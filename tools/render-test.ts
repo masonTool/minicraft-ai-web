@@ -36,8 +36,8 @@ import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/re
 import { GLSL_DITHER } from '../src/render/dither.ts';
 import { readFileSync } from 'node:fs';
 import { srgbColor } from '../src/render/srgb.ts';
-import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
-import { ATLAS_COLUMNS, TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { tileOriginAt, tileRectAt, tileSpanAt } from '../src/render/atlasCoords.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING, TILE_SIZE, TILE_STRIDE } from '../src/render/atlasLayout.ts';
 import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
 import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
@@ -145,6 +145,8 @@ const stubAtlas = {
     const rect = TILE_RECTS[tile];
     return rect ? [rect[0], rect[1]] : [0, 0];
   },
+  /** 破坏裂纹叠加层还要用它算"一张贴图占多大"（批次 425：不能再用 1/columns 手算） */
+  tileSpan: [0.25, 0.25] as [number, number],
 } as unknown as TextureAtlas;
 
 /** 读某个面第 `corner` 个顶点的 UV */
@@ -219,6 +221,41 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
       rect[1] < rect[3],
     rect.map((v) => v.toFixed(4)).join(','),
   );
+
+  // ---- 上传图集的**边距**（批次 425）：每格 32 纹素，内容 16 居中
+  //
+  // 加边距是为了各向异性过滤：取样足迹沿长轴会跨出这张贴图，紧挨着排就会把邻居
+  // 的颜色混进来（砖缝处出现彩色细线）。这里钉住三件事：内容区还是 16 纹素宽、
+  // 内容区的**中心**与不加边距时完全重合（所以不会整体偏移）、跨度是 16 的整数倍
+  // （保证 0~4 级 mip 的纹素边界仍与格子对齐）。
+  {
+    const pad = TILE_PADDING;
+    const [paddedU, paddedV] = tileOriginAt(grassIndex, ATLAS_COLUMNS, rows, pad);
+    const [padSpanU, padSpanV] = tileSpanAt(ATLAS_COLUMNS, rows, pad);
+    const [plainU, plainV] = tileOriginAt(grassIndex, ATLAS_COLUMNS, rows);
+    const [plainSpanU, plainSpanV] = tileSpanAt(ATLAS_COLUMNS, rows);
+
+    check('边距后内容区仍是 16 纹素宽', Math.abs(padSpanU * ATLAS_COLUMNS * TILE_STRIDE - TILE_SIZE) < 1e-9);
+    check(
+      '内容区中心与不加边距时重合（不会整体偏移）',
+      Math.abs(paddedU + padSpanU / 2 - (plainU + plainSpanU / 2)) < 1e-12 &&
+        Math.abs(paddedV + padSpanV / 2 - (plainV + plainSpanV / 2)) < 1e-12,
+    );
+    check(
+      '内容区落在自己格子里（边距没跑到邻居那格）',
+      paddedU > (grassIndex % ATLAS_COLUMNS) / ATLAS_COLUMNS &&
+        paddedU + padSpanU < (grassIndex % ATLAS_COLUMNS + 1) / ATLAS_COLUMNS,
+      `${paddedU.toFixed(5)} + ${padSpanU.toFixed(5)}`,
+    );
+    check('格子跨度是 16 的整数倍（mip 每级都还是整数像素）', TILE_STRIDE % TILE_SIZE === 0);
+    // 内缩后仍应严格落在内容区内部（aniso 不会直接采到边距，但保守起见要成立）
+    const paddedRect = tileRectAt(grassIndex, ATLAS_COLUMNS, rows, 0.5 / (ATLAS_COLUMNS * TILE_STRIDE), 0.5 / (rows * TILE_STRIDE), pad);
+    check(
+      '内容区矩形仍向内收缩且顺序正确',
+      paddedRect[0] > paddedU && paddedRect[2] < paddedU + padSpanU && paddedRect[1] < paddedRect[3],
+      paddedRect.map((v) => v.toFixed(5)).join(','),
+    );
+  }
 
   check('blockFaceTiles 返回六张贴图且顺序为 [侧,侧,顶,底,侧,侧]', (() => {
     const tiles = blockDef(Block.GRASS_BLOCK).tiles;

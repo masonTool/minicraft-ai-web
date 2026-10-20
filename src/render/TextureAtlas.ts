@@ -18,7 +18,7 @@ import {
 } from '../core/registry/colors.ts';
 import { COPPER_STAGES } from '../core/registry/blocks.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
-import { tileOriginAt, tileRectAt } from './atlasCoords.ts';
+import { tileOriginAt, tileRectAt, tileSpanAt } from './atlasCoords.ts';
 import { ARMOR_TYPES, ALL_ARMOR_MATERIALS } from '../core/registry/armor.ts';
 import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
 // 刷怪蛋（批次 174）：蛋形只有一副，颜色取自该生物自己的 bodyColor/accentColor ——
@@ -27,7 +27,14 @@ import { SPAWN_EGG_SPECS, spawnEggTile } from '../core/registry/spawnEggs.ts';
 import { MULTI_PAINTINGS, paintingSubTile, type MultiPainting } from '../core/registry/paintings.ts';
 import { mobTypeById } from '../core/entity/mobs.ts';
 
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE, type TileName } from './atlasLayout.ts';
+import {
+  ATLAS_COLUMNS,
+  TILE_ORDER,
+  TILE_PADDING,
+  TILE_SIZE,
+  TILE_STRIDE,
+  type TileName,
+} from './atlasLayout.ts';
 import { canvasLooksLost, is2dContextLost, pickOpaqueSamples, type PixelSample } from './canvasProbe.ts';
 
 export { ATLAS_COLUMNS, TILE_SIZE, TILE_ORDER };
@@ -6262,7 +6269,20 @@ export function paintedCoverage(name: TileName, size = 16): number {
 
 export class TextureAtlas {
   readonly texture: THREE.Texture;
+  /**
+   * **未加边距**的画布：每格 16×16 紧挨着。
+   *
+   * 像素级读取（方块图标、物品图标、资源包、平均色、覆盖率）都看这张——
+   * 它们要的是"这一张贴图的原始 16×16"。上传给 GPU 的是另一张加了边距的
+   * `uploadCanvas`（见 `syncUploadCanvas`）。
+   */
   readonly canvas: HTMLCanvasElement;
+  /**
+   * **加了边距**的上传画布（每格 32×32，内容居中、四周是边缘外扩）的 2D 上下文。
+   *
+   * 画布本身由 `THREE.CanvasTexture` 持有（`texture.image`），这里只需要能重铺它。
+   */
+  private readonly uploadContext: CanvasRenderingContext2D;
   readonly columns: number;
   readonly rows: number;
   /** 贴图平均色缓存（`averageColor` 用，懒算） */
@@ -6301,11 +6321,20 @@ export class TextureAtlas {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('无法获取 2D 绘图上下文');
 
+    // 上传画布：每格 `TILE_STRIDE`（内容 16 + 两侧边距），见 `syncUploadCanvas`
+    const uploadCanvas = document.createElement('canvas');
+    uploadCanvas.width = TILE_STRIDE * columns;
+    uploadCanvas.height = TILE_STRIDE * rows;
+    const uploadContext = uploadCanvas.getContext('2d');
+    if (!uploadContext) throw new Error('无法获取上传画布的 2D 绘图上下文');
+
     this.canvas = canvas;
+    this.uploadContext = uploadContext;
     this.columns = columns;
     this.rows = rows;
     this.context = ctx;
     this.paintPixels();
+    this.syncUploadCanvas();
 
     // 2D 画布也会被系统回收。事件不是判据（兼容性有限，见 `canvasProbe.ts`），
     // 但"知道了就立刻补"是最省事的一条路：`contextrestored` 到了直接重画。
@@ -6316,7 +6345,7 @@ export class TextureAtlas {
       this.repaint();
     });
 
-    const texture = new THREE.CanvasTexture(canvas);
+    const texture = new THREE.CanvasTexture(uploadCanvas);
     // ⚠️ 保持 three 的默认行为（flipY = true）：上传时把画布整体垂直翻转，
     // 于是 v=0 对应画布的**最后一行**。这正好与几何体的 UV 约定一致——
     // 侧面底边顶点是 uv.y = 0，顶边是 1（见 `atlasCoords` 的文件头）。
@@ -6330,10 +6359,14 @@ export class TextureAtlas {
     // 缩小方向走 mipmap（批次 237）：这是"远处干净、走动时不闪"的来源。
     // 放大方向仍然是 Nearest —— 近处方块的像素风不能糊。
     //
-    // 图集高度永远是 16 的倍数（`TILE_SIZE * rows`），所以 0~4 级的每张 tile
-    // 都还是整数像素（16→8→4→2→1），盒式降采样**不会跨 tile 混色**；
+    // 图集高度永远是 16 的倍数（`TILE_STRIDE * rows`，32 也行、16 也行），所以
+    // 0~4 级的每张 tile 都还是整数像素（16→8→4→2→1），盒式降采样**不会跨 tile 混色**；
     // 更高层级在着色器里被 LOD 封顶挡住（见 `VoxelMaterial` 的 `textureGrad`）。
-    // 内存代价：整条 mip 链只多 1/3（256×1008 ≈ 1.0MB → 1.34MB）。
+    // 内存代价：整条 mip 链只多 1/3。
+    //
+    // 批次 425：因为每格多了两侧边距（32 纹素一格），总像素是原来的 4 倍
+    // （256×1008 → 512×2016，含 mip ≈ 5.3MB）。换来的是各向异性过滤不渗色，
+    // 以及 4× 各向异性的取样足迹永远落在自己的边距里。
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.generateMipmaps = true;
     texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -6375,7 +6408,49 @@ export class TextureAtlas {
     this.revisionValue++;
     this.averageColors.clear();
     this.opacities.clear();
+    // 上传画布是"未加边距画布"的派生，任何像素改动都要重新铺一遍（资源包、重画、重绘）
+    this.syncUploadCanvas();
     this.texture.needsUpdate = true;
+  }
+
+  /**
+   * 把**未加边距**的画布同步到**加了边距**的上传画布（批次 425）。
+   *
+   * 为什么要有第二张画布：图集里贴图紧挨着，各向异性过滤的取样足迹沿长轴会跨出
+   * 这张贴图——侧看地面时会把**邻居贴图的颜色**混进来（砖缝处出现彩色细线）。
+   * 上传的这张每格 32 纹素：内容 16×16 居中，四周 8 纹素用边缘像素外扩填满，
+   * 于是足迹再怎么跨都是"自己的延续"。
+   *
+   * 逐格 8 次 `drawImage`（内容 + 四边 + 四角）而不是逐像素：一张图集三百多格，
+   * 每次启动/资源包导入只跑一遍，几十微秒级的 blit，比在 JS 里写几十万像素便宜。
+   */
+  private syncUploadCanvas(): void {
+    const ctx = this.uploadContext;
+    // 外扩必须是最邻近（否则边缘会糊，边距本身就失去意义）
+    ctx.imageSmoothingEnabled = false;
+    const pad = TILE_PADDING;
+    for (let index = 0; index < this.columns * this.rows; index++) {
+      const col = index % this.columns;
+      const row = Math.floor(index / this.columns);
+      const sx = col * TILE_SIZE;
+      const sy = row * TILE_SIZE;
+      const dx = col * TILE_STRIDE + pad;
+      const dy = row * TILE_STRIDE + pad;
+      const last = TILE_SIZE - 1;
+
+      // 内容
+      ctx.drawImage(this.canvas, sx, sy, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+      // 四边：把最外圈那一行/列拉伸到整个边距宽度
+      ctx.drawImage(this.canvas, sx, sy, TILE_SIZE, 1, dx, dy - pad, TILE_SIZE, pad);
+      ctx.drawImage(this.canvas, sx, sy + last, TILE_SIZE, 1, dx, dy + TILE_SIZE, TILE_SIZE, pad);
+      ctx.drawImage(this.canvas, sx, sy, 1, TILE_SIZE, dx - pad, dy, pad, TILE_SIZE);
+      ctx.drawImage(this.canvas, sx + last, sy, 1, TILE_SIZE, dx + TILE_SIZE, dy, pad, TILE_SIZE);
+      // 四角：用角上那一个像素铺满
+      ctx.drawImage(this.canvas, sx, sy, 1, 1, dx - pad, dy - pad, pad, pad);
+      ctx.drawImage(this.canvas, sx + last, sy, 1, 1, dx + TILE_SIZE, dy - pad, pad, pad);
+      ctx.drawImage(this.canvas, sx, sy + last, 1, 1, dx - pad, dy + TILE_SIZE, pad, pad);
+      ctx.drawImage(this.canvas, sx + last, sy + last, 1, 1, dx + TILE_SIZE, dy + TILE_SIZE, pad, pad);
+    }
   }
 
   /**
@@ -6500,12 +6575,13 @@ export class TextureAtlas {
    */
   tileOrigin(tile: string): [number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;
-    return tileOriginAt(index, this.columns, this.rows);
+    // 上传图集是加过边距的：起点是**内容区**的左下角（见 `atlasCoords`）
+    return tileOriginAt(index, this.columns, this.rows, TILE_PADDING);
   }
 
-  /** 单张贴图占图集的 UV 尺寸（所有贴图相同） */
+  /** 单张贴图**内容区**占图集的 UV 尺寸（所有贴图相同） */
   get tileSpan(): [number, number] {
-    return [1 / this.columns, 1 / this.rows];
+    return tileSpanAt(this.columns, this.rows, TILE_PADDING);
   }
 
   /** 归一化的半像素内缩，着色器用它把采样点限制在贴图内部 */
@@ -6516,10 +6592,10 @@ export class TextureAtlas {
   /** 返回贴图在图集中的 [u0, v0, u1, v1]（左下 → 右上），已做半像素内缩以避免图集渗色 */
   uv(tile: string): [number, number, number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;
-    // 半像素内缩，避免相邻贴图渗色
-    const insetU = 0.5 / (TILE_SIZE * this.columns);
-    const insetV = 0.5 / (TILE_SIZE * this.rows);
-    return tileRectAt(index, this.columns, this.rows, insetU, insetV);
+    // 半像素内缩（纹素 → UV 要按**加边距后**的图集宽度算），避免相邻贴图渗色
+    const insetU = 0.5 / (TILE_STRIDE * this.columns);
+    const insetV = 0.5 / (TILE_STRIDE * this.rows);
+    return tileRectAt(index, this.columns, this.rows, insetU, insetV, TILE_PADDING);
   }
 
   /**
