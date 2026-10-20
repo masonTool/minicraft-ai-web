@@ -798,7 +798,7 @@ const snapshotPlayer = (): PlayerSave => ({
   health,
   food,
   saturation,
-  air: 300,
+  air,
   exhaustion: 0,
   inventory: inventory.serialize(),
   xp: { level: xpLevel, progress: xpIntoLevel / (7 * (xpLevel + 1)), total: 0, partial: xpIntoLevel },
@@ -846,7 +846,9 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   health = 20;
   food = 20;
   saturation = 5;
+  air = 300;
   foodExhaustion = 0;
+  drownTimer = 0;
   hazardTimer = 0;
   regenTimer = 0;
   fallPeakY = spawn.y + 1;
@@ -875,6 +877,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       health = Math.max(0, Math.min(20, loaded.health));
       food = Math.max(0, Math.min(20, loaded.food));
       saturation = Math.max(0, Math.min(20, loaded.saturation));
+      air = Math.max(0, Math.min(300, loaded.air ?? 300));
       xpLevel = Math.max(0, loaded.xp?.level ?? 0);
       xpIntoLevel = Math.max(0, loaded.xp?.partial ?? 0);
       flying = loaded.flying === true;
@@ -1284,6 +1287,9 @@ const showHud = (): void => {
       box(242, uiHeight - 98, 420, 5, [], { background: 'rgba(0,0,0,0.55)', radius: 2 }),
       box(242, uiHeight - 98, Math.max(0, Math.min(420, 420 * (xpIntoLevel / (7 * (xpLevel + 1))))), 5, [], { background: '#7bd88f', radius: 2 }),
       text(668, uiHeight - 110, 90, 20, `Lv ${xpLevel}`, { fontSize: 11, color: 'rgba(210,255,210,0.9)' }),
+      ...(air < 300
+        ? [text(0, uiHeight - 178, 1024, 20, `氧气 ${Math.ceil(air / 20)}s`, { fontSize: 13, color: '#9fe0ff', align: 'center' })]
+        : []),
       vital(242, uiHeight - 152, 16, 'heart', health),
       vital(612, uiHeight - 152, 16, 'food', food),
       text(0, uiHeight - 128, 1024, 20, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
@@ -1429,7 +1435,9 @@ const respawn = (): void => {
   health = 20;
   food = 20;
   saturation = 5;
+  air = 300;
   foodExhaustion = 0;
+  drownTimer = 0;
   starvationTimer = 0;
   regenTimer = 0;
   fallPeakY = spawn.y + 1;
@@ -1612,7 +1620,9 @@ let sneaking = false;
 let health = 20;
 let food = 20;
 let saturation = 5;
+let air = 300;
 let foodExhaustion = 0;
+let drownTimer = 0;
 let fallPeakY = 80;
 let wasOnGround = false;
 let landedOnce = false;
@@ -2098,6 +2108,20 @@ const frame = (): void => {
       }
     } else {
       regenTimer = 0;
+    }
+    const eyeBlock = world.getBlock(Math.floor(physics.x), Math.floor(physics.eyeY), Math.floor(physics.z));
+    if (eyeBlock === Block.WATER) {
+      air = Math.max(0, air - dt * 20);
+      if (air <= 0) {
+        drownTimer += dt;
+        if (drownTimer >= 1) {
+          drownTimer = 0;
+          applyDamage(2, '溺水');
+        }
+      }
+    } else {
+      air = Math.min(300, air + dt * 40);
+      drownTimer = 0;
     }
     if (health <= 0 && !dead) {
       dropInventory();

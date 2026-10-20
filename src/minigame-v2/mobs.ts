@@ -12,6 +12,8 @@ export interface MobState {
   dirZ: number;
   wander: number;
   attackAt?: number;
+  flashUntil?: number;
+  materials: Array<{ material: THREE.MeshBasicMaterial; color: number }>;
 }
 
 export interface MobDeps {
@@ -154,6 +156,8 @@ export class MobSystem {
         const touchY = (clientY / Math.max(1, screenHeight)) * designHeight;
         if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
         this.lastPlayerAttackAt = Date.now();
+        mob.flashUntil = Date.now() + 120;
+        for (const entry of mob.materials) entry.material.color.set(0xff5555);
         mob.hp -= 4;
         this.deps.onHit();
         if (mob.hp <= 0) {
@@ -187,11 +191,21 @@ export class MobSystem {
   private spawn(list: MobState[], group: THREE.Group, x: number, y: number, z: number, hp: number, dir: number): void {
     group.position.set(x, y, z);
     this.deps.scene.add(group);
-    list.push({ group, x, y, z, hp, dirX: dir, dirZ: 0, wander: 2 });
+    const materials: Array<{ material: THREE.MeshBasicMaterial; color: number }> = [];
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
+        if (!materials.some((entry) => entry.material === child.material)) {
+          materials.push({ material: child.material, color: child.material.color.getHex() });
+        }
+      }
+    });
+    list.push({ group, x, y, z, hp, dirX: dir, dirZ: 0, wander: 2, materials });
   }
 
   private tickWanderers(list: MobState[], dt: number, speed: number): void {
+    const now = Date.now();
     for (const mob of list) {
+      this.restoreFlash(mob, now);
       mob.wander -= dt;
       if (mob.wander <= 0) {
         const angle = Math.random() * Math.PI * 2;
@@ -217,7 +231,9 @@ export class MobSystem {
 
   private tickZombies(dt: number): void {
     const player = this.player;
+    const now = Date.now();
     for (const mob of this.zombies) {
+      this.restoreFlash(mob, now);
       const dx = player.x - mob.x;
       const dz = player.z - mob.z;
       const dist = Math.hypot(dx, dz);
@@ -252,6 +268,12 @@ export class MobSystem {
         this.deps.onDamage(2, '僵尸');
       }
     }
+  }
+
+  private restoreFlash(mob: MobState, now: number): void {
+    if (!mob.flashUntil || now < mob.flashUntil) return;
+    mob.flashUntil = 0;
+    for (const entry of mob.materials) entry.material.color.set(entry.color);
   }
 
   private kill(list: MobState[], dropId: number, xp: number): boolean {
