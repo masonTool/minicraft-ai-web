@@ -16,11 +16,12 @@ npm run build:minigame:adapter
 
 1. 微信开发者工具 → 导入 `minigame-adapter-spike/`（项目类型选**小游戏**）。
 2. `project.config.json` 的 `appid` 换成自己的小游戏 AppID（真机预览）。
-3. 控制台看：
-   - `[WX-006] adapter inner ... dpr ...`
-   - `[WX-006] navigator ...`
-   - `[WX-006] GL_VERSION` / `GL_RENDERER`
-   - `[WX-006] fps=... tri=... calls=...`
+3. 先看**屏上 HUD**（顶部四行）：
+   - `WX-006 ADAPTER` + 分辨率/dpr
+   - `GL ...`：`GL_VERSION`
+   - `GL ...`：`GL_RENDERER`
+   - `FPS ... TRI ... CALLS ...`：每秒刷新
+   控制台仍有同样的 `[WX-006]` 日志。
 4. 画面上应该也有一块 16×16 绿色地面 + 柱子；**标记方块是绿色**（WX-001 是红色），
    方便一眼区分当前跑的是哪一版。
 

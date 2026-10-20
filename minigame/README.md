@@ -16,11 +16,14 @@ npm run build:minigame      # 产出 minigame/game.js
 1. 打开微信开发者工具 → 导入项目 → 选择本目录 `minigame/`。
 2. 项目类型选**小游戏**；AppID 先填自己的小游戏 AppID（`project.config.json` 里的
    `touristappid` 只能跑模拟器，真机预览要换成真实 AppID）。
-3. 编译后看控制台：
-   - `[WX-001] GL_VERSION` / `GL_RENDERER`：确认拿到的是 WebGL2。
-   - `[WX-001] fps=... tri=... calls=...`：每秒一条。
-4. 画面上应该有一块 16×16 的绿色方块地面 + 一根柱子 + 一个旋转的红色方块；
-   单指拖动可以转视角。
+3. 编译后先看**屏上 HUD**（顶部四行）：
+   - `WX-001 SHIM` + 分辨率/dpr
+   - `GL ...`：`GL_VERSION`
+   - `GL ...`：`GL_RENDERER`
+   - `FPS ... TRI ... CALLS ...`：每秒刷新
+   控制台仍有同样的 `[WX-001]` 日志。
+4. 画面上应该有一块 16×16 的绿色方块地面 + 一根柱子 + 一个旋转的**红色**方块；
+   单指拖动可以转视角。红色 = 自写 shim，绿色 = 适配器版（WX-006）。
 
 ## 要记录的数字（填回 `WXMINIGAME.md` §7）
 

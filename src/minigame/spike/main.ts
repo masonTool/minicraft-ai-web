@@ -6,7 +6,8 @@
  *
  * 画面：16×16 的程序化贴图地面（InstancedMesh）+ 一个红色标记方块。
  * 交互：单指拖动转视角（验证触摸事件）。
- * 输出：每秒在控制台打印 fps / 三角形数 / draw call。
+ * 输出：屏上 HUD + 控制台，每秒刷新 fps / 三角形数 / draw call。
+ * 红方块 = 自写 shim（WX-001）；绿方块 = 适配器版（WX-006）。
  *
  * ⚠️ 第一行 import 必须是垫片：three 在模块初始化时就会碰 `document`。
  */
@@ -36,6 +37,57 @@ function makeGroundTexture(): THREE.Texture {
   return texture;
 }
 
+/**
+ * 屏上 HUD：小游戏只有一个上屏 WebGL canvas，不能像浏览器那样挂 DOM 文本，
+ * 所以用一张 2D canvas 当贴图，再用正交相机画在最上层。
+ * 每秒只重画一次文本，渲染是一张全屏四边形，成本可以忽略。
+ */
+function createHud(): {
+  update(lines: readonly string[]): void;
+  render(renderer: THREE.WebGLRenderer): void;
+} {
+  const canvas = wxApi.createCanvas() as unknown as HTMLCanvasElement;
+  canvas.width = 1024;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+  camera.position.z = 1;
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.5), material);
+  mesh.position.set(0, 0.72, 0);
+  scene.add(mesh);
+
+  return {
+    update(lines: readonly string[]): void {
+      if (!context) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = 'rgba(0, 0, 0, 0.62)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.font = '28px monospace';
+      context.textBaseline = 'top';
+      context.fillStyle = '#ffffff';
+      lines.forEach((line, index) => {
+        context.fillText(line.slice(0, 78), 18, 16 + index * 54);
+      });
+      texture.needsUpdate = true;
+    },
+    render(renderer: THREE.WebGLRenderer): void {
+      renderer.clearDepth();
+      renderer.render(scene, camera);
+    },
+  };
+}
+
 function boot(): void {
   const renderer = new THREE.WebGLRenderer({
     canvas: mainCanvas as unknown as HTMLCanvasElement,
@@ -45,11 +97,23 @@ function boot(): void {
   renderer.setPixelRatio(Math.min(screen.dpr, 2));
   renderer.setSize(screen.width, screen.height, false);
   renderer.setClearColor(0x8fc7ff, 1);
+  // HUD 是第二次 render，主场景不再自动 clear
+  renderer.autoClear = false;
 
   const gl = renderer.getContext();
+  const glVersion = String(gl.getParameter(gl.VERSION));
+  const glRenderer = String(gl.getParameter(gl.RENDERER));
   console.log('[WX-001] screen', screen.width, screen.height, 'dpr', screen.dpr);
-  console.log('[WX-001] GL_VERSION', gl.getParameter(gl.VERSION));
-  console.log('[WX-001] GL_RENDERER', gl.getParameter(gl.RENDERER));
+  console.log('[WX-001] GL_VERSION', glVersion);
+  console.log('[WX-001] GL_RENDERER', glRenderer);
+
+  const hud = createHud();
+  hud.update([
+    `WX-001 SHIM  ${screen.width}x${screen.height} dpr ${screen.dpr}`,
+    `GL ${glVersion}`,
+    `GL ${glRenderer}`,
+    'FPS ...  TRI ...  CALLS ...',
+  ]);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, screen.width / screen.height, 0.1, 300);
@@ -133,17 +197,27 @@ function boot(): void {
   });
 
   let frames = 0;
+  let fps = 0;
   let lastReport = 0;
   const frame = (time: number): void => {
     frames += 1;
     if (time - lastReport >= 1000) {
       const stats = renderer.info.render;
+      fps = frames;
       console.log(`[WX-001] fps=${frames} tri=${stats.triangles} calls=${stats.calls}`);
+      hud.update([
+        `WX-001 SHIM  ${screen.width}x${screen.height} dpr ${screen.dpr}`,
+        `GL ${glVersion}`,
+        `GL ${glRenderer}`,
+        `FPS ${fps}  TRI ${stats.triangles}  CALLS ${stats.calls}`,
+      ]);
       frames = 0;
       lastReport = time;
     }
     marker.rotation.y += 0.012;
+    renderer.clear();
     renderer.render(scene, camera);
+    hud.render(renderer);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

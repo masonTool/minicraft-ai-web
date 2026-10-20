@@ -40,6 +40,50 @@ function makeGroundTexture() {
   return texture;
 }
 
+/** 屏上 HUD：小游戏只有一个上屏 WebGL canvas，用一张 2D canvas 当贴图叠在最上层 */
+function createHud() {
+  const canvas = doc.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+  camera.position.z = 1;
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.5), material);
+  mesh.position.set(0, 0.72, 0);
+  scene.add(mesh);
+
+  return {
+    update(lines) {
+      if (!context) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = 'rgba(0, 0, 0, 0.62)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.font = '28px monospace';
+      context.textBaseline = 'top';
+      context.fillStyle = '#ffffff';
+      lines.forEach((line, index) => {
+        context.fillText(line.slice(0, 78), 18, 16 + index * 54);
+      });
+      texture.needsUpdate = true;
+    },
+    render(renderer) {
+      renderer.clearDepth();
+      renderer.render(scene, camera);
+    },
+  };
+}
+
 function boot() {
   const width = view.innerWidth;
   const height = view.innerHeight;
@@ -51,12 +95,23 @@ function boot() {
   renderer.setPixelRatio(Math.min(view.devicePixelRatio || 1, 2));
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x8fc7ff, 1);
+  renderer.autoClear = false;
 
   const gl = renderer.getContext();
+  const glVersion = String(gl.getParameter(gl.VERSION));
+  const glRenderer = String(gl.getParameter(gl.RENDERER));
   console.log('[WX-006] adapter', 'inner', width, height, 'dpr', view.devicePixelRatio);
   console.log('[WX-006] navigator', view.navigator?.platform, view.navigator?.userAgent);
-  console.log('[WX-006] GL_VERSION', gl.getParameter(gl.VERSION));
-  console.log('[WX-006] GL_RENDERER', gl.getParameter(gl.RENDERER));
+  console.log('[WX-006] GL_VERSION', glVersion);
+  console.log('[WX-006] GL_RENDERER', glRenderer);
+
+  const hud = createHud();
+  hud.update([
+    `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}`,
+    `GL ${glVersion}`,
+    `GL ${glRenderer}`,
+    'FPS ...  TRI ...  CALLS ...',
+  ]);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 300);
@@ -136,17 +191,27 @@ function boot() {
   });
 
   let frames = 0;
+  let fps = 0;
   let lastReport = 0;
   const frame = (time) => {
     frames += 1;
     if (time - lastReport >= 1000) {
       const stats = renderer.info.render;
+      fps = frames;
       console.log(`[WX-006] fps=${frames} tri=${stats.triangles} calls=${stats.calls}`);
+      hud.update([
+        `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}`,
+        `GL ${glVersion}`,
+        `GL ${glRenderer}`,
+        `FPS ${fps}  TRI ${stats.triangles}  CALLS ${stats.calls}`,
+      ]);
       frames = 0;
       lastReport = time;
     }
     marker.rotation.y += 0.012;
+    renderer.clear();
     renderer.render(scene, camera);
+    hud.render(renderer);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
