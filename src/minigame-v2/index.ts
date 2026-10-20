@@ -14,7 +14,7 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, text } from './ui-kit/index.ts';
+import { UiLayer, box, button, slider, text, toggle } from './ui-kit/index.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 
 /**
@@ -64,11 +64,144 @@ const camera = new THREE.PerspectiveCamera(
 const ui = new UiLayer(platform.system.width, platform.system.height);
 const uiHeight = ui.height;
 let paused = false;
+let settingsOpen = false;
+let activeSettingsTab: 'game' | 'controls' | 'appearance' | 'sound' = 'game';
+
+interface V2Settings {
+  brightness: number;
+  viewDistance: number;
+  sensitivity: number;
+  fingerAim: boolean;
+  sound: boolean;
+}
+
+const SETTINGS_KEY = 'wx.v2.settings';
+const defaultSettings: V2Settings = {
+  brightness: 1,
+  viewDistance: 2,
+  sensitivity: 1,
+  fingerAim: true,
+  sound: true,
+};
+const readSettings = (): V2Settings => {
+  try {
+    const raw = platform.storage.get(SETTINGS_KEY);
+    if (!raw) return { ...defaultSettings };
+    const parsed = JSON.parse(raw) as Partial<V2Settings>;
+    return {
+      brightness: Math.max(0.5, Math.min(2, Number(parsed.brightness ?? 1))),
+      viewDistance: Math.max(1, Math.min(4, Math.round(Number(parsed.viewDistance ?? 2)))),
+      sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity ?? 1))),
+      fingerAim: parsed.fingerAim !== false,
+      sound: parsed.sound !== false,
+    };
+  } catch {
+    return { ...defaultSettings };
+  }
+};
+const settings = readSettings();
+const persistSettings = (): void => {
+  platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
+};
+
+const showSettings = (): void => {
+  settingsOpen = true;
+  const panelW = 800;
+  const panelH = Math.min(650, uiHeight - 32);
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const tabs: Array<['game' | 'controls' | 'appearance' | 'sound', string]> = [
+    ['game', '游戏'],
+    ['controls', '控制'],
+    ['appearance', '外观'],
+    ['sound', '声音'],
+  ];
+  const tabButtons = tabs.map(([key, label], index) =>
+    button(panelX + 24 + index * 180, panelY + 20, 168, 48, label, () => {
+      activeSettingsTab = key;
+      showSettings();
+    }, {
+      background: activeSettingsTab === key ? 'rgba(90, 130, 110, 0.95)' : 'rgba(30, 38, 46, 0.92)',
+      border: 'rgba(190, 220, 240, 0.35)',
+      radius: 8,
+    }),
+  );
+
+  const rows: ReturnType<typeof box>[] = [];
+  let rowY = panelY + 96;
+  const row = (node: ReturnType<typeof box>): void => {
+    rows.push(node);
+    rowY += 68;
+  };
+  const apply = (): void => {
+    persistSettings();
+    solid.skyBrightness = settings.brightness;
+    translucent.skyBrightness = settings.brightness;
+    showSettings();
+  };
+
+  if (activeSettingsTab === 'game') {
+    row(slider(panelX + 24, rowY, panelW - 48, 56, '亮度', 0.5, 2, 0.05, settings.brightness, (value) => {
+      settings.brightness = value;
+      apply();
+    }));
+    row(slider(panelX + 24, rowY, panelW - 48, 56, '视距', 1, 4, 1, settings.viewDistance, (value) => {
+      settings.viewDistance = value;
+      apply();
+    }));
+  } else if (activeSettingsTab === 'controls') {
+    row(slider(panelX + 24, rowY, panelW - 48, 56, '视角灵敏度', 0.5, 2, 0.1, settings.sensitivity, (value) => {
+      settings.sensitivity = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 56, '手指落点瞄准', settings.fingerAim, (value) => {
+      settings.fingerAim = value;
+      apply();
+    }));
+  } else if (activeSettingsTab === 'sound') {
+    row(toggle(panelX + 24, rowY, panelW - 48, 56, '声音', settings.sound, (value) => {
+      settings.sound = value;
+      apply();
+    }));
+    row(text(panelX + 24, rowY + 10, panelW - 48, 40, 'v2 音频引擎尚未接入，开关先保存偏好', {
+      fontSize: 16,
+      color: 'rgba(200, 220, 235, 0.65)',
+    }));
+  } else {
+    row(text(panelX + 24, rowY + 10, panelW - 48, 40, '角色外观/皮肤编辑器：待 UI Kit 二期迁移', {
+      fontSize: 16,
+      color: 'rgba(200, 220, 235, 0.65)',
+    }));
+    row(text(panelX + 24, rowY + 10, panelW - 48, 40, '当前已对齐：亮度、视距、灵敏度、瞄准、声音偏好', {
+      fontSize: 16,
+      color: 'rgba(200, 220, 235, 0.65)',
+    }));
+  }
+
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
+      box(panelX, panelY, panelW, panelH, [
+        ...tabButtons,
+        ...rows,
+        button(panelX + panelW - 196, panelY + panelH - 64, 172, 44, '返回游戏', () => {
+          settingsOpen = false;
+          paused = false;
+          showHud();
+        }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(190, 220, 240, 0.35)', radius: 8 }),
+      ], { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
+    ]),
+  );
+};
 
 const showHud = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       text(24, 18, 460, 40, 'MINECRAFT v2 · main core', { fontSize: 22, color: '#ffffff' }),
+      button(640, 18, 160, 48, '设置', () => {
+        paused = true;
+        showSettings();
+      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
       button(824, 18, 176, 48, '暂停', () => {
         paused = true;
         showPause();
@@ -106,6 +239,9 @@ const translucent = new VoxelMaterial(atlas.texture, {
   tileInset: atlas.tileInset,
 });
 
+solid.skyBrightness = settings.brightness;
+translucent.skyBrightness = settings.brightness;
+
 const world = new World(0x5eed, 'default', 1);
 const chunks = new ChunkRenderer(
   scene,
@@ -139,9 +275,19 @@ let moveX = 0;
 let moveY = 0;
 let lookX = 0;
 let lookY = 0;
+let lastDownAt = 0;
+let lastDownX = 0;
+let lastDownY = 0;
 
 platform.input.onPointer('down', (event) => {
-  if (ui.handleTap(event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
+  const now = Date.now();
+  if (now - lastDownAt < 40 && Math.abs(event.clientX - lastDownX) < 8 && Math.abs(event.clientY - lastDownY) < 8) {
+    return;
+  }
+  lastDownAt = now;
+  lastDownX = event.clientX;
+  lastDownY = event.clientY;
+  if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
   if (paused) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
@@ -155,6 +301,7 @@ platform.input.onPointer('down', (event) => {
 });
 
 platform.input.onPointer('move', (event) => {
+  if (ui.handlePointer('move', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
   if (event.pointerId === movePointer) {
     input.strafe = Math.max(-1, Math.min(1, (event.clientX - moveX) / 56));
     input.forward = Math.max(-1, Math.min(1, -(event.clientY - moveY) / 56));
@@ -163,14 +310,15 @@ platform.input.onPointer('move', (event) => {
       input.forward = 0;
     }
   } else if (event.pointerId === lookPointer) {
-    yaw -= (event.clientX - lookX) * 0.005;
-    pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lookY) * 0.005));
+    yaw -= (event.clientX - lookX) * 0.005 * settings.sensitivity;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lookY) * 0.005 * settings.sensitivity));
     lookX = event.clientX;
     lookY = event.clientY;
   }
 });
 
-const release = (event: { pointerId: number }): void => {
+const release = (event: { pointerId: number; clientX: number; clientY: number }): void => {
+  ui.handlePointer('up', event.clientX, event.clientY, platform.system.width, platform.system.height);
   if (event.pointerId === movePointer) {
     movePointer = null;
     input.forward = 0;
@@ -193,7 +341,7 @@ const frame = (): void => {
 
   const centerCx = Math.floor(physics.x / 16);
   const centerCz = Math.floor(physics.z / 16);
-  world.update(centerCx, centerCz, 2);
+  world.update(centerCx, centerCz, settings.viewDistance);
 
   if (!playerReady && world.isLoaded(spawn.x, spawn.z)) {
     const surface = world.getSurfaceBlockY(spawn.x, spawn.z);
@@ -203,7 +351,7 @@ const frame = (): void => {
     }
   }
 
-  if (playerReady && !paused) {
+  if (playerReady && !paused && !settingsOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, false);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
@@ -211,7 +359,7 @@ const frame = (): void => {
   }
 
   chunks.processQueue(4, centerCx, centerCz);
-  chunks.applyViewDistance(centerCx, centerCz, 2);
+  chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
   solid.setTime(now * 0.001);
   translucent.setTime(now * 0.001);
   renderer.clear();

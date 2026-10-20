@@ -23,7 +23,10 @@
 - [x] v2 出包：`minigame-v2/game.js` 约 2.2MB
 - [ ] 触摸输入
 - [x] PlayerPhysics + 基础触摸（左半屏移动 / 右半屏视角）
-- [x] UI Kit MVP：Box/Text/Button、命中、Canvas 叠加、HUD/暂停面板
+- [x] UI Kit：Box/Text/Button/Toggle/Slider、命中、Canvas 叠加、HUD/暂停
+- [x] v2 设置页：游戏/控制/外观/声音四页；亮度/视距/灵敏度/声音偏好
+- [ ] 外观/皮肤编辑器（当前占位）
+- [ ] 完整声音/分组音量
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 

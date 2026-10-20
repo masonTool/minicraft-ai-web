@@ -42,7 +42,24 @@ export interface UiButtonNode extends UiNode {
   onClick?: () => void;
 }
 
-export type UiElement = UiNode | UiTextNode | UiButtonNode;
+export interface UiToggleNode extends UiNode {
+  kind: 'toggle';
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+export interface UiSliderNode extends UiNode {
+  kind: 'slider';
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+export type UiElement = UiNode | UiTextNode | UiButtonNode | UiToggleNode | UiSliderNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -62,6 +79,33 @@ export function button(
   style: UiStyle = {},
 ): UiButtonNode {
   return { kind: 'button', x, y, w, h, label, onClick, style };
+}
+
+export function toggle(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  label: string,
+  value: boolean,
+  onChange: (value: boolean) => void,
+): UiToggleNode {
+  return { kind: 'toggle', x, y, w, h, label, value, onChange };
+}
+
+export function slider(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  label: string,
+  min: number,
+  max: number,
+  step: number,
+  value: number,
+  onChange: (value: number) => void,
+): UiSliderNode {
+  return { kind: 'slider', x, y, w, h, label, min, max, step, value, onChange };
 }
 
 export function row(
@@ -106,6 +150,7 @@ export class UiLayer {
   private readonly designHeight: number;
   private root: UiElement | null = null;
   private buttons: UiButtonNode[] = [];
+  private activeSlider: UiSliderNode | null = null;
 
   constructor(screenWidth: number, screenHeight: number) {
     const scale = Math.min(2, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
@@ -148,10 +193,30 @@ export class UiLayer {
     this.draw();
   }
 
-  /** 点击优先交给 UI；返回 true 表示已消费，不再进入世界输入。 */
-  handleTap(clientX: number, clientY: number, sw: number, sh: number): boolean {
+  /** 手指按下：按钮/开关/滑杆。返回 true 表示 UI 已消费。 */
+  handlePointer(
+    phase: 'down' | 'move' | 'up',
+    clientX: number,
+    clientY: number,
+    sw: number,
+    sh: number,
+  ): boolean {
     const x = (clientX / Math.max(1, sw)) * DESIGN_WIDTH;
     const y = (clientY / Math.max(1, sh)) * this.designHeight;
+
+    if (phase === 'move' && this.activeSlider) {
+      this.updateSlider(this.activeSlider, x);
+      return true;
+    }
+    if (phase === 'up') {
+      if (this.activeSlider) {
+        this.activeSlider = null;
+        return true;
+      }
+      return false;
+    }
+    if (phase !== 'down') return false;
+
     for (let i = this.buttons.length - 1; i >= 0; i--) {
       const item = this.buttons[i]!;
       if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
@@ -159,7 +224,45 @@ export class UiLayer {
         return true;
       }
     }
-    return false;
+
+    const hit = this.findControl(x, y);
+    if (!hit) return false;
+    if (hit.kind === 'toggle') {
+      hit.onChange(!hit.value);
+      return true;
+    }
+    this.activeSlider = hit;
+    this.updateSlider(hit, x);
+    return true;
+  }
+
+  /** 兼容旧调用：等价于 down。 */
+  handleTap(clientX: number, clientY: number, sw: number, sh: number): boolean {
+    return this.handlePointer('down', clientX, clientY, sw, sh);
+  }
+
+  private updateSlider(node: UiSliderNode, x: number): void {
+    const raw = ((x - node.x) / Math.max(1, node.w)) * (node.max - node.min) + node.min;
+    const stepped = Math.round(raw / node.step) * node.step;
+    const value = Math.max(node.min, Math.min(node.max, stepped));
+    if (value !== node.value) {
+      node.value = value;
+      node.onChange(value);
+    }
+  }
+
+  private findControl(x: number, y: number): UiToggleNode | UiSliderNode | null {
+    const search = (node: UiElement): UiToggleNode | UiSliderNode | null => {
+      if ('kind' in node && (node.kind === 'toggle' || node.kind === 'slider')) {
+        if (x >= node.x && x <= node.x + node.w && y >= node.y && y <= node.y + node.h) return node;
+      }
+      for (const child of node.children ?? []) {
+        const hit = search(child);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    return this.root ? search(this.root) : null;
   }
 
   render(renderer: THREE.WebGLRenderer): void {
@@ -184,6 +287,54 @@ export class UiLayer {
       ctx.textBaseline = 'top';
       const x = style.align === 'center' ? node.x + node.w / 2 : style.align === 'right' ? node.x + node.w : node.x;
       ctx.fillText(node.text, x, node.y, node.w);
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'toggle') {
+      const style = node.style ?? {};
+      ctx.fillStyle = style.background ?? 'rgba(28, 36, 42, 0.9)';
+      roundedRect(ctx, node.x, node.y, node.w, node.h, style.radius ?? 8);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.label, node.x + 16, node.y + node.h / 2, node.w - 130);
+      const sw = 72;
+      const sx = node.x + node.w - sw - 14;
+      const sy = node.y + (node.h - 36) / 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      roundedRect(ctx, sx, sy, sw, 36, 18);
+      ctx.fill();
+      ctx.fillStyle = node.value ? '#7bd88f' : 'rgba(180,190,200,0.55)';
+      ctx.beginPath();
+      ctx.arc(node.value ? sx + sw - 18 : sx + 18, sy + 18, 13, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'slider') {
+      const style = node.style ?? {};
+      ctx.fillStyle = style.background ?? 'rgba(28, 36, 42, 0.9)';
+      roundedRect(ctx, node.x, node.y, node.w, node.h, style.radius ?? 8);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '19px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.label, node.x + 16, node.y + node.h / 2, node.w - 170);
+      const trackX = node.x + node.w - 150;
+      const trackW = 120;
+      const ratio = (node.value - node.min) / Math.max(1e-6, node.max - node.min);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      roundedRect(ctx, trackX, node.y + node.h / 2 - 4, trackW, 8, 4);
+      ctx.fill();
+      ctx.fillStyle = '#7bd88f';
+      roundedRect(ctx, trackX, node.y + node.h / 2 - 4, trackW * ratio, 8, 4);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(trackX + trackW * ratio, node.y + node.h / 2, 10, 0, Math.PI * 2);
+      ctx.fill();
       return;
     }
 
