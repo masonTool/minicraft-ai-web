@@ -115,6 +115,9 @@ async function boot(): Promise<void> {
   const bagSize = 50 * uiScale;
   const bagLeft = 840 * uiScale;
   const bagTop = height - safeBottomPx - 84 * uiScale;
+  const jumpRadiusPx = 46 * uiScale;
+  const jumpCenterX = (1024 - 24 - 46) * uiScale;
+  const jumpCenterY = height - safeBottomPx - (116 + 46) * uiScale;
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -491,6 +494,7 @@ async function boot(): Promise<void> {
   let lookMoved = false;
   let jumpQueued = false;
   let jumpHeld = false;
+  let jumpPointerId: number | null = null;
   let lastMoveTap = 0;
   let lastJumpTap = 0;
   let flying = loadedPlayer?.flying ?? false;
@@ -1141,6 +1145,22 @@ async function boot(): Promise<void> {
       moveMoved = false;
       return;
     }
+    // 右下跳跃键：命中范围跟随视觉圆钮，不再落到中间挖掘区
+    if (Math.hypot(x - jumpCenterX, y - jumpCenterY) <= jumpRadiusPx + 6) {
+      jumpPointerId = event.pointerId;
+      jumpHeld = true;
+      const now = Date.now();
+      if (now - lastJumpTap < 320) {
+        lastJumpTap = 0;
+        flying = !flying;
+        ui.setFlying(flying);
+        ui.showToast(flying ? '飞行开' : '飞行关');
+      } else {
+        lastJumpTap = now;
+        jumpQueued = true;
+      }
+      return;
+    }
     if (lookPointerId === null) {
       lookPointerId = event.pointerId;
       lastLookX = x;
@@ -1204,6 +1224,11 @@ async function boot(): Promise<void> {
   });
 
   const releasePointer = (event: { pointerId: number; clientX: number; clientY: number }): void => {
+    if (event.pointerId === jumpPointerId) {
+      jumpPointerId = null;
+      jumpHeld = false;
+      return;
+    }
     if (event.pointerId === uiPointerId) {
       if (ui.isSettingsOpen()) {
         ui.handleSettingsScrollUp();
