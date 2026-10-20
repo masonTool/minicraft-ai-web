@@ -5,6 +5,8 @@
  * 只需要「贴图名 → 图集 UV 起点」这一个换算，既不需要也不能创建 canvas。
  * 若把这份数据留在 TextureAtlas 里，Worker 就会连带打进整个带 DOM 依赖的模块。
  */
+import { MULTI_PAINTINGS, paintingSubTile } from '../core/registry/paintings.ts';
+
 
 export const TILE_SIZE = 16;
 /**
@@ -966,6 +968,13 @@ export const TILE_ORDER = [
   'painting_bomb',
   'painting_plant',
   'painting_wasteland',
+  // 多格画（批次 494）：每幅按格拆成 w×h 张子图，拼起来才是整幅
+  ...MULTI_PAINTINGS.flatMap((painting) =>
+    Array.from({ length: painting.height }, (_unusedRow, row) =>
+      Array.from({ length: painting.width }, (_unusedCol, col) => paintingSubTile(painting, col, row)),
+    ).flat(),
+  ),
+
   // ---- 村民的工作站四件（J23，批次 90）：各 2~3 面
   'lectern_top', // 摊开的书
   'lectern_side', // 木框 + 书脊

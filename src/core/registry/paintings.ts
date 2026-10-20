@@ -48,6 +48,51 @@ export const PAINTING_VARIANTS: readonly PaintingVariant[] = [
   { name: 'wasteland', cn: '荒地', tile: 'painting_wasteland', width: 1, height: 1 },
 ];
 
+/**
+ * 多格画（批次 494，B51 的 ②）：**占多格**，一幅画跨 w×h 个方块。
+ *
+ * 与上面那 7 幅 1×1 的画是两条路：
+ *  - 1×1 的变体号存在**方块状态**里（bit3-5，7 档够用）；
+ *  - 多格的塞不进状态位（"哪一幅 + 占在第几格"要两个数），所以**存在按坐标的表**里
+ *    （`world/Paintings.ts`），方块状态一律 0。
+ *
+ * 贴图按格切成 `w×h` 张子图（`paintingSubTile`）：图集里每格仍是 16×16，
+ * 拼起来才是整幅画——这样不需要"跨瓦片大图"那套基础设施。
+ * 尺寸与名字都是**原版事实**（donkey_kong 4×4、skeleton 4×3、match 2×2）。
+ */
+export interface MultiPainting {
+  readonly name: string;
+  readonly cn: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export const MULTI_PAINTINGS: readonly MultiPainting[] = [
+  { name: 'donkey_kong', cn: '大金刚', width: 4, height: 4 },
+  { name: 'skeleton', cn: '骷髅', width: 4, height: 3 },
+  { name: 'match', cn: '火柴', width: 2, height: 2 },
+];
+
+/** 多格画的子图贴图名：`painting_<name>_<col>_<row>`（col 从左、row 从上） */
+export function paintingSubTile(painting: MultiPainting, col: number, row: number): string {
+  return `painting_${painting.name}_${col}_${row}`;
+}
+
+/** 这幅画一共几张子图 */
+export function paintingSubTileCount(painting: MultiPainting): number {
+  return painting.width * painting.height;
+}
+
+/** 按面积从大到小排好的多格画（放置时"能放多大的就先放多大的"） */
+export const MULTI_PAINTINGS_LARGE_FIRST: readonly MultiPainting[] = [...MULTI_PAINTINGS].sort(
+  (a, b) => b.width * b.height - a.width * a.height,
+);
+
+/** 按名字找一幅多格画（存档里存的是名字，改名会让它读不回来——所以名字要稳定） */
+export function multiPaintingByName(name: string): MultiPainting | undefined {
+  return MULTI_PAINTINGS.find((painting) => painting.name === name);
+}
+
 /** 原版 1.18 的画作总幅数（本项目只做其中 1×1 的 7 幅，差异记在 TASKS B14） */
 export const VANILLA_PAINTING_COUNT = 26;
 

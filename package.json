@@ -35,6 +35,7 @@
     "test:bell": "esbuild tools/bell-test.ts --bundle --platform=node --format=esm --outfile=.tmp/bell-test.mjs --log-level=error && node .tmp/bell-test.mjs",
     "test:gamemode": "esbuild tools/gamemode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/gamemode-test.mjs --log-level=error && node .tmp/gamemode-test.mjs",
     "test:armorstand": "esbuild tools/armorstand-test.ts --bundle --platform=node --format=esm --outfile=.tmp/armorstand-test.mjs --log-level=error && node .tmp/armorstand-test.mjs",
+    "test:painting": "esbuild tools/painting-test.ts --bundle --platform=node --format=esm --outfile=.tmp/painting-test.mjs --log-level=error && node .tmp/painting-test.mjs",
     "audit:blocks": "esbuild tools/block-gap-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/block-gap.mjs --log-level=error && node .tmp/block-gap.mjs",
     "audit:recipes": "esbuild tools/recipe-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/recipe-audit.mjs --log-level=error && node .tmp/recipe-audit.mjs",
     "test:i18n": "esbuild tools/i18n-test.ts --bundle --platform=node --format=esm --outfile=.tmp/i18n-test.mjs --log-level=error && node .tmp/i18n-test.mjs",

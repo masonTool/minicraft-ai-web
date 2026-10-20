@@ -24,6 +24,7 @@ import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
 // 刷怪蛋（批次 174）：蛋形只有一副，颜色取自该生物自己的 bodyColor/accentColor ——
 // 不为 21 枚蛋各写一份配色（那样"改了僵尸的绿"两边就会分家）
 import { SPAWN_EGG_SPECS, spawnEggTile } from '../core/registry/spawnEggs.ts';
+import { MULTI_PAINTINGS, paintingSubTile, type MultiPainting } from '../core/registry/paintings.ts';
 import { mobTypeById } from '../core/entity/mobs.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
@@ -3599,6 +3600,91 @@ function paintingPainter(
     }
     return [background[0], background[1], background[2], 255];
   };
+}
+
+/**
+ * 多格画（批次 494，B51 的 ②）：一幅画跨 w×h 格，贴图按格切成子图。
+ *
+ * 每张子图只负责"自己在整幅画里的那一小块"，所以图案必须用**归一化坐标**
+ * （`u/v` 0~1 覆盖整幅）来定义，而不能像 1×1 那 7 幅一样按 16×16 像素坐标写
+ * （那样每一格都会画出完整的一幅小画，拼起来是"重复图案"）。
+ *
+ * 画的内容同样是自绘近似（原版素材受版权保护）：大金刚是"横梁 + 棕色的猩猩"，
+ * 骷髅是"白骨头 + 两个黑洞"，火柴是"深色底上一根带红头的木棍"。
+ */
+interface NormRect {
+  readonly u0: number;
+  readonly v0: number;
+  readonly u1: number;
+  readonly v1: number;
+  readonly rgb: readonly [number, number, number];
+}
+
+const MULTI_PAINTING_ART: Readonly<Record<string, { background: readonly [number, number, number]; rects: readonly NormRect[] }>> = {
+  // 大金刚（4×4）：上下的横梁、中间的猩猩、两只眼睛
+  donkey_kong: {
+    background: [26, 34, 68],
+    rects: [
+      { u0: 0, v0: 0, u1: 1, v1: 0.1, rgb: [176, 122, 66] },
+      { u0: 0, v0: 0.9, u1: 1, v1: 1, rgb: [176, 122, 66] },
+      { u0: 0.28, v0: 0.3, u1: 0.72, v1: 0.86, rgb: [116, 70, 38] },
+      { u0: 0.34, v0: 0.16, u1: 0.66, v1: 0.36, rgb: [148, 94, 52] },
+      { u0: 0.4, v0: 0.22, u1: 0.46, v1: 0.28, rgb: [24, 24, 28] },
+      { u0: 0.54, v0: 0.22, u1: 0.6, v1: 0.28, rgb: [24, 24, 28] },
+      { u0: 0.44, v0: 0.4, u1: 0.56, v1: 0.52, rgb: [206, 180, 120] },
+    ],
+  },
+  // 骷髅（4×3）：白骨头 + 两个黑洞 + 一排牙
+  skeleton: {
+    background: [14, 14, 16],
+    rects: [
+      { u0: 0.36, v0: 0.14, u1: 0.64, v1: 0.52, rgb: [216, 216, 206] },
+      { u0: 0.42, v0: 0.24, u1: 0.48, v1: 0.34, rgb: [16, 16, 18] },
+      { u0: 0.52, v0: 0.24, u1: 0.58, v1: 0.34, rgb: [16, 16, 18] },
+      { u0: 0.44, v0: 0.42, u1: 0.46, v1: 0.52, rgb: [16, 16, 18] },
+      { u0: 0.49, v0: 0.42, u1: 0.51, v1: 0.52, rgb: [16, 16, 18] },
+      { u0: 0.54, v0: 0.42, u1: 0.56, v1: 0.52, rgb: [16, 16, 18] },
+      { u0: 0.44, v0: 0.54, u1: 0.56, v1: 0.9, rgb: [204, 204, 194] },
+    ],
+  },
+  // 火柴（2×2）：深色底 + 一根木棍 + 红色火柴头
+  match: {
+    background: [44, 32, 24],
+    rects: [
+      { u0: 0.46, v0: 0.34, u1: 0.54, v1: 0.92, rgb: [222, 190, 140] },
+      { u0: 0.4, v0: 0.16, u1: 0.6, v1: 0.36, rgb: [198, 52, 40] },
+    ],
+  },
+};
+
+/** 取一幅多格画在 (u,v)（0~1 覆盖整幅）处的颜色 */
+function multiPaintingColor(name: string, u: number, v: number): [number, number, number, number] {
+  const art = MULTI_PAINTING_ART[name];
+  if (!art) return [40, 40, 44, 255];
+  for (let i = art.rects.length - 1; i >= 0; i--) {
+    const rect = art.rects[i]!;
+    if (u >= rect.u0 && u < rect.u1 && v >= rect.v0 && v < rect.v1) {
+      return [rect.rgb[0], rect.rgb[1], rect.rgb[2], 255];
+    }
+  }
+  return [art.background[0], art.background[1], art.background[2], 255];
+}
+
+/** 为多格画的每个子图生成画笔：把本格像素映射回整幅画的归一化坐标 */
+function multiPaintingPainter(painting: MultiPainting, col: number, row: number): Painter {
+  return (x, y) => {
+    const u = (col + (x + 0.5) / 16) / painting.width;
+    const v = (row + (y + 0.5) / 16) / painting.height;
+    return multiPaintingColor(painting.name, u, v);
+  };
+}
+
+for (const painting of MULTI_PAINTINGS) {
+  for (let row = 0; row < painting.height; row++) {
+    for (let col = 0; col < painting.width; col++) {
+      PAINTERS[paintingSubTile(painting, col, row)] = multiPaintingPainter(painting, col, row);
+    }
+  }
 }
 
 /**
