@@ -33,6 +33,8 @@ export interface BastionWorld {
   biomeAt(x: number, z: number): number;
   /** 玄武岩三角洲的群系 id（堡垒不在那里生成，与原版一致） */
   readonly basaltBiome: number;
+  /** 灵魂沙峡谷的群系 id（下界化石只在那里生成，与原版一致） */
+  readonly soulSandBiome: number;
 }
 
 /**
@@ -42,7 +44,7 @@ export interface BastionWorld {
  * 覆盖面度台账（`audit:coverage`）数结构种类时要把它加上，否则"我们做了几种结构"这件事
  * 在台账里永远少算下界这两座——**指标漏了自己人会比数字错了更隐蔽**。
  */
-export const NETHER_STRUCTURE_KINDS = ['bastion_remnant', 'nether_fortress'] as const;
+export const NETHER_STRUCTURE_KINDS = ['bastion_remnant', 'nether_fortress', 'nether_fossil'] as const;
 
 /** 单元网格间距（区块）：24 区块 = 384 格一个单元 */
 export const BASTION_SPACING = 24;
@@ -278,4 +280,108 @@ export function bastionInstanceForTest(
   world: BastionWorld,
 ): BastionInstance | null {
   return bastionCandidate(cellX, cellZ, seed, world);
+}
+
+// ---------------------------------------------------------------- 下界化石（批次 410）
+
+/**
+ * 下界化石：埋在灵魂沙峡谷里的骨架。
+ *
+ * 与原版一致的地方：**只在灵魂沙峡谷**生成、由骨块组成、中间夹一块煤矿。
+ * ⚠️ 简化：原版有 14 种骨架形状（含"巨大的脊椎/肋骨"两套变体），这里只做
+ * "脊柱 + 肋骨"这一种并按坐标随机决定走向——形制对了就够，逐个复刻 14 种
+ * 的收益远不如把它们的位置规律做对。
+ */
+const FOSSIL_SPACING_CHUNKS = 16;
+const FOSSIL_CHANCE = 0.35;
+const FOSSIL_SALT = 0x1f05;
+const FOSSIL_RADIUS = 5;
+
+export interface NetherFossilInstance {
+  x: number;
+  y: number;
+  z: number;
+  /** 骨头的走向：true = 沿 X，false = 沿 Z（世界坐标的纯函数，可重放） */
+  alongX: boolean;
+  seed: number;
+}
+
+/** 某个单元里的化石实例；没有候选返回 null（三条判据都是世界坐标的纯函数） */
+export function netherFossilCandidate(
+  cellX: number,
+  cellZ: number,
+  seed: number,
+  world: BastionWorld,
+): NetherFossilInstance | null {
+  const cellSize = FOSSIL_SPACING_CHUNKS * 16;
+  const x = cellX * cellSize + Math.floor(hashAt(cellX, cellZ, seed ^ FOSSIL_SALT) * cellSize);
+  const z = cellZ * cellSize + Math.floor(hashAt(cellX + 6151, cellZ - 7919, seed ^ FOSSIL_SALT) * cellSize);
+
+  if (hashAt(x, z, seed ^ (FOSSIL_SALT + 0x31)) > FOSSIL_CHANCE) return null;
+  // 只长在灵魂沙峡谷（原版如此）。玄武岩三角洲与其它群系都不该出现骨架
+  if (world.biomeAt(x, z) !== world.soulSandBiome) return null;
+
+  const floor = world.floorAt(x, z);
+  const ceiling = world.ceilingAt(x, z);
+  // 埋在地表下 1 格：完全埋着看不见，露头一格才找得到
+  const y = floor - 1;
+  if (ceiling - y < 4) return null;
+  if (y < 32) return null;
+
+  return { x, y, z, alongX: hashAt(x + 13, z - 29, seed ^ (FOSSIL_SALT + 0x77)) > 0.5, seed };
+}
+
+/** 该实例是否会写到 (cx, cz) 这个区块 */
+export function netherFossilIntersects(instance: NetherFossilInstance, cx: number, cz: number): boolean {
+  const originX = cx * CHUNK_SIZE_X;
+  const originZ = cz * CHUNK_SIZE_Z;
+  return !(
+    instance.x + FOSSIL_RADIUS < originX ||
+    instance.x - FOSSIL_RADIUS > originX + 15 ||
+    instance.z + FOSSIL_RADIUS < originZ ||
+    instance.z - FOSSIL_RADIUS > originZ + 15
+  );
+}
+
+function buildNetherFossil(w: FeatureWriter, f: NetherFossilInstance): void {
+  const rng = new PositionalRng(f.x, f.z, f.seed ^ (FOSSIL_SALT + 0x99));
+  // 先清出一格高的腔体：不清的话骨块会被灵魂沙埋住，看上去"什么都没有"
+  for (let i = -2; i <= 2; i++) {
+    const x = f.alongX ? f.x + i : f.x;
+    const z = f.alongX ? f.z : f.z + i;
+    w.fill(x, f.y, z, Block.AIR);
+    if (i % 2 === 1) {
+      for (const side of [-1, 1] as const) {
+        w.fill(f.alongX ? x : x + side, f.y, f.alongX ? z + side : z, Block.AIR);
+      }
+    }
+  }
+  // 脊柱 + 肋骨
+  for (let i = -2; i <= 2; i++) {
+    const x = f.alongX ? f.x + i : f.x;
+    const z = f.alongX ? f.z : f.z + i;
+    w.fill(x, f.y, z, Block.BONE_BLOCK);
+    if (i % 2 === 1) {
+      for (const side of [-1, 1] as const) {
+        w.fill(f.alongX ? x : x + side, f.y + 1, f.alongX ? z + side : z, Block.BONE_BLOCK);
+      }
+    }
+  }
+  // 中心夹一块煤矿（原版骨架里也夹矿石）
+  w.fill(f.x, f.y + 1, f.z, rng.chance(0.5) ? Block.COAL_ORE : Block.BONE_BLOCK);
+}
+
+/** 生成这个区块里落到的下界化石 */
+export function generateNetherFossils(w: FeatureWriter, seed: number, world: BastionWorld): void {
+  const cellSize = FOSSIL_SPACING_CHUNKS * 16;
+  const baseCellX = Math.floor((w.cx * 16) / cellSize);
+  const baseCellZ = Math.floor((w.cz * 16) / cellSize);
+  for (let dcz = -1; dcz <= 1; dcz++) {
+    for (let dcx = -1; dcx <= 1; dcx++) {
+      const instance = netherFossilCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance) continue;
+      if (!netherFossilIntersects(instance, w.cx, w.cz)) continue;
+      buildNetherFossil(w, instance);
+    }
+  }
 }

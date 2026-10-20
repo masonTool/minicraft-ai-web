@@ -80,6 +80,16 @@ const GREEN_DYE_ID = dyeIdByName('green');
 /** 全部熔炼配方（配方书要列出来，所以导出） */
 
 export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
+  /**
+   * 三条"原版走熔炉、不走工作台"的方块（批次 412）。
+   *
+   * 为什么现在才补：配方审计（`tools/recipe-audit.ts`）只列"既不是合成产物、
+   * 也不是熔炼产物"的方块，这三条一直挂在那个清单里——不是没做，是**在另一张表**。
+   * 补完它们之后，审计清单里剩下的都能说清原因（原料物品不存在 / 原版确实没配方）。
+   */
+  { input: Block.CLAY, output: { id: Block.TERRACOTTA, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'none' },
+  { input: Block.STONE_BRICKS, output: { id: Block.CRACKED_STONE_BRICKS, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: Block.BASALT, output: { id: Block.SMOOTH_BASALT, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   // 带釉陶瓦（批次 385）：同色陶瓦烧制
   { input: terracottaId(0), output: { id: 624 + 0, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   { input: terracottaId(1), output: { id: 624 + 1, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },

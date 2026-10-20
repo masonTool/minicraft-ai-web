@@ -28,6 +28,8 @@ import {
   BASTION_RADIUS,
   bastionInstanceForTest,
   bastionIntersects,
+  NETHER_STRUCTURE_KINDS,
+  netherFossilCandidate,
   buildBastion,
   generateBastions,
   type BastionInstance,
@@ -275,6 +277,7 @@ console.log('\n[候选点：三种情况不放]');
     ceilingAt: () => 90,
     biomeAt: () => NetherBiome.NETHER_WASTES,
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
     ...overrides,
   });
 
@@ -316,6 +319,7 @@ console.log('\n[实例与区块的相交判定]');
     ceilingAt: () => 90,
     biomeAt: () => NetherBiome.NETHER_WASTES,
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   })!;
   const cx = instance.x >> 4;
   const cz = instance.z >> 4;
@@ -334,6 +338,7 @@ console.log('\n[布局：桥 + 宝库 + 箱子 + 鎏金黑石]');
     ceilingAt: () => 90,
     biomeAt: () => NetherBiome.NETHER_WASTES,
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   };
   const instance = bastionInstanceForTest(0, 0, SEED, world)!;
 
@@ -391,6 +396,7 @@ console.log('\n[确定性：同一座堡垒重放逐格一致]');
     ceilingAt: () => 90,
     biomeAt: () => NetherBiome.NETHER_WASTES,
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   };
   const instance = bastionInstanceForTest(0, 0, SEED, world)!;
 
@@ -434,6 +440,7 @@ console.log('\n[真实下界：状态通道端到端]');
     ceilingAt: (x, z) => nether.ceilingAt(x, z),
     biomeAt: (x, z) => nether.biomeAt(x, z),
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   };
 
   // 在真实下界里找一座堡垒（单元网格 24 区块，扫 9×9 个单元足够碰上）
@@ -499,6 +506,54 @@ console.log('\n[与"玩家自己放的箱子"不冲突]');
   equal('读出来的就是宝库', lootTableByIndex(chestLootIndex(state))?.key, 'bastion_treasure');
   // 4 位状态位装得下（序列号上限 15）
   check('10 张表都在 4 位状态位能表示的范围内', LOOT_TABLES.length <= 15);
+}
+
+console.log('\n[下界化石（批次 410）]');
+{
+  // 本块自己造一个假世界（上面那个 `world()` 在别的块里，出了作用域就没了）
+  const makeWorld = (overrides: Partial<BastionWorld> = {}): BastionWorld => ({
+    floorAt: () => 40,
+    ceilingAt: () => 90,
+    biomeAt: () => NetherBiome.NETHER_WASTES,
+    basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
+    ...overrides,
+  });
+
+  check('下界结构清单里登记了化石（三种）', NETHER_STRUCTURE_KINDS.length === 3 && NETHER_STRUCTURE_KINDS.includes('nether_fossil'), NETHER_STRUCTURE_KINDS.join(','));
+
+  const soul = makeWorld({ biomeAt: () => NetherBiome.SOUL_SAND_VALLEY });
+  let found: ReturnType<typeof netherFossilCandidate> = null;
+  let foundCell: [number, number] = [0, 0];
+  for (let cx = 0; cx < 40 && !found; cx++) {
+    for (let cz = 0; cz < 40 && !found; cz++) {
+      const inst = netherFossilCandidate(cx, cz, SEED, soul);
+      if (inst) {
+        found = inst;
+        foundCell = [cx, cz];
+      }
+    }
+  }
+  check('灵魂沙峡谷里能找到化石', found !== null);
+
+  if (found) {
+    const again = netherFossilCandidate(foundCell[0], foundCell[1], SEED, soul);
+    check(
+      '同一个单元两次求值完全一致（世界坐标的纯函数，能跨区块重放）',
+      again !== null && again.x === found.x && again.z === found.z && again.y === found.y,
+    );
+    check('埋在地表下 1 格（露头一格，否则永远找不到）', found.y === 39, `y=${found.y}`);
+  }
+
+  // 负面：其它群系一格都不该有
+  const wastes = makeWorld();
+  let inWastes = 0;
+  for (let cx = 0; cx < 40; cx++) {
+    for (let cz = 0; cz < 40; cz++) {
+      if (netherFossilCandidate(cx, cz, SEED, wastes)) inWastes++;
+    }
+  }
+  check('非灵魂沙峡谷一个都不生成', inWastes === 0, `实际 ${inWastes} 个`);
 }
 
 console.log(`\n堡垒遗迹测试：${passed} 通过 / ${failed} 失败`);

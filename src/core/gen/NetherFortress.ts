@@ -37,6 +37,13 @@ export interface FortressWorld {
   biomeAt(x: number, z: number): number;
   /** 玄武岩三角洲的群系 id（要塞不在那里生成，与原版一致） */
   basaltBiome: number;
+  /**
+   * 灵魂沙峡谷的群系 id（批次 410：下界化石只在那里生成）。
+   *
+   * 放在这张表里而不是让化石自己去问生成器：`structureWorld()` 是**下界结构共用**的
+   * 一份查询（堡垒 / 要塞 / 化石三家都用它），多一个字段比多一条查询路径便宜。
+   */
+  soulSandBiome: number;
 }
 
 /** 单元网格间距（区块）：22 区块 = 352 格一个单元 */

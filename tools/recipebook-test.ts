@@ -241,6 +241,16 @@ console.log('\n[配方书列表]');
 
   // 熔炼表也要能被界面列出来
   check(`熔炼配方可枚举（${SMELTING_RECIPES.length} 条）`, SMELTING_RECIPES.length > 0);
+
+  // 批次 412：三条"原版走熔炉"的方块。用输入方块的 id 去查产物，
+  // 而不是只数条数——"表里多了一条"不代表"多的是对的那一条"
+  const smeltOf = (input: number): number | null => {
+    const found = SMELTING_RECIPES.find((recipe) => recipe.input === input);
+    return found ? found.output.id : null;
+  };
+  check('黏土块烧成陶瓦', smeltOf(Block.CLAY) === Block.TERRACOTTA, String(smeltOf(Block.CLAY)));
+  check('石砖烧成裂纹石砖', smeltOf(Block.STONE_BRICKS) === Block.CRACKED_STONE_BRICKS);
+  check('玄武岩烧成平滑玄武岩', smeltOf(Block.BASALT) === Block.SMOOTH_BASALT);
   check('每条熔炼配方都有输入与产物', SMELTING_RECIPES.every((recipe) => recipe.input > 0 && recipe.output.id > 0));
 
   // 所有配方的产物与材料都必须有中文名（否则界面会出现英文 id）
