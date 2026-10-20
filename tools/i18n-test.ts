@@ -63,6 +63,11 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'pause.achievements',
     'pause.exit',
     'settings.language',
+    'settings.row.daylightCycle',
+    'settings.row.showDebug',
+    'settings.row.autosave',
+    'settings.row.flying',
+    'settings.row.gameMode',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));

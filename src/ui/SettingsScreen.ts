@@ -1082,12 +1082,12 @@ export class SettingsScreen {
     const game = this.section('game');
     // 第一块：开关与下拉
     const gameOptions = this.makeBlock(game);
-    this.makeToggle(gameOptions, 'daylightCycle', '昼夜循环');
-    this.makeToggle(gameOptions, 'showDebug', '调试信息');
+    this.makeToggle(gameOptions, 'daylightCycle', t('settings.row.daylightCycle'));
+    this.makeToggle(gameOptions, 'showDebug', t('settings.row.showDebug'));
     // 飞行：只在创造模式里显示（由 `refreshGameModeRows()` 控制显隐）
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow(gameOptions);
     // 自动保存间隔（批次 172）：大世界保存那一下会有卡顿，间隔可调
-    this.makeSelect(gameOptions, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
+    this.makeSelect(gameOptions, 'autosaveSeconds', t('settings.row.autosave'), AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
     // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
     // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
@@ -1899,7 +1899,7 @@ export class SettingsScreen {
   private makeCreativeRow(host: HTMLElement): void {
     this.flyingToggle = this.makeSwitch(
       host,
-      '飞行',
+      t('settings.row.flying'),
       () => this.actions.isFlying?.() ?? false,
       () => this.actions.onToggleFly?.(),
       // 飞行不写进 localStorage（见上面注释），所以切换后不必保存设置
@@ -1916,7 +1916,7 @@ export class SettingsScreen {
   private makeGameModeRow(host: HTMLElement): void {
     this.gameModeToggle = this.makeDropdown(
       host,
-      '游戏模式',
+      t('settings.row.gameMode'),
       ['survival', 'creative'] as const,
       GAME_MODE_LABELS,
       () => this.actions.gameMode?.() ?? 'survival',

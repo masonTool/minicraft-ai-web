@@ -1936,10 +1936,16 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  // 文案表本身也要读：批次 417 起"游戏模式/飞行"走 i18n 键，
+  // 只验源码里有没有那个键，还不足以保证中文表里有它
+  const i18nText = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
   check(
     '设置面板有"游戏模式"与"飞行"两个开关（批次 181 拆开）',
-    settingsSource.includes("'游戏模式'") &&
-      settingsSource.includes("'飞行'") &&
+    // 批次 417 起这两行的文案走 i18n 键：验"绑了哪个键"+"中文表里是什么"
+    settingsSource.includes("t('settings.row.gameMode')") &&
+      settingsSource.includes("t('settings.row.flying')") &&
+      i18nText.includes("'settings.row.gameMode': '游戏模式',") &&
+      i18nText.includes("'settings.row.flying': '飞行',") &&
       settingsSource.includes('private makeCreativeRow') &&
       settingsSource.includes('private makeGameModeRow'),
   );
