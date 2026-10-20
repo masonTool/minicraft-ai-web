@@ -2594,6 +2594,12 @@
         box-shadow: inset 0 0 0 2px rgba(255, 210, 120, .35);
       }
       .inv-slot.preview-result canvas { opacity: .78; }
+      /* 需要站台才能做的产物：目标框用红底，明确"是这个东西需要工具" */
+      .inv-slot.needs-station {
+        background: linear-gradient(#a5453d, #7f2f2a);
+        box-shadow: inset 0 0 0 2px rgba(255, 150, 130, .40);
+      }
+      .inv-slot.needs-station canvas { opacity: .92; }
 
       /* ---------------- 铁砧（H8） ---------------- */
       .anvil-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
@@ -3362,7 +3368,9 @@
       /* 分类里的物品：半栏宽塞不下 9 列，7 列 × 40px 与创造栏一致 */
       .inv-grid.inv-category {
         grid-template-columns: repeat(7, 40px);
-        gap: 2px;
+        gap: 1px;
+        /* 右侧留出 5px 给自绘滚动条，避免拇指/滑块压住最后一列图标 */
+        padding-right: 5px;
         justify-content: center;
         align-content: start;
         min-height: 0;
@@ -3386,10 +3394,11 @@
       .inv-grid.inv-creative::-webkit-scrollbar { display: none; width: 0; height: 0; }
       /* 自绘常驻滚动条：父级 `.inv-category-section` 已经是 position: relative */
       .inv-category-scrollbar {
-        position: absolute; right: 1px; width: 6px;
+        position: absolute; right: 1px; width: 4px;
         background: rgba(0, 0, 0, .26);
         border-radius: 3px; z-index: 3; pointer-events: none;
       }
+      .inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }
       .inv-category-scroll-thumb {
         position: absolute; left: 0; top: 0; width: 100%; min-height: 18px;
         background: #9a9a9a; border: 1px solid #4a4a4a;
@@ -3628,7 +3637,8 @@
       /* 创造栏自己滚：翻页条因此始终留在视野里（宽屏上原来要滚到面板底部才能翻页） */
       .inv-grid.inv-creative {
         grid-template-columns: repeat(12, 34px); gap: 2px;
-        max-height: 46vh; overflow-y: auto; padding-right: 2px;
+        /* 右侧留出 10px：滚动条显示在内容外侧的留白里，不压图标 */
+        max-height: 46vh; overflow-y: auto; padding-right: 10px;
       }
 
       /* ---------------- 创造物品栏：分类、搜索与分页 ---------------- */

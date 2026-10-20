@@ -1322,12 +1322,20 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('this.hidePickToast(true)') &&
       readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8').includes('hide(): void {'),
   );
-  // 创造模式下点物品同样要把配方摆出来
-  // 批次 166 改口径：**创造模式根本不显示配方**（拥有所有方块，看配方没意义），
-  // 点物品就只是"拿起它"——创造栏那个调用点保留，但 `showRecipeFor` 会提前返回
+  // 创造模式点"需要站台"的物品：除了站台图标，目标框也要红底画出这件物品
   check(
-    '创造模式点物品不展示配方（工作站分支之后仍先挡掉创造模式）',
-    /private showRecipeFor\(itemId: number, mode: 'preview' \| 'fill' = 'fill'\): void \{[\s\S]{0,1200}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
+    '创造模式需要站台时，目标框红底显示当前物品',
+    invSrc.includes('this.previewResultNeedsStation = true;') &&
+      invSrc.includes("this.resultElement.classList.toggle(\n        'needs-station',") &&
+      invSrc.includes('this.craftGhost || this.previewResultNeedsStation') &&
+      css.includes('.inv-slot.needs-station {'),
+  );
+  // 创造格滚动不能误选：按下只记录起点，松手后没移动/没滚动才选中
+  check(
+    '创造格滑动列表不会误选物品',
+    invSrc.includes('const startScroll = this.creativeGrid.scrollTop;') &&
+      invSrc.includes('if (moved || Math.abs(this.creativeGrid.scrollTop - startScroll) > 1) return;') &&
+      invSrc.includes('private pickCreativeSlot('),
   );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
   // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）

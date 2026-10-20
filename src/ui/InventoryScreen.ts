@@ -634,6 +634,8 @@ export class InventoryScreen {
    * 材料够的时候走真实填充（结果由 `CraftingGrid` 算），材料不够时只有这份预览。
    */
   private previewResult: { id: number; count: number } | null = null;
+  /** 结果框里的是"需要站台才能做"的预览：用红底，和缺料预览区分开 */
+  private previewResultNeedsStation = false;
   /**
    * 当前预览的配方需要哪些工作站（批次 531）。
    *
@@ -2001,6 +2003,8 @@ export class InventoryScreen {
     this.categoryGrid.replaceChildren(fragment);
     this.categoryGrid.scrollTop = targetScroll;
     this.syncCategoryScrollbar();
+    // 刚换完 DOM 的那一帧，格子的最终位置可能还没结算；下一帧再量一次
+    requestAnimationFrame(() => this.syncCategoryScrollbar());
     // 重建之后把"手上那叠"的落点按 id 找回来并补上选中态（刷新尾部不会再给分类栏补）
     if (this.held) {
       const cell = this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${this.held.id}"]`);
@@ -2020,6 +2024,27 @@ export class InventoryScreen {
     this.categoryPager.classList.toggle('hidden', scrollMode || pages <= 1);
   }
 
+  /**
+   * 滚动条应该贴在**物品内容**的右边几像素，而不是贴在整个网格容器的右缘。
+   *
+   * 分类网格是 `justify-content: center` 的：容器可能比 7 列物品宽很多，
+   * 滚动条如果写死 right:1 就会离最后一列很远。这里按第一行最后一个格子的
+   * 实际右缘来定位。
+   */
+  private scrollbarContentLeft(grid: HTMLElement, host: HTMLElement, track: HTMLElement): number {
+    const hostRect = host.getBoundingClientRect();
+    const style = getComputedStyle(grid);
+    const cols = style.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    const slots = [...grid.children].filter((child) => child.classList.contains('inv-slot'));
+    let contentRight = hostRect.left;
+    for (let i = 0; i < Math.min(cols, slots.length); i++) {
+      contentRight = Math.max(contentRight, slots[i]!.getBoundingClientRect().right);
+    }
+    const width = track.offsetWidth || 6;
+    const left = contentRight - hostRect.left + 4;
+    return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width - 1));
+  }
+
   /** 同步自绘滚动条：只有内容超出一屏时才显示，拇指高度/位置按比例算 */
   private syncCategoryScrollbar(): void {
     const track = this.categoryScrollTrack;
@@ -2030,6 +2055,8 @@ export class InventoryScreen {
     const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'category';
     track.style.display = visible ? 'block' : 'none';
     if (!visible) return;
+    track.style.right = 'auto';
+    track.style.left = `${this.scrollbarContentLeft(grid, this.categoryHostEl, track)}px`;
     track.style.top = `${grid.offsetTop}px`;
     track.style.height = `${grid.clientHeight}px`;
     const trackH = grid.clientHeight;
@@ -2049,6 +2076,8 @@ export class InventoryScreen {
     const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'creative';
     track.style.display = visible ? 'block' : 'none';
     if (!visible) return;
+    track.style.right = 'auto';
+    track.style.left = `${this.scrollbarContentLeft(grid, this.creativeSection, track)}px`;
     track.style.top = `${grid.offsetTop}px`;
     track.style.height = `${grid.clientHeight}px`;
     const trackH = grid.clientHeight;
@@ -2197,18 +2226,34 @@ export class InventoryScreen {
     }
     this.pendingRecipeId = null;
     this.clearCraftGhost();
-    // 批次 166：创造模式不显示配方（拥有所有方块，看配方没有意义）
-    if (this.hooks.isCreative?.() ?? false) return;
+    const creative = this.hooks.isCreative?.() ?? false;
     const recipe = this.bestRecipeFor(itemId);
     // 没有任何合成配方：只可能是站台产物（烧/酿/切/升级/织/制图）。
     // 把所有能产出它的站台都列出来（食物可能同时有熔炉/烟熏炉/营火）。
     if (!recipe) {
       this.craftStations = stationItemsFor(itemId);
+      if (creative && this.craftStations.length > 0) {
+        // 创造模式：目标框里也要画出这件东西（红底），让玩家知道
+        // "需要站台的是它"，而不是只看到一排站台图标。
+        this.previewResult = { id: itemId, count: 1 };
+        this.previewResultNeedsStation = true;
+      }
       return;
     }
     // 配方需要 3×3、当前背包只有 2×2：列出所有站台路线（工作台一定在第一位）。
     if (recipeGridSize(recipe) > this.crafting.size) {
       this.craftStations = stationItemsFor(itemId);
+      if (creative && this.craftStations.length > 0) {
+        this.previewResult = { id: itemId, count: recipe.result.count };
+        this.previewResultNeedsStation = true;
+      }
+      return;
+    }
+    // 创造模式 2×2 就能做：不需要站台，也不消费仓库材料
+    if (creative) {
+      this.craftStations = [];
+      this.previewResult = null;
+      this.previewResultNeedsStation = false;
       return;
     }
     // 2×2 就能摆下：白底（材料够）不显示站台；
@@ -2220,6 +2265,7 @@ export class InventoryScreen {
     // 否则每滑过一件就动物品/重建列表，手指底下的格子会被换掉。
     if (mode === 'fill' && fillCraftingGrid(this.inventory, this.crafting, recipe)) {
       this.previewResult = null;
+      this.previewResultNeedsStation = false;
       // 摆成功了就是"当前能做"，不需要任何站台提示
       this.craftStations = [];
       return;
@@ -2325,6 +2371,7 @@ export class InventoryScreen {
     // 预览收了，"要工作台/要熔炉"的标记与结果槽预览也一起收（批次 185 / 206）
     this.craftStations = [];
     this.previewResult = null;
+    this.previewResultNeedsStation = false;
     if (!this.craftGhost) return;
     this.craftGhost = null;
     for (const [key, binding] of this.bindings) {
@@ -4315,6 +4362,35 @@ export class InventoryScreen {
     }
   }
 
+  /** 创造格真正被点中（已排除滚动）后，拿取/取消选中并刷新配方预览 */
+  private pickCreativeSlot(itemId: number, slot: HTMLElement, button: number): void {
+    // 批次 159：**再点同一格 = 取消选中**（创造取的是复制品，取消就是清掉它）
+    if (this.held && this.heldOriginEl === slot) {
+      this.cancelHeldSelection();
+      return;
+    }
+    // 创造选取 = **先拿到光标**（批次 142，对齐基岩/Java 创造）：
+    // 左键/中键满组、右键 1 个（同类可累加到堆叠上限）。不再直接 inventory.add。
+    const max = maxStackOf(itemId);
+    if (button === 2) {
+      if (this.held?.id === itemId) {
+        this.held = { ...this.held, count: Math.min(max, this.held.count + 1) };
+      } else {
+        this.held = { id: itemId, count: 1 };
+      }
+    } else {
+      this.held = { id: itemId, count: max };
+    }
+    // 批次 159：创造格同样"就地选中"——点中的那一格变深，手上那叠就显示在那儿
+    this.heldOriginEl = slot;
+    // 这是**复制品**（没有来源格）：放到已有物品的格子上时直接覆盖、旧的销毁
+    this.heldFromCreative = true;
+    // 创造模式下点一件东西也要看到"它由什么组成"（右栏在合成时）
+    this.showRecipeFor(itemId);
+    this.hooks.onMove?.();
+    this.refresh();
+  }
+
   /** 按当前分类与搜索词重建创造网格；触摸端整表滚动，PC 底部翻页。 */
   private renderCreativeGrid(): void {
     // 搜索框只在「搜索」那一栏出现（与生存模式同一个口径，见 `syncCreativeSearch`）
@@ -4372,32 +4448,34 @@ export class InventoryScreen {
       this.tooltipStacks.set(slot, { id: itemId, count: stackLimit });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
-        event.preventDefault();
-        // 批次 159：**再点同一格 = 取消选中**（创造取的是复制品，取消就是清掉它）
-        if (this.held && this.heldOriginEl === slot) {
-          this.cancelHeldSelection();
-          return;
-        }
-        // 创造选取 = **先拿到光标**（批次 142，对齐基岩/Java 创造）：
-        // 左键/中键满组、右键 1 个（同类可累加到堆叠上限）。不再直接 inventory.add。
-        const max = maxStackOf(itemId);
-        if (event.button === 2) {
-          if (this.held?.id === itemId) {
-            this.held = { ...this.held, count: Math.min(max, this.held.count + 1) };
-          } else {
-            this.held = { id: itemId, count: 1 };
+        // 不在这里 preventDefault / 选中：手指从格子上开始滑动时，
+        // 浏览器仍要能滚动列表。只有"按下后几乎没有移动"才算选中。
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startScroll = this.creativeGrid.scrollTop;
+        const button = event.button;
+        let moved = false;
+        const onMove = (move: PointerEvent): void => {
+          if (Math.abs(move.clientX - startX) > 6 || Math.abs(move.clientY - startY) > 6) {
+            moved = true;
           }
-        } else {
-          this.held = { id: itemId, count: max };
-        }
-        // 批次 159：创造格同样"就地选中"——点中的那一格变深，手上那叠就显示在那儿
-        this.heldOriginEl = slot;
-        // 这是**复制品**（没有来源格）：放到已有物品的格子上时直接覆盖、旧的销毁
-        this.heldFromCreative = true;
-        // 创造模式下点一件东西也要看到"它由什么组成"（右栏在合成时）
-        this.showRecipeFor(itemId);
-        this.hooks.onMove?.();
-        this.refresh();
+        };
+        const cleanup = (): void => {
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+        };
+        const onUp = (up: PointerEvent): void => {
+          cleanup();
+          // 滚动过（手指移动，或列表自身 scrollTop 变了）就不是选中
+          if (moved || Math.abs(this.creativeGrid.scrollTop - startScroll) > 1) return;
+          up.preventDefault();
+          this.pickCreativeSlot(itemId, slot, button);
+        };
+        const onCancel = (): void => cleanup();
+        window.addEventListener('pointermove', onMove, { passive: true });
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onCancel);
       });
       fragment.appendChild(slot);
     }
@@ -4418,6 +4496,7 @@ export class InventoryScreen {
     this.creativeGrid.replaceChildren(fragment);
     this.creativeGrid.scrollTop = targetScroll;
     this.syncCreativeScrollbar();
+    requestAnimationFrame(() => this.syncCreativeScrollbar());
 
     // 把"手上那叠"的落点搬回重建后的新格子，并把选中态补上
     // （`refresh()` 里那一步在上面的重建之前就做完了）
@@ -6298,11 +6377,16 @@ export class InventoryScreen {
     if (this.mode === 'inventory' || this.mode === 'crafting') {
       // 真实结果优先；只有"缺料预览"时才把预览产物画进结果槽（批次 206）
       const real = this.crafting.result;
-      const result = real ?? (this.craftGhost ? this.previewResult : null);
+      const result =
+        real ?? (this.craftGhost || this.previewResultNeedsStation ? this.previewResult : null);
       this.renderInto(this.resultElement, result ? { id: result.id, count: result.count } : null);
       this.resultElement.classList.toggle('ready', real !== null);
-      // 预览产物是只读的：与真实产物不同的底色，避免玩家以为点了能拿
+      // 预览产物是只读的：缺料 / 需要站台用不同底色
       this.resultElement.classList.toggle('preview-result', real === null && result !== null);
+      this.resultElement.classList.toggle(
+        'needs-station',
+        real === null && result !== null && this.previewResultNeedsStation,
+      );
       this.resultElement.classList.add('take-only');
       // 批次 185 / 531：箭头旁边的工作站图标（可能有多颗）
       this.syncCraftStations();
