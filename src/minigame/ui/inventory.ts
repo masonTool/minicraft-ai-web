@@ -3,8 +3,8 @@ import type { ItemStack } from '../../core/container/Inventory.ts';
 import { CraftingGrid } from '../../core/crafting/CraftingGrid.ts';
 import { buildRecipeEntries, type RecipeEntry } from '../../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../../core/crafting/Recipes.ts';
-import { Block, blockDef } from '../../core/registry/blocks.ts';
-import { itemName } from '../../core/registry/items.ts';
+import { Block } from '../../core/registry/blocks.ts';
+import { itemLabel } from '../../core/registry/itemNames.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
@@ -190,7 +190,7 @@ export function createInventory(
         context.fillRect(gridX, y, gridWidth, 38);
         drawText(
           context,
-          `${itemName(entry.result.id)}${entry.result.count > 1 ? ` x${entry.result.count}` : ''}`,
+          `${itemLabel(entry.result.id)}${entry.result.count > 1 ? ` x${entry.result.count}` : ''}`,
           gridX + 10,
           y + 10,
           16,
@@ -522,7 +522,7 @@ export function createInventory(
       holdTimer = setTimeout(() => {
         holdTimer = null;
         if (!drag || drag.from !== index || drag.moved) return;
-        tooltip = { text: blockDef(stack.id).name.replace('minecraft:', ''), index };
+        tooltip = { text: itemLabel(stack.id), index };
         redraw();
         if (tooltipTimer) clearTimeout(tooltipTimer);
         tooltipTimer = setTimeout(() => {

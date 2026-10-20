@@ -18,7 +18,8 @@ import { World } from '../core/world/World.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
-import { itemName, maxStackOf } from '../core/registry/items.ts';
+import { maxStackOf } from '../core/registry/items.ts';
+import { itemLabel } from '../core/registry/itemNames.ts';
 import { craftFromInventory } from '../core/crafting/RecipeBook.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
@@ -266,7 +267,7 @@ async function boot(): Promise<void> {
       onGiveBlock: (id) => {
         inventory.add(id, 64);
         ui.syncInventory(inventory.serialize(), selectedSlot);
-        ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')} x64`);
+        ui.showToast(`+ ${itemLabel(id)} x64`);
         scheduleSave?.();
       },
       onTakeSelectedItem: (): ItemStack | null => {
@@ -350,7 +351,7 @@ async function boot(): Promise<void> {
         if (stack.count <= 0) inventory.set(selectedSlot, null);
         ui.syncInventory(inventory.serialize(), selectedSlot);
         dropOne?.(one);
-        ui.showToast(`DROPPED ${blockDef(one.id).name.replace('minecraft:', '')}`);
+        ui.showToast(`丢弃 ${itemLabel(one.id)}`);
         scheduleSave?.();
       },
       onCraftRecipe: (recipe) => {
@@ -360,7 +361,7 @@ async function boot(): Promise<void> {
           return;
         }
         ui.syncInventory(inventory.serialize(), selectedSlot);
-        ui.showToast(`+ ${itemName(result.id)} x${result.count}`);
+        ui.showToast(`+ ${itemLabel(result.id)} x${result.count}`);
         scheduleSave?.();
       },
       onMoveItem: (from, to) => {
@@ -582,7 +583,7 @@ async function boot(): Promise<void> {
       if (drop.age > 0.7 && distance < 1.6) {
         inventory.addStack(drop.item);
         ui.syncInventory(inventory.serialize(), selectedSlot);
-        ui.showToast(`+ ${blockDef(drop.item.id).name.replace('minecraft:', '')}`);
+        ui.showToast(`+ ${itemLabel(drop.item.id)}`);
         scene.remove(drop.mesh);
         drop.mesh.geometry.dispose();
         (drop.mesh.material as THREE.Material).dispose();
@@ -819,8 +820,7 @@ async function boot(): Promise<void> {
     }
     outline.visible = true;
     outline.position.set(currentHit.x + 0.5, currentHit.y + 0.5, currentHit.z + 0.5);
-    targetLabel = blockDef(world.getBlock(currentHit.x, currentHit.y, currentHit.z))
-      .name.replace('minecraft:', '');
+    targetLabel = itemLabel(world.getBlock(currentHit.x, currentHit.y, currentHit.z));
     ui.setTarget(targetLabel);
   };
 
@@ -838,7 +838,7 @@ async function boot(): Promise<void> {
     spawnHitParticles(x + 0.5, y + 0.5, z + 0.5, dropColor(id));
     inventory.add(id, 1);
     ui.syncInventory(inventory.serialize(), selectedSlot);
-    ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')}`);
+    ui.showToast(`+ ${itemLabel(id)}`);
     requestSave();
   };
 
@@ -1065,7 +1065,7 @@ async function boot(): Promise<void> {
         if (held >= 500) {
           const stack = inventory.get(selectedSlot);
           ui.showToast(
-            stack ? blockDef(stack.id).name.replace('minecraft:', '') : 'EMPTY SLOT',
+            stack ? itemLabel(stack.id) : '空槽位',
           );
         } else if (held < 300) {
           cycleSlot();
