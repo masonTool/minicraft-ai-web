@@ -780,7 +780,8 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | 自动流程测试 | 新增 `tools/minigame/e2e-flow.cjs` 与 `npm run test:minigame:flow`：Playwright 按 iframe 映射点击，读取 [FLOW] 状态断言标题/世界/创建/进入/暂停/设置四页/背包/创造/切换；当前 PASS；E2E 加入离线 runner 排除项 | `ce0aadf` |
 | 2026-10-20 | 清晰度/流畅度 | DPR 上限恢复 2（对齐 Web），开启 antialias；自适应 DPR 42/56fps 阈值，最低 1.5；主线程网格化预算按帧时长 8/4/2 降载；自动流程 PASS | `f1c6041` |
 | 2026-10-20 | 修复标题设置返回进入游戏 | 标题页设置按钮先 `setOpen(false)`，导致 `openSettings` 记录 settingsFromMenu=false，返回走暂停分支进入世界。改为由 openSettings 统一关闭；E2E 增加“标题→设置→返回必须回标题”断言，当前 PASS | `362b37c` |
-| 2026-10-20 | 自动验收扩展 | E2E 增加标题设置四页签、超平坦/困难/创造组合创建、世界卡片删除自动确认；状态增加 worldType/difficulty；完整流程复跑 PASS | 本次提交 |
+| 2026-10-20 | 自动验收扩展 | E2E 增加标题设置四页签、超平坦/困难/创造组合创建、世界卡片删除自动确认；状态增加 worldType/difficulty；完整流程复跑 PASS | `cb45c86` |
+| 2026-10-20 | 删除当前世界回列表 | 删除当前世界不再 restartMiniProgram；清存档/删条目后 currentWorldId=''、playerReady=false、回世界列表；移除未使用的 restartApp；E2E 验证删除后数量 -1 且能立刻进入剩余世界 | 本次提交 |
 | 2026-10-20 | UI 视觉优化 | 面板/按钮渐变+冷色高光；HUD 从全宽黑条改紧凑面板；快捷栏/背包槽位渐变；主菜单加宽、标题下划线、拉开按钮间距；helper 截图自测 | `6f07fbb` |
 | 2026-10-20 | 对齐网页版 | 对照 Web 截图：主菜单改 `MINECRAFT` + 绿色徽章 + 中文按钮；HUD 移到右上 4 行中文小字；MENU/BAG 移到左上；准星下加目标名；快捷栏加灰色斜面外框/选中提亮；去掉 HP/FOOD 文本；helper 自测主菜单/游戏内 HUD | `f2cde48` |
 | 2026-10-20 | 中文显示名 | 目标名/Toast/背包 Tooltip/配方产物统一改用 `itemLabel()`，如 `矮草`、`橡木木板`；与网页版中文一致 | `e799def` |

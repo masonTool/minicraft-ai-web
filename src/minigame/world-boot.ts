@@ -1008,18 +1008,6 @@ async function boot(): Promise<void> {
     void persist();
   }, 15000);
 
-  const restartApp = (): void => {
-    setTimeout(() => {
-      const restart = (wx as any).restartMiniProgram;
-      if (typeof restart === 'function') {
-        restart({});
-        return;
-      }
-      const exit = (wx as any).exitMiniProgram;
-      if (typeof exit === 'function') exit({});
-    }, 900);
-  };
-
   const confirmModal = (title: string, content: string): Promise<boolean> =>
     new Promise((resolve) => {
       (wx as any).showModal({
@@ -1045,7 +1033,7 @@ async function boot(): Promise<void> {
     if (
       !(await confirmModal(
         `删除「${currentWorld.name}」？`,
-        '该世界的存档会一起删掉，无法恢复。删除后会切到下一个世界。',
+        '该世界的存档会一起删掉，无法恢复。删除后返回世界列表。',
       ))
     ) {
       return;
@@ -1055,28 +1043,31 @@ async function boot(): Promise<void> {
       worlds = worlds.filter((world) => world.id !== currentWorldId);
       if (worlds.length === 0) {
         worlds = [{
-      id: 'wx-default',
-      name: '我的世界',
-      seed: 0x5eed,
-      worldType: 'default',
-      difficulty: 'normal',
-      gameMode: 'survival',
-      playTime: 0,
-      lastPlayed: Date.now(),
-    }];
+          id: 'wx-default',
+          name: '我的世界',
+          seed: 0x5eed,
+          worldType: 'default',
+          difficulty: 'normal',
+          gameMode: 'survival',
+          playTime: 0,
+          lastPlayed: Date.now(),
+        }];
       }
+      // 当前世界已删除：回到世界列表；清空 active id，下一次点“进入”会重新加载。
       currentWorld = worlds[0]!;
-      currentWorldId = currentWorld.id;
+      currentWorldId = '';
       platform.storage.set('wx.worlds', JSON.stringify(worlds));
-      platform.storage.set('wx.worldId', currentWorldId);
+      platform.storage.set('wx.worldId', currentWorld.id);
       save = null;
+      playerReady = false;
+      ui.setLoading(null);
       refreshWorldInfo(0);
+      ui.openMainMenu('worlds');
       ui.showToast('世界已删除');
-      console.log('[WX-020] world deleted', currentWorldId);
-      restartApp();
+      console.log('[WX-020] world deleted', currentWorld.id);
     } catch (error) {
       saveStatus = 'error';
-      ui.showToast('DELETE FAILED');
+      ui.showToast('删除失败');
       console.warn('[WX-020] 删除世界失败', error);
     }
   };

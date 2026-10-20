@@ -227,8 +227,33 @@ async function main() {
       10000,
     );
 
+    // 删除当前世界：进入 → 暂停 → 删除本世界 → 应回世界列表，不重启
+    await tap(702, 174.5);
+    await waitState((state) => state.inGame && state.chunks > 0, '删除当前世界用例进入失败');
+    await tap(512, 86);
+    await waitState((state) => state.paused, '删除当前世界用例暂停失败');
+    await tap(512, 330.5);
+    const afterCurrentDelete = await waitState(
+      (state) => state.screen === 'worlds' && state.menuOpen && !state.inGame,
+      '删除当前世界后没有回到世界列表',
+      10000,
+    );
+    assert(
+      afterCurrentDelete.worldCount === afterDelete.worldCount - 1,
+      '删除当前世界后数量未减少',
+      afterCurrentDelete,
+    );
+
+    // 删除后立刻进入剩余世界，验证空 currentWorldId 不会卡住
+    await tap(702, 174.5);
+    const reentered = await waitState(
+      (state) => state.inGame && state.chunks > 0 && state.drawn > 0,
+      '删除当前世界后无法进入剩余世界',
+      30000,
+    );
+
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);
