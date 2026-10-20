@@ -13,7 +13,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, Wood, blockDef } from '../src/core/registry/blocks.ts';
 import { chestLootIndex } from '../src/core/registry/blockState.ts';
 import { FeatureWriter, type FeatureWorld } from '../src/core/gen/Features.ts';
 import {
@@ -28,6 +28,7 @@ import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/Terrai
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { planMineshaft } from '../src/core/gen/MineshaftLayout.ts';
 import { planStronghold } from '../src/core/gen/StrongholdLayout.ts';
+import { planMansion } from '../src/core/gen/MansionLayout.ts';
 import { lootTableIndex } from '../src/core/registry/loot.ts';
 import {
   STRUCTURE_CREATURE_KINDS,
@@ -1056,6 +1057,130 @@ console.log('\n[要塞的房间网格拼图（批次 462）]');
     equal('末地传送门框架是 12 格（原版一圈）', frames >= 12, true);
     check('图书馆里有两只箱子', libraryChests >= 2, `${libraryChests} 只`);
     check('图书馆里有蠹虫刷怪笼', silverfish >= 1, `${silverfish} 个`);
+  }
+}
+
+console.log('\n[林地府邸的房间网格拼图（批次 463）]');
+{
+  const lcg = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+  const dirVec = (dir: number): [number, number] =>
+    dir === 0 ? [1, 0] : dir === 1 ? [-1, 0] : dir === 2 ? [0, 1] : [0, -1];
+
+  const plan = planMansion(0, 40, 0, lcg(21), { roomCounts: [5, 4, 2], radii: [16, 12, 8] });
+  equal('三层共 11 间房', plan.rooms.length, 11);
+  equal('走廊数 = 房间数 - 层数（每层是一棵树）', plan.links.length, plan.rooms.length - 3);
+
+  // 同层网格唯一（不同层可以垂直重叠）
+  const keys = new Set(plan.rooms.map((room) => `${room.floor}:${room.x},${room.z}`));
+  equal('同层房间互不重叠', keys.size, plan.rooms.length);
+  check(
+    '每层的高度按 6 格递增',
+    [0, 1, 2].every((floor) => plan.rooms.filter((room) => room.floor === floor).every((room) => room.y === 40 + floor * 6)),
+  );
+
+  let dangling = 0;
+  const adjacency = new Map<string, string[]>();
+  for (const link of plan.links) {
+    const [dx, dz] = dirVec(link.dir);
+    const from = `${link.floor}:${link.x},${link.z}`;
+    const to = `${link.floor}:${link.x + dx * link.length},${link.z + dz * link.length}`;
+    if (!keys.has(to)) dangling++;
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    if (!adjacency.has(to)) adjacency.set(to, []);
+    adjacency.get(from)!.push(to);
+    adjacency.get(to)!.push(from);
+  }
+  equal('每条走廊的终点都是一个房间（没有断头路）', dangling, 0);
+
+  // 每层各自连通
+  let allConnected = true;
+  for (let floor = 0; floor < 3; floor++) {
+    const floorRooms = plan.rooms.filter((room) => room.floor === floor);
+    const startKey = `${floor}:${floorRooms[0]!.x},${floorRooms[0]!.z}`;
+    const seen = new Set<string>([startKey]);
+    const queue = [startKey];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const next of adjacency.get(current) ?? []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    if (seen.size !== floorRooms.length) allConnected = false;
+  }
+  check('每层的房间都与该层入口连通', allConnected);
+
+  equal('楼梯数 = 层数 - 1（顶层不需要）', plan.stairs.length, 2);
+  check(
+    '楼梯都在 (0,0) 房间、垂直对齐（玩家不会走丢）',
+    plan.stairs.every((stair) => stair.x === 0 && stair.z === 0 && stair.y === 40 + stair.floor * 6),
+  );
+  check(
+    '全部房间在半径上限内',
+    plan.rooms.every((room) => {
+      const limit = [16, 12, 8][room.floor]!;
+      return Math.hypot(room.x, room.z) <= limit;
+    }),
+  );
+  equal(
+    '同样的种子两次布局一致',
+    JSON.stringify(planMansion(0, 40, 0, lcg(21), { roomCounts: [5, 4, 2], radii: [16, 12, 8] })),
+    JSON.stringify(plan),
+  );
+  check(
+    '房间种类不止一种（每层不是一个大厅）',
+    new Set(plan.rooms.map((room) => room.kind)).size >= 3,
+    [...new Set(plan.rooms.map((room) => room.kind))].join(','),
+  );
+
+  // ---- 真实生成：深色橡木木板 / 大门 / 箱子 / 玻璃
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let mansion = null;
+  for (let cellZ = -8; cellZ <= 8 && !mansion; cellZ++) {
+    for (let cellX = -8; cellX <= 8 && !mansion; cellX++) {
+      mansion = structureInstanceForTest('woodland_mansion', cellX, cellZ, world, seed);
+    }
+  }
+  check('找得到一座林地府邸', mansion !== null);
+  if (mansion) {
+    const cx0 = Math.floor((mansion.x - 30) / 16);
+    const cx1 = Math.floor((mansion.x + 30) / 16);
+    const cz0 = Math.floor((mansion.z - 30) / 16);
+    const cz1 = Math.floor((mansion.z + 30) / 16);
+    let planks = 0;
+    let doors = 0;
+    let mansionChests = 0;
+    let glass = 0;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const blocks = generateChunkBlocks(cx, cz, seed);
+        const states = takeGeneratedStates() ?? new Uint8Array(blocks.length);
+        for (let y = -64; y < 200; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              const index = Chunk.index(x, y, z);
+              const id = blocks[index]!;
+              if (id === Wood.dark_oak!.planks) planks++;
+              else if (id === Block.OAK_DOOR) doors++;
+              else if (id === Block.GLASS) glass++;
+              else if (id === Block.CHEST && chestLootIndex(states[index]!) === lootTableIndex('mansion')) mansionChests++;
+            }
+          }
+        }
+      }
+    }
+    check('深色橡木木板铺满了府邸（> 800 格）', planks > 800, `${planks} 格`);
+    check('正面有一扇门', doors > 0, `${doors} 扇`);
+    check('窗户（玻璃）在', glass > 10, `${glass} 格`);
+    check('府邸表箱子至少两只', mansionChests >= 2, `${mansionChests} 只`);
   }
 }
 

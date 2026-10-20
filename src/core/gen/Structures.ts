@@ -44,6 +44,7 @@ import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
 import { planStronghold, roomHalf } from './StrongholdLayout.ts';
+import { MANSION_FLOOR_HEIGHT, mansionRoomHalf, planMansion } from './MansionLayout.ts';
 import {
   MINESHAFT_CORRIDOR_HALF,
   MINESHAFT_ROOM_HALF,
@@ -1437,85 +1438,163 @@ function buildOceanMonument(w: FeatureWriter, s: StructureInstance, world: Featu
 
 // ---------------------------------------------------------------- 林地府邸
 
+/**
+ * 林地府邸（批次 463 改造）：外壳仍是"逐层收进"，内部换成**房间网格**。
+ *
+ * 布局在 `MansionLayout.ts`（纯函数）：每层独立广度优先，房间落在 8 格网格上、
+ * 只占一次、同层全连通；层间楼梯固定放在每层的 (0,0) 房间，垂直对齐。
+ *
+ * ⚠️ 与原版的差异：原版府邸 50+ 房间、房间之间有门框；这里是 3~6 间/层，
+ * 房间之间是开口（门框要额外一套门洞朝向规则）。
+ */
 function buildWoodlandMansion(w: FeatureWriter, s: StructureInstance, world: FeatureWorld): void {
+  const rng = s.rng;
   const base = world.surfaceY(s.x, s.z) + 1;
   const plank = Wood.dark_oak!.planks;
   const log = Wood.dark_oak!.log;
   const cobble = Block.COBBLESTONE;
   const stair = Wood.dark_oak!.stairs;
 
-  // 三层（24 → 16 → 10），每层 4 格高，逐层收缩
-  const tiers: Array<readonly [number, number]> = [
-    [12, 0],
-    [8, 4],
-    [5, 8],
-  ];
+  const plan = planMansion(s.x, base, s.z, () => rng.next(), {
+    // 一层最多（4~5）、二层 3~4、顶层 1~2：外壳跟着房间数收进
+    roomCounts: [4 + rng.int(2), 3 + rng.int(2), 1 + rng.int(2)],
+    radii: [16, 12, 8],
+  });
 
-  for (const [radius, dy] of tiers) {
-    const y0 = base + dy;
-    const y1 = y0 + 3;
-    // 地基（挖掉起伏 + 铺石）
-    box(w, s.x - radius - 1, y0 - 1, s.z - radius - 1, s.x + radius + 1, y0 - 1, s.z + radius + 1, cobble);
-    clear(w, s.x - radius, y0, s.z - radius, s.x + radius, y1, s.z + radius);
+  const floors = new Map<number, typeof plan.rooms[number][]>();
+  for (const room of plan.rooms) {
+    const list = floors.get(room.floor) ?? [];
+    list.push(room);
+    floors.set(room.floor, list);
+  }
 
+  // ---- 每层：外壳（按该层房间的包围盒）+ 地板 + 天花 + 窗
+  for (const [floor, rooms] of floors) {
+    const y = base + floor * MANSION_FLOOR_HEIGHT;
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+    for (const room of rooms) {
+      const half = mansionRoomHalf(room.kind) + 1;
+      minX = Math.min(minX, room.x - half);
+      maxX = Math.max(maxX, room.x + half);
+      minZ = Math.min(minZ, room.z - half);
+      maxZ = Math.max(maxZ, room.z + half);
+    }
+
+    // 地基与地板
+    box(w, minX, y - 1, minZ, maxX, y - 1, maxZ, floor === 0 ? cobble : plank);
+    // 清空内部
+    clear(w, minX, y, minZ, maxX, y + 4, maxZ);
     // 外墙：木板 + 角柱
-    for (let y = y0; y <= y1; y++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        for (let dz = -radius; dz <= radius; dz++) {
-          const edge = Math.abs(dx) === radius || Math.abs(dz) === radius;
-          if (!edge) continue;
-          const corner = Math.abs(dx) === radius && Math.abs(dz) === radius;
-          w.fill(s.x + dx, y, s.z + dz, corner ? log : plank);
+    for (let dy = 0; dy <= 4; dy++) {
+      for (let x = minX; x <= maxX; x++) {
+        for (const z of [minZ, maxZ]) {
+          const corner = x === minX || x === maxX;
+          w.fill(x, y + dy, z, corner ? log : plank);
+        }
+      }
+      for (let z = minZ; z <= maxZ; z++) {
+        for (const x of [minX, maxX]) {
+          const corner = z === minZ || z === maxZ;
+          w.fill(x, y + dy, z, corner ? log : plank);
         }
       }
     }
-    // 窗
-    for (let t = -radius + 2; t <= radius - 2; t += 3) {
-      w.fill(s.x + t, y0 + 1, s.z - radius, Block.GLASS);
-      w.fill(s.x + t, y0 + 1, s.z + radius, Block.GLASS);
-      w.fill(s.x - radius, y0 + 1, s.z + t, Block.GLASS);
-      w.fill(s.x + radius, y0 + 1, s.z + t, Block.GLASS);
+    // 窗户（每 3 格一扇）
+    for (let x = minX + 2; x <= maxX - 2; x += 3) {
+      w.fill(x, y + 1, minZ, Block.GLASS);
+      w.fill(x, y + 1, maxZ, Block.GLASS);
     }
-    // 内部隔墙：把每层切成几个房间
-    for (const offset of [-Math.floor(radius / 2), Math.floor(radius / 2)]) {
-      for (let t = -radius + 1; t <= radius - 1; t++) {
-        for (let y = y0; y <= y1; y++) {
-          if (Math.abs(t) < 2 && y <= y0 + 1) continue; // 门洞
-          w.fill(s.x + t, y, s.z + offset, plank);
-          w.fill(s.x + offset, y, s.z + t, plank);
-        }
+    for (let z = minZ + 2; z <= maxZ - 2; z += 3) {
+      w.fill(minX, y + 1, z, Block.GLASS);
+      w.fill(maxX, y + 1, z, Block.GLASS);
+    }
+    // 天花
+    box(w, minX, y + 5, minZ, maxX, y + 5, maxZ, plank);
+  }
+
+  // ---- 同层走廊（3 宽 4 高，深色橡木地板）
+  const mansionDirVec = (dir: number): [number, number] =>
+    dir === 0 ? [1, 0] : dir === 1 ? [-1, 0] : dir === 2 ? [0, 1] : [0, -1];
+  for (const link of plan.links) {
+    const [dx, dz] = mansionDirVec(link.dir);
+    const px = dz !== 0 ? 1 : 0;
+    const pz = dx !== 0 ? 1 : 0;
+    for (let i = 0; i <= link.length; i++) {
+      const cx = link.x + dx * i;
+      const cz = link.z + dz * i;
+      clear(w, cx - px, link.y, cz - pz, cx + px, link.y + 3, cz + pz);
+      for (let ox = -px; ox <= px; ox++) {
+        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, link.y - 1, cz + oz, plank);
       }
-    }
-    // 地板
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dz = -radius; dz <= radius; dz++) w.fill(s.x + dx, y0 - 1, s.z + dz, plank);
-    }
-    // 室内火把
-    for (const [dx, dz] of [
-      [radius - 2, radius - 2],
-      [-radius + 2, -radius + 2],
-      [radius - 2, -radius + 2],
-      [-radius + 2, radius - 2],
-    ] as const) {
-      torch(w, s.x + dx, y0 + 2, s.z + dz, 0);
     }
   }
 
-  // 楼梯：从一层通到三层（沿着 +x 侧的内墙盘旋）
-  const stairX = s.x + 9;
-  const stairZ = s.z + 9;
-  stairs(w, stairX, base + 1, stairZ, 1, 4, stair, -1, 0);
-  stairs(w, stairX - 4, base + 5, stairZ, 1, 4, stair, -1, 0);
+  // ---- 房间：清空 + 按种类摆家具（每个房间至少一盏火把）
+  for (const room of plan.rooms) {
+    const half = mansionRoomHalf(room.kind);
+    clear(w, room.x - half, room.y, room.z - half, room.x + half, room.y + 4, room.z + half);
+    torch(w, room.x - half + 1, room.y + 2, room.z - half + 1, 0);
 
-  // 一层的门厅 + 箱子
-  clear(w, s.x, base + 1, s.z + 11, s.x + 1, base + 3, s.z + 12);
-  openDoor(w, s.x, base + 1, s.z + 12, 0, 1);
-  lootChest(w, s.x + 3, base + 1, s.z + 3, 'mansion');
-  lootChest(w, s.x - 3, base + 5, s.z - 3, 'mansion');
+    switch (room.kind) {
+      case 'hall':
+        lootChest(w, room.x + half - 1, room.y, room.z + half - 1, 'mansion');
+        break;
+      case 'study':
+        // 书桌：两张木板摞起来 + 一只箱子
+        box(w, room.x - 1, room.y, room.z - 1, room.x + 1, room.y, room.z - 1, plank);
+        w.fill(room.x, room.y + 1, room.z - 1, Block.OAK_FENCE);
+        lootChest(w, room.x + half - 1, room.y, room.z - half + 1, 'mansion');
+        break;
+      case 'bedroom':
+        villageBed(w, room.x - 1, room.y, room.z + 1, 2, rng.int(16));
+        lootChest(w, room.x + half - 1, room.y, room.z - half + 1, 'mansion');
+        break;
+      case 'dining':
+        // 长桌 + 两侧凳子
+        box(w, room.x - 2, room.y, room.z, room.x + 2, room.y, room.z, stair);
+        w.fill(room.x - 2, room.y + 1, room.z, Block.OAK_FENCE);
+        w.fill(room.x + 2, room.y + 1, room.z, Block.OAK_FENCE);
+        break;
+      case 'library':
+        for (let i = 0; i < 3; i++) {
+          box(w, room.x - 2 + i * 2, room.y, room.z - 2, room.x - 2 + i * 2, room.y + 2, room.z - 2, plank);
+        }
+        lootChest(w, room.x + half - 1, room.y, room.z + half - 1, 'mansion');
+        break;
+      case 'prison':
+        for (let dz = -2; dz <= 2; dz++) {
+          w.fill(room.x, room.y, room.z + dz, Block.OAK_FENCE);
+          w.fill(room.x, room.y + 1, room.z + dz, Block.OAK_FENCE);
+        }
+        w.fill(room.x, room.y, room.z, Block.AIR);
+        w.fill(room.x, room.y + 1, room.z, Block.AIR);
+        break;
+      case 'storage':
+        lootChest(w, room.x, room.y, room.z - 1, 'mansion');
+        w.fill(room.x + 1, room.y, room.z + 1, Block.BARREL);
+        break;
+    }
+  }
 
-  // 屋顶
-  for (const [radius, dy] of tiers) {
-    box(w, s.x - radius - 1, base + dy + 4, s.z - radius - 1, s.x + radius + 1, base + dy + 4, s.z + radius + 1, plank);
+  // ---- 层间楼梯：从本层地面升到上一层地面（6 级），上层地板开洞
+  for (const st of plan.stairs) {
+    const [dx, dz] = mansionDirVec(st.dir);
+    stairs(w, st.x - dx * 2, st.y, st.z - dz * 2, 1, MANSION_FLOOR_HEIGHT, stair, dx, dz);
+    for (let i = 0; i < MANSION_FLOOR_HEIGHT; i++) {
+      // 上层地板（y+5）在楼梯正上方开洞，不然爬上去撞头
+      w.fill(st.x - dx * 2 + dx * i, st.y + MANSION_FLOOR_HEIGHT - 1, st.z - dz * 2 + dz * i, Block.AIR);
+    }
+  }
+
+  // ---- 大门：一层 (0,0) 房间朝南开门 + 门厅
+  const groundFloor = floors.get(0)?.[0];
+  if (groundFloor) {
+    const doorZ = groundFloor.z + mansionRoomHalf('hall') + 1;
+    clear(w, groundFloor.x, base, doorZ, groundFloor.x, base + 2, doorZ);
+    openDoor(w, groundFloor.x, base, doorZ, 2, 1);
   }
 }
 
