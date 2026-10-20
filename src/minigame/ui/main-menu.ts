@@ -126,7 +126,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     drawButton(context, play, 'PLAY', 'normal', 26);
     drawButton(context, settings, 'SETTINGS', 'normal', 22);
     drawButton(context, newWorld, 'NEW WORLD', 'normal', 18);
-    drawButton(context, deleteSave, 'DELETE SAVE', 'normal', 16);
+    drawButton(context, deleteSave, 'DELETE WORLD', 'normal', 16);
     texture.needsUpdate = true;
   };
 

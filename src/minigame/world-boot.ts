@@ -692,22 +692,31 @@ async function boot(): Promise<void> {
   const deleteSave = async (): Promise<void> => {
     if (
       !(await confirmModal(
-        'DELETE SAVE?',
-        'Removes player position, inventory and block edits. Restart to generate a new world.',
+        'DELETE WORLD?',
+        'Deletes this world and its blocks. The game will switch to another world and restart.',
       ))
     ) {
       return;
     }
     try {
       await clearSave();
+      worlds = worlds.filter((world) => world.id !== currentWorldId);
+      if (worlds.length === 0) {
+        worlds = [{ id: 'wx-default', name: 'MY WORLD', seed: 0x5eed }];
+      }
+      currentWorld = worlds[0]!;
+      currentWorldId = currentWorld.id;
+      platform.storage.set('wx.worlds', JSON.stringify(worlds));
+      platform.storage.set('wx.worldId', currentWorldId);
       save = null;
       refreshWorldInfo(0);
-      ui.showToast('SAVE DELETED');
-      console.log('[WX-020] save deleted');
+      ui.showToast('WORLD DELETED');
+      console.log('[WX-020] world deleted', currentWorldId);
+      restartApp();
     } catch (error) {
       saveStatus = 'error';
       ui.showToast('DELETE FAILED');
-      console.warn('[WX-020] 删除存档失败', error);
+      console.warn('[WX-020] 删除世界失败', error);
     }
   };
 
