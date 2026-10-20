@@ -1502,6 +1502,11 @@ const showHud = (): void => {
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
+      text(0, uiHeight - 108, 1024, 24, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.92)',
+        align: 'center',
+      }),
       ...Array.from({ length: 9 }, (_, i) => {
         const stack = inventory.get(i);
         return slot(242 + i * 60, uiHeight - 76, 54, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
