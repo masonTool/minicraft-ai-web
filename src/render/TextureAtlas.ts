@@ -3227,7 +3227,7 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
       if (y < candidate.top) continue;
       // 叶尖 2 行按 `lean` 整体右移 1 格（"叶尖歪了一下"），但**宽度始终是 2 像素**。
       //
-      // 批次 523：以前叶尖收成 1 像素，那正是用户看到的"草尖上的极细的线"——
+      // 批次 524：以前叶尖收成 1 像素，那正是用户看到的"草尖上的极细的线"——
       // 它比旁边窄一半、又会在 mipmap 里第一个被平均掉，镜头一平移就时有时无
       // （"草尖在抖"）。收窄的观感改由"每片叶子高度不同"表达（见上面的 `height`）。
       const tip = y < candidate.top + 2;
@@ -3262,7 +3262,7 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
  */
 function flowerPainter(stem: readonly [number, number, number], petal: readonly [number, number, number], salt: string): Painter {
   return (x, y, rng) => {
-    // 茎：**两像素宽**（批次 523）。以前是 1 像素宽、9 行高的一条竖线——和草尖一样，
+    // 茎：**两像素宽**（批次 524）。以前是 1 像素宽、9 行高的一条竖线——和草尖一样，
     // 它在屏幕上就是"极细的线"，mipmap 一平均还会断成虚线。
     const stemX = 7 + (hashString(`${salt}stem`) % 2);
     if (y >= 7 && (x === stemX || x === stemX + 1)) {
@@ -6300,7 +6300,7 @@ export function paintedCoverage(name: TileName, size = 16): number {
 }
 
 /**
- * 某张程序化贴图里**"只有 1 像素宽"的不透明像素**有几个（批次 523）。
+ * 某张程序化贴图里**"只有 1 像素宽"的不透明像素**有几个（批次 524）。
  *
  * 判据：左右两个邻格都是透明的（贴图边缘按透明算）。这类竖条就是用户说的
  * "草尖上的极细的线"——它在屏幕上是 1~2 个像素宽的一条线，而且**在 mipmap 里第一个

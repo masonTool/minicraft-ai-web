@@ -97,7 +97,7 @@ uniform float uAlphaTest;
  */
 uniform float uAlphaLift;
 /**
- * 阈值抖动幅度（批次 523，见 alphaCoverage.ts 的 ALPHA_DITHER_BAND）。
+ * 阈值抖动幅度（批次 524，见 alphaCoverage.ts 的 ALPHA_DITHER_BAND）。
  * 实心层 0.06（±0.03）、半透明层 0 —— 那层没有 alphaTest，抖动只会白算。
  */
 uniform float uAlphaDither;
@@ -175,7 +175,7 @@ void main() {
   float alphaLod = clamp(log2(max(rho, 0.0001)), 0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)});
   float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));
 
-  // ---- 阈值抖动（批次 523）
+  // ---- 阈值抖动（批次 524）
   //
   // alphaTest 是**硬阈值**：covered 刚好骑在 0.5 上的像素（草尖、叶缘）在镜头
   // 平移一个像素时就会整体翻过去，肉眼就是"草尖在抖"。把阈值按**屏幕空间**的

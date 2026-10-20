@@ -286,7 +286,7 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
 
   applyFaceShade(box, FACE_SHADE);
   check(
-    '逐面明暗：顶面最亮、底面最暗、侧面居中（批次 523 加深）',
+    '逐面明暗：顶面最亮、底面最暗、侧面居中（批次 524 加深）',
     close(colored(box, 8), 1) && close(colored(box, 12), 0.42) && close(colored(box, 0), 0.54) && close(colored(box, 20), 0.72),
     `顶 ${colored(box, 8)} / 底 ${colored(box, 12)} / 侧 ${colored(box, 0)}`,
   );
@@ -659,7 +659,7 @@ console.log('\n[镂空贴图的覆盖率补偿（批次 520）]');
     solid.material.fragmentShader.includes(`0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)})`),
   );
   check('alphaTest 用的是补偿后的值', solid.material.fragmentShader.includes('float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));'));
-  // 批次 523：硬阈值 + 屏幕空间抖色（草尖不再整片翻转）
+  // 批次 524：硬阈值 + 屏幕空间抖色（草尖不再整片翻转）
   check(
     '阈值按屏幕空间 4×4 Bayer 打散（草尖不再整片翻）',
     solid.material.fragmentShader.includes('float threshold = uAlphaTest + (bayer4(gl_FragCoord.xy) - 0.5) * uAlphaDither;') &&
@@ -1073,7 +1073,7 @@ console.log('\n[十字植物贴图的覆盖率下限]');
   equal('树叶是不透明整块（覆盖率 100%）', paintedCoverage('oak_leaves'), 1);
 }
 
-// ---------------------------------------------------------------- 植物贴图不许有 1 像素宽的竖条（批次 523）
+// ---------------------------------------------------------------- 植物贴图不许有 1 像素宽的竖条（批次 524）
 //
 // 用户："看矮草的时候……草尖部分有那种极细的细线"。根因是叶尖收了 1 像素宽：
 // 那是屏幕上 1~2 px 的一条线，而且 mipmap 第一个把它平均掉（覆盖率 0.25~0.5），

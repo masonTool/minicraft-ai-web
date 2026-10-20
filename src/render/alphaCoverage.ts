@@ -35,7 +35,7 @@ export const ALPHA_LIFT_PER_LOD = 0.4;
 export const ALPHA_LIFT_MAX_LOD = 3;
 
 /**
- * 阈值抖动的**总幅度**（批次 523）。
+ * 阈值抖动的**总幅度**（批次 524）。
  *
  * alphaTest 是硬阈值：`covered` 刚好卡在 0.5 附近的像素，镜头平移一个像素就会整体
  * 翻过去，于是草尖那种"半覆盖"的地方看着在抖。把阈值按**屏幕空间** 4×4 Bayer
