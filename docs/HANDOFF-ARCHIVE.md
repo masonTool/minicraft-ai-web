@@ -2727,4 +2727,12 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   `D20` 勾成 `[x]`（条目 186/76/25）。
   ⚠️ 剩下 6 个是标注型（末地 5 + `the_void`），只影响雾色与刷怪表，没做、也不装做完了。
 
+- 批次 402（M23）：**记分板**（命令 28 → 29，73%）。
+  `core/world/Scoreboard.ts` 是纯类（目标/分数/显示槽位/`snapshot`+`restore` 逐条校验）；
+  `/scoreboard objectives add|remove|list|setdisplay` + `players set|add|remove|get|list|reset`
+  （持有人可写选择器）；`/execute if|unless score` 六种运算符、多目标要求全满足。
+  `command-test` +24 条（144 通过）。
+  ⚠️ 存档仓、侧边栏 HUD、队伍三件**还没做**（所以 M23 是 `[~]`）；
+  准则只有 `dummy`，写别的会被拒绝而不是假接受。
+
 <!-- docs-archive:end -->

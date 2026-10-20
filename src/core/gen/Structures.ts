@@ -66,7 +66,9 @@ export type StructureKind =
   | 'ocean_ruins'
   // 批次 349（D21 收尾）
   | 'fossil'
-  | 'amethyst_geode';
+  | 'amethyst_geode'
+  // 批次 408
+  | 'desert_well';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -411,6 +413,17 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     biomes: [Biome.DESERT, Biome.SWAMP, Biome.SNOWY_TAIGA],
     // 固定埋深：-20 左右（原版化石大致在这一带）
     undergroundY: () => -20,
+  },
+  {
+    kind: 'desert_well',
+    spacing: 32,
+    separation: 8,
+    // 原版在沙漠里大约是"每 32 区块的单元里 1/4 概率"
+    chance: 0.25,
+    salt: 0x3456,
+    radius: 6,
+    height: 6,
+    biomes: [Biome.DESERT],
   },
   {
     kind: 'amethyst_geode',
@@ -1455,6 +1468,41 @@ function buildBuriedTreasure(w: FeatureWriter, s: StructureInstance): void {
   lootChest(w, s.x, y, s.z, 'shipwreck_treasure');
 }
 
+// ---------------------------------------------------------------- 沙漠水井（批次 408）
+
+/**
+ * 沙漠水井：5×5 的圆石台 + 中间 1×1 的井 + 四根柱子撑一个 3×3 的顶。
+ *
+ * ⚠️ 与原版的差异：原版的顶是**砂岩台阶**（半砖），这里用整块圆石——
+ * 本项目没有通用的 `stone_slab` 常量（石材台阶是按变体函数算 id 的），
+ * 为了一个装饰顶去接那套 id 换算不划算。整体轮廓（方井 + 柱 + 顶）是一致的。
+ * 井水只填**一格深**：填 4 格深的话，玩家掉进去要靠游泳才上得来。
+ */
+function buildDesertWell(w: FeatureWriter, s: StructureInstance): void {
+  const base = s.y;
+  clear(w, s.x - 2, base + 1, s.z - 2, s.x + 2, base + 4, s.z + 2);
+
+  // 台面：5×5 砂岩，中间 3×3 换成圆石（井沿）
+  box(w, s.x - 2, base, s.z - 2, s.x + 2, base, s.z + 2, Block.SANDSTONE);
+  box(w, s.x - 1, base, s.z - 1, s.x + 1, base, s.z + 1, Block.COBBLESTONE);
+
+  // 井口：中心一格挖成水，四周留一圈圆石护沿（高 1）
+  w.fill(s.x, base, s.z, Block.WATER);
+  walls(w, s.x - 1, base + 1, s.z - 1, s.x + 1, base + 1, s.z + 1, Block.COBBLESTONE);
+
+  // 四根柱子 + 3×3 顶
+  for (const [dx, dz] of [
+    [-1, -1],
+    [-1, 1],
+    [1, -1],
+    [1, 1],
+  ] as const) {
+    w.fill(s.x + dx, base + 1, s.z + dz, Block.COBBLESTONE);
+    w.fill(s.x + dx, base + 2, s.z + dz, Block.COBBLESTONE);
+  }
+  box(w, s.x - 1, base + 3, s.z - 1, s.x + 1, base + 3, s.z + 1, Block.COBBLESTONE);
+}
+
 // ---------------------------------------------------------------- 冰屋（批次 348）
 
 /** 雪原小屋：雪块墙 + 冰地板 + 两层内收屋顶 + 箱子（复用 `village_house` 表） */
@@ -1566,6 +1614,7 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   ocean_ruins: (w, s) => buildOceanRuins(w, s),
   fossil: (w, s) => buildFossil(w, s),
   amethyst_geode: (w, s) => buildAmethystGeode(w, s),
+  desert_well: (w, s) => buildDesertWell(w, s),
 };
 
 /** 结构种类清单（测试用） */

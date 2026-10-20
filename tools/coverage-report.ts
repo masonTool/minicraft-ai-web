@@ -24,6 +24,7 @@ import { BIOMES } from '../src/core/gen/Biome.ts';
 import { NETHER_BIOME_NAMES } from '../src/core/gen/NetherGenerator.ts';
 import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
 import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
+import { END_STRUCTURE_KINDS } from '../src/core/gen/EndStructures.ts';
 import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
 import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
 import { DRINKABLE } from '../src/core/registry/potions.ts';
@@ -61,7 +62,7 @@ const SPEC = {
   items: 1100,
   mobs: 70,
   biomes: 61,
-  structures: 30,
+  structures: 23,
   trees: 11,
   enchantments: 38,
   effects: 30,
@@ -160,11 +161,16 @@ const rows: readonly Row[] = [
   {
     label: '结构',
     spec: SPEC.structures,
-    // 下界的结构（堡垒遗迹）走自己的放置系统，不在 `STRUCTURE_KINDS` 里——
-    // 台账要连它一起数，否则"做了 8 种"这件事在这里永远是 7
-    now: STRUCTURE_KINDS.length + NETHER_STRUCTURE_KINDS.length,
-    basis: '原版 1.18 主世界+下界+末地可探索结构约 30 种',
-    gap: '—',
+    // 三个维度各一张清单：下界（堡垒遗迹/下界要塞）与末地（末地城/末地船）
+    // 都不在 `STRUCTURE_KINDS` 里。以前只加了下界那一张，**末地一个都没数**——
+    // 于是"结构 63%"这个数把已经实现的末地城与末地船漏在外面，看起来像最弱的一项。
+    now: STRUCTURE_KINDS.length + NETHER_STRUCTURE_KINDS.length + END_STRUCTURE_KINDS.length,
+    // 分母不再写"约 30"（那是拍的）：这里是逐条列出来的 23 种——
+    // 主世界 18（村庄/矿井/要塞/地牢/沉船/海底神殿/林地府邸/沙漠神殿/丛林神庙/
+    // 沼泽小屋/掠夺者前哨/废弃传送门/埋藏的宝藏/冰屋/海底废墟/化石/紫晶洞/沙漠水井）、
+    // 下界 3（堡垒遗迹/下界要塞/下界化石）、末地 2（末地城/末地船）
+    basis: '原版 1.18 结构 23 种（主世界 18 + 下界 3 + 末地 2，逐条列在注释里）',
+    gap: '下界化石（nether_fossil）',
   },
   {
     label: '树种（地物）',

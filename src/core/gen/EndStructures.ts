@@ -46,6 +46,16 @@ function shipInCell(cellX: number, cellZ: number, seed: number): boolean {
   return hashAt(cellX + 91, cellZ - 53, seed ^ 0x5a1b) < 0.5;
 }
 
+/**
+ * 末地结构种类（批次 408）。
+ *
+ * 为什么单独导出：覆盖度台账要**数**它。以前它不在任何清单里，
+ * 于是"结构 19/30"这个数字把末地城与末地船漏掉了——实现明明在
+ * （`EndStructures.ts` 里塔与船都在），台账却少算两种。这类"分母虚高 + 分子漏数"
+ * 叠在一起，会让人以为结构是最弱的一项，实际上它已经接近做完。
+ */
+export const END_STRUCTURE_KINDS = ['end_city', 'end_ship'] as const;
+
 export function generateEndStructures(w: FeatureWriter, world: EndGenerator, seed: number): void {
   const originX = w.originX;
   const originZ = w.originZ;
