@@ -252,6 +252,11 @@ export class StatusEffects {
     return list;
   }
 
+  /** 移除单个效果（批次 475：袭击开始时消耗"不祥之兆"） */
+  remove(id: EffectId): boolean {
+    return this.active.delete(id);
+  }
+
   clear(): void {
     this.active.clear();
     this.pendingInstant.length = 0;

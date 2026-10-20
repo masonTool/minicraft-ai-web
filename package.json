@@ -23,6 +23,7 @@
     "test:waterlogged": "esbuild tools/waterlogged-test.ts --bundle --platform=node --format=esm --outfile=.tmp/waterlogged-test.mjs --log-level=error && node .tmp/waterlogged-test.mjs",
     "test:anchor": "esbuild tools/anchor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/anchor-test.mjs --log-level=error && node .tmp/anchor-test.mjs",
     "test:golem": "esbuild tools/golem-test.ts --bundle --platform=node --format=esm --outfile=.tmp/golem-test.mjs --log-level=error && node .tmp/golem-test.mjs",
+    "test:raid": "esbuild tools/raid-test.ts --bundle --platform=node --format=esm --outfile=.tmp/raid-test.mjs --log-level=error && node .tmp/raid-test.mjs",
     "audit:blocks": "esbuild tools/block-gap-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/block-gap.mjs --log-level=error && node .tmp/block-gap.mjs",
     "audit:recipes": "esbuild tools/recipe-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/recipe-audit.mjs --log-level=error && node .tmp/recipe-audit.mjs",
     "test:i18n": "esbuild tools/i18n-test.ts --bundle --platform=node --format=esm --outfile=.tmp/i18n-test.mjs --log-level=error && node .tmp/i18n-test.mjs",

@@ -443,6 +443,8 @@ import {
   GUARD_RANGE,
   nearestHostileTarget,
 } from './core/world/GuardAI.ts';
+// 村庄袭击（批次 475）：状态机是纯逻辑，生成/结算在这一层
+import { Raid, countsAsRaidKill, type RaidRaiderSpec } from './core/world/Raid.ts';
 import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
 import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
@@ -6659,8 +6661,18 @@ class App {
       // 进度（M7）：击杀。报的是**生物种类 id**而不是这一只——
       // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
       this.reportProgress({ kind: 'kill', mob: mob.type.id });
-      // 村庄保卫战（批次 383）：村庄附近击杀掠夺者；累计 5 只算击退一波
-      if (!this.rules.disableRaids && mob.type.id === 'pillager' && this.villagerNear(mob.x, mob.y, mob.z, 64)) {
+      // 不祥之兆（批次 475）：原版只有"带着旗帜的队长"掉，本项目没有队长概念，
+      // 用 10% 概率近似——不然袭击这条线永远触发不了（与要塞之眼那种"拿不到就断链"同一类坑）
+      if (!this.rules.disableRaids && mob.type.id === 'pillager' && Math.random() < 0.1) {
+        this.effects.apply('bad_omen', 6000, 0);
+        this.chat.push('你染上了不祥之兆：带着它走进村庄会引来袭击', 'system');
+      }
+      // 村庄袭击（批次 475）：只有"袭击里的那只、且死在袭击半径内"才算
+      if (countsAsRaidKill(mob.type.id, mob.x, mob.z, this.raid)) {
+        this.raid!.onRaiderKilled();
+        if (this.raid!.kills === 1) this.reportProgress({ kind: 'raid', stage: 1 });
+      } else if (!this.rules.disableRaids && mob.type.id === 'pillager' && this.villagerNear(mob.x, mob.y, mob.z, 64)) {
+        // 旧版的兜底（没有真袭击时）：村庄附近累计 5 只，进度里的 stage 2 仍能达成
         this.raidKills++;
         if (this.raidKills === 1) this.reportProgress({ kind: 'raid', stage: 1 });
         if (this.raidKills >= 5) this.reportProgress({ kind: 'raid', stage: 2 });
@@ -7741,6 +7753,113 @@ class App {
     );
     if (!spot) return;
     this.entities.spawn(createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5));
+  }
+
+  /**
+   * 村庄袭击（批次 475）：触发、推进波次、结算。
+   *
+   * 触发条件是原版主干：**带着不祥之兆走进村庄**（半径 64 格内有村庄中心）。
+   * 之后每帧把状态机推一格，按它吐出的结果做事：
+   *  - `spawn-next` → 刷下一波；
+   *  - `won` → 给"村庄英雄"，报进度 stage 2；
+   *  - `lost` → 只提示（原版袭击失败也就这样，村庄不会消失）。
+   */
+  private tickRaid(dt: number): void {
+    if (this.rules.disableRaids) return;
+    if (!this.raid) {
+      if (!this.effects.has('bad_omen')) return;
+      const center = this.villageCenterNear(this.physics.x, this.physics.z);
+      if (!center) return;
+      this.raid = new Raid(center.x, center.z);
+      // 效果被消耗：原版进村那一刻就用掉
+      this.effects.remove('bad_omen');
+      this.spawnRaidWave(this.raid.start());
+      this.chat.push('袭击开始了：守住村庄！', 'system');
+      this.hudToast.show('袭击开始');
+      return;
+    }
+    const raid = this.raid;
+    const step = raid.tick(dt);
+    if (step === 'spawn-next') {
+      const next = raid.wave + 1;
+      this.chat.push(`第 ${next} 波正在逼近…`, 'system');
+      this.spawnRaidWave(raid.nextWave());
+    } else if (step === 'won') {
+      this.effects.apply('hero_of_the_village', 120, 0);
+      this.reportProgress({ kind: 'raid', stage: 2 });
+      this.chat.push('袭击被击退了：你获得了村庄英雄', 'system');
+      this.hudToast.show('村庄英雄');
+      this.raid = null;
+    } else if (step === 'lost') {
+      this.chat.push('袭击失败：没能守住村庄', 'system');
+      this.raid = null;
+    }
+  }
+
+  /**
+   * 刷一波劫掠者（批次 475）：从村庄**边缘**（半径 32~40）的一个随机方向来。
+   *
+   * ⚠️ 生成失败的补偿：状态机是按"清单数量"记账的，如果地形太差、
+   * 有几只找不到落脚点，`remaining` 就永远减不到 0（袭击会卡死）。
+   * 所以这里把**没生成出来的**直接记成已击杀——宁可少打几只，也不能打到一半卡住。
+   */
+  private spawnRaidWave(specs: readonly RaidRaiderSpec[]): void {
+    const raid = this.raid;
+    if (!raid) return;
+    const generator = this.biomeGenerator;
+    const probe = (x: number, y: number, z: number): boolean =>
+      this.world.getBlock(x, y, z) === Block.AIR &&
+      this.world.getBlock(x, y + 1, z) === Block.AIR &&
+      blockDef(this.world.getBlock(x, y - 1, z)).solid;
+
+    for (const spec of specs) {
+      const type = mobTypeById(spec.kind);
+      for (let i = 0; i < spec.count; i++) {
+        if (!type) {
+          raid.onRaiderKilled();
+          continue;
+        }
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 32 + Math.random() * 8;
+        const x = Math.round(raid.centerX + Math.cos(angle) * distance);
+        const z = Math.round(raid.centerZ + Math.sin(angle) * distance);
+        const guessY = generator ? generator.surfaceY(x, z) + 1 : Math.floor(this.physics.y);
+        const spot = nearbyStandingSpot(probe, x, guessY, z, 6);
+        if (!spot) {
+          raid.onRaiderKilled();
+          continue;
+        }
+        this.entities.spawn(createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5));
+      }
+    }
+  }
+
+  /**
+   * 附近的村庄中心（批次 475）：与结构生成用同一套候选规则，半径 64 格。
+   *
+   * 村庄的 spacing 是 32 区块，所以只扫玩家所在单元与相邻八个，不必全图找。
+   */
+  private villageCenterNear(x: number, z: number): { x: number; z: number } | null {
+    const generator = this.biomeGenerator;
+    if (!generator) return null;
+    const cellSize = 32 * 16;
+    const baseCellX = Math.floor(x / cellSize);
+    const baseCellZ = Math.floor(z / cellSize);
+    const world = {
+      surfaceY: (px: number, pz: number) => generator.surfaceY(px, pz),
+      columnBiome: (px: number, pz: number) => generator.biomeAt(px, pz),
+    };
+    let best: { x: number; z: number; distance: number } | null = null;
+    for (let dcz = -1; dcz <= 1; dcz++) {
+      for (let dcx = -1; dcx <= 1; dcx++) {
+        const instance = structureInstanceForTest('village', baseCellX + dcx, baseCellZ + dcz, world, this.worldConfig.seed);
+        if (!instance) continue;
+        const distance = Math.hypot(instance.x - x, instance.z - z);
+        if (distance > 64) continue;
+        if (!best || distance < best.distance) best = { x: instance.x, z: instance.z, distance };
+      }
+    }
+    return best;
   }
 
   /**
@@ -9151,6 +9270,9 @@ class App {
       },
     };
     this.lastEntityContext = context;
+    // 村庄袭击（批次 475）：触发/推进波次都在实体 tick 之前——新刷出来的劫掠者
+    // 这一帧就能动，不会"先站一帧再走"
+    this.tickRaid(dt);
     // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
     // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
     this.tickGuardians(context, dt);
@@ -10771,6 +10893,9 @@ class App {
   private lastBiomeName = '';
   private biomeProgressTimer = 0;
   /** 村庄保卫战计数（批次 383）：在村庄附近击杀的掠夺者数量 */
+  /** 进行中的袭击（批次 475）。null = 没有袭击 */
+  private raid: Raid | null = null;
+  /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
   private raidKills = 0;
 
   /** 群系探索进度（批次 371）：只在主世界、每 1.5 秒检查一次 */
