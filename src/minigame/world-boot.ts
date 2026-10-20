@@ -9,7 +9,6 @@
  * 后续再把 UiPort / 玩家 / 存档 / 音频接上。
  */
 
-import '../platform/wx/bootstrap.ts';
 import * as THREE from 'three';
 import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { MeshWorkerPool } from '../render/MeshWorkerPool.ts';

@@ -2,7 +2,7 @@
 /**
  * WX-020 真实世界构建
  *
- * 入口：src/minigame/world-boot.ts
+ * 入口：src/minigame/main.ts（先注入适配器，再启动 world-boot）
  * 产物：minigame-world/game.js + minigame-world/workers/chunk.worker.js
  *
  * 与 build.mjs（压力场景）分开，避免把“真实地形”与“性能基线”混在一个工程里。
@@ -29,7 +29,7 @@ mkdirSync(join(outDir, 'workers'), { recursive: true });
 
 await build({
   absWorkingDir: root,
-  entryPoints: ['src/minigame/world-boot.ts'],
+  entryPoints: ['src/minigame/main.ts'],
   bundle: true,
   format: 'iife',
   target: ['es2017'],
