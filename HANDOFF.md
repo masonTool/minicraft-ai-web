@@ -34,9 +34,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1177（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1178（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 292 项 —— 已完成 **240**、进行中 **47**、待办 5 条（另有 1 条主动放弃）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 292 项 —— 已完成 **241**、进行中 **47**、待办 4 条（另有 1 条主动放弃）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -151,10 +151,10 @@ npm run dev            # http://localhost:5173
 
 ## 5. 待复核的悬案（下次接手优先看）
 
-非完整方块展示平台整体偏暗，而同处探针显示天光已是 15。怀疑**网格在光照收敛前就被烘焙**了。
-调试面板已输出两个数：`光照队列`（`World.lightWorkCount` → `LightEngine.pendingCells`）与 `待重刷`
-（见 `src/main.ts` 调试面板一行）。复现与判据：站上平台，观察这两个数是否归零、
-归零后该区块的网格有没有重新生成；若没重刷，就是队列收敛后缺少"脏区块重新入网格队列"的一步。
+~~非完整方块展示平台整体偏暗~~ → **批次 565 补了"光照首次收敛后全量重刷已渲染区块"**
+（`ChunkRenderer.enqueueAllRendered` + `lightSettledRemeshDone`，只做一次；
+之后的光照变化仍由 `pendingSettle` 逐块补刷）。
+真机若仍偏暗，才需要继续查顶点光照/材质本身（而不是烘焙时机）。
 
 ## 5.5 打包与发布（K8）
 
@@ -336,4 +336,4 @@ npm run agent:setup        # 跨机器自检
   虚空血、会捡东西、会被怪追、会掉饥饿/氧气。现在 `canTakeDamage` / `canPickUpItems` /
   `playerInvisible: 旁观` / 生存环境 `creative + spectator`，HUD 隐藏。
   浏览器实测：旁观者 y=-100 时生命/饱食/氧气都不变。
-- 批次 540~564（J27 装备 + J12 攻击/远程动画 + B8 水流/下落方块 + K2 比较器 + K4 药水 + B20 灵魂火 + B18 潮涌核心/盾牌 + B15 细雪 + B55 冒险模式 + B57 极限模式 + B58 统计）：15%/件盔甲与主手武器、武器伤害按工具表、1.9 公式减伤、8.5% 掉落（带 0~60% 耐久损耗）；近战 0.35 秒挥臂、远程双臂抬向前；水流推力扩到生物/掉落物；沙/沙砾/混凝土粉末/脚手架失去支撑时下落；比较器读容器 + 减法模式 + 中继器侧向锁存；水肺/跳跃药水；灵魂火；潮涌核心；细雪；冒险模式；极限模式；盾牌减速/挡爆炸/斧头破防；世界统计面板；漏斗灌堆肥桶；床顶遮挡；黏液块整组推拉；羊吃草长毛；细雪锅；信标次级主效果；雷击转换（猪→僵尸猪灵/村民→女巫/苦力怕充能）。`test:equipment` 43、`test:mob` 160、`test:physics` 118、`test:hopper` 118、`test:bed` 117、`test:redstone` 160、`test:bucket` 62、`test:beacon` 112、`test:brewing` 2415、`test:fire` 91、`test:conduit` 19、`test:lightning` 93、`test:survival` 104、`test:gamemode` 64、`test:worldmatrix` 29、`test:shield` 54 条，套数 161 → **163**。
+- 批次 540~565（J27 装备 + J12 攻击/远程动画 + B8 水流/下落方块 + K2 比较器 + K4 药水 + B20 灵魂火 + B18 潮涌核心/盾牌 + B15 细雪 + B55 冒险模式 + B57 极限模式 + B58 统计）：15%/件盔甲与主手武器、武器伤害按工具表、1.9 公式减伤、8.5% 掉落（带 0~60% 耐久损耗）；近战 0.35 秒挥臂、远程双臂抬向前；水流推力扩到生物/掉落物；沙/沙砾/混凝土粉末/脚手架失去支撑时下落；比较器读容器 + 减法模式 + 中继器侧向锁存；水肺/跳跃药水；灵魂火；潮涌核心；细雪；冒险模式；极限模式；盾牌减速/挡爆炸/斧头破防；世界统计面板；漏斗灌堆肥桶；床顶遮挡；黏液块整组推拉；羊吃草长毛；细雪锅；信标次级主效果；雷击转换（猪→僵尸猪灵/村民→女巫/苦力怕充能）；光照首次收敛后全量重刷（E23）。`test:equipment` 43、`test:mob` 160、`test:physics` 118、`test:hopper` 118、`test:bed` 117、`test:redstone` 160、`test:bucket` 62、`test:beacon` 112、`test:brewing` 2415、`test:fire` 91、`test:conduit` 19、`test:lightning` 93、`test:render` 226、`test:survival` 104、`test:gamemode` 64、`test:worldmatrix` 29、`test:shield` 54 条，套数 161 → **163**。

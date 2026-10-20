@@ -1218,5 +1218,15 @@ console.log('\n[生物/玩家的逐面明暗（批次 521）]');
   }
 }
 
+console.log('\n[光照收敛后全量重刷（E23 / 批次 565）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
+  check('网格层提供已渲染区块的全量重刷入口', rendererSrc.includes('enqueueAllRendered(): void'));
+  check('主程序在首次光照收敛后调用', mainSrc.includes('enqueueAllRendered()'));
+  check('只做一次（有 settled 标记）', mainSrc.includes('lightSettledRemeshDone = true'));
+  check('没有网格先不标记，等网格出来再刷', mainSrc.includes('chunkMeshCount > 0'));
+}
+
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

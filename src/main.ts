@@ -1826,6 +1826,13 @@ class App {
 
   /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
   private readonly pendingSettle: number[] = [];
+  /**
+   * 光照首次收敛后是否已经做过全量重刷（批次 565，E23）。
+   *
+   * 启动期网格可能先于光照烘出来；只重刷一次已渲染区块即可，
+   * 之后的光照变化由 `pendingSettle` 逐块补刷。
+   */
+  private lightSettledRemeshDone = false;
 
   /**
    * 主循环的**连续**失败次数（批次 238）。
@@ -15404,6 +15411,14 @@ class App {
       // 帧时间下不去，视距永远涨不完，"启动期"就再也不会结束。
       const startupLighting = isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done;
       const lightBusy = this.world.processLighting(lightBudgetForFrame(startupLighting, isTouchDevice()));
+
+      // E23（批次 565）：启动期先烘出来的网格可能带着未收敛的光照。
+      // 等光照首次收敛、且已经有网格存在时，把所有已渲染区块重排一次。
+      // 只做一次：之后的光照变化由下面的 `pendingSettle` 逐块补刷。
+      if (!lightBusy && !this.lightSettledRemeshDone && this.chunkRenderer.chunkMeshCount > 0) {
+        this.lightSettledRemeshDone = true;
+        this.chunkRenderer.enqueueAllRendered();
+      }
 
       // 光照收敛后再重刷一次方块改动过的区块，避免烘焙进未收敛的光照
       if (!lightBusy && this.pendingSettle.length > 0) {

@@ -157,6 +157,17 @@ export class ChunkRenderer {
     if (lz === 15) this.enqueue(cx, cz + 1);
   }
 
+  /**
+   * 把**所有已经渲染过的区块**重新排进网格队列（批次 565，E23）。
+   *
+   * 启动期光照还在传播时，先烘出来的网格会带着"当时还没亮"的顶点光照；
+   * 光照收敛后如果没人重刷，画面就会一直偏暗（探针却是 15）。
+   * 这里只重排已渲染的区块，不碰未加载区域；调用方负责**只做一次**。
+   */
+  enqueueAllRendered(): void {
+    for (const entry of this.rendered.values()) this.enqueue(entry.cx, entry.cz);
+  }
+
   private enqueue(cx: number, cz: number): void {
     const key = chunkKey(cx, cz);
     if (this.queued.has(key)) return;
