@@ -187,6 +187,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'rail':
     // 旗帜（批次 484）：原版能从旗子里走过去
     case 'banner':
+    // 钟（批次 490）：钟体很细，走过去不会挡路
+    case 'bell':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
     // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
@@ -532,6 +534,17 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'banner':
       // 旗帜（批次 484 立地 / 486 挂墙）：见 `bannerBoxes`
       return bannerBoxes(state);
+    case 'bell':
+      // 钟（批次 490）：两根支架 + 一个钟体。
+      // 钟体是个"上窄下宽"的倒锥——16×16 下用三个盒子叠出来（顶盖 / 腰 / 口沿）
+      return [
+        // 顶上的横梁（挂钟的那根）
+        [2 / 16, 14 / 16, 7 / 16, 14 / 16, 15 / 16, 9 / 16],
+        // 钟体的腰（细一点）
+        [5 / 16, 6 / 16, 5 / 16, 11 / 16, 14 / 16, 11 / 16],
+        // 钟口（宽一点，落地那一段）
+        [4 / 16, 2 / 16, 4 / 16, 12 / 16, 6 / 16, 12 / 16],
+      ];
     case 'coral_fan':
       return coralFanBoxes(state);
     case 'scaffolding':

@@ -1541,6 +1541,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { P: Block.OAK_PLANKS, R: Item.REDSTONE },
   },
   {
+    // 钟（批次 490，B19）：原版 = 4 金锭摆成钟形（上 1 下 3）
+    kind: 'shaped' as const,
+    result: { id: Block.BELL, count: 1 },
+    pattern: [' G ', 'GGG'],
+    key: { G: Item.GOLD_INGOT },
+  },
+  {
     // 唱片机（批次 489，G9/B19）：原版 = 8 木板围一圈 + 1 钻石
     kind: 'shaped' as const,
     result: { id: Block.JUKEBOX, count: 1 },

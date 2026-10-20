@@ -6431,6 +6431,23 @@ PAINTERS.jukebox_top = (x, y) => {
   return [clamp255(158 * grain), clamp255(120 * grain), clamp255(76 * grain), 255];
 };
 
+/**
+ * 钟（批次 490）：金色钟体。
+ *
+ * 16×16 下画不出钟的轮廓（几何那边已经用三个盒子叠出来了），
+ * 这张图只负责"金属感"：纵向的明暗渐变 + 中间一道高光 + 底部钟口的深色。
+ */
+PAINTERS.bell = (x, y) => {
+  // 底部两行是钟口（暗），顶部一行是横梁（更暗）
+  if (y <= 1) return [92, 66, 18, 255];
+  if (y >= 14) return [120, 88, 24, 255];
+  // 钟体：中间亮、两侧暗（圆柱反光），越往下越厚实
+  const center = Math.abs(x - 7.5) / 7.5;
+  const lit = 1.25 - center * 0.55;
+  const gold: readonly [number, number, number] = [222, 178, 62];
+  return [clamp255(gold[0] * lit), clamp255(gold[1] * lit), clamp255(gold[2] * lit), 255];
+};
+
 PAINTERS.jukebox_side = (x, y) => {
   if (y < 2 || y > 13) return [58, 44, 30, 255];
   const grain = x % 4 === 2 ? 0.88 : 1;

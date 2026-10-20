@@ -129,6 +129,8 @@ import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTic
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
 // 唱片机（批次 489）：旋律是纯数据，播放走 AudioEngine 的同一条合成通道
 import { discDuration, discSoundKind, discSoundSpec } from './core/audio/DiscMelody.ts';
+// 钟声（批次 490）
+import { bellSoundSpec } from './core/audio/BellSound.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
@@ -10670,6 +10672,19 @@ class App {
     return true;
   }
 
+  /**
+   * 敲钟（批次 490）：一声长鸣。
+   *
+   * ⚠️ 与原版的差异：原版敲钟会给**周围 32 格的灾厄村民**挂上"发光"，
+   * 让玩家看清袭击者藏在哪。本项目的生物没有 `glowing` 字段（没有"轮廓高亮"
+   * 那套渲染），所以只做声音——差异记在 TASKS B19。
+   */
+  private ringBell(x: number, y: number, z: number): boolean {
+    this.audio.playVoice('bell:ring', bellSoundSpec(), { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.hand.swing();
+    return true;
+  }
+
   /** 唱片物品 → 曲名（`null` = 不是唱片）；曲名与 `audio/DiscMelody.ts` 的表一一对应 */
   private discNameOf(itemId: number | undefined): string | null {
     if (itemId === Item.MUSIC_DISC_13) return '13';
@@ -10764,6 +10779,8 @@ class App {
     }
     // 唱片机（批次 489）：右键放唱片 / 空手取出
     if (hitBlock === Block.JUKEBOX) return this.useJukebox(x, y, z);
+    // 钟（批次 490）：右键敲响
+    if (hitBlock === Block.BELL) return this.ringBell(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {
       this.inventoryScreen.openWith('crafting');
       return true;

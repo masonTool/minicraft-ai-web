@@ -342,6 +342,7 @@ const EXPLICIT: Record<string, string> = {
   hopper: '漏斗',
   command_block: '命令方块',
   jukebox: '唱片机',
+  bell: '钟',
   music_disc_13: '唱片「13」',
   music_disc_cat: '唱片「Cat」',
   music_disc_ward: '唱片「Ward」',

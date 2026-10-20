@@ -847,6 +847,8 @@ export const TILE_ORDER = [
   // 唱片机（批次 489）：顶面（唱片槽）/ 侧面（木板 + 边条）
   'jukebox_top',
   'jukebox_side',
+  // 钟（批次 490）：金色钟体 + 钟口阴影
+  'bell',
   // 铁轨弯道（批次 478）：四个方向各一张（直轨沿用原来的 `rail`）
   'rail_east_west',
   'rail_ne',

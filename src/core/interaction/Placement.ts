@@ -370,6 +370,14 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       };
     }
 
+    case 'bell': {
+      // 钟（批次 490）：立在地上——下方要实心，命中面必须是顶面
+      //（挂墙/挂天花板没做，见 `BlockShape` 里 `bell` 的注释）
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+    }
+
     case 'banner': {
       // 旗帜（批次 484/486）：占**两格**（下半 + 上半），与原版一致。
       // 上方那一格必须是空气——否则只放得下下半格、上面那半截会凭空消失
