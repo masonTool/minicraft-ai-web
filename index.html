@@ -4973,6 +4973,11 @@
         min-height: 0;
         max-height: min(58vh, 430px);
       }
+      /* 面板本身也留一条退路：窗口矮到连"搜索 + 5 行 + 翻页条"都放不下时，
+         整块面板可以滚——否则翻页条会被 `overflow: hidden` 裁在面板外，等于又没法翻页。 */
+      body:not(.touch-mode) .inv-panel.pocket-ui {
+        overflow-y: auto;
+      }
       /* 搜索框与物品格同宽、同一条中轴（原来它占满整栏，比格子宽一截，看着像放错了） */
       body:not(.touch-mode) .inv-panel.pocket-ui .inv-creative-controls {
         width: 100%;
