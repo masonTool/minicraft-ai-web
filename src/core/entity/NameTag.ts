@@ -66,6 +66,33 @@ const CHAR_WIDTH = 0.16;
 const WIDE_CHAR_WIDTH = 0.26;
 export const NAME_TAG_MAX_WIDTH = 5.2;
 
+/**
+ * 名字牌上最多画几个字符（前缀 + 名字 + 后缀合起来）。
+ *
+ * 为什么需要这条上限：画布是**固定 512×64**（不能改，见 `MobNameTag` 里那个坑），
+ * 字号最小缩到 12px。12px 的中文一个字约 12px 宽，512 的可用宽度约 488 →
+ * 满打满算 40 个字。再长就只能靠裁掉两端，而"两端被裁"看起来像名字坏了。
+ * 所以宁可在拼的时候就截断：**宁可少几个字，也不要露半截字**。
+ *
+ * 原版没有这条限制（名字牌随文字变宽），这是本项目固定画布带来的差异，记在 TASKS M23。
+ */
+export const MAX_TAG_TEXT_LENGTH = 40;
+
+/**
+ * 把「前缀 + 名字 + 后缀」拼成名字牌上真正要画的文本。
+ *
+ * 原版是**直接拼、不留分隔符**（`/team modify red prefix [红]` → `[红]Steve`）。
+ * 三段都是空/名字本身时原样返回；超过 `MAX_TAG_TEXT_LENGTH` 按**字符**截断
+ * （`Array.from` 切开，不会把中文切半个字）。
+ *
+ * 抽成纯函数是为了让"拼法"能被断言——渲染层只负责把结果画出来。
+ */
+export function composeNameTag(prefix: string | null | undefined, name: string, suffix: string | null | undefined): string {
+  const raw = `${prefix ?? ''}${name}${suffix ?? ''}`;
+  const chars = Array.from(raw);
+  return chars.length <= MAX_TAG_TEXT_LENGTH ? raw : chars.slice(0, MAX_TAG_TEXT_LENGTH).join('');
+}
+
 export function nameTagWidthFor(name: string): number {
   let width = 0;
   for (const char of Array.from(name)) {

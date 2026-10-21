@@ -169,8 +169,12 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
   '已让 {member} 退出队伍': 'Removed {member} from their team',
   '颜色不认识：{value}（可用 {colors}）': 'Unknown color: {value} (available: {colors})',
   '队伍 {name} 的颜色已改为 {color}': 'Team {name} color changed to {color}',
-  '不认识的属性 {key}（只有 friendlyFire 与 color）':
-    'Unknown property {key} (only friendlyFire and color)',
+  '不认识的属性 {key}（只有 friendlyFire / color / prefix / suffix）':
+    'Unknown property {key} (only friendlyFire / color / prefix / suffix)',
+  '队伍 {name} 的{part}已清除': 'Cleared the {part} of team {name}',
+  '队伍 {name} 的{part}已改为「{text}」': 'Team {name} {part} is now "{text}"',
+  '前缀': 'prefix',
+  '后缀': 'suffix',
   '友好伤害只能是 true 或 false': 'Friendly fire must be true or false',
   '队伍 {name} 的友好伤害已{state}': 'Team {name} friendly fire is now {state}',
   '打开': 'on',

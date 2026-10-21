@@ -11,9 +11,11 @@
 
 import {
   MAX_NAME_LENGTH,
+  MAX_TAG_TEXT_LENGTH,
   NAME_TAG_HEIGHT,
   NAME_TAG_MAX_WIDTH,
   canNameMob,
+  composeNameTag,
   nameTagWidthFor,
   sanitizeName,
 } from '../src/core/entity/NameTag.ts';
@@ -23,13 +25,15 @@ import { FISHING_POOLS } from '../src/core/registry/fishing.ts';
 import { EntityParking } from '../src/core/entity/EntityParking.ts';
 import { REMOTE_PLAYER_TYPE } from '../src/core/entity/mobs.ts';
 import {
+  PLAIN_NAME_TAG_STYLE,
   TEAM_COLOR_HEX,
   colorForMob,
   nameTagNeedsRedraw,
+  nameTagStyleFor,
   normalizeTeamColor,
   teamColorToHex,
 } from '../src/core/entity/NameTagColor.ts';
-import { TEAM_COLORS } from '../src/core/world/Teams.ts';
+import { MAX_AFFIX_LENGTH, TEAM_COLORS, Teams, sanitizeAffix } from '../src/core/world/Teams.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -307,11 +311,19 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
    */
   const src = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
 
-  check('show() 收 color 参数', /show\(mob: Mob, topLift: number, color: string \| null = null\)/.test(src));
+  check(
+    'show() 收样式对象（颜色 + 前后缀一次传入）',
+    /show\(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE\)/.test(src),
+  );
   check('drawName() 收 color 参数', /private drawName\(name: string, color: string \| null\)/.test(src));
   check('重画判据改走 nameTagNeedsRedraw', src.includes('nameTagNeedsRedraw('));
   check('不再自己比 lastName（那条是颜色不更新的根因）', !/if \(name !== this\.lastName\)/.test(src));
-  check('记录了 lastColor', src.includes('this.lastColor = color'));
+  check('记录了 lastColor', src.includes('this.lastColor = style.color'));
+  // ---- 批次 1359：前后缀 ----
+  check('牌子文本走 composeNameTag（拼法只有一处）', src.includes('composeNameTag(style.prefix, name, style.suffix)'));
+  check('宽度按拼好的文本算（不是只按名字）', src.includes('nameTagWidthFor(display)'));
+  check('lastName 存的是拼好的文本（前缀变了自动重画）', src.includes('this.lastName = display'));
+  check('画布画的是拼好的文本', src.includes('this.drawName(display, style.color)'));
   check('invalidate() 连颜色一起清', /invalidate\(\): void \{[\s\S]{0,120}this\.lastColor = null;/.test(src));
   check('填充色用传入的 color ?? 默认白', src.includes('ctx.fillStyle = color ?? DEFAULT_NAME_COLOR'));
   check('描边固定深色（不跟队伍色走）', src.includes('ctx.strokeStyle = COLORS.outline'));
@@ -325,15 +337,111 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
 
   // ---- Q3：main.ts 的接线 ----
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  check('主程序导入 colorForMob', /import \{ colorForMob \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
+  check('主程序导入 nameTagStyleFor', /import \{ nameTagStyleFor \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
   check(
-    'updateNameTags 里把颜色传给 show()',
-    /colorForMob\(entry\.mob\.customName[\s\S]{0,200}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, color\)/.test(mainSrc),
+    'updateNameTags 里把样式传给 show()',
+    /nameTagStyleFor\(entry\.mob\.customName[\s\S]{0,200}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, style\)/.test(mainSrc),
   );
+  check('颜色已不再单独查一次（避免颜色接上、前后缀漏掉）', !mainSrc.includes('colorForMob('));
   check(
     '颜色查询走真实的 teamState（不是空实现）',
     /\(member\) => this\.teamState\.teamOf\(member\)/.test(mainSrc),
   );
+}
+
+console.log('\n[队伍前后缀（批次 1359）]');
+{
+  // ---- ① 清洗：与名字同一条口径，唯一的差别是"空串合法" ----
+  equal('普通前后缀原样保留', sanitizeAffix('[红]'), '[红]');
+  equal('首尾空白去掉', sanitizeAffix('  [红]  '), '[红]');
+  equal('换行压成空格', sanitizeAffix('[红\n队]'), '[红 队]');
+  equal('连续空白压成一个', sanitizeAffix('[红   队]'), '[红 队]');
+  equal('空串 = 清除（不是 null）', sanitizeAffix(''), '');
+  equal('null 也当清除', sanitizeAffix(null), '');
+  equal('undefined 同上', sanitizeAffix(undefined), '');
+  equal('超长按字符截断', sanitizeAffix('字'.repeat(30)), '字'.repeat(MAX_AFFIX_LENGTH));
+  equal('截断不会切半个中文', Array.from(sanitizeAffix('字'.repeat(30))).length, MAX_AFFIX_LENGTH);
+
+  // ---- ② Teams 里的存取 ----
+  const teams = new Teams();
+  teams.add('red', '红队', 'red');
+  teams.add('blue');
+  equal('建队时前缀是空串', teams.get('blue')?.prefix, '');
+  equal('建队时后缀是空串', teams.get('blue')?.suffix, '');
+  check('设前缀成功', teams.setPrefix('red', '[红]'));
+  equal('前缀读回来', teams.get('red')?.prefix, '[红]');
+  check('设后缀成功', teams.setSuffix('red', '（队长）'));
+  equal('后缀读回来', teams.get('red')?.suffix, '（队长）');
+  check('空值 = 清除前缀', teams.setPrefix('red', ''));
+  equal('清除后是空串', teams.get('red')?.prefix, '');
+  check('不存在的队设前缀返回 false', !teams.setPrefix('nope', 'x'));
+  check('不存在的队设后缀返回 false', !teams.setSuffix('nope', 'x'));
+
+  // ---- ③ 快照往返 + 老存档缺字段 ----
+  teams.setPrefix('red', '[红]');
+  teams.setSuffix('red', '（队长）');
+  const roundTrip = new Teams();
+  roundTrip.restore(JSON.parse(JSON.stringify(teams.snapshot())));
+  equal('前缀随存档往返', roundTrip.get('red')?.prefix, '[红]');
+  equal('后缀随存档往返', roundTrip.get('red')?.suffix, '（队长）');
+  equal('两次快照完全一致', JSON.stringify(roundTrip.snapshot()), JSON.stringify(teams.snapshot()));
+  const legacy = new Teams();
+  const skippedLegacy = legacy.restore({
+    teams: [{ name: 'old', displayName: '老队', color: 'white', friendlyFire: false, members: ['X'] }],
+  });
+  equal('老快照缺前后缀不算坏数据', skippedLegacy, 0);
+  equal('老快照的前缀回退空串', legacy.get('old')?.prefix, '');
+  const dirty = new Teams();
+  dirty.restore({
+    teams: [{ name: 'd', displayName: 'd', color: 'white', friendlyFire: false, prefix: '[a\nb]', suffix: 123 as never, members: [] }],
+  });
+  equal('读档时把换行清洗掉', dirty.get('d')?.prefix, '[a b]');
+  equal('非字符串后缀回退空串', dirty.get('d')?.suffix, '');
+
+  // ---- ④ 拼装（渲染层唯一该知道的"拼法"）----
+  equal('前后缀拼在名字两侧', composeNameTag('[红]', 'Steve', '（队长）'), '[红]Steve（队长）');
+  equal('只有前缀', composeNameTag('[红]', 'Steve', ''), '[红]Steve');
+  equal('只有后缀', composeNameTag('', 'Steve', '（队长）'), 'Steve（队长）');
+  equal('都没有就是名字本身', composeNameTag('', 'Steve', ''), 'Steve');
+  equal('null 当空串处理', composeNameTag(null, 'Steve', null), 'Steve');
+  equal('超长按字符截断', composeNameTag('', '字'.repeat(60), ''), '字'.repeat(MAX_TAG_TEXT_LENGTH));
+  check(
+    '拼好之后比名字本身宽',
+    nameTagWidthFor(composeNameTag('[红]', 'Steve', '')) > nameTagWidthFor('Steve'),
+  );
+  check('宽度仍受 NAME_TAG_MAX_WIDTH 上限约束', nameTagWidthFor(composeNameTag('', '字'.repeat(60), '')) <= NAME_TAG_MAX_WIDTH);
+
+  // ---- ⑤ 一次查表取齐样式（颜色 + 前后缀）----
+  const styleTeamOf = (member: string) =>
+    member === 'Steve' ? { color: 'red', prefix: '[红]', suffix: '（队长）' } : null;
+  const style = nameTagStyleFor('Steve', styleTeamOf);
+  equal('样式里的颜色', style.color, '#b02e26');
+  equal('样式里的前缀', style.prefix, '[红]');
+  equal('样式里的后缀', style.suffix, '（队长）');
+  check('没队伍 → 默认样式（同一个常量）', nameTagStyleFor('Nobody', styleTeamOf) === PLAIN_NAME_TAG_STYLE);
+  check(
+    '没名字时根本不查表',
+    nameTagStyleFor('', () => {
+      throw new Error('不该查表');
+    }) === PLAIN_NAME_TAG_STYLE,
+  );
+  equal('colorForMob 与样式同源（不会各算一套）', colorForMob('Steve', styleTeamOf), style.color);
+  equal('队伍没有 prefix 字段时给空串', nameTagStyleFor('X', () => ({ color: 'blue' })).prefix, '');
+  equal('队伍没有 color 字段时颜色为 null', nameTagStyleFor('X', () => ({ prefix: 'a' })).color, null);
+  check(
+    '前缀变了 → 要重画（拼好的文本变了，判据自动覆盖）',
+    nameTagNeedsRedraw(
+      { name: composeNameTag('', 'Steve', ''), color: null },
+      { name: composeNameTag('[红]', 'Steve', ''), color: null },
+    ),
+  );
+
+  // ---- ⑥ 命令层接线 ----
+  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  check('有 prefix / suffix 两个属性分支', /key === 'prefix' \|\| key === 'suffix'/.test(cmdSrc));
+  check('前后缀保留中间空格（第 4 段之后全部拼回）', cmdSrc.includes('args.slice(3).join('));
+  check('有剥引号的助手（支持 prefix "" 清空）', cmdSrc.includes('function stripAffixQuotes('));
+  check('回执里的 part 也过 msg()（否则英文界面会漏中文）', cmdSrc.includes("msg(key === 'prefix' ? '前缀' : '后缀')"));
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);

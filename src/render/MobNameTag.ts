@@ -10,17 +10,27 @@
  * 名字牌也照这个规矩：**画布尺寸固定**，不同长度的名字靠 `drawText` 里按宽度
  * 自适应字号 + Sprite 的 `scale` 缩放，而不是改画布。
  *
- * 性能：只在名字或**颜色**变化时重画画布（`lastName` / `lastColor`），每帧只更新位置/缩放。
+ * 性能：只在**牌子上的文本**或**颜色**变化时重画画布（`lastName` / `lastColor`），
+ * 每帧只更新位置/缩放。
  *
  * ⚠️ 颜色也是判据的一部分（批次 616）：只比 `lastName` 的话，
  * 玩家 `/team modify red color blue` 之后名字还是红的，直到他改一次名字或重进世界。
  * 判据本身在 `NameTagColor#nameTagNeedsRedraw`，那边有断言盯着。
+ *
+ * ⚠️ 队伍前后缀（批次 1359）**不需要**再加一个判据：`lastName` 存的是拼好的显示文本
+ * （`composeNameTag` 的结果），前缀变了文本就变了，自动触发重画——这正是"把拼法收进
+ * 一个纯函数"的收益：只改一处，宽度/重画/画布内容跟着一起对。
  */
 
 import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
-import { NAME_TAG_HEIGHT, nameTagWidthFor } from '../core/entity/NameTag.ts';
-import { DEFAULT_NAME_COLOR, nameTagNeedsRedraw } from '../core/entity/NameTagColor.ts';
+import { NAME_TAG_HEIGHT, composeNameTag, nameTagWidthFor } from '../core/entity/NameTag.ts';
+import {
+  DEFAULT_NAME_COLOR,
+  PLAIN_NAME_TAG_STYLE,
+  nameTagNeedsRedraw,
+  type NameTagStyle,
+} from '../core/entity/NameTagColor.ts';
 
 /**
  * 画布字体。
@@ -89,27 +99,30 @@ export class MobNameTag {
    *
    * @param topLift 名字牌底边离生物头顶的高度（格）。生命条也要占位置，
    *   由调用方决定谁在上面——见主程序里两处 `show()` 的 `lift` 参数。
-   * @param color 名字的颜色（`#rrggbb`），由 `NameTagColor#colorForMob` 算好传进来。
-   *   传 `null` 表示"没有队伍" → 用默认白。**这里不查队伍**：
+   * @param style 名字的颜色与队伍前后缀，由 `NameTagColor#nameTagStyleFor` **一次查表**算好传进来
+   *   （没队伍时是 `PLAIN_NAME_TAG_STYLE`：默认白、无前后缀）。**这里不查队伍**：
    *   渲染层不该知道 `Teams` 长什么样，否则同一条规则会在两个地方各写一遍。
    */
-  show(mob: Mob, topLift: number, color: string | null = null): void {
+  show(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE): void {
     const name = mob.customName;
     if (!name) {
       this.hide();
       return;
     }
 
-    const width = nameTagWidthFor(name);
+    // 牌子上的**实际文本**是「队伍前缀 + 名字 + 队伍后缀」（批次 1359）。
+    // 宽度、重画判据、画布内容全都跟着这段文本走——只要拼法变了，三处自动一致。
+    const display = composeNameTag(style.prefix, name, style.suffix);
+    const width = nameTagWidthFor(display);
     const height = NAME_TAG_HEIGHT;
     this.object.scale.set(width, height, 1);
     this.object.position.set(mob.x, mob.y + mob.height + topLift + height / 2, mob.z);
 
-    const next = { name, color };
+    const next = { name: display, color: style.color };
     if (nameTagNeedsRedraw({ name: this.lastName, color: this.lastColor }, next)) {
-      this.lastName = name;
-      this.lastColor = color;
-      this.drawName(name, color);
+      this.lastName = display;
+      this.lastColor = style.color;
+      this.drawName(display, style.color);
     }
     this.object.visible = true;
   }
@@ -146,7 +159,11 @@ export class MobNameTag {
     const maxTextWidth = CANVAS_W - 24;
     const measured = ctx.measureText(name).width;
     if (measured > maxTextWidth) {
-      fontSize = Math.max(18, Math.floor((fontSize * maxTextWidth) / measured));
+      // 下限 12px（批次 1359 由 18 下调）：接上队伍前后缀之后，牌子上可能出现
+      // 40 个字符（`MAX_TAG_TEXT_LENGTH`），按 18px 的中文一个字就是 18px 宽、
+      // 40 个字 720px 远超画布的 488px 可用宽度——那时缩小被下限卡住，两端会被裁掉。
+      // 12px 中文刚好塞得下 40 个字，配合拼装层的截断，两条腿一起兜住这件事。
+      fontSize = Math.max(12, Math.floor((fontSize * maxTextWidth) / measured));
       ctx.font = fontOf(fontSize);
     }
 

@@ -955,8 +955,25 @@ console.log('\n[记分板（M23，批次 402）]');
   run('/team modify nope color red');
   check('改不存在的队报错', out.lastError.includes('不存在'), out.lastError);
 
+  // ---- 前后缀（批次 1359）----
+  run('/team modify red prefix [红]');
+  check('设前缀', world.teams_.get('red')?.prefix === '[红]', out.lastError);
+  run('/team modify red suffix 队长');
+  check('设后缀', world.teams_.get('red')?.suffix === '队长', out.lastError);
+  run('/team modify red prefix [ 红 队 ]');
+  check('前缀保留中间空格', world.teams_.get('red')?.prefix === '[ 红 队 ]', String(world.teams_.get('red')?.prefix));
+  run('/team modify red prefix ""');
+  check('写 "" 等于清空', world.teams_.get('red')?.prefix === '', String(world.teams_.get('red')?.prefix));
+  run('/team modify red suffix [红]');
+  run('/team modify red suffix');
+  check('省略值也等于清空', world.teams_.get('red')?.suffix === '', String(world.teams_.get('red')?.suffix));
+  run('/team modify red prefix [R]');
+  run('/team modify red name x');
+  check('不认识的属性提示里带上 prefix/suffix', out.lastError.includes('prefix'), out.lastError);
+
   run('/team list');
   check('列出队伍（带人数）', out.lastInfo.includes('人'), out.lastInfo);
+  check('列出队伍（带前缀）', out.lastInfo.includes('前缀「[R]」'), out.lastInfo);
 
   run('/team remove red');
   check('删队', world.teams_.get('red') === null, out.lastError);

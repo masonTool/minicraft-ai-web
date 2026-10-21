@@ -404,6 +404,9 @@ console.log('\n[队伍存读档（批次 468）]');
   teams.add('blue');
   teams.join('blue', 'Carol');
   teams.setFriendlyFire('red', true);
+  // 前后缀（批次 1359）：只加字段、**不升 DB_VERSION**——老存档缺这两个字段按空串回退
+  teams.setPrefix('red', '[红]');
+  teams.setSuffix('red', '（队长）');
 
   // ① 快照 → JSON → 读回
   const roundTrip = new Teams();
@@ -412,6 +415,9 @@ console.log('\n[队伍存读档（批次 468）]');
   equal('显示名读回来', roundTrip.get('red')?.displayName, '红队');
   equal('颜色读回来', roundTrip.get('red')?.color, 'red');
   equal('友好伤害读回来', roundTrip.get('red')?.friendlyFire, true);
+  equal('前缀读回来', roundTrip.get('red')?.prefix, '[红]');
+  equal('后缀读回来', roundTrip.get('red')?.suffix, '（队长）');
+  equal('没设前后缀的队仍是空串', roundTrip.get('blue')?.prefix, '');
   equal('成员读回来', roundTrip.membersOf('red').join(','), 'Alice,Bob');
   equal('成员的队伍读回来', roundTrip.teamOf('Carol')?.name, 'blue');
   equal('两次快照完全一致', JSON.stringify(roundTrip.snapshot()), JSON.stringify(teams.snapshot()));

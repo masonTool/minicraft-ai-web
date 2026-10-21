@@ -1269,7 +1269,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'team',
     usage: '/team add|remove|list|join|leave|modify …',
-    description: '队伍：建队、拉人、改颜色与友好伤害（免伤/碰撞还没接，见 TASKS M23）',
+    description: '队伍：建队、拉人、改颜色、前后缀与友好伤害（免伤/碰撞还没接，见 TASKS M23）',
     run(args, ctx, out) {
       runTeam(args, ctx, out);
     },
@@ -2215,12 +2215,31 @@ function runDataMergeEntity(args: string[], ctx: CommandContext, out: CommandFee
  * 队友免伤、碰撞开关、名字颜色三项要"伤害来源"与"名字渲染"，还没接
  * （差异写在 `Teams.ts` 的文件头与 TASKS M23 里）。
  */
+/**
+ * 剥掉前后缀两侧的引号。
+ *
+ * 为什么需要：原版清除前后缀写 `/team modify red prefix ""`，而我们的命令解析
+ * 把 `""` 当成**字面两个引号**（没有引号语法）。不剥的话"清空"会变成"前后缀是
+ * 一对引号"，而且玩家没法把它改回来——只有在再敲一次空值时才是空的。
+ * 只剥**成对**的 `"` / `'`（`"红"` → `红`），不剥中间出现的。
+ */
+function stripAffixQuotes(raw: string): string {
+  const text = raw.trim();
+  if (text.length < 2) return text;
+  const first = text[0];
+  const last = text[text.length - 1];
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    return text.slice(1, -1);
+  }
+  return text;
+}
+
 function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): void {
   const teams = ctx.teams();
   const sub = (args[0] ?? '').toLowerCase();
   const usage =
     usageError(
-      '/team add <队伍> [显示名] | remove <队伍> | list | join <队伍> [成员] | leave [成员] | modify <队伍> friendlyFire <true|false> | color <颜色>',
+      '/team add <队伍> [显示名] | remove <队伍> | list | join <队伍> [成员] | leave [成员] | modify <队伍> friendlyFire <true|false> | color <颜色> | prefix <前缀> | suffix <后缀>',
     );
 
   if (sub === 'add') {
@@ -2266,7 +2285,9 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     const described = all.map((team) => {
       const members = teams.membersOf(team.name);
       const shown = team.displayName === team.name ? '' : `，显示为「${team.displayName}」`;
-      return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}，${members.length} 人）`;
+      // 前后缀只在设过的时候才写出来：没设的队伍那一段是噪声
+      const affix = `${team.prefix ? `，前缀「${team.prefix}」` : ''}${team.suffix ? `，后缀「${team.suffix}」` : ''}`;
+      return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}${affix}，${members.length} 人）`;
     });
     out.info(msg('共 {count} 个队伍：{list}', { count: all.length, list: described.join('；') }));
     return;
@@ -2323,7 +2344,10 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     const name = args[1];
     const key = (args[2] ?? '').toLowerCase();
     const value = args[3];
-    if (!name || !key || value === undefined) {
+    const isAffix = key === 'prefix' || key === 'suffix';
+    // 前后缀**可以不带值**（`/team modify red prefix` = 清除，原版也允许省略或写 `""`）；
+    // friendlyFire / color 必须带值，少一个就报用法而不是静默改坏。
+    if (!name || !key || (value === undefined && !isAffix)) {
       out.error(usage);
       return;
     }
@@ -2338,7 +2362,8 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
         return;
       }
       teams.setFriendlyFire(name, on);
-      out.info(msg('队伍 {name} 的友好伤害已{state}', { name: name, state: on ? '打开' : '关闭' }));
+      // `state` 也要过 `msg()`（理由同下面 prefix/suffix 那条注释）
+      out.info(msg('队伍 {name} 的友好伤害已{state}', { name: name, state: msg(on ? '打开' : '关闭') }));
       return;
     }
     if (key === 'color') {
@@ -2349,7 +2374,29 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       out.info(msg('队伍 {name} 的颜色已改为 {color}', { name: name, color: value.toLowerCase() }));
       return;
     }
-    out.error(msg('不认识的属性 {key}（只有 friendlyFire 与 color）', { key: key }));
+    if (isAffix) {
+      // 前后缀是自由文本，**空格要保留**（`[ 红 队 ]` 这种就是想带空格），
+      // 所以把第 4 段之后全部拼回来；两侧的引号（原版写 `""` 表示清空）先剥掉。
+      const text = stripAffixQuotes(args.slice(3).join(' '));
+      const applied = key === 'prefix' ? teams.setPrefix(name, text) : teams.setSuffix(name, text);
+      if (!applied) {
+        out.error(msg('队伍 {name} 不存在', { name: name }));
+        return;
+      }
+      // ⚠️ 参数本身也要过 `msg()`：`msg()` 只替换 {占位符}、**不会翻译传进来的值**，
+      // 直接把 '前缀' 塞进去，英文界面上就会出现 "Cleared the 前缀 of team red"
+      // （既有那条 `友好伤害已{state}` 是同一个问题，本轮顺手一起修）
+      const part = msg(key === 'prefix' ? '前缀' : '后缀');
+      // 提示里用**清洗之后**的值：玩家敲了换行/超长时，看到的是真正生效的那一段
+      const shown = key === 'prefix' ? (teams.get(name)?.prefix ?? '') : (teams.get(name)?.suffix ?? '');
+      out.info(
+        shown.length === 0
+          ? msg('队伍 {name} 的{part}已清除', { name: name, part })
+          : msg('队伍 {name} 的{part}已改为「{text}」', { name: name, part, text: shown }),
+      );
+      return;
+    }
+    out.error(msg('不认识的属性 {key}（只有 friendlyFire / color / prefix / suffix）', { key: key }));
     return;
   }
 

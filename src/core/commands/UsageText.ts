@@ -60,6 +60,9 @@ export const USAGE_FIELD_NAMES: Readonly<Record<string, string>> = {
   '进度 id | *': 'advancement id | *',
   显示名: 'display name',
   成员: 'members',
+  /** `/team modify <队> prefix|suffix <…>`（批次 1359） */
+  前缀: 'prefix',
+  后缀: 'suffix',
   可选: 'optional',
   /** `/data`（批次 623）：格号 / 路径 / 数值 / 名称 */
   格号: 'slot',

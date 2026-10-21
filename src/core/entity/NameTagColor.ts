@@ -3,8 +3,8 @@
  *
  * 这一层**只做三件事**，不碰 DOM、不碰 THREE、不碰世界：
  *   ① 把队伍颜色名（`white` / `red` …）映射成画布能直接用的 `#rrggbb`；
- *   ② 决定"这只生物的名字该用什么颜色"（没队伍 → `null`，表示沿用默认白）；
- *   ③ 队伍换了颜色时，判断"要不要重画"。
+ *   ② 决定"这只生物的名字该用什么颜色、带什么前后缀"（没队伍 → 默认白 + 空前后缀）；
+ *   ③ 队伍换了颜色（或前后缀）时，判断"要不要重画"。
  *
  * 为什么单独一个模块而不是塞进渲染层：颜色表要能被断言——16 色的值对不对、
  * 大小写与拼写变体怎么归一、没队伍时是不是真的返回 `null`（而不是悄悄给白色）。
@@ -46,6 +46,23 @@ export const TEAM_COLOR_HEX: Readonly<Record<string, string>> = {
 
 /** 默认颜色（没有队伍时由渲染层自己决定用白色，这里只表达"没有颜色"） */
 export const DEFAULT_NAME_COLOR = '#ffffff';
+
+/**
+ * 名字牌的样式：颜色 + 前后缀（批次 1359 起，前后缀与颜色一起算）。
+ *
+ * 三者都是"渲染层不该自己查队伍"的那条规矩的产物：`Teams` 长什么样只有这里知道。
+ */
+export interface NameTagStyle {
+  /** `#rrggbb`；`null` = 没有队伍，渲染层用默认白 */
+  color: string | null;
+  /** 队伍前缀（已清洗、可能为空串） */
+  prefix: string;
+  /** 队伍后缀（已清洗、可能为空串） */
+  suffix: string;
+}
+
+/** 没有队伍时的样式：默认白、无前后缀（**常量而不是每次新建对象**，重画判据按值比） */
+export const PLAIN_NAME_TAG_STYLE: NameTagStyle = { color: null, prefix: '', suffix: '' };
 
 /**
  * 归一化一个颜色名。
@@ -98,12 +115,36 @@ export function colorForMob(
   customName: string | null | undefined,
   teamOf: (member: string) => { color?: string } | null | undefined,
 ): string | null {
-  if (typeof customName !== 'string') return null;
+  // ⚠️ 批次 1359 起渲染层走 `nameTagStyleFor`（要一次取齐颜色与前后缀），
+  // 这个函数**只剩"只想问颜色"的调用方与断言在用**。留着而不是删掉：
+  // 它是一条**薄委托**（不是第二套规则），删了反而要让现有断言改去读 `.color`，
+  // 而"颜色与样式同源"这条断言本身是有价值的守卫。
+  return nameTagStyleFor(customName, teamOf).color;
+}
+
+/**
+ * 一只生物名字牌要画的**全部样式**（颜色 + 前后缀）。
+ *
+ * 为什么把三样打成一处返回：它们来自**同一次队伍查询**。分开写就是两次
+ * `Map` 查询、两处"没队伍怎么办"的分支——那种重复迟早会在其中一处漏掉
+ * （批次 616 就发生过"颜色会变、重画判据只看名字"这类半接线）。
+ *
+ * @returns 没名字 / 没队伍时返回 `PLAIN_NAME_TAG_STYLE`（默认白、无前后缀）
+ */
+export function nameTagStyleFor(
+  customName: string | null | undefined,
+  teamOf: (member: string) => { color?: string; prefix?: string; suffix?: string } | null | undefined,
+): NameTagStyle {
+  if (typeof customName !== 'string') return PLAIN_NAME_TAG_STYLE;
   const name = customName.trim();
-  if (name.length === 0) return null;
+  if (name.length === 0) return PLAIN_NAME_TAG_STYLE;
   const team = teamOf(name);
-  if (!team) return null;
-  return teamColorToHex(team.color ?? null);
+  if (!team) return PLAIN_NAME_TAG_STYLE;
+  return {
+    color: teamColorToHex(team.color ?? null),
+    prefix: typeof team.prefix === 'string' ? team.prefix : '',
+    suffix: typeof team.suffix === 'string' ? team.suffix : '',
+  };
 }
 
 /**

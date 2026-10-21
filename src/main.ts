@@ -98,7 +98,7 @@ import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
 import { canNameMob, sanitizeName } from './core/entity/NameTag.ts';
-import { colorForMob } from './core/entity/NameTagColor.ts';
+import { nameTagStyleFor } from './core/entity/NameTagColor.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { PASSIVE_MOBS, mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
@@ -4897,12 +4897,13 @@ class App {
       // 生命条也在头顶：被瞄准的那只把生命条让上来，名字牌在它上面一层，
       // 否则两者会叠在一起（原版也是名字在生命条之上）
       const isAimed = entry.mob === this.aimMob;
-      // 队伍颜色（批次 616）：这一只是哪个队的成员就用那个队的颜色；没队伍 → null
-      // （渲染层用默认白）。判定规则在 `NameTagColor#colorForMob`，那边有断言。
+      // 队伍颜色 + 前后缀（批次 616 / 1359）：这一只是哪个队的成员，就用那个队的颜色
+      // 和前缀后缀；没队伍 → `PLAIN_NAME_TAG_STYLE`（默认白、无前后缀）。
+      // 判定规则在 `NameTagColor#nameTagStyleFor`，那边有断言。
       // 只有真的画的时候才查一次表——池子固定 12 个，每帧最多 12 次 Map 查询，
-      // 比在渲染层每帧自己查队伍要清楚得多。
-      const color = colorForMob(entry.mob.customName, (member) => this.teamState.teamOf(member));
-      tag.show(entry.mob, isAimed ? 0.34 : 0.12, color);
+      // 而且颜色与前后缀是**同一次查询**取回来的，不会出现"颜色接上了、前后缀忘了"。
+      const style = nameTagStyleFor(entry.mob.customName, (member) => this.teamState.teamOf(member));
+      tag.show(entry.mob, isAimed ? 0.34 : 0.12, style);
     }
   }
 
