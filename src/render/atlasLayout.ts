@@ -1373,6 +1373,8 @@ export const TILE_ORDER = [
   'cartography_table_side',
   // 望远镜（批次 518）：铜镜筒 + 一片紫色镜片
   'item_spyglass',
+  // 雪傀儡刷怪蛋（批次 596）：新贴图只追加在末尾，避免 UV 错位
+  'spawn_egg_snow_golem',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

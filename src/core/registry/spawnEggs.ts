@@ -125,6 +125,7 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'tropical_fish', label: '热带鱼', id: 1545 },
   { mobId: 'pufferfish', label: '河豚', id: 1546 },
   { mobId: 'glow_squid', label: '发光鱿鱼', id: 1547 },
+  { mobId: 'snow_golem', label: '雪傀儡', id: 1549 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

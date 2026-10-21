@@ -369,7 +369,7 @@ console.log('\n[工厂与模型]');
   // 批次 94 起：11 → 12 种（加了恶魂）；批次 112 起 12 → 13 种、敌对 7 → 8（加了末影人）；
   // 批次 115 起 13 → 14 种、敌对 8 → 9（加了凋灵骷髅）
   // 批次 436：生物 67 → 70（新增三种都是被动水生，敌对仍是 36）
-  check('生物表里 70 种，其中 36 种敌对（… + 三种鱼/鱿鱼）', MOB_TYPES.length === 70 && ALL_HOSTILE_MOBS.length === 36, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
+  check('生物表里 71 种，其中 36 种敌对（… + 雪傀儡/三种鱼/鱿鱼）', MOB_TYPES.length === 71 && ALL_HOSTILE_MOBS.length === 36, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
 }
 
 console.log(`\n蜘蛛测试：${passed} 通过 / ${failed} 失败`);

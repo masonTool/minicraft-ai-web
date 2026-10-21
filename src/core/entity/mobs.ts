@@ -987,6 +987,31 @@ export const IRON_GOLEM_TYPE: MobType = {
 };
 
 /**
+ * 雪傀儡（J5 尾巴，批次 596）。
+ *
+ * 4 血、不近战；目标规则在 `TargetRules.ts` 的 `SNOW_GOLEM_RULE`
+ * （射程 10、1.5 秒一颗雪球，0 伤害 + 击退）。本项目没有“南瓜 + 2 雪块”
+ * 的建造入口，`naturalSpawn: false`，只能靠刷怪蛋/命令。
+ */
+export const SNOW_GOLEM_TYPE: MobType = {
+  id: 'snow_golem',
+  name: '雪傀儡',
+  health: 4,
+  width: 0.7,
+  height: 1.9,
+  speed: 1.2,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 16,
+  drops: [{ itemId: Item.SNOWBALL, min: 0, max: 15 }],
+  xp: 0,
+  naturalSpawn: false,
+  bodyColor: 0xf2f2f2,
+  accentColor: 0xd8d8d0,
+  eyeHeight: 1.7,
+};
+
+/**
  * 掠夺者（批次 358，J24 第二批）。
  *
  * 24 血、**远程**（弩），掉绿宝石与箭。原版随巡逻队/前哨出现；
@@ -1816,6 +1841,7 @@ export const MOB_TYPES: readonly MobType[] = [
   SHULKER_TYPE,
   // J24 村庄系（批次 358）
   IRON_GOLEM_TYPE,
+  SNOW_GOLEM_TYPE,
   PILLAGER_TYPE,
   // 海洋系（批次 359）
   GUARDIAN_TYPE,
