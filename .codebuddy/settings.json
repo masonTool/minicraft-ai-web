@@ -5,8 +5,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/mason/DouDou/minicraft-ai-web/.codebuddy/hooks/auto-continue.mjs",
+            "command": "node .codebuddy/hooks/auto-continue.mjs",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node .codebuddy/hooks/auto-commit.mjs",
+            "timeout": 30
           }
         ]
       }
@@ -16,7 +21,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/mason/DouDou/minicraft-ai-web/.codebuddy/hooks/auto-continue.mjs",
+            "command": "node .codebuddy/hooks/auto-continue.mjs",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node .codebuddy/hooks/auto-commit.mjs",
             "timeout": 15
           }
         ]

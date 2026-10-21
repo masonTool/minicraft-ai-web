@@ -18,9 +18,23 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MAX_CONTINUATIONS = Number(process.env.AUTO_CONTINUE_MAX ?? 12);
+
+/**
+ * 定位项目根目录（跨机器、跨 cwd 都成立）。
+ *
+ * 本脚本固定在 `<项目根>/.codebuddy/hooks/` 下，所以"脚本自己的位置"就是最可靠的锚点：
+ * 从 `import.meta.url` 往上退 3 层即可，不依赖任何环境变量或当前工作目录。
+ *
+ * 为什么不用相对路径（`./.codebuddy/hooks/xxx.mjs`）：
+ * 钩子进程的 cwd 是 `getWorkDir()` / session cwd，在子目录里发起会话时会指错。
+ * 为什么不用绝对路径：换机器、改目录名（本仓库就被挪进过 `About-minecraft/`）立刻失效。
+ */
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(SCRIPT_DIR, '..', '..');
 
 function readStdinSync() {
   try {
@@ -39,7 +53,11 @@ try {
   payload = {};
 }
 
-const projectDir = process.env.CODEBUDDY_PROJECT_DIR || process.env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd();
+/**
+ * 状态文件放哪：优先脚本反推的项目根（唯一可靠锚点）。
+ * payload.cwd 只在项目根不可用时兜底——它可能是子目录，届时状态会写进子目录。
+ */
+const projectDir = PROJECT_ROOT;
 const codebuddyDir = join(projectDir, '.codebuddy');
 const stateFile = join(codebuddyDir, 'auto-continue.state.json');
 const offFile = join(codebuddyDir, 'auto-continue.off');
