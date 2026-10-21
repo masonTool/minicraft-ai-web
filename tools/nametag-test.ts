@@ -322,6 +322,18 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   const code = codeLines.join('\n');
   check('渲染层不直接查队伍（颜色由外部算好传入）', !/teamOf|new Teams|from '.*Teams\.ts'/.test(code));
   check('默认色来自 NameTagColor，不是本地硬编码', src.includes('DEFAULT_NAME_COLOR'));
+
+  // ---- Q3：main.ts 的接线 ----
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('主程序导入 colorForMob', /import \{ colorForMob \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
+  check(
+    'updateNameTags 里把颜色传给 show()',
+    /colorForMob\(entry\.mob\.customName[\s\S]{0,200}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, color\)/.test(mainSrc),
+  );
+  check(
+    '颜色查询走真实的 teamState（不是空实现）',
+    /\(member\) => this\.teamState\.teamOf\(member\)/.test(mainSrc),
+  );
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);

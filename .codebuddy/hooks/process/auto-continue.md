@@ -161,7 +161,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       有颜色时用它画字（描边仍走深色）；`show()` 增加同参数并纳入"是否要重画"的判据
       （现在只比 `lastName`，名字没变但队伍变了就不会重画）。
       验收：`test:nametag` 增 3 条（颜色变了要重画、null 用默认白、颜色串格式合法）
-- [ ] Q3 `main.ts` 接线：`updateNameTags()` 里把 `colorForMob(...)` 的结果传给 `tag.show()`，
+- [x] Q3 `main.ts` 接线：`updateNameTags()` 里把 `colorForMob(...)` 的结果传给 `tag.show()`，
       队伍变动的来源是 `scoreboard`/`teams` 快照（已有，见 M23 批次 402）。
       验收：`npm run check:fast` 通过；进游戏 `/team add red` + `/team modify red color red` 后
       给自己身边的命名生物看到红字
