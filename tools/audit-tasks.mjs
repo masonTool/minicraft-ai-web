@@ -12,7 +12,8 @@
  *
  * 所以这里做五件事，任何一个不过就以非 0 退出（方便挂到 CI 或提交前手动跑）：
  *   1. 报告 已完成 / 进行中 / 待办 的条数（HANDOFF 的数字要与它一致）
- *   2. 检查 id 是否重复、每段编号是否连续
+ *   2. 检查 id 是否重复、每段编号是否连续；条目行首带空白时单独列出来
+ *      （批次 1355：`M18 操作界面` 那条多了一个空格，整条从台账里隐身了很久）
  *   3. 核对 HANDOFF 的"进度口径"那一行
  *   4. 用本表**自动重写 README 的路线图状态列**（README 里那张表是手写的，
  *      已经漂过一次：P1~P9 全部标着"未开始"，而实际早就完成大半）
@@ -45,20 +46,33 @@ const lines = text.split('\n');
 
 const counts = { done: 0, doing: 0, todo: 0, dropped: 0 };
 const ids = [];
+/**
+ * 行首带空白的条目（` - [~] M24 …`）。
+ *
+ * ⚠️ 这就是批次 1355 抓到的那个坑：条目正则原先锚在**列 0**（`/^- \[/`），
+ * 于是"手滑多敲一个空格"的条目会**整条从台账里消失**——不计入总数、不参与重号检查，
+ * 而自检还一路报 ✓。M18 操作界面那一条（下面 200 行注记）就这么隐身了很久。
+ *
+ * 处置分两层（缺一不可）：
+ *   · 正则容忍行首空白 → **数字永远是对的**（比"报警但不数"更重要）；
+ *   · 另外单独列出这些行 → 缩进本身是排版错误，该修，但不该用红灯拦提交。
+ */
+const indented = [];
 /** @type {Map<string, string[]>} 段落字母 → 出现的编号 */
 const byPrefix = new Map();
 /** @type {Map<string, {done: number, doing: number, todo: number}>} 段落字母 → 完成情况（README 路线图用） */
 const bySection = new Map();
 
 let section = '';
-for (const line of lines) {
+for (const [index, line] of lines.entries()) {
   const head = /^## ([0-9A-O])\./.exec(line);
   if (head) section = head[1];
 
-  const item = /^- \[([ x~-])\] ([A-Z]+)(\d+[a-z]?)\b(.*)$/.exec(line);
+  const item = /^(\s*)- \[([ x~-])\] ([A-Z]+)(\d+[a-z]?)\b(.*)$/.exec(line);
   if (!item) continue;
 
-  const [, mark, prefix, number, rest] = item;
+  const [, indent, mark, prefix, number, rest] = item;
+  if (indent.length > 0) indented.push(`${prefix}${number}（第 ${index + 1} 行）`);
   if (mark === 'x') counts.done++;
   else if (mark === '~') counts.doing++;
   else if (mark === '-') counts.dropped++;
@@ -102,6 +116,11 @@ if (duplicates.length > 0) {
   for (const dup of duplicates) console.log(`    ${dup}`);
 } else {
   console.log('✓ 编号无重复');
+}
+if (indented.length > 0) {
+  // 不进 failed：数字已经算对了（上面那条正则容忍了缩进），这里只是排版提示
+  console.log(`\n! 有 ${indented.length} 条目的行首带空白（容易被误读成"漏了一条"，建议顶格）：`);
+  for (const entry of indented) console.log(`    ${entry}`);
 }
 
 // ---- 2. 跳号
