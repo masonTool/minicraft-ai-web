@@ -12,6 +12,10 @@ export interface ChatDeps {
   setWeather(kind: 'clear' | 'rain' | 'thunder'): void;
   setGameMode(mode: 'survival' | 'creative'): void;
   teleport(x: number, y: number, z: number): void;
+  give(id: number, count: number): number;
+  clear(): void;
+  kill(): void;
+  toggleFly(): boolean;
 }
 
 /** 本地聊天与命令面板；不包含联机。 */
@@ -84,7 +88,8 @@ export class ChatSystem {
     if (!textValue) return;
     const [command, ...args] = textValue.split(/\s+/);
     if (command === '/help') {
-      this.push('/help · /seed · /pos · /heal');
+      this.push('/help · /seed · /pos · /heal · /kill');
+      this.push('/give id [count] · /clear · /fly');
       this.push('/gamemode survival|creative · /tp x y z');
       this.push('/weather clear|rain|thunder · /time set day|night');
       this.push('聊天为 v2 本地日志，尚未接联机');
@@ -111,6 +116,24 @@ export class ChatSystem {
         this.deps.setWeather(kind);
         this.push(`天气：${kind}`);
       }
+    } else if (command === '/give') {
+      const id = Number(args[0]);
+      const count = Number.isFinite(Number(args[1])) ? Math.max(1, Math.min(64, Number(args[1]))) : 1;
+      if (!Number.isInteger(id) || id <= 0) {
+        this.push('用法：/give id [count]');
+      } else {
+        const remaining = this.deps.give(id, count);
+        this.push(remaining > 0 ? `背包已满，剩余 ${remaining}` : `已给予 ${id} x${count}`);
+      }
+    } else if (command === '/clear') {
+      this.deps.clear();
+      this.push('背包已清空');
+    } else if (command === '/kill') {
+      this.deps.kill();
+      this.push('已执行 /kill');
+    } else if (command === '/fly') {
+      const flying = this.deps.toggleFly();
+      this.push(`飞行：${flying ? '开' : '关'}`);
     } else if (command === '/gamemode') {
       const mode = args[0] === 'creative' ? 'creative' : args[0] === 'survival' ? 'survival' : null;
       if (!mode) {

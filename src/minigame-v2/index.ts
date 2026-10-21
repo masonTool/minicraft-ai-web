@@ -1627,6 +1627,17 @@ const chat = new ChatSystem({
     physics.teleport(x, y, z);
     fallPeakY = y;
   },
+  give: (id, count) => inventory.add(id, count),
+  clear: () => {
+    inventory.clear();
+    showHud();
+  },
+  kill: () => applyDamage(20, '/kill'),
+  toggleFly: () => {
+    flying = !flying;
+    showHud();
+    return flying;
+  },
 });
 const input: PlayerInput = {
   forward: 0,
