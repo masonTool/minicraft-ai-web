@@ -195,6 +195,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
+import { t } from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -1129,6 +1130,9 @@ class App {
   private readonly deathEl: HTMLElement;
   /** 死亡卡片上那半句"为什么死的"（批次 207：只写"你死了"等于没解释） */
   private readonly deathCauseEl: HTMLElement | null;
+  /** 死亡卡片的标题与尾句（批次 619 / Q15：原来写死在 index.html 里） */
+  private readonly deathTitleEl: HTMLElement | null;
+  private readonly deathRespawnEl: HTMLElement | null;
   /** 帧时间累积成 20Hz 游戏 tick */
   private tickAccumulator = 0;
   /** 本次下落起始高度（用于摔落伤害） */
@@ -1992,6 +1996,8 @@ class App {
     };
     this.deathEl = deathEl;
     this.deathCauseEl = deathEl.querySelector<HTMLElement>('.death-cause');
+    this.deathTitleEl = deathEl.querySelector<HTMLElement>('.death-title');
+    this.deathRespawnEl = deathEl.querySelector<HTMLElement>('.death-respawn');
     this.vitalsHud = new VitalsHud(vitalsEl);
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
@@ -8009,8 +8015,13 @@ class App {
 
     this.sleeping = { x: fx, y: fy, z: fz };
     this.sleepTimer = 0;
+    // 遮罩里的两句话由代码写（批次 619 / Q15）：静态 HTML 里的中文切语言不会变
+    const sleepDawn = this.sleepEl?.querySelector<HTMLElement>('.sleep-dawn');
+    const sleepHint = this.sleepEl?.querySelector<HTMLElement>('.sleep-hint');
+    if (sleepDawn) sleepDawn.textContent = t('sleep.dawn');
+    if (sleepHint) sleepHint.textContent = t('sleep.hint');
     this.sleepEl?.classList.remove('hidden');
-    this.chat.push('你躺下了…（跳跃键 / 点击遮罩可以提前起床）', 'system');
+    this.chat.push(t('sleep.lieDown'), 'system');
     return true;
   }
 
@@ -14469,6 +14480,8 @@ class App {
         this.statistics.add('deaths');
         // 死亡卡片也写清死因（"被僵尸打死"和"掉进岩浆"的应对完全不同）
         const last = this.stats.lastDamage;
+        if (this.deathTitleEl) this.deathTitleEl.textContent = t('death.title');
+        if (this.deathRespawnEl) this.deathRespawnEl.textContent = t('death.respawning');
         if (this.deathCauseEl) {
           // 批次 388：`showDeathMessages` 控制死亡卡片上的死因
           this.deathCauseEl.textContent =

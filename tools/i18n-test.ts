@@ -496,5 +496,62 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   check('源码里没有硬编码中文的 out.* 调用', rawOut.length === 0, rawOut.slice(0, 3).join(' / '));
 }
 
+console.log('\n[地图 / 成就 / 死亡遮罩（批次 619 / Q15）]');
+{
+  /**
+   * Q15 的四个界面。这里除了查键，还查一条**结构**：
+   * 死亡与睡觉遮罩的文案原来写死在 `index.html` 里，静态 HTML 不参与重绘，
+   * 切语言后那几行永远不变 —— 所以断言 "index.html 里不许再有这几句中文"。
+   * 这条防的不是"忘了翻译"，是"以后有人图省事又把文案塞回 HTML"。
+   */
+  const keys = [
+    'map.title', 'map.locked',
+    'advancement.close', 'advancement.closeLabel', 'advancement.filterAll',
+    'advancement.lockedHint', 'advancement.earned', 'advancement.challengeDone',
+    'advancement.locked', 'advancement.challenge', 'advancement.available',
+    'advancement.toastDone', 'advancement.toastChallenge',
+    'death.title', 'death.respawning', 'sleep.dawn', 'sleep.hint', 'sleep.lieDown',
+  ];
+  const parity = keyParity();
+  const missing = keys.filter(
+    (k) => parity.missingInEn.includes(k) || parity.missingInZh.includes(k) || t(k, 'zh') === k || t(k, 'en') === k,
+  );
+  check(`Q15 的 ${keys.length} 个键中英齐全`, missing.length === 0, missing.join(','));
+  check('每条都真翻成英文', keys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
+
+  const read = (rel: string) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
+  for (const [file, label] of [
+    ['src/ui/MapScreen.ts', '地图'],
+    ['src/ui/AdvancementScreen.ts', '成就'],
+    ['src/ui/AdvancementToast.ts', '成就弹窗'],
+  ] as const) {
+    const code = codeOf(read(file)).split('\n');
+    const hard = code.filter((line) => {
+      const lits = line.match(/'[^']*'/g) ?? [];
+      return lits.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes("t('");
+    });
+    check(`${label}界面没有残留硬编码中文`, hard.length === 0, hard.slice(0, 2).join(' / '));
+  }
+
+  // 静态 HTML 里不许再写死这几句
+  const html = read('index.html');
+  // 只看 `<body>` 里的**标记**：这个仓库的 CSS 直接写在 `<style>` 里（也在 body 内），
+  // 而注释里会提到这几句作为解释（"别和「正在重生」挤在一起"），不是写死的文案。
+  // 第一版整份 HTML 一起查，被注释误判成红；第二版剥了 `<!-- -->` 还是红，因为那是 `/* */`。
+  const bodyHtml = html.slice(html.indexOf('<body'));
+  const markup = bodyHtml
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const htmlHard = ['你死了！', '正在重生…', '天快亮了', '跳跃键可以提前起床'].filter((s) => markup.includes(s));
+  check('body 标记里没有写死死亡/睡觉文案', htmlHard.length === 0, htmlHard.join(' / '));
+  check('死亡卡片改成三个可写入的节点', html.includes('death-title') && html.includes('death-cause') && html.includes('death-respawn'));
+  check('睡觉遮罩改成两个可写入的节点', html.includes('sleep-dawn') && html.includes('sleep-hint'));
+
+  // 主程序必须真的往里写
+  const mainSrc = read('src/main.ts');
+  check('死亡时写标题与尾句', mainSrc.includes("t('death.title')") && mainSrc.includes("t('death.respawning')"));
+  check('睡觉时写两行提示', mainSrc.includes("t('sleep.dawn')") && mainSrc.includes("t('sleep.hint')"));
+}
+
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

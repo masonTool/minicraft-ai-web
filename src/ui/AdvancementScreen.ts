@@ -73,8 +73,8 @@ export class AdvancementScreen {
     close.className = 'adv-close inv-close';
     // 手机上统一成 ✕（与配方书、设置面板同一个形状：右上一个叉关掉，
     // 基岩版也是这么给的），PC 上保留"关闭"两个字（有 Esc 也用得着点）
-    close.textContent = isTouchUi() ? '✕' : '关闭';
-    close.setAttribute('aria-label', '关闭成就');
+    close.textContent = isTouchUi() ? '✕' : t('advancement.close');
+    close.setAttribute('aria-label', t('advancement.closeLabel'));
     close.addEventListener('click', () => this.hide());
 
     header.append(title, this.summaryEl, close);
@@ -177,7 +177,7 @@ export class AdvancementScreen {
   private renderTabs(): void {
     this.tabsEl.textContent = '';
     const entries: ReadonlyArray<{ filter: TabFilter; label: string }> = [
-      { filter: null, label: '全部' },
+      { filter: null, label: t('advancement.filterAll') },
       ...ADVANCEMENT_TABS.map((tab) => ({ filter: tab.id as TabFilter, label: tab.title })),
     ];
     for (const entry of entries) {
@@ -251,7 +251,7 @@ export class AdvancementScreen {
 
     const desc = document.createElement('div');
     desc.className = 'adv-desc';
-    desc.textContent = state === 'locked' ? '达成前面的条目才会看到它' : def.desc;
+    desc.textContent = state === 'locked' ? t('advancement.lockedHint') : def.desc;
 
     main.append(title, desc);
     row.appendChild(main);
@@ -264,12 +264,12 @@ export class AdvancementScreen {
   }
 
   private badgeOf(def: AdvancementDef, state: AdvancementState): string {
-    if (state === 'earned') return def.challenge ? '挑战完成' : '已达成';
-    if (state === 'locked') return '未解锁';
+    if (state === 'earned') return t(def.challenge ? 'advancement.challengeDone' : 'advancement.earned');
+    if (state === 'locked') return t('advancement.locked');
     // 计数型：把"打了一半"的进度露出来（原版也是这样）
     const { seen, need } = this.tracker.countFor(def.id);
     if (need > 1) return `${seen} / ${need}`;
-    return def.challenge ? '挑战' : '可达成';
+    return t(def.challenge ? 'advancement.challenge' : 'advancement.available');
   }
 
   /** 拆面板（`main.dispose` 调；与配方书同一条：把 DOM 摘干净） */

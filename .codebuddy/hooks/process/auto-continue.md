@@ -234,7 +234,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       → 做完的标准：在 `I18n.ts` 加 `cmd.*` 键组，把这 111 句改成 `t()`/`tp()`；
       并让 `test:i18n` 从 `Commands.ts` 抽取**所有**含中文的 `out.*` 调用断言"必须走 t/tp"，
       防以后新加命令又写死中文。`CommandHelp.ts` 的 140 条帮助标签另算，不含在本条。
-- [ ] Q15 地图/成就/死亡界面文案接线。
+- [x] Q15 地图/成就/死亡界面文案接线。
       验收：`test:i18n` 增 4 条；`keyParity()` 仍然全绿
 
 ### 优先级 5：`waterlogged` 状态位（流体系统唯一剩下的缺口）
@@ -242,6 +242,14 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 > 为什么排第五：影响真实玩法（半砖/楼梯里放水），但要同时动网格、流体、存档三处，风险中等。
 > **必须先做纯逻辑，再做存档，最后接渲染**——顺序反了会把 bug 藏进几何里。
 
+- [ ] [发现] 成就数据层（100 条 title + 98 条 desc + 5 个标签页名）仍是中文：
+      `src/core/progress/advancements.ts` 的 `title:` / `desc:` 字段与 `ADVANCEMENT_TABS[].title`。
+      Q15 只接了 `AdvancementScreen.ts` 的**界面文案**（Close / All / Earned / Available /
+      lockedHint / toast），数据本身没接。证据：Q15 浏览器实测，英文模式下成就面板是
+      `Advancements 已达成 1/100 Close All ... 我的世界 1/29 下界 0/5` —— 界面词全英文、内容全中文。
+      → 做完的标准：给 `AdvancementDef` 加 `titleEn` / `descEn`（或一张 `advancementText.data.ts`
+      按 id 映射，零依赖），`AdvancementScreen` 与 `AdvancementToast` 都按语言取；
+      `test:i18n` 加两条断言：100 条都有英文、英文模式下打开成就面板 `cjk` 为 0。
 - [ ] Q16 新增 `core/world/Waterlogged.ts`（纯逻辑）：方块状态里那一位的读写、
       "这个方块支持 waterlogged 吗"的白名单、以及"放水/排水"的状态迁移。
       验收：新套件 `test:waterlogged` 25 条（白名单、放置、排水、与流体互不影响）

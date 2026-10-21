@@ -80,13 +80,13 @@ export class MapScreen {
    *
    * @param player 玩家的世界坐标与朝向（朝向只用来转那个红色三角）
    */
-  show(map: MapData, player: { x: number; z: number; yaw: number }, title = '地图'): void {
+  show(map: MapData, player: { x: number; z: number; yaw: number }, title = t('map.title')): void {
     this.titleEl.textContent = title;
     this.draw(map, player);
     const explored = exploredCount(map);
     // 批次 505：一格覆盖多少方块随缩放翻倍（scale 0 = 1 区块、1 = 2、2 = 4）
     const chunksPerCell = 1 << map.scale;
-    const lockText = map.locked ? ' · 已锁定' : '';
+    const lockText = map.locked ? t('map.locked') : '';
     this.footerEl.textContent =
       `探索 ${explored} / ${MAP_GRID * MAP_GRID} 格（${Math.round((explored / (MAP_GRID * MAP_GRID)) * 100)}%）` +
       ` · 1 格 = ${chunksPerCell} 个区块 · 北在上${lockText}`;

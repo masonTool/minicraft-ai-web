@@ -914,6 +914,12 @@
         display: block; font-size: 14px; line-height: 1.6;
         color: #ffb8b8; letter-spacing: 1px;
       }
+      /* 尾句「正在重生…」（批次 619 / Q15）：原来是 `<b>` 后面的裸文本、跟死因同行；
+         拆成 span 之后要自己占一行，否则会紧贴死因末尾 */
+      #death .death-respawn {
+        display: block; margin-top: 6px; font-size: 14px;
+        letter-spacing: 1px; opacity: .85;
+      }
       /* 睡觉遮罩（B13）：整屏渐暗 + 一排"Zzz"，与死亡遮罩同一个层叠层（z-index 6）。
          不接 pointer-events 的拦截：起床靠跳跃键，不需要点它（点了也不会穿透到世界）。
          ⚠️ 这两个动画不需要自己写 prefers-reduced-motion 分支：文件末尾那条全局规则
@@ -926,6 +932,9 @@
         animation: sleep-fade var(--dur-med) var(--ease);
       }
       #sleep.hidden { display: none; }
+      /* 两句话分别由 `.sleep-dawn` / `.sleep-hint` 承载（批次 619 / Q15），
+         行内排列即可 —— 原来它们是 `<b>` 后面的裸文本 */
+      #sleep .sleep-dawn, #sleep .sleep-hint { display: inline; }
       #sleep b {
         font-size: 30px; display: block; letter-spacing: 10px; margin-bottom: 8px;
         text-shadow: 0 2px 20px rgba(120, 140, 255, .55);
@@ -5088,11 +5097,14 @@
          原来遮罩上那份**按键/手势说明**没有丢：它移到了暂停菜单底部
          （见 `ui/SettingsScreen.ts` 的 `.pause-help`），按 Esc 就能查。 -->
 
-    <div id="death" class="hidden"><div><b>你死了！</b><span class="death-cause"></span>正在重生…</div></div>
+    <!-- 文案由 main.ts 写入（批次 619 / Q15）：这里是静态 HTML，
+         写死中文的话切语言后这一行永远不变。
+         结构保持 `<b>` + 死因 + 尾句 三段，`#death` 的样式依赖这个顺序。 -->
+    <div id="death" class="hidden"><div><b class="death-title"></b><span class="death-cause"></span><span class="death-respawn"></span></div></div>
 
     <!-- 睡觉遮罩（B13）：躺在床上的那十几秒。文字里写清"怎么提前起来"，
          手机上没有 Esc 之类的键，跳跃键是唯一可靠的入口 -->
-    <div id="sleep" class="hidden"><div><b>Zzz…</b>天快亮了<br />跳跃键可以提前起床</div></div>
+    <div id="sleep" class="hidden"><div><b>Zzz…</b><span class="sleep-dawn"></span><br /><span class="sleep-hint"></span></div></div>
 
     <!-- ⚠️ 这里原来是一个写死的加载节点（`#loading`，文案"正在生成世界…"，批次 167 删掉）。
          它从 `boot()` 第一行就在屏幕上，而那段文案说的是**当时还没发生的事**
