@@ -1,0 +1,7 @@
+{
+  "checks": {
+    "fast": "npm run check:fast",
+    "full": "npm run check",
+    "timeoutSec": 180
+  }
+}

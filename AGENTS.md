@@ -9,12 +9,14 @@
 
 | 文件 | 读它是为了 | 怎么读 |
 | --- | --- | --- |
-| [`HANDOFF.md`](./HANDOFF.md) | 当前状态、硬性约定、常用命令、悬案 | **整份读完**（约 310 行；只留最近 6 批，更早的在归档里） |
-| [`.codebuddy/hooks/process/auto-continue.md`](./.codebuddy/hooks/process/auto-continue.md) | **"进行中"的唯一口径**（队列）+ 最近 3 批 | **整份读完**（上限 500 行；历史已归档） |
+| [`HANDOFF.md`](./HANDOFF.md) | 当前状态、硬性约定、常用命令、悬案 | **整份读完**（约 340 行；只留最近 6 批，更早的在归档里） |
+| [`.continue/HANDOFF.md`](./.continue/HANDOFF.md) | **队列机制**（怎么排、钩子怎么认、收尾怎么算） | **整份读完**（约 150 行）；本会话队列是 `.continue/queues/<session_id>.md` |
 
 > 这两份原本分别是 1409 行与 4108 行，**批次 101 做过上下文瘦身**：
 > 已经做完的流水搬到了 `docs/HANDOFF-ARCHIVE.md` 与
-> `.codebuddy/hooks/process/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
+> `.continue/archive/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
+> **2026-10-22 迁移 continue-do**：单队列 `auto-continue.md` 换成会话级队列
+> （`.continue/queues/`），旧队列整份归档在 `.continue/archive/`。
 > **批次 198 又收了一次**：HANDOFF §1 只留最近 6 批（167~191 搬去归档），
 > 并把"离线测试套数"的核对从 README/HANDOFF 两处扩到 **README / HANDOFF / 本文件** 三处。
 
@@ -47,7 +49,8 @@ npm run check          # typecheck + 169 套离线测试 + 三张台账，任一
 ## 4. 硬性约定（细节见 `HANDOFF.md` §2）
 
 1. **每个独立改动单独提交**：review → 中文 commit message → commit → push，全程不等确认。
-2. **不停下来等确认**：按队列自己推进；遇到困难自己解决并把结论记下来。
+2. **不停下来等确认**：按 `.continue/queues/<session_id>.md` 队列自己推进；遇到困难自己解决并把结论记下来。
+   要急停就 `touch .continue/auto-continue.off`（只管自动继续，队列不动）。
 3. **锚点文档里的数字一律由脚本生成**（进度口径 / 覆盖率 / 差异 / 提交总数）——
    手抄过的都漂过，`npm run audit:tasks` 会当场抓住。
 4. **测试是门禁，不要为了跑得快去削它**：`tools/run-tests.mjs` 只是把"进程开销"

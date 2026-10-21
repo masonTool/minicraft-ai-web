@@ -5,13 +5,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .codebuddy/hooks/auto-continue.mjs",
+            "command": "node .continue/hooks/auto-continue.mjs",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .codebuddy/hooks/auto-commit.mjs",
-            "timeout": 30
+            "command": "node .continue/hooks/auto-commit.mjs",
+            "timeout": 300
           }
         ]
       }
@@ -21,12 +21,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .codebuddy/hooks/auto-continue.mjs",
+            "command": "node .continue/hooks/queue-init.mjs",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .codebuddy/hooks/auto-commit.mjs",
+            "command": "node .continue/hooks/auto-continue.mjs",
             "timeout": 15
           }
         ]

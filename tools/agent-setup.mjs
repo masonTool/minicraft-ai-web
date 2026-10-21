@@ -9,7 +9,7 @@
  *      `~/.codebuddy/projects/<项目路径派生 slug>/memory/`（不同机器路径不同，这里按规则现算）；
  *   2. hooks 自检：`.codebuddy/settings.json` 里的钩子命令如果指向"不存在的路径"
  *      （典型是从别的机器带过来的绝对路径），自动改写为本机绝对路径；
- *   3. 环境自检：Node 版本、依赖、远程仓库、自动继续队列剩余条目、紧急刹车文件。
+ *   3. 环境自检：Node 版本、依赖、远程仓库、各会话队列剩余条目、紧急刹车文件。
  *
  * 参数：
  *   --force       记忆文件无条件用仓库版本覆盖本机
@@ -97,7 +97,8 @@ say();
 say('[2/3] 自动继续 hooks: .codebuddy/settings.json');
 
 const settingsFile = join(projectRoot, '.codebuddy', 'settings.json');
-const hooksDir = join(projectRoot, '.codebuddy', 'hooks');
+/** 钩子已迁到 `.continue/hooks/`（continue-do 框架），见 .continue/HANDOFF.md */
+const hooksDir = join(projectRoot, '.continue', 'hooks');
 const hookScript = join(hooksDir, 'auto-continue.mjs');
 
 if (!existsSync(settingsFile)) {
@@ -191,31 +192,42 @@ if (!existsSync(join(projectRoot, 'node_modules'))) {
   problems.push('缺少 node_modules，先执行 npm install。');
 }
 
-const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
-if (existsSync(queueFile)) {
-  // 与钩子同一套规则：**围栏代码块里的 `- [ ]` 是给人看的模板，不算待办**。
-  // 曾经漏了这条，队列明明清空却报"剩余 1 条"，还把那行模板当成任务。
-  const pending = [];
-  {
-    let inFence = false;
-    for (const line of readFileSync(queueFile, 'utf8').split(/\r?\n/)) {
-      if (/^\s*(```|~~~)/.test(line)) {
-        inFence = !inFence;
-        continue;
-      }
-      if (inFence) continue;
-      const trimmed = line.trim();
-      if (/^-\s*\[[ ~]\]\s*\S/.test(trimmed)) pending.push(trimmed);
-    }
-  }
-  say(`        自动继续队列剩余 ${pending.length} 条待办`);
-  for (const line of pending.slice(0, 3)) say(`          · ${line.replace(/^-\s*\[[ ~]\]\s*/, '')}`);
-} else {
-  problems.push('缺少 .codebuddy/hooks/process/auto-continue.md，自动继续队列不存在。');
+/**
+ * 队列是**会话级**的（`.continue/queues/<session_id>.md`），所以这里逐个文件扫，
+ * 不再假设"只有一份 auto-continue.md"。
+ *
+ * 与钩子同一套规则：**围栏代码块里的 `- [ ]` 是给人看的模板，不算待办**。
+ * 曾经漏了这条，队列明明清空却报"剩余 1 条"，还把那行模板当成任务。
+ */
+const queueDir = join(projectRoot, '.continue', 'queues');
+let queueFiles = [];
+try {
+  queueFiles = readdirSync(queueDir).filter((name) => name.endsWith('.md'));
+} catch {
+  problems.push('缺少 .continue/queues/，会话队列目录不存在（钩子会读不到队列）。');
 }
 
-if (existsSync(join(projectRoot, '.codebuddy', 'auto-continue.off'))) {
-  notes.push('存在紧急刹车文件 .codebuddy/auto-continue.off，自动继续当前是关闭的（删除该文件恢复）。');
+if (queueFiles.length === 0) {
+  notes.push('当前没有会话队列（.continue/queues/ 为空）——纯问答会话属正常，要排长跑任务时再建。');
+}
+for (const name of queueFiles) {
+  const pending = [];
+  let inFence = false;
+  for (const line of readFileSync(join(queueDir, name), 'utf8').split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const trimmed = line.trim();
+    if (/^-\s*\[[ ~]\]\s*\S/.test(trimmed)) pending.push(trimmed);
+  }
+  say(`        队列 ${name} 剩余 ${pending.length} 条待办`);
+  for (const line of pending.slice(0, 3)) say(`          · ${line.replace(/^-\s*\[[ ~]\]\s*/, '')}`);
+}
+
+if (existsSync(join(projectRoot, '.continue', 'auto-continue.off'))) {
+  notes.push('存在紧急刹车文件 .continue/auto-continue.off，自动继续当前是关闭的（删除该文件恢复）。');
 }
 
 // 远程仓库：没有远程就没法在机器之间同步，这是换电脑最大的坑。
@@ -248,4 +260,4 @@ if (problems.length === 0) {
 for (const note of notes) say(`  提示: ${note}`);
 
 say();
-say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 HANDOFF.md 与 .codebuddy/hooks/process/auto-continue.md 继续推进。');
+say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 HANDOFF.md 与 .continue/HANDOFF.md 继续推进。');

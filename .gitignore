@@ -13,12 +13,16 @@ coverage/
 .playwright-cli/
 .tmp/
 
-# —— AI 钩子的运行时产物：日志、计数状态、刹车开关 ——# 位置：.codebuddy/hooks/logs/（日志 + 状态）、.codebuddy/*.off（刹车）。
+# —— AI 钩子的运行时产物：日志、计数状态、刹车开关 ——
+# 位置：.continue/logs/（日志 + 状态，另有 .continue/.gitignore 兜底）、.continue/*.off（刹车）。
 # 这些文件每轮都会变，进仓库只会把 git status 撑爆、让 auto-commit 误判成"有改动"。
+.continue/logs/
+.continue/*.off
+.continue/*.state.json
+# 旧位置（2026-10-22 迁移到 continue-do 之前留下的，防止漏网）
 .codebuddy/hooks/logs/
 .codebuddy/*.off
 .codebuddy/*.state.json
-# 旧位置（迁移前留下的，防止漏网）
 .codebuddy/logs/
 .codebuddy/process/
 .codebuddy/auto-continue.log
@@ -30,9 +34,14 @@ coverage/
 # 与 .codebuddy/memory/（人工整理的版本化副本）分开：那是一份结论，这是每日流水
 .workbuddy/
 
+# —— 本地安装的技能包（每个会话按需加载，跨机器各自安）——
+.codebuddy/skills/
+
 # —— 进仓库的（显式列出，防止上面规则误伤）——
-# .codebuddy/hooks/process/   进度文档：队列 + 归档 + batch-seq
-# .codebuddy/hooks/*.mjs      钩子脚本
+# .continue/queues/           会话级队列
+# .continue/archive/          旧队列与批次流水（只读历史）
+# .continue/hooks/*.mjs       钩子脚本
+# .continue/{TASKS,DONE,HANDOFF}.md + batch-seq + config.json
 # .codebuddy/memory/          AI 记忆的版本化副本
 # .codebuddy/settings.json    钩子注册
 

@@ -1,44 +1,44 @@
 #!/usr/bin/env node
 /**
- * 文档体量门禁 + 旧批次自动归档（批次 337）
+ * 文档体量门禁 + 旧批次自动归档（批次 337；2026-10-22 适配 continue-do）
  *
- * 背景：HANDOFF 与 auto-continue 都写着"只留最近 N 批"，但那是**人工承诺**，
- * 没有任何门禁 → 两端都长回去了（auto-continue 210 → 1990 行，HANDOFF 250 → 1100+ 行）。
+ * 背景：HANDOFF 与队列文档都写着"只留最近 N 批"，但那是**人工承诺**，
+ * 没有任何门禁 → 两端都长回去了（HANDOFF 250 → 1100+ 行）。
  * 这里把"保留几批 / 最长几行"变成可执行规则，并且只做**整段搬迁**（一字不改）。
+ *
+ * ⚠️ 2026-10-22 迁移后队列改成了**会话级**（`.continue/queues/<session_id>.md`）：
+ *   · 队列里不再有 `## 批次 N` 小节，收尾时整份搬进 `.continue/DONE.md` 并删除文件，
+ *     "队列一路长到两千行"这件事从机制上消失了；
+ *   · 所以这里只剩两件事：**单份队列别误粘大文件**（5000 行）+ **HANDOFF 只留最近 6 批**；
+ *   · `npm run docs:trim` 现在只处理 HANDOFF（旧队列的归档文件是只读历史）。
  *
  * 用法：
  *   npm run audit:docs   # 只检查（过期非零退出，不改文件，给 npm run check 用）
  *   npm run docs:trim    # 按规则搬走旧批次（写回）
  *
- * ⚠️ 只搬两种边界，不会切半段：
- *   · auto-continue.md 的 `## 批次 N` 小节（到下一个 `## ` 为止）
- *   · HANDOFF.md §1 的 `- 批次 N（` 条目（含续行）
+ * ⚠️ 只搬一种边界，不会切半段：HANDOFF.md §1 的 `- 批次 N（` 条目（含续行）。
  */
 
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 
 const printOnly = process.argv.includes('--print');
 
 const FILES = {
-  queue: new URL('../.codebuddy/hooks/process/auto-continue.md', import.meta.url),
-  queueArchive: new URL('../.codebuddy/hooks/process/auto-continue-archive.md', import.meta.url),
+  queuesDir: new URL('../.continue/queues/', import.meta.url),
   handoff: new URL('../HANDOFF.md', import.meta.url),
   handoffArchive: new URL('../docs/HANDOFF-ARCHIVE.md', import.meta.url),
+  /** 旧队列流水（只读历史，2026-10-22 从 .codebuddy/hooks/process/ 搬来） */
+  queueArchive: new URL('../.continue/archive/auto-continue-archive.md', import.meta.url),
 };
 
 const LIMITS = {
   /**
-   * 队列行数上限：**已放开**（原 500）。
+   * 单份队列行数上限：**已放开**（原 500）。
    *
-   * 原来的理由是"钩子每轮把整个文件读进上下文"，但那条已经不成立了——
-   * 钩子只把**当前这一条**递过去，并在反馈里明确"不用读整个队列文件"。
-   * 所以队列多长与每轮 token 开销无关，限制没有意义。
-   *
-   * 仍留一个很宽松的值，只防"意外"（比如误把大文件粘进队列），
-   * 不防"故意"——想排一百条就排，不需要跟门禁商量。
+   * 钩子只把**当前这一条**递过去，并在反馈里明确"不用读整个队列文件"，
+   * 所以队列多长与每轮 token 开销无关。仍留一个很宽松的值，只防"误把大文件粘进队列"。
    */
   queueLines: 5000,
-  queueBatches: 3,
   handoffLines: 340,
   handoffBatches: 6,
   archiveBytes: 900 * 1024,
@@ -60,53 +60,6 @@ function withArchive(text, chunk, label) {
   }
   const at = out.indexOf(MARK_END);
   return `${out.slice(0, at)}${chunk.trimEnd()}\n\n${out.slice(at)}`;
-}
-
-/** 找出所有 `## 批次 N` 段（到下一个 `## ` 为止，跳过 `## 流程` 这类非批次标题） */
-function batchBlocks(lines) {
-  const heads = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (/^## 批次 (\d+)/.test(lines[i])) heads.push(i);
-  }
-  return heads.map((start, k) => {
-    const nextHead = heads[k + 1] ?? lines.length;
-    let end = nextHead;
-    for (let j = start + 1; j < nextHead; j++) {
-      if (/^## /.test(lines[j])) {
-        end = j;
-        break;
-      }
-    }
-    return { start, end, num: Number(/^## 批次 (\d+)/.exec(lines[start])[1]) };
-  });
-}
-
-function trimQueue() {
-  const text = read(FILES.queue);
-  const lines = text.split('\n');
-  const blocks = batchBlocks(lines);
-  const keep = new Set(blocks.slice(-LIMITS.queueBatches).map((b) => b.start));
-  const moving = blocks.filter((b) => !keep.has(b.start));
-  if (moving.length === 0) {
-    return { lines: lineCount(text), moved: 0, remaining: blocks.length };
-  }
-
-  const chunk = moving.map((b) => lines.slice(b.start, b.end).join('\n')).join('\n');
-  for (const b of [...moving].reverse()) lines.splice(b.start, b.end - b.start);
-  const next = tidy(lines.join('\n'));
-
-  if (!printOnly) {
-    writeFileSync(
-      FILES.queueArchive,
-      withArchive(read(FILES.queueArchive), chunk, '批次流水（自动归档）'),
-    );
-    writeFileSync(FILES.queue, next);
-  }
-  return {
-    lines: lineCount(next),
-    moved: moving.length,
-    remaining: blocks.length - moving.length,
-  };
 }
 
 /** HANDOFF §1 里的 `- 批次 N（` 条目（含续行；跳过"及更早"那条指针） */
@@ -167,29 +120,53 @@ function trimHandoff() {
   };
 }
 
+/** 每份会话队列各自算行数：队列是会话级的，不能只盯某一份 */
+function queueStats() {
+  let names = [];
+  try {
+    names = readdirSync(FILES.queuesDir).filter((name) => name.endsWith('.md'));
+  } catch {
+    names = [];
+  }
+  const rows = names.map((name) => ({
+    name,
+    lines: lineCount(readFileSync(new URL(name, FILES.queuesDir), 'utf8')),
+  }));
+  return { count: rows.length, over: rows.filter((row) => row.lines > LIMITS.queueLines), max: rows.reduce((m, r) => Math.max(m, r.lines), 0) };
+}
+
 let failed = false;
 
-const report = (label, result, limitLines, limitItems, unit) => {
-  const overLines = result.lines > limitLines;
-  const overItems = result.remaining > limitItems;
+{
+  const stats = queueStats();
+  const bad = stats.over.length > 0;
   console.log(
-    `${overLines || overItems ? '✗' : '✓'} ${label}：${result.lines} 行 / ${result.remaining} ${unit}` +
-      `（上限 ${limitLines} 行 / ${limitItems} ${unit}）`,
+    `${bad ? '✗' : '✓'} .continue/queues/：${stats.count} 份会话队列，最长 ${stats.max} 行` +
+      `（上限 ${LIMITS.queueLines} 行/份）`,
+  );
+  for (const row of stats.over) console.log(`  · ${row.name} 已 ${row.lines} 行`);
+  if (bad) failed = true;
+}
+
+{
+  const result = trimHandoff();
+  const overLines = result.lines > LIMITS.handoffLines;
+  const overItems = result.remaining > LIMITS.handoffBatches;
+  console.log(
+    `${overLines || overItems ? '✗' : '✓'} HANDOFF.md：${result.lines} 行 / ${result.remaining} 条批次记录` +
+      `（上限 ${LIMITS.handoffLines} 行 / ${LIMITS.handoffBatches} 条批次记录）`,
   );
   if (result.moved > 0) {
     console.log(
-      `  · ${printOnly ? '待归档' : '已归档'} ${result.moved} ${unit}` +
+      `  · ${printOnly ? '待归档' : '已归档'} ${result.moved} 条批次记录` +
         (printOnly ? '（跑 npm run docs:trim 写回）' : ''),
     );
   }
   if (overLines || overItems) failed = true;
-};
-
-report('auto-continue.md', trimQueue(), LIMITS.queueLines, LIMITS.queueBatches, '个批次小节');
-report('HANDOFF.md', trimHandoff(), LIMITS.handoffLines, LIMITS.handoffBatches, '条批次记录');
+}
 
 for (const [name, url] of [
-  ['auto-continue-archive.md', FILES.queueArchive],
+  ['.continue/archive/auto-continue-archive.md', FILES.queueArchive],
   ['docs/HANDOFF-ARCHIVE.md', FILES.handoffArchive],
 ]) {
   if (!existsSync(url)) continue;

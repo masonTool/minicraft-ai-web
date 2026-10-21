@@ -2,7 +2,8 @@
 
 > 来源：用户在 Android 手机上横屏实测的一轮反馈（启动、新建世界、开局物资、触摸操作、
 > HUD、背包、日志）。本文是**施工单**：每条都有现象、代码定位、方案与验收。
-> 进行中的口径仍以 `.codebuddy/hooks/process/auto-continue.md` 为准；本文只解释"为什么这么做"。
+> 进行中的口径以 `.continue/queues/<session_id>.md`（会话队列）为准；本文只解释"为什么这么做"
+> （写于 2026-10-18，当时队列还是单份 `auto-continue.md`，那份已归档在 `.continue/archive/`）。
 
 ---
 
