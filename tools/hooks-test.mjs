@@ -256,11 +256,30 @@ console.log('\n[无上限与上下文水位]');
   /**
    * 用户明确要求"不限制会话次数"。这两条断言防的是：以后有人好心把上限加回去，
    * 结果长跑跑一半就停、而当事人以为还在跑。
+   *
+   * ⚠️ 2026-10-21 用户进一步明确：**上下文用量只做显示，不能当停下来的理由**。
+   * 原来的"超过 150k 就切交接模式、让用户复制提示词开新会话"整块删掉了——
+   * 它会在做到一半时打断，而且会因为"钩子反馈被当成用户发言 → 轮次清零 → 又判超限"
+   * 自我死锁（实测连发 20 轮，卡死保护永远触发不了）。
+   * 现在的约定是：**AI 自己发现风险才弹窗问用户**（`AskUserQuestion`），
+   * 而不是按一个与工作无关的 token 数打断。下面把这条约定钉住。
    */
   const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
   check('auto-continue 没有轮次上限', !/MAX_CONTINUATIONS/.test(src));
-  check('auto-continue 会读上下文用量', /input_tokens|inputTokens/.test(src));
-  check('auto-continue 有上下文阈值', /AUTO_CONTINUE_CONTEXT_LIMIT/.test(src));
+  check('auto-continue 会读上下文用量（仅供显示）', /input_tokens|inputTokens/.test(src));
+  check('上下文用量只显示，不再当停止条件', !/AUTO_CONTINUE_CONTEXT_LIMIT/.test(src));
+  check('交接模式整块删除（没有 mustHandOff）', !/mustHandOff/.test(src));
+  check('不再生成"复制这段"的交接提示词', !/handoff-prompt\.txt/.test(src));
+
+  // 新的替代方案：发现风险 → 弹窗让用户决策
+  check('反馈里要求"发现风险就弹窗"', /发现风险就弹窗问用户/.test(src));
+  check('明确点名 AskUserQuestion', /AskUserQuestion/.test(src));
+  check('列出 5 类该弹窗的风险', (src.match(/不可逆的破坏|会波及其他批次|有多种合理做法|需求本身有歧义|超出这条的范围/g) ?? []).length >= 5);
+  check('弹窗要求给具体选项而不是"继续/停止"', /给 2~4 个具体选项/.test(src));
+  check('推荐项放第一位', /推荐的那个放第一位/.test(src));
+
+  // 轮次不该因为"钩子自己回传的反馈"被清零：那是死锁的直接原因
+  check('UserPromptSubmit 仍会重置轮次（人工介入后重新计）', /user-prompt-reset/.test(src));
 
   const commitSrc = readFileSync(join(hooksDir, 'auto-commit.mjs'), 'utf8');
   check('auto-commit 没有拦截次数上限', !/MAX_ROUNDS/.test(commitSrc));
@@ -306,39 +325,48 @@ console.log('\n[AI 自插任务]');
   }
 }
 
-console.log('\n[交接单]');
+console.log('\n[不因上下文停摆（2026-10-21 起）]');
 
 {
   /**
-   * 钩子开不了新会话（`Stop` 只允许 additionalContext），所以退而求其次：
-   * 上下文满时生成"新会话第一句话"，让用户复制粘贴。这里断言它确实被生成、
-   * 且**自包含**（带上要读的文件 + 当前第一条），否则新会话接不上。
+   * 用户明确要求：**上下文没有限制**，不要"满了就让用户复制提示词开新会话"。
+   * 这里真跑一次，用一份**很大的 transcript** 把上下文顶到阈值以上，
+   * 断言它照样正常递任务（exit 2 + 递第一条），而不是切进收尾。
+   *
+   * 为什么必须真跑而不是查源码字符串：旧实现里"超限就收尾"是一个 if 分支，
+   * 只查源码看不出它到底有没有被触发；而死锁正是从这个分支出来的。
    */
-  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
-  check('交接分支会写 handoff-prompt.txt', /handoff-prompt\.txt/.test(src));
-  check('交接话术带上要读的文件', /读 AGENTS\.md/.test(src));
+  const bigTranscript = join(tmpdir(), 'hooks-test-big-transcript.jsonl');
+  // 造一条 input_tokens 很大的 assistant 消息（500k，远超旧的 150k 阈值）
+  writeFileSync(
+    bigTranscript,
+    `${JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 500_000 } } })}\n`,
+  );
 
-  // 真跑一次：临时造一条待办 + 用低阈值强制进入交接模式
-  const handoffFile = join(projectRoot, '.codebuddy', 'hooks', 'logs', 'handoff-prompt.txt');
   try {
-    // 队列内容由用例自己给（见 `withQueue` 的注释：不能依赖真实队列还剩几条）
     withQueue(MIN_QUEUE, () => {
-      const r = runHook('auto-continue.mjs', stopEvent('hooks-test-handoff'), {
-        // 用强制开关进入交接模式：比"造一个超大 transcript"直接，也不依赖平台是否传 transcript_path
+      const r = runHook('auto-continue.mjs', {
+        ...stopEvent('hooks-test-bigctx'),
+        transcript_path: bigTranscript,
+      });
+      check('上下文到 500k 仍然拦停并递任务（exit 2）', r.code === 2, String(r.code));
+      check('不切进"先收尾"', !/先收尾/.test(r.stderr), r.stderr.slice(0, 120));
+      check('仍然递出队列第一条', /hooks-test 占位条目/.test(r.stderr));
+      check('不再要求复制提示词', !/复制这段/.test(r.stderr));
+      // 用量仍然显示出来（只是给人看的，不参与判断）
+      check('上下文用量仍然展示出来', /500k/.test(r.stderr), r.stderr.split('\n')[0]);
+      check('不再写 handoff-prompt.txt', !existsSync(join(projectRoot, '.codebuddy', 'hooks', 'logs', 'handoff-prompt.txt')));
+    });
+
+    // 强制交接开关也失效了（那套机制整个删除）
+    withQueue(MIN_QUEUE, () => {
+      const forced = runHook('auto-continue.mjs', stopEvent('hooks-test-force-off'), {
         env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
       });
-      check('强制交接开关生效', r.code === 2 && /收尾/.test(r.stderr), r.stderr.slice(0, 120));
-      check('交接反馈里带可复制的提示词', /复制这段/.test(r.stderr));
-      check('交接反馈带上队列第一条', /hooks-test 占位条目/.test(r.stderr));
-      check('交接单已落盘', existsSync(handoffFile), handoffFile);
-      if (existsSync(handoffFile)) {
-        const content = readFileSync(handoffFile, 'utf8');
-        check('落盘内容自包含（带要读的文件）', /AGENTS\.md/.test(content));
-        check('落盘内容带上队列第一条', /hooks-test 占位条目/.test(content));
-      }
+      check('强制交接开关已失效（照样递任务）', !/先收尾/.test(forced.stderr), forced.stderr.slice(0, 120));
     });
   } finally {
-    rmSync(handoffFile, { force: true });
+    rmSync(bigTranscript, { force: true });
   }
 }
 

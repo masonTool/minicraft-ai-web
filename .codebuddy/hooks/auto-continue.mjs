@@ -361,10 +361,15 @@ if (remaining.length === 0) {
   allowStop('queue-empty', '自动继续队列已全部完成，正常停止。');
 }
 
-const next = remaining
-  .slice(0, 3)
-  .map((line) => `  · ${line.replace(/^-\s*\[[ ~]\]\s*/, '')}`)
-  .join('\n');
+/**
+ * 这一轮要做的条目。
+ *
+ * ⚠️ 只取**一条**（原来 slice(0,3) 列三条当"参考"，但下面的文案写的是
+ * "这一轮做这一条"，列三条只会让人拿不准到底做几条、或者顺手把三条都做了。
+ * 一条做完就停、下一轮再递下一条，提交粒度才干净）。
+ */
+const nextLine = remaining[0];
+const next = `  · ${nextLine.replace(/^-\s*\[[ ~]\]\s*/, '')}`;
 
 /**
  * AI 自己插入的任务（`- [ ] [发现] ...`）。
@@ -380,95 +385,68 @@ const DISCOVERED_LIMIT = Number(process.env.AUTO_CONTINUE_DISCOVERED_LIMIT ?? 5)
 const discoveredFull = discovered.length >= DISCOVERED_LIMIT;
 
 /**
- * 上下文水位。默认阈值 150k：这个量级之后模型的注意力与压缩风险都明显上升，
- * 与其硬撑不如主动收尾——但**收尾不是放弃**，而是把"交接"落到文件里，下一轮换个会话接着跑。
- * 可用 `AUTO_CONTINUE_CONTEXT_LIMIT` 覆盖。
+ * 上下文用量只做**显示**，不再作为停下来的理由（2026-10-21 用户明确要求）。
+ *
+ * 原来这里会在超过 150k 时切进"交接模式"：停下当前工作、让用户复制一段提示词去开新会话。
+ * 那套逻辑被整个删掉了，原因是它在真实使用里制造的问题比解决的多：
+ *   ① 打断节奏——正做到一半被叫停，而"换个会话说"本身就要重读一遍文档；
+ *   ② **会自我死锁**——平台把钩子反馈当成一条新的用户消息回传（`UserPromptSubmit`），
+ *      钩子按"人工介入"把轮次清零，于是每轮都重新判"上下文超限"，
+ *      同一个交接指令连发十几轮，卡死保护（连续 5 轮）永远触发不了。实测撞到过 20 轮。
+ *
+ * 现在的约定：**上下文用量只写进反馈里给人看**，是否换会话由人自己判断。
+ * 需要 AI 停下来要决策时，走另一条路——它自己发现风险就**弹窗问用户**
+ * （见下面 `RISK_ASK_RULE`）。
  */
 const contextTokens = readContextTokens();
-const CONTEXT_LIMIT = Number(process.env.AUTO_CONTINUE_CONTEXT_LIMIT ?? 150_000);
 const contextLine =
-  contextTokens === null
-    ? '（读不到上下文用量，忽略此条）'
-    : `当前上下文约 ${Math.round(contextTokens / 1000)}k tokens（阈值 ${Math.round(CONTEXT_LIMIT / 1000)}k）`;
+  contextTokens === null ? '' : `当前上下文约 ${Math.round(contextTokens / 1000)}k tokens`;
 
 /**
- * 是否进入交接模式。
+ * 「发现风险就弹窗问用户」的规则。
  *
- * 除了"用量过阈值"，还有一条**强制开关** `AUTO_CONTINUE_FORCE_HANDOFF=1`：
- *   ① 兜底——万一哪天平台不再传 `transcript_path`，读不到用量就永远进不了交接模式，
- *      那上下文满了也没人提醒，这个开关是最后一道保险；
- *   ② 手动——用户想主动收尾换个会话时，可以直接开它，不必等到 150k。
+ * 这是**替代**原来"上下文满了就让用户复制提示词开新会话"的那套逻辑。
+ * 两者的区别是本质性的：
+ *   · 旧逻辑按**一个与工作无关的指标**（token 数）打断，不管手上这条做没做完；
+ *   · 新逻辑按**这件事本身的风险**打断，只在真的要人拍板时才停。
+ *
+ * 为什么要写明"弹窗"而不是"在回复里说一句"：回复里说的话夹在长日志中间，
+ * 用户很容易滑过去；而 `AskUserQuestion` 是**拦在流程中间的**，不选就不往下走。
+ * 这正是"让用户决策"该有的强度。
  */
-const mustHandOff =
-  process.env.AUTO_CONTINUE_FORCE_HANDOFF === '1' ||
-  (contextTokens !== null && contextTokens >= CONTEXT_LIMIT);
+const RISK_ASK_RULE = [
+  '## ⚠️ 发现风险就弹窗问用户（重要）',
+  '',
+  '**不要自己替用户拍板**。撞到下面任一情况，立刻用 `AskUserQuestion` 弹窗把选项摆出来，',
+  '等他选完再继续——不要先做了再汇报，也不要用"我觉得这样更好"绕过：',
+  '',
+  '1. **不可逆的破坏**：删数据 / 改存档格式 / 改别人正在用的公开接口 / 强制推送；',
+  '2. **会波及其他批次**：要动的文件同时是队列里另一条的地盘，或改动会让已通过的断言变红；',
+  '3. **有多种合理做法且取向不同**：性能 vs 一致性、对齐原版 vs 修复体验、改注释 vs 改行为；',
+  '4. **需求本身有歧义**：条目写的话可以理解成两个意思，做错了要返工；',
+  '5. **要超出这条的范围**：做完发现必须顺手改一大片没在这次范围内的东西。',
+  '',
+  '弹窗要求：**给 2~4 个具体选项**（不是"继续/停止"这种废话），每个写清代价；',
+  '推荐的那个放第一位并标「推荐」。选完之后立刻按选择执行，不要再来回确认。',
+].join('\n');
 
-/**
- * 交接用的一句话。
- *
- * 钩子**开不了新会话**（`Stop` 事件只允许返回 `additionalContext`，见实现里的
- * 字段白名单；`SessionStart` 的 4 个 source 都由外部动作触发），
- * 所以退而求其次：把"新会话第一句话"直接生成好，让用户复制粘贴就能接上。
- *
- * 这句话必须**自包含**——新会话看不到旧会话的任何东西，只能靠它 + 仓库文件。
- * 所以它要带上：读哪几份文件、当前第一条是什么、做完一条就停的约定。
- */
-/**
- * 交接单里的"下一条"优先取**用户排的任务**，没有才取 `[发现]`。
- *
- * 这条优先级不是小事：如果 AI 插的 `[发现]` 总被排到最前，那就等于
- * 它自己给自己派活、把用户排的任务一直往后推——"只插不改"的承诺就落空了。
- */
-// ⚠️ 必须跳过 [阻塞]：否则新会话第一句话就把卡死的任务又捡回来，白白再烧一轮
-const firstScheduled = remaining.find((line) => !/^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
-const firstPending = firstScheduled ?? remaining[0];
-const firstPendingText = firstPending
-  ? firstPending.replace(/^-\s*\[[ ~]\]\s*/, '').trim().slice(0, 80)
-  : null;
-
-const handoffPrompt = firstPendingText
-  ? `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进。先做第一条：${firstPendingText}`
-  : `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进（队列里还有 ${remaining.length} 条待办）。`;
-
-const handoffFile = join(logsDir, 'handoff-prompt.txt');
-
-const feedback = mustHandOff
-  ? [
-      `[auto-continue 第${state.count}轮 · ${
-        contextTokens === null ? '收到强制交接指令' : `上下文 ${Math.round(contextTokens / 1000)}k 已过阈值`
-      }] 先收尾，不要开新任务。`,
-      '',
-      '## 这一轮只做四件事（不要做新任务）',
-      '',
-      '1. **把手上的活收干净**：该提交的提交（中文 message），该勾的勾 `[x]`；',
-      '2. **如果某条做到一半**，把它改成 `[~]`，并在条目下面补一行"当前卡在哪 / 下一步具体做什么"，',
-      '   写清到"换个会话的人不用问我也能接着做"的程度；',
-      '3. **在回复里给出交接摘要**：本会话做完哪几条（编号）、还剩几条、下一条从哪开始；',
-      '4. **在回复的最后，原样输出下面这个代码块**（用户要复制它到新会话）：',
-      '',
-      '   ┌───────────── 复制这段 ─────────────',
-      '   │ ' + handoffPrompt,
-      '   └───────────────────────────────',
-      '',
-      '   这一行已经同时写进 `.codebuddy/hooks/logs/handoff-prompt.txt`（钩子生成，不用你维护）。',
-      '',
-      '然后**明确停止**（不要再读队列、不要开始新条目）。用户会开一个新会话继续——',
-      '上下文已经满了，硬撑只会让后半程质量下降、还会触发压缩丢细节。',
-    ].join('\n')
-  : [
-      `[auto-continue 第${state.count}轮 · 队列还剩 ${remaining.length} 条 · ${contextLine}] 不要询问我，直接继续执行。`,
-      '',
-      '## 这一轮做这一条（不用读整个队列文件，做这条够用的部分即可）',
-      next,
-      '',
-      '要求：',
-      '1. **这一轮只做一条**：做完就停，不要连着做两三条。下一条由我下一轮递给你。',
-      '2. 开始做时把该条 `[ ]` 改成 `[~]`，做完改成 `[x]`，并同步更新 TASKS.md；',
-      '3. 该条做完立刻单独 git 提交（中文 commit message），不要攒成一个巨型提交；',
-      '4. 改完必须自测：`npx tsc --noEmit` 通过 + 用脚本或浏览器实测，把实测数据写进 commit message；',
-      '5. 遇到困难不要停下来问我，自己找办法解决并把结论记录下来；',
-      '6. 队列全部清空后，在回复里明确写"队列已清空"再停止。',
-      '',
+const feedback = [
+  `[auto-continue 第${state.count}轮 · 队列还剩 ${remaining.length} 条${contextLine ? ` · ${contextLine}` : ''}] 不要询问我，直接继续执行。`,
+  '',
+  '## 这一轮做这一条（不用读整个队列文件，做这条够用的部分即可）',
+  next,
+  '',
+  '要求：',
+  '1. **这一轮只做一条**：做完就停，不要连着做两三条。下一条由我下一轮递给你。',
+  '2. 开始做时把该条 `[ ]` 改成 `[~]`，做完改成 `[x]`，并同步更新 TASKS.md；',
+  '3. 该条做完立刻单独 git 提交（中文 commit message），不要攒成一个巨型提交；',
+  '4. 改完必须自测：`npx tsc --noEmit` 通过 + 用脚本或浏览器实测，把实测数据写进 commit message；',
+  '5. 遇到困难不要停下来问我，自己找办法解决并把结论记录下来——',
+  '   **除非命中下面「发现风险」那五条**，那时必须弹窗；',
+  '6. 队列全部清空后，在回复里明确写"队列已清空"再停止。',
+  '',
+  RISK_ASK_RULE,
+  '',
       justBlocked
         ? [
             `## ⚠️ 刚有一条卡住，已标 ${BLOCKED_TAG}（连续 ${justBlocked.streak} 轮没做完）`,
@@ -508,19 +486,8 @@ const feedback = mustHandOff
         : '',
     ].join('\n');
 
-// 只在交接时落盘：平时不写，免得让人以为随时都有待用的交接单
-if (mustHandOff) {
-  try {
-    mkdirSync(logsDir, { recursive: true });
-    writeFileSync(handoffFile, `${handoffPrompt}\n`);
-  } catch {
-    /* 写不进去不影响主流程，反馈里已经带了这句话 */
-  }
-}
-
 blockStop(feedback, {
   count: state.count,
   pendingCount: pending.length,
   contextTokens,
-  handoffPrompt: mustHandOff ? handoffPrompt : undefined,
 });
