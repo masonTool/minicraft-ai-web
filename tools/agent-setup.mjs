@@ -193,11 +193,23 @@ if (!existsSync(join(projectRoot, 'node_modules'))) {
 
 const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
 if (existsSync(queueFile)) {
-  const pending = readFileSync(queueFile, 'utf8')
-    .split(/\r?\n/)
-    .filter((line) => /^-\s*\[[ ~]\]\s*\S/.test(line.trim()));
+  // 与钩子同一套规则：**围栏代码块里的 `- [ ]` 是给人看的模板，不算待办**。
+  // 曾经漏了这条，队列明明清空却报"剩余 1 条"，还把那行模板当成任务。
+  const pending = [];
+  {
+    let inFence = false;
+    for (const line of readFileSync(queueFile, 'utf8').split(/\r?\n/)) {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        continue;
+      }
+      if (inFence) continue;
+      const trimmed = line.trim();
+      if (/^-\s*\[[ ~]\]\s*\S/.test(trimmed)) pending.push(trimmed);
+    }
+  }
   say(`        自动继续队列剩余 ${pending.length} 条待办`);
-  for (const line of pending.slice(0, 3)) say(`          · ${line.trim().replace(/^-\s*\[[ ~]\]\s*/, '')}`);
+  for (const line of pending.slice(0, 3)) say(`          · ${line.replace(/^-\s*\[[ ~]\]\s*/, '')}`);
 } else {
   problems.push('缺少 .codebuddy/hooks/process/auto-continue.md，自动继续队列不存在。');
 }

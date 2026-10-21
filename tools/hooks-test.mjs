@@ -319,6 +319,49 @@ console.log('\n[交接单]');
   }
 }
 
+// ---------------------------------------------------------------- 围栏代码块
+
+console.log('\n[围栏代码块不算待办]');
+
+{
+  /**
+   * 真实踩过的 bug：队列文件里写着格式模板
+   *     ```\n- [ ] [发现] <一句话说清是什么>…\n```
+   * trim 之后行首就是 `- [ ]`，钩子把它当成真待办 ——
+   * 于是"队列已清空"却一直自动继续，还把模板当任务递出去。
+   */
+  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('钩子会识别围栏', /inFence/.test(src));
+
+  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
+  let backup = null;
+  try {
+    backup = readFileSync(queueFile, 'utf8');
+
+    // 只有代码块里的模板 → 必须判定为"队列空"
+    writeFileSync(queueFile, `${backup}\n\`\`\`\n- [ ] [发现] 模板示例：x → y\n\`\`\`\n`);
+    const fenced = runHook('auto-continue.mjs', stopEvent('hooks-test-fence-1'));
+    check('代码块里的 [ ] 不算待办', fenced.json?.continue === true, JSON.stringify(fenced.json).slice(0, 160));
+    check('判定为队列空', /队列已全部完成/.test(fenced.json?.systemMessage ?? ''));
+
+    // 代码块外 + 代码块内各一条 → 只算外面那条
+    writeFileSync(
+      queueFile,
+      `${backup}\n\`\`\`\n- [ ] 块内假任务：x → y\n\`\`\`\n- [ ] 块外真任务：x → y\n`,
+    );
+    const mixed = runHook('auto-continue.mjs', stopEvent('hooks-test-fence-2'), {
+      env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
+    });
+    check(
+      '只把块外那条当待办',
+      /块外真任务/.test(mixed.stderr) && !/块内假任务/.test(mixed.stderr),
+      mixed.stderr.slice(0, 200),
+    );
+  } finally {
+    if (backup !== null) writeFileSync(queueFile, backup);
+  }
+}
+
 // ---------------------------------------------------------------- 两种输出风格
 
 console.log('\n[输出风格]');

@@ -225,10 +225,34 @@ if (!existsSync(queueFile)) {
   allowStop('no-queue-file', '未找到 .codebuddy/process/auto-continue.md，自动继续未启用。');
 }
 
-const pending = readFileSync(queueFile, 'utf8')
-  .split(/\r?\n/)
-  .map((line) => line.trim())
-  .filter((line) => /^-\s*\[[ ~]\]\s*\S/.test(line));
+/**
+ * 扫描待办。
+ *
+ * ⚠️ 必须**先剥掉围栏代码块**再匹配，不能对着裸文件逐行 trim 后匹配。
+ * 真实踩过：队列文件里写着格式模板
+ *     ```\n- [ ] [发现] <一句话说清是什么>…\n```
+ * 那是给人看的示例，但 trim 之后行首就是 `- [ ]`，钩子把它当成了真待办，
+ * 于是"队列明明已清空"却一直自动继续，还把模板当成任务递出去。
+ *
+ * 规则：``` 围栏之间的内容一律不算待办；`- [x]` 已完成的不算（正则只认空格和 ~）。
+ */
+function readPending(file) {
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const out = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const trimmed = line.trim();
+    if (/^-\s*\[[ ~]\]\s*\S/.test(trimmed)) out.push(trimmed);
+  }
+  return out;
+}
+
+const pending = readPending(queueFile);
 
 if (pending.length === 0) {
   allowStop('queue-empty', '自动继续队列已全部完成，正常停止。');
