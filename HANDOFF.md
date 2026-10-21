@@ -112,8 +112,9 @@ npm run dev            # http://localhost:5173
 - 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`（删掉即恢复）。
 - **没有轮次上限**（用户要求）：队列不清空就一直跑，唯一的正常退出是队列空。
 - **上下文水位 150k**（`AUTO_CONTINUE_CONTEXT_LIMIT`）：每轮从 `transcript_path` 读
-  `input_tokens`，过阈值就转为"收干净 + 写清下一步 + 给交接摘要"再停，让用户开新会话接着跑。
-  **一个会话不可能无限跑**——进度靠文件不靠会话记忆。
+  `input_tokens`，过阈值就转为"收干净 + 写清下一步 + 给交接摘要"再停。
+  钩子**开不了新会话**（`Stop` 只能返回 `additionalContext`），所以它生成"新会话第一句话"
+  写进 `hooks/logs/handoff-prompt.txt`，复制即接上；手动收尾用 `AUTO_CONTINUE_FORCE_HANDOFF=1`。
 
 **auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**，只负责发现未提交改动
 就阻止停止，把清单和规矩交回 AI 自己 review + 提交。理由：message 质量取决于"知不知道自己
