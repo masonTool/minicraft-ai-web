@@ -6114,6 +6114,36 @@ class App {
     return null;
   }
 
+  /**
+   * 跨维度转移（J2，批次 603）：收集玩家穿门前身边该带走的实体。
+   *
+   * 规则刻意保守：只带**3 格内的实体**，外加已驯服/拴绳/正在骑的坐骑；
+   * 不把整片怪群搬过去。掉落物也带，避免"刚丢出来的东西留在旧维度"。
+   */
+  private collectDimensionTransfer(): SavedEntity[] {
+    const px = this.physics.x;
+    const py = this.physics.y;
+    const pz = this.physics.z;
+    const out: SavedEntity[] = [];
+    for (const entity of this.entities.all) {
+      if (entity.dead) continue;
+      const horizontal = Math.hypot(entity.x - px, entity.z - pz);
+      const vertical = Math.abs(entity.y - py);
+      let include = false;
+      if (entity instanceof Mob) {
+        if (entity.type.id === REMOTE_PLAYER_TYPE.id) continue;
+        include = entity.tamed || entity.leashed || entity === this.ridingVehicle || (horizontal <= 3 && vertical <= 6);
+      } else if (entity instanceof ItemEntity) {
+        if (entity.ghost) continue;
+        include = horizontal <= 3 && vertical <= 6;
+      }
+      if (!include) continue;
+      const record = this.savedEntityOf(entity);
+      if (record) out.push(record);
+    }
+    return out;
+  }
+
   /** 区块卸载前寄存该区块的生物与掉落物（批次 258） */
   private parkChunkEntities(cx: number, cz: number): void {
     for (const entity of this.entities.all) {
@@ -15982,6 +16012,11 @@ class App {
     // 一次性请求整个视距会同样卡住（批次 100 的渐进视距在这儿也要生效）
     this.startupRamp.reset();
     if (dimension === this.dimension) return;
+    // 跨维度转移（J2，批次 603）：先下马（否则 entities.clear 会留下悬空骑乘引用），
+    // 再收集身边该带走的生物/掉落物；相对坐标在切换前算好。
+    if (this.ridingVehicle) this.dismountVehicle();
+    const transferOrigin = { x: this.physics.x, y: this.physics.y, z: this.physics.z };
+    const transfer = this.collectDimensionTransfer();
     // 传送那一刻的按键不该带到另一片地形里（尤其是"按住前进"）
     this.touch?.resetInput('dimension');
     this.dimension = dimension;
@@ -16002,6 +16037,19 @@ class App {
     if (dimension === Dimension.END) this.spawnEndBoss();
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+    // 跨维度转移（J2）：按切换前的相对坐标落在新维度，竖直偏移夹到 ±4 格，
+    // 避免从高空掉进岩浆或卡进地面。
+    for (const record of transfer) {
+      const ox = record.x - transferOrigin.x;
+      const oz = record.z - transferOrigin.z;
+      const oy = Math.max(-4, Math.min(4, record.y - transferOrigin.y));
+      this.spawnSavedEntity({
+        ...record,
+        x: this.physics.x + ox,
+        y: this.physics.y + oy,
+        z: this.physics.z + oz,
+      });
+    }
     // 进度（M7）：进入某维度。"第一次踏进下界/末地"这类条目全靠它——
     // 放在**这个方法里**而不是"按 N 键"那处：传送门、命令、调试接口全都走这里，
     // 少一处就漏一种进法（本项目的"两条路径共用同一套逻辑"）
