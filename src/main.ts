@@ -943,6 +943,8 @@ class App {
       const container = this.containerOfBlockAt(x, y, z);
       return container ? containerSignalStrength(container) : 0;
     },
+    // 音符盒（批次 583）：红石上升沿自动演奏；音高读状态位，与右键走同一个方法
+    playNote: (x, y, z) => this.playNoteBlock(x, y, z, false),
   };
   /**
    * TNT 的引信（批次 56）：点燃之后"闪 4 秒再炸"，这份状态跨帧存在这里。

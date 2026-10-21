@@ -101,6 +101,13 @@ export interface RedstoneWorld {
    * （老离线桩不必为了它搭一套箱子）。
    */
   containerSignal?(x: number, y: number, z: number): number;
+  /**
+   * 音符盒收到**红石上升沿**时响一声（批次 583）。
+   *
+   * 与 `isRodPowered` 同一条分工：引擎只判断"该不该响"，音高与音频都在主程序。
+   * 不传就没声音（离线桩不必为了它搭一套音频）。
+   */
+  playNote?(x: number, y: number, z: number, state: number): void;
 }
 
 /**
@@ -163,6 +170,8 @@ export function isRedstoneComponent(id: number): boolean {
     // 但吐出什么、吐到哪去都在容器那边，引擎只负责判定脉冲）
     case Block.DROPPER:
     case Block.DISPENSER:
+    // 音符盒（批次 583）：通电的**上升沿**响一声（音高在状态位里，音频交给主程序）
+    case Block.NOTE_BLOCK:
     // 避雷针（批次 83）：被雷劈中的那 8 tick 输出 15。
     // 它是**第三种"外部世界决定输出"的电源**（前两种是阳光传感器与绊线），
     // 所以"有没有被劈"同样通过注入的接口问（`isRodPowered?`），引擎自己不产生事件
@@ -329,6 +338,8 @@ export class RedstoneEngine {
 
   /** 已经"因为通电而吐过一件"的投掷器（上升沿判定用，与 TNT 同一套路） */
   private readonly dropperPrimed = new Set<string>();
+  /** 音符盒的上升沿记忆（批次 583）：通电只响一次，断电才允许下一次 */
+  private readonly noteBlockPrimed = new Set<string>();
 
   /**
    * 投掷器/发射器被红石**脉冲**触发时的回调（批次 59）。
@@ -1096,6 +1107,19 @@ export class RedstoneEngine {
           } else if (!effective && wasFired) {
             // 断电后允许下一次脉冲再来一次（红石钟就是这么把它变成自动投喂机的）
             this.dropperPrimed.delete(dropperKey);
+          }
+          break;
+        }
+        case Block.NOTE_BLOCK: {
+          // 音符盒（批次 583）：通电的**上升沿**响一声（原版也是红石脉冲演奏）。
+          // 与投掷器同一套记忆：通电只响一次，断电清掉才允许下一次。
+          const noteKey = keyOf(nx, ny, nz);
+          const wasStruck = this.noteBlockPrimed.has(noteKey);
+          if (input > 0 && !wasStruck) {
+            this.noteBlockPrimed.add(noteKey);
+            world.playNote?.(nx, ny, nz, state);
+          } else if (input <= 0 && wasStruck) {
+            this.noteBlockPrimed.delete(noteKey);
           }
           break;
         }

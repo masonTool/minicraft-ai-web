@@ -70,6 +70,8 @@ class StubWorld implements RedstoneWorld {
   private readonly entities = new Set<string>();
   /** 实体个数（批次 247，测重压力板用）：同一格可以站多个 */
   private readonly entityCounts = new Map<string, number>();
+  /** 音符盒回调（批次 583）：测试里数"响了几声" */
+  playNote?: (x: number, y: number, z: number, state: number) => void;
 
   private static key(x: number, y: number, z: number): string {
     return `${x},${y},${z}`;
@@ -919,6 +921,36 @@ console.log('\n[比较器：读容器 + 减法模式（批次 544）]');
   engine.onBlockChanged(world, 0, Y, 0);
   step(engine, world, 0.1);
   equal('空容器输出 0', wirePowerOf(engine, 1, Y, 0), 0);
+}
+
+console.log('\n[音符盒：红石上升沿演奏（批次 583）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  let notes = 0;
+  world.playNote = () => {
+    notes++;
+  };
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.NOTE_BLOCK, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+  check('没通电时不响', notes === 0);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('通电上升沿响一声', notes === 1, `响了 ${notes}`);
+
+  // 保持通电继续重算：不能每轮都响（那就是"卡带"了）
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('保持通电不重复响', notes === 1, `响了 ${notes}`);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('断电再通电才会再响', notes === 2, `响了 ${notes}`);
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);
