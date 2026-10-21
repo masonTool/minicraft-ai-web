@@ -132,4 +132,23 @@ export class NameTagEditor {
     this.input.blur();
     this.onClose?.();
   }
+
+  /**
+   * 退出世界时摘掉 DOM（批次 615 漏项，617 补）。
+   *
+   * 本类是 `App` 的字段，构造时就把 `#name-tag-editor` 挂到了 `<body>`：
+   * 不摘掉的话下一局会叠出第二个同 id 节点；更糟的是**退出时输入框还开着**
+   * （`show()` 已经摘掉 `hidden`），那层 `.sign-editor` 的全屏 55% 黑遮罩
+   * 会留在页面上，表现为"再进世界时画面发暗 / 有东西一闪而过"。
+   *
+   * 与 `CommandBlockEditor.dispose()` 同一套：只收自己，不回调 `onClose`
+   * （那会把已经销毁的 App 再拉起来一次）。
+   */
+  dispose(): void {
+    this.open = false;
+    this.onSave = null;
+    this.onClose = null;
+    this.input.blur();
+    this.root.remove();
+  }
 }

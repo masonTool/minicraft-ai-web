@@ -880,6 +880,18 @@ const NAME_TAG_POOL_SIZE = 12;
 const NAME_TAG_RANGE = 32;
 
 /**
+ * 进世界后的"别自动弹暂停页"保护窗口（毫秒，批次 617）。
+ *
+ * 手机浏览器在"点进世界 → 首帧"这一小段里常会派发一次 `blur`（地址栏/全屏/手势条
+ * 都会引起），甚至先于 `fullscreenchange` 到达——那时 `ignoreBlurUntilMs` 的保护
+ * 还没建立，于是被当成"切到后台"，回来时 `handleReturnFromBackground()` 会无条件
+ * 弹暂停菜单。玩家的体感就是：世界闪一下变暗、菜单（含"统计"入口）冒出来又消失。
+ *
+ * 1.5 秒只挡"进世界瞬间"这一类误判；真正的切 App 一定远超这个窗口。
+ */
+const ENTER_GUARD_MS = 1500;
+
+/**
  * 光照收敛后"全量重刷已渲染区块"的最小间隔（毫秒，批次 616）。
  *
  * 挖/放方块会让光照队列在忙与闲之间反复抖；如果每抖一次就把 100+ 个区块
@@ -1386,6 +1398,13 @@ class App {
 
   /** 刚刚切到过后台：下一次回到前台要先落到暂停页（见 `handleReturnFromBackground`） */
   private wasHidden = false;
+  /**
+   * 本局开始时刻（`performance.now()`，批次 617）。
+   *
+   * 只服务 `ENTER_GUARD_MS`：进世界那一瞬间的 blur / 掉全屏不是"玩家切走"，
+   * 不能把玩家丢进暂停页（见常量处的注释）。
+   */
+  private worldStartedAtMs = 0;
   /**
    * 页面被藏起来 / 失去焦点：主循环**整帧跳过**（批次 303）。
    *
@@ -2469,6 +2488,13 @@ class App {
         const lost = this.lastFullscreen && !full;
         this.lastFullscreen = full;
         if (!lost) return;
+        // 批次 617：进世界那一瞬间的全屏状态翻转（构造时 `lastFullscreen` 取的是
+        // `isFullscreen()`，浏览器随后才真正进出全屏）不是"玩家按了返回"。
+        // 这里补一次暂停菜单，玩家的体感就是：世界闪一下变暗、菜单冒出来又消失。
+        if (performance.now() - this.worldStartedAtMs < ENTER_GUARD_MS) {
+          syncRotateHint();
+          return;
+        }
         // 已经有面板（例如在设置里手动退全屏）：只对一次竖屏提示，不叠暂停
         if (this.isAnyUiOpen()) {
           syncRotateHint();
@@ -4578,6 +4604,9 @@ class App {
         this.touch?.resetInput('blur');
         // 进出全屏会顺带派发 blur（见 `ignoreBlurUntilMs`）：那不是切走
         if (performance.now() < this.ignoreBlurUntilMs) return;
+        // 批次 617：进世界那一瞬间的 blur（地址栏/全屏/手势条）也不是切走——
+        // 放过去就会被判成"切到后台"，回来时自动弹暂停页（世界闪一下 + 菜单一闪）
+        if (performance.now() - this.worldStartedAtMs < ENTER_GUARD_MS) return;
         // 正在打字（聊天/告示牌/搜索）时 blur 往往只是软键盘/输入法在动：
         // 页面并没有被"压到后台"，冻结世界会让打字像卡住
         if (isEditingText()) return;
@@ -15368,6 +15397,8 @@ class App {
   }
 
   start(): void {
+    // 批次 617：记下开局时刻——进世界瞬间的 blur / 掉全屏不算"切走"（见 `ENTER_GUARD_MS`）
+    this.worldStartedAtMs = performance.now();
     // 批次 181：局内常驻一条返回守卫——**没有面板时按返回也要先落到我们手里**
     //（以前无面板时没有任何守卫，浏览器会直接退出页面，PWA 里等于退游戏）
     this.backButton.armRoot();
@@ -16017,6 +16048,9 @@ class App {
     this.chat.dispose();
     this.commandHelp.destroy();
     this.signEditor.dispose();
+    // 命名牌输入框（批次 615）：与告示牌同一类"挂在 body 上的浮层"，
+    // 漏摘会让 `#name-tag-editor` 跨世界残留（开着退出时还留一层全屏黑遮罩）
+    this.nameTagEditor.dispose();
     this.bookScreen.dispose();
     this.mapScreen.dispose();
     this.beaconScreen.dispose();
