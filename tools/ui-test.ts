@@ -4572,10 +4572,10 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       mainSource.includes('? 1\n      : Math.max(1'),
   );
   check(
-    'PC 锁 60 帧并默认视距 9，避免高刷 GPU 满负荷',
+    'PC 锁 60 帧并默认视距 8，避免高刷 GPU 满负荷',
     mainSource.includes('if (!isTouchDevice()) this.settings.maxFps = 60;') &&
       mainSource.includes('defaultViewDistanceFor(isTouchDevice())') &&
-      /viewDistance: 9,/.test(readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8')),
+      /viewDistance: 8,/.test(readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8')),
   );
   check(
     'PC 鼠标视角按帧平滑消费，且单次增量有上限',

@@ -424,10 +424,11 @@ export interface GameSettings {
 export const DEFAULT_SETTINGS: GameSettings = {
   settingsVersion: SETTINGS_VERSION,
   language: DEFAULT_LANGUAGE,
-  // 批次 539：PC 与手机同一策略——先给一个能稳定跑、发热可控的起点（9）。
-  // 实测 12 时 draw calls 约 1700、三角形 1.5M；9 时约 1130 / 1.0M，
-  // 8 时约 845 / 0.73M；9 在观感与 GPU 负载之间取平衡，笔记本不再长期满负荷。
-  viewDistance: 9,
+  // 批次 539：PC 与手机同一策略——发热优先，默认视距直接定在 8。
+  // 同一场景受控采样：12 → 1200 calls / 1.04M tris / WebGL 2757ms/6s；
+  // 8 → 346 calls / 0.26M tris / WebGL 894ms/6s；帧率都保持 60。
+  // 再往上加视距的收益是"远处更清楚"，代价是 GPU 负载接近三倍，笔记本明显发热。
+  viewDistance: 8,
   // 视野默认 60°（批次 521，用户要求；基岩版默认也是 60），范围 45~90 见 `FOV_MIN/FOV_MAX`
   fov: 60,
   volume: 0.7,
@@ -476,12 +477,12 @@ const STORAGE_KEY = 'bedrock-settings';
  * 这台设备的**视距上限**（批次 202 引入，批次 203 改语义）。
  *
  * ⚠️ 这里必须按设备分开，不能直接用 `DEFAULT_SETTINGS.viewDistance`：
- *  - 桌面默认值是 9；手机上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
+ *  - 桌面默认值是 8；手机上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
  *  - 批次 202 之前"恢复默认"把 12 原样写回去，手机上等于一次性请求 489 个区块
  *    （`World.update` 在半径 12 下的候选圈；半径 8 是 225 个）——体感就是"恢复默认反而更卡"。
  *
  * 批次 203 起玩家**已经没有视距滑块**，所以这个函数返回的是"自适应策略允许涨到哪"：
- * 桌面上就是 9（`DEFAULT_SETTINGS`），手机上是 8。开局仍然只有
+ * 桌面上就是 8（`DEFAULT_SETTINGS`），手机上是 8。开局仍然只有
  * `MOBILE_VIEW_DISTANCE`（6）——那由渐进视距 `StartupRamp` 慢慢涨到上限。
  */
 export function defaultViewDistanceFor(touch: boolean): number {
