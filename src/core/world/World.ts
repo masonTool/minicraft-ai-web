@@ -9,7 +9,7 @@
  * 区块 key 与坐标换算：区块 (cx, cz) 覆盖 worldX ∈ [cx*16, cx*16+16)。
  */
 
-import { Chunk } from './Chunk.ts';
+import { Chunk, type ChunkState } from './Chunk.ts';
 import { ChunkEdits } from '../save/ChunkEdits.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
 import { waterFlowAt, type FluidFlow } from './FluidFlow.ts';
@@ -265,6 +265,16 @@ export class World {
 
   getChunk(cx: number, cz: number): Chunk | undefined {
     return this.chunks.get(chunkKey(cx, cz));
+  }
+
+  /**
+   * 区块当前生命周期状态（C5，批次 606）。
+   * 未加载但在请求队列里 → generating；连请求都没有 → empty。
+   */
+  chunkStateAt(cx: number, cz: number): ChunkState {
+    const chunk = this.getChunk(cx, cz);
+    if (chunk) return chunk.state;
+    return this.loading.has(chunkKey(cx, cz)) ? 'generating' : 'empty';
   }
 
   isLoaded(worldX: number, worldZ: number): boolean {

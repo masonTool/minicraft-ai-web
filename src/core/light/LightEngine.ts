@@ -12,7 +12,14 @@
  */
 
 import { blockDef, emitLightWithState } from '../registry/blocks.ts';
-import { Chunk, SECTION_COUNT, SECTION_HEIGHT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
+import {
+  Chunk,
+  SECTION_COUNT,
+  SECTION_HEIGHT,
+  WORLD_MAX_Y,
+  WORLD_MIN_Y,
+  advanceChunkState,
+} from '../world/Chunk.ts';
 
 /** 光照引擎需要的世界访问能力（由 World 实现，接口化以避免循环依赖） */
 export interface LightAccessor {
@@ -227,6 +234,7 @@ export class LightEngine {
     }
 
     chunk.lit = true;
+    chunk.state = advanceChunkState(chunk.state, 'lit');
   }
 
   /**

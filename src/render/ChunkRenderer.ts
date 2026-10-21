@@ -15,7 +15,12 @@
 
 import * as THREE from 'three';
 import { createGeometry, meshSection, type GeometryArrays } from '../core/mesh/ChunkMesher.ts';
-import { SECTION_COUNT, WORLD_MIN_Y, type Chunk } from '../core/world/Chunk.ts';
+import {
+  SECTION_COUNT,
+  WORLD_MIN_Y,
+  advanceChunkState,
+  type Chunk,
+} from '../core/world/Chunk.ts';
 import { chunkKey, type World } from '../core/world/World.ts';
 import type { TextureAtlas } from './TextureAtlas.ts';
 import type { MeshWorkerPool } from './MeshWorkerPool.ts';
@@ -333,6 +338,8 @@ export class ChunkRenderer {
     }
 
     this.replaceMeshes(key, response.cx, response.cz, meshes, triangles);
+    const chunk = this.world.getChunk(response.cx, response.cz);
+    if (chunk) chunk.state = advanceChunkState(chunk.state, 'meshed');
   }
 
   /** Worker 不可用时的回退：在主线程同步网格化 */
@@ -365,6 +372,7 @@ export class ChunkRenderer {
     }
 
     this.replaceMeshes(key, cx, cz, meshes, triangles);
+    chunk.state = advanceChunkState(chunk.state, 'meshed');
   }
 
   /**

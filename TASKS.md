@@ -1438,9 +1438,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] C4 世界坐标方块读写入口（含跨区块）
       已完成：`World.getBlock/setBlock/getBlockState/setBlockAndUpdate/setStateAndUpdate`，
       内部经 `chunkAt(toChunkCoord(...))` 定位，可读写任意已加载区块（含相邻区块）
-- [~] C5 区块状态机（空 / 生成中 / 已生成 / 已点亮 / 已网格化）
-      现状：状态隐含在多处（`World.loading`=生成中、`chunks`=已生成、`Chunk.lit`=已点亮、
-      `ChunkRenderer.rendered`=已网格化）；无统一状态机枚举
+- [x] C5 区块状态机（空 / 生成中 / 已生成 / 已点亮 / 已网格化）
+      之前状态隐含在多处（`World.loading`=生成中、`chunks`=已生成、`Chunk.lit`=已点亮、
+      `ChunkRenderer.rendered`=已网格化），没有统一枚举。
+      —— **批次 606 收成显式状态**：`ChunkState = empty|generating|generated|lit|meshed`，
+      `advanceChunkState` **只允许前进**（网格可能早于光照，所以不强制每步都出现）；
+      `Chunk.state` 在生成时置 generated、`LightEngine` 置 lit、`ChunkRenderer` 两条
+      网格路径置 meshed；`World.chunkStateAt(cx,cz)` 对未加载区块回答
+      generating（在请求队列）或 empty。`tests/chunk-state.test.ts` **4 条**，
+      `test:unit` **133 → 137**。C5 判为完成。
 - [x] C6 高度图（MOTION_BLOCKING / WORLD_SURFACE）与生物群系 3D 采样缓存
       **高度图已完成**（`core/world/Heightmap.ts` + `Chunk` 接入）：
       两种高度图（`world_surface` = 最高非空气、`motion_blocking` = 最高"会挡住移动"的方块，

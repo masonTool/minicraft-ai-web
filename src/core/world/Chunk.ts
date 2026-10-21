@@ -34,6 +34,32 @@ export function createBlockArray(): BlockArray {
   return new Uint16Array(CHUNK_VOLUME);
 }
 
+/**
+ * 区块生命周期状态（C5，批次 606）。
+ *
+ * 之前只有 `lit` 一个布尔值，"生成中/已生成/已网格化"散在 `World.loading`、
+ * `Chunk.lit` 与渲染器的 `rendered` 表里。这里收成一条**只前进**的状态：
+ * empty → generating → generated → lit → meshed。
+ *
+ * `meshed` 可能早于 `lit`（网格先出来、光照随后收敛），所以 `advanceChunkState`
+ * 只拒绝**倒退**，不保证每一步都按顺序发生；`chunk.lit` 仍保留精确含义。
+ */
+export const CHUNK_STATES = ['empty', 'generating', 'generated', 'lit', 'meshed'] as const;
+export type ChunkState = (typeof CHUNK_STATES)[number];
+
+const CHUNK_STATE_RANK: Readonly<Record<ChunkState, number>> = {
+  empty: 0,
+  generating: 1,
+  generated: 2,
+  lit: 3,
+  meshed: 4,
+};
+
+/** 只允许向前推进；重复设置同态或倒退都会原样返回当前状态 */
+export function advanceChunkState(current: ChunkState, next: ChunkState): ChunkState {
+  return CHUNK_STATE_RANK[next] >= CHUNK_STATE_RANK[current] ? next : current;
+}
+
 export class Chunk {
   readonly blocks: BlockArray;
   /**
@@ -61,6 +87,8 @@ export class Chunk {
   readonly sectionCounts: Int32Array;
   /** 光照是否已初始化 */
   lit = false;
+  /** 生命周期进度（C5）：区块对象一创建就至少是 generated */
+  state: ChunkState = 'generated';
   /** 是否被修改过（P8 存档用） */
   dirty = false;
 
