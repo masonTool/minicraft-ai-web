@@ -2,7 +2,7 @@
 
 > 这是「Minecraft 基岩版 1.18 复刻（Web / WebGL2）」的进度交接文档。
 > **换电脑、换会话、换人接手，都先读这一份**（整份读完再按需展开，不用挑），
-> 再读 `.codebuddy/process/auto-continue.md`（推进队列）和 [TASKS.md](./TASKS.md)（长期总表）。
+> 再读 `.codebuddy/hooks/process/auto-continue.md`（推进队列）和 [TASKS.md](./TASKS.md)（长期总表）。
 > 会话聊天记录本身不随仓库走，能带走的关键上下文都沉淀在下面。
 >
 > 大块历史正文已经拆出去按需读，见 §1 的索引表（`docs/HANDOFF-ARCHIVE.md` /
@@ -23,7 +23,7 @@ npm run dev            # http://localhost:5173
 > script 键**（文档写着 `npm run agent:setup`、实际会报 "Missing script"），已补回；
 > 首次在新机器上接手时如又报缺失，先确认这一行还在。
 
-然后对 AI 说一句：**「读 AGENTS.md、HANDOFF.md 与 .codebuddy/process/auto-continue.md，按队列继续推进。」**
+然后对 AI 说一句：**「读 AGENTS.md、HANDOFF.md 与 .codebuddy/hooks/process/auto-continue.md，按队列继续推进。」**
 之后 Stop 钩子会自动按队列继续，不需要逐步确认（机制见第 3 节）。
 
 验收门槛：`npm run check` 全过（= `typecheck` + `npm test` + 三张台账），`npm run build` 能出包；失败时先跑 `npm run audit:tasks`（直接指出三处锚点哪处漂了：本文件 / TASKS 顶部 / README 路线图）。
@@ -39,7 +39,7 @@ npm run dev            # http://localhost:5173
 - 进度口径：`TASKS.md` 共 293 项 —— 已完成 **282**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
-  —— **进行中口径以 `.codebuddy/process/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
+  —— **进行中口径以 `.codebuddy/hooks/process/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
@@ -81,7 +81,7 @@ npm run dev            # http://localhost:5173
 | --- | --- |
 | 某个模块（光照 / 网格化 / 容器 / 生物 / 结构…）当时是怎么做的 | [`docs/HANDOFF-ARCHIVE.md`](./docs/HANDOFF-ARCHIVE.md) |
 | "这个坑踩过了，结论是什么" | [`docs/EXPERIENCE.md`](./docs/EXPERIENCE.md) |
-| 下一步做什么（**唯一的"进行中"口径**） | [`.codebuddy/process/auto-continue.md`](./.codebuddy/process/auto-continue.md) |
+| 下一步做什么（**唯一的"进行中"口径**） | [`.codebuddy/hooks/process/auto-continue.md`](./.codebuddy/hooks/process/auto-continue.md) |
 | 长期总表 / 覆盖率 / 与原版的差异 | [`TASKS.md`](./TASKS.md)（三张派生表都由脚本生成，不要手抄） |
 
 **派生数字一律不要手抄**：`npm run audit:tasks` 会核对本文件的进度口径与提交总数，
@@ -95,7 +95,7 @@ npm run dev            # http://localhost:5173
 
 1. **每个独立改动单独提交**：review 变更 → 中文 commit message → `git add` → `git commit` → `git push`，
    全程自动、不等确认；不要攒成一个巨型提交，版本历史要能逐条回溯/回滚。
-2. **不停下来等确认**：按 `.codebuddy/process/auto-continue.md` 队列自己推进；遇到困难自己想办法解决并记录结论，
+2. **不停下来等确认**：按 `.codebuddy/hooks/process/auto-continue.md` 队列自己推进；遇到困难自己想办法解决并记录结论，
    而不是把问题抛回给用户。
 
 细节与动机记录在仓库内 `.codebuddy/memory/`（AI 记忆的版本化副本）。
@@ -105,20 +105,20 @@ npm run dev            # http://localhost:5173
 - 钩子脚本：`.codebuddy/hooks/auto-continue.mjs`（按队列继续）+ `auto-commit.mjs`（拦住"没提交就想停"），
   都挂在 Stop / UserPromptSubmit 上，配置在 `.codebuddy/settings.json`，**用相对路径**写命令
   （不生效时 `npm run agent:setup -- --fix-hooks` 改成本机绝对路径）。
-- **目录分工**：`.codebuddy/process/`（队列 + 归档 + `batch-seq`，进仓库）/
-  `.codebuddy/logs/`（日志 + 计数状态，gitignore）/ `.codebuddy/*.off`（刹车开关）。
+- **目录分工**：`.codebuddy/hooks/process/`（队列 + 归档 + `batch-seq`，进仓库）/
+  `.codebuddy/hooks/logs/`（日志 + 计数状态，gitignore，超 512KB 转存 `.1`）/ `.codebuddy/*.off`（刹车）。
 - **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算项目根，不依赖 cwd（可能是子目录）
   也不依赖 `CODEBUDDY_PROJECT_DIR`（条件注入）——**目录改名也不用改配置**。
-- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`（删掉即恢复）；
-  上限：`AUTO_CONTINUE_MAX`（12）/ `AUTO_COMMIT_MAX`（5）；
-  日志：`.codebuddy/logs/auto-{continue,commit}.log`（`decision=block` = 生效且拦住了）。
-  日志超 512KB 自动转存为 `.1`（`AUTO_CONTINUE_LOG_MAX` 可调），长跑不会无限长。
+- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`（删掉即恢复）。
+- **没有轮次上限**（用户要求）：队列不清空就一直跑，唯一的正常退出是队列空。
+- **上下文水位 150k**（`AUTO_CONTINUE_CONTEXT_LIMIT`）：每轮从 `transcript_path` 读
+  `input_tokens`，过阈值就转为"收干净 + 写清下一步 + 给交接摘要"再停，让用户开新会话接着跑。
+  **一个会话不可能无限跑**——进度靠文件不靠会话记忆。
 
 **auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**，只负责发现未提交改动
 就阻止停止，把清单和规矩交回 AI 自己 review + 提交。理由：message 质量取决于"知不知道自己
-为什么这么改"，脚本拼出来只能是 `update files`。六道放行：`.off`、非 git 仓库、
-merge/rebase/cherry-pick 中、detached HEAD、未解决冲突、已拦满次数——后四种是危险 git 状态，
-这时拦人反而掩盖问题。
+为什么这么改"，脚本拼出来只能是 `update files`。五道放行：`.off`、非 git 仓库、
+merge/rebase/cherry-pick 中、detached HEAD、未解决冲突——后四种是危险 git 状态，拦人反而掩盖问题。
 
 **踩过的坑（别重犯）**：`{"continue": false}` 可能被当成"硬停止"（本仓库 `41be0e12` 踩过）。
 `auto-continue.mjs` 因此用 `{"continue": true}` + 反馈走 **stderr** + `exit 2`；
@@ -151,7 +151,7 @@ merge/rebase/cherry-pick 中、detached HEAD、未解决冲突、已拦满次数
 **批次 616 真机查出更严重的"方块表面纯黑"并修掉**（两次根因见 `TASKS.md` E23：
 越界光照返回 0 + 补刷只做一次）。现在改成"新区块加载后置脏标记、光照排空时补刷"。
 真机若仍偏暗，才查顶点光照/材质本身。
-**剩余 9 项"哪些能自己做、各自卡在哪" + 命名牌 `name_tag` 真缺口** → `.codebuddy/process/auto-continue.md` 的《剩余 9 项与阻塞》（原 `PENDING.md` 已并入，不再单独维护）。
+**剩余 9 项"哪些能自己做、各自卡在哪" + 命名牌 `name_tag` 真缺口** → `.codebuddy/hooks/process/auto-continue.md` 的《剩余 9 项与阻塞》（原 `PENDING.md` 已并入，不再单独维护）。
 
 ## 5.5 打包与发布（K8）
 
@@ -251,19 +251,19 @@ npm run agent:setup        # 跨机器自检
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
 | `TASKS.md`、`HANDOFF.md`、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
-| `.codebuddy/process/`（队列 + 归档 + `batch-seq`）、`.codebuddy/hooks/`、`.codebuddy/settings.json` | `.codebuddy/logs/`（日志 + 计数状态，每轮都变） |
+| `.codebuddy/hooks/process/`（队列 + 归档 + `batch-seq`）、`.codebuddy/hooks/*.mjs`、`.codebuddy/settings.json` | `.codebuddy/hooks/logs/`（日志 + 计数状态，每轮都变） |
 | `.codebuddy/memory/`（AI 记忆的版本化副本，`npm run agent:setup` 恢复到本机） | 截图 `shot-*.png`、`.codebuddy/*.off`（刹车开关） |
 
-> 长跑任务列表怎么排、`process/` 与 `logs/` 为什么分开 → `.codebuddy/process/auto-continue.md` 开头。
+> 长跑任务列表怎么排、`process/` 与 `logs/` 为什么分开 → `.codebuddy/hooks/process/auto-continue.md` 开头。
 
-**唯一的外部依赖：git 远程仓库。** 没有远程，代码就只存在当前这台机器上，换电脑拿不到。
-查看：`git remote -v`；没有就 `git remote add origin <地址>` 再 `git push -u origin main`。
+**唯一的外部依赖：git 远程仓库**（没有远程 = 代码只在本机）。查看 `git remote -v`，
+没有就 `git remote add origin <地址>` 再 `git push -u origin main`。
 
 ## 8. 恢复一段会话的正确姿势
 
 1. 新机器按第 0 节跑完，确认 `npm run agent:setup` 结论是「一切就绪」；
 2. 打开 AI 会话，第一句给足上下文：
-   「读 AGENTS.md、HANDOFF.md、.codebuddy/memory/MEMORY.md、.codebuddy/process/auto-continue.md，然后继续推进队列」；
+   「读 AGENTS.md、HANDOFF.md、.codebuddy/memory/MEMORY.md、.codebuddy/hooks/process/auto-continue.md，然后继续推进队列」；
 3. AI 会自动：读队列 → 改 `[ ]` 为 `[~]` → 实现 → 自测（`check:fast` 内循环、`check` 提交前）→
    每步单独提交推送 → 更新队列；
 4. 中途想接管：`touch .codebuddy/auto-continue.off`；想让它继续：删掉该文件。

@@ -10,11 +10,11 @@
 | 文件 | 读它是为了 | 怎么读 |
 | --- | --- | --- |
 | [`HANDOFF.md`](./HANDOFF.md) | 当前状态、硬性约定、常用命令、悬案 | **整份读完**（约 310 行；只留最近 6 批，更早的在归档里） |
-| [`.codebuddy/process/auto-continue.md`](./.codebuddy/process/auto-continue.md) | **"进行中"的唯一口径**（队列）+ 最近 3 批 | **整份读完**（上限 500 行；历史已归档） |
+| [`.codebuddy/hooks/process/auto-continue.md`](./.codebuddy/hooks/process/auto-continue.md) | **"进行中"的唯一口径**（队列）+ 最近 3 批 | **整份读完**（上限 500 行；历史已归档） |
 
 > 这两份原本分别是 1409 行与 4108 行，**批次 101 做过上下文瘦身**：
 > 已经做完的流水搬到了 `docs/HANDOFF-ARCHIVE.md` 与
-> `.codebuddy/process/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
+> `.codebuddy/hooks/process/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
 > **批次 198 又收了一次**：HANDOFF §1 只留最近 6 批（167~191 搬去归档），
 > 并把"离线测试套数"的核对从 README/HANDOFF 两处扩到 **README / HANDOFF / 本文件** 三处。
 

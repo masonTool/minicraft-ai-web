@@ -182,12 +182,12 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       **真实地形生成本身就要 2.96s**（实测 11.5ms/区块），其余段落也是海量生成——
       这里没有"压掉开销"的空间，**不要为了跑得快去缩它的覆盖范围**（那是把门禁削掉）。
       **另一半是"每轮都要读一遍的文档"**（同一批做完）：上手原来要读
-      `HANDOFF.md` 1409 行 + `.codebuddy/process/auto-continue.md` 4108 行 + `TASKS.md` 2898 行，
+      `HANDOFF.md` 1409 行 + `.codebuddy/hooks/process/auto-continue.md` 4108 行 + `TASKS.md` 2898 行，
       而前两份的三分之二都是**已经做完的流水**（队列里 810 条全部是 `[x]`、0 条待办）——
       每轮读一遍就是白交的固定税。拆法（内容一字未改，只挪位置）：
       `HANDOFF.md` 1409 → 207 行（历史 → `docs/HANDOFF-ARCHIVE.md`，
       经验 → `docs/EXPERIENCE.md`）、`auto-continue.md` 4108 → 220 行
-      （批次 1~95 → `.codebuddy/process/auto-continue-archive.md`），新增 `AGENTS.md` 作会话入口
+      （批次 1~95 → `.codebuddy/hooks/process/auto-continue-archive.md`），新增 `AGENTS.md` 作会话入口
       （三份必读 + 一张"什么时候读哪一份"的索引表）。
       ⚠️ 拆队列时**只能挪 `- [x]`**：钩子判"要不要自动继续"认的是**行首**的
       `- [ ]` / `- [~]`，把待办一起归档进去等于把队列关掉了。
