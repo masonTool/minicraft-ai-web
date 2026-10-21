@@ -199,5 +199,25 @@ console.log('\n[死亡：掉落龙蛋]');
   check('龙的初始生命是 200', DRAGON_TYPE.health === 200);
 }
 
+// ---------------------------------------------------------------- 6. 栖息（批次 602）
+
+console.log('\n[栖息阶段：每两轮回主岛中央停靠]');
+{
+  const { ctx } = makeContext({ x: 0, y: 66, z: 12 });
+  const dragon = new Dragon(0, 78, 46, 0);
+  let sawPerch = false;
+  let nearest = Number.POSITIVE_INFINITY;
+  // 10s 盘旋 + 4s 俯冲 + 6s 血息，两轮约 50s；留足 120s
+  for (let i = 0; i < 1200; i++) {
+    dragon.tick(ctx, 0.1);
+    if (dragon.stage === 'perch') {
+      sawPerch = true;
+      nearest = Math.min(nearest, Math.hypot(dragon.x, dragon.y - 66, dragon.z));
+    }
+  }
+  check('两轮之后出现栖息阶段', sawPerch);
+  check('栖息时回到主岛中央附近', nearest < 6, `${nearest.toFixed(1)} 格`);
+}
+
 console.log(`\n末地 boss 测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -74,6 +74,13 @@ export const DRAGON_BREATH_INTERVAL = 0.4;
 /** 血息阶段的悬停高度（玩家上方 14 格：够高打不到近战，又够低能罩住脚下一片） */
 const BREATH_HOVER_HEIGHT = 14;
 
+/**
+ * 栖息阶段（J10 尾巴，批次 602）：龙每两轮俯冲/血息后回主岛中央停一会儿。
+ * 主岛面 y≈66，停在 66 刚好让玩家能够到；这段时间它不吐息、不俯冲。
+ */
+export const DRAGON_PERCH_Y = 66;
+export const DRAGON_PERCH_TIME = 6;
+
 export class Dragon extends Mob {
   /** 存活的水晶数量（主线程每帧同步）：>0 时龙会缓慢回血 */
   crystalCount = 0;
@@ -85,8 +92,10 @@ export class Dragon extends Mob {
   private attackTimer = 0;
   private regenTimer = 0;
   private orbitAngle: number;
-  private phase: 'circle' | 'charge' | 'breath' = 'circle';
+  private phase: 'circle' | 'charge' | 'breath' | 'perch' = 'circle';
   private phaseTimer = 10;
+  /** 已经完整打完几轮“俯冲 → 血息”（每两轮回一次栖息） */
+  private cycles = 0;
   /** 血息阶段里距离下一团云还有多久（秒） */
   private breathTimer = 0;
 
@@ -127,6 +136,16 @@ export class Dragon extends Mob {
         this.phase = 'breath';
         this.phaseTimer = DRAGON_BREATH_PHASE_TIME;
         this.breathTimer = 0;
+      } else if (this.phase === 'breath') {
+        this.cycles++;
+        // 每两轮回主岛中央栖息一次；其余轮次回到盘旋
+        if (this.cycles % 2 === 0) {
+          this.phase = 'perch';
+          this.phaseTimer = DRAGON_PERCH_TIME + 4; // 4 秒赶路 + 6 秒停靠
+        } else {
+          this.phase = 'circle';
+          this.phaseTimer = 8 + Math.random() * 5;
+        }
       } else {
         this.phase = 'circle';
         this.phaseTimer = 8 + Math.random() * 5;
@@ -144,6 +163,13 @@ export class Dragon extends Mob {
       targetY = player.y + 1;
       targetZ = player.z;
       speed = 20;
+    } else if (this.phase === 'perch') {
+      // 栖息（批次 602）：回主岛中央、贴着岛面停一会儿，让玩家能近战输出
+      targetX = 0;
+      targetY = DRAGON_PERCH_Y;
+      targetZ = 0;
+      // 到了就收速度，避免绕着停靠点在 18 格/秒来回过冲
+      speed = Math.hypot(this.x, this.y - DRAGON_PERCH_Y, this.z) < 3 ? 0 : 18;
     } else if (this.phase === 'breath' && player) {
       // 血息阶段：悬停在玩家上方（够高打不到，又够低能罩住脚下一片）
       targetX = player.x;
