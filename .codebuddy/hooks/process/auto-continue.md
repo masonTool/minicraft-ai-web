@@ -211,7 +211,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       验收：手工制造一个 `console.error` 能让它变红；正常跑绿
 - [x] Q10 把 Q9 挂进 `npm run check`（可选开关 `BROWSER_CHECK=1`，默认不跑以免 CI 无浏览器时红）。
       验收：`BROWSER_CHECK=1 npm run check` 通过；默认 `npm run check` 行为不变
-- [ ] Q11 `tools/shot-diff.ts`：与上一张同名截图做像素差，超过阈值就报红（回归用）。
+- [x] Q11 `tools/shot-diff.ts`：与上一张同名截图做像素差，超过阈值就报红（回归用）。
       验收：同一页面两次截图差为 0；改一处颜色后能报出差异区域
 
 ### 优先级 4：M8 剩余界面文案接线（50% → 接近 100%）
