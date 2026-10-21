@@ -309,6 +309,19 @@ export class ChunkRenderer {
     return chunks.length > 0 ? { chunks, transfer } : null;
   }
 
+  /**
+   * 同材质跨 section 合并（N4，批次 608）。
+   *
+   * 之前每个 section 各建一张 solid/translucent 网格，一个区块最多 24×2 次 draw call；
+   * 合并后每个区块最多两张。位置要把 section 的 baseY 烘进顶点，网格本身放在 y=0。
+   * light/shade 在 Worker 里已是 0~255 字节，直接按字节合并。
+   */
+  private mergeLayer(
+    entries: Array<{ section: number; arrays: GeometryArrays }>,
+  ): GeometryArrays | null {
+    return mergeSectionLayer(entries);
+  }
+
   /** Worker 结果 → 场景网格 */
   private applyMeshes(key: string, response: MeshResponse): void {
     const offsetX = response.cx * 16;
@@ -316,25 +329,26 @@ export class ChunkRenderer {
     const meshes: THREE.Mesh[] = [];
     let triangles = 0;
 
+    const solids: Array<{ section: number; arrays: GeometryArrays }> = [];
+    const translucent: Array<{ section: number; arrays: GeometryArrays }> = [];
     for (const section of response.sections) {
-      const baseY = WORLD_MIN_Y + section.section * 16;
+      if (section.solid) solids.push({ section: section.section, arrays: section.solid });
+      if (section.translucent) translucent.push({ section: section.section, arrays: section.translucent });
+    }
 
-      if (section.solid) {
-        const geometry = this.acquireGeometry(section.solid);
-        const mesh = new THREE.Mesh(geometry, this.solidMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
-        triangles += geometry.index!.count / 3;
-      }
-      if (section.translucent) {
-        const geometry = this.acquireGeometry(section.translucent);
-        const mesh = new THREE.Mesh(geometry, this.translucentMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
-        triangles += geometry.index!.count / 3;
-      }
+    for (const [layer, material] of [
+      [solids, this.solidMaterial],
+      [translucent, this.translucentMaterial],
+    ] as const) {
+      const merged = this.mergeLayer(layer);
+      if (!merged) continue;
+      const geometry = this.acquireGeometry(merged);
+      const mesh = new THREE.Mesh(geometry, material);
+      // 顶点里已经烘入 section 的 baseY，网格只放水平偏移
+      mesh.position.set(offsetX, 0, offsetZ);
+      mesh.frustumCulled = true;
+      meshes.push(mesh);
+      triangles += geometry.index!.count / 3;
     }
 
     this.replaceMeshes(key, response.cx, response.cz, meshes, triangles);
@@ -523,4 +537,51 @@ export class ChunkRenderer {
     this.queued.clear();
     this.pending.clear();
   }
+}
+
+/**
+ * 把同一材质的多个 section 几何合并成一份（N4，批次 608）。
+ * 位置里的 y 会加上 section 的 baseY；索引加上顶点偏移。
+ */
+export function mergeSectionLayer(
+  entries: Array<{ section: number; arrays: GeometryArrays }>,
+): GeometryArrays | null {
+  if (entries.length === 0) return null;
+  let vertices = 0;
+  let indices = 0;
+  for (const entry of entries) {
+    vertices += entry.arrays.position.length / 3;
+    indices += entry.arrays.index.length;
+  }
+  if (vertices === 0 || indices === 0) return null;
+
+  const position = new Float32Array(vertices * 3);
+  const uv = new Float32Array(vertices * 2);
+  const tile = new Float32Array(vertices * 3);
+  const index = new Uint32Array(indices);
+  const byteLight = entries.every((entry) => entry.arrays.light instanceof Uint8Array);
+  const byteShade = entries.every((entry) => entry.arrays.shade instanceof Uint8Array);
+  const light = byteLight ? new Uint8Array(vertices * 3) : new Float32Array(vertices * 3);
+  const shade = byteShade ? new Uint8Array(vertices) : new Float32Array(vertices);
+
+  let vertexOffset = 0;
+  let indexOffset = 0;
+  for (const entry of entries) {
+    const arrays = entry.arrays;
+    const count = arrays.position.length / 3;
+    const baseY = WORLD_MIN_Y + entry.section * 16;
+    position.set(arrays.position, vertexOffset * 3);
+    for (let i = 0; i < count; i++) position[(vertexOffset + i) * 3 + 1]! += baseY;
+    uv.set(arrays.uv, vertexOffset * 2);
+    tile.set(arrays.tile, vertexOffset * 3);
+    light.set(arrays.light, vertexOffset * 3);
+    shade.set(arrays.shade, vertexOffset);
+    for (let i = 0; i < arrays.index.length; i++) {
+      index[indexOffset + i] = arrays.index[i]! + vertexOffset;
+    }
+    vertexOffset += count;
+    indexOffset += arrays.index.length;
+  }
+
+  return { position, uv, tile, light, shade, index };
 }
