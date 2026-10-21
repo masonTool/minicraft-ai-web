@@ -112,6 +112,8 @@ const ZH: Readonly<Record<string, string>> = {
   'world.save': '保存',
   'world.editHint': '模式与难度会在下次进入世界时生效。',
   'world.delete': '删除',
+  'world.export': '导出',
+  'world.import': '导入存档',
   // ---- 背包与工作站面板（批��� 422 起；先做标题/空态/熔炼那几个标签）
   'inventory.title': '物品栏',
   'inventory.armor': '盔甲',
@@ -247,6 +249,8 @@ const EN: Readonly<Record<string, string>> = {
   'world.save': 'Save',
   'world.editHint': 'Mode and difficulty take effect next time you enter.',
   'world.delete': 'Delete',
+  'world.export': 'Export',
+  'world.import': 'Import Save',
   'inventory.title': 'Inventory',
   'inventory.armor': 'Armor',
   'inventory.returnToStorage': 'Return to Storage',

@@ -60,6 +60,10 @@ export interface WorldScreenActions {
   onEdit?: (world: WorldSummary, patch: WorldEditPatch) => void | Promise<void>;
   /** 打开设置（图形/操作/声音这些是"这台设备的偏好"，与世界无关） */
   onSettings?: () => void;
+  /** 导出世界（批次 591，L2）：把存档内容 + 清单项下载成一个文件 */
+  onExport?: (world: WorldSummary) => void | Promise<void>;
+  /** 导入世界（批次 591，L2）：选一个之前导出的文件，导入成新世界 */
+  onImport?: () => void | Promise<void>;
 }
 
 /**
@@ -205,6 +209,16 @@ export class WorldScreen {
     this.worldCountEl = document.createElement('span');
     this.worldCountEl.className = 'world-count';
     listLabel.appendChild(this.worldCountEl);
+
+    // 导入（批次 591，L2）：入口放在世界列表标题旁，不占卡片按钮位
+    const importButton = document.createElement('button');
+    importButton.type = 'button';
+    importButton.className = 'world-mini world-import';
+    importButton.textContent = t('world.import');
+    importButton.addEventListener('click', () => {
+      void this.actions.onImport?.();
+    });
+    listLabel.appendChild(importButton);
 
     worlds.append(
       this.makeNav(t('world.list'), () => this.setView('home')),
@@ -486,6 +500,14 @@ export class WorldScreen {
     edit.textContent = t('world.edit');
     edit.addEventListener('click', () => this.openEdit(world));
 
+    const exportButton = document.createElement('button');
+    exportButton.type = 'button';
+    exportButton.className = 'world-export';
+    exportButton.textContent = t('world.export');
+    exportButton.addEventListener('click', () => {
+      void this.actions.onExport?.(world);
+    });
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'danger';
@@ -494,7 +516,7 @@ export class WorldScreen {
       void this.confirmDelete(world);
     });
 
-    buttons.append(enter, edit, remove);
+    buttons.append(enter, edit, exportButton, remove);
     card.append(thumbnail, info, buttons);
     return card;
   }

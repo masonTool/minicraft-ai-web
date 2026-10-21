@@ -42,6 +42,7 @@ import type { SavedVehicle } from '../entity/VehicleParking.ts';
 import type { SavedEntityRecord } from '../entity/EntityParking.ts';
 import type { StatisticsData } from '../survival/Statistics.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
+import type { StoreDump } from './SaveTransfer.ts';
 import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 
 /**
@@ -280,6 +281,53 @@ export class SaveGame {
     /** 这个存档属于哪个世界 */
     readonly worldId: string = LEGACY_WORLD_ID,
   ) {}
+
+  /**
+   * 导出**全部对象仓**（批次 591，L2）。
+   *
+   * 不逐个调用 `loadXxx()`：那些方法把值转成了运行时类型（Uint32Array 等），
+   * 再写回去还要反推原始结构；这里按 store 原样导出，导入时原样放回，
+   * 新增对象仓也不必回来改这份代码。
+   */
+  async exportStores(): Promise<StoreDump> {
+    const dump: StoreDump = {};
+    for (const name of Array.from(this.db.objectStoreNames)) {
+      const [keys, values] = await this.transaction(name, 'readonly', (store) =>
+        Promise.all([
+          promisify(store.getAllKeys() as IDBRequest<IDBValidKey[]>),
+          promisify(store.getAll() as IDBRequest<unknown[]>),
+        ]),
+      );
+      dump[name] = keys.map((key, index) => ({
+        // 本项目的键全是字符串（区块是 `dimension|cx,cz`），但类型上保留数字
+        key: key as string | number,
+        value: values[index],
+      }));
+    }
+    return dump;
+  }
+
+  /**
+   * 把导出的对象仓写回**当前世界**（批次 591）。
+   *
+   * 只清空/写入两边都认识的 store：导入文件来自旧版本时少了新对象仓，
+   * 新版本里多出来的仓保持为空，而不是把整个导入判失败。
+   */
+  async importStores(dump: StoreDump): Promise<void> {
+    for (const [name, entries] of Object.entries(dump)) {
+      if (!this.db.objectStoreNames.contains(name)) continue;
+      await this.transaction(name, 'readwrite', (store) => {
+        store.clear();
+        for (const entry of entries) {
+          try {
+            store.put(entry.value, entry.key as IDBValidKey);
+          } catch {
+            // 单条坏数据跳过：导入一张被手改过的文件，不该让整个流程失败
+          }
+        }
+      });
+    }
+  }
 
   /**
    * 打开（或创建）某个世界的存档库。

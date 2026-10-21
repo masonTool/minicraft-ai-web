@@ -356,6 +356,12 @@ import { MusicDirector } from './core/audio/Music.ts';
 import { DamageFlash } from './ui/DamageFlash.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
+import {
+  MAX_TRANSFER_BYTES,
+  buildSaveTransfer,
+  parseSaveTransfer,
+  transferFileName,
+} from './core/save/SaveTransfer.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { restoreContainers, serializeContainers } from './core/save/ContainerSave.ts';
 import {
@@ -16927,12 +16933,96 @@ async function boot(): Promise<void> {
     onDelete: (world) => deleteWorld(world),
     onEdit: (world, patch) => editWorld(world, patch),
     onSettings: openMenuSettings,
+    onExport: (world) => exportWorld(world),
+    onImport: () => importWorld(),
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */
   const deleteWorld = async (world: WorldSummary): Promise<void> => {
     await SaveGame.deleteWorld(world.id);
     registry.remove(world.id);
+  };
+
+  /**
+   * 导出世界（批次 591，L2）：把清单项 + 全部 IndexedDB 对象仓打成一个 JSON 文件。
+   *
+   * 为什么不导出 localStorage 清单：导入到另一台设备时 id 会撞、时间戳也没意义；
+   * 导入方按文件里的种子/类型/模式重新建一个**新世界**，数据原样放进去。
+   */
+  const exportWorld = async (world: WorldSummary): Promise<void> => {
+    let save: SaveGame | null = null;
+    try {
+      save = await SaveGame.open(world.id);
+      if (!save) return;
+      const file = buildSaveTransfer(world, await save.exportStores());
+      const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = transferFileName(world.name);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // 立刻 revoke 会让部分浏览器的下载中断，留一拍再释放
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.warn('[world] 导出存档失败', error);
+    } finally {
+      save?.close();
+    }
+  };
+
+  /**
+   * 导入世界（批次 591，L2）：读一个导出文件 → 建新世界 → 写回对象仓。
+   *
+   * 失败要**把刚建的空世界清掉**，否则列表里会多出一个打不开的壳。
+   */
+  const importWorld = async (): Promise<void> => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (!file) return;
+      if (file.size > MAX_TRANSFER_BYTES) {
+        console.warn('[world] 导入文件过大，已取消', file.size);
+        return;
+      }
+      void (async () => {
+        const parsed = parseSaveTransfer(await file.text());
+        if (!parsed) {
+          console.warn('[world] 导入文件格式不正确');
+          return;
+        }
+        const created = registry.create({
+          name: `${parsed.world.name}（导入）`.slice(0, 24),
+          seed: parsed.world.seed,
+          worldType: parsed.world.worldType,
+          gameMode: parsed.world.gameMode,
+          difficulty: parsed.world.difficulty,
+          hardcore: parsed.world.hardcore,
+          singleBiome: parsed.world.singleBiome,
+        });
+        let save: SaveGame | null = null;
+        try {
+          save = await SaveGame.open(created.id);
+          if (!save) throw new Error('无法创建导入世界的存档库');
+          await save.importStores(parsed.stores);
+          menu.setView('worlds');
+        } catch (error) {
+          console.warn('[world] 导入存档失败', error);
+          registry.remove(created.id);
+          await SaveGame.deleteWorld(created.id);
+        } finally {
+          save?.close();
+        }
+      })();
+    });
+    input.click();
   };
 
   /**
