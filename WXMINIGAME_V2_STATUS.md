@@ -71,7 +71,10 @@
 - [x] Inventory 完整态：拖拽细节
 - [x] Phase 2 光标语义（点击/长按：拿整叠、放下、合并、交换、拿一半、只取不放、关闭回收）——
       `test:v2-inventory` **66 条**，真浏览器 e2e 5 条
-- [ ] Settings / Inventory 按 Web 结构重做
+- [x] **Inventory 外壳按 Web 版（外部端）重排**：原版灰配色 + 直角斜边、
+      左轨 5 颗配方分类 + 底部物品栏、右轨模式键、快捷栏移出面板成独立 dock、
+      护甲竖排；`docs/WEB-INVENTORY-STRUCTURE.md` 里有量测数据
+- [ ] Settings / Inventory 按 Web 结构重做（Settings 仍待做）
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，game.js 约 2.76MB + worker 约 540KB）
 
 ## 下一步顺序
