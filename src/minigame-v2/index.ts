@@ -24,7 +24,16 @@ import { QualityManager } from './quality.ts';
 import { readSettings, saveSettings } from './settings.ts';
 import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
-import { buildCraftingPanel, buildCreativeTab, buildEquipmentRow, buildInventoryChrome, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
+import {
+  buildArmorColumn,
+  buildCraftingPanel,
+  buildCreativeTab,
+  buildHotbarDock,
+  buildPanelHeader,
+  buildRail,
+  buildRecipeTab,
+  RAIL_CATEGORIES,
+} from './inventory-tabs.ts';
 import { InventoryCursor } from './inventory-state.ts';
 import {
   canPlaceItem,
@@ -36,7 +45,7 @@ import {
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type SlotButton, type UiElement, type UiRingNode } from './ui-kit/index.ts';
+import { MC, UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type SlotButton, type UiElement, type UiRingNode } from './ui-kit/index.ts';
 import { Inventory, ARMOR_START, TOTAL_SLOTS, sameStack, stackExtras, type SlotSource } from '../core/container/Inventory.ts';
 import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
@@ -180,6 +189,26 @@ let settingsOpen = false;
 let lastAction = '';
 let inventoryOpen = false;
 let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
+/**
+ * 物品栏模式下"右半边显示什么"（对齐 Web 版 `data-pocket-tab`）：
+ *  - `crafting` = 2×2 合成（默认）
+ *  - `armor`    = 盔甲 4 格竖排 + 副手
+ * 左轨选分类会切到 `creative`，右轨两颗键在这两者间切。
+ */
+let panelMode: 'crafting' | 'armor' = 'crafting';
+/** 背包面板的几何（验收脚本读它来点轨道上的小图标，避免猜像素） */
+let inventoryGeo: {
+  panelX: number;
+  panelY: number;
+  panelW: number;
+  panelH: number;
+  leftRailX: number;
+  rightRailX: number;
+  railTopY: number;
+  contentX: number;
+  contentY: number;
+  slotSize: number;
+} | null = null;
 let recipePage = 0;
 let recipeSize: 2 | 3 = 2;
 let recipeQuery = '';
@@ -534,6 +563,32 @@ const setCreativePage = (list: readonly number[]): void => {
 };
 
 /**
+ * 点产物槽：**产物先进光标**，再点背包放下（对齐 Web 版语义，远端 ca33f5d5 定的口径）。
+ *
+ * 三条拒绝要提前判：手上有别的东西 / 手上那叠已满 —— 否则产物会没地方去，
+ * 而 `takeResult()` 一消耗材料就再也回不来了。
+ */
+const craftOutput = (): void => {
+  const product = crafting.result;
+  if (!product) return;
+  const held = cursor.held;
+  if (held && (held.id !== product.id || held.count + product.count > maxStackOf(product.id))) {
+    inventoryHint = '手上有别的物品或已满，先放下';
+    showInventory();
+    return;
+  }
+  crafting.takeResult();
+  cursor.restore({
+    held: { id: product.id, count: (held?.count ?? 0) + product.count },
+    fromCreative: false,
+    origin: null,
+  });
+  inventoryHint = `合成完成：${itemLabel(product.id)} ×${product.count}`;
+  syncGhost();
+  showInventory();
+};
+
+/**
  * 点击一格的**唯一入口**：短按 = 左键、长按 = 右键，规则全在 `applyClick`。
  *
  * 这一层只做三件事：解析出绑定 → 结算 → 重画（含提示语与光标幽灵）。
@@ -660,186 +715,395 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   showInventory();
 };
 
+/**
+ * 背包面板 —— **按 Web 版（外部端）的结构重排**。
+ *
+ * 参照物：`.tmp/web-inventory-analysis.md` 里量出来的那套（真机截图 + DOM 量测）。
+ * 关键差别（v2 之前 → 现在）：
+ *
+ *  1. 面板从"深蓝黑 + 圆角 + 白字"改成 **原版灰 `#c6c6c6` + 直角斜边 + 深灰字**；
+ *  2. 左轨从"三个大文字按钮"改成 **5 颗配方分类图标 + 底部物品栏**（Web 版
+ *     `RECIPE_BOOK_TABS_POCKET`）——分类一级直达，不再"先点创造再点分类"；
+ *  3. 快捷栏从"塞在面板里"改成 **屏幕底部独立 dock**（Web 版 `inv-hotbar-dock`）；
+ *  4. 护甲从"横排 4 格 + 副手另起一行"改成 **竖排一列**（`inv-grid.inv-armor`）；
+ *  5. 标题从 30px "背包"大字改成 **一行小字 + 右侧两颗小键**（`inv-header`）。
+ *
+ * 布局同时支持"面板区"和"dock 区"两块 —— dock 不在面板里，所以两者分开生成。
+ */
 const showInventory = (): void => {
   inventoryOpen = true;
-  const panelW = 880;
-  const panelH = Math.min(620, uiHeight - 28);
+
+  // ---- 尺寸（对齐 Web 版口袋模式：格子 44、轨宽 40） ----
+  //
+  // ⚠️ 这里的 `uiHeight` 是**设计坐标的高**，横屏手机上是 1024×(屏高/屏宽) ≈ 2216，
+  // 所以不能拿它跟 390 比。格子按 Web 的 44 起、按可用高度收：
+  // 面板要给"3 行主背包 + 顶栏 + 提示"留够，同时右边还得放得下 2×2 合成。
+  const gap = 2;
+  const railW = 40;
+  const pad = 12;
+  const headerH = 24;
+  const bodyPad = 8;
+  const dockH = 48; // 底部快捷栏占掉的高度（面板不能盖住它）
+
+  const slotSize = 44;
+  const gridW = 9 * slotSize + 8 * gap; // 412
+  // 物品栏页的右半边：2×2 合成（格子略小）+ 箭头 + 产物
+  const craftSlot = Math.round(slotSize * 0.86); // 38
+  const craftBlockW = 2 * craftSlot + 2 + 22 + craftSlot; // 2×2 + 箭头 + 产物 ≈ 136
+  const wantsCraftColumn = inventoryTab === 'items' && panelMode === 'crafting';
+  const contentW = wantsCraftColumn ? gridW + 16 + craftBlockW : gridW;
+
+  const panelW = Math.min(1024 - 16, contentW + railW * 2 + pad * 2);
+  const bodyH = 3 * slotSize + 2 * gap; // 3 行主背包
+  // 面板高度：主背包 3 行 + 顶栏 + 底部提示；**左轨要放得下 5 颗分类 + 1 颗物品栏**
+  // （5×36+4×2=188，再加上物品栏 36+2 → 226），所以下限取 226
+  const railNeed = 6 * 36 + 5 * 2 + 16;
+  /**
+   * 面板高度 = 三件事里最高的那个：
+   *  1. 左轨要放得下 5 颗分类 + 1 颗物品栏（`railNeed`）；
+   *  2. 主背包 3 行 + 顶栏 + 底部提示；
+   *  3. **创造/配方页**：顶部还有一条"搜索/整理"（+28），底部一条分页（+30），
+   *     所以它比物品栏页高 —— 少了这 22 像素就会掉成 2 行（实测过）。
+   */
+  const gridNeed = inventoryTab === 'items'
+    ? headerH + bodyPad * 2 + bodyH + 28
+    : headerH + bodyPad * 2 + bodyH + 28 + 28 + 30;
+  // 取"装着内容要多少"和"左轨要多少"的较大值，再夹到屏幕里
+  const panelH = Math.min(uiHeight - dockH - 20, Math.max(railNeed, gridNeed));
   const panelX = (1024 - panelW) / 2;
-  const panelY = (uiHeight - panelH) / 2;
-  const railW = 160;
-  const slotSize = 50;
-  const gap = 5;
-  const gridX = panelX + railW + 20;
-  const gridY = panelY + 92;
-  const craftSlot = 44;
-  const craftGap = 4;
-  const craftX = gridX + 9 * (slotSize + gap) + 10;
-  const craftY = gridY;
-  const outputX = craftX + 3 * (craftSlot + craftGap) + 12;
-  const slotHandlers = {
-    onSlot: (kind: 'inventory' | 'crafting' | 'creative', index: number, button: SlotButton) => clickSlot(kind, index, button),
+  // 面板整体上移一点，给底部 dock 让位
+  const panelY = Math.max(6, (uiHeight - dockH - panelH) / 2);
+
+  const leftRailX = panelX;
+  const rightRailX = panelX + panelW - railW;
+  const contentX = leftRailX + railW + pad;
+  const contentY = panelY + headerH + bodyPad;
+
+  const tabHandlers = {
+    onSlot: (kind: 'inventory' | 'crafting' | 'creative', index: number, button: SlotButton) =>
+      clickSlot(kind, index, button),
     onSlotDrop: (
       from: { kind: 'inventory' | 'crafting' | 'creative'; index: number },
       to: { kind: 'inventory' | 'crafting' | 'creative'; index: number },
     ) => dropSlot(from, to),
   };
-  const elements: UiElement[] = buildInventoryChrome({
+
+  inventoryGeo = {
     panelX,
     panelY,
     panelW,
-    railW,
-    tab: inventoryTab,
-    title: craftingTableOpen ? '工作台 · 3×3' : '背包',
-    onTab: (tab) => {
-      inventoryTab = tab;
-      if (tab === 'recipes') recipePage = 0;
-      showInventory();
-    },
-    // 关闭走统一出口：光标上的东西与合成格里的材料都要还回来（CLOSE-001/002）
-    onClose: () => closeInventory(),
-  });
-  if (inventoryTab === 'items') {
-    elements.push(...buildItemTab({
-      gridX,
-      gridY,
-      slotSize,
-      gap,
-      inventory,
-      selectedSlot,
-      ...slotHandlers,
-    }));
-    elements.push(...buildEquipmentRow({
-      x: gridX,
-      y: Math.min(gridY + 3 * (slotSize + gap) + 90, panelY + panelH - 64),
-      slotSize: 36,
-      gap: 6,
-      inventory,
-      onTap: (slotIndex, button) => clickSlot('inventory', slotIndex, button),
-    }));
-  } else if (inventoryTab === 'creative') {
-    elements.push(...buildCreativeTab({
-      gridX,
-      gridY,
-      panelY,
-      panelH,
-      slotSize,
-      gap,
-      inventory,
-      items: creativeItems,
-      category: creativeCategory,
-      query: creativeQuery,
-      page: creativePage,
-      setCategory: (value) => {
-        creativeCategory = value;
-      },
-      setQuery: (value) => {
-        creativeQuery = value;
-      },
-      setPage: (value) => {
-        creativePage = value;
-      },
-      setPageList: (list) => setCreativePage(list),
-      refresh: () => showInventory(),
-      onSearch: () => {
-        void askText(creativeQuery, 20).then((value) => {
-          if (value !== null) {
-            creativeQuery = value;
-            creativePage = 0;
-            showInventory();
-          }
-        });
-      },
-      ...slotHandlers,
-    }));
-  } else {
-    elements.push(...buildRecipeTab({
-      gridX,
-      gridY,
-      panelY,
-      panelH,
-      query: recipeQuery,
-      size: recipeSize,
-      page: recipePage,
-      setQuery: (value) => {
-        recipeQuery = value;
-      },
-      setSize: (value) => {
-        recipeSize = value;
-      },
-      setPage: (value) => {
-        recipePage = value;
-      },
-      fillRecipe: (recipe) => fillRecipe(recipe),
-      refresh: () => showInventory(),
-      onSearch: () => {
-        void askText(recipeQuery, 20).then((value) => {
-          if (value !== null) {
-            recipeQuery = value;
-            recipePage = 0;
-            showInventory();
-          }
-        });
-      },
-    }));
-  }
-  elements.push(...buildCraftingPanel({
-    craftX,
-    craftY,
-    craftSlot,
-    craftGap,
-    outputX,
-    panelY,
-    crafting,
-    inventory,
-    fixedSize: craftingTableOpen,
-    onToggleSize: () => {
-      if (craftingTableOpen) return;
-      // 换尺寸前先把材料收回背包（否则 3×3 的 9 格会被 2×2 覆掉 4 格，剩下 5 格凭空消失）
-      const reclaimed = reclaimHeld(cursor.snapshot(), inventory, slotResolver(bindingsOfInventory()));
-      cursor.restore(reclaimed.state);
-      crafting.drainTo(inventory);
-      crafting = new CraftingGrid(crafting.size === 2 ? 3 : 2);
-      syncGhost();
-      showInventory();
-    },
-    onOutput: () => {
-      const product = crafting.result;
-      if (!product) return;
-      const held = cursor.held;
-      if (held && (held.id !== product.id || held.count + product.count > maxStackOf(product.id))) {
-        inventoryHint = '手上物品不同或已满';
-        showInventory();
-        return;
-      }
-      crafting.takeResult();
-      cursor.hold({ id: product.id, count: (held?.count ?? 0) + product.count });
-      inventoryHint = `合成完成：${itemLabel(product.id)} x${product.count}`;
-      syncGhost();
-      showInventory();
-    },
-    refresh: () => showInventory(),
-    ...slotHandlers,
-  }));
+    panelH,
+    leftRailX,
+    rightRailX,
+    railTopY: panelY + headerH + bodyPad,
+    contentX,
+    contentY,
+    slotSize,
+  };
 
-  const hint = inventoryHint
-    || (inventoryTab === 'items'
-      ? `短按拿整叠 / 长按拿一半 ${cursor.held ? `· 手上 ${itemLabel(cursor.held.id)} x${cursor.held.count}` : ''}`
+  // ---- 外壳：面板本体（灰底 + 像素斜角 + 直角） ----
+  const elements: UiElement[] = [];
+
+  // ---- 顶栏 ----
+  const titleText =
+    inventoryTab === 'creative'
+      ? `创造 · ${RAIL_CATEGORIES.find((c) => c.key === creativeCategory)?.label ?? '全部'}`
+      : inventoryTab === 'recipes'
+        ? '配方书'
+        : craftingTableOpen
+          ? '工作台'
+          : '物品栏';
+  elements.push(
+    ...buildPanelHeader({
+      x: panelX + railW + pad,
+      y: panelY + 6,
+      w: panelW - railW * 2 - pad * 2,
+      title: titleText,
+      onClose: () => closeInventory(),
+      ...(inventoryTab === 'items' ? { onRecipes: () => {
+        inventoryTab = 'recipes';
+        recipePage = 0;
+        showInventory();
+      } } : {}),
+    }),
+  );
+
+  // ---- 内容区 ----
+  if (inventoryTab === 'items') {
+    // 物品栏：27 格 3×9（快捷栏在 dock，不在这里）
+    for (let j = 0; j < 27; j++) {
+      const i = j + 9;
+      const stack = inventory.get(i);
+      const x = contentX + (j % 9) * (slotSize + gap);
+      const y = contentY + Math.floor(j / 9) * (slotSize + gap);
+      elements.push(
+        slot(
+          x,
+          y,
+          slotSize,
+          i,
+          stack?.id ?? 0,
+          stack?.count ?? 0,
+          false,
+          (button) => clickSlot('inventory', i, button),
+          (from) => dropSlot({ kind: 'inventory', index: from.index }, { kind: 'inventory', index: i }),
+        ),
+      );
+    }
+    // 右半边：合成（2×2）或盔甲列 —— 由 panelMode 决定（对齐 data-pocket-tab）
+    if (panelMode === 'armor') {
+      // 盔甲竖排一列 + 副手，贴在内容区右侧
+      elements.push(
+        ...buildArmorColumn({
+          x: contentX + contentW - slotSize,
+          y: contentY,
+          slotSize,
+          inventory,
+          onTap: (index, button) => clickSlot('inventory', index, button),
+          onDrop: (from, to) => dropSlot({ kind: 'inventory', index: from }, { kind: 'inventory', index: to }),
+        }),
+      );
+    } else {
+      // 2×2 合成（对齐 Web 版右列：网格 → 箭头 → 产物，没有标题字、没有尺寸按钮）
+      const craftX = contentX + gridW + 16;
+      const craftY = contentY + 4;
+      for (let i = 0; i < crafting.size * crafting.size; i++) {
+        const stack = crafting.get(i);
+        elements.push(
+          slot(
+            craftX + (i % crafting.size) * (craftSlot + 2),
+            craftY + Math.floor(i / crafting.size) * (craftSlot + 2),
+            craftSlot,
+            100 + i,
+            stack?.id ?? 0,
+            stack?.count ?? 0,
+            false,
+            (button) => clickSlot('crafting', i, button),
+            (from) => dropSlot({ kind: 'crafting', index: from.index - 100 }, { kind: 'crafting', index: i }),
+          ),
+        );
+      }
+      // 箭头
+      const arrowX = craftX + crafting.size * (craftSlot + 2) + 2;
+      const arrowY = craftY + (crafting.size * (craftSlot + 2) - slotSize) / 2;
+      elements.push(
+        text(arrowX, arrowY + 6, 20, 24, '→', { fontSize: 16, color: MC.text, align: 'center' }),
+      );
+      // 产物槽（只取不放）
+      const result = crafting.result;
+      elements.push(
+        slot(
+          arrowX + 22,
+          arrowY,
+          craftSlot,
+          200,
+          result?.id ?? 0,
+          result?.count ?? 0,
+          false,
+          () => craftOutput(),
+          undefined,
+          true,
+        ),
+      );
+    }
+  } else if (inventoryTab === 'creative') {
+    elements.push(
+      ...buildCreativeTab({
+        gridX: contentX,
+        // 顶栏已经占了 headerH，这里再让出 26 给"搜索/整理"那一行，
+        // 否则它会跟顶栏的「关闭」叠在一起
+        gridY: contentY + 28,
+        panelY,
+        panelH,
+        slotSize,
+        gap,
+        inventory,
+        items: creativeItems,
+        category: creativeCategory,
+        query: creativeQuery,
+        page: creativePage,
+        setCategory: (value) => {
+          creativeCategory = value;
+        },
+        setQuery: (value) => {
+          creativeQuery = value;
+        },
+        setPage: (value) => {
+          creativePage = value;
+        },
+        setPageList: (list) => setCreativePage(list),
+        refresh: () => showInventory(),
+        onSearch: () => {
+          void askText(creativeQuery, 20).then((value) => {
+            if (value !== null) {
+              creativeQuery = value;
+              creativePage = 0;
+              showInventory();
+            }
+          });
+        },
+        ...tabHandlers,
+      }),
+    );
+  } else {
+    elements.push(
+      ...buildRecipeTab({
+        gridX: contentX,
+        gridY: contentY,
+        panelY,
+        panelH,
+        query: recipeQuery,
+        size: recipeSize,
+        page: recipePage,
+        setQuery: (value) => {
+          recipeQuery = value;
+        },
+        setSize: (value) => {
+          recipeSize = value;
+        },
+        setPage: (value) => {
+          recipePage = value;
+        },
+        fillRecipe: (recipe) => fillRecipe(recipe),
+        refresh: () => showInventory(),
+        onSearch: () => {
+          void askText(recipeQuery, 20).then((value) => {
+            if (value !== null) {
+              recipeQuery = value;
+              recipePage = 0;
+              showInventory();
+            }
+          });
+        },
+      }),
+    );
+  }
+
+  // ---- 护甲 / 工作台：3×3 合成在上（对齐 workbench-ui） ----
+  if (craftingTableOpen && inventoryTab === 'items') {
+    // 工作台：3×3 覆盖在内容区上方，玩家 27 格下移
+    const craftSlot = Math.round(slotSize * 0.78);
+    const craftTotalW = 3 * craftSlot + 2 * 2 + 30 + craftSlot;
+    const craftX = contentX + (contentW - craftTotalW) / 2;
+    elements.push(
+      ...buildCraftingPanel({
+        craftX,
+        craftY: contentY,
+        craftSlot,
+        craftGap: 2,
+        outputX: craftX + 3 * (craftSlot + 2) + 14,
+        panelY,
+        crafting,
+        inventory,
+        fixedSize: true,
+        onToggleSize: () => {
+          /* 工作台固定 3×3，不切换（INV-013） */
+        },
+        onOutput: () => craftOutput(),
+        refresh: () => showInventory(),
+        ...tabHandlers,
+      }),
+    );
+  }
+
+  // ---- 左右两条竖轨 ----
+  elements.push(
+    ...buildRail({
+      x: leftRailX + 2,
+      y: panelY + headerH + bodyPad,
+      w: railW,
+      h: panelH - headerH - bodyPad * 2,
+      tab: inventoryTab === 'creative' ? 'creative' : inventoryTab === 'recipes' ? 'recipes' : 'inventory',
+      onTab: (tab) => {
+        inventoryTab = tab === 'creative' ? 'creative' : tab === 'recipes' ? 'recipes' : 'items';
+        if (tab === 'recipes') recipePage = 0;
+        showInventory();
+      },
+      side: 'left',
+      category: creativeCategory,
+      onCategory: (category) => {
+        // 点分类 = **直接进创造网格**（一级直达，不是"先点创造"）
+        creativeCategory = category;
+        creativePage = 0;
+        inventoryTab = 'creative';
+        showInventory();
+      },
+    }),
+    ...buildRail({
+      x: rightRailX + 2,
+      y: panelY + headerH,
+      w: railW,
+      h: panelH - headerH - bodyPad * 2,
+      tab: inventoryTab === 'creative' ? 'creative' : inventoryTab === 'recipes' ? 'recipes' : 'inventory',
+      onTab: (tab) => {
+        inventoryTab = tab === 'creative' ? 'creative' : tab === 'recipes' ? 'recipes' : 'items';
+        showInventory();
+      },
+      side: 'right',
+      mode: panelMode,
+      onMode: (mode) => {
+        if (mode === 'creative') {
+          inventoryTab = 'creative';
+        } else {
+          // 合成 / 盔甲：都在"物品栏"这一页里，只切右半边
+          inventoryTab = 'items';
+          panelMode = mode === 'armor' ? 'armor' : 'crafting';
+        }
+        showInventory();
+      },
+    }),
+  );
+
+  // ---- 提示语 ----
+  const hint =
+    inventoryHint ||
+    (inventoryTab === 'items'
+      ? cursor.held
+        ? `手上：${itemLabel(cursor.held.id)} ×${cursor.held.count}`
+        : '短按拿整叠 · 长按拿一半'
       : '');
   if (hint) {
-    elements.push(text(gridX, panelY + panelH - 32, 560, 26, hint, {
-      fontSize: 14,
-      color: inventoryHint ? 'rgba(255,190,120,0.9)' : 'rgba(190,220,235,0.75)',
-    }));
+    elements.push(
+      text(contentX, panelY + panelH - 24, contentW, 20, hint, {
+        fontSize: 12,
+        color: inventoryHint ? '#8a3a3a' : MC.textMuted,
+      }),
+    );
   }
-  ui.setRoot(box(0, 0, 1024, uiHeight, [
-    box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
-    box(panelX, panelY, panelW, panelH, elements, {
-      background: 'rgba(16, 22, 28, 0.97)',
-      border: 'rgba(170, 205, 230, 0.45)',
-      borderWidth: 2,
-      radius: 12,
-    }),
-  ]));
+
+  // ---- 组装：面板（灰底斜边） + 底部快捷栏 dock（面板外） ----
+  const panelBox = box(panelX, panelY, panelW, panelH, elements, {
+    background: MC.panel,
+    bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+    borderWidth: 3,
+  });
+  // 面板最外那圈黑描边（`.inv-panel` 的 box-shadow: 0 0 0 2px outline）
+  const outline = box(panelX - 2, panelY - 2, panelW + 4, panelH + 4, [], {
+    bevel: [MC.outline, MC.outline, MC.outline, MC.outline],
+    borderWidth: 2,
+  });
+
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.45)' }),
+      outline,
+      panelBox,
+      ...buildHotbarDock({
+        screenW: 1024,
+        screenH: uiHeight,
+        slotSize: Math.round(slotSize * 0.96),
+        gap,
+        inventory,
+        selectedSlot,
+        onSlot: (index, button) => {
+          selectedSlot = index;
+          clickSlot('inventory', index, button);
+        },
+        onDrop: (from, to) =>
+          dropSlot({ kind: 'inventory', index: from }, { kind: 'inventory', index: to }),
+      }),
+    ]),
+  );
 };
 
 const snapshotPlayer = (): PlayerSave => ({
@@ -2437,6 +2701,11 @@ if (wxTestApi && isDesktopRuntime) {
       showHud();
       return { held: cursor.held?.id ?? 0 };
     },
+    /**
+     * 验收钩子：把背包面板的几何量出来（左轨/右轨/内容区）。
+     * 验收脚本不该靠"猜像素"去点轨道上的小图标——猜错就变成点了别处。
+     */
+    inventoryGeo: () => inventoryGeo,
     /** 光标上那一叠（`null` = 空手） */
     snapshot: () => (cursor.held ? { id: cursor.held.id, count: cursor.held.count } : null),
     /** 某格的数量（0 = 空） */

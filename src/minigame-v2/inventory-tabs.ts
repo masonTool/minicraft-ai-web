@@ -2,9 +2,9 @@ import { RECIPES, type ShapelessRecipe, type ShapedRecipe } from '../core/crafti
 import type { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { Inventory } from '../core/container/Inventory.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
-import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
+import { creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
 import { recipeFits } from './recipe-book.ts';
-import { button, slot, text, type SlotButton, type UiElement } from './ui-kit/index.ts';
+import { button, box, MC, slot, text, type SlotButton, type UiElement } from './ui-kit/index.ts';
 
 /**
  * 面板里每个格子的"身份"。
@@ -55,34 +55,21 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
     if (ctx.category !== 'all' && creativeTabFor(id) !== ctx.category) return false;
     return !query || itemLabel(id).toLowerCase().includes(query);
   });
-  const rows = Math.max(2, Math.min(5, Math.floor((ctx.panelH - 150) / (ctx.slotSize + ctx.gap))));
-  const pageSize = rows * 9;
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const page = Math.max(0, Math.min(ctx.page, pages - 1));
-  const startIndex = page * pageSize;
-  const list = filtered.slice(startIndex, startIndex + pageSize);
-  ctx.setPageList(list);
-  for (let index = 0; index < CREATIVE_CATEGORIES.length; index++) {
-    const category = CREATIVE_CATEGORIES[index]!;
-    elements.push(
-      button(ctx.gridX + index * 74, ctx.panelY + 50, 70, 28, category.label, () => {
-        ctx.setCategory(category.key);
-        ctx.setPage(0);
-        ctx.refresh();
-      }, {
-        background: ctx.category === category.key ? 'rgba(80,120,105,0.95)' : 'rgba(32,44,52,0.95)',
-        border: 'rgba(180,215,235,0.35)',
-        radius: 6,
-        fontSize: 12,
-      }),
-    );
-  }
+
+  // 顶部一行：搜索 + 整理（**没有分类按钮**——分类在左轨上，重复一遍就是两套入口）
+  const barY = ctx.gridY - 26;
+  const btn = (x: number, w: number, label: string, onClick: () => void): UiElement =>
+    button(x, barY, w, 22, label, onClick, {
+      background: MC.button,
+      bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+      color: MC.text,
+      fontSize: 12,
+      borderWidth: 2,
+    });
   elements.push(
-    button(ctx.gridX + 5 * 74, ctx.panelY + 50, 95, 28, ctx.query ? '搜索中' : '搜索', () => {
-      ctx.onSearch();
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }),
-    button(ctx.gridX + 5 * 74 + 101, ctx.panelY + 50, 85, 28, '整理', () => {
-      const stacks = [];
+    btn(ctx.gridX, 78, ctx.query ? `搜索：${ctx.query}` : '搜索', () => ctx.onSearch()),
+    btn(ctx.gridX + 84, 54, '整理', () => {
+      const stacks: { id: number; count: number }[] = [];
       for (let i = 0; i < 36; i++) {
         const stack = ctx.inventory.get(i);
         if (stack) stacks.push({ id: stack.id, count: stack.count });
@@ -91,8 +78,19 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
       for (let i = 0; i < 36; i++) ctx.inventory.set(i, stacks[i] ?? null);
       ctx.setPage(0);
       ctx.refresh();
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }),
+    }),
   );
+
+  // 网格：行数按**可用高度**算（顶部工具条 26 + 底部分页 26）
+  const avail = ctx.panelH - (ctx.gridY - ctx.panelY) - 26 - 30;
+  const rows = Math.max(2, Math.min(5, Math.floor(avail / (ctx.slotSize + ctx.gap))));
+  const pageSize = rows * 9;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.max(0, Math.min(ctx.page, pages - 1));
+  const startIndex = page * pageSize;
+  const list = filtered.slice(startIndex, startIndex + pageSize);
+  ctx.setPageList(list);
+
   for (let i = 0; i < list.length; i++) {
     const id = list[i]!;
     elements.push(
@@ -108,19 +106,23 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
       ),
     );
   }
-  const footerY = ctx.gridY + rows * (ctx.slotSize + ctx.gap) + 10;
-  elements.push(text(ctx.gridX, footerY, 420, 24, `${filtered.length} 项 · ${page + 1}/${pages}`, {
-    fontSize: 13,
-    color: 'rgba(200,220,235,0.65)',
-  }));
-  elements.push(button(ctx.gridX + 420, footerY - 4, 75, 28, '上一页', () => {
-    ctx.setPage(Math.max(0, page - 1));
-    ctx.refresh();
-  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
-  elements.push(button(ctx.gridX + 505, footerY - 4, 75, 28, '下一页', () => {
-    ctx.setPage(Math.min(pages - 1, page + 1));
-    ctx.refresh();
-  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
+
+  // 底部一行：`共 N 项 · 第 x/y 页` + 两颗翻页键（全部在面板内，不横向溢出）
+  const footerY = ctx.gridY + rows * (ctx.slotSize + ctx.gap) + 4;
+  elements.push(
+    text(ctx.gridX, footerY + 3, 240, 20, `共 ${filtered.length} 项 · ${page + 1}/${pages}`, {
+      fontSize: 11,
+      color: MC.textMuted,
+    }),
+    btn(ctx.gridX + ctx.slotSize * 6, 54, '上一页', () => {
+      ctx.setPage(Math.max(0, page - 1));
+      ctx.refresh();
+    }),
+    btn(ctx.gridX + ctx.slotSize * 6 + 60, 54, '下一页', () => {
+      ctx.setPage(Math.min(pages - 1, page + 1));
+      ctx.refresh();
+    }),
+  );
   return elements;
 }
 
@@ -301,60 +303,277 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
   return elements;
 }
 
-export interface InventoryChromeContext {
-  panelX: number;
-  panelY: number;
-  panelW: number;
-  railW: number;
-  tab: 'items' | 'creative' | 'recipes';
-  title?: string;
-  onTab(tab: 'items' | 'creative' | 'recipes'): void;
-  onClose(): void;
-}
+// ---------------------------------------------------------------------------
+// 外壳：左右两条竖轨（对齐 Web 版 .inv-shell / .inv-rail-left / .inv-rail-right）
+// ---------------------------------------------------------------------------
 
-export function buildInventoryChrome(ctx: InventoryChromeContext): UiElement[] {
-  const tabStyle = (active: boolean): Record<string, unknown> => ({
-    background: active ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)',
-    border: 'rgba(180, 215, 235, 0.35)',
-    radius: 8,
-  });
-  return [
-    text(ctx.panelX + 24, ctx.panelY + 20, 300, 42, ctx.title ?? '背包', { fontSize: 30, color: '#ffffff' }),
-    button(ctx.panelX + 24, ctx.panelY + 86, ctx.railW - 24, 52, '物品', () => ctx.onTab('items'), tabStyle(ctx.tab === 'items')),
-    button(ctx.panelX + 24, ctx.panelY + 150, ctx.railW - 24, 52, '创造', () => ctx.onTab('creative'), tabStyle(ctx.tab === 'creative')),
-    button(ctx.panelX + 24, ctx.panelY + 214, ctx.railW - 24, 52, '配方', () => ctx.onTab('recipes'), tabStyle(ctx.tab === 'recipes')),
-    button(ctx.panelX + ctx.panelW - 72, ctx.panelY + 20, 44, 44, 'X', () => ctx.onClose(), {
-      background: 'rgba(30, 38, 46, 0.95)',
-      border: 'rgba(180, 215, 235, 0.35)',
-      radius: 8,
-    }),
-  ];
-}
+/**
+ * 左轨的 5 颗配方分类（对齐 Web 版 `RECIPE_BOOK_TABS_POCKET`）。
+ *
+ * ⚠️ 这是 Web 版最重要的结构：**分类直接挂在左轨上**，点一下就换面板内容，
+ * 不需要"先点创造、再点分类"两级跳。v2 之前就是两级，所以用起来"一脸蒙"。
+ */
+export const RAIL_CATEGORIES: ReadonlyArray<{ key: V2CreativeCategory; label: string; glyph: string }> = [
+  { key: 'all', label: '全部', glyph: '⌕' },
+  { key: 'building', label: '建筑', glyph: '▤' },
+  { key: 'equipment', label: '装备', glyph: '⚔' },
+  { key: 'items', label: '物品', glyph: '◆' },
+  { key: 'nature', label: '自然', glyph: '❦' },
+];
 
-export interface EquipmentRowContext {
+/** 右轨的模式键（对齐 Web 版 `.inv-pocket-side` 那 3 颗） */
+export type PanelMode = 'crafting' | 'armor' | 'creative';
+
+export const RAIL_MODES: ReadonlyArray<{ key: PanelMode; label: string; glyph: string }> = [
+  { key: 'creative', label: '创造', glyph: '✦' },
+  { key: 'crafting', label: '合成', glyph: '▦' },
+  { key: 'armor', label: '盔甲', glyph: '⛨' },
+];
+
+export interface RailContext {
+  /** 左轨左上角 */
   x: number;
   y: number;
+  /** 轨道宽度（Web 版是 40） */
+  w: number;
+  h: number;
+  tab: IconTab;
+  onTab(tab: IconTab): void;
+  /** 右轨（同一函数画两条轨，右轨靠 x 定位） */
+  side: 'left' | 'right';
+  /** 左轨专用：当前选中的配方分类（只有左轨前 5 颗用得到） */
+  category?: V2CreativeCategory;
+  onCategory?(category: V2CreativeCategory): void;
+  /** 右轨专用：当前面板模式 */
+  mode?: PanelMode;
+  onMode?(mode: PanelMode): void;
+}
+
+/** 左轨的"物品栏"（回到普通背包，不带分类） */
+export type IconTab = 'inventory' | 'category' | 'creative' | 'recipes';
+
+const RAIL_BTN = 36;
+const RAIL_GAP = 4;
+
+/** 一颗轨道按钮：灰底 + 斜角；选中 = 淡黄绿 + 凹进去（`.inv-pocket-tab.active`） */
+function railButton(
+  x: number,
+  y: number,
+  size: number,
+  label: string,
+  glyph: string,
+  active: boolean,
+  onClick: () => void,
+): UiElement {
+  return button(x, y, size, size, `${glyph}`, onClick, {
+    background: active ? MC.tabActive : MC.button,
+    bevel: active
+      ? [MC.bevelDark, MC.bevelLight, MC.bevelLight, MC.bevelDark]
+      : [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+    color: MC.text,
+    fontSize: 17,
+    borderWidth: 2,
+    // 无障碍/测试用：把中文名塞进 label 的 tooltip 位置不现实（canvas 没有 title），
+    // 所以界面上用小图标 + 面板内标题来标识当前分类
+    ...(label ? { radius: 0 } : {}),
+  });
+}
+
+export function buildRail(ctx: RailContext): UiElement[] {
+  const els: UiElement[] = [];
+  const inner = ctx.x;
+  if (ctx.side === 'left') {
+    // 上：5 颗配方分类
+    for (let i = 0; i < RAIL_CATEGORIES.length; i++) {
+      const cat = RAIL_CATEGORIES[i]!;
+      const active = ctx.tab === 'category' && ctx.category === cat.key;
+      els.push(
+        railButton(
+          inner,
+          ctx.y + i * (RAIL_BTN + 2),
+          RAIL_BTN,
+          cat.label,
+          cat.glyph,
+          active,
+          () => ctx.onCategory?.(cat.key),
+        ),
+      );
+    }
+    // 下：一颗"物品栏"（贴轨道底部，对齐 Web 版的 `inv-pocket-inv-tab`）
+    //
+    // ⚠️ 必须**夹在分类下方**：5 颗分类已经占掉 5×36+4×2 = 188，而面板高度
+    // 只有 194 左右时，"贴底"那颗会正好压在最后一颗分类上（第一版就是这样）。
+    const catsBottom = ctx.y + RAIL_CATEGORIES.length * (RAIL_BTN + 2);
+    const wantY = ctx.y + ctx.h - RAIL_BTN;
+    const invY = Math.max(catsBottom + 2, Math.min(wantY, ctx.y + ctx.h - RAIL_BTN));
+    els.push(
+      railButton(inner, invY, RAIL_BTN, '物品栏', '🎒', ctx.tab === 'inventory', () => ctx.onTab('inventory')),
+    );
+    return els;
+  }
+  // 右轨：3 颗模式键，垂直居中（Web 版也是居中偏下）
+  const totalH = RAIL_MODES.length * RAIL_BTN + (RAIL_MODES.length - 1) * RAIL_GAP;
+  const top = ctx.y + (ctx.h - totalH) / 2;
+  for (let i = 0; i < RAIL_MODES.length; i++) {
+    const mode = RAIL_MODES[i]!;
+    const active = (mode.key === 'creative' && ctx.tab === 'creative') || (mode.key === ctx.mode && ctx.tab !== 'creative');
+    els.push(
+      railButton(inner, top + i * (RAIL_BTN + RAIL_GAP), RAIL_BTN, mode.label, mode.glyph, active, () =>
+        ctx.onMode?.(mode.key),
+      ),
+    );
+  }
+  return els;
+}
+
+export interface PanelHeaderContext {
+  x: number;
+  y: number;
+  w: number;
+  /** 面板内标题（Web 版是"没有标题"，这里保留一行小字说明当前分类，方便定位） */
+  title: string;
+  hint?: string;
+  onClose(): void;
+  /** 配方书开关（只在物品栏模式显示，对齐 `.inv-pocket-recipe-toggle`） */
+  onRecipes?: () => void;
+}
+
+/**
+ * 面板顶栏（对齐 `.inv-header`，高 24）。
+ *
+ * Web 版这一行**没有标题字**，只有右边两颗小键（配方书 / 关闭）。
+ * v2 之前是 30px 的"背包"大字 + X，占掉一整行——那个也是"不像原版"的一部分。
+ */
+export function buildPanelHeader(ctx: PanelHeaderContext): UiElement[] {
+  const els: UiElement[] = [
+    text(ctx.x, ctx.y + 3, 300, 20, ctx.title, { fontSize: 13, color: MC.text }),
+  ];
+  if (ctx.hint) {
+    els.push(text(ctx.x, ctx.y + 3, ctx.w - 100, 20, ctx.hint, { fontSize: 11, color: MC.textMuted, align: 'right' }));
+  }
+  const btnH = 20;
+  els.push(
+    button(ctx.x + ctx.w - 58, ctx.y, 54, btnH, '关闭', () => ctx.onClose(), {
+      background: MC.button,
+      bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+      color: MC.text,
+      fontSize: 12,
+      borderWidth: 2,
+    }),
+  );
+  if (ctx.onRecipes) {
+    els.push(
+      button(ctx.x + ctx.w - 58 - 58, ctx.y, 54, btnH, '配方书', () => ctx.onRecipes?.(), {
+        background: MC.button,
+        bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+        color: MC.text,
+        fontSize: 12,
+        borderWidth: 2,
+      }),
+    );
+  }
+  // 标题栏下面一道浅缝（`.inv-header` 的 border-bottom）
+  els.push(box(ctx.x, ctx.y + btnH + 4, ctx.w, 2, [], { background: '#a9a9a9' }));
+  return els;
+}
+
+/**
+ * 底部独立快捷栏（对齐 `.inv-hotbar-dock`）。
+ *
+ * ⚠️ 这是与 v2 现状**最大的一处差别**：v2 把 9 格快捷栏塞在面板内部，
+ * 而原版（Web 版）里它**在面板之外**、贴屏幕底边，面板开关时它一直在。
+ */
+export interface HotbarDockContext {
+  /** 屏幕宽（用于居中） */
+  screenW: number;
+  screenH: number;
   slotSize: number;
   gap: number;
   inventory: Inventory;
-  onTap(slotIndex: number, button: SlotButton): void;
+  selectedSlot: number;
+  onSlot(index: number, button: SlotButton): void;
+  onDrop(from: number, to: number): void;
 }
 
-/** 护甲 36-39 + 副手 40。两者都是**单件槽**（护甲槽只吃对应部位、副手只放一件）。 */
-export function buildEquipmentRow(ctx: EquipmentRowContext): UiElement[] {
-  const elements: UiElement[] = [];
-  elements.push(text(ctx.x, ctx.y - 20, 180, 18, '护甲', { fontSize: 12, color: 'rgba(200,220,235,0.7)' }));
-  elements.push(text(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y - 20, 80, 18, '副手', { fontSize: 12, color: 'rgba(200,220,235,0.7)' }));
+export function buildHotbarDock(ctx: HotbarDockContext): UiElement[] {
+  const totalW = 9 * ctx.slotSize + 8 * ctx.gap;
+  const x = (ctx.screenW - totalW) / 2;
+  const y = ctx.screenH - ctx.slotSize - 8;
+  const els: UiElement[] = [];
+  // 灰色底板（原版快捷栏是一整条凹槽，不是 9 个散格）
+  els.push(
+    box(x - 3, y - 3, totalW + 6, ctx.slotSize + 6, [], {
+      background: MC.panel,
+      bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+      borderWidth: 2,
+    }),
+  );
+  for (let i = 0; i < 9; i++) {
+    const stack = ctx.inventory.get(i);
+    els.push(
+      slot(
+        x + i * (ctx.slotSize + ctx.gap),
+        y,
+        ctx.slotSize,
+        i,
+        stack?.id ?? 0,
+        stack?.count ?? 0,
+        i === ctx.selectedSlot,
+        (button) => ctx.onSlot(i, button),
+        (from) => ctx.onDrop(from.index, i),
+      ),
+    );
+  }
+  return els;
+}
+
+/**
+ * 护甲列（对齐 `.inv-grid.inv-armor`：**竖排** 4 格 + 下面一格副手）。
+ *
+ * v2 之前是"护甲 4 格横排 + 副手另起一行"，原版是竖着一条。
+ */
+export interface ArmorColumnContext {
+  x: number;
+  y: number;
+  slotSize: number;
+  inventory: Inventory;
+  onTap(slotIndex: number, button: SlotButton): void;
+  onDrop(from: number, to: number): void;
+}
+
+export function buildArmorColumn(ctx: ArmorColumnContext): UiElement[] {
+  const els: UiElement[] = [];
   for (let i = 0; i < 4; i++) {
     const index = 36 + i;
     const stack = ctx.inventory.get(index);
-    elements.push(
-      slot(ctx.x + i * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, index, stack?.id ?? 0, stack?.count ?? 0, false, (button) => ctx.onTap(index, button)),
+    els.push(
+      slot(
+        ctx.x,
+        ctx.y + i * ctx.slotSize,
+        ctx.slotSize,
+        index,
+        stack?.id ?? 0,
+        stack?.count ?? 0,
+        false,
+        (button) => ctx.onTap(index, button),
+        (from) => ctx.onDrop(from.index, index),
+      ),
     );
   }
+  // 副手放在盔甲下面空一行（原版就是这样，靠位置区分）
   const offhand = ctx.inventory.get(40);
-  elements.push(
-    slot(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, 40, offhand?.id ?? 0, offhand?.count ?? 0, false, (button) => ctx.onTap(40, button)),
+  els.push(
+    slot(
+      ctx.x,
+      ctx.y + 5 * ctx.slotSize,
+      ctx.slotSize,
+      40,
+      offhand?.id ?? 0,
+      offhand?.count ?? 0,
+      false,
+      (button) => ctx.onTap(40, button),
+      (from) => ctx.onDrop(from.index, 40),
+    ),
   );
-  return elements;
+  return els;
 }

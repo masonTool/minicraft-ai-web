@@ -20,6 +20,52 @@ export interface UiStyle {
   color?: string;
   fontSize?: number;
   align?: 'left' | 'center' | 'right';
+  /**
+   * 像素斜角（对齐 Web 版 `.inv-panel` / `.inv-slot` 的 `--pixel-bevel`）：
+   * 左上亮、右下暗的一圈硬边。给了它就**不画均匀 border**——原版 GUI 里没有均匀描边。
+   * 四边顺序同 CSS `border-color`：上 右 下 左。也可以传单色（四边同色）。
+   */
+  bevel?: string | readonly [string, string, string, string];
+}
+
+/**
+ * 原版 GUI 的配色（取自 Web 版 CSS 变量，见 `.tmp/web-inventory-analysis.md`）。
+ *
+ * v2 之前用的是"深蓝黑面板 + 白字"，那是**自创风格**；原版（以及 Web 版）是
+ * **浅灰面板 + 深灰字 + 直角斜边**。这两套差得不是一点点，用户说"看着一脸蒙"
+ * 主要就是因为它不像 Minecraft 的物品栏。
+ */
+export const MC = {
+  /** 面板底色 #c6c6c6 */
+  panel: '#c6c6c6',
+  /** 槽位底色 #8b8b8b */
+  slot: '#8b8b8b',
+  /** 槽位按下/选中：白底 + 深框（"相框"） */
+  slotSelected: '#ffffff',
+  /** 正文深灰 */
+  text: '#3a3a3a',
+  /** 次要文字 */
+  textMuted: '#5a5a5a',
+  /** 像素斜角：亮（左上）/ 暗（右下） */
+  bevelLight: '#ffffff',
+  bevelDark: '#5a5a5a',
+  /** 面板最外那圈黑描边 */
+  outline: '#000000',
+  /** 按钮灰 */
+  button: '#a8a8a8',
+  /** 页签选中（基岩版是淡黄绿） */
+  tabActive: '#dcdec4',
+  /** 产物槽的暖色提示边 */
+  outputAccent: '#e0c06a',
+  /** 悬停高亮的绿（拖拽目标） */
+  dropTarget: '#7bd88f',
+} as const;
+
+/** 斜角套成 CSS 顺序（上 右 下 左） */
+export function bevelColors(bevel: UiStyle['bevel']): readonly [string, string, string, string] {
+  if (!bevel) return [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight];
+  if (typeof bevel === 'string') return [bevel, bevel, bevel, bevel];
+  return bevel;
 }
 
 export interface UiNode {
@@ -233,6 +279,36 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
+}
+
+/**
+ * 像素斜角框：四条边各画一条实色线段，**不做均匀描边**。
+ *
+ * 这是原版 GUI 的灵魂：左上亮、右下暗，眼睛把它读成"一块凸起的板"。
+ * 用四条 1px 线段画（而不是 `strokeRect` + 四色）是因为 canvas 的 stroke 只能一色。
+ */
+function bevelRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  colors: readonly [string, string, string, string],
+  width = 2,
+): void {
+  const [top, right, bottom, left] = colors;
+  // 上
+  ctx.fillStyle = top;
+  ctx.fillRect(x, y, w, width);
+  // 左
+  ctx.fillRect(x, y, width, h);
+  // 下
+  ctx.fillStyle = bottom;
+  ctx.fillRect(x, y + h - width, w, width);
+  // 右
+  ctx.fillStyle = right;
+  ctx.fillRect(x + w - width, y, width, h);
+  void left;
 }
 
 export class UiLayer {
@@ -667,21 +743,56 @@ export class UiLayer {
     }
 
     if ('kind' in node && node.kind === 'slot') {
-      ctx.fillStyle = node.selected ? 'rgba(100, 140, 160, 0.92)' : 'rgba(30, 38, 46, 0.92)';
-      roundedRect(ctx, node.x, node.y, node.w, node.h, 6);
-      ctx.fill();
-      const dragOver = this.dragSlot?.moved && this.dragPos && this.dragPos.x >= node.x && this.dragPos.x <= node.x + node.w && this.dragPos.y >= node.y && this.dragPos.y <= node.y + node.h;
-      ctx.strokeStyle = dragOver ? '#7bd88f' : node.takeOnly ? '#e0c06a' : node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
-      ctx.lineWidth = dragOver || node.selected || node.takeOnly ? 3 : 1.5;
-      roundedRect(ctx, node.x + 1, node.y + 1, node.w - 2, node.h - 2, 5);
-      ctx.stroke();
-      if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x, node.y, node.w);
+      const dragOver =
+        this.dragSlot?.moved &&
+        this.dragPos &&
+        this.dragPos.x >= node.x &&
+        this.dragPos.x <= node.x + node.w &&
+        this.dragPos.y >= node.y &&
+        this.dragPos.y <= node.y + node.h;
+
+      // 原版槽位：**直角** + 凹进去的斜角（左上暗、右下亮——与面板凸起的方向相反）。
+      // 选中时换成"白底 + 深框"（`.inv-slot.selected` 那个相框效果）。
+      const selected = node.selected;
+      ctx.fillStyle = selected ? MC.slotSelected : MC.slot;
+      ctx.fillRect(node.x, node.y, node.w, node.h);
+
+      if (selected) {
+        // 相框：2px 深色内边 + 2px 白边（不参与布局，所以直接画在框内）
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(node.x, node.y, node.w, 2);
+        ctx.fillRect(node.x, node.y + node.h - 2, node.w, 2);
+        ctx.fillRect(node.x, node.y, 2, node.h);
+        ctx.fillRect(node.x + node.w - 2, node.y, 2, node.h);
+      } else {
+        // 凹槽：左上暗、右下亮
+        bevelRect(ctx, node.x, node.y, node.w, node.h, [MC.bevelDark, MC.bevelLight, MC.bevelLight, MC.bevelDark], 2);
+      }
+
+      // 拖拽落点 / 产物槽：加一圈高亮（原版没有，但这是必要的操作反馈）
+      if (dragOver) {
+        ctx.strokeStyle = MC.dropTarget;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(node.x + 2, node.y + 2, node.w - 4, node.h - 4);
+      } else if (node.takeOnly) {
+        ctx.strokeStyle = MC.outputAccent;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(node.x + 3, node.y + 3, node.w - 6, node.h - 6);
+      }
+
+      if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x + 2, node.y + 2, node.w - 4);
       if (node.count > 0) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '16px sans-serif';
+        // 数量：原版是**白字带黑描边**，右下角
+        const tx = node.x + node.w - 4;
+        const ty = node.y + node.h - 3;
+        ctx.font = `${Math.max(11, Math.round(node.w * 0.3))}px sans-serif`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
-        ctx.fillText(String(node.count), node.x + node.w - 5, node.y + node.h - 4);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(String(node.count), tx, ty);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(String(node.count), tx, ty);
       }
       this.slots.push(node);
       return;
@@ -737,17 +848,28 @@ export class UiLayer {
 
     if ('kind' in node && node.kind === 'button') {
       const style = node.style ?? {};
-      ctx.fillStyle = style.background ?? 'rgba(40, 48, 56, 0.92)';
-      ctx.beginPath();
-      const radius = style.radius ?? 8;
-      roundedRect(ctx, node.x, node.y, node.w, node.h, radius);
-      ctx.fill();
-      if (style.border) {
+      ctx.fillStyle = style.background ?? MC.button;
+      const radius = style.radius ?? 0;
+      if (radius > 0) {
+        roundedRect(ctx, node.x, node.y, node.w, node.h, radius);
+        ctx.fill();
+      } else {
+        ctx.fillRect(node.x, node.y, node.w, node.h);
+      }
+      // 斜角优先：原版按钮就是"左上亮右下暗"的一块板，没有均匀描边
+      if (style.bevel) {
+        bevelRect(ctx, node.x, node.y, node.w, node.h, bevelColors(style.bevel), style.borderWidth ?? 2);
+      } else if (style.border) {
         ctx.strokeStyle = style.border;
         ctx.lineWidth = style.borderWidth ?? 2;
-        ctx.stroke();
+        if (radius > 0) {
+          roundedRect(ctx, node.x, node.y, node.w, node.h, radius);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(node.x, node.y, node.w, node.h);
+        }
       }
-      ctx.fillStyle = style.color ?? '#ffffff';
+      ctx.fillStyle = style.color ?? MC.text;
       ctx.font = `${style.fontSize ?? 20}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -757,15 +879,28 @@ export class UiLayer {
     }
 
     const style = node.style ?? {};
-    if (style.background || style.border) {
-      ctx.fillStyle = style.background ?? 'transparent';
-      ctx.beginPath();
-      roundedRect(ctx, node.x, node.y, node.w, node.h, style.radius ?? 0);
-      ctx.fill();
-      if (style.border) {
+    if (style.background || style.border || style.bevel) {
+      const radius = style.radius ?? 0;
+      if (style.background) {
+        ctx.fillStyle = style.background;
+        if (radius > 0) {
+          roundedRect(ctx, node.x, node.y, node.w, node.h, radius);
+          ctx.fill();
+        } else {
+          ctx.fillRect(node.x, node.y, node.w, node.h);
+        }
+      }
+      if (style.bevel) {
+        bevelRect(ctx, node.x, node.y, node.w, node.h, bevelColors(style.bevel), style.borderWidth ?? 2);
+      } else if (style.border) {
         ctx.strokeStyle = style.border;
         ctx.lineWidth = style.borderWidth ?? 2;
-        ctx.stroke();
+        if (radius > 0) {
+          roundedRect(ctx, node.x, node.y, node.w, node.h, radius);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(node.x, node.y, node.w, node.h);
+        }
       }
     }
     for (const child of node.children ?? []) this.drawNode(child, ctx);
