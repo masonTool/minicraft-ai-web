@@ -44,6 +44,31 @@ function check(name, cond, detail = '') {
 }
 
 /**
+ * 把真实队列临时换成给定内容跑一段，结束后原样还原。
+ *
+ * ⚠️ 为什么需要它（2026-10-21 修的假失败）：原先这些用例是"往真实队列**末尾追加**
+ * 一条占位条目，然后断言它是**第一条**"。那等于默认「队列里本来没有别的待办」——
+ * 队列一被填满（23 条），占位条目就排在最后，8 条断言全红。
+ * 但**钩子本身是对的**，红的是测试：它把"我的队列正好是空的"当成了前提。
+ *
+ * 现在用例自己指定整份队列内容，与真实队列还剩多少条无关。
+ * 只要 `writeBytes` 抛错也能还原（`finally`），不会把用户的队列弄丢。
+ */
+function withQueue(content, fn) {
+  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
+  const backup = readFileSync(queueFile, 'utf8');
+  try {
+    writeFileSync(queueFile, content);
+    return fn(queueFile);
+  } finally {
+    writeFileSync(queueFile, backup);
+  }
+}
+
+/** 一份最小的、不依赖真实队列的队列内容（只有一条待办） */
+const MIN_QUEUE = '# 自动继续队列（测试用临时内容）\n\n- [ ] hooks-test 占位条目：x → y\n';
+
+/**
  * 跑一个钩子脚本，返回 { code, stdout, stderr, json }。
  * `cwd` 故意可配：脚本必须**不依赖** cwd 才能算健壮。
  */
@@ -294,27 +319,25 @@ console.log('\n[交接单]');
   check('交接话术带上要读的文件', /读 AGENTS\.md/.test(src));
 
   // 真跑一次：临时造一条待办 + 用低阈值强制进入交接模式
-  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
   const handoffFile = join(projectRoot, '.codebuddy', 'hooks', 'logs', 'handoff-prompt.txt');
-  let backup = null;
   try {
-    backup = readFileSync(queueFile, 'utf8');
-    writeFileSync(queueFile, `${backup}\n- [ ] hooks-test 占位条目\n`);
-    const r = runHook('auto-continue.mjs', stopEvent('hooks-test-handoff'), {
-      // 用强制开关进入交接模式：比"造一个超大 transcript"直接，也不依赖平台是否传 transcript_path
-      env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
+    // 队列内容由用例自己给（见 `withQueue` 的注释：不能依赖真实队列还剩几条）
+    withQueue(MIN_QUEUE, () => {
+      const r = runHook('auto-continue.mjs', stopEvent('hooks-test-handoff'), {
+        // 用强制开关进入交接模式：比"造一个超大 transcript"直接，也不依赖平台是否传 transcript_path
+        env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
+      });
+      check('强制交接开关生效', r.code === 2 && /收尾/.test(r.stderr), r.stderr.slice(0, 120));
+      check('交接反馈里带可复制的提示词', /复制这段/.test(r.stderr));
+      check('交接反馈带上队列第一条', /hooks-test 占位条目/.test(r.stderr));
+      check('交接单已落盘', existsSync(handoffFile), handoffFile);
+      if (existsSync(handoffFile)) {
+        const content = readFileSync(handoffFile, 'utf8');
+        check('落盘内容自包含（带要读的文件）', /AGENTS\.md/.test(content));
+        check('落盘内容带上队列第一条', /hooks-test 占位条目/.test(content));
+      }
     });
-    check('强制交接开关生效', r.code === 2 && /收尾/.test(r.stderr), r.stderr.slice(0, 120));
-    check('交接反馈里带可复制的提示词', /复制这段/.test(r.stderr));
-    check('交接反馈带上队列第一条', /hooks-test 占位条目/.test(r.stderr));
-    check('交接单已落盘', existsSync(handoffFile), handoffFile);
-    if (existsSync(handoffFile)) {
-      const content = readFileSync(handoffFile, 'utf8');
-      check('落盘内容自包含（带要读的文件）', /AGENTS\.md/.test(content));
-      check('落盘内容带上队列第一条', /hooks-test 占位条目/.test(content));
-    }
   } finally {
-    if (backup !== null) writeFileSync(queueFile, backup);
     rmSync(handoffFile, { force: true });
   }
 }
@@ -333,22 +356,17 @@ console.log('\n[围栏代码块不算待办]');
   const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
   check('钩子会识别围栏', /inFence/.test(src));
 
-  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
-  let backup = null;
-  try {
-    backup = readFileSync(queueFile, 'utf8');
-
-    // 只有代码块里的模板 → 必须判定为"队列空"
-    writeFileSync(queueFile, `${backup}\n\`\`\`\n- [ ] [发现] 模板示例：x → y\n\`\`\`\n`);
+  // 只有代码块里的模板 → 必须判定为"队列空"
+  // ⚠️ 用例自己给整份队列（见 `withQueue`）：原来往真实队列末尾追加，
+  // 真实队列一有内容，"判定为队列空"就必然失败——那是测试的前提写错了。
+  withQueue('```\n- [ ] [发现] 模板示例：x → y\n```\n', () => {
     const fenced = runHook('auto-continue.mjs', stopEvent('hooks-test-fence-1'));
     check('代码块里的 [ ] 不算待办', fenced.json?.continue === true, JSON.stringify(fenced.json).slice(0, 160));
     check('判定为队列空', /队列已全部完成/.test(fenced.json?.systemMessage ?? ''));
+  });
 
-    // 代码块外 + 代码块内各一条 → 只算外面那条
-    writeFileSync(
-      queueFile,
-      `${backup}\n\`\`\`\n- [ ] 块内假任务：x → y\n\`\`\`\n- [ ] 块外真任务：x → y\n`,
-    );
+  // 代码块外 + 代码块内各一条 → 只算外面那条
+  withQueue('```\n- [ ] 块内假任务：x → y\n```\n- [ ] 块外真任务：x → y\n', () => {
     const mixed = runHook('auto-continue.mjs', stopEvent('hooks-test-fence-2'), {
       env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
     });
@@ -357,9 +375,7 @@ console.log('\n[围栏代码块不算待办]');
       /块外真任务/.test(mixed.stderr) && !/块内假任务/.test(mixed.stderr),
       mixed.stderr.slice(0, 200),
     );
-  } finally {
-    if (backup !== null) writeFileSync(queueFile, backup);
-  }
+  });
 }
 
 // ---------------------------------------------------------------- 卡死保护
@@ -375,12 +391,9 @@ console.log('\n[卡死保护]');
    * 连续次数永远停在 1、永远不会触发。所以下面这条测试是"连跑 N 次看它到底变没变"，
    * 光查源码字符串是抓不到这个 bug 的。
    */
-  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
   const stateFile = join(projectRoot, '.codebuddy', 'hooks', 'logs', 'auto-continue.state.json');
-  let qBackup = null;
   let sBackup = null;
   try {
-    qBackup = readFileSync(queueFile, 'utf8');
     try {
       sBackup = readFileSync(stateFile, 'utf8');
     } catch {
@@ -388,31 +401,37 @@ console.log('\n[卡死保护]');
     }
     rmSync(stateFile, { force: true });
 
-    writeFileSync(queueFile, `${qBackup}\n- [ ] 卡死测试条目：故意做不完\n- [ ] 卡死测试后一条：应该能被轮到\n`);
+    // ⚠️ 队列内容整份由用例给（见 `withQueue`）：原来是在真实队列末尾追加，
+    // 真实队列一被填满，前 4 轮递的就是真实的第一条，后面 5 条断言全红。
+    withQueue('- [ ] 卡死测试条目：故意做不完\n- [ ] 卡死测试后一条：应该能被轮到\n', (queueFile) => {
+      // 第 1~4 轮：都还在递同一条
+      let lastStderr = '';
+      for (let round = 1; round <= 4; round += 1) {
+        const r = runHook('auto-continue.mjs', stopEvent(`hooks-test-block-${round}`));
+        lastStderr = r.stderr;
+      }
+      check('前 4 轮仍在重试同一条', /卡死测试条目/.test(lastStderr));
+      check('前 4 轮还没打阻塞标记', !/已标/.test(lastStderr));
 
-    // 第 1~4 轮：都还在递同一条
-    let lastStderr = '';
-    for (let round = 1; round <= 4; round += 1) {
-      const r = runHook('auto-continue.mjs', stopEvent(`hooks-test-block-${round}`));
-      lastStderr = r.stderr;
-    }
-    check('前 4 轮仍在重试同一条', /卡死测试条目/.test(lastStderr));
-    check('前 4 轮还没打阻塞标记', !/已标/.test(lastStderr));
+      // 第 5 轮：必须隔离
+      const fifth = runHook('auto-continue.mjs', stopEvent('hooks-test-block-5'));
+      check('第 5 轮打出阻塞标记', /已标.*阻塞/.test(fifth.stderr), fifth.stderr.slice(0, 160));
+      check('第 5 轮跳过卡住的那条', !/^  · 卡死测试条目/m.test(fifth.stderr));
+      check('第 5 轮改递下一条', /卡死测试后一条/.test(fifth.stderr));
+      check('要求 AI 上报而非自行处理', /上报/.test(fifth.stderr) && /不要替他决定/.test(fifth.stderr));
 
-    // 第 5 轮：必须隔离
-    const fifth = runHook('auto-continue.mjs', stopEvent('hooks-test-block-5'));
-    check('第 5 轮打出阻塞标记', /已标.*阻塞/.test(fifth.stderr), fifth.stderr.slice(0, 160));
-    check('第 5 轮跳过卡住的那条', !/^  · 卡死测试条目/m.test(fifth.stderr));
-    check('第 5 轮改递下一条', /卡死测试后一条/.test(fifth.stderr));
-    check('要求 AI 上报而非自行处理', /上报/.test(fifth.stderr) && /不要替他决定/.test(fifth.stderr));
+      const queueNow = readFileSync(queueFile, 'utf8');
+      check('队列文件里已写成 [阻塞]', /- \[阻塞\] 卡死测试条目/.test(queueNow));
 
-    const queueNow = readFileSync(queueFile, 'utf8');
-    check('队列文件里已写成 [阻塞]', /- \[阻塞\] 卡死测试条目/.test(queueNow));
-
-    const state = JSON.parse(readFileSync(stateFile, 'utf8'));
-    check('状态里记下了尝试次数', state.attempts?.['卡死测试条目：故意做不完'] >= 5, JSON.stringify(state.attempts));
+      const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+      check(
+        '状态里记下了尝试次数',
+        state.attempts?.['卡死测试条目：故意做不完'] >= 5,
+        JSON.stringify(state.attempts),
+      );
+    });
   } finally {
-    if (qBackup !== null) writeFileSync(queueFile, qBackup);
+    // 队列已由 `withQueue` 自己还原，这里只管钩子的运行时状态文件
     if (sBackup !== null) writeFileSync(stateFile, sBackup);
     else rmSync(stateFile, { force: true });
   }
