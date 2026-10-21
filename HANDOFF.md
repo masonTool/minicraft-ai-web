@@ -36,22 +36,22 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-21 · 提交总数 1238（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 293 项 —— 已完成 **281**、进行中 **9**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 293 项 —— 已完成 **282**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
-- 批次 523（真机"压后台回来**世界全白 + 只剩黑色动物**、重进/换世界都白、只有刷新才好"；
-  日志 `T08-51-19`/`T10-26-43`）：两次都是 `resume.background` 后 15~35ms `gl.context.lost`、
-  1 秒后 restored，而 `ui.canvas.recover` 始终报 `atlas: "intact"`（帧号/触摸全程 60fps）。
-  根因：图集有**两张**画布，探针只测源画布；这次"源还在、上传画布 `uploadCanvas`（4 倍大）空了"
-  → 报 intact → three 恢复上下文后从空画布重传 → 地形全被 `covered < 0.5` discard，只剩天空/云/雨
-  （白），动物不采样图集（`instanceColor`）→ 深色剪影；`atlas` 是 `boot()` 级单例，空图集被带进
-  下一局（这就是"重进也白"）。修法：两张画布都挂事件、`repaint()` 双上下文检查、`ensureUploaded()`、
-  恢复时强制 `repaint()`、回前台补两刀、`App` 构造兜底。埋点带 `uploadBefore/uploadAfter/sourcePixels`。
-  门禁：`canvas-probe` 13→17、`test:ui` 875→883、161 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
+- 批次 614（M10 收口）：**资源包音效替换**。新增 `core/resourcepack/SoundPack.ts`（纯逻辑）+
+  `AudioEngine` 的采样通道（`setSamples` / `hasSample` / `clearSamples`）。要点：
+  ① **显式映射表**而不是按名字自动配——原版音效名与 `SoundKind` 不是一一对应
+  （`dig.stone` 同时是"破坏/放置/挖掘"三种），自动配会接错；也只登记本项目真的会播的。
+  ② `{n}` 展开多变体（石头 4、脚步 6），播放随机挑一个；单采样音效的两种命名（`door_open` / `door_open1`）都认。
+  ③ 采样与合成都接到同一个 `out`，距离衰减/低通/声像/水下全部复用。④ **合成音永远是兜底**
+  （每个可替换音效都断言了非空 spec，没装包行为不变）。
+  新套件 `test:soundpack` **54 条**，套数 163 → **164**；**M10 勾掉**（282 / 8）。
+  ⚠️ 差异：**不做自定义方块与模型** —— 渲染是"图集 + box 模型"，走 Bedrock geometry 要另开非图集渲染路径（独立材质/几何/剔除），按 E17 先例记为设计差异。
 - 批次 528（植被再压一档 + 飞行起步改成加速过程）：
   ① `FOLIAGE_DARKEN` 0.88 → **0.8**（−20%）：用户觉得还不够沉。
   ② 创造飞行不再"按一下就满速"：加速度从固定 90 改成 `speed / FLY_RAMP_SECONDS`（**0.65 s**），
@@ -191,11 +191,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 163 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 164 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 163 套离线测试
+npm test                   # typecheck:tools + vitest + 164 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -207,7 +207,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **163 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **164 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

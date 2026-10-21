@@ -3227,4 +3227,14 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
      "旧档位 → 旧倍率 → 新档位"（直接搬数字会让 4 档从 1× 跳到 4×）。
   ⑤ 手指瞄准取点挪到**白圈边缘**（右手左上 / 左手右上，r/√2），白圈仍跟手；纯函数 `fingerAimPoint`。
 
+- 批次 523（真机"压后台回来**世界全白 + 只剩黑色动物**、重进/换世界都白、只有刷新才好"；
+  日志 `T08-51-19`/`T10-26-43`）：两次都是 `resume.background` 后 15~35ms `gl.context.lost`、
+  1 秒后 restored，而 `ui.canvas.recover` 始终报 `atlas: "intact"`（帧号/触摸全程 60fps）。
+  根因：图集有**两张**画布，探针只测源画布；这次"源还在、上传画布 `uploadCanvas`（4 倍大）空了"
+  → 报 intact → three 恢复上下文后从空画布重传 → 地形全被 `covered < 0.5` discard，只剩天空/云/雨
+  （白），动物不采样图集（`instanceColor`）→ 深色剪影；`atlas` 是 `boot()` 级单例，空图集被带进
+  下一局（这就是"重进也白"）。修法：两张画布都挂事件、`repaint()` 双上下文检查、`ensureUploaded()`、
+  恢复时强制 `repaint()`、回前台补两刀、`App` 构造兜底。埋点带 `uploadBefore/uploadAfter/sourcePixels`。
+  门禁：`canvas-probe` 13→17、`test:ui` 875→883、161 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
+
 <!-- docs-archive:end -->
