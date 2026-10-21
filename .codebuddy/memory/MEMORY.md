@@ -1,2 +1,3 @@
 - [自动 Git 提交与版本记录](feedback_git_auto_commit.md) — 每次改动自动 review/commit/push，且每个独立改动单独提交保留版本记录
 - [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 用户要求不停下来等确认；Stop 钩子须用 continue:true + stderr + exit 2
+- [文档冲突时以谁为准](feedback_doc_authority.md) — TASKS.md > auto-continue.md > HANDOFF.md；摘要类文件无权威性，合并信息后删除，同一事实不写两处
