@@ -62,16 +62,20 @@ console.log('截图脚本自检');
   check('有 npm run shot', typeof pkg.scripts?.shot === 'string');
 
   const src = readFileSync(join(projectRoot, 'tools', 'screenshot.mjs'), 'utf8');
+  // ⚠️ Q9 把浏览器查找抽到了 `tools/browser.mjs`（三个调用方共用一份），
+  // 所以"怎么找浏览器"这几条要查那边；这里只查"截图脚本有没有复用共用模块"。
+  const browser = readFileSync(join(projectRoot, 'tools', 'browser.mjs'), 'utf8');
   check(
     'playwright-core 是"确定要跑才 import"（没浏览器时不加载）',
-    /await import\('playwright-core'\)/.test(src) && !/^import .*playwright-core/m.test(src),
+    /await import\('playwright-core'\)/.test(browser) && !/^import .*playwright-core/m.test(browser),
   );
-  check('优先用 CHROME_PATH', src.includes('process.env.CHROME_PATH'));
-  check('三个平台都有候选路径', /darwin/.test(src) && /win32/.test(src) && /google-chrome/.test(src));
+  check('截图脚本复用共用的浏览器模块', src.includes("from './browser.mjs'"));
+  check('优先用 CHROME_PATH', browser.includes('process.env.CHROME_PATH'));
+  check('三个平台都有候选路径', /darwin/.test(browser) && /win32/.test(browser) && /google-chrome/.test(browser));
   check('截图落到 .tmp（不进仓库）', src.includes(".tmp', 'shots'"));
   check('参数支持 --url/--out/--wait/--full', ['--url', '--out', '--wait', '--full'].every((k) => src.includes(k)));
-  check('收集 console.error（给 Q9 铺路）', /console.*error|message\.type\(\) === 'error'/.test(src));
-  check('收集 pageerror', src.includes("page.on('pageerror'"));
+  check('收集 console.error（给 Q9 铺路）', /type\(\) === 'error'/.test(browser));
+  check('收集 pageerror', browser.includes("page.on('pageerror'"));
 }
 
 console.log(`\n截图脚本测试：${passed} 通过 / ${failed} 失败`);

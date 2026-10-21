@@ -206,7 +206,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 - [x] Q8 仓库内置 `playwright` devDependency + `tools/screenshot.ts`：
       给定 URL/视口/等待条件截一张图到 `.tmp/shots/`（不进仓库）。
       验收：`npm run shot -- /` 能出图；不引入 CI 强制依赖（没装浏览器时脚本给提示并退出 0）
-- [ ] Q9 `tools/console-guard.ts`：用 playwright 打开页面、收集 `console.error` 与 `pageerror`、
+- [x] Q9 `tools/console-guard.ts`：用 playwright 打开页面、收集 `console.error` 与 `pageerror`、
       进一个世界跑 20 秒，任何一条错误即非零退出。
       验收：手工制造一个 `console.error` 能让它变红；正常跑绿
 - [ ] Q10 把 Q9 挂进 `npm run check`（可选开关 `BROWSER_CHECK=1`，默认不跑以免 CI 无浏览器时红）。
