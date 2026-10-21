@@ -918,6 +918,20 @@ export class InventoryScreen {
   /** 上一次点的是哪一格 + 什么时候（批次 128：双击收集） */
   private lastClick: { key: string; at: number } | null = null;
 
+  /**
+   * 切语言后需要重写的文案节点（批次 617 / Q12）。
+   *
+   * 为什么需要：这些文案是**构造函数里一次性写进 DOM** 的（`textContent = t(...)`），
+   * 而语言是模块级状态、不参与依赖追踪。所以切完语言再开背包，看到的还是旧文案
+   * ——M8 那条"切换语言要重开面板才生效"就是这么来的。
+   * `applyTexts()` 在每次 `openPanel()` 里重写一遍，成本是十几个 textContent 赋值。
+   */
+  private hintEl: HTMLElement | null = null;
+  /** 指纹/成就/关闭/合成 等按钮（切语言要重写；`touchKey` 为空表示触摸端不显示文字） */
+  private textButtons: Array<{ element: HTMLElement; key: string; touchKey?: string; ariaOnly?: boolean }> = [];
+  /** 上一次构建时的触摸态（决定用哪一套文案键） */
+  private touchDevice = false;
+
   constructor(
     private readonly atlas: TextureAtlas,
     private readonly inventory: Inventory,
@@ -962,16 +976,17 @@ export class InventoryScreen {
     this.titleEl.textContent = t('inventory.title');
     const hint = document.createElement('span');
     hint.className = 'inv-header-hint';
+    // 批次 617：提成字段，`applyTexts()` 才能在切语言后重写它
+    this.hintEl = hint;
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
     // 构造时 body 可能还没挂 touch-mode（触摸层更晚才建），用 isTouchDevice 兜底
     const touchDevice = isTouchUi() || isTouchDevice();
+    this.touchDevice = touchDevice;
     // ⚠️ 原来这里写着"点空白处关闭"——**那是错的**：面板外的 pointerdown 实际是
     // "把手上的东西丢出去"（批次 128 对齐原版），根本不会关界面（批次 111 顺手修掉）
     // 触摸端的提示要说出"长按能做两件事"里最反直觉的那一件（批次 137）：
     // 长按一格 = 出指示条选数量，左右划改数目——不说的话没人会去划
-    hint.innerHTML = touchDevice
-      ? '轻点拿起 / 再轻点放下 · 长按划动选数量 · 点空槽放下一个'
-      : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
+    hint.innerHTML = touchDevice ? t('inventory.hintTouch') : t('inventory.hintKeyboard');
     // 携带版：配方分类挂在左轨（Wiki 灰框外侧）；经典仍可塞进标题栏
     this.pocketRecipeBar = document.createElement('div');
     this.pocketRecipeBar.className = 'inv-pocket-recipes';
@@ -1020,7 +1035,8 @@ export class InventoryScreen {
       recipes.dataset.role = 'recipe-toggle';
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
-      recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
+      this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
+      recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
       // 批次 209：它就是"配方书"开关。
       //   左栏还在"我的物品"时：点它 = 进入上次那个分类（沿用 `lastRecipeTab`）；
       //   左栏已经是某个分类时：点它 = 在「只看能合成的」与「列出该分类全部物品」之间切。
@@ -1043,7 +1059,8 @@ export class InventoryScreen {
       achievements.type = 'button';
       achievements.className = 'inv-recipes-btn';
       achievements.dataset.role = 'advancements';
-      achievements.textContent = touchDevice ? '成就' : '成就 (J)';
+      this.textButtons.push({ element: achievements, key: 'inventory.achievementsKey', touchKey: 'inventory.achievements' });
+      achievements.textContent = t(touchDevice ? 'inventory.achievements' : 'inventory.achievementsKey');
       achievements.addEventListener('click', () => this.hooks.onOpenAdvancements?.());
       this.achievementsBtn = achievements;
       header.appendChild(achievements);
@@ -1054,8 +1071,9 @@ export class InventoryScreen {
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'inv-close';
-    closeButton.textContent = touchDevice ? '✕' : '关闭 (E)';
-    closeButton.setAttribute('aria-label', '关闭背包');
+    this.textButtons.push({ element: closeButton, key: 'inventory.closeKey' });
+    closeButton.textContent = touchDevice ? '✕' : t('inventory.closeKey');
+    closeButton.setAttribute('aria-label', t('inventory.close'));
     closeButton.addEventListener('click', () => this.close());
     this.closeBtn = closeButton;
     header.appendChild(closeButton);
@@ -1222,7 +1240,7 @@ export class InventoryScreen {
     this.cartographyCraftButton = document.createElement('button');
     this.cartographyCraftButton.type = 'button';
     this.cartographyCraftButton.className = 'stonecutter-option';
-    this.cartographyCraftButton.textContent = '制作';
+    this.cartographyCraftButton.textContent = t('inventory.craft');
     this.cartographyCraftButton.addEventListener('click', () => this.handleCartographyCraft());
     this.cartographyHintEl = document.createElement('div');
     this.cartographyHintEl.className = 'anvil-cost';
@@ -1327,7 +1345,7 @@ export class InventoryScreen {
     };
     this.playerPreviewEl.addEventListener('pointerup', endPreviewDrag);
     this.playerPreviewEl.addEventListener('pointercancel', endPreviewDrag);
-    this.playerPreviewEl.setAttribute('aria-label', '玩家预览');
+    this.playerPreviewEl.setAttribute('aria-label', t('inventory.playerPreview'));
     const gearRow = document.createElement('div');
     gearRow.className = 'inv-gear-row';
     gearRow.append(this.buildArmorGrid(), this.playerPreviewEl);
@@ -1344,13 +1362,21 @@ export class InventoryScreen {
     this.pocketSideEl.className = 'inv-pocket-side';
     // 批次 185（用户）：成就挪到右轨、**在合成/盔甲上面**——与那两颗同属"右栏的入口"，
     // 比挤在 18px 高的标题栏里合理。容器界面没有右轨，那边仍用标题栏那颗（见 applyInventoryChrome）。
-    this.railAchievementsEl = this.makeRailAction('成就', ACHIEVEMENT_ICON, () => this.hooks.onOpenAdvancements?.());
-    this.pocketSideEl.append(
-      this.railAchievementsEl,
-      this.makePocketIconTab('crafting', '合成', Block.CRAFTING_TABLE),
-      this.makePocketIconTab('armor', '盔甲', null),
-    );
-    this.invTabEl = this.makePocketIconTab('inventory', '物品栏', Block.CHEST);
+    this.railAchievementsEl = this.makeRailAction(t('inventory.achievements'), ACHIEVEMENT_ICON, () => this.hooks.onOpenAdvancements?.());
+    // 批次 617：右轨/左轨这几颗是**纯图标**按钮（文字只在 title / aria-label 里），
+    // 刷新时必须走 `ariaOnly` —— 用 textContent 会把图标（canvas / svg）整个抹掉。
+    const craftingTab = this.makePocketIconTab('crafting', t('inventory.crafting'), Block.CRAFTING_TABLE);
+    const armorTab = this.makePocketIconTab('armor', t('inventory.armor'), null);
+    this.pocketSideEl.append(this.railAchievementsEl, craftingTab, armorTab);
+    this.invTabEl = this.makePocketIconTab('inventory', t('inventory.itemsTab'), Block.CHEST);
+    for (const [element, key] of [
+      [this.railAchievementsEl, 'inventory.achievements'],
+      [craftingTab, 'inventory.crafting'],
+      [armorTab, 'inventory.armor'],
+      [this.invTabEl, 'inventory.itemsTab'],
+    ] as const) {
+      this.textButtons.push({ element, key, ariaOnly: true });
+    }
     this.invTabEl.classList.add('inv-pocket-inv-tab');
     // 页签挂在左右轨（Wiki：贴灰框外侧）；pocketTabsEl 只挂 role + .hidden（不参与布局）
     this.railLeft.append(this.pocketRecipeBar, this.invTabEl);
@@ -1494,7 +1520,13 @@ export class InventoryScreen {
   private buildArmorGrid(): HTMLDivElement {
     const grid = document.createElement('div');
     grid.className = 'inv-grid inv-armor';
-    const hints = ['头', '胸', '腿', '靴', '副手'];
+    const hints = [
+      t('inventory.armor.helmet'),
+      t('inventory.armor.chestplate'),
+      t('inventory.armor.leggings'),
+      t('inventory.armor.boots'),
+      t('inventory.armor.offhand'),
+    ];
     for (let i = 0; i < ARMOR_SIZE + 1; i++) {
       const index = ARMOR_START + i;
       const slot = this.registerSlot(`inv:${index}`, this.inventory, index);
@@ -1504,7 +1536,7 @@ export class InventoryScreen {
       slot.appendChild(hint);
       // 批次 275：副手原来只写「副」，玩家联想不到盾牌。触摸端没有悬停提示，
       // 所以文案写全 + 槽位 title 也说清能放什么。
-      if (i === ARMOR_SIZE) slot.title = '副手：盾牌 / 火把 / 图腾等';
+      if (i === ARMOR_SIZE) slot.title = t('inventory.offhandHint');
       grid.appendChild(slot);
     }
     return grid;
@@ -1514,7 +1546,7 @@ export class InventoryScreen {
   private buildCreativeSection(): void {
     const header = document.createElement('div');
     header.className = 'inv-label';
-    header.append('创造物品栏');
+    header.append(t('inventory.creativeTitle'));
     this.creativeCountEl = document.createElement('span');
     this.creativeCountEl.className = 'inv-count-label';
     header.appendChild(this.creativeCountEl);
@@ -1543,7 +1575,7 @@ export class InventoryScreen {
       }
       const label = document.createElement('span');
       label.className = 'inv-tab-label';
-      label.textContent = category === 'all' ? '搜索' : CREATIVE_TAB_LABELS[category];
+      label.textContent = category === 'all' ? t('inventory.searchTab') : CREATIVE_TAB_LABELS[category];
       button.title = label.textContent;
       button.setAttribute('aria-label', label.textContent);
       button.append(icon, label);
@@ -1652,8 +1684,8 @@ export class InventoryScreen {
     // 翻页条：只渲染当前页之后，"全部"分类也不会一次性塞进 495 个图标
     this.creativePager = document.createElement('div');
     this.creativePager.className = 'inv-pager';
-    this.creativePrev = this.makePagerButton('‹ 上一页', () => this.flipCreativePage(-1));
-    this.creativeNext = this.makePagerButton('下一页 ›', () => this.flipCreativePage(1));
+    this.creativePrev = this.makePagerButton(t('inventory.prevPage'), () => this.flipCreativePage(-1));
+    this.creativeNext = this.makePagerButton(t('inventory.nextPage'), () => this.flipCreativePage(1));
     this.creativePageLabel = document.createElement('span');
     this.creativePageLabel.className = 'inv-page-label';
     this.creativePrev.dataset.role = 'prev';
@@ -1768,8 +1800,8 @@ export class InventoryScreen {
 
     this.categoryPager = document.createElement('div');
     this.categoryPager.className = 'inv-pager';
-    this.categoryPrev = this.makePagerButton('‹ 上一页', () => this.flipCategoryPage(-1));
-    this.categoryNext = this.makePagerButton('下一页 ›', () => this.flipCategoryPage(1));
+    this.categoryPrev = this.makePagerButton(t('inventory.prevPage'), () => this.flipCategoryPage(-1));
+    this.categoryNext = this.makePagerButton(t('inventory.nextPage'), () => this.flipCategoryPage(1));
     this.categoryPageLabel = document.createElement('span');
     this.categoryPageLabel.className = 'inv-page-label';
     this.categoryPrev.dataset.role = 'prev';
@@ -1917,7 +1949,7 @@ export class InventoryScreen {
       ? this.showUnowned
         ? tp('inventory.searchAllFor', { station: STATION_LABELS[this.stationRecipeKey()] })
         : tp('inventory.searchUsableFor', { station: STATION_LABELS[this.stationRecipeKey()] })
-      : '搜索可合成的物品…';
+      : t('inventory.searchCraftable');
     // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
     // 关闭时报"现在能做多少 / 用过的缺料多少"。**不受搜索词影响**。
     if (this.stationHasRecipes()) {
@@ -1991,8 +2023,8 @@ export class InventoryScreen {
         empty.className = 'inv-empty';
         empty.textContent =
           this.stationHasRecipes() && !this.showUnowned && this.categoryQuery.length === 0
-            ? '没有材料齐全的配方 · 点「配方书」看本工作站全部'
-            : '这一栏里没有匹配的物品';
+            ? t('inventory.noCompleteRecipes')
+            : t('inventory.noMatch');
         fragment.appendChild(empty);
       }
     }
@@ -6197,6 +6229,52 @@ export class InventoryScreen {
     else this.openWith('inventory');
   }
 
+  /**
+   * 把"构造时写死"的那批文案按当前语言重写一遍（批次 617 / Q12）。
+   *
+   * 为什么要有这个：`InventoryScreen` 的 DOM 在构造函数里一次建好，
+   * 而那批 `textContent = t(...)` 只在那一刻求值。语言是模块级状态、
+   * 不参与依赖追踪，于是"切完语言开背包，里面还是中文"。
+   * M8 台账里那条"切换语言要重开面板才生效"说的就是它——**重开也不生效**，
+   * 因为重开只是显示同一批旧节点。这里每次 `openPanel()` 重写一次，才真的修掉。
+   *
+   * 只覆盖**顶部与外壳**的固定文案（标题/提示/三颗功能键）。
+   * 格子里的物品名、配方名每帧由 `t()` 现取，本来就是对的，不用管。
+   */
+  private applyTexts(): void {
+    if (this.titleEl) this.titleEl.textContent = t('inventory.title');
+    if (this.hintEl) {
+      this.hintEl.innerHTML = this.touchDevice ? t('inventory.hintTouch') : t('inventory.hintKeyboard');
+    }
+    for (const { element, key, touchKey, ariaOnly } of this.textButtons) {
+      const label = t(this.touchDevice && touchKey ? touchKey : key);
+      if (ariaOnly) {
+        // 纯图标按钮：文字只做无障碍名，绝不能用 textContent（会抹掉 canvas/svg 图标）
+        element.title = label;
+        element.setAttribute('aria-label', label);
+        continue;
+      }
+      // 关闭键在触摸端是 ✕（不显示文字），PC 端才写 "关闭 (E)"。
+      // ⚠️ 必须**按父容器在 DOM 里现查**，不能信 `this.closeBtn` 或循环里的引用：
+      // 页面上有 4 个 `.inv-close`（背包 / 成就面板 ×2 / 外观弹窗），
+      // 实测 `this.closeBtn` 指向的那个并不是 `inv-header` 里可见的那一个，
+      // 于是"改了但界面上没变"。这里用 `this.titleEl` 的父节点（就是 inv-header）定位。
+      if (key === 'inventory.closeKey') {
+        // ⚠️ 不依赖任何缓存引用（`this.closeBtn` / 循环里的 element）：
+        // 页面上有 4 个 `.inv-close`（背包 / 成就面板 ×2 / 外观弹窗），
+        // 而构造函数可能执行不止一次，缓存下来的那个不一定是 `inv-header` 里可见的那个。
+        // 实测：`label` 算出来是 "Close (E)"、赋值也执行了，界面上却还是"关闭 (E)"，
+        // 因为赋给了另一个不可见的节点。这里按"可见 + 在 inv-header 内"现查。
+        const candidates = [...this.root.querySelectorAll<HTMLElement>('.inv-close')];
+        const target = candidates.find((node) => node.closest('.inv-header') !== null) ?? this.closeBtn ?? element;
+        target.textContent = this.touchDevice ? '✕' : label;
+        target.setAttribute('aria-label', t('inventory.close'));
+        continue;
+      }
+      element.textContent = label;
+    }
+  }
+
   openPanel(): void {
     // 批次 185：关闭动画（400ms）还没走完又要打开——例如快速点两下背包、
     // 或者程序在关掉背包的同时打开箱子。原来 `open` 还是 true，这里直接 return，
@@ -6226,6 +6304,13 @@ export class InventoryScreen {
     this.panel.style.animation = '';
     this.applyInventoryChrome();
     this.refresh();
+    // 批次 617（Q12）：文案是**构造函数里一次性写进 DOM** 的，而语言是模块级状态、
+    // 不参与依赖追踪（见 I18n.ts 文件头）。所以切完语言再开背包，看到的还是旧文案。
+    // ⚠️ 位置很关键：必须排在 `applyInventoryChrome()` 与 `refresh()` **之后**。
+    // 这两个函数会按模式重写标题栏（`applyInventoryChrome` 在 refresh 链里也会被调到），
+    // 先刷文案就会被它们盖回去。实测踩了两轮：诊断显示"已经设成 Close (E)"，
+    // 但读 DOM 时又变回"关闭 (E)"——就是被后跑的那一步覆盖了。
+    this.applyTexts();
     this.hooks.onOpenChange?.(true);
   }
 

@@ -7,6 +7,8 @@
  * 翻译质量靠人看，表的一致性只能靠断言。
  */
 
+import { readFileSync } from 'node:fs';
+
 import {
   DEFAULT_LANGUAGE,
   LANGUAGES,
@@ -203,6 +205,72 @@ console.log('\n[枚举清单的连接词（批次 427）]');
   check('一项不加分隔符', joinList(['木板'], 'zh') === '木板' && joinList(['Planks'], 'en') === 'Planks');
   check('空清单返回空串', joinList([], 'en') === '');
   check('空字符串项被跳过', joinList(['木板', '', '圆石'], 'zh') === '木板、圆石');
+}
+
+console.log('\n[背包界面文案接线（批次 617 / Q12）]');
+{
+  /**
+   * 这一批接的是**背包界面的标题、分类、搜索、提示、分页**。
+   * 断言分两类：
+   *   ① 键都在，且中英文都不为空、不能是同一串（同一串等于漏翻）；
+   *   ② `InventoryScreen.ts` 里那几处**不再有硬编码中文**——
+   *      只验键存在是不够的：键加了但界面没引用，等于白加。
+   */
+  const keys = [
+    'inventory.playerPreview',
+    'inventory.creativeTitle',
+    'inventory.crafting',
+    'inventory.itemsTab',
+    'inventory.searchTab',
+    'inventory.armor.helmet',
+    'inventory.armor.chestplate',
+    'inventory.armor.leggings',
+    'inventory.armor.boots',
+    'inventory.armor.offhand',
+    'inventory.offhandHint',
+    'inventory.recipeBook',
+    'inventory.recipeBookKey',
+    'inventory.achievements',
+    'inventory.achievementsKey',
+    'inventory.close',
+    'inventory.closeKey',
+    'inventory.craft',
+    'inventory.hintTouch',
+    'inventory.hintKeyboard',
+    'inventory.prevPage',
+    'inventory.nextPage',
+    'inventory.noCompleteRecipes',
+  ];
+
+  const parity = keyParity();
+  const missing = keys.filter(
+    (key) =>
+      parity.missingInEn.includes(key) ||
+      parity.missingInZh.includes(key) ||
+      t(key, 'zh') === key ||
+      t(key, 'en') === key,
+  );
+  check(`Q12 的 ${keys.length} 个键在中英文表里都有`, missing.length === 0, missing.join(','));
+
+  const untranslated = keys.filter((key) => t(key, 'zh') === t(key, 'en'));
+  check('每条都有真正翻成英文（不是照抄中文）', untranslated.length === 0, untranslated.join(','));
+
+  // 界面里那几处必须引用键，不能还是硬编码
+  const screenSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  for (const [label, literal, key] of [
+    ['触摸提示', '轻点拿起 / 再轻点放下', 'inventory.hintTouch'],
+    ['键盘提示', '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭', 'inventory.hintKeyboard'],
+    ['创造物品栏标题', "append('创造物品栏')", 'inventory.creativeTitle'],
+    ['玩家预览 aria-label', "'玩家预览'", 'inventory.playerPreview'],
+    ['上一页', "'‹ 上一页'", 'inventory.prevPage'],
+    ['下一页', "'下一页 ›'", 'inventory.nextPage'],
+    ['分类搜索', "category === 'all' ? '搜索'", 'inventory.searchTab'],
+  ] as const) {
+    check(
+      `${label} 已接线（${key}）且无硬编码`,
+      screenSrc.includes(key) && !screenSrc.includes(literal),
+    );
+  }
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

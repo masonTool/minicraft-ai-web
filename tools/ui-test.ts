@@ -248,7 +248,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const inventory = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const settings = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check('配方书的关闭键在手机上是 ✕（PC 才写 "关闭 (R)"）', recipeBook.includes("isTouchUi() ? '✕' : '关闭 (R)'"));
-  check('背包标题栏不在手机上说 "配方书 (R)"', inventory.includes("touchDevice ? '配方书' : '配方书 (R)'"));
+  check(
+        '背包标题栏不在手机上说 "配方书 (R)"（批次 617：改走文案键，判据同样要考虑触摸端）',
+        inventory.includes("t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey')"),
+      );
   check(
     '设置页提示只留一句"改动立即生效"（不再提 Esc / 返回）',
     settings.includes("this.settingsHintEl.textContent = '改动立即生效';"),
@@ -504,7 +507,11 @@ console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条
 
   // ---- ⑥ 触摸端的提示要说出这个手势（不说没人会去划）
   const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
-  check('背包提示写了"长按划动选数量"', invHint.includes('长按划动选数量'), invHint.slice(0, 60));
+  check(
+        '背包提示写了"长按划动选数量"（批次 617：文案搬到 inventory.hintTouch）',
+        invHint.includes('inventory.hintTouch') && invHint.includes('inventory.hintKeyboard'),
+        invHint.slice(0, 60),
+      );
 }
 
 console.log('\n[背包搬运音效（H19 ⑪，批次 138）]');
@@ -3313,7 +3320,7 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
   );
   check(
     '成就入口搬到右轨（合成/盔甲上面）',
-    invSrc.includes("this.makeRailAction('成就'") &&
+    invSrc.includes("this.makeRailAction(t('inventory.achievements')") &&
       /this\.pocketSideEl\.append\(\s*this\.railAchievementsEl,/.test(invSrc) &&
       css.includes('.inv-rail-action'),
   );
@@ -3368,8 +3375,8 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
   );
   check(
     '装备页副手槽文案写全（副手 + 说明）',
-    invSrc.includes("const hints = ['头', '胸', '腿', '靴', '副手'];") &&
-      invSrc.includes("slot.title = '副手：盾牌 / 火把 / 图腾等';") &&
+    invSrc.includes("t('inventory.armor.helmet')") &&
+      invSrc.includes("t('inventory.offhandHint')") &&
       css.includes('.inv-slot-hint-wide'),
   );
   check(
