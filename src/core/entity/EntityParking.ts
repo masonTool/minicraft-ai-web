@@ -11,7 +11,9 @@
  *  - 掉落物的附加数据（耐久/附魔/改名/潜影盒内容物）：带着附魔的镐掉在地上，
  *    区块卸载再回来不该变成白板。
  *
- * ⚠️ 仍未做：繁殖/求爱计时、马鞍、羊驼的箱子、跨维度转移（另立批次）。
+ * 批次 585 又补上求爱/繁殖冷却；装备、马鞍、马铠在批次 584 一并带回。
+ *
+ * ⚠️ 仍未做：羊驼的箱子、跨维度转移（另立批次）。
  *  - 纯数据、可离线测试；主程序负责把记录变成真实体。
  */
 
@@ -55,6 +57,10 @@ export interface SavedMob {
   saddled?: boolean;
   /** 马铠物品 id（批次 571）：没装不写 */
   horseArmor?: number;
+  /** 求爱剩余秒数（批次 585）：不在求爱不写 */
+  loveSeconds?: number;
+  /** 繁殖冷却剩余秒数（批次 585）：冷却结束不写 */
+  breedCooldownSeconds?: number;
 }
 
 export interface SavedItemEntity {
@@ -286,6 +292,17 @@ export class EntityParking {
           horseArmor:
             typeof record.horseArmor === 'number' && Number.isFinite(record.horseArmor)
               ? record.horseArmor
+              : undefined,
+          // 求爱/繁殖冷却（批次 585）：负数与 NaN 直接丢掉，上限由 Mob 恢复时再夹
+          loveSeconds:
+            typeof record.loveSeconds === 'number' && Number.isFinite(record.loveSeconds) && record.loveSeconds > 0
+              ? record.loveSeconds
+              : undefined,
+          breedCooldownSeconds:
+            typeof record.breedCooldownSeconds === 'number' &&
+            Number.isFinite(record.breedCooldownSeconds) &&
+            record.breedCooldownSeconds > 0
+              ? record.breedCooldownSeconds
               : undefined,
         });
       } else if (record.kind === 'item') {

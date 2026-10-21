@@ -839,6 +839,44 @@ console.log('\n[实体的附加数据随存档往返（批次 445）]');
     JSON.stringify(gearedBack),
   );
 
+  // 求爱/繁殖冷却（批次 585）：临时状态不该因为区块卸载被"治好"
+  const breeding = new EntityParking();
+  breeding.park('overworld', 0, 0, {
+    kind: 'mob',
+    typeId: 'cow',
+    x: 1,
+    y: 64,
+    z: 1,
+    yaw: 0,
+    health: 10,
+    tamed: false,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: false,
+    growSeconds: 0,
+    loveSeconds: 12.5,
+    breedCooldownSeconds: 90,
+  });
+  const breedingRound = new EntityParking();
+  breedingRound.restoreAll(JSON.parse(JSON.stringify(breeding.snapshotAll())) as never);
+  const breedingBack = breedingRound.take('overworld', 0, 0).find((r) => r.kind === 'mob');
+  check(
+    '求爱剩余时间与繁殖冷却原样带回',
+    breedingBack?.kind === 'mob' &&
+      breedingBack.loveSeconds === 12.5 &&
+      breedingBack.breedCooldownSeconds === 90,
+    JSON.stringify(breedingBack),
+  );
+
+  const breeder = createMob(mobTypeById('cow')!, 0, 0, 0);
+  breeder.restoreBreeding(12.5, Number.MAX_SAFE_INTEGER);
+  check('求爱/冷却恢复到实体上', breeder.inLove && breeder.loveRemaining === 12.5);
+  check('超大的冷却被夹到上限（不会永远不繁殖）', breeder.breedCooldownRemaining < 1000, `${breeder.breedCooldownRemaining}`);
+  breeder.restoreBreeding(Number.NaN, -5);
+  check('NaN / 负数按 0 处理', !breeder.inLove && breeder.breedCooldownRemaining === 0);
+
   // 脏数据：非法效果项被剔除、非幼体的成长计时归零、非法附魔等级不落盘
   const dirty = new EntityParking();
   dirty.restoreAll([

@@ -1857,6 +1857,33 @@ export class Mob extends Entity {
     return this.loveTimer > 0;
   }
 
+  /** 求爱剩余秒数（J2 寄存用；0 = 不在求爱） */
+  get loveRemaining(): number {
+    return this.loveTimer;
+  }
+
+  /** 繁殖冷却剩余秒数（J2 寄存用；0 = 可以立刻再生） */
+  get breedCooldownRemaining(): number {
+    return this.breedCooldown;
+  }
+
+  /**
+   * 恢复求爱/繁殖冷却（批次 585，J2）。
+   *
+   * 只接受有限非负数，并夹到各自上限：手改存档塞一个 1e9 不该让这只生物
+   * 永远不再繁殖。传 0/undefined 就是清空。
+   */
+  restoreBreeding(loveSeconds?: number, cooldownSeconds?: number): void {
+    this.loveTimer =
+      typeof loveSeconds === 'number' && Number.isFinite(loveSeconds)
+        ? Math.max(0, Math.min(LOVE_SECONDS, loveSeconds))
+        : 0;
+    this.breedCooldown =
+      typeof cooldownSeconds === 'number' && Number.isFinite(cooldownSeconds)
+        ? Math.max(0, Math.min(BREED_COOLDOWN_SECONDS, cooldownSeconds))
+        : 0;
+  }
+
   /**
    * 尝试驯服（批次 242，狼 / 猫 / 豹猫）。
    *

@@ -6084,6 +6084,11 @@ class App {
         // 马鞍与马铠（批次 571）：只有马/驴/骡才有，没装就不写
         ...(entity instanceof Horse && entity.saddled ? { saddled: true } : {}),
         ...(entity instanceof Horse && entity.armor !== null ? { horseArmor: entity.armor } : {}),
+        // 求爱/繁殖冷却（批次 585）：没有就不写，存档里绝大多数生物都是 0
+        ...(entity.loveRemaining > 0 ? { loveSeconds: entity.loveRemaining } : {}),
+        ...(entity.breedCooldownRemaining > 0
+          ? { breedCooldownSeconds: entity.breedCooldownRemaining }
+          : {}),
         ...(villager ? { villager } : {}),
       };
     }
@@ -6130,6 +6135,8 @@ class App {
     // 幼体必须在 `spawn` 之前设好：它要一并把碰撞盒缩到 BABY_SCALE
     if (record.baby) mob.makeBaby(record.growSeconds);
     mob.effects.restore(record.effects);
+    // 求爱/繁殖冷却（批次 585）：与状态效果同一类"临时状态"，不能因为区块卸载被治好
+    mob.restoreBreeding(record.loveSeconds, record.breedCooldownSeconds);
     // 村民的职业与交易进度（批次 501）：必须在 `spawn` 之前恢复——
     // 入场后的第一帧就会跑 AI，晚一步会出现"先重新认领、再被覆盖"的中间态
     if (mob instanceof Villager) mob.restoreState(record.villager);
