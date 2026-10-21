@@ -174,6 +174,22 @@ wss.on('connection', (socket, request) => {
         break;
       }
 
+      case 'container': {
+        if (!player) return;
+        const dimension = String(message.dimension ?? player.dimension);
+        const x = Math.trunc(Number(message.x));
+        const y = Math.trunc(Number(message.y));
+        const z = Math.trunc(Number(message.z));
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+        const slots = message.slots;
+        // 只做形状校验：内容由客户端 `restoreStacks` 清洗。
+        // 8192 字节上限挡住把消息塞爆的脏客户端。
+        if (!Array.isArray(slots) || slots.length > 27) return;
+        if (JSON.stringify(slots).length > 8192) return;
+        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id);
+        break;
+      }
+
       case 'item-spawn': {
         if (!player) return;
         // 每秒最多 30 条：本地扫描是 100ms 一次，正常一帧也不会一下冒出几十堆

@@ -364,10 +364,11 @@ import {
   transferFileName,
 } from './core/save/SaveTransfer.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
-import { restoreContainers, restoreStacks, serializeContainers } from './core/save/ContainerSave.ts';
+import { restoreContainers, restoreStacks, serializeContainers, serializeStacks } from './core/save/ContainerSave.ts';
 import {
   NetClient,
   defaultServerUrl,
+  type NetContainerState,
   type NetItemState,
   type NetPlayerState,
 } from './net/NetClient.ts';
@@ -1662,6 +1663,7 @@ class App {
     onWelcome: (seed, selfId, players, edits, items) =>
       this.onNetWelcome(seed, selfId, players, edits, items),
     onPlayer: (player) => this.onNetPlayer(player),
+    onContainer: (container) => this.onNetContainer(container),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -1684,6 +1686,10 @@ class App {
   private readonly remotePlayers = new Map<number, Mob>();
   /** 远程玩家的渲染插值（L4，批次 601）：网络位置离散到达，直接赋值会跳 */
   private readonly remoteSmoothers = new Map<number, RemotePlayerSmoother>();
+  /** 联机容器同步的防抖（L4，批次 611） */
+  private containerSyncTimer: number | null = null;
+  private containerSyncTarget: { chest: Chest; x: number; y: number; z: number; dimension: DimensionId } | null =
+    null;
   /**
    * 队友那边的掉落物镜像（L7 第一刀，key = "owner:localId"）。
    *
@@ -3036,6 +3042,46 @@ class App {
     // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）
     this.remoteSmoothers.get(player.id)?.setTarget(next);
     // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
+  }
+
+  /**
+   * 收到队友的容器内容（L4，批次 611）。
+   *
+   * 只处理当前维度、且方块确实是箱子/木桶的情况；槽位走 `restoreStacks`
+   * 清洗（未知 id、坏数量会被丢掉）。`Chest.restore` 不触发 `onMutate`，
+   * 所以不会把刚收到的内容再广播回去。
+   */
+  private onNetContainer(data: NetContainerState): void {
+    if (data.dimension !== this.dimension) return;
+    const id = this.world.getBlock(data.x, data.y, data.z);
+    let chest: Chest | null = null;
+    if (id === Block.BARREL) {
+      chest = this.world.containers.getOrCreateBarrel(this.dimension, data.x, data.y, data.z);
+    } else if (id === Block.CHEST || id === Block.TRAPPED_CHEST) {
+      chest = this.world.containers.getOrCreateChest(this.dimension, data.x, data.y, data.z);
+    }
+    if (!chest) return;
+    chest.restore(restoreStacks(data.slots, chest.size));
+  }
+
+  /** 本地打开箱子/木桶时挂上防抖广播（80ms 合并拖拽产生的连续变更） */
+  private bindContainerSync(chest: Chest, x: number, y: number, z: number): void {
+    this.containerSyncTarget = { chest, x, y, z, dimension: this.dimension };
+    chest.onMutate = () => {
+      if (this.containerSyncTimer !== null) return;
+      this.containerSyncTimer = window.setTimeout(() => {
+        this.containerSyncTimer = null;
+        const target = this.containerSyncTarget;
+        if (!target) return;
+        this.net.sendContainer(
+          target.x,
+          target.y,
+          target.z,
+          target.dimension,
+          serializeStacks(target.chest.snapshot()),
+        );
+      }, 80);
+    };
   }
 
   private onNetLeave(id: number): void {
@@ -12008,7 +12054,11 @@ class App {
         this.chat.push('箱子上面压着方块，打不开（挪开它，或者换成**木桶**——木桶不怕压）', 'system');
         return true;
       }
-      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
+      {
+        const chest = this.world.containers.getOrCreateChest(this.dimension, x, y, z);
+        this.bindContainerSync(chest, x, y, z);
+        this.inventoryScreen.openWith('chest', chest);
+      }
       return true;
     }
     // 陷阱箱（批次 249）：与箱子同一个容器/界面，差别是**开着的时候发红石信号**
@@ -12018,7 +12068,11 @@ class App {
         return true;
       }
       this.openTrappedChest(x, y, z);
-      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
+      {
+        const chest = this.world.containers.getOrCreateChest(this.dimension, x, y, z);
+        this.bindContainerSync(chest, x, y, z);
+        this.inventoryScreen.openWith('chest', chest);
+      }
       return true;
     }
     // 潜影盒（批次 72）：与箱子同一条"头顶压着就打不开"的规矩，27 格
@@ -12050,7 +12104,11 @@ class App {
     // 木桶（批次 61）：与箱子同 27 格，但**头顶压着方块照样能开**（原版就是靠这一条
     // 成为"塞进墙里"的首选）；另外原版它允许漏斗从**任何一面**取放，本项目本来就不按面限制
     if (hitBlock === Block.BARREL) {
-      this.inventoryScreen.openWith('barrel', this.world.containers.getOrCreateBarrel(this.dimension, x, y, z));
+      {
+        const barrel = this.world.containers.getOrCreateBarrel(this.dimension, x, y, z);
+        this.bindContainerSync(barrel, x, y, z);
+        this.inventoryScreen.openWith('barrel', barrel);
+      }
       return true;
     }
     // 堆肥桶（批次 70）：右键塞一件可堆肥的东西 / 满了右键收骨粉（**不打开界面**，原版也没有界面）

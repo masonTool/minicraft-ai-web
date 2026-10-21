@@ -39,6 +39,15 @@ export interface NetItemState {
   z: number;
 }
 
+export interface NetContainerState {
+  dimension: string;
+  x: number;
+  y: number;
+  z: number;
+  /** 27 格槽位（null 或 ItemStack 形状）；由客户端 `restoreStacks` 清洗 */
+  slots: unknown[];
+}
+
 export interface NetHandlers {
   /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动 + 已有掉落物） */
   onWelcome: (
@@ -51,6 +60,8 @@ export interface NetHandlers {
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
+  /** 别人改了箱子/木桶的内容（L4，批次 611） */
+  onContainer?: (container: NetContainerState) => void;
   /** 别人那边生成了一堆掉落物（本地只渲染，不拾取） */
   onItemSpawn: (item: NetItemState) => void;
   /** 别人那边那堆没了（被捡走/烧掉/过期） */
@@ -198,6 +209,17 @@ export class NetClient {
         );
         break;
       }
+      case 'container': {
+        const slots = Array.isArray(message.slots) ? (message.slots as unknown[]) : [];
+        this.handlers.onContainer?.({
+          dimension: String(message.dimension ?? 'overworld'),
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          slots,
+        });
+        break;
+      }
       case 'item-spawn': {
         const item: NetItemState = {
           owner: Number(message.owner ?? 0),
@@ -261,6 +283,18 @@ export class NetClient {
   sendBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'block', x, y, z, id, state, dimension }));
+  }
+
+  /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */
+  sendContainer(
+    x: number,
+    y: number,
+    z: number,
+    dimension: string,
+    slots: readonly unknown[],
+  ): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'container', x, y, z, dimension, slots }));
   }
 
   /**

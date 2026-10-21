@@ -28,6 +28,12 @@ export class Chest implements SlotSource {
   }
 
   onChange: (() => void) | null = null;
+  /**
+   * 内容**被玩家/机器真正改动**时触发（L4，批次 611）。
+   * 与 `onChange` 分开：界面用它刷新，联机用它防抖广播；`restore` 不触发，
+   * 否则远端同步写回来会再广播一遍，形成回环。
+   */
+  onMutate: (() => void) | null = null;
 
   /**
    * 这只箱子是不是**已经被战利品表填过**（结构里的箱子用过一次就置位）。
@@ -48,6 +54,7 @@ export class Chest implements SlotSource {
     if (index < 0 || index >= this.size) return;
     this.slots[index] = stack && stack.count > 0 ? stack : null;
     this.onChange?.();
+    this.onMutate?.();
   }
 
   /** 放入物品，返回未能放入的剩余数量 */
@@ -72,7 +79,10 @@ export class Chest implements SlotSource {
       remaining -= moved;
     }
 
-    if (remaining !== count) this.onChange?.();
+    if (remaining !== count) {
+      this.onChange?.();
+      this.onMutate?.();
+    }
     return remaining;
   }
 
