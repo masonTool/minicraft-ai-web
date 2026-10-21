@@ -106,6 +106,28 @@ const assert = (condition, message, state) => {
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
+  // 背包点物品 → 合成格 → 产物
+  await gameFrame.evaluate(() => {
+    wx.__v2Test?.clearInventory?.();
+    wx.__v2Test?.giveToSlot?.(9, 5, 1);
+  });
+  await tap(815, 424);
+  const bagOpened = await waitState((state) => state.inventoryOpen, '合成用例打开背包失败', 5000);
+  await tap(277, 131);
+  const recipeFilled = await waitState(
+    (state) => state.crafting?.[0] === 5 && state.craftResult === 7,
+    '点击物品没有放入合成格/产物',
+    5000,
+  );
+  await tap(935, 154);
+  const crafted = await waitState(
+    (state) => state.inventory?.[0] === 7 && state.craftResult === 0,
+    '点击产物没有合成/取出',
+    5000,
+  );
+  await tap(902, 56);
+  await waitState((state) => !state.inventoryOpen, '合成用例关闭背包失败', 5000);
+
   // 猪生成与击杀掉落
   const pigSpawned = await waitState((state) => state.pigs > 0, '猪没有生成', 20000);
   const pigKilled = await gameFrame.evaluate(() => wx.__v2Test?.killPig?.());
@@ -313,7 +335,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, bagOpened, recipeFilled, crafted, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),

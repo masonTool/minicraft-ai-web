@@ -648,6 +648,37 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   showInventory();
 };
 
+const quickMoveToCraft = (slotIndex: number): void => {
+  const stack = inventory.get(slotIndex);
+  if (!stack) {
+    inventoryHint = '这一格是空的';
+    showInventory();
+    return;
+  }
+  let target = -1;
+  for (let i = 0; i < crafting.size * crafting.size; i++) {
+    const current = crafting.get(i);
+    if (!current) {
+      target = i;
+      break;
+    }
+    if (current.id === stack.id && current.count < 64) {
+      target = i;
+      break;
+    }
+  }
+  if (target < 0) {
+    inventoryHint = '合成格已满，点产物取出或先收回材料';
+    showInventory();
+    return;
+  }
+  const current = crafting.get(target);
+  crafting.set(target, { id: stack.id, count: (current?.count ?? 0) + 1 });
+  inventory.set(slotIndex, stack.count > 1 ? { id: stack.id, count: stack.count - 1 } : null);
+  inventoryHint = '已放入合成格，点右侧产物取出';
+  showInventory();
+};
+
 const showInventory = (): void => {
   inventoryOpen = true;
   const panelW = 880;
@@ -694,6 +725,7 @@ const showInventory = (): void => {
         selectedSlot = slotIndex;
         showInventory();
       },
+      onQuickMove: (slotIndex) => quickMoveToCraft(slotIndex),
       onDrop: (from, to) => handleDrop(from, to),
       refresh: () => showInventory(),
     }));
@@ -774,11 +806,15 @@ const showInventory = (): void => {
       showInventory();
     },
     onDrop: (from, to) => handleDrop(from, to),
+    onCraft: (id, count) => {
+      inventoryHint = `合成完成：${itemLabel(id)} x${count}`;
+    },
     refresh: () => showInventory(),
   }));
 
-  if (inventoryHint) {
-    elements.push(text(gridX, panelY + panelH - 32, 560, 26, inventoryHint, { fontSize: 14, color: 'rgba(255,190,120,0.9)' }));
+  const hint = inventoryHint || (inventoryTab === 'items' ? '点背包物品放入合成格 · 点产物取出 · 拖拽可交换' : '');
+  if (hint) {
+    elements.push(text(gridX, panelY + panelH - 32, 560, 26, hint, { fontSize: 14, color: inventoryHint ? 'rgba(255,190,120,0.9)' : 'rgba(190,220,235,0.75)' }));
   }
   ui.setRoot(box(0, 0, 1024, uiHeight, [
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
@@ -2015,6 +2051,8 @@ const frame = (): void => {
       z: physics.z,
       selectedSlot,
       inventory: Array.from({ length: 9 }, (_, i) => inventory.get(i)?.id ?? 0),
+      crafting: Array.from({ length: crafting.size * crafting.size }, (_, i) => crafting.get(i)?.id ?? 0),
+      craftResult: crafting.result?.id ?? 0,
       paused,
       settings: settingsOpen,
       inventoryOpen,
@@ -2326,6 +2364,11 @@ if (wxTestApi && isDesktopRuntime) {
       inventory.add(id, count);
       showHud();
       return { id, count };
+    },
+    giveToSlot: (slotIndex = 9, id = 5, count = 1) => {
+      inventory.set(slotIndex, { id, count });
+      showHud();
+      return { slotIndex, id, count, stack: inventory.get(slotIndex) };
     },
     fillChestFirst: (id = 1, count = 2) => {
       containers.fillFirst(id, count);
