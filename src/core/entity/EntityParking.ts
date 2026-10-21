@@ -18,6 +18,9 @@
  */
 
 import type { DroppedExtras } from './Entity.ts';
+import type { ItemStack } from '../container/Inventory.ts';
+import { MOB_CARGO_SIZE } from '../container/Chest.ts';
+import { restoreStacks } from '../save/ContainerSave.ts';
 import { sanitizeMobEquipment, type MobEquipment } from './MobEquipment.ts';
 import type { VillagerSavedState } from './Villager.ts';
 import { MAX_TRADE_DEMAND } from '../registry/villagerTrades.ts';
@@ -59,6 +62,8 @@ export interface SavedMob {
   horseArmor?: number;
   /** 求爱剩余秒数（批次 585）：不在求爱不写 */
   loveSeconds?: number;
+  /** 驴/骡/羊驼的货舱（J19b）：空货舱不写 */
+  cargo?: (ItemStack | null)[];
   /** 繁殖冷却剩余秒数（批次 585）：冷却结束不写 */
   breedCooldownSeconds?: number;
 }
@@ -118,6 +123,12 @@ function sanitizeEffects(data: unknown): SavedMobEffect[] | undefined {
     });
   }
   return out.length > 0 ? out : undefined;
+}
+
+/** 货舱（J19b）：走与箱子同一条 `restoreStacks`；空货舱也要保留“装了箱子”这一事实 */
+function sanitizeCargo(data: unknown): (ItemStack | null)[] | undefined {
+  if (!Array.isArray(data)) return undefined;
+  return restoreStacks(data, MOB_CARGO_SIZE);
 }
 
 /**
@@ -304,6 +315,7 @@ export class EntityParking {
             record.breedCooldownSeconds > 0
               ? record.breedCooldownSeconds
               : undefined,
+          cargo: sanitizeCargo(record.cargo),
         });
       } else if (record.kind === 'item') {
         if (!Number.isFinite(record.itemId) || !Number.isFinite(record.count) || record.count <= 0) continue;

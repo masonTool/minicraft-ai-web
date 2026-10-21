@@ -8,9 +8,24 @@ import type { ItemStack, SlotSource } from './Inventory.ts';
 import { maxStackOf } from '../registry/items.ts';
 
 export const CHEST_SIZE = 27;
+/** 驴/骡/羊驼的货舱格数（J19b）：统一 15 格，不做原版按力量分档 */
+export const MOB_CARGO_SIZE = 15;
 
 export class Chest implements SlotSource {
-  private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(CHEST_SIZE).fill(null);
+  private readonly slots: (ItemStack | null)[];
+
+  /**
+   * 格数（批次 594）：默认 27 格箱子；马/驴/羊驼货舱传 15。
+   *
+   * 之前写死 `CHEST_SIZE`，货舱要么共用 27 格（界面多出 12 个不存在的槽），
+   * 要么另写一个几乎一样的容器类。抽成参数之后，界面按注册的槽位自动得出格数。
+   */
+  readonly size: number;
+
+  constructor(size: number = CHEST_SIZE) {
+    this.size = Math.max(1, Math.floor(size));
+    this.slots = new Array<ItemStack | null>(this.size).fill(null);
+  }
 
   onChange: (() => void) | null = null;
 
@@ -25,12 +40,12 @@ export class Chest implements SlotSource {
   looted = false;
 
   get(index: number): ItemStack | null {
-    if (index < 0 || index >= CHEST_SIZE) return null;
+    if (index < 0 || index >= this.size) return null;
     return this.slots[index] ?? null;
   }
 
   set(index: number, stack: ItemStack | null): void {
-    if (index < 0 || index >= CHEST_SIZE) return;
+    if (index < 0 || index >= this.size) return;
     this.slots[index] = stack && stack.count > 0 ? stack : null;
     this.onChange?.();
   }
@@ -41,7 +56,7 @@ export class Chest implements SlotSource {
     const limit = maxStackOf(itemId);
     let remaining = count;
 
-    for (let i = 0; i < CHEST_SIZE && remaining > 0; i++) {
+    for (let i = 0; i < this.size && remaining > 0; i++) {
       const slot = this.slots[i];
       if (!slot || slot.id !== itemId) continue;
       const room = limit - slot.count;
@@ -50,7 +65,7 @@ export class Chest implements SlotSource {
       slot.count += moved;
       remaining -= moved;
     }
-    for (let i = 0; i < CHEST_SIZE && remaining > 0; i++) {
+    for (let i = 0; i < this.size && remaining > 0; i++) {
       if (this.slots[i]) continue;
       const moved = Math.min(limit, remaining);
       this.slots[i] = { id: itemId, count: moved };
@@ -72,5 +87,19 @@ export class Chest implements SlotSource {
       if (slot) result.push({ index, stack: slot });
     });
     return result;
+  }
+
+  /** 整份快照（含空槽）：马/驴货舱随实体存档时用它 */
+  snapshot(): (ItemStack | null)[] {
+    return [...this.slots];
+  }
+
+  /** 从快照恢复：只取前 `size` 格，空槽/脏槽按 null 处理 */
+  restore(slots: readonly (ItemStack | null)[]): void {
+    for (let i = 0; i < this.size; i++) {
+      const slot = slots[i];
+      this.slots[i] = slot && slot.count > 0 ? slot : null;
+    }
+    this.onChange?.();
   }
 }

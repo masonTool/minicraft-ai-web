@@ -22,6 +22,7 @@
 import { Mob, type HurtSource } from './Mob.ts';
 import type { EntityContext } from './Entity.ts';
 import { Item } from '../registry/items.ts';
+import { Chest } from '../container/Chest.ts';
 
 /** 左右转向的速度（弧度/秒）：比视角慢一档，不然马会像陀螺 */
 const HORSE_TURN_RATE = 2.2;
@@ -67,6 +68,16 @@ export class Horse extends Mob {
   saddled = false;
   /** 装着的马铠物品 id（批次 571）：null = 没装 */
   armor: number | null = null;
+  /**
+   * 货舱（J19b，批次 594）：驴/骡/羊驼装上箱子后才有，15 格。
+   * 马不能装（原版马只有鞍+马铠），猪/炽足兽也不能。
+   */
+  cargo: Chest | null = null;
+
+  /** 这个种类能不能装货舱：驴/骡/羊驼；马不行 */
+  get canCarryCargo(): boolean {
+    return this.type.id === 'donkey' || this.type.id === 'mule' || this.type.id === 'llama' || this.type.id === 'trader_llama';
+  }
 
   /** 这个种类能不能装马铠（猪/炽足兽不行） */
   get canWearHorseArmor(): boolean {

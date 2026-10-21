@@ -92,7 +92,7 @@ import {
   placeOneEach,
   swapWithSlot,
 } from '../core/container/CursorActions.ts';
-import { CHEST_SIZE } from '../core/container/Chest.ts';
+import { CHEST_SIZE, MOB_CARGO_SIZE } from '../core/container/Chest.ts';
 import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
 import {
   GRINDSTONE_LEFT,
@@ -196,6 +196,8 @@ export type InventoryPanelMode =
   | 'ender_chest'
   /** 潜影盒（批次 72）：同一套 27 格；它的内容会**跟着物品走**（挖下来带走） */
   | 'shulker_box'
+  /** 驴/骡/羊驼货舱（J19b，批次 594）：15 格，复用箱子的格子布局 */
+  | 'mob_inventory'
   | 'enchanting'
   | 'anvil'
   /** 砂轮（H15，批次 188）：与铁砧同构的两格输入，但**不收经验、返还经验** */
@@ -4970,6 +4972,17 @@ export class InventoryScreen {
       return;
     }
 
+    if (this.mode === 'mob_inventory') {
+      // 驴/骡/羊驼货舱（J19b）：15 格，沿用箱子的 9 列网格
+      this.chestGrid.replaceChildren();
+      for (let i = 0; i < MOB_CARGO_SIZE; i++) {
+        this.chestGrid.appendChild(this.registerSlot(`mob_inventory:${i}`, this.activeContainer!, i));
+      }
+      this.topArea.appendChild(this.buildLabel(`货舱（${MOB_CARGO_SIZE} 格）`));
+      this.topArea.appendChild(this.chestGrid);
+      return;
+    }
+
     if (
       this.mode === 'chest' ||
       this.mode === 'barrel' ||
@@ -7321,6 +7334,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   barrel: '木桶',
   ender_chest: '末影箱',
   shulker_box: '潜影盒',
+  mob_inventory: '货舱',
   enchanting: '附魔台',
   anvil: '铁砧',
   grindstone: '砂轮',

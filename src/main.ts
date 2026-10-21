@@ -107,6 +107,7 @@ import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
 import { Horse, horseArmorTier } from './core/entity/Horse.ts';
+import { Chest, MOB_CARGO_SIZE } from './core/container/Chest.ts';
 import {
   VehicleParking,
   type SavedVehicle,
@@ -363,7 +364,7 @@ import {
   transferFileName,
 } from './core/save/SaveTransfer.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
-import { restoreContainers, serializeContainers } from './core/save/ContainerSave.ts';
+import { restoreContainers, restoreStacks, serializeContainers } from './core/save/ContainerSave.ts';
 import {
   NetClient,
   defaultServerUrl,
@@ -6093,6 +6094,8 @@ class App {
         // 马鞍与马铠（批次 571）：只有马/驴/骡才有，没装就不写
         ...(entity instanceof Horse && entity.saddled ? { saddled: true } : {}),
         ...(entity instanceof Horse && entity.armor !== null ? { horseArmor: entity.armor } : {}),
+        // 货舱（J19b）：装了箱子就写（空货舱也要写，否则读档后箱子会消失）
+        ...(entity instanceof Horse && entity.cargo ? { cargo: entity.cargo.snapshot() } : {}),
         // 求爱/繁殖冷却（批次 585）：没有就不写，存档里绝大多数生物都是 0
         ...(entity.loveRemaining > 0 ? { loveSeconds: entity.loveRemaining } : {}),
         ...(entity.breedCooldownRemaining > 0
@@ -6135,6 +6138,11 @@ class App {
       const armor = record.horseArmor;
       mob.armor =
         mob.canWearHorseArmor && typeof armor === 'number' && horseArmorTier(armor) !== null ? armor : null;
+      // 货舱（J19b）：有记录就造容器（空货舱也算装了箱子）
+      if (mob.canCarryCargo && Array.isArray(record.cargo)) {
+        mob.cargo = new Chest(MOB_CARGO_SIZE);
+        mob.cargo.restore(restoreStacks(record.cargo, MOB_CARGO_SIZE));
+      }
     }
     mob.tamed = record.tamed;
     mob.sitting = record.sitting;
@@ -6342,6 +6350,11 @@ class App {
     const mob = this.tapUseMob ?? this.aimMob;
     if (!mob || mob.dead) return false;
     const held = this.heldItemId;
+    const sneaking =
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      (this.touch?.input.sneak ?? false) ||
+      (this.gamepadState?.sneak ?? false);
     // 村民（J11）：空手也**有交互**（打开交易界面）——所以它必须排在
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
@@ -6364,6 +6377,24 @@ class App {
       this.hudToast.show(`给${mob.type.name}装上了鞍`);
       return true;
     }
+    // 货舱（J19b，批次 594）：拿箱子点已驯服/不需驯服的驴、骡、羊驼，装货舱
+    if (
+      mob instanceof Horse &&
+      mob.canCarryCargo &&
+      (mob.tamed || !mob.needsTaming) &&
+      held === Block.CHEST
+    ) {
+      if (mob.cargo) {
+        this.hudToast.show(`这只${mob.type.name}已经有货舱了`);
+        return true;
+      }
+      if (!this.inventory.consume(Block.CHEST, 1)) return false;
+      mob.cargo = new Chest(MOB_CARGO_SIZE);
+      this.hand.swing();
+      this.refreshHotbar();
+      this.hudToast.show(`给${mob.type.name}装上了箱子`);
+      return true;
+    }
     // 马铠（批次 571）：拿马铠点已驯服/不需驯服的马、驴、骡，装上一件
     if (
       mob instanceof Horse &&
@@ -6381,6 +6412,12 @@ class App {
       this.hand.swing();
       this.refreshHotbar();
       this.hudToast.show(`给${mob.type.name}装上了马铠`);
+      return true;
+    }
+    // 货舱（J19b）：潜行 + 空手点驴/骡/羊驼 = 打开 15 格货舱；
+    // 不潜行仍是“上马”，避免和骑乘抢同一个手势
+    if (mob instanceof Horse && mob.canCarryCargo && mob.cargo && held === undefined && sneaking) {
+      this.inventoryScreen.openWith('mob_inventory', mob.cargo);
       return true;
     }
     // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）；没鞍先提示
@@ -6452,6 +6489,15 @@ class App {
     if (mob.tamed && held === undefined) return true;
     if (held === undefined) return false;
     if (mobAcceptsTame(mob.type, held)) return true;
+    // 货舱（J19b）：拿箱子点驴/骡/羊驼是装货舱，不是打它
+    if (
+      held === Block.CHEST &&
+      mob instanceof Horse &&
+      mob.canCarryCargo &&
+      (mob.tamed || !mob.needsTaming)
+    ) {
+      return true;
+    }
     // 鞍（批次 254）：对着已驯服的马是"装鞍"，不是打它
     // 鞍（批次 254 / 406）：已驯服的马，或**不需要驯服**的猪/炽足兽，装鞍不是打它
     if (held === Item.SADDLE && mob instanceof Horse && (mob.tamed || !mob.needsTaming)) return true;
