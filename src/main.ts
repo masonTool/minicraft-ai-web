@@ -2280,11 +2280,14 @@ class App {
     //
     //  - 两档自适应一律打开：它们就是"我们替玩家做决定"的那套策略（掉帧时先收视距、
     //    再关装饰层、最后降分辨率）；老存档里关过它们的，进世界时重新接管。
-    //  - 视距回到这台设备的上限（手机 8 / 桌面 12），**并忽略存下来的旧值**：
+    //  - 视距回到这台设备的上限（手机 8 / 桌面 9），**并忽略存下来的旧值**：
     //    没有滑块之后，旧值只会是"以前在别的设备上拖过的数字"（手机上是 489 个区块的坑）。
     this.settings.adaptiveResolution = true;
     this.settings.adaptiveViewDistance = true;
     this.settings.viewDistance = defaultViewDistanceFor(isTouchDevice());
+    // PC 锁 60：高刷屏上不限帧会让 GPU 一直满负荷，画面没更稳、机器更热。
+    // 手机保持原设置（默认不限帧，由系统刷新率决定）。
+    if (!isTouchDevice()) this.settings.maxFps = 60;
     // 视野同样按设备封顶（批次 215；批次 521 起上限统一 90°）。自适应管不到 FOV，
     // 而 60°→110° 是约 1.7 倍的可视范围，老存档里存着的 110 必须在这里夹掉
     this.settings.fov = clampFovFor(this.settings.fov, isTouchDevice());
