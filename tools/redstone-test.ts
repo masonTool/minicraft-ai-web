@@ -384,6 +384,21 @@ console.log('\n[活塞准连接：上方被充能也会伸出（批次 578）]')
   check('断开上方充能后收回', !isPowered(world.getState(1, Y, 0)));
 }
 
+console.log('\n[发射器准连接：上方充能也会触发（批次 579）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(1, Y + 1, -1, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.DISPENSER, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.05);
+  const timers = (engine as unknown as { dispenserTimers: Map<string, number> }).dispenserTimers;
+  check('初始没有待发射计时', !timers.has(`1,${Y},0`));
+
+  engine.toggleLever(world, 1, Y + 1, -1);
+  check('上方充能后发射器进入待发射', timers.has(`1,${Y},0`));
+}
+
 console.log('\n[粘性活塞：收回时把方块拉回来]');
 {
   const world = new StubWorld();

@@ -1084,13 +1084,16 @@ export class RedstoneEngine {
           // 每轮重算都调一次的话，`markDirty` 会把自己反复排进队列）。
           // ⚠️ 吐出去之后**不改方块状态**：投掷器没有"吐过了"这一位（原版那个
           // `triggered` 只是给客户端看红石粒子用的，行为上不读它）。
+          // 准连接（批次 579）：发射器/投掷器与活塞同一档，上方充能也会触发
+          const quasi = this.inputStrength(world, strengths, nx, ny + 1, nz);
+          const effective = input > 0 || quasi > 0;
           const dropperKey = keyOf(nx, ny, nz);
           const wasFired = this.dropperPrimed.has(dropperKey);
-          if (input > 0 && !wasFired) {
+          if (effective && !wasFired) {
             this.dropperPrimed.add(dropperKey);
             // 4 tick 延迟（批次 448）：这里只登记计时，到点在 `tick` 里才吐
             this.dispenserTimers.set(dropperKey, DISPENSER_DELAY);
-          } else if (input <= 0 && wasFired) {
+          } else if (!effective && wasFired) {
             // 断电后允许下一次脉冲再来一次（红石钟就是这么把它变成自动投喂机的）
             this.dropperPrimed.delete(dropperKey);
           }
@@ -1371,7 +1374,12 @@ export class RedstoneEngine {
       const below = node.y - 1;
       if (below >= WORLD_MIN_Y) {
         const belowId = world.getBlock(node.x, below, node.z);
-        if (belowId === Block.PISTON || belowId === Block.STICKY_PISTON) {
+        if (
+          belowId === Block.PISTON ||
+          belowId === Block.STICKY_PISTON ||
+          belowId === Block.DROPPER ||
+          belowId === Block.DISPENSER
+        ) {
           start.push({ x: node.x, y: below, z: node.z });
         }
       }
