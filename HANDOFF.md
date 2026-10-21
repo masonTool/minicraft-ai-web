@@ -69,21 +69,6 @@ npm run dev            # http://localhost:5173
   + 区块寄存/存档往返 + 钓鱼宝藏池。纯决策在 `core/entity/NameTag.ts`。新套件 `test:nametag` **50 条**，
   套数 164 → **165**。⚠️ 差异：留空不擦名字、取消不消耗牌、长度按字符 32 而非原版 32 字节。
   ⚠️ M23 仍 `[~]`：队友免伤与碰撞开关仍未接；**队伍颜色还没接进名字牌**（现在一律白色）。
-- 批次 614（M10 收口）：**资源包音效替换**。新增 `core/resourcepack/SoundPack.ts`（纯逻辑）+
-  `AudioEngine` 的采样通道（`setSamples` / `hasSample` / `clearSamples`）。要点：
-  ① **显式映射表**而不是按名字自动配——原版音效名与 `SoundKind` 不是一一对应
-  （`dig.stone` 同时是"破坏/放置/挖掘"三种），自动配会接错；也只登记本项目真的会播的。
-  ② `{n}` 展开多变体（石头 4、脚步 6），播放随机挑一个；单采样音效的两种命名（`door_open` / `door_open1`）都认。
-  ③ 采样与合成都接到同一个 `out`，距离衰减/低通/声像/水下全部复用。④ **合成音永远是兜底**
-  （每个可替换音效都断言了非空 spec，没装包行为不变）。
-  新套件 `test:soundpack` **54 条**，套数 163 → **164**；**M10 勾掉**（282 / 8）。
-  ⚠️ 差异：**不做自定义方块与模型** —— 渲染是"图集 + box 模型"，走 Bedrock geometry 要另开非图集渲染路径（独立材质/几何/剔除），按 E17 先例记为设计差异。
-- 批次 528（植被再压一档 + 飞行起步改成加速过程）：
-  ① `FOLIAGE_DARKEN` 0.88 → **0.8**（−20%）：用户觉得还不够沉。
-  ② 创造飞行不再"按一下就满速"：加速度从固定 90 改成 `speed / FLY_RAMP_SECONDS`（**0.65 s**），
-     普通与冲刺两档都是 0.65 秒到满速；**松手另算**（`FLY_BRAKE_SECONDS = 0.3`，否则搭建筑会
-     冲过头约 3.5 格）；垂直也走同一条曲线。`test:physics` +8 条（首帧慢 / 0.65 s 到位 /
-     不超速 / 松手滑行 / 最终停住）。
 - ⚠️ 295-1~295-4 被并发会话占用，那两个提交正式编号是 297 / 298；303 同理（正式 304）。
 - 批次 191 及更早（167~191，共 25 条）：已搬到 `docs/HANDOFF-ARCHIVE.md` 的「§1 批次流水」
   ——那部分是"当时怎么做"的查阅材料，不再是"现在什么状态"。**本文件只保留最近 6 批**
@@ -118,31 +103,25 @@ npm run dev            # http://localhost:5173
 
 ## 3. 自动继续机制（换机器最容易坏在这）
 
-- 钩子脚本：`.codebuddy/hooks/auto-continue.mjs`（自动按队列继续）
-  与 `.codebuddy/hooks/auto-commit.mjs`（拦住"没提交就想停"），都挂在 Stop / UserPromptSubmit 上。
-- 配置：`.codebuddy/settings.json` —— **用相对路径**写命令，换机器才不会失效；
-  若你的环境里相对路径不生效（AI 不自动继续），执行 `npm run agent:setup -- --fix-hooks` 自动改成本机绝对路径。
-- **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算出项目根，
-  既不依赖 cwd（可能是子目录），也不依赖 `CODEBUDDY_PROJECT_DIR`（它是条件注入的）。
-  **改过目录名（比如仓库被挪进 `About-minecraft/`）也不需要改任何配置**。
-- 紧急刹车：`touch .codebuddy/auto-continue.off` / `touch .codebuddy/auto-commit.off`；
-  恢复：把对应 `.off` 删掉。
-- 单会话次数上限：`AUTO_CONTINUE_MAX`（默认 12）、`AUTO_COMMIT_MAX`（默认 5）
-- 排查用日志：`.codebuddy/auto-continue.log` / `.codebuddy/auto-commit.log`
-  （每轮一行 JSON，`decision=block` 说明生效且拦住了，`allow:*` 后面是放行依据）
+- 钩子脚本：`auto-continue.mjs`（按队列继续）+ `auto-commit.mjs`（拦住"没提交就想停"），
+  都挂在 Stop / UserPromptSubmit 上，配置在 `.codebuddy/settings.json`，**用相对路径**写命令
+  （不生效时 `npm run agent:setup -- --fix-hooks` 改成本机绝对路径）。
+- **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算项目根，不依赖 cwd（可能是子目录）
+  也不依赖 `CODEBUDDY_PROJECT_DIR`（条件注入）——**目录改名也不用改配置**。
+- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`（删掉即恢复）；
+  上限：`AUTO_CONTINUE_MAX`（12）/ `AUTO_COMMIT_MAX`（5）；
+  日志：`.codebuddy/auto-{continue,commit}.log`（`decision=block` = 生效且拦住了）。
 
-**auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**（不 add / commit / push），
-它只做一件事——发现工作区有未提交改动就阻止停止，把改动清单和规矩（粒度 / 中文 message /
-只 add 具体路径 / 禁 amend 与 --no-verify）交回给 AI，由 AI 自己 review 和提交。
-理由：commit message 的质量取决于"知不知道自己为什么这么改"，脚本拼出来的只能是 `update files`。
-六道放行：`.off` 刹车、非 git 仓库、merge/rebase/cherry-pick 进行中、detached HEAD、
-存在未解决冲突、本会话已拦满次数——后四种是危险 git 状态，这时拦人反而会掩盖问题。
+**auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**，只负责发现未提交改动
+就阻止停止，把清单和规矩交回 AI 自己 review + 提交。理由：message 质量取决于"知不知道自己
+为什么这么改"，脚本拼出来只能是 `update files`。六道放行：`.off`、非 git 仓库、
+merge/rebase/cherry-pick 中、detached HEAD、未解决冲突、已拦满次数——后四种是危险 git 状态，
+这时拦人反而掩盖问题。
 
-**踩过的坑（别重犯）**：Stop 钩子里输出 `{"continue": false}` 有两种后果，取决于实现怎么解读
-`continue`。本仓库历史上（提交 `41be0e12`）遇到过它被当成"硬停止"、AI 真的停了；
-现行 `auto-continue.mjs` 因此改用 `{"continue": true}` + 反馈走 **stderr** + `exit 2`。
-`auto-commit.mjs` 默认走文档写法（`continue:false` + `reason`），并留了开关：
-`AUTO_COMMIT_STYLE=exit2` 可切到"实测有效"那套。**若发现 AI 不理会拦截、直接停了，先切这个开关。**
+**踩过的坑（别重犯）**：`{"continue": false}` 可能被当成"硬停止"（本仓库 `41be0e12` 踩过）。
+`auto-continue.mjs` 因此用 `{"continue": true}` + 反馈走 **stderr** + `exit 2`；
+`auto-commit.mjs` 默认走文档写法（`continue:false` + `reason`），
+**若发现 AI 不理会拦截、直接停了，设 `AUTO_COMMIT_STYLE=exit2` 切到实测那套。**
 
 ## 3.5 本轮（J1/J2/J3）新增的硬性约定
 
