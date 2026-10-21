@@ -9,7 +9,15 @@ const CHROME =
 
 async function main() {
   console.log('[perf] launching browser');
-  const browser = await chromium.launch({ headless: !HEADFUL, executablePath: CHROME });
+  const browser = await chromium.launch({
+    headless: !HEADFUL,
+    executablePath: CHROME,
+    args: [
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
+    ],
+  });
   const context = await browser.newContext({ viewport: { width: 1080, height: 700 }, hasTouch: true });
   const page = await context.newPage();
   let latest = null;
@@ -44,21 +52,17 @@ async function main() {
   await tap(512, 216);
   await page.waitForTimeout(400);
   await tap(727, 423);
-  console.log('[perf] sampling 8s');
-  await page.waitForTimeout(8000);
+  const readyStarted = Date.now();
+  while (Date.now() - readyStarted < 20000 && (!latest || (Number(latest.drawn) || 0) < 20)) {
+    await page.waitForTimeout(250);
+  }
+  console.log('[perf] sampling 6s');
+  await page.waitForTimeout(6000);
 
   if (!latest) throw new Error('没有收到 [V2] 状态');
   const fps = Number(latest.fps) || 0;
   const quality = Number(latest.qualityTier);
   const drawn = Number(latest.drawn) || 0;
-  if (STRICT && fps < 50) throw new Error(`FPS 过低: ${fps}`);
-  if (quality < 1) throw new Error(`画质误降到 ${quality}`);
-  if (drawn <= 0) throw new Error('没有绘制区块');
-  if (!latest.meshBackend) throw new Error('缺少 meshBackend');
-  if (!STRICT) {
-    console.log('[perf] headless 软渲染 FPS 仅作参考，真机请用 PERF_STRICT=1 PERF_HEADFUL=1');
-  }
-
   console.log(
     'PERF',
     JSON.stringify({
@@ -69,6 +73,14 @@ async function main() {
       meshBackend: latest.meshBackend,
     }),
   );
+  if (STRICT && fps < 50) throw new Error(`FPS 过低: ${fps}`);
+  if (quality < 1) throw new Error(`画质误降到 ${quality}`);
+  if (drawn <= 0) throw new Error('没有绘制区块');
+  if (!latest.meshBackend) throw new Error('缺少 meshBackend');
+  if (!STRICT) {
+    console.log('[perf] headless 软渲染 FPS 仅作参考，真机请用 PERF_STRICT=1 PERF_HEADFUL=1');
+  }
+
   await browser.close();
 }
 

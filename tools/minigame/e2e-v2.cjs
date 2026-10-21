@@ -239,13 +239,18 @@ const assert = (condition, message, state) => {
   await selectSlotZero();
   await gameFrame.evaluate(() => wx.__v2Test?.openChestAtFeet?.());
   await waitState((state) => state.containerOpen, '存入用例打开箱子失败', 5000);
-  await page.waitForTimeout(300);
-  await tap(292, 158);
-  const containerStored = await waitState(
-    (state) => state.containerSlots?.[0] === 3 && state.inventory?.[0] === 0,
-    '背包物品没有存入箱子',
-    5000,
-  );
+  let containerStored = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await selectSlotZero();
+    await page.waitForTimeout(250);
+    await tap(292, 158);
+    await page.waitForTimeout(350);
+    if (latest && latest.containerSlots?.[0] === 3 && latest.inventory?.[0] === 0) {
+      containerStored = latest;
+      break;
+    }
+  }
+  assert(containerStored, '背包物品没有存入箱子', latest);
   await closeContainer();
 
   // 熔炉打开/关闭

@@ -863,6 +863,12 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   hudInputBlockUntil = Date.now() + 400;
   playerReadyAt = 0;
   lastAutoSave = Date.now();
+  // 先进入世界，区块与存档读取在后台完成，避免卡在创建页。
+  started = true;
+  paused = false;
+  settingsOpen = false;
+  inventoryOpen = false;
+  showHud();
   try {
     const save = await saveController.open(entry.id);
     for (const record of await save.loadAllChunkEdits()) {
@@ -890,10 +896,6 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   } catch (error) {
     console.warn('[v2] load save failed', error);
   }
-  started = true;
-  paused = false;
-  settingsOpen = false;
-  inventoryOpen = false;
   showHud();
 };
 
