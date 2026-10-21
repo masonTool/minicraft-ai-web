@@ -233,6 +233,7 @@ export class UiLayer {
   private activeButton: UiButtonNode | null = null;
   private lastRefresh = 0;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
+  private dragPos: { x: number; y: number } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
@@ -300,6 +301,7 @@ export class UiLayer {
     }
     if (phase === 'move' && this.dragSlot) {
       if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
+      this.dragPos = { x, y };
       return true;
     }
     if (phase === 'up') {
@@ -315,6 +317,7 @@ export class UiLayer {
       if (this.dragSlot) {
         const drag = this.dragSlot;
         this.dragSlot = null;
+        this.dragPos = null;
         const target = this.findSlot(x, y);
         if (drag.moved && target && target !== drag.node) drag.node.onDrop?.(drag.node, target);
         else if (!drag.moved) drag.node.onTap();
@@ -327,6 +330,7 @@ export class UiLayer {
     const downSlot = this.findSlot(x, y);
     if (downSlot) {
       this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false };
+      this.dragPos = null;
       return true;
     }
 
@@ -415,6 +419,17 @@ export class UiLayer {
     this.slots = [];
     this.icons = [];
     if (this.root) this.drawNode(this.root, ctx);
+    if (this.dragSlot?.moved && this.dragPos && this.dragSlot.node.itemId > 0) {
+      const size = 42;
+      ctx.globalAlpha = 0.85;
+      this.drawIcon?.(ctx, this.dragSlot.node.itemId, this.dragPos.x - size / 2, this.dragPos.y - size / 2, size);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(String(this.dragSlot.node.count), this.dragPos.x, this.dragPos.y + size / 2);
+    }
     this.texture.needsUpdate = true;
   }
 
@@ -535,8 +550,9 @@ export class UiLayer {
       ctx.fillStyle = node.selected ? 'rgba(100, 140, 160, 0.92)' : 'rgba(30, 38, 46, 0.92)';
       roundedRect(ctx, node.x, node.y, node.w, node.h, 6);
       ctx.fill();
-      ctx.strokeStyle = node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
-      ctx.lineWidth = node.selected ? 3 : 1.5;
+      const dragOver = this.dragSlot?.moved && this.dragPos && this.dragPos.x >= node.x && this.dragPos.x <= node.x + node.w && this.dragPos.y >= node.y && this.dragPos.y <= node.y + node.h;
+      ctx.strokeStyle = dragOver ? '#7bd88f' : node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
+      ctx.lineWidth = dragOver || node.selected ? 3 : 1.5;
       roundedRect(ctx, node.x + 1, node.y + 1, node.w - 2, node.h - 2, 5);
       ctx.stroke();
       if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x, node.y, node.w);
