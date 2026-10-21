@@ -24,12 +24,12 @@
  *   AUTO_COMMIT_STYLE=exit2      → stdout `{"continue": true}` + 反馈走 stderr + exit 2
  *   若发现 AI 不理会、直接停了，把环境变量切成 exit2 再试（详见 HANDOFF §3）。
  *
- * 排查：每次调用都往 `.codebuddy/auto-commit.log` 追加一行 JSON。
+ * 排查：每次调用都往 `.codebuddy/logs/auto-commit.log` 追加一行 JSON。
  *   `decision=block` 说明钩子生效且拦住了；`decision=allow:*` 里的原因是放行依据。
  */
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,9 +62,11 @@ try {
 
 const projectDir = PROJECT_ROOT;
 const codebuddyDir = join(projectDir, '.codebuddy');
-const stateFile = join(codebuddyDir, 'auto-commit.state.json');
+/** 运行时产物（日志 + 计数状态）统一放 logs/，不进仓库；刹车文件留在 .codebuddy/ 根便于 touch。 */
+const logsDir = join(codebuddyDir, 'logs');
+const stateFile = join(logsDir, 'auto-commit.state.json');
 const offFile = join(codebuddyDir, 'auto-commit.off');
-const logFile = join(codebuddyDir, 'auto-commit.log');
+const logFile = join(logsDir, 'auto-commit.log');
 
 const sessionId = payload.session_id ?? payload.conversation_id ?? null;
 
@@ -78,9 +80,27 @@ function detectEvent() {
 
 const event = detectEvent();
 
+/**
+ * 日志轮转：长时间运行的队列会跑几百上千轮，日志只 app 不截会无限长
+ * （每轮一行 JSON，约 200~400B；5000 轮就是 2MB）。
+ * 超过上限就把旧文件改名成 `.1` 再重开——保留最近一段用于排查，且**永不删数据**。
+ */
+const LOG_MAX_BYTES = Number(process.env.AUTO_COMMIT_LOG_MAX ?? 512 * 1024);
+
+function rotateIfNeeded() {
+  try {
+    const size = statSync(logFile).size;
+    if (size <= LOG_MAX_BYTES) return;
+    renameSync(logFile, `${logFile}.1`);
+  } catch {
+    /* 文件不存在或改不动都无所谓，照常往下写 */
+  }
+}
+
 function log(decision, extra = {}) {
   try {
     mkdirSync(dirname(logFile), { recursive: true });
+    rotateIfNeeded();
     appendFileSync(
       logFile,
       `${JSON.stringify({

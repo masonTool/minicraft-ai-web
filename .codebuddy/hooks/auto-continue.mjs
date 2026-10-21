@@ -17,7 +17,7 @@
  * 用于确认"钩子到底有没有被触发、收到了什么事件、做了什么决定"。
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,10 +59,17 @@ try {
  */
 const projectDir = PROJECT_ROOT;
 const codebuddyDir = join(projectDir, '.codebuddy');
-const stateFile = join(codebuddyDir, 'auto-continue.state.json');
+/**
+ * 目录分工（长跑任务列表用）：
+ *   · `process/` —— 进度文档（队列 + 归档），进仓库、要 review；
+ *   · `logs/`    —— 运行时产物（日志 + 计数状态），**不进仓库**（.gitignore 掉）。
+ */
+const processDir = join(codebuddyDir, 'process');
+const logsDir = join(codebuddyDir, 'logs');
+const stateFile = join(logsDir, 'auto-continue.state.json');
 const offFile = join(codebuddyDir, 'auto-continue.off');
-const queueFile = join(codebuddyDir, 'auto-continue.md');
-const logFile = join(codebuddyDir, 'auto-continue.log');
+const queueFile = join(processDir, 'auto-continue.md');
+const logFile = join(logsDir, 'auto-continue.log');
 
 const sessionId = payload.session_id ?? payload.conversation_id ?? null;
 
@@ -81,9 +88,26 @@ function detectEvent() {
 
 const event = detectEvent();
 
+/**
+ * 日志轮转：长跑队列会跑几百上千轮，日志不能无限长。
+ * 超过上限就改名成 `.1` 再重开——保留最近一段，且不删数据。
+ * （本脚本每行还存 400B 的原始输入，比 auto-commit 更容易长大，所以上限小一档。）
+ */
+const LOG_MAX_BYTES = Number(process.env.AUTO_CONTINUE_LOG_MAX ?? 512 * 1024);
+
+function rotateIfNeeded() {
+  try {
+    if (statSync(logFile).size <= LOG_MAX_BYTES) return;
+    renameSync(logFile, `${logFile}.1`);
+  } catch {
+    /* 文件不存在或改不动都无所谓，照常往下写 */
+  }
+}
+
 function log(decision, extra = {}) {
   try {
     mkdirSync(dirname(logFile), { recursive: true });
+    rotateIfNeeded();
     appendFileSync(
       logFile,
       `${JSON.stringify({
@@ -162,7 +186,7 @@ if (existsSync(offFile)) {
 }
 
 if (!existsSync(queueFile)) {
-  allowStop('no-queue-file', '未找到 .codebuddy/auto-continue.md，自动继续未启用。');
+  allowStop('no-queue-file', '未找到 .codebuddy/process/auto-continue.md，自动继续未启用。');
 }
 
 const pending = readFileSync(queueFile, 'utf8')
@@ -196,7 +220,7 @@ const next = pending
 const feedback = [
   `[auto-continue ${state.count}/${MAX_CONTINUATIONS}] 不要询问我，直接继续执行。`,
   '',
-  '请先读取 .codebuddy/auto-continue.md 与 TASKS.md，然后立即开始实现下面这些未完成条目：',
+  '请先读取 .codebuddy/process/auto-continue.md 与 TASKS.md，然后立即开始实现下面这些未完成条目：',
   next,
   '',
   '要求：',
