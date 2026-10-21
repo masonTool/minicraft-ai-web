@@ -341,6 +341,65 @@ console.log('\n[工作站与面板标题（批次 617 / Q13）]');
   check('分页文案走 tp()，不再拼中文', pagerSrc.includes("tp('pager.summary'") && !codeOf(pagerSrc).includes('页 · 共'));
 }
 
+console.log('\n[背包与工作站面板的残留文案（批次 1355 / M8 第 N 片）]');
+{
+  /**
+   * 这一屏原先还有 60 多处**直接写在源码里的中文**（列标题、状态行、提示句、模板句），
+   * 切英文后原地不动。断言分两层：
+   *  ① 具体键**两张表都有**（漏翻一条就会在英文界面上露出中文）；
+   *  ② **源码里不再有中文文案**——按"字符串字面量"判，不按"文件里有没有汉字"判：
+   *     这个文件里还有行尾中文注释（`// 不可堆叠（工具 / 盔甲）` 这种），
+   *     拿整份源码判会把注释也算进去，那样只能靠"以后别再写中文注释"来过关，方向错了。
+   */
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const code = codeOf(invSrc);
+
+  const leftoverKeys = [
+    'inventory.rightArmor',
+    'inventory.fuelEmptyPick',
+    'inventory.fuelLabel',
+    'inventory.slotBlocked',
+    'inventory.bookAllStations',
+    'inventory.bindingCurse',
+    'inventory.dropped',
+    'slot.productTarget',
+    'slot.netheriteIngot',
+    'slot.hopper5',
+    'station.stoneToCut',
+    'station.loomPatterns',
+    'station.cartoModes',
+    'station.tradeActions',
+    'station.campfireOut',
+    'station.brewLeft',
+    'station.hopperLocked',
+    'station.grindstoneXp',
+    'station.craftableSummary',
+    'station.anvilNeed',
+    'station.enchantCostTitle',
+  ];
+  const parity2 = keyParity();
+  const missing2 = leftoverKeys.filter(
+    (k) => parity2.missingInEn.includes(k) || parity2.missingInZh.includes(k) || t(k, 'zh') === k || t(k, 'en') === k,
+  );
+  check(`这一屏的 ${leftoverKeys.length} 个新键中英齐全`, missing2.length === 0, missing2.join(','));
+  check(
+    '每个新键都真的翻成英文（不是两边抄同一句）',
+    leftoverKeys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0,
+  );
+
+  // 字符串字面量里不该再有中文：`'…'` / `"…"` / 单行 `` `…` ``
+  const cjkLiteral = /(['"`])(?:(?!\1)[^\\\n])*[\u4e00-\u9fa5](?:(?!\1)[^\\\n])*\1/;
+  const hit = cjkLiteral.exec(code);
+  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.[0]?.slice(0, 60) ?? '');
+
+  // 模板句必须走 tp()：这四条以前是"字符串 + 变量"拼出来的
+  check('可做数量走 tp() 的占位符', code.includes("tp('station.craftableSummary'"));
+  check('燃料行走 tp() 的占位符', code.includes("tp('inventory.fuelLabel'"));
+  check('丢弃回执走 tp() 的占位符', code.includes("tp('inventory.dropped'"));
+  check('切石机提示走 tp() 的占位符', code.includes("tp('station.stoneEach'"));
+  check('不再用模板串拼"可做"', !code.includes('· 可做 '));
+}
+
 console.log('\n[聊天与命令用法（批次 617 / Q14）]');
 {
   /**

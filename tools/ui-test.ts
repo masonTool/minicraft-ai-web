@@ -785,7 +785,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '熔炉/锻造台把产物槽与目标槽合并成一格（批次 299）',
-    invSrc.includes("buildLabel('产物 / 目标')") &&
+    invSrc.includes("t('slot.productTarget')") &&
       !invSrc.includes("'furnace:output'") &&
       !invSrc.includes("'smithing:result'") &&
       invSrc.includes('private takeFurnaceOutput') &&
@@ -813,7 +813,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('private fuelRank') &&
       invSrc.includes('private refreshFurnaceFuelHint') &&
       invSrc.includes('furnaceFuelTextEl') &&
-      invSrc.includes('燃料：空 · 请选择下方燃料') &&
+      invSrc.includes("t('inventory.fuelEmptyPick')") &&
       invSrc.includes('private fillSlotFromBag') &&
       invSrc.includes('this.bagCountOf(itemId)') &&
       !invSrc.includes('furnaceFuelPickBtn') &&
@@ -1040,8 +1040,9 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     '配方书再左移半个按钮宽度；开始制作用中文名（批次 322）',
     css.includes('transform: translateX(-50%);') &&
       css.includes('transform: translate(-50%, 1px);') &&
-      invSrc.includes('开始制作：${itemLabel(entry.resultId)}') &&
-      !invSrc.includes('开始制作：${itemName(entry.resultId)}'),
+      // 批次 1355：整句进了 i18n 表，只留一个占位符；中文名仍走 itemLabel（不是 itemName）
+      invSrc.includes("tp('station.startCrafting', { item: itemLabel(entry.resultId) })") &&
+      !invSrc.includes("startCrafting', { item: itemName("),
   );
   check(
     '点创造分类会切回无限物品页',
@@ -1154,13 +1155,15 @@ console.log('\n[携带版细节收口（批次 159）]');
   check('几秒后自己消失', invSrc.includes('PICK_TOAST_MS') && invSrc.includes('window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS)'));
   // 批次 181：2 秒 + 淡出；丢弃也给一条文字确认
   check('提示 2 秒后淡出', invSrc.includes('export const PICK_TOAST_MS = 2000;') && css.includes('#inv-pick-toast.leaving'));
-  check('丢弃有文字确认', invSrc.includes('已丢弃'));
+  check('丢弃有文字确认', invSrc.includes("tp('inventory.dropped'"));
   check(
     '分类/页签点击也有说明（不只是物品格）',
-    invSrc.includes('showMessage(`分类：') &&
+    // 批次 1355：从"源码里有这句中文"改成"按哪个键取文案"——文案搬进表之后，
+    // 按字面量匹配的断言必然红，而它要守的其实是"这条路径会给出提示"
+    invSrc.includes("tp('inventory.categorySwitched'") &&
       // 批次 617：创造分类的提示改成 t('inventory.creativeCategory') + 分类名
       invSrc.includes("t('inventory.creativeCategory')") &&
-      invSrc.includes("'右栏：合成'"),
+      invSrc.includes("'inventory.rightCrafting'"),
   );
   // 点配方预览只显示名字，不再把预览清掉
   check('点合成区不再清空配方预览', !invSrc.includes('this.craftGhost && slot?.closest'));
@@ -3125,7 +3128,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '分类底部统计（可合成 N / 缺料 M）',
     invSrc.includes("this.categoryInfo.dataset.role = 'category-info'") &&
-      invSrc.includes('可合成 ${craftableInTab}') &&
+      invSrc.includes("tp('inventory.categoryInfo'") &&
       css.includes('.inv-category-info'),
   );
 
@@ -4326,7 +4329,7 @@ console.log('\n[绑定诅咒（批次 270）]');
   check(
     '装备槽拒绝取下绑定物品（点取 / 换装 / Shift 快速移动三条路）',
     invSrc.includes('private boundArmorAt(source: unknown, index: number): boolean') &&
-      invSrc.includes("this.showMessage('绑定诅咒：这件装备取不下来');") &&
+      invSrc.includes("this.showMessage(t('inventory.bindingCurse'));") &&
       invSrc.includes('if (this.boundArmorAt(source, index)) {'),
   );
   check(

@@ -998,7 +998,7 @@ export class InventoryScreen {
         button.className = 'inv-pocket-recipe-tab';
         button.dataset.tab = tab;
         button.title = RECIPE_BOOK_TAB_LABELS[tab];
-        button.setAttribute('aria-label', `配方书 · ${RECIPE_BOOK_TAB_LABELS[tab]}`);
+        button.setAttribute('aria-label', tp('inventory.recipeBookAria', { tab: RECIPE_BOOK_TAB_LABELS[tab] }));
         if (tab === 'all') {
           button.innerHTML = POCKET_RECIPE_ALL_ICON;
         } else {
@@ -1974,7 +1974,10 @@ export class InventoryScreen {
             available: craftableInTab,
           });
       } else {
-        this.categoryInfo.textContent = `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}`;
+        this.categoryInfo.textContent = tp('inventory.categoryInfo', {
+          tab: RECIPE_BOOK_TAB_LABELS[this.categoryTab],
+          count: craftableInTab,
+        });
       }
     }
     const items = this.categoryItems();
@@ -2261,7 +2264,7 @@ export class InventoryScreen {
       if (!(this.hooks.isCreative?.() ?? false)) {
         this.pendingRecipeId = itemId;
         // 按住滑动时每滑过一件都提示一次会很吵：只在抬手确认那一下提示
-        if (mode === 'fill') this.showMessage('右栏是盔甲，切到合成查看配方');
+        if (mode === 'fill') this.showMessage(t('inventory.rightArmorHint'));
       }
       return;
     }
@@ -2525,7 +2528,7 @@ export class InventoryScreen {
         this.refresh();
       }
     }
-    this.showMessage(tab === 'armor' ? '右栏：盔甲' : '右栏：合成');
+    this.showMessage(t(tab === 'armor' ? 'inventory.rightArmor' : 'inventory.rightCrafting'));
   }
 
   /**
@@ -2597,7 +2600,7 @@ export class InventoryScreen {
     this.categoryGrid.scrollTop = targetScroll;
     // 刚显示出来的栏可能还没完成布局，下一帧再量一次
     requestAnimationFrame(() => this.syncCategoryScrollbar());
-    if (!same) this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
+    if (!same) this.showMessage(tp('inventory.categorySwitched', { tab: RECIPE_BOOK_TAB_LABELS[tab] }));
   }
 
   // ---------------------------------------------------------------- 工作站可做列表（批次 277）
@@ -2980,10 +2983,10 @@ export class InventoryScreen {
     const fuel = furnace.get(FURNACE_FUEL);
     const hasOptions = this.bagFuelOptions().length > 0;
     this.furnaceFuelTextEl.textContent = fuel
-      ? `燃料：${itemName(fuel.id)} ×${fuel.count}`
+      ? tp('inventory.fuelLabel', { item: itemName(fuel.id), count: fuel.count })
       : hasOptions
-        ? '燃料：空 · 请选择下方燃料'
-        : '燃料：空 · 请放燃料';
+        ? t('inventory.fuelEmptyPick')
+        : t('inventory.fuelEmptyPut');
     this.furnaceFuelTextEl.title = t('station.fuelHint');
     this.renderFurnaceFuelOptions(furnace);
   }
@@ -3165,7 +3168,7 @@ export class InventoryScreen {
       return;
     }
     if (!this.fillStationRecipe(entry)) {
-      this.showMessage('放不进去：先清一下工作站里的格子');
+      this.showMessage(t('inventory.slotBlocked'));
       return;
     }
     this.inventory.notify();
@@ -3497,7 +3500,7 @@ export class InventoryScreen {
     if (actual) {
       this.renderInto(this.stationTargetEl, actual);
       this.stationTargetEl.classList.add('ready');
-      this.stationTargetEl.title = `点一下收取 ${itemName(actual.id)}`;
+      this.stationTargetEl.title = tp('station.collectTitle', { item: itemName(actual.id) });
       return;
     }
     if (!entry) {
@@ -3541,7 +3544,7 @@ export class InventoryScreen {
     if (!entry) {
       this.setStationTargetEntry(null);
       this.renderStationTarget();
-      this.showMessage('这条配方现在做不了');
+      this.showMessage(t('inventory.recipeUnavailable'));
       return;
     }
     // 燃料槽空 = 红底不可点（背包里有燃料也不行，要先点左栏配方把它放进去）
@@ -3565,7 +3568,7 @@ export class InventoryScreen {
       this.furnaceHasSlotFuel(furnace);
     if (!readyToStart && !this.fillStationRecipe(entry)) {
       this.renderStationTarget();
-      this.showMessage('原料或燃料放不进去，先清一下熔炉格子');
+      this.showMessage(t('inventory.furnaceFull'));
       return;
     }
     // 已经能开工：只把原料/当前燃料补满，绝不换掉玩家选的燃料
@@ -3583,7 +3586,7 @@ export class InventoryScreen {
       // 批次 312：产物默认留在产物槽，不再自动收进快捷栏/仓库
       this.stationAutoCollect = false;
       this.clearStationHint();
-      this.showMessage(`开始制作：${itemLabel(entry.resultId)}`);
+      this.showMessage(tp('station.startCrafting', { item: itemLabel(entry.resultId) }));
       this.refresh();
       return;
     }
@@ -3594,7 +3597,7 @@ export class InventoryScreen {
       // 批次 330：药水留在三个药水槽里，自己点走——与熔炉"产物留在产物槽"同一条口径
       this.stationAutoCollect = false;
       this.clearStationHint();
-      this.showMessage(`开始酿造：${itemLabel(entry.resultId)}`);
+      this.showMessage(tp('station.startBrewing', { item: itemLabel(entry.resultId) }));
       this.refresh();
       return;
     }
@@ -3605,7 +3608,7 @@ export class InventoryScreen {
       // 营火没有产物槽，烤好会弹出来；点过目标时由界面接收（见 `collectCampfireOutput`）
       this.stationAutoCollect = true;
       this.clearStationHint();
-      this.showMessage(`开始烤制：${itemLabel(entry.resultId)}`);
+      this.showMessage(tp('station.startCooking', { item: itemLabel(entry.resultId) }));
       this.refresh();
       return;
     }
@@ -3645,7 +3648,7 @@ export class InventoryScreen {
     if (leftover > 0) this.hooks.onDrop?.(result.output.id, leftover);
     // 目标框保留：装备/锭用完后会按当前材料变红，而不是整条配方消失
     this.inventory.notify();
-    this.showMessage(`完成：${itemName(result.output.id)}`);
+    this.showMessage(tp('station.finished', { item: itemName(result.output.id) }));
     if (refreshAfter) this.refresh();
     return true;
   }
@@ -3823,12 +3826,12 @@ export class InventoryScreen {
   private showStationNeed(need: StationNeed): void {
     const current = stationLabel(this.stationRecipeKey());
     this.renderStationHint(
-      `需要${need.label}`,
+      tp('station.needLabel', { label: need.label }),
       need.station,
       need.inputs,
       need.resultId,
       1,
-      `当前打开的是${current}；在${need.label}里制作 ${itemName(need.resultId)}`,
+      tp('station.needOtherStation', { current, label: need.label, item: itemName(need.resultId) }),
     );
   }
 
@@ -3896,12 +3899,12 @@ export class InventoryScreen {
       return;
     }
     this.renderStationHint(
-      '没有可用的配方',
+      t('inventory.noUsableRecipe'),
       this.stationRecipeKey(),
       [],
       itemId,
       1,
-      '这个物品不在熔炉 / 锻造台 / 酿造台的配方表里',
+      t('inventory.notInRecipeTable'),
     );
   }
 
@@ -3930,7 +3933,7 @@ export class InventoryScreen {
       const count = slot.querySelector('.inv-count') as HTMLSpanElement | null;
       if (count && entry.resultCount > 1) count.textContent = String(entry.resultCount);
       slot.title = entry.available
-        ? `${itemName(entry.resultId)} · 点一下放入材料`
+        ? tp('station.putMaterials', { item: itemName(entry.resultId) })
         : `${itemName(entry.resultId)}：${entry.reason ? stationReasonLabel(entry.reason) : t('station.reason.notAvailable')}`;
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -3949,7 +3952,11 @@ export class InventoryScreen {
     this.stationRecipeInfoEl.textContent =
       entries.length === 0
         ? ''
-        : `${modeTitle(this.mode)} · 可做 ${available} / ${entries.length}（白底 = 点一下就能开工）`;
+        : tp('station.craftableSummary', {
+            station: modeTitle(this.mode),
+            available,
+            total: entries.length,
+          });
   }
 
   /**
@@ -4095,9 +4102,7 @@ export class InventoryScreen {
         this.recipesBtn?.classList.remove('hidden');
         if (this.recipesBtn) {
           this.recipesBtn.classList.toggle('active', showCategory && this.showUnowned);
-          this.recipesBtn.title = this.showUnowned
-            ? '配方书：正在列出所有工作站的配方 · 点一下只看本工作站现在能做的'
-            : '只看本工作站现在能做的 · 点一下列出所有工作站的配方';
+          this.recipesBtn.title = t(this.showUnowned ? 'inventory.bookAllStations' : 'inventory.bookThisStation');
         }
         this.syncRecipeRail(showCategory ? this.categoryTab : null);
         this.invTabEl.classList.toggle('active', !showCategory);
@@ -4213,9 +4218,7 @@ export class InventoryScreen {
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
       this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
       // 批次 209：开 = 配方书模式（列出该分类全部物品）；关 = 只看现在能做的
-      this.recipesBtn.title = this.showUnowned
-        ? '配方书：正在列出该分类的全部物品 · 点一下只看现在能合成的'
-        : '只看现在能合成的（含用过的缺料）· 点一下列出该分类全部物品';
+      this.recipesBtn.title = t(this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable');
     }
     // 工作站专用的左栏配方书按钮离开工作站时必须收起（批次 316）
 
@@ -4742,7 +4745,7 @@ export class InventoryScreen {
       // 退还按钮不能住在那个父元素里，否则"台子里有东西但没目标"时按钮一起消失。
       const targetWrap = document.createElement('div');
       targetWrap.className = 'brewing-target-wrap';
-      targetWrap.append(this.buildLabel('目标'), this.stationTargetEl);
+      targetWrap.append(this.buildLabel(t('slot.target')), this.stationTargetEl);
       const targetCol = document.createElement('div');
       targetCol.className = 'brewing-col brewing-target-col';
       targetCol.append(targetWrap, this.brewReturnBtn);
@@ -4798,7 +4801,7 @@ export class InventoryScreen {
         left,
         this.buildLabel(t('slot.anvilSameGear')),
         right,
-        this.buildLabel('产物'),
+        this.buildLabel(t('slot.product')),
         result,
       );
       const side = document.createElement('div');
@@ -4820,11 +4823,11 @@ export class InventoryScreen {
       // 批次 299：产物槽与目标槽合并（预览与"点一下升级"都在这一格）
       const targetWrap = document.createElement('div');
       targetWrap.className = 'furnace-col';
-      targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
+      targetWrap.append(this.buildLabel(t('slot.productTarget')), this.stationTargetEl);
       row.append(
-        this.buildLabel('钻石装备'),
+        this.buildLabel(t('slot.diamondGear')),
         equipment,
-        this.buildLabel('下界合金锭'),
+        this.buildLabel(t('slot.netheriteIngot')),
         material,
         targetWrap,
       );
@@ -4848,14 +4851,14 @@ export class InventoryScreen {
 
       const left = document.createElement('div');
       left.className = 'stonecutter-col';
-      left.append(this.buildLabel('要切的石料'), input, this.stonecutterHintEl);
+      left.append(this.buildLabel(t('station.stoneToCut')), input, this.stonecutterHintEl);
 
       // 右侧那一列按钮由 `refreshStonecutter` 填：产物清单随输入格变化，
       // 所以不能在重建上半区时一次性写死
       this.stonecutterListEl.replaceChildren();
       const right = document.createElement('div');
       right.className = 'stonecutter-right';
-      right.append(this.buildLabel('能切出什么（点一下切一件）'), this.stonecutterListEl);
+      right.append(this.buildLabel(t('station.stoneResults')), this.stonecutterListEl);
 
       this.stonecutterLayout.replaceChildren(left, right);
       this.topArea.appendChild(this.stonecutterLayout);
@@ -4879,11 +4882,11 @@ export class InventoryScreen {
       const left = document.createElement('div');
       left.className = 'stonecutter-col';
       left.append(
-        this.buildLabel('要印图案的旗帜'),
+        this.buildLabel(t('station.loomBanner')),
         banner,
-        this.buildLabel('染料（每种图案消耗 1 个）'),
+        this.buildLabel(t('station.loomDyes')),
         dye,
-        this.buildLabel('成品（拿走再放下才会变成真正的旗）'),
+        this.buildLabel(t('station.loomResult')),
         output,
         this.loomHintEl,
       );
@@ -4892,7 +4895,7 @@ export class InventoryScreen {
       this.loomListEl.replaceChildren();
       const right = document.createElement('div');
       right.className = 'stonecutter-right';
-      right.append(this.buildLabel('选一种图案（点一下印一件）'), this.loomListEl);
+      right.append(this.buildLabel(t('station.loomPatterns')), this.loomListEl);
 
       this.loomLayout.replaceChildren(left, right);
       this.topArea.appendChild(this.loomLayout);
@@ -4913,9 +4916,9 @@ export class InventoryScreen {
       const left = document.createElement('div');
       left.className = 'stonecutter-col';
       left.append(
-        this.buildLabel('已填好的地图'),
+        this.buildLabel(t('station.cartoMap')),
         map,
-        this.buildLabel('材料：纸 / 空地图 / 玻璃板'),
+        this.buildLabel(t('station.cartoMaterials')),
         material,
         this.cartographyHintEl,
       );
@@ -4923,7 +4926,7 @@ export class InventoryScreen {
       const right = document.createElement('div');
       right.className = 'stonecutter-right';
       right.append(
-        this.buildLabel('纸=放大 · 空地图=复制 · 玻璃板=锁定'),
+        this.buildLabel(t('station.cartoModes')),
         this.cartographyCraftButton,
       );
 
@@ -4935,7 +4938,7 @@ export class InventoryScreen {
     if (this.mode === 'trade') {
       // 左侧：他本人的信息（职业 / 等级 / 还差多少经验）+ 一句操作方法
       this.tradeInfoEl.replaceChildren();
-      this.tradeInfoEl.append(this.buildLabel('村民'), this.tradeLevelEl, this.tradeHintEl);
+      this.tradeInfoEl.append(this.buildLabel(t('slot.villager')), this.tradeLevelEl, this.tradeHintEl);
       this.tradeHintEl.textContent = t('station.tradeHint');
       this.tradeHintEl.classList.remove('bad');
 
@@ -4946,7 +4949,7 @@ export class InventoryScreen {
       this.tradeFingerprint = '';
       const right = document.createElement('div');
       right.className = 'stonecutter-right';
-      right.append(this.buildLabel('他能做什么（点一下成交）'), this.tradeListEl);
+      right.append(this.buildLabel(t('station.tradeActions')), this.tradeListEl);
 
       this.tradeLayout.replaceChildren(this.tradeInfoEl, right);
       this.topArea.appendChild(this.tradeLayout);
@@ -4960,7 +4963,7 @@ export class InventoryScreen {
 
       const left = document.createElement('div');
       left.className = 'enchant-col';
-      left.append(this.buildLabel('物品'), item, this.buildLabel('青金石'), lapis);
+      left.append(this.buildLabel(t('slot.input')), item, this.buildLabel(t('slot.lapis')), lapis);
 
       const right = document.createElement('div');
       right.className = 'enchant-options';
@@ -4990,7 +4993,7 @@ export class InventoryScreen {
         this.hopperGrid.appendChild(this.registerSlot(`hopper:${i}`, this.activeContainer!, i));
       }
       this.hopperHintEl.textContent = '';
-      this.topArea.appendChild(this.buildLabel('漏斗（5 格）'));
+      this.topArea.appendChild(this.buildLabel(t('slot.hopper5')));
       this.topArea.appendChild(this.hopperGrid);
       this.topArea.appendChild(this.hopperHintEl);
       return;
@@ -5003,7 +5006,7 @@ export class InventoryScreen {
         this.nineGrid.appendChild(this.registerSlot(`${this.mode}:${i}`, this.activeContainer!, i));
       }
       this.nineHintEl.textContent = '';
-      this.topArea.appendChild(this.buildLabel(isDispenser ? '发射器（9 格）' : '投掷器（9 格）'));
+      this.topArea.appendChild(this.buildLabel(t(isDispenser ? 'slot.dispenser9' : 'slot.dropper9')));
       this.topArea.appendChild(this.nineGrid);
       this.topArea.appendChild(this.nineHintEl);
       return;
@@ -5015,7 +5018,7 @@ export class InventoryScreen {
       for (let i = 0; i < MOB_CARGO_SIZE; i++) {
         this.chestGrid.appendChild(this.registerSlot(`mob_inventory:${i}`, this.activeContainer!, i));
       }
-      this.topArea.appendChild(this.buildLabel(`货舱（${MOB_CARGO_SIZE} 格）`));
+      this.topArea.appendChild(this.buildLabel(tp('slot.cargo', { count: MOB_CARGO_SIZE })));
       this.topArea.appendChild(this.chestGrid);
       return;
     }
@@ -5325,7 +5328,7 @@ export class InventoryScreen {
       creative: this.hooks.isCreative?.() ?? false,
     });
     this.hooks.onDrop(stack.id, drop);
-    this.showMessage(`已丢弃 ${itemLabel(stack.id)} ×${drop}`);
+    this.showMessage(tp('inventory.dropped', { item: itemLabel(stack.id), count: drop }));
     if (drop >= stack.count) {
       this.held = null;
       this.heldFromCreative = false;
@@ -5356,7 +5359,7 @@ export class InventoryScreen {
     });
     this.hooks.onDrop(stack.id, count);
     // 丢完给一句确认：触摸端没有"东西掉在地上"的直接反馈
-    this.showMessage(`已丢弃 ${itemLabel(stack.id)} ×${count}`);
+    this.showMessage(tp('inventory.dropped', { item: itemLabel(stack.id), count }));
     if (binding) {
       binding.source.set(binding.index, stack.count > count ? { ...stack, count: stack.count - count } : null);
     } else if (this.held) {
@@ -5524,7 +5527,7 @@ export class InventoryScreen {
 
     // 绑定诅咒（批次 270）：Shift+左键的"快速移动"同样不能把绑定装备挪走
     if (this.boundArmorAt(source, index)) {
-      this.showMessage('绑定诅咒：这件装备取不下来');
+      this.showMessage(t('inventory.bindingCurse'));
       return;
     }
 
@@ -5859,7 +5862,7 @@ export class InventoryScreen {
       this.selectedStationKey = key;
       binding.element.classList.add('selected');
       this.selectedEl = binding.element;
-      this.showMessage('已选中 · 再点一次放回仓库');
+      this.showMessage(t('inventory.selectedBack'));
       return;
     }
     // 点了别的格子：熔炉原料/燃料的选中态取消
@@ -5882,7 +5885,7 @@ export class InventoryScreen {
       }
       // 绑定诅咒（批次 270）：已装备的绑定物品换不下来
       if (this.boundArmorAt(binding.source, index)) {
-        this.showMessage('绑定诅咒：这件装备取不下来');
+        this.showMessage(t('inventory.bindingCurse'));
         this.rejectSlot(binding.element);
         this.cancelHeldSelection();
         return;
@@ -5927,7 +5930,7 @@ export class InventoryScreen {
     } else if (slot) {
       // 绑定诅咒（批次 270）：空手点已装备的绑定物品也拿不下来
       if (this.boundArmorAt(binding.source, index)) {
-        this.showMessage('绑定诅咒：这件装备取不下来');
+        this.showMessage(t('inventory.bindingCurse'));
         this.rejectSlot(binding.element);
         return;
       }
@@ -6528,7 +6531,7 @@ export class InventoryScreen {
       // 提示只显示"第一条有意见的"：一列 4 条同样的抱怨没有意义
       let reason = '';
       for (let i = 0; i < CAMPFIRE_SIZE && reason === ''; i++) reason = campfire.rejectReason(i);
-      if (reason === '' && !campfire.lit) reason = '营火熄灭了（拿打火石右键可以重新点燃）';
+      if (reason === '' && !campfire.lit) reason = t('station.campfireOut');
       this.campfireHintEl.textContent = reason;
       this.campfireHintEl.classList.toggle('bad', reason !== '');
       // 目标框保留，材料不足时变红
@@ -6545,9 +6548,13 @@ export class InventoryScreen {
       const powderInSlot = stand.get(BREW_FUEL_SLOT)?.id === Item.BLAZE_POWDER;
       const left = stand.fuelRemaining;
       this.brewFuelTextEl.textContent =
-        left > 0 ? `还能酿 ${left} 次` : powderInSlot ? '烈焰粉就绪' : '需要烈焰粉';
+        left > 0
+          ? tp('station.brewLeft', { count: left })
+          : t(powderInSlot ? 'station.brewReady' : 'station.brewNeed');
       this.brewFuelTextEl.classList.toggle('bad', left <= 0 && !powderInSlot);
-      this.brewFuelTextEl.title = powderInSlot || left > 0 ? '1 份烈焰粉可以酿 20 次' : '往燃料槽放烈焰粉';
+      this.brewFuelTextEl.title = t(
+        powderInSlot || left > 0 ? 'station.brewPowderTitle' : 'station.brewPowderSlot',
+      );
       const hasItems = [...BREW_BOTTLE_SLOTS, BREW_INGREDIENT_SLOT, BREW_FUEL_SLOT].some(
         (slot) => stand.get(slot) !== null,
       );
@@ -6561,18 +6568,17 @@ export class InventoryScreen {
       // 锁定时必须写出来：原版是"漏斗自己不动"，玩家看不到任何别的反馈，
       // 只会以为漏斗坏了（这是 H14 第一批必踩的困惑）
       const locked = this.activeContainer.locked;
-      this.hopperHintEl.textContent = locked
-        ? '被红石信号锁定：不推也不吸（断开信号就继续）'
-        : '每 0.4 秒搬一件：推给朝向那一格，再从头顶的容器或掉落物吸一件';
+      this.hopperHintEl.textContent = t(locked ? 'station.hopperLocked' : 'station.hopperCycle');
       this.hopperHintEl.classList.toggle('bad', locked);
     }
 
     if (this.mode === 'dropper' && this.activeContainer instanceof Dropper) {
       // 空投掷器必须明说：玩家拿红石试半天，看不出"是空的"还是"坏了"
       const facing = SIX_FACING_NAMES[this.activeContainer.facing];
-      this.nineHintEl.textContent = this.activeContainer.isEmpty
-        ? `${facing}吐 · 里面是空的：红石脉冲不会吐任何东西`
-        : `${facing}吐：每来一次红石**脉冲**（拉杆两次、按钮、红石钟）吐一件；对面是容器就塞进去，不是容器就掉在地上`;
+      this.nineHintEl.textContent = tp(
+        this.activeContainer.isEmpty ? 'station.dropperEmpty' : 'station.dropperCycle',
+        { facing },
+      );
       this.nineHintEl.classList.toggle('bad', this.activeContainer.isEmpty);
     }
 
@@ -6580,7 +6586,7 @@ export class InventoryScreen {
       // 发射器的提示要说清"哪几件会被用掉"：混装时玩家根本猜不到下一件是射出去还是掉地上
       const facing = SIX_FACING_NAMES[this.activeContainer.facing];
       if (this.activeContainer.isEmpty) {
-        this.nineHintEl.textContent = `${facing}用 · 里面是空的：红石脉冲不会做任何事`;
+        this.nineHintEl.textContent = tp('station.dispenserEmpty', { facing });
         this.nineHintEl.classList.add('bad');
       } else {
         let recognized = 0;
@@ -6588,11 +6594,11 @@ export class InventoryScreen {
           const stack = this.activeContainer.get(i);
           if (stack && dispenseBehaviorFor(stack.id)) recognized++;
         }
-        const head = `${facing}用：每来一次红石脉冲用掉一件`;
+        const head = tp('station.dispenserHead', { facing });
         this.nineHintEl.textContent =
           recognized > 0
-            ? `${head}——里面 ${recognized} 格是它认得的（会射出去/砸出去/点燃/剪毛），其余当掉落物吐出去`
-            : `${head}——这一箱它一样都不认得，全都当掉落物吐出去（${DEFAULT_DISPENSE_CN}）`;
+            ? tp('station.dispenserKnown', { head, count: recognized })
+            : tp('station.dispenserUnknown', { head, list: DEFAULT_DISPENSE_CN });
         this.nineHintEl.classList.remove('bad');
       }
     }
@@ -6767,7 +6773,7 @@ export class InventoryScreen {
     const description = document.createElement('div');
     description.className = 'tooltip-desc';
     const items = Math.max(1, Math.floor(seconds / 10));
-    description.textContent = `燃料 · 可燃烧 ${seconds} 秒（普通熔炉约 ${items} 个）`;
+    description.textContent = tp('station.fuelTooltip', { seconds, count: items });
     this.pickToastEl.append(title, description);
     this.pickToastEl.classList.remove('hidden', 'leaving');
     this.placePickToast();
@@ -6881,7 +6887,7 @@ export class InventoryScreen {
       return;
     }
     this.held = this.held ? { id: this.held.id, count: this.held.count + result.output.count } : result.output;
-    this.anvilStatusEl.textContent = `花费 ${result.cost} 级`;
+    this.anvilStatusEl.textContent = tp('station.anvilCost', { cost: result.cost });
     this.anvilStatusEl.classList.remove('bad');
     this.refresh();
   }
@@ -6912,7 +6918,8 @@ export class InventoryScreen {
     }
     this.held = result.output;
     if (result.xp > 0) this.hooks.onGrindstoneXp?.(result.xp);
-    this.grindstoneStatusEl.textContent = result.xp > 0 ? `洗掉附魔，返还 ${result.xp} 点经验` : '已取出';
+    this.grindstoneStatusEl.textContent =
+      result.xp > 0 ? tp('station.grindstoneXp', { count: result.xp }) : t('station.grindstoneTaken');
     this.grindstoneStatusEl.classList.remove('bad');
     this.refresh();
   }
@@ -7085,15 +7092,17 @@ export class InventoryScreen {
     this.tradeLevelEl.replaceChildren();
     const who = document.createElement('div');
     who.className = 'trade-who';
-    who.textContent = profession ? `${profession.name} · ${levelName(villager.level)}` : '无业游民';
+    who.textContent = profession
+      ? `${profession.name} · ${levelName(villager.level)}`
+      : t('station.tradeUnemployed');
     const xp = document.createElement('div');
     xp.className = 'trade-xp';
     xp.textContent =
       profession === null
-        ? '认领一个工作站就能开始做生意'
+        ? t('station.tradeClaimHint')
         : progress.next === 0
-          ? `交易经验 ${villager.tradeXp}（已经是大师）`
-          : `交易经验 ${villager.tradeXp}（再 ${progress.next - progress.current} 点升级）`;
+          ? tp('station.tradeXpMaster', { xp: villager.tradeXp })
+          : tp('station.tradeXpNext', { xp: villager.tradeXp, need: progress.next - progress.current });
     this.tradeLevelEl.append(who, xp);
   }
 
@@ -7140,7 +7149,11 @@ export class InventoryScreen {
         const label = document.createElement('span');
         label.textContent = offer.count > 1 ? `${itemLabel(offer.output)} ×${offer.count}` : itemLabel(offer.output);
         button.append(canvas, label);
-        button.title = `1 个${itemLabel(inputId)} → ${offer.count} 个${itemLabel(offer.output)}`;
+        button.title = tp('station.stoneOffer', {
+          item: itemLabel(inputId),
+          count: offer.count,
+          output: itemLabel(offer.output),
+        });
         button.addEventListener('click', () => this.handleStonecutterCut(offer.output));
         this.stonecutterListEl.appendChild(button);
         // 让产物按钮也有悬停提示（与背包槽位共用同一套：`Tooltip.delegate` 只认
@@ -7157,11 +7170,11 @@ export class InventoryScreen {
       return;
     }
     if (cutter.offers.length === 0) {
-      hint.textContent = `${itemLabel(input.id)} 切不出任何石头变体`;
+      hint.textContent = tp('station.stoneNone', { item: itemLabel(input.id) });
       hint.classList.add('bad');
       return;
     }
-    hint.textContent = `每次消耗 1 个${itemLabel(input.id)}（现有 ${input.count} 个）`;
+    hint.textContent = tp('station.stoneEach', { item: itemLabel(input.id), count: input.count });
   }
 
   /** 点某一项：切一件出来直接进背包（原版也是直接进背包，不用先拿到光标上） */
@@ -7185,7 +7198,10 @@ export class InventoryScreen {
     // 背包放不下就放到光标上（`add` 返回没塞进去的数量，不会静默吞掉产物）
     const leftover = this.inventory.add(result.output.id, result.output.count);
     if (leftover > 0) this.held = { id: result.output.id, count: leftover };
-    this.stonecutterHintEl.textContent = `切出 ${offer.count} 个${itemLabel(offer.output)}`;
+    this.stonecutterHintEl.textContent = tp('station.stoneResult', {
+      item: itemLabel(offer.output),
+      count: offer.count,
+    });
     this.stonecutterHintEl.classList.remove('bad');
     this.refresh();
   }
@@ -7209,7 +7225,7 @@ export class InventoryScreen {
       button.className = 'stonecutter-option';
       button.disabled = blocker !== null;
       const label = document.createElement('span');
-      label.textContent = BANNER_PATTERNS[pattern] ?? `图案 ${pattern}`;
+      label.textContent = BANNER_PATTERNS[pattern] ?? tp('station.patternFallback', { index: pattern });
       button.append(label);
       if (blocker) button.title = blocker;
       button.addEventListener('click', () => this.handleLoomApply(pattern));
@@ -7219,14 +7235,14 @@ export class InventoryScreen {
     const hint = this.loomHintEl;
     hint.classList.remove('bad');
     if (!loom.banner) {
-      hint.textContent = '先放一面旗帜';
+      hint.textContent = t('station.loomFirstBanner');
       return;
     }
     if (!loom.dye) {
-      hint.textContent = '再放一个染料';
+      hint.textContent = t('station.loomNextDye');
       return;
     }
-    hint.textContent = `还可以印 ${Math.min(loom.banner.count, loom.dye.count)} 件（每件消耗 1 面旗 + 1 个染料）`;
+    hint.textContent = tp('station.loomCanApply', { count: Math.min(loom.banner.count, loom.dye.count) });
   }
 
   /** 点一种图案：印一件进成品格（材料不够时把原因写在提示行上） */
@@ -7257,9 +7273,9 @@ export class InventoryScreen {
     }
     this.cartographyCraftButton.disabled = false;
     const texts: Record<string, string> = {
-      zoom: '放大一格：覆盖范围翻倍（消耗 1 张纸）',
-      copy: '复制一张：位图完全一样（消耗 1 张空地图，原件保留）',
-      lock: '锁定：之后走过的地方不再记录（消耗 1 块玻璃板）',
+      zoom: t('station.cartoZoom'),
+      copy: t('station.cartoCopy'),
+      lock: t('station.cartoLock'),
     };
     hint.textContent = texts[planned.plan.action] ?? '';
   }
@@ -7290,7 +7306,7 @@ export class InventoryScreen {
     if (!(table instanceof SmithingTable)) return;
     const outcome = table.outcome;
     if (outcome) {
-      this.smithingHintEl.textContent = `消耗 ${outcome.cost} 个下界合金锭（不要经验）`;
+      this.smithingHintEl.textContent = tp('station.smithingCost', { count: outcome.cost });
       this.smithingHintEl.classList.remove('bad');
       return;
     }
@@ -7317,7 +7333,11 @@ export class InventoryScreen {
     }
     const penalty = (anvil.left?.repairCost ?? 0) + (anvil.right?.repairCost ?? 0);
     this.anvilCostEl.textContent =
-      `需要 ${outcome.cost} 级（你 ${context.playerLevel} 级）${repairCostLabel(penalty)}`;
+      tp('station.anvilNeed', {
+        need: outcome.cost,
+        have: context.playerLevel,
+        penalty: repairCostLabel(penalty),
+      });
     this.anvilCostEl.classList.toggle('bad', context.playerLevel < outcome.cost);
   }
 
@@ -7329,7 +7349,9 @@ export class InventoryScreen {
     if (!context) return;
 
     const result = table.applySlot(slot, context.playerLevel, context.consumeLevels);
-    this.enchantStatusEl.textContent = result.ok ? `已附上 ${optionLabel(result.enchants)}` : result.reason;
+    this.enchantStatusEl.textContent = result.ok
+      ? tp('station.enchantApplied', { list: optionLabel(result.enchants) })
+      : result.reason;
     this.enchantStatusEl.classList.toggle('bad', !result.ok);
     this.refresh();
   }
@@ -7353,9 +7375,11 @@ export class InventoryScreen {
       const check = table.checkSlot(slot, context.playerLevel);
       const cost = option?.cost ?? 0;
       const label = option && option.enchants.length > 0 ? optionLabel(option.enchants) : '—';
-      button.textContent = cost > 0 ? `${label}　${cost} 级` : label;
+      button.textContent = cost > 0 ? tp('station.enchantButton', { label, cost }) : label;
       button.classList.toggle('on', check.ok);
-      button.title = check.ok ? `消耗 ${cost} 级经验与 ${option!.lapis} 个青金石` : check.reason;
+      button.title = check.ok
+        ? tp('station.enchantCostTitle', { cost, lapis: option!.lapis })
+        : check.reason;
       button.disabled = !check.ok;
     }
   }
