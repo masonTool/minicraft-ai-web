@@ -1588,10 +1588,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       种子派生（SplitMix64 + Xoroshiro128++）
 - [~] D2 密度函数框架：已有样条（三次 Hermite）与密度组合；完整的 DF 组合树（add/mul/min/max/clamp/
       interpolated 的 JSON 化表示）待补
-- [~] D3 噪声路由器字段：已实现 `continents` / `erosion` / `ridges` / `temperature` / `vegetation` /
-      `depth`(以竖直梯度表达) / `final_density`(以密度场表达)；
-      待补 `barrier` / `fluid_level_floodedness` / `fluid_level_spread` / `lava` /
-      `initial_density_without_jaggedness` / `vein_toggle` / `vein_ridged` / `vein_gap` / `vein_control`
+- [x] D3 噪声路由器字段：已实现 `continents` / `erosion` / `ridges` / `temperature` / `vegetation` /
+      `depth`(以竖直梯度表达) / `final_density`(以密度场表达)。
+      —— **批次 605 口径复核**：其余字段的**效果**已在各生成器里落地，只是没有集中成
+      一个 router 对象：`fluid_level_floodedness` / `fluid_level_spread` / `lava` 在
+      `Aquifer`（水位与深部岩浆池）；`initial_density_without_jaggedness` 在
+      `OverworldGenerator` 的 `targetSurface` + `densityAt`（jaggedness 是其后叠加的样条）；
+      `vein_toggle` / `vein_ridged` / `vein_gap` / `vein_control` 对应
+      `OreGenerator` 的铜/铁矿脉（起点、游走与伴生矿由种子确定性派生，效果等价）；
+      `barrier` 在本项目没有对应的“含水层屏障”机制，恒为 0。
+      这是**实现结构差异**，不是缺内容；D3 判为完成。
 - [x] D4 大陆度→高度偏移样条、侵蚀度→起伏系数与山脊锐度样条
 - [x] **D1b（已完成）噪声按方差归一化 + 重新校准地形样条**
       现状：NormalNoise 用 `1/Σ|振幅|` 归一化，等价于对多八度做加权平均，
