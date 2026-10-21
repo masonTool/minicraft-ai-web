@@ -91,8 +91,15 @@ export const FISHING_POOLS: readonly FishingPool[] = [
     weight: 5,
     luckPerLevel: 2.5,
     // 原版宝藏池是 6 项（弓 / 附魔书 / 钓竿 / 命名牌 / 鹦鹉螺壳 / 鞍）；
-    // 批次 547 补上鹦鹉螺壳后，只剩命名牌与鞍还没有那两件物品
-    entries: [entry(Item.BOW, 1), entry(Item.BOOK, 1, true), entry(Item.FISHING_ROD, 1), entry(Item.NAUTILUS_SHELL, 1)],
+    // 批次 615 补上命名牌后，只剩**鞍**还没有（鞍在本项目里可由皮革+铁锭合成，
+    // 与"原版鞍只能战利品获得"的差异见 TASKS 的差异台账）
+    entries: [
+      entry(Item.BOW, 1),
+      entry(Item.BOOK, 1, true),
+      entry(Item.FISHING_ROD, 1),
+      entry(Item.NAME_TAG, 1),
+      entry(Item.NAUTILUS_SHELL, 1),
+    ],
   },
 ];
 

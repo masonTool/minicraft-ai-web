@@ -697,6 +697,18 @@ export class Mob extends Entity {
   /** 被闪电充能的苦力怕（批次 564）：爆炸威力从 3 提到 6 */
   charged = false;
 
+  /**
+   * 命名牌起的名字（批次 615）。
+   *
+   * `null` = 没被命名过（头顶什么都不画）。**空串不是合法值**——
+   * 清洗在 `NameTag.sanitizeName` 里做完，清完是空就整条拒绝，所以这里
+   * 要么是有内容的字符串、要么是 null，渲染层不用再判空。
+   *
+   * 与 `type.name`（"僵尸"/"牛"这种种类名）分开：种类名随时可读，
+   * 这里只是"玩家给这一只起的别名"。
+   */
+  customName: string | null = null;
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;

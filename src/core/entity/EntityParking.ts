@@ -24,6 +24,7 @@ import { restoreStacks } from '../save/ContainerSave.ts';
 import { sanitizeMobEquipment, type MobEquipment } from './MobEquipment.ts';
 import type { VillagerSavedState } from './Villager.ts';
 import { MAX_TRADE_DEMAND } from '../registry/villagerTrades.ts';
+import { sanitizeName } from './NameTag.ts';
 
 /** 存档里的一条状态效果（与 `StatusEffects.serialize()` 同形） */
 export interface SavedMobEffect {
@@ -66,6 +67,8 @@ export interface SavedMob {
   cargo?: (ItemStack | null)[];
   /** 繁殖冷却剩余秒数（批次 585）：冷却结束不写 */
   breedCooldownSeconds?: number;
+  /** 命名牌起的名字（批次 615）：没被命名就不写这个键 */
+  customName?: string;
 }
 
 export interface SavedItemEntity {
@@ -316,6 +319,9 @@ export class EntityParking {
               ? record.breedCooldownSeconds
               : undefined,
           cargo: sanitizeCargo(record.cargo),
+          // 名字（批次 615）：走与"起名那一刻"**同一个**清洗函数，
+          // 手改过的存档塞进换行/超长/空白串时行为与游戏里一致（清不出东西就当没名字）
+          customName: sanitizeName(record.customName) ?? undefined,
         });
       } else if (record.kind === 'item') {
         if (!Number.isFinite(record.itemId) || !Number.isFinite(record.count) || record.count <= 0) continue;

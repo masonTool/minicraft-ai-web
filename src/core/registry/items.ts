@@ -194,6 +194,8 @@ export const Item = {
   SADDLE: 1486,
   /** 拴绳（批次 256）：牵着一只已驯服的动物走 */
   LEAD: 1487,
+  /** 命名牌（批次 615）：右键生物给它起个名字，名字跟着存档走 */
+  NAME_TAG: 1570,
   /** 弩（批次 265）：装填一次、松手发射；多重射击一次三支 */
   CROSSBOW: 1510,
   /** 紫水晶碎片（批次 351）：紫水晶簇的掉落，4 个压成一块紫水晶块 */
@@ -547,6 +549,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.FURNACE_MINECART, name: 'minecraft:furnace_minecart', tile: 'item_furnace_minecart', maxStack: 1 },
   { id: Item.SADDLE, name: 'minecraft:saddle', tile: 'item_saddle', maxStack: 1 },
   { id: Item.LEAD, name: 'minecraft:lead', tile: 'item_lead' },
+  // 命名牌（批次 615）：一次用一张，用完即耗
+  { id: Item.NAME_TAG, name: 'minecraft:name_tag', tile: 'item_name_tag', maxStack: 64 },
   // 弩（批次 265）：耐久与弓同档（原版 465），一次装填一发
   { id: Item.CROSSBOW, name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465 },
   { id: Item.AMETHYST_SHARD, name: 'minecraft:amethyst_shard', tile: 'item_amethyst_shard' },

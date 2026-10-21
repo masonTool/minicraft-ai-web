@@ -97,6 +97,7 @@ import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
+import { canNameMob, sanitizeName } from './core/entity/NameTag.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { PASSIVE_MOBS, mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
@@ -439,6 +440,7 @@ import { AIM_INFLATE, AIM_LOCK_RADIUS_PX, sightBlocked } from './core/interactio
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { MobHealthBar } from './render/MobHealthBar.ts';
+import { MobNameTag } from './render/MobNameTag.ts';
 import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
@@ -653,6 +655,7 @@ import {
   signKey,
 } from './core/world/SignText.ts';
 import { SignEditor } from './ui/SignEditor.ts';
+import { NameTagEditor } from './ui/NameTagEditor.ts';
 import { CommandBlockEditor } from './ui/CommandBlockEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
@@ -857,6 +860,24 @@ let lastRendererFailure: GlSupportFail | null = null;
  * 提到 2 倍（0.16）才看得清打的是哪一面，同时仍不盖住方块贴图。
  */
 const TOUCH_HIGHLIGHT_STRENGTH = 2;
+
+/**
+ * 名字牌精灵池大小（批次 615）。
+ *
+ * 原版同屏能看到的命名生物通常只有几只；给 12 个足够覆盖"牧场里的几只羊"
+ * 或"村里几个命名村民"，再多就轮到价值最低的那批被隐藏（按距离排）。
+ * 定成常数而不是"有几只建几个"：每张名字牌是一张独立的 CanvasTexture，
+ * 跟着生物数量涨会让显存无谓地涨（而且绝大多数生物是没名字的）。
+ */
+const NAME_TAG_POOL_SIZE = 12;
+
+/**
+ * 名字牌的最远可见距离（格）。
+ *
+ * 原版是 64 格，但那是"客户端已经知道这只生物存在"的前提下。本项目视距内
+ * 生物都在本地，给 32 格与 `HEARING_RANGE` 同一量级：再远的名字只会糊成几个像素点。
+ */
+const NAME_TAG_RANGE = 32;
 
 /**
  * ---------------------------------------------------------------- App 类的段落目录
@@ -1221,6 +1242,18 @@ class App {
   private readonly outline = new BlockOutline();
   /** 生物头顶生命条（只有一条，不再显示名字/攻击）：与方块描边互斥 */
   private readonly mobHealthBar = new MobHealthBar();
+  /**
+   * 生物头顶的名字牌（批次 615）。
+   *
+   * 用**精灵池**而不是"每只生物一个 Sprite"：一个区块里可能站着几十只生物，
+   * 每只都建 Sprite + 独立 CanvasTexture 会白占几十张纹理。这里固定
+   * `NAME_TAG_POOL_SIZE` 个，每帧把"有名字且离得近"的几只填进去，其余隐藏。
+   */
+  private readonly nameTags: MobNameTag[] = [];
+  /** 命名牌输入框（批次 615）：拿命名牌点生物时弹出 */
+  private readonly nameTagEditor = new NameTagEditor();
+  /** 正在等输入框回话的那只生物（输入框是异步的，回来时它可能已经死了/被卸载） */
+  private pendingNameTarget: Mob | null = null;
   /** 破坏裂纹与命中面高亮（G2 / G3） */
   private readonly blockOverlay: BlockOverlay;
   private readonly physics = new PlayerPhysics();
@@ -2081,6 +2114,12 @@ class App {
     );
     this.scene.add(this.outline.object);
     this.scene.add(this.mobHealthBar.object);
+    // 名字牌池（批次 615）：先建好、平时全部隐藏，`updateNameTags()` 每帧填
+    for (let i = 0; i < NAME_TAG_POOL_SIZE; i++) {
+      const tag = new MobNameTag();
+      this.nameTags.push(tag);
+      this.scene.add(tag.object);
+    }
     this.blockOverlay = new BlockOverlay(atlas);
     this.scene.add(this.blockOverlay.object);
     // 告示牌上的字（B12）：单独一个 Group，里面每块有字的牌子一个平面
@@ -2099,6 +2138,12 @@ class App {
     this.signEditor.onClose = () => {
       this.editingSign = null;
       // 与背包/配方书一样：关掉界面要把输入权交回去（重新锁指针、收起触摸层）
+      this.handleInventoryOpen(false);
+    };
+    // 名字牌（批次 615）：输入框是异步的，回来时要先确认那只生物还在
+    this.nameTagEditor.onSave = (raw) => this.applyMobName(raw);
+    this.nameTagEditor.onClose = () => {
+      this.pendingNameTarget = null;
       this.handleInventoryOpen(false);
     };
     // 书（批次 190）：界面只报"新的那一叠"，写回哪一格由这里决定
@@ -2544,6 +2589,7 @@ class App {
   private isAnyUiOpen(): boolean {
     return (
       this.signEditor.isOpen ||
+      this.nameTagEditor.isOpen ||
       this.bookScreen.isOpen ||
       this.mapScreen.isOpen ||
       this.beaconScreen.isOpen ||
@@ -2566,6 +2612,7 @@ class App {
   private closeTopUi(): boolean {
     if (this.commandHelp.isOpen) this.commandHelp.close();
     else if (this.signEditor.isOpen) this.signEditor.close();
+    else if (this.nameTagEditor.isOpen) this.nameTagEditor.close();
     else if (this.bookScreen.isOpen) this.bookScreen.close();
     else if (this.mapScreen.isOpen) this.mapScreen.close();
     else if (this.beaconScreen.isOpen) this.beaconScreen.close();
@@ -2776,6 +2823,8 @@ class App {
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
     this.mobHealthBar.invalidate(); // 下一帧 show() 必重画
+    // 名字牌同理（批次 615）：系统回收 2D 画布后，不重画就永远停在空白
+    for (const tag of this.nameTags) tag.invalidate();
     this.signRenderer.repaintAll(); // 牌子上的字（画布贴图）
 
     diag.event('app', 'ui.canvas.recover', {
@@ -4765,6 +4814,101 @@ class App {
     return blocked === null;
   }
 
+  /**
+   * 每帧填名字牌池（批次 615）。
+   *
+   * 只给"有名字 + 在 `NAME_TAG_RANGE` 内"的生物分配精灵，按距离**由近到远**取前
+   * `NAME_TAG_POOL_SIZE` 个——池子不够时先隐藏最远的，而不是随机挑（随机挑会让
+   * 玩家走近时名字乱闪）。
+   *
+   * 界面开着或睡觉时全部隐藏：名字牌是"世界里的文字"，不该浮在背包上。
+   */
+  private updateNameTags(): void {
+    if (this.uiOpen || this.sleeping) {
+      for (const tag of this.nameTags) tag.hide();
+      return;
+    }
+
+    const px = this.physics.x;
+    const py = this.physics.y;
+    const pz = this.physics.z;
+    const candidates: { mob: Mob; distance: number }[] = [];
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      if (entity.dead || !entity.customName) continue;
+      // 远程玩家的影子不该显示"名字牌"（它本来就是别人的头像）
+      if (entity.type.id === REMOTE_PLAYER_TYPE.id) continue;
+      const distance = Math.hypot(entity.x - px, entity.y - py, entity.z - pz);
+      if (distance > NAME_TAG_RANGE) continue;
+      candidates.push({ mob: entity, distance });
+    }
+    candidates.sort((a, b) => a.distance - b.distance);
+
+    for (let i = 0; i < this.nameTags.length; i++) {
+      const tag = this.nameTags[i]!;
+      const entry = candidates[i];
+      if (!entry) {
+        tag.hide();
+        continue;
+      }
+      // 生命条也在头顶：被瞄准的那只把生命条让上来，名字牌在它上面一层，
+      // 否则两者会叠在一起（原版也是名字在生命条之上）
+      const isAimed = entry.mob === this.aimMob;
+      tag.show(entry.mob, isAimed ? 0.34 : 0.12);
+    }
+  }
+
+  /**
+   * 应用输入框里的名字（批次 615）。
+   *
+   * 输入框是异步的：玩家敲名字这段时间里，生物可能被打死、区块被卸载。
+   * 所以这里先确认"那只生物还在世界里"，再写名字。
+   */
+  private applyMobName(raw: string): void {
+    const mob = this.pendingNameTarget;
+    this.pendingNameTarget = null;
+    if (!mob || mob.dead || !this.entities.all.includes(mob)) return;
+
+    const name = sanitizeName(raw);
+    if (name === null) {
+      // 留空 = 什么都不做（不是"擦掉名字"）。原版擦名字要另找方式，
+      // 而"手滑清空就永久丢名字"是个不可逆的坑，不值得为了对齐原版去踩。
+      this.hudToast.show('名字不能为空');
+      return;
+    }
+
+    mob.customName = name;
+    // 名字写成功了才扣牌：取消/留空都不消耗（见 `beginRename` 的注释）
+    this.inventory.consume(Item.NAME_TAG, 1);
+    this.refreshHotbar();
+    // 池子里那只可能正拿着旧名字画的画布：让它下一帧重画
+    for (const tag of this.nameTags) tag.invalidate();
+    this.hudToast.show(`给${mob.type.name}起名为「${name}」`);
+  }
+
+  /**
+   * 拿命名牌点生物：打开输入框（批次 615）。
+   *
+   * 三个"不消耗"的分支都返回 true（这次右键被吃掉，但不扣物品）：
+   *  - 这种生物不能命名（末影龙、远程玩家影子）→ 提示一句；
+   *  - 输入框已经开着（连点两下）→ 忽略。
+   *
+   * 名字真正写上去时才扣牌，见 `applyMobName` 的调用方 `onSave` 链。
+   */
+  private beginRename(mob: Mob): boolean {
+    if (!canNameMob(mob.type.id)) {
+      this.hudToast.show('这个名字对它没用');
+      return true;
+    }
+    if (this.nameTagEditor.isOpen) return true;
+
+    this.pendingNameTarget = mob;
+    // 打开界面要交出输入权（与告示牌编辑器同一套）：先收起触摸层、放指针
+    this.handleInventoryOpen(true);
+    this.nameTagEditor.show(mob.customName, `给${mob.type.name}起个名字`);
+    return true;
+  }
+
   private updateInteraction(dt: number): void {
     // 开着界面、或者躺着睡觉时：准星与各种交互一律收起
     // （睡觉时必须挡住破坏/放置：不然躺着还能拆自家床）
@@ -6154,6 +6298,8 @@ class App {
         ...(entity.breedCooldownRemaining > 0
           ? { breedCooldownSeconds: entity.breedCooldownRemaining }
           : {}),
+        // 名字（批次 615）：没被命名就不写键（与"白板物品不写 extras"同一条理由）
+        ...(entity.customName ? { customName: entity.customName } : {}),
         ...(villager ? { villager } : {}),
       };
     }
@@ -6237,6 +6383,8 @@ class App {
     mob.effects.restore(record.effects);
     // 求爱/繁殖冷却（批次 585）：与状态效果同一类"临时状态"，不能因为区块卸载被治好
     mob.restoreBreeding(record.loveSeconds, record.breedCooldownSeconds);
+    // 名字（批次 615）：走同一个清洗函数，手改过的存档也不会把换行/超长名字带进来
+    mob.customName = sanitizeName(record.customName);
     // 村民的职业与交易进度（批次 501）：必须在 `spawn` 之前恢复——
     // 入场后的第一帧就会跑 AI，晚一步会出现"先重新认领、再被覆盖"的中间态
     if (mob instanceof Villager) mob.restoreState(record.villager);
@@ -6447,6 +6595,9 @@ class App {
     // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
     // 拴绳（批次 256）：拿绳子点动物 = 拴上 / 解开（绳子不消耗，原版也如此）
     if (held === Item.LEAD) return this.toggleLeash(mob);
+    // 命名牌（批次 615）：点生物弹输入框；**牌在填完名字后才消耗**
+    // （原版是点下去就耗，但这里输入框可能被取消——不该因为手滑就吃掉一张牌）
+    if (held === Item.NAME_TAG) return this.beginRename(mob);
     // 装鞍（批次 254）：拿鞍点已驯服的马，鞍被消耗
     if (mob instanceof Horse && (mob.tamed || !mob.needsTaming) && held === Item.SADDLE) {
       if (mob.saddled) {
@@ -15589,6 +15740,9 @@ class App {
       this.updateCamera(dt);
 
       this.updateInteraction(dt);
+      // 名字牌与准星**无关**：有名字的生物走过去就该看得见（原版如此），
+      // 所以放在 `updateInteraction` 之外——那个函数在开界面时会提前 return
+      this.updateNameTags();
       mark = this.lap('sim', mark);
 
       // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）
@@ -15844,6 +15998,8 @@ class App {
     this.world.dispose();
     this.outline.dispose();
     this.mobHealthBar.dispose();
+    // 名字牌池（批次 615）：每个精灵一张独立画布纹理，逐张释放
+    for (const tag of this.nameTags) tag.dispose();
     this.blockOverlay.dispose();
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();

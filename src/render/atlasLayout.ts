@@ -1375,6 +1375,8 @@ export const TILE_ORDER = [
   'item_spyglass',
   // 雪傀儡刷怪蛋（批次 596）：新贴图只追加在末尾，避免 UV 错位
   'spawn_egg_snow_golem',
+  // 命名牌（批次 615）：一小片木牌 + 系绳的孔
+  'item_name_tag',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
