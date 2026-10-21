@@ -4303,9 +4303,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ② 实体碰撞层没有队伍过滤条件（远程玩家只是渲染镜像，不参与碰撞）；
       ③ 没有名字牌渲染。三项都不是 M23 自己能补的，保持进行中，等对应系统落地。
 
-- [~] N2 多 Worker 分帧预算与优先级调度
+- [x] N2 多 Worker 分帧预算与优先级调度
       已实现：两套 Worker 池（`World` 地形池 + `render/MeshWorkerPool.ts`）+ 网格化按距离排序、
-      `maxInFlight` 限流；缺：统一的帧预算与优先级调度
+      `maxInFlight` 限流；主循环每帧用 `MESH_BUDGET_PER_FRAME` 调 `processQueue`。
+      —— **批次 604 补显式优先级**：`MESH_PRIORITY_EDIT`（改方块）>
+      `MESH_PRIORITY_LOAD`（区块首次加载）> `MESH_PRIORITY_REFRESH`（光照收敛后全量重刷）；
+      已在队列里的项允许**升级**优先级，排序先优先级再距离。
+      `tests/mesh-queue.test.ts` **4 条**；`test:unit` **129 → 133**。N2 判为完成。
 - [x] N3 区块数据的 WebGL 缓冲复用池（批次 566）：
       在 `ChunkRenderer` 里加"按 顶点数:索引数 分桶"的几何池（每桶最多 4 个、总数 64）；
       区块重刷时如果形状完全一致，直接把顶点/索引数组 `set` 回旧 `BufferGeometry`，

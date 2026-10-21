@@ -28,10 +28,26 @@ interface ChunkMeshes {
   cz: number;
 }
 
-interface QueueItem {
+/**
+ * 网格化优先级（N2，批次 604）：
+ *  - **改方块**最急，玩家正盯着那一格变；
+ *  - **区块首次加载**次之，决定视野成型速度；
+ *  - **光照收敛后的全量重刷**最后，早一帧晚一帧看不出。
+ */
+export const MESH_PRIORITY_EDIT = 0;
+export const MESH_PRIORITY_LOAD = 1;
+export const MESH_PRIORITY_REFRESH = 2;
+
+export interface QueueItem {
   cx: number;
   cz: number;
   distanceSq: number;
+  priority: number;
+}
+
+/** 先按优先级、再按离玩家的距离；导出成纯函数便于离线钉住顺序 */
+export function compareMeshQueue(a: QueueItem, b: QueueItem): number {
+  return a.priority - b.priority || a.distanceSq - b.distanceSq;
 }
 
 export class ChunkRenderer {
@@ -48,7 +64,8 @@ export class ChunkRenderer {
   private static readonly MAX_POOL_PER_KEY = 4;
   private static readonly MAX_POOL_TOTAL = 64;
   private readonly queue: QueueItem[] = [];
-  private readonly queued = new Set<string>();
+  /** 已在队列里的项（键 → 项），用于把“普通加载”升级成“改方块”优先级 */
+  private readonly queued = new Map<string, QueueItem>();
   /** 每个区块最近一次派发的请求序号，用于丢弃过期结果 */
   private readonly pending = new Map<string, number>();
   private requestSeq = 0;
@@ -161,13 +178,13 @@ export class ChunkRenderer {
   enqueueAround(worldX: number, worldZ: number): void {
     const cx = worldX >> 4;
     const cz = worldZ >> 4;
-    this.enqueue(cx, cz);
+    this.enqueue(cx, cz, MESH_PRIORITY_EDIT);
     const lx = worldX & 15;
     const lz = worldZ & 15;
-    if (lx === 0) this.enqueue(cx - 1, cz);
-    if (lx === 15) this.enqueue(cx + 1, cz);
-    if (lz === 0) this.enqueue(cx, cz - 1);
-    if (lz === 15) this.enqueue(cx, cz + 1);
+    if (lx === 0) this.enqueue(cx - 1, cz, MESH_PRIORITY_EDIT);
+    if (lx === 15) this.enqueue(cx + 1, cz, MESH_PRIORITY_EDIT);
+    if (lz === 0) this.enqueue(cx, cz - 1, MESH_PRIORITY_EDIT);
+    if (lz === 15) this.enqueue(cx, cz + 1, MESH_PRIORITY_EDIT);
   }
 
   /**
@@ -178,17 +195,23 @@ export class ChunkRenderer {
    * 这里只重排已渲染的区块，不碰未加载区域；调用方负责**只做一次**。
    */
   enqueueAllRendered(): void {
-    for (const entry of this.rendered.values()) this.enqueue(entry.cx, entry.cz);
+    for (const entry of this.rendered.values()) this.enqueue(entry.cx, entry.cz, MESH_PRIORITY_REFRESH);
   }
 
-  private enqueue(cx: number, cz: number): void {
+  private enqueue(cx: number, cz: number, priority: number = MESH_PRIORITY_LOAD): void {
     const key = chunkKey(cx, cz);
-    if (this.queued.has(key)) return;
+    const existing = this.queued.get(key);
+    if (existing) {
+      // 已在队列里：只允许**升级**优先级（例如加载途中玩家改了方块）
+      if (priority < existing.priority) existing.priority = priority;
+      return;
+    }
     // 已有 Worker 请求在途时，改动一入队就立刻让旧结果失效；否则旧结果可能赶在
     // 新请求派发前回来，把“破坏前”的方块短暂画回去一帧。
     if (this.pending.has(key)) this.pending.set(key, ++this.requestSeq);
-    this.queued.add(key);
-    this.queue.push({ cx, cz, distanceSq: 0 });
+    const item: QueueItem = { cx, cz, distanceSq: 0, priority };
+    this.queued.set(key, item);
+    this.queue.push(item);
   }
 
   /**
@@ -201,7 +224,7 @@ export class ChunkRenderer {
     for (const item of this.queue) {
       item.distanceSq = (item.cx - centerCx) ** 2 + (item.cz - centerCz) ** 2;
     }
-    this.queue.sort((a, b) => a.distanceSq - b.distanceSq);
+    this.queue.sort(compareMeshQueue);
 
     let processed = 0;
     while (processed < budget && this.queue.length > 0 && this.inFlight < this.maxInFlight) {
