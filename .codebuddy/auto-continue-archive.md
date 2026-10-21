@@ -11570,4 +11570,27 @@
 - [x] B522-5 结构布局深度收口（府邸 / 要塞 / 堡垒）
 - ⚠️ 差异：原版 4 种拼图（bridge/housing/stables/treasure）仍未全做
 
+## 批次 523：图集"上传画布"被单独回收 → 世界全白（2026-10-20）
+
+> 真机两份日志（`T08-51-19` / `T10-26-43`）：压后台回来整个世界全白、只剩黑色动物；
+> 退出重进 / 换世界都白，只有刷新页面才恢复。
+
+- [x] B523-1 上传画布（512×2016）挂 `contextlost/contextrestored`；`repaint()` 双上下文检查
+- [x] B523-2 新增 `ensureUploaded()`（只重铺上传画布 + `needsUpdate`）与 `probeUpload()/probeSource()`
+- [x] B523-3 `webglcontextrestored` 里强制 `atlas.repaint()` + `clearBlockIconCache()`
+- [x] B523-4 回前台 / GL 恢复后补两刀（rAF + 400ms，幂等）；`App` 构造兜底 `ensureUploaded()`
+- [x] B523-5 埋点：`uploadBefore/uploadAfter/uploadPixels/sourcePixels/retry` + `atlas.ensure`
+- 门禁：`tests/canvas-probe` 13 → **17**、`test:ui` 875 → **883**、离线 160 套全绿
+- ⚠️ 未做：`Sky` 的云/日月 canvas 纹理仍没有重画入口（同类隐患，丢了只会少云/日月）
+
+## 批次 529：世界创建矩阵验收（2026-10-20）
+
+- [x] B523-1 5×3×4 = 60 组：创建、字段、id 唯一、读盘往返、默认命名
+- [x] B523-2 5 类型 × 生存/创造 = 10 组：`planSpawnRegion` 出生点 + 出生区块非空 + 模式能力
+- [x] B523-3 四档难度语义（和平 spawnCap=0/伤害 0/不刷敌对）
+- [x] B523-4 UI 守卫：type/difficulty/gameMode 三项都传进 `registry.create`
+- [x] B523-5 `WorldRegistry.create` 对三个参数先规范化（type 用 `isWorldType`、难度用 `normalizeDifficulty`）
+- [x] B523-6 `test:worldmatrix` **21 条**；套数 160 → **161**
+- ⚠️ 仍未做：浏览器里真的点一遍创建表单（按用户口径不做端到端浏览器测试）
+
 <!-- docs-archive:end -->

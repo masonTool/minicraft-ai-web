@@ -91,6 +91,10 @@
 2. **521 红石充能强度模型**（准连接/充能等级）；现只有元件齐全，极端电路仍有差异。
 3. **性能**：N1 顶点压缩、N3 缓冲池（动网格主路径，单独成批）。
 4. **悬案 E23**：非完整方块平台偏暗（需用户提供两个运行时计数）。
+5. **小游戏 v2 Phase 3**（`WXMINIGAME_V2_INVENTORY_SPEC.md`）：连续合成（长按产物一直做到
+   材料用完）+ 配方书按 3×3 自动摆格；Phase 2 的光标语义已落地，这一批接着往上盖。
+6. **小游戏 v2 Phase 4**：快速移动（复用 `core/container/QuickMove.ts`，不重写规则）、
+   拖拽分配（`CursorActions.distributeEvenly/placeOneEach` 已有纯函数）、点空白丢手上那叠。
 
 ## 流程（一轮批次照着走，别凭记忆）
 
@@ -126,29 +130,6 @@
 
 ---
 
-## 批次 523：图集"上传画布"被单独回收 → 世界全白（2026-10-20）
-
-> 真机两份日志（`T08-51-19` / `T10-26-43`）：压后台回来整个世界全白、只剩黑色动物；
-> 退出重进 / 换世界都白，只有刷新页面才恢复。
-
-- [x] B523-1 上传画布（512×2016）挂 `contextlost/contextrestored`；`repaint()` 双上下文检查
-- [x] B523-2 新增 `ensureUploaded()`（只重铺上传画布 + `needsUpdate`）与 `probeUpload()/probeSource()`
-- [x] B523-3 `webglcontextrestored` 里强制 `atlas.repaint()` + `clearBlockIconCache()`
-- [x] B523-4 回前台 / GL 恢复后补两刀（rAF + 400ms，幂等）；`App` 构造兜底 `ensureUploaded()`
-- [x] B523-5 埋点：`uploadBefore/uploadAfter/uploadPixels/sourcePixels/retry` + `atlas.ensure`
-- 门禁：`tests/canvas-probe` 13 → **17**、`test:ui` 875 → **883**、离线 160 套全绿
-- ⚠️ 未做：`Sky` 的云/日月 canvas 纹理仍没有重画入口（同类隐患，丢了只会少云/日月）
-
-## 批次 529：世界创建矩阵验收（2026-10-20）
-
-- [x] B523-1 5×3×4 = 60 组：创建、字段、id 唯一、读盘往返、默认命名
-- [x] B523-2 5 类型 × 生存/创造 = 10 组：`planSpawnRegion` 出生点 + 出生区块非空 + 模式能力
-- [x] B523-3 四档难度语义（和平 spawnCap=0/伤害 0/不刷敌对）
-- [x] B523-4 UI 守卫：type/difficulty/gameMode 三项都传进 `registry.create`
-- [x] B523-5 `WorldRegistry.create` 对三个参数先规范化（type 用 `isWorldType`、难度用 `normalizeDifficulty`）
-- [x] B523-6 `test:worldmatrix` **21 条**；套数 160 → **161**
-- ⚠️ 仍未做：浏览器里真的点一遍创建表单（按用户口径不做端到端浏览器测试）
-
 ## 批次 530：图集超出纹理上限（"方块没着色"）（2026-10-20）
 
 - [x] B530-1 根因：1234 张贴图 × 16 列 = 78 行，上传画布 2496px > 2048；
@@ -168,3 +149,24 @@
 - [x] B531-4 真实验证：Node 画笔采样 → 无头浏览器图集像素 → 游戏内俯拍截图
   （骨块米色、蓝色带釉陶瓦、蓝色旗帜）；`test:render` 222 条不回归
 - ⚠️ 530 的 32 列改动保留：2048 纹理上限仍是真实风险，只是不是这次白块的原因
+
+## 批次 532：小游戏 v2 背包 Phase 2（光标语义）（2026-10-21）
+
+> 队列文件里其实**已经没有 `- [ ]`** 了，真正挂着的是
+> `WXMINIGAME_V2_INVENTORY_SPEC.md` Phase 2 那 5 条——这一批按那份 SPEC 收口。
+> 参照物是 Web 版 `InventoryScreen` + `CursorActions`/`QuickMove`/`TouchSplit` 三个纯模块。
+
+- [x] B532-1 `src/minigame-v2/inventory-click.ts`：**纯状态机** `applyClick(state, binding, button)`
+      与 `reclaimHeld`（关闭回收）。左键整叠/放下/合并/交换、右键拿半/放一个、
+      产物槽 `takeOnly`、单件槽 `singleItem`、创造品覆盖（CLICK-014）全在这里
+- [x] B532-2 `InventoryCursor` 退化成"只存状态"的外壳（规则不写第二遍）
+- [x] B532-3 UI Kit：`LONG_PRESS_MS = 420` 长按 → 右键、槽位回调改 `onTap(button)`、
+      光标幽灵图标（`setGhost/moveGhost`）、`takeOnly` 金边
+- [x] B532-4 面板改用 `{kind, index}` 而非裸下标（INV-007：背包 9 号 ≠ 箱子 9 号）
+- [x] B532-5 组合根三个唯一入口 `clickSlot` / `dropSlot` / `closeInventory`，
+      旧 `quickMoveToCraft`/`tapEquipment`/`handleDrop`/`swapSlots` 全部删除
+- [x] B532-6 `test:v2-inventory` **66 条**（套数 164 → **166**）；e2e 补 Phase 2 五条真路径断言
+- [x] B532-7 顺手修 `audit-tasks.mjs` 的 `NON_SUITE_KEYS` 与 `run-tests.mjs` 不一致
+      （少排了两套浏览器测试 → 文档里的套数一直多算 2）
+- 门禁：`npm run check` 全绿、`build:minigame:v2` 2.8MB 出包、真浏览器 e2e **PASS**
+- ⚠️ 未做：长按后左右划选数量（TOUCH-004，归 Phase 8）；快速移动/拖拽分配/丢弃（Phase 4）

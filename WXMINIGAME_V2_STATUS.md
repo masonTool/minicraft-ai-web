@@ -68,17 +68,20 @@
 - [x] 创造栏搜索/整理；世界卡片累计游玩时间
 - [x] 创造栏 Web 五分类（全部/建筑/装备/物品/自然）+ 搜索/整理/分页
 - [x] 调试信息开关（FPS/区块/目标/坐标）
-- [ ] Inventory 完整态：拖拽细节
+- [x] Inventory 完整态：拖拽细节
+- [x] Phase 2 光标语义（点击/长按：拿整叠、放下、合并、交换、拿一半、只取不放、关闭回收）——
+      `test:v2-inventory` **66 条**，真浏览器 e2e 5 条
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，game.js 约 2.76MB + worker 约 540KB）
 
 ## 下一步顺序
 
-1. 真机验证 Worker/60FPS/存档/声音/容器/生物
-2. 完整生物/怪物 AI
-3. 门/按钮等方块交互
-4. 按 `WXMINIGAME_V2_ARCHITECTURE.md` 拆分组合根
-5. Settings / Inventory 继续按 Web 结构拆分
+1. Phase 3：合成与工作台（连续合成 / 长按产物）
+2. Phase 4：快速移动（Shift/规则模块）、拖拽分配、丢弃
+3. 真机验证 Worker/60FPS/存档/声音/容器/生物
+4. 完整生物/怪物 AI
+5. Phase 7：容器面板统一（箱子/熔炉共用一套壳）
+6. 按 `WXMINIGAME_V2_ARCHITECTURE.md` 拆分组合根
 
 架构与债务见：`WXMINIGAME_V2_ARCHITECTURE.md`
 
