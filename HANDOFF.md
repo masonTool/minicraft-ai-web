@@ -118,15 +118,31 @@ npm run dev            # http://localhost:5173
 
 ## 3. 自动继续机制（换机器最容易坏在这）
 
-- 钩子脚本：`.codebuddy/hooks/auto-continue.mjs`（Stop / UserPromptSubmit 两个事件）
+- 钩子脚本：`.codebuddy/hooks/auto-continue.mjs`（自动按队列继续）
+  与 `.codebuddy/hooks/auto-commit.mjs`（拦住"没提交就想停"），都挂在 Stop / UserPromptSubmit 上。
 - 配置：`.codebuddy/settings.json` —— **用相对路径**写命令，换机器才不会失效；
   若你的环境里相对路径不生效（AI 不自动继续），执行 `npm run agent:setup -- --fix-hooks` 自动改成本机绝对路径。
-- 紧急刹车：`touch .codebuddy/auto-continue.off`；恢复：`rm .codebuddy/auto-continue.off`
-- 单会话次数上限：环境变量 `AUTO_CONTINUE_MAX`（默认 12）
-- 排查用日志：`.codebuddy/auto-continue.log`（每轮一行 JSON，能看到 `decision=block` 就说明钩子生效）
+- **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算出项目根，
+  既不依赖 cwd（可能是子目录），也不依赖 `CODEBUDDY_PROJECT_DIR`（它是条件注入的）。
+  **改过目录名（比如仓库被挪进 `About-minecraft/`）也不需要改任何配置**。
+- 紧急刹车：`touch .codebuddy/auto-continue.off` / `touch .codebuddy/auto-commit.off`；
+  恢复：把对应 `.off` 删掉。
+- 单会话次数上限：`AUTO_CONTINUE_MAX`（默认 12）、`AUTO_COMMIT_MAX`（默认 5）
+- 排查用日志：`.codebuddy/auto-continue.log` / `.codebuddy/auto-commit.log`
+  （每轮一行 JSON，`decision=block` 说明生效且拦住了，`allow:*` 后面是放行依据）
 
-**踩过的坑（别重犯）**：Stop 钩子里输出 `{"continue": false}` 会被实现层当成"硬停止"，
-表现为 AI 真的停了、不自动继续；正确写法是 `{"continue": true}` + 反馈走 **stderr** + `exit 2`。
+**auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**（不 add / commit / push），
+它只做一件事——发现工作区有未提交改动就阻止停止，把改动清单和规矩（粒度 / 中文 message /
+只 add 具体路径 / 禁 amend 与 --no-verify）交回给 AI，由 AI 自己 review 和提交。
+理由：commit message 的质量取决于"知不知道自己为什么这么改"，脚本拼出来的只能是 `update files`。
+六道放行：`.off` 刹车、非 git 仓库、merge/rebase/cherry-pick 进行中、detached HEAD、
+存在未解决冲突、本会话已拦满次数——后四种是危险 git 状态，这时拦人反而会掩盖问题。
+
+**踩过的坑（别重犯）**：Stop 钩子里输出 `{"continue": false}` 有两种后果，取决于实现怎么解读
+`continue`。本仓库历史上（提交 `41be0e12`）遇到过它被当成"硬停止"、AI 真的停了；
+现行 `auto-continue.mjs` 因此改用 `{"continue": true}` + 反馈走 **stderr** + `exit 2`。
+`auto-commit.mjs` 默认走文档写法（`continue:false` + `reason`），并留了开关：
+`AUTO_COMMIT_STYLE=exit2` 可切到"实测有效"那套。**若发现 AI 不理会拦截、直接停了，先切这个开关。**
 
 ## 3.5 本轮（J1/J2/J3）新增的硬性约定
 
