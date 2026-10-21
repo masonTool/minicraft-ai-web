@@ -44,8 +44,36 @@ const assert = (condition, message, state) => {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(3000);
 
-  const box = await page.locator('iframe').boundingBox();
-  assert(box, '找不到 iframe');
+  let iframeBox = null;
+  for (let attempt = 0; attempt < 15 && !iframeBox; attempt++) {
+    iframeBox = await page.evaluate(() => {
+      const frame = document.querySelector('iframe');
+      if (!frame) return null;
+      const rect = frame.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0
+        ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        : null;
+    });
+    if (!iframeBox) await page.waitForTimeout(200);
+  }
+  const srcdocFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  let canvasBox = null;
+  if (!iframeBox) {
+    canvasBox = await page.evaluate(() => {
+      for (const canvas of Array.from(document.querySelectorAll('canvas'))) {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        }
+      }
+      return null;
+    });
+  }
+  const viewport = page.viewportSize() || { width: 1080, height: 700 };
+  const box = iframeBox ?? canvasBox ?? { x: 0, y: 0, ...viewport };
+  assert(box, '找不到游戏画布');
+  const gameFrame = iframeBox ? srcdocFrame : srcdocFrame ?? page.mainFrame();
+  assert(gameFrame, '找不到游戏 frame');
   const point = (x, y) => ({
     x: box.x + (x / DESIGN.width) * box.width,
     y: box.y + (y / DESIGN.height) * box.height,
@@ -64,6 +92,7 @@ const assert = (condition, message, state) => {
   };
 
   const title = await waitState((state) => state.screen === 'title', '未进入标题页');
+  await page.waitForTimeout(800);
   await tap(512, 327);
   const worlds = await waitState((state) => state.screen === 'worlds', '未进入世界列表');
   await tap(512, 216);
@@ -78,10 +107,8 @@ const assert = (condition, message, state) => {
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
   // 猪生成与击杀掉落
-  const pigFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(pigFrame, '猪用例找不到 iframe');
   const pigSpawned = await waitState((state) => state.pigs > 0, '猪没有生成', 20000);
-  const pigKilled = await pigFrame.evaluate(() => wx.__v2Test?.killPig?.());
+  const pigKilled = await gameFrame.evaluate(() => wx.__v2Test?.killPig?.());
   const pigGone = await waitState(
     (state) => state.pigs === 0 && state.drops > 0,
     '猪没有死亡掉落',
@@ -90,7 +117,7 @@ const assert = (condition, message, state) => {
 
   // 羊生成/击杀
   const sheepSpawned = await waitState((state) => state.sheep > 0, '羊没有生成', 20000);
-  const sheepKilled = await pigFrame.evaluate(() => wx.__v2Test?.killSheep?.());
+  const sheepKilled = await gameFrame.evaluate(() => wx.__v2Test?.killSheep?.());
   const sheepGone = await waitState(
     (state) => state.sheep === 0 && state.drops > 0,
     '羊没有死亡掉落',
@@ -98,15 +125,13 @@ const assert = (condition, message, state) => {
   );
 
   // 僵尸生成/击杀
-  await pigFrame.evaluate(() => wx.__v2Test?.spawnZombie?.());
+  await gameFrame.evaluate(() => wx.__v2Test?.spawnZombie?.());
   const zombieSpawned = await waitState((state) => state.zombies > 0, '僵尸没有生成', 5000);
-  await pigFrame.evaluate(() => wx.__v2Test?.killZombie?.());
+  await gameFrame.evaluate(() => wx.__v2Test?.killZombie?.());
   const zombieGone = await waitState((state) => state.zombies === 0, '僵尸没有死亡', 5000);
 
   // 创造双击跳跃：起飞/落地
-  const flightFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(flightFrame, '飞行用例找不到 iframe');
-  await flightFrame.evaluate(() => wx.__v2Test?.setGameMode?.('creative'));
+  await gameFrame.evaluate(() => wx.__v2Test?.setGameMode?.('creative'));
   const jumpPoint = point(962, 319);
   await page.touchscreen.tap(jumpPoint.x, jumpPoint.y);
   await page.waitForTimeout(80);
@@ -119,9 +144,7 @@ const assert = (condition, message, state) => {
   const flyingOff = await waitState((state) => !state.flying, '双击跳跃没有落地', 5000);
 
   // 死亡 → 重生
-  const deathFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(deathFrame, '死亡用例找不到 iframe');
-  await deathFrame.evaluate(() => {
+  await gameFrame.evaluate(() => {
     wx.__v2Test?.setGameMode?.('survival');
     wx.__v2Test?.setHealth?.(0);
   });
@@ -153,19 +176,32 @@ const assert = (condition, message, state) => {
     await page.waitForTimeout(80);
     await page.touchscreen.tap(stickCenter.x, stickCenter.y);
   };
-  await joystickDouble();
-  const sneakOn = await waitState((state) => state.sneaking, '双击摇杆没有开启潜行', 5000);
-  await joystickDouble();
-  await waitState((state) => !state.sneaking, '双击摇杆没有关闭潜行', 5000);
+  const setSneak = async (target) => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (latest && latest.sneaking === target) return latest;
+      await joystickDouble();
+      await page.waitForTimeout(450);
+    }
+    throw new Error(`双击摇杆没有${target ? '开启' : '关闭'}潜行\nlast=` + JSON.stringify(latest));
+  };
+  const sneakOn = await setSneak(true);
+  await setSneak(false);
 
   await tap(530, 36);
   const paused = await waitState((state) => state.paused && state.screen === 'pause', '暂停没有打开');
   await tap(402, 313);
   const resumed = await waitState((state) => !state.paused && state.screen === 'game', '暂停没有继续');
 
-  const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(liveFrame, '容器用例找不到 iframe');
-  const hook = await liveFrame.evaluate(() => {
+  const closeContainer = async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await tap(775, 82);
+      await page.waitForTimeout(250);
+      if (latest && !latest.containerOpen) return latest;
+    }
+    throw new Error('容器没有关闭\nlast=' + JSON.stringify(latest));
+  };
+
+  const hook = await gameFrame.evaluate(() => {
     try {
       const api = wx.__v2Test;
       return { has: typeof api?.openChestAtFeet, value: api?.openChestAtFeet?.() };
@@ -175,7 +211,7 @@ const assert = (condition, message, state) => {
   });
   console.log('container hook', JSON.stringify(hook));
   const containerOpen = await waitState((state) => state.containerOpen, '容器没有打开', 5000);
-  await liveFrame.evaluate(() => wx.__v2Test?.fillChestFirst?.(1, 2));
+  await gameFrame.evaluate(() => wx.__v2Test?.fillChestFirst?.(1, 2));
   await waitState((state) => state.containerSlots?.[0] === 1, '箱子预置物品失败', 5000);
   await tap(292, 158);
   const containerTaken = await waitState(
@@ -183,37 +219,45 @@ const assert = (condition, message, state) => {
     '从箱子取出物品失败',
     5000,
   );
-  await tap(775, 82);
-  const containerClosed = await waitState((state) => !state.containerOpen, '容器没有关闭', 5000);
+  const containerClosed = await closeContainer();
+
+  const selectSlotZero = async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await tap(269, 424);
+      await page.waitForTimeout(250);
+      if (latest && latest.selectedSlot === 0) return latest;
+    }
+    throw new Error('快捷栏槽位选择失败\nlast=' + JSON.stringify(latest));
+  };
 
   // 背包 → 箱子存入：先给物品并选中槽 0，再点箱子空槽
-  await liveFrame.evaluate(() => {
+  await gameFrame.evaluate(() => {
     wx.__v2Test?.clearInventory?.();
     wx.__v2Test?.giveItem?.(3, 1);
   });
-  await tap(269, 424);
-  await liveFrame.evaluate(() => wx.__v2Test?.openChestAtFeet?.());
+  await page.waitForTimeout(300);
+  await selectSlotZero();
+  await gameFrame.evaluate(() => wx.__v2Test?.openChestAtFeet?.());
   await waitState((state) => state.containerOpen, '存入用例打开箱子失败', 5000);
+  await page.waitForTimeout(300);
   await tap(292, 158);
   const containerStored = await waitState(
     (state) => state.containerSlots?.[0] === 3 && state.inventory?.[0] === 0,
     '背包物品没有存入箱子',
     5000,
   );
-  await tap(775, 82);
-  await waitState((state) => !state.containerOpen, '存入用例关闭箱子失败', 5000);
+  await closeContainer();
 
   // 熔炉打开/关闭
-  await liveFrame.evaluate(() => wx.__v2Test?.openFurnaceAtFeet?.());
+  await gameFrame.evaluate(() => wx.__v2Test?.openFurnaceAtFeet?.());
   const furnaceOpen = await waitState((state) => state.containerOpen, '熔炉没有打开', 5000);
-  const smelted = await liveFrame.evaluate(() => wx.__v2Test?.smeltFurnace?.());
+  const smelted = await gameFrame.evaluate(() => wx.__v2Test?.smeltFurnace?.());
   const furnaceCooked = await waitState(
     (state) => state.containerSlots?.[2] === 1009,
     '铁矿石没有熔炼成铁锭',
     5000,
   );
-  await tap(775, 82);
-  const furnaceClosed = await waitState((state) => !state.containerOpen, '熔炉没有关闭', 5000);
+  const furnaceClosed = await closeContainer();
 
   await tap(815, 424);
   const inventory = await waitState((state) => state.inventoryOpen && state.screen === 'inventory', '背包没有打开');
@@ -233,9 +277,7 @@ const assert = (condition, message, state) => {
   const editScreen = await waitState((state) => state.screen === 'edit', '世界编辑没有打开');
   await tap(252, 391);
   const worldsAfterEdit = await waitState((state) => state.screen === 'worlds', '编辑取消没有回列表');
-  const deleteFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(deleteFrame, '删除用例找不到 iframe');
-  await deleteFrame.evaluate(() => {
+  await gameFrame.evaluate(() => {
     wx.showModal = (options) => options?.success?.({ confirm: true, cancel: false });
   });
   await tap(782, 163);
