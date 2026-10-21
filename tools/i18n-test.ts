@@ -7,6 +7,7 @@
  * 翻译质量靠人看，表的一致性只能靠断言。
  */
 
+import { USAGE_FIELD_NAMES, translateUsageFields } from '../src/core/commands/UsageText.ts';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -37,6 +38,17 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+/** 只看代码行：注释里出现同样的字样是解释，不是使用 */
+function codeOf(source: string): string {
+  return source
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith('*') && !t.startsWith('//') && !t.startsWith('/*');
+    })
+    .join('\n');
 }
 
 console.log('[中英表一致性]');
@@ -306,13 +318,6 @@ console.log('\n[工作站与面板标题（批次 617 / Q13）]');
   check(`Q13 的 ${all.length} 个键中英齐全`, missing.length === 0, missing.join(','));
   check('每条都真翻成英文', all.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
 
-  /** 只查代码行（注释里出现同样的字样是解释，不是使用） */
-  const codeOf = (source: string) =>
-    source
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//') && !line.trim().startsWith('/*'))
-      .join('\n');
-
   // 表必须改成键驱动（不是还留着中文常量）
   const stationSrc = readFileSync(new URL('../src/core/crafting/StationRecipes.ts', import.meta.url), 'utf8');
   check('站台名改成 stationLabel() 查键', stationSrc.includes('export function stationLabel(') && stationSrc.includes("'station.name.furnace'"));
@@ -328,6 +333,74 @@ console.log('\n[工作站与面板标题（批次 617 / Q13）]');
 
   const pagerSrc = readFileSync(new URL('../src/ui/ItemPager.ts', import.meta.url), 'utf8');
   check('分页文案走 tp()，不再拼中文', pagerSrc.includes("tp('pager.summary'") && !codeOf(pagerSrc).includes('页 · 共'));
+}
+
+console.log('\n[聊天与命令用法（批次 617 / Q14）]');
+{
+  /**
+   * Q14 的两块：聊天输入框的 9 处提示，以及命令的 `用法：` 报错。
+   *
+   * 命令那部分刻意**没有**逐句翻译——39 处用法串各不相同，逐句写等于 39 条译文要维护。
+   * 改成只翻 `用法：` 前缀 + `<>`/`[]` 里的参数名，语法符号原样。
+   * 下面第 3 条断言是这一批的关键：**词表必须覆盖 `Commands.ts` 里出现的每个中文字段**，
+   * 漏一个就会在英文界面上留一个中文词。这条断言是从源码里抽真实用法串跑的，
+   * 不是手抄几个样例——手抄的话新加命令时漏掉也不会红。
+   */
+  const chatKeys = [
+    'chat.sendLabel', 'chat.collapse', 'chat.expand', 'chat.hintIdle', 'chat.hintIdleKeyboard',
+    'chat.hintCommand', 'chat.hintCommandKeyboard', 'chat.candidates', 'chat.tabComplete',
+    'command.usagePrefix',
+  ];
+  const parity = keyParity();
+  const missing = chatKeys.filter((k) => parity.missingInEn.includes(k) || parity.missingInZh.includes(k) || t(k, 'zh') === k || t(k, 'en') === k);
+  check(`Q14 的 ${chatKeys.length} 个键中英齐全`, missing.length === 0, missing.join(','));
+  check('每条都真翻成英文', chatKeys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
+
+  // —— 命令用法：从源码抽真实用法串，逐个查字段覆盖 ——
+  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const usageRe = /usageError\(\s*[`']([\s\S]*?)[`']\s*,?\s*\)/g;
+  const usages: string[] = [];
+  for (let m = usageRe.exec(cmdSrc); m; m = usageRe.exec(cmdSrc)) usages.push(m[1]);
+  check('用法报错全部走 usageError()', usages.length >= 39 && !codeOf(cmdSrc).includes('用法：'), `找到 ${usages.length} 条`);
+
+  const cjkFields = new Set<string>();
+  for (const body of usages) {
+    for (const f of [...(body.match(/<([^>]*)>/g) ?? []), ...(body.match(/\[([^\]]*)\]/g) ?? [])]) {
+      const inner = f.slice(1, -1);
+      if (/[\u4e00-\u9fff]/.test(inner)) cjkFields.add(inner);
+    }
+  }
+  const uncovered = [...cjkFields].filter((k) => !(k in USAGE_FIELD_NAMES));
+  check(`词表覆盖全部 ${cjkFields.size} 个中文字段`, uncovered.length === 0, uncovered.join(' | '));
+
+  // 翻译后任何括号里都不该再有中文（这才是用户会看到的东西）
+  const leaks: string[] = [];
+  for (const body of usages) {
+    const out = translateUsageFields(body, 'en');
+    for (const f of [...(out.match(/<([^>]*)>/g) ?? []), ...(out.match(/\[([^\]]*)\]/g) ?? [])]) {
+      if (/[\u4e00-\u9fff]/.test(f)) leaks.push(f);
+    }
+  }
+  check('英文模式下用法串的括号里没有中文', leaks.length === 0, [...new Set(leaks)].join(' | '));
+
+  // 语法符号不能被翻译吃掉
+  check(
+    '命令名、方括号、竖线原样保留',
+    translateUsageFields('/team add <队伍> [显示名] | color <颜色>', 'en') ===
+      '/team add <team> [display name] | color <color>',
+  );
+  check('未登记的参数名原样保留（漏译能一眼看见）', translateUsageFields('/x <新参数>', 'en') === '/x <新参数>');
+  check('中文模式不改动用法串', translateUsageFields('/give <物品> [数量]', 'zh') === '/give <物品> [数量]');
+
+  // 聊天输入框：不能留硬编码
+  const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');
+  const chatCode = codeOf(chatSrc).split('\n');
+  const chatHard = chatCode.filter((line) => {
+    const literals = line.match(/'[^']*'/g) ?? [];
+    return literals.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes("t('");
+  });
+  check('聊天输入框没有残留硬编码中文', chatHard.length === 0, chatHard.slice(0, 3).join(' / '));
+  check('候选提示走占位符（不是拼中文）', chatSrc.includes("tp('chat.candidates'"));
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

@@ -3591,7 +3591,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     '被截断的消息有明确的"展开"提示（不是只剩省略号）',
     html.includes("content: '展开';") &&
       html.includes('#chat.open .chat-line.collapsible::after') &&
-      chatSrc.includes("html.title = '点击展开';"),
+      // 批次 617（Q14）：文案改走 t('chat.expand')，断言跟到键
+      chatSrc.includes("html.title = t('chat.expand');"),
   );
   check(
     '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',

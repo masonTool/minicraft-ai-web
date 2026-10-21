@@ -9,7 +9,7 @@
  * 而且消息栏要能自己淡出（批次 223：整条消息 3 秒后彻底消失，见 `LINE_LIFETIME`）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import { commandNames, mobNames } from '../core/commands/Commands.ts';
 import { resolveItemId } from '../core/registry/itemNames.ts';
 import { isTouchUi } from './TouchControls.ts';
@@ -136,7 +136,7 @@ export class ChatInput {
     this.sendButton.type = 'button';
     this.sendButton.className = 'chat-send hidden';
     this.sendButton.textContent = t('chat.send');
-    this.sendButton.setAttribute('aria-label', '发送');
+    this.sendButton.setAttribute('aria-label', t('chat.sendLabel'));
     // pointerdown 而不是 click：click 之前浏览器会先把焦点从输入框移走，
     // 手机上会顺手收起键盘、甚至把整个输入行关掉（preventDefault 才不会）
     this.sendButton.addEventListener('pointerdown', (event) => {
@@ -183,7 +183,7 @@ export class ChatInput {
         if (!line) return;
         line.expanded = line.expanded !== true;
         lineEl.classList.toggle('expanded', line.expanded);
-        lineEl.title = line.expanded ? '点击收起' : '点击展开';
+        lineEl.title = line.expanded ? t('chat.collapse') : t('chat.expand');
       },
       { signal: this.listeners.signal },
     );
@@ -394,14 +394,14 @@ export class ChatInput {
       if (!element.classList.contains('collapsible')) continue;
       const html = element as HTMLElement;
       if (element.classList.contains('expanded')) {
-        html.title = '点击收起';
+        html.title = t('chat.collapse');
         continue;
       }
       if (html.scrollWidth <= html.clientWidth + 1) {
         element.classList.remove('collapsible');
         html.removeAttribute('title');
       } else {
-        html.title = '点击展开';
+        html.title = t('chat.expand');
       }
     }
     // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置
@@ -533,8 +533,8 @@ export class ChatInput {
     if (!value.startsWith('/') || value.length < 2) {
       this.renderHint(
         touch
-          ? '输入命令（/help 查看全部）或直接发言，点"发送"提交'
-          : '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消',
+          ? t('chat.hintIdle')
+          : t('chat.hintIdleKeyboard'),
       );
       return;
     }
@@ -547,15 +547,16 @@ export class ChatInput {
     if (matches.length === 1 && matches[0] === prefix) {
       this.renderHint(
         touch
-          ? '点"发送"提交（手机上没有 Tab 补全，参数要打全）'
-          : 'Tab 补全参数 · Enter 提交 · ↑↓ 翻历史',
+          ? t('chat.hintCommand')
+          : t('chat.hintCommandKeyboard'),
       );
       return;
     }
     this.renderHint(
-      `候选：${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}${
-        touch ? '' : '（Tab 补全）'
-      }`,
+      tp('chat.candidates', {
+        list: `${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}`,
+        suffix: touch ? '' : t('chat.tabComplete'),
+      }),
     );
   }
 
