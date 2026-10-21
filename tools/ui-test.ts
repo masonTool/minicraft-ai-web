@@ -4599,9 +4599,8 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   check(
     'PC 背包槽位/配方格自适应放大（只命中桌面宽屏）',
     htmlSource.includes('grid-template-columns: repeat(9, 54px);') &&
-      htmlSource.includes('grid-template-columns: repeat(7, 52px);') &&
-      htmlSource.includes('grid-template-columns: repeat(7, 48px);') &&
-      htmlSource.includes('grid-template-columns: repeat(8, 46px);') &&
+      htmlSource.includes('grid-template-columns: repeat(9, 52px);') &&
+      htmlSource.includes('--pc-inv-cell: 46px;') &&
       htmlSource.includes('--recipe-cell: 40px;'),
   );
   check(
@@ -4613,6 +4612,28 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
     'PC 创造/物品列表用满左栏高度（不再固定 174px 只露 4 行）',
     htmlSource.includes('.inv-panel.pocket-ui.pocket-dual .inv-creative-section {') &&
       htmlSource.includes('flex: 1 1 auto;\n          min-height: 0;\n          max-height: none;'),
+  );
+  // 批次 620（用户）："PC 端背包的物品不能滑动、不能翻页，搜索框的位置也不对"。
+  // 三条都出在"只对触摸端成立"的规则没带 `body.touch-mode`，被 PC 一起吃掉了。
+  check(
+    'PC 翻页条不再被携带版规则藏掉（隐藏只对触摸端生效）',
+    htmlSource.includes(
+      'body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-pager { display: none !important; }',
+    ) &&
+      !/^\s*\.inv-panel\.creative-ui\.pocket-ui \.inv-pager \{ display: none !important; \}$/m.test(
+        htmlSource,
+      ),
+  );
+  check(
+    'PC 物品格与搜索框同一条中轴（auto-fill + 574px 上限）',
+    htmlSource.includes('grid-template-columns: repeat(auto-fill, var(--pc-inv-cell));') &&
+      htmlSource.includes('max-width: 574px;') &&
+      htmlSource.includes('body:not(.touch-mode) .inv-panel.pocket-ui .inv-search {'),
+  );
+  check(
+    'PC 物品格自己滚、且用看得见的原生滚动条',
+    htmlSource.includes('body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar,') &&
+      htmlSource.includes('body:not(.touch-mode) .inv-creative-section .inv-category-scrollbar,'),
   );
   const webglSource = readFileSync(
     new URL('../src/core/render/webglSupport.ts', import.meta.url),

@@ -3017,7 +3017,10 @@
       .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot {
         width: 44px; height: 44px; max-width: 44px; max-height: 44px;
       }
-      .inv-panel.creative-ui.pocket-ui .inv-pager { display: none !important; }
+      /* ⚠️ 批次 620：这条原来没带 `body.touch-mode`，而"携带版布局"现在是三端统一的，
+         PC 也挂着 `.pocket-ui` → **桌面端整条翻页条被藏掉**（用户反馈"不能翻页"）。
+         整表滚动是触摸端的手感，PC 仍然靠翻页（见文件末尾的 PC 覆盖段）。 */
+      body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-pager { display: none !important; }
 
       /* ---------------- 携带版统一双栏（批次 156） ----------------
          生存与创造都用同一副壳：左边角色物品/配方/创造物品，右边合成或装备。
@@ -4844,17 +4847,21 @@
         .inv-panel.pocket-ui .inv-grid.inv-armor .inv-slot {
           max-width: 48px; max-height: 48px;
         }
+        /* 批次 620：920 → 1000。创造栏一页 60 件（12 列 × 5 行，`PAGE_SIZE_WIDE`），
+           左栏不给够宽度就排不下 12 列，只能退回 8 列 + 翻两屏。 */
         .inv-panel.pocket-ui.pocket-dual {
-          width: min(calc(100vw - 160px), 920px);
-          max-width: min(calc(100vw - 160px), 920px);
+          width: min(calc(100vw - 160px), 1000px);
+          max-width: min(calc(100vw - 160px), 1000px);
         }
         /* 双栏内容只占上半截：PC 上把整组垂直居中，别在下方留一大片空白 */
         .inv-panel.pocket-ui.pocket-dual .inv-body {
           grid-template-rows: auto auto;
           align-content: center;
         }
+        /* 批次 620：PC 左栏够宽，主背包回到 9 列（27 格 = 3 行，与原版一致）。
+           ⚠️ 只有 ≥1024 才敢这么排：下面是 52px 一格，9 列要 492px。 */
         .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
-          grid-template-columns: repeat(7, 52px);
+          grid-template-columns: repeat(9, 52px);
           gap: 3px;
         }
         .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot {
@@ -4875,30 +4882,8 @@
         .inv-grid.inv-category .inv-slot canvas {
           width: 40px; height: 40px;
         }
-        .inv-grid.inv-creative {
-          /* 双栏左半区约 500px：12×44 会横向溢出，改成 8 列大格 */
-          grid-template-columns: repeat(8, 46px);
-          gap: 3px;
-          padding-right: 20px;
-        }
-        .inv-grid.inv-creative .inv-slot {
-          width: 46px; height: 46px;
-        }
-        .inv-grid.inv-creative .inv-slot canvas {
-          width: 38px; height: 38px;
-        }
-        /* 盖过 `.inv-panel.creative-ui.pocket-ui .inv-creative` 的 10×44 基础规则 */
-        .inv-panel.creative-ui.pocket-ui .inv-creative {
-          grid-template-columns: repeat(8, 46px);
-          gap: 3px;
-          padding-right: 20px;
-        }
-        .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot {
-          width: 46px; height: 46px; max-width: 46px; max-height: 46px;
-        }
-        .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot canvas {
-          width: 38px; height: 38px; max-width: 38px; max-height: 38px;
-        }
+        /* 创造栏的列数/格宽统一由下面「PC 背包：能滚、能翻页」那一段给
+           （`--pc-inv-cell` + `auto-fill`），这里不再各写一套 8×46。 */
         /* 双栏创造栏：用满整个左栏高度，不再固定在 174px 只露 4 行 */
         .inv-panel.pocket-ui.pocket-dual .inv-creative-section {
           display: flex;
@@ -4931,6 +4916,116 @@
         .recipe-panel,
         .settings-panel,
         .adv-panel { font-size: 14px; }
+      }
+
+      /* ---------------- PC 背包：能滚、能翻页、搜索框与物品格对齐（批次 620） ----------------
+         携带版那副窄壳现在是三端统一的，但三条"只对触摸端成立"的规矩当年没带
+         `body.touch-mode`，PC 一起吃了：
+           ① `.inv-pager { display: none !important }` → **桌面端整条翻页条被藏掉**；
+           ② `scrollbar-width: none` + 自绘滑块只给 `pane === 'creative'` 补 →
+               桌面上也看不出"这里还能往下滚"；
+           ③ 左栏 7~8 列、窗口只有 174px 高 → 一页 60 件只露出四行，
+               剩下的既翻不到也滚不到（用户："不能滑动，不能翻页"）。
+         这里只改 PC 的**尺寸 / 滚动 / 翻页条显隐**；页大小（12 × 5 = 60）与玩法不动。 */
+      body:not(.touch-mode) .inv-panel.pocket-ui.pocket-dual:not([data-pocket-tab='armor']) .inv-body {
+        /* 左栏（物品）比右栏（合成/装备）宽：12 列才排得下。
+           ⚠️ 排除盔甲页：那一页的右栏是 `auto`（48px 装备列 + 预览），
+           给它 1fr 会平白多出一大片空地。 */
+        grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+      }
+      /* 物品格：`auto-fill` + 统一格宽——窗口再窄也不会横向溢出；
+         宽到 12 列时一页 60 件正好 5 行（与 `PAGE_SIZE_WIDE` 一致）。 */
+      body:not(.touch-mode) .inv-panel.pocket-ui .inv-creative,
+      body:not(.touch-mode) .inv-grid.inv-category {
+        --pc-inv-cell: 46px;
+        grid-template-columns: repeat(auto-fill, var(--pc-inv-cell));
+        gap: 2px;
+        width: 100%;
+        max-width: 574px; /* 12 × 46 + 11 × 2 */
+        margin-inline: auto;
+        padding: 0;
+        box-sizing: border-box;
+        justify-content: center;
+        align-content: start;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      body:not(.touch-mode) .inv-panel.pocket-ui .inv-creative .inv-slot,
+      body:not(.touch-mode) .inv-grid.inv-category .inv-slot {
+        width: calc(var(--pc-inv-cell) - 4px);
+        height: calc(var(--pc-inv-cell) - 4px);
+        min-width: calc(var(--pc-inv-cell) - 4px);
+        max-width: calc(var(--pc-inv-cell) - 4px);
+        max-height: calc(var(--pc-inv-cell) - 4px);
+        justify-self: center;
+      }
+      body:not(.touch-mode) .inv-panel.pocket-ui .inv-creative .inv-slot canvas,
+      body:not(.touch-mode) .inv-grid.inv-category .inv-slot canvas {
+        width: calc(var(--pc-inv-cell) - 10px);
+        height: calc(var(--pc-inv-cell) - 10px);
+        max-width: calc(var(--pc-inv-cell) - 10px);
+        max-height: calc(var(--pc-inv-cell) - 10px);
+      }
+      /* 一页 60 件要能一眼看全（5 行 × 48px ≈ 240px）；窗口矮时这一栏自己滚 */
+      body:not(.touch-mode) .inv-panel.pocket-ui.pocket-dual .inv-creative {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: min(58vh, 430px);
+      }
+      /* 搜索框与物品格同宽、同一条中轴（原来它占满整栏，比格子宽一截，看着像放错了） */
+      body:not(.touch-mode) .inv-panel.pocket-ui .inv-creative-controls {
+        width: 100%;
+        max-width: 574px;
+        margin: 0 auto;
+        padding: 0;
+        gap: 6px;
+      }
+      body:not(.touch-mode) .inv-panel.pocket-ui .inv-search {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        max-width: 574px;
+        box-sizing: border-box;
+      }
+      /* ⚠️ 分类栏是**竖排**容器：这里只能 `flex: 0 0 auto`（见上面那条注记），
+         否则搜索框会吃掉剩余高度、把物品格挤出可视区。 */
+      body:not(.touch-mode) .inv-category-section .inv-search {
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        max-width: 574px;
+        margin-inline: auto;
+        box-sizing: border-box;
+      }
+      /* PC 用原生细滚动条（滚轮 / 拖滑块）；自绘那根是给 iOS/安卓 overlay 补的 */
+      body:not(.touch-mode) .inv-creative-section .inv-category-scrollbar,
+      body:not(.touch-mode) .inv-category-section .inv-category-scrollbar {
+        display: none !important;
+      }
+      body:not(.touch-mode) .inv-grid.inv-creative,
+      body:not(.touch-mode) .inv-grid.inv-category {
+        scrollbar-width: thin;
+        scrollbar-color: #6f6f6f #b9b9b9;
+      }
+      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar,
+      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar {
+        display: block;
+        width: 10px;
+      }
+      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar-track,
+      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar-track {
+        background: #b9b9b9;
+      }
+      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar-thumb,
+      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar-thumb {
+        background: #6f6f6f;
+        border: 1px solid #4a4a4a;
+      }
+      /* 翻页条：PC 靠它翻页（触摸端在 `.inv-pager` 那条规则里整条隐藏） */
+      body:not(.touch-mode) .inv-panel.creative-ui.pocket-ui .inv-pager {
+        max-width: 574px;
+        margin: 6px auto 0;
       }
 
       /* ---------------- 减少动效（无障碍） ----------------
