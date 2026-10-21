@@ -68,6 +68,8 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
   '模式只有 masked / replace：{mode}': 'Mode must be masked or replace: {mode}',
   '区域太大（{volume} 格），上限 {limit}': 'Area too large ({volume} blocks); limit is {limit}',
   '已填充 {count} 格 {block}': 'Filled {count} blocks with {block}',
+  '目标区域与源区域重叠': 'The destination overlaps the source',
+  '目标区域超出世界竖直范围（{min} ~ {max}）': 'The destination is outside the world height ({min} ~ {max})',
   // ---- /gamemode /seed /list /xp ----
   '已将游戏模式设置为 {mode}': 'Game mode set to {mode}',
   '世界种子：{seed}': 'World seed: {seed}',

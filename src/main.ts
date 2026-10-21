@@ -11203,6 +11203,13 @@ class App {
         if (ok) this.wakeFluidsAround(x, y, z);
         return ok;
       },
+      // 批次 622（Q20）：/clone 要连状态一起复制，否则楼梯全朝一个方向
+      getBlockState: (x, y, z) => this.world.getBlockState(x, y, z),
+      setBlockState: (x, y, z, id, state) => {
+        const ok = this.world.setBlockAndUpdate(x, y, z, id, state);
+        if (ok) this.wakeFluidsAround(x, y, z);
+        return ok;
+      },
       fillBlocks: (x1, y1, z1, x2, y2, z2, id) => {
         let placed = 0;
         for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {

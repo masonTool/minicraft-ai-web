@@ -17,7 +17,15 @@ import {
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import { findNearestBiome } from '../src/core/gen/Locate.ts';
-import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from '../src/core/commands/Clone.ts';
+import {
+  CLONE_LIMIT,
+  cloneBoxInWorld,
+  cloneBoxesOverlap,
+  cloneRegion,
+  cloneVolume,
+  normalizeCloneBox,
+  shiftCloneBox,
+} from '../src/core/commands/Clone.ts';
 import {
   COMMANDS,
   commandNames,
@@ -1053,6 +1061,82 @@ console.log('\n[/clone 区域复制（批次 431）]');
   check('位移必须是数字', run4('/clone 0 0 0 1 1 1 ~ ~ ~').lastError.includes('位移'));
   check('模式写错报错', run4('/clone 0 0 0 1 1 1 5 0 0 nope').lastError.includes('模式'));
   check('超上限报错', run4('/clone 0 0 0 99 99 99 0 0 0').lastError.includes('上限'));
+}
+
+// ---------------------------------------------------------------- /clone 的方块状态与两条拒绝判据（批次 622 / Q20）
+{
+  /**
+   * 三件事：
+   *  ① **方块状态要跟着复制**——只传 id 的话楼梯全朝北、台阶丢双层；
+   *  ② **目标压到源上要拒绝**（原版同）；
+   *  ③ **目标越出世界竖直范围要拒绝**（否则写被静默丢弃，回一句"已复制 N 格"却什么都没发生）。
+   */
+  const world = new Map<string, { id: number; state: number }>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  const get = (x: number, y: number, z: number) => world.get(key(x, y, z)) ?? { id: 0, state: 0 };
+  const ioWithState = {
+    read: (x: number, y: number, z: number) => get(x, y, z).id,
+    write: (x: number, y: number, z: number, id: number) => void world.set(key(x, y, z), { id, state: 0 }),
+    readState: (x: number, y: number, z: number) => get(x, y, z).state,
+    writeState: (x: number, y: number, z: number, id: number, state: number) =>
+      void world.set(key(x, y, z), { id, state }),
+  };
+  const ioWithoutState = {
+    read: (x: number, y: number, z: number) => get(x, y, z).id,
+    write: (x: number, y: number, z: number, id: number) => void world.set(key(x, y, z), { id, state: 0 }),
+  };
+
+  // 摆一排"带朝向的楼梯"：state 分别是 2 / 4 / 6
+  world.set(key(0, 0, 0), { id: 100, state: 2 });
+  world.set(key(1, 0, 0), { id: 100, state: 4 });
+  world.set(key(2, 0, 0), { id: 100, state: 6 });
+  const row = normalizeCloneBox({ x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 });
+
+  cloneRegion(ioWithState, row, { x: 0, y: 0, z: 5 }, 'replace');
+  check('状态被一起复制（朝向 2）', get(0, 0, 5).state === 2, String(get(0, 0, 5).state));
+  check('状态被一起复制（朝向 4）', get(1, 0, 5).state === 4, String(get(1, 0, 5).state));
+  check('状态被一起复制（朝向 6）', get(2, 0, 5).state === 6, String(get(2, 0, 5).state));
+  check('id 也一起过去了', get(1, 0, 5).id === 100);
+
+  // 负对照：不给状态接口时仍然能跑（老调用方不会被这批改动弄坏）
+  cloneRegion(ioWithoutState, row, { x: 0, y: 0, z: 9 }, 'replace');
+  check('没有状态接口时仍能复制（状态按 0）', get(1, 0, 9).id === 100 && get(1, 0, 9).state === 0);
+
+  // ---- 重叠判据 ----
+  const a = normalizeCloneBox({ x: 0, y: 0, z: 0 }, { x: 3, y: 3, z: 3 });
+  check('自己和自己重叠', cloneBoxesOverlap(a, a));
+  check('错开一格仍重叠', cloneBoxesOverlap(a, shiftCloneBox(a, { x: 1, y: 0, z: 0 })));
+  check('错开刚好 4 格不重叠', !cloneBoxesOverlap(a, shiftCloneBox(a, { x: 4, y: 0, z: 0 })));
+  check('只差 Y 也算重叠', cloneBoxesOverlap(a, shiftCloneBox(a, { x: 0, y: 2, z: 0 })));
+  check('Y 错开够远不重叠', !cloneBoxesOverlap(a, shiftCloneBox(a, { x: 0, y: 4, z: 0 })));
+  check('平移后坐标对得上', (() => {
+    const t = shiftCloneBox(a, { x: 10, y: -5, z: 2 });
+    return t.x1 === 10 && t.x2 === 13 && t.y1 === -5 && t.y2 === -2 && t.z1 === 2 && t.z2 === 5;
+  })());
+
+  // ---- 越界判据（世界 Y = -64 ~ 320）----
+  check('范围内通过', cloneBoxInWorld(a, -64, 320));
+  check('贴地板通过', cloneBoxInWorld(normalizeCloneBox({ x: 0, y: -64, z: 0 }, { x: 0, y: -64, z: 0 }), -64, 320));
+  check('贴天花板通过', cloneBoxInWorld(normalizeCloneBox({ x: 0, y: 320, z: 0 }, { x: 0, y: 320, z: 0 }), -64, 320));
+  check('掉到地板下面被拒', !cloneBoxInWorld(normalizeCloneBox({ x: 0, y: -65, z: 0 }, { x: 0, y: 0, z: 0 }), -64, 320));
+  check('顶出天花板被拒', !cloneBoxInWorld(normalizeCloneBox({ x: 0, y: 320, z: 0 }, { x: 0, y: 321, z: 0 }), -64, 320));
+
+  // ---- 命令层：两条拒绝要真的报出来 ----
+  const fake = new FakeWorld();
+  const rec = new Recorder();
+  const run = (line: string): Recorder => {
+    rec.infos.length = 0;
+    rec.errors.length = 0;
+    executeCommand(line, fake, rec);
+    return rec;
+  };
+  // 源 0..3，位移 1 → 目标 1..4，与源重叠
+  check('目标压到源上报重叠', run('/clone 0 0 0 3 3 3 1 0 0').lastError.includes('重叠'));
+  // 位移 −100 → 目标 y = −100，掉出地板
+  check('目标越出竖直范围报越界', run('/clone 0 0 0 3 3 3 0 -100 0').lastError.includes('竖直范围'));
+  // 正常位移不该被拒
+  const ok = run('/clone 0 0 0 3 3 3 10 0 0');
+  check('正常复制不被拒', ok.errors.length === 0 && ok.infos.length > 0, ok.lastError);
 }
 
 // ---------------------------------------------------------------- /help 生成器

@@ -39,7 +39,16 @@ import {
 import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
 import { findNearestBiome } from '../gen/Locate.ts';
-import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from './Clone.ts';
+import {
+  CLONE_LIMIT,
+  cloneBoxInWorld,
+  cloneBoxesOverlap,
+  cloneRegion,
+  cloneVolume,
+  normalizeCloneBox,
+  shiftCloneBox,
+} from './Clone.ts';
+import { WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 // 战利品表（批次 480：`/loot`）
 import { lootTableByIndex, lootTableIndex, rollLoot } from '../registry/loot.ts';
 // 队伍（M23 最后一块，批次 468）
@@ -109,6 +118,13 @@ export interface CommandContext {
   // ---- 世界
   getBlock(x: number, y: number, z: number): number;
   setBlock(x: number, y: number, z: number, id: number): boolean;
+  /**
+   * 读状态字节（批次 622 / Q20）。**可选**：不想改的老测试 stub 不给也能跑，
+   * 那时按 0 处理 —— 但 `/clone` 不带状态就等于复制楼梯全朝北。
+   */
+  getBlockState?(x: number, y: number, z: number): number;
+  /** 写入 id + 状态（批次 622 / Q20）。理由同 `getBlockState?` */
+  setBlockState?(x: number, y: number, z: number, id: number, state: number): boolean;
   fillBlocks(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, id: number): number;
 
   // ---- 时间与天气
@@ -776,15 +792,32 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(msg('区域太大（{volume} 格），上限 {limit}', { volume: volume, limit: CLONE_LIMIT }));
         return;
       }
-      const target = {
-        x: box.x1 + Math.floor(offset.x),
-        y: box.y1 + Math.floor(offset.y),
-        z: box.z1 + Math.floor(offset.z),
-      };
+      const shift = { x: Math.floor(offset.x), y: Math.floor(offset.y), z: Math.floor(offset.z) };
+      const targetBox = shiftCloneBox(box, shift);
+      // 目标压到源上直接拒绝（原版同）：允许的话"把房子往东挪 2 格"会得到
+      // 半新半旧的结果，玩家会以为指令坏了（批次 622 / Q20）
+      if (cloneBoxesOverlap(box, targetBox)) {
+        out.error(msg('目标区域与源区域重叠'));
+        return;
+      }
+      // 越界也拒绝：越界的写会被世界静默丢弃，那样会回"已复制 N 格"却什么都没发生
+      if (!cloneBoxInWorld(targetBox, WORLD_MIN_Y, WORLD_MAX_Y)) {
+        out.error(msg('目标区域超出世界竖直范围（{min} ~ {max}）', { min: WORLD_MIN_Y, max: WORLD_MAX_Y }));
+        return;
+      }
+      const target = { x: targetBox.x1, y: targetBox.y1, z: targetBox.z1 };
       const result = cloneRegion(
-        { read: (x, y, z) => ctx.getBlock(x, y, z), write: (x, y, z, id) => void ctx.setBlock(x, y, z, id) },
+        {
+          read: (x, y, z) => ctx.getBlock(x, y, z),
+          write: (x, y, z, id) => void ctx.setBlock(x, y, z, id),
+          // 状态一起复制（批次 622 / Q20）：楼梯朝向、台阶双层、告示牌朝向都靠它
+          readState: ctx.getBlockState ? (x, y, z) => ctx.getBlockState!(x, y, z) : undefined,
+          writeState: ctx.setBlockState
+            ? (x, y, z, id, state) => void ctx.setBlockState!(x, y, z, id, state)
+            : undefined,
+        },
         box,
-        { x: Math.floor(offset.x), y: Math.floor(offset.y), z: Math.floor(offset.z) },
+        shift,
         modeArg,
       );
       const masked = result.skipped > 0 ? `（masked：跳过 ${result.skipped} 格非空气）` : '';
