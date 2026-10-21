@@ -44,7 +44,7 @@ export const COMMAND_USAGE_EN: Readonly<Record<string, string>> = {
   xp: '/xp add <points> | /xp set <level> | /xp query',
   worldborder: '/worldborder get | /worldborder set <size> | /worldborder center <x> <z>',
   execute: '/execute <as|at|positioned|if|unless> … run <command>',
-  locate: '/locate biome <biome>',
+  locate: '/locate biome <biome> | /locate structure <structure>',
   damage: '/damage <targets> <damage>',
   loot: '/loot give <loot table> [count]',
   data: '/data get block <x> <y> <z> [path] | /data get entity <targets> [path] | /data merge block <x> <y> <z> <slot> <item> [count] | /data merge entity <targets> Health <value> | /data merge entity <targets> CustomName <name>',
@@ -88,7 +88,7 @@ export const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
   worldborder:
     'Read or change the world border (crossing it hurts; leaving the soft zone pushes you back)',
   execute: 'Run a command as another target or from another position (chainable)',
-  locate: 'Find the nearest matching biome (ring search over chunks, radius 640)',
+  locate: 'Find the nearest matching biome (ring search over chunks, radius 640) or structure',
   damage: 'Deal damage to target entities (damage is in points, 2 points = 1 heart)',
   loot: 'Roll a loot table and put the result in your inventory',
   data: 'Read or write a subset of block-entity and entity fields (no generic NBT path — see TASKS)',

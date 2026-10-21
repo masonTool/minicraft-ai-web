@@ -223,7 +223,9 @@ const rows: readonly Row[] = [
     spec: SPEC.commands,
     now: COMMANDS.length,
     basis: '原版 1.18 单人可用命令（不含权限类）',
-    gap: '记分板（M23）、命令方块，以及 /clone /data /locate 一族（批次 399 已补 /execute + 选择器）',
+    // `/execute`（399）、`/data`（479 + 623）、`/locate`（416 + 464 + 624）都已补齐，
+    // 剩下的缺口是"整条命令还没有"的那几条，不是"命令存在但功能不全"。
+    gap: '记分板 objective 的完整语法（M23）、命令方块编辑器的权限分级，以及 /tag /bossbar /worldborder damage 这几条还没有',
   },
   {
     label: '游戏规则',
@@ -259,7 +261,11 @@ const rows: readonly Row[] = [
     spec: SPEC.fluids,
     now: 2,
     basis: '原版 1.18 两种流体（水/岩浆）',
-    gap: '—（waterlogged 状态位未做）',
+    // 这一行的备注曾经写着"waterlogged 状态位未做"，但批次 469 就做了、
+    // 批次 621 又接进了流体引擎（`isWaterAt` / `isWaterSourceAt` /
+    // `canFillWaterlogged` / `fillWaterlogged`），批次 622 让它随 `/clone` 一起复制。
+    // 台账是"给人看的结论"，留着旧结论比数字算错更糟——所以跟着改。
+    gap: '—（waterlogged 已做并接进流体引擎，批次 469 / 621 / 622）',
   },
   {
     label: '矿石',

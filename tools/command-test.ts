@@ -17,6 +17,16 @@ import {
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import { findNearestBiome } from '../src/core/gen/Locate.ts';
+// 结构清单的权威来源（批次 624）：只取那三个常量，不碰生成逻辑
+import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
+import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
+import { END_STRUCTURE_KINDS } from '../src/core/gen/EndStructures.ts';
+import {
+  STRUCTURE_NAMES,
+  findStructureName,
+  structureNamesIn,
+  structuresIn,
+} from '../src/core/commands/structureNames.data.ts';
 import {
   CLONE_LIMIT,
   cloneBoxInWorld,
@@ -71,6 +81,8 @@ import { BLOCKS } from '../src/core/registry/blocks.ts';
 import { defaultBorder, normalizeBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
 import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
 import { Experience } from '../src/core/survival/Experience.ts';
+// 中英双语回执的断言（批次 624）：切语言跑同一批命令，扫残留中文
+import { getLanguage, setLanguage } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;
@@ -1178,13 +1190,139 @@ console.log('\n[/locate biome（批次 416）]');
     out.lastInfo,
   );
   check('回执里带距离', run3('/locate structure village').lastInfo.includes('144 格'), out.lastInfo);
-  check(
-    '结构名不认识时报告没找到（不是静默成功）',
-    run3('/locate structure stronghold').lastError.includes('没有找到'),
-    out.lastError,
-  );
+  check('回执里带中文名（不是回显英文 id）', run3('/locate structure village').lastInfo.includes('村庄'), out.lastInfo);
   check('缺结构名报用法', run3('/locate structure').lastError.includes('用法'));
   check('假世界查不到群系时报告没找到', run3('/locate biome plains').lastError.includes('没有找到'));
+
+  // ---- Q22（批次 624）：三个失败分支必须能分清 ----
+  // ① 名字根本不存在 → "没有这种结构"，并列出**这个维度**的候选
+  check(
+    '结构名不存在时给"没有这种结构"（不是"附近没有找到"）',
+    run3('/locate structure nosuchthing').lastError.includes('没有这种结构'),
+    out.lastError,
+  );
+  check(
+    '报错里带本维度的候选清单（玩家知道该写什么）',
+    run3('/locate structure nosuchthing').lastError.includes('village'),
+    out.lastError,
+  );
+  // ② 名字存在但属于别的维度 → "只在 X 生成"
+  check(
+    '跨维度时报"只在末地生成"（主世界里问 end_city）',
+    run3('/locate structure end_city').lastError.includes('只在'),
+    out.lastError,
+  );
+  check(
+    '跨维度的报错点明当前维度',
+    run3('/locate structure end_city').lastError.includes('主世界'),
+    out.lastError,
+  );
+  // ③ 名字与维度都对、但这一带没生成 → "格内没有"，且**不是** "没有这种结构"
+  check(
+    '这一带没有时与"名字不存在"分开说',
+    run3('/locate structure stronghold').lastError.includes('没有')
+      && !run3('/locate structure stronghold').lastError.includes('没有这种结构'),
+    out.lastError,
+  );
+  // ④ 结构化名字有"会生成但还不能定位"的一类
+  check(
+    '暂不能定位的结构给专门的提示（不冒充"附近没有"）',
+    run3('/locate structure nether_fossil').lastError.includes('只在')
+      || run3('/locate structure nether_fossil').lastError.includes('还不能'),
+    out.lastError,
+  );
+  // ⑤ 别名与原版写法都收（bastion / fortress / end_city）
+  check(
+    '别名 bastion 与原名 bastion_remnant 等价',
+    run3('/locate structure bastion').lastError.includes('只在')
+      && run3('/locate structure bastion_remnant').lastError.includes('只在'),
+    out.lastError,
+  );
+  check(
+    '大小写不敏感',
+    run3('/locate structure VILLAGE').lastInfo.includes('120, 64, -80'),
+    out.lastError,
+  );
+  check(
+    '带 minecraft: 命名空间也认',
+    run3('/locate structure minecraft:village').lastInfo.includes('120, 64, -80'),
+    out.lastError,
+  );
+
+  // ---- 纯逻辑：结构名清单本身（不经过命令）----
+  check(`结构名清单 23 条（18 主世界 + 3 下界 + 2 末地）`, STRUCTURE_NAMES.length === 23, `${STRUCTURE_NAMES.length} 条`);
+  check('主世界 18 种', structuresIn('overworld').length === 18, `${structuresIn('overworld').length}`);
+  check('下界 3 种', structuresIn('nether').length === 3, `${structuresIn('nether').length}`);
+  check('末地 2 种', structuresIn('end').length === 2, `${structuresIn('end').length}`);
+  check('只有两种还不能定位', STRUCTURE_NAMES.filter((e) => !e.locatable).length === 2);
+  check('不能定位的正是末地船与下界化石', (() => {
+    const off = STRUCTURE_NAMES.filter((e) => !e.locatable).map((e) => e.key).sort().join(',');
+    return off === 'end_ship,nether_fossil';
+  })());
+  check('每条都有中文名（不能回显英文 key）', STRUCTURE_NAMES.every((e) => e.label.length > 0 && !/[a-z_]{4,}/.test(e.label)));
+  check('findStructureName 找不到返回 null', findStructureName('没有这个') === null);
+  check('findStructureName 空串返回 null', findStructureName('   ') === null);
+  check('structureNamesIn 按维度过滤', (() => {
+    const nether = structureNamesIn('nether');
+    return nether.includes('bastion_remnant') && !nether.includes('village');
+  })());
+  check('每条都有英文名', STRUCTURE_NAMES.every((e) => e.labelEn.length > 0 && !/[\u4e00-\u9fff]/.test(e.labelEn)));
+
+  /**
+   * 这份清单是**三张真清单的手抄本**（`Structures.ts` 的 `STRUCTURE_DEFS`、
+   * `Bastion.ts` 的 `NETHER_STRUCTURE_KINDS`、`EndStructures.ts` 的 `END_STRUCTURE_KINDS`）。
+   * 手抄就会漂，所以这里对**数量与逐个 key**：漏一行、多一行、拼错一个都红。
+   * 不直接 import 那三个模块，是因为它们会拖进方块注册表与群系表——
+   * 为了对几个名字把生成器搬进命令测试不划算。
+   */
+  check(
+    '主世界的 key 与 STRUCTURE_KINDS 完全一致',
+    (() => {
+      const mine = structuresIn('overworld').map((e) => e.key).sort().join(',');
+      const real = [...STRUCTURE_KINDS].sort().join(',');
+      return mine === real;
+    })(),
+    `清单 ${structuresIn('overworld').length} / 真实 ${STRUCTURE_KINDS.length}`,
+  );
+  check(
+    '下界的 key 与 NETHER_STRUCTURE_KINDS 完全一致',
+    (() => {
+      const mine = structuresIn('nether').map((e) => e.key).sort().join(',');
+      return mine === [...NETHER_STRUCTURE_KINDS].sort().join(',');
+    })(),
+  );
+  check(
+    '末地的 key 与 END_STRUCTURE_KINDS 完全一致',
+    (() => {
+      const mine = structuresIn('end').map((e) => e.key).sort().join(',');
+      return mine === [...END_STRUCTURE_KINDS].sort().join(',');
+    })(),
+  );
+
+  // ---- 英文模式：回执里不能漏中文（批次 624 实测抓到的真缺口）----
+  // 第一版 `label` 只有中文，`msg()` 翻了句式但把中文名原样嵌进去 ——
+  // `test:i18n` 只跑 `/locate`（不带参数）那一条，永远走不到成功分支，所以从没红过。
+  const prevLang = getLanguage();
+  setLanguage('en');
+  const cjk = /[\u4e00-\u9fff]/;
+  const enFound = run3('/locate structure village').lastInfo;
+  check('英文模式下成功的结构回执无中文', !cjk.test(enFound), enFound);
+  const enCross = run3('/locate structure end_city').lastError;
+  check('英文模式下跨维度报错无中文', !cjk.test(enCross), enCross);
+  const enBiome = run3('/locate biome plains').lastInfo;
+  check('英文模式下群系回执无中文', !cjk.test(enBiome), enBiome);
+  // 起点就在目标群系里那条分支（`distance === 0`）原来也是模板字符串
+  setLanguage('en');
+  const enHere = (() => {
+    const near = new FakeWorld();
+    const rec = new Recorder();
+    // 假世界的 biomeNameAt 恒返回 null，这里换一个"脚下就是平原"的探针
+    (near as unknown as { biomeNameAt: (x: number, z: number) => string }).biomeNameAt = () => 'plains';
+    executeCommand('/locate biome plains', near, rec);
+    return rec.lastInfo;
+  })();
+  check('英文模式下"就站在里面"那条无中文', enHere.length > 0 && !cjk.test(enHere), enHere);
+  setLanguage(prevLang);
 }
 
 console.log('\n[/clone 区域复制（批次 431）]');

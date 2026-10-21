@@ -94,6 +94,23 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
     'No {target} found nearby (use names like village / stronghold / mineshaft)',
   '640 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）':
     'No {target} within 640 blocks (try a more common biome, or walk further)',
+  // ---- /locate（批次 624 / Q22）----
+  '{radius} 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）':
+    'No {target} within {radius} blocks (try a more common biome, or walk further)',
+  '你脚下就是 {target}（{x}, {z}）': 'You are standing in {target} ({x}, {z})',
+  '最近的 {target} 在 {x}, {z}（约 {distance} 格）':
+    'Nearest {target} at {x}, {z} (about {distance} blocks away)',
+  '没有这种结构：{name}（这个维度有 {names}）':
+    'No such structure: {name} (this dimension has {names})',
+  '{name} 只在{Dimension}生成，这里是{Current}（可定位的有 {names}）':
+    '{name} only generates in {Dimension}, you are in {Current} (locatable here: {names})',
+  '{name} 还不能用 /locate 找（结构本身会生成，只是搜索还没做）':
+    '{name} cannot be located yet (it does generate, the search just is not written)',
+  '{radius} 格内没有 {name}（换一个位置再试，或者往外走远一点）':
+    'No {name} within {radius} blocks (try another spot, or walk further out)',
+  '最近的{name}在 {x}, {y}, {z}（约 {distance} 格）':
+    'Nearest {name} at {x}, {y}, {z} (about {distance} blocks away)',
+  '这个维度读不到结构位置': 'Structure positions are not readable in this dimension',
   // ---- /damage /loot /advancement ----
   '这个环境不支持 /damage': '/damage is not supported here',
   '没有匹配到实体：{target}': 'No entities matched: {target}',

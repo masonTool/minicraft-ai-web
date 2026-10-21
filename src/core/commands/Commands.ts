@@ -40,7 +40,24 @@ import {
 } from '../world/WorldBorder.ts';
 import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
-import { findNearestBiome } from '../gen/Locate.ts';
+import { findNearestBiome, LOCATE_DEFAULT_RADIUS } from '../gen/Locate.ts';
+// `/locate structure` 的结构名清单（批次 624 / Q22）：零依赖数据表，不拖生成器进来
+import { findStructureName, structureNamesIn } from './structureNames.data.ts';
+// 维度标签：报"这个结构只在 X 生成"时按语言取
+import { DIMENSION_LABELS as DIM_LABELS, type DimensionId } from '../gen/Dimension.ts';
+
+/**
+ * 维度的英文名（中文名在 `gen/Dimension.ts` 的 `DIMENSION_LABELS`）。
+ *
+ * 为什么不放进那张表：那张表服务于 **HUD**（永远中文，HUD 不做多语言），
+ * 而这里是命令回执（要跟界面语言走）。塞进去会让 HUD 在英文界面下变成英文，
+ * 那是另一件事，不该被这条命令顺手改掉。
+ */
+const DIMENSION_LABELS_EN: Readonly<Record<DimensionId, string>> = {
+  overworld: 'the Overworld',
+  nether: 'the Nether',
+  end: 'the End',
+};
 import {
   CLONE_LIMIT,
   cloneBoxInWorld,
@@ -1045,43 +1062,111 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'locate',
-    usage: '/locate biome <群系名>',
-    description: '找最近的指定群系（按区块环搜索，半径 640 格）',
+    usage: '/locate biome <群系名> | /locate structure <结构名>',
+    description: '找最近的指定群系或结构（群系按区块环搜 640 格，结构按单元重算）',
     run(args, ctx, out) {
-      const kind = (args[0] ?? '').toLowerCase();
-      const target = args[1];
-      if (!target || (kind !== 'biome' && kind !== 'structure')) {
-        out.error(usageError('/locate biome <群系名> | /locate structure <结构名>'));
-        return;
-      }
-      // ---- 结构（批次 464）：结构位置是"种子 + 候选规则"的纯函数，
-      //      主线程重算一遍即可，不需要 Worker 的生成器
-      if (kind === 'structure') {
-        if (!ctx.locateStructure) {
-          out.error(msg('这个维度还不支持 /locate structure（目前只做了主世界）'));
+      // ---- 结构（批次 464 主体，批次 624 / Q22 补三个失败分支）----
+      // 原来这一支有三个问题，都是"实测才会撞到"的那种：
+      //  ① 名字不认识 / 属于别的维度，回执都说"附近没有找到" —— 玩家会一直往远处走；
+      //  ② 三种失败（找不到 / 名字不认识 / 这个维度不支持）回执一模一样，没法排查；
+      //  ③ 整个回执是模板字符串拼的，英文模式下整句中文原样漏出来；
+      //     `test:i18n` 只跑 `/locate`（不带参数）那一条，永远走不到成功分支，所以从没红过。
+      // 现在：先查名字 → 再分维度校验 → 再判断有没有定位实现 → 最后才真去找。
+      if ((args[0] ?? '').toLowerCase() === 'structure') {
+        const raw = args[1];
+        if (!raw) {
+          out.error(usageError('/locate biome <群系名> | /locate structure <结构名>'));
           return;
         }
-        const hit = ctx.locateStructure(target.toLowerCase());
+        const entry = findStructureName(raw);
+        if (!entry) {
+          // 候选清单按**当前维度**给（下界只有 3 种，没必要让玩家看 18 个主世界名字）
+          out.error(
+            msg('没有这种结构：{name}（这个维度有 {names}）', {
+              name: raw,
+              names: structureNamesIn(ctx.position().dimension as DimensionId),
+            }),
+          );
+          return;
+        }
+        const here = ctx.position().dimension as DimensionId;
+        if (entry.dimension !== here) {
+          out.error(
+            msg('{name} 只在{Dimension}生成，这里是{Current}（可定位的有 {names}）', {
+              name: pickLabel(entry.label, entry.labelEn),
+              Dimension: pickLabel(DIM_LABELS[entry.dimension], DIMENSION_LABELS_EN[entry.dimension]),
+              Current: pickLabel(DIM_LABELS[here], DIMENSION_LABELS_EN[here]),
+              names: structureNamesIn(here),
+            }),
+          );
+          return;
+        }
+        if (!entry.locatable) {
+          // 结构会生成、但"找最近一个"还没写。说清楚，别让它冒充"附近没有"
+          out.error(
+            msg('{name} 还不能用 /locate 找（结构本身会生成，只是搜索还没做）', {
+              name: pickLabel(entry.label, entry.labelEn),
+            }),
+          );
+          return;
+        }
+        if (!ctx.locateStructure) {
+          out.error(msg('这个维度读不到结构位置'));
+          return;
+        }
+        const hit = ctx.locateStructure(entry.key);
         if (!hit) {
-          out.error(msg('附近没有找到 {target}（结构名要用 village / stronghold / mineshaft 这类）', { target: target }));
+          // 名称与维度都对，纯粹是这一带没生成：换一句"没找到"并给出搜索范围
+          out.error(
+            msg('{radius} 格内没有 {name}（换一个位置再试，或者往外走远一点）', {
+              radius: LOCATE_DEFAULT_RADIUS,
+              name: pickLabel(entry.label, entry.labelEn),
+            }),
+          );
           return;
         }
         out.info(
-          `最近的 ${target} 在 ${hit.x}, ${hit.y}, ${hit.z}（约 ${Math.round(hit.distance)} 格）`,
+          msg('最近的{name}在 {x}, {y}, {z}（约 {distance} 格）', {
+            name: pickLabel(entry.label, entry.labelEn),
+            x: hit.x,
+            y: hit.y,
+            z: hit.z,
+            distance: Math.round(hit.distance),
+          }),
         );
+        return;
+      }
+
+      // ---- 群系 ----
+      const kind = (args[0] ?? '').toLowerCase();
+      const target = args[1];
+      if (kind !== 'biome' || !target) {
+        out.error(usageError('/locate biome <群系名> | /locate structure <结构名>'));
         return;
       }
       const position = ctx.position();
       const hit = findNearestBiome((x, z) => ctx.biomeNameAt(x, z), target, position);
       if (!hit) {
-        out.error(msg('640 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）', { target: target }));
+        out.error(
+          msg('{radius} 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）', {
+            radius: LOCATE_DEFAULT_RADIUS,
+            target: target,
+          }),
+        );
         return;
       }
-      const first = hit.distance === 0;
+      // 脚下就是它：单独一句（原来这条也是模板字符串，英文模式下整句中文）
+      if (hit.distance === 0) {
+        out.info(msg('你脚下就是 {target}（{x}, {z}）', { target: target, x: hit.x, z: hit.z }));
+        return;
+      }
       out.info(
-        first
-          ? `你脚下就是 ${target}（${hit.x}, ${hit.z}）`
-          : `最近的 ${target} 在 ${hit.x}, ${hit.z}（约 ${Math.round(hit.distance)} 格）`,
+        msg('最近的 {target} 在 {x}, {z}（约 {distance} 格）', {
+          target: target,
+          x: hit.x,
+          z: hit.z,
+          distance: Math.round(hit.distance),
+        }),
       );
     },
   },

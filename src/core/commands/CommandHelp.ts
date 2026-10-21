@@ -22,6 +22,8 @@ import { BLOCKS } from '../registry/blocks.ts';
 import { CREATIVE_ITEMS, itemName } from '../registry/items.ts';
 import { blockLabel, itemLabel } from '../registry/itemNames.ts';
 import { BIOME_LABELS, BIOME_TABLE } from '../gen/Biome.ts';
+// `/locate structure` 的结构名下拉（批次 624 / Q22）：零依赖数据表，不拖生成器
+import { STRUCTURE_NAMES } from './structureNames.data.ts';
 
 export interface CommandHelpOption {
   readonly value: string;
@@ -127,6 +129,7 @@ const ARG_LABELS: Readonly<Record<string, string>> = {
   附魔: '附魔',
   动作: '动作',
   群系名: '群系',
+  结构名: '结构',
   目标: '目标',
   伤害: '伤害',
   战利品表: '战利品表',
@@ -456,6 +459,22 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       LOOT_TABLES.map((table) => ({ value: table.key, label: `${table.name}（${table.key}）` })),
     );
   }
+  if (name === '结构名') {
+    // 23 种结构都有中文名，直接给下拉（批次 624 / Q22）。
+    // 标记"还不能定位"的两种也列出来但标清楚——它们是会生成的结构，
+    // 藏起来反而让玩家以为"我们没做末地船"。
+    return selectField(
+      index,
+      name,
+      optional,
+      STRUCTURE_NAMES.map((entry) => ({
+        value: entry.key,
+        label: entry.locatable
+          ? `${entry.label}（${entry.key}）`
+          : `${entry.label}（${entry.key}，暂不能定位）`,
+      })),
+    );
+  }
   if (name === '值') {
     return {
       key: `f${index}`,
@@ -601,6 +620,8 @@ function placeholderFor(name: string): string {
       return '音效 id，如 block.note_block.harp（音符盒）';
     case '群系名':
       return '英文群系名，如 plains（平原）/ desert（沙漠）';
+    case '结构名':
+      return '结构名，如 village（村庄）/ bastion_remnant（堡垒遗迹）';
     case '路径':
       return '路径可留空（列全部）；实体的 Health / CustomName，方块的 Slots[i]';
     case '名称':
