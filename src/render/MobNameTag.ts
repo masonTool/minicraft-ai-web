@@ -10,12 +10,17 @@
  * 名字牌也照这个规矩：**画布尺寸固定**，不同长度的名字靠 `drawText` 里按宽度
  * 自适应字号 + Sprite 的 `scale` 缩放，而不是改画布。
  *
- * 性能：只在名字变化时重画画布（`lastName`），每帧只更新位置/缩放。
+ * 性能：只在名字或**颜色**变化时重画画布（`lastName` / `lastColor`），每帧只更新位置/缩放。
+ *
+ * ⚠️ 颜色也是判据的一部分（批次 616）：只比 `lastName` 的话，
+ * 玩家 `/team modify red color blue` 之后名字还是红的，直到他改一次名字或重进世界。
+ * 判据本身在 `NameTagColor#nameTagNeedsRedraw`，那边有断言盯着。
  */
 
 import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
 import { NAME_TAG_HEIGHT, nameTagWidthFor } from '../core/entity/NameTag.ts';
+import { DEFAULT_NAME_COLOR, nameTagNeedsRedraw } from '../core/entity/NameTagColor.ts';
 
 /**
  * 画布字体。
@@ -38,8 +43,7 @@ const CANVAS_H = 64;
 const COLORS = {
   /** 半透明黑底：名字压在草地/雪地/水面上都要读得出来 */
   background: 'rgba(0, 0, 0, 0.55)',
-  /** 名字本体：纯白 + 一圈深色描边（草绿背景下白字会糊） */
-  text: '#ffffff',
+  /** 描边：固定深色，不跟队伍色走（否则 gray / brown 这类深色队伍会糊成一片） */
   outline: '#1a1a1a',
 };
 
@@ -49,8 +53,10 @@ export class MobNameTag {
   private readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
   private readonly texture: THREE.CanvasTexture;
-  /** 上一次画的名字（只在这个值变化时重画） */
+  /** 上一次画的名字（与颜色一起决定要不要重画） */
   private lastName: string | null = null;
+  /** 上一次画的颜色（`null` = 默认白） */
+  private lastColor: string | null = null;
 
   constructor(canvas?: HTMLCanvasElement) {
     this.canvas = canvas ?? document.createElement('canvas');
@@ -83,8 +89,11 @@ export class MobNameTag {
    *
    * @param topLift 名字牌底边离生物头顶的高度（格）。生命条也要占位置，
    *   由调用方决定谁在上面——见主程序里两处 `show()` 的 `lift` 参数。
+   * @param color 名字的颜色（`#rrggbb`），由 `NameTagColor#colorForMob` 算好传进来。
+   *   传 `null` 表示"没有队伍" → 用默认白。**这里不查队伍**：
+   *   渲染层不该知道 `Teams` 长什么样，否则同一条规则会在两个地方各写一遍。
    */
-  show(mob: Mob, topLift: number): void {
+  show(mob: Mob, topLift: number, color: string | null = null): void {
     const name = mob.customName;
     if (!name) {
       this.hide();
@@ -96,9 +105,11 @@ export class MobNameTag {
     this.object.scale.set(width, height, 1);
     this.object.position.set(mob.x, mob.y + mob.height + topLift + height / 2, mob.z);
 
-    if (name !== this.lastName) {
+    const next = { name, color };
+    if (nameTagNeedsRedraw({ name: this.lastName, color: this.lastColor }, next)) {
       this.lastName = name;
-      this.drawName(name);
+      this.lastColor = color;
+      this.drawName(name, color);
     }
     this.object.visible = true;
   }
@@ -115,6 +126,7 @@ export class MobNameTag {
    */
   invalidate(): void {
     this.lastName = null;
+    this.lastColor = null;
   }
 
   dispose(): void {
@@ -122,7 +134,7 @@ export class MobNameTag {
     (this.object.material as THREE.Material).dispose();
   }
 
-  private drawName(name: string): void {
+  private drawName(name: string, color: string | null): void {
     const ctx = this.context;
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -151,11 +163,13 @@ export class MobNameTag {
     roundRect(ctx, (CANVAS_W - boxWidth) / 2, (CANVAS_H - boxHeight) / 2, boxWidth, boxHeight, 8);
     ctx.fill();
 
-    // 白字 + 深色描边：先描边再填字，笔画内侧不会被描边吃掉
+    // 文字 + 深色描边：先描边再填字，笔画内侧不会被描边吃掉。
+    // 描边颜色固定深色（不跟着队伍色走）：`gray` / `brown` 这类深色队伍
+    // 如果拿自己的颜色描边，和黑底、和自己都会糊在一起。
     ctx.lineWidth = Math.max(2, Math.floor(fontSize / 8));
     ctx.strokeStyle = COLORS.outline;
     ctx.strokeText(name, CANVAS_W / 2, CANVAS_H / 2);
-    ctx.fillStyle = COLORS.text;
+    ctx.fillStyle = color ?? DEFAULT_NAME_COLOR;
     ctx.fillText(name, CANVAS_W / 2, CANVAS_H / 2);
   }
 }

@@ -157,7 +157,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 - [x] Q1 新增 `core/entity/NameTagColor.ts`（纯逻辑）：从队伍名 → 颜色 id → `#rrggbb` 的映射表（原版 16 色），
       `colorForMob(mob, scoreboard)` 返回该生物名字该用的颜色（无队伍 → `null` = 沿用默认白）。
       验收：新文件 30 行内，不引 DOM/渲染；`test:nametag` 增 8 条（有队伍/无队伍/队伍名不存在/16 色全覆盖）
-- [ ] Q2 `render/MobNameTag.ts` 接颜色：`drawName` 增加 `color: string | null` 参数，
+- [x] Q2 `render/MobNameTag.ts` 接颜色：`drawName` 增加 `color: string | null` 参数，
       有颜色时用它画字（描边仍走深色）；`show()` 增加同参数并纳入"是否要重画"的判据
       （现在只比 `lastName`，名字没变但队伍变了就不会重画）。
       验收：`test:nametag` 增 3 条（颜色变了要重画、null 用默认白、颜色串格式合法）

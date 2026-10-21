@@ -30,6 +30,7 @@ import {
   teamColorToHex,
 } from '../src/core/entity/NameTagColor.ts';
 import { TEAM_COLORS } from '../src/core/world/Teams.ts';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 let failed = 0;
@@ -294,6 +295,33 @@ console.log('\n[队伍颜色（Q1 / 批次 616）]');
     '从无颜色变成有颜色 → 要重画',
     nameTagNeedsRedraw({ name: 'Steve', color: null }, { name: 'Steve', color: '#b02e26' }),
   );
+}
+
+console.log('\n[渲染层接线（Q2 / 批次 616）]');
+
+{
+  /**
+   * `MobNameTag` 要 THREE + 真实 canvas，离线跑不起来（Node 没有 canvas 包）。
+   * 所以这里断言的是**源码契约**——它防的是"改了一半"这类真实会犯的错：
+   * 加了参数但没传下去、判据又退回只比名字、颜色硬编码成白色。
+   */
+  const src = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
+
+  check('show() 收 color 参数', /show\(mob: Mob, topLift: number, color: string \| null = null\)/.test(src));
+  check('drawName() 收 color 参数', /private drawName\(name: string, color: string \| null\)/.test(src));
+  check('重画判据改走 nameTagNeedsRedraw', src.includes('nameTagNeedsRedraw('));
+  check('不再自己比 lastName（那条是颜色不更新的根因）', !/if \(name !== this\.lastName\)/.test(src));
+  check('记录了 lastColor', src.includes('this.lastColor = color'));
+  check('invalidate() 连颜色一起清', /invalidate\(\): void \{[\s\S]{0,120}this\.lastColor = null;/.test(src));
+  check('填充色用传入的 color ?? 默认白', src.includes('ctx.fillStyle = color ?? DEFAULT_NAME_COLOR'));
+  check('描边固定深色（不跟队伍色走）', src.includes('ctx.strokeStyle = COLORS.outline'));
+  // 只在**代码行**里查（注释里提到 Teams 是解释，不是依赖）
+  const codeLines = src
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'));
+  const code = codeLines.join('\n');
+  check('渲染层不直接查队伍（颜色由外部算好传入）', !/teamOf|new Teams|from '.*Teams\.ts'/.test(code));
+  check('默认色来自 NameTagColor，不是本地硬编码', src.includes('DEFAULT_NAME_COLOR'));
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);
