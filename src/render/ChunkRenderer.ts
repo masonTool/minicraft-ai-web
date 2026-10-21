@@ -557,11 +557,17 @@ export function mergeSectionLayer(
 
   const position = new Float32Array(vertices * 3);
   const uv = new Float32Array(vertices * 2);
-  const tile = new Float32Array(vertices * 3);
+  // ⚠️ `aTile` / `aLight` 都是 **每顶点 2 个分量**（见 `createGeometry` 的
+  // `new THREE.BufferAttribute(arrays.tile, 2)` / `(quantizeUnit(arrays.light), 2)`）。
+  // 这里曾经写成 `* 3` / `vertexOffset * 3`（批次 608 的笔误）：单 section 时
+  // 偏移为 0，前 2N 个元素恰好正确，**测不出来**；一旦一个区块有 2 个以上非空
+  // section（山地、洞穴、带树的区块），后面 section 的贴图起点与光照就整体错位，
+  // 顶点读到的是上一个 section 的尾巴或 0 —— 表现就是"方块表面纯黑、贴图错乱"。
+  const tile = new Float32Array(vertices * 2);
   const index = new Uint32Array(indices);
   const byteLight = entries.every((entry) => entry.arrays.light instanceof Uint8Array);
   const byteShade = entries.every((entry) => entry.arrays.shade instanceof Uint8Array);
-  const light = byteLight ? new Uint8Array(vertices * 3) : new Float32Array(vertices * 3);
+  const light = byteLight ? new Uint8Array(vertices * 2) : new Float32Array(vertices * 2);
   const shade = byteShade ? new Uint8Array(vertices) : new Float32Array(vertices);
 
   let vertexOffset = 0;
@@ -573,8 +579,9 @@ export function mergeSectionLayer(
     position.set(arrays.position, vertexOffset * 3);
     for (let i = 0; i < count; i++) position[(vertexOffset + i) * 3 + 1]! += baseY;
     uv.set(arrays.uv, vertexOffset * 2);
-    tile.set(arrays.tile, vertexOffset * 3);
-    light.set(arrays.light, vertexOffset * 3);
+    // 与上面同一处笔误的写入端：`tile` / `light` 每顶点 2 个分量
+    tile.set(arrays.tile, vertexOffset * 2);
+    light.set(arrays.light, vertexOffset * 2);
     shade.set(arrays.shade, vertexOffset);
     for (let i = 0; i < arrays.index.length; i++) {
       index[indexOffset + i] = arrays.index[i]! + vertexOffset;

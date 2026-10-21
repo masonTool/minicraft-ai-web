@@ -11,7 +11,8 @@
  *   3. **真实地形上的合并率**：用真实生成的区块对比「逐面网格化」的三角形数。
  */
 
-import { AO_BRIGHTNESS, meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
+import { AO_BRIGHTNESS, createGeometry, meshSection, type GeometryArrays, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
+import { mergeSectionLayer } from '../src/render/ChunkRenderer.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block, blockDef, slabId } from '../src/core/registry/blocks.ts';
 import { withWaterlogged } from '../src/core/registry/blockState.ts';
@@ -247,6 +248,42 @@ console.log('\n[水浸方块：额外输出一层水面（批次 469）]');
   // 只有含水那块会进半透明通道：整格盒子 6 面 × 2 三角形 = 12
   check('含水台阶在半透明通道里输出了 12 个三角形（6 面）', triangleCount(result.translucent) === 12, `${triangleCount(result.translucent)}`);
   check('实心通道里两块台阶都在（各自若干面）', triangleCount(result.solid) > 0);
+}
+
+console.log('\n[跨 section 合并：属性步长必须与 createGeometry 一致（批次 618）]');
+{
+  // 回归守卫：`aTile` / `aLight` 都是**每顶点 2 个分量**，`mergeSectionLayer`
+  // 曾经按 3 分配与写入。单 section 时偏移为 0、前 2N 个元素恰好对，测不出来；
+  // 一个区块有 2 个以上非空 section（山地/洞穴/树）时，第二个 section 起整体错位，
+  // 顶点读到 0 —— 真机表现就是"方块表面纯黑、贴图错乱"。
+  const layer = (baseY: number, seed: number): GeometryArrays => ({
+    position: new Float32Array([0, baseY, 0, 1, baseY, 0, 1, baseY + 1, 0, 0, baseY + 1, 0]),
+    uv: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+    tile: new Float32Array(8).fill(seed),
+    light: new Float32Array(8).fill(seed),
+    shade: new Float32Array(4).fill(1),
+    index: new Uint32Array([0, 1, 2, 0, 2, 3]),
+  });
+  const first = layer(0, 0.5);
+  const second = layer(16, 0.25);
+  const merged = mergeSectionLayer([
+    { section: 0, arrays: first },
+    { section: 1, arrays: second },
+  ]);
+  check('两个 section 能合并', merged !== null);
+  if (merged) {
+    const vertices = 8;
+    check('tile 长度 = 顶点数 × 2', merged.tile.length === vertices * 2, `${merged.tile.length}`);
+    check('light 长度 = 顶点数 × 2', merged.light.length === vertices * 2, `${merged.light.length}`);
+    // 第二个 section 从第 4 个顶点开始 → 2 分量属性的起点是 8
+    check('第二个 section 的 tile 没有错位', merged.tile[8] === second.tile[0], `${merged.tile[8]}`);
+    check('第二个 section 的 light 没有错位', merged.light[8] === second.light[0], `${merged.light[8]}`);
+    check('第一段最后一个顶点的 tile 仍正确', merged.tile[7] === first.tile[7], `${merged.tile[7]}`);
+
+    const geometry = createGeometry(merged);
+    check('aTile 的顶点数与合并结果一致', geometry.getAttribute('aTile').count === vertices);
+    check('aLight 的顶点数与合并结果一致', geometry.getAttribute('aLight').count === vertices);
+  }
 }
 
 console.log(`\n网格化测试：${passed} 通过 / ${failed} 失败\n`);
