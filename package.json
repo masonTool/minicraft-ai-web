@@ -206,7 +206,8 @@
     "preview:minigame": "node tools/minigame/preview-proxy.mjs",
     "e2e:v2-panel": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-fixed-panel.cjs",
     "e2e:v2-weblogic": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic.cjs",
-    "e2e:v2-weblogic2": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic2.cjs"
+    "e2e:v2-weblogic2": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic2.cjs",
+    "e2e:v2-rail": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-rail-tour.cjs"
   },
   "dependencies": {
     "three": "^0.186.1"

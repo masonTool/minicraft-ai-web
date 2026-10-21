@@ -26,6 +26,7 @@ import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
 import {
   buildArmorColumn,
+  buildPlayerPreview,
   buildCraftingPanel,
   buildCreativeTab,
   buildHotbarDock,
@@ -198,7 +199,7 @@ let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
  *  - `armor`    = 盔甲 4 格竖排 + 副手
  * 左轨选分类会切到 `creative`，右轨两颗键在这两者间切。
  */
-let panelMode: 'crafting' | 'armor' = 'crafting';
+let panelMode: 'crafting' | 'armor' | 'achievements' = 'crafting';
 /** 上一次点的是哪一格、什么时候（双击收集判定用；对齐 Web 版 `DOUBLE_CLICK_MS = 400`） */
 const DOUBLE_CLICK_MS = 400;
 let lastClickSlot: { kind: SlotKind; index: number; at: number } | null = null;
@@ -950,8 +951,12 @@ const showInventory = (): void => {
   // 面板整体上移一点，给底部 dock 让位
   const panelY = Math.max(6, (uiHeight - dockH - panelH) / 2);
 
-  const leftRailX = panelX;
-  const rightRailX = panelX + panelW - railW;
+  // ⚠️ 右轨要**留出贴边余量**：`panelX + panelW - railW` 正好贴死面板右边，
+  // 再给轨道自身 +3 的偏移就整个溢出去了（实测截图里三颗按钮挂在面板外面）。
+  // 这里按"面板右内边 - 轨道宽 - 余量"算，左右都留 3px。
+  const RAIL_INSET = 3;
+  const leftRailX = panelX + RAIL_INSET;
+  const rightRailX = panelX + panelW - railW - RAIL_INSET;
   const contentX = leftRailX + railW + pad;
   const contentY = panelY + headerH + bodyPad;
 
@@ -1030,21 +1035,38 @@ const showInventory = (): void => {
     }
     // 右半边：合成（2×2）或盔甲列 —— 由 panelMode 决定（对齐 data-pocket-tab）
     if (panelMode === 'armor') {
-      // 盔甲竖排一列 + 副手，贴在内容区右侧
+      // 盔甲竖排一列（左边带"头/胸/腿/靴/副"标签）+ 右侧玩家预览
+      // 对齐 Web 版 `.inv-grid.inv-armor` + `.inv-player-preview`
+      const armorX = contentX + gridW + 26;
       elements.push(
+        text(contentX + gridW + 26, contentY - 18, 120, 16, '盔甲', { fontSize: 12, color: MC.text }),
         ...buildArmorColumn({
-          x: contentX + contentW - slotSize,
+          x: armorX + 20,
           y: contentY,
           slotSize,
+          maxBottom: panelY + panelH - bodyPad,
           inventory,
           onTap: (index, button) => clickSlot('inventory', index, button),
           onDrop: (from, to) => dropSlot({ kind: 'inventory', index: from }, { kind: 'inventory', index: to }),
         }),
+        ...buildPlayerPreview({
+          x: armorX + 20 + slotSize + 10,
+          y: contentY,
+          // 剩余宽度夹一下，别戳出面板右边
+          size: Math.max(48, Math.min(72, panelX + panelW - railW - pad - (armorX + 20 + slotSize + 10))),
+          inventory,
+        }),
       );
     } else {
-      // 2×2 合成（对齐 Web 版右列：网格 → 箭头 → 产物，没有标题字、没有尺寸按钮）
-      const craftX = contentX + gridW + 16;
+      // 2×2 合成（对齐 Web 版右列：网格 → 箭头 → 产物）
+      const craftX = contentX + gridW + 26;
       const craftY = contentY + 4;
+      // 左上角那颗小字「合成」（Web 版就写在 2×2 左边）
+      elements.push(text(craftX - 26, craftY + craftSlot / 2 - 8, 24, 16, '合成', {
+        fontSize: 11,
+        color: MC.text,
+        align: 'center',
+      }));
       for (let i = 0; i < crafting.size * crafting.size; i++) {
         const stack = crafting.get(i);
         elements.push(
@@ -1189,7 +1211,7 @@ const showInventory = (): void => {
   // ---- 左右两条竖轨 ----
   elements.push(
     ...buildRail({
-      x: leftRailX + 2,
+      x: leftRailX,
       y: panelY + headerH + bodyPad,
       w: railW,
       h: panelH - headerH - bodyPad * 2,
@@ -1210,7 +1232,7 @@ const showInventory = (): void => {
       },
     }),
     ...buildRail({
-      x: rightRailX + 2,
+      x: rightRailX,
       y: panelY + headerH,
       w: railW,
       h: panelH - headerH - bodyPad * 2,
@@ -1222,13 +1244,15 @@ const showInventory = (): void => {
       side: 'right',
       mode: panelMode,
       onMode: (mode) => {
-        if (mode === 'creative') {
-          inventoryTab = 'creative';
-        } else {
-          // 合成 / 盔甲：都在"物品栏"这一页里，只切右半边
-          inventoryTab = 'items';
-          panelMode = mode === 'armor' ? 'armor' : 'crafting';
+        // 三颗都只切**右半边**（成就那颗会盖住整个面板，但它不在 v2 实现范围内：
+        // v2 没有成就系统，点了给一句提示，不假装有个界面）
+        if (mode === 'achievements') {
+          inventoryHint = 'v2 还没有成就系统';
+          showInventory();
+          return;
         }
+        inventoryTab = 'items';
+        panelMode = mode;
         showInventory();
       },
     }),

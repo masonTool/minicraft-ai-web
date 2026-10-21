@@ -160,6 +160,20 @@ export interface UiSlotNode extends UiNode {
 
 export type UiIconKind = 'chat' | 'pause' | 'view';
 
+/**
+ * 物品图标按钮（轨道上那几颗"分类"用的）。
+ *
+ * 与 `button` 的区别只有一处：中间画的**不是文字，是物品贴图**（由 `UiLayer` 构造时
+ * 传入的 `drawIcon` 画）。Web 版左轨就是这一种：放大镜/砖块/镐/方块/叶子/箱子。
+ */
+export interface UiItemButtonNode extends UiNode {
+  kind: 'itembtn';
+  /** 要画哪个物品（0 = 不画图标，只有底色） */
+  itemId: number;
+  active: boolean;
+  onTap: () => void;
+}
+
 export interface UiIconNode extends UiNode {
   kind: 'icon';
   icon: UiIconKind;
@@ -201,7 +215,8 @@ export type UiElement =
   | UiIconNode
   | UiRingNode
   | UiVitalNode
-  | UiSplitBarNode;
+  | UiSplitBarNode
+  | UiItemButtonNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -276,6 +291,17 @@ export function icon(
   style: UiStyle = {},
 ): UiIconNode {
   return { kind: 'icon', x, y, w: size, h: size, icon: kind, onTap, style };
+}
+
+export function itemButton(
+  x: number,
+  y: number,
+  size: number,
+  itemId: number,
+  active: boolean,
+  onTap: () => void,
+): UiItemButtonNode {
+  return { kind: 'itembtn', x, y, w: size, h: size, itemId, active, onTap };
 }
 
 export function splitBar(x: number, y: number, w: number, h: number, count: number, total: number): UiSplitBarNode {
@@ -421,6 +447,7 @@ export class UiLayer {
   } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
+  private itemButtons: UiItemButtonNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
 
   constructor(
@@ -557,6 +584,14 @@ export class UiLayer {
 
     for (let i = this.icons.length - 1; i >= 0; i--) {
       const item = this.icons[i]!;
+      if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
+        item.onTap();
+        return true;
+      }
+    }
+
+    for (let i = this.itemButtons.length - 1; i >= 0; i--) {
+      const item = this.itemButtons[i]!;
       if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
         item.onTap();
         return true;
@@ -751,6 +786,7 @@ export class UiLayer {
     this.buttons = [];
     this.slots = [];
     this.icons = [];
+    this.itemButtons = [];
     if (this.root) this.drawNode(this.root, ctx);
     // 手上物品（UI-004）：先画拖拽幽灵（拖拽分配那一路），再画光标幽灵（点击拿起那一路）
     if (this.dragSlot?.moved && this.dragPos && this.dragSlot.node.itemId > 0) {
@@ -892,6 +928,29 @@ export class UiLayer {
           ctx.fillRect(cx - size * 0.05, cy + size * 0.05, size * 0.12, size * 0.32);
         }
       }
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'itembtn') {
+      // 灰底 + 斜角（选中时翻成凹进去的淡黄绿，与普通按钮同一套观感）
+      ctx.fillStyle = node.active ? MC.tabActive : MC.button;
+      ctx.fillRect(node.x, node.y, node.w, node.h);
+      bevelRect(
+        ctx,
+        node.x,
+        node.y,
+        node.w,
+        node.h,
+        node.active
+          ? [MC.bevelDark, MC.bevelLight, MC.bevelLight, MC.bevelDark]
+          : [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+        2,
+      );
+      if (node.itemId > 0) {
+        const pad = 4;
+        this.drawIcon?.(ctx, node.itemId, node.x + pad, node.y + pad, node.w - pad * 2);
+      }
+      this.itemButtons.push(node);
       return;
     }
 
@@ -1056,7 +1115,10 @@ export class UiLayer {
       ctx.font = `${style.fontSize ?? 20}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(node.label, node.x + node.w / 2, node.y + node.h / 2, node.w - 16);
+      // ⚠️ 第 4 个参数是 **maxWidth**：中文按字宽算，"配方书"三个字在 12px 下
+      // 约 36px、54px 宽的按钮装得下；但一旦字体回退到更宽的字形就会溢出，
+      // 视觉上就像"两个按钮的字压在一起"。压到 w-8 更保险。
+      ctx.fillText(node.label, node.x + node.w / 2, node.y + node.h / 2, node.w - 8);
       this.buttons.push(node);
       return;
     }
