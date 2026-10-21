@@ -510,6 +510,8 @@ export interface HotbarDockContext {
   selectedSlot: number;
   onSlot(index: number, button: SlotButton): void;
   onDrop(from: number, to: number): void;
+  /** 长按选数量（基岩版指示条）；不传 = 这一条 dock 不参与选数量 */
+  onSplit?: (index: number, count: number) => void;
 }
 
 export function buildHotbarDock(ctx: HotbarDockContext): UiElement[] {
@@ -538,6 +540,8 @@ export function buildHotbarDock(ctx: HotbarDockContext): UiElement[] {
         i === ctx.selectedSlot,
         (button) => ctx.onSlot(i, button),
         (from) => ctx.onDrop(from.index, i),
+        false,
+        ctx.onSplit ? (count) => ctx.onSplit!(i, count) : undefined,
       ),
     );
   }

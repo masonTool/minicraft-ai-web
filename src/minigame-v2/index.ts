@@ -18,7 +18,21 @@ import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { SaveController } from './save-controller.ts';
 import { MobSystem } from './mobs.ts';
 import { ChatSystem } from './chat.ts';
-import { ContainerSystem } from './containers.ts';
+import { ContainerSystem, type ContainerGeo } from './containers.ts';
+import {
+  BODY_PAD,
+  CONTENT_W,
+  DESIGN_WIDTH,
+  DOCK_H,
+  GRID_W,
+  HEADER_H,
+  PANEL_PAD,
+  PANEL_W,
+  RAIL_W,
+  SLOT_GAP,
+  SLOT_SIZE,
+  panelHeight,
+} from './panel-metrics.ts';
 import { drawBlockIcon } from './block-icon.ts';
 import { QualityManager } from './quality.ts';
 import { readSettings, saveSettings } from './settings.ts';
@@ -219,6 +233,8 @@ let inventoryGeo: {
   contentY: number;
   slotSize: number;
 } | null = null;
+/** 容器面板的几何（同样给验收脚本用；由 `ContainerSystem` 每次重画回写） */
+let containerGeo: ContainerGeo | null = null;
 let recipePage = 0;
 let recipeSize: 2 | 3 = 2;
 let recipeQuery = '';
@@ -527,7 +543,7 @@ const showSettings = (): void => {
   );
 };
 
-/** 一格里能查到身份的东西（背包 / 合成格 / 创造栏） */
+/** 一格里能查到身份的东西（背包 / 合成格 / 创造栏 / 容器） */
 const bindingFor = (kind: SlotKind, index: number): SlotBinding | null => {
   if (kind === 'inventory') {
     if (index < 0 || index >= TOTAL_SLOTS) return null;
@@ -548,8 +564,19 @@ const bindingFor = (kind: SlotKind, index: number): SlotBinding | null => {
     if (id === undefined) return null;
     return { kind: 'creative', index, source: creativeSource, takeOnly: false };
   }
+  if (kind === 'container') {
+    // 容器（箱子 27 格 / 熔炉 3 格）——数据源是当前开着的那一只
+    const source = containers.source;
+    if (!source) return null;
+    if (index < 0 || index >= containers.openSize) return null;
+    // 熔炉的产物槽（2 号）只取不放（FURN-003）
+    return { kind: 'container', index, source, takeOnly: isFurnaceOutput(index) };
+  }
   return null;
 };
+
+/** 熔炉产物槽：只取不放（箱子没有这个概念） */
+const isFurnaceOutput = (index: number): boolean => containers.isFurnace && index === 2;
 
 /**
  * 创造栏的"格子数据源"：每格永远有货（`MAX_STACK` 个），**读得到、放不进去**。
@@ -601,6 +628,17 @@ const craftOutput = (): void => {
 };
 
 /**
+ * 点完一格之后重画**当前显示着的那块面板**。
+ *
+ * 背包与容器是两套壳、共用这一条点击通道：容器那边没开就退回背包面板，
+ * 否则会出现"点箱子里的东西，背包面板在背后闪一下"。
+ */
+const refreshPanels = (): void => {
+  if (containers.isOpen) containers.refresh();
+  else showInventory();
+};
+
+/**
  * 点击一格的**唯一入口**：短按 = 左键、长按 = 右键，规则全在 `applyClick`。
  *
  * 这一层只做三件事：解析出绑定 → 结算 → 重画（含提示语与光标幽灵）。
@@ -617,7 +655,7 @@ const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
       origin: null,
     });
     inventoryHint = `拿起 ${itemLabel(id)} x${target}（创造）`;
-    showInventory();
+    refreshPanels();
     return;
   }
 
@@ -639,11 +677,11 @@ const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
     // 满一堆 / 不可堆叠 / 没有同类可补 → 双击**退化成快速移动**（基岩版规则）
     if (!gatherInto(binding) && quickMoveSlot(kind, index)) {
       syncGhost();
-      showInventory();
+      refreshPanels();
       return;
     }
     syncGhost();
-    showInventory();
+    refreshPanels();
     return;
   }
 
@@ -651,7 +689,7 @@ const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
   if (result.hint) inventoryHint = result.hint;
   else if (result.changed) inventoryHint = '';
   syncGhost();
-  showInventory();
+  refreshPanels();
 };
 
 /**
@@ -666,7 +704,7 @@ const distributeOver = (nodes: readonly { index: number }[], rightDrag: boolean)
   const held = cursor.held;
   if (!held) {
     inventoryHint = '手上没有东西可分';
-    showInventory();
+    refreshPanels();
     return;
   }
   // 只有"玩家背包"里的格子参与（合成格/创造栏不参与分配，与 Web 版一致）
@@ -679,7 +717,7 @@ const distributeOver = (nodes: readonly { index: number }[], rightDrag: boolean)
   cursor.restore({ held: next, fromCreative: false, origin: cursor.origin });
   inventoryHint = next ? `剩余 ${next.count} 个` : '分配完成';
   syncGhost();
-  showInventory();
+  refreshPanels();
 };
 
 /**
@@ -704,7 +742,7 @@ const dropHeld = (): void => {
   inventoryHint = `已丢弃 ${itemLabel(held.id)} ×${held.count}`;
   cursor.clear();
   ui.setGhost(0, 0);
-  showInventory();
+  refreshPanels();
 };
 
 /**
@@ -730,7 +768,7 @@ const splitFromSlot = (kind: SlotKind, index: number, count: number): void => {
   });
   inventoryHint = `拿起 ${taken.count} / ${stack.count}`;
   syncGhost();
-  showInventory();
+  refreshPanels();
 };
 
 /**
@@ -871,7 +909,7 @@ const dropSlot = (from: { kind: SlotKind; index: number }, to: { kind: SlotKind;
   if (!stack) return;
   if (!canPlaceItem(target, stack.id)) {
     inventoryHint = target.takeOnly ? '产物槽只能取，不能放' : '这件物品不能放进这一格';
-    showInventory();
+    refreshPanels();
     return;
   }
   const existing = target.source.get(target.index);
@@ -904,7 +942,7 @@ const dropSlot = (from: { kind: SlotKind; index: number }, to: { kind: SlotKind;
     }
   }
   inventoryHint = '';
-  showInventory();
+  refreshPanels();
 };
 
 /**
@@ -935,6 +973,13 @@ const bindingsOfInventory = (): SlotBinding[] => {
   for (let i = 0; i < crafting.size * crafting.size; i++) {
     const binding = bindingFor('crafting', i);
     if (binding) list.push(binding);
+  }
+  // 容器开着时，容器格也算"原处"（关容器回收光标时要按 ref 找回来）
+  if (containers.isOpen) {
+    for (let i = 0; i < containers.openSize; i++) {
+      const binding = bindingFor('container', i);
+      if (binding) list.push(binding);
+    }
   }
   return list;
 };
@@ -978,27 +1023,25 @@ const showInventory = (): void => {
   //   · 宽 = 物品栏页（27 格 + 合成列，最宽）
   //   · 高 = 创造页（多一条工具条 + 一条分页，最高）
   // 内容放不满就留白（原版 Web 版也是固定壳、内容居中）。
-  const gap = 2;
-  const railW = 40;
-  const pad = 12;
-  const headerH = 24;
-  const bodyPad = 8;
-  const dockH = 48; // 底部快捷栏占掉的高度（面板不能盖住它）
+  //
+  // 这些常量与 `containers.ts` 共用 `panel-metrics.ts`：容器面板要是自己算一套，
+  // 打开箱子时面板就会缩窄一圈（真踩过，差 210px）。
+  const gap = SLOT_GAP;
+  const railW = RAIL_W;
+  const pad = PANEL_PAD;
+  const headerH = HEADER_H;
+  const bodyPad = BODY_PAD;
+  const dockH = DOCK_H;
 
-  const slotSize = 44;
-  const gridW = 9 * slotSize + 8 * gap; // 412
+  const slotSize = SLOT_SIZE;
+  const gridW = GRID_W;
   const craftSlot = Math.round(slotSize * 0.86); // 38
-  const craftBlockW = 2 * craftSlot + 2 + 22 + craftSlot; // 2×2 + 箭头 + 产物 ≈ 136
 
-  const contentW = gridW + 16 + craftBlockW; // 恒按"物品栏 + 合成列"这一档
-  const panelW = Math.min(1024 - 16, contentW + railW * 2 + pad * 2);
+  const contentW = CONTENT_W;
+  const panelW = PANEL_W;
+  const panelH = panelHeight(uiHeight);
 
-  const bodyH = 3 * slotSize + 2 * gap; // 3 行主背包
-  const railNeed = 6 * 36 + 5 * 2 + 16; // 左轨 5 颗分类 + 1 颗物品栏
-  const gridNeed = headerH + bodyPad * 2 + bodyH + 28 + 28 + 30; // 最高那一档（创造页）
-  const panelH = Math.min(uiHeight - dockH - 20, Math.max(railNeed, gridNeed));
-
-  const panelX = (1024 - panelW) / 2;
+  const panelX = (DESIGN_WIDTH - panelW) / 2;
   // 面板整体上移一点，给底部 dock 让位
   const panelY = Math.max(6, (uiHeight - dockH - panelH) / 2);
 
@@ -1387,6 +1430,7 @@ const showInventory = (): void => {
         },
         onDrop: (from, to) =>
           dropSlot({ kind: 'inventory', index: from }, { kind: 'inventory', index: to }),
+        onSplit: (index, count) => splitFromSlot('inventory', index, count),
       }),
     ]),
   );
@@ -2416,13 +2460,42 @@ const updateAimRing = (clientX: number, clientY: number, visible: boolean): void
   ui.refresh(true);
 };
 
+/**
+ * 容器关掉之前把光标上的东西收回去（`CLOSE-002`）。
+ *
+ * ⚠️ 必须**先**收回再摘容器：`opened` 一置空，箱子里那格和背包格的区别就没了，
+ * `reclaimHeld` 会找不到"原处"，东西会凭空消失。所以这里用**容器还开着时**
+ * 的绑定表当回落目标。
+ */
+const reclaimBeforeContainerClose = (): void => {
+  const held = cursor.held;
+  if (!held) return;
+  // 容器的每一格都还算"可回落"的位置（箱子 / 熔炉都在）
+  const refs = bindingsOfInventory();
+  const reclaimed = reclaimHeld(cursor.snapshot(), inventory, slotResolver(refs));
+  cursor.restore(reclaimed.state);
+  if (reclaimed.changed) inventoryHint = reclaimed.hint;
+  ui.setGhost(cursor.held?.id ?? 0, cursor.held?.count ?? 0);
+};
+
 const containers = new ContainerSystem({
   ui,
   uiHeight,
   getWorld: () => world,
   inventory,
   getSelectedSlot: () => selectedSlot,
+  setSelectedSlot: (index: number) => {
+    selectedSlot = index;
+  },
   showHud: () => showHud(),
+  clickSlot: (kind, index, button) => clickSlot(kind, index, button),
+  dropSlot: (from, to) => dropSlot(from, to),
+  splitSlot: (kind, index, count) => splitFromSlot(kind, index, count),
+  getHint: () => inventoryHint,
+  onClosed: () => reclaimBeforeContainerClose(),
+  onGeo: (geo) => {
+    containerGeo = geo;
+  },
 });
 
 const mobs = new MobSystem({
@@ -2992,6 +3065,11 @@ if (wxTestApi && isDesktopRuntime) {
      * 验收脚本不该靠"猜像素"去点轨道上的小图标——猜错就变成点了别处。
      */
     inventoryGeo: () => inventoryGeo,
+    /** 验收钩子：打开背包面板（量几何 / 做基准对比用） */
+    openInventoryForTest: () => {
+      showInventory();
+      return { open: inventoryOpen };
+    },
     /** 验收：生存模式配方卡的统计（总数 / 可做数 / 当前页） */
     recipeCardInfo: () => {
       const cards = craftableRecipeCards();
@@ -3039,6 +3117,40 @@ if (wxTestApi && isDesktopRuntime) {
       containers.openChestAt(x, y, z);
       return { x, y, z };
     },
+
+    // ---------------------------------------------------------------- Phase 7 容器
+    /** 容器开着没有、几格、各格里是什么（`null` 表示空） */
+    containerInfo: () => ({
+      open: containers.isOpen,
+      furnace: containers.isFurnace,
+      size: containers.openSize,
+      slots: containers.slotIds,
+    }),
+    /** 点容器里的一格（与玩家手指点是同一条通道） */
+    clickContainerSlot: (index = 0, button: 'left' | 'right' = 'left') => {
+      clickSlot('container', index, button);
+      return { index, held: cursor.held?.id ?? 0, count: cursor.held?.count ?? 0 };
+    },
+    /** 点背包里的一格（容器开着时也走这条：容器面板的下半部分） */
+    clickInventorySlot: (index = 9, button: 'left' | 'right' = 'left') => {
+      clickSlot('inventory', index, button);
+      return { index, held: cursor.held?.id ?? 0, count: cursor.held?.count ?? 0 };
+    },
+    /** 容器格 ⇄ 背包格的拖拽 */
+    dragSlotForTest: (
+      from: { kind: 'inventory' | 'container'; index: number },
+      to: { kind: 'inventory' | 'container'; index: number },
+    ) => {
+      dropSlot(from, to);
+      return { held: cursor.held?.id ?? 0 };
+    },
+    /** 关掉容器（验"光标上的东西不会消失"） */
+    closeContainerForTest: () => {
+      containers.close();
+      return { open: containers.isOpen, held: cursor.held?.id ?? 0, heldCount: cursor.held?.count ?? 0 };
+    },
+    /** 容器面板里所有格子的屏幕坐标（验收脚本按它点，不猜像素） */
+    containerGeo: () => containerGeo,
   };
 }
 requestAnimationFrame(frame);
