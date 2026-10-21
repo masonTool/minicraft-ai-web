@@ -19,10 +19,14 @@ export interface SpawnerDecoration {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+  /** 玩家进入这个半径（三维）才转动/工作（批次 586） */
+  readonly activeRadius: number;
 }
 
 /** 方块 id → 刷怪笼定义（null = 不是刷怪笼）；由调用方注入 */
-export type SpawnerDefLookup = (blockId: number) => { readonly mobId: string } | null;
+export type SpawnerDefLookup = (
+  blockId: number,
+) => { readonly mobId: string; readonly activeRadius: number } | null;
 
 /**
  * 收集这一帧要画的装饰。
@@ -49,7 +53,23 @@ export function collectSpawnerDecorations(
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
     const def = defFor(blockAt(x, y, z));
     if (!def) continue;
-    out.push({ mobId: def.mobId, x: x + 0.5, y: y + 0.6, z: z + 0.5 });
+    out.push({ mobId: def.mobId, x: x + 0.5, y: y + 0.6, z: z + 0.5, activeRadius: def.activeRadius });
   }
   return out;
+}
+
+/**
+ * 玩家是否近到让这只迷你生物转起来（批次 586）。
+ *
+ * 与 `planSpawnerSpawn` 用**同一条三维距离**：玩家在笼子正上方也算近。
+ * 分开成纯函数是为了能离线钉住边界（16 格内转、16.1 格停）。
+ */
+export function decorationIsActive(
+  decoration: SpawnerDecoration,
+  player: { x: number; y: number; z: number },
+): boolean {
+  return (
+    Math.hypot(player.x - decoration.x, player.y - decoration.y, player.z - decoration.z) <=
+    decoration.activeRadius
+  );
 }

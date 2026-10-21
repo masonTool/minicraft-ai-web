@@ -1142,6 +1142,11 @@ export interface MobDecoration {
   readonly z: number;
   /** 初始相位（让相邻笼子里的模型不同步转） */
   readonly phase: number;
+  /**
+   * 玩家是否在激活半径内（批次 586）。不在就停在当前朝向——
+   * 原版也是"靠近才转"，远处一排笼子同步空转反而显眼。
+   */
+  readonly active: boolean;
 }
 
 export class MobRenderer {
@@ -1161,6 +1166,9 @@ export class MobRenderer {
 
   /** 装饰生物（批次 487：刷怪笼里旋转的迷你模型），由主程序每帧灌进来 */
   private decorations: readonly MobDecoration[] = [];
+  /** 每只装饰生物自己的朝向（批次 586）：离开激活半径就停住，不让它倒着补转 */
+  private readonly decorationAngles = new Map<string, number>();
+  private decorationLastElapsed = 0;
   /** 装饰用的外观缓存（按 `mobId + 外观版本`）——它们没有实体 id，不能塞进 `visuals` */
   private readonly decorationVisuals = new Map<string, MobVisual>();
 
@@ -1337,10 +1345,20 @@ export class MobRenderer {
     // 整体缩小（`DECOR_SCALE`）。**不做走路摆动**——它们没在走，
     // 摆动反而会让"这是一只被关着的怪"看起来在跑步。
     const seenDecor = new Set<string>();
+    const seenDecorKeys = new Set<string>();
+    const decorDelta = Math.max(0, this.elapsed - this.decorationLastElapsed);
+    this.decorationLastElapsed = this.elapsed;
     for (const deco of this.decorations) {
       const sample = deco.sample;
       const appearanceKey = `${sample.type.id}|${mobAppearanceKey(sample)}`;
       seenDecor.add(appearanceKey);
+      const decorKey = `${deco.x},${deco.y},${deco.z}`;
+      seenDecorKeys.add(decorKey);
+      let angle = this.decorationAngles.get(decorKey) ?? deco.phase;
+      if (deco.active) {
+        angle += decorDelta * DECOR_SPIN;
+        this.decorationAngles.set(decorKey, angle);
+      }
       let visual = this.decorationVisuals.get(appearanceKey);
       if (!visual) {
         visual = this.createVisual(sample);
@@ -1348,7 +1366,7 @@ export class MobRenderer {
       }
 
       this.rootDummy.position.set(deco.x, deco.y, deco.z);
-      this.rootDummy.rotation.set(0, this.elapsed * DECOR_SPIN + deco.phase, 0);
+      this.rootDummy.rotation.set(0, angle, 0);
       this.rootDummy.scale.setScalar(DECOR_SCALE);
       this.rootDummy.updateMatrix();
 
@@ -1381,6 +1399,10 @@ export class MobRenderer {
     // 笼子没了就丢掉它的外观（否则换个笼子类型之后旧的会一直留着）
     for (const key of [...this.decorationVisuals.keys()]) {
       if (!seenDecor.has(key)) this.decorationVisuals.delete(key);
+    }
+    // 装饰生物被挖掉后，它的旋转角也要忘掉（否则换个笼子会继承旧角度）
+    for (const key of [...this.decorationAngles.keys()]) {
+      if (!seenDecorKeys.has(key)) this.decorationAngles.delete(key);
     }
 
     this.usedInstances = instance;

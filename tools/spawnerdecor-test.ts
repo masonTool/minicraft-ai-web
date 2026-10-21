@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { Block } from '../src/core/registry/blocks.ts';
 import { SPAWNER_DEFS, spawnerDefFor } from '../src/core/registry/spawners.ts';
-import { collectSpawnerDecorations } from '../src/core/world/SpawnerDecor.ts';
+import { collectSpawnerDecorations, decorationIsActive } from '../src/core/world/SpawnerDecor.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { MobRenderer } from '../src/render/MobRenderer.ts';
@@ -53,6 +53,15 @@ console.log('\n[收集：哪些笼子该画什么]');
   equal('高度稍抬起（y+0.6，模型才不会陷进笼底）', list[0]!.y, 64.6);
   equal('坐标是格心（z+0.5）', list[0]!.z, 4.5);
   equal('生物种类来自刷怪笼定义', list[0]!.mobId, 'zombie');
+  equal('激活半径来自刷怪笼定义', list[0]!.activeRadius, def!.activeRadius);
+
+  // 批次 586：玩家靠近才转，边界与刷怪距离同一条三维判定
+  const deco = list[0]!;
+  check('玩家站在笼子里 → 激活', decorationIsActive(deco, { x: deco.x, y: deco.y, z: deco.z }));
+  check(
+    '玩家在半径外 → 停止',
+    !decorationIsActive(deco, { x: deco.x + def!.activeRadius + 0.1, y: deco.y, z: deco.z }),
+  );
 
   // 笼子被挖掉：方块变成空气 → 不画（否则会留一个幽灵模型）
   blocks.set('4,64,4', Block.AIR);
@@ -96,7 +105,7 @@ console.log('\n[渲染：真的画了，也在挖掉后消失]');
   check('僵尸种类存在', type !== undefined);
   if (type) {
     const sample = createMob(type, 0, 0, 0);
-    renderer.setDecorations([{ sample, x: 4.5, y: 64.6, z: 4.5, phase: 0 }]);
+    renderer.setDecorations([{ sample, x: 4.5, y: 64.6, z: 4.5, phase: 0, active: true }]);
     renderer.update([], camera, 0.016, light);
     check('一只装饰把实例数顶上去了', renderer.usedInstances > 0, `${renderer.usedInstances}`);
 

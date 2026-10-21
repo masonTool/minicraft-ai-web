@@ -137,7 +137,7 @@ import {
 } from './core/entity/TargetRules.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
-import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
+import { collectSpawnerDecorations, decorationIsActive } from './core/world/SpawnerDecor.ts';
 // 唱片机（批次 489）：旋律是纯数据，播放走 AudioEngine 的同一条合成通道
 import { discDuration, discSoundKind, discSoundSpec } from './core/audio/DiscMelody.ts';
 // 钟声（批次 490）
@@ -9277,6 +9277,8 @@ class App {
         y: decoration.y,
         z: decoration.z,
         phase: ((decoration.x * 0.7 + decoration.z * 0.3) % (Math.PI * 2)),
+        // K6（批次 586）：玩家在激活半径内才转；与“刷不刷”共用同一条半径
+        active: decorationIsActive(decoration, this.physics),
       });
     }
     this.mobRenderer.setDecorations(list);
