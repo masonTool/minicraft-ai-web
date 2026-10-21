@@ -65,6 +65,7 @@ const NON_SUITE_KEYS = new Set([
   'test:offline',
   'test:offline:changed',
   'test:minigame:v2-flow',
+  'test:minigame:v2-perf',
 ]);
 
 // ------------------------------------------------------------------ 套件清单
