@@ -10,7 +10,8 @@
  *   · 队列里不再有 `## 批次 N` 小节，收尾时整份搬进 `.continue/DONE.md` 并删除文件，
  *     "队列一路长到两千行"这件事从机制上消失了；
  *   · 所以这里只剩两件事：**单份队列别误粘大文件**（5000 行）+ **HANDOFF 只留最近 6 批**；
- *   · `npm run docs:trim` 现在只处理 HANDOFF（旧队列的归档文件是只读历史）。
+ *   · `npm run docs:trim` 现在只处理 HANDOFF（旧的队列与批次流水已整份并入 `.continue/DONE.md`，
+ *     那里是只读历史，不再归档）。
  *
  * 用法：
  *   npm run audit:docs   # 只检查（过期非零退出，不改文件，给 npm run check 用）
@@ -27,8 +28,8 @@ const FILES = {
   queuesDir: new URL('../.continue/queues/', import.meta.url),
   handoff: new URL('../HANDOFF.md', import.meta.url),
   handoffArchive: new URL('../docs/HANDOFF-ARCHIVE.md', import.meta.url),
-  /** 旧队列流水（只读历史，2026-10-22 从 .codebuddy/hooks/process/ 搬来） */
-  queueArchive: new URL('../.continue/archive/auto-continue-archive.md', import.meta.url),
+  /** 完成档案（只读历史；2026-10-22 把旧队列与 485 段批次流水并了进来） */
+  done: new URL('../.continue/DONE.md', import.meta.url),
 };
 
 const LIMITS = {
@@ -166,7 +167,7 @@ let failed = false;
 }
 
 for (const [name, url] of [
-  ['.continue/archive/auto-continue-archive.md', FILES.queueArchive],
+  ['.continue/DONE.md', FILES.done],
   ['docs/HANDOFF-ARCHIVE.md', FILES.handoffArchive],
 ]) {
   if (!existsSync(url)) continue;

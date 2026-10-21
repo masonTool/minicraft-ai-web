@@ -33,7 +33,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-22 · 提交总数 1350（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-22 · 提交总数 1351（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 293 项 —— 已完成 **283**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -106,7 +106,7 @@ npm run dev            # http://localhost:5173
   （不生效时 `npm run agent:setup -- --fix-hooks`）。机制全文见 `.continue/HANDOFF.md`。
 - **队列是会话级的**：`.continue/queues/<session_id>.md`；`[ ]` 待办 / `[~]` 进行中 / `[x]` 完成，
   `[阻塞]` 只有钩子会写（同一条连续 5 轮做不完就隔离）；收尾要你确认后才进 `DONE.md`。
-- **目录分工**：`.continue/queues/`（队列）、`archive/`（旧队列与批次流水）、`batch-seq` 进仓库；
+- **目录分工**：`.continue/queues/`（队列）、`DONE.md`（完成档案 + 批次流水）、`batch-seq` 进仓库；
   `.continue/logs/`（日志 + 计数状态）与 `.continue/*.off`（刹车）已 gitignore。
 - **脚本自己认路**：用 `import.meta.url` 反推项目根，不依赖 cwd——**目录改名也不用改配置**。
 - 刹车：`touch .continue/{auto-continue,auto-commit}.off`；**没有轮次上限**，队列不空就一直跑。
@@ -249,7 +249,7 @@ npm run agent:setup        # 跨机器自检
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
 | `TASKS.md`、`HANDOFF.md`、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
-| `.continue/`（`queues/` 队列 + `archive/` 归档 + `hooks/` + `batch-seq` + 三份文档）、`.codebuddy/settings.json` | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.codebuddy/skills/`（本地技能包） |
+| `.continue/`（`queues/` 队列 + `DONE.md` 完成档案 + `hooks/` + `batch-seq` + 三份文档）、`.codebuddy/settings.json` | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.codebuddy/skills/`（本地技能包） |
 | `.codebuddy/memory/`（AI 记忆的版本化副本，`npm run agent:setup` 恢复到本机） | 截图 `shot-*.png`、`.continue/*.off`（刹车开关） |
 
 > 长跑任务列表怎么排、`queues/` 与 `logs/` 为什么分开 → `.continue/HANDOFF.md` 开头。

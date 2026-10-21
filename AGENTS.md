@@ -13,10 +13,10 @@
 | [`.continue/HANDOFF.md`](./.continue/HANDOFF.md) | **队列机制**（怎么排、钩子怎么认、收尾怎么算） | **整份读完**（约 150 行）；本会话队列是 `.continue/queues/<session_id>.md` |
 
 > 这两份原本分别是 1409 行与 4108 行，**批次 101 做过上下文瘦身**：
-> 已经做完的流水搬到了 `docs/HANDOFF-ARCHIVE.md` 与
-> `.continue/archive/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
+> 已经做完的流水搬到了 `docs/HANDOFF-ARCHIVE.md`，内容一字未改，只是不再"每轮都读一遍"。
 > **2026-10-22 迁移 continue-do**：单队列 `auto-continue.md` 换成会话级队列
-> （`.continue/queues/`），旧队列整份归档在 `.continue/archive/`。
+> （`.continue/queues/`）；**旧队列与批次流水（485 段）已全部并进 `.continue/DONE.md`**，
+> 旧的 `.continue/archive/` 目录随之下线（不要再新建同名目录）。
 > **批次 198 又收了一次**：HANDOFF §1 只留最近 6 批（167~191 搬去归档），
 > 并把"离线测试套数"的核对从 README/HANDOFF 两处扩到 **README / HANDOFF / 本文件** 三处。
 
@@ -25,6 +25,7 @@
 | 什么时候读 | 读哪一份 |
 | --- | --- |
 | 想知道某个模块当时怎么做的、为什么这么做 | [`docs/HANDOFF-ARCHIVE.md`](./docs/HANDOFF-ARCHIVE.md) |
+| 想查某一批（批次 1~613）当时做了什么 | [`.continue/DONE.md`](./.continue/DONE.md) 文末「历史批次」 |
 | 动手前想避开已经踩过的坑（渲染/光照/地形/界面/生物 AI） | [`docs/EXPERIENCE.md`](./docs/EXPERIENCE.md) |
 | **要改任意“操作型工作站”（熔炉/酿造台/营火/锻造台…）** | [`docs/STATION-LOGIC.md`](./docs/STATION-LOGIC.md)（通用契约 + 站台矩阵 + 接入 checklist） |
 | 想知道"这一项和原版哪里不一样" | `TASKS.md` 文末的差异台账（脚本生成） |
