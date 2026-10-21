@@ -42,6 +42,8 @@ import {
   type SlotBinding,
   type SlotKind,
 } from './inventory-click.ts';
+import { gatherSameItems } from '../core/container/CursorActions.ts';
+import { quickMove } from '../core/container/QuickMove.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -196,6 +198,9 @@ let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
  * 左轨选分类会切到 `creative`，右轨两颗键在这两者间切。
  */
 let panelMode: 'crafting' | 'armor' = 'crafting';
+/** 上一次点的是哪一格、什么时候（双击收集判定用；对齐 Web 版 `DOUBLE_CLICK_MS = 400`） */
+const DOUBLE_CLICK_MS = 400;
+let lastClickSlot: { kind: SlotKind; index: number; at: number } | null = null;
 /** 背包面板的几何（验收脚本读它来点轨道上的小图标，避免猜像素） */
 let inventoryGeo: {
   panelX: number;
@@ -611,11 +616,111 @@ const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
 
   const binding = bindingFor(kind, index);
   if (!binding) return;
+
+  // ---- 双击收集（对齐 Web 版 `DOUBLE_CLICK_MS = 400`） ----
+  //
+  // 判定必须**在 applyClick 之前**：双击的第二下不该再走一遍"普通左键"
+  // （那会先把手上那叠放下，然后才是"收集"，顺序一错就变成东西被放回去又抓起来）。
+  const now = performance.now();
+  const isDouble =
+    button === 'left' &&
+    lastClickSlot?.kind === kind &&
+    lastClickSlot.index === index &&
+    now - lastClickSlot.at <= DOUBLE_CLICK_MS;
+  lastClickSlot = { kind, index, at: now };
+  if (isDouble) {
+    // 满一堆 / 不可堆叠 / 没有同类可补 → 双击**退化成快速移动**（基岩版规则）
+    if (!gatherInto(binding) && quickMoveSlot(kind, index)) {
+      syncGhost();
+      showInventory();
+      return;
+    }
+    syncGhost();
+    showInventory();
+    return;
+  }
+
   const result = cursor.click(binding, button);
   if (result.hint) inventoryHint = result.hint;
   else if (result.changed) inventoryHint = '';
   syncGhost();
   showInventory();
+};
+
+/**
+ * 双击收集：把这一格里那**一类**物品从整个背包凑到光标上（最多凑满一堆）。
+ *
+ * 规则本体在 `core/container/CursorActions.gatherSameItems`（纯函数、有断言），
+ * 这里只负责三件界面的事：手上那叠的附加数据要跟着走、凑完刷新、给一句话。
+ *
+ * @returns 有没有真的凑到东西（false → 退回普通点击）
+ */
+const gatherInto = (binding: SlotBinding): boolean => {
+  if (binding.takeOnly) return false;
+
+  // ⚠️ 双击的第二下，**这一格已经被第一下拿空了**（第一下是"拿起整叠"）。
+  // 所以不能只认格子里的东西：手上那叠的来源正是这一格时，就拿它继续凑。
+  // 第一版就是漏了这条 —— 实测表现为"双击之后只拿到原来那一叠，没有再凑同类"。
+  const inSlot = binding.source.get(binding.index);
+  const held = cursor.held;
+  const heldFromThisSlot =
+    held !== null && cursor.origin?.kind === binding.kind && cursor.origin.index === binding.index;
+  const basis = inSlot ?? (heldFromThisSlot ? held : null);
+  if (!basis) return false;
+
+  // 已经满一堆、又没有同类可补：双击退化成"快速移动"（基岩版规则）
+  if (basis.count >= maxStackOf(basis.id) && !sameStackCountable(basis)) {
+    return false;
+  }
+  const before = held?.count ?? 0;
+  // 收集**只在背包里扫**（4~44 那次传入的 source 如果是背包本身就好；合成格不参与）
+  const gathered = gatherSameItems(
+    inventory,
+    TOTAL_SLOTS,
+    basis.id,
+    heldFromThisSlot ? held : null,
+    stackExtras(basis),
+  );
+  if (!gathered || gathered.count <= before) return false;
+  cursor.restore({
+    held: gathered,
+    fromCreative: false,
+    origin: { kind: binding.kind, index: binding.index },
+  });
+  inventoryHint = `收集：${itemLabel(gathered.id)} ×${gathered.count}`;
+  return true;
+};
+
+/**
+ * **Shift+左键 / 双击满堆**：把这一格整叠搬到"它该去的地方"。
+ *
+ * 规则全在 `core/container/QuickMove.ts`（纯逻辑、`test:quickmove` 有 40 条断言），
+ * 这里只交三样东西：**哪一格、开着哪个容器、容器多少格**。
+ *
+ * 小游戏目前没有"方块容器开着"的状态（容器面板是独立的 `ContainerSystem`），
+ * 所以传 `null` —— 于是它做的就是原版那条"快捷栏 ↔ 主背包互搬、盔甲直接穿上"。
+ */
+const quickMoveSlot = (kind: SlotKind, index: number): boolean => {
+  const binding = bindingFor(kind, index);
+  if (!binding) return false;
+  const container = containers.openSource;
+  const result = quickMove(inventory, container, containers.openSize, binding.source, binding.index);
+  if (!result.moved) return false;
+  inventoryHint = `快速移动 ${result.count} 件`;
+  return true;
+};
+
+/** 背包里还有没有"同种但不同堆"的物品可收集（决定双击是否退化成快速移动） */
+const sameStackCountable = (stack: { id: number; count: number }): boolean => {
+  let found = false;
+  for (let i = 0; i < TOTAL_SLOTS; i++) {
+    const s = inventory.get(i);
+    if (s && s.id === stack.id) {
+      found = true;
+      break;
+    }
+  }
+  return found;
 };
 
 /** 手上物品的幽灵图标跟着光标状态走（UI-004） */
@@ -733,11 +838,14 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
 const showInventory = (): void => {
   inventoryOpen = true;
 
-  // ---- 尺寸（对齐 Web 版口袋模式：格子 44、轨宽 40） ----
+  // ---- 尺寸：**所有页签共用同一块面板**（固定，不随页签变化） ----
   //
-  // ⚠️ 这里的 `uiHeight` 是**设计坐标的高**，横屏手机上是 1024×(屏高/屏宽) ≈ 2216，
-  // 所以不能拿它跟 390 比。格子按 Web 的 44 起、按可用高度收：
-  // 面板要给"3 行主背包 + 顶栏 + 提示"留够，同时右边还得放得下 2×2 合成。
+  // ⚠️ 用户反馈"点击闪来闪去"：之前 `panelW` 依赖"有没有合成列"、
+  // `panelH` 依赖"当前是哪个页签"，于是切一次页签面板就换一次大小，
+  // 整块跟着重心偏移 —— 看起来就是闪。现在按**最宽 + 最高**的那一档算死：
+  //   · 宽 = 物品栏页（27 格 + 合成列，最宽）
+  //   · 高 = 创造页（多一条工具条 + 一条分页，最高）
+  // 内容放不满就留白（原版 Web 版也是固定壳、内容居中）。
   const gap = 2;
   const railW = 40;
   const pad = 12;
@@ -747,29 +855,17 @@ const showInventory = (): void => {
 
   const slotSize = 44;
   const gridW = 9 * slotSize + 8 * gap; // 412
-  // 物品栏页的右半边：2×2 合成（格子略小）+ 箭头 + 产物
   const craftSlot = Math.round(slotSize * 0.86); // 38
   const craftBlockW = 2 * craftSlot + 2 + 22 + craftSlot; // 2×2 + 箭头 + 产物 ≈ 136
-  const wantsCraftColumn = inventoryTab === 'items' && panelMode === 'crafting';
-  const contentW = wantsCraftColumn ? gridW + 16 + craftBlockW : gridW;
 
+  const contentW = gridW + 16 + craftBlockW; // 恒按"物品栏 + 合成列"这一档
   const panelW = Math.min(1024 - 16, contentW + railW * 2 + pad * 2);
+
   const bodyH = 3 * slotSize + 2 * gap; // 3 行主背包
-  // 面板高度：主背包 3 行 + 顶栏 + 底部提示；**左轨要放得下 5 颗分类 + 1 颗物品栏**
-  // （5×36+4×2=188，再加上物品栏 36+2 → 226），所以下限取 226
-  const railNeed = 6 * 36 + 5 * 2 + 16;
-  /**
-   * 面板高度 = 三件事里最高的那个：
-   *  1. 左轨要放得下 5 颗分类 + 1 颗物品栏（`railNeed`）；
-   *  2. 主背包 3 行 + 顶栏 + 底部提示；
-   *  3. **创造/配方页**：顶部还有一条"搜索/整理"（+28），底部一条分页（+30），
-   *     所以它比物品栏页高 —— 少了这 22 像素就会掉成 2 行（实测过）。
-   */
-  const gridNeed = inventoryTab === 'items'
-    ? headerH + bodyPad * 2 + bodyH + 28
-    : headerH + bodyPad * 2 + bodyH + 28 + 28 + 30;
-  // 取"装着内容要多少"和"左轨要多少"的较大值，再夹到屏幕里
+  const railNeed = 6 * 36 + 5 * 2 + 16; // 左轨 5 颗分类 + 1 颗物品栏
+  const gridNeed = headerH + bodyPad * 2 + bodyH + 28 + 28 + 30; // 最高那一档（创造页）
   const panelH = Math.min(uiHeight - dockH - 20, Math.max(railNeed, gridNeed));
+
   const panelX = (1024 - panelW) / 2;
   // 面板整体上移一点，给底部 dock 让位
   const panelY = Math.max(6, (uiHeight - dockH - panelH) / 2);

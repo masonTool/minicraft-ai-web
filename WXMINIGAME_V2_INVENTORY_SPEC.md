@@ -670,3 +670,56 @@ npm run preview:minigame      # http://localhost:3899 实拍：物品栏 / 建�
   创造页会比物品栏页高约 28px（Web 版是等高切换）。
 - 左轨分类用**字符图标**（`⌕ ▤ ⚔ ◆ ❦`）而不是贴图：v2 没有 `drawItemIcon` 那套
   离屏图标管线，字符至少不会画错；等图标管线接上再换。
+
+---
+
+## 16. 固定窗口 + 补齐 Web 版逻辑（批次 534）
+
+### 16.1 面板尺寸固定（修"点击闪来闪去"）
+
+**根因**：`showInventory()` 里 `panelW` 依赖"当前有没有合成列"、`panelH` 依赖"是哪个页签"。
+切一次页签面板就换一次大小，整块跟着重心偏移 —— 看起来就是闪。
+
+**修法**：按**最宽 + 最高**那一档算死，所有页签共用：
+
+```ts
+const contentW = gridW + 16 + craftBlockW;      // 恒按"27 格 + 合成列"这一档
+const panelW   = Math.min(1024 - 16, contentW + railW * 2 + pad * 2);
+const gridNeed = headerH + bodyPad * 2 + bodyH + 28 + 28 + 30;  // 恒按创造页（最高）
+const panelH   = Math.min(uiHeight - dockH - 20, Math.max(railNeed, gridNeed));
+```
+
+内容放不满就留白（Web 版也是固定壳、内容居中）。
+
+**验收**：`npm run e2e:v2-panel` —— 依次切「物品栏 → 建筑 → 全部 → 盔甲 → 物品栏」，
+逐次读 `inventoryGeo`，断言 `panelX/Y/W/H` **完全一致**（670×262 @177,82）。实测五个页签零漂移。
+
+### 16.2 从 Web 版补齐的逻辑
+
+| 规则 | Web 版常量 | v2 之前 | 现在 |
+|---|---|---|---|
+| 长按 = 右键 | `TOUCH_LONG_PRESS_MS = 260` | 420ms（慢 160ms） | **260ms** |
+| 长按连发 | `TOUCH_REPEAT_MS = 170` | 没有 | **170ms，按住持续触发** |
+| 双击收集 | `DOUBLE_CLICK_MS = 400` | 没有 | **400ms，把同类凑满一堆** |
+| 双击满堆退化 | `shouldQuickMoveOnDouble` | 没有 | **退化成快速移动** |
+| 快速移动 | `quickMove()`（core 纯函数） | 没有接入 | **`quickMoveSlot()` 接上** |
+
+实现要点：
+
+- 长按连发在 `UiLayer.startLongPress` 里：260ms 触发第一次右键，之后 `setInterval(170ms)`；
+  抬手或移动超阈值 `clearLongPress()` 一并 `clearInterval`。
+- 双击判定在 `clickSlot` **入口**（早于 `applyClick`）：第二下不能再走一遍"普通左键"，
+  否则会先把手上那叠放下、然后才收集，顺序一错东西就被放回去了。
+- `gatherInto` 有个**实测才能发现的坑**：双击的第二下，**这一格已经被第一下拿空了**，
+  所以不能只认格子里的东西 —— 手上那叠的来源正是这一格时，要拿它继续凑。
+  第一版漏了这条，运行时的表现是"双击之后只拿到原来那一叠，没有再凑同类"。
+- 快速移动复用 `core/container/QuickMove.quickMove()`（`test:quickmove` 40 条断言），
+  `ContainerSystem` 为此补了两个只读访问器 `openSource` / `openSize`。
+
+### 16.3 验收
+
+```bash
+npm run test:v2-inventory    # 83 条（原 66 + 新增 17：常量对齐 / 双击收集 / 快速移动）
+npm run e2e:v2-panel         # 面板尺寸零漂移
+npm run e2e:v2-weblogic      # 运行时：长按 15+15 / 连发放下 5 个 / 双击收集 60
+```

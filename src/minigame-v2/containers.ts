@@ -31,6 +31,22 @@ export class ContainerSystem {
     return this.opened !== null;
   }
 
+  /**
+   * 当前打开的那个容器（没开就是 `null`）。
+   *
+   * 给"Shift 快速移动 / 双击退化成快速移动"用：`core/container/QuickMove.ts`
+   * 要拿到"开着哪个容器 + 多少格"才能决定搬去哪边（那套规则不在这里重写）。
+   */
+  get openSource(): (Chest | Furnace) | null {
+    return this.opened;
+  }
+
+  /** 打开的容器有多少格（箱子 27、熔炉 3；没开是 0） */
+  get openSize(): number {
+    if (!this.opened) return 0;
+    return this.opened instanceof Chest ? 27 : 3;
+  }
+
   get slotIds(): number[] {
     if (!this.opened) return [];
     const size = this.opened instanceof Chest ? 27 : 3;

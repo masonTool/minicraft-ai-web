@@ -10,7 +10,7 @@
 import { Block } from '../src/core/registry/blocks.ts';
 import { armorItemId } from '../src/core/registry/armor.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
-import { Inventory, ARMOR_START, OFFHAND_SLOT, type ItemStack } from '../src/core/container/Inventory.ts';
+import { Inventory, ARMOR_START, OFFHAND_SLOT, type ItemStack, type SlotSource } from '../src/core/container/Inventory.ts';
 import {
   EMPTY_CURSOR,
   applyClick,
@@ -21,6 +21,9 @@ import {
   type SlotBinding,
 } from '../src/minigame-v2/inventory-click.ts';
 import { InventoryCursor } from '../src/minigame-v2/inventory-state.ts';
+import { LONG_PRESS_MS, LONG_PRESS_REPEAT_MS } from '../src/minigame-v2/ui-kit/index.ts';
+import { gatherSameItems } from '../src/core/container/CursorActions.ts';
+import { quickMove } from '../src/core/container/QuickMove.ts';
 
 let passed = 0;
 let failed = 0;
@@ -47,6 +50,20 @@ function bag(inventory: Inventory, index: number, extra: Partial<SlotBinding> = 
     source: inventory,
     singleItem: index >= ARMOR_START,
     ...extra,
+  };
+}
+
+/** 数组背书的假容器（`gatherSameItems` 要一个 SlotSource） */
+function makeContainer(
+  size: number,
+  fill: (i: number) => ItemStack | null = () => null,
+): SlotSource & { set(i: number, s: ItemStack | null): void } {
+  const slots: (ItemStack | null)[] = Array.from({ length: size }, (_u, i) => fill(i));
+  return {
+    get: (i) => slots[i] ?? null,
+    set: (i, stack) => {
+      slots[i] = stack;
+    },
   };
 }
 
@@ -325,6 +342,74 @@ console.log('\n[边界：越界格子一律安全返回]');
   const result = cursor.click(bag(inventory, 999), 'left');
   check('越界下标不改动', !result.changed);
   equal('光标仍是空的', before.held, null);
+}
+
+// ===========================================================================
+// 第三节：从 Web 版（外部端）抄过来的四条规则
+//
+// 1. 长按阈值 260ms（`TOUCH_LONG_PRESS_MS`）
+// 2. 长按连发 170ms（`TOUCH_REPEAT_MS`）
+// 3. 双击收集（`DOUBLE_CLICK_MS = 400`）
+// 4. 双击满堆 → 退化成快速移动（`shouldQuickMoveOnDouble`）
+// ===========================================================================
+
+console.log('\n[常量：与 Web 版逐项对齐]');
+{
+  // ⚠️ 这几个数字必须与 `src/ui/InventoryScreen.ts` 一致。
+  // v2 之前自己定的是 420ms（比 Web 慢 160ms），手感差别很明显。
+  equal('长按阈值 = Web 的 260ms', LONG_PRESS_MS, 260);
+  equal('长按连发 = Web 的 170ms', LONG_PRESS_REPEAT_MS, 170);
+}
+
+console.log('\n[双击收集：把同一类凑满一堆]');
+{
+  const chest = makeContainer(27, (i) => (i < 5 ? stone(20) : null));
+  const held = gatherSameItems(chest, 27, Block.STONE, null);
+  equal('凑满一整堆 64', held?.count, 64);
+  equal('第 1 格被拿空', chest.get(0), null);
+  equal('第 4 格拿走后留 16', chest.get(3)?.count, 16);
+  equal('第 5 格没被碰', chest.get(4)?.count, 20);
+}
+{
+  const chest = makeContainer(27, (i) => (i === 6 ? stone(30) : null));
+  const held = gatherSameItems(chest, 27, Block.STONE, stone(10));
+  equal('10 + 30 = 40（库里只有这些）', held?.count, 40);
+}
+{
+  // 不同附加数据不能收集到一起（改了名的剑不该并进普通剑）
+  const sword = toolItemId('sword', 'iron');
+  const chest = makeContainer(27, (i) =>
+    i === 0 ? { id: sword, count: 1, name: '斩龙' } : i === 1 ? { id: sword, count: 1 } : null,
+  );
+  const held = gatherSameItems(chest, 27, sword, null, { name: '斩龙' });
+  equal('只收同名的那一把', held?.count, 1);
+  check('普通那把还在原处', chest.get(1) !== null);
+}
+
+console.log('\n[快速移动：与 core 的 QuickMove 同源]');
+{
+  const inventory = new Inventory();
+  inventory.set(0, stone(30));
+  const result = quickMove(inventory, null, 0, inventory, 0);
+  check('快捷栏那叠搬走了', result.moved);
+  equal('搬了 30 件', result.count, 30);
+  check('落到了主背包（9~35）', (result.target?.index ?? 0) >= 9, JSON.stringify(result.target));
+  equal('原格空了', pick(inventory, 0), null);
+}
+{
+  const inventory = new Inventory();
+  const helmet = armorItemId('helmet', 'iron');
+  inventory.set(9, { id: helmet, count: 1 });
+  const result = quickMove(inventory, null, 0, inventory, 9);
+  equal('穿到 36 号头盔槽', result.target?.index, 36);
+  equal('槽里是铁头盔', pick(inventory, 36)?.id, helmet);
+}
+{
+  const inventory = new Inventory();
+  inventory.set(20, dirt(5));
+  const result = quickMove(inventory, null, 0, inventory, 20);
+  check('搬动了', result.moved);
+  check('落到了快捷栏（0~8）', (result.target?.index ?? 99) < 9, JSON.stringify(result.target));
 }
 
 console.log(`\n${failed === 0 ? '✓' : '✗'} 通过 ${passed} / ${passed + failed} 条断言`);

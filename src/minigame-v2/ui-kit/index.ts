@@ -116,8 +116,22 @@ export interface UiSliderNode extends UiNode {
  */
 export type SlotButton = 'left' | 'right';
 
-/** 长按判定阈值；与 `TOUCH_SPLIT` 那套"划动开始前必须稳定按住"的时长同量级 */
-export const LONG_PRESS_MS = 420;
+/**
+ * 长按判定阈值。
+ *
+ * ⚠️ 数值**照 Web 版抄**（`InventoryScreen.TOUCH_LONG_PRESS_MS = 260`）：
+ * 之前 v2 自己定的是 420ms，比 Web 版慢 160ms —— 玩惯了 Web 版的手指会觉得
+ * "长按没反应"，然后不自觉按更久，反而更容易变成拖动。
+ */
+export const LONG_PRESS_MS = 260;
+
+/**
+ * 长按之后的**连发间隔**（对齐 Web 版 `TOUCH_REPEAT_MS = 170`）。
+ *
+ * 用处在"连续放材料 / 连续取一个"：按住不放，每 170ms 再结算一次右键，
+ * 摆 3×3 的合成表就不用点 9 下。
+ */
+export const LONG_PRESS_REPEAT_MS = 170;
 
 export interface UiSlotNode extends UiNode {
   kind: 'slot';
@@ -339,6 +353,7 @@ export class UiLayer {
     moved: boolean;
     fired: boolean;
     timer: ReturnType<typeof setTimeout> | null;
+    repeat: ReturnType<typeof setInterval> | null;
   } | null = null;
   /** 手上拿着的物品（画成跟随手指的幽灵图标，UI-004） */
   private ghost: { itemId: number; count: number; x: number; y: number } | null = null;
@@ -502,6 +517,7 @@ export class UiLayer {
       moved: false,
       fired: false,
       timer: null,
+      repeat: null,
     };
     entry.timer = setTimeout(() => {
       // 触发前再核一遍：手指没动、也还没抬手
@@ -510,6 +526,15 @@ export class UiLayer {
       if (entry.timer) clearTimeout(entry.timer);
       entry.timer = null;
       entry.node.onTap('right');
+      // **连发**（对齐 Web 版 `TOUCH_REPEAT_MS`）：按住不放就每 170ms 再来一次右键。
+      // 摆合成表 / 从箱子里连续取一个都靠它；抬手或移动超过阈值就停。
+      entry.repeat = setInterval(() => {
+        if (this.longPress !== entry || entry.moved) {
+          this.clearLongPress();
+          return;
+        }
+        entry.node.onTap('right');
+      }, LONG_PRESS_REPEAT_MS);
     }, LONG_PRESS_MS);
     this.longPress = entry;
   }
@@ -522,6 +547,7 @@ export class UiLayer {
 
   private clearLongPress(): void {
     if (this.longPress?.timer) clearTimeout(this.longPress.timer);
+    if (this.longPress?.repeat) clearInterval(this.longPress.repeat);
     this.longPress = null;
   }
 

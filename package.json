@@ -203,7 +203,9 @@
     "test:buildinfo": "esbuild tools/buildinfo-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildinfo-test.mjs --log-level=error && node .tmp/buildinfo-test.mjs",
     "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs",
     "test:v2-inventory": "esbuild tools/v2-inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-inventory-test.mjs --log-level=error && node .tmp/v2-inventory-test.mjs",
-    "preview:minigame": "node tools/minigame/preview-proxy.mjs"
+    "preview:minigame": "node tools/minigame/preview-proxy.mjs",
+    "e2e:v2-panel": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-fixed-panel.cjs",
+    "e2e:v2-weblogic": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic.cjs"
   },
   "dependencies": {
     "three": "^0.186.1"
