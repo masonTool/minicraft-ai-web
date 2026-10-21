@@ -68,6 +68,7 @@ export interface UiSlotNode extends UiNode {
   selected: boolean;
   onTap: () => void;
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void;
+  onSecondaryTap?: () => void;
 }
 
 export type UiIconKind = 'chat' | 'pause' | 'view';
@@ -158,8 +159,9 @@ export function slot(
   selected: boolean,
   onTap: () => void,
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void,
+  onSecondaryTap?: () => void,
 ): UiSlotNode {
-  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop };
+  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, onSecondaryTap };
 }
 
 export function icon(
@@ -234,6 +236,10 @@ export class UiLayer {
   private lastRefresh = 0;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private dragPos: { x: number; y: number } | null = null;
+  private cursorItem: { id: number; count: number } | null = null;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private longPressFired = false;
+  private pointerPos: { x: number; y: number } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
@@ -284,6 +290,11 @@ export class UiLayer {
     this.draw();
   }
 
+  setCursor(itemId: number, count: number): void {
+    this.cursorItem = itemId > 0 && count > 0 ? { id: itemId, count } : null;
+    this.draw();
+  }
+
   /** 手指按下：按钮/开关/滑杆。返回 true 表示 UI 已消费。 */
   handlePointer(
     phase: 'down' | 'move' | 'up',
@@ -294,17 +305,22 @@ export class UiLayer {
   ): boolean {
     const x = (clientX / Math.max(1, sw)) * DESIGN_WIDTH;
     const y = (clientY / Math.max(1, sh)) * this.designHeight;
+    this.pointerPos = { x, y };
 
     if (phase === 'move' && this.activeSlider) {
       this.updateSlider(this.activeSlider, x);
       return true;
     }
     if (phase === 'move' && this.dragSlot) {
-      if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
+      if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) {
+        this.dragSlot.moved = true;
+        this.cancelLongPress();
+      }
       this.dragPos = { x, y };
       return true;
     }
     if (phase === 'up') {
+      this.cancelLongPress();
       if (this.activeButton) {
         this.activeButton.onRelease?.();
         this.activeButton = null;
@@ -318,6 +334,10 @@ export class UiLayer {
         const drag = this.dragSlot;
         this.dragSlot = null;
         this.dragPos = null;
+        if (this.longPressFired) {
+          this.longPressFired = false;
+          return true;
+        }
         const target = this.findSlot(x, y);
         if (drag.moved && target && target !== drag.node) drag.node.onDrop?.(drag.node, target);
         else if (!drag.moved) drag.node.onTap();
@@ -331,6 +351,17 @@ export class UiLayer {
     if (downSlot) {
       this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false };
       this.dragPos = null;
+      this.cancelLongPress();
+      if (downSlot.onSecondaryTap) {
+        this.longPressTimer = setTimeout(() => {
+          this.longPressTimer = null;
+          if (!this.dragSlot || this.dragSlot.moved) return;
+          const node = this.dragSlot.node;
+          this.dragSlot = null;
+          this.longPressFired = true;
+          node.onSecondaryTap?.();
+        }, 450);
+      }
       return true;
     }
 
@@ -365,6 +396,13 @@ export class UiLayer {
   /** 兼容旧调用：等价于 down。 */
   handleTap(clientX: number, clientY: number, sw: number, sh: number): boolean {
     return this.handlePointer('down', clientX, clientY, sw, sh);
+  }
+
+  private cancelLongPress(): void {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
   }
 
   private updateSlider(node: UiSliderNode, x: number): void {
@@ -419,6 +457,15 @@ export class UiLayer {
     this.slots = [];
     this.icons = [];
     if (this.root) this.drawNode(this.root, ctx);
+    if (this.cursorItem && this.pointerPos && !this.dragSlot?.moved) {
+      const size = 46;
+      this.drawIcon?.(ctx, this.cursorItem.id, this.pointerPos.x - size / 2, this.pointerPos.y - size / 2 - 22, size);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(String(this.cursorItem.count), this.pointerPos.x, this.pointerPos.y + 2);
+    }
     if (this.dragSlot?.moved && this.dragPos && this.dragSlot.node.itemId > 0) {
       const size = 42;
       ctx.globalAlpha = 0.85;

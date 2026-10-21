@@ -164,6 +164,7 @@ export interface ItemTabContext {
   selectedSlot: number;
   onSelect(slot: number): void;
   onQuickMove(slot: number): void;
+  onSecondaryTap(slot: number): void;
   onDrop(from: number, to: number): void;
   refresh(): void;
 }
@@ -174,7 +175,7 @@ export function buildItemTab(ctx: ItemTabContext): UiElement[] {
     const i = j + 9;
     const stack = ctx.inventory.get(i);
     elements.push(
-      slot(ctx.gridX + (j % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(j / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.onQuickMove(i), (from, to) => ctx.onDrop(from.index, to.index)),
+      slot(ctx.gridX + (j % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(j / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.onQuickMove(i), (from, to) => ctx.onDrop(from.index, to.index), () => ctx.onSecondaryTap(i)),
     );
   }
   const hotbarY = ctx.gridY + 3 * (ctx.slotSize + ctx.gap) + 14;
@@ -182,7 +183,7 @@ export function buildItemTab(ctx: ItemTabContext): UiElement[] {
   for (let i = 0; i < 9; i++) {
     const stack = ctx.inventory.get(i);
     elements.push(
-      slot(ctx.gridX + i * (ctx.slotSize + ctx.gap), hotbarY, ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === ctx.selectedSlot, () => ctx.onSelect(i), (from, to) => ctx.onDrop(from.index, to.index)),
+      slot(ctx.gridX + i * (ctx.slotSize + ctx.gap), hotbarY, ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === ctx.selectedSlot, () => ctx.onSelect(i), (from, to) => ctx.onDrop(from.index, to.index), () => ctx.onSecondaryTap(i)),
     );
   }
   return elements;
@@ -200,7 +201,9 @@ export interface CraftingPanelContext {
   fixedSize?: boolean;
   onToggleSize(): void;
   onDrop(from: number, to: number): void;
-  onCraft(id: number, count: number): void;
+  onTapSlot(craftIndex: number): void;
+  onSecondaryTap(craftIndex: number): void;
+  onOutput(): void;
   refresh(): void;
 }
 
@@ -224,28 +227,16 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
         stack?.id ?? 0,
         stack?.count ?? 0,
         false,
-        () => {
-          const current = ctx.crafting.get(i);
-          if (!current) return;
-          const remaining = ctx.inventory.add(current.id, current.count);
-          ctx.crafting.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
-          ctx.refresh();
-        },
+        () => ctx.onTapSlot(i),
         (from, to) => ctx.onDrop(from.index, to.index),
+        () => ctx.onSecondaryTap(i),
       ),
     );
   }
   const result = ctx.crafting.result;
   elements.push(text(ctx.outputX, ctx.craftY + 2, 100, 24, '产物', { fontSize: 13, color: 'rgba(210,230,240,0.7)' }));
   elements.push(
-    slot(ctx.outputX, ctx.craftY + 26, ctx.craftSlot, 200, result?.id ?? 0, result?.count ?? 0, false, () => {
-      const current = ctx.crafting.result;
-      if (!current) return;
-      ctx.inventory.add(current.id, current.count);
-      ctx.crafting.takeResult();
-      ctx.onCraft(current.id, current.count);
-      ctx.refresh();
-    }),
+    slot(ctx.outputX, ctx.craftY + 26, ctx.craftSlot, 200, result?.id ?? 0, result?.count ?? 0, false, () => ctx.onOutput()),
   );
   return elements;
 }

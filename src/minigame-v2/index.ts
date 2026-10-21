@@ -35,7 +35,7 @@ import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
 import { armorSlotFor } from '../core/container/QuickMove.ts';
-import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, categoryOf, foodInfoById, maxStackOf, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { BED_IDS, Block, blockDef } from '../core/registry/blocks.ts';
@@ -545,68 +545,175 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   showInventory();
 };
 
-const tapEquipment = (slotIndex: number): void => {
+const syncCursorUi = (): void => {
+  ui.setCursor(cursor.held?.id ?? 0, cursor.held?.count ?? 0);
+};
+
+const storeCursor = (): boolean => {
+  const held = cursor.held;
+  if (!held) return true;
+  const remaining = inventory.add(held.id, held.count);
+  if (remaining > 0) {
+    cursor.setCount(remaining);
+    inventoryHint = '背包已满，先腾出空间';
+    return false;
+  }
   cursor.clear();
+  return true;
+};
+
+const activateInventorySlot = (slotIndex: number): void => {
   const current = inventory.get(slotIndex);
-  if (current) {
-    const remaining = inventory.add(current.id, current.count);
-    inventory.set(slotIndex, remaining > 0 ? { id: current.id, count: remaining } : null);
-    inventoryHint = '已放回背包';
-    showInventory();
-    return;
-  }
-  const held = inventory.get(selectedSlot);
-  if (!held) {
-    inventoryHint = '先在快捷栏选中一件物品';
-    showInventory();
-    return;
-  }
-  if (slotIndex === 40) {
-    inventory.set(40, held);
-    inventory.set(selectedSlot, null);
-    inventoryHint = '已放入副手';
-    showInventory();
-    return;
-  }
-  if (armorSlotFor(held.id) !== slotIndex) {
+  const held = cursor.held;
+  const isArmor = slotIndex >= 36 && slotIndex <= 39;
+  const isOffhand = slotIndex === 40;
+
+  if (held && isArmor && armorSlotFor(held.id) !== slotIndex) {
     inventoryHint = '这件物品不能放入该护甲槽';
     showInventory();
     return;
   }
-  inventory.set(slotIndex, { id: held.id, count: 1 });
-  inventory.set(selectedSlot, held.count > 1 ? { id: held.id, count: held.count - 1 } : null);
-  inventoryHint = '已装备';
+  if (held && (isArmor || isOffhand) && current) {
+    inventoryHint = '该装备槽已占用，先点它取下';
+    showInventory();
+    return;
+  }
+
+  if (!held) {
+    if (!current) return;
+    cursor.hold(current, { kind: 'inventory', index: slotIndex });
+    inventory.set(slotIndex, null);
+    showInventory();
+    return;
+  }
+
+  if (!current) {
+    if (isOffhand) {
+      inventory.set(40, { id: held.id, count: 1 });
+      cursor.setCount(held.count - 1);
+    } else {
+      inventory.set(slotIndex, held);
+      cursor.clear();
+    }
+    showInventory();
+    return;
+  }
+
+  if (current.id === held.id && !isArmor) {
+    const room = maxStackOf(current.id) - current.count;
+    const moved = Math.min(room, held.count);
+    inventory.set(slotIndex, { id: current.id, count: current.count + moved });
+    cursor.setCount(held.count - moved);
+    showInventory();
+    return;
+  }
+
+  inventory.set(slotIndex, held);
+  cursor.hold(current, { kind: 'inventory', index: slotIndex });
   showInventory();
 };
 
-const quickMoveToCraft = (slotIndex: number): void => {
-  const stack = inventory.get(slotIndex);
-  if (!stack) {
-    inventoryHint = '这一格是空的';
+const secondaryInventorySlot = (slotIndex: number): void => {
+  const current = inventory.get(slotIndex);
+  const held = cursor.held;
+  if (!held) {
+    if (!current) return;
+    const take = Math.ceil(current.count / 2);
+    cursor.hold({ id: current.id, count: take }, { kind: 'inventory', index: slotIndex });
+    inventory.set(slotIndex, current.count > take ? { id: current.id, count: current.count - take } : null);
     showInventory();
     return;
   }
-  let target = -1;
-  for (let i = 0; i < crafting.size * crafting.size; i++) {
-    const current = crafting.get(i);
-    if (!current) {
-      target = i;
-      break;
-    }
-    if (current.id === stack.id && current.count < 64) {
-      target = i;
-      break;
-    }
-  }
-  if (target < 0) {
-    inventoryHint = '合成格已满，点产物取出或先收回材料';
+  if (!current) {
+    inventory.set(slotIndex, { id: held.id, count: 1 });
+    cursor.setCount(held.count - 1);
     showInventory();
     return;
   }
-  const current = crafting.get(target);
-  crafting.set(target, { id: stack.id, count: (current?.count ?? 0) + 1 });
-  inventory.set(slotIndex, stack.count > 1 ? { id: stack.id, count: stack.count - 1 } : null);
-  inventoryHint = '已放入合成格，点右侧产物取出';
+  if (current.id === held.id) {
+    const room = maxStackOf(current.id) - current.count;
+    if (room > 0) {
+      inventory.set(slotIndex, { id: current.id, count: current.count + 1 });
+      cursor.setCount(held.count - 1);
+    }
+  } else {
+    inventory.set(slotIndex, held);
+    cursor.hold(current, { kind: 'inventory', index: slotIndex });
+  }
+  showInventory();
+};
+
+const secondaryCraftingSlot = (craftIndex: number): void => {
+  const current = crafting.get(craftIndex);
+  const held = cursor.held;
+  if (!held) {
+    if (!current) return;
+    const take = Math.ceil(current.count / 2);
+    cursor.hold({ id: current.id, count: take }, { kind: 'crafting', index: craftIndex });
+    crafting.set(craftIndex, current.count > take ? { id: current.id, count: current.count - take } : null);
+    showInventory();
+    return;
+  }
+  if (!current) {
+    crafting.set(craftIndex, { id: held.id, count: 1 });
+    cursor.setCount(held.count - 1);
+    showInventory();
+    return;
+  }
+  if (current.id === held.id) {
+    const room = maxStackOf(current.id) - current.count;
+    if (room > 0) {
+      crafting.set(craftIndex, { id: current.id, count: current.count + 1 });
+      cursor.setCount(held.count - 1);
+    }
+  } else {
+    crafting.set(craftIndex, held);
+    cursor.hold(current, { kind: 'crafting', index: craftIndex });
+  }
+  showInventory();
+};
+
+const activateCraftingSlot = (craftIndex: number): void => {
+  const current = crafting.get(craftIndex);
+  const held = cursor.held;
+  if (!held) {
+    if (!current) return;
+    cursor.hold(current, { kind: 'crafting', index: craftIndex });
+    crafting.set(craftIndex, null);
+    showInventory();
+    return;
+  }
+  if (!current) {
+    crafting.set(craftIndex, held);
+    cursor.clear();
+    showInventory();
+    return;
+  }
+  if (current.id === held.id) {
+    const room = maxStackOf(current.id) - current.count;
+    const moved = Math.min(room, held.count);
+    crafting.set(craftIndex, { id: current.id, count: current.count + moved });
+    cursor.setCount(held.count - moved);
+    showInventory();
+    return;
+  }
+  crafting.set(craftIndex, held);
+  cursor.hold(current, { kind: 'crafting', index: craftIndex });
+  showInventory();
+};
+
+const takeCraftResult = (): void => {
+  const product = crafting.result;
+  if (!product) return;
+  const held = cursor.held;
+  if (held && (held.id !== product.id || held.count + product.count > maxStackOf(product.id))) {
+    inventoryHint = '手上物品不同或已满';
+    showInventory();
+    return;
+  }
+  crafting.takeResult();
+  cursor.hold({ id: product.id, count: (held?.count ?? 0) + product.count });
+  inventoryHint = `合成完成：${itemLabel(product.id)} x${product.count}`;
   showInventory();
 };
 
@@ -639,6 +746,10 @@ const showInventory = (): void => {
       showInventory();
     },
     onClose: () => {
+      if (!storeCursor()) {
+        showInventory();
+        return;
+      }
       crafting.drainTo(inventory);
       crafting = new CraftingGrid(2);
       craftingTableOpen = false;
@@ -655,11 +766,9 @@ const showInventory = (): void => {
       gap,
       inventory,
       selectedSlot,
-      onSelect: (slotIndex) => {
-        selectedSlot = slotIndex;
-        showInventory();
-      },
-      onQuickMove: (slotIndex) => quickMoveToCraft(slotIndex),
+      onSelect: (slotIndex) => activateInventorySlot(slotIndex),
+      onQuickMove: (slotIndex) => activateInventorySlot(slotIndex),
+      onSecondaryTap: (slotIndex) => secondaryInventorySlot(slotIndex),
       onDrop: (from, to) => handleDrop(from, to),
       refresh: () => showInventory(),
     }));
@@ -669,7 +778,7 @@ const showInventory = (): void => {
       slotSize: 36,
       gap: 6,
       inventory,
-      onTap: (slotIndex) => tapEquipment(slotIndex),
+      onTap: (slotIndex) => activateInventorySlot(slotIndex),
     }));
   } else if (inventoryTab === 'creative') {
     elements.push(...buildCreativeTab({
@@ -752,13 +861,13 @@ const showInventory = (): void => {
       showInventory();
     },
     onDrop: (from, to) => handleDrop(from, to),
-    onCraft: (id, count) => {
-      inventoryHint = `合成完成：${itemLabel(id)} x${count}`;
-    },
+    onTapSlot: (craftIndex) => activateCraftingSlot(craftIndex),
+    onSecondaryTap: (craftIndex) => secondaryCraftingSlot(craftIndex),
+    onOutput: () => takeCraftResult(),
     refresh: () => showInventory(),
   }));
 
-  const hint = inventoryHint || (inventoryTab === 'items' ? '点背包物品放入合成格 · 点产物取出 · 拖拽可交换' : '');
+  const hint = inventoryHint || (inventoryTab === 'items' ? '点击拾起 · 再点放下/合并/交换 · 长按拿一半' : '');
   if (hint) {
     elements.push(text(gridX, panelY + panelH - 32, 560, 26, hint, { fontSize: 14, color: inventoryHint ? 'rgba(255,190,120,0.9)' : 'rgba(190,220,235,0.75)' }));
   }
@@ -766,6 +875,7 @@ const showInventory = (): void => {
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
     box(panelX, panelY, panelW, panelH, elements, { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
   ]));
+  syncCursorUi();
 };
 
 const snapshotPlayer = (): PlayerSave => ({
@@ -2005,7 +2115,9 @@ const frame = (): void => {
       crafting: Array.from({ length: crafting.size * crafting.size }, (_, i) => crafting.get(i)?.id ?? 0),
       craftingSize: crafting.size,
       cursorHeld: cursor.held?.id ?? 0,
+      cursorCount: cursor.held?.count ?? 0,
       inventorySlots: Array.from({ length: 41 }, (_, i) => inventory.get(i)?.id ?? 0),
+      inventoryCounts: Array.from({ length: 41 }, (_, i) => inventory.get(i)?.count ?? 0),
       craftingTable: craftingTableOpen,
       craftResult: crafting.result?.id ?? 0,
       paused,
@@ -2278,9 +2390,19 @@ const isDesktopRuntime = typeof navigator !== 'undefined';
 if (wxTestApi && isDesktopRuntime) {
   wxTestApi.__v2Test = {
     clearInventory: () => {
-      for (let i = 0; i < 36; i++) inventory.set(i, null);
+      for (let i = 0; i < 41; i++) inventory.set(i, null);
+      cursor.clear();
       selectedSlot = 0;
       showHud();
+    },
+    secondarySlot: (slotIndex = 9) => {
+      secondaryInventorySlot(slotIndex);
+      return { slotIndex };
+    },
+    selectHotbar: (slotIndex = 0) => {
+      selectedSlot = Math.max(0, Math.min(8, slotIndex));
+      showHud();
+      return selectedSlot;
     },
     spawnZombie: () => {
       const surface = world.getSurfaceBlockY(Math.floor(physics.x + 3), Math.floor(physics.z + 3));

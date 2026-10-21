@@ -81,6 +81,7 @@ const assert = (condition, message, state) => {
   const tap = async (x, y) => {
     const p = point(x, y);
     await page.touchscreen.tap(p.x, p.y);
+    await page.waitForTimeout(220);
   };
   const waitState = async (predicate, message, timeout = 15000) => {
     const startedAt = Date.now();
@@ -126,19 +127,50 @@ const assert = (condition, message, state) => {
   await tap(815, 424);
   const bagOpened = await waitState((state) => state.inventoryOpen, '合成用例打开背包失败', 5000);
   await tap(277, 131);
+  await waitState((state) => state.cursorHeld === 5, '点击物品没有拾起', 5000);
+  await tap(779, 128);
   const recipeFilled = await waitState(
-    (state) => state.crafting?.[0] === 5 && state.craftResult === 7,
-    '点击物品没有放入合成格/产物',
+    (state) => state.crafting?.[0] === 5 && state.craftResult === 7 && state.cursorHeld === 0,
+    '材料没有放进合成格/产物',
     5000,
   );
   await tap(935, 154);
   const crafted = await waitState(
-    (state) => state.inventory?.[0] === 7 && state.craftResult === 0,
-    '点击产物没有合成/取出',
+    (state) => state.cursorHeld === 7 && state.craftResult === 0,
+    '点击产物没有合成到光标',
     5000,
   );
+  await tap(277, 131);
+  await waitState((state) => state.inventorySlots?.[9] === 7 && state.cursorHeld === 0, '产物没有放进背包', 5000);
   await tap(902, 56);
   await waitState((state) => !state.inventoryOpen, '合成用例关闭背包失败', 5000);
+
+  // Phase 2：长按拿一半，再点回原格
+  await gameFrame.evaluate(() => {
+    wx.__v2Test?.clearInventory?.();
+    wx.__v2Test?.giveToSlot?.(9, 5, 3);
+  });
+  await tap(815, 424);
+  await waitState((state) => state.inventoryOpen, '长按用例打开背包失败', 5000);
+  await gameFrame.evaluate(() => wx.__v2Test?.secondarySlot?.(9));
+  const halfPicked = await waitState(
+    (state) => state.cursorHeld === 5 && state.cursorCount === 2 && state.inventoryCounts?.[9] === 1,
+    '长按没有拿一半',
+    5000,
+  );
+  await tap(277, 131);
+  await waitState((state) => state.cursorHeld === 0 && state.inventoryCounts?.[9] === 3, '半组没有放回', 5000);
+  await tap(277, 131);
+  await waitState((state) => state.cursorHeld === 5 && state.cursorCount === 3, '关闭回收用例拾起失败', 5000);
+  await tap(902, 56);
+  await waitState(
+    (state) =>
+      !state.inventoryOpen &&
+      state.cursorHeld === 0 &&
+      state.inventorySlots.reduce((sum, id, index) => sum + (id === 5 ? state.inventoryCounts[index] : 0), 0) === 3,
+    '关闭背包没有回收手持物品',
+    5000,
+  );
 
   // 猪生成与击杀掉落
   const pigSpawned = await waitState((state) => state.pigs > 0, '猪没有生成', 20000);
@@ -260,11 +292,9 @@ const assert = (condition, message, state) => {
   const containerClosed = await closeContainer();
 
   const selectSlotZero = async () => {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await tap(269, 424);
-      await page.waitForTimeout(250);
-      if (latest && latest.selectedSlot === 0) return latest;
-    }
+    await gameFrame.evaluate(() => wx.__v2Test?.selectHotbar?.(0));
+    await page.waitForTimeout(150);
+    if (latest && latest.selectedSlot === 0) return latest;
     throw new Error('快捷栏槽位选择失败\nlast=' + JSON.stringify(latest));
   };
 
@@ -351,7 +381,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, slots41, bagOpened, recipeFilled, crafted, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, slots41, bagOpened, recipeFilled, crafted, halfPicked, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),
