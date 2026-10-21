@@ -252,7 +252,7 @@ export interface CraftingPanelContext extends PanelSlotHandlers {
   inventory: Inventory;
   fixedSize?: boolean;
   onToggleSize(): void;
-  onCraft(id: number, count: number): void;
+  onOutput(): void;
   refresh(): void;
 }
 
@@ -293,14 +293,7 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
       result?.id ?? 0,
       result?.count ?? 0,
       false,
-      () => {
-        const current = ctx.crafting.result;
-        if (!current) return;
-        ctx.inventory.add(current.id, current.count);
-        ctx.crafting.takeResult();
-        ctx.onCraft(current.id, current.count);
-        ctx.refresh();
-      },
+      () => ctx.onOutput(),
       undefined,
       true,
     ),
