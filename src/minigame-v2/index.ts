@@ -32,6 +32,7 @@ import {
   buildHotbarDock,
   buildPanelHeader,
   buildRail,
+  buildRecipeCards,
   buildRecipeTab,
   RAIL_CATEGORIES,
 } from './inventory-tabs.ts';
@@ -44,6 +45,8 @@ import {
   type SlotKind,
 } from './inventory-click.ts';
 import { distributeEvenly, gatherSameItems, placeOneEach } from '../core/container/CursorActions.ts';
+import { craftableCards, type RecipeCard } from './recipe-cards.ts';
+import { recipeIngredients } from '../core/crafting/RecipeBook.ts';
 import { splitStack } from '../core/container/TouchSplit.ts';
 import { quickMove } from '../core/container/QuickMove.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
@@ -53,7 +56,7 @@ import { MC, UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital
 import { Inventory, ARMOR_START, TOTAL_SLOTS, sameStack, stackExtras, type SlotSource } from '../core/container/Inventory.ts';
 import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
-import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
+import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
 import { CREATIVE_ITEMS, categoryOf, foodInfoById, maxStackOf, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
@@ -219,6 +222,8 @@ let inventoryGeo: {
 let recipePage = 0;
 let recipeSize: 2 | 3 = 2;
 let recipeQuery = '';
+/** 生存模式"配方卡"列表的页码（与 recipes 页签的 recipePage 不是一回事） */
+let recipeCardPage = 0;
 let creativeQuery = '';
 let inventoryHint = '';
 let selectedSlot = 0;
@@ -729,6 +734,52 @@ const splitFromSlot = (kind: SlotKind, index: number, count: number): void => {
 };
 
 /**
+ * 生存模式左栏要显示哪些配方卡。
+ *
+ * ⚠️ 材料数要**连合成格里已摆好的一起算**（外部端也是这么做的）：
+ * 只看背包的话，点一条配方把材料挪进格子之后，那条配方立刻变成"缺料"，
+ * 列表当场红掉 —— 看起来像出错了。
+ */
+const craftableRecipeCards = (): RecipeCard[] => {
+  const countOf = (itemId: number) => {
+    let n = inventory.countOf(itemId);
+    for (let i = 0; i < crafting.size * crafting.size; i++) {
+      const stack = crafting.get(i);
+      if (stack && stack.id === itemId) n += stack.count;
+    }
+    return n;
+  };
+  return craftableCards(countOf, {
+    gridSize: craftingTableOpen ? 3 : 2,
+    category: creativeCategory,
+    query: '',
+    // 与外部端一致：只列**现在做得出来**的（做不出来的留在配方书页签里）
+    showUncraftable: false,
+  });
+};
+
+/**
+ * 点一张配方卡 = **把材料摆进合成格**（原版配方书就是这个行为，不是直接给产物）。
+ *
+ * 复用 `fillRecipe`（它已经处理"材料不足"和"尺寸不符"），
+ * 摆好之后玩家还能自己改格子 —— 直接给产物会让人看不见怎么摆的。
+ */
+const pickRecipeCard = (card: RecipeCard): void => {
+  const recipe = RECIPES.find((r) => r.result.id === card.resultId);
+  if (!recipe) return;
+  // 先看材料齐不齐（`fillRecipeFromInventory` 会边摆边扣，缺料会摆一半）
+  const missing = recipeIngredients(recipe).find((ing) => inventory.countOf(ing.id) < ing.count);
+  if (missing) {
+    inventoryHint = `材料不足：缺 ${itemLabel(missing.id)}`;
+    showInventory();
+    return;
+  }
+  fillRecipe(recipe);
+  inventoryHint = `已摆好：${itemLabel(card.resultId)}`;
+  showInventory();
+};
+
+/**
  * 双击收集：把这一格里那**一类**物品从整个背包凑到光标上（最多凑满一堆）。
  *
  * 规则本体在 `core/container/CursorActions.gatherSameItems`（纯函数、有断言），
@@ -988,7 +1039,10 @@ const showInventory = (): void => {
   // ---- 顶栏 ----
   const titleText =
     inventoryTab === 'creative'
-      ? `创造 · ${RAIL_CATEGORIES.find((c) => c.key === creativeCategory)?.label ?? '全部'}`
+      ? // 生存模式下这个页签列的是**配方卡**（"我能做出什么"），标题不能写"创造"
+        `${currentWorld?.gameMode === 'creative' ? '创造' : '可合成'} · ${
+          RAIL_CATEGORIES.find((c) => c.key === creativeCategory)?.label ?? '全部'
+        }`
       : inventoryTab === 'recipes'
         ? '配方书'
         : craftingTableOpen
@@ -1109,6 +1163,29 @@ const showInventory = (): void => {
       );
     }
   } else if (inventoryTab === 'creative') {
+    /**
+     * ⚠️ 这里按**游戏模式**分叉（对齐外部端实测）：
+     *   创造 → 物品网格（"我有什么"）
+     *   生存 → **配方卡列表**（"我能做出什么"）
+     * 同一个左轨按钮，两种模式内容不同 —— 这是外部端截图里最容易被忽略的一处。
+     */
+    if (currentWorld?.gameMode !== 'creative') {
+      elements.push(
+        ...buildRecipeCards({
+          x: contentX,
+          y: contentY + 28,
+          w: gridW,
+          h: panelH - (contentY - panelY) - 56,
+          cards: craftableRecipeCards(),
+          page: recipeCardPage,
+          onPick: (card) => pickRecipeCard(card),
+          onPage: (page) => {
+            recipeCardPage = page;
+            showInventory();
+          },
+        }),
+      );
+    } else {
     elements.push(
       ...buildCreativeTab({
         gridX: contentX,
@@ -1147,6 +1224,7 @@ const showInventory = (): void => {
         ...tabHandlers,
       }),
     );
+    }
   } else {
     elements.push(
       ...buildRecipeTab({
@@ -2914,6 +2992,16 @@ if (wxTestApi && isDesktopRuntime) {
      * 验收脚本不该靠"猜像素"去点轨道上的小图标——猜错就变成点了别处。
      */
     inventoryGeo: () => inventoryGeo,
+    /** 验收：生存模式配方卡的统计（总数 / 可做数 / 当前页） */
+    recipeCardInfo: () => {
+      const cards = craftableRecipeCards();
+      return {
+        total: cards.length,
+        craftable: cards.filter((c) => c.craftable).length,
+        page: recipeCardPage,
+        first: cards[0] ? { id: cards[0].resultId, craftable: cards[0].craftable } : null,
+      };
+    },
     /** 光标上那一叠（`null` = 空手） */
     snapshot: () => (cursor.held ? { id: cursor.held.id, count: cursor.held.count } : null),
     /** 某格的数量（0 = 空） */

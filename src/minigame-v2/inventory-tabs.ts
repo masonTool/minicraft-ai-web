@@ -4,6 +4,7 @@ import type { Inventory } from '../core/container/Inventory.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
 import { recipeFits } from './recipe-book.ts';
+import { missingHint, type RecipeCard } from './recipe-cards.ts';
 import { button, box, itemButton, MC, slot, text, type SlotButton, type UiElement } from './ui-kit/index.ts';
 import { Block } from '../core/registry/blocks.ts';
 import { Item } from '../core/registry/items.ts';
@@ -673,5 +674,97 @@ export function buildPlayerPreview(ctx: PlayerPreviewContext): UiElement[] {
     els.push(box(cx - unit * 0.8, top + unit * 4.2, unit * 0.7, unit * 0.35, [], { background: armorColor }));
     els.push(box(cx + unit * 0.1, top + unit * 4.2, unit * 0.7, unit * 0.35, [], { background: armorColor }));
   }
+  return els;
+}
+
+// ---------------------------------------------------------------------------
+// 配方卡列表（生存模式下左栏的内容，对齐 Web 版 `inv-category`）
+// ---------------------------------------------------------------------------
+
+export interface RecipeCardGridContext {
+  x: number;
+  y: number;
+  /** 可用宽/高（决定几列几行） */
+  w: number;
+  h: number;
+  cards: readonly RecipeCard[];
+  page: number;
+  /** 点一张卡：把材料摆进合成格 */
+  onPick(card: RecipeCard): void;
+  /** 翻页 */
+  onPage(page: number): void;
+}
+
+const CARD_H = 62;
+const CARD_GAP = 4;
+
+/**
+ * 配方卡列表：3 列 × N 行，每张卡 = 产物图标 + 名字 + 数量/缺料。
+ *
+ * 与外部端一致的三处细节：
+ *  1. **能做的排在前面**（`craftableCards` 已排序）；
+ *  2. 做不出来的卡压暗、底下写"缺 X ×n"；
+ *  3. 底部一条 `共 N 项 · 第 x/y 页` + 翻页键。
+ */
+export function buildRecipeCards(ctx: RecipeCardGridContext): UiElement[] {
+  const els: UiElement[] = [];
+  const cols = 3;
+  const cardW = Math.floor((ctx.w - CARD_GAP * (cols - 1)) / cols);
+  const perPage = Math.max(1, Math.floor((ctx.h - 26) / (CARD_H + CARD_GAP)) * cols);
+  const pages = Math.max(1, Math.ceil(ctx.cards.length / perPage));
+  const page = Math.max(0, Math.min(ctx.page, pages - 1));
+  const start = page * perPage;
+  const list = ctx.cards.slice(start, start + perPage);
+
+  for (let i = 0; i < list.length; i++) {
+    const card = list[i]!;
+    const cx = ctx.x + (i % cols) * (cardW + CARD_GAP);
+    const cy = ctx.y + Math.floor(i / cols) * (CARD_H + CARD_GAP);
+    // 卡底：能做的用白底、做不出来的压暗（对齐外部端的白/红底语义，只是我们用灰）
+    els.push(
+      box(cx, cy, cardW, CARD_H, [], {
+        background: card.craftable ? '#d8d8d8' : '#b0b0b0',
+        bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight],
+        borderWidth: 2,
+      }),
+    );
+    // 产物图标（点它就当点整张卡）
+    els.push(...[]);
+    els.push(
+      slot(cx + 4, cy + (CARD_H - 34) / 2, 34, 900 + i, card.resultId, card.resultCount, false, () => ctx.onPick(card)),
+    );
+    els.push(
+      text(cx + 44, cy + 8, cardW - 50, 16, itemLabel(card.resultId), {
+        fontSize: 11,
+        color: MC.text,
+      }),
+    );
+    const hint = missingHint(card);
+    if (hint) {
+      els.push(text(cx + 44, cy + 26, cardW - 50, 14, hint, { fontSize: 10, color: '#8a3a3a' }));
+    } else {
+      els.push(text(cx + 44, cy + 26, cardW - 50, 14, `×${card.resultCount}`, { fontSize: 10, color: MC.textMuted }));
+    }
+  }
+
+  // 底部：`共 N 项 · 第 x/y 页` + 两颗翻页键
+  const footerY = ctx.y + ctx.h - 22;
+  els.push(
+    text(ctx.x, footerY + 2, 220, 18, `可做 ${ctx.cards.filter((c) => c.craftable).length} 项 · 共 ${ctx.cards.length} · ${page + 1}/${pages}`, {
+      fontSize: 10,
+      color: MC.textMuted,
+    }),
+  );
+  const navStyle = {
+    background: MC.button,
+    bevel: [MC.bevelLight, MC.bevelDark, MC.bevelDark, MC.bevelLight] as const,
+    color: MC.text,
+    fontSize: 11,
+    borderWidth: 2,
+  };
+  els.push(
+    button(ctx.x + ctx.w - 110, footerY, 50, 18, '上一页', () => ctx.onPage(Math.max(0, page - 1)), navStyle),
+    button(ctx.x + ctx.w - 56, footerY, 50, 18, '下一页', () => ctx.onPage(Math.min(pages - 1, page + 1)), navStyle),
+  );
   return els;
 }

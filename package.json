@@ -207,7 +207,9 @@
     "e2e:v2-panel": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-fixed-panel.cjs",
     "e2e:v2-weblogic": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic.cjs",
     "e2e:v2-weblogic2": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic2.cjs",
-    "e2e:v2-rail": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-rail-tour.cjs"
+    "e2e:v2-rail": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-rail-tour.cjs",
+    "test:v2-recipe-cards": "esbuild tools/v2-recipe-cards-test.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-recipe-cards-test.mjs --log-level=error && node .tmp/v2-recipe-cards-test.mjs",
+    "e2e:v2-cards": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-recipe-cards-e2e.cjs"
   },
   "dependencies": {
     "three": "^0.186.1"
