@@ -43,6 +43,13 @@ npm run dev            # http://localhost:5173
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
+- 批次 615（M23 前置）：**命名牌 + 头顶名字牌**。新物品 `minecraft:name_tag`（id **1570**；
+  改号原因：1488 已被 `minecraft:map` 占用，注册表当场报"重复注册"）+ `Mob.customName` +
+  `ui/NameTagEditor.ts`（单行输入，复用 `.sign-editor*` 样式）+ `render/MobNameTag.ts`
+  （CanvasTexture + Sprite **精灵池 12 个**、32 格内可见、按距离由近到远挑选；不是"一只生物一个 Sprite"）
+  + 区块寄存/存档往返 + 钓鱼宝藏池。纯决策在 `core/entity/NameTag.ts`。新套件 `test:nametag` **50 条**，
+  套数 164 → **165**。⚠️ 差异：留空不擦名字、取消不消耗牌、长度按字符 32 而非原版 32 字节。
+  ⚠️ M23 仍 `[~]`：队友免伤与碰撞开关仍未接；**队伍颜色还没接进名字牌**（现在一律白色）。
 - 批次 614（M10 收口）：**资源包音效替换**。新增 `core/resourcepack/SoundPack.ts`（纯逻辑）+
   `AudioEngine` 的采样通道（`setSamples` / `hasSample` / `clearSamples`）。要点：
   ① **显式映射表**而不是按名字自动配——原版音效名与 `SoundKind` 不是一一对应
@@ -75,16 +82,6 @@ npm run dev            # http://localhost:5173
   两条面各画一条线，合起来就是一个极细的十字。修法：十字植物的贴图**四边各留 1 纹素透明**
   （`PLANT_MIN/MAX`），叶片列范围收进 1~13、秆/茎/枝上下留空；这样回绕、各向异性越界、
   薄面底边与地面共面读到的都是空。新增 `paintedEdgeOpaque()` 断言（草/蕨/花/甘蔗/竹子/蘑菇=0）。
-- 批次 524（体感收尾：草尖细线 / 草尖抖动 / 方块太"轻"；**本号是撞号后改的** —— 另一条会话的
-  523 是 `71c5ed8`（压后台白屏），本批原写成 523，按 hash 区分）：
-  ① 植物贴图**不许有 1 像素宽的竖条**：叶尖原本收成 1 像素（花的茎与叶同理）——屏幕上就是
-     "极细的线"，且 mipmap 第一个把它平均掉（覆盖率 0.25~0.5）→ 时有时无=抖。现在叶片
-     全高 2 像素、花茎 2 像素；新增 `paintedThinColumns()` 断言（草/蕨/花/甘蔗/竹子=0）。
-  ② alphaTest 阈值按**屏幕空间 4×4 Bayer** 打散 ±0.03（`ALPHA_DITHER_BAND`）：骑在阈值上的
-     草尖不再整片翻转；近处（mip0 的 alpha 只有 0/1）完全不受影响。
-  ③ 面明暗加深（用户："方块不够沉重、偏亮"）：侧 0.8/0.6 → **0.72/0.54**、底 0.5 → **0.42**，
-     顶面仍 1.0。`atlasMesh.FACE_SHADE` 与 `ChunkMesher.RAW_FACES` 必须一起改；生物那套
-     `BOX_FACE_SHADE` 同步压 10%（否则站在墙边会显得比墙亮）。
 - ⚠️ 295-1~295-4 被并发会话占用，那两个提交正式编号是 297 / 298；303 同理（正式 304）。
 - 批次 191 及更早（167~191，共 25 条）：已搬到 `docs/HANDOFF-ARCHIVE.md` 的「§1 批次流水」
   ——那部分是"当时怎么做"的查阅材料，不再是"现在什么状态"。**本文件只保留最近 6 批**
@@ -191,11 +188,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 164 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 165 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 164 套离线测试
+npm test                   # typecheck:tools + vitest + 165 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -207,7 +204,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **164 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **165 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
