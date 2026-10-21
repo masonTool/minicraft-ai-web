@@ -1220,14 +1220,42 @@ console.log('\n[生物/玩家的逐面明暗（批次 521）]');
   }
 }
 
-console.log('\n[光照收敛后全量重刷（E23 / 批次 565）]');
+console.log('\n[光照收敛后全量重刷（E23 / 批次 565、616）]');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const rendererSrc = readFileSync(new URL('../src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
   check('网格层提供已渲染区块的全量重刷入口', rendererSrc.includes('enqueueAllRendered(): void'));
-  check('主程序在首次光照收敛后调用', mainSrc.includes('enqueueAllRendered()'));
-  check('只做一次（有 settled 标记）', mainSrc.includes('lightSettledRemeshDone = true'));
-  check('没有网格先不标记，等网格出来再刷', mainSrc.includes('chunkMeshCount > 0'));
+  check('主程序在光照收敛后调用', mainSrc.includes('enqueueAllRendered()'));
+  check('没有网格先不刷，等网格出来再刷', mainSrc.includes('chunkMeshCount > 0'));
+
+  // ---- 批次 616：这里曾经是"只做一次"，那是"方块表面纯黑"的根因。
+  // 真机日志里已渲染区块从 62 涨到 182 块，一次性的重刷只覆盖最早那批，
+  // 后加载的区块烘进未收敛光照 → 天空正常、方块纯黑。现在必须**可重复**。
+  check('不再是"只做一次"（settled 标记已删除）', !mainSrc.includes('lightSettledRemeshDone'));
+  check('靠"有新加载区块"的脏标记触发', mainSrc.includes('this.remeshPending'));
+  check('区块加载时置脏', /onChunkLoaded[\s\S]{0,1200}this\.remeshPending = true/.test(mainSrc));
+  check('刷完清脏（不会每帧都刷）', mainSrc.includes('this.remeshPending = false'));
+  check('有节流，避免挖方块时反复全量重排', mainSrc.includes('REMESH_MIN_INTERVAL'));
+  check('节流比较用的是帧时间戳', mainSrc.includes('now - this.lastSettleRemeshAt >= REMESH_MIN_INTERVAL'));
+
+  // 去重保证：重复调用不会让队列变长，所以"每秒重刷一次"是安全的
+  check('入队自带去重（已在队列里的只升级优先级）', rendererSrc.includes('existing.priority = priority'));
+
+  // 为什么会黑：平滑光照要读**跨区块**的 4 个采样格，邻居不在内存时 World 返回 0。
+  // 这条不是"要不要修"的开关，而是修复的**前提事实**——它一旦改成别的语义
+  // （例如返回 15），上面"反复重刷"就不再是必需的，那时的结论要重新推。
+  const worldSrc = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+  const skyFn = worldSrc.slice(worldSrc.indexOf('getSkyLight(worldX'));
+  check(
+    '前提：邻居区块缺失时光照读作 0（所以先到的区块会烘出黑边）',
+    skyFn.slice(0, 400).includes('if (!chunk) return 0;'),
+  );
+  check(
+    '前提：网格化确实读跨区块的采样格（平滑光照 4 邻）',
+    readFileSync(new URL('../src/core/mesh/ChunkMesher.ts', import.meta.url), 'utf8').includes(
+      'originX + nx, worldY + dy, originZ + nz',
+    ),
+  );
 }
 
 console.log('\n[区块几何复用池（N3 / 批次 566）]');

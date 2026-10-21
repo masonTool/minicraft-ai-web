@@ -880,6 +880,15 @@ const NAME_TAG_POOL_SIZE = 12;
 const NAME_TAG_RANGE = 32;
 
 /**
+ * 光照收敛后"全量重刷已渲染区块"的最小间隔（毫秒，批次 616）。
+ *
+ * 挖/放方块会让光照队列在忙与闲之间反复抖；如果每抖一次就把 100+ 个区块
+ * 全排进网格队列，手机会明显掉帧。1 秒一次足够跟住"流式加载新区域"的节奏，
+ * 而**单次的方块光照变化**本来就有 `pendingSettle` 逐块补刷，不依赖这里。
+ */
+const REMESH_MIN_INTERVAL = 1000;
+
+/**
  * ---------------------------------------------------------------- App 类的段落目录
  *
  * 这个类很长（约 7000 行），**不要整份读**。它内部按职责分了段，每段的开头都有一行
@@ -1882,12 +1891,20 @@ class App {
   /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
   private readonly pendingSettle: number[] = [];
   /**
-   * 光照首次收敛后是否已经做过全量重刷（批次 565，E23）。
+   * 是否有"新加载的区块"等着补刷（批次 616，修 E23 的残留）。
    *
-   * 启动期网格可能先于光照烘出来；只重刷一次已渲染区块即可，
-   * 之后的光照变化由 `pendingSettle` 逐块补刷。
+   * 置脏的地方只有 `onChunkLoaded`：新地形进来意味着后面这批网格可能是在
+   * "邻居还没到"时烘的（`getSkyLight` 对不在内存的区块返回 0 → 边界全黑）。
+   * 消费它的地方是主循环：光照排空之后把已渲染区块全量重排一遍，然后清标记。
+   *
+   * ⚠️ 为什么不是"每帧都刷"或"每隔 N 秒兜底刷"：已渲染区块在真机上有 182 块，
+   * 全量重排一次要重建 182 份几何，手机上会持续掉帧。**只在有新区块时刷**，
+   * 稳态游玩（原地挖矿、站着看）一次都不会触发。
    */
-  private lightSettledRemeshDone = false;
+  private remeshPending = false;
+
+  /** 上次"全量重刷已渲染区块"的时刻（`performance.now()`，批次 616 的节流用） */
+  private lastSettleRemeshAt = 0;
 
   /**
    * 主循环的**连续**失败次数（批次 238）。
@@ -2191,7 +2208,14 @@ class App {
         // 队列涨到 28 万格并开始丢任务，帧时间从此再也回不到 16.7ms。
         // 现在由**生成期**保证水是连续的（`applySurface` 只淹真正的海、`Aquifer` 找平水位），
         // 视觉上不需要"加载后再流一遍"。
+        // 区块生成完成：自身 + 已加载的邻居都要重新网格化。
+        // 邻居那一半很关键——`getSkyLight` 对**不在内存的区块返回 0**，
+        // 先到的区块在网格化时把缺失邻居那一侧烘成了全黑（详见 §光照收敛后的全量重刷）。
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
+        // 批次 616：新地形进来 = 后面这一批网格可能是"邻居还没到"时烘的。
+        // 置脏标记，等光照排空后统一补刷一遍（见 §光照收敛后的全量重刷）。
+        // 只标记、不立刻重排：一次流式加载会连着进来十几块，逐块全量重排太贵。
+        this.remeshPending = true;
         this.refreshLoadingState();
       },
       onChunkUnloaded: (cx, cz) => {
@@ -15815,10 +15839,29 @@ class App {
       const lightBusy = this.world.processLighting(lightBudgetForFrame(startupLighting, isTouchDevice()));
 
       // E23（批次 565）：启动期先烘出来的网格可能带着未收敛的光照。
-      // 等光照首次收敛、且已经有网格存在时，把所有已渲染区块重排一次。
-      // 只做一次：之后的光照变化由下面的 `pendingSettle` 逐块补刷。
-      if (!lightBusy && !this.lightSettledRemeshDone && this.chunkRenderer.chunkMeshCount > 0) {
-        this.lightSettledRemeshDone = true;
+      //
+      // ⚠️ **批次 616 修了一个"方块纯黑"的真机 bug**：这里原来用一次性标记
+      // （置真之后就不再进），但"已渲染区块"是**持续增长**的
+      // ——真机日志里从 62 涨到 182 块。于是第一次重刷（那时只有 62 块）之后，
+      // 后加载的 120 块**永远不会被补刷**，它们烘进的是"当时还没算完"的光照，
+      // 表现就是"天空正常、方块表面纯黑"（用户截图）。
+      // 现在改成**有新地形进来就补刷**，用三个条件压住开销：
+      //   · `remeshPending`：只有真的加载过新区块才需要补（见 `onChunkLoaded`）。
+      //     没有新地形时一帧都不多花——这是"每 2 秒全量重排 182 块"那种
+      //     粗暴兜底方案的替代品（那个在手机上会持续掉帧）。
+      //   · `!lightBusy`：光照排空的那一刻读到的才是最终值；
+      //   · `chunkMeshCount > 0` 与 `REMESH_MIN_INTERVAL`：一块都没有时没意义，
+      //     挖方块引起的忙/闲抖动也不该每次都全量重排（1 秒一次足够跟住流式加载）。
+      // `enqueueAllRendered` 只遍历一个 Map，且 `enqueue` 自带去重
+      // （已在队列里的只升级优先级），重复调用不会让队列变长。
+      if (
+        this.remeshPending &&
+        !lightBusy &&
+        this.chunkRenderer.chunkMeshCount > 0 &&
+        now - this.lastSettleRemeshAt >= REMESH_MIN_INTERVAL
+      ) {
+        this.remeshPending = false;
+        this.lastSettleRemeshAt = now;
         this.chunkRenderer.enqueueAllRendered();
       }
 
