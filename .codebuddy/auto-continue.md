@@ -178,16 +178,6 @@
 
 ---
 
-## 批次 532：删除非原版世界类型 + 旁观/正面相机修复（2026-10-21）
-
-- [x] B532-1 删除 caves / floating_islands：类型表/标签/说明/地表基准/密度场分支/
-  caves 跳过地物/UI 短标签/默认命名/`test:worldtype` 全部移除；旧存档回落 default
-- [x] B532-2 世界类型回到原版三型：default / flat / amplified
-- [x] B532-3 旁观模式：`startsFlying` 纯函数；构造/读档/`setGameMode` 三处保证起飞
-- [x] B532-4 第三人称正面：相机 y = `eye.y - dir.y * distance`，碰撞射线同向
-- [x] B532-5 测试：worldmatrix 60 → 36、viewmode 补正面上下、mode 补旁观起飞；套数 162 → 161
-- ⚠️ 原版缺的 large_biomes / single_biome 未做（后续批次）
-
 ## 批次 533：补全原版世界类型（大型群系 / 单一群系）（2026-10-21）
 
 - [x] B533-1 large_biomes：`biomeScale=4`，biomeAt/columnBiome/landBiomeAtCell 按 1/4 坐标采样；
@@ -209,3 +199,15 @@
 - [x] B534-6 HUD：生存状态栏与经验条对旁观隐藏
 - [x] B534-7 测试：survival 86 条、mode 28 条；浏览器实测虚空不掉血
 - ⚠️ 没有旁观者专属 HUD/传送菜单（原版有，按需再做）
+
+## 批次 617：进世界闪屏与命名牌输入框残留（2026-10-21，hotfix）
+
+- [x] B617-1 `NameTagEditor.dispose()`：615 的漏项。它构造时把 `#name-tag-editor` 挂到
+  `<body>`（复用 `.sign-editor`：`fixed; inset:0` + 55% 黑遮罩），`App.dispose()` 里
+  只收了 `signEditor` 没收它——开着输入框退出世界时，遮罩会留在页面上，再进世界又叠一个同 id 节点
+- [x] B617-2 `ENTER_GUARD_MS = 1500`：进世界瞬间的 `blur` 常早于 `fullscreenchange`，
+  此时 `ignoreBlurUntilMs` 的保护还没建立 → 被判成切后台 → 回来无条件 `openSettings()`。
+  现象是"世界闪一下变暗 + 菜单（含统计入口）冒出来又消失"。`blur` 与
+  `fullscreenchange(lost)` 两条入口都加守卫；真正的切 App 远超 1.5 秒
+- 门禁：`npm run check` 全绿（165 套离线）
+- ⚠️ 未做：没在真机上验证"夜里切后台 1.2 秒回来"这类边界（守卫会吞掉这一次暂停）

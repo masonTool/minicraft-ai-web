@@ -11613,4 +11613,14 @@
   （骨块米色、蓝色带釉陶瓦、蓝色旗帜）；`test:render` 222 条不回归
 - ⚠️ 530 的 32 列改动保留：2048 纹理上限仍是真实风险，只是不是这次白块的原因
 
+## 批次 532：删除非原版世界类型 + 旁观/正面相机修复（2026-10-21）
+
+- [x] B532-1 删除 caves / floating_islands：类型表/标签/说明/地表基准/密度场分支/
+  caves 跳过地物/UI 短标签/默认命名/`test:worldtype` 全部移除；旧存档回落 default
+- [x] B532-2 世界类型回到原版三型：default / flat / amplified
+- [x] B532-3 旁观模式：`startsFlying` 纯函数；构造/读档/`setGameMode` 三处保证起飞
+- [x] B532-4 第三人称正面：相机 y = `eye.y - dir.y * distance`，碰撞射线同向
+- [x] B532-5 测试：worldmatrix 60 → 36、viewmode 补正面上下、mode 补旁观起飞；套数 162 → 161
+- ⚠️ 原版缺的 large_biomes / single_biome 未做（后续批次）
+
 <!-- docs-archive:end -->
