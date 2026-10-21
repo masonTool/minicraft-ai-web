@@ -362,6 +362,62 @@ console.log('\n[围栏代码块不算待办]');
   }
 }
 
+// ---------------------------------------------------------------- 卡死保护
+
+console.log('\n[卡死保护]');
+
+{
+  /**
+   * 一条做不完的任务会被无限递回来（`[~]` 也算待办）。连续 N 轮做不完必须
+   * 打 `[阻塞]` 隔离、跳过去做下一条、并要求 AI 上报给用户决策——而不是静默重试。
+   *
+   * ⚠️ 这里踩过一个坑：计数累加后忘了 saveState，导致每轮读回来都是初始值，
+   * 连续次数永远停在 1、永远不会触发。所以下面这条测试是"连跑 N 次看它到底变没变"，
+   * 光查源码字符串是抓不到这个 bug 的。
+   */
+  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
+  const stateFile = join(projectRoot, '.codebuddy', 'hooks', 'logs', 'auto-continue.state.json');
+  let qBackup = null;
+  let sBackup = null;
+  try {
+    qBackup = readFileSync(queueFile, 'utf8');
+    try {
+      sBackup = readFileSync(stateFile, 'utf8');
+    } catch {
+      sBackup = null;
+    }
+    rmSync(stateFile, { force: true });
+
+    writeFileSync(queueFile, `${qBackup}\n- [ ] 卡死测试条目：故意做不完\n- [ ] 卡死测试后一条：应该能被轮到\n`);
+
+    // 第 1~4 轮：都还在递同一条
+    let lastStderr = '';
+    for (let round = 1; round <= 4; round += 1) {
+      const r = runHook('auto-continue.mjs', stopEvent(`hooks-test-block-${round}`));
+      lastStderr = r.stderr;
+    }
+    check('前 4 轮仍在重试同一条', /卡死测试条目/.test(lastStderr));
+    check('前 4 轮还没打阻塞标记', !/已标/.test(lastStderr));
+
+    // 第 5 轮：必须隔离
+    const fifth = runHook('auto-continue.mjs', stopEvent('hooks-test-block-5'));
+    check('第 5 轮打出阻塞标记', /已标.*阻塞/.test(fifth.stderr), fifth.stderr.slice(0, 160));
+    check('第 5 轮跳过卡住的那条', !/^  · 卡死测试条目/m.test(fifth.stderr));
+    check('第 5 轮改递下一条', /卡死测试后一条/.test(fifth.stderr));
+    check('要求 AI 上报而非自行处理', /上报/.test(fifth.stderr) && /不要替他决定/.test(fifth.stderr));
+
+    const queueNow = readFileSync(queueFile, 'utf8');
+    check('队列文件里已写成 [阻塞]', /- \[阻塞\] 卡死测试条目/.test(queueNow));
+
+    const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+    check('状态里记下了尝试次数', state.attempts?.['卡死测试条目：故意做不完'] >= 5, JSON.stringify(state.attempts));
+  } finally {
+    if (qBackup !== null) writeFileSync(queueFile, qBackup);
+    if (sBackup !== null) writeFileSync(stateFile, sBackup);
+    else rmSync(stateFile, { force: true });
+  }
+}
+
 // ---------------------------------------------------------------- 两种输出风格
 
 console.log('\n[输出风格]');

@@ -192,7 +192,7 @@ function loadState() {
   try {
     return JSON.parse(readFileSync(stateFile, 'utf8'));
   } catch {
-    return { sessionId: null, count: 0 };
+    return { sessionId: null, count: 0, attempts: {} };
   }
 }
 
@@ -264,9 +264,104 @@ if (state.sessionId !== sessionId) {
   state.count = 0;
 }
 state.count += 1;
+if (!state.attempts || typeof state.attempts !== 'object') state.attempts = {};
 saveState(state);
 
-const next = pending
+/**
+ * ---- 卡死保护：同一个任务连续多轮没做完 → 隔离上报，不再重试 ----
+ *
+ * 问题：`[~]` 也算待办（正则认 `[ ~]`），所以一条做不完的任务会被**无限递回来**。
+ * 没有这道闸，一条做不动的任务会烧光上下文、交接、再烧，永远走不到后面的条目。
+ *
+ * 判据：条目的**指纹**（去掉勾选标记后的正文）连续出现在多少轮的"第一条"位置。
+ *   · 换了一条 → 说明上一条做完了（或至少推进了），计数归零；
+ *   · 同一指纹再次被选中 → 说明它上一轮没做完，计数 +1；
+ *   · 达到上限（默认 5）→ 标 `[阻塞]`，跳过去做下一条，并提示上报给用户决策。
+ *
+ * 为什么用"连续"而不是"累计"：一条任务做了一半、下一轮继续，是正常推进；
+ * 只有**连续几轮都停在同一条且没有勾掉**才是真的卡住。
+ *
+ * 隔离而不是删除：用户的决策权不能被脚本替掉。标 `[阻塞]` 的条目不再被选中，
+ * 但仍留在文件里等人处理——要重试就把标记去掉，要删就自己删。
+ */
+const BLOCKED_MAX = Number(process.env.AUTO_CONTINUE_BLOCK_AFTER ?? 5);
+const BLOCKED_TAG = '[阻塞]';
+
+const fingerprint = (line) =>
+  line
+    .replace(/^-\s*\[[ ~]\]\s*/, '')
+    .replace(BLOCKED_TAG, '')
+    .trim()
+    .slice(0, 120);
+
+// 选下一条：跳过 [阻塞]，优先用户排的（非 [发现]）
+const selectable = pending.filter((line) => !line.includes(BLOCKED_TAG));
+const blockedNow = pending.filter((line) => line.includes(BLOCKED_TAG));
+
+const firstScheduledSel = selectable.find((line) => !/^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
+const chosen = firstScheduledSel ?? selectable[0] ?? null;
+
+let justBlocked = null;
+if (chosen) {
+  const fp = fingerprint(chosen);
+  if (state.currentFingerprint === fp) {
+    state.currentStreak = (state.currentStreak ?? 0) + 1;
+  } else {
+    state.currentFingerprint = fp;
+    state.currentStreak = 1;
+  }
+  state.attempts[fp] = state.currentStreak;
+
+  if (state.currentStreak >= BLOCKED_MAX) {
+    justBlocked = { fp, streak: state.currentStreak };
+    // 标记原文：把 `- [ ]` / `- [~]` 换成 `- [阻塞]`，其余一字不动
+    try {
+      const raw = readFileSync(queueFile, 'utf8');
+      const lines = raw.split(/\r?\n/);
+      let inFence = false;
+      let hit = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\s*(```|~~~)/.test(lines[i])) {
+          inFence = !inFence;
+          continue;
+        }
+        if (inFence) continue;
+        if (fingerprint(lines[i].trim()) === fp && /^\s*-\s*\[[ ~]\]/.test(lines[i])) {
+          lines[i] = lines[i].replace(/^(\s*-\s*)\[[ ~]\]/, `$1${BLOCKED_TAG}`);
+          hit += 1;
+          break;
+        }
+      }
+      if (hit > 0) writeFileSync(queueFile, lines.join('\n'));
+    } catch {
+      /* 改不动文件也不影响本轮：至少这次会跳过它 */
+    }
+    // 重置计数，避免下一轮又把同一条算进"连续"
+    state.currentFingerprint = null;
+    state.currentStreak = 0;
+    saveState(state);
+  } else {
+    // ⚠️ 正常累加也必须落盘：不存的话下一轮读回来又是初始值，
+    // 连续次数永远是 1，永远到不了上限（这个漏写实测踩过一次）
+    saveState(state);
+  }
+}
+
+// 重新扫描：刚才可能刚把某条改成 [阻塞]
+const remaining = justBlocked ? readPending(queueFile).filter((l) => !l.includes(BLOCKED_TAG)) : selectable;
+
+if (remaining.length === 0 && blockedNow.length === 0 && pending.length > 0) {
+  // 全是阻塞项
+  allowStop(
+    'all-blocked',
+    `队列里 ${pending.length} 条全部标记为 ${BLOCKED_TAG}，没有可做的了。请处理这些条目：改掉卡点、去掉标记重试，或直接删除。`,
+  );
+}
+if (remaining.length === 0) {
+  allowStop('queue-empty', '自动继续队列已全部完成，正常停止。');
+}
+
+const next = remaining
   .slice(0, 3)
   .map((line) => `  · ${line.replace(/^-\s*\[[ ~]\]\s*/, '')}`)
   .join('\n');
@@ -324,15 +419,16 @@ const mustHandOff =
  * 这条优先级不是小事：如果 AI 插的 `[发现]` 总被排到最前，那就等于
  * 它自己给自己派活、把用户排的任务一直往后推——"只插不改"的承诺就落空了。
  */
-const firstScheduled = pending.find((line) => !/^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
-const firstPending = firstScheduled ?? pending[0];
+// ⚠️ 必须跳过 [阻塞]：否则新会话第一句话就把卡死的任务又捡回来，白白再烧一轮
+const firstScheduled = remaining.find((line) => !/^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
+const firstPending = firstScheduled ?? remaining[0];
 const firstPendingText = firstPending
   ? firstPending.replace(/^-\s*\[[ ~]\]\s*/, '').trim().slice(0, 80)
   : null;
 
 const handoffPrompt = firstPendingText
   ? `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进。先做第一条：${firstPendingText}`
-  : `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进（队列里还有 ${pending.length} 条待办）。`;
+  : `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进（队列里还有 ${remaining.length} 条待办）。`;
 
 const handoffFile = join(logsDir, 'handoff-prompt.txt');
 
@@ -360,7 +456,7 @@ const feedback = mustHandOff
       '上下文已经满了，硬撑只会让后半程质量下降、还会触发压缩丢细节。',
     ].join('\n')
   : [
-      `[auto-continue 第${state.count}轮 · 队列还剩 ${pending.length} 条 · ${contextLine}] 不要询问我，直接继续执行。`,
+      `[auto-continue 第${state.count}轮 · 队列还剩 ${remaining.length} 条 · ${contextLine}] 不要询问我，直接继续执行。`,
       '',
       '## 这一轮做这一条（不用读整个队列文件，做这条够用的部分即可）',
       next,
@@ -373,6 +469,25 @@ const feedback = mustHandOff
       '5. 遇到困难不要停下来问我，自己找办法解决并把结论记录下来；',
       '6. 队列全部清空后，在回复里明确写"队列已清空"再停止。',
       '',
+      justBlocked
+        ? [
+            `## ⚠️ 刚有一条卡住，已标 ${BLOCKED_TAG}（连续 ${justBlocked.streak} 轮没做完）`,
+            '',
+            '上面「这一条」里**已经不含它**——脚本把它跳过了，你现在做的是下一条。',
+            '但你必须**在回复里如实上报**，不要默默略过：',
+            '',
+            '1. **是哪一条**（原样抄一下条目内容）；',
+            `2. **试过什么、卡在哪**（具体到报错/断言/文件行号），不要写"做不动"这种废话；`,
+            `3. **给用户的三个选项**：改这条的描述继续做 / 直接删除 / 先跳过留后面处理。`,
+            '   用户会自己决定，**你不要替他决定**，也不要自行删除或改描述。',
+            '',
+            `条目已被标成 \`- ${BLOCKED_TAG} ...\`，之后不会再被选中；用户处理完（去掉标记）才会重试。`,
+            '',
+          ].join('\n')
+        : '',
+      blockedNow.length > 0
+        ? `> 另有 ${blockedNow.length} 条此前已标 ${BLOCKED_TAG}，都在等你决策（改描述重试 / 删除 / 保留）。\n`
+        : '',
       '## 你可以在队列里插任务——但有硬条件',
       '',
       `做完这条后，如果**在动手过程中**发现了更该先做的事，可以往队列**插一条**（现有 ${discovered.length}/${DISCOVERED_LIMIT} 条）。`,
