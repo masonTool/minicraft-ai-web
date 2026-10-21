@@ -12,15 +12,17 @@
  *   · 本会话已经注入过（记在 `logs/<sid>.state.json` 的 initialized）。
  */
 
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import {
   PROJECT_ROOT,
   QUEUES_DIR,
   appendLog,
+  commitCount,
   detectEvent,
   emitAllow,
   listQueues,
   loadState,
+  queuePath,
   readPayload,
   readQueue,
   saveState,
@@ -78,17 +80,28 @@ const othersBlock = others.length
       '',
       ...others.map((item) => `- \`.continue/queues/${item.sid}.md\` · 剩 ${item.left} 条 · 最近更新 ${item.mtime}`),
       '',
-      '处理规则：**先问用户**（用 AskUserQuestion 弹窗给选项：接管 / 只读参考 / 忽略）。',
+      '处理规则：**先问用户**（用弹窗提问工具给选项：接管 / 只读参考 / 忽略）。',
       '用户同意接管后，把那边未完成的条目搬进本会话队列，再删除原队列文件；',
       '没同意就一律不碰——同一份队列被两个会话同时改会导致条目状态错乱。',
     ].join('\n')
   : '';
 
+/**
+ * 批次号：**开工时的提交总数**就是这一批的编号（见 `lib.mjs` 的 `commitCount`）。
+ * 在这里算好直接填进模板，AI 建队列时照抄即可，不需要自己去跑 git、也就不会漏写。
+ */
+const batch = commitCount();
+const batchLabel = batch ? String(batch) : '<提交数>';
+
 const injection = [
   '【continue-do · 会话初始化】',
   '',
   `- 会话 ID：\`${sid}\``,
-  `- 本会话队列：\`.continue/queues/${sid}.md\`（**尚未创建**）`,
+  // 会话重启后同一个 sid 可能已经有队列（上一轮建的）→ 说"尚未创建"会让 AI 覆盖掉进度。
+  `- 本会话队列：\`.continue/queues/${sid}.md\`${existsSync(queuePath(sid)) ? '（**已存在，接着做，别重建**）' : '（**尚未创建**）'}`,
+  batch
+    ? `- 批次号：\`${batch}\`（= 当前提交总数 \`git rev-list --count HEAD\`）`
+    : '- 批次号：取不到（不是 git 仓库 / 还没有提交）→ 队列里省略 `> 批次：`，`DONE.md` 标题也不写批次',
   `- 机制说明：\`.continue/HANDOFF.md\``,
   `- 项目根：\`${PROJECT_ROOT}\``,
   '',
@@ -109,6 +122,7 @@ const injection = [
   '',
   '> 状态：执行中',
   '> 创建：YYYY-MM-DD',
+  `> 批次：${batchLabel}`,
   '',
   '- [ ] T1 <一句话说清做什么>：<改哪个文件> → <怎么算做完>',
   '- [ ] T2 …',
@@ -117,12 +131,25 @@ const injection = [
   '   - 只想先和用户确认方案、还不想开工：把 `> 状态：执行中` 写成 `> 状态：讨论中`，钩子就不会递任务。',
   '     这一行只在**文件头部 5 行**内有效，正文里提到这几个字不影响。',
   '   - 确认开工后，把那一行改回 `> 状态：执行中`。',
+  `   - \`> 批次：\` 抄上面给的值（开工时的提交总数）；收尾时写进 \`DONE.md\` 标题，`,
+  '     形如 `## 批次 24（提交 24→27）· 2026-10-22 · 会话 xxxxxxxx`——',
+  '     这样"这批是第几次改动、一共动了几次"一眼可见，不必翻 git log。',
+  ...(batch
+    ? []
+    : ['   - 取不到提交数（非 git 仓库 / 还没有提交）：`<提交数>` 只是占位符，**不要照抄**，', '     直接省略 `> 批次：` 这一行，`DONE.md` 标题里也不写批次。']),
   '4. 钩子一次只递**一条**，你一次也只做一条。',
   '5. `[ ]` / `[~]` 都没有了 → 钩子会拦住，让你用弹窗请用户确认收尾；',
-  '   **确认之后**才做：整份队列写进 `.continue/DONE.md`（含 `[阻塞]`）、',
-  '   `.continue/TASKS.md` 里对应条目改成 `[x]`、删除队列文件。用户没确认之前不要动这三样。',
+  '   **确认之后**才按顺序做完这五步：',
+  '   ① 整份队列写进 `.continue/DONE.md`（含 `[阻塞]`，标题带 `批次 n（提交 n→m）`）；',
+  '   ② 整份队列在 `.continue/TASKS.md` 里落地（已有条目改 `[x]`，当场任务在 `C. 已完成` 补 `[x]`）；',
+  '   ③ 自问一次「有没有下一批还会被绊到的设计取舍」→ 有就补 `.continue/NOTES.md`；',
+  '   ④ 自问一次「这轮有没有会重复踩的坑」→ 有就补 `.continue/EXPERIENCE.md`；',
+  '   ⑤ 删除队列文件。',
+  '   用户没确认之前不要动这五样。',
+  '   边界：`TASKS.md` 只补 `[x]`，不新增 `[ ]`；`NOTES` / `EXPERIENCE` 没内容就跳过，**不写占位**。',
   '6. 目录分工：`logs/` 是钩子的运行日志（**已 gitignore**，你不要提交、不要改）；',
-  '   `queues/` 与 `TASKS.md` / `DONE.md` / `HANDOFF.md` 是要 review 的文档。',
+  '   `queues/` 与 `TASKS.md` / `DONE.md` / `HANDOFF.md` / `NOTES.md` / `EXPERIENCE.md` 是要 review 的文档。',
+  '   `NOTES.md` = 当时怎么做的、为什么（按模块）；`EXPERIENCE.md` = 动手前按关键词 grep 的坑（按主题）。',
   othersBlock,
 ].join('\n');
 

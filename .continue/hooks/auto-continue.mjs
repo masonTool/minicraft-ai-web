@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import {
   CONTINUE_DIR,
   appendLog,
+  commitCount,
   detectEvent,
   emitAllow,
   emitBlock,
@@ -66,7 +67,7 @@ if (event === 'UserPromptSubmit') {
 if (event !== 'Stop') emitAllow();
 
 /**
- * 紧急刹车（沿用本项目旧钩子的约定）：`touch .continue/auto-continue.off` 即放行，
+ * 紧急刹车（本项目在框架原版上补的）：`touch .continue/auto-continue.off` 即放行，
  * 删掉文件恢复。队列文件保留着，恢复后能接着跑——删队列会丢进度，两件事不一样。
  */
 const OFF_FILE = join(CONTINUE_DIR, 'auto-continue.off');
@@ -111,6 +112,12 @@ function pickNext(target) {
   return chosen ? { raw: chosen.raw, resumed: false } : null;
 }
 
+/**
+ * 批次号（= 当前提交总数）在这里取一次，递任务和收尾提示都要用。
+ * 位置放这么靠后是因为**上面全是放行分支**：纯问答会话不该为一行展示文本付子进程开销。
+ */
+const batch = commitCount();
+
 let pick = pickNext(queue);
 
 /**
@@ -153,17 +160,26 @@ if (!pick) {
       '',
       '## 现在要做的事：请用户确认',
       '',
-      '用 `AskUserQuestion` 让用户拍板，选项按这个顺序（第一个是推荐）：',
+      '用弹窗提问工具让用户拍板（CodeBuddy 叫 `ask_followup_question`，Claude Code 叫',
+      '`AskUserQuestion`，按你手上的实际工具名来），选项按这个顺序（第一个是推荐）：',
       '',
       '1. **确认完成** —— 按下面的步骤收尾；',
       '2. **还要补充** —— 用户说清补什么，你补成 `- [ ]`，队列继续跑；',
       '3. **有做得不对的 / 卡住的要重做** —— 用户指出哪条，你把它改回 `- [ ]` 重做。',
       '',
-      '## 用户确认完成后（三件事都要做完）',
+      '## 用户确认完成后（五步都要做完）',
       '',
-      '1. 把整份队列写进 `.continue/DONE.md`：条目原文照搬（含 `[阻塞]`），再补一段完成说明；',
-      '2. 把 `.continue/TASKS.md` 里对应的条目改成 `[x]`（TASKS 里没有的不必新增）；',
-      `3. 删除 \`.continue/queues/${sid}.md\`。`,
+      '1. 把整份队列写进 `.continue/DONE.md`：条目原文照搬（含 `[阻塞]`），补一段完成说明，',
+      `   标题写成 \`## 批次 ${batch ?? '<n>'}（提交 ${batch ?? '<n>'}→<收尾时的提交总数>）· 日期 · 会话 ${sid.slice(0, 8)}\`；`,
+      '2. 把整份队列在 `.continue/TASKS.md` 里落地：已有对应条目的改成 `[x]`，',
+      '   当场任务（TASKS 里原本没有的）在 `C. 已完成` 补一条 `[x]`，内容照抄队列那一行；',
+      '   边界：只补 `[x]`（记录已发生的事），**不要新增 `[ ]`**——未来的计划由用户提；',
+      '3. **自问一次**：这批有没有"下一批还会被绊到"的设计取舍（为什么这么做 / 代价 / 何时该重看）',
+      '   → 有就在 `.continue/NOTES.md` 补一节（按模块归到已有小节下，别新建重复主题）；',
+      '4. **自问一次**：这轮有没有会重复踩的坑（调很久才定位 / 改了 A 红了 B / 工具的隐蔽默认值）',
+      '   → 有就在 `.continue/EXPERIENCE.md` 补一节（症状 → 根因 → 处置 → 适用面）；',
+      '   ⚠️ 3、4 都**只写确实有的**：没有就跳过，**不写"本批无"占位**——占位会让人以为已经读过；',
+      `5. 删除 \`.continue/queues/${sid}.md\`。`,
       '',
       '> 用户没确认之前不要动 DONE.md / TASKS.md，也不要删除队列文件。',
     ].join('\n'),
@@ -180,7 +196,6 @@ state.askedComplete = null;
 let streak = state.currentFingerprint === fp ? (state.currentStreak ?? 0) + 1 : 1;
 state.currentFingerprint = fp;
 state.currentStreak = streak;
-state.attempts = { ...(state.attempts ?? {}), [fp]: streak };
 // ⚠️ 必须每轮落盘：不存的话下一轮读回来是初始值，连续次数永远是 1，隔离永远触发不了。
 saveState(sid, state);
 
@@ -217,13 +232,26 @@ if (streak >= BLOCKED_MAX) {
 
 const current = readQueue(file);
 const remaining = unfinishedCount(current);
-const discovered = current.entries.filter((entry) => /^-\s*\[[^\]]*\]\s*\[发现\]/.test(entry.raw)).length;
+/**
+ * 配额只数**还没做完**的 `[发现]`。
+ * 数上 `[x]` 的话，插满 5 条并做完之后就永久"已满"，
+ * 等于这个功能在队列后半程被静默关掉。
+ */
+const discovered = current.entries.filter(
+  (entry) =>
+    (entry.kind === 'todo' || entry.kind === 'doing') &&
+    /^-\s*\[[^\]]*\]\s*\[发现\]/.test(entry.raw),
+).length;
 const discoveredFull = discovered >= DISCOVERED_LIMIT;
 const blockedCount = current.counts.blocked;
 
+// `firstPick` 是隔离**之前**选中的那条；隔离后 pick 可能已经换成下一条，
+// 所以"是否续做 [~]"要以最终的 pick 为准，否则文案会张冠李戴。
+const resumedNow = Boolean(pick && pick.resumed);
+
 if (justBlocked) {
   appendLog(sid, `Stop · 递任务（已隔离上一条）· 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
-} else if (firstPick.resumed) {
+} else if (resumedNow) {
   appendLog(sid, `Stop · 继续进行中的条目 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
 } else {
   appendLog(sid, `Stop · 递任务 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
@@ -236,7 +264,8 @@ if (justBlocked) {
 const RISK_RULE = [
   '## ⚠️ 发现风险就弹窗问用户（重要）',
   '',
-  '撞到下面任一情况，立刻用 `AskUserQuestion` 把 2~4 个**具体选项**摆出来（每个写清代价，推荐项放第一位），',
+  '撞到下面任一情况，立刻用弹窗提问工具（`ask_followup_question` / `AskUserQuestion`）把 2~4 个',
+  '**具体选项**摆出来（每个写清代价，推荐项放第一位），',
   '等用户选完再继续。不要先做了再汇报，也不要用"我觉得这样更好"绕过：',
   '',
   '1. **不可逆的破坏**：删数据 / 改存档格式 / 改公开接口 / 强制推送；',
@@ -261,18 +290,33 @@ const discoveredBlock = [
   discoveredFull ? `\n⚠️ 本轮**不要再插**：\`[发现]\` 已满 ${DISCOVERED_LIMIT} 条，先让用户过一遍。` : '',
 ].join('\n');
 
+const header = [
+  `[auto-continue 第${state.count}轮`,
+  batch ? `批次 ${batch}` : null,
+  `会话 ${sid.slice(0, 8)}`,
+  `队列还剩 ${remaining} 条`,
+  `队列：.continue/queues/${sid}.md]`,
+]
+  .filter(Boolean)
+  .join(' · ');
+
 const feedback = [
-  `[auto-continue 第${state.count}轮 · 会话 ${sid.slice(0, 8)} · 队列还剩 ${remaining} 条 · 队列：.continue/queues/${sid}.md]`,
+  header,
   '',
-  `## 这一轮做这一条${firstPick.resumed ? '（它已经标了 `[~]`，接着做完）' : ''}`,
+  `## 这一轮做这一条${resumedNow ? '（它已经标了 `[~]`，接着做完）' : ''}`,
   `  · ${fp}`,
+  '',
+  '## 动手前（30 秒，省掉一次重新踩坑）',
+  '`.continue/EXPERIENCE.md` / `NOTES.md` 若存在，按本条的关键词各 grep 一次（**别整份读**，很贵）；',
+  '撞到已经记过的坑，直接用上面写的处置，不要重新试错；',
+  '真踩到新坑且解决了 → 现在就可以补一条（不必等到收尾）。',
   '',
   '## 要求',
   '1. **只做这一条**，做完就停；下一条由下一轮脚本注入。',
   '2. **标记由你自己写**：开始做这条时把 `- [ ]` 改成 `- [~]`（进行中），',
   '   做完改成 `- [x]`。`[阻塞]` 只有脚本会写，**你不要自己写，也不要手动删除它**。',
   '3. 做完把这一条改成 `[x]`，然后连同队列文件一起单独提交',
-  '   （中文 commit message：改了什么 + 怎么验证的）。',
+  `   （中文 commit message：${batch ? `批次 ${batch} · ` : ''}改了什么 + 怎么验证的）。`,
   '4. 提交前自测；测试不过先修，不要提交半成品。',
   '5. 遇到困难自己解决并把结论记下来——**除非命中下面五条风险**，那时必须弹窗。',
   '6. 判断某条不该做（比如核对后发现已经实现）→ 在回复里说明理由，让用户决定',

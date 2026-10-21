@@ -10,8 +10,8 @@
  *   · 队列里不再有 `## 批次 N` 小节，收尾时整份搬进 `.continue/DONE.md` 并删除文件，
  *     "队列一路长到两千行"这件事从机制上消失了；
  *   · 所以这里只剩两件事：**单份队列别误粘大文件**（5000 行）+ **HANDOFF 只留最近 6 批**；
- *   · `npm run docs:trim` 现在只处理 HANDOFF（旧的队列与批次流水已整份并入 `.continue/DONE.md`，
- *     那里是只读历史，不再归档）。
+ *   · `npm run docs:trim` 只处理 HANDOFF：旧批次追加到 `.continue/DONE.md` 末尾的
+ *     `docs-archive` 标记区（旧的 `docs/HANDOFF-ARCHIVE.md` 已整份并入该文件并下线）。
  *
  * 用法：
  *   npm run audit:docs   # 只检查（过期非零退出，不改文件，给 npm run check 用）
@@ -27,8 +27,10 @@ const printOnly = process.argv.includes('--print');
 const FILES = {
   queuesDir: new URL('../.continue/queues/', import.meta.url),
   handoff: new URL('../HANDOFF.md', import.meta.url),
-  handoffArchive: new URL('../docs/HANDOFF-ARCHIVE.md', import.meta.url),
-  /** 完成档案（只读历史；2026-10-22 把旧队列与 485 段批次流水并了进来） */
+  /**
+   * 完成档案（时间线）。2026-10-22 把旧队列、485 段批次流水、`docs/HANDOFF-ARCHIVE.md`
+   * 都并了进来；`docs:trim` 往后搬的旧批次也追加到它末尾的 `docs-archive` 标记区。
+   */
   done: new URL('../.continue/DONE.md', import.meta.url),
 };
 
@@ -42,7 +44,13 @@ const LIMITS = {
   queueLines: 5000,
   handoffLines: 340,
   handoffBatches: 6,
-  archiveBytes: 900 * 1024,
+  /**
+   * 归档体积提示线。`DONE.md` 是**时间线**，天然只增不减：2026-10-22 把旧队列（485 段）、
+   * `docs/HANDOFF-ARCHIVE.md` 的批次流水都并了进来，一次性到 1.1MB。
+   * 提到 1.5MB 只是给"还会长多久"留个观察点——真到了就把它按年代拆成
+   * `DONE-<年>.md` 并在文首留索引，而不是继续往一个文件里堆。
+   */
+  archiveBytes: 1536 * 1024,
 };
 
 const MARK_START = '<!-- docs-archive:start -->';
@@ -108,10 +116,7 @@ function trimHandoff() {
   const next = tidy(lines.join('\n'));
 
   if (!printOnly) {
-    writeFileSync(
-      FILES.handoffArchive,
-      withArchive(read(FILES.handoffArchive), chunk, '§1 批次流水（自动归档）'),
-    );
+    writeFileSync(FILES.done, withArchive(read(FILES.done), chunk, '附：HANDOFF §1 自动归档'));
     writeFileSync(FILES.handoff, next);
   }
   return {
@@ -166,10 +171,7 @@ let failed = false;
   if (overLines || overItems) failed = true;
 }
 
-for (const [name, url] of [
-  ['.continue/DONE.md', FILES.done],
-  ['docs/HANDOFF-ARCHIVE.md', FILES.handoffArchive],
-]) {
+for (const [name, url] of [['.continue/DONE.md', FILES.done]]) {
   if (!existsSync(url)) continue;
   const size = statSync(url).size;
   if (size > LIMITS.archiveBytes) {

@@ -277,6 +277,35 @@ console.log('\n[auto-continue · 递任务]');
   });
 }
 
+// ---------------------------------------------------------------- 批次号 / 收尾五步
+
+console.log('\n[批次号与收尾五步]');
+
+{
+  /**
+   * 批次号 = **开工时的提交总数**（不用自增计数器）。钩子算好塞进模板，
+   * AI 建队列时照抄——手抄的数字一定会漂，提交数是唯一真值。
+   */
+  const sid = 'hooks-test-batch-1';
+  rmSync(statePath(sid, 'init'), { force: true });
+  try {
+    const r = runHook('queue-init.mjs', promptEvent(sid));
+    const text = JSON.stringify(r.json ?? {});
+    check('queue-init 注入批次号', /批次号/.test(text), r.stdout.slice(0, 160));
+    check('模板里带 `> 批次：`', /> 批次：/.test(text));
+    check('说明批次 = 提交总数', /rev-list --count HEAD/.test(text));
+    check('说明 DONE 标题格式（提交 n→m）', /批次 24（提交 24→27）/.test(text));
+    check('说明收尾五步（DONE→TASKS→NOTES→EXPERIENCE→删队列）', /① /.test(text) && /⑤ /.test(text));
+  } finally {
+    rmSync(statePath(sid, 'init'), { force: true });
+  }
+
+  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('auto-continue 递任务时带批次号', /批次 \$\{batch\}/.test(src));
+  check('收尾提示要求走五步（含 NOTES / EXPERIENCE）', /NOTES\.md/.test(src) && /EXPERIENCE\.md/.test(src));
+  check('提示按关键词 grep 两份长文档', /grep 一次/.test(src));
+}
+
 // ---------------------------------------------------------------- 卡死保护
 
 console.log('\n[卡死保护]');
@@ -383,7 +412,7 @@ console.log('\n[无上限与风险弹窗]');
     '列出 5 类该弹窗的风险',
     (src.match(/不可逆的破坏|会波及其他队列|多种合理做法|需求本身有歧义|超出这条的范围/g) ?? []).length >= 5,
   );
-  check('弹窗要求给具体选项而不是"继续/停止"', /2~4 个\*\*具体选项\*\*/.test(src));
+  check('弹窗要求给具体选项而不是"继续/停止"', /2~4 个/.test(src) && /\*\*具体选项\*\*/.test(src));
 
   const commitSrc = readFileSync(join(hooksDir, 'auto-commit.mjs'), 'utf8');
   check('auto-commit 没有拦截次数上限', !/MAX_ROUNDS/.test(commitSrc));

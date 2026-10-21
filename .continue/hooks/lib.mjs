@@ -61,7 +61,9 @@ export const MARK = {
 
 /** 顺序有意义：`[阻塞]` 是中括号里带中文的，必须先于其它判断。 */
 const MARKER_TESTS = [
-  ['blocked', /^-\s*\[阻塞\]/],
+  // 容忍 `[ 阻塞 ]`：写成带空格时若认不出，这条会既不算待办也不算阻塞，
+  // 从所有统计里消失（表现为"队列明明有条目却被当成空的"）。
+  ['blocked', /^-\s*\[\s*阻塞\s*\]/],
   ['done', /^-\s*\[x\]/i],
   ['doing', /^-\s*\[~\]/],
   ['todo', /^-\s*\[\s*\]/],
@@ -92,7 +94,9 @@ export function detectEvent(payload) {
 /** 会话 ID：队列文件名直接由它推导，所以要挡住空串与明显非法的值。 */
 export function sessionId(payload) {
   const id = payload.session_id ?? payload.conversation_id;
-  return typeof id === 'string' && /^[A-Za-z0-9_-]{4,}$/.test(id) ? id : null;
+  // 允许 `.`：有些平台给的是 UUID / 带版本号的点分 ID。漏掉一个合法字符的代价是
+  // 整个会话静默停摆（返回 null → 所有钩子直接放行，且不报错）。
+  return typeof id === 'string' && /^[A-Za-z0-9._-]{4,}$/.test(id) ? id : null;
 }
 
 // ------------------------------------------------------------------ 路径
@@ -135,17 +139,24 @@ export function saveState(sid, state, ns = '') {
 
 /**
  * 运行日志（人读的 markdown，`logs/<sid>.md`）。
- * 超过 512KB 转存 `.1` 再重开——长跑会跑几百上千轮，日志不能无限长；
- * 只改名不删数据。
+ * 超过 512KB 轮转：`<sid>.md` → `<sid>.md.1` → `.2` → `.3`（最旧的被覆盖）。
+ * 长跑会跑几百上千轮，日志不能无限长。**别写"不删数据"**——轮转位固定，
+ * 最旧那份必然被挤掉（旧的实现直接覆盖 `.1`，连上一份都不留）。
  */
 const LOG_MAX_BYTES = Number(process.env.CONTINUE_LOG_MAX ?? 512 * 1024);
+const LOG_KEEP = 3;
 
 export function appendLog(sid, line) {
   try {
     mkdirSync(LOGS_DIR, { recursive: true });
     const file = logPath(sid);
     try {
-      if (statSync(file).size > LOG_MAX_BYTES) renameSync(file, `${file}.1`);
+      if (statSync(file).size > LOG_MAX_BYTES) {
+        for (let i = LOG_KEEP; i > 1; i -= 1) {
+          if (existsSync(`${file}.${i - 1}`)) renameSync(`${file}.${i - 1}`, `${file}.${i}`);
+        }
+        renameSync(file, `${file}.1`);
+      }
     } catch {
       /* 文件还不存在，正常 */
     }
@@ -220,6 +231,34 @@ export function runCheck(command, timeoutSec = 180) {
 export function tail(text, n = 30) {
   const lines = String(text ?? '').trimEnd().split(/\r?\n/);
   return lines.slice(Math.max(0, lines.length - n)).join('\n');
+}
+
+// ------------------------------------------------------------------ 批次号
+
+/**
+ * 批次号 = 当前提交总数（`git rev-list --count HEAD`）。
+ *
+ * 为什么不自己维护一个自增计数器：手抄的数字一定会漂（参考项目为此专门记过一笔账），
+ * 而提交数是**唯一真值**——它天然与"这批动了多少次"一一对应，一个任务多次提交
+ * 也能用区间表达（`批次 24（提交 24→27）`）。
+ *
+ * 取不到就返回 `null`（不是 git 仓库 / 还没有任何提交）：调用处**直接省略**这个数字。
+ * 框架要能装到任何项目，不能让一个只用于定位的展示数字把主流程卡住。
+ */
+export function commitCount() {
+  try {
+    const res = spawnSync('git', ['rev-list', '--count', 'HEAD'], {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    if (res.status !== 0) return null;
+    const count = Number(String(res.stdout ?? '').trim());
+    return Number.isInteger(count) && count > 0 ? count : null;
+  } catch {
+    return null;
+  }
 }
 
 // ------------------------------------------------------------------ 队列解析

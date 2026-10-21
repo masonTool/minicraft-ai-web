@@ -5,7 +5,7 @@
 > 再读 [`.continue/HANDOFF.md`](./.continue/HANDOFF.md)（队列机制；本会话队列在 `.continue/queues/`）
 > 和 [TASKS.md](./TASKS.md)（长期总表）。
 > 会话聊天记录本身不随仓库走，能带走的关键上下文都沉淀在下面。
-> 大块历史正文已经拆出去按需读，见 §1 的索引表（`docs/HANDOFF-ARCHIVE.md` / `docs/EXPERIENCE.md`）——**不要一开始就把它们全读进来**。
+> 大块历史正文已经拆出去按需读，见 §1 的索引表（`.continue/DONE.md` / `.continue/notes/modules.md` / `.continue/EXPERIENCE.md`）——**不要一开始就把它们全读进来**。
 
 ---
 
@@ -33,9 +33,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-22 · 提交总数 1351（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-22 · 提交总数 1352（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 293 项 —— 已完成 **283**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 293 项 —— 已完成 **283**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.continue/queues/<session_id>.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -68,7 +68,7 @@ npm run dev            # http://localhost:5173
   不用"每 N 秒兜底刷"：182 块全量重排要重建 182 份几何，手机会持续掉帧；
   只在真加载新地形时刷，稳态游玩一次不触发。`test:render` 4 → **12 条**。
 - ⚠️ 295-1~295-4 被并发会话占用，那两个提交正式编号是 297 / 298；303 同理（正式 304）。
-- 批次 191 及更早（167~191，共 25 条）：已搬到 `docs/HANDOFF-ARCHIVE.md` 的「§1 批次流水」
+- 批次 191 及更早（167~191，共 25 条）：已搬到 `.continue/DONE.md` 的「HANDOFF 批次流水」
   ——那部分是"当时怎么做"的查阅材料，不再是"现在什么状态"。**本文件只保留最近 6 批**
   （`npm run docs:trim` 自动归档，上限 340 行）；更早的记录 `git log --grep="批次 NNN"` 可查。
 
@@ -78,8 +78,8 @@ npm run dev            # http://localhost:5173
 
 | 想查什么 | 读哪一份 |
 | --- | --- |
-| 某个模块（光照 / 网格化 / 容器 / 生物 / 结构…）当时是怎么做的 | [`docs/HANDOFF-ARCHIVE.md`](./docs/HANDOFF-ARCHIVE.md) |
-| "这个坑踩过了，结论是什么" | [`docs/EXPERIENCE.md`](./docs/EXPERIENCE.md) |
+| 某个模块（光照 / 网格化 / 容器 / 生物 / 结构…）当时是怎么做的 | [`.continue/notes/modules.md`](./.continue/notes/modules.md)（决策索引在 `.continue/NOTES.md`） |
+| "这个坑踩过了，结论是什么" | [`.continue/EXPERIENCE.md`](./.continue/EXPERIENCE.md) |
 | 下一步做什么（**唯一的"进行中"口径**） | [`.continue/HANDOFF.md`](./.continue/HANDOFF.md)（队列在 `.continue/queues/<session_id>.md`） |
 | 长期总表 / 覆盖率 / 与原版的差异 | [`TASKS.md`](./TASKS.md)（三张派生表都由脚本生成，不要手抄） |
 
@@ -106,7 +106,7 @@ npm run dev            # http://localhost:5173
   （不生效时 `npm run agent:setup -- --fix-hooks`）。机制全文见 `.continue/HANDOFF.md`。
 - **队列是会话级的**：`.continue/queues/<session_id>.md`；`[ ]` 待办 / `[~]` 进行中 / `[x]` 完成，
   `[阻塞]` 只有钩子会写（同一条连续 5 轮做不完就隔离）；收尾要你确认后才进 `DONE.md`。
-- **目录分工**：`.continue/queues/`（队列）、`DONE.md`（完成档案 + 批次流水）、`batch-seq` 进仓库；
+- **目录分工**：`.continue/queues/`（队列）、`DONE.md`（时间线）+ `NOTES.md` / `notes/` + `EXPERIENCE.md`、`hooks/` 进仓库；
   `.continue/logs/`（日志 + 计数状态）与 `.continue/*.off`（刹车）已 gitignore。
 - **脚本自己认路**：用 `import.meta.url` 反推项目根，不依赖 cwd——**目录改名也不用改配置**。
 - 刹车：`touch .continue/{auto-continue,auto-commit}.off`；**没有轮次上限**，队列不空就一直跑。
@@ -136,7 +136,7 @@ npm run dev            # http://localhost:5173
 
 ## 4. 已定论的经验（省时间，别重复踩）
 
-**已拆到 [`docs/EXPERIENCE.md`](./docs/EXPERIENCE.md)**（约 330 行：色彩空间、天光初始化、
+**已拆到 [`.continue/EXPERIENCE.md`](./.continue/EXPERIENCE.md)**（约 430 行：色彩空间、天光初始化、
 地形尺度、断言怎么写、生物 AI 的"该共享原语而不是策略"、掉落概率的两个掷点……）。
 
 动到渲染 / 光照 / 地形 / 界面 / 生物 AI 之前，先去那里搜一眼相关的行再动手——
@@ -249,7 +249,7 @@ npm run agent:setup        # 跨机器自检
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
 | `TASKS.md`、`HANDOFF.md`、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
-| `.continue/`（`queues/` 队列 + `DONE.md` 完成档案 + `hooks/` + `batch-seq` + 三份文档）、`.codebuddy/settings.json` | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.codebuddy/skills/`（本地技能包） |
+| `.continue/`（`queues/` 队列 + `DONE.md` + `NOTES.md` / `notes/` + `EXPERIENCE.md` + `HANDOFF.md` + `TASKS.md` + `hooks/`）、`.codebuddy/settings.json` | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.codebuddy/skills/`（本地技能包） |
 | `.codebuddy/memory/`（AI 记忆的版本化副本，`npm run agent:setup` 恢复到本机） | 截图 `shot-*.png`、`.continue/*.off`（刹车开关） |
 
 > 长跑任务列表怎么排、`queues/` 与 `logs/` 为什么分开 → `.continue/HANDOFF.md` 开头。
