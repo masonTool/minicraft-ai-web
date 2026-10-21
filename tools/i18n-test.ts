@@ -400,6 +400,48 @@ console.log('\n[背包与工作站面板的残留文案（批次 1355 / M8 第 N
   check('不再用模板串拼"可做"', !code.includes('· 可做 '));
 }
 
+console.log('\n[设置界面的残留文案（批次 1355 / T5）]');
+{
+  const src = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const code = codeOf(src);
+
+  const keys = [
+    'settings.backArrow',
+    'settings.hintApplies',
+    'settings.escResume',
+    'settings.touchBack',
+    'settings.reset',
+    'settings.row.brightness',
+    'settings.row.cape',
+    'settings.appearance.title',
+    'settings.appearance.preview',
+    'settings.diagnostics',
+    'settings.exportStats',
+    'settings.helpDesktop',
+    'settings.helpTouch',
+    'settings.opt.off',
+    'settings.opt.finger',
+    'settings.opt.sec30',
+  ];
+  const parity = keyParity();
+  const missing = keys.filter(
+    (k) => parity.missingInEn.includes(k) || parity.missingInZh.includes(k) || t(k, 'zh') === k || t(k, 'en') === k,
+  );
+  check(`设置界面的 ${keys.length} 个代表键中英齐全`, missing.length === 0, missing.join(','));
+  check('每个都真翻成英文', keys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
+
+  const cjkLiteral = /(['"`])(?:(?!\1)[^\\\n])*[\u4e00-\u9fa5](?:(?!\1)[^\\\n])*\1/;
+  const hit = cjkLiteral.exec(code);
+  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.[0]?.slice(0, 60) ?? '');
+
+  // 五张档位标签表改成查表函数（原来是导出常量表，切语言后不跟着变）
+  for (const fn of ['fpsCapLabel', 'particleLevelLabel', 'touchAimModeLabel', 'settingGroupLabel', 'autosaveLabel']) {
+    check(`档位标签走 ${fn}()`, src.includes(`export function ${fn}(`));
+  }
+  check('帮助行两段都是键', code.includes("t('settings.helpDesktop')") && code.includes("t('settings.helpTouch')"));
+  check('诊断读数走 tp() 的占位符', code.includes("tp('settings.exportStats'"));
+}
+
 console.log('\n[聊天与命令用法（批次 617 / Q14）]');
 {
   /**

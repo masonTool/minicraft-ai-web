@@ -13,20 +13,20 @@
  */
 
 import {
-  AUTOSAVE_LABELS,
+  autosaveLabel,
   AUTOSAVE_OPTIONS,
   BRIGHTNESS_MAX,
   BRIGHTNESS_MIN,
   DEFAULT_SETTINGS,
   PARTICLE_DENSITY,
   PARTICLE_LEVELS,
-  PARTICLE_LEVEL_LABELS,
+  particleLevelLabel,
   SENSITIVITY_DEFAULT,
   SENSITIVITY_MAX,
   SENSITIVITY_MIN,
   SETTINGS_VERSION,
   TOUCH_AIM_MODES,
-  TOUCH_AIM_MODE_LABELS,
+  touchAimModeLabel,
   cycleValue,
   defaultViewDistanceFor,
   loadSettings,
@@ -248,7 +248,7 @@ console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
   check('老倍率 4× → 新档位 4', sensitivityLevelFromGain(4) === 4);
   check('老倍率 0.5× → 落到新下限 1 档', sensitivityLevelFromGain(0.5) === 1);
 
-  check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => TOUCH_AIM_MODE_LABELS[mode].length > 0));
+  check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => touchAimModeLabel(mode).length > 0));
   check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => HANDEDNESS_LABELS[mode].length > 0));
 
   // ---- 手指瞄准的取点偏移（批次 521）
@@ -279,7 +279,7 @@ console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
 
 console.log('\n[粒子效果档位]');
 {
-  check('三档都有标签', PARTICLE_LEVELS.every((level) => PARTICLE_LEVEL_LABELS[level].length > 0));
+  check('三档都有标签', PARTICLE_LEVELS.every((level) => particleLevelLabel(level).length > 0));
   check('关闭档密度是 0', PARTICLE_DENSITY.off === 0);
   check('减少档介于中间', PARTICLE_DENSITY.reduced > 0 && PARTICLE_DENSITY.reduced < 1);
   check('全部档是 1', PARTICLE_DENSITY.all === 1);
@@ -323,7 +323,7 @@ console.log('\n[云]');
 console.log('\n[下拉框的选项]');
 {
   check('视角选项与标签一一对应', CAMERA_MODES.every((mode) => typeof CAMERA_MODE_LABELS[mode] === 'string'));
-  check('粒子选项与标签一一对应', PARTICLE_LEVELS.every((level) => typeof PARTICLE_LEVEL_LABELS[level] === 'string'));
+  check('粒子选项与标签一一对应', PARTICLE_LEVELS.every((level) => typeof particleLevelLabel(level) === 'string'));
   check('视角选项数量是 3', CAMERA_MODES.length === 3);
   check('粒子选项数量是 3', PARTICLE_LEVELS.length === 3);
   check(
@@ -342,7 +342,7 @@ console.log('\n[天气效果 / 自动保存间隔（批次 172，M20）]');
   check('自动保存默认 30 秒', DEFAULT_SETTINGS.autosaveSeconds === 30);
   check(
     '自动保存只给三档，且每档都有中文标签',
-    AUTOSAVE_OPTIONS.length === 3 && AUTOSAVE_OPTIONS.every((value) => typeof AUTOSAVE_LABELS[String(value)] === 'string'),
+    AUTOSAVE_OPTIONS.length === 3 && AUTOSAVE_OPTIONS.every((value) => typeof autosaveLabel(value) === 'string'),
   );
 
   const storage = new MemoryStorage();

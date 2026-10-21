@@ -26,6 +26,7 @@ import {
   isLanguage,
   setLanguage,
   t,
+  tp,
   type Language,
 } from '../core/i18n/I18n.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
@@ -80,15 +81,18 @@ export type ParticleLevel = 'off' | 'reduced' | 'all';
 
 /** 帧率上限的可选值（批次 130）：0 = 不限 */
 export const FPS_CAPS: readonly number[] = [0, 30, 60];
-export const FPS_CAP_LABELS: Record<string, string> = { '0': '不限', '30': '30 帧', '60': '60 帧' };
+/** 帧率上限的显示名：0 = 不限。原来是一张常量表，切语言后不跟着变 */
+export function fpsCapLabel(value: number | string): string {
+  return Number(value) === 0 ? t('settings.opt.unlimited') : t(`settings.opt.fps${Number(value)}`);
+}
 
 export const PARTICLE_LEVELS: readonly ParticleLevel[] = ['off', 'reduced', 'all'];
 
-export const PARTICLE_LEVEL_LABELS: Record<ParticleLevel, string> = {
-  off: '关闭',
-  reduced: '减少',
-  all: '全部',
-};
+export function particleLevelLabel(level: ParticleLevel): string {
+  const key =
+    level === 'off' ? 'settings.opt.off' : level === 'reduced' ? 'settings.opt.reduced' : 'settings.opt.all';
+  return t(key);
+}
 
 /** 各档位对应的生成数量倍率（`off` 直接不生成） */
 export const PARTICLE_DENSITY: Record<ParticleLevel, number> = {
@@ -172,10 +176,9 @@ export function legacySensitivityGain(level: number): number {
  */
 export type TouchAimMode = 'finger' | 'center';
 export const TOUCH_AIM_MODES: readonly TouchAimMode[] = ['finger', 'center'];
-export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
-  finger: '手指',
-  center: '屏幕中心',
-};
+export function touchAimModeLabel(mode: TouchAimMode): string {
+  return t(mode === 'finger' ? 'settings.opt.finger' : 'settings.opt.center');
+}
 
 /**
  * 设置格式版本（批次 271；批次 521 升到 3）。
@@ -255,16 +258,15 @@ export type SettingGroup = (typeof SETTING_GROUPS)[number];
  * 判断标准：**一组的行数掉到 1~2 行时就该问"它还算一个分类吗"**——
  * 一个只为一行设置的页签，在手机上等于多一次点击。
  */
-export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
-  appearance: '外观',
-  controls: '控制',
-  sound: '音频',
-  game: '游戏',
-};
+export function settingGroupLabel(group: SettingGroup): string {
+  return t(`settings.group.${group}`);
+}
 
 /** 自动保存间隔的可选值（秒，批次 172 / TASKS M20）：不提供"关闭"，避免丢档 */
 export const AUTOSAVE_OPTIONS: readonly number[] = [30, 60, 120];
-export const AUTOSAVE_LABELS: Record<string, string> = { '30': '30 秒', '60': '60 秒', '120': '120 秒' };
+export function autosaveLabel(seconds: number | string): string {
+  return t(`settings.opt.sec${Number(seconds)}`);
+}
 
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
 type BoolSettingKey =
@@ -712,7 +714,7 @@ export class SettingsScreen {
   /** 面板根节点（`setPage` 会把当前页写到它的 `data-page` 上，供 CSS 按页调宽度） */
   private readonly panel: HTMLDivElement;
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
-  private subtitleText = '按 Esc 继续游戏';
+  private subtitleText = t('settings.escResume');
 
   /**
    * 挂了"文案键"的节点（批次 403）：切语言之后逐个重写 textContent。
@@ -878,16 +880,10 @@ export class SettingsScreen {
     help.className = 'pause-help';
     const keys = document.createElement('div');
     keys.className = 'desktop-only';
-    keys.innerHTML =
-      '<kbd>WASD</kbd> 移动 · <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />' +
-      '<kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1-9</kbd> 换方块 · <kbd>F</kbd> 飞行 · ' +
-      '<kbd>V</kbd> 视角 · <kbd>Esc/E</kbd> 菜单与背包';
+    keys.innerHTML = t('settings.helpDesktop');
     const gestures = document.createElement('div');
     gestures.className = 'touch-only';
-    gestures.innerHTML =
-      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏<br />' +
-      '右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在顶部<br />' +
-      '双击跳跃起飞（创造模式）· 视角与飞行在「设置」里';
+    gestures.innerHTML = t('settings.helpTouch');
     help.append(keys, gestures);
 
     menuPage.append(menuHeader, this.menuHintEl, actionsRow, this.metaEl, help);
@@ -899,8 +895,8 @@ export class SettingsScreen {
     // 那就等于关闭面板（位置与外观仍然统一——用户要的就是"统一"）。
     this.settingsTitleEl = document.createElement('b');
     this.settingsTitleEl.className = 'settings-title';
-    this.settingsTitleEl.textContent = '设置';
-    const header = this.makeHeader(this.settingsTitleEl, '‹ 返回', () => this.backFromSettings());
+    this.settingsTitleEl.textContent = t('settings.title');
+    const header = this.makeHeader(this.settingsTitleEl, t('settings.backArrow'), () => this.backFromSettings());
 
     this.settingsHintEl = document.createElement('div');
     this.settingsHintEl.className = 'settings-hint';
@@ -964,7 +960,7 @@ export class SettingsScreen {
     // 它留在外观页，但排到第一行——进外观先看到亮度，再进"角色形象"二级弹窗。
     const appearanceTop = this.makeBlock(appearance);
     appearanceTop.append(
-      this.makeSlider('brightness', '亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
+      this.makeSlider('brightness', t('settings.row.brightness'), '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
     );
 
     const hero = document.createElement('div');
@@ -973,7 +969,7 @@ export class SettingsScreen {
     stage.className = 'appearance-stage';
     const canvas = document.createElement('canvas');
     canvas.className = 'appearance-avatar';
-    canvas.setAttribute('aria-label', '角色形象预览（可拖动旋转）');
+    canvas.setAttribute('aria-label', t('settings.appearance.preview'));
     this.avatarCanvas = canvas;
     stage.appendChild(canvas);
 
@@ -1001,7 +997,7 @@ export class SettingsScreen {
 
     const tip = document.createElement('span');
     tip.className = 'appearance-tip';
-    tip.textContent = '拖动旋转';
+    tip.textContent = t('settings.appearance.dragTip');
     stage.appendChild(tip);
 
     const fields = document.createElement('div');
@@ -1013,11 +1009,11 @@ export class SettingsScreen {
     const appearanceEntry = document.createElement('div');
     appearanceEntry.className = 'settings-row pair appearance-entry';
     const appearanceEntryName = document.createElement('span');
-    appearanceEntryName.textContent = '角色形象';
+    appearanceEntryName.textContent = t('settings.appearance.title');
     const appearanceEdit = document.createElement('button');
     appearanceEdit.type = 'button';
     appearanceEdit.className = 'settings-cycle';
-    appearanceEdit.textContent = '编辑';
+    appearanceEdit.textContent = t('settings.appearance.edit');
     appearanceEdit.addEventListener('click', () => this.openAppearance());
     appearanceEntry.append(appearanceEntryName, appearanceEdit);
     appearance.appendChild(appearanceEntry);
@@ -1029,12 +1025,12 @@ export class SettingsScreen {
     const modalHeader = document.createElement('div');
     modalHeader.className = 'appearance-modal-header';
     const modalTitle = document.createElement('b');
-    modalTitle.textContent = '角色形象';
+    modalTitle.textContent = t('settings.appearance.title');
     const modalClose = document.createElement('button');
     modalClose.type = 'button';
     modalClose.className = 'inv-close appearance-close';
     modalClose.textContent = '✕';
-    modalClose.setAttribute('aria-label', '关闭角色形象');
+    modalClose.setAttribute('aria-label', t('settings.appearance.close'));
     modalClose.addEventListener('click', () => this.closeAppearance());
     modalHeader.append(modalTitle, modalClose);
     const modalBody = document.createElement('div');
@@ -1049,74 +1045,74 @@ export class SettingsScreen {
     this.makeSelect(
       fields,
       'hairStyle',
-      '发型',
+      t('settings.row.hairStyle'),
       HAIR_STYLES.map((_, i) => String(i)),
       Object.fromEntries(HAIR_STYLES.map((style, i) => [String(i), HAIR_STYLE_LABELS[style]])),
     );
     this.makeSelect(
       fields,
       'hairColor',
-      '发色',
+      t('settings.row.hairColor'),
       HAIR_COLORS.map((_, i) => String(i)),
       Object.fromEntries(HAIR_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
     this.makeSelect(
       fields,
       'beard',
-      '胡须',
+      t('settings.row.beard'),
       BEARD_STYLES.map((_, i) => String(i)),
       Object.fromEntries(BEARD_STYLES.map((style, i) => [String(i), BEARD_STYLE_LABELS[style]])),
     );
     this.makeSelect(
       fields,
       'eyes',
-      '眼型',
+      t('settings.row.eyes'),
       EYE_STYLES.map((_, i) => String(i)),
       Object.fromEntries(EYE_STYLES.map((style, i) => [String(i), EYE_STYLE_LABELS[style]])),
     );
     this.makeSelect(
       fields,
       'eyeColor',
-      '瞳色',
+      t('settings.row.eyeColor'),
       EYE_COLORS.map((_, i) => String(i)),
       Object.fromEntries(EYE_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
     this.makeSelect(
       fields,
       'build',
-      '年龄',
+      t('settings.row.build'),
       BODY_BUILDS.map((_, i) => String(i)),
       Object.fromEntries(BODY_BUILDS.map((build, i) => [String(i), BODY_BUILD_LABELS[build]])),
     );
     this.makeSelect(
       fields,
       'frame',
-      '身架',
+      t('settings.row.frame'),
       BODY_FRAMES.map((_, i) => String(i)),
       Object.fromEntries(BODY_FRAMES.map((frame, i) => [String(i), BODY_FRAME_LABELS[frame]])),
     );
     this.makeSelect(
       fields,
       'skinTone',
-      '肤色',
+      t('settings.row.skinTone'),
       SKIN_TONES.map((_, i) => String(i)),
       Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
     );
     this.makeSelect(
       fields,
       'shirtColor',
-      '上衣',
+      t('settings.row.shirtColor'),
       SHIRT_COLORS.map((_, i) => String(i)),
       Object.fromEntries(SHIRT_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
     this.makeSelect(
       fields,
       'pantsColor',
-      '裤子',
+      t('settings.row.pantsColor'),
       PANTS_COLORS.map((_, i) => String(i)),
       Object.fromEntries(PANTS_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
-    this.makeToggle(fields, 'cape', '披风');
+    this.makeToggle(fields, 'cape', t('settings.row.cape'));
 
     this.bindAvatar(canvas);
     this.applyFocusButtons();
@@ -1146,7 +1142,13 @@ export class SettingsScreen {
     // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
     this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, HANDEDNESS_LABELS);
     // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
-    this.makeSelect(controlOptions, 'aimMode', t('settings.row.aimMode'), TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
+    this.makeSelect(
+      controlOptions,
+      'aimMode',
+      t('settings.row.aimMode'),
+      TOUCH_AIM_MODES,
+      Object.fromEntries(TOUCH_AIM_MODES.map((mode) => [mode, touchAimModeLabel(mode)])) as Record<TouchAimMode, string>,
+    );
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
     this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, STICK_MODE_LABELS);
     this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
@@ -1211,7 +1213,7 @@ export class SettingsScreen {
     resetButton.type = 'button';
     resetButton.id = 'settings-reset';
     resetButton.className = 'settings-reset';
-    resetButton.textContent = '恢复默认设置';
+    resetButton.textContent = t('settings.reset');
     resetButton.addEventListener('click', () => this.resetDefaults());
     footer.appendChild(resetButton);
 
@@ -1264,7 +1266,7 @@ export class SettingsScreen {
       back.type = 'button';
       back.className = 'settings-back';
       back.textContent = backLabel;
-      back.setAttribute('aria-label', '返回上一层');
+      back.setAttribute('aria-label', t('settings.backLayer'));
       back.addEventListener('click', () => onBack?.());
       left.appendChild(back);
     }
@@ -1339,7 +1341,7 @@ export class SettingsScreen {
   /** 取某个分组的容器（设置项都往它里面塞） */
   private section(group: SettingGroup): HTMLElement {
     const element = this.sections.get(group);
-    if (!element) throw new Error(`未定义的分组：${group}`);
+    if (!element) throw new Error(tp('settings.groupUndefined', { group }));
     return element;
   }
 
@@ -1563,7 +1565,7 @@ export class SettingsScreen {
     for (const refresh of this.refreshers) refresh();
     this.commit(true);
     // 给一句确认：面板上没有独立的 toast，借用设置页那行提示，2 秒后恢复原文
-    this.settingsHintEl.textContent = '已恢复默认设置';
+    this.settingsHintEl.textContent = t('settings.resetDone');
     window.setTimeout(() => this.renderSubtitle(), 2000);
   }
 
@@ -1796,17 +1798,17 @@ export class SettingsScreen {
     row.className = 'settings-row action';
 
     const title = document.createElement('span');
-    title.textContent = '日志';
+    title.textContent = t('settings.diagnostics');
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'settings-cycle';
-    button.textContent = '导出';
-    button.title = '下载 JSON（最近两次会话，最多 500KB）';
+    button.textContent = t('settings.export');
+    button.title = t('settings.exportTitle');
     button.addEventListener('click', () => {
-      button.blur(); // 手机上点完别一直保持"按下"态
+      button.blur(); // 手机上点完别一直保持「按下」态（行尾注释里不用英文引号，见 i18n 的字面量守卫）
       const ok = this.actions.onDiagnosticsExport?.() ?? false;
-      this.refreshDiagnostics(ok ? '已导出' : '导出失败');
+      this.refreshDiagnostics(t(ok ? 'settings.exported' : 'settings.exportFailed'));
     });
 
     const status = document.createElement('i');
@@ -1831,8 +1833,8 @@ export class SettingsScreen {
       element.textContent = note ?? '';
       return;
     }
-    const marked = stats.marked ? ' · 已打点' : '';
-    element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB${marked}`;
+    const marked = stats.marked ? t('settings.exportMarked') : '';
+    element.textContent = note ?? tp('settings.exportStats', { events: stats.events, kb: stats.kb, marked });
   }
 
   /** 资源包导入行（.mcpack / .zip） */
@@ -1841,7 +1843,7 @@ export class SettingsScreen {
     const row = document.createElement('div');
     row.className = 'settings-row action';
     const name = document.createElement('span');
-    name.textContent = '资源包';
+    name.textContent = t('settings.resourcePack');
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -1851,13 +1853,13 @@ export class SettingsScreen {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'settings-cycle';
-    button.textContent = '导入';
-    button.title = '选择 .mcpack / .zip 资源包';
+    button.textContent = t('settings.import');
+    button.title = t('settings.importTitle');
     button.addEventListener('click', () => input.click());
 
     const status = document.createElement('i');
     status.className = 'settings-status';
-    status.textContent = '未选择';
+    status.textContent = t('settings.notChosen');
 
     input.addEventListener('change', () => {
       const file = input.files?.[0];
@@ -1961,7 +1963,7 @@ export class SettingsScreen {
    * 改标题与副标题：同一个面板在"游戏中"与"主菜单"两处用，文案要跟着场景变。
    * @param resumeLabel "继续游戏"那行按钮的文字（主菜单里改成"返回"更贴切）
    */
-  setTitle(title: string, subtitle: string, resumeLabel = '继续游戏'): void {
+  setTitle(title: string, subtitle: string, resumeLabel = t('pause.resume')): void {
     this.settingsTitleEl.textContent = title;
     this.subtitleText = subtitle;
     this.resumeButton.textContent = resumeLabel;
@@ -1979,10 +1981,10 @@ export class SettingsScreen {
   private renderSubtitle(): void {
     const touch = isTouchUi();
     this.menuHintEl.textContent = touch
-      ? `点「${this.resumeButton.textContent ?? '继续游戏'}」或系统返回键返回`
+      ? tp('settings.touchBack', { label: this.resumeButton.textContent ?? t('pause.resume') })
       : this.subtitleText;
     // 批次 335：设置页只留一句"改动立即生效"——返回按钮与 Esc 本来就看得见/试得到
-    this.settingsHintEl.textContent = '改动立即生效';
+    this.settingsHintEl.textContent = t('settings.hintApplies');
   }
 
   get isOpen(): boolean {

@@ -13,6 +13,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { t } from '../src/core/i18n/I18n.ts';
 import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
 import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
 import {
@@ -47,7 +48,7 @@ import {
   DEFAULT_SETTINGS,
   SENSITIVITY_MAX,
   SENSITIVITY_MIN,
-  SETTING_GROUP_LABELS,
+  settingGroupLabel,
   SETTING_GROUPS,
   TOUCH_SCALE_MAX,
   TOUCH_SCALE_MIN,
@@ -194,10 +195,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
       SETTING_GROUPS.indexOf('sound') === 3,
     SETTING_GROUPS.join(','),
   );
-  check('分组里有「外观」', SETTING_GROUPS.includes('appearance') && SETTING_GROUP_LABELS.appearance === '外观');
+  check('分组里有「外观」', SETTING_GROUPS.includes('appearance') && settingGroupLabel('appearance') === t('settings.group.appearance'));
   check('不再有「视频」页（视野已并进控制）', !SETTING_GROUPS.includes('graphics' as never));
-  check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
-  equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => SETTING_GROUP_LABELS[group])).size, SETTING_GROUPS.length);
+  check('每个分组都有中文名', SETTING_GROUPS.every((group) => settingGroupLabel(group).length > 0));
+  equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => settingGroupLabel(group))).size, SETTING_GROUPS.length);
 
   // ---- ④ CSS 守卫（少哪一条就是哪一种"半手机半桌面"的怪界面）
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -254,7 +255,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
       );
   check(
     '设置页提示只留一句"改动立即生效"（不再提 Esc / 返回）',
-    settings.includes("this.settingsHintEl.textContent = '改动立即生效';"),
+    settings.includes("this.settingsHintEl.textContent = t('settings.hintApplies');"),
   );
 }
 
@@ -2127,7 +2128,7 @@ console.log('\n[暂停菜单分两层（批次 108）]');
       i18nSource.includes("'pause.exit': '保存并退出到主菜单',"),
   );
   // 设置页有返回；「继续游戏」不该再和滑块挤在同一页上
-  check('设置页有 ‹ 返回', source.includes("'‹ 返回'"));
+  check('设置页有 ‹ 返回', source.includes("t('settings.backArrow')"));
   check('设置页上不再并排放着动作按钮', !source.includes("className = 'settings-buttons'"));
   // Esc / Android 返回键共用"退一层"这一个判据
   check(
@@ -2335,7 +2336,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   );
   // 用户点名："暂停那个界面有继续游戏，可能就不需要关闭按钮了" → ✕ 整个删掉
   check('不再有 ✕ 关闭按钮', !compact.includes('.settings-close') && !source.includes('makeCloseButton'));
-  check('设置页左槽是 ‹ 返回', source.includes("this.makeHeader(this.settingsTitleEl, '‹ 返回'"));
+  check('设置页左槽是 ‹ 返回', source.includes("this.makeHeader(this.settingsTitleEl, t('settings.backArrow')"));
   // 从主菜单打开时"‹ 返回"直接关掉（否则会看到一个标题写着"游戏已暂停"的菜单页）
   check(
     '‹ 返回 的落点随上下文（游戏内回菜单页，主菜单里直接关）',
@@ -2378,7 +2379,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 批次 220（用户）：只保留「导出」——打点与复制对玩家不产出额外信息
   check(
     '诊断日志只留导出（不再有记录问题 / 复制）',
-    source.includes("button.textContent = '导出'") &&
+    source.includes("button.textContent = t('settings.export')") &&
       !source.includes("make('记录问题'") &&
       !source.includes("make('复制'"),
   );
@@ -3356,7 +3357,7 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
   );
   check(
     '披风外观：设置项 + 预览 + 世界模型三处共用',
-    settingsSrc.includes("'cape', '披风'") &&
+    settingsSrc.includes("'cape', t('settings.row.cape')") &&
       settingsSrc.includes('cape: false,') &&
       invSrc.includes('this.hooks.isCapeVisible') &&
       playerSrc.includes('setCape(visible: boolean)') &&
@@ -3446,7 +3447,7 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
       /this\.makeSelect\(\s*fields,\s*'skinTone'/.test(settingsSrc) &&
       /this\.makeSelect\(\s*fields,\s*'shirtColor'/.test(settingsSrc) &&
       /this\.makeSelect\(\s*fields,\s*'pantsColor'/.test(settingsSrc) &&
-      settingsSrc.includes("this.makeToggle(fields, 'cape', '披风')"),
+      settingsSrc.includes("this.makeToggle(fields, 'cape', t('settings.row.cape'))"),
   );
   check(
     '设置页形象只展示原始角色：盔甲与副手一律传空',
