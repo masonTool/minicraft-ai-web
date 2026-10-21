@@ -60,14 +60,29 @@ export interface UiSliderNode extends UiNode {
   onChange: (value: number) => void;
 }
 
+/**
+ * 触摸的两个语义（SPEC §4.1 的 `TOUCH-001/002`）：
+ *  - **短按** = 鼠标左键；
+ *  - **长按**（≥ `LONG_PRESS_MS`）= 鼠标右键（拿一半 / 放一个）。
+ *
+ * 长按在**按住到位的那一刻**就触发（而不是等抬手），这样手指还按着的时候
+ * 就能看见"拿了几个"，与原版基岩版的选数量手感一致。
+ */
+export type SlotButton = 'left' | 'right';
+
+/** 长按判定阈值；与 `TOUCH_SPLIT` 那套"划动开始前必须稳定按住"的时长同量级 */
+export const LONG_PRESS_MS = 420;
+
 export interface UiSlotNode extends UiNode {
   kind: 'slot';
   index: number;
   itemId: number;
   count: number;
   selected: boolean;
-  onTap: () => void;
+  onTap: (button: SlotButton) => void;
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void;
+  /** 只取不放的槽：画成"产物"色（INV-015）；同时界面在点击结算时也会拒绝放置 */
+  takeOnly?: boolean;
 }
 
 export type UiIconKind = 'chat' | 'pause' | 'view';
@@ -156,10 +171,11 @@ export function slot(
   itemId: number,
   count: number,
   selected: boolean,
-  onTap: () => void,
+  onTap: (button: SlotButton) => void,
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void,
+  takeOnly = false,
 ): UiSlotNode {
-  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop };
+  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, takeOnly };
 }
 
 export function icon(
@@ -234,6 +250,22 @@ export class UiLayer {
   private lastRefresh = 0;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private dragPos: { x: number; y: number } | null = null;
+  /**
+   * 长按 → 右键（TOUCH-002/003）。
+   *
+   * 计时器在**按下**时挂起、抬手时清掉。触发条件是"既没移动超过阈值、也还没抬手"——
+   * 所以判据里同时看 `moved`（一旦拖动就再也不会触发长按）与 `fired`（只发一次）。
+   */
+  private longPress: {
+    node: UiSlotNode;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    fired: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null = null;
+  /** 手上拿着的物品（画成跟随手指的幽灵图标，UI-004） */
+  private ghost: { itemId: number; count: number; x: number; y: number } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
@@ -295,14 +327,18 @@ export class UiLayer {
     const x = (clientX / Math.max(1, sw)) * DESIGN_WIDTH;
     const y = (clientY / Math.max(1, sh)) * this.designHeight;
 
-    if (phase === 'move' && this.activeSlider) {
-      this.updateSlider(this.activeSlider, x);
-      return true;
-    }
-    if (phase === 'move' && this.dragSlot) {
-      if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
-      this.dragPos = { x, y };
-      return true;
+    if (phase === 'move') {
+      if (this.longPress) this.trackLongPressMove(x, y);
+      if (this.dragSlot) {
+        if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
+        this.dragPos = { x, y };
+        return true;
+      }
+      if (this.activeSlider) {
+        this.updateSlider(this.activeSlider, x);
+        return true;
+      }
+      return false;
     }
     if (phase === 'up') {
       if (this.activeButton) {
@@ -316,13 +352,18 @@ export class UiLayer {
       }
       if (this.dragSlot) {
         const drag = this.dragSlot;
+        const longPress = this.longPress;
         this.dragSlot = null;
         this.dragPos = null;
+        this.clearLongPress();
+        // 长按已经按"右键"结算过了：抬手不再补一次左键（否则拿一半变成"又放回去"）
+        if (longPress?.fired) return true;
         const target = this.findSlot(x, y);
         if (drag.moved && target && target !== drag.node) drag.node.onDrop?.(drag.node, target);
-        else if (!drag.moved) drag.node.onTap();
+        else if (!drag.moved) drag.node.onTap('left');
         return true;
       }
+      this.clearLongPress();
       return false;
     }
     if (phase !== 'down') return false;
@@ -331,8 +372,10 @@ export class UiLayer {
     if (downSlot) {
       this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false };
       this.dragPos = null;
+      this.startLongPress(downSlot, x, y);
       return true;
     }
+    this.clearLongPress();
 
     for (let i = this.icons.length - 1; i >= 0; i--) {
       const item = this.icons[i]!;
@@ -365,6 +408,66 @@ export class UiLayer {
   /** 兼容旧调用：等价于 down。 */
   handleTap(clientX: number, clientY: number, sw: number, sh: number): boolean {
     return this.handlePointer('down', clientX, clientY, sw, sh);
+  }
+
+  /**
+   * 挂起长按计时器。
+   *
+   * ⚠️ 只对**有物品**的格子挂：空格子长按没有语义（原版也是"长按有物品的格子"），
+   * 而且空格子上的长按会让"按住拖动换位"多等 420ms 才有反应，手感很差。
+   */
+  private startLongPress(node: UiSlotNode, x: number, y: number): void {
+    this.clearLongPress();
+    if (node.itemId <= 0 || node.takeOnly) return;
+    const entry: NonNullable<UiLayer['longPress']> = {
+      node,
+      startX: x,
+      startY: y,
+      moved: false,
+      fired: false,
+      timer: null,
+    };
+    entry.timer = setTimeout(() => {
+      // 触发前再核一遍：手指没动、也还没抬手
+      if (this.longPress !== entry || entry.moved) return;
+      entry.fired = true;
+      if (entry.timer) clearTimeout(entry.timer);
+      entry.timer = null;
+      entry.node.onTap('right');
+    }, LONG_PRESS_MS);
+    this.longPress = entry;
+  }
+
+  private trackLongPressMove(x: number, y: number): void {
+    const entry = this.longPress;
+    if (!entry) return;
+    if (Math.hypot(x - entry.startX, y - entry.startY) > 8) entry.moved = true;
+  }
+
+  private clearLongPress(): void {
+    if (this.longPress?.timer) clearTimeout(this.longPress.timer);
+    this.longPress = null;
+  }
+
+  /** 手上物品的幽灵图标（UI-004）；`null` = 手上没东西 */
+  setGhost(itemId: number, count: number): void {
+    if (itemId <= 0) {
+      if (this.ghost) {
+        this.ghost = null;
+        this.refresh(true);
+      }
+      return;
+    }
+    this.ghost = { itemId, count, x: this.ghost?.x ?? 512, y: this.ghost?.y ?? this.designHeight / 2 };
+    this.refresh(true);
+  }
+
+  /** 手指/鼠标移动时更新幽灵图标位置（只重绘，不改状态） */
+  moveGhost(clientX: number, clientY: number, sw: number, sh: number): void {
+    if (!this.ghost) return;
+    this.ghost.x = (clientX / Math.max(1, sw)) * DESIGN_WIDTH;
+    this.ghost.y = (clientY / Math.max(1, sh)) * this.designHeight;
+    this.refresh();
   }
 
   private updateSlider(node: UiSliderNode, x: number): void {
@@ -419,18 +522,35 @@ export class UiLayer {
     this.slots = [];
     this.icons = [];
     if (this.root) this.drawNode(this.root, ctx);
+    // 手上物品（UI-004）：先画拖拽幽灵（拖拽分配那一路），再画光标幽灵（点击拿起那一路）
     if (this.dragSlot?.moved && this.dragPos && this.dragSlot.node.itemId > 0) {
-      const size = 42;
-      ctx.globalAlpha = 0.85;
-      this.drawIcon?.(ctx, this.dragSlot.node.itemId, this.dragPos.x - size / 2, this.dragPos.y - size / 2, size);
-      ctx.globalAlpha = 1;
+      this.drawGhostIcon(ctx, this.dragSlot.node.itemId, this.dragSlot.node.count, this.dragPos.x, this.dragPos.y);
+    }
+    if (this.ghost) {
+      this.drawGhostIcon(ctx, this.ghost.itemId, this.ghost.count, this.ghost.x, this.ghost.y);
+    }
+    this.texture.needsUpdate = true;
+  }
+
+  /** 跟随手指的半透明图标 + 数量（拖拽与光标共用一套画法） */
+  private drawGhostIcon(
+    ctx: CanvasRenderingContext2D,
+    itemId: number,
+    count: number,
+    cx: number,
+    cy: number,
+  ): void {
+    const size = 42;
+    ctx.globalAlpha = 0.85;
+    this.drawIcon?.(ctx, itemId, cx - size / 2, cy - size / 2, size);
+    ctx.globalAlpha = 1;
+    if (count > 0) {
       ctx.fillStyle = '#ffffff';
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(String(this.dragSlot.node.count), this.dragPos.x, this.dragPos.y + size / 2);
+      ctx.fillText(String(count), cx, cy + size / 2);
     }
-    this.texture.needsUpdate = true;
   }
 
   private drawNode(node: UiElement, ctx: CanvasRenderingContext2D): void {
@@ -551,8 +671,8 @@ export class UiLayer {
       roundedRect(ctx, node.x, node.y, node.w, node.h, 6);
       ctx.fill();
       const dragOver = this.dragSlot?.moved && this.dragPos && this.dragPos.x >= node.x && this.dragPos.x <= node.x + node.w && this.dragPos.y >= node.y && this.dragPos.y <= node.y + node.h;
-      ctx.strokeStyle = dragOver ? '#7bd88f' : node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
-      ctx.lineWidth = dragOver || node.selected ? 3 : 1.5;
+      ctx.strokeStyle = dragOver ? '#7bd88f' : node.takeOnly ? '#e0c06a' : node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
+      ctx.lineWidth = dragOver || node.selected || node.takeOnly ? 3 : 1.5;
       roundedRect(ctx, node.x + 1, node.y + 1, node.w - 2, node.h - 2, 5);
       ctx.stroke();
       if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x, node.y, node.w);

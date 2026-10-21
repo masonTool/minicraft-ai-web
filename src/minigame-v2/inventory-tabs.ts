@@ -4,9 +4,24 @@ import type { Inventory } from '../core/container/Inventory.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
 import { recipeFits } from './recipe-book.ts';
-import { button, slot, text, type UiElement } from './ui-kit/index.ts';
+import { button, slot, text, type SlotButton, type UiElement } from './ui-kit/index.ts';
 
-export interface CreativeTabContext {
+/**
+ * 面板里每个格子的"身份"。
+ *
+ * ⚠️ 这已经不是"一个下标"了：玩家背包的 9 号与合成格的 9 号是两格（INV-007），
+ * 所以回调统一带上 `kind`，由组合根去解析成 `SlotBinding` 再交给 `applyClick`。
+ */
+export type PanelSlotKind = 'inventory' | 'crafting' | 'creative';
+
+export interface PanelSlotHandlers {
+  /** 短按 = left / 长按 = right */
+  onSlot(kind: PanelSlotKind, index: number, button: SlotButton): void;
+  /** 跨格拖拽（从哪一格拖到哪一格） */
+  onSlotDrop(from: { kind: PanelSlotKind; index: number }, to: { kind: PanelSlotKind; index: number }): void;
+}
+
+export interface CreativeTabContext extends PanelSlotHandlers {
   gridX: number;
   gridY: number;
   panelY: number;
@@ -23,6 +38,14 @@ export interface CreativeTabContext {
   setPage(page: number): void;
   refresh(): void;
   onSearch(): void;
+  /**
+   * 把"这一页实际画出来的物品"回写给组合根。
+   *
+   * ⚠️ 必须回写：点击索引是**页内下标**，如果组合根自己再筛一遍（分类/搜索/分页
+   * 三处任何一处算法不同），点第 3 格会拿走第 4 格的方块——这种错在真机上
+   * 只会表现为"拿错了东西"，查起来非常费劲。
+   */
+  setPageList(list: readonly number[]): void;
 }
 
 export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
@@ -38,6 +61,7 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
   const page = Math.max(0, Math.min(ctx.page, pages - 1));
   const startIndex = page * pageSize;
   const list = filtered.slice(startIndex, startIndex + pageSize);
+  ctx.setPageList(list);
   for (let index = 0; index < CREATIVE_CATEGORIES.length; index++) {
     const category = CREATIVE_CATEGORIES[index]!;
     elements.push(
@@ -72,10 +96,16 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
   for (let i = 0; i < list.length; i++) {
     const id = list[i]!;
     elements.push(
-      slot(ctx.gridX + (i % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(i / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, id, 0, false, () => {
-        ctx.inventory.add(id, 64);
-        ctx.refresh();
-      }),
+      slot(
+        ctx.gridX + (i % 9) * (ctx.slotSize + ctx.gap),
+        ctx.gridY + Math.floor(i / 9) * (ctx.slotSize + ctx.gap),
+        ctx.slotSize,
+        i,
+        id,
+        0,
+        false,
+        (button) => ctx.onSlot('creative', i, button),
+      ),
     );
   }
   const footerY = ctx.gridY + rows * (ctx.slotSize + ctx.gap) + 10;
@@ -155,26 +185,39 @@ export function buildRecipeTab(ctx: RecipeTabContext): UiElement[] {
   return elements;
 }
 
-export interface ItemTabContext {
+export interface ItemTabContext extends PanelSlotHandlers {
   gridX: number;
   gridY: number;
   slotSize: number;
   gap: number;
   inventory: Inventory;
   selectedSlot: number;
-  onSelect(slot: number): void;
-  onQuickMove(slot: number): void;
-  onDrop(from: number, to: number): void;
-  refresh(): void;
 }
 
+/**
+ * 物品页：27 主背包 + 独立 9 格快捷栏。
+ *
+ * ⚠️ 快捷栏那 9 格**点击不切选中**——选中（`selectedSlot`）是"手上拿哪一格"，
+ * 属于 HUD 的语义；背包界面里点它应当和点主背包一样地搬东西（原版如此）。
+ */
 export function buildItemTab(ctx: ItemTabContext): UiElement[] {
   const elements: UiElement[] = [];
+  const drop = (to: number) => (from: { index: number }) => ctx.onSlotDrop({ kind: 'inventory', index: from.index }, { kind: 'inventory', index: to });
   for (let j = 0; j < 27; j++) {
     const i = j + 9;
     const stack = ctx.inventory.get(i);
     elements.push(
-      slot(ctx.gridX + (j % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(j / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.onQuickMove(i), (from, to) => ctx.onDrop(from.index, to.index)),
+      slot(
+        ctx.gridX + (j % 9) * (ctx.slotSize + ctx.gap),
+        ctx.gridY + Math.floor(j / 9) * (ctx.slotSize + ctx.gap),
+        ctx.slotSize,
+        i,
+        stack?.id ?? 0,
+        stack?.count ?? 0,
+        false,
+        (button) => ctx.onSlot('inventory', i, button),
+        drop(i),
+      ),
     );
   }
   const hotbarY = ctx.gridY + 3 * (ctx.slotSize + ctx.gap) + 14;
@@ -182,13 +225,23 @@ export function buildItemTab(ctx: ItemTabContext): UiElement[] {
   for (let i = 0; i < 9; i++) {
     const stack = ctx.inventory.get(i);
     elements.push(
-      slot(ctx.gridX + i * (ctx.slotSize + ctx.gap), hotbarY, ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === ctx.selectedSlot, () => ctx.onSelect(i), (from, to) => ctx.onDrop(from.index, to.index)),
+      slot(
+        ctx.gridX + i * (ctx.slotSize + ctx.gap),
+        hotbarY,
+        ctx.slotSize,
+        i,
+        stack?.id ?? 0,
+        stack?.count ?? 0,
+        i === ctx.selectedSlot,
+        (button) => ctx.onSlot('inventory', i, button),
+        drop(i),
+      ),
     );
   }
   return elements;
 }
 
-export interface CraftingPanelContext {
+export interface CraftingPanelContext extends PanelSlotHandlers {
   craftX: number;
   craftY: number;
   craftSlot: number;
@@ -199,7 +252,6 @@ export interface CraftingPanelContext {
   inventory: Inventory;
   fixedSize?: boolean;
   onToggleSize(): void;
-  onDrop(from: number, to: number): void;
   onCraft(id: number, count: number): void;
   refresh(): void;
 }
@@ -224,32 +276,37 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
         stack?.id ?? 0,
         stack?.count ?? 0,
         false,
-        () => {
-          const current = ctx.crafting.get(i);
-          if (!current) return;
-          const remaining = ctx.inventory.add(current.id, current.count);
-          ctx.crafting.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
-          ctx.refresh();
-        },
-        (from, to) => ctx.onDrop(from.index, to.index),
+        (button) => ctx.onSlot('crafting', i, button),
+        (from) => ctx.onSlotDrop({ kind: 'crafting', index: from.index - 100 }, { kind: 'crafting', index: i }),
       ),
     );
   }
   const result = ctx.crafting.result;
   elements.push(text(ctx.outputX, ctx.craftY + 2, 100, 24, '产物', { fontSize: 13, color: 'rgba(210,230,240,0.7)' }));
+  // 产物槽 **只取不放**（INV-015）：`takeOnly` 既管着"点它只取产物"，也管着画成金色的边
   elements.push(
-    slot(ctx.outputX, ctx.craftY + 26, ctx.craftSlot, 200, result?.id ?? 0, result?.count ?? 0, false, () => {
-      const current = ctx.crafting.result;
-      if (!current) return;
-      ctx.inventory.add(current.id, current.count);
-      ctx.crafting.takeResult();
-      ctx.onCraft(current.id, current.count);
-      ctx.refresh();
-    }),
+    slot(
+      ctx.outputX,
+      ctx.craftY + 26,
+      ctx.craftSlot,
+      200,
+      result?.id ?? 0,
+      result?.count ?? 0,
+      false,
+      () => {
+        const current = ctx.crafting.result;
+        if (!current) return;
+        ctx.inventory.add(current.id, current.count);
+        ctx.crafting.takeResult();
+        ctx.onCraft(current.id, current.count);
+        ctx.refresh();
+      },
+      undefined,
+      true,
+    ),
   );
   return elements;
 }
-
 
 export interface InventoryChromeContext {
   panelX: number;
@@ -287,10 +344,10 @@ export interface EquipmentRowContext {
   slotSize: number;
   gap: number;
   inventory: Inventory;
-  onTap(slotIndex: number): void;
+  onTap(slotIndex: number, button: SlotButton): void;
 }
 
-/** 护甲 36-39 + 副手 40。 */
+/** 护甲 36-39 + 副手 40。两者都是**单件槽**（护甲槽只吃对应部位、副手只放一件）。 */
 export function buildEquipmentRow(ctx: EquipmentRowContext): UiElement[] {
   const elements: UiElement[] = [];
   elements.push(text(ctx.x, ctx.y - 20, 180, 18, '护甲', { fontSize: 12, color: 'rgba(200,220,235,0.7)' }));
@@ -299,12 +356,12 @@ export function buildEquipmentRow(ctx: EquipmentRowContext): UiElement[] {
     const index = 36 + i;
     const stack = ctx.inventory.get(index);
     elements.push(
-      slot(ctx.x + i * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, index, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.onTap(index)),
+      slot(ctx.x + i * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, index, stack?.id ?? 0, stack?.count ?? 0, false, (button) => ctx.onTap(index, button)),
     );
   }
   const offhand = ctx.inventory.get(40);
   elements.push(
-    slot(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, 40, offhand?.id ?? 0, offhand?.count ?? 0, false, () => ctx.onTap(40)),
+    slot(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, 40, offhand?.id ?? 0, offhand?.count ?? 0, false, (button) => ctx.onTap(40, button)),
   );
   return elements;
 }

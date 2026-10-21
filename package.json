@@ -201,7 +201,8 @@
     "diag:perf": "esbuild tools/diag-perf.ts --bundle --platform=node --format=esm --outfile=.tmp/diag-perf.mjs --log-level=error && node .tmp/diag-perf.mjs",
     "test:mode": "esbuild tools/mode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mode-test.mjs --log-level=error && node .tmp/mode-test.mjs",
     "test:buildinfo": "esbuild tools/buildinfo-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildinfo-test.mjs --log-level=error && node .tmp/buildinfo-test.mjs",
-    "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs"
+    "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs",
+    "test:v2-inventory": "esbuild tools/v2-inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-inventory-test.mjs --log-level=error && node .tmp/v2-inventory-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

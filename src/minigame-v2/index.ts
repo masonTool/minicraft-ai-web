@@ -26,16 +26,22 @@ import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
 import { buildCraftingPanel, buildCreativeTab, buildEquipmentRow, buildInventoryChrome, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
 import { InventoryCursor } from './inventory-state.ts';
+import {
+  canPlaceItem,
+  reclaimHeld,
+  slotResolver,
+  type SlotBinding,
+  type SlotKind,
+} from './inventory-click.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type UiElement, type UiRingNode } from './ui-kit/index.ts';
-import { Inventory } from '../core/container/Inventory.ts';
+import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type SlotButton, type UiElement, type UiRingNode } from './ui-kit/index.ts';
+import { Inventory, ARMOR_START, TOTAL_SLOTS, sameStack, stackExtras, type SlotSource } from '../core/container/Inventory.ts';
 import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { armorSlotFor } from '../core/container/QuickMove.ts';
-import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, categoryOf, foodInfoById, maxStackOf, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { BED_IDS, Block, blockDef } from '../core/registry/blocks.ts';
@@ -480,56 +486,165 @@ const showSettings = (): void => {
   );
 };
 
-const handleDrop = (fromIndex: number, toIndex: number): void => {
-  if (fromIndex < 100 && toIndex < 100) {
-    swapSlots(fromIndex, toIndex);
-    return;
+/** 一格里能查到身份的东西（背包 / 合成格 / 创造栏） */
+const bindingFor = (kind: SlotKind, index: number): SlotBinding | null => {
+  if (kind === 'inventory') {
+    if (index < 0 || index >= TOTAL_SLOTS) return null;
+    return {
+      kind: 'inventory',
+      index,
+      source: inventory,
+      // 护甲 36~39 与副手 40 是**单件槽**：护甲槽只吃对应部位（`canPlaceItem` 再判一次）
+      singleItem: index >= ARMOR_START,
+    };
   }
-  const craftEnd = 100 + crafting.size * crafting.size;
-  if (fromIndex < 100 && toIndex >= 100 && toIndex < craftEnd) {
-    const stack = inventory.get(fromIndex);
-    if (!stack) return;
-    const target = crafting.get(toIndex - 100);
-    if (target) {
-      if (target.id === stack.id) {
-        target.count += stack.count;
-        crafting.set(toIndex - 100, target);
-        inventory.set(fromIndex, null);
-      } else {
-        inventory.set(fromIndex, target);
-        crafting.set(toIndex - 100, stack);
-      }
-    } else {
-      crafting.set(toIndex - 100, stack);
-      inventory.set(fromIndex, null);
-    }
-    showInventory();
-    return;
+  if (kind === 'crafting') {
+    if (index < 0 || index >= crafting.size * crafting.size) return null;
+    return { kind: 'crafting', index, source: crafting };
   }
-  if (fromIndex >= 100 && fromIndex < craftEnd && toIndex >= 100 && toIndex < craftEnd) {
-    const a = crafting.get(fromIndex - 100);
-    const b = crafting.get(toIndex - 100);
-    crafting.set(fromIndex - 100, b);
-    crafting.set(toIndex - 100, a);
-    showInventory();
-    return;
+  if (kind === 'creative') {
+    const id = creativeList()[index];
+    if (id === undefined) return null;
+    return { kind: 'creative', index, source: creativeSource, takeOnly: false };
   }
-  if (fromIndex >= 100 && fromIndex < craftEnd && toIndex < 100) {
-    const stack = crafting.get(fromIndex - 100);
-    if (!stack) return;
-    const remaining = inventory.add(stack.id, stack.count);
-    crafting.set(fromIndex - 100, remaining > 0 ? { id: stack.id, count: remaining } : null);
-    showInventory();
-  }
+  return null;
 };
 
-const swapSlots = (fromIndex: number, toIndex: number): void => {
-  const from = inventory.get(fromIndex);
-  const to = inventory.get(toIndex);
-  inventory.set(fromIndex, to);
-  inventory.set(toIndex, from);
-  selectedSlot = toIndex;
+/**
+ * 创造栏的"格子数据源"：每格永远有货（`MAX_STACK` 个），**读得到、放不进去**。
+ * 这样它既能被 `applyClick` 当成普通来源（点它 = 拿一组到手上），又不会被写脏。
+ */
+const creativeSource: SlotSource = {
+  get: (index) => {
+    const id = creativeList()[index];
+    return id === undefined ? null : { id, count: 64 };
+  },
+  set: () => {
+    /* 创造栏是"无限货架"：放下不落库，物品因此凭空消失——那正是创造模式要的 */
+  },
+};
+
+/** 当前筛选/分页之后的创造栏列表（点击索引与渲染顺序必须一致，否则会拿走别的方块） */
+let creativePageCache: readonly number[] = [];
+const creativeList = (): readonly number[] => creativePageCache;
+
+/** 由 `buildCreativeTab` 在渲染时回写，保证"看到的第 i 格"就是"拿到的第 i 格" */
+const setCreativePage = (list: readonly number[]): void => {
+  creativePageCache = list;
+};
+
+/**
+ * 点击一格的**唯一入口**：短按 = 左键、长按 = 右键，规则全在 `applyClick`。
+ *
+ * 这一层只做三件事：解析出绑定 → 结算 → 重画（含提示语与光标幽灵）。
+ */
+const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
+  // 创造栏是"取货"不是"摆放"：点一下就照当前选中的快捷栏拿一组，不参与光标状态机
+  if (kind === 'creative') {
+    const id = creativeList()[index];
+    if (id === undefined) return;
+    const target = button === 'right' ? 1 : Math.min(maxStackOf(id), 64);
+    cursor.restore({
+      held: { id, count: target },
+      fromCreative: true,
+      origin: null,
+    });
+    inventoryHint = `拿起 ${itemLabel(id)} x${target}（创造）`;
+    showInventory();
+    return;
+  }
+
+  const binding = bindingFor(kind, index);
+  if (!binding) return;
+  const result = cursor.click(binding, button);
+  if (result.hint) inventoryHint = result.hint;
+  else if (result.changed) inventoryHint = '';
+  syncGhost();
   showInventory();
+};
+
+/** 手上物品的幽灵图标跟着光标状态走（UI-004） */
+const syncGhost = (): void => {
+  const held = cursor.held;
+  ui.setGhost(held?.id ?? 0, held?.count ?? 0);
+};
+
+/** 拖拽换格：只在**同类数据源**之间做，跨源（背包 ⇄ 合成格）各走各自的搬运规则 */
+const dropSlot = (from: { kind: SlotKind; index: number }, to: { kind: SlotKind; index: number }): void => {
+  if (from.kind === 'creative' || to.kind === 'creative') return;
+  const source = bindingFor(from.kind, from.index);
+  const target = bindingFor(to.kind, to.index);
+  if (!source || !target) return;
+  const stack = source.source.get(source.index);
+  if (!stack) return;
+  if (!canPlaceItem(target, stack.id)) {
+    inventoryHint = target.takeOnly ? '产物槽只能取，不能放' : '这件物品不能放进这一格';
+    showInventory();
+    return;
+  }
+  const existing = target.source.get(target.index);
+  if (!existing) {
+    // 空目标：整叠搬过去（单件槽只吃 1 个，剩下的留在原处）
+    const place = target.singleItem ? 1 : stack.count;
+    target.source.set(target.index, { id: stack.id, count: place, ...stackExtras(stack) });
+    source.source.set(source.index, stack.count > place ? { id: stack.id, count: stack.count - place, ...stackExtras(stack) } : null);
+  } else if (sameStack(existing, stack)) {
+    // 同类：补满目标，余数留在原处
+    const limit = target.singleItem ? 1 : maxStackOf(stack.id);
+    const room = limit - existing.count;
+    const moved = Math.min(room, stack.count);
+    if (moved > 0) {
+      target.source.set(target.index, { ...existing, count: existing.count + moved });
+      source.source.set(source.index, stack.count > moved ? { id: stack.id, count: stack.count - moved, ...stackExtras(stack) } : null);
+    }
+  } else {
+    // 异类：交换（单件槽接受一件，对方那叠原样回到源格）
+    const take = target.singleItem ? 1 : Math.min(maxStackOf(stack.id), stack.count);
+    target.source.set(target.index, { id: stack.id, count: take, ...stackExtras(stack) });
+    source.source.set(
+      source.index,
+      stack.count > take ? { id: stack.id, count: stack.count - take, ...stackExtras(stack) } : null,
+    );
+    if (existing) {
+      // 交换出来的旧物品塞回源格；源格还占着就塞进背包（绝不丢失）
+      if (source.source.get(source.index) === null) source.source.set(source.index, existing);
+      else inventory.addStack(existing);
+    }
+  }
+  inventoryHint = '';
+  showInventory();
+};
+
+/**
+ * 关闭背包：光标上的东西回背包（CLOSE-002）、合成格材料回背包（CLOSE-001）。
+ *
+ * 顺序不能反：先把光标处理掉再给合成格腾位置，否则"背包满了但合成格还占着料"
+ * 会让材料无处可去。
+ */
+const closeInventory = (): void => {
+  const reclaimed = reclaimHeld(cursor.snapshot(), inventory, slotResolver(bindingsOfInventory()));
+  cursor.restore(reclaimed.state);
+  crafting.drainTo(inventory);
+  crafting = new CraftingGrid(2);
+  craftingTableOpen = false;
+  inventoryOpen = false;
+  paused = false;
+  ui.setGhost(0, 0);
+  showHud();
+};
+
+/** 把当前面板里所有可点的格子列出来（关闭回收时用来"按 ref 找回来") */
+const bindingsOfInventory = (): SlotBinding[] => {
+  const list: SlotBinding[] = [];
+  for (let i = 0; i < TOTAL_SLOTS; i++) {
+    const binding = bindingFor('inventory', i);
+    if (binding) list.push(binding);
+  }
+  for (let i = 0; i < crafting.size * crafting.size; i++) {
+    const binding = bindingFor('crafting', i);
+    if (binding) list.push(binding);
+  }
+  return list;
 };
 
 const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
@@ -542,71 +657,6 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   crafting = result.crafting;
   inventoryHint = result.hint;
   inventoryTab = 'items';
-  showInventory();
-};
-
-const tapEquipment = (slotIndex: number): void => {
-  cursor.clear();
-  const current = inventory.get(slotIndex);
-  if (current) {
-    const remaining = inventory.add(current.id, current.count);
-    inventory.set(slotIndex, remaining > 0 ? { id: current.id, count: remaining } : null);
-    inventoryHint = '已放回背包';
-    showInventory();
-    return;
-  }
-  const held = inventory.get(selectedSlot);
-  if (!held) {
-    inventoryHint = '先在快捷栏选中一件物品';
-    showInventory();
-    return;
-  }
-  if (slotIndex === 40) {
-    inventory.set(40, held);
-    inventory.set(selectedSlot, null);
-    inventoryHint = '已放入副手';
-    showInventory();
-    return;
-  }
-  if (armorSlotFor(held.id) !== slotIndex) {
-    inventoryHint = '这件物品不能放入该护甲槽';
-    showInventory();
-    return;
-  }
-  inventory.set(slotIndex, { id: held.id, count: 1 });
-  inventory.set(selectedSlot, held.count > 1 ? { id: held.id, count: held.count - 1 } : null);
-  inventoryHint = '已装备';
-  showInventory();
-};
-
-const quickMoveToCraft = (slotIndex: number): void => {
-  const stack = inventory.get(slotIndex);
-  if (!stack) {
-    inventoryHint = '这一格是空的';
-    showInventory();
-    return;
-  }
-  let target = -1;
-  for (let i = 0; i < crafting.size * crafting.size; i++) {
-    const current = crafting.get(i);
-    if (!current) {
-      target = i;
-      break;
-    }
-    if (current.id === stack.id && current.count < 64) {
-      target = i;
-      break;
-    }
-  }
-  if (target < 0) {
-    inventoryHint = '合成格已满，点产物取出或先收回材料';
-    showInventory();
-    return;
-  }
-  const current = crafting.get(target);
-  crafting.set(target, { id: stack.id, count: (current?.count ?? 0) + 1 });
-  inventory.set(slotIndex, stack.count > 1 ? { id: stack.id, count: stack.count - 1 } : null);
-  inventoryHint = '已放入合成格，点右侧产物取出';
   showInventory();
 };
 
@@ -626,6 +676,13 @@ const showInventory = (): void => {
   const craftX = gridX + 9 * (slotSize + gap) + 10;
   const craftY = gridY;
   const outputX = craftX + 3 * (craftSlot + craftGap) + 12;
+  const slotHandlers = {
+    onSlot: (kind: 'inventory' | 'crafting' | 'creative', index: number, button: SlotButton) => clickSlot(kind, index, button),
+    onSlotDrop: (
+      from: { kind: 'inventory' | 'crafting' | 'creative'; index: number },
+      to: { kind: 'inventory' | 'crafting' | 'creative'; index: number },
+    ) => dropSlot(from, to),
+  };
   const elements: UiElement[] = buildInventoryChrome({
     panelX,
     panelY,
@@ -638,14 +695,8 @@ const showInventory = (): void => {
       if (tab === 'recipes') recipePage = 0;
       showInventory();
     },
-    onClose: () => {
-      crafting.drainTo(inventory);
-      crafting = new CraftingGrid(2);
-      craftingTableOpen = false;
-      inventoryOpen = false;
-      paused = false;
-      showHud();
-    },
+    // 关闭走统一出口：光标上的东西与合成格里的材料都要还回来（CLOSE-001/002）
+    onClose: () => closeInventory(),
   });
   if (inventoryTab === 'items') {
     elements.push(...buildItemTab({
@@ -655,13 +706,7 @@ const showInventory = (): void => {
       gap,
       inventory,
       selectedSlot,
-      onSelect: (slotIndex) => {
-        selectedSlot = slotIndex;
-        showInventory();
-      },
-      onQuickMove: (slotIndex) => quickMoveToCraft(slotIndex),
-      onDrop: (from, to) => handleDrop(from, to),
-      refresh: () => showInventory(),
+      ...slotHandlers,
     }));
     elements.push(...buildEquipmentRow({
       x: gridX,
@@ -669,7 +714,7 @@ const showInventory = (): void => {
       slotSize: 36,
       gap: 6,
       inventory,
-      onTap: (slotIndex) => tapEquipment(slotIndex),
+      onTap: (slotIndex, button) => clickSlot('inventory', slotIndex, button),
     }));
   } else if (inventoryTab === 'creative') {
     elements.push(...buildCreativeTab({
@@ -693,6 +738,7 @@ const showInventory = (): void => {
       setPage: (value) => {
         creativePage = value;
       },
+      setPageList: (list) => setCreativePage(list),
       refresh: () => showInventory(),
       onSearch: () => {
         void askText(creativeQuery, 20).then((value) => {
@@ -703,6 +749,7 @@ const showInventory = (): void => {
           }
         });
       },
+      ...slotHandlers,
     }));
   } else {
     elements.push(...buildRecipeTab({
@@ -747,24 +794,39 @@ const showInventory = (): void => {
     fixedSize: craftingTableOpen,
     onToggleSize: () => {
       if (craftingTableOpen) return;
+      // 换尺寸前先把材料收回背包（否则 3×3 的 9 格会被 2×2 覆掉 4 格，剩下 5 格凭空消失）
+      const reclaimed = reclaimHeld(cursor.snapshot(), inventory, slotResolver(bindingsOfInventory()));
+      cursor.restore(reclaimed.state);
       crafting.drainTo(inventory);
       crafting = new CraftingGrid(crafting.size === 2 ? 3 : 2);
+      syncGhost();
       showInventory();
     },
-    onDrop: (from, to) => handleDrop(from, to),
     onCraft: (id, count) => {
       inventoryHint = `合成完成：${itemLabel(id)} x${count}`;
     },
     refresh: () => showInventory(),
+    ...slotHandlers,
   }));
 
-  const hint = inventoryHint || (inventoryTab === 'items' ? '点背包物品放入合成格 · 点产物取出 · 拖拽可交换' : '');
+  const hint = inventoryHint
+    || (inventoryTab === 'items'
+      ? `短按拿整叠 / 长按拿一半 ${cursor.held ? `· 手上 ${itemLabel(cursor.held.id)} x${cursor.held.count}` : ''}`
+      : '');
   if (hint) {
-    elements.push(text(gridX, panelY + panelH - 32, 560, 26, hint, { fontSize: 14, color: inventoryHint ? 'rgba(255,190,120,0.9)' : 'rgba(190,220,235,0.75)' }));
+    elements.push(text(gridX, panelY + panelH - 32, 560, 26, hint, {
+      fontSize: 14,
+      color: inventoryHint ? 'rgba(255,190,120,0.9)' : 'rgba(190,220,235,0.75)',
+    }));
   }
   ui.setRoot(box(0, 0, 1024, uiHeight, [
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
-    box(panelX, panelY, panelW, panelH, elements, { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
+    box(panelX, panelY, panelW, panelH, elements, {
+      background: 'rgba(16, 22, 28, 0.97)',
+      border: 'rgba(170, 205, 230, 0.45)',
+      borderWidth: 2,
+      radius: 12,
+    }),
   ]));
 };
 
@@ -1863,6 +1925,8 @@ platform.input.onPointer('down', (event) => {
 });
 
 platform.input.onPointer('move', (event) => {
+  // 光标幽灵跟手（UI-004）：只要手上拿着东西就跟着走，与"有没有拖拽"无关
+  ui.moveGhost(event.clientX, event.clientY, platform.system.width, platform.system.height);
   if (ui.handlePointer('move', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
   if (event.pointerId === movePointer) {
     input.strafe = Math.max(-1, Math.min(1, (event.clientX - moveX) / 56));
@@ -2005,6 +2069,8 @@ const frame = (): void => {
       crafting: Array.from({ length: crafting.size * crafting.size }, (_, i) => crafting.get(i)?.id ?? 0),
       craftingSize: crafting.size,
       cursorHeld: cursor.held?.id ?? 0,
+      cursorCount: cursor.held?.count ?? 0,
+      cursorFromCreative: cursor.fromCreative,
       inventorySlots: Array.from({ length: 41 }, (_, i) => inventory.get(i)?.id ?? 0),
       craftingTable: craftingTableOpen,
       craftResult: crafting.result?.id ?? 0,
@@ -2325,6 +2391,46 @@ if (wxTestApi && isDesktopRuntime) {
       showHud();
       return { slotIndex, id, count, stack: inventory.get(slotIndex) };
     },
+    /**
+     * Phase 2 验收钩子：直接走"点一格"那条唯一入口（短按/长按都由 `button` 指定）。
+     * 不绕过 `applyClick`，所以验收的是玩家真实走的代码路径。
+     */
+    tapSlot: (kind: 'inventory' | 'crafting' | 'creative' = 'inventory', index = 9, button: SlotButton = 'left') => {
+      clickSlot(kind, index, button);
+      return { kind, index, button, held: cursor.held ? { id: cursor.held.id, count: cursor.held.count } : null };
+    },
+    /** Phase 2 验收钩子：关闭背包（含光标回收） */
+    closeInventoryForTest: () => {
+      closeInventory();
+      return { open: inventoryOpen, held: cursor.held?.id ?? 0 };
+    },
+    /** Phase 2 验收钩子：把某几格清空（验收一个用例一条，互不影响） */
+    clearSlot: (index = 9) => {
+      inventory.set(index, null);
+      showHud();
+      return { index };
+    },
+    /**
+     * Phase 2 验收钩子：**连光标一起**清空。
+     *
+     * ⚠️ 只清格子不清光标是个陷阱：上一个用例手上还拿着 16 个，
+     * 下一个用例"右键拿一半"就会变成"放 1 个"（因为手不空了），
+     * 断言于是量到的是另一套语义——这套验收里真踩过。
+     */
+    resetInventoryForTest: () => {
+      for (let i = 0; i < TOTAL_SLOTS; i++) inventory.set(i, null);
+      cursor.clear();
+      selectedSlot = 0;
+      ui.setGhost(0, 0);
+      showHud();
+      return { held: cursor.held?.id ?? 0 };
+    },
+    /** 光标上那一叠（`null` = 空手） */
+    snapshot: () => (cursor.held ? { id: cursor.held.id, count: cursor.held.count } : null),
+    /** 某格的数量（0 = 空） */
+    slotAt: (index = 9) => inventory.get(index)?.count ?? 0,
+    /** 某物品在整个背包里的总数（验"关闭回收不丢东西"用） */
+    totalOf: (id = 1) => inventory.countOf(id),
     fillChestFirst: (id = 1, count = 2) => {
       containers.fillFirst(id, count);
       return { id, count };

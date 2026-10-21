@@ -3,12 +3,15 @@
  *
  * 前置：helper 预览运行的是 minigame-v2。
  *   npm run test:minigame:v2-flow
+ *
+ * helper 的预览端口**每次启动都可能变**（`run_game` 会给新端口），
+ * 所以地址走环境变量：`V2_URL=http://localhost:50856/ npm run test:minigame:v2-flow`。
  */
 
 const fs = require('node:fs');
 const { chromium } = require('playwright');
 
-const URL = 'http://localhost:3847/';
+const URL = process.env.V2_URL || 'http://localhost:3847/';
 const DEFAULT_CHROME =
   '/Users/mason/Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const CHROME_PATH =
@@ -119,6 +122,8 @@ const assert = (condition, message, state) => {
   );
 
   // 背包点物品 → 合成格 → 产物
+  // ⚠️ Phase 2 起交互是**光标语义**（SPEC §4）：点背包物品是"拿在手上"，
+  // 再点合成格才放进去——不再是"点一下直接进合成格"。
   await gameFrame.evaluate(() => {
     wx.__v2Test?.clearInventory?.();
     wx.__v2Test?.giveToSlot?.(9, 5, 1);
@@ -126,9 +131,15 @@ const assert = (condition, message, state) => {
   await tap(815, 424);
   const bagOpened = await waitState((state) => state.inventoryOpen, '合成用例打开背包失败', 5000);
   await tap(277, 131);
+  const pickedUp = await waitState(
+    (state) => state.cursorHeld === 5 && state.inventorySlots?.[9] === 0,
+    '点背包物品没有拿到手上',
+    5000,
+  );
+  await tap(779, 128);
   const recipeFilled = await waitState(
-    (state) => state.crafting?.[0] === 5 && state.craftResult === 7,
-    '点击物品没有放入合成格/产物',
+    (state) => state.crafting?.[0] === 5 && state.craftResult === 7 && state.cursorHeld === 0,
+    '点击合成格没有放入物品/出产物',
     5000,
   );
   await tap(935, 154);
@@ -139,6 +150,44 @@ const assert = (condition, message, state) => {
   );
   await tap(902, 56);
   await waitState((state) => !state.inventoryOpen, '合成用例关闭背包失败', 5000);
+
+  // Phase 2（INVENTORY_SPEC §4）：光标语义 —— 拿起 / 放下 / 合并 / 交换 / 拿一半 / 只取不放
+  // 走的是玩家真实路径（`tapSlot` 就是界面点击的那个 `clickSlot`），不绕过状态机
+  const phase2 = await gameFrame.evaluate(() => {
+    const api = wx.__v2Test;
+    const out = {};
+    // ① 拿起整叠 → 手上 30、格子空
+    api.resetInventoryForTest();
+    api.giveToSlot(9, 1, 30);
+    api.tapSlot('inventory', 9, 'left');
+    out.pickedUp = { held: api.snapshot(), slot: api.slotAt(9) };
+    // ② 放到空格 10
+    api.tapSlot('inventory', 10, 'left');
+    out.placed = { held: api.snapshot(), slot: api.slotAt(10) };
+    // ③ 同类合并：9 号有 60、手上 20 → 补满 64、手上剩 16
+    api.resetInventoryForTest();
+    api.giveToSlot(9, 1, 60);
+    api.giveToSlot(10, 1, 20);
+    api.tapSlot('inventory', 10, 'left');
+    api.tapSlot('inventory', 9, 'left');
+    out.merged = { slot: api.slotAt(9), held: api.snapshot() };
+    // ④ 长按（右键）拿一半：30 → 15 / 15
+    api.resetInventoryForTest();
+    api.giveToSlot(9, 1, 30);
+    api.tapSlot('inventory', 9, 'right');
+    out.half = { slot: api.slotAt(9), held: api.snapshot() };
+    // ⑤ 关闭回收：手上那半回背包，数量不丢
+    api.closeInventoryForTest();
+    out.closed = { held: api.snapshot(), total: api.totalOf(1) };
+    return out;
+  });
+
+  console.log('phase2', JSON.stringify(phase2));
+  assert(phase2.pickedUp.held?.count === 30 && phase2.pickedUp.slot === 0, 'Phase2 拿起整叠失败', phase2);
+  assert(phase2.placed.slot === 30 && phase2.placed.held === null, 'Phase2 放下整叠失败', phase2);
+  assert(phase2.merged.slot === 64 && phase2.merged.held?.count === 16, 'Phase2 同类合并失败', phase2);
+  assert(phase2.half.slot === 15 && phase2.half.held?.count === 15, 'Phase2 长按拿一半失败', phase2);
+  assert(phase2.closed.held === null && phase2.closed.total === 30, 'Phase2 关闭回收丢物品', phase2);
 
   // 猪生成与击杀掉落
   const pigSpawned = await waitState((state) => state.pigs > 0, '猪没有生成', 20000);

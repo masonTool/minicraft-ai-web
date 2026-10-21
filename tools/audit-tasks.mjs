@@ -238,12 +238,22 @@ if (!claimCommits) {
     /**
      * 不算"自建离线测试"的 key：
      *  · `test:unit` / `test:unit:watch`：vitest，自带 runner；
-     *  · `test:offline` / `test:offline:changed`：聚合 runner（`tools/run-tests.mjs`）。
+     *  · `test:offline` / `test:offline:changed`：聚合 runner（`tools/run-tests.mjs`）；
+     *  · `test:minigame:v2-flow` / `test:minigame:v2-perf`：要起 dev server + 真浏览器
+     *    （Playwright），**不在** `npm test` 里跑。
      * ⚠️ 这份名单与 `tools/run-tests.mjs` 里的 `NON_SUITE_KEYS` **必须一致**：
-     * 那边用来决定"跑哪些套件"，这边用来核对文档里的"91 套"，
-     * 两处不一致就会变成"文档说 91、实际只跑 89"这种最难发现的漂。
+     * 那边用来决定"跑哪些套件"，这边用来核对文档里的"166 套"，
+     * 两处不一致就会变成"文档说 168、实际只跑 166"这种最难发现的漂
+     * （这件事故意留在括号里：它正是这一批修掉的那处不一致）。
      */
-    const NON_SUITE_KEYS = new Set(['test:unit', 'test:unit:watch', 'test:offline', 'test:offline:changed']);
+    const NON_SUITE_KEYS = new Set([
+      'test:unit',
+      'test:unit:watch',
+      'test:offline',
+      'test:offline:changed',
+      'test:minigame:v2-flow',
+      'test:minigame:v2-perf',
+    ]);
     declared = names.filter((key) => !NON_SUITE_KEYS.has(key)).length;
   } catch {
     declared = 0;
