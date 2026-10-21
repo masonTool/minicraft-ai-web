@@ -802,8 +802,20 @@ const showInventory = (): void => {
       syncGhost();
       showInventory();
     },
-    onCraft: (id, count) => {
-      inventoryHint = `合成完成：${itemLabel(id)} x${count}`;
+    onOutput: () => {
+      const product = crafting.result;
+      if (!product) return;
+      const held = cursor.held;
+      if (held && (held.id !== product.id || held.count + product.count > maxStackOf(product.id))) {
+        inventoryHint = '手上物品不同或已满';
+        showInventory();
+        return;
+      }
+      crafting.takeResult();
+      cursor.hold({ id: product.id, count: (held?.count ?? 0) + product.count });
+      inventoryHint = `合成完成：${itemLabel(product.id)} x${product.count}`;
+      syncGhost();
+      showInventory();
     },
     refresh: () => showInventory(),
     ...slotHandlers,

@@ -144,7 +144,7 @@ const assert = (condition, message, state) => {
   );
   await tap(935, 154);
   const crafted = await waitState(
-    (state) => state.inventory?.[0] === 7 && state.craftResult === 0,
+    (state) => state.cursorHeld === 7 && state.cursorCount === 4 && state.craftResult === 0,
     '点击产物没有合成/取出',
     5000,
   );
