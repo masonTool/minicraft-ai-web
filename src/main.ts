@@ -372,6 +372,7 @@ import {
   type NetPlayerState,
 } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
+import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1675,11 +1676,14 @@ class App {
       this.netStatus = detail;
       if (!connected) {
         this.remotePlayers.clear();
+        this.remoteSmoothers.clear();
         this.clearRemoteItems();
       }
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+  /** 远程玩家的渲染插值（L4，批次 601）：网络位置离散到达，直接赋值会跳 */
+  private readonly remoteSmoothers = new Map<number, RemotePlayerSmoother>();
   /**
    * 队友那边的掉落物镜像（L7 第一刀，key = "owner:localId"）。
    *
@@ -3019,24 +3023,25 @@ class App {
 
   /** 其它玩家的位置更新 */
   private onNetPlayer(player: NetPlayerState): void {
+    const next = { x: player.x, y: player.y, z: player.z, yaw: player.yaw };
     let mob = this.remotePlayers.get(player.id);
     if (!mob) {
       mob = new Mob(REMOTE_PLAYER_TYPE, player.x, player.y, player.z);
       mob.yaw = player.yaw;
       this.remotePlayers.set(player.id, mob);
+      this.remoteSmoothers.set(player.id, new RemotePlayerSmoother(next));
       console.info(`[net] ${player.name}#${player.id} 加入了游戏`);
+      return;
     }
-    // 远程玩家不跑物理：每帧直接对齐网络位置（插值会让模型在低速更新下抖动）
-    mob.x = player.x;
-    mob.y = player.y;
-    mob.z = player.z;
-    mob.yaw = player.yaw;
+    // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）
+    this.remoteSmoothers.get(player.id)?.setTarget(next);
     // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
   }
 
   private onNetLeave(id: number): void {
     // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
     this.remotePlayers.delete(id);
+    this.remoteSmoothers.delete(id);
     // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
     for (const [key, ghost] of this.remoteItems) {
       if (!key.startsWith(`${id}:`)) continue;
@@ -10435,7 +10440,16 @@ class App {
       }
     }
     // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
-    for (const mob of this.remotePlayers.values()) mobs.push(mob);
+    for (const [id, mob] of this.remotePlayers) {
+      const smoothed = this.remoteSmoothers.get(id)?.step(dt);
+      if (smoothed) {
+        mob.x = smoothed.x;
+        mob.y = smoothed.y;
+        mob.z = smoothed.z;
+        mob.yaw = smoothed.yaw;
+      }
+      mobs.push(mob);
+    }
     // 刷怪笼里的迷你模型（批次 487）：必须在 `mobRenderer.update` **之前**灌进去，
     // 否则这一帧还是上一帧那批笼子
     this.refreshSpawnerDecorations();
