@@ -103,18 +103,18 @@ npm run dev            # http://localhost:5173
 ## 3. 自动继续机制（换机器最容易坏在这）
 
 - 钩子脚本：`.codebuddy/hooks/auto-continue.mjs`（按队列继续）+ `auto-commit.mjs`（拦住"没提交就想停"），
-  都挂在 Stop / UserPromptSubmit 上，配置在 `.codebuddy/settings.json`，**用相对路径**写命令
-  （不生效时 `npm run agent:setup -- --fix-hooks` 改成本机绝对路径）。
+  挂在 Stop / UserPromptSubmit 上，配置 `.codebuddy/settings.json`，**相对路径**写命令
+  （不生效时 `npm run agent:setup -- --fix-hooks`）。
 - **目录分工**：`.codebuddy/hooks/process/`（队列 + 归档 + `batch-seq`，进仓库）/
   `.codebuddy/hooks/logs/`（日志 + 计数状态，gitignore，超 512KB 转存 `.1`）/ `.codebuddy/*.off`（刹车）。
-- **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算项目根，不依赖 cwd（可能是子目录）
-  也不依赖 `CODEBUDDY_PROJECT_DIR`（条件注入）——**目录改名也不用改配置**。
-- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`（删掉即恢复）。
-- **没有轮次上限**（用户要求）：队列不清空就一直跑，唯一的正常退出是队列空。
+- **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算项目根，不依赖 cwd 与
+  `CODEBUDDY_PROJECT_DIR`（条件注入）——**目录改名也不用改配置**。
+- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`。**没有轮次上限**：队列不空就一直跑。
+- **AI 可插任务**：`- [ ] [发现] …`（须带证据，最多 5 条），细则见队列文件同名小节。
 - **上下文水位 150k**（`AUTO_CONTINUE_CONTEXT_LIMIT`）：每轮从 `transcript_path` 读
   `input_tokens`，过阈值就转为"收干净 + 写清下一步 + 给交接摘要"再停。
   钩子**开不了新会话**（`Stop` 只能返回 `additionalContext`），所以它生成"新会话第一句话"
-  写进 `hooks/logs/handoff-prompt.txt`，复制即接上；手动收尾用 `AUTO_CONTINUE_FORCE_HANDOFF=1`。
+  写进 `hooks/logs/handoff-prompt.txt`；手动收尾用 `AUTO_CONTINUE_FORCE_HANDOFF=1`。
 
 **auto-commit 只当守卫，不替 AI 提交**：脚本里**没有任何 git 写操作**，只负责发现未提交改动
 就阻止停止，把清单和规矩交回 AI 自己 review + 提交。理由：message 质量取决于"知不知道自己
