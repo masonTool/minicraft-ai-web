@@ -10,6 +10,7 @@ export interface CreativeTabContext {
   gridX: number;
   gridY: number;
   panelY: number;
+  panelH: number;
   slotSize: number;
   gap: number;
   inventory: Inventory;
@@ -31,7 +32,8 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
     if (ctx.category !== 'all' && creativeTabFor(id) !== ctx.category) return false;
     return !query || itemLabel(id).toLowerCase().includes(query);
   });
-  const pageSize = 45;
+  const rows = Math.max(2, Math.min(5, Math.floor((ctx.panelH - 150) / (ctx.slotSize + ctx.gap))));
+  const pageSize = rows * 9;
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.max(0, Math.min(ctx.page, pages - 1));
   const startIndex = page * pageSize;
@@ -76,15 +78,16 @@ export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
       }),
     );
   }
-  elements.push(text(ctx.gridX, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 10, 420, 24, `${filtered.length} 项 · ${page + 1}/${pages}`, {
+  const footerY = ctx.gridY + rows * (ctx.slotSize + ctx.gap) + 10;
+  elements.push(text(ctx.gridX, footerY, 420, 24, `${filtered.length} 项 · ${page + 1}/${pages}`, {
     fontSize: 13,
     color: 'rgba(200,220,235,0.65)',
   }));
-  elements.push(button(ctx.gridX + 420, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 6, 75, 28, '上一页', () => {
+  elements.push(button(ctx.gridX + 420, footerY - 4, 75, 28, '上一页', () => {
     ctx.setPage(Math.max(0, page - 1));
     ctx.refresh();
   }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
-  elements.push(button(ctx.gridX + 505, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 6, 75, 28, '下一页', () => {
+  elements.push(button(ctx.gridX + 505, footerY - 4, 75, 28, '下一页', () => {
     ctx.setPage(Math.min(pages - 1, page + 1));
     ctx.refresh();
   }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
@@ -95,6 +98,7 @@ export interface RecipeTabContext {
   gridX: number;
   gridY: number;
   panelY: number;
+  panelH: number;
   query: string;
   size: 2 | 3;
   page: number;
@@ -113,7 +117,8 @@ export function buildRecipeTab(ctx: RecipeTabContext): UiElement[] {
     if (!query) return true;
     return itemLabel(recipe.result.id).toLowerCase().includes(query);
   });
-  const perPage = 6;
+  const rows = Math.max(1, Math.min(3, Math.floor((ctx.panelH - 190) / 86)));
+  const perPage = rows * 3;
   const pages = Math.max(1, Math.ceil(recipes.length / perPage));
   const page = Math.max(0, Math.min(ctx.page, pages - 1));
   elements.push(button(ctx.gridX, ctx.panelY + 52, 150, 30, ctx.query ? `搜索：${ctx.query}` : '搜索配方', () => {
@@ -134,15 +139,16 @@ export function buildRecipeTab(ctx: RecipeTabContext): UiElement[] {
     elements.push(text(x + 58, y + 4, 96, 26, itemLabel(result.id), { fontSize: 14, color: '#dcecf5' }));
     elements.push(text(x + 58, y + 30, 96, 20, `x${result.count}`, { fontSize: 12, color: 'rgba(190,215,230,0.65)' }));
   }
-  elements.push(text(ctx.gridX, ctx.gridY + 188, 400, 26, `配方 ${page + 1}/${pages} · ${recipes.length} 条`, {
+  const footerY = ctx.gridY + rows * 86 + 4;
+  elements.push(text(ctx.gridX, footerY, 400, 26, `配方 ${page + 1}/${pages} · ${recipes.length} 条`, {
     fontSize: 13,
     color: 'rgba(200,220,235,0.65)',
   }));
-  elements.push(button(ctx.gridX, ctx.gridY + 216, 90, 34, '上一页', () => {
+  elements.push(button(ctx.gridX, footerY + 28, 90, 34, '上一页', () => {
     ctx.setPage(Math.max(0, page - 1));
     ctx.refresh();
   }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
-  elements.push(button(ctx.gridX + 100, ctx.gridY + 216, 90, 34, '下一页', () => {
+  elements.push(button(ctx.gridX + 100, footerY + 28, 90, 34, '下一页', () => {
     ctx.setPage(Math.min(pages - 1, page + 1));
     ctx.refresh();
   }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
@@ -191,6 +197,7 @@ export interface CraftingPanelContext {
   panelY: number;
   crafting: CraftingGrid;
   inventory: Inventory;
+  fixedSize?: boolean;
   onToggleSize(): void;
   onDrop(from: number, to: number): void;
   onCraft(id: number, count: number): void;
@@ -200,7 +207,7 @@ export interface CraftingPanelContext {
 export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
   const elements: UiElement[] = [];
   elements.push(
-    button(ctx.craftX, ctx.panelY + 22, 110, 28, `${ctx.crafting.size}x${ctx.crafting.size}`, () => ctx.onToggleSize(), {
+    button(ctx.craftX, ctx.panelY + 22, 110, 28, ctx.fixedSize ? '工作台 3x3' : `${ctx.crafting.size}x${ctx.crafting.size}`, () => ctx.onToggleSize(), {
       background: 'rgba(32, 44, 52, 0.95)',
       border: 'rgba(180, 215, 235, 0.35)',
       radius: 6,
@@ -250,6 +257,7 @@ export interface InventoryChromeContext {
   panelW: number;
   railW: number;
   tab: 'items' | 'creative' | 'recipes';
+  title?: string;
   onTab(tab: 'items' | 'creative' | 'recipes'): void;
   onClose(): void;
 }
@@ -261,7 +269,7 @@ export function buildInventoryChrome(ctx: InventoryChromeContext): UiElement[] {
     radius: 8,
   });
   return [
-    text(ctx.panelX + 24, ctx.panelY + 20, 200, 42, '背包', { fontSize: 30, color: '#ffffff' }),
+    text(ctx.panelX + 24, ctx.panelY + 20, 300, 42, ctx.title ?? '背包', { fontSize: 30, color: '#ffffff' }),
     button(ctx.panelX + 24, ctx.panelY + 86, ctx.railW - 24, 52, '物品', () => ctx.onTab('items'), tabStyle(ctx.tab === 'items')),
     button(ctx.panelX + 24, ctx.panelY + 150, ctx.railW - 24, 52, '创造', () => ctx.onTab('creative'), tabStyle(ctx.tab === 'creative')),
     button(ctx.panelX + 24, ctx.panelY + 214, ctx.railW - 24, 52, '配方', () => ctx.onTab('recipes'), tabStyle(ctx.tab === 'recipes')),

@@ -181,6 +181,7 @@ let selectedSlot = 0;
 let hudInputBlockUntil = 0;
 const inventory = new Inventory();
 let crafting = new CraftingGrid(2);
+let craftingTableOpen = false;
 const creativeItems = CREATIVE_ITEMS;
 let creativeCategory: V2CreativeCategory = 'all';
 let creativePage = 0;
@@ -529,11 +530,12 @@ const swapSlots = (fromIndex: number, toIndex: number): void => {
 };
 
 const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
-  if (crafting.size !== recipeSize) {
+  const targetSize = craftingTableOpen ? 3 : recipeSize;
+  if (crafting.size !== targetSize) {
     crafting.drainTo(inventory);
-    crafting = new CraftingGrid(recipeSize);
+    crafting = new CraftingGrid(targetSize);
   }
-  const result = fillRecipeFromInventory(recipe, recipeSize, inventory, crafting);
+  const result = fillRecipeFromInventory(recipe, targetSize, inventory, crafting);
   crafting = result.crafting;
   inventoryHint = result.hint;
   inventoryTab = 'items';
@@ -593,6 +595,7 @@ const showInventory = (): void => {
     panelW,
     railW,
     tab: inventoryTab,
+    title: craftingTableOpen ? '工作台 · 3×3' : '背包',
     onTab: (tab) => {
       inventoryTab = tab;
       if (tab === 'recipes') recipePage = 0;
@@ -600,6 +603,8 @@ const showInventory = (): void => {
     },
     onClose: () => {
       crafting.drainTo(inventory);
+      crafting = new CraftingGrid(2);
+      craftingTableOpen = false;
       inventoryOpen = false;
       paused = false;
       showHud();
@@ -626,6 +631,7 @@ const showInventory = (): void => {
       gridX,
       gridY,
       panelY,
+      panelH,
       slotSize,
       gap,
       inventory,
@@ -658,6 +664,7 @@ const showInventory = (): void => {
       gridX,
       gridY,
       panelY,
+      panelH,
       query: recipeQuery,
       size: recipeSize,
       page: recipePage,
@@ -692,7 +699,9 @@ const showInventory = (): void => {
     panelY,
     crafting,
     inventory,
+    fixedSize: craftingTableOpen,
     onToggleSize: () => {
+      if (craftingTableOpen) return;
       crafting.drainTo(inventory);
       crafting = new CraftingGrid(crafting.size === 2 ? 3 : 2);
       showInventory();
@@ -1159,6 +1168,9 @@ const openBlockAt = (hit: RayHit): boolean => {
   if (id === Block.CRAFTING_TABLE) {
     crafting.drainTo(inventory);
     crafting = new CraftingGrid(3);
+    craftingTableOpen = true;
+    inventoryTab = 'items';
+    inventoryHint = '工作台：3×3 合成，点物品放入';
     inventoryOpen = true;
     showInventory();
     return true;
@@ -1201,6 +1213,7 @@ const trySleep = (hit: RayHit): boolean => {
 };
 
 const showHud = (): void => {
+  if (started && (settingsOpen || inventoryOpen || chat.isOpen || containers.isOpen || paused || dead)) return;
   const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
   const jumpLeft = settings.leftHanded ? 24 : 1024 - 16 - 92;
   const stickTop = uiHeight - 216;
@@ -1945,6 +1958,8 @@ const frame = (): void => {
       selectedSlot,
       inventory: Array.from({ length: 9 }, (_, i) => inventory.get(i)?.id ?? 0),
       crafting: Array.from({ length: crafting.size * crafting.size }, (_, i) => crafting.get(i)?.id ?? 0),
+      craftingSize: crafting.size,
+      craftingTable: craftingTableOpen,
       craftResult: crafting.result?.id ?? 0,
       paused,
       settings: settingsOpen,
@@ -2276,6 +2291,14 @@ if (wxTestApi && isDesktopRuntime) {
       const z = Math.floor(physics.z);
       world.setBlockAndUpdate(x, y, z, Block.FURNACE);
       containers.openFurnaceAt(x, y, z);
+      return { x, y, z };
+    },
+    openCraftingAtFeet: () => {
+      const x = Math.floor(physics.x);
+      const y = Math.max(0, Math.floor(physics.y) - 1);
+      const z = Math.floor(physics.z);
+      world.setBlockAndUpdate(x, y, z, Block.CRAFTING_TABLE);
+      openBlockAt({ x, y, z } as RayHit);
       return { x, y, z };
     },
     openChestAtFeet: () => {

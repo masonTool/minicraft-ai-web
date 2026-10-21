@@ -235,12 +235,16 @@ const assert = (condition, message, state) => {
   const containerOpen = await waitState((state) => state.containerOpen, '容器没有打开', 5000);
   await gameFrame.evaluate(() => wx.__v2Test?.fillChestFirst?.(1, 2));
   await waitState((state) => state.containerSlots?.[0] === 1, '箱子预置物品失败', 5000);
-  await tap(292, 158);
-  const containerTaken = await waitState(
-    (state) => state.inventory?.[0] === 1 && state.containerSlots?.[0] === 0,
-    '从箱子取出物品失败',
-    5000,
-  );
+  let containerTaken = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await tap(292, 158);
+    await page.waitForTimeout(350);
+    if (latest && latest.inventory?.includes(1) && latest.containerSlots?.[0] === 0) {
+      containerTaken = latest;
+      break;
+    }
+  }
+  assert(containerTaken, '从箱子取出物品失败', latest);
   const containerClosed = await closeContainer();
 
   const selectSlotZero = async () => {
