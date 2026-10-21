@@ -12,6 +12,7 @@
  */
 
 import { Item } from '../registry/items.ts';
+import { t } from '../i18n/I18n.ts';
 import { BREW_RECIPES } from './Brewing.ts';
 import { SMITHING_INGOT_COST, netheriteUpgradeList } from './Smithing.ts';
 import { FURNACE_STATIONS, SMELTING_RECIPES, type FurnaceStation } from './Smelting.ts';
@@ -26,7 +27,34 @@ export type StationRecipeReason =
 /** 能列"可做列表"的站台（批次 293：熔炉系 + 锻造台 + 酿造台） */
 export type StationRecipeStation = FurnaceStation | 'smithing' | 'brewing';
 
-/** 站台中文名（"需要xxx"提示与列表标题共用） */
+/**
+ * 站台名的**文案键**（批次 617 / Q13）。
+ *
+ * ⚠️ 这里不能直接写中文：模块级常量在**模块加载时**求值一次，而语言是运行时状态，
+ * 于是英文模式下站点标题永远是中文。所以表里存**键**，由 `stationLabel()` 现取。
+ */
+export const STATION_LABEL_KEYS: Readonly<Record<StationRecipeStation, string>> = {
+  furnace: 'station.name.furnace',
+  smoker: 'station.name.smokerOrFurnace',
+  blast_furnace: 'station.name.blastFurnaceOrFurnace',
+  campfire: 'station.name.campfire',
+  smithing: 'station.name.smithing',
+  brewing: 'station.name.brewing',
+};
+
+/** 站台名（按当前语言）。"需要xxx"提示与列表标题共用 */
+export function stationLabel(station: StationRecipeStation): string {
+  return t(STATION_LABEL_KEYS[station]);
+}
+
+/**
+ * 站台名的旧接口（**保留**，但已不参与界面文案）。
+ *
+ * 存档、日志与离线测试里有几十处按中文名断言的地方（`'熔炉'` 等），
+ * 那批断言验的是"站台识别对不对"，不是"翻译对不对"。
+ * 一次全改成键会让这批断言全部失效、却换不回任何可读性，
+ * 所以只让**界面**改走 `stationLabel()`，这张中文表留给非界面用途。
+ */
 export const STATION_LABELS: Readonly<Record<StationRecipeStation, string>> = {
   furnace: '熔炉',
   smoker: '烟熏炉（或熔炉）',
@@ -36,7 +64,21 @@ export const STATION_LABELS: Readonly<Record<StationRecipeStation, string>> = {
   brewing: '酿造台',
 };
 
-/** 红底时给玩家看的一句话（按"最具体 → 最笼统"排，由调用方选中的那一条直接显示） */
+/** 红底原因的文案键（批次 617 / Q13，理由同上） */
+export const STATION_REASON_KEYS: Readonly<Record<StationRecipeReason, string>> = {
+  missing_input: 'station.reason.missingInput',
+  missing_fuel: 'station.reason.missingFuel',
+  missing_equipment: 'station.reason.missingEquipment',
+  missing_material: 'station.reason.missingMaterial',
+  slot_occupied: 'station.reason.slotOccupied',
+};
+
+/** 红底时给玩家看的那句话（按当前语言） */
+export function stationReasonLabel(reason: StationRecipeReason): string {
+  return t(STATION_REASON_KEYS[reason]);
+}
+
+/** 红底原因的旧接口（中文，非界面用途，理由同 `STATION_LABELS`） */
 export const STATION_REASON_LABELS: Readonly<Record<StationRecipeReason, string>> = {
   missing_input: '缺原料',
   missing_fuel: '缺燃料',
@@ -210,7 +252,7 @@ export function stationNeedFor(
     }
     return {
       station,
-      label: STATION_LABELS[station],
+      label: stationLabel(station),
       inputs: [{ id: smelt.input, count: 1 }],
       resultId: itemId,
     };
@@ -220,7 +262,7 @@ export function stationNeedFor(
   if (upgrade) {
     return {
       station: 'smithing',
-      label: STATION_LABELS.smithing,
+      label: stationLabel('smithing'),
       inputs: [
         { id: upgrade.equipment, count: 1 },
         { id: Item.NETHERITE_INGOT, count: SMITHING_INGOT_COST },
@@ -233,7 +275,7 @@ export function stationNeedFor(
   if (brew) {
     return {
       station: 'brewing',
-      label: STATION_LABELS.brewing,
+      label: stationLabel('brewing'),
       inputs: [
         { id: brew.from, count: 1 },
         { id: brew.ingredient, count: 1 },

@@ -16,6 +16,7 @@
  */
 
 import { Block } from '../core/registry/blocks.ts';
+import { t } from '../core/i18n/I18n.ts';
 import { categoryOf, type ItemCategory } from '../core/registry/items.ts';
 import { toolItemId } from '../core/registry/tools.ts';
 
@@ -23,6 +24,26 @@ import { toolItemId } from '../core/registry/tools.ts';
 export const CREATIVE_TABS = ['all', 'building', 'equipment', 'items', 'nature'] as const;
 export type CreativeTab = (typeof CREATIVE_TABS)[number];
 
+/**
+ * 分类名的文案键（批次 617 / Q13）。
+ *
+ * ⚠️ 原来是模块级中文常量，模块加载时求值一次——英文模式下这五个分类名
+ * 永远是中文。表里改存**键**，由 `creativeTabLabel()` 现取。
+ */
+export const CREATIVE_TAB_LABEL_KEYS: Record<CreativeTab, string> = {
+  all: 'creative.tab.all',
+  building: 'creative.tab.building',
+  equipment: 'creative.tab.equipment',
+  items: 'creative.tab.items',
+  nature: 'creative.tab.nature',
+};
+
+/** 分类名（按当前语言） */
+export function creativeTabLabel(category: CreativeTab): string {
+  return t(CREATIVE_TAB_LABEL_KEYS[category]);
+}
+
+/** 分类名的旧接口（中文，非界面用途：日志与离线断言按它匹配，理由同 STATION_LABELS） */
 export const CREATIVE_TAB_LABELS: Record<CreativeTab, string> = {
   all: '全部',
   building: '建筑',

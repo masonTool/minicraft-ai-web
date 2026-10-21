@@ -14,6 +14,8 @@
  *     所以"搜到 5 件"时只有一页，翻页条自动隐藏。
  */
 
+import { tp } from '../core/i18n/I18n.ts';
+
 /** 宽屏（PC / 平板横屏）每页条数：12 列 × 5 行，与 `.inv-grid.inv-creative` 的列数一致 */
 export const PAGE_SIZE_WIDE = 60;
 /** 窄屏（手机竖屏等）每页条数：8 列 × 4 行，与窄屏媒体查询里的列数一致 */
@@ -82,5 +84,6 @@ export function slicePage<T>(items: readonly T[], page: number, pageSize: number
 export function pageLabel(page: number, total: number, pageSize: number): string {
   const pages = pageCount(total, pageSize);
   const current = clampPage(page, total, pageSize) + 1;
-  return `第 ${current}/${pages} 页 · 共 ${total} 件`;
+  // 批次 617（Q13）：拼中文句子在英文下会变成 "Page 1/9 页 · 共 60 件"，走占位符";
+  return tp('pager.summary', { current, pages, total });
 }

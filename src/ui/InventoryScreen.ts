@@ -65,8 +65,8 @@ import {
 } from '../core/crafting/Smelting.ts';
 // 工作站"可做列表"（批次 277）：纯逻辑在 core，界面只画格子与填材料
 import {
-  STATION_LABELS,
-  STATION_REASON_LABELS,
+  stationLabel,
+  stationReasonLabel,
   brewingStationRecipes,
   furnaceStationRecipes,
   smithingStationRecipes,
@@ -166,7 +166,7 @@ import { diag } from '../game/diagnosticsRuntime.ts';
 import { Block } from '../core/registry/blocks.ts';
 import {
   CREATIVE_TAB_ICONS,
-  CREATIVE_TAB_LABELS,
+  creativeTabLabel,
   CREATIVE_TABS,
   RECIPE_TAB_ICONS,
   creativeTabFor,
@@ -1575,7 +1575,7 @@ export class InventoryScreen {
       }
       const label = document.createElement('span');
       label.className = 'inv-tab-label';
-      label.textContent = category === 'all' ? t('inventory.searchTab') : CREATIVE_TAB_LABELS[category];
+      label.textContent = category === 'all' ? t('inventory.searchTab') : creativeTabLabel(category);
       button.title = label.textContent;
       button.setAttribute('aria-label', label.textContent);
       button.append(icon, label);
@@ -1612,7 +1612,7 @@ export class InventoryScreen {
         this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(category) ?? targetScroll;
         this.syncCreativeScrollbar();
         // 批次 181：任何点击都在快捷栏上方说一句"刚才点了什么"
-        this.showMessage(`创造分类：${CREATIVE_TAB_LABELS[category]}`);
+        this.showMessage(`${t('inventory.creativeCategory')}${creativeTabLabel(category)}`);
         if (category === 'all') this.creativeSearch.focus();
       });
       this.creativeTabs.appendChild(button);
@@ -1947,8 +1947,8 @@ export class InventoryScreen {
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
     this.categorySearch.placeholder = this.stationHasRecipes()
       ? this.showUnowned
-        ? tp('inventory.searchAllFor', { station: STATION_LABELS[this.stationRecipeKey()] })
-        : tp('inventory.searchUsableFor', { station: STATION_LABELS[this.stationRecipeKey()] })
+        ? tp('inventory.searchAllFor', { station: stationLabel(this.stationRecipeKey()) })
+        : tp('inventory.searchUsableFor', { station: stationLabel(this.stationRecipeKey()) })
       : t('inventory.searchCraftable');
     // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
     // 关闭时报"现在能做多少 / 用过的缺料多少"。**不受搜索词影响**。
@@ -1957,7 +1957,7 @@ export class InventoryScreen {
       const entries = this.currentStationEntries();
       const available = entries.filter((entry) => entry.available && inTab(entry.resultId)).length;
       const total = entries.filter((entry) => inTab(entry.resultId)).length;
-      const label = STATION_LABELS[this.stationRecipeKey()];
+      const label = stationLabel(this.stationRecipeKey());
       this.categoryInfo.textContent = this.showUnowned
         ? tp('inventory.statAll', { label, total, available })
         : tp('inventory.statAvailable', { label, available });
@@ -3160,7 +3160,7 @@ export class InventoryScreen {
     const entry = this.stationRecipeEntries[index];
     if (!entry) return;
     if (!entry.available) {
-      const reason = entry.reason ? STATION_REASON_LABELS[entry.reason] : '现在做不了';
+      const reason = entry.reason ? stationReasonLabel(entry.reason) : t('station.reason.notAvailable');
       this.showMessage(`${itemName(entry.resultId)}：${reason}`);
       return;
     }
@@ -3808,7 +3808,7 @@ export class InventoryScreen {
 
   /** 当前站台缺料/缺燃料/槽位占用：把原因和原料画在下面 */
   private showStationEntryHint(entry: StationRecipeEntry): void {
-    const reason = entry.reason ? STATION_REASON_LABELS[entry.reason] : '现在做不了';
+    const reason = entry.reason ? stationReasonLabel(entry.reason) : t('station.reason.notAvailable');
     this.renderStationHint(
       reason,
       this.stationRecipeKey(),
@@ -3821,7 +3821,7 @@ export class InventoryScreen {
 
   /** 当前站台做不了这件产物：告诉玩家该去哪个站台 */
   private showStationNeed(need: StationNeed): void {
-    const current = STATION_LABELS[this.stationRecipeKey()];
+    const current = stationLabel(this.stationRecipeKey());
     this.renderStationHint(
       `需要${need.label}`,
       need.station,
@@ -3931,7 +3931,7 @@ export class InventoryScreen {
       if (count && entry.resultCount > 1) count.textContent = String(entry.resultCount);
       slot.title = entry.available
         ? `${itemName(entry.resultId)} · 点一下放入材料`
-        : `${itemName(entry.resultId)}：${entry.reason ? STATION_REASON_LABELS[entry.reason] : '现在做不了'}`;
+        : `${itemName(entry.resultId)}：${entry.reason ? stationReasonLabel(entry.reason) : t('station.reason.notAvailable')}`;
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.takeStationRecipe(index);
@@ -3949,7 +3949,7 @@ export class InventoryScreen {
     this.stationRecipeInfoEl.textContent =
       entries.length === 0
         ? ''
-        : `${MODE_TITLES[this.mode]} · 可做 ${available} / ${entries.length}（白底 = 点一下就能开工）`;
+        : `${modeTitle(this.mode)} · 可做 ${available} / ${entries.length}（白底 = 点一下就能开工）`;
   }
 
   /**
@@ -3962,9 +3962,14 @@ export class InventoryScreen {
    *   - 箱子 / 熔炉那些容器界面 → 单栏通用面板（它们本来就没有"分页"这回事）。
    */
   private applyInventoryChrome(): void {
-    // 触摸层可能比背包更晚挂 touch-mode：每次排布时把关闭键文案对齐
+    // 触摸层可能比背包更晚挂 touch-mode：每次排布时把关闭键文案对齐。
+    // ⚠️ 批次 617（Q13）**这才是"关闭"永远是中文的真正根因**：这个函数在
+    // `openPanel()` 与每次 mode 切换里都会被调用，每次都把硬编码的中文写回去，
+    // 于是 `applyTexts()` 刷成 "Close (E)" 一秒后又变回"关闭 (E)"。
+    // 现在文案走键，触摸判据用**构造时缓存的同一个值**。
     if (this.closeBtn) {
-      this.closeBtn.textContent = isTouchUi() || isTouchDevice() ? '✕' : '关闭 (E)';
+      this.closeBtn.textContent = this.touchDevice ? '✕' : t('inventory.closeKey');
+      this.closeBtn.setAttribute('aria-label', t('inventory.close'));
     }
     // ⚠️ 两个口径要分开：
     //   `creativePlayer` = **玩家在创造模式**（与当前开着哪个界面无关）——"有没有配方书"
@@ -4004,7 +4009,7 @@ export class InventoryScreen {
     this.panel.classList.toggle('workbench-ui', workbench);
     if (this.creativeToggleBtn) {
       this.creativeToggleBtn.classList.toggle('hidden', !creative || dual);
-      this.creativeToggleBtn.textContent = this.pane === 'creative' ? '生存背包' : '创造物品';
+      this.creativeToggleBtn.textContent = this.pane === 'creative' ? t('inventory.survivalTab') : t('inventory.creativeTab');
     }
 
     // —— 容器类界面：单栏通用面板，页签 / 左右轨 / 配方书落脚点都不参与 ——
@@ -4685,8 +4690,8 @@ export class InventoryScreen {
       side.className = 'campfire-side';
       const targetWrap = document.createElement('div');
       targetWrap.className = 'furnace-col';
-      targetWrap.append(this.buildLabel('目标'), this.stationTargetEl);
-      side.append(this.buildLabel('放上最多 4 样食物（烤好会自己弹出来）'), this.campfireHintEl, targetWrap);
+      targetWrap.append(this.buildLabel(t('slot.target')), this.stationTargetEl);
+      side.append(this.buildLabel(t('slot.campfireHint')), this.campfireHintEl, targetWrap);
       // 复用"左一块右一列"那条布局（与切石机同一套样式，窄屏会自动上下堆叠）
       const layout = document.createElement('div');
       layout.className = 'stonecutter-layout';
@@ -4721,9 +4726,9 @@ export class InventoryScreen {
       const left = document.createElement('div');
       left.className = 'brewing-left';
       left.append(
-        line('药水', bottles, '最多 3 瓶同时酿'),
-        line('材料', this.brewIngredientSlot),
-        line('燃料', this.brewFuelSlot),
+        line(t('slot.potion'), bottles, t('slot.potionHint')),
+        line(t('slot.material'), this.brewIngredientSlot),
+        line(t('slot.fuel'), this.brewFuelSlot),
       );
 
       const middle = document.createElement('div');
@@ -4758,10 +4763,10 @@ export class InventoryScreen {
 
       const row = document.createElement('div');
       row.className = 'anvil-row';
-      row.append(this.buildLabel('物品'), left, this.buildLabel('材料 / 附魔书'), right, this.buildLabel('产物'), result);
+      row.append(this.buildLabel(t('slot.input')), left, this.buildLabel(t('slot.enchantMaterial')), right, this.buildLabel(t('slot.product')), result);
       const side = document.createElement('div');
       side.className = 'anvil-side';
-      side.append(this.buildLabel('重命名'), this.anvilNameInput, this.anvilCostEl, this.anvilStatusEl);
+      side.append(this.buildLabel(t('slot.anvilRename')), this.anvilNameInput, this.anvilCostEl, this.anvilStatusEl);
       this.anvilLayout.replaceChildren(row, side);
       this.topArea.appendChild(this.anvilLayout);
       return;
@@ -4789,9 +4794,9 @@ export class InventoryScreen {
       const row = document.createElement('div');
       row.className = 'anvil-row';
       row.append(
-        this.buildLabel('要洗的物品'),
+        this.buildLabel(t('slot.anvilWash')),
         left,
-        this.buildLabel('同种装备（可选）'),
+        this.buildLabel(t('slot.anvilSameGear')),
         right,
         this.buildLabel('产物'),
         result,
@@ -5026,14 +5031,9 @@ export class InventoryScreen {
       for (let i = 0; i < CHEST_SIZE; i++) {
         this.chestGrid.appendChild(this.registerSlot(`${this.mode}:${i}`, this.activeContainer!, i));
       }
-      const title =
-        this.mode === 'barrel'
-          ? '木桶'
-          : this.mode === 'ender_chest'
-            ? '末影箱'
-            : this.mode === 'shulker_box'
-              ? '潜影盒'
-              : '箱子';
+      // 批次 617（Q13）：标题直接复用 `modeTitle()`——四种容器名本来就在
+      // `MODE_TITLE_KEYS` 里，这里再手写一遍中文等于同一句话维护两份。
+      const title = modeTitle(this.mode);
       this.topArea.appendChild(this.buildLabel(title));
       this.topArea.appendChild(this.chestGrid);
       return;
@@ -5069,7 +5069,7 @@ export class InventoryScreen {
     // 原版（截图纸质界面也一样）在合成区上方写着"合成"——它是**分组标题**。
     // ⚠️ 只补这一个：装备那一列、主背包与快捷栏在原版里都没有标题
     //（批次 132 刚把「主背包 / 快捷栏 / 盔甲与副手」三行字去掉，别又加回来）。
-    this.topArea.appendChild(this.buildLabel('合成'));
+    this.topArea.appendChild(this.buildLabel(t('slot.crafting')));
     this.topArea.appendChild(layout);
   }
 
@@ -6202,7 +6202,7 @@ export class InventoryScreen {
       this.activeContainer.started = this.campfireStarted;
     }
 
-    this.titleEl.textContent = MODE_TITLES[mode];
+    this.titleEl.textContent = modeTitle(mode);
     // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
     if (mode === 'inventory') {
       this.pocketTab = 'inventory';
@@ -6981,7 +6981,7 @@ export class InventoryScreen {
       this.activeVillager = villager;
       this.rebuildTopArea();
     }
-    this.titleEl.textContent = MODE_TITLES.trade;
+    this.titleEl.textContent = modeTitle('trade');
     this.applyInventoryChrome();
     this.openPanel();
   }
@@ -7408,31 +7408,43 @@ function isFurnaceMode(mode: InventoryPanelMode): boolean {
   return mode === 'furnace' || mode === 'smoker' || mode === 'blast_furnace';
 }
 
-const MODE_TITLES: Record<InventoryPanelMode, string> = {
-  inventory: '物品栏',
-  crafting: '工作台',
-  furnace: '熔炉',
-  smoker: '烟熏炉',
-  blast_furnace: '高炉',
-  campfire: '营火',
-  chest: '箱子',
-  barrel: '木桶',
-  ender_chest: '末影箱',
-  shulker_box: '潜影盒',
-  mob_inventory: '货舱',
-  enchanting: '附魔台',
-  anvil: '铁砧',
-  grindstone: '砂轮',
-  smithing: '锻造台',
-  stonecutter: '切石机',
-  loom: '织布机',
-  cartography: '制图台',
-  brewing: '酿造台',
-  hopper: '漏斗',
-  trade: '与村民交易',
-  dropper: '投掷器',
-  dispenser: '发射器',
+/**
+ * 面板标题（批次 617 / Q13）。
+ *
+ * ⚠️ 原来是 `const MODE_TITLES: Record<mode, string> = { inventory: '物品栏', ... }`——
+ * 模块级常量在**模块加载时**求值一次，而语言是运行时状态，于是英文模式下
+ * 22 个工作站标题永远是中文。改成"查键"的函数，用到时才求值。
+ */
+const MODE_TITLE_KEYS: Record<InventoryPanelMode, string> = {
+  inventory: 'panel.inventory',
+  crafting: 'panel.crafting',
+  furnace: 'panel.furnace',
+  smoker: 'panel.smoker',
+  blast_furnace: 'panel.blastFurnace',
+  campfire: 'panel.campfire',
+  chest: 'panel.chest',
+  barrel: 'panel.barrel',
+  ender_chest: 'panel.enderChest',
+  shulker_box: 'panel.shulkerBox',
+  mob_inventory: 'panel.mobInventory',
+  enchanting: 'panel.enchanting',
+  anvil: 'panel.anvil',
+  grindstone: 'panel.grindstone',
+  smithing: 'panel.smithing',
+  stonecutter: 'panel.stonecutter',
+  loom: 'panel.loom',
+  cartography: 'panel.cartography',
+  brewing: 'panel.brewing',
+  hopper: 'panel.hopper',
+  trade: 'panel.trade',
+  dropper: 'panel.dropper',
+  dispenser: 'panel.dispenser',
 };
+
+/** 面板标题（按当前语言） */
+function modeTitle(mode: InventoryPanelMode): string {
+  return t(MODE_TITLE_KEYS[mode]);
+}
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */
 function matchesQuery(itemId: number, query: string): boolean {

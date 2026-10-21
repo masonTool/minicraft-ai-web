@@ -756,9 +756,9 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '酿造台布局：左药水/材料/燃料，右进度与目标，退还按钮绝对定位（批次 331）',
-    invSrc.includes("line('药水', bottles") &&
-      invSrc.includes("line('材料', this.brewIngredientSlot)") &&
-      invSrc.includes("line('燃料', this.brewFuelSlot)") &&
+    invSrc.includes("line(t('slot.potion'), bottles") &&
+      invSrc.includes("line(t('slot.material'), this.brewIngredientSlot)") &&
+      invSrc.includes("line(t('slot.fuel'), this.brewFuelSlot)") &&
       invSrc.includes('this.brewingLayout.replaceChildren(left, middle, targetCol)') &&
       invSrc.includes("targetWrap.className = 'brewing-target-wrap'") &&
       invSrc.includes('targetCol.append(targetWrap, this.brewReturnBtn)') &&
@@ -1158,7 +1158,8 @@ console.log('\n[携带版细节收口（批次 159）]');
   check(
     '分类/页签点击也有说明（不只是物品格）',
     invSrc.includes('showMessage(`分类：') &&
-      invSrc.includes('showMessage(`创造分类：') &&
+      // 批次 617：创造分类的提示改成 t('inventory.creativeCategory') + 分类名
+      invSrc.includes("t('inventory.creativeCategory')") &&
       invSrc.includes("'右栏：合成'"),
   );
   // 点配方预览只显示名字，不再把预览清掉
@@ -2791,7 +2792,10 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('四个实体标签栏复用了创造栏的真实物品图标', creativeSrc.includes('export const RECIPE_TAB_ICONS'));
   check('"全部"那一栏用放大镜（图集里没有这件物品 → 内联 SVG）', bookUi.includes('SEARCH_TAB_ICON') && bookUi.includes('<svg'));
   check('图标与文字分层（整块 textContent 会把 canvas/svg 抹掉）', bookUi.includes("button.querySelector('.recipe-tab-label')"));
-  check('合成区有"合成"标题（截图里就有，其它分组原版没有标题）', inventorySrc.includes("this.buildLabel('合成')"));
+  check(
+    '合成区有"合成"标题（截图里就有，其它分组原版没有标题）',
+    inventorySrc.includes("this.buildLabel(t('slot.crafting'))"),
+  );
 }
 
 console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');

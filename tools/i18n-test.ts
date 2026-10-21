@@ -273,5 +273,62 @@ console.log('\n[背包界面文案接线（批次 617 / Q12）]');
   }
 }
 
+console.log('\n[工作站与面板标题（批次 617 / Q13）]');
+{
+  /**
+   * 这一批把**模块级常量表**改成"查键的函数"：`MODE_TITLES` / `STATION_LABELS` /
+   * `CREATIVE_TAB_LABELS` 原来在模块加载时求值一次，英文模式下永远是中文。
+   * 断言分两层：键齐全 + 表本身真的改成键驱动（防"加了键但界面还用旧常量"）。
+   */
+  const panelKeys = [
+    'panel.inventory', 'panel.crafting', 'panel.furnace', 'panel.smoker', 'panel.blastFurnace',
+    'panel.campfire', 'panel.chest', 'panel.barrel', 'panel.enderChest', 'panel.shulkerBox',
+    'panel.mobInventory', 'panel.enchanting', 'panel.anvil', 'panel.grindstone', 'panel.smithing',
+    'panel.stonecutter', 'panel.loom', 'panel.cartography', 'panel.brewing', 'panel.hopper',
+    'panel.trade', 'panel.dropper', 'panel.dispenser',
+  ];
+  const stationKeys = [
+    'station.name.furnace', 'station.name.smokerOrFurnace', 'station.name.blastFurnaceOrFurnace',
+    'station.name.campfire', 'station.name.smithing', 'station.name.brewing',
+    'station.reason.missingInput', 'station.reason.missingFuel', 'station.reason.missingEquipment',
+    'station.reason.missingMaterial', 'station.reason.slotOccupied', 'station.reason.notAvailable',
+  ];
+  const slotKeys = [
+    'slot.target', 'slot.potion', 'slot.potionHint', 'slot.material', 'slot.fuel', 'slot.input',
+    'slot.rename', 'slot.enchantMaterial', 'slot.crafting', 'slot.campfireHint',
+    'slot.anvilRename', 'slot.anvilWash', 'slot.anvilSameGear', 'slot.product',
+  ];
+  const creativeKeys = ['creative.tab.all', 'creative.tab.building', 'creative.tab.equipment', 'creative.tab.items', 'creative.tab.nature', 'pager.summary'];
+  const all = [...panelKeys, ...stationKeys, ...slotKeys, ...creativeKeys];
+
+  const parity = keyParity();
+  const missing = all.filter((k) => parity.missingInEn.includes(k) || parity.missingInZh.includes(k) || t(k, 'zh') === k || t(k, 'en') === k);
+  check(`Q13 的 ${all.length} 个键中英齐全`, missing.length === 0, missing.join(','));
+  check('每条都真翻成英文', all.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
+
+  /** 只查代码行（注释里出现同样的字样是解释，不是使用） */
+  const codeOf = (source: string) =>
+    source
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//') && !line.trim().startsWith('/*'))
+      .join('\n');
+
+  // 表必须改成键驱动（不是还留着中文常量）
+  const stationSrc = readFileSync(new URL('../src/core/crafting/StationRecipes.ts', import.meta.url), 'utf8');
+  check('站台名改成 stationLabel() 查键', stationSrc.includes('export function stationLabel(') && stationSrc.includes("'station.name.furnace'"));
+  check('红底原因改成 stationReasonLabel()', stationSrc.includes('export function stationReasonLabel('));
+
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  check('面板标题改成 modeTitle() 查键', invSrc.includes('function modeTitle(') && invSrc.includes("'panel.inventory'"));
+  check('面板标题不再用中文常量表', !codeOf(invSrc).includes("inventory: '物品栏',"));
+  check('站台标签调用会翻译的版本', invSrc.includes('stationLabel(this.stationRecipeKey())'));
+
+  const tabsSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
+  check('创造分类改成 creativeTabLabel()', tabsSrc.includes('export function creativeTabLabel('));
+
+  const pagerSrc = readFileSync(new URL('../src/ui/ItemPager.ts', import.meta.url), 'utf8');
+  check('分页文案走 tp()，不再拼中文', pagerSrc.includes("tp('pager.summary'") && !codeOf(pagerSrc).includes('页 · 共'));
+}
+
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
