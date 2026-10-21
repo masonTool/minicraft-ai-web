@@ -20,14 +20,23 @@ import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 const printOnly = process.argv.includes('--print');
 
 const FILES = {
-  queue: new URL('../.codebuddy/auto-continue.md', import.meta.url),
-  queueArchive: new URL('../.codebuddy/auto-continue-archive.md', import.meta.url),
+  queue: new URL('../.codebuddy/process/auto-continue.md', import.meta.url),
+  queueArchive: new URL('../.codebuddy/process/auto-continue-archive.md', import.meta.url),
   handoff: new URL('../HANDOFF.md', import.meta.url),
   handoffArchive: new URL('../docs/HANDOFF-ARCHIVE.md', import.meta.url),
 };
 
 const LIMITS = {
-  queueLines: 320,
+  /**
+   * 队列行数上限。
+   *
+   * ⚠️ 这个数**不是"美观"指标，而是长跑任务列表的油箱**：
+   * 钩子每轮把整个文件读进上下文，超过上限 `npm run check` 直接拦提交。
+   * 想一次性塞很多任务时，要么按下面这个值分批补队列，要么在这里调高——
+   * 但调高之前先想清楚"每轮多读几百行 × 跑几百轮"的 token 账。
+   * 当前 500 行约等于 50~80 条自包含任务，够 10 批左右的量。
+   */
+  queueLines: 500,
   queueBatches: 3,
   handoffLines: 340,
   handoffBatches: 6,

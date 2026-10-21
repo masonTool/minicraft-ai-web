@@ -151,8 +151,7 @@ console.log('\n[auto-commit]');
 
 {
   // 刹车文件：必须在"有脏文件"的前提下也能放行
-  const offFile = join(projectRoot, '.codebuddy', 'auto-commit.off');
-  const existed = existsSync(offFile);
+  const offFile = join(projectRoot, '.codebuddy', 'auto-commit.off');  const existed = existsSync(offFile);
   if (!existed) writeFileSync(offFile, '');
   try {
     const r = runHook('auto-commit.mjs', stopEvent('hooks-test-commit-2'));
@@ -187,6 +186,36 @@ console.log('\n[auto-commit]');
   const selfFiles = ['auto-commit.state.json', 'auto-commit.log', 'auto-commit.off'];
   const leaked = selfFiles.filter((name) => text.includes(name));
   check('不把自身运行时文件当成未提交改动', leaked.length === 0, leaked.join(', '));
+}
+
+// ---------------------------------------------------------------- 目录分工
+
+console.log('\n[目录分工]');
+
+{
+  /**
+   * process/ 放进度文档（进仓库、要 review），logs/ 放运行时产物（不进仓库）。
+   * 这条断言是给"长跑任务列表"兜底的：一旦有人把日志挪回根目录，
+   * 它会每小时往 git status 里冒出来一次，auto-commit 每次都拦，最后只能靠关钩子收场。
+   */
+  const processDir = join(projectRoot, '.codebuddy', 'process');
+  const logsDir = join(projectRoot, '.codebuddy', 'logs');
+  check('process/ 存在', existsSync(processDir));
+  check('process/auto-continue.md 存在', existsSync(join(processDir, 'auto-continue.md')));
+
+  // logs/ 允许不存在（还没跑过），但一旦存在就必须被 gitignore
+  let ignoreText = '';
+  try {
+    ignoreText = readFileSync(join(projectRoot, '.gitignore'), 'utf8');
+  } catch {
+    ignoreText = '';
+  }
+  for (const pattern of ['.codebuddy/logs/', '.codebuddy/*.off']) {
+    check(`.gitignore 覆盖 ${pattern}`, ignoreText.includes(pattern));
+  }
+  if (existsSync(logsDir)) {
+    check('logs/ 里没有藏进度文档', !existsSync(join(logsDir, 'auto-continue.md')));
+  }
 }
 
 // ---------------------------------------------------------------- 两种输出风格
