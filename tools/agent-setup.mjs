@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +97,8 @@ say();
 say('[2/3] 自动继续 hooks: .codebuddy/settings.json');
 
 const settingsFile = join(projectRoot, '.codebuddy', 'settings.json');
-const hookScript = join(projectRoot, '.codebuddy', 'hooks', 'auto-continue.mjs');
+const hooksDir = join(projectRoot, '.codebuddy', 'hooks');
+const hookScript = join(hooksDir, 'auto-continue.mjs');
 
 if (!existsSync(settingsFile)) {
   problems.push('缺少 .codebuddy/settings.json，Stop 钩子未配置，AI 不会自动按队列继续。');
@@ -126,6 +127,15 @@ if (!existsSync(settingsFile)) {
       problems.push('settings.json 里没有任何 hooks 命令。');
     }
 
+    // 两个脚本各管一件事：auto-continue 推进队列、auto-commit 拦住漏提交。
+    // 少挂任何一个都还能跑，但对应的保护就没了，这里明确指出来。
+    const commitScript = join(hooksDir, 'auto-commit.mjs');
+    if (!existsSync(commitScript)) {
+      problems.push(`缺少 ${commitScript}，改完代码不会被检查是否漏提交。`);
+    } else if (!commands.some(({ hook }) => hook.command.includes('auto-commit.mjs'))) {
+      problems.push('settings.json 里没有注册 auto-commit.mjs，漏提交不会被拦住。');
+    }
+
     let rewritten = 0;
     for (const { event, hook } of commands) {
       const match = hook.command.match(/node\s+(?:'|")?([^\s'"]+\.mjs)(?:'|")?/);
@@ -147,9 +157,16 @@ if (!existsSync(settingsFile)) {
         problems.push(`${event} 钩子指向不存在的路径：${target}（多半来自另一台机器）`);
       }
 
-      hook.command = `node ${hookScript}`;
+      // 只把「路径」改成本机绝对路径，**保留原来的脚本文件名**。
+      // （早期版本这里无条件写成 auto-continue.mjs，配置里一旦有第二个钩子就会被它覆写掉。）
+      const scriptName = target ? basename(target) : 'auto-continue.mjs';
+      const fixed = join(hooksDir, scriptName);
+      hook.command = `node ${fixed}`;
       rewritten += 1;
-      notes.push(`${event} 钩子命令已改写为本机绝对路径：node ${hookScript}`);
+      notes.push(`${event} 钩子命令已改写为本机绝对路径：node ${fixed}`);
+      if (!existsSync(fixed)) {
+        problems.push(`${event} 钩子指向的脚本不存在：${fixed}`);
+      }
     }
 
     if (rewritten > 0) {
