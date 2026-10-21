@@ -26,24 +26,29 @@
 - **模块能力台账**（约 900 行的表，按模块名搜）→ [`notes/modules.md`](./notes/modules.md)
   （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
 - **操作型工作站**（熔炉 / 酿造台 / 营火 / 锻造台…的通用契约 + 站台矩阵）→
-  [`docs/STATION-LOGIC.md`](../docs/STATION-LOGIC.md)（保持原位：它是接入 checklist，不是决策流水）
+  [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来：接入 checklist，不是决策流水）
+- **调试接口**（`window.__mc` 的完整清单：验收脚本 / 浏览器实测用）→
+  [`notes/debug-api.md`](./notes/debug-api.md)（从根 `HANDOFF.md` §6 抽出）
+- **打包与发布**（PWA / GitHub Pages / Capacitor / Electron）→
+  [`notes/packaging.md`](./notes/packaging.md)（从根 `HANDOFF.md` §5.5 抽出）
 
 <!-- 新的一节追加在下面，最新的放最上面 -->
 
-## 长期待办的口径：根 `TASKS.md` 是唯一总表（2026-10-22，迁移 continue-do）
-- 做了什么：根 `TASKS.md`（293 项、A~O 分节）继续做全项目总表；`.continue/TASKS.md` 只做
-  队列视角的落地表（A 进行中 / B 待办 / C 已完成），不复制条目。
-- 为什么：三张台账（`audit:tasks` / `audit:coverage` / `diff-ledger`）与 README 路线图都从根表
-  解析；再抄一份到 `.continue/` 必然漂，而"同一事实写两处"正是这批文档反复出问题的地方。
-- 代价与边界：读队列的人要多跳一次（`.continue/TASKS.md` 顶部有指针）。若哪天三张台账迁到
-  `.continue/`，这条就该重看——那时两份应合成一份。
-- 什么时候该重看：台账脚本的路径改了 / README 不再从根表算路线图。
+## 长期待办只有一份：`.continue/TASKS.md`（2026-10-22，合并根 TASKS）
+- 做了什么：把仓库根的 `TASKS.md`（293 项、A~O 分节 + 覆盖度 / 差异台账）整体并入
+  `.continue/TASKS.md`，根文件删除；三张台账脚本（`audit:tasks` / `coverage-report` / `diff-ledger`）
+  与 README 路线图全部改读这一份。
+- 为什么：机制只能有一套。"根表 + 队列视角表"两份并存时，收尾要写两处、且必然漂
+  （这正是前面几轮反复出问题的地方）。
+- 代价与边界：`TASKS.md` 现在 5000+ 行，**不要通读**，按 `[~]` 搜或看 README 路线图；
+  它由脚本核对，手改只改条目状态与正文，别动标记块。
+- 什么时候该重看：条目多到一份文件搜不动了 → 按段落字母拆 `notes/tasks-<段>.md` 并留索引。
 
 ## 判定不做：M17 真机四项、O1、L4、L5（2026-10-21，迁移自旧队列《明确不做》）
-- 做了什么：这四项的**理由**留在这里，状态仍以根 `TASKS.md` 为准（M17 / O1 / L4 是 `[~]`，L5 是 `[-]`）。
+- 做了什么：这四项的**理由**留在这里，状态仍以 `TASKS.md` 为准（M17 / O1 / L4 是 `[~]`，L5 是 `[-]`）。
 - 理由：
   - M17 真机四项（发热 / 真实触控延迟 / 内存压力 / 不同机型）——**AI 做不了**，要用户拿真机跑，
-    清单在根 `TASKS.md` M17 末尾；
+    清单在 `TASKS.md` M17 末尾；
   - O1 与原版噪声参考值对齐 —— **拿不到原版参考值**（同 O5：仓库与当前环境都没有那份素材）；
   - L4 生物权威模拟 —— 投入远超收益：现在是"客户端模拟 + 服务端转发"，改成服务端权威要重写整套
     实体循环，单机玩家一分钱好处都没有；

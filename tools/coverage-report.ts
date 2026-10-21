@@ -39,7 +39,7 @@ import { TREE_KINDS } from '../src/core/gen/Features.ts';
 import { isRedstoneComponent } from '../src/core/redstone/RedstoneEngine.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 
-const TASKS_FILE = new URL('../TASKS.md', import.meta.url);
+const TASKS_FILE = new URL('../.continue/TASKS.md', import.meta.url);
 const START_MARK = '<!-- coverage:start -->';
 const END_MARK = '<!-- coverage:end -->';
 

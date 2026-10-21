@@ -260,4 +260,4 @@ if (problems.length === 0) {
 for (const note of notes) say(`  提示: ${note}`);
 
 say();
-say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 HANDOFF.md 与 .continue/HANDOFF.md 继续推进。');
+say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 AGENTS.md 与 .continue/HANDOFF.md 继续推进。');

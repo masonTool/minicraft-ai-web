@@ -33,8 +33,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
  */
 const printOnly = process.argv.includes('--print');
 
-const TASK_FILE = new URL('../TASKS.md', import.meta.url);
-const HANDOFF_FILE = new URL('../HANDOFF.md', import.meta.url);
+const TASK_FILE = new URL('../.continue/TASKS.md', import.meta.url);
+const HANDOFF_FILE = new URL('../.continue/HANDOFF.md', import.meta.url);
 const README_FILE = new URL('../README.md', import.meta.url);
 
 /** 【原规格】那条只是锚点，与详细条目共用 id 是允许的 */

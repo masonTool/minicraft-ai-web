@@ -15,7 +15,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const FILE = new URL('../TASKS.md', import.meta.url);
+const FILE = new URL('../.continue/TASKS.md', import.meta.url);
 const START = '<!-- diffs:start -->';
 const END = '<!-- diffs:end -->';
 const NOTE = '⚠️';

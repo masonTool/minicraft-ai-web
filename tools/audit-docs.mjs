@@ -26,7 +26,7 @@ const printOnly = process.argv.includes('--print');
 
 const FILES = {
   queuesDir: new URL('../.continue/queues/', import.meta.url),
-  handoff: new URL('../HANDOFF.md', import.meta.url),
+  handoff: new URL('../.continue/HANDOFF.md', import.meta.url),
   /**
    * 完成档案（时间线）。2026-10-22 把旧队列、485 段批次流水、`docs/HANDOFF-ARCHIVE.md`
    * 都并了进来；`docs:trim` 往后搬的旧批次也追加到它末尾的 `docs-archive` 标记区。
@@ -42,7 +42,12 @@ const LIMITS = {
    * 所以队列多长与每轮 token 开销无关。仍留一个很宽松的值，只防"误把大文件粘进队列"。
    */
   queueLines: 5000,
-  handoffLines: 340,
+  /**
+   * 2026-10-22 起 `HANDOFF.md` 是**唯一一份**接手文档（机制 + 当前状态 + 命令 + 边界），
+   * 由旧的根 `HANDOFF.md` 与 `.continue/HANDOFF.md` 合并而来，所以上限从 340 提到 520。
+   * 再长就说明该把"项目细节"搬进 `notes/`（参考 `notes/debug-api.md` / `notes/packaging.md`）。
+   */
+  handoffLines: 520,
   handoffBatches: 6,
   /**
    * 归档体积提示线。`DONE.md` 是**时间线**，天然只增不减：2026-10-22 把旧队列（485 段）、

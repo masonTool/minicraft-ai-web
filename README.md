@@ -64,8 +64,8 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
 
 ## 路线图
 
-> 完整的任务清单见 [TASKS.md](./TASKS.md)（288 项，按 A~O 分段；这个数由 `npm run audit:tasks` 核对）。
-> **下表的"状态"列由 `npm run audit:tasks` 从 TASKS.md 自动算出来**，
+> 完整的任务清单见 [.continue/TASKS.md](./.continue/TASKS.md)（294 项，按 A~O 分段；这个数由 `npm run audit:tasks` 核对）。
+> **下表的"状态"列由 `npm run audit:tasks` 从 `.continue/TASKS.md` 自动算出来**，
 > 手写会漂（这张表曾经整体停在"未开始"，而实际早已完成大半）。
 
 | 阶段 | 内容 | 状态 |
