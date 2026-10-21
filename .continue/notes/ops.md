@@ -1,17 +1,12 @@
-# 调试接口 · 浏览器控制台 `window.__mc`
+# 运维手册 · 调试接口与打包发布
 
-> 2026-10-22 从根 `HANDOFF.md` §6「常用命令与调试接口」抽出——它是**按需查**的接口清单，
-> 不是每轮都要读的状态。改验收脚本、写浏览器实测时再来这里查。
+> 2026-10-22 从根 `HANDOFF.md` 抽出并合并（原 `notes/debug-api.md` + `notes/packaging.md`）。
+> **按需查**：写浏览器实测、动发布链路、给用户装 App 时再读；每轮会话不要读。
+> 命令速查在 `../HANDOFF.md` §6，机制在 §3/§4，项目模块在 `modules.md` / `stations.md`。
 
-**这些是一条链**：`npm run check` = `typecheck` + `test` + 三张台账。
-`test` = `typecheck:tools` + `test:unit`（vitest）+ `test:offline`
-（`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
-32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
+---
 
-`npm test` 那一层共 **169 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
-不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
-另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
-它们要 dev server，不在 `npm test` 里。
+## 调试接口 · 浏览器控制台 `window.__mc`
 
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）：
 `connect(url,name)` / `disconnect()` / `netState` / `sendChat(text)` / `saveNow()` /
@@ -49,3 +44,36 @@
 `place(x,y,z,blockId,state)` / `dropItem(itemId,count,x,y,z)`，另有 info / 实体列表等。
 
 其它：`tools/pixel-probe.mjs` 直接解码 PNG 取像素亮度，把"看起来偏暗"变成可对比数字。
+
+---
+
+## 打包与发布 · PWA / GitHub Pages / 套壳
+
+**PWA 已经可用**：`npm run build` 的产物里带 `manifest.webmanifest`、`sw.js`、`icon.svg`，
+Service Worker 只在生产模式注册（开发时注册会把 vite 的开发资源缓存住，改代码看不到效果——
+这是 PWA 开发最常见的坑）。验收：`sh tools/pwa-check.sh`。
+缓存策略：导航请求网络优先、静态资源缓存优先 + 后台更新。
+
+**GitHub Pages 已经接好**（2026-10-16）：线上地址
+`https://masontool.github.io/minicraft-ai-web/`，工作流 `.github/workflows/deploy-pages.yml`
+在推 `main` 时自动 `npm ci` + `npm run build` + 发布 `dist`。
+仓库侧只需做**一次**设置：`Settings → Pages → Build and deployment → Source = GitHub Actions`
+（不改这一步的话工作流会跑完但不生效，线上 404——这是最常踩的一处）。
+三条与"能不能在子路径下跑起来"有关的约定：
+`vite.config.ts` 的 `base` 必须是相对值 `'./'`（Pages 上项目位于 `/<repo>/`）、
+`index.html` 与 `manifest.webmanifest` 里的路径同样全是相对的、
+项目没用 `SharedArrayBuffer` 因此不需要 Pages 无法自定义的 COOP/COEP 响应头。
+⚠️ **联机在 Pages 上默认不可用**：`defaultServerUrl()` 给的是 `ws://<当前域名>:8787`，
+而 Pages 是 HTTPS 页面，浏览器会直接拦掉这种混合内容；要玩联机得自己跑 `npm run server`
+并挂 `wss://` 反向代理，再在控制台 `mc.connect('wss://你的域名', '昵称')`。
+
+**想套壳成 App 时**（本项目没装这些依赖，按需再加）：
+
+- **Android（Capacitor）**：
+  `npm i -D @capacitor/cli && npm i @capacitor/core @capacitor/android` →
+  `npx cap init` → `npm run build` → `npx cap add android` → `npx cap sync` → `npx cap open android`。
+  注意 `vite.config.ts` 用的是 `base: './'`（相对路径），套壳与 PWA 都能直接用，不必为 `file://` 另做构建。
+- **桌面（Electron）**：`npm i -D electron`，主进程 `loadFile('dist/index.html')`；
+  存档走 IndexedDB，默认持久化在用户数据目录。
+- **手机浏览器直接用**：`npm run dev -- --host` 后用手机访问局域网地址（触控层自动启用），
+  真机验收清单见 `TASKS.md` 的 M17。

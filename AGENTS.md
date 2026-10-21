@@ -54,6 +54,6 @@ npm run check          # typecheck + 169 套离线测试 + 三张台账，任一
    手抄过的都漂过，`npm run audit:tasks` 会当场抓住。
 4. **测试是门禁，不要为了跑得快去削它**：`tools/run-tests.mjs` 只是把"进程开销"
    挤掉（32s → 9s），套件数与断言一条没少。
-5. **批次号 = 开工时的提交总数**（钩子注入到队列头部 `> 批次：`），不用自增计数器。
-   收尾按 `.continue/HANDOFF.md` §3 的五步走：`DONE.md` → `TASKS.md` →（自问）`NOTES.md` /
-   `EXPERIENCE.md` → 删队列；commit message 带 `批次 n`。
+5. **批次号 = 开工时的提交总数**（钩子注入到队列头部 `> 批次：`），不用自增计数器；
+   收尾按 `.continue/HANDOFF.md` §3 的五步走，commit message 带 `批次 n`。**细节只在那份，这里不抄**
+   （抄一遍就会漂：这里曾写死"当场任务补 `C. 已完成`"，而本项目的总表是 A~O 分节）。

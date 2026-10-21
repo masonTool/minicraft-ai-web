@@ -30,7 +30,7 @@
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-22 · 提交总数 1354（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-22 · 提交总数 1355（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 293 项 —— 已完成 **283**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -301,7 +301,7 @@ npm run agent:setup        # 跨机器自检
 单套调试仍可直接跑 `npm run test:reach` 这类老命令。
 
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）的完整接口清单 →
-[`notes/debug-api.md`](./notes/debug-api.md)；`tools/pixel-probe.mjs` 能把"看起来偏暗"
+[`notes/ops.md`](./notes/ops.md)；`tools/pixel-probe.mjs` 能把"看起来偏暗"
 变成可对比的像素亮度数字。
 
 ---
@@ -468,12 +468,10 @@ npm run agent:setup        # 跨机器自检
 7. **钩子命令里的 `.continue/hooks/…` 是相对路径**，要求钩子进程的 cwd 是项目根。脚本自身靠
    `import.meta.url` 定位根目录，但 `node` 找不到文件时会直接 `Cannot find module`——这时把注册的
    command 换成绝对路径即可（`npm run agent:setup -- --fix-hooks`）。
-8. **本项目在框架原版上补了刹车开关**（`.continue/auto-continue.off` / `auto-commit.off`）。
-   若以后用 `continue-task` 技能重装覆盖了 `hooks/`，记得把这两段加回去（否则只剩"删队列"这一种停法）。
-
----
-
----
+8. **刹车开关**（`.continue/auto-continue.off` / `auto-commit.off`）2026-10-22 起已并入
+   `continue-task` 技能本身（钩子 + `.gitignore` + 本节的说明），重装不会再丢。
+   如果哪天用**旧版**技能包覆盖了 `hooks/`，表现是"刹车文件不起作用"——把这四行加回去即可
+   （`lib.mjs` 已导出 `CONTINUE_DIR`，两个钩子各判一次 `existsSync`）。
 
 ## 11. 待复核的悬案（下次接手优先看）
 

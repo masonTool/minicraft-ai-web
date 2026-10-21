@@ -1,3 +1,7 @@
 # 钩子的运行日志：每轮都写，只在本机。
 # 放在 .continue/ 里而不是项目根，这样不用改用户自己的 .gitignore。
 logs/
+
+# 急刹车开关（touch .continue/auto-continue.off）：本地临时文件，不进仓库。
+# 不 ignore 的话，刹车一打开，提交守卫就会一直把"未提交改动"拦下来。
+*.off

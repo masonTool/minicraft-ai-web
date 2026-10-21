@@ -24,17 +24,14 @@
 ## 索引
 
 > **目录约定**：`notes/` 是本文件的**溢出位**（单节超过 15 行就拆出去），不是第二套机制——
-> 这里只留一行索引。现有：`modules`（模块台账）/ `stations`（工作站契约）/
-> `debug-api`（调试接口）/ `packaging`（打包发布）。
+> 这里只留一行索引。现有：`modules`（模块台账）/ `stations`（工作站契约）/ `ops`（调试接口 + 打包发布）。
 
 - **模块能力台账**（约 900 行的表，按模块名搜）→ [`notes/modules.md`](./notes/modules.md)
   （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
 - **操作型工作站**（熔炉 / 酿造台 / 营火 / 锻造台…的通用契约 + 站台矩阵）→
   [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来：接入 checklist，不是决策流水）
-- **调试接口**（`window.__mc` 的完整清单：验收脚本 / 浏览器实测用）→
-  [`notes/debug-api.md`](./notes/debug-api.md)（从根 `HANDOFF.md` §6 抽出）
-- **打包与发布**（PWA / GitHub Pages / Capacitor / Electron）→
-  [`notes/packaging.md`](./notes/packaging.md)（从根 `HANDOFF.md` §5.5 抽出）
+- **运维手册**（`window.__mc` 调试接口 + PWA / Pages / 套壳发布）→
+  [`notes/ops.md`](./notes/ops.md)（从根 `HANDOFF.md` §5.5 / §6 抽出并合并）
 
 <!-- 新的一节追加在下面，最新的放最上面 -->
 
