@@ -203,7 +203,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 > 为什么排第三：8 条进行中里有 3 条（A7/O4/M17 的一部分）都卡在"目前靠人工看结论"。
 > 这次的方块纯黑就是这样漏过去的——有自动截图 + console 零错误门禁，它上线前就会被抓住。
 
-- [ ] Q8 仓库内置 `playwright` devDependency + `tools/screenshot.ts`：
+- [x] Q8 仓库内置 `playwright` devDependency + `tools/screenshot.ts`：
       给定 URL/视口/等待条件截一张图到 `.tmp/shots/`（不进仓库）。
       验收：`npm run shot -- /` 能出图；不引入 CI 强制依赖（没装浏览器时脚本给提示并退出 0）
 - [ ] Q9 `tools/console-guard.ts`：用 playwright 打开页面、收集 `console.error` 与 `pageerror`、
