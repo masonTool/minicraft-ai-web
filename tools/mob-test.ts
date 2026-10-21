@@ -16,7 +16,14 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { ATTACK_ANIM_SECONDS, Mob, attackSwingAmount, leashPullBoost } from '../src/core/entity/Mob.ts';
+import {
+  ATTACK_ANIM_SECONDS,
+  LEASH_STOP,
+  Mob,
+  attackSwingAmount,
+  leashClampedPosition,
+  leashPullBoost,
+} from '../src/core/entity/Mob.ts';
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
@@ -865,6 +872,21 @@ console.log('\n[拴绳：牵着的动物跟着走（批次 256）]');
   equal('没超出绳长不加速', leashPullBoost(0), 0);
   check('绷得越紧拉得越快', leashPullBoost(4) > leashPullBoost(1));
   check('牵引增速有上限（不会无限快）', leashPullBoost(100) === 1.4);
+
+  // 精确绳长（J19a，批次 593）：纯函数把位置夹到半径上
+  const inside = leashClampedPosition(1, 0, 0, 0);
+  check('绳内坐标不夹', !inside.clamped && inside.x === 1 && inside.z === 0);
+  const outside = leashClampedPosition(10, 0, 0, 0);
+  check('绳外坐标夹到 LEASH_STOP', outside.clamped && Math.abs(outside.x - LEASH_STOP) < 1e-9);
+  check('夹取方向保持（z 不变）', Math.abs(outside.z) < 1e-9);
+
+  // 玩家一瞬间跑远：只 tick 一次也要立刻被夹回绳长，而不是慢慢追
+  const far = new Mob(mobTypeById('cow')!, 20, 65.5, 0.5);
+  far.tamed = true;
+  far.leashed = true;
+  far.tick(ctx, 0.05);
+  const farDistance = Math.abs(8.5 - far.x);
+  check('一帧就把超长绳距夹回 ≤ 3.5 格', farDistance <= LEASH_STOP + 0.01, `距离 ${farDistance.toFixed(2)}`);
 }
 
 console.log('\n[蝙蝠：会飞的被动生物（批次 261）]');

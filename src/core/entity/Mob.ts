@@ -107,12 +107,35 @@ export const LEASH_STOP = 3.5;
 /**
  * 绳子绷紧后的牵引增速（批次 575）：距离超过停止距离越多，被拉得越快。
  *
- * 只做速度倍率（最多 +140%），不做“绳子长度约束/强制位移”——
- * 原版被拴住的生物会有一个朝玩家的额外拉力，这里用提速近似。
+ * 这是“追得上”的一半；“不能超过绳长”由 `leashClampedPosition` 硬约束。
  */
 export function leashPullBoost(excess: number): number {
   if (!(excess > 0)) return 0;
   return Math.min(1.4, excess * 0.35);
+}
+
+/**
+ * 牵引绳的硬长度约束（J19a，批次 593）。
+ *
+ * 原版绳子最长约 4 格，超过就把实体拽回来；本项目之前只有“走近 + 提速”，
+ * 玩家跑得快时绳长会被拉到十几格。这里把位置夹到以玩家为圆心、半径 `max` 的圆上。
+ *
+ * 只算水平距离：竖直方向由地形/重力处理，突然改 y 会让生物卡进台阶。
+ * 返回 `clamped=false` 时坐标原样返回，调用方不必判断距离。
+ */
+export function leashClampedPosition(
+  x: number,
+  z: number,
+  playerX: number,
+  playerZ: number,
+  max: number = LEASH_STOP,
+): { x: number; z: number; clamped: boolean } {
+  const dx = x - playerX;
+  const dz = z - playerZ;
+  const distance = Math.hypot(dx, dz);
+  if (!(distance > max) || distance < 1e-6) return { x, z, clamped: false };
+  const scale = max / distance;
+  return { x: playerX + dx * scale, z: playerZ + dz * scale, clamped: true };
 }
 /**
  * 已驯服的宠物离主人超过这个距离就**传送**过去（格）。
@@ -1374,6 +1397,24 @@ export class Mob extends Entity {
         this.moveDirX = dx / length;
         this.moveDirZ = dz / length;
         this.move(true, dt);
+        // 硬约束：跑得再快也不能把绳子拉长。只夹水平位置，且目标格有碰撞时
+        // 宁可不夹（让生物继续贴着墙走），否则会把它塞进方块里。
+        const clamped = leashClampedPosition(this.x, this.z, player.x, player.z);
+        if (clamped.clamped) {
+          const bx = Math.floor(clamped.x);
+          const bz = Math.floor(clamped.z);
+          const blocked =
+            ctx.world.collisionAt(bx, Math.floor(this.y + 0.1), bz) !== null ||
+            ctx.world.collisionAt(bx, Math.floor(this.y + this.height - 0.1), bz) !== null;
+          if (!blocked) {
+            this.x = clamped.x;
+            this.z = clamped.z;
+            this.leashTension = Math.max(
+              0,
+              Math.hypot(this.x - player.x, this.z - player.z) - LEASH_STOP,
+            );
+          }
+        }
         return;
       }
       // 绳子还松着：停下等主人，别自己游荡（否则会被拽得一抖一抖）
