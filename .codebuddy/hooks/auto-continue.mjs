@@ -248,6 +248,19 @@ const next = pending
   .join('\n');
 
 /**
+ * AI 自己插入的任务（`- [ ] [发现] ...`）。
+ *
+ * 为什么允许：干活时撞见的问题往往比排好的任务更值钱——改物理时发现水里没断言、
+ * 写界面时发现某个分支一直是死代码。这类信息**只在动手时才能拿到**，排期时想不到。
+ *
+ * 为什么要管：不设边界的话，AI 会为了"有活干"而发明任务（本项目真实踩过），
+ * 看起来一直在推进，其实在空转。所以给三条硬规则（见下方 feedback）+ 一个总额度。
+ */
+const discovered = pending.filter((line) => /^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
+const DISCOVERED_LIMIT = Number(process.env.AUTO_CONTINUE_DISCOVERED_LIMIT ?? 5);
+const discoveredFull = discovered.length >= DISCOVERED_LIMIT;
+
+/**
  * 上下文水位。默认阈值 150k：这个量级之后模型的注意力与压缩风险都明显上升，
  * 与其硬撑不如主动收尾——但**收尾不是放弃**，而是把"交接"落到文件里，下一轮换个会话接着跑。
  * 可用 `AUTO_CONTINUE_CONTEXT_LIMIT` 覆盖。
@@ -281,8 +294,16 @@ const mustHandOff =
  * 这句话必须**自包含**——新会话看不到旧会话的任何东西，只能靠它 + 仓库文件。
  * 所以它要带上：读哪几份文件、当前第一条是什么、做完一条就停的约定。
  */
-const firstPendingText = pending[0]
-  ? pending[0].replace(/^-\s*\[[ ~]\]\s*/, '').trim().slice(0, 80)
+/**
+ * 交接单里的"下一条"优先取**用户排的任务**，没有才取 `[发现]`。
+ *
+ * 这条优先级不是小事：如果 AI 插的 `[发现]` 总被排到最前，那就等于
+ * 它自己给自己派活、把用户排的任务一直往后推——"只插不改"的承诺就落空了。
+ */
+const firstScheduled = pending.find((line) => !/^-\s*\[[ ~]\]\s*\[发现\]/.test(line));
+const firstPending = firstScheduled ?? pending[0];
+const firstPendingText = firstPending
+  ? firstPending.replace(/^-\s*\[[ ~]\]\s*/, '').trim().slice(0, 80)
   : null;
 
 const handoffPrompt = firstPendingText
@@ -317,7 +338,7 @@ const feedback = mustHandOff
   : [
       `[auto-continue 第${state.count}轮 · 队列还剩 ${pending.length} 条 · ${contextLine}] 不要询问我，直接继续执行。`,
       '',
-      '请先读取 .codebuddy/hooks/process/auto-continue.md 与 TASKS.md，然后开始实现**下面第一条**：',
+      '## 这一轮做这一条（不用读整个队列文件，做这条够用的部分即可）',
       next,
       '',
       '要求：',
@@ -327,6 +348,25 @@ const feedback = mustHandOff
       '4. 改完必须自测：`npx tsc --noEmit` 通过 + 用脚本或浏览器实测，把实测数据写进 commit message；',
       '5. 遇到困难不要停下来问我，自己找办法解决并把结论记录下来；',
       '6. 队列全部清空后，在回复里明确写"队列已清空"再停止。',
+      '',
+      '## 你可以在队列里插任务——但有硬条件',
+      '',
+      `做完这条后，如果**在动手过程中**发现了更该先做的事，可以往队列**插一条**（现有 ${discovered.length}/${DISCOVERED_LIMIT} 条）。`,
+      '格式（行首必须是这个，钩子靠它识别）：',
+      '',
+      '```',
+      '- [ ] [发现] <一句话说清是什么>：<哪个文件/哪条断言暴露的> → <怎么算做完>',
+      '```',
+      '',
+      '**三条硬条件，缺一条就不要写**：',
+      '',
+      '1. **必须是你这一轮真实撞见的**，并在条目里写明证据（文件行号 / 断言失败 / 实测现象）。',
+      '   不许写"我觉得""可能""顺便优化一下"这类没有证据的东西。',
+      '2. **只能插，不能删改用户排的任务**。已有的 `[ ]` 一条都不许动、不许重排、不许合并。',
+      '3. **插完在你的回复里明确说一句**："我插了一条：[发现] …，因为 …"，让用户能看见并否决。',
+      discoveredFull
+        ? `\n⚠️ 本轮**不要再插**：`[发现]` 已满 ${DISCOVERED_LIMIT} 条。先把手上的活干完，让用户过一遍已有发现。`
+        : '',
     ].join('\n');
 
 // 只在交接时落盘：平时不写，免得让人以为随时都有待用的交接单

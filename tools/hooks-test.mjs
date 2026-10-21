@@ -241,7 +241,45 @@ console.log('\n[无上限与上下文水位]');
   check('auto-commit 没有拦截次数上限', !/MAX_ROUNDS/.test(commitSrc));
 }
 
-// ---------------------------------------------------------------- 交接单
+// ---------------------------------------------------------------- AI 自插任务
+
+console.log('\n[AI 自插任务]');
+
+{
+  /**
+   * 允许 AI 在干活时插 `[发现]` 任务，但必须有闸：
+   *   · 格式能被钩子识别（行首 `- [ ] [发现]`）；
+   *   · 额度满了要明确说"别再插"；
+   *   · 反馈里必须带"证据 / 只插不改 / 明说"三条硬条件。
+   */
+  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('识别 [发现] 条目', /\[发现\]/.test(src));
+  check('有发现条数统计', /discovered\.length/.test(src));
+  check('有额度开关', /AUTO_CONTINUE_DISCOVERED_LIMIT/.test(src));
+
+  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
+  let backup = null;
+  try {
+    backup = readFileSync(queueFile, 'utf8');
+
+    // 正常模式：反馈里应出现三条硬条件
+    writeFileSync(queueFile, `${backup}\n- [ ] hooks-test 占位\n`);
+    const normal = runHook('auto-continue.mjs', stopEvent('hooks-test-discover-1'));
+    check('正常模式提示可插 [发现]', /\[发现\]/.test(normal.stderr));
+    check('带\"必须真实撞见\"的约束', /真实撞见/.test(normal.stderr));
+    check('带\"只能插不许改\"的约束', /不能删改/.test(normal.stderr));
+    check('带\"插完要说一声\"的约束', /我插了一条/.test(normal.stderr));
+    check('正常模式不阻止插入', !/不要再插/.test(normal.stderr));
+
+    // 额度打满：必须明确要求停止插入
+    const filled = Array.from({ length: 6 }, (_, i) => `- [ ] [发现] 占位发现 ${i + 1}：x → y`).join('\n');
+    writeFileSync(queueFile, `${backup}\n${filled}\n`);
+    const full = runHook('auto-continue.mjs', stopEvent('hooks-test-discover-2'));
+    check('额度满时要求停止插入', /不要再插/.test(full.stderr));
+  } finally {
+    if (backup !== null) writeFileSync(queueFile, backup);
+  }
+}
 
 console.log('\n[交接单]');
 
