@@ -14,6 +14,7 @@
 import { Item } from '../src/core/registry/items.ts';
 import { itemLabel, hasDescription, itemDescription } from '../src/core/registry/itemNames.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
+import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
 import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { CREATIVE_ITEMS, itemDef, maxStackOf } from '../src/core/registry/items.ts';
@@ -83,6 +84,26 @@ console.log('\n[配方：书 + 墨囊 + 羽毛]');
   equal('产 1 本', recipe?.result.count, 1);
   const ingredients = recipe ? recipeIngredients(recipe).map((ingredient) => ingredient.id).sort() : [];
   equal('三样原料：书 / 墨囊 / 羽毛', ingredients.join(','), [Item.BOOK, Item.INK_SAC, Item.FEATHER].sort().join(','));
+}
+
+console.log('\n[配方：成书 + 书与笔 → 复制成书]');
+{
+  const recipe = RECIPES.find((entry) => entry.result.id === Item.WRITTEN_BOOK);
+  check('有复制配方', recipe !== undefined);
+  equal('产 2 本（原书 + 副本）', recipe?.result.count, 2);
+  const ingredients = recipe ? recipeIngredients(recipe).map((ingredient) => ingredient.id).sort() : [];
+  equal(
+    '两样原料：成书 / 书与笔',
+    ingredients.join(','),
+    [Item.WRITTEN_BOOK, Item.BOOK_AND_QUILL].sort().join(','),
+  );
+
+  const grid = new CraftingGrid(2);
+  grid.set(0, book({ id: Item.WRITTEN_BOOK, pages: ['第一页'], title: '旅途' }));
+  grid.set(1, { id: Item.BOOK_AND_QUILL, count: 1 });
+  grid.recompute();
+  equal('合成结果页数跟着原书走', grid.result?.pages?.join('|'), '第一页');
+  equal('书名也跟着走', grid.result?.title, '旅途');
 }
 
 console.log('\n[规整规则]');

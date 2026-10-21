@@ -759,6 +759,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.BOOK_AND_QUILL, count: 1 },
     ingredients: [Item.BOOK, Item.INK_SAC, Item.FEATHER],
   },
+  // 成书 + 书与笔 → 成书 ×2（复制；批次 598，H16 最后一条）。
+  // 产物上的页数与书名来自那一本成书，由 `CraftingGrid.recompute` 拷过去。
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.WRITTEN_BOOK, count: 2 },
+    ingredients: [Item.WRITTEN_BOOK, Item.BOOK_AND_QUILL],
+  },
   {
     kind: 'shaped' as const,
     result: { id: Block.ENCHANTING_TABLE, count: 1 },

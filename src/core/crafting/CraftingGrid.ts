@@ -44,6 +44,15 @@ export class CraftingGrid implements SlotSource {
       const colors = star?.firework?.colors ?? [];
       if (colors.length > 0) matched.firework = { flight: matched.firework?.flight ?? 1, colors: [...colors] };
     }
+    // 成书复制（批次 598，H16）：产物的页数/书名必须来自那一本成书，
+    // 否则复制出来会是一本空白书。配方只按 id 匹配，看不到数据。
+    if (matched && matched.id === Item.WRITTEN_BOOK) {
+      const source = this.slots.find((slot) => slot !== null && slot.id === Item.WRITTEN_BOOK);
+      if (source) {
+        if (source.pages) matched.pages = [...source.pages];
+        if (source.title) matched.title = source.title;
+      }
+    }
     this.result = matched;
     this.onChange?.();
   }
