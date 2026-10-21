@@ -26,7 +26,7 @@ npm run dev            # http://localhost:5173
 然后对 AI 说一句：**「读 AGENTS.md、HANDOFF.md 与 .codebuddy/auto-continue.md，按队列继续推进。」**
 之后 Stop 钩子会自动按队列继续，不需要逐步确认（机制见第 3 节）。
 
-验收门槛：`npm run check` 全过（= `typecheck` + `npm test` + 三张台账），`npm run build` 能出包。
+验收门槛：`npm run check` 全过（= `typecheck` + `npm test` + 三张台账），`npm run build` 能出包；失败时先跑 `npm run audit:tasks`（直接指出三处锚点哪处漂了：本文件 / TASKS 顶部 / README 路线图）。
 
 > **改代码时的内循环别用 `check`**（那是提交前的全量），用这两条：
 > `npm run check:fast`（typecheck + 单测 + **只跑被改动命中的那几套离线测试**）、
@@ -152,9 +152,9 @@ npm run dev            # http://localhost:5173
 ## 5. 待复核的悬案（下次接手优先看）
 
 ~~非完整方块展示平台整体偏暗~~ → **批次 565 补了"光照首次收敛后全量重刷已渲染区块"**
-（`ChunkRenderer.enqueueAllRendered` + `lightSettledRemeshDone`，只做一次；
-之后的光照变化仍由 `pendingSettle` 逐块补刷）。
-真机若仍偏暗，才需要继续查顶点光照/材质本身（而不是烘焙时机）。
+（`ChunkRenderer.enqueueAllRendered` + `lightSettledRemeshDone`，只做一次；之后的变化仍由
+`pendingSettle` 逐块补刷）。真机若仍偏暗，才查顶点光照/材质本身（不是烘焙时机）。
+**剩余 9 项"哪些能自己做、各自卡在哪" + 命名牌 `name_tag` 真缺口** → `.codebuddy/auto-continue.md` 的《剩余 9 项与阻塞》（原 `PENDING.md` 已并入，不再单独维护）。
 
 ## 5.5 打包与发布（K8）
 
