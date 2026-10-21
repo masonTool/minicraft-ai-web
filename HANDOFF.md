@@ -109,8 +109,8 @@ npm run dev            # http://localhost:5173
   `.codebuddy/hooks/logs/`（日志 + 计数状态，gitignore，超 512KB 转存 `.1`）/ `.codebuddy/*.off`（刹车）。
 - **脚本自己认路**：两个脚本都用 `import.meta.url` 上退 2 层算项目根，不依赖 cwd 与
   `CODEBUDDY_PROJECT_DIR`（条件注入）——**目录改名也不用改配置**。
-- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`。**没有轮次上限**：队列不空就一直跑。
-- **AI 可插任务**：`- [ ] [发现] …`（须带证据，最多 5 条），细则见队列文件同名小节。
+- 刹车：`touch .codebuddy/{auto-continue,auto-commit}.off`；**没有轮次上限**，队列不空就一直跑。
+- **AI 可插任务**：`- [ ] [发现] …`（须带证据，最多 5 条）；**卡死保护**：同一条连续 5 轮做不完 → 标 `[阻塞]` 跳过并要求 AI 上报等你决策。
 - **上下文水位 150k**（`AUTO_CONTINUE_CONTEXT_LIMIT`）：每轮从 `transcript_path` 读
   `input_tokens`，过阈值就转为"收干净 + 写清下一步 + 给交接摘要"再停。
   钩子**开不了新会话**（`Stop` 只能返回 `additionalContext`），所以它生成"新会话第一句话"
