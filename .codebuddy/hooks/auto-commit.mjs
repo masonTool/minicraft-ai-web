@@ -12,19 +12,21 @@
  * 生命周期：
  *   每轮 Stop → 有脏文件 → 阻止停止 + 给要求 → AI 提交 → 再 Stop → 干净 → 放行。
  *
- * 安全阀（少一个就可能把仓库搞坏或烧光 token）：
+ * 安全阀（少一个就可能把仓库搞坏）：
  *   1. `.codebuddy/auto-commit.off` 存在 → 完全放行（紧急刹车）；
  *   2. merge / rebase / cherry-pick 进行中、detached HEAD、有冲突 → 放行并提醒，
  *      这一类状态下自动提交极容易把别人的活搅乱；
- *   3. 同一会话最多拦 AUTO_COMMIT_MAX 次（默认 5）→ 防止 AI 改不干净时无限循环；
- *   4. 用户主动发言（UserPromptSubmit）重置计数 → 人工介入后重新计。
+ *   3. 用户主动发言（UserPromptSubmit）重置计数 → 人工介入后重新计。
+ *
+ * **没有拦截次数上限**（用户要求"不限制会话次数"）：唯一放行理由是工作区干净。
+ * 代价是长期跑下去计数会一直涨——所以计数只写进日志与该行提示，不再作为放行条件。
  *
  * 两种输出风格（官方文档与实测存在冲突，所以留开关）：
  *   默认 AUTO_COMMIT_STYLE=json  → stdout `{"continue": false, "reason": "..."}` + exit 0
  *   AUTO_COMMIT_STYLE=exit2      → stdout `{"continue": true}` + 反馈走 stderr + exit 2
  *   若发现 AI 不理会、直接停了，把环境变量切成 exit2 再试（详见 HANDOFF §3）。
  *
- * 排查：每次调用都往 `.codebuddy/logs/auto-commit.log` 追加一行 JSON。
+ * 排查：每次调用都往 `.codebuddy/hooks/logs/auto-commit.log` 追加一行 JSON。
  *   `decision=block` 说明钩子生效且拦住了；`decision=allow:*` 里的原因是放行依据。
  */
 
@@ -33,7 +35,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSy
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MAX_ROUNDS = Number(process.env.AUTO_COMMIT_MAX ?? 5);
 const STYLE = process.env.AUTO_COMMIT_STYLE === 'exit2' ? 'exit2' : 'json';
 
 /**
@@ -62,8 +63,9 @@ try {
 
 const projectDir = PROJECT_ROOT;
 const codebuddyDir = join(projectDir, '.codebuddy');
-/** 运行时产物（日志 + 计数状态）统一放 logs/，不进仓库；刹车文件留在 .codebuddy/ 根便于 touch。 */
-const logsDir = join(codebuddyDir, 'logs');
+/** 运行时产物（日志 + 计数状态）统一放 `hooks/logs/`，不进仓库；刹车文件留在 `.codebuddy/` 根便于 touch。 */
+const hooksDir = join(codebuddyDir, 'hooks');
+const logsDir = join(hooksDir, 'logs');
 const stateFile = join(logsDir, 'auto-commit.state.json');
 const offFile = join(codebuddyDir, 'auto-commit.off');
 const logFile = join(logsDir, 'auto-commit.log');
@@ -231,18 +233,18 @@ if (changed.length === 0) {
   allowStop('clean');
 }
 
-// 计数：同一个会话里最多拦这么多次
+/**
+ * 计数只用于**日志与提示**，不再作为放行条件。
+ *
+ * 原先有"同一会话最多拦 5 次"的上限（`AUTO_COMMIT_MAX`），但那会造成长跑时的假保险：
+ * 拦满 5 次之后就不管了，而队列还在继续跑——后半程的漏提交其实没被保护。
+ * 用户要求"不限制会话次数"，所以这里改成**只记次数、不封顶**。
+ * 唯一的放行理由回到本源：工作区干净。
+ */
 const state = loadState();
 if (state.sessionId !== sessionId) {
   state.sessionId = sessionId;
   state.count = 0;
-}
-if (state.count >= MAX_ROUNDS) {
-  allowStop(
-    'max-rounds',
-    `自动提交检查已达上限 ${MAX_ROUNDS} 次，本次放行。工作区仍有 ${changed.length} 个未提交改动，`
-      + `请手动确认。继续可用：删除 ${stateFile}，或调大环境变量 AUTO_COMMIT_MAX。`,
-  );
 }
 state.count += 1;
 saveState(state);
@@ -257,7 +259,7 @@ const diffstat = (git(['diff', '--stat']) ?? '').trim();
 const untrackedCount = changed.filter((line) => line.startsWith('??')).length;
 
 const feedback = [
-  `[auto-commit ${state.count}/${MAX_ROUNDS}] 先别停：工作区还有 ${changed.length} 个未提交改动。`,
+  `[auto-commit 第${state.count}次拦截] 先别停：工作区还有 ${changed.length} 个未提交改动。`,
   '',
   '## 当前改动（git status --porcelain）',
   ...shown.map((line) => `  ${line}`),
