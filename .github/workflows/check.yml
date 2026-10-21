@@ -1,6 +1,7 @@
 # 提交前的门禁（CI）
 #
-# 为什么要有这一条：`npm run check`（typecheck + vitest + 129 套离线测试 + 三张台账）
+# 为什么要有这一条：`npm run check`（typecheck + vitest + 全部离线套件 + 三张台账；
+# 套数以 `package.json` 的 `test:*` 为准，**这里不抄数字**——抄过的那个数已经从 129 漂到 169 了）
 # 一直是**本地自觉**跑的——推上去之后只有"能不能构建"会被验证（`deploy-pages.yml`）。
 # 换句话说，某一次赶时间跳过 check 也不会被发现，直到线上行为不对。
 # 这个工作流把同一道门禁搬到 CI：推送与 PR 都跑一遍，红了就有记录。
@@ -42,7 +43,8 @@ jobs:
 
       - run: npm ci
 
-      # 本地那道门禁：typecheck → vitest → 129 套离线测试 → 三张台账
+      # 本地那道门禁：typecheck → vitest → 全部离线套件 → 三张台账
+      # （浏览器那一段由 `check:browser` 默认跳过，CI 里没有 Chrome，见 tools/browser-check.mjs）
       - run: npm run check
 
       # 再验一次"能不能出包"（关 sourcemap 的快版本，产物内容与正式构建一致）

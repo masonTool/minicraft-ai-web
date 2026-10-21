@@ -101,9 +101,24 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       （这些是**本项目基准值**，不是原版参考值；O1 仍单独追踪。）
 - [x] A6b 离线统计脚本 `tools/gen-stats.ts`（`npm run gen:stats`）：
       在不启动浏览器的情况下输出生成耗时、洞穴占比、各矿石产量、地表高度样本，用于参数标定
-- [~] A7 自动化验收脚本（playwright 截图 + 控制台零错误断言）
+- [x] A7 自动化验收脚本（playwright 截图 + 控制台零错误断言）
       已实现：`tools/*-acceptance.js` + `tools/*-check.sh`（移动端/联机/存档/性能/资源包/PWA/设置/音频），
-      由外部 `playwright-cli` 驱动；缺：仓库内自动截图抓取与控制台零错误门禁
+      由外部 `playwright-cli` 驱动
+      —— **批次 1357 收口**：注记里那句"缺仓库内自动截图抓取与控制台零错误门禁"**已经过期**，
+      四块现在都在仓库里、都是命令：
+      ① 截图 `npm run shot`（`tools/screenshot.mjs`）：用 `playwright-core` **复用本机已装的 Chrome**
+         （不下载 ~300MB Chromium，见脚本头），找不到浏览器时按契约 **exit 0**——
+         环境缺东西与页面坏了不能混成同一个红灯；
+      ② 控制台零错误 `npm run guard`（`tools/console-guard.mjs`）：跑一段时间，任何 `console.error`
+         或 `pageerror` 都非零退出；`--allow` 放行已知噪音、`--enter-world` 顺手进一局更接近真实；
+      ③ 截图断言 `npm run shotdiff`（`tools/shot-diff.mjs`）：自解 PNG（只用 `node:zlib`，不引 pngjs/sharp）
+         按像素差比基线，超阈值非零；**没有基线时算"建立基线"而不是失败**；
+      ④ 接线 `npm run check:browser`（`tools/browser-check.mjs`）：自己起 dev server、故意换 **5199** 端口
+         避开本机 5173 被别的东西占着；起之前先探 IPv4 与 localhost，**任一个有响应就拒绝继续**
+         （否则会连上别人的服务、测出旧代码却报"通过"= 假绿）。`npm run check` 默认**不跑**它，
+         `BROWSER_CHECK=1` 才真跑——保住"纯离线约 12 秒"这条高频内循环。
+      四块各有离线自测（都在 169 套里，合计 **69 条**）：`test:screenshot` 14 / `test:guard` 17 /
+      `test:shotdiff` 23 / `test:browser-check` 15，实测四套全绿。
 - [x] A8 定点基准（perf harness：区块生成 / 网格化 / 单帧渲染耗时）
       已实现：自适应视距基准 `tools/perf-acceptance.js`（fps / chunks / 三角形 / 堆）、
       区块生成耗时 `tools/gen-stats.ts`，以及**离线的定点基准 `tools/perf-bench.ts`**
@@ -4956,9 +4971,17 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       另有 **120 条**玩家移动回归：潜行防掉落/沿边横移、冲刺跳、雪层与台阶不抖跳、
       游泳上下浮、一格高爬行、蛛网、水流、蜂蜜块、细雪、甜浆果丛减速。
       —— **批次 590 口径校准**：文档里"缺玩家物理移动解析"已过期，判为完成。
-- [~] O4 每阶段浏览器实测（截图 + 控制台零错误）
+- [x] O4 每阶段浏览器实测（截图 + 控制台零错误）
       已实现：`tools/mobile-check.sh` / `net-check.sh` / `*-acceptance.js` + `pixel-probe.mjs` 等实测脚本；
       缺：自动截图断言与 console/pageerror 零错误门禁（目前靠人工看结论）
+      —— **批次 1357 收口**：与 A7 是同一件事的两个入口（A7 记"工具在不在"，O4 记"跑出来的结论能不能被机器判"），
+      这里缺的那两样现在都是命令，不需要人看：
+      **截图** `npm run shot` → **像素回归** `npm run shotdiff`（与 `.base.png` 比差，超阈值非零）
+      → **控制台零错误** `npm run guard`（`console.error` / `pageerror` 一律非零）
+      → 三者由 `npm run check:browser` 串起来（`BROWSER_CHECK=1` 开启，默认跳过以保住离线门禁的 12 秒）。
+      所以"靠人工看结论"的注记同样过期了：反过来，**门禁只报"有没有错"，"像不像原版"仍归 O5**（已判不做）。
+      ⚠️ 保留的口径：**CI 不跑浏览器**（`.github/workflows/check.yml` 只跑 `npm run check` + `build:fast`）——
+      容器里通常没有 Chrome，"跑不了"与"页面坏了"混成红灯会把门禁变成噪音；真机四件事仍归 M17。
 - [-] O5 与原版对照截图（地形形态、群系分布、洞穴形态）——**不执行自动化**：
       需要原版客户端的同种子、同坐标截图作为基准，仓库与当前环境都没有这份素材；
       本项目能做的只是自身截图回归，无法替代"与原版对照"这一判据。
