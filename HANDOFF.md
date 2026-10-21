@@ -4,9 +4,7 @@
 > **换电脑、换会话、换人接手，都先读这一份**（整份读完再按需展开，不用挑），
 > 再读 `.codebuddy/hooks/process/auto-continue.md`（推进队列）和 [TASKS.md](./TASKS.md)（长期总表）。
 > 会话聊天记录本身不随仓库走，能带走的关键上下文都沉淀在下面。
->
-> 大块历史正文已经拆出去按需读，见 §1 的索引表（`docs/HANDOFF-ARCHIVE.md` /
-> `docs/EXPERIENCE.md`）——**不要一开始就把它们全读进来**。
+> 大块历史正文已经拆出去按需读，见 §1 的索引表（`docs/HANDOFF-ARCHIVE.md` / `docs/EXPERIENCE.md`）——**不要一开始就把它们全读进来**。
 
 ---
 
@@ -189,11 +187,12 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 167 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 168 套离线测试 + 三张台账（末尾 check:browser 默认跳过；BROWSER_CHECK=1 才真跑浏览器）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
+npm run shot               # 截图到 .tmp/shots/（没浏览器就跳过）；npm run guard = 控制台零错误门禁
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 167 套离线测试
+npm test                   # typecheck:tools + vitest + 168 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -205,7 +204,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **167 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **168 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
