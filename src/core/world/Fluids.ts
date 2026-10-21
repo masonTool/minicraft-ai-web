@@ -14,11 +14,13 @@
  * 不依赖具体世界：`FluidWorld` 只要求读写方块/状态 + 计划刻回调，因此能离线测。
  */
 
-import { Block, blockDef } from '../registry/blocks.ts';
+import { Block, blockDef, canBeWaterlogged } from '../registry/blocks.ts';
 import {
   fluidLevel,
   isFallingFluid,
+  isWaterlogged,
   withFallingFluid,
+  withWaterlogged,
   withFluidLevel,
 } from '../registry/blockState.ts';
 export const WATER = Block.WATER;
@@ -58,6 +60,79 @@ export function flowDelay(id: number): number {
 }
 
 /**
+ * 这一格是不是**水的一员**（批次 621 / Q18）。
+ *
+ * 三种情况算：
+ *  - 真的是一格水（`Block.WATER`）；
+ *  - 方块本身不能含水 → 不算（整格方块、雪层）；
+ *  - **含水方块**（半砖/楼梯/栅栏…的 bit7 置位）→ 算，而且算作**水源**。
+ *
+ * 为什么含水的台阶要算水源：原版把台阶倒满水之后，它就是一格"实心 + 水"的方块，
+ * 旁边的水看到的是一个 0 级的供源，水会从它那里继续往低处流。如果这里只认
+ * `Block.WATER`，那么"往台阶上倒水"就成了一条死路 —— 水灌满台阶就停住，
+ * 旁边的坑永远填不上，而这正是 Q18 要修的行为。
+ *
+ * `canBeWaterlogged` 那道判断不是多余：状态字节的 bit7 是**族内复用**的
+ * （旗帜的图案、雪层的层数都占高位），万一某族的 bit7 被当别的用，
+ * 不查白名单就会把"图案编号 128 的旗帜"当成水源。
+ */
+export function isWaterAt(world: FluidWorld, x: number, y: number, z: number): boolean {
+  const id = world.getBlock(x, y, z);
+  if (id === WATER) return true;
+  if (!canBeWaterlogged(id)) return false;
+  return isWaterlogged(world.getState(x, y, z));
+}
+
+/**
+ * 这一格算不算**0 级供源**（含水源与含水方块）。
+ *
+ * ⚠️ 与 `isWaterAt` 分开是必须的：`isWaterAt` 回答的是"这里有没有水"（流动水也算），
+ * 而供源判据要的是"厚不厚"——**流动的水不是供源**。
+ * 第一版直接把 `isWaterAt` 塞进 `countAdjacentSources`，结果流动的水被当成水源，
+ * 断源的细流靠同级邻居自己续命、永远干不了，`test:tick` 当场红了两条。
+ */
+function isWaterSourceAt(world: FluidWorld, x: number, y: number, z: number): boolean {
+  const id = world.getBlock(x, y, z);
+  if (id === WATER) {
+    const state = world.getState(x, y, z);
+    return fluidLevel(state) === 0 && !isFallingFluid(state);
+  }
+  if (!canBeWaterlogged(id)) return false;
+  // 含水方块恒为"满"：原版的水浸只有 0/1，没有等级概念
+  return isWaterlogged(world.getState(x, y, z));
+}
+
+/**
+ * 这一格能不能被**灌成含水**（批次 621 / Q18）。
+ *
+ * 原版里"往台阶旁边流水"有两种结果：台阶被**填满水**（保留台阶、bit7 置位），
+ * 而不是被水覆盖掉。所以这里要单独一个判据 —— `canFlowInto` 只会说"能不能整个换成液体"。
+ *
+ * 三个条件缺一不可：
+ *  - 必须支持含水（`canBeWaterlogged`）；
+ *  - 现在**还没有**含水（已经含水的不用再灌）；
+ *  - 是水在灌（岩浆不能把台阶变成"含岩浆的台阶"，本项目没有这个概念）。
+ */
+export function canFillWaterlogged(world: FluidWorld, x: number, y: number, z: number, id: number): boolean {
+  if (id !== WATER) return false;
+  const target = world.getBlock(x, y, z);
+  if (!canBeWaterlogged(target)) return false;
+  return !isWaterlogged(world.getState(x, y, z));
+}
+
+/**
+ * 把一格灌成含水：**保留方块本身**，只把 bit7 置起来。
+ *
+ * 用 `setFluid` 而不是另加一个 `setBlock` 到 `FluidWorld` 接口上：底层实现就是
+ * `setBlockAndUpdate`（见 `main.ts` 的注入），能写任意 id + 状态；扩接口会让
+ * 每个测试 stub 都要跟着改，而这里只是"写一格方块"，没有新语义。
+ */
+function fillWaterlogged(world: FluidWorld, x: number, y: number, z: number): void {
+  const target = world.getBlock(x, y, z);
+  world.setFluid(x, y, z, target, withWaterlogged(world.getState(x, y, z), true));
+}
+
+/**
  * 这一格能不能被液体占据（空气，或者可被冲掉的非固体方块，如草与花）。
  *
  * 两类**冲不掉**的非固体方块：水里的植物（海带/海草，批次 50——它们本来就长在水里，
@@ -81,9 +156,16 @@ export function canFlowInto(world: FluidWorld, x: number, y: number, z: number):
 function countAdjacentSources(world: FluidWorld, x: number, y: number, z: number, id: number): number {
   let count = 0;
   for (const [dx, dz] of HORIZONTAL) {
-    if (world.getBlock(x + dx, y, z + dz) !== id) continue;
-    const state = world.getState(x + dx, y, z + dz);
-    if (fluidLevel(state) === 0) count++;
+    const nx = x + dx;
+    const nz = z + dz;
+    // 含水方块（批次 621 / Q18）：它是"实心 + 水"的一格，原版把它当 0 级供源。
+    // 只对水生效 —— 岩浆没有 waterlogged 这一说。
+    if (id === WATER && isWaterSourceAt(world, nx, y, nz)) {
+      count++;
+      continue;
+    }
+    if (world.getBlock(nx, y, nz) !== id) continue;
+    if (fluidLevel(world.getState(nx, y, nz)) === 0) count++;
   }
   return count;
 }
@@ -137,6 +219,14 @@ function desiredFluidState(
   for (const [dx, dz] of HORIZONTAL) {
     const nx = x + dx;
     const nz = z + dz;
+    // 含水方块算 0 级供源（批次 621 / Q18）：漏了这一句，水会绕着台阶流过去、
+    // 却不肯承认台阶是水源，结果是"台阶边上的水慢慢干涸"。
+    // 注意用 `isWaterSourceAt` 而不是 `isWaterAt`：后者对"一格流动的水"也返回 true，
+    // 那会让同级邻居互相当供源（回归见该函数的注释）。
+    if (id === WATER && isWaterSourceAt(world, nx, y, nz) && world.getBlock(nx, y, nz) !== WATER) {
+      best = 0;
+      break;
+    }
     if (world.getBlock(nx, y, nz) !== id) continue;
     const neighbour = fluidLevel(world.getState(nx, y, nz));
     if (neighbour < best) best = neighbour;
@@ -192,8 +282,13 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number, number]> = [
  * @returns 是否改动了世界
  */
 export function fluidTick(world: FluidWorld, x: number, y: number, z: number): boolean {
-  const id = world.getBlock(x, y, z);
-  if (!isFluid(id)) return false;
+  const rawId = world.getBlock(x, y, z);
+  // 含水方块（批次 621 / Q18）：它不是流体，但**要参与扩散**——
+  // 原版往半砖里倒满水之后，水会从半砖那里继续往旁边的坑流。
+  // 所以这里把含水方块统一当成 `WATER` 往下跑；写回时靠 `fillWaterlogged` 保留方块本身。
+  const waterloggedBlock = !isFluid(rawId) && isWaterAt(world, x, y, z);
+  if (!isFluid(rawId) && !waterloggedBlock) return false;
+  const id = waterloggedBlock ? WATER : rawId;
 
   const state = world.getState(x, y, z);
   const source = fluidLevel(state) === 0 && !isFallingFluid(state);
@@ -211,21 +306,37 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
   //
   // ⚠️ 这一步必须**在"向下流"之前**：原来的顺序里，失去源头的瀑布会先走下面那条
   // `return`，永远到不了干涸判定 —— 表现是源头拔掉了、水还在一直往下灌。
-  const want = desiredFluidState(world, x, y, z, id, state, source);
-  if (want === null) {
-    world.setFluid(x, y, z, Block.AIR, 0);
-    wakeFluidNeighbours(world, x, y, z);
-    return true;
-  }
-  if (want !== state) {
-    world.setFluid(x, y, z, id, want);
-    // 液面变了：自己下一 tick 按新等级继续流，邻居也可能因此重排
-    world.schedule(x, y, z, flowDelay(id));
-    wakeFluidNeighbours(world, x, y, z);
-    return true;
+  //
+  // ⚠️ **含水方块要跳过重算**（批次 621 / Q18）：它不是"会产生液面等级的水"，
+  // 而是"一个含水的方块"。照着水源那条路走会把状态覆盖成 0 级水，
+  // 或者在某些条件下判成"断源"、直接写 `Block.AIR` —— 两种都会**把台阶毁掉**。
+  // 它作为供源这件事已经在 `countAdjacentSources` / `desiredFluidState` 里表达过了。
+  if (!waterloggedBlock) {
+    const want = desiredFluidState(world, x, y, z, id, state, source);
+    if (want === null) {
+      world.setFluid(x, y, z, Block.AIR, 0);
+      wakeFluidNeighbours(world, x, y, z);
+      return true;
+    }
+    if (want !== state) {
+      world.setFluid(x, y, z, id, want);
+      // 液面变了：自己下一 tick 按新等级继续流，邻居也可能因此重排
+      world.schedule(x, y, z, flowDelay(id));
+      wakeFluidNeighbours(world, x, y, z);
+      return true;
+    }
   }
 
   // ---- 2) 优先向下：下方能进就往下灌（下落液体不衰减）
+  //
+  // 「能进」有两种：整格换成液体，或者把台阶/栅栏之类**灌成含水**（Q18）。
+  // 后者保留方块本身，只置 bit7 —— 这条分支必须在水流真正扩散之前试，
+  // 否则水会绕过台阶继续往前，台阶永远是干的。
+  if (canFillWaterlogged(world, x, y - 1, z, id)) {
+    fillWaterlogged(world, x, y - 1, z);
+    world.schedule(x, y - 1, z, flowDelay(id));
+    return true;
+  }
   if (canFlowInto(world, x, y - 1, z)) {
     world.setFluid(x, y - 1, z, id, withFallingFluid(withFluidLevel(0, 0), true));
     world.schedule(x, y - 1, z, flowDelay(id));
@@ -239,6 +350,14 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
     for (const [dx, dz] of HORIZONTAL) {
       const nx = x + dx;
       const nz = z + dz;
+      // 含水方块：灌满它（保留方块），不要跳过 —— 跳过就等于"水流被半砖挡住"，
+      // 而原版的水是从半砖上漫过去的（Q18）。
+      if (canFillWaterlogged(world, nx, y, nz, id)) {
+        fillWaterlogged(world, nx, y, nz);
+        world.schedule(nx, y, nz, flowDelay(id));
+        changed = true;
+        continue;
+      }
       if (!canFlowInto(world, nx, y, nz)) continue;
       world.setFluid(nx, y, nz, id, nextLevel);
       world.schedule(nx, y, nz, flowDelay(id));

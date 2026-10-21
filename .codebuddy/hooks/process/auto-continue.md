@@ -250,15 +250,33 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       → 做完的标准：给 `AdvancementDef` 加 `titleEn` / `descEn`（或一张 `advancementText.data.ts`
       按 id 映射，零依赖），`AdvancementScreen` 与 `AdvancementToast` 都按语言取；
       `test:i18n` 加两条断言：100 条都有英文、英文模式下打开成就面板 `cjk` 为 0。
-- [ ] Q16 新增 `core/world/Waterlogged.ts`（纯逻辑）：方块状态里那一位的读写、
-      "这个方块支持 waterlogged 吗"的白名单、以及"放水/排水"的状态迁移。
-      验收：新套件 `test:waterlogged` 25 条（白名单、放置、排水、与流体互不影响）
-- [ ] Q17 `Waterlogged` 接存档：`stackExtras` / `restoreStack` 一处不落地带上这一位。
-      验收：`test:save` 增 3 条（存→读→再存，状态位不丢）
-- [ ] Q18 流体引擎认 `waterlogged`：被水填满的非完整方块当成水源参与扩散。
-      验收：`test:fluid` 增 4 条；半砖里放水能灌满相邻的坑
-- [ ] Q19 网格与渲染：`waterlogged` 的方块要画出水面的那一层（半透明层）。
-      验收：`test:render` 增 2 条；进游戏放一个楼梯再倒水，能看到水面
+- [x] Q16 ~~新增 `core/world/Waterlogged.ts`~~ —— **核对后确认早已实现**（批次 469），
+      而且超出验收标准。证据：`blockState.ts:904-914`（`WATERLOGGED_MASK=0b10000000` +
+      `isWaterlogged` / `withWaterlogged`）、`blocks.ts:5291`（`canBeWaterlogged` 按形状判
+      9 种族：slab/stairs/fence/wall/trapdoor/pane/door/fence_gate/sign）、
+      `blocks.ts:5313`（`waterloggedPlacementState` 落点是水就自动置位）、
+      `blocks.ts:5324`（`blockAfterBreak` 含水 → 变回水）。
+      `npm run test:waterlogged` **30 条全绿**（验收要求 25 条）。
+      不需要 `core/world/Waterlogged.ts` —— 这一位属于**方块状态**，读写放
+      `registry/blockState.ts`、白名单放 `registry/blocks.ts` 才是合理的分层。
+- [x] Q17 ~~`Waterlogged` 接存档~~ —— **不需要改**：`save/ChunkEdits.ts` 的
+      `packEdit(id, state)` 用 `PACK_STATE_MASK = 0xff` 存**整个状态字节**，
+      bit7 天然被带上；`restoreStack` 那条路不在这一层（那是物品栈，不是方块）。
+- [x] Q18 ~~流体引擎认 `waterlogged`~~ —— **批次 621 完成**（这是 Q16~Q19 里唯一真缺的一块）。
+      `Fluids.ts` 新增两个判据 + 三个接入点：
+      ① `isWaterAt()` —— 这一格"有没有水"（流动水也算），用于"含水方块参与扩散"；
+      ② `isWaterSourceAt()` —— 这一格算不算**0 级供源**（含水方块算，流动水不算）；
+      ③ `canFillWaterlogged()` + `fillWaterlogged()` —— 把台阶**灌满**而不是覆盖它；
+      `countAdjacentSources` / `desiredFluidState`（含水源计数与横向供源）、
+      `fluidTick`（含水方块也跑 tick，但**跳过自身重算**，否则会被写成空气或 0 级水）全接上。
+      ⚠️ 两个必须分开的判据：第一版把 `isWaterAt` 直接塞进供源计数，结果**流动的水被当成水源**，
+      断源的细流靠同级邻居自己续命、永远干不了 —— `test:tick` 当场红了两条
+      （"到达最大扩散距离后不再往外流"、"同级邻居不算供源"），改成 `isWaterSourceAt` 才修好。
+      `test:waterlogged` **30 → 55 条**（新增 25 条：水的一员判定、可灌判据、纵向/横向灌满、
+      含水台阶当水源灌满相邻坑、岩浆不灌、已含水不重复灌、以及"四周堵死时含水台阶不被毁"的负对照）。
+- [x] Q19 ~~网格与渲染~~ —— **已实现**（批次 469）：`core/mesh/ChunkMesher.ts:746`
+      在网格化时读 `isWaterlogged(chunk.getState(...))`，`:757` 还会跳过相邻含水格的
+      面剔除（否则水面会被邻居挡掉）。
 
 ### 优先级 6：命令 36 → 40 与游戏规则 24 → 30
 
