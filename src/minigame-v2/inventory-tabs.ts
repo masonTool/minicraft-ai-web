@@ -19,6 +19,8 @@ export interface PanelSlotHandlers {
   onSlot(kind: PanelSlotKind, index: number, button: SlotButton): void;
   /** 跨格拖拽（从哪一格拖到哪一格） */
   onSlotDrop(from: { kind: PanelSlotKind; index: number }, to: { kind: PanelSlotKind; index: number }): void;
+  /** 长按选数量的结算（基岩版那条指示条）：拿走 `count` 个 */
+  onSplit?(kind: PanelSlotKind, index: number, count: number): void;
 }
 
 export interface CreativeTabContext extends PanelSlotHandlers {
@@ -314,20 +316,23 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
  * 不需要"先点创造、再点分类"两级跳。v2 之前就是两级，所以用起来"一脸蒙"。
  */
 export const RAIL_CATEGORIES: ReadonlyArray<{ key: V2CreativeCategory; label: string; glyph: string }> = [
-  { key: 'all', label: '全部', glyph: '⌕' },
-  { key: 'building', label: '建筑', glyph: '▤' },
-  { key: 'equipment', label: '装备', glyph: '⚔' },
-  { key: 'items', label: '物品', glyph: '◆' },
-  { key: 'nature', label: '自然', glyph: '❦' },
+  // ⚠️ 图标用**中文字**而不是符号：v2 没有物品贴图的离屏图标管线，
+  // 而 `⌕ ▤ ◆ ❦` 这类字符在不同字体下渲染差别很大（实测像乱码）。
+  // 一个字反而最稳、也一眼认得出是哪一类。
+  { key: 'all', label: '全部', glyph: '全' },
+  { key: 'building', label: '建筑', glyph: '建' },
+  { key: 'equipment', label: '装备', glyph: '装' },
+  { key: 'items', label: '物品', glyph: '物' },
+  { key: 'nature', label: '自然', glyph: '自' },
 ];
 
 /** 右轨的模式键（对齐 Web 版 `.inv-pocket-side` 那 3 颗） */
 export type PanelMode = 'crafting' | 'armor' | 'creative';
 
 export const RAIL_MODES: ReadonlyArray<{ key: PanelMode; label: string; glyph: string }> = [
-  { key: 'creative', label: '创造', glyph: '✦' },
-  { key: 'crafting', label: '合成', glyph: '▦' },
-  { key: 'armor', label: '盔甲', glyph: '⛨' },
+  { key: 'creative', label: '创造', glyph: '创' },
+  { key: 'crafting', label: '合成', glyph: '合' },
+  { key: 'armor', label: '盔甲', glyph: '甲' },
 ];
 
 export interface RailContext {
@@ -407,7 +412,7 @@ export function buildRail(ctx: RailContext): UiElement[] {
     const wantY = ctx.y + ctx.h - RAIL_BTN;
     const invY = Math.max(catsBottom + 2, Math.min(wantY, ctx.y + ctx.h - RAIL_BTN));
     els.push(
-      railButton(inner, invY, RAIL_BTN, '物品栏', '🎒', ctx.tab === 'inventory', () => ctx.onTab('inventory')),
+      railButton(inner, invY, RAIL_BTN, '物品栏', '包', ctx.tab === 'inventory', () => ctx.onTab('inventory')),
     );
     return els;
   }

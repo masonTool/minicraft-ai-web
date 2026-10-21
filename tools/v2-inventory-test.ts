@@ -22,7 +22,8 @@ import {
 } from '../src/minigame-v2/inventory-click.ts';
 import { InventoryCursor } from '../src/minigame-v2/inventory-state.ts';
 import { LONG_PRESS_MS, LONG_PRESS_REPEAT_MS } from '../src/minigame-v2/ui-kit/index.ts';
-import { gatherSameItems } from '../src/core/container/CursorActions.ts';
+import { distributeEvenly, gatherSameItems, placeOneEach } from '../src/core/container/CursorActions.ts';
+import { canSplitStack, initialSplitCount, splitCountForDrag, splitStack } from '../src/core/container/TouchSplit.ts';
 import { quickMove } from '../src/core/container/QuickMove.ts';
 
 let passed = 0;
@@ -410,6 +411,84 @@ console.log('\n[快速移动：与 core 的 QuickMove 同源]');
   const result = quickMove(inventory, null, 0, inventory, 20);
   check('搬动了', result.moved);
   check('落到了快捷栏（0~8）', (result.target?.index ?? 99) < 9, JSON.stringify(result.target));
+}
+
+
+// ===========================================================================
+// 第四节：选数量 / 拖拽分配（基岩版那两条，规则都在 core 的纯函数里）
+// ===========================================================================
+
+console.log('\n[选数量：初值取半、划线改数量]');
+{
+  equal('64 个 → 初值 32', initialSplitCount(64), 32);
+  equal('5 个 → 初值 3（向上取整）', initialSplitCount(5), 3);
+  equal('1 个 → 初值 1', initialSplitCount(1), 1);
+  equal('0 个 → 0', initialSplitCount(0), 0);
+  check('手上拿着东西时不能选数量', !canSplitStack(stone(30), true));
+  check('空格子不能选数量', !canSplitStack(null, false));
+  check('只有 1 个不能选数量', !canSplitStack(stone(1), false));
+  check('30 个 + 空手 → 可以选数量', canSplitStack(stone(30), false));
+}
+{
+  // 划动一格宽 = 到底（右划到全部、左划到 1）
+  equal('右划一格宽 → 全部 30', splitCountForDrag(30, 15, 46, 46), 30);
+  equal('左划一格宽 → 只剩 1', splitCountForDrag(30, 15, -46, 46), 1);
+  equal('不划 → 保持初值', splitCountForDrag(30, 15, 0, 46), 15);
+  equal('右划半格 → 15 + round(15*0.5) = 23', splitCountForDrag(30, 15, 23, 46), 23);
+}
+{
+  const { taken, rest } = splitStack(stone(30), 12);
+  equal('拆出 12 个', taken?.count, 12);
+  equal('原处剩 18', rest?.count, 18);
+}
+{
+  // 附加数据要跟着走、且两份不能共用一个对象
+  const sword: ItemStack = { id: toolItemId('sword', 'iron'), count: 5, damage: 7, enchants: { sharpness: 2 } };
+  const { taken, rest } = splitStack(sword, 2);
+  equal('拆出的带耐久', taken?.damage, 7);
+  equal('剩下的也带耐久', rest?.damage, 7);
+  check('两份的 enchants 不是同一个对象', taken?.enchants !== rest?.enchants);
+}
+
+console.log('\n[拖拽分配：左拖平均、右拖每格一个]');
+{
+  // 10 个分给 3 格 → 3/3/3，余 1 留手上（地板份额，不是轮流发）
+  const a = makeContainer(3);
+  const b = makeContainer(3);
+  const c = makeContainer(3);
+  const left = distributeEvenly(stone(10), [
+    { source: a, index: 0 },
+    { source: b, index: 0 },
+    { source: c, index: 0 },
+  ]);
+  equal('每格 3 个（a）', a.get(0)?.count, 3);
+  equal('每格 3 个（b）', b.get(0)?.count, 3);
+  equal('每格 3 个（c）', c.get(0)?.count, 3);
+  equal('余 1 留在光标上', left?.count, 1);
+}
+{
+  // 件数比槽位少 → 一个都不放（原版也不放）
+  const a = makeContainer(3);
+  const b = makeContainer(3);
+  const held = distributeEvenly(stone(1), [
+    { source: a, index: 0 },
+    { source: b, index: 0 },
+  ]);
+  equal('1 个分给 2 格 → 不动', held?.count, 1);
+  equal('第一格仍空', a.get(0), null);
+}
+{
+  const a = makeContainer(3);
+  const b = makeContainer(3);
+  const c = makeContainer(3);
+  const left = placeOneEach(stone(5), [
+    { source: a, index: 0 },
+    { source: b, index: 0 },
+    { source: c, index: 0 },
+  ]);
+  equal('每格放 1 个（a）', a.get(0)?.count, 1);
+  equal('每格放 1 个（c）', c.get(0)?.count, 1);
+  equal('剩 2 留手上', left?.count, 2);
 }
 
 console.log(`\n${failed === 0 ? '✓' : '✗'} 通过 ${passed} / ${passed + failed} 条断言`);

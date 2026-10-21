@@ -42,7 +42,8 @@ import {
   type SlotBinding,
   type SlotKind,
 } from './inventory-click.ts';
-import { gatherSameItems } from '../core/container/CursorActions.ts';
+import { distributeEvenly, gatherSameItems, placeOneEach } from '../core/container/CursorActions.ts';
+import { splitStack } from '../core/container/TouchSplit.ts';
 import { quickMove } from '../core/container/QuickMove.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
@@ -648,6 +649,85 @@ const clickSlot = (kind: SlotKind, index: number, button: SlotButton): void => {
 };
 
 /**
+ * **拖过多格 → 分配**（左拖平均、右拖每格一个）。
+ *
+ * 规则在 `core/container/CursorActions` 的两个纯函数里（`test:cursor` 有断言）：
+ *  - `distributeEvenly`：每格拿地板份额，**余数留在光标上**（不是轮流发满）；
+ *  - `placeOneEach`：经过的每格放 1 个。
+ * 这里只做三件事：把 UiSlot 的 `index` 翻成 `SlotBinding`、调纯函数、把新光标写回去。
+ */
+const distributeOver = (nodes: readonly { index: number }[], rightDrag: boolean): void => {
+  const held = cursor.held;
+  if (!held) {
+    inventoryHint = '手上没有东西可分';
+    showInventory();
+    return;
+  }
+  // 只有"玩家背包"里的格子参与（合成格/创造栏不参与分配，与 Web 版一致）
+  const targets = nodes
+    .map((node) => bindingFor('inventory', node.index))
+    .filter((b): b is SlotBinding => b !== null && !b.takeOnly);
+  if (targets.length === 0) return;
+  const slots = targets.map((b) => ({ source: b.source, index: b.index }));
+  const next = rightDrag ? placeOneEach(held, slots) : distributeEvenly(held, slots);
+  cursor.restore({ held: next, fromCreative: false, origin: cursor.origin });
+  inventoryHint = next ? `剩余 ${next.count} 个` : '分配完成';
+  syncGhost();
+  showInventory();
+};
+
+/**
+ * **点空白 / 界面外 = 把手上的东西丢出去**（原版行为，`DROP-001`）。
+ *
+ * ⚠️ 这里**不关界面**：Web 版那条提示原本写"点空白处关闭"是错的（`InventoryScreen`
+ * 里也留了注释纠正），真正关界面只有右上角那颗「关闭」。
+ */
+const dropHeld = (): void => {
+  const held = cursor.held;
+  if (!held) {
+    inventoryOpen = false;
+    paused = false;
+    ui.setGhost(0, 0);
+    showHud();
+    return;
+  }
+  // 丢在玩家脚下稍前一点，别丢进自己身体里
+  const fx = physics.x - Math.sin(yaw) * 0.8;
+  const fz = physics.z - Math.cos(yaw) * 0.8;
+  addDrop(held.id, held.count, fx, physics.y + 0.6, fz);
+  inventoryHint = `已丢弃 ${itemLabel(held.id)} ×${held.count}`;
+  cursor.clear();
+  ui.setGhost(0, 0);
+  showInventory();
+};
+
+/**
+ * **长按选数量**的结算：从这一格拿走 `count` 个。
+ *
+ * 规则（初值取半、划动映射、拆成两份）全在 `core/container/TouchSplit.ts`，
+ * 这里只把结果写回数据源 —— 与普通右键走同一条 `cursor` 通道，
+ * 所以"拿走之后手上那叠、原格剩多少"与右键完全一致。
+ */
+const splitFromSlot = (kind: SlotKind, index: number, count: number): void => {
+  const binding = bindingFor(kind, index);
+  if (!binding) return;
+  const stack = binding.source.get(binding.index);
+  if (!stack) return;
+  const { taken, rest } = splitStack(stack, count);
+  if (!taken) return;
+  binding.source.set(binding.index, rest);
+  // 与右键拿半一样：附加数据要跟着走（`splitStack` 已经拷过了）
+  cursor.restore({
+    held: taken,
+    fromCreative: false,
+    origin: { kind: binding.kind, index: binding.index },
+  });
+  inventoryHint = `拿起 ${taken.count} / ${stack.count}`;
+  syncGhost();
+  showInventory();
+};
+
+/**
  * 双击收集：把这一格里那**一类**物品从整个背包凑到光标上（最多凑满一堆）。
  *
  * 规则本体在 `core/container/CursorActions.gatherSameItems`（纯函数、有断言），
@@ -943,6 +1023,8 @@ const showInventory = (): void => {
           false,
           (button) => clickSlot('inventory', i, button),
           (from) => dropSlot({ kind: 'inventory', index: from.index }, { kind: 'inventory', index: i }),
+          false,
+          (count) => splitFromSlot('inventory', i, count),
         ),
       );
     }
@@ -976,6 +1058,8 @@ const showInventory = (): void => {
             false,
             (button) => clickSlot('crafting', i, button),
             (from) => dropSlot({ kind: 'crafting', index: from.index - 100 }, { kind: 'crafting', index: i }),
+            false,
+            (count) => splitFromSlot('crafting', i, count),
           ),
         );
       }
@@ -1179,9 +1263,13 @@ const showInventory = (): void => {
     borderWidth: 2,
   });
 
+  // 拖过多格 = 分配（左拖平均 / 右拖每格一个）
+  ui.onDragDistribute = (nodes, rightDrag) => distributeOver(nodes, rightDrag);
+
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
-      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.45)' }),
+      // 点空白 = 丢掉手上那叠（原版行为；不关界面）
+      button(0, 0, 1024, uiHeight, '', () => dropHeld(), { background: 'rgba(0, 0, 0, 0.45)' }),
       outline,
       panelBox,
       ...buildHotbarDock({

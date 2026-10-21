@@ -205,7 +205,8 @@
     "test:v2-inventory": "esbuild tools/v2-inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-inventory-test.mjs --log-level=error && node .tmp/v2-inventory-test.mjs",
     "preview:minigame": "node tools/minigame/preview-proxy.mjs",
     "e2e:v2-panel": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-fixed-panel.cjs",
-    "e2e:v2-weblogic": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic.cjs"
+    "e2e:v2-weblogic": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic.cjs",
+    "e2e:v2-weblogic2": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/v2-weblogic2.cjs"
   },
   "dependencies": {
     "three": "^0.186.1"

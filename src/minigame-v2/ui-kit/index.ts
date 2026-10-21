@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import {
+  canSplitStack,
+  initialSplitCount,
+  splitCountForDrag,
+} from '../../core/container/TouchSplit.ts';
 
 /**
  * v2 UI Kit MVP
@@ -143,6 +148,14 @@ export interface UiSlotNode extends UiNode {
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void;
   /** 只取不放的槽：画成"产物"色（INV-015）；同时界面在点击结算时也会拒绝放置 */
   takeOnly?: boolean;
+  /**
+   * **长按选数量**的结算（基岩版那条绿色指示条）。
+   *
+   * 给了它、且这一格有 ≥2 个、手上又空着，长按就进入"选数量"而不是右键：
+   * 左右划改数量、抬手才真正拿走那么多（`core/container/TouchSplit.ts` 是规则层）。
+   * 没给 = 这一格不参与选数量（走普通右键 + 连发）。
+   */
+  onSplit?: (count: number) => void;
 }
 
 export type UiIconKind = 'chat' | 'pause' | 'view';
@@ -164,6 +177,20 @@ export interface UiRingNode extends UiNode {
   visible: boolean;
 }
 
+/**
+ * 长按选数量的**指示条**（基岩版那条绿色进度条，`TouchSplit.ts` 的规则层算占比）。
+ *
+ * 画在来源格的正上方：白色底 + 绿色填充 + 中间一个数字。
+ * 规则（初值取半、左右划动的映射）全在 `core/container/TouchSplit.ts`，这里只画。
+ */
+export interface UiSplitBarNode extends UiNode {
+  kind: 'splitbar';
+  /** 选中的数量 */
+  count: number;
+  /** 这一格原本的总数 */
+  total: number;
+}
+
 export type UiElement =
   | UiNode
   | UiTextNode
@@ -173,7 +200,8 @@ export type UiElement =
   | UiSlotNode
   | UiIconNode
   | UiRingNode
-  | UiVitalNode;
+  | UiVitalNode
+  | UiSplitBarNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -234,8 +262,9 @@ export function slot(
   onTap: (button: SlotButton) => void,
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void,
   takeOnly = false,
+  onSplit?: (count: number) => void,
 ): UiSlotNode {
-  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, takeOnly };
+  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, takeOnly, onSplit };
 }
 
 export function icon(
@@ -247,6 +276,10 @@ export function icon(
   style: UiStyle = {},
 ): UiIconNode {
   return { kind: 'icon', x, y, w: size, h: size, icon: kind, onTap, style };
+}
+
+export function splitBar(x: number, y: number, w: number, h: number, count: number, total: number): UiSplitBarNode {
+  return { kind: 'splitbar', x, y, w, h, count, total };
 }
 
 export function ring(x: number, y: number, size: number, visible = false): UiRingNode {
@@ -338,7 +371,23 @@ export class UiLayer {
   private activeSlider: UiSliderNode | null = null;
   private activeButton: UiButtonNode | null = null;
   private lastRefresh = 0;
-  private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
+  private dragSlot: {
+    node: UiSlotNode;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    /** 拖过的格子（按顺序，去重）——拖拽分配要知道"经过哪几格" */
+    path: UiSlotNode[];
+  } | null = null;
+  /**
+   * 拖拽分配：松手时把光标上那叠分发到"拖过的格子"。
+   *
+   * 与 Web 版一致：**左拖平均分配、右拖每格一个**（`CursorActions` 两个纯函数）。
+   * 回调只在"拖过 ≥1 格"时才被调用；单格拖动仍是普通换位（`onDrop`）。
+   */
+  onDragDistribute: ((nodes: UiSlotNode[], rightDrag: boolean) => void) | null = null;
+  /** 这一次拖动是不是"右键拖"（在 down 那一刻决定，整趟不变） */
+  private dragRight = false;
   private dragPos: { x: number; y: number } | null = null;
   /**
    * 长按 → 右键（TOUCH-002/003）。
@@ -357,6 +406,19 @@ export class UiLayer {
   } | null = null;
   /** 手上拿着的物品（画成跟随手指的幽灵图标，UI-004） */
   private ghost: { itemId: number; count: number; x: number; y: number } | null = null;
+  /**
+   * "长按选数量"的进行态（基岩版那条指示条）。
+   *
+   * 规则全在 `core/container/TouchSplit.ts`：这里只存"哪一格、总数、当前选中几个、
+   * 按下时的起点"，划动时用 `splitCountForDrag` 换算，抬手用 `onSplit(count)` 结算。
+   */
+  private split: {
+    node: UiSlotNode;
+    total: number;
+    count: number;
+    startX: number;
+    cellWidth: number;
+  } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
@@ -419,10 +481,20 @@ export class UiLayer {
     const y = (clientY / Math.max(1, sh)) * this.designHeight;
 
     if (phase === 'move') {
+      // 选数量：手指横向划动改数量（纵向/竖直不参与，避免"想滚动却在改数字"）
+      if (this.split) {
+        this.updateSplit(x);
+        return true;
+      }
       if (this.longPress) this.trackLongPressMove(x, y);
       if (this.dragSlot) {
         if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
         this.dragPos = { x, y };
+        // 记下拖过的格子（去重、保序）：松手时按这条路径分配
+        if (this.dragSlot.moved) {
+          const over = this.findSlot(x, y);
+          if (over && !this.dragSlot.path.includes(over)) this.dragSlot.path.push(over);
+        }
         return true;
       }
       if (this.activeSlider) {
@@ -432,6 +504,14 @@ export class UiLayer {
       return false;
     }
     if (phase === 'up') {
+      // 选数量：抬手 = 按当前数量结算（**必须先于**普通点击的那几条分支）
+      if (this.split) {
+        this.dragSlot = null;
+        this.dragPos = null;
+        this.clearLongPress();
+        this.commitSplit();
+        return true;
+      }
       if (this.activeButton) {
         this.activeButton.onRelease?.();
         this.activeButton = null;
@@ -450,6 +530,12 @@ export class UiLayer {
         // 长按已经按"右键"结算过了：抬手不再补一次左键（否则拿一半变成"又放回去"）
         if (longPress?.fired) return true;
         const target = this.findSlot(x, y);
+        const path = drag.path.filter((n) => n !== drag.node);
+        // 拖过 **多个** 格子 = 分配（左拖平均、右拖每格一个）
+        if (drag.moved && path.length >= 1 && this.onDragDistribute) {
+          this.onDragDistribute(drag.path, this.dragRight);
+          return true;
+        }
         if (drag.moved && target && target !== drag.node) drag.node.onDrop?.(drag.node, target);
         else if (!drag.moved) drag.node.onTap('left');
         return true;
@@ -461,8 +547,9 @@ export class UiLayer {
 
     const downSlot = this.findSlot(x, y);
     if (downSlot) {
-      this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false };
+      this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false, path: [downSlot] };
       this.dragPos = null;
+      this.dragRight = false;
       this.startLongPress(downSlot, x, y);
       return true;
     }
@@ -525,6 +612,9 @@ export class UiLayer {
       entry.fired = true;
       if (entry.timer) clearTimeout(entry.timer);
       entry.timer = null;
+      // **先问"要不要选数量"**：有 ≥2 个、手上空着、且这一格支持拆分时，
+      // 长按进的是选数量（不触发右键、也不连发）——两条手势互斥，叠在一起会互相打架。
+      if (this.beginSplit(entry.node, entry.startX)) return;
       entry.node.onTap('right');
       // **连发**（对齐 Web 版 `TOUCH_REPEAT_MS`）：按住不放就每 170ms 再来一次右键。
       // 摆合成表 / 从箱子里连续取一个都靠它；抬手或移动超过阈值就停。
@@ -537,6 +627,44 @@ export class UiLayer {
       }, LONG_PRESS_REPEAT_MS);
     }, LONG_PRESS_MS);
     this.longPress = entry;
+  }
+
+  /**
+   * 进入"长按选数量"。返回 false = 这一格不走这条路（退回右键 + 连发）。
+   *
+   * 三个前置条件（对齐 Web 版）：这一格支持拆分（`onSplit` 存在）、
+   * 有 ≥2 个、**手上空着**（`canSplitStack`）。
+   */
+  private beginSplit(node: UiSlotNode, startX: number): boolean {
+    if (!node.onSplit || node.takeOnly) return false;
+    if (!canSplitStack({ id: node.itemId, count: node.count }, this.ghost !== null)) return false;
+    this.split = {
+      node,
+      total: node.count,
+      count: initialSplitCount(node.count),
+      startX,
+      cellWidth: Math.max(8, node.w),
+    };
+    this.refresh(true);
+    return true;
+  }
+
+  /** 划动改数量（`splitCountForDrag` 负责那几条容易写错的映射） */
+  private updateSplit(x: number): void {
+    const split = this.split;
+    if (!split) return;
+    split.count = splitCountForDrag(split.total, initialSplitCount(split.total), x - split.startX, split.cellWidth);
+    this.refresh(true);
+  }
+
+  /** 抬手结算：拿走 `count` 个（界面那一层再去改数据） */
+  private commitSplit(): boolean {
+    const split = this.split;
+    this.split = null;
+    if (!split) return false;
+    this.refresh(true);
+    split.node.onSplit?.(split.count);
+    return true;
   }
 
   private trackLongPressMove(x: number, y: number): void {
@@ -630,6 +758,18 @@ export class UiLayer {
     }
     if (this.ghost) {
       this.drawGhostIcon(ctx, this.ghost.itemId, this.ghost.count, this.ghost.x, this.ghost.y);
+    }
+    // 选数量指示条：画在**来源格内部靠下**（基岩版那格上就有条绿条）。
+    // ⚠️ 不能画在格子上方：那里可能正是顶栏/标题行，压上去会挡住"物品栏"几个字
+    // （第一版就画在外面上，截图一看就顶到标题了）。
+    if (this.split) {
+      const n = this.split.node;
+      const barH = Math.max(8, Math.round(n.h * 0.22));
+      const barW = n.w - 6;
+      this.drawNode(
+        splitBar(n.x + 3, n.y + n.h - barH - 3, barW, barH, this.split.count, this.split.total),
+        ctx,
+      );
     }
     this.texture.needsUpdate = true;
   }
@@ -752,6 +892,23 @@ export class UiLayer {
           ctx.fillRect(cx - size * 0.05, cy + size * 0.05, size * 0.12, size * 0.32);
         }
       }
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'splitbar') {
+      // 白底 + 绿色填充 + 数字：基岩版那条指示条的观感
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(node.x - 1, node.y - 1, node.w + 2, node.h + 2);
+      ctx.fillStyle = '#e8e8e8';
+      ctx.fillRect(node.x, node.y, node.w, node.h);
+      const frac = node.total > 0 ? Math.min(1, Math.max(0, node.count / node.total)) : 0;
+      ctx.fillStyle = '#4fae4f';
+      ctx.fillRect(node.x, node.y, node.w * frac, node.h);
+      ctx.fillStyle = '#1b1b1b';
+      ctx.font = `${Math.max(9, Math.round(node.h * 0.8))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(node.count), node.x + node.w / 2, node.y + node.h / 2);
       return;
     }
 
