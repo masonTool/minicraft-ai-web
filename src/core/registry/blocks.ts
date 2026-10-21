@@ -5162,6 +5162,64 @@ export function blockHardness(id: number): number {
 }
 
 /**
+ * 爆炸抗性（B5，批次 597）。
+ *
+ * 原版每个方块都有自己的 `blastResistance`；这里不抄 700 行，只把**关键档位**写死：
+ *  -  bedrock 3.6e6（绝对炸不掉）；
+ *  -  黑曜石/铁砧/附魔台/远古残骸/下界合金块/重生锚 1200；
+ *  -  末影箱 600；水/岩浆 100（炸不掉，但也不该被当成"硬方块"）；
+ *  -  石头/圆石/深板岩/砖 6；木头约 3；泥土 0.5；玻璃 0.3；植物 0。
+ * 其余走 `blockHardness(id) * 4` 兜底，并夹到 [0.2, 20]——
+ * 这个兜底只为"没登记的方块也有个合理量级"，不追求与原版逐个一致。
+ */
+const BLAST_RESISTANCE = new Map<number, number>([
+  [Block.BEDROCK, 3_600_000],
+  [Block.OBSIDIAN, 1200],
+  [Block.CRYING_OBSIDIAN, 1200],
+  [Block.ANVIL, 1200],
+  [Block.ENCHANTING_TABLE, 1200],
+  [Block.ANCIENT_DEBRIS, 1200],
+  [Block.NETHERITE_BLOCK, 1200],
+  [Block.RESPAWN_ANCHOR, 1200],
+  [Block.ENDER_CHEST, 600],
+  [Block.WATER, 100],
+  [Block.LAVA, 100],
+  [Block.STONE, 6],
+  [Block.COBBLESTONE, 6],
+  [Block.DEEPSLATE, 6],
+  [Block.BRICKS, 6],
+  [Block.NETHER_BRICKS, 6],
+  [Block.IRON_BLOCK, 6],
+  [Block.GOLD_BLOCK, 6],
+  [Block.DIAMOND_BLOCK, 6],
+  [Block.EMERALD_BLOCK, 6],
+  [Block.DIRT, 0.5],
+  [Block.GRASS_BLOCK, 0.6],
+  [Block.SAND, 0.5],
+  [Block.GRAVEL, 0.6],
+  [Block.GLASS, 0.3],
+  [Block.TNT, 0],
+]);
+
+export function blastResistanceOf(id: number): number {
+  const explicit = BLAST_RESISTANCE.get(id);
+  if (explicit !== undefined) return explicit;
+  return Math.max(0.2, Math.min(20, blockHardness(id) * 4));
+}
+
+/**
+ * 这一格会不会被这次爆炸炸掉（B5）。
+ *
+ * 原版的射线衰减比 `power * 8` 复杂，这里用一个**单调阈值**近似：
+ * 抗性高于 `power * 8` 就留下。普通 TNT（power 4）能炸石头（6 ≤ 32），
+ * 炸不掉黑曜石/铁砧（1200 > 32）；苦力怕（power 3）同理。
+ */
+export function explosionBreaksBlock(id: number, power: number): boolean {
+  if (id === Block.AIR) return false;
+  return blastResistanceOf(id) <= power * 8;
+}
+
+/**
  * 这个方块的硬度**显式登记过**吗（批次 62）。
  *
  * 存在的理由：`blockHardness` 的兜底是 3，而"没登记"与"登记成 3"从外面看一模一样——

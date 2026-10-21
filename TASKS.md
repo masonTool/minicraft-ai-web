@@ -1328,12 +1328,21 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       —— **渲染也接了**（同一批的尾巴）：网格化的逐格通道在含水方块上额外输出
       一层**整格**的水（走半透明通道，6 面 12 个三角形）；邻居是水或含水方块时
       跳过那一面（重复画会让 alpha 叠深）。`test:mesh` **13 条**。
-- [~] B5 方块属性扩展：硬度/爆炸抗性/易燃/音效组/挖掘工具与等级/掉落表
+- [x] B5 方块属性扩展：硬度/爆炸抗性/易燃/音效组/挖掘工具与等级/掉落表
       已实现：硬度表 `HARDNESS` + 徒手可采集 `HAND_HARVESTABLE` + 掉落表 `dropFor`；
       **挖掘工具与等级**已落到 `core/registry/tools.ts`：`REQUIRED_TOOL`（要镐/斧/锹与最低等级）
       + `EFFICIENT_TOOL`（徒手能采但拿对应工具会加速）+ `breakSeconds(block, tool)` +
-      `canHarvest(block, tool)`（等级不够 = 挖得动但一无所获，对齐原版 `requiresCorrectToolForDrops`）；
-      缺：爆炸抗性、易燃、音效组
+      `canHarvest(block, tool)`（等级不够 = 挖得动但一无所获，对齐原版 `requiresCorrectToolForDrops`）。
+      —— **批次 597 复核并补齐最后一块**：
+      ① **易燃**早已在 `core/world/Fire.ts` 的 `FLAMMABLE` 表（木/羊毛/植物/藤蔓/告示牌…），
+      随机刻真的会烧；
+      ② **音效组**由 `AudioEngine.breakSoundFor` 按方块族分玻璃/羊毛/沙/草/木/石/金属，
+      不是逐方块表但效果等价；
+      ③ 新增 **`blastResistanceOf` + `explosionBreaksBlock`**（`blocks.ts`）：
+      基岩 3.6e6、黑曜石/铁砧/附魔台/远古残骸/下界合金块/重生锚 1200、末影箱 600，
+      水/岩浆 100，石/砖/金属块 6，泥土 0.5，玻璃 0.3；其余按硬度 ×4 兜底夹到 0.2~20。
+      TNT/苦力怕的 `explodeAt` 改为按 `power * 8` 阈值留方块（黑曜石/铁砧不再被普通爆炸拆掉）。
+      `test:unit` **119 → 123 条**。B5 判为完成。
 - [x] B6 方块行为接口 + 随机刻 / 计划刻：`core/tick/RandomTicks.ts` —— 随机刻行为表
       （草方块蔓延与退化、树叶消失（要穿过树叶找原木）、甘蔗与竹子长高、菌岩蔓延下界岩）、
       `TickScheduler` 计划刻队列（同一位置只保留最早一次 + 容量上限 + 维度隔离）。

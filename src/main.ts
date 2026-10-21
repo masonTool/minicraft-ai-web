@@ -462,6 +462,8 @@ import { Block, BLOCKS, blockDef, woolId,
   // 潜影盒（批次 451）：无色 + 16 色，特判一律问这个（别再逐 id 比）
   isShulkerBox,
   // 旗帜（批次 497）：右键换图案
+  // 爆炸抗性（B5）：TNT/苦力怕炸方块时按抗性阈值留方块
+  explosionBreaksBlock,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -10155,13 +10157,14 @@ class App {
           const bz = cz + dz;
           const id = this.world.getBlock(bx, by, bz);
           if (id === Block.AIR) continue;
-          if (id === Block.BEDROCK || id === Block.OBSIDIAN) continue;
           // TNT（批次 56）：爆炸范围内的 TNT 是**被点燃**而不是被炸掉的（原版行为），
           // 于是"一片 TNT"会像多米诺骨牌一样挨个炸开（串联反应）
           if (id === Block.TNT) {
             this.primedTnt.prime(this.tntWorld, bx, by, bz);
             continue;
           }
+          // 爆炸抗性（B5，批次 597）：黑曜石/铁砧/附魔台等抗性高于阈值的方块留下
+          if (!explosionBreaksBlock(id, power)) continue;
           if (this.world.setBlockAndUpdate(bx, by, bz, Block.AIR)) {
             broken++;
             // 炸掉脚下那格，上面的植物同样该掉（批次 78，B49）：与玩家破坏走同一个收尾
