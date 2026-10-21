@@ -178,27 +178,6 @@
 
 ---
 
-## 批次 532：删除非原版世界类型 + 旁观/正面相机修复（2026-10-21）
-
-- [x] B532-1 删除 caves / floating_islands：类型表/标签/说明/地表基准/密度场分支/
-  caves 跳过地物/UI 短标签/默认命名/`test:worldtype` 全部移除；旧存档回落 default
-- [x] B532-2 世界类型回到原版三型：default / flat / amplified
-- [x] B532-3 旁观模式：`startsFlying` 纯函数；构造/读档/`setGameMode` 三处保证起飞
-- [x] B532-4 第三人称正面：相机 y = `eye.y - dir.y * distance`，碰撞射线同向
-- [x] B532-5 测试：worldmatrix 60 → 36、viewmode 补正面上下、mode 补旁观起飞；套数 162 → 161
-- ⚠️ 原版缺的 large_biomes / single_biome 未做（后续批次）
-
-## 批次 533：补全原版世界类型（大型群系 / 单一群系）（2026-10-21）
-
-- [x] B533-1 large_biomes：`biomeScale=4`，biomeAt/columnBiome/landBiomeAtCell 按 1/4 坐标采样；
-  地形密度不变
-- [x] B533-2 single_biome：`biomeByName` + 生成器固定群系；创建界面“群系”下拉（仅该类型显示）
-- [x] B533-3 singleBiome 贯通：WorldSummary → WorldConfig → World → Worker 请求 →
-  TerrainGenerator → OverworldGenerator；非法/类型不符的群系被丢弃
-- [x] B533-4 测试：world 82 条（1/4 映射、单一群系恒定、清单往返）、worldmatrix 60 组
-- [x] B533-5 浏览器验证：单一沙漠表层一致（含 Worker 生成）、大型群系可加载；套数仍 **161**
-- ⚠️ 原版“调试（Debug）”类型不做（开发者用）
-
 ## 批次 534：旁观者口径对齐（2026-10-21）
 
 - [x] B534-1 穿墙保留（原版旁观者就是 noclip）；不改成创造式碰撞
@@ -209,3 +188,33 @@
 - [x] B534-6 HUD：生存状态栏与经验条对旁观隐藏
 - [x] B534-7 测试：survival 86 条、mode 28 条；浏览器实测虚空不掉血
 - ⚠️ 没有旁观者专属 HUD/传送菜单（原版有，按需再做）
+
+## 批次 619：进世界时"世界统计"面板一闪（2026-10-21，hotfix）
+
+- [x] B619-1 **根因：`#statistics` 没有任何 CSS**。`StatisticsScreen` 复用 `.adv-panel`
+  外壳，但 `index.html` 只给 `#advancements` 写了 `position:fixed; inset:0; z-index:55;`
+  和 `#advancements.hidden { display:none }`。`<div id="statistics" class="hidden">`
+  的 `hidden` 类因此**一条规则都不命中**：面板从 App 构造起就是 `position:static`
+  的普通块、占满视口左上角（rect 0,0,844,359），平时被 `#app` 的 canvas 盖住，
+  进世界那一瞬间露出来闪一下
+- [x] B619-2 修法：把 `#statistics` 并进 `#advancements` 同一组规则（fixed / 遮罩 /
+  `.hidden`），并加进 `body.touch-mode` 的安全区那组
+- [x] B619-3 实测（844×390）：进世界后 `#statistics` 为 `display:none` / rect 全 0；
+  从暂停菜单点"统计"正常显示（遮罩 + 居中 + 6 行数据），关闭正常
+- 门禁：`npm run check` 全绿（165 套离线）
+
+## 批次 618：方块表面纯黑的真正根因（2026-10-21，hotfix）
+
+- [x] B618-1 **N4 跨 section 合并的属性步长笔误**：`mergeSectionLayer` 把 `aTile` /
+  `aLight` 按每顶点 **3** 分量分配（`vertices * 3`）与写入（`vertexOffset * 3`），
+  而 `createGeometry` 给两者的 `BufferAttribute` 都是 **2** 分量。单 section 时
+  `vertexOffset = 0`、前 2N 个元素恰好正确，所以测试与单 section 场景全过；
+  2 个以上非空 section（山地/洞穴/带树）才从第二个 section 起整段错位、顶点读到 0
+- [x] B618-2 断言：`tests/merge-layer.test.ts` 的假数据改回 2 分量（以前按 3 造，
+  正好掩护了笔误）+ 新增"第二个 section 不错位"；`tools/mesh-test.ts` 同一条守卫
+- [x] B618-3 实测：844×390 dev server、同种子同坐标——修复前整屏方块发黑，
+  修复后草地/树木/水面/花正常（用调试着色器 + 顶点属性采样定位到 `aShade`/`aLight` 正常，
+  再逐段核对 `mergeSectionLayer`）
+- [x] B618-4 回退 617 的 `ENTER_GUARD_MS`：无日志证据的猜测性行为改动，按约定整段删掉；
+  617 里确凿的 `NameTagEditor.dispose()` 保留
+- 门禁：`npm run check` 全绿（165 套离线）

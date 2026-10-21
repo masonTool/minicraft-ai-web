@@ -16017,6 +16017,9 @@ class App {
     this.chat.dispose();
     this.commandHelp.destroy();
     this.signEditor.dispose();
+    // 命名牌输入框（批次 615）：与告示牌同一类"挂在 body 上的浮层"，
+    // 漏摘会让 `#name-tag-editor` 跨世界残留（开着退出时还留一层全屏黑遮罩）
+    this.nameTagEditor.dispose();
     this.bookScreen.dispose();
     this.mapScreen.dispose();
     this.beaconScreen.dispose();

@@ -10,12 +10,14 @@ import { WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
 import { mergeSectionLayer } from '../src/render/ChunkRenderer.ts';
 import type { GeometryArrays } from '../src/core/mesh/ChunkMesher.ts';
 
-function triangle(y: number): GeometryArrays {
+function triangle(y: number, seed = 0): GeometryArrays {
   return {
     position: new Float32Array([0, y, 0, 1, y, 0, 0, y, 1]),
     uv: new Float32Array([0, 0, 1, 0, 0, 1]),
-    tile: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    light: new Uint8Array([15, 15, 15, 15, 15, 15, 15, 15, 15]),
+    // ⚠️ `aTile` / `aLight` 都是**每顶点 2 分量**（`createGeometry` 里就是 2）。
+    // 这份测试以前按 3 分量造数据，正好和 `mergeSectionLayer` 的 `* 3` 笔误互相掩护。
+    tile: new Float32Array(6).fill(seed),
+    light: new Uint8Array(6).fill(seed),
     shade: new Uint8Array([128, 128, 128]),
     index: new Uint32Array([0, 1, 2]),
   };
@@ -41,6 +43,19 @@ describe('section 几何合并', () => {
     expect(merged.position[1]).toBe(WORLD_MIN_Y);
     expect(merged.position[4]).toBe(WORLD_MIN_Y);
     expect(merged.position[10]).toBe(WORLD_MIN_Y + 16);
+  });
+
+  it('aTile / aLight 按每顶点 2 分量拼接，第二个 section 不错位', () => {
+    // 回归守卫（批次 618）：两者曾经按 3 分量分配与写入，单个 section 时偏移为 0
+    // 恰好正确；两个以上 section 时后面整段错位，顶点读到 0 → 方块表面纯黑
+    const merged = mergeSectionLayer([
+      { section: 0, arrays: triangle(0, 15) },
+      { section: 1, arrays: triangle(0, 7) },
+    ])!;
+    expect(merged.tile.length).toBe(12);
+    expect(merged.light.length).toBe(12);
+    expect(Array.from(merged.tile)).toEqual([15, 15, 15, 15, 15, 15, 7, 7, 7, 7, 7, 7]);
+    expect(Array.from(merged.light)).toEqual([15, 15, 15, 15, 15, 15, 7, 7, 7, 7, 7, 7]);
   });
 
   it('空输入返回 null', () => {
