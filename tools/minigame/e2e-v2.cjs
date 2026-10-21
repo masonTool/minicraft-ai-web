@@ -106,6 +106,18 @@ const assert = (condition, message, state) => {
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
+  // Phase 1：41 格模型（护甲 36-39 + 副手 40）可读写
+  await gameFrame.evaluate(() => {
+    wx.__v2Test?.clearInventory?.();
+    wx.__v2Test?.giveToSlot?.(36, 1132, 1);
+    wx.__v2Test?.giveToSlot?.(40, 7, 2);
+  });
+  const slots41 = await waitState(
+    (state) => state.inventorySlots?.[36] === 1132 && state.inventorySlots?.[40] === 7,
+    '41 格护甲/副手读写失败',
+    5000,
+  );
+
   // 背包点物品 → 合成格 → 产物
   await gameFrame.evaluate(() => {
     wx.__v2Test?.clearInventory?.();
@@ -339,7 +351,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, bagOpened, recipeFilled, crafted, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, sheepSpawned, sheepKilled, sheepGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, slots41, bagOpened, recipeFilled, crafted, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),

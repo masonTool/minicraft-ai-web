@@ -280,3 +280,31 @@ export function buildInventoryChrome(ctx: InventoryChromeContext): UiElement[] {
     }),
   ];
 }
+
+export interface EquipmentRowContext {
+  x: number;
+  y: number;
+  slotSize: number;
+  gap: number;
+  inventory: Inventory;
+  onTap(slotIndex: number): void;
+}
+
+/** 护甲 36-39 + 副手 40。 */
+export function buildEquipmentRow(ctx: EquipmentRowContext): UiElement[] {
+  const elements: UiElement[] = [];
+  elements.push(text(ctx.x, ctx.y - 20, 180, 18, '护甲', { fontSize: 12, color: 'rgba(200,220,235,0.7)' }));
+  elements.push(text(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y - 20, 80, 18, '副手', { fontSize: 12, color: 'rgba(200,220,235,0.7)' }));
+  for (let i = 0; i < 4; i++) {
+    const index = 36 + i;
+    const stack = ctx.inventory.get(index);
+    elements.push(
+      slot(ctx.x + i * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, index, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.onTap(index)),
+    );
+  }
+  const offhand = ctx.inventory.get(40);
+  elements.push(
+    slot(ctx.x + 5 * (ctx.slotSize + ctx.gap), ctx.y, ctx.slotSize, 40, offhand?.id ?? 0, offhand?.count ?? 0, false, () => ctx.onTap(40)),
+  );
+  return elements;
+}

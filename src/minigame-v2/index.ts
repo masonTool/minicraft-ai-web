@@ -24,7 +24,8 @@ import { QualityManager } from './quality.ts';
 import { readSettings, saveSettings } from './settings.ts';
 import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
-import { buildCraftingPanel, buildCreativeTab, buildInventoryChrome, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
+import { buildCraftingPanel, buildCreativeTab, buildEquipmentRow, buildInventoryChrome, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
+import { InventoryCursor } from './inventory-state.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -33,6 +34,7 @@ import { Inventory } from '../core/container/Inventory.ts';
 import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
+import { armorSlotFor } from '../core/container/QuickMove.ts';
 import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
@@ -180,6 +182,7 @@ let inventoryHint = '';
 let selectedSlot = 0;
 let hudInputBlockUntil = 0;
 const inventory = new Inventory();
+const cursor = new InventoryCursor();
 let crafting = new CraftingGrid(2);
 let craftingTableOpen = false;
 const creativeItems = CREATIVE_ITEMS;
@@ -542,6 +545,40 @@ const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   showInventory();
 };
 
+const tapEquipment = (slotIndex: number): void => {
+  cursor.clear();
+  const current = inventory.get(slotIndex);
+  if (current) {
+    const remaining = inventory.add(current.id, current.count);
+    inventory.set(slotIndex, remaining > 0 ? { id: current.id, count: remaining } : null);
+    inventoryHint = '已放回背包';
+    showInventory();
+    return;
+  }
+  const held = inventory.get(selectedSlot);
+  if (!held) {
+    inventoryHint = '先在快捷栏选中一件物品';
+    showInventory();
+    return;
+  }
+  if (slotIndex === 40) {
+    inventory.set(40, held);
+    inventory.set(selectedSlot, null);
+    inventoryHint = '已放入副手';
+    showInventory();
+    return;
+  }
+  if (armorSlotFor(held.id) !== slotIndex) {
+    inventoryHint = '这件物品不能放入该护甲槽';
+    showInventory();
+    return;
+  }
+  inventory.set(slotIndex, { id: held.id, count: 1 });
+  inventory.set(selectedSlot, held.count > 1 ? { id: held.id, count: held.count - 1 } : null);
+  inventoryHint = '已装备';
+  showInventory();
+};
+
 const quickMoveToCraft = (slotIndex: number): void => {
   const stack = inventory.get(slotIndex);
   if (!stack) {
@@ -625,6 +662,14 @@ const showInventory = (): void => {
       onQuickMove: (slotIndex) => quickMoveToCraft(slotIndex),
       onDrop: (from, to) => handleDrop(from, to),
       refresh: () => showInventory(),
+    }));
+    elements.push(...buildEquipmentRow({
+      x: gridX,
+      y: Math.min(gridY + 3 * (slotSize + gap) + 90, panelY + panelH - 64),
+      slotSize: 36,
+      gap: 6,
+      inventory,
+      onTap: (slotIndex) => tapEquipment(slotIndex),
     }));
   } else if (inventoryTab === 'creative') {
     elements.push(...buildCreativeTab({
@@ -1959,6 +2004,8 @@ const frame = (): void => {
       inventory: Array.from({ length: 9 }, (_, i) => inventory.get(i)?.id ?? 0),
       crafting: Array.from({ length: crafting.size * crafting.size }, (_, i) => crafting.get(i)?.id ?? 0),
       craftingSize: crafting.size,
+      cursorHeld: cursor.held?.id ?? 0,
+      inventorySlots: Array.from({ length: 41 }, (_, i) => inventory.get(i)?.id ?? 0),
       craftingTable: craftingTableOpen,
       craftResult: crafting.result?.id ?? 0,
       paused,
