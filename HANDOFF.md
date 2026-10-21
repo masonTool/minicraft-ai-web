@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1245（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1246（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - **wxminigame-v2 背包 Phase 2 已收口**：点击/光标语义 = "光标 held + 短按左键 / 长按(420ms)右键"，
   规则抽到纯模块 `src/minigame-v2/inventory-click.ts`；`test:v2-inventory` 66 条 + 真浏览器 e2e 5 条
