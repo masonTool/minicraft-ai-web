@@ -1855,6 +1855,7 @@ const mobs = new MobSystem({
   scene,
   getPlayer: () => ({ x: physics.x, y: physics.y, z: physics.z }),
   surfaceY: (x, z) => world.getSurfaceBlockY(x, z),
+  solidAt: (x, y, z) => world.isSolid(x, y, z),
   onDamage: (amount, cause) => applyDamage(amount, cause),
   onDrop: (id, count, x, y, z) => addDrop(id, count, x, y, z),
   onXp: (amount) => gainXp(amount),

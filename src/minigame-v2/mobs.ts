@@ -20,6 +20,7 @@ export interface MobDeps {
   scene: THREE.Scene;
   getPlayer(): { x: number; y: number; z: number };
   surfaceY(x: number, z: number): number | null;
+  solidAt(x: number, y: number, z: number): boolean;
   onDamage(amount: number, cause: string): void;
   onDrop(id: number, count: number, x: number, y: number, z: number): void;
   onXp(amount: number): void;
@@ -203,6 +204,16 @@ export class MobSystem {
     list.push({ group, x, y, z, hp, dirX: dir, dirZ: 0, wander: 2, materials });
   }
 
+  private moveSurface(mob: MobState, nx: number, nz: number): number | null {
+    const surface = this.deps.surfaceY(Math.floor(nx), Math.floor(nz));
+    if (surface === null) return null;
+    const nextY = surface + 1;
+    if (Math.abs(nextY - mob.y) > 1.2) return null;
+    if (this.deps.solidAt(Math.floor(nx), Math.floor(mob.y + 0.2), Math.floor(nz))) return null;
+    if (this.deps.solidAt(Math.floor(nx), Math.floor(mob.y + 1.4), Math.floor(nz))) return null;
+    return surface;
+  }
+
   private tickWanderers(list: MobState[], dt: number, speed: number): void {
     const now = Date.now();
     for (const mob of list) {
@@ -216,14 +227,15 @@ export class MobSystem {
       }
       const nx = mob.x + mob.dirX * speed * dt;
       const nz = mob.z + mob.dirZ * speed * dt;
-      const surface = this.deps.surfaceY(Math.floor(nx), Math.floor(nz));
-      if (surface !== null && Math.abs(surface + 1 - mob.y) <= 1.2) {
+      const surface = this.moveSurface(mob, nx, nz);
+      if (surface !== null) {
         mob.x = nx;
         mob.z = nz;
         mob.y = surface + 1;
       } else {
         mob.dirX *= -1;
         mob.dirZ *= -1;
+        mob.wander = 0;
       }
       mob.group.position.set(mob.x, mob.y, mob.z);
       mob.group.rotation.y = Math.atan2(mob.dirX, mob.dirZ);
@@ -252,13 +264,27 @@ export class MobSystem {
           mob.wander = 2 + Math.random() * 3;
         }
       }
-      const nx = mob.x + dirX * 1.05 * dt;
-      const nz = mob.z + dirZ * 1.05 * dt;
-      const surface = this.deps.surfaceY(Math.floor(nx), Math.floor(nz));
-      if (surface !== null && Math.abs(surface + 1 - mob.y) <= 1.2) {
+      const step = 1.05 * dt;
+      const candidates = [
+        [dirX, dirZ],
+        [-dirZ, dirX],
+        [dirZ, -dirX],
+      ];
+      let moved = false;
+      for (const [mx, mz] of candidates) {
+        const nx = mob.x + mx * step;
+        const nz = mob.z + mz * step;
+        const surface = this.moveSurface(mob, nx, nz);
+        if (surface === null) continue;
         mob.x = nx;
         mob.z = nz;
         mob.y = surface + 1;
+        mob.dirX = mx;
+        mob.dirZ = mz;
+        moved = true;
+        break;
+      }
+      if (!moved) {
         mob.dirX = dirX;
         mob.dirZ = dirZ;
       }
