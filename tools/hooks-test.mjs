@@ -329,6 +329,16 @@ console.log('\n[卡死保护]');
     }
     check('前 4 轮仍在重试同一条', /卡死测试条目/.test(lastStderr));
     check('前 4 轮还没打阻塞标记', !/已标/.test(lastStderr));
+    /**
+     * ⚠️ 这条断言原来查的是 `state.attempts['…']`——那是**旧版钩子**的字段。
+     * v3（会话级队列）改成"指纹 + 连续计数"（`currentFingerprint` / `currentStreak`），
+     * 钩子改了、自测没跟着改，于是 `npm run check` 从那次迁移起一直是红的
+     * （批次 1355 的 [发现] 就是它）。现在改成查**当前实现**的字段，
+     * 而且**仍然守原来那个 bug**：计数必须累加并逐轮落盘，否则永远触发不了隔离。
+     */
+    const midState = JSON.parse(readFileSync(statePath(sid), 'utf8'));
+    check('前 4 轮把连续次数累加并逐轮落盘', midState.currentStreak === 4, String(midState.currentStreak));
+    check('连续计数挂在这一条上', /卡死测试条目/.test(midState.currentFingerprint ?? ''));
 
     const fifth = runHook('auto-continue.mjs', stopEvent(sid));
     check('第 5 轮打出阻塞标记', /已标.*阻塞/.test(fifth.stderr), fifth.stderr.slice(0, 160));
@@ -341,9 +351,14 @@ console.log('\n[卡死保护]');
 
     const state = JSON.parse(readFileSync(statePath(sid), 'utf8'));
     check(
-      '状态里记下了尝试次数',
-      state.attempts?.['卡死测试条目：故意做不完'] >= 5,
-      JSON.stringify(state.attempts),
+      '隔离之后计数归零（改回 [ ] 能重新得到 N 次机会）',
+      state.currentStreak === 0,
+      String(state.currentStreak),
+    );
+    check(
+      '计数已经移到下一条（不再算在被隔离的那条头上）',
+      !/卡死测试条目/.test(state.currentFingerprint ?? ''),
+      String(state.currentFingerprint),
     );
   });
 }
