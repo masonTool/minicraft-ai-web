@@ -11623,4 +11623,15 @@
 - [x] B532-5 测试：worldmatrix 60 → 36、viewmode 补正面上下、mode 补旁观起飞；套数 162 → 161
 - ⚠️ 原版缺的 large_biomes / single_biome 未做（后续批次）
 
+## 批次 533：补全原版世界类型（大型群系 / 单一群系）（2026-10-21）
+
+- [x] B533-1 large_biomes：`biomeScale=4`，biomeAt/columnBiome/landBiomeAtCell 按 1/4 坐标采样；
+  地形密度不变
+- [x] B533-2 single_biome：`biomeByName` + 生成器固定群系；创建界面“群系”下拉（仅该类型显示）
+- [x] B533-3 singleBiome 贯通：WorldSummary → WorldConfig → World → Worker 请求 →
+  TerrainGenerator → OverworldGenerator；非法/类型不符的群系被丢弃
+- [x] B533-4 测试：world 82 条（1/4 映射、单一群系恒定、清单往返）、worldmatrix 60 组
+- [x] B533-5 浏览器验证：单一沙漠表层一致（含 Worker 生成）、大型群系可加载；套数仍 **161**
+- ⚠️ 原版“调试（Debug）”类型不做（开发者用）
+
 <!-- docs-archive:end -->
