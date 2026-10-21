@@ -99,6 +99,7 @@
     "test:recipebook": "esbuild tools/recipebook-test.ts --bundle --platform=node --format=esm --outfile=.tmp/recipebook-test.mjs --log-level=error && node .tmp/recipebook-test.mjs",
     "test:net": "node tools/net-test.mjs",
     "test:audio": "esbuild tools/audio-test.ts --bundle --platform=node --format=esm --outfile=.tmp/audio-test.mjs --log-level=error && node .tmp/audio-test.mjs",
+    "test:soundpack": "esbuild tools/soundpack-test.ts --bundle --platform=node --format=esm --outfile=.tmp/soundpack-test.mjs --log-level=error && node .tmp/soundpack-test.mjs",
     "test:unit": "vitest run tests",
     "test:unit:watch": "vitest tests",
     "test:xp": "esbuild tools/xp-test.ts --bundle --platform=node --format=esm --outfile=.tmp/xp-test.mjs --log-level=error && node .tmp/xp-test.mjs",

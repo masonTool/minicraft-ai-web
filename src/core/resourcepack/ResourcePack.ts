@@ -15,6 +15,7 @@
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../../render/atlasLayout.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
+import { countUnmappedSounds, mapPackSounds, soundNameOf } from './SoundPack.ts';
 
 /** zip 里解出来的一项 */
 export interface ZipEntry {
@@ -31,6 +32,10 @@ export interface ResourcePackResult {
   skipped: string[];
   /** 直接忽略的（不是方块贴图，例如模型与语言文件） */
   ignored: number;
+  /** 成功替换的音效 `SoundKind` 名（M10，批次 614） */
+  sounds: string[];
+  /** 认出是音效但没接上的（解码失败，或该音效本项目不播） */
+  soundsSkipped: string[];
 }
 
 /** 把 subarray 视图复制成独立的 ArrayBuffer（Blob/DecompressionStream 要求明确的所有权） */
@@ -120,12 +125,21 @@ export function tileNameOf(entryName: string): string | null {
 }
 
 /**
- * 把资源包应用到图集。返回替换统计。
+ * 把资源包应用到图集 + 音频引擎。返回替换统计。
  *
  * 贴图尺寸不要求是 16×16：`drawImage` 会缩放到图集里那一格，
  * 因此 32×32 的高清包也能用（会被降采样到 16×16，与图集规格一致）。
+ *
+ * 音效（M10，批次 614）：资源包里的 `sounds/**\/*.ogg` 会按
+ * `SoundPack.ts` 的映射表解码并装进引擎，**没命中的音效继续用合成音**。
+ * 解码失败只是少一条采样，不影响贴图与其它音效（资源包好坏参半是常态）。
  */
-export async function applyResourcePack(file: File, atlas: TextureAtlas, packName = file.name): Promise<ResourcePackResult> {
+export async function applyResourcePack(
+  file: File,
+  atlas: TextureAtlas,
+  packName = file.name,
+  audio?: { setSamples(kind: string, buffers: readonly AudioBuffer[]): void },
+): Promise<ResourcePackResult> {
   const buffer = await file.arrayBuffer();
 
   const entries = await readZipEntries(buffer, (name) => {
@@ -136,7 +150,14 @@ export async function applyResourcePack(file: File, atlas: TextureAtlas, packNam
   const ctx = atlas.canvas.getContext('2d');
   if (!ctx) throw new Error('无法取得图集画布上下文，资源包未应用');
 
-  const result: ResourcePackResult = { found: entries.length, replaced: [], skipped: [], ignored: 0 };
+  const result: ResourcePackResult = {
+    found: entries.length,
+    replaced: [],
+    skipped: [],
+    ignored: 0,
+    sounds: [],
+    soundsSkipped: [],
+  };
 
   for (const entry of entries) {
     const tile = tileNameOf(entry.name);
@@ -172,12 +193,94 @@ export async function applyResourcePack(file: File, atlas: TextureAtlas, packNam
   // 平均色缓存与 UI 的等轴方块图标缓存一起作废（否则背包里的图标还是旧材质）。
   if (result.replaced.length > 0) atlas.markTextureChanged();
 
+  // ---- 音效（M10）：贴图处理完之后再把音效解一遍
+  if (audio) {
+    await applyPackSounds(buffer, audio, result);
+  }
+
   console.info(
     `[pack] ${packName}：替换 ${result.replaced.length} 张贴图` +
-      (result.skipped.length > 0 ? `，${result.skipped.length} 张名字对不上图集` : ''),
+      (result.skipped.length > 0 ? `，${result.skipped.length} 张名字对不上图集` : '') +
+      (result.sounds.length > 0 ? `；替换 ${result.sounds.length} 种音效` : ''),
   );
   return result;
 }
+
+/**
+ * 把资源包里的音效解码并装进引擎。
+ *
+ * 单独读一次 zip：贴图那趟的 `accept` 只认方块 PNG，音效条目当时被**跳过**了
+ * （`readZipEntries` 只解压 accept 认可的项，这是为了不把几百 MB 的音乐读进内存）。
+ * 再读一趟比"一次读全、再分拣"省内存，代价只是多扫一遍中央目录。
+ */
+async function applyPackSounds(
+  buffer: ArrayBuffer,
+  audio: { setSamples(kind: string, buffers: readonly AudioBuffer[]): void },
+  result: ResourcePackResult,
+): Promise<void> {
+  let names: string[];
+  try {
+    const soundEntries = await readZipEntries(buffer, (name) => soundNameOf(name) !== null);
+    names = soundEntries.map((entry) => soundNameOf(entry.name)!);
+
+    // 名字对不上就整族丢弃：映射表是显式的，没登记的音效本项目根本不播
+    const hits = mapPackSounds(names);
+    if (hits.size === 0) {
+      result.soundsSkipped.push(...names);
+      return;
+    }
+
+    // 一个 SoundKind 可能有多个变体，先把它们按 kind 归堆再逐组解码
+    const ctx = createDecodeContext();
+    if (!ctx) {
+      // 没有 AudioContext（未交互/不支持）：不算失败，贴图已经生效了
+      result.soundsSkipped.push(...names);
+      return;
+    }
+
+    for (const [kind, paths] of hits) {
+      const buffers: AudioBuffer[] = [];
+      for (const path of paths) {
+        const entry = soundEntries.find((candidate) => soundNameOf(candidate.name) === path);
+        if (!entry) continue;
+        try {
+          // `decodeAudioData` 会**接管**传入的 ArrayBuffer（解完就清空），
+          // 所以每次都要给一份独立的副本，否则同一份数据解第二个变体就到手是空的。
+          buffers.push(await ctx.decodeAudioData(toArrayBuffer(entry.data)));
+        } catch {
+          // 单个变体坏了就跳过它，同族的其它变体还能用
+        }
+      }
+      if (buffers.length > 0) {
+        audio.setSamples(kind, buffers);
+        result.sounds.push(kind);
+      } else {
+        result.soundsSkipped.push(kind);
+      }
+    }
+    // 认得出但没登记的音效（音乐/唱片/生物叫声…）只计数，不进 soundsSkipped
+    void countUnmappedSounds(names);
+  } catch (error) {
+    console.warn('[pack] 音效部分解析失败（贴图不受影响）', error);
+  }
+}
+
+/**
+ * 拿一个能解码的 AudioContext。
+ *
+ * 优先造一个**临时**的：`decodeAudioData` 不要求上下文在 running 状态，
+ * 也不需要用户手势已经恢复播放——这样"导入资源包"这一步不会顺手
+ * 把引擎的主上下文提前建出来（那会让主音量/分组设置走另一套节点）。
+ * 失败就返回 null，调用方按"这次没换成音效"处理。
+ */
+function createDecodeContext(): AudioContext | null {
+  try {
+    return new AudioContext();
+  } catch {
+    return null;
+  }
+}
+
 
 /** 从文件名推断资源包名（`我的材质.mcpack` → `我的材质`） */
 export function packNameFromFile(fileName: string): string {

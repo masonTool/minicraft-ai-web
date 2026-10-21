@@ -1103,6 +1103,14 @@ export class AudioEngine {
   private lastNoteAt = -1;
   /** 仍在发声的那些声音的结束时刻（秒），用来数当前并发了几声 */
   private voiceEnds: number[] = [];
+  /**
+   * 资源包替换进来的采样（M10 第二半，批次 614）：`SoundKind → 已解码的变体`。
+   *
+   * 有它就播采样，没有就照旧合成——**两条路都保留**，因为资源包是可选的，
+   * 而"没装资源包就没声音"是这个项目最不能接受的退化。
+   * 键是 `SoundKind` 字符串；值是若干个 `AudioBuffer`（原版就是这么多个变体随机挑）。
+   */
+  private readonly samples = new Map<string, AudioBuffer[]>();
 
   /**
    * 创建/恢复 AudioContext。必须由用户手势触发（浏览器自动播放策略），
@@ -1122,7 +1130,6 @@ export class AudioEngine {
 
   /**
    * 页面进后台时挂起（批次 303）。
-   *
    * 主循环 `dt = 0` 只能让音乐导演不再排新音符：雨声是**常驻循环节点**、
    * 已经预约到未来的音符也还在播——只有挂起 AudioContext 才真的安静。
    * 恢复走既有的 `resume()`（它本来就会处理 `suspended`）。
@@ -1131,6 +1138,36 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
     void ctx.suspend().catch(() => undefined);
+  }
+
+  /**
+   * 装上一批资源包采样（M10，批次 614）。
+   *
+   * 只接受**已经解码好**的 `AudioBuffer`：解码要 AudioContext，而 AudioContext
+   * 只能在用户手势后创建（浏览器自动播放策略），所以解码那一步放在
+   * `ResourcePack.ts` 里、由"导入资源包"这个点击触发，引擎这边保持纯同步。
+   *
+   * 同名 `SoundKind` 再装一次会**整组替换**（换资源包时不必先清空），
+   * 传空数组等于恢复该音效的合成音。
+   */
+  setSamples(kind: string, buffers: readonly AudioBuffer[]): void {
+    if (buffers.length === 0) this.samples.delete(kind);
+    else this.samples.set(kind, [...buffers]);
+  }
+
+  /** 该音效当前有没有采样（调试/验收用） */
+  hasSample(kind: string): boolean {
+    return (this.samples.get(kind)?.length ?? 0) > 0;
+  }
+
+  /** 已装上的采样条数（按 SoundKind 计，验收用） */
+  get sampleKinds(): number {
+    return this.samples.size;
+  }
+
+  /** 清空全部采样（卸载资源包 / 恢复到合成音） */
+  clearSamples(): void {
+    this.samples.clear();
   }
 
   /**
@@ -1457,7 +1494,18 @@ export class AudioEngine {
     }
 
     const layers = pickLayers(spec);
-    const duration = layersDuration(layers);
+
+    // ---- 资源包采样优先（M10）：有就用它，没有才合成
+    // 变体随机挑一个：原版同一个音效有 3~6 个采样，反复播同一个会像复读机。
+    const sampleList = this.samples.get(key);
+    const sample =
+      sampleList && sampleList.length > 0
+        ? sampleList[Math.floor(Math.random() * sampleList.length)]!
+        : null;
+
+    // 时长决定"这一声占多久并发名额"：采样与合成各按自己的真实长度算，
+    // 否则采样比合成长时会被下一声挤掉（听感上是"偶尔缺一下"）。
+    const duration = sample ? sample.duration : layersDuration(layers);
 
     let gain = spec.gain * this.volume * this.groupVolume[group] * gainScale;
     if (at) {
@@ -1503,7 +1551,17 @@ export class AudioEngine {
       if (wet) tail.connect(wet);
     }
 
-    for (const layer of layers) this.scheduleLayer(ctx, layer, now, rate, out);
+    if (sample) {
+      // 采样直接接到 `out`：音量衰减/距离低通/声像/水下低通全都在下游，
+      // 因此"资源包的声音"与"合成的声音"走**同一条出口链**，不需要两套。
+      const source = ctx.createBufferSource();
+      source.buffer = sample;
+      source.playbackRate.value = rate;
+      source.connect(out);
+      source.start(now);
+    } else {
+      for (const layer of layers) this.scheduleLayer(ctx, layer, now, rate, out);
+    }
     this.played++;
   }
 

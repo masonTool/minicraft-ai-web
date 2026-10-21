@@ -16750,25 +16750,37 @@ class App {
    */
   async loadResourcePack(file: File): Promise<ResourcePackResult | null> {
     try {
-      const result = await applyResourcePack(file, this.atlas, packNameFromFile(file.name));
-      this.resourcePack = { name: packNameFromFile(file.name), replaced: result.replaced.length, skipped: result.skipped.length };
+      const result = await applyResourcePack(file, this.atlas, packNameFromFile(file.name), this.audio);
+      this.resourcePack = {
+        name: packNameFromFile(file.name),
+        replaced: result.replaced.length,
+        skipped: result.skipped.length,
+        sounds: result.sounds.length,
+      };
       return result;
     } catch (error) {
       console.warn('[pack] 资源包加载失败（文件可能不是有效的 zip）', error);
-      this.resourcePack = { name: packNameFromFile(file.name), replaced: 0, skipped: 0, error: true };
+      this.resourcePack = { name: packNameFromFile(file.name), replaced: 0, skipped: 0, sounds: 0, error: true };
       return null;
     }
   }
 
   /** 已加载的资源包状态（验收脚本用） */
-  private resourcePack: { name: string; replaced: number; skipped: number; error?: boolean } | null = null;
+  private resourcePack: { name: string; replaced: number; skipped: number; sounds: number; error?: boolean } | null = null;
 
-  get resourcePackState(): { name: string; replaced: number; skipped: number; error: boolean } | null {
+  get resourcePackState(): {
+    name: string;
+    replaced: number;
+    skipped: number;
+    sounds: number;
+    error: boolean;
+  } | null {
     if (!this.resourcePack) return null;
     return {
       name: this.resourcePack.name,
       replaced: this.resourcePack.replaced,
       skipped: this.resourcePack.skipped,
+      sounds: this.resourcePack.sounds,
       error: this.resourcePack.error ?? false,
     };
   }
