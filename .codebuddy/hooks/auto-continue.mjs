@@ -259,18 +259,57 @@ const contextLine =
     ? '（读不到上下文用量，忽略此条）'
     : `当前上下文约 ${Math.round(contextTokens / 1000)}k tokens（阈值 ${Math.round(CONTEXT_LIMIT / 1000)}k）`;
 
-const mustHandOff = contextTokens !== null && contextTokens >= CONTEXT_LIMIT;
+/**
+ * 是否进入交接模式。
+ *
+ * 除了"用量过阈值"，还有一条**强制开关** `AUTO_CONTINUE_FORCE_HANDOFF=1`：
+ *   ① 兜底——万一哪天平台不再传 `transcript_path`，读不到用量就永远进不了交接模式，
+ *      那上下文满了也没人提醒，这个开关是最后一道保险；
+ *   ② 手动——用户想主动收尾换个会话时，可以直接开它，不必等到 150k。
+ */
+const mustHandOff =
+  process.env.AUTO_CONTINUE_FORCE_HANDOFF === '1' ||
+  (contextTokens !== null && contextTokens >= CONTEXT_LIMIT);
+
+/**
+ * 交接用的一句话。
+ *
+ * 钩子**开不了新会话**（`Stop` 事件只允许返回 `additionalContext`，见实现里的
+ * 字段白名单；`SessionStart` 的 4 个 source 都由外部动作触发），
+ * 所以退而求其次：把"新会话第一句话"直接生成好，让用户复制粘贴就能接上。
+ *
+ * 这句话必须**自包含**——新会话看不到旧会话的任何东西，只能靠它 + 仓库文件。
+ * 所以它要带上：读哪几份文件、当前第一条是什么、做完一条就停的约定。
+ */
+const firstPendingText = pending[0]
+  ? pending[0].replace(/^-\s*\[[ ~]\]\s*/, '').trim().slice(0, 80)
+  : null;
+
+const handoffPrompt = firstPendingText
+  ? `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进。先做第一条：${firstPendingText}`
+  : `读 AGENTS.md、HANDOFF.md 和 .codebuddy/hooks/process/auto-continue.md，按队列继续推进（队列里还有 ${pending.length} 条待办）。`;
+
+const handoffFile = join(logsDir, 'handoff-prompt.txt');
 
 const feedback = mustHandOff
   ? [
-      `[auto-continue 第${state.count}轮 · 上下文 ${Math.round(contextTokens / 1000)}k 已过阈值] 先收尾，不要开新任务。`,
+      `[auto-continue 第${state.count}轮 · ${
+        contextTokens === null ? '收到强制交接指令' : `上下文 ${Math.round(contextTokens / 1000)}k 已过阈值`
+      }] 先收尾，不要开新任务。`,
       '',
-      '## 这一轮只做三件事（不要做新任务）',
+      '## 这一轮只做四件事（不要做新任务）',
       '',
       '1. **把手上的活收干净**：该提交的提交（中文 message），该勾的勾 `[x]`；',
-      '2. **如果某条做到一半**，把它改成 `[~]` 并在条目下面补一行"当前卡在哪 / 下一步具体做什么"，',
+      '2. **如果某条做到一半**，把它改成 `[~]`，并在条目下面补一行"当前卡在哪 / 下一步具体做什么"，',
       '   写清到"换个会话的人不用问我也能接着做"的程度；',
-      '3. **在回复里给出交接摘要**：本会话做完哪几条（编号）、还剩几条、下一条从哪开始。',
+      '3. **在回复里给出交接摘要**：本会话做完哪几条（编号）、还剩几条、下一条从哪开始；',
+      '4. **在回复的最后，原样输出下面这个代码块**（用户要复制它到新会话）：',
+      '',
+      '   ┌───────────── 复制这段 ─────────────',
+      '   │ ' + handoffPrompt,
+      '   └───────────────────────────────',
+      '',
+      '   这一行已经同时写进 `.codebuddy/hooks/logs/handoff-prompt.txt`（钩子生成，不用你维护）。',
       '',
       '然后**明确停止**（不要再读队列、不要开始新条目）。用户会开一个新会话继续——',
       '上下文已经满了，硬撑只会让后半程质量下降、还会触发压缩丢细节。',
@@ -290,4 +329,19 @@ const feedback = mustHandOff
       '6. 队列全部清空后，在回复里明确写"队列已清空"再停止。',
     ].join('\n');
 
-blockStop(feedback, { count: state.count, pendingCount: pending.length, contextTokens });
+// 只在交接时落盘：平时不写，免得让人以为随时都有待用的交接单
+if (mustHandOff) {
+  try {
+    mkdirSync(logsDir, { recursive: true });
+    writeFileSync(handoffFile, `${handoffPrompt}\n`);
+  } catch {
+    /* 写不进去不影响主流程，反馈里已经带了这句话 */
+  }
+}
+
+blockStop(feedback, {
+  count: state.count,
+  pendingCount: pending.length,
+  contextTokens,
+  handoffPrompt: mustHandOff ? handoffPrompt : undefined,
+});

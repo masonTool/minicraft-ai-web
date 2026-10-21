@@ -241,6 +241,46 @@ console.log('\n[无上限与上下文水位]');
   check('auto-commit 没有拦截次数上限', !/MAX_ROUNDS/.test(commitSrc));
 }
 
+// ---------------------------------------------------------------- 交接单
+
+console.log('\n[交接单]');
+
+{
+  /**
+   * 钩子开不了新会话（`Stop` 只允许 additionalContext），所以退而求其次：
+   * 上下文满时生成"新会话第一句话"，让用户复制粘贴。这里断言它确实被生成、
+   * 且**自包含**（带上要读的文件 + 当前第一条），否则新会话接不上。
+   */
+  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('交接分支会写 handoff-prompt.txt', /handoff-prompt\.txt/.test(src));
+  check('交接话术带上要读的文件', /读 AGENTS\.md/.test(src));
+
+  // 真跑一次：临时造一条待办 + 用低阈值强制进入交接模式
+  const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
+  const handoffFile = join(projectRoot, '.codebuddy', 'hooks', 'logs', 'handoff-prompt.txt');
+  let backup = null;
+  try {
+    backup = readFileSync(queueFile, 'utf8');
+    writeFileSync(queueFile, `${backup}\n- [ ] hooks-test 占位条目\n`);
+    const r = runHook('auto-continue.mjs', stopEvent('hooks-test-handoff'), {
+      // 用强制开关进入交接模式：比"造一个超大 transcript"直接，也不依赖平台是否传 transcript_path
+      env: { AUTO_CONTINUE_FORCE_HANDOFF: '1' },
+    });
+    check('强制交接开关生效', r.code === 2 && /收尾/.test(r.stderr), r.stderr.slice(0, 120));
+    check('交接反馈里带可复制的提示词', /复制这段/.test(r.stderr));
+    check('交接反馈带上队列第一条', /hooks-test 占位条目/.test(r.stderr));
+    check('交接单已落盘', existsSync(handoffFile), handoffFile);
+    if (existsSync(handoffFile)) {
+      const content = readFileSync(handoffFile, 'utf8');
+      check('落盘内容自包含（带要读的文件）', /AGENTS\.md/.test(content));
+      check('落盘内容带上队列第一条', /hooks-test 占位条目/.test(content));
+    }
+  } finally {
+    if (backup !== null) writeFileSync(queueFile, backup);
+    rmSync(handoffFile, { force: true });
+  }
+}
+
 // ---------------------------------------------------------------- 两种输出风格
 
 console.log('\n[输出风格]');
