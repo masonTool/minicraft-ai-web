@@ -72,6 +72,8 @@ import { Teams } from '../src/core/world/Teams.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
+  GAME_RULE_LABELS,
+  clampRuleNumber,
   difficultyProfile,
   isDifficulty,
   normalizeDifficulty,
@@ -534,6 +536,78 @@ console.log('\n[难度与游戏规则]');
   check('不给参数时列出全部', list.out.lastInfo.includes('keepInventory') && list.out.lastInfo.includes('randomTickSpeed'));
   const unknown = run('/gamerule 飞行 true');
   check('未知规则报错', unknown.out.lastError.includes('未知的游戏规则'));
+
+  // ---- Q23（批次 625）：6 条新规则 ----
+  // ① 三条接入行为的（默认值也要对，否则升级即改变现有存档的手感）
+  check('freezeDamage 默认开（细雪冻伤）', DEFAULT_GAME_RULES.freezeDamage === true);
+  check('doVinesSpread 默认开（藤蔓蔓延）', DEFAULT_GAME_RULES.doVinesSpread === true);
+  check('snowAccumulationHeight 默认 8（整格）', DEFAULT_GAME_RULES.snowAccumulationHeight === 8);
+  check('三条都能通过命令关掉', (() => {
+    const a = run('/gamerule freezeDamage false');
+    const b = run('/gamerule doVinesSpread false');
+    const c = run('/gamerule snowAccumulationHeight 0');
+    return a.world.rules.freezeDamage === false
+      && b.world.rules.doVinesSpread === false
+      && c.world.rules.snowAccumulationHeight === 0;
+  })());
+  check('snowAccumulationHeight 上限是 8（不是统一夹到 100）', (() => {
+    const r = run('/gamerule snowAccumulationHeight 99');
+    return r.world.rules.snowAccumulationHeight === 8;
+  })());
+  check('积雪上限夹取会在回执里说明', (() => {
+    const r = run('/gamerule snowAccumulationHeight 99');
+    return r.out.lastInfo.includes('夹');
+  })(), run('/gamerule snowAccumulationHeight 99').out.lastInfo);
+
+  // ② 三条"只登记、暂不改变行为"的（原版默认值必须一致）
+  check('doTraderSpawning 默认开', DEFAULT_GAME_RULES.doTraderSpawning === true);
+  check('playersSleepingPercentage 默认 100', DEFAULT_GAME_RULES.playersSleepingPercentage === 100);
+  check('spectatorsGenerateChunks 默认开', DEFAULT_GAME_RULES.spectatorsGenerateChunks === true);
+  check('这三条也能读能写', (() => {
+    return run('/gamerule doTraderSpawning').out.lastInfo.includes('doTraderSpawning = true')
+      && run('/gamerule playersSleepingPercentage 120').world.rules.playersSleepingPercentage === 120
+      && run('/gamerule spectatorsGenerateChunks false').world.rules.spectatorsGenerateChunks === false;
+  })());
+
+  // ③ 按规则各自的范围夹取（以前统一 0~100，会把 maxCommandChainLength 静默压成 100）
+  check('maxCommandChainLength 能设到 256（不被 100 压住）', (() => {
+    const r = run('/gamerule maxCommandChainLength 256');
+    return r.world.rules.maxCommandChainLength === 256;
+  })(), String(run('/gamerule maxCommandChainLength 256').world.rules.maxCommandChainLength));
+  check('maxCommandChainLength 上限 65536（对齐原版）', (() => {
+    return run('/gamerule maxCommandChainLength 999999').world.rules.maxCommandChainLength === 65536;
+  })());
+  check('playersSleepingPercentage 能设到 1000（服务器常用 101 禁跳夜）', (() => {
+    return run('/gamerule playersSleepingPercentage 1000').world.rules.playersSleepingPercentage === 1000;
+  })());
+  check('每条数值规则各自夹取（clampRuleNumber 纯函数）', (() => {
+    return clampRuleNumber('randomTickSpeed', 999) === 100
+      && clampRuleNumber('snowAccumulationHeight', 999) === 8
+      && clampRuleNumber('maxCommandChainLength', 999999) === 65536
+      && clampRuleNumber('spawnRadius', -5) === 0;
+  })());
+  check('未登记的数值规则兜底 0~100', clampRuleNumber('randomTickSpeed', 500) === 100);
+
+  // ④ 旧存档读回来时新规则走默认值（不能因为存档里没有就变成 undefined）
+  check('旧存档（没有新字段）读回来新规则是默认值', (() => {
+    const old = normalizeGameRules({ keepInventory: true, randomTickSpeed: 5 });
+    return old.keepInventory === true
+      && old.randomTickSpeed === 5
+      && old.freezeDamage === true
+      && old.doVinesSpread === true
+      && old.snowAccumulationHeight === 8
+      && old.maxCommandChainLength === 256;
+  })());
+  check('旧存档里的脏数字被按各自范围夹住', (() => {
+    const dirty = normalizeGameRules({ snowAccumulationHeight: 999, maxCommandChainLength: 1e9 });
+    return dirty.snowAccumulationHeight === 8 && dirty.maxCommandChainLength === 65536;
+  })());
+
+  // ⑤ 规则总数（台账与覆盖度都对它）
+  check(`游戏规则 ${Object.keys(DEFAULT_GAME_RULES).length} 条（原 25 + 新 6）`,
+    Object.keys(DEFAULT_GAME_RULES).length === 31, String(Object.keys(DEFAULT_GAME_RULES).length));
+  check('每条规则都有中文名（下拉里不能露英文 id）',
+    (Object.keys(DEFAULT_GAME_RULES) as Array<keyof GameRules>).every((k) => (GAME_RULE_LABELS[k] ?? '').length > 0));
 }
 
 console.log('\n[方块操作]');

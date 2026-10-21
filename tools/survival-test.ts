@@ -415,6 +415,26 @@ console.log('\n[细雪冰冻（批次 548）]');
   runTicks(escaped, 140, env({ inPowderSnow: true }));
   runTicks(escaped, 100, env());
   check('离开细雪后计时清零（不会一回去就扣血）', escaped.health === MAX_HEALTH, `${escaped.health}`);
+
+  // ---- 游戏规则 freezeDamage（批次 625 / Q23）----
+  const noFreeze = new PlayerStats();
+  runTicks(noFreeze, 400, env({ inPowderSnow: true, freezeDamage: false }));
+  check('freezeDamage=false 时在细雪里待 20 秒也不掉血', noFreeze.health === MAX_HEALTH, `${noFreeze.health}`);
+
+  // 关掉再打开：计时器不该被重置，否则"开关一次就能白嫖 7 秒"
+  const toggled = new PlayerStats();
+  runTicks(toggled, 140, env({ inPowderSnow: true, freezeDamage: false }));
+  check('冻伤关着时计时器照样在累加', toggled.health === MAX_HEALTH, `${toggled.health}`);
+  runTicks(toggled, 45, env({ inPowderSnow: true }));
+  check(
+    '重新打开后不会从 0 重新数 7 秒（直接续上）',
+    toggled.health === MAX_HEALTH - 1,
+    `${toggled.health}`,
+  );
+  // 缺省（不传这个字段）= 开，这是"老调用方不改也能跑"的前提
+  const legacy = new PlayerStats();
+  runTicks(legacy, 185, env({ inPowderSnow: true }));
+  check('不传 freezeDamage 时按"开"处理（缺省方向不能反）', legacy.health === MAX_HEALTH - 1, `${legacy.health}`);
 }
 
 console.log('\n[世界统计（批次 552）]');

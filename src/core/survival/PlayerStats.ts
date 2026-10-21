@@ -135,6 +135,15 @@ export interface SurvivalEnvironment {
   inPowderSnow?: boolean;
   /** 是否穿着皮革靴子（批次 548：免疫冰冻） */
   hasLeatherBoots?: boolean;
+  /**
+   * 细雪是否造成冰冻伤害（批次 625 / Q23，游戏规则 `freezeDamage`）。
+   * 缺省 `true`（= 与原版默认一致）；显式传 `false` 才关。
+   *
+   * 为什么用 `=== false` 判断而不是 `!env.freezeDamage`：老调用方不给这个字段时
+   * 必须是"开"，而 `!undefined` 会让它变成"关" —— 这类缺省方向搞反的 bug
+   * 表现是"升级之后所有存档都不冻伤了"，极难联想到规则。
+   */
+  freezeDamage?: boolean;
 }
 
 /**
@@ -465,11 +474,14 @@ export class PlayerStats {
   }
 
   /**
-   * 细雪冰冻（批次 548）。
+   * 细雪冰冻（批次 548；开关批次 625 / Q23 的 `freezeDamage`）。
    *
    * 原版：连续陷在细雪里 7 秒开始"冻结"，之后每 2 秒 1 点伤害，**无视护甲**；
    * 皮革靴子让玩家不陷入、也就不冻结。这里用同一个计时器：
    * 离开细雪或穿靴子就把计时清零（简化：原版是缓慢回退，不是瞬间清零）。
+   *
+   * ⚠️ `freezeDamage` 关掉时**计时器照样累加**、只是不结算伤害：
+   * 那样重新打开的瞬间不会从 0 开始数（原版也是"冰冻进度保留"）。
    */
   private tickFreeze(env: SurvivalEnvironment): void {
     if (!env.inPowderSnow || env.hasLeatherBoots) {
@@ -479,6 +491,7 @@ export class PlayerStats {
     }
     this.freezeSeconds += TICK_SECONDS;
     if (this.freezeSeconds < FREEZE_START_SECONDS) return;
+    if (env.freezeDamage === false) return;
     this.freezeTickTimer++;
     if (this.freezeTickTimer < FREEZE_DAMAGE_INTERVAL_TICKS) return;
     this.freezeTickTimer = 0;

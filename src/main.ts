@@ -1171,6 +1171,10 @@ class App {
     igniteTnt: (x, y, z) => {
       this.primedTnt.prime(this.tntWorld, x, y, z);
     },
+    // 游戏规则（批次 625 / Q23）：三条都走回调而不是快照值 ——
+    // 规则能被 `/gamerule` 随时改，而这个对象是启动时组装一次的
+    vineSpreadEnabled: () => this.rules.doVinesSpread,
+    snowHeightLimit: () => this.rules.snowAccumulationHeight,
     // `raining` 每 tick 现写（见 `tickWorldBlocks`）——天气是变量，
     // 用 getter 会拿到 `this` 指向对象本身而不是 App 实例
     raining: false,
@@ -3978,6 +3982,12 @@ class App {
    * "自适应说视距涨了，实际画面一点没变"。涨完之后就不再受 ramp 的旧半径约束。
    */
   private get viewDistanceNow(): number {
+    // 游戏规则 `spectatorsGenerateChunks`（批次 625 / Q23）：关掉时，
+    // **旁观的玩家不再请求新区块**——已经加载的照常渲染（站着不动看得见），
+    // 但不会因为走过去而让世界继续长。视野半径压到 0 = 只保住脚下那一格。
+    //
+    // ⚠️ 判据写成"旁观 **且** 规则关掉"：非旁观者不受这条规则影响（原版也是）。
+    if (this.isSpectator && !this.rules.spectatorsGenerateChunks) return 0;
     if (this.startupRamp.done) return this.viewDistance;
     return Math.min(this.viewDistance, this.startupRamp.radius);
   }
@@ -14845,6 +14855,8 @@ class App {
       // 生存模块不认识背包，所以由这里把等级放进环境快照。
       featherFalling: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants, 'feather_falling'),
       respiration: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE)?.enchants, 'respiration'),
+      // 游戏规则 `freezeDamage`（批次 625 / Q23）：关掉只影响伤害，不影响"陷进细雪"
+      freezeDamage: this.rules.freezeDamage,
     };
   }
 

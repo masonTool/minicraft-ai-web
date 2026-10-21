@@ -99,6 +99,78 @@ export interface GameRules {
    * 每 0.2 秒刷一屏输出正是玩家想关掉的东西。
    */
   commandBlockOutput: boolean;
+  /**
+   * 细雪是否造成冰冻伤害（批次 625 / Q23）。原版 1.17 起就有。
+   *
+   * ⚠️ 关掉的是**伤害**，不是"冻住"：玩家照样会在细雪里下沉、视线结霜，
+   * 只是不掉血。与 `fireDamage` 是同一个口径（关的是那一条伤害来源）。
+   */
+  freezeDamage: boolean;
+  /**
+   * 藤蔓是否蔓延（批次 625 / Q23）。原版 1.19 起才有这条，
+   * 但我们的藤蔓蔓延（`tick/RandomTicks.ts` 的 `vineBehavior`）批次 50 就做了 ——
+   * 也就是说"做了功能、玩家却关不掉它"，与本条目的动机一致。
+   *
+   * 关掉后**已经长出来的藤蔓还在**（也还能被拆），只是不再往下长、不再往旁边爬。
+   */
+  doVinesSpread: boolean;
+  /**
+   * 雪层最多堆到几层（批次 625 / Q23）。0 = 不再积雪，8 = 整格。
+   *
+   * ⚠️ 原版这条叫 `snowAccumulationHeight`，**只影响"新雪堆多高"**，
+   * 不影响已有雪层的融化，也不影响"光秃秃的地面自己长出第一层雪"
+   * （那是区块级降水刻，本项目还没有，见 TASKS K11）。
+   */
+  snowAccumulationHeight: number;
+  /**
+   * 是否允许**自然生成流浪商人**（批次 625 / Q23）。
+   *
+   * ⚠️ **这条现在不生效**（用户已确认"只登记不接行为"）。
+   * 原因：流浪商人有种类、刷怪蛋、音色、交易界面（未做），但 `MobSpawner` 里
+   * **没有"按周期自发刷新"那套逻辑** —— 它跟村民一样是 `naturalSpawn: false`，
+   * 只能靠刷怪蛋/命令见到。没有刷新逻辑，这条规则就没有可挂的行为。
+   *
+   * 为什么仍然登记：① 原版默认是 `true`，登记后值与原版一致，不会误导；
+   * ② 以后补自发刷新时，判据已经在这里了（`SpawnContext.rules.doTraderSpawning`），
+   * 不用再想起"是不是还有一条规则"。
+   * 等子系统落地后要接的位置写在 TASKS 的 M17 备注里。
+   */
+  doTraderSpawning: boolean;
+  /**
+   * 睡眠跳过夜晚需要**多少比例**的玩家在睡（批次 625 / Q23）。
+   *
+   * ⚠️ **这条现在不改变行为**（用户已确认"只登记不接行为"）。
+   * 本项目是单人，`main` 的睡觉流程（`world/Sleep.ts` + 那只床的演出）里
+   * **只有你一个人**，"躺下就睡" —— 比例 ≤ 100 全都成立，
+   * 而 > 100 在原版里意味着"谁也睡不着"，但我们的睡觉入口不判这条规则。
+   *
+   * 为什么仍然登记：联机落地后（`net.remote` 已经有人了）这个值就是
+   * "要凑够几个人"，判据直接读它即可。
+   */
+  playersSleepingPercentage: number;
+  /**
+   * 一次红石脉冲下**命令方块最多连锁执行几个**（批次 625 / Q23）。
+   *
+   * ⚠️ **这条现在不改变行为**（用户已确认"只登记不接行为"）。
+   * 本项目只做**脉冲**命令方块（见 `world/CommandBlocks.ts` 的文件头），
+   * 没有循环方块、没有连锁方块，一次脉冲就执行**一条**命令 ——
+   * 所以任何 ≥ 1 的值都等价。
+   *
+   * 为什么仍然登记：原版默认 65536，这条与"有没有命令方块"是两件事；
+   * 等连锁命令方块落地时，读的就是这个值（不用再补一条规则、再改一次存档格式）。
+   */
+  maxCommandChainLength: number;
+  /**
+   * 是否允许**旁观者加载区块**（批次 625 / Q23）。
+   *
+   * 本项目的区块流式加载按玩家位置算，旁观者也走同一套循环，所以默认 `true`
+   * （对齐原版）。设成 `false` 时，**旁观的玩家不再请求新区块**：
+   * 已经加载的照常渲染，走过去也不会让世界继续长。
+   *
+   * 实现见 `main.ts` 的 `viewDistanceNow`（旁观 + 规则关 → 请求半径压到 0）。
+   * ⚠️ 关掉的是"**新**区块生成"，不是"卸载已有区块"——那样会让人眼前一黑。
+   */
+  spectatorsGenerateChunks: boolean;
 }
 
 /** 规则英文 id → 中文名（命令帮助的下拉用；命令里仍拼英文 id） */
@@ -127,6 +199,13 @@ export const GAME_RULE_LABELS: Readonly<Record<keyof GameRules, string>> = {
   doEntityDrops: '实体掉落物',
   doPatrolSpawning: '巡逻队生成',
   commandBlockOutput: '命令方块输出',
+  freezeDamage: '细雪冻伤',
+  doVinesSpread: '藤蔓蔓延',
+  snowAccumulationHeight: '积雪上限',
+  doTraderSpawning: '流浪商人生成',
+  playersSleepingPercentage: '跳过夜晚所需比例',
+  maxCommandChainLength: '命令方块链长上限',
+  spectatorsGenerateChunks: '旁观加载区块',
 };
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -154,6 +233,15 @@ export const DEFAULT_GAME_RULES: GameRules = {
   doEntityDrops: true,
   doPatrolSpawning: true,
   commandBlockOutput: true,
+  // ---- 批次 625 / Q23：6 条新规则（逐条核对过依赖的子系统）----
+  freezeDamage: true,
+  doVinesSpread: true,
+  snowAccumulationHeight: 8,
+  doTraderSpawning: true,
+  playersSleepingPercentage: 100,
+  // 原版默认 65536；本项目一次脉冲只跑一条，取 256 纯粹是"够用且不会让人误以为是 65536"
+  maxCommandChainLength: 256,
+  spectatorsGenerateChunks: true,
 };
 
 /**
@@ -199,6 +287,35 @@ export function isDifficulty(value: string): value is Difficulty {
 }
 
 /**
+ * 每条**数值**规则的取值范围（批次 625 / Q23）。
+ *
+ * 为什么要分表而不是统一夹到 0~100：以前只有一个 `randomTickSpeed` 与 `spawnRadius`，
+ * 一个 100 的上限顺手就够了。`maxCommandChainLength` 一来（原版 65536），
+ * 统一夹取会把它悄悄压成 100 —— "设了 256 却生效 100"，这种静默夹取最难查。
+ *
+ * ⚠️ 加一条数值规则时**必须在这里补一行**：`normalizeGameRules` 与 `/gamerule`
+ * 都从这张表取范围。漏了的表现是"命令说设成功、实际被夹回默认上限"。
+ */
+export const GAME_RULE_RANGES: Readonly<Record<'randomTickSpeed' | 'spawnRadius' | 'snowAccumulationHeight' | 'playersSleepingPercentage' | 'maxCommandChainLength', { min: number; max: number }>> = {
+  // 原版默认 3；上限按"每区块每 tick 抽几次"给一个不至于卡死的数
+  randomTickSpeed: { min: 0, max: 100 },
+  // 原版默认 10；再大就会把人扔到看不见的地形外
+  spawnRadius: { min: 0, max: 100 },
+  // 8 = 整格（原版上限也是 8）
+  snowAccumulationHeight: { min: 0, max: 8 },
+  // 原版允许 0~1000，>100 就等于"谁也睡不着"（服务器用它禁止跳夜）
+  playersSleepingPercentage: { min: 0, max: 1000 },
+  // 原版默认 65536；这里给到同一个量级（本项目一次脉冲本来只跑一条）
+  maxCommandChainLength: { min: 0, max: 65536 },
+};
+
+/** 把一条数值规则夹进它自己的范围（认不出的规则名按 0~100 兜底） */
+export function clampRuleNumber(key: keyof GameRules, value: number): number {
+  const range = (GAME_RULE_RANGES as Record<string, { min: number; max: number }>)[key] ?? { min: 0, max: 100 };
+  return Math.max(range.min, Math.min(range.max, Math.round(value)));
+}
+
+/**
  * 把（可能来自旧存档的）散装数据补齐成一份完整规则。
  * 逐项判断类型：旧存档没有这些字段时全部回退默认值，
  * 有人在存档里写了脏数据也不会把游戏带崩。
@@ -213,7 +330,7 @@ export function normalizeGameRules(raw: unknown): GameRules {
     if (typeof DEFAULT_GAME_RULES[key] === 'boolean') {
       if (typeof value === 'boolean') (rules[key] as boolean) = value;
     } else if (typeof value === 'number' && Number.isFinite(value)) {
-      (rules[key] as number) = Math.max(0, Math.min(100, Math.round(value)));
+      (rules[key] as number) = clampRuleNumber(key, value);
     }
   }
   return rules;

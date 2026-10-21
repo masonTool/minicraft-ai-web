@@ -344,8 +344,42 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       ⚠️ 实测踩到一个**假 bug**（已排除）：第一轮在下界问 `village` 竟然成功、`bastion` 反而说
       "只在主世界生成" —— 原因是在下界被岩浆烧死了、3 秒后重生成回主世界。
       切成创造模式重测即正常。**验证维度相关的命令必须先 `gamemode creative`**。
-- [ ] Q23 补 6 条 gamerule（逐条核对哪些依赖的子系统其实已经就位）。
-      验收：`test:commands` 增 3 条；`audit:coverage` 的游戏规则数上涨
+- [x] Q23 补 6 条 gamerule（逐条核对哪些依赖的子系统其实已经就位）。
+      验收：`test:commands` 增 3 条；`audit:coverage` 的游戏规则数上涨 —— **批次 625 完成**，
+      24 → **31 条（100%）**，`test:commands` 408 → **427**（+19）。
+      逐条核对依赖的子系统是本条目的重点，结论分两类：
+      **① 真接进行为（4 条）**：
+      · `freezeDamage` —— 细雪冻伤（批次 548）早有，只缺开关。`tickFreeze` 里一句
+        `if (env.freezeDamage === false) return;`；**关的只是伤害，计时照样累加**
+        （重开不会白嫖 7 秒）；判据写 `=== false` 而不是 `!env.freezeDamage`，缺省才是"开"。
+      · `doVinesSpread` —— 藤蔓蔓延（批次 50）早有。`TickWorld` 加 `vineSpreadEnabled?` 回调，
+        `vineBehavior` 开头判一次；关掉后**已有藤蔓还在**。
+      · `snowAccumulationHeight` —— 雪层堆高（批次 50）早有。`snowHeightLimit?` 回调，
+        上限取 `min(limit, MAX_SNOW_LAYERS)`；**只管堆多高，融化不受影响**。
+      · `spectatorsGenerateChunks` —— `main.viewDistanceNow`：旁观 + 规则关 → 半径压到 0。
+      **② 只登记不接行为（3 条，已弹窗确认）**：
+      · `doTraderSpawning` —— 流浪商人有种类/刷怪蛋/音色，但 `MobSpawner` 里
+        **没有"按周期自发刷新"**（`naturalSpawn: false`）。
+      · `playersSleepingPercentage` —— 单人下"躺下就睡"，比例 ≤ 100 全成立。
+      · `maxCommandChainLength` —— 只做**脉冲**命令方块，一次脉冲就一条，≥1 全等价。
+      三条都写了注释说明"现在不生效"，默认值与原版一致（true / 100 / 256）。
+      ⚠️ **顺手修掉一个会静默改值的坑**：`/gamerule` 的数值上限原来一律夹 0~100，
+      而 `maxCommandChainLength` 要 65536 —— 统一夹取会把它悄悄压成 100。
+      新增 `GAME_RULE_RANGES` 逐条范围 + `clampRuleNumber()`，`normalizeGameRules`
+      与 `/gamerule` 共用；夹取时回执明说「超出范围，已夹到 N」。
+      `test:tick` 103 → **118**（藤蔓/雪层正反对照 + 主循环接线断言）、
+      `test:survival` 107 → **111**（冻伤开关）。
+      浏览器实测（创造放细雪 → 切生存，`/data get entity @s Health` 读真实血量）：
+      冻伤开着 20 秒 → 累计 **4 点**「受到 1 点伤害：冰冻」、血量 20 → 18；
+      `freezeDamage false` 后 14 秒 → 新增 **0 点**（还自然回血到 19）；
+      重开 12 秒 → 新增 **2 点**。`snowAccumulationHeight 99` → 「已夹到 8」、
+      `maxCommandChainLength 999999` → 「已夹到 65536」、列表里 7 条都能看到。
+      ⚠️ 实测踩到两个坑（都记在 TASKS）：① 验血量**别数心形 DOM**（半颗心的裁剪与
+      `display:none` 混在一起，判不准），改用 `/data get entity @s Health`；
+      ② `/setblock` 只能在创造模式用，**先创造放方块再切生存**，否则方块根本没放上去
+      （第一轮就是这样：以为冻伤没生效，实际细雪没放上）。
+
+### 队列已清空
 
 ### 明确不做（留在这里免得下次又提）
 

@@ -111,6 +111,20 @@ export interface TickWorld {
   getState?: (x: number, y: number, z: number) => number;
   /** 写方块**并带上状态**（藤蔓蔓延要把挂面写进去）；不传时退化成 `setBlock` */
   setBlockWithState?: (x: number, y: number, z: number, id: number, state: number) => boolean;
+  /**
+   * 藤蔓是否蔓延（批次 625 / Q23，游戏规则 `doVinesSpread`）。
+   *
+   * 缺省当 `true`（原版默认开）。⚠️ 判据写 `!== false`，不能写 `=== true` ——
+   * 老调用方不传这个字段时必须是"开"，写成 `=== true` 会让所有存档的藤蔓一夜之间不长。
+   */
+  vineSpreadEnabled?: () => boolean;
+  /**
+   * 雪层最多堆到几层（批次 625 / Q23，游戏规则 `snowAccumulationHeight`）。
+   *
+   * 缺省当 `MAX_SNOW_LAYERS`（8 = 整格）。取回调而不是数值，是因为规则能被
+   * `/gamerule` 随时改，而 `TickWorld` 是每次 tick 组装的 —— 传回调省掉一次重建。
+   */
+  snowHeightLimit?: () => number;
 }
 
 export interface TickChunkView {
@@ -458,6 +472,9 @@ function writeVine(world: TickWorld, x: number, y: number, z: number, state: num
  * 那需要"方块变动时通知邻居"这条通道，本项目目前只有红石负载有这种回调。
  */
 function vineBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  // 规则 `doVinesSpread`（批次 625 / Q23）：关掉后**已有的藤蔓还在**，
+  // 只是不再往下长、不再往旁边爬（原版关的也是"随机刻处理"，不是删掉藤蔓）
+  if (world.vineSpreadEnabled?.() === false) return false;
   const state = world.getState?.(x, y, z) ?? 0;
   const sides = vineSides(state);
   const up = (state & 0b10000) !== 0;
@@ -683,7 +700,10 @@ function snowBehavior(world: TickWorld, x: number, y: number, z: number, random:
   }
 
   // 2) 积雪：下雪 + 露天 + 没到满格
-  if (layers >= MAX_SNOW_LAYERS) return false;
+  //    上限走规则 `snowAccumulationHeight`（批次 625 / Q23）：0 = 不再积雪，
+  //    8 = 整格。原地版这条只影响"新雪堆多高"，融化逻辑不受它影响。
+  const limit = world.snowHeightLimit?.() ?? MAX_SNOW_LAYERS;
+  if (layers >= Math.min(limit, MAX_SNOW_LAYERS)) return false;
   if (world.snowingAt?.(x, y, z) !== true) return false;
   if ((world.skyLightAt?.(x, y, z) ?? 0) < 15) return false; // 15 = 头顶直接见天
   if (random() >= SNOW_ACCUMULATE_CHANCE) return false;

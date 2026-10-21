@@ -17,9 +17,12 @@ import {
   fluidHeight,
   fluidLevel,
   isFallingFluid,
+  snowLayers,
   withFacing,
   withFallingFluid,
   withFluidLevel,
+  withSnowLayers,
+  withVineSide,
 } from '../src/core/registry/blockState.ts';
 import {
   RANDOM_TICK_BEHAVIORS,
@@ -613,6 +616,115 @@ console.log('\n[流体模拟窗口（批次 283）]');
   check('主循环按窗口过滤流体刻', mainSrc.includes('isWithinFluidSim(px, pz, pos.x, pos.z)'));
   check('主循环有每 tick 上限并推迟而不是丢弃', mainSrc.includes('this.scheduler.schedule(pos.x, pos.y, pos.z, pos.dimension, 1)'));
   check('被冻结/被推迟的刻都有计数（诊断）', mainSrc.includes('this.fluidTicksFar++') && mainSrc.includes('this.fluidTicksDeferred++'));
+}
+
+/**
+ * 游戏规则接进随机刻（批次 625 / Q23）。
+ *
+ * 这批的三条规则（`doVinesSpread` / `snowAccumulationHeight` / 主循环的 `freezeDamage`）
+ * 有个共同的坑：`TickWorld` 的成员是**可选**的，判据写成 `=== true` 还是 `!== false`
+ * 决定了"老调用方不传时到底开不开"。写反了的表现是"升级之后所有存档的藤蔓都不长了"，
+ * 而这类 bug 在浏览器里要点几百个随机刻才看得出来 —— 所以在这里逐条钉死。
+ */
+console.log('\n[游戏规则接进随机刻（批次 625 / Q23）]');
+{
+  /** 造一个最小世界：一层方块 + 可选规则 */
+  const makeWorld = (blocks: Map<string, number>, states: Map<string, number>, rules: {
+    vineSpreadEnabled?: () => boolean;
+    snowHeightLimit?: () => number;
+  } = {}): TickWorld => ({
+    getBlock: (x, y, z) => blocks.get(`${x},${y},${z}`) ?? 0,
+    setBlock: (x, y, z, id) => {
+      blocks.set(`${x},${y},${z}`, id);
+      return true;
+    },
+    getState: (x, y, z) => states.get(`${x},${y},${z}`) ?? 0,
+    setBlockWithState: (x, y, z, id, state) => {
+      blocks.set(`${x},${y},${z}`, id);
+      states.set(`${x},${y},${z}`, state);
+      return true;
+    },
+    snowingAt: () => true,
+    skyLightAt: () => 15,
+    blockLightAt: () => 0,
+    ...rules,
+  });
+  /** 永远返回 0 的随机源（“一定命中”最容易写断言） */
+  const always = (): number => 0;
+
+  // ---- doVinesSpread ----
+  // 藤蔓挂在北面的墙上（挂面 = 北，邻格 z-1 是石头）；**下方那一格的北邻也是石头**，
+  // 所以"往下长"成立。这与真实世界一致：藤蔓顺着墙面往下垂。
+  const vineKey = '0,0,0';
+  const buildVineScene = (): { blocks: Map<string, number>; states: Map<string, number> } => ({
+    blocks: new Map<string, number>([
+      [vineKey, Block.VINE],
+      ['0,-1,0', 0],          // 下方那一格是空气（可以往下长）
+      ['0,0,-1', Block.STONE], // 北面的墙
+      ['0,-1,-1', Block.STONE], // 下方那一格的北邻也是墙
+    ]),
+    states: new Map<string, number>([[vineKey, withVineSide(0, 0)]]),
+  });
+  const growScene = buildVineScene();
+  const grown = randomTickBlock(makeWorld(growScene.blocks, growScene.states), 0, 0, 0, always);
+  check('藤蔓默认会往下长（不传规则 = 开）', grown && growScene.blocks.get('0,-1,0') === Block.VINE);
+
+  const offScene = buildVineScene();
+  const stopped = randomTickBlock(
+    makeWorld(offScene.blocks, offScene.states, { vineSpreadEnabled: () => false }),
+    0, 0, 0, always,
+  );
+  check('doVinesSpread 关掉后不再往下长', !stopped && offScene.blocks.get('0,-1,0') === 0);
+  check('关掉后原来的藤蔓还在（不是删掉藤蔓）', offScene.blocks.get(vineKey) === Block.VINE);
+  check(
+    '规则回调每 tick 现读（改了立刻生效）',
+    (() => {
+      let on = true;
+      const scene = buildVineScene();
+      const w = makeWorld(scene.blocks, scene.states, { vineSpreadEnabled: () => on });
+      on = false;
+      const firstTry = randomTickBlock(w, 0, 0, 0, always);
+      on = true;
+      const secondTry = randomTickBlock(w, 0, 0, 0, always);
+      return !firstTry && secondTry;
+    })(),
+  );
+
+  // ---- snowAccumulationHeight ----
+  /** 造一片 already-1 层的雪，看它还能不能长高 */
+  const snowCase = (layers: number, limit: number | undefined) => {
+    const b = new Map<string, number>([['0,0,0', Block.SNOW]]);
+    const s = new Map<string, number>([['0,0,0', withSnowLayers(0, layers)]]);
+    const rules = limit === undefined ? {} : { snowHeightLimit: () => limit };
+    randomTickBlock(makeWorld(b, s, rules), 0, 0, 0, always);
+    return snowLayers(s.get('0,0,0') ?? 0);
+  };
+  check('雪层默认能长高（不传规则 = 8 层上限）', snowCase(1, undefined) === 2, String(snowCase(1, undefined)));
+  check('上限 8 时到满格就不再长', snowCase(8, undefined) === 8, String(snowCase(8, undefined)));
+  check('snowAccumulationHeight = 3 时到 3 层就停', snowCase(3, 3) === 3, String(snowCase(3, 3)));
+  check('snowAccumulationHeight = 2 时第 2 层能长、后面停', snowCase(2, 2) === 2 && snowCase(1, 2) === 2);
+  check('snowAccumulationHeight = 0 时完全不再积雪', snowCase(1, 0) === 1, String(snowCase(1, 0)));
+  check('上限超过 8 会被夹到 8（原版上限）', snowCase(8, 99) === 8);
+  check(
+    '关掉积雪不影响融化（规则只管"堆多高"）',
+    (() => {
+      const b = new Map<string, number>([['0,0,0', Block.SNOW]]);
+      const s = new Map<string, number>([['0,0,0', withSnowLayers(0, 3)]]);
+      const w: TickWorld = {
+        ...makeWorld(b, s, { snowHeightLimit: () => 0 }),
+        blockLightAt: () => 15,
+      };
+      randomTickBlock(w, 0, 0, 0, always);
+      return snowLayers(s.get('0,0,0') ?? 0) === 2;
+    })(),
+  );
+
+  // ---- 接线：主循环必须真的把规则传进去 ----
+  const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('主循环把 doVinesSpread 传进随机刻', mainSrc2.includes('vineSpreadEnabled: () => this.rules.doVinesSpread'));
+  check('主循环把 snowAccumulationHeight 传进随机刻', mainSrc2.includes('snowHeightLimit: () => this.rules.snowAccumulationHeight'));
+  check('主循环把 freezeDamage 传进生存环境', mainSrc2.includes('freezeDamage: this.rules.freezeDamage'));
+  check('旁观不加载区块接在 viewDistanceNow 上', mainSrc2.includes('this.isSpectator && !this.rules.spectatorsGenerateChunks'));
 }
 
 console.log(`\nTick 测试：${passed} 通过 / ${failed} 失败`);

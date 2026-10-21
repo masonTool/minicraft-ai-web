@@ -28,6 +28,7 @@ import {
   DIFFICULTIES,
   DIFFICULTY_LABELS,
   DIFFICULTY_LABELS_EN,
+  clampRuleNumber,
   type Difficulty,
   type GameRules,
 } from '../world/Rules.ts';
@@ -369,9 +370,6 @@ export function isSelfTarget(text: string | undefined, playerName: string): bool
 
 // ---------------------------------------------------------------- 命令表
 
-const numericRule = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, Math.round(value)));
-
 /** 天气的中文名（批次 221）：`/weather` 的回执以前直接印 `rain` 这种英文原值 */
 const WEATHER_LABELS: Record<'clear' | 'rain' | 'thunder', string> = {
   clear: '晴天',
@@ -562,9 +560,21 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(msg('{key} 需要一个数字', { key: key }));
         return;
       }
-      const clamped = numericRule(value, 0, 100);
+      // ⚠️ 范围按**每条规则自己**取（批次 625 / Q23）：以前一律夹到 0~100，
+      // 而 `maxCommandChainLength` 要能设到 65536 —— 统一夹取会把它静默压成 100，
+      // 表现是"命令说设成功了、实际生效的是 100"，这种错最难查。
+      const clamped = clampRuleNumber(key, value);
       ctx.setGameRule(key, clamped as GameRules[typeof key]);
-      out.info(msg('{key} 已设置为 {value}', { key: key, value: clamped }));
+      // 夹取必须说出来：玩家设 999 时看到 100，才知道是夹了而不是没生效
+      out.info(
+        clamped === Math.round(value)
+          ? msg('{key} 已设置为 {value}', { key: key, value: clamped })
+          : msg('{key} 已设置为 {value}（超出范围，已夹到 {clamped}）', {
+              key: key,
+              value: Math.round(value),
+              clamped: clamped,
+            }),
+      );
     },
   },
   {
