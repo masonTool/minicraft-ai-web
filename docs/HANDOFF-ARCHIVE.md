@@ -3268,6 +3268,21 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   花的**茎叶**、藤蔓、睡莲；石头/木头/土/沙/**花瓣**不动（花瓣压暗会显脏）。还要更沉就
   只调这一个数（0.8 明显、0.95 几乎看不出），`foliage()` + 5 条结构断言守着。
 
+- 批次 528（植被再压一档 + 飞行起步改成加速过程）：
+  ① `FOLIAGE_DARKEN` 0.88 → **0.8**（−20%）：用户觉得还不够沉。
+  ② 创造飞行不再"按一下就满速"：加速度从固定 90 改成 `speed / FLY_RAMP_SECONDS`（**0.65 s**），
+     普通与冲刺两档都是 0.65 秒到满速；**松手另算**（`FLY_BRAKE_SECONDS = 0.3`，否则搭建筑会
+     冲过头约 3.5 格）；垂直也走同一条曲线。`test:physics` +8 条（首帧慢 / 0.65 s 到位 /
+     不超速 / 松手滑行 / 最终停住）。
+
+- 批次 615（M23 前置）：**命名牌 + 头顶名字牌**。新物品 `minecraft:name_tag`（id **1570**；
+  改号原因：1488 已被 `minecraft:map` 占用，注册表当场报"重复注册"）+ `Mob.customName` +
+  `ui/NameTagEditor.ts`（单行输入，复用 `.sign-editor*` 样式）+ `render/MobNameTag.ts`
+  （CanvasTexture + Sprite **精灵池 12 个**、32 格内可见、按距离由近到远挑选；不是"一只生物一个 Sprite"）
+  + 区块寄存/存档往返 + 钓鱼宝藏池。纯决策在 `core/entity/NameTag.ts`。新套件 `test:nametag` **50 条**，
+  套数 164 → **165**。⚠️ 差异：留空不擦名字、取消不消耗牌、长度按字符 32 而非原版 32 字节。
+  ⚠️ M23 仍 `[~]`：队友免伤与碰撞开关仍未接；**队伍颜色还没接进名字牌**（现在一律白色）。
+
 <!-- docs-archive:end -->
 - 批次 614（M10 收口）：**资源包音效替换**。新增 `core/resourcepack/SoundPack.ts`（纯逻辑）+
   `AudioEngine` 的采样通道（`setSamples` / `hasSample` / `clearSamples`）。要点：

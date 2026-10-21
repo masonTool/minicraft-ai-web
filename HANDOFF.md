@@ -43,6 +43,12 @@ npm run dev            # http://localhost:5173
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
+- 批次 620（用户"PC 端的背包物品不能滑动、不能翻页，搜索框位置也不对"）：三条都出在
+  **"只对触摸端成立"的规则没带 `body.touch-mode`**——携带版窄壳三端统一，PC 一起吃了：翻页条被
+  `display:none !important` 藏掉、`scrollbar-width:none` 让"还能滚"看不出来、左栏 7~8 列 + 174px 窗口
+  使一页 60 件只露四行。修法：隐藏只留给触摸端，另加 `body:not(.touch-mode)` 一段只改 PC 的尺寸/滚动/
+  翻页条（`--pc-inv-cell` + `auto-fill`、物品格与搜索框同 574px 中轴、原生细滚动条、主背包 9 列 × 52px）；
+  页大小仍是 `PAGE_SIZE_WIDE` = 12 × 5，移动端未动；`test:ui` 加 3 条守卫（926 通过）。
 - 批次 619（用户"进世界会弹一下世界统计"）：**`#statistics` 在 CSS 里根本不存在**——
   `index.html` 只给 `#advancements` 写了 `fixed; inset:0; z-index:55` 与 `.hidden{display:none}`，
   而 `StatisticsScreen` 的根节点是 `#statistics`：`hidden` 不命中，面板从 App 构造起就是
@@ -62,13 +68,6 @@ npm run dev            # http://localhost:5173
   修法：`onChunkLoaded` 置 `remeshPending`，主循环在光照排空后清标记并全量重排（1 秒节流）。
   不用"每 N 秒兜底刷"：182 块全量重排要重建 182 份几何，手机会持续掉帧；
   只在真加载新地形时刷，稳态游玩一次不触发。`test:render` 4 → **12 条**。
-- 批次 615（M23 前置）：**命名牌 + 头顶名字牌**。新物品 `minecraft:name_tag`（id **1570**；
-  改号原因：1488 已被 `minecraft:map` 占用，注册表当场报"重复注册"）+ `Mob.customName` +
-  `ui/NameTagEditor.ts`（单行输入，复用 `.sign-editor*` 样式）+ `render/MobNameTag.ts`
-  （CanvasTexture + Sprite **精灵池 12 个**、32 格内可见、按距离由近到远挑选；不是"一只生物一个 Sprite"）
-  + 区块寄存/存档往返 + 钓鱼宝藏池。纯决策在 `core/entity/NameTag.ts`。新套件 `test:nametag` **50 条**，
-  套数 164 → **165**。⚠️ 差异：留空不擦名字、取消不消耗牌、长度按字符 32 而非原版 32 字节。
-  ⚠️ M23 仍 `[~]`：队友免伤与碰撞开关仍未接；**队伍颜色还没接进名字牌**（现在一律白色）。
 - ⚠️ 295-1~295-4 被并发会话占用，那两个提交正式编号是 297 / 298；303 同理（正式 304）。
 - 批次 191 及更早（167~191，共 25 条）：已搬到 `docs/HANDOFF-ARCHIVE.md` 的「§1 批次流水」
   ——那部分是"当时怎么做"的查阅材料，不再是"现在什么状态"。**本文件只保留最近 6 批**

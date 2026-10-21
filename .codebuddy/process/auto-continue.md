@@ -216,17 +216,6 @@
 
 ---
 
-## 批次 534：旁观者口径对齐（2026-10-21）
-
-- [x] B534-1 穿墙保留（原版旁观者就是 noclip）；不改成创造式碰撞
-- [x] B534-2 免伤：`damagePlayer` 改用 `canTakeDamage`（创造/旁观都免伤）
-- [x] B534-3 不捡东西：`pickup` 用 `canPickUpItems`，返回原数量让物品留在地上
-- [x] B534-4 不被追：`playerInvisible: effects.invisible || isSpectator`
-- [x] B534-5 不掉饥饿/氧气/虚空血：生存环境 `creative + spectator`
-- [x] B534-6 HUD：生存状态栏与经验条对旁观隐藏
-- [x] B534-7 测试：survival 86 条、mode 28 条；浏览器实测虚空不掉血
-- ⚠️ 没有旁观者专属 HUD/传送菜单（原版有，按需再做）
-
 ## 批次 619：进世界时"世界统计"面板一闪（2026-10-21，hotfix）
 
 - [x] B619-1 **根因：`#statistics` 没有任何 CSS**。`StatisticsScreen` 复用 `.adv-panel`
@@ -255,4 +244,18 @@
   再逐段核对 `mergeSectionLayer`）
 - [x] B618-4 回退 617 的 `ENTER_GUARD_MS`：无日志证据的猜测性行为改动，按约定整段删掉；
   617 里确凿的 `NameTagEditor.dispose()` 保留
+- 门禁：`npm run check` 全绿（165 套离线）
+
+## 批次 620：PC 背包能滚/能翻页 + 搜索框对齐（2026-10-21）
+
+- [x] B620-1 **根因：三条"只对触摸端成立"的规则没带 `body.touch-mode`**，携带版窄壳
+  三端统一，PC 一起吃了——`.inv-pager { display:none !important }`（没有翻页条）、
+  `scrollbar-width:none` + 自绘滑块只按 `pane==='creative'` 补（看不出能滚）、
+  左栏 7~8 列 + 174px 窗口（一页 60 件只露四行，剩下的既翻不到也滚不到）
+- [x] B620-2 修法：隐藏只留给 `body.touch-mode`；新增 `body:not(.touch-mode)` 一段只改
+  PC 的尺寸/滚动/翻页条——`--pc-inv-cell` + `auto-fill` 列、物品格与搜索框同 574px 中轴、
+  原生细滚动条、翻页条回到视野
+- [x] B620-3 PC 主背包回 9 列 × 52px（27 格 = 3 行），双栏面板 920 → 1000
+- [x] B620-4 `test:ui` 加 3 条守卫（PC 翻页条 / 中轴 / 原生滚动条），926 通过
+- 页大小仍是 `PAGE_SIZE_WIDE` = 12 × 5，格子数量与玩法不变；移动端一条规则没改
 - 门禁：`npm run check` 全绿（165 套离线）

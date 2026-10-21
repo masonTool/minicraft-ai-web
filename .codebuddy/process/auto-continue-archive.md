@@ -11634,4 +11634,15 @@
 - [x] B533-5 浏览器验证：单一沙漠表层一致（含 Worker 生成）、大型群系可加载；套数仍 **161**
 - ⚠️ 原版“调试（Debug）”类型不做（开发者用）
 
+## 批次 534：旁观者口径对齐（2026-10-21）
+
+- [x] B534-1 穿墙保留（原版旁观者就是 noclip）；不改成创造式碰撞
+- [x] B534-2 免伤：`damagePlayer` 改用 `canTakeDamage`（创造/旁观都免伤）
+- [x] B534-3 不捡东西：`pickup` 用 `canPickUpItems`，返回原数量让物品留在地上
+- [x] B534-4 不被追：`playerInvisible: effects.invisible || isSpectator`
+- [x] B534-5 不掉饥饿/氧气/虚空血：生存环境 `creative + spectator`
+- [x] B534-6 HUD：生存状态栏与经验条对旁观隐藏
+- [x] B534-7 测试：survival 86 条、mode 28 条；浏览器实测虚空不掉血
+- ⚠️ 没有旁观者专属 HUD/传送菜单（原版有，按需再做）
+
 <!-- docs-archive:end -->
