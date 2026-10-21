@@ -20,8 +20,8 @@ import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 const printOnly = process.argv.includes('--print');
 
 const FILES = {
-  queue: new URL('../.codebuddy/process/auto-continue.md', import.meta.url),
-  queueArchive: new URL('../.codebuddy/process/auto-continue-archive.md', import.meta.url),
+  queue: new URL('../.codebuddy/hooks/process/auto-continue.md', import.meta.url),
+  queueArchive: new URL('../.codebuddy/hooks/process/auto-continue-archive.md', import.meta.url),
   handoff: new URL('../HANDOFF.md', import.meta.url),
   handoffArchive: new URL('../docs/HANDOFF-ARCHIVE.md', import.meta.url),
 };

@@ -14,21 +14,23 @@ coverage/
 .tmp/
 
 # —— AI 钩子的运行时产物：日志、计数状态、刹车开关 ——
-# 位置：.codebuddy/logs/（日志 + 状态）、.codebuddy/*.off（刹车）。
+# 位置：.codebuddy/hooks/logs/（日志 + 状态）、.codebuddy/*.off（刹车）。
 # 这些文件每轮都会变，进仓库只会把 git status 撑爆、让 auto-commit 误判成"有改动"。
-.codebuddy/logs/
+.codebuddy/hooks/logs/
 .codebuddy/*.off
 .codebuddy/*.state.json
 # 旧位置（迁移前留下的，防止漏网）
+.codebuddy/logs/
+.codebuddy/process/
 .codebuddy/auto-continue.log
 .codebuddy/auto-continue.state.json
 .codebuddy/auto-commit.log
 .codebuddy/auto-commit.state.json
 
 # —— 进仓库的（显式列出，防止上面规则误伤）——
-# .codebuddy/process/         进度文档：队列 + 归档 + batch-seq
+# .codebuddy/hooks/process/   进度文档：队列 + 归档 + batch-seq
+# .codebuddy/hooks/*.mjs      钩子脚本
 # .codebuddy/memory/          AI 记忆的版本化副本
-# .codebuddy/hooks/           钩子脚本
 # .codebuddy/settings.json    钩子注册
 
 shot-*.png

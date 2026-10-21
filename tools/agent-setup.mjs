@@ -191,7 +191,7 @@ if (!existsSync(join(projectRoot, 'node_modules'))) {
   problems.push('缺少 node_modules，先执行 npm install。');
 }
 
-const queueFile = join(projectRoot, '.codebuddy', 'process', 'auto-continue.md');
+const queueFile = join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md');
 if (existsSync(queueFile)) {
   const pending = readFileSync(queueFile, 'utf8')
     .split(/\r?\n/)
@@ -199,7 +199,7 @@ if (existsSync(queueFile)) {
   say(`        自动继续队列剩余 ${pending.length} 条待办`);
   for (const line of pending.slice(0, 3)) say(`          · ${line.trim().replace(/^-\s*\[[ ~]\]\s*/, '')}`);
 } else {
-  problems.push('缺少 .codebuddy/process/auto-continue.md，自动继续队列不存在。');
+  problems.push('缺少 .codebuddy/hooks/process/auto-continue.md，自动继续队列不存在。');
 }
 
 if (existsSync(join(projectRoot, '.codebuddy', 'auto-continue.off'))) {
@@ -236,4 +236,4 @@ if (problems.length === 0) {
 for (const note of notes) say(`  提示: ${note}`);
 
 say();
-say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 HANDOFF.md 与 .codebuddy/process/auto-continue.md 继续推进。');
+say('下一步：npm run dev（http://localhost:5173），然后让 AI 读 HANDOFF.md 与 .codebuddy/hooks/process/auto-continue.md 继续推进。');

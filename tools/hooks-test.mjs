@@ -194,28 +194,51 @@ console.log('\n[目录分工]');
 
 {
   /**
-   * process/ 放进度文档（进仓库、要 review），logs/ 放运行时产物（不进仓库）。
-   * 这条断言是给"长跑任务列表"兜底的：一旦有人把日志挪回根目录，
+   * `hooks/process/` 放进度文档（进仓库、要 review），`hooks/logs/` 放运行时产物（不进仓库）。
+   * 这条断言是给"长跑任务列表"兜底的：一旦有人把日志挪回根目录或 process/，
    * 它会每小时往 git status 里冒出来一次，auto-commit 每次都拦，最后只能靠关钩子收场。
    */
-  const processDir = join(projectRoot, '.codebuddy', 'process');
-  const logsDir = join(projectRoot, '.codebuddy', 'logs');
-  check('process/ 存在', existsSync(processDir));
-  check('process/auto-continue.md 存在', existsSync(join(processDir, 'auto-continue.md')));
+  const hooksRoot = join(projectRoot, '.codebuddy', 'hooks');
+  const processDir = join(hooksRoot, 'process');
+  const logsDir = join(hooksRoot, 'logs');
+  check('hooks/process/ 存在', existsSync(processDir));
+  check('hooks/process/auto-continue.md 存在', existsSync(join(processDir, 'auto-continue.md')));
 
-  // logs/ 允许不存在（还没跑过），但一旦存在就必须被 gitignore
   let ignoreText = '';
   try {
     ignoreText = readFileSync(join(projectRoot, '.gitignore'), 'utf8');
   } catch {
     ignoreText = '';
   }
-  for (const pattern of ['.codebuddy/logs/', '.codebuddy/*.off']) {
+  for (const pattern of ['.codebuddy/hooks/logs/', '.codebuddy/*.off']) {
     check(`.gitignore 覆盖 ${pattern}`, ignoreText.includes(pattern));
   }
   if (existsSync(logsDir)) {
     check('logs/ 里没有藏进度文档', !existsSync(join(logsDir, 'auto-continue.md')));
   }
+  // 队列不能放在 logs/ 或 .codebuddy/ 根下——钩子只认 hooks/process/ 那一份
+  check(
+    '队列不在旧的 .codebuddy/ 根下',
+    !existsSync(join(projectRoot, '.codebuddy', 'auto-continue.md')),
+  );
+}
+
+// ---------------------------------------------------------------- 无上限 / 上下文水位
+
+console.log('\n[无上限与上下文水位]');
+
+{
+  /**
+   * 用户明确要求"不限制会话次数"。这两条断言防的是：以后有人好心把上限加回去，
+   * 结果长跑跑一半就停、而当事人以为还在跑。
+   */
+  const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('auto-continue 没有轮次上限', !/MAX_CONTINUATIONS/.test(src));
+  check('auto-continue 会读上下文用量', /input_tokens|inputTokens/.test(src));
+  check('auto-continue 有上下文阈值', /AUTO_CONTINUE_CONTEXT_LIMIT/.test(src));
+
+  const commitSrc = readFileSync(join(hooksDir, 'auto-commit.mjs'), 'utf8');
+  check('auto-commit 没有拦截次数上限', !/MAX_ROUNDS/.test(commitSrc));
 }
 
 // ---------------------------------------------------------------- 两种输出风格

@@ -15,7 +15,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
-const FILE = new URL('../.codebuddy/process/batch-seq', import.meta.url);
+const FILE = new URL('../.codebuddy/hooks/process/batch-seq', import.meta.url);
 const peek = process.argv.includes('--peek');
 
 /** 上一批的正式编号（仓库内已知最大值）。首次运行且没有 seq 文件时用它当起点 */
