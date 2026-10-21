@@ -36,6 +36,14 @@ describe('生成的确定性', () => {
     expect(same).toBeLessThan(CHUNK_VOLUME * 0.95);
   });
 
+  it('群系按列缓存（同坐标返回同一个对象）', () => {
+    const generator = new OverworldGenerator(SEED);
+    const first = generator.biomeAt(37, -84);
+    const second = generator.biomeAt(37, -84);
+    // 不是"值相等"而是**同一个对象**：缓存命中时不会再走一遍气候噪声
+    expect(second).toBe(first);
+  });
+
   it('地表高度是纯函数（同坐标多次调用一致）', () => {
     const generator = new OverworldGenerator(SEED);
     for (const [x, z] of [

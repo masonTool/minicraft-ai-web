@@ -204,6 +204,14 @@ export class OverworldGenerator {
   private readonly columnTop = new Int16Array(CHUNK_SIZE_X * CHUNK_SIZE_Z);
   /** 粗网格节点的地表高度缓存（地物/结构会反复查询同一片区域） */
   private readonly surfaceYCache = new Map<number, number>();
+  /**
+   * 群系采样缓存（C6，批次 599）。
+   *
+   * `biomeAt` 每次要算 5 条气候噪声 + 群系匹配 + 区域变体；地形生成、结构放置、
+   * 出生点选择都会反复问同一列。按 `x,z` 精确缓存（用字符串键，避免数字键碰撞
+   * 返回错误群系），超过 16384 列直接清空——缓存是加速手段，不是状态。
+   */
+  private readonly biomeCache = new Map<string, BiomeDef>();
   /** 陆地群系按 4 格粗格缓存（批次 340 的 3×3 多数投票要用 9 个邻格） */
   private readonly landBiomeCache = new Map<string, number>();
 
@@ -402,6 +410,10 @@ export class OverworldGenerator {
   biomeAt(x: number, z: number): BiomeDef {
     // 单一群系：整个主世界只有这一种
     if (this.singleBiomeDef) return this.singleBiomeDef;
+    const key = `${x},${z}`;
+    const cached = this.biomeCache.get(key);
+    if (cached !== undefined) return cached;
+
     const sx = x / this.biomeScale;
     const sz = z / this.biomeScale;
     const base = findLandBiome(
@@ -415,7 +427,10 @@ export class OverworldGenerator {
       }),
     );
     // 批次 342：母群系命中之后，再按 64 格区域决定是不是变体
-    return regionVariantAt(base, sx, sz);
+    const biome = regionVariantAt(base, sx, sz);
+    if (this.biomeCache.size > 16384) this.biomeCache.clear();
+    this.biomeCache.set(key, biome);
+    return biome;
   }
 
   /**
