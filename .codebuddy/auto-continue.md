@@ -200,14 +200,18 @@
 - [x] B534-7 测试：survival 86 条、mode 28 条；浏览器实测虚空不掉血
 - ⚠️ 没有旁观者专属 HUD/传送菜单（原版有，按需再做）
 
-## 批次 617：进世界闪屏与命名牌输入框残留（2026-10-21，hotfix）
+## 批次 618：方块表面纯黑的真正根因（2026-10-21，hotfix）
 
-- [x] B617-1 `NameTagEditor.dispose()`：615 的漏项。它构造时把 `#name-tag-editor` 挂到
-  `<body>`（复用 `.sign-editor`：`fixed; inset:0` + 55% 黑遮罩），`App.dispose()` 里
-  只收了 `signEditor` 没收它——开着输入框退出世界时，遮罩会留在页面上，再进世界又叠一个同 id 节点
-- [x] B617-2 `ENTER_GUARD_MS = 1500`：进世界瞬间的 `blur` 常早于 `fullscreenchange`，
-  此时 `ignoreBlurUntilMs` 的保护还没建立 → 被判成切后台 → 回来无条件 `openSettings()`。
-  现象是"世界闪一下变暗 + 菜单（含统计入口）冒出来又消失"。`blur` 与
-  `fullscreenchange(lost)` 两条入口都加守卫；真正的切 App 远超 1.5 秒
+- [x] B618-1 **N4 跨 section 合并的属性步长笔误**：`mergeSectionLayer` 把 `aTile` /
+  `aLight` 按每顶点 **3** 分量分配（`vertices * 3`）与写入（`vertexOffset * 3`），
+  而 `createGeometry` 给两者的 `BufferAttribute` 都是 **2** 分量。单 section 时
+  `vertexOffset = 0`、前 2N 个元素恰好正确，所以测试与单 section 场景全过；
+  2 个以上非空 section（山地/洞穴/带树）才从第二个 section 起整段错位、顶点读到 0
+- [x] B618-2 断言：`tests/merge-layer.test.ts` 的假数据改回 2 分量（以前按 3 造，
+  正好掩护了笔误）+ 新增"第二个 section 不错位"；`tools/mesh-test.ts` 同一条守卫
+- [x] B618-3 实测：844×390 dev server、同种子同坐标——修复前整屏方块发黑，
+  修复后草地/树木/水面/花正常（用调试着色器 + 顶点属性采样定位到 `aShade`/`aLight` 正常，
+  再逐段核对 `mergeSectionLayer`）
+- [x] B618-4 回退 617 的 `ENTER_GUARD_MS`：无日志证据的猜测性行为改动，按约定整段删掉；
+  617 里确凿的 `NameTagEditor.dispose()` 保留
 - 门禁：`npm run check` 全绿（165 套离线）
-- ⚠️ 未做：没在真机上验证"夜里切后台 1.2 秒回来"这类边界（守卫会吞掉这一次暂停）

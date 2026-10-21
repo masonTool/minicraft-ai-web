@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1249（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1252（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 293 项 —— 已完成 **282**、进行中 **8**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -43,13 +43,13 @@ npm run dev            # http://localhost:5173
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
-- 批次 617（hotfix，用户"进世界闪一下 + 统计弹窗一闪"）：① **615 漏了 `dispose()`**——
-  `NameTagEditor` 把 `#name-tag-editor` 挂到 `<body>`（复用 `.sign-editor`：`fixed; inset:0`
-  + 55% 黑遮罩）；退出时输入框还开着，遮罩会留在页面上、再进世界又叠一个同 id 节点。
-  修法：补 `dispose()` 并接进 `App.dispose()`。
-  ② **进世界 1.5s 内不自动弹暂停**（`ENTER_GUARD_MS`）：进世界瞬间的 `blur` 常早于
-  `fullscreenchange`（`ignoreBlurUntilMs` 还没建立）→ 被当成切后台 → 回来无条件 `openSettings()`，
-  体感是"世界闪一下变暗 + 菜单冒出来又消失"；`blur` 与 `fullscreenchange(lost)` 都加守卫。
+- 批次 618（真机"方块表面纯黑"的**真正根因**）：**N4 跨 section 合并的属性步长笔误**——
+  `mergeSectionLayer` 把 `aTile` / `aLight` 按每顶点 **3** 分量分配与写入，而
+  `createGeometry` 里两者都是 **2** 分量。单 section 时 `vertexOffset = 0`、前 2N 个元素
+  恰好正确（离线测试的假数据也按 3 造，正好掩护），一旦区块有 2 个以上非空 section
+  （山地/洞穴/带树），第二个 section 起贴图起点与光照整段错位、顶点读到 0 →
+  "天空正常、方块表面纯黑"。已实测：修复前整屏发黑，修复后草地/树木/水面正常。
+  617 里那条 `ENTER_GUARD_MS` 守卫因无证据已整段回退，只保留 `NameTagEditor.dispose()`。
 - 批次 616（真机"方块表面纯黑"）：用户在洞里截图——天空正常、方块纯黑。根因两条：
   ① `World.getSkyLight/getBlockLight` 对**不在内存的区块返回 0**，而平滑光照要读跨界一格的
   4 个采样格，先加载的区块在邻居未到时被网格化 → 边界顶点两个采样是 0 → 黑；
