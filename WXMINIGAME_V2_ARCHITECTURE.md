@@ -33,6 +33,7 @@ v2
                  inventory-tabs.ts 背包壳/物品/创造/配方页与合成面板 UI
                  quality.ts        画质分级/FPS 自适应
                  chat.ts           本地聊天/命令面板
+                 settings.ts       设置默认值/校验/持久化
                  save-controller.ts
                                    打开/防抖保存/脏区块/容器/玩家写入
                  wx-mesh-pool.ts   微信真实 Worker 网格化
