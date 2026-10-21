@@ -16,7 +16,7 @@
  */
 
 import type { DroppedExtras } from './Entity.ts';
-import type { MobEquipment } from './MobEquipment.ts';
+import { sanitizeMobEquipment, type MobEquipment } from './MobEquipment.ts';
 import type { VillagerSavedState } from './Villager.ts';
 import { MAX_TRADE_DEMAND } from '../registry/villagerTrades.ts';
 
@@ -277,6 +277,16 @@ export class EntityParking {
             baby && Number.isFinite(record.growSeconds) ? Math.max(1, record.growSeconds) : 0,
           effects: sanitizeEffects(record.effects),
           villager: sanitizeVillager(record.villager),
+          // 个体装备（J27）：与主程序 `spawnSavedEntity` 共用同一个清洗函数，
+          // 脏 id 会被剔掉；白板生物仍然不占 `equipment` 这个键
+          equipment: sanitizeMobEquipment(record.equipment),
+          // 马鞍/马铠（批次 571）：马铠只做数值形状校验，具体物品是否合法
+          // 由 `spawnSavedEntity` 的 `horseArmorTier` 再验一次
+          saddled: record.saddled === true ? true : undefined,
+          horseArmor:
+            typeof record.horseArmor === 'number' && Number.isFinite(record.horseArmor)
+              ? record.horseArmor
+              : undefined,
         });
       } else if (record.kind === 'item') {
         if (!Number.isFinite(record.itemId) || !Number.isFinite(record.count) || record.count <= 0) continue;

@@ -806,6 +806,39 @@ console.log('\n[实体的附加数据随存档往返（批次 445）]');
     JSON.stringify(item?.kind === 'item' ? item.extras?.contents : null),
   );
 
+  // 装备 / 马鞍 / 马铠（批次 584）：区块寄存往返不能把马变成"光背"
+  const geared = new EntityParking();
+  geared.park('overworld', 0, 0, {
+    kind: 'mob',
+    typeId: 'horse',
+    x: 1,
+    y: 64,
+    z: 1,
+    yaw: 0,
+    health: 20,
+    tamed: true,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: false,
+    growSeconds: 0,
+    equipment: { mainHand: toolItemId('sword', 'diamond') },
+    saddled: true,
+    horseArmor: Item.DIAMOND_HORSE_ARMOR,
+  });
+  const gearedRound = new EntityParking();
+  gearedRound.restoreAll(JSON.parse(JSON.stringify(geared.snapshotAll())) as never);
+  const gearedBack = gearedRound.take('overworld', 0, 0).find((r) => r.kind === 'mob');
+  check(
+    '装备、马鞍与马铠原样带回',
+    gearedBack?.kind === 'mob' &&
+      gearedBack.equipment?.mainHand === toolItemId('sword', 'diamond') &&
+      gearedBack.saddled === true &&
+      gearedBack.horseArmor === Item.DIAMOND_HORSE_ARMOR,
+    JSON.stringify(gearedBack),
+  );
+
   // 脏数据：非法效果项被剔除、非幼体的成长计时归零、非法附魔等级不落盘
   const dirty = new EntityParking();
   dirty.restoreAll([
