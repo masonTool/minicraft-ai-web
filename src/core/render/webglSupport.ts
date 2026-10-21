@@ -91,7 +91,11 @@ export function probeBrowserGl(): GlSupport {
   const probe: GlProbe = {
     webgl2: () => {
       try {
-        return document.createElement('canvas').getContext('webgl2');
+        const gl = document.createElement('canvas').getContext('webgl2');
+        // 探测用的上下文用完立刻释放：否则这个离屏 WebGL 上下文会一直占着 GPU，
+        // 主菜单停留时笔记本也会保持唤醒/发热。
+        gl?.getExtension('WEBGL_lose_context')?.loseContext();
+        return gl;
       } catch {
         return null;
       }
@@ -99,7 +103,10 @@ export function probeBrowserGl(): GlSupport {
     webgl1: () => {
       try {
         const canvas = document.createElement('canvas');
-        return canvas.getContext('webgl') ?? canvas.getContext('experimental-webgl');
+        const gl = (canvas.getContext('webgl') ??
+          canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+        gl?.getExtension('WEBGL_lose_context')?.loseContext();
+        return gl;
       } catch {
         return null;
       }

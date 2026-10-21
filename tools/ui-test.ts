@@ -4599,9 +4599,22 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       htmlSource.includes('--recipe-cell: 40px;'),
   );
   check(
-    'PC 主菜单停止整屏混合/无限动画',
-    htmlSource.includes('mix-blend-mode: normal;') &&
+    'PC 主菜单去掉额外整屏图层与无限动画',
+    htmlSource.includes('#world-screen::before { display: none; }') &&
       htmlSource.includes('.world-splash { animation: none; }'),
+  );
+  check(
+    'PC 创造/物品列表用满左栏高度（不再固定 174px 只露 4 行）',
+    htmlSource.includes('.inv-panel.pocket-ui.pocket-dual .inv-creative-section {') &&
+      htmlSource.includes('flex: 1 1 auto;\n          min-height: 0;\n          max-height: none;'),
+  );
+  const webglSource = readFileSync(
+    new URL('../src/core/render/webglSupport.ts', import.meta.url),
+    'utf8',
+  );
+  check(
+    '主菜单探测 WebGL 后立刻释放离屏上下文',
+    webglSource.includes("gl?.getExtension('WEBGL_lose_context')?.loseContext();"),
   );
   const atlasSource = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
   check(

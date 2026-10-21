@@ -4785,10 +4785,8 @@
         .world-secondary { font-size: 14px; padding: 10px; }
         /* 主菜单整屏纹理层原来是 mix-blend-mode + 无限 splash 动画：
            在笔记本上会持续做全屏合成，没进世界也在发热。PC 上改成普通半透明。 */
-        #world-screen::before {
-          mix-blend-mode: normal;
-          opacity: .55;
-        }
+        /* 主菜单不需要第二层整屏网格纹理：直接去掉，少一层全屏合成 */
+        #world-screen::before { display: none; }
         .world-splash { animation: none; }
 
         /* 背包/合成/配方这些界面原来全是按手机半屏做的（40~44px 槽位）。
@@ -4889,6 +4887,17 @@
         }
         .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot canvas {
           width: 38px; height: 38px; max-width: 38px; max-height: 38px;
+        }
+        /* 双栏创造栏：用满整个左栏高度，不再固定在 174px 只露 4 行 */
+        .inv-panel.pocket-ui.pocket-dual .inv-creative-section {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+        }
+        .inv-panel.pocket-ui.pocket-dual .inv-creative {
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
         }
         .inv-panel.pocket-ui.pocket-dual.station-ui {
           width: min(calc(100vw - 80px), 1100px);
