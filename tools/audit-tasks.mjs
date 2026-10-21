@@ -238,12 +238,19 @@ if (!claimCommits) {
     /**
      * 不算"自建离线测试"的 key：
      *  · `test:unit` / `test:unit:watch`：vitest，自带 runner；
-     *  · `test:offline` / `test:offline:changed`：聚合 runner（`tools/run-tests.mjs`）。
+     *  · `test:offline` / `test:offline:changed`：聚合 runner（`tools/run-tests.mjs`）；
+     *  · `test:hooks`：钩子自检（`tools/hooks-test.mjs`），单一脚本、不是离线套件。
      * ⚠️ 这份名单与 `tools/run-tests.mjs` 里的 `NON_SUITE_KEYS` **必须一致**：
      * 那边用来决定"跑哪些套件"，这边用来核对文档里的"91 套"，
      * 两处不一致就会变成"文档说 91、实际只跑 89"这种最难发现的漂。
      */
-    const NON_SUITE_KEYS = new Set(['test:unit', 'test:unit:watch', 'test:offline', 'test:offline:changed']);
+    const NON_SUITE_KEYS = new Set([
+      'test:unit',
+      'test:unit:watch',
+      'test:offline',
+      'test:offline:changed',
+      'test:hooks',
+    ]);
     declared = names.filter((key) => !NON_SUITE_KEYS.has(key)).length;
   } catch {
     declared = 0;
