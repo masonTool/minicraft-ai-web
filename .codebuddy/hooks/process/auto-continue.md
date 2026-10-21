@@ -154,7 +154,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 > 为什么排第一：`Teams.sameTeam()` 与 `Mob.customName` 都已就位，缺的只是"渲染时按队伍取色"。
 > 这是 M23 里唯一不依赖联机、也不依赖新基础系统的一项；做完 M23 就只剩两条**必须联机才验得了**的。
 
-- [ ] Q1 新增 `core/entity/NameTagColor.ts`（纯逻辑）：从队伍名 → 颜色 id → `#rrggbb` 的映射表（原版 16 色），
+- [x] Q1 新增 `core/entity/NameTagColor.ts`（纯逻辑）：从队伍名 → 颜色 id → `#rrggbb` 的映射表（原版 16 色），
       `colorForMob(mob, scoreboard)` 返回该生物名字该用的颜色（无队伍 → `null` = 沿用默认白）。
       验收：新文件 30 行内，不引 DOM/渲染；`test:nametag` 增 8 条（有队伍/无队伍/队伍名不存在/16 色全覆盖）
 - [ ] Q2 `render/MobNameTag.ts` 接颜色：`drawName` 增加 `color: string | null` 参数，

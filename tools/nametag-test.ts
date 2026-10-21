@@ -22,6 +22,14 @@ import { itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { FISHING_POOLS } from '../src/core/registry/fishing.ts';
 import { EntityParking } from '../src/core/entity/EntityParking.ts';
 import { REMOTE_PLAYER_TYPE } from '../src/core/entity/mobs.ts';
+import {
+  TEAM_COLOR_HEX,
+  colorForMob,
+  nameTagNeedsRedraw,
+  normalizeTeamColor,
+  teamColorToHex,
+} from '../src/core/entity/NameTagColor.ts';
+import { TEAM_COLORS } from '../src/core/world/Teams.ts';
 
 let passed = 0;
 let failed = 0;
@@ -218,6 +226,73 @@ console.log('\n[⑤ 存档往返]');
   check(
     '没名字的键是 undefined 而不是空串',
     noName?.kind === 'mob' && (noName.customName === undefined || noName.customName === null || noName.customName === ''),
+  );
+}
+
+console.log('\n[队伍颜色（Q1 / 批次 616）]');
+
+{
+  /**
+   * 名字牌的着色决策。这一层是纯函数，所以能把"规则"钉死：
+   * 16 色齐不齐、拼写变体怎么归一、没队伍时到底返回什么。
+   */
+  check('16 色与 Teams 的权威名单键集一致', TEAM_COLORS.every((c) => TEAM_COLOR_HEX[c] !== undefined));
+  equal('调色板正好 16 项', Object.keys(TEAM_COLOR_HEX).length, 16);
+  check(
+    '每个值都是合法的 #rrggbb',
+    Object.values(TEAM_COLOR_HEX).every((v) => /^#[0-9a-f]{6}$/.test(v)),
+  );
+  check('没有重复的颜色值', new Set(Object.values(TEAM_COLOR_HEX)).size === 16);
+
+  // 归一化：三种来源的拼写都要认
+  equal('小写直通', normalizeTeamColor('red'), 'red');
+  equal('大写也能认', normalizeTeamColor('RED'), 'red');
+  equal('带空格的旧写法归一成下划线', normalizeTeamColor('light blue'), 'light_blue');
+  equal('前后空白被忽略', normalizeTeamColor('  lime  '), 'lime');
+  equal('空串返回 null', normalizeTeamColor(''), null);
+  equal('null 返回 null', normalizeTeamColor(null), null);
+  equal('不认识的名字返回 null（不回落白色）', normalizeTeamColor('rainbow'), null);
+  equal('十六进制直接放行', normalizeTeamColor('#ff0000'), '#ff0000');
+  equal('三位十六进制也放行', normalizeTeamColor('#f00'), '#f00');
+  equal('非法十六进制拒绝', normalizeTeamColor('#zzz'), null);
+
+  // 名字 → hex
+  equal('red 的十六进制', teamColorToHex('red'), '#b02e26');
+  equal('light_blue 的十六进制', teamColorToHex('light_blue'), '#3ab3da');
+  equal('认不出来的颜色名返回 null', teamColorToHex('rainbow'), null);
+
+  // 生物 → 颜色（核心决策）
+  const members: Record<string, { color: string }> = {
+    Steve: { color: 'red' },
+    Alex: { color: 'blue' },
+    Broken: { color: 'rainbow' },
+  };
+  const teamOf = (member: string) => members[member] ?? null;
+
+  equal('红队成员给红色', colorForMob('Steve', teamOf), '#b02e26');
+  equal('蓝队成员给蓝色', colorForMob('Alex', teamOf), '#3c44aa');
+  equal('没队伍返回 null（不是白色）', colorForMob('Herobrine', teamOf), null);
+  equal('没名字返回 null', colorForMob(null, teamOf), null);
+  equal('空白名字返回 null', colorForMob('   ', teamOf), null);
+  equal('队伍颜色配错时返回 null，不猜', colorForMob('Broken', teamOf), null);
+  equal('空名字不触发查询', colorForMob('', () => ({ color: 'red' })), null);
+
+  // 重画判据：名字没变但颜色变了，必须重画
+  check(
+    '名字与颜色都没变 → 不重画',
+    !nameTagNeedsRedraw({ name: 'Steve', color: '#b02e26' }, { name: 'Steve', color: '#b02e26' }),
+  );
+  check(
+    '颜色变了（/team modify color）→ 要重画',
+    nameTagNeedsRedraw({ name: 'Steve', color: '#b02e26' }, { name: 'Steve', color: '#3c44aa' }),
+  );
+  check(
+    '名字变了 → 要重画',
+    nameTagNeedsRedraw({ name: 'Steve', color: '#b02e26' }, { name: 'Alex', color: '#b02e26' }),
+  );
+  check(
+    '从无颜色变成有颜色 → 要重画',
+    nameTagNeedsRedraw({ name: 'Steve', color: null }, { name: 'Steve', color: '#b02e26' }),
   );
 }
 
