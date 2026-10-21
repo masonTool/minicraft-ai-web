@@ -16,6 +16,7 @@
  */
 
 import { usageError } from './UsageText.ts';
+import { commandDescription, commandUsage, msg, pickLabel } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
 import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../registry/itemNames.ts';
 import { Block } from '../registry/blocks.ts';
@@ -24,6 +25,7 @@ import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import {
   DIFFICULTIES,
   DIFFICULTY_LABELS,
+  DIFFICULTY_LABELS_EN,
   type Difficulty,
   type GameRules,
 } from '../world/Rules.ts';
@@ -47,6 +49,7 @@ import {
   SCORE_OPERATIONS,
   SCOREBOARD_SLOTS,
   SLOT_LABELS,
+  SLOT_LABELS_EN,
   SUPPORTED_CRITERIA,
   isValidScoreName,
   type ScoreOperation,
@@ -68,7 +71,7 @@ import {
 
 export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
 // 游戏模式（批次 491）：`/gamemode` 的三种取值与中文名
-import { GAME_MODE_LABELS } from '../world/GameMode.ts';
+import { GAME_MODE_LABELS_EN, GAME_MODE_LABELS } from '../world/GameMode.ts';
 export type { Difficulty, GameRules } from '../world/Rules.ts';
 
 /** 命令能看到的"世界与玩家" */
@@ -289,6 +292,13 @@ const WEATHER_LABELS: Record<'clear' | 'rain' | 'thunder', string> = {
   thunder: '雷暴',
 };
 
+/** 英文名（批次 617）：回执句式翻了之后，嵌在里面的值也必须跟着翻 */
+const WEATHER_LABELS_EN: Record<'clear' | 'rain' | 'thunder', string> = {
+  clear: 'Clear',
+  rain: 'Rain',
+  thunder: 'Thunder',
+};
+
 export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'help',
@@ -304,15 +314,15 @@ export const COMMANDS: readonly CommandSpec[] = [
         }
         // 一条消息只放一行：聊天栏按"新消息在上"渲染，所以先发描述、再发用法，
         // 屏幕上看到的就是"用法在上、描述在下"。
-        out.info(spec.description);
-        out.info(spec.usage);
+        out.info(commandDescription(spec));
+        out.info(commandUsage(spec));
         return;
       }
       // 每条命令单独一条消息（聊天栏再按实际宽度折叠），不再拼成一个多行大块。
       // 同样按"新消息在上"倒着发：标题最后发 → 显示在最上面，下面依次是第 1、2…条。
       for (let i = COMMANDS.length - 1; i >= 0; i--) {
         const spec = COMMANDS[i]!;
-        out.info(`${spec.usage} — ${spec.description}`);
+        out.info(`${commandUsage(spec)} — ${commandDescription(spec)}`);
       }
       out.info(tp('command.listTitle', { count: COMMANDS.length }));
     },
@@ -324,16 +334,16 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const pos = parsePosition(args, ctx.position());
       if (!pos) {
-        out.error('坐标格式不对：应为 /tp <x> <y> <z> [维度]');
+        out.error(msg('坐标格式不对：应为 /tp <x> <y> <z> [维度]'));
         return;
       }
       const dimension = args[3]?.toLowerCase();
       if (!ctx.teleport(pos.x, pos.y, pos.z, dimension)) {
-        out.error(`传送失败：维度 ${dimension} 不存在`);
+        out.error(msg('传送失败：维度 {dimension} 不存在', { dimension: dimension }));
         return;
       }
       const where = dimension ? `（${dimension}）` : '';
-      out.info(`已将 ${ctx.playerName()} 传送到 ${fmt(pos.x)} ${fmt(pos.y)} ${fmt(pos.z)}${where}`);
+      out.info(msg('已将 {player} 传送到 {x} {y} {z}{suffix}', { player: ctx.playerName(), x: fmt(pos.x), y: fmt(pos.y), z: fmt(pos.z), suffix: where }));
     },
   },
   {
@@ -349,16 +359,22 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const count = args[1] === undefined ? 1 : Math.floor(num(args[1]));
       if (!Number.isFinite(count) || count <= 0) {
-        out.error(`数量不对：${args[1]}`);
+        out.error(msg('数量不对：{count}', { count: args[1] }));
         return;
       }
       const given = ctx.give(name, count);
       if (given < 0) {
-        out.error(`找不到物品：${name}（可以试 /give stone 或 /give 石头）`);
+        out.error(msg('找不到物品：{name}（可以试 /give stone 或 /give 石头）', { name: name }));
         return;
       }
       // 背包塞不下时给出去了也会丢，这里如实告诉玩家实际给到的数量
-      out.info(`已给予 ${translateName(name)} ×${given}${given < count ? `（背包只装得下 ${given} 个）` : ''}`);
+      out.info(
+      msg('已给予 {item} ×{given}{note}', {
+        item: translateName(name),
+        given,
+        note: given < count ? msg('（背包只装得下 {given} 个）', { given }) : '',
+      }),
+    );
     },
   },
   {
@@ -368,7 +384,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     creativeOnly: true,
     run(_args, ctx, out) {
       const removed = ctx.clearInventory();
-      out.info(`已清空背包（移除 ${removed} 组物品）`);
+      out.info(msg('已清空背包（移除 {removed} 组物品）', { removed: removed }));
     },
   },
   {
@@ -383,11 +399,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const t = parseTime(args[1]);
       if (t === null) {
-        out.error(`时间格式不对：${args[1] ?? '(空)'}`);
+        out.error(msg('时间格式不对：{value}', { value: args[1] ?? '(空)' }));
         return;
       }
       ctx.setTimeOfDay(action === 'add' ? (ctx.timeOfDay() + t) % 1 : t);
-      out.info(`已将时间设置为 ${args[1]}`);
+      out.info(msg('已将时间设置为 {value}', { value: args[1] }));
     },
   },
   {
@@ -402,7 +418,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWeather(kind);
       // 回执用中文；预计时长由主程序的天气播报补一句（`App.announceWeather`）
-      out.info(`天气已切换为 ${WEATHER_LABELS[kind]}`);
+      out.info(msg('天气已切换为 {weather}', { weather: pickLabel(WEATHER_LABELS[kind], WEATHER_LABELS_EN[kind]) }));
     },
   },
   {
@@ -416,7 +432,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setDifficulty(value);
-      out.info(`难度已设置为 ${DIFFICULTY_LABELS[value]}（${value}）`);
+      out.info(msg('难度已设置为 {difficulty}（{value}）', { difficulty: pickLabel(DIFFICULTY_LABELS[value], DIFFICULTY_LABELS_EN[value]), value: value }));
     },
   },
   {
@@ -431,11 +447,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const key = args[0] as keyof GameRules | undefined;
       if (!key) {
         const lines = Object.entries(rules).map(([name, value]) => `${name} = ${value}`);
-        out.info(`当前游戏规则：\n${lines.join('\n')}`);
+        out.info(msg('当前游戏规则：\n{rules}', { rules: lines.join('\n') }));
         return;
       }
       if (!(key in rules)) {
-        out.error(`未知的游戏规则：${key}`);
+        out.error(msg('未知的游戏规则：{key}', { key: key }));
         return;
       }
       const current = rules[key];
@@ -447,21 +463,21 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (typeof current === 'boolean') {
         const lower = raw.toLowerCase();
         if (lower !== 'true' && lower !== 'false') {
-          out.error(`${key} 只能是 true / false`);
+          out.error(msg('{key} 只能是 true / false', { key: key }));
           return;
         }
         ctx.setGameRule(key, (lower === 'true') as GameRules[typeof key]);
-        out.info(`${key} 已设置为 ${lower}`);
+        out.info(msg('{key} 已设置为 {value}', { key: key, value: lower }));
         return;
       }
       const value = num(raw);
       if (Number.isNaN(value)) {
-        out.error(`${key} 需要一个数字`);
+        out.error(msg('{key} 需要一个数字', { key: key }));
         return;
       }
       const clamped = numericRule(value, 0, 100);
       ctx.setGameRule(key, clamped as GameRules[typeof key]);
-      out.info(`${key} 已设置为 ${clamped}`);
+      out.info(msg('{key} 已设置为 {value}', { key: key, value: clamped }));
     },
   },
   {
@@ -472,7 +488,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const action = args[0]?.toLowerCase();
       if (action === 'clear') {
         ctx.clearEffects();
-        out.info('已清除全部状态效果');
+        out.info(msg('已清除全部状态效果'));
         return;
       }
       if (action !== 'give') {
@@ -486,15 +502,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const seconds = args[2] === undefined ? 30 : num(args[2]);
       if (!Number.isFinite(seconds) || seconds <= 0) {
-        out.error(`秒数不对：${args[2]}`);
+        out.error(msg('秒数不对：{seconds}', { seconds: args[2] }));
         return;
       }
       const amplifier = args[3] === undefined ? 0 : Math.floor(num(args[3]));
       if (!ctx.applyEffect(name, seconds, Math.max(0, amplifier))) {
-        out.error(`未知的状态效果：${name}`);
+        out.error(msg('未知的状态效果：{name}', { name: name }));
         return;
       }
-      out.info(`已给予状态效果 ${name} ${seconds} 秒（等级 ${amplifier + 1}）`);
+      out.info(msg('已给予状态效果 {name} {seconds} 秒（等级 {level}）', { name: name, seconds: seconds, level: amplifier + 1 }));
     },
   },
   {
@@ -505,7 +521,10 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const name = args[0]?.toLowerCase();
       if (!name) {
-        out.error(usageError(`/summon <生物> [x] [y] [z]（可用：${MOB_TYPES.map((type) => type.id).join(', ')}）`));
+        out.error(
+      usageError('/summon <生物> [x] [y] [z]') +
+        msg('（可用：{available}）', { available: MOB_TYPES.map((type) => type.id).join(', ') }),
+    );
         return;
       }
       const base = ctx.position();
@@ -514,14 +533,14 @@ export const COMMANDS: readonly CommandSpec[] = [
         ? parsePosition(args.slice(1), base)
         : { x: base.x, y: base.y, z: base.z };
       if (!pos) {
-        out.error('坐标格式不对');
+        out.error(msg('坐标格式不对'));
         return;
       }
       if (!ctx.summon(name, pos.x, pos.y, pos.z)) {
-        out.error(`未知的生物：${name}（可用：${MOB_TYPES.map((type) => type.id).join(', ')}）`);
+        out.error(msg('未知的生物：{name}（可用：{available}）', { name: name, available: MOB_TYPES.map((type) => type.id).join(', ') }));
         return;
       }
-      out.info(`已召唤 ${name}`);
+      out.info(msg('已召唤 {name}', { name: name }));
     },
   },
   {
@@ -533,15 +552,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (first !== undefined && Number.isFinite(Number(first))) {
         const radius = Math.max(0, Number(first));
         const killed = ctx.killNearby(radius);
-        out.info(`已清除 ${killed} 个生物（半径 ${radius}）`);
+        out.info(msg('已清除 {count} 个生物（半径 {radius}）', { count: killed, radius: radius }));
         return;
       }
       if (!isSelfTarget(first, ctx.playerName())) {
-        out.error('只能对自己使用 /kill');
+        out.error(msg('只能对自己使用 /kill'));
         return;
       }
       ctx.killPlayer();
-      out.info(`${ctx.playerName()} 死了`);
+      out.info(msg('{player} 死了', { player: ctx.playerName() }));
     },
   },
   {
@@ -558,14 +577,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const id = resolveBlockId(name);
       if (id === undefined) {
-        out.error(`找不到方块：${name}`);
+        out.error(msg('找不到方块：{name}', { name: name }));
         return;
       }
       if (!ctx.setBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), id)) {
-        out.error('位置超出世界范围');
+        out.error(msg('位置超出世界范围'));
         return;
       }
-      out.info(`已放置 ${translateName(name)} 于 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+      out.info(msg('已放置 {block} 于 {x} {y} {z}', { block: translateName(name), x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -579,7 +598,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setPersonalSpawn(pos.x, pos.y, pos.z);
-      out.info(`已将重生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+      out.info(msg('已将重生点设置为 {x} {y} {z}', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -593,7 +612,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
-      out.info(`已将世界出生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+      out.info(msg('已将世界出生点设置为 {x} {y} {z}', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -608,15 +627,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const count = args[1] === undefined ? 8 : Number(args[1]);
       if (!Number.isInteger(count) || count < 1 || count > 200) {
-        out.error('数量必须是 1~200 的整数');
+        out.error(msg('数量必须是 1~200 的整数'));
         return;
       }
       const pos = ctx.position();
       if (!ctx.spawnParticle(kind, pos.x, pos.y, pos.z, count)) {
-        out.error(`找不到粒子：${kind}`);
+        out.error(msg('找不到粒子：{kind}', { kind: kind }));
         return;
       }
-      out.info(`已生成 ${count} 个 ${kind} 粒子`);
+      out.info(msg('已生成 {count} 个 {kind} 粒子', { count: count, kind: kind }));
     },
   },
   {
@@ -629,7 +648,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('/tell <内容>'));
         return;
       }
-      out.info(`[${ctx.playerName()} -> 你] ${text}`);
+      out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
     },
   },
   {
@@ -642,7 +661,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('/msg <内容>'));
         return;
       }
-      out.info(`[${ctx.playerName()} -> 你] ${text}`);
+      out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
     },
   },
   {
@@ -656,10 +675,10 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (!ctx.playSound(name)) {
-        out.error(`找不到音效：${name}`);
+        out.error(msg('找不到音效：{name}', { name: name }));
         return;
       }
-      out.info(`已播放音效 ${name}`);
+      out.info(msg('已播放音效 {name}', { name: name }));
     },
   },
   {
@@ -700,20 +719,20 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const def = ENCHANTMENTS.find((entry) => entry.id === key || entry.name === key);
       if (!def) {
-        out.error(`找不到附魔：${key}`);
+        out.error(msg('找不到附魔：{key}', { key: key }));
         return;
       }
       const requested = args[1] === undefined ? 1 : Number(args[1]);
       if (!Number.isInteger(requested) || requested < 1) {
-        out.error('等级必须是正整数');
+        out.error(msg('等级必须是正整数'));
         return;
       }
       const level = Math.min(requested, def.maxLevel);
       if (!ctx.enchantHeld(def.id, level)) {
-        out.error('手上没有可附魔的物品');
+        out.error(msg('手上没有可附魔的物品'));
         return;
       }
-      out.info(`已给手持物品附上 ${def.name} ${level}`);
+      out.info(msg('已给手持物品附上 {name} {level}', { name: def.name, level: level }));
     },
   },
   {
@@ -730,7 +749,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const from = parsePosition(args.slice(0, 3), base);
       const to = parsePosition(args.slice(3, 6), base);
       if (!from || !to) {
-        out.error('坐标格式不对');
+        out.error(msg('坐标格式不对'));
         return;
       }
       const offset = {
@@ -740,12 +759,12 @@ export const COMMANDS: readonly CommandSpec[] = [
       };
       if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y) || !Number.isFinite(offset.z)) {
         // 位移只接受数字（不接受 ~ / ^）：它是"相对源区域"的量，不是坐标
-        out.error('位移只能是数字：<dx> <dy> <dz>');
+        out.error(msg('位移只能是数字：<dx> <dy> <dz>'));
         return;
       }
       const modeArg = (args[9] ?? 'replace').toLowerCase();
       if (modeArg !== 'replace' && modeArg !== 'masked') {
-        out.error(`模式只有 masked / replace：${modeArg}`);
+        out.error(msg('模式只有 masked / replace：{mode}', { mode: modeArg }));
         return;
       }
       const box = normalizeCloneBox(
@@ -754,7 +773,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       );
       const volume = cloneVolume(box);
       if (volume > CLONE_LIMIT) {
-        out.error(`区域太大（${volume} 格），上限 ${CLONE_LIMIT}`);
+        out.error(msg('区域太大（{volume} 格），上限 {limit}', { volume: volume, limit: CLONE_LIMIT }));
         return;
       }
       const target = {
@@ -789,11 +808,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const to = parsePosition(args.slice(3, 6), base);
       const id = resolveBlockId(args[6]!);
       if (!from || !to) {
-        out.error('坐标格式不对');
+        out.error(msg('坐标格式不对'));
         return;
       }
       if (id === undefined) {
-        out.error(`找不到方块：${args[6]}`);
+        out.error(msg('找不到方块：{name}', { name: args[6] }));
         return;
       }
       const volume =
@@ -801,7 +820,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         (Math.abs(Math.floor(from.y) - Math.floor(to.y)) + 1) *
         (Math.abs(Math.floor(from.z) - Math.floor(to.z)) + 1);
       if (volume > 32768) {
-        out.error(`区域太大（${volume} 格），上限 32768`);
+        out.error(msg('区域太大（{volume} 格），上限 {limit}', { volume, limit: 32768 }));
         return;
       }
       const placed = ctx.fillBlocks(
@@ -809,7 +828,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         Math.floor(to.x), Math.floor(to.y), Math.floor(to.z),
         id,
       );
-      out.info(`已填充 ${placed} 格 ${translateName(args[6]!)}`);
+      out.info(msg('已填充 {count} 格 {block}', { count: placed, block: translateName(args[6]!) }));
     },
   },
   {
@@ -838,7 +857,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       ctx.setGameMode(mode);
       // 飞行由 `setGameMode` 内部处理（旁观强制飞、切回生存强制落地），
       // 这里**不再**单独调 `setFlying`——两处都设会让"切到生存却还在飞"再现
-      out.info(`已将游戏模式设置为 ${GAME_MODE_LABELS[mode]}`);
+      out.info(msg('已将游戏模式设置为 {mode}', { mode: pickLabel(GAME_MODE_LABELS[mode], GAME_MODE_LABELS_EN[mode]) }));
     },
   },
   {
@@ -846,7 +865,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     usage: '/seed',
     description: '显示世界种子',
     run(_args, ctx, out) {
-      out.info(`世界种子：${ctx.seed()}`);
+      out.info(msg('世界种子：{seed}', { seed: ctx.seed() }));
     },
   },
   {
@@ -855,7 +874,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     description: '列出在线玩家',
     run(_args, ctx, out) {
       const players = ctx.onlinePlayers();
-      out.info(`在线玩家（${players.length}）：${players.join(', ')}`);
+      out.info(msg('在线玩家（{count}）：{players}', { count: players.length, players: players.join(', ') }));
     },
   },
   {
@@ -868,7 +887,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const state = ctx.xpState();
 
       if (mode === 'query') {
-        out.info(`等级 ${state.level}：${state.progress}/${state.toNext}（累计 ${state.total} 点）`);
+        out.info(msg('等级 {level}：{progress}/{next}（累计 {total} 点）', { level: state.level, progress: state.progress, next: state.toNext, total: state.total }));
         return;
       }
       if (mode !== 'add' && mode !== 'set') {
@@ -878,7 +897,7 @@ export const COMMANDS: readonly CommandSpec[] = [
 
       const value = Number(args[1]);
       if (!Number.isFinite(value) || value < 0) {
-        out.error(`数量无效：${args[1] ?? '(空)'}`);
+        out.error(msg('数量无效：{value}', { value: args[1] ?? '(空)' }));
         return;
       }
 
@@ -886,10 +905,10 @@ export const COMMANDS: readonly CommandSpec[] = [
         // 0.4 这样的点数允许（原版经验球是整数，但命令接受小数并向下取整）
         const gained = ctx.addXp(value);
         const after = ctx.xpState();
-        out.info(`已给予 ${value} 点经验（实际进账 ${gained} 点），当前等级 ${after.level}`);
+        out.info(msg('已给予 {value} 点经验（实际进账 {gained} 点），当前等级 {level}', { value: value, gained: gained, level: after.level }));
       } else {
         ctx.setXpLevel(Math.floor(value));
-        out.info(`已将等级设置为 ${Math.floor(value)}`);
+        out.info(msg('已将等级设置为 {level}', { level: Math.floor(value) }));
       }
     },
   },
@@ -908,11 +927,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (mode === 'set') {
         const size = Number(args[1]);
         if (!Number.isFinite(size) || size < BORDER_MIN_SIZE) {
-          out.error(`边长必须是 ≥ ${BORDER_MIN_SIZE} 的数字（当前 ${current.size}）`);
+          out.error(msg('边长必须是 ≥ {min} 的数字（当前 {current}）', { min: BORDER_MIN_SIZE, current: current.size }));
           return;
         }
         const next = ctx.setWorldBorder({ size: clampBorderSize(size) });
-        out.info(`世界边界已设为边长 ${next.size} 格（中心 ${next.centerX}, ${next.centerZ}）`);
+        out.info(msg('世界边界已设为边长 {size} 格（中心 {x}, {z}）', { size: next.size, x: next.centerX, z: next.centerZ }));
         return;
       }
       if (mode === 'center') {
@@ -923,7 +942,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           return;
         }
         const next = ctx.setWorldBorder({ centerX: Math.floor(centerX), centerZ: Math.floor(centerZ) });
-        out.info(`世界中心已设为 (${next.centerX}, ${next.centerZ})，边长 ${next.size} 格`);
+        out.info(msg('世界中心已设为 ({x}, {z})，边长 {size} 格', { x: next.centerX, z: next.centerZ, size: next.size }));
         return;
       }
       out.error(usageError('/worldborder get | set <边长> | center <x> <z>'));
@@ -952,12 +971,12 @@ export const COMMANDS: readonly CommandSpec[] = [
       //      主线程重算一遍即可，不需要 Worker 的生成器
       if (kind === 'structure') {
         if (!ctx.locateStructure) {
-          out.error('这个维度还不支持 /locate structure（目前只做了主世界）');
+          out.error(msg('这个维度还不支持 /locate structure（目前只做了主世界）'));
           return;
         }
         const hit = ctx.locateStructure(target.toLowerCase());
         if (!hit) {
-          out.error(`附近没有找到 ${target}（结构名要用 village / stronghold / mineshaft 这类）`);
+          out.error(msg('附近没有找到 {target}（结构名要用 village / stronghold / mineshaft 这类）', { target: target }));
           return;
         }
         out.info(
@@ -968,7 +987,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const position = ctx.position();
       const hit = findNearestBiome((x, z) => ctx.biomeNameAt(x, z), target, position);
       if (!hit) {
-        out.error(`640 格内没有找到 ${target}（试试点名更常见的群系，或者先走远一点）`);
+        out.error(msg('640 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）', { target: target }));
         return;
       }
       const first = hit.distance === 0;
@@ -988,11 +1007,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const rawAmount = args[1];
       const amount = Number(rawAmount);
       if (!target || rawAmount === undefined || !Number.isFinite(amount) || amount <= 0) {
-        out.error(usageError('/damage <目标> <伤害>（伤害要大于 0）'));
+        out.error(usageError('/damage <目标> <伤害>') + msg('（伤害要大于 0）'));
         return;
       }
       if (!ctx.damageEntity) {
-        out.error('这个环境不支持 /damage');
+        out.error(msg('这个环境不支持 /damage'));
         return;
       }
       const position = ctx.position();
@@ -1007,14 +1026,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
       if (found.length === 0) {
-        out.error(`没有匹配到实体：${target}`);
+        out.error(msg('没有匹配到实体：{target}', { target: target }));
         return;
       }
       let hit = 0;
       for (const entity of found) {
         if (ctx.damageEntity(entity.id, amount)) hit++;
       }
-      out.info(`对 ${hit} 个实体造成了 ${amount} 点伤害`);
+      out.info(msg('对 {count} 个实体造成了 {amount} 点伤害', { count: hit, amount: amount }));
     },
   },
   {
@@ -1034,17 +1053,17 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (!Number.isFinite(times) || times < 1 || times > 10) {
-        out.error('数量要在 1~10 之间');
+        out.error(msg('数量要在 1~10 之间'));
         return;
       }
       const index = lootTableIndex(tableKey);
       const table = index > 0 ? lootTableByIndex(index) : null;
       if (!table) {
-        out.error(`没有这张战利品表：${tableKey}（用 village_house / mineshaft / dungeon 这类）`);
+        out.error(msg('没有这张战利品表：{table}（用 village_house / mineshaft / dungeon 这类）', { table: tableKey }));
         return;
       }
       if (!ctx.giveById) {
-        out.error('这个环境不支持发放物品');
+        out.error(msg('这个环境不支持发放物品'));
         return;
       }
       let given = 0;
@@ -1053,7 +1072,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           given += ctx.giveById(stack.id, stack.count);
         }
       }
-      out.info(`从 ${tableKey} 掷了 ${times} 次，塞进背包 ${given} 件`);
+      out.info(msg('从 {table} 掷了 {times} 次，塞进背包 {given} 件', { table: tableKey, times: times, given: given }));
     },
   },
   {
@@ -1086,7 +1105,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const tracker = ctx.advancements();
       const all = target === '*';
       if (!all && !advancementById(target)) {
-        out.error(`没有这条进度：${target}`);
+        out.error(msg('没有这条进度：{target}', { target: target }));
         return;
       }
       const ids = all ? tracker.defs.map((def) => def.id) : [target];
@@ -1095,7 +1114,13 @@ export const COMMANDS: readonly CommandSpec[] = [
         if (action === 'grant' ? tracker.grant(id) : tracker.revoke(id)) changed++;
       }
       const verb = action === 'grant' ? '授予' : '收回';
-      out.info(`已${verb} ${changed} 条进度${all ? '（全部）' : `：${target}`}`);
+      out.info(
+      msg('已{verb} {count} 条进度{scope}', {
+        verb,
+        count: changed,
+        scope: all ? msg('（全部）') : `：${target}`,
+      }),
+    );
     },
   },
   {
@@ -1337,12 +1362,12 @@ function evalCondition(condition: ExecCondition, state: ExecState, ctx: CommandC
   if (condition.kind === 'block') {
     const position = parsePosition([...condition.coords], state.origin);
     if (!position) {
-      out.error('execute if block：坐标不合法');
+      out.error(msg('execute if block：坐标不合法'));
       return false;
     }
     const id = resolveBlockId(condition.block);
     if (id === undefined) {
-      out.error(`找不到方块：${condition.block}`);
+      out.error(msg('找不到方块：{name}', { name: condition.block }));
       return false;
     }
     return (
@@ -1436,7 +1461,7 @@ function runExecOps(
   switch (op.kind) {
     case 'run': {
       if (executeDepth >= EXECUTE_MAX_DEPTH) {
-        out.error(`execute 嵌套太深（上限 ${EXECUTE_MAX_DEPTH} 层）`);
+        out.error(msg('execute 嵌套太深（上限 {limit} 层）', { limit: EXECUTE_MAX_DEPTH }));
         return;
       }
       executeDepth++;
@@ -1451,7 +1476,7 @@ function runExecOps(
     case 'as': {
       const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
       if (targets.length === 0) {
-        out.error(`选择器 ${describeSelector(op.selector)} 没有匹配到任何目标`);
+        out.error(msg('选择器 {selector} 没有匹配到任何目标', { selector: describeSelector(op.selector) }));
         return;
       }
       for (const target of targets) {
@@ -1464,7 +1489,7 @@ function runExecOps(
     case 'at': {
       const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
       if (targets.length === 0) {
-        out.error(`选择器 ${describeSelector(op.selector)} 没有匹配到任何目标`);
+        out.error(msg('选择器 {selector} 没有匹配到任何目标', { selector: describeSelector(op.selector) }));
         return;
       }
       for (const target of targets) {
@@ -1476,7 +1501,7 @@ function runExecOps(
     case 'positioned': {
       const position = parsePosition([...op.coords], state.origin);
       if (!position) {
-        out.error('execute positioned：坐标不合法');
+        out.error(msg('execute positioned：坐标不合法'));
         return;
       }
       runExecOps(ops, index + 1, { ...state, origin: position }, ctx, out);
@@ -1511,10 +1536,20 @@ function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): 
 
 // ---------------------------------------------------------------- /scoreboard（批次 402）
 
-const SCOREBOARD_USAGE =
-  usageError(
-    '/scoreboard objectives <add|remove|list|setdisplay> … 或 /scoreboard players <set|add|remove|operation|get|list|reset> …',
+/**
+ * `/scoreboard` 的用法提示。
+ *
+ * ⚠️ 必须是**函数**，不能是模块级常量：常量在模块加载时求值一次，
+ * 那一刻语言还是默认的 zh，之后切到英文也不会变 —— 实测就是这样漏出中文。
+ * 一次错误示范：它原来叫 `scoreboardUsage()`，实测英文模式下仍是「用法：…」。
+ */
+function scoreboardUsage(): string {
+  return (
+    usageError('/scoreboard objectives <add|remove|list|setdisplay> …') +
+    msg(' 或 ') +
+    usageError('/scoreboard players <set|add|remove|operation|get|list|reset> …')
   );
+}
 
 function runScoreboard(args: string[], ctx: CommandContext, out: CommandFeedback): void {
   const branch = (args[0] ?? '').toLowerCase();
@@ -1526,7 +1561,7 @@ function runScoreboard(args: string[], ctx: CommandContext, out: CommandFeedback
     runScoreboardPlayers(args, ctx, out);
     return;
   }
-  out.error(SCOREBOARD_USAGE);
+  out.error(scoreboardUsage());
 }
 
 function runScoreboardObjectives(args: string[], ctx: CommandContext, out: CommandFeedback): void {
@@ -1542,18 +1577,24 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       return;
     }
     if (!isValidScoreName(name)) {
-      out.error(`目标名只能用字母/数字/下划线，1~16 个字符：${name}`);
+      out.error(msg('目标名只能用字母/数字/下划线，1~16 个字符：{name}', { name: name }));
       return;
     }
     if (!SUPPORTED_CRITERIA.includes(criterion)) {
-      out.error(`暂不支持准则 ${criterion}（只有 ${SUPPORTED_CRITERIA.join(' / ')}）`);
+      out.error(msg('暂不支持准则 {criterion}（只有 {supported}）', { criterion: criterion, supported: SUPPORTED_CRITERIA.join(' / ') }));
       return;
     }
     if (!board.addObjective(name, criterion, displayName)) {
-      out.error(`目标 ${name} 已经存在`);
+      out.error(msg('目标 {name} 已经存在', { name: name }));
       return;
     }
-    out.info(`已创建目标 ${name}（${criterion}${displayName ? `，显示为“${displayName}”` : ''}）`);
+    out.info(
+      msg('已创建目标 {name}（{criterion}{display}）', {
+        name,
+        criterion,
+        display: displayName ? msg('，显示为“{display}”', { display: displayName }) : '',
+      }),
+    );
     return;
   }
 
@@ -1564,17 +1605,17 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       return;
     }
     if (!board.removeObjective(name)) {
-      out.error(`目标 ${name} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: name }));
       return;
     }
-    out.info(`已删除目标 ${name}（连同它记下的所有分数）`);
+    out.info(msg('已删除目标 {name}（连同它记下的所有分数）', { name: name }));
     return;
   }
 
   if (sub === 'list') {
     const names = board.objectiveNames();
     if (names.length === 0) {
-      out.info('还没有任何记分板目标');
+      out.info(msg('还没有任何记分板目标'));
       return;
     }
     const described = names.map((name) => {
@@ -1582,27 +1623,27 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       const shown = objective.displayName === objective.name ? '' : `，显示为“${objective.displayName}”`;
       return `${objective.name}（${objective.criterion}${shown}）`;
     });
-    out.info(`共 ${names.length} 个目标：${described.join('、')}`);
+    out.info(msg('共 {count} 个目标：{list}', { count: names.length, list: described.join('、') }));
     return;
   }
 
   if (sub === 'setdisplay') {
     const slot = (args[2] ?? '').toLowerCase() as ScoreboardSlot;
     if (!SCOREBOARD_SLOTS.includes(slot)) {
-      out.error(`槽位只能是 ${SCOREBOARD_SLOTS.join(' / ')}`);
+      out.error(msg('槽位只能是 {slots}', { slots: SCOREBOARD_SLOTS.join(' / ') }));
       return;
     }
     const objective = args[3];
     if (!objective) {
       board.setDisplay(slot, null);
-      out.info(`已清空${SLOT_LABELS[slot]}`);
+      out.info(msg('已清空{slot}', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]) }));
       return;
     }
     if (!board.setDisplay(slot, objective)) {
-      out.error(`目标 ${objective} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: objective }));
       return;
     }
-    out.info(`${SLOT_LABELS[slot]}现在显示目标 ${objective}`);
+    out.info(msg('{slot}现在显示目标 {objective}', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]), objective: objective }));
     return;
   }
 
@@ -1647,7 +1688,7 @@ function runData(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     }
     const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
     if (found.length === 0) {
-      out.error(`没有匹配到实体：${target}`);
+      out.error(msg('没有匹配到实体：{target}', { target: target }));
       return;
     }
     // 最多列 5 只（原版也是"只显示第一个 + 数量"，这里折中）
@@ -1656,7 +1697,7 @@ function runData(args: string[], ctx: CommandContext, out: CommandFeedback): voi
         `${entity.type}（${entity.name}）：Pos = [${entity.x.toFixed(1)}, ${entity.y.toFixed(1)}, ${entity.z.toFixed(1)}]`,
          );
     }
-    if (found.length > 5) out.info(`……还有 ${found.length - 5} 个匹配`);
+    if (found.length > 5) out.info(msg('……还有 {count} 个匹配', { count: found.length - 5 }));
     return;
   }
 
@@ -1672,15 +1713,15 @@ function runData(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     return;
   }
   if (!ctx.blockInfoAt) {
-    out.error('这个维度读不到方块数据');
+    out.error(msg('这个维度读不到方块数据'));
     return;
   }
   const info = ctx.blockInfoAt(Math.floor(x), Math.floor(y), Math.floor(z));
   if (!info) {
-    out.error(`(${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) 是空气或还没加载`);
+    out.error(msg('({x}, {y}, {z}) 是空气或还没加载', { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }));
     return;
   }
-  out.info(`(${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) = ${info.name}（状态位 ${info.state}）`);
+  out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}）', { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), name: info.name, state: info.state }));
 }
 
 /**
@@ -1706,10 +1747,15 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     }
     const displayName = args.slice(2).join(' ').trim();
     if (!teams.add(name, displayName)) {
-      out.error(`队伍 ${name} 已经存在`);
+      out.error(msg('队伍 {name} 已经存在', { name: name }));
       return;
     }
-    out.info(`已创建队伍 ${name}${displayName ? `（显示为「${displayName}」）` : ''}`);
+    out.info(
+      msg('已创建队伍 {name}{display}', {
+        name,
+        display: displayName ? msg('（显示为「{display}」）', { display: displayName }) : '',
+      }),
+    );
     return;
   }
 
@@ -1720,17 +1766,17 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       return;
     }
     if (!teams.remove(name)) {
-      out.error(`队伍 ${name} 不存在`);
+      out.error(msg('队伍 {name} 不存在', { name: name }));
       return;
     }
-    out.info(`已删除队伍 ${name}（成员一并解绑）`);
+    out.info(msg('已删除队伍 {name}（成员一并解绑）', { name: name }));
     return;
   }
 
   if (sub === 'list') {
     const all = teams.list();
     if (all.length === 0) {
-      out.info('还没有任何队伍');
+      out.info(msg('还没有任何队伍'));
       return;
     }
     const described = all.map((team) => {
@@ -1738,7 +1784,7 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       const shown = team.displayName === team.name ? '' : `，显示为「${team.displayName}」`;
       return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}，${members.length} 人）`;
     });
-    out.info(`共 ${all.length} 个队伍：${described.join('；')}`);
+    out.info(msg('共 {count} 个队伍：{list}', { count: all.length, list: described.join('；') }));
     return;
   }
 
@@ -1752,7 +1798,7 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     // 队不存在要**先说清楚**：否则 `teams.join` 返回 false 会被下面的分支
     // 误报成"成员名字不合法"（第一版就是这么错的）
     if (sub === 'join' && !teams.get(teamName!)) {
-      out.error(`队伍 ${teamName} 不存在`);
+      out.error(msg('队伍 {name} 不存在', { name: teamName }));
       return;
     }
     const position = ctx.position();
@@ -1766,24 +1812,24 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       : [ctx.playerName()];
     if (members === null) return;
     if (members.length === 0) {
-      out.error(`成员 ${memberArg} 没有匹配到任何对象`);
+      out.error(msg('成员 {member} 没有匹配到任何对象', { member: memberArg }));
       return;
     }
     if (sub === 'join') {
       for (const member of members) {
         if (!teams.join(teamName!, member)) {
-          out.error(`成员 ${member} 的名字不合法（1~16 个字符）`);
+          out.error(msg('成员 {name} 的名字不合法（1~16 个字符）', { name: member }));
           continue;
         }
-        out.info(`已把 ${member} 加入队伍 ${teamName}`);
+        out.info(msg('已把 {member} 加入队伍 {team}', { member: member, team: teamName }));
       }
     } else {
       for (const member of members) {
         if (!teams.leave(member)) {
-          out.info(`${member} 本来就不在任何队伍里`);
+          out.info(msg('{member} 本来就不在任何队伍里', { member: member }));
           continue;
         }
-        out.info(`已让 ${member} 退出队伍`);
+        out.info(msg('已让 {member} 退出队伍', { member: member }));
       }
     }
     return;
@@ -1798,28 +1844,28 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       return;
     }
     if (!teams.get(name)) {
-      out.error(`队伍 ${name} 不存在`);
+      out.error(msg('队伍 {name} 不存在', { name: name }));
       return;
     }
     if (key === 'friendlyfire') {
       const on = value.toLowerCase() === 'true';
       if (value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false') {
-        out.error('友好伤害只能是 true 或 false');
+        out.error(msg('友好伤害只能是 true 或 false'));
         return;
       }
       teams.setFriendlyFire(name, on);
-      out.info(`队伍 ${name} 的友好伤害已${on ? '打开' : '关闭'}`);
+      out.info(msg('队伍 {name} 的友好伤害已{state}', { name: name, state: on ? '打开' : '关闭' }));
       return;
     }
     if (key === 'color') {
       if (!teams.setColor(name, value.toLowerCase())) {
-        out.error(`颜色不认识：${value}（可用 ${TEAM_COLORS.join(' / ')}）`);
+        out.error(msg('颜色不认识：{value}（可用 {colors}）', { value: value, colors: TEAM_COLORS.join(' / ') }));
         return;
       }
-      out.info(`队伍 ${name} 的颜色已改为 ${value.toLowerCase()}`);
+      out.info(msg('队伍 {name} 的颜色已改为 {color}', { name: name, color: value.toLowerCase() }));
       return;
     }
-    out.error(`不认识的属性 ${key}（只有 friendlyFire 与 color）`);
+    out.error(msg('不认识的属性 {key}（只有 friendlyFire 与 color）', { key: key }));
     return;
   }
 
@@ -1844,7 +1890,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   const holders = holderNamesOf(target, state, ctx, out);
   if (holders === null) return;
   if (holders.length === 0) {
-    out.error(`目标 ${target} 没有匹配到任何对象`);
+    out.error(msg('目标 {target} 没有匹配到任何对象', { target: target }));
     return;
   }
 
@@ -1857,23 +1903,23 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     }
     const amount = Number(raw);
     if (!Number.isFinite(amount)) {
-      out.error(`分数必须是数字：${raw}`);
+      out.error(msg('分数必须是数字：{raw}', { raw: raw }));
       return;
     }
     if (!board.objective(objective)) {
-      out.error(`目标 ${objective} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: objective }));
       return;
     }
     for (const holder of holders) {
       if (sub === 'set') {
         board.setScore(holder, objective, amount);
-        out.info(`已将 ${holder} 的 ${objective} 设为 ${board.getScore(holder, objective)}`);
+        out.info(msg('已将 {holder} 的 {objective} 设为 {score}', { holder: holder, objective: objective, score: board.getScore(holder, objective) }));
       } else if (sub === 'add') {
         const next = board.addScore(holder, objective, amount);
-        out.info(`已将 ${holder} 的 ${objective} 加至 ${next}`);
+        out.info(msg('已将 {holder} 的 {objective} 加至 {score}', { holder: holder, objective: objective, score: next }));
       } else {
         const next = board.removeScore(holder, objective, amount);
-        out.info(`已将 ${holder} 的 ${objective} 减至 ${next}`);
+        out.info(msg('已将 {holder} 的 {objective} 减至 {score}', { holder: holder, objective: objective, score: next }));
       }
     }
     return;
@@ -1894,24 +1940,24 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
       return;
     }
     if (!board.objective(objective)) {
-      out.error(`目标 ${objective} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: objective }));
       return;
     }
     if (!board.objective(sourceObjective)) {
-      out.error(`目标 ${sourceObjective} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: sourceObjective }));
       return;
     }
     const sourceHolders = holderNamesOf(sourceTarget, state, ctx, out);
     if (sourceHolders === null) return;
     if (sourceHolders.length === 0) {
-      out.error(`来源 ${sourceTarget} 没有匹配到任何对象`);
+      out.error(msg('来源 {source} 没有匹配到任何对象', { source: sourceTarget }));
       return;
     }
     // 原版是"每个 target 与每个 source 各算一次"（两边都可以是选择器）
     for (const holder of holders) {
       for (const source of sourceHolders) {
         const next = board.operate(holder, objective, op, source, sourceObjective);
-        out.info(`已将 ${holder} 的 ${objective} 设为 ${next}（${op} ${source} 的 ${sourceObjective}）`);
+        out.info(msg('已将 {holder} 的 {objective} 设为 {score}（{op} {source} 的 {sourceObjective}）', { holder: holder, objective: objective, score: next, op: op, source: source, sourceObjective: sourceObjective }));
       }
     }
     return;
@@ -1924,13 +1970,13 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
       return;
     }
     if (!board.objective(objective)) {
-      out.error(`目标 ${objective} 不存在`);
+      out.error(msg('目标 {name} 不存在', { name: objective }));
       return;
     }
     for (const holder of holders) {
       const score = board.getScore(holder, objective);
-      if (score === null) out.info(`${holder} 没有 ${objective} 的分数`);
-      else out.info(`${holder} 的 ${objective} 是 ${score}`);
+      if (score === null) out.info(msg('{holder} 没有 {objective} 的分数', { holder: holder, objective: objective }));
+      else out.info(msg('{holder} 的 {objective} 是 {score}', { holder: holder, objective: objective, score: score }));
     }
     return;
   }
@@ -1939,7 +1985,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     for (const holder of holders) {
       const objectives = board.objectivesOf(holder);
       if (objectives.length === 0) {
-        out.info(`${holder} 还没有任何分数`);
+        out.info(msg('{holder} 还没有任何分数', { holder: holder }));
         continue;
       }
       const parts = objectives.map((name) => `${name}=${board.getScore(holder, name)}`);
@@ -1951,7 +1997,11 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   if (sub === 'reset') {
     for (const holder of holders) {
       const removed = board.resetHolder(holder);
-      out.info(removed === 0 ? `${holder} 本来就没有分数` : `已清空 ${holder} 的 ${removed} 个目标的分数`);
+      out.info(
+      removed === 0
+        ? msg('{holder} 本来就没有分数', { holder })
+        : msg('已清空 {holder} 的 {count} 个目标的分数', { holder, count: removed }),
+    );
     }
     return;
   }

@@ -8,6 +8,9 @@
  */
 
 import { USAGE_FIELD_NAMES, translateUsageFields } from '../src/core/commands/UsageText.ts';
+import { COMMAND_MESSAGES_EN } from '../src/core/commands/commandMessages.data.ts';
+import { COMMAND_DESCRIPTION_EN, COMMAND_USAGE_EN } from '../src/core/commands/commandHelp.data.ts';
+import { COMMANDS, executeCommand } from '../src/core/commands/Commands.ts';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -401,6 +404,96 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   });
   check('聊天输入框没有残留硬编码中文', chatHard.length === 0, chatHard.slice(0, 3).join(' / '));
   check('候选提示走占位符（不是拼中文）', chatSrc.includes("tp('chat.candidates'"));
+}
+
+console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
+{
+  /**
+   * 129 条回执 + 36 条 `/help` 元数据全部走 i18n。
+   *
+   * 这一批最大的风险不是"翻错"，而是**漏掉某一句**：命令分支多、且错误分支平时跑不到，
+   * 靠人眼看源码查不住。所以下面最后一条断言是**真的跑命令**：
+   * 用 46 条调用（每条命令一条 + 几条走成功分支）扫英文模式下有没有残留中文。
+   * 它一次就抓出了 `usageError` 默认参数写死 `'zh'`、
+   * 以及 `SCOREBOARD_USAGE` 是模块级常量这两个真 bug。
+   */
+  const keys = Object.keys(COMMAND_MESSAGES_EN);
+  check(`命令回执词表 ${keys.length} 条`, keys.length >= 120);
+
+  setLanguage('zh');
+  const zhWrong = keys.filter((k) => t(k) !== k);
+  check('中文模式下键返回原文（键写错会立刻暴露）', zhWrong.length === 0, zhWrong.slice(0, 3).join(' / '));
+
+  setLanguage('en');
+  const stillCjk = keys.filter((k) => /[\u4e00-\u9fff]/.test(t(k)));
+  check('英文模式下没有一条返回中文', stillCjk.length === 0, stillCjk.slice(0, 3).join(' / '));
+
+  // 占位符必须一一对应：中文用 {x}、英文也得是 {x}，否则英文会缺值
+  const mismatch: string[] = [];
+  for (const [zh, en] of Object.entries(COMMAND_MESSAGES_EN)) {
+    const a = (zh.match(/\{(\w+)\}/g) ?? []).sort().join(',');
+    const b = (en.match(/\{(\w+)\}/g) ?? []).sort().join(',');
+    if (a !== b) mismatch.push(`${zh} ↔ ${en}`);
+  }
+  check('中英占位符一一对应', mismatch.length === 0, mismatch.slice(0, 3).join(' / '));
+
+  // `/help` 的 usage + description
+  const helpMissing = COMMANDS.filter(
+    (spec) => !(spec.name in COMMAND_USAGE_EN) || !(spec.name in COMMAND_DESCRIPTION_EN),
+  ).map((spec) => spec.name);
+  check(`/help 的 ${COMMANDS.length} 条命令都有中英两版`, helpMissing.length === 0, helpMissing.join(','));
+
+  // —— 真跑：英文模式下扫残留中文 ——
+  const stub = new Proxy(
+    {},
+    {
+      get(_t, prop: string) {
+        if (prop === 'then') return undefined;
+        return () => {
+          switch (prop) {
+            case 'playerName':
+              return 'Steve';
+            case 'position':
+              return { x: 10, y: 64, z: 10, dimension: 'overworld' };
+            case 'isCreative':
+              return true;
+            case 'seed':
+              return 42;
+            case 'gameRules':
+              return { keepInventory: false };
+            default:
+              return undefined;
+          }
+        };
+      },
+    },
+  ) as never;
+
+  const cases = [...COMMANDS.map((spec) => `/${spec.name}`), '/weather clear', '/difficulty easy', '/gamemode survival', '/time set day', '/seed', '/gamerule keepInventory true', '/help'];
+  const leaked: string[] = [];
+  for (const cmd of cases) {
+    const lines: string[] = [];
+    try {
+      executeCommand(cmd, stub, { info: (m: string) => lines.push(m), error: (m: string) => lines.push(m) } as never);
+    } catch {
+      /* stub 不完整导致的异常不算失败 */
+    }
+    for (const line of lines) {
+      if (/[\u4e00-\u9fff]/.test(line)) leaked.push(`${cmd} → ${line.split('\n')[0].slice(0, 60)}`);
+    }
+  }
+  check(`英文模式下跑 ${cases.length} 条命令，输出无中文`, leaked.length === 0, [...new Set(leaked)].slice(0, 5).join(' / '));
+
+  // 源码里不该再有中文的 out.* 调用
+  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const rawOut = codeOf(cmdSrc)
+    .split('\n')
+    .filter((line) => /out\.(info|error)\(/.test(line))
+    .filter((line) => {
+      const literals = line.match(/'[^']*'/g) ?? [];
+      return literals.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes('msg(') && !line.includes('usageError(');
+    });
+  check('源码里没有硬编码中文的 out.* 调用', rawOut.length === 0, rawOut.slice(0, 3).join(' / '));
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

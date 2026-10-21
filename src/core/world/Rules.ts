@@ -17,6 +17,14 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   hard: '困难',
 };
 
+/** 英文名（批次 617）：理由同 `GAME_MODE_LABELS_EN` */
+export const DIFFICULTY_LABELS_EN: Record<Difficulty, string> = {
+  peaceful: 'Peaceful',
+  easy: 'Easy',
+  normal: 'Normal',
+  hard: 'Hard',
+};
+
 /** 游戏规则。布尔与数值混在一起，读取时按类型判断 */
 export interface GameRules {
   /** 死亡不掉落 */

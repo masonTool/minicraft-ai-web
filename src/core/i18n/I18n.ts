@@ -16,6 +16,8 @@
  *     "加了一条中文忘了加英文"是 i18n 最常见的回归，靠人眼查不住。
  */
 
+import { COMMAND_MESSAGES_EN } from '../commands/commandMessages.data.ts';
+
 export const LANGUAGES = ['zh', 'en'] as const;
 
 export type Language = (typeof LANGUAGES)[number];
@@ -481,6 +483,7 @@ const EN: Readonly<Record<string, string>> = {
   'command.empty': 'Type a command, e.g. /help',
   'command.failed': 'Command failed: {message}',
   'command.listTitle': 'Available commands ({count}):',
+  // ---- 命令运行时反馈（批次 617 后续）：直接由 src/core/commands/messages.ts 生成 ----
   'chat.sendLabel': 'Send',
   'chat.collapse': 'Click to collapse',
   'chat.expand': 'Click to expand',
@@ -505,9 +508,26 @@ const EN: Readonly<Record<string, string>> = {
   'sign.done': 'Done',
 };
 
+/**
+ * 命令运行时反馈的英文（批次 617）。
+ *
+ * 这批文案的**键就是中文原文**（见 `core/commands/messages.ts` 的说明），所以这里做两层：
+ *   · `ZH` 侧原样并入 `COMMAND_MESSAGES_EN` 的键（值就是中文原文）；
+ *   · `EN` 侧并入键 → 英文值。
+ *
+ * 放这里而不是手写进两张静态表：129 条一句话一条，手写会和中文原文**悄悄不一致**
+ * ——改了一个字就再也对不上，而 `t()` 找不到键时原样返回，看起来"只是没翻译"。
+ * 由同一个对象生成，两边天然对齐；`test:i18n` 另有一条断言查"每条中文都有英文"。
+ */
+const ZH_MERGED: Readonly<Record<string, string>> = {
+  ...ZH,
+  ...Object.fromEntries(Object.keys(COMMAND_MESSAGES_EN).map((zh) => [zh, zh])),
+};
+const EN_MERGED: Readonly<Record<string, string>> = { ...EN, ...COMMAND_MESSAGES_EN };
+
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
-  zh: ZH,
-  en: EN,
+  zh: ZH_MERGED,
+  en: EN_MERGED,
 };
 
 export function isLanguage(value: unknown): value is Language {
@@ -609,15 +629,15 @@ export function joinList(items: readonly string[], language: Language = current)
  * 正常情况下两个数组都为空——不空就是"漏翻了一条"。
  */
 export function keyParity(): { missingInEn: string[]; missingInZh: string[] } {
-  const zhKeys = Object.keys(ZH);
-  const enKeys = Object.keys(EN);
+  const zhKeys = Object.keys(ZH_MERGED);
+  const enKeys = Object.keys(EN_MERGED);
   return {
-    missingInEn: zhKeys.filter((key) => !(key in EN)),
-    missingInZh: enKeys.filter((key) => !(key in ZH)),
+    missingInEn: zhKeys.filter((key) => !(key in EN_MERGED)),
+    missingInZh: enKeys.filter((key) => !(key in ZH_MERGED)),
   };
 }
 
 /** 所有已定义的键（断言"界面用到的键都在表里"时拿它当白名单） */
 export function allKeys(): string[] {
-  return Object.keys(ZH);
+  return Object.keys(ZH_MERGED);
 }

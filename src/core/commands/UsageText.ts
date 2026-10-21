@@ -13,7 +13,7 @@
  * 于是双语差异被压成"一张 35 行的词表"，而不是 36 句译文。
  */
 
-import { t } from '../i18n/I18n.ts';
+import { getLanguage, t } from '../i18n/I18n.ts';
 
 /**
  * 参数名 → 英文。键是 `<>` 里的原文。
@@ -87,6 +87,9 @@ export function translateUsageFields(usage: string, lang: 'zh' | 'en'): string {
  * 调用方写成 `out.error(usageError('/give <物品> [数量]'))`——
  * 前缀与参数名都由这里处理，命令名与括号保持原样。
  */
-export function usageError(usage: string, lang: 'zh' | 'en' = 'zh'): string {
-  return `${t('command.usagePrefix')}${translateUsageFields(usage, lang)}`;
+export function usageError(usage: string): string {
+  // ⚠️ 语言**必须**现取，不能写成默认参数 `lang = 'zh'`：那样英文模式下
+  // 前缀会变成 "Usage: "（因为走了 `t()`），而括号里的参数名仍是中文 ——
+  // 实测就是 `Usage: /effect <give|clear> <效果> [秒数] [等级]` 这种半截话。
+  return `${t('command.usagePrefix')}${translateUsageFields(usage, getLanguage())}`;
 }

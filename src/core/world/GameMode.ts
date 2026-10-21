@@ -21,6 +21,20 @@ export const GAME_MODE_LABELS: Record<GameMode, string> = {
   spectator: '旁观',
 };
 
+/**
+ * 英文名（批次 617）。
+ *
+ * ⚠️ 不能只留一张中文表：`/gamemode` 的回执是 `已将游戏模式设置为 ${GAME_MODE_LABELS[mode]}`，
+ * 命令文案走 i18n 之后，句式变英文、里面蹦出一个"创造" —— 比不翻更糟。
+ * 两张表分开存，`gameModeLabel()` 按当前语言取。
+ */
+export const GAME_MODE_LABELS_EN: Record<GameMode, string> = {
+  survival: 'Survival',
+  creative: 'Creative',
+  adventure: 'Adventure',
+  spectator: 'Spectator',
+};
+
 export function isGameMode(value: unknown): value is GameMode {
   return value === 'survival' || value === 'creative' || value === 'adventure' || value === 'spectator';
 }
