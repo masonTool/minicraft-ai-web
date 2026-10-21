@@ -4279,7 +4279,8 @@
       }
       body.touch-mode #inventory-screen,
       body.touch-mode #recipe-book,
-      body.touch-mode #advancements {
+      body.touch-mode #advancements,
+      body.touch-mode #statistics {
         overflow: hidden;
         padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
                  env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
@@ -4528,14 +4529,24 @@
       /* ---------------- 成就 / 进度（M7，批次 87） ----------------
          面板与配方书同一套灰色金属；列表是**竖着的树**（缩进），
          未解锁的行整行压暗 + 标题显示 `???`（说明留着——那是"怎么做"，不是秘密）。 */
-      #advancements {
-        /* z-index 55：**要在暂停菜单（设置，50）之上**——暂停菜单里点"成就"
-           就是这个顺序；其余的按文件开头那条层级约定排 */
+      #advancements,
+      #statistics {
+        /* z-index 55：**要在暂停菜单（设置，50）之上**——暂停菜单里点"成就/统计"
+           就是这个顺序；其余的按文件开头那条层级约定排。
+
+           ⚠️ `#statistics` 必须和 `#advancements` 写在同一组里（批次 619）：
+           `StatisticsScreen` 复用了 `.adv-panel` 外壳，但它的根节点是 `#statistics`，
+           而这里以前只给 `#advancements` 写了 fixed/遮罩/`.hidden`。于是
+           `<div id="statistics" class="hidden">` 的 `hidden` 类**没有任何 CSS 生效**，
+           面板从 App 构造起就是一个 `position: static` 的普通块，占满视口左上角；
+           平时被 `#app` 的 canvas 盖住，**进世界那一瞬间会露出来闪一下**——就是
+           "世界统计弹窗一闪而过"。 */
         position: fixed; inset: 0; z-index: 55; display: flex;
         align-items: center; justify-content: center;
         background: rgba(0, 0, 0, .45);
       }
-      #advancements.hidden { display: none; }
+      #advancements.hidden,
+      #statistics.hidden { display: none; }
       .adv-panel {
         /* 批次 528（用户）：尺寸与背包一致，并**只让列表滚**。
            从背包里打开时 JS 会直接复制背包面板的 rect（见 AdvancementScreen#alignTo），
