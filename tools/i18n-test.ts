@@ -11,6 +11,9 @@ import { USAGE_FIELD_NAMES, translateUsageFields } from '../src/core/commands/Us
 import { COMMAND_MESSAGES_EN } from '../src/core/commands/commandMessages.data.ts';
 import { COMMAND_DESCRIPTION_EN, COMMAND_USAGE_EN } from '../src/core/commands/commandHelp.data.ts';
 import { COMMANDS, executeCommand } from '../src/core/commands/Commands.ts';
+import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
+import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
+import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -551,6 +554,56 @@ console.log('\n[地图 / 成就 / 死亡遮罩（批次 619 / Q15）]');
   const mainSrc = read('src/main.ts');
   check('死亡时写标题与尾句', mainSrc.includes("t('death.title')") && mainSrc.includes("t('death.respawning')"));
   check('睡觉时写两行提示', mainSrc.includes("t('sleep.dawn')") && mainSrc.includes("t('sleep.hint')"));
+}
+
+console.log('\n[成就数据层（批次 620）]');
+{
+  /**
+   * Q15 只接了成就**界面词**，数据本身（100 条 title / desc）还是中文。
+   * 这一批补上英文，并且刻意**不加字段到 `AdvancementDef`**（见数据文件头）：
+   * 离线断言按中文 title 匹配、验的是判定逻辑，加英文到原对象会让那批断言白改。
+   *
+   * 关键断言是最后两条：一条查"100 个 id 一条不漏"，一条查"切到英文后
+   * 用真实数据算出来的标题/说明里没有中文"。漏一条 → 英文界面上蹦一句中文，
+   * 而这种漏最容易发生在"新加一条进度但忘了加英文"上。
+   */
+  const enCount = Object.keys(ADVANCEMENT_TEXT_EN).length;
+  check(`英文词条覆盖全部 ${ADVANCEMENTS.length} 条进度`, enCount === ADVANCEMENTS.length, `实际 ${enCount}`);
+
+  const noEn = ADVANCEMENTS.filter((a) => !(a.id in ADVANCEMENT_TEXT_EN)).map((a) => a.id);
+  check('每个 id 都有英文条目（按 id 对齐，不是按顺序）', noEn.length === 0, noEn.slice(0, 3).join(','));
+
+  const emptyEn = Object.entries(ADVANCEMENT_TEXT_EN)
+    .filter(([, v]) => !v.title.trim() || !v.desc.trim())
+    .map(([k]) => k);
+  check('英文标题与说明都非空', emptyEn.length === 0, emptyEn.slice(0, 3).join(','));
+
+  const tabEn = Object.keys(ADVANCEMENT_TAB_EN);
+  check(`五个标签页都有英文`, ADVANCEMENT_TABS.every((x) => tabEn.includes(x.id)));
+
+  // 中文模式必须**原样返回**（不能因为加了英文就动了中文）
+  setLanguage('zh');
+  const zhChanged = ADVANCEMENTS.filter((a) => advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc);
+  check('中文模式下标题与说明原样不动', zhChanged.length === 0, zhChanged.slice(0, 2).map((a) => a.id).join(','));
+
+  // 英文模式不许残留中文
+  setLanguage('en');
+  const leaked = ADVANCEMENTS.filter(
+    (a) => /[\u4e00-\u9fff]/.test(advancementTitle(a)) || /[\u4e00-\u9fff]/.test(advancementDesc(a)),
+  ).map((a) => a.id);
+  check('英文模式下没有任何一条残留中文', leaked.length === 0, leaked.slice(0, 3).join(','));
+  check(
+    '标签页名也全英文',
+    ADVANCEMENT_TABS.every((x) => !/[\u4e00-\u9fff]/.test(advancementTabTitle(x))),
+  );
+
+  // 界面必须真的调这几个函数（防"加了数据没接线"）
+  const screenSrc = readFileSync(new URL('../src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
+  const toastSrc = readFileSync(new URL('../src/ui/AdvancementToast.ts', import.meta.url), 'utf8');
+  check('成就面板用 advancementTitle / advancementDesc', screenSrc.includes('advancementTitle(def)') && screenSrc.includes('advancementDesc(def)'));
+  check('标签页用 advancementTabTitle', screenSrc.includes('advancementTabTitle(tab)'));
+  check('成就弹窗标题也按语言取', toastSrc.includes('advancementTitle(def)'));
+  check('面板顶部统计走占位符', screenSrc.includes("tp('advancement.summary'"));
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

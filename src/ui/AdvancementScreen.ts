@@ -15,7 +15,8 @@
  *     这条是有断言的——`renderedRows` 会被验收脚本读走（"DOM 里有多少行"最好使）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
+import { advancementDesc, advancementTabTitle, advancementTitle } from '../core/progress/advancementText.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import {
   ADVANCEMENTS,
@@ -171,14 +172,17 @@ export class AdvancementScreen {
   private render(): void {
     this.renderTabs();
     this.renderList();
-    this.summaryEl.textContent = `已达成 ${this.tracker.earnedCount} / ${this.tracker.totalCount}`;
+    this.summaryEl.textContent = tp('advancement.summary', {
+      earned: this.tracker.earnedCount,
+      total: this.tracker.totalCount,
+    });
   }
 
   private renderTabs(): void {
     this.tabsEl.textContent = '';
     const entries: ReadonlyArray<{ filter: TabFilter; label: string }> = [
       { filter: null, label: t('advancement.filterAll') },
-      ...ADVANCEMENT_TABS.map((tab) => ({ filter: tab.id as TabFilter, label: tab.title })),
+      ...ADVANCEMENT_TABS.map((tab) => ({ filter: tab.id as TabFilter, label: advancementTabTitle(tab) })),
     ];
     for (const entry of entries) {
       const defs = this.defsOf(entry.filter);
@@ -247,11 +251,11 @@ export class AdvancementScreen {
     const title = document.createElement('div');
     title.className = 'adv-title';
     // 未解锁的不剧透：标题藏起来，说明留着（说明写的是"怎么做"，那不是秘密）
-    title.textContent = state === 'locked' ? '???' : def.title;
+    title.textContent = state === 'locked' ? '???' : advancementTitle(def);
 
     const desc = document.createElement('div');
     desc.className = 'adv-desc';
-    desc.textContent = state === 'locked' ? t('advancement.lockedHint') : def.desc;
+    desc.textContent = state === 'locked' ? t('advancement.lockedHint') : advancementDesc(def);
 
     main.append(title, desc);
     row.appendChild(main);

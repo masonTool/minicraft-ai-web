@@ -242,7 +242,7 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
 > 为什么排第五：影响真实玩法（半砖/楼梯里放水），但要同时动网格、流体、存档三处，风险中等。
 > **必须先做纯逻辑，再做存档，最后接渲染**——顺序反了会把 bug 藏进几何里。
 
-- [ ] [发现] 成就数据层（100 条 title + 98 条 desc + 5 个标签页名）仍是中文：
+- [x] [发现] 成就数据层（100 条 title + 98 条 desc + 5 个标签页名）仍是中文：
       `src/core/progress/advancements.ts` 的 `title:` / `desc:` 字段与 `ADVANCEMENT_TABS[].title`。
       Q15 只接了 `AdvancementScreen.ts` 的**界面文案**（Close / All / Earned / Available /
       lockedHint / toast），数据本身没接。证据：Q15 浏览器实测，英文模式下成就面板是

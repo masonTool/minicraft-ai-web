@@ -14,6 +14,7 @@
 
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { t } from '../core/i18n/I18n.ts';
+import { advancementTitle } from '../core/progress/advancementText.ts';
 import type { AdvancementDef } from '../core/progress/advancements.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 
@@ -62,7 +63,7 @@ export class AdvancementToast {
     label.textContent = t(def.challenge ? 'advancement.toastChallenge' : 'advancement.toastDone');
     const name = document.createElement('div');
     name.className = 'adv-toast-name';
-    name.textContent = def.title;
+    name.textContent = advancementTitle(def);
     text.append(label, name);
 
     card.append(icon, text);
