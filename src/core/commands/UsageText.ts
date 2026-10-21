@@ -61,6 +61,9 @@ export const USAGE_FIELD_NAMES: Readonly<Record<string, string>> = {
   显示名: 'display name',
   成员: 'members',
   可选: 'optional',
+  /** `/data`（批次 623）：格号 / 路径 / 数值 / 名称 */
+  格号: 'slot',
+  路径: 'path',
   /** 这几个是**值列表**，不是参数名，但同样夹着中文 */
   'day|noon|night|midnight|数字': 'day|noon|night|midnight|ticks',
   'survival|creative|adventure|spectator': 'survival|creative|adventure|spectator',

@@ -19,6 +19,8 @@ import { usageError } from './UsageText.ts';
 import { commandDescription, commandUsage, msg, pickLabel } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
 import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../registry/itemNames.ts';
+// 注册名（`stone` 这种短 id）：`/data` 的回执要同时给中文名与注册名
+import { itemName } from '../registry/items.ts';
 import { Block } from '../registry/blocks.ts';
 import { mobTypeById, MOB_TYPES } from '../entity/mobs.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
@@ -49,6 +51,22 @@ import {
   shiftCloneBox,
 } from './Clone.ts';
 import { WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
+// `/data` 的路径与快照（批次 623 / Q21）：纯逻辑、零运行时依赖，可离线断言
+import {
+  BLOCK_PATHS,
+  ENTITY_PATHS,
+  canWriteSlot,
+  filledSlots,
+  parseDataPath,
+  parseHealthValue,
+  pathFitsBlock,
+  pathFitsEntity,
+  slotAt,
+  type BlockEntityData,
+  type EntityData,
+} from './BlockData.ts';
+// 只借类型：`/data` 写回容器内容时要交出 `ItemStack[]`
+import type { ItemStack } from '../container/Inventory.ts';
 // 战利品表（批次 480：`/loot`）
 import { lootTableByIndex, lootTableIndex, rollLoot } from '../registry/loot.ts';
 // 队伍（M23 最后一块，批次 468）
@@ -210,6 +228,42 @@ export interface CommandContext {
    * 容器内容、告示牌文字这些**方块实体**数据不在这里（要另一条通道）。
    */
   blockInfoAt?(x: number, y: number, z: number): { id: number; name: string; state: number } | null;
+
+  /**
+   * 读一格的**方块实体**（批次 623 / Q21）：容器种类 + 逐格内容。
+   *
+   * 与 `blockInfoAt` 分开是刻意的：那个回答"这一格是什么方块"（很便宜，任何一格都有答案），
+   * 这个回答"这一格里装了什么"（只有容器方块有答案，而且要用到主程序的容器映射）。
+   * 返回 null = 这一格不是容器方块（或区块没加载）。
+   *
+   * ⚠️ 交出的是**快照**而不是容器实例：命令层不该拿到能 tick 的对象。
+   */
+  blockEntityAt?(x: number, y: number, z: number): BlockEntityData | null;
+
+  /**
+   * 写回某一格容器的内容（批次 623 / Q21，`/data merge block`）。
+   *
+   * 为什么是"整组内容"而不是"单格"：容器实例的 `set` 会触发 `onChange`/`onMutate`，
+   * 逐格写会让界面与联机同步各刷一遍；一次交一整组则由主程序自己决定怎么刷。
+   *
+   * @returns false = 这一格不是容器方块（没写进去）
+   */
+  setBlockEntitySlots?(x: number, y: number, z: number, slots: (ItemStack | null)[]): boolean;
+
+  /**
+   * 读一只实体的**数据字段**（批次 623 / Q21）。
+   *
+   * @param entityId `CommandEntity.id`（`mob:12` / 玩家固定 id）
+   * @returns null = 找不到这个 id
+   */
+  entityData?(entityId: string): EntityData | null;
+
+  /**
+   * 写一只实体的血量 / 名字（批次 623 / Q21，`/data merge entity`）。
+   *
+   * @returns false = 没有这个 id，或这种实体不支持这两项
+   */
+  setEntityData?(entityId: string, patch: { health?: number; customName?: string }): boolean;
 
   // ---- 进度（M7，批次 415）
   /** 队伍（批次 468，`/team` 用它） */
@@ -1110,8 +1164,9 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'data',
-    usage: '/data get entity <选择器> | /data get block <x> <y> <z>',
-    description: '读实体/方块的数据（只做 get，不做 merge/modify）',
+    usage:
+      '/data get block <x> <y> <z> [路径] | /data get entity <选择器> [路径] | /data merge block <x> <y> <z> <格号> <物品> [数量] | /data merge entity <选择器> Health <数值> | /data merge entity <选择器> CustomName <名称>',
+    description: '读/写方块实体与实体的一个字段子集（没有通用 NBT 路径，见 TASKS）',
     run(args, ctx, out) {
       runData(args, ctx, out);
     },
@@ -1684,77 +1739,378 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
 }
 
 /**
- * `/data`（批次 479）。
+ * `/data`（批次 479 只做 `get`，批次 623 补成 `get|merge`）。
  *
- * 只做 `get`：原版的 `merge` / `modify` 要"按路径写 NBT"，本项目的实体与方块
- * 数据是强类型的字段（坐标、血量、状态位），没有一棵可写的 NBT 树——
- * 与其造一棵假的，不如只把"读得到什么"做扎实。
+ * 原版的 `merge` / `modify` 要"按 NBT 路径写"，本项目的实体与方块数据是强类型字段
+ * （坐标、血量、状态位），**没有一棵可写的 NBT 树**。所以这里的策略是：
+ * 只承认真实存在的那几项，路径白名单在 `BlockData.ts`（纯逻辑、可离线断言）。
  *
- * 读出来的是**人话**（Pos = [1.5, 64.0, -3.2]），不是 JSON：
+ *   /data get   block <x> <y> <z> [路径]      → 方块是什么 / 容器里有什么
+ *   /data get   entity <选择器> [路径]        → Pos / 血量 / 名字
+ *   /data merge block <x> <y> <z> <格号> <物品> [数量]
+ *   /data merge entity <选择器> Health <值>
+ *   /data merge entity <选择器> CustomName <名字>
+ *
+ * `modify` 不做（原版它是"对数字做 +="，我们这边能被它改的只有血量一项，
+ * 为了一个字段引入一套运算语法不值得），遇到时明确说一句。
+ *
+ * 读出来的是**人话**（`Pos = [1.5, 64.0, -3.2]`），不是 JSON：
  * 这是个调试命令，玩家要看的是"它在哪、是什么"。
  */
 function runData(args: string[], ctx: CommandContext, out: CommandFeedback): void {
-  const usage = usageError('/data get entity <选择器> | /data get block <x> <y> <z>');
+  const usage = usageError(
+    '/data get block <x> <y> <z> [路径] | /data get entity <选择器> [路径] | /data merge block <x> <y> <z> <格号> <物品> [数量] | /data merge entity <选择器> Health <数值> | /data merge entity <选择器> CustomName <名称>',
+  );
   const mode = (args[0] ?? '').toLowerCase();
   const kind = (args[1] ?? '').toLowerCase();
-  if (mode !== 'get' || (kind !== 'entity' && kind !== 'block')) {
+  if ((mode !== 'get' && mode !== 'merge') || (kind !== 'entity' && kind !== 'block')) {
+    // `modify` 单独给一句人话，而不是让它落进"用法错误"里
+    if (mode === 'modify') {
+      out.error(msg('/data modify 还没实现：能被它改的只有血量一项，直接用 /data merge entity <选择器> Health <值>'));
+      return;
+    }
     out.error(usage);
     return;
   }
 
   if (kind === 'entity') {
-    const target = args[2];
-    if (!target) {
-      out.error(usageError('/data get entity <选择器>'));
-      return;
-    }
-    const position = ctx.position();
-    const state: ExecState = {
-      origin: { x: position.x, y: position.y, z: position.z },
-      executorId: selfEntityId(ctx),
-    };
-    // 名字（非选择器）也当实体名处理：原版 `@e` 与 `Steve` 都收
-    const selector = parseSelector(target);
-    if (typeof selector === 'string') {
-      out.error(selector);
-      return;
-    }
-    const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
-    if (found.length === 0) {
-      out.error(msg('没有匹配到实体：{target}', { target: target }));
-      return;
-    }
-    // 最多列 5 只（原版也是"只显示第一个 + 数量"，这里折中）
-    for (const entity of found.slice(0, 5)) {
-      out.info(
-        `${entity.type}（${entity.name}）：Pos = [${entity.x.toFixed(1)}, ${entity.y.toFixed(1)}, ${entity.z.toFixed(1)}]`,
-         );
-    }
-    if (found.length > 5) out.info(msg('……还有 {count} 个匹配', { count: found.length - 5 }));
+    if (mode === 'get') runDataGetEntity(args, ctx, out, usage);
+    else runDataMergeEntity(args, ctx, out, usage);
     return;
   }
+  if (mode === 'get') runDataGetBlock(args, ctx, out, usage);
+  else runDataMergeBlock(args, ctx, out, usage);
+}
 
-  // ---- block
-  const rawX = args[2];
-  const rawY = args[3];
-  const rawZ = args[4];
-  const x = Number(rawX);
-  const y = Number(rawY);
-  const z = Number(rawZ);
-  if (rawX === undefined || rawY === undefined || rawZ === undefined || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-    out.error(usageError('/data get block <x> <y> <z>（三个整数）'));
+/** 把一个选择器解析成"能操作的实体 id"（找不到就把错报出去并返回 null） */
+function resolveOneTarget(
+  target: string | undefined,
+  ctx: CommandContext,
+  out: CommandFeedback,
+): string | null {
+  if (!target) return null;
+  const position = ctx.position();
+  const state: ExecState = {
+    origin: { x: position.x, y: position.y, z: position.z },
+    executorId: selfEntityId(ctx),
+  };
+  const selector = parseSelector(target);
+  if (typeof selector === 'string') {
+    out.error(selector);
+    return null;
+  }
+  const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
+  if (found.length === 0) {
+    out.error(msg('没有匹配到实体：{target}', { target: target }));
+    return null;
+  }
+  // 写回只对**第一个**匹配的实体做（原版 `merge` 也是对所有匹配的都写，
+  // 但我们的写入口一次只能改一只，多目标就变成"静默只改了第一只"——
+  // 不如明说一句，让玩家自己写 @e[limit=1]
+  if (found.length > 1) {
+    out.error(msg('一次只能改一只实体（匹配到 {count} 只）：请把选择器写窄一点，例如 @e[type=zombie,limit=1]', {
+      count: found.length,
+    }));
+    return null;
+  }
+  return found[0]!.id;
+}
+
+/** `/data get entity <选择器> [路径]` */
+function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedback, usage: string): void {
+  const target = args[2];
+  if (!target) {
+    out.error(usage);
     return;
   }
+  const path = parseDataPath(args[3]);
+  if (path === null || !pathFitsEntity(path)) {
+    out.error(msg('实体上没有这条路径：{path}（能读的有 {paths}）', {
+      path: args[3] ?? '',
+      paths: ENTITY_PATHS.join(' / '),
+    }));
+    return;
+  }
+  const position = ctx.position();
+  const state: ExecState = {
+    origin: { x: position.x, y: position.y, z: position.z },
+    executorId: selfEntityId(ctx),
+  };
+  // 名字（非选择器）也当实体名处理：原版 `@e` 与 `Steve` 都收
+  const selector = parseSelector(target);
+  if (typeof selector === 'string') {
+    out.error(selector);
+    return;
+  }
+  const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
+  if (found.length === 0) {
+    out.error(msg('没有匹配到实体：{target}', { target: target }));
+    return;
+  }
+  // 最多列 5 只（原版也是"只显示第一个 + 数量"，这里折中）
+  for (const entity of found.slice(0, 5)) {
+    const fields = ctx.entityData?.(entity.id);
+    if (path.kind === 'health') {
+      if (fields?.health === undefined) {
+        // 掉落物/箭/矿车这类没有血量：报一句，而不是显示 0
+        out.info(msg('{name} 没有血量这一项', { name: entity.name }));
+        continue;
+      }
+      out.info(msg('{name} Health = {value}{max}', {
+        name: entity.name,
+        value: fmt(fields.health),
+        max: fields.maxHealth === undefined ? '' : ` / ${fmt(fields.maxHealth)}`,
+      }));
+      continue;
+    }
+    if (path.kind === 'customName') {
+      out.info(msg('{name} CustomName = {value}', {
+        name: entity.name,
+        value: fields?.customName ?? msg('（没有名字）'),
+      }));
+      continue;
+    }
+    const parts = [
+      `Pos = [${entity.x.toFixed(1)}, ${entity.y.toFixed(1)}, ${entity.z.toFixed(1)}]`,
+      `type = ${entity.type}`,
+      `name = ${entity.name}`,
+    ];
+    if (fields?.health !== undefined) {
+      parts.push(`Health = ${fmt(fields.health)}${fields.maxHealth === undefined ? '' : ` / ${fmt(fields.maxHealth)}`}`);
+    }
+    if (fields?.customName !== undefined) parts.push(`CustomName = ${fields.customName}`);
+    out.info(`${entity.type}（${entity.name}）：${parts.join('，')}`);
+  }
+  if (found.length > 5) out.info(msg('……还有 {count} 个匹配', { count: found.length - 5 }));
+}
+
+/**
+ * 解析 `<x> <y> <z>`（从 `args[offset]` 起三个），支持 `~` 相对写法。
+ *
+ * 为什么要单独一个函数：这批之前 `/data` 的三个坐标是 `Number(raw)` 直接转的，
+ * `~` 会变成 NaN 然后报"用法错误"——而**原版是收相对坐标的**，
+ * 实测第一条 `\/data get block ~ ~-1 ~`（"看我脚下是什么"，最自然的写法）就被拒了。
+ *
+ * @returns null = 三个都缺或有一个不是合法坐标（调用方报用法）
+ */
+function parseBlockXYZ(
+  args: string[],
+  offset: number,
+  ctx: CommandContext,
+): { x: number; y: number; z: number } | null {
+  const raw = [args[offset], args[offset + 1], args[offset + 2]];
+  if (raw.some((text) => text === undefined)) return null;
+  const pos = ctx.position();
+  const x = parseCoordinate(raw[0], pos.x);
+  const y = parseCoordinate(raw[1], pos.y);
+  const z = parseCoordinate(raw[2], pos.z);
+  if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) return null;
+  return { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
+}
+
+/** `/data get block <x> <y> <z> [路径]` */
+function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedback, usage: string): void {
+  const at = parseBlockXYZ(args, 2, ctx);
+  if (!at) {
+    out.error(usage);
+    return;
+  }
+  const bx = at.x;
+  const by = at.y;
+  const bz = at.z;
   if (!ctx.blockInfoAt) {
     out.error(msg('这个维度读不到方块数据'));
     return;
   }
-  const info = ctx.blockInfoAt(Math.floor(x), Math.floor(y), Math.floor(z));
+  const info = ctx.blockInfoAt(bx, by, bz);
   if (!info) {
-    out.error(msg('({x}, {y}, {z}) 是空气或还没加载', { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }));
+    out.error(msg('({x}, {y}, {z}) 是空气或还没加载', { x: bx, y: by, z: bz }));
     return;
   }
-  out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}）', { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), name: info.name, state: info.state }));
+  const path = parseDataPath(args[5]);
+  if (path === null || !pathFitsBlock(path)) {
+    out.error(msg('这个方块上没有这条路径：{path}（能读的有 {paths}）', {
+      path: args[5] ?? '',
+      paths: BLOCK_PATHS.join(' / '),
+    }));
+    return;
+  }
+
+  const data = ctx.blockEntityAt?.(bx, by, bz) ?? null;
+  if (path.kind === 'slot') {
+    if (!data) {
+      out.error(msg('({x}, {y}, {z}) 的 {name} 没有方块实体（不是容器）', { x: bx, y: by, z: bz, name: info.name }));
+      return;
+    }
+    const entry = slotAt(data, path.index);
+    if (!entry) {
+      // 越界与空格分开说：前者是格号算错了，后者是"这里本来就空"
+      if (!canWriteSlot(data, path.index)) {
+        out.error(msg('格号越界：{index}（这种容器只有 {count} 格，0 ~ {last}）', {
+          index: path.index,
+          count: data.slots.length,
+          last: Math.max(0, data.slots.length - 1),
+        }));
+        return;
+      }
+      out.info(msg('Slots[{index}] =（空）', { index: path.index }));
+      return;
+    }
+    out.info(msg('Slots[{index}] = {item} ×{count}', {
+      index: entry.index,
+      item: `${itemLabel(entry.id)}（${itemName(entry.id)}）`,
+      count: entry.count,
+    }));
+    return;
+  }
+
+  // 根：方块是什么 + 方块实体里有什么
+  if (!data) {
+    out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}，没有方块实体）', {
+      x: bx,
+      y: by,
+      z: bz,
+      name: info.name,
+      state: info.state,
+    }));
+    return;
+  }
+  const filled = filledSlots(data);
+  out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}，方块实体 {kind}，共 {total} 格，{used} 格有东西）', {
+    x: bx,
+    y: by,
+    z: bz,
+    name: info.name,
+    state: info.state,
+    kind: data.kind,
+    total: data.slots.length,
+    used: filled.length,
+  }));
+  for (const entry of filled) {
+    out.info(msg('  Slots[{index}] = {item} ×{count}', {
+      index: entry.index,
+      item: `${itemLabel(entry.id)}（${itemName(entry.id)}）`,
+      count: entry.count,
+    }));
+  }
+}
+
+/** `/data merge block <x> <y> <z> <格号> <物品> [数量]` */
+function runDataMergeBlock(args: string[], ctx: CommandContext, out: CommandFeedback, usage: string): void {
+  const at = parseBlockXYZ(args, 2, ctx);
+  const slotArg = args[5];
+  const itemArg = args[6];
+  if (!at || slotArg === undefined || itemArg === undefined) {
+    out.error(usage);
+    return;
+  }
+  const bx = at.x;
+  const by = at.y;
+  const bz = at.z;
+  const index = Number(slotArg);
+  if (!Number.isSafeInteger(index) || index < 0) {
+    out.error(msg('格号必须是不小于 0 的整数：{value}', { value: slotArg }));
+    return;
+  }
+  const count = args[7] === undefined ? 1 : Number(args[7]);
+  if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
+    out.error(msg('数量必须是正整数：{value}', { value: args[7] ?? '' }));
+    return;
+  }
+  const itemId = resolveItemId(itemArg);
+  if (itemId === undefined) {
+    out.error(msg('找不到物品：{name}（可以试 /data merge block … 1 stone）', { name: itemArg }));
+    return;
+  }
+  if (!ctx.setBlockEntitySlots) {
+    out.error(msg('这个维度写不了方块实体'));
+    return;
+  }
+  const data = ctx.blockEntityAt?.(bx, by, bz) ?? null;
+  if (!data) {
+    out.error(msg('({x}, {y}, {z}) 没有方块实体（不是容器）', { x: bx, y: by, z: bz }));
+    return;
+  }
+  if (!canWriteSlot(data, index)) {
+    out.error(msg('格号越界：{index}（这种容器只有 {count} 格，0 ~ {last}）', {
+      index,
+      count: data.slots.length,
+      last: data.slots.length - 1,
+    }));
+    return;
+  }
+  // 整组内容拷一份再改（`data.slots` 可能是只读快照）
+  const next: (ItemStack | null)[] = data.slots.map((stack) => (stack ? { ...stack } : null));
+  next[index] = { id: itemId, count };
+  if (!ctx.setBlockEntitySlots(bx, by, bz, next)) {
+    out.error(msg('({x}, {y}, {z}) 写不进去（这一格不是容器方块）', { x: bx, y: by, z: bz }));
+    return;
+  }
+  out.info(msg('已把 ({x}, {y}, {z}) 的 Slots[{index}] 设为 {item} ×{count}', {
+    x: bx,
+    y: by,
+    z: bz,
+    index,
+    item: `${itemLabel(itemId)}（${itemName(itemId)}）`,
+    count,
+  }));
+}
+
+/** `/data merge entity <选择器> Health|CustomName <值>` */
+function runDataMergeEntity(args: string[], ctx: CommandContext, out: CommandFeedback, usage: string): void {
+  const target = args[2];
+  const field = (args[3] ?? '').toLowerCase();
+  const value = args.slice(4).join(' ').trim();
+  if (!target || field.length === 0 || value.length === 0) {
+    out.error(usage);
+    return;
+  }
+  if (field !== 'health' && field !== 'customname') {
+    out.error(msg('实体上能写的只有 Health 与 CustomName，没有 {field}', { field: args[3] ?? '' }));
+    return;
+  }
+  if (!ctx.setEntityData) {
+    out.error(msg('这个维度写不了实体数据'));
+    return;
+  }
+  const entityId = resolveOneTarget(target, ctx, out);
+  if (entityId === null) return;
+
+  const fields = ctx.entityData?.(entityId) ?? null;
+  if (field === 'health') {
+    const parsed = parseHealthValue(value, fields?.maxHealth ?? Infinity);
+    if (parsed === null) {
+      out.error(msg('Health 需要一个数字：{value}', { value }));
+      return;
+    }
+    if (fields?.health === undefined) {
+      out.error(msg('这只实体没有血量这一项（只有生物有）'));
+      return;
+    }
+    if (!ctx.setEntityData(entityId, { health: parsed })) {
+      out.error(msg('写不进去：这只实体不支持改血量'));
+      return;
+    }
+    const clamped = fields.maxHealth !== undefined && Number(value) > fields.maxHealth;
+    out.info(msg('已把血量设为 {value}{max}{note}', {
+      value: fmt(parsed),
+      max: fields.maxHealth === undefined ? '' : ` / ${fmt(fields.maxHealth)}`,
+      // 夹取必须说出来：玩家写 999 时看到 20，才知道是夹了而不是没生效
+      note: clamped ? msg('（超出上限，已夹到上限）') : '',
+    }));
+    return;
+  }
+
+  // CustomName
+  if (fields === null) {
+    out.error(msg('找不到这只实体'));
+    return;
+  }
+  if (!ctx.setEntityData(entityId, { customName: value })) {
+    out.error(msg('写不进去：这只实体不支持改名'));
+    return;
+  }
+  out.info(msg('已把名字设为「{name}」', { name: value }));
 }
 
 /**

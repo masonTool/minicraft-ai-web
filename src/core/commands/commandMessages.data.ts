@@ -174,4 +174,48 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
   '已清空 {holder} 的 {count} 个目标的分数': 'Cleared {count} objectives for {holder}',
   // ---- 选择器 ----
   '目标必须是单一实体（选择器 {selector}）': 'Target must be a single entity (selector {selector})',
+  // ---- /data（批次 623 / Q21）：回执与路径错误 ----
+  '这个维度写不了方块实体': 'Block entities are not writable in this dimension',
+  '这个维度写不了实体数据': 'Entity data is not writable in this dimension',
+  '({x}, {y}, {z}) = {name}（状态位 {state}，没有方块实体）':
+    '({x}, {y}, {z}) = {name} (state {state}, no block entity)',
+  '({x}, {y}, {z}) = {name}（状态位 {state}，方块实体 {kind}，共 {total} 格，{used} 格有东西）':
+    '({x}, {y}, {z}) = {name} (state {state}, block entity {kind}, {used} of {total} slots filled)',
+  '  Slots[{index}] = {item} ×{count}': '  Slots[{index}] = {item} x{count}',
+  'Slots[{index}] = {item} ×{count}': 'Slots[{index}] = {item} x{count}',
+  'Slots[{index}] =（空）': 'Slots[{index}] = (empty)',
+  '({x}, {y}, {z}) 没有方块实体（不是容器）': '({x}, {y}, {z}) has no block entity (not a container)',
+  '({x}, {y}, {z}) 的 {name} 没有方块实体（不是容器）':
+    '{name} at ({x}, {y}, {z}) has no block entity (not a container)',
+  '({x}, {y}, {z}) 写不进去（这一格不是容器方块）': 'Cannot write to ({x}, {y}, {z}) (not a container block)',
+  '格号越界：{index}（这种容器只有 {count} 格，0 ~ {last}）':
+    'Slot out of range: {index} (this container has {count} slots, 0 ~ {last})',
+  '格号必须是不小于 0 的整数：{value}': 'Slot must be an integer >= 0: {value}',
+  '数量必须是正整数：{value}': 'Count must be a positive integer: {value}',
+  '这个方块上没有这条路径：{path}（能读的有 {paths}）':
+    'No such path on this block: {path} (readable: {paths})',
+  '实体上没有这条路径：{path}（能读的有 {paths}）':
+    'No such path on entities: {path} (readable: {paths})',
+  '实体上能写的只有 Health 与 CustomName，没有 {field}':
+    'Entities only accept Health and CustomName, not {field}',
+  '一次只能改一只实体（匹配到 {count} 只）：请把选择器写窄一点，例如 @e[type=zombie,limit=1]':
+    'Only one entity can be modified at a time ({count} matched): narrow the selector, e.g. @e[type=zombie,limit=1]',
+  '找不到这只实体': 'Entity not found',
+  '{name} 没有血量这一项': '{name} has no Health field',
+  '这只实体没有血量这一项（只有生物有）': 'This entity has no Health field (only mobs do)',
+  '写不进去：这只实体不支持改血量': 'Cannot write: this entity does not accept Health',
+  '写不进去：这只实体不支持改名': 'Cannot write: this entity does not accept a name',
+  '{name} Health = {value}{max}': '{name} Health = {value}{max}',
+  '{name} CustomName = {value}': '{name} CustomName = {value}',
+  '（没有名字）': '(no name)',
+  'Health 需要一个数字：{value}': 'Health must be a number: {value}',
+  '已把血量设为 {value}{max}{note}': 'Set Health to {value}{max}{note}',
+  '（超出上限，已夹到上限）': ' (above the maximum, clamped)',
+  '已把名字设为「{name}」': 'Set CustomName to "{name}"',
+  '已把 ({x}, {y}, {z}) 的 Slots[{index}] 设为 {item} ×{count}':
+    'Set Slots[{index}] of ({x}, {y}, {z}) to {item} x{count}',
+  '找不到物品：{name}（可以试 /data merge block … 1 stone）':
+    'Unknown item: {name} (try /data merge block … 1 stone)',
+  '/data modify 还没实现：能被它改的只有血量一项，直接用 /data merge entity <选择器> Health <值>':
+    '/data modify is not implemented yet: the only writable number is Health — use /data merge entity <selector> Health <value>',
 };

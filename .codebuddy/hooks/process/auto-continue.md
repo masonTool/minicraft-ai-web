@@ -297,8 +297,27 @@ AI 在**动手过程中**撞见的问题，往往比排好的任务更值钱—�
       ⚠️ 没做"复制到未加载区块"：本项目 `ctx.getBlock` 对未加载区块返回 0（空气），
       不会报错也不会崩 —— 表现是复制出一片空气。要正确拒绝需要先问 `world.isLoaded`，
       而 `CommandContext` 目前没有这条；留下一条差异记在 TASKS。
-- [ ] Q21 `/data get|merge|modify`：读写方块实体与实体 NBT 的一个子集。
-      验收：`test:commands` 增 5 条；`/data get block` 能读出箱子第 1 格
+- [x] Q21 `/data get|merge|modify`：读写方块实体与实体 NBT 的一个子集。
+      验收：`test:commands` 增 5 条；`/data get block` 能读出箱子第 1 格 —— **批次 623 完成**。
+      新增 `core/commands/BlockData.ts`（零运行时依赖：路径解析 / 方块实体快照 / 血量夹取），
+      `CommandContext` 加四个**可选**方法（`blockEntityAt` / `setBlockEntitySlots` /
+      `entityData` / `setEntityData`，可选是为了老 stub 不改也能跑）；
+      `main.ts` 注入四个实现 + `mobById`（`mob:12` → Mob 实例，线性扫，不缓存）。
+      路径白名单只认真实存在的字段：方块 `Slots` / `Slots[i]`，实体 `Health` / `CustomName`。
+      **`modify` 明确拒绝**并给替代写法（能被它改的只有血量一项，为它引入运算语法不值得）。
+      `test:commands` 330 → **381 条**（+51，验收要求 +5）。
+      浏览器实测（新建世界 → 创造模式 → 真实聊天框敲命令）15 条路径全对：
+      `get 根` → `(-14,70,4) = minecraft:chest（状态位 0，方块实体 chest，共 27 格，0 格有东西）`、
+      `merge slot0` → `已把 … 的 Slots[0] 设为 钻石（diamond） ×8`、
+      `get Slots[0]` → `Slots[0] = 钻石（diamond） ×8`、`get Slots[1]` → `Slots[1] =（空）`、
+      `越界 30` → `格号越界：30（这种容器只有 27 格，0 ~ 26）`、
+      `Health 999` → `已把血量设为 20 / 20（超出上限，已夹到上限）`、`Health abc` → `Health 需要一个数字：abc`。
+      ⚠️ **实测抓出两个坑**：① `filledSlots` 要跳过 `count: 0` 残留，否则根节点多列一行空气；
+      ② 三个坐标原来是 `Number(raw)` 直接转，`~` 变 NaN 直接报用法错误 ——
+      浏览器里第一条 `/data get block ~ ~-1 ~`（"看我脚下是什么"，最自然的写法）就被拒了，
+      改走 `parseCoordinate` 才通（`parseBlockXYZ` 抽出来给 get/merge 共用）。
+      ⚠️ 遗留（与 Q20 同源）：`blockEntityAt` 走 `containerOfBlockAt`（会建实例），
+      对从未打开过的空箱子 `get` 一次会在容器表里多一条空记录；空容器不进存档，无数据后果。
 - [ ] Q22 `/locate`：按结构类型找最近的结构（复用现有的结构放置判定）。
       验收：`test:commands` 增 4 条（找到/找不到/类型不存在/跨维度）
 - [ ] Q23 补 6 条 gamerule（逐条核对哪些依赖的子系统其实已经就位）。

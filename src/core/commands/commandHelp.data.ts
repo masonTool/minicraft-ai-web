@@ -47,7 +47,7 @@ export const COMMAND_USAGE_EN: Readonly<Record<string, string>> = {
   locate: '/locate biome <biome>',
   damage: '/damage <targets> <damage>',
   loot: '/loot give <loot table> [count]',
-  data: '/data get entity <selector> | /data get block <x> <y> <z>',
+  data: '/data get block <x> <y> <z> [path] | /data get entity <targets> [path] | /data merge block <x> <y> <z> <slot> <item> [count] | /data merge entity <targets> Health <value> | /data merge entity <targets> CustomName <name>',
   team: '/team add|remove|list|join|leave|modify …',
   advancement: '/advancement grant|revoke <advancement id | *>',
   scoreboard:
@@ -91,7 +91,7 @@ export const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
   locate: 'Find the nearest matching biome (ring search over chunks, radius 640)',
   damage: 'Deal damage to target entities (damage is in points, 2 points = 1 heart)',
   loot: 'Roll a loot table and put the result in your inventory',
-  data: 'Read entity or block data (get only — no merge/modify)',
+  data: 'Read or write a subset of block-entity and entity fields (no generic NBT path — see TASKS)',
   team: 'Teams: create, join, recolor and set friendly fire (friendly damage and collision are not wired yet — see TASKS M23)',
   advancement: 'Grant or revoke advancements (`*` = all)',
   scoreboard: 'Scoreboard: objectives, scores and display slots',

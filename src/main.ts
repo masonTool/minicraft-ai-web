@@ -334,6 +334,8 @@ import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { blockLabel, itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
+// `/data get|merge`（批次 623 / Q21）：容器的槽位数与种类判定只在存档那一层有一份
+import { SLOT_COUNTS, kindOf } from './core/save/ContainerSave.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
 import {
@@ -4900,6 +4902,23 @@ class App {
    * 输入框是异步的：玩家敲名字这段时间里，生物可能被打死、区块被卸载。
    * 所以这里先确认"那只生物还在世界里"，再写名字。
    */
+  /**
+   * 按 `CommandEntity.id`（`mob:<数字>`）找那只生物（批次 623 / Q21）。
+   *
+   * 为什么不用 Map 缓存 id → 实例：实体每帧都可能增删（生成/死亡/区块卸载），
+   * 缓存要么跟着失效、要么留下悬空引用。这里只在 `/data` 被调用时扫一遍，
+   * 一次命令一次线性扫描完全够用（`entities.all` 通常几十个）。
+   */
+  private mobById(entityId: string): Mob | null {
+    if (!entityId.startsWith('mob:')) return null;
+    const id = Number(entityId.slice('mob:'.length));
+    if (!Number.isSafeInteger(id)) return null;
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob && entity.id === id) return entity;
+    }
+    return null;
+  }
+
   private applyMobName(raw: string): void {
     const mob = this.pendingNameTarget;
     this.pendingNameTarget = null;
@@ -11327,6 +11346,66 @@ class App {
         const id = this.world.getBlock(x, y, z);
         if (id === Block.AIR) return null;
         return { id, name: blockDef(id).name, state: this.world.getBlockState(x, y, z) };
+      },
+      /**
+       * 方块实体（批次 623 / Q21）：`/data get block` 的"里面装了什么"。
+       *
+       * ⚠️ 这里直接用 `containerOfBlockAt`（**会顺手建实例**），而不是只查不建。
+       * 理由：容器本来就是"打开界面时懒创建"的，为了"读一眼"另写一条不建的通道，
+       * 就要把 20 种方块 → 容器种类的映射抄第二遍（那份映射漏一行的表现是
+       * "某个容器永远显示 0 格"）。多建一个空实例的代价可以忽略——
+       * `ContainerSave.hasContent` 只存**有东西**的容器，空壳不会进存档。
+       */
+      blockEntityAt: (x, y, z) => {
+        const container = this.containerOfBlockAt(x, y, z);
+        if (!container) return null;
+        const kind = kindOf(container);
+        const size = SLOT_COUNTS[kind];
+        const slots: (ItemStack | null)[] = new Array<ItemStack | null>(size).fill(null);
+        for (let i = 0; i < size; i++) slots[i] = container.get(i);
+        return { kind, slots };
+      },
+      setBlockEntitySlots: (x, y, z, slots) => {
+        const container = this.containerOfBlockAt(x, y, z);
+        if (!container) return false;
+        // 逐格 `set` 会各自触发一次 onChange/onMutate；这里只在**真变了**的时候写，
+        // 免得联机端收到一串"内容没变"的广播
+        for (let i = 0; i < slots.length; i++) {
+          const before = container.get(i);
+          const after = slots[i] ?? null;
+          if (before === after) continue;
+          if (before && after && before.id === after.id && before.count === after.count) continue;
+          container.set(i, after);
+        }
+        return true;
+      },
+      entityData: (entityId) => {
+        if (entityId === PLAYER_ENTITY_ID) {
+          return { health: this.stats.health, maxHealth: MAX_HEALTH, customName: this.playerName };
+        }
+        const mob = this.mobById(entityId);
+        if (!mob) return null;
+        return {
+          health: mob.health,
+          maxHealth: mob.type.health,
+          ...(mob.customName === null ? {} : { customName: mob.customName }),
+        };
+      },
+      setEntityData: (entityId, patch) => {
+        if (entityId === PLAYER_ENTITY_ID) {
+          // 玩家血量走 `stats`（护甲/无敌帧都在那一层）；玩家名不能通过命令改
+          if (patch.health !== undefined) this.stats.health = patch.health;
+          return patch.customName === undefined;
+        }
+        const mob = this.mobById(entityId);
+        if (!mob) return false;
+        if (patch.health !== undefined) mob.health = patch.health;
+        if (patch.customName !== undefined) {
+          mob.customName = sanitizeName(patch.customName);
+          // 池子里那只可能正拿着旧名字画的画布：让它下一帧重画
+          for (const tag of this.nameTags) tag.invalidate();
+        }
+        return true;
       },
       locateStructure: (kind) => {
         const p = this.physics;

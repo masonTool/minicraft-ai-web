@@ -85,6 +85,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   join: '加入',
   leave: '离开',
   modify: '修改',
+  merge: '写入',
   get: '查询',
   query: '查询',
   center: '设置中心',
@@ -132,12 +133,16 @@ const ARG_LABELS: Readonly<Record<string, string>> = {
   选择器: '选择器',
   边长: '边长',
   点数: '点数',
+  格号: '格号',
+  路径: '路径',
+  数值: '数值',
+  名称: '名称',
 };
 
 /** 这些"选项"其实是要玩家自己填的值，不能做成下拉 */
 const FREE_VALUE_CHOICES = new Set(['数字', '值', '内容', '命令', '半径', '进度 id', '…', '...']);
 
-const NUMBER_ARGS = new Set(['数量', '秒数', '等级', '伤害', '点数', '边长']);
+const NUMBER_ARGS = new Set(['数量', '秒数', '等级', '伤害', '点数', '边长', '格号', '数值']);
 
 export function commandHelpEntries(): CommandHelpEntry[] {
   return COMMANDS
@@ -596,6 +601,11 @@ function placeholderFor(name: string): string {
       return '音效 id，如 block.note_block.harp（音符盒）';
     case '群系名':
       return '英文群系名，如 plains（平原）/ desert（沙漠）';
+    case '路径':
+      return '路径可留空（列全部）；实体的 Health / CustomName，方块的 Slots[i]';
+    case '名称':
+      return '要写进去的名字';
+    case '数值':
     case '规则':
       return '规则名';
     case '命令':

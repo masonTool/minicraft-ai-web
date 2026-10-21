@@ -44,6 +44,19 @@ import {
   type GameRules,
 } from '../src/core/commands/Commands.ts';
 import type { CommandEntity } from '../src/core/commands/Selectors.ts';
+import type { BlockEntityData, EntityData } from '../src/core/commands/BlockData.ts';
+import {
+  BLOCK_PATHS,
+  ENTITY_PATHS,
+  canWriteSlot,
+  filledSlots,
+  parseDataPath,
+  parseHealthValue,
+  pathFitsBlock,
+  pathFitsEntity,
+  slotAt,
+} from '../src/core/commands/BlockData.ts';
+import type { ItemStack } from '../src/core/container/Inventory.ts';
 import { Scoreboard } from '../src/core/world/Scoreboard.ts';
 import { Teams } from '../src/core/world/Teams.ts';
 import {
@@ -286,7 +299,38 @@ class FakeWorld implements CommandContext {
   /** 方块信息（批次 479）：假世界只有 (0,64,0) 是石头，其余空气 */
   blockInfoAt(x: number, y: number, z: number): { id: number; name: string; state: number } | null {
     if (x === 0 && y === 64 && z === 0) return { id: 1, name: 'minecraft:stone', state: 0 };
+    // 容器（批次 623）：(2,64,0) 是箱子，专门给 `/data get|merge block` 用
+    if (x === 2 && y === 64 && z === 0) return { id: 98, name: 'minecraft:chest', state: 0 };
     return null;
+  }
+  /**
+   * 方块实体（批次 623 / Q21）：假世界只有 (2,64,0) 是 27 格箱子。
+   *
+   * 刻意做成**可变**的普通数组而不是引用某个 `Chest` 实例：断言要能一眼看出
+   * "命令写完以后那格到底是什么"，用真容器的话读回来还要再想"是哪一层"。
+   */
+  blockEntities = new Map<string, BlockEntityData>();
+  blockEntityAt(x: number, y: number, z: number): BlockEntityData | null {
+    return this.blockEntities.get(`${x},${y},${z}`) ?? null;
+  }
+  setBlockEntitySlots(x: number, y: number, z: number, slots: (ItemStack | null)[]): boolean {
+    const existing = this.blockEntities.get(`${x},${y},${z}`);
+    if (!existing) return false;
+    this.blockEntities.set(`${x},${y},${z}`, { kind: existing.kind, slots: slots.map((s) => s) });
+    return true;
+  }
+  /** 实体数据（批次 623）：只认玩家，血量 20 上限 20 */
+  entityDataMap = new Map<string, EntityData>([
+    ['player', { health: 20, maxHealth: 20 }],
+  ]);
+  entityData(entityId: string): EntityData | null {
+    return this.entityDataMap.get(entityId) ?? null;
+  }
+  setEntityData(entityId: string, patch: { health?: number; customName?: string }): boolean {
+    const existing = this.entityDataMap.get(entityId);
+    if (!existing) return false;
+    this.entityDataMap.set(entityId, { ...existing, ...patch });
+    return true;
   }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
@@ -841,23 +885,159 @@ console.log('\n[记分板（M23，批次 402）]');
   })());
 
 
-  // ---- /data（批次 479）
+  // ---- /data（批次 479 只做 get，批次 623 补 merge 与方块实体）----
   run('/data get entity @s');
   check('读自己的位置', out.lastInfo.includes('Pos = ['), out.lastInfo);
   check('回执里带类型', out.lastInfo.includes('player'), out.lastInfo);
+  check('回执里带血量（Q21 新增）', out.lastInfo.includes('Health = 20'), out.lastInfo);
   run('/data get entity @e[type=zombie]');
   check('没有匹配时报错', out.lastError.includes('没有匹配到'), out.lastError);
   run('/data get block 0 64 0');
   check('读方块', out.lastInfo.includes('minecraft:stone'), out.lastInfo);
   check('回执带状态位', out.lastInfo.includes('状态位'), out.lastInfo);
+  check('没有方块实体时明说', out.lastInfo.includes('没有方块实体'), out.lastInfo);
   run('/data get block 1 64 0');
   check('空气格报错', out.lastError.includes('空气'), out.lastError);
   run('/data get block 0 64');
   check('坐标不全报用法', out.lastError.includes('用法'), out.lastError);
-  run('/data merge entity @s');
-  check('只支持 get（merge 明确拒绝）', out.lastError.includes('用法'), out.lastError);
   run('/data get');
   check('缺参数报用法', out.lastError.includes('用法'), out.lastError);
+
+  // —— Q21 的核心：箱子第 1 格能读出来，也能写进去 ——
+  // 假世界 (2,64,0) 是一只 27 格空箱子；先放两件东西（第 0 格 5 个苹果、第 3 格 1 把石剑）
+  world.blockEntities.set('2,64,0', {
+    kind: 'chest',
+    slots: [
+      { id: resolveItemId('apple')!, count: 5 },
+      null,
+      null,
+      { id: resolveItemId('stone_sword')!, count: 1 },
+      ...new Array<ItemStack | null>(23).fill(null),
+    ],
+  });
+
+  run('/data get block 2 64 0');
+  // 根节点是多行（标题 + 逐格），标题在第一行
+  const chestRoot = out.infos[0] ?? '';
+  check('箱子根节点报种类', chestRoot.includes('chest'), chestRoot);
+  check('根节点报"27 格里有 2 格有东西"', chestRoot.includes('27') && chestRoot.includes('2 格有东西'), chestRoot);
+  check('根节点后面跟着逐格清单', out.infos.length === 3, `${out.infos.length} 行`);
+
+  run('/data get block 2 64 0 Slots[0]');
+  check('读出箱子第 1 格（验收条目）', out.lastInfo.includes('×5') && out.lastInfo.includes('apple'), out.lastInfo);
+  check('第 1 格是苹果 ×5', world.blockEntities.get('2,64,0')!.slots[0]!.count === 5);
+
+  run('/data get block 2 64 0 Slots[1]');
+  check('空格读出来是（空）而不是报错', out.lastInfo.includes('空'), out.lastInfo);
+
+  run('/data get block 2 64 0 Slots[99]');
+  check('格号越界报错并给出范围', out.lastError.includes('越界'), out.lastError);
+
+  run('/data get block 2 64 0 Slots[abc]');
+  check('格号不是数字按"没有这条路径"报错', out.lastError.includes('路径'), out.lastError);
+
+  run('/data get block 2 64 0 Health');
+  check('方块上没有 Health 这条路径', out.lastError.includes('路径'), out.lastError);
+
+  run('/data get entity @s Health');
+  check('实体上能单读 Health', out.lastInfo.includes('Health = 20'), out.lastInfo);
+
+  run('/data get entity @s CustomName');
+  check('没起名字时回（没有名字）', out.lastInfo.includes('没有名字'), out.lastInfo);
+
+  run('/data get entity @s Slots[0]');
+  check('实体上没有 Slots 这条路径', out.lastError.includes('路径'), out.lastError);
+
+  // —— merge ——
+  run('/data merge block 2 64 0 5 diamond 8');
+  check('写入箱子第 6 格', world.blockEntities.get('2,64,0')!.slots[5]?.count === 8, out.lastError);
+  check('写入的是钻石', world.blockEntities.get('2,64,0')!.slots[5]?.id === resolveItemId('diamond'));
+
+  run('/data get block 2 64 0 Slots[5]');
+  check('写进去的能读回来', out.lastInfo.includes('×8'), out.lastInfo);
+
+  run('/data merge block 2 64 0 0 diamond 8');
+  check('改写已有的格子（覆盖而不是叠加）', world.blockEntities.get('2,64,0')!.slots[0]?.count === 8);
+
+  run('/data merge block 2 64 0 30 stone');
+  check('写入越界格号被拒绝', out.lastError.includes('越界'), out.lastError);
+
+  run('/data merge block 2 64 0 1 不存在的物品 1');
+  check('写不认识的物品名被拒绝', out.lastError.includes('找不到物品'), out.lastError);
+
+  run('/data merge block 2 64 0 1 stone 0');
+  check('数量 0 被拒绝（不是静默写空）', out.lastError.includes('正整数'), out.lastError);
+
+  run('/data merge block 1 64 0 0 stone 1');
+  check('对空气格 merge 报"没有方块实体"', out.lastError.includes('方块实体'), out.lastError);
+
+  // —— 相对坐标（浏览器实测发现的真缺口：原来 `~` 会被 Number() 转成 NaN 直接报用法）——
+  // 假世界玩家站在 (10.5, 64, -3.5)；(2,64,0) 那只箱子在 x=-8.5、z=+3.5 处，
+  // 所以 `~-8 ~0 ~4` 应该落到 (2, 64, 1) —— 那里不是箱子，正好验"解析对了但格子不对"。
+  run('/data get block 2 64 0 Slots[0]');
+  const absoluteRead = out.lastInfo;
+  run('/data get block ~-8 ~ ~4 Slots[0]');
+  check('相对坐标能解析（不再报用法错误）', out.lastError === '', out.lastError);
+  check('相对坐标落到同一格得到同样的答案', out.lastInfo === absoluteRead, `${out.lastInfo} vs ${absoluteRead}`);
+
+  run('/data merge block ~-8 ~ ~4 1 gold_ingot 3');
+  check('merge 也收相对坐标', world.blockEntities.get('2,64,0')!.slots[1]?.count === 3, out.lastError);
+
+  run('/data get block ~abc ~ ~');
+  check('非法的相对偏移仍然报用法', out.lastError.includes('用法'), out.lastError);
+
+  run('/data merge entity @s Health 12');
+  check('改玩家血量', world.entityDataMap.get('player')!.health === 12, out.lastError);
+  check('回执说清改成了多少', out.lastInfo.includes('12'), out.lastInfo);
+
+  run('/data merge entity @s Health 999');
+  check('超过上限时夹到上限', world.entityDataMap.get('player')!.health === 20);
+  check('夹取这件事要说出来', out.lastInfo.includes('夹'), out.lastInfo);
+
+  run('/data merge entity @s Health abc');
+  check('血量不是数字报错（不当成 0）', out.lastError.includes('数字'), out.lastError);
+
+  run('/data merge entity @s CustomName 小明');
+  check('改名字', world.entityDataMap.get('player')!.customName === '小明', out.lastError);
+
+  run('/data merge entity @s NoSuchField 1');
+  check('写不存在的字段报错', out.lastError.includes('Health'), out.lastError);
+
+  run('/data modify entity @s Health 1');
+  check('modify 明确拒绝并给替代写法', out.lastError.includes('merge'), out.lastError);
+
+  // —— 纯逻辑层（`BlockData.ts`）：不经过命令也能逐条钉住 ——
+  const chestSnap: BlockEntityData = {
+    kind: 'chest',
+    slots: [{ id: 1, count: 3 }, null, { id: 2, count: 0 }, { id: 3, count: 1 }],
+  };
+  check('filledSlots 跳过空格', filledSlots(chestSnap).length === 2, JSON.stringify(filledSlots(chestSnap)));
+  check('filledSlots 跳过 count=0 的残留', filledSlots(chestSnap).every((s) => s.count > 0));
+  check('slotAt 取空格返回 null', slotAt(chestSnap, 1) === null);
+  check('slotAt 越界返回 null', slotAt(chestSnap, 99) === null);
+  check('canWriteSlot 认边界', canWriteSlot(chestSnap, 3) && !canWriteSlot(chestSnap, 4) && !canWriteSlot(chestSnap, -1));
+  check('parseDataPath 缺省是根', parseDataPath(undefined)?.kind === 'root');
+  check('parseDataPath 大小写不敏感', parseDataPath('HEALTH')?.kind === 'health');
+  check('parseDataPath 认 Slots[12]', (() => {
+    const p = parseDataPath('Slots[12]');
+    return p?.kind === 'slot' && p.index === 12;
+  })());
+  check('parseDataPath 拒绝 Slots[-1]', parseDataPath('Slots[-1]') === null);
+  check('parseDataPath 拒绝胡写的路径', parseDataPath('Foo.bar') === null);
+  check('方块不收 Health', (() => {
+    const p = parseDataPath('Health')!;
+    return !pathFitsBlock(p) && pathFitsEntity(p);
+  })());
+  check('实体不收 Slots[0]', (() => {
+    const p = parseDataPath('Slots[0]')!;
+    return pathFitsBlock(p) && !pathFitsEntity(p);
+  })());
+  check('路径白名单非空（报错文案要用）', BLOCK_PATHS.length > 0 && ENTITY_PATHS.length > 0);
+  check('parseHealthValue 负数夹到 0', parseHealthValue('-5', 20) === 0);
+  check('parseHealthValue 超上限夹到上限', parseHealthValue('999', 20) === 20);
+  check('parseHealthValue 正常值原样', parseHealthValue('7.5', 20) === 7.5);
+  check('parseHealthValue 非数字返回 null', parseHealthValue('abc', 20) === null);
+  check('parseHealthValue 缺参返回 null', parseHealthValue(undefined, 20) === null);
 
 
   // ---- /damage（批次 480）

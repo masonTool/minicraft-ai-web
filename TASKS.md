@@ -3891,6 +3891,21 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       （本项目的实体与方块数据是强类型字段，没有一棵可写的 NBT 树——与其造一棵假的，
       不如把"读得到什么"做扎实）。实体给 Pos/类型/名字，方块给注册名 + 状态位。
       读空气格或未加载的列会明确报错。`test:commands` 218 → **227 条**，命令 **34/40**。
+      —— **批次 623 把 `/data` 补成 `get|merge`（Q21）**：新增 `core/commands/BlockData.ts`
+      （零运行时依赖：路径解析 + 方块实体快照 + 血量夹取，可离线逐条断言），
+      `CommandContext` 加四个**可选**方法 `blockEntityAt` / `setBlockEntitySlots` /
+      `entityData` / `setEntityData`（可选是为了老 stub 不改也能跑）。
+      路径白名单只有真实存在的字段：方块 `Slots` / `Slots[i]`，实体 `Health` / `CustomName`。
+      `modify` 明确拒绝并给替代写法（能被它改的只有血量一项，不值得为它引入运算语法）。
+      `test:commands` 330 → **381 条**。
+      ⚠️ 两条实测抓出来的坑：① `filledSlots` 要跳过 `count: 0` 的残留（否则根节点会多列一行
+      空气）；② **三个坐标原来是 `Number(raw)` 直接转的，`~` 变成 NaN 直接报用法错误** ——
+      浏览器里第一条 `/data get block ~ ~-1 ~`（"看我脚下是什么"，最自然的写法）就被拒了，
+      改成走 `parseCoordinate` 之后相对坐标才通。
+      ⚠️ 与 Q20 同源的遗留：`blockEntityAt` 走 `containerOfBlockAt`（**会建实例**），
+      所以对一个从未打开过的空箱子执行 `get` 会在容器表里多一条空记录；
+      空容器不进存档（`ContainerSave.hasContent` 只存有内容的），所以没有数据后果。
+      待补：无
       —— **批次 480 补 `/damage` 与 `/loot give`**：`/damage <目标> <伤害>` 走同一个
       选择器解析、对每个匹配到的实体调 `ctx.damageEntity`（`HurtSource = environment`）；
       `/loot give <表> [数量]` 用现有 `rollLoot` 掷点、按 **id** 直接塞背包
