@@ -788,5 +788,29 @@ console.log('\n[细雪：限下落 + 减速 + 免疫摔落（批次 548）]');
   check('没有细雪时会正常加速下落（负对照）', normal.vy < -1.6, `${normal.vy}`);
 }
 
+console.log('\n[甜浆果丛：水平速度 ×0.4（批次 581）]');
+{
+  const berryWorld: PhysicsWorld = {
+    ...makeWorld(),
+    isSweetBerryBush: () => true,
+  };
+  const inBerry = new PlayerPhysics();
+  inBerry.x = 0.5;
+  inBerry.y = 64;
+  inBerry.z = 0.5;
+  for (let i = 0; i < 60; i++) inBerry.update(berryWorld, input({ forward: 1 }), 0, DT, false);
+
+  const normal = new PlayerPhysics();
+  normal.x = 0.5;
+  normal.y = 64;
+  normal.z = 0.5;
+  for (let i = 0; i < 60; i++) normal.update(makeWorld(), input({ forward: 1 }), 0, DT, false);
+
+  const berrySpeed = Math.hypot(inBerry.vx, inBerry.vz);
+  const normalSpeed = Math.hypot(normal.vx, normal.vz);
+  check('走进甜浆果丛会减速', berrySpeed < normalSpeed * 0.5, `丛内 ${berrySpeed.toFixed(2)} / 正常 ${normalSpeed.toFixed(2)}`);
+  check('减速后仍有 0.3 倍以上速度（不是完全卡死）', berrySpeed > normalSpeed * 0.3, `${berrySpeed.toFixed(2)}`);
+}
+
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
 process.exit(failed === 0 ? 0 : 1);

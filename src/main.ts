@@ -7016,6 +7016,33 @@ class App {
   }
 
   /**
+   * 右键成熟的甜浆果丛（批次 581）：摘果并把它退回**第 1 阶段**。
+   *
+   * 原版：阶段 2 掉 1~2 个、阶段 3 掉 2~3 个，摘完变回阶段 1（不是 0），
+   * 这样同一丛还能继续长；左键破坏的掉落另有一套（见 `items.ts` 的掉落表）。
+   * 返回 false 时调用方继续走骨粉/放置分支，不会白吞一次右键。
+   */
+  private harvestSweetBerries(): boolean {
+    if (!this.hit) return false;
+    const { x, y, z } = this.hit;
+    const id = this.world.getBlock(x, y, z);
+    if (id !== Block.SWEET_BERRY_BUSH_STAGE2 && id !== Block.SWEET_BERRY_BUSH_STAGE3) return false;
+
+    const count = id === Block.SWEET_BERRY_BUSH_STAGE3
+      ? 2 + Math.floor(Math.random() * 2)
+      : 1 + Math.floor(Math.random() * 2);
+    this.world.setBlockAndUpdate(x, y, z, Block.SWEET_BERRY_BUSH_STAGE1);
+    this.net.sendBlock(x, y, z, Block.SWEET_BERRY_BUSH_STAGE1, 0, this.dimension);
+
+    const leftover = this.inventory.add(Item.SWEET_BERRIES, count);
+    if (leftover > 0) this.spawnDrop(Item.SWEET_BERRIES, leftover, x + 0.5, y + 0.5, z + 0.5);
+    this.hand.swing();
+    this.refreshHotbar();
+    this.audio.play('click');
+    return true;
+  }
+
+  /**
    * 手上的骨粉对着作物右键：催长并把这一份**消耗掉**。
    *
    * ⚠️ 失败时**不消耗**（对着石头、对着已经成熟的小麦用，什么都不发生）——
@@ -13401,6 +13428,13 @@ class App {
       return;
     }
 
+    // 甜浆果丛（批次 581）：成熟时右键摘果并退回阶段 1。
+    // 排在骨粉之前：对着成熟丛撒骨粉没有效果，右键应该先当"采摘"
+    if (this.harvestSweetBerries()) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
     // 骨粉（批次 69）：对着作物右键 → 催长 2~5 个阶段。
     // 放在放置之前：骨粉不是方块物品，落到下面的放置分支只会什么都不做
     if (this.fertilizeWithBoneMeal()) {
@@ -14324,6 +14358,11 @@ class App {
         p.box(),
         (x, y, z) => this.world.getBlock(x, y, z) === Block.CACTUS,
       ),
+      // 甜浆果丛（批次 581）：脚或身体所在格是丛 → 减速（物理层）+ 每 0.5 秒扎 1 点。
+      // 它是 solid:false，玩家能直接走进去，所以判据用"所在格"而不是碰撞盒相交。
+      inSweetBerryBush:
+        (feet >= Block.SWEET_BERRY_BUSH_STAGE0 && feet <= Block.SWEET_BERRY_BUSH_STAGE3) ||
+        (body >= Block.SWEET_BERRY_BUSH_STAGE0 && body <= Block.SWEET_BERRY_BUSH_STAGE3),
       // 岩浆块（批次 121）：脚底下那一格是岩浆块 → 每秒 1 点火焰伤害。
       // 与生物那边**共用同一个算式**（`standsOnMagmaBlock`），见那里的注记
       onMagma: this.standsOnMagmaBlock(p.x, p.y, p.z),

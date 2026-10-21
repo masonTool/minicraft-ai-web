@@ -345,6 +345,23 @@ console.log('\n[仙人掌接触（批次 222）]');
   check('完整方块也走同一条判据', touchesCactus(fullWorld, boxAt(0.0, 64, 0.5, 0.6, 1.8), () => true));
 }
 
+console.log('\n[甜浆果丛：每 0.5 秒扎 1 点（批次 581）]');
+{
+  const stats = new PlayerStats();
+  // 关掉自然回血，否则高饥饿会把扎掉的 1 点补回来
+  stats.food = 0;
+  runTicks(stats, 9, env({ inSweetBerryBush: true }));
+  check('前 9 tick 不扎（0.5 秒一次）', stats.health === MAX_HEALTH, `生命 ${stats.health}`);
+
+  runTicks(stats, 1, env({ inSweetBerryBush: true }));
+  check('第 10 tick 扎 1 点', stats.health === MAX_HEALTH - 1, `生命 ${stats.health}`);
+
+  // 离开 5 tick 再进来 9 tick：计时必须从 0 重来，不能累计
+  runTicks(stats, 5, env({ inSweetBerryBush: false }));
+  runTicks(stats, 9, env({ inSweetBerryBush: true }));
+  check('离开后计时清零（再进来要重新数满 10 tick）', stats.health === MAX_HEALTH - 1, `生命 ${stats.health}`);
+}
+
 console.log('\n[靴子附魔的移速倍率（批次 262）]');
 {
   check('深海探索者 0 级 = 1 倍', depthStriderMultiplier(0) === 1);

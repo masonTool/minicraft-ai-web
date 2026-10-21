@@ -88,6 +88,9 @@ export function supportKindOf(id: number): SupportKind {
   // 贴附面（B14，批次 86）：展示框与画贴在墙上，墙没了就该掉下来。
   // ⚠️ 这一档只接了这两件：火把/梯子/藤蔓仍是 `'none'`（它们是同一类，
   // 但"藤蔓能同时挂好几面、梯子还能站人"这些差别要各自想过，见 TASKS B49）
+  // 可可豆（批次 581，B17 尾巴）：豆荚贴在丛林原木侧面，原木没了也要弹下来。
+  // 它的 `facing` 与展示框同一套语义（指向贴着的那一面），所以直接复用 `'wall'`。
+  if (def.shape === 'cocoa') return 'wall';
   if (def.shape === 'item_frame' || def.shape === 'painting') return 'wall';
   // 洞穴藤蔓（批次 496）：靠**上方**支撑，而且是一节串一节
   if (def.shape === 'cave_vines') return 'ceiling';
@@ -115,9 +118,8 @@ export function supportIsValid(world: SupportWorld, x: number, y: number, z: num
   if (kind === 'solid') return isSolidSupport(below);
   if (kind === 'wall') {
     // 拿不到状态（老的测试桩）时按"立得住"处理：宁可不收，也不要凭空拆东西
-    const getState = world.getState;
-    if (!getState) return true;
-    const [dx, dz] = wallSupportOffset(getState(x, y, z));
+    if (!world.getState) return true;
+    const [dx, dz] = wallSupportOffset(world.getState(x, y, z));
     return isSolidSupport(world.getBlock(x + dx, y, z + dz));
   }
   if (kind === 'ceiling') {

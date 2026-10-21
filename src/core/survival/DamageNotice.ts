@@ -28,6 +28,7 @@ const CAUSE_REASON: Record<DamageCause, string> = {
   lava: '碰到岩浆（要立刻离开，水浇不灭）',
   fire: '着火（站在火/岩浆块上，或被点燃）',
   cactus: '碰到仙人掌（带刺方块）',
+  sweetBerry: '走进甜浆果丛（被刺扎到）',
   suffocate: '窒息（头卡在方块里）',
   starve: '饥饿（饥饿值耗尽）',
   void: '掉出世界（虚空）',

@@ -89,6 +89,13 @@ const MAX_STEP = 0.4;
 /** 蛛网里的水平速度系数（批次 441） */
 export const COBWEB_SPEED_FACTOR = 0.25;
 /**
+ * 甜浆果丛里的水平速度系数（批次 581）。
+ *
+ * 原版把甜浆果丛归到 `makeStuckInBlock` 一档（与蛛网同机制、系数不同）；
+ * 这里沿用"水平速度乘一个系数"的简化，0.4 比蛛网松、比正常走路明显慢。
+ */
+export const SWEET_BERRY_SPEED_FACTOR = 0.4;
+/**
  * 贴着蜂蜜块下滑时的速度上限（批次 450）。
  *
  * 原版约 1 格/秒（0.05 格/tick ≈ 1 格/秒），这里取 1.2：比自由下落的 -4 慢得多，
@@ -120,6 +127,11 @@ export interface PhysicsWorld extends CollisionWorld {
    * 可选——不给就是不减速（假世界不必都实现它）。
    */
   isCobweb?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格是不是甜浆果丛（批次 581）：能穿过去，但水平速度明显变慢；
+   * 扎人那半在 `PlayerStats`。可选——不给就是不减速。
+   */
+  isSweetBerryBush?(x: number, y: number, z: number): boolean;
   /**
    * 这一格是不是蜂蜜块（批次 450）。
    *
@@ -336,8 +348,18 @@ export class PlayerPhysics {
     // 在没有"挖掉网"这条交互之前会显得像卡死。×0.25 已经能明显感觉到"被粘住"。
     const inCobweb =
       !flying && world.isCobweb?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true;
+    // 甜浆果丛（批次 581）：脚或身体中段任意一处是它 → 水平速度 ×0.4。
+    // 与细雪同采两个点：丛只有一格高，但玩家可能站在丛顶、脚却在上一格。
+    const inSweetBerry =
+      !flying &&
+      (world.isSweetBerryBush?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true ||
+        world.isSweetBerryBush?.(Math.floor(this.x), Math.floor(this.y + 0.9), Math.floor(this.z)) === true);
     const speed =
-      baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1) * (this.inPowderSnow ? 0.65 : 1);
+      baseSpeed *
+      speedMultiplier *
+      (inCobweb ? COBWEB_SPEED_FACTOR : 1) *
+      (inSweetBerry ? SWEET_BERRY_SPEED_FACTOR : 1) *
+      (this.inPowderSnow ? 0.65 : 1);
 
     /**
      * 蜂蜜块（批次 450）：脚下是它 → **跳不起来**；贴着它的侧面 → 下滑被限速。

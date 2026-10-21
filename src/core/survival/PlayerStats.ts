@@ -59,6 +59,8 @@ export type DamageCause =
   | 'lava'
   | 'fire'
   | 'cactus'
+  /** 甜浆果丛（批次 581）：每 0.5 秒扎 1 点 */
+  | 'sweetBerry'
   | 'suffocate'
   | 'starve'
   | 'void'
@@ -88,6 +90,13 @@ export interface SurvivalEnvironment {
   inFire?: boolean;
   /** 身体贴着仙人掌 */
   onCactus: boolean;
+  /**
+   * 脚或身体陷在甜浆果丛里（批次 581）。
+   *
+   * 与 `onCactus` 分开：仙人掌是"贴着"，甜浆果丛是**能走进去**（solid:false），
+   * 所以判据是"所在格是不是丛"，不是碰撞盒相交。
+   */
+  inSweetBerryBush?: boolean;
   /**
    * **脚底下踩着岩浆块**（批次 121，原版：每秒 1 点**火焰伤害**）。
    *
@@ -273,6 +282,8 @@ export class PlayerStats {
   private fireTickTimer = 0;
   /** 岩浆块的烫伤计时（批次 121）：攒够 20 tick（= 1 秒）掉 1 点 */
   private magmaBlockTimer = 0;
+  /** 甜浆果丛的扎伤计时（批次 581）：攒够 10 tick（= 0.5 秒）掉 1 点 */
+  private sweetBerryTimer = 0;
 
   /**
    * 着火剩余秒数（站在火里 / 被点燃后持续掉血）。
@@ -552,6 +563,18 @@ export class PlayerStats {
       this.magmaBlockTimer = 0;
     }
 
+    // 甜浆果丛（批次 581）：每 0.5 秒扎 1 点（原版也是 10 tick 一下）。
+    // 与岩浆块同一条"自己数 tick"的写法；离开就清零，所以快速穿过不会被扎两次。
+    if (env.inSweetBerryBush) {
+      this.sweetBerryTimer++;
+      if (this.sweetBerryTimer >= 10) {
+        this.sweetBerryTimer = 0;
+        this.damage(1, 'sweetBerry');
+      }
+    } else {
+      this.sweetBerryTimer = 0;
+    }
+
     if (env.onCactus) this.damage(1, 'cactus');
     if (env.suffocating) this.damage(1, 'suffocate');
   }
@@ -618,6 +641,7 @@ export class PlayerStats {
     this.drownTickTimer = 0;
     this.airDrain = 0;
     this.lavaTickTimer = 0;
+    this.sweetBerryTimer = 0;
     this.hurtResistantTime = 0;
     this.lastDamageAmount = 0;
     this.lastDamage = null;

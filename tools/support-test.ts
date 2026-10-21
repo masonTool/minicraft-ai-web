@@ -8,7 +8,8 @@
  * 运行：npm run test:support
  */
 
-import { Block, STEM_STAGES } from '../src/core/registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, STEM_STAGES } from '../src/core/registry/blocks.ts';
+import { withFacing } from '../src/core/registry/blockState.ts';
 import { supportIsValid, supportKindOf, sweepUnsupported, type SupportWorld } from '../src/core/world/Support.ts';
 import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
 
@@ -32,14 +33,26 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 /** 只有方块的小世界 */
 class FakeWorld implements SupportWorld {
   readonly cells = new Map<string, number>();
+  readonly states = new Map<string, number>();
 
   at(x: number, y: number, z: number, id: number): this {
     this.cells.set(`${x},${y},${z}`, id);
     return this;
   }
 
+  /** 带状态放置（可可豆这种要看朝向的方块用） */
+  atState(x: number, y: number, z: number, id: number, state: number): this {
+    this.at(x, y, z, id);
+    this.states.set(`${x},${y},${z}`, state);
+    return this;
+  }
+
   getBlock(x: number, y: number, z: number): number {
     return this.cells.get(`${x},${y},${z}`) ?? Block.AIR;
+  }
+
+  getState(x: number, y: number, z: number): number {
+    return this.states.get(`${x},${y},${z}`) ?? 0;
   }
 
   setBlock(x: number, y: number, z: number, id: number): void {
@@ -71,6 +84,19 @@ console.log('\n[形状 → 支撑]');
   equal('石头 → 不需要支撑', supportKindOf(Block.STONE), 'none');
   equal('空气 → 不需要支撑', supportKindOf(Block.AIR), 'none');
   equal('箱子 → 不需要支撑', supportKindOf(Block.CHEST), 'none');
+  equal('可可豆 → 贴附面（原木）', supportKindOf(Block.COCOA_STAGE0), 'wall');
+}
+
+console.log('\n[可可豆荚：原木没了就弹下来（批次 581）]');
+{
+  const world = new FakeWorld();
+  // 豆荚在 (1,64,0)，facing=3（西），贴在 (0,64,0) 的丛林原木上
+  world.atState(1, 64, 0, Block.COCOA_STAGE0, withFacing(0, 3));
+  world.at(0, 64, 0, JUNGLE_LOG_ID);
+  check('原木还在时立得住', supportIsValid(world, 1, 64, 0));
+
+  world.setBlock(0, 64, 0, Block.AIR);
+  check('原木被拆掉后立不住', !supportIsValid(world, 1, 64, 0));
 }
 
 // ---------------------------------------------------------------- 2. 立得住吗

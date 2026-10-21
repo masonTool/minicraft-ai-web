@@ -17,7 +17,7 @@ import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine, type LightPushStats } from '../light/LightEngine.ts';
-import { Block, blockDef, isClimbableBlock, isCobwebBlock, isHoneyBlock } from '../registry/blocks.ts';
+import { Block, blockDef, isClimbableBlock, isCobwebBlock, isHoneyBlock, isSweetBerryBushBlock } from '../registry/blocks.ts';
 import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
@@ -329,6 +329,12 @@ export class World {
   isCobweb(worldX: number, worldY: number, worldZ: number): boolean {
     if (worldY < -64 || worldY >= 320) return false;
     return isCobwebBlock(this.getBlock(worldX, worldY, worldZ));
+  }
+
+  /** 这一格是不是甜浆果丛（批次 581）：物理层用它减速，生存层用它扎人 */
+  isSweetBerryBush(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    return isSweetBerryBushBlock(this.getBlock(worldX, worldY, worldZ));
   }
 
   /** 这一格是不是蜂蜜块（批次 450）：物理层的"跳不起来 / 贴着下滑限速"用 */

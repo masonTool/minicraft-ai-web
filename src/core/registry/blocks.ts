@@ -5212,6 +5212,16 @@ export function isCobwebBlock(id: number): boolean {
 }
 
 /**
+ * 甜浆果丛（四个生长阶段共用一个判据，批次 581）。
+ *
+ * 阶段 id 是连续的（`SWEET_BERRY_BUSH_STAGE0..3`），所以按区间判，
+ * 不必每加一个阶段就往这里补一行。
+ */
+export function isSweetBerryBushBlock(id: number): boolean {
+  return id >= SWEET_BERRY_BUSH_ID_START && id <= SWEET_BERRY_BUSH_ID_START + 3;
+}
+
+/**
  * 这一块能不能"含水"（批次 469）。
  *
  * 判据是**形状**而不是白名单：原版能含水的全是非整格方块（台阶/楼梯/栅栏/墙/
