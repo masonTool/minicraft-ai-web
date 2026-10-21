@@ -434,6 +434,8 @@ console.log('\n[骷髅：远程射击]');
   check('射击方向朝向玩家（x 为正）', (shots[0]?.vx ?? 0) > 0, JSON.stringify(shots[0]));
   equal('箭的伤害取生物的攻击力', shots[0]?.damage, skeletonType.attackDamage);
   equal('骷髅不再近战（不直接扣玩家血）', meleeDamage, 0);
+  // 拉弓蓄力（J12，批次 609）：冷却期间有 0~1 的进度，供渲染层逐渐抬臂
+  check('冷却期间有拉弓进度', far.rangedDraw > 0 && far.rangedDraw <= 1, `${far.rangedDraw.toFixed(2)}`);
 
   // ---- 玩家贴到 2 格：应该后退而不是继续贴
   const shotsBefore = shots.length;
@@ -1106,7 +1108,7 @@ console.log('\n[出手动画（J12）]');
   const skeleton = new Mob(mobTypeById('skeleton')!, 0, 64, 0);
   check('远程出手计时初始为 0', skeleton.rangedAnim === 0);
   check('发射时重置远程计时', mobSrc.includes('this.rangedAnim = ATTACK_ANIM_SECONDS'));
-  check('渲染层远程双臂抬向前', rendererSrc.includes('aiming ? -1.25 * rangedSwing'));
+  check('渲染层远程双臂抬向前', rendererSrc.includes('aiming') && rendererSrc.includes('drawPose'));
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

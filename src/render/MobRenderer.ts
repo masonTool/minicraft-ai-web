@@ -1271,6 +1271,8 @@ export class MobRenderer {
       // 远程动作（J12 尾巴）：拉弓/扔三叉戟时双臂抬向前，不是近战那种上下挥
       const rangedSwing = attackSwingAmount(mob.rangedAnim);
       const aiming = mob.rangedAnim > 0;
+      // 拉弓蓄力（J12，批次 609）：0~1 的进度直接作为抬臂角度
+      const drawPose = mob.rangedDraw;
       if (visual.kind === 'dragon') {
         const speed = Math.hypot(mob.vx, mob.vz);
         flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
@@ -1298,7 +1300,11 @@ export class MobRenderer {
         if (visual.kind === 'crystal') rotY = visual.spin;
         else if (spec.swingArm !== undefined) {
           // 远程：双臂一起抬向前（弓/三叉戟的"举起来"），近战：左右臂交替挥
-          rotX = aiming ? -1.25 * rangedSwing : -attackSwing * spec.swingArm;
+          rotX = aiming
+            ? -1.25 * rangedSwing
+            : drawPose > 0
+              ? -1.25 * drawPose
+              : -attackSwing * spec.swingArm;
         }
         else if (spec.swing !== undefined) rotX = legSwing * spec.swing;
         else if (i < visual.legCount) {

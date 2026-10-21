@@ -688,6 +688,11 @@ export class Mob extends Entity {
    * 与近战的 `attackAnim` 分开——远程没有"挥下"那一下，抬臂瞄准的姿势也不一样。
    */
   rangedAnim = 0;
+  /**
+   * 拉弓蓄力进度（J12，批次 609）：0 = 没在拉，1 = 拉满即将出手。
+   * 渲染层据此把双臂逐渐抬向前；与 `rangedAnim`（出手后的回收动作）分开。
+   */
+  rangedDraw = 0;
 
   /** 被闪电充能的苦力怕（批次 564）：爆炸威力从 3 提到 6 */
   charged = false;
@@ -1603,8 +1608,15 @@ export class Mob extends Entity {
     this.yaw = Math.atan2(dx, dz);
 
     this.rangedTimer -= dt;
+    // 拉弓蓄力（J12，批次 609）：在射程内、冷却没走完时，进度从 0 涨到 1。
+    // 用固定 cooldown 作分母（不加随机抖动），否则动画会一顿一顿。
+    this.rangedDraw =
+      distance <= ranged.range && this.rangedTimer > 0
+        ? Math.max(0, Math.min(1, 1 - this.rangedTimer / ranged.cooldown))
+        : 0;
     if (this.rangedTimer > 0 || distance > ranged.range) return;
     this.rangedTimer = ranged.cooldown + Math.random() * 0.5;
+    this.rangedDraw = 0;
 
     // 从眼睛朝玩家胸口射，带一点散布
     const eyeY = this.y + this.type.eyeHeight;
