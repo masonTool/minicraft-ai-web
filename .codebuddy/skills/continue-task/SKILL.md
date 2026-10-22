@@ -1,0 +1,278 @@
+---
+name: continue-task
+description: This skill installs the continue-do persistent task-queue framework into a project (per-session task queues under `.continue/doing/` plus Stop / UserPromptSubmit hooks), then verifies the environment so the framework actually runs. It is meant for long-running, cross-session AI development of large projects. Use it when the user asks to install, enable, reinstall or diagnose continue-task / continue-do in a project. It is an installer only — the framework's documentation ships with the files it copies. Hooks run in both WorkBuddy and the CodeBuddy IDE, but hosts differ in how many times they accept a Stop hook's feedback per user message (WorkBuddy: unlimited; CodeBuddy IDE: 1 by default, governed by the `loop_limit` field the installer writes) — tell the user which applies before installing.
+---
+
+# continue-task
+
+安装 continue-do 持续任务队列框架。这是安装器；框架怎么用，装完后看项目里的 `.continue/README.md`。
+
+## 用途与平台要求
+
+**用途**：给**大型项目的持续型 AI 开发**用。它把需求、本轮队列、完成档案、模块现状、踩坑经验
+全部落到项目的 `.continue/` 里，让 AI 的进度**跨会话、跨上下文窗口不丢**，把"一次对话干完一件事"
+变成"一条队列逐条推进、做不完下次接着做"。
+
+其它好处（简略）：
+
+- **进度外置**：进度是文件、进版本库，会话被中断也不丢；队列没做完不许停。
+- **一次改动 = 一条任务 = 一个提交**：Stop 钩子只递一条，pre-commit 拒绝一次勾掉多条。
+- **门禁由脚本跑**：编号、跨文件引用、文档体量、钩子自检、提交前检查都由脚本执行，
+  不看 AI 自证。
+- **有刹车**：`> 状态：讨论中` 停单份队列，`touch .continue/auto.off` 全停，随时人工接管。
+- **收尾自动**：队列全打勾 → 直接归档进 `DONE` / `OVERVIEW` / `TASKS` 并删队列，不弹窗等确认；
+  只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
+- **长任务分阶段**：一份队列建议 ≤ 8 条，更多就按阶段拆——每阶段一份队列 + 一个批次；
+  同一会话换批要新号时跑 `node .continue/hooks/queue-init.mjs --new-batch`（号由脚本生成，不手编）。
+  批次 = 归档单元，塞成一批会让 `DONE.md` 一节滚到 300 行以上，自动归档就搬不动了。
+
+**⚠️ 这个框架依赖会话钩子（hooks）。两个宿主的钩子都会跑，差别只在
+Stop 反馈每条用户消息能被采纳几次：**
+
+| 运行环境 | Stop 续跑 | 结论 |
+| --- | --- | --- |
+| WorkBuddy | 无上限，直到队列空 | **有效**，一条消息能跑完整个队列 |
+| CodeBuddy IDE | 默认 **1 次**（宿主字段 `loop_limit` 缺省为 1） | 安装器写 `loop_limit=100` 后**有效**；没写时一条消息只推进一条 |
+| CodeBuddy CLI | 未实测（同产品线，取决于版本有没有这个字段） | 安装器已写 `loop_limit`；装完按第 6 步实测一轮即可确认 |
+
+**别说"IDE 钩子会中断"**：会话注入、递任务、提交守卫、pre-commit 都能跑，被截断的只是续跑次数。
+排查用：IDE 按 `stopHookCount < loop_limit` 判定，计数每条用户消息清零，`loop_limit` 取所有
+Stop group 的最大值（`-1` 不限，非数字算 1）；WorkBuddy 没有这个计数。
+
+## 安装
+
+### 1. 一条命令装完
+
+在**目标项目根目录**执行：
+
+```bash
+node <本技能目录>/scripts/install.mjs
+```
+
+它会自己处理所有分支（全新项目 / 存量项目 / 老版本升级），**装完还会自检**——
+必备文件缺任何一个就非零退出并列出缺什么。
+
+常用参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--dry-run` | 只报告会做什么，不写任何文件。先跑这个看清楚再真装 |
+| `--force` | 文档已存在时也覆盖（默认是另存 `*.continue-do.md`，保护用户进度） |
+| `--ci` | 额外写 `.github/workflows/continue-do.yml`（跑与本地完全相同的 `check.mjs`）。默认不写；已有同名文件不覆盖 |
+
+### 2. 安装器做了什么
+
+| 内容 | 已存在时 |
+| --- | --- |
+| `.continue/hooks/*.mjs`、`.gitignore` | **总是覆盖**（框架代码，不覆盖等于升级失效） |
+| `.continue/config.json` | **只补缺失的键**，已有值一律保留（用户改过的 `checks.fast` 升级后仍在）；不是合法 JSON 就不碰并报错 |
+| git `pre-commit` | 写一个垫片调用 `hooks/pre-commit.mjs`：提交前跑 `checks.fast`（失败拒绝），并拒绝"一次提交勾掉多条队列条目"（`CONTINUE_MAX_ITEMS_PER_COMMIT`，默认 1）。**`.continue/hooks/pre-commit.mjs` 不存在时直接放行**（框架被删/切到没装框架的分支，残留垫片不能把仓库卡成提交不了）。已有**非本框架**的 pre-commit 时不覆盖，只打印"加哪一行"的提示 |
+| `.continue/doing/` | 只保证目录存在，**里面一个文件都不动**（可能有进行中的队列） |
+| `.continue/TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` | 与模板**逐字节相同**→视为已装，跳过；**内容不同**→另存 `<名>.continue-do.md`，原文件保留 |
+| `AGENTS.md` | 同上 |
+| 项目已有文档 | **只读扫描**并列出"待集成"候选（目标文档 + 行数 + 依据），不写任何文件；合并按下一节做 |
+
+两个设计要点：
+
+- **幂等**。重装不会给每份文档都造一个备份——只有"内容真的和模板不同"才另存，
+  且同名备份已存在时不覆盖。所以可以随时重跑安装器来升级框架代码。
+- **永不覆盖用户进度**。文档冲突一律另存，用户合并完自己删。
+
+### 2.5 集成已有文档（存量项目必做，让用户平滑切换）
+
+安装器只做**只读扫描**，给候选与目标建议；**内容判断与合并由你做**：
+
+```bash
+node <技能目录>/scripts/scan-docs.mjs          # 人读表格
+node <技能目录>/scripts/scan-docs.mjs --json   # 机器读（字段：path/lines/target/reason/registered）
+node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出来
+```
+
+扫描范围：跳过 `.git` / `node_modules` / `.continue` / `dist` 等目录，只认 `.md/.markdown/.mdx/.txt`；
+按文件名优先、正文特征兜底，给出 `TASKS / DONE / OVERVIEW / TIPS / README` 建议。
+已经写成 `> 来源：<路径>` 的文档标记为已登记，**不会重复提示**（幂等）。
+
+合并规矩（违反会被 `check.mjs` 拦）：
+
+| 已有文档 | 并到哪 | 怎么并 |
+| --- | --- | --- |
+| 待办 / Roadmap / Issue 列表 | `TASKS.md` | 未完成 → `- [ ] T<n>`，编号接当前最大号、**永不复用**；有意空缺写 `作废编号：T9~T15` |
+| CHANGELOG / 已完成清单 | `TASKS.md` 的 `C. 已完成` + `DONE.md` | 完成项落成 `- [x] T<n>`（一个需求一个号）；`DONE` 里只加一节 `## 迁移导入 · <日期> · 来源 <路径>`，**不编批次号**、不逐条复制 |
+| 架构 / 模块 / 设计说明 | `OVERVIEW.md` | 按模块落到 §二，挂 `T<n>` + 「迁移导入」；§一 同步加模块索引 |
+| 踩坑 / FAQ / 排查笔记 | `TIPS.md` | 四段式（症状 → 根因 → 处置 → 适用面）；模块名必须与 `OVERVIEW` 的 `###` 小节**完全一致** |
+| README / 开发约定 | `.continue/README.md` 的「项目约定」 | 只搬**会改变做法**的约定；`README` 有 400 行上限，装不下就留在原文件并在 `AGENTS.md` 指路 |
+
+四条硬要求：
+
+1. **只搬结论，不搬全文**；每段带一行 `> 来源：<相对路径>`（既是溯源，也是扫描器的"已登记"标记）；
+2. **原文件一律保留**：用户可能还在用；合并完告诉用户"以后以 `.continue/` 为准"，不要默默删；
+3. **不编批次号、不编 `T` 号**：批次号只由 `queue-init` 生成，历史导入用 `## 迁移导入` 这类非批次标题；
+   `T` 号只增不改，DONE 里出现的 `[Tn]` 必须在 TASKS 里有对应的 `[x]` 条目；
+4. 合并完必须 `node .continue/hooks/check.mjs` 全绿；文档超上限先精简再写入，别为了搬全撑爆。
+
+**边界**：扫描器给的是"建议"。无关文档（第三方 LICENSE、子包 README、临时笔记）在回复里说明跳过；
+拿不准的用弹窗问用户，不要硬并。
+
+### 3. 项目自己的检查（可选）
+
+框架**自带** `config.json`，`checks.fast` 指向 `hooks/check.mjs --fast`，装完就有内置检查
+（编号审计、文档体量、钩子自检；`node .continue/hooks/check.mjs --list` 看实时清单）。
+**`checks.fast` 允许改**——重装时 `config.json` 只补缺失的键，你改过的值会保留。
+
+**安装器会自动探测项目怎么测**，把命令写进 `checks.project`（`scripts/detect-tests.mjs`，只读）。
+它只看**现成证据**：package.json 的 `scripts.test` → `test:unit` 等 → vitest/jest/mocha/ava 依赖 →
+有测试文件则 `node --test`；然后 `Cargo.toml` → `go.mod` → Python（pytest 优先、退回 unittest）→
+`pom.xml` → gradle → `*.csproj` / `*.sln` → `phpunit.xml` → `Gemfile` → `Makefile`，
+取**第一个命中**的生态。
+
+三条边界：
+
+- **用户已有非空的 `checks.project` 一律不覆盖**（手写的比探测值可信），日志会写"保留已有值"；
+- `--no-detect` 关掉探测；`--dry-run` 只报告会填什么，不落文件；
+- **npm 的占位脚本**（`npm init` 默认那条 `Error: no test specified` + `exit 1`）判成"没有测试"。
+  真把它接进门禁会让每次提交都变红，比没接上更糟——这是有意为之。
+
+#### 探测不到测试时（装完必须处理，别略过）
+
+安装输出里会出现这样一段：
+
+```
+· 这个项目还没有可自动跑的测试——门禁里只会跑框架自检（编号 / 文档 / 配置 / 钩子）
+  · <依据：为什么判成没有测试>
+  建议（做完重跑安装器即可自动接进门禁，也可直接写进 checks.project）：
+    1. …
+```
+
+**你要做的**（顺序别调）：
+
+1. **先弹窗问用户**要不要现在补一个最小可跑测试，三个选项：
+   "现在就搭（我按建议建一条最小断言）" / "先不搭，门禁只跑框架自检" / "我自己来，别动代码"。
+   推荐第一个，但**决定权在用户**；
+2. 用户同意才动手，且**只建最小的一条**（一条断言能跑通即可，不搭框架、不加依赖、不改构建）；
+3. 跑通后**重跑安装器**，让它把 `project` 自动填上；或在 `checks.project` 里手写这条命令；
+4. 用户选"先不搭"就**如实写进告知**（第 7 步第 9 条），不要沉默——门禁少一层要让人知道。
+
+**不要**替用户建测试框架、不要凭空加依赖、不要为了让门禁"有东西可跑"而写一个永远为真的断言。
+
+要手写或改命令就编辑 `checks.project`：
+
+```jsonc
+{
+  "checks": {
+    "fast": "node .continue/hooks/check.mjs --fast",  // 框架内置检查，别删
+    "project": ["npm test"],                          // 字符串或数组，按顺序跑
+    "timeoutSec": 60                                  // 单条命令的超时，要小于钩子注册的 300s
+  }
+}
+```
+
+要点：
+
+- `check.mjs` 会**先跑内置检查、再跑 `project`**，所以内置检查不可能被漏掉；命令由钩子亲自执行看退出码，
+  写进提示词让 AI 自证没有意义。
+- `project` 里的命令必须**秒级**。跑一轮几十秒的命令放进来，等于让每条任务都卡一次——那还不如不开门禁。
+- 重装框架时 `config.json` 只补缺失的键，你加的 `project`、改过的 `fast` 都会保留。
+
+### 4. 三条提醒
+
+- `*.continue-do.md` 只是备份，**不要留在仓库里**——agent 会同时读到两份指令，
+  内容一冲突就说不清哪份算数。和用户合并完就删掉（第 7 步要提醒）。
+- 老版本留下的 `.continue/HANDOFF.md` / `NOTES.md`：内容分别并入 `README.md` /
+  `DONE.md` 后删掉。两套说明并存时，AI 只会读到其中一半。
+- **老版本的目录/文件名**（`queues/` → `doing/`、`EXPERIENCE.md` → `TIPS.md`）：
+  **不需要手动搬**，`queue-init.mjs` 每会话首次启动会自动对齐（幂等，实现见
+  `lib.mjs` 的 `migrateLegacyLayout()`），并在注入里报告搬了哪几个。
+  装完**重启一次会话**就会触发。
+
+### 5. 注册钩子（安装器自动完成）
+
+安装器会写 `.codebuddy/settings.json`（不存在就新建），四条注册的唯一登记处是
+`scripts/install.mjs` 里的 `HOOKS` 常量——**不要照着文档手抄**，这里也不再复制一份清单。
+
+- 按 `command` 是否含 `.continue/hooks/<脚本名>` 判重，**只追加缺的**；
+  `UserPromptSubmit` 追加到第一个 group，`Stop` 追加到**本框架自己的** group；
+  别的钩子、别的配置项一律不动；
+- **Stop group 上写 `loop_limit`**（常量 `STOP_LOOP_LIMIT`，默认 100 = 宿主允许的最大有限值）：
+  宿主按 group 取最大值，不写就等于 1（每条用户消息只推进一条任务）。已有值不动；
+  如果本框架的钩子和用户自己的钩子混在同一个 group 里（老版本装的），**不写**并告警——
+  写进去等于放宽别人的续跑次数；
+- 装完自检会核对四条注册、`--event=`、以及**读回 settings 复算生效的 `loop_limit`**；
+  用户级 `.codebuddy/settings.json` 里若有别的值（如 `-1` 不限），会警告说明实际以哪个为准；
+- 文件不是合法 JSON 时**不改动**，安装器以 exit 1 报错，修好再重跑。
+
+`auto-continue.mjs` 挂在**两个事件**上：Stop 递任务，UserPromptSubmit 只把轮次计数归零。
+
+注册命令**一律带 `--event=<自己的事件>`**（`node .continue/hooks/auto-continue.mjs --event=Stop`）：
+钩子靠它把来源写进日志行首（`[auto-continue · Stop]`），不靠 payload 猜字段名。老版本装的注册没有这个参数，
+重装时安装器**就地补上**（不整条重写，保住你挂在命令前的环境变量）；自检与 `check-framework.mjs` 各查一次。
+
+⚠️ 注册完**必须重启会话**：钩子配置在会话启动时拍快照，不热加载。改完文件当场测试会发现
+"钩子根本没跑"（`.continue/logs/` 一直是空的）。
+
+### 6. 验证环境
+
+逐条跑，**任何一条不符合就停下来修**，修好再继续：
+
+| # | 检查 | 命令 | 期望 |
+| --- | --- | --- | --- |
+| 1 | **安装器自检通过** | `node <技能目录>/scripts/install.mjs` 的退出码 | `0`；非 0 时按它列出的 `✗` 逐条修。文件齐全、四条钩子注册都由它核对，不再手数 |
+| 2 | Node 可用且 >= 18 | `node -v` | `v18` 或更高 |
+| 3 | **内置检查全绿** | `node .continue/hooks/check.mjs` | 全部 `✓`、exit 0。其中 `hooks` 一项在**临时副本**里灌事件，覆盖了递任务、会话注入、提交守卫、pre-commit 的行为，不会弄脏工作区 |
+| 4 | 提交前门禁接上了 | `git rev-parse --is-inside-work-tree` 为 `true`，且安装输出里没有"已有非本框架的 pre-commit"警告 | 不是 git 仓库 → 告诉用户提交守卫与 pre-commit 都不会生效；有那条警告 → 把提示的那一行加进用户自己的 pre-commit |
+| 5 | **Stop 能连续推进** | 重启会话后建一个 3 条的队列，发**一条**消息，别插话 | 连续做完 3 条 → 宿主无上限或有 `loop_limit`；只做完 1 条 → 上限是 1，看 `.continue/logs/<sid>.md` 里有没有 `续跑第2次` |
+
+第 3 条若失败，先分清是"命令配错"还是"项目本来就有失败"：
+前者改 `config.json`，后者要告诉用户——pre-commit 会拒绝所有提交，等于装上就跑不动。
+
+第 5 条是**唯一能用一条命令坐实的平台差异**，别用"平台名"下结论：
+日志里出现 `续跑第 N 次` 说明宿主确实在续跑；只到第 2 次就停说明上限为 1。
+上限为 1 不是框架坏了，改 `.codebuddy/settings.json` 里 Stop group 的 `loop_limit`（数字，`-1` 不限）
+并重启会话；不想改就告诉用户"每条消息推进一条，说继续即可"。
+
+### 7. 告知用户
+
+1. **第一句先说用途**：这是给大型项目做持续型 AI 开发的任务队列框架，进度写在 `.continue/` 里、
+   跨会话不丢；再简略带一句其它好处（一次任务一个提交、脚本门禁、随时可刹车、**默认提交后自动推送**——
+   不想推就把 `.continue/config.json` 的 `git.push` 设成 `false`）；
+2. **紧接着说清"能连续推进几条"**（见上文表格）：WorkBuddy 一条消息能跑完整队列；
+   CodeBuddy IDE 默认一条消息只推进一条，安装器已写 `loop_limit`（默认 100），
+   **重启后按第 6 步第 5 条实测一轮**再下结论。不要笼统说"IDE 不支持"——会话注入、递任务、
+   提交守卫在 IDE 里都生效，说的是续跑次数；
+3. 装了哪些文件、哪些因为已存在被跳过；`*.continue-do.md` 备份要用户自己合并，
+   **合并完删掉**（两份指令并存时 AI 会读到冲突的两套规则）；
+4. **已有文档的集成结果**（第 2.5 步）：扫到几份、把哪几份并进了哪个文档、哪几份跳过及原因；
+   `> 来源：` 标注的位置也要说，方便用户以后溯源；
+5. 环境验证结果（第 6 步逐条结论，不要只说"通过"）；
+6. 钩子要**重启会话**才生效（第 5 步）；重启后 `queue-init` 只在该会话第一条消息时注入，
+   本会话已经错过了注入时机；
+7. 告诉他怎么暂停：把队列头部的 `> 状态：执行中` 改成 `> 状态：讨论中` 就不递任务，
+   改回来继续；要连提交守卫一起停就 `touch .continue/auto.off`（删掉即恢复）；队列不会丢。
+8. **收尾是自动的**：队列全部打勾后，钩子直接下令收尾（搬 `DONE` → 更新 `OVERVIEW` → 勾 `TASKS`
+   → 自问 `TIPS` → 删队列），**不再弹窗问"要不要收尾"**；只有出现 `[阻塞]`、或打了勾却缺验证 /
+   自述"未验证、跳过"的条目时，才会弹窗要你拍板那几条（改描述继续做 / 删除 / 先留着并收尾）。
+9. **门禁里到底跑了什么**：说清 `checks.fast`（框架自检）与 `checks.project`（项目自己的测试，
+   安装时自动探测填入）各是什么；**没探测到时**要说明你建议补什么、以及用户选了"先不搭"还是"先搭上"。
+
+### 8. 改这个技能的时候（维护者看）
+
+技能自己的规矩由技能自己的脚本查，**不装进用户项目**：
+
+| 脚本 | 查什么 |
+| --- | --- |
+| `scripts/detect-tests.mjs` | 安装器装完后自动跑的测试探测（只读）：npm / Rust / Go / Python / Maven / Gradle / .NET / PHP / Ruby / Make 的识别顺序与判据。改规则后拿几种项目形态各跑一次看 `--json` |
+| `scripts/check-framework.mjs` | 模板里的钩子都在安装器 `REQUIRED` 里、必备文档都会被拷贝、`assets/` 没混入本仓库的批次号与模块名、注册命令都由 `commandFor()` 拼且带 `--event=`、模板默认值与文档说法一致、`scripts/` 下每个脚本与 `install.mjs` 的每个开关都在本文件里有交代 |
+| `scripts/test-install.mjs` | 安装器回归：全新 git 项目 / 非 git 目录 / 已有同名文档 / 已有自定义 config / 已有别的钩子 / 已有别人的 pre-commit / `--dry-run` 不落文件 / `--ci` / 老注册缺 `--event=` 时升级 / 已有文档扫描 / 来源登记幂等，共 11 项 |
+| `scripts/scan-docs.mjs` | 存量文档发现（只读）：目录跳过、扩展名过滤、文件名与正文分类、`> 来源：` 已登记判定。改分类规则后跑一次 `node scripts/scan-docs.mjs --all` 看效果 |
+
+两条都在**本仓库里手动跑**（这个仓库只剩技能目录，没有 `.continue/` 可以挂 `checks.fast`），
+改完技能、提交前各跑一次：
+
+`node .codebuddy/skills/continue-task/scripts/check-framework.mjs && node .codebuddy/skills/continue-task/scripts/test-install.mjs`
+
+要连**装出来的框架**一起验（这两条都只查静态一致性），就在空目录里装一遍再跑它的自检：
+
+```bash
+T=$(mktemp -d) && cd "$T" && git init -q
+node <技能目录>/scripts/install.mjs
+node .continue/hooks/check.mjs          # ids / docs / config / hooks 四项全绿
+```

@@ -35,7 +35,10 @@ coverage/
 .workbuddy/
 
 # —— 本地安装的技能包（每个会话按需加载，跨机器各自安）——
-.codebuddy/skills/
+.codebuddy/skills/*
+# 例外：continue-task 是本仓库机制补丁的**源**，必须跟代码一起版本化——
+# 否则重装会用旧模板覆盖 `.continue/hooks/`，本批的 5 个钩子修复就丢了。
+!.codebuddy/skills/continue-task/
 
 # —— 进仓库的（显式列出，防止上面规则误伤）——
 # .continue/queues/           会话级队列
