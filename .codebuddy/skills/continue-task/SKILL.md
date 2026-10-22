@@ -22,6 +22,7 @@ description: This skill installs the continue-do persistent task-queue framework
 - **有刹车**：`> 状态：讨论中` 停单份队列，`touch .continue/auto.off` 全停，随时人工接管。
 - **收尾自动**：队列全打勾 → 直接归档进 `DONE` / `OVERVIEW` / `TASKS` 并删队列，不弹窗等确认；
   只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
+  **有计划时不是删队列而是重置它**（换成下一阶段的条目 + 新批次号），删了计划链就断在这里。
 - **一批多长看行数，不看条数**：判据是"完成说明预计 > ~80 行"/"队列 > 500 行"/"这一阶段目标变了"；
   条数只是经验值（通常 8~12 条），不是上限。换批要新号时跑
   `node .continue/hooks/queue-init.mjs --new-batch`（号由脚本生成，不手编）。
