@@ -82,6 +82,7 @@ const REQUIRED = [
   '.continue/hooks/selftest.mjs',
   '.continue/hooks/audit-config.mjs',
   '.continue/hooks/archive-done.mjs',
+  '.continue/hooks/archive-queue.mjs',
 ];
 
 const actions = [];

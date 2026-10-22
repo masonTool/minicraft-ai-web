@@ -356,12 +356,30 @@ try {
     );
   });
 
-  check('auto-continue · 没有计划时收尾第五步仍是"删除队列文件"', () => {
+  check('auto-continue · 没有计划时收尾第五步是"归档队列"（不再直接删）', () => {
     queue('s-noplan', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-noplan'));
     return expect(
-      r.code === 2 && r.err.includes('5. 删除') && !r.err.includes('不要删除队列文件'),
-      '存量会话的收尾文案不该被计划模式改掉',
+      r.code === 2 &&
+        r.err.includes('归档队列文件') &&
+        r.err.includes('archive-queue.mjs') &&
+        !r.err.includes('不要删除队列文件'),
+      '存量会话的收尾第五步应改成归档；计划模式才是"不要动队列"',
+      r,
+    );
+  });
+
+  check('archive-queue · 队列移到 logs/doing-archive/<会话ID>-<年月日时分秒>.md', () => {
+    queue('s-arch', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('archive-queue.mjs', null, {}, ['s-arch']);
+    if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
+    if (existsSync(join(DOING, 's-arch.md'))) return expect(false, '队列文件应已移出 doing/', r);
+    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('s-arch-')) : [];
+    if (moved.length !== 1) return expect(false, `logs/doing-archive 里应有 1 份，实际 ${moved.length}`, r);
+    return expect(
+      /^s-arch-\d{14}\.md$/.test(moved[0]),
+      `备份名应是 <会话ID>-<14位时间戳>.md，实际 ${moved[0]}`,
       r,
     );
   });
