@@ -24,11 +24,15 @@
 
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 /**
- * 复用钩子的 `parsePlan`，**不在这里另写一份解析**。
- * 两份解析迟早不同步，那时的症状是"计划能写成、门禁也绿、钩子却读不懂"——
- * 这一层没有报错，只有机制悄悄不生效（`lib.mjs` 是框架文件，字段以它为准）。
+ * 复用钩子的解析，**不在这里另写一份**。
+ *
+ * 这条规矩不是洁癖，是踩过的：本文件原来只复用了 `parsePlan`，却给
+ * 文件名正则和队列头 `> 计划：` 各写了一份自己的版本。结果两份**规则不一致**——
+ * 门禁接受 `> 计划：x.md · 阶段 MS2.1`，钩子的 `parsePlanRef` 只认 `> 计划：x.md`。
+ * 于是那个写法**门禁全绿、机制一次都不触发**，且没有任何报错。
+ * 现在三个解析全部指向 `lib.mjs` 一处；`lib.mjs` 是框架文件，规则以它为准。
  */
-import { parsePlan } from '../.continue/hooks/lib.mjs';
+import { isPlanFile, parsePlan, parsePlanRef, QUEUE_HEAD_LINES } from '../.continue/hooks/lib.mjs';
 
 const printOnly = process.argv.includes('--print');
 
@@ -305,7 +309,6 @@ for (const [name, url] of [
  */
 {
   const problems = [];
-  const planNameRe = /^plan-[A-Za-z0-9._-]+\.md$/;
 
   let names = [];
   try {
@@ -313,8 +316,9 @@ for (const [name, url] of [
   } catch {
     names = [];
   }
-  const planNames = names.filter((name) => planNameRe.test(name));
-  const queueNames = names.filter((name) => !planNameRe.test(name));
+  /** 文件名规则来自 `lib.mjs`（钩子靠同一个前缀区分"队列"与"计划"）。 */
+  const planNames = names.filter((name) => isPlanFile(name));
+  const queueNames = names.filter((name) => !isPlanFile(name));
 
   const readIfAny = (url) => {
     try {
@@ -388,22 +392,59 @@ for (const [name, url] of [
     }
   }
 
-  // 队列头部的 `> 计划：x.md · 阶段 MSa.b` 必须指得着
+  // 队列头部的 `> 计划：x.md` 必须能被钩子解析出来，且指得着
   for (const name of queueNames) {
     const text = readIfAny(new URL(name, FILES.queuesDir));
-    const head = text.split(/\r?\n/).slice(0, 5).join('\n');
-    const m = /^>\s*计划\s*[:：]\s*([A-Za-z0-9._-]+\.md)(?:\s*·\s*阶段\s*(MS\d+\.\d+))?\s*$/m.exec(head);
-    if (!m) continue;
-    const target = plans.get(m[1]);
-    if (!target) {
-      problems.push(
-        `${name} 头部写着 \`> 计划：${m[1]}\`，但 doing/ 里没有这个文件` +
-          '——写错一个字就会静默退化成普通队列，机制一次都不触发',
-      );
+    const head = text.split(/\r?\n/).slice(0, QUEUE_HEAD_LINES).join('\n');
+
+    /**
+     * "写了计划却解析不出来" 必须判红。
+     *
+     * 只校验"解析成功之后的引用对不对"是不够的：写法错了（多写 `· 阶段 MS2.1`、
+     * 漏了 `.md`、写到第 7 行）时 `parsePlanRef` 返回 `null`，钩子会**当它不存在**——
+     * 队列照常收尾、计划永远不再往下取，而门禁此前一声不吭。
+     * 这正是本机制最怕的"看起来正常、实际一次没触发"。
+     */
+    const ref = parsePlanRef(text);
+    if (!ref) {
+      if (/^>\s*计划/m.test(head)) {
+        problems.push(
+          `${name} 头部有「> 计划」声明，但不是钩子认识的形式` +
+            `——只认 \`> 计划：<文件名>.md\`（放在前 ${QUEUE_HEAD_LINES} 行内、后面不能跟别的字）`,
+        );
+        continue;
+      }
+      /**
+       * 声明**写对了但位置超窗**同样读不到（头部声明区只有 6 行：标题/空行 + 4 个声明）。
+       * 这条是"再加一行就悄悄失效"的兜底——扫描时跳过围栏，免得正文里引用模板被误伤。
+       */
+      const lines = text.split(/\r?\n/);
+      let inFence = false;
+      let lateLine = 0;
+      for (let i = 0; i < lines.length; i += 1) {
+        const t = lines[i].trim();
+        if (/^(```|~~~)/.test(t)) {
+          inFence = !inFence;
+          continue;
+        }
+        if (inFence) continue;
+        if (/^>\s*计划/.test(t) && i >= QUEUE_HEAD_LINES) lateLine = i + 1;
+      }
+      if (lateLine > 0) {
+        problems.push(
+          `${name} 的 \`> 计划：\` 写在第 ${lateLine} 行，超出头部声明区（前 ${QUEUE_HEAD_LINES} 行）` +
+            '——钩子读不到，队列会被当成独立队列',
+        );
+      }
       continue;
     }
-    if (m[2] && !target.stages.some((stage) => stage.id === m[2])) {
-      problems.push(`${name} 头部写着「阶段 ${m[2]}」，但 ${m[1]} 里没有这一条`);
+
+    const target = plans.get(ref);
+    if (!target) {
+      problems.push(
+        `${name} 头部写着 \`> 计划：${ref}\`，但 doing/ 里没有这个文件` +
+          '——写错一个字就会静默退化成普通队列，机制一次都不触发',
+      );
     }
   }
 
