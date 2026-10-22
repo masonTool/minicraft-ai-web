@@ -3,7 +3,7 @@
 > 2026-10-22 迁移 continue-do 时，从 `docs/HANDOFF-ARCHIVE.md` 整份搬进 `.continue/notes/`。
 > 这是**按模块**的能力台账：某个模块当时怎么做的、落在哪些文件 / 数值上（表格式，按模块名搜）。
 >
-> 分工：时间线在 `../DONE.md`；踩过的坑在 `../EXPERIENCE.md`；机制在 `../HANDOFF.md`。
+> 分工：时间线在 `../DONE.md`；踩过的坑在 `../TIPS.md`；机制在 `../README.md`（项目约定在 `../HANDOFF.md`）。
 > 新的单条设计决策请按 `../NOTES.md` 的格式追加，不要再往这张大表里塞段落。
 
 已打通并实测过的部分：

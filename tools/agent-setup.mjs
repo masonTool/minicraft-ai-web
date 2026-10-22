@@ -193,22 +193,22 @@ if (!existsSync(join(projectRoot, 'node_modules'))) {
 }
 
 /**
- * 队列是**会话级**的（`.continue/queues/<session_id>.md`），所以这里逐个文件扫，
+ * 队列是**会话级**的（`.continue/doing/<session_id>.md`），所以这里逐个文件扫，
  * 不再假设"只有一份 auto-continue.md"。
  *
  * 与钩子同一套规则：**围栏代码块里的 `- [ ]` 是给人看的模板，不算待办**。
  * 曾经漏了这条，队列明明清空却报"剩余 1 条"，还把那行模板当成任务。
  */
-const queueDir = join(projectRoot, '.continue', 'queues');
+const queueDir = join(projectRoot, '.continue', 'doing');
 let queueFiles = [];
 try {
   queueFiles = readdirSync(queueDir).filter((name) => name.endsWith('.md'));
 } catch {
-  problems.push('缺少 .continue/queues/，会话队列目录不存在（钩子会读不到队列）。');
+  problems.push('缺少 .continue/doing/，会话队列目录不存在（钩子会读不到队列）。');
 }
 
 if (queueFiles.length === 0) {
-  notes.push('当前没有会话队列（.continue/queues/ 为空）——纯问答会话属正常，要排长跑任务时再建。');
+  notes.push('当前没有会话队列（.continue/doing/ 为空）——纯问答会话属正常，要排长跑任务时再建。');
 }
 for (const name of queueFiles) {
   const pending = [];

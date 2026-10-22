@@ -9,9 +9,9 @@
 > 以**详细那条为准**。新增条目时接着该段最大编号往下排（`npm run audit:tasks` 会检查）。
 
 > **执行机制（2026-10-22 起，唯一一套）**：本文件现在是 `.continue/TASKS.md`，是全项目唯一的长期待办总表。
-> 真正要动手的条目排进 `.continue/queues/<session_id>.md`（Stop 钩子逐条递），**收尾时把这里对应条目改 `[x]`**；
+> 真正要动手的条目排进 `.continue/doing/<session_id>.md`（Stop 钩子逐条递），**收尾时把这里对应条目改 `[x]`**；
 > AI 只补 `[x]`、不新增 `[ ]`（新计划由用户提）。「下一批还会被绊到」的取舍 → `.continue/NOTES.md`；
-> 可复用的坑 → `.continue/EXPERIENCE.md`；这批做了什么 → `.continue/DONE.md`。
+> 可复用的坑 → `.continue/TIPS.md`；这批做了什么 → `.continue/DONE.md`。
 > 三张派生表（覆盖度 / 差异 / README 路线图）都由脚本从本文件算出来，**不要手抄**。
 
 ## 0. 基准规格（复刻范围的锚点）
