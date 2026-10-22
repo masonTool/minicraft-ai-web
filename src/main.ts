@@ -678,6 +678,9 @@ import { barterRoll } from './core/items/Barter.ts';
 import { MapScreen } from './ui/MapScreen.ts';
 import { ToolHud } from './ui/ToolHud.ts';
 import { ScoreboardHud } from './ui/ScoreboardHud.ts';
+import { TutorialCard } from './ui/TutorialCard.ts';
+// 新手引导（引导2）：卡片只显示；步骤表与判定都在 `tutorial/` 里（纯逻辑、可离线断言）
+import { stepsOf } from './tutorial/steps.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -1023,6 +1026,8 @@ class App {
   private readonly toolHud: ToolHud;
   /** 侧边栏记分板（M23，批次 456） */
   private readonly scoreboardHud: ScoreboardHud;
+  /** 新手引导卡（引导2）：只负责显示；进度判定在 `tutorial/TutorialTracker.ts` */
+  private readonly tutorialCard: TutorialCard;
   /** 命令方块输入框（批次 477） */
   private readonly commandBlockEditor: CommandBlockEditor;
   /** 命令方块的内容表（按坐标，随存档走） */
@@ -2014,6 +2019,12 @@ class App {
     this.toolHud = new ToolHud(document.getElementById('hud') ?? container);
     // 侧边栏记分板（M23，批次 456）：右上角，只在 `/scoreboard objectives setdisplay sidebar` 之后出现
     this.scoreboardHud = new ScoreboardHud(document.getElementById('hud') ?? container);
+    // 新手引导卡（引导2）：挂进右上角那一列（`#hud-right`），与调试信息/状态效果由 flex 自动上下排开；
+    // 拿不到那一列才退回 `#hud`（此时靠 CSS 的右上角定位）
+    this.tutorialCard = new TutorialCard(
+      document.getElementById('hud-right') ?? document.getElementById('hud') ?? container,
+      atlas,
+    );
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
     this.commandBlockEditor.onSave = (command) => {
@@ -10813,6 +10824,25 @@ class App {
   }
 
   /**
+   * 验收脚本用：把引导卡显示在某一步（引导2）。
+   *
+   * 只验**界面几何**（会不会压住暂停键/快捷栏），不推进引导进度；
+   * 真正的推进在 `tutorial/TutorialTracker`，接线见引导3。
+   */
+  showTutorialCardForTest(stepId?: string): boolean {
+    const steps = stepsOf('survival');
+    const step = stepId ? steps.find((item) => item.id === stepId) : steps[0];
+    if (!step) return false;
+    this.tutorialCard.show(step, { index: steps.indexOf(step), total: steps.length });
+    return true;
+  }
+
+  /** 验收脚本用：收起引导卡 */
+  hideTutorialCardForTest(): void {
+    this.tutorialCard.hide();
+  }
+
+  /**
    * 验收脚本用（J11）：最近的村民是谁、现在能做什么。
    *
    * 手机上的验收脚本没法"用准星对准村民再点一下"，所以要有一个**不依赖瞄头**的入口
@@ -16126,6 +16156,7 @@ class App {
     this.attackCooldownHud.dispose();
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
+    this.tutorialCard.dispose();
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();

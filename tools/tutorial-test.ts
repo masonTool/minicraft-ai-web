@@ -12,6 +12,14 @@ import { BED_IDS, Block, woolId } from '../src/core/registry/blocks.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../src/tutorial/steps.ts';
 import { MAX_TRACKED_KINDS, TutorialTracker } from '../src/tutorial/TutorialTracker.ts';
+import {
+  TUTORIAL_CARD_MAX_WIDTH,
+  isShortViewport,
+  overlapsHotbar,
+  overlapsTouchPauseBar,
+  touchPauseBarRight,
+  tutorialCardBox,
+} from '../src/ui/tutorialLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -228,6 +236,51 @@ console.log('\n计数上限');
     many.serialize().counters.kinds.length <= MAX_TRACKED_KINDS,
     `实际 ${many.serialize().counters.kinds.length}`,
   );
+}
+
+// ------------------------------------------------------------------ 卡片几何
+
+console.log('\n引导卡几何（横屏不遮挡）');
+{
+  const cases: Array<[string, number, number]> = [
+    ['844×390 主力横屏', 844, 390],
+    ['640×360 小横屏', 640, 360],
+    ['932×430 横屏', 932, 430],
+    ['430×932 竖屏', 430, 932],
+    ['1440×900 桌面', 1440, 900],
+  ];
+
+  for (const [label, width, height] of cases) {
+    const box = tutorialCardBox(width, height);
+    check(
+      `${label}：不压顶部暂停三键`,
+      !overlapsTouchPauseBar(box, width),
+      `卡片左边 ${box.left} / 暂停键右边 ${touchPauseBarRight(width)}`,
+    );
+    check(`${label}：不压底部快捷栏`, !overlapsHotbar(box, height));
+    check(
+      `${label}：宽度有值且不超上限`,
+      box.maxWidth > 0 && box.maxWidth <= TUTORIAL_CARD_MAX_WIDTH,
+      `实际 ${box.maxWidth}`,
+    );
+  }
+
+  // 主力机型的具体数字：布局口径一改，这两条会直接红
+  const main = tutorialCardBox(844, 390);
+  equal('844×390 卡片宽 320', main.maxWidth, 320);
+  equal('844×390 左边界落在 516', main.left, 516);
+  check('844×390 与暂停键之间至少留 8px', main.left - touchPauseBarRight(844) >= 8);
+
+  // 窄竖屏靠"可用宽度"那一道兜住（38vw 在这里还不够）
+  const narrow = tutorialCardBox(430, 932);
+  check('430 竖屏仍与暂停键留出 8px', narrow.left - touchPauseBarRight(430) >= 8, `实际 ${narrow.left - touchPauseBarRight(430)}`);
+
+  check('390 高算矮横屏（说明收成两行）', isShortViewport(390));
+  check('932 高不算矮屏', !isShortViewport(932));
+
+  const zero = tutorialCardBox(0, 0);
+  equal('0×0 视口宽度不为负', zero.maxWidth, 0);
+  equal('0×0 视口左边界不为负', zero.left, 0);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

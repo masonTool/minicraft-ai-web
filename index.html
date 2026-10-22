@@ -1130,6 +1130,66 @@
         .scoreboard-hud { top: 6px; right: 6px; font-size: 11px; padding: 4px 6px; }
       }
 
+      /* ---------------- 新手引导卡（引导2，批次 20261022-1954） ----------------
+         挂在 `#hud-right` 那一列里（与调试信息/状态效果自动上下排开），
+         所以这里只写"长什么样"，不写 fixed 坐标。
+         ⚠️ `min(38vw, 320px)` 与 `src/ui/tutorialLayout.ts` 的 0.38 / 320 是同一口径：
+            640×360 横屏下暂停三键右边界 361px，卡片左边界 389px，两边不重叠。
+            改一处必须改另一处。 */
+      .tutorial-root { pointer-events: auto; }
+      .tutorial-root.hidden { display: none; }
+      .tutorial-card, .tutorial-badge {
+        background: rgba(20, 20, 20, .9);
+        border: 2px solid #4a4a4a; border-radius: 4px;
+        color: #fff; text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .45);
+        font-size: 12px; line-height: 1.45;
+      }
+      .tutorial-card {
+        display: flex; align-items: flex-start; gap: 8px;
+        /* 第三道 `calc(50vw - 57px)` = 让开屏幕正中的暂停三键：
+           41px 半宽 + 8px 右边缘 + 8px 间隙。与 tutorialLayout.ts 的 available 同一口径 */
+        max-width: min(38vw, 320px, calc(50vw - 57px)); max-height: 132px;
+        padding: 7px 8px;
+        overflow: hidden;
+      }
+      .tutorial-card.hidden, .tutorial-badge.hidden { display: none; }
+      .tutorial-icon { width: 26px; height: 26px; flex: none; image-rendering: pixelated; }
+      .tutorial-body { min-width: 0; flex: 1 1 auto; }
+      .tutorial-label { font-size: 10px; letter-spacing: .4px; color: #a8c8ff; }
+      .tutorial-title { font-size: 13px; font-weight: 700; margin-top: 1px; }
+      .tutorial-desc { font-size: 11px; color: #dcdcdc; margin-top: 1px; }
+      .tutorial-dismiss {
+        margin-top: 4px; padding: 2px 6px;
+        font: inherit; font-size: 10px; color: #b9b9b9;
+        background: transparent; border: 1px solid #555; border-radius: 2px;
+      }
+      .tutorial-dismiss:active { background: rgba(255, 255, 255, .12); }
+      .tutorial-collapse {
+        flex: none; width: 22px; height: 22px; padding: 0;
+        font: inherit; font-size: 15px; line-height: 1;
+        color: #ddd; background: transparent; border: 0;
+      }
+      .tutorial-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 6px; font-size: 11px;
+      }
+      .tutorial-badge-icon { width: 20px; height: 20px; image-rendering: pixelated; }
+      .tutorial-badge-label { font-variant-numeric: tabular-nums; color: #ffd75e; }
+      /* 触摸端：收起键与「不再提示」都要按得到（44px 是平台下限，这里取 32/30，
+         因为卡片本身很窄，再大就把说明挤没了） */
+      body.touch-mode .tutorial-collapse { width: 32px; height: 32px; font-size: 18px; }
+      body.touch-mode .tutorial-dismiss { min-height: 30px; padding: 4px 8px; font-size: 11px; }
+      /* 矮横屏（844×390 这类）：说明最多两行，卡片整体再紧凑一点 */
+      @media (max-height: 420px) {
+        .tutorial-card { padding: 5px 7px; gap: 6px; }
+        .tutorial-desc {
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+          overflow: hidden; font-size: 10px;
+        }
+        .tutorial-title { font-size: 12px; }
+      }
+
       /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
          与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */
       .command-block-editor {
