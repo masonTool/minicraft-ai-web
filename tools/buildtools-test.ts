@@ -38,6 +38,14 @@ import {
   snapshotCellCount,
   type ClipboardSnapshot,
 } from '../src/buildtools/Clipboard.ts';
+import {
+  TEMPLATES,
+  checkTemplatePlacement,
+  templateById,
+  templateCells,
+  validateTemplate,
+  type BuildTemplate,
+} from '../src/buildtools/templates.ts';
 
 let passed = 0;
 let failed = 0;
@@ -470,6 +478,122 @@ console.log('\n填充：对着一个假世界真的写进去（16×16×4）');
   equal('clear 之后没有非空气残留', remaining, 0);
 }
 
+// ------------------------------------------------------------------ 建筑模板
+
+console.log('\n建筑模板：数据自检');
+{
+  equal('内置 4 个模板', TEMPLATES.length, 4);
+  equal('id 不重复', new Set(TEMPLATES.map((item) => item.id)).size, TEMPLATES.length);
+
+  for (const template of TEMPLATES) {
+    equal(`${template.id} 坐标自检通过`, validateTemplate(template).join('; '), '');
+    check(`${template.id} 至少 10 格`, template.blocks.length >= 10, `实际 ${template.blocks.length}`);
+    check(`${template.id} 有名字键`, template.nameKey.startsWith('template.'));
+  }
+
+  const broken: BuildTemplate = {
+    id: 'bad',
+    nameKey: 'template.bad',
+    width: 2,
+    height: 2,
+    depth: 2,
+    blocks: [{ dx: 2, dy: 0, dz: 0, id: 1 }],
+    requiresSupport: false,
+  };
+  check('越界坐标会被抓住', validateTemplate(broken).some((item) => item.includes('dx 越界')));
+
+  const duplicated: BuildTemplate = {
+    id: 'dup',
+    nameKey: 'template.dup',
+    width: 2,
+    height: 2,
+    depth: 2,
+    blocks: [
+      { dx: 0, dy: 0, dz: 0, id: 1 },
+      { dx: 0, dy: 0, dz: 0, id: 2 },
+    ],
+    requiresSupport: false,
+  };
+  check('重复坐标会被抓住', validateTemplate(duplicated).some((item) => item.includes('重复')));
+
+  equal('按 id 找得到小屋', templateById('small_house')?.id, 'small_house');
+  equal('找不到的 id 返回 null', templateById('nope'), null);
+}
+
+console.log('\n建筑模板：落位检查');
+{
+  const house = templateById('small_house')!;
+  // 一张 y=63 的地面，其余是空气
+  const world = new Map<string, number>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  for (let x = -10; x <= 20; x++) {
+    for (let z = -10; z <= 20; z++) world.set(key(x, 63, z), 1);
+  }
+  const read = (x: number, y: number, z: number): number => world.get(key(x, y, z)) ?? 0;
+  const isSolid = (id: number): boolean => id !== 0 && id !== 10;
+
+  const ok = checkTemplatePlacement(house, { x: 0, y: 64, z: 0 }, read, { isSolid });
+  equal('空地上放得下', ok.ok, true);
+  equal('没有挡路', ok.blocked, 0);
+  equal('没有悬空', ok.unsupported, 0);
+
+  // 挡路：在墙角预放一块石头
+  world.set(key(0, 65, 0), 1);
+  const blocked = checkTemplatePlacement(house, { x: 0, y: 64, z: 0 }, read, { isSolid });
+  equal('有方块挡着：拒绝', blocked.ok, false);
+  equal('理由 blocked', blocked.reason, 'blocked');
+  equal('数出被挡的格数', blocked.blocked, 1);
+  world.delete(key(0, 65, 0));
+
+  // 悬空：抬到空中
+  const floating = checkTemplatePlacement(house, { x: 0, y: 100, z: 0 }, read, { isSolid });
+  equal('半空中放房子：拒绝', floating.ok, false);
+  equal('理由 unsupported', floating.reason, 'unsupported');
+  equal('底层 25 格都悬空', floating.unsupported, 25);
+
+  // 越界：屋顶顶到世界之上
+  const tooHigh = checkTemplatePlacement(house, { x: 0, y: 318, z: 0 }, read, { isSolid });
+  equal('超出世界高度：拒绝', tooHigh.ok, false);
+  equal('理由 outOfWorld', tooHigh.reason, 'outOfWorld');
+  check('数出越界的层', tooHigh.outOfWorld > 0);
+
+  // 桥是悬空的：不查支撑
+  const bridge = templateById('small_bridge')!;
+  const bridgeCheck = checkTemplatePlacement(bridge, { x: 0, y: 100, z: 0 }, read, { isSolid });
+  equal('桥在半空中也放得下（本来就不需要支撑）', bridgeCheck.ok, true);
+  equal('桥的悬空计数为 0', bridgeCheck.unsupported, 0);
+
+  // 水不算支撑：把地面换成水
+  const waterWorld = new Map<string, number>();
+  for (let x = -10; x <= 20; x++) {
+    for (let z = -10; z <= 20; z++) waterWorld.set(key(x, 63, z), 10);
+  }
+  const waterRead = (x: number, y: number, z: number): number => waterWorld.get(key(x, y, z)) ?? 0;
+  const onWater = checkTemplatePlacement(house, { x: 0, y: 64, z: 0 }, waterRead, { isSolid });
+  equal('水面上放房子：拒绝（水不是支撑）', onWater.ok, false);
+  equal('理由 unsupported', onWater.reason, 'unsupported');
+}
+
+console.log('\n建筑模板：格子映射');
+{
+  const house = templateById('small_house')!;
+  const cells = templateCells(house, { x: 10, y: 64, z: 10 });
+  equal('格数等于模板方块数', cells.length, house.blocks.length);
+
+  const occupied = new Set(cells.map((cell) => `${cell.x},${cell.y},${cell.z}`));
+  check('正面门洞留空（y=1）', !occupied.has('12,65,10'));
+  check('正面门洞留空（y=2）', !occupied.has('12,66,10'));
+  check('地板铺满', occupied.has('10,64,10') && occupied.has('14,64,14'));
+  check('屋顶铺满', occupied.has('10,67,10') && occupied.has('14,67,14'));
+  check('窗户是玻璃', cells.some((cell) => cell.x === 10 && cell.y === 66 && cell.z === 12 && cell.id === 11));
+
+  const tower = templateById('stone_tower')!;
+  const towerCells = templateCells(tower, { x: 0, y: 0, z: 0 });
+  check('塔内部中空', !towerCells.some((cell) => cell.x === 1 && cell.z === 1 && cell.y > 0 && cell.y < 6));
+  check('塔正面有门洞', !towerCells.some((cell) => cell.x === 1 && cell.y === 1 && cell.z === 0));
+  check('塔顶封住', towerCells.some((cell) => cell.x === 1 && cell.y === 6 && cell.z === 1));
+}
+
 // ------------------------------------------------------------------ 剪贴板
 
 console.log('\n复制：快照只存非空气');
@@ -717,6 +841,12 @@ console.log('\n主程序接线（静态断言）');
   check('粘贴整体入撤销栈（一次粘贴 = 一步）', mainSrc.includes('this.pasteUndoBuffer'));
   check('默认落点在原件旁边', mainSrc.includes('defaultPasteTarget(snapshot)'));
   check('粘贴超过上限整次不记', mainSrc.includes('this.pasteUndoBuffer.length >= FILL_UNDO_LIMIT'));
+
+  // 创造4：建筑模板
+  check('落位前跑 checkTemplatePlacement', mainSrc.includes('checkTemplatePlacement(template, landing'));
+  check('模板转成格子走 templateCells', mainSrc.includes('templateCells(template, landing)'));
+  check('模板与粘贴共用 startPasteCells', mainSrc.includes('this.startPasteCells(templateCells('));
+  check('放不下时按原因提示', mainSrc.includes("t(`buildtools.template.${check.reason"));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

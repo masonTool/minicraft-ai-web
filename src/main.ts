@@ -696,7 +696,10 @@ import {
   planPaste,
   type ClipboardSnapshot,
   type MirrorAxis,
+  type PasteCell,
 } from './buildtools/Clipboard.ts';
+// 创造4：内置建筑模板
+import { checkTemplatePlacement, templateById, templateCells, type BuildTemplate } from './buildtools/templates.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -9139,8 +9142,21 @@ class App {
       return false;
     }
 
+    return this.startPasteCells(plan.cells);
+  }
+
+  /**
+   * 把一批格子交给跨帧粘贴器。
+   *
+   * 剪贴板与建筑模板**共用这一条执行路径**：都是"一次动作 = 一步撤销 + 每帧一批"。
+   * 分开写只会让两边的上限与收口逻辑慢慢漂开。
+   */
+  private startPasteCells(cells: readonly PasteCell[]): boolean {
+    if (cells.length === 0) return false;
+    if (this.activePaste) this.activePaste.cancel();
+
     this.pasteUndoBuffer = this.undoAllowed() ? [] : null;
-    this.activePaste = new PasteRunner(plan.cells, {
+    this.activePaste = new PasteRunner(cells, {
       write: (cell) => {
         const currentId = this.world.getBlock(cell.x, cell.y, cell.z);
         const currentState = this.world.getBlockState(cell.x, cell.y, cell.z);
@@ -9186,6 +9202,55 @@ class App {
 
   private cancelPaste(): void {
     this.activePaste?.cancel();
+  }
+
+  // ---------------------------------------------------------------- 创造工具（创造4）
+
+  /** 模板落点：准星命中的方块上方；没有命中就放脚下（以建筑中心对齐） */
+  private defaultTemplateOrigin(template: BuildTemplate): { x: number; y: number; z: number } {
+    const base = this.hit
+      ? { x: this.hit.x, y: this.hit.y + 1, z: this.hit.z }
+      : {
+          x: Math.floor(this.physics.x),
+          y: Math.floor(this.physics.y),
+          z: Math.floor(this.physics.z),
+        };
+    return {
+      x: base.x - Math.floor(template.width / 2),
+      y: base.y,
+      z: base.z - Math.floor(template.depth / 2),
+    };
+  }
+
+  /**
+   * 放一座内置建筑：先检查（越界 / 挡路 / 悬空），再交给跨帧粘贴器。
+   *
+   * 检查不通过就**拒绝**并说原因，而不是尽量放——玩家挑了一个位置，
+   * 悄悄少放一半比"放不下"更难理解。
+   */
+  private placeTemplate(
+    templateId: string,
+    origin?: { readonly x: number; readonly y: number; readonly z: number },
+  ): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    const template = templateById(templateId);
+    if (!template) return false;
+
+    const landing = origin ?? this.defaultTemplateOrigin(template);
+    const check = checkTemplatePlacement(template, landing, (x, y, z) => this.world.getBlock(x, y, z), {
+      isSolid: (id) => blockDef(id).solid,
+    });
+    if (!check.ok) {
+      this.hudToast.show(t(`buildtools.template.${check.reason ?? 'blocked'}`));
+      return false;
+    }
+
+    if (!this.startPasteCells(templateCells(template, landing))) return false;
+    this.hudToast.show(tp('buildtools.template.placed', { name: t(template.nameKey) }));
+    return true;
   }
 
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
@@ -11412,6 +11477,15 @@ class App {
       masked: this.clipboard?.masked ?? false,
       pasting: this.activePaste !== null,
     };
+  }
+
+  /** 验收脚本用：放一座内置建筑，返回写入格数（创造4） */
+  placeTemplateForTest(templateId: string, x?: number, y?: number, z?: number): number {
+    const origin = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
+    if (!this.placeTemplate(templateId, origin)) return 0;
+    const runner = this.activePaste;
+    while (this.activePaste) this.stepPasteRunner();
+    return runner?.progress.written ?? 0;
   }
 
   /**
