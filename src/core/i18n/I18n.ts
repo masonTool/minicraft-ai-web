@@ -78,25 +78,71 @@ const ZH_MERGED: Readonly<Record<string, string>> = {
 const EN_MERGED: Readonly<Record<string, string>> = { ...EN, ...COMMAND_MESSAGES_EN };
 
 /**
- * 语言 → 文案表（**稀疏表**，多语言 P0-4）。
+ * 语言 → 文案表（**稀疏表**，多语言 P0-4；P0-7 起可被 `loadLocale()` 填充）。
  *
  * 为什么允许缺项：加一种语言要先有表。表还没写的时候，这种语言**不该让应用崩或白屏**，
  * 也不该出现在设置页的可选项里（"能选但没内容"比不列更糟）。所以：
  *   · 这张表只放**已经有表**的语言；
- *   · UI 的下拉用 `LANGUAGES`（从这张表算出来）；
+ *   · UI 的下拉用 `availableLanguages()`（表 或 加载器 存在才算）；
  *   · 设备语言检测与回落用 `LOCALES`（支持的**全集**）。
  */
-export const TABLES: Readonly<Partial<Record<LocaleCode, Readonly<Record<string, string>>>>> = {
+const TABLE_POOL: Partial<Record<LocaleCode, Readonly<Record<string, string>>>> = {
   zh: ZH_MERGED,
   en: EN_MERGED,
 };
+
+/** 只读视图：`loadLocale()` 往池子里填，外面通过它读 */
+export const TABLES: Readonly<Partial<Record<LocaleCode, Readonly<Record<string, string>>>>> = TABLE_POOL;
 
 /** 没装表的语言查到的"空表"：让 `tableOf()` 永远返回一个可查对象，调用方不必判空 */
 const EMPTY_TABLE: Readonly<Record<string, string>> = {};
 
 /** 取一种语言的表；没装就返回空表（查出来全是 undefined，由 `t()` 走回落链） */
 export function tableOf(language: LocaleCode): Readonly<Record<string, string>> {
-  return TABLES[language] ?? EMPTY_TABLE;
+  return TABLE_POOL[language] ?? EMPTY_TABLE;
+}
+
+/** 按需加载的模块形状：`{ de: {...} }`，键名与 `locales/<code>/index.ts` 的导出一致 */
+export type LocaleModule = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+/**
+ * 按需加载器（多语言 P0-7）：**只有没静态打包的语言才登记**。
+ *
+ * 为什么 zh / en 不在这里：中文是源语言、英文是回落链的唯一一档，
+ * 两者在**第一帧**就要用（首屏提示、`<html lang>`、任何一次 `t()` 的兜底），
+ * 走异步会把启动流程改成"先白屏再出字"。
+ * ru / pt / fr / de 写完表之后在 P4 各加一行：
+ *   de: () => import('./locales/de/index.ts'),
+ */
+const LOADERS: Partial<Record<LocaleCode, () => Promise<LocaleModule>>> = {};
+
+/** 登记一种语言的按需加载器（P4 加语言、以及断言里造一个假语言时用） */
+export function registerLocaleLoader(code: LocaleCode, loader: () => Promise<LocaleModule>): void {
+  LOADERS[code] = loader;
+}
+
+/**
+ * 确保某种语言的表已经就位。
+ *
+ * @returns 现在能查到表吗——zh/en 恒为 `true`；有加载器则加载后 `true`；
+ *          都没有（或加载失败）返回 `false`，此时 `t()` 会按回落链退到英文。
+ *
+ * ⚠️ 加载失败**不抛异常**：离线、打包漏了、CDN 抽风都不该让游戏起不来，
+ * 最坏结果是"界面是英文"而不是"白屏"。
+ */
+export async function loadLocale(code: LocaleCode): Promise<boolean> {
+  if (TABLE_POOL[code] !== undefined) return true;
+  const loader = LOADERS[code];
+  if (!loader) return false;
+  try {
+    const module = await loader();
+    const table = module[code];
+    if (table === undefined) return false;
+    TABLE_POOL[code] = table;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -116,12 +162,17 @@ export function pluralCategory(count: number, language: Language = current): Plu
 }
 
 /**
- * **设置页里可选**的语言：只列已经有表的。
- * 由表派生而不是手写一份——写完某种语言的 `locales/xx/` 之后，它会自己出现在下拉里。
+ * **设置页里可选**的语言：有表、或登记了按需加载器的那些。
+ *
+ * 派生成函数（而不是模块初始化时算好的常量）是因为 P0-7 起表可以在运行时被
+ * `loadLocale()` 填进来——常量会在加载后过期。加一种语言的最后一步
+ * （写完 `locales/xx/` 并登记加载器）之后，它会自己出现在下拉里。
  */
-export const LANGUAGES: readonly LocaleCode[] = LOCALES.map((locale) => locale.code).filter(
-  (code) => TABLES[code] !== undefined,
-);
+export function availableLanguages(): readonly LocaleCode[] {
+  return LOCALES.map((locale) => locale.code).filter(
+    (code) => TABLE_POOL[code] !== undefined || LOADERS[code] !== undefined,
+  );
+}
 
 /** 语言自称（下拉里显示的就是它，不随当前语言变）：6 种都有，哪怕还没有表 */
 export const LANGUAGE_NAMES: Readonly<Record<LocaleCode, string>> = Object.fromEntries(
@@ -179,13 +230,21 @@ export function resolveLanguage(setting: LanguageSetting, tag: string | undefine
 }
 
 /**
- * 解析 + 生效，返回真正生效的语言。
+ * **解析 → 加载表 → 生效**，返回真正生效的语言。
  *
- * 为什么要一个函数收口：`boot()` 与设置页下拉**必须**走同一条路，
- * 否则"启动时跟随系统、设置里选具体语言"会各写一遍解析逻辑，迟早不一致。
+ * 为什么这三步要收在一个函数里：顺序错了就会"界面按德语排版、文案却是英文"，
+ * 或者更糟——先按某种语言建好 DOM、表随后才到。`boot()` 必须 `await` 它，
+ * 且必须在**建任何界面之前**调用。
+ *
+ * ⚠️ 多语言 P0-7 起设置页不再调它：切语言改成整页 `location.reload()`，
+ * 由下一次 `boot()` 重新走这条链（理由见 `SettingsScreen` 里那段注释）。
  */
-export function applyLanguageSetting(setting: LanguageSetting, tag: string | undefined = deviceLanguage()): Language {
+export async function applyLanguageSetting(
+  setting: LanguageSetting,
+  tag: string | undefined = deviceLanguage(),
+): Promise<Language> {
   const resolved = resolveLanguage(setting, tag);
+  await loadLocale(resolved);
   setLanguage(resolved);
   return resolved;
 }
@@ -195,8 +254,9 @@ export function applyLanguageSetting(setting: LanguageSetting, tag: string | und
  *
  * ⚠️ 做成模块级状态而不是"到处传参数"：文案散在几十个渲染函数里，
  * 每处都多一个 `lang` 参数会把函数签名改一遍（那才是真正的大改）。
- * 代价是**它不参与依赖追踪**——所以切语言之后要显式刷新界面
- * （`SettingsScreen.applyLanguage()` 就是干这个的）。
+ * 代价是**它不参与依赖追踪**——所以切语言之后界面不会自己重画。
+ * 多语言 P0-7 起的做法是**整页重载**（`location.reload()`），由下一次 `boot()`
+ * 重新解析、加载、建界面；不再维护"哪些节点挂了文案键、要逐个重写"的那套机制。
  */
 let current: Language = DEFAULT_LANGUAGE;
 

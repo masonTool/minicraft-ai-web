@@ -19,17 +19,19 @@ import { readFileSync, readdirSync } from 'node:fs';
 import {
   AUTO_LANGUAGE,
   DEFAULT_LANGUAGE,
-  LANGUAGES,
   LANGUAGE_NAMES,
   TABLES,
   allKeys,
   applyLanguageSetting,
+  availableLanguages,
   detectLanguage,
   getLanguage,
   isLanguage,
   isLanguageSetting,
   keyParity,
+  loadLocale,
   pluralCategory,
+  registerLocaleLoader,
   resetLanguageForTest,
   resolveLanguage,
   setLanguage,
@@ -46,6 +48,7 @@ import {
   isLocaleCode,
   localeMeta,
   matchLocale,
+  type LocaleCode,
 } from '../src/core/i18n/locale.ts';
 
 let passed = 0;
@@ -107,15 +110,18 @@ console.log('[中英表一致性]');
   check('中文表没有多出来的孤立键', parity.missingInZh.length === 0, parity.missingInZh.join(', '));
 
   const empty: string[] = [];
-  for (const language of LANGUAGES) {
+  for (const language of availableLanguages()) {
     for (const [key, value] of Object.entries(tableOf(language))) {
       if (typeof value !== 'string' || value.trim().length === 0) empty.push(`${language}:${key}`);
     }
   }
   check('没有空文案（空串在界面上会变成"按钮是空的"）', empty.length === 0, empty.join(', '));
 
-  check('语言清单与表一一对应', LANGUAGES.every((language) => TABLES[language] !== undefined));
-  check('每种语言都有自己的自称', LANGUAGES.every((language) => (LANGUAGE_NAMES[language] ?? '').length > 0));
+  check(
+    '有表的语言都在可选清单里（可选清单是函数，P0-7 起会在加载后变长）',
+    (Object.keys(TABLES) as LocaleCode[]).every((code) => availableLanguages().includes(code)),
+  );
+  check('每种语言都有自己的自称', availableLanguages().every((language) => (LANGUAGE_NAMES[language] ?? '').length > 0));
 }
 
 console.log('\n[界面真的会去查的那些键都在表里]');
@@ -829,13 +835,14 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
    *  ③ 查不到就按 当前 → 英文 → 中文 → 键名 走，**不抛异常、不返回空串**。
    */
   check(
-    '支持 6 种语言，但只有有表的才能选',
-    LOCALES.length === 6 && LANGUAGES.length < LOCALES.length,
-    `LANGUAGES=${LANGUAGES.join(',')}`,
+    '支持 6 种语言，但只有有表（或登记了加载器）的才能选',
+    LOCALES.length === 6 && availableLanguages().length < LOCALES.length,
+    `available=${availableLanguages().join(',')}`,
   );
   check(
     '可选语言 = 有表的那些（关系式，不写死数量）',
-    LANGUAGES.every((code) => TABLES[code] !== undefined) && LANGUAGES.length === Object.keys(TABLES).length,
+    availableLanguages().length === Object.keys(TABLES).length,
+    `available=${availableLanguages().length} tables=${Object.keys(TABLES).length}`,
   );
   check('存档里存了还没表的语言也不算脏数据', isLanguage('de') && isLanguage('pt'));
   check('没登记的语言仍然不合法', !isLanguage('ja') && !isLanguage('xx'));
@@ -871,14 +878,39 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   resetLanguageForTest();
   check(
     'applyLanguageSetting 会真的切过去（auto）',
-    applyLanguageSetting('auto', 'pt-BR') === 'pt' && getLanguage() === 'pt',
+    (await applyLanguageSetting('auto', 'pt-BR')) === 'pt' && getLanguage() === 'pt',
     getLanguage(),
   );
   check(
     'applyLanguageSetting 传具体语言也生效',
-    applyLanguageSetting('zh', 'de-DE') === 'zh' && getLanguage() === 'zh',
+    (await applyLanguageSetting('zh', 'de-DE')) === 'zh' && getLanguage() === 'zh',
     getLanguage(),
   );
+  resetLanguageForTest();
+}
+
+console.log('\n[按需加载（多语言 P0-7）]');
+{
+  /**
+   * 这一节放在**最后**：它会注册一个假语言（`de`）并往 `TABLES` 里填表，
+   * 前面那些"没表就回落到英文"的断言必须先跑完。
+   *
+   * 验的是启动流程依赖的那条链：**登记加载器 → loadLocale → 表进池子 → t() 查得到**。
+   * P4 加真实语言时做的正是同一件事（在 `LOADERS` 里加一行）。
+   */
+  check('静态语言（zh / en）本来就是就位的', (await loadLocale('zh')) && (await loadLocale('en')));
+  check('没有加载器的语言加载失败（返回 false，不抛异常）', (await loadLocale('ru')) === false);
+  check('加载失败不影响查表（回落链照旧）', t('pause.title', 'ru') === 'Game Paused', t('pause.title', 'ru'));
+
+  // 假语言：只给一条文案，足够验证"加载 → 可查"这条链
+  registerLocaleLoader('de', async () => ({ de: { 'pause.title': 'Spiel pausiert' } }));
+  check('登记加载器后出现在可选清单里', availableLanguages().includes('de'), availableLanguages().join(','));
+  check('加载成功', (await loadLocale('de')) === true);
+  check('加载后表进了池子', tableOf('de')['pause.title'] === 'Spiel pausiert');
+  check('加载后真能查出来', t('pause.title', 'de') === 'Spiel pausiert', t('pause.title', 'de'));
+  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('de')) === true);
+  check('假语言缺的键仍回落英文', t('pause.resume', 'de') === 'Resume Game', t('pause.resume', 'de'));
+  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('de') && availableLanguages().length === 3);
   resetLanguageForTest();
 }
 

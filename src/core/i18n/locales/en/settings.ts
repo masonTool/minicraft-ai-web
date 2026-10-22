@@ -17,7 +17,7 @@ export const settings = {
   'settings.group.appearance': 'Appearance',
   'settings.group.sound': 'Audio',
   'settings.language': 'Language',
-  'settings.language.hint': 'Takes effect after reopening this panel',
+  'settings.language.hint': 'The game reloads to apply the change',
   'settings.language.autoWith': 'Follow system ({language})',
   'settings.row.daylightCycle': 'Daylight Cycle',
   'settings.row.showDebug': 'Debug Info',

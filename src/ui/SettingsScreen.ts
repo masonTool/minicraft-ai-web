@@ -21,9 +21,8 @@ import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewM
 // 界面语言（M8，批次 403；多语言 P0-5 起多一个 `auto` = 跟随系统）：表与当前语言都在这个纯模块里
 import {
   AUTO_LANGUAGE,
-  LANGUAGES,
   LANGUAGE_NAMES,
-  applyLanguageSetting,
+  availableLanguages,
   isLanguageSetting,
   resolveLanguage,
   t,
@@ -724,30 +723,15 @@ export class SettingsScreen {
   private subtitleText = t('settings.escResume');
 
   /**
-   * 挂了"文案键"的节点（批次 403）：切语言之后逐个重写 textContent。
+   * 写一次文案。
    *
-   * 只收**不随状态变化**的静态文案。像"当前模式：创造"这种由数据拼出来的文案
-   * 不能挂在这里——刷新一次就会把数据覆盖成模板字。
+   * ⚠️ 多语言 P0-7：这里**不再登记**"切语言后要重写"的节点。
+   * 之前那套（`labelBindings` + `applyLanguage()`）只能覆盖挂了 ref 的那几处，
+   * 而且已经踩过"`applyInventoryChrome()` 把硬编码写回去、刷完一秒又被覆盖"的连环坑。
+   * 现在切语言**整页重载**，DOM 全部重建，不需要任何重刷机制。
    */
-  private readonly labelBindings: Array<{ element: HTMLElement; key: string }> = [];
-
-  /** 写一次文案并登记；之后 `applyLanguage()` 会跟着刷新 */
   private bindLabel(element: HTMLElement, key: string): void {
     element.textContent = t(key);
-    this.labelBindings.push({ element, key });
-  }
-
-  /**
-   * 按当前语言重写所有登记的文案。
-   *
-   * 为什么要单独一步：语言是模块级状态（见 `I18n.ts` 文件头），**不参与依赖追踪**，
-   * 所以"改了设置"不会自动让已经建好的 DOM 重画。在 `show()` 里叫它，
-   * 每次打开面板都对一次账——切完语言关掉再打开就能看到新文案。
-   */
-  applyLanguage(): void {
-    // 存的是**选择**（可能是 `auto`），生效的是解析后的语言（多语言 P0-5）
-    applyLanguageSetting(this.settings.language);
-    for (const { element, key } of this.labelBindings) element.textContent = t(key);
   }
   /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
   private flyingToggle: HTMLButtonElement | null = null;
@@ -1188,9 +1172,9 @@ export class SettingsScreen {
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
     // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
     // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
-    // 选项 = "跟随系统" + **已经有文案表**的语言（多语言 P0-5）。
+    // 选项 = "跟随系统" + **可选**的语言（有表或登记了加载器，多语言 P0-5/P0-7）。
     // `auto` 的标签要写出**这台设备上解析成什么**，否则玩家不知道"跟随系统"等于哪种语言。
-    const languageOptions: readonly LanguageSetting[] = [AUTO_LANGUAGE, ...LANGUAGES];
+    const languageOptions: readonly LanguageSetting[] = [AUTO_LANGUAGE, ...availableLanguages()];
     const languageLabels: Record<LanguageSetting, string> = {
       [AUTO_LANGUAGE]: tp('settings.language.autoWith', {
         language: LANGUAGE_NAMES[resolveLanguage(AUTO_LANGUAGE)],
@@ -1204,10 +1188,14 @@ export class SettingsScreen {
       languageLabels,
       () => this.settings.language,
       (next) => {
+        if (next === this.settings.language) return;
         this.settings.language = next;
         saveSettings(this.settings);
-        // `applyLanguage()` 内部走 `applyLanguageSetting()`：`auto` 会在这里解析成实际语言
-        this.applyLanguage();
+        // 切语言 = **整页重载**（多语言 P0-7）。理由见 `bindLabel()` 的注释：
+        // 局部重刷只能覆盖挂了 ref 的节点，物品名/生物名/成就/命令反馈都刷不到。
+        // 重载后 `boot()` 会重新解析语言、按需加载表、重建整个界面。
+        // ⚠️ 这里**不**调 `setLanguage()`：重载前那几十毫秒改语言只会让界面半中半英。
+        location.reload();
       },
     );
 
@@ -2024,8 +2012,6 @@ export class SettingsScreen {
     }
     this.root.classList.remove('closing');
     this.renderSubtitle();
-    // 语言可能在别处被改过（设置项 / 存档载入）：每次打开都对一次文案
-    this.applyLanguage();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
     // 批次 333：面板可见之后形象画布才有尺寸，补一帧（隐藏期间 render 会直接返回）
