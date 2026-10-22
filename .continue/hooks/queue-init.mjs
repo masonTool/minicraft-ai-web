@@ -32,6 +32,7 @@ import {
   saveState,
   sessionId,
   unfinishedCount,
+  writeFd,
 } from './lib.mjs';
 
 /**
@@ -49,7 +50,7 @@ import {
  * 放在最前面：手动调用时没有 payload、也没有 stdin，不能先等 `readPayload()`。
  */
 if (process.argv.includes('--new-batch')) {
-  process.stdout.write(`${nextBatch()}\n`);
+  writeFd(1, `${nextBatch()}\n`);
   process.exit(0);
 }
 
@@ -90,6 +91,12 @@ saveState(sid, state, 'init');
 // ---------------------------------------------------------------- 其他会话的未完成队列
 
 const others = listQueues()
+  /**
+   * **计划文件不是"别人的队列"**：`plan-*.md` 里全是 `[ ]` 阶段，不排掉的话每次注入
+   * 都会多一条"其他会话还有未完成队列（剩 N 条）"，指着 `plan-x.md` 要你去接管——
+   * 那是本会话正在用的计划，接管提示纯属噪音，还会诱导 AI 去删自己的计划。
+   */
+  .filter((item) => !item.sid.startsWith('plan-'))
   .filter((item) => item.sid !== sid)
   .map((item) => {
     const queue = readQueue(item.file);
@@ -212,13 +219,28 @@ const injection = [
   '   边界：用户新提的需求当场落成 `- [ ] T<n>` 并编号（递增、永不复用），收尾只补 `[x]`，',
   '   **不自创需求**；`OVERVIEW` / `TIPS` 没内容就跳过，**不写占位**。',
   '7. 目录分工：`logs/` 是钩子的运行日志（**已 gitignore**，你不要提交、不要改）；',
-  '   `doing/` 与 `TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` 是要 review 的文档。',
+  '   `doing/` 里同时住着**会话队列**（`<session_id>.md`）与**计划**（`plan-<名字>.md`），',
+  '   这两类连同 `TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` 都是要 review 的文档；',
   '   `OVERVIEW.md` = 按模块的实现 + 坑摘要（做某个模块前先看它）；',
   '   `TIPS.md` = 坑的细节（按模块分节，要细节再 grep）。',
-  '8. **一份队列别太长**：建议 ≤ 8 条；更多就按阶段拆——每个阶段一份队列、一个批次，',
-  '   阶段做完（自动收尾）后再开下一份。同一会话里要拿新批次号跑：',
+  '8. **一批多长看行数，不看条数**：判据是「预计这批的完成说明（每条 4~6 行）超过 ~80 行」',
+  '   或「队列本身 > 500 行」或「这一阶段的目标变了」——**条数只是经验值**（通常 8~12 条），',
+  '   不是上限。想再往里塞就说明该拆阶段了。同一会话里要拿新批次号跑：',
   '   `node .continue/hooks/queue-init.mjs --new-batch`（**不要自己编号**）。',
-  '   该拆的判据：预计 `DONE.md` 这一节 > 300 行 / 队列本身 > 500 行 / 这一阶段的目标已经变了。',
+  '9. **任务大过一个批次时，先写计划**：`doing/plan-<名字>.md`，用里程碑把任务切成若干**阶段**：',
+  '',
+  '```markdown',
+  '## MS1 · <里程碑名>',
+  '- 验收：`<这个里程碑做完要跑的命令>`',
+  '- [ ] `MS1.1` <这一阶段做什么> → 验收 `<命令>`',
+  '```',
+  '',
+  '   然后把**当前阶段**拆成本批条目，并在队列头部加一行 `> 计划：plan-<名字>.md` 绑定它。',
+  '   之后每做完一批：**自动从计划取下一阶段**（收尾时队列是"重置"而不是删除）；',
+  '   **完成到里程碑就停**——钩子会硬停，要你跑该里程碑的 `- 验收：` 并把结果贴出来，',
+  '   再弹窗问开发者"继续下一个 / 调整计划 / 先收在这里"。',
+  '   计划里同一时间只有一条 `[~]`（它就是游标）；`- 确认：已验收 · 批次 <号>` 是"人验收过"的凭证，',
+  '   **只在真的收到用户答复之后才写**，替用户写它等于自己给自己验收。',
   othersBlock,
 ].join('\n');
 
@@ -230,11 +252,14 @@ appendLog(sid, `注入会话信息 · 其他未完成队列 ${others.length} 份
  * 无论哪种生效不了，Stop 每轮都会重申队列路径，机制不会因此断掉。
  */
 if (process.env.QUEUE_INIT_STYLE === 'text') {
-  process.stdout.write(`${injection}\n`);
+  writeFd(1, `${injection}\n`);
   process.exit(0);
 }
 
-process.stdout.write(
+// `writeFd` 而不是 `process.stdout.write`：内容 ~5KB，异步写 + 紧跟 exit 会在中间截断，
+// 宿主拿到坏 JSON 就静默丢掉整个注入（见 lib.mjs 的 writeFd 注释）。
+writeFd(
+  1,
   `${JSON.stringify({
     continue: true,
     suppressOutput: true,

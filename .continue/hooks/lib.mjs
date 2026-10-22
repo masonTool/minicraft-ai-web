@@ -33,6 +33,7 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -974,13 +975,28 @@ export function milestoneComplete(plan, msId, alsoDone = null) {
 // ------------------------------------------------------------------ 输出
 
 /**
+ * **同步**写 fd（1 = stdout / 2 = stderr）。
+ *
+ * 为什么不用 `process.stdout.write`：stdout 是管道时它是**异步**的，紧跟其后的
+ * `process.exit()` 会把还没冲出去的尾巴直接丢掉。注入文本一长（协议 + 其他队列提醒 + 计划段），
+ * JSON 就在中间被截断——宿主拿到坏 JSON，表现是"这个钩子没反应"，**而且没有任何报错**。
+ *
+ * 真实踩到：计划机制上线时注入文本涨了约 1.5KB，自检当场红了两条，
+ * 但报的是"没有注入会话 ID"（因为 `JSON.parse` 抛了、ctx 变成空串），
+ * 差点被当成解析逻辑写错。`writeSync` 直接落到 fd 上，排完才返回，不存在这个问题。
+ */
+export function writeFd(fd, text) {
+  writeSync(fd, text);
+}
+
+/**
  * 放行。**唯一正常的停止条件**永远写在调用处，别在这里加默认值——
  * 否则"为什么没继续"和"为什么拦住了"都会变得说不清。
  */
 export function emitAllow(systemMessage) {
   const out = { continue: true, suppressOutput: true };
   if (systemMessage) out.systemMessage = systemMessage;
-  process.stdout.write(`${JSON.stringify(out)}\n`);
+  writeFd(1, `${JSON.stringify(out)}\n`);
   process.exit(0);
 }
 
@@ -993,7 +1009,7 @@ export function emitAllow(systemMessage) {
  * 两种解读下行为都正确。
  */
 export function emitBlock(feedback) {
-  process.stdout.write(`${JSON.stringify({ continue: true, suppressOutput: true })}\n`);
-  process.stderr.write(`${feedback}\n`);
+  writeFd(1, `${JSON.stringify({ continue: true, suppressOutput: true })}\n`);
+  writeFd(2, `${feedback}\n`);
   process.exit(2);
 }

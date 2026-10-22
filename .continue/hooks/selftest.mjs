@@ -376,7 +376,13 @@ try {
       /* 下面断言会报 */
     }
     if (!(first.code === 0 && ctx.includes('s-init') && /批次：\d{8}-\d{4}/.test(ctx))) {
-      return expect(false, '首条应注入会话 ID 与时间戳批次号', first);
+      // 解析失败时 ctx 是空的，光看"断言不成立"分不清是"没注入"还是"JSON 坏了"——
+      // 所以把解析出来的长度和原始输出尾巴一起带上（这两条踩过一次才加）。
+      return expect(
+        false,
+        `首条应注入会话 ID 与时间戳批次号（ctx 长 ${ctx.length}，原始输出尾 ${JSON.stringify(first.out.slice(-160))}）`,
+        first,
+      );
     }
     return expect(second.code === 0 && !second.out.includes('additionalContext'), '第二条应静默', second);
   });
