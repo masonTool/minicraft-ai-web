@@ -25,6 +25,23 @@ import {
   recordScore,
   saveProgress,
 } from '../src/minigame/progress.ts';
+import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
+import {
+  blockSizeForScore,
+  createRun,
+  currentBlock,
+  distanceForCharge,
+  gapForScore,
+  gapRangeForScore,
+  jump,
+  maxReachableGap,
+  nextBlock,
+  resolveLanding,
+  scoreForLanding,
+  specialKindFor,
+  targetBlock,
+  type JumpBlock,
+} from '../src/minigame/games/jump/logic.ts';
 
 let passed = 0;
 let failed = 0;
@@ -170,6 +187,151 @@ class MemoryStorage {
   get length(): number {
     return this.map.size;
   }
+}
+
+// ------------------------------------------------------------------ 跳一跳规则
+
+console.log('\n跳一跳：蓄力 → 距离（线性、夹紧）');
+{
+  equal('0 秒 → 0 格', distanceForCharge(0), 0);
+  check('蓄满 → maxDistance', Math.abs(distanceForCharge(JUMP_CONFIG.maxCharge) - JUMP_CONFIG.maxDistance) < 1e-9);
+  check('超过蓄满不超上限', Math.abs(distanceForCharge(99) - JUMP_CONFIG.maxDistance) < 1e-9);
+  equal('负数按 0', distanceForCharge(-1), 0);
+  equal('NaN 按 0', distanceForCharge(Number.NaN), 0);
+  check('单调递增', distanceForCharge(0.3) < distanceForCharge(0.6));
+  check(
+    '半程正好一半距离',
+    Math.abs(distanceForCharge(JUMP_CONFIG.maxCharge / 2) - JUMP_CONFIG.maxDistance / 2) < 1e-9,
+  );
+}
+
+console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达）');
+{
+  check('0 分边长为起始值', Math.abs(blockSizeForScore(0) - JUMP_CONFIG.blockSizeStart) < 1e-9);
+  check(
+    '封顶分边长到最小',
+    Math.abs(blockSizeForScore(JUMP_CONFIG.shrinkScore) - JUMP_CONFIG.blockSizeMin) < 1e-9,
+  );
+  const scores = [0, 10, 20, 30, 40, 50, 60, 120];
+  check(
+    '边长随分数单调不增',
+    scores.every((score, i) => i === 0 || blockSizeForScore(scores[i - 1]!) >= blockSizeForScore(score) - 1e-9),
+  );
+  check(
+    '间距范围永远 from ≤ to',
+    scores.every((score) => {
+      const range = gapRangeForScore(score);
+      return range.from <= range.to + 1e-9;
+    }),
+  );
+  check(
+    '间距上限永远可达（≤ maxDistance − margin）',
+    [0, 10, 30, 60, 200, 9999].every((score) => gapRangeForScore(score).to <= maxReachableGap() + 1e-9),
+  );
+  const low = gapRangeForScore(0);
+  const high = gapRangeForScore(JUMP_CONFIG.growScore);
+  check('间距随分数单调不减', high.from >= low.from - 1e-9 && high.to >= low.to - 1e-9);
+  check(
+    '随机值被夹在范围内',
+    [-1, 0, 0.5, 1, 2].every((rand) => {
+      const gap = gapForScore(30, rand);
+      const range = gapRangeForScore(30);
+      return gap >= range.from - 1e-9 && gap <= range.to + 1e-9;
+    }),
+  );
+}
+
+console.log('\n跳一跳：生成器（三方向、确定性、可达）');
+{
+  const run = createRun(12345);
+  equal('开局有当前 + 下一个两个方块', run.blocks.length, 2);
+  equal('开局站在 0 号', run.index, 0);
+  equal('开局 0 分', run.score, 0);
+
+  const seq = (seed: number): string =>
+    createRun(seed)
+      .blocks.map((block) => `${block.x.toFixed(6)},${block.z.toFixed(6)},${block.kind}`)
+      .join('|');
+  check('同 seed 生成同一条序列', seq(777) === seq(777));
+  check('不同 seed 生成不同序列', seq(777) !== seq(778));
+
+  let current: JumpBlock = createRun(1).blocks[0]!;
+  let seed = 999;
+  let score = 0;
+  const angles = new Set<number>();
+  let allDirections = true;
+  let allReachable = true;
+  let idsMonotonic = true;
+  for (let i = 0; i < 200; i++) {
+    const { block, seed: nextSeed } = nextBlock(current, score, seed);
+    const deg = Math.round((Math.atan2(-(block.x - current.x), -(block.z - current.z)) * 180) / Math.PI);
+    angles.add(deg);
+    if (!(deg === -30 || deg === 0 || deg === 30)) allDirections = false;
+    if (block.id !== current.id + 1) idsMonotonic = false;
+
+    const gap = Math.hypot(block.x - current.x, block.z - current.z);
+    const range = gapRangeForScore(score);
+    if (gap > maxReachableGap() + 1e-6 || gap < range.from - 1e-6 || gap > range.to + 1e-6) allReachable = false;
+
+    current = block;
+    seed = nextSeed;
+    score = Math.min(200, score + 1);
+  }
+  check('200 次生成只出现 −30/0/+30 三个方向', allDirections);
+  check('三个方向都会出现', angles.size === 3);
+  check('间距始终落在该分数的范围内且可达', allReachable);
+  check('方块 id 单调递增', idsMonotonic);
+}
+
+console.log('\n跳一跳：特殊方块');
+{
+  check('10 分前不出特殊方块', [0, 5, 9].every((score) => specialKindFor(score, 0, 'normal') === 'normal'));
+  check('概率命中时出音乐盒或魔方', ['music', 'cube'].includes(specialKindFor(50, 0, 'normal')));
+  check('上一个已经是特殊方块时不连续出', specialKindFor(50, 0, 'music') === 'normal');
+  check('概率未命中时是普通方块', specialKindFor(50, JUMP_CONFIG.specialChance + 0.01, 'normal') === 'normal');
+}
+
+console.log('\n跳一跳：落点判定与计分');
+{
+  const from: JumpBlock = { id: 0, x: 0, z: 0, size: 1.8, kind: 'normal' };
+  const to: JumpBlock = { id: 1, x: 0, z: -2, size: 1.8, kind: 'normal' };
+  const half = to.size / 2;
+
+  const perfect = resolveLanding(from, to, 2);
+  check('正中心 → hit + center', perfect.kind === 'hit' && perfect.center);
+  const edge = resolveLanding(from, to, 2 + half * 0.5);
+  check('偏半格 → hit 但非中心', edge.kind === 'hit' && !edge.center);
+  equal('偏过头（> 半边长）→ miss', resolveLanding(from, to, 2 + half * 1.2).kind, 'miss');
+  equal('跳不够（差 > 半边长）→ miss', resolveLanding(from, to, 2 - half * 1.2).kind, 'miss');
+  equal('0 距离 → miss', resolveLanding(from, to, 0).kind, 'miss');
+  equal('刚好压边（= 半边长）→ hit', resolveLanding(from, to, 2 + half).kind, 'hit');
+
+  equal('非中心 +1 且断连击', JSON.stringify(scoreForLanding(5, false)), JSON.stringify({ points: 1, combo: 0 }));
+  equal('第 1 次中心 +2', JSON.stringify(scoreForLanding(0, true)), JSON.stringify({ points: 2, combo: 1 }));
+  equal('第 2 次中心 +4', JSON.stringify(scoreForLanding(1, true)), JSON.stringify({ points: 4, combo: 2 }));
+  equal('第 3 次中心 +6', JSON.stringify(scoreForLanding(2, true)), JSON.stringify({ points: 6, combo: 3 }));
+  equal('封顶 +32', scoreForLanding(40, true).points, JUMP_CONFIG.comboMax);
+  equal('封顶后 combo 仍继续累加（只是分数不涨）', scoreForLanding(40, true).combo, 41);
+}
+
+console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
+{
+  const run = createRun(20261022);
+  const from = currentBlock(run);
+  const to = targetBlock(run);
+  const exact = Math.hypot(to.x - from.x, to.z - from.z);
+
+  const outcome = jump(run, exact);
+  check('正中心跳 → 不结束', !outcome.over);
+  equal('分数 +2', outcome.run.score, 2);
+  equal('索引 +1', outcome.run.index, 1);
+  equal('连击 1', outcome.run.combo, 1);
+  equal('方块数 +1（保证总有下一个）', outcome.run.blocks.length, run.blocks.length + 1);
+
+  const fell = jump(run, 0);
+  check('跳空 → 本局结束', fell.over && fell.run.status === 'over');
+  equal('失败不加分', fell.run.score, 0);
+  check('结束后再跳仍是 over（可重入）', jump(fell.run, exact).over);
 }
 
 console.log('\n最高分：纯函数');
