@@ -598,12 +598,25 @@ export function classify(trimmed) {
 }
 
 /**
+ * 队列**头部声明区**的行数：`# 标题` + 空行 + 4 个声明（状态 / 创建 / 批次 / 计划）。
+ *
+ * 为什么抽成一个常量、而不是每处各写 5：这扇窗口原来在三个地方各写了一遍
+ * （`hold` / `parseBatch` / `parsePlanRef`）。加 `> 计划：` 时只想起前两处，
+ * **第三处仍是 5，而标准头部里它正好是第 6 行**——于是"绑定计划"永远读不到，
+ * 且没有任何报错（实测：第 6 行返回 `null`，挪到第 5 行才认）。
+ * 同一个数字写两遍就会漂，这是本项目的老账。
+ *
+ * 为什么必须卡窗口、不能扫全文：正文里随便提一句模板（`> 状态：讨论中`、
+ * `> 计划：plan-x.md`）就能改变整份队列的行为，而且只给用户弹一句提示，
+ * AI 那边毫无感觉——排查起来像"钩子不干活"。
+ */
+export const QUEUE_HEAD_LINES = 6;
+
+/**
  * 返回 { entries, counts, hold }。
  * `hold` 对应队列头部的 `> 状态：讨论中`——表示"还没打算开工，别催"。
  *
- * ⚠️ 只扫**头部 5 行**，不能扫全文。以前是全文正则，结果正文里随便提一句
- * "状态：讨论中"（写备注、引用模板）就能把整份队列永久冻住，而且只给用户
- * 弹一句提示，AI 那边毫无感觉——排查起来像"钩子不干活"。
+ * ⚠️ 只扫**头部声明区**（`QUEUE_HEAD_LINES`），不能扫全文。
  */
 export function parseQueue(text) {
   const lines = text.split(/\r?\n/);
@@ -638,7 +651,7 @@ export function parseQueue(text) {
     entries,
     counts,
     total: entries.length,
-    hold: /状态\s*[:：]\s*讨论中/.test(lines.slice(0, 5).join('\n')),
+    hold: /状态\s*[:：]\s*讨论中/.test(lines.slice(0, QUEUE_HEAD_LINES).join('\n')),
   };
 }
 
@@ -726,11 +739,11 @@ export function nextBatch() {
  * `git log` 变成自相矛盾的一串）。取不到时**不要偷偷回退**——
  * 由调用处显式告警，见 `auto-continue.mjs`（静默回退是旧设计最隐蔽的坑）。
  *
- * 只看前 5 行，与 `hold` 的判定范围保持一致。
+ * 只看头部声明区（`QUEUE_HEAD_LINES`），与 `hold` 的判定范围保持一致。
  */
 export function parseBatch(text) {
   if (!text) return null;
-  const head = text.split(/\r?\n/).slice(0, 5).join('\n');
+  const head = text.split(/\r?\n/).slice(0, QUEUE_HEAD_LINES).join('\n');
   const matched = /^>\s*批次\s*[:：]\s*([0-9A-Za-z_-]+)\s*$/m.exec(head);
   return matched ? matched[1] : null;
 }
@@ -835,15 +848,21 @@ export function listPlans() {
 /**
  * 队列头部的 `> 计划：plan-mobile.md` —— 声明"这一批是从哪份计划里取出来的"。
  *
- * 只读**头部 5 行**，与 `> 状态：讨论中` 同一套口径：正文里引用一句模板不能把
- * 整份队列绑到别的计划上（这个坑 `hold` 已经踩过一次）。
+ * 只读**头部声明区**（`QUEUE_HEAD_LINES`），与 `> 状态：讨论中` 同一套口径：
+ * 正文里引用一句模板不能把整份队列绑到别的计划上（这个坑 `hold` 已经踩过一次）。
  *
  * 为什么把绑定写在队列里、而不是在计划里记"当前会话"：
  * 队列跟着批次进同一个提交，"这一批属于哪个计划"是**这一批**的事实；
  * 写进计划则一批结束就得回去改它，多一次无谓的写入和一份可能对不上的状态。
+ *
+ * **只认这一种写法**：`> 计划：<文件名>.md`，后面什么都不能跟。
+ * 曾经允许过 `· 阶段 MS2.1`（门禁侧还校验了它），但"当前阶段"本来就是从计划里
+ * 派生的（游标 = 第一条 `[~]`），写进队列头就是第二份副本、必然漂。
+ * 现在多写一个字的后果是**解析不出来**——所以门禁侧对"有 `计划` 字样却解析不出"
+ * 直接判红，不让它静默退化成普通队列。
  */
 export function parsePlanRef(text) {
-  const head = String(text ?? '').split(/\r?\n/).slice(0, 5).join('\n');
+  const head = String(text ?? '').split(/\r?\n/).slice(0, QUEUE_HEAD_LINES).join('\n');
   const m = /^>\s*计划\s*[:：]\s*([A-Za-z0-9._-]+\.md)\s*$/m.exec(head);
   return m ? m[1] : null;
 }
@@ -859,7 +878,7 @@ const STAGE_VERIFY_RE = /→\s*验收\s*`([^`]+)`/;
 /**
  * 解析 `doing/plan-*.md`。
  *
- * 结构（见 `README.md` §3.1）：
+ * 结构（细则见 `.continue/notes/plan.md`；`README.md` 只留一句指针，因为它有行数上限）：
  *
  *   ## MS2 · 横屏 HUD          ← 里程碑标题，`MS<n>` 前缀就是归属
  *   - 验收：`npm run test:hud`  ← 这一里程碑做完要跑的命令（硬停时的凭证）
@@ -948,8 +967,6 @@ export function parsePlan(text) {
     milestones,
     stages,
     cursor,
-    /** 计划里还能继续干（还有没勾掉的阶段）。 */
-    open: stages.some((s) => s.kind === 'todo' || s.kind === 'doing'),
   };
 }
 
