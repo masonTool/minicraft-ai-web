@@ -17,12 +17,14 @@
 > 新增一节追加在末尾；**单节 ≤ 15 行**，超了拆进 `notes/<模块>.md` 并在这里留一行索引。
 > 只写结论与理由，不贴大段代码（代码在 git 里，会漂）。
 
-### 索引：三份溢出文档
+### 索引：溢出文档
 
 > `notes/` 是本节的**溢出位**，不是第二套机制——这里只留一行索引。
 
 - **模块能力台账**（约 900 行的表，按模块名搜）→ [`notes/modules.md`](./notes/modules.md)
   （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
+- **历史经验总表**（2026-10-22 之前约 400 条，未按模块拆分，按关键词 grep）→
+  [`notes/tips-history.md`](./notes/tips-history.md)（2026-10-22 从 `TIPS.md` 整段迁出）
 - **操作型工作站**（熔炉 / 酿造台 / 营火 / 锻造台…的通用契约 + 站台矩阵 + 接入 checklist）→
   [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来）
 - **运维手册**（`window.__mc` 调试接口 + PWA / Pages / 套壳发布）→
