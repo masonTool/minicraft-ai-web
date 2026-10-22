@@ -348,6 +348,21 @@ console.log('\n存档仓与主程序接线（静态断言）');
   );
   const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   check('让位有对应样式', htmlSrc.includes('.tutorial-root.suppressed'));
+
+  // 2026-10-22 用户反馈：收起键与「不再提示」都点不动。
+  // 根因是触摸端的 `#touch-look` 铺满全屏、在 DOM 里排在 `#hud-right` 之后，
+  // 卡片不抬层的话点击全被它吃掉（与 `#hotbar` 当年同一个坑）。
+  check(
+    '引导卡抬了层（否则全屏视角面会吃掉点击）',
+    /\.tutorial-root\s*\{[^}]*position:\s*relative[^}]*z-index:\s*[1-9]/.test(htmlSrc),
+  );
+
+  // 同一天的另一条反馈："生存模式找不到铁" —— 引导的说明要给出可执行的位置
+  const i18nSrc = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
+  check(
+    '铁镐一步说了铁矿石在哪找（y≈16）',
+    i18nSrc.includes("'tutorial.survival.ironPickaxe.desc': '铁矿石在地下 y≈16"),
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

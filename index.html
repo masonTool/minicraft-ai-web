@@ -1136,7 +1136,12 @@
          ⚠️ `min(38vw, 320px)` 与 `src/ui/tutorialLayout.ts` 的 0.38 / 320 是同一口径：
             640×360 横屏下暂停三键右边界 361px，卡片左边界 389px，两边不重叠。
             改一处必须改另一处。 */
-      .tutorial-root { pointer-events: auto; }
+      /* ⚠️ 必须抬一层（与 `#hotbar` 同一条处方）：触摸端的视角面 `#touch-look`
+         铺满全屏、`pointer-events: auto`，而它在 DOM 里排在 `#hud-right` 之后——
+         不抬层的话手指点下去命中的是视角面（表现：卡片看得见，但收起键与
+         「不再提示」都点不动，反倒把身后的方块挖了）。`position: relative`
+         让 z-index 不依赖"flex 子项也适用"这一条浏览器细节。 */
+      .tutorial-root { pointer-events: auto; position: relative; z-index: 1; }
       .tutorial-root.hidden { display: none; }
       /* 面板打开时让位：背包/配方书的遮罩是半透明的，底下透出卡片会很乱 */
       .tutorial-root.suppressed { display: none; }

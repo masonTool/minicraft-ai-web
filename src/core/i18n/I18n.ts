@@ -526,7 +526,9 @@ const ZH: Readonly<Record<string, string>> = {
   'tutorial.survival.furnace.title': '做一个熔炉',
   'tutorial.survival.furnace.desc': '8 块圆石围成一圈',
   'tutorial.survival.ironPickaxe.title': '烧铁，做铁镐',
-  'tutorial.survival.ironPickaxe.desc': '粗铁放进熔炉，烧成铁锭再合成',
+  // 补"在哪找"（2026-10-22 用户反馈：新手在地下找不到铁）：只写最实用的一句，
+  // 卡片在矮横屏只显示两行说明，写长了会被截断
+  'tutorial.survival.ironPickaxe.desc': '铁矿石在地下 y≈16 最多（往下挖约 50 格），烧成铁锭再做',
   'tutorial.survival.bed.title': '做一张床',
   'tutorial.survival.bed.desc': '3 块羊毛 + 3 块木板，晚上就能睡',
   'tutorial.survival.house.title': '盖一间小屋',
@@ -1019,7 +1021,7 @@ const EN: Readonly<Record<string, string>> = {
   'tutorial.survival.furnace.title': 'Craft a furnace',
   'tutorial.survival.furnace.desc': 'Ring 8 cobblestone pieces',
   'tutorial.survival.ironPickaxe.title': 'Smelt iron, craft an iron pickaxe',
-  'tutorial.survival.ironPickaxe.desc': 'Smelt raw iron into ingots, then craft',
+  'tutorial.survival.ironPickaxe.desc': 'Iron ore is densest near y=16 (dig ~50 blocks down), then smelt it',
   'tutorial.survival.bed.title': 'Craft a bed',
   'tutorial.survival.bed.desc': '3 wool + 3 planks, so you can sleep at night',
   'tutorial.survival.house.title': 'Build a little house',
