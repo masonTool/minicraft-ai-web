@@ -1291,6 +1291,26 @@
         color: #9fb3c8; font-size: 12px; pointer-events: none;
       }
 
+      /* 推箱子的关卡 HUD（小游戏4）：左下角状态 + 撤销/重来 */
+      .sokoban-hud {
+        position: absolute;
+        left: calc(8px + env(safe-area-inset-left, 0px));
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        display: flex; flex-direction: column; gap: 6px;
+        pointer-events: none;
+      }
+      .sokoban-status {
+        color: #e8eef4; font-size: 13px;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
+      }
+      .sokoban-actions { display: flex; gap: 6px; pointer-events: auto; }
+      .sokoban-actions button {
+        min-height: 40px; padding: 6px 12px;
+        font: inherit; font-size: 13px; color: #fff;
+        background: rgba(30, 30, 30, .85);
+        border: 2px solid #5a5a5a; border-radius: 4px;
+      }
+
       /* ---------------- 小游戏选择页（小游戏3，批次 20261022-1954） ----------------
          与主菜单同一套深色框；z-index 45（高于主菜单 40、低于设置 50）。
          横屏矮屏靠 max-height + overflow 自滚，不多做一栏。 */

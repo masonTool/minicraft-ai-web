@@ -17,6 +17,16 @@ import { buildBlockGroups, groupInstanceCount } from '../src/minigame/blockGroup
 import { levelBlocks, parseLevel } from '../src/minigame/level.ts';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
 import {
+  createSokobanState,
+  isSokobanDeadlocked,
+  isSokobanWon,
+  moveSokoban,
+  undoSokoban,
+  type SokobanDirection,
+  type SokobanState,
+} from '../src/minigame/games/sokoban/logic.ts';
+import { SOKOBAN_LEVELS, sokobanLevel } from '../src/minigame/games/sokoban/levels.ts';
+import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
   bestSteps,
@@ -295,6 +305,180 @@ console.log('\n主菜单入口（静态断言）');
   check('返回键先退小游戏', mainSrc.includes('activeMenuMiniGame.stop()'));
   check('选择页返回逐级', mainSrc.includes('miniGameMenu.back()'));
   check('退出时释放 renderer', mainSrc.includes('renderer.dispose()'));
+}
+
+// ------------------------------------------------------------------ 推箱子
+
+console.log('\n推箱子：推动、胜利与步数');
+{
+  const parsed = parseLevel(sokobanLevel(0));
+  check('第 1 关解析成功', parsed.ok, parsed.ok ? '' : parsed.errors.join('; '));
+  if (!parsed.ok) {
+    // 后面的断言都依赖它
+  } else {
+    const initial = createSokobanState(parsed.level);
+    equal('初始步数 0', initial.steps, 0);
+    equal('初始推动次数 0', initial.pushes, 0);
+    equal('初始不胜利', isSokobanWon(initial), false);
+
+    const up = moveSokoban(initial, 'up');
+    check('向上推一步成功', up.ok);
+    if (up.ok) {
+      equal('推了箱子', up.pushed, true);
+      equal('立刻胜利（教学关）', up.won, true);
+      equal('步数 1', up.state.steps, 1);
+      equal('推动次数 1', up.state.pushes, 1);
+    }
+
+    // 撞墙：玩家初始在 (3,4)，往下走两格到 (3,6) 是边界墙
+    const down1 = moveSokoban(initial, 'down');
+    check('往下走一格成功', down1.ok);
+    if (down1.ok) {
+      const down2 = moveSokoban(down1.state, 'down');
+      equal('撞墙整步不生效', down2.ok, false);
+      if (!down2.ok) equal('原因 wall', down2.reason, 'wall');
+    }
+  }
+}
+
+console.log('\n推箱子：推不动（两箱挡住）');
+{
+  const packed = parseLevel({
+    id: 'packed',
+    width: 5,
+    height: 1,
+    depth: 3,
+    stepLimit: 50,
+    rows: [['#####', '#PBB#', '#..G#']],
+  });
+  check('两箱关卡解析成功', packed.ok, packed.ok ? '' : packed.errors.join('; '));
+  if (packed.ok) {
+    const state = createSokobanState(packed.level);
+    const blocked = moveSokoban(state, 'right');
+    equal('箱子后面还有一个箱子：推不动', blocked.ok, false);
+    if (!blocked.ok) equal('原因 blocked', blocked.reason, 'blocked');
+    equal('推动失败不改变状态', state.pushes, 0);
+  }
+}
+
+console.log('\n推箱子：撤销');
+{
+  const parsed = parseLevel(sokobanLevel(0));
+  if (parsed.ok) {
+    const initial = createSokobanState(parsed.level);
+    equal('初始状态撤销返回 null', undoSokoban(initial), null);
+
+    const step = moveSokoban(initial, 'up');
+    if (step.ok) {
+      const back = undoSokoban(step.state);
+      equal('撤销回到原位', `${back?.playerX},${back?.playerZ}`, `${initial.playerX},${initial.playerZ}`);
+      equal(
+        '撤销后箱子回到原位',
+        [...(back?.boxes ?? [])].sort().join(';'),
+        [...initial.boxes].sort().join(';'),
+      );
+      equal('撤销后步数归零', back?.steps, 0);
+      equal('撤销后推动次数归零', back?.pushes, 0);
+
+      const again = back ? undoSokoban(back) : null;
+      equal('再撤一步就没有了', again, null);
+    }
+  }
+}
+
+console.log('\n推箱子：胜利判定（不在目标不判胜）');
+{
+  const parsed = parseLevel(sokobanLevel(0));
+  if (parsed.ok) {
+    const initial = createSokobanState(parsed.level);
+    const onGoal: SokobanState = { ...initial, boxes: new Set(['3,2']) };
+    const notYet: SokobanState = { ...initial, boxes: new Set(['3,3']) };
+    equal('箱子在目标上判胜', isSokobanWon(onGoal), true);
+    equal('箱子不在目标不判胜', isSokobanWon(notYet), false);
+  }
+}
+
+console.log('\n推箱子：死锁识别');
+{
+  const parsed = parseLevel(sokobanLevel(0));
+  if (parsed.ok) {
+    const initial = createSokobanState(parsed.level);
+    equal('角落里的箱子算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['1,1']) }), true);
+    equal('目标上的箱子不算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['3,2']) }), false);
+    equal('开阔地不算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['2,2']) }), false);
+  }
+}
+
+console.log('\n推箱子：步数上限');
+{
+  const tight = parseLevel({ ...sokobanLevel(0), stepLimit: 1 });
+  if (tight.ok) {
+    const state = createSokobanState(tight.level);
+    const first = moveSokoban(state, 'left');
+    check('第 1 步没超上限', first.ok && !first.limitReached);
+    if (first.ok) {
+      const second = moveSokoban(first.state, 'left');
+      check('第 2 步超过上限', second.ok && second.limitReached);
+    }
+  }
+}
+
+console.log('\n推箱子：10 关全部可解（BFS）');
+{
+  const encode = (state: SokobanState): string =>
+    `${state.playerX},${state.playerZ}|${[...state.boxes].sort().join(';')}`;
+
+  /** 宽度优先找一条解（只用于测试；状态空间很小） */
+  const solve = (start: SokobanState, maxStates = 200_000): SokobanDirection[] | null => {
+    const seen = new Set([encode(start)]);
+    const queue: Array<{ state: SokobanState; path: SokobanDirection[] }> = [{ state: start, path: [] }];
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head++]!;
+      if (isSokobanWon(current.state)) return current.path;
+      if (current.path.length >= 150) continue;
+      for (const direction of ['up', 'down', 'left', 'right'] as const) {
+        const result = moveSokoban(current.state, direction);
+        if (!result.ok) continue;
+        const key = encode(result.state);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (seen.size > maxStates) return null;
+        queue.push({ state: result.state, path: [...current.path, direction] });
+      }
+    }
+    return null;
+  };
+
+  for (let index = 0; index < SOKOBAN_LEVELS.length; index++) {
+    const parsed = parseLevel(SOKOBAN_LEVELS[index]!);
+    if (!parsed.ok) {
+      check(`第 ${index + 1} 关解析`, false, parsed.errors.join('; '));
+      continue;
+    }
+    const solution = solve(createSokobanState(parsed.level));
+    check(`第 ${index + 1} 关可解`, solution !== null, solution ? `${solution.length} 步` : '不可解');
+    if (solution) {
+      check(
+        `第 ${index + 1} 关在上限内可解（${solution.length} ≤ ${parsed.level.stepLimit}）`,
+        parsed.level.stepLimit === 0 || solution.length <= parsed.level.stepLimit,
+      );
+    }
+  }
+}
+
+console.log('\n推箱子：接线静态断言');
+{
+  const sokobanSrc = readFileSync(new URL('../src/minigame/games/sokoban/scene.ts', import.meta.url), 'utf8');
+  check('滑动阈值存在', sokobanSrc.includes('SWIPE_THRESHOLD'));
+  check('轻点按位置判方向', sokobanSrc.includes('directionOf(pointer.x - 0.5'));
+  check('键盘方向键与 WASD', sokobanSrc.includes('ArrowUp') && sokobanSrc.includes('KeyW'));
+  check('过关回调写进度', sokobanSrc.includes('onCleared?.(result.state.steps)'));
+  check('死锁只提示（不判负）', sokobanSrc.includes("t('minigame.sokoban.deadlock')"));
+  check('过关相机庆祝', sokobanSrc.includes('private celebrate('));
+  check('主菜单按 gameId 进推箱子', mainSrc.includes('new SokobanGame(level, { onCleared })'));
+  check('过关写进度', mainSrc.includes('recordClear(loadProgress(), gameId, level, steps)'));
+  check('主菜单路径 Esc 退出', mainSrc.includes('activeMenuMiniGame?.stop()'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

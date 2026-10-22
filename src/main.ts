@@ -707,7 +707,8 @@ import { SmokeGame } from './minigame/games/smoke.ts';
 import type { MiniGame } from './minigame/types.ts';
 // 小游戏3：主菜单入口、选择页与本地进度
 import { MiniGameMenu } from './ui/MiniGameMenu.ts';
-import { loadProgress } from './minigame/progress.ts';
+import { loadProgress, recordClear, saveProgress } from './minigame/progress.ts';
+import { SokobanGame } from './minigame/games/sokoban/scene.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -18408,6 +18409,16 @@ async function boot(): Promise<void> {
       () => renderer.setSize(window.innerWidth, window.innerHeight),
       { signal: listeners.signal },
     );
+    // 主菜单这条路径没有 App 的按键守卫：Esc 得自己接（否则桌面玩家只能用退出按钮）
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.code !== 'Escape') return;
+        event.preventDefault();
+        activeMenuMiniGame?.stop();
+      },
+      { signal: listeners.signal },
+    );
 
     let host: MiniGameHost | null = null;
     host = new MiniGameHost(document.body, {
@@ -18441,9 +18452,17 @@ async function boot(): Promise<void> {
     requestAnimationFrame(loop);
   };
 
-  /** 选关 → 进入（T12/T13 会按 gameId 换成推箱子 / 打砖块；现在统一进框架自检游戏） */
-  const startMiniGameFromMenu = (_gameId: string, _level: number): void => {
+  /** 选关 → 进入（推箱子已接入；打砖块在 T13 补上） */
+  const startMiniGameFromMenu = (gameId: string, level: number): void => {
     miniGameMenu?.hide();
+    // 过关时写一次进度：只记"通关 + 更少步数"，与世界存档无关
+    const onCleared = (steps: number): void => {
+      saveProgress(recordClear(loadProgress(), gameId, level, steps));
+    };
+    if (gameId === 'sokoban') {
+      runStandaloneMiniGame(new SokobanGame(level, { onCleared }));
+      return;
+    }
     runStandaloneMiniGame(new SmokeGame());
   };
 
