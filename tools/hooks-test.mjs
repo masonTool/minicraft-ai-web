@@ -53,6 +53,26 @@ function check(name, cond, detail = '') {
 
 const queuePath = (sid) => join(queuesDir, `${sid}.md`);
 const statePath = (sid, ns = '') => join(logsDir, `${sid}${ns ? `.${ns}` : ''}.state.json`);
+const logFilePath = (sid) => join(logsDir, `${sid}.md`);
+
+/** 读日志正文（不存在就当空串）。 */
+function readLog(sid) {
+  try {
+    return readFileSync(logFilePath(sid), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 删掉用例自己的日志（含轮转位 `.1`~`.3`）。
+ *
+ * ⚠️ 用例跑完只清队列和状态、不清日志的话，`logs/` 会攒下一堆 `hooks-test-*.md`，
+ * 而 `logs/` 本来只该放"真干活的会话"的时间线——那正是用户抱怨过的无效日志。
+ */
+function rmLog(sid) {
+  for (const suffix of ['', '.1', '.2', '.3']) rmSync(`${logFilePath(sid)}${suffix}`, { force: true });
+}
 
 /**
  * 用一份临时队列跑一段，结束后原样还原（原本不存在就删掉）。
@@ -73,6 +93,7 @@ function withQueue(sid, content, fn) {
     // 用例自己的轮次/缓存状态也一起清掉，避免下一轮读回旧计数
     // （`statePath` 自己会补一个点，所以命名空间写 `init` / `commit`，不要写成 `.init`）
     for (const suffix of ['', 'init', 'commit']) rmSync(statePath(sid, suffix), { force: true });
+    rmLog(sid);
   }
 }
 
@@ -570,6 +591,121 @@ console.log('\n[目录分工]');
   // 旧机制必须彻底下线：再出现两份队列文件，钩子会各读一份、互相打脸
   check('旧队列文件已迁移', !existsSync(join(projectRoot, '.codebuddy', 'hooks', 'process', 'auto-continue.md')));
   check('旧钩子脚本已删除', !existsSync(join(projectRoot, '.codebuddy', 'hooks', 'auto-continue.mjs')));
+}
+
+// ---------------------------------------------------------------- 日志
+
+console.log('\n[日志]');
+
+{
+  /**
+   * 2026-10-22 用户要求：日志只留**有效信息**——纯问答会话不留痕、时间用**本地时区**、
+   * 关键节点（初始化 / 回灌 / 拦截 / 隔离 / 收尾）必须一眼能看出来。
+   *
+   * 这几条断言守的是"日志还能不能用来回答『续跑到底有没有发生』"：
+   * 记成 UTC 要对时区；没有队列的会话每轮刷一行"放行"，真事件被淹掉。
+   */
+  const sid = 'hooks-test-log-1';
+  rmSync(queuePath(sid), { force: true });
+  rmSync(statePath(sid, 'init'), { force: true });
+  rmLog(sid);
+  runHook('queue-init.mjs', {
+    hook_event_name: 'UserPromptSubmit',
+    session_id: sid,
+    prompt: '你好，随便问个问题',
+  });
+  check('没有队列的会话不产生日志文件', !existsSync(logFilePath(sid)), readLog(sid).slice(0, 160));
+
+  const libSrc = readFileSync(join(hooksDir, 'lib.mjs'), 'utf8');
+  check('appendLog 只给有队列的会话写', /if \(!existsSync\(queuePath\(sid\)\)\) return;/.test(libSrc));
+  check('时间戳走本地时间函数', /appendFileSync\(file, `\$\{header\}- \$\{localStamp\(\)\}/.test(libSrc));
+
+  const commitSrc2 = readFileSync(join(hooksDir, 'auto-commit.mjs'), 'utf8');
+  check(
+    '不再记「工作区干净」这类每轮噪音',
+    !/appendLog\([^)]*工作区干净/.test(commitSrc2),
+    '工作区干净时不该写日志（每轮都会走到这里）',
+  );
+  const continueSrc = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
+  check('不再记「本会话尚未创建队列」', !/尚未创建队列/.test(continueSrc));
+}
+
+{
+  // 有队列 → 初始化 + 拦截递任务都要记，而且时间戳是本地时间
+  const sid = 'hooks-test-log-2';
+  rmSync(statePath(sid), { force: true });
+  rmSync(statePath(sid, 'init'), { force: true });
+  rmLog(sid);
+  withQueue(sid, MIN_QUEUE, () => {
+    runHook('queue-init.mjs', { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: '开始' });
+    runHook('auto-continue.mjs', stopEvent(sid));
+
+    const log = readLog(sid);
+    check('日志开头声明本地时间与时区', /^# 会话 .*（本地时间 [+-]\d{2}:\d{2}）/m.test(log), log.slice(0, 90));
+    check('记下会话初始化（注入了什么）', /会话初始化 · UserPromptSubmit/.test(log));
+    check('记下拦截与递出的条目', /拦截 · Stop 第1轮 · 递任务：「hooks-test 占位条目/.test(log), log);
+    check(
+      '时间戳是本地时间（不是 UTC 的 T…Z）',
+      /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} · /m.test(log) && !/\dT\d{2}:\d{2}:\d{2}\.\d{3}Z/.test(log),
+      log.split('\n').find((line) => line.startsWith('- ')) ?? '',
+    );
+  });
+}
+
+{
+  // 回灌不归零轮次：日志里的「第N轮」要能看出这一轮已经续了几次
+  const sid = 'hooks-test-log-3';
+  rmSync(statePath(sid), { force: true });
+  rmLog(sid);
+  withQueue(sid, MIN_QUEUE, () => {
+    runHook('auto-continue.mjs', stopEvent(sid));
+    // 回灌时平台会并行跑 UserPromptSubmit 上的两个钩子，这里照实复现
+    const echoed = {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: sid,
+      prompt: '[auto-continue 第1轮 · 批次 1 · 会话 hooks-te] 这一轮做这一条…',
+    };
+    runHook('queue-init.mjs', echoed);
+    runHook('auto-continue.mjs', echoed);
+    runHook('auto-continue.mjs', stopEvent(sid));
+    const log = readLog(sid);
+
+    check('记下回灌（注入已被客户端接住）', /回灌 · UserPromptSubmit · 第1轮任务反馈已到达客户端/.test(log), log);
+    check('回灌那一轮不把轮次归零（第2轮还在）', /拦截 · Stop 第2轮 · 递任务/.test(log), log);
+
+    // 用户真的开口 → 才该归零重新计
+    runHook('auto-continue.mjs', promptEvent(sid));
+    runHook('auto-continue.mjs', stopEvent(sid));
+    const rounds = (readLog(sid).match(/拦截 · Stop 第1轮/g) ?? []).length;
+    check('用户发言后轮次归零（重新从第1轮计）', rounds === 2, `第1轮出现 ${rounds} 次`);
+  });
+}
+
+{
+  // 同一件事连着重复只写一次，否则「等回复」「队列是空的」会把真事件淹掉
+  const sid = 'hooks-test-log-4';
+  rmSync(statePath(sid), { force: true });
+  rmLog(sid);
+  withQueue(sid, '# 队列\n\n> 状态：讨论中\n\n- [ ] 讨论中的条目：x → y\n', () => {
+    for (let i = 0; i < 3; i += 1) runHook('auto-continue.mjs', stopEvent(sid));
+    const hits = (readLog(sid).match(/放行 · Stop · 队列头部是「状态：讨论中」/g) ?? []).length;
+    check('连续相同的一行只写一次', hits === 1, `出现 ${hits} 次`);
+  });
+}
+
+// ---------------------------------------------------------------- 收尾清理
+
+/**
+ * 用例自己造的 `hooks-test-*` 运行时产物（`.state.json` / `.md`）全部删掉。
+ * `logs/` 只该放**真会话**的时间线——用例残留会混进去，翻日志时认不出哪份是干活的。
+ * 用前缀扫一遍而不是逐个删：漏写一处的代价是把噪音永久留在用户机器上。
+ */
+{
+  for (const name of readdirSync(logsDir)) {
+    if (name.startsWith('hooks-test-')) rmSync(join(logsDir, name), { force: true });
+  }
+  const leftovers = readdirSync(logsDir).filter((name) => name.startsWith('hooks-test-'));
+  check('用例不留运行时产物在 logs/', leftovers.length === 0, leftovers.join(' | '));
 }
 
 // ---------------------------------------------------------------- 汇总

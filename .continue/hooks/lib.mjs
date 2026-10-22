@@ -142,25 +142,83 @@ export function saveState(sid, state, ns = '') {
  * 超过 512KB 轮转：`<sid>.md` → `<sid>.md.1` → `.2` → `.3`（最旧的被覆盖）。
  * 长跑会跑几百上千轮，日志不能无限长。**别写"不删数据"**——轮转位固定，
  * 最旧那份必然被挤掉（旧的实现直接覆盖 `.1`，连上一份都不留）。
+ *
+ * 两条"只留有效信息"的规则（2026-10-22 按用户要求改的）：
+ *
+ *   1. **只给「有队列的会话」记**：纯问答会话每轮 Stop 也会跑到这里，记下来只有
+ *      `放行 · 本会话尚未创建队列` 之类一行一行的噪音，翻日志时还得先认出"哪份是干活的"。
+ *      队列文件不存在 → 直接不写（连日志文件都不创建）。
+ *      要排查"钩子到底有没有被调用"，手动喂一条事件（HANDOFF §4），别指望这个文件。
+ *   2. **同一件事连着重复只写一次**：多轮"等用户回复""队列是空的"内容完全一样，
+ *      重复写只会把真正发生的事（拦截 / 隔离 / 自测失败）淹掉。时间戳不参与比较。
  */
 const LOG_MAX_BYTES = Number(process.env.CONTINUE_LOG_MAX ?? 512 * 1024);
 const LOG_KEEP = 3;
 
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * 日志时间戳用**本地时间**（`2026-10-22 08:15:32`）。
+ *
+ * 以前是 `toISOString()`（UTC）：日志里 `00:15`、屏幕上是 `08:15`，
+ * 每次对时间都要在脑子里换算一次。日志是给人看的，就别让人算。
+ */
+export function localStamp(date = new Date()) {
+  return (
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+  );
+}
+
+/** 时区偏移（`+08:00`）。只写在日志头，避免每行都拖着。 */
+export function localOffset(date = new Date()) {
+  const minutes = -date.getTimezoneOffset();
+  const sign = minutes >= 0 ? '+' : '-';
+  const abs = Math.abs(minutes);
+  return `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+}
+
+/** 把 `- 2026-10-22 08:15:32 · 正文` 里的时间戳剥掉，只留正文（去重比较用）。 */
+function stripStamp(line) {
+  return line.replace(/^-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*·\s*/, '').replace(/^-\s*\S+\s*·\s*/, '');
+}
+
 export function appendLog(sid, line) {
   try {
+    // 规则 1：没有队列的会话不产生任何日志（连文件都不建）
+    if (!existsSync(queuePath(sid))) return;
+
     mkdirSync(LOGS_DIR, { recursive: true });
     const file = logPath(sid);
+
+    let existed = true;
     try {
       if (statSync(file).size > LOG_MAX_BYTES) {
         for (let i = LOG_KEEP; i > 1; i -= 1) {
           if (existsSync(`${file}.${i - 1}`)) renameSync(`${file}.${i - 1}`, `${file}.${i}`);
         }
         renameSync(file, `${file}.1`);
+        existed = false;
       }
     } catch {
-      /* 文件还不存在，正常 */
+      existed = false; // 文件还不存在，正常
     }
-    appendFileSync(file, `- ${new Date().toISOString()} · ${line}\n`);
+
+    // 规则 2：与上一行说的是同一件事 → 跳过（重复的时间点本身没有信息量）
+    if (existed) {
+      try {
+        const text = readFileSync(file, 'utf8').trimEnd();
+        const last = text.split(/\r?\n/).pop() ?? '';
+        if (!last.startsWith('#') && stripStamp(last) === line) return;
+      } catch {
+        /* 读不到就当没有上一行 */
+      }
+    }
+
+    const header = existed ? '' : `# 会话 ${sid} 运行日志（本地时间 ${localOffset()}）\n\n`;
+    appendFileSync(file, `${header}- ${localStamp()} · ${line}\n`);
   } catch {
     /* 日志失败绝不影响判定 */
   }

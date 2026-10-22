@@ -53,10 +53,18 @@ const payload = readPayload();
 const event = detectEvent(payload);
 const sid = sessionId(payload);
 
-// 用户主动说话 → 轮次归零（人工介入后重新计）。
-// 只有把本脚本也注册到 UserPromptSubmit 才会走到这里，见 SKILL.md 的注册说明。
+/**
+ * 用户主动说话 → 轮次归零（人工介入后重新计）。
+ * 只有把本脚本也注册到 UserPromptSubmit 才会走到这里，见 SKILL.md 的注册说明。
+ *
+ * ⚠️ **钩子自己回灌的那一轮不算"用户说话"**：Stop 的反馈会被客户端当成一条新的
+ * UserPromptSubmit 再走一遍本脚本，如果照样归零，`state.count` 永远停在 1
+ * （日志里每轮都是「第1轮」，看不出"已经续了几轮"）。所以回灌来的那条只放行、不归零。
+ */
+const promptText = typeof payload.prompt === 'string' ? payload.prompt : '';
 if (event === 'UserPromptSubmit') {
-  if (sid) {
+  const injected = /auto-continue\s*第\s*\d+\s*轮/.test(promptText);
+  if (sid && !injected) {
     const resetState = loadState(sid);
     resetState.count = 0;
     saveState(sid, resetState);
@@ -72,7 +80,7 @@ if (event !== 'Stop') emitAllow();
  */
 const OFF_FILE = join(CONTINUE_DIR, 'auto-continue.off');
 if (existsSync(OFF_FILE)) {
-  if (sid) appendLog(sid, 'Stop · 放行 · 存在刹车文件 auto-continue.off');
+  if (sid) appendLog(sid, '放行 · Stop · 存在刹车文件 auto-continue.off（自动续跑已关）');
   emitAllow('自动继续已关闭（存在 .continue/auto-continue.off），删除该文件即可恢复。');
 }
 
@@ -81,14 +89,11 @@ if (!sid) emitAllow('未拿到 session_id，无法推导队列路径，跳过。
 const file = queuePath(sid);
 const queue = readQueue(file);
 
-// 没有队列 = 用户只是在问问题/聊天 → 一次都不要拦。
-if (!queue) {
-  appendLog(sid, 'Stop · 放行 · 本会话尚未创建队列');
-  emitAllow();
-}
+// 没有队列 = 用户只是在问问题/聊天 → 一次都不要拦（也不记日志，见 lib.appendLog）。
+if (!queue) emitAllow();
 
 if (queue.hold) {
-  appendLog(sid, 'Stop · 放行 · 队列头部标记为「状态：讨论中」');
+  appendLog(sid, '放行 · Stop · 队列头部是「状态：讨论中」，本轮不递任务');
   emitAllow('队列处于「讨论中」状态，钩子不递任务。改成「状态：执行中」后开始执行。');
 }
 
@@ -130,12 +135,12 @@ if (!pick) {
   if (queue.entries.length === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, 'Stop · 放行 · 队列是空的');
+    appendLog(sid, '放行 · Stop · 队列里没有任何条目');
     emitAllow('队列里没有任何条目。没有要做的就删掉这个队列文件。');
   }
 
   if (state.askedComplete) {
-    appendLog(sid, 'Stop · 放行 · 已请用户确认收尾，等回复');
+    appendLog(sid, '放行 · Stop · 已请用户确认收尾，等回复');
     emitAllow('已经请用户确认收尾了，等他们回复；确认后再更新 DONE.md 与 TASKS.md。');
   }
 
@@ -144,7 +149,7 @@ if (!pick) {
   saveState(sid, state);
   appendLog(
     sid,
-    `Stop · 待确认 · 完成 ${queue.counts.done} 条 / 卡住 ${queue.counts.blocked} 条`,
+    `拦截 · Stop · 队列已清空（完成 ${queue.counts.done} 条 / 阻塞 ${queue.counts.blocked} 条）→ 请用户确认收尾`,
   );
 
   const blocked = queue.entries.filter((entry) => entry.kind === 'blocked');
@@ -202,7 +207,7 @@ saveState(sid, state);
 let justBlocked = null;
 if (streak >= BLOCKED_MAX) {
   markBlocked(file, fp);
-  appendLog(sid, `Stop · 隔离 · 连续 ${streak} 轮未完成 → 标 [阻塞] · ${fp.slice(0, 40)}`);
+  appendLog(sid, `隔离 · Stop · 连续 ${streak} 轮未完成 → 标 [阻塞]：「${fp.slice(0, 60)}」`);
   justBlocked = { streak, text: fp };
 
   // 重置连续计数：用户将来改回 `[ ]` 时重新得到 N 次机会
@@ -217,7 +222,7 @@ if (streak >= BLOCKED_MAX) {
   if (!pick || unfinishedCount(after) === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, 'Stop · 放行 · 没有别的活，等待收尾确认');
+    appendLog(sid, '放行 · Stop · 没有别的活，等收尾确认');
     emitAllow(
       `这一条连续 ${streak} 轮没做完，已标 [阻塞] 隔离。队列里没有别的待办了，` +
         '下次停下会请你确认收尾。',
@@ -249,13 +254,16 @@ const blockedCount = current.counts.blocked;
 // 所以"是否续做 [~]"要以最终的 pick 为准，否则文案会张冠李戴。
 const resumedNow = Boolean(pick && pick.resumed);
 
-if (justBlocked) {
-  appendLog(sid, `Stop · 递任务（已隔离上一条）· 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
-} else if (resumedNow) {
-  appendLog(sid, `Stop · 继续进行中的条目 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
-} else {
-  appendLog(sid, `Stop · 递任务 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
-}
+/**
+ * 这一行是整份日志里最重要的一条：**钩子拦住 AI、并把哪一条任务注入回去了**。
+ * 排查"到底续没续上"就靠它 + `queue-init` 的「回灌」行成对出现：
+ *   有「拦截」没有「回灌」= 客户端没接住（批次 1364 实测就卡在这里）。
+ */
+const action = justBlocked ? '递任务（上一条已隔离）' : resumedNow ? '继续 [~] 进行中的条目' : '递任务';
+appendLog(
+  sid,
+  `拦截 · Stop 第${state.count}轮 · ${action}：「${fp}」 · 队列剩 ${remaining} 条 · 已注入给客户端`,
+);
 
 /**
  * 「发现风险就弹窗」，替代"上下文超阈值就打断让人换会话"。

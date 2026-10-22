@@ -22,6 +22,7 @@ import {
   emitAllow,
   listQueues,
   loadState,
+  localOffset,
   queuePath,
   readPayload,
   readQueue,
@@ -41,8 +42,10 @@ if (!sid) emitAllow();
 const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
 
 // ① 钩子回灌的消息：内容里带轮次标记，说明这是 auto-continue 递进来的任务，不是用户说话。
-if (/auto-continue\s*第\s*\d+\s*轮/.test(prompt)) {
-  appendLog(sid, 'Init · 跳过 · 这是钩子回灌的任务反馈');
+// 这一行和 `auto-continue` 的「拦截」行成对读：**有拦截没回灌 = 客户端没接住注入**。
+const round = /auto-continue\s*第\s*(\d+)\s*轮/.exec(prompt)?.[1];
+if (round) {
+  appendLog(sid, `回灌 · UserPromptSubmit · 第${round}轮任务反馈已到达客户端（本轮不是用户发言）`);
   emitAllow();
 }
 
@@ -156,7 +159,12 @@ const injection = [
   othersBlock,
 ].join('\n');
 
-appendLog(sid, `Init · 注入会话信息（其他未完成队列 ${others.length} 份）`);
+appendLog(
+  sid,
+  `会话初始化 · UserPromptSubmit · 注入会话 ID / 队列路径 / 协议 · ` +
+    `队列${existsSync(queuePath(sid)) ? '已存在（接着做，不重建）' : '尚未创建'} · ` +
+    `批次 ${batch ?? '取不到'} · 其他会话未完成队列 ${others.length} 份 · 时区 ${localOffset()}`,
+);
 
 /**
  * 注入方式留了开关：默认走 hookSpecificOutput.additionalContext（Claude Code 兼容写法），
