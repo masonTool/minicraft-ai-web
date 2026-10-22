@@ -22,7 +22,7 @@ export interface TutorialBootInput {
   readonly hasSave: boolean;
   /** 存档里的引导数据；老存档为 null */
   readonly saved: { readonly state: SerializedTutorial; readonly dismissed: boolean } | null;
-  /** 创建世界时选的模式（创造走建造小目标，其余走生存 8 步） */
+  /** 创建世界时选的模式（创造走建造小目标，其余走生存 4 步） */
   readonly mode: 'survival' | 'creative' | 'adventure' | 'spectator';
 }
 

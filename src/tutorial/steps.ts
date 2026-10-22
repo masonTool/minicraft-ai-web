@@ -17,19 +17,20 @@
  *     加一种木材时这里不用回来改（`familyOfItem` 就是那条唯一判据）。
  */
 
-import { BED_IDS, Block, blockDef, woolId } from '../core/registry/blocks.ts';
+import { Block, blockDef, woolId } from '../core/registry/blocks.ts';
 import { toolItemId } from '../core/registry/tools.ts';
 
-/** 两条路径：生存（开荒 8 步）与创造（建造小目标 4 步） */
+/** 两条路径：生存（开荒 4 步）与创造（建造小目标 4 步） */
 export type TutorialTrack = 'survival' | 'creative';
 
 /**
- * "家族"只覆盖引导要问的三类：
+ * "家族"只覆盖引导要问的两类：
  *  - `log`：任意原木 / 树皮方块（`*_log` / `*_wood`，含剥皮原木）；
- *  - `bed`：16 色床任意一种；
  *  - `door`：门 / 活板门 / 栅栏门（对小朋友不苛求"必须是门"）。
+ *
+ * ⚠️ 床那一族随"床"这一步一起删掉了（2026-10-22 用户：生存做到石镐就够）。
  */
-export type TutorialFamily = 'log' | 'bed' | 'door';
+export type TutorialFamily = 'log' | 'door';
 
 /** 一步的完成条件 */
 export type TutorialGoal =
@@ -59,14 +60,17 @@ export interface TutorialStep {
   readonly goal: TutorialGoal;
 }
 
-/** 床的图标：白色床（`BED_IDS` 与 `DYE_COLORS` 同序，第一个就是白色） */
-const BED_ICON = BED_IDS[0]!;
-
 /**
- * 生存 8 步：**从第一棵树到第一间屋**。
+ * 生存 4 步：**从第一棵树到石镐**。
+ *
+ * ⚠️ 2026-10-22（用户）："基本做到石镐就够了，不用太多"。
+ * 原来还有熔炉 / 铁镐 / 床 / 小屋四步，但铁要挖到 y≈16（地表往下 45~50 格）再烧，
+ * 对刚上手的人是一整条长链，卡在中间的人只会把卡片关掉。所以**只教到"能挖石头"**，
+ * 剩下的留给玩家自己探索（原创世界引导 8 步的决策见 `notes/kids-features.md`，
+ * 那份是历史留档，不再作为当前步骤表）。
  *
  * 顺序是教学路径：**当前这一步先满足才进下一步**，不做越级跳过——
- * 否则"第一步撸木头"会在玩家已经拿到铁镐时被无声跳过，教学路径就断了。
+ * 否则"第一步撸木头"会在玩家已经拿到石镐时被无声跳过，教学路径就断了。
  * 但"一件事同时满足好几步"时会连续推进（见 `TutorialTracker.advance()`）。
  */
 const SURVIVAL_STEPS: readonly TutorialStep[] = [
@@ -101,38 +105,6 @@ const SURVIVAL_STEPS: readonly TutorialStep[] = [
     descKey: 'tutorial.survival.stonePickaxe.desc',
     icon: toolItemId('pickaxe', 'stone'),
     goal: { kind: 'obtain', item: toolItemId('pickaxe', 'stone') },
-  },
-  {
-    id: 'survival/furnace',
-    track: 'survival',
-    titleKey: 'tutorial.survival.furnace.title',
-    descKey: 'tutorial.survival.furnace.desc',
-    icon: Block.FURNACE,
-    goal: { kind: 'obtain', item: Block.FURNACE },
-  },
-  {
-    id: 'survival/iron_pickaxe',
-    track: 'survival',
-    titleKey: 'tutorial.survival.ironPickaxe.title',
-    descKey: 'tutorial.survival.ironPickaxe.desc',
-    icon: toolItemId('pickaxe', 'iron'),
-    goal: { kind: 'obtain', item: toolItemId('pickaxe', 'iron') },
-  },
-  {
-    id: 'survival/bed',
-    track: 'survival',
-    titleKey: 'tutorial.survival.bed.title',
-    descKey: 'tutorial.survival.bed.desc',
-    icon: BED_ICON,
-    goal: { kind: 'obtainFamily', family: 'bed' },
-  },
-  {
-    id: 'survival/house',
-    track: 'survival',
-    titleKey: 'tutorial.survival.house.title',
-    descKey: 'tutorial.survival.house.desc',
-    icon: Block.OAK_PLANKS,
-    goal: { kind: 'placeCount', count: 20 },
   },
 ];
 
@@ -177,7 +149,7 @@ const CREATIVE_STEPS: readonly TutorialStep[] = [
   },
 ];
 
-/** 全部步骤（生存 8 + 创造 4；测试与界面都从这里取） */
+/** 全部步骤（生存 4 + 创造 4；测试与界面都从这里取） */
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [...SURVIVAL_STEPS, ...CREATIVE_STEPS];
 
 /** 某条路径的步骤（保持表内顺序） */
@@ -195,6 +167,5 @@ export function familyOfItem(itemId: number): TutorialFamily | null {
   const name = blockDef(itemId).name;
   if (name.endsWith('_log') || name.endsWith('_wood')) return 'log';
   if (name.endsWith('_door') || name.endsWith('_trapdoor') || name.endsWith('_fence_gate')) return 'door';
-  if (BED_IDS.includes(itemId)) return 'bed';
   return null;
 }

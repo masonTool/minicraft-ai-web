@@ -44,8 +44,8 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 
 console.log('\n步骤表');
 {
-  equal('共 12 步', TUTORIAL_STEPS.length, 12);
-  equal('生存 8 步', stepsOf('survival').length, 8);
+  equal('共 8 步', TUTORIAL_STEPS.length, 8);
+  equal('生存 4 步', stepsOf('survival').length, 4);
   equal('创造 4 步', stepsOf('creative').length, 4);
 
   const ids = new Set(TUTORIAL_STEPS.map((step) => step.id));
@@ -71,7 +71,8 @@ console.log('\n家族判定（不手抄 id 表）');
   equal('橡木原木算原木', familyOfItem(Block.OAK_LOG), 'log');
   equal('剥皮原木也算原木', familyOfItem(Block.STRIPPED_OAK_LOG), 'log');
   equal('石头不是原木', familyOfItem(Block.STONE), null);
-  equal('白色床算床', familyOfItem(BED_IDS[0]!), 'bed');
+  // 床那一族随"床"这一步一起删了（2026-10-22 用户：做到石镐就够）
+  equal('床不再属于任何家族', familyOfItem(BED_IDS[0]!), null);
   equal('橡木门算门', familyOfItem(Block.OAK_DOOR), 'door');
   equal('活板门也算门', familyOfItem(Block.OAK_TRAPDOOR), 'door');
   equal('铁镐什么家族都不算', familyOfItem(toolItemId('pickaxe', 'iron')), null);
@@ -79,7 +80,7 @@ console.log('\n家族判定（不手抄 id 表）');
 
 // ------------------------------------------------------------------ 生存路径
 
-console.log('\n生存 8 步按顺序推进');
+console.log('\n生存 4 步按顺序推进（终点是石镐）');
 {
   const tracker = new TutorialTracker('survival');
   equal('第一步是撸木头', tracker.current?.id, 'survival/log');
@@ -95,20 +96,21 @@ console.log('\n生存 8 步按顺序推进');
   tracker.handle({ kind: 'obtain', item: Block.CRAFTING_TABLE });
   equal('工作台之后是木镐', tracker.current?.id, 'survival/wood_pickaxe');
   tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'wooden') });
-  tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'stone') });
-  tracker.handle({ kind: 'obtain', item: Block.FURNACE });
-  tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'iron') });
-  equal('铁镐之后是床', tracker.current?.id, 'survival/bed');
-  tracker.handle({ kind: 'obtain', item: BED_IDS[3]! });
-  equal('床之后只剩盖房', tracker.current?.id, 'survival/house');
-  equal('前面顺手放的 1 块已经计数', tracker.serialize().counters.placed, 1);
+  equal('木镐之后是石镐（最后一步）', tracker.current?.id, 'survival/stone_pickaxe');
 
-  for (let i = 0; i < 18; i++) tracker.handle({ kind: 'place', block: Block.OAK_PLANKS, y: 64 });
-  equal('19 块还不够（要求 20）', tracker.finished, false);
-  const last = tracker.handle({ kind: 'place', block: Block.OAK_PLANKS, y: 64 });
-  equal('第 20 块完成最后一步', last.length, 1);
-  equal('生存走完', tracker.finished, true);
+  const last = tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'stone') });
+  equal('石镐完成最后一步', last.length, 1);
+  equal('拿到石镐就整条走完（不再要求熔炉/铁镐/床/小屋）', tracker.finished, true);
   equal('走完后没有当前步骤', tracker.current, null);
+  equal('放置计数照常保留', tracker.serialize().counters.placed, 1);
+
+  // 反过来钉住"这四步不该再回到表里"：以后有人想把 8 步加回来，
+  // 先得删掉这条断言（而不是无声地把新手又推去挖铁）
+  const ids = new Set(TUTORIAL_STEPS.map((step) => step.id));
+  check(
+    '熔炉 / 铁镐 / 床 / 小屋都不在表里',
+    ['survival/furnace', 'survival/iron_pickaxe', 'survival/bed', 'survival/house'].every((id) => !ids.has(id)),
+  );
 }
 
 // ------------------------------------------------------------------ 幂等与越级
@@ -221,11 +223,34 @@ console.log('\n脏数据逐项跳过');
   const gapAccepted = gap.restore({
     version: 1,
     track: 'survival',
-    completed: ['survival/log', 'survival/furnace'],
+    completed: ['survival/log', 'survival/stone_pickaxe'],
     counters: { placed: 0, kinds: [], minY: null, maxY: null },
   });
   equal('跳步的完成记录只认前缀 1 步', gapAccepted, 1);
   equal('停在第二步（工作台）', gap.current?.id, 'survival/table');
+
+  // 升级兼容：老存档（生存 8 步那一版）走到铁镐之后读进来。
+  // 多出来的 id 现在谁也不认识 → 只认前 4 个连续前缀 → 直接算"引导已走完"，
+  // 不会把人塞回"去做工作台"。（这条是删步骤时最容易漏掉的一条。）
+  const legacy = new TutorialTracker('survival');
+  const kept = legacy.restore({
+    version: 1,
+    track: 'survival',
+    completed: [
+      'survival/log',
+      'survival/table',
+      'survival/wood_pickaxe',
+      'survival/stone_pickaxe',
+      'survival/furnace',
+      'survival/iron_pickaxe',
+      'survival/bed',
+      'survival/house',
+    ],
+    counters: { placed: 12, kinds: [1], minY: 60, maxY: 62 },
+  });
+  equal('老存档的 8 步被截成 4 步', kept, 4);
+  equal('老存档直接判定引导完成（不倒退）', legacy.finished, true);
+  equal('老存档不会再有当前步骤（不会再弹卡）', legacy.current, null);
 }
 
 console.log('\n计数上限');
@@ -294,7 +319,7 @@ console.log('\n启动决策（新世界 / 老存档 / 有数据）');
   const saved = mid.serialize();
 
   const fresh = planTutorialBoot({ hasSave: false, saved: null, mode: 'survival' });
-  equal('新世界：走生存 8 步', fresh.track, 'survival');
+  equal('新世界：走生存 4 步', fresh.track, 'survival');
   equal('新世界：要显示', fresh.dismissed, false);
   equal('新世界：不恢复任何状态', fresh.restore, null);
 
@@ -357,11 +382,16 @@ console.log('\n存档仓与主程序接线（静态断言）');
     /\.tutorial-root\s*\{[^}]*position:\s*relative[^}]*z-index:\s*[1-9]/.test(htmlSrc),
   );
 
-  // 同一天的另一条反馈："生存模式找不到铁" —— 引导的说明要给出可执行的位置
+  // 最后一步（石镐）要说清"石头在哪"：2026-10-22 起生存只教到石镐，
+  // 新手最容易卡在"地表只见草和土、不知道往下挖"
   const i18nSrc = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
   check(
-    '铁镐一步说了铁矿石在哪找（y≈16）',
-    i18nSrc.includes("'tutorial.survival.ironPickaxe.desc': '铁矿石在地下 y≈16"),
+    '石镐一步说了石头在哪（往下挖几格）',
+    i18nSrc.includes("'tutorial.survival.stonePickaxe.desc': '用木镐挖圆石，再合一把石镐（往下挖几格就是石头）"),
+  );
+  check(
+    '被删掉的四步不再留有文案（不留死数据）',
+    ['furnace', 'ironPickaxe', 'bed', 'house'].every((key) => !i18nSrc.includes(`tutorial.survival.${key}.`)),
   );
 }
 
