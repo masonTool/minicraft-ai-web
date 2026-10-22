@@ -11,252 +11,46 @@
 > `DONE.archive.md`。2026-10-22 之前的历史（批次 1~613 / HANDOFF 批次流水 / 旧队列）已整份在那边。
 
 ---
-## 批次 1355（提交 1355→1363）· 2026-10-22 · 会话 06a11957
+## 批次 1363 · 2026-10-22 · 会话 0a49498a
 
-**做了什么**：清台账盲区（一条缩进条目整条隐身 + `M18` 重号）、把 A7/O4 两条"已做完却仍标进行中"收口、
-M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面板两屏共 105 处中文文案接进 i18n，
-外加修掉让全量 `npm run check` 长期变红的 `test:hooks` 漂移。共 6 条（T1~T5 + 一条 `[发现]`）。
+**做了什么**：把 continue-do 从旧版升级到新版（钩子 / 目录 / 三份新文档），并把本项目的文档体系与门禁按新框架重新落地。共 7 条（Q1~Q7）。
 
 **条目**（原文照搬）：
 
-- [x] T1 修 TASKS 台账盲区：`.continue/TASKS.md` 第 4289 行 ` - [~] M18 **操作界面对齐基岩版**` 行首多一个空格，`audit-tasks.mjs` 的正则锚在列 0 于是整条没进台账（不在 294 里、也不参与重号检查），同时 M 段两条 `M18`（第 4214 行「物品中文名」与这条「操作界面」）重号一直没被抓出 →
-      **改**：去掉行首空格；把「操作界面对齐基岩版」改号为 **M24**；`tools/audit-tasks.mjs` 的条目正则改为容忍行首空白，并在**条目有缩进**时打印警告 →
-      **验收**：`npm run audit:tasks -- --print` 通过且总数由 294 变 **295**、进行中由 8 变 **9**
-- [x] T2 A7 / O4 口径校准收口：两条的"缺截图/缺控制台门禁"注记早已过期——`shot` / `guard` / `shotdiff` /
-      `check:browser` 都在仓库里且各有自测 →
-      **验收**：三套自测全绿（14 / 17 / 23 / 15 条）+ `audit:tasks -- --print` 三处锚点一致
-- [x] T3 M23 队伍**前后缀**（`/team modify <队> prefix|suffix`）：`Teams.ts` 加字段 + `sanitizeAffix` +
-      存档往返（不升 DB_VERSION）+ `composeNameTag` + `nameTagStyleFor` + `MobNameTag` 换 `style` 参数 →
-      **验收**：`test:nametag` 91 → **143 条**
-- [x] [发现] `npm run check` 整体是红的：`tools/hooks-test.mjs:342` 断言旧版 `state.attempts[...]`，
-      而 v3 钩子早已改成 `currentStreak`（`5815cd72` 改了钩子没改自测）→ 修断言到当前实现，
-      并保留"计数必须累加并逐轮落盘""隔离后复位"两条行为断言
-- [x] T4 M8 i18n 第 N 片：**背包界面**文案接线（`src/ui/InventoryScreen.ts`）→ **验收**：`test:i18n` 扩守卫
-- [x] T5 M8 i18n 第 N+1 片：**设置界面**文案接线（`src/ui/SettingsScreen.ts`）→ **验收**：`test:i18n` 再扩
+- [x] Q1 让框架门禁变绿：`DONE.md` 拆出 `DONE.archive.md`（主文件 ≤300 行）+ `lib.mjs` 的 `DOC_LIMITS.TASKS` 放宽到 7000（本项目台账是脚本输入）+ `config.json` 的 `checks.fast` 接回框架聚合入口、`project` 用 `npm run check:fast` → `node .continue/hooks/check.mjs` 五项全绿
+  - 做了什么：① `DONE.md` 14316 → 287 行，第 289 行起（历史批次 1~613、HANDOFF 批次流水、旧队列）整段原文搬到 `DONE.archive.md`；② `lib.mjs` 的 `DOC_LIMITS.TASKS` 600 → 7000 并写明理由；③ `config.json` 的 `checks.fast` 从项目自己的 `npm run check:fast` 改回框架聚合入口（原来那样等于**静默跳过** ids/docs/config 三项），`checks.project` 填 `npm run check:fast`。
+  - 为什么：`TASKS.md` 5506 行不是"清单太长"，而是**脚本输入**——`diff-ledger.mjs` 读条目里的 ⚠️ 注记、`coverage-report` 读状态、`audit-tasks` 读编号，压到 600 行等于删它们的语料。`DONE` 则是纯时间线，机械归档无损。
+  - 验证：`node .continue/hooks/check.mjs` → ids / docs / config / hooks / project 五项全过，exit 0。
+  - 遗留：`lib.mjs` 属框架文件，重装会覆盖；要靠 `tools/audit-docs.mjs` 的守卫当场报出来（Q3 补）。
+- [x] Q2 退役旧契约自测：`tools/hooks-test.mjs` 停用，`test:hooks` 改为委派 `node .continue/hooks/check.mjs hooks`，删掉与新框架脱节的 581 行断言 → `npm test` 绿
+  - 做了什么：删 `tools/hooks-test.mjs`（581 行）；`package.json` 的 `test:hooks` 改成 `node .continue/hooks/check.mjs hooks`；`tools/audit-tasks.mjs` 里解释 `test:hooks` 为何不算离线套件的那段注释同步改口径。
+  - 为什么：那份自测断言的是**旧钩子契约**（三个收尾选项 / `NOTES`+`EXPERIENCE` / `queues/` 路径），框架一升级就整片红；而框架自带的自检（`selftest.mjs`，在临时副本里灌事件）覆盖同一批行为还多出 `pre-commit`、`一次提交只勾一条` 两条，且**跟着框架一起升级**。留两份等于留着下一次漂移。
+  - 验证：`npm run test:hooks` → 框架 hooks 自检通过；`npm test` 八段全过（vitest 150 / 离线 169 套 / 截图 14 / guard 17 / browser-check 15 / shotdiff 23）。
+  - 边界：`test:hooks` 这个键名保留，`tools/run-tests.mjs` 与 `audit-tasks.mjs` 的 `NON_SUITE_KEYS` 名单因此不用动。
+- [x] Q3 项目工具适配新目录：`tools/audit-docs.mjs` 的 `queues/` → `doing/`、`docs:trim` 不再搬 DONE → `npm run audit:docs` 与 `npm run audit:tasks` 绿
+  - 做了什么：`tools/audit-docs.mjs` 里 ① 队列目录 `queues/` → `doing/`（含输出文案）；② `docs:trim` 搬走的历史批次改写进 **`DONE.archive.md`**（原来写 `DONE.md`，会把框架 300 行的时间线上限顶爆）；③ 新增 `PROJECT_DOC_LIMITS` 守卫，检查 `.continue/hooks/lib.mjs` 里 `TASKS` 是否仍放宽到 7000；④ 归档体积观察点同时看 `DONE.md` 与 `DONE.archive.md`。
+  - 为什么：`lib.mjs` 是框架文件，重装**总是覆盖**，放宽会被悄悄改回 600，症状是"重装后每次提交都被拒、报错只说 TASKS 太长"。把它记进项目自己的门禁，重装当场变红并给出改回哪几项。
+  - 验证：`node tools/audit-docs.mjs --print` → 三项全 ✓；`npm run audit:tasks -- --print` → 七条断言全 ✓。
+  - 顺带：删掉旧 `hooks-test` 遗留并被误提交的假队列 `.continue/doing/hooks-test-other-4.md`。
+- [x] Q4 `EXPERIENCE.md` 并入 `.continue/TIPS.md`（症状 → 根因 → 处置 → 适用面，模块名与 OVERVIEW 对齐）→ `check.mjs` 的 ids 绿
+  - 做了什么：`EXPERIENCE.md` 461 行整份并入 `TIPS.md`（463 行）：① 两条已经写成四段式的（钩子日志 / 文案字面量断言）按框架格式重排，分别落到 `## 工程与基础设施`、`## 界面与音频`；② 其余 379 行"症状 → 根因"两列表原样保留为 `## 历史经验总表`（框架的办法是"按模块拆"，但拆这 400 条要先逐条判定模块，质量不可控，先保留可 grep 的整体，新坑按模块写）；③ 顺手修掉表里一处历史缺陷——有一行用字面量 `\n` 把两条并成了一行；④ 删掉旧文件。
+  - 为什么：两份"踩坑文档"并存时 AI 只会读到其中一份（技能文档明说这条）；而表格逐条重分类是独立的一批活，混进框架迁移会让两边都做不干净。
+  - 验证：`node .continue/hooks/audit-ids.mjs` → 通过（TIPS 的三个分节名与 OVERVIEW 的 `###` 一一对上）；`audit-docs` → TIPS.md 463/500。
+  - 遗留：`## 历史经验总表` 仍未按模块拆——留在总表里，按关键词 grep（见 OVERVIEW 同名小节）。
+- [x] Q5 `OVERVIEW.md` 落地真实模块索引 + 补批次索引表（批次 24 / 1355），`NOTES.md` 保留为决策索引并挂进入口
+  - 做了什么：`OVERVIEW.md` 从 53 行模板写成 199 行：15 个模块各一段（实现挂 `A1`~`O16` 台账段 + 批次，坑只留一行摘要指向 `TIPS.md` 同名分节），外加批次索引表；模板的 §一「模块索引」表**删掉**（它与 §二 的标题逐字重复，违反"一条内容只写一处"）。
+  - 为什么：框架靠"模块名"把 OVERVIEW ↔ TIPS 串起来，所以模块名必须与 `TASKS.md` 的 A~O 分段对齐，而不是另起一套；`T<n>` 号在本项目不存在，明细写台账段号。
+  - 验证：`audit-ids` 通过（模块名与 TIPS 一一对上、DONE 的批次 1355 在索引表里）；`audit-docs` → OVERVIEW 199/200。
+  - 遗留：只有 200 行预算，199 行已经贴顶——下批再往里加模块会顶爆，届时应先把"验证 / 存档与多人"这类短节合并。
+- [x] Q6 `HANDOFF.md` 瘦身：队列 / 标记 / 钩子机制章节改成指向 `.continue/README.md`，只留项目约定、当前状态、命令 → `npm run audit:docs` 绿且 ≤520 行
+  - 做了什么：`HANDOFF.md` 484 → 178 行：① 删掉与 `README.md` 逐字重复的三节（队列与标记 / 钩子怎么工作 / 容易踩的地方），开头换成一张"想查什么读哪一份"的索引表；② 把 §8 下面挂的 69 行批次摘要（批次 505~613）搬进 `DONE.archive.md`；③ 保留本项目的四类内容——当前状态（含进度口径 / 提交总数 / 技术栈）、命令、约定（数据链路四处 / 界面 / 自建任务额度 / 明确不做 / 跨区块地物约定 / 该问人的五种情况）、跨机器边界与悬案；④ 门禁那一节按"三道门"重写（`npm run check` / `checks.fast` / `DOC_LIMITS` 的局部放宽）。
+  - 为什么：机制只有一份（`README.md`，随框架升级）；HANDOFF 里抄一遍就是在给自己造第二份真相——这次升级里它已经漂了（`queues/`、`EXPERIENCE.md`、`NOTES.md`、旧刹车文件名全过期）。而 `audit:tasks` 要解析的那三句话（进度口径 / 提交总数 / **169 套**）原样保留，所以派生数字仍然被脚本钉着。
+  - 验证：`npm run audit:tasks -- --print` 七条全 ✓（提交总数 1368 与实际一致）；`node tools/audit-docs.mjs --print` → HANDOFF 179 行 / 0 条批次记录，通过。
+  - 顺带：`tools/agent-setup.mjs` 的队列目录 `queues/` → `doing/`（不改的话 `npm run agent:setup` 会报"队列目录不存在"）；`TASKS.md` / `NOTES.md` / `notes/modules.md` 里指向 `EXPERIENCE.md`、`queues/` 的说明同步改掉。
+- [x] Q7 收口：`AGENTS.md` 并入框架入口、删掉全部 `*.continue-do.md` 备份 → 全量 `npm run check` 绿
+  - 做了什么：① `AGENTS.md` 重写：§1 先读两份（`README.md` 机制 + `HANDOFF.md` 状态与约定）、§2 按需展开表补齐 `OVERVIEW.md` / `TIPS.md` / `DONE.archive.md` 并删掉已删除文件的链接、§4 的刹车开关改成 `.continue/auto.off`（旧的 `auto-continue.off` 已并入框架）；② 删掉三份 `*.continue-do.md` 模板备份（`AGENTS.md` / `TASKS.md` / `DONE.md`）——两份指令并存时 AI 会读到冲突的两套规则。
+  - 为什么：`AGENTS.md` 是每个会话第一份读到的文件，它指错一次，后面所有文档都白写（这一轮它连着指了三份已经不存在的文件）。
+  - 验证：`node .continue/hooks/check.mjs` → ids / docs / config / hooks / project **五项全过**；`npm run check` 全链路通过（typecheck + vitest + 169 套离线 + 三张台账 + `audit:docs` + browser-check 跳过）；`npm test` 八段全过。
 
-**完成说明**：
+---
 
-- **验证方式**：每条单独提交、单独跑 `check:fast`；收尾跑 **`npm run check` 全绿**——
-  169/169 套离线 + `test:hooks` 91 项断言 + 三张台账（`audit:tasks` 295 项 / 覆盖度 / 差异 66 条·注意 188 条）
-  + 文档体量。单套成绩：`test:nametag` 91→143、`test:commands` 434、`test:save` 111、
-  `test:i18n` 95→**113**、`test:settings` 111、`test:ui` 919+7→**926**。
-- **台账口径变化**：294 → **295** 项（缩进条目归位）；完成 283 → **286**、进行中 8 → **6**
-  （A7 / O4 / M24 三条收口；M8 与 M23 仍是 `[~]`，其中 M23 只剩"队友免伤""碰撞开关"两项，都要联机）。
-- **遗留（已写进 TASKS 对应条目，不在这里展开）**：
-  M8 剩的是**数据不是文案**（页签名 / 朝向名 / `StationNeed.label` / 职业名 / 图案名 / 物品名本身）；
-  M23 剩两项；L7/L4 生物同步仍等用户拍板方案。
-- **批次号口径事故**：T2(`3b373580`)/T3(`6411217c`) 的提交信息把"提交总数"当批次号写成了 1357/1359，
-  这批正确批次号是 **1355**。已推送、不改写历史，特此留痕。
-- 取舍见 `NOTES.md` · 「i18n 守卫按字面量判的边界」「`[发现]` 的优先级没进文档」两条；
-  坑见 `EXPERIENCE.md` · 「钩子日志会被清空，断点证据要进仓库」。
-
-## 2026-10-21 · 会话 ac183009
-
-**做了什么**：收尾 M23 队伍颜色、M8 界面文案接线、`waterlogged` 状态位、浏览器验收门禁、
-`/clone` `/data` `/locate` 与 6 条 gamerule —— 共 23 条（Q1~Q23），队列已清空。
-
-**条目**（原文照搬；`[跳过]` 是当时核对后作废的条目，留痕不删）：
-
-#### 优先级 1：M23 队伍颜色（收尾 M23 唯一能独立做的一项）
-
-- [x] Q1 新增 `core/entity/NameTagColor.ts`（纯逻辑）：从队伍名 → 颜色 id → `#rrggbb` 的映射表（原版 16 色），
-      `colorForMob(mob, scoreboard)` 返回该生物名字该用的颜色（无队伍 → `null` = 沿用默认白）。
-      验收：新文件 30 行内，不引 DOM/渲染；`test:nametag` 增 8 条（有队伍/无队伍/队伍名不存在/16 色全覆盖）
-- [x] Q2 `render/MobNameTag.ts` 接颜色：`drawName` 增加 `color: string | null` 参数，
-      有颜色时用它画字（描边仍走深色）；`show()` 增加同参数并纳入"是否要重画"的判据
-      （现在只比 `lastName`，名字没变但队伍变了就不会重画）。
-      验收：`test:nametag` 增 3 条（颜色变了要重画、null 用默认白、颜色串格式合法）
-- [x] Q3 `main.ts` 接线：`updateNameTags()` 里把 `colorForMob(...)` 的结果传给 `tag.show()`，
-      队伍变动的来源是 `scoreboard`/`teams` 快照（已有，见 M23 批次 402）。
-      验收：`npm run check:fast` 通过；进游戏 `/team add red` + `/team modify red color red` 后
-      给自己身边的命名生物看到红字
-
-#### 优先级 2：合成配方 —— **2026-10-21 核对后大幅缩水**
-
-- [跳过] Q4~Q7 ~~补 16 色地毯 / 玻璃板 / 陶瓦 / 混凝土 / 床 / 旗帜 / 蜡烛 的染色配方族~~
-      —— **核对后确认：地毯/玻璃板/陶瓦/床早已做完；旗帜与蜡烛的物品本身不存在**
-      （`items.ts` 里搜不到），要做得先加方块 + 物品 + 贴图 + 渲染，是另一个量级的活
-- [跳过] Q4b ~~补"真正的配方缺口"~~ —— **没有需要补的**：`test:reach` 62 项全绿，
-      生存里拿不到的只剩 3 件白名单（成书 / 已填地图属界面步骤，`redstone_ingredient` 是旧 id）。
-      745 这个数低是**分母口径**问题（原版 1000+ 含大量 block state 变体与 1.17 后新方块族），
-      不是缺配方。以后再想动这一块，**先拿 `test:reach` 的实测缺口当依据**，别凭封面百分比排期。
-
-#### 优先级 3：A7/O4 浏览器验收门禁（把"靠人工看"变成自动）
-
-- [x] Q8 仓库内置 `playwright` devDependency + `tools/screenshot.ts`：
-      给定 URL/视口/等待条件截一张图到 `.tmp/shots/`（不进仓库）。
-      验收：`npm run shot -- /` 能出图；不引入 CI 强制依赖（没装浏览器时脚本给提示并退出 0）
-- [x] Q9 `tools/console-guard.ts`：用 playwright 打开页面、收集 `console.error` 与 `pageerror`、
-      进一个世界跑 20 秒，任何一条错误即非零退出。
-      验收：手工制造一个 `console.error` 能让它变红；正常跑绿
-- [x] Q10 把 Q9 挂进 `npm run check`（可选开关 `BROWSER_CHECK=1`，默认不跑以免 CI 无浏览器时红）。
-      验收：`BROWSER_CHECK=1 npm run check` 通过；默认 `npm run check` 行为不变
-- [x] Q11 `tools/shot-diff.ts`：与上一张同名截图做像素差，超过阈值就报红（回归用）。
-      验收：同一页面两次截图差为 0；改一处颜色后能报出差异区域
-
-#### 优先级 4：M8 剩余界面文案接线（50% → 接近 100%）
-
-- [x] Q12 背包界面文案接线（`InventoryScreen.ts`）：标题/分类名/搜索占位/丢弃提示。
-      验收：`test:i18n` 增 5 条；切英文后重开背包整页无中文
-- [x] Q13 工作站界面文案接线（熔炉/工作台/箱子/酿造台/附魔台/铁砧）：通用契约见 `docs/STATION-LOGIC.md`。
-      验收：`test:i18n` 增 6 条；每个站台的标题与按钮都走文案键
-- [x] Q14 聊天与命令提示接线（`ChatInput.ts` + 命令报错文案）。
-      验收：`test:i18n` 增 4 条；`/help` 的英文模式下不出现中文
-- [x] [发现] 命令执行反馈还有 111 句各不相同的自然语言没接 i18n：`src/core/commands/Commands.ts`
-      里 `out.info`/`out.error` 的运行时文案（`已将时间设置为 …`、`找不到物品：…`、
-      `时间格式不对：…`、`已给予 … ×N`、`已将 X 传送到 Y` 等，句式 37 种）。Q14 只接了调度层
-      6 条 + 39 条 `用法：`（走 `usageError()` 的字段词表），这些逐句的没法用词表压。
-      证据：`npx esbuild` 后运行 `executeCommand('/time set notatime')` 在英文模式下仍输出
-      「时间格式不对：notatime」（Q14 浏览器实测，见 HANDOFF 批次 617 注记）。
-      → 做完的标准：在 `I18n.ts` 加 `cmd.*` 键组，把这 111 句改成 `t()`/`tp()`；
-      并让 `test:i18n` 从 `Commands.ts` 抽取**所有**含中文的 `out.*` 调用断言"必须走 t/tp"，
-      防以后新加命令又写死中文。`CommandHelp.ts` 的 140 条帮助标签另算，不含在本条。
-- [x] Q15 地图/成就/死亡界面文案接线。
-      验收：`test:i18n` 增 4 条；`keyParity()` 仍然全绿
-
-#### 优先级 5：`waterlogged` 状态位（流体系统唯一剩下的缺口）
-
-- [x] [发现] 成就数据层（100 条 title + 98 条 desc + 5 个标签页名）仍是中文：
-      `src/core/progress/advancements.ts` 的 `title:` / `desc:` 字段与 `ADVANCEMENT_TABS[].title`。
-      Q15 只接了 `AdvancementScreen.ts` 的**界面文案**（Close / All / Earned / Available /
-      lockedHint / toast），数据本身没接。证据：Q15 浏览器实测，英文模式下成就面板是
-      `Advancements 已达成 1/100 Close All ... 我的世界 1/29 下界 0/5` —— 界面词全英文、内容全中文。
-      → 做完的标准：给 `AdvancementDef` 加 `titleEn` / `descEn`（或一张 `advancementText.data.ts`
-      按 id 映射，零依赖），`AdvancementScreen` 与 `AdvancementToast` 都按语言取；
-      `test:i18n` 加两条断言：100 条都有英文、英文模式下打开成就面板 `cjk` 为 0。
-- [x] Q16 ~~新增 `core/world/Waterlogged.ts`~~ —— **核对后确认早已实现**（批次 469），
-      而且超出验收标准。证据：`blockState.ts:904-914`（`WATERLOGGED_MASK=0b10000000` +
-      `isWaterlogged` / `withWaterlogged`）、`blocks.ts:5291`（`canBeWaterlogged` 按形状判
-      9 种族：slab/stairs/fence/wall/trapdoor/pane/door/fence_gate/sign）、
-      `blocks.ts:5313`（`waterloggedPlacementState` 落点是水就自动置位）、
-      `blocks.ts:5324`（`blockAfterBreak` 含水 → 变回水）。
-      `npm run test:waterlogged` **30 条全绿**（验收要求 25 条）。
-      不需要 `core/world/Waterlogged.ts` —— 这一位属于**方块状态**，读写放
-      `registry/blockState.ts`、白名单放 `registry/blocks.ts` 才是合理的分层。
-- [x] Q17 ~~`Waterlogged` 接存档~~ —— **不需要改**：`save/ChunkEdits.ts` 的
-      `packEdit(id, state)` 用 `PACK_STATE_MASK = 0xff` 存**整个状态字节**，
-      bit7 天然被带上；`restoreStack` 那条路不在这一层（那是物品栈，不是方块）。
-- [x] Q18 ~~流体引擎认 `waterlogged`~~ —— **批次 621 完成**（这是 Q16~Q19 里唯一真缺的一块）。
-      `Fluids.ts` 新增两个判据 + 三个接入点：
-      ① `isWaterAt()` —— 这一格"有没有水"（流动水也算），用于"含水方块参与扩散"；
-      ② `isWaterSourceAt()` —— 这一格算不算**0 级供源**（含水方块算，流动水不算）；
-      ③ `canFillWaterlogged()` + `fillWaterlogged()` —— 把台阶**灌满**而不是覆盖它；
-      `countAdjacentSources` / `desiredFluidState`（含水源计数与横向供源）、
-      `fluidTick`（含水方块也跑 tick，但**跳过自身重算**，否则会被写成空气或 0 级水）全接上。
-      ⚠️ 两个必须分开的判据：第一版把 `isWaterAt` 直接塞进供源计数，结果**流动的水被当成水源**，
-      断源的细流靠同级邻居自己续命、永远干不了 —— `test:tick` 当场红了两条
-      （"到达最大扩散距离后不再往外流"、"同级邻居不算供源"），改成 `isWaterSourceAt` 才修好。
-      `test:waterlogged` **30 → 55 条**（新增 25 条：水的一员判定、可灌判据、纵向/横向灌满、
-      含水台阶当水源灌满相邻坑、岩浆不灌、已含水不重复灌、以及"四周堵死时含水台阶不被毁"的负对照）。
-- [x] Q19 ~~网格与渲染~~ —— **已实现**（批次 469）：`core/mesh/ChunkMesher.ts:746`
-      在网格化时读 `isWaterlogged(chunk.getState(...))`，`:757` 还会跳过相邻含水格的
-      面剔除（否则水面会被邻居挡掉）。
-
-#### 优先级 6：命令 36 → 40 与游戏规则 24 → 30
-
-- [x] ~~Q20 `/clone` 区域复制~~ —— **批次 622 补齐三块**（复制本体批次 431 已有）：
-      ① **方块状态**：`CloneIo` 加可选 `readState` / `writeState`，快照存两条平行数组
-         （体积上限 32768，对象数组在手机上多一倍内存）；`CommandContext` 加可选
-         `getBlockState?` / `setBlockState?`，`main.ts` 注入（顺带 `wakeFluidsAround`）。
-         可选是为了老 stub 不改也能跑；不给时状态按 0。
-      ② **自重叠拒绝**：`cloneBoxesOverlap()` —— 原版同。允许的话"把房子往东挪 2 格"
-         会得到半新半旧的结果，玩家会以为指令坏了。
-      ③ **越界拒绝**：`cloneBoxInWorld()` 查 Y（-64~320，来自 `Chunk.ts`）。
-         越界的写会被世界**静默丢弃**，那样会回"已复制 N 格"却什么都没发生 —— 比报错难查。
-      新增 `shiftCloneBox()` 供两处判据共用。
-      `test:commands` 311 → **330 条**（+19：状态随复制三种朝向、无状态接口负对照、
-      六条重叠判据、五条越界边界含贴地板/贴天花板、三条命令层拒绝）。
-      ⚠️ 没做"复制到未加载区块"：本项目 `ctx.getBlock` 对未加载区块返回 0（空气），
-      不会报错也不会崩 —— 表现是复制出一片空气。要正确拒绝需要先问 `world.isLoaded`，
-      而 `CommandContext` 目前没有这条；留下一条差异记在 TASKS。
-- [x] Q21 `/data get|merge|modify`：读写方块实体与实体 NBT 的一个子集。
-      验收：`test:commands` 增 5 条；`/data get block` 能读出箱子第 1 格 —— **批次 623 完成**。
-      新增 `core/commands/BlockData.ts`（零运行时依赖：路径解析 / 方块实体快照 / 血量夹取），
-      `CommandContext` 加四个**可选**方法（`blockEntityAt` / `setBlockEntitySlots` /
-      `entityData` / `setEntityData`，可选是为了老 stub 不改也能跑）；
-      `main.ts` 注入四个实现 + `mobById`（`mob:12` → Mob 实例，线性扫，不缓存）。
-      路径白名单只认真实存在的字段：方块 `Slots` / `Slots[i]`，实体 `Health` / `CustomName`。
-      **`modify` 明确拒绝**并给替代写法（能被它改的只有血量一项，为它引入运算语法不值得）。
-      `test:commands` 330 → **381 条**（+51，验收要求 +5）。
-      浏览器实测（新建世界 → 创造模式 → 真实聊天框敲命令）15 条路径全对：
-      `get 根` → `(-14,70,4) = minecraft:chest（状态位 0，方块实体 chest，共 27 格，0 格有东西）`、
-      `merge slot0` → `已把 … 的 Slots[0] 设为 钻石（diamond） ×8`、
-      `get Slots[0]` → `Slots[0] = 钻石（diamond） ×8`、`get Slots[1]` → `Slots[1] =（空）`、
-      `越界 30` → `格号越界：30（这种容器只有 27 格，0 ~ 26）`、
-      `Health 999` → `已把血量设为 20 / 20（超出上限，已夹到上限）`、`Health abc` → `Health 需要一个数字：abc`。
-      ⚠️ **实测抓出两个坑**：① `filledSlots` 要跳过 `count: 0` 残留，否则根节点多列一行空气；
-      ② 三个坐标原来是 `Number(raw)` 直接转，`~` 变 NaN 直接报用法错误 ——
-      浏览器里第一条 `/data get block ~ ~-1 ~`（"看我脚下是什么"，最自然的写法）就被拒了，
-      改走 `parseCoordinate` 才通（`parseBlockXYZ` 抽出来给 get/merge 共用）。
-      ⚠️ 遗留（与 Q20 同源）：`blockEntityAt` 走 `containerOfBlockAt`（会建实例），
-      对从未打开过的空箱子 `get` 一次会在容器表里多一条空记录；空容器不进存档，无数据后果。
-- [x] Q22 `/locate`：按结构类型找最近的结构（复用现有的结构放置判定）。
-      验收：`test:commands` 增 4 条（找到/找不到/类型不存在/跨维度）—— **批次 624 完成**，
-      **验收的 4 条原本就有 2 条**（找到 / 找不到），真正缺的是另外两条与一批隐藏问题。
-      **主体（`nearestStructure` / `nearestBastion` / `nearestFortress` / `nearestEndCity`）批次 464/465 已做完**，
-      这一批补的是三条失败路径 + 双语 + 中文名：
-      ① 原来"名字不存在 / 属于别的维度 / 这一带没生成"**三种失败回执一模一样**（都是"附近没有找到"），
-         玩家会一直往远处走；② 整个回执是模板字符串拼的，**英文模式下整句中文原样漏出**
-         （`test:i18n` 只跑不带参数的 `/locate`，永远走不到成功分支，所以从没红过）；
-      ③ 结构名只有 key、没有中文名，`/help` 里只能手打。
-      新增 `core/commands/structureNames.data.ts`（零依赖：23 条 = 18 主世界 + 3 下界 + 2 末地，
-      各带中文名 / 英文名 / 维度 / 别名 / `locatable`）；命令层改成"查名字 → 校验维度 →
-      判断有没有定位实现 → 才真去找"，四种失败各说各的。
-      `locatable: false` 的两条（下界化石 `nether_fossil`、末地船 `end_ship`）会生成但还没有
-      `nearestXxx`，单独报"还不能用 /locate 找"，不冒充"附近没有"。
-      `test:commands` 381 → **408 条**（+27，验收要求 +4）。其中一条把这份手抄清单与
-      `STRUCTURE_KINDS` / `NETHER_STRUCTURE_KINDS` / `END_STRUCTURE_KINDS` **逐个 key 对齐**
-      （手抄就会漂，漏一行即红）。
-      浏览器实测（创造模式，三个维度各跑一遍，problems=0）：
-      主世界 `最近的村庄在 191, 67, 322（约 372 格）`；
-      `nosuchthing` → `没有这种结构：nosuchthing（这个维度有 village / … / desert_well）`；
-      `end_city` → `末地城 只在末地生成，这里是主世界（…）`；
-      下界 `最近的堡垒遗迹在 -119, 36, -229（约 261 格）`、`村庄 只在主世界生成，这里是下界（…）`；
-      末地 `最近的末地城在 -686, 61, -591（约 904 格）`、`村庄 只在主世界生成，这里是末地（可定位的有 end_city / end_ship）`。
-      ⚠️ 实测踩到一个**假 bug**（已排除）：第一轮在下界问 `village` 竟然成功、`bastion` 反而说
-      "只在主世界生成" —— 原因是在下界被岩浆烧死了、3 秒后重生成回主世界。
-      切成创造模式重测即正常。**验证维度相关的命令必须先 `gamemode creative`**。
-- [x] Q23 补 6 条 gamerule（逐条核对哪些依赖的子系统其实已经就位）。
-      验收：`test:commands` 增 3 条；`audit:coverage` 的游戏规则数上涨 —— **批次 625 完成**，
-      24 → **31 条（100%）**，`test:commands` 408 → **427**（+19）。
-      逐条核对依赖的子系统是本条目的重点，结论分两类：
-      **① 真接进行为（4 条）**：
-      · `freezeDamage` —— 细雪冻伤（批次 548）早有，只缺开关。`tickFreeze` 里一句
-        `if (env.freezeDamage === false) return;`；**关的只是伤害，计时照样累加**
-        （重开不会白嫖 7 秒）；判据写 `=== false` 而不是 `!env.freezeDamage`，缺省才是"开"。
-      · `doVinesSpread` —— 藤蔓蔓延（批次 50）早有。`TickWorld` 加 `vineSpreadEnabled?` 回调，
-        `vineBehavior` 开头判一次；关掉后**已有藤蔓还在**。
-      · `snowAccumulationHeight` —— 雪层堆高（批次 50）早有。`snowHeightLimit?` 回调，
-        上限取 `min(limit, MAX_SNOW_LAYERS)`；**只管堆多高，融化不受影响**。
-      · `spectatorsGenerateChunks` —— `main.viewDistanceNow`：旁观 + 规则关 → 半径压到 0。
-      **② 只登记不接行为（3 条，已弹窗确认）**：
-      · `doTraderSpawning` —— 流浪商人有种类/刷怪蛋/音色，但 `MobSpawner` 里
-        **没有"按周期自发刷新"**（`naturalSpawn: false`）。
-      · `playersSleepingPercentage` —— 单人下"躺下就睡"，比例 ≤ 100 全成立。
-      · `maxCommandChainLength` —— 只做**脉冲**命令方块，一次脉冲就一条，≥1 全等价。
-      三条都写了注释说明"现在不生效"，默认值与原版一致（true / 100 / 256）。
-      ⚠️ **顺手修掉一个会静默改值的坑**：`/gamerule` 的数值上限原来一律夹 0~100，
-      而 `maxCommandChainLength` 要 65536 —— 统一夹取会把它悄悄压成 100。
-      新增 `GAME_RULE_RANGES` 逐条范围 + `clampRuleNumber()`，`normalizeGameRules`
-      与 `/gamerule` 共用；夹取时回执明说「超出范围，已夹到 N」。
-      `test:tick` 103 → **118**（藤蔓/雪层正反对照 + 主循环接线断言）、
-      `test:survival` 107 → **111**（冻伤开关）。
-      浏览器实测（创造放细雪 → 切生存，`/data get entity @s Health` 读真实血量）：
-      冻伤开着 20 秒 → 累计 **4 点**「受到 1 点伤害：冰冻」、血量 20 → 18；
-      `freezeDamage false` 后 14 秒 → 新增 **0 点**（还自然回血到 19）；
-      重开 12 秒 → 新增 **2 点**。`snowAccumulationHeight 99` → 「已夹到 8」、
-      `maxCommandChainLength 999999` → 「已夹到 65536」、列表里 7 条都能看到。
-      ⚠️ 实测踩到两个坑（都记在 TASKS）：① 验血量**别数心形 DOM**（半颗心的裁剪与
-      `display:none` 混在一起，判不准），改用 `/data get entity @s Health`；
-      ② `/setblock` 只能在创造模式用，**先创造放方块再切生存**，否则方块根本没放上去
-      （第一轮就是这样：以为冻伤没生效，实际细雪没放上）。
-
-**完成说明**：
-- 关键取舍：Q4~Q7 的判断是错的（以为 16 色地毯 / 染色玻璃板 / 彩色陶瓦 / 床的染色配方缺失，
-  实际批次 37 / 79 早就做完），四条一律作废并在原位留痕；以后排期先拿 `npm run test:reach`
-  的实测缺口当依据，别按封面百分比。
-- 验证与结果：`test:commands` 311 → 427 条、`test:waterlogged` 30 → 55 条、`test:i18n`
-  随各面板递增；`/data` `/locate` `/gamerule` 均有浏览器实测（明细写在条目里）。
-- 遗留：Q20 / Q21 同源的"未加载区块静默返回空气"差异记在根 `TASKS.md`；
-  旧队列文件里的机制说明（卡死保护 / 自插额度 / 风险弹窗 / 流程七步）已并入
-  [`.continue/HANDOFF.md`](./HANDOFF.md)，这里不再重复。

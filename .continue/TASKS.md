@@ -5216,6 +5216,12 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       自检还报 ✓）——现在正则容忍行首空白，并把缩进条目单独列出报警；
       ② 同一段两条同号（`M18` 物品中文名 / `M18` 操作界面）因为上一条而没被发现，重号收敛为 `M24`。
       实测：总数 294 → 295，临时把 M24 改回缩进可看到告警且计数不变。
+- [x] 批次 1363 · **continue-do 升级到新版 + 文档体系落地**（A~O 里没有对应条目，属机制本身）：
+      钩子 / 目录 / 三份文档全换（`queues/`→`doing/`、`EXPERIENCE`→`TIPS`、新增 `OVERVIEW`）；
+      `DONE.md` 14316 → 56 行（历史整段进 `DONE.archive.md`，无损）；`DOC_LIMITS.TASKS` 600 → 7000
+      （台账是 `diff-ledger` / `coverage-report` / `audit-tasks` 三个脚本的输入）+ 一条守卫防重装覆盖；
+      `test:hooks` 改为委派框架自检（旧契约的 581 行断言退役）；`HANDOFF.md` 484 → 178 行（机制交给 `README`）；
+      `AGENTS.md` 重指新文件。全量 `npm run check` 与 `node .continue/hooks/check.mjs` 均绿。
 - [x] 批次 1355 · **`test:hooks` 与 v3 钩子实现脱节**（`[发现]` 条的落地）：
       `hooks-test` 断言旧字段 `state.attempts`，钩子早就写成 `currentStreak`，导致
       `npm run check` 从 v3 迁移（`5815cd72`）起一直是红的（CI 也红）。现在断言跟实现对齐，

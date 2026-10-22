@@ -19,6 +19,30 @@
 
 ## 工程与基础设施
 
+### 重装 continue-do 会覆盖 `hooks/`，本项目改过的口径会被悄悄改回去
+
+- 症状：重装框架之后**每次 `git commit` 都被拒**，报 `TASKS.md N 行 > 上限 600`；或队列目录又变成
+  `queues/`、踩坑文档又说 `EXPERIENCE.md`。功能一行都没改，门禁却全红。
+- 根因：安装器对 `.continue/hooks/*.mjs` 与 `.continue/.gitignore` 是**总是覆盖**（不覆盖等于升级失效）；
+  `config.json` 只补缺失的键（所以 `checks.*` 会保留）；业务文档内容不同时只**另存** `*.continue-do.md`。
+  所以"在 `lib.mjs` 里放宽 `DOC_LIMITS`"这类局部改动必然被抹掉，而且报错不会告诉你是本项目改过的。
+- 处置：① 装完立刻跑 `npm run check`；② 本项目把放宽项记在 `tools/audit-docs.mjs` 的
+  `PROJECT_DOC_LIMITS`（`TASKS=7000`），被改回去时它当场报出"应为 N"；③ 装完把 `*.continue-do.md`
+  备份并进正本后**删掉**——两份指令并存时 AI 会读到冲突的两套规则；④ 钩子配置在会话启动时拍快照，
+  改完要**重启会话**。
+- 适用面：任何一次 `.codebuddy/skills/continue-task` 的重装 / 升级。
+
+### 本仓库复制一份"框架行为断言"，迟早与框架脱节
+
+- 症状：`npm test` 里 `test:hooks` 整片红，而钩子其实工作正常——断言在找旧文案（"三个收尾选项"、
+  `NOTES`+`EXPERIENCE`、`queues/<sid>.md`）。
+- 根因：`tools/hooks-test.mjs` 是照抄框架行为写的（581 行）；框架一升级，它守的契约就没了。
+  这与"文案字面量断言"是同一类病：**守着别人的实现细节**。
+- 处置：框架自己带 `selftest.mjs`（在临时副本里灌事件，覆盖递任务 / 注入 / 提交守卫 / pre-commit），
+  本仓库只保留一行委派：`"test:hooks": "node .continue/hooks/check.mjs hooks"`。**键名留着**，
+  这样 `run-tests.mjs` / `audit-tasks.mjs` 的 `NON_SUITE_KEYS` 名单不用动。
+- 适用面：任何"给第三方框架写自测"的场景——要么委派给它的自检，要么只测**你自己那层**的胶水。
+
 ### 钩子日志会被清掉，所以"断点"不能只记在 logs/ 里
 
 - 症状：问"这套自动续跑的机制为什么停了"时，`.continue/logs/<sid>.md` 只剩一行 `Init`，
