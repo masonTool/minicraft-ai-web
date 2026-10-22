@@ -769,7 +769,7 @@ console.log('\n[语言元数据与匹配（多语言 P0-1）]');
   check('localeMeta 对未登记的语言返回 null', localeMeta('ja') === null);
 }
 
-console.log('\n[中文文案的落脚点（多语言 P0-2 统一口径）]');
+console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
 {
   /**
    * 口径：**中文文案只允许住在 `src/core/i18n/locales/zh/**`**，界面 / 逻辑 / 数据文件
@@ -788,6 +788,25 @@ console.log('\n[中文文案的落脚点（多语言 P0-2 统一口径）]');
   // 中文表里的值必须非空：拆文件时漏掉一格会变成"界面上一块空白"
   const emptyValues = Object.entries(TABLES.zh).filter(([, value]) => value.trim().length === 0).map(([key]) => key);
   check('中文表没有空值', emptyValues.length === 0, emptyValues.slice(0, 3).join(','));
+
+  /**
+   * 英文那一侧（多语言 P0-3）：分组要一一对应，而且**每个分组都必须带
+   * `satisfies Pick<Messages, …>`**。少写那一行不会有任何报错，于是"漏翻一条"就退回
+   * 到"跑测试才发现"——这条断言防的就是这个（类型保护被悄悄删掉）。
+   */
+  const enDir = new URL('../src/core/i18n/locales/en/', import.meta.url);
+  const enGroups = readdirSync(enDir).filter((name) => name.endsWith('.ts') && name !== 'index.ts');
+  const zhGroups = zhFiles.filter((name) => name !== 'index.ts');
+  check(
+    '英文表与中文同构（分组文件一一对应）',
+    enGroups.length === zhGroups.length && zhGroups.every((name) => enGroups.includes(name)),
+    `zh=[${zhGroups.join(',')}] en=[${enGroups.join(',')}]`,
+  );
+  const unchecked = enGroups.filter(
+    (name) => !readFileSync(new URL(name, enDir), 'utf8').includes('satisfies Pick<Messages'),
+  );
+  check('每个英文分组都用 satisfies 卡齐（漏写就等于没有编译期保护）', unchecked.length === 0, unchecked.join(','));
+  check('英文 index.ts 用 satisfies Messages 收口', readFileSync(new URL('index.ts', enDir), 'utf8').includes('} satisfies Messages;'));
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
