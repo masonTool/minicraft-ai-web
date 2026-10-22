@@ -5238,6 +5238,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       `.codebuddy/skills/continue-task/` 纳入版本管理（根 `.gitignore` 只放行这一项，其它技能仍本地）；
       上一批改的 5 个钩子与 `README.md` 同步进 `assets/.continue/`，`diff -rq` 与运行版一致；
       `check-framework.mjs` 与 `test-install.mjs`（19 项）通过。以后重装从仓库里的 skill 装，不会丢补丁。
+- [x] 批次 20261022-2220 · **新手引导的两处可用性问题**（A~O 里没有对应条目，属用户真机反馈）：
+      ① 卡片挂在 `#hud-right` 里，而触摸视角面 `#touch-look` 铺满全屏、DOM 更晚且两者都没 z-index，
+      收起键与「不再提示」的点击全被它吃掉 → `.tutorial-root` 加 `position: relative; z-index: 1`
+      （与 `#hotbar` 同一处方），`test:tutorial` 补静态断言；② 生存第 6 步"找不到铁"是文案没给位置，
+      补「铁矿石在地下 y≈16 最多（往下挖约 50 格）」（`OreGenerator` 实数：y -24~56、众数 16）。
+      步骤表、目标判定与卡片几何一律未动。验证：`test:tutorial` 110 条全过、`npm run check` 全绿。
+- [x] 批次 20261022-2220 · **橡木门打开后消失且再也恢复不了**（A~O 里没有对应条目，属回归）：
+      ① `meshBoxes('door')` 抄了碰撞盒那句 `isDoorOpen ? [] : ...`，于是开着的门整扇不画
+      （`doorBox` 里的开态几何成了死代码）→ 渲染盒始终返回 `doorBox`，碰撞侧仍开着为空；
+      ② `RedstoneEngine.applyOpenableLoad` 每次整体重算都按**当前电平**重写负载，而手动开合不改电平，
+      且 `toggleDoor` 先写下半再写上半、各触发一次重算 → 下半被关回、上半留下（半扇门）→ 改为
+      **电平沿触发**（门/活板门/栅栏门三类），换维度清缓存。验证：`test:redstone` 179 条（+5）、
+      `vitest tests/collision` 13 条（+1）、`npm run check` 全绿。
 
 ---
 
