@@ -796,6 +796,181 @@ export function unfinishedCount(queue) {
   return queue ? queue.counts.todo + queue.counts.doing : 0;
 }
 
+// ------------------------------------------------------------------ 计划（plan-*.md）
+
+/**
+ * 计划文件的命名：`doing/plan-<名字>.md`。
+ *
+ * 为什么要卡这个前缀：`doing/` 里同时住着"会话队列"和"计划"两类文件，
+ * 钩子靠前缀区分——队列按会话 ID 推导（`<sid>.md`），计划按 `plan-` 推导。
+ * 前缀写错（`Plan-x.md` / `planx.md`）的后果是它被当成**别人的队列**：
+ * `audit-ids` 会按队列去解析它、`audit-docs` 按队列体量算它，
+ * 而真正的 plan 判定一次都不会触发——静默失效，最难查。
+ *
+ * 反过来，`plan-xxx` 也能通过"文件名像会话 ID"那条检查（`[A-Za-z0-9._-]{4,}`），
+ * 所以不需要为它在 `audit-ids` 里开白名单。
+ */
+export const PLAN_FILE_RE = /^plan-[A-Za-z0-9._-]+\.md$/;
+
+export function isPlanFile(name) {
+  return PLAN_FILE_RE.test(name);
+}
+
+export function planPath(name) {
+  return join(DOING_DIR, name);
+}
+
+/** 所有 `doing/plan-*.md`（不含会话队列）。读失败当作没有。 */
+export function listPlans() {
+  try {
+    return readdirSync(DOING_DIR)
+      .filter((name) => isPlanFile(name))
+      .map((name) => ({ name, file: join(DOING_DIR, name) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 队列头部的 `> 计划：plan-mobile.md` —— 声明"这一批是从哪份计划里取出来的"。
+ *
+ * 只读**头部 5 行**，与 `> 状态：讨论中` 同一套口径：正文里引用一句模板不能把
+ * 整份队列绑到别的计划上（这个坑 `hold` 已经踩过一次）。
+ *
+ * 为什么把绑定写在队列里、而不是在计划里记"当前会话"：
+ * 队列跟着批次进同一个提交，"这一批属于哪个计划"是**这一批**的事实；
+ * 写进计划则一批结束就得回去改它，多一次无谓的写入和一份可能对不上的状态。
+ */
+export function parsePlanRef(text) {
+  const head = String(text ?? '').split(/\r?\n/).slice(0, 5).join('\n');
+  const m = /^>\s*计划\s*[:：]\s*([A-Za-z0-9._-]+\.md)\s*$/m.exec(head);
+  return m ? m[1] : null;
+}
+
+const MS_HEAD_RE = /^##\s+(MS\d+)\s*[·:：]\s*(.+?)\s*$/;
+const MS_ACCEPT_RE = /^[-*]\s*验收\s*[:：]\s*(.+?)\s*$/;
+const MS_CONFIRM_RE = /^[-*]\s*确认\s*[:：]\s*(.+?)\s*$/;
+/** 阶段行：`- [x] \`MS2.1\` 描述 → 验收 \`cmd\` · 批次 \`20261022-2338\`` */
+const STAGE_RE = /^-\s*\[[^\]]{0,6}\]\s*`(MS\d+\.\d+)`\s*(.*)$/;
+const STAGE_BATCH_RE = /批次\s*`?([0-9]{8}-[0-9]{4})`?/;
+const STAGE_VERIFY_RE = /→\s*验收\s*`([^`]+)`/;
+
+/**
+ * 解析 `doing/plan-*.md`。
+ *
+ * 结构（见 `README.md` §3.1）：
+ *
+ *   ## MS2 · 横屏 HUD          ← 里程碑标题，`MS<n>` 前缀就是归属
+ *   - 验收：`npm run test:hud`  ← 这一里程碑做完要跑的命令（硬停时的凭证）
+ *   - 确认：已验收 · 批次 `x`    ← 开发者确认过（**写在文件里**，换机器也认）
+ *   - [~] `MS2.1` 描述 → 验收 `...` · 批次 `x`
+ *
+ * **游标不落盘**：它就是"第一条 `[~]`，没有就第一条 `[ ]`"。
+ * 与队列条目号同一条原理——能派生的绝不手写，手写的一定会漂。
+ *
+ * `confirmed` / `acceptance` 只认**当前里程碑小节内**的行：跨小节复用会让
+ * "MS1 的确认"被读成"MS2 也确认过了"，那等于自动放行整个里程碑关卡。
+ */
+export function parsePlan(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const milestones = [];
+  let cur = null;
+  let inFence = false;
+
+  lines.forEach((line, index) => {
+    if (isFence(line)) {
+      inFence = !inFence;
+      return;
+    }
+    if (inFence) return;
+    const trimmed = line.trim();
+
+    const head = MS_HEAD_RE.exec(trimmed);
+    if (head) {
+      cur = {
+        id: head[1],
+        title: head[2],
+        index,
+        acceptance: [],
+        confirm: null,
+        stages: [],
+      };
+      milestones.push(cur);
+      return;
+    }
+    // 任何其它二级标题都意味着"出了里程碑区"——标题下面的行不再归属上一个里程碑
+    if (/^##\s/.test(trimmed)) {
+      cur = null;
+      return;
+    }
+    if (!cur) return;
+
+    const accept = MS_ACCEPT_RE.exec(trimmed);
+    if (accept) {
+      cur.acceptance.push(accept[1]);
+      return;
+    }
+    const confirm = MS_CONFIRM_RE.exec(trimmed);
+    if (confirm) {
+      cur.confirm = confirm[1];
+      return;
+    }
+
+    const stage = STAGE_RE.exec(trimmed);
+    if (!stage) return;
+    const id = stage[1];
+    const rest = stage[2];
+    const verify = STAGE_VERIFY_RE.exec(rest);
+    const batch = STAGE_BATCH_RE.exec(rest);
+    const title = rest
+      .replace(STAGE_VERIFY_RE, '')
+      .replace(STAGE_BATCH_RE, '')
+      .replace(/[·\s]+$/g, '')
+      .trim();
+    const entry = {
+      id,
+      ms: id.slice(0, id.indexOf('.')),
+      kind: classify(trimmed) ?? 'todo',
+      raw: trimmed,
+      index,
+      title,
+      verify: verify ? verify[1] : null,
+      batch: batch ? batch[1] : null,
+    };
+    cur.stages.push(entry);
+  });
+
+  const stages = milestones.flatMap((ms) => ms.stages);
+  const cursor = stages.find((s) => s.kind === 'doing') ?? stages.find((s) => s.kind === 'todo') ?? null;
+
+  return {
+    milestones,
+    stages,
+    cursor,
+    /** 计划里还能继续干（还有没勾掉的阶段）。 */
+    open: stages.some((s) => s.kind === 'todo' || s.kind === 'doing'),
+  };
+}
+
+export function readPlan(file) {
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, 'utf8');
+  return { file, text, ...parsePlan(text) };
+}
+
+/**
+ * 某个里程碑的阶段是否**在做完 `alsoDone` 这一条之后**全部完成。
+ *
+ * `alsoDone` 是必须的参数：调用点总是"队列已清空、但计划里这一条还没勾"，
+ * 直接看计划会永远差一条，永远到不了边界——这个 off-by-one 会让里程碑
+ * 关卡**从来不触发**，而现象只是"它自己往下跑了"，没有任何报错。
+ */
+export function milestoneComplete(plan, msId, alsoDone = null) {
+  const stages = plan.stages.filter((s) => s.ms === msId);
+  if (stages.length === 0) return false;
+  return stages.every((s) => s.kind === 'done' || s.id === alsoDone);
+}
+
 // ------------------------------------------------------------------ 输出
 
 /**
