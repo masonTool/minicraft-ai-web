@@ -701,6 +701,10 @@ import {
 // 创造4：内置建筑模板
 import { checkTemplatePlacement, templateById, templateCells, type BuildTemplate } from './buildtools/templates.ts';
 import { BuildToolbar } from './ui/BuildToolbar.ts';
+// 单机小游戏（小游戏1）：宿主 + 自检游戏
+import { MiniGameHost } from './minigame/MiniGameHost.ts';
+import { SmokeGame } from './minigame/games/smoke.ts';
+import type { MiniGame } from './minigame/types.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -1644,6 +1648,8 @@ class App {
   private buildRequest = false;
   /** 建造工具条（右侧双列竖排；折叠时只剩总开关） */
   private readonly buildToolbar: BuildToolbar;
+  /** 单机小游戏宿主（小游戏1）：激活时主循环只跑小游戏帧，世界那一帧全部跳过 */
+  private readonly miniGame: MiniGameHost;
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -2164,6 +2170,7 @@ class App {
       },
     });
     this.refreshBuildToolbar();
+
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
     this.commandBlockEditor.onSave = (command) => {
@@ -2686,6 +2693,21 @@ class App {
     // 新手引导（引导3）：新世界从第一步开始，路径按创建世界时选的模式定；
     // 有存档时 `loadSaveState()` 会用存档里的进度覆盖它（老存档没有这份数据则整条不显示）
     this.tutorial.reset(tutorialTrackFor(this.gameMode));
+
+    // 单机小游戏（小游戏1）：放在构造函数末尾——它要拿 `this.renderer`，
+    // 而 renderer 是在构造体中部创建的（提前构造会被 TS 判"使用前未赋值"）。
+    // 激活时主循环只跑它，世界那一帧全部跳过。
+    this.miniGame = new MiniGameHost(document.body, {
+      renderer: this.renderer,
+      atlas,
+      onExit: () => {
+        // 退出：把输入层与帧计时还回去——否则回主世界第一帧 `dt` 会是"小游戏玩了多久"
+        this.lastTime = performance.now();
+        this.touch?.resetInput('minigame');
+        this.touch?.setEnabled(!this.uiOpen);
+        if (this.touch) this.touch.visible = true;
+      },
+    });
   }
 
   /**
@@ -4567,6 +4589,14 @@ class App {
       }
       // 睡觉期间（B13）：只留跳跃键（提前起床），其余按键一律不处理——
       // 否则会在睡觉遮罩下面打开背包/配方书/聊天，而时间已经跳到天亮了
+      // 小游戏（小游戏1）：Esc 退出；其余按键一律不处理（小游戏用自己的指针输入）
+      if (this.miniGame.active) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          this.miniGame.stop();
+        }
+        return;
+      }
       if (this.sleeping && e.code !== 'Space') return;
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
@@ -9285,6 +9315,20 @@ class App {
     this.activePaste?.cancel();
   }
 
+  /**
+   * 进入一局小游戏（小游戏1）：先把主世界的输入层收掉。
+   *
+   * 小游戏用**自己的指针事件**（宿主那层），主世界那套摇杆/触摸必须停，
+   * 否则两根手指会同时被两边消费（项目在"面板开着人还在走"上踩过同一个坑）。
+   */
+  private startMinigame(game: MiniGame): void {
+    if (this.miniGame.active) return;
+    this.touch?.resetInput('minigame');
+    this.touch?.setEnabled(false);
+    if (this.touch) this.touch.visible = false;
+    this.miniGame.start(game);
+  }
+
   /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
   private refreshBuildToolbar(): void {
     this.buildToolbar.setAvailable(this.isCreative);
@@ -11598,6 +11642,41 @@ class App {
       armed: this.selectionStart !== null,
       undo: this.undoStack.undoCount,
       redo: this.undoStack.redoCount,
+    };
+  }
+
+  /** 验收脚本用：进入框架自检小游戏（小游戏1） */
+  startMinigameForTest(): boolean {
+    this.startMinigame(new SmokeGame());
+    return this.miniGame.active;
+  }
+
+  /** 验收脚本用：退出小游戏 */
+  stopMinigameForTest(): void {
+    this.miniGame.stop();
+  }
+
+  /**
+   * 验收脚本用：小游戏状态。
+   *
+   * `geometries` / `textures` 取自 `renderer.info.memory`——进入前后对比这两个数，
+   * 就能确认 `unmount()` 真的把几何与材质释放了（而不是只把 layer 藏起来）。
+   */
+  get minigameStateForTest(): {
+    active: boolean;
+    id: string | null;
+    geometries: number;
+    textures: number;
+    stageChildren: number;
+    touchVisible: boolean;
+  } {
+    return {
+      active: this.miniGame.active,
+      id: this.miniGame.currentId,
+      geometries: this.renderer.info.memory.geometries,
+      textures: this.renderer.info.memory.textures,
+      stageChildren: this.miniGame.stageChildren,
+      touchVisible: this.touch?.visible ?? false,
     };
   }
 
@@ -16555,6 +16634,16 @@ class App {
       // 不只是 `dt=0`——区块流式、光照队列、网格化、实体/粒子、网络、渲染、音频
       // 一律不再推进。画面定格在最后一帧，暂停页是 DOM，照常显示与点击。
       // ⚠️ 仍然要排下一帧：解冻靠 Resume/Esc/返回键，循环不能自己停死。
+      // 单机小游戏（小游戏1）：只跑小游戏帧，世界这一整帧（物理 / 区块 / 实体 / 音频）
+      // 全部跳过。放在 paused 判断之前：小游戏自己管自己的暂停（退出按钮与 Esc 在它那层）。
+      if (this.miniGame.active) {
+        const gameDt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
+        this.lastTime = now;
+        this.miniGame.update(gameDt);
+        schedule();
+        return;
+      }
+
       const paused =
         this.backgroundPaused || this.settingsScreen.isOpen;
       this.syncPauseAudio(paused);
@@ -16981,6 +17070,7 @@ class App {
     this.scoreboardHud.dispose();
     this.tutorialCard.dispose();
     this.buildToolbar.dispose();
+    this.miniGame.dispose();
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();

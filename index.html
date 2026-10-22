@@ -1240,6 +1240,52 @@
       }
       .build-templates.hidden { display: none; }
 
+      /* ---------------- 单机小游戏层（小游戏1，批次 20261022-1954） ----------------
+         全屏一层，z-index 30：盖住 HUD / 背包 / 配方书（10~20），低于主菜单（40）。
+         小游戏自己的 DOM 挂在 `.minigame-stage` 里，退出时整层清空。 */
+      #minigame-layer {
+        position: fixed; inset: 0; z-index: 30;
+        background: #0b1016;
+      }
+      #minigame-layer.hidden { display: none; }
+      .minigame-stage { position: absolute; inset: 0; touch-action: none; }
+      .minigame-topbar {
+        position: absolute;
+        top: calc(8px + env(safe-area-inset-top, 0px));
+        left: calc(8px + env(safe-area-inset-left, 0px));
+        right: calc(8px + env(safe-area-inset-right, 0px));
+        display: flex; align-items: center; gap: 8px;
+        z-index: 2; pointer-events: none;
+      }
+      .minigame-exit {
+        min-height: 40px; padding: 6px 14px;
+        font: inherit; font-size: 13px;
+        color: #fff; background: rgba(40, 40, 40, .9);
+        border: 2px solid #5a5a5a; border-radius: 4px;
+        pointer-events: auto;
+      }
+      .minigame-title { color: #d8e2ec; font-size: 13px; text-shadow: 1px 1px 0 rgba(0, 0, 0, .6); }
+      .minigame-toast {
+        position: absolute; top: calc(56px + env(safe-area-inset-top, 0px));
+        left: 50%; transform: translateX(-50%);
+        padding: 6px 12px; border-radius: 4px;
+        background: rgba(20, 20, 20, .88); color: #fff;
+        font-size: 13px; pointer-events: none;
+      }
+      .minigame-toast.hidden { display: none; }
+      .minigame-fade {
+        position: absolute; inset: 0; background: #000;
+        opacity: 0; pointer-events: none;
+        transition: opacity .35s ease;
+      }
+      .minigame-fade.show { opacity: 1; }
+      .minigame-hint {
+        position: absolute;
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        left: 50%; transform: translateX(-50%);
+        color: #9fb3c8; font-size: 12px; pointer-events: none;
+      }
+
       /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
          与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */
       .command-block-editor {
