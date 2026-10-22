@@ -34,6 +34,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   CONTINUE_DIR,
+  LOG_TAG,
   PROJECT_ROOT,
   appendLog,
   detectEvent,
@@ -57,7 +58,7 @@ if (event !== 'Stop') emitAllow();
 
 /** 紧急刹车（本项目在框架原版上补的）：提交守卫有独立的开关。 */
 if (existsSync(join(CONTINUE_DIR, 'auto-commit.off'))) {
-  if (sid) appendLog(sid, '放行 · Stop · 存在刹车文件 auto-commit.off（提交守卫已关）');
+  if (sid) appendLog(sid, LOG_TAG.commit, '放行 · Stop · 存在刹车文件 auto-commit.off（提交守卫已关）');
   emitAllow('提交守卫已关闭（存在 .continue/auto-commit.off），删除该文件即可恢复。');
 }
 
@@ -91,19 +92,19 @@ if (gitDir) {
   );
   const inProgress = inProgressDir ?? inProgressFile;
   if (inProgress) {
-    if (sid) appendLog(sid, `放行 · Stop · 提交守卫跳过 · git 进行中（${inProgress}）`);
+    if (sid) appendLog(sid, LOG_TAG.commit, `放行 · Stop · 提交守卫跳过 · git 进行中（${inProgress}）`);
     emitAllow(`检测到 ${inProgress}，正在合并/变基/挑拣，已跳过提交检查，请手动收尾。`);
   }
 }
 
 const branch = (git(['rev-parse', '--abbrev-ref', 'HEAD']) ?? '').trim();
 if (branch === 'HEAD') {
-  if (sid) appendLog(sid, '放行 · Stop · 提交守卫跳过 · detached HEAD');
+  if (sid) appendLog(sid, LOG_TAG.commit, '放行 · Stop · 提交守卫跳过 · detached HEAD');
   emitAllow('当前处于 detached HEAD，已跳过提交检查。');
 }
 
 if ((git(['diff', '--name-only', '--diff-filter=U']) ?? '').trim()) {
-  if (sid) appendLog(sid, '放行 · Stop · 提交守卫跳过 · 存在未解决冲突');
+  if (sid) appendLog(sid, LOG_TAG.commit, '放行 · Stop · 提交守卫跳过 · 存在未解决冲突');
   emitAllow('存在未解决的合并冲突，已跳过提交检查。');
 }
 
@@ -126,6 +127,7 @@ const untracked = changed.filter((line) => line.startsWith('??')).length;
 if (sid) {
   appendLog(
     sid,
+    LOG_TAG.commit,
     `拦截 · Stop · 提交守卫：${changed.length} 个未提交改动（未跟踪 ${untracked}）→ 已要求 AI review + commit + push`,
   );
 }
@@ -201,6 +203,7 @@ if (fastCmd) {
   if (sid) {
     appendLog(
       sid,
+      LOG_TAG.commit,
       `自测${verdict} · Stop · 门禁 \`${fastCmd}\` · ${Math.round((check.ms ?? 0) / 1000)}s` +
         `${check.cached ? '（改动未变，复用上次结论）' : ''}`,
     );

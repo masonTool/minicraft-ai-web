@@ -15,6 +15,7 @@
 import { existsSync, statSync } from 'node:fs';
 import {
   PROJECT_ROOT,
+  LOG_TAG,
   QUEUES_DIR,
   appendLog,
   commitCount,
@@ -45,7 +46,7 @@ const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
 // 这一行和 `auto-continue` 的「拦截」行成对读：**有拦截没回灌 = 客户端没接住注入**。
 const round = /auto-continue\s*第\s*(\d+)\s*轮/.exec(prompt)?.[1];
 if (round) {
-  appendLog(sid, `回灌 · UserPromptSubmit · 第${round}轮任务反馈已到达客户端（本轮不是用户发言）`);
+  appendLog(sid, LOG_TAG.init, `回灌 · UserPromptSubmit · 第${round}轮任务反馈已到达客户端（本轮不是用户发言）`);
   emitAllow();
 }
 
@@ -140,9 +141,10 @@ const injection = [
   ...(batch
     ? []
     : ['   - 取不到提交数（非 git 仓库 / 还没有提交）：`<提交数>` 只是占位符，**不要照抄**，', '     直接省略 `> 批次：` 这一行，`DONE.md` 标题里也不写批次。']),
-  '4. **连续做**：钩子一次只递**一条**作为起点，但你要在**同一个回合里接着往下做**，',
-  '   直到队列里再没有 `[ ]` / `[~]`、或命中五条风险要弹窗为止。',
-  '   ⚠️ 实测（批次 1364）：客户端一个用户消息只肯自动续 **1** 次，所以"做完一条就停"会真的停下来。',
+  '4. **一条一条做**：钩子每轮只递**一条**；你做完这一条就**停下**，不要顺手做下一条、',
+  '   也不要在同一个回合里把整个队列刷完。停下后的下一轮，`auto-continue` 会把下一条递回来。',
+  '   ⚠️ 已知代价（批次 1364 实测）：客户端一个用户消息只肯自动续 **1** 次，偶尔需要用户说一句"继续"。',
+  '   即使这样也按一条一条走——一次刷完整个队列，用户就失去了逐条检查、逐条叫停的机会。',
   '5. `[ ]` / `[~]` 都没有了 → 钩子会拦住，让你用弹窗请用户确认收尾；',
   '   **确认之后**才按顺序做完这五步：',
   '   ① 整份队列写进 `.continue/DONE.md`（含 `[阻塞]`，标题带 `批次 n（提交 n→m）`）；',
@@ -161,6 +163,7 @@ const injection = [
 
 appendLog(
   sid,
+  LOG_TAG.init,
   `会话初始化 · UserPromptSubmit · 注入会话 ID / 队列路径 / 协议 · ` +
     `队列${existsSync(queuePath(sid)) ? '已存在（接着做，不重建）' : '尚未创建'} · ` +
     `批次 ${batch ?? '取不到'} · 其他会话未完成队列 ${others.length} 份 · 时区 ${localOffset()}`,

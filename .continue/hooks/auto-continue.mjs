@@ -29,6 +29,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CONTINUE_DIR,
+  LOG_TAG,
   appendLog,
   commitCount,
   detectEvent,
@@ -80,7 +81,7 @@ if (event !== 'Stop') emitAllow();
  */
 const OFF_FILE = join(CONTINUE_DIR, 'auto-continue.off');
 if (existsSync(OFF_FILE)) {
-  if (sid) appendLog(sid, '放行 · Stop · 存在刹车文件 auto-continue.off（自动续跑已关）');
+  if (sid) appendLog(sid, LOG_TAG.continue, '放行 · Stop · 存在刹车文件 auto-continue.off（自动续跑已关）');
   emitAllow('自动继续已关闭（存在 .continue/auto-continue.off），删除该文件即可恢复。');
 }
 
@@ -93,7 +94,7 @@ const queue = readQueue(file);
 if (!queue) emitAllow();
 
 if (queue.hold) {
-  appendLog(sid, '放行 · Stop · 队列头部是「状态：讨论中」，本轮不递任务');
+  appendLog(sid, LOG_TAG.continue, '放行 · Stop · 队列头部是「状态：讨论中」，本轮不递任务');
   emitAllow('队列处于「讨论中」状态，钩子不递任务。改成「状态：执行中」后开始执行。');
 }
 
@@ -135,12 +136,12 @@ if (!pick) {
   if (queue.entries.length === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, '放行 · Stop · 队列里没有任何条目');
+    appendLog(sid, LOG_TAG.continue, '放行 · Stop · 队列里没有任何条目');
     emitAllow('队列里没有任何条目。没有要做的就删掉这个队列文件。');
   }
 
   if (state.askedComplete) {
-    appendLog(sid, '放行 · Stop · 已请用户确认收尾，等回复');
+    appendLog(sid, LOG_TAG.continue, '放行 · Stop · 已请用户确认收尾，等回复');
     emitAllow('已经请用户确认收尾了，等他们回复；确认后再更新 DONE.md 与 TASKS.md。');
   }
 
@@ -149,6 +150,7 @@ if (!pick) {
   saveState(sid, state);
   appendLog(
     sid,
+    LOG_TAG.continue,
     `拦截 · Stop · 队列已清空（完成 ${queue.counts.done} 条 / 阻塞 ${queue.counts.blocked} 条）→ 请用户确认收尾`,
   );
 
@@ -207,7 +209,7 @@ saveState(sid, state);
 let justBlocked = null;
 if (streak >= BLOCKED_MAX) {
   markBlocked(file, fp);
-  appendLog(sid, `隔离 · Stop · 连续 ${streak} 轮未完成 → 标 [阻塞]：「${fp.slice(0, 60)}」`);
+  appendLog(sid, LOG_TAG.continue, `隔离 · Stop · 连续 ${streak} 轮未完成 → 标 [阻塞]：「${fp.slice(0, 60)}」`);
   justBlocked = { streak, text: fp };
 
   // 重置连续计数：用户将来改回 `[ ]` 时重新得到 N 次机会
@@ -222,7 +224,7 @@ if (streak >= BLOCKED_MAX) {
   if (!pick || unfinishedCount(after) === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, '放行 · Stop · 没有别的活，等收尾确认');
+    appendLog(sid, LOG_TAG.continue, '放行 · Stop · 没有别的活，等收尾确认');
     emitAllow(
       `这一条连续 ${streak} 轮没做完，已标 [阻塞] 隔离。队列里没有别的待办了，` +
         '下次停下会请你确认收尾。',
@@ -262,6 +264,7 @@ const resumedNow = Boolean(pick && pick.resumed);
 const action = justBlocked ? '递任务（上一条已隔离）' : resumedNow ? '继续 [~] 进行中的条目' : '递任务';
 appendLog(
   sid,
+  LOG_TAG.continue,
   `拦截 · Stop 第${state.count}轮 · ${action}：「${fp}」 · 队列剩 ${remaining} 条 · 已注入给客户端`,
 );
 
@@ -320,10 +323,10 @@ const feedback = [
   '真踩到新坑且解决了 → 现在就可以补一条（不必等到收尾）。',
   '',
   '## 要求',
-  '1. **先做完这一条，然后接着做下一条**——不要做完一条就停。',
-  '   ⚠️ 为什么（批次 1364 实测）：Stop 钩子只能"请求"续跑，而客户端**一个用户消息只肯续 1 次**',
-  '   （日志 `00:04:47` 钩子明明递了 T2，客户端没有开新回合）。所以"做完一条就停"等于把余量浪费掉。',
-  '   一直做到 **队列里再没有 `[ ]` / `[~]`**、或**命中下面五条风险要弹窗**、或**上下文明显吃紧**为止；',
+  '1. **这一轮只做这一条，做完就停下**——不要顺手做队列里的下一条，更不要在同一个回合里把整个队列刷完。',
+  '   停下以后，下一轮 Stop 钩子会把队列里的**下一条**递给你（一条一条推进，用户能逐条看清、逐条叫停）。',
+  '   也**不要**把后面几条合并成"一次性任务"来规划：队列的意义就是一次只推进一条。',
+  '   只有两种情况可以不停在这一条上：**命中下面五条风险**（必须弹窗问用户）、**或这条确实做不下去**（说明理由后停）。',
   '   收尾（五步）仍然必须等用户确认，不要自己开始。',
   '2. **标记由你自己写**：开始做这条时把 `- [ ]` 改成 `- [~]`（进行中），',
   '   做完改成 `- [x]`。`[阻塞]` 只有脚本会写，**你不要自己写，也不要手动删除它**。',

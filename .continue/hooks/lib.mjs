@@ -25,7 +25,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -104,46 +104,114 @@ export function sessionId(payload) {
 export function queuePath(sid) {
   return join(QUEUES_DIR, `${sid}.md`);
 }
+
 /**
- * 状态文件按钩子分开存（`ns` 命名空间）。
+ * 每个会话**只有两个运行时文件**（2026-10-22 按用户要求收敛）：
  *
- * 为什么要分：UserPromptSubmit 上同时注册了 `queue-init` 与 `auto-continue`，
- * 而平台是**并行**跑同事件的多个钩子。两个进程对同一个 JSON 做
- * "读 → 改 → 整份写回"，后写的会把先写的字段抹掉（表现为会话被重复注入，
- * 或者轮次归零失效），而且这种错很难复现。
+ *   `logs/<sid>.log`        人读的时间线（本地时间 + 来源标签）
+ *   `logs/<sid>.state.json` 机器读的状态（按钩子分区）
+ *
+ * 以前是"一个分区一个文件"（`<sid>.state.json` / `.init.state.json` / `.commit.state.json`），
+ * 加上日志一共四个——用户的原话是"我不需要有那么多文件"。分区还留着（并行安全需要），
+ * 只是收进同一个 JSON 的 `init` / `continue` / `commit` 三个键里。
  */
-export function statePath(sid, ns = '') {
-  return join(LOGS_DIR, `${sid}${ns ? `.${ns}` : ''}.state.json`);
+export function statePath(sid) {
+  return join(LOGS_DIR, `${sid}.state.json`);
 }
 export function logPath(sid) {
-  return join(LOGS_DIR, `${sid}.md`);
+  return join(LOGS_DIR, `${sid}.log`);
 }
 // ------------------------------------------------------------------ 状态
 
-export function loadState(sid, ns = '') {
+/** 分区名：`''` 是历史写法（= auto-continue 的地盘），统一映射到 `continue`。 */
+const SECTIONS = new Set(['init', 'continue', 'commit']);
+function sectionOf(name) {
+  const key = String(name || 'continue');
+  return SECTIONS.has(key) ? key : key;
+}
+
+/** 同步小睡：钩子是短命进程，拿锁失败时宁可旋一下也不要异步。 */
+function sleepMs(ms) {
   try {
-    return JSON.parse(readFileSync(statePath(sid, ns), 'utf8')) ?? {};
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    /* 环境不支持就退化成忙等，最多几百毫秒 */
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      /* spin */
+    }
+  }
+}
+
+/**
+ * 读-改-写锁（`mkdir` 是原子的）。
+ *
+ * 为什么必须有：`queue-init` 与 `auto-continue` 在 UserPromptSubmit 上**并行**跑，
+ * 两个进程"读整份 JSON → 改自己那一区 → 写回"时，后写的会把先写的分区抹掉
+ * （症状是会话被重复注入、或轮次归零失效）。分区只解决了"字段互相覆盖"，
+ * 解决不了"读到旧副本"——加锁才解决。
+ *
+ * 崩溃残留的锁 2 秒后视为过期（钩子进程本身就活不过几百毫秒）。
+ */
+function withStateLock(file, fn) {
+  const lock = `${file}.lock`;
+  let held = false;
+  for (let i = 0; i < 60 && !held; i += 1) {
+    try {
+      mkdirSync(lock);
+      held = true;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') break;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 2000) {
+          rmSync(lock, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        /* 锁刚被释放，重试即可 */
+      }
+      sleepMs(5);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    if (held) rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+function readAllState(sid) {
+  try {
+    const parsed = JSON.parse(readFileSync(statePath(sid), 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
 }
 
-export function saveState(sid, state, ns = '') {
+export function loadState(sid, section = '') {
+  const value = readAllState(sid)[sectionOf(section)];
+  return value && typeof value === 'object' ? value : {};
+}
+
+export function saveState(sid, state, section = '') {
+  const key = sectionOf(section);
   try {
     mkdirSync(LOGS_DIR, { recursive: true });
-    writeFileSync(statePath(sid, ns), `${JSON.stringify(state, null, 2)}\n`);
+    withStateLock(statePath(sid), () => {
+      const all = readAllState(sid);
+      all[key] = state;
+      writeFileSync(statePath(sid), `${JSON.stringify(all, null, 2)}\n`);
+    });
   } catch {
     /* 状态写不进去不影响主流程 */
   }
 }
 
 /**
- * 运行日志（人读的 markdown，`logs/<sid>.md`）。
- * 超过 512KB 轮转：`<sid>.md` → `<sid>.md.1` → `.2` → `.3`（最旧的被覆盖）。
- * 长跑会跑几百上千轮，日志不能无限长。**别写"不删数据"**——轮转位固定，
- * 最旧那份必然被挤掉（旧的实现直接覆盖 `.1`，连上一份都不留）。
+ * 运行日志（人读的纯文本，`logs/<sid>.log`）。
  *
- * 两条"只留有效信息"的规则（2026-10-22 按用户要求改的）：
+ * 三条"只留有效信息"的规则（2026-10-22 按用户要求改的）：
  *
  *   1. **只给「有队列的会话」记**：纯问答会话每轮 Stop 也会跑到这里，记下来只有
  *      `放行 · 本会话尚未创建队列` 之类一行一行的噪音，翻日志时还得先认出"哪份是干活的"。
@@ -151,9 +219,20 @@ export function saveState(sid, state, ns = '') {
  *      要排查"钩子到底有没有被调用"，手动喂一条事件（HANDOFF §4），别指望这个文件。
  *   2. **同一件事连着重复只写一次**：多轮"等用户回复""队列是空的"内容完全一样，
  *      重复写只会把真正发生的事（拦截 / 隔离 / 自测失败）淹掉。时间戳不参与比较。
+ *   3. **一个会话一个文件，不轮转**：超阈值就地砍掉旧的一半（保留尾部），
+ *      不产生 `.1` / `.2` —— 用户要的是"每样东西一个文件"。
+ *
+ * 每行带**来源标签**（`[init]` / `[continue]` / `[commit]`）：三个钩子共用一个文件，
+ * 但要能一眼分清这条是排队列的、递任务的，还是提交守卫说的。
  */
 const LOG_MAX_BYTES = Number(process.env.CONTINUE_LOG_MAX ?? 512 * 1024);
-const LOG_KEEP = 3;
+
+/** 来源标签：只有这三个脚本会写日志，写错标签说明调用处写错了。 */
+export const LOG_TAG = {
+  init: 'init',
+  continue: 'continue',
+  commit: 'commit',
+};
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -180,12 +259,24 @@ export function localOffset(date = new Date()) {
   return `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
 }
 
-/** 把 `- 2026-10-22 08:15:32 · 正文` 里的时间戳剥掉，只留正文（去重比较用）。 */
-function stripStamp(line) {
-  return line.replace(/^-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*·\s*/, '').replace(/^-\s*\S+\s*·\s*/, '');
+/** 文件头：只在新建/截断后写一次，说明时间口径。 */
+function logHeader(sid) {
+  return `==== 会话 ${sid} · 运行日志 · 本地时间 ${localOffset()} · 标签 [init]/[continue]/[commit] ====`;
 }
 
-export function appendLog(sid, line) {
+/** 把时间戳与标签剥掉，只留正文（去重比较用）。 */
+function stripStamp(line) {
+  return line.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[[a-z]+\] /, '');
+}
+
+/**
+ * 追加一行：`2026-10-22 09:12:40 [continue] 拦截 · Stop 第1轮 · 递任务：「…」`。
+ *
+ * @param {string} sid  会话 ID
+ * @param {string} tag  来源（`LOG_TAG.init` / `.continue` / `.commit`）
+ * @param {string} text 正文
+ */
+export function appendLog(sid, tag, text) {
   try {
     // 规则 1：没有队列的会话不产生任何日志（连文件都不建）
     if (!existsSync(queuePath(sid))) return;
@@ -194,31 +285,37 @@ export function appendLog(sid, line) {
     const file = logPath(sid);
 
     let existed = true;
+    let size = 0;
     try {
-      if (statSync(file).size > LOG_MAX_BYTES) {
-        for (let i = LOG_KEEP; i > 1; i -= 1) {
-          if (existsSync(`${file}.${i - 1}`)) renameSync(`${file}.${i - 1}`, `${file}.${i}`);
-        }
-        renameSync(file, `${file}.1`);
-        existed = false;
-      }
+      size = statSync(file).size;
     } catch {
       existed = false; // 文件还不存在，正常
     }
 
-    // 规则 2：与上一行说的是同一件事 → 跳过（重复的时间点本身没有信息量）
-    if (existed) {
+    // 规则 3：超阈值就砍掉旧的一半（单文件，不产生 .1/.2）
+    if (existed && size > LOG_MAX_BYTES) {
       try {
-        const text = readFileSync(file, 'utf8').trimEnd();
-        const last = text.split(/\r?\n/).pop() ?? '';
-        if (!last.startsWith('#') && stripStamp(last) === line) return;
+        const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+        const body = lines.filter((line) => line && !line.startsWith('===='));
+        writeFileSync(file, `${logHeader(sid)}\n${body.slice(Math.ceil(body.length / 2)).join('\n')}\n`);
+        size = statSync(file).size;
+      } catch {
+        /* 截断失败就继续追加，下次再试 */
+      }
+    }
+
+    // 规则 2：与上一行说的是同一件事 → 跳过（重复的时间点本身没有信息量）
+    if (existed && size > 0) {
+      try {
+        const last = readFileSync(file, 'utf8').trimEnd().split(/\r?\n/).pop() ?? '';
+        if (stripStamp(last) === text) return;
       } catch {
         /* 读不到就当没有上一行 */
       }
     }
 
-    const header = existed ? '' : `# 会话 ${sid} 运行日志（本地时间 ${localOffset()}）\n\n`;
-    appendFileSync(file, `${header}- ${localStamp()} · ${line}\n`);
+    const header = size > 0 ? '' : `${logHeader(sid)}\n`;
+    appendFileSync(file, `${header}${localStamp()} [${tag}] ${text}\n`);
   } catch {
     /* 日志失败绝不影响判定 */
   }

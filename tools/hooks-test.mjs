@@ -52,8 +52,9 @@ function check(name, cond, detail = '') {
 }
 
 const queuePath = (sid) => join(queuesDir, `${sid}.md`);
-const statePath = (sid, ns = '') => join(logsDir, `${sid}${ns ? `.${ns}` : ''}.state.json`);
-const logFilePath = (sid) => join(logsDir, `${sid}.md`);
+// 2026-10-22 起每个会话只有两个运行时文件：`<sid>.log` + `<sid>.state.json`（状态按钩子分区存在同一份里）
+const statePath = (sid) => join(logsDir, `${sid}.state.json`);
+const logFilePath = (sid) => join(logsDir, `${sid}.log`);
 
 /** 读日志正文（不存在就当空串）。 */
 function readLog(sid) {
@@ -67,11 +68,14 @@ function readLog(sid) {
 /**
  * 删掉用例自己的日志（含轮转位 `.1`~`.3`）。
  *
- * ⚠️ 用例跑完只清队列和状态、不清日志的话，`logs/` 会攒下一堆 `hooks-test-*.md`，
+ * ⚠️ 用例跑完只清队列和状态、不清日志的话，`logs/` 会攒下一堆 `hooks-test-*.log`，
  * 而 `logs/` 本来只该放"真干活的会话"的时间线——那正是用户抱怨过的无效日志。
  */
 function rmLog(sid) {
-  for (const suffix of ['', '.1', '.2', '.3']) rmSync(`${logFilePath(sid)}${suffix}`, { force: true });
+  rmSync(logFilePath(sid), { force: true });
+  rmSync(`${logFilePath(sid)}.lock`, { recursive: true, force: true });
+  rmSync(statePath(sid), { force: true });
+  rmSync(`${statePath(sid)}.lock`, { recursive: true, force: true });
 }
 
 /**
@@ -91,8 +95,6 @@ function withQueue(sid, content, fn) {
     if (had && backup !== null) writeFileSync(file, backup);
     else rmSync(file, { force: true });
     // 用例自己的轮次/缓存状态也一起清掉，避免下一轮读回旧计数
-    // （`statePath` 自己会补一个点，所以命名空间写 `init` / `commit`，不要写成 `.init`）
-    for (const suffix of ['', 'init', 'commit']) rmSync(statePath(sid, suffix), { force: true });
     rmLog(sid);
   }
 }
@@ -256,7 +258,12 @@ console.log('\n[auto-continue · 递任务]');
     check('给队列文件的准确路径', r.stderr.includes(`.continue/queues/hooks-test-pick-1.md`), r.stderr.split('\n')[0]);
     // 批次 1364：从"只做这条"改成"同一回合连续做"——客户端一个用户消息只肯续 1 次自动回合，
     // 所以"做完一条就停"会真的停下来（日志 00:04:47 实证）。这条断言钉住新规则，防回退。
-    check('要求连续做（不再"只做这一条"）', /接着做下一条/.test(r.stderr) && !/只做这一条/.test(r.stderr));
+    // 2026-10-22 用户要求改回"一条一条"：每轮只做这一条，做完停下等下一轮注入
+    check(
+      '要求只做这一条、做完就停（不再"接着做下一条"）',
+      /只做这一条/.test(r.stderr) && !/接着做下一条/.test(r.stderr),
+      r.stderr.split('\n').filter((line) => /做这一条|下一条/.test(line)).join(' | '),
+    );
     check('要求自己写 [~] / [x]', /\[~\]/.test(r.stderr) && /\[x\]/.test(r.stderr));
     check('说明 [阻塞] 由脚本写、AI 不许动', /\[阻塞\]/.test(r.stderr) && /不要自己写/.test(r.stderr));
   });
@@ -284,7 +291,7 @@ console.log('\n[auto-continue · 递任务]');
   const sid = 'hooks-test-pick-4';
   rmSync(queuePath(sid), { force: true });
   // queue-init 每个会话只注入一次，用例要复现"第一次"就得先清掉它的标记
-  rmSync(statePath(sid, 'init'), { force: true });
+  rmLog(sid);
   withQueue('hooks-test-other-4', '- [ ] 别人的条目：x → y\n', () => {
     try {
       const r = runHook('auto-continue.mjs', stopEvent(sid));
@@ -295,7 +302,7 @@ console.log('\n[auto-continue · 递任务]');
       check('queue-init 会提示其他会话的未完成队列', /其他会话/.test(text), init.stdout.slice(0, 200));
       check('并且明确要求不要擅自接管', /不要擅自接管/.test(text));
     } finally {
-      rmSync(statePath(sid, 'init'), { force: true });
+      rmLog(sid);
     }
   });
 }
@@ -310,7 +317,7 @@ console.log('\n[批次号与收尾五步]');
    * AI 建队列时照抄——手抄的数字一定会漂，提交数是唯一真值。
    */
   const sid = 'hooks-test-batch-1';
-  rmSync(statePath(sid, 'init'), { force: true });
+  rmLog(sid);
   try {
     const r = runHook('queue-init.mjs', promptEvent(sid));
     const text = JSON.stringify(r.json ?? {});
@@ -320,7 +327,7 @@ console.log('\n[批次号与收尾五步]');
     check('说明 DONE 标题格式（提交 n→m）', /批次 24（提交 24→27）/.test(text));
     check('说明收尾五步（DONE→TASKS→NOTES→EXPERIENCE→删队列）', /① /.test(text) && /⑤ /.test(text));
   } finally {
-    rmSync(statePath(sid, 'init'), { force: true });
+    rmLog(sid);
   }
 
   const src = readFileSync(join(hooksDir, 'auto-continue.mjs'), 'utf8');
@@ -359,7 +366,7 @@ console.log('\n[卡死保护]');
      * （批次 1355 的 [发现] 就是它）。现在改成查**当前实现**的字段，
      * 而且**仍然守原来那个 bug**：计数必须累加并逐轮落盘，否则永远触发不了隔离。
      */
-    const midState = JSON.parse(readFileSync(statePath(sid), 'utf8'));
+    const midState = JSON.parse(readFileSync(statePath(sid), 'utf8')).continue ?? {};
     check('前 4 轮把连续次数累加并逐轮落盘', midState.currentStreak === 4, String(midState.currentStreak));
     check('连续计数挂在这一条上', /卡死测试条目/.test(midState.currentFingerprint ?? ''));
 
@@ -372,7 +379,7 @@ console.log('\n[卡死保护]');
     const queueNow = readFileSync(file, 'utf8');
     check('队列文件里已写成 [阻塞]', /- \[阻塞\] 卡死测试条目/.test(queueNow));
 
-    const state = JSON.parse(readFileSync(statePath(sid), 'utf8'));
+    const state = JSON.parse(readFileSync(statePath(sid), 'utf8')).continue ?? {};
     check(
       '隔离之后计数归零（改回 [ ] 能重新得到 N 次机会）',
       state.currentStreak === 0,
@@ -584,8 +591,8 @@ console.log('\n[目录分工]');
   check('.continue/.gitignore 覆盖 logs/', /^logs\/$/m.test(ignoreText), ignoreText.trim());
 
   if (existsSync(logsDir)) {
-    const stray = readdirSync(logsDir).filter((name) => name.endsWith('.md') && !name.includes('.state'));
-    check('logs/ 里没有藏队列（只有 <sid>.md 运行日志）', stray.every((name) => !name.includes('queue')));
+    const stray = readdirSync(logsDir).filter((name) => !name.includes('.state') && !name.includes('.lock'));
+    check('logs/ 里没有藏队列（只有 <sid>.log 运行日志）', stray.every((name) => !name.includes('queue')));
   }
 
   // 旧机制必须彻底下线：再出现两份队列文件，钩子会各读一份、互相打脸
@@ -599,15 +606,14 @@ console.log('\n[日志]');
 
 {
   /**
-   * 2026-10-22 用户要求：日志只留**有效信息**——纯问答会话不留痕、时间用**本地时区**、
-   * 关键节点（初始化 / 回灌 / 拦截 / 隔离 / 收尾）必须一眼能看出来。
-   *
-   * 这几条断言守的是"日志还能不能用来回答『续跑到底有没有发生』"：
-   * 记成 UTC 要对时区；没有队列的会话每轮刷一行"放行"，真事件被淹掉。
+   * 2026-10-22 用户要求（两条）：
+   *   ① 日志只留**有效信息**——纯问答会话不留痕、时间用**本地时区**、
+   *      关键节点（初始化 / 回灌 / 拦截 / 隔离 / 收尾）一眼能看出来；
+   *   ② **一个会话只要两个文件**：`<sid>.log`（人读）+ `<sid>.state.json`（机器读），
+   *      日志后缀是常规的 `.log`，三个钩子共用一个文件、用 `[init]/[continue]/[commit]` 区分来源。
    */
   const sid = 'hooks-test-log-1';
   rmSync(queuePath(sid), { force: true });
-  rmSync(statePath(sid, 'init'), { force: true });
   rmLog(sid);
   runHook('queue-init.mjs', {
     hook_event_name: 'UserPromptSubmit',
@@ -618,7 +624,9 @@ console.log('\n[日志]');
 
   const libSrc = readFileSync(join(hooksDir, 'lib.mjs'), 'utf8');
   check('appendLog 只给有队列的会话写', /if \(!existsSync\(queuePath\(sid\)\)\) return;/.test(libSrc));
-  check('时间戳走本地时间函数', /appendFileSync\(file, `\$\{header\}- \$\{localStamp\(\)\}/.test(libSrc));
+  check('时间戳走本地时间函数', /appendFileSync\(file, `\$\{header\}\$\{localStamp\(\)\} \[\$\{tag\}\]/.test(libSrc), 'appendLog 的行格式');
+  check('日志后缀是 .log（不是 .md）', /logPath[\s\S]{0,80}`\$\{sid\}\.log`/.test(libSrc), 'logPath 应使用 .log');
+  check('状态收敛成一个 .state.json（不再按钩子分文件）', /`\$\{sid\}\.state\.json`/.test(libSrc) && !/`\$\{sid\}\$\{ns/.test(libSrc));
 
   const commitSrc2 = readFileSync(join(hooksDir, 'auto-commit.mjs'), 'utf8');
   check(
@@ -633,33 +641,44 @@ console.log('\n[日志]');
 {
   // 有队列 → 初始化 + 拦截递任务都要记，而且时间戳是本地时间
   const sid = 'hooks-test-log-2';
-  rmSync(statePath(sid), { force: true });
-  rmSync(statePath(sid, 'init'), { force: true });
   rmLog(sid);
-  withQueue(sid, MIN_QUEUE, () => {
+  withQueue(sid, MIN_QUEUE, (file) => {
     runHook('queue-init.mjs', { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: '开始' });
     runHook('auto-continue.mjs', stopEvent(sid));
 
     const log = readLog(sid);
-    check('日志开头声明本地时间与时区', /^# 会话 .*（本地时间 [+-]\d{2}:\d{2}）/m.test(log), log.slice(0, 90));
-    check('记下会话初始化（注入了什么）', /会话初始化 · UserPromptSubmit/.test(log));
-    check('记下拦截与递出的条目', /拦截 · Stop 第1轮 · 递任务：「hooks-test 占位条目/.test(log), log);
+    check('日志开头声明本地时间与时区', /^==== 会话 .* · 本地时间 [+-]\d{2}:\d{2}/m.test(log), log.slice(0, 90));
+    check('记下会话初始化（带 [init] 标签）', /\[init\] 会话初始化 · UserPromptSubmit/.test(log));
+    check(
+      '记下拦截与递出的条目（带 [continue] 标签）',
+      /\[continue\] 拦截 · Stop 第1轮 · 递任务：「hooks-test 占位条目/.test(log),
+      log,
+    );
     check(
       '时间戳是本地时间（不是 UTC 的 T…Z）',
-      /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} · /m.test(log) && !/\dT\d{2}:\d{2}:\d{2}\.\d{3}Z/.test(log),
-      log.split('\n').find((line) => line.startsWith('- ')) ?? '',
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[[a-z]+\] /m.test(log) && !/\dT\d{2}:\d{2}:\d{2}\.\d{3}Z/.test(log),
+      log.split('\n').find((line) => /^\d{4}-/.test(line)) ?? '',
     );
+
+    // 一个会话只有两个运行时文件：日志 + 状态（锁是瞬时的，跑完就删）
+    const dir = readdirSync(logsDir).filter((name) => name.startsWith(sid));
+    check(
+      '一个会话只有 <sid>.log + <sid>.state.json',
+      dir.sort().join(',') === `${sid}.log,${sid}.state.json`,
+      dir.join(' | '),
+    );
+    check('队列文件没被日志写脏', existsSync(file));
   });
 }
 
 {
   // 回灌不归零轮次：日志里的「第N轮」要能看出这一轮已经续了几次
   const sid = 'hooks-test-log-3';
-  rmSync(statePath(sid), { force: true });
   rmLog(sid);
   withQueue(sid, MIN_QUEUE, () => {
+    runHook('queue-init.mjs', { hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: '开始' });
     runHook('auto-continue.mjs', stopEvent(sid));
-    // 回灌时平台会并行跑 UserPromptSubmit 上的两个钩子，这里照实复现
+    // 回灌时平台会并行跑 UserPromptSubmit 上的两个钩子，这里照实复现（顺带压测状态文件并发写）
     const echoed = {
       hook_event_name: 'UserPromptSubmit',
       session_id: sid,
@@ -678,13 +697,16 @@ console.log('\n[日志]');
     runHook('auto-continue.mjs', stopEvent(sid));
     const rounds = (readLog(sid).match(/拦截 · Stop 第1轮/g) ?? []).length;
     check('用户发言后轮次归零（重新从第1轮计）', rounds === 2, `第1轮出现 ${rounds} 次`);
+
+    // 并发写状态不能互相抹：init 区与 continue 区必须都在
+    const all = JSON.parse(readFileSync(statePath(sid), 'utf8'));
+    check('同一份 state 里两个分区都在（并行写没互相覆盖）', Boolean(all.init) && Boolean(all.continue), JSON.stringify(Object.keys(all)));
   });
 }
 
 {
   // 同一件事连着重复只写一次，否则「等回复」「队列是空的」会把真事件淹掉
   const sid = 'hooks-test-log-4';
-  rmSync(statePath(sid), { force: true });
   rmLog(sid);
   withQueue(sid, '# 队列\n\n> 状态：讨论中\n\n- [ ] 讨论中的条目：x → y\n', () => {
     for (let i = 0; i < 3; i += 1) runHook('auto-continue.mjs', stopEvent(sid));
