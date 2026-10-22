@@ -26,7 +26,7 @@
  *
  * 收尾：`[ ]` / `[~]` 都没了 → **默认自动收尾**（不弹窗、不等确认）：
  *   由 AI 把整份队列（含每条下方的完成说明）搬进 `DONE.md`、更新 `OVERVIEW.md`、
- *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、删除队列文件。
+ *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、把队列归档到 `logs/doing-archive/`。
  *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、没跑"的条目时才弹窗问用户
  *   ——那两类人没看过就等于悄悄丢活。同一份队列只催一次，之后放行（否则每轮重复同一句话）。
  */
@@ -44,8 +44,8 @@ import {
   markBlocked,
   milestoneComplete,
   parseBatch,
-  parsePlanRef,
-  planPath,
+  planNameFor,
+  planPathFor,
   queuePath,
   readPlan,
   readLogText,
@@ -260,9 +260,11 @@ function wrapSteps(keepQueue = false) {
   '   写进去只会稀释真正有价值的条目。没有就跳过，**不写"本批无"占位**；',
     keepQueue
       ? '5. **不要删除队列文件**：计划模式下它是"当前批次"的载体，下一阶段还要用它。' +
-        ' 把 `> 批次：` 换成新号、`> 计划：` 保留、条目整段换成下一阶段的 5~6 条。' +
+        ' 把 `> 批次：` 换成新号、条目整段换成下一阶段的 5~6 条。' +
         ' 删掉的话钩子下一轮按会话 ID 就找不到这个队列了，计划链在这里无声断掉。'
-      : `5. 删除 \`${DOING_REL}/${sid}.md\`。`,
+      : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
+        '   它把队列移到 `.continue/logs/doing-archive/<会话ID>-<年月日时分秒>.md` 备查。' +
+        '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。',
     '',
     '**做完在回复里逐条回执**：五步各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
     '漏掉的当场补，不要让用户自己去翻文档核对。',
@@ -294,59 +296,30 @@ if (!pick) {
   // 没有需要拍板的条目 → 自动收尾，不弹窗。
   if (blocked.length === 0 && unproven.length === 0) {
     /**
-     * **计划模式**：队列头部写了 `> 计划：plan-x.md` 时，收尾之前先问计划"下一步是什么"。
+     * **计划模式**：本会话存在 `doing/plan-<本会话ID>.md` 时，收尾之前先问计划"下一步是什么"。
+     *
+     * 绑定不靠声明、靠**文件名配对**：队列 `<sid>.md` ↔ 计划 `plan-<sid>.md`。
+     * 所以这里没有"引用写错"这种状态——文件在就是有计划，不在就是没有，
+     * 少了一整类"写了但读不到"的静默失效。
      *
      * 三个分支（都在"这一批的条目已经全勾完"这个时刻判定）：
      *   · 未到边界 → 续批：收尾本批（**重置队列，不删**）+ 勾阶段 + 取下一阶段；
      *   · 到边界   → **硬停**：收尾 + 勾阶段 + 跑里程碑验收 + 弹窗等开发者拍板；
-     *   · 计划做完 → 正常收尾（这次删队列）+ 删计划。
+     *   · 计划做完 → 正常收尾 + 删计划。
      *
      * "到边界"的判据是 `milestoneComplete(plan, ms, 当前阶段)` —— 即**做完这一条之后**
      * 该里程碑就齐了，所以是"完成到里程碑才停"，不是"取到里程碑就停"。
      * 少了 `alsoDone` 这个参数就会永远差一条、边界从不触发（见 lib.mjs 的注释）。
      */
-    const planName = parsePlanRef(queue.text);
-    const plan = planName ? readPlan(planPath(planName)) : null;
-    const planKey = planName ? `${planName}:${plan?.cursor?.id ?? 'done'}` : null;
+    const planName = planNameFor(sid);
+    const plan = readPlan(planPathFor(sid));
+    const planKey = plan ? `${planName}:${plan.cursor?.id ?? 'done'}` : null;
 
-    if (planName && !plan) {
-      if (state.planStep === planKey) {
-        idleAllow(
-          '计划引用告警已下发，等修正',
-          `\`> 计划：${planName}\` 指向的文件不存在，上一轮已经告过警了。` +
-            '要么把引用改对、要么删掉这一行，不要重复问用户。',
-        );
-      }
-      state.planStep = planKey;
-      state.count = 0;
-      saveState(sid, state);
-      appendLog(sid, `告警 · 队列头部引用的计划不存在：${planName}`);
-      emitBlock(
-        [
-          '[auto-continue · 队列引用的计划文件不存在]',
-          '',
-          `队列头部写着 \`> 计划：${planName}\`，但 \`${DOING_REL}/${planName}\` 不存在。`,
-          '',
-          '**这不是"没有计划"，是引用写错了。**不能当普通队列收尾了事——那样这套机制',
-          '看起来一切正常，实际上一次都不会触发，而且没有任何报错。',
-          '',
-          '## 现在要做的事',
-          '',
-          `1. 先查清楚：\`ls ${DOING_REL}/\`，看是文件名拼错还是计划被误删；`,
-          '2. 找得回来 → 把 `> 计划：` 改成正确的文件名；',
-          '3. 确实没有计划了 → 把 `> 计划：` 这一行删掉（这个队列就退回成独立队列）；',
-          '4. 然后按普通五步收尾：',
-          '',
-          ...wrapSteps(true),
-        ].join('\n'),
-      );
-    }
-
-    if (plan && planKey) {
+    if (plan) {
       const step = plan.cursor;
       const ms = step ? plan.milestones.find((m) => m.id === step.ms) : null;
 
-      // ---- 计划已无未完成阶段：整体收尾，这次真的删队列
+      // ---- 计划已无未完成阶段：整体收尾，队列走归档（和普通批一样）
       if (!step) {
         /**
          * 收尾前必须有人验收过**最后一个**里程碑。
@@ -398,7 +371,7 @@ if (!pick) {
         if (state.planStep === planKey) {
           idleAllow(
             '计划完成指令已下发，队列文件还在',
-            '计划已经全部完成了，上一轮已经给过收尾指令。照五步补完并删掉队列文件即可。',
+            '计划已经全部完成了，上一轮已经给过收尾指令。照五步补完并把队列归档即可。',
           );
         }
         state.planStep = planKey;
@@ -413,7 +386,7 @@ if (!pick) {
             '',
             '## 现在要做的事',
             '',
-            '### ① 收尾本批（五步，**这次队列文件要删**）',
+            '### ① 收尾本批（五步，**这次队列要归档**）',
             '',
             ...wrapSteps(false),
             '',
@@ -551,7 +524,7 @@ if (!pick) {
     if (state.autoWrapped) {
       idleAllow(
         '自动收尾指令已下发，队列文件还在',
-        '自动收尾的指令上一轮已经给过了：队列文件还在说明五步没做完。照五步补完并删掉队列文件即可，不要来问用户。',
+        '自动收尾的指令上一轮已经给过了：队列文件还在说明五步没做完。照五步补完并把队列归档即可，不要来问用户。',
       );
     }
     state.autoWrapped = true;
@@ -575,7 +548,7 @@ if (!pick) {
         '',
         '## 收尾之后',
         '',
-        '1. 把 `DONE.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 的改动和"删除队列文件"**一起提交**，',
+        '1. 把 `DONE.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 的改动和"队列归档（doing 里那份被移走）"**一起提交**，',
         `   commit message：\`批次 ${batch ?? '<n>'} · 收尾 · <这批做了什么>\`；`,
         '2. 回复末尾写一句"收尾已自动完成"（五步各自做了还是没做）；',
         '3. 遗留问题（`[发现]` 里没做的、判断不该做的）单独列给用户，不要顺手塞进 `TASKS.md`。',
@@ -585,7 +558,7 @@ if (!pick) {
 
   if (state.askedComplete) {
     appendLog(sid, '空转 · 已请用户拍板卡住/未验证的条目，等回复');
-    emitAllow('已经请用户拍板卡住 / 未验证的条目了，等回复；定了之后再收尾（DONE / OVERVIEW / TASKS / TIPS / 删队列）。');
+    emitAllow('已经请用户拍板卡住 / 未验证的条目了，等回复；定了之后再收尾（DONE / OVERVIEW / TASKS / TIPS / 归档队列）。');
   }
 
   state.askedComplete = true;
@@ -634,7 +607,7 @@ if (!pick) {
       '',
       ...WRAP_STEPS,
       '',
-      '> 拍板之前不要动 DONE.md / OVERVIEW.md / TASKS.md，也不要删除队列文件。',
+      '> 拍板之前不要动 DONE.md / OVERVIEW.md / TASKS.md，也不要归档队列文件。',
     ].join('\n'),
   );
 }

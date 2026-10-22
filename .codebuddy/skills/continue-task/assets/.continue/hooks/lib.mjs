@@ -598,19 +598,19 @@ export function classify(trimmed) {
 }
 
 /**
- * 队列**头部声明区**的行数：`# 标题` + 空行 + 4 个声明（状态 / 创建 / 批次 / 计划）。
+ * 队列**头部声明区**的行数：`# 标题` + 空行 + 3 个声明（状态 / 创建 / 批次）。
  *
- * 为什么抽成一个常量、而不是每处各写 5：这扇窗口原来在三个地方各写了一遍
- * （`hold` / `parseBatch` / `parsePlanRef`）。加 `> 计划：` 时只想起前两处，
- * **第三处仍是 5，而标准头部里它正好是第 6 行**——于是"绑定计划"永远读不到，
- * 且没有任何报错（实测：第 6 行返回 `null`，挪到第 5 行才认）。
- * 同一个数字写两遍就会漂，这是本项目的老账。
+ * 为什么抽成一个常量、而不是每处各写：这扇窗口原来在 `hold` 与 `parseBatch` 里各写一遍，
+ * 加第三个读者时漏改了一个——**同一个数字写两遍就会漂**，这是本项目的老账。
+ * 上一版计划机制一度把它改成 6（因为要在第 6 行放 `> 计划：`）；
+ * 计划改成按文件名配对后，那个声明没了，窗口回到 5。
+ * 数字只有一处，改起来才敢改。
  *
- * 为什么必须卡窗口、不能扫全文：正文里随便提一句模板（`> 状态：讨论中`、
- * `> 计划：plan-x.md`）就能改变整份队列的行为，而且只给用户弹一句提示，
- * AI 那边毫无感觉——排查起来像"钩子不干活"。
+ * 为什么必须卡窗口、不能扫全文：正文里随便提一句模板（`> 状态：讨论中`）
+ * 就能改变整份队列的行为，而且只给用户弹一句提示，AI 那边毫无感觉——
+ * 排查起来像"钩子不干活"。
  */
-export const QUEUE_HEAD_LINES = 6;
+export const QUEUE_HEAD_LINES = 5;
 
 /**
  * 返回 { entries, counts, hold }。
@@ -813,57 +813,40 @@ export function unfinishedCount(queue) {
 // ------------------------------------------------------------------ 计划（plan-*.md）
 
 /**
- * 计划文件的命名：`doing/plan-<名字>.md`。
+ * 计划文件的命名：`doing/plan-<session_id>.md` —— **和队列同名配对**。
  *
- * 为什么要卡这个前缀：`doing/` 里同时住着"会话队列"和"计划"两类文件，
- * 钩子靠前缀区分——队列按会话 ID 推导（`<sid>.md`），计划按 `plan-` 推导。
- * 前缀写错（`Plan-x.md` / `planx.md`）的后果是它被当成**别人的队列**：
- * `audit-ids` 会按队列去解析它、`audit-docs` 按队列体量算它，
- * 而真正的 plan 判定一次都不会触发——静默失效，最难查。
+ * 绑定由**文件名**表达：队列 `<sid>.md` ↔ 计划 `plan-<sid>.md`，钩子按会话 ID 直接算路径。
  *
- * 反过来，`plan-xxx` 也能通过"文件名像会话 ID"那条检查（`[A-Za-z0-9._-]{4,}`），
+ * 为什么不写进队列头（旧做法 `> 计划：x.md`）：那等于把"这一批属于哪份计划"存了两份，
+ * 两份必然漂——实测漂过一次：门禁接受带 `· 阶段` 的写法、钩子只认不带后缀的，
+ * 结果**门禁全绿、机制一次都不触发**，且没有任何报错。
+ * 文件名不会漂：改名 = 那份计划谁都读不到，而门禁能当场发现"孤儿计划"。
+ *
+ * 前缀仍必须卡住：`doing/` 里同时住着"会话队列"和"计划"两类文件，钩子靠前缀区分。
+ * 前缀写错（`Plan-x.md` / `planx.md`）时它会被当成**别人的队列**——
+ * `audit-ids` 按队列解析它、`audit-docs` 按队列体量算它，而 plan 判定一次都不触发。
+ * `plan-xxx` 本身能通过"文件名像会话 ID"那条检查（`[A-Za-z0-9._-]{4,}`），
  * 所以不需要为它在 `audit-ids` 里开白名单。
  */
-export const PLAN_FILE_RE = /^plan-[A-Za-z0-9._-]+\.md$/;
+export const PLAN_FILE_RE = /^plan-([A-Za-z0-9._-]+)\.md$/;
 
 export function isPlanFile(name) {
   return PLAN_FILE_RE.test(name);
 }
 
-export function planPath(name) {
-  return join(DOING_DIR, name);
+/** 会话 ID → 计划文件名。配对关系只在这里定义一次。 */
+export function planNameFor(sid) {
+  return `plan-${sid}.md`;
 }
 
-/** 所有 `doing/plan-*.md`（不含会话队列）。读失败当作没有。 */
-export function listPlans() {
-  try {
-    return readdirSync(DOING_DIR)
-      .filter((name) => isPlanFile(name))
-      .map((name) => ({ name, file: join(DOING_DIR, name) }));
-  } catch {
-    return [];
-  }
+/** 会话 ID → 计划文件绝对路径（文件不存在时也返回路径，由调用方 `readPlan` 判空）。 */
+export function planPathFor(sid) {
+  return join(DOING_DIR, planNameFor(sid));
 }
 
-/**
- * 队列头部的 `> 计划：plan-mobile.md` —— 声明"这一批是从哪份计划里取出来的"。
- *
- * 只读**头部声明区**（`QUEUE_HEAD_LINES`），与 `> 状态：讨论中` 同一套口径：
- * 正文里引用一句模板不能把整份队列绑到别的计划上（这个坑 `hold` 已经踩过一次）。
- *
- * 为什么把绑定写在队列里、而不是在计划里记"当前会话"：
- * 队列跟着批次进同一个提交，"这一批属于哪个计划"是**这一批**的事实；
- * 写进计划则一批结束就得回去改它，多一次无谓的写入和一份可能对不上的状态。
- *
- * **只认这一种写法**：`> 计划：<文件名>.md`，后面什么都不能跟。
- * 曾经允许过 `· 阶段 MS2.1`（门禁侧还校验了它），但"当前阶段"本来就是从计划里
- * 派生的（游标 = 第一条 `[~]`），写进队列头就是第二份副本、必然漂。
- * 现在多写一个字的后果是**解析不出来**——所以门禁侧对"有 `计划` 字样却解析不出"
- * 直接判红，不让它静默退化成普通队列。
- */
-export function parsePlanRef(text) {
-  const head = String(text ?? '').split(/\r?\n/).slice(0, QUEUE_HEAD_LINES).join('\n');
-  const m = /^>\s*计划\s*[:：]\s*([A-Za-z0-9._-]+\.md)\s*$/m.exec(head);
+/** 计划文件名 → 它服务的会话 ID；不是计划文件时返回 `null`。 */
+export function sessionOfPlan(name) {
+  const m = PLAN_FILE_RE.exec(name);
   return m ? m[1] : null;
 }
 

@@ -52,21 +52,16 @@ const stop = (sid) => ({ hook_event_name: 'Stop', session_id: sid });
 const prompt = (sid, text = 'hi') => ({ hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: text });
 const queue = (sid, body, head = '> 状态：执行中') =>
   writeFileSync(join(DOING, `${sid}.md`), `# 队列\n\n${head}\n> 批次：19990101-0000\n\n${body}\n`);
-/** 计划文件：`doing/plan-<名>.md`，和真实文件同构。 */
-const plan = (name, body) => writeFileSync(join(DOING, name), `# 计划 · 测试\n\n${body}\n`);
 /**
- * 绑了计划的队列：头部多一行 `> 计划：`。
- *
- * ⚠️ **必须和真实模板逐行同构**（`queue-init` 注入的头部是
- * `# 队列` / 空行 / `> 状态` / `> 创建` / `> 批次` / `> 计划`）。
- * 这个夹具原来少了 `> 创建：`，于是 `> 计划：` 落在**第 5 行**——
- * 而真实队列里它是**第 6 行**，`parsePlanRef` 只看前 5 行，真实绑定恒失效时
- * 这一整组用例照样全绿。夹具比生产短一行，测的就等于不是那件事。
+ * 计划文件：**文件名必须是 `plan-<会话ID>.md`**——钩子按会话 ID 直接算路径，
+ * 名字不对它就当没有计划（这是新契约，和队列同名配对）。
  */
-const planQueue = (sid, planName, body) =>
+const plan = (sid, body) => writeFileSync(join(DOING, `plan-${sid}.md`), `# 计划 · 测试\n\n${body}\n`);
+/** 绑了计划的队列：**不写 `> 计划：`**（绑定在文件名里），其余与真实模板同构。 */
+const planQueue = (sid, body) =>
   writeFileSync(
     join(DOING, `${sid}.md`),
-    `# 队列\n\n> 状态：执行中\n> 创建：1999-01-01\n> 批次：19990101-0000\n> 计划：${planName}\n\n${body}\n`,
+    `# 队列\n\n> 状态：执行中\n> 创建：1999-01-01\n> 批次：19990101-0000\n\n${body}\n`,
   );
 const config = (fast, extra = {}) =>
   writeFileSync(
@@ -214,13 +209,12 @@ try {
 
   // ---------------------------------------------------------------- 计划模式
   /**
-   * 计划模式的 6 条分支。前 4 条是"有 `> 计划：` 时的三条路 + 重复保护"，
-   * 第 5 条钉住**没有计划时文案逐字未变**（这一条是这次改动的回归底线：
-   * 加计划不该动到任何存量会话的收尾行为）。
+   * 计划模式的分支。绑定**靠文件名配对**（`plan-<本会话ID>.md` ↔ `<本会话ID>.md`），
+   * 所以每个用例的计划文件必须挂在它自己的会话 ID 上——不能几份队列共用一份计划。
    */
   check('auto-continue · 计划未到边界 → 续批，并且点名下一阶段', () => {
     plan(
-      'plan-a.md',
+      's-plan-next',
       [
         '## MS1 · 甲',
         '- 验收：`npm run test:a`',
@@ -232,7 +226,7 @@ try {
         '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
       ].join('\n'),
     );
-    planQueue('s-plan-next', 'plan-a.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    planQueue('s-plan-next', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-next'));
     return expect(
       r.code === 2 &&
@@ -250,14 +244,29 @@ try {
     );
   });
 
+  check('auto-continue · 计划文件名不是 `plan-<本会话ID>.md` → 当没有计划（走普通收尾）', () => {
+    // 名字写错 = 钩子按会话 ID 算路径算不到它。这正是"文件名即绑定"的代价，必须钉住。
+    writeFileSync(
+      join(DOING, 'plan-wrong-name.md'),
+      '# 计划 · 测试\n\n## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`\n',
+    );
+    planQueue('s-plan-wrong', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-wrong'));
+    return expect(
+      r.code === 2 && r.err.includes('[auto-continue · 自动收尾]') && !r.err.includes('计划里还有下一阶段'),
+      '计划名与会话 ID 不配对时，必须当成"没有计划"，不能半认',
+      r,
+    );
+  });
+
   check('auto-continue · 计划做到里程碑边界 → 硬停，列出里程碑验收命令', () => {
     plan(
-      'plan-b.md',
+      's-plan-edge',
       ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join(
         '\n',
       ),
     );
-    planQueue('s-plan-edge', 'plan-b.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    planQueue('s-plan-edge', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-edge'));
     return expect(
       r.code === 2 &&
@@ -270,7 +279,13 @@ try {
   });
 
   check('auto-continue · 里程碑硬停只提醒一次，第二轮放行', () => {
-    planQueue('s-plan-edge2', 'plan-b.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    plan(
+      's-plan-edge2',
+      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join(
+        '\n',
+      ),
+    );
+    planQueue('s-plan-edge2', '- [x] 甲\n  - 验证：`npm test` 通过');
     const first = hook('auto-continue.mjs', stop('s-plan-edge2'));
     const second = hook('auto-continue.mjs', stop('s-plan-edge2'));
     if (first.code !== 2) return expect(false, '第一轮应硬停', first);
@@ -279,7 +294,7 @@ try {
 
   check('auto-continue · 上一个里程碑已写「确认：已验收」→ 继续下一里程碑', () => {
     plan(
-      'plan-c.md',
+      's-plan-confirmed',
       [
         '## MS1 · 甲',
         '- 验收：`npm run test:a`',
@@ -292,7 +307,7 @@ try {
         '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
       ].join('\n'),
     );
-    planQueue('s-plan-confirmed', 'plan-c.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    planQueue('s-plan-confirmed', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-confirmed'));
     return expect(
       r.code === 2 && r.err.includes('计划里还有下一阶段') && !r.err.includes('停下等验收'),
@@ -303,7 +318,7 @@ try {
 
   check('auto-continue · 计划里阶段全做完 → 整体收尾并删计划', () => {
     plan(
-      'plan-d.md',
+      's-plan-done',
       [
         '## MS1 · 甲',
         '- 验收：`npm run test:a`',
@@ -311,48 +326,25 @@ try {
         '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
       ].join('\n'),
     );
-    planQueue('s-plan-done', 'plan-d.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    planQueue('s-plan-done', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-done'));
     return expect(
-      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-d.md'),
+      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-s-plan-done.md'),
       '计划全部完成且最后里程碑已验收时，应走整体收尾',
-      r,
-    );
-  });
-
-  check('自检夹具 · 队列头与真实注入模板同构（`> 计划：` 必须在第 6 行被读到）', () => {
-    plan(
-      'plan-f.md',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- [~] `MS1.1` 当前 → 验收 `npm run test:a`',
-        '- [ ] `MS1.2` 下一条 → 验收 `npm run test:a`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-line6', 'plan-f.md', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const lines = readFileSync(join(DOING, 's-plan-line6.md'), 'utf8').split(/\r?\n/);
-    if (!/^>\s*计划/.test(lines[5]?.trim() ?? '')) {
-      return expect(false, `夹具不同构：第 6 行应是 \`> 计划：\`，实际 ${JSON.stringify(lines[5])}`, null);
-    }
-    const r = hook('auto-continue.mjs', stop('s-plan-line6'));
-    return expect(
-      r.code === 2 && r.err.includes('计划里还有下一阶段'),
-      '第 6 行的绑定必须被读到（`parsePlanRef` 原来只看前 5 行，真实队列里它恒失效）',
       r,
     );
   });
 
   check('auto-continue · 计划做完但最后里程碑没验收 → 请用户拍板，不整体收尾', () => {
     plan(
-      'plan-e.md',
+      's-plan-unconfirmed',
       [
         '## MS1 · 甲',
         '- 验收：`npm run test:a`',
         '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
       ].join('\n'),
     );
-    planQueue('s-plan-unconfirmed', 'plan-e.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    planQueue('s-plan-unconfirmed', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-unconfirmed'));
     return expect(
       r.code === 2 &&
@@ -364,22 +356,30 @@ try {
     );
   });
 
-  check('auto-continue · `> 计划：` 指向不存在的文件 → 显式告警，不当普通队列收尾', () => {
-    planQueue('s-plan-miss', 'plan-nope.md', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-miss'));
+  check('auto-continue · 没有计划时收尾第五步是"归档队列"（不再直接删）', () => {
+    queue('s-noplan', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-noplan'));
     return expect(
-      r.code === 2 && r.err.includes('计划文件不存在') && r.err.includes('引用写错了') && !r.err.includes('[auto-continue · 自动收尾]'),
-      '引用丢失必须告警；静默退回普通收尾等于机制失效却看不出来',
+      r.code === 2 &&
+        r.err.includes('归档队列文件') &&
+        r.err.includes('archive-queue.mjs') &&
+        !r.err.includes('不要删除队列文件'),
+      '存量会话的收尾第五步应改成归档；计划模式才是"不要动队列"',
       r,
     );
   });
 
-  check('auto-continue · 没有 `> 计划：` 时收尾第五步仍是"删除队列文件"', () => {
-    queue('s-noplan', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-noplan'));
+  check('archive-queue · 队列移到 logs/doing-archive/<会话ID>-<年月日时分秒>.md', () => {
+    queue('s-arch', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('archive-queue.mjs', null, {}, ['s-arch']);
+    if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
+    if (existsSync(join(DOING, 's-arch.md'))) return expect(false, '队列文件应已移出 doing/', r);
+    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('s-arch-')) : [];
+    if (moved.length !== 1) return expect(false, `logs/doing-archive 里应有 1 份，实际 ${moved.length}`, r);
     return expect(
-      r.code === 2 && r.err.includes('5. 删除') && !r.err.includes('不要删除队列文件'),
-      '存量会话的收尾文案不该被计划模式改掉',
+      /^s-arch-\d{14}\.md$/.test(moved[0]),
+      `备份名应是 <会话ID>-<14位时间戳>.md，实际 ${moved[0]}`,
       r,
     );
   });
