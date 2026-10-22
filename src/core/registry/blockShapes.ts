@@ -503,10 +503,15 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'pane':
       return paneBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'door':
-      // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
-      // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
-      // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
-      return isDoorOpen(state) ? [] : [doorBox(state)];
+      // ⚠️ 渲染盒**始终**要返回门板：开着的门只是"没有碰撞"（见 `collisionBoxes`，
+      // 原版可以直接穿过门洞），不是"不画"。`doorBox` 内部已经按开关把门板转到
+      // 门轴那一侧，所以这里不该再分开关。
+      //
+      // 以前这里抄了碰撞盒那句 `isDoorOpen ? [] : ...`，症状是**开着的门整扇消失**
+      // （玩家看到的是"点了门、听到声音、门没了，却还是过不去"）。
+      // 碰撞那一侧的空数组仍由 `collisionBoxes('door', 开)` 负责，两者差异
+      // 由 `tests/collision.test.ts` 的渲染断言守着。
+      return [doorBox(state)];
     case 'trapdoor':
       // 与碰撞盒共用同一份几何（见 `collisionBoxes`）
       return [trapdoorBox(state)];

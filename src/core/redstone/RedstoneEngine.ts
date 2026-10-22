@@ -438,6 +438,11 @@ export class RedstoneEngine {
 
   /** 方块发生变化（放置/破坏/状态改变）时调用 */
   onBlockChanged(world: RedstoneWorld, x: number, y: number, z: number): void {
+    // 可开合方块被拆掉/换成别的东西之后，"上次电平"这条记录就没意义了
+    // （不清也不会出错，但会随着玩家拆门无线增长）
+    if (!isOpenableShape(blockDef(world.getBlock(x, y, z)).shape)) {
+      this.openablePower.delete(keyOf(x, y, z));
+    }
     // 变化点自身与其 6 邻域都可能影响电路
     this.markDirty(x, y, z);
     for (const [dx, dy, dz] of NEIGHBORS) this.markDirty(x + dx, y + dy, z + dz);
@@ -1174,14 +1179,32 @@ export class RedstoneEngine {
     return changed;
   }
 
+  /** 每个可开合方块上一次的"有没有电"（按坐标；见 `applyOpenableLoad` 的说明） */
+  private readonly openablePower = new Map<string, boolean>();
+
+  /** 换维度时清空：坐标只在维度内有意义（与 `undoStack` 同一条理由） */
+  clearOpenablePower(): void {
+    this.openablePower.clear();
+  }
+
   /**
-   * 门类负载：通电即开、断电即关（门 / 活板门 / 栅栏门共用）。
+   * 门类负载：**在通断电的那一刻**推一次（门 / 活板门 / 栅栏门共用）。
    *
    * ⚠️ 门是**两格**的：红石通常只贴在下半格旁边，上半格自己的 `input` 是 0，
    * 分开判就会得到"上半开着、下半关着"的半扇门。所以：
    *  - 上半格直接跳过（由下半格负责改写两格）
    *  - 下半格依据自己的输入决定开合，然后把上半格设成同一个开合状态
    * 上半格还必须与下半格是**同一种门**，否则会出现"云杉门配橡木门"这种脏数据。
+   *
+   * ⚠️⚠️ **必须按"电平变化"驱动，不能按"当前电平"重写**（2026-10-22 用户反馈：
+   * 创造模式里橡木门打不开、上半扇变透明、再也恢复不了）。这个引擎是"洪泛 + 整体重算"，
+   * 每次方块变化都会把负载状态**重新写一遍**；而玩家手动开合**不改变输入电平**，
+   * 于是"手动推开一扇没接红石的门"会当场被重算关回去。更糟的是 `main.ts#toggleDoor`
+   * 是**先写下半、再写上半**的两次写入，各触发一次重算：下半被关回、上半留下来，
+   * 正好得到"半扇门"（上半格 `meshBoxes` 之前还会因开着而不画 → 看着是透明的）。
+   *
+   * 所以这里记一份"上次电平"，只在**变化**时动门——与联机/存档都无关，纯粹是
+   * "别拿重算当心跳去覆盖玩家的手动状态"。
    *
    * @returns 是否改了东西（调用方据此置 `changed`）
    */
@@ -1195,10 +1218,19 @@ export class RedstoneEngine {
     shape: string,
     input: number,
   ): boolean {
+    // 门的上半格自己不判电（由下半格统一改写两格），也不该占一条记录
+    if (shape === 'door' && isDoorUpper(state)) return false;
+
     const wantOpen = input > 0;
+    const key = keyOf(x, y, z);
+    const previous = this.openablePower.get(key);
+    this.openablePower.set(key, wantOpen);
+    // 电平没变 → 这一次重算与门的开合无关，别覆盖玩家的手动状态。
+    // 第一次见到一扇"没电却开着"的门也放过：那多半是玩家手动推开的。
+    if (previous === wantOpen) return false;
+    if (previous === undefined && !wantOpen) return false;
 
     if (shape === 'door') {
-      if (isDoorUpper(state)) return false;
       const paired = world.getBlock(x, y + 1, z) === id;
       if (isDoorOpen(state) === wantOpen) return false;
       world.setState(x, y, z, withDoorOpen(state, wantOpen));

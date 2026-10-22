@@ -17354,6 +17354,8 @@ class App {
     this.world.setDimension(dimension);
     // 创造1：换维度之后旧维度的撤销记录没有意义（坐标只在维度内有意义，写回去会串世界）
     this.undoStack.clear();
+    // 门类的"上次电平"同样按坐标记：不清的话，新维度里同坐标的门会被误判成"电平没变"
+    this.redstone.clearOpenablePower();
     // 掉落物实体属于旧维度，直接清掉
     this.entities.clear();
     this.particles.clear();

@@ -32,9 +32,12 @@ import {
   sixFacingOf,
   withSixFacing,
   withDelay,
+  withDoorOpen,
   withDoorUpper,
   withFacing,
+  withFenceGateOpen,
   withPowered,
+  withTrapdoorOpen,
 } from '../src/core/registry/blockState.ts';
 import {
   RedstoneEngine,
@@ -234,6 +237,52 @@ console.log('\n[红石驱动门类：通电即开、断电即关]');
     '断电后门的两半都关上',
     !isDoorOpen(world.getState(2, Y + 1, 0)) && !isDoorOpen(world.getState(2, Y + 2, 0)),
   );
+}
+
+// ---------------------------------------------------------------- 1.6 手动开合不被重算覆盖
+
+console.log('\n[手动开合的门：无关的重算不该把它关回去]');
+{
+  // 2026-10-22 用户反馈：创造模式里橡木门"点了没反应/上半变透明/再也恢复不了"。
+  // 根因是这个引擎"洪泛 + 整体重算"——每次方块变化都会按**当前电平**重写负载，
+  // 而手动开合不改变电平。这里钉住"只有电平变化才动门"。
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  const x = 40;
+  const z = 40;
+
+  // 一扇**没接任何红石**的门（下半 + 上半）
+  world.setBlock(x, Y, z, Block.OAK_DOOR, 0);
+  world.setBlock(x, Y + 1, z, Block.OAK_DOOR, withDoorUpper(0, true));
+  engine.onBlockChanged(world, x, Y, z);
+
+  // 玩家手动推开（与 `main.ts#toggleDoor` 同序：先下半、后上半）
+  world.setState(x, Y, z, withDoorOpen(0, true));
+  world.setState(x, Y + 1, z, withDoorUpper(withDoorOpen(0, true), true));
+  engine.onBlockChanged(world, x, Y, z);
+  check('手动推开后下半保持开着', isDoorOpen(world.getState(x, Y, z)));
+  check(
+    '手动推开后上半也开着（且仍是"上半"）',
+    isDoorOpen(world.getState(x, Y + 1, z)) && isDoorUpper(world.getState(x, Y + 1, z)),
+  );
+
+  // 旁边随便变一块方块（这正是现实里"顺手放了个方块"的情形）
+  world.setBlock(x + 1, Y, z, Block.STONE, 0);
+  engine.onBlockChanged(world, x + 1, Y, z);
+  check('旁边方块变化不会把门关回去', isDoorOpen(world.getState(x, Y, z)));
+
+  // 活板门 / 栅栏门走同一段逻辑，各钉一条
+  world.setBlock(x + 2, Y, z, Block.OAK_TRAPDOOR, 0);
+  engine.onBlockChanged(world, x + 2, Y, z);
+  world.setState(x + 2, Y, z, withTrapdoorOpen(0, true));
+  engine.onBlockChanged(world, x + 2, Y, z);
+  check('手动打开的活板门不会被关回去', isTrapdoorOpen(world.getState(x + 2, Y, z)));
+
+  world.setBlock(x + 3, Y, z, Block.OAK_FENCE_GATE, 0);
+  engine.onBlockChanged(world, x + 3, Y, z);
+  world.setState(x + 3, Y, z, withFenceGateOpen(0, true));
+  engine.onBlockChanged(world, x + 3, Y, z);
+  check('手动打开的栅栏门不会被关回去', isFenceGateOpen(world.getState(x + 3, Y, z)));
 }
 
 // ---------------------------------------------------------------- 2. 红石块与火把

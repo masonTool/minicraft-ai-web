@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { GLASS_PANE_ID, Block, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, type LocalBox } from '../src/core/registry/blockShapes.ts';
+import { collisionBoxes, meshBoxes, type LocalBox } from '../src/core/registry/blockShapes.ts';
 import { withDoorOpen, withFacing, withTop } from '../src/core/registry/blockState.ts';
 
 function totalHeight(boxes: readonly LocalBox[]): number {
@@ -70,6 +70,22 @@ describe('方块形状与碰撞盒', () => {
     const thinnest = Math.min(...boxes.map((box) => Math.min(box[3] - box[0], box[4] - box[1], box[5] - box[2])));
     expect(thinnest).toBeLessThan(0.35);
     expect(thinnest).toBeGreaterThan(0);
+  });
+
+  it('开着的门只是没有碰撞，仍然要画出来（门板绕轴转了 90°）', () => {
+    // 2026-10-22 用户反馈"点了门、听到声音、上半扇透明还过不去"：
+    // 渲染盒曾经抄了碰撞盒那句 `isDoorOpen ? [] : ...`，于是开着的门整扇消失。
+    const facing = withFacing(0, 0); // 朝北：门宽沿 X、厚度在 Z
+    const closed = meshBoxes('door', facing);
+    const open = meshBoxes('door', withDoorOpen(facing, true));
+
+    expect(closed).toHaveLength(1);
+    expect(open).toHaveLength(1);
+    // 关：薄在 Z；开：绕门轴转 90° 之后薄在 X
+    expect(closed[0]![5] - closed[0]![2]).toBeCloseTo(0.1875, 5);
+    expect(open[0]![3] - open[0]![0]).toBeCloseTo(0.1875, 5);
+    // 碰撞那一侧仍然是"开着就没有"——两条必须一起看，防止碰撞逻辑又被抄回渲染
+    expect(collisionBoxes('door', withDoorOpen(facing, true))).toHaveLength(0);
   });
 
   it('栅栏是 1.5 格高的柱子（能挡住玩家、但不像整方块那样占满）', () => {
