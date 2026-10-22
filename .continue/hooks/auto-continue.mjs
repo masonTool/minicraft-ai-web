@@ -27,7 +27,7 @@
  * 收尾：`[ ]` / `[~]` 都没了 → **默认自动收尾**（不弹窗、不等确认）：
  *   由 AI 把整份队列（含每条下方的完成说明）搬进 `DONE.md`、更新 `OVERVIEW.md`、
  *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、删除队列文件。
- *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、跳过"的条目时才弹窗问用户
+ *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、没跑"的条目时才弹窗问用户
  *   ——那两类人没看过就等于悄悄丢活。同一份队列只催一次，之后放行（否则每轮重复同一句话）。
  */
 
@@ -176,8 +176,17 @@ function pickNext(target) {
   return chosen ? { entry: chosen, raw: chosen.raw, resumed: false } : null;
 }
 
-/** 自述"没验/跳过"的措辞。命中它 = 这条打了勾但没人能保证真的做完。 */
-const UNPROVEN_RE = /未验证|无法验证|没法验证|没跑|未跑|没执行|跳过|待验证/;
+/** 完成说明里的凭证行：`  - 验证：…`（半角/全角冒号都认）。 */
+const VERIFY_RE = /^\s*(?:[-*]\s*)?验证\s*[:：]\s*(.*)$/;
+
+/**
+ * 自述"没验 / 没跑"的措辞。命中它 = 这条打了勾但没人能保证真的做完。
+ *
+ * ⚠️ **不要收 `跳过`**：本项目 `check:browser` 默认就是跳过，
+ * "npm run check 绿（browser-check 默认跳过）"是一句诚实的验证，收进来会把
+ * 每次自动收尾都变成弹窗（语义误伤，不是理论风险）。
+ */
+const UNPROVEN_RE = /未验证|无法验证|没法验证|没跑|未跑|没执行|待验证/;
 
 /**
  * 找出"打了勾但没能自证"的条目：缺 `验证` 说明，或验证说明里自述未验证 / 跳过。
@@ -193,9 +202,10 @@ function collectUnproven(queue) {
     if (entry.kind !== 'done') return;
     const next = queue.entries[i + 1];
     const body = lines.slice(entry.index + 1, next ? next.index : lines.length);
-    const verify = body.find((line) => /验证/.test(line));
+    // 只认 `验证：` 开头的那一行：正文里顺口提一句"验证"不算凭证。
+    const verify = body.map((line) => VERIFY_RE.exec(line)).find(Boolean);
     if (!verify) out.push({ entry, reason: '缺「验证」说明' });
-    else if (UNPROVEN_RE.test(verify)) out.push({ entry, reason: '自述未验证 / 已跳过' });
+    else if (UNPROVEN_RE.test(verify[1])) out.push({ entry, reason: '自述未验证 / 没跑' });
   });
   return out;
 }
@@ -227,7 +237,7 @@ const WRAP_STEPS = [
   '   `m` 立刻失效——这是个自指的死结（实测连改四版都追不上）。想知道这批动了几次，',
   `   直接 \`git log --oneline --grep '批次 ${batch ?? '<n>'}'\` 数一下。`,
   '   个别条目当时没写说明 → 现在补一段（做了什么 / 为什么 / 怎么验证）；',
-  '   搬运前核对：每条 `[x]` 都要有"验证"一行。缺的当场跑一遍补上；跑不了就如实写"未验证"，',
+  '   搬运前核对：每条 `[x]` 都要有 `验证：` 开头的一行。缺的当场跑一遍补上；跑不了就如实写"未验证"，',
   '   **不要替它编一个结果**；',
   '2. 更新 `.continue/OVERVIEW.md`：完成项按模块挂 `T` 编号 + 批次号，批次索引加一行，',
   '   这批新踩的坑在对应模块下写一行摘要；跨批的同一需求按批次分行累加，不要合并；',
@@ -280,7 +290,7 @@ if (!pick) {
       [
         '[auto-continue · 自动收尾]',
         '',
-        `队列里已经没有 \`[ ]\` / \`[~]\` 了：完成 ${queue.counts.done} 条，没有 \`[阻塞]\`，也没有自述未验证 / 跳过的条目。`,
+        `队列里已经没有 \`[ ]\` / \`[~]\` 了：完成 ${queue.counts.done} 条，没有 \`[阻塞]\`，也没有自述未验证 / 没跑的条目。`,
         '',
         '## 现在要做的事：直接收尾，**不要弹窗问用户**',
         '',

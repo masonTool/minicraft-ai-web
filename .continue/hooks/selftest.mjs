@@ -174,6 +174,38 @@ try {
     );
   });
 
+  check('auto-continue · 验证行里的"默认跳过"不算未验证', () => {
+    // 本项目 check:browser 默认跳过，诚实的验证行会带这四个字——
+    // 旧正则把"跳过"当未验证，会让每次自动收尾都被弹窗打断。
+    queue('s-skipok', '- [x] 甲\n  - 验证：`npm run check` 绿（check:browser 默认跳过）');
+    const r = hook('auto-continue.mjs', stop('s-skipok'));
+    return expect(
+      r.code === 2 && r.err.includes('自动收尾') && !r.err.includes('ask_followup_question'),
+      '应自动收尾，不因"默认跳过"弹窗',
+      r,
+    );
+  });
+
+  check('auto-continue · 验证行自述"没跑" → 请用户拍板', () => {
+    queue('s-unrun', '- [x] 甲\n  - 验证：命令没跑起来');
+    const r = hook('auto-continue.mjs', stop('s-unrun'));
+    return expect(
+      r.code === 2 && r.err.includes('等用户拍板') && r.err.includes('没跑'),
+      '自述没跑时应请用户拍板',
+      r,
+    );
+  });
+
+  check('auto-continue · 正文提到"验证"但没有凭证行 → 仍算缺说明', () => {
+    queue('s-noverifyline', '- [x] 甲\n  - 做了什么：按验证方式跑了一遍，应该没问题');
+    const r = hook('auto-continue.mjs', stop('s-noverifyline'));
+    return expect(
+      r.code === 2 && r.err.includes('缺「验证」说明'),
+      '只有 `验证：` 开头的行才算凭证',
+      r,
+    );
+  });
+
   check('auto-continue · 连续 N 轮没做完 → 标 [阻塞] 并递下一条', () => {
     queue('s-block', '- [ ] 甲\n- [ ] 乙');
     const env = { CONTINUE_BLOCK_AFTER: '2' };
