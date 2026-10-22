@@ -27,6 +27,21 @@ import {
 } from '../src/minigame/games/sokoban/logic.ts';
 import { SOKOBAN_LEVELS, sokobanLevel } from '../src/minigame/games/sokoban/levels.ts';
 import {
+  BALL_RADIUS,
+  MAX_BOUNCE_ANGLE,
+  PADDLE_HALF_HEIGHT,
+  PADDLE_Y,
+  advanceBreakout,
+  createBreakoutState,
+  isBreakoutCleared,
+  substepBreakout,
+} from '../src/minigame/games/breakout/logic.ts';
+import {
+  BREAKOUT_LEVELS,
+  parseBreakoutLevel,
+  type BreakoutLevel,
+} from '../src/minigame/games/breakout/levels.ts';
+import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
   bestSteps,
@@ -479,6 +494,158 @@ console.log('\n推箱子：接线静态断言');
   check('主菜单按 gameId 进推箱子', mainSrc.includes('new SokobanGame(level, { onCleared })'));
   check('过关写进度', mainSrc.includes('recordClear(loadProgress(), gameId, level, steps)'));
   check('主菜单路径 Esc 退出', mainSrc.includes('activeMenuMiniGame?.stop()'));
+}
+
+// ------------------------------------------------------------------ 打砖块
+
+console.log('\n打砖块：关卡校验');
+{
+  for (let index = 0; index < BREAKOUT_LEVELS.length; index++) {
+    const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[index]!);
+    check(`第 ${index + 1} 关解析成功`, parsed.ok, parsed.ok ? '' : parsed.errors.join('; '));
+    if (parsed.ok) {
+      const hasBrick = parsed.level.rows.some((row) => row.some((hp) => hp > 0));
+      check(`第 ${index + 1} 关有砖块`, hasBrick);
+    }
+  }
+
+  const base = { id: 'x', lives: 3, speed: 6, rows: ['111', '111'] };
+  const expectError = (label: string, raw: typeof base, fragment: string): void => {
+    const result = parseBreakoutLevel(raw);
+    check(
+      label,
+      !result.ok && result.errors.some((error) => error.includes(fragment)),
+      result.ok ? '解析居然成功了' : result.errors.join('; '),
+    );
+  };
+  expectError('行不等宽', { ...base, rows: ['111', '11'] }, '应为 3 个');
+  expectError('未知字符', { ...base, rows: ['1x1'] }, '未知字符');
+  expectError('没有砖块', { ...base, rows: ['...'] }, '一块砖都没有');
+  expectError('生命为 0', { ...base, lives: 0 }, '生命数非法');
+  expectError('球速为 0', { ...base, speed: 0 }, '球速非法');
+}
+
+console.log('\n打砖块：挡板反弹角度');
+{
+  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
+  if (parsed.ok) {
+    const base = createBreakoutState(parsed.level);
+    const incoming = {
+      ...base,
+      // 球刚好落在挡板上方、向下飞
+      ballY: PADDLE_Y + PADDLE_HALF_HEIGHT + BALL_RADIUS + 0.02,
+      ballVx: 0,
+      ballVy: -6,
+    };
+
+    const centered = substepBreakout({ ...incoming, ballX: base.paddleX });
+    check('正中击中后向上飞', centered.ballVy > 0);
+    check('正中击中后几乎不横向（|vx| < 0.2）', Math.abs(centered.ballVx) < 0.2, `vx=${centered.ballVx}`);
+
+    const edge = substepBreakout({ ...incoming, ballX: base.paddleX + 1.1 });
+    check('边缘击中后向上飞', edge.ballVy > 0);
+    check('边缘击中横向分量明显（|vx| > 1）', Math.abs(edge.ballVx) > 1, `vx=${edge.ballVx}`);
+    const angle = Math.abs(Math.atan2(edge.ballVx, edge.ballVy));
+    check('反弹角不超过 60°', angle <= MAX_BOUNCE_ANGLE + 1e-9, `angle=${angle}`);
+
+    // 垂直分量永远足够大：不会出现"球贴着挡板横着走"
+    check('反弹后垂直分量不小于 50% 球速', edge.ballVy >= 0.5 * Math.hypot(edge.ballVx, edge.ballVy));
+  }
+}
+
+console.log('\n打砖块：漏球扣命与判负');
+{
+  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
+  if (parsed.ok) {
+    const base = createBreakoutState(parsed.level);
+    const leaking = { ...base, ballY: -2.5, ballVy: -6, lives: 2 };
+    const afterLeak = substepBreakout(leaking);
+    equal('漏球扣一条命', afterLeak.lives, 1);
+    check('球复位到挡板上方', afterLeak.ballY > PADDLE_Y);
+    check('复位后向上飞', afterLeak.ballVy > 0);
+
+    const lastLife = substepBreakout({ ...leaking, lives: 1 });
+    equal('最后一条命漏了判负', lastLife.status, 'lost');
+  }
+}
+
+console.log('\n打砖块：清屏过关与撞砖');
+{
+  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
+  if (parsed.ok) {
+    const base = createBreakoutState(parsed.level);
+    const empty = { ...base, bricks: new Map<string, number>() };
+    equal('砖块清空即过关', substepBreakout(empty).status, 'won');
+    check('isBreakoutCleared 为真', isBreakoutCleared(empty));
+
+    // 球从下往上撞第一块砖
+    const hitting = { ...base, ballX: 0.5, ballY: 0.2, ballVx: 0, ballVy: 6 };
+    const after = substepBreakout(hitting);
+    check('打掉一块砖', after.bricks.size < hitting.bricks.size);
+    check('撞砖后竖直反向', after.ballVy < 0);
+    check('分数增加', after.score > 0);
+  }
+}
+
+console.log('\n打砖块：时间步长无关性');
+{
+  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
+  if (parsed.ok) {
+    const paddleX = parsed.level.width / 2;
+    let thirty = createBreakoutState(parsed.level);
+    for (let i = 0; i < 10; i++) thirty = advanceBreakout(thirty, 1 / 30, { paddleX });
+    let sixty = createBreakoutState(parsed.level);
+    for (let i = 0; i < 20; i++) sixty = advanceBreakout(sixty, 1 / 60, { paddleX });
+
+    const distance = Math.hypot(thirty.ballX - sixty.ballX, thirty.ballY - sixty.ballY);
+    check('30fps×10 与 60fps×20 轨迹一致（差 < 0.05 格）', distance < 0.05, `差 ${distance.toFixed(4)} 格`);
+    equal('累计时间相同', Math.abs(thirty.accumulator - sixty.accumulator) < 1e-9, true);
+  }
+}
+
+console.log('\n打砖块：10 关逐关可通（挡板跟球模拟）');
+{
+  /**
+   * 模拟一个"会玩的玩家"：挡板跟着球，但**每隔 3 秒故意偏一点**，
+   * 让球以不同角度弹出去扫过整片砖墙。
+   *
+   * ⚠️ 只"正中接球"是不够的：球会一直垂直上下、只打中间那一列，
+   * 永远清不完——这也是真人玩家的常识（用挡板边缘改角度）。
+   */
+  const simulate = (level: BreakoutLevel): { won: boolean; seconds: number } => {
+    let state = createBreakoutState(level);
+    let frames = 0;
+    const dt = 1 / 30;
+    while (state.status === 'playing' && frames < 7200) {
+      const side = Math.floor(frames / 90) % 2 === 0 ? 1 : -1;
+      state = advanceBreakout(state, dt, { paddleX: state.ballX + side * 0.75 });
+      frames += 1;
+    }
+    return { won: state.status === 'won', seconds: frames * dt };
+  };
+
+  for (let index = 0; index < BREAKOUT_LEVELS.length; index++) {
+    const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[index]!);
+    if (!parsed.ok) continue;
+    const result = simulate(parsed.level);
+    check(
+      `第 ${index + 1} 关能清屏`,
+      result.won,
+      result.won ? `${result.seconds.toFixed(1)} 秒` : '模拟 120 秒仍未清屏',
+    );
+  }
+}
+
+console.log('\n打砖块：接线静态断言');
+{
+  const logicSrc = readFileSync(new URL('../src/minigame/games/breakout/logic.ts', import.meta.url), 'utf8');
+  const sceneSrc = readFileSync(new URL('../src/minigame/games/breakout/scene.ts', import.meta.url), 'utf8');
+  check('固定子步积分', logicSrc.includes('BREAKOUT_FIXED_STEP'));
+  check('dt 被夹到 0.25 秒', logicSrc.includes('0.25'));
+  check('挡板 mesh 用连续坐标', sceneSrc.includes('this.paddleMesh.position.set('));
+  check('砖块变化才重建', sceneSrc.includes('brickSignature'));
+  check('过关回调', sceneSrc.includes('onCleared?.(advanced.score)'));
+  check('主菜单按 gameId 进打砖块', mainSrc.includes('new BreakoutGame(level'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

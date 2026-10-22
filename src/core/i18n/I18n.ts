@@ -510,6 +510,11 @@ const ZH: Readonly<Record<string, string>> = {
   'minigame.sokoban.limit': '步数用完了，重来一次吧',
   'minigame.sokoban.deadlock': '箱子推到角落了，撤销一步试试',
   'minigame.sokoban.brokenLevel': '这一关的数据有问题，已退出',
+  // ---- 打砖块（小游戏5）
+  'minigame.breakout.status': '第 {level}/{total} 关 · 生命 {lives} · 分数 {score}',
+  'minigame.breakout.won': '全部打完了！',
+  'minigame.breakout.lost': '球掉光了，再试一次吧',
+  'minigame.breakout.brokenLevel': '这一关的数据有问题，已退出',
   'tutorial.survival.log.title': '先去砍一棵树',
   'tutorial.survival.log.desc': '走近树干，按住左键（或手指）把它挖掉',
   'tutorial.survival.table.title': '做一个工作台',
@@ -998,6 +1003,11 @@ const EN: Readonly<Record<string, string>> = {
   'minigame.sokoban.limit': 'Out of steps — give it another go',
   'minigame.sokoban.deadlock': 'That box is stuck in a corner — try undoing',
   'minigame.sokoban.brokenLevel': 'This level is broken, so we closed it',
+  // ---- breakout (batch 20261022-1954)
+  'minigame.breakout.status': 'Level {level}/{total} · {lives} lives · {score} points',
+  'minigame.breakout.won': 'All bricks cleared!',
+  'minigame.breakout.lost': 'Out of balls — give it another go',
+  'minigame.breakout.brokenLevel': 'This level is broken, so we closed it',
   'tutorial.survival.log.title': 'Chop a tree first',
   'tutorial.survival.log.desc': 'Walk up to a trunk and hold to break it',
   'tutorial.survival.table.title': 'Craft a crafting table',

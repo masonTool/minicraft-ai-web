@@ -1291,15 +1291,15 @@
         color: #9fb3c8; font-size: 12px; pointer-events: none;
       }
 
-      /* 推箱子的关卡 HUD（小游戏4）：左下角状态 + 撤销/重来 */
-      .sokoban-hud {
+      /* 小游戏内的关卡 HUD（小游戏4 推箱子 / 小游戏5 打砖块共用一套位置） */
+      .sokoban-hud, .breakout-hud {
         position: absolute;
         left: calc(8px + env(safe-area-inset-left, 0px));
         bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         display: flex; flex-direction: column; gap: 6px;
         pointer-events: none;
       }
-      .sokoban-status {
+      .sokoban-status, .breakout-status {
         color: #e8eef4; font-size: 13px;
         text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
       }

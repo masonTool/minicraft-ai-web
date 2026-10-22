@@ -709,6 +709,7 @@ import type { MiniGame } from './minigame/types.ts';
 import { MiniGameMenu } from './ui/MiniGameMenu.ts';
 import { loadProgress, recordClear, saveProgress } from './minigame/progress.ts';
 import { SokobanGame } from './minigame/games/sokoban/scene.ts';
+import { BreakoutGame } from './minigame/games/breakout/scene.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -18461,6 +18462,11 @@ async function boot(): Promise<void> {
     };
     if (gameId === 'sokoban') {
       runStandaloneMiniGame(new SokobanGame(level, { onCleared }));
+      return;
+    }
+    if (gameId === 'breakout') {
+      // 打砖块没有"步数"：记 1 只用于标记"已通关"（界面只显示 ✓，不显示步数）
+      runStandaloneMiniGame(new BreakoutGame(level, { onCleared: () => onCleared(0) }));
       return;
     }
     runStandaloneMiniGame(new SmokeGame());
