@@ -25,6 +25,8 @@
   （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
 - **历史经验总表**（2026-10-22 之前约 400 条，未按模块拆分，按关键词 grep）→
   [`notes/tips-history.md`](./notes/tips-history.md)（2026-10-22 从 `TIPS.md` 整段迁出）
+- **批次索引**（一行一批，新→旧）→ [`notes/batches.md`](./notes/batches.md)
+  （2026-10-22 从 `OVERVIEW.md` 迁出，不再占它的 200 行预算）
 - **操作型工作站**（熔炉 / 酿造台 / 营火 / 锻造台…的通用契约 + 站台矩阵 + 接入 checklist）→
   [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来）
 - **运维手册**（`window.__mc` 调试接口 + PWA / Pages / 套壳发布）→

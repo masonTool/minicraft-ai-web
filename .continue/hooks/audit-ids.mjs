@@ -67,6 +67,12 @@ const done = read(DONE_FILE);
 /** 搬进归档的批次仍算"已归档"，否则 `OVERVIEW` 的批次索引会被判成对不上。 */
 const doneArchive = read(join(CONTINUE_DIR, 'DONE.archive.md'));
 const overview = read(OVERVIEW_FILE);
+/**
+ * 批次索引 2026-10-22 从 `OVERVIEW.md` 迁到 `notes/batches.md`：
+ * OVERVIEW 是每轮都要读的模块总览，批次流水天然只增不减，不该占它的 200 行预算。
+ * 这里**两份都读**，交叉核对不放松（迁移不能变成"少查一处"）。
+ */
+const batchIndex = read(join(CONTINUE_DIR, 'notes', 'batches.md'));
 
 // ------------------------------------------------------------------ 1. 需求号唯一
 /**
@@ -173,7 +179,7 @@ function batchHeadings(text) {
   return [...stripHtmlComments(text ?? '').matchAll(BATCH_HEADING)].map((m) => m[1]);
 }
 
-/** OVERVIEW「批次索引」表格第一列的批次号（跳过表头与分隔行）。 */
+/** 批次索引（`OVERVIEW.md` 或 `notes/batches.md`）表格第一列的批次号（跳过表头与分隔行）。 */
 function overviewBatchIndex(text) {
   const ids = new Set();
   const lines = stripHtmlComments(text ?? '').split(/\r?\n/);
@@ -197,12 +203,16 @@ for (const [id, count] of dupes) {
 }
 
 if (overview !== null) {
-  const indexed = overviewBatchIndex(overview);
+  const indexed = new Set([...overviewBatchIndex(overview), ...overviewBatchIndex(batchIndex)]);
   for (const id of doneBatches) {
-    if (!indexed.has(id)) warnings.push(`DONE.md 有批次 ${id}，但 OVERVIEW.md 的批次索引表里没有这一行`);
+    if (!indexed.has(id)) {
+      warnings.push(`DONE.md 有批次 ${id}，但 OVERVIEW.md / notes/batches.md 的批次索引表里没有这一行`);
+    }
   }
   for (const id of indexed) {
-    if (!doneBatches.has(id)) warnings.push(`OVERVIEW.md 批次索引有 ${id}，但 DONE.md 里没有这个批次的归档`);
+    if (!doneBatches.has(id)) {
+      warnings.push(`批次索引有 ${id}，但 DONE.md 里没有这个批次的归档`);
+    }
   }
 }
 
