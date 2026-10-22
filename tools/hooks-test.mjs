@@ -233,7 +233,9 @@ console.log('\n[auto-continue · 递任务]');
     check('有待办 → 拦停（exit 2）', r.code === 2, String(r.code));
     check('递出的就是这条', /hooks-test 占位条目/.test(r.stderr));
     check('给队列文件的准确路径', r.stderr.includes(`.continue/queues/hooks-test-pick-1.md`), r.stderr.split('\n')[0]);
-    check('要求只做一条', /只做这一条/.test(r.stderr));
+    // 批次 1364：从"只做这条"改成"同一回合连续做"——客户端一个用户消息只肯续 1 次自动回合，
+    // 所以"做完一条就停"会真的停下来（日志 00:04:47 实证）。这条断言钉住新规则，防回退。
+    check('要求连续做（不再"只做这一条"）', /接着做下一条/.test(r.stderr) && !/只做这一条/.test(r.stderr));
     check('要求自己写 [~] / [x]', /\[~\]/.test(r.stderr) && /\[x\]/.test(r.stderr));
     check('说明 [阻塞] 由脚本写、AI 不许动', /\[阻塞\]/.test(r.stderr) && /不要自己写/.test(r.stderr));
   });
