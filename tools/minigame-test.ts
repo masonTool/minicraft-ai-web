@@ -1,54 +1,28 @@
 /**
- * 单机小游戏的离线测试（小游戏1）
+ * 单机小游戏的离线测试（J0，批次 20261022-2220）
  *
- * 运行：npm run test:minigame
+ * 运行：`npm run test:minigame`
  *
- * 小游戏的宿主与小游戏本身都依赖 DOM / WebGL，离线只能做**静态断言**：
- * 接线在不在、异常兜底在不在、退出有没有清舞台、dt 有没有夹住。
- * 真正的"进入→退出→无残留"在浏览器里用 `__mc.minigameStateForTest` 验
- * （`geometries` / `textures` 前后对比）。
+ * 覆盖三块：
+ *  1. **宿主与接线**：小游戏的宿主、游戏本身依赖 DOM / WebGL，离线只能做静态断言
+ *     （接线在不在、异常兜底在不在、退出有没有清舞台、dt 有没有夹住）。
+ *     真正的"进入→退出→无残留"在浏览器里用 `minigame:perf` 验（前后比对 `renderer.info.memory`）。
+ *  2. **共享渲染的纯逻辑**：按图集 tile 分组（draw call = 方块种类数），5000 格压测。
+ *  3. **目录与最高分**：纯函数 + 存储容错。
  *
- * 后续推箱子 / 打砖块的**规则**是纯逻辑，会作为同一套件里的独立小节加进来。
+ * 跳一跳的规则断言（生成器 / 蓄力距离 / 落点 / 连击）在 [跳跳2] 加进本文件。
  */
 
 import { readFileSync } from 'node:fs';
 import { Block } from '../src/core/registry/blocks.ts';
 import { buildBlockGroups, groupInstanceCount } from '../src/minigame/blockGroups.ts';
-import { levelBlocks, parseLevel } from '../src/minigame/level.ts';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
-import {
-  createSokobanState,
-  isSokobanDeadlocked,
-  isSokobanWon,
-  moveSokoban,
-  undoSokoban,
-  type SokobanDirection,
-  type SokobanState,
-} from '../src/minigame/games/sokoban/logic.ts';
-import { SOKOBAN_LEVELS, sokobanLevel } from '../src/minigame/games/sokoban/levels.ts';
-import {
-  BALL_RADIUS,
-  MAX_BOUNCE_ANGLE,
-  PADDLE_HALF_HEIGHT,
-  PADDLE_Y,
-  advanceBreakout,
-  createBreakoutState,
-  isBreakoutCleared,
-  substepBreakout,
-} from '../src/minigame/games/breakout/logic.ts';
-import {
-  BREAKOUT_LEVELS,
-  parseBreakoutLevel,
-  type BreakoutLevel,
-} from '../src/minigame/games/breakout/levels.ts';
 import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
-  bestSteps,
-  clearedCount,
-  isCleared,
+  bestScore,
   loadProgress,
-  recordClear,
+  recordScore,
   saveProgress,
 } from '../src/minigame/progress.ts';
 
@@ -72,6 +46,8 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
 const hostSrc = readFileSync(new URL('../src/minigame/MiniGameHost.ts', import.meta.url), 'utf8');
 const smokeSrc = readFileSync(new URL('../src/minigame/games/smoke.ts', import.meta.url), 'utf8');
+const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
+const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -85,6 +61,7 @@ console.log('\n小游戏框架：主程序接线');
   check('退出时重置帧计时', mainSrc.includes('this.lastTime = performance.now()'));
   check('Esc 退出', mainSrc.includes('this.miniGame.stop()'));
   check('退出世界时拆掉小游戏层', mainSrc.includes('this.miniGame.dispose()'));
+  check('不再引用已删除的旧游戏', !/sokoban|breakout/i.test(mainSrc));
 }
 
 console.log('\n小游戏框架：宿主契约');
@@ -111,60 +88,16 @@ console.log('\n小游戏框架：自检游戏的资源释放');
   check('每帧自己渲染', smokeSrc.includes('renderer.render(this.scene, this.camera)'));
 }
 
-// ------------------------------------------------------------------ 关卡格式
-
-console.log('\n关卡格式：合法关卡');
+console.log('\n跳一跳：占位场景（J0）');
 {
-  const raw = {
-    id: 'test-1',
-    width: 4,
-    height: 2,
-    depth: 3,
-    stepLimit: 50,
-    rows: [
-      ['####', '#P.#', '#G.#'],
-      ['    ', '    ', '    '],
-    ],
-  };
-  const result = parseLevel(raw);
-  check('解析成功', result.ok, result.ok ? '' : result.errors.join('; '));
-  if (result.ok) {
-    equal('格子数 = 4×2×3', result.level.cells.length, 24);
-    equal('起点坐标', `${result.level.start.x},${result.level.start.y},${result.level.start.z}`, '1,0,1');
-    equal('目标 1 个', result.level.goals.length, 1);
-    equal('目标坐标', `${result.level.goals[0]!.x},${result.level.goals[0]!.y},${result.level.goals[0]!.z}`, '1,0,2');
-    equal('步数上限', result.level.stepLimit, 50);
-    equal('墙是石头', result.level.cells.find((cell) => cell.x === 0 && cell.y === 0 && cell.z === 0)?.blockId, Block.STONE);
-    equal('目标是金块', result.level.cells.find((cell) => cell.kind === 'goal')?.blockId, Block.GOLD_BLOCK);
-    equal('空格不渲染', result.level.cells.find((cell) => cell.kind === 'empty')?.blockId, null);
-    equal('要渲染的方块数（上层 12 格全空）', levelBlocks(result.level).length, 12);
-    equal('步数上限为 0 时保持 0（不限）', parseLevel({ ...raw, stepLimit: 0 }).ok, true);
-  }
-}
-
-console.log('\n关卡格式：非法输入逐条报错');
-{
-  const base = { id: 'x', width: 3, height: 1, depth: 1, stepLimit: 10, rows: [['P.G']] as string[][] };
-
-  const expectError = (label: string, raw: typeof base, fragment: string): void => {
-    const result = parseLevel(raw);
-    check(
-      label,
-      !result.ok && result.errors.some((error) => error.includes(fragment)),
-      result.ok ? '解析居然成功了' : result.errors.join('; '),
-    );
-  };
-
-  check('基准关卡是合法的', parseLevel(base).ok);
-  expectError('层数不符', { ...base, height: 2 }, '应有 2 层');
-  expectError('行数不符', { ...base, depth: 2 }, '应有 2 行');
-  expectError('行长度不符', { ...base, rows: [['P.']] }, '应有 3 个字符');
-  expectError('未知字符', { ...base, rows: [['PXG']] }, '未知字符');
-  expectError('没有起点', { ...base, rows: [['..G']] }, '起点');
-  expectError('两个起点', { ...base, rows: [['PPG']] }, '起点');
-  expectError('没有目标', { ...base, rows: [['P..']] }, '目标');
-  expectError('宽度为 0', { ...base, width: 0 }, '宽度非法');
-  expectError('层数为负', { ...base, height: -1 }, '层数非法');
+  check('id 是 jump', jumpSrc.includes("readonly id = 'jump'"));
+  check('用 BlockScene 画方块', jumpSrc.includes('new BlockScene('));
+  check('用 PlayerRenderer 画小人', jumpSrc.includes('new PlayerRenderer('));
+  check('卸载时释放人物', jumpSrc.includes('this.player?.dispose()'));
+  check('卸载时释放场景', jumpSrc.includes('this.blocks?.dispose()'));
+  check('卸载时移除 HUD', jumpSrc.includes('this.hud?.remove()'));
+  check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
+  check('占位阶段不写分数（J2 才接）', !jumpSrc.includes('recordScore'));
 }
 
 // ------------------------------------------------------------------ 方块分组
@@ -214,7 +147,7 @@ console.log('\n5000 方块的分组耗时（单帧预算）');
   check('分组耗时 < 100ms', elapsed < 100, `${elapsed.toFixed(1)}ms`);
 }
 
-// ------------------------------------------------------------------ 进度与目录
+// ------------------------------------------------------------------ 最高分
 
 /** 内存版 Storage（node 里没有 localStorage） */
 class MemoryStorage {
@@ -239,69 +172,70 @@ class MemoryStorage {
   }
 }
 
-console.log('\n通关进度：纯函数');
+console.log('\n最高分：纯函数');
 {
-  let progress = EMPTY_PROGRESS;
-  equal('初始没通关', isCleared(progress, 'sokoban', 0), false);
-  equal('初始最佳步数为 null', bestSteps(progress, 'sokoban', 0), null);
+  equal('初始 0 分', bestScore(EMPTY_PROGRESS, 'jump'), 0);
 
-  progress = recordClear(progress, 'sokoban', 0, 42);
-  equal('记一次通关', isCleared(progress, 'sokoban', 0), true);
-  equal('最佳步数 42', bestSteps(progress, 'sokoban', 0), 42);
-
-  equal('步数更多不覆盖', bestSteps(recordClear(progress, 'sokoban', 0, 99), 'sokoban', 0), 42);
-  equal('步数更少会覆盖', bestSteps(recordClear(progress, 'sokoban', 0, 30), 'sokoban', 0), 30);
-  equal('NaN 步数按 1 记', bestSteps(recordClear(EMPTY_PROGRESS, 'sokoban', 1, Number.NaN), 'sokoban', 1), 1);
-  equal('0 步按 1 记', bestSteps(recordClear(EMPTY_PROGRESS, 'sokoban', 1, 0), 'sokoban', 1), 1);
-  equal('不同游戏的同号关卡互不影响', isCleared(progress, 'breakout', 0), false);
-
-  const counted = recordClear(recordClear(EMPTY_PROGRESS, 'sokoban', 0, 10), 'sokoban', 2, 20);
-  equal('已通关计数', clearedCount(counted, 'sokoban', 10), 2);
+  const first = recordScore(EMPTY_PROGRESS, 'jump', 12);
+  equal('记一局 12 分', bestScore(first, 'jump'), 12);
+  equal('更低的分数不覆盖', bestScore(recordScore(first, 'jump', 5), 'jump'), 12);
+  equal('更高的分数覆盖', bestScore(recordScore(first, 'jump', 30), 'jump'), 30);
+  equal('0 分（开局就掉）不覆盖', bestScore(recordScore(first, 'jump', 0), 'jump'), 12);
+  equal('NaN 不覆盖', bestScore(recordScore(first, 'jump', Number.NaN), 'jump'), 12);
+  equal('小数取整', bestScore(recordScore(EMPTY_PROGRESS, 'jump', 9.8), 'jump'), 9);
+  equal('不同游戏互不影响', bestScore(first, 'other'), 0);
+  check('原对象不被改写（纯函数）', bestScore(EMPTY_PROGRESS, 'jump') === 0);
 }
 
-console.log('\n通关进度：存储容错');
+console.log('\n最高分：存储容错');
 {
   const storage = new MemoryStorage();
   const asStorage = storage as unknown as Storage;
-  equal('空存储读到空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+  equal('空存储读到 0 分', bestScore(loadProgress(asStorage), 'jump'), 0);
 
-  saveProgress(recordClear(EMPTY_PROGRESS, 'sokoban', 3, 55), asStorage);
-  equal('存了能读回来', bestSteps(loadProgress(asStorage), 'sokoban', 3), 55);
+  saveProgress(recordScore(EMPTY_PROGRESS, 'jump', 55), asStorage);
+  equal('存了能读回来', bestScore(loadProgress(asStorage), 'jump'), 55);
 
   storage.setItem(MINIGAME_PROGRESS_KEY, '{not json');
-  equal('坏 JSON 当空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+  equal('坏 JSON 当空进度', bestScore(loadProgress(asStorage), 'jump'), 0);
 
-  storage.setItem(MINIGAME_PROGRESS_KEY, JSON.stringify({ version: 2, cleared: {} }));
-  equal('版本不对当空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+  storage.setItem(MINIGAME_PROGRESS_KEY, JSON.stringify({ version: 1, best: { jump: 9 } }));
+  equal('旧版本 v1（关卡进度）当空', bestScore(loadProgress(asStorage), 'jump'), 0);
 
   storage.setItem(
     MINIGAME_PROGRESS_KEY,
     JSON.stringify({
-      version: 1,
-      cleared: { 'sokoban:1': 12, 'bad key': 3, 'sokoban:2': 'x', 'sokoban:3': -1, 'sokoban:4': 7.9 },
+      version: 2,
+      best: { jump: 7, 'bad key': 3, other: 'x', neg: -1, frac: 7.9 },
     }),
   );
   const filtered = loadProgress(asStorage);
-  equal('正常键读得回来', bestSteps(filtered, 'sokoban', 1), 12);
-  equal('字符串值被丢掉', isCleared(filtered, 'sokoban', 2), false);
-  equal('负值被丢掉', isCleared(filtered, 'sokoban', 3), false);
-  equal('小数取整', bestSteps(filtered, 'sokoban', 4), 7);
-  equal('坏键被丢掉（不计入总数）', Object.keys(filtered.cleared).length, 2);
+  equal('正常键读得回来', bestScore(filtered, 'jump'), 7);
+  equal('负数被丢掉', bestScore(filtered, 'neg'), 0);
+  equal('字符串值被丢掉', bestScore(filtered, 'other'), 0);
+  equal('小数取整', bestScore(filtered, 'frac'), 7);
+  equal('坏键被丢掉（只留 2 个合法键）', Object.keys(filtered.best).length, 2);
 }
 
 console.log('\n小游戏目录');
 {
-  equal('目录里有 2 个游戏', MINIGAME_CATALOG.length, 2);
-  equal('id 唯一', new Set(MINIGAME_CATALOG.map((entry) => entry.id)).size, MINIGAME_CATALOG.length);
-  check('每个都是 10 关', MINIGAME_CATALOG.every((entry) => entry.levelCount === 10));
-  check(
-    '每个都有标题与说明键',
-    MINIGAME_CATALOG.every(
-      (entry) => entry.titleKey.startsWith('minigame.') && entry.descKey.startsWith('minigame.'),
-    ),
-  );
-  equal('按 id 找得到推箱子', miniGameEntry('sokoban')?.id, 'sokoban');
+  equal('目录里只有 1 个游戏', MINIGAME_CATALOG.length, 1);
+  equal('就是跳一跳', MINIGAME_CATALOG[0]?.id, 'jump');
+  check('标题与说明键都是 minigame.*', MINIGAME_CATALOG.every(
+    (entry) => entry.titleKey.startsWith('minigame.') && entry.descKey.startsWith('minigame.'),
+  ));
+  check('旧游戏已从目录移除', !MINIGAME_CATALOG.some((entry) => entry.id === 'sokoban' || entry.id === 'breakout'));
+  equal('按 id 找得到跳一跳', miniGameEntry('jump')?.id, 'jump');
   equal('找不到返回 null', miniGameEntry('nope'), null);
+}
+
+console.log('\n小游戏选择页（一层）');
+{
+  check('有 onStart(action) 且不带关卡参数', menuSrc.includes('readonly onStart: (gameId: MiniGameId) => void;'));
+  check('卡片点击直接开局', menuSrc.includes('this.actions.onStart(entry.id)'));
+  check('没有关卡网格', !menuSrc.includes('levelGrid') && !menuSrc.includes('levelCount'));
+  check('back 直接关面板', menuSrc.includes('this.actions.onClose()'));
+  check('显示最高分', menuSrc.includes("tp('minigame.menu.best'"));
 }
 
 console.log('\n主菜单入口（静态断言）');
@@ -318,334 +252,8 @@ console.log('\n主菜单入口（静态断言）');
   check('主程序把入口接到选择页', mainSrc.includes('onMiniGames: openMiniGames'));
   check('主菜单跑小游戏会先铺图集', mainSrc.includes('atlas.ensureUploaded()'));
   check('返回键先退小游戏', mainSrc.includes('activeMenuMiniGame.stop()'));
-  check('选择页返回逐级', mainSrc.includes('miniGameMenu.back()'));
   check('退出时释放 renderer', mainSrc.includes('renderer.dispose()'));
-}
-
-// ------------------------------------------------------------------ 推箱子
-
-console.log('\n推箱子：推动、胜利与步数');
-{
-  const parsed = parseLevel(sokobanLevel(0));
-  check('第 1 关解析成功', parsed.ok, parsed.ok ? '' : parsed.errors.join('; '));
-  if (!parsed.ok) {
-    // 后面的断言都依赖它
-  } else {
-    const initial = createSokobanState(parsed.level);
-    equal('初始步数 0', initial.steps, 0);
-    equal('初始推动次数 0', initial.pushes, 0);
-    equal('初始不胜利', isSokobanWon(initial), false);
-
-    const up = moveSokoban(initial, 'up');
-    check('向上推一步成功', up.ok);
-    if (up.ok) {
-      equal('推了箱子', up.pushed, true);
-      equal('立刻胜利（教学关）', up.won, true);
-      equal('步数 1', up.state.steps, 1);
-      equal('推动次数 1', up.state.pushes, 1);
-    }
-
-    // 撞墙：玩家初始在 (3,4)，往下走两格到 (3,6) 是边界墙
-    const down1 = moveSokoban(initial, 'down');
-    check('往下走一格成功', down1.ok);
-    if (down1.ok) {
-      const down2 = moveSokoban(down1.state, 'down');
-      equal('撞墙整步不生效', down2.ok, false);
-      if (!down2.ok) equal('原因 wall', down2.reason, 'wall');
-    }
-  }
-}
-
-console.log('\n推箱子：推不动（两箱挡住）');
-{
-  const packed = parseLevel({
-    id: 'packed',
-    width: 5,
-    height: 1,
-    depth: 3,
-    stepLimit: 50,
-    rows: [['#####', '#PBB#', '#..G#']],
-  });
-  check('两箱关卡解析成功', packed.ok, packed.ok ? '' : packed.errors.join('; '));
-  if (packed.ok) {
-    const state = createSokobanState(packed.level);
-    const blocked = moveSokoban(state, 'right');
-    equal('箱子后面还有一个箱子：推不动', blocked.ok, false);
-    if (!blocked.ok) equal('原因 blocked', blocked.reason, 'blocked');
-    equal('推动失败不改变状态', state.pushes, 0);
-  }
-}
-
-console.log('\n推箱子：撤销');
-{
-  const parsed = parseLevel(sokobanLevel(0));
-  if (parsed.ok) {
-    const initial = createSokobanState(parsed.level);
-    equal('初始状态撤销返回 null', undoSokoban(initial), null);
-
-    const step = moveSokoban(initial, 'up');
-    if (step.ok) {
-      const back = undoSokoban(step.state);
-      equal('撤销回到原位', `${back?.playerX},${back?.playerZ}`, `${initial.playerX},${initial.playerZ}`);
-      equal(
-        '撤销后箱子回到原位',
-        [...(back?.boxes ?? [])].sort().join(';'),
-        [...initial.boxes].sort().join(';'),
-      );
-      equal('撤销后步数归零', back?.steps, 0);
-      equal('撤销后推动次数归零', back?.pushes, 0);
-
-      const again = back ? undoSokoban(back) : null;
-      equal('再撤一步就没有了', again, null);
-    }
-  }
-}
-
-console.log('\n推箱子：胜利判定（不在目标不判胜）');
-{
-  const parsed = parseLevel(sokobanLevel(0));
-  if (parsed.ok) {
-    const initial = createSokobanState(parsed.level);
-    const onGoal: SokobanState = { ...initial, boxes: new Set(['3,2']) };
-    const notYet: SokobanState = { ...initial, boxes: new Set(['3,3']) };
-    equal('箱子在目标上判胜', isSokobanWon(onGoal), true);
-    equal('箱子不在目标不判胜', isSokobanWon(notYet), false);
-  }
-}
-
-console.log('\n推箱子：死锁识别');
-{
-  const parsed = parseLevel(sokobanLevel(0));
-  if (parsed.ok) {
-    const initial = createSokobanState(parsed.level);
-    equal('角落里的箱子算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['1,1']) }), true);
-    equal('目标上的箱子不算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['3,2']) }), false);
-    equal('开阔地不算死锁', isSokobanDeadlocked({ ...initial, boxes: new Set(['2,2']) }), false);
-  }
-}
-
-console.log('\n推箱子：步数上限');
-{
-  const tight = parseLevel({ ...sokobanLevel(0), stepLimit: 1 });
-  if (tight.ok) {
-    const state = createSokobanState(tight.level);
-    const first = moveSokoban(state, 'left');
-    check('第 1 步没超上限', first.ok && !first.limitReached);
-    if (first.ok) {
-      const second = moveSokoban(first.state, 'left');
-      check('第 2 步超过上限', second.ok && second.limitReached);
-    }
-  }
-}
-
-console.log('\n推箱子：10 关全部可解（BFS）');
-{
-  const encode = (state: SokobanState): string =>
-    `${state.playerX},${state.playerZ}|${[...state.boxes].sort().join(';')}`;
-
-  /** 宽度优先找一条解（只用于测试；状态空间很小） */
-  const solve = (start: SokobanState, maxStates = 200_000): SokobanDirection[] | null => {
-    const seen = new Set([encode(start)]);
-    const queue: Array<{ state: SokobanState; path: SokobanDirection[] }> = [{ state: start, path: [] }];
-    let head = 0;
-    while (head < queue.length) {
-      const current = queue[head++]!;
-      if (isSokobanWon(current.state)) return current.path;
-      if (current.path.length >= 150) continue;
-      for (const direction of ['up', 'down', 'left', 'right'] as const) {
-        const result = moveSokoban(current.state, direction);
-        if (!result.ok) continue;
-        const key = encode(result.state);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (seen.size > maxStates) return null;
-        queue.push({ state: result.state, path: [...current.path, direction] });
-      }
-    }
-    return null;
-  };
-
-  for (let index = 0; index < SOKOBAN_LEVELS.length; index++) {
-    const parsed = parseLevel(SOKOBAN_LEVELS[index]!);
-    if (!parsed.ok) {
-      check(`第 ${index + 1} 关解析`, false, parsed.errors.join('; '));
-      continue;
-    }
-    const solution = solve(createSokobanState(parsed.level));
-    check(`第 ${index + 1} 关可解`, solution !== null, solution ? `${solution.length} 步` : '不可解');
-    if (solution) {
-      check(
-        `第 ${index + 1} 关在上限内可解（${solution.length} ≤ ${parsed.level.stepLimit}）`,
-        parsed.level.stepLimit === 0 || solution.length <= parsed.level.stepLimit,
-      );
-    }
-  }
-}
-
-console.log('\n推箱子：接线静态断言');
-{
-  const sokobanSrc = readFileSync(new URL('../src/minigame/games/sokoban/scene.ts', import.meta.url), 'utf8');
-  check('滑动阈值存在', sokobanSrc.includes('SWIPE_THRESHOLD'));
-  check('轻点按位置判方向', sokobanSrc.includes('directionOf(pointer.x - 0.5'));
-  check('键盘方向键与 WASD', sokobanSrc.includes('ArrowUp') && sokobanSrc.includes('KeyW'));
-  check('过关回调写进度', sokobanSrc.includes('onCleared?.(result.state.steps)'));
-  check('死锁只提示（不判负）', sokobanSrc.includes("t('minigame.sokoban.deadlock')"));
-  check('过关相机庆祝', sokobanSrc.includes('private celebrate('));
-  check('主菜单按 gameId 进推箱子', mainSrc.includes('new SokobanGame(level, { onCleared })'));
-  check('过关写进度', mainSrc.includes('recordClear(loadProgress(), gameId, level, steps)'));
-  check('主菜单路径 Esc 退出', mainSrc.includes('activeMenuMiniGame?.stop()'));
-}
-
-// ------------------------------------------------------------------ 打砖块
-
-console.log('\n打砖块：关卡校验');
-{
-  for (let index = 0; index < BREAKOUT_LEVELS.length; index++) {
-    const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[index]!);
-    check(`第 ${index + 1} 关解析成功`, parsed.ok, parsed.ok ? '' : parsed.errors.join('; '));
-    if (parsed.ok) {
-      const hasBrick = parsed.level.rows.some((row) => row.some((hp) => hp > 0));
-      check(`第 ${index + 1} 关有砖块`, hasBrick);
-    }
-  }
-
-  const base = { id: 'x', lives: 3, speed: 6, rows: ['111', '111'] };
-  const expectError = (label: string, raw: typeof base, fragment: string): void => {
-    const result = parseBreakoutLevel(raw);
-    check(
-      label,
-      !result.ok && result.errors.some((error) => error.includes(fragment)),
-      result.ok ? '解析居然成功了' : result.errors.join('; '),
-    );
-  };
-  expectError('行不等宽', { ...base, rows: ['111', '11'] }, '应为 3 个');
-  expectError('未知字符', { ...base, rows: ['1x1'] }, '未知字符');
-  expectError('没有砖块', { ...base, rows: ['...'] }, '一块砖都没有');
-  expectError('生命为 0', { ...base, lives: 0 }, '生命数非法');
-  expectError('球速为 0', { ...base, speed: 0 }, '球速非法');
-}
-
-console.log('\n打砖块：挡板反弹角度');
-{
-  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
-  if (parsed.ok) {
-    const base = createBreakoutState(parsed.level);
-    const incoming = {
-      ...base,
-      // 球刚好落在挡板上方、向下飞
-      ballY: PADDLE_Y + PADDLE_HALF_HEIGHT + BALL_RADIUS + 0.02,
-      ballVx: 0,
-      ballVy: -6,
-    };
-
-    const centered = substepBreakout({ ...incoming, ballX: base.paddleX });
-    check('正中击中后向上飞', centered.ballVy > 0);
-    check('正中击中后几乎不横向（|vx| < 0.2）', Math.abs(centered.ballVx) < 0.2, `vx=${centered.ballVx}`);
-
-    const edge = substepBreakout({ ...incoming, ballX: base.paddleX + 1.1 });
-    check('边缘击中后向上飞', edge.ballVy > 0);
-    check('边缘击中横向分量明显（|vx| > 1）', Math.abs(edge.ballVx) > 1, `vx=${edge.ballVx}`);
-    const angle = Math.abs(Math.atan2(edge.ballVx, edge.ballVy));
-    check('反弹角不超过 60°', angle <= MAX_BOUNCE_ANGLE + 1e-9, `angle=${angle}`);
-
-    // 垂直分量永远足够大：不会出现"球贴着挡板横着走"
-    check('反弹后垂直分量不小于 50% 球速', edge.ballVy >= 0.5 * Math.hypot(edge.ballVx, edge.ballVy));
-  }
-}
-
-console.log('\n打砖块：漏球扣命与判负');
-{
-  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
-  if (parsed.ok) {
-    const base = createBreakoutState(parsed.level);
-    const leaking = { ...base, ballY: -2.5, ballVy: -6, lives: 2 };
-    const afterLeak = substepBreakout(leaking);
-    equal('漏球扣一条命', afterLeak.lives, 1);
-    check('球复位到挡板上方', afterLeak.ballY > PADDLE_Y);
-    check('复位后向上飞', afterLeak.ballVy > 0);
-
-    const lastLife = substepBreakout({ ...leaking, lives: 1 });
-    equal('最后一条命漏了判负', lastLife.status, 'lost');
-  }
-}
-
-console.log('\n打砖块：清屏过关与撞砖');
-{
-  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
-  if (parsed.ok) {
-    const base = createBreakoutState(parsed.level);
-    const empty = { ...base, bricks: new Map<string, number>() };
-    equal('砖块清空即过关', substepBreakout(empty).status, 'won');
-    check('isBreakoutCleared 为真', isBreakoutCleared(empty));
-
-    // 球从下往上撞第一块砖
-    const hitting = { ...base, ballX: 0.5, ballY: 0.2, ballVx: 0, ballVy: 6 };
-    const after = substepBreakout(hitting);
-    check('打掉一块砖', after.bricks.size < hitting.bricks.size);
-    check('撞砖后竖直反向', after.ballVy < 0);
-    check('分数增加', after.score > 0);
-  }
-}
-
-console.log('\n打砖块：时间步长无关性');
-{
-  const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[0]!);
-  if (parsed.ok) {
-    const paddleX = parsed.level.width / 2;
-    let thirty = createBreakoutState(parsed.level);
-    for (let i = 0; i < 10; i++) thirty = advanceBreakout(thirty, 1 / 30, { paddleX });
-    let sixty = createBreakoutState(parsed.level);
-    for (let i = 0; i < 20; i++) sixty = advanceBreakout(sixty, 1 / 60, { paddleX });
-
-    const distance = Math.hypot(thirty.ballX - sixty.ballX, thirty.ballY - sixty.ballY);
-    check('30fps×10 与 60fps×20 轨迹一致（差 < 0.05 格）', distance < 0.05, `差 ${distance.toFixed(4)} 格`);
-    equal('累计时间相同', Math.abs(thirty.accumulator - sixty.accumulator) < 1e-9, true);
-  }
-}
-
-console.log('\n打砖块：10 关逐关可通（挡板跟球模拟）');
-{
-  /**
-   * 模拟一个"会玩的玩家"：挡板跟着球，但**每隔 3 秒故意偏一点**，
-   * 让球以不同角度弹出去扫过整片砖墙。
-   *
-   * ⚠️ 只"正中接球"是不够的：球会一直垂直上下、只打中间那一列，
-   * 永远清不完——这也是真人玩家的常识（用挡板边缘改角度）。
-   */
-  const simulate = (level: BreakoutLevel): { won: boolean; seconds: number } => {
-    let state = createBreakoutState(level);
-    let frames = 0;
-    const dt = 1 / 30;
-    while (state.status === 'playing' && frames < 7200) {
-      const side = Math.floor(frames / 90) % 2 === 0 ? 1 : -1;
-      state = advanceBreakout(state, dt, { paddleX: state.ballX + side * 0.75 });
-      frames += 1;
-    }
-    return { won: state.status === 'won', seconds: frames * dt };
-  };
-
-  for (let index = 0; index < BREAKOUT_LEVELS.length; index++) {
-    const parsed = parseBreakoutLevel(BREAKOUT_LEVELS[index]!);
-    if (!parsed.ok) continue;
-    const result = simulate(parsed.level);
-    check(
-      `第 ${index + 1} 关能清屏`,
-      result.won,
-      result.won ? `${result.seconds.toFixed(1)} 秒` : '模拟 120 秒仍未清屏',
-    );
-  }
-}
-
-console.log('\n打砖块：接线静态断言');
-{
-  const logicSrc = readFileSync(new URL('../src/minigame/games/breakout/logic.ts', import.meta.url), 'utf8');
-  const sceneSrc = readFileSync(new URL('../src/minigame/games/breakout/scene.ts', import.meta.url), 'utf8');
-  check('固定子步积分', logicSrc.includes('BREAKOUT_FIXED_STEP'));
-  check('dt 被夹到 0.25 秒', logicSrc.includes('0.25'));
-  check('挡板 mesh 用连续坐标', sceneSrc.includes('this.paddleMesh.position.set('));
-  check('砖块变化才重建', sceneSrc.includes('brickSignature'));
-  check('过关回调', sceneSrc.includes('onCleared?.(advanced.score)'));
-  check('主菜单按 gameId 进打砖块', mainSrc.includes('new BreakoutGame(level'));
+  check('主菜单按 gameId 进跳一跳', mainSrc.includes('new JumpGame()'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

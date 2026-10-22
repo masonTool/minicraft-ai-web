@@ -707,9 +707,8 @@ import { SmokeGame } from './minigame/games/smoke.ts';
 import type { MiniGame } from './minigame/types.ts';
 // 小游戏3：主菜单入口、选择页与本地进度
 import { MiniGameMenu } from './ui/MiniGameMenu.ts';
-import { loadProgress, recordClear, saveProgress } from './minigame/progress.ts';
-import { SokobanGame } from './minigame/games/sokoban/scene.ts';
-import { BreakoutGame } from './minigame/games/breakout/scene.ts';
+import { loadProgress } from './minigame/progress.ts';
+import { JumpGame } from './minigame/games/jump/scene.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -18466,20 +18465,15 @@ async function boot(): Promise<void> {
     requestAnimationFrame(loop);
   };
 
-  /** 选关 → 进入（推箱子已接入；打砖块在 T13 补上） */
-  const startMiniGameFromMenu = (gameId: string, level: number): void => {
+  /**
+   * 点卡片 → 直接开局（J0：已经没有关卡页）。
+   *
+   * 最高分不在这一层写：跳一跳在"掉落 → 结算"时通过 `onScore` 回调交回来（J2 接上）。
+   */
+  const startMiniGame = (gameId: string): void => {
     miniGameMenu?.hide();
-    // 过关时写一次进度：只记"通关 + 更少步数"，与世界存档无关
-    const onCleared = (steps: number): void => {
-      saveProgress(recordClear(loadProgress(), gameId, level, steps));
-    };
-    if (gameId === 'sokoban') {
-      runStandaloneMiniGame(new SokobanGame(level, { onCleared }));
-      return;
-    }
-    if (gameId === 'breakout') {
-      // 打砖块没有"步数"：记 1 只用于标记"已通关"（界面只显示 ✓，不显示步数）
-      runStandaloneMiniGame(new BreakoutGame(level, { onCleared: () => onCleared(0) }));
+    if (gameId === 'jump') {
+      runStandaloneMiniGame(new JumpGame());
       return;
     }
     runStandaloneMiniGame(new SmokeGame());
@@ -18488,7 +18482,7 @@ async function boot(): Promise<void> {
   const openMiniGames = (): void => {
     if (!miniGameMenu) {
       miniGameMenu = new MiniGameMenu(document.body, atlas, loadProgress(), {
-        onStart: (gameId, level) => startMiniGameFromMenu(gameId, level),
+        onStart: (gameId) => startMiniGame(gameId),
         onClose: () => {
           miniGameMenu?.hide();
           pushMenuGuard();
@@ -18640,10 +18634,9 @@ async function boot(): Promise<void> {
       activeMenuMiniGame.stop();
       return;
     }
-    // 选择页开着：关卡页 → 卡片页由 `back()` 自己处理，回到卡片页时补一条守卫
+    // 选择页开着：只有一层，返回就是关面板（`onClose` 里已经补了一条守卫）
     if (miniGameMenu?.isOpen) {
-      const stayed = miniGameMenu.back();
-      if (stayed) pushMenuGuard();
+      miniGameMenu.back();
       return;
     }
     if (menuSettings?.isOpen) {

@@ -1298,24 +1298,18 @@
         color: #9fb3c8; font-size: 12px; pointer-events: none;
       }
 
-      /* 小游戏内的关卡 HUD（小游戏4 推箱子 / 小游戏5 打砖块共用一套位置） */
-      .sokoban-hud, .breakout-hud {
+      /* 跳一跳 HUD（J0，批次 20261022-2220）：现在只有底部一行提示；
+         J2 在这里加左上角分数，J3 加结算面板。 */
+      .jump-hud {
         position: absolute;
         left: calc(8px + env(safe-area-inset-left, 0px));
         bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         display: flex; flex-direction: column; gap: 6px;
         pointer-events: none;
       }
-      .sokoban-status, .breakout-status {
-        color: #e8eef4; font-size: 13px;
+      .jump-hint {
+        color: #9fb3c8; font-size: 12px;
         text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
-      }
-      .sokoban-actions { display: flex; gap: 6px; pointer-events: auto; }
-      .sokoban-actions button {
-        min-height: 40px; padding: 6px 12px;
-        font: inherit; font-size: 13px; color: #fff;
-        background: rgba(30, 30, 30, .85);
-        border: 2px solid #5a5a5a; border-radius: 4px;
       }
 
       /* ---------------- 小游戏选择页（小游戏3，批次 20261022-1954） ----------------
@@ -1358,17 +1352,7 @@
       .minigame-game-name { font-size: 14px; font-weight: 700; }
       .minigame-game-desc { font-size: 11px; color: #b9c4cf; margin-top: 1px; }
       .minigame-game-count { font-size: 11px; color: #ffd75e; margin-top: 1px; }
-      .minigame-levels { display: flex; flex-direction: column; gap: 8px; }
-      .minigame-levels.hidden, .minigame-games.hidden { display: none; }
-      .minigame-levels-name { font-size: 14px; font-weight: 700; }
-      .minigame-level-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-      .minigame-level {
-        min-height: 44px;
-        font: inherit; font-size: 14px; color: #fff;
-        background: #2b2b2b; border: 2px solid #4a4a4a; border-radius: 4px;
-      }
-      .minigame-level.cleared { border-color: #6fbf73; color: #9be59f; }
-      .minigame-level.cleared::after { content: ' ✓'; font-size: 12px; }
+
 
       /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
          与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */

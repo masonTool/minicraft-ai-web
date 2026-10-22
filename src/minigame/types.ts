@@ -1,7 +1,7 @@
 /**
- * 单机小游戏的**契约**（小游戏1，批次 20261022-1954）
+ * 单机小游戏的**契约**（小游戏1，批次 20261022-1954；J0 收窄到跳一跳，批次 20261022-2220）
  *
- * 三个模块共用这一份：`MiniGameHost`（宿主）只认接口，具体游戏（推箱子 / 打砖块）
+ * 三个模块共用这一份：`MiniGameHost`（宿主）只认接口，具体游戏（跳一跳 / 自检）
  * 各自实现，主程序只负责"什么时候更新、什么时候渲染"。
  *
  * 四条口径：
@@ -20,7 +20,7 @@
 import type * as THREE from 'three';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 
-export type MiniGameId = 'sokoban' | 'breakout' | 'smoke';
+export type MiniGameId = 'jump' | 'smoke';
 
 /** 一局的状态（宿主据此显示"过关/失败"覆盖层） */
 export type MiniGameStatus = 'playing' | 'won' | 'lost';
