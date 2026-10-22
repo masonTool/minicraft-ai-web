@@ -3158,6 +3158,33 @@ if (wxTestApi && isDesktopRuntime) {
     // ---------------------------------------------------------------- 熔炉目标框
     /** 熔炉当前状态（冻结 / 开工 / 燃烧 / 两条进度 / 提示语） */
     furnaceState: () => containers.furnaceState,
+    /** 熔炉左栏可做列表的统计（验收读它判断"列了几条、几条能做"） */
+    stationCardInfo: () => containers.stationCardInfo,
+    /** 点第一张"能做"的卡（验"摆料"用；坐标点击不够稳，走同一条逻辑） */
+    pickFirstCraftableStationCard: () => containers.pickFirstCraftable(),
+    /** 点第一张"缺料"的卡（验拒绝与提示语） */
+    pickLockedStationCard: () => containers.pickFirstLocked(),
+    /** 三种熔炉站台各自能列几条（验站台过滤） */
+    stationCountsByStation: () => containers.stationCountsByStation(),
+    /**
+     * 把开着的那只容器清空（验收一个用例一条，互不影响）。
+     *
+     * ⚠️ `resetInventoryForTest` 只清**背包**；炉子是按坐标缓存的，
+     * 重开同一座炉子拿到的还是同一个实例，上一轮的料还在里面。
+     */
+    clearContainerForTest: () => {
+      const source = containers.source;
+      if (!source) return { cleared: 0 };
+      let cleared = 0;
+      for (let i = 0; i < containers.openSize; i++) {
+        if (source.get(i)) {
+          source.set(i, null);
+          cleared++;
+        }
+      }
+      containers.refresh();
+      return { cleared };
+    },
     /** 点目标框开工（等于玩家点产物格） */
     startFurnace: () => containers.startStation(),
     /** 取走熔炉成品 */

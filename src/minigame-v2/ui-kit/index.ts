@@ -156,6 +156,14 @@ export interface UiSlotNode extends UiNode {
    * 没给 = 这一格不参与选数量（走普通右键 + 连发）。
    */
   onSplit?: (count: number) => void;
+  /**
+   * 这一格"现在用不了"（配方卡缺料 / 缺燃料）。
+   *
+   * ⚠️ 不要用 `takeOnly` 表达这件事：那个字段的语义是"只取不放"（产物槽），
+   * 借它来画"不可用"会让产物槽和缺料卡长得一模一样（第一版就是这样，
+   * 45 张配方卡里有 44 张都亮着金边，看起来像全都能做）。
+   */
+  locked?: boolean;
 }
 
 export type UiIconKind = 'chat' | 'pause' | 'view';
@@ -278,8 +286,9 @@ export function slot(
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void,
   takeOnly = false,
   onSplit?: (count: number) => void,
+  locked = false,
 ): UiSlotNode {
-  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, takeOnly, onSplit };
+  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop, takeOnly, onSplit, locked };
 }
 
 export function icon(
@@ -1011,15 +1020,20 @@ export class UiLayer {
         bevelRect(ctx, node.x, node.y, node.w, node.h, [MC.bevelDark, MC.bevelLight, MC.bevelLight, MC.bevelDark], 2);
       }
 
-      // 拖拽落点 / 产物槽：加一圈高亮（原版没有，但这是必要的操作反馈）
+      // 拖拽落点 / 产物槽 / 不可用：加一圈高亮（原版没有，但这是必要的操作反馈）
       if (dragOver) {
         ctx.strokeStyle = MC.dropTarget;
         ctx.lineWidth = 3;
         ctx.strokeRect(node.x + 2, node.y + 2, node.w - 4, node.h - 4);
       } else if (node.takeOnly) {
+        // 产物槽：金边 = "这格只能取"
         ctx.strokeStyle = MC.outputAccent;
         ctx.lineWidth = 2;
         ctx.strokeRect(node.x + 3, node.y + 3, node.w - 6, node.h - 6);
+      } else if (node.locked) {
+        // 不可用（配方卡缺料）：**压暗**整格，不画金边
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(node.x + 2, node.y + 2, node.w - 4, node.h - 4);
       }
 
       if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x + 2, node.y + 2, node.w - 4);

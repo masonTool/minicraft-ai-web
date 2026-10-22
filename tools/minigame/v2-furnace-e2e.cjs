@@ -100,8 +100,19 @@ const RAW_IRON = 1001;
   await wait((s) => s.screen === 'worlds', '没进列表');
   await tap(512, 216);
   await wait((s) => s.screen === 'create', '没进新建');
-  await tap(727, 423);
-  await wait((s) => s.screen === 'game' && s.drawn > 3, '没进游戏', 90000);
+  // ⚠️ helper 冷启动时，"创建并进入"**第一下经常不生效**（界面还停在 create）。
+  // 这里重试最多 4 次，而不是让整个验收崩掉再手动重跑。
+  let entered = false;
+  for (let attempt = 0; attempt < 4 && !entered; attempt++) {
+    await tap(727, 423);
+    try {
+      await wait((s) => s.screen === 'game' && s.drawn > 3, '没进游戏', 25000);
+      entered = true;
+    } catch {
+      if (attempt === 3) throw new Error('连点 4 次「创建并进入」都没进游戏');
+      await page.waitForTimeout(800);
+    }
+  }
   await page.waitForTimeout(1200);
 
   const frame = page.frames().find((f) => f.url().startsWith('about:srcdoc'));
