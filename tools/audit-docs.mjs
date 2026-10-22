@@ -309,6 +309,8 @@ for (const [name, url] of [
  */
 {
   const problems = [];
+  /** 只打印、不判红的那一类（粒度判断、误用提示）。口径同 `tools/i18n-audit.ts`。 */
+  const hints = [];
 
   let names = [];
   try {
@@ -415,6 +417,28 @@ for (const [name, url] of [
       );
     }
 
+    /**
+     * 里程碑粒度：**只提示、不判红**。
+     *
+     * 规则本身是硬的（计划只该出现在 >16 条的任务上，一个里程碑至少覆盖两批），
+     * 但它是**判断**，不是结构：判红的时机太早会把"正在跑的老计划"直接卡死
+     * （实测：本仓库那份 `plan-jump.md` 就是单阶段，它属于另一个正在进行的会话）。
+     * 强行拆别人的计划等于改它这一批的执行流程，代价大于收益。
+     *
+     * 所以这里走 `i18n-audit` 用过的同一口径：**只报告、不失败，判死是人的事**。
+     * 真正的约束放在两处硬的地方：注入协议（新计划不许这么写）与 `notes/plan.md` §0 的门槛。
+     */
+    for (const ms of plan.milestones) {
+      if (ms.stages.length === 0) {
+        hints.push(`${name} 里程碑「${ms.id} · ${ms.title}」下面一个阶段都没有（阶段行漏写？）`);
+      } else if (ms.stages.length === 1) {
+        hints.push(
+          `${name} 里程碑「${ms.id} · ${ms.title}」只有 1 个阶段——每批都停等于关卡变噪音；` +
+            '要么并到相邻里程碑，要么说明这个任务本来就 ≤16 条、不该建计划',
+        );
+      }
+    }
+
     const doingCount = plan.stages.filter((stage) => stage.kind === 'doing').length;
     if (doingCount > 1) {
       problems.push(`${name} 有 ${doingCount} 条 [~]（计划里同一时间只能有一条，它就是游标）`);
@@ -493,6 +517,7 @@ for (const [name, url] of [
       '阶段批次号、队列引用、注入文本交叉核对',
   );
   for (const line of problems) console.log(`  · ${line}`);
+  for (const line of hints) console.log(`  · 提示（不判红）：${line}`);
   if (problems.length > 0) failed = true;
 }
 
