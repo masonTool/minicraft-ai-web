@@ -146,7 +146,7 @@ npm run agent:setup        # 跨机器自检
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
 | `.continue/`（`doing/` / `DONE` / `OVERVIEW` / `TIPS` + `notes/` / `HANDOFF` / `TASKS` / `hooks` / `README`）、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
-| `.codebuddy/settings.json`（钩子注册）、`.codebuddy/memory/`（AI 记忆的版本化副本） | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.continue/auto.off`（刹车）、`.codebuddy/skills/`（本地技能包）、截图 `shot-*.png` |
+| `.codebuddy/settings.json`（钩子注册）、`.codebuddy/memory/`（AI 记忆的版本化副本）、`.codebuddy/skills/continue-task/`（**框架补丁的源**，重装用它） | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.continue/auto.off`（刹车）、`.codebuddy/skills/` 的**其它**技能（本地）、截图 `shot-*.png` |
 
 **唯一的外部依赖：git 远程仓库**（没有远程 = 代码只在本机）。查看 `git remote -v`，
 没有就 `git remote add origin <地址>` 再 `git push -u origin main`。
