@@ -20,6 +20,8 @@ description: This skill installs the continue-do persistent task-queue framework
 - **门禁由脚本跑**：编号、跨文件引用、文档体量、钩子自检、提交前检查都由脚本执行，
   不看 AI 自证。
 - **有刹车**：`> 状态：讨论中` 停单份队列，`touch .continue/auto.off` 全停，随时人工接管。
+- **并行靠工作树**：`npm run continue:worktree -- <名字>` 建独立 worktree + 分支并推远程，
+  **必须在新路径另开会话**（钩子按 cwd 判断读写哪棵树）；合并时机由用户定。
 - **收尾自动**：队列全打勾 → 直接归档进 `DONE` / `OVERVIEW` / `TASKS` 并删队列，不弹窗等确认；
   只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
   **有计划时不是删队列而是重置它**（换成下一阶段的条目 + 新批次号），删了计划链就断在这里。
