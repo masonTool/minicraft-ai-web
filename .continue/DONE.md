@@ -31,6 +31,8 @@
   [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来）
 - **运维手册**（`window.__mc` 调试接口 + PWA / Pages / 套壳发布）→
   [`notes/ops.md`](./notes/ops.md)（从根 `HANDOFF.md` §5.5 / §6 抽出并合并）
+- **低龄向功能规划**（新手引导 / 创造工具 / 单机小游戏的架构选型、4 项拍板、护栏与判定不做）→
+  [`notes/kids-features.md`](./notes/kids-features.md)（2026-10-22 本轮讨论定稿）
 
 ### 长期待办只有一份：`.continue/TASKS.md`（2026-10-22，合并根 TASKS）
 
