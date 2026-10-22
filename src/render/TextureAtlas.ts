@@ -6784,6 +6784,17 @@ export class TextureAtlas {
   }
 
   /**
+   * 图集像素**铺好了没有**（`deferPaint` 阶段 / 主菜单还没进世界时为 false）。
+   *
+   * 给 UI 用：这时候从图集上裁/拼出来的图标一定是**全透明**的，
+   * 而 `BlockIcon` 会把结果缓存起来（见 `blockIconCanvas` 里的守卫）。
+   * 2026-10-22 的"9 个方块图标永久空白"就是有人在 `painted=false` 时先画了一遍。
+   */
+  get isPainted(): boolean {
+    return this.painted;
+  }
+
+  /**
    * 回到前台 / 上下文恢复后调一次：内容没了就重画。
    *
    * @returns 是否真的重画了（诊断日志用；玩家无感）

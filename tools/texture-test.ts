@@ -16,6 +16,7 @@
  * 运行：npm run test:textures
  */
 
+import { readFileSync } from 'node:fs';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { Item } from '../src/core/registry/items.ts';
 import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
@@ -171,6 +172,43 @@ console.log('\n[顺带确认这些方块的机制本身是完整的]');
     ['white', 'blue', 'red', 'black'].every((color) =>
       [1, 2, 3, 4].every((pattern) => tiles.includes(`banner_${color}_p${pattern}`)),
     ),
+  );
+}
+
+// ---------------------------------------------------------------- 图标缓存
+//
+// 2026-10-22 用户："部分图标不见了" —— 截图里空的是沙 / 原木 / 树叶 / 木板 / 圆石 /
+// 玻璃 / 工作台 / 箱子 / 砖块，**正好是建造工具条用到的 9 件**。
+// 根因：`App` 构造里 `BuildToolbar` 早于 `atlas.ensureUploaded()`，而主菜单阶段的图集是
+// `deferPaint` 的空画布；用空图集拼出来的等轴图标全透明，还被 `BlockIcon` 按 blockId 缓存
+// 住（只按 `atlas.revision` 失效）→ 这 9 个方块在本页所有界面里永久空白。
+// 这套断言守"次序 + 守卫"，因为这两种错都不会报错、只会少画东西。
+console.log('\n图标缓存不能被"还没铺像素的图集"毒化');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const ensureAt = mainSrc.indexOf('atlas.ensureUploaded()');
+  const cardAt = mainSrc.indexOf('new TutorialCard(');
+  const toolbarAt = mainSrc.indexOf('new BuildToolbar(');
+  check(
+    '进世界先铺图集像素，并且排在 UI 构造之前',
+    ensureAt > 0 && cardAt > ensureAt && toolbarAt > ensureAt,
+    `ensure=${ensureAt} card=${cardAt} toolbar=${toolbarAt}`,
+  );
+  check(
+    '进世界时清一次方块图标缓存（上一局的坏图标能自愈）',
+    mainSrc.split('clearBlockIconCache()').length - 1 >= 2,
+  );
+
+  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  check('图集对外暴露"像素铺好了没有"', atlasSrc.includes('get isPainted(): boolean'));
+
+  const iconSrc = readFileSync(new URL('../src/ui/BlockIcon.ts', import.meta.url), 'utf8');
+  const guardAt = iconSrc.indexOf('if (!atlas.isPainted) return null;');
+  const setAt = iconSrc.indexOf('cache.set(blockId, canvas)');
+  check(
+    '图集没铺好时不画、也不进缓存（缓存只按 revision 失效）',
+    guardAt > 0 && setAt > guardAt,
+    `guard=${guardAt} set=${setAt}`,
   );
 }
 

@@ -2078,6 +2078,26 @@ class App {
       difficulty: 'normal',
     },
   ) {
+    // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
+    // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
+    // 表现就是"退出重进、换世界都还是白，非得刷新页面"。每次进世界先铺一遍
+    // 上传画布（1ms 量级），让"重进游戏"也成为一条自愈路径，而不只是刷新。
+    //
+    // ⚠️ **必须排在所有 UI 构造之前**（2026-10-22 修）：主菜单阶段图集是 `deferPaint`
+    // 的空画布，而 `BuildToolbar` 这类界面在构造时就画物品图标。拿空图集拼出来的等轴图标
+    // 是**全透明的**，还会被 `BlockIcon` 的缓存留下来（只按 `atlas.revision` 失效），
+    // 于是那几件方块在本页任何界面里都永久空白——实测正好是工具条用到的 9 件：
+    // 沙 / 原木 / 树叶 / 木板 / 圆石 / 玻璃 / 工作台 / 箱子 / 砖块。
+    const atlasUploadBefore = atlas.probeUpload();
+    const atlasUploaded = atlas.ensureUploaded();
+    diag.event('app', 'atlas.ensure', {
+      upload: atlasUploaded ? 'synced' : 'pending',
+      uploadBefore: atlasUploadBefore,
+      uploadAfter: atlas.probeUpload(),
+    });
+    // 上一局缓存里可能还留着"空图集时代"拼出来的坏图标：进世界整份作废，按新像素重建
+    clearBlockIconCache();
+
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     // 下落方块表只对当前世界有效；换世界/重开时清空，避免旧坐标落到新世界
     this.fallingBlocks.clear();
@@ -2248,18 +2268,6 @@ class App {
     );
     this.camera.rotation.order = 'YXZ';
 
-    // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
-    // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
-    // 表现就是"退出重进、换世界都还是白，非得刷新页面"。每次进世界先铺一遍
-    // 上传画布（1ms 量级），让"重进游戏"也成为一条自愈路径，而不只是刷新。
-    // 进世界这一刻上传画布还有没有内容：`false` = 从上一局带进来的空图集（自愈命中的证据）
-    const atlasUploadBefore = atlas.probeUpload();
-    const atlasUploaded = atlas.ensureUploaded();
-    diag.event('app', 'atlas.ensure', {
-      upload: atlasUploaded ? 'synced' : 'pending',
-      uploadBefore: atlasUploadBefore,
-      uploadAfter: atlas.probeUpload(),
-    });
     // 贴图尺寸与内缩交给着色器：贪心网格化合并出的大四边形要沿面平铺贴图
     const atlasShape = { tileSpan: atlas.tileSpan, tileInset: atlas.tileInset };
     this.solidMaterial = new VoxelMaterial(atlas.texture, atlasShape);
