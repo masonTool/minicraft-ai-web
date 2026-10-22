@@ -6,12 +6,14 @@
  * 没有任何门禁 → 两端都长回去了（HANDOFF 250 → 1100+ 行）。
  * 这里把"保留几批 / 最长几行"变成可执行规则，并且只做**整段搬迁**（一字不改）。
  *
- * ⚠️ 2026-10-22 迁移后队列改成了**会话级**（`.continue/queues/<session_id>.md`）：
+ * ⚠️ 2026-10-22 迁移后队列改成了**会话级**（`.continue/doing/<session_id>.md`）：
  *   · 队列里不再有 `## 批次 N` 小节，收尾时整份搬进 `.continue/DONE.md` 并删除文件，
  *     "队列一路长到两千行"这件事从机制上消失了；
- *   · 所以这里只剩两件事：**单份队列别误粘大文件**（5000 行）+ **HANDOFF 只留最近 6 批**；
- *   · `npm run docs:trim` 只处理 HANDOFF：旧批次追加到 `.continue/DONE.md` 末尾的
- *     `docs-archive` 标记区（旧的 `docs/HANDOFF-ARCHIVE.md` 已整份并入该文件并下线）。
+ *   · 所以这里只剩三件事：**单份队列别误粘大文件**（5000 行）+ **HANDOFF 只留最近 6 批**
+ *     + **框架的文档上限没被重装覆盖**（见下面的 `DOC_LIMITS` 守卫）；
+ *   · `npm run docs:trim` 只处理 HANDOFF：旧批次追加到 **`.continue/DONE.archive.md`**
+ *     末尾的 `docs-archive` 标记区——不进 `DONE.md`，那份是每批都要读的时间线，
+ *     体量由框架的 `audit-docs` 管（上限 300 行）。
  *
  * 用法：
  *   npm run audit:docs   # 只检查（过期非零退出，不改文件，给 npm run check 用）
@@ -25,14 +27,28 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from '
 const printOnly = process.argv.includes('--print');
 
 const FILES = {
-  queuesDir: new URL('../.continue/queues/', import.meta.url),
+  queuesDir: new URL('../.continue/doing/', import.meta.url),
   handoff: new URL('../.continue/HANDOFF.md', import.meta.url),
   /**
-   * 完成档案（时间线）。2026-10-22 把旧队列、485 段批次流水、`docs/HANDOFF-ARCHIVE.md`
-   * 都并了进来；`docs:trim` 往后搬的旧批次也追加到它末尾的 `docs-archive` 标记区。
+   * 旧存档。`docs:trim` 搬走的历史批次写这里，**不写 `DONE.md`**：
+   * 那份是"最近几批"的时间线（框架上限 300 行，超了由 `archive-done.mjs` 归档），
+   * 再往里塞历史会让框架的体量门禁常年红着。
    */
+  archive: new URL('../.continue/DONE.archive.md', import.meta.url),
   done: new URL('../.continue/DONE.md', import.meta.url),
+  /** 框架的上限表（唯一来源）。重装框架会覆盖它，所以这里要盯一眼。 */
+  docLimits: new URL('../.continue/hooks/lib.mjs', import.meta.url),
 };
+
+/**
+ * 本项目对框架 `DOC_LIMITS` 的**局部放宽**（批次 1363）。
+ *
+ * 为什么要有这个守卫：`lib.mjs` 属于框架文件，`node .continue/skills/.../install.mjs`
+ * 重装时**总是覆盖**，放宽会被悄悄改回 600 —— 表现是"重装之后每次提交都被拒"，
+ * 而且报错只说"TASKS.md 5506 行 > 上限 600"，不会告诉你这是本项目改过的值。
+ * 所以由项目自己的门禁记住"应该有哪几项被放宽"，重装后当场报出来。
+ */
+const PROJECT_DOC_LIMITS = { TASKS: 7000 };
 
 const LIMITS = {
   /**
@@ -121,7 +137,10 @@ function trimHandoff() {
   const next = tidy(lines.join('\n'));
 
   if (!printOnly) {
-    writeFileSync(FILES.done, withArchive(read(FILES.done), chunk, '附：HANDOFF §1 自动归档'));
+    const head = existsSync(FILES.archive)
+      ? read(FILES.archive)
+      : '# 更早的归档 · DONE.archive\n\n> 历史批次与旧队列的存档区，**不进每轮上下文**。\n> 找某个批次：`grep -n "批次 <号>" .continue/DONE.archive.md`\n';
+    writeFileSync(FILES.archive, withArchive(head, chunk, '附：HANDOFF §1 自动归档'));
     writeFileSync(FILES.handoff, next);
   }
   return {
@@ -152,7 +171,7 @@ let failed = false;
   const stats = queueStats();
   const bad = stats.over.length > 0;
   console.log(
-    `${bad ? '✗' : '✓'} .continue/queues/：${stats.count} 份会话队列，最长 ${stats.max} 行` +
+    `${bad ? '✗' : '✓'} .continue/doing/：${stats.count} 份会话队列，最长 ${stats.max} 行` +
       `（上限 ${LIMITS.queueLines} 行/份）`,
   );
   for (const row of stats.over) console.log(`  · ${row.name} 已 ${row.lines} 行`);
@@ -176,11 +195,43 @@ let failed = false;
   if (overLines || overItems) failed = true;
 }
 
-for (const [name, url] of [['.continue/DONE.md', FILES.done]]) {
+for (const [name, url] of [
+  ['.continue/DONE.md', FILES.done],
+  ['.continue/DONE.archive.md', FILES.archive],
+]) {
   if (!existsSync(url)) continue;
   const size = statSync(url).size;
   if (size > LIMITS.archiveBytes) {
     console.log(`· ${name} 已 ${(size / 1024).toFixed(0)}KB（超过归档上限，下一步考虑分片）`);
+  }
+}
+
+// ---- 框架文档上限的局部放宽有没有被重装覆盖
+{
+  const bad = [];
+  let text = '';
+  try {
+    text = read(FILES.docLimits);
+  } catch {
+    /* 没有 lib.mjs 说明框架没装，交给框架自检报，这里不重复 */
+  }
+  for (const [key, want] of Object.entries(PROJECT_DOC_LIMITS)) {
+    const m = new RegExp(`\\b${key}:\\s*(\\d+)`).exec(text);
+    if (!m) continue;
+    if (Number(m[1]) < want) bad.push(`${key} 现在是 ${m[1]}，应为 ${want}`);
+  }
+  console.log(
+    `${bad.length > 0 ? '✗' : '✓'} 框架 DOC_LIMITS 放宽：` +
+      Object.entries(PROJECT_DOC_LIMITS)
+        .map(([key, want]) => `${key}=${want}`)
+        .join(' · '),
+  );
+  for (const line of bad) console.log(`  · ${line}`);
+  if (bad.length > 0) {
+    console.log(
+      '  · 重装 continue-do 会覆盖 .continue/hooks/lib.mjs ——把上面几项改回去再提交（理由见该处的注释）',
+    );
+    failed = true;
   }
 }
 
