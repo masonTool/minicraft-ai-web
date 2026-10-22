@@ -52,6 +52,14 @@ const stop = (sid) => ({ hook_event_name: 'Stop', session_id: sid });
 const prompt = (sid, text = 'hi') => ({ hook_event_name: 'UserPromptSubmit', session_id: sid, prompt: text });
 const queue = (sid, body, head = '> 状态：执行中') =>
   writeFileSync(join(DOING, `${sid}.md`), `# 队列\n\n${head}\n> 批次：19990101-0000\n\n${body}\n`);
+/** 计划文件：`doing/plan-<名>.md`，和真实文件同构。 */
+const plan = (name, body) => writeFileSync(join(DOING, name), `# 计划 · 测试\n\n${body}\n`);
+/** 绑了计划的队列：头部多一行 `> 计划：`。 */
+const planQueue = (sid, planName, body) =>
+  writeFileSync(
+    join(DOING, `${sid}.md`),
+    `# 队列\n\n> 状态：执行中\n> 批次：19990101-0000\n> 计划：${planName}\n\n${body}\n`,
+  );
 const config = (fast, extra = {}) =>
   writeFileSync(
     join(ROOT, '.continue', 'config.json'),
@@ -192,6 +200,120 @@ try {
     return expect(
       r.code === 2 && r.err.includes('等用户拍板') && r.err.includes('没跑'),
       '自述没跑时应请用户拍板',
+      r,
+    );
+  });
+
+  // ---------------------------------------------------------------- 计划模式
+  /**
+   * 计划模式的 6 条分支。前 4 条是"有 `> 计划：` 时的三条路 + 重复保护"，
+   * 第 5 条钉住**没有计划时文案逐字未变**（这一条是这次改动的回归底线：
+   * 加计划不该动到任何存量会话的收尾行为）。
+   */
+  check('auto-continue · 计划未到边界 → 续批，并且点名下一阶段', () => {
+    plan(
+      'plan-a.md',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- [x] `MS1.1` 第一条 → 验收 `npm run test:a` · 批次 `19990101-0000`',
+        '',
+        '## MS2 · 乙',
+        '- 验收：`npm run test:b`',
+        '- [~] `MS2.1` 当前 → 验收 `npm run test:b`',
+        '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
+      ].join('\n'),
+    );
+    planQueue('s-plan-next', 'plan-a.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-next'));
+    return expect(
+      r.code === 2 &&
+        r.err.includes('计划里还有下一阶段') &&
+        r.err.includes('MS2.2') &&
+        !r.err.includes('停下等验收'),
+      '未到边界应续批并点名 MS2.2',
+      r,
+    );
+  });
+
+  check('auto-continue · 计划做到里程碑边界 → 硬停，列出里程碑验收命令', () => {
+    plan(
+      'plan-b.md',
+      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join(
+        '\n',
+      ),
+    );
+    planQueue('s-plan-edge', 'plan-b.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-edge'));
+    return expect(
+      r.code === 2 &&
+        r.err.includes('停下等验收') &&
+        r.err.includes('npm run test:b') &&
+        r.err.includes('不要替用户写'),
+      '到边界应硬停、给验收命令、并禁止替用户写确认',
+      r,
+    );
+  });
+
+  check('auto-continue · 里程碑硬停只提醒一次，第二轮放行', () => {
+    planQueue('s-plan-edge2', 'plan-b.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const first = hook('auto-continue.mjs', stop('s-plan-edge2'));
+    const second = hook('auto-continue.mjs', stop('s-plan-edge2'));
+    if (first.code !== 2) return expect(false, '第一轮应硬停', first);
+    return expect(second.code === 0, '第二轮应放行（不重复弹窗）', second);
+  });
+
+  check('auto-continue · 上一个里程碑已写「确认：已验收」→ 继续下一里程碑', () => {
+    plan(
+      'plan-c.md',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- 确认：已验收 · 批次 `19990101-0000`',
+        '- [x] `MS1.1` 第一条 → 验收 `npm run test:a` · 批次 `19990101-0000`',
+        '',
+        '## MS2 · 乙',
+        '- 验收：`npm run test:b`',
+        '- [~] `MS2.1` 当前 → 验收 `npm run test:b`',
+        '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
+      ].join('\n'),
+    );
+    planQueue('s-plan-confirmed', 'plan-c.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-confirmed'));
+    return expect(
+      r.code === 2 && r.err.includes('计划里还有下一阶段') && !r.err.includes('停下等验收'),
+      'MS1 已验收时不该再停在 MS1，应继续 MS2',
+      r,
+    );
+  });
+
+  check('auto-continue · 计划里阶段全做完 → 整体收尾并删计划', () => {
+    plan('plan-d.md', '## MS1 · 甲\n- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`');
+    planQueue('s-plan-done', 'plan-d.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-done'));
+    return expect(
+      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-d.md'),
+      '计划全部完成时应走整体收尾',
+      r,
+    );
+  });
+
+  check('auto-continue · `> 计划：` 指向不存在的文件 → 显式告警，不当普通队列收尾', () => {
+    planQueue('s-plan-miss', 'plan-nope.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-miss'));
+    return expect(
+      r.code === 2 && r.err.includes('计划文件不存在') && r.err.includes('引用写错了') && !r.err.includes('[auto-continue · 自动收尾]'),
+      '引用丢失必须告警；静默退回普通收尾等于机制失效却看不出来',
+      r,
+    );
+  });
+
+  check('auto-continue · 没有 `> 计划：` 时收尾第五步仍是"删除队列文件"', () => {
+    queue('s-noplan', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-noplan'));
+    return expect(
+      r.code === 2 && r.err.includes('5. 删除') && !r.err.includes('不要删除队列文件'),
+      '存量会话的收尾文案不该被计划模式改掉',
       r,
     );
   });
