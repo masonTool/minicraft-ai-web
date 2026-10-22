@@ -1,7 +1,13 @@
 {
   "checks": {
-    "fast": "npm run check:fast",
+    "fast": "node .continue/hooks/check.mjs --fast",
     "full": "npm run check",
-    "timeoutSec": 180
+    "timeoutSec": 180,
+    "project": [
+      "npm run check:fast"
+    ]
+  },
+  "git": {
+    "push": true
   }
 }

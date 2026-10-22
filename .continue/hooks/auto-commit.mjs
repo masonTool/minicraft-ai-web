@@ -18,6 +18,7 @@
  * 结果按工作区指纹缓存，同一份改动不重复跑。没配 `config.json` 时行为与以前完全一致。
  *
  * 四道放行（后三道是危险 git 状态，拦人反而会掩盖问题）：
+ *   0. 刹车开着（`.continue/auto.off`）；同一份改动已拦满 `AUTO_COMMIT_MAX_BLOCKS` 次；
  *   1. 不是 git 仓库；
  *   2. merge / rebase / cherry-pick / bisect 进行中；
  *   3. detached HEAD；
@@ -33,14 +34,16 @@ import { createHash } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
-  CONTINUE_DIR,
+  setLogTag,
   PROJECT_ROOT,
+  BRAKE_REL,
   appendLog,
-  detectEvent,
+  brakeOn,
   emitAllow,
   loadConfig,
   loadState,
   readPayload,
+  resolveEvent,
   runCheck,
   saveState,
   sessionId,
@@ -50,15 +53,26 @@ import {
 const STYLE = process.env.AUTO_COMMIT_STYLE === 'json' ? 'json' : 'exit2';
 
 const payload = readPayload();
-const event = detectEvent(payload);
+const event = resolveEvent(payload);
+setLogTag('auto-commit', event);
 const sid = sessionId(payload);
 
 if (event !== 'Stop') emitAllow();
 
-/** 紧急刹车（本项目在框架原版上补的）：提交守卫有独立的开关。 */
-if (existsSync(join(CONTINUE_DIR, 'auto-commit.off'))) {
-  if (sid) appendLog(sid, 'Commit · 放行 · 存在刹车文件 auto-commit.off');
-  emitAllow('提交守卫已关闭（存在 .continue/auto-commit.off），删除该文件即可恢复。');
+/**
+ * 存活埋点（T16）：每次 Stop 都记一笔 `stopSeen`，**空转放行也留一行**。
+ * 没有它，"守卫放行了"和"守卫没跑"在日志里完全一样（见 TIPS「门禁体系」）。
+ */
+if (sid) {
+  const liveState = loadState(sid, 'commit');
+  liveState.stopSeen = (liveState.stopSeen ?? 0) + 1;
+  liveState.lastStopAt = new Date().toISOString();
+  saveState(sid, liveState, 'commit');
+}
+
+if (brakeOn()) {
+  if (sid) appendLog(sid, '空转 · 刹车已开', 'commit');
+  emitAllow(`刹车已开（${BRAKE_REL}），跳过提交检查；删掉该文件即恢复。`);
 }
 
 /** 跑 git，失败返回 null（不抛）。 */
@@ -91,19 +105,19 @@ if (gitDir) {
   );
   const inProgress = inProgressDir ?? inProgressFile;
   if (inProgress) {
-    if (sid) appendLog(sid, `Commit · 放行 · git 进行中（${inProgress}）`);
+    if (sid) appendLog(sid, `放行 · git 进行中（${inProgress}）`, 'commit');
     emitAllow(`检测到 ${inProgress}，正在合并/变基/挑拣，已跳过提交检查，请手动收尾。`);
   }
 }
 
 const branch = (git(['rev-parse', '--abbrev-ref', 'HEAD']) ?? '').trim();
 if (branch === 'HEAD') {
-  if (sid) appendLog(sid, 'Commit · 放行 · detached HEAD');
+  if (sid) appendLog(sid, '放行 · detached HEAD', 'commit');
   emitAllow('当前处于 detached HEAD，已跳过提交检查。');
 }
 
 if ((git(['diff', '--name-only', '--diff-filter=U']) ?? '').trim()) {
-  if (sid) appendLog(sid, 'Commit · 放行 · 存在未解决冲突');
+  if (sid) appendLog(sid, '放行 · 存在未解决冲突', 'commit');
   emitAllow('存在未解决的合并冲突，已跳过提交检查。');
 }
 
@@ -112,8 +126,29 @@ const changed = (git(['status', '--porcelain']) ?? '')
   .map((line) => line.trimEnd())
   .filter((line) => line.length > 0);
 
+/**
+ * 干净就放行。但**不能一声不吭**——旧版在这里直接 return，结果是整个
+ * 「提交守卫」日志区永远空白，排查时分不清"守卫正常放行"和"守卫压根没跑起来"
+ * （本轮验证时真踩到了：日志区全空，无法判断这段链路是否生效）。
+ *
+ * 口径（T16 起）：**每次 Stop 都记一行**。状态切换时多带一句"上一轮的改动已提交"，
+ * 其余记 `空转 · 工作区干净`。旧口径是"只在状态切换时记"，代价是正常的连续放行
+ * 在日志里一片空白——和"守卫没跑"没法区分。每轮回一行、区内 500 行封顶，这个代价可以付。
+ */
 if (changed.length === 0) {
-  if (sid) appendLog(sid, 'Commit · 放行 · 工作区干净');
+  if (sid) {
+    const commitState = loadState(sid, 'commit');
+    appendLog(
+      sid,
+      commitState.dirty === true
+        ? '放行 · 工作区已干净（上一轮的改动已提交）'
+        : '空转 · 工作区干净',
+      'commit',
+    );
+    commitState.dirty = false;
+    commitState.guard = null; // 干净了就清零拦截计数，下次脏了重新给满额度
+    saveState(sid, commitState, 'commit');
+  }
   emitAllow();
 }
 
@@ -122,7 +157,44 @@ const shown = changed.slice(0, LIST_LIMIT);
 const more = changed.length - shown.length;
 const untracked = changed.filter((line) => line.startsWith('??')).length;
 
-if (sid) appendLog(sid, `Commit · 拦截 · ${changed.length} 个未提交改动（未跟踪 ${untracked}）`);
+/**
+ * 同一份改动最多拦 `MAX_BLOCKS` 次，之后放行。
+ *
+ * 为什么存在（挡的是哪种事故）：守卫唯一的放行条件是"工作区干净"，而它又只让 AI 提交
+ * 本会话的文件。脏文件不属于本会话（用户自己的未完成改动 / 别的会话）、或检查失败 AI 修不动时，
+ * 工作区**永远不会变**，于是每次 Stop 都被拦回去——也就是"无限循环烧钱"。
+ * 判据用**工作区指纹**而不是轮次：只要 AI 真的动了文件（提交 / 修复），指纹变化就重新计数。
+ */
+const MAX_BLOCKS = Math.max(1, Number(process.env.AUTO_COMMIT_MAX_BLOCKS ?? 2));
+const guardFp = workspaceFingerprint('guard');
+const guardKey = sid ?? 'shared';
+const guardState = loadState(guardKey, 'commit');
+const sameAsLast = guardState.guard?.fp === guardFp;
+const blocksSoFar = sameAsLast ? guardState.guard.n ?? 0 : 0;
+
+if (blocksSoFar >= MAX_BLOCKS) {
+  if (sid && guardState.guard?.released !== true) {
+    appendLog(sid, `放行 · 同一份改动已拦 ${blocksSoFar} 次未变化，不再拦`, 'commit');
+    guardState.guard = { ...guardState.guard, released: true };
+    saveState(guardKey, guardState, 'commit');
+  }
+  emitAllow(
+    `工作区还有 ${changed.length} 个未提交改动，但同一份改动已提醒 ${blocksSoFar} 次没有变化，不再拦。` +
+      `需要处理的话请人工提交 / 暂存；想彻底关掉守卫：touch ${BRAKE_REL}`,
+  );
+}
+guardState.guard = { fp: guardFp, n: blocksSoFar + 1 };
+saveState(guardKey, guardState, 'commit');
+
+if (sid) {
+  appendLog(sid, `拦截 · ${changed.length} 个未提交改动（未跟踪 ${untracked}）`, 'commit');
+  // 记下"现在有脏文件"，下次干净时才知道该写"已提交"而不是"就绪"（见上面那条分支）
+  const dirtyState = loadState(sid, 'commit');
+  if (dirtyState.dirty !== true) {
+    dirtyState.dirty = true;
+    saveState(sid, dirtyState, 'commit');
+  }
+}
 
 // ---------------------------------------------------------------- 自测门禁（可选）
 
@@ -195,7 +267,8 @@ if (fastCmd) {
   if (sid) {
     appendLog(
       sid,
-      `Commit · 自测${verdict} · ${Math.round((check.ms ?? 0) / 1000)}s · ${fastCmd}${check.cached ? '（缓存）' : ''}`,
+      `自测${verdict} · ${Math.round((check.ms ?? 0) / 1000)}s · ${fastCmd}${check.cached ? '（缓存）' : ''}`,
+      'commit',
     );
   }
 }
@@ -210,6 +283,12 @@ const checkLine =
         : `> ⚠️ 自测命令无法执行（${check.error ?? '未知原因'}），本次未做验证；在回复里说明。`;
 
 const checkFailed = check !== null && check.ok === false;
+
+/**
+ * push 默认**做**（模板 `config.json` 写 `git.push: true`）：提交完顺手推到当前分支，
+ * 省掉"本地提交了但远端没有"的半截状态。要回到只提交，把 `git.push` 设成 `false`。
+ */
+const pushEnabled = config?.git?.push === true;
 
 const feedback = checkFailed
   ? [
@@ -240,11 +319,15 @@ const feedback = checkFailed
       '1) 自动 review 代码，检查代码合理性、架构合理性、修改有效性；',
       '2) review 通过之后，自动生成简要的提交信息（commit message），',
       '   正文写清"改了什么"和"怎么验证的"（测试命令与结果，不要写"已测试"这种空话）；',
-      '3) 自动 commit 并 push 到当前分支。',
+      pushEnabled
+        ? '3) 自动 commit 并 push 到当前分支（**不要 force push**；推送失败如实报告，别改写历史）。'
+        : '3) 自动 commit（**不要 push**；`.continue/config.json` 里 `git.push` 为 false，推送由用户决定）。',
       ...(checkLine ? ['', checkLine] : []),
       '',
       '> 只提交本会话的改动：`git add <具体路径>`，不要 `git add -A`；不是你改的文件在回复里单列说明。',
-      '> 停不下来就会一直提醒——唯一的放行条件是工作区干净。',
+      '> 脏文件若确实不属于本会话（别的会话 / 用户的未完成改动），**不要硬提交**：列出来并说明，',
+      '  由用户决定怎么处理（提交 / 暂存 / `touch .continue/auto.off` 关守卫）。',
+      `> 同一份改动最多提醒 ${MAX_BLOCKS} 次；改动有变化会重新计数。`,
     ].join('\n');
 
 if (STYLE === 'json') {

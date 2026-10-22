@@ -16,30 +16,38 @@
  *
  * 放行条件（按判定顺序）：
  *   1. 不是 Stop 事件 / 拿不到会话 ID（UserPromptSubmit 只复位轮次）；
- *   2. 本会话没有队列（纯问答会话不打扰）；
- *   3. 队列头部（前 5 行）是 `> 状态：讨论中`；
- *   4. 队列里没有 `[ ]` / `[~]`，且**已经请用户确认过收尾**。
+ *   2. 刹车开着（`.continue/auto.off` 存在）；
+ *   3. 本会话没有队列（纯问答会话不打扰，也不为它建日志文件）；
+ *   4. 队列头部（前 5 行）是 `> 状态：讨论中`；
+ *   5. 队列里没有 `[ ]` / `[~]`，且**自动收尾指令已下发过**（或已请用户拍板过）。
  *
- * 收尾：`[ ]` / `[~]` 都没了 → 拦住，请 AI 弹窗让用户确认；
- *   确认后由 AI 把整份队列写进 `DONE.md`、把 `TASKS.md` 里对应条目改成 `[x]`、删除队列文件。
- *   同一份队列只问一次，问过就放行（否则会变成每轮催同一件事）。
+ * 每一次 Stop 都会在日志里留痕：递任务记一条，空转放行记 `空转 · <原因>`，
+ * 状态行里有累计的 `stopSeen`。没有这一层，"钩子放行了"和"钩子没跑"在日志里长得一样。
+ *
+ * 收尾：`[ ]` / `[~]` 都没了 → **默认自动收尾**（不弹窗、不等确认）：
+ *   由 AI 把整份队列（含每条下方的完成说明）搬进 `DONE.md`、更新 `OVERVIEW.md`、
+ *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、删除队列文件。
+ *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、跳过"的条目时才弹窗问用户
+ *   ——那两类人没看过就等于悄悄丢活。同一份队列只催一次，之后放行（否则每轮重复同一句话）。
  */
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import {
-  CONTINUE_DIR,
+  setLogTag,
   appendLog,
-  commitCount,
-  detectEvent,
+  BRAKE_REL,
+  brakeOn,
+  DOING_REL,
   emitAllow,
   emitBlock,
   fingerprint,
   loadState,
   markBlocked,
+  parseBatch,
   queuePath,
+  readLogText,
   readPayload,
   readQueue,
+  resolveEvent,
   saveState,
   sessionId,
   unfinishedCount,
@@ -49,47 +57,100 @@ import {
 const BLOCKED_MAX = Number(process.env.CONTINUE_BLOCK_AFTER ?? 5);
 const DISCOVERED_LIMIT = Number(process.env.CONTINUE_DISCOVERED_LIMIT ?? 5);
 
+/**
+ * 队列还剩这么多条时，提醒"该分阶段了"。
+ *
+ * 为什么需要：批次号 = 归档单元，而 `archive-done.mjs` 按批次**整节搬**。一批塞 30 条，
+ * `DONE.md` 那一节自己就会超过 300 行上限，届时没有更旧的节可搬，归档退化成手工精简。
+ * 所以要在队列还长的时候就提示：做完当前阶段就收尾，另开一批（`--new-batch`）。
+ */
+const LONG_QUEUE_HINT = 10;
+
 const payload = readPayload();
-const event = detectEvent(payload);
+// 事件名优先来自注册参数（`--event=Stop` / `--event=UserPromptSubmit`），写进日志行首
+const event = resolveEvent(payload);
+setLogTag('auto-continue', event);
 const sid = sessionId(payload);
+
+/**
+ * 这一轮是不是「续跑」：宿主采纳了上一次 Stop 反馈、把模型又叫了起来。
+ *
+ * 为什么要认这个：有的宿主限制"每条用户消息最多采纳几次 Stop 反馈"
+ * （CodeBuddy IDE 默认 1，字段叫 `loop_limit`；WorkBuddy 没有上限）。
+ * 被限制时**这一轮反馈会被静默丢弃**——钩子照样跑、照样写"递任务"，
+ * 只有日志里标出"续跑第 N 次"，才能区分"AI 不听话"和"反馈被宿主截断"。
+ *
+ * 判据：`stop_hook_active` 由宿主直接给；`loop_count` 只有部分宿主给（1 起）。
+ * 两个都没有就按首轮处理，不要猜。
+ */
+const loopCount = Number(payload.loop_count);
+const continuation = payload.stop_hook_active === true || (Number.isFinite(loopCount) && loopCount > 1);
+const contMark = continuation ? ` · 续跑第${Number.isFinite(loopCount) ? loopCount : 2}次` : '';
 
 // 用户主动说话 → 轮次归零（人工介入后重新计）。
 // 只有把本脚本也注册到 UserPromptSubmit 才会走到这里，见 SKILL.md 的注册说明。
+/**
+ * 用户说话 → 轮次归零 + **留一行痕迹**。
+ *
+ * 只归零不记录，日志里就只剩 Stop 的行；用户看到"我发了好几条消息、日志一条没动"，
+ * 会以为钩子没跑（真这么被问过）。这里记次数不记内容：内容没必要，次数足够回答
+ * "钩子有没有在跟着我的消息走"。
+ */
 if (event === 'UserPromptSubmit') {
   if (sid) {
+    // 先判断"这个会话值不值得留痕"：有队列，或 queue-init 已经建过日志
+    const tracked = readQueue(queuePath(sid)) !== null || readLogText(sid) !== null;
     const resetState = loadState(sid);
     resetState.count = 0;
+    resetState.promptSeen = (resetState.promptSeen ?? 0) + 1;
+    resetState.lastPromptAt = new Date().toISOString();
     saveState(sid, resetState);
+    if (tracked) appendLog(sid, `收到用户消息 · 第 ${resetState.promptSeen} 次 · 轮次归零`);
   }
   emitAllow();
 }
 
 if (event !== 'Stop') emitAllow();
 
-/**
- * 紧急刹车（本项目在框架原版上补的）：`touch .continue/auto-continue.off` 即放行，
- * 删掉文件恢复。队列文件保留着，恢复后能接着跑——删队列会丢进度，两件事不一样。
- */
-const OFF_FILE = join(CONTINUE_DIR, 'auto-continue.off');
-if (existsSync(OFF_FILE)) {
-  if (sid) appendLog(sid, 'Stop · 放行 · 存在刹车文件 auto-continue.off');
-  emitAllow('自动继续已关闭（存在 .continue/auto-continue.off），删除该文件即可恢复。');
-}
-
 if (!sid) emitAllow('未拿到 session_id，无法推导队列路径，跳过。');
 
 const file = queuePath(sid);
 const queue = readQueue(file);
 
-// 没有队列 = 用户只是在问问题/聊天 → 一次都不要拦。
-if (!queue) {
-  appendLog(sid, 'Stop · 放行 · 本会话尚未创建队列');
-  emitAllow();
+/**
+ * 本会话是否"值得留痕"：有队列，或者已经写过日志。
+ * 两者都没有 = 纯问答会话，不为它凭空造一个日志文件。
+ */
+const tracked = queue !== null || readLogText(sid) !== null;
+
+/**
+ * 存活埋点（T16）：每次 Stop 都累加一次，**空转放行也记一行**。
+ *
+ * 为什么需要（挡的是哪次误判）：旧行为是"空转的放行不记"，结果一个 7 条任务的批次
+ * 跑完，日志里只有会话启动和一条"就绪"——分不清"钩子放行了"和"钩子根本没跑"，
+ * 排查时只能靠猜（那次真这么猜了半天，最后才确认是整批都在一个回合里做完）。
+ * 一行日志的代价远小于一次错误归因。
+ */
+const liveState = tracked ? loadState(sid) : {};
+if (tracked) {
+  liveState.stopSeen = (liveState.stopSeen ?? 0) + 1;
+  liveState.lastStopAt = new Date().toISOString();
+  saveState(sid, liveState);
 }
 
+/** 空转放行：记一行再放行，让"跑过但放行"和"压根没跑"在日志里长得不一样。 */
+function idleAllow(reason, message) {
+  if (tracked) appendLog(sid, `空转 · ${reason}`);
+  emitAllow(message);
+}
+
+if (brakeOn()) idleAllow('刹车已开', `刹车已开（${BRAKE_REL}），不递任务；删掉该文件即恢复。`);
+
+// 没有队列 = 用户只是在问问题/聊天 → 一次都不要拦。
+if (!queue) idleAllow('本会话没有队列');
+
 if (queue.hold) {
-  appendLog(sid, 'Stop · 放行 · 队列头部标记为「状态：讨论中」');
-  emitAllow('队列处于「讨论中」状态，钩子不递任务。改成「状态：执行中」后开始执行。');
+  idleAllow('讨论中，不递任务', '队列处于「讨论中」状态，钩子不递任务。改成「状态：执行中」后开始执行。');
 }
 
 const state = loadState(sid);
@@ -99,6 +160,9 @@ state.count = (state.count ?? 0) + 1;
  * 选这一轮做哪一条（**只读**，不改文件）：
  *   · 已经有 `[~]`（进行中）→ 继续它（上一轮没做完 / 会话被打断）；
  *   · 没有 → 按用户排的顺序取第一条 `[ ]`，`[发现]` 排在后面。
+ *
+ * 返回的 `entry` 带上 `seq`（队列内序号，见 `parseQueue`）——它才是这一轮的
+ * **条目身份**，隔离、状态记录、显示都用它，不再用正文指纹。
  */
 function pickNext(target) {
   if (!target) return null;
@@ -106,37 +170,140 @@ function pickNext(target) {
     (entry) => entry.kind === 'todo' || entry.kind === 'doing',
   );
   const doing = usable.find((entry) => entry.kind === 'doing');
-  if (doing) return { raw: doing.raw, resumed: true };
+  if (doing) return { entry: doing, raw: doing.raw, resumed: true };
   const scheduled = usable.find((entry) => !/^-\s*\[[^\]]*\]\s*\[发现\]/.test(entry.raw));
   const chosen = scheduled ?? usable[0];
-  return chosen ? { raw: chosen.raw, resumed: false } : null;
+  return chosen ? { entry: chosen, raw: chosen.raw, resumed: false } : null;
+}
+
+/** 自述"没验/跳过"的措辞。命中它 = 这条打了勾但没人能保证真的做完。 */
+const UNPROVEN_RE = /未验证|无法验证|没法验证|没跑|未跑|没执行|跳过|待验证/;
+
+/**
+ * 找出"打了勾但没能自证"的条目：缺 `验证` 说明，或验证说明里自述未验证 / 跳过。
+ *
+ * 为什么由脚本判、而不是让 AI 自报：AI 一旦写"已测试"，人只能信；而"有没有 `验证` 行、
+ * 行里怎么写的"是可以机械检查的——这也正是"跳过"唯一会留下的痕迹。
+ * 宁可多问用户一句，也不要把一条没验证的活记进 `DONE.md` 变成既成事实。
+ */
+function collectUnproven(queue) {
+  const lines = queue.text.split(/\r?\n/);
+  const out = [];
+  queue.entries.forEach((entry, i) => {
+    if (entry.kind !== 'done') return;
+    const next = queue.entries[i + 1];
+    const body = lines.slice(entry.index + 1, next ? next.index : lines.length);
+    const verify = body.find((line) => /验证/.test(line));
+    if (!verify) out.push({ entry, reason: '缺「验证」说明' });
+    else if (UNPROVEN_RE.test(verify)) out.push({ entry, reason: '自述未验证 / 已跳过' });
+  });
+  return out;
 }
 
 /**
- * 批次号（= 当前提交总数）在这里取一次，递任务和收尾提示都要用。
- * 位置放这么靠后是因为**上面全是放行分支**：纯问答会话不该为一行展示文本付子进程开销。
+ * 批次号：**只读队列头部声明的 `> 批次：`**。
+ *
+ * 一批一个号，开工时由 `queue-init` 生成时间戳、AI 抄进队列头，之后恒定不变
+ * （一批里提交很多次也还是同一个号）。
+ *
+ * ⚠️ **取不到时不回退**。旧设计在这里 `?? commitCount()`，后果是：队列没写批次时
+ * 每轮都拿当前提交数当批次号，提交一次就从 `批次 3` 漂成 `批次 4`——
+ * "批次恒定"悄悄失效，而且没有任何提示。现在改成 null 并在注入里显式告警。
  */
-const batch = commitCount();
+const batch = parseBatch(queue.text);
 
 let pick = pickNext(queue);
 
 /**
- * 没有可做的了 → 请用户确认收尾。
+ * 收尾五步（自动收尾与"用户拍板后收尾"共用同一段，避免两份文案分叉）。
  *
- * 为什么必须问：`[阻塞]` 是脚本隔离的条目，用户没看过就等于悄悄丢活；
- * 而且 DONE.md / TASKS.md 一旦写入就是既成事实，写错了要回滚两份文档。
+ * 这五步都是"把已经发生的事实搬进文档"，没有取舍空间——所以默认不需要人拍板。
+ */
+const WRAP_STEPS = [
+  '1. **原样搬运**：把整份队列写进 `.continue/DONE.md`——条目原文照搬（含 `[阻塞]`），',
+  '   **连同每条下方的完成说明一起搬**，不再二次总结；',
+  `   标题写成 \`## 批次 ${batch ?? '<n>'} · 日期 · 会话 ${sid.slice(0, 8)}\`。`,
+  '   ⚠️ **不要写 `提交 n→m`**：`m` 要先知道收尾提交之后的总数，而写这个数字本身又产生一次提交，',
+  '   `m` 立刻失效——这是个自指的死结（实测连改四版都追不上）。想知道这批动了几次，',
+  `   直接 \`git log --oneline --grep '批次 ${batch ?? '<n>'}'\` 数一下。`,
+  '   个别条目当时没写说明 → 现在补一段（做了什么 / 为什么 / 怎么验证）；',
+  '   搬运前核对：每条 `[x]` 都要有"验证"一行。缺的当场跑一遍补上；跑不了就如实写"未验证"，',
+  '   **不要替它编一个结果**；',
+  '2. 更新 `.continue/OVERVIEW.md`：完成项按模块挂 `T` 编号 + 批次号，批次索引加一行，',
+  '   这批新踩的坑在对应模块下写一行摘要；跨批的同一需求按批次分行累加，不要合并；',
+  '3. 把整份队列在 `.continue/TASKS.md` 里落地：已有对应条目的改成 `[x]`，',
+  '   当场任务（TASKS 里原本没有的）在 `C. 已完成` 补一条 `[x]`，内容照抄队列那一行；',
+  '   边界：只补 `[x]`（记录已发生的事），**不要新增 `[ ]`**——未来的需求由用户提；',
+  '4. **自问一次**：这轮有没有会重复踩的坑（调很久才定位 / 改了 A 红了 B / 工具的隐蔽默认值）',
+  '   → 有就在 `.continue/TIPS.md` 的对应模块下补一节（症状 → 根因 → 处置 → 适用面）；',
+  '   ⚠️ **只写确实有的**：语法记错、漏读文档导致的误判、一条命令就能查明的现象**都不算坑**，',
+  '   写进去只会稀释真正有价值的条目。没有就跳过，**不写"本批无"占位**；',
+  `5. 删除 \`${DOING_REL}/${sid}.md\`。`,
+  '',
+  '**做完在回复里逐条回执**：五步各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
+  '漏掉的当场补，不要让用户自己去翻文档核对。',
+];
+
+/**
+ * 没有可做的了 → 收尾。
+ *
+ * 两条路，判据是**有没有需要人拍板的条目**：
+ *   · **没有**（全 `[x]`、每条都有验证说明）→ **自动收尾**：直接做完五步并提交，不弹窗、不等确认。
+ *     收尾只是记账，问一次只是白等一轮；实测更常见的结局是用户丢下不管、队列永久挂着。
+ *   · **有**（`[阻塞]`，或打完勾但缺验证 / 自述未验证、跳过）→ **必须问**。
+ *     这两类人没看过就等于悄悄丢活，而 DONE / TASKS 一旦写入是既成事实，写错要回滚两份文档。
  */
 if (!pick) {
   if (queue.entries.length === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, 'Stop · 放行 · 队列是空的');
+    appendLog(sid, '空转 · 队列没有条目');
     emitAllow('队列里没有任何条目。没有要做的就删掉这个队列文件。');
   }
 
+  const blocked = queue.entries.filter((entry) => entry.kind === 'blocked');
+  const unproven = collectUnproven(queue);
+
+  // 没有需要拍板的条目 → 自动收尾，不弹窗。
+  if (blocked.length === 0 && unproven.length === 0) {
+    if (state.autoWrapped) {
+      idleAllow(
+        '自动收尾指令已下发，队列文件还在',
+        '自动收尾的指令上一轮已经给过了：队列文件还在说明五步没做完。照五步补完并删掉队列文件即可，不要来问用户。',
+      );
+    }
+    state.autoWrapped = true;
+    state.count = 0;
+    saveState(sid, state);
+    appendLog(sid, `自动收尾 · 完成 ${queue.counts.done} 条 · 无卡住/未验证条目`);
+    emitBlock(
+      [
+        '[auto-continue · 自动收尾]',
+        '',
+        `队列里已经没有 \`[ ]\` / \`[~]\` 了：完成 ${queue.counts.done} 条，没有 \`[阻塞]\`，也没有自述未验证 / 跳过的条目。`,
+        '',
+        '## 现在要做的事：直接收尾，**不要弹窗问用户**',
+        '',
+        '收尾是把已经发生的事实搬进文档的记账动作，没有需要用户拍板的取舍。',
+        '只有出现卡住（`[阻塞]`）或跳过 / 未验证的条目时才问用户——这一轮两类都没有。',
+        '',
+        '## 五步都要做完（做完才停）',
+        '',
+        ...WRAP_STEPS,
+        '',
+        '## 收尾之后',
+        '',
+        '1. 把 `DONE.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 的改动和"删除队列文件"**一起提交**，',
+        `   commit message：\`批次 ${batch ?? '<n>'} · 收尾 · <这批做了什么>\`；`,
+        '2. 回复末尾写一句"收尾已自动完成"（五步各自做了还是没做）；',
+        '3. 遗留问题（`[发现]` 里没做的、判断不该做的）单独列给用户，不要顺手塞进 `TASKS.md`。',
+      ].join('\n'),
+    );
+  }
+
   if (state.askedComplete) {
-    appendLog(sid, 'Stop · 放行 · 已请用户确认收尾，等回复');
-    emitAllow('已经请用户确认收尾了，等他们回复；确认后再更新 DONE.md 与 TASKS.md。');
+    appendLog(sid, '空转 · 已请用户拍板卡住/未验证的条目，等回复');
+    emitAllow('已经请用户拍板卡住 / 未验证的条目了，等回复；定了之后再收尾（DONE / OVERVIEW / TASKS / TIPS / 删队列）。');
   }
 
   state.askedComplete = true;
@@ -144,88 +311,108 @@ if (!pick) {
   saveState(sid, state);
   appendLog(
     sid,
-    `Stop · 待确认 · 完成 ${queue.counts.done} 条 / 卡住 ${queue.counts.blocked} 条`,
+    `待用户拍板 · 完成 ${queue.counts.done} 条 / 卡住 ${queue.counts.blocked} 条 / 未验证 ${unproven.length} 条`,
   );
-
-  const blocked = queue.entries.filter((entry) => entry.kind === 'blocked');
 
   emitBlock(
     [
-      '[auto-continue · 等用户确认收尾]',
+      '[auto-continue · 等用户拍板后再收尾]',
       '',
-      `队列里已经没有 \`[ ]\` / \`[~]\` 了：完成 ${queue.counts.done} 条，卡住 ${queue.counts.blocked} 条。`,
+      `队列里已经没有 \`[ ]\` / \`[~]\` 了：完成 ${queue.counts.done} 条，卡住 ${queue.counts.blocked} 条，未验证 ${unproven.length} 条。`,
+      '',
+      '## 需要拍板的只有下面两类，别问"要不要收尾"',
+      '',
+      '收尾本身会自动做。要用户定的只有这些"没人拍板就可能悄悄丢掉的活"：',
+      '',
       ...(blocked.length > 0
-        ? ['', `卡住的条目（\`[阻塞]\`，共 ${blocked.length} 条）：`, ...blocked.map((entry) => `  · ${fingerprint(entry.raw)}`)]
+        ? [
+            `**卡住的（\`[阻塞]\`，共 ${blocked.length} 条，脚本连续 N 轮没等到完成才隔离的）：**`,
+            ...blocked.map((entry) => `  · 第${entry.seq}/${entry.total}条 · ${fingerprint(entry.raw)}`),
+            '',
+          ]
         : []),
+      ...(unproven.length > 0
+        ? [
+            `**做完但没能自证的（共 ${unproven.length} 条）：**`,
+            ...unproven.map(
+              (item) =>
+                `  · 第${item.entry.seq}/${item.entry.total}条 · ${fingerprint(item.entry.raw)} · ${item.reason}`,
+            ),
+            '',
+          ]
+        : []),
+      '用弹窗提问工具（CodeBuddy 叫 `ask_followup_question`，Claude Code 叫 `AskUserQuestion`）逐条问，',
+      '每条给 2~4 个选项，第一个是推荐：',
       '',
-      '## 现在要做的事：请用户确认',
+      '1. **改描述继续做** —— 条目没错，只是没做完 / 没验证；',
+      '2. **直接删除** —— 确认不需要了，删掉这条；',
+      '3. **先留着并收尾** —— 保持现状（`[阻塞]`，或补一句"未验证"），按五步收尾，遗留问题在回复里列出。',
       '',
-      '用弹窗提问工具让用户拍板（CodeBuddy 叫 `ask_followup_question`，Claude Code 叫',
-      '`AskUserQuestion`，按你手上的实际工具名来），选项按这个顺序（第一个是推荐）：',
+      '## 用户拍板之后（五步都要做完）',
       '',
-      '1. **确认完成** —— 按下面的步骤收尾；',
-      '2. **还要补充** —— 用户说清补什么，你补成 `- [ ]`，队列继续跑；',
-      '3. **有做得不对的 / 卡住的要重做** —— 用户指出哪条，你把它改回 `- [ ]` 重做。',
+      ...WRAP_STEPS,
       '',
-      '## 用户确认完成后（五步都要做完）',
-      '',
-      '1. 把整份队列写进 `.continue/DONE.md`：条目原文照搬（含 `[阻塞]`），补一段完成说明，',
-      `   标题写成 \`## 批次 ${batch ?? '<n>'}（提交 ${batch ?? '<n>'}→<收尾时的提交总数>）· 日期 · 会话 ${sid.slice(0, 8)}\`；`,
-      '2. 把整份队列在 `.continue/TASKS.md` 里落地：已有对应条目的改成 `[x]`，',
-      '   当场任务（TASKS 里原本没有的）在 `C. 已完成` 补一条 `[x]`，内容照抄队列那一行；',
-      '   边界：只补 `[x]`（记录已发生的事），**不要新增 `[ ]`**——未来的计划由用户提；',
-      '3. **自问一次**：这批有没有"下一批还会被绊到"的设计取舍（为什么这么做 / 代价 / 何时该重看）',
-      '   → 有就在 `.continue/NOTES.md` 补一节（按模块归到已有小节下，别新建重复主题）；',
-      '4. **自问一次**：这轮有没有会重复踩的坑（调很久才定位 / 改了 A 红了 B / 工具的隐蔽默认值）',
-      '   → 有就在 `.continue/EXPERIENCE.md` 补一节（症状 → 根因 → 处置 → 适用面）；',
-      '   ⚠️ 3、4 都**只写确实有的**：没有就跳过，**不写"本批无"占位**——占位会让人以为已经读过；',
-      `5. 删除 \`.continue/queues/${sid}.md\`。`,
-      '',
-      '> 用户没确认之前不要动 DONE.md / TASKS.md，也不要删除队列文件。',
+      '> 拍板之前不要动 DONE.md / OVERVIEW.md / TASKS.md，也不要删除队列文件。',
     ].join('\n'),
   );
 }
 
+/**
+ * 这一轮的条目身份 = **序号**（`seq`），不是正文指纹。
+ *
+ * 旧实现用正文前 120 字当身份，遇到两条一样的任务（`修 bug` ×2）就分不清，
+ * 隔离会标到错误的条目上。序号由 `parseQueue` 按文件顺序算出，天然唯一。
+ * 状态字段也顺势改名（`currentSeq`），避免和历史的 `currentFingerprint` 混淆。
+ */
 const firstPick = pick;
-let fp = fingerprint(firstPick.raw);
+let itemSeq = firstPick.entry.seq;
 
-// 重新开始干活 → 作废"已经问过收尾"的记忆，下次收尾要重新确认。
+// 重新开始干活 → 作废"收尾指令已下发"的记忆，下次收尾要重新下发一次。
 state.askedComplete = null;
+state.autoWrapped = null;
 
 // ---------------------------------------------------------------- 卡住就隔离
-let streak = state.currentFingerprint === fp ? (state.currentStreak ?? 0) + 1 : 1;
-state.currentFingerprint = fp;
+let streak = state.currentSeq === itemSeq ? (state.currentStreak ?? 0) + 1 : 1;
+state.currentSeq = itemSeq;
 state.currentStreak = streak;
 // ⚠️ 必须每轮落盘：不存的话下一轮读回来是初始值，连续次数永远是 1，隔离永远触发不了。
 saveState(sid, state);
 
 let justBlocked = null;
 if (streak >= BLOCKED_MAX) {
-  markBlocked(file, fp);
-  appendLog(sid, `Stop · 隔离 · 连续 ${streak} 轮未完成 → 标 [阻塞] · ${fp.slice(0, 40)}`);
-  justBlocked = { streak, text: fp };
+  markBlocked(file, itemSeq);
+  appendLog(
+    sid,
+    `隔离 · 连续 ${streak} 轮未完成 → 标 [阻塞] · 第${itemSeq}/${firstPick.entry.total}条 · ${fingerprint(firstPick.raw).slice(0, 40)}`,
+  );
+  justBlocked = {
+    streak,
+    seq: itemSeq,
+    total: firstPick.entry.total,
+    text: fingerprint(firstPick.raw),
+  };
 
   // 重置连续计数：用户将来改回 `[ ]` 时重新得到 N 次机会
-  state.currentFingerprint = null;
+  state.currentSeq = null;
   state.currentStreak = 0;
   saveState(sid, state);
 
   const after = readQueue(file);
   pick = pickNext(after);
 
-  // 没有别的活了 → 放开，下一轮 Stop 会转入「等用户确认收尾」
+  // 没有别的活了 → 放开，下一轮 Stop 会转入收尾（有 [阻塞] 才会请用户拍板）
   if (!pick || unfinishedCount(after) === 0) {
     state.count = 0;
     saveState(sid, state);
-    appendLog(sid, 'Stop · 放行 · 没有别的活，等待收尾确认');
+    appendLog(sid, '放行 · 没有别的活，等待收尾');
     emitAllow(
       `这一条连续 ${streak} 轮没做完，已标 [阻塞] 隔离。队列里没有别的待办了，` +
-        '下次停下会请你确认收尾。',
+        '下次停下会先请你拍板这条怎么处理，再自动收尾。',
     );
   }
 
-  fp = fingerprint(pick.raw);
-  state.currentFingerprint = fp;
+  itemSeq = pick.entry.seq;
+  state.currentSeq = itemSeq;
   state.currentStreak = 0;
   saveState(sid, state);
 }
@@ -245,16 +432,27 @@ const discovered = current.entries.filter(
 const discoveredFull = discovered >= DISCOVERED_LIMIT;
 const blockedCount = current.counts.blocked;
 
+/** 队列还长时的分阶段提醒；只在超过阈值时出现，避免小队列每轮多一行噪声。 */
+const longQueueLine =
+  remaining > LONG_QUEUE_HINT
+    ? `> 这批还剩 ${remaining} 条。如果它其实是几个阶段拼起来的，做完当前阶段就收尾，再跑 ` +
+      '`node .continue/hooks/queue-init.mjs --new-batch` 拿新号开下一阶段——别硬塞同一批' +
+      '（`DONE.md` 一节到 300 行就搬不动了）。\n'
+    : '';
+
 // `firstPick` 是隔离**之前**选中的那条；隔离后 pick 可能已经换成下一条，
 // 所以"是否续做 [~]"要以最终的 pick 为准，否则文案会张冠李戴。
 const resumedNow = Boolean(pick && pick.resumed);
 
+const taskLabel = pick
+  ? `第${pick.entry.seq}/${pick.entry.total}条 · ${fingerprint(pick.raw).slice(0, 40)}`
+  : '';
 if (justBlocked) {
-  appendLog(sid, `Stop · 递任务（已隔离上一条）· 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
+  appendLog(sid, `递任务（已隔离上一条）· 剩 ${remaining} 条 · ${taskLabel}${contMark}`);
 } else if (resumedNow) {
-  appendLog(sid, `Stop · 继续进行中的条目 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
+  appendLog(sid, `继续进行中 · 剩 ${remaining} 条 · ${taskLabel}${contMark}`);
 } else {
-  appendLog(sid, `Stop · 递任务 · 剩 ${remaining} 条 · ${fp.slice(0, 40)}`);
+  appendLog(sid, `递任务 · 剩 ${remaining} 条 · ${taskLabel}${contMark}`);
 }
 
 /**
@@ -295,32 +493,69 @@ const header = [
   batch ? `批次 ${batch}` : null,
   `会话 ${sid.slice(0, 8)}`,
   `队列还剩 ${remaining} 条`,
-  `队列：.continue/queues/${sid}.md]`,
+  `队列：${DOING_REL}/${sid}.md]`,
 ]
   .filter(Boolean)
   .join(' · ');
 
+/**
+ * 队列没声明批次号 → 必须显式告警，**不能静默拿个值糊过去**。
+ * 旧设计在这里回退成"当前提交数"，结果每提交一次批次号就变一次，
+ * 而 AI 完全不知道自己在用一个会漂的编号。
+ */
+const noBatchWarning = batch
+  ? ''
+  : [
+      '',
+      '## ⚠️ 这个队列没有声明批次号，编号不可靠',
+      '',
+      `队列头部缺 \`> 批次：<批次号>\`。本轮**不要**自己编一个，也不要用提交数代替——`,
+      `请在队列头部补上这一行，号从 \`queue-init\` 注入里抄（形如 \`> 批次：20261022-1046\`）。`,
+      '补完之后 commit message 和 `DONE.md` 都统一用它。',
+    ].join('\n');
+
+/**
+ * commit message 前缀：`批次 <号> · [T12] `。
+ *
+ * 带需求号是框架的要求（README §0 原理 1）：ID 是提交、队列、文档之间唯一的连接点，
+ * 有了它 `git log --grep '\[T12\]'` 就是这个需求的完整时间线；只带批次号的话
+ * 只能按"哪一批"找，按"哪个需求"找不到。条目没挂 `T`（如 `[发现]`）就省略。
+ */
+const taskIds = pick ? [...new Set(pick.raw.match(/\[T\d+\]/g) ?? [])].join('') : '';
+const commitPrefix = `${batch ? `批次 ${batch} · ` : ''}${taskIds ? `${taskIds} ` : ''}`;
+
 const feedback = [
   header,
+  noBatchWarning,
   '',
   `## 这一轮做这一条${resumedNow ? '（它已经标了 `[~]`，接着做完）' : ''}`,
-  `  · ${fp}`,
+  `  · 第 ${pick.entry.seq}/${pick.entry.total} 条：${fingerprint(pick.raw)}`,
+  '',
+  '> 这个 `第 N/总数` 是**条目序号**（按队列文件顺序算），本轮引用它、报进度都用它；',
+  '> 它不是任务号——任务号是条目里的 `[T12]`，指向 `TASKS.md` 的需求。',
   '',
   '## 动手前（30 秒，省掉一次重新踩坑）',
-  '`.continue/EXPERIENCE.md` / `NOTES.md` 若存在，按本条的关键词各 grep 一次（**别整份读**，很贵）；',
+  '先看 `.continue/OVERVIEW.md` 里**本条所属模块**的那一节：已经实现什么、有哪些坑；',
+  '需要细节再按模块名 grep `.continue/TIPS.md`（**别整份读**，很贵）；',
   '撞到已经记过的坑，直接用上面写的处置，不要重新试错；',
-  '真踩到新坑且解决了 → 现在就可以补一条（不必等到收尾）。',
+  '真踩到新坑且解决了 → 现在就在 `TIPS.md` 对应模块下补一条（不必等到收尾）。',
   '',
   '## 要求',
   '1. **只做这一条**，做完就停；下一条由下一轮脚本注入。',
   '2. **标记由你自己写**：开始做这条时把 `- [ ]` 改成 `- [~]`（进行中），',
   '   做完改成 `- [x]`。`[阻塞]` 只有脚本会写，**你不要自己写，也不要手动删除它**。',
-  '3. 做完把这一条改成 `[x]`，然后连同队列文件一起单独提交',
-  `   （中文 commit message：${batch ? `批次 ${batch} · ` : ''}改了什么 + 怎么验证的）。`,
-  '4. 提交前自测；测试不过先修，不要提交半成品。',
-  '5. 遇到困难自己解决并把结论记下来——**除非命中下面五条风险**，那时必须弹窗。',
-  '6. 判断某条不该做（比如核对后发现已经实现）→ 在回复里说明理由，让用户决定',
+  '3. **做完先在条目下方补完成说明，再打勾**（缩进两格、普通列表，**不要用复选框**）：',
+  '   做了什么 / 为什么这么做 / 怎么验证的 / 批次号。收尾时这段会原样搬进 `DONE.md`。',
+  '4. 然后连同队列文件一起单独提交',
+  `   （中文 commit message：${commitPrefix}改了什么 + 怎么验证的）。`,
+  '5. **自测通过才算完成**：按条目里写的验证方式跑一遍（项目测试 / 断言 / 构建 / 明确的手动步骤，',
+  '   具体机制由项目决定；配了 `.continue/config.json` 的 `checks.fast` 就照它跑，提交守卫还会亲自再跑一次）；',
+  '   不通过就先修，**别急着把 `[~]` 改成 `[x]`**；命令跑不起来就如实写"未验证"，这条不算完成，交用户定。',
+  '6. 遇到困难自己解决并把结论记下来——**除非命中下面五条风险**，那时必须弹窗。',
+  '7. 判断某条不该做（比如核对后发现已经实现）→ 在回复里说明理由，让用户决定',
   '   （把它删掉或改描述）；**不要自己把它改成 `[~]` 或删掉**——`[~]` 现在是"进行中"。',
+  '8. **回复末尾留一行进度**：做完并提交后队列还有条目就写 `队列还剩 N 条 · 说「继续」接着做`',
+  '   （宿主可能只采纳一次 Stop 反馈，这是它被丢掉时用户唯一能看到的信号；队列已空则不用写）。',
   '',
   RISK_RULE,
   '',
@@ -331,7 +566,7 @@ const feedback = [
         '上面「这一条」里**已经不含它**——脚本隔离了它，你现在做的是下一条。',
         '你要**在回复里如实上报**：',
         '',
-        `1. **是哪一条**：${justBlocked.text}`,
+        `1. **是哪一条**：第 ${justBlocked.seq}/${justBlocked.total} 条 · ${justBlocked.text}`,
         '2. **试过什么、卡在哪**（具体到报错 / 断言 / 文件行号，不要写"做不动"）；',
         '3. **给用户的三个选项**：改这条的描述继续做 / 直接删除 / 先留着后面处理。',
         '   用户会自己决定，你不要替他决定，也不要自行删除或改描述。',
@@ -341,6 +576,7 @@ const feedback = [
       ].join('\n')
     : '',
   blockedCount > 0 ? `> 队列里已有 ${blockedCount} 条 \`[阻塞]\`（卡住），收尾时一起交给用户确认。\n` : '',
+  longQueueLine,
   discoveredBlock,
 ].join('\n');
 

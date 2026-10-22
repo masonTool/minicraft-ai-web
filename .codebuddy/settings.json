@@ -5,15 +5,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-continue.mjs",
+            "command": "node .continue/hooks/auto-continue.mjs --event=Stop",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-commit.mjs",
+            "command": "node .continue/hooks/auto-commit.mjs --event=Stop",
             "timeout": 300
           }
-        ]
+        ],
+        "loop_limit": 100
       }
     ],
     "UserPromptSubmit": [
@@ -21,12 +22,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .continue/hooks/queue-init.mjs",
+            "command": "node .continue/hooks/queue-init.mjs --event=UserPromptSubmit",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-continue.mjs",
+            "command": "node .continue/hooks/auto-continue.mjs --event=UserPromptSubmit",
             "timeout": 15
           }
         ]
