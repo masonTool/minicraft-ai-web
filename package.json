@@ -173,6 +173,7 @@
     "test:frame": "esbuild tools/frame-test.ts --bundle --platform=node --format=esm --outfile=.tmp/frame-test.mjs --log-level=error && node .tmp/frame-test.mjs",
     "test:advancement": "esbuild tools/advancement-test.ts --bundle --platform=node --format=esm --outfile=.tmp/advancement-test.mjs --log-level=error && node .tmp/advancement-test.mjs",
     "test:tutorial": "esbuild tools/tutorial-test.ts --bundle --platform=node --format=esm --outfile=.tmp/tutorial-test.mjs --log-level=error && node .tmp/tutorial-test.mjs",
+    "test:buildtools": "esbuild tools/buildtools-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildtools-test.mjs --log-level=error && node .tmp/buildtools-test.mjs",
     "test:villager": "esbuild tools/villager-test.ts --bundle --platform=node --format=esm --outfile=.tmp/villager-test.mjs --log-level=error && node .tmp/villager-test.mjs",
     "test:village": "esbuild tools/village-test.ts --bundle --platform=node --format=esm --outfile=.tmp/village-test.mjs --log-level=error && node .tmp/village-test.mjs",
     "test:reach": "esbuild tools/reachability-test.ts --bundle --platform=node --format=esm --outfile=.tmp/reachability-test.mjs --log-level=error && node .tmp/reachability-test.mjs",

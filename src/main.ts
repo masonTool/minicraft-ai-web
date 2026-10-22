@@ -683,6 +683,8 @@ import { TutorialCard } from './ui/TutorialCard.ts';
 import { stepsOf } from './tutorial/steps.ts';
 import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.ts';
 import { planTutorialBoot, tutorialTrackFor } from './tutorial/boot.ts';
+// 创造模式撤销/重做（创造1）：栈是纯逻辑，写回世界在这里做
+import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -932,6 +934,14 @@ type PortalArrivalKind = 'nether' | 'end' | 'spawn';
  * 而且不必为了一个判定去算包围盒求交。
  */
 const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
+
+/**
+ * 撤销一次最多唤醒多少格的流体（创造1）。
+ *
+ * 单次放置/破坏最多两格，这个上限是为将来的**批量撤销**（框选填充、模板）留的：
+ * 一次撤 4096 格时逐格 `wakeFluidsAround` 会变成一次小型的流体风暴。
+ */
+const UNDO_WAKE_LIMIT = 256;
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -1572,6 +1582,13 @@ class App {
   private tutorialDismissed = false;
   /** "引导完成"只播一次（避免后续多余的 obtain/place 反复触发） */
   private tutorialFinishedAnnounced = false;
+  /**
+   * 创造模式的撤销 / 重做栈（创造1）。
+   *
+   * 只记**创造 + 单机**：生存模式撤销等于刷物品；联机协议里没有"撤销"这条消息，
+   * 撤销会让别人的世界与服务端不一致。切换维度时清空（见 `switchDimension`）。
+   */
+  private readonly undoStack = new UndoStack();
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -4506,6 +4523,19 @@ class App {
       if (e.code === 'KeyJ') {
         e.preventDefault();
         this.toggleAdvancements();
+        return;
+      }
+      // 创造1：撤销 / 重做（桌面快捷键；触摸端在创造5的工具条上）。
+      // 放在 `uiOpen` 判断之前：背包开着时也该能撤（按 Ctrl+Z 时人是想改刚才的建造）
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+        e.preventDefault();
+        if (e.shiftKey) this.redoLast();
+        else this.undoLast();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
+        e.preventDefault();
+        this.redoLast();
         return;
       }
       // T / 斜杠：打开聊天与命令输入（原版就是这两个键）
@@ -7714,7 +7744,10 @@ class App {
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
     // 批次 38 起按形状判定（原来写死橡木门 → 云杉门拆一半会留下半扇悬空的门）
     if (blockDef(brokenId).shape === 'door') {
+      // 创造1：整扇门（两格）合成一步撤销
+      this.undoBegin();
       this.breakDoorPair(this.hit.x, this.hit.y, this.hit.z);
+      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -7723,7 +7756,10 @@ class App {
 
     // 旗帜（批次 484）：与门一样是两格高——拆一半带走另一半，否则会剩半面旗
     if (blockDef(brokenId).shape === 'banner') {
+      // 创造1：整面旗（两格）合成一步撤销
+      this.undoBegin();
       this.breakBannerPair(this.hit.x, this.hit.y, this.hit.z);
+      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -7733,7 +7769,10 @@ class App {
     // 床（批次 79）同理，只是它横着占两格：拆一半必须带走另一半，
     // 否则会留下一张**半张床**（站上去只剩 9/16 的一半，看着像 bug）
     if (blockDef(brokenId).shape === 'bed') {
+      // 创造1：整张床（两格）合成一步撤销
+      this.undoBegin();
       this.breakBedPair(this.hit.x, this.hit.y, this.hit.z);
+      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -7745,7 +7784,10 @@ class App {
     // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗、
     // 半空中会挂着一片脚手架——而方块本身看起来毫无问题。
     if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE || brokenId === Block.SCAFFOLDING) {
+      // 创造1：整柱海带/甘蔗（可能好几节）合成一步撤销
+      this.undoBegin();
       this.breakColumn(this.hit.x, this.hit.y, this.hit.z, brokenId);
+      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -7813,7 +7855,10 @@ class App {
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     // 水浸（批次 469）：挖掉的是"含水方块"→ 变回**水**而不是空气。
     // 判定用挖之前的 `brokenState`（上面已经读过），不看"现在还是不是那个方块"
-    this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, blockAfterBreak(brokenId, brokenState));
+    const afterBreakId = blockAfterBreak(brokenId, brokenState);
+    this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, afterBreakId);
+    // 创造1：破坏也进撤销栈（撤销 = 把原来那一格放回去；含水方块恢复成水的那一档也对）
+    this.undoRecord(this.hit.x, this.hit.y, this.hit.z, brokenId, brokenState, afterBreakId, 0);
     // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
     // 挖掉的一格可能是"水底/水侧"的塞子——必须唤醒它周围的液体重新评估流向。
     // 原来只有爆炸、拔海带/甘蔗那几条路会唤醒，**玩家手挖这条主路漏了**。
@@ -8218,7 +8263,10 @@ class App {
       const id = this.world.getBlock(bx, by, bz);
       // 另一半必须是**同一种**床（脏存档里可能只剩一半）
       if (!isBed(id)) continue;
+      const state = this.world.getBlockState(bx, by, bz);
       this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
+      // 创造1：整张床是一个动作（外层 `updateBreaking` 用 begin/end 包起来）
+      this.undoRecord(bx, by, bz, id, state, Block.AIR, 0);
       this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
       // 整张床只掉一次（在床脚那一格的位置掉）
@@ -8796,6 +8844,103 @@ class App {
     } catch (error) {
       console.warn('[save] 新手引导状态写入失败', error);
     }
+  }
+
+  // ---------------------------------------------------------------- 创造工具（创造1）
+
+  /**
+   * 撤销是否可用：**创造模式 + 单机**。
+   *
+   * 生存模式撤销等于"把用掉的方块拿回来"（刷物品）；联机协议里没有撤销这条消息，
+   * 本地撤销会让别人的世界与服务端不一致——两件事都只能关掉，而不是"尽力而为"。
+   */
+  private undoAllowed(): boolean {
+    return this.isCreative && !this.net.connected;
+  }
+
+  /** 开一次动作事务（放置门/床这种两格动作用它合成一步） */
+  private undoBegin(): void {
+    if (this.undoAllowed()) this.undoStack.begin();
+  }
+
+  private undoEnd(): void {
+    this.undoStack.end();
+  }
+
+  /** 记一格改动；不在事务里时它自己就是一步 */
+  private undoRecord(
+    x: number,
+    y: number,
+    z: number,
+    beforeId: number,
+    beforeState: number,
+    afterId: number,
+    afterState: number,
+  ): void {
+    if (!this.undoAllowed()) return;
+    this.undoStack.record({
+      dimension: this.dimension,
+      x,
+      y,
+      z,
+      beforeId,
+      beforeState,
+      afterId,
+      afterState,
+    });
+  }
+
+  /** 把一批改动记成**一步**（门/床这种两格动作用它；不在事务里时直接 push） */
+  private undoPush(batch: readonly BlockEdit[]): void {
+    if (!this.undoAllowed() || batch.length === 0) return;
+    this.undoStack.push(batch);
+  }
+
+  /** 撤销一步（Ctrl+Z / 触摸端工具条） */
+  private undoLast(): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    const step = this.undoStack.undo();
+    if (!step) {
+      this.hudToast.show(t('buildtools.undo.empty'));
+      return false;
+    }
+    this.applyUndoStep(step);
+    return true;
+  }
+
+  /** 重做一步（Ctrl+Y / Ctrl+Shift+Z） */
+  private redoLast(): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    const step = this.undoStack.redo();
+    if (!step) {
+      this.hudToast.show(t('buildtools.redo.empty'));
+      return false;
+    }
+    this.applyUndoStep(step);
+    return true;
+  }
+
+  /** 把一步写回世界（撤销写 before、重做写 after） */
+  private applyUndoStep(step: UndoStep): void {
+    let applied = 0;
+    for (const edit of step.edits) {
+      // 切过维度之后旧维度的格子不在这里（切维度本身会清空栈，这条只是兜底）
+      if (edit.dimension !== this.dimension) continue;
+      const id = step.direction === 'undo' ? edit.beforeId : edit.afterId;
+      const state = step.direction === 'undo' ? edit.beforeState : edit.afterState;
+      if (!this.world.setBlockAndUpdate(edit.x, edit.y, edit.z, id, state)) continue;
+      // 挖掉/放回水底的方块要唤醒流体，否则那一格会一直空着（与破坏路径同一条）
+      // ⚠️ 将来批量撤销（框选填充）可能一次几百格：这里限一下，避免一次唤醒风暴
+      if (applied < UNDO_WAKE_LIMIT) this.wakeFluidsAround(edit.x, edit.y, edit.z);
+      applied += 1;
+    }
+    if (applied > 0) this.vibrate(8);
   }
 
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
@@ -10114,7 +10259,9 @@ class App {
   private breakColumn(x: number, y: number, z: number, id: number): void {
     for (let oy = y; oy < 320; oy++) {
       if (this.world.getBlock(x, oy, z) !== id) break;
+      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       // 创造模式不产生掉落（与原版一致）
@@ -10135,7 +10282,9 @@ class App {
       const id = this.world.getBlock(x, oy, z);
       // 上半格必须是同一种门（脏存档里可能只剩半扇）
       if (blockDef(id).shape !== 'door') continue;
+      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -10163,7 +10312,9 @@ class App {
       const oy = baseY + dy;
       const id = this.world.getBlock(x, oy, z);
       if (blockDef(id).shape !== 'banner') continue;
+      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -10935,6 +11086,21 @@ class App {
   /** 验收脚本用：收起引导卡 */
   hideTutorialCardForTest(): void {
     this.tutorialCard.hide();
+  }
+
+  /** 验收脚本用：撤销一步（创造1） */
+  undoForTest(): boolean {
+    return this.undoLast();
+  }
+
+  /** 验收脚本用：重做一步（创造1） */
+  redoForTest(): boolean {
+    return this.redoLast();
+  }
+
+  /** 验收脚本用：撤销栈状态（不改变任何东西） */
+  get undoStateForTest(): { undo: number; redo: number; allowed: boolean } {
+    return { undo: this.undoStack.undoCount, redo: this.undoStack.redoCount, allowed: this.undoAllowed() };
   }
 
   /**
@@ -14104,6 +14270,9 @@ class App {
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
       const { x: hx, y: hy, z: hz } = this.hit;
+      // 创造1：撤销要记"写之前是什么"，必须在 setBlockAndUpdate 之前读
+      const mergeBeforeId = this.world.getBlock(hx, hy, hz);
+      const mergeBeforeState = this.world.getBlockState(hx, hy, hz);
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(heldId, 1);
@@ -14111,12 +14280,15 @@ class App {
         this.reportProgress({ kind: 'place', block: blockId });
         // 新手引导（引导3）：合并放置同样算"放下"，坐标取落点那一格（判"搭起来"要用 y）
         this.reportTutorial({ kind: 'place', block: blockId, y: hy });
+        this.undoRecord(hx, hy, hz, mergeBeforeId, mergeBeforeState, blockId, plan.mergeInto.state);
       }
       return;
     }
 
     // 藤蔓"再挂一面"：改的是**落点那一格**（它已经是同一种藤蔓了）
     if (plan.mergeIntoTarget) {
+      // 创造1：落点原本就是同一种藤蔓（`existing`），改的是状态
+      const targetBeforeState = this.world.getBlockState(x, y, z);
       if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
         this.statistics.add('blocksPlaced');
         this.placeCooldown = PLACE_COOLDOWN;
@@ -14125,6 +14297,7 @@ class App {
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
         this.reportTutorial({ kind: 'place', block: blockId, y });
+        this.undoRecord(x, y, z, existing, targetBeforeState, blockId, plan.mergeIntoTarget.state);
       }
       return;
     }
@@ -14133,6 +14306,15 @@ class App {
     // 放下去时打上 waterlogged 标记。没有这个标记，水下放的台阶被挖掉之后
     // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
     const placeState = waterloggedPlacementState(blockId, plan.state, existing);
+    // 创造1：撤销要记"写之前是什么"。一次放置最多两格（门/床/双台阶/多格画），
+    // 两格的 before 都必须在任何写入发生之前读出来
+    const placeBeforeState = this.world.getBlockState(x, y, z);
+    const extra = plan.extra;
+    const extraX = extra ? x + extra.dx : 0;
+    const extraY = extra ? y + extra.dy : 0;
+    const extraZ = extra ? z + extra.dz : 0;
+    const extraBeforeId = extra ? this.world.getBlock(extraX, extraY, extraZ) : Block.AIR;
+    const extraBeforeState = extra ? this.world.getBlockState(extraX, extraY, extraZ) : 0;
     if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
       this.statistics.add('blocksPlaced');
       // 多格画（批次 495）：`planPlacement` 只返回了哨兵档位，具体是哪一幅、
@@ -14144,6 +14326,44 @@ class App {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
       }
+      // 创造1：一次放置 = 一步（门/床的两格一起撤销，而不是撤两下）
+      this.undoPush(
+        extra
+          ? [
+              {
+                dimension: this.dimension,
+                x,
+                y,
+                z,
+                beforeId: existing,
+                beforeState: placeBeforeState,
+                afterId: blockId,
+                afterState: placeState,
+              },
+              {
+                dimension: this.dimension,
+                x: extraX,
+                y: extraY,
+                z: extraZ,
+                beforeId: extraBeforeId,
+                beforeState: extraBeforeState,
+                afterId: extra.id,
+                afterState: extra.state,
+              },
+            ]
+          : [
+              {
+                dimension: this.dimension,
+                x,
+                y,
+                z,
+                beforeId: existing,
+                beforeState: placeBeforeState,
+                afterId: blockId,
+                afterState: placeState,
+              },
+            ],
+      );
       // 流体（批次 235）：落点在水中/水边时，四周的水要重新评估流向。
       // 往水里放一块石头 = 抽走一格水，不唤醒的话这个洞永远没人来填。
       this.wakeFluidsAround(x, y, z);
@@ -16530,6 +16750,8 @@ class App {
     this.touch?.resetInput('dimension');
     this.dimension = dimension;
     this.world.setDimension(dimension);
+    // 创造1：换维度之后旧维度的撤销记录没有意义（坐标只在维度内有意义，写回去会串世界）
+    this.undoStack.clear();
     // 掉落物实体属于旧维度，直接清掉
     this.entities.clear();
     this.particles.clear();

@@ -447,6 +447,11 @@ const ZH: Readonly<Record<string, string>> = {
   'tutorial.expand': '展开',
   'tutorial.dismiss': '不再提示',
   'tutorial.finish': '新手引导完成！去自由建造吧',
+  // ---- 创造工具（创造1）
+  'buildtools.undo.creativeOnly': '只有创造模式能撤销',
+  'buildtools.undo.onlineOnly': '联机时不能撤销',
+  'buildtools.undo.empty': '没有可以撤销的操作',
+  'buildtools.redo.empty': '没有可以重做的操作',
   'tutorial.survival.log.title': '先去砍一棵树',
   'tutorial.survival.log.desc': '走近树干，按住左键（或手指）把它挖掉',
   'tutorial.survival.table.title': '做一个工作台',
@@ -872,6 +877,11 @@ const EN: Readonly<Record<string, string>> = {
   'tutorial.expand': 'Expand',
   'tutorial.dismiss': "Don't show again",
   'tutorial.finish': 'All done — go build something!',
+  // ---- build tools (batch 20261022-1954)
+  'buildtools.undo.creativeOnly': 'Undo is only available in Creative mode',
+  'buildtools.undo.onlineOnly': "You can't undo while connected to a server",
+  'buildtools.undo.empty': 'Nothing to undo',
+  'buildtools.redo.empty': 'Nothing to redo',
   'tutorial.survival.log.title': 'Chop a tree first',
   'tutorial.survival.log.desc': 'Walk up to a trunk and hold to break it',
   'tutorial.survival.table.title': 'Craft a crafting table',
