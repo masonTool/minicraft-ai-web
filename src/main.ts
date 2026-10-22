@@ -18439,6 +18439,7 @@ async function boot(): Promise<void> {
       atlas,
       onExit: () => {
         activeMenuMiniGame = null;
+        (window as unknown as { __minigame?: unknown }).__minigame = undefined;
         listeners.abort();
         host?.dispose();
         renderer.dispose();
@@ -18473,7 +18474,10 @@ async function boot(): Promise<void> {
   const startMiniGame = (gameId: string): void => {
     miniGameMenu?.hide();
     if (gameId === 'jump') {
-      runStandaloneMiniGame(new JumpGame());
+      const game = new JumpGame();
+      // 验收脚本用：只读快照在 `game.debugState`（E2E 断言分数 / 阶段）
+      (window as unknown as { __minigame?: JumpGame }).__minigame = game;
+      runStandaloneMiniGame(game);
       return;
     }
     runStandaloneMiniGame(new SmokeGame());

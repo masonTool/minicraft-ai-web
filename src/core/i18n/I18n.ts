@@ -501,7 +501,10 @@ const ZH: Readonly<Record<string, string>> = {
   // ---- 跳一跳（J0，批次 20261022-2220）
   'minigame.jump.title': '跳一跳',
   'minigame.jump.desc': '按住蓄力，松手起跳',
-  'minigame.jump.placeholder': '跳一跳正在接入（当前是骨架画面）',
+  'minigame.jump.hint': '按住蓄力，松手起跳',
+  'minigame.jump.best': '最高 {best}',
+  'minigame.jump.over': '本局 {score} 分',
+  'minigame.jump.retry': '再来一局',
   'tutorial.survival.log.title': '先去砍一棵树',
   'tutorial.survival.log.desc': '走近树干，按住左键（或手指）把它挖掉',
   'tutorial.survival.table.title': '做一个工作台',
@@ -975,7 +978,10 @@ const EN: Readonly<Record<string, string>> = {
   // ---- jump (batch 20261022-2220)
   'minigame.jump.title': 'Jump',
   'minigame.jump.desc': 'Hold to charge, release to jump',
-  'minigame.jump.placeholder': 'Jump is being wired up (skeleton screen for now)',
+  'minigame.jump.hint': 'Hold to charge, release to jump',
+  'minigame.jump.best': 'Best {best}',
+  'minigame.jump.over': 'Score {score}',
+  'minigame.jump.retry': 'Play again',
   'tutorial.survival.log.title': 'Chop a tree first',
   'tutorial.survival.log.desc': 'Walk up to a trunk and hold to break it',
   'tutorial.survival.table.title': 'Craft a crafting table',

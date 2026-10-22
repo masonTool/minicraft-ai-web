@@ -15,8 +15,9 @@
 
 import { readFileSync } from 'node:fs';
 import { Block } from '../src/core/registry/blocks.ts';
-import { buildBlockGroups, groupInstanceCount } from '../src/minigame/blockGroups.ts';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
+import { groupPillars, pillarInstanceCount, type PillarSpec } from '../src/minigame/games/jump/pillars.ts';
+import { themeById } from '../src/minigame/games/jump/themes.ts';
 import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
@@ -105,63 +106,73 @@ console.log('\n小游戏框架：自检游戏的资源释放');
   check('每帧自己渲染', smokeSrc.includes('renderer.render(this.scene, this.camera)'));
 }
 
-console.log('\n跳一跳：占位场景（J0）');
+console.log('\n跳一跳：场景与流程（静态断言）');
 {
   check('id 是 jump', jumpSrc.includes("readonly id = 'jump'"));
-  check('用 BlockScene 画方块', jumpSrc.includes('new BlockScene('));
+  check('柱子用 PillarScene（顶/侧/底三套 UV）', jumpSrc.includes('new PillarScene('));
   check('用 PlayerRenderer 画小人', jumpSrc.includes('new PlayerRenderer('));
   check('卸载时释放人物', jumpSrc.includes('this.player?.dispose()'));
-  check('卸载时释放场景', jumpSrc.includes('this.blocks?.dispose()'));
+  check('卸载时释放场景', jumpSrc.includes('this.pillars?.dispose()'));
   check('卸载时移除 HUD', jumpSrc.includes('this.hud?.remove()'));
-  check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
-  check('占位阶段不写分数（J2 才接）', !jumpSrc.includes('recordScore'));
+  check('每帧自己渲染', jumpSrc.includes('pillars.render(context.renderer)'));
+  check('蓄力压缩身体', jumpSrc.includes('BODY_SQUASH'));
+  check('蓄力压缩方块', jumpSrc.includes('setSquash'));
+  check('空中翻转', jumpSrc.includes('rotation.x = -Math.PI * 2 * progress'));
+  check('最高分落盘', jumpSrc.includes('recordScore(') && jumpSrc.includes('saveProgress('));
+  check('特殊方块停留加分', jumpSrc.includes('specialHoldSeconds') && jumpSrc.includes('specialBonus('));
+  check('音效静默降级', jumpSrc.includes('AudioContext') && jumpSrc.includes('catch'));
+  check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
+  check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }
 
 // ------------------------------------------------------------------ 方块分组
 
-console.log('\n方块分组（InstancedMesh 的组数 = draw call 数）');
+console.log('\n柱子分组（一组 = 一个 draw call）');
 {
-  const blocks = [
-    { x: 0, y: 0, z: 0, blockId: Block.STONE },
-    { x: 1, y: 0, z: 0, blockId: Block.STONE },
-    { x: 2, y: 0, z: 0, blockId: Block.OAK_PLANKS },
-    { x: 3, y: 0, z: 0, blockId: Block.GOLD_BLOCK },
-  ];
-  const result = buildBlockGroups(blocks);
-  equal('3 种方块 → 3 组', result.groups.length, 3);
-  equal('没有跳过', result.skipped, 0);
-  equal('实例总数', groupInstanceCount(result), 4);
+  const theme = themeById('meadow');
+  const make = (x: number, kind: PillarSpec['kind'] = 'normal'): PillarSpec => ({
+    x,
+    z: 0,
+    size: 1.8,
+    kind,
+    current: x === 0,
+  });
+
+  const normal = groupPillars([make(0), make(2), make(4), make(6)], theme);
+  equal('4 根普通柱子 → 1 组', normal.length, 1);
+  equal('实例总数', pillarInstanceCount(normal), 4);
+  equal('草方块顶面用 grass_top', normal[0]?.top, 'grass_top');
+  equal('草方块侧面用 grass_side', normal[0]?.side, 'grass_side');
+  equal('草方块底面用 dirt', normal[0]?.bottom, 'dirt');
+
+  const mixed = groupPillars([make(0), make(2, 'music'), make(4), make(6, 'cube')], theme);
+  equal('普通 + 音符盒 + 羊毛 → 3 组', mixed.length, 3);
   equal(
     '组顺序按首次出现',
-    result.groups.map((group) => group.tile).join(','),
-    'stone,oak_planks,gold_block',
+    mixed.map((group) => group.top).join(','),
+    'grass_top,note_block,wool_light_blue',
   );
-  check('每组都有有效的 tileIndex', result.groups.every((group) => group.tileIndex >= 0));
-  equal('石头组里有 2 格', result.groups.find((group) => group.tile === 'stone')?.positions.length, 2);
+  equal(
+    '音符盒三面同一张贴图',
+    `${mixed[1]?.top},${mixed[1]?.side},${mixed[1]?.bottom}`,
+    'note_block,note_block,note_block',
+  );
+  equal('空输入 → 0 组', groupPillars([], theme).length, 0);
 
-  const withAir = buildBlockGroups([{ x: 0, y: 0, z: 0, blockId: Block.AIR }]);
-  equal('空气没有图集贴图：跳过', withAir.skipped, 1);
-  equal('空气不产生组', withAir.groups.length, 0);
-}
+  const snow = groupPillars([make(0)], themeById('snow'));
+  equal('雪地主题顶面用 snow', snow[0]?.top, 'snow');
+  equal('雪地主题底面用 stone', snow[0]?.bottom, 'stone');
 
-console.log('\n5000 方块的分组耗时（单帧预算）');
-{
-  const ids = [Block.STONE, Block.OAK_PLANKS, Block.GOLD_BLOCK, Block.GLASS];
-  const blocks = [];
-  for (let i = 0; i < 5000; i++) {
-    blocks.push({
-      x: i % 32,
-      y: Math.floor(i / 1024) % 8,
-      z: Math.floor(i / 32) % 32,
-      blockId: ids[i % ids.length]!,
-    });
-  }
   const started = performance.now();
-  const result = buildBlockGroups(blocks);
+  const many: PillarSpec[] = [];
+  for (let i = 0; i < 5000; i++) {
+    many.push({ x: i, z: 0, size: 1.8, kind: i % 2 === 0 ? 'normal' : 'music', current: false });
+  }
+  const grouped = groupPillars(many, theme);
   const elapsed = performance.now() - started;
-  equal('5000 格全部被分组', groupInstanceCount(result), 5000);
-  equal('只有 4 组（4 个 draw call）', result.groups.length, 4);
-  check('分组耗时 < 100ms', elapsed < 100, `${elapsed.toFixed(1)}ms`);
+  equal('5000 根只分 2 组', grouped.length, 2);
+  equal('实例一个不少', pillarInstanceCount(grouped), 5000);
+  check('分组耗时 < 50ms', elapsed < 50, `${elapsed.toFixed(1)}ms`);
 }
 
 // ------------------------------------------------------------------ 最高分

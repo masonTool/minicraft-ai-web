@@ -3,22 +3,13 @@
 > 状态：执行中
 > 创建：2026-10-23
 > 设计细则（DoD / 原版差异 / 参数表 / 架构 / 风险）：`.continue/notes/jump-game.md`
-> 机制说明：`notes/plan.md`（阶段 = 一批；队列头 `> 计划：` 绑定；完成到里程碑硬停等验收）
+> 机制：`notes/plan.md`
 
-## MS1 · 单游戏骨架：能进、能退、画面铺满
+> **2026-10-23 调整（用户要求）**：不再按"阶段 = 一批"分 6 批推进，改成**一个阶段装完全部任务、一个队列做到底、最后统一验收**。
+> 原因：用户要睡觉，希望连续开发、最后一次性验证（含 Playwright 截图自查）。
+> 代价：里程碑验收只有一次，中途没有关卡；所以条目内部的验证写得更细（每条都带可跑的命令）。
 
-- 验收：`npm run check:fast` + `grep -riE "sokoban|breakout" src tools index.html` 无输出 + 构图截图比例达标（≥55% / ≥20%）
-- [~] `MS1.1` 去旧与契约：删两个旧游戏；目录/进度/菜单改单游戏（最高分 v2）；跳一跳纯逻辑（config + logic）与离线断言 → 验收 `npm run test:minigame`
-- [ ] `MS1.2` 画面骨架：柱子渲染（顶/侧/底三套 UV）/ 相机 / 横屏构图 / 人物接入 + 构图比例断言 → 验收 `npm run jump:shot`
+## MS1 · 跳一跳完整可玩（画面 + 操作 + 结算 + 自查）
 
-## MS2 · 能玩一局：蓄力起跳、落点计分、掉落结算
-
-- 验收：`npm run jump:e2e` + `npm run check` 全量
-- [ ] `MS2.1` 蓄力/起跳/落点/计分/人物与方块动画 → 验收 `npm run test:minigame`
-- [ ] `MS2.2` 相机跟随 + 下一方块生成 + 结算面板 / 再来一局 / 最高分落盘 + 首个 E2E → 验收 `npm run jump:e2e`
-
-## MS3 · 好玩且稳定：特殊方块、难度、音效、手感
-
-- 验收：`npm run check` + `npm run build:fast` + `npm run minigame:perf` + 用户真机确认
-- [ ] `MS3.1` 特殊方块（音乐盒 +30 / 魔方 +10）+ 难度平衡脚本 + 音效（WebAudio 合成）→ 验收 `npm run jump:balance`
-- [ ] `MS3.2` 力度条 / HUD 打磨 + 真机手感微调 + 回归与文档 → 验收 门禁全绿
+- 验收：`npm run check` 全量 + `npm run build:fast` + `npm run jump:e2e` + `npm run minigame:perf` + 视觉/操作自查结论（截图 + 分析）
+- [~] `MS1.1` 全量开发：画面骨架 → 玩法 → 动画 → 结算 → 特殊方块 → 音效 → 平衡 → Playwright 自查 → 收尾 → 验收 `npm run jump:e2e`
