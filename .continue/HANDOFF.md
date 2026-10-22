@@ -11,8 +11,8 @@
 | 长期待办 / 覆盖率 / 差异台账 | [`TASKS.md`](./TASKS.md)（三张派生表由脚本生成，别手抄） |
 | 某个模块现在有什么、有哪些坑 | [`OVERVIEW.md`](./OVERVIEW.md) |
 | 某个坑的细节（按模块 grep，别整份读） | [`TIPS.md`](./TIPS.md) |
-| 设计决策与理由（按模块，含"判定不做"） | [`NOTES.md`](./NOTES.md) → [`notes/modules.md`](./notes/modules.md) |
-| 工作站契约 / 调试接口 / 打包发布 | `notes/` 下的对应文件（见 NOTES 索引） |
+| 设计决策与理由（含"判定不做"） | [`DONE.md`](./DONE.md) 头部的「设计决策与判定不做」节 → [`notes/modules.md`](./notes/modules.md) |
+| 工作站契约 / 调试接口 / 打包发布 | `notes/` 下的对应文件（索引在 `DONE.md` 那一节里） |
 | 某一批做了什么、怎么验的 | [`DONE.md`](./DONE.md)（最近的在上）；更早的在 `DONE.archive.md` |
 | 机制（队列 / 钩子 / 门禁 / 收尾） | [`README.md`](./README.md) |
 
@@ -111,7 +111,7 @@ npm run agent:setup        # 跨机器自检
 同时最多 5 条——满了钩子会要求先让用户过一遍。额度是防"为了有活干而发明任务"。
 
 **明确不做的事**：状态记在 `TASKS.md`（`[-]` 标记，`audit:tasks` 会统计），
-**判定理由**记在 `NOTES.md` 的「判定不做」那节——免得下次又提一遍却想不起为什么。
+**判定理由**记在 `DONE.md` 头部的「判定不做」那节——免得下次又提一遍却想不起为什么。
 
 **门禁三道**：
 
@@ -145,7 +145,7 @@ npm run agent:setup        # 跨机器自检
 
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
-| `.continue/`（`doing/` / `DONE` / `OVERVIEW` / `TIPS` / `NOTES` + `notes/` / `HANDOFF` / `TASKS` / `hooks` / `README`）、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
+| `.continue/`（`doing/` / `DONE` / `OVERVIEW` / `TIPS` + `notes/` / `HANDOFF` / `TASKS` / `hooks` / `README`）、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
 | `.codebuddy/settings.json`（钩子注册）、`.codebuddy/memory/`（AI 记忆的版本化副本） | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.continue/auto.off`（刹车）、`.codebuddy/skills/`（本地技能包）、截图 `shot-*.png` |
 
 **唯一的外部依赖：git 远程仓库**（没有远程 = 代码只在本机）。查看 `git remote -v`，

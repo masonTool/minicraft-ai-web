@@ -25,7 +25,7 @@
 | --- | --- |
 | 这个模块现在有什么、有哪些坑（**动它之前先看这一节**） | [`.continue/OVERVIEW.md`](./.continue/OVERVIEW.md) |
 | 动手前想避开已经踩过的坑（渲染/光照/地形/界面/生物 AI） | [`.continue/TIPS.md`](./.continue/TIPS.md)（**按关键词 grep，别整份读**） |
-| 想知道某个模块当时怎么做的、为什么这么做 | [`.continue/notes/modules.md`](./.continue/notes/modules.md)（模块台账）+ [`.continue/NOTES.md`](./.continue/NOTES.md)（决策索引） |
+| 想知道某个模块当时怎么做的、为什么这么做 | [`.continue/notes/modules.md`](./.continue/notes/modules.md)（模块台账）+ [`.continue/DONE.md`](./.continue/DONE.md) 头部的「设计决策与判定不做」节 |
 | 想查某一批当时做了什么、怎么验的 | [`.continue/DONE.md`](./.continue/DONE.md)（最近的在上）；更早的在 `DONE.archive.md` |
 | **要改任意"操作型工作站"（熔炉/酿造台/营火/锻造台…）** | [`.continue/notes/stations.md`](./.continue/notes/stations.md)（通用契约 + 站台矩阵 + 接入 checklist） |
 | 想知道"这一项和原版哪里不一样" | [`.continue/TASKS.md`](./.continue/TASKS.md) 文末的差异台账（脚本生成） |
