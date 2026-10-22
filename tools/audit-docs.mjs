@@ -26,13 +26,13 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from '
 /**
  * 复用钩子的解析，**不在这里另写一份**。
  *
- * 这条规矩不是洁癖，是踩过的：本文件原来只复用了 `parsePlan`，却给
- * 文件名正则和队列头 `> 计划：` 各写了一份自己的版本。结果两份**规则不一致**——
- * 门禁接受 `> 计划：x.md · 阶段 MS2.1`，钩子的 `parsePlanRef` 只认 `> 计划：x.md`。
- * 于是那个写法**门禁全绿、机制一次都不触发**，且没有任何报错。
- * 现在三个解析全部指向 `lib.mjs` 一处；`lib.mjs` 是框架文件，规则以它为准。
+ * 这条规矩不是洁癖，是踩过的：本文件原来只复用了 `parsePlan`，却给文件名正则和
+ * 队列头 `> 计划：` 各写了一份自己的版本，两份**规则不一致**——门禁接受带 `· 阶段` 的写法、
+ * 钩子只认不带的，于是那个写法**门禁全绿、机制一次都不触发**，且没有任何报错。
+ * 现在文件名规则（`isPlanFile` / `sessionOfPlan`）与计划解析全部指向 `lib.mjs` 一处；
+ * 而"绑定"已经改由文件名表达，队列头那份声明被删掉了——少一处副本就少一处会漂的地方。
  */
-import { isPlanFile, parsePlan, parsePlanRef, QUEUE_HEAD_LINES } from '../.continue/hooks/lib.mjs';
+import { isPlanFile, parsePlan, sessionOfPlan } from '../.continue/hooks/lib.mjs';
 
 const printOnly = process.argv.includes('--print');
 
@@ -340,12 +340,10 @@ for (const [name, url] of [
     for (const m of text.matchAll(/\b(\d{8}-\d{4})\b/g)) knownBatches.add(m[1]);
   }
 
-  const plans = new Map();
   for (const name of planNames) {
     const url = new URL(name, FILES.queuesDir);
     const text = readIfAny(url);
     const plan = parsePlan(text);
-    plans.set(name, plan);
 
     const n = lineCount(text);
     if (n > LIMITS.planLines) problems.push(`${name} ${n} 行 > 上限 ${LIMITS.planLines} 行`);
@@ -445,58 +443,16 @@ for (const [name, url] of [
     }
   }
 
-  // 队列头部的 `> 计划：x.md` 必须能被钩子解析出来，且指得着
-  for (const name of queueNames) {
-    const text = readIfAny(new URL(name, FILES.queuesDir));
-    const head = text.split(/\r?\n/).slice(0, QUEUE_HEAD_LINES).join('\n');
-
-    /**
-     * "写了计划却解析不出来" 必须判红。
-     *
-     * 只校验"解析成功之后的引用对不对"是不够的：写法错了（多写 `· 阶段 MS2.1`、
-     * 漏了 `.md`、写到第 7 行）时 `parsePlanRef` 返回 `null`，钩子会**当它不存在**——
-     * 队列照常收尾、计划永远不再往下取，而门禁此前一声不吭。
-     * 这正是本机制最怕的"看起来正常、实际一次没触发"。
-     */
-    const ref = parsePlanRef(text);
-    if (!ref) {
-      if (/^>\s*计划/m.test(head)) {
-        problems.push(
-          `${name} 头部有「> 计划」声明，但不是钩子认识的形式` +
-            `——只认 \`> 计划：<文件名>.md\`（放在前 ${QUEUE_HEAD_LINES} 行内、后面不能跟别的字）`,
-        );
-        continue;
-      }
-      /**
-       * 声明**写对了但位置超窗**同样读不到（头部声明区只有 6 行：标题/空行 + 4 个声明）。
-       * 这条是"再加一行就悄悄失效"的兜底——扫描时跳过围栏，免得正文里引用模板被误伤。
-       */
-      const lines = text.split(/\r?\n/);
-      let inFence = false;
-      let lateLine = 0;
-      for (let i = 0; i < lines.length; i += 1) {
-        const t = lines[i].trim();
-        if (/^(```|~~~)/.test(t)) {
-          inFence = !inFence;
-          continue;
-        }
-        if (inFence) continue;
-        if (/^>\s*计划/.test(t) && i >= QUEUE_HEAD_LINES) lateLine = i + 1;
-      }
-      if (lateLine > 0) {
-        problems.push(
-          `${name} 的 \`> 计划：\` 写在第 ${lateLine} 行，超出头部声明区（前 ${QUEUE_HEAD_LINES} 行）` +
-            '——钩子读不到，队列会被当成独立队列',
-        );
-      }
-      continue;
-    }
-
-    const target = plans.get(ref);
-    if (!target) {
+  // 计划与队列靠**文件名配对**：`plan-<sid>.md` ↔ `<sid>.md`。
+  // 配对不上就是孤儿计划——钩子按会话 ID 直接算路径，永远读不到它（且不报错）。
+  const queueStems = new Set(queueNames.map((name) => name.slice(0, -3)));
+  for (const name of planNames) {
+    const sid = sessionOfPlan(name);
+    if (!sid) continue; // 已经被 isPlanFile 过滤过，这里只是防御
+    if (!queueStems.has(sid)) {
       problems.push(
-        `${name} 头部写着 \`> 计划：${ref}\`，但 doing/ 里没有这个文件` +
-          '——写错一个字就会静默退化成普通队列，机制一次都不触发',
+        `${name} 没有对应的会话队列 \`${sid}.md\`——计划按 \`plan-<会话ID>.md\` 与队列配对，` +
+          '孤儿计划钩子永远读不到（跨会话接手时请 `git mv` 到新会话的 ID）',
       );
     }
   }
@@ -504,7 +460,7 @@ for (const [name, url] of [
   // 注入文本里必须还有计划段：重装框架会整份覆盖 queue-init.mjs
   const initText = readIfAny(FILES.queueInit);
   if (initText) {
-    for (const needle of ['plan-<名字>.md', '完成到里程碑就停']) {
+    for (const needle of ['plan-<本会话ID>.md', '完成到里程碑就停']) {
       if (!initText.includes(needle)) {
         problems.push(`queue-init.mjs 的注入里找不到「${needle}」——重装把它覆盖回旧版了？`);
       }
