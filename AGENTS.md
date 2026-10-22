@@ -9,7 +9,7 @@
 
 | 文件 | 读它是为了 | 怎么读 |
 | --- | --- | --- |
-| [`.continue/README.md`](./.continue/README.md) | **机制**：六份文件分工、编号、队列与四种标记、钩子行为、收尾五步、门禁 | 第一次接手整份读一遍；之后按节查（§3 队列 / §6 钩子 / §7 坑） |
+| [`.continue/README.md`](./.continue/README.md) | **机制**：文件分工、编号、队列与四种标记、钩子行为、收尾五步、门禁 | 第一次接手整份读一遍；之后按节查（§3 队列 / §6 钩子 / §7 坑） |
 | [`.continue/HANDOFF.md`](./.continue/HANDOFF.md) | **本项目的当前状态 + 约定**：进度快照、命令、数据链路四处、界面约定、该问人的五种情况 | 整份读完（约 180 行） |
 
 本会话队列：`.continue/doing/<session_id>.md`（`UserPromptSubmit` 钩子会把会话 ID、队列路径、批次号注入回来）。
@@ -30,6 +30,7 @@
 | **要改任意"操作型工作站"（熔炉/酿造台/营火/锻造台…）** | [`.continue/notes/stations.md`](./.continue/notes/stations.md)（通用契约 + 站台矩阵 + 接入 checklist） |
 | 想知道"这一项和原版哪里不一样" | [`.continue/TASKS.md`](./.continue/TASKS.md) 文末的差异台账（脚本生成） |
 | 长期待办 / 覆盖率 | [`.continue/TASKS.md`](./.continue/TASKS.md)（按 `[~]` 或 `TASKS.md` 的段字母 grep，**不要通读**；需求号是 `A1`~`O16`，不是 `T<n>`） |
+| 这个大任务拆成了哪几批、走到哪个里程碑了（**开新批次前 / "为什么不往下走了"**） | [`.continue/notes/plan.md`](./.continue/notes/plan.md)（机制）+ `.continue/doing/plan-*.md`（当前计划）。平时不读 |
 
 ## 3. 命令：内循环用快的，提交前用全的
 
