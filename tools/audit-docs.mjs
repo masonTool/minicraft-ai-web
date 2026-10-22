@@ -235,8 +235,40 @@ for (const [name, url] of [
   }
 }
 
+// ---- 入口文档不得复述机制（P0：AGENTS 曾把"批次号=提交总数"抄成事实，门禁却查不出来）
+{
+  /**
+   * 只拦"把规则写成事实"的句式。历史叙述（"曾经是…"）不该误伤，
+   * 所以正则要求"批次号"后面紧跟等号/冒号，再出现"提交总数"。
+   *
+   * 为什么放在项目自己的门禁里：`AGENTS.md` 是每个会话第一份读到的文件，
+   * 它抄错一条，后面所有文档都白写；而框架的 `audit-docs` 只管行数，查不出语义。
+   */
+  const STALE = /批次号\s*[=＝:：]\s*[^\n]{0,16}提交总数/;
+  const bad = [];
+  for (const [name, url] of [
+    ['AGENTS.md', new URL('../AGENTS.md', import.meta.url)],
+    ['.continue/HANDOFF.md', FILES.handoff],
+  ]) {
+    let text = '';
+    try {
+      text = read(url);
+    } catch {
+      continue; // 缺文件不是本脚本的职责
+    }
+    if (STALE.test(text)) bad.push(name);
+  }
+  console.log(
+    `${bad.length > 0 ? '✗' : '✓'} 入口文档不复述过期机制：批次号是时间戳（见 .continue/README.md §2）`,
+  );
+  for (const name of bad) {
+    console.log(`  · ${name} 仍写着"批次号 = 提交总数"——删掉，改成指向 README 的指针`);
+  }
+  if (bad.length > 0) failed = true;
+}
+
 if (failed) {
-  console.log('\n文档体量超标：跑 `npm run docs:trim` 归档旧批次后再提交');
+  console.log('\n文档检查未通过：体量超了跑 `npm run docs:trim`；机制漂了按上面的提示改。');
   process.exit(1);
 }
 console.log('\n文档体量检查通过');
