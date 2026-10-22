@@ -313,7 +313,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | 名字 | 挡的是什么 |
 | --- | --- |
 | `ids` | 编号唯一、跨文件引用完整性、批次唯一与对齐、模块名对齐、`[~]` 重复、未知标记、队列文件名、模板污染、（框架仓库）技能完整性 |
-| `docs` | 入口文档与队列文件的体量上限（上限值只在 `lib.mjs` 的 `DOC_LIMITS` 定义一处）。`DONE.md` 超了就跑 `node .continue/hooks/archive-done.mjs`，它按同一个上限把最旧的批次整节搬进 `DONE.archive.md` |
+| `docs` | 入口文档与队列文件的体量上限（行数 + 字节；上限值只在 `lib.mjs` 的 `DOC_LIMITS` / `DOC_BYTE_LIMITS` 定义一处）。`DONE.md` 超了就跑 `node .continue/hooks/archive-done.mjs`，它按同一个上限把最旧的批次整节搬进 `DONE.archive.md` |
 | `config` | 配置一致性：README 开关表 ↔ 代码 `process.env` 双向核对；`config.json` 用到的键都有文档 |
 | `hooks` | 钩子离线自检：临时副本里灌事件 JSON，断言各钩子的退出码与输出 |
 

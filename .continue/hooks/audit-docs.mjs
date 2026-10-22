@@ -14,8 +14,17 @@
  * 幂等：只读，不写文件（契约 6：检查与写入分离；归档是另一个脚本的事）。
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { DOC_LIMITS, DONE_FILE, listQueues, OVERVIEW_FILE, README_FILE, TASKS_FILE, TIPS_FILE } from './lib.mjs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  DOC_BYTE_LIMITS,
+  DOC_LIMITS,
+  DONE_FILE,
+  listQueues,
+  OVERVIEW_FILE,
+  README_FILE,
+  TASKS_FILE,
+  TIPS_FILE,
+} from './lib.mjs';
 
 /**
  * 上限怎么定的（每一行都写清依据，否则半年后没人敢动）：
@@ -51,6 +60,19 @@ const LIMITS = [
   })),
 ];
 
+/**
+ * 字节上限：与行数上限同一组文件，查的是"真实上下文成本"而不是行数。
+ * 两套都过才算过——行数防"条目太多"，字节防"单行太长（大表格）"。
+ */
+const BYTE_LIMITS = [
+  { file: README_FILE, name: 'README.md', max: DOC_BYTE_LIMITS.README },
+  { file: DONE_FILE, name: 'DONE.md', max: DOC_BYTE_LIMITS.DONE },
+  { file: OVERVIEW_FILE, name: 'OVERVIEW.md', max: DOC_BYTE_LIMITS.OVERVIEW },
+  { file: TASKS_FILE, name: 'TASKS.md', max: DOC_BYTE_LIMITS.TASKS_BYTES },
+  { file: TIPS_FILE, name: 'TIPS.md', max: DOC_BYTE_LIMITS.TIPS },
+  ...listQueues().map(({ sid, file }) => ({ file, name: `doing/${sid}.md`, max: DOC_BYTE_LIMITS.QUEUE })),
+];
+
 const problems = [];
 
 /** 与 `wc -l` 同口径：末尾换行不算多一行（否则 500 行的文件被数成 501，边界误报）。 */
@@ -68,13 +90,25 @@ for (const { file, name, max, why } of LIMITS) {
   }
 }
 
+for (const { file, name, max } of BYTE_LIMITS) {
+  if (!existsSync(file)) continue; // 缺文件不是本脚本的职责
+  const bytes = statSync(file).size;
+  if (bytes > max) {
+    problems.push(
+      `${name} ${(bytes / 1024).toFixed(0)}KB > 上限 ${(max / 1024).toFixed(0)}KB` +
+        '（行数之外还要看字节：长表格会绕过行数门禁）',
+    );
+  }
+}
+
 if (problems.length > 0) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   console.error(
     '\n体量超限。处置（按顺序试）：\n' +
       '  1. 删掉过时的内容——文档体量是成本，不是资产；\n' +
       '  2. `DONE.md` 超限：把最旧的批次整段搬进 `DONE.archive.md`（整段搬，不切半段）；\n' +
-      '  3. 确实需要更长的上限：改 `.continue/hooks/lib.mjs` 的 `DOC_LIMITS`（唯一来源）并写明理由。',
+      '  3. 大表格/历史清单移到 `notes/`，主文件只留指针；\n' +
+      '  4. 确实需要更长的上限：改 `.continue/hooks/lib.mjs` 的 `DOC_LIMITS` / `DOC_BYTE_LIMITS`（唯一来源）并写明理由。',
   );
   process.exit(1);
 }
@@ -85,4 +119,7 @@ const summary = LIMITS.filter(({ file }) => existsSync(file))
     return `${name} ${lines}/${max}`;
   })
   .join(' · ');
-console.log(`文档体量通过：${summary}`);
+const byteSummary = BYTE_LIMITS.filter(({ file }) => existsSync(file))
+  .map(({ name, file, max }) => `${name} ${(statSync(file).size / 1024).toFixed(0)}/${(max / 1024).toFixed(0)}KB`)
+  .join(' · ');
+console.log(`文档体量通过：\n  行数：${summary}\n  字节：${byteSummary}`);

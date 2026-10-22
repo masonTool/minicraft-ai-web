@@ -84,6 +84,27 @@ export const DOC_LIMITS = {
   QUEUE: 500,
 };
 
+/**
+ * 文档体量的**字节**上限（与行数上限互补，缺一不可）。
+ *
+ * 为什么需要：行数会被"超长行"绕过——本项目实测 `TIPS.md` 499 行 / 190KB，
+ * 按行数看只是"接近 500 行的薄文件"，按 token 看却是 README 的六倍。
+ * 行数只适合"条目密度稳定"的文件；带大表格的文档必须同时看字节。
+ *
+ * 取值都留了余量（当前 → 上限）：README 28KB→40KB、DONE 16KB→40KB、
+ * OVERVIEW 7KB→24KB、TASKS 591KB→900KB、TIPS 7KB→60KB、队列 60KB。
+ * 超了先删 / 归档；确实要放宽就改这里并写明理由（唯一来源）。
+ */
+export const DOC_BYTE_LIMITS = {
+  README: 40 * 1024,
+  DONE: 40 * 1024,
+  OVERVIEW: 24 * 1024,
+  /** 900KB：TASKS 是脚本输入，不能压，但仍要有个观察点。 */
+  TASKS_BYTES: 921600,
+  TIPS: 60 * 1024,
+  QUEUE: 60 * 1024,
+};
+
 
 /**
  * 刹车开关：`touch .continue/auto.off` → 两个 Stop 钩子都只放行，不递任务、不拦提交；

@@ -48,7 +48,7 @@ const FILES = {
  * 而且报错只说"TASKS.md 5506 行 > 上限 600"，不会告诉你这是本项目改过的值。
  * 所以由项目自己的门禁记住"应该有哪几项被放宽"，重装后当场报出来。
  */
-const PROJECT_DOC_LIMITS = { TASKS: 7000 };
+const PROJECT_DOC_LIMITS = { TASKS: 7000, TASKS_BYTES: 921600 };
 
 const LIMITS = {
   /**
@@ -217,7 +217,12 @@ for (const [name, url] of [
   }
   for (const [key, want] of Object.entries(PROJECT_DOC_LIMITS)) {
     const m = new RegExp(`\\b${key}:\\s*(\\d+)`).exec(text);
-    if (!m) continue;
+    // 键不见了也算坏：重装会把 lib.mjs 整份覆盖回框架默认值，
+    // 旧写法 `continue` 会让"放宽项消失"这件事完全没有提示。
+    if (!m) {
+      bad.push(`${key} 不见了（重装把 lib.mjs 覆盖回默认值？）`);
+      continue;
+    }
     if (Number(m[1]) < want) bad.push(`${key} 现在是 ${m[1]}，应为 ${want}`);
   }
   console.log(
