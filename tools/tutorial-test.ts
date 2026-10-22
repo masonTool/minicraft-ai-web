@@ -13,6 +13,8 @@ import { BED_IDS, Block, woolId } from '../src/core/registry/blocks.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../src/tutorial/steps.ts';
 import { MAX_TRACKED_KINDS, TutorialTracker } from '../src/tutorial/TutorialTracker.ts';
+// 文案那一侧走 `t()` / `allKeys()` 查表，不读文案文件源码（多语言 P0-2 起中文表按界面拆分）
+import { allKeys, t } from '../src/core/i18n/I18n.ts';
 import { planTutorialBoot, tutorialTrackFor } from '../src/tutorial/boot.ts';
 import {
   TUTORIAL_CARD_MAX_WIDTH,
@@ -384,14 +386,19 @@ console.log('\n存档仓与主程序接线（静态断言）');
 
   // 最后一步（石镐）要说清"石头在哪"：2026-10-22 起生存只教到石镐，
   // 新手最容易卡在"地表只见草和土、不知道往下挖"
-  const i18nSrc = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
   check(
     '石镐一步说了石头在哪（往下挖几格）',
-    i18nSrc.includes("'tutorial.survival.stonePickaxe.desc': '用木镐挖圆石，再合一把石镐（往下挖几格就是石头）"),
+    t('tutorial.survival.stonePickaxe.desc', 'zh') === '用木镐挖圆石，再合一把石镐（往下挖几格就是石头）',
+    t('tutorial.survival.stonePickaxe.desc', 'zh'),
   );
   check(
     '被删掉的四步不再留有文案（不留死数据）',
-    ['furnace', 'ironPickaxe', 'bed', 'house'].every((key) => !i18nSrc.includes(`tutorial.survival.${key}.`)),
+    (() => {
+      const keys = allKeys();
+      return ['furnace', 'ironPickaxe', 'bed', 'house'].every(
+        (step) => !keys.some((key) => key.startsWith(`tutorial.survival.${step}.`)),
+      );
+    })(),
   );
 }
 

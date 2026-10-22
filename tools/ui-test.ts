@@ -2040,16 +2040,17 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  // 文案表本身也要读：批次 417 起"游戏模式/飞行"走 i18n 键，
-  // 只验源码里有没有那个键，还不足以保证中文表里有它
-  const i18nText = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
+  // 文案表也要查：批次 417 起"游戏模式/飞行"走 i18n 键，
+  // 只验源码里有没有那个键，还不足以保证中文表里有它。
+  // ⚠️ 查表**走 `t()`**，不再读文案文件的源码：多语言 P0-2 起中文表按界面拆到
+  // `core/i18n/locales/zh/*.ts`，用文本匹配会在每次搬文件时假红（改过一次就够）。
   check(
     '设置面板有"游戏模式"与"飞行"两个开关（批次 181 拆开）',
     // 批次 417 起这两行的文案走 i18n 键：验"绑了哪个键"+"中文表里是什么"
     settingsSource.includes("t('settings.row.gameMode')") &&
       settingsSource.includes("t('settings.row.flying')") &&
-      i18nText.includes("'settings.row.gameMode': '游戏模式',") &&
-      i18nText.includes("'settings.row.flying': '飞行',") &&
+      t('settings.row.gameMode', 'zh') === '游戏模式' &&
+      t('settings.row.flying', 'zh') === '飞行' &&
       settingsSource.includes('private makeCreativeRow') &&
       settingsSource.includes('private makeGameModeRow'),
   );
@@ -2111,21 +2112,21 @@ console.log('\n[暂停菜单分两层（批次 108）]');
   // ⚠️ 批次 403 起文案改走 i18n 键（`bindLabel(el, 'pause.resume')`），
   // 所以这里要**同时**验两处：界面绑了哪个键 + 中文表里那个键的中文是什么。
   // 只验源码里的字符串会漏掉"键写错但中文表里恰好也有"的情况。
-  const i18nSource = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
+  // ⚠️ 中文那一侧走 `t(key, 'zh')`：读文案文件源码在多语言 P0-2 之后会假红。
   check(
     '暂停菜单有「继续游戏」',
     source.includes("this.bindLabel(this.resumeButton, 'pause.resume');") &&
-      i18nSource.includes("'pause.resume': '继续游戏',"),
+      t('pause.resume', 'zh') === '继续游戏',
   );
   check(
     '暂停菜单有「设置」按钮（点进二级页）',
     source.includes("this.bindLabel(settingsButton, 'pause.settings');") &&
-      i18nSource.includes("'pause.settings': '设置',"),
+      t('pause.settings', 'zh') === '设置',
   );
   check(
     '暂停菜单有「保存并退出到主菜单」',
     source.includes("this.bindLabel(exitToMenu, 'pause.exit');") &&
-      i18nSource.includes("'pause.exit': '保存并退出到主菜单',"),
+      t('pause.exit', 'zh') === '保存并退出到主菜单',
   );
   // 设置页有返回；「继续游戏」不该再和滑块挤在同一页上
   check('设置页有 ‹ 返回', source.includes("t('settings.backArrow')"));

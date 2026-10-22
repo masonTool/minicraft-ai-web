@@ -14,7 +14,7 @@ import { COMMANDS, executeCommand } from '../src/core/commands/Commands.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
 import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 import {
   DEFAULT_LANGUAGE,
@@ -63,6 +63,34 @@ function codeOf(source: string): string {
       return !t.startsWith('*') && !t.startsWith('//') && !t.startsWith('/*');
     })
     .join('\n');
+}
+
+/**
+ * 中文字面量守卫的**唯一判据**（多语言 P0-2 统一口径：原来这套判据在 5 处各抄了一遍）。
+ *
+ * 口径：**中文文案只允许住在 `src/core/i18n/locales/zh/**`**；界面、逻辑、数据文件
+ * 一律走 `t()` / `tp()`。断言按"字符串字面量"判，不按"文件里有没有汉字"判——
+ * 这个仓库的注释是中文的，按整份源码判等于强迫以后不准写中文注释，方向就错了。
+ *
+ * ⚠️ 已知边界：注释里的引号（`// 保持"按下"态`）也算字面量。
+ * 那条边界记在 TASKS 的 M8 注记里，写注释用中文引号即可。
+ */
+const CJK_LITERAL = /(['"`])(?:(?!\1)[^\\\n])*[\u4e00-\u9fa5](?:(?!\1)[^\\\n])*\1/;
+
+/** 整段代码里第一个带中文的字符串字面量；没有就是 null（给断言的 detail 用） */
+function firstCjkLiteral(code: string): string | null {
+  return CJK_LITERAL.exec(code)?.[0] ?? null;
+}
+
+/**
+ * 逐行的中文字面量守卫（`'…'` 那一类）。
+ * `allow` 返回 true 的行豁免——用于"这一行本来就该有 t()/msg() 包裹"的场景。
+ */
+function linesWithCjkLiteral(code: string, allow: (line: string) => boolean = () => false): string[] {
+  return code
+    .split('\n')
+    .filter((line) => !allow(line))
+    .filter((line) => (line.match(/'[^']*'/g) ?? []).some((one) => /[\u4e00-\u9fa5]/.test(one)));
 }
 
 console.log('[中英表一致性]');
@@ -396,9 +424,8 @@ console.log('\n[背包与工作站面板的残留文案（批次 1355 / M8 第 N
   );
 
   // 字符串字面量里不该再有中文：`'…'` / `"…"` / 单行 `` `…` ``
-  const cjkLiteral = /(['"`])(?:(?!\1)[^\\\n])*[\u4e00-\u9fa5](?:(?!\1)[^\\\n])*\1/;
-  const hit = cjkLiteral.exec(code);
-  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.[0]?.slice(0, 60) ?? '');
+  const hit = firstCjkLiteral(code);
+  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.slice(0, 60) ?? '');
 
   // 模板句必须走 tp()：这四条以前是"字符串 + 变量"拼出来的
   check('可做数量走 tp() 的占位符', code.includes("tp('station.craftableSummary'"));
@@ -438,9 +465,8 @@ console.log('\n[设置界面的残留文案（批次 1355 / T5）]');
   check(`设置界面的 ${keys.length} 个代表键中英齐全`, missing.length === 0, missing.join(','));
   check('每个都真翻成英文', keys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
 
-  const cjkLiteral = /(['"`])(?:(?!\1)[^\\\n])*[\u4e00-\u9fa5](?:(?!\1)[^\\\n])*\1/;
-  const hit = cjkLiteral.exec(code);
-  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.[0]?.slice(0, 60) ?? '');
+  const hit = firstCjkLiteral(code);
+  check('源码里不再有中文文案（都走 t() / tp()）', hit === null, hit?.slice(0, 60) ?? '');
 
   // 五张档位标签表改成查表函数（原来是导出常量表，切语言后不跟着变）
   for (const fn of ['fpsCapLabel', 'particleLevelLabel', 'touchAimModeLabel', 'settingGroupLabel', 'autosaveLabel']) {
@@ -509,11 +535,7 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
 
   // 聊天输入框：不能留硬编码
   const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');
-  const chatCode = codeOf(chatSrc).split('\n');
-  const chatHard = chatCode.filter((line) => {
-    const literals = line.match(/'[^']*'/g) ?? [];
-    return literals.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes("t('");
-  });
+  const chatHard = linesWithCjkLiteral(codeOf(chatSrc), (line) => line.includes("t('"));
   check('聊天输入框没有残留硬编码中文', chatHard.length === 0, chatHard.slice(0, 3).join(' / '));
   check('候选提示走占位符（不是拼中文）', chatSrc.includes("tp('chat.candidates'"));
 }
@@ -598,13 +620,10 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
 
   // 源码里不该再有中文的 out.* 调用
   const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
-  const rawOut = codeOf(cmdSrc)
-    .split('\n')
-    .filter((line) => /out\.(info|error)\(/.test(line))
-    .filter((line) => {
-      const literals = line.match(/'[^']*'/g) ?? [];
-      return literals.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes('msg(') && !line.includes('usageError(');
-    });
+  const rawOut = linesWithCjkLiteral(
+    codeOf(cmdSrc),
+    (line) => line.includes('msg(') || line.includes('usageError('),
+  ).filter((line) => /out\.(info|error)\(/.test(line));
   check('源码里没有硬编码中文的 out.* 调用', rawOut.length === 0, rawOut.slice(0, 3).join(' / '));
 }
 
@@ -637,11 +656,7 @@ console.log('\n[地图 / 成就 / 死亡遮罩（批次 619 / Q15）]');
     ['src/ui/AdvancementScreen.ts', '成就'],
     ['src/ui/AdvancementToast.ts', '成就弹窗'],
   ] as const) {
-    const code = codeOf(read(file)).split('\n');
-    const hard = code.filter((line) => {
-      const lits = line.match(/'[^']*'/g) ?? [];
-      return lits.some((x) => /[\u4e00-\u9fff]/.test(x)) && !line.includes("t('");
-    });
+    const hard = linesWithCjkLiteral(codeOf(read(file)), (line) => line.includes("t('"));
     check(`${label}界面没有残留硬编码中文`, hard.length === 0, hard.slice(0, 2).join(' / '));
   }
 
@@ -752,6 +767,27 @@ console.log('\n[语言元数据与匹配（多语言 P0-1）]');
 
   check('localeMeta 能取回元数据（含带地区的 htmlLang）', localeMeta('pt')?.htmlLang === 'pt-BR');
   check('localeMeta 对未登记的语言返回 null', localeMeta('ja') === null);
+}
+
+console.log('\n[中文文案的落脚点（多语言 P0-2 统一口径）]');
+{
+  /**
+   * 口径：**中文文案只允许住在 `src/core/i18n/locales/zh/**`**，界面 / 逻辑 / 数据文件
+   * 一律走 `t()` / `tp()`。这一节盯的是"目录结构还在"——防的是有人图省事
+   * 又把一张大表塞回 `I18n.ts`（那样下次加语言又要在一千行里对着找）。
+   */
+  const zhDir = new URL('../src/core/i18n/locales/zh/', import.meta.url);
+  const zhFiles = readdirSync(zhDir).filter((name) => name.endsWith('.ts'));
+  check('中文表按界面拆成多个文件', zhFiles.length >= 8, zhFiles.join(','));
+  check('index.ts 是合并入口', zhFiles.includes('index.ts'));
+
+  const indexSource = readFileSync(new URL('../src/core/i18n/locales/zh/index.ts', import.meta.url), 'utf8');
+  const orphans = zhFiles.filter((name) => name !== 'index.ts' && !indexSource.includes(`'./${name}'`));
+  check('每个分组文件都被 index.ts 合并（不留孤儿文件）', orphans.length === 0, orphans.join(','));
+
+  // 中文表里的值必须非空：拆文件时漏掉一格会变成"界面上一块空白"
+  const emptyValues = Object.entries(TABLES.zh).filter(([, value]) => value.trim().length === 0).map(([key]) => key);
+  check('中文表没有空值', emptyValues.length === 0, emptyValues.slice(0, 3).join(','));
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

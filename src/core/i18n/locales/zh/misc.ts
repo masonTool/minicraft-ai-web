@@ -1,0 +1,32 @@
+/**
+ * 中文文案·其余全局文案（`pause.*` / `death.*` / `sleep.*` / `fullscreen.*` / `install.*` / `unit.*`）
+ *
+ * ⚠️ 这个文件是**源语言**（多语言 P0-2）：其余语言按同一套键翻译，键由 `index.ts` 的
+ * `as const` 推导出 `MessageKey`，所以这里**加一条键**就等于给所有语言加一条待翻译项。
+ * 搬运规则：只搬不改——中文一个字都没动，`test:i18n` 的断言一条也没改。
+ */
+
+export const misc = {
+  // ---- 暂停菜单
+  'pause.title': '游戏已暂停',
+  'pause.resume': '继续游戏',
+  'pause.settings': '设置',
+  'pause.achievements': '成就',
+  'pause.statistics': '统计',
+  'pause.exit': '保存并退出到主菜单',
+  'unit.item': '个',
+  'unit.bottle': '瓶',
+  'fullscreen.rotateTitle': '请横屏游玩',
+  'fullscreen.rotateDetail': '点一下进入全屏并横屏 · 把手机横过来也会自动开始',
+  'fullscreen.rotateIosDetail': '把手机横过来即可；想要全屏请用「分享 → 添加到主屏幕」',
+  'install.hint': '添加到主屏幕后，打开即全屏横屏',
+  'install.add': '添加',
+  'install.later': '以后',
+  'install.iosHint': 'Safari 不能把网页直接全屏：点「分享」→「添加到主屏幕」，再从桌面图标打开即可全屏横屏。',
+  'install.iosOk': '知道了',
+  'death.title': '你死了！',
+  'death.respawning': '正在重生…',
+  'sleep.dawn': '天快亮了',
+  'sleep.hint': '跳跃键可以提前起床',
+  'sleep.lieDown': '你躺下了…（跳跃键 / 点击遮罩可以提前起床）',
+} as const;
