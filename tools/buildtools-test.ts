@@ -28,6 +28,16 @@ import {
   planFill,
   shouldFillCell,
 } from '../src/buildtools/Fill.ts';
+import {
+  PASTE_BATCH_SIZE,
+  PasteRunner,
+  createSnapshot,
+  defaultPasteTarget,
+  mirrorCell,
+  planPaste,
+  snapshotCellCount,
+  type ClipboardSnapshot,
+} from '../src/buildtools/Clipboard.ts';
 
 let passed = 0;
 let failed = 0;
@@ -460,6 +470,222 @@ console.log('\n填充：对着一个假世界真的写进去（16×16×4）');
   equal('clear 之后没有非空气残留', remaining, 0);
 }
 
+// ------------------------------------------------------------------ 剪贴板
+
+console.log('\n复制：快照只存非空气');
+{
+  const storage = new Map<string, { id: number; state: number }>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  storage.set(key(2, 64, 2), { id: 1, state: 0 });
+  storage.set(key(2, 65, 2), { id: 45, state: 2 });
+  storage.set(key(2, 66, 2), { id: 1, state: 0 });
+
+  const box: SelectionBox = { minX: 2, minY: 64, minZ: 2, maxX: 4, maxY: 66, maxZ: 4 };
+  const snap = createSnapshot(box, (x, y, z) => storage.get(key(x, y, z)) ?? null);
+
+  equal('尺寸 3×3×3', `${snap.width}×${snap.height}×${snap.depth}`, '3×3×3');
+  equal('只存了 3 格非空气', snapshotCellCount(snap), 3);
+  equal('有空洞标 masked', snap.masked, true);
+  equal('锚点是盒子最小角', `${snap.origin.x},${snap.origin.y},${snap.origin.z}`, '2,64,2');
+  equal('第一格偏移 0,1,0 之前先是最小角', `${snap.cells[0]!.dx},${snap.cells[0]!.dy},${snap.cells[0]!.dz}`, '0,0,0');
+  equal('第二格往上偏移 1', snap.cells[1]!.dy, 1);
+  equal('方块 id 原样带过来', snap.cells[1]!.id, 45);
+  equal('状态也带过来', snap.cells[1]!.state, 2);
+
+  const restored = snap.cells
+    .map((cell) => `${cell.dx + snap.origin.x},${cell.dy + snap.origin.y},${cell.dz + snap.origin.z}`)
+    .sort();
+  equal('快照往返坐标一致', restored.join('|'), [...storage.keys()].sort().join('|'));
+
+  const full = new Map<string, { id: number; state: number }>();
+  for (let x = 0; x < 2; x++) {
+    for (let y = 0; y < 2; y++) {
+      for (let z = 0; z < 2; z++) full.set(key(x, y, z), { id: 1, state: 0 });
+    }
+  }
+  const fullSnap = createSnapshot(
+    { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
+    (x, y, z) => full.get(key(x, y, z)) ?? null,
+  );
+  equal('满区域 8 格', snapshotCellCount(fullSnap), 8);
+  equal('满区域不标 masked', fullSnap.masked, false);
+
+  const emptySnap = createSnapshot(box, () => null);
+  equal('全空快照 0 格', snapshotCellCount(emptySnap), 0);
+  equal('全空也标 masked', emptySnap.masked, true);
+}
+
+console.log('\n镜像：只翻偏移');
+{
+  // 一个 3×1×3 的"两边墙"：x=0 与 x=2
+  const shape = createSnapshot(
+    { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 0, maxZ: 2 },
+    (x, _y, _z) => (x === 0 || x === 2 ? { id: 5, state: 0 } : null),
+  );
+  const left = shape.cells.find((cell) => cell.dx === 0)!;
+  const right = shape.cells.find((cell) => cell.dx === 2)!;
+
+  equal('X 镜像：左墙挪到右边', mirrorCell(left, shape, 'x').dx, 2);
+  equal('X 镜像：右墙挪到左边', mirrorCell(right, shape, 'x').dx, 0);
+  equal('X 镜像：方块不变', mirrorCell(left, shape, 'x').id, 5);
+  equal('镜像两次回到原样', mirrorCell(mirrorCell(left, shape, 'x'), shape, 'x').dx, 0);
+
+  const front = shape.cells.find((cell) => cell.dz === 0)!;
+  equal('Z 镜像：前后对调', mirrorCell(front, shape, 'z').dz, 2);
+  equal('Z 镜像不碰 x', mirrorCell(front, shape, 'z').dx, front.dx);
+}
+
+console.log('\n粘贴：落点与越界裁剪');
+{
+  const shape = createSnapshot(
+    { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 0, maxZ: 2 },
+    (x, _y, _z) => (x === 0 || x === 2 ? { id: 5, state: 0 } : null),
+  );
+
+  const plain = planPaste(shape, { x: 10, y: 64, z: 10 });
+  equal('粘贴格数不变', plain.cells.length, shape.cells.length);
+  equal('没裁剪', plain.clamped, false);
+  check(
+    '每个格子都落在目标偏移上',
+    plain.cells.every((cell) => cell.x >= 10 && cell.x <= 12 && cell.z >= 10 && cell.z <= 12),
+  );
+  equal('默认落点在原件右边一格宽', defaultPasteTarget(shape).x, 3);
+
+  const mirrored = planPaste(shape, { x: 10, y: 64, z: 10 }, { mirror: 'x' });
+  const leftWall = mirrored.cells.filter((cell) => cell.x === 12).length;
+  equal('镜像后左墙贴到最右边', leftWall, 3);
+
+  // 一列 3 格，贴着世界顶粘贴：只贴进 2 格
+  const column = createSnapshot(
+    { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 2, maxZ: 0 },
+    () => ({ id: 1, state: 0 }),
+  );
+  const clipped = planPaste(column, { x: 0, y: 318, z: 0 });
+  equal('只贴世界内的两层', clipped.cells.length, 2);
+  equal('裁掉 1 格', clipped.skipped, 1);
+  equal('标了 clamped', clipped.clamped, true);
+  equal('贴到的是 318/319', clipped.cells.map((cell) => cell.y).join(','), '318,319');
+
+  const allOut = planPaste(column, { x: 0, y: 500, z: 0 });
+  equal('全部越界：0 格', allOut.cells.length, 0);
+  equal('全部越界：skipped 3', allOut.skipped, 3);
+
+  const empty = planPaste(createSnapshot({ minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 }, () => null), { x: 0, y: 0, z: 0 });
+  equal('空快照粘贴 0 格', empty.cells.length, 0);
+  equal('空快照不算裁剪', empty.clamped, false);
+}
+
+console.log('\n粘贴：跨帧推进与中断');
+{
+  const solid = createSnapshot(
+    { minX: 0, minY: 0, minZ: 0, maxX: 15, maxY: 3, maxZ: 15 },
+    () => ({ id: 1, state: 0 }),
+  );
+  const plan = planPaste(solid, { x: 0, y: 0, z: 0 });
+  equal('1024 格待贴', plan.cells.length, 1024);
+
+  let writes = 0;
+  const runner = new PasteRunner(plan.cells, {
+    write: () => {
+      writes += 1;
+      return true;
+    },
+  });
+  equal('第一次 step 写一批', runner.step(), true);
+  equal('一批 512', writes, 512);
+  equal('第二次 step 写完', runner.step(), false);
+  equal('总共 1024', writes, 1024);
+  equal('total 1024', runner.progress.total, 1024);
+
+  let budgetWrites = 0;
+  const budgeted = new PasteRunner(plan.cells, {
+    write: () => {
+      budgetWrites += 1;
+      return true;
+    },
+  });
+  for (let i = 0; i < 10; i++) budgeted.step(100);
+  equal('每帧 100 格，10 帧写 1000', budgetWrites, 1000);
+  equal('第 11 帧收尾', budgeted.step(100), false);
+  equal('总共 1024', budgetWrites, 1024);
+
+  let partial = 0;
+  const cancellable = new PasteRunner(plan.cells, {
+    write: () => {
+      partial += 1;
+      return true;
+    },
+  });
+  cancellable.step(100);
+  cancellable.cancel();
+  equal('中断后 step 返回 false', cancellable.step(), false);
+  equal('中断后不再写', partial, 100);
+  equal('已写的进度保留', cancellable.progress.written, 100);
+
+  let skipCount = 0;
+  const skipping = new PasteRunner(plan.cells, {
+    batchSize: 1024,
+    write: () => {
+      skipCount += 1;
+      return skipCount % 2 === 0;
+    },
+  });
+  skipping.step();
+  equal('visited 是全部', skipping.progress.visited, 1024);
+  equal('written 只有一半', skipping.progress.written, 512);
+
+  equal('默认批量 512', PASTE_BATCH_SIZE, 512);
+}
+
+console.log('\n复制一座小房并镜像（假世界）');
+{
+  // 5×3×5 的房子：四面墙，内部中空
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  const house = new Map<string, number>();
+  for (let x = 0; x < 5; x++) {
+    for (let y = 0; y < 3; y++) {
+      for (let z = 0; z < 5; z++) {
+        if (x === 0 || x === 4 || z === 0 || z === 4) house.set(key(x, 64 + y, z), 5);
+      }
+    }
+  }
+  const box: SelectionBox = { minX: 0, minY: 64, minZ: 0, maxX: 4, maxY: 66, maxZ: 4 };
+  const snapshot: ClipboardSnapshot = createSnapshot(box, (x, y, z) =>
+    house.has(key(x, y, z)) ? { id: 5, state: 0 } : null,
+  );
+  equal('墙共 48 格', snapshotCellCount(snapshot), 48);
+  equal('中空 27 格被标 masked', snapshot.masked, true);
+
+  // 镜像后贴到另一个位置
+  const plan = planPaste(snapshot, { x: 20, y: 64, z: 20 }, { mirror: 'x' });
+  const mirroredHouse = new Map<string, number>();
+  const runner = new PasteRunner(plan.cells, {
+    write: (cell) => {
+      mirroredHouse.set(key(cell.x, cell.y, cell.z), cell.id);
+      return true;
+    },
+  });
+  while (runner.step()) {
+    // 每帧一批
+  }
+  equal('贴进 48 格', runner.progress.written, 48);
+
+  // 镜像后：原来的左墙（dx=0）跑到 x=24，右墙（dx=4）跑到 x=20
+  equal('镜像后的左墙在 x=24', [...mirroredHouse.keys()].filter((k) => k.startsWith('24,')).length, 15);
+  equal('镜像后的右墙在 x=20', [...mirroredHouse.keys()].filter((k) => k.startsWith('20,')).length, 15);
+
+  // 中空的部分不该被填上（复制的是墙，不是一整块实心）
+  let filledInside = 0;
+  for (let x = 21; x <= 23; x++) {
+    for (let y = 64; y <= 66; y++) {
+      for (let z = 21; z <= 23; z++) {
+        if (mirroredHouse.has(key(x, y, z))) filledInside += 1;
+      }
+    }
+  }
+  equal('内部仍然中空', filledInside, 0);
+}
+
 console.log('\n主程序接线（静态断言）');
 {
   // 守的是"纯逻辑写好了但没接上"：栈本身 48 条全绿也可能一次都没被调用过
@@ -483,6 +709,14 @@ console.log('\n主程序接线（静态断言）');
   check('填完整体入撤销栈（一次填充 = 一步）', mainSrc.includes('this.undoPush(buffered)'));
   check('超过上限整次不记', mainSrc.includes('this.fillUndoBuffer.length >= FILL_UNDO_LIMIT'));
   check('选区/填充与撤销同一口径（创造 + 单机）', mainSrc.includes('private startFill('));
+
+  // 创造3：复制 / 粘贴 / 镜像
+  check('复制走 createSnapshot（只存非空气）', mainSrc.includes('createSnapshot(this.selectionBox'));
+  check('粘贴走 planPaste（带镜像轴）', mainSrc.includes('planPaste(snapshot, landing, { mirror })'));
+  check('粘贴在主循环里每帧推进', mainSrc.includes('this.stepPasteRunner();'));
+  check('粘贴整体入撤销栈（一次粘贴 = 一步）', mainSrc.includes('this.pasteUndoBuffer'));
+  check('默认落点在原件旁边', mainSrc.includes('defaultPasteTarget(snapshot)'));
+  check('粘贴超过上限整次不记', mainSrc.includes('this.pasteUndoBuffer.length >= FILL_UNDO_LIMIT'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

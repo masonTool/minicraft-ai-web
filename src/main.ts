@@ -688,6 +688,15 @@ import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack
 // 创造2：两点选区 + 框选填充（分批跨帧）
 import { buildSelection, type BlockPos, type SelectionBox } from './buildtools/Selection.ts';
 import { FillRunner, shouldFillCell, type FillMode } from './buildtools/Fill.ts';
+// 创造3：复制 / 粘贴 / 镜像
+import {
+  PasteRunner,
+  createSnapshot,
+  defaultPasteTarget,
+  planPaste,
+  type ClipboardSnapshot,
+  type MirrorAxis,
+} from './buildtools/Clipboard.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -1614,6 +1623,12 @@ class App {
    * 超过 `FILL_UNDO_LIMIT` 时**整次不记**（见 `startFill` 的注释）。
    */
   private fillUndoBuffer: BlockEdit[] | null = null;
+  /** 创造3：剪贴板（只存非空气；`null` = 还没复制过） */
+  private clipboard: ClipboardSnapshot | null = null;
+  /** 创造3：正在分批执行的粘贴 */
+  private activePaste: PasteRunner | null = null;
+  /** 创造3：这次粘贴攒下的撤销记录（与填充同一条：超过上限整次不记） */
+  private pasteUndoBuffer: BlockEdit[] | null = null;
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -9070,6 +9085,109 @@ class App {
     this.activeFill?.cancel();
   }
 
+  // ---------------------------------------------------------------- 创造工具（创造3）
+
+  /** 复制当前选区（只存非空气；空洞保留为"不覆盖"） */
+  private copySelection(): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    if (!this.selectionBox) {
+      this.hudToast.show(t('buildtools.fill.noSelection'));
+      return false;
+    }
+    const snapshot = createSnapshot(this.selectionBox, (x, y, z) => {
+      const id = this.world.getBlock(x, y, z);
+      if (id === Block.AIR) return null;
+      return { id, state: this.world.getBlockState(x, y, z) };
+    });
+    if (snapshot.cells.length === 0) {
+      this.hudToast.show(t('buildtools.copy.empty'));
+      return false;
+    }
+    this.clipboard = snapshot;
+    this.hudToast.show(tp('buildtools.copy.done', { count: snapshot.cells.length }));
+    return true;
+  }
+
+  /**
+   * 粘贴（可选镜像）。
+   *
+   * 默认落点 = 原件右边一格宽（`defaultPasteTarget`），避免"粘贴完看不出变化"
+   * ——那是最容易让人以为按钮没反应的失败方式。
+   */
+  private pasteClipboard(
+    mirror: MirrorAxis | null = null,
+    target?: { readonly x: number; readonly y: number; readonly z: number },
+  ): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    const snapshot = this.clipboard;
+    if (!snapshot) {
+      this.hudToast.show(t('buildtools.copy.none'));
+      return false;
+    }
+    if (this.activePaste) this.activePaste.cancel();
+
+    const landing = target ?? defaultPasteTarget(snapshot);
+    const plan = planPaste(snapshot, landing, { mirror });
+    if (plan.cells.length === 0) {
+      this.hudToast.show(t('buildtools.paste.outOfWorld'));
+      return false;
+    }
+
+    this.pasteUndoBuffer = this.undoAllowed() ? [] : null;
+    this.activePaste = new PasteRunner(plan.cells, {
+      write: (cell) => {
+        const currentId = this.world.getBlock(cell.x, cell.y, cell.z);
+        const currentState = this.world.getBlockState(cell.x, cell.y, cell.z);
+        if (!this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, cell.id, cell.state)) return false;
+        if (this.pasteUndoBuffer) {
+          if (this.pasteUndoBuffer.length >= FILL_UNDO_LIMIT) {
+            // 与填充同一条：超过上限整次不记，避免"撤销出个洞"
+            this.pasteUndoBuffer = null;
+          } else {
+            this.pasteUndoBuffer.push({
+              dimension: this.dimension,
+              x: cell.x,
+              y: cell.y,
+              z: cell.z,
+              beforeId: currentId,
+              beforeState: currentState,
+              afterId: cell.id,
+              afterState: cell.state,
+            });
+          }
+        }
+        this.wakeFluidsAround(cell.x, cell.y, cell.z);
+        return true;
+      },
+    });
+    return true;
+  }
+
+  /** 每帧推进一步粘贴 */
+  private stepPasteRunner(): void {
+    const runner = this.activePaste;
+    if (!runner) return;
+    if (runner.step()) return;
+
+    this.activePaste = null;
+    const progress = runner.progress;
+    const buffered = this.pasteUndoBuffer;
+    this.pasteUndoBuffer = null;
+    if (buffered && buffered.length > 0) this.undoPush(buffered);
+    if (progress.cancelled) this.hudToast.show(t('buildtools.paste.cancelled'));
+    else this.hudToast.show(tp('buildtools.paste.done', { count: progress.written }));
+  }
+
+  private cancelPaste(): void {
+    this.activePaste?.cancel();
+  }
+
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
   private openAdvancements(): void {
     if (this.advancementScreen.isOpen) return;
@@ -11259,6 +11377,40 @@ class App {
       hasStart: this.selectionStart !== null,
       box: this.selectionBox,
       filling: this.activeFill !== null,
+    };
+  }
+
+  /** 验收脚本用：复制当前选区，返回复制到的格数（创造3） */
+  copySelectionForTest(): number {
+    return this.copySelection() ? (this.clipboard?.cells.length ?? 0) : 0;
+  }
+
+  /** 验收脚本用：同步把剪贴板粘贴完，返回写入格数 */
+  pasteClipboardForTest(
+    mirror: MirrorAxis | null = null,
+    x?: number,
+    y?: number,
+    z?: number,
+  ): number {
+    const target = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
+    if (!this.pasteClipboard(mirror, target)) return 0;
+    const runner = this.activePaste;
+    while (this.activePaste) this.stepPasteRunner();
+    return runner?.progress.written ?? 0;
+  }
+
+  /** 验收脚本用：取消正在进行的粘贴 */
+  cancelPasteForTest(): void {
+    this.cancelPaste();
+  }
+
+  /** 验收脚本用：剪贴板状态 */
+  get clipboardStateForTest(): { hasClipboard: boolean; cells: number; masked: boolean; pasting: boolean } {
+    return {
+      hasClipboard: this.clipboard !== null,
+      cells: this.clipboard?.cells.length ?? 0,
+      masked: this.clipboard?.masked ?? false,
+      pasting: this.activePaste !== null,
     };
   }
 
@@ -16514,8 +16666,9 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
-      // 创造2：框选填充每帧推一批（512 格）；没有填充时这里是一次判空
+      // 创造2/3：框选填充与粘贴每帧各推一批（512 格）；空闲时都是一次判空
       this.stepFillRunner();
+      this.stepPasteRunner();
       this.tickContainers(dt);
       this.updateEntities(dt);
       mark = this.lap('ent', mark);
