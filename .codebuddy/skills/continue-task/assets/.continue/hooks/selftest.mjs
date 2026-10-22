@@ -230,8 +230,14 @@ try {
       r.code === 2 &&
         r.err.includes('计划里还有下一阶段') &&
         r.err.includes('MS2.2') &&
+        /**
+         * 阶段行示例必须带反引号：`STAGE_RE` 靠 `` `MS2.1` `` 这一对反引号认行，
+         * 漏了就**不是阶段**（不是报错，是静默消失）。照抄示例写出解析不出来的行，
+         * 是这个机制最容易犯的错，所以连示例格式一起钉住。
+         */
+        r.err.includes('- [x] `MS2.1`') &&
         !r.err.includes('停下等验收'),
-      '未到边界应续批并点名 MS2.2',
+      '未到边界应续批、点名 MS2.2，且阶段行示例带反引号（漏了会被静默丢弃）',
       r,
     );
   });
@@ -288,12 +294,41 @@ try {
   });
 
   check('auto-continue · 计划里阶段全做完 → 整体收尾并删计划', () => {
-    plan('plan-d.md', '## MS1 · 甲\n- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`');
+    plan(
+      'plan-d.md',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- 确认：已验收 · 批次 `19990101-0000`',
+        '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
+      ].join('\n'),
+    );
     planQueue('s-plan-done', 'plan-d.md', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-done'));
     return expect(
       r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-d.md'),
-      '计划全部完成时应走整体收尾',
+      '计划全部完成且最后里程碑已验收时，应走整体收尾',
+      r,
+    );
+  });
+
+  check('auto-continue · 计划做完但最后里程碑没验收 → 请用户拍板，不整体收尾', () => {
+    plan(
+      'plan-e.md',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
+      ].join('\n'),
+    );
+    planQueue('s-plan-unconfirmed', 'plan-e.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-unconfirmed'));
+    return expect(
+      r.code === 2 &&
+        r.err.includes('没有验收记录') &&
+        r.err.includes('不要替用户写确认行') &&
+        !r.err.includes('计划已全部完成'),
+      '没人验收过的计划不该自动归档（`确认：已验收` 这行必须真的被判定消费）',
       r,
     );
   });
