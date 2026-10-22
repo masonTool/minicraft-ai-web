@@ -68,6 +68,35 @@
   或给 `[发现]` 加一个"是否插队"的可选前缀。
 
 ---
+## 批次 20261022-2330 · 2026-10-22 · 会话 eb9037a4
+
+**做了什么**：生存引导按用户要求缩到石镐（8→4 步），并修掉"9 个方块图标永久空白"——图集还没铺像素时就有 UI 画了图标，坏结果被缓存住。共 4 条。
+
+> 图标那条不是猜的：截图像素分析定位到空的 9 格，正好是建造工具条用到的 9 件方块；
+> 工具条在 `atlas.ensureUploaded()` 之前构造，用的是 `deferPaint` 的空图集。
+
+- [x] [引导6] 生存引导 8 步 → 4 步（终点石镐）：`src/tutorial/steps.ts` 删熔炉/铁镐/床/小屋 + 去掉 bed 家族，`I18n.ts` 删 8 条文案，`boot.ts` 注释同步 → `npm run test:tutorial` 全绿
+  - 做了什么：`SURVIVAL_STEPS` 只留 log / table / wood_pickaxe / stone_pickaxe；`TutorialFamily` 去掉 `bed`（`familyOfItem` 同步）；中英各删 4 键；石镐一步的说明补"往下挖几格就是石头"（最后一步最容易卡住的地方）
+  - 为什么：用户明确"做到石镐就够"——铁要挖到 y≈16 再烧，是一条 45~50 格深的链子，卡住的人只会把卡片关掉。步骤表是数据，删了不影响判定/存档结构
+  - 验证：`npm run test:tutorial` 110 → **113 条**全过；其中两条专门钉老存档：`completed` 里带已删的 4 个 id 时只认连续前缀 4 个 → **直接判定引导完成，不倒退**；另有一条断言"熔炉/铁镐/床/小屋不在表里"，防以后无声加回去
+  - 批次：20261022-2330
+- [x] [图标1] 9 个方块图标永久空白：`main.ts` 把 `atlas.ensureUploaded()` 挪到 App 构造最前面（早于 TutorialCard/BuildToolbar），`TextureAtlas` 暴露 `isPainted`，`BlockIcon` 未铺像素时**不画也不缓存** → 真浏览器复验 9 个图标不透明像素 > 0
+  - 做了什么：`main.ts` 把"进世界先铺图集 + clearBlockIconCache"整段搬到构造函数第一行；`TextureAtlas` 加 `get isPainted()`；`blockIconCanvas` 在 `cache.set` 之前加 `if (!atlas.isPainted) return null`（回退到单格贴图，宁可空一次也不留坏缓存）
+  - 为什么：主菜单阶段图集是 `deferPaint` 的空画布，`BuildToolbar` 构造时就画了 9 个方块图标（BRICKS/GLASS/SAND/CHEST/CRAFTING_TABLE/OAK_PLANKS/OAK_LOG/OAK_LEAVES/COBBLESTONE），拼出来全透明，缓存只按 `atlas.revision` 失效 → 这一页里那 9 个方块在快捷栏/创造栏/分类栏**全都**空白，切分类也不会好
+  - 验证：headless Chromium（792×360 / dpr 3 / 触屏）建生存世界 → 开背包 → 统计全部 1129 个创造格的 canvas 不透明像素：修前 `空白 9 个（4,5,6,7,8,11,43,45,70）`，修后 **空白 0 个**
+  - 批次：20261022-2330
+- [x] [图标2] 自愈与断线：进世界清一次图标缓存（旧会话/旧版本留下的坏图标不必刷新页面就恢复）+ `tools/texture-test.ts` 加 4 条静态断言 → `npm run test:textures`
+  - 做了什么：`clearBlockIconCache()` 现在在进世界时也调一次（原先只在"回前台"那条路径里）；`test:textures` 新增一节：铺图集的语句必须早于 `new TutorialCard(`/`new BuildToolbar(`、`clearBlockIconCache` 至少两处、图集有 `isPainted`、守卫在 `cache.set` 之前
+  - 为什么：这两种错（次序错、缓存毒化）都**不会报错**，只会少画东西；能断言的只有"代码形状"，所以静态断言比截图回归可靠
+  - 验证：`npm run test:textures` 29 → **33 条**全过
+  - 批次：20261022-2330
+- [x] [自测] 全量门禁：`npm run check` 全绿（172 套 + 三张台账 + 文档）→ 分两次提交并 push
+  - 做了什么：`0c5adeab`（引导，4 文件）、`848e03e7`（图标，4 文件）
+  - 验证：`test:tutorial` 113 条、`test:textures` 33 条、`npm run check` 全绿；两次提交的 `checks.fast` 均通过
+  - 说明：图标那条做了浏览器复验（有复现脚本、前后都量了不透明像素）；引导只跑了离线套件
+  - 批次：20261022-2330
+
+---
 ## 批次 20261022-2220 · 2026-10-22 · 会话 eb9037a4
 
 **做了什么**：修用户真机报的三件事——引导卡按钮点不动（触摸视角面吃掉点击）、生存模式找不到铁（文案没给位置）、橡木门打不开且上半扇透明（渲染盒抄了碰撞判据 + 红石整体重算覆盖手动状态）。共 5 条。
