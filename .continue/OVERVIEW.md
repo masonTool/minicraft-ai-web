@@ -18,16 +18,16 @@
 - TypeScript 严格模式 + Vite + Three.js / WebGL2；无第三方运行时依赖（除 `three`）· `A1`~`A5` · 批次 1~9
 - 离线测试 169 套（`tools/run-tests.mjs` 并行跑）+ vitest 单测，`npm run check` 是一道门 · `A6` · 批次 589
 - 浏览器侧四块命令（截图 / 控制台零错误 / 像素差 / 起服检查），`BROWSER_CHECK=1` 才真跑 · `A7` · 批次 1357
-- 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`，`audit-ids` 同时核对 `DONE` ↔ `notes/batches.md` · 批次 20261022-1950
-- 入口文档只留指针：`AGENTS.md` / `HANDOFF.md` 的机制复述由 `tools/audit-docs.mjs` 防漂 · 批次 20261022-1950
+- 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`；`audit-ids` 核对 `DONE` ↔ `notes/batches.md`，`tools/audit-docs.mjs` 防入口文档复述机制 · 批次 1950
 - continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致 · 批次 20261022-2014
-- 任务分层（大任务）：`doing/plan-<名>.md`（里程碑 → 阶段，**阶段 = 一批**）+ 队列头 `> 计划：` 绑定；每批做完自动取下一阶段，**完成到里程碑硬停**等验收；最后里程碑没写 `- 确认：已验收` 不收尾（细则 `notes/plan.md`）· 批次 20261022-2338、20261023-0022
+- 任务分层（**仅 >16 条的任务**）：`doing/plan-<会话ID>.md` 与队列**同名配对**（文件名即绑定，不写 `> 计划：`），里程碑 ≥2 阶段；每批做完自动取下一阶段、**完成到里程碑硬停**，最后里程碑没确认不收尾（细则 `notes/plan.md`）· 批次 2338、0022、20261023-0744
+- 收尾把队列**归档**到 `logs/doing-archive/<会话ID>-<时间戳>.md`（不再 `rm`）；并行任务走 `npm run continue:worktree`（独立树 + 分支推远程，合并由人定）· 批次 20261023-0744
 
 **坑 / 注意**
 
 - 「派生数字不要手抄」与「同一事实写在两处就查两处」是这一段的母题，见 `TIPS.md#工程与基础设施`
 - 钩子写完 stdout 立刻 `exit` 会截断长内容（零报错）：一律走 `writeFd`（`fs.writeSync`），见同节 TIPS
-- 计划机制的失效方式几乎都是**静默**的（绑定行位置/反引号/门禁各写一份规则）：改它之前先跑 `npm run audit:docs` 的"计划"那一行
+- 计划机制的失效几乎都是**静默**的（绑定/反引号/门禁各写一份）：改它前先看 `npm run audit:docs` 的"计划"行；判红过严会卡住别人正在跑的批次，粒度类规则走 hints
 - 文档体量的"行数"会被超长表格绕过（TIPS 曾 499 行 / 190KB）：大表格迁 `notes/`，门禁同时看字节
 - `.continue/` 的任务机制（队列 / 钩子 / 门禁）见 `README.md`；`HANDOFF.md` 只留本项目的约定与命令
 
