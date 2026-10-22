@@ -15492,6 +15492,9 @@ class App {
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
     this.scoreboardHud.update(this.scoreboardState.sidebarView());
+    // 引导卡（小游戏6 收尾）：打开背包/配方书/暂停页时让位。
+    // 那些面板的遮罩是半透明的，卡片在下面透出来既乱又容易被误点。
+    this.tutorialCard.setSuppressed(this.uiOpen || this.settingsScreen.isOpen);
     // 地图探索（批次 196）：跨区块才扫一遍背包
     this.updateMapExploration();
     this.chat.update();

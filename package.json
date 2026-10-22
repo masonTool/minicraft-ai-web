@@ -203,6 +203,7 @@
     "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs",
     "test:screenshot": "node tools/screenshot-test.mjs",
     "guard": "node tools/console-guard.mjs",
+    "minigame:perf": "node tools/minigame-perf.mjs",
     "test:guard": "node tools/console-guard-test.mjs",
     "check:browser": "node tools/browser-check.mjs",
     "test:browser-check": "node tools/browser-check-test.mjs",

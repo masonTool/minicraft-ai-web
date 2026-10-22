@@ -55,6 +55,8 @@ export class TutorialCard {
 
   private collapsed = false;
   private visible = false;
+  /** 面板打开时临时让位（背包/配方书的遮罩是半透明的，底下透出卡片会很乱） */
+  private suppressed = false;
 
   constructor(
     host: HTMLElement,
@@ -168,6 +170,18 @@ export class TutorialCard {
     this.card.classList.toggle('hidden', value);
     this.badge.classList.toggle('hidden', !value);
     if (!value) this.badge.blur();
+  }
+
+  /**
+   * 让位：打开任何面板（背包 / 配方书 / 暂停页）时收起整张卡。
+   *
+   * ⚠️ 与 `hide()` 分开：`hide()` 是"这一局不再显示"，让位只是"现在遮一下"，
+   * 关掉面板后**要自己回来**——所以这里不动 `visible`。
+   */
+  setSuppressed(value: boolean): void {
+    if (this.suppressed === value) return;
+    this.suppressed = value;
+    this.root.classList.toggle('suppressed', value);
   }
 
   /** 「不再提示」：先收起，再交给主程序（写存档 / 换下一条） */

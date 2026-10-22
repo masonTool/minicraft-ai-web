@@ -1138,6 +1138,8 @@
             改一处必须改另一处。 */
       .tutorial-root { pointer-events: auto; }
       .tutorial-root.hidden { display: none; }
+      /* 面板打开时让位：背包/配方书的遮罩是半透明的，底下透出卡片会很乱 */
+      .tutorial-root.suppressed { display: none; }
       .tutorial-card, .tutorial-badge {
         background: rgba(20, 20, 20, .9);
         border: 2px solid #4a4a4a; border-radius: 4px;

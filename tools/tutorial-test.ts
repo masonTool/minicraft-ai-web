@@ -341,6 +341,13 @@ console.log('\n存档仓与主程序接线（静态断言）');
     mainSrc.includes("this.reportTutorial({ kind: 'place', block: blockId, y })"),
   );
   check('进世界对账后显示卡片', mainSrc.includes('this.refreshTutorialCard();'));
+  // 小游戏6 收尾：面板打开时让位（背包/配方书的遮罩是半透明的，透出卡片很乱）
+  check(
+    '面板打开时引导卡让位',
+    mainSrc.includes('this.tutorialCard.setSuppressed(this.uiOpen || this.settingsScreen.isOpen)'),
+  );
+  const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check('让位有对应样式', htmlSrc.includes('.tutorial-root.suppressed'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
