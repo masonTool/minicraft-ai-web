@@ -195,7 +195,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { t, tp } from './core/i18n/I18n.ts';
+import { applyLanguageSetting, t, tp } from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -18246,6 +18246,10 @@ async function boot(): Promise<void> {
   // 诊断日志先开：启动期的错误（图集/Worker/WebGL）也要能被带出来
   diag.start();
   diag.event('app', 'boot', { href: location.href });
+  // 界面语言（多语言 P0-5）：**必须在建任何界面之前**定下来——文案在构建 DOM 时求值一次，
+  // 晚一步就会出现"菜单还是中文、设置里已经写着 English"。设置项是 `auto` 时按设备语言解析
+  // （`navigator.language`），所以俄语/德语手机上第一次打开就是对应语言（没表时回落英文）。
+  applyLanguageSetting(loadSettings().language);
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;
   // 批次 201：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）

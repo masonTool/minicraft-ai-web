@@ -18,16 +18,17 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
-// 界面语言（M8，批次 403）：表与当前语言都在这个纯模块里
+// 界面语言（M8，批次 403；多语言 P0-5 起多一个 `auto` = 跟随系统）：表与当前语言都在这个纯模块里
 import {
-  DEFAULT_LANGUAGE,
+  AUTO_LANGUAGE,
   LANGUAGES,
   LANGUAGE_NAMES,
-  isLanguage,
-  setLanguage,
+  applyLanguageSetting,
+  isLanguageSetting,
+  resolveLanguage,
   t,
   tp,
-  type Language,
+  type LanguageSetting,
 } from '../core/i18n/I18n.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { FOV_MAX, FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
@@ -285,11 +286,13 @@ export interface GameSettings {
   /** 设置格式版本（批次 271；见 `SETTINGS_VERSION` 的注释） */
   settingsVersion: number;
   /**
-   * 界面语言（M8，批次 403）：`zh` / `en`。
+   * 界面语言（M8，批次 403；多语言 P0-5 起是"语言或跟随系统"）：
+   * 具体语言码（`zh` / `en` / …），或 `auto`——首次启动按设备语言定，之后跟着设备走。
    * ⚠️ 切换后要**重开面板**才全部生效：文案是在构建 DOM 时写进去的，
    * 已经建好的节点不会自己重读语言（`applyLanguage()` 只覆盖挂了 ref 的那几处）。
+   * 存的是**选择**（可能是 `auto`），真正生效的语言由 `resolveLanguage()` 解析。
    */
-  language: Language;
+  language: LanguageSetting;
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
   /** 视野角度（度）：45~90，默认 60（见 `FOV_MIN` / `FOV_MAX`） */
@@ -425,7 +428,9 @@ export interface GameSettings {
 
 export const DEFAULT_SETTINGS: GameSettings = {
   settingsVersion: SETTINGS_VERSION,
-  language: DEFAULT_LANGUAGE,
+  // 多语言 P0-5：出厂默认**跟随系统**（发 Google Play 的口径）——
+  // 俄语手机上第一次打开就是俄语（没有俄语表时按回落链退到英文），不再一律中文。
+  language: AUTO_LANGUAGE,
   // 批次 539：PC 与手机同一策略——发热优先，默认视距直接定在 8。
   // 同一场景受控采样：12 → 1200 calls / 1.04M tris / WebGL 2757ms/6s；
   // 8 → 346 calls / 0.26M tris / WebGL 894ms/6s；帧率都保持 60。
@@ -522,8 +527,10 @@ export function loadSettings(): GameSettings {
         : parsed.touchStick;
     return {
       settingsVersion: SETTINGS_VERSION,
-      // 语言：只认 zh / en，写坏了回退默认（不做"从标签推断"——存档里的选择优先）
-      language: isLanguage(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
+      // 语言（多语言 P0-5）：认具体语言码或 `auto`；**老存档里的 `zh`/`en` 原样保留**——
+      // 那是玩家当时的选择（或旧版默认），不该因为换了默认值就把他的界面语言改掉。
+      // 只有"没有这个字段 / 写坏了"才回落到 `auto`（新装用户走跟随系统）。
+      language: isLanguageSetting(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
       viewDistance: clampNumber(parsed.viewDistance, 4, 16, DEFAULT_SETTINGS.viewDistance),
       fov: clampNumber(migratedFov, FOV_MIN, FOV_MAX, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
@@ -738,7 +745,8 @@ export class SettingsScreen {
    * 每次打开面板都对一次账——切完语言关掉再打开就能看到新文案。
    */
   applyLanguage(): void {
-    setLanguage(this.settings.language);
+    // 存的是**选择**（可能是 `auto`），生效的是解析后的语言（多语言 P0-5）
+    applyLanguageSetting(this.settings.language);
     for (const { element, key } of this.labelBindings) element.textContent = t(key);
   }
   /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
@@ -1180,16 +1188,25 @@ export class SettingsScreen {
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
     // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
     // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
+    // 选项 = "跟随系统" + **已经有文案表**的语言（多语言 P0-5）。
+    // `auto` 的标签要写出**这台设备上解析成什么**，否则玩家不知道"跟随系统"等于哪种语言。
+    const languageOptions: readonly LanguageSetting[] = [AUTO_LANGUAGE, ...LANGUAGES];
+    const languageLabels: Record<LanguageSetting, string> = {
+      [AUTO_LANGUAGE]: tp('settings.language.autoWith', {
+        language: LANGUAGE_NAMES[resolveLanguage(AUTO_LANGUAGE)],
+      }),
+      ...LANGUAGE_NAMES,
+    };
     this.makeDropdown(
       gameOptions,
       t('settings.language'),
-      LANGUAGES,
-      { ...LANGUAGE_NAMES },
+      languageOptions,
+      languageLabels,
       () => this.settings.language,
       (next) => {
         this.settings.language = next;
-        setLanguage(next);
         saveSettings(this.settings);
+        // `applyLanguage()` 内部走 `applyLanguageSetting()`：`auto` 会在这里解析成实际语言
         this.applyLanguage();
       },
     );

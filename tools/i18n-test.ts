@@ -17,16 +17,20 @@ import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/c
 import { readFileSync, readdirSync } from 'node:fs';
 
 import {
+  AUTO_LANGUAGE,
   DEFAULT_LANGUAGE,
   LANGUAGES,
   LANGUAGE_NAMES,
   TABLES,
   allKeys,
+  applyLanguageSetting,
   detectLanguage,
   getLanguage,
   isLanguage,
+  isLanguageSetting,
   keyParity,
   resetLanguageForTest,
+  resolveLanguage,
   setLanguage,
   t,
   tableOf,
@@ -798,6 +802,36 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
   check('俄语同理（回落链不看具体是哪种语言）', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
   check('一路回落到头就返回键名', t('no.such.key', 'de') === 'no.such.key', t('no.such.key', 'de'));
   check('有表时不会串味', t('pause.title', 'zh') === '游戏已暂停' && t('pause.title', 'en') === 'Game Paused');
+}
+
+console.log('\n[设置项：跟随系统（多语言 P0-5）]');
+{
+  /**
+   * `auto` 不是一种语言：它没有文案表，也不该进 `TABLES`，只存在于**设置项**里。
+   * 所以这里验三件事：合法值判定、按设备标签解析、以及"具体语言不会被设备标签覆盖"。
+   * `tag` 一律显式传入——否则结果会跟着跑测试那台机器的系统语言变。
+   */
+  check('auto 是合法的设置值', isLanguageSetting(AUTO_LANGUAGE) && AUTO_LANGUAGE === 'auto');
+  check('具体语言码也是合法设置值', isLanguageSetting('zh') && isLanguageSetting('de') && isLanguageSetting('pt'));
+  check('写坏了不算（会回落到 auto）', !isLanguageSetting('xx') && !isLanguageSetting(undefined) && !isLanguageSetting(42));
+
+  check('auto 按设备标签解析', resolveLanguage('auto', 'de-AT') === 'de');
+  check('auto + 认不出的标签 → 英文', resolveLanguage('auto', 'ja-JP') === 'en');
+  check('auto + 没有标签 → 英文', resolveLanguage('auto', undefined) === 'en');
+  check('具体语言不会被设备标签覆盖', resolveLanguage('zh', 'de-DE') === 'zh');
+
+  resetLanguageForTest();
+  check(
+    'applyLanguageSetting 会真的切过去（auto）',
+    applyLanguageSetting('auto', 'pt-BR') === 'pt' && getLanguage() === 'pt',
+    getLanguage(),
+  );
+  check(
+    'applyLanguageSetting 传具体语言也生效',
+    applyLanguageSetting('zh', 'de-DE') === 'zh' && getLanguage() === 'zh',
+    getLanguage(),
+  );
+  resetLanguageForTest();
 }
 
 console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');

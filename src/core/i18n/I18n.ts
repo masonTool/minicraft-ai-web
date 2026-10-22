@@ -125,6 +125,52 @@ export function detectLanguage(tag: string | undefined | null): Language {
   return detectLocale(tag);
 }
 
+/** 设置里"跟随系统"的取值（多语言 P0-5） */
+export const AUTO_LANGUAGE = 'auto';
+
+/**
+ * 设置项里存的**语言选择**：具体语言，或 `auto`（跟随系统）。
+ *
+ * 为什么把它和 `Language` 分开：`auto` 不是一种语言，它没有文案表、也不该进 `TABLES`。
+ * 混进 `Language` 会让 `t(key, 'auto')` 这种调用在类型上合法却永远查不到东西。
+ */
+export type LanguageSetting = Language | typeof AUTO_LANGUAGE;
+
+export function isLanguageSetting(value: unknown): value is LanguageSetting {
+  return value === AUTO_LANGUAGE || isLanguage(value);
+}
+
+/**
+ * 设备语言标签。
+ * Node / Worker 里没有 `navigator`，返回 `undefined`（由 `detectLanguage` 兜底到英文）。
+ */
+export function deviceLanguage(): string | undefined {
+  if (typeof navigator === 'undefined') return undefined;
+  const tag = (navigator as { language?: unknown }).language;
+  return typeof tag === 'string' ? tag : undefined;
+}
+
+/**
+ * 把设置项解析成**真正生效**的语言：`auto` → 按设备标签推断，其余原样返回。
+ *
+ * `tag` 可显式传入（断言用）——否则测试结果会跟着跑测试那台机器的系统语言变。
+ */
+export function resolveLanguage(setting: LanguageSetting, tag: string | undefined = deviceLanguage()): Language {
+  return setting === AUTO_LANGUAGE ? detectLanguage(tag) : setting;
+}
+
+/**
+ * 解析 + 生效，返回真正生效的语言。
+ *
+ * 为什么要一个函数收口：`boot()` 与设置页下拉**必须**走同一条路，
+ * 否则"启动时跟随系统、设置里选具体语言"会各写一遍解析逻辑，迟早不一致。
+ */
+export function applyLanguageSetting(setting: LanguageSetting, tag: string | undefined = deviceLanguage()): Language {
+  const resolved = resolveLanguage(setting, tag);
+  setLanguage(resolved);
+  return resolved;
+}
+
 /**
  * 当前语言。
  *

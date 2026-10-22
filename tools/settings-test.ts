@@ -202,6 +202,39 @@ console.log('\n[设置的容错]');
   check('脏值不当成关闭（只认严格的 false）', loadSettings().fastEat === true);
 }
 
+// ---------------------------------------------------------------- 2b. 界面语言（多语言 P0-5）
+
+console.log('\n[语言设置：跟随系统与老存档]');
+{
+  /**
+   * 这一节的取舍：**新装用户跟随系统，老用户的选择不动**。
+   * 出厂默认从 `zh` 改成 `auto`，但老存档里已经写着 `zh`/`en`——那是玩家当时的选择，
+   * 不该因为换了默认值就把他界面改成另一种语言。
+   */
+  check('出厂默认跟随系统', DEFAULT_SETTINGS.language === 'auto', String(DEFAULT_SETTINGS.language));
+
+  const storage = new MemoryStorage();
+  useStorage(storage);
+  const write = (patch: Record<string, unknown>): void => {
+    storage.setItem(KEY, JSON.stringify({ settingsVersion: SETTINGS_VERSION, ...patch }));
+  };
+
+  write({ language: 'en' });
+  check('老存档里选过的 en 原样保留（不被新默认改掉）', loadSettings().language === 'en', String(loadSettings().language));
+  write({ language: 'zh' });
+  check('老存档里选过的 zh 原样保留', loadSettings().language === 'zh');
+  write({ language: 'auto' });
+  check('auto 能存能读', loadSettings().language === 'auto');
+  write({});
+  check('老存档没有这个字段 → 跟随系统', loadSettings().language === 'auto');
+  write({ language: 'klingon' });
+  check('写坏的语言回落到跟随系统', loadSettings().language === 'auto');
+  write({ language: 'de' });
+  check('德语（还没有文案表）也算合法选择，不会被重置', loadSettings().language === 'de');
+  write({ language: 42 });
+  check('不是字符串也回落到跟随系统', loadSettings().language === 'auto');
+}
+
 // ---------------------------------------------------------------- 3. 往返
 
 console.log('\n[保存与读取]');
