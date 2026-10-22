@@ -27,6 +27,7 @@
 | 动手前想避开已经踩过的坑（渲染/光照/地形/界面/生物 AI） | [`.continue/EXPERIENCE.md`](./.continue/EXPERIENCE.md)（**按关键词 grep，别整份读**） |
 | **要改任意“操作型工作站”（熔炉/酿造台/营火/锻造台…）** | [`.continue/notes/stations.md`](./.continue/notes/stations.md)（通用契约 + 站台矩阵 + 接入 checklist） |
 | 想知道"这一项和原版哪里不一样" | [`.continue/TASKS.md`](./.continue/TASKS.md) 文末的差异台账（脚本生成） |
+| 想把本仓库"任务表 + 门禁 + 台账"这套机制搬到别的项目 | [`docs/FRAMEWORK.md`](./docs/FRAMEWORK.md)（可迁移版，已剥离本项目特有信息） |
 
 ## 3. 命令：内循环用快的，提交前用全的
 
