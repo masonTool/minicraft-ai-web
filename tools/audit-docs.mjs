@@ -23,6 +23,12 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+/**
+ * 复用钩子的 `parsePlan`，**不在这里另写一份解析**。
+ * 两份解析迟早不同步，那时的症状是"计划能写成、门禁也绿、钩子却读不懂"——
+ * 这一层没有报错，只有机制悄悄不生效（`lib.mjs` 是框架文件，字段以它为准）。
+ */
+import { parsePlan } from '../.continue/hooks/lib.mjs';
 
 const printOnly = process.argv.includes('--print');
 
@@ -38,6 +44,10 @@ const FILES = {
   done: new URL('../.continue/DONE.md', import.meta.url),
   /** 框架的上限表（唯一来源）。重装框架会覆盖它，所以这里要盯一眼。 */
   docLimits: new URL('../.continue/hooks/lib.mjs', import.meta.url),
+  /** 批次索引：计划阶段行挂的批次号要与它交叉核对。 */
+  batches: new URL('../.continue/notes/batches.md', import.meta.url),
+  /** 注入协议的生成处：计划机制有没有被重装覆盖，只能看这个文件的文本。 */
+  queueInit: new URL('../.continue/hooks/queue-init.mjs', import.meta.url),
 };
 
 /**
@@ -72,6 +82,15 @@ const LIMITS = {
    * `DONE-<年>.md` 并在文首留索引，而不是继续往一个文件里堆。
    */
   archiveBytes: 1536 * 1024,
+  /**
+   * 计划文件（`doing/plan-*.md`）的上限：与单份队列同口径（500 行 / 60KB）。
+   *
+   * 为什么不给更多：计划是"阶段清单"，一个阶段一行，500 行就是几百个阶段——
+   * 真到那个量级说明该拆成几份计划（每份一个里程碑族），而不是继续加长。
+   * 上限定在这里而不是更宽，是为了把它挡在"变成第二个什么都往里写的文档"之前。
+   */
+  planLines: 500,
+  planBytes: 60 * 1024,
 };
 
 const MARK_START = '<!-- docs-archive:start -->';
@@ -270,6 +289,141 @@ for (const [name, url] of [
     console.log(`  · ${name} 仍写着"批次号 = 提交总数"——删掉，改成指向 README 的指针`);
   }
   if (bad.length > 0) failed = true;
+}
+
+// ---- 计划的结构与引用完整性（doing/plan-*.md）
+/**
+ * 计划机制的六条门禁。母题还是这一条：**写了两处就一定要查两处**。
+ *
+ *   · 阶段行挂着批次号（第二处：`notes/batches.md` / `DONE.md`）；
+ *   · 队列头部挂着计划名与阶段号（第二处：计划文件本身）；
+ *   · 注入文本挂着机制本身（第二处：`queue-init.mjs`，而它是**重装会被覆盖**的框架文件）。
+ *
+ * 任何一处漂了，机制都**静默退化**：计划照样能写、门禁别的项照样绿、
+ * 钩子也不再报错，只是永远不再往下取批次。这类"看起来正常但完全不生效"
+ * 才是要拦的东西——加计划的目的是防跑偏，不是给自己加一层装饰。
+ */
+{
+  const problems = [];
+  const planNameRe = /^plan-[A-Za-z0-9._-]+\.md$/;
+
+  let names = [];
+  try {
+    names = readdirSync(FILES.queuesDir).filter((name) => name.endsWith('.md'));
+  } catch {
+    names = [];
+  }
+  const planNames = names.filter((name) => planNameRe.test(name));
+  const queueNames = names.filter((name) => !planNameRe.test(name));
+
+  const readIfAny = (url) => {
+    try {
+      return read(url);
+    } catch {
+      return '';
+    }
+  };
+
+  /** 已知批次号：批次索引 + DONE（含归档）+ 各队列头部的 `> 批次：`。 */
+  const knownBatches = new Set();
+  for (const url of [FILES.batches, FILES.done, FILES.archive]) {
+    for (const m of readIfAny(url).matchAll(/\b(\d{8}-\d{4})\b/g)) knownBatches.add(m[1]);
+  }
+  for (const name of queueNames) {
+    const text = readIfAny(new URL(name, FILES.queuesDir));
+    for (const m of text.matchAll(/\b(\d{8}-\d{4})\b/g)) knownBatches.add(m[1]);
+  }
+
+  const plans = new Map();
+  for (const name of planNames) {
+    const url = new URL(name, FILES.queuesDir);
+    const text = readIfAny(url);
+    const plan = parsePlan(text);
+    plans.set(name, plan);
+
+    const n = lineCount(text);
+    if (n > LIMITS.planLines) problems.push(`${name} ${n} 行 > 上限 ${LIMITS.planLines} 行`);
+    let bytes = 0;
+    try {
+      bytes = statSync(url).size;
+    } catch {
+      bytes = 0;
+    }
+    if (bytes > LIMITS.planBytes) {
+      problems.push(`${name} ${(bytes / 1024).toFixed(0)}KB > 上限 ${(LIMITS.planBytes / 1024).toFixed(0)}KB`);
+    }
+
+    // 阶段必须归在自己小节对应的里程碑下，否则"前缀比较"判的就是另一个里程碑
+    const order = [];
+    for (const ms of plan.milestones) {
+      for (const stage of ms.stages) {
+        if (stage.ms !== ms.id) {
+          problems.push(`${name} 阶段 ${stage.id} 写在了「${ms.id}」小节里（编号与所属小节不一致）`);
+        }
+      }
+      if (ms.stages.length > 0) order.push(ms.id);
+    }
+    const seen = new Set();
+    for (const id of order) {
+      if (seen.has(id)) {
+        problems.push(`${name} 里程碑 ${id} 的阶段被拆成不连续的两段（前缀比较失真，跨里程碑判定会跟着错）`);
+      }
+      seen.add(id);
+    }
+
+    for (const stage of plan.stages) {
+      if (stage.batch && !knownBatches.has(stage.batch)) {
+        problems.push(
+          `${name} 阶段 ${stage.id} 挂着批次 ${stage.batch}，但 .continue/notes/batches.md / DONE.md / doing/ 里都没有它`,
+        );
+      }
+      if (stage.kind === 'done' && !stage.batch) {
+        problems.push(`${name} 阶段 ${stage.id} 已勾 [x] 却没挂批次号（回溯链在这里断了）`);
+      }
+    }
+
+    const doingCount = plan.stages.filter((stage) => stage.kind === 'doing').length;
+    if (doingCount > 1) {
+      problems.push(`${name} 有 ${doingCount} 条 [~]（计划里同一时间只能有一条，它就是游标）`);
+    }
+  }
+
+  // 队列头部的 `> 计划：x.md · 阶段 MSa.b` 必须指得着
+  for (const name of queueNames) {
+    const text = readIfAny(new URL(name, FILES.queuesDir));
+    const head = text.split(/\r?\n/).slice(0, 5).join('\n');
+    const m = /^>\s*计划\s*[:：]\s*([A-Za-z0-9._-]+\.md)(?:\s*·\s*阶段\s*(MS\d+\.\d+))?\s*$/m.exec(head);
+    if (!m) continue;
+    const target = plans.get(m[1]);
+    if (!target) {
+      problems.push(
+        `${name} 头部写着 \`> 计划：${m[1]}\`，但 doing/ 里没有这个文件` +
+          '——写错一个字就会静默退化成普通队列，机制一次都不触发',
+      );
+      continue;
+    }
+    if (m[2] && !target.stages.some((stage) => stage.id === m[2])) {
+      problems.push(`${name} 头部写着「阶段 ${m[2]}」，但 ${m[1]} 里没有这一条`);
+    }
+  }
+
+  // 注入文本里必须还有计划段：重装框架会整份覆盖 queue-init.mjs
+  const initText = readIfAny(FILES.queueInit);
+  if (initText) {
+    for (const needle of ['plan-<名字>.md', '完成到里程碑就停']) {
+      if (!initText.includes(needle)) {
+        problems.push(`queue-init.mjs 的注入里找不到「${needle}」——重装把它覆盖回旧版了？`);
+      }
+    }
+  }
+
+  console.log(
+    `${problems.length > 0 ? '✗' : '✓'} 计划（doing/plan-*.md）：${planNames.length} 份 · ` +
+      `${LIMITS.planLines} 行 / ${(LIMITS.planBytes / 1024).toFixed(0)}KB 上限 · ` +
+      '阶段批次号、队列引用、注入文本交叉核对',
+  );
+  for (const line of problems) console.log(`  · ${line}`);
+  if (problems.length > 0) failed = true;
 }
 
 if (failed) {
