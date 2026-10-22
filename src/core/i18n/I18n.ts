@@ -296,7 +296,43 @@ function nonEmpty(table: Readonly<Record<string, string>>, key: string): string 
  * 那会让"漏翻"变成"看起来只是语言不对"，而不是一眼可见的键名。
  */
 export function t(key: string, language: Language = current): string {
-  return nonEmpty(tableOf(language), key) ?? nonEmpty(tableOf(FALLBACK_LOCALE), key) ?? key;
+  const text = nonEmpty(tableOf(language), key) ?? nonEmpty(tableOf(FALLBACK_LOCALE), key) ?? key;
+  return pseudo ? pseudoText(text) : text;
+}
+
+// ---------------------------------------------------------------- 伪语言（P0-8）
+
+/**
+ * 伪语言开关（多语言 P0-8）。
+ *
+ * 用途：`?lang=xa` 打开之后，**所有走过 `t()` 的文字**都会被 `⟦…⟧` 包住。
+ * 于是"屏幕上没被包住的文字"就是还没接 i18n 的硬编码文案 —— 一眼一个准，
+ * 比逐个文件 grep 有效得多（P3 就是照这个清单干活）。
+ *
+ * 为什么用"包括号"而不是"把字母换成带音标的变体"：
+ *   1. 中文文案在伪语言下也要能一眼认出来，而音标只对拉丁字母有意义；
+ *   2. 括号不吃字宽，不会把正常界面撑坏（想验变长应该用德语真表，不是伪语言）。
+ */
+let pseudo = false;
+
+export function setPseudoLocale(enabled: boolean): void {
+  pseudo = enabled;
+}
+
+export function isPseudoLocale(): boolean {
+  return pseudo;
+}
+
+/** `?lang=xa` / `?lang=en-XA` 都算伪语言（`en-XA` 是业界惯用的假 locale 名） */
+export function isPseudoLocaleTag(tag: string | undefined | null): boolean {
+  if (typeof tag !== 'string') return false;
+  const lower = tag.trim().toLowerCase();
+  return lower === 'xa' || lower === 'en-xa';
+}
+
+/** 伪语言的形状：两头加括号，中间原样 */
+export function pseudoText(text: string): string {
+  return `⟦${text}⟧`;
 }
 
 /**

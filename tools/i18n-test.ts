@@ -28,8 +28,11 @@ import {
   getLanguage,
   isLanguage,
   isLanguageSetting,
+  isPseudoLocale,
+  isPseudoLocaleTag,
   keyParity,
   loadLocale,
+  setPseudoLocale,
   pluralCategory,
   registerLocaleLoader,
   resetLanguageForTest,
@@ -959,6 +962,31 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
     enFilesAll.includes('plural.ts') &&
       readFileSync(new URL('plural.ts', enDir), 'utf8').includes('satisfies PluralTable'),
   );
+}
+
+console.log('\n[伪语言（多语言 P0-8）]');
+{
+  /**
+   * 伪语言的用途是**照妖**：`?lang=xa` 下所有走过 `t()` 的文字会被 `⟦⟧` 包住，
+   * 屏幕上没被包住的就是还没接 i18n 的硬编码文案。这里只验机制，真正的排查靠肉眼。
+   */
+  check('认 xa / en-XA 两种写法', isPseudoLocaleTag('xa') && isPseudoLocaleTag('en-XA') && isPseudoLocaleTag('EN-xa'));
+  check('真语言不是伪语言', !isPseudoLocaleTag('de') && !isPseudoLocaleTag(undefined) && !isPseudoLocaleTag(''));
+  check('默认是关的', !isPseudoLocale());
+
+  setLanguage('en');
+  setPseudoLocale(true);
+  check('打开后文案被包起来', t('pause.title') === '⟦Game Paused⟧', t('pause.title'));
+  check(
+    '占位符照样替换（包在替换之后，不影响 {name}）',
+    tp('station.craftableSummary', { station: 'X', available: 1, total: 2 }).startsWith('⟦X · craftable 1 / 2'),
+    tp('station.craftableSummary', { station: 'X', available: 1, total: 2 }),
+  );
+  check('查不到的键也包起来（一眼看出是漏的）', t('no.such.key') === '⟦no.such.key⟧', t('no.such.key'));
+  setPseudoLocale(false);
+  check('关掉就恢复原样', t('pause.title') === 'Game Paused', t('pause.title'));
+  check('isPseudoLocale 跟着开关走', !isPseudoLocale());
+  resetLanguageForTest();
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

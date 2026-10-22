@@ -31,6 +31,10 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
   '未知的游戏规则：{key}': 'Unknown game rule: {key}',
   '{key} 只能是 true / false': '{key} must be true or false',
   '{key} 已设置为 {value}': '{key} set to {value}',
+  // 多语言 P0-8 审计补漏：`Commands.ts:572` 一直在用这条，但表里没有——
+  // 中文模式下看不出问题（键就是中文原文），英文模式下会整句漏出中文
+  '{key} 已设置为 {value}（超出范围，已夹到 {clamped}）':
+    '{key} set to {value} (out of range, clamped to {clamped})',
   '{key} 需要一个数字': '{key} needs a number',
   // ---- /effect ----
   '已清除全部状态效果': 'Cleared all status effects',
