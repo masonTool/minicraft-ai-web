@@ -46,6 +46,13 @@ import {
   validateTemplate,
   type BuildTemplate,
 } from '../src/buildtools/templates.ts';
+import {
+  BUILD_BUTTON_SIZE,
+  buildToolbarBox,
+  buildToolbarFits,
+  buildToolbarOverlapsPauseBar,
+  buildToolbarSize,
+} from '../src/ui/buildToolbarLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -810,6 +817,38 @@ console.log('\n复制一座小房并镜像（假世界）');
   equal('内部仍然中空', filledInside, 0);
 }
 
+// ------------------------------------------------------------------ 工具条几何
+
+console.log('\n建造工具条几何（横屏不遮挡）');
+{
+  const size = buildToolbarSize();
+  equal('宽 = 2×44 + 4', size.width, 92);
+  equal('高 = 5×44 + 4×4', size.height, 236);
+  check('按钮热区不小于 44px（平台下限）', BUILD_BUTTON_SIZE >= 44);
+
+  const cases: Array<[string, number, number]> = [
+    ['844×390 主力横屏', 844, 390],
+    ['640×360 小横屏', 640, 360],
+    ['932×430 横屏', 932, 430],
+    ['430×932 竖屏', 430, 932],
+  ];
+  for (const [label, width, height] of cases) {
+    const box = buildToolbarBox(width, height);
+    check(`${label}：装得下`, buildToolbarFits(height));
+    check(`${label}：不压顶部暂停三键`, !buildToolbarOverlapsPauseBar(box, width), `左边 ${box.left}`);
+    check(`${label}：上下不出界`, box.top >= 0 && box.bottom <= height);
+  }
+
+  const main = buildToolbarBox(844, 390);
+  equal('844×390 左边界落在 744', main.left, 744);
+  equal('844×390 顶部 77（垂直居中）', main.top, 77);
+  equal('844×390 底部 313（在快捷栏之上）', main.bottom, 313);
+
+  check('240 高的屏幕装不下（应保持折叠）', !buildToolbarFits(240));
+  const tiny = buildToolbarBox(320, 240);
+  check('极窄屏也不压暂停键', !buildToolbarOverlapsPauseBar(tiny, 320));
+}
+
 console.log('\n主程序接线（静态断言）');
 {
   // 守的是"纯逻辑写好了但没接上"：栈本身 48 条全绿也可能一次都没被调用过
@@ -847,6 +886,13 @@ console.log('\n主程序接线（静态断言）');
   check('模板转成格子走 templateCells', mainSrc.includes('templateCells(template, landing)'));
   check('模板与粘贴共用 startPasteCells', mainSrc.includes('this.startPasteCells(templateCells('));
   check('放不下时按原因提示', mainSrc.includes("t(`buildtools.template.${check.reason"));
+
+  // 创造5：工具条与输入互斥
+  check('工具条接进主程序', mainSrc.includes('new BuildToolbar(document.body'));
+  check('建造模式下左键改发一次性请求', mainSrc.includes('if (this.buildMode) this.buildRequest = true;'));
+  check('建造模式下不攻击', mainSrc.includes('if (this.buildMode) return;'));
+  check('建造模式下左键改成选区角', mainSrc.includes('this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z })'));
+  check('工具条按创造模式显隐', mainSrc.includes('this.buildToolbar.setAvailable(this.isCreative)'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

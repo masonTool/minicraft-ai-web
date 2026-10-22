@@ -1190,6 +1190,56 @@
         .tutorial-title { font-size: 12px; }
       }
 
+      /* ---------------- 建造工具条（创造5，批次 20261022-1954） ----------------
+         横屏右侧双列竖排：44px 是平台最小手势尺寸；双列 92px 宽、5 行 236px 高。
+         844×390 下垂直居中排开（top≈77），不压顶部暂停三键（中心 422px），
+         也不压底部快捷栏。折叠时只剩总开关一列。 */
+      .build-toolbar {
+        position: fixed;
+        right: calc(8px + env(safe-area-inset-right, 0px));
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 9;
+        display: grid;
+        grid-template-columns: repeat(2, 44px);
+        gap: 4px;
+        pointer-events: auto;
+      }
+      .build-toolbar.hidden { display: none; }
+      .build-toolbar.collapsed { grid-template-columns: 44px; }
+      .build-toolbar.collapsed .build-tool.extra { display: none; }
+
+      .build-tool {
+        width: 44px; height: 44px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 0;
+        font: inherit;
+        background: rgba(20, 20, 20, .78);
+        border: 2px solid #4a4a4a;
+        border-radius: 4px;
+        color: #fff;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .build-tool canvas { width: 28px; height: 28px; image-rendering: pixelated; }
+      .build-glyph { font-size: 22px; line-height: 1; }
+      .build-tool:active { background: rgba(70, 70, 70, .9); }
+      .build-tool.active { border-color: #ffd75e; }
+      .build-tool:disabled { opacity: .35; }
+
+      /* 模板弹层挂在工具条左侧，不额外占右侧宽度 */
+      .build-templates {
+        position: absolute;
+        right: calc(100% + 8px);
+        top: 0;
+        display: flex; flex-direction: column; gap: 4px;
+        padding: 4px;
+        background: rgba(20, 20, 20, .9);
+        border: 2px solid #4a4a4a;
+        border-radius: 4px;
+      }
+      .build-templates.hidden { display: none; }
+
       /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
          与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */
       .command-block-editor {

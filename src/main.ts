@@ -700,6 +700,7 @@ import {
 } from './buildtools/Clipboard.ts';
 // 创造4：内置建筑模板
 import { checkTemplatePlacement, templateById, templateCells, type BuildTemplate } from './buildtools/templates.ts';
+import { BuildToolbar } from './ui/BuildToolbar.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -1632,6 +1633,17 @@ class App {
   private activePaste: PasteRunner | null = null;
   /** 创造3：这次粘贴攒下的撤销记录（与填充同一条：超过上限整次不记） */
   private pasteUndoBuffer: BlockEdit[] | null = null;
+  /**
+   * 建造模式（创造5）：激活后左键改为"点一个选区角"，不再破坏方块。
+   *
+   * 这是工具条与原有操作之间**唯一的耦合点**：只影响左键语义，
+   * 右键放置、移动、跳跃、界面全部照旧。
+   */
+  private buildMode = false;
+  /** 鼠标左键在建造模式下的一次性请求（按下沿；按住不会连续加角） */
+  private buildRequest = false;
+  /** 建造工具条（右侧双列竖排；折叠时只剩总开关） */
+  private readonly buildToolbar: BuildToolbar;
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -2106,6 +2118,52 @@ class App {
         },
       },
     );
+
+    // 建造工具条（创造5）：挂 <body>，与其它面板同一套层叠口径（z-index 9，低于背包 10）。
+    // 它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
+    this.buildToolbar = new BuildToolbar(document.body, atlas, {
+      onToggleMode: (active) => {
+        this.buildMode = active;
+        // 退出建造模式时把没点完的第一个角清掉，避免下次进来"莫名其妙已经选了一半"
+        if (!active) this.clearSelection();
+        this.refreshBuildToolbar();
+      },
+      onSelect: () => {
+        this.clearSelection();
+        this.hudToast.show(t('buildtools.tool.selectHint'));
+        this.refreshBuildToolbar();
+      },
+      onFill: () => {
+        const blockId = this.selectedBlock;
+        if (blockId === undefined) {
+          this.hudToast.show(t('buildtools.fill.noBlock'));
+          return;
+        }
+        this.startFill(blockId);
+        this.refreshBuildToolbar();
+      },
+      onCopy: () => {
+        this.copySelection();
+        this.refreshBuildToolbar();
+      },
+      onPaste: (mirror) => {
+        this.pasteClipboard(mirror);
+        this.refreshBuildToolbar();
+      },
+      onUndo: () => {
+        this.undoLast();
+        this.refreshBuildToolbar();
+      },
+      onRedo: () => {
+        this.redoLast();
+        this.refreshBuildToolbar();
+      },
+      onTemplate: (templateId) => {
+        this.placeTemplate(templateId);
+        this.refreshBuildToolbar();
+      },
+    });
+    this.refreshBuildToolbar();
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
     this.commandBlockEditor.onSave = (command) => {
@@ -4681,7 +4739,11 @@ class App {
             this.pickBlock();
             return;
           }
-          if (e.button === 0) this.leftDown = true;
+          if (e.button === 0) {
+            // 建造模式（创造5）：左键只点一个选区角，不进入"按住破坏"
+            if (this.buildMode) this.buildRequest = true;
+            else this.leftDown = true;
+          }
           if (e.button === 2) this.rightDown = true;
         },
         { signal: this.listeners.signal },
@@ -7564,6 +7626,8 @@ class App {
   private updateAttacking(dt: number): void {
     // 旁观模式（批次 491）：不能攻击（连挥空都不该有）
     if (!canInteract(this.gameMode)) return;
+    // 建造模式（创造5）：左键改成选区，不攻击（`tapAttackRequest` 留给 `updateBreaking` 消费）
+    if (this.buildMode) return;
     // 批次 271：只要这一帧瞄着生物，就不许去挖方块——包括**攻击冷却期间**。
     // 原来这一行是无条件 false，冷却的 0.5 秒里 `updateBreaking` 会拿方块目标继续挖，
     // 手机上按住一只猪就会把脚下的地挖穿。
@@ -7707,6 +7771,23 @@ class App {
     if (!canInteract(this.gameMode)) return;
     // 冒险模式（批次 549）：能打怪、能交互，但不能破坏方块
     if (!canBreakBlocks(this.gameMode)) return;
+
+    // 建造模式（创造5）：左键 = 点一个选区角；**按住什么都不做**（避免误拆）。
+    // 放在 `suppressBreaking` 判断之前：上一帧攻击留下的标志不该让选区失灵。
+    if (this.buildMode) {
+      if ((this.buildRequest || this.tapAttackRequest) && this.hit && this.placeCooldown <= 0) {
+        this.placeCooldown = PLACE_COOLDOWN;
+        this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z });
+        this.refreshBuildToolbar();
+      }
+      this.buildRequest = false;
+      this.tapAttackRequest = false;
+      this.breakingKey = '';
+      this.breakProgress = 0;
+      this.digSoundTimer = 0;
+      this.suppressBreaking = false;
+      return;
+    }
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -9202,6 +9283,13 @@ class App {
 
   private cancelPaste(): void {
     this.activePaste?.cancel();
+  }
+
+  /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
+  private refreshBuildToolbar(): void {
+    this.buildToolbar.setAvailable(this.isCreative);
+    this.buildToolbar.setUndoState(this.undoStack.canUndo, this.undoStack.canRedo);
+    this.buildToolbar.setSelectionArmed(this.selectionStart !== null);
   }
 
   // ---------------------------------------------------------------- 创造工具（创造4）
@@ -11486,6 +11574,31 @@ class App {
     const runner = this.activePaste;
     while (this.activePaste) this.stepPasteRunner();
     return runner?.progress.written ?? 0;
+  }
+
+  /** 验收脚本用：开关建造模式（创造5） */
+  setBuildModeForTest(active: boolean): void {
+    this.buildMode = active;
+    this.buildToolbar.setMode(active);
+    if (!active) this.clearSelection();
+    this.refreshBuildToolbar();
+  }
+
+  /** 验收脚本用：工具条状态 */
+  get buildToolbarStateForTest(): {
+    mode: boolean;
+    available: boolean;
+    armed: boolean;
+    undo: number;
+    redo: number;
+  } {
+    return {
+      mode: this.buildToolbar.isOpen,
+      available: this.isCreative,
+      armed: this.selectionStart !== null,
+      undo: this.undoStack.undoCount,
+      redo: this.undoStack.redoCount,
+    };
   }
 
   /**
@@ -16740,6 +16853,8 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
+      // 创造5：工具条只对创造模式可见（内部判等，没变化时不动 DOM）
+      this.buildToolbar.setAvailable(this.isCreative);
       // 创造2/3：框选填充与粘贴每帧各推一批（512 格）；空闲时都是一次判空
       this.stepFillRunner();
       this.stepPasteRunner();
@@ -16865,6 +16980,7 @@ class App {
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
     this.tutorialCard.dispose();
+    this.buildToolbar.dispose();
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
