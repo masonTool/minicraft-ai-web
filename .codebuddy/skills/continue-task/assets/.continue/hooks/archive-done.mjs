@@ -18,7 +18,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { DOC_LIMITS, CONTINUE_DIR, PROJECT_ROOT } from './lib.mjs';
+import { DOC_BYTE_LIMITS, DOC_LIMITS, CONTINUE_DIR, PROJECT_ROOT } from './lib.mjs';
 import { join } from 'node:path';
 
 const DONE = join(CONTINUE_DIR, 'DONE.md');
@@ -33,10 +33,24 @@ if (!existsSync(DONE)) {
 const text = readFileSync(DONE, 'utf8');
 const countLines = (s) => (s.length === 0 ? 0 : s.replace(/\r?\n$/, '').split(/\r?\n/).length);
 
-const limit = DOC_LIMITS.DONE;
+/**
+ * **两条上限都要守**：`audit-docs` 查行数 + 字节两套，归档却只看行数。
+ *
+ * 这是个真实的坑：一批的完成说明写得很详细时，行数只涨了 50、字节涨了 13KB；
+ * 按行看"没超"，`audit-docs` 却因为 40KB 字节上限判红，而归档命令说"无需归档"——
+ * 只能手工剪贴，正是这个脚本当初要消灭的动作。
+ */
+const lineLimit = DOC_LIMITS.DONE;
+const byteLimit = DOC_BYTE_LIMITS.DONE;
+const bytes = (s) => Buffer.byteLength(s, 'utf8');
+const over = (s) => countLines(s) > lineLimit || bytes(s) > byteLimit;
+
 const before = countLines(text);
-if (before <= limit) {
-  console.log(`DONE.md 共 ${before} 行，未超过上限 ${limit} 行，无需归档。`);
+if (!over(text)) {
+  console.log(
+    `DONE.md 共 ${before} 行 / ${(bytes(text) / 1024).toFixed(0)}KB，` +
+      `未超过上限 ${lineLimit} 行 / ${(byteLimit / 1024).toFixed(0)}KB，无需归档。`,
+  );
   process.exit(0);
 }
 
@@ -47,7 +61,7 @@ const sections = parts; // 顺序：新 → 旧
 
 const keep = [...sections];
 const moved = [];
-while (keep.length > 0 && countLines(head + keep.join('')) > limit) {
+while (keep.length > 0 && over(head + keep.join(''))) {
   moved.push(keep.pop()); // 从最旧的开始搬
 }
 moved.reverse(); // 恢复成"新 → 旧"的顺序，写进归档时仍是这个顺序
@@ -57,8 +71,13 @@ if (moved.length === 0) {
   process.exit(0);
 }
 
-const after = countLines(head + keep.join(''));
-console.log(`${dryRun ? '[dry-run] ' : ''}DONE.md ${before} 行 → ${after} 行（上限 ${limit}），搬走 ${moved.length} 个批次：`);
+const afterText = head + keep.join('');
+const after = countLines(afterText);
+console.log(
+  `${dryRun ? '[dry-run] ' : ''}DONE.md ${before} 行 / ${(bytes(text) / 1024).toFixed(0)}KB → ` +
+    `${after} 行 / ${(bytes(afterText) / 1024).toFixed(0)}KB（上限 ${lineLimit} 行 / ` +
+    `${(byteLimit / 1024).toFixed(0)}KB），搬走 ${moved.length} 个批次：`,
+);
 for (const section of moved) {
   console.log(`  · ${section.split(/\r?\n/)[0].replace(/^## /, '')}`);
 }
