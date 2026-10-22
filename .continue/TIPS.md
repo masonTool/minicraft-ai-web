@@ -19,6 +19,19 @@
 
 ## 工程与基础设施
 
+### 钩子把 JSON 写 stdout 后立刻 `process.exit`，内容一长就被截断（零报错）
+
+- 症状：`node .continue/hooks/check.mjs hooks` 红两条，报的是「首条应注入会话 ID」，
+  可 stdout 里明明有 `"additionalContext":"【co…`；手工单跑同一个钩子却是好的。
+- 根因：stdout 是**管道**时 `process.stdout.write()` 是异步的，紧跟的 `process.exit(0)`
+  不等它冲完，超出管道缓冲的部分直接丢。注入文本从 3.5KB 涨到 5KB 后 JSON 从中间断掉，
+  宿主侧 `JSON.parse` 抛错 → **静默丢掉整个注入**，表现只是"这个钩子没反应"。
+  自检里 `ctx` 因此变成空串，报错指向"没注入"，与真实原因（没写完）差得很远。
+- 处置：钩子写 stdout/stderr 一律用 `fs.writeSync(fd, text)`（`lib.mjs` 的 `writeFd`），
+  不要用 `process.stdout.write` + `process.exit` 这套组合。自检断言里带上 `ctx.length`
+  与 `r.out.slice(-160)`，一眼分清"没注入"和"JSON 坏了"。
+- 适用面：任何"输出后立刻 exit"的钩子 / CLI；输出会随内容增长时（注入文本、报告、diff）必踩。
+
 ### 队列条目写成 `[T1]` 会被门禁当成需求号，提交直接被拒
 
 - 症状：新建队列用 `- [ ] [T1] …` 编号，`git commit` 被 continue-do 的 `ids` 检查拒掉：

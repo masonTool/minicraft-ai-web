@@ -19,8 +19,11 @@
 
 ### 索引：溢出文档
 
-> `notes/` 是本节的**溢出位**，不是第二套机制——这里只留一行索引。
+> `notes/` 是本节的**溢出位**，也是**入口文档放不下的细则**的落点（如 `notes/plan.md`）；
+> 它不是第二套机制——规则仍只在入口文档说一次，这里只放细节。这里只留一行索引。
 
+- **计划机制细则**（三层结构 / 三条分支 / 门禁 / 机器管不到的）→ [`notes/plan.md`](./notes/plan.md)；
+  `README.md` §3 第 10 条只留指针（README 有 400 行硬上限）
 - **模块能力台账**（约 900 行的表，按模块名搜）→ [`notes/modules.md`](./notes/modules.md)
   （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
 - **历史经验总表**（2026-10-22 之前约 400 条，未按模块拆分，按关键词 grep）→
@@ -34,40 +37,68 @@
 - **低龄向功能规划**（新手引导 / 创造工具 / 单机小游戏的架构选型、4 项拍板、护栏与判定不做）→
   [`notes/kids-features.md`](./notes/kids-features.md)（2026-10-22 本轮讨论定稿）
 
-### 长期待办只有一份：`.continue/TASKS.md`（2026-10-22，合并根 TASKS）
+### 长期待办 / 判定不做 / `[发现]` 优先级 → [`notes/decisions.md`](./notes/decisions.md)
 
-- 做了什么：把仓库根的 `TASKS.md`（293 项、A~O 分节 + 覆盖度 / 差异台账）整体并入
-  `.continue/TASKS.md`，根文件删除；三张台账脚本（`audit:tasks` / `coverage-report` / `diff-ledger`）
-  与 README 路线图全部改读这一份。
-- 为什么：机制只能有一套。"根表 + 队列视角表"两份并存时，收尾要写两处、且必然漂
-  （这正是前面几轮反复出问题的地方）。
-- 代价与边界：`TASKS.md` 现在 5000+ 行，**不要通读**，按 `[~]` 搜或看 README 路线图；
-  它由脚本核对，手改只改条目状态与正文，别动标记块。
-- 什么时候该重看：条目多到一份文件搜不动了 → 按段落字母拆 `notes/tasks-<段>.md` 并留索引。
-
-### 判定不做：M17 真机四项、O1、L4、L5（2026-10-21，迁移自旧队列《明确不做》）
-
-- 做了什么：这四项的**理由**留在这里，状态仍以 `TASKS.md` 为准（M17 / O1 / L4 是 `[~]`，L5 是 `[-]`）。
-- 理由：
-  - M17 真机四项（发热 / 真实触控延迟 / 内存压力 / 不同机型）——**AI 做不了**，要用户拿真机跑，
-    清单在 `TASKS.md` M17 末尾；
-  - O1 与原版噪声参考值对齐 —— **拿不到原版参考值**（同 O5：仓库与当前环境都没有那份素材）；
-  - L4 生物权威模拟 —— 投入远超收益：现在是"客户端模拟 + 服务端转发"，改成服务端权威要重写整套
-    实体循环，单机玩家一分钱好处都没有；
-  - L5 局域网发现 —— 浏览器发不了 UDP 广播 / mDNS，技术上不可能。
-- 为什么写在这：旧队列文件已并入 `DONE.md`，理由散在 1.4 万行里等于丢失；"下次又提"是要付代价的。
-- 什么时候该重看：真机测试有代理手段 / 拿到原版噪声素材 / 浏览器支持 UDP。
-
-### `[发现]` 的优先级：排在所有用户任务之后（批次 1355 查证）
-
-- 做了什么：确认 `auto-continue.mjs` 挑任务的顺序是"先找非 `[发现]` 的条目、`[发现]` 兜底"
-  （`pickNext` 里那条正则）。
-- 为什么：`[发现]` 是 AI 干活时顺手插的，用户排的活优先——这样"AI 不会拿自己发明的任务把用户的队列顶掉"。
-- 代价与边界：表现上像"钩子漏了一条"（待办三选一却递了中间那条）。
-- 什么时候该重看：用户觉得"我插的 `[发现]` 一直轮不到"时 → 把它写进 `.continue/HANDOFF.md` §4，
-  或给 `[发现]` 加一个"是否插队"的可选前缀。
+> 三节正文（长期待办只有一份 · 判定不做 M17/O1/L4/L5 · `[发现]` 的优先级）已按本节自己的规矩
+> （**单节 ≤ 15 行**）拆进 `notes/decisions.md`——它们合计 31 行 / 4.7KB，把 `DONE.md` 的
+> 40KB **字节**门禁顶爆了（行数才 290，按行看是"没超"）。查理由去那份文件，这里只留索引。
 
 ---
+## 批次 20261022-2338 · 2026-10-22 · 会话 b09ae4d7
+
+**做了什么**：把"一批最多 8 条"这条**文档建议**换成分层机制——任务大过一个批次就写
+`doing/plan-<名字>.md`（里程碑 → 阶段，**阶段 = 一批**），队列头部 `> 计划：` 绑定，
+之后每批做完钩子自动从计划取下一阶段；**完成到里程碑就硬停**，要跑该里程碑的验收并弹窗等开发者拍板。
+条数判据改成行数（完成时长 / 队列 500 行 / 目标变了）。共 7 条。
+
+**条目**（原文照搬）：
+
+- [x] [机制1] `lib.mjs` 加 plan 解析：`parsePlan()` / `parsePlanRef()` / 游标 / 里程碑完成判定 → `node -e` 冒烟脚本自测解析 4 种输入；`node .continue/hooks/check.mjs` 仍绿
+  - 做了什么：`lib.mjs` 新增一节「计划（plan-*.md）」：`PLAN_FILE_RE` / `isPlanFile` / `planPath` / `listPlans` / `parsePlanRef`（队列头 `> 计划：x.md`，只认前 5 行）/ `parsePlan`（里程碑 + 验收 + 确认 + 阶段 + 批次号）/ `readPlan` / `milestoneComplete`
+  - 为什么：三件事都做成**派生**而不是落盘状态——① 游标 = 第一条 `[~]`（没有就第一条 `[ ]`），不存任何 cursor 字段；② 阶段归属 = 阶段号 `MS<n>.<k>` 的前缀，不需要边界标记，跨里程碑只比前缀；③ 里程碑的"已确认"写在计划文件里（`- 确认：已验收 · 批次 x`），不依赖 `.continue/logs/` 的会话 state（那是本机、gitignore，换机器就丢）
+  - 为什么 `milestoneComplete` 必须收 `alsoDone`：调用点总是"队列已清空、但计划里这一条还没勾"——只看计划永远差一条，边界**从不触发**且没有任何报错（off-by-one 静默失效）
+  - 为什么确认行只认当前小节内：跨小节复用会让「MS1 已验收」被读成「MS2 也验收过了」，等于自动放行整个里程碑关卡；有断言钉住
+  - 验证：`node --input-type=module -e` 冒烟 **18 条断言**全过（围栏内的阶段不计入 / 游标取第一条 `[~]` / 标题·验收·批次号解析 / MS2 不继承 MS1 的确认 / 第 7 行的 `> 计划：` 不生效 / 单阶段里程碑做完即完成 / 全勾 `open=false`）；`node .continue/hooks/check.mjs --fast` 五项全绿（ids / docs / config / hooks / project）
+  - 批次：20261022-2338
+- [x] [机制2] `auto-continue.mjs` 三个分支：无 plan 时行为**一字不变** / 有 plan 且未到边界 → 下令「收尾本批 + 从 plan 取下一条阶段 + 重置队列」/ 到边界 → 硬停请开发者验收 → 确认后开下一里程碑 → `node .continue/hooks/check.mjs` 绿（旧 14 条自检全过）
+  - 做了什么：`wrapSteps(keepQueue)` 把收尾五步参数化（计划模式下第 5 步从"删队列"变成"重置队列"）；`!pick` 分支里加计划四路：① 队列头 `> 计划：` 指向的文件不存在 → 告警；② 计划里没有未完成阶段 → 整体收尾（这次删队列 + 删计划）；③ `milestoneComplete(plan, ms, 当前阶段)` 为真 → **硬停**（收尾 + 勾阶段 + 跑里程碑验收 + 弹窗三选一）；④ 否则 → 续批（收尾 + 勾阶段 + 取下一阶段 + 重置队列，且明说"不要问用户"）。重复下发用 `state.planStep`（键 = `计划名:阶段号`）挡住
+  - 为什么"到边界"用 `milestoneComplete(plan, ms, 当前阶段)` 而不是 `plan.cursor.ms !== 下一个.ms`：判据必须是**做完这一条之后**里程碑才齐，这是"完成到里程碑才停"；直接看计划永远差一条，关卡从不触发且不报错
+  - 为什么重复提醒要单独一个 `state.planStep` 而不是复用 `autoWrapped`：两者语义不同（前者是"关卡已提醒"、后者是"收尾已下发"），混用会让"里程碑停住"被误判成"收尾已下发"而直接放行
+  - 为什么"先收在这里"复用 `> 状态：讨论中`：不新增第五种标记，暂停语义现有机制已经表达完整；新增标记要同时改 `classify` / `audit-ids` / 三份文档，收益不值
+  - 验证：手工跑四个分支全对——A 未到边界 → 输出「这一批做完了，计划里还有下一阶段」并点名 `MS2.1 → MS2.2`；B 到边界 → 「里程碑完成，停下等验收」并列出 `npm run test:hud` 与三条"不许"；C 计划引用丢失 → 「不存在 / 不是没有计划，是引用写错了」；D 无 `> 计划：` → 仍走原「自动收尾」文案（**逐字未变**）。`node .continue/hooks/check.mjs hooks` 旧 14 条自检全过
+  - 批次：20261022-2338
+- [x] [机制3] `selftest.mjs` 补 plan 场景：续批、边界停、写 `确认：已验收` 后放行、`> 计划：` 指向不存在的文件要告警（不静默）、无 plan 队列行为不变 → `node .continue/hooks/check.mjs hooks` 全绿且新增 ≥ 5 条
+  - 做了什么：`selftest.mjs` 加 `plan()` / `planQueue()` 两个构造器（在临时副本的 `doing/` 里写真实同构的 plan 与带 `> 计划：` 的队列），新增 **7 条** 用例：① 未到边界 → 续批并点名 `MS2.2`；② 到边界 → 硬停 + 列出里程碑验收命令 + 禁止替用户写确认；③ 硬停只提醒一次、第二轮放行；④ 上一里程碑已写 `确认：已验收` → 不再停，继续下一里程碑；⑤ 阶段全做完 → 整体收尾并删计划；⑥ `> 计划：` 指向不存在的文件 → 显式告警且**不**走普通收尾；⑦ 无 `> 计划：` 时第五步仍是「删除队列文件」
+  - 为什么第 ⑦ 条最重要：它是这次改动的回归底线——存量会话（没有计划）的收尾文案必须**逐字不变**，否则加了计划反而改坏了在跑的批次；这条用 `5. 删除` 存在 + `不要删除队列文件` 不存在两个条件同时钉
+  - 为什么第 ④ 条要构造两个里程碑：只写一个已确认的里程碑测不出"会不会误停"——游标必须已经落到**下一个**里程碑、且那个里程碑还没做完，才区分得出"已验收就放行"和"每次到边界都停"
+  - 验证：自检条数 **36 → 43**（新增 7 条全部被收集并通过）；`node .continue/hooks/check.mjs hooks` ✓ 2441ms
+  - 批次：20261022-2338
+- [x] [机制4] 注入协议改措辞与 plan 段：`queue-init.mjs` 第 8 条由「建议 ≤ 8 条」改成行数判据 + 新增 plan/里程碑段；`.codebuddy/skills/continue-task/SKILL.md` 与 `assets/.continue/` 副本同步 → `grep -rn "≤ 8 条"` 只剩历史档案；`node .continue/hooks/check.mjs` 绿
+  - 做了什么：① `queue-init.mjs` 第 8 条改写为「一批多长看行数，不看条数」（判据：完成说明 > ~80 行 / 队列 > 500 行 / 目标变了；条数只是经验值 8~12），新增第 9 条「任务大过一批先写计划」+ `MS1` 模板围栏；第 7 条把 `doing/` 说明改成"住着队列与计划两类"；② `README.md` §3 第 9 条同步改写、新增第 10 条并指向新文件；③ 新建 `.continue/notes/plan.md`（三层结构 / 格式 / 三条分支表 / 5 条门禁 / 机器管不到的 3 件事）；④ `SKILL.md` 的「长任务分阶段」拆成「行数判据 + 计划」两条；⑤ `assets/.continue/` 回灌 README 与 4 个钩子
+  - **顺带修掉一个真 bug（改写后才暴露）**：`queue-init` 的注入原本用 `process.stdout.write` 紧跟 `process.exit(0)`。stdout 是管道时它是异步的，注入文本从 3.5KB 涨到 5KB 后**JSON 在中间被截断**，`JSON.parse` 抛错 → 自检报的是"没有注入会话 ID"，差点被当成解析逻辑写错。新增 `lib.writeFd(fd, text)`（`fs.writeSync`）并替换 `emitAllow` / `emitBlock` / `queue-init` 三处写出口。这类截断**没有任何报错**，宿主只会静默丢掉整个注入
+  - **顺带修掉一个设计漏洞**：`queue-init` 的「其他会话还有未完成队列」会把 `plan-*.md` 当成别人的队列（里面全是 `[ ]` 阶段），每次注入都劝 AI「去接管 / 删掉它」——那是本会话在用的计划。在 `others` 的过滤里排掉 `plan-` 前缀
+  - 为什么 README 只留指针、细则放 `notes/plan.md`：README 有 400 行硬上限（改前正好 400），而机制细则（三条分支 + 门禁 + 边界）值得完整写下来；`notes/` 不在每轮上下文里，按 `notes/plan.md` 一句话就能到
+  - 为什么 `notes/plan.md` 不会变成第二个 `NOTES.md`：它只有一件事（计划怎么写），有两个固定消费点（写计划前 / 排查"为什么不往下走"），且**每行信息都能从批次索引反查回来**——所以它永远可以安全瘦身
+  - 验证：注入实测（新会话）`len 3678`，`≤ 8 条` **false**、行数判据 true、计划段 true、"完成到里程碑就停" true、`plan-<名字>.md` true、"重置" true；`node .continue/hooks/selftest.mjs` **43 项全过**；`node .continue/hooks/check.mjs --fast` **五项全绿**（ids / docs / config / hooks / project），README 400 行踩在上限内
+  - 批次：20261022-2338
+- [x] [机制5] `tools/audit-docs.mjs` 加 5 条门禁（plan 行数/字节、阶段按 MS 分组连续、plan 批次号存在、队列头 `> 计划：` 引用完整、注入文本仍有 plan 段）→ `npm run audit:docs` 绿；故意造一个坏 plan 能红
+  - 做了什么：`tools/audit-docs.mjs` 新增「计划的结构与引用完整性」一节（6 条断言）：① `plan-*.md` ≤ 500 行 / 60KB；② 阶段号必须归在自己小节对应的里程碑下；③ 同一里程碑的阶段必须**连续**（`MS1.1/MS2.1/MS1.2` 判红）；④ 阶段行挂的批次号必须在 `notes/batches.md` / `DONE.md` / `DONE.archive.md` / `doing/` 里存在，且 `[x]` 阶段必须有批次号；⑤ 计划里最多一条 `[~]`；⑥ 队列头 `> 计划：x.md · 阶段 MSa.b` 的文件与阶段都必须存在；⑦ `queue-init.mjs` 注入里必须还有 `plan-<名字>.md` 与「完成到里程碑就停」
+  - 为什么复用 `lib.mjs` 的 `parsePlan` 而不在这里另写一份：两份解析迟早不同步，那时的症状是"计划能写成、门禁也绿、钩子读不懂"——**没有任何报错**
+  - 为什么第 ③ 条（阶段连续）值得单独一条门禁：跨里程碑判定全部靠"比较 `MS` 前缀"，一旦阶段交错（`MS1.1 → MS2.1 → MS1.2`），前缀比较的对象就不是"当前里程碑"了，边界会在错误的位置触发或永不触发
+  - 为什么第 ⑦ 条要查注入文本：`queue-init.mjs` 是框架文件，重装会整份覆盖回旧版；覆盖后计划机制会**无声消失**，而其它门禁全绿（这跟批次 1363 踩过的 `DOC_LIMITS.TASKS` 被改回 600 是同一类事故）
+  - 验证：`npm run audit:docs` 绿（`计划：0 份`）；故意造坏数据后 **4 条问题全部命中**——编号与小节不一致、假批次号 `20990101-9999`、2 条 `[~]`、队列头引用不存在的 `plan-nope.md`；删掉坏数据后复绿
+  - 批次：20261022-2338
+- [x] [机制6] 文档接线：`README.md`（§1 分工 / §3 队列规则 / §6 Stop 行为）、`AGENTS.md`（§2 表格一行）、`HANDOFF.md`（§4 约定）→ `npm run audit:docs` 与 `npm run audit:tasks -- --print` 绿
+  - 做了什么：① `AGENTS.md` §1 去掉"六份文件"这个会随文件数漂的数字；§2 按需展开表补一行「这个大任务拆成了哪几批、走到哪个里程碑了 → `notes/plan.md` + `doing/plan-*.md`（平时不读）」；② `HANDOFF.md` §4 加两段约定：「大任务先写计划」（阶段=一批 / 队列头绑定 / 重置而非删除 / 完成到里程碑硬停 / 确认行只在用户答复后写）与「一批多长看行数不看条数」；③ README 的机制接线在第 4 条已做（§3 第 9/10 条 + §1 判据去重），§6 的 Stop 行为表**不改**——三条分支的细则写在 `notes/plan.md`，README 只留指针
+  - 为什么 README §6 不再抄一遍分支表：§6 是"钩子怎么工作"的机制索引，抄一份分支表就等于多一处会漂的副本；`notes/plan.md` 已经是那份细则的唯一来源
+  - 为什么顺手改了 HANDOFF 的「提交总数」：`npm run audit:tasks --print` 判它过期（写着 1407、实际 1412）。这个锚点只能手写、容差 ±2，所以**每次收尾提交时要再对一次**（收尾那次会让 HEAD 再涨 1~2）
+  - 验证：`npm run audit:docs` 五项全 ✓（HANDOFF 191/520 行；计划检查 `0 份`）；`npm run audit:tasks -- --print` 六项全 ✓（编号无重复 / 各段连续 / 进度口径一致 / README 路线图一致 / 提交总数一致 1412 / 172 套一致）；`node .continue/hooks/check.mjs --fast` 五项全绿
+  - 批次：20261022-2338
+- [x] [机制7] 全量验证 → `npm run check` 全绿（172 套 + 三张台账 + 文档门禁）；`node .continue/hooks/check.mjs` 五项绿
+  - 做了什么：跑全量门禁 + 框架五项门禁，并复核注入文本
+  - 验证：`npm run check` **exit 0**——typecheck / 172 套离线 / `audit:tasks`（编号无重复、各段连续、进度口径一致、README 路线图一致、提交总数一致、172 套一致）/ `audit:coverage`（覆盖度台账与表一致）/ `audit:diffs`（差异 66 条 / 注意 188 条一致）/ `audit:docs`（五项全 ✓）/ `check:browser`（默认跳过，与既有口径一致）；`node .continue/hooks/check.mjs --fast` 五项绿；新会话注入实测 3678 字符且旧措辞为 `false`
+  - 批次：20261022-2338
+
 ## 批次 20261022-2330 · 2026-10-22 · 会话 eb9037a4
 
 **做了什么**：生存引导按用户要求缩到石镐（8→4 步），并修掉"9 个方块图标永久空白"——图集还没铺像素时就有 UI 画了图标，坏结果被缓存住。共 4 条。
@@ -227,49 +258,6 @@
   - 为什么：删文件不改引用 = 下一轮照着指过去扑空；`AGENTS.md` 第 19 行那句"不要再新建同名文件（… `NOTES.md` …）"**故意保留**——它正是防止有人把第七份文档再造出来。
   - 验证：`node .continue/hooks/check.mjs` 五项全过；`npm run audit:tasks -- --print` 七条全过；全仓 `grep -rn "NOTES.md"` 只剩本队列、`DONE.md`（并入说明）、`AGENTS.md`（禁用清单）与框架 `SKILL.md`。
   - 批次：20261022-1944
-
----
-
-## 批次 1363 · 2026-10-22 · 会话 0a49498a
-
-**做了什么**：把 continue-do 从旧版升级到新版（钩子 / 目录 / 三份新文档），并把本项目的文档体系与门禁按新框架重新落地。共 7 条（Q1~Q7）。
-
-**条目**（原文照搬）：
-
-- [x] Q1 让框架门禁变绿：`DONE.md` 拆出 `DONE.archive.md`（主文件 ≤300 行）+ `lib.mjs` 的 `DOC_LIMITS.TASKS` 放宽到 7000（本项目台账是脚本输入）+ `config.json` 的 `checks.fast` 接回框架聚合入口、`project` 用 `npm run check:fast` → `node .continue/hooks/check.mjs` 五项全绿
-  - 做了什么：① `DONE.md` 14316 → 287 行，第 289 行起（历史批次 1~613、HANDOFF 批次流水、旧队列）整段原文搬到 `DONE.archive.md`；② `lib.mjs` 的 `DOC_LIMITS.TASKS` 600 → 7000 并写明理由；③ `config.json` 的 `checks.fast` 从项目自己的 `npm run check:fast` 改回框架聚合入口（原来那样等于**静默跳过** ids/docs/config 三项），`checks.project` 填 `npm run check:fast`。
-  - 为什么：`TASKS.md` 5506 行不是"清单太长"，而是**脚本输入**——`diff-ledger.mjs` 读条目里的 ⚠️ 注记、`coverage-report` 读状态、`audit-tasks` 读编号，压到 600 行等于删它们的语料。`DONE` 则是纯时间线，机械归档无损。
-  - 验证：`node .continue/hooks/check.mjs` → ids / docs / config / hooks / project 五项全过，exit 0。
-  - 遗留：`lib.mjs` 属框架文件，重装会覆盖；要靠 `tools/audit-docs.mjs` 的守卫当场报出来（Q3 补）。
-- [x] Q2 退役旧契约自测：`tools/hooks-test.mjs` 停用，`test:hooks` 改为委派 `node .continue/hooks/check.mjs hooks`，删掉与新框架脱节的 581 行断言 → `npm test` 绿
-  - 做了什么：删 `tools/hooks-test.mjs`（581 行）；`package.json` 的 `test:hooks` 改成 `node .continue/hooks/check.mjs hooks`；`tools/audit-tasks.mjs` 里解释 `test:hooks` 为何不算离线套件的那段注释同步改口径。
-  - 为什么：那份自测断言的是**旧钩子契约**（三个收尾选项 / `NOTES`+`EXPERIENCE` / `queues/` 路径），框架一升级就整片红；而框架自带的自检（`selftest.mjs`，在临时副本里灌事件）覆盖同一批行为还多出 `pre-commit`、`一次提交只勾一条` 两条，且**跟着框架一起升级**。留两份等于留着下一次漂移。
-  - 验证：`npm run test:hooks` → 框架 hooks 自检通过；`npm test` 八段全过（vitest 150 / 离线 169 套 / 截图 14 / guard 17 / browser-check 15 / shotdiff 23）。
-  - 边界：`test:hooks` 这个键名保留，`tools/run-tests.mjs` 与 `audit-tasks.mjs` 的 `NON_SUITE_KEYS` 名单因此不用动。
-- [x] Q3 项目工具适配新目录：`tools/audit-docs.mjs` 的 `queues/` → `doing/`、`docs:trim` 不再搬 DONE → `npm run audit:docs` 与 `npm run audit:tasks` 绿
-  - 做了什么：`tools/audit-docs.mjs` 里 ① 队列目录 `queues/` → `doing/`（含输出文案）；② `docs:trim` 搬走的历史批次改写进 **`DONE.archive.md`**（原来写 `DONE.md`，会把框架 300 行的时间线上限顶爆）；③ 新增 `PROJECT_DOC_LIMITS` 守卫，检查 `.continue/hooks/lib.mjs` 里 `TASKS` 是否仍放宽到 7000；④ 归档体积观察点同时看 `DONE.md` 与 `DONE.archive.md`。
-  - 为什么：`lib.mjs` 是框架文件，重装**总是覆盖**，放宽会被悄悄改回 600，症状是"重装后每次提交都被拒、报错只说 TASKS 太长"。把它记进项目自己的门禁，重装当场变红并给出改回哪几项。
-  - 验证：`node tools/audit-docs.mjs --print` → 三项全 ✓；`npm run audit:tasks -- --print` → 七条断言全 ✓。
-  - 顺带：删掉旧 `hooks-test` 遗留并被误提交的假队列 `.continue/doing/hooks-test-other-4.md`。
-- [x] Q4 `EXPERIENCE.md` 并入 `.continue/TIPS.md`（症状 → 根因 → 处置 → 适用面，模块名与 OVERVIEW 对齐）→ `check.mjs` 的 ids 绿
-  - 做了什么：`EXPERIENCE.md` 461 行整份并入 `TIPS.md`（463 行）：① 两条已经写成四段式的（钩子日志 / 文案字面量断言）按框架格式重排，分别落到 `## 工程与基础设施`、`## 界面与音频`；② 其余 379 行"症状 → 根因"两列表原样保留为 `## 历史经验总表`（框架的办法是"按模块拆"，但拆这 400 条要先逐条判定模块，质量不可控，先保留可 grep 的整体，新坑按模块写）；③ 顺手修掉表里一处历史缺陷——有一行用字面量 `\n` 把两条并成了一行；④ 删掉旧文件。
-  - 为什么：两份"踩坑文档"并存时 AI 只会读到其中一份（技能文档明说这条）；而表格逐条重分类是独立的一批活，混进框架迁移会让两边都做不干净。
-  - 验证：`node .continue/hooks/audit-ids.mjs` → 通过（TIPS 的三个分节名与 OVERVIEW 的 `###` 一一对上）；`audit-docs` → TIPS.md 463/500。
-  - 遗留：`## 历史经验总表` 仍未按模块拆——留在总表里，按关键词 grep（见 OVERVIEW 同名小节）。
-- [x] Q5 `OVERVIEW.md` 落地真实模块索引 + 补批次索引表（批次 24 / 1355），`NOTES.md` 保留为决策索引并挂进入口
-  - 做了什么：`OVERVIEW.md` 从 53 行模板写成 199 行：15 个模块各一段（实现挂 `A1`~`O16` 台账段 + 批次，坑只留一行摘要指向 `TIPS.md` 同名分节），外加批次索引表；模板的 §一「模块索引」表**删掉**（它与 §二 的标题逐字重复，违反"一条内容只写一处"）。
-  - 为什么：框架靠"模块名"把 OVERVIEW ↔ TIPS 串起来，所以模块名必须与 `TASKS.md` 的 A~O 分段对齐，而不是另起一套；`T<n>` 号在本项目不存在，明细写台账段号。
-  - 验证：`audit-ids` 通过（模块名与 TIPS 一一对上、DONE 的批次 1355 在索引表里）；`audit-docs` → OVERVIEW 199/200。
-  - 遗留：只有 200 行预算，199 行已经贴顶——下批再往里加模块会顶爆，届时应先把"验证 / 存档与多人"这类短节合并。
-- [x] Q6 `HANDOFF.md` 瘦身：队列 / 标记 / 钩子机制章节改成指向 `.continue/README.md`，只留项目约定、当前状态、命令 → `npm run audit:docs` 绿且 ≤520 行
-  - 做了什么：`HANDOFF.md` 484 → 178 行：① 删掉与 `README.md` 逐字重复的三节（队列与标记 / 钩子怎么工作 / 容易踩的地方），开头换成一张"想查什么读哪一份"的索引表；② 把 §8 下面挂的 69 行批次摘要（批次 505~613）搬进 `DONE.archive.md`；③ 保留本项目的四类内容——当前状态（含进度口径 / 提交总数 / 技术栈）、命令、约定（数据链路四处 / 界面 / 自建任务额度 / 明确不做 / 跨区块地物约定 / 该问人的五种情况）、跨机器边界与悬案；④ 门禁那一节按"三道门"重写（`npm run check` / `checks.fast` / `DOC_LIMITS` 的局部放宽）。
-  - 为什么：机制只有一份（`README.md`，随框架升级）；HANDOFF 里抄一遍就是在给自己造第二份真相——这次升级里它已经漂了（`queues/`、`EXPERIENCE.md`、`NOTES.md`、旧刹车文件名全过期）。而 `audit:tasks` 要解析的那三句话（进度口径 / 提交总数 / **169 套**）原样保留，所以派生数字仍然被脚本钉着。
-  - 验证：`npm run audit:tasks -- --print` 七条全 ✓（提交总数 1368 与实际一致）；`node tools/audit-docs.mjs --print` → HANDOFF 179 行 / 0 条批次记录，通过。
-  - 顺带：`tools/agent-setup.mjs` 的队列目录 `queues/` → `doing/`（不改的话 `npm run agent:setup` 会报"队列目录不存在"）；`TASKS.md` / `NOTES.md` / `notes/modules.md` 里指向 `EXPERIENCE.md`、`queues/` 的说明同步改掉。
-- [x] Q7 收口：`AGENTS.md` 并入框架入口、删掉全部 `*.continue-do.md` 备份 → 全量 `npm run check` 绿
-  - 做了什么：① `AGENTS.md` 重写：§1 先读两份（`README.md` 机制 + `HANDOFF.md` 状态与约定）、§2 按需展开表补齐 `OVERVIEW.md` / `TIPS.md` / `DONE.archive.md` 并删掉已删除文件的链接、§4 的刹车开关改成 `.continue/auto.off`（旧的 `auto-continue.off` 已并入框架）；② 删掉三份 `*.continue-do.md` 模板备份（`AGENTS.md` / `TASKS.md` / `DONE.md`）——两份指令并存时 AI 会读到冲突的两套规则。
-  - 为什么：`AGENTS.md` 是每个会话第一份读到的文件，它指错一次，后面所有文档都白写（这一轮它连着指了三份已经不存在的文件）。
-  - 验证：`node .continue/hooks/check.mjs` → ids / docs / config / hooks / project **五项全过**；`npm run check` 全链路通过（typecheck + vitest + 169 套离线 + 三张台账 + `audit:docs` + browser-check 跳过）；`npm test` 八段全过。
 
 ---
 
