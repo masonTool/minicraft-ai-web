@@ -681,6 +681,8 @@ import { ScoreboardHud } from './ui/ScoreboardHud.ts';
 import { TutorialCard } from './ui/TutorialCard.ts';
 // 新手引导（引导2）：卡片只显示；步骤表与判定都在 `tutorial/` 里（纯逻辑、可离线断言）
 import { stepsOf } from './tutorial/steps.ts';
+import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.ts';
+import { planTutorialBoot, tutorialTrackFor } from './tutorial/boot.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -1559,6 +1561,17 @@ class App {
    * 这里只做四件事：**在事件处报一声**、**弹提示**、**面板入口**、**随存档走**。
    */
   private readonly advancements = new AdvancementTracker();
+  /**
+   * 新手引导（引导3）：进度判定与状态。
+   *
+   * 与成就同一条分工：判定在 `tutorial/`（纯逻辑），这里只做"事件处报一声 +
+   * 卡片显示 + 随存档走"。老存档没有引导数据时 `tutorialDismissed = true`，不打扰玩家。
+   */
+  private readonly tutorial = new TutorialTracker();
+  /** 玩家点过「不再提示」（或这是没有引导数据的老存档）→ 一律不显示 */
+  private tutorialDismissed = false;
+  /** "引导完成"只播一次（避免后续多余的 obtain/place 反复触发） */
+  private tutorialFinishedAnnounced = false;
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -2024,6 +2037,14 @@ class App {
     this.tutorialCard = new TutorialCard(
       document.getElementById('hud-right') ?? document.getElementById('hud') ?? container,
       atlas,
+      {
+        // 「不再提示」（引导3）：立刻写一次存档——等 30 秒自动保存的话，
+        // 玩家点完就关页面，下次进来还会再弹一次
+        onDismiss: () => {
+          this.tutorialDismissed = true;
+          void this.saveTutorialNow();
+        },
+      },
     );
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
@@ -2544,6 +2565,9 @@ class App {
     // 有存档时先不请求 —— 读档要先装载"方块增量"，否则先加载进来的区块
     // 会以未修改的自然地形生成，之后还要回炉重算光照与网格（会在玩家眼前闪一下）
     if (!this.save?.hasSave) this.prepareNewWorldSpawn();
+    // 新手引导（引导3）：新世界从第一步开始，路径按创建世界时选的模式定；
+    // 有存档时 `loadSaveState()` 会用存档里的进度覆盖它（老存档没有这份数据则整条不显示）
+    this.tutorial.reset(tutorialTrackFor(this.gameMode));
   }
 
   /**
@@ -3352,6 +3376,18 @@ class App {
     const restoredProgress = this.advancements.restore(progress);
     if (restoredProgress > 0) console.info(`[save] 已还原 ${restoredProgress} 条成就进度`);
 
+    // 新手引导（引导3）：与进度同一条分工——存档只搬运，容错在 `TutorialTracker.restore`。
+    // 三个分支（有数据 / 老存档没数据 / 新世界）的判定在 `tutorial/boot.ts`（纯函数、可断言）
+    const tutorialSave = await this.save.loadTutorial();
+    const plan = planTutorialBoot({ hasSave: true, saved: tutorialSave, mode: this.gameMode });
+    this.tutorialDismissed = plan.dismissed;
+    if (plan.restore) {
+      const restoredSteps = this.tutorial.restore(plan.restore);
+      if (restoredSteps > 0) console.info(`[save] 已还原新手引导进度（${restoredSteps} 步）`);
+    } else {
+      this.tutorial.reset(plan.track);
+    }
+
     // 记分板（M23，批次 456）：与进度同一条分工——存档只搬运，坏条目由
     // `Scoreboard.restore` 跳过（返回值是跳过的条数）
     const scoreboard = await this.save.loadScoreboard();
@@ -3551,6 +3587,8 @@ class App {
       await this.save.saveFrames(serializeFrames(this.itemFrames));
       // 成就 / 进度（M7）：整份覆盖写（`serialize` 按表的顺序排，diff 稳定）
       await this.save.saveAdvancements(this.advancements.serialize());
+      // 新手引导（引导3）：同一条口径（十几步、几十字节，整份覆盖写最省心）
+      await this.save.saveTutorial({ state: this.tutorial.serialize(), dismissed: this.tutorialDismissed });
       // 记分板（M23，批次 456）：整份覆盖写
       await this.save.saveScoreboard(this.scoreboardState.snapshot());
       // 队伍（批次 468）：同一条
@@ -8646,6 +8684,11 @@ class App {
     const gained = this.advancements.earnedCount - before;
     if (gained > 0) this.chat.push(`对了一次背包：已达成 ${gained} 条进度（详情按 J 看）`, 'system');
     this.suppressProgressToasts = false;
+
+    // 新手引导（引导3）：进度对完账再显示卡片（避免和加载遮罩抢位置）。
+    // 读档时若引导早就走完，把"完成提示"标成已播——否则会一进世界就弹一句"引导完成"
+    this.tutorialFinishedAnnounced = this.tutorial.finished;
+    this.refreshTutorialCard();
   }
 
   /**
@@ -8687,6 +8730,11 @@ class App {
    */
   private reportProgress(...events: ProgressEvent[]): void {
     if (!this.progressReady) return;
+    // 新手引导（引导3）：`obtain` 走同一条事件通道，主程序不必在背包变化处再写第二遍。
+    // `place` 不在这里桥接——引导要坐标判"搭起来"，而 `ProgressEvent.place` 没有 y。
+    for (const event of events) {
+      if (event.kind === 'obtain') this.reportTutorial({ kind: 'obtain', item: event.item });
+    }
     const unlocked: AdvancementDef[] = [];
     for (const event of events) unlocked.push(...this.advancements.handle(event));
     if (unlocked.length === 0) return;
@@ -8701,6 +8749,53 @@ class App {
     }
     // 面板开着就当场重画（不然玩家会看到"列表里还是灰的"）
     this.advancementScreen.refresh();
+  }
+
+  /**
+   * 新手引导的事实入口（引导3）。
+   *
+   * 与 `reportProgress` 分开的理由：引导的 `place` 需要坐标（判"搭起来"），
+   * 而 `ProgressEvent` 里没有 y——把它塞进去会让 100 条进度的契约跟着变。
+   */
+  private reportTutorial(fact: TutorialFact): void {
+    if (!this.progressReady || this.tutorialDismissed) return;
+    const advanced = this.tutorial.handle(fact);
+    if (advanced.length === 0) return;
+
+    if (this.tutorial.finished) {
+      this.tutorialCard.hide();
+      if (!this.tutorialFinishedAnnounced) {
+        this.tutorialFinishedAnnounced = true;
+        this.chat.push(t('tutorial.finish'), 'system');
+        this.hudToast.show(t('tutorial.finish'));
+      }
+      return;
+    }
+    this.refreshTutorialCard();
+  }
+
+  /** 把当前步骤画到卡片上（已关闭 / 没有步骤就收起） */
+  private refreshTutorialCard(): void {
+    if (this.tutorialDismissed) {
+      this.tutorialCard.hide();
+      return;
+    }
+    const step = this.tutorial.current;
+    if (!step) {
+      this.tutorialCard.hide();
+      return;
+    }
+    this.tutorialCard.show(step, this.tutorial.position);
+  }
+
+  /** 立刻把引导状态写进存档（「不再提示」用；失败不打断游戏） */
+  private async saveTutorialNow(): Promise<void> {
+    if (!this.save) return;
+    try {
+      await this.save.saveTutorial({ state: this.tutorial.serialize(), dismissed: this.tutorialDismissed });
+    } catch (error) {
+      console.warn('[save] 新手引导状态写入失败', error);
+    }
   }
 
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
@@ -14014,6 +14109,8 @@ class App {
         this.inventory.consume(heldId, 1);
         // 进度（M7）：合并类放置也算"放下了这个方块"（雪层叠高、台阶叠双层）
         this.reportProgress({ kind: 'place', block: blockId });
+        // 新手引导（引导3）：合并放置同样算"放下"，坐标取落点那一格（判"搭起来"要用 y）
+        this.reportTutorial({ kind: 'place', block: blockId, y: hy });
       }
       return;
     }
@@ -14027,6 +14124,7 @@ class App {
         this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
+        this.reportTutorial({ kind: 'place', block: blockId, y });
       }
       return;
     }
@@ -14070,6 +14168,8 @@ class App {
       // 进度（M7）：放下方块。"种下一颗种子"也走这条——种子是**方块物品**
       // （`Item.WHEAT_SEEDS` 的 `block` 就是 `WHEAT_STAGE0`），所以它本来就落在放置这条路上
       this.reportProgress({ kind: 'place', block: blockId });
+      // 新手引导（引导3）：普通放置（绝大多数路径都走这里），带 y 供"搭起来"判定
+      this.reportTutorial({ kind: 'place', block: blockId, y });
 
       // 潜影盒（批次 72）：物品里带着的内容**倒回方块**（原版如此）。
       // 空盒子也照样建一个容器——放着不管的话，第一次打开界面才建，

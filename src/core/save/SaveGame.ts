@@ -44,6 +44,8 @@ import type { StatisticsData } from '../survival/Statistics.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 import type { StoreDump } from './SaveTransfer.ts';
 import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
+// 新手引导的进度（引导3）：序列化形状由 `TutorialTracker` 定义，存档只搬运
+import type { SerializedTutorial } from '../../tutorial/TutorialTracker.ts';
 
 /**
  * 存档结构版本（口径在 `SaveMigrations.ts`：每加一条迁移规则 +1）。
@@ -52,7 +54,7 @@ import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 export { SAVE_VERSION };
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 import type { GameMode } from '../world/GameMode.ts';
@@ -124,6 +126,20 @@ const STORE_ARMOR_STANDS = 'armorStands';
  * 仓库版本 9 → 10，老存档自动补建。
  */
 const STORE_PAINTINGS = 'paintings';
+/**
+ * 新手引导（引导3，批次 20261022-1954）——第 13 个对象仓。
+ *
+ * 存两件事：**进度**（`state`，由 `TutorialTracker.serialize()` 生成）与
+ * **玩家点过「不再提示」**。仓库版本 10 → 11，老存档自动补建。
+ *
+ * ⚠️ 缺这份数据 = 老存档：主程序据此**不弹引导**（老玩家不该被当成新手）。
+ * 这不是"坏数据"，是合法状态，所以不能按 null 一律当新世界处理。
+ */
+export interface TutorialSave {
+  state: SerializedTutorial;
+  dismissed: boolean;
+}
+const STORE_TUTORIAL = 'tutorial';
 
 export interface SaveMeta {
   seed: number;
@@ -360,6 +376,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_COMMAND_BLOCKS)) db.createObjectStore(STORE_COMMAND_BLOCKS);
         if (!db.objectStoreNames.contains(STORE_ARMOR_STANDS)) db.createObjectStore(STORE_ARMOR_STANDS);
         if (!db.objectStoreNames.contains(STORE_PAINTINGS)) db.createObjectStore(STORE_PAINTINGS);
+        if (!db.objectStoreNames.contains(STORE_TUTORIAL)) db.createObjectStore(STORE_TUTORIAL);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -655,6 +672,26 @@ export class SaveGame {
   async savePaintings(list: SerializedPainting[]): Promise<void> {
     await this.transaction(STORE_PAINTINGS, 'readwrite', (store) => {
       store.put(list, 'paintings');
+    });
+  }
+
+  /**
+   * 读新手引导（引导3）：**整份一次读**，细校验交给 `TutorialTracker.restore`。
+   *
+   * 返回 null 的语义是"这个存档没有引导数据"（老存档），**不是读失败**：
+   * 主程序按"已经会玩"处理，不给老玩家弹新手卡片。
+   */
+  async loadTutorial(): Promise<TutorialSave | null> {
+    const value = await this.transaction(STORE_TUTORIAL, 'readonly', (store) =>
+      promisify(store.get('tutorial') as IDBRequest<TutorialSave | undefined>),
+    );
+    if (!value || typeof value !== 'object') return null;
+    return value;
+  }
+
+  async saveTutorial(data: TutorialSave): Promise<void> {
+    await this.transaction(STORE_TUTORIAL, 'readwrite', (store) => {
+      store.put(data, 'tutorial');
     });
   }
 

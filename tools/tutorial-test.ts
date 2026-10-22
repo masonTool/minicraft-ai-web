@@ -8,10 +8,12 @@
  * 界面（卡片）与接线（主程序事件点）不在这里。
  */
 
+import { readFileSync } from 'node:fs';
 import { BED_IDS, Block, woolId } from '../src/core/registry/blocks.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../src/tutorial/steps.ts';
 import { MAX_TRACKED_KINDS, TutorialTracker } from '../src/tutorial/TutorialTracker.ts';
+import { planTutorialBoot, tutorialTrackFor } from '../src/tutorial/boot.ts';
 import {
   TUTORIAL_CARD_MAX_WIDTH,
   isShortViewport,
@@ -281,6 +283,64 @@ console.log('\n引导卡几何（横屏不遮挡）');
   const zero = tutorialCardBox(0, 0);
   equal('0×0 视口宽度不为负', zero.maxWidth, 0);
   equal('0×0 视口左边界不为负', zero.left, 0);
+}
+
+// ------------------------------------------------------------------ 启动决策
+
+console.log('\n启动决策（新世界 / 老存档 / 有数据）');
+{
+  const mid = new TutorialTracker('creative');
+  for (let i = 0; i < 10; i++) mid.handle({ kind: 'place', block: Block.STONE, y: 64 });
+  const saved = mid.serialize();
+
+  const fresh = planTutorialBoot({ hasSave: false, saved: null, mode: 'survival' });
+  equal('新世界：走生存 8 步', fresh.track, 'survival');
+  equal('新世界：要显示', fresh.dismissed, false);
+  equal('新世界：不恢复任何状态', fresh.restore, null);
+
+  equal('新世界（创造）：走建造小目标', planTutorialBoot({ hasSave: false, saved: null, mode: 'creative' }).track, 'creative');
+  equal('冒险模式走生存路径', tutorialTrackFor('adventure'), 'survival');
+  equal('旁观模式走生存路径', tutorialTrackFor('spectator'), 'survival');
+
+  const old = planTutorialBoot({ hasSave: true, saved: null, mode: 'survival' });
+  equal('老存档没有引导数据：不弹（不是数据坏了）', old.dismissed, true);
+  equal('老存档没有引导数据：也不恢复', old.restore, null);
+
+  const restored = planTutorialBoot({ hasSave: true, saved: { state: saved, dismissed: false }, mode: 'survival' });
+  equal('有数据：路径听存档的（创造）', restored.track, 'creative');
+  equal('有数据：恢复的就是存档那一份', restored.restore, saved);
+  equal('有数据：不被当前模式覆盖', restored.dismissed, false);
+
+  const dismissedSave = planTutorialBoot({ hasSave: true, saved: { state: saved, dismissed: true }, mode: 'survival' });
+  equal('点过「不再提示」：照样不弹', dismissedSave.dismissed, true);
+}
+
+// ------------------------------------------------------------------ 存档与接线（静态）
+
+console.log('\n存档仓与主程序接线（静态断言）');
+{
+  // 这几条守的是"改了版本却忘了建仓"这类**静默失败**：
+  // IndexedDB 的 onupgradeneeded 少一行不会报错，只会让 loadTutorial 永远拿到 null。
+  const saveSrc = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  check('引导仓有常量', saveSrc.includes("const STORE_TUTORIAL = 'tutorial';"));
+  check('建库时会补建（老库自动升级）', saveSrc.includes('createObjectStore(STORE_TUTORIAL)'));
+  check('DB_VERSION 已升到 11', /const DB_VERSION = 11;/.test(saveSrc));
+  check('有 loadTutorial 读取入口', saveSrc.includes('async loadTutorial('));
+  check('有 saveTutorial 写入入口', saveSrc.includes('async saveTutorial('));
+
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('读档时会恢复引导进度', mainSrc.includes('loadTutorial()'));
+  check('读档用纯决策函数判"新世界 / 老存档 / 有数据"', mainSrc.includes('planTutorialBoot('));
+  check('「不再提示」立刻写存档', mainSrc.includes('void this.saveTutorialNow()'));
+  check(
+    '获得物品经 reportProgress 桥接给引导',
+    mainSrc.includes("if (event.kind === 'obtain') this.reportTutorial("),
+  );
+  check(
+    '普通放置带 y 上报给引导',
+    mainSrc.includes("this.reportTutorial({ kind: 'place', block: blockId, y })"),
+  );
+  check('进世界对账后显示卡片', mainSrc.includes('this.refreshTutorialCard();'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
