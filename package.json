@@ -75,7 +75,7 @@
     "test:save": "esbuild tools/save-test.ts --bundle --platform=node --format=esm --outfile=.tmp/save-test.mjs --log-level=error && node .tmp/save-test.mjs",
     "test": "npm run typecheck:tools && npm run test:unit && npm run test:offline && npm run test:hooks && npm run test:screenshot && npm run test:guard && npm run test:browser-check && npm run test:shotdiff",
     "test:offline": "node tools/run-tests.mjs",
-    "test:hooks": "node tools/hooks-test.mjs",
+    "test:hooks": "node .continue/hooks/check.mjs hooks",
     "shot": "node tools/screenshot.mjs",
     "test:offline:changed": "node tools/run-tests.mjs --changed",
     "server": "node server/index.mjs",

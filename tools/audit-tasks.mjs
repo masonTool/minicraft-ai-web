@@ -258,7 +258,10 @@ if (!claimCommits) {
      * 不算"自建离线测试"的 key：
      *  · `test:unit` / `test:unit:watch`：vitest，自带 runner；
      *  · `test:offline` / `test:offline:changed`：聚合 runner（`tools/run-tests.mjs`）；
-     *  · `test:hooks`：钩子自检（`tools/hooks-test.mjs`），单一脚本、不是离线套件。
+     *  · `test:hooks`：钩子自检，**已委派给框架自带的自检**（`node .continue/hooks/check.mjs hooks`）——
+     *    2026-10-22 升级 continue-do 时退役了本仓库那份 581 行 `tools/hooks-test.mjs`：
+     *    它断言的是旧契约（三个收尾选项 / NOTES+EXPERIENCE / `queues/`），
+     *    与框架每轮一起漂，正是批次 1355 那次"门禁红了两周没人发现"的同一个根因。
      * ⚠️ 这份名单与 `tools/run-tests.mjs` 里的 `NON_SUITE_KEYS` **必须一致**：
      * 那边用来决定"跑哪些套件"，这边用来核对文档里的"91 套"，
      * 两处不一致就会变成"文档说 91、实际只跑 89"这种最难发现的漂。
