@@ -29,6 +29,7 @@ import {
   resetLanguageForTest,
   setLanguage,
   t,
+  tableOf,
   tp,
   joinList,
 } from '../src/core/i18n/I18n.ts';
@@ -101,7 +102,7 @@ console.log('[中英表一致性]');
 
   const empty: string[] = [];
   for (const language of LANGUAGES) {
-    for (const [key, value] of Object.entries(TABLES[language])) {
+    for (const [key, value] of Object.entries(tableOf(language))) {
       if (typeof value !== 'string' || value.trim().length === 0) empty.push(`${language}:${key}`);
     }
   }
@@ -214,8 +215,12 @@ console.log('\n[语言码判定]');
   check('navigator 给 zh-CN → 中文', detectLanguage('zh-CN') === 'zh');
   check('navigator 给 zh-TW → 中文（繁体也走中文表）', detectLanguage('zh-TW') === 'zh');
   check('navigator 给 en-US → 英文', detectLanguage('en-US') === 'en');
-  check('navigator 给 fr-FR → 回退默认（不出现半中半英）', detectLanguage('fr-FR') === DEFAULT_LANGUAGE);
-  check('没有 navigator 标签时回退默认', detectLanguage(undefined) === DEFAULT_LANGUAGE);
+  // ⚠️ 多语言 P0-4 起口径变了：原来"认不出来回中文"，现在"认全六种、认不出来回英文"
+  check('navigator 给 fr-FR → 法语（不再一律回中文）', detectLanguage('fr-FR') === 'fr');
+  check('navigator 给 de-AT → 德语', detectLanguage('de-AT') === 'de');
+  check('navigator 给 pt-BR → 葡语', detectLanguage('pt-BR') === 'pt');
+  check('认不出来的语言回英文（Play 发行口径）', detectLanguage('ja-JP') === 'en');
+  check('没有 navigator 标签时回英文', detectLanguage(undefined) === 'en');
 }
 
 console.log('\n[占位符（批次 425）]');
@@ -769,6 +774,32 @@ console.log('\n[语言元数据与匹配（多语言 P0-1）]');
   check('localeMeta 对未登记的语言返回 null', localeMeta('ja') === null);
 }
 
+console.log('\n[稀疏表与回落链（多语言 P0-4）]');
+{
+  /**
+   * 这一节盯的是"6 种语言里只装了 2 张表"这个中间状态能不能安全运行：
+   *  ① 没表的不该出现在下拉里（"能选但没内容"比不列更糟）；
+   *  ② 存档里存了没表的语言不该被判成脏数据（否则玩家换设备后设置被重置）；
+   *  ③ 查不到就按 当前 → 英文 → 中文 → 键名 走，**不抛异常、不返回空串**。
+   */
+  check(
+    '支持 6 种语言，但只有有表的才能选',
+    LOCALES.length === 6 && LANGUAGES.length < LOCALES.length,
+    `LANGUAGES=${LANGUAGES.join(',')}`,
+  );
+  check(
+    '可选语言 = 有表的那些（关系式，不写死数量）',
+    LANGUAGES.every((code) => TABLES[code] !== undefined) && LANGUAGES.length === Object.keys(TABLES).length,
+  );
+  check('存档里存了还没表的语言也不算脏数据', isLanguage('de') && isLanguage('pt'));
+  check('没登记的语言仍然不合法', !isLanguage('ja') && !isLanguage('xx'));
+  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('de')).length === 0);
+  check('缺表时回落英文', t('pause.title', 'de') === t('pause.title', 'en'), t('pause.title', 'de'));
+  check('俄语同理（回落链不看具体是哪种语言）', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
+  check('一路回落到头就返回键名', t('no.such.key', 'de') === 'no.such.key', t('no.such.key', 'de'));
+  check('有表时不会串味', t('pause.title', 'zh') === '游戏已暂停' && t('pause.title', 'en') === 'Game Paused');
+}
+
 console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
 {
   /**
@@ -786,7 +817,7 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
   check('每个分组文件都被 index.ts 合并（不留孤儿文件）', orphans.length === 0, orphans.join(','));
 
   // 中文表里的值必须非空：拆文件时漏掉一格会变成"界面上一块空白"
-  const emptyValues = Object.entries(TABLES.zh).filter(([, value]) => value.trim().length === 0).map(([key]) => key);
+  const emptyValues = Object.entries(tableOf('zh')).filter(([, value]) => value.trim().length === 0).map(([key]) => key);
   check('中文表没有空值', emptyValues.length === 0, emptyValues.slice(0, 3).join(','));
 
   /**

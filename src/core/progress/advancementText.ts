@@ -6,6 +6,11 @@
  *
  * 取不到英文时**回落中文**，不做二次处理：英文界面上冒出中文一眼能看见，
  * 比显示 id 或空串好定位得多（同 `commandMessages.data.ts` 的取舍）。
+ *
+ * ⚠️ 多语言 P0-4：判定从"是不是英文"改成"**是不是中文**"。
+ * 原来 `!== 'en'` 意味着德语/俄语用户拿到的是**中文**标题——那正是要避免的。
+ * 现在只有中文走 `advancements.ts` 里的原文，其余语言一律取英文那一层（取不到再回落中文）。
+ * 这层"英文单独一张表"的形态会在 P2 数据层键化时并进 `locales/`。
  */
 
 import { getLanguage } from '../i18n/I18n.ts';
@@ -13,18 +18,18 @@ import { ADVANCEMENT_TAB_EN, ADVANCEMENT_TEXT_EN } from './advancementText.data.
 
 /** 某条进度的标题（按当前语言） */
 export function advancementTitle(def: { readonly id: string; readonly title: string }): string {
-  if (getLanguage() !== 'en') return def.title;
+  if (getLanguage() === 'zh') return def.title;
   return ADVANCEMENT_TEXT_EN[def.id]?.title ?? def.title;
 }
 
 /** 某条进度的说明（按当前语言） */
 export function advancementDesc(def: { readonly id: string; readonly desc: string }): string {
-  if (getLanguage() !== 'en') return def.desc;
+  if (getLanguage() === 'zh') return def.desc;
   return ADVANCEMENT_TEXT_EN[def.id]?.desc ?? def.desc;
 }
 
 /** 标签页名（按当前语言） */
 export function advancementTabTitle(tab: { readonly id: string; readonly title: string }): string {
-  if (getLanguage() !== 'en') return tab.title;
+  if (getLanguage() === 'zh') return tab.title;
   return ADVANCEMENT_TAB_EN[tab.id] ?? tab.title;
 }

@@ -13,7 +13,7 @@
  * 于是双语差异被压成"一张 35 行的词表"，而不是 36 句译文。
  */
 
-import { getLanguage, t } from '../i18n/I18n.ts';
+import { getLanguage, t, type Language } from '../i18n/I18n.ts';
 
 /**
  * 参数名 → 英文。键是 `<>` 里的原文。
@@ -72,8 +72,14 @@ export const USAGE_FIELD_NAMES: Readonly<Record<string, string>> = {
   'survival|creative|adventure|spectator': 'survival|creative|adventure|spectator',
 };
 
-/** 把用法串里 `<>` 中的中文参数名换成英文（其余字符原样） */
-export function translateUsageFields(usage: string, lang: 'zh' | 'en'): string {
+/**
+ * 把用法串里 `<>` 中的中文参数名换成英文（其余字符原样）。
+ *
+ * ⚠️ 多语言 P0-4：参数类型从 `'zh' | 'en'` 放宽到 `Language`。除中文外**一律走英文词表**
+ * ——德/俄/法/葡还没有自己的词表，而它们的中文文案本来就该退回英文那一层。
+ * 这张词表的形态会在 P1（命令域键化）删掉：那时每种语言直接给整句用法。
+ */
+export function translateUsageFields(usage: string, lang: Language): string {
   if (lang === 'zh') return usage;
   // `<必填>` 与 `[可选]` 两种括号都要翻：`/give <物品> [数量]` 里两个都是参数名。
   // 圆括号里的**说明文字**（"（伤害要大于 0）"）不翻——那是一整句，不属于参数名，

@@ -9,8 +9,8 @@
  * 三条约定（都是踩过坑之后定的）：
  *  1. **键名点分、按界面分组**（`settings.group.game`），不写 `设置_游戏` 这种
  *     把中文当键的写法——那样改文案就会把键改掉，两处引用立刻失联。
- *  2. **查不到的键返回键名本身**，不返回空串、也不抛异常：
- *     界面上显示 `settings.group.game` 一眼就能看出漏了文案，
+ *  2. **查不到的键沿回落链找，最后一档是键名本身**：当前语言 → 英文 → 中文 → 键名。
+ *     不返回空串、也不抛异常——界面上显示 `settings.group.game` 一眼就能看出漏了文案，
  *     而空串会变成"按钮是空的"，玩家只会以为是渲染坏了。
  *  3. **各语言键集必须与中文一致**。多语言 P0-3 起这件事由**类型**保证：
  *     `locales/en/*.ts` 用 `satisfies Pick<Messages, keyof typeof zhXxx>` 声明，
@@ -24,18 +24,25 @@ import { COMMAND_MESSAGES_EN } from '../commands/commandMessages.data.ts';
 import { zh } from './locales/zh/index.ts';
 // 英文文案本体（多语言 P0-3）：与中文同构分组，键集由 `satisfies Messages` 卡齐
 import { en } from './locales/en/index.ts';
+// 语言清单与匹配（多语言 P0-1 / P0-4）：6 种语言的元数据 + 设备标签匹配
+import {
+  FALLBACK_LOCALE,
+  LOCALES,
+  detectLocale,
+  isLocaleCode,
+  localeMeta,
+  type LocaleCode,
+} from './locale.ts';
 
-export const LANGUAGES = ['zh', 'en'] as const;
+/**
+ * 语言码（`LocaleCode` 在本仓库的历史名字，多语言 P0-4）。
+ *
+ * ⚠️ 保留这个名字是因为它已经出现在几十处签名里（`t(key, language: Language)`）；
+ * 现在它等于 `LocaleCode`——**6 种**而不是 2 种。新代码直接用 `LocaleCode`。
+ */
+export type Language = LocaleCode;
 
-export type Language = (typeof LANGUAGES)[number];
-
-/** 语言自称（语言选择器里显示的就是这两串，不随当前语言变） */
-export const LANGUAGE_NAMES: Readonly<Record<Language, string>> = {
-  zh: '简体中文',
-  en: 'English',
-};
-
-/** 默认语言：中文（本项目最初的文案全是中文，英文是后来补的） */
+/** 当前语言的初值。首次启动会按设备语言覆盖（P0-5 把 `detectLanguage` 接到启动流程） */
 export const DEFAULT_LANGUAGE: Language = 'zh';
 
 /**
@@ -67,25 +74,55 @@ const ZH_MERGED: Readonly<Record<string, string>> = {
 };
 const EN_MERGED: Readonly<Record<string, string>> = { ...EN, ...COMMAND_MESSAGES_EN };
 
-export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
+/**
+ * 语言 → 文案表（**稀疏表**，多语言 P0-4）。
+ *
+ * 为什么允许缺项：加一种语言要先有表。表还没写的时候，这种语言**不该让应用崩或白屏**，
+ * 也不该出现在设置页的可选项里（"能选但没内容"比不列更糟）。所以：
+ *   · 这张表只放**已经有表**的语言；
+ *   · UI 的下拉用 `LANGUAGES`（从这张表算出来）；
+ *   · 设备语言检测与回落用 `LOCALES`（支持的**全集**）。
+ */
+export const TABLES: Readonly<Partial<Record<LocaleCode, Readonly<Record<string, string>>>>> = {
   zh: ZH_MERGED,
   en: EN_MERGED,
 };
 
-export function isLanguage(value: unknown): value is Language {
-  return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value);
+/** 没装表的语言查到的"空表"：让 `tableOf()` 永远返回一个可查对象，调用方不必判空 */
+const EMPTY_TABLE: Readonly<Record<string, string>> = {};
+
+/** 取一种语言的表；没装就返回空表（查出来全是 undefined，由 `t()` 走回落链） */
+export function tableOf(language: LocaleCode): Readonly<Record<string, string>> {
+  return TABLES[language] ?? EMPTY_TABLE;
 }
 
 /**
- * 从浏览器语言标签推断（`navigator.language`，形如 `zh-CN` / `en-US`）。
- * 分辨不出来的按中文处理——本项目的中文文案最全，英文是子集时也不至于一半中文一半英文。
+ * **设置页里可选**的语言：只列已经有表的。
+ * 由表派生而不是手写一份——写完某种语言的 `locales/xx/` 之后，它会自己出现在下拉里。
+ */
+export const LANGUAGES: readonly LocaleCode[] = LOCALES.map((locale) => locale.code).filter(
+  (code) => TABLES[code] !== undefined,
+);
+
+/** 语言自称（下拉里显示的就是它，不随当前语言变）：6 种都有，哪怕还没有表 */
+export const LANGUAGE_NAMES: Readonly<Record<LocaleCode, string>> = Object.fromEntries(
+  LOCALES.map((locale) => [locale.code, locale.nativeName]),
+) as Record<LocaleCode, string>;
+
+export function isLanguage(value: unknown): value is Language {
+  // 认的是**支持的**语言（6 种），不是"已经有表的"：存档里存了 `de` 不该被判成脏数据
+  return isLocaleCode(value);
+}
+
+/**
+ * 从设备语言标签推断界面语言（`navigator.language`，形如 `zh-CN` / `de-AT` / `pt_BR`）。
+ *
+ * ⚠️ 多语言 P0-4 起**口径变了**：原来只认 zh / en，其余一律回中文；
+ * 现在认全 `LOCALES` 六种，**认不出来回英文**（发 Play 的口径：陌生语言用户看英文比看中文有用）。
+ * 匹配规则只在 `locale.ts` 的 `matchLocale()` 一处，这里仅转发——不再留第二套判断。
  */
 export function detectLanguage(tag: string | undefined | null): Language {
-  if (typeof tag !== 'string') return DEFAULT_LANGUAGE;
-  const lower = tag.toLowerCase();
-  if (lower.startsWith('zh')) return 'zh';
-  if (lower.startsWith('en')) return 'en';
-  return DEFAULT_LANGUAGE;
+  return detectLocale(tag);
 }
 
 /**
@@ -105,8 +142,9 @@ export function getLanguage(): Language {
 export function setLanguage(language: Language): void {
   current = language;
   if (typeof document !== 'undefined') {
-    // `<html lang>` 不是装饰：手机上的朗读/断行规则、以及浏览器的"翻译此页"提示都看它
-    document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+    // `<html lang>` 不是装饰：手机上的朗读/断行规则、以及浏览器的"翻译此页"提示都看它。
+    // 带地区的值（`zh-CN` / `pt-BR`）从元数据取，不再是"三分支里猜一个"
+    document.documentElement.lang = localeMeta(language)?.htmlLang ?? language;
   }
 }
 
@@ -115,18 +153,28 @@ export function resetLanguageForTest(): void {
   current = DEFAULT_LANGUAGE;
 }
 
+/** 一条非空文案；空串按"没有"处理（界面上空按钮比露出键名更难查） */
+function nonEmpty(table: Readonly<Record<string, string>>, key: string): string | undefined {
+  const value = table[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 /**
  * 查一条文案。`language` 省略时用当前语言。
- * 查不到就**返回键名**（见文件头第 2 条约定）。
+ *
+ * **回落链：当前语言 → 英文（发行主语言）→ 中文（源语言，最全）→ 键名本身。**
+ *
+ * 为什么英文排在中文前面：6 种语言之后，"德语缺一条"退到英文是对的
+ * （德语用户多半看得懂英文），退到中文等于把界面切成看不懂的字。
+ * 中文留在链尾做最后兜底——它是最全的一张表。
  */
 export function t(key: string, language: Language = current): string {
-  const table = TABLES[language] ?? ZH;
-  const value = table[key];
-  if (typeof value === 'string' && value.length > 0) return value;
-  // 当前语言缺这一条时退到中文：英文表漏一条不该让界面出现空白
-  const fallback = ZH[key];
-  if (typeof fallback === 'string' && fallback.length > 0) return fallback;
-  return key;
+  return (
+    nonEmpty(tableOf(language), key) ??
+    nonEmpty(tableOf(FALLBACK_LOCALE), key) ??
+    nonEmpty(ZH_MERGED, key) ??
+    key
+  );
 }
 
 /**
@@ -159,7 +207,10 @@ export function joinList(items: readonly string[], language: Language = current)
   const list = items.filter((item) => item.length > 0);
   if (list.length === 0) return '';
   if (list.length === 1) return list[0]!;
-  if (language === 'en') {
+  // 中文用顿号，其余语言暂按英文那套（`, ` + `and`）。
+  // ⚠️ 这是 P0-6 改成 `Intl.ListFormat` 之前的临时口径：法/德/葡/俄各自的连接词
+  // 会在那一条里由 Intl 处理，这里不手写四种分词规则。
+  if (language !== 'zh') {
     if (list.length === 2) return `${list[0]} and ${list[1]}`;
     return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
   }

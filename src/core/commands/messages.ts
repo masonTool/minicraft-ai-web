@@ -41,7 +41,10 @@ export { COMMAND_MESSAGES_EN } from './commandMessages.data.ts';
  * 拆成 `i18n.ts` 的键组反而让 core 层依赖界面层的分组约定。两张表 + 一个开关最直白。
  */
 export function pickLabel(zh: string, en: string): string {
-  return getLanguage() === 'en' ? en : zh;
+  // ⚠️ 多语言 P0-4：判定从"是不是英文"改成"**是不是中文**"。
+  // 原来德语/俄语用户会在这几处拿到中文（`Weather set to 下雨` 那种半截话的根源）。
+  // 两张表的形态会在 P1 命令域键化时删掉，这里只是先让判定方向正确。
+  return getLanguage() === 'zh' ? zh : en;
 }
 
 /** `/help` 里那条命令的用法行（按当前语言） */
