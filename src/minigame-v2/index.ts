@@ -19,6 +19,7 @@ import { SaveController } from './save-controller.ts';
 import { MobSystem } from './mobs.ts';
 import { ChatSystem } from './chat.ts';
 import { ContainerSystem, type ContainerGeo } from './containers.ts';
+import { Furnace } from '../core/container/Furnace.ts';
 import {
   BODY_PAD,
   CONTENT_W,
@@ -2733,7 +2734,9 @@ const frame = (): void => {
     }),
   );
 
+  // 熔炉：开着的那个按 500ms 节流重绘，**其余的全都在这里推进**（关掉界面也继续烧）
   if (started && containers.isOpen) containers.tick(dt, now);
+  if (started) containers.tickAll(dt);
 
   if (!started) {
     renderer.clear();
@@ -3151,6 +3154,63 @@ if (wxTestApi && isDesktopRuntime) {
     },
     /** 容器面板里所有格子的屏幕坐标（验收脚本按它点，不猜像素） */
     containerGeo: () => containerGeo,
+
+    // ---------------------------------------------------------------- 熔炉目标框
+    /** 熔炉当前状态（冻结 / 开工 / 燃烧 / 两条进度 / 提示语） */
+    furnaceState: () => containers.furnaceState,
+    /** 点目标框开工（等于玩家点产物格） */
+    startFurnace: () => containers.startStation(),
+    /** 取走熔炉成品 */
+    takeFurnaceOutput: () => containers.takeStationOutput(),
+    /**
+     * 手动推进熔炉（验收用）。
+     *
+     * ⚠️ 不能用真实时间等：一炉要烧 10 秒，验收不能真等 10 秒。
+     * 走的是**和游戏主循环同一条** `tickAll`，所以验的是真实路径。
+     *
+     * @param seconds 喂多少秒
+     * @param includeOpen 连"正开着的那个"一起推进（默认 true——
+     *        验收想在一次调用里看到进度变化，而不是等 500ms 节流的 `tick()`）
+     */
+    advanceFurnacesForTest: (seconds = 1, includeOpen = true) => {
+      const open = containers.openSource;
+      if (includeOpen && open) {
+        // 直接推进这一个（与 `tick()` 内部的 `opened.tick(dt)` 是同一句）
+        (open as { tick(dt: number): unknown }).tick(seconds);
+      }
+      containers.tickAll(seconds);
+      containers.refresh();
+      // 界面开着 → 返回开着那个；关着 → 返回世界里**任意一座**熔炉（验收要看它有没有继续烧）
+      return (
+        containers.furnaceState ??
+        furnaceStateOfAny()
+      );
+    },
+  };
+}
+
+/** 世界里任意一座熔炉的状态（界面关着时验收用） */
+function furnaceStateOfAny(): {
+  paused: boolean;
+  started: boolean;
+  burning: boolean;
+  burnPct: number;
+  cookPct: number;
+  hint: string;
+} | null {
+  let found: Furnace | null = null;
+  world.containers.forEach((container) => {
+    if (!found && container instanceof Furnace) found = container;
+  });
+  if (!found) return null;
+  const f = found as Furnace;
+  return {
+    paused: f.paused,
+    started: f.started,
+    burning: f.isLit,
+    burnPct: Math.round(f.burnRatio * 100),
+    cookPct: Math.round(f.cookRatio * 100),
+    hint: '',
   };
 }
 requestAnimationFrame(frame);

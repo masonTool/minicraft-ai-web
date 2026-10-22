@@ -8,6 +8,9 @@ import type { World } from '../core/world/World.ts';
 import { quickMove } from '../core/container/QuickMove.ts';
 import { UiLayer, box, button, MC, slot, text, type SlotButton, type UiElement } from './ui-kit/index.ts';
 import { buildHotbarDock } from './inventory-tabs.ts';
+import { verdictOnLeave, verdictOnOpen, verdictOnStart } from './furnace-station.ts';
+import { fuelSeconds, smeltingRecipeFor } from '../core/crafting/Smelting.ts';
+import { maxStackOf } from '../core/registry/items.ts';
 import {
   BODY_PAD,
   CONTAINER_PANEL_NEED,
@@ -101,6 +104,10 @@ export class ContainerSystem {
   private lastUi = 0;
   /** 容器格数（箱子 27 / 熔炉 3）——`QuickMove` 与外部读状态都要它 */
   private containerSize = 0;
+  /** 这一轮有没有点过目标框开工（`started` 的界面侧副本，关界面时按它决定解不解冻） */
+  private stationStarted = false;
+  /** 目标框那一行的提示（"开始制作" / "燃料槽是空的……"） */
+  private stationHint = '';
 
   constructor(private readonly deps: ContainerDeps) {}
 
@@ -154,11 +161,35 @@ export class ContainerSystem {
       this.opened = world.containers.getOrCreateFurnace('overworld', hit.x, hit.y, hit.z);
       this.title = '熔炉';
       this.containerSize = 3;
+      this.prepareFurnaceOnOpen();
     } else {
       return false;
     }
     this.show();
     return true;
+  }
+
+  /**
+   * 打开熔炉时的第一件事：**判断该冻还是该继续烧**。
+   *
+   * 规则在 `furnace-station.ts` 的 `verdictOnOpen`（有 26 条离线断言）：
+   * 正在烧的不冻（否则"外面在烧、一打开就停"），没在烧的冻住等玩家点目标框。
+   */
+  private prepareFurnaceOnOpen(): void {
+    if (!(this.opened instanceof Furnace)) return;
+    const furnace = this.opened;
+    const verdict = verdictOnOpen({
+      hasInput: furnace.get(0) !== null,
+      hasFuel: furnace.get(1) !== null,
+      burnTimeLeft: furnace.burnTimeLeft,
+      cookProgress: furnace.cookProgress,
+      cookTimeTotal: furnace.cookTimeTotal,
+      paused: furnace.paused,
+      started: furnace.started,
+    });
+    furnace.paused = verdict.paused;
+    this.stationStarted = furnace.started && !verdict.paused;
+    this.stationHint = verdict.reason;
   }
 
   openChestAt(x: number, y: number, z: number): void {
@@ -172,16 +203,116 @@ export class ContainerSystem {
     this.opened = this.deps.getWorld().containers.getOrCreateFurnace('overworld', x, y, z);
     this.title = '熔炉';
     this.containerSize = 3;
+    this.prepareFurnaceOnOpen();
     this.show();
   }
 
   close(): void {
+    // **先解除冻结**：点过目标框的炉子关掉界面后要继续烧。
+    // 漏了这一步 = 玩家点开看一眼再关掉，炉子就再也不烧了（永久冻住）。
+    this.releaseStationPause();
     // ⚠️ 光标上的东西**先收回背包**再摘容器：`opened` 一置空，
     // `bindingFor('container', …)` 就再也找不到那一格了，东西会凭空消失。
     this.deps.onClosed();
     this.opened = null;
     this.containerSize = 0;
+    this.stationStarted = false;
+    this.stationHint = '';
     this.deps.showHud();
+  }
+
+  /**
+   * 离开容器前把冻结状态收尾。
+   *
+   * 规则在 `furnace-station.ts` 的 `verdictOnLeave`：`started` 的解除冻结继续烧，
+   * 没开工的保持冻结（玩家没选配方，不该自己烧）。
+   */
+  private releaseStationPause(): void {
+    if (!(this.opened instanceof Furnace)) return;
+    const furnace = this.opened;
+    const verdict = verdictOnLeave({
+      hasInput: furnace.get(0) !== null,
+      hasFuel: furnace.get(1) !== null,
+      burnTimeLeft: furnace.burnTimeLeft,
+      cookProgress: furnace.cookProgress,
+      cookTimeTotal: furnace.cookTimeTotal,
+      paused: furnace.paused,
+      started: this.stationStarted || furnace.started,
+    });
+    furnace.paused = verdict.paused;
+    furnace.started = !verdict.paused;
+  }
+
+  /**
+   * **点目标框开工** —— 熔炉界面上那颗"产物格"就是目标框。
+   *
+   * 规则在 `verdictOnStart`：没原料 / 没燃料 / 产物槽满 各有各的拒绝话术。
+   *
+   * @returns 有没有真的开工
+   */
+  startStation(): boolean {
+    if (!(this.opened instanceof Furnace)) return false;
+    const furnace = this.opened;
+    const input = furnace.get(0);
+    const fuel = furnace.get(1);
+    const output = furnace.get(2);
+    // 产物槽能不能装下：空的能装；同一种且没满也能装；其余都不行
+    const product = input ? smeltingRecipeFor(input.id, furnace.station) : undefined;
+    const outputFits = product
+      ? !output || (output.id === product.output.id && output.count + product.output.count <= maxStackOf(output.id))
+      : false;
+
+    const verdict = verdictOnStart({
+      inputReady: input !== null,
+      fuelReady: fuel !== null && fuelSeconds(fuel.id) > 0,
+      outputFits,
+    });
+    this.stationHint = verdict.reason;
+    if (!verdict.ok) {
+      this.show();
+      return false;
+    }
+    furnace.paused = false;
+    furnace.started = true;
+    this.stationStarted = true;
+    this.show();
+    return true;
+  }
+
+  /** 点目标框收取成品（熔炉的产物槽只取不放，所以"取"走这条） */
+  takeStationOutput(): boolean {
+    if (!(this.opened instanceof Furnace)) return false;
+    const furnace = this.opened;
+    const output = furnace.get(2);
+    if (!output) return false;
+    // 先进背包（背包满了就留在产物槽里，不凭空消失）
+    const leftover = this.deps.inventory.addStack(output);
+    if (leftover >= output.count) {
+      this.stationHint = '背包满了，先腾出空间';
+      this.show();
+      return false;
+    }
+    furnace.set(2, leftover > 0 ? { ...output, count: leftover } : null);
+    if (leftover === 0) furnace.takeExperience();
+    this.stationHint = '';
+    this.show();
+    return true;
+  }
+
+  /** 熔炉状态（验收脚本读它判断"有没有在烧"） */
+  get furnaceState():
+    | { paused: boolean; started: boolean; burning: boolean; burnPct: number; cookPct: number; hint: string }
+    | null {
+    const furnace = this.opened;
+    if (!(furnace instanceof Furnace)) return null;
+    return {
+      paused: furnace.paused,
+      started: furnace.started,
+      burning: furnace.isLit,
+      burnPct: Math.round(furnace.burnRatio * 100),
+      cookPct: Math.round(furnace.cookRatio * 100),
+      hint: this.stationHint,
+    };
   }
 
   /** 外部（`index.ts` 的唯一入口）改完数据后叫它重画 */
@@ -241,6 +372,27 @@ export class ContainerSystem {
       this.lastUi = now;
       this.show();
     }
+  }
+
+  /**
+   * **全局**推进所有熔炉 —— 不只是开着的那个。
+   *
+   * ⚠️ 之前只有"界面开着"才 tick（`if (containers.isOpen) containers.tick(...)`），
+   * 于是关掉界面炉子就停住了。外部端（`main.ts: tickContainers`）是**所有熔炉都推进**，
+   * 注释写得很清楚："熔炉与酿造台离开玩家视野也要继续跑"。
+   *
+   * 这里只推进熔炉（v2 目前只有箱子与熔炉两种容器），
+   * 而且**跳过正在看的那个**——它由 `tick()` 按 500ms 节流重绘，
+   * 两处一起推进会让 `dt` 被算两遍、烧得比正常快一倍。
+   */
+  tickAll(dt: number): void {
+    if (!(dt > 0)) return;
+    const world = this.deps.getWorld();
+    world.containers.forEach((container) => {
+      if (!(container instanceof Furnace)) return;
+      if (container === this.opened) return; // 开着的那个由 tick() 管
+      container.tick(dt);
+    });
   }
 
   private show(): void {
@@ -354,19 +506,30 @@ export class ContainerSystem {
       // 箭头 + 两条进度（火焰在上、熔炼在下，都夹在原料/燃料与产物之间）
       const arrowX = leftX + 28 + slotSize + 14;
       const arrowY = y + (2 * slotSize + gap - 20) / 2;
+      // 冻结时进度条一律 0%（炉子真的不烧），并用文字说明"点目标框开工"
+      const idle = f.paused;
       els.push(
         text(arrowX, arrowY, 26, 20, '→', { fontSize: 16, color: MC.text, align: 'center' }),
-        text(arrowX + 26, arrowY - 2, 96, 14, `火焰 ${Math.round(f.burnRatio * 100)}%`, {
+        text(arrowX + 26, arrowY - 2, 96, 14, idle ? '待开工' : `火焰 ${Math.round(f.burnRatio * 100)}%`, {
           fontSize: 10,
-          color: MC.text,
+          color: idle ? MC.textMuted : MC.text,
         }),
-        text(arrowX + 26, arrowY + 16, 96, 14, `熔炼 ${Math.round(f.cookRatio * 100)}%`, {
-          fontSize: 10,
-          color: MC.textMuted,
-        }),
+        text(
+          arrowX + 26,
+          arrowY + 16,
+          96,
+          14,
+          idle ? '点产物框' : `熔炼 ${Math.round(f.cookRatio * 100)}%`,
+          { fontSize: 10, color: MC.textMuted },
+        ),
       );
-      // 产物槽（只取不放）
+      // 产物槽 = **目标框**：有成品就取走，没成品就开工（对齐外部端 `clickStationTarget`）
+      //
+      // ⚠️ 不额外画高亮：`takeOnly` 的槽位本身就会画一圈 `MC.outputAccent` 描边
+      // （`ui-kit` 里管这个），再叠一层只会变成两圈黄框。
+      // "现在该点这里"这件事由左边那两行小字表达（"待开工 / 点产物框"）。
       const outX = arrowX + 26 + 100;
+      const product = f.get(2);
       els.push(
         text(outX, labelY, 60, labelH, '产物', { fontSize: 10, color: MC.textMuted }),
         slot(
@@ -374,10 +537,14 @@ export class ContainerSystem {
           y + (2 * slotSize + gap - slotSize) / 2,
           slotSize,
           CONTAINER_NODE_BASE + 2,
-          f.get(2)?.id ?? 0,
-          f.get(2)?.count ?? 0,
+          product?.id ?? 0,
+          product?.count ?? 0,
           false,
-          (b) => this.deps.clickSlot('container', 2, b),
+          () => {
+            // 有成品 → 取走；没成品 → 点目标框开工
+            if (f.get(2)) this.takeStationOutput();
+            else this.startStation();
+          },
           undefined,
           true,
         ),
@@ -438,7 +605,11 @@ export class ContainerSystem {
     }
 
     // ---- 底部提示（与背包面板同一行小字，位置也一致） ----
-    const hint = this.deps.getHint();
+    //
+    // ⚠️ 两条来源要合成一条：`deps.getHint()` 是背包那一层的话（"拿起 8 个"），
+    // `stationHint` 是熔炉目标框的话（"燃料槽是空的"）。
+    // 只显示前者的话，玩家点了目标框被拒，界面上**什么都不说** —— 那正是第一版的样子。
+    const hint = this.stationHint || this.deps.getHint();
     if (hint) els.push(text(contentX, panelY + panelH - 22, panelW - pad * 2, 18, hint, { fontSize: 11, color: '#8a3a3a' }));
 
     this.deps.onGeo?.({
