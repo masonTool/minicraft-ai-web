@@ -195,7 +195,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { t } from './core/i18n/I18n.ts';
+import { t, tp } from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -685,6 +685,9 @@ import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.t
 import { planTutorialBoot, tutorialTrackFor } from './tutorial/boot.ts';
 // 创造模式撤销/重做（创造1）：栈是纯逻辑，写回世界在这里做
 import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack.ts';
+// 创造2：两点选区 + 框选填充（分批跨帧）
+import { buildSelection, type BlockPos, type SelectionBox } from './buildtools/Selection.ts';
+import { FillRunner, shouldFillCell, type FillMode } from './buildtools/Fill.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -942,6 +945,14 @@ const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
  * 一次撤 4096 格时逐格 `wakeFluidsAround` 会变成一次小型的流体风暴。
  */
 const UNDO_WAKE_LIMIT = 256;
+
+/**
+ * 一次填充最多记多少格的撤销（创造2）。
+ *
+ * 选区上限是 32768 格，全记下来约 3~6MB（手机上偏高）。超过这个数就**整次不记**，
+ * 而不是记一半——记一半的撤销会把玩家刚填好的区域撤出一个洞，比"不能撤"更糟。
+ */
+const FILL_UNDO_LIMIT = 8192;
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -1589,6 +1600,20 @@ class App {
    * 撤销会让别人的世界与服务端不一致。切换维度时清空（见 `switchDimension`）。
    */
   private readonly undoStack = new UndoStack();
+  /** 创造2：选区第一个角（null = 还没开始选） */
+  private selectionStart: BlockPos | null = null;
+  /** 创造2：成型的选区（两点都点完才有） */
+  private selectionBox: SelectionBox | null = null;
+  /** 创造2：正在分批执行的填充（null = 空闲） */
+  private activeFill: FillRunner | null = null;
+  /**
+   * 创造2：这次填充攒下的撤销记录。
+   *
+   * 填充是跨帧的，不能靠 `undoBegin/undoEnd` 包住（那会把玩家在这期间的其它操作
+   * 也并进同一步）——所以先攒进数组，全部写完再一次性 `undoPush`。
+   * 超过 `FILL_UNDO_LIMIT` 时**整次不记**（见 `startFill` 的注释）。
+   */
+  private fillUndoBuffer: BlockEdit[] | null = null;
   private readonly advancementScreen: AdvancementScreen;
   /** 世界统计（批次 552） */
   private readonly statistics = new Statistics();
@@ -8943,6 +8968,108 @@ class App {
     if (applied > 0) this.vibrate(8);
   }
 
+  // ---------------------------------------------------------------- 创造工具（创造2）
+
+  /**
+   * 点一个选区角：第一次记起点，第二次成盒。
+   *
+   * 同一格点两次 = 1×1×1 的选区（不是"取消"）：低龄玩家用"取消选框"来取消，
+   * 不该让"点了两下同一个地方"产生两种解释。
+   */
+  private selectCorner(pos: BlockPos): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    if (!this.selectionStart) {
+      this.selectionStart = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
+      this.selectionBox = null;
+      this.hudToast.show(t('buildtools.select.first'));
+      return true;
+    }
+    const result = buildSelection(this.selectionStart, pos);
+    this.selectionStart = null;
+    if (!result.ok) {
+      this.selectionBox = null;
+      this.hudToast.show(
+        t(result.reason === 'tooLarge' ? 'buildtools.select.tooLarge' : 'buildtools.select.outOfWorld'),
+      );
+      return false;
+    }
+    this.selectionBox = result.box;
+    this.hudToast.show(tp('buildtools.select.done', { volume: result.volume }));
+    return true;
+  }
+
+  private clearSelection(): void {
+    this.selectionStart = null;
+    this.selectionBox = null;
+  }
+
+  /** 开始填充：只建 runner，真正的写入由每帧的 `stepFillRunner` 推进 */
+  private startFill(blockId: number, mode: FillMode = 'fill', replaceId: number | null = null): boolean {
+    if (!this.undoAllowed()) {
+      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
+      return false;
+    }
+    if (!this.selectionBox) {
+      this.hudToast.show(t('buildtools.fill.noSelection'));
+      return false;
+    }
+    if (this.activeFill) this.activeFill.cancel();
+
+    this.fillUndoBuffer = this.undoAllowed() ? [] : null;
+    const box = this.selectionBox;
+    this.activeFill = new FillRunner(box, {
+      write: (pos) => {
+        const currentId = this.world.getBlock(pos.x, pos.y, pos.z);
+        if (!shouldFillCell({ mode, currentId, replaceId })) return false;
+        const currentState = this.world.getBlockState(pos.x, pos.y, pos.z);
+        if (!this.world.setBlockAndUpdate(pos.x, pos.y, pos.z, blockId, 0)) return false;
+        if (this.fillUndoBuffer) {
+          if (this.fillUndoBuffer.length >= FILL_UNDO_LIMIT) {
+            // 超过上限：整次不记（丢掉已攒的），避免"撤销出个洞"
+            this.fillUndoBuffer = null;
+          } else {
+            this.fillUndoBuffer.push({
+              dimension: this.dimension,
+              x: pos.x,
+              y: pos.y,
+              z: pos.z,
+              beforeId: currentId,
+              beforeState: currentState,
+              afterId: blockId,
+              afterState: 0,
+            });
+          }
+        }
+        // 与单格放置同一条：填到水底/水边要让水重新评估流向
+        this.wakeFluidsAround(pos.x, pos.y, pos.z);
+        return true;
+      },
+    });
+    return true;
+  }
+
+  /** 每帧推进一步填充（最多一批 512 格；没有填充时什么都不做） */
+  private stepFillRunner(): void {
+    const runner = this.activeFill;
+    if (!runner) return;
+    if (runner.step()) return;
+
+    this.activeFill = null;
+    const progress = runner.progress;
+    const buffered = this.fillUndoBuffer;
+    this.fillUndoBuffer = null;
+    if (buffered && buffered.length > 0) this.undoPush(buffered);
+    if (progress.cancelled) this.hudToast.show(t('buildtools.fill.cancelled'));
+    else this.hudToast.show(tp('buildtools.fill.done', { count: progress.written }));
+  }
+
+  private cancelFill(): void {
+    this.activeFill?.cancel();
+  }
+
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
   private openAdvancements(): void {
     if (this.advancementScreen.isOpen) return;
@@ -11101,6 +11228,38 @@ class App {
   /** 验收脚本用：撤销栈状态（不改变任何东西） */
   get undoStateForTest(): { undo: number; redo: number; allowed: boolean } {
     return { undo: this.undoStack.undoCount, redo: this.undoStack.redoCount, allowed: this.undoAllowed() };
+  }
+
+  /** 验收脚本用：点一个选区角（创造2） */
+  selectCornerForTest(x: number, y: number, z: number): boolean {
+    return this.selectCorner({ x, y, z });
+  }
+
+  /** 验收脚本用：同步把选区填完，返回真正写入的格数 */
+  fillSelectionForTest(blockId: number, mode: FillMode = 'fill'): number {
+    if (!this.startFill(blockId, mode)) return 0;
+    const runner = this.activeFill;
+    while (this.activeFill) this.stepFillRunner();
+    return runner?.progress.written ?? 0;
+  }
+
+  /** 验收脚本用：清掉选区（两个角都作废） */
+  clearSelectionForTest(): void {
+    this.clearSelection();
+  }
+
+  /** 验收脚本用：取消正在进行的填充（已写进去的格子不回滚） */
+  cancelFillForTest(): void {
+    this.cancelFill();
+  }
+
+  /** 验收脚本用：选区 / 填充状态 */
+  get selectionStateForTest(): { hasStart: boolean; box: SelectionBox | null; filling: boolean } {
+    return {
+      hasStart: this.selectionStart !== null,
+      box: this.selectionBox,
+      filling: this.activeFill !== null,
+    };
   }
 
   /**
@@ -16355,6 +16514,8 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
+      // 创造2：框选填充每帧推一批（512 格）；没有填充时这里是一次判空
+      this.stepFillRunner();
       this.tickContainers(dt);
       this.updateEntities(dt);
       mark = this.lap('ent', mark);
