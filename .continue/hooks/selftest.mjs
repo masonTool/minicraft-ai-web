@@ -54,11 +54,19 @@ const queue = (sid, body, head = '> 状态：执行中') =>
   writeFileSync(join(DOING, `${sid}.md`), `# 队列\n\n${head}\n> 批次：19990101-0000\n\n${body}\n`);
 /** 计划文件：`doing/plan-<名>.md`，和真实文件同构。 */
 const plan = (name, body) => writeFileSync(join(DOING, name), `# 计划 · 测试\n\n${body}\n`);
-/** 绑了计划的队列：头部多一行 `> 计划：`。 */
+/**
+ * 绑了计划的队列：头部多一行 `> 计划：`。
+ *
+ * ⚠️ **必须和真实模板逐行同构**（`queue-init` 注入的头部是
+ * `# 队列` / 空行 / `> 状态` / `> 创建` / `> 批次` / `> 计划`）。
+ * 这个夹具原来少了 `> 创建：`，于是 `> 计划：` 落在**第 5 行**——
+ * 而真实队列里它是**第 6 行**，`parsePlanRef` 只看前 5 行，真实绑定恒失效时
+ * 这一整组用例照样全绿。夹具比生产短一行，测的就等于不是那件事。
+ */
 const planQueue = (sid, planName, body) =>
   writeFileSync(
     join(DOING, `${sid}.md`),
-    `# 队列\n\n> 状态：执行中\n> 批次：19990101-0000\n> 计划：${planName}\n\n${body}\n`,
+    `# 队列\n\n> 状态：执行中\n> 创建：1999-01-01\n> 批次：19990101-0000\n> 计划：${planName}\n\n${body}\n`,
   );
 const config = (fast, extra = {}) =>
   writeFileSync(
@@ -308,6 +316,29 @@ try {
     return expect(
       r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-d.md'),
       '计划全部完成且最后里程碑已验收时，应走整体收尾',
+      r,
+    );
+  });
+
+  check('自检夹具 · 队列头与真实注入模板同构（`> 计划：` 必须在第 6 行被读到）', () => {
+    plan(
+      'plan-f.md',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- [~] `MS1.1` 当前 → 验收 `npm run test:a`',
+        '- [ ] `MS1.2` 下一条 → 验收 `npm run test:a`',
+      ].join('\n'),
+    );
+    planQueue('s-plan-line6', 'plan-f.md', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const lines = readFileSync(join(DOING, 's-plan-line6.md'), 'utf8').split(/\r?\n/);
+    if (!/^>\s*计划/.test(lines[5]?.trim() ?? '')) {
+      return expect(false, `夹具不同构：第 6 行应是 \`> 计划：\`，实际 ${JSON.stringify(lines[5])}`, null);
+    }
+    const r = hook('auto-continue.mjs', stop('s-plan-line6'));
+    return expect(
+      r.code === 2 && r.err.includes('计划里还有下一阶段'),
+      '第 6 行的绑定必须被读到（`parsePlanRef` 原来只看前 5 行，真实队列里它恒失效）',
       r,
     );
   });

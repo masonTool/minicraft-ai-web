@@ -386,6 +386,35 @@ for (const [name, url] of [
       }
     }
 
+    /**
+     * 阶段行格式核对：`- [x] MS2.1 …`（阶段号**没带反引号**）会被 `parsePlan` 当普通行丢弃，
+     * 钩子侧不报错、只是这条阶段消失（严重时整个计划被判定"已做完"）。
+     * 判定方式是拿 `parsePlan` 自己解析出的 `raw` 做差集——**不另写一份阶段正则**，
+     * 否则又是两份规则各自漂。
+     */
+    const stageRaws = new Set(plan.stages.map((stage) => stage.raw));
+    const orphans = [];
+    {
+      const lines = text.split(/\r?\n/);
+      let inFence = false;
+      for (const line of lines) {
+        const t = line.trim();
+        if (/^(```|~~~)/.test(t)) {
+          inFence = !inFence;
+          continue;
+        }
+        if (inFence) continue;
+        if (!/^-\s*\[[^\]]{0,6}\]/.test(t)) continue;
+        if (!stageRaws.has(t)) orphans.push(t);
+      }
+    }
+    if (orphans.length > 0) {
+      problems.push(
+        `${name} 有 ${orphans.length} 行看着像阶段但解析不出来（阶段号两侧必须带反引号）：` +
+          `「${orphans[0].slice(0, 48)}」`,
+      );
+    }
+
     const doingCount = plan.stages.filter((stage) => stage.kind === 'doing').length;
     if (doingCount > 1) {
       problems.push(`${name} 有 ${doingCount} 条 [~]（计划里同一时间只能有一条，它就是游标）`);
