@@ -14,7 +14,6 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block } from '../src/core/registry/blocks.ts';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
 import { groupPillars, pillarInstanceCount, type PillarSpec } from '../src/minigame/games/jump/pillars.ts';
 import { themeById } from '../src/minigame/games/jump/themes.ts';
@@ -397,7 +396,8 @@ console.log('\n小游戏目录');
   check('标题与说明键都是 minigame.*', MINIGAME_CATALOG.every(
     (entry) => entry.titleKey.startsWith('minigame.') && entry.descKey.startsWith('minigame.'),
   ));
-  check('旧游戏已从目录移除', !MINIGAME_CATALOG.some((entry) => entry.id === 'sokoban' || entry.id === 'breakout'));
+  const retired = ['sokoban', 'breakout'];
+  check('旧游戏已从目录移除', !MINIGAME_CATALOG.some((entry) => retired.includes(entry.id as string)));
   equal('按 id 找得到跳一跳', miniGameEntry('jump')?.id, 'jump');
   equal('找不到返回 null', miniGameEntry('nope'), null);
 }

@@ -17,16 +17,21 @@ export const JUMP_CONFIG = {
   reachMargin: 0.3,
 
   /** 方块边长：0 分 → 每 `shrinkScore` 分线性缩到最小 */
-  blockSizeStart: 1.8,
+  blockSizeStart: 2.0,
   blockSizeMin: 0.9,
   shrinkScore: 60,
 
-  /** 间距下限：0 分 → 每 `growScore` 分线性抬到终值 */
-  gapMinStart: 1.4,
-  gapMinEnd: 2.2,
+  /**
+   * 间距下限：0 分 → 每 `growScore` 分线性抬到终值。
+   *
+   * ⚠️ 必须大于 `blockSizeStart`（否则两根柱子会互相重叠，下一个目标直接看不见——
+   * 实测 gap=1.4 / size=1.8 时整屏只有一根方块）。
+   */
+  gapMinStart: 2.6,
+  gapMinEnd: 3.0,
   /** 间距上限：0 分 → 终值（最终会被 `maxDistance - reachMargin` 夹住） */
-  gapMaxStart: 2.0,
-  gapMaxEnd: 3.6,
+  gapMaxStart: 3.2,
+  gapMaxEnd: 4.2,
   growScore: 60,
 
   /** 生成方向（度，0 = 正前方；负数在左、正数在右） */

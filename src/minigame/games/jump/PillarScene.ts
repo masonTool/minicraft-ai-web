@@ -29,10 +29,10 @@ export interface PillarSceneOptions {
 }
 
 /** 相机俯角与距离系数（`notes/jump-game.md` §4 的初值） */
-const CAMERA_HEIGHT_RATIO = 0.72;
-const CAMERA_BACK_RATIO = 0.58;
+const CAMERA_HEIGHT_RATIO = 0.6;
+const CAMERA_BACK_RATIO = 0.62;
 const CAMERA_SIDE_RATIO = 0.62;
-const MIN_DISTANCE = 5.4;
+const MIN_DISTANCE = 5.0;
 /** 竖屏时把相机拉远多少（横屏为主场景） */
 const PORTRAIT_PULLBACK = 1.25;
 
@@ -110,12 +110,12 @@ export class PillarScene {
 
     const aspect = this.camera.aspect;
     const portrait = aspect < 1.2 ? PORTRAIT_PULLBACK / Math.max(0.6, aspect) : 1;
-    const distance = Math.max(MIN_DISTANCE, span * 1.35) * portrait;
+    const distance = Math.max(MIN_DISTANCE, span * 1.05) * portrait;
 
-    this.lookTarget.set(cx, 0.6, cz);
+    this.lookTarget.set(cx, 1.1, cz);
     this.desired.set(
       cx + distance * CAMERA_SIDE_RATIO,
-      0.6 + distance * CAMERA_HEIGHT_RATIO,
+      1.1 + distance * CAMERA_HEIGHT_RATIO,
       cz + distance * CAMERA_BACK_RATIO,
     );
 

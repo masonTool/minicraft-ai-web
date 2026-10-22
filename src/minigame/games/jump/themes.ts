@@ -64,14 +64,15 @@ export const JUMP_THEMES: readonly JumpTheme[] = [
   },
 ];
 
-/** 每多少分换一个主题 */
-export const THEME_SCORE_STEP = 20;
-
-/** 按分数取主题（负数/NaN 按 0） */
-export function themeForScore(score: number): JumpTheme {
-  const safe = Number.isFinite(score) ? Math.max(0, score) : 0;
-  const index = Math.floor(safe / THEME_SCORE_STEP) % JUMP_THEMES.length;
-  return JUMP_THEMES[index]!;
+/**
+ * 每局取一个主题（按 seed）。
+ *
+ * 为什么不是"每 20 分换一次"：中途换主题会重建场景，结算画面正好赶上切换时
+ * 背景会突然换色/换材质（实测很难看）。一局一个主题，重开时换——视觉稳定。
+ */
+export function themeForSeed(seed: number): JumpTheme {
+  const safe = Number.isFinite(seed) ? Math.abs(Math.floor(seed)) : 0;
+  return JUMP_THEMES[safe % JUMP_THEMES.length]!;
 }
 
 export function themeById(id: ThemeId): JumpTheme {

@@ -30,7 +30,7 @@ import {
   type LandingOutcome,
 } from './logic.ts';
 import { PillarScene, type PillarSpec } from './PillarScene.ts';
-import { themeForScore, type JumpTheme } from './themes.ts';
+import { themeForSeed, type JumpTheme } from './themes.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
 
 type Phase = 'ready' | 'charging' | 'jumping' | 'falling' | 'over';
@@ -38,9 +38,9 @@ type Phase = 'ready' | 'charging' | 'jumping' | 'falling' | 'over';
 /** 方块顶面高度 */
 const STAND_Y = 1;
 /** 蓄力到满时的身体压缩比例 */
-const BODY_SQUASH = 0.35;
+const BODY_SQUASH = 0.45;
 /** 蓄力时柱子顶面下沉的最大比例 */
-const PILLAR_SQUASH = 0.12;
+const PILLAR_SQUASH = 0.18;
 /** 结算面板淡入前的等待（让玩家看清"掉下去了"） */
 const FALL_SECONDS = 0.75;
 
@@ -60,7 +60,7 @@ export class JumpGame implements MiniGame {
   private player: PlayerRenderer | null = null;
   private audio: JumpAudio | null = null;
 
-  private theme: JumpTheme = themeForScore(0);
+  private theme: JumpTheme = themeForSeed(1);
   private run: JumpRun;
   private seed = 1;
   private phase: Phase = 'ready';
@@ -103,7 +103,7 @@ export class JumpGame implements MiniGame {
     this.run = createRun(this.seed);
     this.phase = 'ready';
 
-    this.theme = themeForScore(0);
+    this.theme = themeForSeed(this.seed);
     const pillars = new PillarScene({ atlas: context.atlas, theme: this.theme });
     pillars.setViewport(window.innerWidth, window.innerHeight);
     this.pillars = pillars;
@@ -164,7 +164,10 @@ export class JumpGame implements MiniGame {
     if (this.phase === 'ready' || this.phase === 'charging') {
       this.tickSpecialHold(step);
       const block = currentBlock(this.run);
-      this.drawPlayer(block.x, STAND_Y, block.z, this.yaw);
+      const charging = this.phase === 'charging';
+      // 蓄力时给一点 `sneaking`：模型会前倾 0.22 rad 并下沉 0.12，
+      // 把下沉补回去（脚仍贴地），观感就是"蹲下去蓄力"而不只是被压扁
+      this.drawPlayer(block.x, STAND_Y + (charging ? 0.12 : 0), block.z, this.yaw, charging);
     } else if (this.phase === 'jumping') {
       this.elapsed += step;
       const progress = Math.min(1, this.elapsed / this.duration);
@@ -184,7 +187,10 @@ export class JumpGame implements MiniGame {
       if (this.elapsed >= FALL_SECONDS) this.finish();
     }
 
-    pillars.follow(currentBlock(this.run), targetBlock(this.run), step);
+    // 掉落与结算期间不再跟随：人已经掉出画面，镜头再追会把方块甩到奇怪的视角
+    if (this.phase !== 'falling' && this.phase !== 'over') {
+      pillars.follow(currentBlock(this.run), targetBlock(this.run), step);
+    }
     pillars.render(context.renderer);
   }
 
@@ -207,7 +213,10 @@ export class JumpGame implements MiniGame {
     index: number;
     best: number;
     blocks: number;
+    gap: number;
   } {
+    const from = currentBlock(this.run);
+    const to = this.run.blocks[this.run.index + 1];
     return {
       phase: this.phase,
       score: this.run.score,
@@ -215,6 +224,8 @@ export class JumpGame implements MiniGame {
       index: this.run.index,
       best: this.best,
       blocks: this.run.blocks.length,
+      // 到下一个方块中心的距离：E2E 靠它算出"该按多久"（只读，不改状态）
+      gap: to ? Math.hypot(to.x - from.x, to.z - from.z) : 0,
     };
   }
 
@@ -277,7 +288,6 @@ export class JumpGame implements MiniGame {
     }
 
     this.run = outcome.run;
-    this.applyThemeIfNeeded();
     this.rebuildPillars();
     this.phase = 'ready';
     this.elapsed = 0;
@@ -298,13 +308,14 @@ export class JumpGame implements MiniGame {
     this.status = 'lost';
 
     const score = this.run.score;
+    const newRecord = score > this.best;
     this.best = Math.max(this.best, score);
     const progress = recordScore(loadProgress(), 'jump', score);
     saveProgress(progress);
     this.options.onScore?.(score);
 
     this.updateHud();
-    this.showOver(score);
+    this.showOver(score, newRecord);
   }
 
   private restart(): void {
@@ -324,7 +335,7 @@ export class JumpGame implements MiniGame {
       this.player.object.rotation.set(0, 0, 0);
     }
     this.overEl?.classList.add('hidden');
-    this.applyThemeIfNeeded();
+    this.syncTheme();
     this.rebuildPillars();
     this.pillars?.snap(currentBlock(this.run), targetBlock(this.run));
     this.updateHud();
@@ -349,7 +360,7 @@ export class JumpGame implements MiniGame {
 
   // ---------------------------------------------------------------- 画面
 
-  private drawPlayer(x: number, y: number, z: number, yaw: number): void {
+  private drawPlayer(x: number, y: number, z: number, yaw: number, sneaking = false): void {
     this.player?.update(
       {
         x,
@@ -361,13 +372,14 @@ export class JumpGame implements MiniGame {
         walkAmount: 0,
         swing: 0,
         flying: false,
+        sneaking,
       },
       () => null,
     );
   }
 
-  private applyThemeIfNeeded(): void {
-    const next = themeForScore(this.run.score);
+  private syncTheme(): void {
+    const next = themeForSeed(this.seed);
     if (next.id === this.theme.id) return;
     this.theme = next;
 
@@ -442,12 +454,21 @@ export class JumpGame implements MiniGame {
     hint.textContent = t('minigame.jump.hint');
     this.hintEl = hint;
 
-    hud.append(score, best, hint);
-    context.layer.appendChild(hud);
+    hud.append(score, best);
+    // 提示单独挂在 stage 上：`.jump-hint` 是绝对定位，挂进 `.jump-hud`（也是 absolute）
+    // 会相对它定位，结果跑到左上角与分数叠在一起
+    context.layer.append(hud, hint);
     this.hud = hud;
 
     const over = document.createElement('div');
     over.className = 'jump-over hidden';
+    // ⚠️ 宿主在 stage 上 `setPointerCapture`，会把后续 click 也重定向到 stage——
+    // 结算面板的按钮就永远收不到 click（实测点"再来一局"毫无反应）。
+    // 在面板这一层吞掉指针事件，宿主就不会拿捕获，按钮的 click 才正常。
+    const swallow = (event: Event): void => event.stopPropagation();
+    over.addEventListener('pointerdown', swallow);
+    over.addEventListener('pointerup', swallow);
+    over.addEventListener('pointermove', swallow);
 
     const panel = document.createElement('div');
     panel.className = 'jump-over-panel';
@@ -494,10 +515,14 @@ export class JumpGame implements MiniGame {
     if (this.hintEl) this.hintEl.classList.toggle('hidden', this.run.score > 0 || this.phase === 'over');
   }
 
-  private showOver(score: number): void {
+  private showOver(score: number, newRecord = false): void {
     if (!this.overEl) return;
     if (this.overTitleEl) this.overTitleEl.textContent = tp('minigame.jump.over', { score });
-    if (this.overBestEl) this.overBestEl.textContent = tp('minigame.jump.best', { best: this.best });
+    if (this.overBestEl) {
+      this.overBestEl.textContent = newRecord
+        ? t('minigame.jump.record')
+        : tp('minigame.jump.best', { best: this.best });
+    }
     this.overEl.classList.remove('hidden');
     if (this.hintEl) this.hintEl.classList.add('hidden');
   }
