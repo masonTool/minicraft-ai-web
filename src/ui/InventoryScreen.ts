@@ -21,7 +21,7 @@
  * 关闭界面时手上的物品、合成网格里的材料都会自动收回背包，不会丢失。
  */
 
-import { t, tp } from '../core/i18n/I18n.ts';
+import { t, tn, tp } from '../core/i18n/I18n.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import { itemIconTile } from '../core/registry/items.ts';
@@ -6549,7 +6549,8 @@ export class InventoryScreen {
       const left = stand.fuelRemaining;
       this.brewFuelTextEl.textContent =
         left > 0
-          ? tp('station.brewLeft', { count: left })
+          // 复数（多语言 P0-6）：英文的 1 要读成 "1 more brew" 而不是 "1 more brews"
+          ? tn('station.brewLeft', left)
           : t(powderInSlot ? 'station.brewReady' : 'station.brewNeed');
       this.brewFuelTextEl.classList.toggle('bad', left <= 0 && !powderInSlot);
       this.brewFuelTextEl.title = t(

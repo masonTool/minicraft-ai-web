@@ -24,6 +24,9 @@ import { COMMAND_MESSAGES_EN } from '../commands/commandMessages.data.ts';
 import { zh } from './locales/zh/index.ts';
 // 英文文案本体（多语言 P0-3）：与中文同构分组，键集由 `satisfies Messages` 卡齐
 import { en } from './locales/en/index.ts';
+// 英文的复数形式（多语言 P0-6）：只有需要区分单复数的键才出现在这里
+import { plural } from './locales/en/plural.ts';
+import { pluralCategoryFor, type PluralCategory, type PluralTable } from './plural.ts';
 // 语言清单与匹配（多语言 P0-1 / P0-4）：6 种语言的元数据 + 设备标签匹配
 import {
   FALLBACK_LOCALE,
@@ -94,6 +97,22 @@ const EMPTY_TABLE: Readonly<Record<string, string>> = {};
 /** 取一种语言的表；没装就返回空表（查出来全是 undefined，由 `t()` 走回落链） */
 export function tableOf(language: LocaleCode): Readonly<Record<string, string>> {
   return TABLES[language] ?? EMPTY_TABLE;
+}
+
+/**
+ * 每种语言的**复数表**（多语言 P0-6）：只放"count 可能是 1 且读起来别扭"的键。
+ * 没登记的键仍走 `t()`，所以这不是第二套文案，是一层可选的精修。
+ */
+export const PLURAL_TABLES: Readonly<Partial<Record<LocaleCode, PluralTable>>> = { en: plural };
+const EMPTY_PLURALS: PluralTable = {};
+
+export function pluralTableOf(language: LocaleCode): PluralTable {
+  return PLURAL_TABLES[language] ?? EMPTY_PLURALS;
+}
+
+/** 一个数字在某种语言里属于哪个复数类别（测试与 `tn()` 共用） */
+export function pluralCategory(count: number, language: Language = current): PluralCategory {
+  return pluralCategoryFor(count, localeMeta(language)?.intlLocale ?? 'en');
 }
 
 /**
@@ -208,19 +227,31 @@ function nonEmpty(table: Readonly<Record<string, string>>, key: string): string 
 /**
  * 查一条文案。`language` 省略时用当前语言。
  *
- * **回落链：当前语言 → 英文（发行主语言）→ 中文（源语言，最全）→ 键名本身。**
+ * **回落链：当前语言 → 英文（发行主语言）→ 键名本身。**
  *
- * 为什么英文排在中文前面：6 种语言之后，"德语缺一条"退到英文是对的
+ * 为什么只留英文这一档：6 种语言之后，"德语缺一条"退到英文是对的
  * （德语用户多半看得懂英文），退到中文等于把界面切成看不懂的字。
- * 中文留在链尾做最后兜底——它是最全的一张表。
+ * 又因为 `locales/en/**` 由 `satisfies Messages` 保证**键集与中文完全一致**，
+ * 英文这一档实际上不可能查空——所以不要再留"最后退中文"的第三档：
+ * 那会让"漏翻"变成"看起来只是语言不对"，而不是一眼可见的键名。
  */
 export function t(key: string, language: Language = current): string {
-  return (
-    nonEmpty(tableOf(language), key) ??
-    nonEmpty(tableOf(FALLBACK_LOCALE), key) ??
-    nonEmpty(ZH_MERGED, key) ??
-    key
-  );
+  return nonEmpty(tableOf(language), key) ?? nonEmpty(tableOf(FALLBACK_LOCALE), key) ?? key;
+}
+
+/**
+ * 把 `{name}` 占位符替换成参数。
+ *
+ * 两条约定（`tp()` / `tn()` 共用，别各写一份）：
+ *  1. **缺参数时保留占位符原文**（不替换成空串、也不抛错）——
+ *     界面上显示 `{count}` 一眼能看出漏传了，空串则像"排版坏了"；
+ *  2. 值统一 `String()`，数字参数不必调用方先转。
+ */
+function substitute(template: string, params: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name];
+    return value === undefined ? match : String(value);
+  });
 }
 
 /**
@@ -236,31 +267,59 @@ export function t(key: string, language: Language = current): string {
  *     界面上显示 `{count}` 一眼能看出漏传了，空串则像"排版坏了"。
  */
 export function tp(key: string, params: Record<string, string | number>): string {
-  return t(key).replace(/\{(\w+)\}/g, (match, name: string) => {
-    const value = params[name];
-    return value === undefined ? match : String(value);
-  });
+  return substitute(t(key), params);
+}
+
+/**
+ * 带**复数**的查表：`tn('station.brewLeft', left)`（多语言 P0-6）。
+ *
+ * 与 `tp()` 的唯一区别是**模板先按数量挑一种复数形式**：
+ *   1. 该语言在 `PLURAL_TABLES` 里登记过这条键 → 用 `Intl.PluralRules` 选类别，
+ *      取该类别（取不到取 `other`）的模板；
+ *   2. 没登记 → 退回 `t(key)` 那一条，`{count}` 照样替换。
+ * 所以**不需要每条文案都写复数**，只有"count 可能是 1 且读起来别扭"的才登记
+ * （见 `locales/en/plural.ts` 的判据）。
+ *
+ * 中文用不到复数形式（CLDR 里只有 other），走第 2 条即可。
+ */
+export function tn(key: string, count: number, params: Record<string, string | number> = {}): string {
+  // 先看**这条文案最终由哪种语言提供**（与 `t()` 的回落链同一判据）：
+  //  · 中文有自己的文案 → 用中文（中文没有复数形式，直接替换 {count}）；
+  //  · 德语表还没写 → 渲染的是英文那条 → 用英文的复数表 + 英文的复数规则。
+  // 关键点：**复数类别必须跟模板同语言**。拿德语规则去英文模板里挑类别，
+  // 会挑出 few/many 之类英文根本没有的类别，最后只能退回 other。
+  const source = nonEmpty(tableOf(current), key) === undefined ? FALLBACK_LOCALE : current;
+  const forms = pluralTableOf(source)[key];
+  const category = pluralCategory(count, source);
+  const template = forms?.[category] ?? forms?.other ?? nonEmpty(tableOf(source), key) ?? key;
+  return substitute(template, { ...params, count });
 }
 
 /**
  * 把几个词连成一句（枚举清单用）。
  *
- * 为什么需要它：中文用顿号、英文用逗号加 and，**分隔符本身就是语言相关的**。
- * 直接把 `items.join('、')` 写在界面里，英文模式下会变成
- * "Oak Planks、Cobblestone、Stick" —— 语法上不算错，但一眼就是机翻。
+ * 为什么需要它：**连接词本身就是语言相关的**——中文是"和"、英文是"and"、
+ * 德语是"und"、法语是"et"、葡语是"e"、俄语是"и"，而且标点规则各不相同。
+ * 手写 `items.join('、')` 在英文下会变成 "Oak Planks、Cobblestone、Stick"，
+ * 语法不算错但一眼就是机翻。
+ *
+ * ⚠️ 多语言 P0-6 起**一律交给 `Intl.ListFormat`**（用户拍板）：
+ * 中文因此从"木板、圆石、木棍"变成"木板、圆石和木棍"——这是**有意的行为变化**，
+ * 换来的是不用为每种语言手写一套连接规则（俄语/葡语的逗号规则并不简单）。
  */
 export function joinList(items: readonly string[], language: Language = current): string {
   const list = items.filter((item) => item.length > 0);
   if (list.length === 0) return '';
+  // 一项没有"连接"可言，也就不该走 Intl（某些语言会给出奇怪的单项形式）
   if (list.length === 1) return list[0]!;
-  // 中文用顿号，其余语言暂按英文那套（`, ` + `and`）。
-  // ⚠️ 这是 P0-6 改成 `Intl.ListFormat` 之前的临时口径：法/德/葡/俄各自的连接词
-  // 会在那一条里由 Intl 处理，这里不手写四种分词规则。
-  if (language !== 'zh') {
-    if (list.length === 2) return `${list[0]} and ${list[1]}`;
-    return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+  const tag = localeMeta(language)?.intlLocale ?? 'en';
+  if (typeof Intl === 'undefined' || typeof Intl.ListFormat !== 'function') return list.join(', ');
+  try {
+    return new Intl.ListFormat(tag, { type: 'conjunction', style: 'long' }).format([...list]);
+  } catch {
+    // 老 WebView 或没装该 locale 的数据：退成逗号列表，总比抛异常好
+    return list.join(', ');
   }
-  return list.join('、');
 }
 
 /**

@@ -29,11 +29,13 @@ import {
   isLanguage,
   isLanguageSetting,
   keyParity,
+  pluralCategory,
   resetLanguageForTest,
   resolveLanguage,
   setLanguage,
   t,
   tableOf,
+  tn,
   tp,
   joinList,
 } from '../src/core/i18n/I18n.ts';
@@ -256,18 +258,58 @@ console.log('\n[占位符（批次 425）]');
   );
 }
 
-console.log('\n[枚举清单的连接词（批次 427）]');
+console.log('\n[枚举清单的连接词（批次 427 / 多语言 P0-6）]');
 {
-  check('中文用顿号', joinList(['木板', '圆石', '木棍'], 'zh') === '木板、圆石、木棍', joinList(['木板', '圆石', '木棍'], 'zh'));
+  /**
+   * 多语言 P0-6 起一律走 `Intl.ListFormat(conjunction)`，**连接词由语言决定**。
+   * ⚠️ 中文因此从"木板、圆石、木棍"变成"木板、圆石和木棍"——这是用户拍板的
+   * 有意的行为变化（换来不再为每种语言手写连接规则），所以断言也照新口径写。
+   */
+  check('中文三项用"和"收尾', joinList(['木板', '圆石', '木棍'], 'zh') === '木板、圆石和木棍', joinList(['木板', '圆石', '木棍'], 'zh'));
+  check('中文两项用"和"', joinList(['木板', '圆石'], 'zh') === '木板和圆石', joinList(['木板', '圆石'], 'zh'));
   check('英文两项用 and', joinList(['Planks', 'Cobblestone'], 'en') === 'Planks and Cobblestone');
   check(
-    '英文三项是 "a, b, and c"',
+    '英文三项是 "a, b, and c"（牛津逗号）',
     joinList(['Planks', 'Cobblestone', 'Stick'], 'en') === 'Planks, Cobblestone, and Stick',
     joinList(['Planks', 'Cobblestone', 'Stick'], 'en'),
   );
+  // 每种语言的连接词都不一样，这正是不能手写 if 的理由
+  check('德语用 und', joinList(['A', 'B', 'C'], 'de') === 'A, B und C', joinList(['A', 'B', 'C'], 'de'));
+  check('法语用 et', joinList(['A', 'B', 'C'], 'fr') === 'A, B et C', joinList(['A', 'B', 'C'], 'fr'));
+  check('葡语用 e', joinList(['A', 'B', 'C'], 'pt') === 'A, B e C', joinList(['A', 'B', 'C'], 'pt'));
+  check('俄语用 и', joinList(['A', 'B', 'C'], 'ru') === 'A, B и C', joinList(['A', 'B', 'C'], 'ru'));
   check('一项不加分隔符', joinList(['木板'], 'zh') === '木板' && joinList(['Planks'], 'en') === 'Planks');
   check('空清单返回空串', joinList([], 'en') === '');
-  check('空字符串项被跳过', joinList(['木板', '', '圆石'], 'zh') === '木板、圆石');
+  check('空字符串项被跳过', joinList(['木板', '', '圆石'], 'zh') === '木板和圆石', joinList(['木板', '', '圆石'], 'zh'));
+}
+
+console.log('\n[复数（多语言 P0-6）]');
+{
+  /**
+   * 复数**不是二分的**：俄语 4 种、法语 0 算单数。所以判定必须交给
+   * `Intl.PluralRules`，而 `tn()` 只在"该语言登记过这条键"时才换模板。
+   */
+  check('英文 1 → one / 2 → other', pluralCategory(1, 'en') === 'one' && pluralCategory(2, 'en') === 'other');
+  check(
+    '俄语 1 → one / 2 → few / 5 → many / 1.5 → other / 21 → one',
+    ['one', 'few', 'many', 'other', 'one'].every((want, i) => pluralCategory([1, 2, 5, 1.5, 21][i]!, 'ru') === want),
+    [1, 2, 5, 1.5, 21].map((n) => `${n}:${pluralCategory(n, 'ru')}`).join(' '),
+  );
+  check('法语 0 和 1 都算单数（0 jour 不是 0 jours）', pluralCategory(0, 'fr') === 'one' && pluralCategory(1, 'fr') === 'one' && pluralCategory(2, 'fr') === 'other');
+
+  setLanguage('en');
+  check('英文单数走 one 形式', tn('station.brewLeft', 1) === '1 more brew', tn('station.brewLeft', 1));
+  check('英文复数走 other 形式', tn('station.brewLeft', 3) === '3 more brews', tn('station.brewLeft', 3));
+  check('额外参数照样能传', tn('station.brewLeft', 2, { extra: 'x' }) === '2 more brews', tn('station.brewLeft', 2, { extra: 'x' }));
+
+  setLanguage('zh');
+  check('中文没有复数表 → 回落 t()，{count} 照样替换', tn('station.brewLeft', 1) === '还能酿 1 次', tn('station.brewLeft', 1));
+  check('中文复数与单数同一条', tn('station.brewLeft', 5) === '还能酿 5 次', tn('station.brewLeft', 5));
+  check('没登记复数的键也能用 tn（等于 tp）', tn('inventory.fuelLabel', 2, { item: '煤炭' }) === '燃料：煤炭 ×2', tn('inventory.fuelLabel', 2, { item: '煤炭' }));
+
+  setLanguage('de');
+  check('还没表/没复数表的语言：tn 也回落英文', tn('station.brewLeft', 1) === '1 more brew', tn('station.brewLeft', 1));
+  resetLanguageForTest();
 }
 
 console.log('\n[背包界面文案接线（批次 617 / Q12）]');
@@ -801,6 +843,12 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
   check('缺表时回落英文', t('pause.title', 'de') === t('pause.title', 'en'), t('pause.title', 'de'));
   check('俄语同理（回落链不看具体是哪种语言）', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
   check('一路回落到头就返回键名', t('no.such.key', 'de') === 'no.such.key', t('no.such.key', 'de'));
+  // 回落链只留英文一档（多语言 P0-6 去掉了"最后退中文"）——前提是英文表真的完整。
+  // ⚠️ 判据必须是"**键在不在**英文表里"，不能写成 `t(key) === key`：
+  // 命令回执里有 `{name} Health = {value}` 这种语言中性的条目，英文值**就是键本身**，
+  // 那样判会把正常条目误报成漏翻。
+  const missingInEn = allKeys().filter((key) => !(key in tableOf(FALLBACK_LOCALE)));
+  check('英文表覆盖全部中文键（回落链只剩英文一档，缺一条就会露出键名）', missingInEn.length === 0, missingInEn.slice(0, 3).join(','));
   check('有表时不会串味', t('pause.title', 'zh') === '游戏已暂停' && t('pause.title', 'en') === 'Game Paused');
 }
 
@@ -860,7 +908,9 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
    * 到"跑测试才发现"——这条断言防的就是这个（类型保护被悄悄删掉）。
    */
   const enDir = new URL('../src/core/i18n/locales/en/', import.meta.url);
-  const enGroups = readdirSync(enDir).filter((name) => name.endsWith('.ts') && name !== 'index.ts');
+  // `plural.ts` 不是分组文件，是"需要区分单复数的那些键"的可选精修（多语言 P0-6）
+  const enFilesAll = readdirSync(enDir).filter((name) => name.endsWith('.ts'));
+  const enGroups = enFilesAll.filter((name) => name !== 'index.ts' && name !== 'plural.ts');
   const zhGroups = zhFiles.filter((name) => name !== 'index.ts');
   check(
     '英文表与中文同构（分组文件一一对应）',
@@ -872,6 +922,11 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
   );
   check('每个英文分组都用 satisfies 卡齐（漏写就等于没有编译期保护）', unchecked.length === 0, unchecked.join(','));
   check('英文 index.ts 用 satisfies Messages 收口', readFileSync(new URL('index.ts', enDir), 'utf8').includes('} satisfies Messages;'));
+  check(
+    '复数表用 satisfies PluralTable 卡齐（写错类别名会红）',
+    enFilesAll.includes('plural.ts') &&
+      readFileSync(new URL('plural.ts', enDir), 'utf8').includes('satisfies PluralTable'),
+  );
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
