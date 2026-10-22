@@ -66,6 +66,40 @@
   或给 `[发现]` 加一个"是否插队"的可选前缀。
 
 ---
+## 批次 20261022-1950 · 2026-10-22 · 会话 1fc8c4d7
+
+**做了什么**：把 continue-do 机制按上一轮评估的五个问题硬化：入口去重、未验证判定、TIPS 历史表迁出、批次索引迁出、字节门禁。共 5 条。
+
+**条目**（原文照搬）：
+
+- [x] [机制-1] 入口文档去重 + 防漂断言：`AGENTS.md` / `.continue/HANDOFF.md` 删掉"批次号 = 提交总数"的过期复述，只留指向 `README.md` 的指针；`tools/audit-docs.mjs` 加一条"入口文档不得复述过期机制"的检查 → `npm run audit:docs` 绿，且人为写回旧句会红
+  - 做了什么：`AGENTS.md` §4 第 5 条改成"机制细节只看 README"的指针；`HANDOFF.md` §1 删掉"批次号 = 提交总数"和手写的"最近一批 1363"，改成看 `DONE.md` 标题；`tools/audit-docs.mjs` 新增正则 `/批次号\s*[=＝:：]\s*[^\n]{0,16}提交总数/`，扫 `AGENTS.md` 与 `HANDOFF.md`。
+  - 为什么：钩子实际注入的是 `20261022-1950`，入口文档却还写着"提交总数"；新会话第一份读到的就是错的，而行数门禁查不出语义漂。
+  - 验证：`npm run audit:docs` 绿；临时往 `AGENTS.md` 追加旧句 → 检查红并给出"改成指向 README"的提示，还原后重新绿；`node .continue/hooks/check.mjs` 五项全过；`npm run check` 全绿。
+  - 批次：20261022-1950
+- [x] [机制-2] 修"未验证"误判：`auto-continue.mjs` 去掉 `UNPROVEN_RE` 里的 `跳过`、验证行改为只认 `验证：` 开头；`selftest.mjs` 补三条用例（"默认跳过"不弹窗 / "没跑"要弹窗 / 正文提"验证"不算凭证）；`README.md` 同步措辞 → `node .continue/hooks/check.mjs hooks` 绿
+  - 做了什么：`UNPROVEN_RE` 去掉 `跳过`；新增 `VERIFY_RE = /^\s*(?:[-*]\s*)?验证\s*[:：]\s*(.*)$/`，只把 `验证：` 开头的一行当凭证（原来正文里只要出现"验证"两个字就算）；`selftest.mjs` 加三条用例（默认跳过不弹窗 / 没跑要弹窗 / 正文提"验证"但没有凭证行仍算缺说明）；`README.md` 两处措辞同步。
+  - 为什么：本项目 `check:browser` 默认跳过，诚实的验证行会带"跳过"二字，旧正则把它判成未验证，等于每次自动收尾都弹窗；同时"验证"任意出现就能冒充凭证，门禁太松。两个方向一起修。
+  - 验证：`node .continue/hooks/check.mjs hooks` 通过（新增三条用例）；`npm run check` 全绿。
+  - 批次：20261022-1950
+- [x] [机制-3] TIPS 历史表迁出主文件：把 `.continue/TIPS.md` 第 87 行起的「历史经验总表」（约 170KB）整段搬到 `notes/tips-history.md`，TIPS 只留按模块的坑；`OVERVIEW.md` 移除同名模块并改指新文件 → `node .continue/hooks/check.mjs ids docs` 绿，TIPS ≤ 150 行
+  - 做了什么：用 `sed -n '92,$p'` 把「历史经验总表」的表格（408 行 / 约 189KB）整段搬到 `notes/tips-history.md`（表头另写，表格原文未改），TIPS 截到前 84 行；`OVERVIEW.md` 删掉同名模块、两处指路改到新文件，头部补一行索引；`DONE.md` 的溢出文档索引补一行。
+  - 为什么：TIPS 用 499 行装了 190KB，行数门禁看不出真实 token 成本；而且 80% 内容是一张没有模块列的总表，"按模块 grep"在多数模块上名存实亡。迁出后 TIPS 只装按模块整理的坑，总表作为历史归档按关键词搜。
+  - 验证：`node .continue/hooks/check.mjs ids docs` 绿；`npm run audit:docs` 绿；`wc -l` 口径 TIPS 84 行、OVERVIEW 190 行；`grep -rn "TIPS.md#历史经验总表"` 无残留；`npm run check` 全绿。
+  - 批次：20261022-1950
+- [x] [机制-4] 批次索引迁出 OVERVIEW：`OVERVIEW.md` 的「三、批次索引」表搬到 `notes/batches.md`，只留一行指针；`audit-ids.mjs` 同时读两份做 DONE↔索引 交叉核对 → `node .continue/hooks/check.mjs ids` 绿，OVERVIEW ≤ 190 行
+  - 做了什么：新建 `notes/batches.md`（表头 + 3 行索引）；`OVERVIEW.md` 的「三、批次索引」只留两行指针（199 → 185 行）；`audit-ids.mjs` 的索引核对改成 `OVERVIEW` 与 `notes/batches.md` 的并集；`DONE.md` 溢出索引补一行；顺带把 `HANDOFF.md` 的提交总数锚点 1374 → 1377（连做三次提交后 `audit:tasks` 当场报差 3，这正是它该干的）。
+  - 为什么：批次索引每批 +1 行，是 OVERVIEW 200 行预算里唯一只增不减的部分；移走后 OVERVIEW 185 行，留出约 3 批余量。
+  - 验证：`node .continue/hooks/audit-ids.mjs --strict` exit 0（若新文件没被读到，3 个批次会变成 3 条 warning，strict 下即失败）；`check.mjs ids docs` 绿；`npm run check` exit 0；`wc -l OVERVIEW` = 185。
+  - 批次：20261022-1950
+- [x] [机制-5] 文档体量门禁加字节口径：`lib.mjs` 增 `DOC_BYTE_LIMITS`，`audit-docs.mjs` 同时查行数与字节；`tools/audit-docs.mjs` 的重装守卫同时盯 `TASKS_BYTES` → `node .continue/hooks/check.mjs docs` 绿，临时灌大 TIPS 会红
+  - 做了什么：`lib.mjs` 新增 `DOC_BYTE_LIMITS`（README 40KB / DONE 40KB / OVERVIEW 24KB / TASKS 900KB / TIPS 60KB / 队列 60KB）；`audit-docs.mjs` 同时查行数与字节，成功时打两行摘要；`tools/audit-docs.mjs` 的重装守卫加 `TASKS_BYTES`，并把"键不见了"从静默 `continue` 改成报错；README 的 `docs` 说明同步。
+  - 为什么：TIPS 曾用 499 行装 190KB，行数门禁完全看不出来；行数只适合"条目密度稳定"的文件，带大表格的必须同时看字节。
+  - 验证：`audit-docs.mjs` 绿（行数 / 字节两行摘要）；临时往 `TIPS.md` 灌 200KB → 红（202KB > 60KB），还原后绿；把 `TASKS_BYTES` 改名 → 项目守卫报"不见了"并 exit 1，还原后绿；`npm run check` exit 0。
+  - 批次：20261022-1950
+
+---
+
 ## 批次 20261022-1944 · 2026-10-22 · 会话 0a49498a
 
 **做了什么**：把 `.continue/NOTES.md`（框架六份文件之外的第七份）整份并入 `DONE.md`，并让全仓引用改指新位置。共 2 条。

@@ -18,10 +18,13 @@
 - TypeScript 严格模式 + Vite + Three.js / WebGL2；无第三方运行时依赖（除 `three`）· `A1`~`A5` · 批次 1~9
 - 离线测试 169 套（`tools/run-tests.mjs` 并行跑）+ vitest 单测，`npm run check` 是一道门 · `A6` · 批次 589
 - 浏览器侧四块命令（截图 / 控制台零错误 / 像素差 / 起服检查），`BROWSER_CHECK=1` 才真跑 · `A7` · 批次 1357
+- 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`，`audit-ids` 同时核对 `DONE` ↔ `notes/batches.md` · 批次 20261022-1950
+- 入口文档只留指针：`AGENTS.md` / `HANDOFF.md` 的机制复述由 `tools/audit-docs.mjs` 防漂 · 批次 20261022-1950
 
 **坑 / 注意**
 
 - 「派生数字不要手抄」与「同一事实写在两处就查两处」是这一段的母题，见 `TIPS.md#工程与基础设施`
+- 文档体量的"行数"会被超长表格绕过（TIPS 曾 499 行 / 190KB）：大表格迁 `notes/`，门禁同时看字节
 - `.continue/` 的任务机制（队列 / 钩子 / 门禁）见 `README.md`；`HANDOFF.md` 只留本项目的约定与命令
 
 ### 方块与物品注册表
