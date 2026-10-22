@@ -5234,6 +5234,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       `npm run check` 从 v3 迁移（`5815cd72`）起一直是红的（CI 也红）。现在断言跟实现对齐，
       并保留"连续次数必须累加并逐轮落盘""隔离后归零、指纹移到下一条"两条行为断言。
       `test:hooks` **91 项断言**全过，全量 `npm run check` 恢复绿。
+- [x] 批次 20261022-2014 · **continue-task skill 入库 + 补丁回灌**（A~O 里没有对应条目，属机制本身）：
+      `.codebuddy/skills/continue-task/` 纳入版本管理（根 `.gitignore` 只放行这一项，其它技能仍本地）；
+      上一批改的 5 个钩子与 `README.md` 同步进 `assets/.continue/`，`diff -rq` 与运行版一致；
+      `check-framework.mjs` 与 `test-install.mjs`（19 项）通过。以后重装从仓库里的 skill 装，不会丢补丁。
 
 ---
 

@@ -20,6 +20,7 @@
 - 浏览器侧四块命令（截图 / 控制台零错误 / 像素差 / 起服检查），`BROWSER_CHECK=1` 才真跑 · `A7` · 批次 1357
 - 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`，`audit-ids` 同时核对 `DONE` ↔ `notes/batches.md` · 批次 20261022-1950
 - 入口文档只留指针：`AGENTS.md` / `HANDOFF.md` 的机制复述由 `tools/audit-docs.mjs` 防漂 · 批次 20261022-1950
+- continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致 · 批次 20261022-2014
 
 **坑 / 注意**
 

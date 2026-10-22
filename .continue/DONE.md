@@ -66,6 +66,26 @@
   或给 `[发现]` 加一个"是否插队"的可选前缀。
 
 ---
+## 批次 20261022-2014 · 2026-10-22 · 会话 1fc8c4d7
+
+**做了什么**：把 continue-task skill 纳入版本管理，并把上一批的 5 个框架补丁回灌到 skill 的 `assets/`，让重装源与运行版一致。共 2 条。
+
+**条目**（原文照搬）：
+
+- [x] [机制-6] 把 continue-task skill 纳入版本管理，并把本批 5 个钩子 + README 同步进 skill assets：`.gitignore` 放行 `.codebuddy/skills/continue-task/`；`cp .continue/hooks/{lib,auto-continue,audit-ids,audit-docs,selftest}.mjs` 与 `.continue/README.md` 到 `assets/.continue/` → `git check-ignore` 不再命中、`git ls-files` 有 skill、`diff -rq` 两份 hooks 无差异
+  - 做了什么：根 `.gitignore` 把 `.codebuddy/skills/` 改成 `.codebuddy/skills/*` + `!.codebuddy/skills/continue-task/`；把本批改过的 5 个钩子（`lib` / `auto-continue` / `audit-ids` / `audit-docs` / `selftest`）与 `.continue/README.md` 拷进 `assets/.continue/`，让 skill 成为补丁的源；`git add` 整个 `continue-task`（26 个文件）。
+  - 为什么：上一批改的是"已安装的框架"，skill 的 `assets/` 还是旧模板；只把 skill 纳入 git 而不回灌补丁，下次重装就会把 5 个修复覆盖掉。纳入版本管理后，重装源与运行版一致。
+  - 验证：`diff -rq .continue/hooks assets/.continue/hooks` 无差异；`diff -q` README 无差异；`git check-ignore` 不再命中；`git ls-files` 26 个；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过；`node .continue/hooks/check.mjs` 五项全过；`npm run check` exit 0。
+  - 批次：20261022-2014
+- [x] [机制-7] 更新“skills 是本地”的文档口径：`HANDOFF.md` §5 的跨机器边界表把 `continue-task` 移到“随仓库走”，其余本地技能保持忽略；同步 `assets/.continue/README.md` → `grep` 口径正确、`npm run check` 绿
+  - 做了什么：`HANDOFF.md` §5 的跨机器边界表把 `.codebuddy/skills/continue-task/` 移到"随仓库走"，注明它是框架补丁的源、重装用它；其它技能仍留在"只在本机"。
+  - 为什么：skill 已入库，旧表还写着"skills 全是本地"，下一个人会以为可以直接删/不同步；资产 README 在上一批已同步，本次无需再改。
+  - 验证：`grep -n "continue-task" .continue/HANDOFF.md` 指向"随仓库走"那列；`git check-ignore` 不再命中；`check.mjs` 五项全过；`npm run check` exit 0（audit-tasks 用容差 2 通过：写着 1379、实际 1381）。
+  - 批次：20261022-2014
+- [ ] [机制-8] 收尾：把队列原样搬进 `DONE.md`、更新 `OVERVIEW` / `TASKS` / `TIPS` / `notes/batches.md` 与 `HANDOFF` 提交总数锚点，删队列 → `node .continue/hooks/check.mjs` 与 `npm run check` 全绿
+
+---
+
 ## 批次 20261022-1950 · 2026-10-22 · 会话 1fc8c4d7
 
 **做了什么**：把 continue-do 机制按上一轮评估的五个问题硬化：入口去重、未验证判定、TIPS 历史表迁出、批次索引迁出、字节门禁。共 5 条。
