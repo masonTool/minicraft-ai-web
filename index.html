@@ -1244,11 +1244,16 @@
          全屏一层，z-index 30：盖住 HUD / 背包 / 配方书（10~20），低于主菜单（40）。
          小游戏自己的 DOM 挂在 `.minigame-stage` 里，退出时整层清空。 */
       #minigame-layer {
-        position: fixed; inset: 0; z-index: 30;
+        position: fixed; inset: 0; z-index: 45;
         background: #0b1016;
       }
       #minigame-layer.hidden { display: none; }
       .minigame-stage { position: absolute; inset: 0; touch-action: none; }
+      /* 主菜单进入小游戏时，canvas 由主菜单创建并插进 stage（App 内那套用的是主 canvas） */
+      .minigame-stage canvas {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        display: block;
+      }
       .minigame-topbar {
         position: absolute;
         top: calc(8px + env(safe-area-inset-top, 0px));
@@ -1285,6 +1290,58 @@
         left: 50%; transform: translateX(-50%);
         color: #9fb3c8; font-size: 12px; pointer-events: none;
       }
+
+      /* ---------------- 小游戏选择页（小游戏3，批次 20261022-1954） ----------------
+         与主菜单同一套深色框；z-index 45（高于主菜单 40、低于设置 50）。
+         横屏矮屏靠 max-height + overflow 自滚，不多做一栏。 */
+      #minigame-menu {
+        position: fixed; inset: 0; z-index: 45;
+        display: grid; place-items: center;
+        padding: 12px;
+        background: rgba(0, 0, 0, .55);
+        overflow-y: auto;
+      }
+      #minigame-menu.hidden { display: none; }
+      .minigame-menu-panel {
+        width: min(92vw, 560px);
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
+        padding: 10px 12px;
+        background: rgba(22, 22, 22, .96);
+        border: 3px solid #4a4a4a; border-radius: 4px;
+        color: #fff;
+        font-size: 13px;
+      }
+      .minigame-menu-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+      .minigame-back {
+        min-height: 36px; padding: 4px 10px;
+        font: inherit; font-size: 13px; color: #fff;
+        background: #3a3a3a; border: 2px solid #5a5a5a; border-radius: 3px;
+      }
+      .minigame-menu-title { font-size: 15px; font-weight: 700; }
+      .minigame-games { display: flex; flex-direction: column; gap: 8px; }
+      .minigame-game {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px; text-align: left;
+        font: inherit; color: inherit;
+        background: #2b2b2b; border: 2px solid #4a4a4a; border-radius: 4px;
+      }
+      .minigame-game canvas { width: 40px; height: 40px; flex: none; image-rendering: pixelated; }
+      .minigame-game-text { min-width: 0; }
+      .minigame-game-name { font-size: 14px; font-weight: 700; }
+      .minigame-game-desc { font-size: 11px; color: #b9c4cf; margin-top: 1px; }
+      .minigame-game-count { font-size: 11px; color: #ffd75e; margin-top: 1px; }
+      .minigame-levels { display: flex; flex-direction: column; gap: 8px; }
+      .minigame-levels.hidden, .minigame-games.hidden { display: none; }
+      .minigame-levels-name { font-size: 14px; font-weight: 700; }
+      .minigame-level-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+      .minigame-level {
+        min-height: 44px;
+        font: inherit; font-size: 14px; color: #fff;
+        background: #2b2b2b; border: 2px solid #4a4a4a; border-radius: 4px;
+      }
+      .minigame-level.cleared { border-color: #6fbf73; color: #9be59f; }
+      .minigame-level.cleared::after { content: ' ✓'; font-size: 12px; }
 
       /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
          与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */

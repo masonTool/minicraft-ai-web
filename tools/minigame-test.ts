@@ -15,6 +15,17 @@ import { readFileSync } from 'node:fs';
 import { Block } from '../src/core/registry/blocks.ts';
 import { buildBlockGroups, groupInstanceCount } from '../src/minigame/blockGroups.ts';
 import { levelBlocks, parseLevel } from '../src/minigame/level.ts';
+import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
+import {
+  EMPTY_PROGRESS,
+  MINIGAME_PROGRESS_KEY,
+  bestSteps,
+  clearedCount,
+  isCleared,
+  loadProgress,
+  recordClear,
+  saveProgress,
+} from '../src/minigame/progress.ts';
 
 let passed = 0;
 let failed = 0;
@@ -176,6 +187,114 @@ console.log('\n5000 方块的分组耗时（单帧预算）');
   equal('5000 格全部被分组', groupInstanceCount(result), 5000);
   equal('只有 4 组（4 个 draw call）', result.groups.length, 4);
   check('分组耗时 < 100ms', elapsed < 100, `${elapsed.toFixed(1)}ms`);
+}
+
+// ------------------------------------------------------------------ 进度与目录
+
+/** 内存版 Storage（node 里没有 localStorage） */
+class MemoryStorage {
+  private readonly map = new Map<string, string>();
+  getItem(key: string): string | null {
+    return this.map.get(key) ?? null;
+  }
+  setItem(key: string, value: string): void {
+    this.map.set(key, value);
+  }
+  removeItem(key: string): void {
+    this.map.delete(key);
+  }
+  clear(): void {
+    this.map.clear();
+  }
+  key(index: number): string | null {
+    return [...this.map.keys()][index] ?? null;
+  }
+  get length(): number {
+    return this.map.size;
+  }
+}
+
+console.log('\n通关进度：纯函数');
+{
+  let progress = EMPTY_PROGRESS;
+  equal('初始没通关', isCleared(progress, 'sokoban', 0), false);
+  equal('初始最佳步数为 null', bestSteps(progress, 'sokoban', 0), null);
+
+  progress = recordClear(progress, 'sokoban', 0, 42);
+  equal('记一次通关', isCleared(progress, 'sokoban', 0), true);
+  equal('最佳步数 42', bestSteps(progress, 'sokoban', 0), 42);
+
+  equal('步数更多不覆盖', bestSteps(recordClear(progress, 'sokoban', 0, 99), 'sokoban', 0), 42);
+  equal('步数更少会覆盖', bestSteps(recordClear(progress, 'sokoban', 0, 30), 'sokoban', 0), 30);
+  equal('NaN 步数按 1 记', bestSteps(recordClear(EMPTY_PROGRESS, 'sokoban', 1, Number.NaN), 'sokoban', 1), 1);
+  equal('0 步按 1 记', bestSteps(recordClear(EMPTY_PROGRESS, 'sokoban', 1, 0), 'sokoban', 1), 1);
+  equal('不同游戏的同号关卡互不影响', isCleared(progress, 'breakout', 0), false);
+
+  const counted = recordClear(recordClear(EMPTY_PROGRESS, 'sokoban', 0, 10), 'sokoban', 2, 20);
+  equal('已通关计数', clearedCount(counted, 'sokoban', 10), 2);
+}
+
+console.log('\n通关进度：存储容错');
+{
+  const storage = new MemoryStorage();
+  const asStorage = storage as unknown as Storage;
+  equal('空存储读到空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+
+  saveProgress(recordClear(EMPTY_PROGRESS, 'sokoban', 3, 55), asStorage);
+  equal('存了能读回来', bestSteps(loadProgress(asStorage), 'sokoban', 3), 55);
+
+  storage.setItem(MINIGAME_PROGRESS_KEY, '{not json');
+  equal('坏 JSON 当空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+
+  storage.setItem(MINIGAME_PROGRESS_KEY, JSON.stringify({ version: 2, cleared: {} }));
+  equal('版本不对当空进度', Object.keys(loadProgress(asStorage).cleared).length, 0);
+
+  storage.setItem(
+    MINIGAME_PROGRESS_KEY,
+    JSON.stringify({
+      version: 1,
+      cleared: { 'sokoban:1': 12, 'bad key': 3, 'sokoban:2': 'x', 'sokoban:3': -1, 'sokoban:4': 7.9 },
+    }),
+  );
+  const filtered = loadProgress(asStorage);
+  equal('正常键读得回来', bestSteps(filtered, 'sokoban', 1), 12);
+  equal('字符串值被丢掉', isCleared(filtered, 'sokoban', 2), false);
+  equal('负值被丢掉', isCleared(filtered, 'sokoban', 3), false);
+  equal('小数取整', bestSteps(filtered, 'sokoban', 4), 7);
+  equal('坏键被丢掉（不计入总数）', Object.keys(filtered.cleared).length, 2);
+}
+
+console.log('\n小游戏目录');
+{
+  equal('目录里有 2 个游戏', MINIGAME_CATALOG.length, 2);
+  equal('id 唯一', new Set(MINIGAME_CATALOG.map((entry) => entry.id)).size, MINIGAME_CATALOG.length);
+  check('每个都是 10 关', MINIGAME_CATALOG.every((entry) => entry.levelCount === 10));
+  check(
+    '每个都有标题与说明键',
+    MINIGAME_CATALOG.every(
+      (entry) => entry.titleKey.startsWith('minigame.') && entry.descKey.startsWith('minigame.'),
+    ),
+  );
+  equal('按 id 找得到推箱子', miniGameEntry('sokoban')?.id, 'sokoban');
+  equal('找不到返回 null', miniGameEntry('nope'), null);
+}
+
+console.log('\n主菜单入口（静态断言）');
+{
+  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  check('主菜单有小游戏 action', worldSrc.includes('onMiniGames?: () => void;'));
+  check('入口按钮是 secondary', worldSrc.includes("miniGames.className = 'world-secondary';"));
+  check('入口按钮有稳定 id', worldSrc.includes("miniGames.id = 'world-minigames-button';"));
+  check(
+    '第一颗 primary 仍是"开始游戏"（浏览器验收脚本依赖）',
+    worldSrc.indexOf("play.className = 'world-primary'") >= 0 &&
+      worldSrc.indexOf("play.className = 'world-primary'") < worldSrc.indexOf("miniGames.className = 'world-secondary'"),
+  );
+  check('主程序把入口接到选择页', mainSrc.includes('onMiniGames: openMiniGames'));
+  check('主菜单跑小游戏会先铺图集', mainSrc.includes('atlas.ensureUploaded()'));
+  check('返回键先退小游戏', mainSrc.includes('activeMenuMiniGame.stop()'));
+  check('选择页返回逐级', mainSrc.includes('miniGameMenu.back()'));
+  check('退出时释放 renderer', mainSrc.includes('renderer.dispose()'));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

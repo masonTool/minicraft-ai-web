@@ -705,6 +705,9 @@ import { BuildToolbar } from './ui/BuildToolbar.ts';
 import { MiniGameHost } from './minigame/MiniGameHost.ts';
 import { SmokeGame } from './minigame/games/smoke.ts';
 import type { MiniGame } from './minigame/types.ts';
+// 小游戏3：主菜单入口、选择页与本地进度
+import { MiniGameMenu } from './ui/MiniGameMenu.ts';
+import { loadProgress } from './minigame/progress.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -18376,6 +18379,91 @@ async function boot(): Promise<void> {
     menuSettings.show();
   };
 
+  // ---------------------------------------------------------------- 小游戏（小游戏3）
+
+  let miniGameMenu: MiniGameMenu | null = null;
+  let activeMenuMiniGame: MiniGameHost | null = null;
+
+  /**
+   * 主菜单里跑一局小游戏（独立于 App）。
+   *
+   * 为什么不复用 App 里的宿主：主菜单阶段没有 renderer（App 才有），
+   * 而"进小游戏"不该先加载整个世界。这里自己建 canvas + renderer，
+   * 退出时全部 dispose——小游戏本身不碰世界、不碰存档。
+   */
+  const runStandaloneMiniGame = (game: MiniGame): void => {
+    if (activeMenuMiniGame) return;
+    // 图集是 boot 的单例（主菜单阶段只建对象、不铺贴图）：进小游戏先铺一次
+    atlas.ensureUploaded();
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'minigame-canvas';
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const listeners = new AbortController();
+    window.addEventListener(
+      'resize',
+      () => renderer.setSize(window.innerWidth, window.innerHeight),
+      { signal: listeners.signal },
+    );
+
+    let host: MiniGameHost | null = null;
+    host = new MiniGameHost(document.body, {
+      renderer,
+      atlas,
+      onExit: () => {
+        activeMenuMiniGame = null;
+        listeners.abort();
+        host?.dispose();
+        renderer.dispose();
+        canvas.remove();
+        // 主菜单一直开着（小游戏只是盖在上面），补一条返回守卫就行
+        pushMenuGuard();
+      },
+    });
+    activeMenuMiniGame = host;
+
+    // canvas 必须插进 stage：layer 有底色，挂在外面会被盖住
+    host.layer.querySelector('.minigame-stage')?.appendChild(canvas);
+    host.start(game);
+
+    let last = performance.now();
+    const loop = (): void => {
+      if (!host?.active) return;
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      host.update(dt);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  };
+
+  /** 选关 → 进入（T12/T13 会按 gameId 换成推箱子 / 打砖块；现在统一进框架自检游戏） */
+  const startMiniGameFromMenu = (_gameId: string, _level: number): void => {
+    miniGameMenu?.hide();
+    runStandaloneMiniGame(new SmokeGame());
+  };
+
+  const openMiniGames = (): void => {
+    if (!miniGameMenu) {
+      miniGameMenu = new MiniGameMenu(document.body, atlas, loadProgress(), {
+        onStart: (gameId, level) => startMiniGameFromMenu(gameId, level),
+        onClose: () => {
+          miniGameMenu?.hide();
+          pushMenuGuard();
+        },
+      });
+    } else {
+      // 每次打开都重读进度：上一局可能在别的标签页里通关了
+      miniGameMenu.setProgress(loadProgress());
+    }
+    pushMenuGuard();
+    miniGameMenu.show();
+  };
+
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
     onDelete: (world) => deleteWorld(world),
@@ -18383,6 +18471,7 @@ async function boot(): Promise<void> {
     onSettings: openMenuSettings,
     onExport: (world) => exportWorld(world),
     onImport: () => importWorld(),
+    onMiniGames: openMiniGames,
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */
@@ -18508,6 +18597,17 @@ async function boot(): Promise<void> {
   // 主菜单的返回层级（批次 181）：设置 → 关掉；二级页 → 首页；首页 → 交给浏览器退出
   window.addEventListener('popstate', () => {
     if (!menu.isOpen) return; // 游戏内由 App 自己的守卫处理
+    // 小游戏在跑：先退游戏（`onExit` 会补一条守卫，这里不再补，避免多压一条）
+    if (activeMenuMiniGame) {
+      activeMenuMiniGame.stop();
+      return;
+    }
+    // 选择页开着：关卡页 → 卡片页由 `back()` 自己处理，回到卡片页时补一条守卫
+    if (miniGameMenu?.isOpen) {
+      const stayed = miniGameMenu.back();
+      if (stayed) pushMenuGuard();
+      return;
+    }
     if (menuSettings?.isOpen) {
       menuSettings.hide();
       pushMenuGuard();

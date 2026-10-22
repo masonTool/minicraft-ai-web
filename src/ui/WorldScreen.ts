@@ -64,6 +64,12 @@ export interface WorldScreenActions {
   onExport?: (world: WorldSummary) => void | Promise<void>;
   /** 导入世界（批次 591，L2）：选一个之前导出的文件，导入成新世界 */
   onImport?: () => void | Promise<void>;
+  /**
+   * 小游戏（小游戏3）：打开选择页。
+   *
+   * 不传就**不显示入口**——单机版 / 精简构建把它当可选能力，不需要改界面代码。
+   */
+  onMiniGames?: () => void;
 }
 
 /**
@@ -161,6 +167,19 @@ export class WorldScreen {
       settings.textContent = t('menu.settings');
       settings.addEventListener('click', () => this.actions.onSettings?.());
       menu.append(settings);
+    }
+
+    // 小游戏入口（小游戏3）：第三颗按钮。
+    // ⚠️ 必须是 `world-secondary`：浏览器验收脚本要求"可见视图里的第一颗 `.world-primary`
+    // 仍是开始游戏"，把它写成 primary 会让那套脚本全红。
+    if (this.actions.onMiniGames) {
+      const miniGames = document.createElement('button');
+      miniGames.type = 'button';
+      miniGames.className = 'world-secondary';
+      miniGames.id = 'world-minigames-button';
+      miniGames.textContent = t('menu.minigames');
+      miniGames.addEventListener('click', () => this.actions.onMiniGames?.());
+      menu.append(miniGames);
     }
 
     const splash = document.createElement('div');
