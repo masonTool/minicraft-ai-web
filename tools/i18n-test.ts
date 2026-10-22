@@ -32,6 +32,14 @@ import {
   tp,
   joinList,
 } from '../src/core/i18n/I18n.ts';
+import {
+  FALLBACK_LOCALE,
+  LOCALES,
+  detectLocale,
+  isLocaleCode,
+  localeMeta,
+  matchLocale,
+} from '../src/core/i18n/locale.ts';
 
 let passed = 0;
 let failed = 0;
@@ -705,6 +713,45 @@ console.log('\n[成就数据层（批次 620）]');
   check('标签页用 advancementTabTitle', screenSrc.includes('advancementTabTitle(tab)'));
   check('成就弹窗标题也按语言取', toastSrc.includes('advancementTitle(def)'));
   check('面板顶部统计走占位符', screenSrc.includes("tp('advancement.summary'"));
+}
+
+console.log('\n[语言元数据与匹配（多语言 P0-1）]');
+{
+  /**
+   * 这一节盯的是"加语言时不会散架"的三件事：
+   *  ① 元数据本身齐全（自称 / htmlLang）—— 语言选择器与 `<html lang>` 都直接吃它；
+   *  ② 匹配规则（前缀、大小写、下划线写法）—— 设备标签五花八门，认错会把界面切成看不懂的语言；
+   *  ③ **兜底是英文**：这是 Play 发行口径，和"默认中文"是两件事，分开验。
+   */
+  check('六种语言都登记了', LOCALES.length === 6, LOCALES.map((x) => x.code).join(','));
+  check('语言码不重复', new Set(LOCALES.map((x) => x.code)).size === LOCALES.length);
+  check('每种语言都有自己的自称', LOCALES.every((x) => x.nativeName.trim().length > 0));
+  check(
+    '每种语言都有合法的 htmlLang（`zh-CN` / `pt-BR` 这种带地区的写法）',
+    LOCALES.every((x) => /^[a-z]{2}(-[A-Z]{2})?$/.test(x.htmlLang)),
+    LOCALES.filter((x) => !/^[a-z]{2}(-[A-Z]{2})?$/.test(x.htmlLang)).map((x) => x.code).join(','),
+  );
+  check('zh / en 必须在（回落链两端的锚点）', isLocaleCode('zh') && isLocaleCode('en'));
+  check('未登记的语言码不合法', !isLocaleCode('ja') && !isLocaleCode('') && !isLocaleCode(undefined));
+
+  check('zh-CN → zh', matchLocale('zh-CN') === 'zh');
+  check('zh-Hant → zh（本项目不分简繁，都给简体）', matchLocale('zh-Hant') === 'zh');
+  check('pt-BR → pt', matchLocale('pt-BR') === 'pt');
+  check('pt-PT → pt', matchLocale('pt-PT') === 'pt');
+  check('de-AT → de', matchLocale('de-AT') === 'de');
+  check('fr-CA → fr', matchLocale('fr-CA') === 'fr');
+  check('大小写不敏感', matchLocale('ZH-cn') === 'zh');
+  check('下划线写法也认（Android 会给 zh_CN）', matchLocale('zh_CN') === 'zh');
+  check('没登记的语言返回 null（不在这里猜）', matchLocale('ja-JP') === null);
+  check('空串 / 纯空白 / undefined 返回 null', matchLocale('') === null && matchLocale('  ') === null && matchLocale(undefined) === null);
+  check('null 返回 null', matchLocale(null) === null);
+
+  check('detectLocale 认得就返回自己', detectLocale('de-AT') === 'de');
+  check('detectLocale 认不得就兜底英文', detectLocale('ja-JP') === FALLBACK_LOCALE && FALLBACK_LOCALE === 'en');
+  check('detectLocale 没有标签也兜底英文', detectLocale(undefined) === 'en');
+
+  check('localeMeta 能取回元数据（含带地区的 htmlLang）', localeMeta('pt')?.htmlLang === 'pt-BR');
+  check('localeMeta 对未登记的语言返回 null', localeMeta('ja') === null);
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
