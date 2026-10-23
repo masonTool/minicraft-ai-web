@@ -1,6 +1,6 @@
 {
-  "name": "Bedrock 1.18 Web",
-  "short_name": "Minecraft Web",
+  "name": "Minicraft",
+  "short_name": "Minicraft",
   "description": "浏览器里的《我的世界》基岩版 1.18 复刻：无限地形、生存、合成、生物、联机与存档",
   "lang": "zh-CN",
   "dir": "ltr",
@@ -11,7 +11,10 @@
   "orientation": "landscape",
   "background_color": "#0b0b0b",
   "theme_color": "#0b0b0b",
-  "categories": ["games", "entertainment"],
+  "categories": [
+    "games",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "./icon.svg",

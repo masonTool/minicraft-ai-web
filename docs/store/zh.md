@@ -7,7 +7,7 @@
 ## 标题 — 16 字符
 
 ```
-Bedrock 1.18 Web
+Minicraft
 ```
 
 ## 短描述 — 32 字符

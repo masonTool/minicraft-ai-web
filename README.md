@@ -1,4 +1,4 @@
-# Bedrock 1.18 Web
+# Minicraft
 
 Minecraft 基岩版 **1.18** 的 Web 复刻项目（TypeScript + Vite + Three.js / WebGL2）。
 

@@ -16409,7 +16409,7 @@ class App {
     }
 
     this.debugEl.textContent =
-      `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
+      `Minicraft  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
       `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${difficultyLabel(this.difficulty)}   模式: ${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +

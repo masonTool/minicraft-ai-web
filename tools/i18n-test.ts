@@ -1036,6 +1036,26 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
     manifestDescriptions.add(desc);
   }
   check('六份 manifest 的描述两两不同（不是都抄英文）', manifestDescriptions.size === 6, `${manifestDescriptions.size} 种`);
+
+  /**
+   * 品牌名一致性（批次 20261024-0121，用户拍板：这个游戏叫 **Minicraft**）。
+   *
+   * 品牌名散在五处**互不相干的文件**里（6 份 manifest / `index.html` / 6 份商店文案 / README / 调试 HUD），
+   * 手改必然漏一处 —— 而漏掉的那处平时看不见（比如只在安装成 PWA 后的桌面上显示）。
+   * 所以这里做一条**跨文件一致性**断言，改名前后的唯一真值就是 `BRAND`。
+   *
+   * 注意：历史档案（`DONE.md` / `notes/`）里的旧名**故意不改** —— 那是"当时叫什么"的记录。
+   */
+  const BRAND = 'Minicraft';
+  const brandDrift: string[] = [];
+  for (const [, file] of manifestLocales) {
+    const manifest = JSON.parse(readFileSync(`${manifestDir}/${file}`, 'utf8')) as Record<string, unknown>;
+    if (manifest.name !== BRAND) brandDrift.push(`${file}.name=${String(manifest.name)}`);
+    if (manifest.short_name !== BRAND) brandDrift.push(`${file}.short_name=${String(manifest.short_name)}`);
+  }
+  check('六份 manifest 的 name / short_name 都是同一个品牌名', brandDrift.length === 0, brandDrift.slice(0, 3).join(','));
+  check('页面标题是品牌名', readFileSync('index.html', 'utf8').includes(`<title>${BRAND}</title>`));
+  check('商店文案六份的标题都是品牌名', ['zh', 'en', 'de', 'ru', 'fr', 'pt'].every((code) => readFileSync(`docs/store/${code}.md`, 'utf8').includes(`\n${BRAND}\n`)));
   check(
     '深链优先于设置里的值',
     (languageFromParam('fr') ?? 'zh') === 'fr' && (languageFromParam('zz') ?? 'zh') === 'zh',

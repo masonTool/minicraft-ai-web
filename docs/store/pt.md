@@ -7,7 +7,7 @@
 ## Título — 16 caracteres
 
 ```
-Bedrock 1.18 Web
+Minicraft
 ```
 
 ## Descrição curta — 75 caracteres
