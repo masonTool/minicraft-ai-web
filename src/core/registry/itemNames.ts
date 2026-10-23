@@ -682,6 +682,26 @@ for (const color of COLOR_KEYS) {
     tp('item.desc.tpl.stainedGlassPane', { name: tp('item.tpl.stainedGlassPane', { color: t(`item.color.${color}`) }) });
 }
 
+// ---- 作物生长阶段（B4f，批次 20261024-0136）：15 个方块只写 2 条模板
+//
+// ⚠️ 名字里是**复数**（`carrots_stage0` / `potatoes_stage0` / `beetroots_stage0`），
+// 而 `item.<crop>` 的键是单数 —— 拼前缀时踩过一次 `potato + s` = `potatos` 的坑，
+// 这里用显式三元组把"名字前缀"与"物品键"分开写，不靠字符串加法。
+const CROP_STAGES = [
+  ['carrots', 'carrot'],
+  ['potatoes', 'potato'],
+  ['beetroots', 'beetroot'],
+] as const;
+for (const [prefix, crop] of CROP_STAGES) {
+  for (let stage = 0; stage < 4; stage += 1) {
+    DESCRIPTIONS[`${prefix}_stage${stage}`] = () =>
+      tp('item.desc.tpl.cropStage', { crop: t(`item.${crop}`), stage });
+  }
+}
+for (let stage = 1; stage <= 3; stage += 1) {
+  DESCRIPTIONS[`sweet_berry_bush_stage${stage}`] = () => tp('item.desc.tpl.berryBush', { stage });
+}
+
 // ---- 颜色族第二批（B4e，批次 20261024-0136）：80 个方块只写 5 条模板
 //
 // 陶瓦 / 带釉陶瓦 / 蜡烛 / 旗帜 / 潜影盒，各 16 色。
