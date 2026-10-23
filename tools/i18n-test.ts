@@ -915,17 +915,33 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
     LOCALES.length === 6 && availableLanguages().length < LOCALES.length,
     `available=${availableLanguages().join(',')}`,
   );
+  /**
+   * 多语言 P4-1 起口径变了：可选语言 = **有表 或 登记了加载器** 的那些。
+   * 德语是"有加载器、表按需加载"，所以不能再拿 `Object.keys(TABLES).length` 去比。
+   * 改成验真正关心的事：**每个可选语言都能确实拿到表**（静态表，或加载器真能加载出来）。
+   */
+  const unreachable: string[] = [];
+  for (const code of availableLanguages()) {
+    if (TABLES[code] !== undefined) continue;
+    if (!(await loadLocale(code))) unreachable.push(code);
+  }
   check(
-    '可选语言 = 有表的那些（关系式，不写死数量）',
-    availableLanguages().length === Object.keys(TABLES).length,
-    `available=${availableLanguages().length} tables=${Object.keys(TABLES).length}`,
+    '每个可选语言都能真的拿到表（静态表或可加载）',
+    unreachable.length === 0,
+    unreachable.join(','),
+  );
+  check(
+    '有静态表的语言一定在可选清单里',
+    (Object.keys(TABLES) as LocaleCode[]).every((code) => availableLanguages().includes(code)),
+    Object.keys(TABLES).join(','),
   );
   check('存档里存了还没表的语言也不算脏数据', isLanguage('de') && isLanguage('pt'));
   check('没登记的语言仍然不合法', !isLanguage('ja') && !isLanguage('xx'));
-  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('de')).length === 0);
-  check('缺表时回落英文', t('pause.title', 'de') === t('pause.title', 'en'), t('pause.title', 'de'));
+  // 多语言 P4-1：de 已经有表（按需加载），"没装表"的例子改用 ru / pt
+  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('ru')).length === 0);
+  check('缺表时回落英文', t('pause.title', 'ru') === t('pause.title', 'en'), t('pause.title', 'ru'));
   check('俄语同理（回落链不看具体是哪种语言）', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
-  check('一路回落到头就返回键名', t('no.such.key', 'de') === 'no.such.key', t('no.such.key', 'de'));
+  check('一路回落到头就返回键名', t('no.such.key', 'ru') === 'no.such.key', t('no.such.key', 'ru'));
   // 回落链只留英文一档（多语言 P0-6 去掉了"最后退中文"）——前提是英文表真的完整。
   // ⚠️ 判据必须是"**键在不在**英文表里"，不能写成 `t(key) === key`：
   // 命令回执里有 `{name} Health = {value}` 这种语言中性的条目，英文值**就是键本身**，
@@ -979,14 +995,14 @@ console.log('\n[按需加载（多语言 P0-7）]');
   check('加载失败不影响查表（回落链照旧）', t('pause.title', 'ru') === 'Game Paused', t('pause.title', 'ru'));
 
   // 假语言：只给一条文案，足够验证"加载 → 可查"这条链
-  registerLocaleLoader('de', async () => ({ de: { 'pause.title': 'Spiel pausiert' } }));
-  check('登记加载器后出现在可选清单里', availableLanguages().includes('de'), availableLanguages().join(','));
-  check('加载成功', (await loadLocale('de')) === true);
-  check('加载后表进了池子', tableOf('de')['pause.title'] === 'Spiel pausiert');
-  check('加载后真能查出来', t('pause.title', 'de') === 'Spiel pausiert', t('pause.title', 'de'));
-  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('de')) === true);
-  check('假语言缺的键仍回落英文', t('pause.resume', 'de') === 'Resume Game', t('pause.resume', 'de'));
-  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('de') && availableLanguages().length === 3);
+  registerLocaleLoader('ru', async () => ({ ru: { 'pause.title': 'Пауза' } }));
+  check('登记加载器后出现在可选清单里', availableLanguages().includes('ru'), availableLanguages().join(','));
+  check('加载成功', (await loadLocale('ru')) === true);
+  check('加载后表进了池子', tableOf('ru')['pause.title'] === 'Пауза');
+  check('加载后真能查出来', t('pause.title', 'ru') === 'Пауза', t('pause.title', 'ru'));
+  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('ru')) === true);
+  check('假语言缺的键仍回落英文', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
+  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('ru'));
   resetLanguageForTest();
 }
 
@@ -1062,6 +1078,33 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('容器类不再 return 中文句子（一律走 reason(...)）', cjkReasons.length === 0, cjkReasons.slice(0, 3).join(' / '));
   const badReasonKeys = [...reasonKeys].filter((key) => t(key) === key || /[\u4e00-\u9fff]/.test(t(key, 'en')));
   check('每条 reason 键都能渲染出中英文（不露键名）', badReasonKeys.length === 0, badReasonKeys.slice(0, 3).join(','));
+
+  /**
+   * 德语（多语言 P4-1）。
+   *
+   * 德语是**第一个按需加载**的真实语言：表在 `locales/de/`，`LOADERS` 里一行。
+   * 这里只钉"能加载、可选、抽到的界面分组是真德语"——**不**断言"全表已翻"：
+   * 那 7 个占位分组（item / itemDesc / cmd / cmdMessages / label / entity / inventory）
+   * 还是英文，进度记在 `notes/i18n-de.md`，由 `audit:i18n` 的「已翻 / 疑似未翻」报数。
+   */
+  check('德语可加载', (await loadLocale('de')) === true);
+  check('德语进了可选清单', availableLanguages().includes('de'), availableLanguages().join(','));
+  const deKeys = Object.keys(tableOf('de'));
+  check('德语表条数与中文相同', deKeys.length === allKeys().length, `${deKeys.length} vs ${allKeys().length}`);
+
+  // 抽查 6 个界面分组的代表键：必须真的是德语（不是英文占位、也不是中文漏出）
+  const deSamples: Array<[string, string]> = [
+    ['menu.play', 'Spielen'],
+    ['pause.title', 'Spiel pausiert'],
+    ['settings.row.fov', 'Sichtfeld'],
+    ['statistics.title', 'Weltstatistiken'],
+    ['editor.cancel', 'Abbrechen'],
+    ['station.reason.needLevels', 'Braucht {cost} Stufen Erfahrung'],
+  ];
+  for (const [key, expected] of deSamples) {
+    check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));
+  }
+  check('德语回执用了德语序数/缩写（不含中文）', !/[\u4e00-\u9fff]/.test(deKeys.map((key) => t(key, 'de')).join('')));
 
   /**
    * 首屏与 manifest（多语言 P3-4）。

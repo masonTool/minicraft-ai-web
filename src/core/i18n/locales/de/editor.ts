@@ -1,0 +1,66 @@
+/**
+ * 德语文案·editor（与 `locales/zh/editor.ts` **键集必须相同**）
+ *
+ * ⚠️ 多语言 P4-1：`satisfies Pick<Messages, keyof typeof zhXxx>` 把键集卡在 `typecheck`，
+ * 中文加一条、这边没跟上就编译不过。
+ */
+
+import type { Messages } from '../zh/index.ts';
+import type { editor as zhEditor } from '../zh/editor.ts';
+
+export const editor = {
+  "book.noPages": "Keine Seite geschrieben – Signieren nicht möglich",
+  "sign.done": "Fertig",
+  "buildtools.undo.creativeOnly": "Rückgängig nur im Kreativmodus",
+  "buildtools.undo.onlineOnly": "Im Mehrspieler kein Rückgängig",
+  "buildtools.undo.empty": "Nichts rückgängig zu machen",
+  "buildtools.redo.empty": "Nichts wiederherzustellen",
+  "buildtools.select.first": "Erste Ecke gewählt, jetzt eine zweite antippen",
+  "buildtools.select.done": "Auswahl umfasst {volume} Blöcke",
+  "buildtools.select.tooLarge": "Auswahl zu groß (max. 32768 Blöcke)",
+  "buildtools.select.outOfWorld": "Auswahl liegt außerhalb der Welt",
+  "buildtools.fill.noSelection": "Zuerst mit zwei Ecken einen Bereich wählen",
+  "buildtools.fill.done": "{count} Blöcke gefüllt",
+  "buildtools.fill.cancelled": "Füllen abgebrochen",
+  "buildtools.copy.done": "{count} Blöcke kopiert",
+  "buildtools.copy.none": "Noch nichts kopiert",
+  "buildtools.copy.empty": "In der Auswahl sind keine Blöcke",
+  "buildtools.paste.done": "{count} Blöcke eingefügt",
+  "buildtools.paste.cancelled": "Einfügen abgebrochen",
+  "buildtools.paste.outOfWorld": "Einfügeposition liegt außerhalb der Welt",
+  "template.smallHouse": "Kleines Haus",
+  "template.bridge": "Kleine Brücke",
+  "template.tree": "Großer Baum",
+  "template.tower": "Steinturm",
+  "buildtools.template.blocked": "Hier passt es nicht, Blöcke im Weg",
+  "buildtools.template.unsupported": "Kein Halt darunter, nicht platzierbar",
+  "buildtools.template.outOfWorld": "Außerhalb der Welt",
+  "buildtools.template.placed": "Wird gesetzt: {name}",
+  "buildtools.toggle": "Baumodus",
+  "buildtools.tool.select": "Auswahl",
+  "buildtools.tool.fill": "Füllen",
+  "buildtools.tool.copy": "Kopieren",
+  "buildtools.tool.paste": "Einfügen",
+  "buildtools.tool.mirror": "Gespiegelt einfügen",
+  "buildtools.tool.undo": "Rückgängig",
+  "buildtools.tool.redo": "Wiederholen",
+  "buildtools.tool.template": "Bauvorlagen",
+  "buildtools.tool.selectHint": "Einen Block antippen, um die erste Ecke zu wählen",
+  "buildtools.fill.noBlock": "Zuerst einen Block in die Hand nehmen",
+  "editor.ok": "OK",
+  "editor.cancel": "Abbrechen",
+  "editor.done": "Fertig",
+  "editor.close": "Schließen",
+  "editor.back": "Zurück",
+  "editor.sign": "Signieren",
+  "book.writePlaceholder": "Schreib etwas auf diese Seite…",
+  "book.titlePlaceholder": "Buchtitel",
+  "book.writingTitle": "Buch und Feder",
+  "book.emptyPage": "(Diese Seite ist leer)",
+  "book.pageOf": "Seite {current} / {total}",
+  "sign.linePlaceholder": "Zeile {n}",
+  "sign.hint": "Max. {n} Zeichen pro Zeile · alles leer lassen löscht das Schild",
+  "nameTag.placeholder": "Gib ihm einen Namen",
+  "nameTag.hint": "Max. {n} Zeichen · leer lassen ändert nichts",
+  "commandBlock.title": "Befehlsblock",
+} satisfies Pick<Messages, keyof typeof zhEditor>;

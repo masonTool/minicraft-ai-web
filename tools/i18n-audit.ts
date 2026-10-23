@@ -22,7 +22,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { allKeys, availableLanguages, tableOf } from '../src/core/i18n/I18n.ts';
+import { allKeys, availableLanguages, loadLocale, tableOf } from '../src/core/i18n/I18n.ts';
 import { LOCALES } from '../src/core/i18n/locale.ts';
 
 const ROOT = 'src';
@@ -166,6 +166,9 @@ if (unused.length > 0) {
   console.log('\n  ✓ 没有孤儿键');
 }
 
+// 按需加载的语言先就位：否则覆盖率会把"表还没加载"报成"没有表"（很误导）
+for (const locale of LOCALES) await loadLocale(locale.code);
+
 console.log('\n[覆盖率]');
 for (const locale of LOCALES) {
   const table = tableOf(locale.code);
@@ -176,7 +179,18 @@ for (const locale of LOCALES) {
   }
   const pct = ((have / keys.size) * 100).toFixed(1);
   const lack = keys.size - have;
-  console.log(`  ${locale.code.padEnd(3)} ${have}/${keys.size}  ${pct}%${lack > 0 ? `  缺 ${lack}` : ''}`);
+  // 多语言 P4-1：**"键齐"不等于"翻完"** —— 占位值逐字等于英文的那些单独报出来，
+  // 免得看 100% 以为已经译好（德语第一批就是这样：表齐了，但 7 个分组还是英文）
+  let untranslated = 0;
+  if (locale.code !== 'zh' && locale.code !== 'en') {
+    const enTable = tableOf('en');
+    const zhTable = tableOf('zh');
+    untranslated = Object.keys(table).filter(
+      (key) => table[key] === enTable[key] && zhTable[key] !== enTable[key],
+    ).length;
+  }
+  const extra = untranslated > 0 ? `  已翻 ${have - untranslated} · 疑似未翻 ${untranslated}` : '';
+  console.log(`  ${locale.code.padEnd(3)} ${have}/${keys.size}  ${pct}%${lack > 0 ? `  缺 ${lack}` : ''}${extra}`);
 }
 
 if (missing.length > 0) {

@@ -85,7 +85,10 @@ export type LocaleModule = Readonly<Record<string, Readonly<Record<string, strin
  * ru / pt / fr / de 写完表之后在 P4 各加一行：
  *   de: () => import('./locales/de/index.ts'),
  */
-const LOADERS: Partial<Record<LocaleCode, () => Promise<LocaleModule>>> = {};
+const LOADERS: Partial<Record<LocaleCode, () => Promise<LocaleModule>>> = {
+  // 多语言 P4-1：德语按需加载（`.webmanifest` 与界面文案都跟它走）
+  de: () => import('./locales/de/index.ts'),
+};
 
 /** 登记一种语言的按需加载器（P4 加语言、以及断言里造一个假语言时用） */
 export function registerLocaleLoader(code: LocaleCode, loader: () => Promise<LocaleModule>): void {
