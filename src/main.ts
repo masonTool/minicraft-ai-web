@@ -1809,6 +1809,13 @@ class App {
   private readonly blockFunnel = new BlockFunnel();
   /** 正在把远端改动写进世界（此时触发的 `onBlockChanged` 不再回发，否则两端互相回声） */
   private applyingRemoteBlock = 0;
+  /**
+   * 还没加载的区块里那些队友容器内容（联机13）：key = `维度|cx,cz`。
+   *
+   * `welcome` 的快照会一次带来很多容器，而那时区块基本都没生成——先攒着，等
+   * `onChunkLoaded` 再写回去。
+   */
+  private readonly pendingContainers = new Map<string, NetContainerState[]>();
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1885,6 +1892,8 @@ class App {
         this.netTimeTarget = null;
         // 攒着没发的方块改动也丢掉（联机12）：重连后服务端状态可能已经不同了
         this.blockFunnel.clear();
+        // 待恢复的容器内容同理（联机13），重连会重新拿一份 welcome 快照
+        this.pendingContainers.clear();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
@@ -2496,6 +2505,8 @@ class App {
         // 结构箱的战利品（K8 尾巴）：方块状态里写着"哪张表"，在这里按表掷点填进容器。
         // 放在网格化之前也没关系——箱子内容不影响渲染
         fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
+        // 队友的容器内容（联机13）：放在战利品之后——队友改过的才是最终状态
+        this.flushPendingContainers(chunk.cx, chunk.cz);
         // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
         this.scanRodsInChunk(chunk.cx, chunk.cz);
         // 刷怪笼索引（批次 92）：同一个道理——下界要塞里的笼子在加载时登记，之后按倒计时生成
@@ -3430,6 +3441,7 @@ class App {
     players: NetPlayerState[],
     edits: number[][],
     items: NetItemState[],
+    containers: NetContainerState[] = [],
   ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
@@ -3483,6 +3495,10 @@ class App {
       if (item.owner === selfId) continue;
       this.onNetItemSpawn(item);
     }
+
+    // 容器快照（联机13）：服务端落盘的内容。已加载的区块立刻恢复，没加载的先存着，
+    // 等区块加载回调里再补（见 `flushPendingContainers`）
+    for (const container of containers) this.onNetContainer(container);
   }
 
   /** 其它玩家的位置更新 */
@@ -3513,6 +3529,15 @@ class App {
    */
   private onNetContainer(data: NetContainerState): void {
     if (data.dimension !== this.dimension) return;
+    // 区块还没加载：先存着（联机13 的 welcome 快照会带一批容器，那时候区块多半还没生成），
+    // 等 `onChunkLoaded` 里再恢复。原来的写法是直接 return，于是"走回箱子前发现是空的"
+    if (!this.world.isLoaded(data.x, data.z)) {
+      const key = `${data.dimension}|${toChunkCoord(data.x)},${toChunkCoord(data.z)}`;
+      const list = this.pendingContainers.get(key);
+      if (list) list.push(data);
+      else this.pendingContainers.set(key, [data]);
+      return;
+    }
     const id = this.world.getBlock(data.x, data.y, data.z);
     let chest: Chest | null = null;
     if (id === Block.BARREL) {
@@ -3522,6 +3547,16 @@ class App {
     }
     if (!chest) return;
     chest.restore(restoreStacks(data.slots, chest.size));
+  }
+
+  /** 区块加载完之后，把之前存下的队友容器内容补上（联机13） */
+  private flushPendingContainers(cx: number, cz: number): void {
+    if (this.pendingContainers.size === 0) return;
+    const key = `${this.dimension}|${cx},${cz}`;
+    const list = this.pendingContainers.get(key);
+    if (!list) return;
+    this.pendingContainers.delete(key);
+    for (const data of list) this.onNetContainer(data);
   }
 
   /** 本地打开箱子/木桶时挂上防抖广播（80ms 合并拖拽产生的连续变更） */

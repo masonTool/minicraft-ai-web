@@ -18,6 +18,8 @@
  */
 
 import { WebSocketServer } from 'ws';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   CLOSE_CLIENT_ID,
   CLOSE_DUPLICATE,
@@ -28,6 +30,7 @@ import {
   sanitizeDimension,
   sanitizeName,
 } from './protocol.mjs';
+import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
@@ -73,6 +76,22 @@ const items = new Map();
 const GRACE_MS = Number(process.env.GRACE_MS ?? 30000);
 /** clientId → { id, name, timer }：已断开但还没过宽限期的人 */
 const graces = new Map();
+/**
+ * 容器内容（联机13）：`维度|x,y,z` → `{x,y,z,dimension,slots}`。
+ *
+ * 服务端原来只转发 `container` 消息、不留副本，于是重启之后箱子里的东西对新玩家
+ * 完全不可见（只有打开过那个箱子的老玩家本地还记得）。这里顺手留一份，随快照落盘，
+ * `welcome` 里下发。
+ */
+const containers = new Map();
+/** 容器快照上限（与 `MAX_EDITS` 同一个理由：别让长时间运行的房间把内存吃光） */
+const MAX_CONTAINERS = 5000;
+/**
+ * 世界快照文件（联机13）。`DATA_DIR` 可覆盖——测试里指到临时目录，
+ * 免得把仓库里的 `server/.data/world.json` 弄脏。
+ */
+const DATA_DIR = process.env.DATA_DIR ?? fileURLToPath(new URL('./.data/', import.meta.url));
+const WORLD_FILE = join(DATA_DIR, 'world.json');
 let nextPlayerId = 1;
 
 const log = (...args) => console.log(`[server ${new Date().toISOString().slice(11, 19)}]`, ...args);
@@ -121,6 +140,8 @@ function snapshotFor() {
     edits: [...edits.values()].map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
     // 地上的掉落物：新玩家进来要看得见（L7 第一刀）
     items: [...items.values()],
+    // 容器内容（联机13）：重启后箱子里的东西不会凭空消失
+    containers: [...containers.values()],
   };
 }
 
@@ -149,11 +170,14 @@ wss.on('listening', () => {
  * 2 秒一条足够——不需要每帧广播。
  */
 const DAY_LENGTH_MS = 20 * 60 * 1000;
-const START_TIME_OF_DAY = 0.12;
-/** 开局时刻（`sleep` 会把它重置成"现在"，等于把时间拨回清晨） */
+/** 清晨 0.12（睡满跳夜也回到这里） */
+const DAWN_TIME_OF_DAY = 0.12;
+/** 当前这一天的起点时刻（`sleep` 会把它重置成"现在"，等于把时间拨回清晨） */
 let serverStartMs = Date.now();
+/** 起点时刻对应的一天中的时间：读档时会换成存档里的值（重启后从上次那一刻继续） */
+let startTimeOfDay = DAWN_TIME_OF_DAY;
 function currentTimeOfDay() {
-  const value = (Date.now() - serverStartMs) / DAY_LENGTH_MS + START_TIME_OF_DAY;
+  const value = (Date.now() - serverStartMs) / DAY_LENGTH_MS + startTimeOfDay;
   return value - Math.floor(value);
 }
 
@@ -163,6 +187,70 @@ const clockTimer = setInterval(() => {
   broadcast({ t: 'time', timeOfDay: currentTimeOfDay() });
 }, 2000);
 clockTimer.unref?.();
+
+// ---------------------------------------------------------------- 持久化（联机13）
+
+/** 当前世界的完整快照（落盘用） */
+function worldSnapshot() {
+  return {
+    version: SNAPSHOT_VERSION,
+    savedAt: Date.now(),
+    seed: WORLD_SEED,
+    timeOfDay: Number(currentTimeOfDay().toFixed(6)),
+    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]
+    edits: [...edits.values()].map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
+    // 容器：[x, y, z, dimension, slots]
+    containers: [...containers.values()].map((c) => [c.x, c.y, c.z, c.dimension, c.slots]),
+  };
+}
+
+/**
+ * 启动时读档：把上次的快照灌回内存表。
+ *
+ * 时间用"存档时刻的时间"做新的起点——服务端停机的那段时间不走（原版服务器关掉的
+ * 时候世界也是停的），这比"按真实时间补算"更符合直觉，也不会出现"重启后突然变成深夜"。
+ */
+const loaded = readSnapshot(WORLD_FILE, log);
+if (loaded.data) {
+  const saved = loaded.data;
+  for (const entry of Array.isArray(saved.edits) ? saved.edits : []) {
+    if (!Array.isArray(entry)) continue;
+    const [x, y, z, id, state, dimension] = entry;
+    const edit = {
+      x: Math.trunc(Number(x)),
+      y: Math.trunc(Number(y)),
+      z: Math.trunc(Number(z)),
+      id: Math.trunc(Number(id)),
+      state: Math.trunc(Number(state ?? 0)),
+      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
+    };
+    if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
+    edits.set(`${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit);
+  }
+  for (const entry of Array.isArray(saved.containers) ? saved.containers : []) {
+    if (!Array.isArray(entry)) continue;
+    const [x, y, z, dimension, slots] = entry;
+    const container = {
+      x: Math.trunc(Number(x)),
+      y: Math.trunc(Number(y)),
+      z: Math.trunc(Number(z)),
+      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
+      slots,
+    };
+    if (![container.x, container.y, container.z].every(Number.isFinite)) continue;
+    containers.set(`${container.dimension}|${container.x},${container.y},${container.z}`, container);
+  }
+  if (typeof saved.timeOfDay === 'number' && Number.isFinite(saved.timeOfDay)) {
+    startTimeOfDay = ((saved.timeOfDay % 1) + 1) % 1;
+    serverStartMs = Date.now();
+  }
+  log(
+    `读档完成：方块 ${edits.size} 条 / 容器 ${containers.size} 个 / 时间 ${currentTimeOfDay().toFixed(2)}`,
+  );
+}
+
+/** 定时落盘（30 秒）；正常退出时再补一次 */
+const autoSave = startAutoSave(WORLD_FILE, worldSnapshot, { intervalMs: 30_000, log });
 
 const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_TIMEOUT_MS = 20000;
@@ -367,6 +455,10 @@ wss.on('connection', (socket, request) => {
         // 8192 字节上限挡住把消息塞爆的脏客户端。
         if (!Array.isArray(slots) || slots.length > 27) return;
         if (JSON.stringify(slots).length > 8192) return;
+        // 留一份副本随快照落盘（联机13）：不然重启之后箱子里的东西对新玩家不可见
+        if (containers.size < MAX_CONTAINERS) {
+          containers.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, slots });
+        }
         broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id);
         break;
       }
@@ -429,6 +521,7 @@ wss.on('connection', (socket, request) => {
       case 'sleep': {
         if (!player) return send(socket, { t: 'error', code: 'joined', message: '先 join 再睡' });
         serverStartMs = Date.now();
+        startTimeOfDay = DAWN_TIME_OF_DAY;
         broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true });
         log(`${player.name}#${player.id} 睡满，时间跳到黎明`);
         break;
@@ -482,7 +575,9 @@ wss.on('connection', (socket, request) => {
 // Ctrl+C 时干净退出（容器里被 kill 也不会留下半开连接）
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    log('收到退出信号，关闭服务端');
+    log('收到退出信号，保存快照并关闭服务端');
+    // 退出前补存一次（联机13）：定时器是 30 秒一轮，最后这几秒的改动不能白丢
+    autoSave.stop();
     wss.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 500);
   });

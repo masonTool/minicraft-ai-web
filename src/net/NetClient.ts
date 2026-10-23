@@ -60,6 +60,8 @@ export interface NetHandlers {
     players: NetPlayerState[],
     edits: number[][],
     items: NetItemState[],
+    /** 容器快照（联机13）：服务端落盘的内容，重启后也能带回来 */
+    containers?: NetContainerState[],
   ) => void;
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
@@ -261,7 +263,8 @@ export class NetClient {
         }
         const edits = (message.edits as number[][] | undefined) ?? [];
         const items = (message.items as NetItemState[] | undefined) ?? [];
-        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items);
+        const containers = (message.containers as NetContainerState[] | undefined) ?? [];
+        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items, containers);
         // 时间权威（联机10）：进服先对齐一次，之后靠 `time` 广播校正
         this.deliverTime(message);
         break;

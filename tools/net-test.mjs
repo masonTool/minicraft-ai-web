@@ -9,10 +9,18 @@
  */
 
 import { spawn } from 'node:child_process';
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
 const PORT = 8799; // 用不常用的端口，避免和开发者自己的服务端撞车
+/**
+ * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
+ * 否则跑一次测试就把开发者自己房间的存档覆盖了。
+ */
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'minicraft-net-'));
 let passed = 0;
 let failed = 0;
 /** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
@@ -106,27 +114,39 @@ class TestClient {
 // ---------------------------------------------------------------- 启动服务端
 
 console.log('\n[启动服务端]');
-const server = spawn('node', ['server/index.mjs'], {
-  // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
-  // "宽限期过后才清掉落物"的断言都要白等半分钟
-  env: { ...process.env, PORT: String(PORT), GRACE_MS: '400' },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+/** @type {import('node:child_process').ChildProcess | null} */
+let server = null;
 let serverOutput = '';
-server.stdout.on('data', (chunk) => {
-  serverOutput += String(chunk);
-});
-server.stderr.on('data', (chunk) => {
-  serverOutput += String(chunk);
-});
 
-// 等服务端监听端口
-let listening = false;
-for (let i = 0; i < 100 && !listening; i++) {
-  await sleep(100);
-  listening = serverOutput.includes('已启动');
+/**
+ * 起一个服务端子进程并等它监听端口。
+ *
+ * 抽成函数是为了"重启后快照仍在"那条用例（联机13）——它要真的杀一次再起一次。
+ */
+async function startServer() {
+  serverOutput = '';
+  server = spawn('node', ['server/index.mjs'], {
+    // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
+    // "宽限期过后才清掉落物"的断言都要白等半分钟
+    env: { ...process.env, PORT: String(PORT), GRACE_MS: '400', DATA_DIR },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server.stdout.on('data', (chunk) => {
+    serverOutput += String(chunk);
+  });
+  server.stderr.on('data', (chunk) => {
+    serverOutput += String(chunk);
+  });
+  // 等服务端监听端口
+  for (let i = 0; i < 100; i++) {
+    await sleep(100);
+    if (serverOutput.includes('已启动')) return true;
+    if (server.exitCode !== null) return false;
+  }
+  return false;
 }
-check('服务端启动成功', listening, serverOutput.trim().split('\n').slice(-3).join(' | '));
+
+check('服务端启动成功', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
 
 try {
   // ---------------------------------------------------------------- 加入与广播
@@ -516,8 +536,74 @@ try {
   );
 
   bob.close();
+
+  // ---------------------------------------------------------------- 重启后快照仍在（联机13）
+  console.log('\n[持久化：重启后快照仍在]');
+  {
+    // 先留一条方块 + 一个容器，然后 SIGTERM（退出流程里会补存一次）
+    const before = new TestClient('BeforeRestart');
+    const welcomeBefore = await joinAndWaitWelcome(before, '重启前', 0, 70, 0);
+    check('重启前的客户端能加入', welcomeBefore !== null);
+    before.send({ t: 'block', x: 300, y: 70, z: 300, id: 5, state: 0, dimension: 'overworld' });
+    before.send({
+      t: 'container',
+      x: 301,
+      y: 70,
+      z: 300,
+      dimension: 'overworld',
+      slots: [{ id: 3, count: 7 }],
+    });
+    await sleep(250);
+    before.close();
+
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    // 等它真的退干净再起——端口还在 TIME_WAIT 时新进程会 EADDRINUSE
+    await Promise.race([exited, sleep(2500)]);
+    await sleep(200);
+
+    check('重启后服务端能再起来', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
+
+    const revived = new TestClient('Revived');
+    const welcome = await joinAndWaitWelcome(revived, '复活的玩家', 0, 70, 0);
+    check('重启后拿到 welcome', welcome !== null);
+    check(
+      '重启后方块改动还在',
+      (welcome?.edits ?? []).some((e) => e[0] === 300 && e[1] === 70 && e[2] === 300),
+      JSON.stringify((welcome?.edits ?? []).slice(-3)),
+    );
+    check(
+      '重启后容器内容还在',
+      (welcome?.containers ?? []).some((c) => c.x === 301 && c.z === 300),
+      JSON.stringify(welcome?.containers),
+    );
+    revived.close();
+  }
+
+  // ---------------------------------------------------------------- 损坏快照回退（联机13）
+  console.log('\n[持久化：损坏快照被备份而不是覆盖]');
+  {
+    // 先让它退干净（退出流程会写一份好快照），再把文件写坏
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    await Promise.race([exited, sleep(2500)]);
+    writeFileSync(join(DATA_DIR, 'world.json'), '{ 这不是 JSON');
+    await sleep(100);
+
+    check('坏快照下服务端仍能起来', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
+    check(
+      '坏快照被备份（不是静静删掉）',
+      readdirSync(DATA_DIR).some((name) => name.startsWith('world.json.broken-')),
+      readdirSync(DATA_DIR).join(','),
+    );
+
+    const fresh = new TestClient('Fresh');
+    const welcomeFresh = await joinAndWaitWelcome(fresh, '新开局', 0, 70, 0);
+    check('坏快照之后从空世界开始', welcomeFresh !== null && (welcomeFresh.edits ?? []).length === 0, `${(welcomeFresh?.edits ?? []).length}`);
+    fresh.close();
+  }
 } finally {
-  server.kill('SIGTERM');
+  server?.kill('SIGTERM');
   await sleep(300);
 }
 
