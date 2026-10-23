@@ -16,7 +16,7 @@
  * 点哪行改哪行，但**不拦 Tab/方向键**（留给浏览器默认行为，输入法才不会被顶掉）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import { SIGN_LINES, SIGN_LINE_LENGTH } from '../core/world/SignText.ts';
 
 /** 标题里要显示的方块名（"橡木告示牌"） */
@@ -58,7 +58,7 @@ export class SignEditor {
       row.autocapitalize = 'off';
       row.autocomplete = 'off';
       row.spellcheck = false;
-      row.placeholder = `第 ${i + 1} 行`;
+      row.placeholder = tp('sign.linePlaceholder', { n: i + 1 });
       // Enter：跳到下一行；最后一行直接完成（原版也能一路敲完）
       row.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
@@ -72,7 +72,7 @@ export class SignEditor {
 
     const hint = document.createElement('div');
     hint.className = 'sign-editor-hint';
-    hint.textContent = `每行最多 ${SIGN_LINE_LENGTH} 字 · 全部留空＝擦掉牌子上的字`;
+    hint.textContent = tp('sign.hint', { n: SIGN_LINE_LENGTH });
 
     const buttons = document.createElement('div');
     buttons.className = 'sign-editor-buttons';
@@ -87,7 +87,7 @@ export class SignEditor {
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
     cancelButton.className = 'sign-editor-button';
-    cancelButton.textContent = '取消';
+    cancelButton.textContent = t('editor.cancel');
     cancelButton.addEventListener('click', () => this.close());
 
     buttons.appendChild(saveButton);

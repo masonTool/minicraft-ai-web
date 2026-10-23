@@ -17,7 +17,7 @@
  * 文本区自己滚，按钮永远在底部（不跟着内容滚走）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import {
   BOOK_MAX_PAGES,
   BOOK_PAGE_CHARS,
@@ -80,7 +80,7 @@ export class BookScreen {
     this.pageEl.autocapitalize = 'off';
     this.pageEl.autocomplete = 'off';
     this.pageEl.spellcheck = false;
-    this.pageEl.placeholder = '在这一页写点什么…';
+    this.pageEl.placeholder = t('book.writePlaceholder');
     // 边打边记：翻页/署名时不必再"提交一次"
     this.pageEl.addEventListener('input', () => {
       this.pages[this.pageIndex] = this.pageEl.value;
@@ -103,12 +103,12 @@ export class BookScreen {
     this.titleInput.type = 'text';
     this.titleInput.className = 'book-title-input';
     this.titleInput.maxLength = BOOK_TITLE_CHARS;
-    this.titleInput.placeholder = '书名';
+    this.titleInput.placeholder = t('book.titlePlaceholder');
     this.titleInput.autocapitalize = 'off';
     this.titleInput.autocomplete = 'off';
     this.titleInput.spellcheck = false;
-    const confirmSign = this.makeButton('确定', () => this.confirmSign());
-    const cancelSign = this.makeButton('返回', () => this.titleRow.classList.add('hidden'));
+    const confirmSign = this.makeButton(t('editor.ok'), () => this.confirmSign());
+    const cancelSign = this.makeButton(t('editor.back'), () => this.titleRow.classList.add('hidden'));
     this.titleRow.append(this.titleInput, confirmSign, cancelSign);
     this.titleInput.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
@@ -118,9 +118,9 @@ export class BookScreen {
 
     const buttons = document.createElement('div');
     buttons.className = 'book-buttons';
-    this.signButton = this.makeButton('署名', () => this.beginSign());
-    this.doneButton = this.makeButton('完成', () => this.save());
-    const closeButton = this.makeButton('关闭', () => this.close());
+    this.signButton = this.makeButton(t('editor.sign'), () => this.beginSign());
+    this.doneButton = this.makeButton(t('editor.done'), () => this.save());
+    const closeButton = this.makeButton(t('editor.close'), () => this.close());
     buttons.append(this.signButton, this.doneButton, closeButton);
 
     panel.append(this.titleEl, this.pageEl, this.readEl, this.pagerEl, this.titleRow, buttons);
@@ -151,7 +151,7 @@ export class BookScreen {
     this.pages = bookPages(stack);
     const start = Math.floor(options.startPage ?? 0);
     this.pageIndex = Math.max(0, Math.min(this.pages.length - 1, Number.isFinite(start) ? start : 0));
-    this.titleEl.textContent = this.writing ? '书与笔' : bookTitleOf(stack);
+    this.titleEl.textContent = this.writing ? t('book.writingTitle') : bookTitleOf(stack);
 
     this.pageEl.classList.toggle('hidden', !this.writing);
     this.readEl.classList.toggle('hidden', this.writing);
@@ -214,9 +214,9 @@ export class BookScreen {
       // 只有值真的不同才改，否则每翻一页都会重置光标位置
       if (this.pageEl.value !== page) this.pageEl.value = page;
     } else {
-      this.readEl.textContent = page === '' ? '（这一页什么也没写）' : page;
+      this.readEl.textContent = page === '' ? t('book.emptyPage') : page;
     }
-    this.pageLabelEl.textContent = `第 ${this.pageIndex + 1} / ${this.pages.length} 页`;
+    this.pageLabelEl.textContent = tp('book.pageOf', { current: this.pageIndex + 1, total: this.pages.length });
     this.prevButton.disabled = this.pageIndex === 0;
     this.nextButton.disabled = this.pageIndex >= this.pages.length - 1;
   }
@@ -256,7 +256,7 @@ export class BookScreen {
     this.pages[this.pageIndex] = this.pageEl.value;
     const written = signBook(withPages(this.stack, this.pages), this.titleInput.value || UNTITLED_BOOK);
     if (!written) {
-      this.titleEl.textContent = '一页都没写，没法署名';
+      this.titleEl.textContent = t('book.noPages');
       return;
     }
     const committed = written;

@@ -48,4 +48,22 @@ export const editor = {
   'buildtools.tool.template': '建筑模板',
   'buildtools.tool.selectHint': '点一个方块，选第一个角',
   'buildtools.fill.noBlock': '先拿一块方块',
+
+  // ---- 四个编辑器面板的框架文案（多语言 P3-2）
+  "editor.ok": "确定",
+  "editor.cancel": "取消",
+  "editor.done": "完成",
+  "editor.close": "关闭",
+  "editor.back": "返回",
+  "editor.sign": "署名",
+  "book.writePlaceholder": "在这一页写点什么…",
+  "book.titlePlaceholder": "书名",
+  "book.writingTitle": "书与笔",
+  "book.emptyPage": "（这一页什么也没写）",
+  "book.pageOf": "第 {current} / {total} 页",
+  "sign.linePlaceholder": "第 {n} 行",
+  "sign.hint": "每行最多 {n} 字 · 全部留空＝擦掉牌子上的字",
+  "nameTag.placeholder": "给它起个名字",
+  "nameTag.hint": "最多 {n} 个字 · 留空则不修改",
+  "commandBlock.title": "命令方块",
 } as const;

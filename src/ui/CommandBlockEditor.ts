@@ -11,6 +11,9 @@
  *  3. 完成键是一个**真按钮**（手机键盘不一定派发 Enter，聊天那批踩过）。
  */
 
+// 多语言 P3-2：面板文案走 `editor.*` / `commandBlock.*`
+import { t } from '../core/i18n/I18n.ts';
+
 /** 输入框最多多少字（与 `CommandBlocks.COMMAND_MAX_LENGTH` 一致） */
 const MAX_LENGTH = 128;
 
@@ -52,12 +55,12 @@ export class CommandBlockEditor {
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'command-block-button';
-    cancel.textContent = '取消';
+    cancel.textContent = t('editor.cancel');
     cancel.addEventListener('click', () => this.hide(false));
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'command-block-button primary';
-    ok.textContent = '完成';
+    ok.textContent = t('editor.done');
     ok.addEventListener('click', () => this.hide(true));
     buttons.append(cancel, ok);
 
@@ -83,7 +86,7 @@ export class CommandBlockEditor {
   }
 
   /** 打开并填入当前命令（`null` = 这一格还没有命令） */
-  show(current: string | null, title = '命令方块'): void {
+  show(current: string | null, title = t('commandBlock.title')): void {
     this.open = true;
     this.titleEl.textContent = title;
     this.input.value = current ?? '';

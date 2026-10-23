@@ -1077,6 +1077,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     'ui/LoadingOverlay.ts',
     'ui/Fullscreen.ts',
     'ui/InstallHint.ts',
+    // 四个编辑器面板（多语言 P3-2）：书与笔 / 告示牌 / 名字牌 / 命令方块
+    'ui/BookScreen.ts',
+    'ui/SignEditor.ts',
+    'ui/NameTagEditor.ts',
+    'ui/CommandBlockEditor.ts',
   ];
   for (const rel of chromeFiles) {
     const code = codeOf(readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8'));

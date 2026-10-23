@@ -14,7 +14,7 @@
  *     （虚拟键盘的确定键不一定派发 Enter，聊天那批踩过）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import { MAX_NAME_LENGTH } from '../core/entity/NameTag.ts';
 
 export class NameTagEditor {
@@ -50,7 +50,7 @@ export class NameTagEditor {
     this.input.autocapitalize = 'off';
     this.input.autocomplete = 'off';
     this.input.spellcheck = false;
-    this.input.placeholder = '给它起个名字';
+    this.input.placeholder = t('nameTag.placeholder');
     this.input.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -60,7 +60,7 @@ export class NameTagEditor {
 
     const hint = document.createElement('div');
     hint.className = 'sign-editor-hint';
-    hint.textContent = `最多 ${MAX_NAME_LENGTH} 个字 · 留空则不修改`;
+    hint.textContent = tp('nameTag.hint', { n: MAX_NAME_LENGTH });
 
     const buttons = document.createElement('div');
     buttons.className = 'sign-editor-buttons';
@@ -74,7 +74,7 @@ export class NameTagEditor {
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
     cancelButton.className = 'sign-editor-button';
-    cancelButton.textContent = '取消';
+    cancelButton.textContent = t('editor.cancel');
     cancelButton.addEventListener('click', () => this.close());
 
     buttons.appendChild(saveButton);
