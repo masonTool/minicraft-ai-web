@@ -181,6 +181,8 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
   check('方块动画每帧推进', blockSceneSrc.includes('tick(dt: number)'));
   check('入场进度跨重建保留（按位置键）', blockSceneSrc.includes('ages.set(entry.key'));
   check('掉队的方块淡出而不是直接消失', blockSceneSrc.includes('this.fading.push(entry)'));
+  // 配色必须跟"方块身份"走，不能跟"这一屏列表里的下标"走——后者会让每跳一次全世界重新上色
+  check('方块配色按身份取（不是按列表下标）', blockSceneSrc.includes('blockColorAt(this.palette, spec.colorIndex)'));
   check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
   check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
 }
