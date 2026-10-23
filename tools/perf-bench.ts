@@ -18,6 +18,7 @@ import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
 import { StartupRamp } from '../src/core/world/StartupRamp.ts';
+import { RemoteAoiGate } from '../src/core/net/NetAoi.ts';
 import { STARTUP_PHASES, StartupTrace } from '../src/game/startupTrace.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { withFacing } from '../src/core/registry/blockState.ts';
@@ -534,6 +535,31 @@ console.log('\n[启动耗时台账（N8 的判据，批次 103）]');
       'boot:begin,boot:gl,boot:atlas,boot:menu,world:begin,world:constructed,world:playable',
     trace.marks.map((m) => m.name).join(','),
   );
+}
+
+console.log('\n[远端实体分级关注（联机20）：1 秒内的接受次数预算]');
+{
+  /*
+   * 断"操作次数"而不是断耗时：模拟 1 秒、每 10ms 一条位置更新（100 条/实体），
+   * 20 个远端实体按距离分三档，统计总共接受了几条。上限是算出来的：
+   *   近档（≤16 格，100ms）→ 最多 11 次/秒
+   *   中档（≤32 格，250ms）→ 最多 5 次/秒
+   *   远档（>32 格）      → 0 次
+   * 这条会随机器快慢波动吗？不会——它只数次数，不看时间。
+   */
+  const gate = new RemoteAoiGate();
+  let near = 0;
+  let mid = 0;
+  let far = 0;
+  for (let tick = 0; tick <= 1000; tick += 10) {
+    for (let id = 1; id <= 10; id++) if (gate.accept(id, 8, tick)) near++;
+    for (let id = 11; id <= 15; id++) if (gate.accept(id, 24, tick)) mid++;
+    for (let id = 16; id <= 20; id++) if (gate.accept(id, 64, tick)) far++;
+  }
+  check(`近档 10 个实体 1 秒内 ≤ 110 次（实测 ${near}）`, near <= 110);
+  check(`中档 5 个实体 1 秒内 ≤ 25 次（实测 ${mid}）`, mid <= 25);
+  check('远档一次都不接受', far === 0, `实测 ${far}`);
+  check('总接受次数 ≤ 135（不分级的话是 2000）', near + mid + far <= 135, `实测 ${near + mid + far}`);
 }
 
 console.log(`\n性能基准：${passed} 通过 / ${failed} 失败`);

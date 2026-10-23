@@ -392,6 +392,7 @@ import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
 import { findMobMatch } from './core/net/MobMatch.ts';
+import { RemoteAoiGate } from './core/net/NetAoi.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1849,6 +1850,12 @@ class App {
    * 不是最新那条消息里的布尔（`RemoteAppearance` 做边沿触发）。
    */
   private readonly remoteAppearance = new Map<number, RemoteAppearance>();
+  /**
+   * 远端玩家的分级关注（联机20）：16 格内 100ms、32 格内 250ms、更远不更新插值目标。
+   *
+   * 只作用于**位置**——昵称、外观、维度这些状态仍然每条都更新，否则远处队友会"冻住"。
+   */
+  private readonly remoteAoi = new RemoteAoiGate();
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1926,6 +1933,7 @@ class App {
         this.remoteSmoothers.clear();
         this.remotePresence.clear();
         this.remoteAppearance.clear();
+        this.remoteAoi.clear();
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
@@ -3623,8 +3631,16 @@ class App {
     }
     // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新
     if (mob.customName !== player.name) mob.customName = player.name;
-    // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）
-    this.remoteSmoothers.get(player.id)?.setTarget(next);
+    // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）。
+    // 联机20：按距离分级——16 格外不值得按 100ms 精度插值，32 格外干脆不更新目标
+    const distance = Math.hypot(
+      player.x - this.physics.x,
+      player.y - this.physics.y,
+      player.z - this.physics.z,
+    );
+    if (this.remoteAoi.accept(player.id, distance, performance.now())) {
+      this.remoteSmoothers.get(player.id)?.setTarget(next);
+    }
     // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
   }
 
@@ -3711,6 +3727,7 @@ class App {
     this.remoteSmoothers.delete(id);
     this.remotePresence.remove(id);
     this.remoteAppearance.delete(id);
+    this.remoteAoi.forget(id);
     // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
     for (const [key, ghost] of this.remoteItems) {
       if (!key.startsWith(`${id}:`)) continue;
