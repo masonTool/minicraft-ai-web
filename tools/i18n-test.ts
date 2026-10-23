@@ -1104,6 +1104,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['label.effect.speed', 'Schnelligkeit'],
     ['panel.anvil', 'Amboss'],
     ['inventory.tab.craftable', 'Machbar'],
+    // P4-1c 起：构件与模板、以及生物名是德语（显式物品名仍是英文占位）
+    ['item.toolMaterial.diamond', 'Diamant'],
+    ['item.tpl.tool', '{material}{kind}'],
+    ['entity.creeper', 'Creeper'],
+    ['entity.ender_dragon', 'Enderdrache'],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));
