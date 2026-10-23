@@ -1,107 +1,158 @@
 #!/usr/bin/env node
 /**
- * 把**本会话的队列文件**从 `doing/` 移到 `logs/doing-archive/`，文件名加时间戳后缀。
+ * 把**本会话的队列 / 计划 / 决策记录**从 `doing/` 移进 `logs/<会话ID>/`。
  *
  * 用法：
- *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列 <sid6>.md
- *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 归档计划 <sid6>-plan.md
- *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 归档决策 <sid6>-decision.md
+ *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列（顺带把计划/决策一起搬）
+ *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 只归档计划
+ *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 只归档决策记录
  *
- * 落到 `logs/<会话ID>/<种类>-<YYYYMMDDHHmmss>.md`——按会话分目录，同一会话的东西在一处。
+ * ## 归档文件是**累积**的，不按批次新建
  *
- * 为什么不再直接删：
- *   收尾五步的第 5 步原来是 `rm`。队列原文确实已经整份搬进 `DONE.md`，但那是**加工过的**
- *   ——排版重排、条目合并、错字修正都可能发生；事后想核对"当时那条到底怎么写的"就没有原件了。
- *   代价极低（一个 `mv`，落在 gitignore 里），所以改成归档。
+ * `logs/<会话ID>/queue.md`、`plan.md`、`decision.md` 各一份，**每个新批次插到最上面**，
+ * 批次之间用 `----------` 分隔：
  *
- * 为什么文件名叫 `<会话ID>-<时间戳>.md`：
- *   `logs/` 里已经住着钩子的运行日志 `<会话ID>.md`，同名会撞；加时间戳还能区分
- *   "同一个会话反复开批"（同一个会话可以有多个批次，每个批次都会归档一次）。
+ *   ## 批次 20261023-1141 · 2026-10-23 11:41
+ *   <这一批的队列原文>
+ *   ----------
+ *   ## 批次 20261023-1018 · 2026-10-23 11:18
+ *   <上一批的原文>
  *
- * 为什么由脚本做而不是让 AI 手敲 `mv`：
- *   时间戳格式（`YYYYMMDDHHmmss`、本地时区）手敲必错，而错的时间戳**不会报错**，
- *   只是以后再按时间排序时乱序。这类"派生且必须唯一/有序"的字符串一律交给脚本。
+ * 为什么不再一批一个文件：一个会话跑十几批就会在 `logs/<会话ID>/` 里堆十几个
+ * `queue-20261023114100.md`，想按时间连着看一遍得一个个开。累积成一份之后，
+ * "这个会话从头到尾都干了什么"是一个文件、从上往下读。
  *
- * 退出码：0 成功（含"本来就没有队列"）/ 1 移动失败。
+ * ⚠️ `doing/` 那边的规则**完全不变**：仍然是一批一份文件，收尾时移走。
+ *    这里改的只是落盘格式。
+ *
+ * ## 其它两条仍然成立
+ *
+ * · **不再直接删**：`DONE.md` 里是**加工过**的版本（重排、合并、改错字），
+ *   事后想核对"当时的原文"只有这份归档。（落在 gitignore 里，代价极低。）
+ * · **派生的东西交给脚本**：批次号、日期格式手敲必错，而错的日期不会报错，
+ *   只是以后按时间查找时乱序。
+ *
+ * 退出码：0 成功（含"本来就没有队列"）/ 1 写盘失败。
  */
-import { existsSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { appendLog, archiveDirFor, decisionNameFor, DOING_DIR, planNameFor, PROJECT_ROOT, queueFileName } from './lib.mjs';
+import {
+  appendLog,
+  archiveDirFor,
+  decisionNameFor,
+  DOING_DIR,
+  planNameFor,
+  PROJECT_ROOT,
+  queueFileName,
+  shortSid,
+} from './lib.mjs';
 
 const sid = (process.argv[2] ?? '').trim();
-/**
- * 三类文件（队列 / 计划 / 决策记录）走**同一套归档规则**，只有前缀不同：
- * `<sid>.md` / `plan-<sid>.md` / `decision-<sid>.md`。
- */
 const kind = process.argv.includes('--plan')
   ? 'plan'
   : process.argv.includes('--decision')
     ? 'decision'
     : 'queue';
+
 if (!sid) {
   console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--plan|--decision]');
   process.exit(2);
 }
 
-const srcName =
-  kind === 'plan' ? planNameFor(sid) : kind === 'decision' ? decisionNameFor(sid) : queueFileName(sid);
-const src = join(DOING_DIR, srcName);
-/** 归档按**会话分目录**：`logs/<会话ID>/`，同一个会话的日志与备份都在一处。 */
+const LABEL = { queue: '队列', plan: '计划', decision: '决策记录' };
+const SRC_NAME = {
+  queue: queueFileName(sid),
+  plan: planNameFor(sid),
+  decision: decisionNameFor(sid),
+};
+
+/** `logs/<会话ID>/`：同一个会话的日志与归档都在一处。 */
 const ARCHIVE_DIR = archiveDirFor(sid);
+const SEP = '----------';
 
-if (!existsSync(src)) {
-  console.log(`没有 ${src}（可能已经归档过了），无需处理。`);
-  process.exit(0);
-}
-
-/** 本地时区的 `YYYYMMDDHHmmss`；不用 ISO，因为文件名要能直接排序且不带分隔符。 */
-function stamp(now = new Date()) {
+/** 本地时区的 `YYYY-MM-DD HH:mm`；批次标题用它，人能直接读。 */
+function when(now = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
-  return (
-    `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}` +
-    `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`
-  );
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`;
 }
 
-// 目录里已经有会话 ID 了，文件名只留"种类 + 时间戳"，不再重复一遍 sid
-const dest = join(ARCHIVE_DIR, `${kind}-${stamp()}.md`);
+/** 从原文里取 `> 批次：xxx`；取不到就写"未知批次"（不猜）。 */
+function batchOf(text) {
+  const m = /^>\s*批次\s*[:：]\s*(\S+)/m.exec(text);
+  return m ? m[1] : '未知批次';
+}
+
+function fileHead(k) {
+  return [
+    `# ${LABEL[k]}归档 · 会话 ${shortSid(sid)}`,
+    '',
+    '> 本会话所有批次的原文，**新的在最上面**；批次之间用 `----------` 分隔。',
+    '> 按 `## 批次 <号>` 可定位某一批；原文已从 `doing/` 移走。',
+    '',
+    '',
+  ].join('\n');
+}
+
+/**
+ * 把一节插到最上面。
+ *
+ * 幂等：同一批次号已经存在就跳过（重跑归档不会写重复节）。
+ */
+function archiveAs(k) {
+  const src = join(DOING_DIR, SRC_NAME[k]);
+  if (!existsSync(src)) return false;
+
+  const text = readFileSync(src, 'utf8');
+  const batch = batchOf(text);
+  const dest = join(ARCHIVE_DIR, `${k}.md`);
+  const old = existsSync(dest) ? readFileSync(dest, 'utf8') : '';
+  const bodyStart = old.indexOf('## 批次 ');
+
+  if (batch !== '未知批次' && bodyStart >= 0 && old.slice(bodyStart).includes(`## 批次 ${batch} `)) {
+    rmSync(src, { force: true });
+    console.log(`${SRC_NAME[k]} 的批次 ${batch} 已在归档里，跳过`);
+    return true;
+  }
+
+  const head = bodyStart >= 0 ? old.slice(0, bodyStart) : old || fileHead(k);
+  const body = bodyStart >= 0 ? old.slice(bodyStart).trimEnd() : '';
+  const section = `## 批次 ${batch} · ${when()}\n\n${text.trimEnd()}\n`;
+  const next = body ? `${head}${section}\n${SEP}\n\n${body}\n` : `${head}${section}\n`;
+
+  mkdirSync(ARCHIVE_DIR, { recursive: true });
+  writeFileSync(dest, next);
+  rmSync(src, { force: true });
+
+  const rel = dest.slice(PROJECT_ROOT.length + 1);
+  console.log(`已归档：${rel}（批次 ${batch}）`);
+  appendLog(sid, `${LABEL[k]}已归档 · ${rel} · 批次 ${batch}`);
+  return true;
+}
 
 try {
-  mkdirSync(ARCHIVE_DIR, { recursive: true });
-  renameSync(src, dest);
+  const done = archiveAs(kind);
+  if (!done) {
+    console.log(`没有 ${join(DOING_DIR, SRC_NAME[kind])}（可能已经归档过了），无需处理。`);
+    process.exit(0);
+  }
 } catch (err) {
   console.error(`归档失败：${err.message}`);
   process.exit(1);
 }
 
-const rel = dest.slice(PROJECT_ROOT.length + 1);
-console.log(`已归档：${rel}`);
-appendLog(sid, `${kind === 'plan' ? '计划' : kind === 'decision' ? '决策记录' : '队列'}已归档 · ${rel}`);
-
 /**
  * 不带 flag 时 = 归档**本会话的全部"正在做"文件**：队列 + 决策记录 + 计划（存在才搬）。
  *
- * 为什么改成一条命令：收尾第五步原本要求"归档队列 → 再 `--decision` → 再 `--plan`"，
- * 实测模型只做了第一步就宣布收尾，决策记录留在 `doing/` 里成了孤儿（门禁会红，但那是事后）。
+ * 为什么做成一条命令：收尾第五步本来要求"归档队列 → 再 `--decision` → 再 `--plan`"，
+ * 实测模型只做第一步就宣布收尾，决策记录留在 `doing/` 里成了孤儿。
  * 一个会话的东西本来就该一起走，做成一条命令就不存在"漏了第二步"。
- *
- * 单独的 `--plan` / `--decision` 仍然可用（幂等：文件不在就跳过）。
  */
 if (kind === 'queue') {
-  for (const [k, name, label] of [
-    ['decision', decisionNameFor(sid), '决策记录'],
-    ['plan', planNameFor(sid), '计划'],
-  ]) {
-    const from = join(DOING_DIR, name);
-    if (!existsSync(from)) continue;
-    const to = join(ARCHIVE_DIR, `${k}-${stamp()}.md`);
+  for (const k of ['decision', 'plan']) {
     try {
-      renameSync(from, to);
-      const r = to.slice(PROJECT_ROOT.length + 1);
-      console.log(`已归档（随队列）：${r}`);
-      appendLog(sid, `${label}已归档（随队列） · ${r}`);
+      archiveAs(k);
     } catch (err) {
-      console.error(`附带归档 ${name} 失败：${err.message}`);
+      console.error(`附带归档 ${SRC_NAME[k]} 失败：${err.message}`);
       process.exit(1);
     }
   }

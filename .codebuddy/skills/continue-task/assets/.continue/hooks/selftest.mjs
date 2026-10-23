@@ -391,36 +391,55 @@ try {
     );
   });
 
-  check('archive-queue · 队列移到 logs/<会话ID>/queue-<年月日时分秒>.md', () => {
+  /**
+   * 归档改成**累积式**：一个会话一个 `queue.md` / `plan.md` / `decision.md`，
+   * 新批次插到最上面，批次之间 `----------` 分隔。`doing/` 的规则不变（一批一文件）。
+   */
+  check('archive-queue · 归档成 logs/<会话ID>/queue.md（累积，不按批次新建）', () => {
     queue('s-arch', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('archive-queue.mjs', null, {}, ['s-arch']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 's-arch.md'))) return expect(false, '队列文件应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 's-arch');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('queue-')) : [];
-    if (moved.length !== 1) return expect(false, `logs/s-arch/ 里应有 1 份 queue-*.md，实际 ${moved.length}`, r);
+    const dest = join(ROOT, '.continue', 'logs', 's-arch', 'queue.md');
+    if (!existsSync(dest)) return expect(false, '应有 logs/s-arch/queue.md', r);
+    const text = readFileSync(dest, 'utf8');
     return expect(
-      /^queue-\d{14}\.md$/.test(moved[0]),
-      `备份名应是 queue-<14位时间戳>.md（会话目录里不再重复 ID），实际 ${moved[0]}`,
+      /^## 批次 \S+ · /m.test(text) && text.includes('- [x] 甲'),
+      '归档文件应带 `## 批次 <号> · <时间>` 标题并保留原文',
       r,
     );
   });
 
-  check('archive-queue --plan · 计划也归档（不删）', () => {
+  check('archive-queue · 第二批插到最上面，两节用 ---------- 分隔', () => {
+    queue('s-arch2', '- [x] 甲\n  - 验证：`npm test` 通过');
+    hook('archive-queue.mjs', null, {}, ['s-arch2']);
+    writeFileSync(
+      join(DOING, 's-arch2.md'),
+      '# 队列 · 会话 s-arch2\n\n> 状态：执行中\n> 批次：20260101-0002\n\n- [ ] 乙\n  - 验证：`true`\n',
+    );
+    const r = hook('archive-queue.mjs', null, {}, ['s-arch2']);
+    if (r.code !== 0) return expect(false, '第二次归档应 exit 0', r);
+    const text = readFileSync(join(ROOT, '.continue', 'logs', 's-arch2', 'queue.md'), 'utf8');
+    const first = text.indexOf('## 批次 20260101-0002');
+    const second = text.indexOf('## 批次 19990101-0000');  // 夹具 queue() 固定写这个号
+    const seps = (text.match(/^-{10}$/gm) ?? []).length;
+    return expect(
+      first >= 0 && second > first && seps === 1,
+      `新批次应在上面、旧批次在下面、中间一条分隔线（实际 first=${first} second=${second} seps=${seps}）`,
+      r,
+    );
+  });
+
+  check('archive-queue --plan · 计划也归档成 <会话ID>/plan.md', () => {
     plan('s-archplan', '## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`');
     const r = hook('archive-queue.mjs', null, {}, ['s-archplan', '--plan']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
-    if (existsSync(join(DOING, 'plan-s-archplan.md'))) return expect(false, '计划应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 's-archplan');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('plan-')) : [];
-    return expect(
-      moved.length === 1 && /^plan-\d{14}\.md$/.test(moved[0]),
-      `应有一份 plan-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
-      r,
-    );
+    if (existsSync(join(DOING, 's-archplan-plan.md'))) return expect(false, '计划应已移出 doing/', r);
+    const dest = join(ROOT, '.continue', 'logs', 's-archplan', 'plan.md');
+    return expect(existsSync(dest), `应有 ${dest}`, r);
   });
 
-  check('archive-queue --decision · 决策记录也归档', () => {
+  check('archive-queue --decision · 决策记录也归档成 <会话ID>/decision.md', () => {
     queue('s-archdec', '- [x] 甲\n  - 验证：`npm test` 通过');
     writeFileSync(
       join(DOING, 's-archdec-decision.md'),
@@ -429,11 +448,17 @@ try {
     const r = hook('archive-queue.mjs', null, {}, ['s-archdec', '--decision']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 's-archdec-decision.md'))) return expect(false, '决策记录应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 's-archdec');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('decision-')) : [];
+    const dest = join(ROOT, '.continue', 'logs', 's-archdec', 'decision.md');
+    return expect(existsSync(dest), `应有 ${dest}`, r);
+  });
+
+  check('archive-queue · 不带 flag 时把决策记录一起搬走', () => {
+    queue('s-archall', '- [x] 甲\n  - 验证：`npm test` 通过');
+    writeFileSync(join(DOING, 's-archall-decision.md'), '# 决策\n\n## D1 · 甲\n- 决定：x\n');
+    const r = hook('archive-queue.mjs', null, {}, ['s-archall']);
     return expect(
-      moved.length === 1 && /^decision-\d{14}\.md$/.test(moved[0]),
-      `应有一份 decision-<会话ID>-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
+      r.code === 0 && !existsSync(join(DOING, 's-archall-decision.md')),
+      '归档队列时应把决策记录一并搬走（否则会留在 doing/ 成孤儿）',
       r,
     );
   });
