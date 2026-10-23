@@ -220,6 +220,21 @@
   这样它与锚点所在作用域解耦，插错也只影响自己那一块。
 - 适用面：所有“往长测试文件里追加断言”的编辑（`tools/*-test.ts` 尤其多）。
 
+### 断言按**文本**匹配 JSON 片段：任何一次格式化重排都会把它打破
+
+- 症状：只是把 `manifest.webmanifest` 的 `name` 改个名（用 `json.dumps(indent=2)` 写回），
+  `ui` 套件立刻报「manifest 以横屏全屏打开」失败 —— 内容一个字段没动。
+- 原因：那条断言查的是 `manifest.includes('"display_override": ["fullscreen", "standalone"]')`，
+  而重排把数组展开成了多行，**文本不再匹配**。JSON 语义完全没变。
+- 两种修法，选哪个看责任在谁：
+  1. **本次改动**破坏了既有格式 → 把文件恢复成原格式（本项目选了这个：只把那一段写回紧凑一行，
+     `gen-manifests` 派生的另外五份仍展开，但断言只查基准文件）；
+  2. **判据本身太脆** → 改成 `JSON.parse` 后比值；但要意识到这会放宽"格式意图"的检查
+     （别人可能就是想让某个字段保持紧凑写法）。
+- 判据：改 JSON/JSON5/TOML 文件时，**先看有没有断言在按文本匹配它**（`grep 'includes('`），
+  能"定点改值"就别整文件重写。
+- 适用面：`manifest*.webmanifest`、`package.json`、`tsconfig.json`、`config.json`。
+
 ### 「语言表 100% 齐」不等于「界面没有中文」—— 要扫的是渲染输出
 
 - 症状：`audit:i18n` 报每张表 2168/2168、`satisfies` 过、`test:i18n` 全绿、四语言巡查 20 条也全绿，
