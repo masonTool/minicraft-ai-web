@@ -520,7 +520,7 @@ for (const [name, url] of [
   // 注入文本里必须还有计划段：重装框架会整份覆盖 queue-init.mjs
   const initText = readIfAny(FILES.queueInit);
   if (initText) {
-    for (const needle of ['plan-<本会话ID>.md', '完成到里程碑就停']) {
+    for (const needle of ['<本会话ID>-plan.md', '完成到里程碑就停']) {
       if (!initText.includes(needle)) {
         problems.push(`queue-init.mjs 的注入里找不到「${needle}」——重装把它覆盖回旧版了？`);
       }

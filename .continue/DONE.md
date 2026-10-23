@@ -8,6 +8,52 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+## 批次 20261023-0903 · 2026-10-23 · 会话 b09ae4
+
+**做了什么**：三处命名收敛成一套——① 文件名里的会话 ID 只取**前 6 位**（只截 UUID 形态，
+`s-plan-next` 这类短标识原样保留，否则一截就撞）；② 计划/决策改成**后缀式**
+（`b09ae4-plan.md` / `b09ae4-decision.md`），同一会话三份文件在目录里排在一起；
+③ `logs/` **按会话分目录**（`logs/<会话ID>/run.md` + `<queue|plan|decision>-<时间戳>.md`），
+不再几十份归档堆在 `doing-archive/` 一个目录里。新增「队列头部完整 ID 前 6 位 == 文件名」
+门禁作为截短的前提——它第一次生效就抓到我自己的手误。共 6 条。
+
+**条目**（原文照搬）：
+
+- [x] [名1] `lib.mjs`：加 `shortSid()`（**只截 UUID 形态**）、队列/计划/决策三个文件名改成 `<sid6>` / `<sid6>-plan.md` / `<sid6>-decision.md`、日志与锁移进 `logs/<sid6>/run.md`、`listQueues` 只列队列 → `node -e` 断言三种名字与目录
+  - 做了什么：`shortSid()` 只对 **32 位 hex / 带横线 UUID** 取前 6 位，其它形态原样返回；`queueFileName()` / `planNameFor()` / `decisionNameFor()` / `queuePath()` / `planPathFor()` / `decisionPathFor()` 全部走它；`PLAN_FILE_RE` / `DECISION_FILE_RE` 改成**后缀式**（`^(.+?)-plan\.md$`）；`logPath()` → `logs/<sid6>/run.md`，锁跟着走（`withLogLock` 改成建父目录）；`listQueues()` 排除两类非队列文件
+  - 为什么只截 UUID：真实会话 ID 是 32 位 hex，前 6 位足够区分同时在跑的几个人；而 `s-plan-next` 这类**本身就是短标识**的 ID（自检夹具、平台自定义 ID）一截就撞（`s-plan-next`/`s-plan-edge` 都变 `s-plan`），两个会话共用一份队列比文件名长严重得多
+  - 为什么文件名用后缀式：`plan-b09ae4.md` 与队列 `b09ae4.md` 的公共前缀在最前面，按名字排序时**同一个会话的三份文件会散开**；`b09ae4-plan.md` 排在一起，看目录就知道哪几份属于同一个会话
+  - 验证：`node --input-type=module -e` 六项——`shortSid(full)=b09ae4`、`shortSid(uuid)=b09ae4`、`shortSid('s-plan-next')` **原样**、`queue/plan/decision` 三个名字、`logPath` = `logs/b09ae4/run.md`、`isPlanFile('s-plan-next.md')=false` / `isPlanFile('b09ae4-plan.md')=true`
+  - 批次：20261023-0903
+- [x] [名2] 归档改成按会话分目录：`archive-queue.mjs` 写 `logs/<sid6>/<kind>-<ts>.md`；`auto-continue` 指令里的路径同步 → 归档后文件落在会话目录、名字带时间戳
+  - 做了什么：`archive-queue.mjs` 的源文件名改由 `queueFileName/planNameFor/decisionNameFor` 算，目标目录换成 `archiveDirFor(sid)`，文件名只留 `<kind>-<YYYYMMDDHHmmss>.md`（目录里已经有会话 ID，不再重复）；`auto-continue` / `queue-init` 指令里 6 处路径文案同步
+  - 为什么文件名里去掉会话 ID：目录已经是 `logs/b09ae4/`，再写 `b09ae4-queue-…` 是同一事实第二遍——而且以前所有会话的归档都堆在 `logs/doing-archive/` 一个目录里，几十份之后根本分不清哪些属于同一轮
+  - 为什么 `queue-` 前缀：同一个会话目录里要住着队列 / 计划 / 决策三类备份，靠前缀区分；时间戳保证同一会话多批不互相覆盖
+  - 验证：`selftest` 的两条归档用例改成断言 `logs/<sid>/queue-<14位>.md` 与 `logs/<sid>/plan-<14位>.md`、`logs/<sid>/decision-<14位>.md`，52 项全绿
+  - 批次：20261023-0903
+- [x] [名3] 迁移现存文件：`doing/` 三个（含别的会话的队列与计划）+ `logs/` 旧日志与旧归档归位 → `ls` 结果符合新规则，且两个别的会话的队列仍能被读到
+  - 做了什么：`doing/` 四份改名（`4024a9d4…`→`4024a9.md`、`b75f5b89…`→`b75f5b.md`、`plan-b75f5b89…`→`b75f5b-plan.md`、本会话队列→`b09ae4.md`）；`logs/` 归位 13 项——7 份旧的 `logs/<full>.md` 运行日志变成 `logs/<sid6>/run.md`，4 份旧归档变成 `logs/<sid6>/<kind>-<ts>.md`，随后删掉空的 `doing-archive/`
+  - 为什么必须和代码同一个提交：钩子改成按 6 位找队列，**不迁 = 另外两个会话的队列当场“消失”**（它们下一轮就会被当成“没有队列”而静默停摆），而且不会报任何错
+  - 顺带被自己的门禁抓了一次：我把 `b75f5b` 手打成 `b75f5b8`（7 位），新加的「头部会话 ID 前 6 位 == 文件名」当场判红，改回来才绿——这条门禁第一次生效就是抓我
+  - 验证：`ls .continue/doing/` = `4024a9.md b09ae4.md b75f5b-plan.md b75f5b.md`；`npm run audit:docs` 绿（含头像核对）；Stop 钩子实测能找到 `doing/b09ae4.md` 并递出「第 1/6 条」
+  - 批次：20261023-0903
+- [x] [名4] 门禁与自检：`audit-docs` 文件名规则跟着改 + 新增「队列头部会话 ID 前 6 位必须等于文件名」；`selftest` 断言跟着改 → 造一个头像不符的队列能红；自检全绿
+  - 做了什么：`audit-docs` 加一条硬校验（每条队列读头部 `# 队列 · 会话 <full>`，`shortSid()` 后必须等于文件名）；门禁摘要文案改成 `doing/*-plan.md、*-decision.md`；`selftest` 的夹具与断言全部跟着改（计划文件 `s-x-plan.md`、归档目录 `logs/<sid>/`、日志 `logs/<sid>/run.md`）
+  - 为什么这条门禁是**截短 ID 的前提**：文件名只留 6 位，理论上两个会话可能撞；撞了之后后开的会**直接接管**前一个的队列（勾错条目、写错 DONE），而且零报错。头部保留完整 ID 就是为了在这里对一次账
+  - 顺带修了自检里 8 条写死 `logs/<sid>.md` 的断言——它们读的是文件路径，路径一变就全红，正好逼着一次改干净
+  - 验证：造 `zzzzzz.md`（头部写 `ffff…`）→ 判红「头部会话与文件名不一致」；改成一致后绿；`selftest` **52 项全绿**
+  - 批次：20261023-0903
+- [x] [名5] 文档与打包源：注入协议 / README / notes/plan.md / HANDOFF / AGENTS / SKILL.md / assets 全链路 → `grep` 无旧写法；`check-framework` / `test-install` 通过
+  - 做了什么：`queue-init` 第 9/10 条、`README` §3 第 10 条与收尾第 ⑤ 步、`notes/plan.md`（标题 / 三层结构 / §3 判定 / §4 门禁表 / §5 跨会话接手 / §6 图里两处标签）、`notes/session-decisions.md`、`HANDOFF` §4 两段、`AGENTS` §2、`SKILL.md` 全部改成后缀式 + `logs/<会话ID>/`；`assets/` 回灌 hooks 与 README
+  - 为什么连 `notes/batches.md` 的历史行不改：那些行记的是**当时**的做法（`plan-<会话ID>.md`），改历史等于伪造台账；新批次行写新命名，两行并存正好能看出改名发生在哪一批
+  - 验证：`grep -rn "doing-archive|plan-<会话ID>|decision-<会话ID>"` 只剩历史批次行；`diff -rq assets/.continue/hooks .continue/hooks` 无差异；`check-framework` 通过；`test-install` 19 项通过；`check.mjs --fast` 五项绿
+  - 批次：20261023-0903
+- [x] [验] `npm run check` + `node .continue/hooks/check.mjs` 全绿
+  - 做了什么：跑全量门禁与框架五项，核对 `assets` 与运行版一致
+  - 验证：`npm run check` **EXIT 0**（typecheck / 172 套 / `audit:i18n` / 三张台账 / 文档门禁）；`node .continue/hooks/check.mjs` **五项全绿**；`diff -rq assets/.continue/hooks .continue/hooks` 无差异
+  - 批次：20261023-0903
+
+
 ## 批次 20261023-0845 · 2026-10-23 · 会话 b09ae4d7
 
 **做了什么**：修掉上一批收尾时留下的一处**真实数据损坏**——`DONE.md` 里 0823 的批次标题
@@ -101,93 +147,3 @@
   - 批次：20261023-0823
 
 
-## 批次 20261023-0744 · 2026-10-23 · 会话 b09ae4d7
-
-**做了什么**：用户确认的 3 组机制调整 + worktree 并行，共 6 条。① 计划启用门槛收紧到
-「任务 > 16 个队列条目才建，每个里程碑 ≥2 个阶段」；② 计划改成**会话专属** `doing/plan-<会话ID>.md`，
-与队列同名配对——队列头 `> 计划：` 整行删除，连带删掉「解析头部 / 校验写法 / 校验位置 / 引用丢失告警」
-四道防线；③ 收尾不再 `rm` 队列，改 `archive-queue.mjs` 归档到 `logs/doing-archive/<会话ID>-<时间戳>.md`；
-④ 并行任务改走 `git worktree`（`npm run continue:worktree`），分支自动推远程、合并时机交给人。
-框架与机制一起改：`SKILL.md` 与 `assets/.continue/` 同步回灌。
-
-**条目**（原文照搬）：
-
-- [x] [门槛1] Plan 启用门槛收紧：任务 > 16 个队列条目才建计划、里程碑至少 2 个阶段（`notes/plan.md` / `README.md` §3 第 10 条 / `queue-init` 第 9 条 / `HANDOFF.md` §4 / `audit-docs` 新断言）→ `npm run audit:docs` 绿；造一个单阶段里程碑能红
-  - 做了什么：`notes/plan.md` 新增 **§0「什么时候才需要计划（门槛 16）」**（≤16 条不建计划、>16 条才建、每个里程碑 ≥2 阶段，附一张门槛表与"为什么门槛定这么高"）；§5 把"里程碑粒度"改成两条"机器管不到的"（该覆盖多少用户价值 / 该不该进计划）；`README.md` §3 第 10 条首句改成"预计 > 16 条才用计划"并补"每个里程碑 ≥ 2 个阶段"（**仍 3 行、仍 400 行**）；`queue-init` 第 9 条同步；`HANDOFF.md` §4 同步；`audit-docs` 加"里程碑 0 阶段 / 1 阶段"的检查
-  - **为什么这条只提示、不判红**：实测本仓库那份 `plan-jump.md` 就是单阶段，而它属于**另一个正在跑的会话**——判红会当场卡住它的提交，而"拆别人的计划"等于改它这一批的执行流程。里程碑粒度是**判断**不是结构，所以走 `i18n-audit` 用过的同一口径（**只报告、不失败，判死是人的事**）；真正的硬约束放在注入协议与 `notes/plan.md` §0（新计划不许这么写）。为此给 `audit-docs` 加了 `hints` 通道（只打印、不设 `failed`）
-  - 为什么门槛是 16：一批 8~12 条，16 ≈ 两批。**≤16 条的任务不存在"跑到一半忘了初衷"的风险**，为它建计划设里程碑，只有打断的代价、没有防护的收益；而且"每批都停"会让人开始无脑点"继续"，关卡退化成形式
-  - 验证：`npm run audit:docs` 绿，且对 `plan-jump.md` 打出**提示**而非错误；造一个"空里程碑 + 单阶段里程碑"的假计划 → 两条提示都按时打印、仍然 `文档体量检查通过`（不判红）；删掉假计划后复绿；`README.md` 仍 400 行
-  - 批次：20261023-0744
-- [x] [会话1] 计划改成会话专属 `plan-<session_id>.md`：`lib.mjs` 加 `planNameFor/planPathFor`、删 `parsePlanRef`、`QUEUE_HEAD_LINES` 6→5；`auto-continue.mjs` 按 sid 读计划并删「引用不存在」分支；`audit-docs` 删两条头部检查、加「孤儿计划」；`selftest` 夹具改成 `plan-<sid>.md` + 删除第 6 行用例 + 新增「名字不对就不生效」；迁移 `plan-jump.md` 并清掉两份队列里的 `> 计划：` 行 → `node .continue/hooks/check.mjs` 五绿 + `npm run audit:docs` 绿
-  - 做了什么：① `lib.mjs` 新增 `planNameFor(sid)` / `planPathFor(sid)` / `sessionOfPlan(name)`（`PLAN_FILE_RE` 加捕获组），删掉 `parsePlanRef` / `planPath` / `listPlans`，`QUEUE_HEAD_LINES` **6 → 5**（第 6 行原本就是为 `> 计划：` 让位）；② `auto-continue.mjs` 改成 `readPlan(planPathFor(sid))`，**删掉「队列引用的计划文件不存在」整段（约 40 行）**——没有引用就没有错引用；③ `audit-docs` 删掉「声明写法不对」「声明位置超窗」两条，`plans` Map（零消费者）一并删掉，新增**孤儿计划**判红（`plan-X.md` 必须有 `X.md`），注入文本探针改成 `plan-<本会话ID>.md`；④ `selftest` 夹具改成 `plan(sid, body)` + `planQueue(sid, body)`（不再写 `> 计划：`），删两条过期用例（第 6 行同构、引用丢失告警），新增「文件名不配对 → 当没有计划」；⑤ 文档同步 `notes/plan.md` / `README` §3 第 10 条 / `queue-init` 第 7+9 条 / `SKILL.md` / `AGENTS.md` §2 / `HANDOFF.md` §4；⑥ **迁移** `plan-jump.md` → `plan-b75f5b898109486f8b2988e8849149e1.md`，并删掉那份队列里的 `> 计划：plan-jump.md` 行
-  - 为什么这一改能删掉三条机制：绑定写在队列头 = **同一件事存两份**，于是要"解析头部""校验写法""校验位置""引用丢失告警"四道防线去兜它。绑定搬进文件名后，这四道全部消失，只剩一条"名字必须配对"的门禁——**少一份副本，就少一类会漂的失效**
-  - 为什么 `QUEUE_HEAD_LINES` 退回 5：6 是上一批为 `> 计划：` 落在第 6 行临时加的。声明没了，留 6 就是没有依据的数字；常量本身保留（`hold` / `parseBatch` 两处仍共用一个值）
-  - 为什么迁移别人的计划文件：改完不迁，`plan-jump.md` 立刻变成孤儿（新门禁判红），会卡住那个会话的提交。改名是纯文件名动作，不动它的阶段/批次内容；同时把它队列里那行已经失效的 `> 计划：` 删掉（不改任何 `[ ]`/`[x]` 状态）
-  - 验证：`node .continue/hooks/selftest.mjs` **44 项全过**（删 2 加 1）；`node .continue/hooks/check.mjs --fast` **五项全绿**；`npm run audit:docs` 绿且孤儿检查在迁移前确实红过（用 `plan-jump.md` 实测）；`README.md` 仍 400 行
-  - 批次：20261023-0744
-- [x] [备份1] 收尾不再删队列，移到 `logs/doing-archive/<sid>-<YYYYMMDDHHmmss>.md`：新增 `archive-queue.mjs` + `wrapSteps` 第 5 步改文案 → `selftest` 断言"收尾后队列不在 `doing/`、备份在 `logs/doing-archive/` 且带时间戳"
-  - 做了什么：① 新增 `.continue/hooks/archive-queue.mjs <session_id>`：`mkdir -p logs/doing-archive` + `rename` 到 `<会话ID>-<YYYYMMDDHHmmss>.md`，打印相对路径并写日志行；② `wrapSteps` 的第 5 步从「删除队列文件」改成「**归档**队列文件（跑上面那条命令，不要 `rm`）」；③ 全链路措辞对齐（`auto-continue` 的 7 处、`queue-init` 第 6/7 条、`README` §3 收尾五步与流程摘要与"只算一条"那条、`pre-commit` 注释）；④ `install.mjs` 的 `REQUIRED` 加这个文件（新项目装出来必须有它）
-  - 为什么不再 `rm`：队列原文确实整份搬进了 `DONE.md`，但那是**加工过的**（重排、合并、改错字）；事后想核对"当时那条到底怎么写的"就没有原件了。代价只是一个 `mv`、落在 gitignore 里，不进仓库也不进提交
-  - 为什么文件名要带 `<会话ID>-` 前缀：`logs/` 里已经住着钩子的运行日志 `<会话ID>.md`，同名会撞；时间戳还能区分同一会话的多个批次（每批归档一次）
-  - 为什么交给脚本而不是让 AI 手敲 `mv`：时间戳 `YYYYMMDDHHmmss`（本地时区）手敲必错，而**错的时间戳不会报错**，只是以后按时间排序时乱序——这类"派生且必须唯一有序"的字符串一律脚本生成
-  - 为什么没有第三态"删"：计划全部完成时也该归档（用户的要求是"先不要删"），所以只有两态——普通批走"归档"、计划续批走"重置"
-  - 验证：`node .continue/hooks/selftest.mjs` **45 项全过**（新增一条真跑 `archive-queue.mjs`：断言 `doing/` 里没了、`logs/doing-archive/` 里多一份且名字匹配 `^<sid>-\d{14}\.md$`；另一条断言收尾第五步文案是"归档队列"而非"删除"）；`node .continue/hooks/check.mjs --fast` 五项全绿；`check-framework.mjs` 通过；`README.md` 仍 400 行
-  - 批次：20261023-0744
-- [x] [并行1] worktree 并行：新增 `.continue/hooks/worktree.mjs` + `npm run continue:worktree`、`HANDOFF.md` §4 写合并约定 → `--dry-run` 打印计划且不建目录
-  - 做了什么：① 新增 `.continue/hooks/worktree.mjs <名字> [--dry-run]`：在仓库旁建 `<仓库>-wt-<名字>`、开分支 `continue/<名字>`（基于 HEAD）、**立刻 `git push -u origin`**；带三条拒绝（名字不合法 / 已在 worktree 里 / 目录或分支已存在）；push 失败只告警不中断（树已经能用）；② `npm run continue:worktree` 指向它；③ **放在 `.continue/hooks/` 而不是 `tools/`**，并加进 `install.mjs` 的 `REQUIRED` 与 `assets/`——这样它是框架的一部分，新项目装出来就有；④ `HANDOFF.md` §4 加「并行工作树」段（建树 → **必须在新路径另开会话** → 合并时机由用户定 → 冲突处置约定）；⑤ 注入协议第 1 条把"串行开发"改成"**一棵树上只有一个会话在干活**，要并行就开工作树"；⑥ `SKILL.md` 加一条、`README` §7.2 那句补上工作树指路
-  - 为什么合并约定要写死：`DONE.md` / `notes/batches.md` 是**追加型**（各一批一节，两边都留即可）；`TASKS.md` 是**状态位**（两边可能都勾了同一条，必须按语义手工合）；`doing/*.md` 各是各的会话文件、不会冲突。不写下来，每次合并都要重新想一遍
-  - 为什么必须"新建会话"而不能沿用原会话：钩子的注册命令是相对路径，**cwd 决定它读写哪棵树**。从原会话跑，`queue-init`/`auto-continue` 读写的永远是原工作区的 `doing/`，等于没隔离。这是工具边界，不是框架能绕过的，所以脚本最后直接把 `cd <新路径>` 印出来
-  - 为什么脚本拒绝"在 worktree 里再开树"：用 `--git-dir` 与 `--git-common-dir` 是否相同来判断；树里套树会让 `PROJECT_ROOT` 反推和 git 操作都变复杂，且没有真实场景需要
-  - 验证：`npm run continue:worktree -- demo --dry-run` 打印三步计划、**不建任何目录/分支**；缺参数时打印用法并 exit 2；`node .continue/hooks/check.mjs --fast` 五项全绿；`check-framework.mjs` 通过；`README.md` 仍 400 行
-  - 批次：20261023-0744
-- [x] [同步1] 框架侧一起改：`SKILL.md` + `assets/.continue/`（README + 改过的钩子）回灌 → `diff -rq` 无差异；`check-framework.mjs` 与 `test-install.mjs` 通过
-  - 做了什么：`SKILL.md` 的三段（收尾自动 / 一批多长 / 任务大过一批用计划）在本批各条里同步改完，并新增「并行靠工作树」一条；`assets/.continue/README.md` 与 6 个钩子（`lib` / `auto-continue` / `queue-init` / `selftest` / `pre-commit` / `archive-queue` / `worktree`）回灌，`diff -rq` 无差异；`install.mjs` 的 `REQUIRED` 补上两个新脚本
-  - 为什么这一条必须单独走一遍：**框架与机制要一起改**——运行版改了而打包源没改，重装一次就把本批三条改动全抹掉，而且症状是"过几天又变回去了"，没有任何报错。本仓库踩过同一个坑（`DOC_LIMITS.TASKS` 被重装改回 600），所以 `audit-docs` 里留了探针，这里再靠 `diff -rq` 兜一层
-  - 验证：`diff -rq assets/.continue/hooks .continue/hooks` **无差异**；`diff -q` README **一致**；`check-framework.mjs` 技能自查通过（模板↔安装器一致、注册命令带 `--event=`）；`test-install.mjs` 安装器回归 **19 项**通过
-  - 批次：20261023-0744
-- [x] [验] 全量验证：`npm run check` / `node .continue/hooks/check.mjs` / 两项 skill 自检全绿，删掉刹车 `.continue/auto.off`
-  - 做了什么：跑全量门禁、框架五项、两项 skill 自检；删掉改钩子期间挂的刹车 `.continue/auto.off`；把 HANDOFF 的「提交总数」锚点对齐到实际（1440）
-  - 为什么锚点要手动对：`audit:tasks` 只判「过期」不写回，容差 ±2；而本仓库现在**多个会话并行提交**，这个锚点会持续漂——它是共享文档的固有代价，收尾时得再对一次
-  - 验证：`npm run check` **EXIT 0**（typecheck / 172 套 / `audit:i18n` / 三张台账 / 文档门禁）；`node .continue/hooks/check.mjs` **五项全绿**；`check-framework.mjs` 通过；`test-install.mjs` **19 项**通过；`.continue/auto.off` 已删除（`ls` 无此文件）
-  - 批次：20261023-0744
-
-
-<号> · <日期> · 会话 <sid 前 8 位>` 见 `README.md` §3；这里不放格式样例（会被当成真批次）。
->
-> 体量上限 300 行，超了跑 `node .continue/hooks/archive-done.mjs` 把最旧的批次整节搬进
-> `DONE.archive.md`。2026-10-22 之前的历史（批次 1~613 / HANDOFF 批次流水 / 旧队列）已整份在那边。
-
-## 设计决策与判定不做（2026-10-22 由 NOTES.md 并入）
-
-> 这一节**不是时间线**：按主题记「当时怎么做的、为什么」，也就是"下一批还会被绊到"的那些结论。
-> 并进 DONE 是因为框架只有六份文件（老版 `NOTES.md` 的下场就是被并进来），单开第七份必然被漏读。
-> 新增一节追加在末尾；**单节 ≤ 15 行**，超了拆进 `notes/<模块>.md` 并在这里留一行索引。
-> 只写结论与理由，不贴大段代码（代码在 git 里，会漂）。
-
-### 索引：溢出文档
-
-> `notes/` 是本节的**溢出位**，也是**入口文档放不下的细则**的落点（如 `notes/plan.md`）；
-> 它不是第二套机制——规则仍只在入口文档说一次，这里只放细节。这里只留一行索引。
-
-- **计划机制细则**（三层结构 / 三条分支 / 门禁 / 机器管不到的）→ [`notes/plan.md`](./notes/plan.md)；
-  `README.md` §3 第 10 条只留指针（README 有 400 行硬上限）
-- **模块能力台账**（约 900 行的表，按模块名搜）→ [`notes/modules.md`](./notes/modules.md)
-  （2026-10-22 从 `docs/HANDOFF-ARCHIVE.md` 整份搬来）
-- **历史经验总表**（2026-10-22 之前约 400 条，未按模块拆分，按关键词 grep）→
-  [`notes/tips-history.md`](./notes/tips-history.md)（2026-10-22 从 `TIPS.md` 整段迁出）
-- **批次索引**（一行一批，新→旧）→ [`notes/batches.md`](./notes/batches.md)
-  （2026-10-22 从 `OVERVIEW.md` 迁出，不再占它的 200 行预算）
-- **操作型工作站**（熔炉 / 酿造台 / 营火 / 锻造台…的通用契约 + 站台矩阵 + 接入 checklist）→
-  [`notes/stations.md`](./notes/stations.md)（2026-10-22 从 `docs/` 迁来）
-- **运维手册**（`window.__mc` 调试接口 + PWA / Pages / 套壳发布）→
-  [`notes/ops.md`](./notes/ops.md)（从根 `HANDOFF.md` §5.5 / §6 抽出并合并）
-- **低龄向功能规划**（新手引导 / 创造工具 / 单机小游戏的架构选型、4 项拍板、护栏与判定不做）→
-  [`notes/kids-features.md`](./notes/kids-features.md)（2026-10-22 本轮讨论定稿）
-
-### 长期待办 / 判定不做 / `[发现]` 优先级 → [`notes/decisions.md`](./notes/decisions.md)
-
-> 三节正文（长期待办只有一份 · 判定不做 M17/O1/L4/L5 · `[发现]` 的优先级）已按本节自己的规矩
-> （**单节 ≤ 15 行**）拆进 `notes/decisions.md`——它们合计 31 行 / 4.7KB，把 `DONE.md` 的
-> 40KB **字节**门禁顶爆了（行数才 290，按行看是"没超"）。查理由去那份文件，这里只留索引。
-
----
