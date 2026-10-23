@@ -382,6 +382,7 @@ import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
+import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1857,6 +1858,20 @@ class App {
    * 否则队友走进下界之后，你主世界同坐标会站着一个分身。
    */
   private readonly remotePresence = new RemotePresence();
+  /**
+   * 服务端种子（联机5）。`null` = 还没连过 / 服务端没带种子。
+   *
+   * 记它只为一件事：种子冲突时 `/netseed reload|new` 要有"对齐到哪个种子"可依，
+   * 而 `welcome` 之后这个值不会变（服务端开局就定了世界）。
+   */
+  private serverSeed: number | null = null;
+  /**
+   * 用服务端种子重开世界（联机5）。
+   *
+   * App 自己换不了种子——`World` 在构造时就拿着种子建好了（Worker 也是那时起的），
+   * 所以这里只负责"拆干净 + 把意图交出去"，由 `boot()` 改世界清单并重新 `startWorld`。
+   */
+  onSeedRealign: ((request: { mode: 'reload' | 'new'; seed: number }) => void) | null = null;
   /** 联机容器同步的防抖（L4，批次 611） */
   private containerSyncTimer: number | null = null;
   private containerSyncTarget: { chest: Chest; x: number; y: number; z: number; dimension: DimensionId } | null =
@@ -3281,9 +3296,22 @@ class App {
   ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
-    // 种子不一致：地形会对不上（两边看到的是不同的大陆），只提示不强行切换
-    if (seed !== this.worldConfig.seed) {
-      console.warn(`[net] 服务端种子 ${seed} 与本地 ${this.worldConfig.seed} 不同，地形可能与队友不一致`);
+    // 种子以服务端为准（联机5）：地形由种子纯函数重现，两边不同等于在两片大陆上玩，
+    // 坐标对得上、风景对不上，方块改动还会互相错位
+    this.serverSeed = Number.isFinite(seed) ? seed : null;
+    const conflict = seedConflict(seed, this.worldConfig.seed);
+
+    if (conflict) {
+      const hint = `联机种子不一致：服务端 ${conflict.serverSeed} · 本地 ${conflict.localSeed}。输入 /netseed reload 用服务端种子重载本世界，/netseed new 新建同种子世界`;
+      console.warn(`[net] ${hint}`);
+      this.netStatus = hint;
+      this.chat.push(hint, 'error');
+      this.chatLine = hint;
+      this.chatUntil = performance.now() + 12000;
+      this.hudToast.show('种子不一致：/netseed reload 或 /netseed new');
+      // ⚠️ 种子不一致时**不应用**这批 edits：两片大陆的地形不同，同一坐标是另一格，
+      // 写进去会污染本地存档。对齐之后重新 join 才拿得到真正该有的那批
+      return;
     }
 
     // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来
@@ -3884,6 +3912,30 @@ class App {
 
   /** 世界被删掉时由 boot 注入的回调（App 本身不认识世界清单） */
   onWorldDeleted: ((worldId: string) => void) | null = null;
+
+  /**
+   * 用服务端种子对齐世界（联机5）。
+   *
+   * - `reload`：删掉这一局**整个存档库**再用服务端种子重开——地形、edits、容器、
+   *   时间、玩家位置与物品都在库里，删库等于一次清干净（比逐项重置少漏）；
+   * - `new`：库不动，另建一个同种子的世界（留给"我还想留着原来那个"）。
+   *
+   * 返回 false = 现在没有服务端种子（没连上服务器），调用方据此提示。
+   */
+  async realignNetSeed(mode: 'reload' | 'new'): Promise<boolean> {
+    const seed = this.serverSeed;
+    if (seed === null) return false;
+    if (mode === 'reload') {
+      // ⚠️ 先删库再拆：拆的时候不落盘（`dispose` 不写），否则刚删的库会被重建
+      await SaveGame.deleteWorld(this.worldConfig.id);
+      this.onWorldDeleted?.(this.worldConfig.id);
+    }
+    // 不落盘：reload 的库已经删了，new 也不该把这一局的改动带过去
+    diag.event('app', 'seedRealign', { mode, seed, saved: false });
+    this.dispose();
+    this.onSeedRealign?.({ mode, seed });
+    return true;
+  }
 
   // ---------------------------------------------------------------- 环境
 
@@ -12144,6 +12196,12 @@ class App {
         this.stats.damage(MAX_HEALTH * 10, 'generic', '/kill 命令');
       },
       seed: () => this.world.seed,
+      // 联机5：种子冲突时的两条出路（真正的重开由 boot 接手）
+      realignNetSeed: (mode) => {
+        if (this.serverSeed === null) return false;
+        void this.realignNetSeed(mode);
+        return true;
+      },
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       setBlock: (x, y, z, id) => {
         const ok = this.world.setBlockAndUpdate(x, y, z, id);
@@ -18439,6 +18497,40 @@ async function boot(): Promise<void> {
       // 否则玩家在菜单里按返回会直接退出页面
       pushMenuGuard();
       diag.event('app', 'menu.show', { from: 'world' });
+    };
+    /**
+     * 联机5：种子以服务端为准。
+     *
+     * App 已经把自己拆干净了（`realignNetSeed` 里 `dispose` 过），这里接手"改世界清单
+     * + 重开世界"——换种子必须新建 `World`（种子在构造时就定死了，Worker 也是那时起的），
+     * 所以只能走这条"回菜单再进来"的路，而不是原地改一个字段。
+     */
+    app.onSeedRealign = ({ mode, seed }) => {
+      if (mode === 'reload') {
+        // 同一个世界、换成服务端种子：旧地形的统计归零（`realignedWorldSummary` 有理由）
+        const next = realignedWorldSummary(world, seed, Date.now());
+        registry.update(next.id, {
+          seed: next.seed,
+          edits: next.edits,
+          playTime: next.playTime,
+          lastPlayed: next.lastPlayed,
+        });
+        diag.event('app', 'seedRealign.reloadWorld', { id: next.id, seed });
+        void startWorld(next);
+        return;
+      }
+      // 保留原世界，另建一个同种子的世界（名字带种子，免得列表里两个同名分不清）
+      const created = registry.create({
+        seed,
+        name: `${world.name} (${seed})`,
+        worldType: world.worldType,
+        difficulty: world.difficulty,
+        gameMode: world.gameMode,
+        ...(world.hardcore ? { hardcore: true } : {}),
+        ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
+      });
+      diag.event('app', 'seedRealign.newWorld', { id: created.id, seed });
+      void startWorld(created);
     };
     app.start();
     // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样

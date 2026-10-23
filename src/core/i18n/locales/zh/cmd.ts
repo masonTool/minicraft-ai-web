@@ -85,6 +85,9 @@ export const cmd = {
   // ---- /seed
   'cmd.seed.usage': "/seed",
   'cmd.seed.desc': "显示世界种子",
+  // ---- /netseed（联机5：种子以服务端为准）
+  'cmd.netseed.usage': "/netseed reload|new",
+  'cmd.netseed.desc': "用服务端的种子重载当前世界（reload），或另建一个同种子的世界（new）；只在联机时可用",
   // ---- /list
   'cmd.list.usage': "/list",
   'cmd.list.desc': "列出在线玩家",

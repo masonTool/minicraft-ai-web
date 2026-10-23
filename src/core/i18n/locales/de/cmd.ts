@@ -59,6 +59,8 @@ export const cmd = {
   "cmd.gamemode.desc": "Wechselt den Spielmodus (Kreativ = Fliegen + kein Schaden + sofort abbauen; Abenteuer = nicht bauen/abbauen; Zuschauer = durch Wände fliegen + nicht interagieren)",
   "cmd.seed.usage": "/seed",
   "cmd.seed.desc": "Zeigt den Weltseed",
+  "cmd.netseed.usage": "/netseed reload|new",
+  "cmd.netseed.desc": "Lädt diese Welt mit dem Seed des Servers neu (reload) oder erstellt eine neue Welt damit (new); nur im Mehrspieler",
   "cmd.list.usage": "/list",
   "cmd.list.desc": "Listet die Spieler online auf",
   "cmd.xp.usage": "/xp add <Punkte> | /xp set <Stufe> | /xp query",

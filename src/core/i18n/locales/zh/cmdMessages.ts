@@ -71,6 +71,11 @@ export const cmdMessages = {
   // ---- /gamemode ----
   "cmd.reply.gamemode.game-mode-set-to-mode": "已将游戏模式设置为 {mode}",
   "cmd.reply.gamemode.world-seed-seed": "世界种子：{seed}",
+  // ---- /netseed
+  "cmd.reply.netseed.reloading": "正用服务端种子重载本世界…",
+  "cmd.reply.netseed.creating": "正用服务端种子新建世界…",
+  "cmd.reply.netseed.no-server-seed": "现在没有服务端种子：先连上服务器",
+  "cmd.reply.netseed.unavailable": "当前环境不支持换种子重载",
   "cmd.reply.gamemode.online-players-count-players": "在线玩家（{count}）：{players}",
   "cmd.reply.gamemode.level-level-progress-next-total": "等级 {level}：{progress}/{next}（累计 {total} 点）",
   "cmd.reply.gamemode.invalid-amount-value": "数量无效：{value}",

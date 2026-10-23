@@ -74,6 +74,10 @@ export const cmdMessages = {
   // ---- /gamemode ----
   "cmd.reply.gamemode.game-mode-set-to-mode": "Game mode set to {mode}",
   "cmd.reply.gamemode.world-seed-seed": "World seed: {seed}",
+  "cmd.reply.netseed.reloading": "Reloading this world with the server seed...",
+  "cmd.reply.netseed.creating": "Creating a new world with the server seed...",
+  "cmd.reply.netseed.no-server-seed": "No server seed yet: connect to a server first",
+  "cmd.reply.netseed.unavailable": "Seed realign is not available here",
   "cmd.reply.gamemode.online-players-count-players": "Online players ({count}): {players}",
   "cmd.reply.gamemode.level-level-progress-next-total": "Level {level}: {progress}/{next} ({total} points total)",
   "cmd.reply.gamemode.invalid-amount-value": "Invalid amount: {value}",

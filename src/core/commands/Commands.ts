@@ -139,6 +139,13 @@ export interface CommandContext {
   isCreative(): boolean;
   killPlayer(): void;
   seed(): number;
+  /**
+   * 用服务端种子对齐世界（联机5，`/netseed`）。
+   *
+   * **可选**：不想改的老测试 stub 不给也能跑。返回 false = 现在没有服务端种子
+   * （还没连上服务器 / 服务端没带种子），命令据此提示而不是假装成功。
+   */
+  realignNetSeed?(mode: 'reload' | 'new'): boolean;
 
   // ---- 世界
   getBlock(x: number, y: number, z: number): number;
@@ -970,6 +977,35 @@ export const COMMANDS: readonly CommandSpec[] = [
     descriptionKey: 'cmd.seed.desc',
     run(_args, ctx, out) {
       out.info(msg('cmd.reply.gamemode.world-seed-seed', { seed: ctx.seed() }));
+    },
+  },
+  {
+    /**
+     * 联机种子对齐（联机5）。
+     *
+     * `reload` 是"以服务端为准"那条路：删掉本世界的存档库、用服务端种子重开
+     * （地形由种子重现，旧库套在新种子上只会错位）。`new` 保留原世界，另建一个
+     * 同种子的世界。
+     */
+    name: 'netseed',
+    usageKey: 'cmd.netseed.usage',
+    descriptionKey: 'cmd.netseed.desc',
+    run(args, ctx, out) {
+      const mode = (args[0] ?? '').toLowerCase();
+      if (mode !== 'reload' && mode !== 'new') {
+        out.error(usageError('netseed'));
+        return;
+      }
+      if (!ctx.realignNetSeed) {
+        out.error(msg('cmd.reply.netseed.unavailable'));
+        return;
+      }
+      if (!ctx.realignNetSeed(mode)) {
+        out.error(msg('cmd.reply.netseed.no-server-seed'));
+        return;
+      }
+      // 真正的重开要等 App 拆完之后由 boot 接手，这里只回执"已经安排了"
+      out.info(msg(mode === 'reload' ? 'cmd.reply.netseed.reloading' : 'cmd.reply.netseed.creating'));
     },
   },
   {

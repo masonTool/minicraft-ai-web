@@ -205,6 +205,14 @@ class FakeWorld implements CommandContext {
   seed(): number {
     return this.seed_;
   }
+  /** 联机5：`/netseed` 记下请求，返回值模拟"有没有服务端种子" */
+  seedRealigns: Array<'reload' | 'new'> = [];
+  hasServerSeed = true;
+  realignNetSeed(mode: 'reload' | 'new'): boolean {
+    if (!this.hasServerSeed) return false;
+    this.seedRealigns.push(mode);
+    return true;
+  }
   getBlock(x: number, y: number, z: number): number {
     return this.blocks.get(`${x},${y},${z}`) ?? 0;
   }
@@ -674,6 +682,23 @@ console.log('\n[模式、种子与权限]');
   check('拼错的模式报用法', badMode.out.lastError.includes('spectator'), badMode.out.lastError);
   const seed = run('/seed');
   check('/seed 显示种子', seed.out.lastInfo.includes('4242'));
+
+  // ---- /netseed（联机5：种子以服务端为准）
+  const netseedBad = run('/netseed');
+  check('/netseed 缺参数报用法', netseedBad.out.lastError.includes('/netseed'), netseedBad.out.lastError);
+  const netseedReload = run('/netseed reload');
+  check('/netseed reload 发出重载请求', netseedReload.world.seedRealigns.join(',') === 'reload', JSON.stringify(netseedReload.world.seedRealigns));
+  const netseedNew = run('/netseed new');
+  check('/netseed new 发出新建请求', netseedNew.world.seedRealigns.join(',') === 'new', JSON.stringify(netseedNew.world.seedRealigns));
+  const offlineWorld = new FakeWorld();
+  offlineWorld.hasServerSeed = false;
+  const netseedOffline = run('/netseed reload', offlineWorld);
+  check(
+    '没连服务器时 /netseed 不假装成功',
+    netseedOffline.out.lastError.length > 0 && offlineWorld.seedRealigns.length === 0,
+    netseedOffline.out.lastError,
+  );
+
   const list = run('/list');
   check('/list 列出玩家', list.out.lastInfo.includes('玩家'));
 
@@ -1807,6 +1832,8 @@ console.log('\n[/clone 区域复制（批次 431）]');
   }
 
   equal('没有参数的 /seed 直接生成', buildCommand(byName.get('seed')!, 0, {}), '/seed');
+  // `buildCommand` 填的是「参数默认值」而不是 usage 文本，所以这里落到默认的 reload
+  equal('没有参数的 /netseed 落到默认 reload', buildCommand(byName.get('netseed')!, 0, {}), '/netseed reload');
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

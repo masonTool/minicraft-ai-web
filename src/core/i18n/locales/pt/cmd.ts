@@ -58,6 +58,8 @@ export const cmd = {
   "cmd.gamemode.desc": "Troca o modo de jogo (Criativo = voo + sem dano + quebra instantânea; Aventura = não pode quebrar nem colocar; Espectador = voa pelas paredes + sem interação)",
   "cmd.seed.usage": "/seed",
   "cmd.seed.desc": "Mostra a semente do mundo",
+  "cmd.netseed.usage": "/netseed reload|new",
+  "cmd.netseed.desc": "Recarrega este mundo com a semente do servidor (reload) ou cria um novo mundo com ela (new); apenas multijogador",
   "cmd.list.usage": "/list",
   "cmd.list.desc": "Lista os jogadores conectados",
   "cmd.xp.usage": "/xp add <pontos> | /xp set <nível> | /xp query",

@@ -83,6 +83,8 @@ export const cmd = {
   // ---- /seed
   'cmd.seed.usage': "/seed",
   'cmd.seed.desc': "Show the world seed",
+  'cmd.netseed.usage': "/netseed reload|new",
+  'cmd.netseed.desc': "Reload this world with the server's seed (reload), or create a new world with it (new); multiplayer only",
   // ---- /list
   'cmd.list.usage': "/list",
   'cmd.list.desc': "List online players",

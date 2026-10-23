@@ -59,6 +59,8 @@ export const cmd = {
   "cmd.gamemode.desc": "Переключает режим игры (творческий = полёт + без урона + мгновенная добыча; приключение = нельзя ставить и ломать блоки; наблюдатель = полёт сквозь стены + нельзя взаимодействовать)",
   "cmd.seed.usage": "/seed",
   "cmd.seed.desc": "Показывает сид мира",
+  "cmd.netseed.usage": "/netseed reload|new",
+  "cmd.netseed.desc": "Перезагружает этот мир с сидом сервера (reload) или создаёт новый мир с ним (new); только в сетевой игре",
   "cmd.list.usage": "/list",
   "cmd.list.desc": "Показывает игроков в сети",
   "cmd.xp.usage": "/xp add <очки> | /xp set <уровень> | /xp query",
