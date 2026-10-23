@@ -158,18 +158,18 @@ function colorName(color: ColorId): string {
 // 染料系：16 色 × 10 件 = 160 条名字，**语序由语言表里的模板决定**（多语言 P2-1a）
 // 模板键：item.dye / item.wool / …，值形如 `{color}染料` / `{color} Wool`
 for (const color of COLOR_IDS) {
-  put(`${color}_dye`, () => tp('item.dye', { color: colorName(color) }));
-  put(`${color}_wool`, () => tp('item.wool', { color: colorName(color) }));
-  put(`${color}_carpet`, () => tp('item.carpet', { color: colorName(color) }));
+  put(`${color}_dye`, () => tp('item.tpl.dye', { color: colorName(color) }));
+  put(`${color}_wool`, () => tp('item.tpl.wool', { color: colorName(color) }));
+  put(`${color}_carpet`, () => tp('item.tpl.carpet', { color: colorName(color) }));
   // 床（B13，批次 79）：16 色，与羊毛/地毯同一条"配色表驱动"
-  put(`${color}_bed`, () => tp('item.bed', { color: colorName(color) }));
-  put(`${color}_terracotta`, () => tp('item.terracottaColored', { color: colorName(color) }));
-  put(`${color}_concrete`, () => tp('item.concrete', { color: colorName(color) }));
-  put(`${color}_concrete_powder`, () => tp('item.concrete_powder', { color: colorName(color) }));
-  put(`${color}_stained_glass`, () => tp('item.stained_glass', { color: colorName(color) }));
-  put(`${color}_stained_glass_pane`, () => tp('item.stained_glass_pane', { color: colorName(color) }));
+  put(`${color}_bed`, () => tp('item.tpl.bed', { color: colorName(color) }));
+  put(`${color}_terracotta`, () => tp('item.tpl.terracottaColored', { color: colorName(color) }));
+  put(`${color}_concrete`, () => tp('item.tpl.concrete', { color: colorName(color) }));
+  put(`${color}_concrete_powder`, () => tp('item.tpl.concretePowder', { color: colorName(color) }));
+  put(`${color}_stained_glass`, () => tp('item.tpl.stainedGlass', { color: colorName(color) }));
+  put(`${color}_stained_glass_pane`, () => tp('item.tpl.stainedGlassPane', { color: colorName(color) }));
   // 潜影盒（批次 451）：16 色，与羊毛同一条配色表驱动
-  put(`${color}_shulker_box`, () => tp('item.shulker_box', { color: colorName(color) }));
+  put(`${color}_shulker_box`, () => tp('item.tpl.shulkerBox', { color: colorName(color) }));
 }
 put('terracotta', () => t('item.terracotta'));
 put('glass', () => t('item.glass'));
@@ -177,21 +177,21 @@ put('glass_pane', () => t('item.glass_pane'));
 
 // 木头系：原木 / 木板 / 树叶（多语言 P2-1b-1：模板在语言表里，语序由语言决定）
 for (const wood of Object.keys(WOODS_CN)) {
-  put(`${wood}_log`, () => tp('item.woodLog', { wood: t(`item.wood.${wood}`) }));
-  put(`${wood}_planks`, () => tp('item.woodPlanks', { wood: t(`item.wood.${wood}`) }));
-  put(`${wood}_leaves`, () => tp('item.woodLeaves', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_log`, () => tp('item.tpl.woodLog', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_planks`, () => tp('item.tpl.woodPlanks', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_leaves`, () => tp('item.tpl.woodLeaves', { wood: t(`item.wood.${wood}`) }));
 }
 
 // 木制方块族（批次 38）：栅栏 / 栅栏门 / 门 / 活板门
 // 与方块表同源（都从木材表展开），加一种木材两边自动跟上——
 // 这正是"新加了方块却冒出英文 id"那条老毛病要防的地方
 for (const wood of Object.keys(WOODS_CN)) {
-  put(`${wood}_fence`, () => tp('item.woodFence', { wood: t(`item.wood.${wood}`) }));
-  put(`${wood}_fence_gate`, () => tp('item.woodFenceGate', { wood: t(`item.wood.${wood}`) }));
-  put(`${wood}_door`, () => tp('item.woodDoor', { wood: t(`item.wood.${wood}`) }));
-  put(`${wood}_trapdoor`, () => tp('item.woodTrapdoor', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_fence`, () => tp('item.tpl.woodFence', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_fence_gate`, () => tp('item.tpl.woodFenceGate', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_door`, () => tp('item.tpl.woodDoor', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_trapdoor`, () => tp('item.tpl.woodTrapdoor', { wood: t(`item.wood.${wood}`) }));
   // 告示牌（批次 80）：同一个方块兼作落地牌与挂墙牌，所以名字只有一个
-  put(`${wood}_sign`, () => tp('item.woodSign', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_sign`, () => tp('item.tpl.woodSign', { wood: t(`item.wood.${wood}`) }));
 }
 
 // 展示框与画（B14，批次 86）：各一条——**画只有一件物品**，
@@ -206,19 +206,19 @@ put('painting', '画');
 const coralName = (kind: string): string => t(`item.coral.${kind}`);
 for (const kind of Object.keys(CORAL_KIND_CN)) {
   // 失活 = `失活的{name}` 再套一层（英文是 `Dead {name}`，语序由模板给）
-  const dead = (name: string): string => tp('item.dead', { name });
-  put(`${kind}_coral_block`, () => tp('item.coralBlock', { coral: coralName(kind) }));
-  put(`dead_${kind}_coral_block`, () => dead(tp('item.coralBlock', { coral: coralName(kind) })));
-  put(`${kind}_coral`, () => tp('item.coral', { coral: coralName(kind) }));
-  put(`dead_${kind}_coral`, () => dead(tp('item.coral', { coral: coralName(kind) })));
-  put(`${kind}_coral_fan`, () => tp('item.coralFan', { coral: coralName(kind) }));
-  put(`dead_${kind}_coral_fan`, () => dead(tp('item.coralFan', { coral: coralName(kind) })));
+  const dead = (name: string): string => tp('item.tpl.dead', { name });
+  put(`${kind}_coral_block`, () => tp('item.tpl.coralBlock', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral_block`, () => dead(tp('item.tpl.coralBlock', { coral: coralName(kind) })));
+  put(`${kind}_coral`, () => tp('item.tpl.coral', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral`, () => dead(tp('item.tpl.coral', { coral: coralName(kind) })));
+  put(`${kind}_coral_fan`, () => tp('item.tpl.coralFan', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral_fan`, () => dead(tp('item.tpl.coralFan', { coral: coralName(kind) })));
 }
 
 // 台阶 / 楼梯
 for (const base of Object.keys(STRUCTURE_BASES_CN)) {
-  put(`${base}_slab`, () => tp('item.slab', { base: t(`item.base.${base}`) }));
-  put(`${base}_stairs`, () => tp('item.stairs', { base: t(`item.base.${base}`) }));
+  put(`${base}_slab`, () => tp('item.tpl.slab', { base: t(`item.base.${base}`) }));
+  put(`${base}_stairs`, () => tp('item.tpl.stairs', { base: t(`item.base.${base}`) }));
 }
 
 // 石材家族的变体（批次 41）：台阶 / 楼梯 / 墙的名字 = **母方块的中文名 + 后缀**。
@@ -264,9 +264,9 @@ const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
   smooth_red_sandstone: '平滑红砂岩',
 };
 for (const base of Object.keys(STONE_VARIANT_PARENTS_CN)) {
-  put(`${base}_slab`, () => tp('item.slab', { base: t(`item.base.${base}`) }));
-  put(`${base}_stairs`, () => tp('item.stairs', { base: t(`item.base.${base}`) }));
-  put(`${base}_wall`, () => tp('item.wall', { base: t(`item.base.${base}`) }));
+  put(`${base}_slab`, () => tp('item.tpl.slab', { base: t(`item.base.${base}`) }));
+  put(`${base}_stairs`, () => tp('item.tpl.stairs', { base: t(`item.base.${base}`) }));
+  put(`${base}_wall`, () => tp('item.tpl.wall', { base: t(`item.base.${base}`) }));
 }
 
 // 铜的四档（批次 40）：铜块 / 斑驳的铜块 / 锈蚀的铜块 / 氧化的铜块 + 切制铜家族。
@@ -282,14 +282,14 @@ const COPPER_CN = [
 COPPER_STAGES.forEach((stage, index) => {
   put(stage.blockTile, () => t(`item.copper.block.${index}`));
   put(stage.cutTile, () => t(`item.copper.cut.${index}`));
-  put(`${stage.cutTile}_slab`, () => tp('item.slab', { base: t(`item.copper.cut.${index}`) }));
-  put(`${stage.cutTile}_stairs`, () => tp('item.stairs', { base: t(`item.copper.cut.${index}`) }));
+  put(`${stage.cutTile}_slab`, () => tp('item.tpl.slab', { base: t(`item.copper.cut.${index}`) }));
+  put(`${stage.cutTile}_stairs`, () => tp('item.tpl.stairs', { base: t(`item.copper.cut.${index}`) }));
 });
 
 // 矿石：`coal_ore` = 煤矿石，`deepslate_coal_ore` = 深层煤矿石
 for (const ore of Object.keys(ORE_NAMES_CN)) {
   put(`${ore}_ore`, () => t(`item.ore.${ore}`));
-  put(`deepslate_${ore}_ore`, () => tp('item.deepslateOre', { name: t(`item.ore.${ore}`) }));
+  put(`deepslate_${ore}_ore`, () => tp('item.tpl.deepslateOre', { name: t(`item.ore.${ore}`) }));
 }
 
 // 工具与武器：材质 × 种类 = 30 条（木镐 / 石斧 / 铁锹 / 金锄 / 钻石剑 / 下界合金镐……）
@@ -308,9 +308,10 @@ const TOOL_KINDS_CN: Record<string, string> = {
   hoe: '锄',
   sword: '剑',
 };
-for (const [material, materialCn] of Object.entries(TOOL_MATERIALS_CN)) {
-  for (const [kind, kindCn] of Object.entries(TOOL_KINDS_CN)) {
-    put(`${material}_${kind}`, `${materialCn}${kindCn}`);
+for (const material of Object.keys(TOOL_MATERIALS_CN)) {
+  for (const kind of Object.keys(TOOL_KINDS_CN)) {
+    put(`${material}_${kind}`, () =>
+      tp('item.tpl.tool', { material: t(`item.toolMaterial.${material}`), kind: t(`item.toolKind.${kind}`) }));
   }
 }
 
@@ -331,7 +332,8 @@ const ARMOR_TYPES_CN: Record<string, string> = {
 };
 for (const material of ALL_ARMOR_MATERIALS) {
   for (const type of ARMOR_TYPES) {
-    put(`${material}_${type}`, `${ARMOR_MATERIALS_CN[material]!}${ARMOR_TYPES_CN[type]!}`);
+    put(`${material}_${type}`, () =>
+      tp('item.tpl.armor', { material: t(`item.armorMaterial.${material}`), type: t(`item.armorType.${type}`) }));
   }
 }
 
@@ -883,48 +885,45 @@ const EXPLICIT: Record<string, string> = {
 
 for (const [id, name] of Object.entries(EXPLICIT)) put(id, name);
 
-/** 红石元件的中文名（它们由红石系统注册，单独一张小表） */
-const REDSTONE_CN: Record<string, string> = {
-  redstone_wire: '红石线',
-  redstone_torch: '红石火把',
-  redstone_block: '红石块',
-  lever: '拉杆',
-  stone_button: '石头按钮',
-  oak_button: '橡木按钮',
-  stone_pressure_plate: '石质压力板',
-  oak_pressure_plate: '橡木压力板',
-  repeater: '红石中继器',
-  comparator: '红石比较器',
-  redstone_lamp: '红石灯',
-  piston: '活塞',
-  piston_head: '活塞头',
-  sticky_piston: '黏性活塞',
-  observer: '侦测器',
-  iron_door: '铁门',
-  iron_trapdoor: '铁活板门',
-  oak_trapdoor: '橡木活板门',
-  note_block: '音符盒',
-  dispenser: '发射器',
-  dropper: '投掷器',
-  barrel: '木桶',
-  composter: '堆肥桶',
-  ender_chest: '末影箱',
-  trapped_chest: '陷阱箱',
-  shulker_box: '潜影盒',
-  hopper: '漏斗',
-  target: '标靶',
-  daylight_detector: '阳光探测器',
-  tripwire: '绊线',
-  tripwire_hook: '绊线钩',
-  slime_block: '黏液块',
-  rail: '铁轨',
-  powered_rail: '动力铁轨',
-  detector_rail: '探测铁轨',
-  activator_rail: '激活铁轨',
-  light_weighted_pressure_plate: '轻质测重压力板',
-  heavy_weighted_pressure_plate: '重质测重压力板',
-};
-for (const [id, name] of Object.entries(REDSTONE_CN)) put(id, name);
+// 红石元件（多语言 P2-1b-2）：键**写死**，不走 `item.${id}` —— 前缀 `item.` 太短，会把整个命名空间洗白，孤儿判据就废了
+put('redstone_wire', () => t('item.redstone_wire'));
+put('redstone_torch', () => t('item.redstone_torch'));
+put('redstone_block', () => t('item.redstone_block'));
+put('lever', () => t('item.lever'));
+put('stone_button', () => t('item.stone_button'));
+put('oak_button', () => t('item.oak_button'));
+put('stone_pressure_plate', () => t('item.stone_pressure_plate'));
+put('oak_pressure_plate', () => t('item.oak_pressure_plate'));
+put('repeater', () => t('item.repeater'));
+put('comparator', () => t('item.comparator'));
+put('redstone_lamp', () => t('item.redstone_lamp'));
+put('piston', () => t('item.piston'));
+put('piston_head', () => t('item.piston_head'));
+put('sticky_piston', () => t('item.sticky_piston'));
+put('observer', () => t('item.observer'));
+put('iron_door', () => t('item.iron_door'));
+put('iron_trapdoor', () => t('item.iron_trapdoor'));
+put('oak_trapdoor', () => t('item.oak_trapdoor'));
+put('note_block', () => t('item.note_block'));
+put('dispenser', () => t('item.dispenser'));
+put('dropper', () => t('item.dropper'));
+put('barrel', () => t('item.barrel'));
+put('composter', () => t('item.composter'));
+put('ender_chest', () => t('item.ender_chest'));
+put('trapped_chest', () => t('item.trapped_chest'));
+put('shulker_box', () => t('item.shulker_box'));
+put('hopper', () => t('item.hopper'));
+put('target', () => t('item.target'));
+put('daylight_detector', () => t('item.daylight_detector'));
+put('tripwire', () => t('item.tripwire'));
+put('tripwire_hook', () => t('item.tripwire_hook'));
+put('slime_block', () => t('item.slime_block'));
+put('rail', () => t('item.rail'));
+put('powered_rail', () => t('item.powered_rail'));
+put('detector_rail', () => t('item.detector_rail'));
+put('activator_rail', () => t('item.activator_rail'));
+put('light_weighted_pressure_plate', () => t('item.light_weighted_pressure_plate'));
+put('heavy_weighted_pressure_plate', () => t('item.heavy_weighted_pressure_plate'));
 
 // ---------------------------------------------------------------- 说明
 
@@ -1378,7 +1377,8 @@ for (const arrow of TIPPED_ARROWS) {
 // 手抄 21 行"僵尸刷怪蛋/骷髅刷怪蛋…"迟早会漏一个，而漏掉的那枚在界面上会显示成英文 id。
 for (const spec of SPAWN_EGG_SPECS) {
   const key = spawnEggTile(spec.mobId);
-  put(key, `${spec.label}刷怪蛋`);
+  // 刷怪蛋（多语言 P2-1b-2）：结构先接好；`{mob}` 现在还是中文名，P2-4 把生物名键化后自动跟着变
+  put(key, () => tp('item.tpl.spawnEgg', { mob: spec.label }));
   DESCRIPTIONS[key] =
     `对着一格方块右击，生成一只**${spec.label}**。⚠️ **创造专属**：原版刷怪蛋也没有任何生存来源` +
     `（本项目一样），所以它只出现在创造物品栏里；生存模式拿到也用不掉。`;
