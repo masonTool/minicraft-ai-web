@@ -379,10 +379,12 @@ import {
   type NetFrameState,
   type NetItemState,
   type NetItemTakeResult,
+  type NetArrowState,
   type NetMobHit,
   type NetPlayerHit,
   type NetPlayerState,
   type NetSignState,
+  type NetTntState,
 } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
@@ -1900,6 +1902,9 @@ class App {
     onMobHit: (hit) => this.onNetMobHit(hit),
     // 有人打了我（联机22）：这边再用对方队伍判一次友伤
     onPlayerHit: (hit) => this.onNetPlayerHit(hit),
+    // 箭与 TNT（联机23）：事件 + 坐标/速度，各端自己模拟
+    onArrow: (arrow) => this.onNetArrow(arrow),
+    onTnt: (tnt) => this.onNetTnt(tnt),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -2317,6 +2322,11 @@ class App {
     // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
     this.redstone.onTntIgnite = (x, y, z) => {
       this.primedTnt.prime(this.tntWorld, x, y, z);
+    };
+    // 联机23：TNT 点燃的统一出口（玩家点/红石/爆炸波及都走 `prime`）
+    this.primedTnt.onPrime = (x, y, z) => {
+      if (this.applyingRemoteBlock > 0) return;
+      this.net.sendTnt(x, y, z, this.dimension);
     };
     // 投掷器（批次 59）：引擎只负责"判定这里来了一个上升沿"，吐什么、
     // 吐到哪去（塞进对面的容器还是掉在地上）都在容器与实体那一侧
@@ -8642,7 +8652,18 @@ class App {
     velocity: { x: number; y: number; z: number },
     options: ArrowOptions,
   ): Arrow {
-    return this.entities.spawn(new Arrow(x, y, z, velocity, options));
+    const arrow = this.entities.spawn(new Arrow(x, y, z, velocity, options));
+    /*
+     * 联机23：**玩家射的箭**广播给队友（骷髅射的不发——两端各自有骷髅，发了就是双份）。
+     *
+     * 这里是唯一的箭生成入口，挂钩比在 `fireBow` / `fireCrossbow` 各写一遍稳：
+     * 以后再加弩/烟花弩之类，只要还是玩家射的，就自动带上同步。
+     * `applyingRemoteBlock` 挡住"收到队友的箭又发回去"的回声。
+     */
+    if (options.fromPlayer && this.applyingRemoteBlock === 0 && this.net.sessionState === 'connected') {
+      this.net.sendArrow({ x, y, z, vx: velocity.x, vy: velocity.y, vz: velocity.z, damage: options.damage });
+    }
+    return arrow;
   }
 
   /**
@@ -9070,6 +9091,40 @@ class App {
     this.net.sendPlayerHit(best.id, damage, myTeam?.name ?? '');
     this.audio.play('click', { x: this.physics.x, y: this.physics.y, z: this.physics.z });
     return true;
+  }
+
+  /**
+   * 队友射了一支箭（联机23）：本地也生成一支跑物理。
+   *
+   * 落点会与对方差几厘米（各端物理的浮点与碰撞判定不完全一致），但"看到队友在射箭"
+   * 这件事成立，而且不必为飞行体维护全局 id 与生命周期。`pickable: false`：别人的箭
+   * 不给捡，否则一支箭能变成两支。
+   */
+  private onNetArrow(arrow: NetArrowState): void {
+    if (![arrow.x, arrow.y, arrow.z, arrow.vx, arrow.vy, arrow.vz].every(Number.isFinite)) return;
+    this.applyingRemoteBlock++;
+    try {
+      this.spawnArrow(
+        arrow.x,
+        arrow.y,
+        arrow.z,
+        { x: arrow.vx, y: arrow.vy, z: arrow.vz },
+        { fromPlayer: true, damage: Math.max(0, arrow.damage), pickable: false },
+      );
+    } finally {
+      this.applyingRemoteBlock--;
+    }
+  }
+
+  /** 队友点燃了一格 TNT（联机23）：坐标即 key，`prime` 幂等所以不会重复点火 */
+  private onNetTnt(tnt: NetTntState): void {
+    if (tnt.dimension !== this.dimension) return;
+    this.applyingRemoteBlock++;
+    try {
+      this.primedTnt.prime(this.tntWorld, tnt.x, tnt.y, tnt.z);
+    } finally {
+      this.applyingRemoteBlock--;
+    }
   }
 
   /** 有人打了我（联机22）：先按队伍规则判一次，再扣血 */

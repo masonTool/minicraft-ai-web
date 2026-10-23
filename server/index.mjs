@@ -120,6 +120,21 @@ const MAX_SIGNS = 5000;
 const MAX_FRAMES = 5000;
 
 /**
+ * 箭/TNT 这类"特效消息"的令牌窗口（联机23）：每人每秒 30 条。
+ *
+ * 与掉落物、生物命中相同的做法——正常玩法根本打不满，这个上限只用来挡脚本。
+ */
+const EFFECT_RATE_LIMIT = 30;
+function takeEffectToken(player) {
+  const now = Date.now();
+  if (now >= player.effectWindow) {
+    player.effectWindow = now + 1000;
+    player.effectCount = 0;
+  }
+  return ++player.effectCount <= EFFECT_RATE_LIMIT;
+}
+
+/**
  * 外观字段收口（联机17）。
  *
  * 只认这 9 个白名单字段，值一律规整成数字/布尔——**不让客户端把任意结构塞进广播**，
@@ -458,6 +473,9 @@ wss.on('connection', (socket, request) => {
           // 拾取申请的令牌窗口（联机21，见 ITEM_TAKE_RATE_LIMIT）
           takeWindow: 0,
           takeCount: 0,
+          // 箭/TNT 的令牌窗口（联机23，见 EFFECT_RATE_LIMIT）
+          effectWindow: 0,
+          effectCount: 0,
         };
         players.set(player.id, player);
 
@@ -627,6 +645,42 @@ wss.on('connection', (socket, request) => {
        * 两端各自判：攻击者那边判一次（省一次往返），被击者再用消息里的 `fromTeam` 判一次
        * （不能只信对方）。
        */
+      /*
+       * 箭与 TNT（联机23）：都是"事件 + 坐标/速度"，不带实体 id。
+       *
+       * 箭在接收端重新生成一支跑物理（落点会差几厘米，但"看到队友在射箭"成立）；
+       * TNT 用坐标当 key，接收端 `prime` 是幂等的，不会重复点火。
+       */
+      case 'arrow': {
+        if (!player) return;
+        if (!takeEffectToken(player)) return;
+        const x = Number(message.x);
+        const y = Number(message.y);
+        const z = Number(message.z);
+        const vx = Number(message.vx);
+        const vy = Number(message.vy);
+        const vz = Number(message.vz);
+        if (![x, y, z, vx, vy, vz].every(Number.isFinite)) return;
+        // 一支箭不该每秒飞几百格：速度与伤害都夹住
+        if (Math.hypot(vx, vy, vz) > 200) return;
+        const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
+        if (!Number.isFinite(damage)) return;
+        broadcast({ t: 'arrow', x, y, z, vx, vy, vz, damage, by: player.id }, player.id);
+        break;
+      }
+
+      case 'tnt': {
+        if (!player) return;
+        if (!takeEffectToken(player)) return;
+        const x = Math.trunc(Number(message.x));
+        const y = Math.trunc(Number(message.y));
+        const z = Math.trunc(Number(message.z));
+        if (![x, y, z].every(Number.isFinite)) return;
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        broadcast({ t: 'tnt', x, y, z, dimension, by: player.id }, player.id);
+        break;
+      }
+
       case 'player-hit': {
         if (!player) return;
         const targetId = Math.trunc(Number(message.targetId));

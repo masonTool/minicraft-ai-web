@@ -114,6 +114,25 @@ export interface NetPlayerHit {
   damage: number;
 }
 
+/** 一支箭（联机23）：位置 + 速度 + 伤害，物理由各端自己跑 */
+export interface NetArrowState {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  damage: number;
+}
+
+/** 一格格 TNT 被点燃（联机23）：坐标就是 key，天然幂等 */
+export interface NetTntState {
+  x: number;
+  y: number;
+  z: number;
+  dimension: string;
+}
+
 /** 捡别人那堆掉落物的仲裁结果（联机21） */
 export interface NetItemTakeResult {
   ok: boolean;
@@ -155,6 +174,10 @@ export interface NetHandlers {
    * 被击者要再判一次友伤——不能只信攻击者那边的判定。
    */
   onPlayerHit?: (hit: NetPlayerHit) => void;
+  /** 别人射了一支箭（联机23）：在本地也生成一支，物理各端自己跑 */
+  onArrow?: (arrow: NetArrowState) => void;
+  /** 别人点燃了一格 TNT（联机23）：坐标即 key，直接在本地点燃 */
+  onTnt?: (tnt: NetTntState) => void;
   /**
    * 捡别人的掉落物的仲裁结果（联机21）。
    *
@@ -442,6 +465,27 @@ export class NetClient {
         });
         break;
       }
+      case 'arrow': {
+        this.handlers.onArrow?.({
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          vx: Number(message.vx),
+          vy: Number(message.vy),
+          vz: Number(message.vz),
+          damage: Number(message.damage ?? 0),
+        });
+        break;
+      }
+      case 'tnt': {
+        this.handlers.onTnt?.({
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          dimension: String(message.dimension ?? 'overworld'),
+        });
+        break;
+      }
       case 'player-hit': {
         this.handlers.onPlayerHit?.({
           fromId: Number(message.fromId ?? 0),
@@ -661,6 +705,34 @@ export class NetClient {
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+  }
+
+  /**
+   * 我射了一支箭（联机23）：发位置/速度/伤害，**不发 id**。
+   *
+   * 各端收到后自己在本地生成一支箭跑物理——落点会有几厘米差异，但"看到队友在射箭"
+   * 这件事成立，而且不需要为飞行体维护全局 id 与生命周期。
+   */
+  sendArrow(arrow: NetArrowState): void {
+    if (!this.connected) return;
+    this.socket?.send(
+      JSON.stringify({
+        t: 'arrow',
+        x: Number(arrow.x.toFixed(2)),
+        y: Number(arrow.y.toFixed(2)),
+        z: Number(arrow.z.toFixed(2)),
+        vx: Number(arrow.vx.toFixed(2)),
+        vy: Number(arrow.vy.toFixed(2)),
+        vz: Number(arrow.vz.toFixed(2)),
+        damage: Number(arrow.damage.toFixed(1)),
+      }),
+    );
+  }
+
+  /** 我点燃了一格 TNT（联机23）：坐标即 key，对方那边 `prime` 是幂等的 */
+  sendTnt(x: number, y: number, z: number, dimension: string): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'tnt', x, y, z, dimension }));
   }
 
   /** 我所在的队伍名（联机22）：空串 = 没队伍；随 `move` 一起发，供对方判友伤 */

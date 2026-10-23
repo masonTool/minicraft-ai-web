@@ -639,6 +639,35 @@ try {
     check('打自己 / 打不存在的 id 都不发', (await alice.wait('player-hit', 600)) === null);
   }
 
+  // ---------------------------------------------------------------- 箭与 TNT（联机23）
+  console.log('\n[箭与 TNT]');
+  {
+    alice.mailbox.length = 0;
+    bob.send({ t: 'arrow', x: 5, y: 71, z: 5, vx: 0, vy: 0, vz: -45, damage: 6 });
+    const arrow = await alice.wait('arrow', 2000);
+    check(
+      '箭被转发（位置 + 速度 + 伤害）',
+      arrow?.damage === 6 && arrow?.vz === -45 && arrow?.x === 5,
+      JSON.stringify(arrow),
+    );
+
+    // 速度上限：手搓一支 500 格/秒 的箭要被丢（一支箭不该飞那么快）
+    alice.mailbox.length = 0;
+    bob.send({ t: 'arrow', x: 5, y: 71, z: 5, vx: 500, vy: 0, vz: 0, damage: 6 });
+    check('超速的箭被拒', (await alice.wait('arrow', 600)) === null);
+
+    alice.mailbox.length = 0;
+    bob.send({ t: 'tnt', x: 7, y: 70, z: 7, dimension: 'overworld' });
+    const tnt = await alice.wait('tnt', 2000);
+    check('TNT 点燃被转发（坐标 + 维度）', tnt?.x === 7 && tnt?.dimension === 'overworld', JSON.stringify(tnt));
+
+    // ⚠️ 用非数字字符串而不是 NaN：`JSON.stringify(NaN)` 会变成 null，
+    // 服务端 `Number(null)` 是 0，等于"合法坐标 0"——那样这条会假通过
+    alice.mailbox.length = 0;
+    bob.send({ t: 'tnt', x: 'abc', y: 70, z: 7, dimension: 'overworld' });
+    check('TNT 脏坐标被拒', (await alice.wait('tnt', 600)) === null);
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {

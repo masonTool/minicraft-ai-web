@@ -53,6 +53,13 @@ export class PrimedTnt {
   private readonly flashTimers = new Map<string, number>();
   /** 统计：本次会话引爆过多少个（调试面板与断言用） */
   ignited = 0;
+  /**
+   * 真的点燃了一格（联机23 的联机同步出口）。
+   *
+   * 放在这里而不是每个点燃入口各写一遍：点燃 TNT 的路径有玩家点、红石、爆炸波及等
+   * 四处，逐处挂钩必然漏；而 `prime` 本身是幂等的，接在它后面最稳。
+   */
+  onPrime: ((x: number, y: number, z: number) => void) | null = null;
 
   /**
    * 点燃一格 TNT（**幂等**：已经点着的返回 false，不会把引信重置）。
@@ -67,6 +74,8 @@ export class PrimedTnt {
     this.flashTimers.set(key, TNT_FLASH_INTERVAL);
     // 立刻把 `powered` 位点亮（渲染与红石调试都看它："这一格已经被点燃了"）
     world.setState(x, y, z, withPowered(world.getState(x, y, z), true));
+    // 联机23：真的点燃了才通知（幂等返回 false 的那些不会重复发）
+    this.onPrime?.(x, y, z);
     return true;
   }
 
