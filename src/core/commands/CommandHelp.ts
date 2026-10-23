@@ -18,7 +18,7 @@ import { t, tp } from '../i18n/I18n.ts';
 // 字段身份表（多语言 P1-3a）：中英两种写法 → 语言无关的 slug，逻辑只认 slug
 import { ARG_LABEL_SLUGS, FREE_SLUGS, NUMBER_SLUGS, slugOf } from './commandFields.data.ts';
 import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
-import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { EFFECTS, effectLabel } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import { MOB_TYPES } from '../entity/mobs.ts';
 import { LOOT_TABLES } from '../registry/loot.ts';
@@ -389,7 +389,8 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       index,
       name,
       optional,
-      Object.entries(EFFECT_LABELS).map(([id, label]) => ({ value: id, label })),
+      // 多语言 P2-3c3：效果名走 `label.effect.*`（下拉里显示当前语言的名字，值仍是英文 id）
+      EFFECTS.map((id) => ({ value: id, label: effectLabel(id) })),
     );
   }
   if (slug === 'enchantment') {

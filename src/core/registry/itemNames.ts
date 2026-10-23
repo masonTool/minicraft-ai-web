@@ -24,7 +24,7 @@ import {
   type ItemCategory,
 } from './items.ts';
 import { ALL_ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
-import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { effectLabel } from '../survival/StatusEffects.ts';
 import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
 import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survival/PotionCloud.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, type PotionEntry, type TippedArrowEntry } from './potions.ts';
@@ -480,7 +480,7 @@ for (const [key, food] of Object.entries(FOOD_TABLE)) {
   for (const effect of food.effects ?? []) {
     const chance = effect.chance === undefined ? '' : `${Math.round(effect.chance * 100)}% 概率`;
     const level = effect.amplifier > 0 ? ` ${effect.amplifier + 1} 级` : '';
-    parts.push(`${chance}${EFFECT_LABELS[effect.id]}${level} ${effect.seconds} 秒`);
+    parts.push(`${chance}${effectLabel(effect.id)}${level} ${effect.seconds} 秒`);
   }
   DESCRIPTIONS[key] = `${parts.join('｜')}。`;
 }
@@ -489,11 +489,6 @@ for (const [key, food] of Object.entries(FOOD_TABLE)) {
 // 只有两处信息需要人写：**档位前缀**（延长/强化，由 `tier` 决定）与
 // **效果本身的注意事项**（中毒不致死之类，下表）。
 
-/** 效果本身的注意事项（按变体 key）；没写的效果就是"照着效果名念一遍"就够清楚 */
-const POTION_NOTES: Record<string, string> = {
-  poison: '中毒不会致死（会停在半颗心）。',
-  slowness: '原版里这瓶通常是用来砸别人的——喷溅药水还没做，现在只能自己喝。',
-};
 
 /**
  * 时长文案：`45 秒` / `3 分钟` / `1 分 30 秒`。
@@ -506,46 +501,60 @@ function durationLabel(seconds: number): string {
   const total = Math.floor(seconds);
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
-  if (minutes === 0) return `${rest} 秒`;
-  return rest === 0 ? `${minutes} 分钟` : `${minutes} 分 ${rest} 秒`;
+  if (minutes === 0) return tp('item.desc.tpl.durationSeconds', { n: rest });
+  return rest === 0
+    ? tp('item.desc.tpl.durationMinutes', { n: minutes })
+    : tp('item.desc.tpl.durationMixed', { m: minutes, s: rest });
 }
 
 function potionDescription(potion: PotionEntry): string {
   const splash = potion.splash === true;
   const lingering = potion.lingering === true;
   if (potion.variant === 'awkward') {
-    if (splash) return '半成品（喷溅版）：扔出去也不会有任何效果。';
-    if (lingering) return '半成品（滞留版）：扔出去只会留下一片什么用都没有的云。';
-    return '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
+    if (splash) return t('item.desc.tpl.potionBaseSplash');
+    if (lingering) return t('item.desc.tpl.potionBaseLingering');
+    return t('item.desc.tpl.potionBase');
   }
-  const tier = potion.tier === 'long' ? '红石粉延长版：' : potion.tier === 'strong' ? '荧石粉强化版：' : '';
+  const tier =
+    potion.tier === 'long'
+      ? t('item.desc.tpl.potionTierLong')
+      : potion.tier === 'strong'
+        ? t('item.desc.tpl.potionTierStrong')
+        : '';
   const effects = potion.effects.map((effect) => {
     // ⚠️ 本文件用的是 `enchantments.romanLevel`（**1 起始**，所以 +1）；
     // `StatusEffects` 里那个同名函数吃的是 amplifier（0 → I），两处别抄错
     const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier + 1)}` : '';
-    const label = `${EFFECT_LABELS[effect.id]}${level}`;
+    const label = `${effectLabel(effect.id)}${level}`;
     // 瞬间效果（治疗/伤害）没有"持续多久"可言——判定与喷溅那边的缩放共用同一个函数
-    if (isInstantEffect(effect.id)) return `${label}（立刻生效）`;
-    return `${label} ${durationLabel(effect.seconds)}`;
+    if (isInstantEffect(effect.id)) return tp('item.desc.tpl.effectInstant', { label });
+    return tp('item.desc.tpl.effectTimed', { label, duration: durationLabel(effect.seconds) });
   });
   // 三种用法的文案都与各自的范围/节奏同源（半径、持续、结算间隔都来自 `survival/`）
   const verb = lingering
-    ? `扔出去留下一片 ${LINGERING_RADIUS} 格的药水云，云里的实体获得`
+    ? tp('item.desc.tpl.potionVerbLingering', { radius: LINGERING_RADIUS })
     : splash
-      ? `扔出去砸中后 ${SPLASH_RADIUS} 格内的实体获得`
-      : '喝下获得';
+      ? tp('item.desc.tpl.potionVerbSplash', { radius: SPLASH_RADIUS })
+      : t('item.desc.tpl.potionVerbDrink');
   const tail = lingering
-    ? `云持续 ${CLOUD_DURATION} 秒、每 ${CLOUD_PULSE_INTERVAL} 秒结算一次，站得越靠边领到的时长越短。`
+    ? tp('item.desc.tpl.potionTailLingering', { duration: CLOUD_DURATION, interval: CLOUD_PULSE_INTERVAL })
     : splash
-      ? '离爆心越远时长越短，直接命中的目标拿满时长。'
+      ? t('item.desc.tpl.potionTailSplash')
       : '';
-  return `${tier}${verb}${effects.join('、')}。${tail}${POTION_NOTES[potion.variant] ?? ''}`;
+  const note =
+    potion.variant === 'poison'
+      ? t('item.desc.tpl.potionNotePoison')
+      : potion.variant === 'slowness'
+        ? t('item.desc.tpl.potionNoteSlowness')
+        : '';
+  const sep = t('item.desc.tpl.listSep');
+  return `${tier}${verb}${effects.join(sep)}${t('item.desc.tpl.potionEnd')}${tail}${note}`;
 }
 
 for (const potion of POTIONS) {
   const key = `potion_${potion.key}`;
   put(key, potion.name);
-  DESCRIPTIONS[key] = potionDescription(potion);
+  DESCRIPTIONS[key] = () => potionDescription(potion);
 }
 
 // ---- 药水箭（K4 最后一步）：28 支，名字与说明同样由数据表生成。
@@ -554,19 +563,19 @@ for (const potion of POTIONS) {
 
 function tippedArrowDescription(arrow: TippedArrowEntry): string {
   const potion = potionById(arrow.potionId);
-  if (!potion || potion.base) return '半成品做的箭：射中生物也不会有任何效果（只能当普通箭用）。';
+  if (!potion || potion.base) return t('item.desc.tpl.tippedArrowBase');
   const effects = tippedArrowEffects(potion).map((effect) => {
     const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier + 1)}` : '';
-    const label = `${EFFECT_LABELS[effect.id]}${level}`;
-    if (isInstantEffect(effect.id)) return `${label}（立刻生效）`;
-    return `${label} ${durationLabel(effect.seconds)}`;
+    const label = `${effectLabel(effect.id)}${level}`;
+    if (isInstantEffect(effect.id)) return tp('item.desc.tpl.effectInstant', { label });
+    return tp('item.desc.tpl.effectTimed', { label, duration: durationLabel(effect.seconds) });
   });
-  return `射中生物后获得${effects.join('、')}（药水箭只给原药水 **1/8** 的时长）。酿造：滞留药水 + 8 支箭 → 8 支。`;
+  return tp('item.desc.tpl.tippedArrowBody', { list: effects.join(t('item.desc.tpl.listSep')) });
 }
 
 for (const arrow of TIPPED_ARROWS) {
   put(arrow.key, arrow.name);
-  DESCRIPTIONS[arrow.key] = tippedArrowDescription(arrow);
+  DESCRIPTIONS[arrow.key] = () => tippedArrowDescription(arrow);
 }
 
 // ---------------------------------------------------------------- 刷怪蛋（批次 174，J17）
@@ -577,9 +586,7 @@ for (const spec of SPAWN_EGG_SPECS) {
   const key = spawnEggTile(spec.mobId);
   // 刷怪蛋（多语言 P2-1b-2）：结构先接好；`{mob}` 现在还是中文名，P2-4 把生物名键化后自动跟着变
   put(key, () => tp('item.tpl.spawnEgg', { mob: spec.label }));
-  DESCRIPTIONS[key] =
-    `对着一格方块右击，生成一只**${spec.label}**。⚠️ **创造专属**：原版刷怪蛋也没有任何生存来源` +
-    `（本项目一样），所以它只出现在创造物品栏里；生存模式拿到也用不掉。`;
+  DESCRIPTIONS[key] = () => tp('item.desc.tpl.spawnEgg', { mob: spec.label });
 }
 
 // ---------------------------------------------------------------- 对外接口

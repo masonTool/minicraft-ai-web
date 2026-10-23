@@ -9,6 +9,8 @@
 
 import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/commands/Commands.ts';
 import { commandHelpEntries } from '../src/core/commands/CommandHelp.ts';
+// 多语言 P2-3c3：效果名键化的守卫要逐个核对
+import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
 import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
@@ -985,6 +987,14 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
 
   const cjkInEn = itemKeys.filter((key) => /[\u4e00-\u9fff]/.test(t(key, 'en')));
   check('英文侧没有中文残留（构件漏翻会污染几十条名字）', cjkInEn.length === 0, cjkInEn.slice(0, 3).join(','));
+
+  /**
+   * 效果名（多语言 P2-3c3）：30 种状态效果的名字进了 `label.effect.*`。
+   * 它同时被 HUD、药水说明、药箭说明、`/effect` 下拉读——漏一条会在四处同时露中文。
+   */
+  const effectKeys = Object.keys(EFFECTS).map((id) => `label.effect.${EFFECTS[id as never] as string}`);
+  const badEffect = effectKeys.filter((key) => t(key) === key || /[\u4e00-\u9fff]/.test(t(key, 'en')));
+  check(`效果名 ${EFFECTS.length} 条都在表里且英文无中文`, badEffect.length === 0, badEffect.slice(0, 3).join(','));
 
   // 组件类（color / wood / coral / base / ore / toolMaterial …）必须是"词"，不是句子
   const components = itemKeys.filter((key) => !key.startsWith('item.tpl.') && key.split('.').length === 3);

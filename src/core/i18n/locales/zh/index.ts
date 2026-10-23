@@ -21,6 +21,7 @@ import { cmd } from './cmd.ts';
 import { cmdMessages } from './cmdMessages.ts';
 import { item } from './item.ts';
 import { itemDesc } from './itemDesc.ts';
+import { label } from './label.ts';
 import { misc } from './misc.ts';
 
 export const zh = {
@@ -36,6 +37,7 @@ export const zh = {
   ...cmdMessages,
   ...item,
   ...itemDesc,
+  ...label,
   ...misc,
 } as const;
 

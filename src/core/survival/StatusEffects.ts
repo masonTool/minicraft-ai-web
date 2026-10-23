@@ -17,6 +17,9 @@
  */
 
 /** 全部效果（名称与原版一致，命令与 UI 都用它） */
+// 多语言 P2-3c3：效果名走 `label.effect.*`（原来是一张中文常量表）
+import { t } from '../i18n/I18n.ts';
+
 export const EFFECTS = [
   'speed',
   'slowness',
@@ -52,39 +55,6 @@ export const EFFECTS = [
 
 export type EffectId = (typeof EFFECTS)[number];
 
-export const EFFECT_LABELS: Record<EffectId, string> = {
-  speed: '速度',
-  slowness: '缓慢',
-  haste: '急迫',
-  mining_fatigue: '挖掘疲劳',
-  strength: '力量',
-  instant_health: '瞬间治疗',
-  instant_damage: '瞬间伤害',
-  jump_boost: '跳跃提升',
-  nausea: '反胃',
-  regeneration: '生命恢复',
-  resistance: '抗性提升',
-  fire_resistance: '抗火',
-  water_breathing: '水下呼吸',
-  invisibility: '隐身',
-  blindness: '失明',
-  night_vision: '夜视',
-  hunger: '饥饿',
-  weakness: '虚弱',
-  poison: '中毒',
-  wither: '凋零',
-  health_boost: '生命提升',
-  absorption: '伤害吸收',
-  saturation: '饱和',
-  levitation: '飘浮',
-  slow_falling: '缓降',
-  conduit_power: '潮涌能量',
-  dolphins_grace: '海豚的恩惠',
-  bad_omen: '不祥之兆',
-  hero_of_the_village: '村庄英雄',
-  darkness: '黑暗',
-};
-
 /** 效果的"好/坏"标签（HUD 上区分配色，也让玩家一眼看出这是debuff） */
 export type EffectTone = 'good' | 'bad';
 
@@ -109,8 +79,10 @@ export function effectTone(id: EffectId): EffectTone {
 
 /** 命令里常用的别名（原版有 `/effect give minecraft:speed` 这种写法） */
 const ALIASES: Record<string, EffectId> = {
-  // 中文名直接可用
-  ...Object.fromEntries(Object.entries(EFFECT_LABELS).map(([id, label]) => [label, id as EffectId])),
+  // 中文名直接可用。
+  // ⚠️ **固定取中文表**（`t(..., 'zh')`），不跟界面语言走：玩家在英文界面下照样可能输入
+  // `/effect give @s 夜视`，这是既有行为，不能因为切了语言就解析不出来。
+  ...Object.fromEntries(EFFECTS.map((id) => [t(`label.effect.${id}`, 'zh'), id as EffectId])),
   // 常见别名
   swiftness: 'speed',
   jump: 'jump_boost',
@@ -183,8 +155,14 @@ export function resolveEffect(name: string): EffectId | undefined {
   return ALIASES[raw];
 }
 
+/**
+ * 效果名（多语言 P2-3c3）：HUD、药水说明、药箭说明、`/effect` 下拉共用一条键。
+ * 查不到返回 id —— 宁可露出 `speed`，也不要空串（空串在 HUD 上就是一块空白）。
+ */
 export function effectLabel(id: EffectId): string {
-  return EFFECT_LABELS[id] ?? id;
+  const key = `label.effect.${id}`;
+  const text = t(key);
+  return text === key ? id : text;
 }
 
 /** 等级显示：0 → I、1 → II … */
