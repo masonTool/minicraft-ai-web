@@ -26,6 +26,8 @@ export interface NetPlayerState {
   yaw: number;
   pitch: number;
   dimension: string;
+  /** 队伍名（联机22）：空/缺省 = 没队伍。用来判友伤，也用于联机18 的名字牌颜色 */
+  team?: string;
   /**
    * 外观（联机17）：都可缺省——老客户端不带这些字段，渲染就按"空手站立"画。
    * 服务端原样转发，不做语义校验（数字/布尔由客户端自己收口）。
@@ -103,6 +105,15 @@ export interface NetMobHit {
   fire: number;
 }
 
+/** 有人打了我（联机22） */
+export interface NetPlayerHit {
+  fromId: number;
+  fromName: string;
+  /** 对方的队伍名（空串 = 没队伍） */
+  fromTeam: string;
+  damage: number;
+}
+
 /** 捡别人那堆掉落物的仲裁结果（联机21） */
 export interface NetItemTakeResult {
   ok: boolean;
@@ -139,6 +150,11 @@ export interface NetHandlers {
   onFrame?: (frame: NetFrameState) => void;
   /** 别人打了一只生物（联机19）：按类型 + 邻域认到自己世界里那只 */
   onMobHit?: (hit: NetMobHit) => void;
+  /**
+   * 有人打了我（联机22）。`fromTeam` 是对方的队伍名（空串 = 没队伍），
+   * 被击者要再判一次友伤——不能只信攻击者那边的判定。
+   */
+  onPlayerHit?: (hit: NetPlayerHit) => void;
   /**
    * 捡别人的掉落物的仲裁结果（联机21）。
    *
@@ -202,6 +218,13 @@ export class NetClient {
   private fatal = false;
   /** 本机的稳定标识（见 `core/net/ClientId.ts`），首次 connect 时生成 */
   private clientId = '';
+  /**
+   * 我所在的队伍名（联机22）：空串 = 没队伍。
+   *
+   * 随 `move` 一起发出去，队友据此判"是不是自己人"——队伍表本身各端各存一份，
+   * 不同步（用同一条 `/team join` 才会一致）。
+   */
+  private myTeam = '';
   /**
    * 最近一帧的位置与维度。
    *
@@ -419,6 +442,15 @@ export class NetClient {
         });
         break;
       }
+      case 'player-hit': {
+        this.handlers.onPlayerHit?.({
+          fromId: Number(message.fromId ?? 0),
+          fromName: String(message.fromName ?? ''),
+          fromTeam: String(message.fromTeam ?? ''),
+          damage: Number(message.damage ?? 0),
+        });
+        break;
+      }
       case 'mob-hit': {
         this.handlers.onMobHit?.({
           typeId: String(message.typeId ?? ''),
@@ -533,6 +565,8 @@ export class NetClient {
         yaw: Number(yaw.toFixed(3)),
         pitch: Number(pitch.toFixed(3)),
         dimension,
+        // 队伍（联机22）：没队伍就不带，省字节
+        ...(this.myTeam ? { team: this.myTeam } : {}),
         // 外观（联机17）：字段短、都可缺省；空手/没盔甲就不带，省字节
         ...(appearance.held ? { held: appearance.held } : {}),
         ...(appearance.offhand ? { offhand: appearance.offhand } : {}),
@@ -627,6 +661,19 @@ export class NetClient {
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+  }
+
+  /** 我所在的队伍名（联机22）：空串 = 没队伍；随 `move` 一起发，供对方判友伤 */
+  setTeam(team: string): void {
+    this.myTeam = team;
+  }
+
+  /** 我打了一名玩家（联机22）：服务端只转发给被击者，再由他那边判一次友伤 */
+  sendPlayerHit(targetId: number, damage: number, team: string): void {
+    if (!this.connected) return;
+    this.socket?.send(
+      JSON.stringify({ t: 'player-hit', targetId: Math.trunc(targetId), damage: Number(damage.toFixed(1)), team }),
+    );
   }
 
   /**

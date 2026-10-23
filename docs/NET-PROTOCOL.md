@@ -71,7 +71,7 @@
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
-| `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收） | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）跟 `move` 走而不是单独一条 |
+| `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走 |
 | `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | 单条版本，客户端现在走 `blocks`；**不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
@@ -83,6 +83,7 @@
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
 | `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
+| `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
 
 未知 `t` 回 `error`；不是合法 JSON 也回 `error`，连接不关。
 
@@ -99,6 +100,7 @@
 | `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
+| `player-hit` | `fromId, fromName, fromTeam, damage` | **只发给被击者**；被击者用 `fromTeam` + 自己的队伍表再判一次友伤 |
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
@@ -177,6 +179,7 @@
 | `sign` | 写回 `signText`，当前维度立刻 `syncSigns`（渲染器下一趟 sync 画出） | 全空 = 擦除；非当前维度也存下来，切过去还在 |
 | `frame` | 写回 `itemFrames`（`item: null` = 删条目），当前维度 `syncFrames` | 与容器同理：本地放/取/转格子时也发（`联机16`） |
 | `mob-hit` | 按"同类型 + 3 格内最近"找自己世界里的那只（`core/net/MobMatch.ts`），扣血 + 点火 | **找不到就忽略**：两端生物各自生成，不能凭空造一只（否则双份怪物）；击退不同步（位置由各端 AI 自己算） |
+| `player-hit` | `Teams.canHurt(fromName, 自己)` 判一次友伤，通过才 `damagePlayer`（来源 `generic`） | 攻击者那边也判过一次（本地拦截省往返）；队伍表各端各存一份，不同步 |
 | `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 同维度且那一格确实是**容器方块**时，按方块取容器（箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 / 投掷器 / 漏斗），用 `restoreStacks` 按格数清洗后逐格写回 | 写回期间 `applyingRemoteBlock` 抑制回声；本地任一类容器内容变化都会发（`containerOfBlockAt` 建出来就挂，不再只在打开界面时挂） |
 | `item-spawn` | 建镜像（`ghost=true`）：不跑物理、不参与本地拾取，但**走近会向服务端申请**（`联机21`） | `owner === selfId` 时跳过 |
@@ -208,7 +211,8 @@
 | `联机19` | 生物**命中**已同步（伤害 + 着火，按类型 + 邻域认） | **生物位置不同步**：两端 AI 各自跑、随机生成，同步位置会让两只怪互相拉扯并出现双份（前置见 `联机38`） |
 | `联机20` | 远端玩家的位置已按距离分级（16 格 100ms / 32 格 250ms / 更远不更新插值目标） | 只在**接收侧**省成本；真正的"更远不发"要服务端按距离决定发给谁（`联机27`） |
 | `联机21` | 拾取已仲裁（`item-take` first-come：先到的拿到，另一条 `gone`） | 只仲裁"谁拿到"：物品数量与附属数据（附魔/耐久）仍以生成方上报的为准，不校验 |
-| `联机22`~`联机23` | PvP、其他实体 | 打人不同步 |
+| `联机22` | PvP 已通（近战可打远端玩家，友伤按 `Teams.canHurt` 两端各判一次） | 只做近战；箭/投掷物打人不转发；伤害来源仍是 `generic`（没有 `pvp` 死因） |
+| `联机23` | 其他实体（箭/船/矿车/经验球） | 各看各的 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |

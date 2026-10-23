@@ -1003,6 +1003,16 @@ console.log('\n[记分板（M23，批次 402）]');
   check('打开友好伤害', world.teams_.get('red')?.friendlyFire === true, out.lastError);
   run('/team modify red friendlyFire maybe');
   check('友好伤害只接受 true/false', out.lastError.includes('true 或 false'), out.lastError);
+
+  // ---- 友伤判定（联机22：`canHurt` 是 PvP 的唯一入口）
+  world.teams_.join('red', 'steve');
+  world.teams_.join('red', 'alex');
+  check('开了友好伤害之后，同队可以互伤', world.teams_.canHurt('steve', 'alex') === true);
+  run('/team modify red friendlyFire false');
+  check('关掉之后同队互伤打不动', world.teams_.canHurt('steve', 'alex') === false);
+  world.teams_.join('blue', 'alex');
+  check('不同队之间永远能打（不看 friendlyFire）', world.teams_.canHurt('steve', 'alex') === true);
+  check('没队伍的人也能打别人（不受任何队伍规则约束）', world.teams_.canHurt('nobody', 'steve') === true);
   run('/team modify red color purple');
   check('改颜色', world.teams_.get('red')?.color === 'purple', out.lastError);
   run('/team modify red color rainbow');

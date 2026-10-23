@@ -450,6 +450,8 @@ wss.on('connection', (socket, request) => {
           // 掉落物广播的令牌窗口（见 ITEM_RATE_LIMIT）
           itemWindow: 0,
           itemCount: 0,
+          // 队伍名（联机22）：随 move 上报，转发给其他人判友伤
+          team: '',
           // 生物命中的令牌窗口（联机19，见 MOB_HIT_RATE_LIMIT）
           hitWindow: 0,
           hitCount: 0,
@@ -486,6 +488,9 @@ wss.on('connection', (socket, request) => {
         player.yaw = Number(message.yaw ?? player.yaw);
         player.pitch = Number(message.pitch ?? player.pitch);
         player.dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        // 队伍（联机22）：空串 = 没队伍；只在变了的时候改，避免每条 move 都写一遍
+        const team = String(message.team ?? '').slice(0, 32);
+        if (team !== player.team) player.team = team;
         // 外观（联机17）：只认白名单字段，收口后原样转发
         player.appearance = readAppearance(message);
         broadcast(
@@ -500,6 +505,7 @@ wss.on('connection', (socket, request) => {
             pitch: player.pitch,
             dimension: player.dimension,
             ...player.appearance,
+            ...(player.team ? { team: player.team } : {}),
           },
           player.id,
         );
@@ -611,6 +617,30 @@ wss.on('connection', (socket, request) => {
         const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
         if (![x, y, z, damage, fire].every(Number.isFinite)) return;
         broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id);
+        break;
+      }
+
+      /*
+       * 打人（联机22）：**只转发给被击者**，不做友伤判定。
+       *
+       * 队伍规则（`friendlyFire`）存在客户端存档里，服务端没有队伍表——所以友伤只能在
+       * 两端各自判：攻击者那边判一次（省一次往返），被击者再用消息里的 `fromTeam` 判一次
+       * （不能只信对方）。
+       */
+      case 'player-hit': {
+        if (!player) return;
+        const targetId = Math.trunc(Number(message.targetId));
+        const target = players.get(targetId);
+        if (!target || target.id === player.id) return;
+        const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
+        if (!Number.isFinite(damage) || damage <= 0) return;
+        send(target.socket, {
+          t: 'player-hit',
+          fromId: player.id,
+          fromName: player.name,
+          fromTeam: String(message.team ?? '').slice(0, 32),
+          damage,
+        });
         break;
       }
 

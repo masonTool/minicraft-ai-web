@@ -221,6 +221,20 @@ export class Teams {
     return teamA !== undefined && teamA === this.members.get(b.toLowerCase());
   }
 
+  /**
+   * 这两个人之间能不能造成伤害（联机22 的判定入口）。
+   *
+   * 规则与原版一致：**没队伍 / 不同队 → 能打**；同队 → 看该队的 `friendlyFire`。
+   * 收成一个方法而不是让调用方自己拼 `sameTeam` + `friendlyFire`：这两步拼错一次
+   * 就是"队友能互砍"或"敌人都打不动"，而且联机两端（攻击者/被击者）都要判一次。
+   */
+  canHurt(attacker: string, victim: string): boolean {
+    const team = this.teamOf(attacker);
+    if (!team) return true;
+    if (team !== this.teamOf(victim)) return true;
+    return team.friendlyFire;
+  }
+
   snapshot(): TeamsSnapshot {
     return {
       teams: [...this.teams.values()].map((team) => ({

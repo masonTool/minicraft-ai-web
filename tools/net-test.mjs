@@ -608,6 +608,37 @@ try {
     rival.close();
   }
 
+  // ---------------------------------------------------------------- PvP（联机22）
+  console.log('\n[PvP 转发]');
+  {
+    await sleep(80);
+    const aliceId = Number(welcomeA?.id ?? 0);
+    const bobServerId = Number(welcomeB?.id ?? 0);
+
+    alice.mailbox.length = 0;
+    bob.mailbox.length = 0;
+    bob.send({ t: 'player-hit', targetId: aliceId, damage: 4, team: 'red' });
+    const hitMsg = await alice.wait('player-hit', 2000);
+    check(
+      '打人只发给被打的那位（带来源与队伍）',
+      hitMsg?.damage === 4 && hitMsg?.fromTeam === 'red' && hitMsg?.fromId === bobServerId,
+      JSON.stringify(hitMsg),
+    );
+    check('攻击者自己不会收到自己发的 player-hit', (await bob.wait('player-hit', 400)) === null);
+
+    // 服务端夹取伤害上限（无鉴权下最省的那道闸）
+    alice.mailbox.length = 0;
+    bob.send({ t: 'player-hit', targetId: aliceId, damage: 999, team: '' });
+    const clampedHit = await alice.wait('player-hit', 2000);
+    check('打人伤害被夹到 50', clampedHit?.damage === 50, JSON.stringify(clampedHit));
+
+    // 打自己 / 打不存在的 id：服务端不发（避免自伤死循环与无效包）
+    alice.mailbox.length = 0;
+    bob.send({ t: 'player-hit', targetId: bobServerId, damage: 4, team: '' });
+    bob.send({ t: 'player-hit', targetId: 9999, damage: 4, team: '' });
+    check('打自己 / 打不存在的 id 都不发', (await alice.wait('player-hit', 600)) === null);
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {

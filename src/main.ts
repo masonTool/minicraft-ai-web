@@ -380,6 +380,7 @@ import {
   type NetItemState,
   type NetItemTakeResult,
   type NetMobHit,
+  type NetPlayerHit,
   type NetPlayerState,
   type NetSignState,
 } from './net/NetClient.ts';
@@ -1857,6 +1858,8 @@ class App {
    * 只作用于**位置**——昵称、外观、维度这些状态仍然每条都更新，否则远处队友会"冻住"。
    */
   private readonly remoteAoi = new RemoteAoiGate();
+  /** 远端玩家各自在哪个队（联机22）：`player.team` 跟着 move 一起来，用来判友伤 */
+  private readonly remoteTeams = new Map<number, string>();
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1895,6 +1898,8 @@ class App {
     onFrame: (frame) => this.applyRemoteFrame(frame),
     // 生物命中（联机19）：队友打了哪只怪
     onMobHit: (hit) => this.onNetMobHit(hit),
+    // 有人打了我（联机22）：这边再用对方队伍判一次友伤
+    onPlayerHit: (hit) => this.onNetPlayerHit(hit),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -1937,6 +1942,7 @@ class App {
         this.remotePresence.clear();
         this.remoteAppearance.clear();
         this.remoteAoi.clear();
+        this.remoteTeams.clear();
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
@@ -3640,6 +3646,8 @@ class App {
     }
     // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新
     if (mob.customName !== player.name) mob.customName = player.name;
+    // 队伍（联机22）：判友伤要用；没带就记空串（= 没队伍）
+    this.remoteTeams.set(player.id, player.team ?? '');
     // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）。
     // 联机20：按距离分级——16 格外不值得按 100ms 精度插值，32 格外干脆不更新目标
     const distance = Math.hypot(
@@ -3737,6 +3745,7 @@ class App {
     this.remotePresence.remove(id);
     this.remoteAppearance.delete(id);
     this.remoteAoi.forget(id);
+    this.remoteTeams.delete(id);
     // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
     for (const [key, ghost] of this.remoteItems) {
       if (!key.startsWith(`${id}:`)) continue;
@@ -8182,6 +8191,14 @@ class App {
     // 轻点那一下仍以点中的那只优先（点哪打哪）
     const mob = tappedMob && !tappedMob.dead ? tappedMob : this.aimMob;
     if (!mob || mob.dead) {
+      // 联机22：没有生物目标时，看看前方有没有**队友的影子**（远端玩家不在 entities 里）
+      if (this.tryAttackRemotePlayer()) {
+        this.attackCooldown = attackCooldownFor(this.heldTool);
+        this.attackCooldownMax = this.attackCooldown;
+        this.suppressBreaking = true;
+        this.breakProgress = 0;
+        return;
+      }
       // 载具（批次 435）：准星对着船/矿车时左键是**敲它**。
       // 放在生物之后：生物优先（原版也是先判实体命中，而生物总在载具之上）。
       const vehicle = this.vehicleUnderCrosshair();
@@ -9007,6 +9024,63 @@ class App {
   private applyRemoteSign(sign: NetSignState): void {
     this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
     if (sign.dimension === this.dimension) this.syncSigns();
+  }
+
+  /**
+   * 打远端玩家（联机22）。
+   *
+   * 远端玩家不在 `entities` 里（`remotePlayers` 单独一张表），所以准星判定摸不到他们。
+   * 这里用"3 格内 + 视线前 25° 锥内"的近似，不碰射线系统就够用。
+   *
+   * 友伤：同队且该队 `friendlyFire` 关 → **本地就不发**（省一次往返）；被击者那边还会
+   * 用消息里的 `fromTeam` 再判一次（不能只信攻击者）。
+   *
+   * @returns 是否消费了这次攻击（命中了某个远端玩家）
+   */
+  private tryAttackRemotePlayer(): boolean {
+    if (this.net.sessionState !== 'connected') return false;
+    const dir = this.camera.getWorldDirection(new THREE.Vector3());
+    const eyeY = this.physics.y + 1.62;
+    const maxCos = Math.cos((25 * Math.PI) / 180);
+
+    let best: { id: number; distance: number } | null = null;
+    for (const [id, mob] of this.remotePlayers) {
+      if (!this.remotePresence.visible(id, this.dimension)) continue;
+      const dx = mob.x - this.physics.x;
+      const dy = mob.y + mob.height / 2 - eyeY;
+      const dz = mob.z - this.physics.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance < 0.2 || distance > 3) continue;
+      // 视线夹角：用归一化点积，比算 atan2 省
+      if ((dx * dir.x + dy * dir.y + dz * dir.z) / distance < maxCos) continue;
+      if (!best || distance < best.distance) best = { id, distance };
+    }
+    if (!best) return false;
+
+    this.hand.swing();
+    const myTeam = this.teamState.teamOf(this.playerName);
+    const targetName = this.remotePlayers.get(best.id)?.customName ?? '';
+    // 友伤（联机22）：同队且该队 `friendlyFire` 关 → 本地就拦（省一次往返），
+    // 被击者那边还会用消息里的 `fromName` 再判一次
+    if (!this.teamState.canHurt(this.playerName, targetName)) {
+      this.chat.push('同队免伤（`/team friendlyfire true` 可以打开）', 'system');
+      return true;
+    }
+    const damage = this.isCreative ? 20 : 4;
+    this.net.sendPlayerHit(best.id, damage, myTeam?.name ?? '');
+    this.audio.play('click', { x: this.physics.x, y: this.physics.y, z: this.physics.z });
+    return true;
+  }
+
+  /** 有人打了我（联机22）：先按队伍规则判一次，再扣血 */
+  private onNetPlayerHit(hit: NetPlayerHit): void {
+    // 友伤再判一次（联机22）：对方的判定可能因为队伍表不同步而漏掉，
+    // 也可能有人直接改了客户端发消息过来——这一侧才是"我会不会掉血"的最终依据
+    if (!this.teamState.canHurt(hit.fromName, this.playerName)) return;
+    const attacker = this.remotePlayers.get(hit.fromId);
+    const fromX = attacker ? attacker.x : this.physics.x + 1;
+    const fromZ = attacker ? attacker.z : this.physics.z;
+    this.damagePlayer(hit.damage, fromX, fromZ, 'generic', hit.fromName);
   }
 
   /**
@@ -17495,6 +17569,8 @@ class App {
       this.updateMusic(dt);
       // 红闪按**真实**帧时间衰减（不是 dt）：它是纯视觉反馈，暂停时也不该停在半红
       this.damageFlash.update(frameSeconds);
+      // 队伍（联机22）：跟着 move 发出去，队友据此判友伤
+      this.net.setTeam(this.teamState.teamOf(this.playerName)?.name ?? '');
       this.net.tick(
         this.physics.x,
         this.physics.y,
