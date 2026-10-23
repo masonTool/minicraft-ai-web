@@ -235,4 +235,8 @@ export const label = {
   "label.stickMode.dynamic": "Folgend",
   "label.handedness.right": "Rechts",
   "label.handedness.left": "Links",
+  "label.appearance.preset.man": "Erwachsener Mann",
+  "label.appearance.preset.woman": "Erwachsene Frau",
+  "label.appearance.preset.boy": "Jugendlicher",
+  "label.appearance.preset.girl": "Jugendliche",
 } satisfies Pick<Messages, keyof typeof zhLabel>;

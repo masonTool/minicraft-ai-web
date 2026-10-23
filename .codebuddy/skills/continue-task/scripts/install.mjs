@@ -14,7 +14,7 @@
  *   node <skill>/scripts/install.mjs [--dry-run] [--force] [--ci] [--no-detect]
  *
  *   --dry-run    只报告会做什么，不写任何文件
- *   --force      文档已存在时也覆盖（默认是：已存在就另存 *.continue-do.md，不覆盖用户进度）
+ *   --force      文档已存在时也覆盖（默认是：已存在就跳过，不覆盖用户进度、不留备份文件）
  *   --ci         额外写 GitHub Actions 工作流（跑与本地完全相同的 check.mjs），默认不写
  *   --no-detect  不探测项目测试方式，`checks.project` 保持原样（探测逻辑见 detect-tests.mjs）
  *
@@ -22,6 +22,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
   cpSync,
@@ -42,6 +43,21 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** 本脚本在 `<skill>/scripts/install.mjs`，assets 是同级的 `../assets`。 */
 const ASSETS = resolve(HERE, '..', 'assets');
 const TARGET = process.cwd();
+
+/**
+ * 框架版本：**唯一来源**是技能根目录的 `VERSION`。
+ *
+ * 为什么要有它：装上去的钩子每次重装都被覆盖，用户想知道"我这个项目跑的是哪一版"，
+ * 原来只能靠翻 `git log`。版本号至少要在安装时打印出来；读不到就标 `unknown` 并继续
+ * （版本号缺失不该拦住安装，但必须让人看见）。
+ */
+const FRAMEWORK_VERSION = (() => {
+  try {
+    return readFileSync(join(HERE, '..', 'VERSION'), 'utf8').trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
@@ -64,6 +80,7 @@ if (!existsSync(ASSETS)) {
 /** 装完必须具备的文件（自检清单）。缺任何一个都说明安装不完整。 */
 const REQUIRED = [
   '.continue/.gitignore',
+  '.continue/.installed.json',
   '.continue/config.json',
   '.continue/README.md',
   '.continue/TASKS.md',
@@ -81,9 +98,12 @@ const REQUIRED = [
   '.continue/hooks/pre-commit.mjs',
   '.continue/hooks/selftest.mjs',
   '.continue/hooks/audit-config.mjs',
+  '.continue/hooks/audit-version.mjs',
   '.continue/hooks/archive-done.mjs',
   '.continue/hooks/archive-queue.mjs',
   '.continue/hooks/worktree.mjs',
+  '.continue/hooks/worktree-sync.mjs',
+  '.continue/hooks/dispatch.mjs',
   '.continue/hooks/run.mjs',
 ];
 
@@ -117,36 +137,76 @@ function copyDir(from, to, overwrite) {
   }
 }
 
-function copyFile(from, to, overwrite, backupOnConflict) {
+/**
+ * 复制单个文件。`overwrite=false` 时只保证"有"，**不产生任何备份文件**。
+ *
+ * 早期这里会另存 `<名>.continue-do.md`，结果每装一次多一批垃圾：项目里同时有两套
+ * 指令（一套生效、一套待合并），AI 读到哪套全看谁先被匹配。现在已存在就跳过，
+ * 差异由调用方打印出来让人自己比。
+ */
+function copyFile(from, to, overwrite) {
   if (existsSync(to) && !overwrite) {
-    /**
-     * 幂等的关键：内容与模板**完全相同**时不备份。
-     *
-     * 否则重装一次就给全部五份文档各生成一个 `.continue-do.md`，
-     * 每跑一次多一批垃圾——而上一次安装写进去的就是模板内容本身，
-     * 那是"已经装过"，不是"用户有自己的版本"。
-     */
-    if (readFileSync(to, 'utf8') === readFileSync(from, 'utf8')) {
-      log(`  已是最新        ${to}`);
-      return;
-    }
-    if (backupOnConflict) {
-      const backup = `${to}.continue-do.md`;
-      // 备份也幂等：已有同名备份就不覆盖（用户可能已经改过它）
-      if (existsSync(backup)) {
-        log(`  跳过（备份已存在） ${backup}`);
-        return;
-      }
-      if (!dryRun) cpSync(from, backup);
-      log(`  另存（原文件保留） ${backup}`);
-    } else {
-      log(`  跳过（已存在）  ${to}`);
-    }
+    if (readFileSync(to, 'utf8') === readFileSync(from, 'utf8')) log(`  已是最新        ${to}`);
+    else log(`  跳过（已存在，内容不同） ${to}`);
     return;
   }
   if (!dryRun) mkdirSync(dirname(to), { recursive: true });
   if (!dryRun) cpSync(from, to);
   log(`  写入            ${to}`);
+}
+
+/**
+ * 读上次安装留下的状态（`.continue/.installed.json`）。读不到/坏了都返回 null：
+ * 它只是账本，**不能**因为账本坏了就中止安装（那等于账本比数据还重要）。
+ */
+function readInstalledState() {
+  const file = join(TARGET, '.continue', '.installed.json');
+  if (!existsSync(file)) return null;
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 业务文档：**只比两边，不落任何备份文件**。
+ *
+ * | 情形 | 处理 |
+ * | --- | --- |
+ * | 文件不存在 | 直接写入 |
+ * | 与模板逐字节相同 | 视为已装，跳过 |
+ * | `--force` | 直接覆盖（用户明确要求） |
+ * | 内容不同 | **什么都不写**，返回「有差异」，由调用方汇总成一条提示 |
+ *
+ * 为什么既不做三方合并、也不另存备份：两者都要在项目里长期留副本
+ * （`.baseline/` + `.backup/` + `*.continue-do.md`），而副本一多就分不清哪份生效。
+ * 模板改进靠人按 SKILL §1.9 用 `diff` 比一次，代价比"项目里堆三套文件"小。
+ *
+ * 返回 `true` = 这份文档与模板有差异（调用方负责汇总提示）。
+ */
+function syncDoc(from, to, { label }) {
+  const theirs = readFileSync(from, 'utf8');
+  if (!existsSync(to)) {
+    if (!dryRun) {
+      mkdirSync(dirname(to), { recursive: true });
+      writeFileSync(to, theirs);
+    }
+    log(`  写入            ${to}`);
+    return false;
+  }
+  const ours = readFileSync(to, 'utf8');
+  if (ours === theirs) {
+    log(`  已是最新        ${to}`);
+    return false;
+  }
+  if (force) {
+    if (!dryRun) writeFileSync(to, theirs);
+    log(`  覆盖（--force）  ${to}`);
+    return false;
+  }
+  log(`  跳过（模板有更新，未合并） ${label}`);
+  return true;
 }
 
 /** 把 `defaults` 里缺的键补进 `target`（递归）；返回补了哪些键路径。已有值一律不动。 */
@@ -251,6 +311,53 @@ function installPreCommit() {
   log(`  写入            ${file}`);
 }
 
+/**
+ * 给**本来就有 package.json** 的项目补一条 `continue:worktree` 别名（缺才加，已有的不动）。
+ *
+ * 为什么要有（挡的是哪次事故）：文档与钩子注入长期写的是 `npm run continue:worktree -- <名字>`，
+ * 而框架**从不创建 package.json**——非 npm 项目里这条命令必失败；更糟的是 npm 会向上冒泡找到
+ * 仓库**外面**的 package.json，于是报的是 `Missing script` 而不是"没有 package.json"，更难看出问题
+ * （实测：在 `/Users/mason/x` 里跑，命中的是 `/Users/mason/package.json`）。
+ *
+ * 现在主推命令是 `node .continue/hooks/worktree.mjs <名字>`；这里只做顺手别名：
+ *   · 没有 package.json → 什么都不写，只打印一句该用哪个命令；
+ *   · 已有非空 `scripts["continue:worktree"]` → 保留用户的值；
+ *   · JSON 坏了 / 顶层不是对象 → 不碰，记警告（与本脚本其它 merge 同一口径）。
+ *
+ * 代价：写回时用 `JSON.stringify(…, 2)`，会重排 package.json 的缩进（和写 `.codebuddy/settings.json` 同一处理）。
+ * 不加这条别名不影响任何功能，所以不值得为它做"保留原格式"的正则外科手术。
+ */
+const WORKTREE_ALIAS = 'continue:worktree';
+const WORKTREE_CMD = 'node .continue/hooks/worktree.mjs';
+function addWorktreeAlias() {
+  const file = join(TARGET, 'package.json');
+  if (!existsSync(file)) {
+    log(`  跳过（没有 package.json：并行用 \`node .continue/hooks/worktree.mjs <名字>\`）`);
+    return;
+  }
+  let pkg;
+  try {
+    pkg = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    warnings.push(`${file} 不是合法 JSON（${err.message}），未加 scripts.${WORKTREE_ALIAS} 别名`);
+    log('  跳过（package.json 解析失败）');
+    return;
+  }
+  if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+    warnings.push(`${file} 顶层不是对象，未加 scripts.${WORKTREE_ALIAS} 别名`);
+    return;
+  }
+  pkg.scripts = pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+  const existing = pkg.scripts[WORKTREE_ALIAS];
+  if (typeof existing === 'string' && existing.trim()) {
+    log(`  保留已有值      ${file}：scripts.${WORKTREE_ALIAS} = ${existing}`);
+    return;
+  }
+  pkg.scripts[WORKTREE_ALIAS] = WORKTREE_CMD;
+  if (!dryRun) writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+  log(`  ${dryRun ? '将写入' : '写入'}          ${file}：scripts.${WORKTREE_ALIAS} = ${WORKTREE_CMD}`);
+}
+
 // ------------------------------------------------------------------ 钩子注册
 
 /**
@@ -258,6 +365,10 @@ function installPreCommit() {
  *
  * `auto-continue` 要挂在两个事件上：Stop 递任务，UserPromptSubmit 只把轮次计数归零。
  * `auto-commit` 的 300s 要大于 `config.json` 的 `checks.timeoutSec`。
+ * `dispatch` 的 60s 要够 `git worktree add`（大仓库检出可能十几秒）+ 拉窗口。
+ *
+ * **顺序有语义**：`dispatch` 排在 `auto-continue` 之前——同一轮 Stop 里先把待派发队列
+ * 变成执行树，后面的钩子再判断"这个会话该不该继续"；反过来可能先给主工作区递了任务。
  *
  * **命令一律带 `--event=<自己的事件>`**：钩子靠它写日志行首（`[auto-continue · Stop]`），
  * 不靠 payload 猜（各平台字段名不一致，猜错就把"用户说话"记成"停下"）。
@@ -265,6 +376,7 @@ function installPreCommit() {
  * `scripts/check-framework.mjs` 各自查一次。
  */
 const HOOKS = [
+  { event: 'Stop', script: 'dispatch.mjs', timeout: 60 },
   { event: 'Stop', script: 'auto-continue.mjs', timeout: 15 },
   { event: 'Stop', script: 'auto-commit.mjs', timeout: 300 },
   { event: 'UserPromptSubmit', script: 'queue-init.mjs', timeout: 15 },
@@ -537,8 +649,83 @@ function verifyStopLoopLimit() {
   log(`  已核对          ${file}：Stop · loop_limit=${effective}${note}`);
 }
 
+// ------------------------------------------------------------------ 安装状态
+
+/**
+ * 装完把「这一刻装了什么」落盘：`.continue/.installed.json`。
+ *
+ * 为什么需要（升级能力的地基）：钩子是覆盖安装，用户查不到"我这个项目跑的是哪一版"，
+ * 也分不清"这个 hook 与上一版差在哪"。有了这份状态才能答两件事：
+ *   ① 旧版本 → 新版本（`version`）；
+ *   ② 这个文件被用户改过没有（哈希与记录不同 = 改过，`check.mjs version` 会点名）。
+ *
+ * 记的是**安装后磁盘上的实际内容**，不是模板哈希：只有这样"磁盘 ≠ 记录"才等价于"有人动过"。
+ * 该文件**要入库**：换台机器 clone 下来，也能知道这个项目上次是用哪一版装的。
+ *
+ * 幂等：`version` 与 `files` 都没变时**不写文件**——否则每次重装都改一遍 `installedAt`，
+ * diff 里全是噪音，真升级的那次反而看不出来。
+ */
+const STATE_FILE_REL = '.continue/.installed.json';
+const STATE_TRACKED = [
+  '.continue/.gitignore',
+  '.continue/config.json',
+  '.continue/TASKS.md',
+  '.continue/DONE.md',
+  '.continue/OVERVIEW.md',
+  '.continue/TIPS.md',
+  '.continue/README.md',
+  'AGENTS.md',
+];
+
+function trackedFiles() {
+  const list = [...STATE_TRACKED];
+  const hooks = join(ASSETS, '.continue', 'hooks');
+  if (existsSync(hooks)) {
+    for (const name of readdirSync(hooks)) {
+      if (name.endsWith('.mjs')) list.push(`.continue/hooks/${name}`);
+    }
+  }
+  return list;
+}
+
+const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+/** 键顺序不影响判断：两边都按 key 排好再比。 */
+const canonical = (obj) =>
+  JSON.stringify(Object.fromEntries(Object.entries(obj ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))));
+
+function writeInstalledState() {
+  const file = join(TARGET, STATE_FILE_REL);
+  const files = {};
+  for (const rel of trackedFiles()) {
+    const abs = join(TARGET, rel);
+    if (existsSync(abs)) files[rel] = sha256(abs);
+  }
+  let previous = null;
+  if (existsSync(file)) {
+    try {
+      previous = JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      previous = null; // 坏文件按"没有"处理：它只是账本，重建一份不会丢用户数据
+    }
+  }
+  if (previous && previous.version === FRAMEWORK_VERSION && canonical(previous.files) === canonical(files)) {
+    log(`  已是最新        ${file}（v${FRAMEWORK_VERSION}）`);
+    return;
+  }
+  const upgradedFrom = previous?.version && previous.version !== FRAMEWORK_VERSION ? previous.version : null;
+  writeFileSync(
+    file,
+    `${JSON.stringify({ version: FRAMEWORK_VERSION, installedAt: new Date().toISOString(), files }, null, 2)}\n`,
+  );
+  log(
+    `  写入            ${file}：v${FRAMEWORK_VERSION}` +
+      `${upgradedFrom ? `（从 v${upgradedFrom} 升级）` : ''}，记录 ${Object.keys(files).length} 个文件`,
+  );
+}
+
 // ------------------------------------------------------------------ 开始
-console.log(`安装 continue-do 到 ${TARGET}`);
+console.log(`安装 continue-do v${FRAMEWORK_VERSION} 到 ${TARGET}`);
 console.log(dryRun ? '（--dry-run：只报告，不写文件）\n' : '');
 
 /**
@@ -557,6 +744,20 @@ console.log(`      · CodeBuddy IDE：默认每条用户消息只采纳 1 次（
  * 钩子脚本：**总是覆盖**。
  * 它们是框架代码，覆盖不会丢用户数据；不覆盖的话升级就失效了。
  */
+/**
+ * 升级模式：上一次装的是哪一版、这次是不是升级。
+ *
+ * 为什么必须显式打出来：钩子是覆盖安装，"我这个项目跑的是哪版"本来就该由安装器回答。
+ */
+const previousState = readInstalledState();
+if (previousState?.version && previousState.version !== FRAMEWORK_VERSION) {
+  log(`· 升级：v${previousState.version} → v${FRAMEWORK_VERSION}`);
+} else if (previousState) {
+  log(`· 已是 v${FRAMEWORK_VERSION}（重装 / 校验）`);
+} else {
+  log('· 首次安装（没有 .continue/.installed.json）');
+}
+
 log('· 钩子（覆盖）');
 copyDir(join(ASSETS, '.continue', 'hooks'), join(TARGET, '.continue', 'hooks'), true);
 copyFile(join(ASSETS, '.continue', '.gitignore'), join(TARGET, '.continue', '.gitignore'), true, false);
@@ -645,6 +846,13 @@ log('· git pre-commit');
 installPreCommit();
 
 /**
+ * npm 别名：只有"本来就有 package.json"的项目才补，非 npm 项目什么都不写。
+ * 顺序放在 pre-commit 之后、文档之前：它只碰 package.json，与其它步骤互不影响。
+ */
+log('· npm 别名（可选）');
+addWorktreeAlias();
+
+/**
  * 队列目录：只保证存在，**不动里面的文件**。
  * `doing/` 里可能有正在进行的队列，覆盖等于丢进度。
  */
@@ -658,31 +866,42 @@ if (!existsSync(doingDir)) {
 }
 
 /**
- * 业务文档：**默认不覆盖**。
- * 这些文件里是用户的进度、需求、踩坑记录，覆盖 = 数据丢失。
- * 已存在就另存 `<名>.continue-do.md` 让用户自己合并（并提示合并完删掉）。
+ * 业务文档：**默认不覆盖，也不留备份**。
+ * 这些文件里是用户的进度、需求、踩坑记录，覆盖 = 数据丢失；另存备份 = 项目里多一套不生效的指令。
+ * 内容不同就只报一句"模板有更新"，怎么合并由人按 SKILL §1.9 用 `diff` 看。
  */
-log('· 业务文档（默认不覆盖）');
+log('· 业务文档（新装写入 / 没变跳过 / 有差异只报告不落文件）');
+const staleDocs = [];
 for (const name of ['TASKS.md', 'DONE.md', 'OVERVIEW.md', 'TIPS.md', 'README.md']) {
-  copyFile(
-    join(ASSETS, '.continue', name),
-    join(TARGET, '.continue', name),
-    force,
-    !force, // 冲突时另存备份
-  );
+  if (
+    syncDoc(join(ASSETS, '.continue', name), join(TARGET, '.continue', name), {
+      label: `.continue/${name}`,
+    })
+  ) {
+    staleDocs.push(name);
+  }
 }
 
 log('· AGENTS.md');
-copyFile(join(ASSETS, 'AGENTS.md'), join(TARGET, 'AGENTS.md'), force, !force);
+const agentsPath = join(TARGET, 'AGENTS.md');
+if (syncDoc(join(ASSETS, 'AGENTS.md'), agentsPath, { label: 'AGENTS.md' })) {
+  staleDocs.push('AGENTS.md');
+}
 /**
- * 已有 `AGENTS.md` 时框架的入口指引**不会生效**（只另存了备份）。
- * 用户看日志很容易漏掉"另存"，症状是 AI 冷启动完全不知道 `.continue/` 的约定——
- * 所以这条必须升级成警告，而不是一行普通输出。
+ * 已有 `AGENTS.md` 且**没提 `.continue/`** 时框架入口等于没生效。
+ * 症状是 AI 冷启动完全不知道队列约定，而日志里只有一行"跳过"——所以必须升级成警告。
  */
-if (existsSync(join(TARGET, 'AGENTS.md.continue-do.md'))) {
+if (existsSync(agentsPath) && !readFileSync(agentsPath, 'utf8').includes('.continue/README.md')) {
   warnings.push(
-    '项目已有 AGENTS.md：框架入口被另存为 AGENTS.md.continue-do.md，**没有生效**。' +
-      '把里面那几行并进你的 AGENTS.md 再删掉备份，否则 AI 读不到 .continue/ 的约定。',
+    `项目已有 ${agentsPath} 但没有指向 .continue/：框架入口**没有生效**。` +
+      `手动加一句"动手之前先读 .continue/README.md"，模板见 ${join(ASSETS, 'AGENTS.md')}。`,
+  );
+}
+if (staleDocs.length > 0) {
+  warnings.push(
+    `${staleDocs.length} 份文件的模板有更新、**没有自动合并**（实例原样保留，也不生成备份）：` +
+      `${staleDocs.join('、')}。要看差异：diff ${join(ASSETS, '.continue')}/TASKS.md .continue/TASKS.md` +
+      '（把 TASKS.md 换成对应文件名）；只想要模板版本就加 --force 重跑。',
   );
 }
 
@@ -718,7 +937,10 @@ registerHooks();
  * 手抄命令漏一行不会有任何提示，而缺 `config.json` 的症状是"门禁静默失效"——
  * 看起来一切正常，其实一个检查都不跑。
  */
+log('· 安装状态（版本 + 逐文件哈希）');
 if (!dryRun) {
+  // 顺序：先记状态、再核对 REQUIRED——`REQUIRED` 里有 `.installed.json`，反过来会自欺
+  writeInstalledState();
   for (const rel of REQUIRED) {
     if (!existsSync(join(TARGET, rel))) problems.push(`安装后缺少 ${rel}`);
   }
@@ -771,22 +993,16 @@ if (dryRun) {
   process.exit(0);
 }
 
-/** 统计备份数：只认真正的"另存"动作行，别把章节标题也算进去。 */
-const backups = actions.filter((line) => line.trimStart().startsWith('另存')).length;
 console.log('安装完成。下一步：');
-if (backups > 0) {
-  console.log(`  1. 有 ${backups} 份文件因已存在被另存为 *.continue-do.md —— 合并完请删掉，`);
-  console.log('     两份指令并存时 AI 会读到冲突的两套规则。');
-}
-const base = backups > 0 ? 2 : 1;
-console.log(`  ${base}. **重启会话**——钩子配置在启动时拍快照，不热加载（注册已自动完成）`);
-console.log(`  ${base + 1}. 自检：node .continue/hooks/check.mjs`);
+console.log('  1. **重启会话**——钩子配置在启动时拍快照，不热加载（注册已自动完成）');
+console.log('  2. 自检：node .continue/hooks/check.mjs');
+const base = 2;
 if (projectFilled) {
   console.log(`     （门禁里已接入项目测试：${JSON.stringify(detected.commands)}，要改就编辑 checks.project）`);
 }
 if (pendingDocs.length > 0) {
   console.log(
-    `  ${base + 2}. 集成已有文档：${pendingDocs.length} 份待合并（上方清单；规矩见 SKILL.md「集成已有文档」）`,
+    `  ${base + 1}. 集成已有文档：${pendingDocs.length} 份待合并（上方清单；规矩见 SKILL.md「集成已有文档」）`,
   );
 }
 

@@ -39,13 +39,17 @@ export function worldTypeLabel(type: WorldType): string {
  * 超平坦在 `TerrainGenerator` 里直接返回三层方块，地物与结构阶段根本不会跑。
  * 这段文案就是让玩家在创建之前就知道，而不是进游戏才发现没有树和矿。
  */
-export const WORLD_TYPE_HINTS: Record<WorldType, string> = {
-  default: '完整世界：群系、树木、矿石、村庄、要塞… 生存模式推荐',
-  amplified: '与默认相同的全部内容，只是陆地起伏更大、山更高',
-  flat: '只有三层平地：没有树木、村庄与矿石（适合建筑/创造）',
-  large_biomes: '与默认相同的完整世界，只是群系面积大约 ×4（走很久才会换群系）',
-  single_biome: '与默认相同的地形，但整个世界只有一种群系（在下面选是哪一种）',
-};
+/**
+ * 世界类型的说明文字（批次 20261024-0245）。
+ *
+ * 原来是一张中文常量表 —— 新建世界界面的类型下拉下方直接显示它，德语/俄语玩家会看到中文。
+ * 现在走 `world.typeHint.*`（5 条 × 6 语言）。
+ *
+ * ⚠️ 键写成模板字面量，`audit:i18n` 才认得出这一族被引用了。
+ */
+export function worldTypeHint(type: WorldType): string {
+  return t(`world.typeHint.${type}`);
+}
 
 /** 超平坦世界的分层（从 y = -64 起，与原版"经典"预设一致） */
 export const FLAT_LAYERS = {

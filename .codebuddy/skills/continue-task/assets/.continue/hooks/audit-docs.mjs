@@ -68,7 +68,7 @@ const BYTE_LIMITS = [
   { file: README_FILE, name: 'README.md', max: DOC_BYTE_LIMITS.README },
   { file: DONE_FILE, name: 'DONE.md', max: DOC_BYTE_LIMITS.DONE },
   { file: OVERVIEW_FILE, name: 'OVERVIEW.md', max: DOC_BYTE_LIMITS.OVERVIEW },
-  { file: TASKS_FILE, name: 'TASKS.md', max: DOC_BYTE_LIMITS.TASKS_BYTES },
+  { file: TASKS_FILE, name: 'TASKS.md', max: DOC_BYTE_LIMITS.TASKS },
   { file: TIPS_FILE, name: 'TIPS.md', max: DOC_BYTE_LIMITS.TIPS },
   ...listQueues().map(({ sid, file }) => ({ file, name: `doing/${sid}.md`, max: DOC_BYTE_LIMITS.QUEUE })),
 ];

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 把**本会话的队列 / 决策记录**从 `doing/` 移进 `logs/<会话ID>/`。
+ * 把**本会话的队列 / 决策记录**从 `doing/` 移进 `.logs/<会话ID>/`。
  *
  * 用法：
  *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列（顺带把决策记录一起搬）
@@ -8,7 +8,7 @@
  *
  * ## 归档文件是**累积**的，不按批次新建
  *
- * `logs/<会话ID>/queue.md`、`decision.md` 各一份，**每个新批次插到最上面**，
+ * `.logs/<会话ID>/queue.md`、`decision.md` 各一份，**每个新批次插到最上面**，
  * 批次之间用 `----------` 分隔：
  *
  *   ## 批次 20261023-1141 · 2026-10-23 11:41
@@ -17,7 +17,7 @@
  *   ## 批次 20261023-1018 · 2026-10-23 11:18
  *   <上一批的原文>
  *
- * 为什么不再一批一个文件：一个会话跑十几批就会在 `logs/<会话ID>/` 里堆十几个
+ * 为什么不再一批一个文件：一个会话跑十几批就会在 `.logs/<会话ID>/` 里堆十几个
  * `queue-20261023114100.md`，想按时间连着看一遍得一个个开。累积成一份之后，
  * "这个会话从头到尾都干了什么"是一个文件、从上往下读。
  *
@@ -59,7 +59,7 @@ const SRC_NAME = {
   decision: decisionNameFor(sid),
 };
 
-/** `logs/<会话ID>/`：同一个会话的日志与归档都在一处。 */
+/** `.logs/<会话ID>/`：同一个会话的日志与归档都在一处。 */
 const ARCHIVE_DIR = archiveDirFor(sid);
 const SEP = '----------';
 
@@ -73,6 +73,26 @@ function when(now = new Date()) {
 function batchOf(text) {
   const m = /^>\s*批次\s*[:：]\s*(\S+)/m.exec(text);
   return m ? m[1] : '未知批次';
+}
+
+/**
+ * 归档标题里用的批次号。
+ *
+ * `queue` 自己有 `> 批次：` 行，直接读；**`decision` 没有**（它的格式是 `## D<n> · …`），
+ * 所以要从别处派生：队列还在 `doing/` 就用它，已归档就用 `.logs/<sid>/queue.md` 最新那节。
+ * 旧实现在决策记录上永远拿不到队列文本，于是每份归档都写「未知批次」——
+ * "这条决策属于哪一批"这唯一的线索就这么丢了（2026-10-23 实测日志里连着两条都是"未知批次"）。
+ */
+function batchFor(k, text) {
+  if (k === 'queue') return batchOf(text);
+  const doingQueue = join(DOING_DIR, SRC_NAME.queue);
+  if (existsSync(doingQueue)) return batchOf(readFileSync(doingQueue, 'utf8'));
+  const archived = join(ARCHIVE_DIR, 'queue.md');
+  if (existsSync(archived)) {
+    const m = /^##\s*批次\s*(\S+)/m.exec(readFileSync(archived, 'utf8'));
+    if (m) return m[1];
+  }
+  return '未知批次';
 }
 
 function fileHead(k) {
@@ -96,7 +116,7 @@ function archiveAs(k) {
   if (!existsSync(src)) return false;
 
   const text = readFileSync(src, 'utf8');
-  const batch = batchOf(text);
+  const batch = batchFor(k, text);
   const dest = join(ARCHIVE_DIR, `${k}.md`);
   const old = existsSync(dest) ? readFileSync(dest, 'utf8') : '';
   /**

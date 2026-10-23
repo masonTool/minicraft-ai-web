@@ -43,4 +43,11 @@ export const menu = {
   "world.import": "Spielstand importieren",
   "menu.minigames": "Minispiele",
   "world.saveFailed": "Speichern fehlgeschlagen, bitte erneut versuchen",
+  "world.seedHint": "Gib eine Zahl als Seed ein oder lass das Feld leer für einen zufälligen.",
+  "world.survivalWarn": "{base} — im Überleben besser die Standardwelt wählen oder in den Kreativmodus wechseln.",
+  "world.typeHint.default": "Volle Welt: Biome, Bäume, Erze, Dörfer, Festungen… für Überleben empfohlen",
+  "world.typeHint.amplified": "Alles wie in der Standardwelt, nur mit größeren Höhenunterschieden und höheren Bergen",
+  "world.typeHint.flat": "Nur drei flache Schichten: keine Bäume, Dörfer oder Erze (gut zum Bauen/Kreativ)",
+  "world.typeHint.large_biomes": "Eine volle Welt wie die Standardwelt, aber Biome sind etwa ×4 größer",
+  "world.typeHint.single_biome": "Gleiches Gelände wie Standard, aber die ganze Welt ist ein Biom (unten wählen)",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

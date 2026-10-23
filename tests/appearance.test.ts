@@ -98,12 +98,8 @@ describe('角色外观（批次 187 / 279 / 296）', () => {
   });
 
   it('四个角色预设齐全且互不相同', () => {
-    expect(CHARACTER_PRESETS.map((preset) => preset.label)).toEqual([
-      '成年男性',
-      '成年女性',
-      '少年男性',
-      '少年女性',
-    ]);
+    // 批次 20261024-0245：`label` 字段已删，文字走 `label.appearance.preset.*`
+    expect(CHARACTER_PRESETS.map((preset) => preset.id)).toEqual(['man', 'woman', 'boy', 'girl']);
     const signatures = CHARACTER_PRESETS.map((preset) =>
       [
         preset.skinTone,

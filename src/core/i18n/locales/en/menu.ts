@@ -45,4 +45,11 @@ export const menu = {
   // ---- mini-game menu (batch 20261022-1954)
   'menu.minigames': 'Mini-games',
   "world.saveFailed": "Save failed, please try again",
+  "world.seedHint": "Enter a number as the seed, or leave it empty for a random one.",
+  "world.survivalWarn": "{base} — in Survival, pick the default world or switch to Creative.",
+  "world.typeHint.default": "Full world: biomes, trees, ores, villages, strongholds… recommended for Survival",
+  "world.typeHint.amplified": "Everything the default world has, but with bigger terrain and taller mountains",
+  "world.typeHint.flat": "Only three layers of flat ground: no trees, villages or ores (good for building/creative)",
+  "world.typeHint.large_biomes": "A full world like the default, but biomes are about ×4 larger (you walk much further between them)",
+  "world.typeHint.single_biome": "The same terrain as default, but the whole world is one biome (pick it below)",
 } satisfies Pick<Messages, keyof typeof zhmenu>;

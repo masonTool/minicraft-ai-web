@@ -226,7 +226,6 @@ export function shouldEchoCommandResult(rules: GameRules, fromCommandBlock: bool
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
 export interface DifficultyProfile {
-  label: string;
   /** 生物对玩家的伤害倍率 */
   mobDamage: number;
   /** 玩家饥饿耗尽时的饿死速率倍率 */
@@ -241,10 +240,10 @@ export interface DifficultyProfile {
 
 export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
   // 和平：不刷敌对生物、饿不死、回血最快（原版和平难度回血是"饥饿不为 0 就回"）
-  peaceful: { label: '和平', mobDamage: 0, starveRate: 0, regenRate: 0.5, hostileSpawning: false, spawnCap: 0 },
-  easy: { label: '简单', mobDamage: 0.5, starveRate: 0.5, regenRate: 1, hostileSpawning: true, spawnCap: 0.5 },
-  normal: { label: '普通', mobDamage: 1, starveRate: 1, regenRate: 1, hostileSpawning: true, spawnCap: 1 },
-  hard: { label: '困难', mobDamage: 1.5, starveRate: 1.5, regenRate: 1, hostileSpawning: true, spawnCap: 1.5 },
+  peaceful: { mobDamage: 0, starveRate: 0, regenRate: 0.5, hostileSpawning: false, spawnCap: 0 },
+  easy: { mobDamage: 0.5, starveRate: 0.5, regenRate: 1, hostileSpawning: true, spawnCap: 0.5 },
+  normal: { mobDamage: 1, starveRate: 1, regenRate: 1, hostileSpawning: true, spawnCap: 1 },
+  hard: { mobDamage: 1.5, starveRate: 1.5, regenRate: 1, hostileSpawning: true, spawnCap: 1.5 },
 };
 
 export function difficultyProfile(difficulty: Difficulty): DifficultyProfile {

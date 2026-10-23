@@ -22,10 +22,10 @@
 
 **条目**（原文照搬，状态保持原样，`[阻塞]` 也要带上；每条下方的完成说明一起搬）：
 
-- [x] [T12] 给地形加分块生成：`src/world/chunk.ts` → `npm run test:chunk` 通过
-  - 做了什么：抽出 `ChunkBuilder`，按 16×16 分块生成
-  - 为什么：整图生成内存峰值 2.1G，分块后 300M
-  - 验证：`npm run test:chunk` 12 条通过
+- [x] [T12] 给设置页加导入导出：`src/settings/io.ts` → `npm test` 全绿
+  - 做了什么：抽出 `exportSettings()` / `importSettings()`，旧的内联逻辑删掉
+  - 为什么：导入要校验 schema，散在组件里得改三处才能对齐
+  - 验证：`npm test` 12 条通过；手点了一遍导入旧版本配置文件
   - 批次：<批次号>
 - [阻塞] [T15] …（卡住原因 / 用户怎么处理的）
 

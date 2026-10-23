@@ -84,7 +84,8 @@ const CONFIG_KEYS = {
   fast: '每次提交前跑的聚合命令',
   full: '完整体检命令（钩子不读，给人 / CI 留位置）',
   timeoutSec: '单条检查命令的超时秒数',
-  project: '项目自己的检查命令（字符串或数组），由 check.mjs 依次执行',
+  project: '项目自己的快检查命令（字符串或数组），由 check.mjs 依次执行',
+  projectSlow: '项目自己的慢检查命令：只在全档跑，--fast（pre-commit / Stop 守卫）跳过',
 };
 const configFile = join(CONTINUE_DIR, 'config.json');
 if (existsSync(configFile)) {

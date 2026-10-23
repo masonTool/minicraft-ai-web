@@ -44,4 +44,11 @@ export const menu = {
   // ---- 小游戏选择页（小游戏3）
   'menu.minigames': '小游戏',
   "world.saveFailed": "保存失败，请重试",
+  "world.seedHint": "种子要填数字，或者留空用随机种子。",
+  "world.survivalWarn": "{base} —— 生存模式建议改选默认世界，或改用创造模式。",
+  "world.typeHint.default": "完整世界：群系、树木、矿石、村庄、要塞… 生存模式推荐",
+  "world.typeHint.amplified": "与默认相同的全部内容，只是陆地起伏更大、山更高",
+  "world.typeHint.flat": "只有三层平地：没有树木、村庄与矿石（适合建筑/创造）",
+  "world.typeHint.large_biomes": "与默认相同的完整世界，只是群系面积大约 ×4（走很久才会换群系）",
+  "world.typeHint.single_biome": "与默认相同的地形，但整个世界只有一种群系（在下面选是哪一种）",
 } as const;

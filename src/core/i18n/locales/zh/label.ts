@@ -237,4 +237,8 @@ export const label = {
   "label.stickMode.dynamic": "跟随",
   "label.handedness.right": "右手",
   "label.handedness.left": "左手",
+  "label.appearance.preset.man": "成年男性",
+  "label.appearance.preset.woman": "成年女性",
+  "label.appearance.preset.boy": "少年男性",
+  "label.appearance.preset.girl": "少年女性",
 } as const;

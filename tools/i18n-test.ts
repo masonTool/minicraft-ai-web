@@ -1149,6 +1149,32 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   check('中文下战利品表名仍是原来的说法', t('cmd.label.lootTable.village_house') === '村庄小屋');
 
   /**
+   * 最后一批界面文案（E1，批次 20261024-0245）：
+   * 外观预设 4 条、世界类型提示 5 条、HUD 提示 28 条、世界种子/生存提示 2 条、告示牌标题 1 条。
+   */
+  const uiSamples: Array<[string, Record<string, string | number>]> = [
+    ['label.appearance.preset.man', {}],
+    ['label.appearance.preset.girl', {}],
+    ['world.typeHint.default', {}],
+    ['world.typeHint.flat', {}],
+    ['world.seedHint', {}],
+    ['misc.toast.leashTamedOnly', {}],
+    ['misc.toast.totemSaved', {}],
+    ['misc.toast.named', { kind: 'Hund', name: 'Bello' }],
+    ['misc.toast.gameMode', { mode: 'Kreativ' }],
+    ['misc.signEditorHint', { name: 'Eichenholz' }],
+  ];
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const leaked = uiSamples
+      .map(([key, params]) => tp(key, params as never))
+      .filter((text) => /[\u4e00-\u9fff]/.test(text) || text.startsWith('misc.') || text.startsWith('world.') || text.startsWith('label.'));
+    check(`${code} 界面文案（预设/世界类型/HUD 提示）不含中文、也不露键名`, leaked.length === 0, leaked.slice(0, 3).join(' | '));
+  }
+  setLanguage('zh');
+  check('中文下这些文案仍是原来的说法', t('misc.toast.raidStart') === '袭击开始' && t('world.typeHint.flat').startsWith('只有三层平地'));
+
+  /**
    * 兜底语言必须是**英文**（D2，批次 20261024-0245，用户要求）。
    *
    * `t()` 的回落链是「本语言表 → 英文表 → 键名」。前面已有「整个表缺失时回落英文」那条，

@@ -19,7 +19,7 @@ import { BRAND } from '../core/brand.ts';
 import { localeMeta } from '../core/i18n/locale.ts';
 import {
   WORLD_TYPES,
-  WORLD_TYPE_HINTS,
+  worldTypeHint,
   worldTypeLabel,
   randomSeed,
   type WorldType,
@@ -769,7 +769,7 @@ export class WorldScreen {
     if (raw.length > 0) {
       const parsed = Number(raw);
       if (!Number.isFinite(parsed)) {
-        this.typeHintEl.textContent = '种子要填数字，或者留空用随机种子。';
+        this.typeHintEl.textContent = t('world.seedHint');
         this.typeHintEl.classList.add('bad');
         return;
       }
@@ -821,11 +821,11 @@ export class WorldScreen {
   private updateTypeHint(): void {
     const type = this.typeSelect.value as WorldType;
     const survival = this.gameModeSelect.value === 'survival';
-    const base = WORLD_TYPE_HINTS[type] ?? '';
+    const base = worldTypeHint(type);
     const warn = type === 'flat' && survival;
     // 只有单一群系世界才显示"选群系"这一行
     this.biomeRow.hidden = type !== 'single_biome';
-    this.typeHintEl.textContent = warn ? `${base} —— 生存模式建议改选默认世界，或改用创造模式` : base;
+    this.typeHintEl.textContent = warn ? tp('world.survivalWarn', { base }) : base;
     this.typeHintEl.classList.toggle('bad', warn);
   }
 

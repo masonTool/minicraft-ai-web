@@ -15,13 +15,14 @@
  * 触发不了；而它又是最容易静默失效的分支。probe 仍然跑在**装出来的真实框架**上，
  * 只是不经过模型——所以它验的是机制，不是"模型乖不乖"。
  *
- * 用法（在仓库根执行）：
- *   npm run skill:e2e                          # 只跑主干（main）
- *   npm run skill:e2e -- --all                 # 跑全部 7 个场景（先清场）
- *   npm run skill:e2e -- --scenario blocked    # 单跑一个（可重复给多次）
- *   npm run skill:e2e -- --dry-run             # 只打印计划
- *   npm run skill:e2e -- --clean              # 只清现场（test.md 重置为表头）
- *   npm run skill:e2e -- --model X --turns 45 --timeout 600 --strict
+ * 用法（在仓库根执行；这个仓库没有 package.json，所以是**直接跑脚本**，不是 npm script）：
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs                    # 只跑主干（main）
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --all              # 跑全部 8 个场景（先清场）
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --scenario blocked # 单跑一个（可重复给多次）
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --dry-run          # 只打印计划
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --clean           # 只清现场（test.md 重置为表头）
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --self-test-kill  # 验"超时/中断后不留孤儿进程"（约 2s）
+ *   node .codebuddy/skills/continue-task/scripts/e2e.mjs --model X --turns 45 --timeout 600 --strict
  *
  * 现场（默认**保留**，方便你看）：
  *   `.codebuddy/skills/continue-task/.e2e/<场景>-<时间戳>/`
@@ -36,7 +37,7 @@
  *
  * 退出码：0 通过（或环境跳过）/ 1 断言失败 / 2 用法错误（含"已有一轮在跑"）。
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -46,7 +47,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,81 @@ const LOCK = join(DATA_ROOT, '.lock');
  * 后面那句 `const report = ...` 之前，晚定义会踩 TDZ。
  */
 const REPORT = join(DATA_ROOT, 'test.md');
+
+/**
+ * 子进程治理：**e2e 起的 CLI 必须能整组清掉**。
+ *
+ * 挡的是"跑完之后后台还在烧"这一类事故（2026-10-23 用户机器发烫、怀疑有残留实例时查出来的）：
+ *   1. `spawnSync(..., { timeout })` 只对**直接子进程**发信号。CLI 再 spawn 出来的子代理 /
+ *      MCP server 是孙进程——父进程一收工，它们成孤儿，继续跑、继续烧 token；
+ *   2. `spawnSync` **阻塞事件循环**：Ctrl-C 时本进程被信号直接终止，`SIGINT` 处理器
+ *      永远轮不到执行，CLI 照旧在后台跑完整轮（几分钟、几百万 token）。
+ *
+ * 所以改成异步 `spawn` + `detached: true`（自成进程组），按 **负 pid 杀整组**：
+ * 超时、`SIGINT`、`SIGTERM`、正常退出四条路径都会尽力清一遍。
+ *
+ * 已知边界：如果 CLI 自己 `setsid` 进新会话，就不在我们这组了——那属于 CLI 侧行为，
+ * 这里只能保证"自己起的这棵树"清干净；也不做跨机器的进程扫描（没有可靠判据）。
+ */
+const liveGroups = new Set();
+
+/** 杀掉以 `pid` 为组长的整个进程组（`ESRCH` = 组已空，正常）。 */
+function killGroup(pid, signal = 'SIGTERM') {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    /* 组空了 / 没权限：都不该影响主流程 */
+  }
+}
+
+/** 退出或被打断时，把还在跑的 CLI 整组带走。 */
+function killAllGroups() {
+  for (const pid of liveGroups) killGroup(pid);
+  liveGroups.clear();
+}
+
+/**
+ * 起一个 CLI 子进程（自成进程组）并等它结束。
+ * 返回 `{ pid, status, signal, stdout, stderr, timedOut }`——`pid` 留给自检核对"组真的空了"。
+ */
+function runCliGroup(cmd, args, { cwd, timeoutMs }) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    liveGroups.add(child.pid);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const finish = (status, signal, extra = '') => {
+      clearTimeout(timer);
+      // 收尾再扫一次组：CLI 正常退出后，孙进程可能还活着——这一步才是最关键的
+      killGroup(child.pid);
+      liveGroups.delete(child.pid);
+      resolve({ pid: child.pid, status, signal, stdout, stderr: `${stderr}${extra}`, timedOut });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup(child.pid);
+    }, timeoutMs);
+    child.stdout?.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr?.on('data', (d) => {
+      stderr += d;
+    });
+    child.on('error', (err) => finish(null, null, `spawn 失败：${err.message}`));
+    child.on('close', (status, signal) => finish(status, signal));
+  });
+}
+
+/**
+ * 剥掉 `GIT_*`：经 pre-commit 调用时 git 会注入 `GIT_DIR` / `GIT_INDEX_FILE`，
+ * 场景目录里的 `git add` / `git commit` 会落到**外层真实仓库**上（`.git/hooks/pre-commit` 那边
+ * 踩过同一个坑）。在进程启动时直接删，所有子进程自然继承干净的环境。
+ */
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith('GIT_')) delete process.env[key];
+}
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -93,19 +169,49 @@ const fresh = flag('--fresh');
 const isAutoFresh = () => all && !flag('--keep-all');
 const cleanOnly = flag('--clean');
 const all = flag('--all');
+/** 只跑 probe 场景：0 token、秒级，可以接进门禁（`--all` 含模型，必须人来点）。 */
+const probesOnly = flag('--probes');
+/** 跳过末尾三项单测：给门禁用的（那些检查由调用方自己跑，重复跑只是浪费 5 秒）。 */
+const noSelftest = flag('--no-selftest');
+
+/**
+ * `--clean` 与"要跑测试"的开关同时出现 → **直接拒绝**。
+ *
+ * 为什么值得拦（本仓库自己刚踩的）：`--clean` 是"只清场"模式，清完就退出、退出码 0。
+ * `--probes --clean` 因此一个场景都不跑却是绿的——CI 里这样写等于**绿灯空转**，
+ * 症状是"工作流一直绿、其实从来没验过"。
+ */
+const runSwitches = ['--probes', '--all', '--scenario'].filter((f) => argv.includes(f));
+if (cleanOnly && runSwitches.length > 0) {
+  console.error(`--clean 是"只清场"（清完就退出），不能与 ${runSwitches.join(' / ')} 一起用——那样一个场景都不会跑。`);
+  console.error('分两次跑：先 --clean，再单独跑要跑的测试。');
+  process.exit(2);
+}
 const timeoutSec = Number(value('--timeout', '480'));
 const maxTurns = Number(value('--turns', '45'));
 
 if (flag('--help') || flag('-h')) {
   console.log(
-    '用法：node scripts/e2e.mjs [--all] [--scenario <名>]... [--dry-run] [--strict]\n' +
-      '                        [--model <id>] [--turns 40] [--timeout 600]',
+    '用法：node scripts/e2e.mjs [--all] [--probes] [--scenario <名>]... [--no-selftest] [--dry-run] [--strict]\n' +
+      '  --probes       只跑 probe 场景（0 token、秒级，可接进门禁）\n' +
+      '  --no-selftest  跳过末尾三项单测（门禁里由调用方自己跑，别重复）\n' +
+      '                        [--model <id>] [--turns 40] [--timeout 600]\n' +
+      '                        [--self-test-kill]（验"超时/中断后不留孤儿进程"，约 2s、不烧 token）',
   );
   process.exit(0);
 }
 if (!Number.isFinite(timeoutSec) || timeoutSec <= 0 || !Number.isFinite(maxTurns) || maxTurns <= 0) {
   console.error('--timeout / --turns 必须是正整数');
   process.exit(2);
+}
+
+/**
+ * 进程治理自检：不起模型、不碰 `.e2e/`，跑完即退。
+ * 放在拿锁之前——它不需要现场，也不该被"已有一轮在跑"挡住。
+ */
+if (flag('--self-test-kill')) {
+  const ok = await selfTestKill();
+  process.exit(ok ? 0 : 1);
 }
 
 const stamp = new Date()
@@ -175,7 +281,7 @@ const write = (ctx, rel, body) => {
   writeFileSync(join(ctx.dir, rel), body);
 };
 const readMaybe = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
-const logOf = (ctx, s) => readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 'run.md'));
+const logOf = (ctx, s) => readMaybe(join(ctx.dir, '.continue', '.logs', sid6(s), 'run.md'));
 
 /**
  * 清掉某个会话的运行日志（钩子的 `msStep` / `msStreak` 就存在里面）。
@@ -187,7 +293,7 @@ const logOf = (ctx, s) => readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 
  */
 const resetHookState = (ctx, s) => {
   // 删不掉就抛：不然"硬停"其实没被重置，断言会给出假红/假绿
-  if (!rmPath(join(ctx.dir, '.continue', 'logs', sid6(s), 'run.md'))) {
+  if (!rmPath(join(ctx.dir, '.continue', '.logs', sid6(s), 'run.md'))) {
     throw new Error('重置钩子状态失败（run.md 删不掉），后面的边界断言会失真');
   }
 };
@@ -203,7 +309,7 @@ const SCENARIOS = {};
 SCENARIOS.main = {
   driver: 'model',
   desc: '主干：真模型依次做完 3 条小任务（逐条递 / 逐条勾 / 收尾 / 归档）',
-  run(ctx, s) {
+  async run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
     check('装出 .continue/README.md', existsSync(join(ctx.dir, '.continue', 'README.md')));
     check('注册了钩子', existsSync(join(ctx.dir, '.codebuddy', 'settings.json')));
@@ -229,7 +335,7 @@ SCENARIOS.main = {
       '2. **一次只做一条**：做完勾 `[x]`、写完成说明、提交，再下一条；',
       '3. 三条做完后按收尾五步收尾（搬进 DONE.md、更新 OVERVIEW.md / TASKS.md、归档队列），再提交。',
     ].join('\n');
-    const r = runModel(ctx, prompt);
+    const r = await runModel(ctx, prompt);
     if (!r) return;
 
     const logText = logOf(ctx, s);
@@ -241,14 +347,14 @@ SCENARIOS.main = {
 
     const doingFile = join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`);
     const archived = listArchive(ctx, s);
-    check('建过会话队列', existsSync(doingFile) || archived.length > 0, 'doing/ 与 logs/ 里都没有队列');
+    check('建过会话队列', existsSync(doingFile) || archived.length > 0, 'doing/ 与 .logs/ 里都没有队列');
     check('DONE.md 出现批次节', /^## 批次 \d{8}-\d{4}/m.test(readMaybe(join(ctx.dir, '.continue', 'DONE.md'))));
     /**
      * 「归档」这一步不靠模型自觉：它是**机制**，用 probe 直接调一次最可靠。
      * 模型那段只要验到"收了尾（DONE 有批次节）"即可——两次实跑证明它会不会跑第 5 步是抖的。
      */
     const arch = hook(ctx, 'archive-queue.mjs', null, { args: [s] });
-    const queueArchive = readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 'queue.md'));
+    const queueArchive = readMaybe(join(ctx.dir, '.continue', '.logs', sid6(s), 'queue.md'));
     check(
       '收尾第 5 步可执行（归档队列）',
       arch.status === 0 && listArchive(ctx, s).length > 0,
@@ -266,7 +372,9 @@ SCENARIOS.blocked = {
   desc: '阻塞：连续 2 轮没做完 → 标 [阻塞] → 请求用户拍板',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
-    const q = `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 创建：2026-10-23\n> 批次：20260101-0001\n\n- [ ] 甲\n  - 描述：故意一直做不完\n`;
+    // 末尾必须是 `[自审]`（T14 起的硬规则）：少写它，下面这次 commit 会被 pre-commit 拒，
+    // 工作区就一直是脏的 → 后面的"提交守卫不判脏"必然假红
+    const q = `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 创建：2026-10-23\n> 批次：20260101-0001\n\n- [ ] 甲\n  - 描述：故意一直做不完\n- [ ] [自审] 占位自审\n`;
     write(ctx, `.continue/doing/${sid6(s)}.md`, q);
     ctx.git(['add', '-A']);
     ctx.git(['commit', '-q', '-m', 'queue']);
@@ -293,39 +401,73 @@ SCENARIOS.blocked = {
     check('连续 N 轮后条目被标 [阻塞]', /\[阻塞\]/.test(afterQueue), afterQueue.split('\n').find((l) => l.includes('[')) ?? '');
     check('日志记了"隔离"', /隔离 · 连续 \d+ 轮/.test(logOf(ctx, s)));
     check('之后改为请求用户拍板', /拍板|阻塞/.test(`${r2.stderr}${r3.stderr}`), `${r2.stderr}${r3.stderr}`.slice(0, 160));
-    check('阻塞条目不再被当成普通任务递出', !/这一轮做这一条/.test(r3.stderr) || /拍板/.test(r3.stderr));
+    /**
+     * 判据看**队列状态**而不是注入文案：递一次任务就会把那条标回 `[~]`，
+     * 所以"甲 仍是 `[阻塞]`"就是"没被再递出去"的硬证据。
+     * （队列里还有 `[自审]` 这种正常条目时，第 3 轮去递它是**对的**，不能拿
+     * "这一轮做这一条"这个词判失败——那是旧夹具只有 1 条时留下的写法。）
+     */
+    const afterThird = readMaybe(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`));
+    check(
+      '阻塞条目不再被当成普通任务递出',
+      /- \[阻塞\] 甲/.test(afterThird),
+      afterThird.split('\n').filter((l) => l.startsWith('- ')).join(' | '),
+    );
   },
 };
 
 /** 场景 2：需要拍板的地方由模型自己决定，但必须写进 decision 文件。 */
 SCENARIOS.decision = {
   driver: 'model',
-  desc: '决策留底：模型自己拍板，并写进 <sid>-decision.md（收尾后归档）',
-  run(ctx, s) {
+  desc: '决策留底（**提示词刻意不提 decision**）：只给一个取舍，看框架会不会让模型自己拍板 + 留底',
+  async run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
+    /**
+     * ⚠️ 这段提示词**故意不写**"要写 decision 文件"，也不写"不要问我"。
+     *
+     * 旧版写的是"按框架第 10 条：你替用户做的决定必须写进 …"——那等于把答案递给模型，
+     * 于是这条用例一直在验"模型能不能照抄指令"，而真正的问题（每轮注入在说"必须弹窗"）
+     * 一次都没被它抓住。2026-10-23 用户反馈"AI 明明有推荐结果却停下来让我选"就是这么漏的。
+     * 现在只给一个有取舍的家务事：**行为对不对，全靠框架自己的注入**。
+     */
     const prompt = [
       '这是一个刚装好 continue-do 框架的空项目，机制见 .continue/README.md。',
       '请按框架流程做这一件小事：把 README.md 里的 `status: 1` 改成 2。',
       '',
-      '写法有两种，你**自己决定**用哪种（不要问我）：',
-      '  A) `status: 2` —— 纯数字，简单；',
-      '  B) `status: "two"` —— 带引号，可读性好但类型变了。',
-      '',
-      '按框架第 10 条：你替用户做的决定必须写进 `.continue/doing/<本会话ID>-decision.md`，',
-      '每条用 `## D1 · <一句话说清决策点>`，下面写 `- 决定：` / `- 为什么：` / `- 影响：` 三行。',
-      '然后照常建队列、改完、按收尾五步收尾（含把决策文件归档）。不要问我问题。',
+      '两种写法都行：A) `status: 2`（纯数字）；B) `status: "two"`（字符串，可读性好但类型变了）。',
+      '选哪个由你判断。',
     ].join('\n');
-    const r = runModel(ctx, prompt);
+    const r = await runModel(ctx, prompt);
     if (!r) return;
 
     const decPath = join(ctx.dir, '.continue', 'doing', `${sid6(s)}-decision.md`);
     const archived = listArchive(ctx, s).filter(isDecisionArchive);
-    const body = readMaybe(decPath) || (archived[0] ? readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), archived[0])) : '');
+    const body = readMaybe(decPath) || (archived[0] ? readMaybe(join(ctx.dir, '.continue', '.logs', sid6(s), archived[0])) : '');
 
-    check('写了决策记录（doing/ 或已归档）', body.length > 0, '既没有 doing/<sid>-decision.md，也没有归档');
+    check('没被明确要求也写了决策记录（doing/ 或已归档）', body.length > 0, '既没有 doing/<sid>-decision.md，也没有归档——"默认自己决定并留底"没落地');
     check('至少一条 D<n>', /^##\s*D\d+/m.test(body), body.slice(0, 120));
     check('每条有「决定」', /^[-*]\s*决定\s*[:：]/m.test(body));
     check('每条有「为什么」', /^[-*]\s*为什么\s*[:：]/m.test(body));
+    check('每条有「影响」', /^[-*]\s*影响\s*[:：]/m.test(body));
+
+    /**
+     * 最关键的一条：**有没有为了"选哪种写法"弹窗问人**。
+     *
+     * 判据来自 CLI 的事件流（stdout 里的 tool_use 记录）。先确认"这条流里能看到工具调用"，
+     * 否则"没弹窗"只是个空断言——看不见等于没验（宁可标跳过，也不要假绿）。
+     */
+    const toolNames = [...String(r.text ?? '').matchAll(/"name"\s*:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+    if (toolNames.length === 0) {
+      console.log('    ⚠️ 事件流里解析不到工具调用记录，"是否弹窗"无法判定——按环境问题跳过这条断言');
+      ctx.skipped = true;
+    } else {
+      const asked = toolNames.includes('ask_followup_question') || toolNames.includes('AskUserQuestion');
+      check(
+        '没有为一个"选哪种写法"的取舍弹窗问用户',
+        !asked,
+        `事件里出现提问工具；本轮工具：${[...new Set(toolNames)].slice(0, 10).join(', ')}`,
+      );
+    }
     /**
      * 归档同样用 probe：模型会不会跑第 5 步是抖的，而"决策记录跟着队列一起走"是**机制**。
      * 这里直接调 `archive-queue <sid>`，看它是否把 decision 也带走了。
@@ -350,7 +492,7 @@ SCENARIOS.decision = {
 SCENARIOS['milestone-split'] = {
   driver: 'model',
   desc: '里程碑切分：大任务 → 是否在队列里插节点、粒度与验收命令是否合理（不实现）',
-  run(ctx, s) {
+  async run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
     const prompt = [
       '这是一个刚装好 continue-do 框架的空项目，机制见 .continue/README.md。',
@@ -363,7 +505,7 @@ SCENARIOS['milestone-split'] = {
       '3. **不要建任何计划文件**（里程碑只写在队列里）；',
       '4. 不要问我问题。',
     ].join('\n');
-    const r = runModel(ctx, prompt);
+    const r = await runModel(ctx, prompt);
     if (!r) return;
 
     const qPath = join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`);
@@ -483,7 +625,7 @@ SCENARIOS.milestone = {
 SCENARIOS.journey = {
   driver: 'model',
   desc: '完整旅程：两批任务（含跨批次累积归档）+ 队列内里程碑硬停与完成',
-  run(ctx, s) {
+  async run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
 
     // ---- 第 1 批：模型做 2 条
@@ -494,11 +636,11 @@ SCENARIOS.journey = {
       '  2. 新建 notes.txt，内容一行 `ok`。',
       '要求：一次只做一条，勾 `[x]` 并写 `验证：` 再提交；不要问我问题。',
     ].join('\n');
-    const r = runModel(ctx, prompt);
+    const r = await runModel(ctx, prompt);
     if (!r) return;
 
     const arch1 = hook(ctx, 'archive-queue.mjs', null, { args: [s] });
-    const archivePath = join(ctx.dir, '.continue', 'logs', sid6(s), 'queue.md');
+    const archivePath = join(ctx.dir, '.continue', '.logs', sid6(s), 'queue.md');
     const afterBatch1 = readMaybe(archivePath);
     check('第 1 批做完并归档', arch1.status === 0 && afterBatch1.includes('## 批次'), afterBatch1.slice(0, 120));
     check('第 1 批两条都勾了', (afterBatch1.match(/^- \[x\]/gm) ?? []).length >= 2);
@@ -562,18 +704,25 @@ SCENARIOS.journey = {
   },
 };
 
-/** 场景 4：已有进行中的队列 → 注入提示 → 开 worktree → 隔离 → 合回主分支。 */
+/** 场景 4：已有进行中的队列 → 注入提示 → 开 worktree → 隔离 → 收尾同步（rebase + merge）合回父分支。 */
 SCENARIOS.worktree = {
   driver: 'probe',
-  desc: '并行：别的会话有队列 → 提示开 worktree → 树内隔离 → 合回主分支',
+  desc: '并行：别的会话有队列 → 提示开 worktree → 树内隔离 → rebase + merge 合回父分支',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
 
     // 已有的"另一个会话"队列：前缀必须与本次会话**不同**，否则 sid6 撞车（文件名相同＝同一份队列）
+    // 最后一条必须是 `[自审]`（README §8）：少写它，pre-commit 会拒绝提交，
+    // 于是主树 HEAD 还停在 `init`（树里连钩子都没有），后面每一步都跟着假红。
     const other = `abcdef${'0'.repeat(25)}1`;
-    write(ctx, `.continue/doing/${sid6(other)}.md`, `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0009\n\n- [ ] 乙\n  - 描述：别人在做\n`);
+    write(
+      ctx,
+      `.continue/doing/${sid6(other)}.md`,
+      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0009\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] [自审] 占位自审\n`,
+    );
     ctx.git(['add', '-A']);
-    ctx.git(['commit', '-q', '-m', 'other session queue']);
+    const prep = ctx.git(['commit', '-q', '-m', 'other session queue']);
+    check('准备提交（fixture 合法，否则 pre-commit 会拦）', prep.status === 0, (prep.stderr || prep.stdout).slice(0, 300));
 
     // ① 新会话的注入里必须提到"其他未完成队列"
     const inj = hook(ctx, 'queue-init.mjs', promptEvt(s), { args: ['--event=UserPromptSubmit'] });
@@ -597,30 +746,41 @@ SCENARIOS.worktree = {
     ctx.git(['remote', 'add', 'origin', origin]);
     ctx.git(['push', '-q', '-u', 'origin', 'main']);
 
-    // ③ 建 worktree
-    const wt = spawnSync(process.execPath, [join(ctx.dir, '.continue', 'hooks', 'worktree.mjs'), 'wt1'], {
-      cwd: ctx.dir,
-      encoding: 'utf8',
-    });
-    const wtDir = join(dirname(ctx.dir), `${ctx.name}-${stamp}-wt-wt1`);
+    // ③ 建 worktree（目录 `doing/.worktree/<本会话 sid 前 6 位>`、分支 `continue/<父目录名>-<名字>`）
+    const wt = spawnSync(
+      process.execPath,
+      [join(ctx.dir, '.continue', 'hooks', 'worktree.mjs'), 'wt1', '--no-window'],
+      {
+        cwd: ctx.dir,
+        encoding: 'utf8',
+        env: { ...process.env, CODEBUDDY_SESSION_ID: s },
+      },
+    );
+    const wtBranch = `continue/${basename(ctx.dir)}-wt1`;
+    const wtDir = join(ctx.dir, '.continue', 'doing', '.worktree', sid6(s));
     check('worktree.mjs 退出码 0', wt.status === 0, (wt.stderr || wt.stdout).slice(0, 300));
-    check('建出了工作树目录', existsSync(wtDir), wtDir);
+    check('建出了工作树目录（在 doing/.worktree/<sid6> 下）', existsSync(wtDir), wtDir);
     check(
-      '分支 continue/wt1 存在',
-      spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/continue/wt1'], { cwd: ctx.dir }).status === 0,
+      `分支 ${wtBranch} 存在`,
+      spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${wtBranch}`], { cwd: ctx.dir }).status === 0,
     );
     check(
       '分支已推到 origin',
-      spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/continue/wt1'], { cwd: origin }).status === 0,
+      spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${wtBranch}`], { cwd: origin }).status === 0,
+    );
+    check(
+      '交接队列写进了树里（doing/worktree.md，含批次号）',
+      /^> 批次：\d{8}-\d{4}/m.test(readMaybe(join(wtDir, '.continue', 'doing', 'worktree.md')) ?? ''),
+      readMaybe(join(wtDir, '.continue', 'doing', 'worktree.md'))?.slice(0, 120) ?? '没有 worktree.md',
     );
 
     /**
      * ④ 隔离验什么：**不是**"看不到主树的队列"。
      *
-     * worktree 检出的是同一条分支，`doing/` 里**已提交**的队列两边长得一样——那是共享事实，
-     * 本来就该看得见（"其他会话还有未完成队列"这条提示正是靠它）。真正被隔离的是
-     * **未提交的改动**与**各自的会话状态**。所以这里验两件：
-     *   · 一个全新的会话 ID 在树里跑，得到"本会话没有队列"（按 sid 找，不误认别人的）；
+     * worktree 检出的是同一条分支，`doing/` 里**已提交**的队列两边长得一样——那是共享事实。
+     * 真正被隔离的是**未提交的改动**与**各自的会话状态**。所以这里验两件：
+     *   · 一个全新的会话 ID 在树里跑，会**接管** `doing/worktree.md`（改名成 `<sid6>.md`）
+     *     并开始递任务——这是"队列即交接"的核心，比"看不到别人的队列"更值得钉住；
      *   · 在树里留下未提交改动，主树的 `git status` 不受影响。
      */
     // 再换一个**不同的 6 位前缀**：短名会截到前 6 位，前缀重复就等于同一个会话
@@ -630,13 +790,13 @@ SCENARIOS.worktree = {
     hook(ctx, 'queue-init.mjs', promptEvt(freshSid), { args: ['--event=UserPromptSubmit'], cwd: wtDir });
     hook(ctx, 'auto-continue.mjs', stop(freshSid), { args: ['--event=Stop'], cwd: wtDir });
     /**
-     * 「没有队列」是**放行**（exit 0），原因只写进日志、不走 stderr——
-     * 所以断言要读树里那份 `logs/<sid6>/run.md`，别去 stderr 里找。
+     * 判据读两处：树里那份 `.logs/<sid6>/run.md`（递任务会在这里留痕）与
+     * 改名后的 `doing/<sid6>.md`——只读 stderr 分不清"接管了"和"没找到队列"。
      */
-    const wtLog = readMaybe(join(wtDir, '.continue', 'logs', sid6(freshSid), 'run.md'));
+    const wtLog = readMaybe(join(wtDir, '.continue', '.logs', sid6(freshSid), 'run.md'));
     check(
-      '树内新会话按 sid 找队列（不误认别人的队列）',
-      /本会话没有队列/.test(wtLog),
+      '树内新会话接管交接队列（doing/<sid6>.md）并开始递任务',
+      /递任务/.test(wtLog) && existsSync(join(wtDir, '.continue', 'doing', `${sid6(freshSid)}.md`)),
       wtLog.slice(0, 160) || '树里没写出日志',
     );
 
@@ -646,32 +806,217 @@ SCENARIOS.worktree = {
     spawnSync('git', ['checkout', '--', '.'], { cwd: wtDir });
     rmrf(join(wtDir, 'only-in-wt.txt'));
 
-    // ⑤ 在树里干一条活并提交，然后合回主分支
+    // ⑤ 收尾同步：树里提交 → 父分支前进 → rebase → 合回父分支 → 推树分支
     write({ dir: wtDir }, 'hello.txt', 'hello from worktree\n');
     spawnSync('git', ['add', '-A'], { cwd: wtDir });
     const c = spawnSync('git', ['commit', '-q', '-m', 'feat: worktree 里的改动'], { cwd: wtDir, encoding: 'utf8' });
-    check('worktree 里能提交', c.status === 0, (c.stderr || '').slice(0, 160));
+    check('worktree 里能提交（收尾提交）', c.status === 0, (c.stderr || '').slice(0, 160));
 
-    const merge = spawnSync('git', ['merge', '--no-ff', '--no-edit', 'continue/wt1'], {
-      cwd: ctx.dir,
-      encoding: 'utf8',
-    });
-    check('合回主分支成功（无冲突）', merge.status === 0, (merge.stderr || merge.stdout).slice(0, 300));
+    /**
+     * 父分支必须先前进一条：没有它 rebase 是 no-op，"垫在谁下面"根本测不出来——
+     * 而这条链路存在的意义恰恰是"树干活期间父分支也在动"。
+     */
+    write({ dir: ctx.dir }, 'parent.txt', 'moved on\n');
+    ctx.git(['add', '-A']);
+    const pc = ctx.git(['commit', '-q', '-m', 'parent: 主线又前进了一条']);
+    check('父分支继续前进（rebase 的前提）', pc.status === 0, (pc.stderr || pc.stdout).slice(0, 200));
+
+    const sync = (args) =>
+      spawnSync(process.execPath, [join(wtDir, '.continue', 'hooks', 'worktree-sync.mjs'), ...args], {
+        cwd: wtDir,
+        encoding: 'utf8',
+      });
+
+    const probe = sync(['--json']);
+    let probed = {};
+    try {
+      probed = JSON.parse(probe.stdout);
+    } catch {
+      /* 让下面的断言把它报出来 */
+    }
     check(
-      '主分支拿到了 worktree 的改动',
-      existsSync(join(ctx.dir, 'hello.txt')) &&
-        /feat: worktree 里的改动/.test(spawnSync('git', ['log', '--oneline'], { cwd: ctx.dir, encoding: 'utf8' }).stdout ?? ''),
+      'worktree-sync 从 worktree 列表认出父树与父分支',
+      probed.kind === 'worktree' && probed.parent?.branch === 'main',
+      (probe.stdout || probe.stderr).slice(0, 240),
     );
+
+    const reb = sync(['--run=rebase']);
+    check('树分支 rebase 到父分支成功', reb.status === 0, (reb.stderr || reb.stdout).slice(0, 300));
     check(
-      '主分支 doing/ 没被 worktree 的现场污染',
+      'rebase 后父分支的提交垫在树分支下面（顺序真的换了）',
+      /parent: 主线又前进了一条/.test(
+        spawnSync('git', ['log', '--oneline'], { cwd: wtDir, encoding: 'utf8' }).stdout ?? '',
+      ),
+    );
+
+    const mrg = sync(['--run=merge']);
+    check('合回父分支成功（无冲突）', mrg.status === 0, (mrg.stderr || mrg.stdout).slice(0, 300));
+    check(
+      '父分支拿到了 worktree 的改动',
+      existsSync(join(ctx.dir, 'hello.txt')) &&
+        /feat: worktree 里的改动/.test(
+          spawnSync('git', ['log', '--oneline'], { cwd: ctx.dir, encoding: 'utf8' }).stdout ?? '',
+        ),
+    );
+
+    // rebase 改写了树分支历史 → 推它只能靠 force-with-lease（这条分支是建树时自己开的）
+    const ps = sync(['--run=push']);
+    check('推树分支成功（rebase 后用 force-with-lease）', ps.status === 0, (ps.stderr || ps.stdout).slice(0, 300));
+    check(
+      '父分支 doing/ 没被 worktree 的现场污染',
       !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`)) || true,
     );
   },
 };
 
+/**
+ * 场景 5：**交接模式**——主工作区写收件箱 → Stop 建执行树 → 新窗口第一条消息接管。
+ *
+ * 与 `worktree` 场景的区别：那条验的是手工 `worktree.mjs`（交接文件在树里的 `doing/worktree.md`）；
+ * 这条验默认链路（交接文件在**主工作区**的 `.continue/doing/.worktree/todo/`），
+ * 也就是"规划区 / 执行区"分离到底成不成立；顺带验前提——`doing/` 空着时不派发。
+ */
+SCENARIOS.dispatch = {
+  driver: 'probe',
+  desc: '交接：doing 有人时写 todo → Stop 建树 → 新树接管；没人时不派发',
+  run(ctx, s) {
+    check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
+
+    /**
+     * 先把**安装产物**提交掉：`git worktree add HEAD` 只检出已提交的内容，
+     * 不提交就等于建出一棵没有钩子的空树（worktree 场景也在同一处踩过）。
+     * 收件箱在 `.worktree/` 下、已被 gitignore，写它不会让工作区变脏。
+     */
+    ctx.git(['add', '-A']);
+    const prep = ctx.git(['commit', '-q', '-m', 'install framework']);
+    check('准备提交（新树要从 HEAD 检出钩子）', prep.status === 0, (prep.stderr || prep.stdout).slice(0, 300));
+
+    /**
+     * 钩子的 `shortSid` 只对 **32 位 hex / UUID** 截前 6 位；e2e 的会话 ID
+     * 末尾是 `q`（不是 hex），所以目录名与队列文件名都是**完整 ID**。
+     * 这里不能直接用 e2e 的 `sid6()`（它无条件 slice），否则路径全错。
+     */
+    const short = (id) => (/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(id) ? id.slice(0, 6) : id);
+
+    const todoDir = join(ctx.dir, '.continue', 'doing', '.worktree', 'todo');
+    mkdirSync(todoDir, { recursive: true });
+
+    /**
+     * ⓪ 前提不成立时**不该派发**：`doing/` 里一个人都没有。
+     * 放在最前——这时 `doing/` 还空着，正好是"空树"的真实状态；
+     * 这条挡的是"收件箱有内容就建树"的直觉（会把简单事情拆成两步）。
+     */
+    writeFileSync(
+      join(todoDir, 'queue.md'),
+      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
+    );
+    writeFileSync(join(todoDir, 'context.md'), '# 上下文\n\n空树不该派发。\n');
+    const idle = hook(ctx, 'dispatch.mjs', stop(s), { args: ['--event=Stop', '--no-window'] });
+    check(
+      'doing/ 里没人在跑 → 不建树、不写 state',
+      !existsSync(join(todoDir, 'state.json')) && /没有别的会话队列/.test(idle.stdout),
+      idle.stdout.slice(0, 240),
+    );
+
+    /**
+     * 造出前提：**另一个会话**正在跑（合法队列——pre-commit 的 `audit-ids` 会校验
+     * 首行 ID 与文件名、最后一条是 `[自审]`；不合法的 fixture 会让下面每一步都假红）。
+     */
+    const other = `abcdef${'0'.repeat(25)}9`;
+    write(
+      { dir: ctx.dir },
+      `.continue/doing/${short(other)}.md`,
+      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0010\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] [自审] 占位自审\n`,
+    );
+    ctx.git(['add', '-A']);
+    const prepOther = ctx.git(['commit', '-q', '-m', 'other session queue']);
+    check(
+      '准备提交（别的会话队列 + 新树要从 HEAD 检出钩子）',
+      prepOther.status === 0,
+      (prepOther.stderr || prepOther.stdout).slice(0, 300),
+    );
+    writeFileSync(
+      join(todoDir, 'queue.md'),
+      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
+    );
+    writeFileSync(join(todoDir, 'context.md'), '# 上下文\n\n把甲做完，验证看 a.txt。\n');
+
+    const readCtx = (r) => {
+      try {
+        return JSON.parse(r.stdout).hookSpecificOutput.additionalContext ?? '';
+      } catch {
+        return r.stdout;
+      }
+    };
+
+    // ① 规划区第一条消息：**不接管**，只提示"收件箱待派发"
+    const parentInj = hook(ctx, 'queue-init.mjs', promptEvt(s), { args: ['--event=UserPromptSubmit'] });
+    check('规划区注入提示「收件箱待派发」', /待派发队列/.test(readCtx(parentInj)), readCtx(parentInj).slice(0, 200));
+    check(
+      '规划区没有生成 doing/<sid6>.md（接管只在树里）',
+      !existsSync(join(ctx.dir, '.continue', 'doing', `${short(s)}.md`)),
+    );
+
+    // ② 规划区 Stop：放行（没有本会话队列），不递任务
+    const parentStop = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
+    check('规划区 Stop 放行（exit 0）', parentStop.status === 0, (parentStop.stderr || '').slice(0, 200));
+
+    // ③ 派发：建树 + 分支 + 状态
+    hook(ctx, 'dispatch.mjs', stop(s), { args: ['--event=Stop', '--no-window'] });
+    let state = {};
+    try {
+      state = JSON.parse(readMaybe(join(todoDir, 'state.json'))) ?? {};
+    } catch {
+      state = {};
+    }
+    const tree = state.tree ?? '';
+    check('dispatch 建出工作树并写 state.json', Boolean(tree) && existsSync(tree), tree || '没有 state.json');
+    check(`分支是 continue/${short(s)}`, state.branch === `continue/${short(s)}`, String(state.branch));
+    check(
+      '新树基于 HEAD 检出（钩子文件都在）',
+      existsSync(join(tree, '.continue', 'hooks', 'dispatch.mjs')) &&
+        existsSync(join(tree, '.continue', 'hooks', 'queue-init.mjs')),
+    );
+    check(
+      '收件箱不复制进树（只在主工作区一份）',
+      !existsSync(join(tree, '.continue', 'doing', '.worktree', 'todo', 'queue.md')),
+    );
+
+    // ④ 幂等：再停下一次不重复建树
+    const again = hook(ctx, 'dispatch.mjs', stop(s), { args: ['--event=Stop', '--no-window'] });
+    check('已派发且树还在 → 不重复建树', /已有待接管/.test(again.stdout), again.stdout.slice(0, 200));
+
+    // ⑤ 新窗口第一条消息：接管队列 + 上下文
+    const freshSid = `fedcba${'0'.repeat(25)}5`;
+    const childInj = hook(ctx, 'queue-init.mjs', promptEvt(freshSid), {
+      args: ['--event=UserPromptSubmit'],
+      cwd: tree,
+    });
+    const childCtx = readCtx(childInj);
+    const qfile = join(tree, '.continue', 'doing', `${short(freshSid)}.md`);
+    const qtext = readMaybe(qfile);
+    check('新树接管成 doing/<新 sid6>.md', existsSync(qfile), qfile);
+    check('首行换成新会话的完整 ID', qtext.startsWith(`# 队列 · 会话 ${freshSid}`), qtext.slice(0, 80));
+    check('批次号沿用主工作区写的那个', /20260101-0011/.test(qtext), qtext.slice(0, 200));
+    check('上下文附进注入', /把甲做完/.test(childCtx), childCtx.slice(0, 300));
+    check(
+      '接管后收件箱清空',
+      !existsSync(join(todoDir, 'queue.md')) && !existsSync(join(todoDir, 'context.md')),
+    );
+    check(
+      '上下文存档到 .logs/<新 sid6>/handoff.md',
+      /把甲做完/.test(readMaybe(join(tree, '.continue', '.logs', short(freshSid), 'handoff.md'))),
+    );
+
+    // ⑥ 新树里 Stop 必须开始递任务
+    const childStop = hook(ctx, 'auto-continue.mjs', stop(freshSid), { args: ['--event=Stop'], cwd: tree });
+    check('新树 Stop 递第 1/2 条', /1\/2 条/.test(childStop.stderr ?? ''), (childStop.stderr || '').slice(0, 300));
+  },
+};
+
 // ---------------------------------------------------------------- 运行器
 function listArchive(ctx, s) {
-  const d = join(ctx.dir, '.continue', 'logs', sid6(s));
+  const d = join(ctx.dir, '.continue', '.logs', sid6(s));
   if (!existsSync(d)) return [];
   // 新格式：累积文件 queue.md / decision.md；旧格式带时间戳，一并认。
   // 旧版计划归档（`plan.md`）不算：机制已移除，它不参与"这一批归档了没有"的判定。
@@ -690,7 +1035,7 @@ function isDecisionArchive(n) {
 }
 
 /** 真跑一次 CLI；返回 { text, status } 或 null（环境跳过）。 */
-function runModel(ctx, prompt) {
+async function runModel(ctx, prompt) {
   const cliArgs = [
     '-p',
     prompt,
@@ -707,19 +1052,21 @@ function runModel(ctx, prompt) {
   ];
   console.log(`    $ codebuddy -p "<prompt>" --model ${model} --max-turns ${maxTurns}`);
   const started = Date.now();
-  const run = spawnSync('codebuddy', cliArgs, {
+  const run = await runCliGroup('codebuddy', cliArgs, {
     cwd: ctx.dir,
-    encoding: 'utf8',
-    timeout: timeoutSec * 1000,
-    maxBuffer: 32 * 1024 * 1024,
+    timeoutMs: timeoutSec * 1000,
   });
   const elapsed = Math.round((Date.now() - started) / 1000);
   writeFileSync(
     join(ctx.dir, '.e2e-cli.json'),
-    JSON.stringify({ args: cliArgs, status: run.status, signal: run.signal, elapsed, stdout: run.stdout, stderr: run.stderr }, null, 2),
+    JSON.stringify(
+      { args: cliArgs, status: run.status, signal: run.signal, elapsed, timedOut: run.timedOut, stdout: run.stdout, stderr: run.stderr },
+      null,
+      2,
+    ),
   );
   const text = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
-  console.log(`    CLI 结束：exit=${run.status} ${elapsed}s`);
+  console.log(`    CLI 结束：exit=${run.status} ${elapsed}s${run.timedOut ? '（超时：已整组清理）' : ''}`);
 
   /**
    * 环境检测**只看 stderr**。
@@ -757,12 +1104,66 @@ function runModel(ctx, prompt) {
   return { text, status: run.status };
 }
 
+/** 等一个 pid 消失（SIGTERM 到退出有几十毫秒延迟）。 */
+async function waitGone(pid, ms = 2000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (!pidAlive(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !pidAlive(pid);
+}
+
+/**
+ * `--self-test-kill`：用假 CLI 验证"超时 / 打断时整组清掉"这条承诺（不烧 token，约 2s）。
+ *
+ * 假 CLI 先 spawn 一个孙进程，然后自己睡 30s——模拟真 CLI "起了子代理之后卡住"。
+ * 断言三件事：超时确实触发、孙进程被带走、进程组已空。
+ *
+ * 为什么值得单独一条：改回 `spawnSync` 不会有任何报错，症状是**机器发烫**（后台还在跑），
+ * 只有这种"故意让子进程活着"的用例才抓得住。
+ */
+async function selfTestKill() {
+  const fake = [
+    "const { spawn } = require('node:child_process');",
+    "const g = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });",
+    "console.log('GRANDCHILD=' + g.pid);",
+    'setTimeout(() => {}, 30000);',
+  ].join('\n');
+  console.log('自检：假 CLI（含一个孙进程）→ 1.2s 超时后整组应当消失');
+  const r = await runCliGroup(process.execPath, ['-e', fake], { cwd: REPO, timeoutMs: 1200 });
+  const gpid = Number(/GRANDCHILD=(\d+)/.exec(r.stdout ?? '')?.[1] ?? 0);
+  const childGone = await waitGone(r.pid);
+  const grandchildGone = gpid > 0 ? await waitGone(gpid) : false;
+  const groupGone = (() => {
+    try {
+      process.kill(-r.pid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  })();
+  const ok = r.timedOut === true && childGone && grandchildGone && groupGone;
+  console.log(
+    `  ${ok ? '✓' : '✗'} timedOut=${r.timedOut} 子进程=${childGone ? '已清' : '还在'} ` +
+      `孙进程=${grandchildGone ? '已清' : '还在'} 进程组=${groupGone ? '已空' : '还在'}`,
+  );
+  if (!ok) {
+    console.error(
+      '  自检失败：e2e 在超时 / 中断后会把它起的 CLI（及其子代理）留在后台继续跑。\n' +
+        '  检查是不是又把 `runModel` 改回了 `spawnSync`——它只杀直接子进程，而且会阻塞信号处理。',
+    );
+    process.exitCode = 1;
+  }
+  return ok;
+}
+
 /** 模型级场景共用的收尾断言：没有未提交改动。 */
 function checkHead(r) {
   check('CLI 正常退出', r.status === 0);
 }
 
-function runScenario(name) {
+async function runScenario(name) {
   const sc = SCENARIOS[name];
   if (!sc) {
     console.error(`未知场景：${name}（可选：${Object.keys(SCENARIOS).join(' / ')}）`);
@@ -770,13 +1171,13 @@ function runScenario(name) {
   }
   steps = [];
   const s = sid(
-    { main: 'e', blocked: 'b', decision: 'd', 'milestone-split': 'f', milestone: 'c', worktree: 'a' }[name] ?? 'a',
+    { main: 'e', blocked: 'b', decision: 'd', 'milestone-split': 'f', milestone: 'c', worktree: 'a', dispatch: 'q' }[name] ?? 'a',
   );
   console.log(`\n▶ 场景 ${name}（${sc.driver}）— ${sc.desc}`);
   const ctx = scaffold(name);
   ctx.sid = s;
   try {
-    sc.run(ctx, s);
+    await sc.run(ctx, s);
   } catch (err) {
     check('场景执行没抛异常', false, err.message);
   }
@@ -999,7 +1400,11 @@ const chosen = all
   ? Object.keys(SCENARIOS)
   : multi('--scenario').length > 0
     ? multi('--scenario')
-    : ['main'];
+    : probesOnly
+      ? Object.entries(SCENARIOS)
+          .filter(([, sc]) => sc.driver === 'probe')
+          .map(([name]) => name)
+      : ['main'];
 
 for (const name of chosen) {
   if (!SCENARIOS[name]) {
@@ -1008,7 +1413,7 @@ for (const name of chosen) {
   }
 }
 if (chosen.some((n) => SCENARIOS[n].driver === 'model') && !model) {
-  console.error('读不到当前会话的模型，也没给 --model 或 CODEBUDDY_MODEL。请显式指定：npm run skill:e2e -- --model <id>');
+  console.error('读不到当前会话的模型，也没给 --model 或 CODEBUDDY_MODEL。请显式指定：node <技能目录>/scripts/e2e.mjs --model <id>');
   process.exit(2);
 }
 
@@ -1068,7 +1473,7 @@ const needsConfirm = chosen.some((n) => SCENARIOS[n].driver === 'model');
 const assumed = flag('--yes');
 if (needsConfirm && !assumed) {
   console.log('⚠️ 还没开始。真实跑一次会消耗上面的 token 与时间，需要你确认。');
-  console.log('   确认后加 --yes 再跑：npm run skill:e2e -- --yes ' + (all ? '--all' : ''));
+  console.log('   确认后加 --yes 再跑：node <技能目录>/scripts/e2e.mjs --yes ' + (all ? '--all' : ''));
   console.log('   （AI 在主流程里发起时，应当先把上面这份预检念给你听，再等你点头。）');
   process.exit(0);
 }
@@ -1213,12 +1618,23 @@ function acquireLock() {
       scenarios: chosen.join(','),
     })}\n`,
   );
-  process.on('exit', releaseLock);
+  /**
+   * 退出/中断：**先杀子进程组，再放锁**。
+   *
+   * 顺序有意义：锁一放，另一轮就可能开跑；此时本轮的 CLI 若还活着，两边会同时烧 token、
+   * 同时写 `.e2e/`。先清干净再交锁，下一轮看到的才是"没人了"。
+   */
+  process.on('exit', () => {
+    killAllGroups();
+    releaseLock();
+  });
   process.on('SIGINT', () => {
+    killAllGroups();
     releaseLock();
     process.exit(130);
   });
   process.on('SIGTERM', () => {
+    killAllGroups();
     releaseLock();
     process.exit(143);
   });
@@ -1433,7 +1849,7 @@ ensureReport();
 
 const results = [];
 for (const name of chosen) {
-  const r = { name, ...runScenario(name) };
+  const r = { name, ...(await runScenario(name)) };
   results.push(r);
   writeDirReport(r);
   upsertRunBlock(buildRunBlock(results, null));
@@ -1441,11 +1857,13 @@ for (const name of chosen) {
 }
 
 // ---------------------------------------------------------------- 单测（快，几秒）
-const UNITS = [
-  ['钩子自检 selftest', 'node', [join(SKILL, 'assets', '.continue', 'hooks', 'selftest.mjs')]],
-  ['打包源自洽 check-framework', 'node', [join(HERE, 'check-framework.mjs')]],
-  ['安装器回归 test-install', 'node', [join(HERE, 'test-install.mjs')]],
-];
+const UNITS = noSelftest
+  ? []
+  : [
+      ['钩子自检 selftest', 'node', [join(SKILL, 'assets', '.continue', 'hooks', 'selftest.mjs')]],
+      ['打包源自洽 check-framework', 'node', [join(HERE, 'check-framework.mjs')]],
+      ['安装器回归 test-install', 'node', [join(HERE, 'test-install.mjs')]],
+    ];
 const units = [];
 for (const [label, cmd, args] of UNITS) {
   const t0 = Date.now();

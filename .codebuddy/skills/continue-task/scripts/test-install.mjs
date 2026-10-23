@@ -8,11 +8,14 @@
  *
  * 覆盖：全新 git 项目 · 非 git 目录 · 已有同名文档 · 已有自定义 config ·
  *       已有别的钩子 · 已有别人的 pre-commit · 重复安装幂等 · `--dry-run` · `--ci` ·
- *       老版本注册（命令缺 `--event=`）升级 · 已有项目文档扫描 · 来源登记幂等。
+ *       老版本注册（命令缺 `--event=`）升级 · 已有项目文档扫描 · 来源登记幂等 ·
+ *       npm 项目补 `continue:worktree` 别名（非 npm 项目不凭空造 package.json）。
  */
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -86,6 +89,10 @@ check('全新 git 项目：文档 / 钩子 / 注册 / pre-commit 全到位', (di
       return expect(false, `注册命令缺 --event=${event}`, commands.join(' | '));
     }
   }
+  // 版本号必须在安装时打印出来：装上去的钩子每次重装都被覆盖，用户只能靠这一行知道跑的是哪版
+  if (!/安装 continue-do v\d+\.\d+\.\d+/.test(r.stdout)) {
+    return expect(false, '安装输出没有打印框架版本', (r.stdout || '').split('\n')[0]);
+  }
   const shim = join(dir, '.git', 'hooks', 'pre-commit');
   if (!existsSync(shim)) return expect(false, '没有写 pre-commit 垫片');
   // node 缺失时必须放行：GUI git 客户端没有 nvm 的 PATH，fail-closed 会让所有提交失败
@@ -156,7 +163,7 @@ check('非 git 目录：装得下来，只是没有提交守卫', (dir) => {
 });
 
 // ------------------------------------------------------------------ 3. 已有同名文档
-check('已有同名文档：原文件不动，另存 *.continue-do.md', (dir) => {
+check('已有同名文档：原文件不动，也不产生任何备份文件', (dir) => {
   mkdirSync(join(dir, '.continue'), { recursive: true });
   writeFileSync(join(dir, '.continue', 'TASKS.md'), '# 我自己的需求\n- [ ] T1 别动我\n');
   const r = run(dir);
@@ -164,7 +171,10 @@ check('已有同名文档：原文件不动，另存 *.continue-do.md', (dir) =>
   if (!readFileSync(join(dir, '.continue', 'TASKS.md'), 'utf8').includes('别动我')) {
     return expect(false, '原文件被覆盖了');
   }
-  return expect(existsSync(join(dir, '.continue', 'TASKS.md.continue-do.md')), '应另存一份模板供合并');
+  if (existsSync(join(dir, '.continue', 'TASKS.md.continue-do.md'))) {
+    return expect(false, '不该再产生 *.continue-do.md（要求是项目里少一点文件）');
+  }
+  return expect(/模板有更新/.test(r.stderr), '差异要报告出来（不报就没人知道模板变了）', r.stderr.slice(0, 300));
 });
 
 // ------------------------------------------------------------------ 4. 已有自定义 config
@@ -329,8 +339,8 @@ check('已有 AGENTS.md：不覆盖，并明确警告入口指引没生效', (di
     return expect(false, 'AGENTS.md 被覆盖了');
   }
   return expect(
-    existsSync(join(dir, 'AGENTS.md.continue-do.md')) && r.stderr.includes('没有生效'),
-    '只另存备份不够：入口指引没生效必须告警',
+    r.stderr.includes('没有生效') && !existsSync(join(dir, 'AGENTS.md.continue-do.md')),
+    '入口指引没生效必须告警，且不该靠"另存备份"来表示',
     r.stderr.slice(0, 300),
   );
 });
@@ -408,8 +418,12 @@ check('升级老注册：缺 --event= 的命令就地补上，条数不变、env
   const r = run(dir);
   if (r.status !== 0) return expect(false, 'install 应 exit 0', r.stderr.slice(0, 300));
   const commands = hookCommands(readJson(settingsFile));
-  // 不重复注册：还是 4 条
-  if (commands.length !== 4) return expect(false, `应仍是 4 条注册，实际 ${commands.length}`, commands.join(' | '));
+  // 不重复注册：原有 4 条保留 + 新增的 dispatch 1 条 = 5 条
+  if (commands.length !== 5) return expect(false, `应仍是 5 条注册，实际 ${commands.length}`, commands.join(' | '));
+  // 新增的派发钩子也要注册进来（老项目升级时最容易漏这一个）
+  if (!commands.includes('node .continue/hooks/run.mjs dispatch.mjs --event=Stop')) {
+    return expect(false, '没有注册 dispatch.mjs', commands.join(' | '));
+  }
   // auto-continue 在两个事件上，各自补自己的事件名
   if (!commands.includes('node .continue/hooks/auto-continue.mjs --event=Stop')) {
     return expect(false, 'Stop 上的 auto-continue 没补 --event=Stop', commands.join(' | '));
@@ -428,6 +442,297 @@ check('升级老注册：缺 --event= 的命令就地补上，条数不变、env
   const before = readFileSync(settingsFile, 'utf8');
   run(dir);
   return expect(readFileSync(settingsFile, 'utf8') === before, '重复安装后 settings 应字节不变');
+});
+
+check('npm 项目：补 continue:worktree 别名，已有 scripts 不动，重复安装幂等', (dir) => {
+  git(dir, ['init', '-q']);
+  // 用户的 package.json：已有自己的 script，且缩进是 4 空格（写入后会被重排成 2 空格，这是已声明的代价）
+  writeFileSync(
+    join(dir, 'package.json'),
+    JSON.stringify({ name: 'demo', scripts: { test: 'node --test', lint: 'echo lint' } }, null, 4),
+  );
+  const first = run(dir);
+  if (first.status !== 0) return expect(false, 'install 应 exit 0', first.stderr.slice(0, 300));
+  const pkg = readJson(join(dir, 'package.json'));
+  if (pkg.scripts?.['continue:worktree'] !== 'node .continue/hooks/worktree.mjs') {
+    return expect(false, '别名没写进 scripts', JSON.stringify(pkg.scripts));
+  }
+  if (pkg.scripts.test !== 'node --test' || pkg.scripts.lint !== 'echo lint') {
+    return expect(false, '用户的 scripts 被改了', JSON.stringify(pkg.scripts));
+  }
+  if (!pkg.name || pkg.name !== 'demo') return expect(false, 'package.json 其它字段被改了');
+  // 别名要能真的跑起来：走 node 直跑，不进 git 操作（--dry-run 只打印计划）
+  const alias = spawnSync('node', ['.continue/hooks/worktree.mjs', 'demo', '--dry-run'], {
+    cwd: dir,
+    env: baseEnv,
+    encoding: 'utf8',
+  });
+  if (alias.status !== 0) return expect(false, 'worktree.mjs --dry-run 应 exit 0', (alias.stderr || '').slice(0, 300));
+  // 分支名 = `continue/<父目录名>-<名字>`：父目录名让"从哪一层分出去的"一眼可见
+  if (!/continue\/[A-Za-z0-9._-]+-demo/.test(alias.stdout || '')) {
+    return expect(false, '--dry-run 应打印计划分支名（continue/<父目录名>-demo）', (alias.stdout || '').slice(0, 200));
+  }
+  // 重复安装：字节不变（"已存在就不重写"）
+  const before = readFileSync(join(dir, 'package.json'), 'utf8');
+  const second = run(dir);
+  if (second.status !== 0) return expect(false, '重复 install 应 exit 0', second.stderr.slice(0, 300));
+  return expect(
+    readFileSync(join(dir, 'package.json'), 'utf8') === before &&
+      (second.stdout || '').includes('保留已有值'),
+    '重复安装后 package.json 应字节不变并打印"保留已有值"',
+    (second.stdout || '').split('\n').filter((l) => l.includes('continue:worktree')).join(' | '),
+  );
+});
+
+check('安装状态：落盘 .installed.json（版本 + 每文件哈希），重装字节不变', (dir) => {
+  git(dir, ['init', '-q']);
+  const first = run(dir);
+  if (first.status !== 0) return expect(false, 'install 应 exit 0', first.stderr.slice(0, 300));
+
+  const stateFile = join(dir, '.continue', '.installed.json');
+  if (!existsSync(stateFile)) return expect(false, '没有写 .installed.json');
+  const state = readJson(stateFile);
+  if (!/^\d+\.\d+\.\d+$/.test(String(state.version ?? ''))) {
+    return expect(false, `version 不是 semver：${state.version}`);
+  }
+  const hash = createHash('sha256').update(readFileSync(join(dir, '.continue', 'hooks', 'lib.mjs'))).digest('hex');
+  if (state.files?.['.continue/hooks/lib.mjs'] !== hash) {
+    return expect(false, 'lib.mjs 的哈希与记录不一致（记录的不是装完时的实际内容）');
+  }
+
+  // 幂等：什么都没变时不该刷新 installedAt——否则每次重装都产生一行无意义的 diff
+  const before = readFileSync(stateFile, 'utf8');
+  const second = run(dir);
+  if (second.status !== 0) return expect(false, '重装应 exit 0', second.stderr.slice(0, 300));
+  return expect(
+    readFileSync(stateFile, 'utf8') === before && second.stdout.includes('已是最新'),
+    '重装后 .installed.json 应字节不变并打印"已是最新"',
+    second.stdout.split('\n').filter((l) => l.includes('installed.json')).join(' | '),
+  );
+});
+
+// ------------------------------------------------------------------ 升级（只比两边）
+check('升级：文档内容不同 → 实例一个字不动、不产生备份，只报告差异', (dir) => {
+  git(dir, ['init', '-q']);
+  if (run(dir).status !== 0) return expect(false, '首次安装应 exit 0');
+
+  const ours = '# 需求\n\n用户自己的内容\n';
+  writeFileSync(join(dir, '.continue', 'TASKS.md'), ours);
+
+  const r = run(dir);
+  if (r.status !== 0) return expect(false, '升级应 exit 0', r.stderr.slice(0, 300));
+  if (readFileSync(join(dir, '.continue', 'TASKS.md'), 'utf8') !== ours) {
+    return expect(false, '实例被改写了（用户进度丢了，这是最不能接受的）');
+  }
+  if (existsSync(join(dir, '.continue', 'TASKS.md.continue-do.md'))) {
+    return expect(false, '不该产生备份文件（要求是项目里少一点文件）');
+  }
+  if (!/跳过（模板有更新，未合并）/.test(r.stdout)) {
+    return expect(false, '应逐份报告"模板有更新、未合并"', r.stdout.slice(-300));
+  }
+  return expect(
+    /模板有更新/.test(r.stderr) && /--force/.test(r.stderr),
+    '汇总告警里要给出 diff 与 --force 两条出路',
+    r.stderr.slice(0, 400),
+  );
+});
+
+check('升级：hooks 覆盖成最新版，且不产生 .baseline / .backup 目录', (dir) => {
+  git(dir, ['init', '-q']);
+  if (run(dir).status !== 0) return expect(false, '首次安装应 exit 0');
+
+  const libPath = join(dir, '.continue', 'hooks', 'lib.mjs');
+  writeFileSync(libPath, `${readFileSync(libPath, 'utf8')}\n// 用户自己的调试开关\n`);
+  const r = run(dir);
+  if (r.status !== 0) return expect(false, '升级应 exit 0', r.stderr.slice(0, 300));
+
+  if (
+    readFileSync(libPath, 'utf8') !==
+    readFileSync(join(SKILL_DIR, 'assets', '.continue', 'hooks', 'lib.mjs'), 'utf8')
+  ) {
+    return expect(false, '框架代码应被覆盖成最新版');
+  }
+  for (const name of ['.baseline', '.backup']) {
+    if (existsSync(join(dir, '.continue', name))) {
+      return expect(false, `不该再产生 .continue/${name}/（要求是项目里少一点文件）`);
+    }
+  }
+  return expect(true, '');
+});
+
+check('非 npm 项目：不凭空创建 package.json', (dir) => {
+  git(dir, ['init', '-q']);
+  const r = run(dir);
+  if (r.status !== 0) return expect(false, 'install 应 exit 0', r.stderr.slice(0, 300));
+  if (existsSync(join(dir, 'package.json'))) {
+    return expect(false, '没有 package.json 的项目不该被凭空造一个');
+  }
+  return expect(
+    (r.stdout || '').includes('node .continue/hooks/worktree.mjs'),
+    '应提示并行命令用 node 直跑',
+    (r.stdout || '').split('\n').filter((l) => l.includes('worktree')).join(' | '),
+  );
+});
+
+check('队列最后一条必须是 [自审]：缺它判红、补上转绿', (dir) => {
+  git(dir, ['init', '-q']);
+  const inst = run(dir);
+  if (inst.status !== 0) return expect(false, 'install 应 exit 0', inst.stderr.slice(0, 300));
+  const queue = join(dir, '.continue', 'doing', 'aaaa0001.md');
+  const head = '# 队列 · 会话 aaaa0001\n\n> 状态：执行中\n> 创建：2026-10-23\n> 批次：20260101-0000\n\n';
+  writeFileSync(queue, `${head}- [ ] 随便一条任务\n`);
+  const runCheck = () =>
+    spawnSync('node', ['.continue/hooks/check.mjs', 'ids'], { cwd: dir, env: baseEnv, encoding: 'utf8' });
+
+  const bad = runCheck();
+  if (bad.status === 0) return expect(false, '最后一条不是 [自审] 时应判红', `${bad.stdout}${bad.stderr}`.slice(-300));
+  if (!String(bad.stderr).includes('自审')) {
+    return expect(false, '报错要点名 [自审]，否则没人知道该补什么', bad.stderr.slice(-300));
+  }
+
+  // 补上自审条目 → 转绿（`[ ]` 状态不要求三层凭证）
+  writeFileSync(queue, `${head}- [ ] 随便一条任务\n- [ ] [自审] 审三层目标\n`);
+  const good = runCheck();
+  if (good.status !== 0) return expect(false, '补上 [自审] 后应转绿', `${good.stdout}${good.stderr}`.slice(-300));
+
+  // 勾成 [x] 但没写三层凭证 → 仍要红；补三行 → 转绿
+  writeFileSync(queue, `${head}- [ ] 随便一条任务\n- [x] [自审] 审三层目标\n  - 做了什么：看过三层\n`);
+  const noProof = runCheck();
+  if (noProof.status === 0) return expect(false, '自审缺 L1/L2/L3 三行应判红', `${noProof.stdout}`.slice(-300));
+  writeFileSync(
+    queue,
+    `${head}- [ ] 随便一条任务\n- [x] [自审] 审三层目标\n` +
+      '  - L1：check.mjs 全绿\n  - L2：probe 场景 7 个\n  - L3：无外部反馈\n',
+  );
+  const withProof = runCheck();
+  if (withProof.status !== 0) {
+    return expect(false, '补三层凭证后应转绿', `${withProof.stdout}${withProof.stderr}`.slice(-300));
+  }
+
+  // 归档侧：收尾是"整份队列原样搬进 DONE"，但搬运没有机器核对——
+  // 最新批次里丢了自审条目，就等于这批的自省记录凭空消失（DONE 是判断收敛的唯一凭据）。
+  // 历史豁免靠"锚点"派生：DONE 是新→旧，比最上面那个带自审的批次更靠上的，都必须带自审。
+  const done = join(dir, '.continue', 'DONE.md');
+  const before = readFileSync(done, 'utf8');
+  const reviewBlock = '- [x] [自审] 审三层目标\n  - L1：有检查\n  - L2：有 probe\n  - L3：无外部\n';
+  const newest = `## 批次 20260101-0002 · 2026-10-23 · 会话 aaaa0001\n\n`;
+  const older = `## 批次 20260101-0001 · 2026-10-23 · 会话 aaaa0001\n\n- [x] 随便一条任务\n${reviewBlock}`;
+  writeFileSync(done, `${before}\n${newest}- [x] 随便一条任务\n\n${older}`);
+  // 批次索引补两行，把"索引对不上"这条无关的红排除掉，只留自审这一条在考
+  const overview = join(dir, '.continue', 'OVERVIEW.md');
+  writeFileSync(
+    overview,
+    readFileSync(overview, 'utf8').replace(
+      '| --- | --- | --- | --- | --- |',
+      '| --- | --- | --- | --- | --- |\n' +
+        '| 20260101-0002 | 2026-10-23 | 自检 | - | 回归夹具 |\n' +
+        '| 20260101-0001 | 2026-10-23 | 自检 | - | 回归夹具 |',
+    ),
+  );
+  const noReview = runCheck();
+  if (noReview.status === 0) {
+    return expect(false, 'DONE 最新批次缺 [自审] 应判红', `${noReview.stdout}`.slice(-300));
+  }
+  if (!String(noReview.stderr).includes('20260101-0002')) {
+    return expect(false, '报错要点名是哪个批次缺的，否则不知道该补哪节', noReview.stderr.slice(-300));
+  }
+  return expect(
+    (() => {
+      writeFileSync(done, `${before}\n${newest}- [x] 随便一条任务\n${reviewBlock}\n${older}`);
+      return runCheck().status === 0;
+    })(),
+    'DONE 最新批次补上 [自审] 后应转绿',
+  );
+});
+
+// ------------------------------------------- 28. version 项按文件哈希判落后
+/**
+ * 挡的是 T25 那个坑：只比版本号时，开发期不 bump 就等于永远"一致"，
+ * 而它唯一要抓的场景（技能目录被新版覆盖、实例没重装）恰好就是这么漏掉的。
+ * 这条用例自己造一个技能目录，**只改模板、不动实例**，看结论会不会变。
+ */
+check('version 项按文件哈希判落后（版本号不动也看得出来）', (dir) => {
+  git(dir, ['init', '-q']);
+  const r = run(dir);
+  if (r.status !== 0) return expect(false, 'install 应 exit 0', r.stderr.slice(0, 300));
+
+  // 造技能目录：audit-version 只读 VERSION 与 assets 下的托管文件
+  const skillDir = join(dir, '.codebuddy', 'skills', 'continue-task');
+  mkdirSync(join(skillDir, 'assets'), { recursive: true });
+  cpSync(join(SKILL_DIR, 'VERSION'), join(skillDir, 'VERSION'));
+  cpSync(join(SKILL_DIR, 'assets'), join(skillDir, 'assets'), { recursive: true });
+
+  const version = () =>
+    spawnSync(process.execPath, [join(dir, '.continue', 'hooks', 'audit-version.mjs')], {
+      cwd: dir,
+      env: baseEnv,
+      encoding: 'utf8',
+    }).stdout ?? '';
+
+  const base = version();
+  if (!base.includes('一致')) return expect(false, '刚装完、模板没动时应报告一致', base.trim());
+
+  // 只改模板（等价于技能目录被新版覆盖），实例一个字节都不动
+  const target = join(skillDir, 'assets', '.continue', 'hooks', 'lib.mjs');
+  const original = readFileSync(target, 'utf8');
+  writeFileSync(target, `${original}\n// 故意改一行\n`);
+  const stale = version();
+  if (!stale.includes('落后')) return expect(false, '模板改了、实例没重装 → 应报告落后', stale.trim());
+  if (!stale.includes('lib.mjs')) return expect(false, '报告要点名是哪个文件落后', stale.trim());
+
+  // 改回来必须恢复一致：判定不能是"报过一次就永远报"
+  writeFileSync(target, original);
+  return expect(version().includes('一致'), '模板改回后应恢复一致', version().trim());
+});
+
+// ---------------------------------- 29. project / projectSlow 的分档口径
+/**
+ * 挡的是 T23 那个机制**没人守**：分档全靠 `check.mjs` 里一行 `g.fast` 判定，
+ * 改错（比如把慢档也当成 fast）不会报错，症状只是"pre-commit 又慢了 20 秒"。
+ * 这条用例不跑内置检查（只点名 project / projectSlow 两个组 + --list），所以是毫秒级。
+ */
+check('check.mjs 分档：project 是快档、projectSlow 是慢档', (dir) => {
+  git(dir, ['init', '-q']);
+  const r = run(dir);
+  if (r.status !== 0) return expect(false, 'install 应 exit 0', r.stderr.slice(0, 300));
+
+  const cfg = join(dir, '.continue', 'config.json');
+  const j = readJson(cfg);
+  j.checks.project = ['echo FAST-TIER'];
+  j.checks.projectSlow = ['echo SLOW-TIER'];
+  writeFileSync(cfg, JSON.stringify(j, null, 2));
+
+  const checkIn = (args) =>
+    spawnSync(process.execPath, [join(dir, '.continue', 'hooks', 'check.mjs'), ...args], {
+      cwd: dir,
+      env: baseEnv,
+      encoding: 'utf8',
+    });
+  const out = (res) => `${res.stdout ?? ''}${res.stderr ?? ''}`;
+
+  // --list 不执行任何命令，只打印档位标签：档位映射错了这里立刻看得见
+  const list = out(checkIn(['--list']));
+  if (!/^fast\s+project\s/m.test(list)) return expect(false, '--list 应把 project 标成 fast', list);
+  if (!/^slow\s+projectSlow\s/m.test(list)) return expect(false, '--list 应把 projectSlow 标成 slow', list);
+
+  // 点名某一档：只跑它，不顺带另一档
+  const slow = out(checkIn(['projectSlow']));
+  if (!slow.includes('SLOW-TIER')) return expect(false, '点名 projectSlow 应真的跑它', slow);
+  if (slow.includes('FAST-TIER')) return expect(false, '点名 projectSlow 不该顺带跑快档', slow);
+  const fast = out(checkIn(['project']));
+  if (!fast.includes('FAST-TIER') || fast.includes('SLOW-TIER')) {
+    return expect(false, '点名 project 不该顺带跑慢档', fast);
+  }
+
+  /**
+   * 真正跑一次 `--fast`（不带点名）：**只有这条默认路径**能发现"慢档被算成快档"，
+   * 点名路径走的是 `explicit.includes()` 分支，改坏默认分支它照样绿。
+   * 代价 ~3.5 秒（内置 hooks 自检跑一遍）：这个脚本只在技能仓库自己跑，
+   * 维护者多等几秒，换"分档退化一定被抓住"——值。
+   */
+  const fastDefault = out(checkIn(['--fast']));
+  if (fastDefault.includes('SLOW-TIER')) return expect(false, '--fast 默认路径不该跑 projectSlow', fastDefault.slice(-300));
+  return expect(fastDefault.includes('FAST-TIER'), '--fast 默认路径应跑 project', fastDefault.slice(-300));
 });
 
 // ------------------------------------------------------------------ 输出

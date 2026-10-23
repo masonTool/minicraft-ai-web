@@ -5166,7 +5166,7 @@ class App {
     if (name === null) {
       // 留空 = 什么都不做（不是"擦掉名字"）。原版擦名字要另找方式，
       // 而"手滑清空就永久丢名字"是个不可逆的坑，不值得为了对齐原版去踩。
-      this.hudToast.show('名字不能为空');
+      this.hudToast.show(t('misc.toast.nameEmpty'));
       return;
     }
 
@@ -5176,7 +5176,7 @@ class App {
     this.refreshHotbar();
     // 池子里那只可能正拿着旧名字画的画布：让它下一帧重画
     for (const tag of this.nameTags) tag.invalidate();
-    this.hudToast.show(`给${mobLabel(mob.type)}起名为「${name}」`);
+    this.hudToast.show(tp('misc.toast.named', { kind: mobLabel(mob.type), name }));
   }
 
   /**
@@ -5190,7 +5190,7 @@ class App {
    */
   private beginRename(mob: Mob): boolean {
     if (!canNameMob(mob.type.id)) {
-      this.hudToast.show('这个名字对它没用');
+      this.hudToast.show(t('misc.toast.nameUseless'));
       return true;
     }
     if (this.nameTagEditor.isOpen) return true;
@@ -6131,7 +6131,7 @@ class App {
     this.pendingFallDistance = 0;
     this.audio.play('place', { x: vehicle.x, y: vehicle.y, z: vehicle.z });
     const boat = vehicle instanceof Boat;
-    this.hudToast.show(boat ? '上船：跳跃 / 潜行 下船' : '上车：跳跃 / 潜行 下车');
+    this.hudToast.show(t(boat ? 'misc.toast.boardHint' : 'misc.toast.mountHint'));
     return true;
   }
 
@@ -6894,14 +6894,14 @@ class App {
     // 装鞍（批次 254）：拿鞍点已驯服的马，鞍被消耗
     if (mob instanceof Horse && (mob.tamed || !mob.needsTaming) && held === Item.SADDLE) {
       if (mob.saddled) {
-        this.hudToast.show('这匹马已经有鞍了');
+        this.hudToast.show(t('misc.toast.alreadySaddled'));
         return true;
       }
       if (!this.inventory.consume(Item.SADDLE, 1)) return false;
       mob.saddled = true;
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mobLabel(mob.type)}装上了鞍`);
+      this.hudToast.show(tp('misc.toast.saddled', { kind: mobLabel(mob.type) }));
       return true;
     }
     // 货舱（J19b，批次 594）：拿箱子点已驯服/不需驯服的驴、骡、羊驼，装货舱
@@ -6912,14 +6912,14 @@ class App {
       held === Block.CHEST
     ) {
       if (mob.cargo) {
-        this.hudToast.show(`这只${mobLabel(mob.type)}已经有货舱了`);
+        this.hudToast.show(tp('misc.toast.alreadyChested', { kind: mobLabel(mob.type) }));
         return true;
       }
       if (!this.inventory.consume(Block.CHEST, 1)) return false;
       mob.cargo = new Chest(MOB_CARGO_SIZE);
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mobLabel(mob.type)}装上了箱子`);
+      this.hudToast.show(tp('misc.toast.chested', { kind: mobLabel(mob.type) }));
       return true;
     }
     // 马铠（批次 571）：拿马铠点已驯服/不需驯服的马、驴、骡，装上一件
@@ -6931,14 +6931,14 @@ class App {
       horseArmorTier(held) !== null
     ) {
       if (mob.armor !== null) {
-        this.hudToast.show(`这匹${mobLabel(mob.type)}已经有马铠了`);
+        this.hudToast.show(tp('misc.toast.alreadyArmored', { kind: mobLabel(mob.type) }));
         return true;
       }
       if (!this.inventory.consume(held, 1)) return false;
       mob.armor = held;
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mobLabel(mob.type)}装上了马铠`);
+      this.hudToast.show(tp('misc.toast.armored', { kind: mobLabel(mob.type) }));
       return true;
     }
     // 货舱（J19b）：潜行 + 空手点驴/骡/羊驼 = 打开 15 格货舱；
@@ -6950,7 +6950,7 @@ class App {
     // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）；没鞍先提示
     if (mob instanceof Horse && (mob.tamed || !mob.needsTaming) && held === undefined) {
       if (!mob.saddled) {
-        this.hudToast.show('先给它装上鞍');
+        this.hudToast.show(t('misc.toast.needSaddle'));
         return true;
       }
       return this.mountVehicle(mob);
@@ -6958,7 +6958,7 @@ class App {
     if (mob.tamed && held === undefined) {
       const sitting = mob.toggleSitting();
       this.playMobVoice(mob);
-      this.hudToast.show(sitting ? `${mobLabel(mob.type)}坐下了` : `${mobLabel(mob.type)}站起来了`);
+      this.hudToast.show(tp(sitting ? 'misc.toast.sat' : 'misc.toast.stood', { kind: mobLabel(mob.type) }));
       return true;
     }
     if (held === undefined) return false;
@@ -6984,7 +6984,7 @@ class App {
   private barterWithPiglin(mob: Mob): boolean {
     if (mob.dead || mob.type.id !== 'piglin') return false;
     if (!this.inventory.consume(Item.GOLD_INGOT, 1)) {
-      this.hudToast.show('需要 1 个金锭才能和猪灵换东西');
+      this.hudToast.show(t('misc.toast.piglinNeedGold'));
       return false;
     }
     const loot = barterRoll();
@@ -6992,7 +6992,7 @@ class App {
     this.refreshHotbar();
     this.spawnDrop(loot.itemId, loot.count, mob.x, mob.y + 0.8, mob.z);
     this.playMobVoice(mob);
-    this.hudToast.show(`猪灵收下金锭，丢回 ${itemLabel(loot.itemId)} ×${loot.count}`);
+    this.hudToast.show(tp('misc.toast.piglinBarter', { item: itemLabel(loot.itemId), count: loot.count }));
     return true;
   }
 
@@ -7054,7 +7054,7 @@ class App {
     if (result === 'tamed') {
       this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, 1);
       this.playMobVoice(mob);
-      this.hudToast.show(`${mobLabel(mob.type)}已被驯服`);
+      this.hudToast.show(tp('misc.toast.tamed', { kind: mobLabel(mob.type) }));
       this.vibrate(10);
     } else {
       // 驯服失败：一小团烟 + 一声略低的叫（原版的反馈就是"它没认你"）
@@ -7075,11 +7075,11 @@ class App {
       mob.leashed = false;
       this.leashedMob = null;
       if (this.leashLine) this.leashLine.visible = false;
-      this.hudToast.show(`解开了${mobLabel(mob.type)}`);
+      this.hudToast.show(tp('misc.toast.unleashed', { kind: mobLabel(mob.type) }));
       return true;
     }
     if (!mob.tamed) {
-      this.hudToast.show('只能牵已驯服的动物');
+      this.hudToast.show(t('misc.toast.leashTamedOnly'));
       return true;
     }
     // 一次只牵一只：换目标时先把旧的那只放开
@@ -7087,7 +7087,7 @@ class App {
     this.leashedMob = mob;
     mob.leashed = true;
     this.hand.swing();
-    this.hudToast.show(`牵住了${mobLabel(mob.type)}`);
+    this.hudToast.show(tp('misc.toast.leashed', { kind: mobLabel(mob.type) }));
     return true;
   }
 
@@ -7741,7 +7741,7 @@ class App {
     if (applied && shouldSting(mob.type.id, this.stungBees.has(mob))) {
       this.stungBees.add(mob);
       this.effects.apply('poison', BEE_STING_POISON_SECONDS, BEE_STING_POISON_AMPLIFIER);
-      this.hudToast.show('被蜜蜂蛰了');
+      this.hudToast.show(t('misc.toast.beeSting'));
       this.vibrate(15);
     }
     // 火焰附加（批次 243）：原版每级 4 秒。只在**真正造成伤害**时点着
@@ -8475,7 +8475,7 @@ class App {
   private openSignEditor(x: number, y: number, z: number, blockId: number): void {
     this.editingSign = { x, y, z };
     const existing = this.signText.get(this.dimension, x, y, z);
-    this.signEditor.show(existing, { title: `${itemLabel(blockId)}（右键可再改）` });
+    this.signEditor.show(existing, { title: tp('misc.signEditorHint', { name: itemLabel(blockId) }) });
     // 与背包/配方书同一个入口：释放指针锁、收起触摸层，打字不会被当成操作
     this.handleInventoryOpen(true);
   }
@@ -9611,7 +9611,7 @@ class App {
       this.effects.remove('bad_omen');
       this.spawnRaidWave(this.raid.start());
       this.chat.push('袭击开始了：守住村庄！', 'system');
-      this.hudToast.show('袭击开始');
+      this.hudToast.show(t('misc.toast.raidStart'));
       return;
     }
     const raid = this.raid;
@@ -9624,7 +9624,7 @@ class App {
       this.effects.apply('hero_of_the_village', 120, 0);
       this.reportProgress({ kind: 'raid', stage: 2 });
       this.chat.push('袭击被击退了：你获得了村庄英雄', 'system');
-      this.hudToast.show('村庄英雄');
+      this.hudToast.show(t('misc.toast.heroOfVillage'));
       this.raid = null;
     } else if (step === 'lost') {
       this.chat.push('袭击失败：没能守住村庄', 'system');
@@ -12434,7 +12434,7 @@ class App {
       z: this.physics.z,
     });
     this.chat.push('不死图腾救了你一命', 'system');
-    this.hudToast.show('不死图腾救了你一命');
+    this.hudToast.show(t('misc.toast.totemSaved'));
     this.refreshHotbar();
     return true;
   }
@@ -14606,7 +14606,7 @@ class App {
         boatTarget.addFuel(FURNACE_CART_FUEL_PER_COAL);
         this.hand.swing();
         this.refreshHotbar();
-        this.hudToast.show('动力矿车加了一块煤');
+        this.hudToast.show(t('misc.toast.furnaceMinecartFuel'));
         this.tapVehicle = null;
         this.touchPlaceRequest = false;
         this.placeCooldown = PLACE_COOLDOWN * 2;
@@ -16090,7 +16090,7 @@ class App {
       });
     }
     if (this.frameErrors === 3) {
-      this.hudToast.show('渲染出错，已跳过该帧');
+      this.hudToast.show(t('misc.toast.renderError'));
     }
   }
 
@@ -17484,7 +17484,7 @@ class App {
     if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
     this.onGameModeChanged?.(next);
-    this.hudToast.show(`游戏模式：${gameModeLabel(next)}`);
+    this.hudToast.show(tp('misc.toast.gameMode', { mode: gameModeLabel(next) }));
     // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();

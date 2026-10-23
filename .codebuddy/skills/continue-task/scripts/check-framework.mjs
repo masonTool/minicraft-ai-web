@@ -17,13 +17,15 @@
  * 退出码：0 通过 / 1 有问题。
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKILL_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const ASSETS = join(SKILL_DIR, 'assets');
 const INSTALLER = join(SKILL_DIR, 'scripts', 'install.mjs');
+/** 仓库根（`<root>/.codebuddy/skills/continue-task` 往上三层）：查"文档里的仓库内路径"要用它。 */
+const REPO_ROOT = resolve(SKILL_DIR, '..', '..', '..');
 
 const problems = [];
 const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null);
@@ -83,9 +85,55 @@ for (const name of TEMPLATE_DOCS) {
   }
 }
 
+/**
+ * 第二层：**所有** assets 文件都要干净，不只是上面那 5 份文档。
+ *
+ * 为什么扩到 `hooks/*.mjs`：`批次 1363`、`tools/diff-ledger.mjs`、另一个项目的示例路径
+ * 就是这么活下来的——它们藏在 `lib.mjs` 的注释里，而旧扫描只看 md，于是自检一直输出
+ * "模板无实例痕迹"。**检查没覆盖到的地方，说"干净"是没意义的。**
+ *
+ * 为什么用**显式清单**而不是正则：`批次 \d+`、`\d{8}-\d{4}` 在源码里到处是合法示例
+ * （自检夹具、文档样例），正则一定误报；而"某个项目的名字 / 工具链"是有限的几个具体串，
+ * 列出来既准确又能一眼看懂它挡的是什么。清单**不许为空**——空了这条检查就退化成空转。
+ */
+const INSTANCE_TOKENS = [
+  '批次 1363',
+  'diff-ledger',
+  'coverage-report',
+  'audit-tasks',
+  'minicraft',
+  'src/world/chunk.ts',
+  'test:chunk',
+];
+if (INSTANCE_TOKENS.length === 0) {
+  problems.push('INSTANCE_TOKENS 是空的——模板污染检查会静默失效（"没有痕迹"和"没查"长得一样）');
+}
+const ASSET_SCAN_EXT = new Set(['.md', '.mjs', '.json', '.yml']);
+function scanAssetDir(dir) {
+  if (!existsSync(dir)) return;
+  for (const name of readdirSync(dir)) {
+    if (name === '.e2e' || name === 'node_modules') continue;
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) {
+      scanAssetDir(full);
+      continue;
+    }
+    if (!ASSET_SCAN_EXT.has(name.slice(name.lastIndexOf('.')))) continue;
+    const text = readFileSync(full, 'utf8');
+    for (const token of INSTANCE_TOKENS) {
+      if (!text.includes(token)) continue;
+      problems.push(
+        `${relative(REPO_ROOT, full)} 里出现实例痕迹「${token}」——模板必须是空白骨架，` +
+          '别把某个项目的名字 / 工具链 / 示例路径带进来',
+      );
+    }
+  }
+}
+scanAssetDir(ASSETS);
+
 // ------------------------------------------------------------------ 4. 注册命令必须带 --event
 /**
- * 挡的是：注册命令退回成 `node .continue/hooks/xxx.mjs`（老版本形态）。
+ * 挡的是：注册命令退回成 `node .continue/hooks/<脚本>.mjs`（老版本形态）。
  * 这种注册**跑得起来、检查也绿**，只是日志行首只剩钩子名，排查时把"用户说了句话"
  * 当成"停下触发"——错得安静，只能靠这条静态检查提前发现。
  */
@@ -110,6 +158,48 @@ if (!hooksBlock) {
   const literalCommand = /command:\s*`node \.continue\/hooks\/\$\{script\}/.exec(installerText);
   if (literalCommand) {
     problems.push(`install.mjs 里还有手拼的注册命令（"${literalCommand[0]}…"）——它不带 --event=，改用 commandFor()`);
+  }
+
+  /**
+   * 三方核对：`HOOKS` ↔ 模板 `hooks/` ↔ 两份机制文档。
+   *
+   * 挡的是三种"跑得起来、检查也绿"的错：
+   *   · 注册了模板里不存在的脚本 → 装出来指向空气；
+   *   · 注册了但文档没写 → 用户 / 维护者不知道有这个东西；
+   *   · 模板里明明是个事件钩子却没注册 → 它永远不会跑（症状是"机制某一半静默失效"）。
+   *
+   * 第三种不维护白名单：判据是**代码特征**（读 stdin 的 payload + 用 emit* 回答宿主）。
+   * 白名单会随每次加钩子手抄一遍，漏抄的代价正是这条检查要挡的事。
+   */
+  const templateDocs = [join(ASSETS, '.continue', 'README.md'), join(SKILL_DIR, 'SKILL.md')];
+  const registered = new Set();
+  for (const [, , script] of entries) {
+    registered.add(script);
+    if (!existsSync(join(templateHooksDir, script))) {
+      problems.push(
+        `HOOKS 注册了 ${script}，但模板 assets/.continue/hooks/ 里没有这个文件——装出来会指向不存在的钩子`,
+      );
+    }
+    // 文档里可能只写脚本名不带扩展名（"`auto-commit` 的 300s…"），按 stem 比
+    const stem = script.replace(/\.mjs$/, '');
+    for (const doc of templateDocs) {
+      if (!(read(doc) ?? '').includes(stem)) {
+        problems.push(`HOOKS 注册了 ${script}，但 ${relative(REPO_ROOT, doc)} 里没提到——加了钩子没人知道`);
+      }
+    }
+  }
+  if (existsSync(templateHooksDir)) {
+    for (const name of readdirSync(templateHooksDir)) {
+      if (!name.endsWith('.mjs') || registered.has(name)) continue;
+      const src = read(join(templateHooksDir, name)) ?? '';
+      // 排除**定义** `readPayload` 的 lib.mjs：它当然"用到了"这个名字
+      const callsPayload = /readPayload\s*\(/.test(src) && !/export function readPayload/.test(src);
+      if (callsPayload && /emitAllow|emitBlock/.test(src)) {
+        problems.push(
+          `模板 hooks/${name} 看起来是事件钩子（用了 readPayload + emit*），但 install.mjs 的 HOOKS 里没注册——它永远不会跑`,
+        );
+      }
+    }
   }
 }
 
@@ -198,6 +288,177 @@ if (!flagList) {
     if (!skillDoc.includes(m[1])) {
       problems.push(`install.mjs 支持 ${m[1]}，但 SKILL.md 里没写——用户不知道有这个开关`);
     }
+  }
+}
+
+// ------------------------------------------------------------------ 8. 文档里的命令必须真能跑
+/**
+ * 挡的是：文档 / 钩子注入里教人跑一条**不存在**的命令或路径。
+ *
+ * 实测踩到三回，都是"静态检查全绿、照着做必失败"：
+ *   · `npm run continue:worktree` —— 框架从不创建 package.json，非 npm 项目里必失败；
+ *   · 仓库里那条 `skill:e2e` 别名 —— 演示项目清理时 package.json 被删，文档没跟着改；
+ *   · `.continue/HANDOFF.md` —— 文件已并入 README，引用还挂着（散文路径，本检查管不到）。
+ *
+ * 前两类在这条检查的覆盖范围内（路径引用那一类在 §7 之外单独靠人，见下面的边界）。
+ *
+ * 只查**可机械判定**的两种形态，宁可窄也不误报：
+ *   A. `node <路径>.mjs`：按 `.continue/` → 模板、`.codebuddy/skills/continue-task/` → 仓库、
+ *      其余 → 技能目录的顺序找，**必须有一个真实存在**；
+ *   B. `npm run <name>`：只认框架自己的命名空间 `continue:*` / `skill:*`——必须要么由
+ *      安装器创建（install.mjs 里出现这个名字），要么仓库根 package.json 里真有这条 script。
+ *      用户项目自己的 script（`npm run test:chunk` 这类示例）**不在范围内**，不判。
+ *
+ * 边界：`node <技能目录>/…` 这类带占位符的写法跳过（`<` `>` 不在路径字符集里，天然不匹配）；
+ * 纯散文里的路径（如 `` `.continue/xxx.md` ``）不查——模板里有按需生成的文件（`DONE.archive.md`），
+ * 硬查会误报。这条检查管的是"命令"，不是"所有反引号"。
+ */
+const DOC_SCAN_EXT = new Set(['.md', '.mjs']);
+const docSources = [{ label: 'SKILL.md', text: skillDoc }];
+function collectDocSources(dir) {
+  if (!existsSync(dir)) return;
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) {
+      // `.e2e/` 是跑出来的现场（gitignore），里面是装好的旧副本，不能参与检查
+      if (name === '.e2e' || name === 'node_modules') continue;
+      collectDocSources(full);
+      continue;
+    }
+    if (!DOC_SCAN_EXT.has(name.slice(name.lastIndexOf('.')))) continue;
+    docSources.push({ label: relative(REPO_ROOT, full), text: readFileSync(full, 'utf8') });
+  }
+}
+collectDocSources(ASSETS);
+collectDocSources(scriptsDir);
+
+const repoPkgPath = join(REPO_ROOT, 'package.json');
+let repoScripts = {};
+if (existsSync(repoPkgPath)) {
+  try {
+    repoScripts = JSON.parse(readFileSync(repoPkgPath, 'utf8'))?.scripts ?? {};
+  } catch {
+    repoScripts = {};
+  }
+}
+
+/** 文档里的 `.mjs` 路径按三个根依次找；都不在就是死链。 */
+function resolveDocScript(raw) {
+  const p = raw.replace(/^\.\//, '');
+  // 裸文件名（`node install.mjs`）：路径取决于 cwd，判不了，放过——写了目录的才判
+  if (!p.includes('/')) return true;
+  const candidates = [];
+  if (p.startsWith('.continue/')) candidates.push(join(ASSETS, p));
+  if (p.startsWith('.codebuddy/skills/continue-task/')) candidates.push(join(REPO_ROOT, p));
+  candidates.push(join(SKILL_DIR, p));
+  return candidates.some((c) => existsSync(c));
+}
+
+/**
+ * 只查**框架自己的**路径：`.continue/…`（装进项目的）、`.codebuddy/skills/continue-task/…`（技能仓库的）、
+ * 以及技能仓库自己的 `scripts/…`（只有 SKILL.md 和 scripts/ 下的源码这么写）。
+ * 其它（`scripts/lint.mjs` 这类**用户项目**的示例）一概不判——那是人家仓库里的路径。
+ */
+function isFrameworkPath(token, label) {
+  if (token.startsWith('.continue/') || token.startsWith('.codebuddy/')) return true;
+  const frameworkFile = label === 'SKILL.md' || label.startsWith('scripts/') || label.includes('/scripts/');
+  return frameworkFile && token.startsWith('scripts/');
+}
+
+const deadRefs = new Map();
+const deadScripts = new Map();
+for (const { label, text } of docSources) {
+  for (const m of text.matchAll(/\bnode\s+((?:\.\/)?[A-Za-z0-9_.\-/]+\.mjs)/g)) {
+    const token = m[1];
+    if (!isFrameworkPath(token, label)) continue;
+    if (!resolveDocScript(token)) deadRefs.set(`${label} → ${token}`, true);
+  }
+  for (const m of text.matchAll(/npm run ([a-z0-9:_-]+)/g)) {
+    const name = m[1];
+    // 只认**完整**的框架脚本名：`npm run continue:*` 这种通配写法（说明性文字）不算引用，别误报
+    if (!/^(continue|skill):[a-z0-9_-]+$/.test(name)) continue;
+    const byInstaller = installerText.includes(`'${name}'`) || installerText.includes(`"${name}"`);
+    const byRepoPkg = typeof repoScripts[name] === 'string';
+    if (!byInstaller && !byRepoPkg) deadScripts.set(`${label} → npm run ${name}`, true);
+  }
+}
+for (const where of deadRefs.keys()) {
+  problems.push(`${where}：指向的脚本不存在（照着跑必失败）——改名或删掉这行引用`);
+}
+for (const where of deadScripts.keys()) {
+  problems.push(
+    `${where}：这条 npm script 既不由安装器创建、也不在仓库 package.json 里——` +
+      '改成 `node .continue/hooks/…` 直跑，或让安装器真的把它写进 package.json',
+  );
+}
+
+// ------------------------------------------------------------------ 9. 写进文档的数字必须等于实际
+/**
+ * 挡的是：SKILL.md 里"`test-install.mjs` 共 N 项"这类**手抄的数字**。
+ * 实测原文写"共 11 项"，实际已经 19 项——数字只会越漂越远，而读它的人正是**维护者**
+ * （他据此判断"回归覆盖面够不够"）。能算出来的就别手抄：这里直接数 `check('…')` 的条数。
+ */
+const testInstallText = read(join(scriptsDir, 'test-install.mjs')) ?? '';
+const caseCount = (testInstallText.match(/^check\('/gm) ?? []).length;
+if (caseCount === 0) {
+  problems.push('读不到 test-install.mjs 的用例数（`check(\'…\')` 一条都没匹配到）——这条检查正在空转');
+} else {
+  const claimed = /`scripts\/test-install\.mjs`[^\n]*?共\s*(\d+)\s*项/.exec(skillDoc);
+  if (!claimed) {
+    problems.push('SKILL.md 没写 test-install 的用例数（应形如「共 N 项」），无法与代码核对');
+  } else if (Number(claimed[1]) !== caseCount) {
+    problems.push(`SKILL.md 写"共 ${claimed[1]} 项"，实际 ${caseCount} 项——数字要跟着用例走，别手抄`);
+  }
+}
+
+// ------------------------------------------------------------------ 10. 版本号只有一个来源
+/**
+ * 挡的是：版本号写两份（`VERSION` 与 `SKILL.md`），改一处忘另一处；以及安装器某次重构后
+ * 忘了读它——那时"我装的是哪一版"就永远答不上来（钩子是覆盖安装，git log 里看不出来）。
+ *
+ * 三条一起查：`VERSION` 存在且是 semver、`SKILL.md` 里写的与它一致、安装器确实读了它。
+ */
+const versionPath = join(SKILL_DIR, 'VERSION');
+const versionText = read(versionPath);
+if (versionText === null) {
+  problems.push('缺少 VERSION 文件（框架版本号的唯一来源）');
+} else {
+  const version = versionText.trim();
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    problems.push(`VERSION 内容 "${version}" 不是 semver（应形如 1.2.3）`);
+  }
+  if (!skillDoc.includes(`版本：${version}`)) {
+    problems.push(`SKILL.md 里没有「版本：${version}」这一行——两处版本号必须一致（改版本只改 VERSION）`);
+  }
+  if (!/readFileSync\(join\(HERE, '\.\.', 'VERSION'\)/.test(installerText)) {
+    problems.push('install.mjs 没有读 VERSION——安装输出里就看不到装的是哪一版');
+  }
+}
+
+// ------------------------------------------------------------------ 11. 跨文件的机制：几处都得在
+/**
+ * 挡的是"机制只落在其中一处"。原理 1 说队列协议的文字写在三处、改一处要记得改另两处，
+ * 而这一直只能靠人记——本批新增的"每批最后一条 = 自审"正好横跨三处，就拿它当第一个可查的例子：
+ *
+ *   · `assets/.continue/README.md` 的 §8（口径与收敛判据）
+ *   · `assets/.continue/hooks/queue-init.mjs` 注入的第 12 条（AI 每会话必读）
+ *   · `assets/.continue/hooks/audit-ids.mjs` 的判定（坏了会红）
+ *
+ * 为什么值得查：README 正卡在 400 行上限，下一次压缩最容易顺手删掉整整一节；
+ * 注入文本里少一行没人看得出；而审计脚本不知道自己该拦的规则在协议里还提不提。
+ */
+const ANCHORS = [
+  ['README 的 §8（三层目标）', join(ASSETS, '.continue', 'README.md'), /^##\s*8\.\s*持续迭代/m],
+  [
+    'queue-init 注入的第 12 条（每批最后一条 = 自审）',
+    join(ASSETS, '.continue', 'hooks', 'queue-init.mjs'),
+    /每一批的最后一条 = `\[自审\]`/,
+  ],
+  ['audit-ids 的自审判定', join(ASSETS, '.continue', 'hooks', 'audit-ids.mjs'), /REVIEW_TAG\s*=\s*'\[自审\]'/],
+];
+for (const [label, file, re] of ANCHORS) {
+  if (!re.test(read(file) ?? '')) {
+    problems.push(`${label}：找不到这条机制——它横跨 README / 注入 / 审计，删掉任一处三边就会各说一套`);
   }
 }
 

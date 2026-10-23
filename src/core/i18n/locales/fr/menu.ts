@@ -43,4 +43,11 @@ export const menu = {
   "world.import": "Importer une sauvegarde",
   "menu.minigames": "Mini-jeux",
   "world.saveFailed": "Échec de l’enregistrement, réessayez",
+  "world.seedHint": "Saisis un nombre comme graine, ou laisse vide pour une graine aléatoire.",
+  "world.survivalWarn": "{base} — en survie, choisis le monde par défaut ou passe en créatif.",
+  "world.typeHint.default": "Monde complet : biomes, arbres, minerais, villages, forteresses… recommandé en survie",
+  "world.typeHint.amplified": "Tout comme le monde par défaut, mais avec un relief plus marqué et des montagnes plus hautes",
+  "world.typeHint.flat": "Trois couches plates seulement : ni arbres, ni villages, ni minerais (idéal en construction)",
+  "world.typeHint.large_biomes": "Un monde complet comme celui par défaut, mais les biomes sont environ ×4 plus grands",
+  "world.typeHint.single_biome": "Le même terrain que par défaut, mais tout le monde est un seul biome (choisis ci-dessous)",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

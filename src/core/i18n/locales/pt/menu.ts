@@ -42,4 +42,11 @@ export const menu = {
   "world.import": "Importar save",
   "menu.minigames": "Minijogos",
   "world.saveFailed": "Falha ao salvar, tente novamente",
+  "world.seedHint": "Digite um número como semente, ou deixe vazio para uma aleatória.",
+  "world.survivalWarn": "{base} — no survival, escolha o mundo padrão ou mude para o criativo.",
+  "world.typeHint.default": "Mundo completo: biomas, árvores, minérios, vilas, fortalezas… recomendado no survival",
+  "world.typeHint.amplified": "Tudo igual ao mundo padrão, mas com relevo maior e montanhas mais altas",
+  "world.typeHint.flat": "Só três camadas planas: sem árvores, vilas ou minérios (bom para construir/criativo)",
+  "world.typeHint.large_biomes": "Um mundo completo como o padrão, mas os biomas são cerca de ×4 maiores",
+  "world.typeHint.single_biome": "O mesmo terreno do padrão, mas o mundo inteiro é um bioma (escolha abaixo)",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

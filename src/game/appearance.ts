@@ -180,7 +180,6 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
  */
 export interface CharacterPreset {
   readonly id: 'man' | 'woman' | 'boy' | 'girl';
-  readonly label: string;
   readonly skinTone: number;
   readonly shirtColor: number;
   readonly pantsColor: number;
@@ -197,7 +196,6 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   // 成年男性：就是默认外观（短发 + 胡茬 + 沉稳眼 + 标准身架）
   {
     id: 'man',
-    label: '成年男性',
     skinTone: 1,
     shirtColor: 0,
     pantsColor: 0,
@@ -212,7 +210,6 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   // 成年女性：栗棕长发 + 无胡须 + 明亮大眼 + 纤细身架
   {
     id: 'woman',
-    label: '成年女性',
     skinTone: 0,
     shirtColor: 5,
     pantsColor: 2,
@@ -227,7 +224,6 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   // 少年男性：乌黑翘发 + 无胡须 + 圆眼 + 少年体型
   {
     id: 'boy',
-    label: '少年男性',
     skinTone: 1,
     shirtColor: 2,
     pantsColor: 1,
@@ -242,7 +238,6 @@ export const CHARACTER_PRESETS: readonly CharacterPreset[] = [
   // 少年女性：金色马尾 + 无胡须 + 明亮眼 + 蓝瞳 + 少年体型
   {
     id: 'girl',
-    label: '少年女性',
     skinTone: 0,
     shirtColor: 4,
     pantsColor: 3,

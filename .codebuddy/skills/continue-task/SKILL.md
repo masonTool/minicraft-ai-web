@@ -5,6 +5,9 @@ description: This skill installs the continue-do persistent task-queue framework
 
 # continue-task
 
+> 版本：1.0.0（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
+> 这里的数字由 `scripts/check-framework.mjs` 核对，写错会红。）
+
 安装 continue-do 持续任务队列框架。这是安装器；框架怎么用，装完后看项目里的 `.continue/README.md`。
 
 ## 用途与平台要求
@@ -23,10 +26,24 @@ description: This skill installs the continue-do persistent task-queue framework
 - **钩子崩了不会静默放行**：注册命令都经 `.continue/hooks/run.mjs`，它把"钩子自己崩了"（exit 1）
   翻成 exit 2 + 告警——否则宿主会当"本轮无需阻止"，整条队列停摆且一句提示都没有。
 - **有刹车**：`> 状态：讨论中` 停单份队列，`touch .continue/auto.off` 全停，随时人工接管。
-- **并行靠工作树**：`npm run continue:worktree -- <名字>` 建独立 worktree + 分支并推远程，
-  **必须在新路径另开会话**（钩子按 cwd 判断读写哪棵树）；合并时机由用户定。
+- **规划与执行分离（交接模式，`doing/` 里有人在跑时才触发）**：主工作区已经有别的会话队列时，
+  新任务只讨论、拆条目，把整份队列写进 `.continue/doing/.worktree/todo/queue.md` + 中文上下文
+  `context.md`，停手后 Stop 的 `dispatch.mjs` 基于 HEAD 建 `.continue/doing/.worktree/<本会话前 6 位>`
+  （分支 `continue/<前 6 位>`）并拉新窗口；新窗口第一条消息自动接管成 `doing/<新会话前 6 位>.md`
+  （批次沿用、上下文附进注入）。**`doing/` 空着时不走交接**，直接在本会话建队列干完。
+  开关是 `config.json` 的 `worktree.auto` / `worktree.openWindow`。
+- **手工并行仍可用**：`node .continue/hooks/worktree.mjs <名字>` 建独立 worktree + 分支并推远程，
+  **必须在新路径另开会话**（钩子按 cwd 判断读写哪棵树）；收尾时 `worktree-sync.mjs` 自动
+  `rebase` 到父分支再 `merge --no-ff` 合回（冲突按语义解，解不动就 abort 退回），删树由用户定。
+  npm 项目由安装器顺手补一条 `continue:worktree` 别名（`npm run continue:worktree -- <名字>` 等价），
+  非 npm 项目一律用上面的 node 形式——**文档与注入里不许再写 `npm run …` 当作唯一入口**。
 - **收尾自动**：队列全打勾 → 直接归档进 `DONE` / `OVERVIEW` / `TASKS` 并删队列，不弹窗等确认；
+  **在工作树里**多一步（第 6 步）：文档收尾提交之后跑 `worktree-sync.mjs`，rebase → merge → push 合回父分支；
   只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
+- **每批最后一条是自审**：最后一个条目固定审「三层目标」（L1 可测量 / L2 可对抗 / L3 可外部，
+  口径见装出来的 `.continue/README.md` §8）。`audit-ids` 查它在不在最后、勾成 `[x]` 时三层凭证
+  （`- L1：`/`- L2：`/`- L3：`）齐不齐，**不判结论质量**；「没有建议」必须带排除记录，
+  连续 3 批都提不出改进项才算收敛。
 - **一批多长看行数，不看条数**：判据是"完成说明预计 > ~80 行"/"队列 > 500 行"/"这一阶段目标变了"；
   条数只是经验值（通常 8~12 条），不是上限。换批要新号时跑
   `node .continue/hooks/queue-init.mjs --new-batch`（号由脚本生成，不手编）。
@@ -52,6 +69,9 @@ Stop group 的最大值（`-1` 不限，非数字算 1）；WorkBuddy 没有这�
 
 ### 1. 一条命令装完
 
+前提：技能目录本身要先落到目标项目里（把整个 `continue-task/` 复制进 `<项目>/.codebuddy/skills/`），
+下面说的 `<本技能目录>` 就是它。安装器只往**当前项目**写文件，不会改技能目录。
+
 在**目标项目根目录**执行：
 
 ```bash
@@ -66,40 +86,94 @@ node <本技能目录>/scripts/install.mjs
 | 参数 | 作用 |
 | --- | --- |
 | `--dry-run` | 只报告会做什么，不写任何文件。先跑这个看清楚再真装 |
-| `--force` | 文档已存在时也覆盖（默认是另存 `*.continue-do.md`，保护用户进度） |
+| `--force` | 文档已存在时也覆盖（默认是跳过：不覆盖用户进度、不落备份文件） |
 | `--ci` | 额外写 `.github/workflows/continue-do.yml`（跑与本地完全相同的 `check.mjs`）。默认不写；已有同名文件不覆盖 |
+
+### 1.2 交接：规划完，执行在另一棵树里（仅在 `doing/` 里有人在跑时）
+
+**前提**：`doing/` 里已经有**别的会话**的未完成队列。没有人在跑时这整套不触发——
+直接写 `doing/<sid>.md` 在本会话干完，多开一个窗口只是把简单事情拆成两步。
+
+触发时，主工作区（**规划区**）写两份文件，然后停手：
+
+| 文件 | 内容 |
+| --- | --- |
+| `.continue/doing/.worktree/todo/queue.md` | 整份队列（头部状态 / 批次、条目、最后一条 `[自审]`） |
+| `.continue/doing/.worktree/todo/context.md` | 这一轮的中文上下文（目标 / 已定方案 / 否决过什么 / 关键文件 / 验收方式） |
+
+Stop 钩子 `dispatch.mjs` 看到它们就：建 `.continue/doing/.worktree/<本会话 sid 前 6 位>`（已 gitignore）、
+分支 `continue/<sid 前 6 位>`、写 `todo/state.json`、`code -n` 拉新窗口。
+它还有两条守卫：**本会话已有队列**（执行区）或 **`doing/` 里没人**时都不建树，只提示下一步。
+**失败只告警不拦会话**（拦住会让 AI 在规划区开工），todo 原样保留；`--dry-run` 只预演。
+
+新窗口第一个会话（`queue-init`）把 todo 读成 `doing/<新会话 sid6>.md`：头部换成完整新 ID、批次沿用、
+`context.md` 附进注入并存档到 `.logs/<新会话>/handoff.md`，然后清空 todo。
+认领用 `rename`，两个窗口同时到达只有一个能成功。
+
+手工并行（自动派发关掉、或想自己起名字时）：
+
+```bash
+node .continue/hooks/worktree.mjs <名字> --task="<一句话任务>"   # --task= 可重复
+node .continue/hooks/worktree.mjs <名字> --no-window              # CI / 无 GUI：不拉 IDE 窗口
+```
+
+它建树 + 分支 `continue/<父目录名>-<名字>` + 树里的 `doing/worktree.md` 交接（批次号 + 条目），
+新会话同样自动改名接管；树里还能再建树，层数会打印。探测 CodeBuddy 的 `code` 并 `code -n <树>`，
+探测不到就打印命令，不假装成功。
+
+**树里收尾时**（文档五步与收尾提交**之后**，rebase 要求工作区干净）：
+
+```bash
+node .continue/hooks/worktree-sync.mjs              # 先看父子关系与能否同步（--json 机器可读）
+node .continue/hooks/worktree-sync.mjs --run=rebase  # 树分支垫到父树当前分支
+node .continue/hooks/worktree-sync.mjs --run=merge   # 父树里 merge --no-ff 合回
+node .continue/hooks/worktree-sync.mjs --run=push    # 推树分支（force-with-lease）+ 按 git.push 推父分支
+```
+
+父树与父分支从 `git worktree list` 认（不从目录名猜；父树 detached 就停手）。冲突以**退出码 3** 停下并列出文件，
+解冲突要看语义（`git add` → `git rebase --continue`；merge 冲突在父树 `git commit --no-edit`），
+解不动就 `--abort` 退回报告用户，**不许 `--skip`**。
+
+**不论哪条路，都必须在新路径里另开会话**：钩子按 cwd 判断读写哪棵树，在原会话里跑等于没隔离；删树由人定。
 
 ### 1.5 三层自检（都不需要人肉核对）
 
 | 脚本 | 回答什么问题 | 快慢 |
 | --- | --- | --- |
-| `scripts/check-framework.mjs` | 打包源**自己**一致吗（模板↔安装器、注册命令带 `--event=`、脚本与开关都在本文里有交代） | 秒级 |
+| `scripts/check-framework.mjs` | 打包源**自己**一致吗（模板↔安装器、注册命令带 `--event=`、脚本与开关都在本文里有交代、**文档里的命令与路径真实存在**） | 秒级 |
 | `scripts/test-install.mjs` | 装出来的**形状**对吗（必备文件齐不齐、装完的自检跑得通） | 秒级 |
 | `scripts/e2e.mjs` | 装好之后**真的转得动吗**：跑真场景，断言"队列 / 递任务 / 收尾 / 归档 / 里程碑关卡 / 阻塞 / 并行" | 分钟级、花 token |
 
 前两个只看静态产物，挡不住"注入 JSON 被截断""队列文件名写错"这类**静默失效**——那种情况静态检查全绿，但任务永远递不出来。`e2e.mjs` 就是为了这一层。
 
-#### 七个场景、两种执行器
+#### 八个场景、两种执行器
 
 | 场景 | 执行器 | 验什么 |
 | --- | --- | --- |
 | `main` | model | 主干：**3 条**极小任务 → 逐条递 / 逐条勾 / 收尾（DONE 有批次节）/ 归档 |
 | `blocked` | probe | 同一条连续 N 轮没做完 → 标 `[阻塞]` → 之后请用户拍板 |
-| `decision` | model | 需要拍板的地方自己决定，并写进 `<sid>-decision.md`（`决定`/`为什么`），归档时跟着队列一起走 |
+| `decision` | model | 只给一个取舍、**提示词刻意不提 decision**：自己拍板 → 写 `<sid>-decision.md`（决定/为什么/影响）→ 归档跟着走；并断言**事件流里没有提问工具**（"为选哪种写法去问用户"就是失败） |
 | `milestone-split` | model | 30 条的大任务 → **是否在队列里插里程碑**（节点、验收命令、条目数是否合理；只验切分，不实现） |
 | `milestone` | probe | 队列内里程碑节点：前面的条目做完 → **硬停**（先跑验收、先问人）→ 确认后继续 → 最后一个里程碑验收完才整体收尾 |
-| `worktree` | probe | 别的会话有队列 → 注入提示 → 建树+分支+推本地 bare origin → 树内隔离 → `merge --no-ff` 回主分支 |
+| `worktree` | probe | 手工并行：别的会话有队列 → 注入提示 → 建树+分支+推本地 bare origin → 树内隔离 → 父分支前进 → `worktree-sync` rebase + merge 合回父分支 + force-with-lease 推树分支 |
+| `dispatch` | probe | 交接：`doing/` 有人时主工作区写收件箱 → 只提示不接管 → Stop 建树（分支 `continue/<sid6>`、基于 HEAD）→ 重复 Stop 不重建 → 新树接管（换 ID / 批次沿用 / context 附上 / 收件箱清空）→ 新树递任务；另验 `doing/` 空时不派发 |
 | `journey` | model+probe | **完整旅程**：两批任务（含跨批次累积归档）+ 里程碑硬停与完成 |
 
 **为什么要 probe**：像"连喂 5 轮没做完"这种分支，靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的地方。probe 仍然跑在**装出来的真实框架**上，只是不经过模型——验的是机制，不是"模型乖不乖"。
 
+在**仓库根**执行（这个仓库只有技能目录、没有 `package.json`，所以不是 npm script——别再写 `npm run …`）：
+
 ```bash
-npm run skill:e2e                          # 只预检，不跑
-npm run skill:e2e -- --all --yes            # 七个全跑（先清场，含模型，会烧 token）
-npm run skill:e2e -- --scenario blocked     # probe 场景不用 --yes
-npm run skill:e2e -- --clean                # 只清现场（test.md 重置为表头）
-npm run skill:e2e -- --dry-run             # 只看计划
-npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
+E2E="node .codebuddy/skills/continue-task/scripts/e2e.mjs"
+$E2E                          # 只预检，不跑
+$E2E --probes                 # 只跑 probe 场景（0 token、秒级；门禁里就是这么挂的）
+$E2E --probes --no-selftest   # 同上，并跳过末尾三项单测（调用方自己会跑）
+$E2E --all --yes              # 七个全跑（先清场，含模型，会烧 token）
+$E2E --scenario blocked       # probe 场景不用 --yes
+$E2E --clean                  # 只清现场（test.md 重置为表头）
+$E2E --dry-run                # 只看计划
+$E2E --self-test-kill         # 验"超时/中断后不留孤儿进程"（约 2s，不烧 token）
+$E2E --turns 30 --model <id> --timeout 480 --strict
 ```
 
 ### 跑之前必须确认（会烧 token）
@@ -118,6 +192,11 @@ npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
 
 ### 约定（跑之前先看这几条）
 
+- **不留孤儿进程**：CLI 跑在**独立进程组**里，超时 / `Ctrl-C` / 退出 / 正常结束四条路径都会整组清掉
+  （`--self-test-kill` 验这条，约 2s、不烧 token）。为什么值得单列：`spawnSync` 的 `timeout`
+  只杀**直接子进程**（CLI 起的子代理 / MCP server 会活成孤儿继续烧 token），而且它**阻塞事件循环**
+  ——`Ctrl-C` 时本进程直接死，`SIGINT` 处理器根本轮不到执行。**改回 `spawnSync` 不会报错，
+  症状是"机器发烫"**，所以必须有这条自检盯着。
 - **数据目录在 skill 里**：`.codebuddy/skills/continue-task/.e2e/<场景>-<时间戳>/`，
   同目录 `.gitignore` 已排除。**框架进库、现场不进库**。
 - **全测只跑一遍**：`.e2e/.lock` 记着正在跑那一轮的 pid，已有活跃轮次时**跑测试和 `--clean` 都直接 exit 2**。
@@ -149,15 +228,50 @@ npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
   终版报告**先**落盘、账本**后**追加，避免中途被杀留下"账本有行、报告还是进行中"的半截状态）。
 - 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
 
-**CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**，一次几分钟且花 token）。
-它需要登录态——CLI 的 `auth-type` 是 `cli-external-link`，登录信息落在配置目录的
-`local_storage/` 里（实测：只拷这一个子目录 + 设 `CODEBUDDY_CONFIG_DIR` 就能跑）。
+**CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**），跑 `check-framework` + `test-install`
++ `e2e --probes`——即"机制没坏"的确定性回归，**0 token、不需要登录态**。
+
+**四个模型场景不在 CI 里**（`main` / `decision` / `milestone-split` / `journey`）：要登录态、每轮百万级 token，
+只能在本机手动跑。将来要接进 CI，得把登录态塞进 secret——CLI 的 `auth-type` 是 `cli-external-link`，
+登录信息落在配置目录的 `local_storage/` 里（实测：只拷这一个子目录 + 设 `CODEBUDDY_CONFIG_DIR` 就能跑）。
+**这一步尚未接进 workflow**，接之前先在本机验通再改 workflow。
 
 ```bash
-# 本机已登录时，把登录态打包成 secret（约 400KB，不是整个 ~/.codebuddy）
+# 本机已登录时，把登录态打包（约 400KB，不是整个 ~/.codebuddy）
 cd ~/.codebuddy && tar czf - local_storage | base64 | pbcopy
 # → GitHub: Settings → Secrets → Actions → CODEBUDDY_LOCAL_STORAGE_B64
 ```
+
+### 1.9 升级：技能更新后怎么更新项目实例
+
+技能目录被新版本覆盖之后，**钩子还是旧的**——覆盖文件不等于生效。升级只有一步：
+
+```bash
+node <本技能目录>/scripts/install.mjs        # 先加 --dry-run 看清楚会做什么
+```
+
+它会：① 打一行 `· 升级：v1.0.0 → v1.1.0`（同版本重跑则打「已是 vX（重装）」）；
+② 覆盖 hooks（框架代码，不覆盖等于升级失效）；③ 业务文档**只比两边**：内容相同跳过、不同只报告；
+④ 刷新 `.continue/.installed.json`（版本 + 各文件哈希）。
+
+文档的判断只有三条（不需要你手动比）：
+
+| 情形 | 处理 | 你要做什么 |
+| --- | --- | --- |
+| 与模板逐字节相同 | 视为已装，跳过 | 无 |
+| 内容不同 | **实例一个字不动，也不落任何备份文件**；输出里点名"模板有更新"并给出 `diff` 命令 | 想同步就按提示 diff 一次，手动合并 |
+| 加 `--force` | 直接覆盖 | 确认不要自己的改动才用 |
+
+三条边界：
+
+- **改过的 hooks 会被覆盖**：框架代码不覆盖等于升级失效。要改框架就改技能目录里的源文件，别改实例。
+- **`config.json` 只补缺键**：你的 `checks.fast` / `checks.project` 升级后仍在。
+- **不留任何备份文件**：没有 `.baseline/`、`.backup/`、`*.continue-do.md`——有差异只在输出里点名。
+  代价是不做三方合并、升级时只能判"内容是否相同"；宁可多一次人工 diff，也不长期堆看不见的副本。
+
+装完照旧两步：`node .continue/hooks/check.mjs`（`version` 项**逐文件比对实例与技能模板**，直接点出哪几个文件落后——
+不再只看版本号，因为开发期版本号常常不动，那时它永远报"一致"）
+→ **重启会话**（钩子配置在会话启动时拍快照，不热加载）。
 
 ### 2. 安装器做了什么
 
@@ -167,15 +281,16 @@ cd ~/.codebuddy && tar czf - local_storage | base64 | pbcopy
 | `.continue/config.json` | **只补缺失的键**，已有值一律保留（用户改过的 `checks.fast` 升级后仍在）；不是合法 JSON 就不碰并报错 |
 | git `pre-commit` | 写一个垫片调用 `hooks/pre-commit.mjs`：提交前跑 `checks.fast`（失败拒绝），并拒绝"一次提交勾掉多条队列条目"（`CONTINUE_MAX_ITEMS_PER_COMMIT`，默认 1）。**`.continue/hooks/pre-commit.mjs` 不存在时直接放行**（框架被删/切到没装框架的分支，残留垫片不能把仓库卡成提交不了）。已有**非本框架**的 pre-commit 时不覆盖，只打印"加哪一行"的提示 |
 | `.continue/doing/` | 只保证目录存在，**里面一个文件都不动**（可能有进行中的队列） |
-| `.continue/TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` | 与模板**逐字节相同**→视为已装，跳过；**内容不同**→另存 `<名>.continue-do.md`，原文件保留 |
-| `AGENTS.md` | 同上 |
+| `.continue/.installed.json` | 每次安装后写：版本 + 25 个托管文件的 sha256（**入库**；`version` 与 `files` 都没变时不重写）。`check.mjs version` 靠它点出哪个文件落后 |
+| `.continue/TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` | 与模板**逐字节相同**→跳过；**内容不同**→也跳过，只在输出里点名"模板有更新"（不覆盖、不落备份） |
+| `AGENTS.md` | 同上；已有但不含 `.continue/README.md` 时告警"入口没生效" |
 | 项目已有文档 | **只读扫描**并列出"待集成"候选（目标文档 + 行数 + 依据），不写任何文件；合并按下一节做 |
 
 两个设计要点：
 
-- **幂等**。重装不会给每份文档都造一个备份——只有"内容真的和模板不同"才另存，
-  且同名备份已存在时不覆盖。所以可以随时重跑安装器来升级框架代码。
-- **永不覆盖用户进度**。文档冲突一律另存，用户合并完自己删。
+- **幂等且不落文件**。重装只可能"写入不存在的文件"或"覆盖框架代码"，**永远不产生备份副本**，
+  所以可以随时重跑安装器。
+- **永不覆盖用户进度**。内容不同一律跳过，只报告差异；要模板版本就显式 `--force`。
 
 ### 2.5 集成已有文档（存量项目必做，让用户平滑切换）
 
@@ -253,13 +368,14 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
 
 **不要**替用户建测试框架、不要凭空加依赖、不要为了让门禁"有东西可跑"而写一个永远为真的断言。
 
-要手写或改命令就编辑 `checks.project`：
+要手写或改命令就编辑 `checks.project`（快档）与 `checks.projectSlow`（慢档）：
 
 ```jsonc
 {
   "checks": {
     "fast": "node .continue/hooks/check.mjs --fast",  // 框架内置检查，别删
-    "project": ["npm test"],                          // 字符串或数组，按顺序跑
+    "project": ["npm test"],                          // 快档：--fast 与全档都跑，必须秒级
+    "projectSlow": ["node scripts/e2e.mjs"],          // 慢档：只在全档跑，可以几十秒
     "timeoutSec": 60                                  // 单条命令的超时，要小于钩子注册的 300s
   }
 }
@@ -267,15 +383,17 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
 
 要点：
 
-- `check.mjs` 会**先跑内置检查、再跑 `project`**，所以内置检查不可能被漏掉；命令由钩子亲自执行看退出码，
+- `check.mjs` 会**先跑内置检查、再跑 `project`、最后跑 `projectSlow`**，所以内置检查不可能被漏掉；命令由钩子亲自执行看退出码，
   写进提示词让 AI 自证没有意义。
-- `project` 里的命令必须**秒级**。跑一轮几十秒的命令放进来，等于让每条任务都卡一次——那还不如不开门禁。
-- 重装框架时 `config.json` 只补缺失的键，你加的 `project`、改过的 `fast` 都会保留。
+- **`project` 里的命令必须秒级**。跑一轮几十秒的命令放进来，等于让每条任务都卡一次——那还不如不开门禁。
+  几十秒以上的（e2e / 集成测试）放 **`projectSlow`**：`--fast`（pre-commit 与 Stop 守卫）跳过它，手动跑
+  `node .continue/hooks/check.mjs` 全档才跑。分档只看键名，不看命令内容——框架无法替你判断哪条慢。
+- 重装框架时 `config.json` 只补缺失的键，你加的 `project` / `projectSlow`、改过的 `fast` 都会保留。
 
 ### 4. 三条提醒
 
-- `*.continue-do.md` 只是备份，**不要留在仓库里**——agent 会同时读到两份指令，
-  内容一冲突就说不清哪份算数。和用户合并完就删掉（第 7 步要提醒）。
+- 安装器**不再产生 `*.continue-do.md`**；如果从旧版本留下过，合并完就删掉——agent 会同时读到两份指令，
+  内容一冲突就说不清哪份算数（第 7 步要提醒）。
 - 老版本留下的 `.continue/HANDOFF.md` / `NOTES.md`：内容分别并入 `README.md` /
   `DONE.md` 后删掉。两套说明并存时，AI 只会读到其中一半。
 - **老版本的目录/文件名**（`queues/` → `doing/`、`EXPERIENCE.md` → `TIPS.md`）：
@@ -285,8 +403,9 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
 
 ### 5. 注册钩子（安装器自动完成）
 
-安装器会写 `.codebuddy/settings.json`（不存在就新建），四条注册的唯一登记处是
-`scripts/install.mjs` 里的 `HOOKS` 常量——**不要照着文档手抄**，这里也不再复制一份清单。
+安装器会写 `.codebuddy/settings.json`（不存在就新建），注册集合的唯一登记处是
+`scripts/install.mjs` 里的 `HOOKS` 常量（Stop 上 `dispatch` → `auto-continue` → `auto-commit`，
+UserPromptSubmit 上 `queue-init` + `auto-continue`）——**不要照着文档手抄**，这里也不再复制一份清单。
 
 - 按 `command` 是否含 `.continue/hooks/<脚本名>` 判重，**只追加缺的**；
   `UserPromptSubmit` 追加到第一个 group，`Stop` 追加到**本框架自己的** group；
@@ -295,18 +414,20 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
   宿主按 group 取最大值，不写就等于 1（每条用户消息只推进一条任务）。已有值不动；
   如果本框架的钩子和用户自己的钩子混在同一个 group 里（老版本装的），**不写**并告警——
   写进去等于放宽别人的续跑次数；
-- 装完自检会核对四条注册、`--event=`、以及**读回 settings 复算生效的 `loop_limit`**；
+- 装完自检会核对注册集合、`--event=`、以及**读回 settings 复算生效的 `loop_limit`**；
   用户级 `.codebuddy/settings.json` 里若有别的值（如 `-1` 不限），会警告说明实际以哪个为准；
 - 文件不是合法 JSON 时**不改动**，安装器以 exit 1 报错，修好再重跑。
 
 `auto-continue.mjs` 挂在**两个事件**上：Stop 递任务，UserPromptSubmit 只把轮次计数归零。
+`dispatch.mjs` 只挂 Stop，且排在 `auto-continue` **前面**：先把待派发队列变成执行树，
+再判断这个会话要不要继续（反过来可能先给规划区递了任务）。它的超时给 60s——`git worktree add` 可能十几秒。
 
 注册命令**一律带 `--event=<自己的事件>`**（`node .continue/hooks/auto-continue.mjs --event=Stop`）：
 钩子靠它把来源写进日志行首（`[auto-continue · Stop]`），不靠 payload 猜字段名。老版本装的注册没有这个参数，
 重装时安装器**就地补上**（不整条重写，保住你挂在命令前的环境变量）；自检与 `check-framework.mjs` 各查一次。
 
 ⚠️ 注册完**必须重启会话**：钩子配置在会话启动时拍快照，不热加载。改完文件当场测试会发现
-"钩子根本没跑"（`.continue/logs/` 一直是空的）。
+"钩子根本没跑"（`.continue/.logs/` 一直是空的）。
 
 ### 6. 验证环境
 
@@ -318,7 +439,7 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
 | 2 | Node 可用且 >= 18 | `node -v` | `v18` 或更高 |
 | 3 | **内置检查全绿** | `node .continue/hooks/check.mjs` | 全部 `✓`、exit 0。其中 `hooks` 一项在**临时副本**里灌事件，覆盖了递任务、会话注入、提交守卫、pre-commit 的行为，不会弄脏工作区 |
 | 4 | 提交前门禁接上了 | `git rev-parse --is-inside-work-tree` 为 `true`，且安装输出里没有"已有非本框架的 pre-commit"警告 | 不是 git 仓库 → 告诉用户提交守卫与 pre-commit 都不会生效；有那条警告 → 把提示的那一行加进用户自己的 pre-commit |
-| 5 | **Stop 能连续推进** | 重启会话后建一个 3 条的队列，发**一条**消息，别插话 | 连续做完 3 条 → 宿主无上限或有 `loop_limit`；只做完 1 条 → 上限是 1，看 `.continue/logs/<sid>.md` 里有没有 `续跑第2次` |
+| 5 | **Stop 能连续推进** | 重启会话后建一个 3 条的队列，发**一条**消息，别插话 | 连续做完 3 条 → 宿主无上限或有 `loop_limit`；只做完 1 条 → 上限是 1，看 `.continue/.logs/<sid>.md` 里有没有 `续跑第2次` |
 
 第 3 条若失败，先分清是"命令配错"还是"项目本来就有失败"：
 前者改 `config.json`，后者要告诉用户——pre-commit 会拒绝所有提交，等于装上就跑不动。
@@ -337,8 +458,8 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
    CodeBuddy IDE 默认一条消息只推进一条，安装器已写 `loop_limit`（默认 100），
    **重启后按第 6 步第 5 条实测一轮**再下结论。不要笼统说"IDE 不支持"——会话注入、递任务、
    提交守卫在 IDE 里都生效，说的是续跑次数；
-3. 装了哪些文件、哪些因为已存在被跳过；`*.continue-do.md` 备份要用户自己合并，
-   **合并完删掉**（两份指令并存时 AI 会读到冲突的两套规则）；
+3. 装了哪些文件、哪些因为已存在被跳过；有差异的文档在输出里点名了（`diff` 命令也在），
+   要不要合并由用户定，**不产生任何备份文件**；
 4. **已有文档的集成结果**（第 2.5 步）：扫到几份、把哪几份并进了哪个文档、哪几份跳过及原因；
    `> 来源：` 标注的位置也要说，方便用户以后溯源；
 5. 环境验证结果（第 6 步逐条结论，不要只说"通过"）；
@@ -359,8 +480,8 @@ node <技能目录>/scripts/scan-docs.mjs --all    # 连无法归类的也列出
 | 脚本 | 查什么 |
 | --- | --- |
 | `scripts/detect-tests.mjs` | 安装器装完后自动跑的测试探测（只读）：npm / Rust / Go / Python / Maven / Gradle / .NET / PHP / Ruby / Make 的识别顺序与判据。改规则后拿几种项目形态各跑一次看 `--json` |
-| `scripts/check-framework.mjs` | 模板里的钩子都在安装器 `REQUIRED` 里、必备文档都会被拷贝、`assets/` 没混入本仓库的批次号与模块名、注册命令都由 `commandFor()` 拼且带 `--event=`、模板默认值与文档说法一致、`scripts/` 下每个脚本与 `install.mjs` 的每个开关都在本文件里有交代 |
-| `scripts/test-install.mjs` | 安装器回归：全新 git 项目 / 非 git 目录 / 已有同名文档 / 已有自定义 config / 已有别的钩子 / 已有别人的 pre-commit / `--dry-run` 不落文件 / `--ci` / 老注册缺 `--event=` 时升级 / 已有文档扫描 / 来源登记幂等，共 11 项 |
+| `scripts/check-framework.mjs` | 模板里的钩子都在安装器 `REQUIRED` 里、必备文档都会被拷贝、`assets/` 没混入本仓库的批次号与模块名、注册命令都由 `commandFor()` 拼且带 `--event=`、模板默认值与文档说法一致、`scripts/` 下每个脚本与 `install.mjs` 的每个开关都在本文件里有交代、**文档与钩子注入里出现的 `node …mjs` 路径真实存在且 `npm run continue:*`/`skill:*` 确实被安装器创建** |
+| `scripts/test-install.mjs` | 安装器回归：全新 git 项目 / 非 git 目录 / 已有同名文档 / 已有自定义 config / 已有别的钩子 / 已有别人的 pre-commit / `--dry-run` 不落文件 / `--ci` / 老注册缺 `--event=` 时升级 / 已有文档扫描 / 来源登记幂等 / npm 项目补并行别名 / 非 npm 项目不造 package.json / 升级时"内容不同只报告、不落任何备份文件" / 升级不产生 `.baseline`、`.backup`、`*.continue-do.md` / 队列最后一条必须是 `[自审]`（缺它判红、勾掉要三层凭证）/ 版本落后按文件哈希判定 / `project` 与 `projectSlow` 的分档口径，共 27 项（**这个数字由 `check-framework` 与实际用例数核对，别手改**） |
 | `scripts/scan-docs.mjs` | 存量文档发现（只读）：目录跳过、扩展名过滤、文件名与正文分类、`> 来源：` 已登记判定。改分类规则后跑一次 `node scripts/scan-docs.mjs --all` 看效果 |
 
 两条都在**本仓库里手动跑**（这个仓库只剩技能目录，没有 `.continue/` 可以挂 `checks.fast`），

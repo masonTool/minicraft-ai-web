@@ -1595,7 +1595,8 @@ export class SettingsScreen {
       button.type = 'button';
       button.className = 'appearance-preset';
       button.dataset.preset = preset.id;
-      button.textContent = preset.label;
+      // 批次 20261024-0245：预设名走 `label.appearance.preset.*`
+      button.textContent = t(`label.appearance.preset.${preset.id}`);
       button.addEventListener('click', () => {
         applyCharacterPreset(this.settings, index);
         // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）

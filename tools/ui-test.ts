@@ -2028,9 +2028,11 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '世界类型下面有"到底有什么"的说明（超平坦会警告）',
-    worldSource.includes('WORLD_TYPE_HINTS') &&
+    // 批次 20261024-0245 起说明文字走 `worldTypeHint()` / `world.typeHint.*`，
+    // 生存模式那句进 `world.survivalWarn`；判据改成锚"键与函数"，不再扫中文字面量。
+    worldSource.includes('worldTypeHint(type)') &&
       worldSource.includes('private updateTypeHint') &&
-      worldSource.includes('生存模式建议改选默认世界'),
+      worldSource.includes("tp('world.survivalWarn'"),
   );
   {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -3511,8 +3513,8 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
       playerSrc.includes('this.lashMeshes'),
   );
   check(
-    '四个角色预设：成年男性 / 成年女性 / 少年男性 / 少年女性，选中后可继续微调',
-    /export const CHARACTER_PRESETS[\s\S]{0,1200}label: '成年男性'[\s\S]{0,400}label: '成年女性'[\s\S]{0,400}label: '少年男性'[\s\S]{0,400}label: '少年女性'/.test(
+    '四个角色预设（man / woman / boy / girl，名字走 label.appearance.preset.*），选中后可继续微调',
+    /export const CHARACTER_PRESETS[\s\S]{0,1200}id: 'man'[\s\S]{0,400}id: 'woman'[\s\S]{0,400}id: 'boy'[\s\S]{0,400}id: 'girl'/.test(
       readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
       settingsSrc.includes('presetIndexOf(this.settings)') &&
@@ -4052,7 +4054,7 @@ console.log('\n[拴绳（批次 256）]');
     '拴 / 解不消耗绳子，且只牵已驯服的动物',
     appSrc.includes('private toggleLeash(mob: Mob)') &&
       appSrc.includes("if (!mob.tamed) {") &&
-      appSrc.includes("this.hudToast.show('只能牵已驯服的动物');"),
+      appSrc.includes("this.hudToast.show(t('misc.toast.leashTamedOnly'));"),
   );
   check(
     '绳子是一条两点线段，每帧跟着动物更新',

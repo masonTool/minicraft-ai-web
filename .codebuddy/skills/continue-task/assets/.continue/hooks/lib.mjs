@@ -35,7 +35,7 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -46,11 +46,18 @@ export const CONTINUE_DIR = join(PROJECT_ROOT, '.continue');
  * 进行中队列目录是 `doing/`（不是 `queues/`）。
  *
  * 名字直接对应状态：`doing/` 里是"正在做"的，收尾后整份搬进 `DONE.md`，原文追加到
- * `logs/<会话ID>/queue.md`（**累积**：每个批次一节，新的在最上面，`----------` 分隔）。
+ * `.logs/<会话ID>/queue.md`（**累积**：每个批次一节，新的在最上面，`----------` 分隔）。
  * 只在这一个常量里定义目录名——所有路径都从它推导，改名时只需改这里一行。
  */
 export const DOING_DIR = join(CONTINUE_DIR, 'doing');
-export const LOGS_DIR = join(CONTINUE_DIR, 'logs');
+/**
+ * 运行日志与归档：`.continue/.logs/<会话ID>/`。
+ *
+ * 为什么带点：`.continue/` 下不带点的是"给 AI 读的文档"（`README` / `TASKS` / `DONE` /
+ * `OVERVIEW` / `TIPS` / `AGENTS`），`.logs/` 混在里面像第七份文档；带上点一眼看出是本机产物。
+ * 老项目的 `.logs/` 由 `migrateLegacyLayout()` 整体改名，见下。
+ */
+export const LOGS_DIR = join(CONTINUE_DIR, '.logs');
 export const TASKS_FILE = join(CONTINUE_DIR, 'TASKS.md');
 export const DONE_FILE = join(CONTINUE_DIR, 'DONE.md');
 export const README_FILE = join(CONTINUE_DIR, 'README.md');
@@ -66,22 +73,23 @@ export const CONFIG_FILE = join(CONTINUE_DIR, 'config.json');
  * 或者反过来。这正是 README §0 原理 2（派生即计算）在框架自己身上的应用。
  */
 export const DOC_LIMITS = {
-  README: 400,
+  /**
+   * 460：交接模式（§9）是第十节机制说明，写清楚"规划区 / 执行区"要 ~30 行；
+   * 400 行时它会把原有条目挤掉。**上限仍按"一次能读完"定**，不是随内容无限涨——
+   * 再加一节之前先想清楚能不能压缩掉旧的一段。
+   */
+  README: 460,
   DONE: 300,
   OVERVIEW: 200,
   /**
-   * **本项目放宽：600 → 7000（批次 1363）**。
+   * `TASKS` 是**台账**（每条需求一个 `T` 号，只 grep 不逐条读），所以比其它入口文档松一档：
+   * 600 行 ≈ 几百条需求；再多说明该按分节拆文件了。
    *
-   * 框架默认 600 行是给"轻量需求清单"的；本项目的 `TASKS.md` 不是清单，是**台账**：
-   * 每条条目下方挂着实现文件、批次号、⚠️ 与原版差异注记，而这些注记是脚本的输入——
-   * `tools/diff-ledger.mjs`（差异台账）、`tools/coverage-report.ts`（覆盖度）、
-   * `tools/audit-tasks.mjs`（编号与进度口径）都在解析它。压到 600 行等于删掉它们的输入。
-   *
-   * 代价与边界：这份文件**不许通读**（按 `[~]` / `T<号>` grep），也不进每轮上下文。
-   * 什么时候重看：条目多到 grep 不动了 → 按段字母拆 `notes/tasks-<段>.md` 并同步改那三个脚本。
-   * ⚠️ 重装框架会覆盖本文件，`npm run audit:docs` 会当场报出来（见 tools/audit-docs.mjs 的守卫）。
+   * ⚠️ 这里必须是**中性默认值**——它会跟着框架装进**每一个**项目。
+   * 某个项目确有更大的台账时，改这里并写明理由（本文件是唯一来源），
+   * 但别把那个项目的实测数字直接当默认值：那等于让新装项目的门禁默认关着。
    */
-  TASKS: 7000,
+  TASKS: 600,
   TIPS: 500,
   QUEUE: 500,
 };
@@ -89,20 +97,18 @@ export const DOC_LIMITS = {
 /**
  * 文档体量的**字节**上限（与行数上限互补，缺一不可）。
  *
- * 为什么需要：行数会被"超长行"绕过——本项目实测 `TIPS.md` 499 行 / 190KB，
- * 按行数看只是"接近 500 行的薄文件"，按 token 看却是 README 的六倍。
- * 行数只适合"条目密度稳定"的文件；带大表格的文档必须同时看字节。
+ * 为什么需要：行数会被"超长行"绕过——一份 499 行、190KB 的踩坑笔记，按行数看只是
+ * "接近 500 行的薄文件"，按 token 看却是 README 的数倍。行数只适合"条目密度稳定"的文件；
+ * 带大表格的文档必须同时看字节。
  *
- * 取值都留了余量（当前 → 上限）：README 28KB→40KB、DONE 16KB→40KB、
- * OVERVIEW 7KB→24KB、TASKS 591KB→900KB、TIPS 7KB→60KB、队列 60KB。
+ * 取值按"行数上限 × 每行约 100 字节"估、再留一档余量（TASKS 的条目带说明，所以单独给 60KB）。
  * 超了先删 / 归档；确实要放宽就改这里并写明理由（唯一来源）。
  */
 export const DOC_BYTE_LIMITS = {
   README: 40 * 1024,
   DONE: 40 * 1024,
   OVERVIEW: 24 * 1024,
-  /** 900KB：TASKS 是脚本输入，不能压，但仍要有个观察点。 */
-  TASKS_BYTES: 921600,
+  TASKS: 60 * 1024,
   TIPS: 60 * 1024,
   QUEUE: 60 * 1024,
 };
@@ -131,6 +137,7 @@ export const DOING_REL = '.continue/doing';
  *
  * 老项目升级后：
  *   · `queues/`（旧队列目录）→ 逐文件搬进 `doing/`；
+ *   · `logs/`（旧日志目录）→ 整体改名为 `.logs/`；
  *   · `EXPERIENCE.md`（旧踩坑文档）→ 改名为 `TIPS.md`。
  *
  * 为什么在钩子里做而不是让用户手动搬：装到已有项目时，用户手上的队列里可能有
@@ -187,8 +194,23 @@ export function migrateLegacyLayout() {
     /* 同上 */
   }
   /**
+   * 日志目录 `logs/` → `.logs/`（2026-10-24 改名，与 `.worktree/` 一致的"本机产物"写法）。
+   *
+   * 两边都在时**不动**：说明迁过一半，或用户手工建了新的；合并两份日志等于把
+   * 两个会话的历史搅在一起，交给人判断更安全。
+   */
+  try {
+    const legacyLogs = join(CONTINUE_DIR, 'logs');
+    if (existsSync(legacyLogs) && !existsSync(LOGS_DIR)) {
+      renameSync(legacyLogs, LOGS_DIR);
+      notes.push('已把日志目录 `logs/` 改名为 `.logs/`');
+    }
+  } catch {
+    /* 迁不动就维持现状：读不到旧日志不影响递任务 */
+  }
+  /**
    * 旧版计划文件（`doing/<会话ID>-plan.md`）：计划机制已移除，里程碑现在写在队列里。
-   * 搬进 `logs/<会话ID>/plan.md` **归档**（不删）——内容还在，只是不再参与任何判定。
+   * 搬进 `.logs/<会话ID>/plan.md` **归档**（不删）——内容还在，只是不再参与任何判定。
    * 不搬的话它会永远躺在 `doing/` 里，看起来像"还有另一份进度"，还会被当成别人的队列。
    */
   try {
@@ -202,7 +224,7 @@ export function migrateLegacyLayout() {
         mkdirSync(dirname(dest), { recursive: true });
         appendFileSync(dest, `\n## 旧计划（计划机制已移除）· ${localStamp()}\n\n${text.trimEnd()}\n`);
         unlinkSync(join(DOING_DIR, name));
-        notes.push(`已把旧计划 \`${name}\` 归档到 \`logs/${shortSid(sid)}/plan.md\``);
+        notes.push(`已把旧计划 \`${name}\` 归档到 \`.logs/${shortSid(sid)}/plan.md\``);
       }
     }
   } catch {
@@ -212,7 +234,7 @@ export function migrateLegacyLayout() {
 }
 
 /**
- * 四态，与参考项目（minicraft-ai-web 的 .codebuddy/hooks）同一套语义：
+ * 四态（沿用本框架早期的钩子实现，语义不变）：
  *
  *   `[ ]` 待办（AI 规划时写）· `[~]` 进行中（AI 开始做时写）·
  *   `[x]` 完成（AI 做完写）· `[阻塞]` 卡住（**只有钩子会写**，AI 不许自己写）
@@ -331,7 +353,7 @@ export function queuePath(sid) {
   return join(DOING_DIR, queueFileName(sid));
 }
 /**
- * 每个会话**一个文件**：`logs/<sid>.md`，里面分两个区：
+ * 每个会话**一个文件**：`.logs/<sid>.md`，里面分两个区：
  *
  *   ## 任务递送（queue-init / auto-continue）
  *   ## 提交守卫（auto-commit）
@@ -347,6 +369,47 @@ export function queuePath(sid) {
  */
 export function logPath(sid) {
   return join(LOGS_DIR, shortSid(sid), 'run.md');
+}
+
+/**
+ * 「这个会话还在跑吗」：`.logs/<sid6>/run.md` 最近 N 分钟有写入。
+ *
+ * 为什么不用队列文件的 mtime：它只在**改队列**时更新，而 AI 读代码 / 跑测试的十几分钟里
+ * 队列一动不动，会被误判成"这个会话早死了"——判错的代价是两条路都错：
+ * 对活会话开工作树（白开），或对死会话串行等（白等）。
+ * 钩子每轮都写日志，那才是"活着"的证据。
+ * 为什么不在状态里记 pid：宿主重启 / 换机器后 pid 会被复用，时间戳没有这个问题。
+ *
+ * 判据是"最近 N 分钟"，不是"一定在跑"——所以注入里只写"可能还在跑"，让人来定。
+ */
+export const ACTIVE_WINDOW_MIN = 15;
+
+export function isSessionActive(sid, minutes = ACTIVE_WINDOW_MIN) {
+  try {
+    return Date.now() - statSync(logPath(sid)).mtimeMs < minutes * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 当前工作区是不是一棵**并行工作树**（不是主工作区）。
+ *
+ * 判据：`git rev-parse --absolute-git-dir` 与 `--git-common-dir` 不同。
+ * 主工作区里两者指同一个 `.git`；worktree 里前者是 `.git/worktrees/<名字>`、
+ * 后者指回主仓库的 `.git`。
+ *
+ * 为什么注入需要它：树是从 HEAD 检出的，父树 `doing/` 里**已入库**的队列会一起跟过来，
+ * 看起来就像"别的会话正在这棵树里跑"——其实它们属于另一棵树。照旧列出会诱发
+ * "要不要接管"的假决策，而正确答案是"那些跟你无关"。
+ */
+export function isInsideWorktree() {
+  const git = (...args) =>
+    spawnSync('git', args, { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const gitDir = git('rev-parse', '--absolute-git-dir').stdout?.trim() ?? '';
+  const commonDir = git('rev-parse', '--git-common-dir').stdout?.trim() ?? '';
+  if (!gitDir || !commonDir) return false;
+  return resolve(PROJECT_ROOT, commonDir) !== gitDir;
 }
 
 /** 归档目录（队列 / 决策记录 / 历史遗留的旧计划都放这儿，按会话分）。 */
@@ -434,7 +497,7 @@ function withLogLock(sid, fn) {
   const file = logPath(sid);
   const lock = `${file}.lock`;
   const deadline = Date.now() + 400;
-  // 日志现在住在 `logs/<会话ID>/run.md`，锁也在同一层 → 建目录要用 file 的父目录
+  // 日志现在住在 `.logs/<会话ID>/run.md`，锁也在同一层 → 建目录要用 file 的父目录
   mkdirSync(dirname(file), { recursive: true });
   for (;;) {
     try {
@@ -859,11 +922,26 @@ export function parseBatch(text) {
 }
 
 /**
- * 把指纹命中的那条改成 `- [阻塞]`（内容其余一字不动）。
+ * 队列文件的**原子写回**：先写 `<file>.tmp` 再 rename。
  *
- * 这是**钩子唯一的写操作**：连续 N 轮没做完 → 隔离，不再递回来，
- * 但条目留在文件里等用户决策（改描述重试 / 删除 / 保留），脚本不替他删。
+ * 为什么不能直接 `writeFileSync(file)`：队列是**唯一事实源**（这一批做到哪一步就在这几行里），
+ * 写到一半被杀 / 断电，留下的是半截文件——那是"丢进度"级别的损坏。日志（非事实源）早就在用
+ * tmp+rename，事实源没有理由比日志更随便。
+ *
+ * `eol` 按**原文件**传：`split(/\r?\n/)` 再 `join('\n')` 会把 CRLF 文件整体改写成 LF，
+ * 在 Windows 上等于整份队列重写一遍（diff 全红，还容易和别人的改动撞车）。
  */
+function writeQueueFile(file, lines, eol) {
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, lines.join('\n').replace(/\n/g, eol));
+  renameSync(tmp, file);
+}
+
+/** 原文件的换行风格：有 CRLF 就按 CRLF 写回（只看第一行，不必扫全文）。 */
+function detectEol(text) {
+  return /\r\n/.test(text) ? '\r\n' : '\n';
+}
+
 /**
  * 把第 `seq` 条改成 `- [阻塞]`（内容其余一字不动）。
  *
@@ -876,7 +954,9 @@ export function parseBatch(text) {
  * 序号（`parseQueue` 里按文件顺序算）天然互不相同。
  */
 export function markBlocked(file, seq) {
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const text = readFileSync(file, 'utf8');
+  const eol = detectEol(text);
+  const lines = text.split(/\r?\n/);
   let inFence = false;
   let seen = 0;
   for (let i = 0; i < lines.length; i += 1) {
@@ -891,7 +971,7 @@ export function markBlocked(file, seq) {
     if (seen !== seq) continue;
     if (kind !== 'todo' && kind !== 'doing') return false;
     lines[i] = lines[i].replace(/^(\s*-\s*)\[[^\]]*\]/, `$1${MARK.blocked}`);
-    writeFileSync(file, lines.join('\n'));
+    writeQueueFile(file, lines, eol);
     return true;
   }
   return false;
@@ -942,7 +1022,13 @@ export function findStrayQueue(sid) {
   try {
     return (
       readdirSync(DOING_DIR)
-        .filter((name) => name.endsWith('.md') && !isLegacyPlanFile(name) && !isDecisionFile(name))
+        .filter(
+          (name) =>
+            name.endsWith('.md') &&
+            !isLegacyPlanFile(name) &&
+            !isDecisionFile(name) &&
+            !isWorktreeHandoffFile(name),
+        )
         .find((name) => {
           const stem = name.slice(0, -3);
           return stem !== want && stem.startsWith(want) && stem.length > want.length;
@@ -953,12 +1039,15 @@ export function findStrayQueue(sid) {
   }
 }
 
-/** 只列**会话队列**：`doing/` 里还可能有历史遗留的计划文件与 `<sid>-decision.md`。 */
+/**
+ * 只列**会话队列**：`doing/` 里还可能有历史遗留的计划文件、`<sid>-decision.md`
+ * 与待接管的 `worktree.md`。
+ */
 export function listQueues() {
   try {
     return readdirSync(DOING_DIR)
       .filter((name) => name.endsWith('.md'))
-      .filter((name) => !isLegacyPlanFile(name) && !isDecisionFile(name))
+      .filter((name) => !isLegacyPlanFile(name) && !isDecisionFile(name) && !isWorktreeHandoffFile(name))
       .map((name) => ({ sid: name.slice(0, -3), file: join(DOING_DIR, name) }));
   } catch {
     return [];
@@ -977,13 +1066,17 @@ export function listQueues() {
 export function markEntryDoing(file, entry) {
   if (!entry || entry.kind !== 'todo') return false;
   try {
-    const lines = readFileSync(file, 'utf8').split('\n');
+    const text = readFileSync(file, 'utf8');
+    const eol = detectEol(text);
+    // 与 `parseQueue` 同一套切分（`\r?\n`）：`entry.index` 就是这么算出来的，
+    // 两边切法不一致时行号会错位（CRLF 队列上表现为"标到了别的条目"）。
+    const lines = text.split(/\r?\n/);
     const i = entry.index;
     if (i < 0 || i >= lines.length) return false;
     const next = lines[i].replace(/- \[ \]/, '- [~]');
     if (next === lines[i]) return false;
     lines[i] = next;
-    writeFileSync(file, lines.join('\n'));
+    writeQueueFile(file, lines, eol);
     return true;
   } catch {
     return false;
@@ -1001,7 +1094,7 @@ export function unfinishedCount(queue) {
  * 这里只保留"认出它们"的能力，用途有两个：
  *   · `listQueues` / `findStrayQueue` 别把旧计划当成别人的队列（否则注入里会
  *     反复提示"其他会话还有未完成队列"，诱导 AI 去接管一份早就作废的计划）；
- *   · `migrateLegacyLayout()` 把它们搬进 `logs/`（归档，不删），免得 forever 留在 `doing/`。
+ *   · `migrateLegacyLayout()` 把它们搬进 `.logs/`（归档，不删），免得 forever 留在 `doing/`。
  */
 const LEGACY_PLAN_RE = /^[A-Za-z0-9._-]+-plan\.md$/;
 
@@ -1019,7 +1112,7 @@ export function sessionOfLegacyPlan(name) {
  * 会话**决策记录**：`doing/decision-<session_id>.md`。
  *
  * 用户的规则：需要拍板的地方**以 AI 的意见为准**，但每一处都要记成人能看懂的形式留底。
- * 于是它和队列一样是"正在做"的文件，收尾时同样**追加**进 `logs/<会话ID>/decision.md`
+ * 于是它和队列一样是"正在做"的文件，收尾时同样**追加**进 `.logs/<会话ID>/decision.md`
  * （累积、按批次分节，新的在最上面）。
  *
  * 为什么也叫 `<sid>` 结尾：两类文件（队列 / 决策）靠前缀区分、靠会话 ID 配对，
@@ -1038,6 +1131,285 @@ export function decisionPathFor(sid) {
 export function sessionOfDecision(name) {
   const m = DECISION_FILE_RE.exec(name);
   return m ? m[1] : null;
+}
+
+/**
+ * **待接管队列**：`.continue/doing/worktree.md`。
+ *
+ * 谁写的：`worktree.mjs` 建树时，把父会话的交接任务写进树里的这个文件名。
+ * 谁接管：树里的第一个会话（`queue-init`）把它改名成 `doing/<sid6>.md`，
+ * 改名那一刻它才成为"某个会话的队列"。
+ *
+ * 为什么必须从 `listQueues` / `findStrayQueue` 里排掉（挡的是哪次事故）：
+ * 实测（2026-10-23）建完树第一件事就是自己催自己——`listQueues()` 返回
+ * `['042a8b', 'worktree']`，注入里于是出现两条"其他会话还有未完成队列"：
+ * 一条是父树的真队列（随 HEAD 带过来的），另一条就是这份**还没被接管**的交接队列。
+ * 后果不是"少做一件事"，而是把 AI 引向"要不要接管 worktree 这个会话"—
+ * 正确答案却是"改名，然后干活"。
+ *
+ * 这也解释了为什么它不能被当成 `<sid>` 队列：`worktree` 不是会话 ID，
+ * 拿它去比 `findStrayQueue()` 的前缀还会误判成"本会话队列名字写错了"。
+ */
+export const WORKTREE_HANDOFF_NAME = 'worktree.md';
+
+export function isWorktreeHandoffFile(name) {
+  return name === WORKTREE_HANDOFF_NAME;
+}
+
+/** 待接管队列的绝对路径（`queue-init` 改名接管时用）。 */
+export function worktreeHandoffPath() {
+  return join(DOING_DIR, WORKTREE_HANDOFF_NAME);
+}
+
+/**
+ * 接管待接管队列：`doing/worktree.md` → `doing/<sid6>.md`，并把头部会话 ID 补成**完整**的。
+ *
+ * 为什么由钩子做、不等 AI 手工 `git mv`：手工版有三步（改名、补头部、保住批次号），
+ * 漏第三步不会被任何检查发现——批次号一换，`DONE.md` / `OVERVIEW.md` / commit message
+ * 会被拆成两批，"一批一个号"当场失效。这里返回分支明确的结果，让注入把
+ * 「已接管 / 冲突 / 失败」三种情况都写出来，没有一种会静默。
+ *
+ * 冲突时**不覆盖**：目标队列已存在说明本会话已经有一份队列（重复开会话 / 手工建过），
+ * 覆盖等于丢进度——交给注入告警，由人合并。
+ */
+export function adoptWorktreeHandoff(sid) {
+  const from = worktreeHandoffPath();
+  if (!existsSync(from)) return null;
+  const to = queuePath(sid);
+  if (existsSync(to)) return { conflict: true, target: queueFileName(sid) };
+  try {
+    const text = readFileSync(from, 'utf8');
+    const eol = detectEol(text);
+    const lines = text.split(/\r?\n/);
+    // 只动**第一行**（`# 队列 · 会话 <id>`）：`audit-docs` 用它核对"前 6 位 == 文件名"
+    const i = lines.findIndex((line) => /^#\s*队列\s*·\s*会话\s+/.test(line));
+    if (i >= 0) lines[i] = `# 队列 · 会话 ${sid}`;
+    // 先原子写内容（保住原换行风格），再改名：改名失败时文件仍在原名下，下次还能接上
+    writeQueueFile(from, lines, eol);
+    renameSync(from, to);
+    return { renamed: true, target: queueFileName(sid) };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// ------------------------------------------------------------------ 交接收件箱（dispatch）
+
+/**
+ * 交接收件箱：`<主工作区>/.continue/doing/.worktree/todo/`。
+ *
+ * 工作流（2026-10-24 定）分成两段，**规划区与执行区分离**：
+ *
+ *   1. 主工作区里规划完，把**整份队列**写进 `todo/queue.md`、把这一轮的上下文（中文）
+ *      写进 `todo/context.md`，然后停手——**不建** `doing/<sid>.md`，也不在本树干活；
+ *   2. Stop 钩子 `dispatch.mjs` 看到待派发内容 → 基于 HEAD 建工作树
+ *      `doing/.worktree/<sid6>`（分支 `continue/<sid6>`）并拉一个新 IDE 窗口；
+ *   3. 新窗口里第一个会话由 `queue-init` 接管：读 todo → 写成 `doing/<新sid6>.md`
+ *      （批次沿用）→ 把 context 附进注入并存档，然后清空 todo。
+ *
+ * **前提：`doing/` 里已经有别的会话队列**。主工作区空着（没人在跑）时不该派发——
+ * 那种情况直接写 `doing/<sid>.md` 在本会话干，多开一个窗口只是把简单事情拆成两步。
+ * 门在协议层（`queue-init` 注入），`dispatch` 再挡一次。
+ *
+ * 为什么放在 `doing/` 下：`.worktree` 是**队列的附属物**（待派发的队列、派发出去的树），
+ * 和 `doing/*.md` 放在一起才符合"这一批活在哪"的直觉；`.continue/.gitignore` 里的
+ * `.worktree/` 规则对任意层级生效，仍然不会进版本库。`listQueues()` 只扫 `*.md`，
+ * 目录不会被当成会话队列。
+ */
+export const WORKTREE_DIR = join(DOING_DIR, '.worktree');
+export const TODO_DIR = join(WORKTREE_DIR, 'todo');
+export const TODO_REL = '.continue/doing/.worktree/todo';
+export const TODO_QUEUE_NAME = 'queue.md';
+export const TODO_CONTEXT_NAME = 'context.md';
+export const TODO_STATE_NAME = 'state.json';
+
+/**
+ * 主工作区根目录（收件箱永远在**主工作区**，不在某棵树里）。
+ *
+ * 判据用 `git rev-parse --git-common-dir`：worktree 里它指回主仓库的 `.git`，
+ * 主工作区里它就是 `.git`。为什么不让每棵树自己维护一份 todo：队列是一份交接凭据，
+ * 复制到树里就变成两份，谁先认领、谁作废会立刻说不清。
+ *
+ * 拿不到 git（不是仓库 / 没装 git）时退回 `PROJECT_ROOT`：最坏是"在树里读不到收件箱"，
+ * 而抛异常会让所有钩子崩掉——那连队列都不会递。
+ */
+let mainRootCache;
+export function mainWorktreeRoot() {
+  if (mainRootCache !== undefined) return mainRootCache;
+  const git = (...args) =>
+    spawnSync('git', args, { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const common = git('rev-parse', '--git-common-dir').stdout?.trim() ?? '';
+  if (!common) return (mainRootCache = PROJECT_ROOT);
+  const abs = resolve(PROJECT_ROOT, common);
+  mainRootCache = basename(abs) === '.git' ? dirname(abs) : PROJECT_ROOT;
+  return mainRootCache;
+}
+
+/** 收件箱三个文件的绝对路径（主工作区）。 */
+export function todoPaths(root = mainWorktreeRoot()) {
+  const dir = join(root, '.continue', 'doing', '.worktree', 'todo');
+  return {
+    dir,
+    queue: join(dir, TODO_QUEUE_NAME),
+    context: join(dir, TODO_CONTEXT_NAME),
+    state: join(dir, TODO_STATE_NAME),
+  };
+}
+
+/**
+ * 读收件箱。**只看 queue.md**：没有它就等于"没有待派发内容"，
+ * context 单独存在没有意义（不知道要做什么），不驱动任何行为。
+ *
+ * 字段名刻意分成「路径」与「内容」两组（`queuePath` / `text`）：
+ * 早先把内容直接叫 `queue`、又用 `...paths` 铺开，路径当场被内容覆盖，
+ * dry-run 打印"收件箱："时把整份队列吐了出来。
+ */
+export function readTodo(root = mainWorktreeRoot()) {
+  const paths = todoPaths(root);
+  if (!existsSync(paths.queue)) return null;
+  let text = '';
+  try {
+    text = readFileSync(paths.queue, 'utf8');
+  } catch {
+    return null;
+  }
+  if (!text.trim()) return null;
+  let context = '';
+  try {
+    context = readFileSync(paths.context, 'utf8');
+  } catch {
+    context = '';
+  }
+  let state = null;
+  try {
+    state = JSON.parse(readFileSync(paths.state, 'utf8'));
+  } catch {
+    state = null;
+  }
+  return {
+    dir: paths.dir,
+    queuePath: paths.queue,
+    contextPath: paths.context,
+    statePath: paths.state,
+    text,
+    context,
+    state,
+  };
+}
+
+/** 派发状态：记下"这次已经派发过"，Stop 每次触发时据此避免重复建树。 */
+export function writeTodoState(state, root = mainWorktreeRoot()) {
+  const paths = todoPaths(root);
+  mkdirSync(paths.dir, { recursive: true });
+  writeFileSync(paths.state, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+/**
+ * 原子认领：`queue.md` → `queue.md.claim-<sid6>`。
+ *
+ * 为什么必须用 rename 而不是"先读再删"：两个新窗口同时收到第一条消息时，
+ * 两边都会看到同一个 `queue.md`；`rename` 只有一个能成功，另一个拿到 ENOENT
+ * 后退化成"已被别的会话接管，别重复做"——这正是要的结果。
+ */
+export function claimTodo(sid, root = mainWorktreeRoot()) {
+  const paths = todoPaths(root);
+  const claim = join(paths.dir, `${TODO_QUEUE_NAME}.claim-${shortSid(sid)}`);
+  try {
+    renameSync(paths.queue, claim);
+    return { ...paths, claim };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 新会话接管收件箱：todo/queue.md → `doing/<sid6>.md`，并把 context 存档。
+ *
+ * 返回三种结果（注入要把三种都说出来，没有一种能静默）：
+ *   · `{ adopted }`  接管成功；`context` 原文交给注入使用，`batch` 让批次号延续；
+ *   · `{ conflict }` 本会话已有队列——**不动 todo**（覆盖等于丢进度），交给人合并；
+ *   · `{ error }`    认领/写入失败；认领文件会放回原名，下次会话还能接上。
+ */
+export function adoptTodoHandoff(sid) {
+  const root = mainWorktreeRoot();
+  const paths = todoPaths(root);
+  if (!existsSync(paths.queue)) return null;
+  const target = queuePath(sid);
+  if (existsSync(target)) return { conflict: true, target: queueFileName(sid) };
+
+  const claimed = claimTodo(sid, root);
+  if (!claimed) return { error: '认领失败（另一个会话可能刚接管，或磁盘不可写）' };
+
+  try {
+    const text = readFileSync(claimed.claim, 'utf8');
+    const eol = detectEol(text);
+    const lines = text.split(/\r?\n/);
+    // 只动第一行的会话 ID：`audit-docs` 用它核对"前 6 位 == 文件名"
+    const i = lines.findIndex((line) => /^#\s*队列\s*·\s*会话\s+/.test(line));
+    if (i >= 0) lines[i] = `# 队列 · 会话 ${sid}`;
+    else lines.unshift(`# 队列 · 会话 ${sid}`, '');
+    // 新树是 `git worktree add` 检出的：git 不跟踪空目录，`doing/` 在这里通常不存在
+    mkdirSync(DOING_DIR, { recursive: true });
+    writeQueueFile(target, lines, eol);
+
+    let context = '';
+    try {
+      context = readFileSync(claimed.context, 'utf8');
+    } catch {
+      context = '';
+    }
+    if (context.trim()) {
+      mkdirSync(archiveDirFor(sid), { recursive: true });
+      writeFileSync(join(archiveDirFor(sid), 'handoff.md'), context);
+    }
+
+    unlinkSync(claimed.claim);
+    for (const file of [claimed.context, claimed.state]) {
+      try {
+        unlinkSync(file);
+      } catch {
+        /* 没有就没有 */
+      }
+    }
+    return { adopted: true, target: queueFileName(sid), context, batch: parseBatch(text) };
+  } catch (err) {
+    // 写队列失败必须把认领文件放回去：留在 `.claim-<sid>` 下，下次会话读不到、也不会自己恢复
+    try {
+      renameSync(claimed.claim, paths.queue);
+    } catch {
+      /* 放不回去时至少保留文件，人工可捞 */
+    }
+    return { error: err.message };
+  }
+}
+
+/**
+ * 找 IDE 的命令行入口（`code -n <目录>` 开新窗口）。
+ *
+ * 判据是**能力存在**，不是"宿主叫什么"：伪装宿主名容易误判，而"这个路径下有一个
+ * 能 `-n` 开窗口的 `code` 命令"是可以直接检查的事实。找不到返回 null，
+ * 调用方必须打印可复制的命令——**不假装成功**（用户看不到窗口会以为是建树失败）。
+ */
+export function findIdeCli() {
+  const candidates = [
+    '/Applications/CodeBuddy CN.app/Contents/Resources/app/bin/code',
+    '/Applications/CodeBuddy.app/Contents/Resources/app/bin/code',
+    '/Applications/WorkBuddy.app/Contents/Resources/app/bin/code',
+  ];
+  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
+  const found = spawnSync('sh', ['-c', 'command -v code'], { encoding: 'utf8' });
+  const onPath = (found.stdout ?? '').trim();
+  return onPath && existsSync(onPath) ? onPath : null;
+}
+
+/** 交接派发的配置（`config.json` 的 `worktree` 段）；缺省全开，缺键按默认值。 */
+export function worktreeConfig() {
+  const config = loadConfig();
+  const section = config?.worktree ?? {};
+  return {
+    auto: section.auto !== false,
+    openWindow: section.openWindow !== false,
+  };
 }
 
 // ------------------------------------------------------------------ 输出
