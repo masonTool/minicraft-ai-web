@@ -7,9 +7,8 @@
  * 翻译质量靠人看，表的一致性只能靠断言。
  */
 
-import { USAGE_FIELD_NAMES, translateUsageFields } from '../src/core/commands/UsageText.ts';
 import { COMMAND_MESSAGES_EN } from '../src/core/commands/commandMessages.data.ts';
-import { COMMANDS, executeCommand } from '../src/core/commands/Commands.ts';
+import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/commands/Commands.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
 import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
@@ -555,41 +554,29 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   check(`Q14 的 ${chatKeys.length} 个键中英齐全`, missing.length === 0, missing.join(','));
   check('每条都真翻成英文', chatKeys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
 
-  // —— 命令用法：从源码抽真实用法串，逐个查字段覆盖 ——
+  // —— 用法报错（多语言 P1-2 起传**命令名**，不再各自抄一份用法串）——
   const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
-  const usageRe = /usageError\(\s*[`']([\s\S]*?)[`']\s*,?\s*\)/g;
-  const usages: string[] = [];
-  for (let m = usageRe.exec(cmdSrc); m; m = usageRe.exec(cmdSrc)) usages.push(m[1]);
-  check('用法报错全部走 usageError()', usages.length >= 39 && !codeOf(cmdSrc).includes('用法：'), `找到 ${usages.length} 条`);
+  const nameArgs: string[] = [];
+  for (const m of codeOf(cmdSrc).matchAll(/usageError\(\s*'([^']*)'\s*\)/g)) nameArgs.push(m[1]!);
+  check('用法报错全部走 usageError() 且传命令名', nameArgs.length >= 39 && !codeOf(cmdSrc).includes('用法：'), `找到 ${nameArgs.length} 处`);
 
-  const cjkFields = new Set<string>();
-  for (const body of usages) {
-    for (const f of [...(body.match(/<([^>]*)>/g) ?? []), ...(body.match(/\[([^\]]*)\]/g) ?? [])]) {
-      const inner = f.slice(1, -1);
-      if (/[\u4e00-\u9fff]/.test(inner)) cjkFields.add(inner);
-    }
-  }
-  const uncovered = [...cjkFields].filter((k) => !(k in USAGE_FIELD_NAMES));
-  check(`词表覆盖全部 ${cjkFields.size} 个中文字段`, uncovered.length === 0, uncovered.join(' | '));
+  const unknownNames = [...new Set(nameArgs)].filter((name) => findCommand(name) === undefined);
+  check('每处 usageError 传的都是真实命令名（写错就查不到表）', unknownNames.length === 0, unknownNames.join(','));
 
-  // 翻译后任何括号里都不该再有中文（这才是用户会看到的东西）
-  const leaks: string[] = [];
-  for (const body of usages) {
-    const out = translateUsageFields(body, 'en');
-    for (const f of [...(out.match(/<([^>]*)>/g) ?? []), ...(out.match(/\[([^\]]*)\]/g) ?? [])]) {
-      if (/[\u4e00-\u9fff]/.test(f)) leaks.push(f);
-    }
-  }
-  check('英文模式下用法串的括号里没有中文', leaks.length === 0, [...new Set(leaks)].join(' | '));
+  // 核心口径：**报错里的用法与 `/help` 那句是同一句**（同一个 `cmd.<name>.usage`），不会各写一份
+  setLanguage('zh');
+  const inconsistent = COMMANDS.filter(
+    (spec) => usageError(spec.name) !== `${t('command.usagePrefix')}${t(spec.usageKey)}`,
+  ).map((spec) => spec.name);
+  check('报错里的用法与 /help 里那句完全一致', inconsistent.length === 0, inconsistent.join(','));
 
-  // 语法符号不能被翻译吃掉
+  setLanguage('en');
   check(
-    '命令名、方括号、竖线原样保留',
-    translateUsageFields('/team add <队伍> [显示名] | color <颜色>', 'en') ===
-      '/team add <team> [display name] | color <color>',
+    '报错里的用法在英文模式下是英文（不再靠词表逐字段替换）',
+    !/[\u4e00-\u9fff]/.test(usageError('give')),
+    usageError('give'),
   );
-  check('未登记的参数名原样保留（漏译能一眼看见）', translateUsageFields('/x <新参数>', 'en') === '/x <新参数>');
-  check('中文模式不改动用法串', translateUsageFields('/give <物品> [数量]', 'zh') === '/give <物品> [数量]');
+  resetLanguageForTest();
 
   // 聊天输入框：不能留硬编码
   const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');

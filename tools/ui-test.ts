@@ -4007,7 +4007,9 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
   );
   check(
     '/gamerule 的帮助里列出了新规则（中文名在帮助里，命令里仍用英文 id）',
-    commandsSrc.includes('死亡后保留物品') &&
+    // ⚠️ 多语言 P1-1b 起这句说明搬进了 `locales/zh/cmd.ts`（`cmd.gamerule.desc`），
+    // 所以改**查表**而不是扫 `Commands.ts` 源码——否则每次搬文案都会假红。
+    t('cmd.gamerule.desc').includes('死亡后保留物品') &&
       rulesSrc.includes("doImmediateRespawn: '立即重生'") &&
       rulesSrc.includes('doImmediateRespawn: false'),
   );

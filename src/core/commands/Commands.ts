@@ -15,7 +15,6 @@
  *  - 反馈文案与原版风格一致（"已将时间设置为 day"、"找不到物品 xxx"）
  */
 
-import { usageError } from './UsageText.ts';
 import { commandDescription, commandUsage, msg, pickLabel } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
 import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../registry/itemNames.ts';
@@ -446,7 +445,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const name = args[0];
       if (!name) {
-        out.error(usageError('/give <物品> [数量]'));
+        out.error(usageError('give'));
         return;
       }
       const count = args[1] === undefined ? 1 : Math.floor(num(args[1]));
@@ -486,7 +485,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const action = args[0]?.toLowerCase();
       if (action !== 'set' && action !== 'add') {
-        out.error(usageError('/time set <day|noon|night|midnight|数字>'));
+        out.error(usageError('time'));
         return;
       }
       const t = parseTime(args[1]);
@@ -505,7 +504,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const kind = args[0]?.toLowerCase();
       if (kind !== 'clear' && kind !== 'rain' && kind !== 'thunder') {
-        out.error(usageError('/weather <clear|rain|thunder>'));
+        out.error(usageError('weather'));
         return;
       }
       ctx.setWeather(kind);
@@ -520,7 +519,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const value = args[0]?.toLowerCase() as Difficulty | undefined;
       if (!value || !DIFFICULTIES.includes(value)) {
-        out.error(usageError(`/difficulty <${DIFFICULTIES.join('|')}>`));
+        out.error(usageError('difficulty'));
         return;
       }
       ctx.setDifficulty(value);
@@ -593,12 +592,12 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (action !== 'give') {
-        out.error(usageError('/effect <give|clear> <效果> [秒数] [等级]'));
+        out.error(usageError('effect'));
         return;
       }
       const name = args[1];
       if (!name) {
-        out.error(usageError('/effect give <效果> [秒数] [等级]'));
+        out.error(usageError('effect'));
         return;
       }
       const seconds = args[2] === undefined ? 30 : num(args[2]);
@@ -623,7 +622,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const name = args[0]?.toLowerCase();
       if (!name) {
         out.error(
-      usageError('/summon <生物> [x] [y] [z]') +
+      usageError('summon') +
         msg('（可用：{available}）', { available: MOB_TYPES.map((type) => type.id).join(', ') }),
     );
         return;
@@ -673,7 +672,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const pos = parsePosition(args.slice(0, 3), ctx.position());
       const name = args[3];
       if (!pos || !name) {
-        out.error(usageError('/setblock <x> <y> <z> <方块>'));
+        out.error(usageError('setblock'));
         return;
       }
       const id = resolveBlockId(name);
@@ -695,7 +694,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
       if (!pos) {
-        out.error(usageError('/spawnpoint [x y z]'));
+        out.error(usageError('spawnpoint'));
         return;
       }
       ctx.setPersonalSpawn(pos.x, pos.y, pos.z);
@@ -709,7 +708,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
       if (!pos) {
-        out.error(usageError('/setworldspawn [x y z]'));
+        out.error(usageError('setworldspawn'));
         return;
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
@@ -723,7 +722,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const kind = args[0];
       if (!kind) {
-        out.error(usageError('/particle <类型> [数量]'));
+        out.error(usageError('particle'));
         return;
       }
       const count = args[1] === undefined ? 8 : Number(args[1]);
@@ -746,7 +745,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
-        out.error(usageError('/tell <内容>'));
+        out.error(usageError('tell'));
         return;
       }
       out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
@@ -759,7 +758,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
-        out.error(usageError('/msg <内容>'));
+        out.error(usageError('msg'));
         return;
       }
       out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
@@ -772,7 +771,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const name = args[0];
       if (!name) {
-        out.error(usageError('/playsound <音效>'));
+        out.error(usageError('playsound'));
         return;
       }
       if (!ctx.playSound(name)) {
@@ -789,7 +788,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
-        out.error(usageError('/me <动作>'));
+        out.error(usageError('me'));
         return;
       }
       out.info(`* ${ctx.playerName()} ${text}`);
@@ -802,7 +801,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, _ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
-        out.error(usageError('/say <内容>'));
+        out.error(usageError('say'));
         return;
       }
       out.info(text);
@@ -815,7 +814,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const key = args[0];
       if (!key) {
-        out.error(usageError('/enchant <附魔> [等级]'));
+        out.error(usageError('enchant'));
         return;
       }
       const def = ENCHANTMENTS.find((entry) => entry.id === key || entry.name === key);
@@ -843,7 +842,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     creativeOnly: true,
     run(args, ctx, out) {
       if (args.length < 9) {
-        out.error(usageError('/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace]'));
+        out.error(usageError('clone'));
         return;
       }
       const base = ctx.position();
@@ -918,7 +917,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     creativeOnly: true,
     run(args, ctx, out) {
       if (args.length < 7) {
-        out.error(usageError('/fill <x1> <y1> <z1> <x2> <y2> <z2> <方块>'));
+        out.error(usageError('fill'));
         return;
       }
       const base = ctx.position();
@@ -969,7 +968,7 @@ export const COMMANDS: readonly CommandSpec[] = [
                 ? 'spectator'
                 : raw;
       if (mode !== 'survival' && mode !== 'creative' && mode !== 'adventure' && mode !== 'spectator') {
-        out.error(usageError('/gamemode <survival|creative|adventure|spectator>'));
+        out.error(usageError('gamemode'));
         return;
       }
       ctx.setGameMode(mode);
@@ -1009,7 +1008,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (mode !== 'add' && mode !== 'set') {
-        out.error(usageError('/xp add <点数> | /xp set <等级> | /xp query'));
+        out.error(usageError('xp'));
         return;
       }
 
@@ -1056,14 +1055,14 @@ export const COMMANDS: readonly CommandSpec[] = [
         const centerX = num(args[1]);
         const centerZ = num(args[2]);
         if (!Number.isFinite(centerX) || !Number.isFinite(centerZ)) {
-          out.error(usageError('/worldborder center <x> <z>'));
+          out.error(usageError('worldborder'));
           return;
         }
         const next = ctx.setWorldBorder({ centerX: Math.floor(centerX), centerZ: Math.floor(centerZ) });
         out.info(msg('世界中心已设为 ({x}, {z})，边长 {size} 格', { x: next.centerX, z: next.centerZ, size: next.size }));
         return;
       }
-      out.error(usageError('/worldborder get | set <边长> | center <x> <z>'));
+      out.error(usageError('worldborder'));
     },
   },
   {
@@ -1089,7 +1088,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       if ((args[0] ?? '').toLowerCase() === 'structure') {
         const raw = args[1];
         if (!raw) {
-          out.error(usageError('/locate biome <群系名> | /locate structure <结构名>'));
+          out.error(usageError('locate'));
           return;
         }
         const entry = findStructureName(raw);
@@ -1155,7 +1154,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const kind = (args[0] ?? '').toLowerCase();
       const target = args[1];
       if (kind !== 'biome' || !target) {
-        out.error(usageError('/locate biome <群系名> | /locate structure <结构名>'));
+        out.error(usageError('locate'));
         return;
       }
       const position = ctx.position();
@@ -1193,7 +1192,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const rawAmount = args[1];
       const amount = Number(rawAmount);
       if (!target || rawAmount === undefined || !Number.isFinite(amount) || amount <= 0) {
-        out.error(usageError('/damage <目标> <伤害>') + msg('（伤害要大于 0）'));
+        out.error(usageError('damage') + msg('（伤害要大于 0）'));
         return;
       }
       if (!ctx.damageEntity) {
@@ -1235,7 +1234,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const rawCount = (mode === 'give' && args[2] === 'loot' ? args[4] : args[2]) ?? '1';
       const times = Math.floor(Number(rawCount));
       if (mode !== 'give' || !tableKey) {
-        out.error(usageError('/loot give <战利品表> [数量]'));
+        out.error(usageError('loot'));
         return;
       }
       if (!Number.isFinite(times) || times < 1 || times > 10) {
@@ -1285,7 +1284,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const action = (args[0] ?? '').toLowerCase();
       const target = args[1];
       if ((action !== 'grant' && action !== 'revoke') || !target) {
-        out.error(usageError('/advancement grant|revoke <进度 id | *>'));
+        out.error(usageError('advancement'));
         return;
       }
       const tracker = ctx.advancements();
@@ -1321,6 +1320,25 @@ export const COMMANDS: readonly CommandSpec[] = [
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((spec) => spec.name === name);
+}
+
+/**
+ * 组一句「用法：…」报错（多语言 P1-2 起按**命令名**查表）。
+ *
+ * 原来这里收的是"用法串"（39 处各自抄一份中文），再靠一张 35 行的词表把 `<>` 里的
+ * 参数名逐个换英文 —— 于是**错误提示里的用法与 `/help` 里那句不是同一句**：
+ * `/effect give <效果>` 与 `/effect <give|clear> <效果>` 两边各写一份，改一处就漂。
+ * 现在统一查 `cmd.<name>.usage`（与 `/help` 同一个键），一套文案两个出口。
+ *
+ * ⚠️ 代价（有意的）：子变体的报错不再显示"更精确的那一句"（例如 `/execute positioned …`
+ * 失败时报的是 execute 的完整用法）。换来的是**不会漂**，以及 6 种语言不用各维护一份。
+ *
+ * 查不到命令名时不抛异常：把名字原样带出去，一眼能看出调用点写错了（`用法：tp` 这种），
+ * 比命令直接炸掉好排查。
+ */
+export function usageError(name: string): string {
+  const spec = findCommand(name);
+  return `${t('command.usagePrefix')}${spec ? commandUsage(spec) : name}`;
 }
 
 /** 拆分一行命令：`/give stone 64` → { name: 'give', args: ['stone','64'] } */
@@ -1466,14 +1484,14 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
         .slice(index + 1)
         .join(' ')
         .trim();
-      if (command.length === 0) return usageError('/execute … run <命令>');
+      if (command.length === 0) return usageError('execute');
       ops.push({ kind: 'run', command });
       return ops;
     }
 
     if (token === 'as' || token === 'at') {
       const text = args[index + 1];
-      if (!text) return usageError(`/execute ${token} <目标选择器> … run <命令>`);
+      if (!text) return usageError('execute');
       const selector = parseSelector(text);
       if (typeof selector === 'string') return selector;
       ops.push({ kind: token, selector });
@@ -1483,7 +1501,7 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
 
     if (token === 'positioned') {
       const coords = args.slice(index + 1, index + 4);
-      if (coords.length < 3) return usageError('/execute positioned <x> <y> <z> … run <命令>');
+      if (coords.length < 3) return usageError('execute');
       ops.push({ kind: 'positioned', coords });
       index += 4;
       continue;
@@ -1495,7 +1513,7 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
       if (sub === 'block') {
         const coords = args.slice(index + 2, index + 5);
         const block = args[index + 5];
-        if (coords.length < 3 || !block) return usageError(`/execute ${token} block <x> <y> <z> <方块> … run <命令>`);
+        if (coords.length < 3 || !block) return usageError('execute');
         ops.push({ kind: 'cond', invert: token === 'unless', condition: { kind: 'block', coords, block } });
         index += 6;
         continue;
@@ -1503,7 +1521,7 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
 
       if (sub === 'entity') {
         const text = args[index + 2];
-        if (!text) return usageError(`/execute ${token} entity <目标选择器> … run <命令>`);
+        if (!text) return usageError('execute');
         const selector = parseSelector(text);
         if (typeof selector === 'string') return selector;
         ops.push({ kind: 'cond', invert: token === 'unless', condition: { kind: 'entity', selector } });
@@ -1518,7 +1536,7 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
         const op = args[index + 4];
         const rawValue = args[index + 5];
         if (!target || !objective || !op || rawValue === undefined) {
-          return usageError(`/execute ${token} score <目标> <目标名> <运算符> <数值> … run <命令>`);
+          return usageError('execute');
         }
         if (!SCORE_OPERATORS.includes(op)) {
           return `score 的运算符只能是 ${SCORE_OPERATORS.join(' / ')}：${op}`;
@@ -1540,7 +1558,7 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
     return `未知的 execute 子命令：${token}（可用 as / at / positioned / if / unless / run）`;
   }
 
-  return usageError('/execute … run <命令>');
+  return usageError('execute');
 }
 
 /** 求一个条件。坐标与选择器都相对**当前执行原点**（`at` / `positioned` 之后的值） */
@@ -1731,9 +1749,9 @@ function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): 
  */
 function scoreboardUsage(): string {
   return (
-    usageError('/scoreboard objectives <add|remove|list|setdisplay> …') +
+    usageError('scoreboard') +
     msg(' 或 ') +
-    usageError('/scoreboard players <set|add|remove|operation|get|list|reset> …')
+    usageError('scoreboard')
   );
 }
 
@@ -1759,7 +1777,7 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
     const criterion = (args[3] ?? 'dummy').toLowerCase();
     const displayName = args.slice(4).join(' ').trim();
     if (!name) {
-      out.error(usageError('/scoreboard objectives add <名称> [准则] [显示名]'));
+      out.error(usageError('scoreboard'));
       return;
     }
     if (!isValidScoreName(name)) {
@@ -1787,7 +1805,7 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
   if (sub === 'remove') {
     const name = args[2];
     if (!name) {
-      out.error(usageError('/scoreboard objectives remove <名称>'));
+      out.error(usageError('scoreboard'));
       return;
     }
     if (!board.removeObjective(name)) {
@@ -1833,7 +1851,7 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
     return;
   }
 
-  out.error(usageError('/scoreboard objectives <add|remove|list|setdisplay> …'));
+  out.error(usageError('scoreboard'));
 }
 
 /**
@@ -1856,9 +1874,7 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
  * 这是个调试命令，玩家要看的是"它在哪、是什么"。
  */
 function runData(args: string[], ctx: CommandContext, out: CommandFeedback): void {
-  const usage = usageError(
-    '/data get block <x> <y> <z> [路径] | /data get entity <选择器> [路径] | /data merge block <x> <y> <z> <格号> <物品> [数量] | /data merge entity <选择器> Health <数值> | /data merge entity <选择器> CustomName <名称>',
-  );
+  const usage = usageError('data');
   const mode = (args[0] ?? '').toLowerCase();
   const kind = (args[1] ?? '').toLowerCase();
   if ((mode !== 'get' && mode !== 'merge') || (kind !== 'entity' && kind !== 'block')) {
@@ -2241,9 +2257,7 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
   const teams = ctx.teams();
   const sub = (args[0] ?? '').toLowerCase();
   const usage =
-    usageError(
-      '/team add <队伍> [显示名] | remove <队伍> | list | join <队伍> [成员] | leave [成员] | modify <队伍> friendlyFire <true|false> | color <颜色> | prefix <前缀> | suffix <后缀>',
-    );
+    usageError('team');
 
   if (sub === 'add') {
     const name = args[1];
@@ -2411,7 +2425,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   const sub = (args[1] ?? '').toLowerCase();
   const target = args[2];
   if (!target) {
-    out.error(usageError('/scoreboard players <set|add|remove|operation|get|list|reset> <目标> …'));
+    out.error(usageError('scoreboard'));
     return;
   }
 
@@ -2432,7 +2446,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     const objective = args[3];
     const raw = args[4];
     if (!objective || raw === undefined) {
-      out.error(usageError(`/scoreboard players ${sub} <目标> <目标名> <分数>`));
+      out.error(usageError('scoreboard'));
       return;
     }
     const amount = Number(raw);
@@ -2466,11 +2480,9 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     const sourceTarget = args[5];
     const sourceObjective = args[6];
     if (!objective || !SCORE_OPERATIONS.includes(op) || !sourceTarget || !sourceObjective) {
-      out.error(
-        usageError(
-          `/scoreboard players operation <目标> <目标名> <运算> <来源> <来源目标名>（运算：${SCORE_OPERATIONS.join(' ')}）`,
-        ),
-      );
+      // ⚠️ 合法运算符清单是**可操作的提示**，不能随"用法串统一"一起丢掉（这条曾经挂在
+      // 那句临时用法串的括号里）。它只在这一条报错里需要，塞进 `/help` 的用法会让那行没法读。
+      out.error(usageError('scoreboard') + msg('（运算：{list}）', { list: SCORE_OPERATIONS.join(' ') }));
       return;
     }
     if (!board.objective(objective)) {
@@ -2500,7 +2512,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   if (sub === 'get') {
     const objective = args[3];
     if (!objective) {
-      out.error(usageError('/scoreboard players get <目标> <目标名>'));
+      out.error(usageError('scoreboard'));
       return;
     }
     if (!board.objective(objective)) {
@@ -2540,5 +2552,5 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     return;
   }
 
-  out.error(usageError('/scoreboard players <set|add|remove|operation|get|list|reset> <目标> …'));
+  out.error(usageError('scoreboard'));
 }

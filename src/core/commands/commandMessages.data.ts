@@ -20,6 +20,8 @@ export const COMMAND_MESSAGES_EN: Readonly<Record<string, string>> = {
     'Unknown item: {name} (try /give stone)',
   '已给予 {item} ×{given}{note}': 'Gave {item} ×{given}{note}',
   '（背包只装得下 {given} 个）': ' (inventory only had room for {given})',
+  // P1-2：`/scoreboard` 分数字段的合法运算符清单（原来挂在临时用法串的括号里）
+  '（运算：{list}）': ' (operations: {list})',
   '已清空背包（移除 {removed} 组物品）': 'Cleared the inventory ({removed} stacks removed)',
   // ---- /time /weather /difficulty /gamerule ----
   '时间格式不对：{value}': 'Bad time format: {value}',
