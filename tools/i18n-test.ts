@@ -1109,6 +1109,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.tpl.tool', '{material}{kind}'],
     ['entity.creeper', 'Creeper'],
     ['entity.ender_dragon', 'Enderdrache'],
+    // P4-1c2 起：显式物品名也是德语（不再是英文占位）
+    ['item.grass_block', 'Grasblock'],
+    ['item.cobblestone', 'Bruchstein'],
+    ['item.cooked_beef', 'Steak'],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));

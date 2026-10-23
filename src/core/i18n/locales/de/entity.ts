@@ -1,9 +1,8 @@
 /**
- * 德语文案·entity（**部分翻译**：75/75 条已翻）
+ * 德语文案·entity（与 `locales/zh/entity.ts` **键集必须相同**）
  *
- * 已翻的是构件与模板（`item.color.*` / `item.wood.*` / `item.tpl.*` … 与全部生物名），
- * 其余显式物品名**暂时沿用英文**，待翻清单见 `notes/i18n-de.md`。
- * 键集仍由 `satisfies Pick<Messages, keyof typeof zhXxx>` 卡在 typecheck。
+ * ⚠️ 多语言 P4-1：`satisfies Pick<Messages, keyof typeof zhXxx>` 把键集卡在 `typecheck`，
+ * 中文加一条、这边没跟上就编译不过。
  */
 
 import type { Messages } from '../zh/index.ts';
