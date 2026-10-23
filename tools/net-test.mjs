@@ -233,16 +233,16 @@ try {
 
   // ---------------------------------------------------------------- 方块同步
   console.log('\n[方块改动广播与快照]');
-  alice.send({ t: 'block', x: 100, y: 64, z: -50, id: 1, state: 0, dimension: 'overworld' });
+  alice.send({ t: 'block', x: 30, y: 64, z: -20, id: 1, state: 0, dimension: 'overworld' });
   const blockMessage = await bob.wait('block');
   check(
     '方块改动被广播（含坐标/方块/维度）',
-    blockMessage?.x === 100 && blockMessage?.y === 64 && blockMessage?.z === -50 && blockMessage?.id === 1,
+    blockMessage?.x === 30 && blockMessage?.y === 64 && blockMessage?.z === -20 && blockMessage?.id === 1,
     JSON.stringify(blockMessage),
   );
   check('广播里带 by（发送者 id）', blockMessage?.by === 1, `${blockMessage?.by}`);
 
-  alice.send({ t: 'block', x: 101, y: 65, z: -50, id: 259, state: 6, dimension: 'overworld' });
+  alice.send({ t: 'block', x: 31, y: 65, z: -20, id: 259, state: 6, dimension: 'overworld' });
   // 等 Bob 真的收到这条广播再让 Carol 加入：`await sleep(100)` 也有"服务端还没处理完"
   // 的风险（那时 Carol 的 welcome 里就少一条改动，而且是**偶发**的）
   await bob.wait('block');
@@ -253,8 +253,8 @@ try {
   check('新玩家拿到玩家列表', (welcomeC?.players ?? []).length === 3, `${welcomeC?.players?.length}`);
   check(
     '新玩家拿到历史方块改动（含状态）',
-    (welcomeC?.edits ?? []).some((e) => e[0] === 100 && e[3] === 1) &&
-      (welcomeC?.edits ?? []).some((e) => e[0] === 101 && e[3] === 259 && e[4] === 6),
+    (welcomeC?.edits ?? []).some((e) => e[0] === 30 && e[3] === 1) &&
+      (welcomeC?.edits ?? []).some((e) => e[0] === 31 && e[3] === 259 && e[4] === 6),
     JSON.stringify(welcomeC?.edits),
   );
   check('新玩家拿到的是服务端种子（据此重现同一片地形）', welcomeC?.seed === welcomeA?.seed);
@@ -471,8 +471,8 @@ try {
     bob.send({
       t: 'blocks',
       blocks: [
-        [100, 70, 100, 1, 0, 'overworld'],
-        [101, 70, 100, 2, 3, 'overworld'],
+        [20, 70, 30, 1, 0, 'overworld'],
+        [21, 70, 30, 2, 3, 'overworld'],
       ],
     });
     const batch = await alice.wait('blocks', 2000);
@@ -483,8 +483,8 @@ try {
     bob.send({
       t: 'blocks',
       blocks: [
-        [102, 70, 100, 1, 0, 'overworld'],
-        ['x', 70, 100, 1, 0, 'overworld'],
+        [22, 70, 30, 1, 0, 'overworld'],
+        ['x', 70, 30, 1, 0, 'overworld'],
       ],
     });
     const filtered = await alice.wait('blocks', 2000);
@@ -639,6 +639,39 @@ try {
     check('打自己 / 打不存在的 id 都不发', (await alice.wait('player-hit', 600)) === null);
   }
 
+  // ---------------------------------------------------------------- 脏消息校验（联机24）
+  console.log('\n[脏消息校验]');
+  {
+    const dirty = [
+      ['y 越界', { t: 'block', x: 5, y: 400, z: 5, id: 1, state: 0, dimension: 'overworld' }],
+      ['方块 id 超上界', { t: 'block', x: 5, y: 70, z: 5, id: 9999, state: 0, dimension: 'overworld' }],
+      ['state 超 8 位', { t: 'block', x: 5, y: 70, z: 5, id: 1, state: 300, dimension: 'overworld' }],
+      ['隔空改方块（200 格外）', { t: 'block', x: 200, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld' }],
+    ];
+    for (const [label, message] of dirty) {
+      alice.mailbox.length = 0;
+      bob.send(message);
+      check(`${label} 被拒`, (await alice.wait('block', 500)) === null);
+    }
+
+    // 批量里逐条丢：坏的那条不连累好的
+    alice.mailbox.length = 0;
+    bob.send({
+      t: 'blocks',
+      blocks: [
+        [6, 70, 6, 1, 0, 'overworld'],
+        [6, 400, 6, 1, 0, 'overworld'],
+      ],
+    });
+    const batch = await alice.wait('blocks', 2000);
+    check('批量里越界的条目被单独丢掉', batch?.blocks?.length === 1, JSON.stringify(batch));
+
+    // 容器也要卡距离（原来只校验形状）
+    alice.mailbox.length = 0;
+    bob.send({ t: 'container', x: 300, y: 70, z: 300, dimension: 'overworld', slots: [null] });
+    check('隔空改容器被拒', (await alice.wait('container', 500)) === null);
+  }
+
   // ---------------------------------------------------------------- 箭与 TNT（联机23）
   console.log('\n[箭与 TNT]');
   {
@@ -675,9 +708,9 @@ try {
     // 服务端不按方块类型限制：熔炉 3 格、漏斗 5 格、箱子 27 格都走同一条 container 消息
     bob.send({
       t: 'container',
-      x: 70,
+      x: 40,
       y: 70,
-      z: 70,
+      z: 40,
       dimension: 'overworld',
       slots: [{ id: 1, count: 2 }, null, null],
     });
@@ -691,7 +724,7 @@ try {
 
     // 超过 27 格（最大的容器）整条丢：服务端只做形状校验
     alice.mailbox.length = 0;
-    bob.send({ t: 'container', x: 71, y: 70, z: 70, dimension: 'overworld', slots: new Array(28).fill(null) });
+    bob.send({ t: 'container', x: 41, y: 70, z: 40, dimension: 'overworld', slots: new Array(28).fill(null) });
     check('超过 27 格的容器消息被拒', (await alice.wait('container', 600)) === null);
   }
 
@@ -796,13 +829,21 @@ try {
   // ---------------------------------------------------------------- 快照裁剪（联机14）
   console.log('\n[快照裁剪]');
   {
-    // 一条在原点附近、一条在 5000 格外：新玩家只该收到近的那条。
-    // ⚠️ 用一个**新**客户端发：上面那节已经把 alice/bob 都关了，
-    // 对已关闭的 socket `send()` 是静默失败（本轮踩过：断言拿到 5 条旧改动、不含新的）
+    /*
+     * 一条在原点附近、一条在 2000 格外：新玩家只该收到近的那条。
+     *
+     * ⚠️ 远处那条要**先让发送者走过去**再写——联机24 加的距离闸（64 格）会直接拒收
+     * "隔空改方块"，否则这条测到的就不是"裁剪"而是"拒收"了。
+     * ⚠️ 用一个**新**客户端发：上面那节已经把 alice/bob 都关了，
+     * 对已关闭的 socket `send()` 是静默失败（踩过：断言拿到旧改动、不含新的）。
+     */
     const sender = new TestClient('SnapshotSender');
     await joinAndWaitWelcome(sender, '裁剪测试', 0, 70, 0);
     sender.send({ t: 'block', x: 8, y: 70, z: 8, id: 1, state: 0, dimension: 'overworld' });
-    sender.send({ t: 'block', x: 5000, y: 70, z: 5000, id: 1, state: 0, dimension: 'overworld' });
+    await sleep(80);
+    sender.send({ t: 'move', x: 2000, y: 70, z: 2000, yaw: 0, pitch: 0, dimension: 'overworld' });
+    await sleep(120); // move 有 50ms 限频
+    sender.send({ t: 'block', x: 2008, y: 70, z: 2008, id: 1, state: 0, dimension: 'overworld' });
     await sleep(150);
 
     const newcomer = new TestClient('Newcomer');
@@ -815,7 +856,7 @@ try {
     );
     check(
       'welcome 不带远处改动（按玩家位置裁剪）',
-      !edits.some((e) => e[0] === 5000),
+      !edits.some((e) => e[0] === 2008),
       `${edits.length} 条`,
     );
     newcomer.close();
@@ -829,12 +870,12 @@ try {
     const before = new TestClient('BeforeRestart');
     const welcomeBefore = await joinAndWaitWelcome(before, '重启前', 0, 70, 0);
     check('重启前的客户端能加入', welcomeBefore !== null);
-    before.send({ t: 'block', x: 60, y: 70, z: 60, id: 5, state: 0, dimension: 'overworld' });
+    before.send({ t: 'block', x: 30, y: 70, z: 30, id: 5, state: 0, dimension: 'overworld' });
     before.send({
       t: 'container',
-      x: 61,
+      x: 31,
       y: 70,
-      z: 60,
+      z: 30,
       dimension: 'overworld',
       slots: [{ id: 3, count: 7 }],
     });
@@ -854,12 +895,12 @@ try {
     check('重启后拿到 welcome', welcome !== null);
     check(
       '重启后方块改动还在',
-      (welcome?.edits ?? []).some((e) => e[0] === 60 && e[1] === 70 && e[2] === 60),
+      (welcome?.edits ?? []).some((e) => e[0] === 30 && e[1] === 70 && e[2] === 30),
       JSON.stringify((welcome?.edits ?? []).slice(-3)),
     );
     check(
       '重启后容器内容还在',
-      (welcome?.containers ?? []).some((c) => c.x === 61 && c.z === 60),
+      (welcome?.containers ?? []).some((c) => c.x === 31 && c.z === 30),
       JSON.stringify(welcome?.containers),
     );
     revived.close();

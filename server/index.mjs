@@ -25,10 +25,14 @@ import {
   CLOSE_DUPLICATE,
   CLOSE_VERSION,
   PROTOCOL_VERSION,
+  WORLD_MAX_Y,
+  WORLD_MIN_Y,
+  blockEditRejection,
   finiteNumber,
   isValidClientId,
   sanitizeDimension,
   sanitizeName,
+  withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
 import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
@@ -118,6 +122,23 @@ const signs = new Map();
 const frames = new Map();
 const MAX_SIGNS = 5000;
 const MAX_FRAMES = 5000;
+
+/**
+ * 拒收日志（联机24）：限频到每 5 秒最多一条。
+ *
+ * 单独看一条"y 越界"没意义，但"某个人一直在发越界坐标"很值得知道——每条都打会把
+ * 日志刷满，反而看不出规律。
+ */
+let lastRejectLogAt = 0;
+let rejectedSinceLastLog = 0;
+function rejectEdit(player, reason, where) {
+  rejectedSinceLastLog++;
+  const now = Date.now();
+  if (now - lastRejectLogAt < 5000) return;
+  lastRejectLogAt = now;
+  log(`${player.name}#${player.id} 的改动被拒 ${rejectedSinceLastLog} 次（最近一次：${reason} @ ${where}）`);
+  rejectedSinceLastLog = 0;
+}
 
 /**
  * 箭/TNT 这类"特效消息"的令牌窗口（联机23）：每人每秒 30 条。
@@ -538,7 +559,12 @@ wss.on('connection', (socket, request) => {
         const z = Math.trunc(Number(message.z));
         const id = Math.trunc(Number(message.id));
         const state = Math.trunc(Number(message.state ?? 0));
-        if (![x, y, z, id, state].every(Number.isFinite)) return;
+        // 校验（联机24）：y 范围 / id 上界 / state 位宽 / 与玩家的距离
+        const rejection = blockEditRejection(player, x, y, z, id, state);
+        if (rejection) {
+          rejectEdit(player, rejection, `${x},${y},${z}`);
+          return;
+        }
 
         if (edits.size < MAX_EDITS) {
           rememberEdit(edits, `${dimension}|${x},${y},${z}`, { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
@@ -570,7 +596,8 @@ wss.on('connection', (socket, request) => {
             state: Math.trunc(Number(rawState ?? 0)),
             dimension: sanitizeDimension(String(rawDimension ?? player.dimension)),
           };
-          if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
+          // 与单条 `block` 同一套校验（联机24）：坏条目单独丢，不整包拒绝
+          if (blockEditRejection(player, edit.x, edit.y, edit.z, edit.id, edit.state)) continue;
           rememberEdit(edits, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit, MAX_EDITS, warnEvictedEdit);
           accepted.push(edit);
         }
@@ -729,6 +756,12 @@ wss.on('connection', (socket, request) => {
         // 8192 字节上限挡住把消息塞爆的脏客户端。
         if (!Array.isArray(slots) || slots.length > 27) return;
         if (JSON.stringify(slots).length > 8192) return;
+        // 联机24：容器也要卡距离与 y 范围（原来只看形状，隔空改主城的箱子照样收）
+        if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
+        if (!withinEditReach(player, x, z)) {
+          rejectEdit(player, 'distance', `${x},${y},${z}`);
+          return;
+        }
         // 留一份副本随快照落盘（联机13）：不然重启之后箱子里的东西对新玩家不可见
         if (containers.size < MAX_CONTAINERS) {
           containers.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, slots });

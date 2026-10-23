@@ -70,3 +70,60 @@ export function sanitizeName(value) {
   const chars = Array.from(cleaned).slice(0, MAX_NAME_LENGTH).join('');
   return chars.length > 0 ? chars : '玩家';
 }
+
+// ---------------------------------------------------------------- 方块/容器消息的校验（联机24）
+
+/**
+ * 世界高度范围（与客户端 `core/world/Chunk.ts` 的 `WORLD_MIN_Y` / `WORLD_MAX_Y` 一致）。
+ *
+ * 越界的 y 在客户端会被 `Chunk.index` 算成**别的格子**的下标，等于"改了一格不相干的
+ * 方块"——比拒收更难查，所以在这里就挡掉。
+ */
+export const WORLD_MIN_Y = -64;
+export const WORLD_MAX_Y = 320;
+
+/**
+ * 方块 id 的上界。
+ *
+ * ⚠️ 这不是**精确白名单**：精确白名单要把客户端的注册表（`core/registry/blocks.ts`）
+ * 同步到服务端（生成文件或接口），而这份注册表每个版本都在长。这里只挡住"明显不是
+ * 方块"的 id（负数、超大数）。上界给到 2000 是当前 id 空间的两倍多，
+ * `tests/net-block-validation.test.ts` 会断言真实注册表的最大 id 小于它——注册表长到
+ * 超过 2000 时那条测试会红，逼着把上界一起调。
+ */
+export const MAX_BLOCK_ID = 2000;
+
+/** 方块 state 的位宽上限（客户端按 8 位打包，见 `ChunkEdits.packEdit`） */
+export const MAX_BLOCK_STATE = 255;
+
+/**
+ * 一次方块/容器改动允许离玩家多远（格）。
+ *
+ * 没有这条，一个客户端就能"隔空改主城"——服务端连距离都不看，改哪儿都收。
+ * 64 格比视距（默认 8 区块 = 128 格）小，正常玩法够用；而且玩家位置本身也是
+ * 客户端报的（`move` 没有校验），这道闸只能挡住"完全不相关坐标"，挡不住精心伪造。
+ */
+export const MAX_EDIT_DISTANCE = 64;
+
+/** `(x, z)` 离玩家多远（水平距离；垂直方向不参与——上下挖矿是常事） */
+export function withinEditReach(player, x, z, maxDistance = MAX_EDIT_DISTANCE) {
+  if (!player) return false;
+  const dx = x - player.x;
+  const dz = z - player.z;
+  if (!Number.isFinite(dx) || !Number.isFinite(dz)) return false;
+  return Math.hypot(dx, dz) <= maxDistance;
+}
+
+/**
+ * 一条方块改动是否可信（`block` / `blocks` 共用）。
+ *
+ * @returns `null` = 通过；否则是拒收原因（只给日志用，不回给客户端）
+ */
+export function blockEditRejection(player, x, y, z, id, state) {
+  if (![x, y, z, id, state].every(Number.isFinite)) return 'not-finite';
+  if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 'y-range';
+  if (id < 0 || id > MAX_BLOCK_ID) return 'id-range';
+  if (state < 0 || state > MAX_BLOCK_STATE) return 'state-range';
+  if (!withinEditReach(player, x, z)) return 'distance';
+  return null;
+}

@@ -72,9 +72,9 @@
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走 |
-| `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | 单条版本，客户端现在走 `blocks`；**不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
-| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
-| `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
+| `block` | `x, y, z, id, state, dimension` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条 |
+| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
+| `container` | `x, y, z, dimension, slots[]` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍 |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
 | `item-take` | `owner, localId` | 两个正整数；每人每秒 20 次 | 捡**别人**那堆（`联机21`）：first-come 仲裁，先到的拿到，另一条回 `gone` |
@@ -161,6 +161,9 @@
 | 掉落物广播 | 每人每秒 30 条（固定 1 秒窗口） | `ITEM_RATE_LIMIT` |
 | 位置限频 | 50ms | `MOVE_INTERVAL_MS` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
+| 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/protocol.mjs` |
+| 方块 state 位宽 | 255（8 位，与 `ChunkEdits.packEdit` 一致） | 同上 |
+| 改动距离上限 | 64 格（水平；`MAX_EDIT_DISTANCE`） | 同上 |
 | 快照文件 | `server/.data/world.json`（`DATA_DIR` 可覆盖） | `server/store.mjs` |
 | 保存时机 | 每 30 秒一次 + SIGINT/SIGTERM 退出前补存一次 | 同上 |
 | 快照内容 | `version / savedAt / seed / timeOfDay / edits[] / containers[] / signs[] / frames[]` | 同上 |
@@ -219,6 +222,7 @@
 | `联机21` | 拾取已仲裁（`item-take` first-come：先到的拿到，另一条 `gone`） | 只仲裁"谁拿到"：物品数量与附属数据（附魔/耐久）仍以生成方上报的为准，不校验 |
 | `联机22` | PvP 已通（近战可打远端玩家，友伤按 `Teams.canHurt` 两端各判一次） | 只做近战；箭/投掷物打人不转发；伤害来源仍是 `generic`（没有 `pvp` 死因） |
 | `联机23` | 箭与 TNT 已同步（玩家射的箭、任何来源点燃的 TNT） | **经验球 / 船 / 矿车不同步**：前两者与生物同属"各自生成、没有 id 空间"（`联机38`）；载具还有骑乘与摆放归属问题 |
+| `联机24` | 方块/容器消息已校验（y 范围、id 上界、state 位宽、距玩家 ≤64 格，拒收日志限频） | id 上界不是精确白名单；容器**不校验目标方块是不是容器**（服务端没有方块表） |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |
