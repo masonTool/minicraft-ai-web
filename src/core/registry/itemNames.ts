@@ -682,6 +682,19 @@ for (const color of COLOR_KEYS) {
     tp('item.desc.tpl.stainedGlassPane', { name: tp('item.tpl.stainedGlassPane', { color: t(`item.color.${color}`) }) });
 }
 
+// ---- 收尾批（B4h，批次 20261024-0136）：染料 16 + 木质按钮/压力板 12 + 涂蜡铜块 4 走 4 条模板
+for (const color of COLOR_KEYS) {
+  DESCRIPTIONS[`${color}_dye`] = () =>
+    tp('item.desc.tpl.dye', { name: tp('item.tpl.dye', { color: t(`item.color.${color}`) }) });
+}
+for (const wood of WOOD_KEYS) {
+  DESCRIPTIONS[`${wood}_button`] = () => tp('item.desc.tpl.woodButton', { name: t(`item.${wood}_button`) });
+  DESCRIPTIONS[`${wood}_pressure_plate`] = () => tp('item.desc.tpl.woodPressurePlate', { name: t(`item.${wood}_pressure_plate`) });
+}
+for (const key of ['waxed_copper_block', 'waxed_exposed_copper', 'waxed_weathered_copper', 'waxed_oxidized_copper'] as const) {
+  DESCRIPTIONS[key] = () => tp('item.desc.tpl.waxedCopper', { name: t(`item.${key}`) });
+}
+
 // ---- 木质围栏 / 栅栏门 / 门 / 活板门（B4g，批次 20261024-0136）：21 个方块只写 4 条模板
 //
 // `{name}` 传整件物品名（`item.oak_fence` = 橡木栅栏）—— 这个名字在表里是**生成的显式键**，
