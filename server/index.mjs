@@ -30,8 +30,10 @@ import {
   blockEditRejection,
   finiteNumber,
   isValidClientId,
+  DEFAULT_ROOM,
   sanitizeDimension,
   sanitizeName,
+  sanitizeRoom,
   withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
@@ -207,13 +209,82 @@ function reject(socket, code, message, closeCode) {
   socket.close(closeCode, code);
 }
 
-function broadcast(message, exceptId = null) {
+/**
+ * 房间密码（联机26）：`ROOM_PASSWORD` 为空 = 不校验（内网自建默认）。
+ *
+ * 只做"进房要口令"这一层，不是鉴权：口令在局域网里明文发，防的是"隔壁同事随手连"。
+ */
+const ROOM_PASSWORD = process.env.ROOM_PASSWORD ?? '';
+
+/**
+ * 允许的来源（联机26）：`ALLOWED_ORIGINS` 用逗号分隔，留空 = 不校验。
+ *
+ * ⚠️ **没有 Origin 的连接放行**：浏览器一定带 Origin，而 node 机器人 / 原生客户端
+ * 不带——不放行的话，所有非浏览器客户端（含本仓库的 `test:net`）都会被拒。
+ * 所以这条规则是"浏览器跨站会被挡"，不是"所有客户端都校验"。
+ */
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+/** 关闭码：来源被拒（联机26） */
+const CLOSE_ORIGIN = 4004;
+/** 关闭码：房间密码错（联机26） */
+const CLOSE_PASSWORD = 4005;
+
+/**
+ * 广播给同一个房间里的人（联机26）。
+ *
+ * `room` 必传：漏一个调用点就会"跨房串台"——这也是为什么 `broadcast` 的第三个参数
+ * 不给默认值（给了默认值，漏传的地方会静默变成"发给所有人"）。
+ */
+function broadcast(message, exceptId, room) {
   const text = JSON.stringify(message);
   for (const player of players.values()) {
     if (player.id === exceptId) continue;
+    if (player.room !== room) continue;
     if (player.socket.readyState !== player.socket.OPEN) continue;
     player.socket.send(text);
   }
+}
+
+/**
+ * 数据 key 里的房间名（联机26）：新格式 `room|dimension|x,y,z`，旧格式只有
+ * `dimension|x,y,z`（这个版本之前存的）——旧数据归默认房间，不当作损坏。
+ */
+function roomOfDataKey(key) {
+  const parts = String(key).split('|');
+  // 旧格式的第二段是 `x,y,z`（逗号分隔，不含 `|`），所以"正好两段"就是旧格式
+  return parts.length >= 3 ? parts[0] : DEFAULT_ROOM;
+}
+
+/** 取出某房间名下的全部值（key 是 `房名|...`，联机26） */
+function roomScopedValues(map, room) {
+  const prefix = `${room}|`;
+  const out = [];
+  for (const [key, value] of map) {
+    if (key.startsWith(prefix)) out.push(value);
+  }
+  return out;
+}
+
+/** 现在有人的房间（`time` 这类广播要按房各发一份） */
+function roomsInUse() {
+  const rooms = new Set();
+  for (const player of players.values()) rooms.add(player.room);
+  return rooms;
+}
+
+/**
+ * 数据表的 key 加房间前缀（联机26）：`room|dimension|x,y,z`。
+ *
+ * 用前缀而不是"每个房间一套 Map"：前者只需要改 key 的拼法，后者要把四张表
+ * （edits / containers / signs / frames）全部搬进 Room 对象、再改几十处引用——
+ * 改错一处的表现是"某个功能跨房串台"，比 key 拼错更难查。
+ */
+function scopedKey(room, key) {
+  return `${room}|${key}`;
 }
 
 /** 给新玩家准备的世界快照 */
@@ -228,7 +299,9 @@ function snapshotFor(player) {
     seed: WORLD_SEED,
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
-    players: [...players.values()].map((p) => ({
+    players: [...players.values()]
+      .filter((p) => p.room === player.room)
+      .map((p) => ({
       id: p.id,
       name: p.name,
       x: p.x,
@@ -239,14 +312,21 @@ function snapshotFor(player) {
       dimension: p.dimension,
     })),
     // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]；**按玩家位置裁剪**（联机14）
-    edits: selectSnapshotEdits(edits.values(), player).map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
-    // 地上的掉落物：新玩家进来要看得见（L7 第一刀）
-    items: [...items.values()],
-    // 容器内容（联机13）：重启后箱子里的东西不会凭空消失
-    containers: [...containers.values()],
-    // 牌子与展示框（联机16）：同一条理由
-    signs: [...signs.values()],
-    frames: [...frames.values()],
+    // 且**只带本房**的（联机26：key 前缀就是房名）
+    edits: selectSnapshotEdits(roomScopedValues(edits, player.room), player).map((e) => [
+      e.x,
+      e.y,
+      e.z,
+      e.id,
+      e.state,
+      e.dimension,
+    ]),
+    // 地上的掉落物：新玩家进来要看得见（L7 第一刀）；owner 必须同房
+    items: [...items.values()].filter((item) => players.get(item.owner)?.room === player.room),
+    // 容器内容（联机13）与牌子/展示框（联机16）：同样只带本房
+    containers: roomScopedValues(containers, player.room),
+    signs: roomScopedValues(signs, player.room),
+    frames: roomScopedValues(frames, player.room),
   };
 }
 
@@ -294,7 +374,7 @@ function currentTimeOfDay() {
 /** 时间校正广播：2 秒一条；没人时什么都不发 */
 const clockTimer = setInterval(() => {
   if (players.size === 0) return;
-  broadcast({ t: 'time', timeOfDay: currentTimeOfDay() });
+  for (const room of roomsInUse()) broadcast({ t: 'time', timeOfDay: currentTimeOfDay() }, null, room);
 }, 2000);
 clockTimer.unref?.();
 
@@ -307,14 +387,14 @@ function worldSnapshot() {
     savedAt: Date.now(),
     seed: WORLD_SEED,
     timeOfDay: Number(currentTimeOfDay().toFixed(6)),
-    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]
-    edits: [...edits.values()].map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
-    // 容器：[x, y, z, dimension, slots]
-    containers: [...containers.values()].map((c) => [c.x, c.y, c.z, c.dimension, c.slots]),
-    // 牌子：[x, y, z, dimension, lines]（联机16）
-    signs: [...signs.values()].map((s) => [s.x, s.y, s.z, s.dimension, s.lines]),
-    // 展示框：[x, y, z, dimension, item, rotation]
-    frames: [...frames.values()].map((f) => [f.x, f.y, f.z, f.dimension, f.item, f.rotation]),
+    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension, room]（末位 room 是联机26 加的）
+    edits: [...edits].map(([key, e]) => [e.x, e.y, e.z, e.id, e.state, e.dimension, roomOfDataKey(key)]),
+    // 容器：[x, y, z, dimension, slots, room]
+    containers: [...containers].map(([key, c]) => [c.x, c.y, c.z, c.dimension, c.slots, roomOfDataKey(key)]),
+    // 牌子：[x, y, z, dimension, lines, room]（联机16）
+    signs: [...signs].map(([key, v]) => [v.x, v.y, v.z, v.dimension, v.lines, roomOfDataKey(key)]),
+    // 展示框：[x, y, z, dimension, item, rotation, room]
+    frames: [...frames].map(([key, f]) => [f.x, f.y, f.z, f.dimension, f.item, f.rotation, roomOfDataKey(key)]),
   };
 }
 
@@ -329,7 +409,8 @@ if (loaded.data) {
   const saved = loaded.data;
   for (const entry of Array.isArray(saved.edits) ? saved.edits : []) {
     if (!Array.isArray(entry)) continue;
-    const [x, y, z, id, state, dimension] = entry;
+    const [x, y, z, id, state, dimension, rawRoom] = entry;
+    const room = sanitizeRoom(String(rawRoom ?? DEFAULT_ROOM));
     const edit = {
       x: Math.trunc(Number(x)),
       y: Math.trunc(Number(y)),
@@ -340,11 +421,12 @@ if (loaded.data) {
     };
     if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
     // 读档也走容量策略：存档比上限还大时保留最后 MAX_EDITS 条（不告警，这是读档不是溢出）
-    rememberEdit(edits, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit, MAX_EDITS);
+    rememberEdit(edits, scopedKey(room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), edit, MAX_EDITS);
   }
   for (const entry of Array.isArray(saved.containers) ? saved.containers : []) {
     if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, slots] = entry;
+    const [x, y, z, dimension, slots, rawRoomC] = entry;
+    const roomC = sanitizeRoom(String(rawRoomC ?? DEFAULT_ROOM));
     const container = {
       x: Math.trunc(Number(x)),
       y: Math.trunc(Number(y)),
@@ -353,11 +435,12 @@ if (loaded.data) {
       slots,
     };
     if (![container.x, container.y, container.z].every(Number.isFinite)) continue;
-    containers.set(`${container.dimension}|${container.x},${container.y},${container.z}`, container);
+    containers.set(scopedKey(roomC, `${container.dimension}|${container.x},${container.y},${container.z}`), container);
   }
   for (const entry of Array.isArray(saved.signs) ? saved.signs : []) {
     if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, lines] = entry;
+    const [x, y, z, dimension, lines, rawRoomS] = entry;
+    const roomS = sanitizeRoom(String(rawRoomS ?? DEFAULT_ROOM));
     const sign = {
       x: Math.trunc(Number(x)),
       y: Math.trunc(Number(y)),
@@ -366,11 +449,12 @@ if (loaded.data) {
       lines: Array.isArray(lines) ? lines.map((line) => String(line)) : [],
     };
     if (![sign.x, sign.y, sign.z].every(Number.isFinite)) continue;
-    signs.set(`${sign.dimension}|${sign.x},${sign.y},${sign.z}`, sign);
+    signs.set(scopedKey(roomS, `${sign.dimension}|${sign.x},${sign.y},${sign.z}`), sign);
   }
   for (const entry of Array.isArray(saved.frames) ? saved.frames : []) {
     if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, item, rotation] = entry;
+    const [x, y, z, dimension, item, rotation, rawRoomF] = entry;
+    const roomF = sanitizeRoom(String(rawRoomF ?? DEFAULT_ROOM));
     const frame = {
       x: Math.trunc(Number(x)),
       y: Math.trunc(Number(y)),
@@ -380,7 +464,7 @@ if (loaded.data) {
       rotation: Math.trunc(Number(rotation ?? 0)) || 0,
     };
     if (![frame.x, frame.y, frame.z].every(Number.isFinite)) continue;
-    frames.set(`${frame.dimension}|${frame.x},${frame.y},${frame.z}`, frame);
+    frames.set(scopedKey(roomF, `${frame.dimension}|${frame.x},${frame.y},${frame.z}`), frame);
   }
   if (typeof saved.timeOfDay === 'number' && Number.isFinite(saved.timeOfDay)) {
     startTimeOfDay = ((saved.timeOfDay % 1) + 1) % 1;
@@ -416,6 +500,18 @@ heartbeat.unref?.();
 wss.on('connection', (socket, request) => {
   const address = request.socket.remoteAddress ?? 'unknown';
   let player = null;
+
+  /*
+   * 来源校验（联机26）：只挡**带 Origin 且不在白名单**的连接。
+   *
+   * `ALLOWED_ORIGINS` 留空 = 不校验（内网自建默认，否则更新完就连不上）；
+   * 无 Origin 的放行（node 机器人 / 原生客户端不带，浏览器一定带）。
+   */
+  const origin = request.headers.origin;
+  if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+    reject(socket, 'origin', `来源不被允许：${origin}`, CLOSE_ORIGIN);
+    return;
+  }
 
   // 心跳（联机7）：ping 是协议层帧，浏览器会自动回 pong（它不能主动 ping）
   socket.lastPongAt = Date.now();
@@ -474,10 +570,20 @@ wss.on('connection', (socket, request) => {
           log(`${grace.name}#${grace.id} 宽限期内重连，复用 id`);
         }
 
+        /*
+         * 房间（联机26）：非法房名回默认房间（房名是数据 key 的前缀，不能透传）。
+         * 密码只做"进房口令"，不是鉴权——明文、只防隔壁同事随手连。
+         */
+        const room = sanitizeRoom(message.room);
+        if (ROOM_PASSWORD && String(message.password ?? '') !== ROOM_PASSWORD) {
+          return reject(socket, 'password', '房间密码不对', CLOSE_PASSWORD);
+        }
+
         const name = sanitizeName(message.name);
         player = {
           id: grace ? grace.id : nextPlayerId++,
           name,
+          room,
           clientId: message.clientId,
           // 位置与维度：客户端进服时会带上"我此刻在哪"，不再让新玩家在别人眼里
           // 先出现在 (0,80,0) 一次（要等 100ms 后的第一条 move 才纠正）
@@ -516,7 +622,7 @@ wss.on('connection', (socket, request) => {
           name: player.name,
           ...snapshotFor(player),
         });
-        broadcast({ t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: 0, pitch: 0, dimension: player.dimension }, player.id);
+        broadcast({ t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: 0, pitch: 0, dimension: player.dimension }, player.id, player.room);
         // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
         // 测试也不必白等一个完整间隔
         socket.ping();
@@ -555,6 +661,7 @@ wss.on('connection', (socket, request) => {
             ...(player.team ? { team: player.team } : {}),
           },
           player.id,
+          player.room,
         );
         break;
       }
@@ -577,10 +684,10 @@ wss.on('connection', (socket, request) => {
         }
 
         if (edits.size < MAX_EDITS) {
-          rememberEdit(edits, `${dimension}|${x},${y},${z}`, { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
+          rememberEdit(edits, scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
-        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id);
+        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -610,7 +717,7 @@ wss.on('connection', (socket, request) => {
           };
           // 与单条 `block` 同一套校验（联机24）：坏条目单独丢，不整包拒绝
           if (blockEditRejection(player, edit.x, edit.y, edit.z, edit.id, edit.state)) continue;
-          rememberEdit(edits, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit, MAX_EDITS, warnEvictedEdit);
+          rememberEdit(edits, scopedKey(player.room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), edit, MAX_EDITS, warnEvictedEdit);
           accepted.push(edit);
         }
         if (accepted.length === 0) return;
@@ -621,6 +728,7 @@ wss.on('connection', (socket, request) => {
             by: player.id,
           },
           player.id,
+          player.room,
         );
         break;
       }
@@ -642,8 +750,8 @@ wss.on('connection', (socket, request) => {
         const lines = Array.isArray(message.lines)
           ? message.lines.slice(0, 4).map((line) => String(line).slice(0, 64))
           : [];
-        if (signs.size < MAX_SIGNS) signs.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, lines });
-        broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id);
+        if (signs.size < MAX_SIGNS) signs.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, lines });
+        broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -673,7 +781,7 @@ wss.on('connection', (socket, request) => {
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
         if (![x, y, z, damage, fire].every(Number.isFinite)) return;
-        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id);
+        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -704,7 +812,7 @@ wss.on('connection', (socket, request) => {
         if (Math.hypot(vx, vy, vz) > 200) return;
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         if (!Number.isFinite(damage)) return;
-        broadcast({ t: 'arrow', x, y, z, vx, vy, vz, damage, by: player.id }, player.id);
+        broadcast({ t: 'arrow', x, y, z, vx, vy, vz, damage, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -716,7 +824,7 @@ wss.on('connection', (socket, request) => {
         const z = Math.trunc(Number(message.z));
         if (![x, y, z].every(Number.isFinite)) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
-        broadcast({ t: 'tnt', x, y, z, dimension, by: player.id }, player.id);
+        broadcast({ t: 'tnt', x, y, z, dimension, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -751,8 +859,8 @@ wss.on('connection', (socket, request) => {
             : null;
         if (item && (!Number.isFinite(item.id) || !Number.isFinite(item.count))) return;
         const rotation = Math.trunc(Number(message.rotation ?? 0)) || 0;
-        if (frames.size < MAX_FRAMES) frames.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, item, rotation });
-        broadcast({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id }, player.id);
+        if (frames.size < MAX_FRAMES) frames.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, item, rotation });
+        broadcast({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -777,9 +885,9 @@ wss.on('connection', (socket, request) => {
         }
         // 留一份副本随快照落盘（联机13）：不然重启之后箱子里的东西对新玩家不可见
         if (containers.size < MAX_CONTAINERS) {
-          containers.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, slots });
+          containers.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, slots });
         }
-        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id);
+        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id, player.room);
         break;
       }
 
@@ -807,7 +915,7 @@ wss.on('connection', (socket, request) => {
         const key = `${player.id}:${localId}`;
         if (items.size >= MAX_ITEMS && !items.has(key)) return;
         items.set(key, { owner: player.id, localId, itemId, count, x, y, z });
-        broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id);
+        broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id, player.room);
         break;
       }
 
@@ -833,6 +941,12 @@ wss.on('connection', (socket, request) => {
         const localId = Math.trunc(Number(message.localId));
         if (!Number.isFinite(owner) || !Number.isFinite(localId) || owner <= 0 || localId <= 0) return;
 
+        // 跨房不给偷（联机26）：owner 必须和我在同一个房间
+        const ownerPlayer = players.get(owner);
+        if (!ownerPlayer || ownerPlayer.room !== player.room) {
+          send(socket, { t: 'item-take', ok: false, owner, localId, reason: 'gone' });
+          break;
+        }
         const key = `${owner}:${localId}`;
         const item = items.get(key);
         if (!item) {
@@ -842,7 +956,7 @@ wss.on('connection', (socket, request) => {
         items.delete(key);
         send(socket, { t: 'item-take', ok: true, owner, localId, itemId: item.itemId, count: item.count });
         // 所有人（含请求者）都删镜像：请求者靠 `ok` 加背包，靠这条删掉地上的那堆
-        broadcast({ t: 'item-remove', owner, localId });
+        broadcast({ t: 'item-remove', owner, localId }, null, player.room);
         log(`${player.name}#${player.id} 捡走了 ${owner}#${localId} 那堆（${item.itemId}×${item.count}）`);
         break;
       }
@@ -853,7 +967,7 @@ wss.on('connection', (socket, request) => {
         if (!Number.isFinite(localId) || localId <= 0) return;
         const key = `${player.id}:${localId}`;
         if (!items.delete(key)) return;
-        broadcast({ t: 'item-remove', owner: player.id, localId }, player.id);
+        broadcast({ t: 'item-remove', owner: player.id, localId }, player.id, player.room);
         break;
       }
 
@@ -863,7 +977,7 @@ wss.on('connection', (socket, request) => {
         if (!player.buckets.chat.take()) return;
         const text = String(message.text ?? '').slice(0, 200);
         if (text.length === 0) return;
-        broadcast({ t: 'chat', id: player.id, name: player.name, text });
+        broadcast({ t: 'chat', id: player.id, name: player.name, text }, null, player.room);
         log(`<${player.name}> ${text}`);
         break;
       }
@@ -880,7 +994,7 @@ wss.on('connection', (socket, request) => {
         if (!player) return send(socket, { t: 'error', code: 'joined', message: '先 join 再睡' });
         serverStartMs = Date.now();
         startTimeOfDay = DAWN_TIME_OF_DAY;
-        broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true });
+        for (const room of roomsInUse()) broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true }, null, room);
         log(`${player.name}#${player.id} 睡满，时间跳到黎明`);
         break;
       }
@@ -909,13 +1023,13 @@ wss.on('connection', (socket, request) => {
     };
     grace.timer = setTimeout(() => {
       graces.delete(player.clientId);
-      broadcast({ t: 'leave', id: player.id });
+      broadcast({ t: 'leave', id: player.id }, null, player.room);
       // 宽限期过完，他名下那些掉落物再没人有权删了（owner 已离线），一并清掉；
       // 否则它们会永远躺在别人的世界里，而本地镜像又不可拾取
       for (const [key, item] of items) {
         if (item.owner !== player.id) continue;
         items.delete(key);
-        broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId });
+        broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId }, null, player.room);
       }
       log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
     }, GRACE_MS);

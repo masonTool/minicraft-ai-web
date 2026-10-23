@@ -127,3 +127,21 @@ export function blockEditRejection(player, x, y, z, id, state) {
   if (!withinEditReach(player, x, z)) return 'distance';
   return null;
 }
+
+// ---------------------------------------------------------------- 房间（联机26）
+
+/** 没有指定房间时的默认房间名 */
+export const DEFAULT_ROOM = 'default';
+
+/** 房间名：1~24 位字母/数字/`-`/`_`。太宽松会让"房名即 key"那套失效（拼出怪字符） */
+const ROOM_RE = /^[A-Za-z0-9_-]{1,24}$/;
+
+/**
+ * 房间名收口：非法/缺失一律回默认房间。
+ *
+ * 房间名是**数据表的 key 前缀**（方块增量、容器、牌子、展示框都按房隔离），
+ * 一个带分隔符的名字会让两房的数据在 key 上撞车——所以这里宁可回默认，也不透传。
+ */
+export function sanitizeRoom(value) {
+  return typeof value === 'string' && ROOM_RE.test(value) ? value : DEFAULT_ROOM;
+}

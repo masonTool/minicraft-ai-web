@@ -41,11 +41,17 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** 一个测试用客户端：把收到的消息存进 mailbox，便于断言 */
 class TestClient {
   /** @param {string} [clientId] 显式传同一个值可以测"重复身份" */
-  constructor(name, clientId = `testclient${String(++clientSeq).padStart(2, '0')}`) {
+  constructor(name, clientId = `testclient${String(++clientSeq).padStart(2, '0')}`, options = {}) {
     this.name = name;
     this.clientId = clientId;
+    /** 房间码 / 口令（联机26）：跟着 join 一起发 */
+    this.room = options.room ?? '';
+    this.password = options.password ?? '';
     this.mailbox = [];
-    this.socket = new WebSocket(`ws://localhost:${PORT}`);
+    this.socket = new WebSocket(
+      `ws://localhost:${PORT}`,
+      options.origin ? { headers: { origin: options.origin } } : undefined,
+    );
     /*
      * 兜底监听 `error`：没有它的话，连接失败（服务端还没起来 / 重启中的空窗）
      * 会以**未捕获事件**的形式把整个测试进程带崩——看不到是哪条断言失败，只看到
@@ -136,13 +142,21 @@ let serverOutput = '';
  *
  * 抽成函数是为了"重启后快照仍在"那条用例（联机13）——它要真的杀一次再起一次。
  */
-async function startServer(attempts = 2) {
+async function startServer(extraEnv = {}, attempts = 3) {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     serverOutput = '';
     server = spawn('node', ['server/index.mjs'], {
       // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
       // "宽限期过后才清掉落物"的断言都要白等半分钟
-      env: { ...process.env, PORT: String(PORT), GRACE_MS: '400', DATA_DIR },
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        GRACE_MS: '400',
+        DATA_DIR,
+        // 来源白名单（联机26）：只有这个 origin 能连；不带 Origin 的照常放行（node 客户端）
+        ALLOWED_ORIGINS: 'http://good.example',
+        ...extraEnv,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     server.stdout.on('data', (chunk) => {
@@ -159,7 +173,7 @@ async function startServer(attempts = 2) {
     }
     // 上一次的 socket 还在 TIME_WAIT / CPU 挤到超时：等一下再起一次，
     // 而不是直接把"没监听"当成断言失败（外面看到的是偶发红）
-    if (attempt < attempts) await sleep(500);
+    if (attempt < attempts) await sleep(700);
   }
   return false;
 }
@@ -179,7 +193,18 @@ try {
   async function joinAndWaitWelcome(client, name, x, y, z, dimension = 'overworld') {
     await client.ready();
     for (let attempt = 0; attempt < 2; attempt++) {
-      client.send({ t: 'join', v: PROTOCOL_VERSION, clientId: client.clientId, name, x, y, z, dimension });
+      client.send({
+        t: 'join',
+        v: PROTOCOL_VERSION,
+        clientId: client.clientId,
+        name,
+        x,
+        y,
+        z,
+        dimension,
+        ...(client.room ? { room: client.room } : {}),
+        ...(client.password ? { password: client.password } : {}),
+      });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
     }
@@ -957,6 +982,81 @@ try {
     const welcomeFresh = await joinAndWaitWelcome(fresh, '新开局', 0, 70, 0);
     check('坏快照之后从空世界开始', welcomeFresh !== null && (welcomeFresh.edits ?? []).length === 0, `${(welcomeFresh?.edits ?? []).length}`);
     fresh.close();
+  }
+  // ---------------------------------------------------------------- 房间 / 来源（联机26）
+  console.log('\n[房间与来源校验]');
+  {
+    // 来源：带 Origin 的连接才校验（node 客户端不带 Origin，照常放行——否则这套测试自己就连不上）
+    const evil = new TestClient('EvilOrigin', undefined, { origin: 'http://evil.example' });
+    const evilError = await evil.wait('error', 3000);
+    check('错 origin 被拒', evilError?.code === 'origin', JSON.stringify(evilError));
+    evil.close();
+
+    const good = new TestClient('GoodOrigin', undefined, { origin: 'http://good.example' });
+    check('白名单里的 origin 正常加入', (await joinAndWaitWelcome(good, '好来源', 0, 70, 0)) !== null);
+
+    // 一房一世界：A 房写的方块，B 房看不到（广播与快照两条路都要挡住）
+    const roomA = new TestClient('RoomA', undefined, { room: 'alpha' });
+    const welcomeA = await joinAndWaitWelcome(roomA, 'A 房', 0, 70, 0);
+    const roomB = new TestClient('RoomB', undefined, { room: 'beta' });
+    const welcomeB2 = await joinAndWaitWelcome(roomB, 'B 房', 0, 70, 0);
+    check('两个房都能加入', welcomeA !== null && welcomeB2 !== null);
+
+    roomA.send({ t: 'block', x: 3, y: 70, z: 3, id: 1, state: 0, dimension: 'overworld' });
+    await sleep(150);
+    check('A 房的方块不会发给 B 房', (await roomB.wait('block', 600)) === null);
+
+    const lateA = new TestClient('LateA', undefined, { room: 'alpha' });
+    const lateWelcomeA = await joinAndWaitWelcome(lateA, '后进 A 房', 0, 70, 0);
+    check(
+      'A 房的快照里有自己的方块',
+      (lateWelcomeA?.edits ?? []).some((e) => e[0] === 3 && e[2] === 3),
+      JSON.stringify(lateWelcomeA?.edits),
+    );
+
+    const lateB = new TestClient('LateB', undefined, { room: 'beta' });
+    const lateWelcomeB = await joinAndWaitWelcome(lateB, '后进 B 房', 0, 70, 0);
+    check(
+      'B 房的快照里没有 A 房的方块',
+      !(lateWelcomeB?.edits ?? []).some((e) => e[0] === 3 && e[2] === 3),
+      JSON.stringify(lateWelcomeB?.edits),
+    );
+
+    // 非法房名回默认房间（房名是数据 key 的前缀，不能透传）
+    const weirdRoom = new TestClient('WeirdRoom', undefined, { room: '不合法 房名!' });
+    check('非法房名回默认房间（不报错）', (await joinAndWaitWelcome(weirdRoom, '怪房名', 0, 70, 0)) !== null);
+
+    for (const client of [good, roomA, roomB, lateA, lateB, weirdRoom]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 房间口令（联机26）
+  console.log('\n[房间口令]');
+  {
+    // 这一段要带着口令重启（其他测试都不带密码，不能提前设）
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    await Promise.race([exited, sleep(2500)]);
+    check('带口令的服务端起来了', await startServer({ ROOM_PASSWORD: 'sesame' }));
+
+    const noPw = new TestClient('NoPw');
+    await noPw.ready();
+    noPw.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: noPw.clientId,
+      name: '没口令',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+    });
+    const noPwError = await noPw.wait('error', 3000);
+    check('没带口令被拒', noPwError?.code === 'password', JSON.stringify(noPwError));
+    noPw.close();
+
+    const withPw = new TestClient('WithPw', undefined, { password: 'sesame' });
+    check('带对口令能进', (await joinAndWaitWelcome(withPw, '有口令', 0, 70, 0)) !== null);
+    withPw.close();
   }
 } finally {
   server?.kill('SIGTERM');

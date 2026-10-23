@@ -16,6 +16,7 @@ import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
+import { parseServerUrl } from '../core/net/ServerUrl.ts';
 
 export interface NetPlayerState {
   id: number;
@@ -241,6 +242,10 @@ export class NetClient {
   private fatal = false;
   /** 本机的稳定标识（见 `core/net/ClientId.ts`），首次 connect 时生成 */
   private clientId = '';
+  /** 房间码（联机26）：空串 = 服务端默认房间；同一房间的人才互相可见 */
+  private room = '';
+  /** 房间口令（联机26）：空串 = 不发送（服务端没设密码时也不需要） */
+  private password = '';
   /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
@@ -272,7 +277,11 @@ export class NetClient {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
     this.fatal = false;
-    this.url = url;
+    // 房间/口令从地址里拆（联机26）：`ws://host:8787/red?pw=1234`
+    const parsed = parseServerUrl(url);
+    this.url = parsed.url;
+    this.room = parsed.room;
+    this.password = parsed.password;
     this.name = name;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
     if (this.clientId.length === 0) this.clientId = browserClientId();
@@ -320,6 +329,9 @@ export class NetClient {
           y: Number(this.position.y.toFixed(3)),
           z: Number(this.position.z.toFixed(3)),
           dimension: this.position.dimension,
+          // 房间与口令（联机26）：没填就不带
+          ...(this.room ? { room: this.room } : {}),
+          ...(this.password ? { password: this.password } : {}),
         }),
       );
     };
