@@ -427,9 +427,10 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       optional,
       STRUCTURE_NAMES.map((entry) => ({
         value: entry.key,
+        // 结构名（多语言 P1-7）：标签来自 `cmd.label.structure.*`，数据表里不再存两种写法
         label: entry.locatable
-          ? tp('cmd.help.ui.titleWithId', { title: entry.label, id: entry.key })
-          : tp('cmd.help.ui.cannotLocate', { label: entry.label, key: entry.key }),
+          ? tp('cmd.help.ui.titleWithId', { title: t(`cmd.label.structure.${entry.key}`), id: entry.key })
+          : tp('cmd.help.ui.cannotLocate', { label: t(`cmd.label.structure.${entry.key}`), key: entry.key }),
       })),
     );
   }

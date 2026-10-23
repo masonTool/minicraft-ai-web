@@ -30,13 +30,6 @@ export const SLOT_LABELS: Readonly<Record<ScoreboardSlot, string>> = {
   below_name: '名字下方',
 };
 
-/** 英文名（批次 617）：理由同 `GAME_MODE_LABELS_EN` */
-export const SLOT_LABELS_EN: Readonly<Record<ScoreboardSlot, string>> = {
-  sidebar: 'Sidebar',
-  list: 'Player list',
-  below_name: 'Below name',
-};
-
 /** 目前只支持 dummy（见文件头的差异说明） */
 export const SUPPORTED_CRITERIA: readonly string[] = ['dummy'];
 

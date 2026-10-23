@@ -5,22 +5,9 @@
  *  · `commandUsage` / `commandDescription`：`/help` 的用法与说明 —— **已走 `cmd.*` 查表**（P1-1b）。
  *    之前是"中文串写在 spec 里 + 英文串放在 `commandHelp.data.ts`"二选一，改一句要同步两个文件。
  *  · `msg()`：命令回执 —— 键是 `cmd.reply.*` 语义键（P1-6 已切完，旧的中文原文表已删除）。
- *  · `pickLabel()`：**过渡遗留** —— `/gamemode`、`/weather`、`/difficulty`、`/scoreboard setdisplay`
- *    这几条回执里嵌着另一张"值 → 名字"的表，还是中文一张 + 英文一张（P1-7 删掉，改成 `cmd.label.*`）。
  */
 
-import { getLanguage, t } from '../i18n/I18n.ts';
-
-/**
- * 把"中文表 + 英文表"这对常量按当前语言取一个值。
- *
- * ⚠️ 多语言 P0-4：判定从"是不是英文"改成"**是不是中文**"。
- * 原来德语/俄语用户会在这几处拿到中文（`Weather set to 下雨` 那种半截话的根源）。
- * 这套形态会在 **P1-7** 删掉（改成 `cmd.label.*` 走查表），这里只是先让判定方向正确。
- */
-export function pickLabel(zh: string, en: string): string {
-  return getLanguage() === 'zh' ? zh : en;
-}
+import { t } from '../i18n/I18n.ts';
 
 /**
  * `/help` 里那条命令的用法行（按当前语言）。

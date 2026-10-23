@@ -21,16 +21,6 @@ import type { DimensionId } from '../gen/Dimension.ts';
 export interface StructureNameEntry {
   /** 命令里写的名字（= 生成器内部 kind） */
   readonly key: string;
-  /** 中文名（报错与补全用） */
-  readonly label: string;
-  /**
-   * 英文名。
-   *
-   * 为什么不在命令层按中文名查表：那会造出第二张"中文 → 英文"的表，
-   * 两张表迟早漂（一边改了名另一边没改）。名字与它的两种写法放在同一行，
-   * 改的时候眼睛就在它旁边。
-   */
-  readonly labelEn: string;
   /** 它在哪个维度 */
   readonly dimension: DimensionId;
   /** 有没有"找最近一个"的实现；false = 结构会生成，但还不能被 /locate 找到 */
@@ -41,45 +31,41 @@ export interface StructureNameEntry {
 
 export const STRUCTURE_NAMES: readonly StructureNameEntry[] = [
   // ---- 主世界（`Structures.ts` 的 STRUCTURE_DEFS，18 种）----
-  { key: 'village', label: '村庄', labelEn: 'Village', dimension: 'overworld', locatable: true },
-  { key: 'mineshaft', label: '废弃矿井', labelEn: 'Mineshaft', dimension: 'overworld', locatable: true },
-  { key: 'stronghold', label: '要塞', labelEn: 'Stronghold', dimension: 'overworld', locatable: true },
-  { key: 'dungeon', label: '地牢', labelEn: 'Dungeon', dimension: 'overworld', locatable: true },
-  { key: 'shipwreck', label: '沉船', labelEn: 'Shipwreck', dimension: 'overworld', locatable: true },
-  { key: 'ocean_monument', label: '海底神殿', labelEn: 'Ocean Monument', dimension: 'overworld', locatable: true },
-  { key: 'woodland_mansion', label: '林地府邸', labelEn: 'Woodland Mansion', dimension: 'overworld', locatable: true },
-  { key: 'desert_pyramid', label: '沙漠神殿', labelEn: 'Desert Pyramid', dimension: 'overworld', locatable: true },
-  { key: 'jungle_temple', label: '丛林神庙', labelEn: 'Jungle Temple', dimension: 'overworld', locatable: true },
-  { key: 'witch_hut', label: '女巫小屋', labelEn: 'Witch Hut', dimension: 'overworld', locatable: true },
-  { key: 'pillager_outpost', label: '掠夺者前哨站', labelEn: 'Pillager Outpost', dimension: 'overworld', locatable: true },
-  { key: 'ruined_portal', label: '废弃传送门', labelEn: 'Ruined Portal', dimension: 'overworld', locatable: true },
-  { key: 'buried_treasure', label: '埋藏的宝藏', labelEn: 'Buried Treasure', dimension: 'overworld', locatable: true },
-  { key: 'igloo', label: '雪屋', labelEn: 'Igloo', dimension: 'overworld', locatable: true },
-  { key: 'ocean_ruins', label: '海底废墟', labelEn: 'Ocean Ruins', dimension: 'overworld', locatable: true },
-  { key: 'fossil', label: '化石', labelEn: 'Fossil', dimension: 'overworld', locatable: true },
-  { key: 'amethyst_geode', label: '紫水晶洞', labelEn: 'Amethyst Geode', dimension: 'overworld', locatable: true },
-  { key: 'desert_well', label: '沙漠水井', labelEn: 'Desert Well', dimension: 'overworld', locatable: true },
+  { key: 'village', dimension: 'overworld', locatable: true },
+  { key: 'mineshaft', dimension: 'overworld', locatable: true },
+  { key: 'stronghold', dimension: 'overworld', locatable: true },
+  { key: 'dungeon', dimension: 'overworld', locatable: true },
+  { key: 'shipwreck', dimension: 'overworld', locatable: true },
+  { key: 'ocean_monument', dimension: 'overworld', locatable: true },
+  { key: 'woodland_mansion', dimension: 'overworld', locatable: true },
+  { key: 'desert_pyramid', dimension: 'overworld', locatable: true },
+  { key: 'jungle_temple', dimension: 'overworld', locatable: true },
+  { key: 'witch_hut', dimension: 'overworld', locatable: true },
+  { key: 'pillager_outpost', dimension: 'overworld', locatable: true },
+  { key: 'ruined_portal', dimension: 'overworld', locatable: true },
+  { key: 'buried_treasure', dimension: 'overworld', locatable: true },
+  { key: 'igloo', dimension: 'overworld', locatable: true },
+  { key: 'ocean_ruins', dimension: 'overworld', locatable: true },
+  { key: 'fossil', dimension: 'overworld', locatable: true },
+  { key: 'amethyst_geode', dimension: 'overworld', locatable: true },
+  { key: 'desert_well', dimension: 'overworld', locatable: true },
   // ---- 下界（`Bastion.ts` 的 NETHER_STRUCTURE_KINDS，3 种）----
   {
     key: 'bastion_remnant',
-    label: '堡垒遗迹',
-    labelEn: 'Bastion Remnant',
     dimension: 'nether',
     locatable: true,
     alias: ['bastion'],
   },
   {
     key: 'nether_fortress',
-    label: '下界要塞',
-    labelEn: 'Nether Fortress',
     dimension: 'nether',
     locatable: true,
     alias: ['fortress'],
   },
-  { key: 'nether_fossil', label: '下界化石', labelEn: 'Nether Fossil', dimension: 'nether', locatable: false },
+  { key: 'nether_fossil', dimension: 'nether', locatable: false },
   // ---- 末地（`EndStructures.ts` 的 END_STRUCTURE_KINDS，2 种）----
-  { key: 'end_city', label: '末地城', labelEn: 'End City', dimension: 'end', locatable: true },
-  { key: 'end_ship', label: '末地船', labelEn: 'End Ship', dimension: 'end', locatable: false },
+  { key: 'end_city', dimension: 'end', locatable: true },
+  { key: 'end_ship', dimension: 'end', locatable: false },
 ];
 
 /** 三张真清单的长度和（断言用它跟上面这条数组对齐） */

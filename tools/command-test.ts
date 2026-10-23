@@ -86,7 +86,7 @@ import { defaultBorder, normalizeBorder, type WorldBorder } from '../src/core/wo
 import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
 import { Experience } from '../src/core/survival/Experience.ts';
 // 中英双语回执的断言（批次 624）：切语言跑同一批命令，扫残留中文
-import { getLanguage, resetLanguageForTest, setLanguage } from '../src/core/i18n/I18n.ts';
+import { getLanguage, resetLanguageForTest, setLanguage, t } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;
@@ -1378,14 +1378,27 @@ console.log('\n[/locate biome（批次 416）]');
     const off = STRUCTURE_NAMES.filter((e) => !e.locatable).map((e) => e.key).sort().join(',');
     return off === 'end_ship,nether_fossil';
   })());
-  check('每条都有中文名（不能回显英文 key）', STRUCTURE_NAMES.every((e) => e.label.length > 0 && !/[a-z_]{4,}/.test(e.label)));
+  // 多语言 P1-7：名字已搬进 `cmd.label.structure.*`（数据表只留 key / 维度 / 能不能定位）
+  check(
+    '每条都有中文名（不能回显英文 key）',
+    STRUCTURE_NAMES.every((e) => {
+      const zh = t(`cmd.label.structure.${e.key}`, 'zh');
+      return zh !== `cmd.label.structure.${e.key}` && zh.length > 0 && !/[a-z_]{4,}/.test(zh);
+    }),
+  );
   check('findStructureName 找不到返回 null', findStructureName('没有这个') === null);
   check('findStructureName 空串返回 null', findStructureName('   ') === null);
   check('structureNamesIn 按维度过滤', (() => {
     const nether = structureNamesIn('nether');
     return nether.includes('bastion_remnant') && !nether.includes('village');
   })());
-  check('每条都有英文名', STRUCTURE_NAMES.every((e) => e.labelEn.length > 0 && !/[\u4e00-\u9fff]/.test(e.labelEn)));
+  check(
+    '每条都有英文名',
+    STRUCTURE_NAMES.every((e) => {
+      const en = t(`cmd.label.structure.${e.key}`, 'en');
+      return en.length > 0 && !/[\u4e00-\u9fff]/.test(en);
+    }),
+  );
 
   /**
    * 这份清单是**三张真清单的手抄本**（`Structures.ts` 的 `STRUCTURE_DEFS`、

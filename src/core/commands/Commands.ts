@@ -15,7 +15,7 @@
  *  - 反馈文案与原版风格一致（"已将时间设置为 day"、"找不到物品 xxx"）
  */
 
-import { commandDescription, commandUsage, msg, pickLabel } from './messages.ts';
+import { commandDescription, commandUsage, msg } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
 import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../registry/itemNames.ts';
 // 注册名（`stone` 这种短 id）：`/data` 的回执要同时给中文名与注册名
@@ -25,8 +25,6 @@ import { mobTypeById, MOB_TYPES } from '../entity/mobs.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import {
   DIFFICULTIES,
-  DIFFICULTY_LABELS,
-  DIFFICULTY_LABELS_EN,
   clampRuleNumber,
   type Difficulty,
   type GameRules,
@@ -44,7 +42,7 @@ import { findNearestBiome, LOCATE_DEFAULT_RADIUS } from '../gen/Locate.ts';
 // `/locate structure` 的结构名清单（批次 624 / Q22）：零依赖数据表，不拖生成器进来
 import { findStructureName, structureNamesIn } from './structureNames.data.ts';
 // 维度标签：报"这个结构只在 X 生成"时按语言取
-import { DIMENSION_LABELS as DIM_LABELS, type DimensionId } from '../gen/Dimension.ts';
+import type { DimensionId } from '../gen/Dimension.ts';
 
 /**
  * 维度的英文名（中文名在 `gen/Dimension.ts` 的 `DIMENSION_LABELS`）。
@@ -53,11 +51,6 @@ import { DIMENSION_LABELS as DIM_LABELS, type DimensionId } from '../gen/Dimensi
  * 而这里是命令回执（要跟界面语言走）。塞进去会让 HUD 在英文界面下变成英文，
  * 那是另一件事，不该被这条命令顺手改掉。
  */
-const DIMENSION_LABELS_EN: Readonly<Record<DimensionId, string>> = {
-  overworld: 'the Overworld',
-  nether: 'the Nether',
-  end: 'the End',
-};
 import {
   CLONE_LIMIT,
   cloneBoxInWorld,
@@ -92,8 +85,6 @@ import { TEAM_COLORS, type Teams } from '../world/Teams.ts';
 import {
   SCORE_OPERATIONS,
   SCOREBOARD_SLOTS,
-  SLOT_LABELS,
-  SLOT_LABELS_EN,
   SUPPORTED_CRITERIA,
   isValidScoreName,
   type ScoreOperation,
@@ -115,7 +106,6 @@ import {
 
 export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
 // 游戏模式（批次 491）：`/gamemode` 的三种取值与中文名
-import { GAME_MODE_LABELS_EN, GAME_MODE_LABELS } from '../world/GameMode.ts';
 export type { Difficulty, GameRules } from '../world/Rules.ts';
 
 /** 命令能看到的"世界与玩家" */
@@ -308,7 +298,7 @@ export interface CommandSpec {
    * 用法的 **i18n 键**（`cmd.<name>.usage`，值在 `locales/<lang>/cmd.ts`）。
    *
    * ⚠️ 不是文案本身（多语言 P1）：原来是中文串、英文另存 `commandHelp.data.ts`，
-   * 于是"改一句用法"要同步两个文件，而英文界面还得靠 `pickLabel` 二选一。
+   * 于是"改一句用法"要同步两个文件，英文界面还得靠一张平行的英文表二选一（P1-7 已删）。
    * 现在与界面文案同一套键空间，6 种语言不用再各开平行表。
    */
   usageKey: string;
@@ -377,18 +367,8 @@ export function isSelfTarget(text: string | undefined, playerName: string): bool
 // ---------------------------------------------------------------- 命令表
 
 /** 天气的中文名（批次 221）：`/weather` 的回执以前直接印 `rain` 这种英文原值 */
-const WEATHER_LABELS: Record<'clear' | 'rain' | 'thunder', string> = {
-  clear: '晴天',
-  rain: '下雨',
-  thunder: '雷暴',
-};
 
 /** 英文名（批次 617）：回执句式翻了之后，嵌在里面的值也必须跟着翻 */
-const WEATHER_LABELS_EN: Record<'clear' | 'rain' | 'thunder', string> = {
-  clear: 'Clear',
-  rain: 'Rain',
-  thunder: 'Thunder',
-};
 
 export const COMMANDS: readonly CommandSpec[] = [
   {
@@ -509,7 +489,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWeather(kind);
       // 回执用中文；预计时长由主程序的天气播报补一句（`App.announceWeather`）
-      out.info(msg('cmd.reply.time.weather-set-to-weather', { weather: pickLabel(WEATHER_LABELS[kind], WEATHER_LABELS_EN[kind]) }));
+      out.info(msg('cmd.reply.time.weather-set-to-weather', { weather: t(`cmd.label.weather.${kind}`) }));
     },
   },
   {
@@ -523,7 +503,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setDifficulty(value);
-      out.info(msg('cmd.reply.time.difficulty-set-to-difficulty-value', { difficulty: pickLabel(DIFFICULTY_LABELS[value], DIFFICULTY_LABELS_EN[value]), value: value }));
+      out.info(msg('cmd.reply.time.difficulty-set-to-difficulty-value', { difficulty: t(`cmd.label.difficulty.${value}`), value: value }));
     },
   },
   {
@@ -974,7 +954,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       ctx.setGameMode(mode);
       // 飞行由 `setGameMode` 内部处理（旁观强制飞、切回生存强制落地），
       // 这里**不再**单独调 `setFlying`——两处都设会让"切到生存却还在飞"再现
-      out.info(msg('cmd.reply.gamemode.game-mode-set-to-mode', { mode: pickLabel(GAME_MODE_LABELS[mode], GAME_MODE_LABELS_EN[mode]) }));
+      out.info(msg('cmd.reply.gamemode.game-mode-set-to-mode', { mode: t(`cmd.label.gamemode.${mode}`) }));
     },
   },
   {
@@ -1106,9 +1086,9 @@ export const COMMANDS: readonly CommandSpec[] = [
         if (entry.dimension !== here) {
           out.error(
             msg('cmd.reply.locate.name-only-generates-in-dimension', {
-              name: pickLabel(entry.label, entry.labelEn),
-              Dimension: pickLabel(DIM_LABELS[entry.dimension], DIMENSION_LABELS_EN[entry.dimension]),
-              Current: pickLabel(DIM_LABELS[here], DIMENSION_LABELS_EN[here]),
+              name: t(`cmd.label.structure.${entry.key}`),
+              Dimension: t(`cmd.label.dimension.${entry.dimension}`),
+              Current: t(`cmd.label.dimension.${here}`),
               names: structureNamesIn(here),
             }),
           );
@@ -1118,7 +1098,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           // 结构会生成、但"找最近一个"还没写。说清楚，别让它冒充"附近没有"
           out.error(
             msg('cmd.reply.locate.name-cannot-be-located-yet', {
-              name: pickLabel(entry.label, entry.labelEn),
+              name: t(`cmd.label.structure.${entry.key}`),
             }),
           );
           return;
@@ -1133,14 +1113,14 @@ export const COMMANDS: readonly CommandSpec[] = [
           out.error(
             msg('cmd.reply.locate.no-name-within-radius-blocks', {
               radius: LOCATE_DEFAULT_RADIUS,
-              name: pickLabel(entry.label, entry.labelEn),
+              name: t(`cmd.label.structure.${entry.key}`),
             }),
           );
           return;
         }
         out.info(
           msg('cmd.reply.locate.nearest-name-at-x-y', {
-            name: pickLabel(entry.label, entry.labelEn),
+            name: t(`cmd.label.structure.${entry.key}`),
             x: hit.x,
             y: hit.y,
             z: hit.z,
@@ -1840,14 +1820,14 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
     const objective = args[3];
     if (!objective) {
       board.setDisplay(slot, null);
-      out.info(msg('cmd.reply.scoreboard.cleared-slot', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]) }));
+      out.info(msg('cmd.reply.scoreboard.cleared-slot', { slot: t(`cmd.label.slot.${slot}`) }));
       return;
     }
     if (!board.setDisplay(slot, objective)) {
       out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: objective }));
       return;
     }
-    out.info(msg('cmd.reply.scoreboard.slot-now-shows-objective-objective', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]), objective: objective }));
+    out.info(msg('cmd.reply.scoreboard.slot-now-shows-objective-objective', { slot: t(`cmd.label.slot.${slot}`), objective: objective }));
     return;
   }
 
