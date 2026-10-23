@@ -41,6 +41,7 @@ import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { glFailText } from '../src/core/render/webglSupport.ts';
 import { BRAND, BRAND_EDITION } from '../src/core/brand.ts';
 import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
+import { DEFAULT_GAME_RULES, gameRuleLabel } from '../src/core/world/Rules.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1089,6 +1090,24 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   setLanguage('zh');
   check('中文下视角选项仍是原来的说法', cameraModeLabel('first') === '第一人称' && cameraModeLabel('third-back') === '第三人称（背后）');
+
+  /**
+   * 游戏规则的显示名（C3，批次 20261024-0223）。
+   *
+   * `GAME_RULE_LABELS` 原来是中文常量表，命令帮助的 gamerule 下拉直接显示它 ——
+   * 与 P6-1 的难度/模式同一个毛病。31 条 × 6 语言。
+   */
+  const ruleKeys = Object.keys(DEFAULT_GAME_RULES) as Array<keyof typeof DEFAULT_GAME_RULES>;
+  check('规则标签覆盖全部 31 条规则', ruleKeys.length === 31, String(ruleKeys.length));
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const labels = ruleKeys.map((rule) => gameRuleLabel(rule));
+    const leaked = ruleKeys.filter((rule, i) => /[\u4e00-\u9fff]/.test(labels[i]!) || labels[i] === rule);
+    check(`${code} 游戏规则名不含中文、也不露英文 id`, leaked.length === 0, leaked.slice(0, 3).join(','));
+  }
+  setLanguage('zh');
+  check('中文下规则名仍是原来的说法', gameRuleLabel('keepInventory') === '死亡后保留物品' && gameRuleLabel('doDaylightCycle') === '昼夜循环');
+  resetLanguageForTest();
 
   /**
    * 局内 HUD（B3，批次 20261024-0136）。

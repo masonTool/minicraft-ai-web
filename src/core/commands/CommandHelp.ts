@@ -20,7 +20,7 @@ import { commandDescription, commandUsage } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
 // 字段身份表（多语言 P1-3a）：中英两种写法 → 语言无关的 slug，逻辑只认 slug
 import { ARG_LABEL_SLUGS, FREE_SLUGS, NUMBER_SLUGS, slugOf } from './commandFields.data.ts';
-import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
+import { DEFAULT_GAME_RULES, gameRuleLabel } from '../world/Rules.ts';
 import { EFFECTS, effectLabel } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import { MOB_TYPES } from '../entity/mobs.ts';
@@ -387,7 +387,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       optional,
       (Object.keys(DEFAULT_GAME_RULES) as Array<keyof typeof DEFAULT_GAME_RULES>).map((rule) => ({
         value: rule,
-        label: `${GAME_RULE_LABELS[rule]}（${rule}）`,
+        label: `${gameRuleLabel(rule)}（${rule}）`,
       })),
     );
   }

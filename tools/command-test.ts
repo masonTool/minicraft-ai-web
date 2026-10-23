@@ -74,7 +74,7 @@ import { Teams } from '../src/core/world/Teams.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
-  GAME_RULE_LABELS,
+  gameRuleLabel,
   clampRuleNumber,
   difficultyProfile,
   isDifficulty,
@@ -611,8 +611,10 @@ console.log('\n[难度与游戏规则]');
   // ⑤ 规则总数（台账与覆盖度都对它）
   check(`游戏规则 ${Object.keys(DEFAULT_GAME_RULES).length} 条（原 25 + 新 6）`,
     Object.keys(DEFAULT_GAME_RULES).length === 31, String(Object.keys(DEFAULT_GAME_RULES).length));
-  check('每条规则都有中文名（下拉里不能露英文 id）',
-    (Object.keys(DEFAULT_GAME_RULES) as Array<keyof GameRules>).every((k) => (GAME_RULE_LABELS[k] ?? '').length > 0));
+  // 批次 20261024-0223 起标签走 i18n（`gameRuleLabel`），这条改成验"每条都有非空显示名"，
+  // 四语言下是否真的翻了由 `test:i18n` 的巡查断言管。
+  check('每条规则都有显示名（下拉里不能露英文 id）',
+    (Object.keys(DEFAULT_GAME_RULES) as Array<keyof GameRules>).every((k) => gameRuleLabel(k).length > 0 && gameRuleLabel(k) !== `cmd.label.gamerule.${k}`));
 }
 
 console.log('\n[方块操作]');

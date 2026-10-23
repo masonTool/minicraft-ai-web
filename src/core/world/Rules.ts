@@ -165,40 +165,18 @@ export interface GameRules {
   spectatorsGenerateChunks: boolean;
 }
 
-/** 规则英文 id → 中文名（命令帮助的下拉用；命令里仍拼英文 id） */
-export const GAME_RULE_LABELS: Readonly<Record<keyof GameRules, string>> = {
-  keepInventory: '死亡后保留物品',
-  doMobSpawning: '生物自然生成',
-  mobGriefing: '生物破坏方块',
-  doDaylightCycle: '昼夜循环',
-  naturalRegeneration: '自然回血',
-  randomTickSpeed: '随机刻速度',
-  doMobLoot: '生物掉落物',
-  doTileDrops: '方块掉落物',
-  doWeatherCycle: '天气循环',
-  doInsomnia: '幻翼失眠',
-  doImmediateRespawn: '立即重生',
-  fallDamage: '摔落伤害',
-  fireDamage: '火焰伤害',
-  drowningDamage: '溺水伤害',
-  announceAdvancements: '播报进度',
-  sendCommandFeedback: '显示命令反馈',
-  showDeathMessages: '显示死亡消息',
-  disableRaids: '禁用袭击',
-  spawnRadius: '出生点半径',
-  reducedDebugInfo: '简化调试信息',
-  doFireTick: '火焰蔓延',
-  doEntityDrops: '实体掉落物',
-  doPatrolSpawning: '巡逻队生成',
-  commandBlockOutput: '命令方块输出',
-  freezeDamage: '细雪冻伤',
-  doVinesSpread: '藤蔓蔓延',
-  snowAccumulationHeight: '积雪上限',
-  doTraderSpawning: '流浪商人生成',
-  playersSleepingPercentage: '跳过夜晚所需比例',
-  maxCommandChainLength: '命令方块链长上限',
-  spectatorsGenerateChunks: '旁观加载区块',
-};
+/**
+ * 规则的显示名（批次 20261024-0223）。
+ *
+ * 原来是 `GAME_RULE_LABELS` 一张中文常量表 —— 与 P6-1 修的 `DIFFICULTY_LABELS` /
+ * `GAME_MODE_LABELS` 同一个毛病：命令帮助的 gamerule 下拉在德语/俄语界面上会直接显示中文。
+ * 现在走 `cmd.label.gamerule.*`（31 条 × 6 语言）。
+ *
+ * ⚠️ 键写成模板字面量，`audit:i18n` 才认得出这一族被引用了。
+ */
+export function gameRuleLabel(rule: keyof GameRules): string {
+  return t(`cmd.label.gamerule.${rule}`);
+}
 
 export const DEFAULT_GAME_RULES: GameRules = {
   keepInventory: false,

@@ -4030,8 +4030,11 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
     // ⚠️ 多语言 P1-1b 起这句说明搬进了 `locales/zh/cmd.ts`（`cmd.gamerule.desc`），
     // 所以改**查表**而不是扫 `Commands.ts` 源码——否则每次搬文案都会假红。
     t('cmd.gamerule.desc').includes('死亡后保留物品') &&
-      rulesSrc.includes("doImmediateRespawn: '立即重生'") &&
-      rulesSrc.includes('doImmediateRespawn: false'),
+      // 批次 20261024-0223 起规则名搬进 `cmd.label.gamerule.*`（`gameRuleLabel()`），
+      // `Rules.ts` 里不再有中文字面量 —— 所以这里只验"规则默认值还在"，
+      // 标签是否翻好由 `test:i18n` 的巡查断言管（四语言不含中文 + 覆盖 31 条）。
+      rulesSrc.includes('doImmediateRespawn: false') &&
+      !rulesSrc.includes("doImmediateRespawn: '立即重生'"),
   );
 }
 
