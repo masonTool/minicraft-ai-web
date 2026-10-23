@@ -113,36 +113,42 @@ export function slugOf(text: string): string {
 }
 
 /** 字段显示标签（slug → 中文短标签）。多语言 P1-3b 会换成 `cmd.help.arg.*` 查表 */
-export const ARG_LABELS: Readonly<Record<string, string>> = {
-  item: '物品',
-  count: '数量',
-  dimension: '维度',
-  rule: '规则',
-  value: '值',
-  effect: '效果',
-  seconds: '秒数',
-  level: '等级',
-  entity: '生物',
-  radius: '半径',
-  block: '方块',
-  type: '类型',
-  message: '内容',
-  sound: '音效',
-  enchantment: '附魔',
-  action: '动作',
-  biome: '群系',
-  structure: '结构',
-  targets: '目标',
-  damage: '伤害',
-  loot: '战利品表',
-  selector: '选择器',
-  size: '边长',
-  points: '点数',
-  slot: '格号',
-  path: '路径',
-  number: '数值',
-  name: '名称',
-};
+/**
+ * 有短标签的 slug 集合（多语言 P1-3b）。
+ *
+ * ⚠️ 这里**只有标识、没有文案**：短标签在 `locales/<lang>/cmd.ts` 的 `cmd.help.arg.<slug>`。
+ * 集合用于"没有标签时退回 slug 原文"，避免界面上出现空白。
+ */
+export const ARG_LABEL_SLUGS: ReadonlySet<string> = new Set([
+  'item',
+  'count',
+  'dimension',
+  'rule',
+  'value',
+  'effect',
+  'seconds',
+  'level',
+  'entity',
+  'radius',
+  'block',
+  'type',
+  'message',
+  'sound',
+  'enchantment',
+  'action',
+  'biome',
+  'structure',
+  'targets',
+  'damage',
+  'loot',
+  'selector',
+  'size',
+  'points',
+  'slot',
+  'path',
+  'number',
+  'name',
+]);
 
 /** 这些字段做成数字输入框（按 slug 判，与语言无关） */
 export const NUMBER_SLUGS: ReadonlySet<string> = new Set([

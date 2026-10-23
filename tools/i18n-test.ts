@@ -583,6 +583,17 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   const chatHard = linesWithCjkLiteral(codeOf(chatSrc), (line) => line.includes("t('"));
   check('聊天输入框没有残留硬编码中文', chatHard.length === 0, chatHard.slice(0, 3).join(' / '));
   check('候选提示走占位符（不是拼中文）', chatSrc.includes("tp('chat.candidates'"));
+
+  /**
+   * 命令帮助面板的显示文案（多语言 P1-3b）。
+   *
+   * 这个文件长期是"最大的一块未接 i18n 的中文"：值标签 45 条、字段短标签 28 条、
+   * 面板短语 40 余条，全部硬编码在里面。搬完之后立一条守卫，
+   * 防的是"以后顺手又写一句中文"——那种回退没有任何其它检查能发现。
+   */
+  const helpSrc = readFileSync(new URL('../src/core/commands/CommandHelp.ts', import.meta.url), 'utf8');
+  const helpHard = linesWithCjkLiteral(codeOf(helpSrc));
+  check('命令帮助面板没有残留中文字面量（全部走 cmd.help.*）', helpHard.length === 0, helpHard.slice(0, 3).join(' / '));
 }
 
 console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');

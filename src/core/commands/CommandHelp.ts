@@ -14,8 +14,9 @@
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
 // 多语言 P1-1b：用法与说明要**按当前语言**取，不能直接抄 spec 里的键
 import { commandDescription, commandUsage } from './messages.ts';
+import { t, tp } from '../i18n/I18n.ts';
 // 字段身份表（多语言 P1-3a）：中英两种写法 → 语言无关的 slug，逻辑只认 slug
-import { ARG_LABELS, FREE_SLUGS, NUMBER_SLUGS, slugOf } from './commandFields.data.ts';
+import { ARG_LABEL_SLUGS, FREE_SLUGS, NUMBER_SLUGS, slugOf } from './commandFields.data.ts';
 import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
@@ -65,54 +66,29 @@ export interface CommandHelpEntry {
   readonly variants: readonly CommandHelpVariant[];
 }
 
-/** 选项值的中文标签（命令本身仍然拼英文值） */
-const VALUE_LABELS: Readonly<Record<string, string>> = {
-  peaceful: '和平',
-  easy: '简单',
-  normal: '普通',
-  hard: '困难',
-  clear: '清除',
-  rain: '下雨',
-  thunder: '雷暴',
-  survival: '生存',
-  creative: '创造',
-  spectator: '旁观',
-  day: '白天',
-  noon: '正午',
-  night: '夜晚',
-  midnight: '午夜',
-  masked: '遮罩',
-  replace: '替换',
-  give: '给予',
-  set: '设置',
-  add: '添加',
-  remove: '移除',
-  list: '列表',
-  join: '加入',
-  leave: '离开',
-  modify: '修改',
-  merge: '写入',
-  get: '查询',
-  query: '查询',
-  center: '设置中心',
-  grant: '授予',
-  revoke: '收回',
-  entity: '实体',
-  block: '方块',
-  objectives: '记分项',
-  players: '玩家',
-  as: '作为',
-  at: '在',
-  positioned: '定位到',
-  if: '如果',
-  unless: '除非',
-  run: '执行',
-  overworld: '主世界',
-  nether: '下界',
-  end: '末地',
-  biome: '群系',
-  '*': '全部（*）',
-};
+/**
+ * 已知的关键字（`peaceful` / `day` / `masked` …）。
+ *
+ * 只是"这个词有没有标签"的集合，**不含任何文案**：标签本身在
+ * `locales/<lang>/cmd.ts` 的 `cmd.help.value.<关键字>` 里（多语言 P1-3b）。
+ */
+const KNOWN_VALUES: ReadonlySet<string> = new Set([
+  'peaceful', 'easy', 'normal', 'hard', 'clear', 'rain', 'thunder', 'survival', 'creative',
+  'spectator', 'day', 'noon', 'night', 'midnight', 'masked', 'replace', 'give', 'set', 'add',
+  'remove', 'list', 'join', 'leave', 'modify', 'merge', 'get', 'query', 'center', 'grant',
+  'revoke', 'entity', 'block', 'objectives', 'players', 'as', 'at', 'positioned', 'if', 'unless',
+  'run', 'overworld', 'nether', 'end', 'biome', '*',
+]);
+
+/** 关键字 → 显示名（没登记的原样返回，界面不会变成空白） */
+function valueLabel(value: string): string {
+  return KNOWN_VALUES.has(value) ? t(`cmd.help.value.${value === '*' ? 'all' : value}`) : value;
+}
+
+/** slug → 字段短标签（同样只查表，不存文案） */
+function argLabel(slug: string): string {
+  return ARG_LABEL_SLUGS.has(slug) ? t(`cmd.help.arg.${slug}`) : slug;
+}
 
 
 export function commandHelpEntries(): CommandHelpEntry[] {
@@ -185,7 +161,7 @@ export function buildCommand(
 export function variantLabel(variant: CommandHelpVariant): string {
   const words = variant.parts
     .filter((part): part is { kind: 'literal'; value: string } => part.kind === 'literal')
-    .map((part) => VALUE_LABELS[part.value] ?? part.value);
+    .map((part) => valueLabel(part.value));
   // “操作”下拉（`/team add|remove…`、`/scoreboard objectives add|…`）的默认值
   // 也要进变体名，否则两个变体都会显示成“记分项”/“玩家”，分不清。
   // 判据是"有 options 的字段"（= 那个 `a|b|c` 的"操作"下拉），不再比中文字面标签
@@ -195,7 +171,7 @@ export function variantLabel(variant: CommandHelpVariant): string {
   );
   const first = mode?.field.options?.[0];
   if (first) words.push(first.label);
-  return words.length > 0 ? words.join(' ') : '默认';
+  return words.length > 0 ? words.join(' ') : t('cmd.help.ui.default');
 }
 
 // ---------------------------------------------------------------- usage 解析
@@ -207,7 +183,7 @@ function parseUsage(spec: CommandSpec): CommandHelpVariant[] {
   const variants = segments
     .map((segment, index) => parseVariant(segment, index))
     .filter((variant): variant is CommandHelpVariant => variant !== null);
-  return variants.length > 0 ? variants : [{ label: '默认', parts: [] }];
+  return variants.length > 0 ? variants : [{ label: t('cmd.help.ui.default'), parts: [] }];
 }
 
 /** 按顶层 ` | ` / ` / ` 拆变体；括号里的竖线不算 */
@@ -255,10 +231,10 @@ function parseVariant(segment: string, index: number): CommandHelpVariant | null
         kind: 'field',
         field: {
           key: `f${fieldIndex++}`,
-          label: '其余参数',
+          label: t('cmd.help.ui.rest'),
           kind: 'text',
           optional: true,
-          placeholder: '按用法补充',
+          placeholder: t('cmd.help.ui.fillAsUsed'),
         },
       });
       continue;
@@ -279,7 +255,7 @@ function parseVariant(segment: string, index: number): CommandHelpVariant | null
           kind: 'field',
           field: {
             key: `f${fieldIndex++}`,
-            label: '操作',
+            label: t('cmd.help.ui.action'),
             kind: 'select',
             optional: false,
             options: choices.map((choice) => optionOf(choice)),
@@ -292,9 +268,9 @@ function parseVariant(segment: string, index: number): CommandHelpVariant | null
     parts.push({ kind: 'literal', value: token });
   }
 
-  if (parts.length === 0) return { label: '默认', parts: [] };
+  if (parts.length === 0) return { label: t('cmd.help.ui.default'), parts: [] };
   const variant: CommandHelpVariant = { label: '', parts };
-  return { ...variant, label: variantLabel({ label: '', parts }) || `操作 ${index + 1}` };
+  return { ...variant, label: variantLabel({ label: '', parts }) || tp('cmd.help.ui.actionN', { n: index + 1 }) };
 }
 
 function fieldFromArg(inner: string, optional: boolean, index: number): CommandHelpField {
@@ -303,7 +279,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
   if (/^x\s+y\s+z$/i.test(inner)) {
     return {
       key: `f${index}`,
-      label: '坐标',
+      label: t('cmd.help.ui.coords'),
       kind: 'text',
       optional,
       placeholder: '~ ~ ~',
@@ -319,9 +295,12 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
   // 注意判据是"**任一** 选项是进度"：`<进度 id | *>` 的第一个词才是 advancement，
   // 而 `slug` 取的是整个 `<…>` 的文本。原实现用 `inner.includes('进度')`，等价于此。
   if (choices.some((choice) => slugOf(choice) === 'advancement')) {
-    return selectField(index, '进度', optional, [
-      { value: '*', label: '全部进度（*）' },
-      ...ADVANCEMENTS.map((entry) => ({ value: entry.id, label: `${entry.title}（${entry.id}）` })),
+    return selectField(index, 'advancement', optional, [
+      { value: '*', label: t('cmd.help.ui.allAdvancements') },
+      ...ADVANCEMENTS.map((entry) => ({
+        value: entry.id,
+        label: tp('cmd.help.ui.titleWithId', { title: entry.title, id: entry.id }),
+      })),
     ]);
   }
 
@@ -337,7 +316,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
           kind: 'combo',
           optional,
           options: fixed.map((choice) => optionOf(choice, inner)),
-          customPlaceholder: free[0] === '数字' ? '输入数字' : free[0],
+          customPlaceholder: slugOf(free[0]!) === 'ticks' ? t('cmd.help.ui.enterNumber') : valueLabel(slugOf(free[0]!)),
         };
       }
       return {
@@ -381,17 +360,17 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
     }
     return {
       key: `f${index}`,
-      label: '命令',
+      label: t('cmd.help.ui.command'),
       kind: 'text',
       optional,
-      placeholder: '例如 say hi / give @s stone',
+      placeholder: t('cmd.help.ui.commandExample'),
     };
   }
   if (slug === 'dimension') {
     return selectField(index, name, optional, [
-      { value: 'overworld', label: '主世界' },
-      { value: 'nether', label: '下界' },
-      { value: 'end', label: '末地' },
+      { value: 'overworld', label: t('cmd.help.ui.overworld') },
+      { value: 'nether', label: t('cmd.help.ui.nether') },
+      { value: 'end', label: t('cmd.help.ui.end') },
     ]);
   }
   if (slug === 'rule') {
@@ -423,11 +402,11 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
   }
   if (slug === 'type') {
     return selectField(index, name, optional, [
-      { value: 'heart', label: '爱心（heart）' },
-      { value: 'crit', label: '暴击（crit）' },
-      { value: 'flame', label: '火焰（flame）' },
-      { value: 'portal', label: '传送门（portal）' },
-      { value: 'explosion', label: '爆炸（explosion）' },
+      { value: 'heart', label: t('cmd.help.ui.heart') },
+      { value: 'crit', label: t('cmd.help.ui.crit') },
+      { value: 'flame', label: t('cmd.help.ui.flame') },
+      { value: 'portal', label: t('cmd.help.ui.portal') },
+      { value: 'explosion', label: t('cmd.help.ui.explosion') },
     ]);
   }
   if (slug === 'loot') {
@@ -449,22 +428,22 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       STRUCTURE_NAMES.map((entry) => ({
         value: entry.key,
         label: entry.locatable
-          ? `${entry.label}（${entry.key}）`
-          : `${entry.label}（${entry.key}，暂不能定位）`,
+          ? tp('cmd.help.ui.titleWithId', { title: entry.label, id: entry.key })
+          : tp('cmd.help.ui.cannotLocate', { label: entry.label, key: entry.key }),
       })),
     );
   }
   if (slug === 'value') {
     return {
       key: `f${index}`,
-      label: '值',
+      label: t('cmd.help.ui.value'),
       kind: 'combo',
       optional,
       options: [
-        { value: 'true', label: '开启（true）' },
-        { value: 'false', label: '关闭（false）' },
+        { value: 'true', label: t('cmd.help.ui.on') },
+        { value: 'false', label: t('cmd.help.ui.off') },
       ],
-      customPlaceholder: '数字（如 3）',
+      customPlaceholder: t('cmd.help.ui.numberExample'),
     };
   }
 
@@ -550,60 +529,60 @@ function selectField(
 
 function optionOf(value: string, context = ''): CommandHelpOption {
   // `clear` 在天气里是“晴天”，在 effect 里是“清除”；不能共用一条标签
-  if (value === 'clear' && context.includes('rain')) return { value, label: '晴天' };
-  if (value === 'clear' && context.includes('give|clear')) return { value, label: '清除' };
+  if (value === 'clear' && context.includes('rain')) return { value, label: t('cmd.help.ui.clearSky') };
+  if (value === 'clear' && context.includes('give|clear')) return { value, label: valueLabel('clear') };
   // execute 的条件词保留英文原词，方便玩家把界面和命令对上
-  if (context.includes('as|at|') && VALUE_LABELS[value]) {
-    return { value, label: `${VALUE_LABELS[value]}（${value}）` };
+  if (context.includes('as|at|') && KNOWN_VALUES.has(value)) {
+    return { value, label: tp('cmd.help.ui.labelWithValue', { label: valueLabel(value), value }) };
   }
-  return { value, label: VALUE_LABELS[value] ?? value };
+  return { value, label: valueLabel(value) };
 }
 
 function labelForArg(inner: string): string {
   const first = inner.split('|')[0]!.trim();
   if (/^[xyz]\d*$/.test(first) || /^d[xyz]$/.test(first)) return first.toUpperCase();
-  if (inner.includes('day') && inner.includes('night')) return '时间';
-  if (inner.includes('peaceful')) return '难度';
-  if (inner.includes('clear') && inner.includes('rain')) return '天气';
-  if (inner.includes('survival')) return '模式';
-  if (inner.includes('masked')) return '模式';
-  if (inner.includes('as|at|')) return '条件';
-  if (inner.includes('give|clear')) return '操作';
-  if (slugOf(first) === 'advancement') return '进度';
-  if (inner.includes('@s')) return '目标 / 半径';
-  return ARG_LABELS[slugOf(first)] ?? first;
+  if (inner.includes('day') && inner.includes('night')) return t('cmd.help.ui.labelTime');
+  if (inner.includes('peaceful')) return t('cmd.help.ui.labelDifficulty');
+  if (inner.includes('clear') && inner.includes('rain')) return t('cmd.help.ui.labelWeather');
+  if (inner.includes('survival')) return t('cmd.help.ui.labelMode');
+  if (inner.includes('masked')) return t('cmd.help.ui.labelMode');
+  if (inner.includes('as|at|')) return t('cmd.help.ui.labelCondition');
+  if (inner.includes('give|clear')) return t('cmd.help.ui.action');
+  if (slugOf(first) === 'advancement') return t('cmd.help.ui.advancement');
+  if (inner.includes('@s')) return t('cmd.help.ui.labelTargetRadius');
+  return argLabel(slugOf(first));
 }
 
 function placeholderFor(name: string): string {
-  if (/^[xyz]\d*$/.test(name) || /^d[xyz]$/.test(name)) return '~ 或数字';
-  switch (name) {
-    case '物品':
-      return '中文名或英文 id，如 石头 / stone';
-    case '方块':
-      return '中文名或英文 id，如 石头 / stone';
-    case '选择器':
-      return '@s（自己）/ @p（最近玩家）/ 玩家名';
-    case '目标':
-      return '@s（自己）/ @p（最近玩家）/ 玩家名';
-    case '内容':
-      return '要发送的文字';
-    case '动作':
-      return '例如 跳了一下';
-    case '音效':
-      return '音效 id，如 block.note_block.harp（音符盒）';
-    case '群系名':
-      return '英文群系名，如 plains（平原）/ desert（沙漠）';
-    case '结构名':
-      return '结构名，如 village（村庄）/ bastion_remnant（堡垒遗迹）';
-    case '路径':
-      return '路径可留空（列全部）；实体的 Health / CustomName，方块的 Slots[i]';
-    case '名称':
-      return '要写进去的名字';
-    case '数值':
-    case '规则':
-      return '规则名';
-    case '命令':
-      return '例如 say hi / give @s stone';
+  if (/^[xyz]\d*$/.test(name) || /^d[xyz]$/.test(name)) return t('cmd.help.ui.near');
+  switch (slugOf(name)) {
+    case 'item':
+      return t('cmd.help.ui.suggestItem');
+    case 'block':
+      return t('cmd.help.ui.suggestItem');
+    case 'selector':
+      return t('cmd.help.ui.suggestTarget');
+    case 'targets':
+      return t('cmd.help.ui.suggestTarget');
+    case 'message':
+      return t('cmd.help.ui.messageHint');
+    case 'action':
+      return t('cmd.help.ui.actionExample');
+    case 'sound':
+      return t('cmd.help.ui.soundId');
+    case 'biome':
+      return t('cmd.help.ui.biomeId');
+    case 'structure':
+      return t('cmd.help.ui.structureId');
+    case 'path':
+      return t('cmd.help.ui.pathHint');
+    case 'name':
+      return t('cmd.help.ui.writeName');
+    case 'number':
+    case 'rule':
+      return t('cmd.help.ui.ruleName');
+    case 'command':
+      return t('cmd.help.ui.commandExample');
     default:
       return '';
   }
