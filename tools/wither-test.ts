@@ -32,7 +32,7 @@ import {
   MOB_TYPES,
   mobTypeById,
 } from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import {
   Wither,
   WITHER_SHIELD_SECONDS,
@@ -134,7 +134,7 @@ function placement(overrides: Partial<PlacementInput>): PlacementInput {
 console.log('\n[凋灵骷髅：类型与数据]');
 {
   equal('在生物表里', mobTypeById('wither_skeleton'), WITHER_SKELETON_TYPE);
-  equal('名字', WITHER_SKELETON_TYPE.name, '凋灵骷髅');
+  equal('名字', mobLabel(WITHER_SKELETON_TYPE), '凋灵骷髅');
   equal('生命 20（原版）', WITHER_SKELETON_TYPE.health, 20);
   equal('接触伤害 8（原版普通难度，石剑加成已含在内）', WITHER_SKELETON_TYPE.attackDamage, 8);
   equal('追击范围 16 格（原版）', WITHER_SKELETON_TYPE.followRange, 16);
@@ -394,7 +394,7 @@ console.log('\n[召唤仪式：4 块灵魂沙摆 T + 3 颗头]');
 
 console.log('\n[凋灵：数据与阶段]');
 {
-  equal('名字', WITHER_TYPE.name, '凋灵');
+  equal('名字', mobLabel(WITHER_TYPE), '凋灵');
   equal('300 点生命（原版）', WITHER_TYPE.health, 300);
   check('**会飞**', WITHER_TYPE.flying === true);
   check('**免疫火焰**（原版）', WITHER_TYPE.fireImmune === true);

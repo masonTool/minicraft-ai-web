@@ -12,6 +12,8 @@
  */
 
 import { Entity, type EntityContext } from './Entity.ts';
+// 多语言 P2-4：种类名走 `entity.<id>`
+import { t } from '../i18n/I18n.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
@@ -302,7 +304,13 @@ export type MobFamily = 'undead' | 'arthropod';
 /** 生物种类定义（数据表在 mobs.ts） */
 export interface MobType {
   id: string;
-  name: string;
+  /**
+   * 名字的 **i18n 键**（`entity.<id>`，多语言 P2-4）。
+   *
+   * ⚠️ 不是文案本身：原来是中文串，于是死亡消息、`/summon` 补全、刷怪蛋名、
+   * "给僵尸起名"的提示全是中文。现在与界面文案同一套键，取名用 `mobLabel()`。
+   */
+  nameKey: string;
   health: number;
   /** 碰撞盒（宽 = 深） */
   width: number;
@@ -605,6 +613,18 @@ export interface MobType {
   eyeColor?: number;
   /** 眼睛高度（渲染用） */
   eyeHeight: number;
+}
+
+/**
+ * 生物的种类名（多语言 P2-4）。
+ *
+ * 为什么不直接读 `type.nameKey`：这个名字出现在**死亡消息、`/summon` 补全、刷怪蛋名、
+ * 取名提示、目标信息栏**五处，每处都自己查表必然会漂（一边 `t()` 一边忘了）。
+ * 一律走这个函数，切语言时自动跟着变。
+ */
+export function mobLabel(type: MobType): string {
+  const text = t(type.nameKey);
+  return text === type.nameKey ? type.id : text;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1211,7 +1231,7 @@ export class Mob extends Entity {
     const damage = Math.max(0, base + this.effects.attackBonus());
     // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
     // 把 `this` 一起传下去（批次 264）：荆棘要靠它反伤"是谁打的"
-    ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this);
+    ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this);
     if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
     // 真的打中了才挥臂（J12）：没够着的那一下不该有动作，否则站在墙后也会"空挥"
     this.attackAnim = ATTACK_ANIM_SECONDS;

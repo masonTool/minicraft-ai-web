@@ -25,7 +25,7 @@ import { TRIDENT_ITEM_ID, toolInfoById } from '../src/core/registry/tools.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { DROWNED_TYPE, HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 import {
   TRIDENT_THROW_DAMAGE,
@@ -102,7 +102,7 @@ function run(mob: Mob, ctx: EntityContext, seconds: number, step = 1 / 20): void
 
 console.log('\n[溺尸：僵尸的水生变体]');
 {
-  equal('名字', DROWNED_TYPE.name, '溺尸');
+  equal('名字', mobLabel(DROWNED_TYPE), '溺尸');
   equal('20 点生命（与僵尸同）', DROWNED_TYPE.health, 20);
   equal('近战 3 点（与僵尸同——原版溺尸的威胁在扔三叉戟，不在贴脸）', DROWNED_TYPE.attackDamage, 3);
   equal('（对照）僵尸也是 3', mobTypeById('zombie')!.attackDamage, 3);

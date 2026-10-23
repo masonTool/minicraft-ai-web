@@ -18,7 +18,7 @@ import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { ALL_HOSTILE_MOBS, HOSTILE_MOBS, HUSK_TYPE, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from '../src/core/world/Daylight.ts';
 import { isNight } from '../src/core/survival/Sleep.ts';
@@ -80,7 +80,7 @@ function run(mob: Mob, ctx: EntityContext, seconds: number, step = 1 / 20): void
 
 console.log('\n[尸壳：僵尸的沙漠变体]');
 {
-  equal('名字', HUSK_TYPE.name, '尸壳');
+  equal('名字', mobLabel(HUSK_TYPE), '尸壳');
   equal('20 点生命（与僵尸同）', HUSK_TYPE.health, 20);
   equal('接触伤害 3（与僵尸同）', HUSK_TYPE.attackDamage, 3);
   equal('追击 24 格', HUSK_TYPE.followRange, 24);
@@ -109,13 +109,13 @@ console.log('\n[亡灵白天被晒：哪些生物会烧]');
   // 亡灵家族里，除了尸壳都写了这一位（原版也是如此）
   for (const id of ['zombie', 'skeleton', 'drowned'] as const) {
     const type = mobTypeById(id)!;
-    check(`${type.name}**会**被太阳晒着（亡灵的通用规则）`, type.burnsInDaylight === true);
+    check(`${mobLabel(type)}**会**被太阳晒着（亡灵的通用规则）`, type.burnsInDaylight === true);
   }
   check('（对照）尸壳不会', mobTypeById('husk')!.burnsInDaylight !== true);
   // 非亡灵不烧（这几只都只是"顺带确认没写错"）
   for (const id of ['creeper', 'spider', 'zombie_piglin'] as const) {
     const type = mobTypeById(id)!;
-    check(`${type.name} 不参与这条规则（不是亡灵 / 原版也不烧）`, type.burnsInDaylight !== true);
+    check(`${mobLabel(type)} 不参与这条规则（不是亡灵 / 原版也不烧）`, type.burnsInDaylight !== true);
   }
   check('（对照）僵尸猪灵虽然是亡灵，但原版它在主世界也不烧——所以这一位是逐种写的', mobTypeById('zombie_piglin')!.family === 'undead');
   // 亡灵全是敌对生物（免得有人把某只挪出敌对表）

@@ -34,7 +34,7 @@ import {
   mobTypeById,
 } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
-import { Mob, TELEPORT_ATTEMPTS } from '../src/core/entity/Mob.ts';
+import { Mob, TELEPORT_ATTEMPTS, mobLabel } from '../src/core/entity/Mob.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
@@ -137,7 +137,7 @@ function spawnEnderman(x = 0.5, y = 64, z = 0.5): Mob {
 console.log('\n[末影人：类型与数据]');
 {
   equal('在生物表里', mobTypeById('enderman'), ENDERMAN_TYPE);
-  equal('名字', ENDERMAN_TYPE.name, '末影人');
+  equal('名字', mobLabel(ENDERMAN_TYPE), '末影人');
   equal('生命 40（原版，本项目最耐打的普通怪）', ENDERMAN_TYPE.health, 40);
   equal('接触伤害 7（原版普通难度）', ENDERMAN_TYPE.attackDamage, 7);
   equal('追击范围 24 格', ENDERMAN_TYPE.followRange, 24);

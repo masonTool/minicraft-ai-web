@@ -11,6 +11,12 @@ import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/c
 import { commandHelpEntries } from '../src/core/commands/CommandHelp.ts';
 // 多语言 P2-3c3：效果名键化的守卫要逐个核对
 import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
+// 多语言 P2-4：生物名
+import { mobLabel } from '../src/core/entity/Mob.ts';
+import { MOB_TYPES } from '../src/core/entity/mobs.ts';
+import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
+import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
+import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
 import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
@@ -995,6 +1001,28 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   const effectKeys = Object.keys(EFFECTS).map((id) => `label.effect.${EFFECTS[id as never] as string}`);
   const badEffect = effectKeys.filter((key) => t(key) === key || /[\u4e00-\u9fff]/.test(t(key, 'en')));
   check(`效果名 ${EFFECTS.length} 条都在表里且英文无中文`, badEffect.length === 0, badEffect.slice(0, 3).join(','));
+
+  /**
+   * 生物名（多语言 P2-4）：75 条 `entity.<id>`。
+   *
+   * 判据直接对着 `MobType.nameKey` 扫 —— 名字表与生物表**两边都要对**：
+   * 只查表会漏掉"新加了一种生物但忘了加名字"，只查类型表又漏掉"键写错了"。
+   */
+  // ⚠️ 末影龙 / 末地水晶 / 幻翼 / 凋灵**不在** `MOB_TYPES` 里（各自一个模块），
+  // 所以要显式拼进来 —— 只扫 `MOB_TYPES` 会漏掉这四个，而它们恰恰最容易漏翻
+  const mobTypes = [...MOB_TYPES, DRAGON_TYPE, END_CRYSTAL_TYPE, PHANTOM_TYPE, WITHER_TYPE].map((type) => ({
+    id: type.id,
+    key: type.nameKey,
+  }));
+  check(`生物表 ${mobTypes.length} 条都带 entity.* 键`, mobTypes.every((one) => one.key === `entity.${one.id}`), mobTypes.find((one) => one.key !== `entity.${one.id}`)?.id ?? '');
+  const badMob = mobTypes.filter((one) => mobLabel({ nameKey: one.key, id: one.id } as never) === one.id);
+  check('每条生物名都能在表里查到（查不到会回落成 id）', badMob.length === 0, badMob.slice(0, 3).map((one) => one.id).join(','));
+
+  // 名字牌是世界里的 canvas 文字：字体栈必须留 `sans-serif` 兜底，
+  // 否则西里尔（ru）与变音（de/fr/pt）会在没装 PingFang / Segoe 的机器上变豆腐块。
+  const nameTagSrc = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
+  check('名字牌字体栈留了 sans-serif 兜底（西里尔 / 变音符靠它接住）', /sans-serif/.test(nameTagSrc));
+  check('名字牌字体栈保留中文字体（PingFang / YaHei）', nameTagSrc.includes('PingFang SC') && nameTagSrc.includes('Microsoft YaHei'));
 
   // 组件类（color / wood / coral / base / ore / toolMaterial …）必须是"词"，不是句子
   const components = itemKeys.filter((key) => !key.startsWith('item.tpl.') && key.split('.').length === 3);

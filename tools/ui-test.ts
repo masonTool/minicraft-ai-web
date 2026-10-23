@@ -3689,7 +3689,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('takeDamageLog()') &&
       appSrc.includes('damageReason(') &&
       appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
-      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this)"),
+      // 多语言 P2-4：种类名不再直接读 `type.name`（字段已改成 `nameKey`），走 `mobLabel()`
+      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this)"),
   );
   // 桥接层（`EntityContext.hurtPlayer` → `damagePlayer`）必须把第 5 个参数原样转过去：
   // 少了它，实体层传的生物名白传，所有生物伤害都显示"没有记录到来源"（批次 218）
@@ -4181,7 +4182,7 @@ console.log('\n[荆棘（批次 264）]');
     '伤害链路把攻击者传下来（实体层用结构化类型，避免 Entity↔Mob 成环）',
     entitySrc.includes('attacker?: DamageAttacker') &&
       entitySrc.includes('export interface DamageAttacker') &&
-      mobSrc.includes('this.type.name, this);') &&
+      mobSrc.includes('mobLabel(this.type), this);') &&
       appSrc.includes('attacker?: DamageAttacker'),
   );
   check(

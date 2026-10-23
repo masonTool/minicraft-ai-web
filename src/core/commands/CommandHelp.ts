@@ -12,6 +12,8 @@
  */
 
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
+// 多语言 P2-4：种类名走 `entity.<id>`
+import { mobLabel } from '../entity/Mob.ts';
 // 多语言 P1-1b：用法与说明要**按当前语言**取，不能直接抄 spec 里的键
 import { commandDescription, commandUsage } from './messages.ts';
 import { t, tp } from '../i18n/I18n.ts';
@@ -344,7 +346,11 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       index,
       name,
       optional,
-      MOB_TYPES.map((mob) => ({ value: mob.id, label: `${mob.name}（${mob.id}）` })),
+      // 多语言 P2-4：标签用当前语言的种类名，命令里仍拼英文 id（复用结构名那条占位符模板）
+      MOB_TYPES.map((mob) => ({
+        value: mob.id,
+        label: tp('cmd.help.ui.titleWithId', { title: mobLabel(mob), id: mob.id }),
+      })),
     );
   }
   if (slug === 'command') {

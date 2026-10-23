@@ -416,7 +416,7 @@ console.log('\n[刷怪笼：什么时候出、出在哪]');
 console.log('\n[烈焰人：类型与掉落]');
 {
   check('在生物表里', MOB_TYPES.some((type) => type.id === 'blaze'));
-  equal('`mobTypeById` 找得到它', mobTypeById('blaze')?.name, '烈焰人');
+  equal('`mobTypeById` 找得到它', mobTypeById('blaze')?.nameKey, 'entity.blaze');
   check('敌对', BLAZE_TYPE.hostile);
   check('**会飞**（没有重力）', BLAZE_TYPE.flying === true);
   check('**免疫火焰**', BLAZE_TYPE.fireImmune === true);

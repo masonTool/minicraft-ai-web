@@ -17,7 +17,7 @@
 
 import { Block } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { Ghast, GHAST_FIRE_COOLDOWN, GHAST_FIRE_RANGE, GHAST_KEEP_DISTANCE } from '../src/core/entity/Ghast.ts';
 import { GHAST_TYPE, HOSTILE_MOBS, MOB_TYPES, mobSpawnsIn } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
@@ -95,7 +95,7 @@ function distanceTo(ghast: Ghast, player: { x: number; y: number; z: number }): 
 console.log('\n[恶魂：数据]');
 {
   equal('在生物表里', MOB_TYPES.some((type) => type.id === 'ghast'), true);
-  equal('名字', GHAST_TYPE.name, '恶魂');
+  equal('名字', mobLabel(GHAST_TYPE), '恶魂');
   equal('生命 10（很脆）', GHAST_TYPE.health, 10);
   check('**大块头**：4×4（本项目最大的生物）', GHAST_TYPE.width === 4 && GHAST_TYPE.height === 4);
   check('会飞、免疫火焰', GHAST_TYPE.flying === true && GHAST_TYPE.fireImmune === true);

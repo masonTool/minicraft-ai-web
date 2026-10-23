@@ -585,8 +585,8 @@ for (const arrow of TIPPED_ARROWS) {
 for (const spec of SPAWN_EGG_SPECS) {
   const key = spawnEggTile(spec.mobId);
   // 刷怪蛋（多语言 P2-1b-2）：结构先接好；`{mob}` 现在还是中文名，P2-4 把生物名键化后自动跟着变
-  put(key, () => tp('item.tpl.spawnEgg', { mob: spec.label }));
-  DESCRIPTIONS[key] = () => tp('item.desc.tpl.spawnEgg', { mob: spec.label });
+  put(key, () => tp('item.tpl.spawnEgg', { mob: t(`entity.${spec.mobId}`) }));
+  DESCRIPTIONS[key] = () => tp('item.desc.tpl.spawnEgg', { mob: t(`entity.${spec.mobId}`) });
 }
 
 // ---------------------------------------------------------------- 对外接口

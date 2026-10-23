@@ -25,7 +25,7 @@ import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { BARTER_TABLE, BARTER_TOTAL_WEIGHT, barterRoll } from '../src/core/items/Barter.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { HOSTILE_MOBS, MOB_TYPES, ZOMBIE_PIGLIN_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, provokedBy } from '../src/core/entity/Mob.ts';
+import { Mob, provokedBy, mobLabel } from '../src/core/entity/Mob.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 
@@ -90,7 +90,7 @@ function run(mob: Mob, ctx: EntityContext, seconds: number, step = 1 / 20): void
 
 console.log('\n[僵尸猪灵的数据（按原版普通难度）]');
 {
-  equal('名字', ZOMBIE_PIGLIN_TYPE.name, '僵尸猪灵');
+  equal('名字', mobLabel(ZOMBIE_PIGLIN_TYPE), '僵尸猪灵');
   equal('20 点生命（原版）', ZOMBIE_PIGLIN_TYPE.health, 20);
   equal('接触伤害 8（原版普通难度；**比僵尸的 3 高得多**——它拿着金剑）', ZOMBIE_PIGLIN_TYPE.attackDamage, 8);
   equal('（对照）僵尸只有 3', mobTypeById('zombie')!.attackDamage, 3);

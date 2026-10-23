@@ -16,6 +16,7 @@
  */
 
 import type { EntityContext } from './Entity.ts';
+import { mobLabel } from './Mob.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Block } from '../registry/blocks.ts';
 
@@ -25,7 +26,7 @@ export const ENDER_DRAGON_XP = 12000;
 /** 末影龙：200 点生命（对齐原版），碰撞盒按可玩性缩小到 6×4 */
 export const DRAGON_TYPE: MobType = {
   id: 'ender_dragon',
-  name: '末影龙',
+  nameKey: 'entity.ender_dragon',
   health: 200,
   width: 6,
   height: 4,
@@ -46,7 +47,7 @@ export const DRAGON_TYPE: MobType = {
 /** 末地水晶：1 点生命，悬浮不动 */
 export const END_CRYSTAL_TYPE: MobType = {
   id: 'end_crystal',
-  name: '末地水晶',
+  nameKey: 'entity.end_crystal',
   health: 1,
   width: 1.6,
   height: 1.6,
@@ -195,7 +196,7 @@ export class Dragon extends Mob {
       const distance = Math.hypot(player.x - this.x, player.z - this.z);
       const vertical = Math.abs(player.y - this.y);
       if (distance < 5.5 && vertical < 4) {
-        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name);
+        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', mobLabel(this.type));
         this.attackTimer = 1.5;
       }
     }

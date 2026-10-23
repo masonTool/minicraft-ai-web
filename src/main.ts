@@ -96,7 +96,7 @@ import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
-import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
+import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy, mobLabel } from './core/entity/Mob.ts';
 import { canNameMob, sanitizeName } from './core/entity/NameTag.ts';
 import { nameTagStyleFor } from './core/entity/NameTagColor.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
@@ -5175,7 +5175,7 @@ class App {
     this.refreshHotbar();
     // 池子里那只可能正拿着旧名字画的画布：让它下一帧重画
     for (const tag of this.nameTags) tag.invalidate();
-    this.hudToast.show(`给${mob.type.name}起名为「${name}」`);
+    this.hudToast.show(`给${mobLabel(mob.type)}起名为「${name}」`);
   }
 
   /**
@@ -5197,7 +5197,7 @@ class App {
     this.pendingNameTarget = mob;
     // 打开界面要交出输入权（与告示牌编辑器同一套）：先收起触摸层、放指针
     this.handleInventoryOpen(true);
-    this.nameTagEditor.show(mob.customName, `给${mob.type.name}起个名字`);
+    this.nameTagEditor.show(mob.customName, `给${mobLabel(mob.type)}起个名字`);
     return true;
   }
 
@@ -5377,7 +5377,7 @@ class App {
     const mob = this.aimMob;
     if (mob && !mob.dead) {
       const health = Math.max(0, Math.ceil(mob.health));
-      this.setTargetInfo(`${mob.type.name}  ${health}/${mob.type.health}`);
+      this.setTargetInfo(`${mobLabel(mob.type)}  ${health}/${mob.type.health}`);
       return;
     }
     if (this.hit) {
@@ -6900,7 +6900,7 @@ class App {
       mob.saddled = true;
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mob.type.name}装上了鞍`);
+      this.hudToast.show(`给${mobLabel(mob.type)}装上了鞍`);
       return true;
     }
     // 货舱（J19b，批次 594）：拿箱子点已驯服/不需驯服的驴、骡、羊驼，装货舱
@@ -6911,14 +6911,14 @@ class App {
       held === Block.CHEST
     ) {
       if (mob.cargo) {
-        this.hudToast.show(`这只${mob.type.name}已经有货舱了`);
+        this.hudToast.show(`这只${mobLabel(mob.type)}已经有货舱了`);
         return true;
       }
       if (!this.inventory.consume(Block.CHEST, 1)) return false;
       mob.cargo = new Chest(MOB_CARGO_SIZE);
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mob.type.name}装上了箱子`);
+      this.hudToast.show(`给${mobLabel(mob.type)}装上了箱子`);
       return true;
     }
     // 马铠（批次 571）：拿马铠点已驯服/不需驯服的马、驴、骡，装上一件
@@ -6930,14 +6930,14 @@ class App {
       horseArmorTier(held) !== null
     ) {
       if (mob.armor !== null) {
-        this.hudToast.show(`这匹${mob.type.name}已经有马铠了`);
+        this.hudToast.show(`这匹${mobLabel(mob.type)}已经有马铠了`);
         return true;
       }
       if (!this.inventory.consume(held, 1)) return false;
       mob.armor = held;
       this.hand.swing();
       this.refreshHotbar();
-      this.hudToast.show(`给${mob.type.name}装上了马铠`);
+      this.hudToast.show(`给${mobLabel(mob.type)}装上了马铠`);
       return true;
     }
     // 货舱（J19b）：潜行 + 空手点驴/骡/羊驼 = 打开 15 格货舱；
@@ -6957,7 +6957,7 @@ class App {
     if (mob.tamed && held === undefined) {
       const sitting = mob.toggleSitting();
       this.playMobVoice(mob);
-      this.hudToast.show(sitting ? `${mob.type.name}坐下了` : `${mob.type.name}站起来了`);
+      this.hudToast.show(sitting ? `${mobLabel(mob.type)}坐下了` : `${mobLabel(mob.type)}站起来了`);
       return true;
     }
     if (held === undefined) return false;
@@ -7053,7 +7053,7 @@ class App {
     if (result === 'tamed') {
       this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, 1);
       this.playMobVoice(mob);
-      this.hudToast.show(`${mob.type.name}已被驯服`);
+      this.hudToast.show(`${mobLabel(mob.type)}已被驯服`);
       this.vibrate(10);
     } else {
       // 驯服失败：一小团烟 + 一声略低的叫（原版的反馈就是"它没认你"）
@@ -7074,7 +7074,7 @@ class App {
       mob.leashed = false;
       this.leashedMob = null;
       if (this.leashLine) this.leashLine.visible = false;
-      this.hudToast.show(`解开了${mob.type.name}`);
+      this.hudToast.show(`解开了${mobLabel(mob.type)}`);
       return true;
     }
     if (!mob.tamed) {
@@ -7086,7 +7086,7 @@ class App {
     this.leashedMob = mob;
     mob.leashed = true;
     this.hand.swing();
-    this.hudToast.show(`牵住了${mob.type.name}`);
+    this.hudToast.show(`牵住了${mobLabel(mob.type)}`);
     return true;
   }
 
@@ -12219,7 +12219,7 @@ class App {
           list.push({
             id: `mob:${entity.id}`,
             type: entity.type.id,
-            name: entity.type.name,
+            name: mobLabel(entity.type),
             x: entity.x,
             y: entity.y,
             z: entity.z,
@@ -13683,7 +13683,7 @@ class App {
     const ratio = Math.max(0, Math.min(1, health / maxHealth));
     this.bossFillEl.style.width = `${(ratio * 100).toFixed(1)}%`;
 
-    const title = showWither ? WITHER_TYPE.name : DRAGON_TYPE.name;
+    const title = showWither ? mobLabel(WITHER_TYPE) : mobLabel(DRAGON_TYPE);
     if (this.bossTitleEl && this.bossTitleEl.textContent !== title) this.bossTitleEl.textContent = title;
   }
 

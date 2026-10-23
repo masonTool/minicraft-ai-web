@@ -22,7 +22,7 @@ import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { MOB_TYPES, PASSIVE_MOBS, SQUID_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../src/core/registry/spawnEggs.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
@@ -82,7 +82,7 @@ function constantRandom(value: number): () => number {
 
 console.log('\n[鱿鱼：海里那只]');
 {
-  equal('名字', SQUID_TYPE.name, '鱿鱼');
+  equal('名字', mobLabel(SQUID_TYPE), '鱿鱼');
   equal('10 点生命（原版）', SQUID_TYPE.health, 10);
   equal('不还手', SQUID_TYPE.hostile, false);
   equal('不打人', SQUID_TYPE.attackDamage, 0);

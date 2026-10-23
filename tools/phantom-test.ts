@@ -15,6 +15,7 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
+import { mobLabel } from '../src/core/entity/Mob.ts';
 import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
@@ -96,7 +97,7 @@ function step(phantom: Phantom, ctx: EntityContext, seconds: number, dt = 1 / 20
 
 console.log('\n[幻翼：天上那只"失眠怪"]');
 {
-  equal('名字', PHANTOM_TYPE.name, '幻翼');
+  equal('名字', mobLabel(PHANTOM_TYPE), '幻翼');
   equal('20 点生命', PHANTOM_TYPE.health, 20);
   equal('接触伤害 3（原版普通难度）', PHANTOM_TYPE.attackDamage, 3);
   equal('追击 48 格（它从天上扎下来，要看得远）', PHANTOM_TYPE.followRange, 48);

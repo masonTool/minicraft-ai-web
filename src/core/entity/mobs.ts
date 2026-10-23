@@ -41,7 +41,7 @@ import { WITHER_TYPE } from './Wither.ts';
  */
 export const VILLAGER_TYPE: MobType = {
   id: 'villager',
-  name: '村民',
+  nameKey: 'entity.villager',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -76,7 +76,7 @@ export const VILLAGER_TYPE: MobType = {
  */
 export const BLAZE_TYPE: MobType = {
   id: 'blaze',
-  name: '烈焰人',
+  nameKey: 'entity.blaze',
   health: 20,
   width: 0.6,
   height: 1.8,
@@ -133,7 +133,7 @@ export const BLAZE_TYPE: MobType = {
  */
 export const GHAST_TYPE: MobType = {
   id: 'ghast',
-  name: '恶魂',
+  nameKey: 'entity.ghast',
   health: 10,
   width: 4,
   height: 4,
@@ -159,7 +159,7 @@ export const GHAST_TYPE: MobType = {
 
 export const SPIDER_TYPE: MobType = {
   id: 'spider',
-  name: '蜘蛛',
+  nameKey: 'entity.spider',
   health: 16,
   width: 1.4,
   height: 0.9,
@@ -199,7 +199,7 @@ export const SPIDER_TYPE: MobType = {
  */
 export const CAVE_SPIDER_TYPE: MobType = {
   id: 'cave_spider',
-  name: '洞穴蜘蛛',
+  nameKey: 'entity.cave_spider',
   health: 12,
   width: 0.7,
   height: 0.5,
@@ -251,7 +251,7 @@ export const CAVE_SPIDER_TYPE: MobType = {
  */
 export const ENDERMAN_TYPE: MobType = {
   id: 'enderman',
-  name: '末影人',
+  nameKey: 'entity.enderman',
   health: 40,
   width: 0.6,
   height: 2.9,
@@ -297,7 +297,7 @@ export const ENDERMAN_TYPE: MobType = {
  */
 export const WITHER_SKELETON_TYPE: MobType = {
   id: 'wither_skeleton',
-  name: '凋灵骷髅',
+  nameKey: 'entity.wither_skeleton',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -352,7 +352,7 @@ export const WITHER_SKELETON_TYPE: MobType = {
  */
 export const SLIME_BIG_TYPE: MobType = {
   id: 'slime_big',
-  name: '史莱姆（大）',
+  nameKey: 'entity.slime_big',
   health: 16,
   width: 2,
   height: 2,
@@ -377,7 +377,7 @@ export const SLIME_BIG_TYPE: MobType = {
 /** 史莱姆（中）：自然刷的那一档是"大"，这一档只从分裂里出现（见上面那段注记） */
 export const SLIME_TYPE: MobType = {
   id: 'slime',
-  name: '史莱姆',
+  nameKey: 'entity.slime',
   health: 4,
   width: 1,
   height: 1,
@@ -402,7 +402,7 @@ export const SLIME_TYPE: MobType = {
  */
 export const SLIME_SMALL_TYPE: MobType = {
   id: 'slime_small',
-  name: '史莱姆（小）',
+  nameKey: 'entity.slime_small',
   health: 1,
   width: 0.5,
   height: 0.5,
@@ -439,7 +439,7 @@ export const SLIME_SMALL_TYPE: MobType = {
  */
 export const MAGMA_CUBE_BIG_TYPE: MobType = {
   id: 'magma_cube_big',
-  name: '岩浆怪（大）',
+  nameKey: 'entity.magma_cube_big',
   health: 16,
   width: 2,
   height: 2,
@@ -462,7 +462,7 @@ export const MAGMA_CUBE_BIG_TYPE: MobType = {
 /** 岩浆怪（中）：与史莱姆一样，自然刷的是"大"那一档，它从分裂里出现 */
 export const MAGMA_CUBE_TYPE: MobType = {
   id: 'magma_cube',
-  name: '岩浆怪',
+  nameKey: 'entity.magma_cube',
   health: 4,
   width: 1,
   height: 1,
@@ -485,7 +485,7 @@ export const MAGMA_CUBE_TYPE: MobType = {
 /** 岩浆怪（小）：最小的那一档也一样凶（原版 2 点伤害），只是更脆 */
 export const MAGMA_CUBE_SMALL_TYPE: MobType = {
   id: 'magma_cube_small',
-  name: '岩浆怪（小）',
+  nameKey: 'entity.magma_cube_small',
   health: 1,
   width: 0.5,
   height: 0.5,
@@ -525,7 +525,7 @@ export const MAGMA_CUBE_SMALL_TYPE: MobType = {
  */
 export const ZOMBIE_PIGLIN_TYPE: MobType = {
   id: 'zombie_piglin',
-  name: '僵尸猪灵',
+  nameKey: 'entity.zombie_piglin',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -562,7 +562,7 @@ export const ZOMBIE_PIGLIN_TYPE: MobType = {
  */
 export const PIGLIN_TYPE: MobType = {
   id: 'piglin',
-  name: '猪灵',
+  nameKey: 'entity.piglin',
   health: 16,
   width: 0.6,
   height: 1.95,
@@ -596,7 +596,7 @@ export const PIGLIN_TYPE: MobType = {
  */
 export const SHULKER_TYPE: MobType = {
   id: 'shulker',
-  name: '潜影贝',
+  nameKey: 'entity.shulker',
   health: 30,
   width: 0.9,
   height: 0.9,
@@ -624,7 +624,7 @@ export const SHULKER_TYPE: MobType = {
  */
 export const BEE_TYPE: MobType = {
   id: 'bee',
-  name: '蜜蜂',
+  nameKey: 'entity.bee',
   health: 10,
   width: 0.6,
   height: 0.6,
@@ -648,7 +648,7 @@ export const BEE_TYPE: MobType = {
  */
 export const VINDICATOR_TYPE: MobType = {
   id: 'vindicator',
-  name: '卫道士',
+  nameKey: 'entity.vindicator',
   health: 24,
   width: 0.6,
   height: 1.95,
@@ -667,7 +667,7 @@ export const VINDICATOR_TYPE: MobType = {
 /** 唤魔者（批次 379）：24 血、伤害 6，掉绿宝石；原版放尖牙/召唤恼鬼，这里只保留近战 */
 export const EVOKER_TYPE: MobType = {
   id: 'evoker',
-  name: '唤魔者',
+  nameKey: 'entity.evoker',
   health: 24,
   width: 0.6,
   height: 1.95,
@@ -690,7 +690,7 @@ export const EVOKER_TYPE: MobType = {
 /** 女巫（批次 379）：26 血，远程（简化成带中毒的箭），掉荧石粉/红石/糖 */
 export const WITCH_TYPE: MobType = {
   id: 'witch',
-  name: '女巫',
+  nameKey: 'entity.witch',
   health: 26,
   width: 0.6,
   height: 1.95,
@@ -718,7 +718,7 @@ export const WITCH_TYPE: MobType = {
  */
 export const TRADER_LLAMA_TYPE: MobType = {
   id: 'trader_llama',
-  name: '行商羊驼',
+  nameKey: 'entity.trader_llama',
   health: 30,
   width: 0.9,
   height: 1.9,
@@ -737,7 +737,7 @@ export const TRADER_LLAMA_TYPE: MobType = {
 /** 僵尸村民（批次 381）：24 血、敌对、掉腐肉；不做“虚弱 + 金苹果治愈” */
 export const ZOMBIE_VILLAGER_TYPE: MobType = {
   id: 'zombie_villager',
-  name: '僵尸村民',
+  nameKey: 'entity.zombie_villager',
   health: 24,
   width: 0.6,
   height: 1.95,
@@ -759,7 +759,7 @@ export const ZOMBIE_VILLAGER_TYPE: MobType = {
  */
 export const RAVAGER_TYPE: MobType = {
   id: 'ravager',
-  name: '劫掠兽',
+  nameKey: 'entity.ravager',
   health: 100,
   width: 1.2,
   height: 2.2,
@@ -778,7 +778,7 @@ export const RAVAGER_TYPE: MobType = {
 /** 恼鬼（批次 380）：14 血、飞行、伤害 9，不掉落 */
 export const VEX_TYPE: MobType = {
   id: 'vex',
-  name: '恼鬼',
+  nameKey: 'entity.vex',
   health: 14,
   width: 0.4,
   height: 0.8,
@@ -798,7 +798,7 @@ export const VEX_TYPE: MobType = {
 /** 幻术师（批次 380）：32 血、远程（弓），掉绿宝石 */
 export const ILLUSIONER_TYPE: MobType = {
   id: 'illusioner',
-  name: '幻术师',
+  nameKey: 'entity.illusioner',
   health: 32,
   width: 0.6,
   height: 1.95,
@@ -818,7 +818,7 @@ export const ILLUSIONER_TYPE: MobType = {
 /** 流浪商人（批次 380）：20 血、被动、不掉落；交易界面未做，先作为生物存在 */
 export const WANDERING_TRADER_TYPE: MobType = {
   id: 'wandering_trader',
-  name: '流浪商人',
+  nameKey: 'entity.wandering_trader',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -840,7 +840,7 @@ export const WANDERING_TRADER_TYPE: MobType = {
  */
 export const ENDERMITE_TYPE: MobType = {
   id: 'endermite',
-  name: '末影螨',
+  nameKey: 'entity.endermite',
   health: 8,
   width: 0.4,
   height: 0.3,
@@ -862,7 +862,7 @@ export const ENDERMITE_TYPE: MobType = {
  */
 export const PARROT_TYPE: MobType = {
   id: 'parrot',
-  name: '鹦鹉',
+  nameKey: 'entity.parrot',
   health: 6,
   width: 0.5,
   height: 0.9,
@@ -885,7 +885,7 @@ export const PARROT_TYPE: MobType = {
  */
 export const MOOSHROOM_TYPE: MobType = {
   id: 'mooshroom',
-  name: '哞菇',
+  nameKey: 'entity.mooshroom',
   health: 10,
   width: 0.9,
   height: 1.4,
@@ -914,7 +914,7 @@ export const MOOSHROOM_TYPE: MobType = {
  */
 export const GUARDIAN_TYPE: MobType = {
   id: 'guardian',
-  name: '守卫者',
+  nameKey: 'entity.guardian',
   health: 30,
   width: 0.9,
   height: 0.9,
@@ -938,7 +938,7 @@ export const GUARDIAN_TYPE: MobType = {
 /** 远古守卫者（批次 359）：守卫者的放大版，80 血、伤害 8 */
 export const ELDER_GUARDIAN_TYPE: MobType = {
   id: 'elder_guardian',
-  name: '远古守卫者',
+  nameKey: 'entity.elder_guardian',
   health: 80,
   width: 1.8,
   height: 1.8,
@@ -966,7 +966,7 @@ export const ELDER_GUARDIAN_TYPE: MobType = {
  */
 export const IRON_GOLEM_TYPE: MobType = {
   id: 'iron_golem',
-  name: '铁傀儡',
+  nameKey: 'entity.iron_golem',
   health: 100,
   width: 1.4,
   height: 2.7,
@@ -995,7 +995,7 @@ export const IRON_GOLEM_TYPE: MobType = {
  */
 export const SNOW_GOLEM_TYPE: MobType = {
   id: 'snow_golem',
-  name: '雪傀儡',
+  nameKey: 'entity.snow_golem',
   health: 4,
   width: 0.7,
   height: 1.9,
@@ -1020,7 +1020,7 @@ export const SNOW_GOLEM_TYPE: MobType = {
  */
 export const PILLAGER_TYPE: MobType = {
   id: 'pillager',
-  name: '掠夺者',
+  nameKey: 'entity.pillager',
   health: 24,
   width: 0.6,
   height: 1.95,
@@ -1051,7 +1051,7 @@ export const PILLAGER_TYPE: MobType = {
  */
 export const STRIDER_TYPE: MobType = {
   id: 'strider',
-  name: '炽足兽',
+  nameKey: 'entity.strider',
   health: 20,
   width: 0.9,
   height: 1.7,
@@ -1078,7 +1078,7 @@ export const STRIDER_TYPE: MobType = {
  */
 export const SILVERFISH_TYPE: MobType = {
   id: 'silverfish',
-  name: '蠹虫',
+  nameKey: 'entity.silverfish',
   health: 8,
   width: 0.4,
   height: 0.3,
@@ -1104,7 +1104,7 @@ export const SILVERFISH_TYPE: MobType = {
  */
 export const PIGLIN_BRUTE_TYPE: MobType = {
   id: 'piglin_brute',
-  name: '猪灵蛮兵',
+  nameKey: 'entity.piglin_brute',
   health: 50,
   width: 0.6,
   height: 1.95,
@@ -1133,7 +1133,7 @@ export const PIGLIN_BRUTE_TYPE: MobType = {
  */
 export const HOGLIN_TYPE: MobType = {
   id: 'hoglin',
-  name: '疣猪兽',
+  nameKey: 'entity.hoglin',
   health: 40,
   width: 1.4,
   height: 1.4,
@@ -1174,7 +1174,7 @@ export const HOGLIN_TYPE: MobType = {
  */
 export const DROWNED_TYPE: MobType = {
   id: 'drowned',
-  name: '溺尸',
+  nameKey: 'entity.drowned',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -1221,7 +1221,7 @@ export const DROWNED_TYPE: MobType = {
  */
 export const HUSK_TYPE: MobType = {
   id: 'husk',
-  name: '尸壳',
+  nameKey: 'entity.husk',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -1261,7 +1261,7 @@ export const HUSK_TYPE: MobType = {
  */
 export const STRAY_TYPE: MobType = {
   id: 'stray',
-  name: '流浪者',
+  nameKey: 'entity.stray',
   health: 20,
   width: 0.6,
   height: 1.95,
@@ -1303,7 +1303,7 @@ export const STRAY_TYPE: MobType = {
  */
 export const SQUID_TYPE: MobType = {
   id: 'squid',
-  name: '鱿鱼',
+  nameKey: 'entity.squid',
   health: 10,
   width: 0.8,
   height: 0.8,
@@ -1347,7 +1347,7 @@ export const SQUID_TYPE: MobType = {
  */
 export const WOLF_TYPE: MobType = {
   id: 'wolf',
-  name: '狼',
+  nameKey: 'entity.wolf',
   health: 8,
   width: 0.6,
   height: 0.85,
@@ -1377,7 +1377,7 @@ export const WOLF_TYPE: MobType = {
  */
 export const CAT_TYPE: MobType = {
   id: 'cat',
-  name: '猫',
+  nameKey: 'entity.cat',
   health: 10,
   width: 0.6,
   height: 0.7,
@@ -1405,7 +1405,7 @@ export const CAT_TYPE: MobType = {
  */
 export const OCELOT_TYPE: MobType = {
   id: 'ocelot',
-  name: '豹猫',
+  nameKey: 'entity.ocelot',
   health: 10,
   width: 0.6,
   height: 0.7,
@@ -1433,7 +1433,7 @@ export const OCELOT_TYPE: MobType = {
  */
 export const FOX_TYPE: MobType = {
   id: 'fox',
-  name: '狐狸',
+  nameKey: 'entity.fox',
   health: 10,
   width: 0.6,
   height: 0.7,
@@ -1457,7 +1457,7 @@ export const FOX_TYPE: MobType = {
  */
 export const HORSE_TYPE: MobType = {
   id: 'horse',
-  name: '马',
+  nameKey: 'entity.horse',
   health: 20,
   width: 1.0,
   height: 1.5,
@@ -1479,7 +1479,7 @@ export const HORSE_TYPE: MobType = {
 /** 驴（批次 253）：比马小一圈、慢一点，同样能骑 */
 export const DONKEY_TYPE: MobType = {
   id: 'donkey',
-  name: '驴',
+  nameKey: 'entity.donkey',
   health: 18,
   width: 0.9,
   height: 1.35,
@@ -1501,7 +1501,7 @@ export const DONKEY_TYPE: MobType = {
 /** 骡（批次 253）：原版不能自然生成，这里给平原/草甸让它能被看到 */
 export const MULE_TYPE: MobType = {
   id: 'mule',
-  name: '骡',
+  nameKey: 'entity.mule',
   health: 20,
   width: 0.9,
   height: 1.4,
@@ -1523,7 +1523,7 @@ export const MULE_TYPE: MobType = {
 /** 羊驼（批次 253）：队伍里那一只；目前与马同一套骑乘 */
 export const LLAMA_TYPE: MobType = {
   id: 'llama',
-  name: '羊驼',
+  nameKey: 'entity.llama',
   health: 20,
   width: 0.9,
   height: 1.4,
@@ -1550,7 +1550,7 @@ export const LLAMA_TYPE: MobType = {
  */
 export const RABBIT_TYPE: MobType = {
   id: 'rabbit',
-  name: '兔子',
+  nameKey: 'entity.rabbit',
   health: 3,
   width: 0.4,
   height: 0.4,
@@ -1572,7 +1572,7 @@ export const RABBIT_TYPE: MobType = {
 /** 山羊（批次 259）：山地那只，吃小麦；无掉落（原版只掉角，本项目没有） */
 export const GOAT_TYPE: MobType = {
   id: 'goat',
-  name: '山羊',
+  nameKey: 'entity.goat',
   health: 10,
   width: 0.9,
   height: 1.1,
@@ -1592,7 +1592,7 @@ export const GOAT_TYPE: MobType = {
 /** 鳕鱼（批次 259）：水里的小鱼，钓上来就是它自己 */
 export const COD_TYPE: MobType = {
   id: 'cod',
-  name: '鳕鱼',
+  nameKey: 'entity.cod',
   health: 3,
   width: 0.5,
   height: 0.3,
@@ -1625,7 +1625,7 @@ export const COD_TYPE: MobType = {
 /** 鲑鱼（批次 259）：与鳕鱼同一条水生路径，只是颜色与体型不同 */
 export const SALMON_TYPE: MobType = {
   id: 'salmon',
-  name: '鲑鱼',
+  nameKey: 'entity.salmon',
   health: 3,
   width: 0.6,
   height: 0.4,
@@ -1658,7 +1658,7 @@ export const SALMON_TYPE: MobType = {
 /** 海豚（批次 259）：海洋里的大只水生生物，掉 0~1 条鳕鱼（原版如此） */
 export const DOLPHIN_TYPE: MobType = {
   id: 'dolphin',
-  name: '海豚',
+  nameKey: 'entity.dolphin',
   health: 10,
   width: 0.9,
   height: 0.6,
@@ -1689,7 +1689,7 @@ export const DOLPHIN_TYPE: MobType = {
 /** 熊猫（批次 260）：丛林里吃竹子；无掉落（原版只掉竹子，本项目给的是方块，不重复给） */
 export const PANDA_TYPE: MobType = {
   id: 'panda',
-  name: '熊猫',
+  nameKey: 'entity.panda',
   health: 20,
   width: 1.0,
   height: 1.1,
@@ -1709,7 +1709,7 @@ export const PANDA_TYPE: MobType = {
 /** 北极熊（批次 260）：雪原系，掉 0~2 条鳕鱼（原版就是鱼） */
 export const POLAR_BEAR_TYPE: MobType = {
   id: 'polar_bear',
-  name: '北极熊',
+  nameKey: 'entity.polar_bear',
   health: 30,
   width: 1.2,
   height: 1.2,
@@ -1734,7 +1734,7 @@ export const POLAR_BEAR_TYPE: MobType = {
  */
 export const TURTLE_TYPE: MobType = {
   id: 'turtle',
-  name: '海龟',
+  nameKey: 'entity.turtle',
   health: 30,
   width: 0.9,
   height: 0.4,
@@ -1770,7 +1770,7 @@ export const TURTLE_TYPE: MobType = {
  */
 export const AXOLOTL_TYPE: MobType = {
   id: 'axolotl',
-  name: '美西螈',
+  nameKey: 'entity.axolotl',
   health: 14,
   width: 0.5,
   height: 0.4,
@@ -1797,7 +1797,7 @@ export const AXOLOTL_TYPE: MobType = {
  */
 export const BAT_TYPE: MobType = {
   id: 'bat',
-  name: '蝙蝠',
+  nameKey: 'entity.bat',
   health: 6,
   width: 0.5,
   height: 0.4,
@@ -1894,7 +1894,7 @@ export const MOB_TYPES: readonly MobType[] = [
   BAT_TYPE,
   {
     id: 'zombie',
-    name: '僵尸',
+  nameKey: 'entity.zombie',
     health: 20,
     width: 0.6,
     height: 1.95,
@@ -1913,7 +1913,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'skeleton',
-    name: '骷髅',
+  nameKey: 'entity.skeleton',
     health: 20,
     width: 0.6,
     height: 1.95,
@@ -1934,7 +1934,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'creeper',
-    name: '苦力怕',
+  nameKey: 'entity.creeper',
     health: 20,
     width: 0.6,
     height: 1.7,
@@ -1951,7 +1951,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'cow',
-    name: '牛',
+  nameKey: 'entity.cow',
     health: 10,
     width: 0.9,
     height: 1.4,
@@ -1973,7 +1973,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'pig',
-    name: '猪',
+  nameKey: 'entity.pig',
     health: 10,
     width: 0.9,
     height: 0.9,
@@ -1991,7 +1991,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'sheep',
-    name: '羊',
+  nameKey: 'entity.sheep',
     health: 8,
     width: 0.9,
     height: 1.3,
@@ -2010,7 +2010,7 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   {
     id: 'chicken',
-    name: '鸡',
+  nameKey: 'entity.chicken',
     health: 4,
     width: 0.4,
     height: 0.7,
@@ -2040,7 +2040,7 @@ export const MOB_TYPES: readonly MobType[] = [
    */
   {
     id: 'tropical_fish',
-    name: '热带鱼',
+  nameKey: 'entity.tropical_fish',
     health: 3,
     width: 0.5,
     height: 0.3,
@@ -2062,7 +2062,7 @@ export const MOB_TYPES: readonly MobType[] = [
   /** 河豚：同一条水生路径；受惊会鼓起来是**动画**，这一批不做（只有数值与掉落对齐） */
   {
     id: 'pufferfish',
-    name: '河豚',
+  nameKey: 'entity.pufferfish',
     health: 3,
     width: 0.6,
     height: 0.5,
@@ -2087,7 +2087,7 @@ export const MOB_TYPES: readonly MobType[] = [
    */
   {
     id: 'glow_squid',
-    name: '发光鱿鱼',
+  nameKey: 'entity.glow_squid',
     health: 10,
     width: 0.8,
     height: 0.8,
@@ -2132,7 +2132,7 @@ export function mobTypeById(id: string): MobType | undefined {
  */
 export const REMOTE_PLAYER_TYPE: MobType = {
   id: 'remote_player',
-  name: '玩家',
+  nameKey: 'entity.remote_player',
   health: 20,
   width: 0.6,
   height: 1.8,

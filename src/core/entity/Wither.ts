@@ -29,7 +29,7 @@ import { Item } from '../registry/items.ts';
 /** 凋灵：300 点生命（原版）、三颗头、会飞 */
 export const WITHER_TYPE: MobType = {
   id: 'wither',
-  name: '凋灵',
+  nameKey: 'entity.wither',
   health: 300,
   // 原版碰撞盒是 0.9×3.5；这里按"手机上也打得到"稍微放宽（与末影龙同一条取舍）
   width: 1.2,

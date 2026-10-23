@@ -19,7 +19,7 @@
 import { Block } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
 import { meleeDamage } from '../src/core/registry/tools.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { ALL_HOSTILE_MOBS, CAVE_SPIDER_TYPE, HOSTILE_MOBS, MOB_TYPES, SPIDER_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
@@ -109,7 +109,7 @@ const FLAT = makeTerrain();
 console.log('\n[蜘蛛：类型与掉落]');
 {
   equal('在中生物表里', mobTypeById('spider'), SPIDER_TYPE);
-  equal('名字', SPIDER_TYPE.name, '蜘蛛');
+  equal('名字', mobLabel(SPIDER_TYPE), '蜘蛛');
   equal('生命 16（原版）', SPIDER_TYPE.health, 16);
   equal('接触伤害 2（原版）', SPIDER_TYPE.attackDamage, 2);
   equal('追击范围 16 格（原版）', SPIDER_TYPE.followRange, 16);
@@ -249,7 +249,7 @@ console.log('\n[亮处中立：暗处追人、亮处干瞪眼、被打过就还�
 
 console.log('\n[洞穴蜘蛛：更小、有毒、不自然刷]');
 {
-  equal('名字', CAVE_SPIDER_TYPE.name, '洞穴蜘蛛');
+  equal('名字', mobLabel(CAVE_SPIDER_TYPE), '洞穴蜘蛛');
   equal('生命 12（比蜘蛛少）', CAVE_SPIDER_TYPE.health, 12);
   check(
     '体型更小（能钻进 1 格高的缝）',

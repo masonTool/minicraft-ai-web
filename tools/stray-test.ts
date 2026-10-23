@@ -22,7 +22,7 @@ import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { HOSTILE_MOBS, MOB_TYPES, STRAY_TYPE, HUSK_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 import { Arrow } from '../src/core/entity/Arrow.ts';
 import { boxAt } from '../src/core/physics/AABB.ts';
@@ -90,7 +90,7 @@ function run(mob: Mob, ctx: EntityContext, seconds: number, step = 1 / 20): void
 
 console.log('\n[流浪者：骷髅的雪原变体]');
 {
-  equal('名字', STRAY_TYPE.name, '流浪者');
+  equal('名字', mobLabel(STRAY_TYPE), '流浪者');
   equal('20 点生命（与骷髅同）', STRAY_TYPE.health, 20);
   equal('接触伤害 2（与骷髅同——它的威胁不在数值上）', STRAY_TYPE.attackDamage, 2);
   equal('（对照）骷髅也是 2', mobTypeById('skeleton')!.attackDamage, 2);

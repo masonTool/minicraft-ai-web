@@ -21,6 +21,7 @@ import { cmdMessages } from './cmdMessages.ts';
 import { item } from './item.ts';
 import { itemDesc } from './itemDesc.ts';
 import { label } from './label.ts';
+import { entity } from './entity.ts';
 import { misc } from './misc.ts';
 
 export const en = {
@@ -37,5 +38,6 @@ export const en = {
   ...item,
   ...itemDesc,
   ...label,
+  ...entity,
   ...misc,
 } satisfies Messages;

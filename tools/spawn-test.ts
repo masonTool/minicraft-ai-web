@@ -8,6 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { t, tp } from '../src/core/i18n/I18n.ts';
 import { MobSpawner, PASSIVE_LIMIT, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 // 史莱姆那条高度线（批次 120）：断言里按它比，别写死 40
 import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
@@ -487,7 +488,8 @@ console.log('\n[刷怪蛋（批次 174，J17）：每种生物一枚，创造专
     const def = itemDef(id);
     if (!def || def.spawnEgg !== spec.mobId) roundTrip = false;
     if (!(TILE_ORDER as readonly string[]).includes(spawnEggTile(spec.mobId))) tileOk = false;
-    if (itemLabel(id) !== `${spec.label}刷怪蛋`) roundTrip = false;
+    // 多语言 P2-4：蛋名由模板拼（`{mob}刷怪蛋`），mob 来自 `entity.<id>`
+    if (itemLabel(id) !== tp('item.tpl.spawnEgg', { mob: t(`entity.${spec.mobId}`) })) roundTrip = false;
   }
   check('蛋的 id 两两不同', idOk);
   check('每枚蛋都能反查出生物、名字也由规格表给', roundTrip);
