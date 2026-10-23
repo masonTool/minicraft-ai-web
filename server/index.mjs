@@ -114,6 +114,33 @@ const signs = new Map();
 const frames = new Map();
 const MAX_SIGNS = 5000;
 const MAX_FRAMES = 5000;
+
+/**
+ * 外观字段收口（联机17）。
+ *
+ * 只认这 9 个白名单字段，值一律规整成数字/布尔——**不让客户端把任意结构塞进广播**，
+ * 否则一个客户端就能决定别人收到的报文长什么样（内存与带宽都被它牵着走）。
+ */
+function readAppearance(message) {
+  const armor = Array.isArray(message.armor)
+    ? message.armor.slice(0, 4).map((id) => Math.trunc(Number(id)) || 0)
+    : undefined;
+  const positive = (value) => {
+    const id = Math.trunc(Number(value));
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  };
+  return {
+    ...(positive(message.held) ? { held: positive(message.held) } : {}),
+    ...(positive(message.offhand) ? { offhand: positive(message.offhand) } : {}),
+    ...(armor && armor.some((id) => id > 0) ? { armor } : {}),
+    ...(message.sneak ? { sneak: true } : {}),
+    ...(message.swing ? { swing: true } : {}),
+    ...(message.hurt ? { hurt: true } : {}),
+    ...(message.fire ? { fire: true } : {}),
+    ...(message.ride ? { ride: true } : {}),
+    ...(message.sleep ? { sleep: true } : {}),
+  };
+}
 /**
  * 世界快照文件（联机13）。`DATA_DIR` 可覆盖——测试里指到临时目录，
  * 免得把仓库里的 `server/.data/world.json` 弄脏。
@@ -449,8 +476,21 @@ wss.on('connection', (socket, request) => {
         player.yaw = Number(message.yaw ?? player.yaw);
         player.pitch = Number(message.pitch ?? player.pitch);
         player.dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        // 外观（联机17）：只认白名单字段，收口后原样转发
+        player.appearance = readAppearance(message);
         broadcast(
-          { t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch, dimension: player.dimension },
+          {
+            t: 'player',
+            id: player.id,
+            name: player.name,
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            yaw: player.yaw,
+            pitch: player.pitch,
+            dimension: player.dimension,
+            ...player.appearance,
+          },
           player.id,
         );
         break;

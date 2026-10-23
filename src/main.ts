@@ -389,6 +389,7 @@ import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
+import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1838,6 +1839,13 @@ class App {
    * `onChunkLoaded` 再写回去。
    */
   private readonly pendingContainers = new Map<string, NetContainerState[]>();
+  /**
+   * 远端玩家的外观状态（联机17）：手持物 / 潜行 / 挥手 / 受伤 / 着火 / 骑乘 / 睡觉。
+   *
+   * 网络 100ms 一条，而挥手只有 0.25 秒——所以这里存的是"还剩几秒"的计时，
+   * 不是最新那条消息里的布尔（`RemoteAppearance` 做边沿触发）。
+   */
+  private readonly remoteAppearance = new Map<number, RemoteAppearance>();
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1912,6 +1920,7 @@ class App {
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
         this.remotePresence.clear();
+        this.remoteAppearance.clear();
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
@@ -3539,10 +3548,62 @@ class App {
     for (const frame of frames) this.applyRemoteFrame(frame);
   }
 
+  /**
+   * 本机外观（联机17）：跟着 `move` 一起发。
+   *
+   * 只发**有数据源**的那几项。副手槽与玩家盔甲栏这个项目还没有独立数据（盔甲是
+   * `armorColors` 那种简化模型），硬编 0 发过去等于撒谎——队友会以为你空着手。
+   * 缺的几项记在 `联机37`。
+   */
+  private localAppearance(): RemoteAppearanceInput {
+    const held = this.inventory.get(this.hotbarIndex);
+    return {
+      held: held?.id ?? 0,
+      sneak: this.frameInput.sneak,
+      swing: this.hand.swingProgress > 0,
+      ride: this.ridingVehicle !== null,
+      sleep: this.sleeping !== null,
+    };
+  }
+
+  /**
+   * 把远端外观写到模型上（联机17）。
+   *
+   * 能直接接渲染的只有手持物（`equipment.mainHand`）、挥手（`attackAnim`）与着火
+   * （`ignite`）；潜行/骑乘/睡觉先只存状态——远端模型没有下蹲/骑乘姿势，
+   * 硬改要动 `MobRenderer` 的骨架（记在 `联机37`）。
+   */
+  private applyRemoteAppearance(mob: Mob, appearance: RemoteAppearance): void {
+    const state = appearance.state;
+    const equipment = { ...mob.equipment };
+    if (state.held > 0) equipment.mainHand = state.held;
+    else delete equipment.mainHand;
+    mob.equipment = equipment;
+    if (appearance.swinging) mob.attackAnim = Math.max(mob.attackAnim, 0.2);
+    if (state.onFire && !mob.burning) mob.ignite(3);
+  }
+
   /** 其它玩家的位置更新 */
   private onNetPlayer(player: NetPlayerState): void {
     // 维度先记：下面"首次见到这个人"的分支会提前 return，放在后面就会漏掉第一次
     this.remotePresence.set(player.id, player.dimension ?? 'overworld');
+    // 外观（联机17）：先更新状态表，模型在渲染前由 `applyRemoteAppearance` 刷
+    let appearance = this.remoteAppearance.get(player.id);
+    if (!appearance) {
+      appearance = new RemoteAppearance();
+      this.remoteAppearance.set(player.id, appearance);
+    }
+    appearance.update({
+      held: player.held,
+      offhand: player.offhand,
+      armor: player.armor,
+      sneak: player.sneak,
+      swing: player.swing,
+      hurt: player.hurt,
+      fire: player.fire,
+      ride: player.ride,
+      sleep: player.sleep,
+    });
     const next = { x: player.x, y: player.y, z: player.z, yaw: player.yaw };
     let mob = this.remotePlayers.get(player.id);
     if (!mob) {
@@ -3640,6 +3701,7 @@ class App {
     this.remotePlayers.delete(id);
     this.remoteSmoothers.delete(id);
     this.remotePresence.remove(id);
+    this.remoteAppearance.delete(id);
     // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
     for (const [key, ghost] of this.remoteItems) {
       if (!key.startsWith(`${id}:`)) continue;
@@ -17318,7 +17380,14 @@ class App {
         this.yaw,
         this.pitch,
         this.dimension,
+        this.localAppearance(),
       );
+      // 远端玩家的外观计时（联机17）：挥手 0.25 秒、受伤 0.3 秒，本地自己数
+      for (const [id, appearance] of this.remoteAppearance) {
+        appearance.tick(dt);
+        const mob = this.remotePlayers.get(id);
+        if (mob) this.applyRemoteAppearance(mob, appearance);
+      }
       // 本地掉落物的增删同步（L7 第一刀）：内部自己节流到 100ms
       this.syncNetItems(performance.now());
       mark = this.lap('io', mark);

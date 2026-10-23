@@ -479,6 +479,57 @@ try {
     check('批量里的非法条目被丢掉', filtered?.blocks?.length === 1, JSON.stringify(filtered));
   }
 
+  // ---------------------------------------------------------------- 外观状态（联机17）
+  console.log('\n[外观状态]');
+  {
+    await sleep(80); // move 有 50ms 限频
+    alice.mailbox.length = 0;
+    bob.send({
+      t: 'move',
+      x: -5,
+      y: 70,
+      z: 8,
+      yaw: 0.5,
+      pitch: 0.1,
+      dimension: 'overworld',
+      held: 5,
+      armor: [1, 2, 0, 0],
+      sneak: 1,
+      swing: 1,
+    });
+    const state = await alice.wait('player', 2000);
+    check(
+      'move 带的手持物 / 盔甲 / 潜行 / 挥手被转发',
+      state?.held === 5 &&
+        Array.isArray(state?.armor) &&
+        state.armor[1] === 2 &&
+        state?.sneak === true &&
+        state?.swing === true,
+      JSON.stringify(state),
+    );
+
+    // 白名单：客户端塞的未知字段不该出现在广播里（否则一个客户端就能决定别人收到的报文）
+    await sleep(80);
+    alice.mailbox.length = 0;
+    bob.send({
+      t: 'move',
+      x: -5,
+      y: 70,
+      z: 8,
+      yaw: 0.5,
+      pitch: 0.1,
+      dimension: 'overworld',
+      evil: { x: 1 },
+      held: -3,
+    });
+    const clean = await alice.wait('player', 2000);
+    check(
+      '外观只转发白名单字段（未知字段与非正 id 被丢掉）',
+      clean !== null && clean.evil === undefined && clean.held === undefined,
+      JSON.stringify(clean),
+    );
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {

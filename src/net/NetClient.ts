@@ -15,6 +15,7 @@
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
+import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 
 export interface NetPlayerState {
   id: number;
@@ -25,6 +26,19 @@ export interface NetPlayerState {
   yaw: number;
   pitch: number;
   dimension: string;
+  /**
+   * 外观（联机17）：都可缺省——老客户端不带这些字段，渲染就按"空手站立"画。
+   * 服务端原样转发，不做语义校验（数字/布尔由客户端自己收口）。
+   */
+  held?: number;
+  offhand?: number;
+  armor?: number[];
+  sneak?: boolean;
+  swing?: boolean;
+  hurt?: boolean;
+  fire?: boolean;
+  ride?: boolean;
+  sleep?: boolean;
 }
 
 /**
@@ -423,7 +437,12 @@ export class NetClient {
     }
   }
 
-  /** 每帧调用：按间隔把自己的位置发出去 */
+  /**
+   * 每帧调用：按间隔把自己的位置 + 外观发出去（联机17）。
+   *
+   * 外观跟 `move` 一起走而不是单独一条：它同样"变了才值得知道"，而 100ms 一条
+   * 已经足够（挥手 0.25 秒会被收到 2~3 次；客户端那边靠边沿触发补成动画）。
+   */
   tick(
     x: number,
     y: number,
@@ -431,6 +450,7 @@ export class NetClient {
     yaw: number,
     pitch: number,
     dimension: string,
+    appearance: RemoteAppearanceInput = {},
     now = performance.now(),
   ): void {
     // 位置快照要在 connected 检查**之前**更新：连接可能发生在「暂停菜单里点连接」，
@@ -452,6 +472,16 @@ export class NetClient {
         yaw: Number(yaw.toFixed(3)),
         pitch: Number(pitch.toFixed(3)),
         dimension,
+        // 外观（联机17）：字段短、都可缺省；空手/没盔甲就不带，省字节
+        ...(appearance.held ? { held: appearance.held } : {}),
+        ...(appearance.offhand ? { offhand: appearance.offhand } : {}),
+        ...(appearance.armor && appearance.armor.some((id) => id > 0) ? { armor: appearance.armor } : {}),
+        ...(appearance.sneak ? { sneak: 1 } : {}),
+        ...(appearance.swing ? { swing: 1 } : {}),
+        ...(appearance.hurt ? { hurt: 1 } : {}),
+        ...(appearance.fire ? { fire: 1 } : {}),
+        ...(appearance.ride ? { ride: 1 } : {}),
+        ...(appearance.sleep ? { sleep: 1 } : {}),
       }),
     );
   }

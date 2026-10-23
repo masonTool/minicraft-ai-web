@@ -71,7 +71,7 @@
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
-| `move` | `x, y, z, yaw, pitch, dimension` | 距上一条 < 50ms 直接丢弃；缺字段保留旧值 | 客户端 100ms 发一条；**没有速度/距离校验** |
+| `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收） | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）跟 `move` 走而不是单独一条 |
 | `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | 单条版本，客户端现在走 `blocks`；**不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
@@ -90,7 +90,7 @@
 | --- | --- | --- |
 | `welcome` | `v, id, name, seed, timeOfDay, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
-| `player` | `id, name, x, y, z, yaw, pitch, dimension` | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
+| `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
 | `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
@@ -167,7 +167,7 @@
 | 消息 | 客户端行为 | 备注 |
 | --- | --- | --- |
 | `welcome` | 种子与服务端比对：**不一致就整批跳过**（不写 edits、不建远端玩家），消息栏 + HUD 提示 `/netseed reload` 或 `/netseed new`；一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像 | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档；种子冲突判定在 `core/net/SeedReconcile.ts`。远端改动**会**进本地存档（`联机6` 隔离仍未做） |
-| `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
+| `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度；外观进 `RemoteAppearance`（挥手/受伤**边沿触发 + 本地计时**，因为网络 100ms 一条而动作只有 0.25s） | 队友走进下界时不会在主世界同坐标留一个分身；手持物/挥手/着火直接接到模型上 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`）；`snap: true` 时**立刻对齐**并顺手放晴 | 直接赋值太阳会"跳"；睡满跳夜那种大跳必须换成立即对齐，否则夜里要追 70 秒 |
 | `sign` | 写回 `signText`，当前维度立刻 `syncSigns`（渲染器下一趟 sync 画出） | 全空 = 擦除；非当前维度也存下来，切过去还在 |
@@ -197,7 +197,8 @@
 | `联机14` | `welcome` 已按 8 区块裁剪；增量满了淘汰最旧并告警 | 半径外的旧改动新玩家收不到，要等"按视野补发"（`联机27`）；容器与掉落物仍全量下发 |
 | `联机15` | 容器已覆盖 9 种工作站（箱子/木桶/熔炉/高炉/烟熏炉/酿造台/发射器/投掷器/漏斗），且建出来就挂、不用打开界面 | 只同步**内容**：熔炉燃烧进度、酿造进度、漏斗冷却这些计时器各端自己跑 |
 | `联机16` | 已同步（`sign` / `frame` 两条消息 + 快照下发） | 只同步文字与物品：牌子上的**染料颜色/发光**、框的**多件拼贴**这些本项目本来就没做 |
-| `联机17`~`联机23` | 玩家外观、名字牌、生物、拾取、PvP、其他实体 | 看不到手持物；打怪不同步；镜像捡不起来 |
+| `联机17` | 外观已通（手持物/挥手/着火接到模型；潜行/骑乘/睡觉只存状态） | **副手与玩家盔甲没有数据源**（项目没有独立副手槽、盔甲是简化模型），远端模型也没有下蹲/骑乘姿势（`联机37`） |
+| `联机18`~`联机23` | 名字牌、生物、拾取、PvP、其他实体 | 看不到队友昵称牌；打怪不同步；镜像捡不起来 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |
