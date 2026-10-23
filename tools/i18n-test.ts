@@ -37,6 +37,7 @@ import { ITEM_CATEGORIES, itemDef } from '../src/core/registry/items.ts';
 import { itemDescription, translateName } from '../src/core/registry/itemNames.ts';
 import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
 import { POTIONS, TIPPED_ARROWS } from '../src/core/registry/potions.ts';
+import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1393,6 +1394,27 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   }
   setLanguage('zh');
   check('中文成就说明与原文逐条一致', ADVANCEMENTS.every((a) => advancementDesc(a) === a.desc));
+
+  /**
+   * 伤害提示（P6-5，批次 20261024-0020）。
+   *
+   * `DamageNotice` 原来有 16 条中文原因 + 7 条中文句式（“来自僵尸”/“被骷髅射中”/“摔落（从高处落地）（来源：世界边界）”），
+   * 德语/俄语界面上会直接露中文。现在走 `notice.damage.*`，取值在**调用这一刻**做。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const texts = [
+      damageReason('fall'),
+      damageReason('lava'),
+      damageReason('generic', 'Zombie'),
+      damageReason('projectile', 'Skelett'),
+      damageReason('poison', 'Spinne'),
+    ];
+    check(`${code} 伤害提示不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 60));
+  }
+  setLanguage('zh');
+  check('中文伤害提示与改造前一致', damageReason('generic', '僵尸') === '来自僵尸' && damageReason('fall') === '摔落（从高处落地）');
+  resetLanguageForTest();
   resetLanguageForTest();
 
   /**

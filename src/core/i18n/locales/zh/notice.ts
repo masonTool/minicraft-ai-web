@@ -1,0 +1,31 @@
+/**
+ * 中文文案·提示（伤害原因 / 配方书 / WebGL 提示）
+ *
+ * P6-5 起把 `DamageNotice` 里那张中文原因表搬到这里。
+ */
+
+export const notice = {
+  "notice.damage.cause.poison": "中毒（持续扣血）",
+  "notice.damage.cause.wither": "凋零（持续扣血，会致死）",
+  "notice.damage.cause.freeze": "冰冻（陷在细雪里太久）",
+  "notice.damage.cause.fall": "摔落（从高处落地）",
+  "notice.damage.cause.drown": "溺水（氧气耗尽）",
+  "notice.damage.cause.lava": "碰到岩浆（要立刻离开，水浇不灭）",
+  "notice.damage.cause.fire": "着火（站在火/岩浆块上，或被点燃）",
+  "notice.damage.cause.cactus": "碰到仙人掌（带刺方块）",
+  "notice.damage.cause.sweetBerry": "走进甜浆果丛（被刺扎到）",
+  "notice.damage.cause.suffocate": "窒息（头卡在方块里）",
+  "notice.damage.cause.starve": "饥饿（饥饿值耗尽）",
+  "notice.damage.cause.void": "掉出世界（虚空）",
+  "notice.damage.cause.explosion": "爆炸（TNT / 苦力怕 / 床）",
+  "notice.damage.cause.projectile": "被弹射物击中",
+  "notice.damage.cause.lightning": "被雷击中",
+  "notice.damage.cause.generic": "受到伤害（没有记录到来源）",
+  "notice.damage.from": "来自{source}",
+  "notice.damage.shotBy": "被{source}射中",
+  "notice.damage.explosionOf": "{source}的爆炸",
+  "notice.damage.fireOf": "{source}造成的火焰伤害",
+  "notice.damage.poisonOf": "{source}导致的中毒",
+  "notice.damage.witherOf": "{source}导致的凋零",
+  "notice.damage.withSource": "{cause}（来源：{source}）",
+} as const;

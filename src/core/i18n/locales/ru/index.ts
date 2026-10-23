@@ -24,6 +24,7 @@ import { label } from './label.ts';
 import { entity } from './entity.ts';
 import { misc } from './misc.ts';
 import { advancement } from './advancement.ts';
+import { notice } from './notice.ts';
 
 export const ru = {
   ...menu,
@@ -42,4 +43,5 @@ export const ru = {
   ...entity,
   ...misc,
   ...advancement,
+  ...notice,
 } satisfies Messages;
