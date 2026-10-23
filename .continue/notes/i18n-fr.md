@@ -17,13 +17,13 @@
 | `editor` | 54 | ✅ 法语 |
 | `minigame` | 37 | ✅ 法语 |
 | `label` | 226 | ⬜ 英文占位 |
-| `item` | 644 | ⬜ 英文占位 |
-| `entity` | 75 | ⬜ 英文占位 |
+| `item` | 644 | 🟡 部分：构件与模板 128 条已翻，**516 条显式物品名仍是英文** |
+| `entity` | 75 | ✅ 法语 |
 | `cmd` | 243 | ⬜ 英文占位 |
 | `cmdMessages` | 170 | ⬜ 英文占位 |
 | `itemDesc` | 288 | ⬜ 英文占位 |
 
-合计 **2168 条**：已翻 **519**（审计报 521，多出的 2 条是"法语写法恰好与英文相同"的，如 `Normal`）。
+合计 **2168 条**：已翻 **725**（审计报 707，少 18 条是"法语写法恰好与英文相同"的，如 `Normal`、`Creeper`、`Blaze`）。
 
 ## 法语的三处特殊处理
 
@@ -38,10 +38,9 @@
 
 ## 还差的批次（按顺序）
 
-1. **`item` 的构件与模板 + `entity`**（203 条）：先翻构件，一条顶几十条。
-2. **`item` 的 516 条显式物品名**。
-3. **`cmd` + `cmdMessages`**（413 条）：⚠️ 必须保留 `<>` `[]` `|`（照抄德语/俄语那条守卫）。
-4. **`itemDesc`**（288 条长文）：最贵的一批。
+1. **`item` 的 516 条显式物品名**。
+2. **`cmd` + `cmdMessages`**（413 条）：⚠️ 必须保留 `<>` `[]` `|`（照抄德语/俄语那条守卫）。
+3. **`itemDesc`**（288 条长文）：最贵的一批。
 
 ## 提取原文时的一个坑（P4-3b 撞到的）
 
@@ -55,3 +54,18 @@
 用"`键: 值` 一行一个"的正则去列原文，**这三条会被静默漏掉**（`settings.helpDesktop` / `settings.helpTouch` /
 `station.dropperCycle`），直到生成脚本的 `satisfies` 或"缺 N 条"断言才暴露。列原文时只用正则抓**键名**
 （`^\s+'([^']+)':`），值另取——键名永远在行首，值可能在下一行。
+
+## 法语拼名的第四个处理：颜色用"名词（颜色）"，木材用 `de/en + 名词`
+
+| 族 | 法语写法 | 为什么 |
+| --- | --- | --- |
+| 颜色 10 族 | `Laine (blanc)` / `Lit (orange)` | 法语形容词要与名词的性数配合（`laine blanche` / `lit orange`），一个 `{color}` 服务不了 10 个名词 |
+| 木材 8 形态 | `Planches de chêne` / `Barrière en chêne` / `Bûche de chêne` | 名词 + `de/en` 结构天然成立，不需要变格 |
+| 珊瑚 3 形态 | `Bloc de corail tubulaire` / `Corail tubulaire mort` | 五个珊瑚形容词都是规则形式，成立 |
+| 工具 / 盔甲 | `Pioche en diamant` / `Plastron en netherite` | `en + 材质`，成立 |
+| 台阶/楼梯/墙 | `Dalle de roche lisse` / `Escalier en roche lisse` | 基名是小写名词短语，成立 |
+
+⚠️ **已知外观瑕疵**：木板类基名（`planches de chêne`）本身是**独立物品名**、首字母大写，
+所以拼出来是 `Dalle de Planches de chêne noir`、`Escalier en Planches de chêne` —— 句中大写。
+受影响 6 种木材 × 3 变体 = **18 个名字**。要修得让"独立名"与"构件名"分开存（键空间由中文表决定，
+`satisfies` 要求键集一致），代价大于收益，**接受**（与俄语那批括号内大写同一个处置）。

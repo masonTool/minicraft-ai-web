@@ -1185,6 +1185,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['panel.dispenser', 'Lanceur'],
     ['editor.cancel', 'Annuler'],
     ['minigame.jump.retry', 'Rejouer'],
+    // P4-3c 起构件与模板、以及生物名是法语（显式物品名仍是英文占位）
+    ['item.toolKind.pickaxe', 'Pioche'],
+    ['item.tpl.tool', '{kind} en {material}'],
+    ['item.wood.oak', 'chêne'],
+    ['entity.mooshroom', 'Vache-champignon'],
   ];
   for (const [key, expected] of frSamples) {
     check(`法语：${key}`, t(key, 'fr') === expected, t(key, 'fr'));
