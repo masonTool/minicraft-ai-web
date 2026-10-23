@@ -260,4 +260,23 @@ export const itemDesc = {
   // ---- 展示框与画（原来直接写在代码里）
   "item.desc.item_frame": "物品展示框：贴在**墙上**（点方块侧面放），框里能挂**任何一件东西**。右键空框 → 把手里那件挂上去（消耗 1 个）；右键有东西的框 → **转 45°**（转 8 次回到原位）；手里拿着别的东西右键 → **换一件**。拆框时挂着的那件会一起掉出来。⚠️ 与原版差异：**框里只挂 1 件**（不显示数量），方块类物品挂上去是**一张平面图标**（原版是立体小方块）。",
   "item.desc.painting": "画：贴在**墙上**（点方块侧面放），挂上去的是**哪一幅随机**。⚠️ 与原版差异：本项目这一批只做了原版 1.18 里 **1×1 的 7 幅**（烤肉串 / 阿兹特克 / 阿尔班 / 阿兹特克II / 炸弹 / 植物 / 荒地），**多格拼贴的大画还没做**——所以不会出现\"挂一幅 2×2 的大画\"。",
+
+  // ---- 工具与盔甲说明模板（多语言 P2-3c2）
+  "item.desc.tpl.tool": "{material}{kind}：{desc} 采集等级 {tier}｜速度 ×{speed}｜攻击 {attack}｜耐久 {durability}",
+  "item.desc.tpl.toolKind.pickaxe": "挖石头、矿石与砖石类方块；等级不够的矿石挖了也不掉落。",
+  "item.desc.tpl.toolKind.axe": "砍木头最快；近战单次伤害最高。",
+  "item.desc.tpl.toolKind.shovel": "挖泥土、沙子、砂砾这类松软方块最快。",
+  "item.desc.tpl.toolKind.hoe": "耕地的工具，也能当低伤害武器。",
+  "item.desc.tpl.toolKind.sword": "近战伤害与攻击手感最好的武器。",
+  "item.desc.tpl.toolTier.0": "木/金",
+  "item.desc.tpl.toolTier.1": "石",
+  "item.desc.tpl.toolTier.2": "铁",
+  "item.desc.tpl.toolTier.3": "钻石",
+  "item.desc.tpl.toolTier.4": "下界合金",
+  "item.desc.tpl.armor": "{material}{type}：{desc} 护甲值 {defense}{toughness}｜耐久 {durability}｜{material}满套共 {total} 点护甲",
+  "item.desc.tpl.armorType.helmet": "戴在头上，四件里护甲值最低但材料最省。",
+  "item.desc.tpl.armorType.chestplate": "穿在胸口，护甲值最高，优先做它。",
+  "item.desc.tpl.armorType.leggings": "穿在腿上，护甲值居中。",
+  "item.desc.tpl.armorType.boots": "穿在脚上，护甲值最低。",
+  "item.desc.tpl.toughness": "｜韧性 {value}",
 } as const;

@@ -313,20 +313,6 @@ for (const material of Object.keys(TOOL_MATERIALS_CN)) {
 }
 
 // 盔甲：部位 × 材质 = 24 件（皮革头盔 / 锁链胸甲 / 铁护腿 / 钻石靴子 / 下界合金头盔……）
-const ARMOR_MATERIALS_CN: Record<string, string> = {
-  leather: '皮革',
-  chainmail: '锁链',
-  iron: '铁',
-  golden: '金',
-  diamond: '钻石',
-  netherite: '下界合金',
-};
-const ARMOR_TYPES_CN: Record<string, string> = {
-  helmet: '头盔',
-  chestplate: '胸甲',
-  leggings: '护腿',
-  boots: '靴子',
-};
 for (const material of ALL_ARMOR_MATERIALS) {
   for (const type of ARMOR_TYPES) {
     put(`${material}_${type}`, () =>
@@ -453,42 +439,37 @@ COPPER_STAGES.forEach((stage, index) => {
 });
 
 // 工具与武器的说明由属性表生成：新加一把工具就自带说明，不会漏
-const TOOL_TIER_CN = ['木/金', '石', '铁', '钻石', '下界合金'];
-const TOOL_KIND_DESC: Record<string, string> = {
-  pickaxe: '挖石头、矿石与砖石类方块；等级不够的矿石挖了也不掉落。',
-  axe: '砍木头最快；近战单次伤害最高。',
-  shovel: '挖泥土、沙子、砂砾这类松软方块最快。',
-  hoe: '耕地的工具，也能当低伤害武器。',
-  sword: '近战伤害与攻击手感最好的武器。',
-};
 for (const spec of TOOL_SPECS) {
-  const materialCn = TOOL_MATERIALS_CN[spec.tool.material]!;
-  const kindCn = TOOL_KINDS_CN[spec.tool.type]!;
-  DESCRIPTIONS[`${spec.tool.material}_${spec.tool.type}`] =
-    `${materialCn}${kindCn}：${TOOL_KIND_DESC[spec.tool.type]!}` +
-    ` 采集等级 ${TOOL_TIER_CN[spec.tool.tier]!}｜速度 ×${spec.tool.speed}｜攻击 ${spec.tool.attack}｜耐久 ${spec.tool.durability}`;
+  // 说明由属性表 + 语言表拼：材质/种类/等级词都按当前语言取（多语言 P2-3c2）
+  DESCRIPTIONS[`${spec.tool.material}_${spec.tool.type}`] = () =>
+    tp('item.desc.tpl.tool', {
+      material: t(`item.toolMaterial.${spec.tool.material}`),
+      kind: t(`item.toolKind.${spec.tool.type}`),
+      desc: t(`item.desc.tpl.toolKind.${spec.tool.type}`),
+      tier: t(`item.desc.tpl.toolTier.${spec.tool.tier}`),
+      speed: spec.tool.speed,
+      attack: spec.tool.attack,
+      durability: spec.tool.durability,
+    });
 }
 
 // 盔甲的说明同样从属性表生成。
 // "满套 N 点"是新手最想知道的那个数，所以顺手按材质算出来写进说明里
-const ARMOR_KIND_DESC: Record<string, string> = {
-  helmet: '戴在头上，四件里护甲值最低但材料最省。',
-  chestplate: '穿在胸口，护甲值最高，优先做它。',
-  leggings: '穿在腿上，护甲值居中。',
-  boots: '穿在脚上，护甲值最低。',
-};
 const armorSetTotals = new Map<string, number>();
 for (const spec of ARMOR_SPECS) {
   armorSetTotals.set(spec.armor.material, (armorSetTotals.get(spec.armor.material) ?? 0) + spec.armor.defense);
 }
 for (const spec of ARMOR_SPECS) {
-  const materialCn = ARMOR_MATERIALS_CN[spec.armor.material]!;
-  const typeCn = ARMOR_TYPES_CN[spec.armor.type]!;
-  const toughness = spec.armor.toughness > 0 ? `｜韧性 ${spec.armor.toughness}` : '';
-  DESCRIPTIONS[`${spec.armor.material}_${spec.armor.type}`] =
-    `${materialCn}${typeCn}：${ARMOR_KIND_DESC[spec.armor.type]!}` +
-    ` 护甲值 ${spec.armor.defense}${toughness}｜耐久 ${spec.armor.durability}` +
-    `｜${materialCn}满套共 ${armorSetTotals.get(spec.armor.material)!} 点护甲`;
+  DESCRIPTIONS[`${spec.armor.material}_${spec.armor.type}`] = () =>
+    tp('item.desc.tpl.armor', {
+      material: t(`item.armorMaterial.${spec.armor.material}`),
+      type: t(`item.armorType.${spec.armor.type}`),
+      desc: t(`item.desc.tpl.armorType.${spec.armor.type}`),
+      defense: spec.armor.defense,
+      toughness: spec.armor.toughness > 0 ? tp('item.desc.tpl.toughness', { value: spec.armor.toughness }) : '',
+      durability: spec.armor.durability,
+      total: armorSetTotals.get(spec.armor.material)!,
+    });
 }
 
 // 食物的说明也由数值表生成：饥饿与饱和度是玩家最关心的两个数，

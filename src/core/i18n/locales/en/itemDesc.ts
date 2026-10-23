@@ -260,4 +260,23 @@ export const itemDesc = {
   "item.desc.tpl.copperStairs": "Stairs made from {cut} (6 cut into 4).",
   "item.desc.item_frame": "Item Frame: sticks to a **wall** (right-click a block side). It can hold **any single item**. Right-click an empty frame to hang the held item (costs 1); right-click a filled one to **rotate 45°** (8 clicks bring it back); right-click with a different item to **swap it**. Breaking the frame drops the item with it. Difference from vanilla: **only one item per frame** (no stack count), and blocks show as a **flat icon** rather than a small 3D block.",
   "item.desc.painting": "Painting: sticks to a **wall** (right-click a block side); **which picture you get is random**. Difference from vanilla: this build only has the **seven 1x1 paintings** from 1.18 (Kebab / Aztec / Alban / Aztec2 / Bomb / Plant / Wasteland) — **multi-block paintings are not implemented**, so you will never hang a 2x2 one.",
+
+  // ---- tool / armour description templates (P2-3c2)
+  "item.desc.tpl.tool": "{material} {kind}: {desc} Harvest tier {tier} | Speed x{speed} | Attack {attack} | Durability {durability}",
+  "item.desc.tpl.toolKind.pickaxe": "mines stone, ore and masonry blocks; ore above your tier drops nothing.",
+  "item.desc.tpl.toolKind.axe": "fastest on wood; highest single-hit melee damage.",
+  "item.desc.tpl.toolKind.shovel": "fastest on soft blocks such as dirt, sand and gravel.",
+  "item.desc.tpl.toolKind.hoe": "the farming tool, and a low-damage weapon.",
+  "item.desc.tpl.toolKind.sword": "the best melee weapon for damage and swing feel.",
+  "item.desc.tpl.toolTier.0": "Wood/Gold",
+  "item.desc.tpl.toolTier.1": "Stone",
+  "item.desc.tpl.toolTier.2": "Iron",
+  "item.desc.tpl.toolTier.3": "Diamond",
+  "item.desc.tpl.toolTier.4": "Netherite",
+  "item.desc.tpl.armor": "{material} {type}: {desc} Armour {defense}{toughness} | Durability {durability} | a full {material} set gives {total} armour",
+  "item.desc.tpl.armorType.helmet": "worn on the head; the least armour of the four, and the cheapest to make.",
+  "item.desc.tpl.armorType.chestplate": "worn on the chest; the most armour, so make it first.",
+  "item.desc.tpl.armorType.leggings": "worn on the legs; middle armour.",
+  "item.desc.tpl.armorType.boots": "worn on the feet; the least armour.",
+  "item.desc.tpl.toughness": " | Toughness {value}",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;
