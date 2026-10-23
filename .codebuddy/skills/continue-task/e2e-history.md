@@ -9,3 +9,12 @@
 | 2026-10-23 11:46 | main | deepseek-v4.1-flash-official | 129s | 0 | fail |
 | 2026-10-23 11:48 | main | deepseek-v4.1-flash-official | 263s | 3,258,313 | pass |
 | 2026-10-23 14:33 | journey | deepseek-v4.1-flash-official | 249s | 0 | pass |
+| 2026-10-23 15:50 | main | deepseek-v4.1-flash-official | 127s | 未知 | fail |
+| 2026-10-23 15:50 | decision | deepseek-v4.1-flash-official | 184s | 2,262,787 | fail |
+| 2026-10-23 15:50 | plan-split | deepseek-v4.1-flash-official | 264s | 2,495,932 | pass |
+| 2026-10-23 15:50 | journey | deepseek-v4.1-flash-official | 139s | 2,005,054 | fail |
+| 2026-10-23 15:52 | main | deepseek-v4.1-flash-official | 186s | 未知 | pass |
+| 2026-10-23 15:52 | decision | deepseek-v4.1-flash-official | 209s | 2,834,165 | fail |
+| 2026-10-23 15:52 | plan-split | deepseek-v4.1-flash-official | 257s | 1,504,413 | pass |
+| 2026-10-23 15:52 | journey | deepseek-v4.1-flash-official | 153s | 1,925,705 | pass |
+| 2026-10-23 16:11 | decision | deepseek-v4.1-flash-official | 88s | 1,147,135 | pass |

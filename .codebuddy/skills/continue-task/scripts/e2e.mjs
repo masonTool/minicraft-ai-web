@@ -293,7 +293,7 @@ SCENARIOS.decision = {
     if (!r) return;
 
     const decPath = join(ctx.dir, '.continue', 'doing', `${sid6(s)}-decision.md`);
-    const archived = listArchive(ctx, s).filter((n) => n.startsWith('decision-'));
+    const archived = listArchive(ctx, s).filter(isDecisionArchive);
     const body = readMaybe(decPath) || (archived[0] ? readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), archived[0])) : '');
 
     check('写了决策记录（doing/ 或已归档）', body.length > 0, '既没有 doing/<sid>-decision.md，也没有归档');
@@ -308,7 +308,7 @@ SCENARIOS.decision = {
     const archivedNow = listArchive(ctx, s);
     check(
       '归档队列时决策记录跟着一起归档',
-      arch.status === 0 && archivedNow.some((n) => n.startsWith('decision-')),
+      arch.status === 0 && archivedNow.some(isDecisionArchive),
       `${arch.stdout.slice(0, 120)} | 归档目录：${JSON.stringify(archivedNow)}`,
     );
     checkHead(r);
@@ -624,6 +624,15 @@ function listArchive(ctx, s) {
   return readdirSync(d).filter(
     (n) => /^(queue|plan|decision)(-\d{14})?\.md$/.test(n),
   );
+}
+
+/**
+ * 决策记录的归档文件：现格式是累积式 `decision.md`（一个会话一份），
+ * 旧格式带 14 位时间戳 `decision-<ts>.md`。两种都认——只写 `startsWith('decision-')`
+ * 会把现格式判成"没归档"（本场景就栽在这上面，2026-10-23 实测）。
+ */
+function isDecisionArchive(n) {
+  return /^decision(-\d{14})?\.md$/.test(n);
 }
 
 /** 真跑一次 CLI；返回 { text, status } 或 null（环境跳过）。 */

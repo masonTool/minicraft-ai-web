@@ -55,8 +55,10 @@ function completedQueueItems() {
       // 计划与决策记录也住在 `doing/`、也用 `- [x]`，但它们**不是队列条目**：
       // 不排掉的话，"勾了最后一条队列条目 + 顺手勾掉阶段"这种自然写法会被判成
       // "一次勾了 2 条"而拒绝提交，逼人去用 --no-verify（等于削弱门禁）。
-      ':(exclude).continue/doing/plan-*.md',
-      ':(exclude).continue/doing/decision-*.md',
+      // 文件名是 `<会话ID>-plan.md` / `<会话ID>-decision.md`（前缀是会话 ID，不是 plan/decision），
+      // 所以排除串必须用 `*-plan.md` / `*-decision.md`——写成 `plan-*.md` 什么都排不掉。
+      ':(exclude).continue/doing/*-plan.md',
+      ':(exclude).continue/doing/*-decision.md',
     ],
     { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
   );

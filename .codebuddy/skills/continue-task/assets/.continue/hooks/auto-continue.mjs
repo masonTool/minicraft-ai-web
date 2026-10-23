@@ -564,7 +564,7 @@ if (!pick) {
             '',
             `「已达成」那一行先同步挂进 \`OVERVIEW\` 的对应模块，然后跑`,
             `\`node .continue/hooks/archive-queue.mjs ${sid} --plan\` 把 \`${DOING_REL}/${planName}\` 归档；`,
-            '和队列一样落在 `.continue/logs/<会话ID>/plan-<时间戳>.md`，',
+            '和队列一样落在 `.continue/logs/<会话ID>/plan.md`（累积式，一个会话一份），',
             '想复看"当初这活是怎么排的"就去那儿——删掉就真没了。',
             '',
             '### ③ 回复里报一句',
