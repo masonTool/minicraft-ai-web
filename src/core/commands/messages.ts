@@ -1,22 +1,44 @@
 /**
- * 命令的执行反馈文案（批次 617 / Q14 的后续，条目 [发现]）。
+ * 命令文案的取用入口（多语言 P1 收口）。
  *
- * 为什么单独一个文件、而不是塞进 `I18n.ts`：
- * 这里有 **129 条一句一义的反馈**（"已将时间设置为 …"、"找不到物品：…"），
- * 句式重复的只有 8 组 —— 没法像 `UsageText.ts` 那样用词表压。
- * 塞进 `I18n.ts` 会让那个文件从 199 条涨到 330 条，而它服务于**界面**；
- * 命令反馈是**运行时输出**，单独一处更好审、也更好按命令分组。
- *
- * 与 `I18n.ts` 的关系：`msg()` / `msgp()` 最终仍走同一个语言状态，
- * 所以 `setLanguage()` 切过去、这里立刻跟着变，不存在第二套语言开关。
+ * 三件事，各自处在不同的迁移阶段：
+ *  · `commandUsage` / `commandDescription`：`/help` 的用法与说明 —— **已走 `cmd.*` 查表**（P1-1b）。
+ *    之前是"中文串写在 spec 里 + 英文串放在 `commandHelp.data.ts`"二选一，改一句要同步两个文件。
+ *  · `msg()`：命令回执 —— 键仍是**中文原文**（P1-5 才搬进 `cmdMessages.ts`、P1-6 切调用点）。
+ *  · `pickLabel()`：**过渡遗留** —— `/gamemode`、`/weather`、`/difficulty`、`/scoreboard setdisplay`
+ *    这几条回执里嵌着另一张"值 → 名字"的表，还是中文一张 + 英文一张（P1-7 删掉，改成 `cmd.label.*`）。
  */
 
 import { getLanguage, t } from '../i18n/I18n.ts';
-import { COMMAND_DESCRIPTION_EN, COMMAND_USAGE_EN } from './commandHelp.data.ts';
 
 /** 中文原文 → 英文。键是**中文原文**，不是人造 id —— 见下面 `msg()` 的说明。 */
 export { COMMAND_MESSAGES_EN } from './commandMessages.data.ts';
 
+/**
+ * 把"中文表 + 英文表"这对常量按当前语言取一个值。
+ *
+ * ⚠️ 多语言 P0-4：判定从"是不是英文"改成"**是不是中文**"。
+ * 原来德语/俄语用户会在这几处拿到中文（`Weather set to 下雨` 那种半截话的根源）。
+ * 这套形态会在 **P1-7** 删掉（改成 `cmd.label.*` 走查表），这里只是先让判定方向正确。
+ */
+export function pickLabel(zh: string, en: string): string {
+  return getLanguage() === 'zh' ? zh : en;
+}
+
+/**
+ * `/help` 里那条命令的用法行（按当前语言）。
+ *
+ * 多语言 P1-1b：`spec.usageKey`（`cmd.<name>.usage`）→ 查表。
+ * 想拿"语法结构"也拿这一份 —— 德/俄等翻译必须保留 `<>` `[]` `|` 这些语法符号（P4 的验收项）。
+ */
+export function commandUsage(spec: { readonly name: string; readonly usageKey: string }): string {
+  return t(spec.usageKey);
+}
+
+/** `/help` 里那条命令的说明（按当前语言） */
+export function commandDescription(spec: { readonly name: string; readonly descriptionKey: string }): string {
+  return t(spec.descriptionKey);
+}
 
 /**
  * 取一条反馈文案。
@@ -29,34 +51,9 @@ export { COMMAND_MESSAGES_EN } from './commandMessages.data.ts';
  *     英文界面上看得见，而不是变成 `cmd.give.ok` 这种谁也看不懂的东西。
  *
  * 代价：改中文文案等于改键。命令反馈的措辞本来就极少动，可以接受。
+ * ⚠️ **P1-5 / P1-6 会推翻这个取舍**（一批命令域收成一套 `cmd.msg.*` 语义键），
+ * 那时这条注释与 `commandMessages.data.ts` 一起删。
  */
-/**
- * 把"中文表 + 英文表"这对常量按当前语言取一个值。
- *
- * 用于 `/weather` `/difficulty` `/gamemode` `/scoreboard setdisplay` 这些
- * **回执里嵌着另一个标签表**的命令：句式已经翻了，若值还是中文，
- * 英文界面上就会出现 `Weather set to 下雨` 这种半截话 —— 比整句不翻更难看。
- *
- * 为什么不让那几张表直接走 `t()`：它们本身就是"值 → 名字"的映射，
- * 拆成 `i18n.ts` 的键组反而让 core 层依赖界面层的分组约定。两张表 + 一个开关最直白。
- */
-export function pickLabel(zh: string, en: string): string {
-  // ⚠️ 多语言 P0-4：判定从"是不是英文"改成"**是不是中文**"。
-  // 原来德语/俄语用户会在这几处拿到中文（`Weather set to 下雨` 那种半截话的根源）。
-  // 两张表的形态会在 P1 命令域键化时删掉，这里只是先让判定方向正确。
-  return getLanguage() === 'zh' ? zh : en;
-}
-
-/** `/help` 里那条命令的用法行（按当前语言） */
-export function commandUsage(spec: { readonly name: string; readonly usage: string }): string {
-  return pickLabel(spec.usage, COMMAND_USAGE_EN[spec.name] ?? spec.usage);
-}
-
-/** `/help` 里那条命令的说明（按当前语言） */
-export function commandDescription(spec: { readonly name: string; readonly description: string }): string {
-  return pickLabel(spec.description, COMMAND_DESCRIPTION_EN[spec.name] ?? spec.description);
-}
-
 export function msg(zh: string, params?: Record<string, unknown>): string {
   const template = t(zh);
   if (params === undefined) return template;

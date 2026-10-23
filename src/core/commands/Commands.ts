@@ -305,9 +305,16 @@ export interface CommandFeedback {
 
 export interface CommandSpec {
   name: string;
-  /** 用法（/help 里显示） */
-  usage: string;
-  description: string;
+  /**
+   * 用法的 **i18n 键**（`cmd.<name>.usage`，值在 `locales/<lang>/cmd.ts`）。
+   *
+   * ⚠️ 不是文案本身（多语言 P1）：原来是中文串、英文另存 `commandHelp.data.ts`，
+   * 于是"改一句用法"要同步两个文件，而英文界面还得靠 `pickLabel` 二选一。
+   * 现在与界面文案同一套键空间，6 种语言不用再各开平行表。
+   */
+  usageKey: string;
+  /** 说明的 i18n 键（`cmd.<name>.desc`） */
+  descriptionKey: string;
   /** 需要创造模式（原版是权限等级） */
   creativeOnly?: boolean;
   run(args: string[], ctx: CommandContext, out: CommandFeedback): void;
@@ -387,8 +394,8 @@ const WEATHER_LABELS_EN: Record<'clear' | 'rain' | 'thunder', string> = {
 export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'help',
-    usage: '/help [命令]',
-    description: '列出所有命令，或查看某条命令的用法',
+    usageKey: 'cmd.help.usage',
+    descriptionKey: 'cmd.help.desc',
     run(args, _ctx, out) {
       const wanted = args[0]?.replace('/', '').toLowerCase();
       if (wanted) {
@@ -414,8 +421,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'tp',
-    usage: '/tp <x> <y> <z> [维度]',
-    description: '传送到坐标（支持 ~ 相对写法）',
+    usageKey: 'cmd.tp.usage',
+    descriptionKey: 'cmd.tp.desc',
     run(args, ctx, out) {
       const pos = parsePosition(args, ctx.position());
       if (!pos) {
@@ -433,8 +440,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'give',
-    usage: '/give <物品> [数量]',
-    description: '给自己物品（物品名支持中文/英文/数字 id）',
+    usageKey: 'cmd.give.usage',
+    descriptionKey: 'cmd.give.desc',
     creativeOnly: true,
     run(args, ctx, out) {
       const name = args[0];
@@ -464,8 +471,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'clear',
-    usage: '/clear',
-    description: '清空自己的背包',
+    usageKey: 'cmd.clear.usage',
+    descriptionKey: 'cmd.clear.desc',
     creativeOnly: true,
     run(_args, ctx, out) {
       const removed = ctx.clearInventory();
@@ -474,8 +481,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'time',
-    usage: '/time set <day|noon|night|midnight|数字>',
-    description: '设置时间',
+    usageKey: 'cmd.time.usage',
+    descriptionKey: 'cmd.time.desc',
     run(args, ctx, out) {
       const action = args[0]?.toLowerCase();
       if (action !== 'set' && action !== 'add') {
@@ -493,8 +500,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'weather',
-    usage: '/weather <clear|rain|thunder>',
-    description: '切换天气',
+    usageKey: 'cmd.weather.usage',
+    descriptionKey: 'cmd.weather.desc',
     run(args, ctx, out) {
       const kind = args[0]?.toLowerCase();
       if (kind !== 'clear' && kind !== 'rain' && kind !== 'thunder') {
@@ -508,8 +515,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'difficulty',
-    usage: '/difficulty <peaceful|easy|normal|hard>',
-    description: '设置难度（和平难度下敌对生物不会生成）',
+    usageKey: 'cmd.difficulty.usage',
+    descriptionKey: 'cmd.difficulty.desc',
     run(args, ctx, out) {
       const value = args[0]?.toLowerCase() as Difficulty | undefined;
       if (!value || !DIFFICULTIES.includes(value)) {
@@ -522,11 +529,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'gamerule',
-    usage: '/gamerule <规则> [值]',
-    description:
-      '查看或修改游戏规则，例如“死亡后保留物品 / 生物自然生成 / 生物破坏方块 / 昼夜循环 / ' +
-      '自然回血 / 随机刻速度 / 生物掉落物 / 天气循环”。帮助弹窗的下拉里有中文名，' +
-      '命令里仍使用对应的英文规则名。',
+    usageKey: 'cmd.gamerule.usage',
+    descriptionKey: 'cmd.gamerule.desc',
     run(args, ctx, out) {
       const rules = ctx.gameRules();
       const key = args[0] as keyof GameRules | undefined;
@@ -579,8 +583,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'effect',
-    usage: '/effect <give|clear> <效果> [秒数] [等级]',
-    description: '给予或清除状态效果（如 /effect give speed 10 2）',
+    usageKey: 'cmd.effect.usage',
+    descriptionKey: 'cmd.effect.desc',
     run(args, ctx, out) {
       const action = args[0]?.toLowerCase();
       if (action === 'clear') {
@@ -612,8 +616,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'summon',
-    usage: '/summon <生物> [x] [y] [z]',
-    description: '在指定位置召唤生物（默认在自己面前）',
+    usageKey: 'cmd.summon.usage',
+    descriptionKey: 'cmd.summon.desc',
     creativeOnly: true,
     run(args, ctx, out) {
       const name = args[0]?.toLowerCase();
@@ -642,8 +646,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'kill',
-    usage: '/kill [@s|半径]',
-    description: '杀死自己，或清除附近半径内的生物',
+    usageKey: 'cmd.kill.usage',
+    descriptionKey: 'cmd.kill.desc',
     run(args, ctx, out) {
       const first = args[0];
       if (first !== undefined && Number.isFinite(Number(first))) {
@@ -662,8 +666,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'setblock',
-    usage: '/setblock <x> <y> <z> <方块>',
-    description: '放置一个方块',
+    usageKey: 'cmd.setblock.usage',
+    descriptionKey: 'cmd.setblock.desc',
     creativeOnly: true,
     run(args, ctx, out) {
       const pos = parsePosition(args.slice(0, 3), ctx.position());
@@ -686,8 +690,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'spawnpoint',
-    usage: '/spawnpoint [x y z]',
-    description: '设置个人重生点（不带坐标 = 当前位置）',
+    usageKey: 'cmd.spawnpoint.usage',
+    descriptionKey: 'cmd.spawnpoint.desc',
     run(args, ctx, out) {
       const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
       if (!pos) {
@@ -700,8 +704,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'setworldspawn',
-    usage: '/setworldspawn [x y z]',
-    description: '设置世界出生点（不带坐标 = 当前位置）',
+    usageKey: 'cmd.setworldspawn.usage',
+    descriptionKey: 'cmd.setworldspawn.desc',
     run(args, ctx, out) {
       const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
       if (!pos) {
@@ -714,8 +718,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'particle',
-    usage: '/particle <类型> [数量]',
-    description: '在玩家位置生成粒子（爱心 / 暴击 / 火焰 / 传送门 / 爆炸）',
+    usageKey: 'cmd.particle.usage',
+    descriptionKey: 'cmd.particle.desc',
     run(args, ctx, out) {
       const kind = args[0];
       if (!kind) {
@@ -737,8 +741,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'tell',
-    usage: '/tell <内容>',
-    description: '给自己发一条私聊（单人下等同 /say）',
+    usageKey: 'cmd.tell.usage',
+    descriptionKey: 'cmd.tell.desc',
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
@@ -750,8 +754,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'msg',
-    usage: '/msg <内容>',
-    description: '同 /tell',
+    usageKey: 'cmd.msg.usage',
+    descriptionKey: 'cmd.msg.desc',
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
@@ -763,8 +767,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'playsound',
-    usage: '/playsound <音效>',
-    description: '在玩家所在位置播一个音效（名字见音效设置里的分组）',
+    usageKey: 'cmd.playsound.usage',
+    descriptionKey: 'cmd.playsound.desc',
     run(args, ctx, out) {
       const name = args[0];
       if (!name) {
@@ -780,8 +784,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'me',
-    usage: '/me <动作>',
-    description: '发一条动作消息（“* 玩家 挥了挥手”）',
+    usageKey: 'cmd.me.usage',
+    descriptionKey: 'cmd.me.desc',
     run(args, ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
@@ -793,8 +797,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'say',
-    usage: '/say <内容>',
-    description: '向聊天栏发一条消息',
+    usageKey: 'cmd.say.usage',
+    descriptionKey: 'cmd.say.desc',
     run(args, _ctx, out) {
       const text = args.join(' ').trim();
       if (!text) {
@@ -806,8 +810,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'enchant',
-    usage: '/enchant <附魔> [等级]',
-    description: '给手持物品附魔（等级默认 1，超过上限按上限算）',
+    usageKey: 'cmd.enchant.usage',
+    descriptionKey: 'cmd.enchant.desc',
     run(args, ctx, out) {
       const key = args[0];
       if (!key) {
@@ -834,8 +838,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'clone',
-    usage: '/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace]',
-    description: '把一块区域复制到别处（单次上限 32768 格；“遮罩”模式只覆盖空气）',
+    usageKey: 'cmd.clone.usage',
+    descriptionKey: 'cmd.clone.desc',
     creativeOnly: true,
     run(args, ctx, out) {
       if (args.length < 9) {
@@ -909,8 +913,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'fill',
-    usage: '/fill <x1> <y1> <z1> <x2> <y2> <z2> <方块>',
-    description: '用方块填充一个长方体区域（单次上限 32768 格）',
+    usageKey: 'cmd.fill.usage',
+    descriptionKey: 'cmd.fill.desc',
     creativeOnly: true,
     run(args, ctx, out) {
       if (args.length < 7) {
@@ -947,8 +951,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'gamemode',
-    usage: '/gamemode <survival|creative|adventure|spectator>',
-    description: '切换游戏模式（创造 = 飞行 + 不受伤 + 秒破；冒险 = 不能破坏/放方块；旁观 = 穿墙飞行 + 不能交互）',
+    usageKey: 'cmd.gamemode.usage',
+    descriptionKey: 'cmd.gamemode.desc',
     // ⚠️ 故意**不设** creativeOnly：否则一旦切到生存就再也切不回来了
     // （其他创造专用命令仍然要求创造模式）。原版这条命令是权限等级控制的。
     run(args, ctx, out) {
@@ -976,16 +980,16 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'seed',
-    usage: '/seed',
-    description: '显示世界种子',
+    usageKey: 'cmd.seed.usage',
+    descriptionKey: 'cmd.seed.desc',
     run(_args, ctx, out) {
       out.info(msg('世界种子：{seed}', { seed: ctx.seed() }));
     },
   },
   {
     name: 'list',
-    usage: '/list',
-    description: '列出在线玩家',
+    usageKey: 'cmd.list.usage',
+    descriptionKey: 'cmd.list.desc',
     run(_args, ctx, out) {
       const players = ctx.onlinePlayers();
       out.info(msg('在线玩家（{count}）：{players}', { count: players.length, players: players.join(', ') }));
@@ -994,8 +998,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     // 与原版的 `/xp add|set|query` 对应；原版还有 `<n>L` 的"按级给"写法，这里没做
     name: 'xp',
-    usage: '/xp add <点数> | /xp set <等级> | /xp query',
-    description: '查看或修改经验值与等级',
+    usageKey: 'cmd.xp.usage',
+    descriptionKey: 'cmd.xp.desc',
     run(args, ctx, out) {
       const mode = (args[0] ?? 'query').toLowerCase();
       const state = ctx.xpState();
@@ -1028,8 +1032,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'worldborder',
-    usage: '/worldborder get | /worldborder set <边长> | /worldborder center <x> <z>',
-    description: '查看或修改世界边界（越界掉血、超出软区会被推回）',
+    usageKey: 'cmd.worldborder.usage',
+    descriptionKey: 'cmd.worldborder.desc',
     run(args, ctx, out) {
       const mode = (args[0] ?? 'get').toLowerCase();
       const current = ctx.worldBorder();
@@ -1064,16 +1068,16 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'execute',
-    usage: '/execute <as|at|positioned|if|unless> … run <命令>',
-    description: '以指定目标与位置执行一条命令（可链式叠加）',
+    usageKey: 'cmd.execute.usage',
+    descriptionKey: 'cmd.execute.desc',
     run(args, ctx, out) {
       runExecute(args, ctx, out);
     },
   },
   {
     name: 'locate',
-    usage: '/locate biome <群系名> | /locate structure <结构名>',
-    description: '找最近的指定群系或结构（群系按区块环搜 640 格，结构按单元重算）',
+    usageKey: 'cmd.locate.usage',
+    descriptionKey: 'cmd.locate.desc',
     run(args, ctx, out) {
       // ---- 结构（批次 464 主体，批次 624 / Q22 补三个失败分支）----
       // 原来这一支有三个问题，都是"实测才会撞到"的那种：
@@ -1182,8 +1186,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'damage',
-    usage: '/damage <目标> <伤害>',
-    description: '对目标实体造成伤害（伤害是点数，2 点 = 1 颗心）',
+    usageKey: 'cmd.damage.usage',
+    descriptionKey: 'cmd.damage.desc',
     run(args, ctx, out) {
       const target = args[0];
       const rawAmount = args[1];
@@ -1220,8 +1224,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'loot',
-    usage: '/loot give <战利品表> [数量]',
-    description: '把一张战利品表掷点后塞进自己的背包',
+    usageKey: 'cmd.loot.usage',
+    descriptionKey: 'cmd.loot.desc',
     run(args, ctx, out) {
       // ⚠️ 只支持"给自己"：`/loot give @a loot …` 那种广播式发放要按目标逐个塞，
       // 而本项目只有本地玩家一个背包，做出来也是假的（差异记在 TASKS）
@@ -1259,25 +1263,24 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'data',
-    usage:
-      '/data get block <x> <y> <z> [路径] | /data get entity <选择器> [路径] | /data merge block <x> <y> <z> <格号> <物品> [数量] | /data merge entity <选择器> Health <数值> | /data merge entity <选择器> CustomName <名称>',
-    description: '读/写方块实体与实体的一个字段子集（没有通用 NBT 路径，见 TASKS）',
+    usageKey: 'cmd.data.usage',
+    descriptionKey: 'cmd.data.desc',
     run(args, ctx, out) {
       runData(args, ctx, out);
     },
   },
   {
     name: 'team',
-    usage: '/team add|remove|list|join|leave|modify …',
-    description: '队伍：建队、拉人、改颜色、前后缀与友好伤害（免伤/碰撞还没接，见 TASKS M23）',
+    usageKey: 'cmd.team.usage',
+    descriptionKey: 'cmd.team.desc',
     run(args, ctx, out) {
       runTeam(args, ctx, out);
     },
   },
   {
     name: 'advancement',
-    usage: '/advancement grant|revoke <进度 id | *>',
-    description: '授予或收回进度（`*` = 全部）',
+    usageKey: 'cmd.advancement.usage',
+    descriptionKey: 'cmd.advancement.desc',
     run(args, ctx, out) {
       const action = (args[0] ?? '').toLowerCase();
       const target = args[1];
@@ -1308,8 +1311,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'scoreboard',
-    usage: '/scoreboard objectives add|remove|list|setdisplay … / players set|add|remove|operation|get|list|reset …',
-    description: '记分板：目标、分数与显示槽位',
+    usageKey: 'cmd.scoreboard.usage',
+    descriptionKey: 'cmd.scoreboard.desc',
     run(args, ctx, out) {
       runScoreboard(args, ctx, out);
     },

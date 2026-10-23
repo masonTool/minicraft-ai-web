@@ -12,6 +12,8 @@
  */
 
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
+// 多语言 P1-1b：用法与说明要**按当前语言**取，不能直接抄 spec 里的键
+import { commandDescription, commandUsage } from './messages.ts';
 import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
@@ -155,8 +157,11 @@ export function commandHelpEntries(): CommandHelpEntry[] {
     .sort((a, b) => a.name.localeCompare(b.name, 'en'))
     .map((spec) => ({
       name: spec.name,
-      usage: spec.usage,
-      description: spec.description,
+      // ⚠️ 多语言 P1：这里原来直接抄 `spec.usage` / `spec.description`（当时是中文串），
+      // 于是**英文模式下帮助面板的用法与说明是中文**——静态审计抓不到（不是硬编码字面量，
+      // 是数据流没接线）。现在必须经 `commandUsage()` / `commandDescription()` 走查表。
+      usage: commandUsage(spec),
+      description: commandDescription(spec),
       creativeOnly: spec.creativeOnly === true,
       variants: parseUsage(spec),
     }));
@@ -229,7 +234,9 @@ export function variantLabel(variant: CommandHelpVariant): string {
 // ---------------------------------------------------------------- usage 解析
 
 function parseUsage(spec: CommandSpec): CommandHelpVariant[] {
-  const segments = splitVariants(spec.usage, spec.name);
+  // 解析**已本地化**的用法串：面板里显示的参数名与拼出来的命令必须同一种语言。
+  // ⚠️ 代价：翻译必须保留 `<>` `[]` `|` 这些语法符号，否则这里拆不出变体（P4 验收项）。
+  const segments = splitVariants(commandUsage(spec), spec.name);
   const variants = segments
     .map((segment, index) => parseVariant(segment, index))
     .filter((variant): variant is CommandHelpVariant => variant !== null);

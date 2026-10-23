@@ -9,7 +9,6 @@
 
 import { USAGE_FIELD_NAMES, translateUsageFields } from '../src/core/commands/UsageText.ts';
 import { COMMAND_MESSAGES_EN } from '../src/core/commands/commandMessages.data.ts';
-import { COMMAND_DESCRIPTION_EN, COMMAND_USAGE_EN } from '../src/core/commands/commandHelp.data.ts';
 import { COMMANDS, executeCommand } from '../src/core/commands/Commands.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
@@ -630,31 +629,41 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   }
   check('中英占位符一一对应', mismatch.length === 0, mismatch.slice(0, 3).join(' / '));
 
-  // `/help` 的 usage + description
+  /**
+   * `/help` 的 usage + description（多语言 P1-1b 起 spec 里存的是**键**）。
+   *
+   * 这几条替代了原来那批"和 `commandHelp.data.ts` 逐条比对"的断言：那张表已经删了，
+   * 现在**表就是唯一真相**，所以改判"键在不在表里 + 中英是否真的不同 + 语法符号有没有被吃掉"。
+   */
   const helpMissing = COMMANDS.filter(
-    (spec) => !(spec.name in COMMAND_USAGE_EN) || !(spec.name in COMMAND_DESCRIPTION_EN),
+    (spec) =>
+      !allKeys().includes(spec.usageKey) ||
+      !allKeys().includes(spec.descriptionKey) ||
+      t(spec.usageKey) === spec.usageKey ||
+      t(spec.descriptionKey) === spec.descriptionKey,
   ).map((spec) => spec.name);
-  check(`/help 的 ${COMMANDS.length} 条命令都有中英两版`, helpMissing.length === 0, helpMissing.join(','));
+  check(`/help 的 ${COMMANDS.length} 条命令的 usage/desc 键都在表里`, helpMissing.length === 0, helpMissing.join(','));
 
   /**
-   * P1-1a 护栏：新 `cmd.*` 表与 spec / 旧英文表**逐条一致**。
-   *
-   * 这几条是"搬家"这一批的核心证据：72 条字符串是脚本从 `COMMANDS` 与旧表照搬的，
-   * 这条断言把"照搬"变成可验证的事实 —— 以后谁改了 `Commands.ts` 的文案却没改表
-   * （或反过来），这里会立刻红，而不是等跑 `/help` 才发现。
+   * ⚠️ 判据是"**英文用法里不许有中文**"，不是"中英必须不同"：
+   * `/clear`、`/seed`、`/weather <clear|rain|thunder>` 这类用法**本来就没有可翻的字**，
+   * 中英一字不差是对的（第一版写成"必须不同"，当场误报了 10 条）。
    */
-  const drift: string[] = [];
+  const untranslatedHelp = COMMANDS.filter((spec) => /[\u4e00-\u9fff]/.test(t(spec.usageKey, 'en'))).map((spec) => spec.name);
+  check('英文用法里没有残留中文', untranslatedHelp.length === 0, untranslatedHelp.join(','));
+
+  /**
+   * 用法串里的**语法符号**不能被翻译吃掉：`<>` `[]` `|` 的个数中英必须一致。
+   * 帮助面板靠这些符号拆变体（`CommandHelp.ts` 的 `splitVariants`），少一个括号就拆不出来。
+   */
+  const syntaxDrift: string[] = [];
   for (const spec of COMMANDS) {
-    if (t(`cmd.${spec.name}.usage`, 'zh') !== spec.usage) drift.push(`${spec.name}.usage(zh)`);
-    if (t(`cmd.${spec.name}.desc`, 'zh') !== spec.description) drift.push(`${spec.name}.desc(zh)`);
-    if (t(`cmd.${spec.name}.usage`, 'en') !== COMMAND_USAGE_EN[spec.name]) drift.push(`${spec.name}.usage(en)`);
-    if (t(`cmd.${spec.name}.desc`, 'en') !== COMMAND_DESCRIPTION_EN[spec.name]) drift.push(`${spec.name}.desc(en)`);
+    const zh = t(spec.usageKey, 'zh');
+    const en = t(spec.usageKey, 'en');
+    const count = (text: string, ch: string): number => text.split(ch).length - 1;
+    if (count(zh, '<') !== count(en, '<') || count(zh, '[') !== count(en, '[')) syntaxDrift.push(spec.name);
   }
-  check(`cmd.* 的 ${COMMANDS.length * 2} 条与 spec / 旧英文表逐条一致`, drift.length === 0, drift.slice(0, 5).join(','));
-  check(
-    '每条命令的 usage / desc 键都在表里',
-    COMMANDS.every((spec) => allKeys().includes(`cmd.${spec.name}.usage`) && allKeys().includes(`cmd.${spec.name}.desc`)),
-  );
+  check('用法串的 <> / [] 个数中英一致（翻译不能吃掉语法符号）', syntaxDrift.length === 0, syntaxDrift.join(','));
 
   // —— 真跑：英文模式下扫残留中文 ——
   const stub = new Proxy(

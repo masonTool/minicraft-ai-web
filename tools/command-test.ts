@@ -14,6 +14,8 @@ import {
   suggestCommandValues,
   type CommandHelpField,
 } from '../src/core/commands/CommandHelp.ts';
+// 多语言 P1-1b：spec 里存的是 `cmd.*` 键，用法文案要经 `commandUsage()` 查表
+import { commandUsage } from '../src/core/commands/messages.ts';
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import { findNearestBiome } from '../src/core/gen/Locate.ts';
@@ -418,7 +420,10 @@ console.log('\n[命令解析]');
   check('@s 是自己', isSelfTarget('@s', '玩家') && isSelfTarget('@p', '玩家') && isSelfTarget(undefined, '玩家'));
   check('别人不是自己', !isSelfTarget('Alex', '玩家'));
 
-  check(`命令表 ${COMMANDS.length} 条且用法都以 / 开头`, COMMANDS.length >= 15 && COMMANDS.every((spec) => spec.usage.startsWith('/')));
+  check(
+    `命令表 ${COMMANDS.length} 条且用法都以 / 开头`,
+    COMMANDS.length >= 15 && COMMANDS.every((spec) => commandUsage(spec).startsWith('/')),
+  );
   check('命令名唯一', new Set(commandNames()).size === commandNames().length);
 }
 
@@ -692,7 +697,7 @@ console.log('\n[/help]');
   check(
     '/help 每条命令单独一条消息（不再拼成一个多行大块）',
     all.out.infos.length === COMMANDS.length + 1 &&
-      COMMANDS.every((spec) => all.out.infos.some((line) => line.startsWith(spec.usage))),
+      COMMANDS.every((spec) => all.out.infos.some((line) => line.startsWith(commandUsage(spec)))),
     `${all.out.infos.length} 条 / ${COMMANDS.length} 个命令`,
   );
   const one = run('/help fill');
