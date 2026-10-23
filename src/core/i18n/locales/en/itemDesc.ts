@@ -303,4 +303,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "Arrow made from a base potion: it has no effect on hit (only useful as a plain arrow).",
   "item.desc.tpl.tippedArrowBody": "On hit the target gets {list} (tipped arrows give **1/8** of the potion duration). Brewing: lingering potion + 8 arrows -> 8 arrows.",
   "item.desc.tpl.spawnEgg": "Right-click a block to spawn a **{mob}**. ⚠️ **Creative only**: vanilla spawn eggs have no survival source either (same here), so they only appear in the creative inventory and are useless in survival.",
+  "item.desc.food.hunger": "Hunger +{n}",
+  "item.desc.food.saturation": "Saturation +{n}",
+  "item.desc.food.alwaysEdible": "edible even when full",
+  "item.desc.food.effectChance": "{chance}% chance: {label} ({power})",
+  "item.desc.food.effect": "{label} ({power})",
+  "item.desc.food.powerLeveled": "level {level}, {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": " | ",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

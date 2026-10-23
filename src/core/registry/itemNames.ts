@@ -473,16 +473,41 @@ for (const spec of ARMOR_SPECS) {
 }
 
 // 食物的说明也由数值表生成：饥饿与饱和度是玩家最关心的两个数，
-// 而附加效果（腐肉/生鸡肉的饥饿）不写出来玩家根本不知道，会以为吃了没事
+// 而附加效果（腐肉/生鸡肉的饥饿）不写出来玩家根本不知道，会以为吃了没事。
+//
+// 多语言 P5-4（[发现] 食物说明键化）：这族原来把「饥饿 +N」「饱和度 +N」「饥饿满时也能吃」
+// 与「N% 概率<效果> N 级 N 秒」直接拼在代码里 —— 德语/俄语界面上会露出中文。
+// 现在每个片段都进表（`item.desc.food.*`），连**分隔符**与**句号**也是：
+// 中文用全角 `｜` + `。`，其它语言用 ` | ` + `.`；片段的先后顺序与单位写法由各语言自己排
+// （德语 `30 s auf Stufe 2`、俄语 `30 сек., уровень 2` 的语序不同，拼不出来）。
 for (const [key, food] of Object.entries(FOOD_TABLE)) {
-  const parts = [`饥饿 +${food.hunger}`, `饱和度 +${saturationFrom(food).toFixed(1)}`];
-  if (food.alwaysEdible) parts.push('饥饿满时也能吃');
-  for (const effect of food.effects ?? []) {
-    const chance = effect.chance === undefined ? '' : `${Math.round(effect.chance * 100)}% 概率`;
-    const level = effect.amplifier > 0 ? ` ${effect.amplifier + 1} 级` : '';
-    parts.push(`${chance}${effectLabel(effect.id)}${level} ${effect.seconds} 秒`);
-  }
-  DESCRIPTIONS[key] = `${parts.join('｜')}。`;
+  // ⚠️ 必须是**函数**，不能是字符串：模块加载时求值一次的话，
+  // 记下来的是"那一刻的语言"（默认中文），之后切语言这条说明不会跟着变。
+  // 工具/盔甲那两族一开始就写成 `() => tp(...)`，所以没踩到；食物这族原来拼的是纯中文常量，
+  // 看起来"（反正只有中文）没问题"，一旦键化就立刻暴露成"界面换了语言、说明还是中文"。
+  DESCRIPTIONS[key] = () => {
+    const parts = [
+      tp('item.desc.food.hunger', { n: food.hunger }),
+      tp('item.desc.food.saturation', { n: saturationFrom(food).toFixed(1) }),
+    ];
+    if (food.alwaysEdible) parts.push(t('item.desc.food.alwaysEdible'));
+    for (const effect of food.effects ?? []) {
+      // 秒数先过 `durationSeconds` 片段，拿到**带单位**的字符串（中文 `30 秒` / 德语 `30 s` /
+      // 俄语 `30 сек.`）—— 单位的写法与位置各语言不同，不能在这里拼。
+      const seconds = tp('item.desc.tpl.durationSeconds', { n: effect.seconds });
+      const power =
+        effect.amplifier > 0
+          ? tp('item.desc.food.powerLeveled', { level: effect.amplifier + 1, seconds })
+          : tp('item.desc.food.power', { seconds });
+      const label = effectLabel(effect.id);
+      parts.push(
+        effect.chance === undefined
+          ? tp('item.desc.food.effect', { label, power })
+          : tp('item.desc.food.effectChance', { chance: Math.round(effect.chance * 100), label, power }),
+      );
+    }
+    return `${parts.join(t('item.desc.food.sep'))}${t('item.desc.tpl.potionEnd')}`;
+  };
 }
 
 // ---- 药水（H10）：24 瓶的名字与说明都由 `potions.ts` 的变体表生成。

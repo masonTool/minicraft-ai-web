@@ -296,4 +296,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "Flecha feita de produto intermediário: acertar uma criatura não faz nada (é uma flecha normal).",
   "item.desc.tpl.tippedArrowBody": "Ao acertar, a criatura recebe {list} (a flecha dá só **1/8** do tempo da poção). Preparo: poção persistente + 8 flechas → 8 flechas.",
   "item.desc.tpl.spawnEgg": "Clique direito num bloco gera **{mob}**. ⚠️ **Só no criativo**: ovos de invocação não têm fonte no modo sobrevivência (como no original), então só existem no inventário criativo; no sobrevivência não servem para nada.",
+  "item.desc.food.hunger": "Fome +{n}",
+  "item.desc.food.saturation": "Saturação +{n}",
+  "item.desc.food.alwaysEdible": "pode comer mesmo saciado",
+  "item.desc.food.effectChance": "{chance}% de chance: {label} ({power})",
+  "item.desc.food.effect": "{label} ({power})",
+  "item.desc.food.powerLeveled": "nível {level}, {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": " | ",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

@@ -297,4 +297,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "Стрела из полуфабриката: попадание по существу ничего не даёт (обычная стрела).",
   "item.desc.tpl.tippedArrowBody": "При попадании существо получает {list} (зелье-стрела даёт только **1/8** времени зелья). Варка: остаточное зелье + 8 стрел → 8 штук.",
   "item.desc.tpl.spawnEgg": "Правый клик по блоку создаёт **{mob}**. ⚠️ **Только для творческого режима**: у яиц призыва нет источника в выживании (как и в оригинале), поэтому они есть только в творческом инвентаре; в выживании их не применить.",
+  "item.desc.food.hunger": "Голод +{n}",
+  "item.desc.food.saturation": "Насыщение +{n}",
+  "item.desc.food.alwaysEdible": "можно есть при полном голоде",
+  "item.desc.food.effectChance": "{chance} % шанс: {label} ({power})",
+  "item.desc.food.effect": "{label} ({power})",
+  "item.desc.food.powerLeveled": "уровень {level}, {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": " | ",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

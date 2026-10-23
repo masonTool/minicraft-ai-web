@@ -297,4 +297,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "Pfeil aus einem Zwischenprodukt: trifft er eine Kreatur, bewirkt er nichts (nur ein normaler Pfeil).",
   "item.desc.tpl.tippedArrowBody": "Trifft er eine Kreatur, erhält sie {list} (Trankpfeile geben nur **1/8** der Dauer des Tranks). Brauen: verweilender Trank + 8 Pfeile → 8 Stück.",
   "item.desc.tpl.spawnEgg": "Rechtsklick auf einen Block erzeugt eine **{mob}**. ⚠️ **Nur im Kreativmodus**: auch im Original haben Spawn-Eier keine Überlebensquelle (hier genauso), sie erscheinen also nur im Kreativ-Inventar; im Überlebensmodus sind sie unbrauchbar.",
+  "item.desc.food.hunger": "Hunger +{n}",
+  "item.desc.food.saturation": "Sättigung +{n}",
+  "item.desc.food.alwaysEdible": "auch bei vollem Hunger essbar",
+  "item.desc.food.effectChance": "{chance} % Chance: {label} ({power})",
+  "item.desc.food.effect": "{label} ({power})",
+  "item.desc.food.powerLeveled": "Stufe {level}, {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": " | ",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

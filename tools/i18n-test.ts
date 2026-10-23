@@ -33,7 +33,8 @@ import {
   SKIN_TONES,
 } from '../src/game/appearance.ts';
 import { RECIPE_BOOK_TABS } from '../src/core/crafting/RecipeBook.ts';
-import { ITEM_CATEGORIES } from '../src/core/registry/items.ts';
+import { ITEM_CATEGORIES, itemDef } from '../src/core/registry/items.ts';
+import { itemDescription } from '../src/core/registry/itemNames.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
 import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
@@ -1322,6 +1323,35 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     const sample = keysOfLocale.filter((_, index) => index % step === 0).slice(0, 20);
     const leakedKeys = sample.filter((key) => table[key] === key);
     check(`巡查 ${code}：抽样 20 条都不露键名`, leakedKeys.length === 0, leakedKeys.join(','));
+  }
+
+  /**
+   * 食物说明跟着语言走（`[发现] 食物说明键化`）。
+   *
+   * 两条一起看，缺一不可：
+   *  ① 动态拼出来的说明**不能露中文** —— 这族原来把「饥饿 +N｜饱和度 +N｜N% 概率<效果> N 级 N 秒」
+   *     直接拼在 `itemNames.ts` 里：23 条有静态表条目的食物走表所以看不出来，
+   *     另外 13 条（苹果、牛肉、腐肉、金苹果…）在德语/俄语界面上会露出中文；
+   *  ② **切语言之后要变** —— 这是本条真正的坑：`DESCRIPTIONS[key]` 原来存的是**模块加载时求值的字符串**，
+   *     只把文案搬进表、不改成 `() => …`，界面换了语言它仍然是中文（第一版就是这么翻的，实测才发现）。
+   */
+  const findItemId = (name: string): number => {
+    for (let id = 0; id < 2000; id += 1) {
+      if (itemDef(id)?.name?.replace('minecraft:', '') === name) return id;
+    }
+    return -1;
+  };
+  const appleId = findItemId('apple');
+  check('食物动态说明的样本（apple）找得到', appleId >= 0);
+  if (appleId >= 0) {
+    setLanguage('zh');
+    const appleZh = itemDescription(appleId);
+    setLanguage('de');
+    const appleDe = itemDescription(appleId);
+    check('中文下食物说明是中文', appleZh.includes('饥饿 +4') && !appleZh.includes('Hunger'), appleZh);
+    check('德语下食物说明不露中文', !/[\u4e00-\u9fff]/.test(appleDe) && appleDe.includes('Hunger +4'), appleDe);
+    check('切语言后食物说明跟着变（不是加载时固化的字符串）', appleZh !== appleDe, `${appleZh} / ${appleDe}`);
+    resetLanguageForTest();
   }
 
   /**

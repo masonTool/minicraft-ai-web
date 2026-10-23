@@ -297,4 +297,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "Flèche faite d’un produit intermédiaire : touchée une créature ne subit rien (une flèche normale).",
   "item.desc.tpl.tippedArrowBody": "Touchée, la créature reçoit {list} (une flèche trempée ne donne que **1/8** de la durée de la potion). Brassage : potion persistante + 8 flèches → 8 flèches.",
   "item.desc.tpl.spawnEgg": "Clic droit sur un bloc fait apparaître **{mob}**. ⚠️ **Créatif uniquement** : les œufs d’apparition n’ont aucune source en survie (comme dans l’original), ils n’existent donc que dans l’inventaire créatif ; en survie ils ne servent à rien.",
+  "item.desc.food.hunger": "Faim +{n}",
+  "item.desc.food.saturation": "Saturation +{n}",
+  "item.desc.food.alwaysEdible": "mangeable même rassasié",
+  "item.desc.food.effectChance": "{chance} % de chance : {label} ({power})",
+  "item.desc.food.effect": "{label} ({power})",
+  "item.desc.food.powerLeveled": "niveau {level}, {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": " | ",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

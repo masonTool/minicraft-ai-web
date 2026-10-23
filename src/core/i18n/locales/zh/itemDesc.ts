@@ -303,4 +303,12 @@ export const itemDesc = {
   "item.desc.tpl.tippedArrowBase": "半成品做的箭：射中生物也不会有任何效果（只能当普通箭用）。",
   "item.desc.tpl.tippedArrowBody": "射中生物后获得{list}（药水箭只给原药水 **1/8** 的时长）。酿造：滞留药水 + 8 支箭 → 8 支。",
   "item.desc.tpl.spawnEgg": "对着一格方块右击，生成一只**{mob}**。⚠️ **创造专属**：原版刷怪蛋也没有任何生存来源（本项目一样），所以它只出现在创造物品栏里；生存模式拿到也用不掉。",
+  "item.desc.food.hunger": "饥饿 +{n}",
+  "item.desc.food.saturation": "饱和度 +{n}",
+  "item.desc.food.alwaysEdible": "饥饿满时也能吃",
+  "item.desc.food.effectChance": "{chance}% 概率{label}（{power}）",
+  "item.desc.food.effect": "{label}（{power}）",
+  "item.desc.food.powerLeveled": "{level} 级 {seconds}",
+  "item.desc.food.power": "{seconds}",
+  "item.desc.food.sep": "｜",
 } as const;
