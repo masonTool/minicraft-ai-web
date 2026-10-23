@@ -1161,6 +1161,20 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('俄语用法串的 <> / [] / | 与中文一致', ruSyntaxDrift.length === 0, ruSyntaxDrift.join(','));
 
   /**
+   * 法语的用法串同样必须保留 `<>` `[]` `|`（多语言 P4-3e，照抄德语/俄语那条）。
+   * 帮助面板靠这些符号拆变体：少一个括号**不报错、只是表单变空**。
+   */
+  const frSyntaxDrift: string[] = [];
+  for (const spec of COMMANDS) {
+    const zh = t(spec.usageKey, 'zh');
+    const fr = t(spec.usageKey, 'fr');
+    if (countChar(zh, '<') !== countChar(fr, '<') || countChar(zh, '[') !== countChar(fr, '[') || countChar(zh, '|') !== countChar(fr, '|')) {
+      frSyntaxDrift.push(spec.name);
+    }
+  }
+  check('法语用法串的 <> / [] / | 与中文一致', frSyntaxDrift.length === 0, frSyntaxDrift.join(','));
+
+  /**
    * 法语（多语言 P4-3）。
    *
    * 法语有两个特有的坑，这一节把两条都钉住：
@@ -1195,6 +1209,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.cobblestone', 'Pierre'],
     ['item.writable_book', 'Livre et plume'],
     ['item.cooked_beef', 'Steak'],
+    // P4-3e 起命令域也是法语
+    ['cmd.give.desc', 'Vous donne des objets (nom en français/anglais ou id numérique)'],
+    ['cmd.reply.team.prefix', 'Préfixe'],
   ];
   for (const [key, expected] of frSamples) {
     check(`法语：${key}`, t(key, 'fr') === expected, t(key, 'fr'));
