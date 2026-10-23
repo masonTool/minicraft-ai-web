@@ -15,6 +15,8 @@
  */
 
 import { PAINTING_VARIANT_LIMIT, paintingName } from './paintings.ts';
+// 多语言 P2-6：标签表走 `label.*`
+import { t, tp } from '../i18n/I18n.ts';
 
 /** 朝向：0=北(-Z)、1=东(+X)、2=南(+Z)、3=西(-X) */
 export type Facing = 0 | 1 | 2 | 3;
@@ -332,14 +334,29 @@ const BANNER_TOP_MASK = 0b100000;
 const BANNER_PATTERN_MASK = 0b1010001;
 
 /** 图案编号 → 名字（渲染与提示共用；0 是光板） */
-export const BANNER_PATTERNS: readonly string[] = ['无', '十字', '边框', '斜纹', '横条'];
+/**
+ * 旗帜图案的**档数**（多语言 P2-6）。
+ *
+ * 原来这里是一个"中文名数组"，同时被当成"有几档"用（`length` 夹取图案下标）；
+ * 名字进语言表之后，数量单独留一个常量 —— 夹取用数量、显示用 `bannerPatternLabel()`。
+ */
+export const BANNER_PATTERN_COUNT = 5;
+
+/** 旗帜图案的显示名（下标 0~4：无 / 十字 / 边框 / 斜纹 / 横条） */
+export function bannerPatternLabel(pattern: number): string {
+  const index = Math.max(0, Math.min(BANNER_PATTERN_COUNT - 1, Math.floor(pattern)));
+  const key = `label.bannerPattern.${index}`;
+  const text = t(`label.bannerPattern.${index}`);
+  // 查不到时用原来那句「图案 N」：它比裸下标更像话，也不至于让界面出现空标签
+  return text === key ? tp('station.patternFallback', { index }) : text;
+}
 
 export function bannerPatternOf(state: number): number {
   return (state & 0b1) | (((state >> 4) & 0b1) << 1) | (((state >> 6) & 0b1) << 2);
 }
 
 export function withBannerPattern(state: number, pattern: number): number {
-  const clamped = Math.max(0, Math.min(BANNER_PATTERNS.length - 1, Math.floor(pattern)));
+  const clamped = Math.max(0, Math.min(BANNER_PATTERN_COUNT - 1, Math.floor(pattern)));
   return (
     (state & ~BANNER_PATTERN_MASK) |
     (clamped & 0b1) |
@@ -350,7 +367,7 @@ export function withBannerPattern(state: number, pattern: number): number {
 
 /** 右键一次换成下一种图案（0 → 1 → … → 4 → 0） */
 export function nextBannerPattern(state: number): number {
-  return withBannerPattern(state, (bannerPatternOf(state) + 1) % BANNER_PATTERNS.length);
+  return withBannerPattern(state, (bannerPatternOf(state) + 1) % BANNER_PATTERN_COUNT);
 }
 
 export function isBannerTop(state: number): boolean {
@@ -1089,14 +1106,15 @@ export function sixFacingOpposite(facing: SixFacing): SixFacing {
   }
 }
 
-export const SIX_FACING_NAMES: Readonly<Record<SixFacing, string>> = {
-  up: '朝上',
-  down: '朝下',
-  0: '朝北',
-  1: '朝东',
-  2: '朝南',
-  3: '朝西',
-};
+/**
+ * 容器朝向的显示名（多语言 P2-6）：漏斗/发射器界面右上角那句"朝向：朝东"。
+ * 数字档是水平四向（0 北 / 1 东 / 2 南 / 3 西），与 `SixFacing` 的定义一一对应。
+ */
+export function sixFacingLabel(facing: SixFacing): string {
+  const key = `label.facing.${facing}`;
+  const text = t(`label.facing.${facing}`);
+  return text === key ? String(facing) : text;
+}
 
 /** 竖直两档的判定（投掷器/发射器"往下倒"与"往上抛"是两条不同的落点规则） */
 export function isVerticalFacing(facing: SixFacing): boolean {
@@ -1270,10 +1288,10 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${HOPPER_OUTPUT_NAMES[hopperOutputOf(state)]}${isHopperLocked(state) ? '·已锁定' : ''}`;
     case 'dropper':
       // 投掷器没有"锁定"这回事：通电就吐一件，断电什么也不做
-      return SIX_FACING_NAMES[sixFacingOf(state)];
+      return sixFacingLabel(sixFacingOf(state));
     case 'dispenser':
       // 发射器（批次 60）：与投掷器同一套状态（朝向 + 通电位），读法也就一样
-      return SIX_FACING_NAMES[sixFacingOf(state)];
+      return sixFacingLabel(sixFacingOf(state));
     case 'bed':
       return `${isBedHead(state) ? '床头' : '床脚'}·床头朝${FACING_NAMES[facingOf(state)]}`;
     case 'sign':

@@ -19,6 +19,21 @@ import { WORLD_TYPES } from '../src/core/gen/WorldType.ts';
 import { BIOMES } from '../src/core/gen/Biome.ts';
 import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
 import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
+import { SOUND_GROUPS } from '../src/core/audio/AudioEngine.ts';
+import {
+  BEARD_STYLES,
+  BODY_BUILDS,
+  BODY_FRAMES,
+  EYE_COLORS,
+  EYE_STYLES,
+  HAIR_COLORS,
+  HAIR_STYLES,
+  PANTS_COLORS,
+  SHIRT_COLORS,
+  SKIN_TONES,
+} from '../src/game/appearance.ts';
+import { RECIPE_BOOK_TABS } from '../src/core/crafting/RecipeBook.ts';
+import { ITEM_CATEGORIES } from '../src/core/registry/items.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
 import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
@@ -1028,6 +1043,38 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   const nameTagSrc = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
   check('名字牌字体栈留了 sans-serif 兜底（西里尔 / 变音符靠它接住）', /sans-serif/.test(nameTagSrc));
   check('名字牌字体栈保留中文字体（PingFang / YaHei）', nameTagSrc.includes('PingFang SC') && nameTagSrc.includes('Microsoft YaHei'));
+
+  /**
+   * 标签表族（二）（多语言 P2-6）：音效组 / 外观 10 张 / 朝向 / 旗帜图案 / 配方书页签 / 物品类别。
+   *
+   * 外观那十张表里有五张是**按下标**存名字的（肤色/上衣/裤色/发色/瞳色），
+   * 所以判据用下标序列，而不是枚举值 —— 两种都要覆盖，漏了哪一半都会在加档位时静默失效。
+   */
+  const indexed = (count: number): string[] => Array.from({ length: count }, (_, i) => String(i));
+  const labelTables2: ReadonlyArray<readonly [string, readonly string[], (value: string) => string]> = [
+    // ⚠️ `SOUND_GROUPS` 是「音效 → 组」的映射（53 条音效），组名要**去重**取
+    ['音效组', [...new Set(Object.values(SOUND_GROUPS))], (value) => `label.sound.${value}`],
+    ['外观-肤色', indexed(SKIN_TONES.length), (value) => `label.appearance.skinTone.${value}`],
+    ['外观-上衣', indexed(SHIRT_COLORS.length), (value) => `label.appearance.shirtColor.${value}`],
+    ['外观-裤色', indexed(PANTS_COLORS.length), (value) => `label.appearance.pantsColor.${value}`],
+    ['外观-发色', indexed(HAIR_COLORS.length), (value) => `label.appearance.hairColor.${value}`],
+    ['外观-瞳色', indexed(EYE_COLORS.length), (value) => `label.appearance.eyeColor.${value}`],
+    ['外观-发型', [...HAIR_STYLES], (value) => `label.appearance.hairStyle.${value}`],
+    ['外观-胡须', [...BEARD_STYLES], (value) => `label.appearance.beard.${value}`],
+    ['外观-眼型', [...EYE_STYLES], (value) => `label.appearance.eyeStyle.${value}`],
+    ['外观-体型', [...BODY_BUILDS], (value) => `label.appearance.bodyBuild.${value}`],
+    ['外观-身架', [...BODY_FRAMES], (value) => `label.appearance.bodyFrame.${value}`],
+    ['朝向', ['up', 'down', '0', '1', '2', '3'], (value) => `label.facing.${value}`],
+    ['旗帜图案', indexed(5), (value) => `label.bannerPattern.${value}`],
+    ['配方书页签', [...RECIPE_BOOK_TABS], (value) => `label.recipeTab.${value}`],
+    ['物品类别', [...ITEM_CATEGORIES], (value) => `label.category.${value}`],
+  ];
+  for (const [name, values, keyOf] of labelTables2) {
+    const missing = values.filter((value) => t(keyOf(value)) === keyOf(value));
+    check(`${name}的 ${values.length} 个值都有键`, missing.length === 0, missing.slice(0, 3).join(','));
+    const cjk = values.filter((value) => /[\u4e00-\u9fff]/.test(t(keyOf(value), 'en')));
+    check(`${name}的英文名没有残留中文`, cjk.length === 0, cjk.slice(0, 3).join(','));
+  }
 
   /**
    * 标签表族（一）（多语言 P2-5）：维度 / 世界类型 / 群系 / 附魔 / 村民等级 / 职业。

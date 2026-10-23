@@ -20,20 +20,38 @@
  */
 
 /** 肤色 6 档（浅 → 深）；第 1 档是原来的 `#dc9a6b` */
+// 多语言 P2-6：标签表走 `label.*`
+import { t } from '../core/i18n/I18n.ts';
+
 export const SKIN_TONES = [0xf0c8a0, 0xdc9a6b, 0xc68642, 0x8d5524, 0xa1662f, 0x5c3317] as const;
-export const SKIN_TONE_LABELS = ['白皙', '小麦', '古铜', '深棕', '橄榄', '乌木'] as const;
+/**
+ * 外观各档位的显示名（多语言 P2-6）。
+ *
+ * 十张表全是"下标/枚举 → 名字"，且名字只在设置页出现 —— 所以统一成函数，
+ * 切语言（含测试里 `setLanguage()`）之后立刻拿到新文案。
+ * ⚠️ 档位下标**只能追加在末尾**：设置里存的是下标，插在中间会让老存档换外观。
+ */
+export function skinToneLabel(index: number): string {
+  return appearanceText(`skinTone.${index}`, index);
+}
 
 /** 上衣 6 色；第 0 档是原来的青色 `#00a8a8` */
 export const SHIRT_COLORS = [0x00a8a8, 0xb33a3a, 0x3b5bb5, 0x3f8f45, 0xc9a227, 0x7a4bb5] as const;
-export const SHIRT_COLOR_LABELS = ['青', '红', '蓝', '绿', '黄', '紫'] as const;
+export function shirtColorLabel(index: number): string {
+  return appearanceText(`shirtColor.${index}`, index);
+}
 
 /** 裤子 6 色；第 0 档是原来的靛蓝 `#3b4bb5` */
 export const PANTS_COLORS = [0x3b4bb5, 0x2f2f38, 0x6b4a2f, 0x2f6b4a, 0x8a8a92, 0x5a2f6b] as const;
-export const PANTS_COLOR_LABELS = ['靛蓝', '炭黑', '皮革棕', '墨绿', '石灰', '暗紫'] as const;
+export function pantsColorLabel(index: number): string {
+  return appearanceText(`pantsColor.${index}`, index);
+}
 
 /** 发色 6 档；第 0 档是原来的深棕 `#2f2016` */
 export const HAIR_COLORS = [0x2f2016, 0x17171b, 0x5a3a1e, 0xc9a227, 0x9a9a9a, 0xe8e8e8] as const;
-export const HAIR_COLOR_LABELS = ['深棕', '乌黑', '栗棕', '金', '灰', '白'] as const;
+export function hairColorLabel(index: number): string {
+  return appearanceText(`hairColor.${index}`, index);
+}
 
 /**
  * 发型；`short` 是原来的发型（老存档默认）。
@@ -44,24 +62,16 @@ export const HAIR_COLOR_LABELS = ['深棕', '乌黑', '栗棕', '金', '灰', '�
  */
 export const HAIR_STYLES = ['short', 'long', 'ponytail', 'bald', 'bob', 'messy'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
-export const HAIR_STYLE_LABELS: Readonly<Record<HairStyle, string>> = {
-  short: '短发',
-  long: '长发',
-  ponytail: '马尾',
-  bald: '光头',
-  bob: '齐耳',
-  messy: '翘发',
-};
+export function hairStyleLabel(style: HairStyle): string {
+  return appearanceText(`hairStyle.${style}`, style);
+}
 
 /** 胡须；`none` 是原来的样子。同样只追加，`goatee` 是山羊胡 */
 export const BEARD_STYLES = ['none', 'stubble', 'full', 'goatee'] as const;
 export type BeardStyle = (typeof BEARD_STYLES)[number];
-export const BEARD_STYLE_LABELS: Readonly<Record<BeardStyle, string>> = {
-  none: '无',
-  stubble: '胡茬',
-  full: '络腮胡',
-  goatee: '山羊胡',
-};
+export function beardLabel(style: BeardStyle): string {
+  return appearanceText(`beard.${style}`, style);
+}
 
 /**
  * 眼型（批次 333）：不再只有"一块深色"，而是眼白 + 虹膜 + 可选睫毛 + 眉形。
@@ -71,32 +81,39 @@ export const BEARD_STYLE_LABELS: Readonly<Record<BeardStyle, string>> = {
  */
 export const EYE_STYLES = ['calm', 'bright', 'round'] as const;
 export type EyeStyle = (typeof EYE_STYLES)[number];
-export const EYE_STYLE_LABELS: Readonly<Record<EyeStyle, string>> = {
-  calm: '沉稳',
-  bright: '明亮',
-  round: '圆眼',
-};
+export function eyeStyleLabel(style: EyeStyle): string {
+  return appearanceText(`eyeStyle.${style}`, style);
+}
 
 /** 瞳色 4 档（第 0 档是默认的深褐） */
 export const EYE_COLORS = [0x3a2a1e, 0x2b4a7a, 0x2f5a45, 0x6a6a72] as const;
-export const EYE_COLOR_LABELS = ['深褐', '深蓝', '墨绿', '灰'] as const;
+export function eyeColorLabel(index: number): string {
+  return appearanceText(`eyeColor.${index}`, index);
+}
 
 /** 成年 / 少年：只影响横向比例（肩宽、四肢粗细），**不改总高** */
 export const BODY_BUILDS = ['adult', 'teen'] as const;
 export type BodyBuild = (typeof BODY_BUILDS)[number];
-export const BODY_BUILD_LABELS: Readonly<Record<BodyBuild, string>> = {
-  adult: '成年',
-  teen: '少年',
-};
+export function bodyBuildLabel(build: BodyBuild): string {
+  return appearanceText(`bodyBuild.${build}`, build);
+}
 
 /** 身架：标准 / 纤细 / 魁梧（同样只改横向比例） */
 export const BODY_FRAMES = ['normal', 'slim', 'broad'] as const;
 export type BodyFrame = (typeof BODY_FRAMES)[number];
-export const BODY_FRAME_LABELS: Readonly<Record<BodyFrame, string>> = {
-  normal: '标准',
-  slim: '纤细',
-  broad: '魁梧',
-};
+export function bodyFrameLabel(frame: BodyFrame): string {
+  return appearanceText(`bodyFrame.${frame}`, frame);
+}
+
+/**
+ * 外观名字的查表兜底：查不到就退成下标 / 枚举值的字面量。
+ * 单独一个函数是为了**把 `t()` 的键写成模板字面量**（审计靠它认前缀）。
+ */
+function appearanceText(suffix: string, fallback: string | number): string {
+  const key = `label.appearance.${suffix}`;
+  const text = t(`label.appearance.${suffix}`);
+  return text === key ? String(fallback) : text;
+}
 
 /** 设置里存的是**下标**（存档小、加一档不会让旧档失效） */
 export interface AppearanceSettings {

@@ -16,7 +16,7 @@
  */
 
 import { isBannerId } from '../registry/blocks.ts';
-import { BANNER_PATTERNS } from '../registry/blockState.ts';
+import { BANNER_PATTERN_COUNT } from '../registry/blockState.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { DYE_ITEM_START } from '../registry/items.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
@@ -28,7 +28,7 @@ export const LOOM_SIZE = 3;
 
 /** 可选的图案编号（0 = 光板不在列表里：织布机不会"把图案洗掉"） */
 export const LOOM_PATTERNS: readonly number[] = Array.from(
-  { length: BANNER_PATTERNS.length - 1 },
+  { length: BANNER_PATTERN_COUNT - 1 },
   (_value, index) => index + 1,
 );
 
@@ -51,7 +51,7 @@ export function loomBlocker(
 ): string | null {
   if (!banner) return '先放一面旗帜';
   if (!isBannerId(banner.id)) return '这一格只收旗帜';
-  if (!Number.isInteger(pattern) || pattern <= 0 || pattern >= BANNER_PATTERNS.length) {
+  if (!Number.isInteger(pattern) || pattern <= 0 || pattern >= BANNER_PATTERN_COUNT) {
     return '没有这种图案';
   }
   if ((banner.bannerPattern ?? 0) === pattern) return '这面旗帜已经是这个图案了';

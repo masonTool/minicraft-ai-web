@@ -11,7 +11,7 @@
 import { Block, BANNER_ID_START, bannerPatternTile, blockDef, isBannerId } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
 import {
-  BANNER_PATTERNS,
+  BANNER_PATTERN_COUNT,
   bannerPatternOf,
   facingOf,
   isBannerTop,
@@ -207,7 +207,7 @@ console.log('\n[挂墙（批次 486）]');
 
 console.log('\n[图案：状态位与循环（批次 497）]');
 {
-  equal('图案一共 5 档（光板 + 4 种）', BANNER_PATTERNS.length, 5);
+  equal('图案一共 5 档（光板 + 4 种）', BANNER_PATTERN_COUNT, 5);
   equal('默认是光板', bannerPatternOf(0), 0);
   equal('写第 3 种', bannerPatternOf(withBannerPattern(0, 3)), 3);
   equal('越界会夹到最后一档', bannerPatternOf(withBannerPattern(0, 99)), 4);

@@ -16,7 +16,7 @@
 
 import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
 import {
-  SIX_FACING_NAMES,
+  sixFacingLabel,
   describeState,
   sixFacingOf,
   sixFacingOffset,
@@ -317,7 +317,7 @@ console.log('\n[朝向与放置：与投掷器同一套]');
   const roundTrip = all.filter((facing) => sixFacingOf(withSixFacing(0, facing)) !== facing);
   check('六个方向都能写进状态再读回来', roundTrip.length === 0, `错的是 ${roundTrip.join(', ')}`);
   for (const facing of [0, 1, 2, 3] as const) {
-    check(`朝${SIX_FACING_NAMES[facing]}的编码与投掷器一致`, withSixFacing(0, facing) === withHopperOutput(0, facing));
+    check(`朝${sixFacingLabel(facing)}的编码与投掷器一致`, withSixFacing(0, facing) === withHopperOutput(0, facing));
   }
   equal('"朝下"的编码与投掷器一致', withSixFacing(0, 'down'), withHopperOutput(0, 'down'));
   equal('偏移表：朝上', sixFacingOffset('up').join(','), '0,1,0');

@@ -11,6 +11,8 @@
  */
 
 import { ARMOR_SPECS, ELYTRA_ITEM_ID, type ArmorInfo } from './armor.ts';
+// 多语言 P2-6：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
   BLOCKS,
@@ -900,21 +902,17 @@ export const ITEM_CATEGORIES = [
 ] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
 
-export const CATEGORY_LABELS: Record<ItemCategory, string> = {
-  all: '全部',
-  building: '建筑',
-  natural: '自然',
-  ores: '矿石与材料',
-  // 「床」也在这个分类里（批次 79）：它本质是**染色羊毛做的家具**，
-  // 16 张床跟 16 色羊毛/地毯摆在同一页才找得到——原版把它们放在"装饰方块"页，
-  // 而本项目没有装饰页（标签里点一句"床"，免得玩家翻遍分类找不到）
-  wool: '羊毛·床·染料',
-  tools: '工具与武器',
-  armor: '盔甲',
-  food: '食物',
-  functional: '功能方块',
-  brewing: '酿造与药水',
-};
+/**
+ * 物品类别的显示名（多语言 P2-6）：创造模式标签页与搜索用。
+ *
+ * ⚠️ 与 `itemNames.ts` 的 `categoryLabel(itemId)` 不是一个东西：那个吃 **itemId**、
+ * 返回这一件属于哪一类；这个吃**类别本身**、返回类别的名字。
+ */
+export function itemCategoryLabel(category: ItemCategory): string {
+  const key = `label.category.${category}`;
+  const text = t(`label.category.${category}`);
+  return text === key ? category : text;
+}
 
 /** 工具与武器（25 种由 TOOL_SPECS 派生，另外加上单独注册的剪刀） */
 /**

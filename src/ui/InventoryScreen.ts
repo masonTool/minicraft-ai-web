@@ -43,7 +43,7 @@ import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 // 配方书点一条配方 = **把材料摆进合成格**（批次 132，对齐原版）。
 // 规则在 `core/crafting/RecipeBook.ts` 里（纯逻辑、可断言），界面只负责"摆哪一格"。
 import {
-  RECIPE_BOOK_TAB_LABELS,
+  recipeBookTabLabel,
   RECIPE_BOOK_TABS_POCKET,
   canCraft,
   fillCraftingGrid,
@@ -115,7 +115,7 @@ import {
   CARTO_MATERIAL,
   CartographyTable,
 } from '../core/container/CartographyTable.ts';
-import { BANNER_PATTERNS } from '../core/registry/blockState.ts';
+import { bannerPatternLabel } from '../core/registry/blockState.ts';
 // 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
 import { Villager } from '../core/entity/Villager.ts';
 import { adjustedTradeCosts, levelName, tradeBlocker, tradeDemand, professionLabel } from '../core/registry/villagerTrades.ts';
@@ -152,7 +152,7 @@ import {
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
 // 说明浮层的标题颜色与提示框同源（稀有度 → 类名，CSS 只认类名）
 import { rarityClassName } from '../core/registry/itemVisuals.ts';
-import { SIX_FACING_NAMES } from '../core/registry/blockState.ts';
+import { sixFacingLabel } from '../core/registry/blockState.ts';
 import {
   NARROW_MAX_WIDTH,
   clampPage,
@@ -997,8 +997,8 @@ export class InventoryScreen {
         button.type = 'button';
         button.className = 'inv-pocket-recipe-tab';
         button.dataset.tab = tab;
-        button.title = RECIPE_BOOK_TAB_LABELS[tab];
-        button.setAttribute('aria-label', tp('inventory.recipeBookAria', { tab: RECIPE_BOOK_TAB_LABELS[tab] }));
+        button.title = recipeBookTabLabel(tab);
+        button.setAttribute('aria-label', tp('inventory.recipeBookAria', { tab: recipeBookTabLabel(tab) }));
         if (tab === 'all') {
           button.innerHTML = POCKET_RECIPE_ALL_ICON;
         } else {
@@ -1969,13 +1969,13 @@ export class InventoryScreen {
         const allInTab = CREATIVE_ITEMS.filter(inTab).length;
         this.categoryInfo.textContent =
           tp('inventory.statAll', {
-            label: RECIPE_BOOK_TAB_LABELS[this.categoryTab],
+            label: recipeBookTabLabel(this.categoryTab),
             total: allInTab,
             available: craftableInTab,
           });
       } else {
         this.categoryInfo.textContent = tp('inventory.categoryInfo', {
-          tab: RECIPE_BOOK_TAB_LABELS[this.categoryTab],
+          tab: recipeBookTabLabel(this.categoryTab),
           count: craftableInTab,
         });
       }
@@ -2600,7 +2600,7 @@ export class InventoryScreen {
     this.categoryGrid.scrollTop = targetScroll;
     // 刚显示出来的栏可能还没完成布局，下一帧再量一次
     requestAnimationFrame(() => this.syncCategoryScrollbar());
-    if (!same) this.showMessage(tp('inventory.categorySwitched', { tab: RECIPE_BOOK_TAB_LABELS[tab] }));
+    if (!same) this.showMessage(tp('inventory.categorySwitched', { tab: recipeBookTabLabel(tab) }));
   }
 
   // ---------------------------------------------------------------- 工作站可做列表（批次 277）
@@ -6575,7 +6575,7 @@ export class InventoryScreen {
 
     if (this.mode === 'dropper' && this.activeContainer instanceof Dropper) {
       // 空投掷器必须明说：玩家拿红石试半天，看不出"是空的"还是"坏了"
-      const facing = SIX_FACING_NAMES[this.activeContainer.facing];
+      const facing = sixFacingLabel(this.activeContainer.facing);
       this.nineHintEl.textContent = tp(
         this.activeContainer.isEmpty ? 'station.dropperEmpty' : 'station.dropperCycle',
         { facing },
@@ -6585,7 +6585,7 @@ export class InventoryScreen {
 
     if (this.mode === 'dispenser' && this.activeContainer instanceof Dispenser) {
       // 发射器的提示要说清"哪几件会被用掉"：混装时玩家根本猜不到下一件是射出去还是掉地上
-      const facing = SIX_FACING_NAMES[this.activeContainer.facing];
+      const facing = sixFacingLabel(this.activeContainer.facing);
       if (this.activeContainer.isEmpty) {
         this.nineHintEl.textContent = tp('station.dispenserEmpty', { facing });
         this.nineHintEl.classList.add('bad');
@@ -7226,7 +7226,7 @@ export class InventoryScreen {
       button.className = 'stonecutter-option';
       button.disabled = blocker !== null;
       const label = document.createElement('span');
-      label.textContent = BANNER_PATTERNS[pattern] ?? tp('station.patternFallback', { index: pattern });
+      label.textContent = bannerPatternLabel(pattern);
       button.append(label);
       if (blocker) button.title = blocker;
       button.addEventListener('click', () => this.handleLoomApply(pattern));

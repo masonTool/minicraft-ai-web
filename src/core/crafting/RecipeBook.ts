@@ -13,6 +13,8 @@
  */
 
 import type { Inventory } from '../container/Inventory.ts';
+// 多语言 P2-6：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
 import type { CraftingGrid } from './CraftingGrid.ts';
 import { RECIPES, resultStackOf, type Recipe, type RecipeResult } from './Recipes.ts';
 import { SMELTING_RECIPES } from './Smelting.ts';
@@ -59,13 +61,12 @@ export function recipeBookTabsFor(): readonly RecipeBookTab[] {
   return RECIPE_BOOK_TABS_POCKET;
 }
 
-export const RECIPE_BOOK_TAB_LABELS: Record<RecipeBookTab, string> = {
-  all: '全部',
-  building: '建筑',
-  equipment: '装备',
-  items: '物品',
-  nature: '自然',
-};
+/** 配方书页签的显示名（多语言 P2-6） */
+export function recipeBookTabLabel(tab: RecipeBookTab): string {
+  const key = `label.recipeTab.${tab}`;
+  const text = t(`label.recipeTab.${tab}`);
+  return text === key ? tab : text;
+}
 
 /**
  * 这件食物算不算"熟食"（是某条 `kind: 'food'` 熔炼配方的产物）。

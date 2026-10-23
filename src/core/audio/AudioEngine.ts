@@ -26,6 +26,9 @@
  */
 
 /** 折线点：时间比例 0~1 → 值（包络是 0~1，音高是基频倍率） */
+// 多语言 P2-6：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
+
 export type LayerPoint = readonly [number, number];
 
 /** 元音共振峰：中心频率 / 尖锐度 / 相对音量 */
@@ -856,14 +859,15 @@ export function soundGroupOf(kind: SoundKind): SoundGroup {
 }
 
 /** 四组的显示顺序与中文名（设置界面按它排） */
-export const SOUND_GROUP_LABELS: Readonly<Record<SoundGroup, string>> = {
-  blocks: '方块音效',
-  mobs: '生物音效',
-  player: '玩家音效',
-  ui: '界面与环境',
-  ambient: '环境音（雨声）',
-  music: '背景音乐',
-};
+/**
+ * 音效分组名（多语言 P2-6）：设置页每一行滑块的标题。
+ * ⚠️ 键写成模板字面量直接进 `t()`，否则 `audit:i18n` 收不到前缀（整族会被判孤儿）。
+ */
+export function soundGroupLabel(group: SoundGroup): string {
+  const key = `label.sound.${group}`;
+  const text = t(`label.sound.${group}`);
+  return text === key ? group : text;
+}
 
 /**
  * 方块名 → 破坏音效。抽成纯函数是为了能离线测试：

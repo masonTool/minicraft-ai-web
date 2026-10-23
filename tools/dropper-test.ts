@@ -21,7 +21,7 @@
 
 import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
 import {
-  SIX_FACING_NAMES,
+  sixFacingLabel,
   describeState,
   hopperOutputOf,
   isVerticalFacing,
@@ -169,7 +169,7 @@ console.log('\n[六向朝向：与漏斗共用一套编码]');
   // 否则同一格方块换个 id 读出来的朝向就变了（存档里存的是状态数字）
   equal('"朝下"的编码与漏斗一致', withSixFacing(0, 'down'), withHopperOutput(0, 'down'));
   for (const facing of [0, 1, 2, 3] as const) {
-    check(`朝${SIX_FACING_NAMES[facing]}的编码与漏斗一致`, withSixFacing(0, facing) === withHopperOutput(0, facing));
+    check(`朝${sixFacingLabel(facing)}的编码与漏斗一致`, withSixFacing(0, facing) === withHopperOutput(0, facing));
   }
   equal('漏斗读到"朝上"那一格时折回"朝下"（它没有朝上这一档）', hopperOutputOf(withSixFacing(0, 'up')), 'down');
 

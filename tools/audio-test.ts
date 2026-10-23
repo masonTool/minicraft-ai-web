@@ -13,7 +13,7 @@
 
 import {
   AudioEngine,
-  SOUND_GROUP_LABELS,
+  soundGroupLabel,
   SOUND_GROUPS,
   SOUND_KINDS,
   UNDERWATER_GAIN,
@@ -368,7 +368,7 @@ console.log('\n[音量分组：六组各自可调]');
   check(
     '六组都有中文名（设置界面直接用）',
     (['blocks', 'mobs', 'player', 'ui', 'ambient', 'music'] as const).every(
-      (group) => typeof SOUND_GROUP_LABELS[group] === 'string',
+      (group) => typeof soundGroupLabel(group) === 'string',
     ),
   );
 
@@ -390,7 +390,7 @@ console.log('\n[音量分组：六组各自可调]');
 
   for (const group of ['blocks', 'player', 'ui'] as const) {
     const count = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === group).length;
-    check(`「${SOUND_GROUP_LABELS[group]}」这一组不为空`, count > 0, `${count} 条`);
+    check(`「${soundGroupLabel(group)}」这一组不为空`, count > 0, `${count} 条`);
   }
 
   const engine = new AudioEngine();

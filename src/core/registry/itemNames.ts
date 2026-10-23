@@ -16,7 +16,7 @@
 
 import { BLOCKS, COPPER_STAGES, CORAL_KIND_CN, blockHardness } from './blocks.ts';
 import {
-  CATEGORY_LABELS,
+  itemCategoryLabel,
   categoryOf,
   CREATIVE_ITEMS,
   itemDef,
@@ -661,7 +661,7 @@ export function enchantList(enchants?: Readonly<Record<string, number>>): string
 /** 中文类别名 */
 export function categoryLabel(itemId: number): string {
   const category: ItemCategory = categoryOf(itemId);
-  return CATEGORY_LABELS[category] ?? category;
+  return itemCategoryLabel(category);
 }
 
 /**

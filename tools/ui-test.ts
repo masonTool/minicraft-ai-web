@@ -2746,7 +2746,8 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   );
   // 批次 157：不再有"跨过断点重画"——页签顺序与视口宽度无关
   check('不再按视口宽度重排页签', !bookUi.includes('isClassicUi') && !bookUi.includes('handleResize'));
-  check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）'));
+  // 多语言 P2-6：页签名改成查表函数，断言跟到 `recipeBookTabLabel(tab)`（仍验"页签带条数"）
+  check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('recipeBookTabLabel(tab)}（${counts.get(tab) ?? 0}）'));
   check('有「仅显示可合成」筛选', bookUi.includes("this.filterButton.dataset.role = 'craftable-filter'"));
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
   check('空列表会说清为什么空（是筛掉了还是这一栏本来就没有）', bookUi.includes('关掉「仅显示可合成」可以看到全部'));

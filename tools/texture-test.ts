@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { Item } from '../src/core/registry/items.ts';
 import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
-import { BANNER_PATTERNS } from '../src/core/registry/blockState.ts';
+import { BANNER_PATTERN_COUNT } from '../src/core/registry/blockState.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_STRIDE } from '../src/render/atlasLayout.ts';
 import { PAINTERS } from '../src/render/TextureAtlas.ts';
 import { tileRectAt } from '../src/render/atlasCoords.ts';
@@ -166,7 +166,7 @@ console.log('\n[顺带确认这些方块的机制本身是完整的]');
   equal('回退得到 9 个', unpacked?.count, 9);
 
   // 旗帜：4 种图案 + 光板；图案贴图逐色生成
-  equal('旗帜图案 4 种（加光板共 5 个名字）', BANNER_PATTERNS.length, 5);
+  equal('旗帜图案 4 种（加光板共 5 个名字）', BANNER_PATTERN_COUNT, 5);
   check(
     '16 色 × 4 图案的贴图都在名单里',
     ['white', 'blue', 'red', 'black'].every((color) =>

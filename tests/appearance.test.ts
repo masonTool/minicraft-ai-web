@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   BEARD_STYLES,
-  BEARD_STYLE_LABELS,
+  beardLabel,
   BODY_BUILDS,
   BODY_FRAMES,
   CHARACTER_PRESETS,
   DEFAULT_APPEARANCE,
   EYE_COLORS,
   EYE_STYLES,
-  EYE_STYLE_LABELS,
+  eyeStyleLabel,
   HAIR_COLORS,
   HAIR_STYLES,
-  HAIR_STYLE_LABELS,
+  hairStyleLabel,
   PANTS_COLORS,
   SHIRT_COLORS,
   SKIN_TONES,
@@ -85,9 +85,9 @@ describe('角色外观（批次 187 / 279 / 296）', () => {
   });
 
   it('每个发型/胡须/眼型都有中文名（设置里不会出现空按钮）', () => {
-    expect(HAIR_STYLES.every((style) => (HAIR_STYLE_LABELS[style] ?? '').length > 0)).toBe(true);
-    expect(BEARD_STYLES.every((style) => (BEARD_STYLE_LABELS[style] ?? '').length > 0)).toBe(true);
-    expect(EYE_STYLES.every((style) => (EYE_STYLE_LABELS[style] ?? '').length > 0)).toBe(true);
+    expect(HAIR_STYLES.every((style) => hairStyleLabel(style).length > 0)).toBe(true);
+    expect(BEARD_STYLES.every((style) => beardLabel(style).length > 0)).toBe(true);
+    expect(EYE_STYLES.every((style) => eyeStyleLabel(style).length > 0)).toBe(true);
   });
 
   it('新档位只追加在末尾（老存档下标不会错位）', () => {

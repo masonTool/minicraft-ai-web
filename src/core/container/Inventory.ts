@@ -17,7 +17,7 @@ import { itemDef, maxStackOf } from '../registry/items.ts';
 import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
 import { sanitizeFirework, type FireworkData } from '../items/Firework.ts';
 import { sanitizeMap, type MapData } from '../items/Map.ts';
-import { BANNER_PATTERNS } from '../registry/blockState.ts';
+import { BANNER_PATTERN_COUNT } from '../registry/blockState.ts';
 import { isBannerId } from '../registry/blocks.ts';
 
 export interface ItemStack {
@@ -83,7 +83,7 @@ export interface ItemStack {
    */
   map?: MapData;
   /**
-   * 旗帜图案（批次 502）：0/缺省 = 光板，1~4 = `BANNER_PATTERNS` 里那几种。
+   * 旗帜图案（批次 502）：0/缺省 = 光板，1~4 = `BANNER_PATTERN_COUNT` 里那几种。
    *
    * 图案本来就是**物品属性**（原版记在 NBT 的 `BlockEntityTag.Patterns` 里），
    * 但在批次 497 之前只存在方块状态位里——于是"挖下来再放下"图案就没了。
@@ -173,7 +173,7 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
     typeof pattern === 'number' &&
     Number.isInteger(pattern) &&
     pattern >= 1 &&
-    pattern < BANNER_PATTERNS.length
+    pattern < BANNER_PATTERN_COUNT
   ) {
     stack.bannerPattern = pattern;
   }

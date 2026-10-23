@@ -35,7 +35,7 @@ import {
   RECIPE_BOOK_TABS,
   RECIPE_BOOK_TABS_POCKET,
   recipeBookTabsFor,
-  RECIPE_BOOK_TAB_LABELS,
+  recipeBookTabLabel,
   buildRecipeEntries,
   canCraft,
   craftFromInventory,
@@ -494,7 +494,7 @@ console.log('\n[配方书：标签栏（批次 133，对齐基岩版）]');
   equal('界面统一走携带版的顺序', recipeBookTabsFor().join(','), 'all,building,equipment,items,nature');
   equal('顺序就是 RECIPE_BOOK_TABS_POCKET', recipeBookTabsFor().join(','), RECIPE_BOOK_TABS_POCKET.join(','));
   for (const tab of RECIPE_BOOK_TABS) {
-    check(`标签栏「${tab}」有中文名`, (RECIPE_BOOK_TAB_LABELS[tab] ?? '').length > 0);
+    check(`标签栏「${tab}」有名字`, recipeBookTabLabel(tab).length > 0);
   }
 
   // 归类是拿创造分类**归并**的（两边的分类不能各说各话）

@@ -21,7 +21,7 @@
 import { t } from '../core/i18n/I18n.ts';
 import type { Inventory } from '../core/container/Inventory.ts';
 import {
-  RECIPE_BOOK_TAB_LABELS,
+  recipeBookTabLabel,
   buildRecipeEntries,
   matchesRecipe,
   recipeBookTabsFor,
@@ -452,7 +452,7 @@ export class RecipeBook {
       button.setAttribute('aria-pressed', String(on));
       // ⚠️ 条数只写进 title / aria 与那个不可见的 label：页面上仍是"纯图标方块"。
       // 整块 `textContent` 覆盖会把 canvas / svg 抹掉，所以只改 label 那一层。
-      const text = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
+      const text = `${recipeBookTabLabel(tab)}（${counts.get(tab) ?? 0}）`;
       const label = button.querySelector('.recipe-tab-label');
       if (label) label.textContent = text;
       button.title = text;

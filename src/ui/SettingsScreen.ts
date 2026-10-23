@@ -42,31 +42,31 @@ import {
 } from './TouchControls.ts';
 import {
   BEARD_STYLES,
-  BEARD_STYLE_LABELS,
   BODY_BUILDS,
-  BODY_BUILD_LABELS,
   BODY_FRAMES,
-  BODY_FRAME_LABELS,
   CHARACTER_PRESETS,
   DEFAULT_APPEARANCE,
   EYE_COLORS,
-  EYE_COLOR_LABELS,
   EYE_STYLES,
-  EYE_STYLE_LABELS,
   HAIR_COLORS,
-  HAIR_COLOR_LABELS,
   HAIR_STYLES,
-  HAIR_STYLE_LABELS,
   PANTS_COLORS,
-  PANTS_COLOR_LABELS,
   SHIRT_COLORS,
-  SHIRT_COLOR_LABELS,
   SKIN_TONES,
-  SKIN_TONE_LABELS,
   appearanceIndex,
   applyCharacterPreset,
+  beardLabel,
+  bodyBuildLabel,
+  bodyFrameLabel,
+  eyeColorLabel,
+  eyeStyleLabel,
+  hairColorLabel,
+  hairStyleLabel,
   paletteOf,
+  pantsColorLabel,
   presetIndexOf,
+  shirtColorLabel,
+  skinToneLabel,
 } from '../game/appearance.ts';
 import { PlayerPreview3D, type PreviewFocus } from './PlayerPreview3D.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
@@ -1039,70 +1039,70 @@ export class SettingsScreen {
       'hairStyle',
       t('settings.row.hairStyle'),
       HAIR_STYLES.map((_, i) => String(i)),
-      Object.fromEntries(HAIR_STYLES.map((style, i) => [String(i), HAIR_STYLE_LABELS[style]])),
+      Object.fromEntries(HAIR_STYLES.map((style, i) => [String(i), hairStyleLabel(style)])),
     );
     this.makeSelect(
       fields,
       'hairColor',
       t('settings.row.hairColor'),
       HAIR_COLORS.map((_, i) => String(i)),
-      Object.fromEntries(HAIR_COLOR_LABELS.map((label, i) => [String(i), label])),
+      Object.fromEntries(HAIR_COLORS.map((_, i) => [String(i), hairColorLabel(i)])),
     );
     this.makeSelect(
       fields,
       'beard',
       t('settings.row.beard'),
       BEARD_STYLES.map((_, i) => String(i)),
-      Object.fromEntries(BEARD_STYLES.map((style, i) => [String(i), BEARD_STYLE_LABELS[style]])),
+      Object.fromEntries(BEARD_STYLES.map((style, i) => [String(i), beardLabel(style)])),
     );
     this.makeSelect(
       fields,
       'eyes',
       t('settings.row.eyes'),
       EYE_STYLES.map((_, i) => String(i)),
-      Object.fromEntries(EYE_STYLES.map((style, i) => [String(i), EYE_STYLE_LABELS[style]])),
+      Object.fromEntries(EYE_STYLES.map((style, i) => [String(i), eyeStyleLabel(style)])),
     );
     this.makeSelect(
       fields,
       'eyeColor',
       t('settings.row.eyeColor'),
       EYE_COLORS.map((_, i) => String(i)),
-      Object.fromEntries(EYE_COLOR_LABELS.map((label, i) => [String(i), label])),
+      Object.fromEntries(EYE_COLORS.map((_, i) => [String(i), eyeColorLabel(i)])),
     );
     this.makeSelect(
       fields,
       'build',
       t('settings.row.build'),
       BODY_BUILDS.map((_, i) => String(i)),
-      Object.fromEntries(BODY_BUILDS.map((build, i) => [String(i), BODY_BUILD_LABELS[build]])),
+      Object.fromEntries(BODY_BUILDS.map((build, i) => [String(i), bodyBuildLabel(build)])),
     );
     this.makeSelect(
       fields,
       'frame',
       t('settings.row.frame'),
       BODY_FRAMES.map((_, i) => String(i)),
-      Object.fromEntries(BODY_FRAMES.map((frame, i) => [String(i), BODY_FRAME_LABELS[frame]])),
+      Object.fromEntries(BODY_FRAMES.map((frame, i) => [String(i), bodyFrameLabel(frame)])),
     );
     this.makeSelect(
       fields,
       'skinTone',
       t('settings.row.skinTone'),
       SKIN_TONES.map((_, i) => String(i)),
-      Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
+      Object.fromEntries(SKIN_TONES.map((_, i) => [String(i), skinToneLabel(i)])),
     );
     this.makeSelect(
       fields,
       'shirtColor',
       t('settings.row.shirtColor'),
       SHIRT_COLORS.map((_, i) => String(i)),
-      Object.fromEntries(SHIRT_COLOR_LABELS.map((label, i) => [String(i), label])),
+      Object.fromEntries(SHIRT_COLORS.map((_, i) => [String(i), shirtColorLabel(i)])),
     );
     this.makeSelect(
       fields,
       'pantsColor',
       t('settings.row.pantsColor'),
       PANTS_COLORS.map((_, i) => String(i)),
-      Object.fromEntries(PANTS_COLOR_LABELS.map((label, i) => [String(i), label])),
+      Object.fromEntries(PANTS_COLORS.map((_, i) => [String(i), pantsColorLabel(i)])),
     );
     this.makeToggle(fields, 'cape', t('settings.row.cape'));
 
