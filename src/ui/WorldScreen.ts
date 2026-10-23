@@ -14,7 +14,8 @@
  * 进世界的动作交回给调用方（`main.ts` 的 boot）。这样这个模块在 Node 里也能测。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { getLanguage, t, tp } from '../core/i18n/I18n.ts';
+import { localeMeta } from '../core/i18n/locale.ts';
 import {
   WORLD_TYPES,
   WORLD_TYPE_HINTS,
@@ -492,13 +493,17 @@ export class WorldScreen {
 
     const stats = document.createElement('div');
     stats.className = 'world-card-stats';
+    // 时长与相对时间都是"时间文案"（多语言 P3-4）：一句整话 + 三种时长形态进表
     const played =
       world.playTime < 60
-        ? '不到 1 分钟'
+        ? t('time.underMinute')
         : world.playTime < 3600
-          ? `${Math.round(world.playTime / 60)} 分钟`
-          : `${Math.floor(world.playTime / 3600)} 小时 ${Math.round((world.playTime % 3600) / 60)} 分`;
-    stats.textContent = `上次游玩 ${relativeTime(world.lastPlayed)} · 已玩 ${played}`;
+          ? tp('time.minutes', { n: Math.round(world.playTime / 60) })
+          : tp('time.hoursMinutes', {
+              h: Math.floor(world.playTime / 3600),
+              m: Math.round((world.playTime % 3600) / 60),
+            });
+    stats.textContent = tp('time.lastPlayed', { when: relativeTime(world.lastPlayed), played });
 
     info.append(name, chips, stats);
 
@@ -827,13 +832,28 @@ export class WorldScreen {
   }
 }
 
-/** "3 分钟前"这种人话时间 */
+/**
+ * "3 分钟前"这种人话时间（多语言 P3-4）。
+ *
+ * 交给 `Intl.RelativeTimeFormat`：德语的 `vor 3 Minuten`、法语的 `il y a 3 minutes`、
+ * 俄语的 `3 минуты назад`（还要按数量变格）—— 手写必然错，而且错得很微妙。
+ *
+ * ⚠️ 中文因此有一处可见变化：原来是"刚刚 / 3 分钟前"（带空格），
+ * 现在是"现在 / 3分钟前"（`numeric: 'auto'` + CLDR 的中文格式，不带空格）。
+ * 这是与 P0-6（列表连接词全部交 Intl）同一口径的选择：不为一种语言保留特例。
+ */
 export function relativeTime(timestamp: number, now = Date.now()): string {
   const seconds = Math.max(0, Math.round((now - timestamp) / 1000));
-  if (seconds < 60) return '刚刚';
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟前`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  return `${Math.round(hours / 24)} 天前`;
+  const days = Math.round(hours / 24);
+  const [value, unit] =
+    seconds < 60 ? [0, 'second'] : minutes < 60 ? [-minutes, 'minute'] : hours < 24 ? [-hours, 'hour'] : [-days, 'day'];
+  try {
+    const tag = localeMeta(getLanguage())?.intlLocale ?? 'en';
+    return new Intl.RelativeTimeFormat(tag, { numeric: 'auto' }).format(value, unit as Intl.RelativeTimeFormatUnit);
+  } catch {
+    // 老 WebView 没装 Intl.RelativeTimeFormat：退成中性的数字形式，总比抛异常好
+    return { second: '', minute: `${minutes} min`, hour: `${hours} h`, day: `${days} d` }[unit] || '';
+  }
 }

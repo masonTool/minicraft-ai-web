@@ -46,4 +46,14 @@ export const misc = {
   "unsupported.title": "这台设备暂时打不开这个游戏",
   "unsupported.reload": "刷新页面",
   "unsupported.code": "诊断码：{code}",
+
+  // ---- 时间文案（多语言 P3-4）：相对时间交给 Intl，时长走模板
+  "time.lastPlayed": "上次游玩 {when} · 已玩 {played}",
+  "time.underMinute": "不到 1 分钟",
+  "time.minutes": "{n} 分钟",
+  "time.hoursMinutes": "{h} 小时 {m} 分",
+  "time.minutesSeconds": "{m} 分 {s} 秒",
+  "time.seconds": "{n} 秒",
+  "loading.boot": "加载中…",
+  "loading.bootSub": "正在准备材质与存档",
 } as const;

@@ -32,6 +32,7 @@ import {
   planSpawnRegion,
   type SpawnSearchWorld,
 } from '../src/core/world/SpawnPoint.ts';
+import { resetLanguageForTest, setLanguage } from '../src/core/i18n/I18n.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
 import { readFileSync } from 'node:fs';
@@ -452,11 +453,20 @@ console.log('\n[超平坦世界的出生点（批次 238）]');
 console.log('\n[相对时间]');
 {
   const now = Date.now();
-  check('刚刚', relativeTime(now - 5_000, now) === '刚刚');
-  check('分钟', relativeTime(now - 3 * 60_000, now) === '3 分钟前');
-  check('小时', relativeTime(now - 5 * 3_600_000, now) === '5 小时前');
-  check('天', relativeTime(now - 3 * 86_400_000, now) === '3 天前');
-  check('未来时间不会显示负数', relativeTime(now + 60_000, now) === '刚刚');
+  /**
+   * 多语言 P3-4：相对时间改走 `Intl.RelativeTimeFormat`。
+   * ⚠️ 中文因此有可见变化（用户拍板）：`刚刚` → `现在`、`3 分钟前` → `3分钟前`（CLDR 不带空格）。
+   * 判据同时验英文，避免"只有中文对"这种假绿。
+   */
+  check('一分钟内显示「现在」', relativeTime(now - 5_000, now) === '现在', relativeTime(now - 5_000, now));
+  check('分钟', relativeTime(now - 3 * 60_000, now) === '3分钟前', relativeTime(now - 3 * 60_000, now));
+  check('小时', relativeTime(now - 5 * 3_600_000, now) === '5小时前', relativeTime(now - 5 * 3_600_000, now));
+  check('天', relativeTime(now - 3 * 86_400_000, now) === '3天前', relativeTime(now - 3 * 86_400_000, now));
+  check('未来时间不会显示负数', relativeTime(now + 60_000, now) === '现在', relativeTime(now + 60_000, now));
+
+  setLanguage('en');
+  check('英文同样走 Intl', relativeTime(now - 3 * 60_000, now) === '3 minutes ago', relativeTime(now - 3 * 60_000, now));
+  resetLanguageForTest();
 }
 
 console.log('\n[光照快路径：写入侧的接线（批次 283）]');

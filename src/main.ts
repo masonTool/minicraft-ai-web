@@ -176,6 +176,7 @@ import {
   failBootLoading,
   hideBootLoading,
   hideLoading,
+  localizeBootLoading,
   showLoading,
 } from './ui/LoadingOverlay.ts';
 import {
@@ -194,7 +195,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { applyLanguageSetting, isPseudoLocaleTag, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
+import { applyLanguageSetting, getLanguage, isPseudoLocaleTag, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -18252,6 +18253,13 @@ async function boot(): Promise<void> {
   // 屏幕上没被包住的，就是还没接 i18n 的硬编码文案。只在调试时用，不写进设置、不进存档。
   if (isPseudoLocaleTag(new URLSearchParams(location.search).get('lang'))) setPseudoLocale(true);
   await applyLanguageSetting(loadSettings().language);
+  // 首屏静态文案与 manifest 都跟语言走（多语言 P3-4）：HTML 是语言无关的静态文件，
+  // 所以解析完语言之后补一次。manifest 只有中英两份，其余语言回落到英文那份。
+  localizeBootLoading();
+  {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (link) link.href = getLanguage() === 'zh' ? './manifest.webmanifest' : './manifest.en.webmanifest';
+  }
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;
   // 批次 201：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）

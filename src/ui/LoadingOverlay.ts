@@ -104,6 +104,22 @@ export function failBootLoading(text = t('loading.failed')): void {
   if (label) label.textContent = text;
 }
 
+/**
+ * 把静态 HTML 里的首屏两句话换成当前语言（多语言 P3-4）。
+ *
+ * ⚠️ 为什么不能只靠 HTML 写死：`index.html` 是**语言无关的静态文件** —— 服务端不知道
+ * 玩家选了什么语言，JS 也还没跑。所以 `boot()` 解析完语言之后立刻覆盖一次；
+ * 代价是英文用户可能看到几十毫秒的中文（与"切语言整页重载"同一个取舍：先有内容，再纠正）。
+ */
+export function localizeBootLoading(): void {
+  const element = doc()?.getElementById(BOOT_LOADING_ID);
+  if (!element) return;
+  const label = element.querySelector('.boot-text');
+  if (label) label.textContent = t('loading.boot');
+  const sub = element.querySelector('.boot-sub');
+  if (sub) sub.textContent = t('loading.bootSub');
+}
+
 /** 首屏启动遮罩还在不在（验收脚本与断言用） */
 export function isBootLoadingVisible(): boolean {
   const document_ = doc();

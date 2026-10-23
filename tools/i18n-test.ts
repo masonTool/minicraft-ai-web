@@ -1064,6 +1064,30 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('每条 reason 键都能渲染出中英文（不露键名）', badReasonKeys.length === 0, badReasonKeys.slice(0, 3).join(','));
 
   /**
+   * 首屏与 manifest（多语言 P3-4）。
+   *
+   * `index.html` 与 `manifest.webmanifest` 是**服务端/浏览器直接读的静态文件**，
+   * 它们拿不到玩家的语言设置 —— 所以只能：① 静态里留中文占位、`boot()` 解析完语言后
+   * 用 `localizeBootLoading()` 覆盖；② manifest 出中英两份，`boot()` 按语言换 `<link>`。
+   * 这两点必须被断言钉住，否则以后有人"顺手"把文案写回 HTML 就没人发现。
+   */
+  const overlaySrc2 = readFileSync(new URL('../src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
+  check('首屏两句有本地化入口', overlaySrc2.includes("t('loading.boot')") && overlaySrc2.includes("t('loading.bootSub')"));
+  const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('boot() 会调用 localizeBootLoading()', mainSrc2.includes('localizeBootLoading();'));
+  check(
+    'boot() 会按语言换 manifest 链接',
+    mainSrc2.includes("'./manifest.webmanifest'") && mainSrc2.includes("'./manifest.en.webmanifest'"),
+  );
+
+  const zhManifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
+  const enManifest = JSON.parse(readFileSync(new URL('../public/manifest.en.webmanifest', import.meta.url), 'utf8'));
+  check('中英两份 manifest 的键完全一致', JSON.stringify(Object.keys(zhManifest).sort()) === JSON.stringify(Object.keys(enManifest).sort()));
+  check('英文 manifest 里没有中文（name / description）', !/[\u4e00-\u9fff]/.test(enManifest.name + enManifest.description));
+  check('两份 manifest 的图标一致（别一边加了 png 另一边没加）', JSON.stringify(zhManifest.icons) === JSON.stringify(enManifest.icons));
+  check('manifest 声明了 lang（商店与安装提示会用）', zhManifest.lang.startsWith('zh') && enManifest.lang === 'en');
+
+  /**
    * 界面残留（一）（多语言 P3-1）：触摸控件 / 提示框 / 加载遮罩 / 全屏 / 安装提示。
    *
    * 这五个文件有一个共同点：它们的文案**全是 "chrome"**（按钮 aria-label、提示行、

@@ -48,4 +48,14 @@ export const misc = {
   "unsupported.title": "This game cannot open on this device",
   "unsupported.reload": "Reload the page",
   "unsupported.code": "Diagnostic code: {code}",
+
+  // ---- 时间文案（多语言 P3-4）：相对时间交给 Intl，时长走模板
+  "time.lastPlayed": "Last played {when} · Played {played}",
+  "time.underMinute": "Under a minute",
+  "time.minutes": "{n} min",
+  "time.hoursMinutes": "{h} h {m} min",
+  "time.minutesSeconds": "{m} min {s} s",
+  "time.seconds": "{n} s",
+  "loading.boot": "Loading…",
+  "loading.bootSub": "Preparing textures and save data",
 } satisfies Pick<Messages, keyof typeof zhmisc>;

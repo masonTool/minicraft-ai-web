@@ -11,6 +11,8 @@
  * 纯数据 + 纯函数，主程序只负责在事件点调 `add`，面板只负责画。
  */
 
+import { tp } from '../i18n/I18n.ts';
+
 export interface StatisticsData {
   blocksMined: number;
   blocksPlaced: number;
@@ -79,7 +81,9 @@ export function formatPlayTime(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
-  if (minutes > 0) return `${minutes} 分 ${total % 60} 秒`;
-  return `${total} 秒`;
+  // 单位与语序进表（多语言 P3-4）：英文是 "1 h 2 min"、中文是 "1 小时 2 分"，
+  // 缩写与语序都不该写死在代码里
+  if (hours > 0) return tp('time.hoursMinutes', { h: hours, m: minutes });
+  if (minutes > 0) return tp('time.minutesSeconds', { m: minutes, s: total % 60 });
+  return tp('time.seconds', { n: total });
 }

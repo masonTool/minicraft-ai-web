@@ -2,6 +2,8 @@
   "name": "Bedrock 1.18 Web",
   "short_name": "Minecraft Web",
   "description": "浏览器里的《我的世界》基岩版 1.18 复刻：无限地形、生存、合成、生物、联机与存档",
+  "lang": "zh-CN",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
