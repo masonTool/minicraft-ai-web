@@ -31,12 +31,29 @@ import {
   sanitizeName,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
+import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
 const WORLD_SEED = Number(process.env.SEED ?? 20261014);
-/** 方块改动最多记这么多条（防止长时间运行的房间把内存吃光） */
-const MAX_EDITS = 200_000;
+/**
+ * 方块改动最多记这么多条（防止长时间运行的房间把内存吃光）。
+ *
+ * 满了之后**淘汰最旧的一条并告警**（联机14）——原来的写法是静默丢弃新改动，
+ * 客户端完全不知道，队友那边就"我改的东西不见了"。
+ */
+const MAX_EDITS = DEFAULT_MAX_EDITS;
+/** 淘汰计数：告警限频用（每 100 条报一次，否则一炸就是几千行日志） */
+let evictedEdits = 0;
+function warnEvictedEdit(key) {
+  evictedEdits++;
+  if (evictedEdits === 1 || evictedEdits % 100 === 0) {
+    log(
+      `方块增量已达上限 ${MAX_EDITS}，淘汰最旧的一条（累计 ${evictedEdits} 条，例如 ${key}）。` +
+        '建议清空存档或调大 MAX_EDITS',
+    );
+  }
+}
 /**
  * 一条 `blocks` 消息最多认多少条（联机12）。
  *
@@ -121,7 +138,13 @@ function broadcast(message, exceptId = null) {
 }
 
 /** 给新玩家准备的世界快照 */
-function snapshotFor() {
+/**
+ * 给新玩家准备的世界快照。
+ *
+ * `edits` **只发这个玩家附近的**（联机14）：跑久了的房间能攒到十几万条，
+ * 一次发给手机就是几 MB 的 JSON，而这个玩家真正看得见的可能只有几百格。
+ */
+function snapshotFor(player) {
   return {
     seed: WORLD_SEED,
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
@@ -136,8 +159,8 @@ function snapshotFor() {
       pitch: p.pitch,
       dimension: p.dimension,
     })),
-    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]
-    edits: [...edits.values()].map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
+    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]；**按玩家位置裁剪**（联机14）
+    edits: selectSnapshotEdits(edits.values(), player).map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
     // 地上的掉落物：新玩家进来要看得见（L7 第一刀）
     items: [...items.values()],
     // 容器内容（联机13）：重启后箱子里的东西不会凭空消失
@@ -225,7 +248,8 @@ if (loaded.data) {
       dimension: sanitizeDimension(String(dimension ?? 'overworld')),
     };
     if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
-    edits.set(`${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit);
+    // 读档也走容量策略：存档比上限还大时保留最后 MAX_EDITS 条（不告警，这是读档不是溢出）
+    rememberEdit(edits, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit, MAX_EDITS);
   }
   for (const entry of Array.isArray(saved.containers) ? saved.containers : []) {
     if (!Array.isArray(entry)) continue;
@@ -359,7 +383,7 @@ wss.on('connection', (socket, request) => {
           v: PROTOCOL_VERSION,
           id: player.id,
           name: player.name,
-          ...snapshotFor(),
+          ...snapshotFor(player),
         });
         broadcast({ t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: 0, pitch: 0, dimension: player.dimension }, player.id);
         // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
@@ -398,7 +422,7 @@ wss.on('connection', (socket, request) => {
         if (![x, y, z, id, state].every(Number.isFinite)) return;
 
         if (edits.size < MAX_EDITS) {
-          edits.set(`${dimension}|${x},${y},${z}`, { x, y, z, id, state, dimension });
+          rememberEdit(edits, `${dimension}|${x},${y},${z}`, { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
         broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id);
@@ -428,7 +452,7 @@ wss.on('connection', (socket, request) => {
             dimension: sanitizeDimension(String(rawDimension ?? player.dimension)),
           };
           if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
-          if (edits.size < MAX_EDITS) edits.set(`${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit);
+          rememberEdit(edits, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit, MAX_EDITS, warnEvictedEdit);
           accepted.push(edit);
         }
         if (accepted.length === 0) return;

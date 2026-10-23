@@ -46,6 +46,12 @@ class TestClient {
     this.clientId = clientId;
     this.mailbox = [];
     this.socket = new WebSocket(`ws://localhost:${PORT}`);
+    /*
+     * 兜底监听 `error`：没有它的话，连接失败（服务端还没起来 / 重启中的空窗）
+     * 会以**未捕获事件**的形式把整个测试进程带崩——看不到是哪条断言失败，只看到
+     * 一段 ECONNREFUSED 堆栈。`ready()` 里那个 `once('error', reject)` 仍然生效。
+     */
+    this.socket.on('error', () => {});
     this.socket.on('message', (raw) => {
       this.mailbox.push(JSON.parse(String(raw)));
     });
@@ -537,6 +543,35 @@ try {
 
   bob.close();
 
+  // ---------------------------------------------------------------- 快照裁剪（联机14）
+  console.log('\n[快照裁剪]');
+  {
+    // 一条在原点附近、一条在 5000 格外：新玩家只该收到近的那条。
+    // ⚠️ 用一个**新**客户端发：上面那节已经把 alice/bob 都关了，
+    // 对已关闭的 socket `send()` 是静默失败（本轮踩过：断言拿到 5 条旧改动、不含新的）
+    const sender = new TestClient('SnapshotSender');
+    await joinAndWaitWelcome(sender, '裁剪测试', 0, 70, 0);
+    sender.send({ t: 'block', x: 8, y: 70, z: 8, id: 1, state: 0, dimension: 'overworld' });
+    sender.send({ t: 'block', x: 5000, y: 70, z: 5000, id: 1, state: 0, dimension: 'overworld' });
+    await sleep(150);
+
+    const newcomer = new TestClient('Newcomer');
+    const welcome = await joinAndWaitWelcome(newcomer, '新人', 0, 70, 0);
+    const edits = welcome?.edits ?? [];
+    check(
+      'welcome 带附近改动',
+      edits.some((e) => e[0] === 8 && e[2] === 8),
+      JSON.stringify(edits.length),
+    );
+    check(
+      'welcome 不带远处改动（按玩家位置裁剪）',
+      !edits.some((e) => e[0] === 5000),
+      `${edits.length} 条`,
+    );
+    newcomer.close();
+    sender.close();
+  }
+
   // ---------------------------------------------------------------- 重启后快照仍在（联机13）
   console.log('\n[持久化：重启后快照仍在]');
   {
@@ -544,12 +579,12 @@ try {
     const before = new TestClient('BeforeRestart');
     const welcomeBefore = await joinAndWaitWelcome(before, '重启前', 0, 70, 0);
     check('重启前的客户端能加入', welcomeBefore !== null);
-    before.send({ t: 'block', x: 300, y: 70, z: 300, id: 5, state: 0, dimension: 'overworld' });
+    before.send({ t: 'block', x: 60, y: 70, z: 60, id: 5, state: 0, dimension: 'overworld' });
     before.send({
       t: 'container',
-      x: 301,
+      x: 61,
       y: 70,
-      z: 300,
+      z: 60,
       dimension: 'overworld',
       slots: [{ id: 3, count: 7 }],
     });
@@ -569,12 +604,12 @@ try {
     check('重启后拿到 welcome', welcome !== null);
     check(
       '重启后方块改动还在',
-      (welcome?.edits ?? []).some((e) => e[0] === 300 && e[1] === 70 && e[2] === 300),
+      (welcome?.edits ?? []).some((e) => e[0] === 60 && e[1] === 70 && e[2] === 60),
       JSON.stringify((welcome?.edits ?? []).slice(-3)),
     );
     check(
       '重启后容器内容还在',
-      (welcome?.containers ?? []).some((c) => c.x === 301 && c.z === 300),
+      (welcome?.containers ?? []).some((c) => c.x === 61 && c.z === 60),
       JSON.stringify(welcome?.containers),
     );
     revived.close();
