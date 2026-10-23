@@ -13,7 +13,7 @@
  *  3. **小人原点在脚底**：所以"站到方块顶面"就是 `position.y = 顶面高度`，压扁也从脚底压，
  *     不会陷进方块；蓄力压扁、空中翻转、落地回弹全部交给 `JumperModel` 的三个 setter。
  *  4. **方块每跳重建**：一屏 3~4 块，重建比增量维护简单；换一局只换色板（不重建场景）。
- *  5. **音效静默降级**：没有 AudioContext / 被浏览器拦截时全部吞掉，`guard` 必须 0 错误。
+ *  5. **音效静默降级**：WebAudio 代码全在 `audio.ts`，拿不到上下文时全部吞掉，`guard` 必须 0 错误。
  */
 
 import { t, tp } from '../../../core/i18n/I18n.ts';
@@ -34,6 +34,7 @@ import { BlockScene, type BlockSpec } from './BlockScene.ts';
 import { JumperModel } from './JumperModel.ts';
 import { BLOCK_HEIGHT_RATIO } from './iso.ts';
 import { JUMP_TIMING, flipProgress, jumpArc, landingSquash } from './motion.ts';
+import { JumpAudio } from './audio.ts';
 import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
 
@@ -176,7 +177,7 @@ export class JumpGame implements MiniGame {
       const ratio = this.charge / JUMP_CONFIG.maxCharge;
       jumper.setSquash(ratio);
       blocks.setSquash(PILLAR_SQUASH * ratio);
-      this.audio?.updateCharge(ratio);
+      this.audio?.updateCharge(ratio, this.charge);
     }
 
     if (this.phase === 'ready' || this.phase === 'charging') {
@@ -378,7 +379,7 @@ export class JumpGame implements MiniGame {
     if (bonus <= 0) return;
 
     this.run = { ...this.run, score: this.run.score + bonus };
-    this.audio?.playSpecial();
+    this.audio?.playSpecial(block.kind);
     this.showFloat(`+${bonus}`, block);
     this.updateHud();
   }
@@ -555,125 +556,6 @@ export class JumpGame implements MiniGame {
         : tp('minigame.jump.best', { best: this.best });
     }
     this.overEl.classList.remove('hidden');
-  }
-}
-
-// ------------------------------------------------------------------ 音效
-
-/**
- * 极简 WebAudio：不引入任何音频文件（不增加包体）。
- *
- * 蓄力是一条持续振荡器，频率随蓄力从 220Hz 升到 660Hz——这是原版"听声音数节奏"
- * 那个手感的关键；落地按"是否中心"给两种短音。
- *
- * ⚠️ 任何一步失败都静默：AudioContext 在某些浏览器里要用户手势后才能创建，
- * 小游戏的第一次 pointerdown 正好满足；但自动化环境里可能完全没有音频设备。
- */
-class JumpAudio {
-  private ctx: AudioContext | null = null;
-  private chargeOsc: OscillatorNode | null = null;
-  private chargeGain: GainNode | null = null;
-
-  startCharge(): void {
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    this.stopCharge();
-    try {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.value = 220;
-      gain.gain.value = 0.05;
-      osc.connect(gain).connect(ctx.destination);
-      osc.start();
-      this.chargeOsc = osc;
-      this.chargeGain = gain;
-    } catch {
-      this.stopCharge();
-    }
-  }
-
-  updateCharge(ratio: number): void {
-    if (!this.chargeOsc) return;
-    try {
-      this.chargeOsc.frequency.value = 220 + 440 * Math.min(1, Math.max(0, ratio));
-    } catch {
-      // 忽略：频率更新失败不该影响玩法
-    }
-  }
-
-  stopCharge(): void {
-    try {
-      this.chargeOsc?.stop();
-    } catch {
-      // 已经停过
-    }
-    this.chargeOsc = null;
-    this.chargeGain?.disconnect();
-    this.chargeGain = null;
-  }
-
-  playJump(): void {
-    this.blip(320, 520, 0.08);
-  }
-
-  playLand(center: boolean): void {
-    this.blip(center ? 880 : 160, center ? 880 : 120, center ? 0.12 : 0.07);
-  }
-
-  playSpecial(): void {
-    this.blip(660, 990, 0.16);
-  }
-
-  playFall(): void {
-    this.blip(300, 80, 0.35);
-  }
-
-  dispose(): void {
-    this.stopCharge();
-    try {
-      void this.ctx?.close();
-    } catch {
-      // 关闭失败无所谓
-    }
-    this.ctx = null;
-  }
-
-  private blip(from: number, to: number, seconds: number): void {
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    try {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const now = ctx.currentTime;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(from, now);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), now + seconds);
-      gain.gain.setValueAtTime(0.09, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + seconds + 0.02);
-    } catch {
-      // 静默降级
-    }
-  }
-
-  private ensureContext(): AudioContext | null {
-    if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
-      return this.ctx;
-    }
-    try {
-      const Ctor =
-        globalThis.AudioContext ??
-        (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) return null;
-      this.ctx = new Ctor();
-      return this.ctx;
-    } catch {
-      return null;
-    }
   }
 }
 

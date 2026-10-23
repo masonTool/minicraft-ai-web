@@ -80,6 +80,7 @@ const smokeSrc = readFileSync(new URL('../src/minigame/games/smoke.ts', import.m
 const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
 const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
 const blockSceneSrc = readFileSync(new URL('../src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
+const audioSrc = readFileSync(new URL('../src/minigame/games/jump/audio.ts', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -139,7 +140,8 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('站高按方块高度算（方块会随分数变矮）', jumpSrc.includes('standHeight('));
   check('最高分落盘', jumpSrc.includes('recordScore(') && jumpSrc.includes('saveProgress('));
   check('特殊方块停留加分', jumpSrc.includes('specialHoldSeconds') && jumpSrc.includes('specialBonus('));
-  check('音效静默降级', jumpSrc.includes('AudioContext') && jumpSrc.includes('catch'));
+  check('音效抽到 audio.ts（场景里不再有 WebAudio 调用）', !jumpSrc.includes('createOscillator') && jumpSrc.includes("from './audio.ts'"));
+  check('特殊方块按种类播放各自音色', jumpSrc.includes('playSpecial(block.kind)'));
   check('落地换小人尺寸（方块会随分数变小）', jumpSrc.includes('this.jumper?.setSize('));
   check('一跳固定 400ms（与跳多远无关）', jumpSrc.includes('JUMP_TIMING.totalMs / 1000'));
   check('弧线与空翻走 motion.ts', jumpSrc.includes('jumpArc(') && jumpSrc.includes('flipProgress('));
@@ -148,6 +150,15 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('被踩的方块回弹', jumpSrc.includes('.punch('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
+}
+
+console.log('\n音效模块（audio.ts）');
+{
+  check('蓄力每 0.15 秒升一级', audioSrc.includes('CHARGE_STEP_SECONDS = 0.15'));
+  check('蓄力是"阶梯音阶"不是连续滑音', audioSrc.includes('chargeStepFor(') && audioSrc.includes('chargeFrequencyFor('));
+  check('四类特殊方块各有旋律', audioSrc.includes('well: [') && audioSrc.includes('music: ['));
+  check('起跳/落地/完美/失败四种单音', audioSrc.includes('JUMP_SFX') && audioSrc.includes('LAND_SFX') && audioSrc.includes('PERFECT_SFX') && audioSrc.includes('FAIL_SFX'));
+  check('拿不到 AudioContext 时静默降级', audioSrc.includes('catch') && audioSrc.includes('return null'));
 }
 
 console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借 MC 图集）');
