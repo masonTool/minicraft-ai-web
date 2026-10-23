@@ -27,6 +27,7 @@ import {
   specialBonus,
   targetBlock,
   type JumpBlock,
+  type JumpBlockKind,
   type JumpRun,
   type LandingOutcome,
 } from './logic.ts';
@@ -233,9 +234,22 @@ export class JumpGame implements MiniGame {
     best: number;
     blocks: number;
     gap: number;
+    /** 间距 ÷ 边长（原版口径 1.15~1.9；E2E 用它验"方块几乎贴合"） */
+    gapRatio: number;
+    /** 这一步沿哪条世界轴前进（原版只有 x / z 两向） */
+    axis: 'x' | 'z';
+    /** 当前站着的方块种类 */
+    kind: JumpBlockKind;
+    /** 下一块种类 */
+    nextKind: JumpBlockKind;
+    /** 相机是不是正交的（透视相机会破坏等距观感，必须能验） */
+    orthographic: boolean;
   } {
     const from = currentBlock(this.run);
     const to = this.run.blocks[this.run.index + 1];
+    const dx = to ? to.x - from.x : 0;
+    const dz = to ? to.z - from.z : 0;
+    const gap = Math.hypot(dx, dz);
     return {
       phase: this.phase,
       score: this.run.score,
@@ -244,7 +258,12 @@ export class JumpGame implements MiniGame {
       best: this.best,
       blocks: this.run.blocks.length,
       // 到下一个方块中心的距离：E2E 靠它算出"该按多久"（只读，不改状态）
-      gap: to ? Math.hypot(to.x - from.x, to.z - from.z) : 0,
+      gap,
+      gapRatio: gap > 0 ? gap / from.size : 0,
+      axis: Math.abs(dx) >= Math.abs(dz) ? 'x' : 'z',
+      kind: from.kind,
+      nextKind: to?.kind ?? 'normal',
+      orthographic: this.blocks?.camera.isOrthographicCamera === true,
     };
   }
 
