@@ -5211,6 +5211,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] 批次 20261023-0927 · **e2e 落地：数据在 skill 内且不版本化 / 模型固定 / CI 登录可配置**（A~O 里没有对应条目，属机制本身）：
+      ① 现场目录 `.codebuddy/skills/continue-task/.e2e/`，同目录自带 `.gitignore`——别人拷这个 skill
+      进自己仓库时自动排除，不用改根 `.gitignore`；根里作废的 `.skill-e2e/` 已删。
+      ② 模型固定 `deepseek-v4.1-flash-official`（`--model` 可覆盖）：默认模型一换，同一套断言
+      今天过明天不过，排查时分不清是框架退化还是模型换了。
+      ③ CLI 的 `auth-type` 是 `cli-external-link`，`.credentials.json` 里只有 MCP OAuth；
+      真正的 Bearer 在 `~/.codebuddy/local_storage/`（444KB）——实测"只拷这一个子目录 + 设
+      `CODEBUDDY_CONFIG_DIR`"即可，据此写了手动触发的 `.github/workflows/skill-e2e.yml`。
+      ④ e2e 首次真跑通过 15 项；前三次失败分别暴露：轮次 12 走不完、网关 502 被误诊为框架问题、
+      未登录 401 被误诊——现在后两种都归"环境跳过"（`--strict` 可收紧）。
 - [x] 批次 20261023-0914 · **skill 端到端自测（真跑 codebuddy CLI）**（A~O 里没有对应条目，属机制本身）：
       前三层门禁（`check.mjs` / `check-framework` / `test-install`）都只看**静态产物**，
       挡不住"钩子写 stdout 后立刻 exit → 注入 JSON 被截断 → 任务永远递不出来"这类事故（实测过）。
