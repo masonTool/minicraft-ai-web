@@ -12,6 +12,9 @@
  * 因此进入服务器时不需要下载任何区块数据（这是本项目生成器确定性的直接红利）。
  */
 
+import { browserClientId } from '../core/net/ClientId.ts';
+import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
+
 export interface NetPlayerState {
   id: number;
   name: string;
@@ -67,6 +70,14 @@ export interface NetHandlers {
   /** 别人那边那堆没了（被捡走/烧掉/过期） */
   onItemRemove: (owner: number, localId: number) => void;
   onChat: (id: number, name: string, text: string) => void;
+  /**
+   * 服务端回了 `error`。
+   *
+   * 与 `onStatus(false, …)` 分开：`bad-json`/`unknown` 是消息级错误，连接还好好的，
+   * 不该触发"清空远端玩家"那一套。致命错误（版本/身份/重复连接）由 `NetClient`
+   * 自己置 `fatal`，随后的 `onStatus(false, …)` 才表示真的断了。
+   */
+  onError?: (code: string, message: string) => void;
   /** 连接状态变化（用于 HUD 提示） */
   onStatus: (connected: boolean, detail: string) => void;
 }
@@ -93,6 +104,15 @@ export class NetClient {
   private reconnectTimer: number | null = null;
   /** 主动断开时不再重连 */
   private disposed = false;
+  /**
+   * 致命错误（协议版本/身份/重复连接）：**不再自动重连**。
+   *
+   * 这几种错误重连多少次结果都一样，3 秒一次的循环只会把服务端日志刷满、
+   * 玩家还看不出到底哪里错了（状态一路在"连接中"与"已断开"之间跳）。
+   */
+  private fatal = false;
+  /** 本机的稳定标识（见 `core/net/ClientId.ts`），首次 connect 时生成 */
+  private clientId = '';
   /** 连接状态文本（HUD 显示用） */
   status = '未连接';
 
@@ -108,8 +128,12 @@ export class NetClient {
 
   connect(url: string, name: string): void {
     this.disposed = false;
+    // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
+    this.fatal = false;
     this.url = url;
     this.name = name;
+    // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
+    if (this.clientId.length === 0) this.clientId = browserClientId();
     this.open();
   }
 
@@ -139,7 +163,10 @@ export class NetClient {
       socket.send(
         JSON.stringify({
           t: 'join',
+          // 版本与服务端不一致时会被拒（error.code = 'version'），不会静默错乱
+          v: NET_PROTOCOL_VERSION,
           name: this.name,
+          clientId: this.clientId,
         }),
       );
     };
@@ -155,12 +182,14 @@ export class NetClient {
     };
 
     socket.onclose = () => {
-      this.status = '连接已断开';
+      // 致命错误时保留原因（"协议版本不匹配"比"连接已断开"有用得多）
+      if (!this.fatal) this.status = '连接已断开';
       this.remote.clear();
       this.selfId = 0;
       this.handlers.onStatus(false, this.status);
       // 非主动断开就等一会儿重连：家里的 wifi 抖一下不该直接退出联机
       if (this.disposed) return;
+      if (this.fatal) return;
       this.reconnectTimer = window.setTimeout(() => this.open(), RECONNECT_DELAY_MS);
     };
 
@@ -173,6 +202,19 @@ export class NetClient {
   private handleMessage(message: Record<string, unknown>): void {
     switch (message.t) {
       case 'welcome': {
+        /*
+         * 兜住"新客户端连老服务端"：老服务端不校验 v，也不会回 v。
+         * 这时如果直接进游戏，字段差异会在之后的每条消息上零星炸开，很难归因；
+         * 在门口停下来，玩家至少能看到一句人话。
+         */
+        const version = Number(message.v ?? 0);
+        if (version !== NET_PROTOCOL_VERSION) {
+          this.fatal = true;
+          this.status = `协议版本不匹配：服务端 ${version || '旧版'}，客户端 ${NET_PROTOCOL_VERSION}`;
+          this.handlers.onError?.('version', this.status);
+          this.socket?.close();
+          break;
+        }
         this.selfId = Number(message.id ?? 0);
         this.worldSeed = Number(message.seed ?? 0);
         const players = (message.players as NetPlayerState[] | undefined) ?? [];
@@ -245,6 +287,18 @@ export class NetClient {
         const text = String(message.text ?? '');
         this.lastChat = `<${String(message.name ?? '?')}> ${text}`;
         this.handlers.onChat(Number(message.id ?? 0), String(message.name ?? '?'), text);
+        break;
+      }
+      case 'error': {
+        const code = String(message.code ?? 'unknown');
+        const text = String(message.message ?? '联机出错');
+        this.status = text;
+        /*
+         * 致命错误只置标记、**不在这里 close**：服务端拒绝 join 时已经在关连接，
+         * 客户端再 close 一次会提前把还没送达的 error 帧吞掉（测试里表现为"没收到 error"）。
+         */
+        if (isFatalProtocolError(code)) this.fatal = true;
+        this.handlers.onError?.(code, text);
         break;
       }
       default:

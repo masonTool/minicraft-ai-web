@@ -1,0 +1,53 @@
+/**
+ * 联机协议的共享常量与清洗函数（服务端）。
+ *
+ * 为什么不是 `.ts`：`server/index.mjs` 是直接 `node` 跑的原生 ESM，不经过打包。
+ * 版本号在客户端另有一份（`src/core/net/Protocol.ts`），两处相等由
+ * `tests/net-protocol-version.test.ts` 断言——为一个数字引入 JSON import attributes
+ * 会让服务端在 Node 20.10 以下直接起不来，不值得。
+ */
+
+/** 协议版本。**改字段语义就 +1**；两端不一致时服务端拒绝连接，而不是静默错乱 */
+export const PROTOCOL_VERSION = 1;
+
+/**
+ * 名字最长多少个**字符**（不是字节）。
+ *
+ * 与命名牌同一口径（`core/entity/NameTag.ts`）：按字节卡会让三个中文名就超。
+ */
+export const MAX_NAME_LENGTH = 16;
+
+/**
+ * 自定义关闭码（4000~4999 是应用段）。
+ *
+ * 客户端判的是 `error.code`，不是关闭码——关闭码只给日志/抓包看。
+ */
+export const CLOSE_VERSION = 4001;
+export const CLOSE_CLIENT_ID = 4002;
+export const CLOSE_DUPLICATE = 4003;
+
+/** clientId 的合法形状：8~64 位字母/数字/下划线/连字符（浏览器生成的是 16 位 hex） */
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+export function isValidClientId(value) {
+  return typeof value === 'string' && CLIENT_ID_RE.test(value);
+}
+
+/**
+ * 把客户端给的名字洗成一个能安全显示的名字。
+ *
+ * 三件事，每一件都有具体理由：
+ *   · **去掉控制字符与尖括号**：聊天里用 `<名字>` 包，名字带 `>` 就能伪造一段前缀
+ *     （`<a> 假消息` 看起来像系统发言）；控制字符会让日志/界面错行。
+ *   · **按字符截断**：`slice(0, 16)` 会把 emoji 的代理对切成半个，界面上是乱码方块。
+ *   · **空的退回"玩家"**：原版也允许空名字，但空名字在消息栏里看起来像一条系统提示。
+ */
+export function sanitizeName(value) {
+  const raw = typeof value === 'string' ? value : '';
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const chars = Array.from(cleaned).slice(0, MAX_NAME_LENGTH).join('');
+  return chars.length > 0 ? chars : '玩家';
+}

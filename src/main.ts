@@ -1828,6 +1828,13 @@ class App {
       this.chatUntil = performance.now() + 8000;
       void id;
     },
+    onError: (_code, message) => {
+      // 协议级错误进消息栏：只写在调试面板里，手机上（没有 F3）等于没提示
+      this.netStatus = message;
+      this.chat.push(message, 'error');
+      this.chatLine = message;
+      this.chatUntil = performance.now() + 8000;
+    },
     onStatus: (connected, detail) => {
       this.netStatus = detail;
       if (!connected) {

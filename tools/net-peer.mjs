@@ -8,6 +8,7 @@
  */
 
 import { WebSocket } from 'ws';
+import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
 const port = Number(process.argv[2] ?? 8787);
 const blockX = Number(process.argv[3] ?? 0);
@@ -21,7 +22,18 @@ const socket = new WebSocket(`ws://localhost:${port}`);
 const log = (...args) => console.log('[peer]', ...args);
 
 socket.on('open', () => {
-  socket.send(JSON.stringify({ t: 'join', name: '机器人队友', x: blockX + 3, y: blockY, z: blockZ + 3 }));
+  socket.send(
+    JSON.stringify({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      // 每次跑都是一个新的"浏览器"：带 pid，避免和上一次残留的同名连接撞 clientId
+      clientId: `peerbot-${process.pid}`,
+      name: '机器人队友',
+      x: blockX + 3,
+      y: blockY,
+      z: blockZ + 3,
+    }),
+  );
 });
 
 socket.on('message', (raw) => {

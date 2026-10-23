@@ -15,7 +15,10 @@
 - 服务端不校验 Origin、不鉴权、不设 `maxPayload`（用的是 `ws` 默认 100MB）。
 - 没有心跳：连接是否还活着完全依赖 TCP 层的 FIN/RST。半开连接会一直留在在线列表里，
   直到客户端重连把旧 socket 顶掉（`联机7` 补 ping/pong 与 20 秒超时）。
-- 没有协议版本位：字段不兼容时双方都不会报错，只会静默错乱（`联机2` 补 `{v, clientId}` 握手）。
+- 有协议版本位（`v`，当前 **1**）与稳定客户端标识（`clientId`）：版本不一致直接拒绝连接，
+  不进入“字段慢慢对不上”的状态（见 §5.1）。
+- `clientId` **不是鉴权**：没有密码/签名，只用来挡住同一个浏览器的两个标签页并发连接，
+  以及将来重连时认回原玩家。它存在 localStorage（`core/net/ClientId.ts`）。
 
 ## 2. 世界模型：种子 + 增量
 
@@ -35,7 +38,7 @@
 ```
 客户端                                  服务端
   |-- TCP/WS 连接 ---------------------->|
-  |-- join ----------------------------->|  建 players 记录（id 自增）
+  |-- join（v / name / clientId）------>|  校验版本与身份；建 players 记录（id 自增）
   |<------------- welcome（快照）--------|  给自己
   |                                      |-- player（广播）--> 其他人
   |-- move（100ms 一条）---------------->|  50ms 限频，转发给其他人
@@ -51,7 +54,7 @@
 
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
-| `join` | `name?`（`x/y/z?` 服务端会读，客户端目前不发） | 名字截断到 16 字符；重复 join 回 `error` | 位置默认 `(0, 80, 0)`、维度固定 `overworld`；`联机3` 改为必发坐标与维度 |
+| `join` | `v, name, clientId`（`x/y/z?` 服务端会读，客户端目前不发） | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined` | 位置默认 `(0, 80, 0)`、维度固定 `overworld`；`联机3` 改为必发坐标与维度 |
 | `move` | `x, y, z, yaw, pitch, dimension` | 距上一条 < 50ms 直接丢弃；缺字段保留旧值 | 客户端 100ms 发一条；**没有速度/距离校验** |
 | `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | **不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
@@ -65,7 +68,7 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `id, name, seed, players[], edits[], items[]` | 只发给刚 join 的人 |
+| `welcome` | `v, id, name, seed, players[], edits[], items[]` | 只发给刚 join 的人 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
@@ -73,13 +76,14 @@
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
 | `chat` | `id, name, text` | 收到 `chat` 后发给**所有人（含发送者）** |
-| `error` | `message` | 非法 JSON / 未知类型 / 重复 join |
+| `error` | `code, message` | 非法 JSON / 未知类型 / 重复 join / 版本或身份不合法 |
 
 `welcome` 的快照形状：
 
 ```json
 {
   "t": "welcome",
+  "v": 1,
   "id": 1,
   "name": "玩家",
   "seed": 20261014,
@@ -90,6 +94,25 @@
 ```
 
 `edits` 用数组而不是对象，是为了少传字段名；数组顺序即 `[x, y, z, id, state, dimension]`。
+
+### 5.1 版本与错误码
+
+版本号在两端各有一份（`server/protocol.mjs` 与 `src/core/net/Protocol.ts`），
+相等由 `tests/net-protocol-version.test.ts` 断言。**什么时候 +1**：字段语义变了、
+旧客户端会理解错；加一个可选字段不算。
+
+| `error.code` | 含义 | 服务端关闭码 | 客户端要不要重连 |
+| --- | --- | --- | --- |
+| `version` | `v` 与服务端不一致 | 4001 | **不重连**（重连也不会变好） |
+| `clientId` | 缺 clientId 或形状不合法 | 4002 | **不重连** |
+| `duplicate` | 同一 clientId 已在线 | 4003 | **不重连**（先关掉另一个标签页） |
+| `joined` | 同一条连接重复 join | 不关 | 是（消息级） |
+| `bad-json` | 不是合法 JSON | 不关 | 是 |
+| `unknown` | 未知 `t` | 不关 | 是 |
+
+客户端的判据是 `code`，**不是关闭码**——两者可以独立演进。
+新客户端连上老服务端时，`welcome` 里没有 `v`，客户端按 `v=0` 处理并拒绝进入世界
+（否则字段差异会在之后的每条消息上零星炸开，很难归因）。
 
 ## 6. 服务端状态与上限
 
@@ -116,7 +139,7 @@
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
 | `chat` | 追加到消息栏并本地回显 | 发送者会收到服务端回传 → **重复一条**（`联机30`） |
-| `error` | 目前只忽略 | `联机2` 起按 `code` 区分 |
+| `error` | 写进状态与消息栏（`onError`）；致命码置 `fatal`，**不再自动重连** | 服务端拒绝 join 时它会紧接着关闭连接 |
 
 平滑：`core/net/RemoteInterpolation.ts` 用指数逼近 + 最短角 yaw；位移超过 8 格（重生/传送门）
 直接对齐，不拖长线。
@@ -125,7 +148,6 @@
 
 | 编号 | 缺口 | 影响 |
 | --- | --- | --- |
-| `联机2` | 无版本位、无 clientId | 新旧客户端混连静默错乱；重连拿不到原 id |
 | `联机3` | join 不带坐标/维度；`player` 的 dimension 被丢 | 远端玩家在下界也会画在你旁边 |
 | `联机4` | 未加载区块的 `block` 被丢弃 | 走动过去还是旧地形，只有重连能补 |
 | `联机5`/`联机6` | 种子不强制、远端改动写进单机档 | 各玩各的世界；单机存档被污染 |

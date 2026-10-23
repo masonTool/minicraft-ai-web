@@ -10,10 +10,13 @@
 
 import { spawn } from 'node:child_process';
 import { WebSocket } from 'ws';
+import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
 const PORT = 8799; // 用不常用的端口，避免和开发者自己的服务端撞车
 let passed = 0;
 let failed = 0;
+/** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
+let clientSeq = 0;
 
 function check(label, ok, detail = '') {
   if (ok) {
@@ -29,8 +32,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 一个测试用客户端：把收到的消息存进 mailbox，便于断言 */
 class TestClient {
-  constructor(name) {
+  /** @param {string} [clientId] 显式传同一个值可以测"重复身份" */
+  constructor(name, clientId = `testclient${String(++clientSeq).padStart(2, '0')}`) {
     this.name = name;
+    this.clientId = clientId;
     this.mailbox = [];
     this.socket = new WebSocket(`ws://localhost:${PORT}`);
     this.socket.on('message', (raw) => {
@@ -77,6 +82,21 @@ class TestClient {
     return null;
   }
 
+  /**
+   * 等连接真的关闭。
+   *
+   * 被服务端拒绝时，"收到 error"与"连接关闭"是两帧：只断言前者，
+   * 会把"错误发出去了但没关"这种半成品当成通过。
+   */
+  async waitClosed(timeout = 2000) {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (this.socket.readyState === WebSocket.CLOSED) return true;
+      await sleep(20);
+    }
+    return false;
+  }
+
   close() {
     this.closed = true;
     this.socket.close();
@@ -119,7 +139,7 @@ try {
   async function joinAndWaitWelcome(client, name, x, y, z) {
     await client.ready();
     for (let attempt = 0; attempt < 2; attempt++) {
-      client.send({ t: 'join', name, x, y, z });
+      client.send({ t: 'join', v: PROTOCOL_VERSION, clientId: client.clientId, name, x, y, z });
       const welcome = await client.wait('welcome', attempt === 0 ? 2500 : 4000);
       if (welcome) return welcome;
     }
@@ -130,6 +150,7 @@ try {
   const welcomeA = await joinAndWaitWelcome(alice, 'Alice', 10, 70, 20);
   check('Alice 收到 welcome', welcomeA !== null);
   check('welcome 带服务端种子', welcomeA?.seed === 20261014, `${welcomeA?.seed}`);
+  check('welcome 带协议版本', welcomeA?.v === PROTOCOL_VERSION, `${welcomeA?.v}`);
   check('welcome 带自己的 id', welcomeA?.id === 1, `${welcomeA?.id}`);
   check('welcome 初始玩家表只含自己', (welcomeA?.players ?? []).length === 1, `${welcomeA?.players?.length}`);
 
@@ -273,6 +294,50 @@ try {
   const welcomeD = await joinAndWaitWelcome(dave, 'Dave', 3, 70, 3);
   check('非法坐标不会写进世界快照', welcomeD !== null && !(welcomeD.edits ?? []).some((e) => e[3] === 1 && e[0] === 1));
   dave.close();
+
+  // ---------------------------------------------------------------- 握手（联机2）
+  console.log('\n[握手 / 版本 / 身份]');
+  {
+    // 旧版本：字段语义可能已经变了，服务端必须在 join 就拒绝，而不是让他带病进世界
+    const oldVersion = new TestClient('OldVersion');
+    await oldVersion.ready();
+    oldVersion.send({ t: 'join', v: PROTOCOL_VERSION - 1, name: '老客户端', clientId: 'oldversion01' });
+    const versionError = await oldVersion.wait('error');
+    check('旧版本被拒（error.code = version）', versionError?.code === 'version', JSON.stringify(versionError));
+    check('被拒后服务端关闭连接', await oldVersion.waitClosed(), `readyState=${oldVersion.socket.readyState}`);
+
+    // 缺 clientId：没有它就没法做"重复连接"和重连认人
+    const noId = new TestClient('NoId');
+    await noId.ready();
+    noId.send({ t: 'join', v: PROTOCOL_VERSION, name: '无身份' });
+    const idError = await noId.wait('error');
+    check('缺 clientId 被拒（error.code = clientId）', idError?.code === 'clientId', JSON.stringify(idError));
+    await noId.waitClosed();
+
+    // 重复 clientId：同一个浏览器开两个标签页，后来的应被拒（不然两个连接共用一个玩家记录）
+    const duplicate = new TestClient('Duplicate', alice.clientId);
+    await duplicate.ready();
+    duplicate.send({ t: 'join', v: PROTOCOL_VERSION, name: '重复身份', clientId: alice.clientId });
+    const dupError = await duplicate.wait('error');
+    check('重复 clientId 被拒（error.code = duplicate）', dupError?.code === 'duplicate', JSON.stringify(dupError));
+    await duplicate.waitClosed();
+
+    // 脏名字：控制字符、尖括号（能伪造 `<名字>` 前缀）、前后空白
+    const dirty = new TestClient('DirtyName');
+    const welcomeDirty = await joinAndWaitWelcome(dirty, '  <坏\u0000名>  ', 0, 70, 0);
+    check('脏名字被洗成安全形式', welcomeDirty?.name === '坏 名', JSON.stringify(welcomeDirty?.name));
+    dirty.close();
+
+    // 超长名字按**字符**截断（不能把 emoji 的代理对切一半）
+    const longName = new TestClient('LongName');
+    const welcomeLong = await joinAndWaitWelcome(longName, '一二三四五六七八九十一二三四五六七八', 0, 70, 0);
+    check(
+      '超长名字截到 16 个字符',
+      Array.from(welcomeLong?.name ?? '').length === 16,
+      JSON.stringify(welcomeLong?.name),
+    );
+    longName.close();
+  }
 
   check('服务端仍然活着', server.exitCode === null, `exitCode=${server.exitCode}`);
 

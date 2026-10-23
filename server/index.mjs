@@ -18,6 +18,14 @@
  */
 
 import { WebSocketServer } from 'ws';
+import {
+  CLOSE_CLIENT_ID,
+  CLOSE_DUPLICATE,
+  CLOSE_VERSION,
+  PROTOCOL_VERSION,
+  isValidClientId,
+  sanitizeName,
+} from './protocol.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
@@ -36,7 +44,7 @@ const MAX_ITEMS = 2000;
 /** 每个玩家每秒最多广播多少条掉落物（防脚本刷消息） */
 const ITEM_RATE_LIMIT = 30;
 
-/** @type {Map<string, {id:number,name:string,x:number,y:number,z:number,yaw:number,pitch:number,socket:import('ws').WebSocket,lastMove:number,dimension:string}>} */
+/** @type {Map<string, {id:number,name:string,clientId:string,x:number,y:number,z:number,yaw:number,pitch:number,socket:import('ws').WebSocket,lastMove:number,dimension:string}>} */
 const players = new Map();
 /** 方块改动：key = "维度|x,y,z" → { x, y, z, id, state, dimension } */
 const edits = new Map();
@@ -54,6 +62,16 @@ const log = (...args) => console.log(`[server ${new Date().toISOString().slice(1
 function send(socket, message) {
   if (socket.readyState !== socket.OPEN) return;
   socket.send(JSON.stringify(message));
+}
+
+/**
+ * 拒绝一条连接：先回 `error`（带 `code`，客户端按它决定要不要重连），再关。
+ *
+ * 关闭码只给日志/抓包看；客户端判的永远是 `error.code`——这样两者可以独立演进。
+ */
+function reject(socket, code, message, closeCode) {
+  send(socket, { t: 'error', code, message });
+  socket.close(closeCode, code);
 }
 
 function broadcast(message, exceptId = null) {
@@ -102,17 +120,43 @@ wss.on('connection', (socket, request) => {
     try {
       message = JSON.parse(String(raw));
     } catch {
-      send(socket, { t: 'error', message: '消息不是合法 JSON' });
+      send(socket, { t: 'error', code: 'bad-json', message: '消息不是合法 JSON' });
       return;
     }
 
     switch (message.t) {
       case 'join': {
-        if (player) return send(socket, { t: 'error', message: '已经加入过了' });
-        const name = String(message.name ?? '玩家').slice(0, 16);
+        if (player) return send(socket, { t: 'error', code: 'joined', message: '已经加入过了' });
+
+        // 版本先判：字段不兼容时，旧客户端连新服务端不会自己报错，只会静默错乱
+        if (Number(message.v) !== PROTOCOL_VERSION) {
+          return reject(
+            socket,
+            'version',
+            `协议版本不匹配：服务端 ${PROTOCOL_VERSION}，客户端 ${message.v ?? '未提供'}`,
+            CLOSE_VERSION,
+          );
+        }
+        if (!isValidClientId(message.clientId)) {
+          return reject(socket, 'clientId', '缺少合法的 clientId（8~64 位字母/数字/-/_）', CLOSE_CLIENT_ID);
+        }
+        /*
+         * 同一个 clientId 已经在线 → 拒绝新连接。
+         *
+         * 不做"新连接顶掉旧连接"：在没有鉴权的前提下，那等于谁抄到 id 谁就能踢人。
+         * 断线重连复用 id 是另一条路（联机8 的 grace 会话），前提是旧连接已经消失。
+         */
+        for (const other of players.values()) {
+          if (other.clientId === message.clientId) {
+            return reject(socket, 'duplicate', '这个 clientId 已经在线（同一个浏览器开了两个标签页？）', CLOSE_DUPLICATE);
+          }
+        }
+
+        const name = sanitizeName(message.name);
         player = {
           id: nextPlayerId++,
           name,
+          clientId: message.clientId,
           x: Number(message.x ?? 0),
           y: Number(message.y ?? 80),
           z: Number(message.z ?? 0),
@@ -129,6 +173,8 @@ wss.on('connection', (socket, request) => {
 
         send(socket, {
           t: 'welcome',
+          // 客户端据此确认"我连上的是我认识的那版协议"（服务端已经先校验过一次）
+          v: PROTOCOL_VERSION,
           id: player.id,
           name: player.name,
           ...snapshotFor(),
@@ -238,7 +284,7 @@ wss.on('connection', (socket, request) => {
       }
 
       default:
-        send(socket, { t: 'error', message: `未知消息类型 ${message.t}` });
+        send(socket, { t: 'error', code: 'unknown', message: `未知消息类型 ${message.t}` });
     }
   });
 
