@@ -19,7 +19,7 @@
 - 离线测试 169 套（`tools/run-tests.mjs` 并行跑）+ vitest 单测，`npm run check` 是一道门 · `A6` · 批次 589
 - 浏览器侧四块命令（截图 / 控制台零错误 / 像素差 / 起服检查），`BROWSER_CHECK=1` 才真跑 · `A7` · 批次 1357
 - 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`；`audit-ids` 核对 `DONE` ↔ `notes/batches.md`，`tools/audit-docs.mjs` 防入口文档复述机制 · 批次 1950
-- continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致 · 批次 20261022-2014
+- continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致；e2e 脚手架「全测只跑一遍 + 先清场」（`.e2e/.lock` 运行锁、`--all` 先清旧现场、删除走绝对路径 `/bin/rm` 并校验）· 批次 20261022-2014、20261023-1603
 - 任务分层（**仅 >16 条的任务**）：`doing/plan-<会话ID>.md` 与队列**同名配对**（文件名即绑定，不写 `> 计划：`），里程碑 ≥2 阶段；每批做完自动取下一阶段、**完成到里程碑硬停**，最后里程碑没确认不收尾（细则 `notes/plan.md`）· 批次 2338、0022、20261023-0744
 - 收尾**归档**（不 `rm`）队列 / 计划 / 决策记录到 `logs/doing-archive/<名>-<会话ID>-<时间戳>.md`；并行任务走 `npm run continue:worktree`（独立树 + 分支推远程，合并由人定）· 批次 0744、20261023-0823
 

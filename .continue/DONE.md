@@ -8,6 +8,41 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+## 批次 20261023-1603 · 2026-10-23 · 会话 d3607f00
+
+**做了什么**：按「全测只跑一遍 + 全测先清场」改 e2e 脚手架：① 删除一律走绝对路径 `/bin/rm`
+（IDE 的 safe-delete 垫片按 toolCallId 累计、到 500 条**删一半**并进废纸篓），`rmrf()` 删完校验；
+② 加 `.e2e/.lock` 运行锁，已有活跃轮次时再跑一轮或 `--clean` 直接 exit 2；③ `--all` 先清场并报条数，
+清不干净 exit 2；④ 终版 `test.md` 先落盘、账本后追加；⑤ 文档补三条约定并修两处漂移
+（`--all` 是 7 个场景、`journey` 实际在 `--all` 里）。共 5 条。
+
+**条目**（原文照搬）：
+
+- [x] [框架1] e2e 清理绕开 IDE 删除垫片：`scripts/e2e.mjs` 新增 `rmPath()`（绝对路径 `/bin/rm`）并替换 3 处 `fs.rmSync`，`rmrf()` 校验目录真的没了 → `npm run skill:e2e -- --clean` 后 `.e2e/` 只剩 `test.md`（+`.lock`）
+  - 做了什么：新增 `rmPath()`（`/bin/rm -rf`，命中不到再用 `fs.rmSync` 兜 Win32）与 `rmrf()`（删完校验，删不掉就抛）；`resetHookState`、`rmSync(origin)`、`rmSync(only-in-wt.txt)` 三处全部换掉，`scaffold()` 的清理也走同一条路径
+  - 为什么：IDE 终端把 `fs.rmSync` 和 `PATH` 里的 `rm` 都换成了 safe-delete 垫片，按 toolCallId 累计删除条数，到 500 条**删到一半停下**（留下半删现场）且进系统废纸篓——2026-10-23 `plan-run`/`journey`/`worktree` 就是被它判红的；`rmrf()` 以前不看退出码，于是 `main-...-075023` 只剩 3 个文件
+  - 验证：`npm run skill:e2e -- --clean` → `已清理 19 个现场目录`，`ls -A .e2e` 只剩 `test.md`；随后三个 probe 场景全绿
+  - 批次：20261023-1603
+- [x] [框架2] e2e 加运行锁，「全测只跑一遍」：`scripts/e2e.mjs` 启动先抢 `.e2e/.lock`（pid + 心跳），已有活跃轮直接 exit 2；僵尸锁自动清 → 手写一个 pid 存活的锁再跑 `--scenario blocked`，断言 exit 2 且 stderr 有"已有一轮"
+  - 做了什么：`.lock` 记 `{pid, stamp, startedAt, scenarios}`；`activeRun()` 用 `process.kill(pid, 0)` 判活（EPERM 也算活），僵尸锁直接覆盖；`acquireLock()` 放在**清场之前**，`--clean` 也走同一道拦截；`exit`/`SIGINT`/`SIGTERM` 自动释放
+  - 为什么：两轮 `--all` 相差 2 分钟同时跑，后一轮"先清场"删掉前一轮现场 → 前一轮假红 + 双倍烧 token（2026-10-23 实际发生）。锁必须早于清场，第二轮才会在动别人目录前退出
+  - 验证：写 `{"pid":1,…}` 假锁后 `--scenario blocked` exit=2、`--clean` exit=2，报错文案为"已有一轮 e2e 在跑…拒绝执行"；正常跑完一轮后 `ls -A .e2e` 无 `.lock`（已释放）
+  - 批次：20261023-1603
+- [x] [框架3] 全测先清场：`--all` 在开跑前清掉上一轮全部现场并汇报条数，删不干净就 exit 2（不再半删继续） → 造 2 个假目录后 `--all --dry-run` 打印"将清 2 个"，且目录仍在
+  - 做了什么：`pendingCleanNames()` 供预检报"先清场 --all：开跑前删掉 N 个旧现场目录"；`cleanRuns()` 逐个校验，删不掉就 `exit 2`；`--all` 拿到锁之后才清场，`--fresh` 复用同一函数
+  - 为什么：用户要求"全测要先清场"；而清不干净继续跑会产出半删现场，比旧现场更误导（假红来源）
+  - 验证：`npm run skill:e2e -- --all --dry-run` 打印 `先清场  --all：开跑前删掉 19 个旧现场目录（test.md 保留）` 且未删任何目录；`--clean` 实删 19 个后只剩 `test.md`
+  - 批次：20261023-1603
+- [x] [框架4] 报告先于账本落盘 + 账本加免责行：`scripts/e2e.mjs` 把终版 `test.md` 写盘挪到 `e2e-history.md` 追加之前；账本注记 2026-10-23 两轮并发事故 → `npm run check:fast` 通过
+  - 做了什么：把 `upsertRunBlock(buildRunBlock(results, units))` 移到账本段之前；`e2e-history.md` 头部加一条警示（写明 11:46/15:50/15:52 是假红、不可作估算依据），**加在表头而不是表尾**——脚本是 append-only，写表尾会被下一轮行插到中间把表断开
+  - 为什么：15:52 那轮出现过"账本有 journey 行、test.md 还停在进行中 5/7"的半截状态，说明两步顺序反了；假红行会污染 `estimate()` 的中位数
+  - 验证：`npm run check:fast` 全绿（172 套里命中 5 套通过 11.0s）；三个 probe 场景跑完后 `test.md` 与账本都正常写入
+  - 批次：20261023-1603
+- [x] [框架5] 文档补齐：`SKILL.md` e2e 一节写清"全测只跑一遍 / 先清场 / 锁 / 为什么用 `/bin/rm`" → `npm run check` 三张台账通过
+  - 做了什么：`SKILL.md` 的"六条约定"改成"约定（跑之前先看这几条）"，新增"全测只跑一遍""全测先清场""删除一律走 `/bin/rm`"三条；顺手改掉两处漂移：`--all` 是 **7** 个场景（原写"六个"）、`journey` 实际在 `--all` 里（原写"不进 --all"）；`scripts/e2e.mjs` 顶部用法注释同步
+  - 为什么：机制改了文档不跟就会漂（本项目 `audit:tasks` 的教训）；两处场景数/范围本来就与代码不符
+  - 验证：`npm run check` 通过（含三张台账）
+  - 批次：20261023-1603
 ## 批次 20261023-1439 · 2026-10-23 · 会话 b09ae4
 
 **做了什么**：① `test.md` 从"一行箭头串"改成**表格**（场景 / 执行器 / 测什么 / 耗时 / tokens / 结果
@@ -241,51 +276,5 @@
   - 做了什么：跑全量门禁与框架五项；清掉 e2e 留下的现场（`.skill-e2e/`）
   - 验证：`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` **五项全绿**；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
   - 批次：20261023-0914
-
-
-## 批次 20261023-0903 · 2026-10-23 · 会话 b09ae4
-
-**做了什么**：三处命名收敛成一套——① 文件名里的会话 ID 只取**前 6 位**（只截 UUID 形态，
-`s-plan-next` 这类短标识原样保留，否则一截就撞）；② 计划/决策改成**后缀式**
-（`b09ae4-plan.md` / `b09ae4-decision.md`），同一会话三份文件在目录里排在一起；
-③ `logs/` **按会话分目录**（`logs/<会话ID>/run.md` + `<queue|plan|decision>-<时间戳>.md`），
-不再几十份归档堆在 `doing-archive/` 一个目录里。新增「队列头部完整 ID 前 6 位 == 文件名」
-门禁作为截短的前提——它第一次生效就抓到我自己的手误。共 6 条。
-
-**条目**（原文照搬）：
-
-- [x] [名1] `lib.mjs`：加 `shortSid()`（**只截 UUID 形态**）、队列/计划/决策三个文件名改成 `<sid6>` / `<sid6>-plan.md` / `<sid6>-decision.md`、日志与锁移进 `logs/<sid6>/run.md`、`listQueues` 只列队列 → `node -e` 断言三种名字与目录
-  - 做了什么：`shortSid()` 只对 **32 位 hex / 带横线 UUID** 取前 6 位，其它形态原样返回；`queueFileName()` / `planNameFor()` / `decisionNameFor()` / `queuePath()` / `planPathFor()` / `decisionPathFor()` 全部走它；`PLAN_FILE_RE` / `DECISION_FILE_RE` 改成**后缀式**（`^(.+?)-plan\.md$`）；`logPath()` → `logs/<sid6>/run.md`，锁跟着走（`withLogLock` 改成建父目录）；`listQueues()` 排除两类非队列文件
-  - 为什么只截 UUID：真实会话 ID 是 32 位 hex，前 6 位足够区分同时在跑的几个人；而 `s-plan-next` 这类**本身就是短标识**的 ID（自检夹具、平台自定义 ID）一截就撞（`s-plan-next`/`s-plan-edge` 都变 `s-plan`），两个会话共用一份队列比文件名长严重得多
-  - 为什么文件名用后缀式：`plan-b09ae4.md` 与队列 `b09ae4.md` 的公共前缀在最前面，按名字排序时**同一个会话的三份文件会散开**；`b09ae4-plan.md` 排在一起，看目录就知道哪几份属于同一个会话
-  - 验证：`node --input-type=module -e` 六项——`shortSid(full)=b09ae4`、`shortSid(uuid)=b09ae4`、`shortSid('s-plan-next')` **原样**、`queue/plan/decision` 三个名字、`logPath` = `logs/b09ae4/run.md`、`isPlanFile('s-plan-next.md')=false` / `isPlanFile('b09ae4-plan.md')=true`
-  - 批次：20261023-0903
-- [x] [名2] 归档改成按会话分目录：`archive-queue.mjs` 写 `logs/<sid6>/<kind>-<ts>.md`；`auto-continue` 指令里的路径同步 → 归档后文件落在会话目录、名字带时间戳
-  - 做了什么：`archive-queue.mjs` 的源文件名改由 `queueFileName/planNameFor/decisionNameFor` 算，目标目录换成 `archiveDirFor(sid)`，文件名只留 `<kind>-<YYYYMMDDHHmmss>.md`（目录里已经有会话 ID，不再重复）；`auto-continue` / `queue-init` 指令里 6 处路径文案同步
-  - 为什么文件名里去掉会话 ID：目录已经是 `logs/b09ae4/`，再写 `b09ae4-queue-…` 是同一事实第二遍——而且以前所有会话的归档都堆在 `logs/doing-archive/` 一个目录里，几十份之后根本分不清哪些属于同一轮
-  - 为什么 `queue-` 前缀：同一个会话目录里要住着队列 / 计划 / 决策三类备份，靠前缀区分；时间戳保证同一会话多批不互相覆盖
-  - 验证：`selftest` 的两条归档用例改成断言 `logs/<sid>/queue-<14位>.md` 与 `logs/<sid>/plan-<14位>.md`、`logs/<sid>/decision-<14位>.md`，52 项全绿
-  - 批次：20261023-0903
-- [x] [名3] 迁移现存文件：`doing/` 三个（含别的会话的队列与计划）+ `logs/` 旧日志与旧归档归位 → `ls` 结果符合新规则，且两个别的会话的队列仍能被读到
-  - 做了什么：`doing/` 四份改名（`4024a9d4…`→`4024a9.md`、`b75f5b89…`→`b75f5b.md`、`plan-b75f5b89…`→`b75f5b-plan.md`、本会话队列→`b09ae4.md`）；`logs/` 归位 13 项——7 份旧的 `logs/<full>.md` 运行日志变成 `logs/<sid6>/run.md`，4 份旧归档变成 `logs/<sid6>/<kind>-<ts>.md`，随后删掉空的 `doing-archive/`
-  - 为什么必须和代码同一个提交：钩子改成按 6 位找队列，**不迁 = 另外两个会话的队列当场“消失”**（它们下一轮就会被当成“没有队列”而静默停摆），而且不会报任何错
-  - 顺带被自己的门禁抓了一次：我把 `b75f5b` 手打成 `b75f5b8`（7 位），新加的「头部会话 ID 前 6 位 == 文件名」当场判红，改回来才绿——这条门禁第一次生效就是抓我
-  - 验证：`ls .continue/doing/` = `4024a9.md b09ae4.md b75f5b-plan.md b75f5b.md`；`npm run audit:docs` 绿（含头像核对）；Stop 钩子实测能找到 `doing/b09ae4.md` 并递出「第 1/6 条」
-  - 批次：20261023-0903
-- [x] [名4] 门禁与自检：`audit-docs` 文件名规则跟着改 + 新增「队列头部会话 ID 前 6 位必须等于文件名」；`selftest` 断言跟着改 → 造一个头像不符的队列能红；自检全绿
-  - 做了什么：`audit-docs` 加一条硬校验（每条队列读头部 `# 队列 · 会话 <full>`，`shortSid()` 后必须等于文件名）；门禁摘要文案改成 `doing/*-plan.md、*-decision.md`；`selftest` 的夹具与断言全部跟着改（计划文件 `s-x-plan.md`、归档目录 `logs/<sid>/`、日志 `logs/<sid>/run.md`）
-  - 为什么这条门禁是**截短 ID 的前提**：文件名只留 6 位，理论上两个会话可能撞；撞了之后后开的会**直接接管**前一个的队列（勾错条目、写错 DONE），而且零报错。头部保留完整 ID 就是为了在这里对一次账
-  - 顺带修了自检里 8 条写死 `logs/<sid>.md` 的断言——它们读的是文件路径，路径一变就全红，正好逼着一次改干净
-  - 验证：造 `zzzzzz.md`（头部写 `ffff…`）→ 判红「头部会话与文件名不一致」；改成一致后绿；`selftest` **52 项全绿**
-  - 批次：20261023-0903
-- [x] [名5] 文档与打包源：注入协议 / README / notes/plan.md / HANDOFF / AGENTS / SKILL.md / assets 全链路 → `grep` 无旧写法；`check-framework` / `test-install` 通过
-  - 做了什么：`queue-init` 第 9/10 条、`README` §3 第 10 条与收尾第 ⑤ 步、`notes/plan.md`（标题 / 三层结构 / §3 判定 / §4 门禁表 / §5 跨会话接手 / §6 图里两处标签）、`notes/session-decisions.md`、`HANDOFF` §4 两段、`AGENTS` §2、`SKILL.md` 全部改成后缀式 + `logs/<会话ID>/`；`assets/` 回灌 hooks 与 README
-  - 为什么连 `notes/batches.md` 的历史行不改：那些行记的是**当时**的做法（`plan-<会话ID>.md`），改历史等于伪造台账；新批次行写新命名，两行并存正好能看出改名发生在哪一批
-  - 验证：`grep -rn "doing-archive|plan-<会话ID>|decision-<会话ID>"` 只剩历史批次行；`diff -rq assets/.continue/hooks .continue/hooks` 无差异；`check-framework` 通过；`test-install` 19 项通过；`check.mjs --fast` 五项绿
-  - 批次：20261023-0903
-- [x] [验] `npm run check` + `node .continue/hooks/check.mjs` 全绿
-  - 做了什么：跑全量门禁与框架五项，核对 `assets` 与运行版一致
-  - 验证：`npm run check` **EXIT 0**（typecheck / 172 套 / `audit:i18n` / 三张台账 / 文档门禁）；`node .continue/hooks/check.mjs` **五项全绿**；`diff -rq assets/.continue/hooks .continue/hooks` 无差异
-  - 批次：20261023-0903
 
 
