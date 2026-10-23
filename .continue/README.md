@@ -296,6 +296,8 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | `AUTO_COMMIT_STYLE` | 空 | 设成 `json` 时改用 `{"continue":false,"reason":…}` 而不是 exit 2 |
 | `AUTO_COMMIT_MAX_BLOCKS` | `2` | 同一份未提交改动最多拦几次 |
 | `CONTINUE_MAX_ITEMS_PER_COMMIT` | `1` | 一次提交最多把几条队列条目勾成 `[x]` |
+| `CODEBUDDY_SESSION_ID` | 宿主注入 | 只读：`worktree.mjs` 用它的前 6 位命名树目录（`.continue/doing/.worktree/<sid6>`）；不是给人设的开关 |
+| `WORKBUDDY_SESSION_ID` | 宿主注入 | 同上，WorkBuddy 的等价变量 |
 
 ### 自测门禁
 
@@ -327,10 +329,14 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 {
   "checks": {
     "fast": "node .continue/hooks/check.mjs --fast",
-    "project": ["npm test", "node scripts/lint.mjs"]
+    "project": ["npm test", "node scripts/lint.mjs"],
+    "projectSlow": ["node scripts/e2e.mjs"]
   }
 }
 ```
+
+**区别只看"提交前愿不愿意等"**：`project` 必须秒级（`--fast` 与全档都跑），`projectSlow` 可以几十秒（只在全档跑）。
+分档由**键**决定、不猜命令内容——慢命令写进 `project`，每条任务就都卡一次，没有别的兜底。
 
 为什么要走这个口子、而不是自己写个 shell 脚本再把 `checks.fast` 指过去：那样**删掉框架那一行不会有任何提示**，
 编号审计和体量门禁就悄悄失效了。重装框架时 `config.json` 只补缺失的键，你加的 `project` 会保留。

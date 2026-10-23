@@ -14,8 +14,10 @@ coverage/
 .tmp/
 
 # —— AI 钩子的运行时产物：日志、计数状态、刹车开关 ——
-# 位置：.continue/logs/（日志 + 状态，另有 .continue/.gitignore 兜底）、.continue/*.off（刹车）。
+# 位置：.continue/.logs/（日志 + 状态，另有 .continue/.gitignore 兜底）、.continue/*.off（刹车）。
+# 2026-10-24 框架把 logs/ 改名成 .logs/（本机产物统一带点，和 doing/.worktree/ 一致）。
 # 这些文件每轮都会变，进仓库只会把 git status 撑爆、让 auto-commit 误判成"有改动"。
+.continue/.logs/
 .continue/logs/
 .continue/*.off
 .continue/*.state.json

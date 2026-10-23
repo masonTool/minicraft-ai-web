@@ -17,7 +17,17 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,9 +47,9 @@ function sh(cmd, args) {
   return spawnSync(cmd, args, { cwd: ROOT, env: baseEnv, encoding: 'utf8' });
 }
 
-function hook(script, payload, env = {}, args = []) {
-  const res = spawnSync(process.execPath, [join(HOOKS, script), ...args], {
-    cwd: ROOT,
+function hook(script, payload, env = {}, args = [], cwd = ROOT) {
+  const res = spawnSync(process.execPath, [join(cwd, '.continue', 'hooks', script), ...args], {
+    cwd,
     env: { ...baseEnv, ...env },
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
     encoding: 'utf8',
@@ -110,7 +120,8 @@ try {
     if (name.endsWith('.mjs')) cpSync(join(HERE, name), join(HOOKS, name));
   }
   // doing/ 也忽略：队列用例会写队列文件，不忽略的话"工作区干净"那条永远不成立
-  writeFileSync(join(ROOT, '.continue', '.gitignore'), 'logs/\nauto.off\ndoing/\n');
+  // .worktree/ 同理：交接用例会在里面建树、写收件箱
+  writeFileSync(join(ROOT, '.continue', '.gitignore'), '.logs/\nauto.off\ndoing/\n.worktree/\n');
   config('');
   sh('git', ['init', '-q']);
   sh('git', ['add', '-A']);
@@ -123,17 +134,17 @@ try {
   });
 
   check('auto-continue · 纯问答会话不凭空造日志文件', () => {
-    const file = join(ROOT, '.continue', 'logs', 's-none', 'run.md');
+    const file = join(ROOT, '.continue', '.logs', 's-none', 'run.md');
     return expect(!existsSync(file), `不应创建 ${file}`, null);
   });
 
   check('日志留痕 · 递任务与空转可区分且 stopSeen 累加', () => {
     queue('s-trace', '- [ ] 甲');
     hook('auto-continue.mjs', stop('s-trace'));
-    const first = readFileSync(join(ROOT, '.continue', 'logs', 's-trace', 'run.md'), 'utf8');
+    const first = readFileSync(join(ROOT, '.continue', '.logs', 's-trace', 'run.md'), 'utf8');
     rmSync(join(DOING, 's-trace.md'));
     hook('auto-continue.mjs', stop('s-trace'));
-    const second = readFileSync(join(ROOT, '.continue', 'logs', 's-trace', 'run.md'), 'utf8');
+    const second = readFileSync(join(ROOT, '.continue', '.logs', 's-trace', 'run.md'), 'utf8');
     if (!(first.includes('递任务') && !first.includes('空转') && first.includes('"stopSeen":1'))) {
       return expect(false, `首轮应只有"递任务"且 stopSeen=1，实际：${first.split('\n').slice(-4).join(' / ')}`, null);
     }
@@ -395,13 +406,13 @@ try {
    * 归档改成**累积式**：一个会话一个 `queue.md` / `decision.md`，
    * 新批次插到最上面，批次之间 `----------` 分隔。`doing/` 的规则不变（一批一文件）。
    */
-  check('archive-queue · 归档成 logs/<会话ID>/queue.md（累积，不按批次新建）', () => {
+  check('archive-queue · 归档成 .logs/<会话ID>/queue.md（累积，不按批次新建）', () => {
     queue('s-arch', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('archive-queue.mjs', null, {}, ['s-arch']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 's-arch.md'))) return expect(false, '队列文件应已移出 doing/', r);
-    const dest = join(ROOT, '.continue', 'logs', 's-arch', 'queue.md');
-    if (!existsSync(dest)) return expect(false, '应有 logs/s-arch/queue.md', r);
+    const dest = join(ROOT, '.continue', '.logs', 's-arch', 'queue.md');
+    if (!existsSync(dest)) return expect(false, '应有 .logs/s-arch/queue.md', r);
     const text = readFileSync(dest, 'utf8');
     return expect(
       /^## 批次 \S+ · /m.test(text) && text.includes('- [x] 甲'),
@@ -419,7 +430,7 @@ try {
     );
     const r = hook('archive-queue.mjs', null, {}, ['s-arch2']);
     if (r.code !== 0) return expect(false, '第二次归档应 exit 0', r);
-    const text = readFileSync(join(ROOT, '.continue', 'logs', 's-arch2', 'queue.md'), 'utf8');
+    const text = readFileSync(join(ROOT, '.continue', '.logs', 's-arch2', 'queue.md'), 'utf8');
     const first = text.indexOf('## 批次 20260101-0002');
     const second = text.indexOf('## 批次 19990101-0000');  // 夹具 queue() 固定写这个号
     const seps = (text.match(/^-{10}$/gm) ?? []).length;
@@ -444,7 +455,7 @@ try {
     const r = hook('archive-queue.mjs', null, {}, ['s-archdec', '--decision']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 's-archdec-decision.md'))) return expect(false, '决策记录应已移出 doing/', r);
-    const dest = join(ROOT, '.continue', 'logs', 's-archdec', 'decision.md');
+    const dest = join(ROOT, '.continue', '.logs', 's-archdec', 'decision.md');
     return expect(existsSync(dest), `应有 ${dest}`, r);
   });
 
@@ -543,7 +554,7 @@ try {
       stop_hook_active: true,
       loop_count: 2,
     });
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-cont', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 's-cont', 'run.md'), 'utf8');
     return expect(
       r.code === 2 && log.includes('续跑第2次'),
       `应递任务且日志带"续跑第2次"，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -597,6 +608,269 @@ try {
     );
   });
 
+  /**
+   * 待接管队列（`worktree.mjs` 建树时写的 `doing/worktree.md`）：改名 + 补头部会话 ID
+   * 必须由钩子做，而且「已接管 / 冲突 / 失败」三种结果都不能静默——这是"换棵树继续干活"
+   * 的唯一交接通道，静默一次就等于任务丢了。
+   */
+  check('queue-init · 待接管队列被改名接管，头部会话 ID 补全', () => {
+    const sid = 'wt-adopt';
+    writeFileSync(
+      join(DOING, 'worktree.md'),
+      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0000\n\n- [ ] 甲\n- [ ] [自审] 占位\n',
+    );
+    const r = hook('queue-init.mjs', prompt(sid));
+    const adopted = existsSync(join(DOING, `${sid}.md`)) ? readFileSync(join(DOING, `${sid}.md`), 'utf8') : '';
+    if (existsSync(join(DOING, 'worktree.md'))) {
+      return expect(false, 'worktree.md 应已改名（留着的话下次会话还会把它当待接管队列）', r);
+    }
+    if (!adopted.startsWith(`# 队列 · 会话 ${sid}\n`)) {
+      return expect(false, `第一行应补成完整会话 ID，实际：${JSON.stringify(adopted.split('\n')[0])}`, r);
+    }
+    return expect(r.out.includes('已接管交接队列'), '注入里应说明"已接管"（否则 AI 会再建一份队列）', r);
+  });
+
+  check('queue-init · 目标队列已存在时不覆盖待接管文件', () => {
+    const sid = 'wt-conflict';
+    writeFileSync(
+      join(DOING, 'worktree.md'),
+      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0001\n\n- [ ] 乙\n- [ ] [自审] 占位\n',
+    );
+    queue(sid, '- [ ] 已有任务');
+    const before = readFileSync(join(DOING, `${sid}.md`), 'utf8');
+    const r = hook('queue-init.mjs', prompt(sid));
+    const after = readFileSync(join(DOING, `${sid}.md`), 'utf8');
+    if (!existsSync(join(DOING, 'worktree.md'))) return expect(false, '冲突时不该动 worktree.md', r);
+    if (after !== before) return expect(false, '冲突时不该改写已有队列（那就是丢进度）', r);
+    rmSync(join(DOING, 'worktree.md'));
+    return expect(r.out.includes('同时存在'), '注入里应告警"两份都在，人工合并"', r);
+  });
+
+  /**
+   * 「别的会话的队列」这一段的三态：本会话有队列 → 不提；别人活跃 → 给建树指引；
+   * 别人已停 → 只列出来，走"接管/忽略"。
+   * 分档的意义：对**活着**的会话开工作树并行，对**死掉**的才谈接管——旧版把两者
+   * 写成同一句"先问用户"，于是"正在跑"的场景被引导成"要不要接管"（实测就是这个后果）。
+   */
+  const touchLog = (stem, ageMin = 0) => {
+    const dir = join(ROOT, '.continue', '.logs', stem);
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, 'run.md');
+    writeFileSync(file, '# 会话日志\n');
+    if (ageMin > 0) {
+      const at = new Date(Date.now() - ageMin * 60 * 1000);
+      utimesSync(file, at, at);
+    }
+  };
+  const clearDoing = () => {
+    for (const name of readdirSync(DOING)) rmSync(join(DOING, name));
+  };
+  const injectText = (r) => {
+    try {
+      return JSON.parse(r.out).hookSpecificOutput?.additionalContext ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  check('queue-init · 别的会话活跃 → 标注"可能还在跑"并给出建树指引', () => {
+    clearDoing();
+    queue('s-active', '- [ ] 甲');
+    touchLog('s-active');
+    const r = hook('queue-init.mjs', prompt('s-quiet-1'));
+    const ctx = injectText(r);
+    if (!ctx.includes('可能还在跑')) return expect(false, `应标注"可能还在跑"，实际：${ctx.slice(0, 300)}`, r);
+    return expect(
+      ctx.includes('worktree.mjs') && ctx.includes('--task='),
+      '活跃会话应给出建树指引（否则又退化成"要不要接管"）',
+      r,
+    );
+  });
+
+  check('queue-init · 本会话已有队列 → 不再提别的会话队列', () => {
+    queue('s-quiet-2', '- [ ] 自己的活');
+    const r = hook('queue-init.mjs', prompt('s-quiet-2'));
+    const ctx = injectText(r);
+    return expect(!ctx.includes('其他会话还有未完成队列'), '有自己的队列时不该再提别人（会诱导接管）', r);
+  });
+
+  check('queue-init · 别的会话已停 → 只列出，不给建树指引', () => {
+    clearDoing();
+    queue('s-stale', '- [ ] 乙');
+    touchLog('s-stale', 60);
+    const r = hook('queue-init.mjs', prompt('s-quiet-3'));
+    const ctx = injectText(r);
+    if (!ctx.includes('已停（可接管）')) return expect(false, `应标注"已停（可接管）"，实际：${ctx.slice(0, 300)}`, r);
+    clearDoing();
+    return expect(!ctx.includes('--task='), '已停会话不该给建树指引（该谈接管）', r);
+  });
+
+  /**
+   * 树里不列父树的队列：树是从 HEAD 检出的，父树 `doing/` 里已入库的队列会一起跟过来，
+   * 照旧列出就会诱发"要不要接管"的假决策——正确答案是"那些跟你无关"。
+   */
+  check('queue-init · 并行树里不列父树的队列，并说明原因', () => {
+    clearDoing();
+    queue('s-parent', '- [ ] 父树的活');
+    const wt = join(ROOT, '.continue', '.worktree', 'selftest-wt');
+    const added = sh('git', ['worktree', 'add', '-b', 'continue/selftest-wt', wt, 'HEAD']);
+    if (added.status !== 0) return expect(false, `建树失败：${(added.stderr || '').slice(0, 200)}`, null);
+    // `doing/` 在临时项目里是 gitignore 的，HEAD 带不过来——手工放一份"别人的队列"
+    mkdirSync(join(wt, '.continue', 'doing'), { recursive: true });
+    writeFileSync(
+      join(wt, '.continue', 'doing', 's-foreign.md'),
+      '# 队列\n\n> 状态：执行中\n> 批次：19990101-0002\n\n- [ ] 别人的\n',
+    );
+    const r = hook('queue-init.mjs', prompt('s-in-tree'), {}, [], wt);
+    const ctx = injectText(r);
+    sh('git', ['worktree', 'remove', '--force', wt]);
+    sh('git', ['branch', '-D', 'continue/selftest-wt']);
+    if (ctx.includes('其他会话还有未完成队列')) {
+      return expect(false, '树里不该列父树 / 祖先树的队列', r);
+    }
+    return expect(ctx.includes('这是一棵并行工作树'), '应说明"这些队列不是本树的任务，已忽略"', r);
+  });
+
+  /**
+   * 工作树里的**收尾注入**必须多出第 6 步。
+   *
+   * 为什么单独钉：`worktree-sync.mjs` 写得再对，注入里不提它，AI 收完文档就停了——
+   * 而"停了"在日志里和"这批没有要同步的东西"长得一样，只能靠断言注入文案提前发现。
+   */
+  check('auto-continue · 工作树里收尾注入多出"提交后 rebase + merge 合回父分支"这一步', () => {
+    const wt = join(ROOT, '.continue', '.worktree', 'selftest-wrap-hint');
+    const added = sh('git', ['worktree', 'add', '-b', 'continue/selftest-wrap-hint', wt, 'HEAD']);
+    if (added.status !== 0) return expect(false, `建树失败：${(added.stderr || '').slice(0, 200)}`, null);
+    const sid = 's-tree-wrap';
+    mkdirSync(join(wt, '.continue', 'doing'), { recursive: true });
+    writeFileSync(
+      join(wt, '.continue', 'doing', `${sid}.md`),
+      '# 队列\n\n> 状态：执行中\n> 批次：19990101-0002\n\n' +
+        '- [x] 甲\n  - 做了什么：x\n  - 验证：`true`\n' +
+        '- [x] [自审] 占位\n  - L1：x\n  - L2：y\n  - L3：z\n',
+    );
+    const r = hook('auto-continue.mjs', stop(sid), {}, ['--event=Stop'], wt);
+    sh('git', ['worktree', 'remove', '--force', wt]);
+    sh('git', ['branch', '-D', 'continue/selftest-wrap-hint']);
+    const text = `${r.err}${r.out}`;
+    if (!/worktree-sync\.mjs/.test(text)) {
+      return expect(false, '收尾注入应点名 worktree-sync.mjs（否则 AI 收完文档就停）', r);
+    }
+    return expect(
+      /--run=rebase/.test(text) && /收尾提交/.test(text),
+      '注入应写清 rebase 在收尾提交之后、以及三步命令',
+      r,
+    );
+  });
+
+  /**
+   * 工作树收尾同步（`worktree-sync.mjs`）：认父树 → rebase → 合回父分支。
+   *
+   * 另起一个仓库：这条会**真的** rebase / merge，而 ROOT 里其他用例随时让工作区变脏
+   * （脚本要求"收尾提交之后"才同步，脏着跑被拒是下面另一条断言），两者混在一起会互相干扰。
+   */
+  const SYNC_REPO = mkdtempSync(join(tmpdir(), 'continue-selftest-sync-'));
+  try {
+    const sgit = (args, cwd = SYNC_REPO) => spawnSync('git', args, { cwd, env: baseEnv, encoding: 'utf8' });
+    const syHooks = join(SYNC_REPO, '.continue', 'hooks');
+    mkdirSync(syHooks, { recursive: true });
+    for (const name of ['lib.mjs', 'worktree-sync.mjs']) cpSync(join(HERE, name), join(syHooks, name));
+    // `.worktree/` 必须忽略：子树目录在父树里面，不忽略会让父树永远"工作区不干净"
+    writeFileSync(join(SYNC_REPO, '.continue', '.gitignore'), '.logs/\n.worktree/\n');
+    sgit(['init', '-q']);
+    sgit(['add', '-A']);
+    sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'init']);
+
+    const parentDir = join(SYNC_REPO, 'parent');
+    const childDir = join(parentDir, '.continue', 'doing', '.worktree', 'child');
+    // 顺序要紧：先建父树（目标目录必须不存在/为空），再在父树里建子树。
+    // 反过来先把 `parentDir/.continue/...` mkdir 出来，`worktree add` 会因"目录非空"失败，
+    // 而失败被忽略时症状是"父树被认成主仓库"——排查起来会误以为是路径比较写错了。
+    const addParent = sgit(['worktree', 'add', '-q', parentDir, '-b', 'continue/parent']);
+    check('worktree-sync · 夹具：父树建得出来', () =>
+      expect(addParent.status === 0, `建父树失败：${(addParent.stderr || '').slice(0, 200)}`, {
+        code: addParent.status,
+      }),
+    );
+    mkdirSync(join(parentDir, '.continue', 'doing', '.worktree'), { recursive: true });
+    sgit(['worktree', 'add', '-q', childDir, '-b', 'continue/parent-child'], parentDir);
+
+    const sync = (args, cwd = childDir) =>
+      spawnSync(process.execPath, [join(syHooks, 'worktree-sync.mjs'), ...args], {
+        cwd,
+        env: baseEnv,
+        encoding: 'utf8',
+      });
+
+    check('worktree-sync · 主工作区明确"无需同步"且退出码 0', () => {
+      const r = sync(['--json'], SYNC_REPO);
+      return expect(
+        r.status === 0 && /"kind":"main"/.test(r.stdout ?? ''),
+        '主工作区不该被当成"前置条件失败"（退出码 1），否则 && 链与 e2e 分不清正常与故障',
+        { code: r.status, out: r.stdout, err: r.stderr },
+      );
+    });
+
+    check('worktree-sync · 树里认出的父分支就是父树当前 HEAD', () => {
+      const r = sync(['--json']);
+      let data = null;
+      try {
+        data = JSON.parse(r.stdout ?? '{}');
+      } catch {
+        /* 落到下面的断言里报 */
+      }
+      if (!data) return expect(false, '--json 应输出一行合法 JSON', { code: r.status, out: r.stdout, err: r.stderr });
+      if (data.parent?.branch !== 'continue/parent') {
+        return expect(false, `父分支应为 continue/parent，实际 ${JSON.stringify(data.parent)}`, { code: r.status, out: r.stdout });
+      }
+      return expect(data.kind === 'worktree', `kind 应为 worktree，实际 ${data.kind}`, { code: r.status, out: r.stdout });
+    });
+
+    check('worktree-sync · rebase + merge 把树分支合回父分支', () => {
+      writeFileSync(join(childDir, 'tree.txt'), 'from tree\n');
+      sgit(['add', '-A'], childDir);
+      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'tree work'], childDir);
+      writeFileSync(join(parentDir, 'parent.txt'), 'from parent\n');
+      sgit(['add', '-A'], parentDir);
+      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'parent moves'], parentDir);
+
+      const reb = sync(['--run=rebase']);
+      if (reb.status !== 0) return expect(false, `rebase 应成功，实际 exit=${reb.status}`, { code: reb.status, out: reb.stdout, err: reb.stderr });
+      const mrg = sync(['--run=merge']);
+      if (mrg.status !== 0) return expect(false, `merge 应成功，实际 exit=${mrg.status}`, { code: mrg.status, out: mrg.stdout, err: mrg.stderr });
+      if (!existsSync(join(parentDir, 'tree.txt'))) return expect(false, '父树应拿到 tree.txt', { code: mrg.status, out: mrg.stdout });
+      const merged = sgit(['merge-base', '--is-ancestor', 'continue/parent-child', 'HEAD'], parentDir);
+      return expect(merged.status === 0, '父分支应已包含树分支（合并在 HEAD 上）', { code: merged.status });
+    });
+
+    check('worktree-sync · 工作区脏时拒绝 rebase，并说清"先收尾提交"', () => {
+      writeFileSync(join(childDir, 'dirty.txt'), 'dirty\n');
+      const r = sync(['--run=rebase']);
+      writeFileSync(join(childDir, '.keep'), '');
+      const why = r.status === 1 && (r.stderr ?? '').includes('收尾提交');
+      sgit(['clean', '-fd'], childDir);
+      return expect(why, '脏工作区应 exit 1 且提示"同步要在收尾提交之后跑"', { code: r.status, out: r.stdout, err: r.stderr });
+    });
+
+    check('worktree-sync · 冲突时退出码 3 并列出冲突文件（不自动 abort）', () => {
+      writeFileSync(join(childDir, 'conflict.txt'), 'tree side\n');
+      sgit(['add', '-A'], childDir);
+      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'tree side'], childDir);
+      writeFileSync(join(parentDir, 'conflict.txt'), 'parent side\n');
+      sgit(['add', '-A'], parentDir);
+      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'parent side'], parentDir);
+
+      const r = sync(['--run=rebase']);
+      const ok = r.status === 3 && (r.stderr ?? '').includes('conflict.txt') && (r.stderr ?? '').includes('--continue');
+      // 收尾：把 rebase 退回去，否则后面的用例会在一棵"正在变基"的树里跑
+      sgit(['rebase', '--abort'], childDir);
+      sgit(['reset', '--hard', '-q', 'HEAD'], parentDir);
+      return expect(ok, '冲突应 exit 3、列出 conflict.txt、给 --continue 指引', { code: r.status, out: r.stdout, err: r.stderr });
+    });
+  } finally {
+    spawnSync('/bin/rm', ['-rf', SYNC_REPO]);
+  }
+
   check('queue-init · 注入里写了里程碑协议（队列内节点 + 硬停 + 不许替用户确认）', () => {
     const r = hook('queue-init.mjs', prompt('s-init-ms'));
     let ctx = '';
@@ -615,10 +889,10 @@ try {
     );
   });
 
-  check('queue-init · 旧版计划文件被归档到 logs/（机制已移除，不留在 doing/）', () => {
+  check('queue-init · 旧版计划文件被归档到 .logs/（机制已移除，不留在 doing/）', () => {
     writeFileSync(join(DOING, 's-legacy-plan.md'), '# 计划\n\n## MS1 · 甲\n- [ ] `MS1.1` 一\n');
     const r = hook('queue-init.mjs', prompt('s-legacy'));
-    const dest = join(ROOT, '.continue', 'logs', 's-legacy', 'plan.md');
+    const dest = join(ROOT, '.continue', '.logs', 's-legacy', 'plan.md');
     return expect(
       r.code === 0 && !existsSync(join(DOING, 's-legacy-plan.md')) && existsSync(dest),
       `旧计划应搬进 ${dest}（归档、不删）`,
@@ -654,7 +928,7 @@ try {
     hook('queue-init.mjs', prompt('s-ups'));
     hook('auto-continue.mjs', prompt('s-ups'));
     hook('auto-continue.mjs', prompt('s-ups'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-ups', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 's-ups', 'run.md'), 'utf8');
     if (!log.includes('收到用户消息 · 第 1 次') || !log.includes('收到用户消息 · 第 2 次')) {
       return expect(false, `应记两次"收到用户消息"，实际：${log.split('\n').slice(-5).join(' / ')}`, null);
     }
@@ -665,7 +939,7 @@ try {
     queue('s-event', '- [ ] 甲');
     // payload 说这是 Stop，参数说这是 UserPromptSubmit → 以参数为准（走"收到用户消息"分支）
     const r = hook('auto-continue.mjs', stop('s-event'), {}, ['--event=UserPromptSubmit']);
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 's-event', 'run.md'), 'utf8');
     return expect(
       r.code === 0 && log.includes('[auto-continue · UserPromptSubmit]') && log.includes('收到用户消息'),
       `参数应覆盖 payload 推断并写进日志行首，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -676,7 +950,7 @@ try {
   check('日志留痕 · 没有 --event 时退回 payload 推断', () => {
     queue('s-event2', '- [ ] 甲');
     hook('auto-continue.mjs', stop('s-event2'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event2', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 's-event2', 'run.md'), 'utf8');
     return expect(log.includes('[auto-continue · Stop]'), '无参数时应按 payload 写出 Stop', null);
   });
 
@@ -688,7 +962,7 @@ try {
 
   check('auto-commit · 干净时也留一行并累计 stopSeen', () => {
     hook('auto-commit.mjs', stop('c-trace'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-trace', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 'c-trace', 'run.md'), 'utf8');
     return expect(
       /空转 · 工作区干净|就绪 · 工作区干净|放行 · 工作区已干净/.test(log) && log.includes('"stopSeen":1'),
       `应留痕且 stopSeen=1，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -698,7 +972,7 @@ try {
 
   check('提交守卫日志 · 事件来源同样写进行首', () => {
     hook('auto-commit.mjs', stop('c-event'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-event', 'run.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 'c-event', 'run.md'), 'utf8');
     return expect(log.includes('[auto-commit · Stop]'), '日志行首应带事件名', null);
   });
 
@@ -804,6 +1078,265 @@ try {
     if (bad.code !== 1) return expect(false, '失败时应 exit 1', bad);
     return expect(good.code === 0, '通过时应 exit 0', good);
   });
+
+  // ---------------------------------------------------------------- 队列写回（原子 + 换行风格）
+  /**
+   * 钩子对队列只有两处写：递任务时 `[ ]`→`[~]`、连续 N 轮没做完 `[ ]`/`[~]`→`[阻塞]`。
+   * 这两处写的是**唯一事实源**，所以钉三件事：
+   *   · 换行风格跟原文件（CRLF 队列不能被整体改写成 LF，否则 diff 全红）；
+   *   · 落盘是 tmp+rename（不留 `.tmp`；中途被杀也不会留半截文件）；
+   *   · 行号对得上（`markEntryDoing` 与 `parseQueue` 必须同一套切分，否则标到别的条目）。
+   */
+  check('队列写回 · CRLF 原样保留、无 .tmp 残留、按序号改对条目', () => {
+    const file = join(DOING, 's-crlf.md');
+    mkdirSync(DOING, { recursive: true });
+    writeFileSync(file, '# 队列\r\n\r\n> 状态：执行中\r\n\r\n- [ ] 甲\r\n- [ ] 乙\r\n');
+    const script = [
+      `import { markBlocked, markEntryDoing, parseQueue } from ${JSON.stringify(join(HOOKS, 'lib.mjs'))};`,
+      "import { readFileSync } from 'node:fs';",
+      `const p = ${JSON.stringify(file)};`,
+      'markBlocked(p, 1);',
+      "const q = parseQueue(readFileSync(p, 'utf8'));",
+      'markEntryDoing(p, q.entries.find((e) => e.kind === "todo"));',
+      "process.stdout.write(readFileSync(p, 'utf8'));",
+    ].join('\n');
+    const r = sh(process.execPath, ['--input-type=module', '-e', script]);
+    const text = r.stdout ?? '';
+    const crlf = (text.match(/\r\n/g) ?? []).length;
+    const strayLf = (text.replace(/\r\n/g, '').match(/\n/g) ?? []).length;
+    return expect(
+      r.status === 0 &&
+        crlf === 6 &&
+        strayLf === 0 &&
+        !existsSync(`${file}.tmp`) &&
+        text.includes('- [阻塞] 甲') &&
+        text.includes('- [~] 乙'),
+      '应保持 6 个 CRLF、无裸 LF、无 .tmp、且两条各按序号改对',
+      { code: r.status, crlf, strayLf, err: (r.stderr || '').slice(0, 300), text: text.slice(0, 200) },
+    );
+  });
+
+// ---------------------------------------------------------------- 交接派发（dispatch / 收件箱接管）
+/**
+ * 一条完整链路：主工作区写 `todo/queue.md` + `context.md` → Stop 派发成工作树 →
+ * 新树里第一条消息接管成 `doing/<新 sid>.md`。
+ *
+ * 临时项目本来就是 git repo（上面 `git init` 过），所以 `git worktree add` 能真跑；
+ * `--no-window` 保证无 GUI 环境不会弹窗——CI 里弹一个指向临时目录的 IDE 窗口是灾难。
+ *
+ * 每一步都单独断言（建树 / 状态 / 幂等 / 接管 / 递任务），失败时能一眼看出断在哪一环。
+ */
+const TODO_DIR = join(ROOT, '.continue', 'doing', '.worktree', 'todo');
+const PARENT_SID = 'd1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1';
+const CHILD_SID = 'd2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2';
+const OTHER_SID = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+let dispatchedTree = null;
+
+/**
+ * 交接的**前提**：`doing/` 里已经有别的会话在跑。
+ * 空树时只该在本会话干——`dispatch` 有守卫挡着，用例里必须先造出这个前提。
+ */
+function writeOtherQueue() {
+  mkdirSync(DOING, { recursive: true });
+  writeFileSync(
+    join(DOING, 'bbbbbb.md'),
+    `# 队列 · 会话 ${OTHER_SID}\n\n> 状态：执行中\n> 批次：19990101-0009\n\n- [ ] 别人的活\n`,
+  );
+}
+
+function writeTodo() {
+  mkdirSync(TODO_DIR, { recursive: true });
+  writeFileSync(
+    join(TODO_DIR, 'queue.md'),
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0000\n\n- [ ] 甲任务\n- [ ] [自审] 收尾前三层自审\n`,
+  );
+  writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n把甲任务做完，验证方式是看 a.txt。\n');
+  rmSync(join(TODO_DIR, 'state.json'), { force: true });
+  writeOtherQueue();
+}
+
+check('交接 · 主工作区不接管收件箱，只提示待派发', () => {
+  writeTodo();
+  const r = hook('queue-init.mjs', prompt('c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0'), {}, ['--event=UserPromptSubmit']);
+  if (!existsSync(join(TODO_DIR, 'queue.md'))) return expect(false, '主工作区把收件箱抢走了', r);
+  if (existsSync(join(DOING, 'c0c0c0.md'))) return expect(false, '主工作区不应生成本会话队列', r);
+  return expect(r.out.includes('待派发队列'), '注入应提示收件箱有待派发队列', r);
+});
+
+check('交接 · dispatch 按会话前 6 位建树并记录状态', () => {
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  const stateFile = join(TODO_DIR, 'state.json');
+  if (!existsSync(stateFile)) return expect(false, '应写 state.json', r);
+  const state = JSON.parse(readFileSync(stateFile, 'utf8'));
+  dispatchedTree = state.tree;
+  if (r.code !== 0) return expect(false, '应 exit 0（失败也不拦会话）', r);
+  if (state.branch !== 'continue/d1d1d1') {
+    return expect(false, `分支应为 continue/d1d1d1，实际 ${state.branch}`, r);
+  }
+  return expect(
+    existsSync(join(state.tree, '.continue', 'hooks', 'queue-init.mjs')),
+    '新树应检出 HEAD（含钩子）',
+    r,
+  );
+});
+
+check('交接 · 已派发且树还在 → 不重复建树', () => {
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  const state = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
+  return expect(
+    r.code === 0 && state.tree === dispatchedTree && r.out.includes('已有待接管'),
+    `应提示已有执行树、不重建（tree=${state.tree} 期望=${dispatchedTree}）`,
+    r,
+  );
+});
+
+check('交接 · 新树第一条消息接管 todo（批次沿用 + 上下文附上）', () => {
+  const r = hook('queue-init.mjs', prompt(CHILD_SID), {}, ['--event=UserPromptSubmit'], dispatchedTree);
+  const target = join(dispatchedTree, '.continue', 'doing', 'd2d2d2.md');
+  if (!existsSync(target)) return expect(false, `应在树里生成 ${target}`, r);
+  const text = readFileSync(target, 'utf8');
+  if (!text.startsWith(`# 队列 · 会话 ${CHILD_SID}`)) return expect(false, '首行应换成新会话完整 ID', r);
+  if (!text.includes('19990101-0000')) return expect(false, '批次号应沿用', r);
+  if (existsSync(join(TODO_DIR, 'queue.md'))) return expect(false, '接管后应收件箱清空', r);
+  if (existsSync(join(TODO_DIR, 'context.md'))) return expect(false, '接管后 context 也应清空', r);
+  if (!r.out.includes('把甲任务做完')) return expect(false, '注入应附上 context 原文', r);
+  const archived = join(dispatchedTree, '.continue', '.logs', 'd2d2d2', 'handoff.md');
+  return expect(existsSync(archived), 'context 应存档到 .logs/<sid>/handoff.md', r);
+});
+
+check('交接 · 新树里 Stop 正常递任务', () => {
+  const r = hook('auto-continue.mjs', stop(CHILD_SID), {}, ['--event=Stop'], dispatchedTree);
+  return expect(r.code === 2 && /1\/2 条/.test(`${r.err}${r.out}`), '应递第 1/2 条', r);
+});
+
+/**
+ * 同一会话派发第二批：树 1 还在，但 `queue.md` 内容变了。
+ * 只看"树还在"会把它当成"已派发"放行，第二批永远不派发且不报错——
+ * 这是**静默丢活**，比多建一棵树严重得多。
+ */
+check('交接 · 收件箱内容变了 → 允许再派发一棵（-2）', () => {
+  writeFileSync(
+    join(TODO_DIR, 'queue.md'),
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0001\n\n- [ ] 乙任务\n- [ ] [自审] 自审\n`,
+  );
+  writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n第二批。\n');
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  const state = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
+  return expect(
+    state.treeName === 'd1d1d1-2' && existsSync(state.tree),
+    `内容变了应再派发一棵（实际 treeName=${state.treeName}）`,
+    r,
+  );
+});
+
+/**
+ * 反向：`doing/` 里一个人都没有时**不该派发**。
+ * 这条链最容易犯的错是"因为收件箱有内容就建树"——空树建树等于把
+ * "一条命令能做完的事"拆成"建树 + 新窗口 + 接管"，用户每次都得关一个多余窗口。
+ */
+check('交接 · doing/ 里没人在跑 → 不派发', () => {
+  for (const name of readdirSync(DOING)) {
+    if (name.endsWith('.md')) rmSync(join(DOING, name), { force: true });
+  }
+  mkdirSync(TODO_DIR, { recursive: true });
+  writeFileSync(
+    join(TODO_DIR, 'queue.md'),
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0002\n\n- [ ] 丙任务\n- [ ] [自审] 自审\n`,
+  );
+  rmSync(join(TODO_DIR, 'state.json'), { force: true });
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  return expect(
+    r.code === 0 && !existsSync(join(TODO_DIR, 'state.json')) && /没有别的会话队列/.test(r.out),
+    '应放行并说明交接不触发（不建树、不写 state）',
+    r,
+  );
+});
+
+/**
+ * 反向的另一半：`doing/` 里那份队列**就是本会话的**。
+ * 拿文件名（sid 前 6 位）去跟完整会话 ID 比会永远不等，于是注入说"有别人在跑、
+ * Stop 会建树"，而 `dispatch` 的守卫说"本会话已在干、不派发"——两边打架。
+ */
+check('交接 · 只有本会话的队列时，不说"有别人在跑"', () => {
+  const own = 'e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0';
+  for (const name of readdirSync(DOING)) {
+    if (name.endsWith('.md')) rmSync(join(DOING, name), { force: true });
+  }
+  writeFileSync(
+    join(DOING, 'e0e0e0.md'),
+    `# 队列 · 会话 ${own}\n\n> 状态：执行中\n> 批次：19990101-0003\n\n- [ ] 自己的活\n`,
+  );
+  writeFileSync(
+    join(TODO_DIR, 'queue.md'),
+    `# 队列 · 会话 ${own}\n\n> 状态：执行中\n> 批次：19990101-0004\n\n- [ ] 草稿\n`,
+  );
+  rmSync(join(TODO_DIR, 'state.json'), { force: true });
+  const r = hook('queue-init.mjs', prompt(own), {}, ['--event=UserPromptSubmit']);
+  return expect(
+    /没有\**别的会话队列/.test(r.out),
+    '注入应说"没有别的会话队列"（自己的队列不算别人）',
+    r,
+  );
+});
+
+// ---------------------------------------------------------------- version
+/**
+ * 版本项三态：一致 / 落后 / 没有技能目录。
+ *
+ * 关键断言是"**永远 exit 0**"——它是提示不是门禁：技能目录常常不在版本库里
+ * （被当成本地工具），CI 上根本没有它；把它判红等于给所有 CI 提一个无解要求。
+ */
+const versionFixtures = (installedVersion, skillVersion) => {
+  writeFileSync(
+    join(ROOT, '.continue', '.installed.json'),
+    JSON.stringify({ version: installedVersion, installedAt: '2000-01-01T00:00:00.000Z', files: {} }),
+  );
+  const dir = join(ROOT, '.codebuddy', 'skills', 'continue-task');
+  if (skillVersion === null) {
+    rmSync(join(ROOT, '.codebuddy'), { recursive: true, force: true });
+    return;
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'VERSION'), `${skillVersion}\n`);
+};
+
+check('version · 实例与技能目录一致 → 报一致且 exit 0', () => {
+  versionFixtures('1.2.3', '1.2.3');
+  const r = hook('audit-version.mjs', {});
+  return expect(r.code === 0 && /1\.2\.3/.test(r.out) && /=\s*技能/.test(r.out), '应报"实例 vX = 技能 vX"', r);
+});
+
+check('version · 实例落后 → 提示重跑安装器，但仍 exit 0', () => {
+  versionFixtures('1.2.3', '1.2.4');
+  const r = hook('audit-version.mjs', {});
+  if (r.code !== 0) return expect(false, '版本落后不该判红（技能目录可能不在版本库里）', r);
+  return expect(/≠/.test(r.out) && /install\.mjs/.test(r.out), '应提示重跑安装器', r);
+});
+
+check('version · 没有技能目录 → 跳过比对，exit 0', () => {
+  versionFixtures('1.2.3', null);
+  const r = hook('audit-version.mjs', {});
+  return expect(r.code === 0 && /跳过/.test(r.out), '应提示"技能目录不在，跳过比对"', r);
+});
+
+// ---------------------------------------------------------------- 布局迁移（logs → .logs）
+/**
+ * 改名类改动最怕"代码读新路径、老归档留在旧路径"：功能全绿，历史却静默丢了。
+ * 这里直接删掉新目录、造一份旧的，验的是**整体 rename**，不是"读不到就算了"。
+ */
+check('布局迁移 · 旧的 logs/ 自动改名 .logs/（归档跟着走）', () => {
+  rmSync(join(ROOT, '.continue', '.logs'), { recursive: true, force: true });
+  const legacy = join(ROOT, '.continue', 'logs');
+  mkdirSync(join(legacy, 'oldsid'), { recursive: true });
+  writeFileSync(join(legacy, 'oldsid', 'queue.md'), '# 旧归档\n');
+  const r = hook('queue-init.mjs', prompt('f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0'), {}, ['--event=UserPromptSubmit']);
+  return expect(
+    existsSync(join(ROOT, '.continue', '.logs', 'oldsid', 'queue.md')) && !existsSync(legacy),
+    '旧 logs/ 应整体改名成 .logs/（内容不丢）',
+    r,
+  );
+});
+
 } finally {
   if (existsSync(ROOT)) rmSync(ROOT, { recursive: true, force: true });
 }

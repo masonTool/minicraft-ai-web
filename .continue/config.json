@@ -5,9 +5,14 @@
     "timeoutSec": 180,
     "project": [
       "npm run check:fast"
-    ]
+    ],
+    "projectSlow": []
   },
   "git": {
     "push": true
+  },
+  "worktree": {
+    "auto": true,
+    "openWindow": true
   }
 }

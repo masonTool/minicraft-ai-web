@@ -67,7 +67,13 @@ const FILES = {
  * 而且报错只说"TASKS.md 5506 行 > 上限 600"，不会告诉你这是本项目改过的值。
  * 所以由项目自己的门禁记住"应该有哪几项被放宽"，重装后当场报出来。
  */
-const PROJECT_DOC_LIMITS = { TASKS: 7000, TASKS_BYTES: 921600 };
+/**
+ * ⚠️ 2026-10-24 起框架把字节上限的键从 `TASKS_BYTES` 改名成 `DOC_BYTE_LIMITS.TASKS`，
+ * 于是这里也按"行数表 / 字节表"分开记：两个键现在同名（都叫 `TASKS`），只能各自在自己的
+ * `export const DOC_LIMITS` / `export const DOC_BYTE_LIMITS` 块里取值，否则会取串。
+ */
+const PROJECT_DOC_LIMITS = { TASKS: 7000 };
+const PROJECT_DOC_BYTE_LIMITS = { TASKS: 921600 };
 
 const LIMITS = {
   /**
@@ -236,21 +242,32 @@ for (const [name, url] of [
   } catch {
     /* 没有 lib.mjs 说明框架没装，交给框架自检报，这里不重复 */
   }
-  for (const [key, want] of Object.entries(PROJECT_DOC_LIMITS)) {
-    const m = new RegExp(`\\b${key}:\\s*(\\d+)`).exec(text);
+  /** 只在一个 `export const <名字>` 块内取键值：两张表现在都有 `TASKS` 键，混着找会取串。 */
+  const limitIn = (blockName, key) => {
+    const start = text.indexOf(`export const ${blockName}`);
+    if (start < 0) return null;
+    const end = text.indexOf('\n};', start);
+    const body = end < 0 ? text.slice(start) : text.slice(start, end);
+    const m = new RegExp(`\\b${key}:\\s*(\\d+)`).exec(body);
+    return m ? Number(m[1]) : null;
+  };
+  const wanted = [
+    ...Object.entries(PROJECT_DOC_LIMITS).map(([key, want]) => [key, want, 'DOC_LIMITS']),
+    ...Object.entries(PROJECT_DOC_BYTE_LIMITS).map(([key, want]) => [key, want, 'DOC_BYTE_LIMITS']),
+  ];
+  for (const [key, want, block] of wanted) {
+    const got = limitIn(block, key);
     // 键不见了也算坏：重装会把 lib.mjs 整份覆盖回框架默认值，
     // 旧写法 `continue` 会让"放宽项消失"这件事完全没有提示。
-    if (!m) {
-      bad.push(`${key} 不见了（重装把 lib.mjs 覆盖回默认值？）`);
+    if (got === null) {
+      bad.push(`${block}.${key} 不见了（重装把 lib.mjs 覆盖回默认值？）`);
       continue;
     }
-    if (Number(m[1]) < want) bad.push(`${key} 现在是 ${m[1]}，应为 ${want}`);
+    if (got < want) bad.push(`${block}.${key} 现在是 ${got}，应为 ${want}`);
   }
   console.log(
-    `${bad.length > 0 ? '✗' : '✓'} 框架 DOC_LIMITS 放宽：` +
-      Object.entries(PROJECT_DOC_LIMITS)
-        .map(([key, want]) => `${key}=${want}`)
-        .join(' · '),
+    `${bad.length > 0 ? '✗' : '✓'} 框架文档上限放宽：` +
+      wanted.map(([key, want, block]) => `${block}.${key}=${want}`).join(' · '),
   );
   for (const line of bad) console.log(`  · ${line}`);
   if (bad.length > 0) {
