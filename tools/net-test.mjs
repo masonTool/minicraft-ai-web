@@ -147,6 +147,17 @@ try {
   }
 
   const alice = new TestClient('Alice');
+  /**
+   * 心跳（联机7）的探针：服务端在 join 成功时立刻 ping 一次，之后每 5s 一次。
+   * 这里**先挂监听再继续跑别的用例**，跑完再收结果——不对齐 5s 窗口，套件不会因此变慢。
+   */
+  const heartbeatSeen = new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), 5000);
+    alice.socket.once('ping', () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
   const welcomeA = await joinAndWaitWelcome(alice, 'Alice', 10, 70, 20);
   check('Alice 收到 welcome', welcomeA !== null);
   check('welcome 带服务端种子', welcomeA?.seed === 20261014, `${welcomeA?.seed}`);
@@ -365,6 +376,9 @@ try {
     check('非法维度回落 overworld', weirdSelf?.dimension === 'overworld', `${weirdSelf?.dimension}`);
     weird.close();
   }
+
+  // ---------------------------------------------------------------- 心跳（联机7）
+  check('心跳：客户端收到服务端 ping', await heartbeatSeen);
 
   check('服务端仍然活着', server.exitCode === null, `exitCode=${server.exitCode}`);
 

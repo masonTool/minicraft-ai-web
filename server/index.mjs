@@ -113,9 +113,44 @@ wss.on('listening', () => {
   log(`玩家把游戏指向 ws://localhost:${PORT} 即可联机`);
 });
 
+/**
+ * 心跳（联机7）：每 5s ping 一次，20s 没回 pong 就 terminate。
+ *
+ * 为什么必须有：TCP 半开连接（手机切后台、断 wifi、进电梯）**不会**触发 close，
+ * 服务端会一直把这个人算在线——房间里永远多一个人，他名下的掉落物也不会清。
+ * 浏览器不能主动发 ping，但会自动回 pong，所以 ping/pong 是唯一不用改协议的探活。
+ *
+ * 用时间戳而不是经典的单布尔 `isAlive`：后者把"超时"绑死在扫描间隔上（一次没回就断，
+ * 5s 的网络抖动也会踢人），时间戳才能表达"20s 都没回"。
+ */
+const HEARTBEAT_INTERVAL_MS = 5000;
+const HEARTBEAT_TIMEOUT_MS = 20000;
+const heartbeat = setInterval(() => {
+  const now = Date.now();
+  for (const player of players.values()) {
+    const socket = player.socket;
+    if (socket.readyState !== socket.OPEN) continue;
+    const silentFor = now - (socket.lastPongAt ?? now);
+    if (silentFor > HEARTBEAT_TIMEOUT_MS) {
+      log(`玩家 #${player.id}（${player.name}）${Math.round(silentFor / 1000)}s 没回 pong，断开`);
+      socket.terminate();
+      continue;
+    }
+    socket.ping();
+  }
+}, HEARTBEAT_INTERVAL_MS);
+// 不拖住进程退出（测试里 spawn 服务端，收尾时要能干净收）
+heartbeat.unref?.();
+
 wss.on('connection', (socket, request) => {
   const address = request.socket.remoteAddress ?? 'unknown';
   let player = null;
+
+  // 心跳（联机7）：ping 是协议层帧，浏览器会自动回 pong（它不能主动 ping）
+  socket.lastPongAt = Date.now();
+  socket.on('pong', () => {
+    socket.lastPongAt = Date.now();
+  });
 
   socket.on('message', (raw) => {
     let message;
@@ -184,6 +219,9 @@ wss.on('connection', (socket, request) => {
           ...snapshotFor(),
         });
         broadcast({ t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: 0, pitch: 0, dimension: player.dimension }, player.id);
+        // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
+        // 测试也不必白等一个完整间隔
+        socket.ping();
         log(`${name}#${player.id} 加入（来自 ${address}），当前 ${players.size} 人`);
         break;
       }

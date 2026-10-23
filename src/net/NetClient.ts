@@ -14,6 +14,7 @@
 
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
+import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 
 export interface NetPlayerState {
   id: number;
@@ -102,6 +103,8 @@ export class NetClient {
   private name = '';
   private lastMoveSent = 0;
   private reconnectTimer: number | null = null;
+  /** 会话状态机（联机7）：迁移与"要不要重连"只在它里面判 */
+  private readonly session = new NetSession();
   /** 主动断开时不再重连 */
   private disposed = false;
   /**
@@ -141,7 +144,13 @@ export class NetClient {
     this.name = name;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
     if (this.clientId.length === 0) this.clientId = browserClientId();
+    this.session.connect();
     this.open();
+  }
+
+  /** 会话状态（联机7）：`idle|connecting|connected|reconnecting|offline` */
+  get sessionState(): NetSessionState {
+    return this.session.state;
   }
 
   private open(): void {
@@ -165,6 +174,7 @@ export class NetClient {
     this.socket = socket;
 
     socket.onopen = () => {
+      this.session.opened();
       this.status = `已连接 ${this.url}`;
       this.handlers.onStatus(true, this.status);
       socket.send(
@@ -197,11 +207,13 @@ export class NetClient {
       if (!this.fatal) this.status = '连接已断开';
       this.remote.clear();
       this.selfId = 0;
+      // 状态迁移与"要不要重连"只有一个出口（联机7）：主动断开 / 致命错误 → stop
+      const action = this.session.closed({ intentional: this.disposed, fatal: this.fatal });
       this.handlers.onStatus(false, this.status);
       // 非主动断开就等一会儿重连：家里的 wifi 抖一下不该直接退出联机
-      if (this.disposed) return;
-      if (this.fatal) return;
-      this.reconnectTimer = window.setTimeout(() => this.open(), RECONNECT_DELAY_MS);
+      if (action === 'reconnect') {
+        this.reconnectTimer = window.setTimeout(() => this.open(), RECONNECT_DELAY_MS);
+      }
     };
 
     socket.onerror = () => {
@@ -402,6 +414,7 @@ export class NetClient {
 
   disconnect(): void {
     this.disposed = true;
+    this.session.disconnect();
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
