@@ -14,7 +14,7 @@
  * 运行：node server/index.mjs           （默认端口 8787）
  *      PORT=9000 node server/index.mjs
  *
- * 协议：JSON 文本帧，消息类型见 tools/net-protocol.md 与 src/net/NetClient.ts
+ * 协议：JSON 文本帧，消息表与校验规则见 docs/NET-PROTOCOL.md（客户端实现在 src/net/NetClient.ts）
  */
 
 import { WebSocketServer } from 'ws';
