@@ -1319,7 +1319,6 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     // ⚠️ 已知占位分组：P6-4 本轮只把成就翻成德语，ru / fr / pt 仍是英文占位（真值 = 英文）。
     // 这三项做完（P6-4a/b/c）必须删掉，否则这条判据不再是"漏翻探测器"。
     const knownPlaceholder: Partial<Record<(typeof sweepLocales)[number], readonly string[]>> = {
-      fr: ['advancement'],
       pt: ['advancement'],
     };
     const untranslatedGroups = [...byGroup.entries()]
@@ -1390,8 +1389,8 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   setLanguage('en');
   const advEn = ADVANCEMENTS.map((a) => advancementTitle(a));
   // 允许少量专名与梗原样保留（`Minecraft` / `Nether` / `Sssssss…` / `Ice Bucket Challenge`），
-  // 所以阈值是 10 而不是 0 —— 实测德语 6 条、俄语 4 条，说明其余都真翻了。
-  for (const code of ['de', 'ru'] as const) {
+  // 所以阈值是 10 而不是 0 —— 实测德语 6 条、俄语 4 条、法语 5 条，说明其余都真翻了。
+  for (const code of ['de', 'ru', 'fr'] as const) {
     setLanguage(code);
     const titles = ADVANCEMENTS.map((a) => advancementTitle(a));
     check(`${code} 成就标题不含中文`, !/[\u4e00-\u9fff]/.test(titles.join('')));
