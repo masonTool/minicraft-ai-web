@@ -636,6 +636,26 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   ).map((spec) => spec.name);
   check(`/help 的 ${COMMANDS.length} 条命令都有中英两版`, helpMissing.length === 0, helpMissing.join(','));
 
+  /**
+   * P1-1a 护栏：新 `cmd.*` 表与 spec / 旧英文表**逐条一致**。
+   *
+   * 这几条是"搬家"这一批的核心证据：72 条字符串是脚本从 `COMMANDS` 与旧表照搬的，
+   * 这条断言把"照搬"变成可验证的事实 —— 以后谁改了 `Commands.ts` 的文案却没改表
+   * （或反过来），这里会立刻红，而不是等跑 `/help` 才发现。
+   */
+  const drift: string[] = [];
+  for (const spec of COMMANDS) {
+    if (t(`cmd.${spec.name}.usage`, 'zh') !== spec.usage) drift.push(`${spec.name}.usage(zh)`);
+    if (t(`cmd.${spec.name}.desc`, 'zh') !== spec.description) drift.push(`${spec.name}.desc(zh)`);
+    if (t(`cmd.${spec.name}.usage`, 'en') !== COMMAND_USAGE_EN[spec.name]) drift.push(`${spec.name}.usage(en)`);
+    if (t(`cmd.${spec.name}.desc`, 'en') !== COMMAND_DESCRIPTION_EN[spec.name]) drift.push(`${spec.name}.desc(en)`);
+  }
+  check(`cmd.* 的 ${COMMANDS.length * 2} 条与 spec / 旧英文表逐条一致`, drift.length === 0, drift.slice(0, 5).join(','));
+  check(
+    '每条命令的 usage / desc 键都在表里',
+    COMMANDS.every((spec) => allKeys().includes(`cmd.${spec.name}.usage`) && allKeys().includes(`cmd.${spec.name}.desc`)),
+  );
+
   // —— 真跑：英文模式下扫残留中文 ——
   const stub = new Proxy(
     {},

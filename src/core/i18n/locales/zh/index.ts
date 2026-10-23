@@ -17,6 +17,7 @@ import { editor } from './editor.ts';
 import { chat } from './chat.ts';
 import { progress } from './progress.ts';
 import { minigame } from './minigame.ts';
+import { cmd } from './cmd.ts';
 import { misc } from './misc.ts';
 
 export const zh = {
@@ -28,6 +29,7 @@ export const zh = {
   ...chat,
   ...progress,
   ...minigame,
+  ...cmd,
   ...misc,
 } as const;
 
