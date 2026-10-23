@@ -26,3 +26,7 @@
 | 2026-10-23 16:40 | decision | deepseek-v4.1-flash-official | 238s | 未知 | pass |
 | 2026-10-23 16:40 | plan-split | deepseek-v4.1-flash-official | 482s | 未知 | pass |
 | 2026-10-23 16:40 | journey | deepseek-v4.1-flash-official | 105s | 1,178,925 | pass |
+| 2026-10-23 17:31 | main | deepseek-v4.1-flash-official | 157s | 1,971,955 | pass |
+| 2026-10-23 17:31 | decision | deepseek-v4.1-flash-official | 152s | 1,966,419 | pass |
+| 2026-10-23 17:31 | milestone-split | deepseek-v4.1-flash-official | 482s | 未知 | pass |
+| 2026-10-23 17:31 | journey | deepseek-v4.1-flash-official | 151s | 1,847,897 | pass |
