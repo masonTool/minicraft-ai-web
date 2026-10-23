@@ -18,7 +18,7 @@
  * 数据都在 `core/crafting/RecipeBook.ts` 里（纯函数，可离线测），这里只管画。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import type { Inventory } from '../core/container/Inventory.ts';
 import {
   recipeBookTabLabel,
@@ -158,7 +158,7 @@ export class RecipeBook {
     this.searchEl = document.createElement('input');
     this.searchEl.type = 'text';
     this.searchEl.className = 'recipe-search';
-    this.searchEl.placeholder = '搜索物品或材料（中文/英文都行）';
+    this.searchEl.placeholder = t('notice.recipe.searchPlaceholder');
     this.searchEl.addEventListener('input', () => {
       this.query = this.searchEl.value;
       // 搜索是从头筛一遍，页码当然要回到第 1 页
@@ -172,8 +172,8 @@ export class RecipeBook {
     // 手机上是一个 ✕（基岩版也是右上角一个叉），PC 上保留 "关闭 (R)" 的键盘提示
     //（批次 104：手机端不该出现键盘字母——"关闭 (R)"会让人以为要按 R 才关得掉）。
     // 两种情况下读屏与无障碍拿到的都是"关闭配方书"。
-    close.textContent = isTouchUi() ? '✕' : '关闭 (R)';
-    close.setAttribute('aria-label', '关闭配方书');
+    close.textContent = isTouchUi() ? '✕' : t('notice.recipe.close');
+    close.setAttribute('aria-label', t('notice.recipe.closeAria'));
     close.addEventListener('click', () => this.hide());
 
     header.append(title, this.summaryEl, close);
@@ -266,8 +266,8 @@ export class RecipeBook {
     // ---- 翻页条（与创造物品栏同一套类名与样式）
     this.pagerEl = document.createElement('div');
     this.pagerEl.className = 'inv-pager hidden';
-    this.prevButton = this.makePagerButton('‹ 上一页', () => this.flipPage(-1));
-    this.nextButton = this.makePagerButton('下一页 ›', () => this.flipPage(1));
+    this.prevButton = this.makePagerButton(t('notice.recipe.prev'), () => this.flipPage(-1));
+    this.nextButton = this.makePagerButton(t('notice.recipe.next'), () => this.flipPage(1));
     this.pageLabel = document.createElement('span');
     this.pageLabel.className = 'inv-page-label';
     this.pageLabel.dataset.role = 'label';
@@ -390,7 +390,7 @@ export class RecipeBook {
 
     this.renderTabs(base);
     const craftable = entries.filter((entry) => entry.craftable).length;
-    this.summaryEl.textContent = `共 ${entries.length} 条 · 现在能做 ${craftable} 条`;
+    this.summaryEl.textContent = tp('notice.recipe.summary', { total: entries.length, craftable });
 
     // 分页（批次 29）：181 条配方一次全建进 DOM 要 400ms 以上，而搜索框每敲一个字
     // 都会重建。只画当前页就回到可忽略。页大小跟着 CSS 的列数走（宽屏 12 列 × 5 行、
@@ -411,9 +411,7 @@ export class RecipeBook {
       empty.className = 'recipe-empty';
       // 空列表要说清"为什么空"：是筛掉了，还是这一栏本来就没有——
       // 否则玩家只会以为配方书坏了（"仅显示可合成"默认关着，所以多半是搜索/标签栏的问题）
-      empty.textContent = this.onlyCraftable
-        ? '现在没有能做的配方（关掉「仅显示可合成」可以看到全部）'
-        : '这一栏里没有匹配的配方';
+      empty.textContent = this.onlyCraftable ? t('notice.recipe.emptyCraftable') : t('notice.recipe.emptyFiltered');
       this.gridEl.appendChild(empty);
     } else {
       for (const entry of visible) this.gridEl.appendChild(this.makeCell(entry));
@@ -459,7 +457,7 @@ export class RecipeBook {
       button.setAttribute('aria-label', text);
     }
 
-    const filterText = this.onlyCraftable ? '仅显示可合成（已开启）' : '仅显示可合成';
+    const filterText = this.onlyCraftable ? t('notice.recipe.filterOn') : t('notice.recipe.filterOff');
     this.filterButton.classList.toggle('on', this.onlyCraftable);
     this.filterButton.setAttribute('aria-pressed', String(this.onlyCraftable));
     this.filterButton.title = filterText;
@@ -532,17 +530,19 @@ export class RecipeBook {
       const missing = entry.ingredients
         .filter((ingredient) => this.inventory.countOf(ingredient.id) < ingredient.count)
         .map((ingredient) => itemLabel(ingredient.id))
-        .join('、');
-      return `${head} · ${layoutText} · 材料不足${missing ? `（缺 ${missing}）` : ''}`;
+        .join(t('item.desc.tpl.listSep'));
+      return missing
+        ? tp('notice.recipe.lineMissing', { head, layout: layoutText, missing })
+        : tp('notice.recipe.lineMissingNoList', { head, layout: layoutText });
     }
     // “需要工作台”只在当前确实还是 2×2 时提示；进入工作台后同一条 3×3
     // 配方已经可填格，应像普通可合成配方一样显示可制作次数。
     if (entry.gridSize > this.actions.gridSize()) {
-      return `${head} · ${layoutText} · 需要工作台 3×3`;
+      return tp('notice.recipe.lineNeedTable', { head, layout: layoutText });
     }
     return entry.maxCraftable > 1
-      ? `${head} · ${layoutText} · 可做 ${entry.maxCraftable} 次`
-      : `${head} · ${layoutText}`;
+      ? tp('notice.recipe.lineCraftable', { head, layout: layoutText, times: entry.maxCraftable })
+      : tp('notice.recipe.line', { head, layout: layoutText });
   }
 
   /** 说明行的默认文案（没点着任何一格时） */
@@ -592,7 +592,7 @@ export class RecipeBook {
     const title = document.createElement('div');
     title.className = 'recipe-hint';
     // 熔炼没有摆放顺序问题，但"哪一格放什么"同样要说清楚：原料在上、燃料在下
-    title.textContent = `熔炼：原料放上面的格子、燃料放下面的格子（每个约 ${SMELTING_TIME} 秒）`;
+    title.textContent = tp('notice.recipe.smeltingHint', { seconds: SMELTING_TIME });
     this.smeltingEl.appendChild(title);
 
     const row = document.createElement('div');

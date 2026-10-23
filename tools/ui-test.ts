@@ -248,7 +248,8 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const recipeBook = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
   const inventory = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const settings = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  check('配方书的关闭键在手机上是 ✕（PC 才写 "关闭 (R)"）', recipeBook.includes("isTouchUi() ? '✕' : '关闭 (R)'"));
+  // 多语言 P6-5a：文案搬进 notice.recipe.*，判据跟到键调用（仍是"手机上 ✕、PC 才带键盘提示"）
+  check('配方书的关闭键在手机上是 ✕（PC 才写关闭提示）', recipeBook.includes("isTouchUi() ? '✕' : t('notice.recipe.close')"));
   check(
         '背包标题栏不在手机上说 "配方书 (R)"（批次 617：改走文案键，判据同样要考虑触摸端）',
         inventory.includes("t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey')"),
@@ -2752,7 +2753,10 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('recipeBookTabLabel(tab)}（${counts.get(tab) ?? 0}）'));
   check('有「仅显示可合成」筛选', bookUi.includes("this.filterButton.dataset.role = 'craftable-filter'"));
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
-  check('空列表会说清为什么空（是筛掉了还是这一栏本来就没有）', bookUi.includes('关掉「仅显示可合成」可以看到全部'));
+  check(
+    '空列表会说清为什么空（是筛掉了还是这一栏本来就没有）',
+    bookUi.includes("t('notice.recipe.emptyCraftable')") && bookUi.includes("t('notice.recipe.emptyFiltered')"),
+  );
   check('标签栏与筛选按钮的样式在（含选中态）', compact.includes('.recipe-tabs {') && compact.includes('.recipe-tab.active, .recipe-filter.on'));
 
   // ---- 版面：基岩版经典 UI 那一屏（批次 135，用户给的截图）
@@ -2769,7 +2773,8 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('页签是方形图标块（文字只留在 title/aria 里）', compact.includes('.recipe-tab { width: 32px;') && compact.includes('.recipe-tab-label { display: none; }'));
   // 图标网格省掉了卡片上的文字，但名字与材料不能跟着一起没（手机上没有悬停）
   check('底部有一行说明"这格是什么 + 材料够不够"', bookUi.includes("this.detailEl.textContent = summary"));
-  check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
+  // 多语言 P6-5a：整行文案进表，判据跟到键与参数（仍验"缺哪样材料会被列出来"）
+  check('说明行会说出缺哪样材料', bookUi.includes("tp('notice.recipe.lineMissing', { head, layout: layoutText, missing })"));
   check(
     '没点着任何一格时说明行也有默认文案',
     // 批次 434：文案走 i18n 键（中文表里那条由 i18n 测试管）

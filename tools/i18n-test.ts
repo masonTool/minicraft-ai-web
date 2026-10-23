@@ -1414,6 +1414,26 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   }
   setLanguage('zh');
   check('中文伤害提示与改造前一致', damageReason('generic', '僵尸') === '来自僵尸' && damageReason('fall') === '摔落（从高处落地）');
+
+  /**
+   * 配方书文案（P6-5a，批次 20261024-0020）。
+   *
+   * `RecipeBook` 原来有 14 处中文字面量（搜索框提示、关闭键、翻页、汇总、空状态、
+   * 仅可合成、按材料不足分行、熔炼提示）。现在走 `notice.recipe.*`。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const texts = [
+      t('notice.recipe.searchPlaceholder'),
+      t('notice.recipe.closeAria'),
+      tp('notice.recipe.summary', { total: 181, craftable: 12 }),
+      t('notice.recipe.emptyCraftable'),
+      tp('notice.recipe.lineMissing', { head: 'A', layout: 'B', missing: 'C' }),
+      tp('notice.recipe.smeltingHint', { seconds: 10 }),
+    ];
+    check(`${code} 配方书文案不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 60));
+  }
+  resetLanguageForTest();
   resetLanguageForTest();
   resetLanguageForTest();
 
