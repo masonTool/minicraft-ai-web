@@ -20,6 +20,7 @@ coverage/
 .continue/*.off
 .continue/*.state.json
 # 旧位置（2026-10-22 迁移到 continue-do 之前留下的，防止漏网）
+.codebuddy/
 .codebuddy/hooks/logs/
 .codebuddy/*.off
 .codebuddy/*.state.json
