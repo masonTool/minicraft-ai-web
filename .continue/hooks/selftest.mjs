@@ -154,6 +154,21 @@ try {
     );
   });
 
+  check('auto-continue · 队列名恰好是完整会话 ID → 自动认领改名', () => {
+    // 完整 ID 全局唯一，文件名叫它一定是本会话写的 → 直接改名，不用等人
+    const full = 'a'.repeat(32);
+    writeFileSync(join(DOING, `${full}.md`), '# 队列\n\n> 批次：19990101-0000\n\n- [ ] 甲\n  - 验证：x\n');
+    const r = hook('auto-continue.mjs', stop(full));
+    const renamed = existsSync(join(DOING, 'aaaaaa.md'));
+    const gone = !existsSync(join(DOING, `${full}.md`));
+    rmSync(join(DOING, 'aaaaaa.md'), { force: true });
+    return expect(
+      r.code === 2 && renamed && gone,
+      `应把 ${full.slice(0, 6)}…${full.slice(-2)}.md 改名成 aaaaaa.md 并照常递任务（renamed=${renamed} gone=${gone}）`,
+      r,
+    );
+  });
+
   check('auto-continue · 队列文件名写错（完整会话 ID）→ 拦住要求改名', () => {
     // 实测形态：模型把文件名写成完整会话 ID，钩子按 6 位找不到 → 机制静默失效
     writeFileSync(join(DOING, 's-stray-full-id.md'), '# 队列 · 会话 s-stray-full-id\n\n- [ ] 甲\n');

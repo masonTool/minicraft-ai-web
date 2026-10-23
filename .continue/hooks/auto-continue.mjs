@@ -38,6 +38,7 @@ import {
   brakeOn,
   DOING_REL,
   emitAllow,
+  adoptStrayQueue,
   emitBlock,
   findStrayQueue,
   fingerprint,
@@ -120,6 +121,16 @@ if (event === 'UserPromptSubmit') {
 if (event !== 'Stop') emitAllow();
 
 if (!sid) emitAllow('未拿到 session_id，无法推导队列路径，跳过。');
+
+/**
+ * 先认领"用完整会话 ID 命名"的队列，再读。
+ *
+ * 实测模型会把文件名写成完整会话 ID（`e2e000…e.md`），而钩子按前 6 位找——找不到就等于
+ * 没有队列，整套机制静默失效。完整 ID 全局唯一，所以"文件名恰好等于完整 ID"时可以直接改名，
+ * 没有歧义；只是前缀相同的其它文件一律不动（可能是另一个会话撞了 6 位前缀）。
+ */
+const adopted = adoptStrayQueue(sid);
+if (adopted) appendLog(sid, `已认领队列文件名 · -> ${adopted}`);
 
 const file = queuePath(sid);
 const queue = readQueue(file);

@@ -82,32 +82,48 @@ node <本技能目录>/scripts/install.mjs
 
 | 场景 | 执行器 | 验什么 |
 | --- | --- | --- |
-| `main` | model | 主干：改一个数字 → 建队列 → 钩子递任务 → 收尾（DONE 有批次节）→ 归档可用 |
+| `main` | model | 主干：**3 条**极小任务 → 逐条递 / 逐条勾 / 收尾（DONE 有批次节）/ 归档 |
 | `blocked` | probe | 同一条连续 N 轮没做完 → 标 `[阻塞]` → 之后请用户拍板 |
 | `decision` | model | 需要拍板的地方自己决定，并写进 `<sid>-decision.md`（`决定`/`为什么`），归档时跟着队列一起走 |
 | `plan-split` | model | 30 条的大任务 → **是否切成 plan**，里程碑/阶段是否合理（只验切分，不实现） |
-| `plan-run` | probe | plan 执行：续批 / 硬停（先问人后重置队列）/ 确认后继续 / 完成归档 |
+| `plan-run` | probe | plan 执行：**里程碑边界硬停**（先问人后重置队列）+ **完成之后的整体收尾与归档** |
 | `worktree` | probe | 别的会话有队列 → 注入提示 → 建树+分支+推本地 bare origin → 树内隔离 → `merge --no-ff` 回主分支 |
 
 **为什么要 probe**：像"连喂 5 轮没做完"这种分支，靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的地方。probe 仍然跑在**装出来的真实框架**上，只是不经过模型——验的是机制，不是"模型乖不乖"。
 
 ```bash
-npm run skill:e2e                          # 只跑主干
-npm run skill:e2e -- --all                 # 六个全跑
-npm run skill:e2e -- --scenario blocked    # 单跑（可重复给多次）
+npm run skill:e2e                          # 只预检，不跑
+npm run skill:e2e -- --all --yes            # 六个全跑（含模型，会烧 token）
+npm run skill:e2e -- --scenario blocked     # probe 场景不用 --yes
 npm run skill:e2e -- --dry-run             # 只看计划
 npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
 ```
 
-五条约定：
+### 跑之前必须确认（会烧 token）
+
+脚本**默认只做预检、不跑**。带上 `--yes` 才真跑；含模型场景时缺 `--yes` 会打印下面这份东西然后退出：
+
+```
+· main（model）
+    主干：真模型依次做完 3 条小任务（逐条递 / 逐条勾 / 收尾 / 归档）
+    预计：约 3,258,313 tokens / 约 4 分钟  —— 历史 1 次的中位数
+```
+
+- 数字来自 **`e2e-history.md`（入库账本）**里的同场景实测；没有历史就退化成经验值，
+  并**明确标「估算，非实测」**——不编。
+- probe 场景不消耗 token、几秒跑完，**不需要** `--yes`。
+
+### 六条约定
 
 - **数据目录在 skill 里**：`.codebuddy/skills/continue-task/.e2e/<场景>-<时间戳>/`，
   同目录 `.gitignore` 已排除。**框架进库、现场不进库**。
-- **现场默认保留**：一次完整测试由多个用例组成，跑到一半重跑某个用例时**不会**动别的用例的现场；
-  要清空整轮加 `--fresh`。
-- **模型固定** `deepseek-v4.1-flash-official`（`--model` 可覆盖）：默认模型一换，断言跟着飘。
-- **环境问题不算失败**：没装 CLI / 未登录（401）/ 网络挂掉 → 只验静态级并标 `⏭ 跳过`，
-  不算"通过"也不算"失败"；`--strict` 可以把跳过收紧成失败。
+- **现场默认保留**：跑到一半重跑某个用例时**不会**动别的用例的现场；`--fresh` 才清上一轮。
+- **模型取本机正在用的那个**：读 `~/.codebuddy/settings.json` 的 `model`（去掉 `custom-local:` 前缀）；
+  读不到就报错要 `--model`，**绝不猜**。
+- **环境问题不算失败**：没装 CLI / 未登录（401）/ 网络挂掉 → 只验静态级并标 `⏭ 跳过`；
+  `--strict` 可以把跳过收紧成失败。
+- **两份记录**：`.e2e/test.md` 是现场报告（目录 / 目的 / 时间 / 流程 / 结果，含单测那张表，不入库）；
+  `e2e-history.md` 是**入库账本**（每次模型场景的耗时与 tokens），给下次估算当依据。
 - 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
 
 **CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**，一次几分钟且花 token）。

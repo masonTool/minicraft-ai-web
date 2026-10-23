@@ -12,7 +12,7 @@
  *   · 本会话已经注入过（记在 `logs/<sid>.md` 的 `<!-- s:init … -->` 状态行里）。
  */
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import {
   setLogTag,
   PROJECT_ROOT,
@@ -142,46 +142,13 @@ const othersBlock = others.length
 const existingQueue = existsSync(queuePath(sid)) ? readQueue(queuePath(sid)) : null;
 const batch = (existingQueue && parseBatch(existingQueue.text)) ?? nextBatch();
 
-/**
- * **队列文件由脚本创建**（只建空文件，条目不替你写）。
- *
- * 为什么不能靠 AI 自己建：文件名就是契约，钩子按会话 ID 直接算路径。实测模型会把文件名
- * 写成**完整会话 ID**（`e2e000…e.md`），于是钩子永远找不到队列、整套机制静默失效——
- * 而队列看着还在、AI 也以为自己在按流程走。脚本建就不会错。
- *
- * 初始状态写 `讨论中`：这时队列里还没有条目，钩子不该把它当成"已经清空"去收尾。
- * `auto-continue` 那边有配套的一条：讨论中 **且空** → 拦住让 AI 填条目，而不是静默放行。
- */
-function ensureQueueFile() {
-  const file = queuePath(sid);
-  if (existsSync(file)) return false;
-  mkdirSync(DOING_DIR, { recursive: true });
-  writeFileSync(
-    file,
-    [
-      `# 队列 · 会话 ${sid}`,
-      '',
-      '> 状态：讨论中',
-      `> 创建：${new Date().toISOString().slice(0, 10)}`,
-      `> 批次：${batch}`,
-      '',
-      '> ⚠️ 脚本建好的**空队列**：把本批条目写进来（每条带一行 `验证：`），',
-      '> 再把上面的 `状态：讨论中` 改成 `状态：执行中`，钩子才会开始递任务。',
-      '',
-    ].join('\n'),
-  );
-  return true;
-}
-
-const queueCreated = ensureQueueFile();
 
 const injection = [
   '【continue-do · 会话初始化】',
   '',
   `- 会话 ID：\`${sid}\``,
   // 会话重启后同一个 sid 可能已经有队列（上一轮建的）→ 说"尚未创建"会让 AI 覆盖掉进度。
-  `- 本会话队列：\`${DOING_REL}/${queueFileName(sid)}\`（**文件名已定，别改名，别另建一份**）` +
-    (queueCreated ? '——本次已建好空队列，填条目后把 `状态：讨论中` 改成 `执行中`' : '——已存在，接着做'),
+  `- 本会话队列：\`${DOING_REL}/${queueFileName(sid)}\`${existsSync(queuePath(sid)) ? '（**已存在，接着做，别重建**）' : '（**尚未创建**：文件名必须精确等于这个，**不要用完整会话 ID**）'}`,
   `- 批次号：\`${batch}\` —— **一批一个号，开工定下就不再变**（时间戳，天然唯一）`,
   `- 机制说明：\`.continue/README.md\`（文件分工 / 编号 / 队列格式 / 收尾流程）`,
   `- 项目根：\`${PROJECT_ROOT}\``,

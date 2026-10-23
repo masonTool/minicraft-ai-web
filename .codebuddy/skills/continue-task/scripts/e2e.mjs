@@ -64,9 +64,7 @@ const strict = flag('--strict');
 const fresh = flag('--fresh');
 const all = flag('--all');
 const timeoutSec = Number(value('--timeout', '480'));
-const maxTurns = Number(value('--turns', '30'));
-const DEFAULT_MODEL = 'deepseek-v4.1-flash-official';
-const model = value('--model', DEFAULT_MODEL);
+const maxTurns = Number(value('--turns', '45'));
 
 if (flag('--help') || flag('-h')) {
   console.log(
@@ -169,7 +167,7 @@ const SCENARIOS = {};
 /** 主干：真模型跑一条小任务，走完 队列 → 递任务 → 收尾 → 归档。 */
 SCENARIOS.main = {
   driver: 'model',
-  desc: '主干：真模型跑完一条任务（队列 / 递任务 / 收尾 / 归档）',
+  desc: '主干：真模型依次做完 3 条小任务（逐条递 / 逐条勾 / 收尾 / 归档）',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
     check('装出 .continue/README.md', existsSync(join(ctx.dir, '.continue', 'README.md')));
@@ -178,14 +176,23 @@ SCENARIOS.main = {
     ctx.git(['add', '-A']);
     ctx.git(['commit', '-q', '-m', 'chore: 装框架']);
 
+    /**
+     * 三条**极小**任务：每一条都只是改一个字符/加一行，AI 一轮就能做完。
+     * 这样既能验"逐条递、勾一条递下一条"，又不会把 token 烧穿
+     * （实测：轮数才是成本主因，任务条数不是）。
+     */
     const prompt = [
       '这是一个刚装好 continue-do 框架的空项目，机制见 .continue/README.md。',
-      '请按框架流程做这一件小事：把 README.md 里的 `version: 1` 改成 `version: 2`。',
+      '队列文件已经建好了（空的，状态讨论中）。请把下面 3 件小事写成 3 条队列条目，逐条做完：',
+      '',
+      '  1. 把 README.md 里的 `version: 1` 改成 `version: 2`；',
+      '  2. 新建 notes.txt，内容一行 `ok`；',
+      '  3. 把 README.md 里的 `status: 1` 改成 `status: 2`。',
       '',
       '要求（按顺序做完，不要问我问题）：',
-      '1. 先在 .continue/doing/ 建**本会话的队列**，放 1 条条目，带一行 `验证：`；',
-      '2. 改完把条目勾成 `[x]` 并写完成说明，然后提交；',
-      '3. 按收尾五步收尾（搬进 DONE.md、更新 OVERVIEW.md / TASKS.md、归档队列），再提交。',
+      '1. 把 3 条写进队列（每条带 `验证：` 一行，验证命令要能一条就跑完），并把状态改成 `执行中`；',
+      '2. **一次只做一条**：做完勾 `[x]`、写完成说明、提交，再下一条；',
+      '3. 三条做完后按收尾五步收尾（搬进 DONE.md、更新 OVERVIEW.md / TASKS.md、归档队列），再提交。',
     ].join('\n');
     const r = runModel(ctx, prompt);
     if (!r) return;
@@ -206,11 +213,14 @@ SCENARIOS.main = {
      * 模型那段只要验到"收了尾（DONE 有批次节）"即可——两次实跑证明它会不会跑第 5 步是抖的。
      */
     const arch = hook(ctx, 'archive-queue.mjs', null, { args: [s] });
+    const queueArchive = readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 'queue.md'));
     check(
       '收尾第 5 步可执行（归档队列）',
-      arch.status === 0 && listArchive(ctx, s).some((n) => n.startsWith('queue-')),
+      arch.status === 0 && listArchive(ctx, s).length > 0,
       arch.stdout.slice(0, 160),
     );
+    const doneItems = (queueArchive.match(/^- \[x\]/gm) ?? []).length;
+    check(`三条任务都勾完了（归档里 ${doneItems} 条 [x]）`, doneItems >= 3, queueArchive.slice(0, 200));
     checkHead(r);
   },
 };
@@ -344,7 +354,7 @@ SCENARIOS['plan-split'] = {
  */
 SCENARIOS['plan-run'] = {
   driver: 'probe',
-  desc: '计划执行：续批 / 硬停（先问后重置）/ 确认后继续 / 完成归档',
+  desc: '计划执行：里程碑边界硬停（先问人后重置队列）+ 完成之后的整体收尾与归档',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
     write(ctx, `.continue/doing/${sid6(s)}.md`, doneQueue(s));
@@ -364,48 +374,20 @@ SCENARIOS['plan-run'] = {
         '- [ ] `MS2.2` 二 → 验收 `true`',
       ].join('\n');
 
-    write(ctx, `.continue/doing/${sid6(s)}-plan.md`, plan(['- [~] `MS1.2` 二 → 验收 `true`', '- [ ] `MS1.3` 三 → 验收 `true`']));
-    const cont = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    check('① 未到边界 → 续批', /计划里还有下一阶段/.test(cont.stderr), cont.stderr.slice(0, 120));
-
+    /**
+     * 只验两件事（按确认范围）：**走到里程碑边界会停下**，以及**全部做完之后怎么处理**。
+     * 续批 / 已确认后继续这两条由 `selftest` 的分支断言覆盖，这里不再重复跑一遍。
+     */
     resetHookState(ctx, s);
     write(ctx, `.continue/doing/${sid6(s)}-plan.md`, plan(['- [~] `MS1.2` 二 → 验收 `true`']));
     const hard = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
     const ask = hard.stderr.indexOf('弹窗问用户');
     const reset = hard.stderr.indexOf('只有用户选了');
-    check('② 到边界 → 硬停', /停下等验收/.test(hard.stderr), hard.stderr.slice(0, 120));
-    check('② 硬停先问人再重置队列', ask > 0 && reset > ask, `ask=${ask} reset=${reset}`);
-    check('② 硬停列出里程碑验收命令', /`true`/.test(hard.stderr), hard.stderr.slice(0, 120));
+    check('里程碑边界 → 硬停', /停下等验收/.test(hard.stderr), hard.stderr.slice(0, 120));
+    check('硬停先问人、拿到答复才重置队列', ask > 0 && reset > ask, `ask=${ask} reset=${reset}`);
+    check('硬停列出该里程碑的验收命令', /`true`/.test(hard.stderr), hard.stderr.slice(0, 120));
 
-    /**
-     * ③ 已确认的里程碑不该再拦。注意 MS2 这边要留 **≥2 条**未完成阶段：
-     * 只留一条的话游标一进 MS2 就到边界，硬停是**对的**（我第一版就是这么写错的）。
-     */
-    resetHookState(ctx, s);
-    write(
-      ctx,
-      `.continue/doing/${sid6(s)}-plan.md`,
-      [
-        '## MS1 · 甲',
-        '- 验收：`true`',
-        '- 确认：已验收 · 批次 `20260101-0001`',
-        '- [x] `MS1.1` 一 → 验收 `true` · 批次 `20260101-0001`',
-        '- [x] `MS1.2` 二 → 验收 `true` · 批次 `20260101-0001`',
-        '',
-        '## MS2 · 乙',
-        '- 验收：`true`',
-        '- [~] `MS2.1` 一 → 验收 `true`',
-        '- [ ] `MS2.2` 二 → 验收 `true`',
-        '- [ ] `MS2.3` 三 → 验收 `true`',
-      ].join('\n'),
-    );
-    const afterConfirm = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    check(
-      '③ 已确认 → 继续下一里程碑',
-      /计划里还有下一阶段/.test(afterConfirm.stderr) && !/停下等验收/.test(afterConfirm.stderr),
-      afterConfirm.stderr.slice(0, 140),
-    );
-
+    // 完成处理：阶段全做完 + 最后里程碑已确认 → 整体收尾，计划可归档
     resetHookState(ctx, s);
     write(
       ctx,
@@ -418,7 +400,7 @@ SCENARIOS['plan-run'] = {
       ].join('\n'),
     );
     const fin = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    check('④ 阶段全做完 → 整体收尾', /计划已全部完成/.test(fin.stderr), fin.stderr.slice(0, 120));
+    check('阶段全做完 → 整体收尾', /计划已全部完成/.test(fin.stderr), fin.stderr.slice(0, 120));
     const arch = hook(ctx, 'archive-queue.mjs', null, { args: [s, '--plan'] });
     check(
       '④ 计划可归档（--plan）',
@@ -539,7 +521,10 @@ SCENARIOS.worktree = {
 function listArchive(ctx, s) {
   const d = join(ctx.dir, '.continue', 'logs', sid6(s));
   if (!existsSync(d)) return [];
-  return readdirSync(d).filter((n) => /^(queue|plan|decision)-\d{14}\.md$/.test(n));
+  // 新格式：累积文件 queue.md / plan.md / decision.md；旧格式带时间戳，一并认
+  return readdirSync(d).filter(
+    (n) => /^(queue|plan|decision)(-\d{14})?\.md$/.test(n),
+  );
 }
 
 /** 真跑一次 CLI；返回 { text, status } 或 null（环境跳过）。 */
@@ -634,48 +619,165 @@ function runScenario(name) {
     check('场景执行没抛异常', false, err.message);
   }
   const failed = steps.filter((x) => !x.ok);
+  const base = { dir: ctx.dir, steps: [...steps] };
   if (ctx.skipped && failed.length === 0) {
     console.log(`  ⏭ 跳过（环境问题，未验模型断言）— 现场：${ctx.dir}`);
-    return 'skip';
+    return { ...base, ok: 'skip' };
   }
   console.log(
     `  ${failed.length === 0 ? '✓ 通过' : `✗ 未通过 ${failed.length}/${steps.length}`} — 现场：${ctx.dir}`,
   );
-  return failed.length === 0 ? 'pass' : 'fail';
+  return { ...base, ok: failed.length === 0 ? 'pass' : 'fail' };
 }
 
 // ---------------------------------------------------------------- 主流程
-const chosen = all ? Object.keys(SCENARIOS) : multi('--scenario').length > 0 ? multi('--scenario') : ['main'];
 
-console.log('端到端自测');
+/**
+ * 模型：**优先读本机 codebuddy 正在用的那个**，其次才是命令行显式指定。
+ *
+ * 依据：`~/.codebuddy/settings.json` 里有 `"model": "custom-local:deepseek-v4.1-flash-official"`，
+ * 去掉 `custom-local:` 前缀就是 CLI 的 `--model` 值。读不到就报错要求显式指定——
+ * 绝不"猜一个"然后让断言跑在另一个模型上。
+ */
+function detectModel() {
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (!home) return null;
+  try {
+    const file = join(home, '.codebuddy', 'settings.json');
+    if (!existsSync(file)) return null;
+    const raw = JSON.parse(readFileSync(file, 'utf8'));
+    const m = typeof raw.model === 'string' ? raw.model.trim() : '';
+    return m ? m.replace(/^custom-local:/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
+const explicitModel = value('--model', null);
+const model = explicitModel || detectModel();
+const modelSource = explicitModel ? '命令行 --model' : model ? '~/.codebuddy/settings.json' : '未知';
+
+const HISTORY = join(SKILL, 'e2e-history.md');
+
+/**
+ * 历史账本里的同场景记录（用于"跑之前估"）。
+ *
+ * 为什么要有它：token 只能靠实测，不能拍脑袋。账本入库（skill 里），
+ * 换台机器、换个人也能看到"这个场景上次花了多少"。
+ */
+function historyRows(name) {
+  if (!existsSync(HISTORY)) return [];
+  const rows = [];
+  for (const line of readFileSync(HISTORY, 'utf8').split('\n')) {
+    if (!line.startsWith('|')) continue;
+    // `| 时间 | 场景 | 模型 | 耗时 | tokens | 结果 |` → split 后首尾各一个空串
+    const cells = line.split('|').map((c) => c.trim());
+    if (cells.length < 7 || cells[2] !== name) continue;
+    const sec = Number.parseFloat(cells[4]);
+    const tok = Number(cells[5].replace(/,/g, ''));
+    if (!Number.isFinite(sec) || !Number.isFinite(tok) || tok <= 0) continue; // 失败的 run 取不到 usage，别拿 0 当中位数
+    rows.push({ sec, tok });
+  }
+  return rows;
+}
+
+const median = (xs) => {
+  if (xs.length === 0) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  return a[Math.floor(a.length / 2)];
+};
+
+/** 没有历史时的兜底估算（**明确标"估算"**，来自 2026-10-23 的实测：main 30 轮 ≈ 2.7M / 213s）。 */
+const FALLBACK = { model: { tok: 2_700_000, sec: 240 }, probe: { tok: 0, sec: 3 } };
+
+function estimate(name, driver) {
+  const rows = historyRows(name);
+  if (rows.length > 0) {
+    return {
+      tok: median(rows.map((r) => r.tok)),
+      sec: median(rows.map((r) => r.sec)),
+      basis: `历史 ${rows.length} 次的中位数`,
+      guessed: false,
+    };
+  }
+  const f = FALLBACK[driver] ?? FALLBACK.model;
+  return { tok: f.tok, sec: f.sec, basis: '无历史数据，按同类场景实测的经验值', guessed: true };
+}
+
+const chosen = all
+  ? Object.keys(SCENARIOS)
+  : multi('--scenario').length > 0
+    ? multi('--scenario')
+    : ['main'];
+
+for (const name of chosen) {
+  if (!SCENARIOS[name]) {
+    console.error(`未知场景：${name}（可选：${Object.keys(SCENARIOS).join(' / ')}）`);
+    process.exit(2);
+  }
+}
+if (chosen.some((n) => SCENARIOS[n].driver === 'model') && !model) {
+  console.error('读不到本机模型，也没给 --model。请显式指定：npm run skill:e2e -- --model <id>');
+  process.exit(2);
+}
+
+// ---------------------------------------------------------------- 预检（必须确认才跑）
+console.log('端到端自测 · 预检');
 console.log(`  仓库    ${REPO}`);
-console.log(`  数据根  ${DATA_ROOT}（每次运行前清空，跑完保留）`);
-console.log(`  场景    ${chosen.join(', ')}`);
-console.log(`  模型    ${model}`);
-console.log(`  轮次/超时 ${maxTurns} / ${timeoutSec}s`);
+console.log(`  数据根  ${DATA_ROOT}（现场默认保留；--fresh 清上一轮）`);
+console.log(`  模型    ${model ?? '（本场景不需要模型）'}   来源：${modelSource}`);
+console.log('');
+
+let totalTok = 0;
+let totalSec = 0;
+for (const name of chosen) {
+  const sc = SCENARIOS[name];
+  const e = estimate(name, sc.driver);
+  totalTok += e.tok;
+  totalSec += e.sec;
+  console.log(`  · ${name}（${sc.driver}）`);
+  console.log(`      ${sc.desc}`);
+  const human = e.sec < 60 ? `约 ${Math.max(1, Math.round(e.sec))} 秒` : `约 ${Math.round(e.sec / 60)} 分钟`;
+  console.log(
+    `      预计：约 ${e.tok.toLocaleString()} tokens / ${human}` +
+      `  —— ${e.basis}${e.guessed ? '（**估算**，非实测）' : ''}`,
+  );
+}
+console.log('');
+const totalHuman =
+  totalSec < 60 ? `约 ${Math.max(1, Math.round(totalSec))} 秒` : `约 ${Math.round(totalSec / 60)} 分钟`;
+console.log(
+  `  合计：约 ${totalTok.toLocaleString()} tokens / ${totalHuman}` +
+    `（${chosen.length} 个场景；probe 场景不消耗 token）`,
+);
+console.log('');
 
 if (dryRun) {
-  console.log('\n[dry-run] 计划：');
-  for (const name of chosen) {
-    const sc = SCENARIOS[name];
-    if (!sc) {
-      console.error(`  ! 未知场景 ${name}`);
-      process.exit(2);
-    }
-    console.log(`  · ${name}（${sc.driver}）— ${sc.desc}`);
-  }
+  console.log('[dry-run] 到此为止，什么都没跑。');
   process.exit(0);
 }
 
-const needCli = chosen.some((n) => SCENARIOS[n]?.driver === 'model');
+/**
+ * 只有**含模型场景**才需要确认：probe 场景不消耗 token、几秒跑完，
+ * 每次都要求 --yes 只会让人去写脚本绕过它。
+ */
+const needsConfirm = chosen.some((n) => SCENARIOS[n].driver === 'model');
+const assumed = flag('--yes');
+if (needsConfirm && !assumed) {
+  console.log('⚠️ 还没开始。真实跑一次会消耗上面的 token 与时间，需要你确认。');
+  console.log('   确认后加 --yes 再跑：npm run skill:e2e -- --yes ' + (all ? '--all' : ''));
+  console.log('   （AI 在主流程里发起时，应当先把上面这份预检念给你听，再等你点头。）');
+  process.exit(0);
+}
+
+const needCli = chosen.some((n) => SCENARIOS[n].driver === 'model');
 if (needCli && spawnSync('codebuddy', ['--version'], { encoding: 'utf8' }).status !== 0) {
-  console.log('\n⚠️ 没找到 `codebuddy` CLI，跳过（这不是失败）。');
+  console.log('⚠️ 没找到 `codebuddy` CLI，跳过（这不是失败）。');
   process.exit(0);
 }
 
 mkdirSync(DATA_ROOT, { recursive: true });
 if (fresh) {
-  // 只清"上一轮"的目录（保留本轮已跑的），避免手滑把整轮历史都删了
   for (const name of readdirSync(DATA_ROOT)) {
     if (name.startsWith('.')) continue;
     rmSync(join(DATA_ROOT, name), { recursive: true, force: true });
@@ -683,14 +785,116 @@ if (fresh) {
   console.log('  --fresh：已清空上一轮现场');
 }
 
+const startedAt = new Date();
 const results = [];
-for (const name of chosen) results.push({ name, ok: runScenario(name) });
-
-const bad = results.filter((r) => r.ok === 'fail');
-console.log('\n汇总：');
-for (const r of results) {
-  console.log(`  ${{ pass: '✓', fail: '✗', skip: '⏭' }[r.ok]} ${r.name}`);
+for (const name of chosen) {
+  results.push({ name, ...runScenario(name) });
 }
-console.log(`\n现场保留在 ${DATA_ROOT}（每次重跑前会自动清空）`);
-if (bad.length > 0) process.exit(1);
-process.exit(process.exitCode === 1 ? 1 : 0);
+
+// ---------------------------------------------------------------- 单测（快，几秒）
+const UNITS = [
+  ['钩子自检 selftest', 'node', [join(SKILL, 'assets', '.continue', 'hooks', 'selftest.mjs')]],
+  ['打包源自洽 check-framework', 'node', [join(HERE, 'check-framework.mjs')]],
+  ['安装器回归 test-install', 'node', [join(HERE, 'test-install.mjs')]],
+];
+const units = [];
+for (const [label, cmd, args] of UNITS) {
+  const t0 = Date.now();
+  const r = spawnSync(cmd, args, { cwd: REPO, encoding: 'utf8' });
+  units.push({ label, ok: r.status === 0, sec: Math.round((Date.now() - t0) / 100) / 10 });
+}
+
+// ---------------------------------------------------------------- 账本 + 报告
+function usageOf(r) {
+  const f = join(r.dir, '.e2e-cli.json');
+  if (!existsSync(f)) return { tok: 0, sec: 0 };
+  try {
+    const j = JSON.parse(readFileSync(f, 'utf8'));
+    const t = String(j.stdout ?? '');
+    const sum = (re) => [...t.matchAll(re)].reduce((a, m) => a + Number(m[1] || 0), 0);
+    return {
+      tok: sum(/"inputTokens"\s*:\s*(\d+)/g) + sum(/"outputTokens"\s*:\s*(\d+)/g),
+      sec: Number(j.elapsed ?? 0),
+    };
+  } catch {
+    return { tok: 0, sec: 0 };
+  }
+}
+
+const day = startedAt.toISOString().slice(0, 10);
+const clock = startedAt.toTimeString().slice(0, 5);
+
+// 账本（入库）：只记真跑了模型的场景
+const ledgerRows = [];
+for (const r of results) {
+  if (SCENARIOS[r.name].driver !== 'model') continue;
+  const u = usageOf(r);
+  ledgerRows.push(
+    `| ${day} ${clock} | ${r.name} | ${model} | ${u.sec}s | ${u.tok.toLocaleString()} | ${r.ok} |`,
+  );
+}
+if (ledgerRows.length > 0) {
+  if (!existsSync(HISTORY)) {
+    writeFileSync(
+      HISTORY,
+      [
+        '# e2e 历史（入库）',
+        '',
+        '> 用途：给"跑之前估算"提供依据。token 取自 CLI 的 json 输出（本轮累计 input + output）。',
+        '> 只记**真跑了模型**的场景；probe 场景不消耗 token，不记。',
+        '> 这张表由 `scripts/e2e.mjs` 自动追加，不要手改结构。',
+        '',
+        '| 时间 | 场景 | 模型 | 耗时 | tokens | 结果 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '',
+      ].join('\n'),
+    );
+  }
+  writeFileSync(HISTORY, readFileSync(HISTORY, 'utf8').trimEnd() + '\n' + ledgerRows.join('\n') + '\n');
+}
+
+// 报告（现场，不入库）：每个场景一节 + 单测一张表
+const report = join(DATA_ROOT, 'test.md');
+if (!existsSync(report)) {
+  writeFileSync(
+    report,
+    [
+      '# e2e 测试报告',
+      '',
+      '> 每次运行追加一节：目录 / 目的 / 时间 / 流程 / 结果。',
+      '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
+      '',
+    ].join('\n'),
+  );
+}
+
+const lines = [];
+lines.push(`## ${day} ${clock} · 模型 ${model ?? '—'}`, '');
+for (const r of results) {
+  const sc = SCENARIOS[r.name];
+  const u = usageOf(r);
+  lines.push(`### ${r.name} · ${r.ok}`, '');
+  lines.push(`- **目录**：\`${r.dir.replace(REPO + '/', '')}\``);
+  lines.push(`- **目的**：${sc.desc}`);
+  lines.push(`- **时间**：${day} ${clock} · 耗时 ${u.sec}s · ${u.tok.toLocaleString()} tokens`);
+  lines.push(`- **流程**（${sc.driver} 执行器）：${r.steps.map((x) => (x.ok ? '✓' : '✗') + x.label).join(' → ')}`);
+  lines.push(`- **结果**：${r.steps.filter((x) => x.ok).length}/${r.steps.length} 通过`);
+  lines.push('');
+}
+lines.push('### 单测', '');
+lines.push('| 套件 | 结果 | 耗时 |');
+lines.push('| --- | --- | --- |');
+for (const u of units) lines.push(`| ${u.label} | ${u.ok ? '通过' : '失败'} | ${u.sec}s |`);
+lines.push('');
+writeFileSync(report, readFileSync(report, 'utf8').trimEnd() + '\n\n' + lines.join('\n') + '\n');
+
+// ---------------------------------------------------------------- 汇总
+console.log('\n汇总：');
+for (const r of results) console.log(`  ${{ pass: '✓', fail: '✗', skip: '⏭' }[r.ok]} ${r.name}`);
+for (const u of units) console.log(`  ${u.ok ? '✓' : '✗'} ${u.label}（${u.sec}s）`);
+console.log(`\n报告：${report}`);
+console.log(`账本：${HISTORY}${ledgerRows.length ? '' : '（本次没有模型场景，未追加）'}`);
+console.log(`现场：${DATA_ROOT}`);
+
+const bad = results.filter((r) => r.ok === 'fail').length + units.filter((u) => !u.ok).length;
+process.exit(bad > 0 || process.exitCode === 1 ? 1 : 0);

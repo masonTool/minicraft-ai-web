@@ -839,6 +839,27 @@ export function fingerprint(raw) {
  * 只报不改：前缀相同也可能是**另一个会话**（6 位撞车），自动改名会踩别人。
  * 这里只负责把"你可能写错了"摆到明面上，改不改由 AI 判断。
  */
+/**
+ * 认领"用完整会话 ID 命名"的队列文件：`<full-sid>.md` → `<sid6>.md`。
+ *
+ * 只认**完整 ID 完全相等**这一种：那个名字全局唯一，一定是本会话写的；
+ * 而"前缀相同"的其它文件可能是另一个会话（6 位撞车），绝不动。
+ *
+ * 为什么是改名而不是"让 AI 自己改"：实测模型建完就往下走了，拦截提示它看得到、
+ * 但不一定回头改；而这一步**没有任何歧义**（完整 ID 就是我们自己），脚本做掉最省事。
+ */
+export function adoptStrayQueue(sid) {
+  const from = join(DOING_DIR, `${sid}.md`);
+  const to = queuePath(sid);
+  if (from === to || !existsSync(from) || existsSync(to)) return null;
+  try {
+    renameSync(from, to);
+    return queueFileName(sid);
+  } catch {
+    return null;
+  }
+}
+
 export function findStrayQueue(sid) {
   const want = shortSid(sid);
   try {
