@@ -185,6 +185,8 @@ export interface NetHandlers {
   onPlayerHit?: (hit: NetPlayerHit) => void;
   /** 别人射了一支箭（联机23）：在本地也生成一支，物理各端自己跑 */
   onArrow?: (arrow: NetArrowState) => void;
+  /** 服务端切换了天气（联机35）：`clear|rain|thunder` */
+  onWeather?: (kind: string) => void;
   /** 别人点燃了一格 TNT（联机23）：坐标即 key，直接在本地点燃 */
   onTnt?: (tnt: NetTntState) => void;
   /**
@@ -423,6 +425,8 @@ export class NetClient {
         this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items, containers, signs, frames);
         // 时间权威（联机10）：进服先对齐一次，之后靠 `time` 广播校正
         this.deliverTime(message);
+        // 天气权威（联机35）：同样先对齐一次
+        if (typeof message.weather === 'string') this.handlers.onWeather?.(message.weather);
         break;
       }
       case 'time': {
@@ -482,6 +486,10 @@ export class NetClient {
           z: Number(message.z),
           lines: Array.isArray(message.lines) ? (message.lines as unknown[]).map((line) => String(line)) : [],
         });
+        break;
+      }
+      case 'weather': {
+        if (typeof message.kind === 'string') this.handlers.onWeather?.(message.kind);
         break;
       }
       case 'pong': {

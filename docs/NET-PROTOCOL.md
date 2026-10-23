@@ -94,8 +94,9 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, timeOfDay, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
+| `welcome` | `v, id, name, seed, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
+| `weather` | `kind`（`clear` / `rain` / `thunder`） | 天气**切换时**广播（`联机35`）：晴天 8~16 分钟后 45% 继续晴 / 55% 转雨（30% 雷暴），雨天与雷暴一律转晴 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
@@ -247,6 +248,7 @@
 | `联机31` | 掉落物带维度（`item-spawn` 与 `welcome.items`，客户端维度不匹配不建镜像） | `item-remove` 仍只带 `owner/localId`（不需要维度：全局键唯一） |
 | `联机33` | 区块加载后补建的容器实体已做（从增量表里挑，不扫整块方块） | 只覆盖「自己会动」的四类（漏斗/投掷器/发射器/潜影盒）；箱子/熔炉靠打开界面时懒创建 |
 | `联机34` | 世界原地重载已做（`World.reset()` + 清单自检；退联机时切回单机库并重载） | 只在**退联机**这一条路径上接了；`/netseed reload` 仍走「回菜单重开」 |
+| `联机35` | 天气权威已做（服务端每 2 秒推进一次状态机、切换时广播、`welcome` 下发、落盘） | 各房间共享**同一个**天气（不是每房一套）；切换广播没有测试覆盖（要等 8~16 分钟），靠 `tests/net-weather.test.ts` 的两端规则一致性兜底 |
 
 ## 9. 改动这份协议时的规矩
 

@@ -118,6 +118,9 @@ export class Weather {
     this.geometry.setDrawRange(0, this.drawCount);
   }
 
+  /** 天气种类由本机决定吗（联机时为 false，见 `setAuthority`，联机35） */
+  private locallyAuthoritative = true;
+
   /** 当前实际在画多少个点（调试与验收用） */
   get activeCount(): number {
     return this.drawCount;
@@ -137,13 +140,27 @@ export class Weather {
   }
 
   /**
+   * 天气由谁决定（联机35）。
+   *
+   * `true` = 服务端权威：本机**不再自己掷骰子**（`tickWeather` 那行跳过），只负责
+   * 按 `setKind()` 收到的种类渲染降水。不这么做的话，两个人各自每 8~16 分钟换一次天气，
+   * 永远对不上——一个人在下雨、另一个人晴天。
+   */
+  setAuthority(local: boolean): void {
+    this.locallyAuthoritative = local;
+  }
+
+  /**
    * @param snowy 玩家所在地表是否是寒冷群系（决定下雪还是下雨）
    */
   update(dt: number, cameraPosition: THREE.Vector3, snowy: boolean): void {
-    // 状态推进只有一行：到点了就换成下一种（规则在 `WeatherState.ts` 里）
-    const next = tickWeather(this.state, dt, Math.random);
-    if (next.kind !== this.state.kind) this.applyKind(next.kind);
-    this.state = next;
+    // 状态推进只有一行：到点了就换成下一种（规则在 `WeatherState.ts` 里）。
+    // 联机时这一步让位给服务端（联机35）：本地只渲染，不改种类
+    if (this.locallyAuthoritative) {
+      const next = tickWeather(this.state, dt, Math.random);
+      if (next.kind !== this.state.kind) this.applyKind(next.kind);
+      this.state = next;
+    }
 
     if (this.snowy !== snowy) {
       this.snowy = snowy;

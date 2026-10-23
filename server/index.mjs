@@ -41,6 +41,7 @@ import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './
 import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
 import { createBuckets } from './ratelimit.mjs';
 import { withinAoi } from './aoi.mjs';
+import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
@@ -348,6 +349,8 @@ function snapshotFor(player) {
     seed: WORLD_SEED,
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
+    // 天气权威（联机35）：进服先对齐一次，之后靠切换时的广播
+    weather: weather.kind,
     players: [...players.values()]
       .filter((p) => p.room === player.room)
       .map((p) => ({
@@ -462,6 +465,24 @@ const clockTimer = setInterval(() => {
 clockTimer.unref?.();
 
 /**
+ * 天气权威（联机35）：晴天/雨/雷暴由服务端决定，切换时广播。
+ *
+ * 客户端那边有一套完整的状态机（8~16 分钟晴天、45% 继续晴 / 55% 转雨、30% 雷暴），
+ * 联机时让它**让位**——否则两个人各自掷骰子，永远对不上。
+ */
+let weather = { kind: 'clear', seconds: weatherSecondsFor(Math.random, 'clear') };
+const weatherTimer = setInterval(() => {
+  const next = tickWeather(weather, 2, Math.random);
+  const changed = next.kind !== weather.kind;
+  weather = next;
+  if (!changed || players.size === 0) return;
+  // 按房各发一份（同房间的人共享天气；不同房间各看各的也不冲突）
+  for (const room of roomsInUse()) broadcast({ t: 'weather', kind: weather.kind }, null, room);
+  log(`天气切换到 ${weather.kind}`);
+}, 2000);
+weatherTimer.unref?.();
+
+/**
  * 运行统计日志（联机29）：每 10 秒一行。
  *
  * 只在有人在线上时打（空房间刷日志没有意义）；消息速率也一起打——它比字节更早暴露
@@ -487,6 +508,8 @@ function worldSnapshot() {
     savedAt: Date.now(),
     seed: WORLD_SEED,
     timeOfDay: Number(currentTimeOfDay().toFixed(6)),
+    // 天气（联机35）：重启后接着上次的天气跑
+    weather: weather.kind,
     // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension, room]（末位 room 是联机26 加的）
     edits: [...edits].map(([key, e]) => [e.x, e.y, e.z, e.id, e.state, e.dimension, roomOfDataKey(key)]),
     // 容器：[x, y, z, dimension, slots, room]
@@ -565,6 +588,9 @@ if (loaded.data) {
     };
     if (![frame.x, frame.y, frame.z].every(Number.isFinite)) continue;
     frames.set(scopedKey(roomF, `${frame.dimension}|${frame.x},${frame.y},${frame.z}`), frame);
+  }
+  if (isWeatherKind(saved.weather)) {
+    weather = { kind: saved.weather, seconds: weatherSecondsFor(Math.random, saved.weather) };
   }
   if (typeof saved.timeOfDay === 'number' && Number.isFinite(saved.timeOfDay)) {
     startTimeOfDay = ((saved.timeOfDay % 1) + 1) % 1;

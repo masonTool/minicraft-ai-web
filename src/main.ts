@@ -1905,6 +1905,10 @@ class App {
     onMobHit: (hit) => this.onNetMobHit(hit),
     // 有人打了我（联机22）：这边再用对方队伍判一次友伤
     onPlayerHit: (hit) => this.onNetPlayerHit(hit),
+    // 天气权威（联机35）：服务端说了算，本地只渲染
+    onWeather: (kind) => {
+      if (kind === 'clear' || kind === 'rain' || kind === 'thunder') this.weather.setKind(kind);
+    },
     // 箭与 TNT（联机23）：事件 + 坐标/速度，各端自己模拟
     onArrow: (arrow) => this.onNetArrow(arrow),
     onTnt: (tnt) => this.onNetTnt(tnt),
@@ -1954,6 +1958,8 @@ class App {
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
+        // 天气也收回本地（联机35）
+        this.weather.setAuthority(true);
         // 攒着没发的方块改动也丢掉（联机12）：重连后服务端状态可能已经不同了
         this.blockFunnel.clear();
         // 待恢复的容器内容同理（联机13），重连会重新拿一份 welcome 快照
@@ -1962,6 +1968,8 @@ class App {
         this.leaveMultiplayerSave();
         return;
       }
+      // 天气（联机35）：连上就交给服务端，本地不再自己换天气
+      this.weather.setAuthority(false);
       // 联机6：连上就换到按 roomId 派生的联机库（异步换库，这里不阻塞状态回调）
       void this.enterMultiplayerSave();
     },

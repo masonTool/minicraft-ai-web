@@ -562,6 +562,14 @@ try {
   {
     const welcomeTime = welcomeA?.timeOfDay;
     check('welcome 带时间', typeof welcomeTime === 'number' && welcomeTime >= 0 && welcomeTime < 1, `${welcomeTime}`);
+    // 天气权威（联机35）：进服先对齐一次。切换广播要等真实天气到点（8~16 分钟），
+    // 那一半由 `tests/net-weather.test.ts` 的规则一致性覆盖
+    const welcomeWeather = welcomeA?.weather;
+    check(
+      'welcome 带天气（clear/rain/thunder）',
+      welcomeWeather === 'clear' || welcomeWeather === 'rain' || welcomeWeather === 'thunder',
+      `${welcomeWeather}`,
+    );
     // 2 秒一条校正广播；值必须落在一天之内（否则客户端会算成 NaN/负数）
     const timeMessage = await timeSeen;
     const value = timeMessage?.timeOfDay;

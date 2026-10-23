@@ -205,3 +205,9 @@
 - 决定：给 `World` 加 `reset()`（清 chunks/wanted/loading/pending/edits/containers/light，**保留 worker 池与 seed**），渲染侧用已有的 `ChunkRenderer.disposeAll()`；`main.ts` 新增 `reloadWorld()` 按 `WORLD_RESET_TARGETS` 清单逐项清并自检，接在 `leaveMultiplayerSave()` 上（切回单机库 → 重载，失败则 `exitToMenu`）。
 - 为什么：原计划（联机39）是"去掉 `readonly world` + 让渲染器可换"，但真正需要的只是"世界内容可清空"。换实例要重建渲染器（连带 GPU 缓冲与 worker 池），风险与工作量都高得多，而 `reset()` 达到同样效果。在途的生成请求也不用取消：清空 `wanted` 后回包会在 `onGenerated` 的 `wanted.has` 处被丢掉。
 - 影响：断开联机后不再"本局不落盘"，而是真正回到单机世界（这是联机6 承诺过的那一半）；`/netseed reload` 仍走回菜单重开。失败有兜底（回主菜单），不会把联机地形留在内存里。可撤回（`reset()` 不影响任何离线逻辑）。
+
+## D35 · 天气规则在服务端照抄一份，用一致性测试兜住
+
+- 决定：`server/weather.mjs` 照抄客户端 `WeatherState.ts` 的规则；客户端 `Weather.setAuthority(false)` 时只渲染、不推进状态机；服务端每 2 秒推进一次并在**种类变化时**广播。各房间共享同一个天气。
+- 为什么：服务端是纯 `.mjs`（不进打包），客户端是 TS（过类型检查/i18n），没有共同运行时，所以规则只能照抄一份；代价是"改规则要改两处"，所以配了 `tests/net-weather.test.ts`——同一串随机数下逐条比对两端结果，改漏一处立刻变红（本轮它当场抓到我把 `STORM_SECONDS_*` 写成 180~420、实际是 120~300）。为什么不每房一套天气：天气是"这个世界的天"，房间只是分区，各房天气不同会让人困惑，而且每次切换要按房广播（已经这么发了，成本一样）。
+- 影响：联机时两人一定同天气；断线后回本地掷骰子。切换广播没有 e2e 覆盖（要等 8~16 分钟真实时间），靠一致性测试兜底。
