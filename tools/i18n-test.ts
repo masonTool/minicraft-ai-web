@@ -1083,6 +1083,24 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   setLanguage('zh');
   check('中文下视角选项仍是原来的说法', cameraModeLabel('first') === '第一人称' && cameraModeLabel('third-back') === '第三人称（背后）');
+
+  /**
+   * 局内 HUD（B3，批次 20261024-0136）。
+   *
+   * 进世界后第一眼看到的是**调试面板**（实测：`60 fps … 三角形 XYZ: … 朝向: 北 时间: 08:59 月相: 满月 …`），
+   * 原来整段是中文拼接。现在 `debugEl` 的 40+ 片段与它们的**值**（方位四向、月相八相、是/否）都进表。
+   * 判据：`hud.*` 整族在四种语言下都不含中文 —— 面板是默认显示的，漏一条用户一眼就看见。
+   */
+  const hudKeys = allKeys().filter((key) => key.startsWith('hud.'));
+  check('hud 分组的键数（面板片段 + 方位 + 月相）足够', hudKeys.length >= 50, String(hudKeys.length));
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const cjk = hudKeys.filter((key) => /[\u4e00-\u9fff]/.test(t(key)));
+    check(`${code}：hud 整族不含中文`, cjk.length === 0, cjk.slice(0, 3).join(','));
+  }
+  setLanguage('zh');
+  check('中文下 HUD 的方位与月相仍是原来的说法', t('hud.facingNorth').includes('北') && t('hud.moonPhase.0') === '满月');
+  resetLanguageForTest();
   resetLanguageForTest();
   check('商店文案六份的标题都是品牌名', ['zh', 'en', 'de', 'ru', 'fr', 'pt'].every((code) => readFileSync(`docs/store/${code}.md`, 'utf8').includes(`\n${BRAND}\n`)));
   check(

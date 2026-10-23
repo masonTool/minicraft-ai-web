@@ -24,6 +24,7 @@ import { entity } from './entity.ts';
 import { misc } from './misc.ts';
 import { advancement } from './advancement.ts';
 import { notice } from './notice.ts';
+import { hud } from './hud.ts';
 
 export const fr = {
   ...menu,
@@ -43,4 +44,5 @@ export const fr = {
   ...misc,
   ...advancement,
   ...notice,
+  ...hud,
 } satisfies Messages;

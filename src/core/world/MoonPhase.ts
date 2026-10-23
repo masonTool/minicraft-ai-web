@@ -12,6 +12,7 @@
  * 这个模块是纯函数/纯数据（不碰 THREE、不碰 DOM），因为月亮长什么样是**几何**：
  * 哪半边是亮的、明暗分界的椭圆有多宽，都能离线断言（见 `tools/moon-test.ts`）。
  */
+import { t } from '../i18n/I18n.ts';
 
 /** 8 天一个循环（原版） */
 export const MOON_PHASE_COUNT = 8;
@@ -67,8 +68,14 @@ export function moonPhaseInfo(phase: number): MoonPhase {
 }
 
 /** 中文名（调试面板、`/time` 用） */
+/**
+ * 月相的中文名（批次 20261024-0136 起按语言取）。
+ *
+ * ⚠️ 表里仍保留 `cn` 字段：它是**数据**（调试面板以外还有人拿它当"稳定标识"），
+ * 而显示名改成查 `hud.moonPhase.<phase>` —— 否则德语界面的调试面板会显示「满月」。
+ */
 export function moonPhaseName(phase: number): string {
-  return moonPhaseInfo(phase).cn;
+  return t(`hud.moonPhase.${moonPhaseFor(phase)}`);
 }
 
 /**

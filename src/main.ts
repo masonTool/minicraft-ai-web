@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
+import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import {
@@ -16386,16 +16387,21 @@ class App {
     const cx = toChunkCoord(p.x);
     const cz = toChunkCoord(p.z);
     // yaw=0 时朝向 (-sin, 0, -cos) = -Z，即原版定义的"北"
-    const facing = ['北 (-Z)', '东 (+X)', '南 (+Z)', '西 (-X)'][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
+    const facing = [
+      t('hud.facingNorth'),
+      t('hud.facingEast'),
+      t('hud.facingSouth'),
+      t('hud.facingWest'),
+    ][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
     const clockHours = (this.timeOfDay * 24 + 6) % 24;
     const clock = `${String(Math.floor(clockHours)).padStart(2, '0')}:${String(Math.floor((clockHours % 1) * 60)).padStart(2, '0')}`;
     // 月相（批次 84）：第 N 天（满月起步，8 天一轮）
-    const moon = `${moonPhaseName(moonPhaseFor(this.dayCount))}(第 ${this.dayCount} 天)`;
+    const moon = moonPhaseName(this.dayCount) + tp('hud.moonDay', { day: this.dayCount });
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
       ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
-      : '无';
+      : t('hud.none');
 
     const armorPoints = this.stats.armorPoints;
 
@@ -16403,27 +16409,35 @@ class App {
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
-        `${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   ${clock}   ${moon}\n` +
-        `持有 ${this.heldName}${armorPoints > 0 ? `   护甲 ${armorPoints}` : ''}`;
+        `${gameModeLabel(this.gameMode)}${this.flying ? t('hud.flying') : ''}   ${clock}   ${moon}\n` +
+        `${tp('hud.holdingShort', { name: this.heldName })}${
+          armorPoints > 0 ? `   ${tp('hud.armorShort', { count: armorPoints })}` : ''
+        }`;
       return;
     }
 
+    const adaptive =
+      this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance
+        ? ` ${tp('hud.adaptive', { count: this.settings.viewDistance })}`
+        : '';
     this.debugEl.textContent =
-      `Minicraft  ·  P1 物理 + 方块交互\n` +
-      `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
-      `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${difficultyLabel(this.difficulty)}   模式: ${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${cameraModeLabel(this.cameraMode)}\n` +
-      `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
-      `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
-      `持有: ${this.heldName}\n` +
-      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   雾: ${this.fogRadius.toFixed(1)}   已渲染: ${this.chunkRenderer.drawnCount}/${this.chunkRenderer.chunkMeshCount}（画/留）   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
-      `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
-      `经验: ${this.experience.level} 级 ${this.experience.progress}/${this.experience.toNext}（累计 ${this.experience.total}）\n` +
-      `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
+      `${BRAND}  ·  ${t('hud.physics')}\n` +
+      `${this.fps} fps   ${tp('hud.triangles', { count: this.chunkRenderer.triangles.toLocaleString() })}\n` +
+      `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   ${tp('hud.chunk', { x: cx, z: cz })}\n` +
+      `${tp('hud.facing', { dir: facing })}   ${tp('hud.time', { time: clock })}   ${tp('hud.moon', { moon })}   ${tp('hud.difficulty', { value: difficultyLabel(this.difficulty) })}   ${tp('hud.mode', { value: `${gameModeLabel(this.gameMode)}${this.flying ? t('hud.flying') : ''}` })}   ${tp('hud.dimension', { value: dimensionLabel(this.dimension) })}   ${tp('hud.camera', { value: cameraModeLabel(this.cameraMode) })}\n` +
+      `${tp('hud.onGround', { value: p.onGround ? t('hud.yes') : t('hud.no') })}   ${tp('hud.inWater', { value: p.inWater ? t('hud.yes') : t('hud.no') })}   ${tp('hud.feetLight', { count: feetLight })}\n` +
+      `${tp('hud.target', { target })}${this.breakProgress > 0 ? `   ${tp('hud.breaking', { percent: Math.round(this.breakProgress * 100) })}` : ''}\n` +
+      `${tp('hud.holding', { name: this.heldName })}\n` +
+      `${tp('hud.viewDistance', { count: this.viewDistance })}${adaptive} ${t('hud.chunkWord')}   ${tp('hud.fog', { count: this.fogRadius.toFixed(1) })}   ${tp('hud.rendered', { drawn: this.chunkRenderer.drawnCount, total: this.chunkRenderer.chunkMeshCount })}   ${tp('hud.pendingMesh', { count: this.chunkRenderer.queueLength })}   ${tp('hud.inFlight', { count: this.chunkRenderer.inFlightCount })}   ${tp('hud.pendingGen', { count: this.world.pendingCount })}\n` +
+      `${tp('hud.health', { value: this.stats.health.toFixed(1) })}   ${tp('hud.food', { value: this.stats.food })}   ${tp('hud.saturation', { value: this.stats.saturation.toFixed(1) })}   ${tp('hud.air', { value: this.stats.air })}   ${tp('hud.exhaustion', { value: this.stats.exhaustion.toFixed(2) })}   ${tp('hud.armor', { value: armorPoints })}\n` +
+      `${tp('hud.experience', { level: this.experience.level, progress: this.experience.progress, next: this.experience.toNext, total: this.experience.total })}\n` +
+      `${tp('hud.lightQueue', { count: this.world.lightWorkCount })}   ${tp('hud.pendingRelight', { count: this.pendingSettle.length / 3 })}\n` +
       // 世界边界（K12，批次 175）：只在"不是默认的 3 千万格"时才占一行，
       // 否则每个玩家的调试面板都会多一句永远不变的话
       (this.border.size < DEFAULT_BORDER_SIZE ? `${describeBorder(this.border)}\n` : '') +
-      `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
+      `${tp('hud.net', { status: this.netStatus })}${
+        this.net.selfId > 0 ? ` ${tp('hud.netOnline', { id: this.net.selfId, count: this.net.playerCount })}` : ''
+      }` +
       (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
   }
 
