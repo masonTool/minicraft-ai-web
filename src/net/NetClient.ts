@@ -76,7 +76,7 @@ export interface NetHandlers {
    *
    * 主线不是"每帧都发"——服务端 2 秒一条，客户端按 4 倍速往它靠（`core/net/NetTime.ts`）。
    */
-  onTime?: (timeOfDay: number) => void;
+  onTime?: (timeOfDay: number, snap: boolean) => void;
   /**
    * 服务端回了 `error`。
    *
@@ -232,7 +232,8 @@ export class NetClient {
   private deliverTime(message: Record<string, unknown>): void {
     const timeOfDay = Number(message.timeOfDay);
     if (!Number.isFinite(timeOfDay)) return;
-    this.handlers.onTime?.(timeOfDay);
+    // `snap` = 有人睡满跳夜了（联机11）：本地要**立刻**对齐，不能 4 倍速慢慢追
+    this.handlers.onTime?.(timeOfDay, message.snap === true);
   }
 
   private handleMessage(message: Record<string, unknown>): void {
@@ -429,6 +430,16 @@ export class NetClient {
   sendChat(text: string): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'chat', text }));
+  }
+
+  /**
+   * 我睡满跳夜了（联机11）：让服务端把大家的时间一起跳到黎明。
+   *
+   * 只发"我睡了"这一个事实，不带时间——服务端才是权威（它决定跳到几点、要不要清天气）。
+   */
+  sendSleep(): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'sleep' }));
   }
 
   disconnect(): void {

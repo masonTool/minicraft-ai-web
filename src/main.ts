@@ -1797,6 +1797,8 @@ class App {
    * 只存目标值、不直接赋给 `timeOfDay`——2 秒一条广播，直接赋值太阳会"跳"。
    */
   private netTimeTarget: number | null = null;
+  /** 下一个时间目标要**直接对齐**（有人睡满跳夜，见联机11），而不是按 4 倍速追 */
+  private netTimeSnap = false;
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1835,8 +1837,16 @@ class App {
     onItemSpawn: (item) => this.onNetItemSpawn(item),
     onItemRemove: (owner, localId) => this.onNetItemRemove(owner, localId),
     // 时间权威（联机10）：服务端 2s 一条，这里只记目标值，推进在主循环里按 4 倍速追
-    onTime: (timeOfDay) => {
+    onTime: (timeOfDay, snap) => {
       this.netTimeTarget = timeOfDay;
+      if (!snap) return;
+      // 有人睡满跳夜（联机11）：下一秒直接对齐，别让人看着太阳慢慢爬
+      this.netTimeSnap = true;
+      // 睡醒放晴：天气权威还没做（联机35），这里只跟着"跳夜"这一个事件清一次，
+      // 抢不到"谁在下雨"的决定权——那是联机35 的事
+      const weatherBefore = this.weather.current;
+      this.weather.setKind('clear');
+      this.announceWeather(weatherBefore);
     },
     onChat: (id, name, text) => {
       this.chat.push(`<${name}> ${text}`, 'player');
@@ -8560,6 +8570,9 @@ class App {
     }
 
     this.timeOfDay = DAWN_TIME;
+    // 联机（联机11）：我这边睡了，让服务端把**所有人**的时间一起拨到黎明。
+    // 本项目口径是"任一玩家睡满即跳夜"（不要求全员躺下），差异记在 TASKS 差异台账
+    if (this.net.sessionState === 'connected') this.net.sendSleep();
     // 睡到天亮 = 又过了一天（批次 84）：不推进的话"靠睡觉过日子"的玩家永远停在满月
     this.advanceDay();
     // 但**睡过了就不算失眠**（批次 126）：先推进一天、再归零，所以"睡一觉"净效果是 0
@@ -17058,7 +17071,14 @@ class App {
         if (this.netTimeTarget !== null && this.net.sessionState === 'connected') {
           // 联机（联机10）：时间是**服务端权威**，本地每帧按 4 倍速向它靠，
           // 而不是自己按 dt 推进——否则两个人各跑各的（一个人白天一个人黑夜）
-          this.timeOfDay = stepTimeOfDayToward(this.timeOfDay, this.netTimeTarget, dt);
+          if (this.netTimeSnap) {
+            // 有人睡满跳夜（联机11）：直接对齐。夜里 0.7 → 黎明 0.12 用 4 倍速要追 70 秒，
+            // 那段时间四个人站在漆黑的床上等天亮，明显不对
+            this.timeOfDay = this.netTimeTarget;
+            this.netTimeSnap = false;
+          } else {
+            this.timeOfDay = stepTimeOfDayToward(this.timeOfDay, this.netTimeTarget, dt);
+          }
         } else {
           this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
         }

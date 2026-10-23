@@ -143,7 +143,8 @@ wss.on('listening', () => {
  */
 const DAY_LENGTH_MS = 20 * 60 * 1000;
 const START_TIME_OF_DAY = 0.12;
-const serverStartMs = Date.now();
+/** 开局时刻（`sleep` 会把它重置成"现在"，等于把时间拨回清晨） */
+let serverStartMs = Date.now();
 function currentTimeOfDay() {
   const value = (Date.now() - serverStartMs) / DAY_LENGTH_MS + START_TIME_OF_DAY;
   return value - Math.floor(value);
@@ -369,6 +370,22 @@ wss.on('connection', (socket, request) => {
         if (text.length === 0) return;
         broadcast({ t: 'chat', id: player.id, name: player.name, text });
         log(`<${player.name}> ${text}`);
+        break;
+      }
+
+      /*
+       * 睡满跳夜（联机11）。
+       *
+       * 口径**先按本项目**：任一玩家睡满即跳夜，不要求"所有人都躺下"（基岩版要全员睡；
+       * 这条差异记在 TASKS 的差异台账里）。服务端只做两件事：把时间拨到黎明、广播出去。
+       *
+       * 拨法很省：把"开局时刻"重置成现在——因为 `START_TIME_OF_DAY` 本身就是清晨 0.12。
+       */
+      case 'sleep': {
+        if (!player) return send(socket, { t: 'error', code: 'joined', message: '先 join 再睡' });
+        serverStartMs = Date.now();
+        broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true });
+        log(`${player.name}#${player.id} 睡满，时间跳到黎明`);
         break;
       }
 

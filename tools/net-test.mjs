@@ -426,6 +426,39 @@ try {
     check('收到时间校正广播', typeof value === 'number' && value >= 0 && value < 1, `${value}`);
   }
 
+  // ---------------------------------------------------------------- 睡眠跳夜（联机11）
+  console.log('\n[睡眠跳夜]');
+  {
+    alice.mailbox.length = 0;
+    // bob 睡满（本项目口径：一个人睡就行，不要求全员躺下）→ 服务端拨到黎明并广播 snap
+    bob.send({ t: 'sleep' });
+
+    // 2 秒一次的时间广播也会进来，跳过它们，只找带 snap 的那条
+    let snap = null;
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const message = alice.take('time');
+      if (!message) {
+        await sleep(20);
+        continue;
+      }
+      if (message.snap === true) {
+        snap = message;
+        break;
+      }
+    }
+    check('有人睡满 → 广播跳夜（snap）', snap !== null, JSON.stringify(snap));
+    check('跳夜落在黎明（0.12 附近）', Math.abs((snap?.timeOfDay ?? -1) - 0.12) < 0.02, `${snap?.timeOfDay}`);
+
+    // 没 join 就睡：回错误，而不是崩
+    const early = new TestClient('EarlySleeper');
+    await early.ready();
+    early.send({ t: 'sleep' });
+    const earlyError = await early.wait('error', 2000);
+    check('未 join 就睡被拒', earlyError?.code === 'joined', JSON.stringify(earlyError));
+    early.close();
+  }
+
   // ---------------------------------------------------------------- 心跳（联机7）
   check('心跳：客户端收到服务端 ping', await heartbeatSeen);
 
