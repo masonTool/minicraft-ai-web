@@ -1195,6 +1195,71 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('葡语用法串的 <> / [] / | 与中文一致', ptSyntaxDrift.length === 0, ptSyntaxDrift.join(','));
 
   /**
+   * 四语言巡查（多语言 P4-5）：对 de / ru / fr / pt 各跑一遍同一套判据。
+   *
+   * 这是"逐语言巡查"的可复现版本 —— 不靠人切语言点一圈，而是把四种语言全表
+   * 逐键比一遍。四条判据各自防一类"测试全绿但界面上能看出来"的问题：
+   *
+   *  ① **不得含中文**：漏翻时抄了中文，`satisfies` 查不出来；
+   *  ② **不得有空值**：空串在界面上就是一片空白；
+   *  ③ **不得引入中文表里没有的占位符**：多出来的 `{foo}` 没人替换，会**字面显示**在界面上。
+   *     （反向的"少用占位符"是允许的：`item.desc.tpl.armor` 的中文提了两次 `{material}`，
+   *     罗曼语系写成「全套共 N 点护甲」不再提材料 —— 语义无损，不算错。）
+   *  ④ **不得整组与英文相同**：法语收尾时 `label` 整组 226 条都是英文占位，
+   *     而当时所有测试都是绿的 —— 这条判据就是那次挖出来的。
+   */
+  const sweepLocales = ['de', 'ru', 'fr', 'pt'] as const;
+  for (const code of sweepLocales) await loadLocale(code);
+  const zhTable = tableOf('zh');
+  const enTable = tableOf('en');
+  const holdersOf = (text: string): string[] => (text.match(/\{\w+\}/g) ?? []).map((h) => h.slice(1, -1));
+
+  for (const code of sweepLocales) {
+    const table = tableOf(code);
+    const keysOfLocale = allKeys();
+
+    const cjkLeft = keysOfLocale.filter((key) => /[\u4e00-\u9fff]/.test(table[key] ?? ''));
+    check(`巡查 ${code}：全表没有中文残留`, cjkLeft.length === 0, cjkLeft.slice(0, 3).join(','));
+
+    const emptyValues = keysOfLocale.filter((key) => (table[key] ?? '').trim().length === 0);
+    check(`巡查 ${code}：全表没有空值`, emptyValues.length === 0, emptyValues.slice(0, 3).join(','));
+
+    // 多出来的占位符 = 没人替换 → 界面上直接显示 `{foo}`
+    const extraHolders: string[] = [];
+    for (const key of keysOfLocale) {
+      const zhHolders = new Set(holdersOf(zhTable[key] ?? ''));
+      const localHolders = holdersOf(table[key] ?? '');
+      for (const h of localHolders) {
+        if (!zhHolders.has(h)) {
+          extraHolders.push(`${key}:{${h}}`);
+          break;
+        }
+      }
+    }
+    check(`巡查 ${code}：没有中文表之外的占位符`, extraHolders.length === 0, extraHolders.slice(0, 3).join(','));
+
+    // 整组漏翻：一个组里 90% 以上与英文逐字相同，且组内键数 ≥ 20
+    const byGroup = new Map<string, { total: number; sameAsEn: number }>();
+    for (const key of keysOfLocale) {
+      const group = key.split('.')[0] ?? key;
+      const bucket = byGroup.get(group) ?? { total: 0, sameAsEn: 0 };
+      bucket.total += 1;
+      if (table[key] === enTable[key] && (zhTable[key] ?? '') !== (enTable[key] ?? '')) bucket.sameAsEn += 1;
+      byGroup.set(group, bucket);
+    }
+    const untranslatedGroups = [...byGroup.entries()]
+      .filter(([, b]) => b.total >= 20 && b.sameAsEn / b.total > 0.9)
+      .map(([group, b]) => `${group}:${b.sameAsEn}/${b.total}`);
+    check(`巡查 ${code}：没有整组仍是英文的组`, untranslatedGroups.length === 0, untranslatedGroups.join(','));
+
+    // 抽查 20 条：不露键名（回落链坏掉时 t() 会返回键本身）
+    const step = Math.max(1, Math.floor(keysOfLocale.length / 20));
+    const sample = keysOfLocale.filter((_, index) => index % step === 0).slice(0, 20);
+    const leakedKeys = sample.filter((key) => table[key] === key);
+    check(`巡查 ${code}：抽样 20 条都不露键名`, leakedKeys.length === 0, leakedKeys.join(','));
+  }
+
+  /**
    * 葡语（巴西，多语言 P4-4）。
    *
    * 条目点名的三件事都在这一节里：
