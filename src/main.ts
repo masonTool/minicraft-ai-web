@@ -2162,6 +2162,9 @@ class App {
     this.buildToolbar = new BuildToolbar(document.body, atlas, {
       onToggleMode: (active) => {
         this.buildMode = active;
+        // 打开面板顺手把按住的键清掉：面板是模态的，键盘却还连着——
+        // 不清的话会出现"面板开着、人还在往前走"
+        if (active) this.keys.clear();
         // 退出建造模式时把没点完的第一个角清掉，避免下次进来"莫名其妙已经选了一半"
         if (!active) this.clearSelection();
         this.refreshBuildToolbar();
@@ -4625,6 +4628,16 @@ class App {
         return;
       }
       if (this.sleeping && e.code !== 'Space') return;
+      // 建造抽屉（批次 20261024-0344）是模态层：Esc 收面板，其余按键一律不往下走。
+      // 遮罩只挡鼠标/触摸，键盘完全不受影响——不挡的话面板开着按 W 会一边走一边把左键
+      // 当"点选区角"，按 E 会在抽屉上面再叠一层背包，按 Esc 会先弹暂停菜单。
+      if (this.buildToolbar.isPanelOpen) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          this.buildToolbar.closePanel();
+        }
+        return;
+      }
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
