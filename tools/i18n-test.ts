@@ -849,7 +849,11 @@ console.log('\n[成就数据层（批次 620）]');
 
   // 中文模式必须**原样返回**（不能因为加了英文就动了中文）
   setLanguage('zh');
-  const zhChanged = ADVANCEMENTS.filter((a) => advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc);
+  // 批次 20261024-0223：`minecraft:story/root` 的标题按用户要求统一成品牌名 `Minicraft`
+  // （中文原来是「我的世界」），所以它**故意**与原文不同；其余成就中文必须原样返回。
+  const zhChanged = ADVANCEMENTS.filter(
+    (a) => a.id !== 'minecraft:story/root' && (advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc),
+  );
   check('中文模式下标题与说明原样不动', zhChanged.length === 0, zhChanged.slice(0, 2).map((a) => a.id).join(','));
 
   // 英文模式不许残留中文
@@ -1061,13 +1065,15 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   // 真正要保证的是「界面上取值的两个源头不再是旧字面量」。
   const worldScreenSrc = readFileSync('src/ui/WorldScreen.ts', 'utf8');
   check(
-    '首页品牌块从 BRAND / BRAND_EDITION 取值（旧字面量已清掉）',
+    '首页只显示品牌名（副标题已删，旧字面量已清掉）',
     worldScreenSrc.includes('logo.textContent = BRAND') &&
-      worldScreenSrc.includes('edition.textContent = BRAND_EDITION') &&
+      !worldScreenSrc.includes('world-edition') &&
       !worldScreenSrc.includes("textContent = 'MINECRAFT'") &&
       !worldScreenSrc.includes("textContent = '基岩版"),
   );
-  check('副标题是版本身份（不含「基岩版」）', BRAND_EDITION.includes('1.18') && !BRAND_EDITION.includes('基岩'));
+  // 批次 20261024-0223：用户要求去掉「1.18 · WEB EDITION」副标 → `BRAND_EDITION` 置空，
+  // 首页只剩品牌名一行。这条断言从"副标题是什么"改成"副标题已经没有了"。
+  check('副标题已删除（BRAND_EDITION 为空）', BRAND_EDITION === '');
 
   /**
    * 设置里的「视角」选项（B2，批次 20261024-0136）。
@@ -1448,7 +1454,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minecraft:story/root` →
    * `advancement.story_root.title`）。本轮只翻德语，ru / fr / pt 仍是英文占位（巡查里有白名单）。
    */
-  check('中文成就标题与原文逐条一致', ADVANCEMENTS.every((a) => advancementTitle(a) === a.title));
+  // `story/root` 例外：它的标题是品牌名（见上），其余中文必须逐条等于原文
+  check(
+    '中文成就标题与原文逐条一致（story_root 除外，它是品牌名）',
+    ADVANCEMENTS.filter((a) => a.id !== 'minecraft:story/root').every((a) => advancementTitle(a) === a.title),
+  );
   setLanguage('en');
   const advEn = ADVANCEMENTS.map((a) => advancementTitle(a));
   // 允许少量专名与梗原样保留（`Minecraft` / `Nether` / `Sssssss…` / `Ice Bucket Challenge`），

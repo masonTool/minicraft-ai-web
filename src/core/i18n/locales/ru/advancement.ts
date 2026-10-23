@@ -8,7 +8,7 @@ import type { Messages } from '../zh/index.ts';
 import type { advancement as zhAdvancement } from '../zh/advancement.ts';
 
 export const advancement = {
-  "advancement.story_root.title": "Minecraft",
+  "advancement.story_root.title": "Minicraft",
   "advancement.story_root.desc": "Открой инвентарь (E) и посмотри, что у тебя есть",
   "advancement.story_mine_wood.title": "Лесоруб",
   "advancement.story_mine_wood.desc": "Сруби любое бревно (можно голыми руками, топором быстрее)",

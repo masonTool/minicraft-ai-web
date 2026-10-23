@@ -3,7 +3,7 @@
  * （`minecraft:story/root` → `advancement.story_root.title`），不再手写第二份清单。
  */
 export const advancement = {
-  "advancement.story_root.title": "我的世界",
+  "advancement.story_root.title": "Minicraft",
   "advancement.story_root.desc": "打开背包（E）看一眼自己有什么",
   "advancement.story_mine_stone.title": "石器时代",
   "advancement.story_mine_stone.desc": "用镐挖一块圆石",

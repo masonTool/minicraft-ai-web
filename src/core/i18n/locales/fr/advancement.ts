@@ -8,7 +8,7 @@ import type { Messages } from '../zh/index.ts';
 import type { advancement as zhAdvancement } from '../zh/advancement.ts';
 
 export const advancement = {
-  "advancement.story_root.title": "Minecraft",
+  "advancement.story_root.title": "Minicraft",
   "advancement.story_root.desc": "Ouvre ton inventaire (E) et regarde ce que tu as",
   "advancement.story_mine_wood.title": "Bûcheron",
   "advancement.story_mine_wood.desc": "Abats n’importe quelle bûche (à mains nues ça marche, à la hache c’est plus rapide)",

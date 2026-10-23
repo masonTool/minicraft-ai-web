@@ -8,7 +8,7 @@ import type { Messages } from '../zh/index.ts';
 import type { advancement as zhAdvancement } from '../zh/advancement.ts';
 
 export const advancement = {
-  "advancement.story_root.title": "Minecraft",
+  "advancement.story_root.title": "Minicraft",
   "advancement.story_root.desc": "Öffne dein Inventar (E) und schau, was du hast",
   "advancement.story_mine_stone.title": "Steinzeit",
   "advancement.story_mine_stone.desc": "Baue mit einer Spitzhacke einen Bruchstein ab",

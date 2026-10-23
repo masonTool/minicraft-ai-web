@@ -2207,7 +2207,12 @@ console.log('\n[主菜单分层（批次 108）]');
       mainSrc.includes('await save.savePlayer('),
   );
   // 20261024-0136 用户拍板：首页大字从 MINECRAFT 改成品牌名，并**去掉「基岩版」字样**
-  check('首页品牌块取唯一真值（BRAND / BRAND_EDITION），不再写死 MINECRAFT 与「基岩版」', source.includes('logo.textContent = BRAND;') && source.includes('edition.textContent = BRAND_EDITION;') && source.includes('world-edition'));
+  // 批次 20261024-0223：用户要求连副标题一起去掉 —— 首页只剩 `logo.textContent = BRAND` 一行，
+  // `world-edition` 这个类名不应再出现在 WorldScreen 里。
+  check(
+    '首页只显示品牌名（取 BRAND，副标题已删）',
+    source.includes('logo.textContent = BRAND;') && !source.includes('world-edition'),
+  );
   check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
   check(
     '新建世界返回世界列表（不是跳回首页）',
