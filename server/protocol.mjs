@@ -29,6 +29,25 @@ export const CLOSE_DUPLICATE = 4003;
 /** clientId 的合法形状：8~64 位字母/数字/下划线/连字符（浏览器生成的是 16 位 hex） */
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
+/** 允许的维度名（与客户端 `DimensionId` 的三档一致） */
+const DIMENSIONS = new Set(['overworld', 'nether', 'end']);
+
+/**
+ * 维度名收口：非法/缺失一律回主世界。
+ *
+ * 不做原样透传：维度是 `edits` / 容器表的 key 之一，一个拼错的名字会让那一片改动
+ * 永远对不上（别人眼里那片地形就是没改过），而且日志里看不出来。
+ */
+export function sanitizeDimension(value) {
+  return typeof value === 'string' && DIMENSIONS.has(value) ? value : 'overworld';
+}
+
+/** 数字收口：NaN / 非数字字符串 / undefined 都回落到默认值（join 的坐标用） */
+export function finiteNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function isValidClientId(value) {
   return typeof value === 'string' && CLIENT_ID_RE.test(value);
 }

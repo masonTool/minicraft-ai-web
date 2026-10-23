@@ -380,6 +380,7 @@ import {
 } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
+import { RemotePresence } from './core/net/RemotePresence.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1840,6 +1841,7 @@ class App {
       if (!connected) {
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
+        this.remotePresence.clear();
         this.clearRemoteItems();
       }
     },
@@ -1847,6 +1849,13 @@ class App {
   private readonly remotePlayers = new Map<number, Mob>();
   /** 远程玩家的渲染插值（L4，批次 601）：网络位置离散到达，直接赋值会跳 */
   private readonly remoteSmoothers = new Map<number, RemotePlayerSmoother>();
+  /**
+   * 远端玩家在哪个维度（联机3）。
+   *
+   * 远端玩家不在 `EntityManager` 里、也没有维度字段，所以"画不画"要单独问这张表；
+   * 否则队友走进下界之后，你主世界同坐标会站着一个分身。
+   */
+  private readonly remotePresence = new RemotePresence();
   /** 联机容器同步的防抖（L4，批次 611） */
   private containerSyncTimer: number | null = null;
   private containerSyncTarget: { chest: Chest; x: number; y: number; z: number; dimension: DimensionId } | null =
@@ -3310,6 +3319,8 @@ class App {
 
   /** 其它玩家的位置更新 */
   private onNetPlayer(player: NetPlayerState): void {
+    // 维度先记：下面"首次见到这个人"的分支会提前 return，放在后面就会漏掉第一次
+    this.remotePresence.set(player.id, player.dimension ?? 'overworld');
     const next = { x: player.x, y: player.y, z: player.z, yaw: player.yaw };
     let mob = this.remotePlayers.get(player.id);
     if (!mob) {
@@ -3369,6 +3380,7 @@ class App {
     // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
     this.remotePlayers.delete(id);
     this.remoteSmoothers.delete(id);
+    this.remotePresence.remove(id);
     // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
     for (const [key, ghost] of this.remoteItems) {
       if (!key.startsWith(`${id}:`)) continue;
@@ -3471,7 +3483,7 @@ class App {
     selfId: number;
     seed: number | null;
     players: number;
-    remote: Array<{ id: number; x: number; y: number; z: number }>;
+    remote: Array<{ id: number; x: number; y: number; z: number; dimension: string }>;
     chat: string;
   } {
     return {
@@ -3479,7 +3491,14 @@ class App {
       selfId: this.net.selfId,
       seed: this.net.worldSeed,
       players: this.net.playerCount,
-      remote: [...this.remotePlayers.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z })),
+      remote: [...this.remotePlayers.entries()].map(([id, mob]) => ({
+        id,
+        x: mob.x,
+        y: mob.y,
+        z: mob.z,
+        // 调试/验收用：远端玩家在哪个维度（渲染按它过滤）
+        dimension: this.remotePresence.dimensionOf(id) ?? 'overworld',
+      })),
       chat: this.chatLine,
     };
   }
@@ -11458,6 +11477,8 @@ class App {
     }
     // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
     for (const [id, mob] of this.remotePlayers) {
+      // 只画同一维度的：远端玩家没有维度字段，坐标却是"他所在维度"的
+      if (!this.remotePresence.visible(id, this.dimension)) continue;
       const smoothed = this.remoteSmoothers.get(id)?.step(dt);
       if (smoothed) {
         mob.x = smoothed.x;

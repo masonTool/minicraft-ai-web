@@ -32,6 +32,7 @@ socket.on('open', () => {
       x: blockX + 3,
       y: blockY,
       z: blockZ + 3,
+      dimension: 'overworld',
     }),
   );
 });

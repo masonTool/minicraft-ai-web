@@ -113,6 +113,13 @@ export class NetClient {
   private fatal = false;
   /** 本机的稳定标识（见 `core/net/ClientId.ts`），首次 connect 时生成 */
   private clientId = '';
+  /**
+   * 最近一帧的位置与维度。
+   *
+   * `join` 要带"我此刻在哪"：不带的话，队友会在 `(0, 80, 0)` 看到你闪一下
+   * （要等入服后第一条 `move` 才纠正）。掉线重连时也用这份最新值。
+   */
+  private readonly position = { x: 0, y: 80, z: 0, dimension: 'overworld' };
   /** 连接状态文本（HUD 显示用） */
   status = '未连接';
 
@@ -167,6 +174,10 @@ export class NetClient {
           v: NET_PROTOCOL_VERSION,
           name: this.name,
           clientId: this.clientId,
+          x: Number(this.position.x.toFixed(3)),
+          y: Number(this.position.y.toFixed(3)),
+          z: Number(this.position.z.toFixed(3)),
+          dimension: this.position.dimension,
         }),
       );
     };
@@ -316,6 +327,12 @@ export class NetClient {
     dimension: string,
     now = performance.now(),
   ): void {
+    // 位置快照要在 connected 检查**之前**更新：连接可能发生在「暂停菜单里点连接」，
+    // 那一刻上一帧的 tick 已经跑过（主循环暂停时也照样调这个），这份值就是最新的。
+    this.position.x = x;
+    this.position.y = y;
+    this.position.z = z;
+    this.position.dimension = dimension;
     if (!this.connected || this.selfId === 0) return;
     if (now - this.lastMoveSent < MOVE_SEND_INTERVAL_MS) return;
     this.lastMoveSent = now;

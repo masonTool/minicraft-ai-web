@@ -23,7 +23,9 @@ import {
   CLOSE_DUPLICATE,
   CLOSE_VERSION,
   PROTOCOL_VERSION,
+  finiteNumber,
   isValidClientId,
+  sanitizeDimension,
   sanitizeName,
 } from './protocol.mjs';
 
@@ -157,12 +159,14 @@ wss.on('connection', (socket, request) => {
           id: nextPlayerId++,
           name,
           clientId: message.clientId,
-          x: Number(message.x ?? 0),
-          y: Number(message.y ?? 80),
-          z: Number(message.z ?? 0),
+          // 位置与维度：客户端进服时会带上"我此刻在哪"，不再让新玩家在别人眼里
+          // 先出现在 (0,80,0) 一次（要等 100ms 后的第一条 move 才纠正）
+          x: finiteNumber(message.x, 0),
+          y: finiteNumber(message.y, 80),
+          z: finiteNumber(message.z, 0),
           yaw: 0,
           pitch: 0,
-          dimension: 'overworld',
+          dimension: sanitizeDimension(message.dimension),
           socket,
           lastMove: 0,
           // 掉落物广播的令牌窗口（见 ITEM_RATE_LIMIT）

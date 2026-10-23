@@ -136,10 +136,10 @@ try {
    * 那条消息就**永远没人接**（不是服务端的 bug，而是"测试比服务端快"）。
    * 第一次等 2.5 秒还没回就重发一次 join——真实玩家重连也是这个行为。
    */
-  async function joinAndWaitWelcome(client, name, x, y, z) {
+  async function joinAndWaitWelcome(client, name, x, y, z, dimension = 'overworld') {
     await client.ready();
     for (let attempt = 0; attempt < 2; attempt++) {
-      client.send({ t: 'join', v: PROTOCOL_VERSION, clientId: client.clientId, name, x, y, z });
+      client.send({ t: 'join', v: PROTOCOL_VERSION, clientId: client.clientId, name, x, y, z, dimension });
       const welcome = await client.wait('welcome', attempt === 0 ? 2500 : 4000);
       if (welcome) return welcome;
     }
@@ -337,6 +337,33 @@ try {
       JSON.stringify(welcomeLong?.name),
     );
     longName.close();
+  }
+
+  // ---------------------------------------------------------------- 位置与维度（联机3）
+  console.log('\n[位置与维度]');
+  {
+    // 入服要带上"我此刻在哪"：不带的话队友会先在 (0,80,0) 看到你闪一下
+    alice.mailbox.length = 0;
+    const netherGuy = new TestClient('NetherGuy');
+    const welcomeN = await joinAndWaitWelcome(netherGuy, '下界客', 12.5, 70.25, -3.5, 'nether');
+    const selfInWelcome = (welcomeN?.players ?? []).find((player) => player.id === welcomeN?.id);
+    check(
+      'join 的坐标写进 welcome',
+      selfInWelcome?.x === 12.5 && selfInWelcome?.y === 70.25 && selfInWelcome?.z === -3.5,
+      JSON.stringify(selfInWelcome),
+    );
+    check('join 的维度写进 welcome', selfInWelcome?.dimension === 'nether', `${selfInWelcome?.dimension}`);
+
+    const joinBroadcast = await alice.wait('player');
+    check('加入广播带维度（其他人据此过滤渲染）', joinBroadcast?.dimension === 'nether', JSON.stringify(joinBroadcast));
+    netherGuy.close();
+
+    // 脏维度不能进 edits/容器表的 key（那会让一整片改动永远对不上）
+    const weird = new TestClient('WeirdDimension');
+    const welcomeWeird = await joinAndWaitWelcome(weird, '怪维度', 0, 70, 0, 'moon');
+    const weirdSelf = (welcomeWeird?.players ?? []).find((player) => player.id === welcomeWeird?.id);
+    check('非法维度回落 overworld', weirdSelf?.dimension === 'overworld', `${weirdSelf?.dimension}`);
+    weird.close();
   }
 
   check('服务端仍然活着', server.exitCode === null, `exitCode=${server.exitCode}`);

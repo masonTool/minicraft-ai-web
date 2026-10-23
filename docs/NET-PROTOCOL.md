@@ -54,7 +54,7 @@
 
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
-| `join` | `v, name, clientId`（`x/y/z?` 服务端会读，客户端目前不发） | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined` | 位置默认 `(0, 80, 0)`、维度固定 `overworld`；`联机3` 改为必发坐标与维度 |
+| `join` | `v, name, clientId, x, y, z, dimension` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
 | `move` | `x, y, z, yaw, pitch, dimension` | 距上一条 < 50ms 直接丢弃；缺字段保留旧值 | 客户端 100ms 发一条；**没有速度/距离校验** |
 | `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | **不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
@@ -132,7 +132,7 @@
 | 消息 | 客户端行为 | 备注 |
 | --- | --- | --- |
 | `welcome` | 种子记下（不一致只 warn）；`edits` 逐条写进 `world.edits`，已加载区块立即 `setBlockAndUpdate`；重建远端玩家与掉落物镜像 | 这里**会**把远端改动写进本地存档（`联机6` 隔离） |
-| `player` | 维护 `remotePlayers` + 平滑器 | `dimension` 被丢弃、渲染也不过滤（`联机3`） |
+| `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `block` | 只处理**已加载**区块，未加载直接 return（`联机4`） | 走 `setBlockAndUpdate`，会进增量存档 |
 | `container` | 仅当同维度、且那一格确实是箱子/木桶时，用 `restoreStacks` 清洗后写回 | 不回声（`Chest.restore` 不触发 `onMutate`） |
@@ -148,7 +148,6 @@
 
 | 编号 | 缺口 | 影响 |
 | --- | --- | --- |
-| `联机3` | join 不带坐标/维度；`player` 的 dimension 被丢 | 远端玩家在下界也会画在你旁边 |
 | `联机4` | 未加载区块的 `block` 被丢弃 | 走动过去还是旧地形，只有重连能补 |
 | `联机5`/`联机6` | 种子不强制、远端改动写进单机档 | 各玩各的世界；单机存档被污染 |
 | `联机7` | 无心跳/超时 | 半开连接永远在线 |
