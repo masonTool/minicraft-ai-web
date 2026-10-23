@@ -13,6 +13,7 @@
  */
 
 import { combineOnAnvil, type AnvilOutcome } from '../crafting/Anvil.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
 
 export const ANVIL_LEFT = 0;
@@ -22,7 +23,7 @@ export const ANVIL_SIZE = 3;
 
 export type AnvilTakeResult =
   | { ok: true; output: ItemStack; cost: number }
-  | { ok: false; reason: string };
+  | { ok: false; reason: ReasonRef };
 
 export class Anvil implements SlotSource {
   private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(ANVIL_SIZE).fill(null);
@@ -80,14 +81,14 @@ export class Anvil implements SlotSource {
    */
   take(playerLevel: number, consumeLevels: (levels: number) => boolean): AnvilTakeResult {
     const outcome = combineOnAnvil(this.left, this.right, this.name);
-    if (!outcome) return { ok: false, reason: '没有可产出的结果' };
-    if (playerLevel < outcome.cost) return { ok: false, reason: `需要 ${outcome.cost} 级经验` };
+    if (!outcome) return { ok: false, reason: reason('station.reason.noResult') };
+    if (playerLevel < outcome.cost) return { ok: false, reason: reason('station.reason.needLevels', { cost: outcome.cost }) };
 
     // 先留一份产物快照：后面的 refresh 会把产物槽重算成"下一轮"的结果
     const output: ItemStack = { ...outcome.output };
     if (outcome.output.enchants) output.enchants = { ...outcome.output.enchants };
 
-    if (!consumeLevels(outcome.cost)) return { ok: false, reason: `需要 ${outcome.cost} 级经验` };
+    if (!consumeLevels(outcome.cost)) return { ok: false, reason: reason('station.reason.needLevels', { cost: outcome.cost }) };
 
     // 扣材料：两格各消耗 1 个（附魔书也是消耗 1 本，原版行为）
     for (const index of [ANVIL_LEFT, ANVIL_RIGHT]) {

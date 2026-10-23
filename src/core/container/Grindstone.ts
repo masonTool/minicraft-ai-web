@@ -21,6 +21,7 @@
  */
 
 import { grindOnGrindstone, type GrindstoneOutcome } from '../crafting/Grindstone.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
 
 export const GRINDSTONE_LEFT = 0;
@@ -30,7 +31,7 @@ export const GRINDSTONE_SIZE = 3;
 
 export type GrindstoneTakeResult =
   | { ok: true; output: ItemStack; xp: number }
-  | { ok: false; reason: string };
+  | { ok: false; reason: ReasonRef };
 
 export class Grindstone implements SlotSource {
   private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(GRINDSTONE_SIZE).fill(null);
@@ -77,7 +78,7 @@ export class Grindstone implements SlotSource {
    */
   take(): GrindstoneTakeResult {
     const outcome = grindOnGrindstone(this.left, this.right);
-    if (!outcome) return { ok: false, reason: '没有可产出的结果' };
+    if (!outcome) return { ok: false, reason: reason('station.reason.noResult') };
 
     const output: ItemStack = { ...outcome.output };
     if (outcome.output.contents) output.contents = outcome.output.contents.map((entry) => (entry ? { ...entry } : null));

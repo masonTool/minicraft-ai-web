@@ -17,6 +17,7 @@
  */
 
 import { Item } from '../registry/items.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import { GLASS_PANE_ID } from '../registry/blocks.ts';
 import {
   MAP_MAX_SCALE,
@@ -53,16 +54,16 @@ const GLASS_PANE_ITEM = GLASS_PANE_ID;
 export function planCartography(
   mapStack: ItemStack | null,
   material: ItemStack | null,
-): { ok: true; plan: CartographyPlan } | { ok: false; reason: string } {
-  if (!mapStack) return { ok: false, reason: '先放一张已填好的地图' };
-  if (mapStack.id !== Item.FILLED_MAP || !mapStack.map) return { ok: false, reason: '这一格只收已填好的地图' };
-  if (!material) return { ok: false, reason: '再放纸 / 空地图 / 玻璃板' };
+): { ok: true; plan: CartographyPlan } | { ok: false; reason: ReasonRef } {
+  if (!mapStack) return { ok: false, reason: reason('station.reason.cartographyNeedMap') };
+  if (mapStack.id !== Item.FILLED_MAP || !mapStack.map) return { ok: false, reason: reason('station.reason.cartographyOnlyFilledMap') };
+  if (!material) return { ok: false, reason: reason('station.reason.cartographyNeedMaterial') };
 
   const data: MapData = mapStack.map;
 
   if (material.id === Item.PAPER) {
     const zoomed = zoomOutMap(data);
-    if (!zoomed) return { ok: false, reason: `已经放大到最大（${MAP_MAX_SCALE + 1} 档）` };
+    if (!zoomed) return { ok: false, reason: reason('station.reason.maxZoom', { max: MAP_MAX_SCALE + 1 }) };
     return {
       ok: true,
       plan: { action: 'zoom', result: { id: Item.FILLED_MAP, count: 1, map: zoomed }, consumesMap: true },
@@ -77,14 +78,14 @@ export function planCartography(
   }
 
   if (material.id === GLASS_PANE_ITEM) {
-    if (data.locked) return { ok: false, reason: '这张地图已经锁定了' };
+    if (data.locked) return { ok: false, reason: reason('station.reason.mapLocked') };
     return {
       ok: true,
       plan: { action: 'lock', result: { id: Item.FILLED_MAP, count: 1, map: lockMap(data) }, consumesMap: true },
     };
   }
 
-  return { ok: false, reason: '材料只认纸（放大）、空地图（复制）、玻璃板（锁定）' };
+  return { ok: false, reason: reason('station.reason.cartographyMaterialHint') };
 }
 
 export class CartographyTable implements SlotSource {
@@ -112,7 +113,7 @@ export class CartographyTable implements SlotSource {
   }
 
   /** 当前两格能做出什么（界面用它决定按钮的可用状态与提示） */
-  plan(): { ok: true; plan: CartographyPlan } | { ok: false; reason: string } {
+  plan(): { ok: true; plan: CartographyPlan } | { ok: false; reason: ReasonRef } {
     return planCartography(this.map, this.material);
   }
 
@@ -121,7 +122,7 @@ export class CartographyTable implements SlotSource {
    *
    * 复制只扣空地图、不扣原件；放大与锁定连地图一起扣（产物就是新的那张）。
    */
-  craft(): { ok: true; plan: CartographyPlan } | { ok: false; reason: string } {
+  craft(): { ok: true; plan: CartographyPlan } | { ok: false; reason: ReasonRef } {
     const planned = this.plan();
     if (!planned.ok) return planned;
 

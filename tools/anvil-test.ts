@@ -13,6 +13,7 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
+import { reasonText } from '../src/core/container/reason.ts';
 import { Item } from '../src/core/registry/items.ts';
 import { armorItemId } from '../src/core/registry/armor.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
@@ -266,7 +267,7 @@ console.log('\n[容器：取产物才扣等级与材料]');
   anvil.set(ANVIL_RIGHT, stack(Item.DIAMOND, { count: 1 }));
   const before = xp.level;
   const result = anvil.take(xp.level, (levels) => xp.consumeLevels(levels));
-  check('取产物成功', result.ok, result.ok ? '' : result.reason);
+  check('取产物成功', result.ok, result.ok ? '' : reasonText(result.reason));
   equal('扣了 1 级', xp.level, before - 1);
   equal('材料 -1', anvil.get(ANVIL_RIGHT), null);
   equal('左格物品被消耗', anvil.get(ANVIL_LEFT), null);
@@ -283,7 +284,8 @@ console.log('\n[容器：失败一点都不扣]');
 
   const result = anvil.take(xp.level, (levels) => xp.consumeLevels(levels));
   check('等级不够时取不走', !result.ok, JSON.stringify(result));
-  check('失败原因是"需要 N 级经验"', !result.ok && result.reason.includes('级经验'));
+  // 多语言 P2-7：逻辑层返回键，断言直接比键（比中文串稳，换语言不会红）
+  check('失败原因是"需要 N 级经验"', !result.ok && result.reason.key === 'station.reason.needLevels');
   equal('等级没被扣（本来就是 0）', xp.level, 0);
   equal('材料一点没少', anvil.get(ANVIL_RIGHT)?.count, 2);
   check('左格物品也还在', anvil.get(ANVIL_LEFT) !== null);

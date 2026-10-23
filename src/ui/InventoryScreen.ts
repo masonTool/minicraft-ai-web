@@ -22,6 +22,8 @@
  */
 
 import { t, tn, tp } from '../core/i18n/I18n.ts';
+// 多语言 P2-7：逻辑层返回 ReasonRef，界面层渲染
+import { reasonText } from '../core/container/reason.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import { itemIconTile } from '../core/registry/items.ts';
@@ -3639,7 +3641,7 @@ export class InventoryScreen {
     if (!(table instanceof SmithingTable)) return false;
     const result = table.take();
     if (!result.ok) {
-      this.smithingHintEl.textContent = result.reason;
+      this.smithingHintEl.textContent = reasonText(result.reason);
       this.smithingHintEl.classList.add('bad');
       if (refreshAfter) this.refresh();
       return false;
@@ -6882,7 +6884,7 @@ export class InventoryScreen {
 
     const result = anvil.take(context.playerLevel, context.consumeLevels);
     if (!result.ok) {
-      this.anvilStatusEl.textContent = result.reason;
+      this.anvilStatusEl.textContent = reasonText(result.reason);
       this.anvilStatusEl.classList.add('bad');
       this.refresh();
       return;
@@ -6912,7 +6914,7 @@ export class InventoryScreen {
 
     const result = grindstone.take();
     if (!result.ok) {
-      this.grindstoneStatusEl.textContent = result.reason;
+      this.grindstoneStatusEl.textContent = reasonText(result.reason);
       this.grindstoneStatusEl.classList.add('bad');
       this.refresh();
       return;
@@ -6956,7 +6958,7 @@ export class InventoryScreen {
 
     const result = table.take();
     if (!result.ok) {
-      this.smithingHintEl.textContent = result.reason;
+      this.smithingHintEl.textContent = reasonText(result.reason);
       this.smithingHintEl.classList.add('bad');
       this.refresh();
       return;
@@ -7192,7 +7194,7 @@ export class InventoryScreen {
 
     const result = cutter.cut(outputId);
     if (!result.ok) {
-      this.stonecutterHintEl.textContent = result.reason;
+      this.stonecutterHintEl.textContent = reasonText(result.reason);
       this.stonecutterHintEl.classList.add('bad');
       return;
     }
@@ -7228,7 +7230,7 @@ export class InventoryScreen {
       const label = document.createElement('span');
       label.textContent = bannerPatternLabel(pattern);
       button.append(label);
-      if (blocker) button.title = blocker;
+      if (blocker) button.title = reasonText(blocker);
       button.addEventListener('click', () => this.handleLoomApply(pattern));
       this.loomListEl.appendChild(button);
     }
@@ -7252,7 +7254,7 @@ export class InventoryScreen {
     if (!(loom instanceof Loom)) return;
     const result = loom.applyPattern(pattern);
     if (!result.ok) {
-      this.loomHintEl.textContent = result.reason;
+      this.loomHintEl.textContent = reasonText(result.reason);
       this.loomHintEl.classList.add('bad');
       return;
     }
@@ -7269,7 +7271,7 @@ export class InventoryScreen {
     hint.classList.remove('bad');
     if (!planned.ok) {
       this.cartographyCraftButton.disabled = true;
-      hint.textContent = planned.reason;
+      hint.textContent = reasonText(planned.reason);
       return;
     }
     this.cartographyCraftButton.disabled = false;
@@ -7291,7 +7293,7 @@ export class InventoryScreen {
     }
     const result = table.craft();
     if (!result.ok) {
-      this.cartographyHintEl.textContent = result.reason;
+      this.cartographyHintEl.textContent = reasonText(result.reason);
       this.cartographyHintEl.classList.add('bad');
       return;
     }
@@ -7352,7 +7354,7 @@ export class InventoryScreen {
     const result = table.applySlot(slot, context.playerLevel, context.consumeLevels);
     this.enchantStatusEl.textContent = result.ok
       ? tp('station.enchantApplied', { list: optionLabel(result.enchants) })
-      : result.reason;
+      : reasonText(result.reason);
     this.enchantStatusEl.classList.toggle('bad', !result.ok);
     this.refresh();
   }
@@ -7380,7 +7382,7 @@ export class InventoryScreen {
       button.classList.toggle('on', check.ok);
       button.title = check.ok
         ? tp('station.enchantCostTitle', { cost, lapis: option!.lapis })
-        : check.reason;
+        : reasonText(check.reason);
       button.disabled = !check.ok;
     }
   }

@@ -44,13 +44,6 @@ export function creativeTabLabel(category: CreativeTab): string {
 }
 
 /** 分类名的旧接口（中文，非界面用途：日志与离线断言按它匹配，理由同 STATION_LABELS） */
-export const CREATIVE_TAB_LABELS: Record<CreativeTab, string> = {
-  all: '全部',
-  building: '建筑',
-  equipment: '装备',
-  items: '物品',
-  nature: '自然',
-};
 
 /** 每个顶层分类拿哪一件物品当图标（都是注册表里已有的东西）。 */
 export const CREATIVE_TAB_ICONS: Record<CreativeTab, number> = {

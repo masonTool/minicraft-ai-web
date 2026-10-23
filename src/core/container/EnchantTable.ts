@@ -10,6 +10,7 @@
  */
 
 import { enchantKindOf, rollOptions, type EnchantApplied, type EnchantOption } from '../crafting/Enchanting.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import { Item } from '../registry/items.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
 
@@ -19,7 +20,7 @@ export const ENCHANT_LAPIS_SLOT = 1;
 
 export type EnchantAttempt =
   | { ok: true; enchants: readonly EnchantApplied[] }
-  | { ok: false; reason: string };
+  | { ok: false; reason: ReasonRef };
 
 export class EnchantTable implements SlotSource {
   private readonly slots: (ItemStack | null)[] = [null, null];
@@ -67,13 +68,13 @@ export class EnchantTable implements SlotSource {
   }
 
   /** 这个候选槽现在能不能点；不能点就给出原因（界面直接显示给玩家） */
-  checkSlot(slot: number, playerLevel: number): { ok: true; option: EnchantOption } | { ok: false; reason: string } {
+  checkSlot(slot: number, playerLevel: number): { ok: true; option: EnchantOption } | { ok: false; reason: ReasonRef } {
     const option = this.options[slot];
-    if (!option) return { ok: false, reason: '没有候选' };
-    if (!this.item) return { ok: false, reason: '放入要附魔的物品' };
-    if (option.enchants.length === 0) return { ok: false, reason: `需要 ${option.cost} 级经验` };
-    if (playerLevel < option.cost) return { ok: false, reason: `需要 ${option.cost} 级经验` };
-    if (this.lapis < option.lapis) return { ok: false, reason: `需要 ${option.lapis} 个青金石` };
+    if (!option) return { ok: false, reason: reason('station.reason.enchantNoOption') };
+    if (!this.item) return { ok: false, reason: reason('station.reason.enchantNeedItem') };
+    if (option.enchants.length === 0) return { ok: false, reason: reason('station.reason.needLevels', { cost: option.cost }) };
+    if (playerLevel < option.cost) return { ok: false, reason: reason('station.reason.needLevels', { cost: option.cost }) };
+    if (this.lapis < option.lapis) return { ok: false, reason: reason('station.reason.needLapis', { lapis: option.lapis }) };
     return { ok: true, option };
   }
 
@@ -91,7 +92,7 @@ export class EnchantTable implements SlotSource {
 
     const { option } = check;
     const item = this.item!;
-    if (!consumeLevels(option.cost)) return { ok: false, reason: `需要 ${option.cost} 级经验` };
+    if (!consumeLevels(option.cost)) return { ok: false, reason: reason('station.reason.needLevels', { cost: option.cost }) };
 
     // 扣青金石：优先扣这一槽，不够再从别处补（玩家可能把青金石分了几叠）
     const lapisStack = this.get(ENCHANT_LAPIS_SLOT);

@@ -16,6 +16,7 @@
  */
 
 import { isBannerId } from '../registry/blocks.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import { BANNER_PATTERN_COUNT } from '../registry/blockState.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { DYE_ITEM_START } from '../registry/items.ts';
@@ -48,20 +49,20 @@ export function loomBlocker(
   dye: ItemStack | null,
   pattern: number,
   output: ItemStack | null,
-): string | null {
-  if (!banner) return '先放一面旗帜';
-  if (!isBannerId(banner.id)) return '这一格只收旗帜';
+): ReasonRef | null {
+  if (!banner) return reason('station.reason.loomNeedBanner');
+  if (!isBannerId(banner.id)) return reason('station.reason.loomOnlyBanner');
   if (!Number.isInteger(pattern) || pattern <= 0 || pattern >= BANNER_PATTERN_COUNT) {
-    return '没有这种图案';
+    return reason('station.reason.loomNoPattern');
   }
-  if ((banner.bannerPattern ?? 0) === pattern) return '这面旗帜已经是这个图案了';
-  if (!dye) return '还需要 1 个染料';
-  if (!isDyeItem(dye.id)) return '染料格里得放染料';
+  if ((banner.bannerPattern ?? 0) === pattern) return reason('station.reason.loomSamePattern');
+  if (!dye) return reason('station.reason.loomNeedDye');
+  if (!isDyeItem(dye.id)) return reason('station.reason.loomOnlyDye');
   if (output) {
     // 成品格里只能继续堆"同一面旗的同一个图案"：混着放会让玩家拿错颜色
-    if (output.id !== banner.id) return '先把成品格里的东西拿走';
-    if ((output.bannerPattern ?? 0) !== pattern) return '成品格里是另一种图案';
-    if (output.count >= 64) return '成品格已经满了';
+    if (output.id !== banner.id) return reason('station.reason.loomOutputOccupied');
+    if ((output.bannerPattern ?? 0) !== pattern) return reason('station.reason.loomOutputOtherPattern');
+    if (output.count >= 64) return reason('station.reason.loomOutputFull');
   }
   return null;
 }
@@ -95,7 +96,7 @@ export class Loom implements SlotSource {
   }
 
   /** 这一项现在能不能印（界面用它在按钮上标灰/提示） */
-  blockerFor(pattern: number): string | null {
+  blockerFor(pattern: number): ReasonRef | null {
     return loomBlocker(this.banner, this.dye, pattern, this.output);
   }
 
@@ -108,7 +109,7 @@ export class Loom implements SlotSource {
    *
    * @returns 成功时给出成品那一份（界面用来播提示与音效）
    */
-  applyPattern(pattern: number): { ok: true; output: ItemStack } | { ok: false; reason: string } {
+  applyPattern(pattern: number): { ok: true; output: ItemStack } | { ok: false; reason: ReasonRef } {
     const banner = this.banner;
     const dye = this.dye;
     const blocker = loomBlocker(banner, dye, pattern, this.output);

@@ -16,6 +16,7 @@
  */
 
 import { stonecuttingOffers, type StonecuttingOffer } from '../crafting/Stonecutting.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
 
 export const STONECUTTER_INPUT = 0;
@@ -58,12 +59,12 @@ export class Stonecutter implements SlotSource {
    * 任何一步不满足都只返回原因、不改动任何东西
    * （"东西被吃掉却没拿到产物"是最恼人的 bug）。
    */
-  cut(outputId: number): { ok: true; output: ItemStack } | { ok: false; reason: string } {
+  cut(outputId: number): { ok: true; output: ItemStack } | { ok: false; reason: ReasonRef } {
     const input = this.input;
-    if (!input) return { ok: false, reason: '先放进要切的石料' };
+    if (!input) return { ok: false, reason: reason('station.reason.stonecutterNeedInput') };
 
     const offer = this.offers.find((candidate) => candidate.output === outputId);
-    if (!offer) return { ok: false, reason: '这件石料切不出它' };
+    if (!offer) return { ok: false, reason: reason('station.reason.stonecutterNoOffer') };
 
     const output: ItemStack = { id: offer.output, count: offer.count };
 

@@ -1045,6 +1045,25 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('名字牌字体栈保留中文字体（PingFang / YaHei）', nameTagSrc.includes('PingFang SC') && nameTagSrc.includes('Microsoft YaHei'));
 
   /**
+   * 逻辑层不返回文案（多语言 P2-7）：容器类只能返回 `reason('station.reason.*')`。
+   *
+   * 判据直接从源码里把 `reason('…')` 的键抓出来，再逐条查表 ——
+   * 这样"新写一句中文塞进 reason"与"键写错了"都会当场红，不必等界面截图。
+   */
+  const containerFiles = ['Anvil', 'CartographyTable', 'EnchantTable', 'Grindstone', 'Loom', 'SmithingTable', 'Stonecutter'];
+  const reasonKeys = new Set<string>();
+  const cjkReasons: string[] = [];
+  for (const name of containerFiles) {
+    const code = codeOf(readFileSync(new URL(`../src/core/container/${name}.ts`, import.meta.url), 'utf8'));
+    for (const match of code.matchAll(/reason\('([^']+)'/g)) reasonKeys.add(match[1]!);
+    for (const match of code.matchAll(/return '([^']*[\u4e00-\u9fff][^']*)'/g)) cjkReasons.push(`${name}: ${match[1]!.slice(0, 12)}`);
+  }
+  check(`容器类用 ${reasonKeys.size} 条 reason 键（不是中文句子）`, reasonKeys.size >= 15, String(reasonKeys.size));
+  check('容器类不再 return 中文句子（一律走 reason(...)）', cjkReasons.length === 0, cjkReasons.slice(0, 3).join(' / '));
+  const badReasonKeys = [...reasonKeys].filter((key) => t(key) === key || /[\u4e00-\u9fff]/.test(t(key, 'en')));
+  check('每条 reason 键都能渲染出中英文（不露键名）', badReasonKeys.length === 0, badReasonKeys.slice(0, 3).join(','));
+
+  /**
    * 标签表族（二）（多语言 P2-6）：音效组 / 外观 10 张 / 朝向 / 旗帜图案 / 配方书页签 / 物品类别。
    *
    * 外观那十张表里有五张是**按下标**存名字的（肤色/上衣/裤色/发色/瞳色），

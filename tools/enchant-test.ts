@@ -12,6 +12,7 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
+import { reasonText } from '../src/core/container/reason.ts';
 import { armorItemId } from '../src/core/registry/armor.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { Item } from '../src/core/registry/items.ts';
@@ -179,7 +180,7 @@ console.log('\n[点候选：扣等级与青金石]');
   const option = table.options[0]!;
   const before = xp.level;
   const result = table.applySlot(0, xp.level, (levels) => xp.consumeLevels(levels));
-  check('结算成功', result.ok, result.ok ? '' : result.reason);
+  check('结算成功', result.ok, result.ok ? '' : reasonText(result.reason));
   equal('扣掉了对应等级', xp.level, before - option.cost);
   equal('扣掉了 1 个青金石', table.get(ENCHANT_LAPIS_SLOT)?.count, 3 - option.lapis);
   check('装备上写入了附魔', Object.keys(table.item?.enchants ?? {}).length > 0, JSON.stringify(table.item?.enchants));
@@ -207,7 +208,7 @@ console.log('\n[点候选：各种失败都不该扣东西]');
   poorTable.refresh(noXp.level, 15, seeded(42));
   const poor = poorTable.applySlot(0, noXp.level, (levels) => noXp.consumeLevels(levels));
   check('没经验时点不动', !poor.ok && noXp.level === 0, JSON.stringify(poor));
-  check('失败原因会说明需要多少级', !poor.ok && poor.reason.includes('级经验'), JSON.stringify(poor));
+  check('失败原因会说明需要多少级', !poor.ok && poor.reason.key === 'station.reason.needLevels', JSON.stringify(poor));
 
   // 没有装备
   const empty = new EnchantTable();

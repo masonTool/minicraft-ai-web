@@ -12,6 +12,7 @@
  */
 
 import { SMITHING_INGOT_COST, combineOnSmithing, type SmithingOutcome } from '../crafting/Smithing.ts';
+import { reason, type ReasonRef } from './reason.ts';
 import type { ItemStack, SlotSource } from './Inventory.ts';
 
 export const SMITHING_EQUIPMENT = 0;
@@ -61,9 +62,9 @@ export class SmithingTable implements SlotSource {
    * 顺序照铁砧那条经验：**先算结果、再留产物快照、最后扣材料**——
    * 任何一步失败都不改动任何东西（东西没了又没拿到产物是最恼人的 bug）。
    */
-  take(): { ok: true; output: ItemStack } | { ok: false; reason: string } {
+  take(): { ok: true; output: ItemStack } | { ok: false; reason: ReasonRef } {
     const outcome = combineOnSmithing(this.equipment, this.material);
-    if (!outcome) return { ok: false, reason: '没有可产出的结果' };
+    if (!outcome) return { ok: false, reason: reason('station.reason.noResult') };
 
     const output: ItemStack = { ...outcome.output };
     if (outcome.output.enchants) output.enchants = { ...outcome.output.enchants };

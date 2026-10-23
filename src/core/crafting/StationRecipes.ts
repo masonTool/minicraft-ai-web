@@ -55,14 +55,6 @@ export function stationLabel(station: StationRecipeStation): string {
  * 一次全改成键会让这批断言全部失效、却换不回任何可读性，
  * 所以只让**界面**改走 `stationLabel()`，这张中文表留给非界面用途。
  */
-export const STATION_LABELS: Readonly<Record<StationRecipeStation, string>> = {
-  furnace: '熔炉',
-  smoker: '烟熏炉（或熔炉）',
-  blast_furnace: '高炉（或熔炉）',
-  campfire: '营火',
-  smithing: '锻造台',
-  brewing: '酿造台',
-};
 
 /** 红底原因的文案键（批次 617 / Q13，理由同上） */
 export const STATION_REASON_KEYS: Readonly<Record<StationRecipeReason, string>> = {
@@ -78,14 +70,6 @@ export function stationReasonLabel(reason: StationRecipeReason): string {
   return t(STATION_REASON_KEYS[reason]);
 }
 
-/** 红底原因的旧接口（中文，非界面用途，理由同 `STATION_LABELS`） */
-export const STATION_REASON_LABELS: Readonly<Record<StationRecipeReason, string>> = {
-  missing_input: '缺原料',
-  missing_fuel: '缺燃料',
-  missing_equipment: '缺要升级的装备',
-  missing_material: '缺材料',
-  slot_occupied: '槽位被其他物品占着',
-};
 
 export interface StationRecipeEntry {
   /** 产物（列表格子里画它） */

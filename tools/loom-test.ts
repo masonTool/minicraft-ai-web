@@ -64,28 +64,29 @@ console.log('\n[印不印得了：六种拒绝]');
   const banner = { id: Block.RED_BANNER, count: 1 };
   const dye = { id: RED_DYE, count: 1 };
 
-  equal('没旗帜', loomBlocker(null, dye, 1, null), '先放一面旗帜');
-  equal('旗帜格里不是旗帜', loomBlocker({ id: Block.STONE, count: 1 }, dye, 1, null), '这一格只收旗帜');
-  equal('图案 0 不在列表里', loomBlocker(banner, dye, 0, null), '没有这种图案');
-  equal('越界图案', loomBlocker(banner, dye, 5, null), '没有这种图案');
-  equal('小数图案', loomBlocker(banner, dye, 1.5, null), '没有这种图案');
-  equal('已经就是这个图案', loomBlocker({ ...banner, bannerPattern: 3 }, dye, 3, null), '这面旗帜已经是这个图案了');
-  equal('没染料', loomBlocker(banner, null, 1, null), '还需要 1 个染料');
-  equal('染料格里不是染料', loomBlocker(banner, { id: Block.STONE, count: 1 }, 1, null), '染料格里得放染料');
+  // 多语言 P2-7：逻辑层返回**键**（`ReasonRef`），断言直接比键 —— 换语言不会红
+  equal('没旗帜', loomBlocker(null, dye, 1, null)?.key, 'station.reason.loomNeedBanner');
+  equal('旗帜格里不是旗帜', loomBlocker({ id: Block.STONE, count: 1 }, dye, 1, null)?.key, 'station.reason.loomOnlyBanner');
+  equal('图案 0 不在列表里', loomBlocker(banner, dye, 0, null)?.key, 'station.reason.loomNoPattern');
+  equal('越界图案', loomBlocker(banner, dye, 5, null)?.key, 'station.reason.loomNoPattern');
+  equal('小数图案', loomBlocker(banner, dye, 1.5, null)?.key, 'station.reason.loomNoPattern');
+  equal('已经就是这个图案', loomBlocker({ ...banner, bannerPattern: 3 }, dye, 3, null)?.key, 'station.reason.loomSamePattern');
+  equal('没染料', loomBlocker(banner, null, 1, null)?.key, 'station.reason.loomNeedDye');
+  equal('染料格里不是染料', loomBlocker(banner, { id: Block.STONE, count: 1 }, 1, null)?.key, 'station.reason.loomOnlyDye');
   equal(
     '成品格里是另一种颜色的旗',
-    loomBlocker(banner, dye, 1, { id: Block.BLUE_BANNER, count: 1, bannerPattern: 1 }),
-    '先把成品格里的东西拿走',
+    loomBlocker(banner, dye, 1, { id: Block.BLUE_BANNER, count: 1, bannerPattern: 1 })?.key,
+    'station.reason.loomOutputOccupied',
   );
   equal(
     '成品格里是另一种图案',
-    loomBlocker(banner, dye, 1, { id: Block.RED_BANNER, count: 1, bannerPattern: 2 }),
-    '成品格里是另一种图案',
+    loomBlocker(banner, dye, 1, { id: Block.RED_BANNER, count: 1, bannerPattern: 2 })?.key,
+    'station.reason.loomOutputOtherPattern',
   );
   equal(
     '成品格满了',
-    loomBlocker(banner, dye, 1, { id: Block.RED_BANNER, count: 64, bannerPattern: 1 }),
-    '成品格已经满了',
+    loomBlocker(banner, dye, 1, { id: Block.RED_BANNER, count: 64, bannerPattern: 1 })?.key,
+    'station.reason.loomOutputFull',
   );
   equal('都对就放行', loomBlocker(banner, dye, 1, { id: Block.RED_BANNER, count: 2, bannerPattern: 1 }), null);
 }
@@ -117,7 +118,7 @@ console.log('\n[印一件：扣一面旗 + 一个染料]');
 
   const third = loom.applyPattern(2);
   check('没染料了印不了', !third.ok);
-  equal('拒绝原因', third.ok ? '' : third.reason, '还需要 1 个染料');
+  equal('拒绝原因', third.ok ? '' : third.reason.key, 'station.reason.loomNeedDye');
   equal('拒绝时旗帜不动', loom.banner?.count, 3);
   equal('拒绝时成品不动', loom.output?.count, 2);
 }

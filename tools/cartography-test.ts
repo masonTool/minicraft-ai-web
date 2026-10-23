@@ -10,6 +10,7 @@
  */
 
 import { Block, GLASS_PANE_ID, blockDef } from '../src/core/registry/blocks.ts';
+import { reasonText, type ReasonRef } from '../src/core/container/reason.ts';
 import { Item } from '../src/core/registry/items.ts';
 import { blockLabel } from '../src/core/registry/itemNames.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
@@ -130,19 +131,19 @@ console.log('\n[规则：四种拒绝]');
   equal('没地图', planCartography(null, paper).ok, false);
   equal(
     '地图格里不是已填好的地图',
-    planCartography({ id: Item.MAP, count: 1 }, paper).ok ? '' : (planCartography({ id: Item.MAP, count: 1 }, paper) as { reason: string }).reason,
+    planCartography({ id: Item.MAP, count: 1 }, paper).ok ? '' : reasonText((planCartography({ id: Item.MAP, count: 1 }, paper) as { reason: ReasonRef }).reason),
     '这一格只收已填好的地图',
   );
   equal(
     '没材料',
-    planCartography(map, null).ok ? '' : (planCartography(map, null) as { reason: string }).reason,
+    planCartography(map, null).ok ? '' : reasonText((planCartography(map, null) as { reason: ReasonRef }).reason),
     '再放纸 / 空地图 / 玻璃板',
   );
   const bad = planCartography(map, { id: Block.STONE, count: 1 });
   equal(
     '不认识的材料',
-    bad.ok ? '' : bad.reason,
-    '材料只认纸（放大）、空地图（复制）、玻璃板（锁定）',
+    bad.ok ? '' : bad.reason.key,
+    'station.reason.cartographyMaterialHint',
   );
 }
 
@@ -165,11 +166,11 @@ console.log('\n[规则：三种材料]');
 
   const maxed = filled(zoomOutMap(zoomOutMap(map.map!)!)!);
   const tooFar = planCartography(maxed, { id: Item.PAPER, count: 1 });
-  equal('已到最大缩放不能再放大', tooFar.ok ? '' : tooFar.reason, `已经放大到最大（${MAP_MAX_SCALE + 1} 档）`);
+  equal('已到最大缩放不能再放大', tooFar.ok ? '' : tooFar.reason.key, 'station.reason.maxZoom');
 
   const locked = filled(lockMap(map.map!));
   const again = planCartography(locked, { id: GLASS_PANE_ID, count: 1 });
-  equal('已锁定不能再锁', again.ok ? '' : again.reason, '这张地图已经锁定了');
+  equal('已锁定不能再锁', again.ok ? '' : again.reason.key, 'station.reason.mapLocked');
 }
 
 console.log('\n[制作：扣材料只扣该扣的]');
