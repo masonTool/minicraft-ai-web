@@ -20,6 +20,8 @@ import {
   type CommandHelpField,
   type CommandHelpVariant,
 } from '../core/commands/CommandHelp.ts';
+// 多语言 P1-4：整屏文案走 `cmd.help.screen.*`（原来全部硬编码在 DOM 构造里）
+import { t, tp } from '../core/i18n/I18n.ts';
 
 export class CommandHelpScreen {
   readonly root: HTMLDivElement;
@@ -48,23 +50,23 @@ export class CommandHelpScreen {
     panel.className = 'cmd-help-panel';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
-    panel.setAttribute('aria-label', '命令帮助');
+    panel.setAttribute('aria-label', t('cmd.help.screen.title'));
 
     const header = document.createElement('div');
     header.className = 'cmd-help-header';
     const title = document.createElement('b');
     title.className = 'cmd-help-title';
-    title.textContent = '命令帮助';
+    title.textContent = t('cmd.help.screen.title');
     this.searchEl = document.createElement('input');
     this.searchEl.type = 'text';
     this.searchEl.className = 'world-input cmd-help-search';
-    this.searchEl.placeholder = '搜索命令…';
+    this.searchEl.placeholder = t('cmd.help.screen.search');
     this.searchEl.spellcheck = false;
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'cmd-help-close';
     close.textContent = '✕';
-    close.setAttribute('aria-label', '关闭');
+    close.setAttribute('aria-label', t('cmd.help.screen.close'));
     header.append(title, this.searchEl, close);
 
     const body = document.createElement('div');
@@ -167,7 +169,7 @@ export class CommandHelpScreen {
     if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'cmd-help-empty';
-      empty.textContent = '没有匹配的命令';
+      empty.textContent = t('cmd.help.screen.empty');
       this.listEl.appendChild(empty);
       return;
     }
@@ -202,7 +204,7 @@ export class CommandHelpScreen {
     if (entry.creativeOnly) {
       const tag = document.createElement('span');
       tag.className = 'cmd-help-tag';
-      tag.textContent = '需要创造模式';
+      tag.textContent = t('cmd.help.screen.creativeOnly');
       head.appendChild(tag);
     }
 
@@ -216,8 +218,7 @@ export class CommandHelpScreen {
 
     const note = document.createElement('div');
     note.className = 'cmd-help-note';
-    note.textContent =
-      '下拉框里显示中文名，生成的命令会自动使用对应的英文 id；物品、方块等文本框也能直接填中文名。';
+    note.textContent = t('cmd.help.screen.note');
 
     this.detailEl.append(head, usage, desc, note);
 
@@ -225,7 +226,7 @@ export class CommandHelpScreen {
       const modeField = document.createElement('div');
       modeField.className = 'cmd-help-field';
       const label = document.createElement('label');
-      label.textContent = '操作';
+      label.textContent = t('cmd.help.screen.action');
       const select = document.createElement('select');
       select.className = 'world-input';
       entry.variants.forEach((variant, index) => {
@@ -263,7 +264,7 @@ export class CommandHelpScreen {
     const fill = document.createElement('button');
     fill.type = 'button';
     fill.className = 'cmd-help-fill';
-    fill.textContent = '填入聊天框';
+    fill.textContent = t('cmd.help.screen.fill');
     fill.addEventListener('click', () => {
       const command = buildCommand(entry, this.variantIndex, this.values);
       if (command) this.onUse?.(command);
@@ -278,7 +279,7 @@ export class CommandHelpScreen {
     wrap.className = 'cmd-help-field';
     if (field.suggest) wrap.classList.add('cmd-help-field-suggest');
     const label = document.createElement('label');
-    label.textContent = field.optional ? `${field.label}（可选）` : field.label;
+    label.textContent = field.optional ? tp('cmd.help.screen.optional', { label: field.label }) : field.label;
     wrap.appendChild(label);
 
     if (field.suggest) {
@@ -371,7 +372,7 @@ export class CommandHelpScreen {
       if (field.optional) {
         const empty = document.createElement('option');
         empty.value = '';
-        empty.textContent = '不填';
+        empty.textContent = t('cmd.help.screen.none');
         select.appendChild(empty);
       }
       for (const option of field.options ?? []) {
@@ -384,12 +385,12 @@ export class CommandHelpScreen {
       if (field.kind === 'combo') {
         const customOption = document.createElement('option');
         customOption.value = '__custom__';
-        customOption.textContent = '自定义…';
+        customOption.textContent = t('cmd.help.screen.customEllipsis');
         select.appendChild(customOption);
         custom = document.createElement('input');
         custom.type = 'text';
         custom.className = 'world-input cmd-help-combo-custom';
-        custom.placeholder = field.customPlaceholder ?? '自定义';
+        custom.placeholder = field.customPlaceholder ?? t('cmd.help.screen.custom');
         custom.value = this.values[`${field.key}__custom`] ?? '';
         custom.hidden = (this.values[field.key] ?? '') !== '__custom__';
         custom.addEventListener('input', () => {
@@ -438,9 +439,9 @@ export class CommandHelpScreen {
     fill: HTMLButtonElement,
   ): void {
     const command = buildCommand(entry, this.variantIndex, this.values);
-    preview.textContent = command ?? '请先填写必填项';
+    preview.textContent = command ?? t('cmd.help.screen.needRequired');
     preview.classList.toggle('bad', command === null);
-    error.textContent = command === null ? '还有必填项没有填' : '';
+    error.textContent = command === null ? t('cmd.help.screen.stillRequired') : '';
     fill.disabled = command === null;
   }
 }

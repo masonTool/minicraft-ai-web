@@ -3650,8 +3650,10 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       helpSrc.includes('cmd-help-suggest-list') &&
       helpSrc.includes('let interacting = false;') &&
       helpSrc.includes("item.addEventListener('click', (event) => {") &&
-      helpSrc.includes("this.searchEl.placeholder = '搜索命令…'") &&
-      helpSrc.includes("fill.textContent = '填入聊天框'") &&
+      // ⚠️ 多语言 P1-4：这两句文案已搬进 `cmd.help.screen.*`，断言跟着改成查键绑定，
+      // 不再匹配中文原文（否则每次搬文案都假红一次）
+      helpSrc.includes("this.searchEl.placeholder = t('cmd.help.screen.search')") &&
+      helpSrc.includes("fill.textContent = t('cmd.help.screen.fill')") &&
       appSrc.includes('this.commandHelp.onUse = (command) =>') &&
       appSrc.includes('this.chat.openWith(command, { focus: true });'),
   );

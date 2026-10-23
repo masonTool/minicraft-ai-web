@@ -594,6 +594,15 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   const helpSrc = readFileSync(new URL('../src/core/commands/CommandHelp.ts', import.meta.url), 'utf8');
   const helpHard = linesWithCjkLiteral(codeOf(helpSrc));
   check('命令帮助面板没有残留中文字面量（全部走 cmd.help.*）', helpHard.length === 0, helpHard.slice(0, 3).join(' / '));
+
+  // 整屏 DOM（多语言 P1-4）：标题 / 搜索 / 空态 / 操作列 / 填入 / 可选 / 自定义 / 预览 / 必填提示
+  const helpScreenSrc = readFileSync(new URL('../src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
+  const helpScreenHard = linesWithCjkLiteral(codeOf(helpScreenSrc));
+  check(
+    '命令帮助整屏没有残留中文字面量（全部走 cmd.help.screen.*）',
+    helpScreenHard.length === 0,
+    helpScreenHard.slice(0, 3).join(' / '),
+  );
 }
 
 console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');

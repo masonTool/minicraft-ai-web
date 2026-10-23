@@ -238,4 +238,20 @@ export const cmd = {
   "cmd.help.ui.allAdvancements": "全部进度（*）",
   "cmd.help.ui.enterNumber": "输入数字",
   "cmd.help.ui.near": "~ 或数字",
+
+  // ---- 命令帮助面板（整屏 DOM，多语言 P1-4）
+  "cmd.help.screen.title": "命令帮助",
+  "cmd.help.screen.search": "搜索命令…",
+  "cmd.help.screen.close": "关闭",
+  "cmd.help.screen.empty": "没有匹配的命令",
+  "cmd.help.screen.creativeOnly": "需要创造模式",
+  "cmd.help.screen.note": "下拉框里显示中文名，生成的命令会自动使用对应的英文 id；物品、方块等文本框也能直接填中文名。",
+  "cmd.help.screen.action": "操作",
+  "cmd.help.screen.fill": "填入聊天框",
+  "cmd.help.screen.optional": "{label}（可选）",
+  "cmd.help.screen.none": "不填",
+  "cmd.help.screen.customEllipsis": "自定义…",
+  "cmd.help.screen.custom": "自定义",
+  "cmd.help.screen.needRequired": "请先填写必填项",
+  "cmd.help.screen.stillRequired": "还有必填项没有填",
 } as const;

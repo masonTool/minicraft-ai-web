@@ -236,4 +236,20 @@ export const cmd = {
   "cmd.help.ui.allAdvancements": "All advancements (*)",
   "cmd.help.ui.enterNumber": "Enter a number",
   "cmd.help.ui.near": "~ or a number",
+
+  // ---- command help panel (screen chrome, P1-4)
+  "cmd.help.screen.title": "Command Help",
+  "cmd.help.screen.search": "Search commands…",
+  "cmd.help.screen.close": "Close",
+  "cmd.help.screen.empty": "No matching commands",
+  "cmd.help.screen.creativeOnly": "Requires Creative Mode",
+  "cmd.help.screen.note": "Dropdowns show localized names; the command uses the English id. Text fields for items and blocks also accept localized names.",
+  "cmd.help.screen.action": "Action",
+  "cmd.help.screen.fill": "Insert into chat",
+  "cmd.help.screen.optional": "{label} (optional)",
+  "cmd.help.screen.none": "Leave empty",
+  "cmd.help.screen.customEllipsis": "Custom…",
+  "cmd.help.screen.custom": "Custom",
+  "cmd.help.screen.needRequired": "Fill in the required fields first",
+  "cmd.help.screen.stillRequired": "Some required fields are still empty",
 } satisfies Pick<Messages, keyof typeof zhcmd>;
