@@ -44,6 +44,6 @@
 ## 4. 归档
 
 收尾第五步：`node .continue/hooks/archive-queue.mjs <会话ID>` 归档队列，
-若写过决策记录再跑 `--decision`（计划是 `--plan`）。三者同一套命名：
-`logs/<会话ID>/queue-<时间戳>.md` / `plan-<时间戳>.md` / `decision-<时间戳>.md`——**按会话分目录**，
+若写过决策记录再跑 `--decision`（不带 flag 时会一起搬）。两份同一套命名：
+`logs/<会话ID>/queue.md` / `decision.md`——**按会话分目录、累积式**（新批次插到最上面、`----------` 分隔），
 文件名里不再重复会话 ID（目录已经说了）。都在 `.continue/logs/` 下（gitignore：本机可查，不进仓库）。

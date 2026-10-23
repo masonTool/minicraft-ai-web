@@ -26,18 +26,16 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from '
 /**
  * 复用钩子的解析，**不在这里另写一份**。
  *
- * 这条规矩不是洁癖，是踩过的：本文件原来只复用了 `parsePlan`，却给文件名正则和
- * 队列头 `> 计划：` 各写了一份自己的版本，两份**规则不一致**——门禁接受带 `· 阶段` 的写法、
- * 钩子只认不带的，于是那个写法**门禁全绿、机制一次都不触发**，且没有任何报错。
- * 现在文件名规则（`isPlanFile` / `sessionOfPlan`）与计划解析全部指向 `lib.mjs` 一处；
- * 而"绑定"已经改由文件名表达，队列头那份声明被删掉了——少一处副本就少一处会漂的地方。
+ * 这条规矩不是洁癖，是踩过的：本文件曾经给文件名正则和队列头声明各写了一份自己的版本，
+ * 两份**规则不一致**——门禁接受的写法钩子不认，于是那个写法**门禁全绿、机制一次都不触发**，
+ * 且没有任何报错。现在文件名规则（`isDecisionFile` / `isLegacyPlanFile`）与队列解析
+ * （含里程碑节点）全部指向 `lib.mjs` 一处——少一处副本就少一处会漂的地方。
  */
 import {
   isDecisionFile,
-  isPlanFile,
-  parsePlan,
+  isLegacyPlanFile,
+  parseQueue,
   sessionOfDecision,
-  sessionOfPlan,
   shortSid,
 } from '../.continue/hooks/lib.mjs';
 
@@ -55,9 +53,9 @@ const FILES = {
   done: new URL('../.continue/DONE.md', import.meta.url),
   /** 框架的上限表（唯一来源）。重装框架会覆盖它，所以这里要盯一眼。 */
   docLimits: new URL('../.continue/hooks/lib.mjs', import.meta.url),
-  /** 批次索引：计划阶段行挂的批次号要与它交叉核对。 */
+  /** 批次索引：里程碑确认行挂的批次号要与它交叉核对。 */
   batches: new URL('../.continue/notes/batches.md', import.meta.url),
-  /** 注入协议的生成处：计划机制有没有被重装覆盖，只能看这个文件的文本。 */
+  /** 注入协议的生成处：里程碑段有没有被重装覆盖，只能看这个文件的文本。 */
   queueInit: new URL('../.continue/hooks/queue-init.mjs', import.meta.url),
 };
 
@@ -93,16 +91,7 @@ const LIMITS = {
    * `DONE-<年>.md` 并在文首留索引，而不是继续往一个文件里堆。
    */
   archiveBytes: 1536 * 1024,
-  /**
-   * 计划文件（`doing/plan-*.md`）的上限：与单份队列同口径（500 行 / 60KB）。
-   *
-   * 为什么不给更多：计划是"阶段清单"，一个阶段一行，500 行就是几百个阶段——
-   * 真到那个量级说明该拆成几份计划（每份一个里程碑族），而不是继续加长。
-   * 上限定在这里而不是更宽，是为了把它挡在"变成第二个什么都往里写的文档"之前。
-   */
-  planLines: 500,
-  planBytes: 60 * 1024,
-  /** 决策记录：一次会话的拍板笔记，比计划短得多；超了说明该合并同类项。 */
+  /** 决策记录：一次会话的拍板笔记；超了说明该合并同类项。 */
   decisionLines: 300,
 };
 
@@ -304,17 +293,16 @@ for (const [name, url] of [
   if (bad.length > 0) failed = true;
 }
 
-// ---- 计划的结构与引用完整性（doing/plan-*.md）
+// ---- 里程碑的结构与引用完整性（写在 doing/<会话ID>.md 里）
 /**
- * 计划机制的六条门禁。母题还是这一条：**写了两处就一定要查两处**。
+ * 里程碑门禁。母题还是这一条：**写了两处就一定要查两处**。
  *
- *   · 阶段行挂着批次号（第二处：`notes/batches.md` / `DONE.md`）；
- *   · 队列头部挂着计划名与阶段号（第二处：计划文件本身）；
- *   · 注入文本挂着机制本身（第二处：`queue-init.mjs`，而它是**重装会被覆盖**的框架文件）。
+ *   · 里程碑的确认行挂着批次号（第二处：`notes/batches.md` / `DONE.md`）；
+ *   · 注入文本挂着机制本身（第二处：`queue-init.mjs`，而它是**重装会被覆盖**的框架文件）；
+ *   · 旧版计划文件不能留在 `doing/`（机制已移除，残留会被当成队列）。
  *
- * 任何一处漂了，机制都**静默退化**：计划照样能写、门禁别的项照样绿、
- * 钩子也不再报错，只是永远不再往下取批次。这类"看起来正常但完全不生效"
- * 才是要拦的东西——加计划的目的是防跑偏，不是给自己加一层装饰。
+ * 任何一处漂了，关卡都会**静默退化**：队列照常递、别的检查照绿、钩子也不报错，
+ * 只是"到点停下让人验收"永远不发生。这类"看起来正常但完全不生效"才是要拦的东西。
  */
 {
   const problems = [];
@@ -327,11 +315,11 @@ for (const [name, url] of [
   } catch {
     names = [];
   }
-  /** 文件名规则来自 `lib.mjs`（钩子靠同一个前缀区分"队列"与"计划"）。 */
-  const planNames = names.filter((name) => isPlanFile(name));
+  /** 文件名规则来自 `lib.mjs`（钩子靠同一套判定区分队列 / 历史旧计划 / 决策记录）。 */
   const decisionNames = names.filter((name) => isDecisionFile(name));
-  /** 会话队列 = `doing/` 里既不是计划、也不是决策记录的那些。 */
-  const queueNames = names.filter((name) => !isPlanFile(name) && !isDecisionFile(name));
+  const legacyPlanNames = names.filter((name) => isLegacyPlanFile(name));
+  /** 会话队列 = `doing/` 里既不是旧计划、也不是决策记录的那些。 */
+  const queueNames = names.filter((name) => !isLegacyPlanFile(name) && !isDecisionFile(name));
 
   const readIfAny = (url) => {
     try {
@@ -381,106 +369,75 @@ for (const [name, url] of [
     for (const m of text.matchAll(/\b(\d{8}-\d{4})\b/g)) knownBatches.add(m[1]);
   }
 
-  for (const name of planNames) {
+  /**
+   * 里程碑的结构与引用（写在队列里，不再是独立文件）。
+   *
+   * 母题还是"写了两处就一定要查两处"：
+   *   · 里程碑挂着批次号（第二处：`notes/batches.md` / `DONE.md`）；
+   *   · 注入文本挂着机制本身（第二处：`queue-init.mjs`，而它是**重装会被覆盖**的框架文件）；
+   *   · 队列头部的 `> 批次：`（第二处：批次索引）。
+   * 任何一处漂了，关卡都会**静默退化**：队列照常递、别的检查照绿，只是"到点停下让人验收"永远不发生。
+   */
+  for (const name of queueNames) {
     const url = new URL(name, FILES.queuesDir);
     const text = readIfAny(url);
-    const plan = parsePlan(text);
+    const queue = parseQueue(text);
+    if (queue.milestones.length === 0) continue;
 
-    const n = lineCount(text);
-    if (n > LIMITS.planLines) problems.push(`${name} ${n} 行 > 上限 ${LIMITS.planLines} 行`);
-    let bytes = 0;
-    try {
-      bytes = statSync(url).size;
-    } catch {
-      bytes = 0;
-    }
-    if (bytes > LIMITS.planBytes) {
-      problems.push(`${name} ${(bytes / 1024).toFixed(0)}KB > 上限 ${(LIMITS.planBytes / 1024).toFixed(0)}KB`);
-    }
+    const ids = new Set();
+    for (const ms of queue.milestones) {
+      if (ids.has(ms.id)) problems.push(`${name} 里程碑 ${ms.id} 出现了两次（id 必须唯一）`);
+      ids.add(ms.id);
 
-    // 阶段必须归在自己小节对应的里程碑下，否则"前缀比较"判的就是另一个里程碑
-    const order = [];
-    for (const ms of plan.milestones) {
-      for (const stage of ms.stages) {
-        if (stage.ms !== ms.id) {
-          problems.push(`${name} 阶段 ${stage.id} 写在了「${ms.id}」小节里（编号与所属小节不一致）`);
+      if (ms.acceptance.length === 0) {
+        problems.push(`${name} 里程碑 ${ms.id} 没有 \`- 验收：\` 行——硬停到它时只能空手问人`);
+      }
+      if (ms.confirm) {
+        const batch = /批次\s*`?(\d{8}-\d{4})`?/.exec(ms.confirm);
+        if (batch && !knownBatches.has(batch[1])) {
+          problems.push(
+            `${name} 里程碑 ${ms.id} 的确认行挂着批次 ${batch[1]}，但 notes/batches.md / DONE.md / doing/ 里都没有它`,
+          );
         }
-      }
-      if (ms.stages.length > 0) order.push(ms.id);
-    }
-    const seen = new Set();
-    for (const id of order) {
-      if (seen.has(id)) {
-        problems.push(`${name} 里程碑 ${id} 的阶段被拆成不连续的两段（前缀比较失真，跨里程碑判定会跟着错）`);
-      }
-      seen.add(id);
-    }
-
-    for (const stage of plan.stages) {
-      if (stage.batch && !knownBatches.has(stage.batch)) {
-        problems.push(
-          `${name} 阶段 ${stage.id} 挂着批次 ${stage.batch}，但 .continue/notes/batches.md / DONE.md / doing/ 里都没有它`,
+        const unfinished = queue.entries.filter(
+          (e) => e.index < ms.index && (e.kind === 'todo' || e.kind === 'doing'),
         );
-      }
-      if (stage.kind === 'done' && !stage.batch) {
-        problems.push(`${name} 阶段 ${stage.id} 已勾 [x] 却没挂批次号（回溯链在这里断了）`);
+        if (unfinished.length > 0) {
+          problems.push(
+            `${name} 里程碑 ${ms.id} 已确认，但它前面还有 ${unfinished.length} 条没做完` +
+              `（第${unfinished[0].seq}条）——确认行必须真的验收过这一段`,
+          );
+        }
+      } else if (
+        !queue.entries.some((e) => e.index > ms.index && (e.kind === 'todo' || e.kind === 'doing'))
+      ) {
+        hints.push(`${name} 里程碑 ${ms.id} 后面没有待办了但还没确认——钩子会在这里硬停，等人工验收`);
       }
     }
 
-    /**
-     * 阶段行格式核对：`- [x] MS2.1 …`（阶段号**没带反引号**）会被 `parsePlan` 当普通行丢弃，
-     * 钩子侧不报错、只是这条阶段消失（严重时整个计划被判定"已做完"）。
-     * 判定方式是拿 `parsePlan` 自己解析出的 `raw` 做差集——**不另写一份阶段正则**，
-     * 否则又是两份规则各自漂。
-     */
-    const stageRaws = new Set(plan.stages.map((stage) => stage.raw));
-    const orphans = [];
-    {
-      const lines = text.split(/\r?\n/);
-      let inFence = false;
-      for (const line of lines) {
-        const t = line.trim();
-        if (/^(```|~~~)/.test(t)) {
-          inFence = !inFence;
-          continue;
-        }
-        if (inFence) continue;
-        if (!/^-\s*\[[^\]]{0,6}\]/.test(t)) continue;
-        if (!stageRaws.has(t)) orphans.push(t);
-      }
-    }
-    if (orphans.length > 0) {
-      problems.push(
-        `${name} 有 ${orphans.length} 行看着像阶段但解析不出来（阶段号两侧必须带反引号）：` +
-          `「${orphans[0].slice(0, 48)}」`,
+    const total = queue.entries.length;
+    if (total <= 16) {
+      hints.push(
+        `${name} 只有 ${total} 条就设了 ${queue.milestones.length} 个里程碑——≤16 条一般不该设` +
+          '（关卡太密就会变成噪音，人开始无脑点"继续"）',
       );
     }
+  }
 
-    /**
-     * 里程碑粒度：**只提示、不判红**。
-     *
-     * 规则本身是硬的（计划只该出现在 >16 条的任务上，一个里程碑至少覆盖两批），
-     * 但它是**判断**，不是结构：判红的时机太早会把"正在跑的老计划"直接卡死
-     * （实测：本仓库那份 `plan-jump.md` 就是单阶段，它属于另一个正在进行的会话）。
-     * 强行拆别人的计划等于改它这一批的执行流程，代价大于收益。
-     *
-     * 所以这里走 `i18n-audit` 用过的同一口径：**只报告、不失败，判死是人的事**。
-     * 真正的约束放在两处硬的地方：注入协议（新计划不许这么写）与 `notes/plan.md` §0 的门槛。
-     */
-    for (const ms of plan.milestones) {
-      if (ms.stages.length === 0) {
-        hints.push(`${name} 里程碑「${ms.id} · ${ms.title}」下面一个阶段都没有（阶段行漏写？）`);
-      } else if (ms.stages.length === 1) {
-        hints.push(
-          `${name} 里程碑「${ms.id} · ${ms.title}」只有 1 个阶段——每批都停等于关卡变噪音；` +
-            '要么并到相邻里程碑，要么说明这个任务本来就 ≤16 条、不该建计划',
-        );
+  // 旧版计划文件：机制已移除，还留在 doing/ 里说明这个项目没重启过会话、迁移没跑
+  for (const name of legacyPlanNames) {
+    problems.push(
+      `${name} 是旧版计划文件（机制已移除）；重启一次会话，让 migrateLegacyLayout() 把它归档到 logs/<会话ID>/plan.md`,
+    );
+  }
+
+  // 注入文本里必须还有里程碑段：重装框架会整份覆盖 queue-init.mjs
+  const initText = readIfAny(FILES.queueInit);
+  if (initText) {
+    for (const needle of ['## 里程碑 MS1', '硬停']) {
+      if (!initText.includes(needle)) {
+        problems.push(`queue-init.mjs 的注入里找不到「${needle}」——重装把它覆盖回旧版了？`);
       }
-    }
-
-    const doingCount = plan.stages.filter((stage) => stage.kind === 'doing').length;
-    if (doingCount > 1) {
-      problems.push(`${name} 有 ${doingCount} 条 [~]（计划里同一时间只能有一条，它就是游标）`);
     }
   }
 
@@ -514,33 +471,10 @@ for (const [name, url] of [
     }
   }
 
-  // 计划与队列靠**文件名配对**：`plan-<sid>.md` ↔ `<sid>.md`。
-  // 配对不上就是孤儿计划——钩子按会话 ID 直接算路径，永远读不到它（且不报错）。
-  for (const name of planNames) {
-    const sid = sessionOfPlan(name);
-    if (!sid) continue; // 已经被 isPlanFile 过滤过，这里只是防御
-    if (!queueStems.has(sid)) {
-      problems.push(
-        `${name} 没有对应的会话队列 \`${sid}.md\`——计划按 \`plan-<会话ID>.md\` 与队列配对，` +
-          '孤儿计划钩子永远读不到（跨会话接手时请 `git mv` 到新会话的 ID）',
-      );
-    }
-  }
-
-  // 注入文本里必须还有计划段：重装框架会整份覆盖 queue-init.mjs
-  const initText = readIfAny(FILES.queueInit);
-  if (initText) {
-    for (const needle of ['<本会话ID>-plan.md', '完成到里程碑就停']) {
-      if (!initText.includes(needle)) {
-        problems.push(`queue-init.mjs 的注入里找不到「${needle}」——重装把它覆盖回旧版了？`);
-      }
-    }
-  }
-
   console.log(
-    `${problems.length > 0 ? '✗' : '✓'} 计划 / 决策记录（doing/*-plan.md、*-decision.md）：${planNames.length} 份计划 · ${decisionNames.length} 份决策 · ` +
-      `${LIMITS.planLines} 行 / ${(LIMITS.planBytes / 1024).toFixed(0)}KB 上限 · ` +
-      '阶段批次号、队列引用、注入文本交叉核对',
+    `${problems.length > 0 ? '✗' : '✓'} 里程碑 / 决策记录（doing/<会话ID>.md 内的里程碑节点、*-decision.md）：` +
+      `${decisionNames.length} 份决策 · ` +
+      '验收命令、确认行批次号、旧计划残留、注入文本交叉核对',
   );
   for (const line of problems) console.log(`  · ${line}`);
   for (const line of hints) console.log(`  · 提示（不判红）：${line}`);

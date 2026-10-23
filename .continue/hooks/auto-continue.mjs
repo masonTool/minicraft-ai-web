@@ -19,7 +19,10 @@
  *   2. 刹车开着（`.continue/auto.off` 存在）；
  *   3. 本会话没有队列（纯问答会话不打扰，也不为它建日志文件）；
  *   4. 队列头部（前 5 行）是 `> 状态：讨论中`；
- *   5. 队列里没有 `[ ]` / `[~]`，且**自动收尾指令已下发过**（或已请用户拍板过）。
+ *   5. 队列里没有 `[ ]` / `[~]`，**且**没有待验收的里程碑，且**自动收尾指令已下发过**（或已请用户拍板过）。
+ *
+ * 里程碑关卡（`## 里程碑 MS1 · 名` + `- 验收：…`）：走到它 → **硬停**，等人验收。
+ * 这是这套机制里唯一"必须人说一句才继续"的地方——里程碑存在的理由就是这个停顿。
  *
  * 每一次 Stop 都会在日志里留痕：递任务记一条，空转放行记 `空转 · <原因>`，
  * 状态行里有累计的 `stopSeen`。没有这一层，"钩子放行了"和"钩子没跑"在日志里长得一样。
@@ -45,13 +48,9 @@ import {
   loadState,
   markBlocked,
   markEntryDoing,
-  milestoneComplete,
   parseBatch,
-  planNameFor,
-  planPathFor,
   queueFileName,
   queuePath,
-  readPlan,
   readLogText,
   readPayload,
   readQueue,
@@ -67,11 +66,12 @@ const BLOCKED_MAX = Number(process.env.CONTINUE_BLOCK_AFTER ?? 5);
 const DISCOVERED_LIMIT = Number(process.env.CONTINUE_DISCOVERED_LIMIT ?? 5);
 
 /**
- * 队列还剩这么多条时，提醒"该分阶段了"。
+ * 队列还剩这么多条时，提醒"该设检查点了"。
  *
- * 为什么需要：批次号 = 归档单元，而 `archive-done.mjs` 按批次**整节搬**。一批塞 30 条，
- * `DONE.md` 那一节自己就会超过 300 行上限，届时没有更旧的节可搬，归档退化成手工精简。
- * 所以要在队列还长的时候就提示：做完当前阶段就收尾，另开一批（`--new-batch`）。
+ * 为什么需要：一批塞 30 条时，`DONE.md` 那一节自己就会超过 300 行上限，
+ * 而 `archive-done.mjs` 只能按批次**整节搬**——届时没有更旧的节可搬，归档退化成手工精简。
+ * 所以要在队列还长的时候就提示：要么按批分阶段收尾，要么在队列里插里程碑节点
+ * （`## 里程碑 MSn · 名` + `- 验收：…`），让长任务在中间停下来让人看一眼。
  */
 const LONG_QUEUE_HINT = 10;
 
@@ -294,32 +294,45 @@ const batch = parseBatch(queue.text);
 let pick = pickNext(queue);
 
 /**
- * 递任务的同时**把这条标成进行中**（`[ ]` → `[~]`）。
+ * 里程碑关卡：找出**该停下来的那个节点**。
  *
- * 不依赖 AI 记得改：实测经常出现"正在做的那条还是 `[ ]`"，因为 AI 改队列的时机不稳定。
- * 而"现在在发哪一条"是钩子自己的事实，由它落盘最可靠。
- * 已经 `[~]` 的条目不会再动（`markEntryDoing` 只处理 `todo`）。
+ * 判据两条，缺一不可：
+ *   · 这个里程碑还没有 `- 确认：已验收`（没被人工验收过）；
+ *   · 它**前面**的条目全部是 `[x]` / `[阻塞]`（没有 `[ ]` / `[~]`）——即已经做完这一段。
+ *
+ * `[发现]` 例外：它是干活途中插进来的"以后再做"，不该拦住关卡。否则 `pickNext` 会
+ * 先挑里程碑后面那条普通任务（`[发现]` 排在后面），关卡就被**绕过去**了。
+ *
+ * 为什么不再单独建计划文件：里程碑本来就是"队列里的一个位置"。写成独立文件后，
+ * 队列顺序、批次号、完成状态都要在两处表达，两份必然漂（历史上真漂过：
+ * 门禁接受的写法钩子不认，门禁全绿、机制一次不触发）。放在同一份文件里，顺序与状态只有一份。
  */
-if (pick && markEntryDoing(file, pick.entry)) {
-  appendLog(sid, `标记进行中 · 第${pick.entry.seq}/${pick.entry.total}条 · ${fingerprint(pick.raw).slice(0, 40)}`);
+function pendingMilestone(target) {
+  if (!target) return null;
+  return (
+    target.milestones.find(
+      (ms) =>
+        !ms.confirm &&
+        target.entries.every(
+          (entry) =>
+            entry.index > ms.index ||
+            entry.kind === 'done' ||
+            entry.kind === 'blocked' ||
+            /^-\s*\[[^\]]*\]\s*\[发现\]/.test(entry.raw),
+        ),
+    ) ?? null
+  );
 }
 
 /**
- * 收尾五步（自动收尾与"用户拍板后收尾"共用同一段，避免两份文案分叉）。
+ * 收尾步骤（自动收尾、用户拍板后收尾、里程碑中场收尾共用同一段，避免文案分叉）。
  *
- * 这五步都是"把已经发生的事实搬进文档"，没有取舍空间——所以默认不需要人拍板。
+ * 这五步都是"把已经发生的事实搬进文档"，没有取舍空间——默认不需要人拍板。
  *
- * `keepQueue` 是**计划模式**唯一的差异：队列头部写了 `> 计划：` 时，队列是
- * "可复用的当前批次载体"，收尾后要接着装下一阶段，所以第 5 步从"删除"变成"重置"。
- * 这一步不能省成"先删了再说"：删掉之后钩子下一轮按会话 ID 找不到队列，
- * 计划链在第一批收尾处**无声断掉**——现象是"它不往下取下一批了"，没有任何报错。
+ * `includeArchive=false` 用于**里程碑关卡的中场收尾**：队列还要接着装下一段，
+ * 所以第 5 步（归档并移走队列文件）先不做；等走到最后一个里程碑时再走完整五步。
  */
-/**
- * 收尾五步。`keepQueue=true` 表示计划模式下队列要**重置**；`includeFifth=false` 表示
- * **先不做第 5 步**（硬停时用：用户还没拍板，此时重置队列会把"下一阶段"塞进去，
- * 用户若选"调整计划 / 先收在这里"，队列里就是一堆从没做过的条目）。
- */
-function wrapSteps(keepQueue = false, includeFifth = true) {
+function wrapSteps(includeArchive = true) {
   return [
   '1. **原样搬运**：把整份队列写进 `.continue/DONE.md`——条目原文照搬（含 `[阻塞]`），',
   '   **连同每条下方的完成说明一起搬**，不再二次总结；',
@@ -339,23 +352,150 @@ function wrapSteps(keepQueue = false, includeFifth = true) {
   '   → 有就在 `.continue/TIPS.md` 的对应模块下补一节（症状 → 根因 → 处置 → 适用面）；',
   '   ⚠️ **只写确实有的**：语法记错、漏读文档导致的误判、一条命令就能查明的现象**都不算坑**，',
   '   写进去只会稀释真正有价值的条目。没有就跳过，**不写"本批无"占位**；',
-    ...(includeFifth
-      ? [keepQueue
-      ? '5. **不要删除队列文件**：计划模式下它是"当前批次"的载体，下一阶段还要用它。' +
-        ' 把 `> 批次：` 换成新号、条目整段换成下一阶段的 5~6 条。' +
-        ' 删掉的话钩子下一轮按会话 ID 就找不到这个队列了，计划链在这里无声断掉。'
-      : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
+    ...(includeArchive
+      ? [`5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
         '   它把队列**追加**到 `.continue/logs/<会话ID>/queue.md` 的最上面（一个批次一节、`----------` 分隔），原文不会丢。' +
         '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
-        '   **决策记录与计划会跟着队列一起归档**，不用再单独跑 `--decision` / `--plan`。']
+        '   决策记录会跟着队列一起归档，不用再单独跑 `--decision`。']
       : []),
     '',
-    '**做完在回复里逐条回执**：五步各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
+    '**做完在回复里逐条回执**：各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
     '漏掉的当场补，不要让用户自己去翻文档核对。',
   ];
 }
-/** 非计划模式的五步——行为与改造前**逐字一致**（自检里钉着这条）。 */
-const WRAP_STEPS = wrapSteps(false);
+/** 完整五步（含归档）。文案与自动收尾分支共用一份，自检里钉着"必须含归档、不许 rm"。 */
+const WRAP_STEPS = wrapSteps(true);
+
+/**
+ * 走到里程碑 → **硬停**，等人验收。
+ *
+ * 为什么这是硬停而不是"顺手记一笔就继续"：里程碑存在的唯一理由就是"到这个点了，
+ * 让人看一眼值不值得往下走"。自动越过它，等于关卡从来没有存在过。
+ *
+ * 重复提醒由 `state.msStep` 挡一次：同一把钥匙（里程碑 + 批次）连续出现 = 上一轮指令没落实，
+ * 到 `BLOCKED_MAX` 轮就升级成"卡住了"告警——否则会永久空转且一声不吭。
+ */
+function emitMilestoneGate(ms) {
+  const key = `${ms.id}:${batch ?? '?'}`;
+  const blockedBefore = queue.entries.filter((entry) => entry.index < ms.index && entry.kind === 'blocked');
+  if (state.msStep === key) {
+    state.msStreak = (state.msStreak ?? 0) + 1;
+  } else {
+    state.msStep = key;
+    state.msStreak = 0;
+    state.msStuck = null;
+  }
+  // ⚠️ 立刻落盘：下面"只放行一次"的分支不会再写状态，不存的话连续次数永远是 1，
+  // 「卡住了」升级永远触发不了（计划机制时代踩过，现象只是"它一直在等"，没有任何报错）。
+  saveState(sid, state);
+
+  if (state.msStreak >= BLOCKED_MAX && state.msStuck !== key) {
+    state.msStuck = key;
+    saveState(sid, state);
+    appendLog(sid, `里程碑卡住 · ${key} 连续 ${state.msStreak} 轮没推进`);
+    emitBlock(
+      [
+        '[auto-continue · 里程碑关卡卡住了，需要人看一眼]',
+        '',
+        `\`${key}\` 连续 **${state.msStreak} 轮**没有推进：指令下发过，但队列里的确认行 / 批次号都没变化。`,
+        '',
+        '**这不是"没事可做"，是上一轮该做的事没做成。**继续空转会一直停在这里，而且不会有新提示。',
+        '',
+        '## 现在要做的事',
+        '',
+        `1. 打开 \`.continue/doing/${queueFileName(sid)}\`，核对卡在哪一步`,
+        '   （跑验收？弹窗问人？写 `- 确认：已验收`？换批次号？修剪已完成条目？）；',
+        '2. 直接把它做掉——这些动作不产生新事实，没有取舍空间；',
+        '3. 如果连指令都读不懂，`touch .continue/auto.off` 停下并告诉用户，',
+        '   **不要**把"卡住"伪装成"完成"（比如替用户写确认行）。',
+      ].join('\n'),
+    );
+  }
+
+  if (state.msStreak > 0) {
+    idleAllow(
+      `里程碑 ${ms.id} 已请用户验收，等回复`,
+      `\`${ms.id}\` 已经请你验收、指令也下发过了，正在等用户答复。答复之前不要动队列、也不要重复弹窗。`,
+    );
+  }
+
+  state.count = 0;
+  saveState(sid, state);
+  appendLog(sid, `里程碑完成 · ${ms.id} · 硬停等验收 · 批次 ${batch ?? '?'}`);
+  emitBlock(
+    [
+      `[auto-continue · 到达里程碑 ${ms.id}，停下等人工验收]`,
+      '',
+      `队列里 \`## 里程碑 ${ms.id} · ${ms.title}\` 之前的条目已经全部做完，`,
+      '这个里程碑**还没有** `- 确认：已验收`，所以现在停下来。',
+      '',
+      '## 顺序不能反：跑验收 → 问人 → 拿到答复后才动队列',
+      '',
+      '### ① 真跑一遍这个里程碑的验收',
+      '',
+      ...(ms.acceptance.length > 0
+        ? ms.acceptance.map((a) => `- \`${a.replace(/`/g, '')}\``)
+        : ['- ⚠️ 这个里程碑**没写 `- 验收：`**。先补一行能跑的命令再执行；以后每个里程碑都要有这一行。']),
+      '',
+      '把输出贴给用户。**跑不起来就如实写"未验证"，不要编一个结果。**',
+      '',
+      '### ② 弹窗问用户',
+      '',
+      '用 `ask_followup_question` 给三个选项（第一个是推荐）：',
+      '',
+      '1. **继续下一段** —— 用户选这个之后才做 ③；',
+      '2. **调整队列** —— 用户改队列条目/里程碑，改完再继续（此时队列还没动，正是原样）；',
+      '3. **先收在这里** —— 只把队列头部改成 `> 状态：讨论中`（钩子会停），**条目原样保留**；',
+      '   **不要**写 `确认：已验收`（那等于替用户验收了）。',
+      '',
+      ...(blockedBefore.length > 0
+        ? [
+            `⚠️ 这个里程碑前面还有 **${blockedBefore.length} 条 \`[阻塞]\`**，一起在同一个弹窗里逐条问`,
+            '（改描述继续做 / 直接删除 / 先留着并写"未验证"收尾）：',
+            ...blockedBefore.map((entry) => `  · 第${entry.seq}/${entry.total}条 · ${fingerprint(entry.raw)}`),
+            '',
+          ]
+        : []),
+      '',
+      '### ③ 只有用户选了"继续"才做这些',
+      '',
+      `1. 在 \`## ${ms.id}\` 小节补一行 \`- 确认：已验收 · 批次 ${batch ?? '<n>'}\`；`,
+      '2. 收尾**本段**（前四步，**第 5 步先别做**——队列还要接着用）：',
+      '   ⚠️ 只搬**本段已经做完的条目**（`## ' + ms.id + '` 之前的那些），',
+      '   后面的 `[ ]` 还在这份队列里、**不要搬进 `DONE.md`**（它们还没发生）。',
+      '',
+      ...wrapSteps(false),
+      '',
+      '3. 跑 `node .continue/hooks/queue-init.mjs --new-batch` 拿新批次号，写进队列头部 `> 批次：`；',
+      '4. **修剪队列**：把本段已完成的 `[x]` 条目删掉（它们已经进了 `DONE.md`），',
+      '   **保留**里程碑小节（含刚写的确认行）和后面还没做的条目；',
+      '5. 直接开始下一条，不要来问用户"要不要继续"。',
+      '',
+      '> 如果这是最后一个里程碑（后面没有待办了），继续之后钩子会下发正常的五步收尾，',
+      '> 那时才归档队列文件（`archive-queue.mjs`）。',
+      '',
+      '### ⚠️ 三条不许',
+      '',
+      '1. **不要跳过 ①②**：关卡存在的唯一理由就是"这一段到底值不值得往下走"；',
+      '2. **不要替用户写 `确认：已验收`**：那一行是"人验收过"的凭证，写它的人必须收到过答复；',
+      '3. **不要在 ② 之前动队列**（删条目 / 换批次号）：用户若选"调整 / 先收"，队列必须还是原样。',
+    ].join('\n'),
+  );
+}
+
+const gate = pendingMilestone(queue);
+if (gate) emitMilestoneGate(gate);
+
+/**
+ * 递任务的同时**把这条标成进行中**（`[ ]` → `[~]`）。
+ *
+ * 不依赖 AI 记得改：实测经常出现"正在做的那条还是 `[ ]`"，因为 AI 改队列的时机不稳定。
+ * 而"现在在发哪一条"是钩子自己的事实，由它落盘最可靠。
+ * 已经 `[~]` 的条目不会再动（`markEntryDoing` 只处理 `todo`）。
+ */
+if (pick && markEntryDoing(file, pick.entry)) {
+  appendLog(sid, `标记进行中 · 第${pick.entry.seq}/${pick.entry.total}条 · ${fingerprint(pick.raw).slice(0, 40)}`);
+}
 
 /**
  * 没有可做的了 → 收尾。
@@ -379,331 +519,6 @@ if (!pick) {
 
   // 没有需要拍板的条目 → 自动收尾，不弹窗。
   if (blocked.length === 0 && unproven.length === 0) {
-    /**
-     * **计划模式**：本会话存在 `doing/plan-<本会话ID>.md` 时，收尾之前先问计划"下一步是什么"。
-     *
-     * 绑定不靠声明、靠**文件名配对**：队列 `<sid>.md` ↔ 计划 `plan-<sid>.md`。
-     * 所以这里没有"引用写错"这种状态——文件在就是有计划，不在就是没有，
-     * 少了一整类"写了但读不到"的静默失效。
-     *
-     * 三个分支（都在"这一批的条目已经全勾完"这个时刻判定）：
-     *   · 未到边界 → 续批：收尾本批（**重置队列，不删**）+ 勾阶段 + 取下一阶段；
-     *   · 到边界   → **硬停**：收尾 + 勾阶段 + 跑里程碑验收 + 弹窗等开发者拍板；
-     *   · 计划做完 → 正常收尾 + 归档计划（和队列同一套规则，不删）。
-     *
-     * "到边界"的判据是 `milestoneComplete(plan, ms, 当前阶段)` —— 即**做完这一条之后**
-     * 该里程碑就齐了，所以是"完成到里程碑才停"，不是"取到里程碑就停"。
-     * 少了 `alsoDone` 这个参数就会永远差一条、边界从不触发（见 lib.mjs 的注释）。
-     */
-    const planName = planNameFor(sid);
-    const plan = readPlan(planPathFor(sid));
-    const planKey = plan ? `${planName}:${plan.cursor?.id ?? 'done'}` : null;
-
-    if (plan) {
-      const step = plan.cursor;
-      const ms = step ? plan.milestones.find((m) => m.id === step.ms) : null;
-
-      /**
-       * 同一把"钥匙"（计划 + 当前阶段）连续出现 = **上一轮下发的指令没有落实**。
-       *
-       * 为什么必须计数：队列条目有 `BLOCKED_MAX` 隔离兜底（连续 5 轮没做完就标 `[阻塞]`），
-       * 而计划分支走的是"下过指令就放行"——一旦 AI 忘了勾阶段/重置队列，`planKey` 永远不变，
-       * 这里就会**永久空转**：不隔离、不弹窗、不升级，连用户催一句也解不开，
-       * 而现象只是"它不动了"。实测过一次，最难查的一类。
-       */
-      if (state.planKey === planKey) {
-        state.planStreak = (state.planStreak ?? 0) + 1;
-      } else {
-        state.planKey = planKey;
-        state.planStreak = 0;
-        state.planStuck = null;
-      }
-      saveState(sid, state);
-
-      /** 重复下发：先按"卡住"升级，没到阈值就照旧只放行一次。 */
-      const repeatOrStuck = (reason, message) => {
-        if (state.planStreak >= BLOCKED_MAX && state.planStuck !== planKey) {
-          state.planStuck = planKey;
-          saveState(sid, state);
-          appendLog(sid, `计划卡住 · ${planKey} 连续 ${state.planStreak} 轮没推进`);
-          emitBlock(
-            [
-              '[auto-continue · 计划卡住了，需要人看一眼]',
-              '',
-              `\`${planKey}\` 连续 **${state.planStreak} 轮**没有推进：指令下发过，但计划文件没变化。`,
-              '',
-              '**这不是"没事可做"，是上一轮该做的事没做成。**继续空转会一直停在这里、而且不会有新提示。',
-              '',
-              '## 现在要做的事',
-              '',
-              `1. 打开 \`${DOING_REL}/${planName}\` 和本会话队列，核对指令卡在哪一步`,
-              '   （勾阶段？挂批次号？重置队列？写确认行？）；',
-              '2. 直接把它做掉——这些记账动作不产生新事实，没有取舍空间；',
-              '3. 如果连指令都读不懂，`touch .continue/auto.off` 停下并告诉用户，',
-              '   **不要**把"卡住"伪装成"完成"（比如把阶段勾成 `[x]` 却什么都没做）。',
-            ].join('\n'),
-          );
-        }
-        idleAllow(reason, message);
-      };
-
-      // ---- 计划已无未完成阶段：整体收尾，队列走归档（和普通批一样）
-      if (!step) {
-        /**
-         * **0 个阶段 ≠ 做完了**。`cursor` 为 null 有两种来源：全部勾完，或者一条阶段都没写
-         * （计划刚建没填 / 阶段行漏了反引号）。后者若按"完成"处理，会**把整批悄悄收尾**：
-         * 队列归档、计划归档，什么痕迹都不留——比报错糟得多。
-         */
-        if (plan.stages.length === 0) {
-          const emptyKey = `${planKey}:empty`;
-          if (state.planStep === emptyKey) {
-            repeatOrStuck(
-              '计划是空的，已提醒补阶段',
-              `\`${planName}\` 一条阶段都没有，上一轮已经提醒过：要么补阶段，要么归档掉它。`,
-            );
-          }
-          state.planStep = emptyKey;
-          state.count = 0;
-          saveState(sid, state);
-          appendLog(sid, `计划为空 · ${planName} 没有任何阶段行`);
-          emitBlock(
-            [
-              '[auto-continue · 这个计划一条阶段都没有]',
-              '',
-              `\`${planName}\` 里没有任何阶段行。\`cursor\` 为空有两种意思：**全部做完了**，或者**一条都没写**。`,
-              '',
-              '现在看起来是后者——所以**不能当成"计划已完成"收尾**（那会把整批悄悄归档，什么都不留）。',
-              '',
-              '## 二选一',
-              '',
-              '1. **计划还要用** → 按这个格式补阶段（阶段号两侧的反引号是解析锚点，漏了就不算阶段）：',
-              '',
-              '```markdown',
-              '## MS1 · <里程碑名>',
-              '- 验收：`<做完要跑的命令>`',
-              '- [ ] `MS1.1` <这一阶段做什么> → 验收 `<命令>`',
-              '```',
-              '',
-              '2. **不要计划了** → 跑 `node .continue/hooks/archive-queue.mjs ' +
-                `${sid} --plan\` 把它归档，然后按普通五步收尾。`,
-              '',
-              '⚠️ 不要为了"让流程走下去"随手补一个假阶段——计划的价值全在阶段边界是真的。',
-            ].join('\n'),
-          );
-        }
-        /**
-         * 收尾前必须有人验收过**最后一个**里程碑。
-         *
-         * 为什么现在才补这一条：`- 确认：已验收` 从落地起就只被**解析**、没有任何判定读它
-         * （`plan.open` 是同一类死字段，已在 审1 删掉）。结果是"计划悄悄归档了，却没人跑过
-         * 最后一个里程碑的验收"——而"里程碑是不是真的达成了"正是这套关卡存在的唯一理由。
-         * 现在它成为整体收尾的前置条件，和"打完勾却缺 `验证：` 就请用户拍板"同一口径。
-         *
-         * 只查最后一个：前面的里程碑在各自边界停下时已经被要求确认过，
-         * 再回头查一遍只会制造噪音（而且用户可能中途改过计划）。
-         */
-        const lastMs = plan.milestones[plan.milestones.length - 1] ?? null;
-        if (lastMs && !lastMs.confirm) {
-          const askKey = `${planKey}:last-unconfirmed`;
-          if (state.planStep === askKey) {
-            repeatOrStuck(
-              '计划收尾缺少里程碑验收记录，已请用户拍板',
-              `\`${lastMs.id}\` 还没有 \`- 确认：已验收\` 行，上一轮已经问过用户了，等回复。`,
-            );
-          }
-          state.planStep = askKey;
-          state.count = 0;
-          saveState(sid, state);
-          appendLog(sid, `计划完成但缺里程碑验收 · ${lastMs.id} 没有确认行`);
-          emitBlock(
-            [
-              '[auto-continue · 计划做完了，但最后一个里程碑没有验收记录]',
-              '',
-              `\`${planName}\` 的阶段全部完成，但最近一个里程碑 \`${lastMs.id} · ${lastMs.title}\` 的小节里` +
-                '没有 `- 确认：已验收` 行。',
-              '',
-              '**这意味着没人跑过这个里程碑的验收**——计划就这么归档，等于关卡白设了。',
-              '',
-              '## 现在要做的事',
-              '',
-              '1. 先判断是**漏写**还是**真的没验**，跑一遍它的验收命令：',
-              ...(lastMs.acceptance.length > 0
-                ? lastMs.acceptance.map((a) => `   - \`${a.replace(/`/g, '')}\``)
-                : ['   - ⚠️ 这个里程碑连 `- 验收：` 都没写，先补一行能跑的命令']),
-              '2. 把输出贴给用户，然后弹窗问（选项按顺序）：',
-              '   **验收通过** → 在 `## ' + lastMs.id + '` 小节补 `- 确认：已验收 · 批次 ' + (batch ?? '<n>') + '`，再走到 3；',
-              '   **有问题** → 把阶段改回 `[ ]` 并写清哪一条不对，按续批处理；',
-              '   **先收在这里** → 队列头部改 `> 状态：讨论中`。',
-              '3. **不要替用户写确认行**，也不要跳过这一步直接收尾。',
-            ].join('\n'),
-          );
-        }
-        if (state.planStep === planKey) {
-          repeatOrStuck(
-            '计划完成指令已下发，队列文件还在',
-            '计划已经全部完成了，上一轮已经给过收尾指令。照五步补完并把队列归档即可。',
-          );
-        }
-        state.planStep = planKey;
-        state.count = 0;
-        saveState(sid, state);
-        appendLog(sid, `计划完成 · ${planName} 已无未完成阶段`);
-        emitBlock(
-          [
-            '[auto-continue · 计划已全部完成]',
-            '',
-            `\`${planName}\` 里已经没有 \`[ ]\` / \`[~]\` 了，最后一个里程碑 \`${lastMs?.id ?? '?'}\` 也已验收。`,
-            '',
-            '## 现在要做的事',
-            '',
-            '### ① 收尾本批（五步，**这次队列要归档**）',
-            '',
-            ...wrapSteps(false),
-            '',
-            '### ② 计划同样**归档**（不要 `rm`）',
-            '',
-            `「已达成」那一行先同步挂进 \`OVERVIEW\` 的对应模块，然后跑`,
-            `\`node .continue/hooks/archive-queue.mjs ${sid} --plan\` 把 \`${DOING_REL}/${planName}\` 归档；`,
-            '和队列一样落在 `.continue/logs/<会话ID>/plan-<时间戳>.md`，',
-            '想复看"当初这活是怎么排的"就去那儿——删掉就真没了。',
-            '',
-            '### ③ 回复里报一句',
-            '',
-            `"计划 ${planName} 已全部完成（${plan.milestones.length} 个里程碑，最后一个是 ${lastMs?.id ?? '?'}）"`,
-          ].join('\n'),
-        );
-      }
-
-      const stages = plan.stages;
-      const atBoundary = milestoneComplete(plan, step.ms, step.id);
-      const next = stages[stages.findIndex((s) => s.id === step.id) + 1] ?? null;
-
-      // ---- 到边界：完成到里程碑 → 硬停，等开发者验收
-      if (atBoundary) {
-        if (state.planStep === planKey) {
-          repeatOrStuck(
-            `里程碑 ${step.ms} 已请开发者验收，等回复`,
-            `\`${step.ms}\` 已经全部做完、上一轮已经请你验收并在等回复。` +
-              '用户答复之前不要往下开新阶段，也不要重复弹窗。',
-          );
-        }
-        state.planStep = planKey;
-        state.count = 0;
-        saveState(sid, state);
-        appendLog(sid, `里程碑完成 · ${step.ms} 阶段全了 · 硬停等验收`);
-        emitBlock(
-          [
-            `[auto-continue · 里程碑完成，停下等验收]`,
-            '',
-            `\`${step.ms} · ${ms?.title ?? ''}\` 的阶段全部做完了（这一批是最后一条：\`${step.id}\`）。`,
-            '',
-            '## 现在要做的事：记账 → 验收 → 问人 → **拿到答复才继续**',
-            '',
-            '⚠️ **顺序不能反**：先做 ①②③，再问用户（④），用户答"继续"之后才做 ⑤。',
-            '以前是先重置队列再问——用户若选"调整计划 / 先收在这里"，队列里已经塞满了',
-            '下一阶段、从没做过的条目，状态与事实不符。',
-            '',
-            '### ① 勾计划 + 挂批次号',
-            '',
-            `把 \`${step.id}\` 那行改成 \`[x]\`，并在行尾挂上批次号。形如：`,
-            `- [x] \`${step.id}\` <原文> · 批次 \`${batch ?? '<n>'}\``,
-            '',
-            '⚠️ 阶段号两侧的**反引号是解析锚点**：漏了它这一行不会被当成阶段，',
-            '阶段会从计划里**静默消失**（计划被误判成"已经做完"）。照抄上面的格式。',
-            '',
-            '### ② 收尾这一批（前四步，**第 5 步先别做**）',
-            '',
-            '把事实记账，但**先不要动队列文件**——队列留到用户拍板之后。',
-            '',
-            ...wrapSteps(true, false),
-            '',
-            '### ③ 真跑一遍这个里程碑的验收',
-            '',
-            ...(ms && ms.acceptance.length > 0
-              ? ms.acceptance.map((a) => `- \`${a.replace(/`/g, '')}\``)
-              : ['- ⚠️ 这个里程碑在小节里**没写 `- 验收：`**。现在补一行能跑的命令，再执行它。']),
-            '',
-            '把输出贴给用户。**跑不起来就如实写"未验证"，不要编一个结果。**',
-            '',
-            '### ④ 弹窗问用户',
-            '',
-            '用 `ask_followup_question` 给三个选项（第一个是推荐）：',
-            '',
-            '1. **继续下一个里程碑** —— 用户选这个之后，才做 ⑤：在 plan 的',
-            `   \`## ${step.ms}\` 小节写一行 \`- 确认：已验收 · 批次 ${batch ?? '<n>'}\`，`,
-            '   然后**重置队列**（`> 批次：` 换新号、条目换成下一阶段的 5~6 条）再开下一阶段；',
-            '2. **调整计划** —— 用户改 plan 的阶段/里程碑，改完再继续（此时队列还没动，正是原样）；',
-            '3. **先收在这里** —— 只把队列头部改成 `> 状态：讨论中`（钩子会停），**队列条目原样保留**；',
-            '   **不要**写 `确认：已验收`（那等于替用户验收了）。',
-            '',
-            '### ⑤ 只有用户选了"继续"才重置队列',
-            '',
-            '`> 批次：` 换成 `node .continue/hooks/queue-init.mjs --new-batch` 给的新号，',
-            '条目整段换成下一阶段的 5~6 条。**用户没答复之前，一个字都不要改队列。**',
-            '',
-            '### ⚠️ 三条不许',
-            '',
-            '1. **不要跳过 ③④**：这个关卡存在的唯一理由就是"里程碑是不是真的达成了"；',
-            '   少了验收和拍板，它就只剩一句"我完成了"，防跑偏的功能等于没有。',
-            '2. **不要替用户写 `确认：已验收`**：那一行是"人验收过"的凭证，写它的人必须是收到过答复的你。',
-            '3. **不要在 ④ 之前动下一个里程碑**：一个字都不改。',
-          ].join('\n'),
-        );
-      }
-
-      // ---- 未到边界：续批（不收尾就停，而是取下一阶段继续）
-      if (state.planStep === planKey) {
-        repeatOrStuck(
-          '续批指令已下发，等队列被重置',
-          `上一轮已经下令"从 \`${planName}\` 取下一阶段了"。` +
-            '把队列重置成下一阶段的条目（新批次号）即可继续，不要重复问用户。',
-        );
-      }
-      state.planStep = planKey;
-      state.count = 0;
-      saveState(sid, state);
-      appendLog(sid, `续批 · ${planName} · 当前 ${step.id} → 下一条 ${next?.id ?? '（没有下一条）'}`);
-      emitBlock(
-        [
-          `[auto-continue · 这一批做完了，计划里还有下一阶段]`,
-          '',
-          `\`${planName}\` 的当前阶段是 \`${step.id}\`，下一个是 \`${next?.id ?? '（无）'}\`。`,
-          '**不要停在这里，也不要问用户**——计划里还有没做的阶段，接着做。',
-          '',
-          '## 按顺序做完这三步，然后直接开始干',
-          '',
-          '### ① 收尾本批',
-          '',
-          `先看 \`.continue/DONE.md\` 里有没有 \`## 批次 ${batch ?? '<n>'}\`：有就说明收尾过了，跳过这次；`,
-          '没有就按五步收尾——',
-          '',
-          ...wrapSteps(true),
-          '',
-          '### ② 勾计划',
-          '',
-          `把 \`${step.id}\` 那行改成 \`[x]\`，并在行尾挂上批次号。形如：`,
-          `- [x] \`${step.id}\` <原文> · 批次 \`${batch ?? '<n>'}\``,
-          '',
-          '⚠️ 反引号不能漏：它是"这一行是阶段"的解析锚点，漏了会让这个阶段从计划里消失，',
-          '后面的游标直接跳到下一条（计划会被误判成"做完了"）。',
-          '',
-          '### ③ 取下一阶段、拆条目、重置队列',
-          '',
-          ...(next
-            ? [
-                `1. 读 \`${next.id}\` 那一行的描述和行尾的「验收」命令，把它改成 \`[~]\`（计划里同一时间只有一条 \`[~]\`）；`,
-              ]
-            : [
-                '1. ⚠️ 计划里已经没有下一条阶段了，但这一批做完了：回到计划头部核对，',
-                '   是不是漏写了阶段（这种情况先别开新批，把缺的阶段补进 plan）；',
-              ]),
-          '2. 按它拆 **5~6 条可独立验证的条目**（一条一个提交；超过 8~12 条说明这一阶段还得再切）；',
-          '3. 跑 `node .continue/hooks/queue-init.mjs --new-batch` 拿新批次号，',
-          '   写进队列头部 `> 批次：`；`> 计划：` 那一行**保留不动**；',
-          '4. 条目整段换成新阶段的那几条，然后**直接开始做第一条**，不要来问用户"要不要继续"。',
-        ].join('\n'),
-      );
-    }
 
     if (state.autoWrapped) {
       idleAllow(
@@ -809,8 +624,9 @@ let itemSeq = firstPick.entry.seq;
 // 重新开始干活 → 作废"收尾指令已下发"的记忆，下次收尾要重新下发一次。
 state.askedComplete = null;
 state.autoWrapped = null;
-// 计划模式下同理：队列重新有了条目，说明续批/验收已经推进过，下一道关卡要重新判定。
-state.planStep = null;
+// 里程碑关卡同理：既然又开始递任务了，说明上一道关卡已经过了，下一条里程碑要重新判定。
+state.msStep = null;
+state.msStreak = 0;
 
 // ---------------------------------------------------------------- 卡住就隔离
 let streak = state.currentSeq === itemSeq ? (state.currentStreak ?? 0) + 1 : 1;
@@ -878,9 +694,19 @@ const blockedCount = current.counts.blocked;
 /** 队列还长时的分阶段提醒；只在超过阈值时出现，避免小队列每轮多一行噪声。 */
 const longQueueLine =
   remaining > LONG_QUEUE_HINT
-    ? `> 这批还剩 ${remaining} 条。如果它其实是几个阶段拼起来的，做完当前阶段就收尾，再跑 ` +
-      '`node .continue/hooks/queue-init.mjs --new-batch` 拿新号开下一阶段——别硬塞同一批' +
-      '（`DONE.md` 一节到 300 行就搬不动了）。\n'
+    ? `> 这批还剩 ${remaining} 条。如果它其实是几个阶段拼起来的，**在队列里插一个里程碑节点**：\n` +
+      '> `## 里程碑 MS1 · <名字>` + `- 验收：`<命令>`（到那儿钩子会硬停，等人工验收再往下走）；\n' +
+      '> 或者做完当前阶段就收尾、跑 `node .continue/hooks/queue-init.mjs --new-batch` 拿新号开下一批。\n' +
+      '> 别硬塞同一批——`DONE.md` 一节到 300 行就搬不动了。\n'
+    : '';
+
+/** 下一个还没过的里程碑：告诉 AI 它离关卡还有多远（本轮不硬停时才有意义）。 */
+const upcoming = current.milestones.find((ms) => !ms.confirm && pick && ms.index > pick.entry.index) ?? null;
+const milestoneLine = upcoming
+  ? `> 下一个里程碑 \`${upcoming.id} · ${upcoming.title}\` 在这条之后；做到它前面的条目全部完成时，` +
+    '钩子会**硬停**，要你先跑它的 `- 验收：` 命令、再问用户是否继续。本轮安心做这一条即可。\n'
+  : current.milestones.length > 0
+    ? '> 队列里有里程碑节点；做完它前面的条目时会硬停等人工验收，不要自己越过它。\n'
     : '';
 
 // `firstPick` 是隔离**之前**选中的那条；隔离后 pick 可能已经换成下一条，
@@ -1019,6 +845,7 @@ const feedback = [
       ].join('\n')
     : '',
   blockedCount > 0 ? `> 队列里已有 ${blockedCount} 条 \`[阻塞]\`（卡住），收尾时一起交给用户确认。\n` : '',
+  milestoneLine,
   longQueueLine,
   discoveredBlock,
 ].join('\n');

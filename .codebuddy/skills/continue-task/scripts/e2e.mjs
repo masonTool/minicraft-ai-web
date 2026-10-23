@@ -43,6 +43,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -171,11 +172,11 @@ const readMaybe = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 const logOf = (ctx, s) => readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 'run.md'));
 
 /**
- * 清掉某个会话的运行日志（钩子的 `planStep` / `planStreak` 就存在里面）。
+ * 清掉某个会话的运行日志（钩子的 `msStep` / `msStreak` 就存在里面）。
  *
- * 为什么 probe 场景需要它：钩子用 `计划名:当前阶段` 当去重键，同一把钥匙只下发一次。
- * 而 probe 场景是**手工改计划文件**来逼近边界，游标不变 → 键不变 → 第二次会被当成
- * "已下发过"而放行，看着像"硬停失效"。真实流程里勾阶段会换钥匙，所以这是**测试的假象**，
+ * 为什么 probe 场景需要它：钩子用 `里程碑:批次` 当关卡去重键，同一把钥匙只下发一次。
+ * 而 probe 场景是**手工改队列文件**来逼近边界，批次号不变 → 键不变 → 第二次会被当成
+ * "已下发过"而放行，看着像"硬停失效"。真实流程里确认后换批次号，所以这是**测试的假象**，
  * 每个边界前重置一次状态即可。
  */
 const resetHookState = (ctx, s) => {
@@ -335,22 +336,14 @@ SCENARIOS.decision = {
 };
 
 /**
- * 场景 3：长队列 → plan。
+ * 场景 3a：长任务 → 会不会在队列里插里程碑（**只验切分产物**，不实现）。
  *
- * 分两段：
- *   · model 段：验"模型会不会自己建 plan、结构是否合法"（依赖模型配合）
- *   · probe 段：手写一份 plan，验四条边界（续批 / 硬停 / 确认后继续 / 完成归档）——
- *     这部分**必须**用 probe：手推阶段状态才能精确命中边界
+ * 只回答一个问题：给一个明显装不下一批的任务，它会不会**真的**在队列里插节点、
+ * 节点粒度与验收命令合不合理。**产物合理就过，到此为止**——不往下实现，那样太慢。
  */
-/**
- * 场景 3a：长任务 → 自动转 plan（**只验切分产物**，不实现）。
- *
- * 这个用例只回答一个问题：给一个明显装不下一批的任务，它会不会**真的**切成 plan 模式，
- * 切出来的东西合不合理。**产物合理就过，到此为止**——不往下实现，那样太慢。
- */
-SCENARIOS['plan-split'] = {
+SCENARIOS['milestone-split'] = {
   driver: 'model',
-  desc: '计划切分：大任务 → 是否切成 plan、里程碑/阶段是否合理（不实现）',
+  desc: '里程碑切分：大任务 → 是否在队列里插节点、粒度与验收命令是否合理（不实现）',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
     const prompt = [
@@ -358,94 +351,115 @@ SCENARIOS['plan-split'] = {
       '现在有一个明显装不下一批的大任务：给项目补 30 条小功能（每条 3~5 行代码那种）。',
       '',
       '请**只做规划**，一行实现代码都不要写：',
-      '1. 判断这种任务该不该先写计划；该写就建 `.continue/doing/<本会话ID>-plan.md`；',
-      '2. 用 `## MS1 · 名字` 分组，每个里程碑至少 2 个阶段，阶段行写成 `- [ ] \`MS1.1\` 做什么 → 验收 \`命令\``；',
-      '3. 每个里程碑写一行 `- 验收：\`命令\``；',
-      '4. 建会话队列，**只放第一个阶段**要做的条目；',
-      '5. 不要问我问题。',
+      '1. 建本会话队列 `.continue/doing/<本会话ID>.md`，把 30 条拆成条目（每条带验证方式）；',
+      '2. 按框架第 10 条，在队列里每 8~12 条之后插一个 `## 里程碑 MSn · 名字` 节点，',
+      '   每个节点带一行 `- 验收：<这一段做完要跑的命令>`；',
+      '3. **不要建任何计划文件**（里程碑只写在队列里）；',
+      '4. 不要问我问题。',
     ].join('\n');
     const r = runModel(ctx, prompt);
     if (!r) return;
 
-    const planPath = join(ctx.dir, '.continue', 'doing', `${sid6(s)}-plan.md`);
-    const planText = readMaybe(planPath);
-    check('建了计划文件 <sid>-plan.md', planText.length > 0, `缺 ${planPath}（没切到 plan 模式）`);
-    const mss = [...planText.matchAll(/^##\s+(MS\d+)\s*·/gm)].map((m) => m[1]);
-    const stages = [...planText.matchAll(/^-\s*\[[ x~]\]\s*`(MS\d+\.\d+)`/gm)].map((m) => m[1]);
-    const perMs = new Map();
-    for (const st of stages) {
-      const k = st.split('.')[0];
-      perMs.set(k, (perMs.get(k) ?? 0) + 1);
-    }
-    check('至少 1 个里程碑', mss.length >= 1, `解析到 ${mss.length} 个`);
-    check('阶段总数 ≥ 2（30 条任务不该只有一条）', stages.length >= 2, `解析到 ${stages.length} 个阶段`);
-    check('每个里程碑 ≥2 个阶段', perMs.size > 0 && [...perMs.values()].every((n) => n >= 2), JSON.stringify([...perMs]));
-    check('里程碑有验收命令', /^-\s*验收\s*[:：]/m.test(planText));
-    check('队列只放当前阶段（已建队列）', existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`)));
+    const qPath = join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`);
+    const qText = readMaybe(qPath);
+    check('建了会话队列', qText.length > 0, `缺 ${qPath}`);
+    const milestones = [...qText.matchAll(/^##\s*里程碑\s*(MS\d+)\s*[·:：]/gm)].map((m) => m[1]);
+    const entries = (qText.match(/^-\s*\[[ x~]\]/gm) ?? []).length;
+    check('在队列里插了里程碑节点', milestones.length >= 1, `解析到 ${milestones.length} 个`);
+    check('每个里程碑都写了验收命令', /^[-*]\s*验收\s*[:：]/m.test(qText));
+    check('条目数 ≥ 10（30 条任务不该只有几条）', entries >= 10, `解析到 ${entries} 条`);
+    check('没有建计划文件', !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}-plan.md`)));
     checkHead(r);
   },
 };
 
 /**
- * 场景 3b：plan 的执行与里程碑关卡（**纯 probe**）。
+ * 场景 3b：里程碑关卡（**纯 probe**）。
  *
- * plan 与队列**提前准备好**，每一步都只是"喂一次 Stop 看它怎么判"——秒级。
- * 四个边界：续批 / 硬停（且先问人后重置队列）/ 确认后继续 / 全部完成并归档。
+ * 里程碑写在队列里（`## 里程碑 MS1 · 名` + `- 验收：…`），不另建计划文件。
+ * 验四件事：
+ *   ① 前面的条目做完 → **硬停**（不把后面的任务递出去）；
+ *   ② 硬停时列出验收命令，并要求"先问人、拿到答复才动队列"；
+ *   ③ 写了 `- 确认：已验收` → 放行，接着递后面的条目；
+ *   ④ 最后一个里程碑也确认后 → 自动收尾（五步含归档）。
  */
-SCENARIOS['plan-run'] = {
+SCENARIOS.milestone = {
   driver: 'probe',
-  desc: '计划执行：里程碑边界硬停（先问人后重置队列）+ 完成之后的整体收尾与归档',
+  desc: '里程碑：队列内节点 → 硬停等人工验收 → 确认后继续 → 最后整体收尾',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
-    write(ctx, `.continue/doing/${sid6(s)}.md`, doneQueue(s));
-    ctx.git(['add', '-A']);
-    ctx.git(['commit', '-q', '-m', 'queue done']);
 
-    const plan = (ms) =>
+    const queueWith = ({ before, after, confirm = false }) =>
       [
-        '## MS1 · 甲',
-        '- 验收：`true`',
-        '- [x] `MS1.1` 一 → 验收 `true` · 批次 `20260101-0001`',
-        ...ms,
+        `# 队列 · 会话 ${s}`,
         '',
-        '## MS2 · 乙',
+        '> 状态：执行中',
+        '> 创建：2026-10-23',
+        '> 批次：20260101-0001',
+        '',
+        ...before,
+        '',
+        '## 里程碑 MS1 · 甲',
         '- 验收：`true`',
-        '- [x] `MS2.1` 一 → 验收 `true` · 批次 `20260101-0001`',
-        '- [ ] `MS2.2` 二 → 验收 `true`',
+        ...(confirm ? ['- 确认：已验收 · 批次 `20260101-0001`'] : []),
+        '',
+        ...after,
+        '',
       ].join('\n');
 
-    /**
-     * 只验两件事（按确认范围）：**走到里程碑边界会停下**，以及**全部做完之后怎么处理**。
-     * 续批 / 已确认后继续这两条由 `selftest` 的分支断言覆盖，这里不再重复跑一遍。
-     */
-    resetHookState(ctx, s);
-    write(ctx, `.continue/doing/${sid6(s)}-plan.md`, plan(['- [~] `MS1.2` 二 → 验收 `true`']));
-    const hard = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    const ask = hard.stderr.indexOf('弹窗问用户');
-    const reset = hard.stderr.indexOf('只有用户选了');
-    check('里程碑边界 → 硬停', /停下等验收/.test(hard.stderr), hard.stderr.slice(0, 120));
-    check('硬停先问人、拿到答复才重置队列', ask > 0 && reset > ask, `ask=${ask} reset=${reset}`);
-    check('硬停列出该里程碑的验收命令', /`true`/.test(hard.stderr), hard.stderr.slice(0, 120));
+    // ① 前面的条目全做完、后面还有一条 → 应该停在里程碑
+    write(
+      ctx,
+      `.continue/doing/${sid6(s)}.md`,
+      queueWith({
+        before: ['- [x] 甲', '  - 验证：`true`'],
+        after: ['- [ ] 乙', '  - 验证：`true`'],
+      }),
+    );
+    ctx.git(['add', '-A']);
+    ctx.git(['commit', '-q', '-m', 'queue with milestone']);
 
-    // 完成处理：阶段全做完 + 最后里程碑已确认 → 整体收尾，计划可归档
+    const hard = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
+    check('走到里程碑 → 硬停', /到达里程碑 MS1/.test(hard.stderr), hard.stderr.slice(0, 160));
+    check('列出该里程碑的验收命令', /`true`/.test(hard.stderr), hard.stderr.slice(0, 160));
+    check('硬停时**不**把后面的任务递出去', !/这一轮做这一条/.test(hard.stderr), hard.stderr.slice(0, 160));
+    const ask = hard.stderr.indexOf('弹窗问用户');
+    const act = hard.stderr.indexOf('只有用户选了');
+    check('先问人、拿到答复才动队列', ask > 0 && act > ask, `ask=${ask} act=${act}`);
+
+    // ② 用户选"继续"之后：写确认行 → 放行，接着递后面的条目
     resetHookState(ctx, s);
     write(
       ctx,
-      `.continue/doing/${sid6(s)}-plan.md`,
-      [
-        '## MS1 · 甲',
-        '- 验收：`true`',
-        '- 确认：已验收 · 批次 `20260101-0001`',
-        '- [x] `MS1.1` 一 → 验收 `true` · 批次 `20260101-0001`',
-      ].join('\n'),
+      `.continue/doing/${sid6(s)}.md`,
+      queueWith({
+        before: ['- [x] 甲', '  - 验证：`true`'],
+        after: ['- [ ] 乙', '  - 验证：`true`'],
+        confirm: true,
+      }),
+    );
+    const next = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
+    check(
+      '确认后继续递后面的条目',
+      next.status === 2 && /乙/.test(next.stderr) && !/到达里程碑/.test(next.stderr),
+      next.stderr.slice(0, 160),
+    );
+
+    // ③ 全部做完 + 里程碑已确认 → 自动收尾（含归档）
+    resetHookState(ctx, s);
+    write(
+      ctx,
+      `.continue/doing/${sid6(s)}.md`,
+      queueWith({ before: ['- [x] 甲', '  - 验证：`true`'], after: [], confirm: true }),
     );
     const fin = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    check('阶段全做完 → 整体收尾', /计划已全部完成/.test(fin.stderr), fin.stderr.slice(0, 120));
-    const arch = hook(ctx, 'archive-queue.mjs', null, { args: [s, '--plan'] });
+    check('最后一个里程碑验收完 → 自动收尾', /自动收尾/.test(fin.stderr), fin.stderr.slice(0, 160));
+    check('收尾要求归档队列（不是 rm）', /archive-queue\.mjs/.test(fin.stderr));
+    const arch = hook(ctx, 'archive-queue.mjs', null, { args: [s] });
     check(
-      '④ 计划可归档（--plan）',
-      arch.status === 0 && !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}-plan.md`)),
-      arch.stdout.slice(0, 120),
+      '归档可执行（队列移出 doing/）',
+      arch.status === 0 && !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`)),
+      arch.stdout.slice(0, 160),
     );
   },
 };
@@ -455,14 +469,14 @@ SCENARIOS['plan-run'] = {
  *
  * 和前面几个的区别：它们是"切片"，各测一段；这条是**串起来**——
  * 第 1 批（模型做 2 条）→ 收尾归档 → 第 2 批（probe 驱动）→ 再归档（**同一份累积文件里两节**）
- * → 计划 → 里程碑边界硬停 → 完成。
+ * → 队列内里程碑 → 边界硬停 → 完成。
  *
  * 为什么第 2 批用 probe：它的目的是验"跨批次的衔接"，不是"模型会不会干活"；
  * 模型那一段已经证明过了，再跑一遍只是把 token 烧在同一个地方。
  */
 SCENARIOS.journey = {
   driver: 'model',
-  desc: '完整旅程：两批任务（含跨批次累积归档）+ 计划里程碑硬停与完成',
+  desc: '完整旅程：两批任务（含跨批次累积归档）+ 队列内里程碑硬停与完成',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
 
@@ -510,18 +524,32 @@ SCENARIOS.journey = {
       `sections=${sections} seps=${seps}`,
     );
 
-    // ---- 计划：里程碑边界硬停
-    write(ctx, `.continue/doing/${sid6(s)}.md`, doneQueue(s));
+    // ---- 里程碑：队列内节点走到边界 → 硬停
     write(
       ctx,
-      `.continue/doing/${sid6(s)}-plan.md`,
-      ['## MS1 · 甲', '- 验收：`true`', '- [x] `MS1.1` 一 → 验收 `true` · 批次 `20260101-0000`', '- [~] `MS1.2` 二 → 验收 `true`'].join('\n'),
+      `.continue/doing/${sid6(s)}.md`,
+      [
+        `# 队列 · 会话 ${s}`,
+        '',
+        '> 状态：执行中',
+        '> 批次：20260101-0000',
+        '',
+        '- [x] 甲',
+        '  - 验证：`true`',
+        '',
+        '## 里程碑 MS1 · 甲',
+        '- 验收：`true`',
+        '',
+        '- [ ] 乙',
+        '  - 验证：`true`',
+        '',
+      ].join('\n'),
     );
     resetHookState(ctx, s);
     const hard = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'] });
-    check('走到里程碑边界 → 硬停', /停下等验收/.test(hard.stderr), hard.stderr.slice(0, 120));
+    check('走到里程碑 → 硬停', /到达里程碑/.test(hard.stderr), hard.stderr.slice(0, 120));
     check(
-      '硬停先问人、答复后才重置',
+      '硬停先问人、答复后才动队列',
       hard.stderr.indexOf('弹窗问用户') > 0 && hard.stderr.indexOf('只有用户选了') > hard.stderr.indexOf('弹窗问用户'),
     );
     checkHead(r);
@@ -639,9 +667,10 @@ SCENARIOS.worktree = {
 function listArchive(ctx, s) {
   const d = join(ctx.dir, '.continue', 'logs', sid6(s));
   if (!existsSync(d)) return [];
-  // 新格式：累积文件 queue.md / plan.md / decision.md；旧格式带时间戳，一并认
+  // 新格式：累积文件 queue.md / decision.md；旧格式带时间戳，一并认。
+  // 旧版计划归档（`plan.md`）不算：机制已移除，它不参与"这一批归档了没有"的判定。
   return readdirSync(d).filter(
-    (n) => /^(queue|plan|decision)(-\d{14})?\.md$/.test(n),
+    (n) => /^(queue|decision)(-\d{14})?\.md$/.test(n),
   );
 }
 
@@ -735,7 +764,7 @@ function runScenario(name) {
   }
   steps = [];
   const s = sid(
-    { main: 'e', blocked: 'b', decision: 'd', 'plan-split': 'f', 'plan-run': 'c', worktree: 'a' }[name] ?? 'a',
+    { main: 'e', blocked: 'b', decision: 'd', 'milestone-split': 'f', milestone: 'c', worktree: 'a' }[name] ?? 'a',
   );
   console.log(`\n▶ 场景 ${name}（${sc.driver}）— ${sc.desc}`);
   const ctx = scaffold(name);
@@ -760,29 +789,158 @@ function runScenario(name) {
 // ---------------------------------------------------------------- 主流程
 
 /**
- * 模型：**优先读本机 codebuddy 正在用的那个**，其次才是命令行显式指定。
+ * 模型：**优先用"当前会话正在用的那个"**，不是 `~/.codebuddy/settings.json` 里那份全局默认。
  *
- * 依据：`~/.codebuddy/settings.json` 里有 `"model": "custom-local:deepseek-v4.1-flash-official"`，
- * 去掉 `custom-local:` 前缀就是 CLI 的 `--model` 值。读不到就报错要求显式指定——
- * 绝不"猜一个"然后让断言跑在另一个模型上。
+ * 为什么改（旧实现的错）：settings.json 的 `model` 是"这台机器上次选的"，用户在会话里
+ * 换了模型（IDE 的模型选择器 / `--model`）它**不会跟着变**。于是自测跑在一个模型上、
+ * 报告却写着另一个——而"这个模型的协议依从性"正是模型级场景唯一要验的东西。
+ *
+ * 优先级（越靠前越"当前"）：
+ *   1. `--model`（人显式指定，最高）；
+ *   2. 当前会话：`CODEBUDDY_SESSION_ID` 对应的模型配置
+ *      · IDE：`<globalStorage>/<插件>/message-queue/*.json` 里该会话最后一条消息的 `modelId`；
+ *      · CLI：`~/.codebuddy/projects/<项目>/<sid>.jsonl` 里的 `requestModelId`；
+ *   3. `CODEBUDDY_MODEL` 环境变量；
+ *   4. `codebuddy config get model`（CLI 合并后的生效值）；
+ *   5. `~/.codebuddy/settings.json` / 项目 `.codebuddy/settings.json` 的 `model`。
+ *
+ * `custom-local:` 前缀只是宿主内部的"本地自定义模型"标记，CLI 的 `--model` 不认它。
+ * 全都取不到就报错要求显式指定——绝不"猜一个"然后让断言跑在另一个模型上。
  */
-function detectModel() {
+const stripModel = (m) => String(m ?? '').trim().replace(/^custom-local:/, '');
+
+/** 可能的 CodeBuddy 数据目录（IDE 与 CLI 的产品目录名不一样，逐个试）。 */
+function configRoots() {
   const home = process.env.HOME || process.env.USERPROFILE;
-  if (!home) return null;
+  if (!home) return [];
+  const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming');
+  const products = ['CodeBuddy CN', 'CodeBuddy', 'WorkBuddy'];
+  const roots = [];
+  for (const product of products) {
+    if (process.platform === 'darwin') {
+      roots.push(join(home, 'Library', 'Application Support', product, 'User', 'globalStorage'));
+    } else if (process.platform === 'win32') {
+      roots.push(join(appData, product, 'User', 'globalStorage'));
+    } else {
+      roots.push(join(home, '.config', product, 'User', 'globalStorage'));
+    }
+  }
+  return roots.filter((p) => existsSync(p));
+}
+
+/** IDE：从 message-queue 里读某个会话最后一条带 modelId 的消息。 */
+function modelFromIdeStore(sid) {
+  for (const root of configRoots()) {
+    let pluginDirs = [];
+    try {
+      pluginDirs = readdirSync(root)
+        .map((name) => join(root, name, 'message-queue'))
+        .filter((p) => existsSync(p));
+    } catch {
+      continue;
+    }
+    for (const dir of pluginDirs) {
+      let files = [];
+      try {
+        files = readdirSync(dir)
+          .filter((n) => n.endsWith('.json'))
+          .map((n) => join(dir, n))
+          .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        let data = null;
+        try {
+          data = JSON.parse(readFileSync(file, 'utf8'));
+        } catch {
+          continue;
+        }
+        const conversations = data?.conversations ?? {};
+        const ids = sid ? (conversations[sid] ? [sid] : []) : Object.keys(conversations);
+        let best = null;
+        for (const id of ids) {
+          for (const item of conversations[id]?.items ?? []) {
+            const modelId =
+              item?.modelId ??
+              item?.contentBlocks?.find((block) => block?._meta?.['codebuddy.ai']?.model)?._meta['codebuddy.ai']
+                ?.model;
+            if (!modelId) continue;
+            const at = Number(item.updatedAt ?? item.createdAt ?? 0);
+            if (!best || at >= best.at) best = { model: modelId, at, id };
+          }
+        }
+        if (best) return { model: best.model, where: `IDE 会话 ${best.id} 的模型配置` };
+      }
+    }
+  }
+  return null;
+}
+
+/** CLI：`projects/<项目>/<sid>.jsonl` 里最后一次请求用的模型。 */
+function modelFromCliTranscript(sid) {
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (!home || !sid) return null;
+  const escaped = process.cwd().replace(/^[/\\]+/, '').replace(/[/\\:]/g, '-');
+  const file = join(home, '.codebuddy', 'projects', escaped, `${sid}.jsonl`);
+  if (!existsSync(file)) return null;
   try {
-    const file = join(home, '.codebuddy', 'settings.json');
-    if (!existsSync(file)) return null;
-    const raw = JSON.parse(readFileSync(file, 'utf8'));
-    const m = typeof raw.model === 'string' ? raw.model.trim() : '';
-    return m ? m.replace(/^custom-local:/, '') : null;
+    const text = readFileSync(file, 'utf8');
+    const requested = [...text.matchAll(/"requestModelId"\s*:\s*"([^"]+)"/g)].map((m) => m[1]);
+    const used = [...text.matchAll(/"model"\s*:\s*"([^"]+)"/g)].map((m) => m[1]);
+    const m = requested.at(-1) ?? used.at(-1);
+    return m ? { model: m, where: `CLI 会话记录 ${sid}` } : null;
   } catch {
     return null;
   }
 }
 
+/** CLI 生效配置（项目级 + 用户级合并后的值）。 */
+function modelFromCliConfig() {
+  const res = spawnSync('codebuddy', ['config', 'get', 'model'], { encoding: 'utf8', timeout: 8000 });
+  if (res.status !== 0) return null;
+  const line = String(res.stdout ?? '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .find((s) => s && !s.includes(' '));
+  return line ? { model: line, where: 'codebuddy config get model' } : null;
+}
+
+/** 兜底：settings.json（先项目、后用户）。 */
+function modelFromSettings() {
+  const home = process.env.HOME || process.env.USERPROFILE;
+  const files = [join(process.cwd(), '.codebuddy', 'settings.json')];
+  if (home) files.push(join(home, '.codebuddy', 'settings.json'));
+  for (const file of files) {
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8'));
+      const m = typeof raw.model === 'string' ? raw.model.trim() : '';
+      if (m) return { model: m, where: file.replace(home ?? '', '~') };
+    } catch {
+      /* 没有 / 不是合法 JSON → 继续 */
+    }
+  }
+  return null;
+}
+
 const explicitModel = value('--model', null);
-const model = explicitModel || detectModel();
-const modelSource = explicitModel ? '命令行 --model' : model ? '~/.codebuddy/settings.json' : '未知';
+const sessionIdForModel = process.env.CODEBUDDY_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
+/**
+ * 有会话 ID 就**只认这个会话**：它读不到就往下走别的来源，绝不拿"最近一个会话"顶替——
+ * 那是另一个窗口/上一轮对话的模型，写进报告比"未知"更误导。
+ * 没有会话 ID（在普通终端里跑）才退化成"IDE 最近一次对话"。
+ */
+const sessionModel = sessionIdForModel
+  ? (modelFromIdeStore(sessionIdForModel) ?? modelFromCliTranscript(sessionIdForModel))
+  : modelFromIdeStore('');
+const resolved = explicitModel
+  ? { model: explicitModel, where: '命令行 --model' }
+  : sessionModel ||
+    (process.env.CODEBUDDY_MODEL ? { model: process.env.CODEBUDDY_MODEL, where: 'CODEBUDDY_MODEL 环境变量' } : null) ||
+    modelFromCliConfig() ||
+    modelFromSettings();
+const model = resolved ? stripModel(resolved.model) : null;
+const modelSource = resolved ? `${resolved.where}${resolved.model.startsWith('custom-local:') ? '（去掉 custom-local:）' : ''}` : '未知';
 
 const HISTORY = join(SKILL, 'e2e-history.md');
 
@@ -844,7 +1002,7 @@ for (const name of chosen) {
   }
 }
 if (chosen.some((n) => SCENARIOS[n].driver === 'model') && !model) {
-  console.error('读不到本机模型，也没给 --model。请显式指定：npm run skill:e2e -- --model <id>');
+  console.error('读不到当前会话的模型，也没给 --model 或 CODEBUDDY_MODEL。请显式指定：npm run skill:e2e -- --model <id>');
   process.exit(2);
 }
 
@@ -922,7 +1080,7 @@ if (needCli && spawnSync('codebuddy', ['--version'], { encoding: 'utf8' }).statu
  * `fs.rmSync` / `unlinkSync` 会被接管——按 toolCallId 累计删除条数，跨过 500 条就
  * **删到一半停下**（留下半删的现场），还把文件挪进系统废纸篓；PATH 里的 `rm`
  * 也是同一层垫片。只有绝对路径 `/bin/rm` 不过这两层，才是"真的删掉"。
- * 2026-10-23 实测：`plan-run`/`journey`/`worktree` 三个场景就是被这个 500 阈值判红的。
+ * 2026-10-23 实测：`milestone`/`journey`/`worktree` 三个场景就是被这个 500 阈值判红的。
  * 作用域始终限制在 `.e2e/` 下的单个条目，不会误伤别处。
  */
 function rmPath(target) {

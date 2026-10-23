@@ -186,6 +186,28 @@ export function migrateLegacyLayout() {
   } catch {
     /* 同上 */
   }
+  /**
+   * 旧版计划文件（`doing/<会话ID>-plan.md`）：计划机制已移除，里程碑现在写在队列里。
+   * 搬进 `logs/<会话ID>/plan.md` **归档**（不删）——内容还在，只是不再参与任何判定。
+   * 不搬的话它会永远躺在 `doing/` 里，看起来像"还有另一份进度"，还会被当成别人的队列。
+   */
+  try {
+    if (existsSync(DOING_DIR)) {
+      for (const name of readdirSync(DOING_DIR)) {
+        if (!isLegacyPlanFile(name)) continue;
+        const sid = sessionOfLegacyPlan(name);
+        if (!sid) continue;
+        const dest = join(LOGS_DIR, shortSid(sid), 'plan.md');
+        const text = readFileSync(join(DOING_DIR, name), 'utf8');
+        mkdirSync(dirname(dest), { recursive: true });
+        appendFileSync(dest, `\n## 旧计划（计划机制已移除）· ${localStamp()}\n\n${text.trimEnd()}\n`);
+        unlinkSync(join(DOING_DIR, name));
+        notes.push(`已把旧计划 \`${name}\` 归档到 \`logs/${shortSid(sid)}/plan.md\``);
+      }
+    }
+  } catch {
+    /* 归档失败不影响主流程：那一份本来也不参与判定 */
+  }
   return notes;
 }
 
@@ -327,7 +349,7 @@ export function logPath(sid) {
   return join(LOGS_DIR, shortSid(sid), 'run.md');
 }
 
-/** 归档目录（队列 / 计划 / 决策记录都放这儿，按会话分）。 */
+/** 归档目录（队列 / 决策记录 / 历史遗留的旧计划都放这儿，按会话分）。 */
 export function archiveDirFor(sid) {
   return join(LOGS_DIR, shortSid(sid));
 }
@@ -636,8 +658,6 @@ export function classify(trimmed) {
  *
  * 为什么抽成一个常量、而不是每处各写：这扇窗口原来在 `hold` 与 `parseBatch` 里各写一遍，
  * 加第三个读者时漏改了一个——**同一个数字写两遍就会漂**，这是本项目的老账。
- * 上一版计划机制一度把它改成 6（因为要在第 6 行放 `> 计划：`）；
- * 计划改成按文件名配对后，那个声明没了，窗口回到 5。
  * 数字只有一处，改起来才敢改。
  *
  * 为什么必须卡窗口、不能扫全文：正文里随便提一句模板（`> 状态：讨论中`）
@@ -647,7 +667,62 @@ export function classify(trimmed) {
 export const QUEUE_HEAD_LINES = 5;
 
 /**
- * 返回 { entries, counts, hold }。
+ * 里程碑节点：写在**队列文件里**的一行二级标题。
+ *
+ *   ## 里程碑 MS1 · 横屏 HUD
+ *   - 验收：`npm run test:hud`
+ *   - 确认：已验收 · 批次 20261023-1018     ← 只在人工验收之后写
+ *
+ * 为什么放在队列里、而不是另建一份计划文件（旧设计）：
+ * 计划文件是"队列之外的第二份进度副本"，两份必然漂——它和队列的顺序、批次号、
+ * 完成状态全是同一件事的两种表达。里程碑本来就是"队列里的一个位置"，
+ * 写在同一份文件里，顺序与状态天然只有一份。
+ *
+ * `MS\d+` 前缀是解析锚点；`· <名>` 是给人看的。`- 验收：` 是硬停时要跑的命令，
+ * `- 确认：` 是"人验收过"的凭证（**只有收到用户答复之后才能写**）。
+ */
+const MS_HEAD_RE = /^##\s*里程碑\s*(MS\d+)\s*[·:：]\s*(.+?)\s*$/;
+const MS_ACCEPT_RE = /^[-*]\s*验收\s*[:：]\s*(.+?)\s*$/;
+const MS_CONFIRM_RE = /^[-*]\s*确认\s*[:：]\s*(.+?)\s*$/;
+
+/** 解析队列里的里程碑节点（围栏代码块里的格式示例不算）。 */
+export function parseMilestones(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const milestones = [];
+  let cur = null;
+  let inFence = false;
+  lines.forEach((line, index) => {
+    if (isFence(line)) {
+      inFence = !inFence;
+      return;
+    }
+    if (inFence) return;
+    const trimmed = line.trim();
+    const head = MS_HEAD_RE.exec(trimmed);
+    if (head) {
+      cur = { id: head[1], title: head[2], index, acceptance: [], confirm: null, line: trimmed };
+      milestones.push(cur);
+      return;
+    }
+    // 任何其它二级标题都意味着"出了这个里程碑的小节"
+    if (/^##\s/.test(trimmed)) {
+      cur = null;
+      return;
+    }
+    if (!cur) return;
+    const accept = MS_ACCEPT_RE.exec(trimmed);
+    if (accept) {
+      cur.acceptance.push(accept[1]);
+      return;
+    }
+    const confirm = MS_CONFIRM_RE.exec(trimmed);
+    if (confirm) cur.confirm = confirm[1];
+  });
+  return milestones;
+}
+
+/**
+ * 返回 { entries, counts, hold, milestones }。
  * `hold` 对应队列头部的 `> 状态：讨论中`——表示"还没打算开工，别催"。
  *
  * ⚠️ 只扫**头部声明区**（`QUEUE_HEAD_LINES`），不能扫全文。
@@ -685,6 +760,7 @@ export function parseQueue(text) {
     entries,
     counts,
     total: entries.length,
+    milestones: parseMilestones(text),
     hold: /状态\s*[:：]\s*讨论中/.test(lines.slice(0, QUEUE_HEAD_LINES).join('\n')),
   };
 }
@@ -866,7 +942,7 @@ export function findStrayQueue(sid) {
   try {
     return (
       readdirSync(DOING_DIR)
-        .filter((name) => name.endsWith('.md') && !isPlanFile(name) && !isDecisionFile(name))
+        .filter((name) => name.endsWith('.md') && !isLegacyPlanFile(name) && !isDecisionFile(name))
         .find((name) => {
           const stem = name.slice(0, -3);
           return stem !== want && stem.startsWith(want) && stem.length > want.length;
@@ -877,12 +953,12 @@ export function findStrayQueue(sid) {
   }
 }
 
-/** 只列**会话队列**：`doing/` 里还有 `<sid>-plan.md` / `<sid>-decision.md` 两类。 */
+/** 只列**会话队列**：`doing/` 里还可能有历史遗留的计划文件与 `<sid>-decision.md`。 */
 export function listQueues() {
   try {
     return readdirSync(DOING_DIR)
       .filter((name) => name.endsWith('.md'))
-      .filter((name) => !isPlanFile(name) && !isDecisionFile(name))
+      .filter((name) => !isLegacyPlanFile(name) && !isDecisionFile(name))
       .map((name) => ({ sid: name.slice(0, -3), file: join(DOING_DIR, name) }));
   } catch {
     return [];
@@ -918,43 +994,24 @@ export function unfinishedCount(queue) {
   return queue ? queue.counts.todo + queue.counts.doing : 0;
 }
 
-// ------------------------------------------------------------------ 计划（plan-*.md）
-
 /**
- * 计划文件的命名：`doing/plan-<session_id>.md` —— **和队列同名配对**。
+ * **历史遗留**：旧版本把长任务拆到 `doing/<会话ID>-plan.md`（独立的计划文件）。
+ * 该机制已移除，计划节点现在写在队列文件里（见 `parseMilestones`）。
  *
- * 绑定由**文件名**表达：队列 `<sid>.md` ↔ 计划 `plan-<sid>.md`，钩子按会话 ID 直接算路径。
- *
- * 为什么不写进队列头（旧做法 `> 计划：x.md`）：那等于把"这一批属于哪份计划"存了两份，
- * 两份必然漂——实测漂过一次：门禁接受带 `· 阶段` 的写法、钩子只认不带后缀的，
- * 结果**门禁全绿、机制一次都不触发**，且没有任何报错。
- * 文件名不会漂：改名 = 那份计划谁都读不到，而门禁能当场发现"孤儿计划"。
- *
- * 前缀仍必须卡住：`doing/` 里同时住着"会话队列"和"计划"两类文件，钩子靠前缀区分。
- * 前缀写错（`Plan-x.md` / `planx.md`）时它会被当成**别人的队列**——
- * `audit-ids` 按队列解析它、`audit-docs` 按队列体量算它，而 plan 判定一次都不触发。
- * `plan-xxx` 本身能通过"文件名像会话 ID"那条检查（`[A-Za-z0-9._-]{4,}`），
- * 所以不需要为它在 `audit-ids` 里开白名单。
+ * 这里只保留"认出它们"的能力，用途有两个：
+ *   · `listQueues` / `findStrayQueue` 别把旧计划当成别人的队列（否则注入里会
+ *     反复提示"其他会话还有未完成队列"，诱导 AI 去接管一份早就作废的计划）；
+ *   · `migrateLegacyLayout()` 把它们搬进 `logs/`（归档，不删），免得 forever 留在 `doing/`。
  */
-export const PLAN_FILE_RE = /^([A-Za-z0-9._-]+?)-plan\.md$/;
+const LEGACY_PLAN_RE = /^[A-Za-z0-9._-]+-plan\.md$/;
 
-export function isPlanFile(name) {
-  return PLAN_FILE_RE.test(name);
+export function isLegacyPlanFile(name) {
+  return LEGACY_PLAN_RE.test(name);
 }
 
-/** 会话 ID → 计划文件名。配对关系只在这里定义一次。 */
-export function planNameFor(sid) {
-  return `${shortSid(sid)}-plan.md`;
-}
-
-/** 会话 ID → 计划文件绝对路径（文件不存在时也返回路径，由调用方 `readPlan` 判空）。 */
-export function planPathFor(sid) {
-  return join(DOING_DIR, planNameFor(sid));
-}
-
-/** 计划文件名 → 它服务的会话 ID；不是计划文件时返回 `null`。 */
-export function sessionOfPlan(name) {
-  const m = PLAN_FILE_RE.exec(name);
+/** 旧计划文件名 → 它属于哪个会话（前缀）。 */
+export function sessionOfLegacyPlan(name) {
+  const m = /^([A-Za-z0-9._-]+?)-plan\.md$/.exec(name);
   return m ? m[1] : null;
 }
 
@@ -962,10 +1019,10 @@ export function sessionOfPlan(name) {
  * 会话**决策记录**：`doing/decision-<session_id>.md`。
  *
  * 用户的规则：需要拍板的地方**以 AI 的意见为准**，但每一处都要记成人能看懂的形式留底。
- * 于是它和队列 / 计划一样是"正在做"的文件，收尾时同样**追加**进 `logs/<会话ID>/decision.md`
+ * 于是它和队列一样是"正在做"的文件，收尾时同样**追加**进 `logs/<会话ID>/decision.md`
  * （累积、按批次分节，新的在最上面）。
  *
- * 为什么也叫 `<sid>` 结尾：三类文件（队列 / 计划 / 决策）靠前缀区分、靠会话 ID 配对，
+ * 为什么也叫 `<sid>` 结尾：两类文件（队列 / 决策）靠前缀区分、靠会话 ID 配对，
  * 归档后还能一眼看出属于同一轮工作。
  */
 export const DECISION_FILE_RE = /^([A-Za-z0-9._-]+?)-decision\.md$/;
@@ -983,138 +1040,16 @@ export function sessionOfDecision(name) {
   return m ? m[1] : null;
 }
 
-const MS_HEAD_RE = /^##\s+(MS\d+)\s*[·:：]\s*(.+?)\s*$/;
-const MS_ACCEPT_RE = /^[-*]\s*验收\s*[:：]\s*(.+?)\s*$/;
-const MS_CONFIRM_RE = /^[-*]\s*确认\s*[:：]\s*(.+?)\s*$/;
-/** 阶段行：`- [x] \`MS2.1\` 描述 → 验收 \`cmd\` · 批次 \`20261022-2338\`` */
-const STAGE_RE = /^-\s*\[[^\]]{0,6}\]\s*`(MS\d+\.\d+)`\s*(.*)$/;
-const STAGE_BATCH_RE = /批次\s*`?([0-9]{8}-[0-9]{4})`?/;
-const STAGE_VERIFY_RE = /→\s*验收\s*`([^`]+)`/;
-
-/**
- * 解析 `doing/plan-*.md`。
- *
- * 结构（细则见 `.continue/notes/plan.md`；`README.md` 只留一句指针，因为它有行数上限）：
- *
- *   ## MS2 · 横屏 HUD          ← 里程碑标题，`MS<n>` 前缀就是归属
- *   - 验收：`npm run test:hud`  ← 这一里程碑做完要跑的命令（硬停时的凭证）
- *   - 确认：已验收 · 批次 `x`    ← 开发者确认过（**写在文件里**，换机器也认）
- *   - [~] `MS2.1` 描述 → 验收 `...` · 批次 `x`
- *
- * **游标不落盘**：它就是"第一条 `[~]`，没有就第一条 `[ ]`"。
- * 与队列条目号同一条原理——能派生的绝不手写，手写的一定会漂。
- *
- * `confirmed` / `acceptance` 只认**当前里程碑小节内**的行：跨小节复用会让
- * "MS1 的确认"被读成"MS2 也确认过了"，那等于自动放行整个里程碑关卡。
- */
-export function parsePlan(text) {
-  const lines = String(text ?? '').split(/\r?\n/);
-  const milestones = [];
-  let cur = null;
-  let inFence = false;
-
-  lines.forEach((line, index) => {
-    if (isFence(line)) {
-      inFence = !inFence;
-      return;
-    }
-    if (inFence) return;
-    const trimmed = line.trim();
-
-    const head = MS_HEAD_RE.exec(trimmed);
-    if (head) {
-      cur = {
-        id: head[1],
-        title: head[2],
-        index,
-        acceptance: [],
-        confirm: null,
-        stages: [],
-      };
-      milestones.push(cur);
-      return;
-    }
-    // 任何其它二级标题都意味着"出了里程碑区"——标题下面的行不再归属上一个里程碑
-    if (/^##\s/.test(trimmed)) {
-      cur = null;
-      return;
-    }
-    if (!cur) return;
-
-    const accept = MS_ACCEPT_RE.exec(trimmed);
-    if (accept) {
-      cur.acceptance.push(accept[1]);
-      return;
-    }
-    const confirm = MS_CONFIRM_RE.exec(trimmed);
-    if (confirm) {
-      cur.confirm = confirm[1];
-      return;
-    }
-
-    const stage = STAGE_RE.exec(trimmed);
-    if (!stage) return;
-    const id = stage[1];
-    const rest = stage[2];
-    const verify = STAGE_VERIFY_RE.exec(rest);
-    const batch = STAGE_BATCH_RE.exec(rest);
-    const title = rest
-      .replace(STAGE_VERIFY_RE, '')
-      .replace(STAGE_BATCH_RE, '')
-      .replace(/[·\s]+$/g, '')
-      .trim();
-    const entry = {
-      id,
-      ms: id.slice(0, id.indexOf('.')),
-      kind: classify(trimmed) ?? 'todo',
-      raw: trimmed,
-      index,
-      title,
-      verify: verify ? verify[1] : null,
-      batch: batch ? batch[1] : null,
-    };
-    cur.stages.push(entry);
-  });
-
-  const stages = milestones.flatMap((ms) => ms.stages);
-  const cursor = stages.find((s) => s.kind === 'doing') ?? stages.find((s) => s.kind === 'todo') ?? null;
-
-  return {
-    milestones,
-    stages,
-    cursor,
-  };
-}
-
-export function readPlan(file) {
-  if (!existsSync(file)) return null;
-  const text = readFileSync(file, 'utf8');
-  return { file, text, ...parsePlan(text) };
-}
-
-/**
- * 某个里程碑的阶段是否**在做完 `alsoDone` 这一条之后**全部完成。
- *
- * `alsoDone` 是必须的参数：调用点总是"队列已清空、但计划里这一条还没勾"，
- * 直接看计划会永远差一条，永远到不了边界——这个 off-by-one 会让里程碑
- * 关卡**从来不触发**，而现象只是"它自己往下跑了"，没有任何报错。
- */
-export function milestoneComplete(plan, msId, alsoDone = null) {
-  const stages = plan.stages.filter((s) => s.ms === msId);
-  if (stages.length === 0) return false;
-  return stages.every((s) => s.kind === 'done' || s.id === alsoDone);
-}
-
 // ------------------------------------------------------------------ 输出
 
 /**
  * **同步**写 fd（1 = stdout / 2 = stderr）。
  *
  * 为什么不用 `process.stdout.write`：stdout 是管道时它是**异步**的，紧跟其后的
- * `process.exit()` 会把还没冲出去的尾巴直接丢掉。注入文本一长（协议 + 其他队列提醒 + 计划段），
+ * `process.exit()` 会把还没冲出去的尾巴直接丢掉。注入文本一长（协议 + 其他队列提醒 + 里程碑提示），
  * JSON 就在中间被截断——宿主拿到坏 JSON，表现是"这个钩子没反应"，**而且没有任何报错**。
  *
- * 真实踩到：计划机制上线时注入文本涨了约 1.5KB，自检当场红了两条，
+ * 真实踩到：注入文本涨了约 1.5KB 时自检当场红了两条，
  * 但报的是"没有注入会话 ID"（因为 `JSON.parse` 抛了、ctx 变成空串），
  * 差点被当成解析逻辑写错。`writeSync` 直接落到 fd 上，排完才返回，不存在这个问题。
  */

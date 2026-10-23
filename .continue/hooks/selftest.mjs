@@ -53,15 +53,33 @@ const prompt = (sid, text = 'hi') => ({ hook_event_name: 'UserPromptSubmit', ses
 const queue = (sid, body, head = '> 状态：执行中') =>
   writeFileSync(join(DOING, `${sid}.md`), `# 队列\n\n${head}\n> 批次：19990101-0000\n\n${body}\n`);
 /**
- * 计划文件：**文件名必须是 `<会话ID>-plan.md`**（后缀式）——钩子按会话 ID 直接算路径，
- * 名字不对它就当没有计划（这是新契约，和队列同名配对）。
+ * 带里程碑的队列：结尾的节点写成
+ *
+ *   ## 里程碑 MS1 · 名
+ *   - 验收：`cmd`
+ *   - 确认：已验收 · 批次 `x`     ← 只在人工验收后才有
  */
-const plan = (sid, body) => writeFileSync(join(DOING, `${sid}-plan.md`), `# 计划 · 测试\n\n${body}\n`);
-/** 绑了计划的队列：**不写 `> 计划：`**（绑定在文件名里），其余与真实模板同构。 */
-const planQueue = (sid, body) =>
+const msQueue = (sid, before, after, { accept = '`true`', confirm = null } = {}) =>
   writeFileSync(
     join(DOING, `${sid}.md`),
-    `# 队列\n\n> 状态：执行中\n> 创建：1999-01-01\n> 批次：19990101-0000\n\n${body}\n`,
+    [
+      '# 队列',
+      '',
+      '> 状态：执行中',
+      '> 创建：1999-01-01',
+      '> 批次：19990101-0000',
+      '',
+      ...before,
+      '',
+      '## 里程碑 MS1 · 测试',
+      accept ? `- 验收：${accept}` : null,
+      confirm ? `- 确认：${confirm}` : null,
+      '',
+      ...after,
+      '',
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
   );
 const config = (fast, extra = {}) =>
   writeFileSync(
@@ -244,170 +262,137 @@ try {
     );
   });
 
-  // ---------------------------------------------------------------- 计划模式
+  // ---------------------------------------------------------------- 里程碑（写在队列里）
   /**
-   * 计划模式的分支。绑定**靠文件名配对**（`<本会话ID>-plan.md` ↔ `<本会话ID>.md`），
-   * 所以每个用例的计划文件必须挂在它自己的会话 ID 上——不能几份队列共用一份计划。
+   * 里程碑是**队列里的一个节点**（不再有独立的计划文件）：
+   *
+   *   ## 里程碑 MS1 · 名
+   *   - 验收：`cmd`
+   *   - 确认：已验收 · 批次 `x`     ← 只在人工验收后才有
+   *
+   * 关卡判据：没写确认行，且它**前面**的条目全部 `[x]` / `[阻塞]`。
    */
-  check('auto-continue · 计划未到边界 → 续批，并且点名下一阶段', () => {
-    plan(
-      's-plan-next',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- [x] `MS1.1` 第一条 → 验收 `npm run test:a` · 批次 `19990101-0000`',
-        '',
-        '## MS2 · 乙',
-        '- 验收：`npm run test:b`',
-        '- [~] `MS2.1` 当前 → 验收 `npm run test:b`',
-        '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-next', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-next'));
+  check('auto-continue · 走到里程碑 → 硬停，列出验收命令并要求先问人', () => {
+    msQueue('s-ms-gate', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙']);
+    const r = hook('auto-continue.mjs', stop('s-ms-gate'));
     return expect(
       r.code === 2 &&
-        r.err.includes('计划里还有下一阶段') &&
-        r.err.includes('MS2.2') &&
-        /**
-         * 阶段行示例必须带反引号：`STAGE_RE` 靠 `` `MS2.1` `` 这一对反引号认行，
-         * 漏了就**不是阶段**（不是报错，是静默消失）。照抄示例写出解析不出来的行，
-         * 是这个机制最容易犯的错，所以连示例格式一起钉住。
-         */
-        r.err.includes('- [x] `MS2.1`') &&
-        !r.err.includes('停下等验收'),
-      '未到边界应续批、点名 MS2.2，且阶段行示例带反引号（漏了会被静默丢弃）',
+        r.err.includes('到达里程碑 MS1') &&
+        r.err.includes('`true`') &&
+        r.err.includes('弹窗问用户') &&
+        r.err.includes('不要替用户写') &&
+        !r.err.includes('这一轮做这一条'),
+      '到里程碑应硬停：跑验收 → 问人 → 答复后才动队列',
       r,
     );
   });
 
-  check('auto-continue · 计划文件名不是 `<本会话ID>-plan.md` → 当没有计划（走普通收尾）', () => {
-    // 名字写错 = 钩子按会话 ID 算路径算不到它。这正是"文件名即绑定"的代价，必须钉住。
-    writeFileSync(
-      join(DOING, 'wrong-name-plan.md'),
-      '# 计划 · 测试\n\n## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`\n',
-    );
-    planQueue('s-plan-wrong', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-wrong'));
+  check('auto-continue · 里程碑前面的条目还没做完 → 不触发关卡，正常递任务', () => {
+    msQueue('s-ms-early', ['- [ ] 甲'], ['- [ ] 乙']);
+    const r = hook('auto-continue.mjs', stop('s-ms-early'));
     return expect(
-      r.code === 2 && r.err.includes('[auto-continue · 自动收尾]') && !r.err.includes('计划里还有下一阶段'),
-      '计划名与会话 ID 不配对时，必须当成"没有计划"，不能半认',
+      r.code === 2 && r.err.includes('这一轮做这一条') && !r.err.includes('到达里程碑'),
+      '里程碑前面还有待办时不该停',
       r,
     );
   });
 
-  check('auto-continue · 计划做到里程碑边界 → 硬停，列出里程碑验收命令', () => {
-    plan(
-      's-plan-edge',
-      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join(
-        '\n',
-      ),
-    );
-    planQueue('s-plan-edge', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-edge'));
+  check('auto-continue · 里程碑前面只剩 [发现] → 仍到点硬停（发现条目不挡关卡）', () => {
+    msQueue('s-ms-found', ['- [ ] [发现] 顺手记的一条：x → `true`'], ['- [ ] 乙']);
+    const r = hook('auto-continue.mjs', stop('s-ms-found'));
     return expect(
-      r.code === 2 &&
-        r.err.includes('停下等验收') &&
-        r.err.includes('npm run test:b') &&
-        r.err.includes('不要替用户写'),
-      '到边界应硬停、给验收命令、并禁止替用户写确认',
+      r.code === 2 && r.err.includes('到达里程碑') && !r.err.includes('这一轮做这一条'),
+      '[发现] 排在后面，不该让它把关卡绕过去',
       r,
     );
   });
 
-  check('auto-continue · 里程碑硬停只提醒一次，第二轮放行', () => {
-    plan(
-      's-plan-edge2',
-      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join(
-        '\n',
-      ),
-    );
-    planQueue('s-plan-edge2', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const first = hook('auto-continue.mjs', stop('s-plan-edge2'));
-    const second = hook('auto-continue.mjs', stop('s-plan-edge2'));
+  check('auto-continue · 里程碑关卡只提醒一次，第二轮放行', () => {
+    msQueue('s-ms-once', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙']);
+    const first = hook('auto-continue.mjs', stop('s-ms-once'));
+    const second = hook('auto-continue.mjs', stop('s-ms-once'));
     if (first.code !== 2) return expect(false, '第一轮应硬停', first);
     return expect(second.code === 0, '第二轮应放行（不重复弹窗）', second);
   });
 
-  check('auto-continue · 上一个里程碑已写「确认：已验收」→ 继续下一里程碑', () => {
-    plan(
-      's-plan-confirmed',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- 确认：已验收 · 批次 `19990101-0000`',
-        '- [x] `MS1.1` 第一条 → 验收 `npm run test:a` · 批次 `19990101-0000`',
-        '',
-        '## MS2 · 乙',
-        '- 验收：`npm run test:b`',
-        '- [~] `MS2.1` 当前 → 验收 `npm run test:b`',
-        '- [ ] `MS2.2` 下一条 → 验收 `npm run test:b`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-confirmed', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-confirmed'));
+  check('auto-continue · 里程碑已写「确认：已验收」→ 继续递后面的条目', () => {
+    msQueue('s-ms-ok', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙'], {
+      confirm: '已验收 · 批次 `19990101-0000`',
+    });
+    const r = hook('auto-continue.mjs', stop('s-ms-ok'));
     return expect(
-      r.code === 2 && r.err.includes('计划里还有下一阶段') && !r.err.includes('停下等验收'),
-      'MS1 已验收时不该再停在 MS1，应继续 MS2',
+      r.code === 2 && r.err.includes('乙') && !r.err.includes('到达里程碑'),
+      '确认行是"人验收过"的凭证：写了就该放行到下一段',
       r,
     );
   });
 
-  check('auto-continue · 计划里阶段全做完 → 整体收尾并归档计划', () => {
-    plan(
-      's-plan-done',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- 确认：已验收 · 批次 `19990101-0000`',
-        '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-done', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-done'));
-    return expect(
-      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('s-plan-done-plan.md'),
-      '计划全部完成且最后里程碑已验收时，应走整体收尾',
-      r,
-    );
-  });
-
-  check('auto-continue · 计划做完但最后里程碑没验收 → 请用户拍板，不整体收尾', () => {
-    plan(
-      's-plan-unconfirmed',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- [x] `MS1.1` 唯一 → 验收 `npm run test:a` · 批次 `19990101-0000`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-unconfirmed', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-unconfirmed'));
+  check('auto-continue · 全做完但里程碑没确认 → 不整体收尾', () => {
+    msQueue('s-ms-open', ['- [x] 甲', '  - 验证：`true`'], []);
+    const r = hook('auto-continue.mjs', stop('s-ms-open'));
     return expect(
       r.code === 2 &&
-        r.err.includes('没有验收记录') &&
-        r.err.includes('不要替用户写确认行') &&
-        !r.err.includes('计划已全部完成'),
-      '没人验收过的计划不该自动归档（`确认：已验收` 这行必须真的被判定消费）',
+        r.err.includes('到达里程碑 MS1') &&
+        !r.err.includes('[auto-continue · 自动收尾]'),
+      '没人验收过的里程碑不该被当成"已完成"归档',
       r,
     );
   });
 
-  check('auto-continue · 没有计划时收尾第五步是"归档队列"（不再直接删）', () => {
+  check('auto-continue · 全做完且里程碑已确认 → 自动收尾（含归档）', () => {
+    msQueue('s-ms-done', ['- [x] 甲', '  - 验证：`true`'], [], {
+      confirm: '已验收 · 批次 `19990101-0000`',
+    });
+    const r = hook('auto-continue.mjs', stop('s-ms-done'));
+    return expect(
+      r.code === 2 &&
+        r.err.includes('[auto-continue · 自动收尾]') &&
+        r.err.includes('归档队列文件') &&
+        r.err.includes('archive-queue.mjs'),
+      '最后一个里程碑验收完之后应走正常五步（含归档）',
+      r,
+    );
+  });
+
+  check('auto-continue · 里程碑没写「验收」→ 关卡照停但明确要补命令', () => {
+    msQueue('s-ms-noaccept', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙'], { accept: null });
+    const r = hook('auto-continue.mjs', stop('s-ms-noaccept'));
+    return expect(
+      r.code === 2 && r.err.includes('到达里程碑') && r.err.includes('没写 `- 验收：`'),
+      '缺验收命令不能被当成"验收通过"',
+      r,
+    );
+  });
+
+  check('auto-continue · 关卡连续 N 轮没推进 → 升级成「卡住了」告警', () => {
+    msQueue('s-ms-stuck', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙']);
+    const env = { CONTINUE_BLOCK_AFTER: '2' };
+    const first = hook('auto-continue.mjs', stop('s-ms-stuck'), env);
+    const second = hook('auto-continue.mjs', stop('s-ms-stuck'), env);
+    const third = hook('auto-continue.mjs', stop('s-ms-stuck'), env);
+    if (first.code !== 2 || !first.err.includes('到达里程碑')) {
+      return expect(false, '第一轮应硬停', first);
+    }
+    if (second.code !== 0) return expect(false, '第二轮应只放行（不重复弹）', second);
+    return expect(
+      third.code === 2 && third.err.includes('里程碑关卡卡住了'),
+      '连续 N 轮没推进必须升级成告警；否则关卡会永久空转且不隔离',
+      third,
+    );
+  });
+
+  check('auto-continue · 收尾第五步是"归档队列"（不再直接删）', () => {
     queue('s-noplan', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-noplan'));
     return expect(
-      r.code === 2 &&
-        r.err.includes('归档队列文件') &&
-        r.err.includes('archive-queue.mjs') &&
-        !r.err.includes('不要删除队列文件'),
-      '存量会话的收尾第五步应改成归档；计划模式才是"不要动队列"',
+      r.code === 2 && r.err.includes('归档队列文件') && r.err.includes('archive-queue.mjs'),
+      '收尾第五步应是归档（`archive-queue.mjs`），不是 `rm`',
       r,
     );
   });
 
   /**
-   * 归档改成**累积式**：一个会话一个 `queue.md` / `plan.md` / `decision.md`，
+   * 归档改成**累积式**：一个会话一个 `queue.md` / `decision.md`，
    * 新批次插到最上面，批次之间 `----------` 分隔。`doing/` 的规则不变（一批一文件）。
    */
   check('archive-queue · 归档成 logs/<会话ID>/queue.md（累积，不按批次新建）', () => {
@@ -450,15 +435,6 @@ try {
     );
   });
 
-  check('archive-queue --plan · 计划也归档成 <会话ID>/plan.md', () => {
-    plan('s-archplan', '## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`');
-    const r = hook('archive-queue.mjs', null, {}, ['s-archplan', '--plan']);
-    if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
-    if (existsSync(join(DOING, 's-archplan-plan.md'))) return expect(false, '计划应已移出 doing/', r);
-    const dest = join(ROOT, '.continue', 'logs', 's-archplan', 'plan.md');
-    return expect(existsSync(dest), `应有 ${dest}`, r);
-  });
-
   check('archive-queue --decision · 决策记录也归档成 <会话ID>/decision.md', () => {
     queue('s-archdec', '- [x] 甲\n  - 验证：`npm test` 通过');
     writeFileSync(
@@ -483,60 +459,17 @@ try {
     );
   });
 
-  check('auto-continue · 硬停：先问人，再重置队列（顺序不许反）', () => {
-    plan(
-      's-plan-order',
-      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join('\n'),
-    );
-    planQueue('s-plan-order', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-order'));
+  check('auto-continue · 硬停：先问人，拿到答复后才动队列（顺序不许反）', () => {
+    msQueue('s-ms-order', ['- [x] 甲', '  - 验证：`true`'], ['- [ ] 乙']);
+    const r = hook('auto-continue.mjs', stop('s-ms-order'));
     if (r.code !== 2) return expect(false, '应硬停', r);
     const ask = r.err.indexOf('弹窗问用户');
-    const reset = r.err.indexOf('只有用户选了');
-    // 第 5 步（重置队列）在硬停时**整体不出现**：此刻动队列会让"调整/先收"的路径状态错乱
+    const act = r.err.indexOf('只有用户选了');
+    // 第 5 步（归档并移走队列）在关卡中场收尾时**整体不出现**：队列还要接着用
     return expect(
-      ask > 0 && reset > ask && !r.err.includes('5. **不要删除队列文件**'),
-      '硬停必须先问人、拿到答复后才重置队列；现在把重置写在问之前（或根本没拆开）',
+      ask > 0 && act > ask && !r.err.includes('5. **归档队列文件**'),
+      '硬停必须先问人、拿到答复后才动队列；中场收尾不该归档队列',
       r,
-    );
-  });
-
-  check('auto-continue · 计划一条阶段都没有 → 告警，不整体收尾（H2）', () => {
-    plan('s-plan-empty', '# 只有标题\n');
-    planQueue('s-plan-empty', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const r = hook('auto-continue.mjs', stop('s-plan-empty'));
-    return expect(
-      r.code === 2 &&
-        r.err.includes('一条阶段都没有') &&
-        !r.err.includes('[auto-continue · 计划已全部完成]'),
-      '空计划必须告警；按"已完成"处理会把整批悄悄归档、什么都不留',
-      r,
-    );
-  });
-
-  check('auto-continue · 计划关卡连续 N 轮没推进 → 升级成「卡住了」告警', () => {
-    plan(
-      's-plan-stuck',
-      [
-        '## MS1 · 甲',
-        '- 验收：`npm run test:a`',
-        '- [~] `MS1.1` 当前 → 验收 `npm run test:a`',
-        '- [ ] `MS1.2` 下一条 → 验收 `npm run test:a`',
-      ].join('\n'),
-    );
-    planQueue('s-plan-stuck', '- [x] 甲\n  - 验证：`npm test` 通过');
-    const env = { CONTINUE_BLOCK_AFTER: '2' };
-    const first = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
-    const second = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
-    const third = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
-    if (first.code !== 2 || !first.err.includes('计划里还有下一阶段')) {
-      return expect(false, '第一轮应下发续批指令', first);
-    }
-    if (second.code !== 0) return expect(false, '第二轮应只放行（不重复弹）', second);
-    return expect(
-      third.code === 2 && third.err.includes('计划卡住了') && third.err.includes('没有推进'),
-      '连续 N 轮没推进必须升级成告警；否则计划分支会永久空转、且不隔离',
-      third,
     );
   });
 
@@ -660,6 +593,35 @@ try {
     return expect(
       r.code === 0 && ctx.includes('19990101-0000'),
       `注入的批次号应沿用队列头部的 19990101-0000，实际：${ctx.slice(0, 200)}`,
+      r,
+    );
+  });
+
+  check('queue-init · 注入里写了里程碑协议（队列内节点 + 硬停 + 不许替用户确认）', () => {
+    const r = hook('queue-init.mjs', prompt('s-init-ms'));
+    let ctx = '';
+    try {
+      ctx = JSON.parse(r.out).hookSpecificOutput?.additionalContext ?? '';
+    } catch {
+      /* 下面断言会报 */
+    }
+    return expect(
+      r.code === 0 &&
+        ctx.includes('## 里程碑 MS1') &&
+        ctx.includes('硬停') &&
+        ctx.includes('自己给自己验收'),
+      `注入里必须有里程碑协议（ctx 长 ${ctx.length}）`,
+      r,
+    );
+  });
+
+  check('queue-init · 旧版计划文件被归档到 logs/（机制已移除，不留在 doing/）', () => {
+    writeFileSync(join(DOING, 's-legacy-plan.md'), '# 计划\n\n## MS1 · 甲\n- [ ] `MS1.1` 一\n');
+    const r = hook('queue-init.mjs', prompt('s-legacy'));
+    const dest = join(ROOT, '.continue', 'logs', 's-legacy', 'plan.md');
+    return expect(
+      r.code === 0 && !existsSync(join(DOING, 's-legacy-plan.md')) && existsSync(dest),
+      `旧计划应搬进 ${dest}（归档、不删）`,
       r,
     );
   });

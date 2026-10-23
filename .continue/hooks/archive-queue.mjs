@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /**
- * 把**本会话的队列 / 计划 / 决策记录**从 `doing/` 移进 `logs/<会话ID>/`。
+ * 把**本会话的队列 / 决策记录**从 `doing/` 移进 `logs/<会话ID>/`。
  *
  * 用法：
- *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列（顺带把计划/决策一起搬）
- *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 只归档计划
+ *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列（顺带把决策记录一起搬）
  *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 只归档决策记录
  *
  * ## 归档文件是**累积**的，不按批次新建
  *
- * `logs/<会话ID>/queue.md`、`plan.md`、`decision.md` 各一份，**每个新批次插到最上面**，
+ * `logs/<会话ID>/queue.md`、`decision.md` 各一份，**每个新批次插到最上面**，
  * 批次之间用 `----------` 分隔：
  *
  *   ## 批次 20261023-1141 · 2026-10-23 11:41
@@ -41,28 +40,22 @@ import {
   archiveDirFor,
   decisionNameFor,
   DOING_DIR,
-  planNameFor,
   PROJECT_ROOT,
   queueFileName,
   shortSid,
 } from './lib.mjs';
 
 const sid = (process.argv[2] ?? '').trim();
-const kind = process.argv.includes('--plan')
-  ? 'plan'
-  : process.argv.includes('--decision')
-    ? 'decision'
-    : 'queue';
+const kind = process.argv.includes('--decision') ? 'decision' : 'queue';
 
 if (!sid) {
-  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--plan|--decision]');
+  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--decision]');
   process.exit(2);
 }
 
-const LABEL = { queue: '队列', plan: '计划', decision: '决策记录' };
+const LABEL = { queue: '队列', decision: '决策记录' };
 const SRC_NAME = {
   queue: queueFileName(sid),
-  plan: planNameFor(sid),
   decision: decisionNameFor(sid),
 };
 
@@ -146,19 +139,17 @@ try {
 }
 
 /**
- * 不带 flag 时 = 归档**本会话的全部"正在做"文件**：队列 + 决策记录 + 计划（存在才搬）。
+ * 不带 flag 时 = 归档**本会话的全部"正在做"文件**：队列 + 决策记录（存在才搬）。
  *
- * 为什么做成一条命令：收尾第五步本来要求"归档队列 → 再 `--decision` → 再 `--plan`"，
+ * 为什么做成一条命令：收尾第五步本来要求"归档队列 → 再 `--decision`"，
  * 实测模型只做第一步就宣布收尾，决策记录留在 `doing/` 里成了孤儿。
  * 一个会话的东西本来就该一起走，做成一条命令就不存在"漏了第二步"。
  */
 if (kind === 'queue') {
-  for (const k of ['decision', 'plan']) {
-    try {
-      archiveAs(k);
-    } catch (err) {
-      console.error(`附带归档 ${SRC_NAME[k]} 失败：${err.message}`);
-      process.exit(1);
-    }
+  try {
+    archiveAs('decision');
+  } catch (err) {
+    console.error(`附带归档 ${SRC_NAME.decision} 失败：${err.message}`);
+    process.exit(1);
   }
 }

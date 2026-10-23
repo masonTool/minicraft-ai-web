@@ -52,11 +52,14 @@ function completedQueueItems() {
       '--diff-filter=M',
       '--',
       '.continue/doing',
-      // 计划与决策记录也住在 `doing/`、也用 `- [x]`，但它们**不是队列条目**：
-      // 不排掉的话，"勾了最后一条队列条目 + 顺手勾掉阶段"这种自然写法会被判成
-      // "一次勾了 2 条"而拒绝提交，逼人去用 --no-verify（等于削弱门禁）。
-      ':(exclude).continue/doing/plan-*.md',
-      ':(exclude).continue/doing/decision-*.md',
+      // 决策记录也住在 `doing/`、也用 `- [x]`，但它**不是队列条目**：
+      // 不排掉的话，"勾了最后一条队列条目 + 顺手勾掉记录"会被判成"一次勾了 2 条"，
+      // 逼人去用 --no-verify（等于削弱门禁）。
+      // 文件名是 `<会话ID>-decision.md`（前缀是会话 ID，不是 decision），所以排除串必须用 `*-decision.md`。
+      ':(exclude).continue/doing/*-decision.md',
+      // 历史遗留：旧版计划文件同样是 `- [x]` 形态，但机制已移除（`migrateLegacyLayout` 会把它归档）。
+      // 迁移前万一被改了一行，也不该按"队列条目"算。
+      ':(exclude).continue/doing/*-plan.md',
     ],
     { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
   );
