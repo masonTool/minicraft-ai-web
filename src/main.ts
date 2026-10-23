@@ -195,7 +195,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { applyLanguageSetting, getLanguage, isPseudoLocaleTag, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
+import { applyLanguageSetting, getLanguage, isPseudoLocaleTag, languageFromParam, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -18251,8 +18251,13 @@ async function boot(): Promise<void> {
   // （`navigator.language`），所以俄语/德语手机上第一次打开就是对应语言（没表时回落英文）。
   // 伪语言（多语言 P0-8）：`?lang=xa` 打开后，所有**走过 t() 的文字**都会被 ⟦⟧ 包住；
   // 屏幕上没被包住的，就是还没接 i18n 的硬编码文案。只在调试时用，不写进设置、不进存档。
-  if (isPseudoLocaleTag(new URLSearchParams(location.search).get('lang'))) setPseudoLocale(true);
-  await applyLanguageSetting(loadSettings().language);
+  //
+  // 深链（多语言 P5-2）：`?lang=de` / `?lang=pt-BR` 这类**真实语言码**优先于设置里的值，
+  // 前缀匹配规则与系统语言同一套（`languageFromParam()`）。它**不写进设置**——
+  // 语义是「这次用这个语言看」，分享链接给朋友不会改他的语言；刷新回到设置里的值。
+  const langParam = new URLSearchParams(location.search).get('lang');
+  if (isPseudoLocaleTag(langParam)) setPseudoLocale(true);
+  await applyLanguageSetting(languageFromParam(langParam) ?? loadSettings().language);
   // 首屏静态文案与 manifest 都跟语言走（多语言 P3-4）：HTML 是语言无关的静态文件，
   // 所以解析完语言之后补一次。manifest 只有中英两份，其余语言回落到英文那份。
   localizeBootLoading();

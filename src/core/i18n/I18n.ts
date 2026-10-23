@@ -37,6 +37,7 @@ import {
   detectLocale,
   isLocaleCode,
   localeMeta,
+  matchLocale,
   type LocaleCode,
 } from './locale.ts';
 
@@ -336,6 +337,24 @@ export function isPseudoLocaleTag(tag: string | undefined | null): boolean {
   if (typeof tag !== 'string') return false;
   const lower = tag.trim().toLowerCase();
   return lower === 'xa' || lower === 'en-xa';
+}
+
+/**
+ * `?lang=` 深链 → 语言设置（多语言 P5-2）。
+ *
+ * 三种输入各走各的路，别混：
+ *  · `?lang=xa` / `en-XA` → **伪语言**（调试用），由 `isPseudoLocaleTag` 处理，这里返回 `undefined`；
+ *  · `?lang=de` / `de-AT` / `pt-BR` → 真实语言，**前缀匹配**到表里的语言码（与系统语言的匹配同一套规则，
+ *    只在 `locale.ts` 的 `matchLocale()` 一处）；
+ *  · 其它（`ja` 这种还没做表的）→ `undefined`，交回设置里的值，不会因为一个错参数变成英文。
+ *
+ * ⚠️ 返回值**不写进设置**（不落盘）：深链的语义是「这次用这个语言看」，
+ * 分享出去不会改别人的语言设置；代价是刷新（不带参数）后回到设置里的语言 —— 想固定就在设置里改。
+ */
+export function languageFromParam(tag: string | undefined | null): LanguageSetting | undefined {
+  if (typeof tag !== 'string') return undefined;
+  if (isPseudoLocaleTag(tag)) return undefined;
+  return matchLocale(tag) ?? undefined;
 }
 
 /** 伪语言的形状：两头加括号，中间原样 */

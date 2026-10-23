@@ -51,6 +51,7 @@ import {
   applyLanguageSetting,
   availableLanguages,
   detectLanguage,
+  languageFromParam,
   getLanguage,
   isLanguage,
   isLanguageSetting,
@@ -969,6 +970,32 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   check('auto 按设备标签解析', resolveLanguage('auto', 'de-AT') === 'de');
   check('auto + 认不出的标签 → 英文', resolveLanguage('auto', 'ja-JP') === 'en');
   check('auto + 没有标签 → 英文', resolveLanguage('auto', undefined) === 'en');
+
+  /**
+   * per-app language 与深链（多语言 P5-2）。
+   *
+   * **Android 13 的应用语言**在 Web 侧没有专门的 API：TWA / WebView 会把应用语言反映到
+   * `navigator.language` 上，所以"透传"这条链是「应用语言 → navigator.language → `auto` 解析」。
+   * 前三条把这条链钉住（`resolveLanguage('auto', tag)` 就是 boot 里对 auto 做的事）。
+   *
+   * **深链** `?lang=` 由 `languageFromParam()` 解析：真实语言码（含带地区的写法）前缀匹配到表里的语言，
+   * 伪语言 `xa` 不参与（它走 `setPseudoLocale`），没做表的语言返回 `undefined` 交回设置里的值 ——
+   * 不能让一个拼错的参数把界面变成英文。
+   */
+  check('应用语言透传：auto + pt-BR 标签 → 葡语', resolveLanguage('auto', 'pt-BR') === 'pt');
+  check('应用语言透传：auto + ru 标签 → 俄语', resolveLanguage('auto', 'ru') === 'ru');
+  check('应用语言透传：auto + fr-CA 标签 → 法语', resolveLanguage('auto', 'fr-CA') === 'fr');
+
+  check('深链 ?lang=de → 德语', languageFromParam('de') === 'de');
+  check('深链 ?lang=pt-BR → 葡语（带地区前缀匹配）', languageFromParam('pt-BR') === 'pt');
+  check('深链 ?lang=de-AT → 德语（同上）', languageFromParam('de-AT') === 'de');
+  check('深链 ?lang=xa 仍是伪语言、不覆盖语言', languageFromParam('xa') === undefined && languageFromParam('en-XA') === undefined);
+  check('深链 ?lang=ja（没做表）→ 不覆盖设置', languageFromParam('ja') === undefined);
+  check('深链没给参数 / 空串 → 不覆盖设置', languageFromParam(null) === undefined && languageFromParam('') === undefined);
+  check(
+    '深链优先于设置里的值',
+    (languageFromParam('fr') ?? 'zh') === 'fr' && (languageFromParam('zz') ?? 'zh') === 'zh',
+  );
   check('具体语言不会被设备标签覆盖', resolveLanguage('zh', 'de-DE') === 'zh');
 
   resetLanguageForTest();
