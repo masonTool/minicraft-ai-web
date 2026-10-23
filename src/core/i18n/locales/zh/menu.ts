@@ -43,4 +43,5 @@ export const menu = {
   'world.import': '导入存档',
   // ---- 小游戏选择页（小游戏3）
   'menu.minigames': '小游戏',
+  "world.saveFailed": "保存失败，请重试",
 } as const;

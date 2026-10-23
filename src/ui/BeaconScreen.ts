@@ -15,6 +15,7 @@
  */
 
 import { t, tp } from '../core/i18n/I18n.ts';
+import { effectLabel } from '../core/survival/StatusEffects.ts';
 import {
   BEACON_MAX_LEVEL,
   BEACON_POWERS,
@@ -69,14 +70,14 @@ export class BeaconScreen {
     const primaryRow = this.buildRow(t('beacon.primary'));
     for (let i = 0; i < BEACON_POWERS.length; i++) {
       const power = BEACON_POWERS[i]!;
-      const button = this.buildButton(power.label);
+      const button = this.buildButton(effectLabel(power.effect));
       button.addEventListener('click', () => this.choose(i + 1));
       this.primaryButtons.push(button);
       primaryRow.buttons.appendChild(button);
     }
 
     const secondaryRow = this.buildRow(t('beacon.secondary'));
-    this.regenButton = this.buildButton(BEACON_REGEN_POWER.label);
+    this.regenButton = this.buildButton(effectLabel(BEACON_REGEN_POWER.effect));
     this.regenButton.addEventListener('click', () =>
       // 生命恢复与"次级主效果"互斥（原版次级只能选一条）
       this.choose(this.selectedPrimary, !this.selectedRegen, 0),
@@ -91,7 +92,7 @@ export class BeaconScreen {
     const secondaryPowerRow = this.buildRow(t('beacon.secondaryPower'));
     for (let i = 0; i < BEACON_POWERS.length; i++) {
       const power = BEACON_POWERS[i]!;
-      const button = this.buildButton(power.label);
+      const button = this.buildButton(effectLabel(power.effect));
       button.addEventListener('click', () => this.choose(this.selectedPrimary, false, i + 1));
       this.secondaryButtons.push(button);
       secondaryPowerRow.buttons.appendChild(button);
@@ -183,14 +184,14 @@ export class BeaconScreen {
     this.regenButton.disabled = !regenUsable;
     this.regenButton.classList.toggle('beacon-screen-button-on', this.selectedRegen && regenUsable);
     const level2 = beaconPrimaryAmplifier(level) + 1;
-    this.regenButton.textContent = `${BEACON_REGEN_POWER.label} I`;
+    this.regenButton.textContent = `${effectLabel(BEACON_REGEN_POWER.effect)} I`;
     // 次级主效果：4 级起；固定 I 级，所以按钮上把等级写出来
     const secondaryUsable = level >= BEACON_SECONDARY_MIN_LEVEL;
     for (let i = 0; i < this.secondaryButtons.length; i++) {
       const button = this.secondaryButtons[i]!;
       button.disabled = !secondaryUsable;
       button.classList.toggle('beacon-screen-button-on', this.selectedSecondary === i + 1 && secondaryUsable);
-      button.textContent = `${BEACON_POWERS[i]!.label} I`;
+      button.textContent = `${effectLabel(BEACON_POWERS[i]!.effect)} I`;
     }
     this.summaryEl.dataset.primaryLevel = String(level2);
     this.summaryEl.dataset.secondaryLevel = secondaryUsable ? '1' : '0';

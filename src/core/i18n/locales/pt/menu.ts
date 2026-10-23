@@ -41,4 +41,5 @@ export const menu = {
   "world.export": "Exportar",
   "world.import": "Importar save",
   "menu.minigames": "Minijogos",
+  "world.saveFailed": "Falha ao salvar, tente novamente",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

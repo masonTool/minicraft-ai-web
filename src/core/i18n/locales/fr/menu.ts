@@ -42,4 +42,5 @@ export const menu = {
   "world.export": "Exporter",
   "world.import": "Importer une sauvegarde",
   "menu.minigames": "Mini-jeux",
+  "world.saveFailed": "Échec de l’enregistrement, réessayez",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

@@ -1147,6 +1147,33 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   setLanguage('zh');
   check('中文下战利品表名仍是原来的说法', t('cmd.label.lootTable.village_house') === '村庄小屋');
+
+  /**
+   * 兜底语言必须是**英文**（D2，批次 20261024-0245，用户要求）。
+   *
+   * `t()` 的回落链是「本语言表 → 英文表 → 键名」。前面已有「整个表缺失时回落英文」那条，
+   * 这里补的是更常见的一半：**表在、但某条键没翻**（新增文案只加进了 zh/en 就上线）。
+   *
+   * 用假语言 `yy` 装一张只有 1 条键的表，验证"表里没有的那条"拿到的是英文而不是中文。
+   */
+  const FAKE = 'yy' as LocaleCode;
+  registerLocaleLoader(FAKE, async () => ({ [FAKE]: { 'pause.title': 'Custom Pause' } }));
+  await loadLocale(FAKE);
+  check(
+    '表里缺某条键时回落到英文（不是中文）',
+    t('pause.resume', FAKE) === t('pause.resume', 'en') && t('pause.resume', FAKE) !== t('pause.resume', 'zh'),
+    `${t('pause.resume', FAKE)} / zh=${t('pause.resume', 'zh')}`,
+  );
+  check('表里有的键照常取本语言', t('pause.title', FAKE) === 'Custom Pause', t('pause.title', FAKE));
+
+  // 数据驱动的两条（成就标题 / 物品说明）同理：`t()` 已经先回落英文，
+  // 说明里的"中文原文"只在**连英文都没有**时才出现 —— 那时是"键漏了"的 bug，不是缺翻。
+  check(
+    '成就标题在德语下取德语（不缺翻时不落到中文原文）',
+    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }).length > 0 &&
+      advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }) !== '采集石头',
+    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }),
+  );
   resetLanguageForTest();
 
   /**

@@ -579,7 +579,7 @@ export class WorldScreen {
     close.type = 'button';
     close.className = 'world-modal-close';
     close.textContent = '✕';
-    close.setAttribute('aria-label', '关闭');
+    close.setAttribute('aria-label', t('misc.close'));
     header.append(title, close);
 
     const form = document.createElement('div');
@@ -670,7 +670,7 @@ export class WorldScreen {
           this.render();
         } catch (saveError) {
           console.error('[world] 保存编辑失败', saveError);
-          error.textContent = '保存失败，请重试';
+          error.textContent = t('world.saveFailed');
           error.classList.remove('hidden');
           save.disabled = false;
         }

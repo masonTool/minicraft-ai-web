@@ -15,6 +15,7 @@
  */
 
 import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
+import { effectLabel } from '../src/core/survival/StatusEffects.ts';
 import { CREATIVE_ITEMS, Item, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
@@ -302,9 +303,11 @@ console.log('\n[范围与效果]');
     BEACON_POWERS.map((power) => power.key).join(',') === 'speed,haste,resistance,jump_boost,strength',
     BEACON_POWERS.map((power) => power.key).join(','),
   );
+  // 批次 20261024-0245：`label` 字段删了，按钮文字改由 `effectLabel(power.effect)` 取
+  // （复用状态效果的 `label.effect.*`）；所以这里验"每个 power 都有可解析的效果 id"。
   check(
-    '每条都写了中文（界面按钮上要显示它）',
-    BEACON_POWERS.every((power) => power.label.length > 0 && power.effect.length > 0),
+    '每条都有效果 id（按钮文字由 effectLabel() 取）',
+    BEACON_POWERS.every((power) => power.effect.length > 0 && effectLabel(power.effect) !== `label.effect.${power.effect}`),
   );
   equal('生命恢复要三级（原版）', BEACON_REGEN_MIN_LEVEL, 3);
 

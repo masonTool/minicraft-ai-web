@@ -54,5 +54,6 @@ export const misc = {
   "time.seconds": "{n} s",
   "loading.boot": "Carregando…",
   "loading.bootSub": "Preparando texturas e saves",
-  "misc.cameraModeToast": "Câmera: {mode}"
+  "misc.cameraModeToast": "Câmera: {mode}",
+  "misc.close": "Fechar",
 } satisfies Pick<Messages, keyof typeof zhMisc>;

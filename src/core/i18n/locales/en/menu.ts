@@ -44,4 +44,5 @@ export const menu = {
   'world.import': 'Import Save',
   // ---- mini-game menu (batch 20261022-1954)
   'menu.minigames': 'Mini-games',
+  "world.saveFailed": "Save failed, please try again",
 } satisfies Pick<Messages, keyof typeof zhmenu>;

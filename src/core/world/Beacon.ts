@@ -48,7 +48,6 @@ export const BEACON_BASE_BLOCKS: readonly number[] = [
 
 export interface BeaconPower {
   readonly key: string;
-  readonly label: string;
   readonly effect: EffectId;
 }
 
@@ -59,17 +58,16 @@ export interface BeaconPower {
  * 要加新效果请**追加**（并同步 `blockState.ts` 的位宽注释）。
  */
 export const BEACON_POWERS: readonly BeaconPower[] = [
-  { key: 'speed', label: '速度', effect: 'speed' },
-  { key: 'haste', label: '急迫', effect: 'haste' },
-  { key: 'resistance', label: '抗性提升', effect: 'resistance' },
-  { key: 'jump_boost', label: '跳跃提升', effect: 'jump_boost' },
-  { key: 'strength', label: '力量', effect: 'strength' },
+  { key: 'speed', effect: 'speed' },
+  { key: 'haste', effect: 'haste' },
+  { key: 'resistance', effect: 'resistance' },
+  { key: 'jump_boost', effect: 'jump_boost' },
+  { key: 'strength', effect: 'strength' },
 ];
 
 /** 次级效果：原版三级以上的金字塔能再要一条**生命恢复** */
 export const BEACON_REGEN_POWER: BeaconPower = {
   key: 'regeneration',
-  label: '生命恢复',
   effect: 'regeneration',
 };
 /** 生命恢复需要几级金字塔（原版 3 级起） */
