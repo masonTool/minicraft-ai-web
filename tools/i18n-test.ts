@@ -1165,7 +1165,12 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['statistics.title', 'Статистика мира'],
     ['editor.cancel', 'Отмена'],
     ['station.reason.needLevels', 'Нужно {cost} уровней опыта'],
-    ['item.toolMaterial.diamond', 'Diamond'], // 占位分组：仍是英文（P4-2b/c 再翻）
+    ['item.toolMaterial.diamond', 'Diamond'], // 占位分组：仍是英文（P4-2c 再翻）
+    // P4-2b 起这两组也是真俄语
+    ['inventory.title', 'Инвентарь'],
+    ['panel.anvil', 'Наковальня'],
+    ['label.effect.speed', 'Скорость'],
+    ['label.enchantment.silk_touch', 'Шёлковое касание'],
   ];
   for (const [key, expected] of ruSamples) {
     check(`俄语：${key}`, t(key, 'ru') === expected, t(key, 'ru'));
