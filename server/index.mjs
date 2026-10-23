@@ -371,7 +371,10 @@ function snapshotFor(player) {
       e.dimension,
     ]),
     // 地上的掉落物：新玩家进来要看得见（L7 第一刀）；owner 必须同房
-    items: [...items.values()].filter((item) => players.get(item.owner)?.room === player.room),
+    // 同房 + **同维度**（联机31）：下界掉的东西不该画在主世界同坐标
+    items: [...items.values()].filter(
+      (item) => players.get(item.owner)?.room === player.room && item.dimension === player.dimension,
+    ),
     // 容器内容（联机13）与牌子/展示框（联机16）：同样只带本房
     containers: roomScopedValues(containers, player.room),
     signs: roomScopedValues(signs, player.room),
@@ -1016,8 +1019,15 @@ wss.on('connection', (socket, request) => {
 
         const key = `${player.id}:${localId}`;
         if (items.size >= MAX_ITEMS && !items.has(key)) return;
-        items.set(key, { owner: player.id, localId, itemId, count, x, y, z });
-        broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id, player.room, { x, z, dimension: player.dimension });
+        // 维度（联机31）：镜像要在**掉落物所在的维度**才画，不能拿「接收者当前维度」顶替
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        items.set(key, { owner: player.id, localId, itemId, count, x, y, z, dimension });
+        broadcast(
+          { t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z, dimension },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 

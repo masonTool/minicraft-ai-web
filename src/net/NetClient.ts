@@ -59,6 +59,13 @@ export interface NetItemState {
   x: number;
   y: number;
   z: number;
+  /**
+   * 这一堆在哪个维度（联机31）。
+   *
+   * 没有它的时候，队友在下界丢的东西会画在主世界同坐标——镜像只按坐标建，
+   * 而坐标在两个维度里是同一套数。
+   */
+  dimension: string;
 }
 
 export interface NetContainerState {
@@ -567,6 +574,7 @@ export class NetClient {
           x: Number(message.x ?? 0),
           y: Number(message.y ?? 0),
           z: Number(message.z ?? 0),
+          dimension: String(message.dimension ?? 'overworld'),
         };
         // 自己的生成也会被服务端回传（快照路径），别把自己那边再镜像一份
         if (item.owner === this.selfId) break;

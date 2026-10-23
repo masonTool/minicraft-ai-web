@@ -371,14 +371,57 @@ try {
   await alice.wait('leave');
 
   // ---------------------------------------------------------------- 聊天与离开
+  console.log('\n[掉落物维度（联机31）]');
+  {
+    // bob 在下界丢一堆（`dimension` 跟着消息走，而不是"接收者当前维度"）
+    bob.send({ t: 'item-spawn', localId: 61, itemId: 3, count: 1, x: 9, y: 70, z: 9, dimension: 'nether' });
+    await sleep(150);
+
+    // 主世界的新玩家不该看到它
+    const overworldGuest = new TestClient('OwGuest');
+    const owWelcome = await joinAndWaitWelcome(overworldGuest, '主世界客', 9, 70, 9);
+    check(
+      '主世界玩家的快照里没有下界的掉落物',
+      !(owWelcome?.items ?? []).some((i) => i.localId === 61),
+      JSON.stringify(owWelcome?.items),
+    );
+
+    // 下界的新玩家应该看到（同一个坐标，不同维度）
+    const netherGuest = new TestClient('NetherGuest');
+    const netherWelcome = await joinAndWaitWelcome(netherGuest, '下界客', 9, 70, 9, 'nether');
+    check(
+      '下界玩家的快照里有它（带 dimension）',
+      (netherWelcome?.items ?? []).some((i) => i.localId === 61 && i.dimension === 'nether'),
+      JSON.stringify(netherWelcome?.items),
+    );
+
+    overworldGuest.close();
+    netherGuest.close();
+  }
+
   console.log('\n[聊天 / 离开]');
   bob.send({ t: 'chat', text: '你好世界' });
   const chat = await alice.wait('chat');
   check('聊天被广播（带昵称）', chat?.name === 'Bob' && chat?.text === '你好世界', JSON.stringify(chat));
 
+  alice.mailbox.length = 0;
   carol.close();
-  const leave = await alice.wait('leave');
-  check('离开会广播 leave', leave?.id === 3, JSON.stringify(leave));
+  // 宽限期（400ms）到期才广播 leave，而且这期间**别人的** leave 也会进来
+  // （上面几段新加的 guest 客户端刚关）——所以按 id 找，别取第一条
+  let leave = null;
+  const leaveDeadline = Date.now() + 2500;
+  while (Date.now() < leaveDeadline) {
+    const message = alice.take('leave');
+    if (!message) {
+      await sleep(20);
+      continue;
+    }
+    if (message.id === welcomeC?.id) {
+      leave = message;
+      break;
+    }
+  }
+  check('离开会广播 leave', leave !== null, JSON.stringify(leave));
 
   // ---------------------------------------------------------------- 聊天不重复回显（联机30）
   console.log('\n[聊天不重复]');

@@ -3772,6 +3772,10 @@ class App {
    * 让镜像也能被捡会让同一堆被两个人各拿一份。拾取仲裁留给 L7 的下一刀。
    */
   private onNetItemSpawn(item: NetItemState): void {
+    // 维度不匹配就不建镜像（联机31）：坐标在两个维度里是同一套数，画出来就是"下界的东西
+    // 出现在我主世界的同一个位置"。服务端已经按维度过滤过，这里是第二道（客户端自己的
+    // 当前维度可能与消息到达时不同）
+    if (item.dimension !== this.dimension) return;
     const key = `${item.owner}:${item.localId}`;
     const existing = this.remoteItems.get(key);
     if (existing) {

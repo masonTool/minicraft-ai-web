@@ -108,7 +108,7 @@
 | `arrow` | 同上行 + `by` | 收到 `arrow` 后转发给其他人 |
 | `tnt` | 同上行 + `by` | 收到 `tnt` 后转发给其他人 |
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
-| `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
+| `item-spawn` | `owner, localId, itemId, count, x, y, z, dimension` | 收到 `item-spawn` 后转发给其他人（`dimension` 由服务端记下来、随快照下发，`联机31`） |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
 | `item-take` | `ok, owner, localId, itemId?, count?, reason?` | 只回给申请者；成功时**另**广播一条 `item-remove` 给所有人 |
 | `chat` | `id, name, text` | 收到 `chat` 后发给**同一个房间里的其他人**（不含发送者） |
@@ -204,7 +204,7 @@
 | `tnt` | 同维度才处理，直接 `primedTnt.prime(...)` | 坐标即 key，`prime` 幂等，不会重复点火 |
 | `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 同维度且那一格确实是**容器方块**时，按方块取容器（箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 / 投掷器 / 漏斗），用 `restoreStacks` 按格数清洗后逐格写回 | 写回期间 `applyingRemoteBlock` 抑制回声；本地任一类容器内容变化都会发（`containerOfBlockAt` 建出来就挂，不再只在打开界面时挂） |
-| `item-spawn` | 建镜像（`ghost=true`）：不跑物理、不参与本地拾取，但**走近会向服务端申请**（`联机21`） | `owner === selfId` 时跳过 |
+| `item-spawn` | 建镜像（`ghost=true`）：不跑物理、不参与本地拾取，但**走近会向服务端申请**（`联机21`）；**维度不匹配直接跳过**（`联机31`） | `owner === selfId` 时跳过 |
 | `item-take` | 仲裁结果：`ok` 才把 `itemId/count` 加进背包（背包满就掉脚下），无论成败都删镜像 | 成功后服务端还会广播 `item-remove`，各端镜像一起消失 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
 | `chat` | 追加到消息栏（`onChat`） | 发送方自己**本地回显**一次、服务端不再回传——两侧各管一半，所以只出现一次 |
@@ -244,6 +244,7 @@
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | 已修：`chat` 不再回传给发送者（与方块/容器同一口径） | 客户端在发送时本地回显，服务端只发给其他人 |
+| `联机31` | 掉落物带维度（`item-spawn` 与 `welcome.items`，客户端维度不匹配不建镜像） | `item-remove` 仍只带 `owner/localId`（不需要维度：全局键唯一） |
 
 ## 9. 改动这份协议时的规矩
 
