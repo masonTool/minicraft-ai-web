@@ -177,7 +177,6 @@ import {
   hideBootLoading,
   hideLoading,
   showLoading,
-  WORLD_LOADING_TEXT,
 } from './ui/LoadingOverlay.ts';
 import {
   armAutoFullscreen,
@@ -18321,7 +18320,7 @@ async function boot(): Promise<void> {
     menuSettings = null;
     // ⚠️ 遮罩**只在这一刻**挂出来（批次 167）：从这一行起才真的在"生成世界"。
     // 放得这么早是有意的——`SaveGame.open()` 要等 IndexedDB，手机上可能是几百毫秒的空白。
-    showLoading(WORLD_LOADING_TEXT);
+    showLoading();
     // 安装引导只在主菜单上有意义；进世界之后它会压在触摸按钮上
     hideInstallHint();
     // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成

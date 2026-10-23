@@ -234,4 +234,8 @@ export const label = {
   "label.category.food": "Food",
   "label.category.functional": "Functional blocks",
   "label.category.brewing": "Brewing & potions",
+  "label.stickMode.fixed": "Fixed",
+  "label.stickMode.dynamic": "Follow",
+  "label.handedness.right": "Right hand",
+  "label.handedness.left": "Left hand",
 } satisfies Pick<Messages, keyof typeof zhLabel>;

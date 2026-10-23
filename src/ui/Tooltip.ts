@@ -10,6 +10,7 @@
  */
 
 import type { ItemTooltip } from '../core/registry/itemNames.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import { rarityClassName } from '../core/registry/itemVisuals.ts';
 
 /**
@@ -220,7 +221,10 @@ export class Tooltip {
     if (data.showMeta) {
       const meta = document.createElement('div');
       meta.className = 'tooltip-meta';
-      meta.textContent = `${data.category} · ${data.maxStack <= 1 ? '不可堆叠' : `最多 ${data.maxStack} 个/格`}`;
+      // 多语言 P3-1："不可堆叠 / 最多 N 个每格"进表（N 走占位符）
+      meta.textContent = `${data.category} · ${
+        data.maxStack <= 1 ? t('tooltip.unstackable') : tp('tooltip.maxStack', { n: data.maxStack })
+      }`;
       this.root.appendChild(meta);
     }
 

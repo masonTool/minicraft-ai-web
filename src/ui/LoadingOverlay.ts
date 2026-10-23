@@ -1,3 +1,6 @@
+// 多语言 P3-1：加载提示走 `loading.*`
+import { t } from '../core/i18n/I18n.ts';
+
 /**
  * 加载遮罩（批次 167）
  *
@@ -24,7 +27,15 @@
 export const LOADING_ID = 'loading';
 
 /** 进世界时那句文案（原版也是"正在生成世界"，因为这一步真的在生成地形） */
-export const WORLD_LOADING_TEXT = '正在生成世界…';
+/**
+ * 首屏"加载中"那句话（多语言 P3-1）。
+ *
+ * 原来是个导出常量：常量在**模块加载时**就定死了语言，切语言后不会变 ——
+ * 所以改成函数，调用点用 `showLoading()` 的默认值即可。
+ */
+export function worldLoadingText(): string {
+  return t('loading.world');
+}
 
 function doc(): Document | null {
   return typeof document === 'undefined' ? null : document;
@@ -35,7 +46,7 @@ function doc(): Document | null {
  *
  * 只在"真的要生成/加载一个世界"时调用；`boot()` 里**一次都不要调**。
  */
-export function showLoading(text: string = WORLD_LOADING_TEXT): void {
+export function showLoading(text: string = worldLoadingText()): void {
   const document_ = doc();
   if (!document_) return;
   let element = document_.getElementById(LOADING_ID);
@@ -85,7 +96,7 @@ export function hideBootLoading(): void {
 }
 
 /** 启动失败：停住转圈、换成一句能看懂的话（保留遮罩，别把"黑屏 + 准星"还给玩家） */
-export function failBootLoading(text = '加载失败，请刷新页面重试'): void {
+export function failBootLoading(text = t('loading.failed')): void {
   const element = doc()?.getElementById(BOOT_LOADING_ID);
   if (!element) return;
   element.classList.add('failed');

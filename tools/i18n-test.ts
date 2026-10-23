@@ -1064,6 +1064,33 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('每条 reason 键都能渲染出中英文（不露键名）', badReasonKeys.length === 0, badReasonKeys.slice(0, 3).join(','));
 
   /**
+   * 界面残留（一）（多语言 P3-1）：触摸控件 / 提示框 / 加载遮罩 / 全屏 / 安装提示。
+   *
+   * 这五个文件有一个共同点：它们的文案**全是 "chrome"**（按钮 aria-label、提示行、
+   * 遮罩上的一句话），用户不会拿它们去对照原版，但英文用户天天看见。
+   * 判据沿用命令域那套：文件里不许再有中文字面量（注释不算）。
+   */
+  const chromeFiles = [
+    'ui/TouchControls.ts',
+    'ui/TouchIcons.ts',
+    'ui/Tooltip.ts',
+    'ui/LoadingOverlay.ts',
+    'ui/Fullscreen.ts',
+    'ui/InstallHint.ts',
+  ];
+  for (const rel of chromeFiles) {
+    const code = codeOf(readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8'));
+    const hard = linesWithCjkLiteral(code);
+    check(`${rel} 没有残留中文字面量`, hard.length === 0, hard.slice(0, 2).join(' / '));
+  }
+
+  // 触摸控件的两条文案要真翻成英文（"潜行 / 向上飞" 曾在英文界面里露出中文）
+  check('触摸控件文案有英文版', t('touch.sneak', 'en') === 'Sneak' && t('touch.flyUp', 'en') === 'Fly up');
+  setLanguage('en');
+  check('提示框的"最多 N 个/格"走占位符且真替换', tp('tooltip.maxStack', { n: 64 }).includes('64'), tp('tooltip.maxStack', { n: 64 }));
+  resetLanguageForTest();
+
+  /**
    * 标签表族（二）（多语言 P2-6）：音效组 / 外观 10 张 / 朝向 / 旗帜图案 / 配方书页签 / 物品类别。
    *
    * 外观那十张表里有五张是**按下标**存名字的（肤色/上衣/裤色/发色/瞳色），

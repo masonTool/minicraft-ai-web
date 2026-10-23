@@ -37,7 +37,7 @@ import {
   sensitivityLevelFromGain,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
-import { HANDEDNESS_LABELS, HANDEDNESS_MODES, fingerAimPoint } from '../src/ui/TouchControls.ts';
+import { HANDEDNESS_MODES, fingerAimPoint, handednessLabels } from '../src/ui/TouchControls.ts';
 import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../src/core/viewMode.ts';
 import {
   FRAME_TIME_DROP,
@@ -282,7 +282,7 @@ console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
   check('老倍率 0.5× → 落到新下限 1 档', sensitivityLevelFromGain(0.5) === 1);
 
   check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => touchAimModeLabel(mode).length > 0));
-  check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => HANDEDNESS_LABELS[mode].length > 0));
+  check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => handednessLabels()[mode].length > 0));
 
   // ---- 手指瞄准的取点偏移（批次 521）
   //

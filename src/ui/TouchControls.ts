@@ -18,9 +18,11 @@
  */
 
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
+// 多语言 P3-1：触摸控件的文案走 `touch.*` / `label.*`
+import { t } from '../core/i18n/I18n.ts';
 import { HOTBAR_SIZE } from '../core/container/Inventory.ts';
 import { diag } from '../game/diagnosticsRuntime.ts';
-import { TOUCH_ICON_LABELS, touchIconSvg, type TouchIconName } from './TouchIcons.ts';
+import { touchIconLabel, touchIconSvg, type TouchIconName } from './TouchIcons.ts';
 import {
   pointFromEvent,
   pointFromEventWithSource,
@@ -96,10 +98,10 @@ const DYNAMIC_STICK_ZONE = { maxX: 0.45, minY: 0.4 } as const;
 export type StickMode = 'fixed' | 'dynamic';
 /** 设置界面要遍历它（与 `CAMERA_MODES` / `PARTICLE_LEVELS` 同一个套路） */
 export const STICK_MODES: readonly StickMode[] = ['fixed', 'dynamic'];
-export const STICK_MODE_LABELS: Record<StickMode, string> = {
-  fixed: '固定',
-  dynamic: '跟随',
-};
+/** 摇杆模式的显示名（多语言 P3-1）：返回**新对象**，切语言后重新调用即可 */
+export function stickModeLabels(): Record<StickMode, string> {
+  return { fixed: t('label.stickMode.fixed'), dynamic: t('label.stickMode.dynamic') };
+}
 
 /**
  * 左右手模式（批次 271）：右手模式摇杆在左、按钮在右；左手模式整个镜像。
@@ -109,10 +111,10 @@ export const STICK_MODE_LABELS: Record<StickMode, string> = {
  */
 export type Handedness = 'right' | 'left';
 export const HANDEDNESS_MODES: readonly Handedness[] = ['right', 'left'];
-export const HANDEDNESS_LABELS: Record<Handedness, string> = {
-  right: '右手',
-  left: '左手',
-};
+/** 惯用手的显示名（多语言 P3-1） */
+export function handednessLabels(): Record<Handedness, string> {
+  return { right: t('label.handedness.right'), left: t('label.handedness.left') };
+}
 
 /**
  * 摇杆四周的**死区**（批次 271，批次 275 加大）：这一圈里点按不产生任何目标，
@@ -316,7 +318,7 @@ export class TouchControls {
     // 在摇杆正上方加一枚"潜行"小牌；CSS 只在 `#touch-stick.sneaking` 时显示。
     const sneakBadge = document.createElement('div');
     sneakBadge.className = 'sneak-badge';
-    sneakBadge.textContent = '潜行';
+    sneakBadge.textContent = t('touch.sneak');
     sneakBadge.setAttribute('aria-hidden', 'true');
     this.stickBase.appendChild(sneakBadge);
     this.bindStick();
@@ -328,8 +330,8 @@ export class TouchControls {
 
     this.flyUpButton = this.makeIconButton('jump', () => undefined);
     this.flyUpButton.classList.add('fly-only', 'fly-up');
-    this.flyUpButton.setAttribute('aria-label', '向上飞');
-    this.flyUpButton.title = '向上飞';
+    this.flyUpButton.setAttribute('aria-label', t('touch.flyUp'));
+    this.flyUpButton.title = t('touch.flyUp');
     this.bindHoldButton(this.flyUpButton, (down) => {
       this.jumpHeld = down;
     });
@@ -352,8 +354,8 @@ export class TouchControls {
 
     this.flyDownButton = this.makeIconButton('sneak', () => undefined);
     this.flyDownButton.classList.add('fly-only', 'fly-down');
-    this.flyDownButton.setAttribute('aria-label', '向下飞');
-    this.flyDownButton.title = '向下飞';
+    this.flyDownButton.setAttribute('aria-label', t('touch.flyDown'));
+    this.flyDownButton.title = t('touch.flyDown');
     this.bindHoldButton(this.flyDownButton, (down) => {
       this.sneakHeld = down;
     });
@@ -389,7 +391,7 @@ export class TouchControls {
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
     this.hint.textContent =
-      '摇杆走 · 双击摇杆潜行 · 拖动看 · 轻点放 · 按住挖/用 · 双击跳起飞（飞时出升降键）';
+      t('touch.hint');
 
     this.object.append(this.lookSurface, this.aimRing, this.stickBase, buttons, pauseBar, this.hint);
     host.appendChild(this.object);
@@ -607,8 +609,8 @@ export class TouchControls {
     button.className = 'touch-button';
     button.dataset.icon = icon;
     button.innerHTML = touchIconSvg(icon);
-    button.setAttribute('aria-label', TOUCH_ICON_LABELS[icon]);
-    button.title = TOUCH_ICON_LABELS[icon];
+    button.setAttribute('aria-label', touchIconLabel(icon));
+    button.title = touchIconLabel(icon);
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();

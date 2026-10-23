@@ -233,4 +233,8 @@ export const label = {
   "label.category.food": "食物",
   "label.category.functional": "功能方块",
   "label.category.brewing": "酿造与药水",
+  "label.stickMode.fixed": "固定",
+  "label.stickMode.dynamic": "跟随",
+  "label.handedness.right": "右手",
+  "label.handedness.left": "左手",
 } as const;

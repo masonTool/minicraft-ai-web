@@ -30,7 +30,7 @@ import {
   pageSizeFor,
   slicePage,
 } from '../src/ui/ItemPager.ts';
-import { TOUCH_ICON_LABELS, TOUCH_ICON_NAMES, touchIconSvg } from '../src/ui/TouchIcons.ts';
+import { TOUCH_ICON_NAMES, touchIconLabel, touchIconSvg } from '../src/ui/TouchIcons.ts';
 import { iconBackingScale, iconDisplaySize } from '../src/ui/ItemIcon.ts';
 import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../src/ui/BlockIcon.ts';
 import { BLOCKS } from '../src/core/registry/blocks.ts';
@@ -40,7 +40,7 @@ import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
 import {
   STICK_MODES,
-  STICK_MODE_LABELS,
+  stickModeLabels,
   TOUCH_BREAK_LONG_PRESS_MS,
   isTouchUi,
 } from '../src/ui/TouchControls.ts';
@@ -155,7 +155,7 @@ console.log('\n[触摸按钮图标]');
     check(`${name} 是合法 SVG（有 viewBox 与闭合标签）`, svg.startsWith('<svg') && svg.includes('viewBox="0 0 24 24"') && svg.endsWith('</svg>'));
     check(`${name} 至少画了一条路径`, svg.includes('<path') || svg.includes('<rect'));
     check(`${name} 用 currentColor（颜色交给 CSS）`, svg.includes('currentColor') || svg.includes('opacity'), '填充色应与按钮文字同色');
-    check(`${name} 有中文说明（aria-label 用）`, (TOUCH_ICON_LABELS[name] ?? '').length > 0);
+    check(`${name} 有中文说明（aria-label 用）`, touchIconLabel(name).length > 0);
     svgs.add(svg);
   }
   equal('图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
@@ -167,7 +167,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
 {
   // ---- ① 手机端"设置/暂停"必须有入口（原来只有 PC 的 Esc，手机上打不开）
   check('图标集里有 pause（顶部暂停键）', TOUCH_ICON_NAMES.includes('pause'));
-  check('pause 有中文说明（aria-label 用）', (TOUCH_ICON_LABELS.pause ?? '').length > 0);
+  check('pause 有中文说明（aria-label 用）', touchIconLabel('pause').length > 0);
 
   // ---- ② 触摸判据只有一处：`isTouchUi()` 读的是 <body class="touch-mode">
   //      （构造在触摸层**之前**的面板也要拿到正确答案，所以它同时兜底 `isTouchDevice()`）
@@ -1630,7 +1630,7 @@ console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全�
 console.log('\n[动态摇杆与飞行提示（批次 96）]');
 {
   equal('摇杆两档（与基岩版一致）', STICK_MODES.join(','), 'fixed,dynamic');
-  check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
+  check('两档都有中文名', STICK_MODES.every((mode) => stickModeLabels()[mode].length > 0));
   // 批次 521：用户要求默认改成"跟随手指"（左下随便一按就是摇杆，躺着玩单手也够得着）
   equal('默认固定摇杆（批次 528，用户要求）', DEFAULT_SETTINGS.touchStick, 'fixed');
   equal('按钮大小默认 1×（不改任何既有尺寸）', DEFAULT_SETTINGS.touchScale, 1);
@@ -1985,7 +1985,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '潜行时摇杆上有明确提示（绿边 + 摇杆芯变绿 + 「潜行」小牌）',
-    source.includes("sneakBadge.textContent = '潜行'") &&
+    // 多语言 P3-1：牌子文案改成查键，断言跟到 `t('touch.sneak')`（仍验"潜行时摇杆上那块小牌"）
+    source.includes("sneakBadge.textContent = t('touch.sneak')") &&
       source.includes("this.stickBase.classList.remove('sneaking')") &&
       indexSource.includes('#touch-stick.sneaking .knob') &&
       indexSource.includes('#touch-stick.sneaking .sneak-badge') &&
@@ -2589,7 +2590,7 @@ console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
   );
   check(
     '进世界那一刻才挂遮罩',
-    /const startWorld = async[\s\S]*?showLoading\(WORLD_LOADING_TEXT\)/.test(mainSrc),
+    /const startWorld = async[\s\S]*?showLoading\(\)/.test(mainSrc),
   );
   check(
     '遮罩撤掉时整块移除（验收脚本按 getElementById 判）',
@@ -2636,7 +2637,8 @@ console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
   );
   check(
     '启动失败时把遮罩换成错误文案（不让它一直转）',
-    mainSrc.includes('failBootLoading()') && overlaySrc.includes('加载失败'),
+    // 多语言 P3-1：失败文案进表（`loading.failed`），断言改成查键
+    mainSrc.includes('failBootLoading()') && overlaySrc.includes("t('loading.failed')"),
   );
 }
 

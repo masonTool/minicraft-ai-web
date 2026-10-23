@@ -32,10 +32,10 @@ import {
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { FOV_MAX, FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import {
-  HANDEDNESS_LABELS,
+  handednessLabels,
   HANDEDNESS_MODES,
   STICK_MODES,
-  STICK_MODE_LABELS,
+  stickModeLabels,
   isTouchUi,
   type Handedness,
   type StickMode,
@@ -1132,7 +1132,7 @@ export class SettingsScreen {
     const controlOptions = this.makeBlock(controls);
     this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode'), CAMERA_MODES, CAMERA_MODE_LABELS);
     // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
-    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, HANDEDNESS_LABELS);
+    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, handednessLabels());
     // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
     this.makeSelect(
       controlOptions,
@@ -1142,7 +1142,7 @@ export class SettingsScreen {
       Object.fromEntries(TOUCH_AIM_MODES.map((mode) => [mode, touchAimModeLabel(mode)])) as Record<TouchAimMode, string>,
     );
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
-    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, STICK_MODE_LABELS);
+    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, stickModeLabels());
     this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
     this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));

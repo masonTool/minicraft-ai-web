@@ -1,3 +1,6 @@
+// 多语言 P3-1：图标说明走 `touch.icon.*`
+import { t } from '../core/i18n/I18n.ts';
+
 /**
  * 触摸端的按钮图标（界面适配：手机上用图标而不是文字）
  *
@@ -37,15 +40,12 @@ const PATHS: Readonly<Record<TouchIconName, string>> = {
     '<g transform="rotate(-33 12 12)"><rect x="1.8" y="9.2" width="13" height="5.6" rx="1"/><rect x="14" y="7.8" width="3" height="8.4" rx="1"/><rect x="16.6" y="6.4" width="4.2" height="11.2" rx="1"/><circle cx="20.2" cy="12" r="2.2" opacity=".55"/></g><rect x="2.2" y="18.2" width="6.4" height="2.2" rx="1.1"/>',
 };
 
-/** 图标对应的中文说明（`aria-label` 与长按提示用） */
-export const TOUCH_ICON_LABELS: Readonly<Record<TouchIconName, string>> = {
-  jump: '跳跃',
-  sneak: '潜行',
-  inventory: '背包',
-  chat: '聊天与命令',
-  pause: '暂停与设置',
-  view: '切换视角',
-};
+/** 图标对应的说明（`aria-label` 与长按提示用，多语言 P3-1） */
+export function touchIconLabel(name: TouchIconName): string {
+  const key = `touch.icon.${name}`;
+  const text = t(`touch.icon.${name}`);
+  return text === key ? name : text;
+}
 
 /**
  * 一个图标的完整 `<svg>` 字符串（24×24）。
