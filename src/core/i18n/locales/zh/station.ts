@@ -113,4 +113,10 @@ export const station = {
   "station.reason.loomOutputOccupied": "先把成品格里的东西拿走",
   "station.reason.loomOutputOtherPattern": "成品格里是另一种图案",
   "station.reason.loomOutputFull": "成品格已经满了",
+  "beacon.primary": "主效果",
+  "beacon.secondary": "次级效果",
+  "beacon.secondaryPower": "次级主效果",
+  "beacon.regenHint": "要 {level} 级以上的金字塔才有",
+  "beacon.secondaryHint": "要 {level} 级金字塔才有",
+  "beacon.levelHint": "效果等级：{max} 级金字塔内 1~2 级给 I、3 级以上给 II · 点一下就生效",
 } as const;

@@ -43,4 +43,7 @@ export const misc = {
   "tooltip.maxStack": "最多 {n} 个/格",
   "loading.world": "正在生成世界…",
   "loading.failed": "加载失败，请刷新页面重试",
+  "unsupported.title": "这台设备暂时打不开这个游戏",
+  "unsupported.reload": "刷新页面",
+  "unsupported.code": "诊断码：{code}",
 } as const;

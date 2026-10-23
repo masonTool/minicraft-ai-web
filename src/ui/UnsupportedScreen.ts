@@ -20,6 +20,7 @@
  */
 
 import type { GlSupportFail } from '../core/render/webglSupport.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 
 export class UnsupportedScreen {
   /** 只有 `show()` 之后才有值 —— 没有它的时候页面上一个字节的 DOM 都没多 */
@@ -40,7 +41,7 @@ export class UnsupportedScreen {
 
     const title = document.createElement('div');
     title.className = 'unsupported-title';
-    title.textContent = '这台设备暂时打不开这个游戏';
+    title.textContent = t('unsupported.title');
     panel.appendChild(title);
 
     const reason = document.createElement('div');
@@ -60,14 +61,14 @@ export class UnsupportedScreen {
     const reload = document.createElement('button');
     reload.className = 'unsupported-button';
     reload.type = 'button';
-    reload.textContent = '刷新页面';
+    reload.textContent = t('unsupported.reload');
     reload.addEventListener('click', () => window.location.reload());
     panel.appendChild(reload);
 
     const code = document.createElement('div');
     code.className = 'unsupported-code';
     // 具体归类写出来（玩家截图给我们时，这一行就是最有用的一句话）
-    code.textContent = `诊断码：${failure.kind}`;
+    code.textContent = tp('unsupported.code', { code: failure.kind });
     panel.appendChild(code);
 
     root.appendChild(panel);

@@ -1082,6 +1082,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     'ui/SignEditor.ts',
     'ui/NameTagEditor.ts',
     'ui/CommandBlockEditor.ts',
+    // 其余屏幕（多语言 P3-3）：信标 / 设备不支持 / 世界统计
+    'ui/BeaconScreen.ts',
+    'ui/UnsupportedScreen.ts',
+    'ui/StatisticsScreen.ts',
   ];
   for (const rel of chromeFiles) {
     const code = codeOf(readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8'));

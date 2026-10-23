@@ -32,4 +32,6 @@ export const progress = {
   'advancement.available': '可达成',
   'advancement.toastDone': '进度已达成！',
   'advancement.toastChallenge': '挑战完成！',
+  "statistics.closeAria": "关闭统计",
+  "statistics.blocks": "{count} 格",
 } as const;

@@ -34,4 +34,6 @@ export const progress = {
   'advancement.available': 'Available',
   'advancement.toastDone': 'Advancement made!',
   'advancement.toastChallenge': 'Challenge complete!',
+  "statistics.closeAria": "Close statistics",
+  "statistics.blocks": "{count} blocks",
 } satisfies Pick<Messages, keyof typeof zhprogress>;

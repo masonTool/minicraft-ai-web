@@ -14,7 +14,7 @@
  *  3. **`onClose` 交回输入权**：与背包/告示牌同一条（App 里那个 `uiOpen` 判据）。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import {
   BEACON_MAX_LEVEL,
   BEACON_POWERS,
@@ -66,7 +66,7 @@ export class BeaconScreen {
     this.summaryEl = document.createElement('div');
     this.summaryEl.className = 'beacon-screen-summary';
 
-    const primaryRow = this.buildRow('主效果');
+    const primaryRow = this.buildRow(t('beacon.primary'));
     for (let i = 0; i < BEACON_POWERS.length; i++) {
       const power = BEACON_POWERS[i]!;
       const button = this.buildButton(power.label);
@@ -75,7 +75,7 @@ export class BeaconScreen {
       primaryRow.buttons.appendChild(button);
     }
 
-    const secondaryRow = this.buildRow('次级效果');
+    const secondaryRow = this.buildRow(t('beacon.secondary'));
     this.regenButton = this.buildButton(BEACON_REGEN_POWER.label);
     this.regenButton.addEventListener('click', () =>
       // 生命恢复与"次级主效果"互斥（原版次级只能选一条）
@@ -84,11 +84,11 @@ export class BeaconScreen {
     secondaryRow.buttons.appendChild(this.regenButton);
     const regenHint = document.createElement('div');
     regenHint.className = 'beacon-screen-hint';
-    regenHint.textContent = `要 ${BEACON_REGEN_MIN_LEVEL} 级以上的金字塔才有`;
+    regenHint.textContent = tp('beacon.regenHint', { level: BEACON_REGEN_MIN_LEVEL });
     secondaryRow.buttons.appendChild(regenHint);
 
     // 次级主效果（批次 560）：4 级金字塔才能从五条主效果里再选一条
-    const secondaryPowerRow = this.buildRow('次级主效果');
+    const secondaryPowerRow = this.buildRow(t('beacon.secondaryPower'));
     for (let i = 0; i < BEACON_POWERS.length; i++) {
       const power = BEACON_POWERS[i]!;
       const button = this.buildButton(power.label);
@@ -98,14 +98,14 @@ export class BeaconScreen {
     }
     const secondaryHint = document.createElement('div');
     secondaryHint.className = 'beacon-screen-hint';
-    secondaryHint.textContent = `要 ${BEACON_SECONDARY_MIN_LEVEL} 级金字塔才有`;
+    secondaryHint.textContent = tp('beacon.secondaryHint', { level: BEACON_SECONDARY_MIN_LEVEL });
     secondaryPowerRow.buttons.appendChild(secondaryHint);
 
     const hint = document.createElement('div');
     hint.className = 'beacon-screen-hint';
-    hint.textContent = `效果等级：${BEACON_MAX_LEVEL} 级金字塔内 1~2 级给 I、3 级以上给 II · 点一下就生效`;
+    hint.textContent = tp('beacon.levelHint', { max: BEACON_MAX_LEVEL });
 
-    const done = this.buildButton('完成');
+    const done = this.buildButton(t('editor.done'));
     done.classList.add('beacon-screen-done');
     done.addEventListener('click', () => this.close());
 

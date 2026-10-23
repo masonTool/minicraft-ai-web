@@ -14,4 +14,6 @@ import type { PluralTable } from '../../plural.ts';
 
 export const plural = {
   'station.brewLeft': { one: '{count} more brew', other: '{count} more brews' },
+  // 移动距离：0 格 / 1 格在英文里是 "0 blocks" / "1 block"，不登记会印成 "1 blocks"
+  'statistics.blocks': { one: '{count} block', other: '{count} blocks' },
 } satisfies PluralTable;

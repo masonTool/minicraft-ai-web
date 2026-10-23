@@ -115,4 +115,10 @@ export const station = {
   "station.reason.loomOutputOccupied": "Clear the output slot first",
   "station.reason.loomOutputOtherPattern": "The output slot holds a different pattern",
   "station.reason.loomOutputFull": "The output slot is full",
+  "beacon.primary": "Primary effect",
+  "beacon.secondary": "Secondary effect",
+  "beacon.secondaryPower": "Secondary power",
+  "beacon.regenHint": "Needs a pyramid of level {level} or higher",
+  "beacon.secondaryHint": "Needs a level {level} pyramid",
+  "beacon.levelHint": "Effect level: in a level {max} pyramid, levels 1-2 give I and 3+ give II · click to apply",
 } satisfies Pick<Messages, keyof typeof zhstation>;

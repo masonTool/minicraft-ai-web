@@ -5,7 +5,7 @@
  * 数据由主程序传进来（`Statistics.serialize()`），这里不做任何累计。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tn } from '../core/i18n/I18n.ts';
 import { formatPlayTime, type StatisticsData } from '../core/survival/Statistics.ts';
 import { isTouchUi } from './TouchControls.ts';
 
@@ -31,8 +31,8 @@ export class StatisticsScreen {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'adv-close inv-close';
-    close.textContent = isTouchUi() ? '✕' : '关闭';
-    close.setAttribute('aria-label', '关闭统计');
+    close.textContent = isTouchUi() ? '✕' : t('editor.close');
+    close.setAttribute('aria-label', t('statistics.closeAria'));
     close.addEventListener('click', () => this.hide());
 
     header.append(title, close);
@@ -67,7 +67,7 @@ export class StatisticsScreen {
       [t('statistics.blocksPlaced'), String(Math.floor(data.blocksPlaced))],
       [t('statistics.mobsKilled'), String(Math.floor(data.mobsKilled))],
       [t('statistics.deaths'), String(Math.floor(data.deaths))],
-      [t('statistics.distance'), `${Math.floor(data.distance)} 格`],
+      [t('statistics.distance'), tn('statistics.blocks', Math.floor(data.distance))],
     ];
     this.listEl.replaceChildren(
       ...rows.map(([label, value]) => {

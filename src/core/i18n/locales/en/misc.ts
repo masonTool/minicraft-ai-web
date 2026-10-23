@@ -45,4 +45,7 @@ export const misc = {
   "tooltip.maxStack": "Up to {n} per slot",
   "loading.world": "Generating world…",
   "loading.failed": "Loading failed — please refresh the page",
+  "unsupported.title": "This game cannot open on this device",
+  "unsupported.reload": "Reload the page",
+  "unsupported.code": "Diagnostic code: {code}",
 } satisfies Pick<Messages, keyof typeof zhmisc>;
