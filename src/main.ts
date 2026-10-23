@@ -386,6 +386,7 @@ import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
+import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1799,6 +1800,15 @@ class App {
   private netTimeTarget: number | null = null;
   /** 下一个时间目标要**直接对齐**（有人睡满跳夜，见联机11），而不是按 4 倍速追 */
   private netTimeSnap = false;
+  /**
+   * 方块改动的合帧漏斗（联机12）：100ms 一批、同格只留最后一稿。
+   *
+   * 所有广播都从这里出（散点的 `queueBlockChange` 调用 + `World.events.onBlockChanged`），
+   * 于是红石/流体/火焰/作物/漏斗/爆炸这些"自己不会记得广播"的路径也自动覆盖了。
+   */
+  private readonly blockFunnel = new BlockFunnel();
+  /** 正在把远端改动写进世界（此时触发的 `onBlockChanged` 不再回发，否则两端互相回声） */
+  private applyingRemoteBlock = 0;
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1873,6 +1883,8 @@ class App {
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
+        // 攒着没发的方块改动也丢掉（联机12）：重连后服务端状态可能已经不同了
+        this.blockFunnel.clear();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
@@ -2546,6 +2558,16 @@ class App {
         } else {
           this.conduits.delete(`${x},${y},${z}`);
         }
+        // 联机12：方块写入的**唯一真相来源**。事件在写入之后触发，所以这里读到的是最终值——
+        // 红石/流体/火焰/作物/漏斗/爆炸这些自己改方块的路径全靠这一行才同步得到队友那边
+        this.queueBlockChange(
+          x,
+          y,
+          z,
+          this.world.getBlock(x, y, z),
+          this.world.getBlockState(x, y, z),
+          this.dimension,
+        );
       },
     };
 
@@ -3429,19 +3451,25 @@ class App {
       return;
     }
 
-    // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来
-    for (const entry of edits) {
-      const [x, y, z, id, state, dimension] = entry as [number, number, number, number, number, string];
-      const target: DimensionId = isDimension(dimension) ? dimension : Dimension.OVERWORLD;
-      // 与 `onNetBlock` 同一条判定：别的维度 / 没加载的区块都只记增量，
-      // 免得"队友在下界改的地形"被写进我刚生成的主世界
-      const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
-      if (action === 'drop') continue;
-      this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state ?? 0);
-      if (action === 'buffer') continue;
-      this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
-      // 队友放下的漏斗也要有容器，否则"看着是漏斗、就是不搬东西"（见 `ensureBlockEntityAt`）
-      this.ensureBlockEntityAt(x, y, z, id, target);
+    // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来。
+    // 整段包一层回声抑制（联机12）：不然刚进服就把服务端那批改动原样回发一遍
+    this.applyingRemoteBlock++;
+    try {
+      for (const entry of edits) {
+        const [x, y, z, id, state, dimension] = entry as [number, number, number, number, number, string];
+        const target: DimensionId = isDimension(dimension) ? dimension : Dimension.OVERWORLD;
+        // 与 `onNetBlock` 同一条判定：别的维度 / 没加载的区块都只记增量，
+        // 免得"队友在下界改的地形"被写进我刚生成的主世界
+        const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
+        if (action === 'drop') continue;
+        this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state ?? 0);
+        if (action === 'buffer') continue;
+        this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
+        // 队友放下的漏斗也要有容器，否则"看着是漏斗、就是不搬东西"（见 `ensureBlockEntityAt`）
+        this.ensureBlockEntityAt(x, y, z, id, target);
+      }
+    } finally {
+      this.applyingRemoteBlock--;
     }
 
     for (const player of players) {
@@ -3596,6 +3624,20 @@ class App {
   }
 
   /**
+   * 一切方块改动的广播出口（联机12）。
+   *
+   * 两条路都走这里：原来散在各处的 40 个调用点（挖/放/耕地/脱皮/堆肥/骨粉…），
+   * 以及 `World.events.onBlockChanged`（红石/流体/火焰/作物/漏斗/爆炸/下落方块）。
+   * 后者是"任何写入都会触发"的那一条，覆盖了所有没人记得补广播的路径。
+   */
+  private queueBlockChange(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
+    // 回声抑制：远端改动写进本地世界时也会触发 onBlockChanged，再发回去就成了两端来回弹
+    if (this.applyingRemoteBlock > 0) return;
+    if (this.net.sessionState !== 'connected') return;
+    this.blockFunnel.push({ x, y, z, id, state, dimension });
+  }
+
+  /**
    * 队友改了方块（联机4）。
    *
    * **先记增量、再决定要不要立刻写世界**：区块没加载时原来直接 return，改动就丢了
@@ -3609,10 +3651,16 @@ class App {
     if (action === 'drop') return;
     this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
     if (action === 'buffer') return;
-    // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
-    this.world.setBlockAndUpdate(x, y, z, id, state);
-    // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
-    this.ensureBlockEntityAt(x, y, z, id, target);
+    // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
+    this.applyingRemoteBlock++;
+    try {
+      // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
+      this.world.setBlockAndUpdate(x, y, z, id, state);
+      // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
+      this.ensureBlockEntityAt(x, y, z, id, target);
+    } finally {
+      this.applyingRemoteBlock--;
+    }
   }
 
   /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
@@ -7462,7 +7510,7 @@ class App {
     if (stripped === undefined) return false;
 
     this.world.setBlockAndUpdate(x, y, z, stripped);
-    this.net.sendBlock(x, y, z, stripped, 0, this.dimension);
+    this.queueBlockChange(x, y, z, stripped, 0, this.dimension);
     this.audio.play('break_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.damageHeldTool();
     this.hand.swing();
@@ -7476,7 +7524,7 @@ class App {
     if (scraped === undefined) return false;
 
     this.world.setBlockAndUpdate(x, y, z, scraped);
-    this.net.sendBlock(x, y, z, scraped, 0, this.dimension);
+    this.queueBlockChange(x, y, z, scraped, 0, this.dimension);
     this.audio.play('break_stone', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.damageHeldTool();
     this.hand.swing();
@@ -7520,7 +7568,7 @@ class App {
         const lit = shapeAt(this.portalWorld, x, y, z);
         if (lit) {
           for (const [px, py, pz] of portalInterior(lit)) {
-            this.net.sendBlock(px, py, pz, Block.NETHER_PORTAL, this.world.getBlockState(px, py, pz), this.dimension);
+            this.queueBlockChange(px, py, pz, Block.NETHER_PORTAL, this.world.getBlockState(px, py, pz), this.dimension);
           }
         }
         this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
@@ -7550,7 +7598,7 @@ class App {
     this.hand.swing();
     // 联机：把这一格火广播给队友（否则只有自己这边在烧）；
     // 灵魂沙上点出来的是灵魂火，所以要读实际方块 id，不能写死 `Block.FIRE`
-    this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), 0, this.dimension);
+    this.queueBlockChange(x, y, z, this.world.getBlock(x, y, z), 0, this.dimension);
     this.refreshHotbar();
     return true;
   }
@@ -7686,7 +7734,7 @@ class App {
   /** 写堆肥等级：走带光照/网格/增量存档的那条路，并广播给队友 */
   private setComposterLevel(x: number, y: number, z: number, state: number): void {
     this.world.setBlockAndUpdate(x, y, z, Block.COMPOSTER, state);
-    this.net.sendBlock(x, y, z, Block.COMPOSTER, state, this.dimension);
+    this.queueBlockChange(x, y, z, Block.COMPOSTER, state, this.dimension);
   }
 
   /**
@@ -7709,7 +7757,7 @@ class App {
     sweepUnsupported(this.supportWorld, x, y, z, (cx, cy, cz, id) => {
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, cx + 0.5, cy + 0.5, cz + 0.5);
-      this.net.sendBlock(cx, cy, cz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(cx, cy, cz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(cx + 0.5, cy + 0.5, cz + 0.5, this.blockParticleColor(id), 4);
     });
   }
@@ -7729,7 +7777,7 @@ class App {
       this.dropFrameContents(hx, hy, hz);
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, hx + 0.5, hy + 0.5, hz + 0.5);
-      this.net.sendBlock(hx, hy, hz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(hx, hy, hz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(hx + 0.5, hy + 0.5, hz + 0.5, this.blockParticleColor(id), 4);
     });
   }
@@ -7776,7 +7824,7 @@ class App {
     if (!changed) return false;
     const { x: cx, y: cy, z: cz } = changed;
     // 世界改动要广播（与放方块走同一条），否则队友那边作物还在原来的阶段
-    this.net.sendBlock(cx, cy, cz, this.world.getBlock(cx, cy, cz), this.world.getBlockState(cx, cy, cz), this.dimension);
+    this.queueBlockChange(cx, cy, cz, this.world.getBlock(cx, cy, cz), this.world.getBlockState(cx, cy, cz), this.dimension);
     // 淡绿的碎屑（原版骨粉那圈粒子）
     this.particles.spawnSplash(cx + 0.5, cy + 0.4, cz + 0.5, 0xc8f0a0, 10);
     this.audio.play('place', { x: cx + 0.5, y: cy + 0.5, z: cz + 0.5 });
@@ -7799,7 +7847,7 @@ class App {
     const changes = growTreeAt(this.treeWorld, x, y, z, this.world.getBlock(x, y, z), kind, 1);
     if (!changes) return false;
     for (const change of changes) {
-      this.net.sendBlock(change.x, change.y, change.z, change.blockId, change.state, this.dimension);
+      this.queueBlockChange(change.x, change.y, change.z, change.blockId, change.state, this.dimension);
     }
     this.particles.spawnSplash(x + 0.5, y + 0.5, z + 0.5, 0xa8e08a, 14);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
@@ -7824,7 +7872,7 @@ class App {
       ? 2 + Math.floor(Math.random() * 2)
       : 1 + Math.floor(Math.random() * 2);
     this.world.setBlockAndUpdate(x, y, z, Block.SWEET_BERRY_BUSH_STAGE1);
-    this.net.sendBlock(x, y, z, Block.SWEET_BERRY_BUSH_STAGE1, 0, this.dimension);
+    this.queueBlockChange(x, y, z, Block.SWEET_BERRY_BUSH_STAGE1, 0, this.dimension);
 
     const leftover = this.inventory.add(Item.SWEET_BERRIES, count);
     if (leftover > 0) this.spawnDrop(Item.SWEET_BERRIES, leftover, x + 0.5, y + 0.5, z + 0.5);
@@ -8194,7 +8242,7 @@ class App {
         this.hit.y,
         this.hit.z,
         (bx, by, bz) => {
-          this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+          this.queueBlockChange(bx, by, bz, Block.AIR, 0, this.dimension);
           this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(Block.CAVE_VINES), 3);
         },
       );
@@ -8300,7 +8348,7 @@ class App {
     this.audio.playBreakForBlock(blockDef(brokenId).name, { x: this.hit.x + 0.5, y: this.hit.y + 0.5, z: this.hit.z + 0.5 });
     // 联机：告诉队友这里被挖空了。
     // 读**实际**方块：含水方块挖掉之后是水（批次 469），不是空气
-    this.net.sendBlock(
+    this.queueBlockChange(
       this.hit.x,
       this.hit.y,
       this.hit.z,
@@ -8387,7 +8435,7 @@ class App {
       this.inventory.consume(Item.STRING, 1);
       this.refreshHotbar();
     }
-    this.net.sendBlock(x, y, z, Block.TRIPWIRE, 0, this.dimension);
+    this.queueBlockChange(x, y, z, Block.TRIPWIRE, 0, this.dimension);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.hand.swing();
     return true;
@@ -8417,11 +8465,11 @@ class App {
     if (bites >= CAKE_SLICES) {
       // 最后一片：整块蛋糕消失（原版吃完就没）
       this.world.setBlockAndUpdate(x, y, z, Block.AIR);
-      this.net.sendBlock(x, y, z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(x, y, z, Block.AIR, 0, this.dimension);
     } else {
       const next = withCakeBites(state, bites);
       this.world.setStateAndUpdate(x, y, z, next);
-      this.net.sendBlock(x, y, z, Block.CAKE, next, this.dimension);
+      this.queueBlockChange(x, y, z, Block.CAKE, next, this.dimension);
     }
     this.refreshHotbar();
     return true;
@@ -8447,7 +8495,7 @@ class App {
       if (!this.inventory.consume(held, 1)) return false;
       const next = withFlowerPotPlant(state, index);
       this.world.setStateAndUpdate(x, y, z, next);
-      this.net.sendBlock(x, y, z, Block.FLOWER_POT, next, this.dimension);
+      this.queueBlockChange(x, y, z, Block.FLOWER_POT, next, this.dimension);
       this.audio.play('place', { x, y, z });
       this.hand.swing();
       this.refreshHotbar();
@@ -8464,7 +8512,7 @@ class App {
     }
     const next = withFlowerPotPlant(state, 0);
     this.world.setStateAndUpdate(x, y, z, next);
-    this.net.sendBlock(x, y, z, Block.FLOWER_POT, next, this.dimension);
+    this.queueBlockChange(x, y, z, Block.FLOWER_POT, next, this.dimension);
     this.audio.play('break_grass', { x, y, z });
     this.hand.swing();
     this.refreshHotbar();
@@ -8638,7 +8686,7 @@ class App {
       this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
       // 创造1：整张床是一个动作（外层 `updateBreaking` 用 begin/end 包起来）
       this.undoRecord(bx, by, bz, id, state, Block.AIR, 0);
-      this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(bx, by, bz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
       // 整张床只掉一次（在床脚那一格的位置掉）
       if (this.isCreative || [bx, by, bz].join() !== [x, y, z].join()) continue;
@@ -10101,7 +10149,7 @@ class App {
     ];
     for (const [bx, by, bz] of cells) {
       this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
-      this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(bx, by, bz, Block.AIR, 0, this.dimension);
     }
     this.wakeFluidsAround(x, y, z);
 
@@ -10461,7 +10509,7 @@ class App {
       level >= BEACON_SECONDARY_MIN_LEVEL ? secondary : 0,
     );
     this.world.setStateAndUpdate(x, y, z, next);
-    this.net.sendBlock(x, y, z, Block.BEACON, next, this.dimension);
+    this.queueBlockChange(x, y, z, Block.BEACON, next, this.dimension);
 
     const entry = this.beacons.get(this.beaconKey(x, y, z));
     if (entry) entry.level = level;
@@ -10677,7 +10725,7 @@ class App {
       const here = this.world.getBlock(target.x, y, target.z);
       if (shouldIgnite(here, below)) {
         this.world.setBlockAndUpdate(target.x, y, target.z, Block.FIRE);
-        this.net.sendBlock(target.x, y, target.z, Block.FIRE, 0, this.dimension);
+        this.queueBlockChange(target.x, y, target.z, Block.FIRE, 0, this.dimension);
       }
     }
 
@@ -10921,7 +10969,7 @@ class App {
       const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
-      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       // 创造模式不产生掉落（与原版一致）
       if (this.isCreative) continue;
@@ -10944,7 +10992,7 @@ class App {
       const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
-      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
       // 掉落**这一种**门（原来写死 `dropFor(Block.OAK_DOOR)`，加别的木材就会掉错东西）
@@ -10974,7 +11022,7 @@ class App {
       const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
-      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
       const drop = dropFor(id);
@@ -13004,7 +13052,7 @@ class App {
       const existing = this.world.getBlock(target.x, target.y, target.z);
       if (existing !== Block.AIR && existing !== Block.WATER) return false;
       if (!this.world.setBlockAndUpdate(target.x, target.y, target.z, Block.POWDER_SNOW, 0)) return false;
-      this.net.sendBlock(target.x, target.y, target.z, Block.POWDER_SNOW, 0, this.dimension);
+      this.queueBlockChange(target.x, target.y, target.z, Block.POWDER_SNOW, 0, this.dimension);
       if (!this.isCreative) this.exchangeHeld(held, Item.BUCKET);
       this.audio.play('place_sand', { x: target.x + 0.5, y: target.y + 0.5, z: target.z + 0.5 });
       this.particles.spawnSplash(target.x + 0.5, target.y + 0.8, target.z + 0.5, 0xf2f8ff, 5);
@@ -13031,7 +13079,7 @@ class App {
     // `setBlockAndUpdate` 只通知渲染/光照/红石，流动完全靠 `TickScheduler`。
     // 这也解释了用户看到的"倒水不流"：手挖会流（那条路一直有唤醒），倒水不会。
     this.wakeFluidsAround(target.x, target.y, target.z);
-    this.net.sendBlock(target.x, target.y, target.z, liquid, 0, this.dimension);
+    this.queueBlockChange(target.x, target.y, target.z, liquid, 0, this.dimension);
 
     // 创造模式不回收桶（原版也是"桶还在手里"），生存里变回空桶
     if (!this.isCreative) this.exchangeHeld(held, Item.BUCKET);
@@ -13147,7 +13195,7 @@ class App {
     for (const cell of cells) {
       if (cell.x === x && cell.y === y && cell.z === z) continue;
       this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, blockId, state);
-      this.net.sendBlock(cell.x, cell.y, cell.z, blockId, state, this.dimension);
+      this.queueBlockChange(cell.x, cell.y, cell.z, blockId, state, this.dimension);
     }
     this.syncPaintings();
   }
@@ -13164,7 +13212,7 @@ class App {
     for (const cell of removed.cells) {
       if (cell.x === x && cell.y === y && cell.z === z) continue;
       this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, Block.AIR);
-      this.net.sendBlock(cell.x, cell.y, cell.z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(cell.x, cell.y, cell.z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5, this.blockParticleColor(Block.PAINTING));
     }
     if (!this.isCreative) this.spawnDrop(Block.PAINTING, 1, x + 0.5, y + 0.5, z + 0.5);
@@ -13639,7 +13687,7 @@ class App {
 
     const next = withEndPortalEye(state, true);
     this.world.setStateAndUpdate(x, y, z, next);
-    this.net.sendBlock(x, y, z, Block.END_PORTAL_FRAME, next, this.dimension);
+    this.queueBlockChange(x, y, z, Block.END_PORTAL_FRAME, next, this.dimension);
     this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.particles.spawnPortal(x + 0.5, y + 1.1, z + 0.5, 8, 0.4);
     this.hand.swing();
@@ -13654,7 +13702,7 @@ class App {
     if (!activation || activation.filled === 0) return;
     const [cx, cy, cz] = activation.center;
     for (const [px, py, pz] of endPortalCells(cx, cy, cz)) {
-      this.net.sendBlock(px, py, pz, Block.END_PORTAL, 0, this.dimension);
+      this.queueBlockChange(px, py, pz, Block.END_PORTAL, 0, this.dimension);
     }
     this.audio.play('portal', { x: cx + 0.5, y: cy + 0.5, z: cz + 0.5 });
     this.particles.spawnPortal(cx + 0.5, cy + 0.6, cz + 0.5, 40, 1.2);
@@ -14214,7 +14262,7 @@ class App {
       igniteFire: (bx, by, bz) => {
         if (!igniteAt(this.world, bx, by, bz)) return false;
         // 联机：火也要广播（与玩家拿打火石点火走同一条）
-        this.net.sendBlock(bx, by, bz, Block.FIRE, 0, this.dimension);
+        this.queueBlockChange(bx, by, bz, Block.FIRE, 0, this.dimension);
         return true;
       },
       shearAt: (bx, by, bz) => {
@@ -14255,7 +14303,7 @@ class App {
       this.world.setStateAndUpdate(x, y, z, next);
       this.inventory.consume(Block.GLOWSTONE, 1);
       this.refreshHotbar();
-      this.net.sendBlock(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
+      this.queueBlockChange(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
       this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 8);
       this.chat.push(`重生锚充能 ${charge + 1} / ${RESPAWN_ANCHOR_MAX_CHARGE}`, 'system');
@@ -14269,7 +14317,7 @@ class App {
     }
     const next = withAnchorCharge(state, charge - 1);
     this.world.setStateAndUpdate(x, y, z, next);
-    this.net.sendBlock(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
+    this.queueBlockChange(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
     this.bedSpawn = { x, y, z, dimension: this.dimension };
     this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 12);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
@@ -15095,7 +15143,7 @@ class App {
         this.statistics.add('blocksPlaced');
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(heldId, 1);
-        this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
+        this.queueBlockChange(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
         this.reportTutorial({ kind: 'place', block: blockId, y });
@@ -15220,7 +15268,7 @@ class App {
       this.hand.swing();
       // 联机：把这次改动广播给队友。
       // 读**实际**方块而不是 `blockId`：海绵放下后可能已经变成湿海绵（批次 449）
-      this.net.sendBlock(
+      this.queueBlockChange(
         x,
         y,
         z,
@@ -15230,7 +15278,7 @@ class App {
       );
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
-        this.net.sendBlock(x + dx, y + dy, z + dz, id, state, this.dimension);
+        this.queueBlockChange(x + dx, y + dy, z + dz, id, state, this.dimension);
       }
     }
   }
@@ -15254,7 +15302,7 @@ class App {
     if (consumeSummonSkulls(this.witherSummonWorld, layout) !== layout.skulls.length) return;
 
     for (const skull of layout.skulls) {
-      this.net.sendBlock(skull.x, skull.y, skull.z, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(skull.x, skull.y, skull.z, Block.AIR, 0, this.dimension);
       this.particles.spawnSmoke(skull.x + 0.5, skull.y + 0.3, skull.z + 0.5, 8, 0.3);
     }
     this.audio.play('explode', { x, y, z });
@@ -15459,7 +15507,7 @@ class App {
     if (removed.length === 0) return;
 
     for (const [px, py, pz] of removed) {
-      this.net.sendBlock(px, py, pz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(px, py, pz, Block.AIR, 0, this.dimension);
       this.particles.spawnPortal(px + 0.5, py + 0.5, pz + 0.5, 4, 0.3);
     }
     this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
@@ -15475,7 +15523,7 @@ class App {
     const removed = clearBrokenEndPortalsAround(this.portalWorld, x, y, z);
     if (removed.length === 0) return;
     for (const [px, py, pz] of removed) {
-      this.net.sendBlock(px, py, pz, Block.AIR, 0, this.dimension);
+      this.queueBlockChange(px, py, pz, Block.AIR, 0, this.dimension);
       this.particles.spawnPortal(px + 0.5, py + 0.5, pz + 0.5, 4, 0.3);
     }
     this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
@@ -15495,7 +15543,7 @@ class App {
     if (!buildPortal(this.portalWorld, site)) return null;
 
     for (const [x, y, z] of [...portalFrame(site), ...portalInterior(site)]) {
-      this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), this.world.getBlockState(x, y, z), this.dimension);
+      this.queueBlockChange(x, y, z, this.world.getBlock(x, y, z), this.world.getBlockState(x, y, z), this.dimension);
     }
     return site;
   }
@@ -17084,6 +17132,13 @@ class App {
         }
         // 跨过午夜 = 新的一天：月相往前推一格（批次 84）。判据就是"取模之后变小了"
         if (this.timeOfDay < before) this.advanceDay();
+      }
+
+      // 方块改动的合帧发（联机12）：100ms 一批。红石连锁一响就是几十格，
+      // 逐格发会把消息量放大两个数量级；一批最多 256 条，剩下的下一帧继续
+      if (this.blockFunnel.tick(dt)) {
+        const batch = this.blockFunnel.drain();
+        if (batch.length > 0) this.net.sendBlocks(batch);
       }
 
       // 寒冷群系下雪：每秒复查一次地表方块即可

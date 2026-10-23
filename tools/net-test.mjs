@@ -426,6 +426,33 @@ try {
     check('收到时间校正广播', typeof value === 'number' && value >= 0 && value < 1, `${value}`);
   }
 
+  // ---------------------------------------------------------------- 批量方块（联机12）
+  console.log('\n[批量方块]');
+  {
+    alice.mailbox.length = 0;
+    bob.send({
+      t: 'blocks',
+      blocks: [
+        [100, 70, 100, 1, 0, 'overworld'],
+        [101, 70, 100, 2, 3, 'overworld'],
+      ],
+    });
+    const batch = await alice.wait('blocks', 2000);
+    check('一批方块被整体转发', Array.isArray(batch?.blocks) && batch.blocks.length === 2, JSON.stringify(batch));
+
+    // 脏条目逐条丢：坐标非数字那条不能进 edits，也不能被转发
+    alice.mailbox.length = 0;
+    bob.send({
+      t: 'blocks',
+      blocks: [
+        [102, 70, 100, 1, 0, 'overworld'],
+        ['x', 70, 100, 1, 0, 'overworld'],
+      ],
+    });
+    const filtered = await alice.wait('blocks', 2000);
+    check('批量里的非法条目被丢掉', filtered?.blocks?.length === 1, JSON.stringify(filtered));
+  }
+
   // ---------------------------------------------------------------- 睡眠跳夜（联机11）
   console.log('\n[睡眠跳夜]');
   {

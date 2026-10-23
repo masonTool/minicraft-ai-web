@@ -34,6 +34,13 @@ const PORT = Number(process.env.PORT ?? 8787);
 const WORLD_SEED = Number(process.env.SEED ?? 20261014);
 /** 方块改动最多记这么多条（防止长时间运行的房间把内存吃光） */
 const MAX_EDITS = 200_000;
+/**
+ * 一条 `blocks` 消息最多认多少条（联机12）。
+ *
+ * 客户端合帧上限是 256，这里给到 4096 是留余量；再多的直接截掉——否则一条手工构造
+ * 的消息就能让服务端遍历几十万次，还把它整包转发出去。
+ */
+const MAX_BLOCKS_PER_MESSAGE = 4096;
 /** 玩家位置更新的最小间隔（毫秒）：比这更频繁的移动消息直接丢弃 */
 const MOVE_INTERVAL_MS = 50;
 /**
@@ -284,7 +291,7 @@ wss.on('connection', (socket, request) => {
         player.z = Number(message.z ?? player.z);
         player.yaw = Number(message.yaw ?? player.yaw);
         player.pitch = Number(message.pitch ?? player.pitch);
-        player.dimension = String(message.dimension ?? player.dimension);
+        player.dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         broadcast(
           { t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: player.yaw, pitch: player.pitch, dimension: player.dimension },
           player.id,
@@ -294,7 +301,7 @@ wss.on('connection', (socket, request) => {
 
       case 'block': {
         if (!player) return;
-        const dimension = String(message.dimension ?? player.dimension);
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
         const z = Math.trunc(Number(message.z));
@@ -310,9 +317,47 @@ wss.on('connection', (socket, request) => {
         break;
       }
 
+      /*
+       * 批量方块改动（联机12）。
+       *
+       * 客户端把 100ms 内的改动合成一条（同格只留最后一稿），这里逐条与 `block` 同样收口
+       * （截断成整数、坐标必须有限、`edits` 有上限、维度名走 `sanitizeDimension`），
+       * 再**一次性**广播给其他人——`by` 仍然带，客户端靠它区分"自己改的"。
+       */
+      case 'blocks': {
+        if (!player) return;
+        const list = Array.isArray(message.blocks) ? message.blocks.slice(0, MAX_BLOCKS_PER_MESSAGE) : [];
+        const accepted = [];
+        for (const raw of list) {
+          if (!Array.isArray(raw)) continue;
+          const [rawX, rawY, rawZ, rawId, rawState, rawDimension] = raw;
+          const edit = {
+            x: Math.trunc(Number(rawX)),
+            y: Math.trunc(Number(rawY)),
+            z: Math.trunc(Number(rawZ)),
+            id: Math.trunc(Number(rawId)),
+            state: Math.trunc(Number(rawState ?? 0)),
+            dimension: sanitizeDimension(String(rawDimension ?? player.dimension)),
+          };
+          if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
+          if (edits.size < MAX_EDITS) edits.set(`${edit.dimension}|${edit.x},${edit.y},${edit.z}`, edit);
+          accepted.push(edit);
+        }
+        if (accepted.length === 0) return;
+        broadcast(
+          {
+            t: 'blocks',
+            blocks: accepted.map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
+            by: player.id,
+          },
+          player.id,
+        );
+        break;
+      }
+
       case 'container': {
         if (!player) return;
-        const dimension = String(message.dimension ?? player.dimension);
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
         const z = Math.trunc(Number(message.z));

@@ -72,7 +72,8 @@
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
 | `move` | `x, y, z, yaw, pitch, dimension` | 距上一条 < 50ms 直接丢弃；缺字段保留旧值 | 客户端 100ms 发一条；**没有速度/距离校验** |
-| `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | **不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
+| `block` | `x, y, z, id, state, dimension` | 五个数 `Number.isFinite`；坐标与 id 截断成整数 | 单条版本，客户端现在走 `blocks`；**不校验 id 是否合法、y 范围、与玩家距离**；`edits` 满 20 万条后静默丢弃 |
+| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
@@ -90,6 +91,7 @@
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
+| `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
@@ -153,7 +155,7 @@
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`）；`snap: true` 时**立刻对齐**并顺手放晴 | 直接赋值太阳会"跳"；睡满跳夜那种大跳必须换成立即对齐，否则夜里要追 70 秒 |
-| `block` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits） |
+| `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 仅当同维度、且那一格确实是箱子/木桶时，用 `restoreStacks` 清洗后写回 | 不回声（`Chest.restore` 不触发 `onMutate`） |
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
@@ -173,7 +175,7 @@
 | `联机7` | 心跳已做（5s ping / 20s 无 pong 断开），状态机在 `core/net/NetSession.ts` | 客户端侧没有"服务端静默"超时：只认 socket close |
 | `联机10` | 时间已做（服务端推算 + 2s 校正，客户端按 4 倍速收敛）；**天气还没同步** | 时间一致了，但一个人下雨一个人晴天（天气拆到 `联机35`） |
 | `联机11` | 睡眠跳夜已做（`sleep` 上行 + `time{snap}` 下行，任一玩家睡满即跳） | 口径与基岩版不同：**不要求全员躺下**；天气放晴只在客户端跟着跳夜事件做（`联机35`） |
-| `联机12` | 只有玩家动作广播方块 | 红石/流体/作物/爆炸长期分叉 |
+| `联机12` | 方块写入已统一出口（`World.events.onBlockChanged` + 40 处散点 → `BlockFunnel`，100ms 合帧、同格只留最后一稿） | 红石/流体/火焰/作物/漏斗/爆炸现在都会同步；但两端各自跑模拟，同一事件在两边得出的结果仍可能不同（如流体更新顺序） |
 | `联机13` | 服务端无持久化 | 重启后新玩家看到原始地形 |
 | `联机15`/`联机16` | 容器只覆盖箱子/木桶且打开时才挂；告示牌/展示框不同步 | 熔炉、酿造台、牌子上的字各看各的 |
 | `联机17`~`联机23` | 玩家外观、名字牌、生物、拾取、PvP、其他实体 | 看不到手持物；打怪不同步；镜像捡不起来 |

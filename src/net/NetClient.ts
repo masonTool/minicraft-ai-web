@@ -294,6 +294,23 @@ export class NetClient {
         );
         break;
       }
+      case 'blocks': {
+        // 批量版本（联机12）：合帧后一包多条，逐条喂同一个回调，顺序即服务端记录顺序
+        const blocks = Array.isArray(message.blocks) ? (message.blocks as unknown[]) : [];
+        for (const raw of blocks) {
+          if (!Array.isArray(raw)) continue;
+          const [x, y, z, id, state, dimension] = raw as [unknown, unknown, unknown, unknown, unknown, unknown];
+          this.handlers.onBlock(
+            Number(x),
+            Number(y),
+            Number(z),
+            Number(id),
+            Number(state ?? 0),
+            String(dimension ?? 'overworld'),
+          );
+        }
+        break;
+      }
       case 'container': {
         const slots = Array.isArray(message.slots) ? (message.slots as unknown[]) : [];
         this.handlers.onContainer?.({
@@ -384,8 +401,23 @@ export class NetClient {
 
   /** 本地改了方块：广播出去 */
   sendBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
-    if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'block', x, y, z, id, state, dimension }));
+    this.sendBlocks([{ x, y, z, id, state, dimension }]);
+  }
+
+  /**
+   * 一批方块改动（联机12）。
+   *
+   * 合帧在 `core/net/BlockFunnel.ts` 里做：100ms 一次、同格只留最后一稿。这里只负责
+   * 打包——数组比逐条对象省一半以上字节，红石连锁那种"一次几十格"全靠它。
+   */
+  sendBlocks(batch: readonly { x: number; y: number; z: number; id: number; state: number; dimension: string }[]): void {
+    if (!this.connected || batch.length === 0) return;
+    this.socket?.send(
+      JSON.stringify({
+        t: 'blocks',
+        blocks: batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]),
+      }),
+    );
   }
 
   /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */
