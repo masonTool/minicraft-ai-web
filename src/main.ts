@@ -371,6 +371,7 @@ import {
   transferFileName,
 } from './core/save/SaveTransfer.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
+import { collectContainerSpawns } from './core/save/EditSpawns.ts';
 import { restoreContainers, restoreStacks, serializeContainers, serializeStacks } from './core/save/ContainerSave.ts';
 import {
   NetClient,
@@ -2587,6 +2588,8 @@ class App {
         fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
         // 队友的容器内容（联机13）：放在战利品之后——队友改过的才是最终状态
         this.flushPendingContainers(chunk.cx, chunk.cz);
+        // 联机33：经增量表补上的漏斗/投掷器/发射器要补建容器实体
+        this.spawnContainersFromEdits(chunk.cx, chunk.cz);
         // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
         this.scanRodsInChunk(chunk.cx, chunk.cz);
         // 刷怪笼索引（批次 92）：同一个道理——下界要塞里的笼子在加载时登记，之后按倒计时生成
@@ -8650,6 +8653,27 @@ class App {
    * 射出一支箭（J9）。玩家拉弓与骷髅射箭都走这里，
    * 于是"箭怎么飞"只有一份实现，两边不会各自漂移。
    */
+  /**
+   * 区块加载后，把"经增量表补上的容器方块"补建容器实体（联机33）。
+   *
+   * 远端改动有两条落地路径：区块**已加载**就当场写（顺带 `ensureBlockEntityAt`）；
+   * **没加载**就只记增量、等 `ChunkEdits.applyTo` 在区块生成时叠上去——后一条路上没人
+   * 建容器实体，表现是"看着是漏斗，就是不搬东西"。
+   *
+   * 只在联机时做：单机路径的漏斗是放下那一刻就建好的，这里再扫一遍纯属浪费。
+   * 从**增量表**里挑而不是扫整块方块：一个区块 384×256 格，扫一遍是几万次读，而增量
+   * 只有被改过的那几十格。
+   */
+  private spawnContainersFromEdits(cx: number, cz: number): void {
+    if (this.net.sessionState !== 'connected') return;
+    if (!this.world.edits.has(this.dimension, cx, cz)) return;
+    const data = this.world.edits.serialize(this.dimension, cx, cz);
+    if (!data) return;
+    for (const spawn of collectContainerSpawns(cx, cz, data, isHopperLikeBlock)) {
+      this.ensureBlockEntityAt(spawn.x, spawn.y, spawn.z, spawn.id, this.dimension);
+    }
+  }
+
   spawnArrow(
     x: number,
     y: number,
@@ -18987,6 +19011,16 @@ class App {
     this.refreshHotbar();
     return left;
   }
+}
+
+/**
+ * 这些方块的容器实体**必须**建（联机33）：它们自己会搬运/吐出东西，不打开界面也会动。
+ *
+ * 箱子/木桶/熔炉不在名单里——它们的内容只有在玩家打开界面时才有意义，
+ * `containerOfBlockAt` 会懒创建；漏了反而会白白占内存。
+ */
+function isHopperLikeBlock(id: number): boolean {
+  return id === Block.HOPPER || id === Block.DROPPER || id === Block.DISPENSER || isShulkerBox(id);
 }
 
 // ---------------------------------------------------------------- 启动与环境色
