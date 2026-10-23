@@ -177,6 +177,7 @@
     "test:tutorial": "esbuild tools/tutorial-test.ts --bundle --platform=node --format=esm --outfile=.tmp/tutorial-test.mjs --log-level=error && node .tmp/tutorial-test.mjs",
     "test:buildtools": "esbuild tools/buildtools-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildtools-test.mjs --log-level=error && node .tmp/buildtools-test.mjs",
     "test:minigame": "esbuild tools/minigame-test.ts --bundle --platform=node --format=esm --outfile=.tmp/minigame-test.mjs --log-level=error && node .tmp/minigame-test.mjs",
+    "test:jumpiso": "esbuild tools/jump-iso-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-iso-test.mjs --log-level=error && node .tmp/jump-iso-test.mjs",
     "test:villager": "esbuild tools/villager-test.ts --bundle --platform=node --format=esm --outfile=.tmp/villager-test.mjs --log-level=error && node .tmp/villager-test.mjs",
     "test:village": "esbuild tools/village-test.ts --bundle --platform=node --format=esm --outfile=.tmp/village-test.mjs --log-level=error && node .tmp/village-test.mjs",
     "test:reach": "esbuild tools/reachability-test.ts --bundle --platform=node --format=esm --outfile=.tmp/reachability-test.mjs --log-level=error && node .tmp/reachability-test.mjs",
