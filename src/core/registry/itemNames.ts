@@ -175,23 +175,23 @@ put('terracotta', () => t('item.terracotta'));
 put('glass', () => t('item.glass'));
 put('glass_pane', () => t('item.glass_pane'));
 
-// 木头系：原木 / 木板 / 树叶
-for (const [wood, cn] of Object.entries(WOODS_CN)) {
-  put(`${wood}_log`, `${cn}原木`);
-  put(`${wood}_planks`, `${cn}木板`);
-  put(`${wood}_leaves`, `${cn}树叶`);
+// 木头系：原木 / 木板 / 树叶（多语言 P2-1b-1：模板在语言表里，语序由语言决定）
+for (const wood of Object.keys(WOODS_CN)) {
+  put(`${wood}_log`, () => tp('item.woodLog', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_planks`, () => tp('item.woodPlanks', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_leaves`, () => tp('item.woodLeaves', { wood: t(`item.wood.${wood}`) }));
 }
 
 // 木制方块族（批次 38）：栅栏 / 栅栏门 / 门 / 活板门
 // 与方块表同源（都从木材表展开），加一种木材两边自动跟上——
 // 这正是"新加了方块却冒出英文 id"那条老毛病要防的地方
-for (const [wood, cn] of Object.entries(WOODS_CN)) {
-  put(`${wood}_fence`, `${cn}栅栏`);
-  put(`${wood}_fence_gate`, `${cn}栅栏门`);
-  put(`${wood}_door`, `${cn}门`);
-  put(`${wood}_trapdoor`, `${cn}活板门`);
+for (const wood of Object.keys(WOODS_CN)) {
+  put(`${wood}_fence`, () => tp('item.woodFence', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_fence_gate`, () => tp('item.woodFenceGate', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_door`, () => tp('item.woodDoor', { wood: t(`item.wood.${wood}`) }));
+  put(`${wood}_trapdoor`, () => tp('item.woodTrapdoor', { wood: t(`item.wood.${wood}`) }));
   // 告示牌（批次 80）：同一个方块兼作落地牌与挂墙牌，所以名字只有一个
-  put(`${wood}_sign`, `${cn}告示牌`);
+  put(`${wood}_sign`, () => tp('item.woodSign', { wood: t(`item.wood.${wood}`) }));
 }
 
 // 展示框与画（B14，批次 86）：各一条——**画只有一件物品**，
@@ -203,19 +203,22 @@ put('painting', '画');
 // 珊瑚一族（批次 51）：5 种 × 3 形 × 活/失活 = 30 条中文名，**由"种"表展开**。
 // 与方块表（`CORAL_SPECS`）同一套命名规则：少写一种就会冒出英文 id，
 // 而"某一格显示 tube_coral_fan"这种事只有玩家看得见
-for (const [kind, cn] of Object.entries(CORAL_KIND_CN)) {
-  put(`${kind}_coral_block`, `${cn}珊瑚块`);
-  put(`dead_${kind}_coral_block`, `失活的${cn}珊瑚块`);
-  put(`${kind}_coral`, `${cn}珊瑚`);
-  put(`dead_${kind}_coral`, `失活的${cn}珊瑚`);
-  put(`${kind}_coral_fan`, `${cn}珊瑚扇`);
-  put(`dead_${kind}_coral_fan`, `失活的${cn}珊瑚扇`);
+const coralName = (kind: string): string => t(`item.coral.${kind}`);
+for (const kind of Object.keys(CORAL_KIND_CN)) {
+  // 失活 = `失活的{name}` 再套一层（英文是 `Dead {name}`，语序由模板给）
+  const dead = (name: string): string => tp('item.dead', { name });
+  put(`${kind}_coral_block`, () => tp('item.coralBlock', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral_block`, () => dead(tp('item.coralBlock', { coral: coralName(kind) })));
+  put(`${kind}_coral`, () => tp('item.coral', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral`, () => dead(tp('item.coral', { coral: coralName(kind) })));
+  put(`${kind}_coral_fan`, () => tp('item.coralFan', { coral: coralName(kind) }));
+  put(`dead_${kind}_coral_fan`, () => dead(tp('item.coralFan', { coral: coralName(kind) })));
 }
 
 // 台阶 / 楼梯
-for (const [base, cn] of Object.entries(STRUCTURE_BASES_CN)) {
-  put(`${base}_slab`, `${cn}台阶`);
-  put(`${base}_stairs`, `${cn}楼梯`);
+for (const base of Object.keys(STRUCTURE_BASES_CN)) {
+  put(`${base}_slab`, () => tp('item.slab', { base: t(`item.base.${base}`) }));
+  put(`${base}_stairs`, () => tp('item.stairs', { base: t(`item.base.${base}`) }));
 }
 
 // 石材家族的变体（批次 41）：台阶 / 楼梯 / 墙的名字 = **母方块的中文名 + 后缀**。
@@ -260,10 +263,10 @@ const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
   cut_red_sandstone: '切制红砂岩',
   smooth_red_sandstone: '平滑红砂岩',
 };
-for (const [base, cn] of Object.entries(STONE_VARIANT_PARENTS_CN)) {
-  put(`${base}_slab`, `${cn}台阶`);
-  put(`${base}_stairs`, `${cn}楼梯`);
-  put(`${base}_wall`, `${cn}墙`);
+for (const base of Object.keys(STONE_VARIANT_PARENTS_CN)) {
+  put(`${base}_slab`, () => tp('item.slab', { base: t(`item.base.${base}`) }));
+  put(`${base}_stairs`, () => tp('item.stairs', { base: t(`item.base.${base}`) }));
+  put(`${base}_wall`, () => tp('item.wall', { base: t(`item.base.${base}`) }));
 }
 
 // 铜的四档（批次 40）：铜块 / 斑驳的铜块 / 锈蚀的铜块 / 氧化的铜块 + 切制铜家族。
@@ -277,17 +280,16 @@ const COPPER_CN = [
   { block: '氧化的铜块', cut: '氧化的切制铜' },
 ] as const;
 COPPER_STAGES.forEach((stage, index) => {
-  const cn = COPPER_CN[index]!;
-  put(stage.blockTile, cn.block);
-  put(stage.cutTile, cn.cut);
-  put(`${stage.cutTile}_slab`, `${cn.cut}台阶`);
-  put(`${stage.cutTile}_stairs`, `${cn.cut}楼梯`);
+  put(stage.blockTile, () => t(`item.copper.block.${index}`));
+  put(stage.cutTile, () => t(`item.copper.cut.${index}`));
+  put(`${stage.cutTile}_slab`, () => tp('item.slab', { base: t(`item.copper.cut.${index}`) }));
+  put(`${stage.cutTile}_stairs`, () => tp('item.stairs', { base: t(`item.copper.cut.${index}`) }));
 });
 
 // 矿石：`coal_ore` = 煤矿石，`deepslate_coal_ore` = 深层煤矿石
-for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
-  put(`${ore}_ore`, cn);
-  put(`deepslate_${ore}_ore`, `深层${cn}`);
+for (const ore of Object.keys(ORE_NAMES_CN)) {
+  put(`${ore}_ore`, () => t(`item.ore.${ore}`));
+  put(`deepslate_${ore}_ore`, () => tp('item.deepslateOre', { name: t(`item.ore.${ore}`) }));
 }
 
 // 工具与武器：材质 × 种类 = 30 条（木镐 / 石斧 / 铁锹 / 金锄 / 钻石剑 / 下界合金镐……）
