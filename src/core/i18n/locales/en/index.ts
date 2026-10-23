@@ -19,6 +19,7 @@ import { minigame } from './minigame.ts';
 import { cmd } from './cmd.ts';
 import { cmdMessages } from './cmdMessages.ts';
 import { item } from './item.ts';
+import { itemDesc } from './itemDesc.ts';
 import { misc } from './misc.ts';
 
 export const en = {
@@ -33,5 +34,6 @@ export const en = {
   ...cmd,
   ...cmdMessages,
   ...item,
+  ...itemDesc,
   ...misc,
 } satisfies Messages;
