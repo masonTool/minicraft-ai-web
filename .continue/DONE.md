@@ -8,6 +8,113 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+## 批次 20261023-1855 · 2026-10-23 · 会话 4024a9d4
+
+**做了什么**：命令域键化（P1，10 个条目）。命令域原有**三套并行机制**——`commandMessages.data.ts`（键=中文原文）、`commandHelp.data.ts`（键=命令名）、`UsageText.USAGE_FIELD_NAMES`（只翻括号里的参数名），外加 `pickLabel(zh,en)` 与六张 `*_LABELS_EN` 平行表；每多一种语言，每套都要再裂一份。本批把它们收成**一套 `cmd.*` 语义键**：`cmd.<name>.usage|.desc`（72 条）/ `cmd.help.*`（值标签、字段短标签、面板短语，110 条）/ `cmd.reply.*`（175 条回执）/ `cmd.label.*`（40 条回执里嵌的标签）。三个"第二套键约定"的文件与 `pickLabel` 全部删除，表 625 → **864** 条。
+顺带修掉四个**只在英文模式暴露**的缺陷：帮助面板的用法与说明是中文（数据流没接线）、数字框退化成文本框、进度下拉直接消失（判断按中文字段名写）、`Weather set to 下雨` 这类半截话。
+
+**条目**（原文照搬）：
+
+- [x] [P1-1a] 建 `cmd` 键空间（数据层，不动调用点）：新增 `locales/zh/cmd.ts` + `locales/en/cmd.ts`，把 `/help` 的 36 条 usage 与 36 条 description 搬进去（键 `cmd.<name>.usage` / `cmd.<name>.desc`），加**护栏断言**"表里 72 条与 `COMMANDS` 的 spec 逐条一致" → `npm run test:i18n` 全绿，且护栏断言能证明不是手抄
+  - 做了什么：`36 条命令 × 2 = 72 条键` 搬进 `locales/{zh,en}/cmd.ts`；两个 `index.ts` 各加一行 `...cmd`；`tools/i18n-test.ts` 加 2 条护栏断言（72 条逐条比对 spec 中文 + 旧英文表、键都在 `allKeys()` 里）
+  - 为什么用脚本搬：72 条字符串手抄必出错，而**一字之差只有跑 `/help` 才看得见**。写了 `.tmp/gen-cmd-locale.ts`，直接 `import { COMMANDS }` 与旧英文表，值逐字照搬（不是把中文再打一遍）
+  - 为什么这一条不切调用点：改 72 处文案值 + 改 4 处读取方（`commandUsage` / `commandDescription` / `CommandHelp.ts` 两处），和"建表"混在一个提交里，红的时候分不清是哪边坏。拆成 P1-1a（建表+护栏）/ P1-1b（切键+删旧文件）
+  - ⚠️ 预期中的副作用：`audit:i18n` 的"孤儿"栏临时变成 **72 条**（`cmd.*` 还没有读者），P1-1b 切完归零。它不是死文案，是"表先建、接线在后"
+  - 验证：`npm run test:i18n` **200 通过 / 0 失败**（新增 2 条，其中"72 条逐条一致"是本条的核心证据）；`npm run typecheck` 无错误；`npm run check:fast` 全绿（命中 14/172 套，11.7s）；`audit:i18n` 表 625 → **697** 条
+  - 批次：20261023-1855
+- [x] [P1-1b] spec 切键：`CommandSpec` 的 `usage` / `description` 改成 `usageKey` / `descriptionKey`（值 `cmd.<name>.usage`），`commandUsage/commandDescription` 走 `t()`，`CommandHelp.ts` 改用这两个函数（它现在直接抄 `spec.usage`，**英文模式下帮助面板的用法是中文**），删 `commandHelp.data.ts` → `test:commands` 434 条 + `test:i18n` 全绿，`grep -rn "commandHelp.data" src tools` 无输出
+  - 做了什么：`CommandSpec` → `usageKey` / `descriptionKey`（带文档说明"存的是键不是文案"）；36 条 spec 的 72 处属性由脚本改写；`messages.ts` 的 `commandUsage/commandDescription` 改成 `t(spec.xxxKey)`；`CommandHelp.ts` 两处改用查表（条目构造 + `parseUsage`）；`git rm commandHelp.data.ts`
+  - 🔴 **顺带修掉一个真 bug**：`CommandHelp.ts:158-159` 原来直接抄 `spec.usage` / `spec.description`（当时是中文串），**英文模式下命令帮助面板的用法与说明是中文**。静态审计抓不到它——不是硬编码字面量，是数据流没接线
+  - 为什么用脚本改 72 处：里面有 2 处是**跨行写法**（`gamerule` 的 description 用 `+` 拼、`data` 的 usage 换行）。第一版正则只认 `usage: ` 带空格，替换了 70 处 → 脚本自己断言"必须 72"当场退出；补成 `:[ \t]?` 后一次过
+  - ⚠️ 改了两处**已通过**的断言（理由：被比较的旧表已删，断言目标必须换）：
+    ① `i18n-test` 的"与 `commandHelp.data.ts` 逐条比对" → 改成"键在表里 / **英文用法里没有中文残留** / `<>` `[]` 个数中英一致"；
+    ② `command-test` 两处 `spec.usage` → `commandUsage(spec)`（`/help` 每条单独一条消息、用法以 `/` 开头）
+  - ⚠️ 一次自纠：最初写"每条用法中英必须不同"，误报 10 条（`/clear`、`/seed`、`/weather <clear|rain|thunder>` 这类本来没有可翻的字）。判据改成"英文用法里不许有中文"
+  - 新增护栏（`<>` `[]` 个数一致）不是装饰：帮助面板靠 `splitVariants()` 拆变体，翻译里少一个括号就拆不出来，而那时**不报错、只是表单变空**
+  - 验证：`test:i18n` 200 通过 / 0 失败；`test:commands` **434 通过 / 0 失败**（命令输出逐字不变）；`typecheck` 与 `typecheck:tools` 无错误；`npm run check:fast` 全绿（命中 9/172 套）；`audit:i18n` 孤儿 **72 → 0**（P1-1a 的预期副作用如期归零），表仍 697 条
+  - 批次：20261023-1855
+- [x] [P1-2] `usageError` 按命令名查表：39 处 `usageError('中文用法串')` 改成 `usageError('tp')`（内部查 `cmd.tp.usage`），删 `UsageText.ts`（`USAGE_FIELD_NAMES` / `translateUsageFields` 整套） → `test:commands` 434 条全绿；`test:i18n` 里那批"用法串字段覆盖"的断言改成"错误提示里的用法与 `/help` 那句**同一句**"
+  - 做了什么：47 处 `usageError('……用法串……')` 全部改成 `usageError('<命令名>')`（脚本按"斜杠后第一个词"提取，47/47 无残留）；`usageError` 从 `UsageText.ts` 搬进 `Commands.ts`（用现成的 `findCommand`）并改为查 `cmd.<name>.usage`；删 `UsageText.ts`（35 行词表 + `translateUsageFields` 整套）
+  - 为什么搬进 `Commands.ts` 而不是 `messages.ts`：它要按名字找 spec（需要 `COMMANDS`），而 `messages.ts` 正被 `Commands.ts` 依赖 —— 放那边就成环
+  - 为什么统一成"一句"：原来错误提示里那套用法串与 `/help` 里那句**各写一份**（`/effect give <效果>` vs `/effect <give|clear> <效果>`），改一处就漂；现在同一个键、两个出口
+  - ⚠️ 有意的口径变化：子变体的报错不再显示"更精确的那一句"（如 `/execute positioned …` 失败时给 execute 的完整用法）。换来的是不会漂、也不用 6 种语言各维护一份
+  - ⚠️ 但**运算符清单不能丢**：`/scoreboard players operation` 的合法运算符原来挂在临时用法串的括号里，统一后没了 → 补成 `msg('（运算：{list}）')`（新键进 `commandMessages.data.ts`，表 697 → 698），只在这一条报错里出现，**不**塞进 `/help`（塞进去那行就没法读了）
+  - ⚠️ 改了三处**已通过**的断言（理由：机制/文案位置变了）：
+    ① `i18n-test`：删掉 3 条 `translateUsageFields` 行为断言与 2 条词表覆盖断言（机制本身已删），换成 3 条新口径 —— 传的是真实命令名 / 报错用法与 `/help` 那句**完全一致** / 英文模式下用法无中文；
+    ② `command-test`：`/scoreboard` 运算符那条靠 `运算：` 判定，由上面补的键自动恢复（断言没动、自己又绿了）；
+    ③ `ui-test`：`/gamerule` 帮助里含"死亡后保留物品"原本扫 `Commands.ts` 源码，说明搬走后假红 → 改查 `t('cmd.gamerule.desc')`
+  - 验证：`test:i18n` 198 通过 / 0 失败；`test:commands` **434 / 0**；`test:ui` **926 / 0**；`typecheck`、`typecheck:tools` 无错误；`npm run check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿；`grep -rn "UsageText" src tools` 无输出
+  - 批次：20261023-1855
+- [x] [P1-3a] 字段身份归一（切 P1-3）：新建 `commandFields.data.ts`（中英字段名 → slug、`NUMBER_SLUGS` / `FREE_SLUGS`、`ARG_LABELS` 改按 slug），`CommandHelp.ts` 的 10 处 `name === '中文'` 与 3 张表全部改成按 slug 判 → `test:commands` 新增"中英字段结构一致"护栏（`commandHelpEntries()` 在 zh/en 下 kind 与选项数必须相同）
+  - 做了什么：新增 `src/core/commands/commandFields.data.ts`（100 条"中英写法 → slug"映射 + 数字/自由值两个 slug 集合 + 按 slug 的短标签表）；`CommandHelp.ts` 删掉本地 `ARG_LABELS` / `FREE_VALUE_CHOICES` / `NUMBER_ARGS` 三张表，改为 `slugOf()` 归一后按 slug 分支（`生物/命令/维度/规则/效果/附魔/类型/战利品表/结构名/值` 十处）
+  - 🔴 修的是**我自己上一轮引入的回归**：P1-1b 把 `parseUsage` 的输入换成"本地化用法串"之后，英文模式拿到 `<entity>` / `<count>`，而判断全按中文字段名 —— **数字框退化成文本框、进度下拉直接消失**，不报错、只在英文界面看得出来
+  - 顺带消歧两处英文重名：`选择器` 的 `targets` → `selector`（否则与 `目标` 撞名）、`数值` 的 `value` → `number`（否则与 `值` 撞名）；并把 `team` 的英文用法串与中文对齐（英文多了个 `(friendlyFire|color|prefix|suffix)` 括号，会被解析成额外下拉，信息在 `cmd.team.desc` 里已有）
+  - 新增护栏（`test:commands`）：中英两种语言下 `commandHelpEntries()` 的字段结构必须一致（比 kind 与选项数量，不比显示文案）——这正是"语言换了、控件退化"那类回归的守门人
+  - 验证：`test:commands` **435 通过 / 0 失败**（新增 1 条）；`test:i18n` 198 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿；临时脚本比对"中英字段结构不一致 0 条"
+  - 批次：20261023-1855
+- [x] [P1-3b] 显示文案键化（原 P1-3 的另一半）：`VALUE_LABELS`（45 条）/ `ARG_LABELS`（29 条）/ `labelForArg` 与 `placeholderFor` 里的散句 → `cmd.help.*` 进两个语言表，`CommandHelp.ts` 不留中文字面量 → `test:i18n` 新增断言"该文件无中文字面量" + `test:commands` 全绿
+  - 做了什么：`CommandHelp.ts` 里 95 条显示文案搬进 `cmd.help.*`（值标签 45 条 `cmd.help.value.*`、字段短标签 28 条 `cmd.help.arg.*`、面板短语 40 余条 `cmd.help.ui.*`），表 698 → **815** 条；`VALUE_LABELS` 表换成 `KNOWN_VALUES` 集合 + `valueLabel()`（查表），`ARG_LABELS` 换成 `ARG_LABEL_SLUGS` 集合 + `argLabel()`，`placeholderFor` 的 `switch` 从中文 `case` 改成按 slug
+  - 为什么：这个文件长期是最大一块"没接 i18n 的中文"，且两张表若留着中文值，英文模式下的下拉标签、字段标签、占位符全是中文
+  - ⚠️ 顺带修掉 P1-3a 的一个洞：`placeholderFor(name)` 里是 `switch (name) { case '物品': … }`，**上一轮只改了 `name ===` 那批，漏了 `case`** —— 英文模式下占位符全部为空。现在按 slug 分支
+  - 新增守卫（`test:i18n`）：`CommandHelp.ts` 不许再有中文字面量 —— 防"以后顺手又写一句中文"，那种回退没有别的检查能发现
+  - ⚠️ 审计当场抓到我漏写的 3 个键（`ui.allAdvancements` / `ui.enterNumber` / `ui.near`），补上后归零 —— 这正是 P0-8 那条审计的价值
+  - 验证：`test:i18n` 199 通过 / 0 失败（新增 1 条）；`test:commands` 435 / 0；`test:ui` 926 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿，表 698 → 815
+  - 批次：20261023-1855
+- [x] [P1-4] `CommandHelpScreen.ts` 整屏键化：标题 / 搜索框 / 空态 / 操作列 / 填入聊天框 / 可选 / 自定义 / 预览 / 必填提示 → `test:i18n` 新增断言（该文件无中文字面量）
+  - 做了什么：`CommandHelpScreen.ts` 的 15 处文案搬进 `cmd.help.screen.*`（14 条键：标题 / 搜索 / 关闭 / 空态 / 需要创造模式 / 下拉说明 / 操作 / 填入聊天框 / 可选 / 不填 / 自定义… / 自定义 / 必填提示 ×2），表 815 → **829** 条；`${field.label}（可选）` 改成 `tp()` 占位符
+  - 为什么：这一屏是英文用户最重要的自助入口（`/help`），却一个字都没接 i18n——整屏英文用户看到的是中文
+  - ⚠️ 改了一条**已通过**的断言（`ui-test`）：原来断言源码里有 `'搜索命令…'` / `'填入聊天框'` 两个中文串，搬走后必然假红 → 改成断言"绑到了哪个键"（`t('cmd.help.screen.search')` / `t('cmd.help.screen.fill')`），验的仍是"搜索框与填入按钮接上了"，但以后改文案不会再红
+  - 新增守卫（`test:i18n`）：`CommandHelpScreen.ts` 不许再有中文字面量
+  - 验证：`test:i18n` 200 通过 / 0 失败（新增 1 条）；`test:ui` 926 / 0；`test:commands` 435 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿，表 815 → 829
+  - 批次：20261023-1855
+- [x] [P1-5] 129 条回执搬进 `locales/{zh,en}/cmdMessages.ts`（键 `cmd.msg.<command>.<slug>`）：值**逐字照抄**现有两张表；同时加"逐条与旧表一致"的护栏断言 → `test:i18n` 全绿，且新断言逐条比对 129 条（防手抄错）
+  - 做了什么：新建 `locales/{zh,en}/cmdMessages.ts`，把旧表 `commandMessages.data.ts` 的 **175 条**（队列里写的 129 是旧注释的估计，实测 175）搬成 `cmd.reply.<命令>.<英文 slug>`，18 组（tp / give / time / effect / summon / … / team / data）；两个 `index.ts` 各加 `...cmdMessages`；表 829 → **1004** 条
+  - 为什么换掉"中文原文当键"：那样 6 种语言的键各不相同，两个语言文件 `diff` 起来毫无意义，也没法用 `satisfies` 卡齐（键必须来自中文）；换成语义键后，`en/cmdMessages.ts` 由 `satisfies Pick<Messages, keyof typeof zhCmdMessages>` 卡住，漏翻一条 = 编译不过
+  - ⚠️ 偏离条目原文一处（有理由）：条目写的是 `cmd.msg.<命令>.<slug>`，但 `/msg` 命令自己的元数据已经占了 `cmd.msg.usage` / `cmd.msg.desc`（P1-1a 生成），两个语义完全不同的东西挤在同一前缀下，以后必被误读 → 回执改用 **`cmd.reply.*`**（实测表里 `cmd.msg.*` 正好多出这 2 条，就是它们）
+  - 为什么用脚本搬：175 条手抄必错，且**键里含 `\n` 转义**（`当前游戏规则：\n{rules}`）—— 第一版按原样读源码，把这 2 个字符当成了字面量，护栏当场报"`当前游戏规则：` 没搬进"；改成解析时还原转义、输出时再转义回去才对
+  - 新增护栏（`test:i18n`，3 条）：旧表 175 条都搬进了 `cmd.reply.*` / 新表英文与旧表**逐字一致**（不是重译）/ 条数相同（没多也没漏）
+  - 验证：`test:i18n` **203 通过 / 0 失败**（新增 3 条）；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿，表 829 → 1004
+  - 批次：20261023-1855
+- [x] [P1-6] 129 处 `msg('中文原文')` 切到语义键，删 `commandMessages.data.ts` 与 `I18n.ts` 里的 `ZH_MERGED` / `EN_MERGED` 合并逻辑 → `test:commands` 434 条全绿（输出逐字不变）+ `audit:i18n` 0 缺口
+  - 做了什么：183 处 `msg('中文原文')` 换成语义键（脚本按 `.tmp/cmd-msg-map.json` 的"中文 → 键"映射批量替换，0 处未映射）+ 2 处三目（`prefix/suffix`、`开启/关闭`）手工改；删 `commandMessages.data.ts`、`I18n.ts` 里的 `ZH_MERGED` / `EN_MERGED` 合并（表池直接用 `zh` / `en`）、`messages.ts` 的再导出；表 1004 → **829**（175 条中文键退场）
+  - 为什么：键随语言变（中文原文当键）时，6 个语言文件互相对不上、`satisfies` 也卡不齐；统一成语义键后中文只是"某个值"，英文表由类型保证完整
+  - 🔴 顺带清掉 5 条**已死回执**（审计的孤儿栏报的）：`locate` 三条（"这个维度还不支持 / 附近没有找到 / 640 格内没有找到"）、`目标必须是单一实体`、`（空）` —— 实测源码 0 引用（grep 只剩注释），留着要白翻 4 种语言 × 5 条
+  - ⚠️ 改了三处**已通过**的断言（理由：被比较的旧表已删）
+    ① P1-5 那三条"与旧表逐条一致"完成使命 → 退化成"条数 ≥170 / 中文不露键名 / 英文不是照抄"
+    ② 回执"真翻成英文"要排除**语言中性**的两条（`{name} Health = {value}` 中英本来就一样，P0-6 也踩过同一处）
+    ③ 真跑扫中文前必须 `setLanguage('en')` —— 我改写时把原来那行删了，扫描一度在中文下跑，报"满屏中文"（假红）
+  - 验证：`test:i18n` 201 通过 / 0 失败；`test:commands` 435 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（14/14 套）；`audit:i18n` 0 缺口 / 0 孤儿；`grep -rn "commandMessages.data" src tools` 只剩注释里的历史说明
+  - 批次：20261023-1855
+- [x] [P1-7] 删 `pickLabel`：`gamemode` / `weather` / `difficulty` / `scoreboardSlot` 四张 `*_LABELS(_EN)` 平行表改成 `cmd.label.*` 键 → `test:commands` 与 `test:i18n` 全绿，`grep -rn "pickLabel" src` 无输出
+  - 做了什么：40 条 `cmd.label.*`（gamemode 4 / difficulty 4 / weather 3 / slot 3 / dimension 3 / structure 23）进两个语言表，表 829 → 864；11 处 `pickLabel(...)` 全部换成 `t()`；删掉 `WEATHER_LABELS(_EN)`、`DIM_LABELS`、`DIMENSION_LABELS_EN`、`GAME_MODE_LABELS_EN`、`DIFFICULTY_LABELS_EN`、`SLOT_LABELS_EN` 与 `pickLabel` 本身
+  - 比条目写的大一圈（顺手做完了）：条目只列了 4 张表，但 `pickLabel` 还被**维度**与**结构名**用着 —— 不一起换就删不掉 `pickLabel`，而那两处同样是"中文一张 + 英文一张"。结构名的 `label` / `labelEn` 字段从数据表里整个删掉（23 条 × 2 种写法），标识只剩 key
+  - 顺带修掉一类**半截话**：`pickLabel` 原来判"是不是英文"，德语/俄语用户会拿到中文（`Weather set to 下雨` 那种）。现在一律查表 + 回落链
+  - ⚠️ 改了两条**已通过**的断言（`command-test`）：结构名的"每条都有中文名 / 英文名"原来读数据表的 `label` / `labelEn` 字段，字段删了必然假红 → 改成查 `cmd.label.structure.<key>` 的两种语言值（顺带多验了"键真的在表里"）
+  - ⚠️ 顺手清了三处过时注释（`Rules.ts` / `Scoreboard.ts` 里指向已删表的"理由同 `GAME_MODE_LABELS_EN`"、`Commands.ts` 里提 `pickLabel` 的说明）
+  - 验证：`test:commands` 435 / 0；`test:i18n` 201 / 0；`test:ui` 926 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（19/19 套）；`audit:i18n` 0 缺口 / 0 孤儿；`grep -rn "pickLabel\|_LABELS_EN" src tools` 只剩 0 处（原来 20+ 处）
+  - 批次：20261023-1855
+- [x] [P1-8] 回归与巡查：`audit:i18n` 0 缺口、`?lang=xa` 下命令帮助面板无"没被 ⟦⟧ 包住"的文案、`test:commands` / `test:ui` / `check:fast` 全绿，`M8` 台账补一行 → 四条命令输出贴进完成说明
+  - 做了什么：① `audit:i18n` → **0 缺口 / 0 孤儿**（864 条键）；② 伪语言巡查**程序化**（不靠开浏览器，面板文案全来自 `commandHelpEntries()`）：命令域 usage / 描述 / 字段标签 / 占位符 **0 处未包住**，只剩坐标标签（`X`/`Y1`/`DX`）、纯符号占位（`~ ~ ~`）、值名（`radius`）这三类**语言中性**的东西；③ `test:commands` 435 / `test:ui` 926 / `check:fast` 全绿；④ `TASKS.md` 的 `M8` 台账补一段（P1 收口内容 + 仍待做的数据层）
+  - 为什么用程序化巡查而不是"真机点一遍"：`?lang=xa` 的价值是"一眼看见没接 i18n 的文字"，但那种检查**不可复现、不进 CI**。把同一判据写成断言（伪语言开关 + 扫 `commandHelpEntries()` 的返回值）之后，每次 `test:i18n` 都在替人看
+  - ⚠️ 下拉选项 197/370 处仍没被包住 —— 全是**数据层**的名字（物品 / 方块 / 生物 / 进度标题 / 附魔 / 状态效果），属 P2；这一条断言现在只覆盖命令域，P2 做完后应把白名单收到"一处不漏"（已写进断言注释与 `M8` 台账）
+  - 验证：`test:i18n` **202 通过 / 0 失败**（新增 1 条巡查断言）；`test:commands` 435 / 0；`test:ui` 926 / 0；`typecheck`、`typecheck:tools` 无错误；`check:fast` 全绿（6/6 套）；`npm run audit:docs` 通过；`audit:i18n` 0 缺口 / 0 孤儿
+  - 批次：20261023-1855
+
+**队列原文 · 其余部分**（后续阶段路线图与验收口径，留档备查）：
+
+## 后续阶段路线图（非本批，按阶段另开队列）
+
+- **P2 数据层键化**（中文文本零变化）：物品/方块名 `item.<id>`（约 800）；说明 `item.desc.<id>`（独立文件，约 450 条长文）；生物名 `entity.<id>`（75）；职业/等级、附魔、效果、群系、维度、世界类型、音效组、外观 10 张、朝向、旗帜图案、配方书页签、类别；逻辑层 reason 串（`Loom` / `StationNeed` / 容器红底原因）
+- **P3 界面残留**：`TouchControls`（潜行/向上飞/向下飞）/ `Tooltip`（不可堆叠/最多 N 个）/ `BookScreen` / `SignEditor` / `NameTagEditor` / `CommandBlockEditor` / `BeaconScreen` / `UnsupportedScreen` / `StatisticsScreen` / `LoadingOverlay` / `relativeTime` / `index.html` 首屏 / `manifest.webmanifest`
+- **P4 新语言**：德语（最长串、复合词）→ 俄语（4 种复数 + 西里尔字体）→ 法语 → 葡语（巴西）；每语言一个批次，各在 `LOADERS` 加一行
+- **P5 Play 发行**：商店列表 6 份文案、Android 13 per-app language 透传、真实语言 `?lang=` 深链、`manifest.webmanifest` 多语言、真机横屏逐语言过一遍
+
+## 验收口径（本批）
+
+- `npm run check:fast` 与 `npm run check` 全绿
+- **命令输出逐字不变**：`test:commands` 434 条、`test:i18n` 的命令相关断言全绿
+- 命令域不再有第二套键约定：`commandMessages.data.ts` / `commandHelp.data.ts` / `UsageText.ts` 三个文件都删掉
+
 ## 批次 20261023-1847 · 2026-10-23 · 会话 b75f5b89
 
 **做了什么**：把"两个用 3D 做的 2D 小游戏"整体换成一个真 3D 的**跳一跳**——删掉推箱子 / 打砖块与旧渲染层（`BlockScene` / `blockGroups` / 通用关卡格式），目录 / 进度 / 选择页收成"单游戏 + 最高分"；新增跳一跳的纯逻辑（三方向生成器 / 蓄力距离 / 落点判定 / 连击计分 / 难度曲线 / 可达性保证）、柱子渲染（顶/侧/底三套 UV + 四套群系主题 + 相机跟随）、蓄力压缩与空中翻转、结算与最高分、特殊方块、WebAudio 合成音效；最后用 Playwright 跑 12 项端到端自查（含四张截图）与难度平衡模拟。共 12 条。
@@ -81,104 +188,4 @@
   - 批次：20261023-1847
 
 ---
-
-## 批次 20261023-0000 · 2026-10-23 · 会话 4024a9d4
-
-**做了什么**：多语言**基础设施（P0）**——把 i18n 从"一张 zh 表 + 一张 en 表 + 一个模块级语言状态"
-改成"6 种语言装得下"的骨架：语言元数据模块（`LOCALES` 六条 + 前缀匹配 + 兜底英文）、
-中文/英文各按界面拆成 9 个分组文件并**用 `satisfies Messages` 把键集卡到编译期**、
-语言清单接进运行时（`LocaleCode` + 稀疏表）、首次启动跟随系统（`language: 'auto'`）、
-回落链收到英文一档 + 列表连接与复数交给 `Intl`、按需加载 + 切语言整页重载、
-`npm run audit:i18n` 接进门禁 + `?lang=xa` 伪语言。共 9 条（8 条 P0 + 1 条审计驱动的 [发现]）。
-
-**条目**（原文照搬）：
-
-- [x] [P0-1] 语言元数据模块：新建 `src/core/i18n/locale.ts`（6 语言元数据 + 前缀匹配 + 兜底英文），`tools/i18n-test.ts` 补一节断言 → `npm run test:i18n` 全绿、`npm run typecheck` 不新增错误
-  - 做了什么：新建 `core/i18n/locale.ts`（`LOCALES` 六条元数据：短码 / 自称 / htmlLang / intlLocale；`isLocaleCode` / `localeMeta` / `matchLocale` / `detectLocale`），`tools/i18n-test.ts` 新增一节 22 条断言
-  - 为什么：旧 `I18n.detectLanguage()` 只认 zh/en、其余一律回中文，等于"陌生语言用户被塞中文"；且语言清单与自称写死在 `I18n.ts` 里，加语言要动逻辑文件。拆出来后**加语言 = 在 `LOCALES` 加一行**
-  - 三个刻意的取舍：① 短码存设置（`zh`/`en` 老存档不用迁移）；② 只做前缀匹配、不做语言协商（玩家的选择优先于设备猜测）；③ 匹配不到返回 `null`，兜底由 `detectLocale()` 定成**英文**——"匹配对不对"与"兜底选谁"分开验
-  - 验证：`npm run test:i18n` 135 通过 / 0 失败（原 113 + 新增 22）；`npm run typecheck` 与 `npm run typecheck:tools` 均无错误
-  - 批次：20261023-0000
-- [x] [P0-2] zh 主表拆成命名空间：把 `I18n.ts` 的 `ZH` 搬进 `core/i18n/locales/zh/*.ts`（menu / settings / inventory / station / chat / progress / minigame / misc），`index.ts` 合成 → `npm run test:i18n` **一条断言都不改**仍然全绿（证明是纯搬运）
-  - 做了什么：`I18n.ts` 里的 454 条中文按界面拆成 9 个文件（`menu` 33 / `settings` 81 / `inventory` 123 / `station` 78 / `editor` 38 / `chat` 18 / `progress` 24 / `minigame` 38 / `misc` 21），`locales/zh/index.ts` 合成并导出 `MessageKey` / `Messages`；`I18n.ts` 只留 `const ZH = zh` 一行别名（495 行删到 7 行）
-  - 为什么用脚本搬：454 条手打必出错。写了一次性脚本 `.tmp/split-zh.mjs` 解析 `const ZH = {…}` 块（注释挂下一条、续行归上一条），按前缀分组输出；`I18n.ts` 只做"删块 + 加 import + 加别名"
-  - 为什么分组从 8 个变 9 个：第一版跑完 `misc` 收了 62 条、跨 12 个命名空间，正是这次要消掉的"杂物抽屉"。加 `editor`（`book.*` / `sign.*` / `template.*` / `buildtools.*`），并把 `recipeBook.*` 归 `inventory`、`beacon.*` 归 `station`，`misc` 降到 21 条（`pause` / `death` / `sleep` / `fullscreen` / `install` / `unit`）
-  - 怎么验证"纯搬运"：搬运前后各把 `TABLES.zh` 导成 JSON 排序比对（`.tmp/dump-zh.ts`），**627 条键与值零 diff**；再加 `test:i18n` 135 条一条没改仍全绿
-  - ⚠️ 连带改了两处**已通过**的断言（用户拍板：改成走 `t()` 查表）：`ui-test.ts` 3 条（暂停菜单「继续游戏 / 设置 / 保存并退出」）与 `tutorial-test.ts` 2 条（石镐说明、删掉的四步不留文案）原本是"读 `I18n.ts` 源码找中文字面量"，表搬走后必然假红。改后验的是"键对 + 中文值对"，今后再搬文件不会再红
-  - ⚠️ 顺带统一了"中文字面量守卫"的口径：`i18n-test.ts` 里同一套判据原来在 5 处各抄一遍，抽成 `firstCjkLiteral()` / `linesWithCjkLiteral()` 两个函数，并把口径写进注释（**中文只允许住在 `locales/zh/**`**）；新增一条"分组文件都被 `index.ts` 合并、不留孤儿"的断言（拆了文件忘了合并会红）
-  - 验证：`npm run test:i18n` 139 通过 / 0 失败（135 + 新增 4）；`npm run test:ui` 926 / 0；`npm run test:tutorial` 113 / 0；`npm run typecheck`、`npm run typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-3] en 同构拆分 + 编译期卡齐：`locales/en/*.ts` 用 `satisfies Messages`（`MessageKey` 由 zh 的 `as const` 推导）→ 故意删一条键时 `npm run typecheck` 必须报错（验完还原）
-  - 做了什么：454 条英文按与中文**同一套前缀规则**拆成同样的 9 个文件；每个分组文件用 `satisfies Pick<Messages, keyof typeof zhXxx>`，`locales/en/index.ts` 用 `satisfies Messages` 收口；`I18n.ts` 只留 `const EN = en` 别名
-  - 为什么分组用 `Pick<Messages, keyof typeof zhXxx>` 而不是在 index 处一次性卡：这样报错会**指到具体分组文件的具体行**，而不是只说"index 里少了个键"。实测删 `settings.group.game` 时 tsc 同时报两处：`en/settings.ts(96,3)` 与 `en/index.ts(31,3)`
-  - 为什么还要 `satisfies` 而不只靠 `keyParity()`：后者是运行期断言（跑测试才知道），前者在 `typecheck` 里，而 `typecheck` 已经在 `check:fast` 与提交守卫里了 —— 零额外成本
-  - 顺手把 `I18n.ts` 文件头第 3 条约定改写：原来说"中英键集一致靠 `keyParity()` 给断言用"，现在键集由类型保证，`keyParity()` 退居第二道防线（留给"表是运行时拼出来的"那种情况，比如命令回执合并进来的 129 条）
-  - 怎么验证"纯搬运"：搬运前后各把 `TABLES.en` 导成 JSON 排序比对 → **627 条键与值零 diff**
-  - 编译期卡齐的验收：`sed` 删掉 `en/settings.ts` 的 `'settings.group.game'` → `npm run typecheck` 报 `TS2741 Property '"settings.group.game"' is missing`（两处）→ 从备份还原 → typecheck 重新通过
-  - 新增守卫（`test:i18n` +4 条）：英文分组与中文一一对应、每个分组都带 `satisfies Pick<Messages`、`index.ts` 带 `satisfies Messages` —— 防"类型保护被悄悄删掉"
-  - 验证：`npm run test:i18n` 142 通过 / 0 失败；`npm run typecheck`、`npm run typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-4] 语言清单接进运行时：`Language` 扩成 `LocaleCode`、`TABLES` 改稀疏表（缺表回落 en）、`detectLanguage` 走 `LOCALES` 匹配、`setLanguage` 的 `<html lang>` 走 `htmlLang` → `test:i18n` 补 `fr-FR → fr` 的新语义断言
-  - 做了什么：`Language = LocaleCode`（6 种）；`TABLES` 改成 `Partial<Record<LocaleCode, …>>` 稀疏表 + `tableOf()` 取表（没装返回空表，调用方不必判空）；`LANGUAGES` 改成**从表派生**的可选语言（现在仍是 zh/en，写完某语言表会自动出现）；`LANGUAGE_NAMES` 从 `LOCALES` 派生；`detectLanguage` 转发 `detectLocale`、`isLanguage` 转发 `isLocaleCode`；`setLanguage` 的 `<html lang>` 走 `localeMeta().htmlLang`
-  - 回落链改成 **当前 → 英文 → 中文 → 键名**：德语缺一条退英文是对的（德语用户多半看得懂），退中文等于把界面切成看不懂的字；中文留在链尾做最后兜底
-  - 三个刻意的取舍：① `LANGUAGES`（可选）与 `LOCALES`（支持）分开——"能选但没内容"比不列更糟，所以下拉只列有表的；② `isLanguage` 认**支持的全集**而不是"有表的"——存档里存了 `de` 不该被判成脏数据、把玩家设置重置掉；③ 没有直接动 `DEFAULT_LANGUAGE`（仍是 `zh`），"首次启动跟随系统"是 P0-5 的事，这条不做半截
-  - ⚠️ 连带修了 3 处同类"双语假设"（`typecheck` 当场抓出来的 + 同批 grep 出来的）：`UsageText.translateUsageFields` 的参数类型 `'zh' | 'en'` 放宽到 `Language`；`messages.pickLabel()` 与 `advancementText.ts` 三处判定从"是不是英文"改成"**是不是中文**"——原来德/俄用户会在这几处拿到中文（`Weather set to 下雨` 那类半截话的根源）
-  - ⚠️ 改了两条**已通过**的断言（条目里预先约定了）：`detectLanguage('fr-FR')` 由"回退中文"改成 `'fr'`、`detectLanguage(undefined)` 改成 `'en'`；另加 4 条（`de-AT`/`pt-BR`/`ja-JP` 的匹配与兜底）
-  - 验证：`npm run test:i18n` 154 通过 / 0 失败（142 + 新增 12）；`test:settings` 111、`test:commands` 434、`test:advancement` 116 全绿；`typecheck` 与 `typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-5] 首次启动跟随系统：设置项加 `language: 'auto'`（老存档迁移 + 写坏回退）、设置页下拉加"跟随系统"、`boot()` 时按 `navigator.language` 定语言 → `npm run test:settings` 与 `test:i18n` 全绿
-  - 做了什么：`I18n.ts` 新增 `AUTO_LANGUAGE` / `LanguageSetting` / `isLanguageSetting` / `deviceLanguage` / `resolveLanguage(setting, tag?)` / `applyLanguageSetting()`；`GameSettings.language` 改成 `LanguageSetting`，出厂默认改成 `auto`；设置页下拉变成 `['auto', ...LANGUAGES]`，`auto` 那条标签显示"跟随系统（English）"（括号里是**这台设备**解析出来的语言）；`boot()` 第一屏之前调 `applyLanguageSetting(loadSettings().language)`
-  - 为什么 `auto` 不塞进 `Language`：它不是一种语言，没有文案表、也不该进 `TABLES`。混进去会让 `t(key,'auto')` 在类型上合法却永远查不到东西，所以单独一个 `LanguageSetting` 联合类型
-  - 为什么老存档里的 `zh`/`en` 原样保留：那是玩家当时的选择（或旧版默认）。换默认值不该把老玩家的界面语言改掉 —— 只有"没这个字段 / 写坏了"才回落到 `auto`
-  - 为什么下拉只列有表的语言：`auto` 之后是 `LANGUAGES`（从 `TABLES` 派生），所以德语表没写之前不会出现"Deutsch 选了没反应"
-  - ⚠️ 顺带修掉一个**既有缺陷**：`setLanguage()` 原来只在 `SettingsScreen.applyLanguage()` 里被调用（打开设置面板时才跑），也就是说**存档里存的 `en` 在启动时根本没生效**——主菜单一直是中文，直到打开设置。现在 `boot()` 在建任何界面之前先应用一次
-  - 验证：`test:i18n` 163 通过 / 0 失败（154 + 新增 9）；`test:settings` 119 通过 / 0 失败（111 + 新增 8：出厂默认、老存档保留、写坏回落、德语虽无表也合法）；`typecheck` / `typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-6] 回落链与语言相关格式：`t()` 回落 当前 → en → key（去掉硬编码 `ZH`）、`joinList` 改 `Intl.ListFormat`、新增 `tn()`（`Intl.PluralRules`，为俄语 4 种复数留口）→ `test:i18n` 补 de/ru 假数据用例
-  - 做了什么：`t()` 回落链砍到 **当前 → 英文 → 键名**（去掉"最后退中文"）；`joinList` 改走 `Intl.ListFormat(conjunction)`；新增 `plural.ts`（零依赖：`PluralCategory`/`PluralForms`/`PluralTable` + `pluralCategoryFor`）；`I18n.ts` 加 `PLURAL_TABLES`/`pluralTableOf`/`pluralCategory`/`tn()`；`tp()` 与 `tn()` 共用抽出来的 `substitute()`
-  - ⚠️ 中文列表连接**按用户拍板改成 Intl conjunction**：`木板、圆石、木棍` → `木板、圆石和木棍`，两项 `木板和圆石`。这是本批唯一有意的中文可见变化（换来不再为每种语言手写连接规则），对应断言也照新口径改了
-  - 为什么去掉"最后退中文"这一档：`locales/en/**` 已由 `satisfies Messages` 保证键集与中文完全一致，英文那一档不可能查空；留着退中文反而会把"漏翻"伪装成"只是语言不对"
-  - `tn()` 的两个关键取舍（都踩过）：① **复数类别必须跟模板同语言**——拿德语规则去英文模板里挑类别，会挑出英文没有的 `few`/`many`，最后只能退 `other`；② 判断"这条文案最终由哪种语言提供"用的是 `t()` 同一条回落判据，不是"当前语言的复数表有没有这个键"
-  - 复数只登记**真正会读错**的键：`station.brewLeft`（英文 `{count} more brews` → 1 时读错），其余用 `t()` 那一条；中文没有复数形式（CLDR 只有 other），自动走回落
-  - ⚠️ 自己写错一条断言并修正：最初用 `t(key,'de') === key` 判"英文表是否完整"，但命令回执里有 `{name} Health = {value}` 这种**语言中性**条目，英文值就是键本身，被误报。改成判"键在不在英文表里"
-  - 验证：`test:i18n` 180 通过 / 0 失败（163 + 新增 17）；`test:ui` 926、`test:inventory` 103 全绿；`typecheck` / `typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-7] 按需加载 + 切语言重载：`loadLocale()`（zh/en 静态、ru/pt/fr/de 动态 `import()`）、`boot()` 先加载再建 UI、切语言存设置后 `location.reload()`，删除 `SettingsScreen.applyLanguage()` 系列 → `npm run test:ui` / `test:settings` 全绿
-  - 做了什么：`TABLES` 改成"可写池 `TABLE_POOL` + 只读视图"；新增 `LocaleModule` 类型、`LOADERS` 注册表、`registerLocaleLoader()`、`loadLocale(code)`（异步，失败**不抛异常**只返回 false）；`LANGUAGES` 常量改成函数 `availableLanguages()`（有表**或**有加载器才算可选，因为表现在会在运行时填进来）；`applyLanguageSetting()` 改成 `resolve → loadLocale → setLanguage` 的异步链，`boot()` 里 `await` 它；设置页切语言改成存设置 + `location.reload()`；删掉 `labelBindings` / `applyLanguage()`，`bindLabel()` 只写文案
-  - 为什么 zh/en 不走动态加载：中文是源语言、英文是回落链的唯一一档，两者**第一帧**就要用（首屏提示、`<html lang>`、每次 `t()` 的兜底），异步会把启动改成"先白屏再出字"
-  - 为什么现在 `LOADERS` 是空表：ru/pt/fr/de 的表还不存在，写 `import('./locales/de/index.ts')` 会直接构建失败。P4 写完某语言的表就在 `LOADERS` 加一行（`de: () => import('./locales/de/index.ts')`），这也是唯一的一步。加载链本身已用**假语言**在断言里跑通（注册 `de` → 加载 → 表进池子 → `t()` 查得到 → 可选清单变长）
-  - 为什么切语言要整页重载：局部重刷（`applyLanguage()`）只能覆盖挂了 ref 的那几个节点，物品名/生物名/成就/命令反馈/配方书都刷不到；这套机制已经踩过"`applyInventoryChrome()` 把硬编码写回去、刷完一秒又被覆盖"的连环坑。重载后 `boot()` 重新解析、加载、建界面，`applyLanguage()` 整条机制可以删掉
-  - ⚠️ 连带改了一句文案：`settings.language.hint` 从"切换后重新打开本面板生效"改成"切换后游戏会重新加载以生效"（旧文案在重载机制下已经是错的）
-  - ⚠️ 断言侧机械适配：`LANGUAGES` → `availableLanguages()`（6 处调用点，语义不变）；`applyLanguageSetting` 现在是 async，断言里加 `await`
-  - 验证：`test:i18n` 190 通过 / 0 失败（180 + 新增 10）；`test:ui` 926、`test:settings` 119、`test:unit` 151（20 文件）全绿；`typecheck` / `typecheck:tools` 无错误
-  - 批次：20261023-0000
-- [x] [P0-8] 审计与伪语言：`npm run i18n:audit`（扫 `t('…')` / `tp('…')` 字面量 → 报"用了但没有 / 有但没人用 / 各语言覆盖率"）接进 `check:fast`；`en-XA` 伪语言（`?lang=xa`）→ `npm run i18n:audit` 报 0 缺口
-  - 做了什么：新增 `tools/i18n-audit.ts`（+ `npm run audit:i18n`，接进 `check:fast` 与 `check` 的 typecheck 之后，便宜且早失败）；`I18n.ts` 新增 `setPseudoLocale` / `isPseudoLocale` / `isPseudoLocaleTag` / `pseudoText`，`boot()` 里 `?lang=xa` 打开伪语言
-  - 审计的三条判据：**缺失**用窄判据（只认 `t()`/`tp()`/`tn()`/`msg()` 的直接第一参数，硬错误 `exit 1`）、**孤儿**用宽判据（源码里出现过该字符串就算引用，只报告不失败）、**覆盖率**按 `LOCALES` 逐语言报
-  - 两个刻意的取舍：① **先剥注释再扫**——这个仓库注释里大量出现键名，不剥会把死文案算成有人用；② **剥注释要保留行号**（注释行换成空行而不是删掉），否则报出来的 `file:line` 会位移
-  - 🔴 **审计第一次跑就抓到一个真 bug**：`Commands.ts:572` 的 `msg('{key} 已设置为 {value}（超出范围，已夹到 {clamped}）')` 在 `commandMessages.data.ts` 里**没有对应英文**。中文下看不出（键就是中文原文），英文下会整句漏中文。已补 `'{key} set to {value} (out of range, clamped to {clamped})'`
-  - 另一处误报也修了：`msg('当前游戏规则：\n{rules}')` 扫出来是反斜杠+n 两个字符，而表里的键是真换行 → 加 `decodeLiteral()` 还原转义（`\n` / `\t` / `\uXXXX` / 引号）
-  - 伪语言为什么用"包括号"而不是"换字母变音"：中文文案也要能一眼认出来，而音标只对拉丁字母有意义；括号也不吃字宽，不会把正常界面撑坏
-  - ⚠️ 伪语言是**运行期变换**（在 `t()` 出口包一层），不是造一张 `en-XA` 假表：假表只能覆盖"已有的键"，而这里要照的是"没接 i18n 的文字"，两者覆盖面一样但变换版不需要新 LocaleCode、新表、新加载器
-  - 实测数字：353 个文件 · 554 处直接调用 · 表里 629 条键 · zh/en 各 100% · 孤儿 73 条（多含数据驱动取键）
-  - 验证：`npm run audit:i18n` → 0 缺口、exit 0；`test:i18n` 198 通过 / 0 失败（190 + 新增 8）；`npm run check:fast` 全绿（typecheck + audit:i18n + vitest 151 + 离线 172 套，17.3s）
-  - 批次：20261023-0000
-
-- [x] [发现] 先修 `audit:i18n` 的引用判据，再清确实死掉的键（顺序不能反：判据不可信时删键 = 让界面显示裸键名，而且不报错）
-  - 做了什么（修判据）：`tools/i18n-audit.ts` 换掉"按成对单引号切字符串"的做法，改成两条更稳的判据 —— ① **源码子串包含**（`code.includes(key)`）；② **模板拼键前缀**（`t(`settings.opt.fps${n}`)` → 前缀 `settings.opt.fps`；短于 4 字符不收，避免 `settings.` 把整片放行）。报告里把 4 个前缀打出来，过宽前缀一眼可见
-  - 做了什么（清键）：删 4 条确认死文案（zh + en 各一份）：`settings.language.hint`（重载提示从未被渲染）、`settings.row.autosave`（批次 528 删掉自动保存行）、`slot.rename`（铁砧用的是 `slot.anvilRename`）、`tutorial.title`（引导卡标题另有来源）。表 629 → **625** 条
-  - 为什么旧判据不可信：它靠"成对单引号"切字面量，一行里反引号模板与单引号混排时配对错位、后面整段被切乱 —— 实测 `inventory.recipeBook` 明明写在 `InventoryScreen.ts:1038` 却被报成孤儿，`settings.opt.fps30` 这类模板拼键也全被判死。**73 条里只有 4 条是真的**
-  - 验证：`npm run audit:i18n` → 孤儿 73 → **0**，zh/en 覆盖率 625/625 100%，exit 0；`npm run test:i18n` 198 通过 / 0 失败（死键同时从两处"必需键"清单里去掉：`required` 与 `slotKeys`）；`npm run check:fast` 全绿（命中 14/172 套）
-  - 批次：20261023-0000
-
-**队列原文 · 其余部分**（验收口径与后续路线图，P1~P5 尚未开工，留档备查）：
-
-- `npm run check:fast` 与 `npm run check` 全绿
-- 中文与英文**文案内容零 diff**（P0 只搬不译）
-- 4 个新语言文件可以先不存在，但 `LOCALES` 登记之后，缺表必须被审计报出来，而不是静默回落
-- **P1 命令域键化**：129 条回执 → `cmd.*`；`usageError('中文用法')` → `usageError('tp')` 查 `cmd.usage.*`；`/help` 的 usage/description 进表；删除 `USAGE_FIELD_NAMES` / `translateUsageFields` / `pickLabel`；`CommandHelp.ts` 的 140 条参数标签 + `CommandHelpScreen` 整屏
-- **P2 数据层键化**（中文文本零变化）：物品/方块名 `item.<id>`；说明 `item.desc.<id>`（独立文件）；生物名、职业/等级、附魔、效果、群系、维度、世界类型、音效组、外观 10 张、朝向、旗帜图案、配方书页签、类别；逻辑层 reason 串（`Loom` / `StationNeed` / 容器红底原因）
-- **P3 界面残留**：`TouchControls` / `Tooltip` / `BookScreen` / `SignEditor` / `NameTagEditor` / `CommandBlockEditor` / `BeaconScreen` / `UnsupportedScreen` / `StatisticsScreen` / `LoadingOverlay` / `relativeTime` / `index.html` 首屏 / `manifest.webmanifest`
-- **P4 新语言**：德语（最长串、复合词）→ 俄语（4 种复数 + 西里尔）→ 法语 → 葡语（巴西）；每语言一个批次
-- **P5 Play 发行**：商店列表 6 份文案、Android 13 per-app language 透传、`?lang=` 深链、真机横屏逐语言过一遍
 
