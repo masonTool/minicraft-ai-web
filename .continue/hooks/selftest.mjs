@@ -416,6 +416,63 @@ try {
     );
   });
 
+  check('auto-continue · 硬停：先问人，再重置队列（顺序不许反）', () => {
+    plan(
+      's-plan-order',
+      ['## MS2 · 乙', '- 验收：`npm run test:b`', '- [~] `MS2.1` 最后一条 → 验收 `npm run test:b`'].join('\n'),
+    );
+    planQueue('s-plan-order', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-order'));
+    if (r.code !== 2) return expect(false, '应硬停', r);
+    const ask = r.err.indexOf('弹窗问用户');
+    const reset = r.err.indexOf('只有用户选了');
+    // 第 5 步（重置队列）在硬停时**整体不出现**：此刻动队列会让"调整/先收"的路径状态错乱
+    return expect(
+      ask > 0 && reset > ask && !r.err.includes('5. **不要删除队列文件**'),
+      '硬停必须先问人、拿到答复后才重置队列；现在把重置写在问之前（或根本没拆开）',
+      r,
+    );
+  });
+
+  check('auto-continue · 计划一条阶段都没有 → 告警，不整体收尾（H2）', () => {
+    plan('s-plan-empty', '# 只有标题\n');
+    planQueue('s-plan-empty', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const r = hook('auto-continue.mjs', stop('s-plan-empty'));
+    return expect(
+      r.code === 2 &&
+        r.err.includes('一条阶段都没有') &&
+        !r.err.includes('[auto-continue · 计划已全部完成]'),
+      '空计划必须告警；按"已完成"处理会把整批悄悄归档、什么都不留',
+      r,
+    );
+  });
+
+  check('auto-continue · 计划关卡连续 N 轮没推进 → 升级成「卡住了」告警', () => {
+    plan(
+      's-plan-stuck',
+      [
+        '## MS1 · 甲',
+        '- 验收：`npm run test:a`',
+        '- [~] `MS1.1` 当前 → 验收 `npm run test:a`',
+        '- [ ] `MS1.2` 下一条 → 验收 `npm run test:a`',
+      ].join('\n'),
+    );
+    planQueue('s-plan-stuck', '- [x] 甲\n  - 验证：`npm test` 通过');
+    const env = { CONTINUE_BLOCK_AFTER: '2' };
+    const first = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
+    const second = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
+    const third = hook('auto-continue.mjs', stop('s-plan-stuck'), env);
+    if (first.code !== 2 || !first.err.includes('计划里还有下一阶段')) {
+      return expect(false, '第一轮应下发续批指令', first);
+    }
+    if (second.code !== 0) return expect(false, '第二轮应只放行（不重复弹）', second);
+    return expect(
+      third.code === 2 && third.err.includes('计划卡住了') && third.err.includes('没有推进'),
+      '连续 N 轮没推进必须升级成告警；否则计划分支会永久空转、且不隔离',
+      third,
+    );
+  });
+
   // ---------------------------------------------------------------- 包装器
   /**
    * 这一组挡的是那次真实事故：`lib.mjs` 删了导出、`auto-continue.mjs` 还在 import，
