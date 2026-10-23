@@ -14,6 +14,8 @@
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
 // 多语言 P1-1b：用法与说明要**按当前语言**取，不能直接抄 spec 里的键
 import { commandDescription, commandUsage } from './messages.ts';
+// 字段身份表（多语言 P1-3a）：中英两种写法 → 语言无关的 slug，逻辑只认 slug
+import { ARG_LABELS, FREE_SLUGS, NUMBER_SLUGS, slugOf } from './commandFields.data.ts';
 import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
@@ -112,42 +114,6 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   '*': '全部（*）',
 };
 
-/** 参数名 → 中文标签（同一条 usage 里出现多次的 x/y/z 另算） */
-const ARG_LABELS: Readonly<Record<string, string>> = {
-  物品: '物品',
-  数量: '数量',
-  维度: '维度',
-  规则: '规则',
-  值: '值',
-  效果: '效果',
-  秒数: '秒数',
-  等级: '等级',
-  生物: '生物',
-  半径: '半径',
-  方块: '方块',
-  类型: '类型',
-  内容: '内容',
-  音效: '音效',
-  附魔: '附魔',
-  动作: '动作',
-  群系名: '群系',
-  结构名: '结构',
-  目标: '目标',
-  伤害: '伤害',
-  战利品表: '战利品表',
-  选择器: '选择器',
-  边长: '边长',
-  点数: '点数',
-  格号: '格号',
-  路径: '路径',
-  数值: '数值',
-  名称: '名称',
-};
-
-/** 这些"选项"其实是要玩家自己填的值，不能做成下拉 */
-const FREE_VALUE_CHOICES = new Set(['数字', '值', '内容', '命令', '半径', '进度 id', '…', '...']);
-
-const NUMBER_ARGS = new Set(['数量', '秒数', '等级', '伤害', '点数', '边长', '格号', '数值']);
 
 export function commandHelpEntries(): CommandHelpEntry[] {
   return COMMANDS
@@ -222,9 +188,10 @@ export function variantLabel(variant: CommandHelpVariant): string {
     .map((part) => VALUE_LABELS[part.value] ?? part.value);
   // “操作”下拉（`/team add|remove…`、`/scoreboard objectives add|…`）的默认值
   // 也要进变体名，否则两个变体都会显示成“记分项”/“玩家”，分不清。
+  // 判据是"有 options 的字段"（= 那个 `a|b|c` 的"操作"下拉），不再比中文字面标签
   const mode = variant.parts.find(
     (part): part is { kind: 'field'; field: CommandHelpField } =>
-      part.kind === 'field' && part.field.label === '操作' && part.field.options !== undefined,
+      part.kind === 'field' && part.field.options !== undefined,
   );
   const first = mode?.field.options?.[0];
   if (first) words.push(first.label);
@@ -343,10 +310,15 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
     };
   }
 
+  // ⚠️ 多语言 P1-3a：下面所有分支都按 **slug** 判，不再比中文字段名——
+  // 否则英文模式下 `inner` 是 `entity`/`item`，全部落空（数字框退化成文本框）。
+  const slug = slugOf(inner);
   const choices = inner.split('|').map((choice) => choice.trim()).filter(Boolean);
 
   // 进度 id：100 条进度都有中文标题，直接给下拉（`*` = 全部）
-  if (inner.includes('进度')) {
+  // 注意判据是"**任一** 选项是进度"：`<进度 id | *>` 的第一个词才是 advancement，
+  // 而 `slug` 取的是整个 `<…>` 的文本。原实现用 `inner.includes('进度')`，等价于此。
+  if (choices.some((choice) => slugOf(choice) === 'advancement')) {
     return selectField(index, '进度', optional, [
       { value: '*', label: '全部进度（*）' },
       ...ADVANCEMENTS.map((entry) => ({ value: entry.id, label: `${entry.title}（${entry.id}）` })),
@@ -355,9 +327,9 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
 
   if (choices.length > 1) {
     // `<day|noon|night|midnight|数字>`：固定选项做下拉，自由值做“自定义”输入
-    const free = choices.filter((choice) => FREE_VALUE_CHOICES.has(choice));
+    const free = choices.filter((choice) => FREE_SLUGS.has(slugOf(choice)));
     if (free.length > 0) {
-      const fixed = choices.filter((choice) => !FREE_VALUE_CHOICES.has(choice));
+      const fixed = choices.filter((choice) => !FREE_SLUGS.has(slugOf(choice)));
       if (fixed.length > 0) {
         return {
           key: `f${index}`,
@@ -387,7 +359,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
 
   const name = inner.trim();
   // 有现成数据源的参数直接给下拉，避免玩家背英文 id
-  if (name === '生物') {
+  if (slug === 'entity') {
     // 玩家不需要背英文 id：标签用中文名，命令里仍拼 id。
     return selectField(
       index,
@@ -396,7 +368,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       MOB_TYPES.map((mob) => ({ value: mob.id, label: `${mob.name}（${mob.id}）` })),
     );
   }
-  if (name === '命令') {
+  if (slug === 'command') {
     // `/help [命令]` 是"从现有命令里挑一条"；`/execute … run <命令>` 则是
     // 要玩家写一条任意命令，不能把后者也做成命令名下拉。
     if (optional) {
@@ -415,14 +387,14 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       placeholder: '例如 say hi / give @s stone',
     };
   }
-  if (name === '维度') {
+  if (slug === 'dimension') {
     return selectField(index, name, optional, [
       { value: 'overworld', label: '主世界' },
       { value: 'nether', label: '下界' },
       { value: 'end', label: '末地' },
     ]);
   }
-  if (name === '规则') {
+  if (slug === 'rule') {
     return selectField(
       index,
       name,
@@ -433,7 +405,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       })),
     );
   }
-  if (name === '效果') {
+  if (slug === 'effect') {
     return selectField(
       index,
       name,
@@ -441,7 +413,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       Object.entries(EFFECT_LABELS).map(([id, label]) => ({ value: id, label })),
     );
   }
-  if (name === '附魔') {
+  if (slug === 'enchantment') {
     return selectField(
       index,
       name,
@@ -449,7 +421,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       ENCHANTMENTS.map((entry) => ({ value: entry.id, label: entry.name })),
     );
   }
-  if (name === '类型') {
+  if (slug === 'type') {
     return selectField(index, name, optional, [
       { value: 'heart', label: '爱心（heart）' },
       { value: 'crit', label: '暴击（crit）' },
@@ -458,7 +430,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       { value: 'explosion', label: '爆炸（explosion）' },
     ]);
   }
-  if (name === '战利品表') {
+  if (slug === 'loot') {
     return selectField(
       index,
       name,
@@ -466,7 +438,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       LOOT_TABLES.map((table) => ({ value: table.key, label: `${table.name}（${table.key}）` })),
     );
   }
-  if (name === '结构名') {
+  if (slug === 'structure') {
     // 23 种结构都有中文名，直接给下拉（批次 624 / Q22）。
     // 标记"还不能定位"的两种也列出来但标清楚——它们是会生成的结构，
     // 藏起来反而让玩家以为"我们没做末地船"。
@@ -482,7 +454,7 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       })),
     );
   }
-  if (name === '值') {
+  if (slug === 'value') {
     return {
       key: `f${index}`,
       label: '值',
@@ -499,17 +471,11 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
   return {
     key: `f${index}`,
     label: labelForArg(name),
-    kind: NUMBER_ARGS.has(name) ? 'number' : 'text',
+    kind: NUMBER_SLUGS.has(slug) ? 'number' : 'text',
     optional,
     placeholder: placeholderFor(name),
     suggest:
-      name === '物品'
-        ? 'item'
-        : name === '方块'
-          ? 'block'
-          : name === '群系名'
-            ? 'biome'
-            : undefined,
+      slug === 'item' ? 'item' : slug === 'block' ? 'block' : slug === 'biome' ? 'biome' : undefined,
   };
 }
 
@@ -603,9 +569,9 @@ function labelForArg(inner: string): string {
   if (inner.includes('masked')) return '模式';
   if (inner.includes('as|at|')) return '条件';
   if (inner.includes('give|clear')) return '操作';
-  if (inner.includes('进度')) return '进度';
+  if (slugOf(first) === 'advancement') return '进度';
   if (inner.includes('@s')) return '目标 / 半径';
-  return ARG_LABELS[first] ?? first;
+  return ARG_LABELS[slugOf(first)] ?? first;
 }
 
 function placeholderFor(name: string): string {

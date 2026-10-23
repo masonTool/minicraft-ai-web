@@ -105,10 +105,10 @@ export const cmd = {
   'cmd.loot.usage': "/loot give <loot table> [count]",
   'cmd.loot.desc': "Roll a loot table and put the result in your inventory",
   // ---- /data
-  'cmd.data.usage': "/data get block <x> <y> <z> [path] | /data get entity <targets> [path] | /data merge block <x> <y> <z> <slot> <item> [count] | /data merge entity <targets> Health <value> | /data merge entity <targets> CustomName <name>",
+  'cmd.data.usage': "/data get block <x> <y> <z> [path] | /data get entity <selector> [path] | /data merge block <x> <y> <z> <slot> <item> [count] | /data merge entity <selector> Health <number> | /data merge entity <selector> CustomName <name>",
   'cmd.data.desc': "Read or write a subset of block-entity and entity fields (no generic NBT path — see TASKS)",
   // ---- /team
-  'cmd.team.usage': "/team add|remove|list|join|leave|modify (friendlyFire|color|prefix|suffix) …",
+  'cmd.team.usage': '/team add|remove|list|join|leave|modify …',
   'cmd.team.desc': "Teams: create, join, recolor, set prefix/suffix and friendly fire (friendly damage and collision are not wired yet — see TASKS M23)",
   // ---- /advancement
   'cmd.advancement.usage': "/advancement grant|revoke <advancement id | *>",

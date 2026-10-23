@@ -86,7 +86,7 @@ import { defaultBorder, normalizeBorder, type WorldBorder } from '../src/core/wo
 import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
 import { Experience } from '../src/core/survival/Experience.ts';
 // 中英双语回执的断言（批次 624）：切语言跑同一批命令，扫残留中文
-import { getLanguage, setLanguage } from '../src/core/i18n/I18n.ts';
+import { getLanguage, resetLanguageForTest, setLanguage } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;
@@ -700,6 +700,29 @@ console.log('\n[/help]');
       COMMANDS.every((spec) => all.out.infos.some((line) => line.startsWith(commandUsage(spec)))),
     `${all.out.infos.length} 条 / ${COMMANDS.length} 个命令`,
   );
+
+  /**
+   * 多语言 P1-3a 护栏：**中英两种语言下帮助面板的字段结构必须一致**。
+   *
+   * 这条正对着一个真实回归：P1-1b 把解析对象换成"本地化用法串"之后，英文模式拿到的是
+   * `<entity>` / `<count>`，而判断逻辑还按中文字段名分支 —— 数字框退化成文本框、
+   * 进度下拉直接消失，**不报错、只在英文界面看得出来**。比对 kind 与选项数量就能挡住它。
+   */
+  const helpShape = (): string =>
+    JSON.stringify(
+      commandHelpEntries().map((entry) => ({
+        name: entry.name,
+        parts: entry.variants.map((variant) =>
+          variant.parts.map((part) => (part.kind === 'field' ? `${part.field.kind}:${part.field.options?.length ?? 0}` : 'lit')),
+        ),
+      })),
+    );
+  setLanguage('zh');
+  const zhShape = helpShape();
+  setLanguage('en');
+  const enShape = helpShape();
+  resetLanguageForTest();
+  check('中英两种语言下帮助面板的字段结构一致（数字框 / 下拉不能因语言而退化）', zhShape === enShape);
   const one = run('/help fill');
   const oneText = one.out.infos.join('\n');
   check('/help <命令> 用法与描述分开，且都能看到', oneText.includes('/fill') && oneText.includes('32768'));

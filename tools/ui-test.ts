@@ -3981,7 +3981,6 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
 {
   const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const rulesSrc = readFileSync(new URL('../src/core/world/Rules.ts', import.meta.url), 'utf8');
-  const commandsSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
   check(
     '五条新规则都进了默认表（旧存档会被 normalizeGameRules 补齐）',
     ['doMobLoot', 'doTileDrops', 'doWeatherCycle', 'doInsomnia', 'doImmediateRespawn'].every((key) =>
