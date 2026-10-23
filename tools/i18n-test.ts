@@ -1450,6 +1450,41 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     check(`${code} WebGL 提示不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 60));
   }
   resetLanguageForTest();
+
+  /**
+   * 输出侧守卫（P6-6，批次 20261024-0020）：**全量**扫 `translateName()` 与 `itemDescription()`。
+   *
+   * 为什么必须单独立这一条：前面所有“巡查”查的都是**语言表的值**，而 2026-10-24 用户报的
+   * “很多方块的标题说明还没改”恰恰是**表外的中文**（`potions.ts` 的名字常量、`item_frame` 的
+   * `put(...)`、`fishing_rod` 的旧说明）。表里 100% 齐、`satisfies` 过、`audit:i18n` 也过 ——
+   * 只有把**渲染结果**扫一遍才会露出来。这条是那次的直接产物，也是以后加物品时的兜底。
+   *
+   * 口径：1130 个物品 × 4 语言 × {名字, 说明}，任何一处含中日韩字符就报（附前 5 条定位）。
+   */
+  {
+    const allItemIds: number[] = [];
+    for (let id = 0; id < 2000; id += 1) {
+      if (itemDef(id)) allItemIds.push(id);
+    }
+    check('输出侧守卫的样本量（物品数）足够', allItemIds.length > 1000, String(allItemIds.length));
+    for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+      setLanguage(code);
+      const leakedOutput: string[] = [];
+      for (const id of allItemIds) {
+        const def = itemDef(id);
+        if (!def) continue;
+        const key = def.name.replace('minecraft:', '');
+        if (/[\u4e00-\u9fff]/.test(translateName(key))) leakedOutput.push(`name:${key}`);
+        if (/[\u4e00-\u9fff]/.test(itemDescription(id))) leakedOutput.push(`desc:${key}`);
+      }
+      check(
+        `${code}：${allItemIds.length} 个物品的名字与说明全量没有中文`,
+        leakedOutput.length === 0,
+        leakedOutput.slice(0, 5).join(','),
+      );
+    }
+    resetLanguageForTest();
+  }
   }
   resetLanguageForTest();
   resetLanguageForTest();
