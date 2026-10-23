@@ -1,0 +1,9 @@
+# 钩子的运行日志与归档：每轮都写，只在本机。
+# 放在 .continue/ 里而不是项目根，这样不用改用户自己的 .gitignore。
+.logs/
+# 并行工作树与交接收件箱（`worktree.mjs` / `dispatch.mjs` 建在 `doing/.worktree/` 下）。
+# 每棵都是完整仓库副本，进版本库等于把项目复制一遍；不带前导斜杠 → 匹配任意层级。
+.worktree/
+# 刹车开关（touch 即停、删除即恢复），本机状态，不进版本库。
+auto.off
+.DS_Store

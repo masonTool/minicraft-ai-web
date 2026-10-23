@@ -1,0 +1,5 @@
+- [自动 Git 提交与版本记录](feedback_git_auto_commit.md) — 每次改动自动 review/commit/push，且每个独立改动单独提交保留版本记录
+- [auto-commit 钩子（只当守卫）](feedback_auto_commit_hook.md) — Stop 时发现未提交改动就拦住，交回 AI 自己提交；脚本不做 git 写操作
+- [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 用户要求不停下来等确认；Stop 钩子须用 continue:true + stderr + exit 2
+- [钩子路径必须自解析](feedback_hook_self_resolve.md) — 绝对路径换机/改目录必坏；相对路径依赖 cwd；正解是 import.meta.url 上退 2 层
+- [文档冲突时以谁为准](feedback_doc_authority.md) — TASKS.md > auto-continue.md > HANDOFF.md；摘要类文件无权威性，合并信息后删除，同一事实不写两处

@@ -1,0 +1,16 @@
+{
+  "checks": {
+    "fast": "node .continue/hooks/check.mjs --fast",
+    "full": "node .continue/hooks/check.mjs",
+    "timeoutSec": 60,
+    "project": [],
+    "projectSlow": []
+  },
+  "git": {
+    "push": true
+  },
+  "worktree": {
+    "auto": true,
+    "openWindow": true
+  }
+}

@@ -21,27 +21,30 @@ coverage/
 .continue/logs/
 .continue/*.off
 .continue/*.state.json
-# 旧位置（2026-10-22 迁移到 continue-do 之前留下的，防止漏网）
-.codebuddy/
-.codebuddy/hooks/logs/
-.codebuddy/*.off
-.codebuddy/*.state.json
-.codebuddy/logs/
-.codebuddy/process/
-.codebuddy/auto-continue.log
-.codebuddy/auto-continue.state.json
-.codebuddy/auto-commit.log
-.codebuddy/auto-commit.state.json
+# —— .codebuddy/：目录本体入库，只排除本机产物与第三方技能包 ——
+# 2026-10-24 修正：原先这里是一行 `.codebuddy/`，把整个目录挡在门外，
+# 与文末「进仓库的」清单（settings.json / memory/）自相矛盾。
+# 注意：git 的 `!` 不能穿透被排除的目录，必须先把目录本身 `!` 回来、再 `!` 回内容。
+.codebuddy/**
+!.codebuddy/settings.json
+!.codebuddy/memory/
+!.codebuddy/memory/**
+!.codebuddy/skills/
+!.codebuddy/skills/continue-task/
+!.codebuddy/skills/continue-task/**
+# 上面这些 `!` 会盖掉顶部的 `.DS_Store` 规则，得在它们之后再挡回来。
+.codebuddy/**/.DS_Store
+# 本机专属：插件开关（跨机器各自开）与运行产物
+# （logs / process / *.off / *.state.json 都已被上面的 `**` 挡掉，这里只补一条配置文件）。
+.codebuddy/settings.local.json
 
 # —— WorkBuddy 的工作区记忆（每日日志，本地性质，不进仓库）——
 # 与 .codebuddy/memory/（人工整理的版本化副本）分开：那是一份结论，这是每日流水
 .workbuddy/
 
 # —— 本地安装的技能包（每个会话按需加载，跨机器各自安）——
-.codebuddy/skills/*
-# 例外：continue-task 是本仓库机制补丁的**源**，必须跟代码一起版本化——
-# 否则重装会用旧模板覆盖 `.continue/hooks/`，本批的 5 个钩子修复就丢了。
-!.codebuddy/skills/continue-task/
+# 规则集中在上面 `.codebuddy/` 块：只有 continue-task 是本仓库机制补丁的**源**、
+# 必须跟代码一起版本化（否则重装会用旧模板覆盖 `.continue/hooks/`），其余技能包留在本地。
 
 # —— 进仓库的（显式列出，防止上面规则误伤）——
 # .continue/queues/           会话级队列

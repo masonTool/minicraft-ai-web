@@ -1,0 +1,27 @@
+# continue-do · CI 门禁
+#
+# 由安装器 `--ci` 写入 `.github/workflows/continue-do.yml`。
+# 跑的命令和本地**完全一致**（就是 `checks.full`）——CI 另写一套，迟早"本地绿、CI 红"，
+# 然后就没人看 CI 了（README §0 原理 4）。
+#
+# 想让 CI 也跑项目自己的测试：在 `.continue/config.json` 的 `checks.project` 里加命令，
+# 这里不用改。
+
+name: continue-do
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 同一套检查（编号 / 体量 / 配置 / 钩子自检 / 项目检查）
+        run: node .continue/hooks/check.mjs
