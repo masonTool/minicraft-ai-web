@@ -45,7 +45,8 @@ export const CONTINUE_DIR = join(PROJECT_ROOT, '.continue');
 /**
  * 进行中队列目录是 `doing/`（不是 `queues/`）。
  *
- * 名字直接对应状态：`doing/` 里是"正在做"的，收尾后整份搬进 `DONE.md`，原文归档到 `logs/doing-archive/`。
+ * 名字直接对应状态：`doing/` 里是"正在做"的，收尾后整份搬进 `DONE.md`，原文追加到
+ * `logs/<会话ID>/queue.md`（**累积**：每个批次一节，新的在最上面，`----------` 分隔）。
  * 只在这一个常量里定义目录名——所有路径都从它推导，改名时只需改这里一行。
  */
 export const DOING_DIR = join(CONTINUE_DIR, 'doing');
@@ -961,7 +962,8 @@ export function sessionOfPlan(name) {
  * 会话**决策记录**：`doing/decision-<session_id>.md`。
  *
  * 用户的规则：需要拍板的地方**以 AI 的意见为准**，但每一处都要记成人能看懂的形式留底。
- * 于是它和队列 / 计划一样是"正在做"的文件，收尾时同样加时间戳归档进 `logs/doing-archive/`。
+ * 于是它和队列 / 计划一样是"正在做"的文件，收尾时同样**追加**进 `logs/<会话ID>/decision.md`
+ * （累积、按批次分节，新的在最上面）。
  *
  * 为什么也叫 `<sid>` 结尾：三类文件（队列 / 计划 / 决策）靠前缀区分、靠会话 ID 配对，
  * 归档后还能一眼看出属于同一轮工作。

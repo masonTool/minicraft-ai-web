@@ -345,7 +345,7 @@ function wrapSteps(keepQueue = false, includeFifth = true) {
         ' 把 `> 批次：` 换成新号、条目整段换成下一阶段的 5~6 条。' +
         ' 删掉的话钩子下一轮按会话 ID 就找不到这个队列了，计划链在这里无声断掉。'
       : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
-        '   它把队列移到 `.continue/logs/<会话ID>/queue-<年月日时分秒>.md` 备查。' +
+        '   它把队列**追加**到 `.continue/logs/<会话ID>/queue.md` 的最上面（一个批次一节、`----------` 分隔），原文不会丢。' +
         '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
         '   **决策记录与计划会跟着队列一起归档**，不用再单独跑 `--decision` / `--plan`。']
       : []),
