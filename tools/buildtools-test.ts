@@ -56,6 +56,7 @@ import {
   pauseBarBottom,
   toggleOverlapsPauseBar,
 } from '../src/ui/buildToolbarLayout.ts';
+import { tableOf } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;
@@ -939,6 +940,112 @@ console.log('\n主程序接线（静态断言）');
   check('建造模式下不攻击', mainSrc.includes('if (this.buildMode) return;'));
   check('建造模式下左键改成选区角', mainSrc.includes('this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z })'));
   check('工具条按创造模式显隐', mainSrc.includes('this.buildToolbar.setAvailable(this.isCreative)'));
+}
+
+// ------------------------------------------------------------------ 抽屉形态（批次 20261024-0344）
+
+console.log('\n折叠态总开关与跳跃键（不重叠、不抢点击）');
+{
+  // 跳跃键的几何来自 `index.html` 的 `#touch-ui` 变量（改那边要回来改这里）：
+  //   --touch-jump-size     = 76 × touchScale
+  //   --touch-buttons-inset = 40 + (132 − 76) / 2 × touchScale
+  //   ⇒ 右边界 = 视口宽 − (40 + 28 × touchScale)
+  const jumpRight = (width: number, scale: number) => width - 40 - 28 * scale;
+  const viewports: Array<[string, number, number]> = [
+    ['844×390', 844, 390],
+    ['640×360', 640, 360],
+  ];
+  for (const scale of [0.8, 1, 1.4]) {
+    for (const [label, width, height] of viewports) {
+      const toggle = buildToggleBox(width, height);
+      const gap = toggle.left - jumpRight(width, scale);
+      // 上一版双列竖条在这里重叠 32×76，而且 `z-index: 9` 把跳跃键的点击抢走了
+      check(`${label} @${scale}x：与跳跃键横向留出间隙`, gap > 0, `间隙 ${gap}`);
+      check(
+        `${label} @${scale}x：开关四边在视口内`,
+        toggle.left >= 0 && toggle.top >= 0 && toggle.right <= width && toggle.bottom <= height,
+        `left ${toggle.left} top ${toggle.top}`,
+      );
+    }
+  }
+}
+
+console.log('\n抽屉形态（DOM / 状态机 / 被谁引用）');
+{
+  const toolbarSrc = readFileSync(new URL('../src/ui/BuildToolbar.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // 上一版 `buildToolbarFits()` 只被测试引用，等于"设计活在测试里"——这次把"被引用"本身钉成断言
+  check(
+    '抽屉几何真的被工具条用上（不是只活在测试里）',
+    toolbarSrc.includes('buildDrawerBox(') && toolbarSrc.includes('buildCellSize('),
+  );
+  check('装不下时走滚动降级（drawerFits 真的被调用）', toolbarSrc.includes('drawerFits('));
+  check(
+    '旧的"9 个按钮挤一条"已删干净',
+    !toolbarSrc.includes("'extra'") && !toolbarSrc.includes('build-templates'),
+  );
+  check(
+    'index.html 里也没有旧的双列竖条',
+    !html.includes('grid-template-columns: repeat(2, 44px)') && !html.includes('.build-templates'),
+  );
+  check('抽屉层级低于背包（z-index: 9）', /#build-toolbar \{[^}]*z-index: 9/.test(html));
+  check('遮罩吃点击（pointer-events: auto）', /\.build-backdrop \{[^}]*pointer-events: auto/.test(html));
+
+  // 状态机：开面板 = 开模式；收面板 ≠ 退模式；结束建造 = 三件事一起做
+  check('打开抽屉顺带开建造模式', /openPanel\(\): void \{[\s\S]*?setMode\(true, true\)/.test(toolbarSrc));
+  const closePanelBody = toolbarSrc.slice(
+    toolbarSrc.indexOf('closePanel(): void {'),
+    toolbarSrc.indexOf('dispose(): void {'),
+  );
+  check('收起面板不退建造模式', closePanelBody.length > 0 && !closePanelBody.includes('setMode('));
+  check(
+    '「结束建造」= 收面板 + 关模式 + 清选区回调',
+    /private endBuild\(\): void \{[\s\S]*?closePanel\(\)[\s\S]*?setMode\(false\)[\s\S]*?onEndBuild\(\)/.test(toolbarSrc),
+  );
+  check(
+    '格子里有图标 + 两字标签 + 一句短语',
+    toolbarSrc.includes('build-cell-label') && toolbarSrc.includes('build-cell-hint'),
+  );
+  check(
+    '模板在面板内翻第二页',
+    toolbarSrc.includes("setPage('templates')") && toolbarSrc.includes('build-page-templates'),
+  );
+}
+
+console.log('\n抽屉接线（主程序）');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '非创造时把 buildMode 一起清零',
+    mainSrc.includes('if (!this.isCreative && this.buildMode) this.buildMode = false;'),
+  );
+  check('onEndBuild 接进主程序', mainSrc.includes('onEndBuild: () =>'));
+  check('抽屉开合接指针锁（onPanelChange）', mainSrc.includes('onPanelChange: (open) =>'));
+  check('面板开着时键盘只认 Esc', mainSrc.includes('if (this.buildToolbar.isPanelOpen) {'));
+  check('验收 API 暴露 panelOpen', mainSrc.includes('panelOpen: this.buildToolbar.isPanelOpen,'));
+}
+
+console.log('\n抽屉文案（8 个工具 × short / hint）');
+{
+  const tools = ['select', 'fill', 'copy', 'paste', 'mirror', 'undo', 'redo', 'template'] as const;
+  for (const language of ['zh', 'en'] as const) {
+    const table = tableOf(language);
+    const missing = tools.filter(
+      (id) => !table[`buildtools.tool.${id}.short`] || !table[`buildtools.tool.${id}.hint`],
+    );
+    check(`${language}：8 个工具的 short 与 hint 都在`, missing.length === 0, missing.join(' '));
+  }
+  const zh = tableOf('zh');
+  equal(
+    '中文短标签都是一句话两字',
+    tools.map((id) => [...(zh[`buildtools.tool.${id}.short`] ?? '')].length).join(','),
+    '2,2,2,2,2,2,2,2',
+  );
+  check(
+    '面板框架三条文案入表',
+    !!zh['buildtools.panel.title'] && !!zh['buildtools.panel.endBuild'] && !!zh['buildtools.toggle.short'],
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
