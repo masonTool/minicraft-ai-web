@@ -17,13 +17,13 @@
 | `station` | 106 | ✅ 葡语（工作站 / 容器 / 回执） |
 | `inventory` | 122 | ✅ 葡语 |
 | `label` | 226 | ✅ 葡语 |
-| `item` | 644 | ⬜ 英文占位 |
-| `entity` | 75 | ⬜ 英文占位 |
+| `item` | 644 | 🟡 部分：构件与模板 128 条已翻，**516 条显式物品名仍是英文** |
+| `entity` | 75 | ✅ 葡语 |
 | `cmd` | 243 | ⬜ 英文占位 |
 | `cmdMessages` | 170 | ⬜ 英文占位 |
 | `itemDesc` | 288 | ⬜ 英文占位 |
 
-合计 **2168 条**：已翻 **748**（审计报 745 —— `audit:i18n` 按"值是否逐字等于英文"判，`Normal` / `TNT` 这类会被算成未翻）。
+合计 **2168 条**：已翻 **951**（审计报 936 —— `audit:i18n` 按"值是否逐字等于英文"判，`Normal` / `TNT` 这类会被算成未翻）。
 
 ## 条目点名的三件事，都已坐实
 
@@ -36,19 +36,22 @@
 
 ## 还差的批次（按顺序）
 
-1. **`item` + `entity`**（719 条，先构件与模板再逐条过显式名）—— P4-4c
+1. **`item` 的 516 条显式物品名** —— P4-4c2
 2. **`cmd` + `cmdMessages`**（413 条，⚠️ 必须保留 `<>` `[]` `|`）—— P4-4d
 3. **`itemDesc`**（288 条长文，分两批过）—— P4-4e
 
-## 葡语拼名的预判（照前三门语言的结论）
+## 葡语拼名：预判与实测一致（P4-4c1 已落地）
 
-| 族 | 葡语写法 | 理由 |
+| 族 | 葡语写法 | 结论 |
 | --- | --- | --- |
-| 颜色 10 族 | `Lã branca` / `Cama laranja` | 形容词要与名词的性数配合（`lã` 阴、`tapete` 阳），一个 `{color}` 服务不了 10 个名词 |
-| 木材 / 珊瑚 / 工具 / 盔甲 | 模板可拼（`Tábuas de carvalho`、`Picareta de diamante`） | 介词结构天然成立 |
-| 台阶/楼梯/墙 | `Laje de pedra` / `Escada de pedra` / `Muro de pedra` | 同上 |
+| 颜色 10 族 | `Lã (branco)` / `Cama (laranja)` | ❌ 不能用 `Lã branca`：形容词要与名词性数配合，模板对 16×10 只放一个 `{color}` → **括号归属式**（与俄语同） |
+| 木材 / 珊瑚 / 工具 / 盔甲 | `Tábuas de carvalho` / `Bloco de coral tubular` / `Picareta de diamante` / `Peitoral de netherita` | ✅ `de + 名词` 天然成立 |
+| 台阶/楼梯/墙 | `Laje de pedra` / `Escada de pedra` / `Muro de pedra` | ✅ 同上 |
+| 深层矿石 / 失活珊瑚 | `Minério de ferro (ardósia profunda)` / `Coral tubular morto` | 深层用括号（避免句中大写），失活用**后置** `morto` |
 
-⚠️ 到 P4-4c 落地时以实际渲染结果为准，与德语/俄语/法语那三份台账对照。
+⚠️ 已知外观瑕疵（与法语同一个）：木板类基名是独立物品名、首字母大写，所以拼出来是
+`Escada de Tábuas de carvalho`（句中大写），受影响 6 木材 × 3 变体 = 18 个名字。键空间由中文表决定，
+要修得让"独立名"与"构件名"分开存，代价大于收益 —— 接受。
 
 ## 加一种语言的完整步骤（pt 已照此走完前 4 步）
 
