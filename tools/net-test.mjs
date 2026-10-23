@@ -697,6 +697,33 @@ try {
     check('隔空改容器被拒', (await alice.wait('container', 500)) === null);
   }
 
+  // ---------------------------------------------------------------- 广播范围（联机27）
+  console.log('\n[广播范围]');
+  {
+    // 一个"远方的观察者"：和 bob 同房，但人在 5000 格外（313 区块）
+    const far = new TestClient('FarAway');
+    await joinAndWaitWelcome(far, '远处的人', 5000, 70, 5000);
+
+    alice.mailbox.length = 0;
+    far.mailbox.length = 0;
+    bob.send({ t: 'block', x: 2, y: 70, z: 8, id: 1, state: 0, dimension: 'overworld' });
+    check('近处的人收到方块', (await alice.wait('block', 2000)) !== null);
+    check('8 区块外的人收不到方块', (await far.wait('block', 700)) === null);
+
+    // 聊天是文字，不受范围限制（否则远处的人就成了聋子）
+    far.mailbox.length = 0;
+    bob.send({ t: 'chat', text: '远处的也看得到' });
+    check('聊天不受关注范围限制', (await far.wait('chat', 2000)) !== null);
+
+    // 维度不同也不收：`far` 换维度不发 move 了，这里用"下界坐标"的方块试
+    alice.mailbox.length = 0;
+    far.mailbox.length = 0;
+    bob.send({ t: 'block', x: 2, y: 70, z: 8, id: 1, state: 0, dimension: 'nether' });
+    check('换维度的方块不会发给主世界的人', (await alice.wait('block', 700)) === null);
+
+    far.close();
+  }
+
   // ---------------------------------------------------------------- 箭与 TNT（联机23）
   console.log('\n[箭与 TNT]');
   {
@@ -737,15 +764,17 @@ try {
     while (alice.take('chat') !== null) chats++;
     check('聊天刷屏被限（30 条只放行一部分）', chats > 0 && chats < 30, `${chats} 条`);
 
-    // 方块：桶容量 400（够一次红石连锁），灌 600 条单条消息
+    /*
+     * 方块：桶容量 400，**按条数计费**。用两批 256 格来验证，而不是灌 500 条单条消息——
+     * 后者要对 500 条消息做序列化与断言，是这个套件最贵的一段（它已经 16s 了）。
+     * 第一批 256 放行；紧接着第二批只剩 ~150 个令牌，不够 256 → 被拒。
+     */
     alice.mailbox.length = 0;
-    for (let i = 0; i < 500; i++) {
-      bob.send({ t: 'block', x: 5, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld' });
-    }
-    await sleep(600);
-    let blocks = 0;
-    while (alice.take('block') !== null) blocks++;
-    check('方块刷屏被限（500 条只放行一部分）', blocks > 0 && blocks < 500, `${blocks} 条`);
+    const bigBatch = Array.from({ length: 256 }, () => [5, 70, 5, 1, 0, 'overworld']);
+    bob.send({ t: 'blocks', blocks: bigBatch });
+    check('第一批 256 格放行（红石连锁的量级）', (await alice.wait('blocks', 2000)) !== null);
+    bob.send({ t: 'blocks', blocks: bigBatch });
+    check('紧接着的第二批被限（桶里不够 256 个令牌）', (await alice.wait('blocks', 1200)) === null);
 
     // 超过 maxPayload（64KB）的消息：`ws` 直接以 1009 关连接
     const big = new TestClient('BigSender');

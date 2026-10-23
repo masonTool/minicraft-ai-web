@@ -39,6 +39,7 @@ import {
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
 import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
 import { createBuckets } from './ratelimit.mjs';
+import { withinAoi } from './aoi.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
@@ -239,11 +240,13 @@ const CLOSE_PASSWORD = 4005;
  * `room` 必传：漏一个调用点就会"跨房串台"——这也是为什么 `broadcast` 的第三个参数
  * 不给默认值（给了默认值，漏传的地方会静默变成"发给所有人"）。
  */
-function broadcast(message, exceptId, room) {
+function broadcast(message, exceptId, room, aoi = null) {
   const text = JSON.stringify(message);
   for (const player of players.values()) {
     if (player.id === exceptId) continue;
     if (player.room !== room) continue;
+    // 关注范围（联机27）：只发给"看得见这一格/这一点的"人。`aoi` 为空 = 不按范围过滤
+    if (aoi && !withinAoi(player, aoi.x, aoi.z, aoi.dimension)) continue;
     if (player.socket.readyState !== player.socket.OPEN) continue;
     player.socket.send(text);
   }
@@ -662,6 +665,8 @@ wss.on('connection', (socket, request) => {
           },
           player.id,
           player.room,
+          // 批量用**发起者位置**当中心：这批改动都在他 64 格内（联机24 的距离闸）
+          { x: player.x, z: player.z, dimension: player.dimension },
         );
         break;
       }
@@ -687,7 +692,7 @@ wss.on('connection', (socket, request) => {
           rememberEdit(edits, scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
-        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id, player.room);
+        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -751,7 +756,7 @@ wss.on('connection', (socket, request) => {
           ? message.lines.slice(0, 4).map((line) => String(line).slice(0, 64))
           : [];
         if (signs.size < MAX_SIGNS) signs.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, lines });
-        broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id, player.room);
+        broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -781,7 +786,7 @@ wss.on('connection', (socket, request) => {
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
         if (![x, y, z, damage, fire].every(Number.isFinite)) return;
-        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id, player.room);
+        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -812,7 +817,7 @@ wss.on('connection', (socket, request) => {
         if (Math.hypot(vx, vy, vz) > 200) return;
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         if (!Number.isFinite(damage)) return;
-        broadcast({ t: 'arrow', x, y, z, vx, vy, vz, damage, by: player.id }, player.id, player.room);
+        broadcast({ t: 'arrow', x, y, z, vx, vy, vz, damage, by: player.id }, player.id, player.room, { x, z, dimension: player.dimension });
         break;
       }
 
@@ -824,7 +829,7 @@ wss.on('connection', (socket, request) => {
         const z = Math.trunc(Number(message.z));
         if (![x, y, z].every(Number.isFinite)) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
-        broadcast({ t: 'tnt', x, y, z, dimension, by: player.id }, player.id, player.room);
+        broadcast({ t: 'tnt', x, y, z, dimension, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -860,7 +865,7 @@ wss.on('connection', (socket, request) => {
         if (item && (!Number.isFinite(item.id) || !Number.isFinite(item.count))) return;
         const rotation = Math.trunc(Number(message.rotation ?? 0)) || 0;
         if (frames.size < MAX_FRAMES) frames.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, item, rotation });
-        broadcast({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id }, player.id, player.room);
+        broadcast({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -887,7 +892,7 @@ wss.on('connection', (socket, request) => {
         if (containers.size < MAX_CONTAINERS) {
           containers.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, slots });
         }
-        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id, player.room);
+        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id, player.room, { x, z, dimension });
         break;
       }
 
@@ -915,7 +920,7 @@ wss.on('connection', (socket, request) => {
         const key = `${player.id}:${localId}`;
         if (items.size >= MAX_ITEMS && !items.has(key)) return;
         items.set(key, { owner: player.id, localId, itemId, count, x, y, z });
-        broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id, player.room);
+        broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id, player.room, { x, z, dimension: player.dimension });
         break;
       }
 
@@ -967,7 +972,7 @@ wss.on('connection', (socket, request) => {
         if (!Number.isFinite(localId) || localId <= 0) return;
         const key = `${player.id}:${localId}`;
         if (!items.delete(key)) return;
-        broadcast({ t: 'item-remove', owner: player.id, localId }, player.id, player.room);
+        broadcast({ t: 'item-remove', owner: player.id, localId }, player.id, player.room, { x: player.x, z: player.z, dimension: player.dimension });
         break;
       }
 
