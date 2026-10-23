@@ -134,7 +134,7 @@
 | `welcome` | 种子记下（不一致只 warn）；`edits` 逐条写进 `world.edits`，已加载区块立即 `setBlockAndUpdate`；重建远端玩家与掉落物镜像 | 这里**会**把远端改动写进本地存档（`联机6` 隔离） |
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
 | `leave` | 删远端玩家与其名下镜像 | |
-| `block` | 只处理**已加载**区块，未加载直接 return（`联机4`） | 走 `setBlockAndUpdate`，会进增量存档 |
+| `block` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits） |
 | `container` | 仅当同维度、且那一格确实是箱子/木桶时，用 `restoreStacks` 清洗后写回 | 不回声（`Chest.restore` 不触发 `onMutate`） |
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
@@ -148,7 +148,7 @@
 
 | 编号 | 缺口 | 影响 |
 | --- | --- | --- |
-| `联机4` | 未加载区块的 `block` 被丢弃 | 走动过去还是旧地形，只有重连能补 |
+| `联机4` | 未加载区块的 `block` 改为进增量表等区块加载（`onNetBlock` / `welcome` 同一条判定） | 走动过去能看到队友的改动；但补上的若是漏斗/箱子，容器实体仍不会建（`联机33`） |
 | `联机5`/`联机6` | 种子不强制、远端改动写进单机档 | 各玩各的世界；单机存档被污染 |
 | `联机7` | 无心跳/超时 | 半开连接永远在线 |
 | `联机10`/`联机11` | 无时间/天气/睡眠消息 | 一个人白天一个人黑夜 |

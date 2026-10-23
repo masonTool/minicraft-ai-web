@@ -381,6 +381,7 @@ import {
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
+import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -3288,20 +3289,16 @@ class App {
     // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来
     for (const entry of edits) {
       const [x, y, z, id, state, dimension] = entry as [number, number, number, number, number, string];
-      this.world.edits.record(
-        dimension ?? 'overworld',
-        toChunkCoord(x),
-        toChunkCoord(z),
-        Chunk.index(x & 15, y, z & 15),
-        id,
-        state ?? 0,
-      );
-      // 已经加载出来的区块立即生效
-      if (this.world.isLoaded(x, z)) {
-        this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
-        // 队友放下的漏斗也要有容器，否则"看着是漏斗、就是不搬东西"（见 `ensureBlockEntityAt`）
-        this.ensureBlockEntityAt(x, y, z, id, dimension);
-      }
+      const target: DimensionId = isDimension(dimension) ? dimension : Dimension.OVERWORLD;
+      // 与 `onNetBlock` 同一条判定：别的维度 / 没加载的区块都只记增量，
+      // 免得"队友在下界改的地形"被写进我刚生成的主世界
+      const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
+      if (action === 'drop') continue;
+      this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state ?? 0);
+      if (action === 'buffer') continue;
+      this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
+      // 队友放下的漏斗也要有容器，否则"看着是漏斗、就是不搬东西"（见 `ensureBlockEntityAt`）
+      this.ensureBlockEntityAt(x, y, z, id, target);
     }
 
     for (const player of players) {
@@ -3455,13 +3452,24 @@ class App {
     }
   }
 
-  /** 队友改了方块：直接写进世界（也会进增量存档） */
+  /**
+   * 队友改了方块（联机4）。
+   *
+   * **先记增量、再决定要不要立刻写世界**：区块没加载时原来直接 return，改动就丢了
+   * ——玩家走过去看到的地形仍是种子重现的原始样子（只有重连能补）。
+   * 记进 `world.edits` 之后，区块以后加载时 `World.onGenerated` 会 `applyTo` 叠回去；
+   * 别的维度的改动同理，等玩家切过去再补。
+   */
   private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
-    if (!this.world.isLoaded(x, z)) return;
-    // 走 setBlockAndUpdate：光照与网格会跟着更新，也会被记进增量存档
+    const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
+    const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
+    if (action === 'drop') return;
+    this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
+    if (action === 'buffer') return;
+    // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
     this.world.setBlockAndUpdate(x, y, z, id, state);
     // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
-    this.ensureBlockEntityAt(x, y, z, id, dimension);
+    this.ensureBlockEntityAt(x, y, z, id, target);
   }
 
   /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
