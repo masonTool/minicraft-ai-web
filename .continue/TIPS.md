@@ -220,6 +220,28 @@
   这样它与锚点所在作用域解耦，插错也只影响自己那一块。
 - 适用面：所有“往长测试文件里追加断言”的编辑（`tools/*-test.ts` 尤其多）。
 
+### 找"漏翻的文案"要按**出口**反查，不是按文件排名扫
+
+- 教训：按"每文件含中文行数"排序，前几名全是 `advancements.ts` / `itemNames.ts`（回退原文，不用翻），
+  于是 `CHARACTER_PRESETS[].label`（外观预设 4 条）、`WORLD_TYPE_HINTS`（世界类型说明 5 条）、
+  `main.ts` 的 25 处 `hudToast.show('…')` 全被漏掉了 —— 它们分散在长尾文件里，行数只有几条。
+- 正确判据：**从 UI 出口往回找**。grep 这些形态：
+  `textContent =` / `.setAttribute('aria-label'` / `\.show\(` / `\.info\(` / `\.error\(` /
+  `label:` / `placeholder:` / `title:`，再筛"字符串里含中日韩字符"的行。
+- 补一步交叉验证：命中的字段（如 `preset.label`、`WORLD_TYPE_HINTS[type]`）要**拿到使用点**确认它真的
+  进了 DOM —— 我上一轮就是因为 grep 只搜了 `preset.label` 而漏了 `button.textContent = preset.label`。
+- 适用面：任何"文案散在数据表 + 组件"的项目；尤其注意**同一概念有两张表**的情况
+  （`worldTypeLabel()` 已 i18n，但 `WORLD_TYPE_HINTS` 是另一张，且只有后者显示在界面上）。
+
+### `git add -A` 会把技能包 / 工具落盘的资产一起提交
+
+- 症状：一次 `git add -A` 之后，提交里多了 26 个 `.codebuddy/skills/…` 文件（`SKILL.md`、`assets/.continue/*`），
+  它们不是项目代码，是技能安装时落盘的模板。
+- 处置：`git rm -r --cached .codebuddy`（**只移出跟踪，工作区文件不动**）+ `.gitignore` 加 `.codebuddy/`。
+  注意 `.gitignore` 里可能已有 `.codebuddy/hooks/logs/` 这种**子路径**规则，别被"已有 .codebuddy 字样"骗过去 ——
+  整目录规则要单独一行 `.codebuddy/`。
+- 判据：提交前 `git status --short` 扫一眼，出现非 `src` / `tools` / `.continue` / `docs` 的路径就先问一句"这是谁写的"。
+
 ### 给语言表追加键：**中文表与非中文表的结尾格式不同**，别写死一种
 
 - 症状：脚本按 `} as const;` 找插入点，中文那份顺利，另外五份直接 `AssertionError`
