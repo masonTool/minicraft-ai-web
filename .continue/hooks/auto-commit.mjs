@@ -124,7 +124,13 @@ if ((git(['diff', '--name-only', '--diff-filter=U']) ?? '').trim()) {
 const changed = (git(['status', '--porcelain']) ?? '')
   .split(/\r?\n/)
   .map((line) => line.trimEnd())
-  .filter((line) => line.length > 0);
+  .filter((line) => line.length > 0)
+  /**
+   * **排除队列文件**：`auto-continue` 递任务时会把 `[ ]` 改成 `[~]`，那是钩子的正常工作痕迹，
+   * 不是"你还有活没提交"。不排掉的话，每轮 Stop 都会因为钩子自己刚改的那一行判脏、
+   * 反复催提交——而那次改动本来就不该由人提交（收尾时会整份归档）。
+   */
+  .filter((line) => !line.includes('.continue/doing/'));
 
 /**
  * 干净就放行。但**不能一声不吭**——旧版在这里直接 return，结果是整个

@@ -44,6 +44,7 @@ import {
   fingerprint,
   loadState,
   markBlocked,
+  markEntryDoing,
   milestoneComplete,
   parseBatch,
   planNameFor,
@@ -291,6 +292,17 @@ function collectUnproven(queue) {
 const batch = parseBatch(queue.text);
 
 let pick = pickNext(queue);
+
+/**
+ * 递任务的同时**把这条标成进行中**（`[ ]` → `[~]`）。
+ *
+ * 不依赖 AI 记得改：实测经常出现"正在做的那条还是 `[ ]`"，因为 AI 改队列的时机不稳定。
+ * 而"现在在发哪一条"是钩子自己的事实，由它落盘最可靠。
+ * 已经 `[~]` 的条目不会再动（`markEntryDoing` 只处理 `todo`）。
+ */
+if (pick && markEntryDoing(file, pick.entry)) {
+  appendLog(sid, `标记进行中 · 第${pick.entry.seq}/${pick.entry.total}条 · ${fingerprint(pick.raw).slice(0, 40)}`);
+}
 
 /**
  * 收尾五步（自动收尾与"用户拍板后收尾"共用同一段，避免两份文案分叉）。
@@ -828,6 +840,8 @@ if (streak >= BLOCKED_MAX) {
 
   const after = readQueue(file);
   pick = pickNext(after);
+  // 隔离完接着递下一条时同样打标（否则"正在做"会停在被隔离的那条上）
+  if (pick) markEntryDoing(file, pick.entry);
 
   // 没有别的活了 → 放开，下一轮 Stop 会转入收尾（有 [阻塞] 才会请用户拍板）
   if (!pick || unfinishedCount(after) === 0) {

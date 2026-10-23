@@ -888,6 +888,31 @@ export function listQueues() {
   }
 }
 
+/**
+ * 把某条 `[ ]` **就地**改成 `[~]`（钩子在递任务时调用）。
+ *
+ * 为什么由钩子改而不是等 AI 自己勾：实测经常看到"正在做的那条还挂着 `[ ]`"——
+ * AI 改队列的时机不稳定（有时做完才一起改，有时压根不改）。而"当前在做什么"是**钩子自己知道**的
+ * 事实（它就是发这条指令的人），由它落盘最可靠。
+ *
+ * 用 `entry.index`（行号）定位，只替换那一行的勾选框，不动行尾的批注与缩进。
+ */
+export function markEntryDoing(file, entry) {
+  if (!entry || entry.kind !== 'todo') return false;
+  try {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    const i = entry.index;
+    if (i < 0 || i >= lines.length) return false;
+    const next = lines[i].replace(/- \[ \]/, '- [~]');
+    if (next === lines[i]) return false;
+    lines[i] = next;
+    writeFileSync(file, lines.join('\n'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function unfinishedCount(queue) {
   return queue ? queue.counts.todo + queue.counts.doing : 0;
 }

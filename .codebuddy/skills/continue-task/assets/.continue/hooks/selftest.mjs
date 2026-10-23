@@ -572,6 +572,17 @@ try {
     );
   });
 
+  check('auto-continue · 递任务时把该条标成 [~]（不等 AI 改）', () => {
+    queue('s-mark', '- [ ] 甲\n- [ ] 乙');
+    const r = hook('auto-continue.mjs', stop('s-mark'));
+    const text = readFileSync(join(DOING, 's-mark.md'), 'utf8');
+    return expect(
+      r.code === 2 && text.includes('- [~] 甲') && text.includes('- [ ] 乙'),
+      `第 1 条应被标成 [~]、第 2 条保持 [ ]（实际：${text.replace(/\n/g, '⏎')}）`,
+      r,
+    );
+  });
+
   check('auto-continue · 连续 N 轮没做完 → 标 [阻塞] 并递下一条', () => {
     queue('s-block', '- [ ] 甲\n- [ ] 乙');
     const env = { CONTINUE_BLOCK_AFTER: '2' };
@@ -579,8 +590,9 @@ try {
     const r = hook('auto-continue.mjs', stop('s-block'), env);
     const text = readFileSync(join(DOING, 's-block.md'), 'utf8');
     return expect(
-      text.includes('- [阻塞] 甲') && text.includes('- [ ] 乙') && r.err.includes('乙'),
-      `应隔离"甲"并递"乙"（队列现为：${text.replace(/\n/g, '⏎')}）`,
+      // 递"乙"时钩子会把它标成 `[~]`（进行中），所以这里断言 `[~]` 而不是 `[ ]`
+      text.includes('- [阻塞] 甲') && text.includes('- [~] 乙') && r.err.includes('乙'),
+      `应隔离"甲"、把"乙"标成进行中并递出去（队列现为：${text.replace(/\n/g, '⏎')}）`,
       r,
     );
   });

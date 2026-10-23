@@ -16,7 +16,8 @@ description: This skill installs the continue-do persistent task-queue framework
 其它好处（简略）：
 
 - **进度外置**：进度是文件、进版本库，会话被中断也不丢；队列没做完不许停。
-- **一次改动 = 一条任务 = 一个提交**：Stop 钩子只递一条，pre-commit 拒绝一次勾掉多条。
+- **一次改动 = 一条任务 = 一个提交**：Stop 钩子只递一条，**递出时就把那条标成 `[~]`**（不靠 AI 自己写），
+  pre-commit 拒绝一次勾掉多条。
 - **门禁由脚本跑**：编号、跨文件引用、文档体量、钩子自检、提交前检查都由脚本执行，
   不看 AI 自证。
 - **钩子崩了不会静默放行**：注册命令都经 `.continue/hooks/run.mjs`，它把"钩子自己崩了"（exit 1）

@@ -238,10 +238,22 @@ SCENARIOS.blocked = {
 
     const env = { CONTINUE_BLOCK_AFTER: '2' };
     const r1 = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'], env });
+    // ⚠️ 必须**立刻**抓：后面两轮会把它标成 [阻塞]，那时再读就看不到 [~] 了
+    const afterFirst = readMaybe(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`));
     const r2 = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'], env });
     const r3 = hook(ctx, 'auto-continue.mjs', stop(s), { args: ['--event=Stop'], env });
 
     check('第 1 轮正常递任务', r1.status === 2 && /第 \d+\/\d+ 条/.test(r1.stderr), r1.stderr.slice(0, 120));
+
+    // 递任务时钩子自己把这条标成进行中（不等 AI 写）
+    check('递出去的那条被标成 [~]（进行中）', /^- \[~\] 甲/m.test(afterFirst), afterFirst.split('\n').find((l) => l.startsWith('- [')) ?? '');
+
+    /**
+     * 钩子刚改了队列 → 工作区确实脏，但那是**钩子自己的痕迹**，不该催人提交。
+     * `auto-commit` 判脏时排除了 `doing/`，所以这里应当放行（exit 0）。
+     */
+    const guard = hook(ctx, 'auto-commit.mjs', stop(s), { args: ['--event=Stop'] });
+    check('钩子改过队列后，提交守卫不判脏（exit 0）', guard.status === 0, `exit=${guard.status} ${guard.stderr.slice(0, 160)}`);
     const afterQueue = readMaybe(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`));
     check('连续 N 轮后条目被标 [阻塞]', /\[阻塞\]/.test(afterQueue), afterQueue.split('\n').find((l) => l.includes('[')) ?? '');
     check('日志记了"隔离"', /隔离 · 连续 \d+ 轮/.test(logOf(ctx, s)));
