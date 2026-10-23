@@ -1,7 +1,8 @@
 /**
- * 跳一跳的**画面、输入与一局流程**（J1~J3，批次 20261022-2220）
+ * 跳一跳的**画面、输入与一局流程**（J1~J3 起，批次 20261024-0415 重写渲染层）
  *
- * 规则全在 `logic.ts`，这里只做四件事：把状态画出来、把按下/松开翻译成蓄力与起跳、
+ * 规则全在 `logic.ts`，镜头在 `iso.ts`，方块与色板在 `BlockScene.ts` / `palette.ts`，
+ * 小人在 `JumperModel.ts`；这里只做四件事：把状态画出来、把按下/松开翻译成蓄力与起跳、
  * 结算与最高分、音效。
  *
  * 五条刻意的做法：
@@ -9,14 +10,13 @@
  *  1. **一个自由度**：方向自动对准下一个方块，玩家只控制蓄力时长。
  *  2. **状态机显式**：`ready → charging → jumping → (ready | falling → over)`；
  *     每次状态切换只在一个地方发生（`beginCharge` / `release` / `land` / `finish`）。
- *  3. **压缩身体**：`PlayerRenderer.object` 的原点在脚底，所以 `scale.y` 直接压就是
- *     "蹲下"，不会陷进方块；起跳时弹回并前空翻，落地再压一次。
- *  4. **柱子每跳重建**：一屏 4~5 根，重建比增量维护简单；主题每 20 分换一次。
+ *  3. **小人原点在脚底**：所以"站到方块顶面"就是 `position.y = 顶面高度`，压扁也从脚底压，
+ *     不会陷进方块；蓄力压扁、空中翻转、落地回弹全部交给 `JumperModel` 的三个 setter。
+ *  4. **方块每跳重建**：一屏 3~4 块，重建比增量维护简单；换一局只换色板（不重建场景）。
  *  5. **音效静默降级**：没有 AudioContext / 被浏览器拦截时全部吞掉，`guard` 必须 0 错误。
  */
 
 import { t, tp } from '../../../core/i18n/I18n.ts';
-import { PlayerRenderer } from '../../../render/PlayerRenderer.ts';
 import { bestScore, loadProgress, recordScore, saveProgress } from '../../progress.ts';
 import { JUMP_CONFIG } from './config.ts';
 import {
@@ -31,6 +31,7 @@ import {
   type LandingOutcome,
 } from './logic.ts';
 import { BlockScene, type BlockSpec } from './BlockScene.ts';
+import { JumperModel } from './JumperModel.ts';
 import { BLOCK_HEIGHT_RATIO } from './iso.ts';
 import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
@@ -42,8 +43,6 @@ function standHeight(block: { size: number }): number {
   return Math.max(0.05, block.size * BLOCK_HEIGHT_RATIO);
 }
 
-/** 蓄力到满时的身体压缩比例 */
-const BODY_SQUASH = 0.45;
 /** 蓄力时当前方块下压的最大比例（规格表 §8：顶面 y → 0.8） */
 const PILLAR_SQUASH = 0.2;
 /** 结算面板淡入前的等待（让玩家看清"掉下去了"） */
@@ -62,7 +61,7 @@ export class JumpGame implements MiniGame {
 
   private context: MiniGameContext | null = null;
   private blocks: BlockScene | null = null;
-  private player: PlayerRenderer | null = null;
+  private jumper: JumperModel | null = null;
   private audio: JumpAudio | null = null;
 
   private run: JumpRun;
@@ -116,9 +115,11 @@ export class JumpGame implements MiniGame {
     this.rebuildBlocks();
     blocks.follow(0);
 
-    const player = new PlayerRenderer(blocks.scene, () => 1);
-    player.setVisible(true);
-    this.player = player;
+    const jumper = new JumperModel();
+    jumper.setSize(currentBlock(this.run).size);
+    jumper.setPosition(currentBlock(this.run).x, standHeight(currentBlock(this.run)), currentBlock(this.run).z);
+    blocks.scene.add(jumper.object);
+    this.jumper = jumper;
 
     this.audio = new JumpAudio();
     this.buildHud(context);
@@ -131,8 +132,8 @@ export class JumpGame implements MiniGame {
 
   unmount(): void {
     this.listeners.abort();
-    this.player?.dispose();
-    this.player = null;
+    this.jumper?.dispose();
+    this.jumper = null;
     this.blocks?.dispose();
     this.blocks = null;
     this.audio?.dispose();
@@ -154,15 +155,15 @@ export class JumpGame implements MiniGame {
   update(dt: number): void {
     const context = this.context;
     const blocks = this.blocks;
-    const player = this.player;
-    if (!context || !blocks || !player) return;
+    const jumper = this.jumper;
+    if (!context || !blocks || !jumper) return;
 
     const step = Math.min(0.05, Math.max(0, dt));
 
     if (this.phase === 'charging') {
       this.charge = Math.min(JUMP_CONFIG.maxCharge, this.charge + step);
       const ratio = this.charge / JUMP_CONFIG.maxCharge;
-      player.object.scale.y = 1 - BODY_SQUASH * ratio;
+      jumper.setSquash(ratio);
       blocks.setSquash(PILLAR_SQUASH * ratio);
       this.audio?.updateCharge(ratio);
     }
@@ -170,10 +171,8 @@ export class JumpGame implements MiniGame {
     if (this.phase === 'ready' || this.phase === 'charging') {
       this.tickSpecialHold(step);
       const block = currentBlock(this.run);
-      const charging = this.phase === 'charging';
-      // 蓄力时给一点 `sneaking`：模型会前倾 0.22 rad 并下沉 0.12，
-      // 把下沉补回去（脚仍贴地），观感就是"蹲下去蓄力"而不只是被压扁
-      this.drawPlayer(block.x, standHeight(block) + (charging ? 0.12 : 0), block.z, this.yaw, charging);
+      // 站姿：脚底贴方块顶面中心（压扁已在上面按蓄力比例处理，脚底不动）
+      this.placeJumper(block.x, standHeight(block), block.z);
     } else if (this.phase === 'jumping') {
       this.elapsed += step;
       const progress = Math.min(1, this.elapsed / this.duration);
@@ -182,15 +181,15 @@ export class JumpGame implements MiniGame {
       // 抛物线：起跳和落地都是 0，中间到峰值；两端方块的顶面高度可能不同，先线性过渡
       const base = this.jumpFromY + (this.jumpToY - this.jumpFromY) * progress;
       const y = base + Math.sin(Math.PI * progress) * this.jumpPeak;
-      this.drawPlayer(x, y, z, this.yaw);
-      // `update()` 会把 rotation.x 归零，所以空翻必须写在它之后
-      player.object.rotation.x = -Math.PI * 2 * progress;
+      this.placeJumper(x, y, z);
+      jumper.setFlip(-Math.PI * 2 * progress);
       if (progress >= 1) this.land();
     } else if (this.phase === 'falling') {
       this.elapsed += step;
       const y = this.jumpToY - this.elapsed * 7;
-      this.drawPlayer(this.jumpTo.x, y, this.jumpTo.z, this.yaw);
-      player.object.rotation.z = this.elapsed * 2.2;
+      this.placeJumper(this.jumpTo.x, y, this.jumpTo.z);
+      // 掉下去时越转越快，翻脸式下坠（原版也是"翻着掉出去"）
+      jumper.setFlip(this.elapsed * 8);
       if (this.elapsed >= FALL_SECONDS) this.finish();
     }
 
@@ -271,7 +270,7 @@ export class JumpGame implements MiniGame {
     this.phase = 'jumping';
     this.charge = 0;
     this.blocks?.setSquash(0);
-    if (this.player) this.player.object.scale.y = 1;
+    this.jumper?.setSquash(0);
     this.audio?.stopCharge();
     this.audio?.playJump();
   }
@@ -284,10 +283,7 @@ export class JumpGame implements MiniGame {
       return;
     }
 
-    if (this.player) {
-      this.player.object.rotation.x = 0;
-      this.player.object.scale.y = 1;
-    }
+    this.jumper?.resetPose();
 
     if (outcome.over) {
       this.phase = 'falling';
@@ -298,6 +294,8 @@ export class JumpGame implements MiniGame {
 
     this.run = outcome.run;
     this.rebuildBlocks();
+    // 方块会随分数变小，小人也跟着变小——否则会在小方块上站一个"巨人"
+    this.jumper?.setSize(currentBlock(this.run).size);
     this.phase = 'ready';
     this.elapsed = 0;
 
@@ -339,10 +337,8 @@ export class JumpGame implements MiniGame {
     this.specialTaken = false;
     this.pending = null;
 
-    if (this.player) {
-      this.player.object.scale.y = 1;
-      this.player.object.rotation.set(0, 0, 0);
-    }
+    this.jumper?.resetPose();
+    this.jumper?.setSize(currentBlock(this.run).size);
     this.overEl?.classList.add('hidden');
     this.syncPalette();
     this.rebuildBlocks();
@@ -369,23 +365,14 @@ export class JumpGame implements MiniGame {
 
   // ---------------------------------------------------------------- 画面
 
-  private drawPlayer(x: number, y: number, z: number, yaw: number, sneaking = false): void {
-    this.player?.update(
-      {
-        x,
-        y,
-        z,
-        yaw,
-        pitch: 0,
-        walkPhase: 0,
-        walkAmount: 0,
-        swing: 0,
-        flying: false,
-        sneaking,
-      },
-      () => null,
-    );
+  /** 把小人放到某点（原点是脚底，所以 y 直接就是"脚底高度"） */
+  private placeJumper(x: number, y: number, z: number): void {
+    const jumper = this.jumper;
+    if (!jumper) return;
+    jumper.setPosition(x, y, z);
+    jumper.setYaw(this.yaw);
   }
+
 
   /** 换一局的配色：场景与相机都留着，只换色板（比旧版重建整个场景便宜得多） */
   private syncPalette(): void {
