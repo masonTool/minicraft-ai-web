@@ -1165,9 +1165,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['statistics.title', 'Статистика мира'],
     ['editor.cancel', 'Отмена'],
     ['station.reason.needLevels', 'Нужно {cost} уровней опыта'],
-    // P4-2c1 起构架与生物名是俄语，显式物品名仍是英文占位（P4-2c2 再翻）
+    // P4-2c 起物品名的构件与显式名都是俄语（itemDesc 仍是英文占位，P4-2e 再翻）
     ['item.toolMaterial.diamond', 'алмаз'],
-    ['item.dirt', 'Dirt'],
+    ['item.dirt', 'Земля'],
     // P4-2b 起这两组也是真俄语
     ['inventory.title', 'Инвентарь'],
     ['panel.anvil', 'Наковальня'],
@@ -1178,6 +1178,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     check(`俄语：${key}`, t(key, 'ru') === expected, t(key, 'ru'));
   }
   check('俄语表里没有中文残留', !/[\u4e00-\u9fff]/.test(ruKeys.map((key) => t(key, 'ru')).join('')));
+  // 唯一还没翻的分组是 itemDesc（P4-2e）：用"与英文逐字相同"判定，不写死英文原文
+  check(
+    '俄语的物品说明仍是英文占位（itemDesc 待翻）',
+    t('item.desc.honey_block', 'ru') === t('item.desc.honey_block', 'en'),
+  );
 
   // 四个数字各自取对形式：俄语的 one 覆盖 1/21/31，few 覆盖 2~4/22~24，many 覆盖 0 与 5~20
   setLanguage('ru');
