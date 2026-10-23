@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
-import { defineConfig } from 'vite';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 /**
  * 读当前 HEAD 的"短 hash + 提交标题"（批次 182）。
@@ -57,5 +57,19 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+  },
+  /**
+   * 单测的收文件范围（联机32）。
+   *
+   * 并行会话的工作树建在 `.continue/doing/.worktree/<名字>/` 下，里面有**同名**的
+   * `tests/` 与 `src/`。vitest 默认只按测试文件名找文件、不看
+   * `.gitignore`，于是主树的 23 套会连同工作树的副本各跑一遍：计数虚高一倍
+   * （169 → 332），更要紧的是**工作树里的红会让主树门禁变红**，而与这边的改动无关。
+   *
+   * 用 `configDefaults.exclude` 打底再追加，避免把默认的 `node_modules`/`dist`
+   * 排除项一起覆盖掉（`--exclude` 命令行参数是覆盖语义，踩过）。
+   */
+  test: {
+    exclude: [...configDefaults.exclude, '**/.continue/**'],
   },
 });
