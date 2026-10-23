@@ -619,6 +619,24 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   const keys = Object.keys(COMMAND_MESSAGES_EN);
   check(`命令回执词表 ${keys.length} 条`, keys.length >= 120);
 
+  /**
+   * 多语言 P1-5 护栏：新 `cmd.reply.*` 表与旧"中文原文 → 英文"表**逐条一致**。
+   *
+   * 175 条是脚本从旧表照搬的，这条断言把"照搬"变成可验证的事实：
+   * 以后谁改了一句回执却只改一边（或搬的时候手抖），这里立刻红。
+   * P1-6 删掉旧表时，这条会退化成"键都在且中英不同"。
+   */
+  const msgEntries = Object.entries(TABLES.zh ?? {}).filter(([key]) => key.startsWith('cmd.reply.'));
+  const zhToKey = new Map(msgEntries.map(([key, value]) => [value, key]));
+  const lost = keys.filter((zh) => !zhToKey.has(zh));
+  const drifted = keys.filter((zh) => {
+    const key = zhToKey.get(zh);
+    return key !== undefined && t(key, 'en') !== COMMAND_MESSAGES_EN[zh];
+  });
+  check(`旧表的 ${keys.length} 条回执都搬进了 cmd.reply.*`, lost.length === 0, lost.slice(0, 3).join(' / '));
+  check('新表英文与旧表逐字一致（不是重译）', drifted.length === 0, drifted.slice(0, 3).join(' / '));
+  check('新表条数与旧表相同（没多也没漏）', msgEntries.length === keys.length, `${msgEntries.length} vs ${keys.length}`);
+
   setLanguage('zh');
   const zhWrong = keys.filter((k) => t(k) !== k);
   check('中文模式下键返回原文（键写错会立刻暴露）', zhWrong.length === 0, zhWrong.slice(0, 3).join(' / '));
