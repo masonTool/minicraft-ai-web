@@ -1165,7 +1165,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['statistics.title', 'Статистика мира'],
     ['editor.cancel', 'Отмена'],
     ['station.reason.needLevels', 'Нужно {cost} уровней опыта'],
-    ['item.toolMaterial.diamond', 'Diamond'], // 占位分组：仍是英文（P4-2c 再翻）
+    // P4-2c1 起构架与生物名是俄语，显式物品名仍是英文占位（P4-2c2 再翻）
+    ['item.toolMaterial.diamond', 'алмаз'],
+    ['item.dirt', 'Dirt'],
     // P4-2b 起这两组也是真俄语
     ['inventory.title', 'Инвентарь'],
     ['panel.anvil', 'Наковальня'],
