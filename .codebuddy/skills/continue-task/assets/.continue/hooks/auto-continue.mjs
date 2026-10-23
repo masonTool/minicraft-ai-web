@@ -26,7 +26,7 @@
  *
  * 收尾：`[ ]` / `[~]` 都没了 → **默认自动收尾**（不弹窗、不等确认）：
  *   由 AI 把整份队列（含每条下方的完成说明）搬进 `DONE.md`、更新 `OVERVIEW.md`、
- *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、把队列归档到 `logs/doing-archive/`。
+ *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、把队列归档到 `logs/<会话ID>/`。
  *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、没跑"的条目时才弹窗问用户
  *   ——那两类人没看过就等于悄悄丢活。同一份队列只催一次，之后放行（否则每轮重复同一句话）。
  */
@@ -46,6 +46,7 @@ import {
   parseBatch,
   planNameFor,
   planPathFor,
+  queueFileName,
   queuePath,
   readPlan,
   readLogText,
@@ -54,6 +55,7 @@ import {
   resolveEvent,
   saveState,
   sessionId,
+  shortSid,
   unfinishedCount,
 } from './lib.mjs';
 
@@ -269,9 +271,9 @@ function wrapSteps(keepQueue = false, includeFifth = true) {
         ' 把 `> 批次：` 换成新号、条目整段换成下一阶段的 5~6 条。' +
         ' 删掉的话钩子下一轮按会话 ID 就找不到这个队列了，计划链在这里无声断掉。'
       : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
-        '   它把队列移到 `.continue/logs/doing-archive/<会话ID>-<年月日时分秒>.md` 备查。' +
+        '   它把队列移到 `.continue/logs/<会话ID>/queue-<年月日时分秒>.md` 备查。' +
         '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
-        `   本会话写过 \`doing/decision-${sid}.md\` 的话，**再跑一次**` +
+        `   本会话写过 \`doing/${shortSid(sid)}-decision.md\` 的话，**再跑一次**` +
         ` \`node .continue/hooks/archive-queue.mjs ${sid} --decision\` 一起归档。`]
       : []),
     '',
@@ -489,7 +491,7 @@ if (!pick) {
             '',
             `「已达成」那一行先同步挂进 \`OVERVIEW\` 的对应模块，然后跑`,
             `\`node .continue/hooks/archive-queue.mjs ${sid} --plan\` 把 \`${DOING_REL}/${planName}\` 归档；`,
-            '和队列一样落在 `.continue/logs/doing-archive/plan-<会话ID>-<时间戳>.md`，',
+            '和队列一样落在 `.continue/logs/<会话ID>/plan-<时间戳>.md`，',
             '想复看"当初这活是怎么排的"就去那儿——删掉就真没了。',
             '',
             '### ③ 回复里报一句',
@@ -859,7 +861,7 @@ const header = [
   batch ? `批次 ${batch}` : null,
   `会话 ${sid.slice(0, 8)}`,
   `队列还剩 ${remaining} 条`,
-  `队列：${DOING_REL}/${sid}.md]`,
+  `队列：${DOING_REL}/${queueFileName(sid)}]`,
 ]
   .filter(Boolean)
   .join(' · ');

@@ -280,8 +280,32 @@ export function sessionId(payload) {
 
 // ------------------------------------------------------------------ 路径
 
+/**
+ * 文件名里用的**短会话 ID**：UUID 形态只取前 6 位。
+ *
+ * 为什么只截 UUID：真实会话 ID 是 32 位 hex 或带横线的 UUID，前 6 位（24 bit）足够
+ * 区分同时在跑的几个人；而 `s-plan-next` 这类**本来就是短标识**的 ID（自检夹具、
+ * 某些平台的自定义 ID）一截就会撞车（`s-plan-next` / `s-plan-edge` 都变 `s-plan`），
+ * 撞车的后果是两个会话共用一份队列——比文件名长得多严重。
+ *
+ * 撞车兜底：队列头部仍写**完整** session id（`# 队列 · 会话 <full>`），
+ * `audit-docs` 会核对"头部的前 6 位 == 文件名"，对不上就判红。
+ */
+export function shortSid(sid) {
+  const text = String(sid ?? '');
+  const isUuid =
+    /^[0-9a-f]{32}$/i.test(text) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
+  return isUuid ? text.slice(0, 6) : text;
+}
+
+/** 队列文件名（含扩展名）。三类文件名只在这里定义一次。 */
+export function queueFileName(sid) {
+  return `${shortSid(sid)}.md`;
+}
+
 export function queuePath(sid) {
-  return join(DOING_DIR, `${sid}.md`);
+  return join(DOING_DIR, queueFileName(sid));
 }
 /**
  * 每个会话**一个文件**：`logs/<sid>.md`，里面分两个区：
@@ -299,7 +323,12 @@ export function queuePath(sid) {
  * 抢不到就退化成"追加到文件末尾"——顺序乱一点，但内容不丢、解析照常。
  */
 export function logPath(sid) {
-  return join(LOGS_DIR, `${sid}.md`);
+  return join(LOGS_DIR, shortSid(sid), 'run.md');
+}
+
+/** 归档目录（队列 / 计划 / 决策记录都放这儿，按会话分）。 */
+export function archiveDirFor(sid) {
+  return join(LOGS_DIR, shortSid(sid));
 }
 
 function logHeader(sid) {
@@ -382,7 +411,8 @@ function withLogLock(sid, fn) {
   const file = logPath(sid);
   const lock = `${file}.lock`;
   const deadline = Date.now() + 400;
-  mkdirSync(LOGS_DIR, { recursive: true });
+  // 日志现在住在 `logs/<会话ID>/run.md`，锁也在同一层 → 建目录要用 file 的父目录
+  mkdirSync(dirname(file), { recursive: true });
   for (;;) {
     try {
       closeSync(openSync(lock, 'wx'));
@@ -511,7 +541,10 @@ export function appendLog(sid, line, ns = 'auto') {
       writeFileSync(`${file}.tmp`, renderLog(sid, head, sections));
       renameSync(`${file}.tmp`, file);
     });
-    if (!written) appendFileSync(logPath(sid), `${entry}\n`);
+    if (!written) {
+      mkdirSync(dirname(logPath(sid)), { recursive: true });
+      appendFileSync(logPath(sid), `${entry}\n`);
+    }
   } catch {
     /* 日志失败绝不影响判定 */
   }
@@ -796,10 +829,12 @@ export function fingerprint(raw) {
     .slice(0, 120);
 }
 
+/** 只列**会话队列**：`doing/` 里还有 `<sid>-plan.md` / `<sid>-decision.md` 两类。 */
 export function listQueues() {
   try {
     return readdirSync(DOING_DIR)
       .filter((name) => name.endsWith('.md'))
+      .filter((name) => !isPlanFile(name) && !isDecisionFile(name))
       .map((name) => ({ sid: name.slice(0, -3), file: join(DOING_DIR, name) }));
   } catch {
     return [];
@@ -828,7 +863,7 @@ export function unfinishedCount(queue) {
  * `plan-xxx` 本身能通过"文件名像会话 ID"那条检查（`[A-Za-z0-9._-]{4,}`），
  * 所以不需要为它在 `audit-ids` 里开白名单。
  */
-export const PLAN_FILE_RE = /^plan-([A-Za-z0-9._-]+)\.md$/;
+export const PLAN_FILE_RE = /^([A-Za-z0-9._-]+?)-plan\.md$/;
 
 export function isPlanFile(name) {
   return PLAN_FILE_RE.test(name);
@@ -836,7 +871,7 @@ export function isPlanFile(name) {
 
 /** 会话 ID → 计划文件名。配对关系只在这里定义一次。 */
 export function planNameFor(sid) {
-  return `plan-${sid}.md`;
+  return `${shortSid(sid)}-plan.md`;
 }
 
 /** 会话 ID → 计划文件绝对路径（文件不存在时也返回路径，由调用方 `readPlan` 判空）。 */
@@ -859,12 +894,12 @@ export function sessionOfPlan(name) {
  * 为什么也叫 `<sid>` 结尾：三类文件（队列 / 计划 / 决策）靠前缀区分、靠会话 ID 配对，
  * 归档后还能一眼看出属于同一轮工作。
  */
-export const DECISION_FILE_RE = /^decision-([A-Za-z0-9._-]+)\.md$/;
+export const DECISION_FILE_RE = /^([A-Za-z0-9._-]+?)-decision\.md$/;
 export function isDecisionFile(name) {
   return DECISION_FILE_RE.test(name);
 }
 export function decisionNameFor(sid) {
-  return `decision-${sid}.md`;
+  return `${shortSid(sid)}-decision.md`;
 }
 export function decisionPathFor(sid) {
   return join(DOING_DIR, decisionNameFor(sid));

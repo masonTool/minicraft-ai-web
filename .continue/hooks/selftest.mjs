@@ -53,10 +53,10 @@ const prompt = (sid, text = 'hi') => ({ hook_event_name: 'UserPromptSubmit', ses
 const queue = (sid, body, head = '> 状态：执行中') =>
   writeFileSync(join(DOING, `${sid}.md`), `# 队列\n\n${head}\n> 批次：19990101-0000\n\n${body}\n`);
 /**
- * 计划文件：**文件名必须是 `plan-<会话ID>.md`**——钩子按会话 ID 直接算路径，
+ * 计划文件：**文件名必须是 `<会话ID>-plan.md`**（后缀式）——钩子按会话 ID 直接算路径，
  * 名字不对它就当没有计划（这是新契约，和队列同名配对）。
  */
-const plan = (sid, body) => writeFileSync(join(DOING, `plan-${sid}.md`), `# 计划 · 测试\n\n${body}\n`);
+const plan = (sid, body) => writeFileSync(join(DOING, `${sid}-plan.md`), `# 计划 · 测试\n\n${body}\n`);
 /** 绑了计划的队列：**不写 `> 计划：`**（绑定在文件名里），其余与真实模板同构。 */
 const planQueue = (sid, body) =>
   writeFileSync(
@@ -105,17 +105,17 @@ try {
   });
 
   check('auto-continue · 纯问答会话不凭空造日志文件', () => {
-    const file = join(ROOT, '.continue', 'logs', 's-none.md');
+    const file = join(ROOT, '.continue', 'logs', 's-none', 'run.md');
     return expect(!existsSync(file), `不应创建 ${file}`, null);
   });
 
   check('日志留痕 · 递任务与空转可区分且 stopSeen 累加', () => {
     queue('s-trace', '- [ ] 甲');
     hook('auto-continue.mjs', stop('s-trace'));
-    const first = readFileSync(join(ROOT, '.continue', 'logs', 's-trace.md'), 'utf8');
+    const first = readFileSync(join(ROOT, '.continue', 'logs', 's-trace', 'run.md'), 'utf8');
     rmSync(join(DOING, 's-trace.md'));
     hook('auto-continue.mjs', stop('s-trace'));
-    const second = readFileSync(join(ROOT, '.continue', 'logs', 's-trace.md'), 'utf8');
+    const second = readFileSync(join(ROOT, '.continue', 'logs', 's-trace', 'run.md'), 'utf8');
     if (!(first.includes('递任务') && !first.includes('空转') && first.includes('"stopSeen":1'))) {
       return expect(false, `首轮应只有"递任务"且 stopSeen=1，实际：${first.split('\n').slice(-4).join(' / ')}`, null);
     }
@@ -209,7 +209,7 @@ try {
 
   // ---------------------------------------------------------------- 计划模式
   /**
-   * 计划模式的分支。绑定**靠文件名配对**（`plan-<本会话ID>.md` ↔ `<本会话ID>.md`），
+   * 计划模式的分支。绑定**靠文件名配对**（`<本会话ID>-plan.md` ↔ `<本会话ID>.md`），
    * 所以每个用例的计划文件必须挂在它自己的会话 ID 上——不能几份队列共用一份计划。
    */
   check('auto-continue · 计划未到边界 → 续批，并且点名下一阶段', () => {
@@ -244,10 +244,10 @@ try {
     );
   });
 
-  check('auto-continue · 计划文件名不是 `plan-<本会话ID>.md` → 当没有计划（走普通收尾）', () => {
+  check('auto-continue · 计划文件名不是 `<本会话ID>-plan.md` → 当没有计划（走普通收尾）', () => {
     // 名字写错 = 钩子按会话 ID 算路径算不到它。这正是"文件名即绑定"的代价，必须钉住。
     writeFileSync(
-      join(DOING, 'plan-wrong-name.md'),
+      join(DOING, 'wrong-name-plan.md'),
       '# 计划 · 测试\n\n## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`\n',
     );
     planQueue('s-plan-wrong', '- [x] 甲\n  - 验证：`npm test` 通过');
@@ -329,7 +329,7 @@ try {
     planQueue('s-plan-done', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('auto-continue.mjs', stop('s-plan-done'));
     return expect(
-      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('plan-s-plan-done.md'),
+      r.code === 2 && r.err.includes('计划已全部完成') && r.err.includes('s-plan-done-plan.md'),
       '计划全部完成且最后里程碑已验收时，应走整体收尾',
       r,
     );
@@ -369,17 +369,17 @@ try {
     );
   });
 
-  check('archive-queue · 队列移到 logs/doing-archive/<会话ID>-<年月日时分秒>.md', () => {
+  check('archive-queue · 队列移到 logs/<会话ID>/queue-<年月日时分秒>.md', () => {
     queue('s-arch', '- [x] 甲\n  - 验证：`npm test` 通过');
     const r = hook('archive-queue.mjs', null, {}, ['s-arch']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 's-arch.md'))) return expect(false, '队列文件应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('s-arch-')) : [];
-    if (moved.length !== 1) return expect(false, `logs/doing-archive 里应有 1 份，实际 ${moved.length}`, r);
+    const dir = join(ROOT, '.continue', 'logs', 's-arch');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('queue-')) : [];
+    if (moved.length !== 1) return expect(false, `logs/s-arch/ 里应有 1 份 queue-*.md，实际 ${moved.length}`, r);
     return expect(
-      /^s-arch-\d{14}\.md$/.test(moved[0]),
-      `备份名应是 <会话ID>-<14位时间戳>.md，实际 ${moved[0]}`,
+      /^queue-\d{14}\.md$/.test(moved[0]),
+      `备份名应是 queue-<14位时间戳>.md（会话目录里不再重复 ID），实际 ${moved[0]}`,
       r,
     );
   });
@@ -389,11 +389,11 @@ try {
     const r = hook('archive-queue.mjs', null, {}, ['s-archplan', '--plan']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
     if (existsSync(join(DOING, 'plan-s-archplan.md'))) return expect(false, '计划应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('plan-s-archplan-')) : [];
+    const dir = join(ROOT, '.continue', 'logs', 's-archplan');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('plan-')) : [];
     return expect(
-      moved.length === 1 && /^plan-s-archplan-\d{14}\.md$/.test(moved[0]),
-      `应有一份 plan-<会话ID>-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
+      moved.length === 1 && /^plan-\d{14}\.md$/.test(moved[0]),
+      `应有一份 plan-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
       r,
     );
   });
@@ -401,16 +401,16 @@ try {
   check('archive-queue --decision · 决策记录也归档', () => {
     queue('s-archdec', '- [x] 甲\n  - 验证：`npm test` 通过');
     writeFileSync(
-      join(DOING, 'decision-s-archdec.md'),
+      join(DOING, 's-archdec-decision.md'),
       '# 决策\n\n## D1 · 甲\n- 决定：x\n- 为什么：y\n',
     );
     const r = hook('archive-queue.mjs', null, {}, ['s-archdec', '--decision']);
     if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
-    if (existsSync(join(DOING, 'decision-s-archdec.md'))) return expect(false, '决策记录应已移出 doing/', r);
-    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
-    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('decision-s-archdec-')) : [];
+    if (existsSync(join(DOING, 's-archdec-decision.md'))) return expect(false, '决策记录应已移出 doing/', r);
+    const dir = join(ROOT, '.continue', 'logs', 's-archdec');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('decision-')) : [];
     return expect(
-      moved.length === 1 && /^decision-s-archdec-\d{14}\.md$/.test(moved[0]),
+      moved.length === 1 && /^decision-\d{14}\.md$/.test(moved[0]),
       `应有一份 decision-<会话ID>-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
       r,
     );
@@ -531,7 +531,7 @@ try {
       stop_hook_active: true,
       loop_count: 2,
     });
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-cont.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-cont', 'run.md'), 'utf8');
     return expect(
       r.code === 2 && log.includes('续跑第2次'),
       `应递任务且日志带"续跑第2次"，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -613,7 +613,7 @@ try {
     hook('queue-init.mjs', prompt('s-ups'));
     hook('auto-continue.mjs', prompt('s-ups'));
     hook('auto-continue.mjs', prompt('s-ups'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-ups.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-ups', 'run.md'), 'utf8');
     if (!log.includes('收到用户消息 · 第 1 次') || !log.includes('收到用户消息 · 第 2 次')) {
       return expect(false, `应记两次"收到用户消息"，实际：${log.split('\n').slice(-5).join(' / ')}`, null);
     }
@@ -624,7 +624,7 @@ try {
     queue('s-event', '- [ ] 甲');
     // payload 说这是 Stop，参数说这是 UserPromptSubmit → 以参数为准（走"收到用户消息"分支）
     const r = hook('auto-continue.mjs', stop('s-event'), {}, ['--event=UserPromptSubmit']);
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event', 'run.md'), 'utf8');
     return expect(
       r.code === 0 && log.includes('[auto-continue · UserPromptSubmit]') && log.includes('收到用户消息'),
       `参数应覆盖 payload 推断并写进日志行首，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -635,7 +635,7 @@ try {
   check('日志留痕 · 没有 --event 时退回 payload 推断', () => {
     queue('s-event2', '- [ ] 甲');
     hook('auto-continue.mjs', stop('s-event2'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event2.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 's-event2', 'run.md'), 'utf8');
     return expect(log.includes('[auto-continue · Stop]'), '无参数时应按 payload 写出 Stop', null);
   });
 
@@ -647,7 +647,7 @@ try {
 
   check('auto-commit · 干净时也留一行并累计 stopSeen', () => {
     hook('auto-commit.mjs', stop('c-trace'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-trace.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-trace', 'run.md'), 'utf8');
     return expect(
       /空转 · 工作区干净|就绪 · 工作区干净|放行 · 工作区已干净/.test(log) && log.includes('"stopSeen":1'),
       `应留痕且 stopSeen=1，实际：${log.split('\n').slice(-3).join(' / ')}`,
@@ -657,7 +657,7 @@ try {
 
   check('提交守卫日志 · 事件来源同样写进行首', () => {
     hook('auto-commit.mjs', stop('c-event'));
-    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-event.md'), 'utf8');
+    const log = readFileSync(join(ROOT, '.continue', 'logs', 'c-event', 'run.md'), 'utf8');
     return expect(log.includes('[auto-commit · Stop]'), '日志行首应带事件名', null);
   });
 

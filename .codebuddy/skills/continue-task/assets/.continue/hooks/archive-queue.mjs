@@ -3,9 +3,11 @@
  * 把**本会话的队列文件**从 `doing/` 移到 `logs/doing-archive/`，文件名加时间戳后缀。
  *
  * 用法：
- *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列 <sid>.md
- *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 归档计划 plan-<sid>.md
- *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 归档决策记录 decision-<sid>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列 <sid6>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 归档计划 <sid6>-plan.md
+ *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 归档决策 <sid6>-decision.md
+ *
+ * 落到 `logs/<会话ID>/<种类>-<YYYYMMDDHHmmss>.md`——按会话分目录，同一会话的东西在一处。
  *
  * 为什么不再直接删：
  *   收尾五步的第 5 步原来是 `rm`。队列原文确实已经整份搬进 `DONE.md`，但那是**加工过的**
@@ -24,7 +26,7 @@
  */
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { appendLog, CONTINUE_DIR, DOING_DIR, PROJECT_ROOT } from './lib.mjs';
+import { appendLog, archiveDirFor, decisionNameFor, DOING_DIR, planNameFor, PROJECT_ROOT, queueFileName } from './lib.mjs';
 
 const sid = (process.argv[2] ?? '').trim();
 /**
@@ -41,9 +43,11 @@ if (!sid) {
   process.exit(2);
 }
 
-const base = kind === 'queue' ? sid : `${kind}-${sid}`;
-const src = join(DOING_DIR, `${base}.md`);
-const ARCHIVE_DIR = join(CONTINUE_DIR, 'logs', 'doing-archive');
+const srcName =
+  kind === 'plan' ? planNameFor(sid) : kind === 'decision' ? decisionNameFor(sid) : queueFileName(sid);
+const src = join(DOING_DIR, srcName);
+/** 归档按**会话分目录**：`logs/<会话ID>/`，同一个会话的日志与备份都在一处。 */
+const ARCHIVE_DIR = archiveDirFor(sid);
 
 if (!existsSync(src)) {
   console.log(`没有 ${src}（可能已经归档过了），无需处理。`);
@@ -59,7 +63,8 @@ function stamp(now = new Date()) {
   );
 }
 
-const dest = join(ARCHIVE_DIR, `${base}-${stamp()}.md`);
+// 目录里已经有会话 ID 了，文件名只留"种类 + 时间戳"，不再重复一遍 sid
+const dest = join(ARCHIVE_DIR, `${kind}-${stamp()}.md`);
 
 try {
   mkdirSync(ARCHIVE_DIR, { recursive: true });

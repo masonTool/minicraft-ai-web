@@ -38,6 +38,7 @@ import {
   parsePlan,
   sessionOfDecision,
   sessionOfPlan,
+  shortSid,
 } from '../.continue/hooks/lib.mjs';
 
 const printOnly = process.argv.includes('--print');
@@ -340,6 +341,26 @@ for (const [name, url] of [
     }
   };
 
+  /**
+   * 队列头部写的会话 ID，前 6 位必须等于文件名。
+   *
+   * 为什么要有这条：文件名为了好读只取前 6 位（`b09ae4.md`），万一两个会话的 ID 前 6 位相同，
+   * 后开的那个会**直接接管**前一个的队列——勾错条目、写错 DONE，而且没有任何报错。
+   * 队列头部保留完整 ID（`# 队列 · 会话 <full>`）就是为了在这里对一次账。
+   */
+  for (const name of queueNames) {
+    const text = readIfAny(new URL(name, FILES.queuesDir));
+    const m = /^#\s*队列\s*·\s*会话\s+(\S+)/m.exec(text);
+    if (!m) continue;
+    const stem = name.slice(0, -3);
+    if (shortSid(m[1]) !== stem) {
+      problems.push(
+        `${name} 头部的会话是 ${m[1]}（前 6 位 ${shortSid(m[1])}），与文件名不一致` +
+          '——两个会话可能撞进同一份队列（头部写着别人的 ID，却又叫这个文件名）',
+      );
+    }
+  }
+
   /** 已知批次号：批次索引 + DONE（含归档）+ 各队列头部的 `> 批次：`。 */
   const knownBatches = new Set();
   for (const url of [FILES.batches, FILES.done, FILES.archive]) {
@@ -507,7 +528,7 @@ for (const [name, url] of [
   }
 
   console.log(
-    `${problems.length > 0 ? '✗' : '✓'} 计划 / 决策记录（doing/plan-*.md、decision-*.md）：${planNames.length} 份计划 · ${decisionNames.length} 份决策 · ` +
+    `${problems.length > 0 ? '✗' : '✓'} 计划 / 决策记录（doing/*-plan.md、*-decision.md）：${planNames.length} 份计划 · ${decisionNames.length} 份决策 · ` +
       `${LIMITS.planLines} 行 / ${(LIMITS.planBytes / 1024).toFixed(0)}KB 上限 · ` +
       '阶段批次号、队列引用、注入文本交叉核对',
   );
