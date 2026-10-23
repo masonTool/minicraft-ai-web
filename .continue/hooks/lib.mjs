@@ -45,7 +45,7 @@ export const CONTINUE_DIR = join(PROJECT_ROOT, '.continue');
 /**
  * 进行中队列目录是 `doing/`（不是 `queues/`）。
  *
- * 名字直接对应状态：`doing/` 里是"正在做"的，收尾后整份搬进 `DONE.md` 并删文件。
+ * 名字直接对应状态：`doing/` 里是"正在做"的，收尾后整份搬进 `DONE.md`，原文归档到 `logs/doing-archive/`。
  * 只在这一个常量里定义目录名——所有路径都从它推导，改名时只需改这里一行。
  */
 export const DOING_DIR = join(CONTINUE_DIR, 'doing');

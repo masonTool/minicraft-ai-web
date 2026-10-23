@@ -316,7 +316,7 @@ try {
     );
   });
 
-  check('auto-continue · 计划里阶段全做完 → 整体收尾并删计划', () => {
+  check('auto-continue · 计划里阶段全做完 → 整体收尾并归档计划', () => {
     plan(
       's-plan-done',
       [
@@ -380,6 +380,20 @@ try {
     return expect(
       /^s-arch-\d{14}\.md$/.test(moved[0]),
       `备份名应是 <会话ID>-<14位时间戳>.md，实际 ${moved[0]}`,
+      r,
+    );
+  });
+
+  check('archive-queue --plan · 计划也归档（不删）', () => {
+    plan('s-archplan', '## MS1 · 甲\n- [~] `MS1.1` 当前 → 验收 `x`');
+    const r = hook('archive-queue.mjs', null, {}, ['s-archplan', '--plan']);
+    if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
+    if (existsSync(join(DOING, 'plan-s-archplan.md'))) return expect(false, '计划应已移出 doing/', r);
+    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('plan-s-archplan-')) : [];
+    return expect(
+      moved.length === 1 && /^plan-s-archplan-\d{14}\.md$/.test(moved[0]),
+      `应有一份 plan-<会话ID>-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
       r,
     );
   });

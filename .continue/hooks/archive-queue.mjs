@@ -3,7 +3,8 @@
  * 把**本会话的队列文件**从 `doing/` 移到 `logs/doing-archive/`，文件名加时间戳后缀。
  *
  * 用法：
- *   node .continue/hooks/archive-queue.mjs <session_id>
+ *   node .continue/hooks/archive-queue.mjs <session_id>            # 归档队列 <sid>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id> --plan     # 归档计划 plan-<sid>.md
  *
  * 为什么不再直接删：
  *   收尾五步的第 5 步原来是 `rm`。队列原文确实已经整份搬进 `DONE.md`，但那是**加工过的**
@@ -25,12 +26,15 @@ import { join } from 'node:path';
 import { appendLog, CONTINUE_DIR, DOING_DIR, PROJECT_ROOT } from './lib.mjs';
 
 const sid = (process.argv[2] ?? '').trim();
+const wantPlan = process.argv.includes('--plan');
 if (!sid) {
-  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id>');
+  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--plan]');
   process.exit(2);
 }
 
-const src = join(DOING_DIR, `${sid}.md`);
+/** 队列和计划走同一套归档规则，只是前缀不同（`<sid>.md` / `plan-<sid>.md`）。 */
+const base = wantPlan ? `plan-${sid}` : sid;
+const src = join(DOING_DIR, `${base}.md`);
 const ARCHIVE_DIR = join(CONTINUE_DIR, 'logs', 'doing-archive');
 
 if (!existsSync(src)) {
@@ -47,7 +51,7 @@ function stamp(now = new Date()) {
   );
 }
 
-const dest = join(ARCHIVE_DIR, `${sid}-${stamp()}.md`);
+const dest = join(ARCHIVE_DIR, `${base}-${stamp()}.md`);
 
 try {
   mkdirSync(ARCHIVE_DIR, { recursive: true });
@@ -59,4 +63,4 @@ try {
 
 const rel = dest.slice(PROJECT_ROOT.length + 1);
 console.log(`已归档：${rel}`);
-appendLog(sid, `队列已归档 · ${rel}`);
+appendLog(sid, `${wantPlan ? '计划' : '队列'}已归档 · ${rel}`);
