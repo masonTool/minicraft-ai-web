@@ -27,6 +27,7 @@ import { en } from './locales/en/index.ts';
 import { plural } from './locales/en/plural.ts';
 import { plural as dePlural } from './locales/de/plural.ts';
 import { plural as ruPlural } from './locales/ru/plural.ts';
+import { plural as frPlural } from './locales/fr/plural.ts';
 import { pluralCategoryFor, type PluralCategory, type PluralTable } from './plural.ts';
 // 语言清单与匹配（多语言 P0-1 / P0-4）：6 种语言的元数据 + 设备标签匹配
 import {
@@ -94,6 +95,8 @@ const LOADERS: Partial<Record<LocaleCode, () => Promise<LocaleModule>>> = {
   de: () => import('./locales/de/index.ts'),
   // 多语言 P4-2：俄语按需加载
   ru: () => import('./locales/ru/index.ts'),
+  // 多语言 P4-3：法语按需加载
+  fr: () => import('./locales/fr/index.ts'),
 };
 
 /** 登记一种语言的按需加载器（P4 加语言、以及断言里造一个假语言时用） */
@@ -136,6 +139,8 @@ export const PLURAL_TABLES: Readonly<Partial<Record<LocaleCode, PluralTable>>> =
   // 语言表本体仍按需加载（`LOADERS`），两者不要混在一起。
   de: dePlural,
   ru: ruPlural,
+  // 法语的 one 覆盖 0（0 bloc），与英语不同
+  fr: frPlural,
 };
 const EMPTY_PLURALS: PluralTable = {};
 

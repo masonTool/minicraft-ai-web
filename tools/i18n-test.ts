@@ -1161,6 +1161,53 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('俄语用法串的 <> / [] / | 与中文一致', ruSyntaxDrift.length === 0, ruSyntaxDrift.join(','));
 
   /**
+   * 法语（多语言 P4-3）。
+   *
+   * 法语有两个特有的坑，这一节把两条都钉住：
+   *  ① **0 算单数**：`Intl.PluralRules('fr').select(0)` 是 `one`（`0 bloc`，不是 `0 blocs`），
+   *     与英语相反 —— 直接照英语写复数表会错；
+   *  ② **撇号**：法语里 `l’` / `d’` 极多，值里统一用排版撇号 `’`，
+   *     既省掉转义，也符合排版惯例（这条在生成脚本 `esc()` 里统一做，这里断言它没被漏掉）。
+   */
+  check('法语可加载', (await loadLocale('fr')) === true);
+  check('法语进了可选清单', availableLanguages().includes('fr'), availableLanguages().join(','));
+  const frKeys = Object.keys(tableOf('fr'));
+  check('法语表条数与中文相同', frKeys.length === allKeys().length, `${frKeys.length} vs ${allKeys().length}`);
+
+  const frSamples: Array<[string, string]> = [
+    ['menu.play', 'Jouer'],
+    ['pause.title', 'Jeu en pause'],
+    ['chat.send', 'Envoyer'],
+    ['statistics.title', 'Statistiques du monde'],
+  ];
+  for (const [key, expected] of frSamples) {
+    check(`法语：${key}`, t(key, 'fr') === expected, t(key, 'fr'));
+  }
+  check('法语表里没有中文残留', !/[\u4e00-\u9fff]/.test(frKeys.map((key) => t(key, 'fr')).join('')));
+  // 只看**已翻的**键：没翻的组仍逐字等于英文，英文里的 `doesn't` 不该算进来
+  const frTranslated = frKeys.filter((key) => t(key, 'fr') !== t(key, 'en'));
+  const frAsciiApostrophe = frTranslated.filter((key) => t(key, 'fr').includes("'"));
+  check(
+    `法语值里没有 ASCII 撇号（统一用 ’，已翻 ${frTranslated.length} 条）`,
+    frAsciiApostrophe.length === 0,
+    frAsciiApostrophe.slice(0, 3).join(','),
+  );
+
+  setLanguage('fr');
+  const frForms = [0, 1, 2, 5].map((n) => tn('statistics.blocks', n));
+  check(
+    '法语复数：0 算单数（0 bloc / 1 bloc / 2 blocs / 5 blocs）',
+    frForms.join('|') === '0 bloc|1 bloc|2 blocs|5 blocs',
+    frForms.join('|'),
+  );
+  check(
+    '法语的过去分词也跟着配合（rempli / remplis）',
+    tn('buildtools.fill.done', 1) === '1 bloc rempli' && tn('buildtools.fill.done', 3) === '3 blocs remplis',
+    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+  );
+  resetLanguageForTest();
+
+  /**
    * 俄语（多语言 P4-2）。
    *
    * 俄语是**第一个真正需要复数变格**的语言：`1 блок / 2 блока / 5 блоков / 21 блок`。
