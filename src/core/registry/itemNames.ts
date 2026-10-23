@@ -41,7 +41,7 @@ import {
 } from './tools.ts';
 import { durabilityBar, rarityOf, type ItemRarity } from './itemVisuals.ts';
 // 多语言 P2-1a：物品名从"中文常量"改成"查表 + 模板拼装"，切语言不必重建模块
-import { t, tp } from '../i18n/I18n.ts';
+import { allKeys, t, tp } from '../i18n/I18n.ts';
 
 // ---------------------------------------------------------------- 规则生成
 
@@ -342,551 +342,6 @@ for (const material of ALL_ARMOR_MATERIALS) {
 
 // ---------------------------------------------------------------- 显式表
 
-const EXPLICIT: Record<string, string> = {
-  // 自然方块
-  stone: '石头',
-  dirt: '泥土',
-  grass_block: '草方块',
-  sand: '沙子',
-  cobblestone: '圆石',
-  bedrock: '基岩',
-  deepslate: '深板岩',
-  granite: '花岗岩',
-  diorite: '闪长岩',
-  andesite: '安山岩',
-  tuff: '凝灰岩',
-  calcite: '方解石',
-  gravel: '砂砾',
-  clay: '黏土块',
-  sandstone: '砂岩',
-  snow_block: '雪块',
-  // 雪层（批次 37）：与"雪块"是两样东西——它是 1~8 层的薄雪，用锹铲或徒手撸
-  snow: '雪',
-  ice: '冰',
-  frosted_ice: '霜冰',
-  packed_ice: '浮冰',
-  obsidian: '黑曜石',
-  raw_copper_block: '粗铜块',
-  raw_iron_block: '粗铁块',
-  // 流体与光
-  water: '水',
-  lava: '岩浆',
-  glowstone: '荧石',
-  // 火焰（I12）与下界传送门（K8）：都没有物品（背包里拿不到），
-  // 但方块的调试信息、主菜单与提示里要用到这两个名字
-  fire: '火焰',
-  // 灵魂火（批次 546）：同样没有物品，但调试信息与提示要用名字
-  soul_fire: '灵魂火',
-  nether_portal: '下界传送门',
-  // 下界合金（K8 尾巴）
-  netherite_block: '下界合金块',
-  smithing_table: '锻造台',
-  // 切石机（H11，批次 44）
-  stonecutter: '切石机',
-  // 村民的工作站（J23，批次 90）：名字与原版一致（村民职业靠"认领哪个方块"决定）
-  lectern: '讲台',
-  fletching_table: '制箭台',
-  grindstone: '砂轮',
-  loom: '织布机',
-  cartography_table: '制图台',
-  // 烟熏炉与高炉（H6，批次 46）、营火（批次 47）
-  smoker: '烟熏炉',
-  blast_furnace: '高炉',
-  campfire: '营火',
-  // 漏斗（批次 58，H14）：本项目第一件"会自己搬东西"的方块
-  hopper: '漏斗',
-  command_block: '命令方块',
-  jukebox: '唱片机',
-  bell: '钟',
-  armor_stand: '盔甲架',
-  cave_vines: '洞穴藤蔓',
-  music_disc_13: '唱片「13」',
-  music_disc_cat: '唱片「Cat」',
-  music_disc_ward: '唱片「Ward」',
-  totem_of_undying: '不死图腾',
-  heart_of_the_sea: '海洋之心',
-  nautilus_shell: '鹦鹉螺壳',
-  // 投掷器（批次 59，H14）：通电就朝朝向那一格吐一件（对面是容器就塞进去）
-  dropper: '投掷器',
-  dispenser: '发射器',
-  // 睡莲（B16）
-  lily_pad: '睡莲',
-  // 建材
-  stone_bricks: '石砖',
-  chiseled_stone_bricks: '錾制石砖',
-  smooth_stone: '平滑石头',
-  polished_granite: '磨制花岗岩',
-  polished_diorite: '磨制闪长岩',
-  polished_andesite: '磨制安山岩',
-  deepslate_bricks: '深板岩砖',
-  chiseled_deepslate: '錾制深板岩',
-  bricks: '红砖块',
-  polished_deepslate: '磨制深板岩',
-  mossy_cobblestone: '苔石',
-  mossy_stone_bricks: '苔石砖',
-  cracked_stone_bricks: '裂纹石砖',
-  cracked_deepslate_bricks: '裂纹深板岩砖',
-  cobbled_deepslate: '深板岩圆石',
-  chiseled_sandstone: '錾制砂岩',
-  cut_sandstone: '切制砂岩',
-  smooth_sandstone: '平滑砂岩',
-  // 红沙与红砂岩（批次 45）：名字与砂岩家族一一对应，只加"红"字
-  red_sand: '红沙',
-  red_sandstone: '红砂岩',
-  chiseled_red_sandstone: '錾制红砂岩',
-  cut_red_sandstone: '切制红砂岩',
-  smooth_red_sandstone: '平滑红砂岩',
-  // 石英家族与深板岩瓦、红色下界砖（批次 42）
-  quartz_block: '石英块',
-  chiseled_quartz_block: '錾制石英块',
-  quartz_pillar: '石英柱',
-  smooth_quartz: '平滑石英',
-  deepslate_tiles: '深板岩瓦',
-  red_nether_bricks: '红色下界砖',
-  // 功能方块
-  crafting_table: '工作台',
-  furnace: '熔炉',
-  chest: '箱子',
-  torch: '火把',
-  soul_torch: '灵魂火把',
-  soul_lantern: '灵魂灯笼',
-  ladder: '梯子',
-  // 锁链与藤蔓（B11）
-  chain: '锁链',
-  vine: '藤蔓',
-  oak_door: '橡木门',
-  oak_trapdoor: '橡木活板门',
-  oak_fence_gate: '橡木栅栏门',
-  oak_fence: '橡木栅栏',
-  cobblestone_wall: '圆石墙',
-  stone_brick_wall: '石砖墙',
-  // 植物与装饰
-  short_grass: '矮草',
-  oak_sapling: '橡木树苗',
-  birch_sapling: '白桦树苗',
-  spruce_sapling: '云杉树苗',
-  jungle_sapling: '丛林树苗',
-  acacia_sapling: '金合欢树苗',
-  dark_oak_sapling: '深色橡木树苗',
-  fern: '蕨',
-  dandelion: '蒲公英',
-  poppy: '虞美人',
-  blue_orchid: '兰花',
-  oxeye_daisy: '雏菊',
-  cornflower: '矢车菊',
-  red_mushroom: '红色蘑菇',
-  brown_mushroom: '棕色蘑菇',
-  sugar_cane: '甘蔗',
-  pumpkin: '南瓜',
-  melon: '西瓜',
-  cactus: '仙人掌',
-  dead_bush: '枯萎的灌木',
-  bamboo: '竹子',
-  // 附魔与铁砧（H9 / H8）
-  enchanting_table: '附魔台',
-  bookshelf: '书架',
-  anvil: '铁砧',
-  iron_block: '铁块',
-  // 海底
-  prismarine: '海晶石',
-  prismarine_bricks: '海晶石砖',
-  dark_prismarine: '暗海晶石',
-  sea_lantern: '海晶灯',
-  conduit: '潮涌核心',
-  powder_snow: '细雪',
-  // 下界
-  netherrack: '下界岩',
-  soul_sand: '灵魂沙',
-  soul_soil: '灵魂土',
-  basalt: '玄武岩',
-  smooth_basalt: '平滑玄武岩',
-  blackstone: '黑石',
-  // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材。
-  // ⚠️ 名字必须走 `put`（这张 EXPLICIT 表就是干这个的），**不能写进
-  // `STONE_VARIANT_PARENTS_CN`**——那张表是"变体名的词干"，只会派生出台阶/楼梯/墙，
-  // 写在那里等于三条死数据（而"每件物品都有中文名"那条断言正是抓这个的）
-  polished_blackstone: '磨制黑石',
-  gilded_blackstone: '鎏金黑石',
-  // 避雷针（批次 83）
-  lightning_rod: '避雷针',
-  // 黑石家族的装饰性补齐（批次 85）
-  chiseled_polished_blackstone: '錾制磨制黑石',
-  cracked_polished_blackstone_bricks: '裂纹磨制黑石砖',
-  // ⚠️ 母方块**自己**也要一个名字（上面那张 `STONE_VARIANT_PARENTS_CN` 只管派生
-  // "台阶/楼梯/墙"三个名字；方块本身的名字走的是这张表）
-  polished_blackstone_bricks: '磨制黑石砖',
-  magma_block: '岩浆块',
-  crimson_nylium: '绯红菌岩',
-  warped_nylium: '诡异菌岩',
-  crimson_stem: '绯红菌柄',
-  warped_stem: '诡异菌柄',
-  crimson_planks: '绯红木板',
-  warped_planks: '诡异木板',
-  crimson_fungus: '绯红菌',
-  warped_fungus: '诡异菌',
-  nether_wart_block: '下界疣块',
-  warped_wart_block: '诡异疣块',
-  shroomlight: '菌光体',
-  nether_bricks: '下界砖',
-  nether_quartz_ore: '下界石英矿石',
-  ancient_debris: '远古残骸',
-  crimson_roots: '绯红菌索',
-  warped_roots: '诡异菌索',
-  nether_sprouts: '下界苗',
-  // 末地
-  end_stone: '末地石',
-  end_stone_bricks: '末地石砖',
-  purpur_block: '紫珀块',
-  purpur_pillar: '紫珀柱',
-  chorus_plant: '紫颂植物',
-  chorus_flower: '紫颂花',
-  end_rod: '末地烛',
-  dragon_egg: '龙蛋',
-  end_portal_frame: '末地传送门框架',
-  end_portal: '末地传送门',
-  // 物品
-  coal: '煤炭',
-  charcoal: '木炭',
-  raw_iron: '粗铁',
-  raw_copper: '粗铜',
-  raw_gold: '粗金',
-  redstone: '红石粉',
-  lapis_lazuli: '青金石',
-  diamond: '钻石',
-  emerald: '绿宝石',
-  stick: '木棍',
-  iron_ingot: '铁锭',
-  // 铁粒（B11）：1 铁锭 ↔ 9 铁粒，锁链的原料
-  iron_nugget: '铁粒',
-  // 下界石英（批次 42）：石英家族的唯一原料
-  quartz: '下界石英',
-  gold_ingot: '金锭',
-  copper_ingot: '铜锭',
-  brick: '红砖',
-  clay_ball: '黏土球',
-  // 生物掉落物（这几件此前**根本没有词条**，一直被染料区压着显示成染料名）
-  rotten_flesh: '腐肉',
-  bone: '骨头',
-  bone_block: '骨块',
-  candle: '蜡烛',
-  tinted_glass: '遮光玻璃',
-  crying_obsidian: '哭泣的黑曜石',
-  glow_lichen: '发光地衣',
-  glow_berries: '发光浆果',
-  pointed_dripstone: '尖滴石',
-  dripstone_block: '滴水石块',
-  spore_blossom: '孢子花',
-  hanging_roots: '垂根',
-  rooted_dirt: '缠根泥土',
-  small_dripleaf: '小型垂滴叶',
-  big_dripleaf: '大型垂滴叶',
-  white_banner: '白色旗帜',
-  orange_banner: '橙色旗帜',
-  magenta_banner: '品红色旗帜',
-  light_blue_banner: '淡蓝色旗帜',
-  yellow_banner: '黄色旗帜',
-  lime_banner: '黄绿色旗帜',
-  pink_banner: '粉红色旗帜',
-  gray_banner: '灰色旗帜',
-  light_gray_banner: '淡灰色旗帜',
-  cyan_banner: '青色旗帜',
-  purple_banner: '紫色旗帜',
-  blue_banner: '蓝色旗帜',
-  brown_banner: '棕色旗帜',
-  green_banner: '绿色旗帜',
-  red_banner: '红色旗帜',
-  black_banner: '黑色旗帜',
-  white_glazed_terracotta: '白色带釉陶瓦',
-  orange_glazed_terracotta: '橙色带釉陶瓦',
-  magenta_glazed_terracotta: '品红色带釉陶瓦',
-  light_blue_glazed_terracotta: '淡蓝色带釉陶瓦',
-  yellow_glazed_terracotta: '黄色带釉陶瓦',
-  lime_glazed_terracotta: '黄绿色带釉陶瓦',
-  pink_glazed_terracotta: '粉红色带釉陶瓦',
-  gray_glazed_terracotta: '灰色带釉陶瓦',
-  light_gray_glazed_terracotta: '淡灰色带釉陶瓦',
-  cyan_glazed_terracotta: '青色带釉陶瓦',
-  purple_glazed_terracotta: '紫色带釉陶瓦',
-  blue_glazed_terracotta: '蓝色带釉陶瓦',
-  brown_glazed_terracotta: '棕色带釉陶瓦',
-  green_glazed_terracotta: '绿色带釉陶瓦',
-  red_glazed_terracotta: '红色带釉陶瓦',
-  black_glazed_terracotta: '黑色带釉陶瓦',
-  white_candle: '白色蜡烛',
-  orange_candle: '橙色蜡烛',
-  magenta_candle: '品红色蜡烛',
-  light_blue_candle: '淡蓝色蜡烛',
-  yellow_candle: '黄色蜡烛',
-  lime_candle: '黄绿色蜡烛',
-  pink_candle: '粉红色蜡烛',
-  gray_candle: '灰色蜡烛',
-  light_gray_candle: '淡灰色蜡烛',
-  cyan_candle: '青色蜡烛',
-  purple_candle: '紫色蜡烛',
-  blue_candle: '蓝色蜡烛',
-  brown_candle: '棕色蜡烛',
-  green_candle: '绿色蜡烛',
-  red_candle: '红色蜡烛',
-  black_candle: '黑色蜡烛',
-  amethyst_block: '紫水晶块',
-  budding_amethyst: '紫水晶芽床',
-  amethyst_cluster: '紫水晶簇',
-  amethyst_shard: '紫水晶碎片',
-  spyglass: '望远镜',
-  mycelium: '菌丝',
-  mushroom_stem: '蘑菇柄',
-  brown_mushroom_block: '棕色蘑菇块',
-  red_mushroom_block: '红色蘑菇块',
-  moss_block: '苔藓块',
-  moss_carpet: '苔藓地毯',
-  azalea: '杜鹃花丛',
-  bee_nest: '蜂巢',
-  waxed_copper_block: '涂蜡铜块',
-  waxed_exposed_copper: '涂蜡斑驳铜块',
-  waxed_weathered_copper: '涂蜡风化铜块',
-  waxed_oxidized_copper: '涂蜡氧化铜块',
-  honeycomb: '蜜脾',
-  honey_bottle: '蜂蜜瓶',
-  elytra: '鞘翅',
-  flowering_azalea: '盛开的杜鹃花丛',
-  zombie_spawner: '僵尸刷怪笼',
-  cave_spider_spawner: '洞穴蜘蛛刷怪笼',
-  silverfish_spawner: '蠹虫刷怪笼',
-  prismarine_shard: '海晶碎片',
-  // 下界砖（批次 413）
-  nether_brick: '下界砖',
-  hay_block: '干草块',
-  oak_wood: '橡木木头',
-  spruce_wood: '云杉木头',
-  birch_wood: '白桦木头',
-  jungle_wood: '丛林木头',
-  acacia_wood: '金合欢木头',
-  dark_oak_wood: '深色橡木木头',
-  polished_basalt: '磨制玄武岩',
-  blue_ice: '蓝冰',
-  sponge: '海绵',
-  wet_sponge: '湿海绵',
-  honey_block: '蜂蜜块',
-  lodestone: '磁石',
-  respawn_anchor: '重生锚',
-  honeycomb_block: '蜜脾块',
-  cobweb: '蛛网',
-  stripped_oak_log: '剥皮橡木原木',
-  stripped_spruce_log: '剥皮云杉原木',
-  stripped_birch_log: '剥皮白桦原木',
-  stripped_jungle_log: '剥皮丛林原木',
-  stripped_acacia_log: '剥皮金合欢原木',
-  stripped_dark_oak_log: '剥皮深色橡木原木',
-  spruce_button: '云杉按钮',
-  birch_button: '白桦按钮',
-  jungle_button: '丛林按钮',
-  acacia_button: '金合欢按钮',
-  dark_oak_button: '深色橡木按钮',
-  spruce_pressure_plate: '云杉压力板',
-  birch_pressure_plate: '白桦压力板',
-  jungle_pressure_plate: '丛林压力板',
-  acacia_pressure_plate: '金合欢压力板',
-  dark_oak_pressure_plate: '深色橡木压力板',
-  chorus_fruit: '紫颂果',
-  popped_chorus_fruit: '爆裂紫颂果',
-  prismarine_crystals: '海晶砂粒',
-  bone_meal: '骨粉',
-  pumpkin_seeds: '南瓜籽',
-  melon_seeds: '西瓜籽',
-  snowball: '雪球',
-  egg: '鸡蛋',
-  dragon_breath: '龙息',
-  gunpowder: '火药',
-  beef: '生牛肉',
-  porkchop: '生猪排',
-  mutton: '生羊肉',
-  chicken: '生鸡肉',
-  leather: '皮革',
-  feather: '羽毛',
-  // 附魔材料
-  paper: '纸',
-  book: '书',
-  // 农业
-  farmland: '耕地',
-  // 瓜藤（批次 77）：与作物阶段同一套命名（阶段从 1 数起）
-  pumpkin_stem_stage0: '南瓜藤（刚播下）',
-  pumpkin_stem_stage1: '南瓜藤（第 2 阶段）',
-  pumpkin_stem_stage2: '南瓜藤（第 3 阶段）',
-  pumpkin_stem_stage3: '南瓜藤（第 4 阶段）',
-  pumpkin_stem_stage4: '南瓜藤（第 5 阶段）',
-  pumpkin_stem_stage5: '南瓜藤（第 6 阶段）',
-  pumpkin_stem_stage6: '南瓜藤（第 7 阶段）',
-  pumpkin_stem_stage7: '南瓜藤（已成熟（随时会结果））',
-  melon_stem_stage0: '西瓜藤（刚播下）',
-  melon_stem_stage1: '西瓜藤（第 2 阶段）',
-  melon_stem_stage2: '西瓜藤（第 3 阶段）',
-  melon_stem_stage3: '西瓜藤（第 4 阶段）',
-  melon_stem_stage4: '西瓜藤（第 5 阶段）',
-  melon_stem_stage5: '西瓜藤（第 6 阶段）',
-  melon_stem_stage6: '西瓜藤（第 7 阶段）',
-  melon_stem_stage7: '西瓜藤（已成熟（随时会结果））',
-  attached_pumpkin_stem: '南瓜藤（已结果）',
-  attached_melon_stem: '西瓜藤（已结果）',
-  carrots_stage0: '胡萝卜（第 1 阶段）',
-  potatoes_stage0: '马铃薯（第 1 阶段）',
-  wheat_stage0: '小麦（幼苗）',
-  carrots_stage1: '胡萝卜（第 2 阶段）',
-  potatoes_stage1: '马铃薯（第 2 阶段）',
-  wheat_stage1: '小麦（生长中）',
-  carrots_stage2: '胡萝卜（第 3 阶段）',
-  potatoes_stage2: '马铃薯（第 3 阶段）',
-  wheat_stage2: '小麦（抽穗）',
-  carrots_stage3: '胡萝卜（第 4 阶段）',
-  potatoes_stage3: '马铃薯（第 4 阶段）',
-  // 甜菜（批次 48）：第四种作物，四个阶段各自一个方块
-  beetroots_stage0: '甜菜（第 1 阶段）',
-  beetroots_stage1: '甜菜（第 2 阶段）',
-  beetroots_stage2: '甜菜（第 3 阶段）',
-  beetroots_stage3: '甜菜（第 4 阶段）',
-  // 甜浆果丛与可可豆（批次 49）
-  sweet_berry_bush_stage0: '甜浆果丛（幼苗）',
-  sweet_berry_bush_stage1: '甜浆果丛（生长中）',
-  sweet_berry_bush_stage2: '甜浆果丛（结果）',
-  sweet_berry_bush_stage3: '甜浆果丛（成熟）',
-  cocoa_stage0: '可可果（未成熟）',
-  cocoa_stage1: '可可果（半熟）',
-  cocoa_stage2: '可可果（成熟）',
-  // 海带与海草（批次 50）：长在海底的两样植物（方块本身就是物品）
-  kelp: '海带',
-  seagrass: '海草',
-  dried_kelp: '干海带',
-  dried_kelp_block: '干海带块',
-  // 蛋糕与花盆（批次 52）
-  cake: '蛋糕',
-  flower_pot: '花盆',
-  // 脚手架（批次 53）
-  scaffolding: '脚手架',
-  // 绊线与绊线钩（批次 55）：绊线没有物品，但方块名（调试/提示）要有
-  tripwire: '绊线',
-  tripwire_hook: '绊线钩',
-  // TNT（批次 56）
-  tnt: 'TNT',
-  // 阳光传感器（批次 54）：中文名**不在这里写**——红石元件那一张 `REDSTONE_CN` 表里
-  // 早就有 `daylight_detector: '阳光探测器'`（官方译名），两处都写必然漂（第一版就写成了
-  // "阳光传感器"，实测被后注册的那张表覆盖掉）
-  wheat_stage3: '小麦（成熟）',
-  wheat_seeds: '小麦种子',
-  // ---- 食物与杂物补齐（批次 48）
-  gold_nugget: '金粒',
-  bowl: '碗',
-  oak_boat: '橡木船',
-  minecart: '矿车',
-  hopper_minecart: '漏斗矿车',
-  furnace_minecart: '动力矿车',
-  saddle: '鞍',
-  leather_horse_armor: '皮革马铠',
-  iron_horse_armor: '铁马铠',
-  golden_horse_armor: '金马铠',
-  diamond_horse_armor: '钻石马铠',
-  lead: '拴绳',
-  name_tag: '命名牌',
-  crossbow: '弩',
-  mushroom_stew: '蘑菇煲',
-  pumpkin_pie: '南瓜派',
-  beetroot: '甜菜根',
-  beetroot_seeds: '甜菜种子',
-  beetroot_soup: '甜菜汤',
-  sweet_berries: '甜浆果',
-  cocoa_beans: '可可豆',
-  cookie: '曲奇',
-  // 可疑的炖菜（批次 57）：展示名**故意带花名**——原版是"同一样物品 + NBT"，
-  // 光看名字分不出哪一碗；我们按花分 id，就把花写进名字里（更好用，见 TASKS B31 的差异记录）
-  suspicious_stew_dandelion: '可疑的炖菜（蒲公英）',
-  suspicious_stew_poppy: '可疑的炖菜（虞美人）',
-  suspicious_stew_blue_orchid: '可疑的炖菜（兰花）',
-  suspicious_stew_oxeye_daisy: '可疑的炖菜（雏菊）',
-  suspicious_stew_cornflower: '可疑的炖菜（矢车菊）',
-  wheat: '小麦',
-  bread: '面包',
-  brewing_stand: '酿造台',
-  rabbit_foot: '兔子脚',
-  magma_cream: '岩浆膏',
-  ghast_tear: '恶魂之泪',
-  spider_eye: '蜘蛛眼',
-  fermented_spider_eye: '发酵蜘蛛眼',
-  glistering_melon_slice: '闪烁的西瓜片',
-  pufferfish: '河豚',
-  golden_carrot: '金萝卜',
-  // ---- 钓鱼（批次 81，G11）
-  fishing_rod: '钓竿',
-  cod: '生鳕鱼',
-  salmon: '生鲑鱼',
-  tropical_fish: '热带鱼',
-  cooked_cod: '熟鳕鱼',
-  cooked_salmon: '熟鲑鱼',
-  redstone_ingredient: '红石',
-  glowstone_dust_ingredient: '荧石粉',
-  glass_bottle: '玻璃瓶',
-  water_bottle: '水瓶',
-  nether_wart: '下界疣',
-  blaze_powder: '烈焰粉',
-  // 下界疣的 4 个阶段（批次 92）：与小麦/甜菜一样，每个阶段各是一个方块物品
-  nether_wart_stage0: '下界疣（刚种下）',
-  nether_wart_stage1: '下界疣（生长中）',
-  nether_wart_stage2: '下界疣（快熟了）',
-  nether_wart_stage3: '下界疣（成熟）',
-  blaze_rod: '烈焰棒',
-  ender_pearl: '末影珍珠',
-  ender_eye: '末影之眼',
-  spawner: '刷怪笼',
-  wither_skeleton_skull: '凋灵骷髅头',
-  nether_star: '下界之星',
-  gold_block: '金块',
-  diamond_block: '钻石块',
-  emerald_block: '绿宝石块',
-  beacon: '信标',
-  slime_ball: '黏液球',
-  trident: '三叉戟',
-  phantom_membrane: '幻翼膜',
-  ink_sac: '墨囊',
-  map: '地图',
-  filled_map: '已填好的地图',
-  clock: '时钟',
-  compass: '指南针',
-  shield: '盾牌',
-  firework_star: '烟火之星',
-  firework_rocket: '烟花火箭',
-  writable_book: '书与笔',
-  written_book: '成书',
-  sugar: '糖',
-  // 药水的名字与说明**不在这里写**：24 瓶全部由 `potions.ts` 的变体表生成（见文件后半段），
-  // 否则"改了表的时长、忘了改文案"这类漂移没人能发现
-  carrot: '胡萝卜',
-  potato: '马铃薯',
-  baked_potato: '烤马铃薯',
-  // 工具与杂项
-  shears: '剪刀',
-  bucket: '桶',
-  water_bucket: '水桶',
-  lava_bucket: '岩浆桶',
-  powder_snow_bucket: '细雪桶',
-  cauldron: '炼药锅',
-  milk_bucket: '牛奶桶',
-  flint_and_steel: '打火石',
-  // 下界合金（K8 尾巴）：材料
-  netherite_scrap: '下界合金碎片',
-  netherite_ingot: '下界合金锭',
-  // 弓与箭
-  flint: '燧石',
-  string: '线',
-  arrow: '箭',
-  bow: '弓',
-  // 食物
-  cooked_beef: '牛排',
-  cooked_porkchop: '熟猪排',
-  cooked_mutton: '熟羊肉',
-  cooked_chicken: '熟鸡肉',
-  apple: '苹果',
-  melon_slice: '西瓜片',
-  golden_apple: '金苹果',
-};
-
-for (const [id, name] of Object.entries(EXPLICIT)) put(id, name);
 
 // 红石元件（多语言 P2-1b-2）：键**写死**，不走 `item.${id}` —— 前缀 `item.` 太短，会把整个命名空间洗白，孤儿判据就废了
 put('redstone_wire', () => t('item.redstone_wire'));
@@ -1390,12 +845,33 @@ for (const spec of SPAWN_EGG_SPECS) {
 // ---------------------------------------------------------------- 对外接口
 
 /** 由英文 id（可带命名空间）取中文名；查不到就回退成英文 id */
+/**
+ * 由英文 id（可带命名空间）取当前语言的名字。
+ *
+ * 三级查找（多语言 P2-2）：
+ *  ① **族拼装表** `NAMES`：颜色/木材/工具这类"构件 + 模板"生成的名字；
+ *  ② **语言表里的 `item.<id>`**：显式名字（481 条），查不到说明这条没有词条；
+ *  ③ 都查不到 → 回退成注册 id（宁可露出 `grasss_block` 让人发现，也不要显示空串）。
+ */
 export function translateName(id: string): string {
   const key = id.startsWith('minecraft:') ? id.slice('minecraft:'.length) : id;
   const value = NAMES.get(key);
-  if (value === undefined) return key;
-  // 函数形态（多语言 P2-1a）：**取值这一刻**才查表，所以切语言后立刻是新的
-  return typeof value === 'function' ? value() : value;
+  if (value !== undefined) {
+    // 函数形态（多语言 P2-1a）：**取值这一刻**才查表，所以切语言后立刻是新的
+    return typeof value === 'function' ? value() : value;
+  }
+  // ⚠️ 必须写成**模板字面量**而不是 `t(probe)`：`audit:i18n` 靠它认出"这一族键是数据驱动取的"，
+  // 写成变量的话 481 条 `item.<id>` 会全被判成孤儿，那份报告就没法看了。
+  const probe = `item.${key}`;
+  const text = t(`item.${key}`);
+  return text === probe ? key : text;
+}
+
+/** 这个名字有来源吗（族拼装表，或 `item.<id>` 在语言表里命中） */
+function hasName(key: string): boolean {
+  if (NAMES.has(key)) return true;
+  const probe = `item.${key}`;
+  return t(`item.${key}`) !== probe;
 }
 
 /** 方块的中文名 */
@@ -1640,7 +1116,8 @@ export function itemTooltip(
 
 /** 供测试与调试：所有有中文名的条目数 */
 export function knownNameCount(): number {
-  return NAMES.size;
+  // 族拼成的名字 + 语言表里的 `item.<id>` 词条（P2-2 之后后者是主体）
+  return NAMES.size + allKeys().filter((key) => key.startsWith('item.') && !key.startsWith('item.tpl.')).length;
 }
 
 /** 供测试用：方块表里还没翻译的条目（应当为空） */
@@ -1649,7 +1126,7 @@ export function missingBlockNames(): string[] {
   for (const def of BLOCKS) {
     if (!def || def.id === 0) continue;
     const key = def.name.replace('minecraft:', '');
-    if (!NAMES.has(key)) missing.push(key);
+    if (!hasName(key)) missing.push(key);
   }
   return missing;
 }

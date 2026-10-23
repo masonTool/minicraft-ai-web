@@ -975,6 +975,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('颜色构件正好 16 个（染料族按它展开）', itemKeys.filter((key) => key.startsWith('item.color.')).length === 16);
   check('物品名构件表非空', itemKeys.length > 150, String(itemKeys.length));
 
+  // 显式名（多语言 P2-2）：`item.<id>` 是 481 条显式名的落脚点，掉一大截说明被误删了
+  const explicitNames = itemKeys.filter((key) => !key.startsWith('item.') === false && key.split('.').length === 2);
+  check('显式物品名 ≥ 480 条（481 条显式名 + 38 条红石元件）', explicitNames.length >= 480, String(explicitNames.length));
+
   const tplKeys = itemKeys.filter((key) => key.startsWith('item.tpl.'));
   const badTpl = tplKeys.filter((key) => !/\{\w+\}/.test(t(key, 'zh')));
   check(`模板都带占位符（${tplKeys.length} 个）`, badTpl.length === 0, badTpl.slice(0, 3).join(','));
