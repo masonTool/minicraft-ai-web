@@ -594,10 +594,30 @@ import {
 } from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
-import type { DropperEnv } from './core/container/Dropper.ts';
+import { Dropper, type DropperEnv } from './core/container/Dropper.ts';
 import { Hopper, type HopperEnv } from './core/container/Hopper.ts';
 import { containerSlotCount, isComputedResultSlot } from './core/container/Transfer.ts';
-import type { BlockContainer } from './core/world/BlockEntityStore.ts';
+import type { BlockContainer, BlockEntityStore } from './core/world/BlockEntityStore.ts';
+
+/**
+ * 会同步给队友的容器种类（联机15）。
+ *
+ * 条目列的就是这 9 种：箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 /
+ * 投掷器 / 漏斗（`Barrel extends Chest`、`Dispenser extends Dropper`、木桶与潜影盒
+ * 都算在 `Chest` 里）。铁砧/织布机/讲台这些是"操作台"，内容不是共用储物，暂不同步。
+ */
+type SyncedContainer = Chest | Furnace | Hopper | Dropper | BrewingStand;
+
+/** 这个容器要不要跟着广播内容（联机15） */
+function isSyncedContainer(container: BlockContainer): container is SyncedContainer {
+  return (
+    container instanceof Chest ||
+    container instanceof Furnace ||
+    container instanceof Hopper ||
+    container instanceof Dropper ||
+    container instanceof BrewingStand
+  );
+}
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import {
   DAWN_TIME,
@@ -1969,10 +1989,17 @@ class App {
   private save: SaveGame | null;
   /** 现在写的是联机库（联机6） */
   private inMultiplayerSave = false;
-  /** 联机容器同步的防抖（L4，批次 611） */
+  /**
+   * 联机容器同步的防抖（L4，批次 611；联机15 收成"待发集合"）。
+   *
+   * 原来是"一个 target + 一个 timer"，只能记一个容器。统一出口之后，漏斗/熔炉
+   * 自己搬东西也会改内容，同一时刻可能有多个容器都变了——必须能一起发。
+   */
   private containerSyncTimer: number | null = null;
-  private containerSyncTarget: { chest: Chest; x: number; y: number; z: number; dimension: DimensionId } | null =
-    null;
+  private readonly containerSyncPending = new Map<
+    string,
+    { container: SyncedContainer; x: number; y: number; z: number; dimension: DimensionId }
+  >();
   /**
    * 队友那边的掉落物镜像（L7 第一刀，key = "owner:localId"）。
    *
@@ -3521,11 +3548,13 @@ class App {
   }
 
   /**
-   * 收到队友的容器内容（L4，批次 611）。
+   * 收到队友的容器内容（L4 批次 611；联机15 扩到全部工作站）。
    *
-   * 只处理当前维度、且方块确实是箱子/木桶的情况；槽位走 `restoreStacks`
-   * 清洗（未知 id、坏数量会被丢掉）。`Chest.restore` 不触发 `onMutate`，
-   * 所以不会把刚收到的内容再广播回去。
+   * 按方块取容器（`containerOfBlockAt`，20 种映射只写一份），再逐格写回。
+   * 槽位走 `restoreStacks` 清洗（未知 id、坏数量会被丢掉）。
+   *
+   * 写回期间 `applyingRemoteBlock > 0`：容器的 `onMutate` 会看见它并跳过广播，
+   * 否则刚收到的内容会原样发回去，两端来回弹。
    */
   private onNetContainer(data: NetContainerState): void {
     if (data.dimension !== this.dimension) return;
@@ -3538,15 +3567,16 @@ class App {
       else this.pendingContainers.set(key, [data]);
       return;
     }
-    const id = this.world.getBlock(data.x, data.y, data.z);
-    let chest: Chest | null = null;
-    if (id === Block.BARREL) {
-      chest = this.world.containers.getOrCreateBarrel(this.dimension, data.x, data.y, data.z);
-    } else if (id === Block.CHEST || id === Block.TRAPPED_CHEST) {
-      chest = this.world.containers.getOrCreateChest(this.dimension, data.x, data.y, data.z);
+    const container = this.containerOfBlockAt(data.x, data.y, data.z);
+    if (!container) return;
+    const count = SLOT_COUNTS[kindOf(container)];
+    const stacks = restoreStacks(data.slots, count);
+    this.applyingRemoteBlock++;
+    try {
+      for (let i = 0; i < count; i++) container.set(i, stacks[i] ?? null);
+    } finally {
+      this.applyingRemoteBlock--;
     }
-    if (!chest) return;
-    chest.restore(restoreStacks(data.slots, chest.size));
   }
 
   /** 区块加载完之后，把之前存下的队友容器内容补上（联机13） */
@@ -3559,24 +3589,39 @@ class App {
     for (const data of list) this.onNetContainer(data);
   }
 
-  /** 本地打开箱子/木桶时挂上防抖广播（80ms 合并拖拽产生的连续变更） */
-  private bindContainerSync(chest: Chest, x: number, y: number, z: number): void {
-    this.containerSyncTarget = { chest, x, y, z, dimension: this.dimension };
-    chest.onMutate = () => {
-      if (this.containerSyncTimer !== null) return;
-      this.containerSyncTimer = window.setTimeout(() => {
-        this.containerSyncTimer = null;
-        const target = this.containerSyncTarget;
-        if (!target) return;
-        this.net.sendContainer(
-          target.x,
-          target.y,
-          target.z,
-          target.dimension,
-          serializeStacks(target.chest.snapshot()),
-        );
-      }, 80);
+  /**
+   * 给一个容器挂上"内容变了就广播"（联机15：所有工作站共用这一个出口）。
+   *
+   * 原来只有"打开箱子/木桶"时才挂，于是熔炉烧出东西、漏斗搬运、发射器吐弹……
+   * 队友那边全都看不见。现在 `containerOfBlockAt` 建出容器时就挂上，**不打开也同步**。
+   */
+  private bindContainerSync(container: SyncedContainer, x: number, y: number, z: number): void {
+    const dimension = this.dimension;
+    const key = `${dimension}|${x},${y},${z}`;
+    container.onMutate = () => {
+      // 回声抑制（联机12/15）：远端内容写回本地时不广播
+      if (this.applyingRemoteBlock > 0) return;
+      this.containerSyncPending.set(key, { container, x, y, z, dimension });
+      this.scheduleContainerSync();
     };
+  }
+
+  /** 80ms 防抖：拖拽整理一次会连着改十几格，合成一包发 */
+  private scheduleContainerSync(): void {
+    if (this.containerSyncTimer !== null) return;
+    this.containerSyncTimer = window.setTimeout(() => {
+      this.containerSyncTimer = null;
+      const pending = [...this.containerSyncPending.entries()];
+      this.containerSyncPending.clear();
+      for (const [, target] of pending) {
+        // 按容器种类取格数：箱子 27、熔炉 3、酿造台 5……
+        const count = SLOT_COUNTS[kindOf(target.container)];
+        const slots: (ItemStack | null)[] = [];
+        // 空容器也要发：队友那边得知道"东西被拿光了"，跳过它就永远是满的
+        for (let i = 0; i < count; i++) slots.push(target.container.get(i));
+        this.net.sendContainer(target.x, target.y, target.z, target.dimension, serializeStacks(slots));
+      }
+    }, 80);
   }
 
   private onNetLeave(id: number): void {
@@ -14169,6 +14214,24 @@ class App {
     const store = this.world.containers;
     const dimension = this.dimension;
 
+    const container = this.createContainerFor(store, dimension, block, x, y, z);
+    if (!container) return null;
+    // 统一出口（联机15）：建出来就挂上广播，**不打开界面也同步**。
+    // 原来只有右键打开箱子/木桶时才挂，于是熔炉烧出东西、漏斗搬东西、发射器吐弹
+    // 队友那边全看不见。
+    if (isSyncedContainer(container)) this.bindContainerSync(container, x, y, z);
+    return container;
+  }
+
+  /** 方块 → 容器实例（懒创建）。映射只写这一份，`containerOfBlockAt` 负责绑定广播 */
+  private createContainerFor(
+    store: BlockEntityStore,
+    dimension: DimensionId,
+    block: number,
+    x: number,
+    y: number,
+    z: number,
+  ): BlockContainer | null {
     if (block === Block.CHEST) return store.getOrCreateChest(dimension, x, y, z);
     if (block === Block.BARREL) return store.getOrCreateBarrel(dimension, x, y, z);
     if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);

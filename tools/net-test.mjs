@@ -479,6 +479,33 @@ try {
     check('批量里的非法条目被丢掉', filtered?.blocks?.length === 1, JSON.stringify(filtered));
   }
 
+  // ---------------------------------------------------------------- 容器同步（联机15）
+  console.log('\n[容器同步]');
+  {
+    alice.mailbox.length = 0;
+    // 服务端不按方块类型限制：熔炉 3 格、漏斗 5 格、箱子 27 格都走同一条 container 消息
+    bob.send({
+      t: 'container',
+      x: 70,
+      y: 70,
+      z: 70,
+      dimension: 'overworld',
+      slots: [{ id: 1, count: 2 }, null, null],
+    });
+    const furnaceMsg = await alice.wait('container', 2000);
+    check(
+      '熔炉（3 格）的内容被转发',
+      Array.isArray(furnaceMsg?.slots) && furnaceMsg.slots.length === 3,
+      JSON.stringify(furnaceMsg),
+    );
+    check('转发里带 by（发送者 id）', typeof furnaceMsg?.by === 'number', `${furnaceMsg?.by}`);
+
+    // 超过 27 格（最大的容器）整条丢：服务端只做形状校验
+    alice.mailbox.length = 0;
+    bob.send({ t: 'container', x: 71, y: 70, z: 70, dimension: 'overworld', slots: new Array(28).fill(null) });
+    check('超过 27 格的容器消息被拒', (await alice.wait('container', 600)) === null);
+  }
+
   // ---------------------------------------------------------------- 睡眠跳夜（联机11）
   console.log('\n[睡眠跳夜]');
   {

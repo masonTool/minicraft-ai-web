@@ -61,6 +61,13 @@ export class BrewingStand implements SlotSource {
   started = true;
 
   onChange: (() => void) | null = null;
+  /**
+   * 槽位内容被改动（联机15）：与 `onChange` 分开。
+   *
+   * `onChange` 是界面刷新，`tick` 里"点燃状态变了"也会调它；联机只关心内容，
+   * 而且远端恢复（逐格 `set` 写回）不该触发它——抑制由调用方做（`main.ts` 的 `applyingRemoteBlock`）。
+   */
+  onMutate: (() => void) | null = null;
 
   get(index: number): ItemStack | null {
     return this.slots[index] ?? null;
@@ -68,6 +75,7 @@ export class BrewingStand implements SlotSource {
 
   set(index: number, stack: ItemStack | null): void {
     this.slots[index] = stack;
+    this.onMutate?.();
     this.onChange?.();
   }
 
