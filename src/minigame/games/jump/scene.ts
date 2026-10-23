@@ -91,10 +91,9 @@ export class JumpGame implements MiniGame {
 
   private hud: HTMLDivElement | null = null;
   private scoreEl: HTMLDivElement | null = null;
-  private bestEl: HTMLDivElement | null = null;
-  private hintEl: HTMLDivElement | null = null;
   private overEl: HTMLDivElement | null = null;
   private overTitleEl: HTMLDivElement | null = null;
+  private overScoreEl: HTMLDivElement | null = null;
   private overBestEl: HTMLDivElement | null = null;
 
   private best = 0;
@@ -147,9 +146,8 @@ export class JumpGame implements MiniGame {
     this.overEl?.remove();
     this.overEl = null;
     this.scoreEl = null;
-    this.bestEl = null;
-    this.hintEl = null;
     this.overTitleEl = null;
+    this.overScoreEl = null;
     this.overBestEl = null;
     this.context = null;
     this.pending = null;
@@ -474,6 +472,8 @@ export class JumpGame implements MiniGame {
   // ---------------------------------------------------------------- HUD
 
   private buildHud(context: MiniGameContext): void {
+    // 原版游戏里**只有一个分数**：左上角、深色细体、没有任何别的字。
+    // 所以这里不建"最高分"行、也不建底部提示——它们正是"看着不像原版"的来源。
     const hud = document.createElement('div');
     hud.className = 'jump-hud';
 
@@ -481,19 +481,8 @@ export class JumpGame implements MiniGame {
     score.className = 'jump-score';
     this.scoreEl = score;
 
-    const best = document.createElement('div');
-    best.className = 'jump-best';
-    this.bestEl = best;
-
-    const hint = document.createElement('div');
-    hint.className = 'jump-hint';
-    hint.textContent = t('minigame.jump.hint');
-    this.hintEl = hint;
-
-    hud.append(score, best);
-    // 提示单独挂在 stage 上：`.jump-hint` 是绝对定位，挂进 `.jump-hud`（也是 absolute）
-    // 会相对它定位，结果跑到左上角与分数叠在一起
-    context.layer.append(hud, hint);
+    hud.append(score);
+    context.layer.append(hud);
     this.hud = hud;
 
     const over = document.createElement('div');
@@ -509,9 +498,16 @@ export class JumpGame implements MiniGame {
     const panel = document.createElement('div');
     panel.className = 'jump-over-panel';
 
+    // 原版没有结算页可参照（参考图 09 是排行榜），所以沿用首页的语言：
+    // 一行小标签 + 一个很大的数字 + 最高分 + 两颗胶囊按钮。
     const title = document.createElement('div');
     title.className = 'jump-over-title';
+    title.textContent = t('minigame.jump.over');
     this.overTitleEl = title;
+
+    const overScore = document.createElement('div');
+    overScore.className = 'jump-over-score';
+    this.overScoreEl = overScore;
 
     const overBest = document.createElement('div');
     overBest.className = 'jump-over-best';
@@ -539,7 +535,7 @@ export class JumpGame implements MiniGame {
     });
 
     actions.append(retry, exit);
-    panel.append(title, overBest, actions);
+    panel.append(title, overScore, overBest, actions);
     over.appendChild(panel);
     context.layer.appendChild(over);
     this.overEl = over;
@@ -547,20 +543,18 @@ export class JumpGame implements MiniGame {
 
   private updateHud(): void {
     if (this.scoreEl) this.scoreEl.textContent = String(this.run.score);
-    if (this.bestEl) this.bestEl.textContent = tp('minigame.jump.best', { best: this.best });
-    if (this.hintEl) this.hintEl.classList.toggle('hidden', this.run.score > 0 || this.phase === 'over');
   }
 
   private showOver(score: number, newRecord = false): void {
     if (!this.overEl) return;
-    if (this.overTitleEl) this.overTitleEl.textContent = tp('minigame.jump.over', { score });
+    if (this.overScoreEl) this.overScoreEl.textContent = String(score);
+    if (this.overTitleEl) this.overTitleEl.textContent = t('minigame.jump.over');
     if (this.overBestEl) {
       this.overBestEl.textContent = newRecord
         ? t('minigame.jump.record')
         : tp('minigame.jump.best', { best: this.best });
     }
     this.overEl.classList.remove('hidden');
-    if (this.hintEl) this.hintEl.classList.add('hidden');
   }
 }
 
