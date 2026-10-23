@@ -24,6 +24,7 @@ import { itemDesc } from './itemDesc.ts';
 import { label } from './label.ts';
 import { entity } from './entity.ts';
 import { misc } from './misc.ts';
+import { advancement } from './advancement.ts';
 
 export const zh = {
   ...menu,
@@ -41,6 +42,7 @@ export const zh = {
   ...label,
   ...entity,
   ...misc,
+  ...advancement,
 } as const;
 
 export type MessageKey = keyof typeof zh;

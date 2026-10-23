@@ -1316,7 +1316,15 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
       if (table[key] === enTable[key] && (zhTable[key] ?? '') !== (enTable[key] ?? '')) bucket.sameAsEn += 1;
       byGroup.set(group, bucket);
     }
+    // ⚠️ 已知占位分组：P6-4 本轮只把成就翻成德语，ru / fr / pt 仍是英文占位（真值 = 英文）。
+    // 这三项做完（P6-4a/b/c）必须删掉，否则这条判据不再是"漏翻探测器"。
+    const knownPlaceholder: Partial<Record<(typeof sweepLocales)[number], readonly string[]>> = {
+      ru: ['advancement'],
+      fr: ['advancement'],
+      pt: ['advancement'],
+    };
     const untranslatedGroups = [...byGroup.entries()]
+      .filter(([group]) => !(knownPlaceholder[code] ?? []).includes(group))
       .filter(([, b]) => b.total >= 20 && b.sameAsEn / b.total > 0.9)
       .map(([group, b]) => `${group}:${b.sameAsEn}/${b.total}`);
     check(`巡查 ${code}：没有整组仍是英文的组`, untranslatedGroups.length === 0, untranslatedGroups.join(','));
@@ -1371,6 +1379,27 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   }
   setLanguage('zh');
   check('中文下模式/难度标签仍是中文', gameModeLabel('creative') === '创造' && difficultyLabel('hard') === '困难', `${gameModeLabel('creative')} / ${difficultyLabel('hard')}`);
+
+  /**
+   * 成就文案（P6-4，批次 20261024-0020）。
+   *
+   * 200 条（100 × 标题+描述）从「中文在 `advancements.ts`、英文在 `advancementText.data.ts`」的
+   * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minecraft:story/root` →
+   * `advancement.story_root.title`）。本轮只翻德语，ru / fr / pt 仍是英文占位（巡查里有白名单）。
+   */
+  check('中文成就标题与原文逐条一致', ADVANCEMENTS.every((a) => advancementTitle(a) === a.title));
+  setLanguage('en');
+  const advEn = ADVANCEMENTS.map((a) => advancementTitle(a));
+  setLanguage('de');
+  const advDe = ADVANCEMENTS.map((a) => advancementTitle(a));
+  check('德语成就标题不含中文', !/[\u4e00-\u9fff]/.test(advDe.join('')));
+  const sameAsEn = advDe.filter((title, i) => title === advEn[i]).length;
+  // 允许少量专名与梗原样保留（`Minecraft` / `Nether` / `Sssssss…` / `Ice Bucket Challenge`），
+  // 所以阈值是 10 而不是 0 —— 但 100 条里只有 6 条，说明其余都真翻了。
+  check('德语成就标题基本都已本地化', sameAsEn <= 10, `${sameAsEn}/${advDe.length} 条与英文相同`);
+  setLanguage('zh');
+  check('中文成就说明与原文逐条一致', ADVANCEMENTS.every((a) => advancementDesc(a) === a.desc));
+  resetLanguageForTest();
 
   /**
    * 药水与药水箭的名字（P6-2，批次 20261024-0020）。

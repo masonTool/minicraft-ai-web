@@ -23,6 +23,7 @@ import { itemDesc } from './itemDesc.ts';
 import { label } from './label.ts';
 import { entity } from './entity.ts';
 import { misc } from './misc.ts';
+import { advancement } from './advancement.ts';
 
 export const de = {
   ...menu,
@@ -40,4 +41,5 @@ export const de = {
   ...label,
   ...entity,
   ...misc,
+  ...advancement,
 } satisfies Messages;
