@@ -1113,11 +1113,31 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.grass_block', 'Grasblock'],
     ['item.cobblestone', 'Bruchstein'],
     ['item.cooked_beef', 'Steak'],
+    // P4-1d 起：命令用法与回执也是德语
+    ['cmd.give.desc', 'Gibt dir Gegenstände (Name auf Deutsch/Englisch oder als Zahl)'],
+    ['cmd.reply.team.prefix', 'Präfix'],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));
   }
   check('德语回执用了德语序数/缩写（不含中文）', !/[\u4e00-\u9fff]/.test(deKeys.map((key) => t(key, 'de')).join('')));
+
+  /**
+   * 德语的用法串必须保留 `<>` `[]` `|`（多语言 P4-1d）。
+   *
+   * 帮助面板靠这些符号拆变体；翻译里少一个括号**不会报错、只是表单变空**。
+   * 中文与英文之间已经有同样的断言，这条把它扩到德语 —— 每新增一种语言都该加一条。
+   */
+  const deSyntaxDrift: string[] = [];
+  const countChar = (text: string, ch: string): number => text.split(ch).length - 1;
+  for (const spec of COMMANDS) {
+    const zh = t(spec.usageKey, 'zh');
+    const de = t(spec.usageKey, 'de');
+    if (countChar(zh, '<') !== countChar(de, '<') || countChar(zh, '[') !== countChar(de, '[') || countChar(zh, '|') !== countChar(de, '|')) {
+      deSyntaxDrift.push(spec.name);
+    }
+  }
+  check('德语用法串的 <> / [] / | 与中文一致', deSyntaxDrift.length === 0, deSyntaxDrift.join(','));
 
   /**
    * 首屏与 manifest（多语言 P3-4）。
