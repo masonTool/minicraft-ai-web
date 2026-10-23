@@ -182,8 +182,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 
 ## 6. 钩子怎么工作
 
-注册在 `.codebuddy/settings.json`（安装器自动写入，登记表是 `install.mjs` 的 `HOOKS`；
-重装会重写这些 command，改过的 `--event=` 参数要一并写回登记表），外加一个 git 钩子：
+注册在 `.codebuddy/settings.json`（安装器自动写入，登记表是 `install.mjs` 的 `HOOKS`；重装会重写这些 command，改过的 `--event=` 参数要一并写回登记表）。**每条注册都经 `run.mjs` 包装器**：钩子自己崩了（如 import 了已删导出）是 exit 1，宿主当"未阻止"静默放行、队列就此停摆且无提示，包装器把它翻成 exit 2 + 告警。外加一个 git 钩子：
 
 | 事件 | 脚本（注册命令都带 `--event=<事件>`） | 做什么 |
 | --- | --- | --- |

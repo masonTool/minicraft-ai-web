@@ -384,6 +384,33 @@ try {
     );
   });
 
+  // ---------------------------------------------------------------- 包装器
+  /**
+   * 这一组挡的是那次真实事故：`lib.mjs` 删了导出、`auto-continue.mjs` 还在 import，
+   * 钩子 import 阶段 SyntaxError → node 以 1 退出 → 宿主当"未阻止"→ **静默放行**，
+   * 队列停摆、收尾指令也不发，对话里一声不吭。
+   */
+  check('run.mjs · 钩子 import 崩溃 → exit 2 + 告警（绝不放行）', () => {
+    const broken = join(HOOKS, '_selftest-broken.mjs');
+    writeFileSync(broken, "import { definitelyNotExported } from './lib.mjs';\n");
+    const r = hook('run.mjs', stop('s-broken'), {}, ['_selftest-broken.mjs', '--event=Stop']);
+    rmSync(broken);
+    return expect(
+      r.code === 2 && r.err.includes('框架自己坏了') && r.err.includes('SyntaxError'),
+      '崩溃必须翻译成拦截；放行等于把"看得见的红"换成"看不见的停"',
+      r,
+    );
+  });
+
+  check('run.mjs · 正常钩子的退出码与 stdout 原样透传', () => {
+    const r = hook('run.mjs', stop('s-passthru'), {}, ['auto-continue.mjs', '--event=Stop']);
+    return expect(
+      r.code === 0 && r.out.includes('"continue":true'),
+      '包装器不能改写子进程的输出（0 放行 / 2 拦截都要逐字保留）',
+      r,
+    );
+  });
+
   check('auto-continue · 正文提到"验证"但没有凭证行 → 仍算缺说明', () => {
     queue('s-noverifyline', '- [x] 甲\n  - 做了什么：按验证方式跑了一遍，应该没问题');
     const r = hook('auto-continue.mjs', stop('s-noverifyline'));

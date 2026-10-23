@@ -84,6 +84,7 @@ const REQUIRED = [
   '.continue/hooks/archive-done.mjs',
   '.continue/hooks/archive-queue.mjs',
   '.continue/hooks/worktree.mjs',
+  '.continue/hooks/run.mjs',
 ];
 
 const actions = [];
@@ -270,8 +271,15 @@ const HOOKS = [
   { event: 'UserPromptSubmit', script: 'auto-continue.mjs', timeout: 15 },
 ];
 
-/** 注册命令的完整形态。`--event=` 必须排在脚本名之后，否则会被 node 当成脚本参数之外的东西。 */
-const commandFor = ({ event, script }) => `node .continue/hooks/${script} --event=${event}`;
+/**
+ * 注册命令的完整形态：**一律经 `run.mjs` 包装器**。
+ *
+ * 为什么不直接注册脚本本身：钩子 import 阶段崩溃（比如某个脚本引用了 `lib.mjs` 里已删除的
+ * 导出）时，node 以 **1** 退出，宿主把"非 0 非 2"当成"未阻止"→ **静默放行**，
+ * 队列就此停摆且一声不吭。包装器把这类退出翻译成 exit 2 + 能照着做的告警。
+ * `--event=` 仍放在脚本名之后，钩子照旧靠它给日志行首打标签。
+ */
+const commandFor = ({ event, script }) => `node .continue/hooks/run.mjs ${script} --event=${event}`;
 
 /**
  * Stop 的**续跑上限**：宿主字段 `loop_limit`，与 `hooks` **同级**（不是每条 hook 里）。
@@ -316,7 +324,7 @@ function findHook(settings, event, script) {
   if (!Array.isArray(groups)) return null;
   for (const group of groups) {
     if (!Array.isArray(group?.hooks)) continue;
-    const hit = group.hooks.find((h) => String(h?.command ?? '').includes(`.continue/hooks/${script}`));
+    const hit = group.hooks.find((h) => String(h?.command ?? '').includes(script));
     if (hit) return hit;
   }
   return null;
@@ -330,7 +338,7 @@ function groupOf(settings, event, script) {
     groups.find(
       (group) =>
         Array.isArray(group?.hooks) &&
-        group.hooks.some((h) => String(h?.command ?? '').includes(`.continue/hooks/${script}`)),
+        group.hooks.some((h) => String(h?.command ?? '').includes(script)),
     ) ?? null
   );
 }

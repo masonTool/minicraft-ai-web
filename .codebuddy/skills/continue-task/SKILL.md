@@ -19,6 +19,8 @@ description: This skill installs the continue-do persistent task-queue framework
 - **一次改动 = 一条任务 = 一个提交**：Stop 钩子只递一条，pre-commit 拒绝一次勾掉多条。
 - **门禁由脚本跑**：编号、跨文件引用、文档体量、钩子自检、提交前检查都由脚本执行，
   不看 AI 自证。
+- **钩子崩了不会静默放行**：注册命令都经 `.continue/hooks/run.mjs`，它把"钩子自己崩了"（exit 1）
+  翻成 exit 2 + 告警——否则宿主会当"本轮无需阻止"，整条队列停摆且一句提示都没有。
 - **有刹车**：`> 状态：讨论中` 停单份队列，`touch .continue/auto.off` 全停，随时人工接管。
 - **并行靠工作树**：`npm run continue:worktree -- <名字>` 建独立 worktree + 分支并推远程，
   **必须在新路径另开会话**（钩子按 cwd 判断读写哪棵树）；合并时机由用户定。

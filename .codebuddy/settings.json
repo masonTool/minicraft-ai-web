@@ -5,12 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-continue.mjs --event=Stop",
+            "command": "node .continue/hooks/run.mjs auto-continue.mjs --event=Stop",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-commit.mjs --event=Stop",
+            "command": "node .continue/hooks/run.mjs auto-commit.mjs --event=Stop",
             "timeout": 300
           }
         ],
@@ -22,12 +22,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .continue/hooks/queue-init.mjs --event=UserPromptSubmit",
+            "command": "node .continue/hooks/run.mjs queue-init.mjs --event=UserPromptSubmit",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "node .continue/hooks/auto-continue.mjs --event=UserPromptSubmit",
+            "command": "node .continue/hooks/run.mjs auto-continue.mjs --event=UserPromptSubmit",
             "timeout": 15
           }
         ]
