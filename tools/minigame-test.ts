@@ -148,6 +148,14 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('落地压缩 100ms 回弹', jumpSrc.includes('landingSquash('));
   check('完美命中出同心圆 + 飘字', jumpSrc.includes('playRipple(') && jumpSrc.includes('jump-float'));
   check('被踩的方块回弹', jumpSrc.includes('.punch('));
+  // debugState 是给 `jump:e2e` 用的只读契约，而 E2E 不在 CI 里跑（要浏览器）——
+  // 字段被改名的话，线上没人会发现，只有离线这条还能立刻变红。
+  check(
+    'debugState 暴露 E2E 依赖的字段',
+    ['gap', 'gapRatio', 'axis', 'kind', 'nextKind', 'orthographic', 'phase', 'score', 'index', 'best'].every(
+      (field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, '')),
+    ),
+  );
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }
