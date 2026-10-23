@@ -1192,11 +1192,13 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     check(`俄语：${key}`, t(key, 'ru') === expected, t(key, 'ru'));
   }
   check('俄语表里没有中文残留', !/[\u4e00-\u9fff]/.test(ruKeys.map((key) => t(key, 'ru')).join('')));
-  // 唯一还没翻的分组是 itemDesc（P4-2e）：用"与英文逐字相同"判定，不写死英文原文
+  // P4-2e2 起 itemDesc 也翻完了：抽查两条长文，必须与英文不同且不含中文
   check(
-    '俄语的物品说明仍是英文占位（itemDesc 待翻）',
-    t('item.desc.honey_block', 'ru') === t('item.desc.honey_block', 'en'),
+    '俄语的物品说明已翻（不再与英文相同）',
+    t('item.desc.honey_block', 'ru') !== t('item.desc.honey_block', 'en') &&
+      t('item.desc.cauldron', 'ru') !== t('item.desc.cauldron', 'en'),
   );
+  check('俄语的物品说明里没有中文残留', !/[\u4e00-\u9fff]/.test(t('item.desc.cauldron', 'ru')));
 
   // 四个数字各自取对形式：俄语的 one 覆盖 1/21/31，few 覆盖 2~4/22~24，many 覆盖 0 与 5~20
   setLanguage('ru');
