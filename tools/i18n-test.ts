@@ -1116,6 +1116,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     // P4-1d 起：命令用法与回执也是德语
     ['cmd.give.desc', 'Gibt dir Gegenstände (Name auf Deutsch/Englisch oder als Zahl)'],
     ['cmd.reply.team.prefix', 'Präfix'],
+    // P4-1e 起：物品说明（先翻模板与方块/工具那半）
+    ['item.desc.tpl.toolTier.4', 'Netherit'],
+    ['item.desc.tpl.listSep', ', '],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));
