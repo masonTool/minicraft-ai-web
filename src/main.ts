@@ -372,6 +372,7 @@ import {
 } from './core/save/SaveTransfer.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { collectContainerSpawns } from './core/save/EditSpawns.ts';
+import { missingResetTargets, type WorldResetTarget } from './game/worldReset.ts';
 import { restoreContainers, restoreStacks, serializeContainers, serializeStacks } from './core/save/ContainerSave.ts';
 import {
   NetClient,
@@ -2002,7 +2003,7 @@ class App {
     await this.saveNow('mp-enter');
     const solo = this.save;
     const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId));
-    solo?.close();
+    this.soloSave = solo;
     this.save = mp;
     this.inMultiplayerSave = mp !== null;
     diag.event('app', 'save.mpEnter', { room: roomId, opened: mp !== null });
@@ -2018,20 +2019,120 @@ class App {
    */
   private leaveMultiplayerSave(): void {
     if (!this.inMultiplayerSave) return;
+    const solo = this.soloSave;
     this.save?.close();
-    this.save = null;
     this.inMultiplayerSave = false;
-    diag.event('app', 'save.mpLeave', {});
-    const hint = '已断开联机：本局不再写存档（否则联机地形会写进单机档），重进世界即回到单机存档';
-    this.chat.push(hint, 'error');
-    this.chatLine = hint;
-    this.chatUntil = performance.now() + 12000;
+    this.soloSave = null;
+    diag.event('app', 'save.mpLeave', { restored: solo !== null });
+
+    if (!solo) {
+      // 无痕模式（单机库根本没打开）：这一局不再落盘，但世界仍要重载回单机地形
+      this.save = null;
+      void this.reloadWorld().catch((error: unknown) => console.error('[net] 重载世界失败', error));
+      return;
+    }
+
+    this.save = solo;
+    // 联机34：切回单机库之后**原地重载世界**——不然内存里还是联机地形，
+    // 下一次自动保存就会把它写进单机档（这正是联机6 当初"断开即停写"要躲开的事）
+    void this.reloadWorld()
+      .then(() => {
+        const hint = '已断开联机：世界已重载回单机存档';
+        this.chat.push(hint, 'system');
+        this.chatLine = hint;
+        this.chatUntil = performance.now() + 8000;
+      })
+      .catch((error: unknown) => {
+        // 重载失败就退回主菜单：宁可让玩家重新进世界，也不能把联机地形留在内存里
+        console.error('[net] 重载单机世界失败，回主菜单', error);
+        void this.exitToMenu();
+      });
+  }
+
+  /**
+   * 原地重载世界（联机34）。
+   *
+   * 清一局里所有"跟着世界走"的状态，再从**当前存档库**把 edits/容器/牌子/展示框/玩家位置
+   * 读回来。清单在 `game/worldReset.ts`——清完逐项打勾，漏了会打 `console.warn`（这条路径
+   * 只能在浏览器里验收，所以让它在运行时自己报错，而不是静默出错）。
+   *
+   * 为什么不是"新建 `World`"：渲染器把 world 作为 `readonly` 绑定，换实例要重建渲染器
+   * （连带 GPU 缓冲与 worker 池）；而 `World.reset()` 清内部状态就能达到同样效果。
+   */
+  private async reloadWorld(): Promise<boolean> {
+    const handled: WorldResetTarget[] = [];
+
+    // ① 世界本体：区块、光照、增量存档、容器表（Worker 池留着复用）
+    this.world.reset();
+    this.chunkRenderer.disposeAll();
+    handled.push('world', 'chunkRenderer');
+
+    // ② 实体与定时器
+    this.entities.clear();
+    this.fallingBlocks.clear();
+    this.primedTnt.clear();
+    this.conduits.clear();
+    this.scheduler.clear();
+    handled.push('entities', 'fallingBlocks', 'primedTnt', 'conduits', 'scheduler');
+
+    // ③ 方块实体表
+    this.signText.clear();
+    this.itemFrames.clear();
+    handled.push('signText', 'itemFrames');
+
+    // ④ 联机镜像与缓冲
+    this.remotePlayers.clear();
+    this.remoteSmoothers.clear();
+    this.remotePresence.clear();
+    this.remoteAppearance.clear();
+    this.remoteAoi.clear();
+    this.remoteTeams.clear();
+    this.clearRemoteItems();
+    this.pendingContainers.clear();
+    this.pendingItemTakes.clear();
+    this.blockFunnel.clear();
+    this.netTimeTarget = null;
+    this.netTimeSnap = false;
+    handled.push(
+      'remotePlayers',
+      'remoteSmoothers',
+      'remotePresence',
+      'remoteAppearance',
+      'remoteAoi',
+      'remoteTeams',
+      'remoteItems',
+      'pendingContainers',
+      'pendingItemTakes',
+      'blockFunnel',
+      'netTime',
+    );
+
+    // ⑤ 时间 / 天气 / 维度 / 重生点（玩家位置与背包由下面的读档恢复）
+    this.timeOfDay = 0.12;
+    this.dayCount = 0;
+    this.weather.setKind('clear');
+    this.setDimension(Dimension.OVERWORLD);
+    this.bedSpawn = null;
+    handled.push('timeOfDay', 'dayCount', 'weather', 'physics', 'dimension', 'bedSpawn');
+
+    const missing = missingResetTargets(handled);
+    if (missing.length > 0) console.warn('[world] 重载时漏清了这些：', missing.join(', '));
+
+    // 从当前存档库读回来（位置/背包也一起；没有存档就当新世界）
+    this.waitingForSaveRestore = Boolean(this.save?.hasSave);
+    const restored = await this.loadSaveState();
+    this.waitingForSaveRestore = false;
+    if (!restored) this.prepareNewWorldSpawn();
+    console.info(`[world] 已重载（${restored ? '从存档恢复' : '新世界'}）`);
+    return restored;
   }
 
   /** 当前存档句柄（联机时是联机库，见构造参数 `save` 的注释） */
   private save: SaveGame | null;
   /** 现在写的是联机库（联机6） */
   private inMultiplayerSave = false;
+  /** 进联机之前的单机库句柄（联机34：断开时切回它再重载世界） */
+  private soloSave: SaveGame | null = null;
   /**
    * 联机容器同步的防抖（L4，批次 611；联机15 收成"待发集合"）。
    *

@@ -154,6 +154,30 @@ export class World {
     this.events.onChunkLoaded?.(chunk);
   }
 
+  /**
+   * 清空整个世界，准备原地重新加载（联机34）。
+   *
+   * 为什么不新建一个 `World`：渲染器（`ChunkRenderer`）把 world 作为 `readonly` 参数绑定，
+   * 换实例就得重建渲染器（连带 GPU 缓冲与 worker 池）。而这里要解决的问题只是"世界内容
+   * 变了"——实例换不换无所谓，清的干净才要紧。
+   *
+   * 在途的生成请求**不用取消**：清空 `wanted` 之后，回来的结果会在 `onGenerated` 的
+   * `if (!this.wanted.has(key)) return;` 处被丢掉——那行本来就是为"玩家走开了"写的，
+   * 这里正好复用。
+   */
+  reset(): void {
+    this.wanted.clear();
+    this.loading.clear();
+    this.pending.clear();
+    this.chunks.clear();
+    this.edits.clear();
+    this.containers.clear();
+    this.light.reset();
+    this.invalidateChunkCache();
+    this.completed = 0;
+    this.dispatched = 0;
+  }
+
   /** 处理光照队列，返回是否仍有未完成的光照工作 */
   processLighting(budget: number): boolean {
     return this.light.process(budget);
