@@ -104,6 +104,17 @@ const containers = new Map();
 /** 容器快照上限（与 `MAX_EDITS` 同一个理由：别让长时间运行的房间把内存吃光） */
 const MAX_CONTAINERS = 5000;
 /**
+ * 牌子文字（联机16）：`维度|x,y,z` → `{x,y,z,dimension,lines}`。
+ *
+ * 与容器同理：服务端不留副本，新玩家进来就看不到队友写的牌子；留了却不落盘，
+ * 重启之后又全没了。所以既留也存。
+ */
+const signs = new Map();
+/** 展示框内容（联机16）：`维度|x,y,z` → `{x,y,z,dimension,item,rotation}`；`item = null` 是空框 */
+const frames = new Map();
+const MAX_SIGNS = 5000;
+const MAX_FRAMES = 5000;
+/**
  * 世界快照文件（联机13）。`DATA_DIR` 可覆盖——测试里指到临时目录，
  * 免得把仓库里的 `server/.data/world.json` 弄脏。
  */
@@ -165,6 +176,9 @@ function snapshotFor(player) {
     items: [...items.values()],
     // 容器内容（联机13）：重启后箱子里的东西不会凭空消失
     containers: [...containers.values()],
+    // 牌子与展示框（联机16）：同一条理由
+    signs: [...signs.values()],
+    frames: [...frames.values()],
   };
 }
 
@@ -224,6 +238,10 @@ function worldSnapshot() {
     edits: [...edits.values()].map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
     // 容器：[x, y, z, dimension, slots]
     containers: [...containers.values()].map((c) => [c.x, c.y, c.z, c.dimension, c.slots]),
+    // 牌子：[x, y, z, dimension, lines]（联机16）
+    signs: [...signs.values()].map((s) => [s.x, s.y, s.z, s.dimension, s.lines]),
+    // 展示框：[x, y, z, dimension, item, rotation]
+    frames: [...frames.values()].map((f) => [f.x, f.y, f.z, f.dimension, f.item, f.rotation]),
   };
 }
 
@@ -263,6 +281,33 @@ if (loaded.data) {
     };
     if (![container.x, container.y, container.z].every(Number.isFinite)) continue;
     containers.set(`${container.dimension}|${container.x},${container.y},${container.z}`, container);
+  }
+  for (const entry of Array.isArray(saved.signs) ? saved.signs : []) {
+    if (!Array.isArray(entry)) continue;
+    const [x, y, z, dimension, lines] = entry;
+    const sign = {
+      x: Math.trunc(Number(x)),
+      y: Math.trunc(Number(y)),
+      z: Math.trunc(Number(z)),
+      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
+      lines: Array.isArray(lines) ? lines.map((line) => String(line)) : [],
+    };
+    if (![sign.x, sign.y, sign.z].every(Number.isFinite)) continue;
+    signs.set(`${sign.dimension}|${sign.x},${sign.y},${sign.z}`, sign);
+  }
+  for (const entry of Array.isArray(saved.frames) ? saved.frames : []) {
+    if (!Array.isArray(entry)) continue;
+    const [x, y, z, dimension, item, rotation] = entry;
+    const frame = {
+      x: Math.trunc(Number(x)),
+      y: Math.trunc(Number(y)),
+      z: Math.trunc(Number(z)),
+      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
+      item: item && typeof item === 'object' ? item : null,
+      rotation: Math.trunc(Number(rotation ?? 0)) || 0,
+    };
+    if (![frame.x, frame.y, frame.z].every(Number.isFinite)) continue;
+    frames.set(`${frame.dimension}|${frame.x},${frame.y},${frame.z}`, frame);
   }
   if (typeof saved.timeOfDay === 'number' && Number.isFinite(saved.timeOfDay)) {
     startTimeOfDay = ((saved.timeOfDay % 1) + 1) % 1;
@@ -464,6 +509,47 @@ wss.on('connection', (socket, request) => {
           },
           player.id,
         );
+        break;
+      }
+
+      /*
+       * 牌子文字与展示框内容（联机16）。
+       *
+       * 都按坐标存一份（`welcome` 要发、快照要落盘），校验只做形状与长度：
+       * 牌子最多 4 行、每行截到 64 个字符；展示框的 `item` 要么是 null（空框），
+       * 要么是 `{id, count}`。内容怎么渲染是客户端的事。
+       */
+      case 'sign': {
+        if (!player) return;
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        const x = Math.trunc(Number(message.x));
+        const y = Math.trunc(Number(message.y));
+        const z = Math.trunc(Number(message.z));
+        if (![x, y, z].every(Number.isFinite)) return;
+        const lines = Array.isArray(message.lines)
+          ? message.lines.slice(0, 4).map((line) => String(line).slice(0, 64))
+          : [];
+        if (signs.size < MAX_SIGNS) signs.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, lines });
+        broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id);
+        break;
+      }
+
+      case 'frame': {
+        if (!player) return;
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        const x = Math.trunc(Number(message.x));
+        const y = Math.trunc(Number(message.y));
+        const z = Math.trunc(Number(message.z));
+        if (![x, y, z].every(Number.isFinite)) return;
+        const rawItem = message.item;
+        const item =
+          rawItem && typeof rawItem === 'object'
+            ? { id: Math.trunc(Number(rawItem.id)), count: Math.trunc(Number(rawItem.count ?? 1)) }
+            : null;
+        if (item && (!Number.isFinite(item.id) || !Number.isFinite(item.count))) return;
+        const rotation = Math.trunc(Number(message.rotation ?? 0)) || 0;
+        if (frames.size < MAX_FRAMES) frames.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, item, rotation });
+        broadcast({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id }, player.id);
         break;
       }
 

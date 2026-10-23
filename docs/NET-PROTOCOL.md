@@ -79,6 +79,8 @@
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
 | `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃 | 服务端日志打 `<名字> 内容`；**广播包含发送者**（见已知问题） |
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
+| `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
+| `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
 
 未知 `t` 回 `error`；不是合法 JSON 也回 `error`，连接不关。
 
@@ -86,12 +88,14 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, timeOfDay, players[], edits[], items[], containers[]` | 只发给刚 join 的人；`containers` 是落盘带回来的容器内容（`联机13`） |
+| `welcome` | `v, id, name, seed, timeOfDay, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
 | `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
+| `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
+| `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
@@ -149,7 +153,7 @@
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 快照文件 | `server/.data/world.json`（`DATA_DIR` 可覆盖） | `server/store.mjs` |
 | 保存时机 | 每 30 秒一次 + SIGINT/SIGTERM 退出前补存一次 | 同上 |
-| 快照内容 | `version / savedAt / seed / timeOfDay / edits[] / containers[]` | 同上 |
+| 快照内容 | `version / savedAt / seed / timeOfDay / edits[] / containers[] / signs[] / frames[]` | 同上 |
 | 损坏处理 | 读不出来就改名成 `world.json.broken-<时间戳>` 再按空世界启动（**不静默删**） | 同上 |
 
 快照是**原子写**（先写 `world.json.tmp` 再 rename）：写到一半断电不会留下半个 JSON，
@@ -166,6 +170,8 @@
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`）；`snap: true` 时**立刻对齐**并顺手放晴 | 直接赋值太阳会"跳"；睡满跳夜那种大跳必须换成立即对齐，否则夜里要追 70 秒 |
+| `sign` | 写回 `signText`，当前维度立刻 `syncSigns`（渲染器下一趟 sync 画出） | 全空 = 擦除；非当前维度也存下来，切过去还在 |
+| `frame` | 写回 `itemFrames`（`item: null` = 删条目），当前维度 `syncFrames` | 与容器同理：本地放/取/转格子时也发（`联机16`） |
 | `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 同维度且那一格确实是**容器方块**时，按方块取容器（箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 / 投掷器 / 漏斗），用 `restoreStacks` 按格数清洗后逐格写回 | 写回期间 `applyingRemoteBlock` 抑制回声；本地任一类容器内容变化都会发（`containerOfBlockAt` 建出来就挂，不再只在打开界面时挂） |
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
@@ -190,7 +196,7 @@
 | `联机13` | 已有持久化（`edits` / 容器 / 时间落盘，30s + 退出保存，损坏备份） | **天气还没落盘**（天气权威未做，`联机35`）；玩家背包/进度仍是各客户端自己的 |
 | `联机14` | `welcome` 已按 8 区块裁剪；增量满了淘汰最旧并告警 | 半径外的旧改动新玩家收不到，要等"按视野补发"（`联机27`）；容器与掉落物仍全量下发 |
 | `联机15` | 容器已覆盖 9 种工作站（箱子/木桶/熔炉/高炉/烟熏炉/酿造台/发射器/投掷器/漏斗），且建出来就挂、不用打开界面 | 只同步**内容**：熔炉燃烧进度、酿造进度、漏斗冷却这些计时器各端自己跑 |
-| `联机16` | 告示牌/展示框不同步 | 牌子上的字与框里的东西各看各的 |
+| `联机16` | 已同步（`sign` / `frame` 两条消息 + 快照下发） | 只同步文字与物品：牌子上的**染料颜色/发光**、框的**多件拼贴**这些本项目本来就没做 |
 | `联机17`~`联机23` | 玩家外观、名字牌、生物、拾取、PvP、其他实体 | 看不到手持物；打怪不同步；镜像捡不起来 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |

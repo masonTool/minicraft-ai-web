@@ -376,8 +376,10 @@ import {
   NetClient,
   defaultServerUrl,
   type NetContainerState,
+  type NetFrameState,
   type NetItemState,
   type NetPlayerState,
+  type NetSignState,
 } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
@@ -1869,6 +1871,9 @@ class App {
       this.onNetWelcome(seed, selfId, players, edits, items),
     onPlayer: (player) => this.onNetPlayer(player),
     onContainer: (container) => this.onNetContainer(container),
+    // 牌子与展示框（联机16）：队友写的字、框里的东西
+    onSign: (sign) => this.applyRemoteSign(sign),
+    onFrame: (frame) => this.applyRemoteFrame(frame),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -3469,6 +3474,8 @@ class App {
     edits: number[][],
     items: NetItemState[],
     containers: NetContainerState[] = [],
+    signs: NetSignState[] = [],
+    frames: NetFrameState[] = [],
   ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
@@ -3526,6 +3533,10 @@ class App {
     // 容器快照（联机13）：服务端落盘的内容。已加载的区块立刻恢复，没加载的先存着，
     // 等区块加载回调里再补（见 `flushPendingContainers`）
     for (const container of containers) this.onNetContainer(container);
+
+    // 牌子与展示框（联机16）：直接进表，渲染器下一趟 sync 就会画出来
+    for (const sign of signs) this.applyRemoteSign(sign);
+    for (const frame of frames) this.applyRemoteFrame(frame);
   }
 
   /** 其它玩家的位置更新 */
@@ -7872,6 +7883,8 @@ class App {
     const entry = this.itemFrames.get(this.dimension, x, y, z);
     if (!entry) return;
     this.itemFrames.remove(this.dimension, x, y, z);
+    // 联机16：队友那边这张框也得变空
+    this.net.sendFrame(x, y, z, this.dimension, null, 0);
     // `stackExtras` 把耐久/附魔/改名/累积惩罚/内容物原样搬过去——
     // 于是"挂着的那把附魔剑"掉出来还是那一把（与容器倒空走同一个出处）
     this.spawnDrop(entry.item.id, entry.item.count, x + 0.5, y + 0.5, z + 0.5, stackExtras(entry.item));
@@ -8820,11 +8833,24 @@ class App {
   private applySignText(lines: string[]): void {
     const target = this.editingSign;
     if (!target) return;
-    // ⚠️ 文字**不广播**给队友：联机协议目前只同步"哪一格变成了什么方块"
-    // （容器内容也不在协议里），要同步它得给协议加一条消息 + 服务端存一份。
-    // 这条差异写进了 TASKS B12（与"容器内容不同步"是同一个口径）。
     this.signText.set(this.dimension, target.x, target.y, target.z, lines);
+    // 联机16：把字发给队友（原来这里写着"不广播"，与容器内容是同一个缺口）。
+    // 服务端会留一份并随 `welcome` 下发，所以新进来的人也看得到
+    this.net.sendSign(target.x, target.y, target.z, this.dimension, lines);
     this.syncSigns();
+  }
+
+  /** 队友写了/擦了牌子上的字（联机16）：进表，当前维度立刻重画 */
+  private applyRemoteSign(sign: NetSignState): void {
+    this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
+    if (sign.dimension === this.dimension) this.syncSigns();
+  }
+
+  /** 队友往展示框里放了/取了东西（联机16）：空框 = 从表里删掉 */
+  private applyRemoteFrame(frame: NetFrameState): void {
+    if (frame.item) this.itemFrames.set(frame.dimension, frame.x, frame.y, frame.z, frame.item, frame.rotation);
+    else this.itemFrames.remove(frame.dimension, frame.x, frame.y, frame.z);
+    if (frame.dimension === this.dimension) this.syncFrames();
   }
 
   /**
@@ -9016,6 +9042,9 @@ class App {
    */
   private clearSignText(x: number, y: number, z: number): void {
     if (!this.signText.remove(this.dimension, x, y, z)) return;
+    // 拆掉/换掉牌子也要告诉队友擦掉（联机16）；`remove` 返回 false 时上面已经返回，
+    // 所以不会在对账路径上反复发空消息
+    this.net.sendSign(x, y, z, this.dimension, []);
     this.syncSigns();
   }
 
@@ -9081,6 +9110,9 @@ class App {
     if (!held) {
       if (!entry) return true;
       this.itemFrames.rotate(this.dimension, x, y, z);
+      // 联机16：转格子也要同步（旋转值重新读一次，比自己在外面算 45° 更稳）
+      const rotated = this.itemFrames.get(this.dimension, x, y, z);
+      if (rotated) this.net.sendFrame(x, y, z, this.dimension, rotated.item, rotated.rotation);
       this.audio.play('click', { x, y, z });
       this.hand.swing();
       this.syncFrames();
@@ -9096,6 +9128,8 @@ class App {
       if (leftover > 0) this.spawnDrop(entry.item.id, leftover, x + 0.5, y - 0.2, z + 0.5, stackExtras(entry.item));
     }
     this.itemFrames.set(this.dimension, x, y, z, snapshot, entry?.rotation ?? 0);
+    // 联机16：挂上去的东西队友也要看得见
+    this.net.sendFrame(x, y, z, this.dimension, { id: snapshot.id, count: snapshot.count }, entry?.rotation ?? 0);
     this.audio.play('place', { x, y, z });
     this.hand.swing();
     this.refreshHotbar();

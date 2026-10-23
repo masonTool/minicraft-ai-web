@@ -52,6 +52,25 @@ export interface NetContainerState {
   slots: unknown[];
 }
 
+/** 一块牌子的字（联机16）：全是空串 = 擦掉 */
+export interface NetSignState {
+  dimension: string;
+  x: number;
+  y: number;
+  z: number;
+  lines: string[];
+}
+
+/** 一张展示框里的东西（联机16）：`item` 为 null = 空框 */
+export interface NetFrameState {
+  dimension: string;
+  x: number;
+  y: number;
+  z: number;
+  item: { id: number; count: number } | null;
+  rotation: number;
+}
+
 export interface NetHandlers {
   /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动 + 已有掉落物） */
   onWelcome: (
@@ -62,12 +81,19 @@ export interface NetHandlers {
     items: NetItemState[],
     /** 容器快照（联机13）：服务端落盘的内容，重启后也能带回来 */
     containers?: NetContainerState[],
+    /** 牌子与展示框的内容（联机16），同样是落盘带回来的 */
+    signs?: NetSignState[],
+    frames?: NetFrameState[],
   ) => void;
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
-  /** 别人改了箱子/木桶的内容（L4，批次 611） */
+  /** 别人改了箱子/木桶的内容（L4，批次 611；联机15 扩到全部工作站） */
   onContainer?: (container: NetContainerState) => void;
+  /** 别人写了/擦了牌子上的字（联机16） */
+  onSign?: (sign: NetSignState) => void;
+  /** 别人往展示框里放了/取了东西（联机16） */
+  onFrame?: (frame: NetFrameState) => void;
   /** 别人那边生成了一堆掉落物（本地只渲染，不拾取） */
   onItemSpawn: (item: NetItemState) => void;
   /** 别人那边那堆没了（被捡走/烧掉/过期） */
@@ -264,7 +290,9 @@ export class NetClient {
         const edits = (message.edits as number[][] | undefined) ?? [];
         const items = (message.items as NetItemState[] | undefined) ?? [];
         const containers = (message.containers as NetContainerState[] | undefined) ?? [];
-        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items, containers);
+        const signs = (message.signs as NetSignState[] | undefined) ?? [];
+        const frames = (message.frames as NetFrameState[] | undefined) ?? [];
+        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items, containers, signs, frames);
         // 时间权威（联机10）：进服先对齐一次，之后靠 `time` 广播校正
         this.deliverTime(message);
         break;
@@ -312,6 +340,32 @@ export class NetClient {
             String(dimension ?? 'overworld'),
           );
         }
+        break;
+      }
+      /*
+       * 牌子与展示框（联机16）：与方块、容器同理——服务端只转发 + 留一份给快照，
+       * 内容按坐标存，不关心渲染。
+       */
+      case 'sign': {
+        this.handlers.onSign?.({
+          dimension: String(message.dimension ?? 'overworld'),
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          lines: Array.isArray(message.lines) ? (message.lines as unknown[]).map((line) => String(line)) : [],
+        });
+        break;
+      }
+      case 'frame': {
+        const item = message.item as { id?: unknown; count?: unknown } | null | undefined;
+        this.handlers.onFrame?.({
+          dimension: String(message.dimension ?? 'overworld'),
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          item: item ? { id: Number(item.id ?? 0), count: Number(item.count ?? 1) } : null,
+          rotation: Number(message.rotation ?? 0),
+        });
         break;
       }
       case 'container': {
@@ -465,6 +519,25 @@ export class NetClient {
   sendChat(text: string): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'chat', text }));
+  }
+
+  /** 我写了/擦了牌子上的字（联机16）。全空 = 擦掉 */
+  sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+  }
+
+  /** 我往展示框里放了/取了东西，或转了方向（联机16） */
+  sendFrame(
+    x: number,
+    y: number,
+    z: number,
+    dimension: string,
+    item: { id: number; count: number } | null,
+    rotation: number,
+  ): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'frame', x, y, z, dimension, item, rotation }));
   }
 
   /**

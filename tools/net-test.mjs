@@ -506,6 +506,40 @@ try {
     check('超过 27 格的容器消息被拒', (await alice.wait('container', 600)) === null);
   }
 
+  // ---------------------------------------------------------------- 牌子 / 展示框（联机16）
+  console.log('\n[牌子与展示框]');
+  {
+    alice.mailbox.length = 0;
+    bob.send({ t: 'sign', x: 90, y: 70, z: 90, dimension: 'overworld', lines: ['你好', '世界', '', ''] });
+    const signMsg = await alice.wait('sign', 2000);
+    check(
+      '牌子文字被转发（4 行）',
+      Array.isArray(signMsg?.lines) && signMsg.lines.length === 4 && signMsg.lines[0] === '你好',
+      JSON.stringify(signMsg),
+    );
+
+    // 超过 4 行要截断，不然客户端渲染与存档都会多出一行
+    alice.mailbox.length = 0;
+    bob.send({ t: 'sign', x: 92, y: 70, z: 90, dimension: 'overworld', lines: ['1', '2', '3', '4', '5'] });
+    const clipped = await alice.wait('sign', 2000);
+    check('牌子超过 4 行被截断', Array.isArray(clipped?.lines) && clipped.lines.length === 4, JSON.stringify(clipped));
+
+    alice.mailbox.length = 0;
+    bob.send({ t: 'frame', x: 91, y: 70, z: 90, dimension: 'overworld', item: { id: 5, count: 1 }, rotation: 2 });
+    const frameMsg = await alice.wait('frame', 2000);
+    check(
+      '展示框内容被转发（含旋转）',
+      frameMsg?.item?.id === 5 && frameMsg?.rotation === 2,
+      JSON.stringify(frameMsg),
+    );
+
+    // 取走东西 = item 为 null（空框），不是少一个字段
+    alice.mailbox.length = 0;
+    bob.send({ t: 'frame', x: 91, y: 70, z: 90, dimension: 'overworld', item: null, rotation: 0 });
+    const emptyFrame = await alice.wait('frame', 2000);
+    check('取空展示框用 item=null 表示', emptyFrame?.item === null, JSON.stringify(emptyFrame));
+  }
+
   // ---------------------------------------------------------------- 睡眠跳夜（联机11）
   console.log('\n[睡眠跳夜]');
   {
