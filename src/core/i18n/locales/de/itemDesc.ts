@@ -373,4 +373,9 @@ export const itemDesc = {
   "item.desc.tpl.concrete": "{name}: gleichfarbiges Betonpulver härtet im Wasser; kräftiger als Keramik",
   "item.desc.tpl.stainedGlass": "{name}: Glas plus gleichfarbiger Farbstoff; lässt Licht farbig durch",
   "item.desc.tpl.stainedGlassPane": "{name}: sechs gleichfarbige Glasblöcke ergeben sechzehn; für Fenster",
+  "item.desc.tpl.coloredTerracotta": "{name}: Keramik mit gleichfarbigem Farbstoff gefärbt; Baumaterial",
+  "item.desc.tpl.glazedTerracotta": "{name}: Keramik ein zweites Mal gebrannt, mit Muster; das Muster richtet sich nach der Platzierungsseite",
+  "item.desc.tpl.candle": "{name}: aus Honigwabe und Faden; angezündet spendet sie Licht, auf einem Kuchen darf man sich etwas wünschen",
+  "item.desc.tpl.banner": "{name}: sechs Wolle derselben Farbe plus ein Stock; hängt an der Wand oder wird getragen, Muster lassen sich aufsetzen",
+  "item.desc.tpl.shulkerBox": "{name}: eine Shulkerschale plus eine Kiste; fasst 27 Stapel zum Mitnehmen, der Inhalt bleibt beim Abbauen erhalten",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

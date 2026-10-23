@@ -682,6 +682,28 @@ for (const color of COLOR_KEYS) {
     tp('item.desc.tpl.stainedGlassPane', { name: tp('item.tpl.stainedGlassPane', { color: t(`item.color.${color}`) }) });
 }
 
+// ---- 颜色族第二批（B4e，批次 20261024-0136）：80 个方块只写 5 条模板
+//
+// 陶瓦 / 带釉陶瓦 / 蜡烛 / 旗帜 / 潜影盒，各 16 色。
+//
+// ⚠️ `{name}` 有两种来源，别混：
+//  · 陶瓦与潜影盒的名字是**模板拼的**（`item.tpl.terracottaColored` / `item.tpl.shulkerBox`，
+//    `item.white_terracotta` 这个键**不存在**）；
+//  · 带釉陶瓦 / 蜡烛 / 旗帜的名字是**显式键**（`item.white_glazed_terracotta` 等）。
+// 用错的那种会拿到键名本身（B4c 的木板就是这个坑）。
+for (const color of COLOR_KEYS) {
+  const colorName = () => t(`item.color.${color}`);
+  DESCRIPTIONS[`${color}_terracotta`] = () =>
+    tp('item.desc.tpl.coloredTerracotta', { name: tp('item.tpl.terracottaColored', { color: colorName() }) });
+  DESCRIPTIONS[`${color}_glazed_terracotta`] = () =>
+    tp('item.desc.tpl.glazedTerracotta', { name: t(`item.${color}_glazed_terracotta`) });
+  DESCRIPTIONS[`${color}_candle`] = () => tp('item.desc.tpl.candle', { name: t(`item.${color}_candle`) });
+  DESCRIPTIONS[`${color}_banner`] = () => tp('item.desc.tpl.banner', { name: t(`item.${color}_banner`) });
+  DESCRIPTIONS[`${color}_shulker_box`] = () =>
+    tp('item.desc.tpl.shulkerBox', { name: tp('item.tpl.shulkerBox', { color: colorName() }) });
+}
+
+
 // ⚠️ 石砖墙的 id 是**单数**（`stone_brick_wall`），与另外两个形状（`stone_bricks_stairs` /
 // `stone_bricks_slab`）不一致 —— 遍历基座表碰不到它，只能单独补一条。
 DESCRIPTIONS['stone_brick_wall'] = () => tp('item.desc.tpl.wall', { base: t('item.stone_bricks') });

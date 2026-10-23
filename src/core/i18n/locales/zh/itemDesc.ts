@@ -379,4 +379,9 @@ export const itemDesc = {
   "item.desc.tpl.concrete": "{name}：同色混凝土粉末遇水凝固而成；颜色比陶瓦更饱和",
   "item.desc.tpl.stainedGlass": "{name}：玻璃加同色染料；透光但带颜色",
   "item.desc.tpl.stainedGlassPane": "{name}：6 块同色染色玻璃合成 16 块；做窗格用",
+  "item.desc.tpl.coloredTerracotta": "{name}：黏土烧成陶瓦后用同色染料染色；装饰建材",
+  "item.desc.tpl.glazedTerracotta": "{name}：陶瓦再烧一次，表面带花纹；花纹朝向随放置面变化",
+  "item.desc.tpl.candle": "{name}：蜂巢加线合成；点亮后提供光照，插在蛋糕上还能许愿",
+  "item.desc.tpl.banner": "{name}：6 块同色羊毛加 1 根木棍；能挂墙或举在手里，还可以叠加图案",
+  "item.desc.tpl.shulkerBox": "{name}：潜影贝的壳加箱子合成；能装 27 格物品随身带，破坏后里面的东西不散",
 } as const;

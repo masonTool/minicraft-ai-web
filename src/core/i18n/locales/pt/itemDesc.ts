@@ -372,4 +372,9 @@ export const itemDesc = {
   "item.desc.tpl.concrete": "{name}: surge quando o pó de concreto da mesma cor toca a água; mais saturado que a cerâmica",
   "item.desc.tpl.stainedGlass": "{name}: vidro e corante da mesma cor; deixa passar luz colorida",
   "item.desc.tpl.stainedGlassPane": "{name}: seis blocos de vidro colorido dão dezesseis; para janelas",
+  "item.desc.tpl.coloredTerracotta": "{name}: cerâmica tingida com corante da mesma cor; material de construção",
+  "item.desc.tpl.glazedTerracotta": "{name}: cerâmica assada uma segunda vez, com padrão; o padrão depende da face onde é colocada",
+  "item.desc.tpl.candle": "{name}: favo de mel e linha; acesa ilumina, e num bolo dá para fazer um pedido",
+  "item.desc.tpl.banner": "{name}: seis lãs da mesma cor e um graveto; pendura na parede ou vai na mão, e padrões podem ser sobrepostos",
+  "item.desc.tpl.shulkerBox": "{name}: um casco de shulker e um baú; guarda 27 pilhas para levar, o conteúdo não cai ao quebrar",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

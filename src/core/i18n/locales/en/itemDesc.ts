@@ -379,4 +379,9 @@ export const itemDesc = {
   "item.desc.tpl.concrete": "{name}: concrete powder of the same color hardens in water; more saturated than terracotta",
   "item.desc.tpl.stainedGlass": "{name}: glass plus dye of the same color; lets light through with a tint",
   "item.desc.tpl.stainedGlassPane": "{name}: six stained glass of the same color craft into sixteen; for windows",
+  "item.desc.tpl.coloredTerracotta": "{name}: terracotta dyed with a matching color; decorative building material",
+  "item.desc.tpl.glazedTerracotta": "{name}: terracotta fired a second time, with a pattern; the pattern follows the face you place it on",
+  "item.desc.tpl.candle": "{name}: crafted from honeycomb and string; lit it gives light, and on a cake you can make a wish",
+  "item.desc.tpl.banner": "{name}: six wool of the same color plus a stick; hangs on walls or is carried, and patterns can be layered on",
+  "item.desc.tpl.shulkerBox": "{name}: a shulker shell plus a chest; holds 27 stacks on the go, and the contents survive being broken",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

@@ -373,4 +373,9 @@ export const itemDesc = {
   "item.desc.tpl.concrete": "{name} : obtenu quand la poudre de béton de la même couleur touche l’eau ; plus saturé que la terre cuite",
   "item.desc.tpl.stainedGlass": "{name} : du verre et un colorant de la même couleur ; laisse passer une lumière colorée",
   "item.desc.tpl.stainedGlassPane": "{name} : six blocs de verre coloré donnent seize vitres ; pour les fenêtres",
+  "item.desc.tpl.coloredTerracotta": "{name} : de la terre cuite teintée avec un colorant de la même couleur ; matériau de construction",
+  "item.desc.tpl.glazedTerracotta": "{name} : de la terre cuite cuite une seconde fois, avec un motif ; le motif dépend de la face de pose",
+  "item.desc.tpl.candle": "{name} : un rayon de miel et une ficelle ; allumée elle éclaire, et sur un gâteau on peut faire un vœu",
+  "item.desc.tpl.banner": "{name} : six laines de la même couleur et un bâton ; se suspend au mur ou se porte à la main, des motifs peuvent s’ajouter",
+  "item.desc.tpl.shulkerBox": "{name} : une carapace de shulker et un coffre ; contient 27 piles à emporter, le contenu reste au cassage",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;
