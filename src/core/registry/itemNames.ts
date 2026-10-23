@@ -610,6 +610,34 @@ function arrowDisplayName(arrow: TippedArrowEntry): string {
   return tp('item.tpl.tippedArrow', { effect, suffix });
 }
 
+// ---- 木材与作物茎（B4b，批次 20261024-0136）：**53 个方块只写 8 条模板**
+//
+// 木材是"树种 × 形状"的组合：6 种 × {原木/木板/树叶/木头/去皮原木} = 30 条说明。
+// 逐条写会得到 30 段只差一个词的文案，翻译时还要再乘 6 —— 模板一条顶五条。
+//
+// ⚠️ `{wood}` 在各语言里的**语法形态不同**（中文"橡木"是名词前缀、德语 `Eichen` 是合成词干、
+// 俄语 `Дубов` 是形容词干），所以模板不是"同一个句式",而是每种语言各自排 —— 这是模板能做到、
+// 拼接做不到的地方（`{wood}stamm` → `Eichenstamm`，`{wood}ое бревно` → `Дубовое бревно`）。
+const WOOD_KEYS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'] as const;
+for (const wood of WOOD_KEYS) {
+  // ⚠️ 取值必须在**函数里**做：写在外面就成了"模块加载时那一刻的语言"（P6 那条坑）
+  DESCRIPTIONS[`${wood}_log`] = () => tp('item.desc.tpl.woodLog', { wood: t(`item.wood.${wood}`) });
+  DESCRIPTIONS[`${wood}_planks`] = () => tp('item.desc.tpl.woodPlanks', { wood: t(`item.wood.${wood}`) });
+  DESCRIPTIONS[`${wood}_leaves`] = () => tp('item.desc.tpl.woodLeaves', { wood: t(`item.wood.${wood}`) });
+  DESCRIPTIONS[`${wood}_wood`] = () => tp('item.desc.tpl.wood', { wood: t(`item.wood.${wood}`) });
+  DESCRIPTIONS[`stripped_${wood}_log`] = () => tp('item.desc.tpl.strippedLog', { wood: t(`item.wood.${wood}`) });
+}
+
+// 作物茎的 8 个生长阶段 + "已连上果实"的那一支：3 条模板覆盖 18 个方块
+for (const crop of ['pumpkin', 'melon'] as const) {
+  for (let stage = 0; stage < 8; stage += 1) {
+    DESCRIPTIONS[`${crop}_stem_stage${stage}`] = () => tp('item.desc.tpl.stemStage', { crop: t(`item.${crop}`), stage });
+  }
+  DESCRIPTIONS[`attached_${crop}_stem`] = () => tp('item.desc.tpl.attachedStem', { crop: t(`item.${crop}`) });
+}
+
+DESCRIPTIONS.mushroom_stem = () => t('item.desc.tpl.mushroomStem');
+
 for (const potion of POTIONS) {
   const key = `potion_${potion.key}`;
   // 函数形态：取值这一刻才查表，所以切语言后名字立刻变（`translateName` 支持函数）
