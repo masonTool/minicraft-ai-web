@@ -542,6 +542,31 @@ try {
     );
   }
 
+  // ---------------------------------------------------------------- 生物命中（联机19）
+  console.log('\n[生物命中]');
+  {
+    alice.mailbox.length = 0;
+    bob.send({ t: 'mob-hit', typeId: 'zombie', dimension: 'overworld', x: 12, y: 70, z: 12, damage: 4, fire: 0 });
+    const hit = await alice.wait('mob-hit', 2000);
+    check(
+      '生物命中被转发（类型 + 坐标 + 伤害）',
+      hit?.typeId === 'zombie' && hit?.damage === 4 && hit?.x === 12,
+      JSON.stringify(hit),
+    );
+    check('服务端填 by（谁打的）', typeof hit?.by === 'number', `${hit?.by}`);
+
+    // 伤害与着火夹在合理区间：一个人不该能一发打死 100 血的怪
+    alice.mailbox.length = 0;
+    bob.send({ t: 'mob-hit', typeId: 'zombie', dimension: 'overworld', x: 12, y: 70, z: 12, damage: 999, fire: 99 });
+    const clamped = await alice.wait('mob-hit', 2000);
+    check('伤害与着火被夹到上限', clamped?.damage === 50 && clamped?.fire === 16, JSON.stringify(clamped));
+
+    // 缺 typeId 整条丢（没有类型就无从匹配）
+    alice.mailbox.length = 0;
+    bob.send({ t: 'mob-hit', typeId: '', dimension: 'overworld', x: 0, y: 70, z: 0, damage: 4 });
+    check('缺 typeId 的命中被拒', (await alice.wait('mob-hit', 600)) === null);
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {

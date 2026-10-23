@@ -85,6 +85,24 @@ export interface NetFrameState {
   rotation: number;
 }
 
+/**
+ * 一次生物命中（联机19）。
+ *
+ * 两端生物各自随机生成、服务端没有实体 id，所以这里**不带 id**——接收方按
+ * `typeId + 坐标邻域` 找自己世界里那只（`core/net/MobMatch.ts`）。找不到就直接
+ * 忽略（不要凭空生成，否则会双份怪物）。
+ */
+export interface NetMobHit {
+  typeId: string;
+  dimension: string;
+  x: number;
+  y: number;
+  z: number;
+  damage: number;
+  /** 着火秒数（火焰附加）；0 = 不点火 */
+  fire: number;
+}
+
 export interface NetHandlers {
   /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动 + 已有掉落物） */
   onWelcome: (
@@ -108,6 +126,8 @@ export interface NetHandlers {
   onSign?: (sign: NetSignState) => void;
   /** 别人往展示框里放了/取了东西（联机16） */
   onFrame?: (frame: NetFrameState) => void;
+  /** 别人打了一只生物（联机19）：按类型 + 邻域认到自己世界里那只 */
+  onMobHit?: (hit: NetMobHit) => void;
   /** 别人那边生成了一堆掉落物（本地只渲染，不拾取） */
   onItemSpawn: (item: NetItemState) => void;
   /** 别人那边那堆没了（被捡走/烧掉/过期） */
@@ -370,6 +390,18 @@ export class NetClient {
         });
         break;
       }
+      case 'mob-hit': {
+        this.handlers.onMobHit?.({
+          typeId: String(message.typeId ?? ''),
+          dimension: String(message.dimension ?? 'overworld'),
+          x: Number(message.x),
+          y: Number(message.y),
+          z: Number(message.z),
+          damage: Number(message.damage ?? 0),
+          fire: Number(message.fire ?? 0),
+        });
+        break;
+      }
       case 'frame': {
         const item = message.item as { id?: unknown; count?: unknown } | null | undefined;
         this.handlers.onFrame?.({
@@ -555,6 +587,28 @@ export class NetClient {
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+  }
+
+  /**
+   * 我打了一只生物（联机19）：发的是"类型 + 坐标 + 伤害"，不是 id。
+   *
+   * 队友那边用它找自己世界里最近的那只同类怪扣血。**对方找不到就忽略**——
+   * 两端生物是各自生成的，不能为了"看起来同步"凭空造一只出来。
+   */
+  sendMobHit(typeId: string, dimension: string, x: number, y: number, z: number, damage: number, fire = 0): void {
+    if (!this.connected) return;
+    this.socket?.send(
+      JSON.stringify({
+        t: 'mob-hit',
+        typeId,
+        dimension,
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+        z: Number(z.toFixed(2)),
+        damage: Number(damage.toFixed(1)),
+        fire: Number(fire.toFixed(1)),
+      }),
+    );
   }
 
   /** 我往展示框里放了/取了东西，或转了方向（联机16） */

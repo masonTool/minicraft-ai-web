@@ -72,6 +72,8 @@ const MOVE_INTERVAL_MS = 50;
 const MAX_ITEMS = 2000;
 /** 每个玩家每秒最多广播多少条掉落物（防脚本刷消息） */
 const ITEM_RATE_LIMIT = 30;
+/** 每个玩家每秒最多广播多少条生物命中（联机19）：攻击频率本来就低，这个上限只挡脚本 */
+const MOB_HIT_RATE_LIMIT = 30;
 
 /** @type {Map<string, {id:number,name:string,clientId:string,x:number,y:number,z:number,yaw:number,pitch:number,socket:import('ws').WebSocket,lastMove:number,dimension:string}>} */
 const players = new Map();
@@ -446,6 +448,9 @@ wss.on('connection', (socket, request) => {
           // 掉落物广播的令牌窗口（见 ITEM_RATE_LIMIT）
           itemWindow: 0,
           itemCount: 0,
+          // 生物命中的令牌窗口（联机19，见 MOB_HIT_RATE_LIMIT）
+          hitWindow: 0,
+          hitCount: 0,
         };
         players.set(player.id, player);
 
@@ -571,6 +576,36 @@ wss.on('connection', (socket, request) => {
           : [];
         if (signs.size < MAX_SIGNS) signs.set(`${dimension}|${x},${y},${z}`, { x, y, z, dimension, lines });
         broadcast({ t: 'sign', x, y, z, dimension, lines, by: player.id }, player.id);
+        break;
+      }
+
+      /*
+       * 生物命中（联机19）。
+       *
+       * 不带实体 id：两端生物是各自随机生成的，服务端也没有实体表。接收方按
+       * "类型 + 坐标邻域"找自己世界里最近的那只（找不到就忽略，不能凭空生成）。
+       * 所以服务端这里只做形状收口 + 限频，语义全在两端。
+       */
+      case 'mob-hit': {
+        if (!player) return;
+        const now = Date.now();
+        if (now - player.hitWindow >= 1000) {
+          player.hitWindow = now;
+          player.hitCount = 0;
+        }
+        if (++player.hitCount > MOB_HIT_RATE_LIMIT) return;
+
+        const typeId = String(message.typeId ?? '').slice(0, 32);
+        if (!typeId) return;
+        const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
+        const x = Number(message.x);
+        const y = Number(message.y);
+        const z = Number(message.z);
+        // 伤害与着火时长夹到合理区间：一个人不该能一发打死 100 血的怪
+        const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
+        const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
+        if (![x, y, z, damage, fire].every(Number.isFinite)) return;
+        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id);
         break;
       }
 

@@ -81,6 +81,7 @@
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
 | `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
+| `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 
 未知 `t` 回 `error`；不是合法 JSON 也回 `error`，连接不关。
 
@@ -96,6 +97,7 @@
 | `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
 | `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
+| `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
@@ -172,6 +174,7 @@
 | `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`）；`snap: true` 时**立刻对齐**并顺手放晴 | 直接赋值太阳会"跳"；睡满跳夜那种大跳必须换成立即对齐，否则夜里要追 70 秒 |
 | `sign` | 写回 `signText`，当前维度立刻 `syncSigns`（渲染器下一趟 sync 画出） | 全空 = 擦除；非当前维度也存下来，切过去还在 |
 | `frame` | 写回 `itemFrames`（`item: null` = 删条目），当前维度 `syncFrames` | 与容器同理：本地放/取/转格子时也发（`联机16`） |
+| `mob-hit` | 按"同类型 + 3 格内最近"找自己世界里的那只（`core/net/MobMatch.ts`），扣血 + 点火 | **找不到就忽略**：两端生物各自生成，不能凭空造一只（否则双份怪物）；击退不同步（位置由各端 AI 自己算） |
 | `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 同维度且那一格确实是**容器方块**时，按方块取容器（箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 / 投掷器 / 漏斗），用 `restoreStacks` 按格数清洗后逐格写回 | 写回期间 `applyingRemoteBlock` 抑制回声；本地任一类容器内容变化都会发（`containerOfBlockAt` 建出来就挂，不再只在打开界面时挂） |
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
@@ -199,7 +202,8 @@
 | `联机16` | 已同步（`sign` / `frame` 两条消息 + 快照下发） | 只同步文字与物品：牌子上的**染料颜色/发光**、框的**多件拼贴**这些本项目本来就没做 |
 | `联机17` | 外观已通（手持物/挥手/着火接到模型；潜行/骑乘/睡觉只存状态） | **副手与玩家盔甲没有数据源**（项目没有独立副手槽、盔甲是简化模型），远端模型也没有下蹲/骑乘姿势（`联机37`） |
 | `联机18` | 队友昵称牌已做（复用 `Mob.customName` + 名字牌池，范围 64 格、32 格起渐隐） | 名字牌池 16 个是上限：视野里"有名字的生物 + 队友"超过 16 个时，最远的会被挤掉 |
-| `联机19`~`联机23` | 生物、拾取、PvP、其他实体 | 打怪不同步；镜像捡不起来 |
+| `联机19` | 生物**命中**已同步（伤害 + 着火，按类型 + 邻域认） | **生物位置不同步**：两端 AI 各自跑、随机生成，同步位置会让两只怪互相拉扯并出现双份（前置见 `联机38`） |
+| `联机20`~`联机23` | 拾取、PvP、其他实体 | 镜像捡不起来；打人不同步 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |

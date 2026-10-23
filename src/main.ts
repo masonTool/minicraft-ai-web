@@ -378,6 +378,7 @@ import {
   type NetContainerState,
   type NetFrameState,
   type NetItemState,
+  type NetMobHit,
   type NetPlayerState,
   type NetSignState,
 } from './net/NetClient.ts';
@@ -390,6 +391,7 @@ import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/Multipl
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
+import { findMobMatch } from './core/net/MobMatch.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1883,6 +1885,8 @@ class App {
     // 牌子与展示框（联机16）：队友写的字、框里的东西
     onSign: (sign) => this.applyRemoteSign(sign),
     onFrame: (frame) => this.applyRemoteFrame(frame),
+    // 生物命中（联机19）：队友打了哪只怪
+    onMobHit: (hit) => this.onNetMobHit(hit),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -8160,6 +8164,20 @@ class App {
       // 批次 471：玩家近战是"被打"，会让它记仇/惊动同类
       { kind: 'player' },
     );
+    // 联机19：把"我打了哪只、打掉多少"告诉队友。发的是**类型 + 坐标**而不是 id——
+    // 两端生物各自生成，没有可匹配的 id；对方按邻域找自己世界里那只同类怪
+    if (applied && this.net.sessionState === 'connected') {
+      this.net.sendMobHit(
+        mob.type.id,
+        this.dimension,
+        mob.x,
+        mob.y,
+        mob.z,
+        damage,
+        // 火焰附带的秒数也带上：队友那边要跟着着火（判据与下面 ignite 一致）
+        fireAspect > 0 ? 4 * fireAspect : 0,
+      );
+    }
     // 被蛰（J21，批次 407）：打了蜜蜂就中毒，而且**一只蜜蜂只蜇一次**。
     // 只在"真的造成了伤害"（没被无敌帧挡下）时触发，否则连点可以无限续毒。
     if (applied && shouldSting(mob.type.id, this.stungBees.has(mob))) {
@@ -8926,6 +8944,27 @@ class App {
   private applyRemoteSign(sign: NetSignState): void {
     this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
     if (sign.dimension === this.dimension) this.syncSigns();
+  }
+
+  /**
+   * 队友打了一只生物（联机19）。
+   *
+   * 两端生物各自随机生成、没有可匹配的 id，所以这里按"**同类型 + 3 格内最近**"
+   * 认自己世界里那只（`findMobMatch`）。找不到就**什么都不做**——不能凭空生成一只，
+   * 否则玩家会看到双份怪物。击退传 0：位置由各端 AI 自己算，同步击退只会让两只怪
+   * 互相拉扯。
+   */
+  private onNetMobHit(hit: NetMobHit): void {
+    if (hit.dimension !== this.dimension) return;
+    const candidates: { mob: Mob; typeId: string; x: number; y: number; z: number }[] = [];
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      candidates.push({ mob: entity, typeId: entity.type.id, x: entity.x, y: entity.y, z: entity.z });
+    }
+    const match = findMobMatch(candidates, hit);
+    if (!match) return;
+    match.mob.hurt(hit.damage, 0, 0, this.lastEntityContext ?? undefined, 0, 0, { kind: 'player' });
+    if (hit.fire > 0 && !match.mob.dead) match.mob.ignite(hit.fire);
   }
 
   /** 队友往展示框里放了/取了东西（联机16）：空框 = 从表里删掉 */
