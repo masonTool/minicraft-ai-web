@@ -1011,6 +1011,12 @@ console.log('\n抽屉形态（DOM / 状态机 / 被谁引用）');
     '模板在面板内翻第二页',
     toolbarSrc.includes("setPage('templates')") && toolbarSrc.includes('build-page-templates'),
   );
+  // ⚠️ 自审 L2 补的：把这一行删掉时原本一条断言都不红（主程序侧那句管的是 main.buildMode，
+  // 工具条自己的 mode 会留在 true，回到创造模式后"面板没开、左键却在框选"）
+  check(
+    '不可用时工具条自己也会退建造模式',
+    /private applyVisibility\(\): void \{[\s\S]*?if \(!this\.available\) this\.setMode\(false\);/.test(toolbarSrc),
+  );
 }
 
 console.log('\n抽屉接线（主程序）');
