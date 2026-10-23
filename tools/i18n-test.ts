@@ -1119,6 +1119,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     // P4-1e 起：物品说明（先翻模板与方块/工具那半）
     ['item.desc.tpl.toolTier.4', 'Netherit'],
     ['item.desc.tpl.listSep', ', '],
+    // P4-1e2 起：说明全翻完（抽查两条长文，看的是"真的成句"而不是占位）
+    ['item.desc.written_book', '**Rechtsklick öffnet** es zum Blättern. Der Inhalt steht mit dem Signieren fest und lässt sich nicht ändern – dafür braucht es ein neues Buch.'],
+    ['item.desc.honey_block', 'Klebt Blöcke fest, lässt einen aber nicht springen.'],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));

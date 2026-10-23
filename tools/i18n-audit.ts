@@ -189,7 +189,9 @@ for (const locale of LOCALES) {
       (key) => table[key] === enTable[key] && zhTable[key] !== enTable[key],
     ).length;
   }
-  const extra = untranslated > 0 ? `  已翻 ${have - untranslated} · 疑似未翻 ${untranslated}` : '';
+  // 名字改准一点：这部分是"与英文写了同一种东西"（`Sand` / `Steak` / `OK` / `30 fps` / `{label} ({value})`），
+  // 不一定是没翻。早期叫"疑似未翻"，德语收口时发现 64 条全是专名、单位与纯符号。
+  const extra = untranslated > 0 ? `  已翻 ${have - untranslated} · 与英文写法相同 ${untranslated}` : '';
   console.log(`  ${locale.code.padEnd(3)} ${have}/${keys.size}  ${pct}%${lack > 0 ? `  缺 ${lack}` : ''}${extra}`);
 }
 
