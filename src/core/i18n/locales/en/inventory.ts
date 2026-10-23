@@ -67,7 +67,6 @@ export const inventory = {
   'slot.material': 'Ingredient',
   'slot.fuel': 'Fuel',
   'slot.input': 'Item',
-  'slot.rename': 'Rename',
   'slot.enchantMaterial': 'Item / Enchanted Book',
   'slot.crafting': 'Crafting',
   'slot.campfireHint': 'Place up to 4 foods here (they pop out when done)',

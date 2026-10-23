@@ -15,14 +15,12 @@ export const settings = {
   'settings.group.appearance': '外观',
   'settings.group.sound': '音频',
   'settings.language': '界面语言',
-  'settings.language.hint': '切换后游戏会重新加载以生效',
   // 多语言 P0-5：下拉里的"跟随系统"——括号里写出它当前解析成了哪种语言，
   // 否则玩家不知道"跟随系统"在**这台设备**上到底等于什么
   'settings.language.autoWith': '跟随系统（{language}）',
   // ---- 设置行（"游戏"组那几行：进世界后最常改的）
   'settings.row.daylightCycle': '昼夜循环',
   'settings.row.showDebug': '调试信息',
-  'settings.row.autosave': '自动保存',
   'settings.row.flying': '飞行',
   'settings.row.gameMode': '游戏模式',
   // ---- 设置行（"控制"组：视角、手感与触屏按钮）

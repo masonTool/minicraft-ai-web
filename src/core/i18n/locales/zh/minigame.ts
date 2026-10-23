@@ -8,7 +8,6 @@
 
 export const minigame = {
   // ---- 新手引导（引导2，批次 20261022-1954）
-  'tutorial.title': '新手引导',
   'tutorial.progress': '第 {current} 步 / 共 {total} 步',
   'tutorial.collapse': '收起',
   'tutorial.expand': '展开',

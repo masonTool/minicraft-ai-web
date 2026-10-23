@@ -88,36 +88,65 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** `t('x')` / `tp('x', …)` / `tn('x', …)` / `msg('x')` 的第一参数 */
+/** `t('x')` / `tp('x', …)` / `tn('x', …)` / `msg('x')` 的第一参数（**整串写死**的那些） */
 const CALL_RE = /\b(?:t|tp|tn|msg)\(\s*'((?:[^'\\]|\\.)+)'/g;
-/** 任何单引号字符串字面量（"引用"的宽判据） */
-const ANY_STRING_RE = /'((?:[^'\\]|\\.)+)'/g;
+/** 模板拼键：`t(`settings.opt.fps${n}`)` → 前缀 `settings.opt.fps` */
+const DYNAMIC_RE = /\b(?:t|tp|tn)\(\s*`([^`]*?)\$\{/g;
 
 const keys = new Set(allKeys());
 const files = walk(ROOT);
 
 const calls: Hit[] = [];
-const referenced = new Set<string>();
+/** 每个文件剥完注释的源码：引用判据要拿它做子串查找 */
+const sourceByFile = new Map<string, string>();
+const dynamicPrefixes = new Set<string>();
 
 for (const file of files) {
   const code = stripComments(readFileSync(file, 'utf8'));
   const rel = relative('.', file);
+  sourceByFile.set(rel, code);
   const lineOf = (index: number): number => code.slice(0, index).split('\n').length;
 
   for (const match of code.matchAll(CALL_RE)) {
     calls.push({ key: decodeLiteral(match[1]!), file: rel, line: lineOf(match.index ?? 0) });
   }
-  for (const match of code.matchAll(ANY_STRING_RE)) referenced.add(decodeLiteral(match[1]!));
+  for (const match of code.matchAll(DYNAMIC_RE)) {
+    const prefix = match[1]!;
+    // 太短的前缀等于"整片放行"（`settings.` 会把 settings.* 全洗白），宁可漏报也不这么干
+    if (prefix.length >= 4) dynamicPrefixes.add(prefix);
+  }
 }
 
 const missing = calls.filter((call) => !keys.has(call.key));
 const usedKeys = new Set(calls.map((call) => call.key));
-const unused = [...keys].filter((key) => !referenced.has(key) && !usedKeys.has(key));
+
+/**
+ * "这个键被引用过吗"——三条判据（多语言 P0-8 修订）：
+ *  ① 直接调用过（`usedKeys`）；
+ *  ② **源码里出现过这个字符串**（子串查找，不解析引号配对）；
+ *  ③ 命中某个模板前缀（`settings.opt.fps` → `settings.opt.fps30`）。
+ *
+ * 为什么不再用"成对单引号"切字面量：一行里反引号模板与单引号混排时配对会错位，
+ * 后面整段都被切乱。实测 `inventory.recipeBook` 明明写在 `InventoryScreen.ts:1038`，
+ * 却被报成孤儿。子串判据不会错位；代价是"注释里提到也算引用"，而这一栏本来就只报警告。
+ */
+function isReferenced(key: string): boolean {
+  if (usedKeys.has(key)) return true;
+  for (const code of sourceByFile.values()) if (code.includes(key)) return true;
+  for (const prefix of dynamicPrefixes) if (key.startsWith(prefix)) return true;
+  return false;
+}
+
+const unused = [...keys].filter((key) => !isReferenced(key));
 
 // ---------------------------------------------------------------- 报告
 
 console.log('[i18n 审计]');
 console.log(`  扫描 ${files.length} 个文件 · ${calls.length} 处直接调用 · 表里 ${keys.size} 条键`);
+if (dynamicPrefixes.size > 0) {
+  // 把前缀打出来：哪天出现 `settings.` 这种过宽前缀，一眼就能看见（它等于把整片键放行）
+  console.log(`  模板拼键前缀 ${dynamicPrefixes.size} 个：${[...dynamicPrefixes].map((p) => `${p}…`).join(' · ')}`);
+}
 
 if (missing.length > 0) {
   console.log(`\n  ✗ 用了但表里没有（${missing.length}）——这些会在界面上原样显示键名：`);

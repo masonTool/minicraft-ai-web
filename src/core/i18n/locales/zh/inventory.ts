@@ -66,7 +66,6 @@ export const inventory = {
   'slot.material': '材料',
   'slot.fuel': '燃料',
   'slot.input': '物品',
-  'slot.rename': '重命名',
   'slot.enchantMaterial': '材料 / 附魔书',
   'slot.crafting': '合成',
   'slot.campfireHint': '放上最多 4 样食物（烤好会自己弹出来）',

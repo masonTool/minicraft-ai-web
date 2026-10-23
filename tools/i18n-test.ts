@@ -139,7 +139,6 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.language',
     'settings.row.daylightCycle',
     'settings.row.showDebug',
-    'settings.row.autosave',
     'settings.row.flying',
     'settings.row.gameMode',
     'settings.row.cameraMode',
@@ -409,7 +408,7 @@ console.log('\n[工作站与面板标题（批次 617 / Q13）]');
   ];
   const slotKeys = [
     'slot.target', 'slot.potion', 'slot.potionHint', 'slot.material', 'slot.fuel', 'slot.input',
-    'slot.rename', 'slot.enchantMaterial', 'slot.crafting', 'slot.campfireHint',
+    'slot.enchantMaterial', 'slot.crafting', 'slot.campfireHint',
     'slot.anvilRename', 'slot.anvilWash', 'slot.anvilSameGear', 'slot.product',
   ];
   const creativeKeys = ['creative.tab.all', 'creative.tab.building', 'creative.tab.equipment', 'creative.tab.items', 'creative.tab.nature', 'pager.summary'];

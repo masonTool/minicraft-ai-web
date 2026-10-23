@@ -11,7 +11,6 @@ import type { minigame as zhminigame } from '../zh/minigame.ts';
 
 export const minigame = {
   // ---- first-run guide (batch 20261022-1954)
-  'tutorial.title': 'Getting Started',
   'tutorial.progress': 'Step {current} of {total}',
   'tutorial.collapse': 'Collapse',
   'tutorial.expand': 'Expand',
