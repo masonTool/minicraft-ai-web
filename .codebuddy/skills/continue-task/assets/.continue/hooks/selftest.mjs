@@ -144,6 +144,28 @@ try {
     return expect(r.code === 2 && r.err.includes('第 2/2 条'), '应续做第 2 条', r);
   });
 
+  check('auto-continue · 讨论中但空队列 → 拦住，要求填条目', () => {
+    queue('s-hold-empty', '', '> 状态：讨论中');
+    const r = hook('auto-continue.mjs', stop('s-hold-empty'));
+    return expect(
+      r.code === 2 && r.err.includes('还是空的'),
+      '脚本建的空队列必须被提醒去填，否则会一直停在讨论中',
+      r,
+    );
+  });
+
+  check('auto-continue · 队列文件名写错（完整会话 ID）→ 拦住要求改名', () => {
+    // 实测形态：模型把文件名写成完整会话 ID，钩子按 6 位找不到 → 机制静默失效
+    writeFileSync(join(DOING, 's-stray-full-id.md'), '# 队列 · 会话 s-stray-full-id\n\n- [ ] 甲\n');
+    const r = hook('auto-continue.mjs', stop('s-stray'));
+    rmSync(join(DOING, 's-stray-full-id.md'), { force: true });
+    return expect(
+      r.code === 2 && r.err.includes('队列文件名不对'),
+      '名字写错必须拦住；静默放行等于整套机制失效',
+      r,
+    );
+  });
+
   check('auto-continue · 讨论中 → 放行', () => {
     queue('s-hold', '- [ ] 甲', '> 状态：讨论中');
     const r = hook('auto-continue.mjs', stop('s-hold'));

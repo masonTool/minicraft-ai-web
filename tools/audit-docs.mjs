@@ -353,6 +353,16 @@ for (const [name, url] of [
     const m = /^#\s*队列\s*·\s*会话\s+(\S+)/m.exec(text);
     if (!m) continue;
     const stem = name.slice(0, -3);
+    /**
+     * 顺带挡一种"看着像队列、其实钩子永远找不到"的文件名：**把完整会话 ID 当文件名**。
+     * 实测模型干过——它按头部里那个完整 ID 命名，钩子按 6 位算路径，于是机制静默失效。
+     */
+    if (/^[0-9a-f]{8,}$/i.test(stem)) {
+      problems.push(
+        `${name} 用的是完整会话 ID 当文件名；钩子按前 6 位算路径（应为 ${shortSid(m[1])}.md）` +
+          '——名字差一个字符，整套机制就不生效，但不会报错',
+      );
+    }
     if (shortSid(m[1]) !== stem) {
       problems.push(
         `${name} 头部的会话是 ${m[1]}（前 6 位 ${shortSid(m[1])}），与文件名不一致` +

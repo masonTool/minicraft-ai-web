@@ -74,26 +74,40 @@ node <本技能目录>/scripts/install.mjs
 | --- | --- | --- |
 | `scripts/check-framework.mjs` | 打包源**自己**一致吗（模板↔安装器、注册命令带 `--event=`、脚本与开关都在本文里有交代） | 秒级 |
 | `scripts/test-install.mjs` | 装出来的**形状**对吗（必备文件齐不齐、装完的自检跑得通） | 秒级 |
-| `scripts/e2e.mjs` | 装好之后**真的转得动吗**：用真实 `codebuddy` CLI 跑一个小任务，断言"队列建了 → 钩子递了 → 收尾做了 → 归档落位" | 分钟级、花 token |
+| `scripts/e2e.mjs` | 装好之后**真的转得动吗**：跑真场景，断言"队列 / 递任务 / 收尾 / 归档 / 计划 / 阻塞 / 并行" | 分钟级、花 token |
 
-前两个是静态的，所以挡不住"钩子写 stdout 后立刻 exit 导致注入 JSON 被截断"这类事故——那种情况静态检查全绿、但任务永远递不出来。**`e2e.mjs` 就是为了这一层。**
+前两个只看静态产物，挡不住"注入 JSON 被截断""队列文件名写错"这类**静默失效**——那种情况静态检查全绿，但任务永远递不出来。`e2e.mjs` 就是为了这一层。
+
+#### 六个场景、两种执行器
+
+| 场景 | 执行器 | 验什么 |
+| --- | --- | --- |
+| `main` | model | 主干：改一个数字 → 建队列 → 钩子递任务 → 收尾（DONE 有批次节）→ 归档可用 |
+| `blocked` | probe | 同一条连续 N 轮没做完 → 标 `[阻塞]` → 之后请用户拍板 |
+| `decision` | model | 需要拍板的地方自己决定，并写进 `<sid>-decision.md`（`决定`/`为什么`），归档时跟着队列一起走 |
+| `plan-split` | model | 30 条的大任务 → **是否切成 plan**，里程碑/阶段是否合理（只验切分，不实现） |
+| `plan-run` | probe | plan 执行：续批 / 硬停（先问人后重置队列）/ 确认后继续 / 完成归档 |
+| `worktree` | probe | 别的会话有队列 → 注入提示 → 建树+分支+推本地 bare origin → 树内隔离 → `merge --no-ff` 回主分支 |
+
+**为什么要 probe**：像"连喂 5 轮没做完"这种分支，靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的地方。probe 仍然跑在**装出来的真实框架**上，只是不经过模型——验的是机制，不是"模型乖不乖"。
 
 ```bash
-npm run skill:e2e -- --dry-run   # 只看计划（不建目录、不跑模型）
-npm run skill:e2e               # 真跑（默认成功即删现场）
-npm run skill:e2e -- --keep     # 保留现场排查
-npm run skill:e2e -- --turns 15 --model <id> --timeout 900
+npm run skill:e2e                          # 只跑主干
+npm run skill:e2e -- --all                 # 六个全跑
+npm run skill:e2e -- --scenario blocked    # 单跑（可重复给多次）
+npm run skill:e2e -- --dry-run             # 只看计划
+npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
 ```
 
 五条约定：
 
-- **数据目录在 skill 里**：`.codebuddy/skills/continue-task/.e2e/run-<时间戳>/`，
-  同目录的 `.gitignore` 已排除。**框架进库、现场不进库**——copys skill 时不会带着一堆测试现场。
-- **模型固定**：默认 `deepseek-v4.1-flash-official`，`--model` 可覆盖。固定住是为了
-  "本机默认模型换了 → 断言跟着飘"。
-- **其余配置继承本机**（登录态、MCP、权限），不另造一套。
-- **没装 CLI 就跳过**（exit 0 并说明）；**未登录（401）也只算跳过**——那种情况下仍然验到
-  "装好 → 钩子被加载 → 注入没被截断 → 钩子没崩"，只是模型那段没发生。
+- **数据目录在 skill 里**：`.codebuddy/skills/continue-task/.e2e/<场景>-<时间戳>/`，
+  同目录 `.gitignore` 已排除。**框架进库、现场不进库**。
+- **现场默认保留**：一次完整测试由多个用例组成，跑到一半重跑某个用例时**不会**动别的用例的现场；
+  要清空整轮加 `--fresh`。
+- **模型固定** `deepseek-v4.1-flash-official`（`--model` 可覆盖）：默认模型一换，断言跟着飘。
+- **环境问题不算失败**：没装 CLI / 未登录（401）/ 网络挂掉 → 只验静态级并标 `⏭ 跳过`，
+  不算"通过"也不算"失败"；`--strict` 可以把跳过收紧成失败。
 - 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
 
 **CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**，一次几分钟且花 token）。

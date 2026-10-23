@@ -829,6 +829,32 @@ export function fingerprint(raw) {
     .slice(0, 120);
 }
 
+/**
+ * 找出"名字写错"的队列文件：前缀和本会话相同、又不是那个精确短名。
+ *
+ * 为什么需要它：文件名就是契约（钩子按会话 ID 直接算路径），写错一个字符，
+ * 整套机制就**静默失效**——队列还在，但钩子永远找不到它，AI 以为自己在按流程走。
+ * 实测形态：模型把文件名写成了**完整会话 ID**（`e2e000…e.md` 而不是 `e2e000.md`）。
+ *
+ * 只报不改：前缀相同也可能是**另一个会话**（6 位撞车），自动改名会踩别人。
+ * 这里只负责把"你可能写错了"摆到明面上，改不改由 AI 判断。
+ */
+export function findStrayQueue(sid) {
+  const want = shortSid(sid);
+  try {
+    return (
+      readdirSync(DOING_DIR)
+        .filter((name) => name.endsWith('.md') && !isPlanFile(name) && !isDecisionFile(name))
+        .find((name) => {
+          const stem = name.slice(0, -3);
+          return stem !== want && stem.startsWith(want) && stem.length > want.length;
+        }) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** 只列**会话队列**：`doing/` 里还有 `<sid>-plan.md` / `<sid>-decision.md` 两类。 */
 export function listQueues() {
   try {

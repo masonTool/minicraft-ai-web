@@ -77,3 +77,32 @@ try {
 const rel = dest.slice(PROJECT_ROOT.length + 1);
 console.log(`已归档：${rel}`);
 appendLog(sid, `${kind === 'plan' ? '计划' : kind === 'decision' ? '决策记录' : '队列'}已归档 · ${rel}`);
+
+/**
+ * 不带 flag 时 = 归档**本会话的全部"正在做"文件**：队列 + 决策记录 + 计划（存在才搬）。
+ *
+ * 为什么改成一条命令：收尾第五步原本要求"归档队列 → 再 `--decision` → 再 `--plan`"，
+ * 实测模型只做了第一步就宣布收尾，决策记录留在 `doing/` 里成了孤儿（门禁会红，但那是事后）。
+ * 一个会话的东西本来就该一起走，做成一条命令就不存在"漏了第二步"。
+ *
+ * 单独的 `--plan` / `--decision` 仍然可用（幂等：文件不在就跳过）。
+ */
+if (kind === 'queue') {
+  for (const [k, name, label] of [
+    ['decision', decisionNameFor(sid), '决策记录'],
+    ['plan', planNameFor(sid), '计划'],
+  ]) {
+    const from = join(DOING_DIR, name);
+    if (!existsSync(from)) continue;
+    const to = join(ARCHIVE_DIR, `${k}-${stamp()}.md`);
+    try {
+      renameSync(from, to);
+      const r = to.slice(PROJECT_ROOT.length + 1);
+      console.log(`已归档（随队列）：${r}`);
+      appendLog(sid, `${label}已归档（随队列） · ${r}`);
+    } catch (err) {
+      console.error(`附带归档 ${name} 失败：${err.message}`);
+      process.exit(1);
+    }
+  }
+}

@@ -39,6 +39,7 @@ import {
   DOING_REL,
   emitAllow,
   emitBlock,
+  findStrayQueue,
   fingerprint,
   loadState,
   markBlocked,
@@ -153,9 +154,59 @@ function idleAllow(reason, message) {
 if (brakeOn()) idleAllow('刹车已开', `刹车已开（${BRAKE_REL}），不递任务；删掉该文件即恢复。`);
 
 // 没有队列 = 用户只是在问问题/聊天 → 一次都不要拦。
-if (!queue) idleAllow('本会话没有队列');
+if (!queue) {
+  /**
+   * 「还没建」和「名字写错」在钩子眼里都是"没有队列"，后果却完全不同：
+   * 前者正常，后者等于整套机制静默失效。所以先扫一遍近名文件，命中就拦住要求改名。
+   */
+  const stray = findStrayQueue(sid);
+  if (stray) {
+    appendLog(sid, `队列文件名可疑 · ${stray}（应为 ${queueFileName(sid)}）`);
+    emitBlock(
+      [
+        '[auto-continue · 队列文件名不对，整套机制现在是失效的]',
+        '',
+        `本会话的队列应该叫 \`${DOING_REL}/${queueFileName(sid)}\`，`,
+        `但 \`${DOING_REL}/\` 里有个 \`${stray}\`（前缀和本会话相同）。`,
+        '',
+        '文件名就是契约：钩子按会话 ID 直接算路径，**名字差一个字符就永远找不到它**。',
+        '此时队列看着还在、你也在按流程走，但钩子一次都不会递任务、也不会收尾——而且不报错。',
+        '',
+        '## 现在要做的事',
+        '',
+        `1. 如果 \`${stray}\` 是你刚建的：\`git mv ${DOING_REL}/${stray} ${DOING_REL}/${queueFileName(sid)}\`，`,
+        '   文件内容不用动；改名后钩子下一轮就能接上；',
+        `2. 如果它是**别的会话**的（6 位前缀撞车）：不要动它，把本会话队列建成 \`${queueFileName(sid)}\`；`,
+        '3. 两种都不是：先 `ls .continue/doing/` 看清楚再动手。',
+      ].join('\n'),
+    );
+  }
+  idleAllow('本会话没有队列');
+}
 
 if (queue.hold) {
+  /**
+   * `讨论中` 有两种：用户主动暂停（有内容），和"脚本刚建好还没填"（空）。
+   * 后者静默放行就等于**永远停在这里**——没人会记得回来改状态。所以空的时候要拦一次。
+   */
+  if (queue.entries.length === 0) {
+    emitBlock(
+      [
+        '[auto-continue · 队列还是空的（状态：讨论中）]',
+        '',
+        `\`${DOING_REL}/${queueFileName(sid)}\` 已经建好了，但里面**一条条目都没有**，`,
+        '状态还是 `讨论中` ——这个状态钩子不递任务，会一直停在这里。',
+        '',
+        '## 现在要做的事',
+        '',
+        '1. 把这一批要做的事写成条目（每条一行 `- [ ] …`，下面带一行 `  - 验证：…`）；',
+        '2. 把头部的 `> 状态：讨论中` 改成 `> 状态：执行中`；',
+        '3. 之后钩子每轮递一条，做完勾 `[x]` 再提交。',
+        '',
+        '如果是用户明确要求**先讨论方案、先别动手**，那就保持 `讨论中` 不动，把问题问清楚即可。',
+      ].join('\n'),
+    );
+  }
   idleAllow('讨论中，不递任务', '队列处于「讨论中」状态，钩子不递任务。改成「状态：执行中」后开始执行。');
 }
 
@@ -273,8 +324,7 @@ function wrapSteps(keepQueue = false, includeFifth = true) {
       : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
         '   它把队列移到 `.continue/logs/<会话ID>/queue-<年月日时分秒>.md` 备查。' +
         '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
-        `   本会话写过 \`doing/${shortSid(sid)}-decision.md\` 的话，**再跑一次**` +
-        ` \`node .continue/hooks/archive-queue.mjs ${sid} --decision\` 一起归档。`]
+        '   **决策记录与计划会跟着队列一起归档**，不用再单独跑 `--decision` / `--plan`。']
       : []),
     '',
     '**做完在回复里逐条回执**：五步各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
