@@ -97,7 +97,7 @@ node <本技能目录>/scripts/install.mjs
 npm run skill:e2e                          # 只预检，不跑
 npm run skill:e2e -- --all --yes            # 七个全跑（先清场，含模型，会烧 token）
 npm run skill:e2e -- --scenario blocked     # probe 场景不用 --yes
-npm run skill:e2e -- --clean                # 只清现场（test.md 保留）
+npm run skill:e2e -- --clean                # 只清现场（test.md 重置为表头）
 npm run skill:e2e -- --dry-run             # 只看计划
 npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
 ```
@@ -124,9 +124,10 @@ npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
   两轮并发跑是 2026-10-23 实测过的事故：后一轮的"先清场"把前一轮正在用的场景目录删掉，
   前一轮 `main` 全红（假红），两轮还各烧 200 万 token。正常结束/SIGINT/SIGTERM 会自己释放锁；
   确认那个进程已经死了才手动 `/bin/rm -f .e2e/.lock`。
-- **全测先清场**：`--all` 在开跑前删掉上一轮**全部**现场（`test.md` 保留），预检里会写"先清场 … 删掉 N 个"；
+- **全测先清场**：`--all` 在开跑前删掉上一轮**全部**现场，并把 `test.md` **重置成表头**（否则上一轮那一节
+  全是"现场目录已被删掉"的悬空引用），预检里会写"先清场 … 删掉 N 个"；
   **清不干净就 exit 2**，绝不带着半删现场继续跑（半删的目录比旧目录更误导人）。
-  单跑某场景不清（互不干扰）；`--keep-all` 可保留上一轮。
+  单跑某场景不清（互不干扰）；`--keep-all` 则目录与报告都保留上一轮。
 - **删除一律走绝对路径 `/bin/rm`**：IDE 终端把 `fs.rmSync` 和 `PATH` 里的 `rm` 都换成了 safe-delete 垫片
   ——按 toolCallId 累计删除条数、到 500 条**删到一半停下**、还把文件挪进系统废纸篓。
   `rmrf()` 删完会校验"真的没了"，没删掉就抛错（2026-10-23 `journey`/`milestone`/`worktree` 三个场景

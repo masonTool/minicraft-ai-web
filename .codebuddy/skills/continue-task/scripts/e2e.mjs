@@ -20,7 +20,7 @@
  *   npm run skill:e2e -- --all                 # 跑全部 7 个场景（先清场）
  *   npm run skill:e2e -- --scenario blocked    # 单跑一个（可重复给多次）
  *   npm run skill:e2e -- --dry-run             # 只打印计划
- *   npm run skill:e2e -- --clean              # 只清现场（test.md 保留）
+ *   npm run skill:e2e -- --clean              # 只清现场（test.md 重置为表头）
  *   npm run skill:e2e -- --model X --turns 45 --timeout 600 --strict
  *
  * 现场（默认**保留**，方便你看）：
@@ -31,7 +31,7 @@
  * 两条硬规矩（2026-10-23 踩过，见 `.continue/TIPS.md`）：
  *   · **全测只跑一遍**：`.e2e/.lock` 记 pid，已有活跃轮次时第二轮直接 exit 2。两轮并发
  *     会把彼此的现场清掉，前一轮全红（假红）且双倍烧 token。
- *   · **全测先清场**：`--all` 开跑前删掉上一轮全部现场（`test.md` 保留），删不干净就 exit 2；
+ *   · **全测先清场**：`--all` 开跑前删掉上一轮全部现场，并把 `test.md` 重置为表头，删不干净就 exit 2；
  *     删除一律走绝对路径 `/bin/rm`（IDE 终端的 safe-delete 垫片会在 500 条处"删一半"）。
  *
  * 退出码：0 通过（或环境跳过）/ 1 断言失败 / 2 用法错误（含"已有一轮在跑"）。
@@ -61,6 +61,12 @@ const DATA_ROOT = join(SKILL, '.e2e');
 const BIN_RM = process.platform === 'win32' ? null : '/bin/rm';
 /** 运行锁文件：同一时间只允许一轮 e2e（全测只跑一遍）。 */
 const LOCK = join(DATA_ROOT, '.lock');
+/**
+ * 汇总报告。清场时它会一起被重置——它描述的是"这一轮的现场"，不是长期台账
+ * （长期记录在 `e2e-history.md`，那个入库）。定义在这里是因为清场发生在
+ * 后面那句 `const report = ...` 之前，晚定义会踩 TDZ。
+ */
+const REPORT = join(DATA_ROOT, 'test.md');
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -1011,7 +1017,7 @@ if (chosen.some((n) => SCENARIOS[n].driver === 'model') && !model) {
 if (cleanOnly) {
   refuseBecauseRunning('现在清场');
   const n = cleanRuns();
-  console.log(`已清理 ${n} 个现场目录（test.md 保留）。`);
+  console.log(`已清理 ${n} 个现场目录（test.md 已重置为表头）。`);
   process.exit(0);
 }
 
@@ -1020,7 +1026,7 @@ console.log('端到端自测 · 预检');
 console.log(`  仓库    ${REPO}`);
 console.log(`  数据根  ${DATA_ROOT}（现场默认保留；--fresh 清上一轮）`);
 if (isAutoFresh()) {
-  console.log(`  先清场  --all：开跑前删掉 ${pendingCleanNames().length} 个旧现场目录（test.md 保留）`);
+  console.log(`  先清场  --all：开跑前删掉 ${pendingCleanNames().length} 个旧现场目录，test.md 重置为表头`);
 }
 console.log(`  模型    ${model ?? '（本场景不需要模型）'}   来源：${modelSource}`);
 console.log('');
@@ -1096,13 +1102,43 @@ function rmrf(target) {
   if (!rmPath(target)) throw new Error(`清理失败，删不干净：${target}`);
 }
 
-/** `cleanRuns()` 会删掉哪些条目（`test.md` / `.lock` / 点开头的保留）。 */
+/**
+ * `cleanRuns()` 会删掉哪些条目。
+ *
+ * `test.md` 不在其中——它不是目录，而是由 `resetReport()` 重写成表头；
+ * `.lock` 与点开头的（`.gitignore` 之类）一律不动。
+ */
 function pendingCleanNames() {
   if (!existsSync(DATA_ROOT)) return [];
   return readdirSync(DATA_ROOT).filter((n) => n !== 'test.md' && !n.startsWith('.'));
 }
 
-/** 清掉所有"一次运行"的目录与 worktree 场景留下的 bare 仓库；`test.md` 保留。 */
+/** `test.md` 的表头：首次创建与清场重写共用同一份，避免两处各写一套文案。 */
+function reportHeader() {
+  return [
+    '# e2e 测试报告',
+    '',
+    '> 每次运行一节，用表格列：测什么 / 结果 / 耗时 / tokens，失败的单独列原因。',
+    '> **每个场景跑完就刷新本节**（不等整轮结束）：中途停下也能看到已完成场景的结果；',
+    '> 每个场景目录里另有一份 `report.md`（同一个场景的逐条断言）。',
+    '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
+    '> **清场（`--all` / `--fresh` / `--clean`）会把它重置成这个表头**：报告只描述当前一轮；',
+    '> 想连报告一起保留上一轮，用 `--keep-all`。',
+    '',
+  ].join('\n');
+}
+
+/**
+ * 清场时把报告也归零。
+ *
+ * 为什么：清场已经把场景目录全删了，留着上一轮那一节就是一堆指向不存在目录的悬空
+ * 引用（"现场目录"列点进去什么都没有），还让人分不清哪节是这次的。
+ */
+function resetReport() {
+  writeFileSync(REPORT, reportHeader());
+}
+
+/** 清掉所有"一次运行"的目录与 worktree 场景留下的 bare 仓库，并把 `test.md` 重置。 */
 function cleanRuns() {
   let n = 0;
   const failed = [];
@@ -1116,6 +1152,7 @@ function cleanRuns() {
     console.error(`     （确认没被占用后手动处理：/bin/rm -rf "<${DATA_ROOT}/目录名>"）`);
     process.exit(2);
   }
+  resetReport();
   return n;
 }
 
@@ -1203,7 +1240,7 @@ if (isAutoFresh()) {
   const n = cleanRuns();
   console.log(
     pending > 0
-      ? `  先清场（--all）：删掉上一轮 ${n} 个现场目录（test.md 保留）`
+      ? `  先清场（--all）：删掉上一轮 ${n} 个现场目录，test.md 重置为表头`
       : '  先清场（--all）：没有旧现场，直接开跑',
   );
 }
@@ -1223,7 +1260,7 @@ const when = `${startedAt.toISOString().slice(0, 10)} ${startedAt.toTimeString()
  * 用 `stamp` 而不是数组下标——同一份报告里会累积多轮，下标会漂。
  */
 const runId = stamp;
-const report = join(DATA_ROOT, 'test.md');
+const report = REPORT;
 
 function usageOf(r) {
   const f = join(r.dir, '.e2e-cli.json');
@@ -1372,18 +1409,7 @@ function buildRunBlock(rows, unitRows) {
  */
 function ensureReport() {
   if (existsSync(report)) return;
-  writeFileSync(
-    report,
-    [
-      '# e2e 测试报告',
-      '',
-      '> 每次运行一节，用表格列：测什么 / 结果 / 耗时 / tokens，失败的单独列原因。',
-      '> **每个场景跑完就刷新本节**（不等整轮结束）：中途停下也能看到已完成场景的结果；',
-      '> 每个场景目录里另有一份 `report.md`（同一个场景的逐条断言）。',
-      '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
-      '',
-    ].join('\n'),
-  );
+  writeFileSync(report, reportHeader());
 }
 
 /** 把本轮那一节写进 `test.md`：已有就**原地替换**（不重复追加），没有就追加。 */
