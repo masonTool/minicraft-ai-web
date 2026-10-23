@@ -910,9 +910,11 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
    *  ② 存档里存了没表的语言不该被判成脏数据（否则玩家换设备后设置被重置）；
    *  ③ 查不到就按 当前 → 英文 → 中文 → 键名 走，**不抛异常、不返回空串**。
    */
+  // 多语言 P4-4：六种语言（zh / en / ru / pt / fr / de）现在**全部有表**，
+  // 所以"只有一部分能选"这个旧判据不再成立 —— 改验"支持 6 种且 6 种都能选"。
   check(
-    '支持 6 种语言，但只有有表（或登记了加载器）的才能选',
-    LOCALES.length === 6 && availableLanguages().length < LOCALES.length,
+    '支持 6 种语言，且六种都能选（都有表或加载器）',
+    LOCALES.length === 6 && availableLanguages().length === LOCALES.length,
     `available=${availableLanguages().join(',')}`,
   );
   /**
@@ -937,12 +939,13 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
   );
   check('存档里存了还没表的语言也不算脏数据', isLanguage('de') && isLanguage('pt'));
   check('没登记的语言仍然不合法', !isLanguage('ja') && !isLanguage('xx'));
-  // 多语言 P4-1：de 已经有表（按需加载），"没装表"的例子改用 ru / pt
-  // 多语言 P4-2：ru 有表了（按需加载），"没装表"的例子改用 pt
-  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('pt')).length === 0);
-  check('缺表时回落英文', t('pause.title', 'pt') === t('pause.title', 'en'), t('pause.title', 'pt'));
-  check('其它语言同理（回落链不看具体是哪种语言）', t('pause.resume', 'pt') === 'Resume Game', t('pause.resume', 'pt'));
-  check('一路回落到头就返回键名', t('no.such.key', 'pt') === 'no.such.key', t('no.such.key', 'pt'));
+  // 多语言 P4-4：六种真实语言（zh / en / ru / pt / fr / de）**全部有表**，
+  // 再想验"没表的语言"就只能造一个码 —— 回落链本身与码真不真无关。
+  const NO_TABLE = 'xx' as LocaleCode;
+  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf(NO_TABLE)).length === 0);
+  check('缺表时回落英文', t('pause.title', NO_TABLE) === t('pause.title', 'en'), t('pause.title', NO_TABLE));
+  check('其它语言同理（回落链不看具体是哪种语言）', t('pause.resume', NO_TABLE) === 'Resume Game', t('pause.resume', NO_TABLE));
+  check('一路回落到头就返回键名', t('no.such.key', NO_TABLE) === 'no.such.key', t('no.such.key', NO_TABLE));
   // 回落链只留英文一档（多语言 P0-6 去掉了"最后退中文"）——前提是英文表真的完整。
   // ⚠️ 判据必须是"**键在不在**英文表里"，不能写成 `t(key) === key`：
   // 命令回执里有 `{name} Health = {value}` 这种语言中性的条目，英文值**就是键本身**，
@@ -992,18 +995,21 @@ console.log('\n[按需加载（多语言 P0-7）]');
    * P4 加真实语言时做的正是同一件事（在 `LOADERS` 里加一行）。
    */
   check('静态语言（zh / en）本来就是就位的', (await loadLocale('zh')) && (await loadLocale('en')));
-  check('没有加载器的语言加载失败（返回 false，不抛异常）', (await loadLocale('pt')) === false);
-  check('加载失败不影响查表（回落链照旧）', t('pause.title', 'pt') === 'Game Paused', t('pause.title', 'pt'));
+  // 与前面那段同一个理由：六种语言都有表了，这里造一个码来验"加载失败"这条分支
+  const NO_TABLE = 'xx' as LocaleCode;
+  check('没有加载器的语言加载失败（返回 false，不抛异常）', (await loadLocale(NO_TABLE)) === false);
+  check('加载失败不影响查表（回落链照旧）', t('pause.title', NO_TABLE) === 'Game Paused', t('pause.title', NO_TABLE));
 
   // 假语言：只给一条文案，足够验证"加载 → 可查"这条链
-  registerLocaleLoader('pt', async () => ({ pt: { 'pause.title': 'Pausado' } }));
-  check('登记加载器后出现在可选清单里', availableLanguages().includes('pt'), availableLanguages().join(','));
-  check('加载成功', (await loadLocale('pt')) === true);
-  check('加载后表进了池子', tableOf('pt')['pause.title'] === 'Pausado');
-  check('加载后真能查出来', t('pause.title', 'pt') === 'Pausado', t('pause.title', 'pt'));
-  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('pt')) === true);
-  check('假语言缺的键仍回落英文', t('pause.resume', 'pt') === 'Resume Game', t('pause.resume', 'pt'));
-  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('pt'));
+  registerLocaleLoader(NO_TABLE, async () => ({ [NO_TABLE]: { 'pause.title': 'Pausado' } }));
+  // 造出来的码**不该**漏进语言选择器：可选清单只认 `LOCALES` 里的语言，
+  // 加载器只是"怎么拿表"，不是"能不能选"。这条把那个边界钉住。
+  check('造出来的语言码不会出现在可选清单里', !availableLanguages().includes(NO_TABLE), availableLanguages().join(','));
+  check('加载成功', (await loadLocale(NO_TABLE)) === true);
+  check('加载后表进了池子', tableOf(NO_TABLE)['pause.title'] === 'Pausado');
+  check('加载后真能查出来', t('pause.title', NO_TABLE) === 'Pausado', t('pause.title', NO_TABLE));
+  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale(NO_TABLE)) === true);
+  check('假语言缺的键仍回落英文', t('pause.resume', NO_TABLE) === 'Resume Game', t('pause.resume', NO_TABLE));
   resetLanguageForTest();
 }
 
@@ -1173,6 +1179,44 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     }
   }
   check('法语用法串的 <> / [] / | 与中文一致', frSyntaxDrift.length === 0, frSyntaxDrift.join(','));
+
+  /**
+   * 葡语（巴西，多语言 P4-4）。
+   *
+   * 条目点名的三件事都在这一节里：
+   *  ① **htmlLang**：`pt-BR`（不是 `pt`）—— `<html lang>` 与 `Intl.*` 都靠它，前面已有断言；
+   *  ② **连接词**：`Intl.ListFormat('pt-BR')` 给的是 `A, B e C`，不用手写（前面也有断言）；
+   *  ③ **0 算单数**：`Intl.PluralRules('pt-BR').select(0)` 是 `one` → `0 bloco`，与法语同构、与英语相反。
+   */
+  check('葡语可加载', (await loadLocale('pt')) === true);
+  check('葡语进了可选清单', availableLanguages().includes('pt'), availableLanguages().join(','));
+  const ptKeys = Object.keys(tableOf('pt'));
+  check('葡语表条数与中文相同', ptKeys.length === allKeys().length, `${ptKeys.length} vs ${allKeys().length}`);
+
+  const ptSamples: Array<[string, string]> = [
+    ['menu.play', 'Jogar'],
+    ['pause.title', 'Jogo pausado'],
+    ['settings.row.fov', 'Campo de visão'],
+    ['station.name.furnace', 'Fornalha'],
+  ];
+  for (const [key, expected] of ptSamples) {
+    check(`葡语：${key}`, t(key, 'pt') === expected, t(key, 'pt'));
+  }
+  check('葡语表里没有中文残留', !/[\u4e00-\u9fff]/.test(ptKeys.map((key) => t(key, 'pt')).join('')));
+
+  setLanguage('pt');
+  const ptForms = [0, 1, 2, 5].map((n) => tn('statistics.blocks', n));
+  check(
+    '葡语复数：0 算单数（0 bloco / 1 bloco / 2 blocos / 5 blocos）',
+    ptForms.join('|') === '0 bloco|1 bloco|2 blocos|5 blocos',
+    ptForms.join('|'),
+  );
+  check(
+    '葡语的过去分词也跟着配合（preenchido / preenchidos）',
+    tn('buildtools.fill.done', 1) === '1 bloco preenchido' && tn('buildtools.fill.done', 3) === '3 blocos preenchidos',
+    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+  );
+  resetLanguageForTest();
 
   /**
    * 法语（多语言 P4-3）。
