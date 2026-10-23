@@ -1,8 +1,4 @@
 /**
- * 中文文案·成就
-
-
-/**
  * 成就的标题与描述：键由 `advancements.ts` 的 id 派生
  * （`minecraft:story/root` → `advancement.story_root.title`），不再手写第二份清单。
  */

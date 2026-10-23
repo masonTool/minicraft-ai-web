@@ -1,8 +1,4 @@
 /**
- * EN文案·成就
-
-
-/**
  * EN 文案·成就（与 `locales/zh/advancement.ts` **键集必须相同**）
  *
  * `satisfies Pick<Messages, keyof typeof zhAdvancement>` 把键集卡在 `typecheck`（值才是该语言的文案）。
