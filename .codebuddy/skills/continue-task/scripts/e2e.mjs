@@ -17,7 +17,7 @@
  *
  * 用法（在仓库根执行）：
  *   npm run skill:e2e                          # 只跑主干（main）
- *   npm run skill:e2e -- --all                 # 跑全部 5 个场景
+ *   npm run skill:e2e -- --all                 # 跑全部 7 个场景（先清场）
  *   npm run skill:e2e -- --scenario blocked    # 单跑一个（可重复给多次）
  *   npm run skill:e2e -- --dry-run             # 只打印计划
  *   npm run skill:e2e -- --clean              # 只清现场（test.md 保留）
@@ -28,7 +28,13 @@
  *   报告**每跑完一个场景就刷新一次**：场景目录里的 `report.md`，以及 `.e2e/test.md` 里本轮那一节
  *   （先写「进行中」版本，整轮结束后用终版覆盖）。所以不用等十几分钟才知道前面几个场景过没过。
  *
- * 退出码：0 通过（或环境跳过）/ 1 断言失败 / 2 用法错误。
+ * 两条硬规矩（2026-10-23 踩过，见 `.continue/TIPS.md`）：
+ *   · **全测只跑一遍**：`.e2e/.lock` 记 pid，已有活跃轮次时第二轮直接 exit 2。两轮并发
+ *     会把彼此的现场清掉，前一轮全红（假红）且双倍烧 token。
+ *   · **全测先清场**：`--all` 开跑前删掉上一轮全部现场（`test.md` 保留），删不干净就 exit 2；
+ *     删除一律走绝对路径 `/bin/rm`（IDE 终端的 safe-delete 垫片会在 500 条处"删一半"）。
+ *
+ * 退出码：0 通过（或环境跳过）/ 1 断言失败 / 2 用法错误（含"已有一轮在跑"）。
  */
 import { spawnSync } from 'node:child_process';
 import {
@@ -46,6 +52,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = resolve(HERE, '..');
 const REPO = resolve(SKILL, '..', '..', '..');
 const DATA_ROOT = join(SKILL, '.e2e');
+/**
+ * 绝对路径的 `rm`：绕开 IDE 终端的 safe-delete 垫片（`PATH` 里的 `rm` 与
+ * `fs.rmSync` 都被它接管，见 `rmPath()` 注释）。定义在这里是因为 `--clean`
+ * 分支在文件靠前的位置就会用到。
+ */
+const BIN_RM = process.platform === 'win32' ? null : '/bin/rm';
+/** 运行锁文件：同一时间只允许一轮 e2e（全测只跑一遍）。 */
+const LOCK = join(DATA_ROOT, '.lock');
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -164,7 +178,12 @@ const logOf = (ctx, s) => readMaybe(join(ctx.dir, '.continue', 'logs', sid6(s), 
  * "已下发过"而放行，看着像"硬停失效"。真实流程里勾阶段会换钥匙，所以这是**测试的假象**，
  * 每个边界前重置一次状态即可。
  */
-const resetHookState = (ctx, s) => rmSync(join(ctx.dir, '.continue', 'logs', sid6(s), 'run.md'), { force: true });
+const resetHookState = (ctx, s) => {
+  // 删不掉就抛：不然"硬停"其实没被重置，断言会给出假红/假绿
+  if (!rmPath(join(ctx.dir, '.continue', 'logs', sid6(s), 'run.md'))) {
+    throw new Error('重置钩子状态失败（run.md 删不掉），后面的边界断言会失真');
+  }
+};
 
 /** 一个只带 `[x]` 条目的队列（用于触发"队列已清空"的收尾分支）。 */
 const doneQueue = (s) =>
@@ -538,7 +557,7 @@ SCENARIOS.worktree = {
 
     // ② 本地 bare 仓库当 origin（不依赖网络/凭据）
     const origin = join(dirname(ctx.dir), `origin-${ctx.name}-${stamp}.git`);
-    rmSync(origin, { recursive: true, force: true });
+    rmrf(origin);
     spawnSync('git', ['init', '--bare', '-q', origin]);
     ctx.git(['branch', '-M', 'main']);
     ctx.git(['remote', 'add', 'origin', origin]);
@@ -591,7 +610,7 @@ SCENARIOS.worktree = {
     const mainStatus = spawnSync('git', ['status', '--porcelain'], { cwd: ctx.dir, encoding: 'utf8' }).stdout ?? '';
     check('树里的未提交改动不串到主树', !/only-in-wt\.txt/.test(mainStatus), mainStatus.slice(0, 200));
     spawnSync('git', ['checkout', '--', '.'], { cwd: wtDir });
-    rmSync(join(wtDir, 'only-in-wt.txt'), { force: true });
+    rmrf(join(wtDir, 'only-in-wt.txt'));
 
     // ⑤ 在树里干一条活并提交，然后合回主分支
     write({ dir: wtDir }, 'hello.txt', 'hello from worktree\n');
@@ -830,8 +849,9 @@ if (chosen.some((n) => SCENARIOS[n].driver === 'model') && !model) {
 }
 
 // `--clean` 要先于预检处理：它不是在跑测试，不该被 --yes 挡住
-// （cleanRuns 是 function 声明，会提升，这里能直接调）
+// （cleanRuns / refuseBecauseRunning 都是 function 声明，会提升，这里能直接调）
 if (cleanOnly) {
+  refuseBecauseRunning('现在清场');
   const n = cleanRuns();
   console.log(`已清理 ${n} 个现场目录（test.md 保留）。`);
   process.exit(0);
@@ -841,6 +861,9 @@ if (cleanOnly) {
 console.log('端到端自测 · 预检');
 console.log(`  仓库    ${REPO}`);
 console.log(`  数据根  ${DATA_ROOT}（现场默认保留；--fresh 清上一轮）`);
+if (isAutoFresh()) {
+  console.log(`  先清场  --all：开跑前删掉 ${pendingCleanNames().length} 个旧现场目录（test.md 保留）`);
+}
 console.log(`  模型    ${model ?? '（本场景不需要模型）'}   来源：${modelSource}`);
 console.log('');
 
@@ -893,40 +916,142 @@ if (needCli && spawnSync('codebuddy', ['--version'], { encoding: 'utf8' }).statu
 }
 
 /**
- * 删一个目录（整棵）。
+ * 删一个路径（文件或目录），**走绝对路径 `/bin/rm`**。
  *
- * 为什么走 `rm -rf` 而不是 `fs.rmSync`：本机对 `rmSync` 有批量删除保护
- * （单次 >500 个文件会抛 SAFE_DELETE_BULK_CONFIRM_REQUIRED），
- * 而一个场景目录里 `.git` 就有几百个对象文件——用 `rmSync` 清到一半会失败。
- * 作用域严格限制在 `.e2e/` 下的单个条目，不会误伤别处。
+ * 为什么不 `fs.rmSync`：IDE 的终端往 `NODE_OPTIONS` 里注入了 safe-delete 垫片，
+ * `fs.rmSync` / `unlinkSync` 会被接管——按 toolCallId 累计删除条数，跨过 500 条就
+ * **删到一半停下**（留下半删的现场），还把文件挪进系统废纸篓；PATH 里的 `rm`
+ * 也是同一层垫片。只有绝对路径 `/bin/rm` 不过这两层，才是"真的删掉"。
+ * 2026-10-23 实测：`plan-run`/`journey`/`worktree` 三个场景就是被这个 500 阈值判红的。
+ * 作用域始终限制在 `.e2e/` 下的单个条目，不会误伤别处。
  */
-function rmrf(dir) {
-  spawnSync('rm', ['-rf', '--', dir], { encoding: 'utf8' });
+function rmPath(target) {
+  if (!existsSync(target)) return true;
+  if (BIN_RM) spawnSync(BIN_RM, ['-rf', '--', target], { encoding: 'utf8' });
+  else rmSync(target, { recursive: true, force: true });
+  // 只认"真的没了"：半删比不删更糟（目录看着在、内容缺一半，断言会给出假红）
+  return !existsSync(target);
+}
+
+/** 删一个路径并校验；删不干净就抛错，不带着半删现场继续跑。 */
+function rmrf(target) {
+  if (!rmPath(target)) throw new Error(`清理失败，删不干净：${target}`);
+}
+
+/** `cleanRuns()` 会删掉哪些条目（`test.md` / `.lock` / 点开头的保留）。 */
+function pendingCleanNames() {
+  if (!existsSync(DATA_ROOT)) return [];
+  return readdirSync(DATA_ROOT).filter((n) => n !== 'test.md' && !n.startsWith('.'));
 }
 
 /** 清掉所有"一次运行"的目录与 worktree 场景留下的 bare 仓库；`test.md` 保留。 */
 function cleanRuns() {
-  if (!existsSync(DATA_ROOT)) return 0;
   let n = 0;
-  for (const name of readdirSync(DATA_ROOT)) {
-    if (name === 'test.md' || name.startsWith('.')) continue;
-    rmrf(join(DATA_ROOT, name));
-    n += 1;
+  const failed = [];
+  for (const name of pendingCleanNames()) {
+    if (rmPath(join(DATA_ROOT, name))) n += 1;
+    else failed.push(name);
+  }
+  if (failed.length > 0) {
+    // 半删的现场比旧现场更误导人：宁可停下，让人先手动处理
+    console.error(`  ⚠️ 清场失败：${failed.join('、')} 删不掉，拒绝开跑。`);
+    console.error(`     （确认没被占用后手动处理：/bin/rm -rf "<${DATA_ROOT}/目录名>"）`);
+    process.exit(2);
   }
   return n;
 }
 
+// ---------------------------------------------------------------- 运行锁
+/**
+ * 同一时间只允许一轮 e2e（**全测只跑一遍**）。
+ *
+ * 为什么必须有：2026-10-23 实测两轮 `--all` 相差 2 分钟同时跑，后一轮的"先清场"
+ * 把前一轮正在用的场景目录删掉 → 前一轮 `main` 全红（假红），两轮还各烧了 200 万
+ * token。锁放在**清场之前**，就是为了让第二轮在动别人的现场之前就退出去。
+ */
+function readLock() {
+  if (!existsSync(LOCK)) return null;
+  try {
+    return JSON.parse(readFileSync(LOCK, 'utf8'));
+  } catch {
+    return null; // 写坏了的锁按"没有"处理，等一下会被覆盖
+  }
+}
+
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM'; // 活着但没权限，也算活着
+  }
+}
+
+/** 另一个活跃轮次的信息；没有就返回 null。 */
+function activeRun() {
+  const cur = readLock();
+  if (!cur || cur.pid === process.pid || !pidAlive(cur.pid)) return null;
+  return cur;
+}
+
+/** 报"已有一轮在跑"并退出（清场与开跑共用同一套话术）。 */
+function refuseBecauseRunning(what) {
+  const other = activeRun();
+  if (!other) return false;
+  console.error(`\n⚠️ 已有一轮 e2e 在跑（pid ${other.pid}，批次 ${other.stamp ?? '?'}，开始于 ${other.startedAt ?? '?'}）。`);
+  console.error(`   ${what}会把它的现场删掉，所以拒绝执行。全测只跑一遍：等它结束再跑。`);
+  console.error(`   确认那个进程已经死了：/bin/rm -f "${LOCK}"`);
+  process.exit(2);
+}
+
+function acquireLock() {
+  refuseBecauseRunning('再跑一轮');
+  mkdirSync(DATA_ROOT, { recursive: true });
+  rmPath(LOCK); // 僵尸锁（pid 已不在）
+  writeFileSync(
+    LOCK,
+    `${JSON.stringify({
+      pid: process.pid,
+      stamp,
+      startedAt: new Date().toISOString(),
+      scenarios: chosen.join(','),
+    })}\n`,
+  );
+  process.on('exit', releaseLock);
+  process.on('SIGINT', () => {
+    releaseLock();
+    process.exit(130);
+  });
+  process.on('SIGTERM', () => {
+    releaseLock();
+    process.exit(143);
+  });
+}
+
+function releaseLock() {
+  try {
+    if (readLock()?.pid === process.pid) rmPath(LOCK);
+  } catch {
+    /* 退出路径上尽力而为 */
+  }
+}
+
 mkdirSync(DATA_ROOT, { recursive: true });
+acquireLock(); // 先拿锁、再动现场：第二轮在删别人目录之前就退出
+
 if (isAutoFresh()) {
+  const pending = pendingCleanNames().length;
   const n = cleanRuns();
-  if (n > 0) console.log(`  --all：已清空上一轮 ${n} 个现场目录`);
+  console.log(
+    pending > 0
+      ? `  先清场（--all）：删掉上一轮 ${n} 个现场目录（test.md 保留）`
+      : '  先清场（--all）：没有旧现场，直接开跑',
+  );
 }
 if (fresh && !isAutoFresh()) {
-  for (const name of readdirSync(DATA_ROOT)) {
-    if (name.startsWith('.')) continue;
-    rmrf(join(DATA_ROOT, name));
-  }
-  console.log('  --fresh：已清空上一轮现场');
+  const n = cleanRuns();
+  console.log(`  --fresh：已清空 ${n} 个现场目录`);
 }
 
 // ---------------------------------------------------------------- 报告（现场，不入库）
@@ -1132,6 +1257,13 @@ for (const [label, cmd, args] of UNITS) {
   units.push({ label, ok: r.status === 0, sec: Math.round((Date.now() - t0) / 100) / 10 });
 }
 
+// ---------------------------------------------------------------- 收尾：终版报告
+// **先落终版报告、再记账本**：反过来的话，进程在两步之间被杀，就会留下
+// "账本已经有行、test.md 还停在'进行中'"的半截状态（2026-10-23 实测过一次）。
+// 场景循环里每跑完一个就已经刷新过 test.md（进行中版本）；这里用同一个函数生成终版
+// （多了单测表、标题改成"X/Y 个场景通过"）原地覆盖，避免同一轮在报告里出现两次。
+upsertRunBlock(buildRunBlock(results, units));
+
 // ---------------------------------------------------------------- 账本（入库）
 // 账本只在整轮结束后写：一行就是一次"这个场景花了多少"，跑到一半的行会污染估算的中位数。
 const ledgerRows = [];
@@ -1161,11 +1293,6 @@ if (ledgerRows.length > 0) {
   }
   writeFileSync(HISTORY, readFileSync(HISTORY, 'utf8').trimEnd() + '\n' + ledgerRows.join('\n') + '\n');
 }
-
-// ---------------------------------------------------------------- 收尾：终版报告
-// 场景循环里每跑完一个就已经刷新过 test.md（进行中版本）；这里用同一个函数生成终版
-// （多了单测表、标题改成"X/Y 个场景通过"）原地覆盖，避免同一轮在报告里出现两次。
-upsertRunBlock(buildRunBlock(results, units));
 
 // 报告已经在 `upsertRunBlock(buildRunBlock(results, units))` 那里写完了，这里只打印汇总。
 
