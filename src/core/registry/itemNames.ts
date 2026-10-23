@@ -276,12 +276,6 @@ for (const base of STONE_BASE_IDS) {
 // 名字由 `COPPER_STAGES` 展开（与方块表同源），加一档氧化不会漏名字。
 // ⚠️ 中文名的语序不是"前缀 + 块"：斑驳的是"斑驳的铜块"、切制那支是"斑驳的切制铜"，
 // 所以两种写法各列一份，不要拿一个前缀去拼。
-const COPPER_CN = [
-  { block: '铜块', cut: '切制铜' },
-  { block: '斑驳的铜块', cut: '斑驳的切制铜' },
-  { block: '锈蚀的铜块', cut: '锈蚀的切制铜' },
-  { block: '氧化的铜块', cut: '氧化的切制铜' },
-] as const;
 COPPER_STAGES.forEach((stage, index) => {
   put(stage.blockTile, () => t(`item.copper.block.${index}`));
   put(stage.cutTile, () => t(`item.copper.cut.${index}`));
@@ -391,7 +385,11 @@ put('heavy_weighted_pressure_plate', () => t('item.heavy_weighted_pressure_plate
  * 只写"光看图标看不出来"的信息：矿石在哪一层、这个能当燃料、右键能打开什么界面。
  * 普通建材不写（写"一种方块"没有意义）。
  */
-const DESCRIPTIONS: Record<string, string> = {
+/**
+ * 说明表。值是**字符串**（还没搬走的静态条目）或**惰性函数**（模板拼装，多语言 P2-3c1）。
+ * 惰性求值的理由同 `NAMES`：切语言（含测试里 `setLanguage()`）后要立刻拿到新文案。
+ */
+const DESCRIPTIONS: Record<string, string | (() => string)> = {
   // 平滑石头（批次 528，用户点名）：它没有专门说明时只剩标题 + 英文 id
   // ---- 可疑的炖菜（批次 57）：5 种花各自的文案由下面这一小段循环生成
   // ---- 钓鱼（批次 81，G11）
@@ -402,66 +400,56 @@ const DESCRIPTIONS: Record<string, string> = {
 };
 
 // 深层矿石统一补一句
-for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
-  DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
+for (const ore of Object.keys(ORE_NAMES_CN)) {
+  DESCRIPTIONS[`deepslate_${ore}_ore`] = () => tp('item.desc.tpl.deepslateOre', { ore: t(`item.ore.${ore}`) });
 }
 
 // 告示牌（B12，批次 80）：6 种木材共用一段说明（差别只有木料颜色）
-for (const [wood, cn] of Object.entries(WOODS_CN)) {
-  DESCRIPTIONS[`${wood}_sign`] =
-    `${cn}告示牌：**能写四行字**（每行最多 15 字），右键牌子就能改。放置方式看**点在哪一面**：点方块**顶面** → **落地牌**（字朝你）；点**侧面** → **挂墙牌**（贴在墙上、字朝外）。牌子**不挡路**，能从它中间走过去；木头做的，会被火烧掉。`;
+for (const wood of Object.keys(WOODS_CN)) {
+  DESCRIPTIONS[`${wood}_sign`] = () => tp('item.desc.tpl.sign', { wood: t(`item.wood.${wood}`) });
 }
 
 // 展示框与画（B14，批次 86）
-DESCRIPTIONS.item_frame =
-  '物品展示框：贴在**墙上**（点方块侧面放），框里能挂**任何一件东西**。右键空框 → 把手里那件挂上去（消耗 1 个）；右键有东西的框 → **转 45°**（转 8 次回到原位）；手里拿着别的东西右键 → **换一件**。拆框时挂着的那件会一起掉出来。⚠️ 与原版差异：**框里只挂 1 件**（不显示数量），方块类物品挂上去是**一张平面图标**（原版是立体小方块）。';
-DESCRIPTIONS.painting =
-  '画：贴在**墙上**（点方块侧面放），挂上去的是**哪一幅随机**。⚠️ 与原版差异：本项目这一批只做了原版 1.18 里 **1×1 的 7 幅**（烤肉串 / 阿兹特克 / 阿尔班 / 阿兹特克II / 炸弹 / 植物 / 荒地），**多格拼贴的大画还没做**——所以不会出现"挂一幅 2×2 的大画"。';
 
 // 混凝土粉末（批次 131）：16 色共用一段说明（差别只有颜色，按配色表套模板）
-for (const [color, cn] of Object.entries(COLORS_CN)) {
-  DESCRIPTIONS[`${color}_concrete_powder`] =
-    `**挨到水就凝固**成${cn}**混凝土**——这是混凝土唯一的来源（原版它也做不出来）。` +
-    '合成：4 沙 + 4 砾石 + 1 染料 = 8 份（沙在四角、砾石在四边、染料在正中）。⚠️ 凝固之后回不去了。';
+for (const color of Object.keys(COLORS_CN)) {
+  DESCRIPTIONS[`${color}_concrete_powder`] = () =>
+    tp('item.desc.tpl.concretePowder', { color: t(`item.color.${color}`) });
 }
 
 // 床（B13，批次 79）：16 色的说明是同一段（差别只有颜色，所以按配色表套模板）
-for (const [color, cn] of Object.entries(COLORS_CN)) {
-  DESCRIPTIONS[`${color}_bed`] = `${cn}床：**横着占两格**，右键躺下睡觉——**只能在夜晚或雷暴时**入睡，附近 8 格里有敌对生物也睡不着。睡一觉会**跳到天亮**、**把重生点设在这张床上**（死了之后从这里复活；床被拆掉就回世界出生点）。⚠️ 与原版差异：睡觉时视角停在原地（不摆出躺下的姿势），跳跃键随时可以起床。`;
+for (const color of Object.keys(COLORS_CN)) {
+  DESCRIPTIONS[`${color}_bed`] = () => tp('item.desc.tpl.bed', { color: t(`item.color.${color}`) });
 }
 
 // 珊瑚一族（批次 51）：30 件的说明按"形 × 活/失活"**四套模板**套上"种"的中文名——
 // 一个一个手写 30 段必然出现"某一种的文案写的是另一种的颜色"
-for (const [kind, cn] of Object.entries(CORAL_KIND_CN)) {
-  DESCRIPTIONS[`${kind}_coral_block`] =
-    `${cn}珊瑚块：活着的珊瑚，**贴着水才活着**——离开水会慢慢变成失活的珊瑚块（灰白）。挖它要带镐；**不用精准采集挖到的就是失活版**。暖水海洋的海底成片长着它。`;
-  DESCRIPTIONS[`dead_${kind}_coral_block`] =
-    `失活的${cn}珊瑚块：活珊瑚离开水之后留下的灰白骨架。泡在水里、且**六面挨着活珊瑚**时会慢慢复活（原版机制）。也可以当建材。`;
-  DESCRIPTIONS[`${kind}_coral`] =
-    `活着的${cn}珊瑚（丛）：长在海底珊瑚块上的小株，一碰就掉、徒手可采。**离开水会失活**；想要活的带回家，得用**精准采集**的镐。`;
-  DESCRIPTIONS[`dead_${kind}_coral`] =
-    `失活的${cn}珊瑚丛：灰白的珊瑚骸骨。泡在水里、挨着活珊瑚会复活。`;
-  DESCRIPTIONS[`${kind}_coral_fan`] =
-    `${cn}珊瑚扇：一片薄薄的扇形珊瑚，能**落在方块顶上、也能贴在侧面**（与火把一样）。种在水里、徒手可采；**离开水会失活**。`;
-  DESCRIPTIONS[`dead_${kind}_coral_fan`] =
-    `失活的${cn}珊瑚扇：灰白的扇形骸骨。贴在水里挨着活珊瑚会慢慢复活。`;
+for (const kind of Object.keys(CORAL_KIND_CN)) {
+  const coral = (): string => t(`item.coral.${kind}`);
+  DESCRIPTIONS[`${kind}_coral_block`] = () => tp('item.desc.tpl.coralBlock', { coral: coral() });
+  DESCRIPTIONS[`dead_${kind}_coral_block`] = () => tp('item.desc.tpl.deadCoralBlock', { coral: coral() });
+  DESCRIPTIONS[`${kind}_coral`] = () => tp('item.desc.tpl.coral', { coral: coral() });
+  DESCRIPTIONS[`dead_${kind}_coral`] = () => tp('item.desc.tpl.deadCoral', { coral: coral() });
+  DESCRIPTIONS[`${kind}_coral_fan`] = () => tp('item.desc.tpl.coralFan', { coral: coral() });
+  DESCRIPTIONS[`dead_${kind}_coral_fan`] = () => tp('item.desc.tpl.deadCoralFan', { coral: coral() });
 }
 
 // 铜的四档（批次 40）：说明写清"会氧化、斧头能刮、刮了会退一档"
 COPPER_STAGES.forEach((stage, index) => {
-  const cn = COPPER_CN[index]!;
-  const next = COPPER_CN[index + 1];
-  const oxidize = next
-    ? `放久了会慢慢变成**${next.block}**（一共 4 档，锈会从已经锈的地方往旁边蔓延）`
-    : '已经锈到底了，不会再变';
-  const scrape =
-    index > 0
-      ? `拿斧头右键能刮掉一层锈（退回**${COPPER_CN[index - 1]!.block}**，消耗 1 点耐久）`
-      : '拿斧头刮没有效果（它已经是最新的一档）';
-  DESCRIPTIONS[stage.blockTile] = `铜锭做的方块。${oxidize}；${scrape}。`;
-  DESCRIPTIONS[stage.cutTile] = `把 4 个${cn.block}切成 4 个${cn.cut}，切面更整齐的铜建材。同样会氧化、也能用斧头刮。`;
-  DESCRIPTIONS[`${stage.cutTile}_slab`] = `${cn.cut}做的台阶（3 个切 6 个）。`;
-  DESCRIPTIONS[`${stage.cutTile}_stairs`] = `${cn.cut}做的楼梯（6 个切 4 个）。`;
+  const block = (): string => t(`item.copper.block.${index}`);
+  const cut = (): string => t(`item.copper.cut.${index}`);
+  // "氧化到下一档 / 斧头刮回上一档"这两句本身也是模板：它们嵌着**相邻档位的名字**，
+  // 而档位名要按当前语言取 —— 所以这里拼的不是字符串，是"取文案的函数"
+  const oxidize = (): string =>
+    index + 1 < COPPER_STAGES.length
+      ? tp('item.desc.tpl.oxidizeTo', { next: t(`item.copper.block.${index + 1}`) })
+      : t('item.desc.tpl.oxidizedFinal');
+  const scrape = (): string =>
+    index > 0 ? tp('item.desc.tpl.scrapeTo', { prev: t(`item.copper.block.${index - 1}`) }) : t('item.desc.tpl.scrapeNone');
+  DESCRIPTIONS[stage.blockTile] = () => tp('item.desc.tpl.copperBlock', { oxidize: oxidize(), scrape: scrape() });
+  DESCRIPTIONS[stage.cutTile] = () => tp('item.desc.tpl.cutCopper', { block: block(), cut: cut() });
+  DESCRIPTIONS[`${stage.cutTile}_slab`] = () => tp('item.desc.tpl.copperSlab', { cut: cut() });
+  DESCRIPTIONS[`${stage.cutTile}_stairs`] = () => tp('item.desc.tpl.copperStairs', { cut: cut() });
 });
 
 // 工具与武器的说明由属性表生成：新加一把工具就自带说明，不会漏
@@ -704,7 +692,9 @@ export function itemDescription(itemId: number): string {
   const probe = `item.desc.${key}`;
   const text = t(`item.desc.${key}`);
   if (text !== probe) return text;
-  return DESCRIPTIONS[key] ?? '';
+  const value = DESCRIPTIONS[key];
+  if (value === undefined) return '';
+  return typeof value === 'function' ? value() : value;
 }
 
 /** 方块形状的一句话说明（通用说明用；没列到的走"完整方块"） */
