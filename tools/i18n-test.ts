@@ -34,8 +34,9 @@ import {
 } from '../src/game/appearance.ts';
 import { RECIPE_BOOK_TABS } from '../src/core/crafting/RecipeBook.ts';
 import { ITEM_CATEGORIES, itemDef } from '../src/core/registry/items.ts';
-import { itemDescription } from '../src/core/registry/itemNames.ts';
+import { itemDescription, translateName } from '../src/core/registry/itemNames.ts';
 import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
+import { POTIONS, TIPPED_ARROWS } from '../src/core/registry/potions.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1370,6 +1371,30 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   }
   setLanguage('zh');
   check('中文下模式/难度标签仍是中文', gameModeLabel('creative') === '创造' && difficultyLabel('hard') === '困难', `${gameModeLabel('creative')} / ${difficultyLabel('hard')}`);
+
+  /**
+   * 药水与药水箭的名字（P6-2，批次 20261024-0020）。
+   *
+   * 这 140 条原来是 `potions.ts` 里构建时拼好的中文串（`name: '迅捷药水'`、`喷溅…`、`（延长）`、`II`），
+   * 四语言界面上全部露中文。现在由 `variant` / `tier` / `splash` / `lingering` 走模板拼。
+   * 两条判据：**换语言后不含中文**，以及**中文名与改造前逐字一致**（中文文案零变化是这批的硬约束）。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const names = [
+      ...POTIONS.map((potion) => translateName(`potion_${potion.key}`)),
+      ...TIPPED_ARROWS.map((arrow) => translateName(arrow.key)),
+    ];
+    const cjk = names.filter((name) => /[\u4e00-\u9fff]/.test(name));
+    check(`药水/箭名在 ${code} 下不含中文`, cjk.length === 0, cjk.slice(0, 3).join(','));
+  }
+  setLanguage('zh');
+  const potionNameDrift = [
+    ...POTIONS.map((potion) => ({ key: `potion_${potion.key}`, expected: potion.name })),
+    ...TIPPED_ARROWS.map((arrow) => ({ key: arrow.key, expected: arrow.name })),
+  ].filter(({ key, expected }) => translateName(key) !== expected);
+  check('中文药水/箭名与改造前逐字一致', potionNameDrift.length === 0, potionNameDrift.slice(0, 2).map((row) => row.key).join(','));
+  resetLanguageForTest();
   resetLanguageForTest();
 
   /**

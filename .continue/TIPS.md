@@ -197,6 +197,16 @@
   （`settings.` 会把整片键洗白）；③ 把前缀打进报告，过宽前缀一眼可见。修完 73 → 0。
 - 适用面：任何"扫源码统计字符串使用"的脚本（覆盖率、死代码检测、文案去重）。
 
+### 两个 `romanLevel` 同名不同口径：`StatusEffects` 吃 amplifier（0→I），`enchantments` 是 1 起始
+
+- 症状：「力量药水 II」被印成「力量药水 I」、「缓慢药水 IV」印成「III」—— 差整整一级，而**不报错**。
+- 原因：`itemNames.ts` 里用的是 `enchantments.romanLevel`（1 起始），药水的 `amplifier` 是 0 起始；
+  `potions.ts` 用的是 `survival/StatusEffects.romanLevel`（直接吃 amplifier）。两处注释都警告过，
+  但键化药水名时照样抄混了一次（批次 20261024-0020，靠"改造前后逐字 diff"才发现）。
+- 判据：**跨模块搬数字前先看它旁边那个 `romanLevel` 是从哪个文件 import 的**；
+  更省事的办法是照抄项目里已有的做法 —— `itemNames.ts` 里所有 `+ 1` 都是在补这个差。
+- 兜底：这类"名字由数字拼出来"的改造，跑一次"改造前后全量逐字 diff"（105 瓶 + 35 支箭 diff 为 0 才算过）。
+
 ### 说明类文案存"字符串"还是"函数"：存字符串 = 只在加载那一刻的语言下正确
 
 - 症状：把 `DESCRIPTIONS[key]` 里的中文挪进语言表之后，切到德语界面**说明仍然是中文**；

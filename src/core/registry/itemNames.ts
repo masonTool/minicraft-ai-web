@@ -576,9 +576,46 @@ function potionDescription(potion: PotionEntry): string {
   return `${tier}${verb}${effects.join(sep)}${t('item.desc.tpl.potionEnd')}${tail}${note}`;
 }
 
+/**
+ * 药水的显示名（P6-2，批次 20261024-0020）。
+ *
+ * 名字由 `variant` / `tier` / `splash` / `lingering` 四个字段拼出来，**不再用 `potion.name`**
+ * 那个中文串（它是构建时算好的整句，切语言不会变）。
+ *
+ * ⚠️ `tp()` 的键必须写成**模板字面量**（三个分支各一处），`audit:i18n` 靠这个形态认出
+ * "这一族键是数据驱动取的"；拼成变量的话这 22 条会被判成孤儿键。
+ */
+function potionDisplayName(potion: PotionEntry): string {
+  const effect = t(`item.potionEffect.${potion.variant}`);
+  // ⚠️ 本文件的 `romanLevel` 是 **1 起始**（enchantments 版）；药水的 `amplifier` 是 0 起始
+  // （0 → I）。不加 1 会把「力量 II」印成「力量 I」—— `potions.ts` 用的是 `StatusEffects` 版那个
+  // `romanLevel`（直接吃 amplifier），两处同名不同口径，别抄混。
+  const level = potion.tier === 'strong' ? romanLevel(potion.effects[0]!.amplifier + 1) : '';
+  const suffix = potion.tier === 'long' ? t('item.potionSuffixLong') : level === '' ? '' : ` ${level}`;
+  const base = potion.lingering
+    ? tp('item.tpl.potionLingering', { effect })
+    : potion.splash
+      ? tp('item.tpl.potionSplash', { effect })
+      : tp('item.tpl.potion', { effect });
+  return `${base}${suffix}`;
+}
+
+/** 药水箭的显示名：`药水箭（{效果}{档位}）`，档位是" · 延长"或" · II" */
+function arrowDisplayName(arrow: TippedArrowEntry): string {
+  const effect = t(`item.potionEffect.${arrow.variant}`);
+  const suffix =
+    arrow.tier === 'long'
+      ? t('item.arrowSuffixLong')
+      : arrow.tier === 'strong'
+        ? tp('item.tpl.arrowLevel', { level: romanLevel(arrow.effects[0]!.amplifier + 1) })
+        : '';
+  return tp('item.tpl.tippedArrow', { effect, suffix });
+}
+
 for (const potion of POTIONS) {
   const key = `potion_${potion.key}`;
-  put(key, potion.name);
+  // 函数形态：取值这一刻才查表，所以切语言后名字立刻变（`translateName` 支持函数）
+  put(key, () => potionDisplayName(potion));
   DESCRIPTIONS[key] = () => potionDescription(potion);
 }
 
@@ -599,7 +636,7 @@ function tippedArrowDescription(arrow: TippedArrowEntry): string {
 }
 
 for (const arrow of TIPPED_ARROWS) {
-  put(arrow.key, arrow.name);
+  put(arrow.key, () => arrowDisplayName(arrow));
   DESCRIPTIONS[arrow.key] = () => tippedArrowDescription(arrow);
 }
 
