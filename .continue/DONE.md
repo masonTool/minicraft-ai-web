@@ -8,6 +8,39 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+## 批次 20261023-0914 · 2026-10-23 · 会话 b09ae4
+
+**做了什么**：先核对了"运行版 ↔ skill 打包源"（14 个钩子逐字节一致、`REQUIRED` 无遗漏），
+然后在 **skill 里**加了一层**端到端自测** `scripts/e2e.mjs`：临时项目 → 装框架 →
+用真实 `codebuddy -p` 跑一个小任务 → 断言"队列建了 → 钩子递了 → 收尾做了 → 归档落位"。
+测试数据落在 `.skill-e2e/`（已 gitignore）：**框架进库、现场不进库**。共 4 条。
+
+**条目**（原文照搬）：
+
+- [x] [一致1] 运行版与 skill 打包源逐字节一致、预留钩子全在 install 清单里、注入探针与文档措辞同步 → `diff -rq` 无差异 + `check-framework` / `test-install` 通过
+  - 做了什么：核对了四件事——① `assets/.continue/hooks` 与 `.continue/hooks` **14 个文件逐字节一致**；② `assets/.continue/README.md` 与运行版一致；③ `install.mjs` 的 `REQUIRED` 22 条覆盖了磁盘上**全部** 14 个钩子（我用脚本比对"磁盘上有但 REQUIRED 没列"= 无）；④ `notes/batches.md` 的历史行故意不改（那是当时的做法，改历史等于伪造台账）
+  - 为什么每次都要真比对而不是"我记得同步了"：上一批就漏过一次——改了运行版没回灌 assets，重装一次改动全被抹掉，症状是"过几天又变回去了"且零报错
+  - 验证：`diff -rq` 无输出；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
+  - 批次：20261023-0914
+- [x] [e2e1] 新增 `scripts/e2e.mjs`：建临时项目 → 装框架 → 用 `codebuddy -p` 跑一个小任务 → 断言队列/递任务/收尾/归档/日志全链路 → `--dry-run` 能打印计划且不建目录
+  - 做了什么：新增 `.codebuddy/skills/continue-task/scripts/e2e.mjs`（约 260 行）——临时项目 `git init` + 初始提交 → 跑 `install.mjs --no-detect` → `codebuddy -p "<小任务>" --session-id <固定 32 位 hex> --max-turns N --permission-mode bypassPermissions --output-format json` → 断言 `logs/<sid6>/run.md` 里有 `[queue-init`／`[auto-continue`、队列建过（现存或已归档）、`DONE.md` 出现 `## 批次`、`git rev-list` ≥ 3、队列最终落到 `logs/<sid6>/queue-<14位>.md`；失败保留现场并打印 CLI 输出尾部
+  - 为什么固定 `--session-id`：断言要按会话 ID 推导路径（`<sid6>.md`、`logs/<sid6>/`），随机 ID 会让"归档到哪儿"每次都变，断言写不出来
+  - **为什么要这一层（不是重复 `test-install`）**：前两个脚本只看静态产物。实测过一类事故——钩子写 stdout 后立刻 `exit` 导致 JSON 被截断，静态检查全绿，但注入整份被宿主丢掉、任务永远递不出来。只有真跑一遍才看得见
+  - **未登录（401）不判失败**：CLI 仍会加载 `settings.json` 并触发钩子，所以"注册对不对、注入有没有被截断、钩子会不会崩"这三件**已经真的验过了**；模型那一轮没发生，队列自然不建。于是分两级——静态级通过就 exit 0 并说明"登录后重跑才能验到队列/收尾/归档"
+  - 验证：`--dry-run` 只打印计划、**不建目录**；实跑两次（未登录环境）→ 静态级 4 项全 ✓（日志有、queue-init 有、auto-continue 有、钩子没崩）并正确跳过模型级；缺参数时 exit 2
+  - 批次：20261023-0914
+- [x] [e2e2] 接线：`.gitignore` 忽略测试数据目录、`package.json` 加 `skill:e2e`（**不进 test:* 前缀**，避免台账套数漂）、SKILL.md 写清怎么跑 → `npm run skill:e2e -- --dry-run` 通过
+  - 做了什么：`.gitignore` 加 `.skill-e2e/`（框架进库、现场不进库）；`package.json` 加 `skill:e2e`；`SKILL.md` 新增「1.5 三层自检」——把三个脚本的分工、`--dry-run/--keep`、三条约定（模型继承本机 / 数据不进仓库 / 没装 CLI 就跳过）写清楚
+  - 为什么**不用** `test:` 前缀：`audit-tasks` 会拿 `package.json` 里 `test:*` 的**数量**去核对 README/AGENTS/HANDOFF 里写的"172 套"，加一个就会三处全红；而且 `npm run check` 会把它带上——一次几分钟、还花 token，不该进每次提交的门禁
+  - 为什么数据目录放在仓库内而不是 `/tmp`：`install.mjs` 要写 `.git/hooks`、`git` 要能提交，仓库内更接近真实项目；用 gitignore 隔离即可，也让失败现场好找
+  - 验证：`npm run skill:e2e -- --dry-run` 打印计划且**没有**创建 `.skill-e2e/`；`node -e` 确认 script 已注册；`git status` 里没有 `.skill-e2e`（被忽略）
+  - 批次：20261023-0914
+- [x] [验] `npm run check` + `node .continue/hooks/check.mjs` 全绿
+  - 做了什么：跑全量门禁与框架五项；清掉 e2e 留下的现场（`.skill-e2e/`）
+  - 验证：`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` **五项全绿**；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
+  - 批次：20261023-0914
+
+
 ## 批次 20261023-0903 · 2026-10-23 · 会话 b09ae4
 
 **做了什么**：三处命名收敛成一套——① 文件名里的会话 ID 只取**前 6 位**（只截 UUID 形态，
