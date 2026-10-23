@@ -682,6 +682,17 @@ for (const color of COLOR_KEYS) {
     tp('item.desc.tpl.stainedGlassPane', { name: tp('item.tpl.stainedGlassPane', { color: t(`item.color.${color}`) }) });
 }
 
+// ---- 木质围栏 / 栅栏门 / 门 / 活板门（B4g，批次 20261024-0136）：21 个方块只写 4 条模板
+//
+// `{name}` 传整件物品名（`item.oak_fence` = 橡木栅栏）—— 这个名字在表里是**生成的显式键**，
+// 直接 `t()` 就能拿到，不必再拼一次构件。
+for (const wood of WOOD_KEYS) {
+  DESCRIPTIONS[`${wood}_fence`] = () => tp('item.desc.tpl.woodFence', { name: t(`item.${wood}_fence`) });
+  DESCRIPTIONS[`${wood}_fence_gate`] = () => tp('item.desc.tpl.woodFenceGate', { name: t(`item.${wood}_fence_gate`) });
+  DESCRIPTIONS[`${wood}_door`] = () => tp('item.desc.tpl.woodDoor', { name: t(`item.${wood}_door`) });
+  DESCRIPTIONS[`${wood}_trapdoor`] = () => tp('item.desc.tpl.woodTrapdoor', { name: t(`item.${wood}_trapdoor`) });
+}
+
 // ---- 作物生长阶段（B4f，批次 20261024-0136）：15 个方块只写 2 条模板
 //
 // ⚠️ 名字里是**复数**（`carrots_stage0` / `potatoes_stage0` / `beetroots_stage0`），
