@@ -42,6 +42,7 @@ import { glFailText } from '../src/core/render/webglSupport.ts';
 import { BRAND, BRAND_EDITION } from '../src/core/brand.ts';
 import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
 import { DEFAULT_GAME_RULES, gameRuleLabel } from '../src/core/world/Rules.ts';
+import { LOOT_TABLES } from '../src/core/registry/loot.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1131,6 +1132,21 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   setLanguage('zh');
   check('中文下选择器错误仍是原来的说法', t('cmd.error.selector.typeMissing') === 'type 后面没有种类');
+
+  /**
+   * 战利品表名（C5，批次 20261024-0223）。
+   *
+   * `/loot` 的帮助下拉显示 `${table.name}（key）`，而 `LOOT_TABLES[].name` 是中文常量 ——
+   * 与 gamerule 下拉同一类。22 条 × 6 语言走 `cmd.label.lootTable.*`。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const labels = LOOT_TABLES.map((table) => t(`cmd.label.lootTable.${table.key}`));
+    const leaked = labels.filter((label) => /[\u4e00-\u9fff]/.test(label) || label.startsWith('cmd.'));
+    check(`${code} 战利品表名不含中文、也不露键名`, leaked.length === 0, leaked.slice(0, 3).join(','));
+  }
+  setLanguage('zh');
+  check('中文下战利品表名仍是原来的说法', t('cmd.label.lootTable.village_house') === '村庄小屋');
   resetLanguageForTest();
 
   /**

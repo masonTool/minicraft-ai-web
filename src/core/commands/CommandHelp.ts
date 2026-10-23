@@ -423,7 +423,12 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       index,
       name,
       optional,
-      LOOT_TABLES.map((table) => ({ value: table.key, label: `${table.name}（${table.key}）` })),
+      LOOT_TABLES.map((table) => ({
+        value: table.key,
+        // 批次 20261024-0223：表名走 `cmd.label.lootTable.*`（22 条 × 6 语言）；
+        // `table.name` 保留为数据字段（调试与测试在用），不再上界面
+        label: `${t(`cmd.label.lootTable.${table.key}`)}（${table.key}）`,
+      })),
     );
   }
   if (slug === 'structure') {
