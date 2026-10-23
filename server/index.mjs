@@ -36,6 +36,7 @@ import {
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
 import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
+import { createBuckets } from './ratelimit.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
@@ -249,7 +250,12 @@ function snapshotFor(player) {
   };
 }
 
-const wss = new WebSocketServer({ port: PORT });
+/*
+ * `maxPayload`（联机25）：`ws` 默认是 100MB——一条手工构造的消息就能让服务端
+ * 先分配 100MB 再解析。64KB 足够容纳最大的合法消息（`blocks` 一批 256 条约 8KB，
+ * 容器 8192 字节上限），超了 `ws` 会以 1009 关连接。
+ */
+const wss = new WebSocketServer({ port: PORT, maxPayload: 64 * 1024 });
 
 wss.on('listening', () => {
   log(`已启动，端口 ${PORT}，种子 ${WORLD_SEED}`);
@@ -497,6 +503,8 @@ wss.on('connection', (socket, request) => {
           // 箭/TNT 的令牌窗口（联机23，见 EFFECT_RATE_LIMIT）
           effectWindow: 0,
           effectCount: 0,
+          // 方块/容器/聊天的令牌桶（联机25）
+          buckets: createBuckets(),
         };
         players.set(player.id, player);
 
@@ -553,6 +561,8 @@ wss.on('connection', (socket, request) => {
 
       case 'block': {
         if (!player) return;
+        // 限频（联机25）：一条改动花一个令牌
+        if (!player.buckets.block.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -584,6 +594,8 @@ wss.on('connection', (socket, request) => {
       case 'blocks': {
         if (!player) return;
         const list = Array.isArray(message.blocks) ? message.blocks.slice(0, MAX_BLOCKS_PER_MESSAGE) : [];
+        // 限频（联机25）：**按条数**计费——一次爆炸几百格是正常的，持续每帧几百格不是
+        if (!player.buckets.block.take(Date.now(), list.length)) return;
         const accepted = [];
         for (const raw of list) {
           if (!Array.isArray(raw)) continue;
@@ -746,6 +758,7 @@ wss.on('connection', (socket, request) => {
 
       case 'container': {
         if (!player) return;
+        if (!player.buckets.container.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -846,6 +859,8 @@ wss.on('connection', (socket, request) => {
 
       case 'chat': {
         if (!player) return;
+        // 限频（联机25）：每人每秒 5 条；超了就静默丢（回一条错误反而会被刷屏者利用）
+        if (!player.buckets.chat.take()) return;
         const text = String(message.text ?? '').slice(0, 200);
         if (text.length === 0) return;
         broadcast({ t: 'chat', id: player.id, name: player.name, text });

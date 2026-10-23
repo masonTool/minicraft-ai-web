@@ -701,6 +701,36 @@ try {
     check('TNT 脏坐标被拒', (await alice.wait('tnt', 600)) === null);
   }
 
+  // ---------------------------------------------------------------- 限频与体积（联机25）
+  console.log('\n[限频与体积]');
+  {
+    // 聊天：每秒 5 条、桶容量 10。灌 30 条，只有一部分被广播
+    alice.mailbox.length = 0;
+    for (let i = 0; i < 30; i++) bob.send({ t: 'chat', text: `刷屏 ${i}` });
+    await sleep(400);
+    let chats = 0;
+    while (alice.take('chat') !== null) chats++;
+    check('聊天刷屏被限（30 条只放行一部分）', chats > 0 && chats < 30, `${chats} 条`);
+
+    // 方块：桶容量 400（够一次红石连锁），灌 600 条单条消息
+    alice.mailbox.length = 0;
+    for (let i = 0; i < 500; i++) {
+      bob.send({ t: 'block', x: 5, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld' });
+    }
+    await sleep(600);
+    let blocks = 0;
+    while (alice.take('block') !== null) blocks++;
+    check('方块刷屏被限（500 条只放行一部分）', blocks > 0 && blocks < 500, `${blocks} 条`);
+
+    // 超过 maxPayload（64KB）的消息：`ws` 直接以 1009 关连接
+    const big = new TestClient('BigSender');
+    await joinAndWaitWelcome(big, '大包', 0, 70, 0);
+    const closed = new Promise((resolve) => big.socket.once('close', (code) => resolve(code)));
+    big.socket.send(JSON.stringify({ t: 'chat', text: 'x'.repeat(80 * 1024) }));
+    const code = await Promise.race([closed, sleep(2000).then(() => -1)]);
+    check('超过 64KB 的消息直接断连（1009）', code === 1009, `${code}`);
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {
