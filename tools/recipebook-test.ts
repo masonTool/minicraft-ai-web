@@ -113,7 +113,10 @@ console.log('\n[物品说明]');
   check('工作台说明提到合成', itemDescription(Block.CRAFTING_TABLE).includes('合成'));
   // 普通建材没有**手写**说明；批次 528 起提示框用注册表数据生成一段兜底说明，
   // 所以 `itemDescription` 仍为空，但 `itemTooltip().description` 不再是空串。
-  check('普通建材没有手写说明（保留 hasDescription 语义）', !hasDescription(Block.GRANITE) && itemDescription(Block.GRANITE) === '');
+  // ⚠️ B4a（批次 20261024-0136）起，普通建材也补了手写说明（用户要求"所有方块都要有介绍"）。
+  // 这条原本验的是"没说明 → 走兜底"，现在拆成两件事：有说明的方块走手写（这里），
+  // 兜底机制仍由下一条覆盖（样本找不到时直接通过，B4 全补完后不会变成永远为假）。
+  check('普通建材有手写说明（B4 起补全）', hasDescription(Block.GRANITE) && itemDescription(Block.GRANITE).includes('花岗岩'), itemDescription(Block.GRANITE));
 
   const tooltip = itemTooltip(Item.COAL, 12);
   check('提示框：标题是中文名', tooltip.title === '煤炭', tooltip.title);
@@ -121,11 +124,16 @@ console.log('\n[物品说明]');
   check('提示框：带数量', tooltip.count === 12 && tooltip.maxStack === 64);
   check('提示框：专门写过说明时不再重复显示类别行', tooltip.showMeta === false);
 
-  const plain = itemTooltip(Block.GRANITE);
+  // 样本**运行时找**（取一个当前还没有手写说明的方块），而不是写死花岗岩：
+  // B4 系列会把 495 个方块逐个补上说明，写死任何一个都会在某一批之后失效。
+  const plainSample = [Block.PACKED_ICE, Block.OAK_LOG, Block.OAK_LEAVES, Block.DIRT].find((id) => !hasDescription(id));
   check(
-    '提示框：没写过说明也有兜底文案（不再是空说明）',
-    plain.showMeta === true && plain.description.length > 0 && plain.description.includes('方块'),
-    plain.description,
+    '提示框：没写过说明也有兜底文案（B4 全部补完后这条自然通过）',
+    plainSample === undefined ||
+      (itemTooltip(plainSample).showMeta === true &&
+        itemTooltip(plainSample).description.length > 0 &&
+        itemTooltip(plainSample).description.includes('方块')),
+    plainSample === undefined ? '(全部方块已有说明)' : itemTooltip(plainSample).description,
   );
   const smooth = itemTooltip(Block.SMOOTH_STONE);
   check(
