@@ -268,6 +268,17 @@ function nonEmpty(table: Readonly<Record<string, string>>, key: string): string 
  */
 export function t(key: string, language: Language = current): string {
   const text = nonEmpty(tableOf(language), key) ?? nonEmpty(tableOf(FALLBACK_LOCALE), key) ?? key;
+  return withPseudo(text);
+}
+
+/**
+ * 伪语言的统一出口（多语言 P0-8 / P3-5）。
+ *
+ * `t()` 与 `tn()` 都必须过它：`tn()` 是**直接读表**再替换占位符的（不走 `t()`），
+ * 早先漏了这一步 —— 结果 `tn('statistics.blocks', 3)` 在伪语言下不被 `⟦⟧` 包住，
+ * 巡查时会被误判成"没接 i18n 的硬编码"。收敛成一个函数，以后新增查表入口也只需调它。
+ */
+function withPseudo(text: string): string {
   return pseudo ? pseudoText(text) : text;
 }
 
@@ -359,7 +370,7 @@ export function tn(key: string, count: number, params: Record<string, string | n
   const forms = pluralTableOf(source)[key];
   const category = pluralCategory(count, source);
   const template = forms?.[category] ?? forms?.other ?? nonEmpty(tableOf(source), key) ?? key;
-  return substitute(template, { ...params, count });
+  return withPseudo(substitute(template, { ...params, count }));
 }
 
 /**

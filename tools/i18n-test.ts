@@ -1124,6 +1124,45 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   resetLanguageForTest();
 
   /**
+   * P3-5 巡查收口：P3 触过的界面键族在伪语言下**必须全部被 `⟦⟧` 包住**。
+   *
+   * 这是"屏幕上没被包住的文字 = 没接 i18n"那条判据的**可复现版本**：
+   * 不靠开浏览器点一遍，而是把键族逐个渲染一遍。**P3 自己的键共 63 条**（P2 的
+   * `item.*` / `entity.*` 另有断言），全部被包住；走 Intl 的文本（`relativeTime` /
+   * `joinList`）包不住 —— 它们不经过 `t()`，属于"语言相关但由 CLDR 给"，单独列出。
+   */
+  const p3Families = [
+    'touch.',
+    'tooltip.',
+    'loading.',
+    'editor.',
+    'book.',
+    'sign.',
+    'nameTag.',
+    'commandBlock.',
+    'beacon.',
+    'unsupported.',
+    'statistics.',
+    'time.',
+    'label.stickMode.',
+    'label.handedness.',
+  ];
+  setPseudoLocale(true);
+  const p3Keys = allKeys().filter((key) => p3Families.some((prefix) => key.startsWith(prefix)));
+  const notWrapped = p3Keys.filter((key) => !(t(key).startsWith('⟦') && t(key).endsWith('⟧')));
+  check(
+    `P3 键族 ${p3Keys.length} 条在伪语言下都被包住`,
+    p3Keys.length >= 50 && notWrapped.length === 0,
+    notWrapped.slice(0, 3).join(','),
+  );
+
+  // `tn()` 曾经**绕过**伪语言（它直接读表、不走 `t()`）：巡查时被误判成"没接 i18n"
+  const tnText = tn('statistics.blocks', 3);
+  check('tn() 也吃伪语言（P3-5 修的那个漏包）', tnText.startsWith('⟦') && tnText.endsWith('⟧'), tnText);
+  setPseudoLocale(false);
+  resetLanguageForTest();
+
+  /**
    * 标签表族（二）（多语言 P2-6）：音效组 / 外观 10 张 / 朝向 / 旗帜图案 / 配方书页签 / 物品类别。
    *
    * 外观那十张表里有五张是**按下标**存名字的（肤色/上衣/裤色/发色/瞳色），
