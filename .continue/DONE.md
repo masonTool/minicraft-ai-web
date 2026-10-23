@@ -8,6 +8,104 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+
+## 批次 20261024-0136 · 2026-10-24 · 会话 4024a9d4
+
+- [x] [B1] 首页品牌块：`WorldScreen` 的 `logo`（`MINECRAFT`）+ `edition`（`基岩版 1.18 · WEB EDITION`）→ `Minicraft` / `1.18 · WEB EDITION`；品牌名抽成 `BRAND` 常量，与 `test:i18n` 的品牌一致性断言共用一个真值
+  - 做了什么：新建 `src/core/brand.ts`（`BRAND = 'Minicraft'` / `BRAND_EDITION = '1.18 · WEB EDITION'`），首页 `WorldScreen` 的 `logo` / `edition` 改成取它 —— 原来写死 `'MINECRAFT'` 与 `'基岩版 1.18 · WEB EDITION'`
+  - 「基岩版」按用户要求去掉：那是 Mojang 的版本命名，本项目是独立的浏览器实现，不该借用；`1.18` 保留（说明复刻的是哪个版本的规则）
+  - 品牌名**不接进语言表**：它在六种语言里都是 `Minicraft`，接进表反而会让 `audit:i18n` 把 6 份重复文案算成"该翻的"
+  - 断言：`test:i18n` 原有 3 条品牌一致性改从 `core/brand.ts` 取唯一真值，另加 2 条 —— 首页品牌块取 `BRAND`/`BRAND_EDITION` 且旧字面量已清、副标题是版本身份（不含「基岩」）
+  - ⚠️ 改了一条既有 `ui` 断言：「首页品牌信号是 MINECRAFT + 基岩版标识」→ 「首页品牌块取唯一真值，不再写死 MINECRAFT 与「基岩版」」—— 这条断言原本在**保护旧文案**，用户拍板后必须跟着转向，否则它会一直红
+  - 验证：`test:i18n` **512 / 0**；`ui` 套件 **926 / 0**；`test:offline` **172 / 172 套全绿**
+  - 批次：20261024-0136
+- [x] [B2] 设置里的 camera 选项多语言：`CAMERA_MODE_LABELS`（第一人称 / 第三人称（背后） / 第三人称（正面））→ `settings.cameraMode.*` 六语言；同一处的粒子等级标签一并检查
+  - 做了什么：`CAMERA_MODE_LABELS`（第一人称 / 第三人称（背后） / 第三人称（正面））这张中文常量表改成 **`cameraModeLabel(mode)`** 函数，文案进 `settings.cameraMode.*`（3 键 × 6 语言）；切视角的 toast `视角：{mode}` 也键化成 `misc.cameraModeToast`
+  - `third-back` / `third-front` 这类**带连字符的 id 不能直接当键名后缀**，加了一张 `CAMERA_MODE_KEY` 映射（`third-back` → `thirdBack`），键写成模板字面量让 `audit:i18n` 能认出这一族
+  - 照抄同文件里 `handednessLabels()` 的既有做法：`makeSelect` 要 `Record<T, string>`，所以在构造时 `Object.fromEntries(CAMERA_MODES.map(...))` 生成一次（会话内切语言走整页重载，构造时求值安全）
+  - 四处调用点：`SettingsScreen` 的下拉、`main.ts` 切视角 toast 与调试 HUD 的「视角」，以及 `tools/settings-test` / `tools/viewmode-test` 两个测试的引用
+  - ⚠️ 又改了一条既有 `ui` 断言：「设置面板里的"视角"下拉还在」原来锚的是 makeSelect 的**单行**写法，改成多行后失配 —— 判据改成锚「键 + 标签函数」（`'cameraMode'` + `cameraModeLabel(mode)` + `t('settings.row.cameraMode')`），不再依赖换行
+  - 验证：六语言实测（de `Erste Person / Dritte Person (hinten) / Dritte Person (vorne)` · `Ansicht: …`、ru `От первого лица / … (сзади) / … (спереди)`、fr `Première personne / Troisième personne (derrière) / (devant)`、pt `Primeira pessoa / Terceira pessoa (atrás) / (à frente)`）；`test:i18n` **517 / 0**（新增 5 条）；`ui` **926 / 0**；`test:offline` **172 / 172**；`audit:i18n` 2457 条、0 孤儿
+  - 批次：20261024-0136
+- [x] [B3] 进游戏后的第一条消息多语言：先用浏览器实测定位到底是哪一条（引导卡已确认有 de 翻译，所以目标可能是别处），再键化
+  - 做了什么：新建 `hud` 分组 **54 键 × 6 语言**（表 2457 → **2511**），把 `main.ts` 里 `debugEl` 的整段拼接（桌面 9 行 + 手机 3 行）全部改成 `t()` / `tp()`；**值**也一并键化 —— 方位四向（北/东/南/西）、月相八相、天数、是/否 —— 只翻标签不翻值的话，德语面板会变成「Blickrichtung: 北 (-Z)」（第一次实测就是这个结果）
+  - 覆盖的片段：`hud.physics` / 三角形 / 区块 / 朝向 / 时间 / 月相 / 难度 / 模式 / 维度 / 视角 / 在地面 / 在水中 / 脚下方块光 / 指向 / 破坏% / 持有 / 视距 / 自适应 / 雾 / 已渲染 / 待网格化 / 在途 / 待生成 / 生命 / 饥饿 / 饱和 / 氧气 / 疲劳 / 护甲 / 经验 / 光照队列 / 待重刷 / 联机 / 在线人数 / 无
+  - 两处**值**也走了 i18n：`moonPhaseName()` 从返回 `moonPhaseInfo().cn` 改成查 `hud.moonPhase.<phase>`（8 相）；`facing` 从 4 个字面量数组改成 `[t('hud.facingNorth'), …]`
+  - ⚠️ 纠正上一批的判断：P6-5 的完成说明里写过「`diagPerf` 调试面板不翻（`?debug=1` 才出现）」—— 这个 HUD **进世界默认就显示**，与那条不是同一个东西。已在队列里记下这处记错
+  - 🖥️ 浏览器实测（起 vite 5206 + 本机 Chrome，`?lang=de` / `?lang=pt-BR` / `?lang=zh-CN` 三路各走一次「游戏 → 新建世界 → 创建并进入」）：**de 与 pt 的整屏 `含中文=false`**、zh 正常 —— 实测文本 `Minicraft · P1-Physik + Blockinteraktion 60 fps 3,478,548 Dreiecke … Blickrichtung: Norden (-Z) Zeit: 08:59 Mondphase: Vollmond (Tag 0) … Ansicht: Erste Person`、pt `… Direção: Norte (-Z) … Lua: Lua cheia (dia 0) … Câmera: Primeira pessoa`
+  - 验证：`test:i18n` **523 / 0**（新增 6 条：`hud.*` 整族在 de/ru/fr/pt 不含中文 + 键数哨兵 + 中文侧没变）；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2511 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+  - 侦察结论（浏览器实测，起 vite 5205 + 本机 Chrome，走「游戏 → 新建世界 → 创建并进入」）：进世界后第一眼看到的是**调试面板**（`this.debugEl` 那段拼接，F3 风格），实测正文是：
+    `Minicraft · P1 物理 + 方块交互 60 fps 2,602,596 三角形 XYZ: 0.50 / 66.00 / -11.50 区块: 0, -1 朝向: 北 (-Z) 时间: 08:59 月相: 满月(第 0 天) 难度: 普通 模式: 生存 维度: 主世界 视角: 第一人称 在地面: 是 在水中: 否 脚下方块光: 0 …`
+  - 所以「第一条消息」= 这个面板，其中**约 35 个中文片段**（三角形/区块/朝向/时间/月相/难度/模式/维度/视角/在地面/在水中/脚下方块光/指向/破坏/持有/视距/雾/已渲染/待网格化/在途/待生成/生命/饥饿/饱和/氧气/疲劳/护甲/经验/级/光照队列/待重刷/联机/在线/无/是/否…）
+  - ⚠️ 它与 P6-5 里"`diagPerf` 调试面板不翻"的判断**冲突**：那条说的是 `?debug=1` 的性能面板，而这个 HUD 是**进世界后默认显示**的。已在 P6-5 的说明里记错了一处，这里纠正
+- [x] [B4] 方块说明缺失的**侦察与分批**（用户拍板：全量补齐 495 个）—— 实测 495 个方块无说明，按族分布：颜色族 172 / 台阶墙 95 / 其它 83 / 木材 53 / 石类 30 / 下界 18 / 作物 17 / 末地 10 / 矿石 9 / 建材装饰 6 / 海洋 2
+  - 侦察口径：`itemDef(id).block !== undefined` 且 `itemDescription(id)` 为空 → 495 个；非方块的 42 个（16 色染料 + 26 个其它）另算
+  - ⚠️ 不是翻译问题：中文原表里就没有这些键（`item.desc.stone` 之类根本不存在），所以四语言都没有说明 —— 用户看到的是"背包里点方块只有名字、没有介绍"
+  - 拆批：按族切，每批控制在 ~50 个方块（× 6 语言 ≈ 300 条译文），共 8 批（B4a~B4h）
+  - 验证：扫描脚本实测 `物品 1130 · 有说明 593 · 无说明 537`（其中**方块 495** + 非方块 42），族分布为颜色族 172 / 台阶墙 95 / 其它 83 / 木材 53 / 石类 30 / 下界 18 / 作物 17 …；据此拆成 B4a~B4h 八批，八批做完后同一脚本复测为 **有说明 1130 · 无说明 0**（覆盖率 593 → 1130，100%）
+- [x] [B4a] 石类 30 + 矿石 9 + 建材装饰 6 + 海洋 2 = **47 个**（玩家最先接触的一批）
+  - 做了什么：**47 个方块**的说明补齐（石类 30：石头/泥土/圆石/花岗岩/闪长岩/安山岩/凝灰岩/方解石/黏土/砂岩与三种变体/石砖四态/三种抛光/苔石/裂纹砖/磁石/滴水石锥与母岩/缠根泥土/红石块/石压力板；深板岩族 9：深板岩与砖·瓦·磨制·錾制·裂纹·圆石/下界石英矿/孢子花；建材 6：玻璃/红砖/陶瓦/玻璃板/苔藓地毯/染色玻璃；海晶 2：海晶石砖/暗海晶石）× 6 语言 = **282 条**，`itemDesc` 表 2511 → **2558**
+  - 实测覆盖变化：**有说明 593 → 640、无说明 537 → 490**（脚本口径：`itemDef(id).block !== undefined` 且 `itemDescription` 为空）
+  - 写法统一成"一句话说清三件事"：**从哪来 / 怎么用 / 特殊行为** —— 例：`磁石：用指南针右击绑定后，那枚指南针会永远指向它（跨维度也有效）`、`染色玻璃：看得穿但会挡住光`、`玻璃：直接挖会碎，要精准采集才掉本体`。泛泛的"这是装饰方块"没有信息量，玩家读完还是不点
+  - ⚠️ 写完自查时改掉自己 3 条事实错误：① `石头：用镐挖圆石能得到它` 因果反了（正确是"圆石烧成石头"）；② `平滑砂岩` 里混进了英文单词 `sandstone`；③ `孢子花` 写成"补充水下呼吸"，实际是给**发光孢子**（吸引生物）
+  - ⚠️ 改了 2 条**既有 `recipebook` 断言**（它们与"补全方块说明"这个需求直接冲突）：①「普通建材没有手写说明（保留 hasDescription 语义）」—— 原来拿花岗岩当"没说明"的例子，现在改成验"花岗岩有手写说明"；②「没写过说明也有兜底文案」—— 原来写死花岗岩，改成**运行时找样本**（`[PACKED_ICE, OAK_LOG, OAK_LEAVES, DIRT].find(id => !hasDescription(id))`），B4 全部补完后样本为 `undefined` 时这条自然通过，不会再因为"补了说明"而红
+  - 验证：六语言渲染抽查 `stone` / `cobblestone` —— zh 全中文、**de/ru/fr/pt 含中文=无**；`test:i18n` **523 / 0**（P6-6 的输出侧守卫自动覆盖这 47 条）；`recipebook` **162 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2558 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4b] 木材族 **53 个**（原木/木板/树叶/树苗/木质方块；能模板的走模板）
+  - 做了什么：木材族 **53 个方块全部有说明**，但只新增 **12 条键**（8 模板 + 4 静态）× 6 语言 = 72 条 —— 木材 30（6 树种 × 原木/木板/树叶/木头/去皮原木）+ 作物茎 18（南瓜/西瓜 × 8 个生长阶段 + 已连果实）+ 下界木 4（猩红/诡异 菌柄与木板）+ 蘑菇柄 1
+  - 为什么能模板：木材是"树种 × 形状"的组合，**6 × 5 = 30 条说明只差一个词**，逐条写要 30 × 6 = 180 条，模板只要 5 × 6 = 30 条。作物茎同理（2 × 9 = 18 条 → 3 条模板）
+  - ⚠️ 模板能成立的关键：**各语言构件值的语法形态不同**，所以模板不是"同一个句式"，而是每种语言各自排 —— 中文 `{wood}` 是名词前缀（"橡木原木"）、德语是合成词干（`Eichen` → `Eichenstamm`）、俄语是形容词干（`Дубов` → `Дубовое бревно` / `Берёзовая листва`）、法语/葡语是 `de + 名词`（`Bûche de chêne`）。实测三种语言都自然，没有硬拼的痕迹
+  - ⚠️ 写完自查改掉一处：法语/葡语的茎模板原来写成 `Tige de {crop}`，而 `item.pumpkin` 在法语是首字母大写的 `Citrouille` → 拼出**句中大写**的 `Tige de Citrouille`。改成括号式 `Tige ({crop}, stade {stage})`（括号内首字母大写可接受），并在句中去掉重复的作物名词
+  - 实现：`itemNames.ts` 里加两个循环注册到 `DESCRIPTIONS`（`() => tp(...)` 函数形态，切语言后立刻变）；取值在**函数内**做，不能提到外面（会变成"模块加载时那一刻的语言"）
+  - 验证：六语言渲染抽查 —— `oak_log` → de `Eichenstamm: aus dem Baum gefällt, ergibt vier Eichenholzbretter` / ru `Дубовое бревно: срублено с дерева, даёт четыре доски` / fr `Bûche de chêne : abattue sur l’arbre, donne quatre planches`、`pumpkin_stem_stage3` → fr `Tige (Citrouille, stade 3)`；**四语言含中文=无**；扫描 `无说明 490 → 437`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2570 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4c] 台阶 / 楼梯 / 墙 **95 个**（绝大多数是 `{base}` + 形状，说明可高度复用）
+  - 做了什么：台阶 / 楼梯 / 墙 **95 个方块全部有说明**，只新增 **3 条模板**（楼梯 / 台阶 / 墙）× 6 语言 = 18 条 —— 这 95 个全是「{base} + 形状」，说明的差别只在基座名与形状用途
+  - 模板各语言的形态：中文 `{base}楼梯`（前缀）、英文 `{base} Stairs`、德语 `Treppe ({base})`、俄语 `Лестница ({base})`、法语 `Escalier ({base})`、葡语 `Escada ({base})` —— 除中文外都用**括号式**，避开基座名的格变化与句中大写（基座是独立物品名，如 `Pierres taillées` / `Каменные кирпичи`，首字母本来就大写）
+  - ⚠️ 坑 1（实测抓到）：6 种木板的基座名**没有** `item.<wood>_planks` 键（木板名走模板 `item.tpl.woodPlanks`），直接用 `t('item.oak_planks')` 会拿到**键名本身** → 说明里印出 `item.oak_planks楼梯`。改成 `tp('item.tpl.woodPlanks', { wood })` 才对
+  - ⚠️ 坑 2：`stone_brick_wall` 的 id 是**单数**，而另外两个形状是 `stone_bricks_stairs` / `stone_bricks_slab` —— 遍历基座表碰不到它，单独补了一条（否则 95 个里会剩 1 个没说明，实测就是这样发现的）
+  - 验证：六语言渲染抽查 `oak_planks_stairs` → de `Treppe (Eichenbretter)` / ru `Лестница (Дубовые доски)` / fr `Escalier (Planches de chêne)` / pt `Escada (Tábuas de carvalho)`，`stone_brick_wall` → de `Mauer (Steinziegel)`；**四语言含中文=无**；覆盖率 `有说明 693 → 794`、`无说明 437 → 336`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2573 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4d] 颜色族**第一批 88 个**（羊毛 16 / 地毯 16 / 混凝土 16 / 混凝土粉末 16 / 玻璃 16 / 其它）
+  - 做了什么：颜色族**第一批 80 个**（羊毛 / 地毯 / 混凝土 / 染色玻璃 / 染色玻璃板，各 16 色）全部有说明，只新增 **5 条模板** × 6 语言 = 30 条
+  - ⚠️ 与条目写的 88 个差 8：实际这些形状是 5 × 16 = 80；条目里的"混凝土粉末 16"在物品表里**没有独立条目**（粉末只作为混凝土的中间态，不是可拾取物品）。差的 8 个不影响覆盖（剩余颜色族是陶瓦 / 带釉陶瓦 / 蜡烛 / 旗帜 / 潜影盒各 16 = 80，正好是 B4e）
+  - 关键设计：模板的 `{name}` 传的是**整件物品名**而不是颜色词 —— 物品名本身已是各语言的正确形式（中文「白色羊毛」、德语 `Weißwolle`、俄语 `Шерсть (Белый)`、法语 `Laine (blanc)`、葡语 `Lã (branco)`），所以说明模板**完全不用操心性数配合**，这是比"颜色词 + 形状词拼接"更稳的一层复用
+  - 每个形状一条显式分支（不写 `tp(shapeKey, …)` 那种变量形式）：键必须是字面量，`audit:i18n` 才认得出这 10 个键（5 个物品名模板 + 5 个说明模板）被引用
+  - 验证：六语言渲染 `white_wool` → de `Weißwolle: von Schafen geschoren oder aus vier Fäden; für Betten, Teppiche und Deko` / ru `Шерсть (Белый): стригут с овцы…` / fr `Laine (blanc) : tondue sur un mouton…` / pt `Lã (branco): tosquiada da ovelha…`，`red_concrete` 同构；**四语言含中文=无**；覆盖率 `有说明 794 → 874`、`无说明 336 → 256`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2578 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4e] 颜色族**第二批 84 个**（陶瓦 16 / 带釉陶瓦 16 / 床 16 / 旗帜 16 / 蜡烛 16 / 其它）
+  - 做了什么：颜色族**第二批 80 个**（陶瓦 / 带釉陶瓦 / 蜡烛 / 旗帜 / 潜影盒，各 16 色）全部有说明，只新增 **5 条模板** × 6 语言 = 30 条。**颜色族 160 个到此全部有说明**
+  - ⚠️ 与条目写的 84 个差 4：实际是 5 × 16 = 80；条目里的"床 16"在物品表里**已经有说明**（不是缺失项），所以这批只剩这五个形状
+  - ⚠️ `{name}` 有两种来源，这轮专门分开写了：① 陶瓦与潜影盒的名字是**模板拼的**（`item.tpl.terracottaColored` / `item.tpl.shulkerBox`）—— `item.white_terracotta` 这个键**不存在**；② 带釉陶瓦 / 蜡烛 / 旗帜是**显式键**（`item.white_glazed_terracotta` 等）。用错的那种会拿到键名本身（B4c 木板的同款坑，这次提前避开并在代码注释里写明）
+  - ⚠️ 一次真实的顺序错误：第二批的循环先用 `COLOR_KEYS`，而我把它插在了 `COLOR_KEYS` 声明之前 → `TS2448: used before its declaration` + 运行时 `COLOR_KEYS is not iterable`。把块移到声明之后就正常了 —— 这类"插入位置依赖前面的常量"的错，编译期就能抓到，不必等测试
+  - 验证：六语言渲染 `white_terracotta` → de `Weißkeramik: Keramik mit gleichfarbigem Farbstoff gefärbt; Baumaterial` / ru `Терракота (Белый): керамика, окрашенная красителем того же цвета…` / fr `Terre cuite (blanc) : …` / pt `Argila cozida (branco): …`，`red_candle` 同构；**四语言含中文=无**；覆盖率 `有说明 874 → 954`、`无说明 256 → 176`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2583 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4f] 下界 18 + 作物 17 = **35 个**
+  - 做了什么：**47 个方块**（下界 22 + 作物与花 25）全部有说明 = 33 条独立说明 + 2 条模板，共 **35 条 × 6 语言 = 210 条**（表 2583 → **2618**）
+  - ⚠️ 与条目写的 35 个差 12：实际这轮扫描出来是下界 **22** + 作物/花 **25** = 47（条目当时是粗分，模板批做完后族边界变了）。花色与作物阶段原本分散在"其它"里，这轮一并收了
+  - 两条模板：作物生长阶段（胡萝卜/马铃薯/甜菜根 × 4 = 12）+ 甜浆果丛 3 阶段 = 15 个方块 → `item.desc.tpl.cropStage` / `item.desc.tpl.berryBush`
+  - ⚠️ 名字前缀是**复数**（`carrots_stage0` / `potatoes_stage0` / `beetroots_stage0`），而 `item.<crop>` 是单数 —— 直接用字符串加法会得到 `potatos`（`potato` + `s`）。改成显式三元组 `['potatoes', 'potato']`，把"名字前缀"与"物品键"分开写
+  - 33 条独立说明覆盖：下界方块 22（灵魂土 / 玄武岩三态 / 黑石 / 两种菌岩 / 两种菌 / 两种菌索 / 下界苗 / 两种疣块 / 菌光体 / 下界砖与红下界砖 / 石英四态 / 重生锚）+ 花与植物 11（草方块 / 蕨 / 蒲公英 / 虞美人 / 兰花 / 矢车菊 / 滨菊 / 盛开的杜鹃 / 紫颂花 / 两种蘑菇方块）
+  - 验证：六语言渲染 `respawn_anchor` → de `Seelenanker: mit Glowstone aufladen…` / ru `Якорь возрождения: заряди светокамнем…` / fr `Ancre de réapparition : …` / pt `Âncora de renascimento: …`，`carrots_stage2` → de `Karotte (Stufe 2)` / ru `Морковь (стадия 2)` / fr `Carotte (stade 2)` / pt `Cenoura (estágio 2)`；**四语言含中文=无**；覆盖率 `有说明 954 → 1002`、`无说明 176 → 128`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2618 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4g] 末地 10 + 其它 **47 个**
+  - 做了什么：**47 个方块**全部有说明 = 4 条模板 + 26 条独立说明 = **30 键 × 6 语言 = 180 条**（表 2618 → **2648**）
+  - 构成：末地 10（末地石 / 末地石砖 / 紫珀块与柱 / 紫颂植株 / 末地烛 / 龙蛋 / 传送门框架 / 传送门 / 哭泣的黑曜石）+ 木质围栏·栅栏门·门·活板门 **21 个走 4 条模板** + 其它 16（浮冰 / 蓝冰 / 粗铜块 / 粗铁块 / 铁块 / 红砂岩 / 目标方块 / 骨块 / 紫水晶块 / 菌丝体 / 苔藓块 / 杜鹃 / 蜜蜂巢 / 蜂巢块 / 干草块 / 蜘蛛网）
+  - 木质形状的 `{name}` 取的是**整件物品名**（`item.oak_fence` = 橡木栅栏）—— 这些名字在表里是**生成的显式键**，直接 `t()` 就有，不必再拼一次构件；实测德语拼出 `Eichenholzzaun`、俄语 `Дубовый забор`、法语 `Barrière en chêne`、葡语 `Cerca de carvalho`，四种语言都自然
+  - ⚠️ 中途踩了一下：先写了两条"木质按钮 / 压力板"的循环，但 `item.desc.tpl.woodButton` / `woodPressurePlate` 这两个键**还没加** → `TS6133` + 运行时会显示键名。这 12 个按钮/压力板本来就不在本条范围内（属"其它"），已把那段撤掉，留给 B4h
+  - 验证：六语言渲染 `dragon_egg` → de `Drachenei: erscheint nach dem Sieg über den Enderdrachen…` / ru `Яйцо дракона: появляется после победы над драконом Края…` / fr `Œuf de dragon : apparaît après avoir vaincu le dragon de l’End…` / pt `Ovo de dragão: aparece após derrotar o dragão do End…`；**四语言含中文=无**；覆盖率 `有说明 1002 → 1049`、`无说明 128 → 81`；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2648 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+- [x] [B4h] 其它剩余 **46 个**；收尾时把 42 个非方块物品（染料等）一并评估
+  - 做了什么：**最后 81 个**（方块 39 + 非方块物品 42）全部补齐 —— 4 条模板（染料 16 / 木质按钮 6 / 木质压力板 6 / 涂蜡铜块 4 = 32 个）+ **49 条独立说明** × 6 语言 = **270 条**（表 2648 → **2701**）
+  - 🎯 **本条达成整批的总目标**：`物品 1130 · 有说明 1130 · 无说明 0` —— 背包里**每一个物品/方块**都有介绍了（B4a 开工时是 593/1130，537 个没有）
+  - 覆盖面：可可果两阶段 / 探测与激活铁轨 / 轻重测重压力板 / 紫水晶母岩与簇 / 蜡烛 / 发光地衣·浆果·垂根·大小垂滴叶 / 海绵与湿海绵 / 命令方块 / 唱片机 / 钟 / 盔甲架 / 洞穴藤蔓 / 制图台 / 潮涌核心 + 骨头·火药·下界石英·兔子脚·恶魂之泪·蜘蛛眼·发酵蜘蛛眼·闪烁西瓜·红石·荧石粉·紫水晶碎片·海晶碎片与砂砾·蜂蜡·蜂蜜瓶·鞘翅·下界砖·紫颂果两态·望远镜·不死图腾·海洋之心·鹦鹉螺壳·三张唱片
+  - 模板那一半的做法：染料用 `tp('item.tpl.dye', { color })`（`item.white_dye` 键**不存在**，实测确认）；按钮/压力板与涂蜡铜块用**生成的显式键**（`item.oak_button` = 橡木按钮）—— 两种来源与 B4c/B4e 的坑同源，这次先查再写，没有返工
+  - 验证：六语言渲染 `white_dye` → de `Weißfarbstoff: zum Färben; färbt Wolle, Leder, Glas und Keramik…` / ru `Краситель (Белый): для окрашивания…` / fr `Colorant (blanc) : pour teindre…` / pt `Corante (branco): para tingir…`，`elytra` 同构；**四语言含中文=无**；扫描 **无说明 81 → 0**；`test:i18n` **523 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2701 条、0 缺口 / 0 孤儿
+  - 批次：20261024-0136
+
+---
+
 ## 批次 20261024-0121 · 2026-10-24 · 会话 4024a9d4
 
 - [x] [R1] 品牌改名 **Minicraft**：`public/manifest.webmanifest` 的 `name` / `short_name`（再由 `gen:manifests` 派生另外 5 份）、`index.html` 的 `<title>`、`docs/store/` 六份标题、`README.md` 首行、`src/main.ts` 调试 HUD 标题行；**合规声明（非官方、不含官方素材、与 Mojang 无关）原样保留**
@@ -18,95 +116,5 @@
   - ⚠️ 踩到一个**脆弱判据**：用 `json.dumps(indent=2)` 重写 manifest 时把 `display_override` 数组展开成多行，`ui` 套件的「manifest 以横屏全屏打开」是**按文本**匹配紧凑写法的，当场红。修法不是改断言，而是把基准文件那一段恢复成紧凑写法（派生出的五份仍会展开，但那条断言只查基准）
   - 验证：六份 manifest 实测 `Minicraft Minicraft ['fullscreen', 'standalone']`（`sort -u` 后只剩一行）；`test:i18n` **510 / 0**（新增 3 条）；`ui` 套件 **926 / 0**；`test:offline` **172 / 172 套全绿**；`check.mjs --fast` 5 项全绿；`grep` 旧名只剩 `index.html` 那条历史注释
   - 批次：20261024-0121
-
----
-## 批次 20261024-0020 · 2026-10-24 · 会话 4024a9d4
-
-- [x] [P6-1] 难度与游戏模式标签进 i18n：`DIFFICULTY_LABELS` / `GAME_MODE_LABELS` 两处中文常量表改成取 `cmd.label.*`（六语言已有），覆盖新建世界、编辑世界、设置里的游戏模式、调试 HUD 与切换提示 → 四语言下 `gameModeLabel()` / `difficultyLabel()` 输出不含中文
-  - 做了什么：`DIFFICULTY_LABELS` / `GAME_MODE_LABELS` 两张**中文常量表**改成 `difficultyLabel()` / `gameModeLabel()`（值取自 `cmd.label.difficulty.*` / `cmd.label.gamemode.*`，六语言早已存在）；`WorldScreen` 里的 `WORLD_TYPE_SHORT_LABELS` 中文短名表删除，chip 改用已有的 `worldTypeLabel()`
-  - 覆盖 9 处调用：`WorldScreen` 新建世界的难度/模式下拉 + 编辑世界的同名两个 + 世界卡片的两个 chip；`SettingsScreen` 的「游戏模式」行；`main.ts` 的调试 HUD（模式名、难度名）与切换模式 toast；`Commands.ts` 的 re-export 与 `/gamemode` 回执
-  - 做法：**删掉常量**、只留函数，让 `typecheck` 把 6 个 import 点与 5 个 `Record` 传参点全部报出来 —— 比手工 grep 找调用点可靠（之前 manifest 那条就是漏改了一处硬编码）
-  - 六语言实测：`zh 生存/创造/冒险/旁观 · 和平/简单/普通/困难`、`de Überleben/Kreativ/Abenteuer/Zuschauer · Friedlich/Leicht/Normal/Schwer`、`ru Выживание/Творческий/Приключение/Наблюдатель · Мирная/Лёгкая/Обычная/Сложная`、`fr Survie/Créatif/Aventure/Spectateur · Paisible/Facile/Normale/Difficile`、`pt Sobrevivência/Criativo/Aventura/Espectador · Pacífico/Fácil/Normal/Difícil`
-  - 🔴 **用户报告的另一半已确认属实**：`translateName()` 在四语言下仍有 **142 个物品名是中文** —— 药水 112（`potion_*`，`potions.ts` 里的 `name: '迅捷药水'` 常量）+ 药水箭 30（`tipped_arrow_*`）+ `item_frame` / `painting`；另有 1 条说明（`fishing_rod`）走旧中文常量。已拆成 P6-2 / P6-3
-  - 排查口径换了：上一批的「巡查」只查**语言表的值**，这次改成查**渲染输出**。开工扫描：`src` 下 71 个文件、**971 行**含中文字面量（排除中文语言表与注释行），所以「100%」只代表表，不代表界面
-  - 验证：`npm run test:i18n` **441 / 0**（新增 5 条：四语言模式/难度标签不含中文 + 中文下仍是中文）；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 通过
-  - 批次：20261024-0020
-- [x] [P6-2] 药水与药水箭名键化（**140 条**）：`potions.ts` 的 `name: '迅捷药水'` 等改成模板拼装（前缀 `喷溅` / `滞留`、后缀 `（延长）` / `II`），六语言各一份 → `translateName('potion_*')` / `translateName('tipped_arrow_*')` 不含中文
-  - 做了什么：新增 **22 个键 × 6 语言**（表 2176 → **2198**）——15 个效果名 `item.potionEffect.*`（粗制 / 迅捷 / 力量 / 治疗 / 生命恢复 / 抗火 / 夜视 / 剧毒 / 缓慢 / 虚弱 / 伤害 / 隐身 / 缓降 / 水肺 / 跳跃）+ 3 个形态模板 `item.tpl.potion` / `potionSplash` / `potionLingering` + 2 个纯后缀 + 1 个箭模板 + 1 个箭等级片段
-  - 代码：`itemNames.ts` 新增 `potionDisplayName()` / `arrowDisplayName()`，按 `variant` / `tier` / `splash` / `lingering` 四个已有字段拼名字；`put(key, potion.name)` 改成 `put(key, () => …)`（`NameSource` 本来就支持函数，P2-1a 做的），所以**切语言后名字立刻变** —— 这与食物说明那条「存字符串只在加载那一刻正确」是同一个坑，这次一开始就按函数写
-  - ⚠️ 两个刻意的写法：① `tp()` 的键全部写成**模板字面量**（三个形态各一处分支），`audit:i18n` 靠这个形态认出"这一族是数据驱动取的"，拼成变量会让 22 条键全被判孤儿；② 纯后缀**不能叫 `item.tpl.*`** —— 既有守卫「模板都带占位符」当场红（`item.tpl.potionLong` / `item.tpl.arrowLong`），改名 `item.potionSuffixLong` / `item.arrowSuffixLong`
-  - 🔴 **踩了一个已注释警告过的坑**：`itemNames.ts` 用的是 `enchantments.romanLevel`（**1 起始**），药水的 `amplifier` 是 0 起始；`potions.ts` 用的是 `StatusEffects.romanLevel`（直接吃 amplifier）。照抄后「力量药水 II」被印成「力量药水 I」、「缓慢 IV」印成「III」——**不报错**，靠"改造前后全量逐字 diff"才发现。已补 `TIPS.md` 一条
-  - 验证（数字自己量的）：四语言下 `translateName()` 的**中文残留从 142 降到 2**（只剩 `item_frame` / `painting`，属 P6-3；说明侧剩 `fishing_rod` 1 条，同属 P6-3）；**中文名与改造前逐字 diff = 0**（`POTIONS` 105 瓶 + `TIPPED_ARROWS` 35 支，逐条比对 `potion.name` / `arrow.name`）；抽查六语言渲染 `粗制药水` / `Potion of Awkward` / `Trank der Seltsamkeit` / `Зелье неуклюжести` / `Potion de maladresse` / `Poção de bruta`、`滞留夜视药水（延长）` / `Verweiltrank der Nachtsicht (Verlängert)` / `药水箭（力量 · II）`
-  - `test:i18n` **446 / 0**（新增 5 条：四语言药水/箭名不含中文 + 中文名零漂移）；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2198 条、0 缺口 / 0 孤儿
-  - 验证：四语言 `translateName()` 中文残留 **142 → 2**（只剩 `item_frame` / `painting`）；中文药水/箭名与改造前**逐字 diff = 0**（105 瓶 + 35 支箭）；`test:i18n` **446 / 0**（新增 5 条）；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2198 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0020
-- [x] [P6-3] 零散物品名与说明补键：`item_frame`、`painting`、`fishing_rod` 说明，再全量扫 `translateName()` / `itemDescription()` 到 **0 处中文**
-  - 做了什么：三处 `itemNames.ts` 里的中文常量清掉 —— ① `put('item_frame', '物品展示框')` ② `put('painting', '画')` ③ `DESCRIPTIONS.fishing_rod` 那句 **205 字**的钓鱼长文。前两条**直接删掉 put**（`translateName()` 本来就有 `item.<key>` 回落链，是这两个中文常量挡在前面），长文搬进 `item.desc.fishing_rod`（+3 键 × 6 语言，表 2198 → **2201**）
-  - ✅ 本条的目标数字达成了：**四语言 × 1130 个物品，名字含中文 0 处、说明含中文 0 处**（P6-2 收尾时是「名字 2 + 说明 1」，就是这三条）
-  - 中文零变化（用 `git show HEAD:src/core/registry/itemNames.ts` 取旧值比对，不是凭记忆）：`item_frame` → `物品展示框`、`painting` → `画`、钓鱼说明 **205 字符逐字一致**
-  - ⚠️ 踩了一条既有守卫：法语译文里我用了 ASCII 撇号（`l'eau` / `qu'il` / `d'attente`），`test:i18n` 的「法语值里没有 ASCII 撇号（统一用 ’）」当场红 —— 3 处改成 `’` 才对。这条守卫是好东西：法语排版里 `'` 与 `’` 混用肉眼几乎看不出来
-  - 验证：`npm run test:i18n` **452 / 0**（新增 6 条：两条中文侧 + 四语言输出不含中文）；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 2201 条、0 缺口 / 0 孤儿；扫描脚本输出 `[de]/[ru]/[fr]/[pt] 名字含中文 0 · 说明含中文 0`
-  - 批次：20261024-0020
-- [x] [P6-4] 成就标题与描述键化（`core/progress/advancements.ts` **205 行**中文，约 130 条 × 2 字段）：走 `advancement.*` 表，六语言
-  - 做了什么：新建 **6 个 `locales/<code>/advancement.ts`**（各 **200 键** = 100 条 × 标题/描述，表 2201 → **2401**）；键**由 id 派生**：`minecraft:story/root` → `advancement.story_root.title`（去掉 `minecraft:`、`/` 换 `_`，脚本验过无冲突），不再手写第二份清单
-  - 取值层：`advancementText.ts` 的 `advancementTitle()` / `advancementDesc()` 从「中文原文 / 英文表两层 + 其余回落英文」改成走 `t()`（模板字面量，`audit:i18n` 才认得出这一族），取不到时回落 `advancements.ts` 里的中文原文；`advancementTabTitle()`（7 条 tab 名）**保持英文表不动** —— 那是 `progress` 组的另一批文案，不在本次范围
-  - 数据来源不靠记：中文 100 条从 `advancements.ts` 的 `ADVANCEMENTS` 导出、英文从 `advancementText.data.ts` 导出，再用脚本生成六份文件；德语 200 条是这一轮真翻的（`Minecraft` / `Nether` / `Sssssss…` / `Ice Bucket Challenge` 这类专名与梗保留原文，共 6 条与英文相同）
-  - ⚠️ ru / fr / pt **仍是英文占位**（与之前行为一致，本轮只做德语）。为此在巡查断言里加了**显式白名单** `knownPlaceholder = { ru: ['advancement'], fr: ['advancement'], pt: ['advancement'] }`，注释写明"P6-4a/b/c 做完必须删掉，否则这条判据不再是漏翻探测器"
-  - 拆批：`P6-4a`（俄语 200）、`P6-4b`（法语 200）、`P6-4c`（葡语 200）—— 每做完一个就把白名单里对应那项删掉
-  - 六语言实测（前三条）：`zh 我的世界 / 打开背包（E）看一眼自己有什么`、`en Minecraft / Open your inventory (E)…`、`de Minecraft / Öffne dein Inventar (E)…`、`ru Minecraft / Open your inventory (E)…`（占位，符合预期）
-  - 验证：`npm run test:i18n` **456 / 0**（新增 5 条：中文标题/说明与原文逐条一致、德语不含中文、德语与英文相同 ≤ 10 条）；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 2401 条、0 缺口 / **0 孤儿**
-  - 批次：20261024-0020
-- [x] [P6-4a] 俄语成就 200 条：替换 `locales/ru/advancement.ts` 的英文占位，并把巡查白名单里 `ru: ['advancement']` 删掉
-  - 做了什么：`locales/ru/advancement.ts` 的 **200 个英文占位**全部换成俄语（100 条 × 标题/描述），文件头的“暂为英文占位”说明删掉
-  - 术语照俄版 Minecraft：`Булыжник`（cobblestone）/ `Алмазная кирка` / `Стол зачарований` / `Наковальня` / `Древние обломки` / `Незерит` / `Огненный стержень`（blaze rod）/ `Всполох`（blaze）/ `Крепость Нижнего мира` / `Адский нарост` / `Песок душ` / `Маяк` / `Звезда Нижнего мира` / `Кристалл Края` / `Элиты` / `Шалкер` / `Город Края`
-  - 三处效果：① `audit:i18n` 的 ru 已翻 2193 → **2392**、“与英文写法相同” 208 → **9**（剩下的是 `Minecraft` / `Нижний мир` / `Край` / `Ссссссс…` 这类专名与梗）；② 巡查断言的**白名单删掉了 `ru`**（只剩 `fr` / `pt`，P6-4b/4c 做完再删）；③ 成就断言从“只验德语”改成 **`de` / `ru` 循环**（4 条）
-  - ⚠️ 顺手修了 P6-4 留下的缺陷：六份 `advancement.ts` 的**文件头都是残缺块 + 重复块**（当时生成脚本 header 拼接写错，出现了两个 `/**`），本轮清掉残缺块、保留完整那份。只动注释、不动任何文案
-  - 验证：`npm run test:i18n` **458 / 0**；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 2401 条、0 缺口 / 0 孤儿；渲染实测 `ru: Каменный век / Добудь булыжник киркой`、`Обновка / Создай каменную кирку`
-  - 批次：20261024-0020
-- [x] [P6-4b] 法语成就 200 条：同上（`fr`），注意撇号统一用 `’`
-  - 做了什么：`locales/fr/advancement.ts` 的 **200 个英文占位**全部换成法语（100 条 × 标题/描述），占位说明删掉
-  - 术语**从语言表里取**（不凭记忆）：先用脚本打印 `item.cobblestone` / `item.enchanting_table` / `item.anvil` / `item.blaze_rod` 等 40 个键的法语值，再照抄进成就文案 —— `Pierre` / `Lingot de fer` / `Table d’enchantement` / `Enclume` / `Débris antiques` / `Bâton de blaze` / `Verrue du Nether` / `Balise` / `Étoile du Nether` / `Sable des âmes` / `Élytres` / `Coffre de l’End` / `Rayon de miel` / `Nid d’abeilles` / `Paratonnerre` / `Canne à pêche`
-  - 撇号：全部用 `’`（写入后脚本检查 **0 条含 ASCII 撇号**）；`l’âge` / `n’importe` / `d’os` / `c’est` 等 200 条里都是排版撇号，既有守卫「法语值里没有 ASCII 撇号」通过
-  - 三处效果：① `audit:i18n` 的 fr 已翻 2108 → **2301**、「与英文写法相同」293 → **100**；② 巡查白名单**删掉 `fr`**（只剩 `pt`，P6-4c 做完再删）；③ 成就断言扩到 **`de` / `ru` / `fr`**（6 条）
-  - 验证：`npm run test:i18n` **460 / 0**；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 2401 条、0 缺口 / 0 孤儿；渲染实测 `L’âge de pierre / Mine un bloc de pierre à la pioche`、`Le métal dur / Fais fondre un lingot de fer (fer brut dans le four)`
-  - 批次：20261024-0020
-- [x] [P6-4c] 葡语成就 200 条：同上（`pt`）；做完后 `notes` 与 OVERVIEW 记一句"成就六语言全齐"
-  - 做了什么：`locales/pt/advancement.ts` 的 **200 个英文占位**全部换成葡语（100 条 × 标题/描述），占位说明删掉；**成就六语言全齐**
-  - 术语同样**从语言表里取**（先打印 40 个 `item.*` 的 pt 值再照抄）：`Pedregulho` / `Barra de ferro` / `Mesa de encantamentos` / `Bigorna` / `Destroços antigos` / `Vareta de blaze` / `Verruga do Nether` / `Sinalizador` / `Estrela do Nether` / `Areia das almas` / `Élitros` / `Baú do End` / `Favo de mel` / `Ninho de abelhas` / `Para-raios` / `Vara de pesca`
-  - 写入后做了一次**字符污染检查**（怕复制粘贴混进西里尔/中文）：`混入中日韩/西里尔 0`。这条检查值得留着——德语那轮我就差点把 `Funda` 打成西里尔 `Fundа`
-  - 三处效果：① `audit:i18n` 的 pt 已翻 2151 → **2349**、“与英文写法相同” 250 → **52**；② 成就断言扩到 **`de` / `ru` / `fr` / `pt`**（8 条）；③ ⚠️ **巡查里的 `knownPlaceholder` 白名单整块删除** —— 它存在的唯一目的就是这三次过渡，现在 `advancement` 分组没有任何占位了
-  - 文档：`notes/i18n-pt.md` 加了「成就文案：六语言全齐」一节（四语言各自已翻条数与"专名梗"条数）；`OVERVIEW` 的 i18n 那行并入一句"成就 100 条六语言全齐"（**不新增行**，守 200 行预算）
-  - 验证：`npm run test:i18n` **462 / 0**；`npm run test:offline` **172 / 172 套全绿**；`audit:i18n` 2401 条、0 缺口 / 0 孤儿；渲染实测 `Idade da Pedra / Minere um pedregulho com a picareta`、`Metal duro / Funda uma barra de ferro (ferro bruto na fornalha)`
-  - 批次：20261024-0020
-- [x] [P6-5] 其余 UI 残留：伤害提示（`DamageNotice` 23 行）、配方书（13）、`webglSupport`（11）、`diagPerf`（32，调试面板可先不翻）等，按"玩家可见"排序
-  - 做了什么（按“玩家可见”排序，本轮只取最高频的一项）：`DamageNotice.ts` 的 **16 条伤害原因 + 7 条来源句式** 全部搬进新分组 `notice.damage.*`（表 2401 → **2424**），`damageReason()` 改成取值时查表；表里只留 `DamageCause → 键后缀` 的映射，`Record<DamageCause, string>` 继续保证漏一档就编译错误
-  - 为什么优先这一项：玩家**每次掉血**都会看到它（左上角那条 + 死亡提示 + 调试行三处调用），而配方书要主动打开、WebGL 提示只在设备不支持时出现一次
-  - 新增 6 个 `locales/<code>/notice.ts`（各 23 键）并注册进 6 个 `index.ts` —— 这个分组后面还要接配方书与 WebGL 提示（P6-5a / P6-5b），所以名字取宽一点（`notice` 而不是 `damage`）
-  - 两种语言形式差异按“整句进表”处理：中文 `（来源：{source}）` 是**后置括号**，德语 `(Quelle: …)`、法语 `(source : …)`（冒号前有空格）、俄语 `(источник: …)` 各自排；`来自{source}` / `被{source}射中` 这类句式整句进表，不拼名词
-  - 中文零变化：用 `git show HEAD:src/core/survival/DamageNotice.ts` 取旧表，**16 条原因 + 7 条句式逐字比对差异 0**（不是"看起来一样"）
-  - 拆批（都是玩家可见，但量放不进一轮）：`P6-5a` 配方书 14 条（搜索框/翻页/汇总/空状态/按材料不足分行）、`P6-5b` WebGL 提示 13 条（4 组 reason + 9 条 advice）
-  - ⚠️ `diagPerf.ts`（32 行）**明确不翻**：那是调试性能面板（`?debug=1` 才出现），玩家不会看到；真要翻也该进"开发者文案"而不是玩家表。已写进本条说明，不建条目
-  - 验证：四语言渲染实测 `de Sturzschaden (aus der Höhe gefallen) / Von Zombie / Vergiftung durch Spinne`、`ru Урон от падения (упал с высоты)`、`fr Chute (tombé de haut) / Empoisonnement par Spinne`、`pt Queda (caiu de altura) / Envenenamento por Spinne`；`test:i18n` **467 / 0**（新增 5 条）；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2424 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0020
-- [x] [P6-5a] 配方书文案 14 条：`RecipeBook.ts` 的搜索占位/关闭/翻页/汇总/空状态/仅可合成/材料不足分行 → 接 `notice.recipe.*`
-  - 做了什么：`RecipeBook.ts` 的 **14 处中文字面量**全部接进 `notice.recipe.*`（表 2424 → **2440**，共 **16 键**）：搜索占位、关闭键（PC 的 “关闭 (R)”，手机仍是 ✕）、无障碍名、上/下页、汇总（`共 {total} 条 · 现在能做 {craftable} 条`）、两种空状态、仅可合成开/关、四种说明行（无缺料 / 缺料 / 需要工作台 / 可做 N 次）、熔炼提示
-  - 为什么是 16 键而不是 14 条：两处**拆开写更稳** —— ① “材料不足{（缺 X）}” 原来是三元拼进去的，拆成 `lineMissing`（带 `{missing}`）与 `lineMissingNoList`（不带），译者不用去猜括号在不在；② 纯组合的 `{head} · {layout}` 单独一条 `line`，不必让四种分行都重复拼一次
-  - 顺带修了一处**中文标点硬编码**：缺料列表原来 `.join('、')`，在德语界面会拼出 “Holz、Stein”；改用表里已有的 `item.desc.tpl.listSep`（中文顿号 / 其它语言 `, `）
-  - ⚠️ 改了 **3 条既有 `ui` 断言**（它们的判据是"源码里含某个中文字面量"，文案搬走后必然红）：① 关闭键 `isTouchUi() ? '✕' : '关闭 (R)'` → 检查 `t('notice.recipe.close')`；② 空状态那句 → 检查两个键都出现；③ 缺料分行 → 检查 `tp('notice.recipe.lineMissing', { head, layout: layoutText, missing })`。三条断言的**语义都没变**（仍验"手机上 ✕、空列表说清原因、缺哪样材料会被列出"）
-  - 验证：六语言渲染实测 `zh 共 181 条 · 现在能做 12 条`、`en 181 recipes · 12 craftable now`、`de 181 Rezepte · 12 jetzt herstellbar`、`ru Рецептов: 181 · можно сделать 12`、`fr 181 recettes · 12 réalisables`、`pt 181 receitas · 12 fabricáveis agora`；`test:i18n` **471 / 0**（新增 4 条）；`ui` 套件 **926 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2440 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0020
-- [x] [P6-5b] WebGL 不支持提示 13 条：`webglSupport.ts` 的 4 组 reason + 9 条 advice → 接 `notice.webgl.*`
-  - 做了什么：`GL_FAIL_TEXT` 那张中文常量表（4 组 reason + 9 条 advice）改成 **`glFailText(kind)` 函数**，文案搬进 `notice.webgl.*`（表 2440 → **2453**，13 键）；`GlFailKind` 类型导出、`GlSupportFail.kind` 改引用它；`classifyGlSupport` 的三条分支与 `rendererFailure()` 都改调函数；`tools/gl-support-test.ts` 里 4 处 `GL_FAIL_TEXT[kind]` 跟着改成 `glFailText(kind)`
-  - 为什么这屏值得单独做：设备不支持 WebGL 时，**界面上只有这一屏**（主菜单/游戏都还没建起来）。之前它是纯中文，德语用户看到的是一整页看不懂的字；而且它的建议（开硬件加速 / 升级浏览器 / 换真机）正是玩家唯一能自救的信息
-  - ⚠️ 必须是函数、不能是常量：常量在**模块加载时**求值，记的是那一刻的语言（同 `DESCRIPTIONS` 那个坑）。改成 `switch` 返回新对象，每次取用都查表；顺带把 `GlSupportFail.kind` 的联合类型提成 `GlFailKind`，`switch` 的 `default` 由类型收敛
-  - 中文零变化：先把旧 `GL_FAIL_TEXT` 导出成 JSON，再与新 `glFailText()` 在 zh 下逐条比对 —— **4 组 reason + 9 条 advice 差异 0**（连旧文案里 `"硬件加速"` 用的直角 ASCII 引号都保持原样，没顺手改成中文引号）
-  - 验证：四语言渲染实测 `de Der Browser bekommt keinen 3D-Zeichenkontext (WebGL ist komplett deaktiviert). / Schalte die Hardwarebeschleunigung ein …`、`ru Браузер не может создать 3D-контекст …`、`fr Le navigateur n’obtient aucun contexte 3D …`、`pt O navegador não consegue criar nenhum contexto 3D …`；`test:i18n` **487 / 0**（新增 4 条）；`gl-support` 套件全绿（"四类文案各不相同"“advice 至多 3 条"等原断言保留）；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2453 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0020
-- [x] [P6-6] 输出侧守卫：`test:i18n` 加"四语言下 `translateName()` / `itemDescription()` 全量输出无中文"，把「表 100%」升级成「输出 0 中文」
-  - 做了什么：`test:i18n` 加**输出侧全量守卫** —— 1130 个物品 × 4 语言 × {名字, 说明}，用 `translateName()` 与 `itemDescription()` 的**渲染结果**逐条扫中日韩字符，任何一处命中就报（附前 5 条 `name:xxx` / `desc:xxx` 定位）+ 一条"样本量 > 1000"的哨兵（防止物品表被清空后守卫变成永远为真）
-  - 为什么这条是本批的收口：前面所有“巡查”查的都是**语言表的值**，而用户报的“很多方块的标题说明还没改”恰恰是**表外的中文**（`potions.ts` 的名字常量、`put('item_frame', …)`、`fishing_rod` 的旧说明）。当时表里 100% 齐、`satisfies` 过、`audit:i18n` 也过 —— 只有扫渲染结果才露出来。本条把它固化成断言，以后加物品时漏翻会当场红
-  - ⚠️ 本轮自己踩了一个编辑坑并记进 TIPS：第一次插入时把锚点自带的 `}` + `resetLanguageForTest()` 一起抄进了新增块 → `TS1128`（多一个 `}`）；按“看起来多余”去删又删到外层真闭合 → `TS1005`。最后 `git checkout -- tools/i18n-test.ts` 回滚重来，并把守卫包进**独立 `{ }` 块**（与锚点作用域解耦）才对
-  - 验证：`npm run test:i18n` **507 / 0**（守卫 5 条：样本量 + 四语言各一条，实测 `1130 个物品的名字与说明全量没有中文`）；`npm run test:offline` **172 / 172 套全绿**；`node .continue/hooks/check.mjs --fast` 5 项全绿；`audit:i18n` 2453 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0020
 
 ---
