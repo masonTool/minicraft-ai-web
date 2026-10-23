@@ -86,7 +86,14 @@ class TestClient {
    * 门禁"时红时绿"比慢一秒危险得多：它会让人养成**习惯性重跑**，
    * 那个习惯一养成，真红也会被当成偶发。
    */
-  async wait(type, timeout = 4000) {
+  /**
+   * 等某类型消息出现。
+   *
+   * 默认超时 4s → **8s**：这个套件现在要起两次服务端（持久化用例），而 `check:fast`
+   * 里它和 guard 等重套件并发跑——机器一忙，"服务端 spawn + 握手"就可能超过 4 秒，
+   * 表现为偶发红（外面重跑又绿，反而让人养成习惯性重跑）。等待成功的路径不会变慢。
+   */
+  async wait(type, timeout = 8000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const message = this.take(type);
@@ -129,25 +136,30 @@ let serverOutput = '';
  *
  * 抽成函数是为了"重启后快照仍在"那条用例（联机13）——它要真的杀一次再起一次。
  */
-async function startServer() {
-  serverOutput = '';
-  server = spawn('node', ['server/index.mjs'], {
-    // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
-    // "宽限期过后才清掉落物"的断言都要白等半分钟
-    env: { ...process.env, PORT: String(PORT), GRACE_MS: '400', DATA_DIR },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  server.stdout.on('data', (chunk) => {
-    serverOutput += String(chunk);
-  });
-  server.stderr.on('data', (chunk) => {
-    serverOutput += String(chunk);
-  });
-  // 等服务端监听端口
-  for (let i = 0; i < 100; i++) {
-    await sleep(100);
-    if (serverOutput.includes('已启动')) return true;
-    if (server.exitCode !== null) return false;
+async function startServer(attempts = 2) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    serverOutput = '';
+    server = spawn('node', ['server/index.mjs'], {
+      // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
+      // "宽限期过后才清掉落物"的断言都要白等半分钟
+      env: { ...process.env, PORT: String(PORT), GRACE_MS: '400', DATA_DIR },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    server.stdout.on('data', (chunk) => {
+      serverOutput += String(chunk);
+    });
+    server.stderr.on('data', (chunk) => {
+      serverOutput += String(chunk);
+    });
+    // 等服务端监听端口
+    for (let i = 0; i < 100; i++) {
+      await sleep(100);
+      if (serverOutput.includes('已启动')) return true;
+      if (server.exitCode !== null) break;
+    }
+    // 上一次的 socket 还在 TIME_WAIT / CPU 挤到超时：等一下再起一次，
+    // 而不是直接把"没监听"当成断言失败（外面看到的是偶发红）
+    if (attempt < attempts) await sleep(500);
   }
   return false;
 }
@@ -168,7 +180,7 @@ try {
     await client.ready();
     for (let attempt = 0; attempt < 2; attempt++) {
       client.send({ t: 'join', v: PROTOCOL_VERSION, clientId: client.clientId, name, x, y, z, dimension });
-      const welcome = await client.wait('welcome', attempt === 0 ? 2500 : 4000);
+      const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
     }
     return null;
