@@ -311,4 +311,5 @@ export const itemDesc = {
   "item.desc.food.powerLeveled": "{level} 级 {seconds}",
   "item.desc.food.power": "{seconds}",
   "item.desc.food.sep": "｜",
+  "item.desc.fishing_rod": "对着**水面**右键抛竿（只认水面，水里有没有鱼不看），浮标落水后等 **5~30 秒** 会咬钩——浮标往下一沉的那 **2 秒内** 再右键收杆才算钓上来，收早了只是把浮标收回来。钓上来三种可能：**鱼**（85%）、**杂物**（10%：睡莲/皮革/骨头/碗/木棍…）、**宝藏**（5%：弓/附魔书/钓竿）。耐用 64 次，每次收杆 -1。附魔诱饵（每级少等 5 秒）与海之眷顾（杂物变少、宝藏变多）。",
 } as const;

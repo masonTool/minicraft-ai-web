@@ -684,4 +684,6 @@ export const item = {
   "item.tpl.tippedArrow": "药水箭（{effect}{suffix}）",
   "item.arrowSuffixLong": " · 延长",
   "item.tpl.arrowLevel": " · {level}",
+  "item.item_frame": "物品展示框",
+  "item.painting": "画",
 } as const;

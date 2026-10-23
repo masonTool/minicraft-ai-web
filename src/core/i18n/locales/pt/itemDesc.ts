@@ -304,4 +304,5 @@ export const itemDesc = {
   "item.desc.food.powerLeveled": "nível {level}, {seconds}",
   "item.desc.food.power": "{seconds}",
   "item.desc.food.sep": " | ",
+  "item.desc.fishing_rod": "Clique direito na **água** lança a linha (só a superfície conta, ter peixe ou não não muda nada). Depois que o flutuador cai, espere **5 a 30 segundos** pela fisgada — então, nos **2 segundos** em que o flutuador afunda, clique de novo para recolher; recolher cedo demais só traz o flutuador de volta. Três resultados: **peixe** (85%), **tralha** (10%: vitória-régia/couro/osso/tigela/graveto…), **tesouro** (5%: arco/livro encantado/vara). Durabilidade 64, -1 por recolhida. Encantamentos: Isca (5 s menos de espera por nível) e Sorte do mar (menos tralha, mais tesouros).",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

@@ -1394,6 +1394,23 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ...TIPPED_ARROWS.map((arrow) => ({ key: arrow.key, expected: arrow.name })),
   ].filter(({ key, expected }) => translateName(key) !== expected);
   check('中文药水/箭名与改造前逐字一致', potionNameDrift.length === 0, potionNameDrift.slice(0, 2).map((row) => row.key).join(','));
+
+  /**
+   * 零散物品名与说明（P6-3，批次 20261024-0020）。
+   *
+   * 三处原来在 `itemNames.ts` 里是中文常量：`put('item_frame', '物品展示框')`、`put('painting', '画')`、
+   * `DESCRIPTIONS.fishing_rod` 那句 205 字的长文。前两条删掉 `put` 让 `translateName()` 回落到
+   * `item.<key>` 表，长文搬进 `item.desc.fishing_rod`。
+   */
+  const rodId = findItemId('fishing_rod');
+  check('item_frame / painting 走语言表', translateName('item_frame') === '物品展示框' && translateName('painting') === '画');
+  check('钓鱼说明走语言表（中文与原 205 字一致）', rodId >= 0 && /5~30 秒/.test(itemDescription(rodId)));
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const texts = [translateName('item_frame'), translateName('painting'), itemDescription(rodId)];
+    check(`零散名/钓鱼说明在 ${code} 下不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 50));
+  }
+  resetLanguageForTest();
   resetLanguageForTest();
   resetLanguageForTest();
 

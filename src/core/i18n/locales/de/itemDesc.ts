@@ -305,4 +305,5 @@ export const itemDesc = {
   "item.desc.food.powerLeveled": "Stufe {level}, {seconds}",
   "item.desc.food.power": "{seconds}",
   "item.desc.food.sep": " | ",
+  "item.desc.fishing_rod": "Rechtsklick auf **Wasser** wirft die Angel aus (nur die Oberfläche zählt, Fische spielen keine Rolle). Nach dem Aufprall des Schwimmers **5-30 Sekunden** auf einen Biss warten — dann in den **2 Sekunden**, in denen der Schwimmer eintaucht, erneut rechtsklicken, um einzuholen; zu früh eingeholt kommt nur der Schwimmer zurück. Drei Ausgänge: **Fisch** (85 %), **Plunder** (10 %: Seerosenblatt/Leder/Knochen/Schüssel/Stock…), **Schatz** (5 %: Bogen/verzaubertes Buch/Angel). Haltbarkeit 64, -1 pro Einholen. Verzauberungen: Köder (5 s weniger Wartezeit pro Stufe) und Glück des Meeres (weniger Plunder, mehr Schätze).",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

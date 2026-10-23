@@ -305,4 +305,5 @@ export const itemDesc = {
   "item.desc.food.powerLeveled": "niveau {level}, {seconds}",
   "item.desc.food.power": "{seconds}",
   "item.desc.food.sep": " | ",
+  "item.desc.fishing_rod": "Un clic droit sur **l’eau** lance la ligne (seule la surface compte, la présence de poissons ne change rien). Une fois le flotteur posé, attendez **5 à 30 secondes** qu’il morde — puis, pendant les **2 secondes** où le flotteur plonge, recliquez pour ramener ; ramener trop tôt ne récupère que le flotteur. Trois issues : **poisson** (85 %), **déchets** (10 % : nénuphar/cuir/os/bol/bâton…), **trésor** (5 % : arc/livre enchanté/canne). Durabilité 64, -1 par récupération. Enchantements : Appât (5 s d’attente en moins par niveau) et Chance de la mer (moins de déchets, plus de trésors).",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

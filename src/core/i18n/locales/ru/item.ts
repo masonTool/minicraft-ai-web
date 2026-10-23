@@ -675,4 +675,6 @@ export const item = {
   "item.tpl.tippedArrow": "Стрела с зельем ({effect}{suffix})",
   "item.arrowSuffixLong": " (продлённая)",
   "item.tpl.arrowLevel": " {level}",
+  "item.item_frame": "Рамка",
+  "item.painting": "Картина",
 } satisfies Pick<Messages, keyof typeof zhItem>;

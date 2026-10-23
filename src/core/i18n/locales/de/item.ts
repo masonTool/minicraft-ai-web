@@ -675,4 +675,6 @@ export const item = {
   "item.tpl.tippedArrow": "Getränkter Pfeil ({effect}{suffix})",
   "item.arrowSuffixLong": " (Verlängert)",
   "item.tpl.arrowLevel": " {level}",
+  "item.item_frame": "Rahmen",
+  "item.painting": "Gemälde",
 } satisfies Pick<Messages, keyof typeof zhItem>;

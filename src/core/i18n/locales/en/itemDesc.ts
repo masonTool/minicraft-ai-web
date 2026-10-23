@@ -311,4 +311,5 @@ export const itemDesc = {
   "item.desc.food.powerLeveled": "level {level}, {seconds}",
   "item.desc.food.power": "{seconds}",
   "item.desc.food.sep": " | ",
+  "item.desc.fishing_rod": "Right-click **water** to cast (only the surface counts; whether there are fish makes no difference). After the bobber lands, wait **5-30 seconds** for a bite — then, during the **2 seconds** the bobber dips, right-click again to reel in; reeling early only pulls the bobber back. Three outcomes: **fish** (85%), **junk** (10%: lily pad/leather/bone/bowl/stick…), **treasure** (5%: bow/enchanted book/rod). Durability 64, -1 per cast. Enchants: Lure (5 s less waiting per level) and Luck of the Sea (less junk, more treasure).",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

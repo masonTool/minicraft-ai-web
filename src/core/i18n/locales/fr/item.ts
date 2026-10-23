@@ -675,4 +675,6 @@ export const item = {
   "item.tpl.tippedArrow": "Flèche de {effect}{suffix}",
   "item.arrowSuffixLong": " (prolongée)",
   "item.tpl.arrowLevel": " {level}",
+  "item.item_frame": "Cadre",
+  "item.painting": "Tableau",
 } satisfies Pick<Messages, keyof typeof zhItem>;
