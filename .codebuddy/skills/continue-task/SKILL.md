@@ -89,6 +89,7 @@ node <本技能目录>/scripts/install.mjs
 | `plan-split` | model | 30 条的大任务 → **是否切成 plan**，里程碑/阶段是否合理（只验切分，不实现） |
 | `plan-run` | probe | plan 执行：**里程碑边界硬停**（先问人后重置队列）+ **完成之后的整体收尾与归档** |
 | `worktree` | probe | 别的会话有队列 → 注入提示 → 建树+分支+推本地 bare origin → 树内隔离 → `merge --no-ff` 回主分支 |
+| `journey` | model+probe | **完整旅程（可选，不进 `--all`）**：两批任务（含跨批次累积归档）+ 计划里程碑硬停与完成 |
 
 **为什么要 probe**：像"连喂 5 轮没做完"这种分支，靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的地方。probe 仍然跑在**装出来的真实框架**上，只是不经过模型——验的是机制，不是"模型乖不乖"。
 
@@ -96,6 +97,7 @@ node <本技能目录>/scripts/install.mjs
 npm run skill:e2e                          # 只预检，不跑
 npm run skill:e2e -- --all --yes            # 六个全跑（含模型，会烧 token）
 npm run skill:e2e -- --scenario blocked     # probe 场景不用 --yes
+npm run skill:e2e -- --clean                # 只清现场（test.md 保留）
 npm run skill:e2e -- --dry-run             # 只看计划
 npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
 ```
@@ -123,8 +125,11 @@ npm run skill:e2e -- --turns 30 --model <id> --timeout 480 --strict
   读不到就报错要 `--model`，**绝不猜**。
 - **环境问题不算失败**：没装 CLI / 未登录（401）/ 网络挂掉 → 只验静态级并标 `⏭ 跳过`；
   `--strict` 可以把跳过收紧成失败。
-- **两份记录**：`.e2e/test.md` 是现场报告（目录 / 目的 / 时间 / 流程 / 结果，含单测那张表，不入库）；
+- **记录三处**：`.e2e/test.md` 是**汇总表**（场景 / 执行器 / 测什么 / 耗时 / tokens / 结果 + 失败明细 + 单测表）；
+  **每个场景目录里另有 `report.md`**（逐条断言 + 失败原因），点进目录就能看懂这个目录是干嘛的；
   `e2e-history.md` 是**入库账本**（每次模型场景的耗时与 tokens），给下次估算当依据。
+- **跑全套自动清场**：`--all` 会先清掉上一轮现场（一轮 = 一批目录 = 一节报告）；单跑某场景不清，
+  `--keep-all` 可保留。
 - 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
 
 **CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**，一次几分钟且花 token）。
