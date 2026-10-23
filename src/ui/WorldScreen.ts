@@ -23,21 +23,24 @@ import {
   randomSeed,
   type WorldType,
 } from '../core/gen/WorldType.ts';
-import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
-import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
+import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
+import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
 
 /** 列表里的世界类型短名（新建表单仍然用带说明的全名） */
-const WORLD_TYPE_SHORT_LABELS: Record<WorldType, string> = {
-  default: '默认',
-  flat: '超平坦',
-  large_biomes: '大型群系',
-  amplified: '放大化',
-  single_biome: '单一群系',
-};
+/**
+ * 下拉用的标签表（批次 20261024-0020）。
+ *
+ * `Dropdown` 要的是 `Record<T, string>`，而标签现在来自 i18n 函数 —— 这里在**构造时**求值一次。
+ * 会话内切语言走的是整页重载（`SettingsScreen` 里 `location.reload()`），所以"构造时求值"是安全的。
+ */
+const gameModeLabels = (): Record<GameMode, string> =>
+  Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>;
+const difficultyLabels = (): Record<Difficulty, string> =>
+  Object.fromEntries(DIFFICULTIES.map((difficulty) => [difficulty, difficultyLabel(difficulty)])) as Record<Difficulty, string>;
 
 /** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */
 export interface WorldEditPatch {
@@ -282,7 +285,7 @@ export class WorldScreen {
     );
     this.difficultySelect = new Dropdown<Difficulty>(
       DIFFICULTIES,
-      DIFFICULTY_LABELS,
+      difficultyLabels(),
       'normal',
       () => this.updateTypeHint(),
       { fullWidth: true, className: 'world-dropdown' },
@@ -290,7 +293,7 @@ export class WorldScreen {
     // 游戏模式（批次 181）：**在创建时就要选**，不要靠游戏里双击跳跃去猜
     this.gameModeSelect = new Dropdown<GameMode>(
       GAME_MODES,
-      GAME_MODE_LABELS,
+      gameModeLabels(),
       'survival',
       () => this.updateTypeHint(),
       { fullWidth: true, className: 'world-dropdown' },
@@ -486,9 +489,9 @@ export class WorldScreen {
     chips.className = 'world-card-chips';
     chips.append(
       ...(world.hardcore ? [this.makeChip(t('world.hardcoreOn'), 'hardcore', 'hardcore')] : []),
-      this.makeChip(GAME_MODE_LABELS[world.gameMode], 'mode', world.gameMode),
-      this.makeChip(DIFFICULTY_LABELS[world.difficulty], 'difficulty', world.difficulty),
-      this.makeChip(WORLD_TYPE_SHORT_LABELS[world.worldType], 'type', world.worldType),
+      this.makeChip(gameModeLabel(world.gameMode), 'mode', world.gameMode),
+      this.makeChip(difficultyLabel(world.difficulty), 'difficulty', world.difficulty),
+      this.makeChip(worldTypeLabel(world.worldType), 'type', world.worldType),
     );
 
     const stats = document.createElement('div');
@@ -590,14 +593,14 @@ export class WorldScreen {
 
     const mode = new Dropdown<GameMode>(
       GAME_MODES,
-      GAME_MODE_LABELS,
+      gameModeLabels(),
       world.gameMode,
       () => undefined,
       { fullWidth: true, className: 'world-dropdown' },
     );
     const difficulty = new Dropdown<Difficulty>(
       DIFFICULTIES,
-      DIFFICULTY_LABELS,
+      difficultyLabels(),
       world.difficulty,
       () => undefined,
       { fullWidth: true, className: 'world-dropdown' },

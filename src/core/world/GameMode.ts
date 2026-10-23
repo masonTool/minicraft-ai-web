@@ -10,16 +10,23 @@
  * 纯数据 + 纯函数：主程序、存档、主菜单与命令层都从这里取口径。
  */
 
+import { t } from '../i18n/I18n.ts';
+
 export type GameMode = 'survival' | 'creative' | 'adventure' | 'spectator';
 
 export const GAME_MODES: readonly GameMode[] = ['survival', 'creative', 'adventure', 'spectator'];
 
-export const GAME_MODE_LABELS: Record<GameMode, string> = {
-  survival: '生存',
-  creative: '创造',
-  adventure: '冒险',
-  spectator: '旁观',
-};
+/**
+ * 模式的中文名（批次 20261024-0020 之前这里是中文常量表）。
+ *
+ * ⚠️ 现在**只有一个入口** `gameModeLabel()`，值来自语言表的 `cmd.label.gamemode.*`：
+ * 新建世界 / 编辑世界 / 设置 / 调试 HUD / `/gamemode` 回执全都走它。
+ * 之前那张 `GAME_MODE_LABELS` 中文常量在德语界面里会直接蹦出「创造」——
+ * 用户报「难度与游戏模式没改」时抓的就是这处。
+ */
+export function gameModeLabel(mode: GameMode): string {
+  return t(`cmd.label.gamemode.${mode}`);
+}
 
 /**
  * 英文名（批次 617）。

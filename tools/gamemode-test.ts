@@ -11,7 +11,7 @@
 
 import {
   GAME_MODES,
-  GAME_MODE_LABELS,
+  gameModeLabel,
   canBreakBlocks,
   canFly,
   canInteract,
@@ -50,7 +50,7 @@ console.log('\n[四种模式]');
   equal('一共四种', GAME_MODES.length, 4);
   equal('顺序是 生存 → 创造 → 冒险 → 旁观', GAME_MODES.join(','), 'survival,creative,adventure,spectator');
   for (const mode of GAME_MODES) {
-    check(`${mode} 有中文名`, (GAME_MODE_LABELS[mode] ?? '').length > 0, GAME_MODE_LABELS[mode]);
+    check(`${mode} 有中文名`, (gameModeLabel(mode) ?? '').length > 0, gameModeLabel(mode));
     check(`isGameMode 认得 ${mode}`, isGameMode(mode));
   }
   check('拼错的不认', !isGameMode('spectater') && !isGameMode('SPECTATOR') && !isGameMode(1));

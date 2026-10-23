@@ -10,7 +10,7 @@
 
 import {
   GAME_MODES,
-  GAME_MODE_LABELS,
+  gameModeLabel,
   isCreativeMode,
   isGameMode,
   nextGameMode,
@@ -58,7 +58,7 @@ console.log('\n[一、模式取值]');
 {
   // 批次 491：加了旁观（M22）
   equal('四种模式（生存 / 创造 / 冒险 / 旁观）', GAME_MODES.join(','), 'survival,creative,adventure,spectator');
-  check('都有中文名', GAME_MODES.every((mode) => GAME_MODE_LABELS[mode].length > 0));
+  check('都有中文名', GAME_MODES.every((mode) => gameModeLabel(mode).length > 0));
   check('survival 合法', isGameMode('survival'));
   check('creative 合法', isGameMode('creative'));
   check('spectator 合法', isGameMode('spectator'));

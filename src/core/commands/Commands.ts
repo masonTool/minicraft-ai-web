@@ -104,7 +104,7 @@ import {
   type SelectorView,
 } from './Selectors.ts';
 
-export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
+export { DIFFICULTIES, difficultyLabel, DEFAULT_GAME_RULES } from '../world/Rules.ts';
 // 游戏模式（批次 491）：`/gamemode` 的三种取值与中文名
 export type { Difficulty, GameRules } from '../world/Rules.ts';
 

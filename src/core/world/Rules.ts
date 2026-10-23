@@ -6,16 +6,16 @@
  * 这里只有数据与判定，没有任何副作用。
  */
 
+import { t } from '../i18n/I18n.ts';
+
 /** 难度（与原版一致的四档） */
 export const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
-export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  peaceful: '和平',
-  easy: '简单',
-  normal: '普通',
-  hard: '困难',
-};
+/** 难度的显示名：与 `gameModeLabel()` 同一个口径，值来自 `cmd.label.difficulty.*` */
+export function difficultyLabel(difficulty: Difficulty): string {
+  return t(`cmd.label.difficulty.${difficulty}`);
+}
 
 /** 游戏规则。布尔与数值混在一起，读取时按类型判断 */
 export interface GameRules {

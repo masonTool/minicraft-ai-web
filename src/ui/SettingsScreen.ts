@@ -29,7 +29,7 @@ import {
   tp,
   type LanguageSetting,
 } from '../core/i18n/I18n.ts';
-import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
+import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
 import { FOV_MAX, FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import {
   handednessLabels,
@@ -1920,7 +1920,7 @@ export class SettingsScreen {
       modeCell,
       t('settings.row.gameMode'),
       ['survival', 'creative'] as const,
-      GAME_MODE_LABELS,
+      Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>,
       () => this.actions.gameMode?.() ?? 'survival',
       () => this.actions.onToggleGameMode?.(),
     );

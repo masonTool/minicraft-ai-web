@@ -41,7 +41,7 @@ import {
 import {
   COMMANDS,
   commandNames,
-  DIFFICULTY_LABELS,
+  difficultyLabel,
   DIFFICULTIES,
   executeCommand,
   isSelfTarget,
@@ -736,7 +736,7 @@ console.log('\n[难度与游戏规则的数据层]');
 {
   check('难度四档且与原版同名', JSON.stringify([...DIFFICULTIES]) === JSON.stringify(['peaceful', 'easy', 'normal', 'hard']));
   check('命令模块与规则模块共用同一份难度定义', JSON.stringify([...RULE_DIFFICULTIES]) === JSON.stringify([...DIFFICULTIES]));
-  check('每档都有中文名', DIFFICULTIES.every((value) => DIFFICULTY_LABELS[value].length > 0));
+  check('每档都有中文名', DIFFICULTIES.every((value) => difficultyLabel(value).length > 0));
   check('isDifficulty 正确判定', isDifficulty('hard') && !isDifficulty('HARD'));
 
   check('和平难度不刷敌对生物', difficultyProfile('peaceful').hostileSpawning === false);

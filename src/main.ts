@@ -316,7 +316,7 @@ import {
 } from './core/survival/StatusEffects.ts';
 import {
   DEFAULT_GAME_RULES,
-  DIFFICULTY_LABELS,
+  difficultyLabel,
   difficultyProfile,
   normalizeDifficulty,
   normalizeGameRules,
@@ -324,7 +324,7 @@ import {
   type GameRules,
 } from './core/world/Rules.ts';
 import {
-  GAME_MODE_LABELS,
+  gameModeLabel,
   isCreativeMode,
   nextGameMode,
   normalizeGameMode,
@@ -16403,7 +16403,7 @@ class App {
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
-        `${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   ${clock}   ${moon}\n` +
+        `${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   ${clock}   ${moon}\n` +
         `持有 ${this.heldName}${armorPoints > 0 ? `   护甲 ${armorPoints}` : ''}`;
       return;
     }
@@ -16412,7 +16412,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${difficultyLabel(this.difficulty)}   模式: ${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -17470,7 +17470,7 @@ class App {
     if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
     this.onGameModeChanged?.(next);
-    this.hudToast.show(`游戏模式：${GAME_MODE_LABELS[next]}`);
+    this.hudToast.show(`游戏模式：${gameModeLabel(next)}`);
     // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();

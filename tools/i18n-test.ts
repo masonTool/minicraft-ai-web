@@ -35,6 +35,8 @@ import {
 import { RECIPE_BOOK_TABS } from '../src/core/crafting/RecipeBook.ts';
 import { ITEM_CATEGORIES, itemDef } from '../src/core/registry/items.ts';
 import { itemDescription } from '../src/core/registry/itemNames.ts';
+import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
+import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
 import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
@@ -1353,6 +1355,22 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     check('切语言后食物说明跟着变（不是加载时固化的字符串）', appleZh !== appleDe, `${appleZh} / ${appleDe}`);
     resetLanguageForTest();
   }
+
+  /**
+   * 难度与游戏模式的标签（P6-1，批次 20261024-0020）。
+   *
+   * 这两处在 `WorldScreen` / `SettingsScreen` 里原来是**中文常量表**
+   * （`DIFFICULTY_LABELS` / `GAME_MODE_LABELS`），新建世界界面在德语下会显示「和平 / 简单 / 普通 / 困难」——
+   * 用户报「难度、游戏模式都没改」指的就是这处。现在统一走 `cmd.label.*`，这条断言盯输出侧。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const labels = [...GAME_MODES.map((mode) => gameModeLabel(mode)), ...DIFFICULTIES.map((d) => difficultyLabel(d))];
+    check(`模式/难度标签在 ${code} 下不含中文`, !/[\u4e00-\u9fff]/.test(labels.join('')), labels.join(','));
+  }
+  setLanguage('zh');
+  check('中文下模式/难度标签仍是中文', gameModeLabel('creative') === '创造' && difficultyLabel('hard') === '困难', `${gameModeLabel('creative')} / ${difficultyLabel('hard')}`);
+  resetLanguageForTest();
 
   /**
    * 葡语（巴西，多语言 P4-4）。
