@@ -1198,6 +1198,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['pause.title', 'Jogo pausado'],
     ['settings.row.fov', 'Campo de visão'],
     ['station.name.furnace', 'Fornalha'],
+    // P4-4b 起 inventory 与 label 也是葡语
+    ['inventory.tab.craftable', 'Fabricável'],
+    ['panel.anvil', 'Bigorna'],
+    ['label.effect.speed', 'Velocidade'],
+    ['label.biome.desert', 'Deserto'],
   ];
   for (const [key, expected] of ptSamples) {
     check(`葡语：${key}`, t(key, 'pt') === expected, t(key, 'pt'));
