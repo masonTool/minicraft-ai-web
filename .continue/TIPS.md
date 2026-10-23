@@ -241,6 +241,10 @@
   视觉复验要在浏览器里量 canvas 的不透明像素数。
 - 适用面：任何"按 id 缓存位图"的 UI（方块图标、成就图标、小游戏素材）＋任何"构造时就画图"的组件。
 
+- **小游戏柱子的间距必须大于方块边长**：`gapMinStart 1.4` + `blockSizeStart 1.8` 时两根柱子互相重叠，整屏只剩一根——玩家看不到"要跳哪"，而逻辑与单测全绿（纯几何重叠，断言覆盖不到）。判据：`gapMin > blockSizeStart`，用截图或按分数扫一遍生成结果。
+- **宿主在 stage 上 `setPointerCapture` 会把 click 也重定向到 stage**：结算面板的"再来一局 / 退出"因此点不动，而 `document.elementFromPoint` 明明命中按钮。修法是面板那层 `pointerdown / pointerup / pointermove` 全部 `stopPropagation`，宿主就不会拿捕获。这类问题纯逻辑测试永远发现不了，只能靠 Playwright 真点。
+- **绝对定位元素别塞进同样 absolute 的 HUD 容器**：`.jump-hint` 挂进 `.jump-hud`（两者都是 absolute）后会相对 HUD 定位，跑到左上角与分数叠在一起；挂到 stage 上才是"底部居中"。
+
 ## 渲染与光照
 
 ### `meshBoxes` 与 `collisionBoxes` 是两套盒子，判据不能互相照抄
