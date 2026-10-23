@@ -438,9 +438,14 @@ try {
     const first = text.indexOf('## 批次 20260101-0002');
     const second = text.indexOf('## 批次 19990101-0000');  // 夹具 queue() 固定写这个号
     const seps = (text.match(/^-{10}$/gm) ?? []).length;
+    /**
+     * 还要钉住**文件头没被切坏**：头里的说明本身写着 `## 批次 <号>`，
+     * 一旦插入点用裸子串匹配，就会把这一行从中间劈开（真踩过，靠这条才防得住）。
+     */
+    const headOk = text.includes('> 按 `## 批次 <号>` 可定位某一批');
     return expect(
-      first >= 0 && second > first && seps === 1,
-      `新批次应在上面、旧批次在下面、中间一条分隔线（实际 first=${first} second=${second} seps=${seps}）`,
+      first >= 0 && second > first && seps === 1 && headOk,
+      `新批次在上、旧批次在下、一条分隔线，且文件头完整（first=${first} second=${second} seps=${seps} headOk=${headOk}）`,
       r,
     );
   });

@@ -106,7 +106,12 @@ function archiveAs(k) {
   const batch = batchOf(text);
   const dest = join(ARCHIVE_DIR, `${k}.md`);
   const old = existsSync(dest) ? readFileSync(dest, 'utf8') : '';
-  const bodyStart = old.indexOf('## 批次 ');
+  /**
+   * ⚠️ 必须**行锚点**匹配：文件头那段说明里本来就写着 `> 按 \`## 批次 <号>\` 可定位某一批`，
+   * 用裸 `indexOf('## 批次 ')` 会把插入点放进引用行中间，把标题写坏（已踩过一次）。
+   */
+  const firstSection = /^## 批次 /m.exec(old);
+  const bodyStart = firstSection ? firstSection.index : -1;
 
   if (batch !== '未知批次' && bodyStart >= 0 && old.slice(bodyStart).includes(`## 批次 ${batch} `)) {
     rmSync(src, { force: true });
