@@ -27,7 +27,12 @@
     // 而离线测试要用 `process.argv` / `process.exit` 报结果——所以这一份显式加上 node。
     // ⚠️ 只加在**这一份**里：往主配置里加会让 `src` 也能看见 `process`，
     // 于是"浏览器里没有 process"这类错误要等到运行时才发现。
-    "types": ["node"]
+    "types": ["node"],
+    // 测试要 import `server/*.mjs`（协议校验 / 令牌桶 / 快照策略这些纯函数在服务端那侧，
+    // 复制一份到 src 必然漂）。没有这一项时 `tsc` 报 TS7016（隐式 any）——
+    // 而 `check:fast` 不含 `typecheck:tools`，所以只有跑完整 `npm run check` 才暴露。
+    // `checkJs` 保持默认 false：只解析 .mjs 让它参与类型推断，不去检查 JS 内部。
+    "allowJs": true
   },
   "include": ["tools", "tests", "src"]
 }

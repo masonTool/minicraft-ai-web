@@ -395,6 +395,7 @@ import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/Multipl
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
+import { formatBytesPerSecond } from './core/net/NetStats.ts';
 import { findMobMatch } from './core/net/MobMatch.ts';
 import { RemoteAoiGate } from './core/net/NetAoi.ts';
 import {
@@ -17143,7 +17144,21 @@ class App {
       `${tp('hud.net', { status: this.netStatus })}${
         this.net.selfId > 0 ? ` ${tp('hud.netOnline', { id: this.net.selfId, count: this.net.playerCount })}` : ''
       }` +
+      // 联机统计（联机29）：延迟 / 丢包 / 上下行；没上线就不占这一行
+      (this.net.selfId > 0 ? `\n${this.describeNetStats()}` : '') +
       (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
+  }
+
+  /** F3 面板上的联机统计（联机29）：延迟 / 丢包 / 上下行 */
+  private describeNetStats(): string {
+    const stats = this.net.stats;
+    return tp('hud.netStats', {
+      // 还没收到 pong 时显示破折号，别伪装成 0ms
+      ping: stats.pingMs === null ? '—' : String(Math.round(stats.pingMs)),
+      loss: (stats.lossRatio * 100).toFixed(1),
+      up: formatBytesPerSecond(stats.sentPerSecond),
+      down: formatBytesPerSecond(stats.receivedPerSecond),
+    });
   }
 
   start(): void {

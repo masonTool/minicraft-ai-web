@@ -17,6 +17,7 @@ import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
+import { NetStats } from '../core/net/NetStats.ts';
 
 export interface NetPlayerState {
   id: number;
@@ -210,6 +211,8 @@ export interface NetHandlers {
 }
 
 /** 发送位置的间隔（毫秒）：服务端也会限频，这里先自己节制 */
+/** 应用层 ping 的间隔（联机29）：浏览器不允许我们发协议层 ping 帧，只能自己定一条 */
+const PING_INTERVAL_MS = 2000;
 const MOVE_SEND_INTERVAL_MS = 100;
 /** 断线重连的等待时间（毫秒） */
 const RECONNECT_DELAY_MS = 3000;
@@ -228,6 +231,8 @@ export class NetClient {
   private url = '';
   private name = '';
   private lastMoveSent = 0;
+  /** 上一次发 ping 的时刻（联机29） */
+  private lastPingAt = 0;
   private reconnectTimer: number | null = null;
   /** 会话状态机（联机7）：迁移与"要不要重连"只在它里面判 */
   private readonly session = new NetSession();
@@ -242,6 +247,8 @@ export class NetClient {
   private fatal = false;
   /** 本机的稳定标识（见 `core/net/ClientId.ts`），首次 connect 时生成 */
   private clientId = '';
+  /** 运行统计（联机29）：延迟 / 丢包 / 上下行，F3 面板读它 */
+  readonly stats = new NetStats();
   /** 房间码（联机26）：空串 = 服务端默认房间；同一房间的人才互相可见 */
   private room = '';
   /** 房间口令（联机26）：空串 = 不发送（服务端没设密码时也不需要） */
@@ -337,6 +344,8 @@ export class NetClient {
     };
 
     socket.onmessage = (event) => {
+      // 下行速率（联机29）：收包时按原始文本长度记账
+      this.stats.recordReceived(String(event.data).length);
       let message: Record<string, unknown>;
       try {
         message = JSON.parse(String(event.data)) as Record<string, unknown>;
@@ -351,6 +360,8 @@ export class NetClient {
       if (!this.fatal) this.status = '连接已断开';
       this.remote.clear();
       this.selfId = 0;
+      // 统计归零（联机29）：重连之后是一条新连接，延迟/速率都该重新算
+      this.stats.reset();
       // 状态迁移与"要不要重连"只有一个出口（联机7）：主动断开 / 致命错误 → stop
       const action = this.session.closed({ intentional: this.disposed, fatal: this.fatal });
       this.handlers.onStatus(false, this.status);
@@ -464,6 +475,11 @@ export class NetClient {
           z: Number(message.z),
           lines: Array.isArray(message.lines) ? (message.lines as unknown[]).map((line) => String(line)) : [],
         });
+        break;
+      }
+      case 'pong': {
+        // 延迟样本（联机29）：与最早那条未回的 ping 配对
+        this.stats.ackPing();
         break;
       }
       case 'item-take': {
@@ -608,10 +624,18 @@ export class NetClient {
     this.position.y = y;
     this.position.z = z;
     this.position.dimension = dimension;
+    // 统计推进（联机29）：清过期的速率桶与超时的 ping
+    this.stats.tick(now);
     if (!this.connected || this.selfId === 0) return;
+    // 延迟探测：每 2 秒一条应用层 ping（协议层 ping 帧浏览器发不了）
+    if (now - this.lastPingAt >= PING_INTERVAL_MS) {
+      this.lastPingAt = now;
+      this.stats.sentPing(now);
+      this.sendRaw(JSON.stringify({ t: 'ping' }));
+    }
     if (now - this.lastMoveSent < MOVE_SEND_INTERVAL_MS) return;
     this.lastMoveSent = now;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({
         t: 'move',
         x: Number(x.toFixed(3)),
@@ -650,7 +674,7 @@ export class NetClient {
    */
   sendBlocks(batch: readonly { x: number; y: number; z: number; id: number; state: number; dimension: string }[]): void {
     if (!this.connected || batch.length === 0) return;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({
         t: 'blocks',
         blocks: batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]),
@@ -667,7 +691,7 @@ export class NetClient {
     slots: readonly unknown[],
   ): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'container', x, y, z, dimension, slots }));
+    this.sendRaw(JSON.stringify({ t: 'container', x, y, z, dimension, slots }));
   }
 
   /**
@@ -678,7 +702,7 @@ export class NetClient {
    */
   sendItemSpawn(localId: number, itemId: number, count: number, x: number, y: number, z: number): void {
     if (!this.connected) return;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({
         t: 'item-spawn',
         localId: Math.trunc(localId),
@@ -699,24 +723,38 @@ export class NetClient {
    */
   sendItemTake(owner: number, localId: number): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'item-take', owner: Math.trunc(owner), localId: Math.trunc(localId) }));
+    this.sendRaw(JSON.stringify({ t: 'item-take', owner: Math.trunc(owner), localId: Math.trunc(localId) }));
   }
 
   /** 本地那堆没了（被捡走/烧掉/过期）→ 让所有人删掉镜像 */
   sendItemRemove(localId: number): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'item-remove', localId: Math.trunc(localId) }));
+    this.sendRaw(JSON.stringify({ t: 'item-remove', localId: Math.trunc(localId) }));
+  }
+
+  /**
+   * 唯一的发送出口（联机29）：顺手按**载荷长度**记账，供 F3 面板显示上行速率。
+   *
+   * 收所有发送走这里而不是各处 `socket.send`：浏览器没有任何"已发送字节数"的读数，
+   * 漏一处，上行速率就永远偏低。
+   */
+  private sendRaw(payload: string): void {
+    const socket = this.socket;
+    // 没连上就什么都不做，也**不记账**：否则上行速率会因为"发了但没发出去"偏高
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(payload);
+    this.stats.recordSent(payload.length);
   }
 
   sendChat(text: string): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'chat', text }));
+    this.sendRaw(JSON.stringify({ t: 'chat', text }));
   }
 
   /** 我写了/擦了牌子上的字（联机16）。全空 = 擦掉 */
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+    this.sendRaw(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
   }
 
   /**
@@ -727,7 +765,7 @@ export class NetClient {
    */
   sendArrow(arrow: NetArrowState): void {
     if (!this.connected) return;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({
         t: 'arrow',
         x: Number(arrow.x.toFixed(2)),
@@ -744,7 +782,7 @@ export class NetClient {
   /** 我点燃了一格 TNT（联机23）：坐标即 key，对方那边 `prime` 是幂等的 */
   sendTnt(x: number, y: number, z: number, dimension: string): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'tnt', x, y, z, dimension }));
+    this.sendRaw(JSON.stringify({ t: 'tnt', x, y, z, dimension }));
   }
 
   /** 我所在的队伍名（联机22）：空串 = 没队伍；随 `move` 一起发，供对方判友伤 */
@@ -755,7 +793,7 @@ export class NetClient {
   /** 我打了一名玩家（联机22）：服务端只转发给被击者，再由他那边判一次友伤 */
   sendPlayerHit(targetId: number, damage: number, team: string): void {
     if (!this.connected) return;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({ t: 'player-hit', targetId: Math.trunc(targetId), damage: Number(damage.toFixed(1)), team }),
     );
   }
@@ -768,7 +806,7 @@ export class NetClient {
    */
   sendMobHit(typeId: string, dimension: string, x: number, y: number, z: number, damage: number, fire = 0): void {
     if (!this.connected) return;
-    this.socket?.send(
+    this.sendRaw(
       JSON.stringify({
         t: 'mob-hit',
         typeId,
@@ -792,7 +830,7 @@ export class NetClient {
     rotation: number,
   ): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'frame', x, y, z, dimension, item, rotation }));
+    this.sendRaw(JSON.stringify({ t: 'frame', x, y, z, dimension, item, rotation }));
   }
 
   /**
@@ -802,7 +840,7 @@ export class NetClient {
    */
   sendSleep(): void {
     if (!this.connected) return;
-    this.socket?.send(JSON.stringify({ t: 'sleep' }));
+    this.sendRaw(JSON.stringify({ t: 'sleep' }));
   }
 
   disconnect(): void {

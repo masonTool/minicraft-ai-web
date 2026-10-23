@@ -198,7 +198,10 @@ const log = (...args) => console.log(`[server ${new Date().toISOString().slice(1
 
 function send(socket, message) {
   if (socket.readyState !== socket.OPEN) return;
-  socket.send(JSON.stringify(message));
+  const text = JSON.stringify(message);
+  socket.send(text);
+  traffic.outBytes += text.length;
+  traffic.outMessages++;
 }
 
 /**
@@ -236,6 +239,46 @@ const CLOSE_ORIGIN = 4004;
 const CLOSE_PASSWORD = 4005;
 
 /**
+ * 运行统计（联机29）：入/出字节与消息数。
+ *
+ * 只累计、不按窗口清零；速率由"两个采样点的差值 / 经过秒数"算出来——这样即使
+ * `/healthz` 和定时日志交错调用，也不会互相把对方的窗口打乱。
+ */
+const traffic = {
+  inBytes: 0,
+  outBytes: 0,
+  inMessages: 0,
+  outMessages: 0,
+  sampleAt: Date.now(),
+  sampleInBytes: 0,
+  sampleOutBytes: 0,
+};
+
+/** 取一段时间的平均速率（会推进采样点） */
+function trafficRates() {
+  const now = Date.now();
+  const seconds = Math.max(0.001, (now - traffic.sampleAt) / 1000);
+  const rates = {
+    seconds: Number(seconds.toFixed(2)),
+    inBytesPerSecond: Math.round((traffic.inBytes - traffic.sampleInBytes) / seconds),
+    outBytesPerSecond: Math.round((traffic.outBytes - traffic.sampleOutBytes) / seconds),
+    inMessagesPerSecond: Math.round(traffic.inMessages / Math.max(1, seconds)),
+    outMessagesPerSecond: Math.round(traffic.outMessages / Math.max(1, seconds)),
+  };
+  traffic.sampleAt = now;
+  traffic.sampleInBytes = traffic.inBytes;
+  traffic.sampleOutBytes = traffic.outBytes;
+  return rates;
+}
+
+/** 人读的字节速率 */
+function formatBytesPerSecond(bytes) {
+  if (bytes < 1024) return `${bytes}B/s`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB/s`;
+  return `${(bytes / 1024 / 1024).toFixed(2)}MB/s`;
+}
+
+/**
  * 广播给同一个房间里的人（联机26）。
  *
  * `room` 必传：漏一个调用点就会"跨房串台"——这也是为什么 `broadcast` 的第三个参数
@@ -250,6 +293,8 @@ function broadcast(message, exceptId, room, aoi = null) {
     if (aoi && !withinAoi(player, aoi.x, aoi.z, aoi.dimension)) continue;
     if (player.socket.readyState !== player.socket.OPEN) continue;
     player.socket.send(text);
+    traffic.outBytes += text.length;
+    traffic.outMessages++;
   }
 }
 
@@ -357,6 +402,9 @@ const httpServer = createServer((req, res) => {
         uptime: Math.round(process.uptime()),
         seed: WORLD_SEED,
         protocol: PROTOCOL_VERSION,
+        // 最近一段时间的平均吞吐（联机29）：容器/反代拿它看"这条线路是不是堵了"
+        traffic: trafficRates(),
+        totals: { inBytes: traffic.inBytes, outBytes: traffic.outBytes },
       }),
     );
     return;
@@ -409,6 +457,23 @@ const clockTimer = setInterval(() => {
   for (const room of roomsInUse()) broadcast({ t: 'time', timeOfDay: currentTimeOfDay() }, null, room);
 }, 2000);
 clockTimer.unref?.();
+
+/**
+ * 运行统计日志（联机29）：每 10 秒一行。
+ *
+ * 只在有人在线上时打（空房间刷日志没有意义）；消息速率也一起打——它比字节更早暴露
+ * "某个客户端在疯狂发包"（字节会被单条大消息带偏）。
+ */
+const statsTimer = setInterval(() => {
+  if (players.size === 0) return;
+  const rates = trafficRates();
+  log(
+    `统计：在线 ${players.size} 人 / 房间 ${roomsInUse().size} 个 / ` +
+      `↓${formatBytesPerSecond(rates.inBytesPerSecond)} ↑${formatBytesPerSecond(rates.outBytesPerSecond)} / ` +
+      `消息 ↓${rates.inMessagesPerSecond}/s ↑${rates.outMessagesPerSecond}/s`,
+  );
+}, 10_000);
+statsTimer.unref?.();
 
 // ---------------------------------------------------------------- 持久化（联机13）
 
@@ -552,6 +617,9 @@ wss.on('connection', (socket, request) => {
   });
 
   socket.on('message', (raw) => {
+    // 入站统计（联机29）：按原始文本长度
+    traffic.inBytes += String(raw).length;
+    traffic.inMessages++;
     let message;
     try {
       message = JSON.parse(String(raw));
@@ -962,6 +1030,15 @@ wss.on('connection', (socket, request) => {
        *
        * 自己的掉落物不走这里：那是本地权威，客户端自己捡、再发 `item-remove`。
        */
+      /*
+       * 应用层 ping（联机29）：浏览器不允许客户端发协议层 ping 帧，所以延迟只能这样测。
+       * 只回一条 pong，不带业务逻辑、也不记日志（2 秒一条，记了会把日志刷满）。
+       */
+      case 'ping': {
+        send(socket, { t: 'pong' });
+        break;
+      }
+
       case 'item-take': {
         if (!player) return;
         const now = Date.now();

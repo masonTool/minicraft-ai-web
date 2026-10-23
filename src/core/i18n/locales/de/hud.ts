@@ -45,6 +45,7 @@ export const hud = {
   "hud.pendingRelight": "Neuberechnung ausstehend: {count}",
   "hud.net": "Mehrspieler: {status}",
   "hud.netOnline": "(#{id} · {count} online)",
+  "hud.netStats": "Netz: Ping {ping} ms · Verlust {loss}% · ↑ {up} ↓ {down}",
   "hud.none": "nichts",
   "hud.yes": "ja",
   "hud.no": "nein",

@@ -45,6 +45,7 @@ export const hud = {
   "hud.pendingRelight": "Rallumage en attente : {count}",
   "hud.net": "Multijoueur : {status}",
   "hud.netOnline": "(#{id} · {count} en ligne)",
+  "hud.netStats": "Réseau : ping {ping} ms · perte {loss}% · ↑ {up} ↓ {down}",
   "hud.none": "aucun",
   "hud.yes": "oui",
   "hud.no": "non",

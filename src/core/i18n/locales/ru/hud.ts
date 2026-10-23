@@ -45,6 +45,7 @@ export const hud = {
   "hud.pendingRelight": "В очереди на пересвет: {count}",
   "hud.net": "Сеть: {status}",
   "hud.netOnline": "(#{id} · онлайн {count})",
+  "hud.netStats": "Сеть: пинг {ping} мс · потери {loss}% · ↑ {up} ↓ {down}",
   "hud.none": "нет",
   "hud.yes": "да",
   "hud.no": "нет",

@@ -60,13 +60,13 @@ describe('selectSnapshotEdits 裁剪', () => {
 
 describe('rememberEdit 容量策略', () => {
   it('没满就直接存', () => {
-    const map = new Map<string, unknown>();
+    const map = new Map<string, object>();
     expect(rememberEdit(map, 'a', { id: 1 }, 3)).toBe('stored');
     expect(map.size).toBe(1);
   });
 
   it('满了淘汰最旧的一条，并把被淘汰的 key 报出去', () => {
-    const map = new Map<string, unknown>();
+    const map = new Map<string, object>();
     const evicted: string[] = [];
     for (const key of ['a', 'b', 'c']) rememberEdit(map, key, { key }, 3);
     expect(rememberEdit(map, 'd', { key: 'd' }, 3, (key) => evicted.push(key))).toBe('evicted');
@@ -77,7 +77,7 @@ describe('rememberEdit 容量策略', () => {
   });
 
   it('覆盖已有 key 不触发淘汰（只是更新，不占新位置）', () => {
-    const map = new Map<string, unknown>();
+    const map = new Map<string, object>();
     const evicted: string[] = [];
     for (const key of ['a', 'b', 'c']) rememberEdit(map, key, { key }, 3);
     expect(rememberEdit(map, 'a', { key: 'a', updated: true }, 3, (key) => evicted.push(key))).toBe('stored');

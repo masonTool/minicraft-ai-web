@@ -42,6 +42,7 @@ export const hud = {
   "hud.pendingRelight": "待重刷: {count}",
   "hud.net": "联机: {status}",
   "hud.netOnline": "（#{id} · 在线 {count} 人）",
+  "hud.netStats": "联机：延迟 {ping} ms · 丢包 {loss}% · ↑ {up} ↓ {down}",
   "hud.none": "无",
   "hud.yes": "是",
   "hud.no": "否",

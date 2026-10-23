@@ -186,6 +186,11 @@ check('服务端启动成功', await startServer(), serverOutput.trim().split('\
   const body = response ? await response.json().catch(() => null) : null;
   check('GET /healthz 返回 ok', response?.status === 200 && body?.ok === true, JSON.stringify(body));
   check('/healthz 带上在线人数与协议版本', typeof body?.players === 'number' && body?.protocol > 0, JSON.stringify(body));
+  check(
+    '/healthz 带吞吐统计（联机29）',
+    typeof body?.traffic?.inBytesPerSecond === 'number' && typeof body?.traffic?.outBytesPerSecond === 'number',
+    JSON.stringify(body?.traffic),
+  );
   const missing = await fetch(`http://localhost:${PORT}/nope`).catch(() => null);
   check('其它路径返回 404（不误当健康检查通过）', missing?.status === 404, `${missing?.status}`);
 }
@@ -267,6 +272,14 @@ try {
   check('位置消息被服务端限频', forwarded <= 2, `150ms 内转发了 ${forwarded} 条`);
 
   // ---------------------------------------------------------------- 方块同步
+  console.log('\n[延迟探测（联机29）]');
+  {
+    alice.mailbox.length = 0;
+    alice.send({ t: 'ping' });
+    const pong = await alice.wait('pong', 2000);
+    check('ping 收到 pong（客户端靠它算 RTT）', pong !== null, JSON.stringify(pong));
+  }
+
   console.log('\n[方块改动广播与快照]');
   alice.send({ t: 'block', x: 30, y: 64, z: -20, id: 1, state: 0, dimension: 'overworld' });
   const blockMessage = await bob.wait('block');

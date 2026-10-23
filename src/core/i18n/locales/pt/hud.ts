@@ -45,6 +45,7 @@ export const hud = {
   "hud.pendingRelight": "Reluzimento pendente: {count}",
   "hud.net": "Multijogador: {status}",
   "hud.netOnline": "(#{id} · {count} online)",
+  "hud.netStats": "Rede: ping {ping} ms · perda {loss}% · ↑ {up} ↓ {down}",
   "hud.none": "nada",
   "hud.yes": "sim",
   "hud.no": "não",
