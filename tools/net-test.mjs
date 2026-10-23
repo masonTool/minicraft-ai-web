@@ -107,7 +107,9 @@ class TestClient {
 
 console.log('\n[启动服务端]');
 const server = spawn('node', ['server/index.mjs'], {
-  env: { ...process.env, PORT: String(PORT) },
+  // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
+  // "宽限期过后才清掉落物"的断言都要白等半分钟
+  env: { ...process.env, PORT: String(PORT), GRACE_MS: '400' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverOutput = '';
@@ -375,6 +377,37 @@ try {
     const weirdSelf = (welcomeWeird?.players ?? []).find((player) => player.id === welcomeWeird?.id);
     check('非法维度回落 overworld', weirdSelf?.dimension === 'overworld', `${weirdSelf?.dimension}`);
     weird.close();
+  }
+
+  // ---------------------------------------------------------------- 断线重连（联机8）
+  console.log('\n[断线重连]');
+  {
+    /*
+     * 手机切后台/网络抖一下都会触发 close，客户端那边是"自动重连"。
+     * 宽限期（测试里 400ms）内带同一个 clientId 回来，要复用原来的玩家 id：
+     * 否则队友眼里你"消失又出现"，你名下的掉落物也再没人有权删（owner 就是 id）。
+     */
+    const reconnector = new TestClient('Reconnector');
+    const welcomeR1 = await joinAndWaitWelcome(reconnector, '重连者', 3, 70, 3);
+    const idBefore = welcomeR1?.id;
+    check('首次加入拿到 id', typeof idBefore === 'number', `${idBefore}`);
+
+    reconnector.close();
+    await sleep(120); // 落在宽限期内（400ms）
+    const back = new TestClient('Reconnector', reconnector.clientId);
+    const welcomeR2 = await joinAndWaitWelcome(back, '重连者', 3, 70, 3);
+    check('宽限期内重连复用原 id', welcomeR2?.id === idBefore, `${idBefore} → ${welcomeR2?.id}`);
+    back.close();
+    await sleep(600); // 让他过完宽限期
+    // 宽限期过完就该从玩家表里消失（新进来的人看不到"幽灵"）
+    const peek = new TestClient('Peeker');
+    const welcomePeek = await joinAndWaitWelcome(peek, '旁观者', 0, 70, 0);
+    check(
+      '宽限期过后不再出现在玩家表里',
+      !(welcomePeek?.players ?? []).some((p) => p.name === '重连者'),
+      JSON.stringify(welcomePeek?.players),
+    );
+    peek.close();
   }
 
   // ---------------------------------------------------------------- 心跳（联机7）

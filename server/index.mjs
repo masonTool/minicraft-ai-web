@@ -57,6 +57,15 @@ const edits = new Map();
  * 于是"删别人的掉落物"这件事在协议层就不成立。
  */
 const items = new Map();
+/**
+ * 断线宽限期（联机8）：这么久之内带同一个 clientId 回来就复用原 id 与掉落物。
+ *
+ * 可用 `GRACE_MS` 覆盖——测试里调成几百毫秒，不必白等 30 秒（`联机7` 的坑：
+ * 让断言去对齐真实时长，套件会从 2 秒涨到十几秒，并发下还容易偶发超时）。
+ */
+const GRACE_MS = Number(process.env.GRACE_MS ?? 30000);
+/** clientId → { id, name, timer }：已断开但还没过宽限期的人 */
+const graces = new Map();
 let nextPlayerId = 1;
 
 const log = (...args) => console.log(`[server ${new Date().toISOString().slice(11, 19)}]`, ...args);
@@ -189,9 +198,23 @@ wss.on('connection', (socket, request) => {
           }
         }
 
+        /*
+         * 断线重连（联机8）：宽限期内的 clientId 复用原来的 id。
+         *
+         * 上面那条 duplicate 只挡"还活着"的连接；这个人已经断了，宽限期里他还占着 id 与
+         * 掉落物——重连时认回同一个 id，队友眼里的你不会"消失又出现"，你自己名下的东西
+         * （`items` 的 owner 就是 id）也还能删。
+         */
+        const grace = graces.get(message.clientId);
+        if (grace) {
+          clearTimeout(grace.timer);
+          graces.delete(message.clientId);
+          log(`${grace.name}#${grace.id} 宽限期内重连，复用 id`);
+        }
+
         const name = sanitizeName(message.name);
         player = {
-          id: nextPlayerId++,
+          id: grace ? grace.id : nextPlayerId++,
           name,
           clientId: message.clientId,
           // 位置与维度：客户端进服时会带上"我此刻在哪"，不再让新玩家在别人眼里
@@ -333,15 +356,36 @@ wss.on('connection', (socket, request) => {
   socket.on('close', () => {
     if (!player) return;
     players.delete(player.id);
-    broadcast({ t: 'leave', id: player.id });
-    // 他生成的那些掉落物之后没人有权删了（owner 已离线），一并清掉；
-    // 否则它们会永远躺在别人的世界里，而本地镜像又不可拾取
-    for (const [key, item] of items) {
-      if (item.owner !== player.id) continue;
-      items.delete(key);
-      broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId });
-    }
-    log(`${player.name}#${player.id} 离开，当前 ${players.size} 人`);
+    /*
+     * 不立刻广播 leave，也不立刻清掉落物：先给 30 秒宽限期（联机8）。
+     *
+     * 手机切后台、wifi 抖一下都会触发 close，客户端那边是"自动重连"。如果这时就把人
+     * 移出房间、把他的掉落物清掉，重连回来等于换了个人：队友眼里你消失又出现，你自己
+     * 生成的东西还被清空了。宽限期到期才真正离开。
+     *
+     * 期间他**不在** `players` 里：位置不再广播（别人看到的是停在原地），也不占在线人数。
+     */
+    const grace = {
+      id: player.id,
+      name: player.name,
+      timer: null,
+    };
+    grace.timer = setTimeout(() => {
+      graces.delete(player.clientId);
+      broadcast({ t: 'leave', id: player.id });
+      // 宽限期过完，他名下那些掉落物再没人有权删了（owner 已离线），一并清掉；
+      // 否则它们会永远躺在别人的世界里，而本地镜像又不可拾取
+      for (const [key, item] of items) {
+        if (item.owner !== player.id) continue;
+        items.delete(key);
+        broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId });
+      }
+      log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
+    }, GRACE_MS);
+    // 不拖住进程退出（测试里 spawn 服务端，收尾时要能干净收）
+    grace.timer.unref?.();
+    graces.set(player.clientId, grace);
+    log(`${player.name}#${player.id} 断线（${Math.round(GRACE_MS / 1000)}s 内重连可复用 id），当前在线 ${players.size} 人`);
   });
 
   socket.on('error', (error) => {
