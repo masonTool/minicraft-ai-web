@@ -8,6 +8,7 @@
  */
 
 import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/commands/Commands.ts';
+import { commandHelpEntries } from '../src/core/commands/CommandHelp.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
 import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
@@ -1027,6 +1028,39 @@ console.log('\n[伪语言（多语言 P0-8）]');
     tp('station.craftableSummary', { station: 'X', available: 1, total: 2 }),
   );
   check('查不到的键也包起来（一眼看出是漏的）', t('no.such.key') === '⟦no.such.key⟧', t('no.such.key'));
+
+  /**
+   * P1-8 巡查：伪语言下，命令帮助面板里**属于命令域自己的文案**必须都被 `⟦⟧` 包住。
+   *
+   * 这条是"不用开浏览器"的版本：面板的每一条文案都来自 `commandHelpEntries()`，
+   * 所以直接把返回值的 usage / 描述 / 字段标签 / 占位符扫一遍即可。
+   * 白名单只有**语言中性**的三类：坐标标签（`X` / `Y1` / `DX`）、纯符号占位（`~ ~ ~`）、
+   * 值名（`radius` 这种要玩家自己填的词）。
+   * ⚠️ 下拉选项有 197/370 处没被包住 —— 它们来自**数据层**（物品/方块/生物/进度/附魔名，
+   * 属于 P2），这一条等 P2 做完后再收紧到"一处不漏"。
+   */
+  const wrappedByPseudo = (text: string | undefined): boolean =>
+    text === undefined || text === '' || (text.startsWith('⟦') && text.endsWith('⟧'));
+  const languageNeutral = (text: string): boolean => /^[XYZ]\d?$|^D[XYZ]$/.test(text) || /^[~\s]+$/.test(text) || text === 'radius';
+  const unwrappedHelp: string[] = [];
+  for (const entry of commandHelpEntries()) {
+    if (!wrappedByPseudo(entry.usage)) unwrappedHelp.push(`${entry.name}.usage`);
+    if (!wrappedByPseudo(entry.description)) unwrappedHelp.push(`${entry.name}.desc`);
+    for (const variant of entry.variants) {
+      for (const part of variant.parts) {
+        if (part.kind !== 'field') continue;
+        const field = part.field;
+        if (!wrappedByPseudo(field.label) && !languageNeutral(field.label)) unwrappedHelp.push(`${entry.name}.${field.key}.label`);
+        if (!wrappedByPseudo(field.placeholder) && !languageNeutral(String(field.placeholder))) unwrappedHelp.push(`${entry.name}.${field.key}.ph`);
+        if (!wrappedByPseudo(field.customPlaceholder) && !languageNeutral(String(field.customPlaceholder))) unwrappedHelp.push(`${entry.name}.${field.key}.custom`);
+      }
+    }
+  }
+  check(
+    '伪语言巡查：命令帮助面板的命令域文案全部被 ⟦⟧ 包住',
+    unwrappedHelp.length === 0,
+    unwrappedHelp.slice(0, 5).join(' / '),
+  );
   setPseudoLocale(false);
   check('关掉就恢复原样', t('pause.title') === 'Game Paused', t('pause.title'));
   check('isPseudoLocale 跟着开关走', !isPseudoLocale());
