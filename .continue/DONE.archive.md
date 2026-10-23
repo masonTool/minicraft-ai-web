@@ -14897,3 +14897,124 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 批次：20261023-0903
 
 
+## 批次 20261023-1018 · 2026-10-23 · 会话 b09ae4
+
+**做了什么**：把 e2e 从"一个主干场景"扩成 **6 个场景 + 两种执行器**（真模型 / 直接喂钩子），
+六个场景逐个实跑通过；并在跑的过程中撞出**四处静默失效**（队列文件名写错、空队列停在讨论中、
+归档漏决策记录、两处断言误判），全部修掉并补了自检。现场改为**默认保留**、`--fresh` 才清整轮。共 8 条。
+
+**条目**（原文照搬）：
+
+- [x] [现场1] 现场改为**默认保留**、每次跑前清空；补「CLI 退出码必须 0」断言，未知失败标"环境疑似"并贴原文 → `--dry-run` 与实跑都不再删现场
+  - 做了什么：去掉"成功即删"，改成**跑前 `rmSync(.e2e)` + 跑完保留**（只留最近一次）；`runModel` 分出三个出口——正常返回、环境跳过（401 / 网络，只看 stderr）、未知非 0 退出（打印 stderr 尾部并标"疑似环境"，不判框架红）；跳过不再算"通过"，汇总里单列 `⏭`
+  - 为什么只看 stderr：实测踩过 `--output-format json` 的 stdout 里一个 UUID（`8b47-401ce1189567`）就含 "401"，把"模型明明跑完了"误判成"未登录"——扫描面收窄到 stderr，并去掉裸 `401` 这种过宽匹配
+  - 为什么"跳过"不能算通过：跳过意味着模型那一段压根没跑，把它算绿就等于**用"没验"冒充"验过"**
+  - 验证：`--dry-run` 不建目录；`blocked`/`worktree`/`decision` 三次实跑后现场都保留在 `.e2e/`；`decision` 那次 stdout 里带 UUID 但不再误判（133s 正常跑完）
+  - 批次：20261023-1018
+- [x] [场景1] `blocked`（probe）：造队列 + `CONTINUE_BLOCK_AFTER=2` 连喂 Stop → 断言标 `[阻塞]`、日志有隔离、之后请求用户拍板
+  - 做了什么：新增 `blocked` 场景——单条目队列 + `CONTINUE_BLOCK_AFTER=2`，连喂 3 次 Stop，断言：第 1 轮正常递任务、连续 N 轮后队列里出现 `[阻塞]`、日志有「隔离 · 连续 N 轮」、之后改为请求用户拍板、且不再把它当普通任务递出
+  - 为什么用 probe 而不是真模型：靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的分支。probe 仍跑在**装出来的真实框架**上，只是不经过模型
+  - 验证：`npm run skill:e2e -- --scenario blocked` **6 项全过**
+  - 批次：20261023-1018
+- [x] [场景2] `decision`（model）：给一个有取舍的任务 → 断言模型真写了 `<sid>-decision.md`（含 `- 决定：`/`- 为什么：`）且收尾后归档
+  - 做了什么：提示词给一个真的二选一（`storage` 写成 `"v2"` 还是 `{version:2}`），明确"自己决定、不要问"，并要求按协议把每处决定写进 `doing/<sid>-decision.md`；断言文件存在（doing/ 或已归档）、至少一条 `## D<n>`、每条有 `- 决定：` 与 `- 为什么：`、收尾后归档
+  - 为什么这条必须真模型：它验的是"模型会不会照着协议写"，机制侧的归档半天前已有单测（`archive-queue --decision`）
+  - 验证：实跑 **7 项全过**（133s）；现场留下 `config.json` + `logs/e2e000/decision-<时间戳>.md`
+  - 批次：20261023-1018
+- [x] [场景3] `plan`：model 段验"会不会建 plan 且结构合法"；probe 段用手工 plan 验续批 / 硬停（先问后重置）/ 确认后继续 / 完成归档
+  - 做了什么：拆成两个用例。**`plan-split`（model）**：给"补 30 条小功能"，只让它规划不实现，断言建了 `<sid>-plan.md`、≥1 里程碑、阶段总数 ≥2、每个里程碑 ≥2 阶段、有 `- 验收：`、队列只放当前阶段——**产物合理就过，到此为止**；**`plan-run`（probe）**：plan 与队列提前写好，每一步只喂一次 Stop，验续批 / 硬停（且「弹窗问用户」出现在「只有用户选了」之前）/ 已确认就不再拦 / 全部完成并归档
+  - 为什么拆：把"切分"和"执行"混在一个用例里，一轮跑不完（30 条任务 + 收尾）；拆开后切分只花一次模型调用，执行是秒级
+  - 踩到的两个测试假象：① 手工改计划文件时游标不变 → `planKey` 不变 → 钩子判"已下发过"直接放行，看着像硬停失效（真实流程里勾阶段会换钥匙），所以每个边界前清一次钩子状态；② 我第一版把 MS2 只留 1 条未完成阶段，游标一进 MS2 就到边界——**硬停是对的**，是我预期写错了
+  - 验证：`--scenario plan-split` **8 项全过**（302s，模型确实把 30 条切成了多里程碑多阶段）；`--scenario plan-run` **8 项全过**
+  - 批次：20261023-1018
+- [x] [场景4] `worktree`（probe）：已有别的会话队列时注入提示、建树+分支+推本地 bare origin、树内钩子隔离、`merge --no-ff` 回主分支
+  - 做了什么：新增 `worktree` 场景（12 项）——别的会话留一条进行中队列 → 新会话注入里出现「其他会话还有未完成队列」→ 跑 `worktree.mjs` 建树/开分支/推**本地 bare 仓库**（不依赖网络与凭据）→ 树内新 sid 找不到队列（按 sid 找，不误认别人的）→ 树里未提交改动不串到主树 → 树里提交 → `git merge --no-ff` 回主分支并断言拿到那条改动
+  - **修正了一个我原来写错的断言**：起初断言"树里看不到主树队列"——错的。worktree 检出的是同一条分支，**已提交**的队列两边一样，本来就该看得见（"其他会话还有未完成队列"这条提示正是靠它）。真正被隔离的是**未提交改动**与**各自的会话状态**，断言照这个改
+  - 还修了两处测试自身的错：① 给"别的会话"和"本会话"用了同一个 6 位前缀，`shortSid` 一截就变成同一份队列文件；② 全新会话直接喂 Stop 不写日志（`tracked = 有队列 || 已有日志`），得先喂一次用户消息
+  - 验证：`--scenario worktree` **12 项全过**
+  - 批次：20261023-1018
+- [x] [文档1] SKILL.md 写清 5 个场景、两种执行器、现场保留规则与常用命令
+  - 做了什么：`SKILL.md` §1.5 整节重写——三层自检的分工、**6 个场景表**（场景 / 执行器 / 验什么）、`--all` / `--scenario` / `--dry-run` / `--fresh` / `--strict` 用法、五条约定（数据在 skill 内且不进库、**现场默认保留**、模型固定、环境跳过不算失败、不进 `test:*`）、CI 登录 secret 的导出命令
+  - 为什么强调"现场默认保留"：一次完整测试由多个用例组成，跑到一半重跑一个用例就把别的用例现场删掉，等于让人没法对照（这正是不久前踩的）
+  - 验证：`check-framework.mjs` 通过（它要求脚本与开关都在 SKILL.md 里有交代）；`--dry-run --all` 打印 6 个场景
+  - 批次：20261023-1018
+- [x] [发现] e2e 暴露的四处**静默失效**（跑场景时撞出来的，不是预先设计的）
+  - ① **队列文件名写错**：模型按完整会话 ID 建文件（`e2e000…e.md`），钩子按前 6 位找 `e2e000.md` → 永远找不到，机制全程不生效且零报错。修法：`queue-init` **自己建队列文件**（只建空壳，状态 `讨论中`），文件名不再由 AI 拼；`auto-continue` 另加一道「近名文件」拦截，命中就要求 `git mv` 改名
+  - ② **空队列停在讨论中**：脚本建好空队列后如果不填就一直是 `讨论中`，钩子静默放行 = 永远停住。修法：讨论中**且空** → 拦住让 AI 填条目再改 `执行中`
+  - ③ **归档漏决策记录**：收尾第 5 步原本要求"归档队列 → 再 `--decision`"，实测模型只做第一步就走了。修法：`archive-queue <sid>` 一条命令把队列 + 决策记录 + 计划一起归档（单独的 `--plan`/`--decision` 仍可用）
+  - ④ **断言误判两次**：`--output-format json` 的 stdout 里一个 UUID（`8b47-401ce1189567`）含 "401" → 被当成"未登录"；模型读了 README，而 README 里写着"框架自己坏了" → 被当成"钩子崩了"。修法：环境检测只看 stderr 且用精确匹配；崩溃检测只匹配包装器特有文案
+  - 为什么记这条：四处都不是"写错了代码"，而是**机制在某些入口上留了静默缺口**——它们只有真跑场景才会露出来，静态自检 52 项全绿也照不出来
+  - 验证：钩子自检新增 2 条（空队列 / 文件名写错）；`main`、`decision` 复跑转绿
+- [x] [验] 逐场景实跑 + `npm run check` 全绿
+  - 做了什么：六个场景逐个实跑，外加全量门禁
+  - 验证：`main` **12/12**（213s）、`blocked` **6/6**、`decision` **7/7**（142s）、`plan-split` **8/8**（302s）、`plan-run` **8/8**、`worktree` **12/12**；钩子自检 **52 → 54 项**（新增"空队列讨论中要拦""文件名写错要拦"）；`npm run check` **EXIT 0**；`check-framework.mjs` 通过
+  - 批次：20261023-1018
+
+
+## 批次 20261023-0927 · 2026-10-23 · 会话 b09ae4
+
+**做了什么**：把 e2e 的现场挪进 skill 自己的目录并排除出版本库（框架进库、数据不进库）、
+模型固定成 `deepseek-v4.1-flash-official`、摸清 CLI 登录态的真实位置并写成可执行的 CI 配置。
+过程中实跑四次，**前三次的失败各暴露一个真问题**（轮次不够 / 网络误诊 / 未登录误诊），都修掉了；
+第四次 15 项全过：队列建了 → 钩子递了 → DONE 有批次节 → 队列归档 → git 5 个提交。共 4 条。
+
+**条目**（原文照搬）：
+
+- [x] [目录1] 测试数据挪进 skill：`scripts/e2e.mjs` 的数据根改到 `.codebuddy/skills/continue-task/.e2e/`，在 skill 内加 `.gitignore`，删掉根 `.gitignore` 里作废的 `.skill-e2e/` → `git check-ignore` 命中、`git status` 干净
+  - 做了什么：`DATA_ROOT` 从 `<仓库>/.skill-e2e` 改成 `<skill>/.e2e`；新增 `.codebuddy/skills/continue-task/.gitignore`（一行 `.e2e/`）；根 `.gitignore` 里那段 `.skill-e2e/` 删掉（作废配置留着比没有更坏）
+  - 为什么放 skill 目录里：这套测试是**随 skill 走**的，现场也该跟着它；而且 `.gitignore` 放在 skill 内侧，别人把这个目录拷进自己仓库时**自带排除规则**，不用再改根 `.gitignore`
+  - 验证：建 `.e2e/probe/a.txt` 后 `git check-ignore -v` 命中 `.codebuddy/skills/continue-task/.gitignore:3:.e2e/`；`git status` 里不出现现场；实跑一次后现场被自动删除（`--keep` 才留）
+  - 批次：20261023-0927
+- [x] [模型1] 模型固定 `deepseek-v4.1-flash-official`（默认参数，可用 `--model` 覆盖）→ `--dry-run` 打印出模型名
+  - 做了什么：`DEFAULT_MODEL = 'deepseek-v4.1-flash-official'`，`--model` 可覆盖；CLI 调用里显式传 `--model`；`--dry-run` 打印"模型 deepseek-v4.1-flash-official（默认）"
+  - 为什么固定而不是"继承本机默认"：本机默认模型随时会换，换了之后断言结果就跟着变（同一套代码今天过明天不过），排查时根本分不清是框架退化还是模型换了。**测试要钉住变量**
+  - 为什么仍允许 `--model` 覆盖：换模型对比行为是正常需求，留一个显式入口即可
+  - 验证：`npm run skill:e2e -- --dry-run` 打印模型名；实跑的命令行里能看到 `--model deepseek-v4.1-flash-official`
+  - 批次：20261023-0927
+- [x] [CI1] 把「CI 怎么登录」写成可执行配置：新增手动触发的 `.github/workflows/skill-e2e.yml`（还原 `local_storage` → 设 `CODEBUDDY_CONFIG_DIR`）+ SKILL.md 写清步骤 → `yaml` 静态可读、默认不在 push 上跑
+  - 做了什么：摸清了 CLI 的登录态存放位置——`auth-type` 是 `cli-external-link`，`~/.codebuddy/.credentials.json` 里**只有 MCP OAuth**，真正的 Bearer 在 `~/.codebuddy/local_storage/`（444KB）。实测：只把 `local_storage/` 拷进空目录 + `CODEBUDDY_CONFIG_DIR=<该目录>`，401 消失、模型正常回话。据此写了 `skill-e2e.yml`（`workflow_dispatch` 手动触发）：装 CLI → 从 secret 还原 `local_storage` → 先探一次登录 → 跑 `npm run skill:e2e` → 失败上传现场；SKILL.md 写明三条命令导出 secret
+  - 为什么**只手动触发**：一次几分钟且花 token，放 push 上等于每次提交都烧钱
+  - 为什么不用整个 `~/.codebuddy`：里面有 `projects/` 会话历史，几百 MB，塞不进 secret；实测只要 `local_storage/`
+  - 诚实说明：这个 workflow **只在本地做了静态审阅，没在真 GitHub Actions 上跑过**（没有仓库 secret 可验）。secret 缺了会 `::error::` 明确失败，不会静默绿
+  - 验证：`--dry-run` 与 SKILL.md 的导出命令一致；`local_storage` 单独可用的结论来自两次对照实验（空目录 401 / 只带 local_storage 通过）
+  - 批次：20261023-0927
+- [x] [验] 真跑一次 e2e（已登录环境）+ `npm run check` 全绿
+  - 做了什么：连跑四次，前三次分别暴露了三个真问题（见下），第四次通过；跑完全量门禁
+  - **三次失败都不是白的**：① 12 轮不够——模型写完 `hello.txt` 就结束了，根本没建队列，于是把轮次放到 40 并把提示词写成"建队列 → 逐条勾 → 收尾"的可对照清单；② 网关 502 / DNS 解析失败——环境问题被当成框架问题误诊，于是加了"环境跳过"分支（沿用 `check:browser` 的口径，`--strict` 可把跳过改成失败）；③ 未登录 401——同样按跳过处理，并验静态级
+  - 验证：第四次 **15 项全过**——钩子日志有 `queue-init`/`auto-continue`、队列建过、`DONE.md` 出现 `## 批次`、队列归档到 `logs/<sid6>/queue-<14位>.md`、git 5 个提交；`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` 五项全绿
+  - 批次：20261023-0927
+
+
+## 批次 20261023-0914 · 2026-10-23 · 会话 b09ae4
+
+**做了什么**：先核对了"运行版 ↔ skill 打包源"（14 个钩子逐字节一致、`REQUIRED` 无遗漏），
+然后在 **skill 里**加了一层**端到端自测** `scripts/e2e.mjs`：临时项目 → 装框架 →
+用真实 `codebuddy -p` 跑一个小任务 → 断言"队列建了 → 钩子递了 → 收尾做了 → 归档落位"。
+测试数据落在 `.skill-e2e/`（已 gitignore）：**框架进库、现场不进库**。共 4 条。
+
+**条目**（原文照搬）：
+
+- [x] [一致1] 运行版与 skill 打包源逐字节一致、预留钩子全在 install 清单里、注入探针与文档措辞同步 → `diff -rq` 无差异 + `check-framework` / `test-install` 通过
+  - 做了什么：核对了四件事——① `assets/.continue/hooks` 与 `.continue/hooks` **14 个文件逐字节一致**；② `assets/.continue/README.md` 与运行版一致；③ `install.mjs` 的 `REQUIRED` 22 条覆盖了磁盘上**全部** 14 个钩子（我用脚本比对"磁盘上有但 REQUIRED 没列"= 无）；④ `notes/batches.md` 的历史行故意不改（那是当时的做法，改历史等于伪造台账）
+  - 为什么每次都要真比对而不是"我记得同步了"：上一批就漏过一次——改了运行版没回灌 assets，重装一次改动全被抹掉，症状是"过几天又变回去了"且零报错
+  - 验证：`diff -rq` 无输出；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
+  - 批次：20261023-0914
+- [x] [e2e1] 新增 `scripts/e2e.mjs`：建临时项目 → 装框架 → 用 `codebuddy -p` 跑一个小任务 → 断言队列/递任务/收尾/归档/日志全链路 → `--dry-run` 能打印计划且不建目录
+  - 做了什么：新增 `.codebuddy/skills/continue-task/scripts/e2e.mjs`（约 260 行）——临时项目 `git init` + 初始提交 → 跑 `install.mjs --no-detect` → `codebuddy -p "<小任务>" --session-id <固定 32 位 hex> --max-turns N --permission-mode bypassPermissions --output-format json` → 断言 `logs/<sid6>/run.md` 里有 `[queue-init`／`[auto-continue`、队列建过（现存或已归档）、`DONE.md` 出现 `## 批次`、`git rev-list` ≥ 3、队列最终落到 `logs/<sid6>/queue-<14位>.md`；失败保留现场并打印 CLI 输出尾部
+  - 为什么固定 `--session-id`：断言要按会话 ID 推导路径（`<sid6>.md`、`logs/<sid6>/`），随机 ID 会让"归档到哪儿"每次都变，断言写不出来
+  - **为什么要这一层（不是重复 `test-install`）**：前两个脚本只看静态产物。实测过一类事故——钩子写 stdout 后立刻 `exit` 导致 JSON 被截断，静态检查全绿，但注入整份被宿主丢掉、任务永远递不出来。只有真跑一遍才看得见
+  - **未登录（401）不判失败**：CLI 仍会加载 `settings.json` 并触发钩子，所以"注册对不对、注入有没有被截断、钩子会不会崩"这三件**已经真的验过了**；模型那一轮没发生，队列自然不建。于是分两级——静态级通过就 exit 0 并说明"登录后重跑才能验到队列/收尾/归档"
+  - 验证：`--dry-run` 只打印计划、**不建目录**；实跑两次（未登录环境）→ 静态级 4 项全 ✓（日志有、queue-init 有、auto-continue 有、钩子没崩）并正确跳过模型级；缺参数时 exit 2
+  - 批次：20261023-0914
+- [x] [e2e2] 接线：`.gitignore` 忽略测试数据目录、`package.json` 加 `skill:e2e`（**不进 test:* 前缀**，避免台账套数漂）、SKILL.md 写清怎么跑 → `npm run skill:e2e -- --dry-run` 通过
+  - 做了什么：`.gitignore` 加 `.skill-e2e/`（框架进库、现场不进库）；`package.json` 加 `skill:e2e`；`SKILL.md` 新增「1.5 三层自检」——把三个脚本的分工、`--dry-run/--keep`、三条约定（模型继承本机 / 数据不进仓库 / 没装 CLI 就跳过）写清楚
+  - 为什么**不用** `test:` 前缀：`audit-tasks` 会拿 `package.json` 里 `test:*` 的**数量**去核对 README/AGENTS/HANDOFF 里写的"172 套"，加一个就会三处全红；而且 `npm run check` 会把它带上——一次几分钟、还花 token，不该进每次提交的门禁
+  - 为什么数据目录放在仓库内而不是 `/tmp`：`install.mjs` 要写 `.git/hooks`、`git` 要能提交，仓库内更接近真实项目；用 gitignore 隔离即可，也让失败现场好找
+  - 验证：`npm run skill:e2e -- --dry-run` 打印计划且**没有**创建 `.skill-e2e/`；`node -e` 确认 script 已注册；`git status` 里没有 `.skill-e2e`（被忽略）
+  - 批次：20261023-0914
+- [x] [验] `npm run check` + `node .continue/hooks/check.mjs` 全绿
+  - 做了什么：跑全量门禁与框架五项；清掉 e2e 留下的现场（`.skill-e2e/`）
+  - 验证：`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` **五项全绿**；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
+  - 批次：20261023-0914
+
+

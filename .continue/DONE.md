@@ -8,6 +8,106 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
+## 批次 20261023-0000 · 2026-10-23 · 会话 4024a9d4
+
+**做了什么**：多语言**基础设施（P0）**——把 i18n 从"一张 zh 表 + 一张 en 表 + 一个模块级语言状态"
+改成"6 种语言装得下"的骨架：语言元数据模块（`LOCALES` 六条 + 前缀匹配 + 兜底英文）、
+中文/英文各按界面拆成 9 个分组文件并**用 `satisfies Messages` 把键集卡到编译期**、
+语言清单接进运行时（`LocaleCode` + 稀疏表）、首次启动跟随系统（`language: 'auto'`）、
+回落链收到英文一档 + 列表连接与复数交给 `Intl`、按需加载 + 切语言整页重载、
+`npm run audit:i18n` 接进门禁 + `?lang=xa` 伪语言。共 9 条（8 条 P0 + 1 条审计驱动的 [发现]）。
+
+**条目**（原文照搬）：
+
+- [x] [P0-1] 语言元数据模块：新建 `src/core/i18n/locale.ts`（6 语言元数据 + 前缀匹配 + 兜底英文），`tools/i18n-test.ts` 补一节断言 → `npm run test:i18n` 全绿、`npm run typecheck` 不新增错误
+  - 做了什么：新建 `core/i18n/locale.ts`（`LOCALES` 六条元数据：短码 / 自称 / htmlLang / intlLocale；`isLocaleCode` / `localeMeta` / `matchLocale` / `detectLocale`），`tools/i18n-test.ts` 新增一节 22 条断言
+  - 为什么：旧 `I18n.detectLanguage()` 只认 zh/en、其余一律回中文，等于"陌生语言用户被塞中文"；且语言清单与自称写死在 `I18n.ts` 里，加语言要动逻辑文件。拆出来后**加语言 = 在 `LOCALES` 加一行**
+  - 三个刻意的取舍：① 短码存设置（`zh`/`en` 老存档不用迁移）；② 只做前缀匹配、不做语言协商（玩家的选择优先于设备猜测）；③ 匹配不到返回 `null`，兜底由 `detectLocale()` 定成**英文**——"匹配对不对"与"兜底选谁"分开验
+  - 验证：`npm run test:i18n` 135 通过 / 0 失败（原 113 + 新增 22）；`npm run typecheck` 与 `npm run typecheck:tools` 均无错误
+  - 批次：20261023-0000
+- [x] [P0-2] zh 主表拆成命名空间：把 `I18n.ts` 的 `ZH` 搬进 `core/i18n/locales/zh/*.ts`（menu / settings / inventory / station / chat / progress / minigame / misc），`index.ts` 合成 → `npm run test:i18n` **一条断言都不改**仍然全绿（证明是纯搬运）
+  - 做了什么：`I18n.ts` 里的 454 条中文按界面拆成 9 个文件（`menu` 33 / `settings` 81 / `inventory` 123 / `station` 78 / `editor` 38 / `chat` 18 / `progress` 24 / `minigame` 38 / `misc` 21），`locales/zh/index.ts` 合成并导出 `MessageKey` / `Messages`；`I18n.ts` 只留 `const ZH = zh` 一行别名（495 行删到 7 行）
+  - 为什么用脚本搬：454 条手打必出错。写了一次性脚本 `.tmp/split-zh.mjs` 解析 `const ZH = {…}` 块（注释挂下一条、续行归上一条），按前缀分组输出；`I18n.ts` 只做"删块 + 加 import + 加别名"
+  - 为什么分组从 8 个变 9 个：第一版跑完 `misc` 收了 62 条、跨 12 个命名空间，正是这次要消掉的"杂物抽屉"。加 `editor`（`book.*` / `sign.*` / `template.*` / `buildtools.*`），并把 `recipeBook.*` 归 `inventory`、`beacon.*` 归 `station`，`misc` 降到 21 条（`pause` / `death` / `sleep` / `fullscreen` / `install` / `unit`）
+  - 怎么验证"纯搬运"：搬运前后各把 `TABLES.zh` 导成 JSON 排序比对（`.tmp/dump-zh.ts`），**627 条键与值零 diff**；再加 `test:i18n` 135 条一条没改仍全绿
+  - ⚠️ 连带改了两处**已通过**的断言（用户拍板：改成走 `t()` 查表）：`ui-test.ts` 3 条（暂停菜单「继续游戏 / 设置 / 保存并退出」）与 `tutorial-test.ts` 2 条（石镐说明、删掉的四步不留文案）原本是"读 `I18n.ts` 源码找中文字面量"，表搬走后必然假红。改后验的是"键对 + 中文值对"，今后再搬文件不会再红
+  - ⚠️ 顺带统一了"中文字面量守卫"的口径：`i18n-test.ts` 里同一套判据原来在 5 处各抄一遍，抽成 `firstCjkLiteral()` / `linesWithCjkLiteral()` 两个函数，并把口径写进注释（**中文只允许住在 `locales/zh/**`**）；新增一条"分组文件都被 `index.ts` 合并、不留孤儿"的断言（拆了文件忘了合并会红）
+  - 验证：`npm run test:i18n` 139 通过 / 0 失败（135 + 新增 4）；`npm run test:ui` 926 / 0；`npm run test:tutorial` 113 / 0；`npm run typecheck`、`npm run typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-3] en 同构拆分 + 编译期卡齐：`locales/en/*.ts` 用 `satisfies Messages`（`MessageKey` 由 zh 的 `as const` 推导）→ 故意删一条键时 `npm run typecheck` 必须报错（验完还原）
+  - 做了什么：454 条英文按与中文**同一套前缀规则**拆成同样的 9 个文件；每个分组文件用 `satisfies Pick<Messages, keyof typeof zhXxx>`，`locales/en/index.ts` 用 `satisfies Messages` 收口；`I18n.ts` 只留 `const EN = en` 别名
+  - 为什么分组用 `Pick<Messages, keyof typeof zhXxx>` 而不是在 index 处一次性卡：这样报错会**指到具体分组文件的具体行**，而不是只说"index 里少了个键"。实测删 `settings.group.game` 时 tsc 同时报两处：`en/settings.ts(96,3)` 与 `en/index.ts(31,3)`
+  - 为什么还要 `satisfies` 而不只靠 `keyParity()`：后者是运行期断言（跑测试才知道），前者在 `typecheck` 里，而 `typecheck` 已经在 `check:fast` 与提交守卫里了 —— 零额外成本
+  - 顺手把 `I18n.ts` 文件头第 3 条约定改写：原来说"中英键集一致靠 `keyParity()` 给断言用"，现在键集由类型保证，`keyParity()` 退居第二道防线（留给"表是运行时拼出来的"那种情况，比如命令回执合并进来的 129 条）
+  - 怎么验证"纯搬运"：搬运前后各把 `TABLES.en` 导成 JSON 排序比对 → **627 条键与值零 diff**
+  - 编译期卡齐的验收：`sed` 删掉 `en/settings.ts` 的 `'settings.group.game'` → `npm run typecheck` 报 `TS2741 Property '"settings.group.game"' is missing`（两处）→ 从备份还原 → typecheck 重新通过
+  - 新增守卫（`test:i18n` +4 条）：英文分组与中文一一对应、每个分组都带 `satisfies Pick<Messages`、`index.ts` 带 `satisfies Messages` —— 防"类型保护被悄悄删掉"
+  - 验证：`npm run test:i18n` 142 通过 / 0 失败；`npm run typecheck`、`npm run typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-4] 语言清单接进运行时：`Language` 扩成 `LocaleCode`、`TABLES` 改稀疏表（缺表回落 en）、`detectLanguage` 走 `LOCALES` 匹配、`setLanguage` 的 `<html lang>` 走 `htmlLang` → `test:i18n` 补 `fr-FR → fr` 的新语义断言
+  - 做了什么：`Language = LocaleCode`（6 种）；`TABLES` 改成 `Partial<Record<LocaleCode, …>>` 稀疏表 + `tableOf()` 取表（没装返回空表，调用方不必判空）；`LANGUAGES` 改成**从表派生**的可选语言（现在仍是 zh/en，写完某语言表会自动出现）；`LANGUAGE_NAMES` 从 `LOCALES` 派生；`detectLanguage` 转发 `detectLocale`、`isLanguage` 转发 `isLocaleCode`；`setLanguage` 的 `<html lang>` 走 `localeMeta().htmlLang`
+  - 回落链改成 **当前 → 英文 → 中文 → 键名**：德语缺一条退英文是对的（德语用户多半看得懂），退中文等于把界面切成看不懂的字；中文留在链尾做最后兜底
+  - 三个刻意的取舍：① `LANGUAGES`（可选）与 `LOCALES`（支持）分开——"能选但没内容"比不列更糟，所以下拉只列有表的；② `isLanguage` 认**支持的全集**而不是"有表的"——存档里存了 `de` 不该被判成脏数据、把玩家设置重置掉；③ 没有直接动 `DEFAULT_LANGUAGE`（仍是 `zh`），"首次启动跟随系统"是 P0-5 的事，这条不做半截
+  - ⚠️ 连带修了 3 处同类"双语假设"（`typecheck` 当场抓出来的 + 同批 grep 出来的）：`UsageText.translateUsageFields` 的参数类型 `'zh' | 'en'` 放宽到 `Language`；`messages.pickLabel()` 与 `advancementText.ts` 三处判定从"是不是英文"改成"**是不是中文**"——原来德/俄用户会在这几处拿到中文（`Weather set to 下雨` 那类半截话的根源）
+  - ⚠️ 改了两条**已通过**的断言（条目里预先约定了）：`detectLanguage('fr-FR')` 由"回退中文"改成 `'fr'`、`detectLanguage(undefined)` 改成 `'en'`；另加 4 条（`de-AT`/`pt-BR`/`ja-JP` 的匹配与兜底）
+  - 验证：`npm run test:i18n` 154 通过 / 0 失败（142 + 新增 12）；`test:settings` 111、`test:commands` 434、`test:advancement` 116 全绿；`typecheck` 与 `typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-5] 首次启动跟随系统：设置项加 `language: 'auto'`（老存档迁移 + 写坏回退）、设置页下拉加"跟随系统"、`boot()` 时按 `navigator.language` 定语言 → `npm run test:settings` 与 `test:i18n` 全绿
+  - 做了什么：`I18n.ts` 新增 `AUTO_LANGUAGE` / `LanguageSetting` / `isLanguageSetting` / `deviceLanguage` / `resolveLanguage(setting, tag?)` / `applyLanguageSetting()`；`GameSettings.language` 改成 `LanguageSetting`，出厂默认改成 `auto`；设置页下拉变成 `['auto', ...LANGUAGES]`，`auto` 那条标签显示"跟随系统（English）"（括号里是**这台设备**解析出来的语言）；`boot()` 第一屏之前调 `applyLanguageSetting(loadSettings().language)`
+  - 为什么 `auto` 不塞进 `Language`：它不是一种语言，没有文案表、也不该进 `TABLES`。混进去会让 `t(key,'auto')` 在类型上合法却永远查不到东西，所以单独一个 `LanguageSetting` 联合类型
+  - 为什么老存档里的 `zh`/`en` 原样保留：那是玩家当时的选择（或旧版默认）。换默认值不该把老玩家的界面语言改掉 —— 只有"没这个字段 / 写坏了"才回落到 `auto`
+  - 为什么下拉只列有表的语言：`auto` 之后是 `LANGUAGES`（从 `TABLES` 派生），所以德语表没写之前不会出现"Deutsch 选了没反应"
+  - ⚠️ 顺带修掉一个**既有缺陷**：`setLanguage()` 原来只在 `SettingsScreen.applyLanguage()` 里被调用（打开设置面板时才跑），也就是说**存档里存的 `en` 在启动时根本没生效**——主菜单一直是中文，直到打开设置。现在 `boot()` 在建任何界面之前先应用一次
+  - 验证：`test:i18n` 163 通过 / 0 失败（154 + 新增 9）；`test:settings` 119 通过 / 0 失败（111 + 新增 8：出厂默认、老存档保留、写坏回落、德语虽无表也合法）；`typecheck` / `typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-6] 回落链与语言相关格式：`t()` 回落 当前 → en → key（去掉硬编码 `ZH`）、`joinList` 改 `Intl.ListFormat`、新增 `tn()`（`Intl.PluralRules`，为俄语 4 种复数留口）→ `test:i18n` 补 de/ru 假数据用例
+  - 做了什么：`t()` 回落链砍到 **当前 → 英文 → 键名**（去掉"最后退中文"）；`joinList` 改走 `Intl.ListFormat(conjunction)`；新增 `plural.ts`（零依赖：`PluralCategory`/`PluralForms`/`PluralTable` + `pluralCategoryFor`）；`I18n.ts` 加 `PLURAL_TABLES`/`pluralTableOf`/`pluralCategory`/`tn()`；`tp()` 与 `tn()` 共用抽出来的 `substitute()`
+  - ⚠️ 中文列表连接**按用户拍板改成 Intl conjunction**：`木板、圆石、木棍` → `木板、圆石和木棍`，两项 `木板和圆石`。这是本批唯一有意的中文可见变化（换来不再为每种语言手写连接规则），对应断言也照新口径改了
+  - 为什么去掉"最后退中文"这一档：`locales/en/**` 已由 `satisfies Messages` 保证键集与中文完全一致，英文那一档不可能查空；留着退中文反而会把"漏翻"伪装成"只是语言不对"
+  - `tn()` 的两个关键取舍（都踩过）：① **复数类别必须跟模板同语言**——拿德语规则去英文模板里挑类别，会挑出英文没有的 `few`/`many`，最后只能退 `other`；② 判断"这条文案最终由哪种语言提供"用的是 `t()` 同一条回落判据，不是"当前语言的复数表有没有这个键"
+  - 复数只登记**真正会读错**的键：`station.brewLeft`（英文 `{count} more brews` → 1 时读错），其余用 `t()` 那一条；中文没有复数形式（CLDR 只有 other），自动走回落
+  - ⚠️ 自己写错一条断言并修正：最初用 `t(key,'de') === key` 判"英文表是否完整"，但命令回执里有 `{name} Health = {value}` 这种**语言中性**条目，英文值就是键本身，被误报。改成判"键在不在英文表里"
+  - 验证：`test:i18n` 180 通过 / 0 失败（163 + 新增 17）；`test:ui` 926、`test:inventory` 103 全绿；`typecheck` / `typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-7] 按需加载 + 切语言重载：`loadLocale()`（zh/en 静态、ru/pt/fr/de 动态 `import()`）、`boot()` 先加载再建 UI、切语言存设置后 `location.reload()`，删除 `SettingsScreen.applyLanguage()` 系列 → `npm run test:ui` / `test:settings` 全绿
+  - 做了什么：`TABLES` 改成"可写池 `TABLE_POOL` + 只读视图"；新增 `LocaleModule` 类型、`LOADERS` 注册表、`registerLocaleLoader()`、`loadLocale(code)`（异步，失败**不抛异常**只返回 false）；`LANGUAGES` 常量改成函数 `availableLanguages()`（有表**或**有加载器才算可选，因为表现在会在运行时填进来）；`applyLanguageSetting()` 改成 `resolve → loadLocale → setLanguage` 的异步链，`boot()` 里 `await` 它；设置页切语言改成存设置 + `location.reload()`；删掉 `labelBindings` / `applyLanguage()`，`bindLabel()` 只写文案
+  - 为什么 zh/en 不走动态加载：中文是源语言、英文是回落链的唯一一档，两者**第一帧**就要用（首屏提示、`<html lang>`、每次 `t()` 的兜底），异步会把启动改成"先白屏再出字"
+  - 为什么现在 `LOADERS` 是空表：ru/pt/fr/de 的表还不存在，写 `import('./locales/de/index.ts')` 会直接构建失败。P4 写完某语言的表就在 `LOADERS` 加一行（`de: () => import('./locales/de/index.ts')`），这也是唯一的一步。加载链本身已用**假语言**在断言里跑通（注册 `de` → 加载 → 表进池子 → `t()` 查得到 → 可选清单变长）
+  - 为什么切语言要整页重载：局部重刷（`applyLanguage()`）只能覆盖挂了 ref 的那几个节点，物品名/生物名/成就/命令反馈/配方书都刷不到；这套机制已经踩过"`applyInventoryChrome()` 把硬编码写回去、刷完一秒又被覆盖"的连环坑。重载后 `boot()` 重新解析、加载、建界面，`applyLanguage()` 整条机制可以删掉
+  - ⚠️ 连带改了一句文案：`settings.language.hint` 从"切换后重新打开本面板生效"改成"切换后游戏会重新加载以生效"（旧文案在重载机制下已经是错的）
+  - ⚠️ 断言侧机械适配：`LANGUAGES` → `availableLanguages()`（6 处调用点，语义不变）；`applyLanguageSetting` 现在是 async，断言里加 `await`
+  - 验证：`test:i18n` 190 通过 / 0 失败（180 + 新增 10）；`test:ui` 926、`test:settings` 119、`test:unit` 151（20 文件）全绿；`typecheck` / `typecheck:tools` 无错误
+  - 批次：20261023-0000
+- [x] [P0-8] 审计与伪语言：`npm run i18n:audit`（扫 `t('…')` / `tp('…')` 字面量 → 报"用了但没有 / 有但没人用 / 各语言覆盖率"）接进 `check:fast`；`en-XA` 伪语言（`?lang=xa`）→ `npm run i18n:audit` 报 0 缺口
+  - 做了什么：新增 `tools/i18n-audit.ts`（+ `npm run audit:i18n`，接进 `check:fast` 与 `check` 的 typecheck 之后，便宜且早失败）；`I18n.ts` 新增 `setPseudoLocale` / `isPseudoLocale` / `isPseudoLocaleTag` / `pseudoText`，`boot()` 里 `?lang=xa` 打开伪语言
+  - 审计的三条判据：**缺失**用窄判据（只认 `t()`/`tp()`/`tn()`/`msg()` 的直接第一参数，硬错误 `exit 1`）、**孤儿**用宽判据（源码里出现过该字符串就算引用，只报告不失败）、**覆盖率**按 `LOCALES` 逐语言报
+  - 两个刻意的取舍：① **先剥注释再扫**——这个仓库注释里大量出现键名，不剥会把死文案算成有人用；② **剥注释要保留行号**（注释行换成空行而不是删掉），否则报出来的 `file:line` 会位移
+  - 🔴 **审计第一次跑就抓到一个真 bug**：`Commands.ts:572` 的 `msg('{key} 已设置为 {value}（超出范围，已夹到 {clamped}）')` 在 `commandMessages.data.ts` 里**没有对应英文**。中文下看不出（键就是中文原文），英文下会整句漏中文。已补 `'{key} set to {value} (out of range, clamped to {clamped})'`
+  - 另一处误报也修了：`msg('当前游戏规则：\n{rules}')` 扫出来是反斜杠+n 两个字符，而表里的键是真换行 → 加 `decodeLiteral()` 还原转义（`\n` / `\t` / `\uXXXX` / 引号）
+  - 伪语言为什么用"包括号"而不是"换字母变音"：中文文案也要能一眼认出来，而音标只对拉丁字母有意义；括号也不吃字宽，不会把正常界面撑坏
+  - ⚠️ 伪语言是**运行期变换**（在 `t()` 出口包一层），不是造一张 `en-XA` 假表：假表只能覆盖"已有的键"，而这里要照的是"没接 i18n 的文字"，两者覆盖面一样但变换版不需要新 LocaleCode、新表、新加载器
+  - 实测数字：353 个文件 · 554 处直接调用 · 表里 629 条键 · zh/en 各 100% · 孤儿 73 条（多含数据驱动取键）
+  - 验证：`npm run audit:i18n` → 0 缺口、exit 0；`test:i18n` 198 通过 / 0 失败（190 + 新增 8）；`npm run check:fast` 全绿（typecheck + audit:i18n + vitest 151 + 离线 172 套，17.3s）
+  - 批次：20261023-0000
+
+- [x] [发现] 先修 `audit:i18n` 的引用判据，再清确实死掉的键（顺序不能反：判据不可信时删键 = 让界面显示裸键名，而且不报错）
+  - 做了什么（修判据）：`tools/i18n-audit.ts` 换掉"按成对单引号切字符串"的做法，改成两条更稳的判据 —— ① **源码子串包含**（`code.includes(key)`）；② **模板拼键前缀**（`t(`settings.opt.fps${n}`)` → 前缀 `settings.opt.fps`；短于 4 字符不收，避免 `settings.` 把整片放行）。报告里把 4 个前缀打出来，过宽前缀一眼可见
+  - 做了什么（清键）：删 4 条确认死文案（zh + en 各一份）：`settings.language.hint`（重载提示从未被渲染）、`settings.row.autosave`（批次 528 删掉自动保存行）、`slot.rename`（铁砧用的是 `slot.anvilRename`）、`tutorial.title`（引导卡标题另有来源）。表 629 → **625** 条
+  - 为什么旧判据不可信：它靠"成对单引号"切字面量，一行里反引号模板与单引号混排时配对错位、后面整段被切乱 —— 实测 `inventory.recipeBook` 明明写在 `InventoryScreen.ts:1038` 却被报成孤儿，`settings.opt.fps30` 这类模板拼键也全被判死。**73 条里只有 4 条是真的**
+  - 验证：`npm run audit:i18n` → 孤儿 73 → **0**，zh/en 覆盖率 625/625 100%，exit 0；`npm run test:i18n` 198 通过 / 0 失败（死键同时从两处"必需键"清单里去掉：`required` 与 `slotKeys`）；`npm run check:fast` 全绿（命中 14/172 套）
+  - 批次：20261023-0000
+
+**队列原文 · 其余部分**（验收口径与后续路线图，P1~P5 尚未开工，留档备查）：
+
+- `npm run check:fast` 与 `npm run check` 全绿
+- 中文与英文**文案内容零 diff**（P0 只搬不译）
+- 4 个新语言文件可以先不存在，但 `LOCALES` 登记之后，缺表必须被审计报出来，而不是静默回落
+- **P1 命令域键化**：129 条回执 → `cmd.*`；`usageError('中文用法')` → `usageError('tp')` 查 `cmd.usage.*`；`/help` 的 usage/description 进表；删除 `USAGE_FIELD_NAMES` / `translateUsageFields` / `pickLabel`；`CommandHelp.ts` 的 140 条参数标签 + `CommandHelpScreen` 整屏
+- **P2 数据层键化**（中文文本零变化）：物品/方块名 `item.<id>`；说明 `item.desc.<id>`（独立文件）；生物名、职业/等级、附魔、效果、群系、维度、世界类型、音效组、外观 10 张、朝向、旗帜图案、配方书页签、类别；逻辑层 reason 串（`Loom` / `StationNeed` / 容器红底原因）
+- **P3 界面残留**：`TouchControls` / `Tooltip` / `BookScreen` / `SignEditor` / `NameTagEditor` / `CommandBlockEditor` / `BeaconScreen` / `UnsupportedScreen` / `StatisticsScreen` / `LoadingOverlay` / `relativeTime` / `index.html` 首屏 / `manifest.webmanifest`
+- **P4 新语言**：德语（最长串、复合词）→ 俄语（4 种复数 + 西里尔）→ 法语 → 葡语（巴西）；每语言一个批次
+- **P5 Play 发行**：商店列表 6 份文案、Android 13 per-app language 透传、`?lang=` 深链、真机横屏逐语言过一遍
+
 ## 批次 20261023-1603 · 2026-10-23 · 会话 d3607f00
 
 **做了什么**：按「全测只跑一遍 + 全测先清场」改 e2e 脚手架：① 删除一律走绝对路径 `/bin/rm`
@@ -155,126 +255,5 @@
   - 验证：四个场景全通过（13 / 6 / 12 / 6 项）；`npm run check` **EXIT 0**；`check-framework.mjs` 通过；`selftest` **57 项**；`assets` 逐字节一致
   - 说明：`b75f5b-plan.md` 那条删除是别的会话的改动，我按"旧的全删了"一并提交了——严格说应该先问你，已记录在此
   - 批次：20261023-1141
-
-
-## 批次 20261023-1018 · 2026-10-23 · 会话 b09ae4
-
-**做了什么**：把 e2e 从"一个主干场景"扩成 **6 个场景 + 两种执行器**（真模型 / 直接喂钩子），
-六个场景逐个实跑通过；并在跑的过程中撞出**四处静默失效**（队列文件名写错、空队列停在讨论中、
-归档漏决策记录、两处断言误判），全部修掉并补了自检。现场改为**默认保留**、`--fresh` 才清整轮。共 8 条。
-
-**条目**（原文照搬）：
-
-- [x] [现场1] 现场改为**默认保留**、每次跑前清空；补「CLI 退出码必须 0」断言，未知失败标"环境疑似"并贴原文 → `--dry-run` 与实跑都不再删现场
-  - 做了什么：去掉"成功即删"，改成**跑前 `rmSync(.e2e)` + 跑完保留**（只留最近一次）；`runModel` 分出三个出口——正常返回、环境跳过（401 / 网络，只看 stderr）、未知非 0 退出（打印 stderr 尾部并标"疑似环境"，不判框架红）；跳过不再算"通过"，汇总里单列 `⏭`
-  - 为什么只看 stderr：实测踩过 `--output-format json` 的 stdout 里一个 UUID（`8b47-401ce1189567`）就含 "401"，把"模型明明跑完了"误判成"未登录"——扫描面收窄到 stderr，并去掉裸 `401` 这种过宽匹配
-  - 为什么"跳过"不能算通过：跳过意味着模型那一段压根没跑，把它算绿就等于**用"没验"冒充"验过"**
-  - 验证：`--dry-run` 不建目录；`blocked`/`worktree`/`decision` 三次实跑后现场都保留在 `.e2e/`；`decision` 那次 stdout 里带 UUID 但不再误判（133s 正常跑完）
-  - 批次：20261023-1018
-- [x] [场景1] `blocked`（probe）：造队列 + `CONTINUE_BLOCK_AFTER=2` 连喂 Stop → 断言标 `[阻塞]`、日志有隔离、之后请求用户拍板
-  - 做了什么：新增 `blocked` 场景——单条目队列 + `CONTINUE_BLOCK_AFTER=2`，连喂 3 次 Stop，断言：第 1 轮正常递任务、连续 N 轮后队列里出现 `[阻塞]`、日志有「隔离 · 连续 N 轮」、之后改为请求用户拍板、且不再把它当普通任务递出
-  - 为什么用 probe 而不是真模型：靠"让模型故意不干活"根本触发不了；而它又是最容易静默失效的分支。probe 仍跑在**装出来的真实框架**上，只是不经过模型
-  - 验证：`npm run skill:e2e -- --scenario blocked` **6 项全过**
-  - 批次：20261023-1018
-- [x] [场景2] `decision`（model）：给一个有取舍的任务 → 断言模型真写了 `<sid>-decision.md`（含 `- 决定：`/`- 为什么：`）且收尾后归档
-  - 做了什么：提示词给一个真的二选一（`storage` 写成 `"v2"` 还是 `{version:2}`），明确"自己决定、不要问"，并要求按协议把每处决定写进 `doing/<sid>-decision.md`；断言文件存在（doing/ 或已归档）、至少一条 `## D<n>`、每条有 `- 决定：` 与 `- 为什么：`、收尾后归档
-  - 为什么这条必须真模型：它验的是"模型会不会照着协议写"，机制侧的归档半天前已有单测（`archive-queue --decision`）
-  - 验证：实跑 **7 项全过**（133s）；现场留下 `config.json` + `logs/e2e000/decision-<时间戳>.md`
-  - 批次：20261023-1018
-- [x] [场景3] `plan`：model 段验"会不会建 plan 且结构合法"；probe 段用手工 plan 验续批 / 硬停（先问后重置）/ 确认后继续 / 完成归档
-  - 做了什么：拆成两个用例。**`plan-split`（model）**：给"补 30 条小功能"，只让它规划不实现，断言建了 `<sid>-plan.md`、≥1 里程碑、阶段总数 ≥2、每个里程碑 ≥2 阶段、有 `- 验收：`、队列只放当前阶段——**产物合理就过，到此为止**；**`plan-run`（probe）**：plan 与队列提前写好，每一步只喂一次 Stop，验续批 / 硬停（且「弹窗问用户」出现在「只有用户选了」之前）/ 已确认就不再拦 / 全部完成并归档
-  - 为什么拆：把"切分"和"执行"混在一个用例里，一轮跑不完（30 条任务 + 收尾）；拆开后切分只花一次模型调用，执行是秒级
-  - 踩到的两个测试假象：① 手工改计划文件时游标不变 → `planKey` 不变 → 钩子判"已下发过"直接放行，看着像硬停失效（真实流程里勾阶段会换钥匙），所以每个边界前清一次钩子状态；② 我第一版把 MS2 只留 1 条未完成阶段，游标一进 MS2 就到边界——**硬停是对的**，是我预期写错了
-  - 验证：`--scenario plan-split` **8 项全过**（302s，模型确实把 30 条切成了多里程碑多阶段）；`--scenario plan-run` **8 项全过**
-  - 批次：20261023-1018
-- [x] [场景4] `worktree`（probe）：已有别的会话队列时注入提示、建树+分支+推本地 bare origin、树内钩子隔离、`merge --no-ff` 回主分支
-  - 做了什么：新增 `worktree` 场景（12 项）——别的会话留一条进行中队列 → 新会话注入里出现「其他会话还有未完成队列」→ 跑 `worktree.mjs` 建树/开分支/推**本地 bare 仓库**（不依赖网络与凭据）→ 树内新 sid 找不到队列（按 sid 找，不误认别人的）→ 树里未提交改动不串到主树 → 树里提交 → `git merge --no-ff` 回主分支并断言拿到那条改动
-  - **修正了一个我原来写错的断言**：起初断言"树里看不到主树队列"——错的。worktree 检出的是同一条分支，**已提交**的队列两边一样，本来就该看得见（"其他会话还有未完成队列"这条提示正是靠它）。真正被隔离的是**未提交改动**与**各自的会话状态**，断言照这个改
-  - 还修了两处测试自身的错：① 给"别的会话"和"本会话"用了同一个 6 位前缀，`shortSid` 一截就变成同一份队列文件；② 全新会话直接喂 Stop 不写日志（`tracked = 有队列 || 已有日志`），得先喂一次用户消息
-  - 验证：`--scenario worktree` **12 项全过**
-  - 批次：20261023-1018
-- [x] [文档1] SKILL.md 写清 5 个场景、两种执行器、现场保留规则与常用命令
-  - 做了什么：`SKILL.md` §1.5 整节重写——三层自检的分工、**6 个场景表**（场景 / 执行器 / 验什么）、`--all` / `--scenario` / `--dry-run` / `--fresh` / `--strict` 用法、五条约定（数据在 skill 内且不进库、**现场默认保留**、模型固定、环境跳过不算失败、不进 `test:*`）、CI 登录 secret 的导出命令
-  - 为什么强调"现场默认保留"：一次完整测试由多个用例组成，跑到一半重跑一个用例就把别的用例现场删掉，等于让人没法对照（这正是不久前踩的）
-  - 验证：`check-framework.mjs` 通过（它要求脚本与开关都在 SKILL.md 里有交代）；`--dry-run --all` 打印 6 个场景
-  - 批次：20261023-1018
-- [x] [发现] e2e 暴露的四处**静默失效**（跑场景时撞出来的，不是预先设计的）
-  - ① **队列文件名写错**：模型按完整会话 ID 建文件（`e2e000…e.md`），钩子按前 6 位找 `e2e000.md` → 永远找不到，机制全程不生效且零报错。修法：`queue-init` **自己建队列文件**（只建空壳，状态 `讨论中`），文件名不再由 AI 拼；`auto-continue` 另加一道「近名文件」拦截，命中就要求 `git mv` 改名
-  - ② **空队列停在讨论中**：脚本建好空队列后如果不填就一直是 `讨论中`，钩子静默放行 = 永远停住。修法：讨论中**且空** → 拦住让 AI 填条目再改 `执行中`
-  - ③ **归档漏决策记录**：收尾第 5 步原本要求"归档队列 → 再 `--decision`"，实测模型只做第一步就走了。修法：`archive-queue <sid>` 一条命令把队列 + 决策记录 + 计划一起归档（单独的 `--plan`/`--decision` 仍可用）
-  - ④ **断言误判两次**：`--output-format json` 的 stdout 里一个 UUID（`8b47-401ce1189567`）含 "401" → 被当成"未登录"；模型读了 README，而 README 里写着"框架自己坏了" → 被当成"钩子崩了"。修法：环境检测只看 stderr 且用精确匹配；崩溃检测只匹配包装器特有文案
-  - 为什么记这条：四处都不是"写错了代码"，而是**机制在某些入口上留了静默缺口**——它们只有真跑场景才会露出来，静态自检 52 项全绿也照不出来
-  - 验证：钩子自检新增 2 条（空队列 / 文件名写错）；`main`、`decision` 复跑转绿
-- [x] [验] 逐场景实跑 + `npm run check` 全绿
-  - 做了什么：六个场景逐个实跑，外加全量门禁
-  - 验证：`main` **12/12**（213s）、`blocked` **6/6**、`decision` **7/7**（142s）、`plan-split` **8/8**（302s）、`plan-run` **8/8**、`worktree` **12/12**；钩子自检 **52 → 54 项**（新增"空队列讨论中要拦""文件名写错要拦"）；`npm run check` **EXIT 0**；`check-framework.mjs` 通过
-  - 批次：20261023-1018
-
-
-## 批次 20261023-0927 · 2026-10-23 · 会话 b09ae4
-
-**做了什么**：把 e2e 的现场挪进 skill 自己的目录并排除出版本库（框架进库、数据不进库）、
-模型固定成 `deepseek-v4.1-flash-official`、摸清 CLI 登录态的真实位置并写成可执行的 CI 配置。
-过程中实跑四次，**前三次的失败各暴露一个真问题**（轮次不够 / 网络误诊 / 未登录误诊），都修掉了；
-第四次 15 项全过：队列建了 → 钩子递了 → DONE 有批次节 → 队列归档 → git 5 个提交。共 4 条。
-
-**条目**（原文照搬）：
-
-- [x] [目录1] 测试数据挪进 skill：`scripts/e2e.mjs` 的数据根改到 `.codebuddy/skills/continue-task/.e2e/`，在 skill 内加 `.gitignore`，删掉根 `.gitignore` 里作废的 `.skill-e2e/` → `git check-ignore` 命中、`git status` 干净
-  - 做了什么：`DATA_ROOT` 从 `<仓库>/.skill-e2e` 改成 `<skill>/.e2e`；新增 `.codebuddy/skills/continue-task/.gitignore`（一行 `.e2e/`）；根 `.gitignore` 里那段 `.skill-e2e/` 删掉（作废配置留着比没有更坏）
-  - 为什么放 skill 目录里：这套测试是**随 skill 走**的，现场也该跟着它；而且 `.gitignore` 放在 skill 内侧，别人把这个目录拷进自己仓库时**自带排除规则**，不用再改根 `.gitignore`
-  - 验证：建 `.e2e/probe/a.txt` 后 `git check-ignore -v` 命中 `.codebuddy/skills/continue-task/.gitignore:3:.e2e/`；`git status` 里不出现现场；实跑一次后现场被自动删除（`--keep` 才留）
-  - 批次：20261023-0927
-- [x] [模型1] 模型固定 `deepseek-v4.1-flash-official`（默认参数，可用 `--model` 覆盖）→ `--dry-run` 打印出模型名
-  - 做了什么：`DEFAULT_MODEL = 'deepseek-v4.1-flash-official'`，`--model` 可覆盖；CLI 调用里显式传 `--model`；`--dry-run` 打印"模型 deepseek-v4.1-flash-official（默认）"
-  - 为什么固定而不是"继承本机默认"：本机默认模型随时会换，换了之后断言结果就跟着变（同一套代码今天过明天不过），排查时根本分不清是框架退化还是模型换了。**测试要钉住变量**
-  - 为什么仍允许 `--model` 覆盖：换模型对比行为是正常需求，留一个显式入口即可
-  - 验证：`npm run skill:e2e -- --dry-run` 打印模型名；实跑的命令行里能看到 `--model deepseek-v4.1-flash-official`
-  - 批次：20261023-0927
-- [x] [CI1] 把「CI 怎么登录」写成可执行配置：新增手动触发的 `.github/workflows/skill-e2e.yml`（还原 `local_storage` → 设 `CODEBUDDY_CONFIG_DIR`）+ SKILL.md 写清步骤 → `yaml` 静态可读、默认不在 push 上跑
-  - 做了什么：摸清了 CLI 的登录态存放位置——`auth-type` 是 `cli-external-link`，`~/.codebuddy/.credentials.json` 里**只有 MCP OAuth**，真正的 Bearer 在 `~/.codebuddy/local_storage/`（444KB）。实测：只把 `local_storage/` 拷进空目录 + `CODEBUDDY_CONFIG_DIR=<该目录>`，401 消失、模型正常回话。据此写了 `skill-e2e.yml`（`workflow_dispatch` 手动触发）：装 CLI → 从 secret 还原 `local_storage` → 先探一次登录 → 跑 `npm run skill:e2e` → 失败上传现场；SKILL.md 写明三条命令导出 secret
-  - 为什么**只手动触发**：一次几分钟且花 token，放 push 上等于每次提交都烧钱
-  - 为什么不用整个 `~/.codebuddy`：里面有 `projects/` 会话历史，几百 MB，塞不进 secret；实测只要 `local_storage/`
-  - 诚实说明：这个 workflow **只在本地做了静态审阅，没在真 GitHub Actions 上跑过**（没有仓库 secret 可验）。secret 缺了会 `::error::` 明确失败，不会静默绿
-  - 验证：`--dry-run` 与 SKILL.md 的导出命令一致；`local_storage` 单独可用的结论来自两次对照实验（空目录 401 / 只带 local_storage 通过）
-  - 批次：20261023-0927
-- [x] [验] 真跑一次 e2e（已登录环境）+ `npm run check` 全绿
-  - 做了什么：连跑四次，前三次分别暴露了三个真问题（见下），第四次通过；跑完全量门禁
-  - **三次失败都不是白的**：① 12 轮不够——模型写完 `hello.txt` 就结束了，根本没建队列，于是把轮次放到 40 并把提示词写成"建队列 → 逐条勾 → 收尾"的可对照清单；② 网关 502 / DNS 解析失败——环境问题被当成框架问题误诊，于是加了"环境跳过"分支（沿用 `check:browser` 的口径，`--strict` 可把跳过改成失败）；③ 未登录 401——同样按跳过处理，并验静态级
-  - 验证：第四次 **15 项全过**——钩子日志有 `queue-init`/`auto-continue`、队列建过、`DONE.md` 出现 `## 批次`、队列归档到 `logs/<sid6>/queue-<14位>.md`、git 5 个提交；`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` 五项全绿
-  - 批次：20261023-0927
-
-
-## 批次 20261023-0914 · 2026-10-23 · 会话 b09ae4
-
-**做了什么**：先核对了"运行版 ↔ skill 打包源"（14 个钩子逐字节一致、`REQUIRED` 无遗漏），
-然后在 **skill 里**加了一层**端到端自测** `scripts/e2e.mjs`：临时项目 → 装框架 →
-用真实 `codebuddy -p` 跑一个小任务 → 断言"队列建了 → 钩子递了 → 收尾做了 → 归档落位"。
-测试数据落在 `.skill-e2e/`（已 gitignore）：**框架进库、现场不进库**。共 4 条。
-
-**条目**（原文照搬）：
-
-- [x] [一致1] 运行版与 skill 打包源逐字节一致、预留钩子全在 install 清单里、注入探针与文档措辞同步 → `diff -rq` 无差异 + `check-framework` / `test-install` 通过
-  - 做了什么：核对了四件事——① `assets/.continue/hooks` 与 `.continue/hooks` **14 个文件逐字节一致**；② `assets/.continue/README.md` 与运行版一致；③ `install.mjs` 的 `REQUIRED` 22 条覆盖了磁盘上**全部** 14 个钩子（我用脚本比对"磁盘上有但 REQUIRED 没列"= 无）；④ `notes/batches.md` 的历史行故意不改（那是当时的做法，改历史等于伪造台账）
-  - 为什么每次都要真比对而不是"我记得同步了"：上一批就漏过一次——改了运行版没回灌 assets，重装一次改动全被抹掉，症状是"过几天又变回去了"且零报错
-  - 验证：`diff -rq` 无输出；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
-  - 批次：20261023-0914
-- [x] [e2e1] 新增 `scripts/e2e.mjs`：建临时项目 → 装框架 → 用 `codebuddy -p` 跑一个小任务 → 断言队列/递任务/收尾/归档/日志全链路 → `--dry-run` 能打印计划且不建目录
-  - 做了什么：新增 `.codebuddy/skills/continue-task/scripts/e2e.mjs`（约 260 行）——临时项目 `git init` + 初始提交 → 跑 `install.mjs --no-detect` → `codebuddy -p "<小任务>" --session-id <固定 32 位 hex> --max-turns N --permission-mode bypassPermissions --output-format json` → 断言 `logs/<sid6>/run.md` 里有 `[queue-init`／`[auto-continue`、队列建过（现存或已归档）、`DONE.md` 出现 `## 批次`、`git rev-list` ≥ 3、队列最终落到 `logs/<sid6>/queue-<14位>.md`；失败保留现场并打印 CLI 输出尾部
-  - 为什么固定 `--session-id`：断言要按会话 ID 推导路径（`<sid6>.md`、`logs/<sid6>/`），随机 ID 会让"归档到哪儿"每次都变，断言写不出来
-  - **为什么要这一层（不是重复 `test-install`）**：前两个脚本只看静态产物。实测过一类事故——钩子写 stdout 后立刻 `exit` 导致 JSON 被截断，静态检查全绿，但注入整份被宿主丢掉、任务永远递不出来。只有真跑一遍才看得见
-  - **未登录（401）不判失败**：CLI 仍会加载 `settings.json` 并触发钩子，所以"注册对不对、注入有没有被截断、钩子会不会崩"这三件**已经真的验过了**；模型那一轮没发生，队列自然不建。于是分两级——静态级通过就 exit 0 并说明"登录后重跑才能验到队列/收尾/归档"
-  - 验证：`--dry-run` 只打印计划、**不建目录**；实跑两次（未登录环境）→ 静态级 4 项全 ✓（日志有、queue-init 有、auto-continue 有、钩子没崩）并正确跳过模型级；缺参数时 exit 2
-  - 批次：20261023-0914
-- [x] [e2e2] 接线：`.gitignore` 忽略测试数据目录、`package.json` 加 `skill:e2e`（**不进 test:* 前缀**，避免台账套数漂）、SKILL.md 写清怎么跑 → `npm run skill:e2e -- --dry-run` 通过
-  - 做了什么：`.gitignore` 加 `.skill-e2e/`（框架进库、现场不进库）；`package.json` 加 `skill:e2e`；`SKILL.md` 新增「1.5 三层自检」——把三个脚本的分工、`--dry-run/--keep`、三条约定（模型继承本机 / 数据不进仓库 / 没装 CLI 就跳过）写清楚
-  - 为什么**不用** `test:` 前缀：`audit-tasks` 会拿 `package.json` 里 `test:*` 的**数量**去核对 README/AGENTS/HANDOFF 里写的"172 套"，加一个就会三处全红；而且 `npm run check` 会把它带上——一次几分钟、还花 token，不该进每次提交的门禁
-  - 为什么数据目录放在仓库内而不是 `/tmp`：`install.mjs` 要写 `.git/hooks`、`git` 要能提交，仓库内更接近真实项目；用 gitignore 隔离即可，也让失败现场好找
-  - 验证：`npm run skill:e2e -- --dry-run` 打印计划且**没有**创建 `.skill-e2e/`；`node -e` 确认 script 已注册；`git status` 里没有 `.skill-e2e`（被忽略）
-  - 批次：20261023-0914
-- [x] [验] `npm run check` + `node .continue/hooks/check.mjs` 全绿
-  - 做了什么：跑全量门禁与框架五项；清掉 e2e 留下的现场（`.skill-e2e/`）
-  - 验证：`npm run check` **EXIT 0**；`node .continue/hooks/check.mjs` **五项全绿**；`check-framework.mjs` 通过；`test-install.mjs` 19 项通过
-  - 批次：20261023-0914
 
 
