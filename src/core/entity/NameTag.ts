@@ -109,3 +109,34 @@ export function nameTagWidthFor(name: string): number {
 
 /** 名字牌的高度（格）：固定，不随字数变——高度变了会挡住生物的脸 */
 export const NAME_TAG_HEIGHT = 0.26;
+
+/**
+ * 队友名字牌的范围（格）。
+ *
+ * 比生物名字牌（32 格）大一倍：生物是"附近有什么"，队友是"人在哪"——原版联机里
+ * 隔着半个山谷也能看到队友昵称。再远就没意义了（本来也看不清）。
+ */
+export const REMOTE_NAME_TAG_RANGE = 64;
+
+/** 队友名字牌从多远开始变淡（格） */
+export const REMOTE_NAME_TAG_FADE_FROM = 32;
+
+/**
+ * 队友名字牌的透明度（距离衰减）。
+ *
+ * 为什么只给队友做：生物名字牌是"命名牌起名"的结果，原版不渐隐；而队友昵称在
+ * 64 格外还很亮会显得世界很挤，渐隐之后远方的队友退成背景，近处才清晰。
+ *
+ * 规则：`≤ fadeFrom` 全亮、`≥ maxRange` 全透明（调用方本来也不会画）、中间线性。
+ */
+export function remoteNameTagOpacity(
+  distance: number,
+  maxRange: number = REMOTE_NAME_TAG_RANGE,
+  fadeFrom: number = REMOTE_NAME_TAG_FADE_FROM,
+): number {
+  if (!Number.isFinite(distance) || distance <= fadeFrom) return 1;
+  if (distance >= maxRange) return 0;
+  const span = maxRange - fadeFrom;
+  if (span <= 0) return distance >= maxRange ? 0 : 1;
+  return Math.max(0, Math.min(1, 1 - (distance - fadeFrom) / span));
+}

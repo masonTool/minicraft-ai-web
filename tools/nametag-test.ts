@@ -14,9 +14,11 @@ import {
   MAX_TAG_TEXT_LENGTH,
   NAME_TAG_HEIGHT,
   NAME_TAG_MAX_WIDTH,
+  REMOTE_NAME_TAG_RANGE,
   canNameMob,
   composeNameTag,
   nameTagWidthFor,
+  remoteNameTagOpacity,
   sanitizeName,
 } from '../src/core/entity/NameTag.ts';
 import { Item, itemDef, itemIconTile, itemName } from '../src/core/registry/items.ts';
@@ -313,7 +315,8 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
 
   check(
     'show() 收样式对象（颜色 + 前后缀一次传入）',
-    /show\(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE\)/.test(src),
+    // 联机18 起多了一个 `opacity`（队友名字牌的距离衰减），样式对象仍是"一次传入"
+    /show\(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE, opacity = 1\)/.test(src),
   );
   check('drawName() 收 color 参数', /private drawName\(name: string, color: string \| null\)/.test(src));
   check('重画判据改走 nameTagNeedsRedraw', src.includes('nameTagNeedsRedraw('));
@@ -340,7 +343,10 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   check('主程序导入 nameTagStyleFor', /import \{ nameTagStyleFor \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
   check(
     'updateNameTags 里把样式传给 show()',
-    /nameTagStyleFor\(entry\.mob\.customName[\s\S]{0,200}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, style\)/.test(mainSrc),
+    // 联机18 起第 4 参是距离衰减后的透明度，样式仍按"一次查表、一次传入"走
+    /nameTagStyleFor\(entry\.mob\.customName[\s\S]{0,400}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, style, opacity\)/.test(
+      mainSrc,
+    ),
   );
   check('颜色已不再单独查一次（避免颜色接上、前后缀漏掉）', !mainSrc.includes('colorForMob('));
   check(
@@ -448,6 +454,20 @@ console.log('\n[队伍前后缀（批次 1359）]');
     '回执里的 part 也过 msg()（否则英文界面会漏中文）',
     cmdSrc.includes("msg(key === 'prefix' ? 'cmd.reply.team.prefix' : 'cmd.reply.team.suffix')"),
   );
+}
+
+console.log('\n[队友名字牌的距离衰减（联机18）]');
+{
+  // 从 32 格开始变淡、到 64 格全透明；近距离不衰减
+  check('32 格内全亮', remoteNameTagOpacity(0) === 1 && remoteNameTagOpacity(32) === 1);
+  check('64 格外全透明', remoteNameTagOpacity(64) === 0 && remoteNameTagOpacity(100) === 0);
+  check('中间线性（48 格正好一半）', Math.abs(remoteNameTagOpacity(48) - 0.5) < 1e-9);
+  check(
+    '单调递减（越远越淡）',
+    remoteNameTagOpacity(40) > remoteNameTagOpacity(50) && remoteNameTagOpacity(50) > remoteNameTagOpacity(60),
+  );
+  check('距离非法时按全亮处理（不返回 NaN）', remoteNameTagOpacity(Number.NaN) === 1);
+  check('队友范围比生物名字牌大一倍', REMOTE_NAME_TAG_RANGE === 64 && REMOTE_NAME_TAG_RANGE > 32);
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);

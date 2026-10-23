@@ -98,7 +98,7 @@ import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy, mobLabel } from './core/entity/Mob.ts';
-import { canNameMob, sanitizeName } from './core/entity/NameTag.ts';
+import { REMOTE_NAME_TAG_RANGE, canNameMob, remoteNameTagOpacity, sanitizeName } from './core/entity/NameTag.ts';
 import { nameTagStyleFor } from './core/entity/NameTagColor.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { PASSIVE_MOBS, mobTypeById } from './core/entity/mobs.ts';
@@ -935,7 +935,8 @@ const TOUCH_HIGHLIGHT_STRENGTH = 2;
  * 定成常数而不是"有几只建几个"：每张名字牌是一张独立的 CanvasTexture，
  * 跟着生物数量涨会让显存无谓地涨（而且绝大多数生物是没名字的）。
  */
-const NAME_TAG_POOL_SIZE = 12;
+// 12 → 16（联机18）：队友昵称也占一个位置，人多时 12 个会被生物挤掉
+const NAME_TAG_POOL_SIZE = 16;
 
 /**
  * 名字牌的最远可见距离（格）。
@@ -3609,11 +3610,15 @@ class App {
     if (!mob) {
       mob = new Mob(REMOTE_PLAYER_TYPE, player.x, player.y, player.z);
       mob.yaw = player.yaw;
+      // 名字牌（联机18）：远端玩家的昵称存在 `customName` 上，`updateNameTags` 才认得出
+      mob.customName = player.name;
       this.remotePlayers.set(player.id, mob);
       this.remoteSmoothers.set(player.id, new RemotePlayerSmoother(next));
       console.info(`[net] ${player.name}#${player.id} 加入了游戏`);
       return;
     }
+    // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新
+    if (mob.customName !== player.name) mob.customName = player.name;
     // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）
     this.remoteSmoothers.get(player.id)?.setTarget(next);
     // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
@@ -5508,11 +5513,23 @@ class App {
     for (const entity of this.entities.all) {
       if (!(entity instanceof Mob)) continue;
       if (entity.dead || !entity.customName) continue;
-      // 远程玩家的影子不该显示"名字牌"（它本来就是别人的头像）
+      // 远程玩家**不在** `entities` 里（它们单独住在 `remotePlayers`），下面单独收集
       if (entity.type.id === REMOTE_PLAYER_TYPE.id) continue;
       const distance = Math.hypot(entity.x - px, entity.y - py, entity.z - pz);
       if (distance > NAME_TAG_RANGE) continue;
       candidates.push({ mob: entity, distance });
+    }
+
+    // 队友昵称（联机18）：原来这里**明确跳过**远程玩家，于是联机时看不到队友叫什
+    // 么。它们不在 `entities` 里，所以单独扫一遍 `remotePlayers`；范围放到
+    // `REMOTE_NAME_TAG_RANGE`（64 格）——生物名字牌是"附近有什么"，队友是"人在哪"
+    for (const [id, mob] of this.remotePlayers) {
+      if (!mob.customName) continue;
+      // 别的维度的队友不画（他在下界时主世界同坐标会有一个分身，联机3 已经处理过玩家模型）
+      if (!this.remotePresence.visible(id, this.dimension)) continue;
+      const distance = Math.hypot(mob.x - px, mob.y - py, mob.z - pz);
+      if (distance > REMOTE_NAME_TAG_RANGE) continue;
+      candidates.push({ mob, distance });
     }
     candidates.sort((a, b) => a.distance - b.distance);
 
@@ -5532,7 +5549,10 @@ class App {
       // 只有真的画的时候才查一次表——池子固定 12 个，每帧最多 12 次 Map 查询，
       // 而且颜色与前后缀是**同一次查询**取回来的，不会出现"颜色接上了、前后缀忘了"。
       const style = nameTagStyleFor(entry.mob.customName, (member) => this.teamState.teamOf(member));
-      tag.show(entry.mob, isAimed ? 0.34 : 0.12, style);
+      // 距离衰减只给队友（联机18）：生物名字牌是命名牌起的，原版不渐隐
+      const opacity =
+        entry.mob.type.id === REMOTE_PLAYER_TYPE.id ? remoteNameTagOpacity(entry.distance) : 1;
+      tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, opacity);
     }
   }
 

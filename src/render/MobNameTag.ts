@@ -103,7 +103,7 @@ export class MobNameTag {
    *   （没队伍时是 `PLAIN_NAME_TAG_STYLE`：默认白、无前后缀）。**这里不查队伍**：
    *   渲染层不该知道 `Teams` 长什么样，否则同一条规则会在两个地方各写一遍。
    */
-  show(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE): void {
+  show(mob: Mob, topLift: number, style: NameTagStyle = PLAIN_NAME_TAG_STYLE, opacity = 1): void {
     const name = mob.customName;
     if (!name) {
       this.hide();
@@ -124,6 +124,11 @@ export class MobNameTag {
       this.lastColor = style.color;
       this.drawName(display, style.color);
     }
+    // 距离衰减（联机18）：只对队友名字牌生效，生物传 1 进来
+    // 下限留 0.05 而不是 0：0 与"隐藏"在视觉上一样，但保留一点点可以让它淡出得连续
+    const material = this.object.material as THREE.SpriteMaterial;
+    material.transparent = true;
+    material.opacity = Math.max(0.05, Math.min(1, opacity));
     this.object.visible = true;
   }
 
