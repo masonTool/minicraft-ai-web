@@ -2210,6 +2210,22 @@ class App {
         this.clearSelection();
         this.refreshBuildToolbar();
       },
+      // 抽屉开合与指针锁（批次 20261024-0344）：
+      // 开着时释放指针锁——不然鼠标还在后面转视角，面板上根本点不准；
+      // 关掉后按 `uiOpen` 决定要不要重新锁（背包还开着就别抢回来，与 `handleInventoryOpen` 同口径）。
+      // ⚠️ 这里**不**走 `uiOpen`：`handleInventoryOpen` 会清按键、收触摸层、退锁再抢锁，
+      // 每开关一次面板抖一下（取舍见 `.continue/doing/f639d3-decision.md` D4）。
+      onPanelChange: (open) => {
+        if (open) {
+          if (document.pointerLockElement) document.exitPointerLock();
+          return;
+        }
+        if (this.uiOpen || this.touch) return;
+        const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+        result?.catch(() => {
+          /* 浏览器可能拒绝自动重新锁定，玩家点一下画面即可 */
+        });
+      },
     });
     this.refreshBuildToolbar();
 
@@ -9371,6 +9387,9 @@ class App {
 
   /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
   private refreshBuildToolbar(): void {
+    // 非创造时**把模式一起清零**（批次 20261024-0344）：旧实现只把工具条藏起来，
+    // `buildMode` 还是 true，左键继续被当"点选区角"吞掉——玩家会觉得"挖不动、工具也没了"。
+    if (!this.isCreative && this.buildMode) this.buildMode = false;
     this.buildToolbar.setAvailable(this.isCreative);
     this.buildToolbar.setUndoState(this.undoStack.canUndo, this.undoStack.canRedo);
     this.buildToolbar.setSelectionArmed(this.selectionStart !== null);
@@ -11671,6 +11690,7 @@ class App {
   /** 验收脚本用：工具条状态 */
   get buildToolbarStateForTest(): {
     mode: boolean;
+    panelOpen: boolean;
     available: boolean;
     armed: boolean;
     undo: number;
@@ -11678,6 +11698,7 @@ class App {
   } {
     return {
       mode: this.buildToolbar.isOpen,
+      panelOpen: this.buildToolbar.isPanelOpen,
       available: this.isCreative,
       armed: this.selectionStart !== null,
       undo: this.undoStack.undoCount,

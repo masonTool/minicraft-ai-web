@@ -30,3 +30,13 @@
   只能先塞临时字面量再回头拆，反而多一次改动。
 - 影响：只影响本批两条任务的先后；条目标号沿用 B2/B3 不变（编号是位置，不复用含义）。
   面板的「返回」不再新增 `buildtools.panel.back`，直接复用已有的 `editor.back`（同一份文案表、6 语言齐全）。
+
+## D4 · 抽屉的指针锁由 `onPanelChange` 单独管，不复用 `uiOpen`
+
+- 决定：`BuildToolbar` 新增一个 `onPanelChange(open)` 回调，主程序在里面开面板时
+  `exitPointerLock()`、关面板时按 `!uiOpen && !touch` 重新 `requestPointerLock()`。
+- 为什么：走 `uiOpen`（`handleInventoryOpen`）会顺带清按键、收起触摸层、退锁再抢锁，
+  每开关一次面板抖一下；而抽屉的遮罩已经吃掉了世界观交互，不需要那套副作用。
+  两种做法都能"关掉面板后视角能转"，代价都不难撤回，取副作用最小的那个。
+- 影响：指针锁只在桌面端有意义（`this.touch` 在时直接跳过）；面板开合不再影响
+  `uiOpen`、背包、触摸层显隐。

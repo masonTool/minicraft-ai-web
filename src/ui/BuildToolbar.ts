@@ -56,6 +56,13 @@ export interface BuildToolbarActions {
    * 不该被当成"玩家主动收工"，那边要留选区、也不弹提示。
    */
   readonly onEndBuild: () => void;
+  /**
+   * 抽屉开/合（主程序拿去管指针锁：开着时释放，关掉后按 `uiOpen` 决定要不要重新锁）。
+   *
+   * 不走 `uiOpen` 那条：`handleInventoryOpen` 会清按键、收触摸层、退锁再抢锁，
+   * 每开关一次面板抖一下，而遮罩已经吃掉了世界观交互。
+   */
+  readonly onPanelChange: (open: boolean) => void;
 }
 
 interface CellSpec {
@@ -316,11 +323,14 @@ export class BuildToolbar {
 
   /** 打开抽屉：顺带把建造模式打开（否则"点选区 → 收面板 → 点方块"会变成挖方块） */
   openPanel(): void {
-    if (!this.available) return;
+    if (!this.available || this.panelOpen) return;
     this.panelOpen = true;
+    // 先发 onToggleMode 再摆面板：主程序那边可能马上 refresh（改变可用性），
+    // 状态先对齐，后面 applyLayout 读到的才是最终值
     if (!this.mode) this.setMode(true, true);
     this.setPage('tools');
     this.applyPanel();
+    this.actions.onPanelChange(true);
   }
 
   /** 收起抽屉：**不退**建造模式（选完工具收面板是常态） */
@@ -329,6 +339,7 @@ export class BuildToolbar {
     this.panelOpen = false;
     this.setPage('tools');
     this.applyPanel();
+    this.actions.onPanelChange(false);
   }
 
   dispose(): void {
