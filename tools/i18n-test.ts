@@ -992,6 +992,44 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   check('深链 ?lang=xa 仍是伪语言、不覆盖语言', languageFromParam('xa') === undefined && languageFromParam('en-XA') === undefined);
   check('深链 ?lang=ja（没做表）→ 不覆盖设置', languageFromParam('ja') === undefined);
   check('深链没给参数 / 空串 → 不覆盖设置', languageFromParam(null) === undefined && languageFromParam('') === undefined);
+
+  /**
+   * manifest 六语言（多语言 P5-3）。
+   *
+   * 六个文件由 `tools/gen-manifests.mjs` 生成：**只有 `description` 与 `lang` 不同**，
+   * 其余字段必须与中文基准逐字相同。这一节盯三件事：
+   *  ① 六份都在（少一份，那个语言装出来的 App 就还是中文描述）；
+   *  ② `lang` 与 `<html lang>` 用同一套值（`localeMeta().htmlLang`，带地区的写成 `pt-BR`）；
+   *  ③ 描述**两两不同** —— 六份都抄英文的话，字段检查全过、界面却是"六个一样的描述"。
+   */
+  const manifestDir = 'public';
+  const baseManifest = JSON.parse(readFileSync(`${manifestDir}/manifest.webmanifest`, 'utf8'));
+  const manifestLocales: Array<[string, string]> = [
+    ['zh', 'manifest.webmanifest'],
+    ['en', 'manifest.en.webmanifest'],
+    ['de', 'manifest.de.webmanifest'],
+    ['ru', 'manifest.ru.webmanifest'],
+    ['fr', 'manifest.fr.webmanifest'],
+    ['pt', 'manifest.pt.webmanifest'],
+  ];
+  const manifestDescriptions = new Set<string>();
+  for (const [code, file] of manifestLocales) {
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(readFileSync(`${manifestDir}/${file}`, 'utf8')) as Record<string, unknown>;
+    } catch {
+      check(`manifest ${file} 存在且是合法 JSON`, false, '读不到');
+      continue;
+    }
+    check(`manifest ${file} 的 lang 与 htmlLang 一致`, manifest.lang === localeMeta(code)?.htmlLang, String(manifest.lang));
+    const frozen = ['name', 'short_name', 'start_url', 'scope', 'display', 'display_override', 'orientation'];
+    const drifted = frozen.filter((key) => JSON.stringify(manifest[key]) !== JSON.stringify(baseManifest[key]));
+    check(`manifest ${file} 的启动/显示字段与基准一致`, drifted.length === 0, drifted.join(','));
+    const desc = String(manifest.description ?? '');
+    check(`manifest ${file} 有该语言的描述`, desc.length > 0);
+    manifestDescriptions.add(desc);
+  }
+  check('六份 manifest 的描述两两不同（不是都抄英文）', manifestDescriptions.size === 6, `${manifestDescriptions.size} 种`);
   check(
     '深链优先于设置里的值',
     (languageFromParam('fr') ?? 'zh') === 'fr' && (languageFromParam('zz') ?? 'zh') === 'zh',
@@ -1476,9 +1514,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('首屏两句有本地化入口', overlaySrc2.includes("t('loading.boot')") && overlaySrc2.includes("t('loading.bootSub')"));
   const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   check('boot() 会调用 localizeBootLoading()', mainSrc2.includes('localizeBootLoading();'));
+  // 多语言 P5-3：六种语言各一份 manifest，文件名按语言码拼（`manifest.${uiLang}.webmanifest`），
+  // 中文那份仍是默认的 `manifest.webmanifest`（已装 PWA 的地址不能改）。
   check(
-    'boot() 会按语言换 manifest 链接',
-    mainSrc2.includes("'./manifest.webmanifest'") && mainSrc2.includes("'./manifest.en.webmanifest'"),
+    'boot() 会按语言换 manifest 链接（六语言）',
+    mainSrc2.includes("'./manifest.webmanifest'") && mainSrc2.includes('manifest.${uiLang}.webmanifest'),
   );
 
   const zhManifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));

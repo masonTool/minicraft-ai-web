@@ -1,7 +1,7 @@
 {
   "name": "Bedrock 1.18 Web",
   "short_name": "Minecraft Web",
-  "description": "A Minecraft Bedrock 1.18 remake in the browser: infinite terrain, survival, crafting, mobs, multiplayer and saves",
+  "description": "A blocky sandbox in your browser: infinite terrain, survival and creative.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

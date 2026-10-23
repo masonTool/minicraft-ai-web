@@ -18258,12 +18258,15 @@ async function boot(): Promise<void> {
   const langParam = new URLSearchParams(location.search).get('lang');
   if (isPseudoLocaleTag(langParam)) setPseudoLocale(true);
   await applyLanguageSetting(languageFromParam(langParam) ?? loadSettings().language);
-  // 首屏静态文案与 manifest 都跟语言走（多语言 P3-4）：HTML 是语言无关的静态文件，
-  // 所以解析完语言之后补一次。manifest 只有中英两份，其余语言回落到英文那份。
+  // 首屏静态文案与 manifest 都跟语言走（多语言 P3-4 / P5-3）：HTML 是语言无关的静态文件，
+  // 所以解析完语言之后补一次。manifest 现在**六种语言各一份**（`tools/gen-manifests.mjs` 生成，
+  // 六份之间只有 `description` / `lang` 不同），中文那份仍叫 `manifest.webmanifest` ——
+  // 它是 `index.html` 里默认指向的文件，也是已装好的 PWA 正在用的地址，不能改名。
   localizeBootLoading();
   {
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (link) link.href = getLanguage() === 'zh' ? './manifest.webmanifest' : './manifest.en.webmanifest';
+    const uiLang = getLanguage();
+    if (link) link.href = uiLang === 'zh' ? './manifest.webmanifest' : `./manifest.${uiLang}.webmanifest`;
   }
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;

@@ -210,6 +210,8 @@
     "jump:e2e": "node tools/jump-e2e.mjs",
     "test:guard": "node tools/console-guard-test.mjs",
     "check:browser": "node tools/browser-check.mjs",
+    "gen:manifests": "node tools/gen-manifests.mjs",
+    "check:manifests": "node tools/gen-manifests.mjs --check",
     "test:browser-check": "node tools/browser-check-test.mjs",
     "shotdiff": "node tools/shot-diff.mjs",
     "test:shotdiff": "node tools/shot-diff-test.mjs",
