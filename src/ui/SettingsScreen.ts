@@ -640,6 +640,12 @@ export interface SettingsActions {
   /** 打开世界统计面板（批次 552） */
   onOpenStatistics?: () => void;
   /**
+   * 打开多人游戏面板（联机9）。
+   *
+   * 不传就不显示——与 `WorldScreenActions.onMultiplayer` 同一套约定。
+   */
+  onMultiplayer?: () => void;
+  /**
    * 切换创造模式（飞行）（批次 107）。
    *
    * 手机端右下那一簇原来有一颗"飞行"键，批次 107 精简掉之后它搬到这里
@@ -846,6 +852,15 @@ export class SettingsScreen {
     statistics.addEventListener('click', () => this.actions.onOpenStatistics?.());
     statistics.style.display = this.actions.onOpenStatistics ? '' : 'none';
 
+    // 多人游戏（联机9）：暂停菜单里也要有入口——开局之后才想联机是常态
+    const multiplayer = document.createElement('button');
+    multiplayer.type = 'button';
+    multiplayer.id = 'pause-multiplayer';
+    multiplayer.className = 'pause-action';
+    this.bindLabel(multiplayer, 'menu.multiplayer');
+    multiplayer.addEventListener('click', () => this.actions.onMultiplayer?.());
+    multiplayer.style.display = this.actions.onMultiplayer ? '' : 'none';
+
     // 用户点名的"保存档退出"：退出前主程序会落一次盘（`exitToMenu` 里已经这么做了）
     const exitToMenu = document.createElement('button');
     exitToMenu.type = 'button';
@@ -860,7 +875,7 @@ export class SettingsScreen {
     // 加在按钮上没有任何效果。
     if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
 
-    actionsRow.append(this.resumeButton, settingsButton, achievements, statistics, exitToMenu);
+    actionsRow.append(this.resumeButton, settingsButton, achievements, statistics, multiplayer, exitToMenu);
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint settings-meta';

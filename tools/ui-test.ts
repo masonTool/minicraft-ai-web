@@ -56,6 +56,12 @@ import {
   sensitivityGain,
 } from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
+import {
+  MULTIPLAYER_NAME_MAX,
+  multiplayerButtons,
+  normalizeServerUrl,
+  sanitizeMultiplayerName,
+} from '../src/ui/MultiplayerScreen.ts';
 import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
 import {
   failBootLoading,
@@ -4694,6 +4700,42 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       atlasSource.includes('constructor(deferPaint = false)') &&
       atlasSource.includes('if (!this.painted) return this.repaint();') &&
       atlasSource.includes('if (!this.painted) {\n      this.ensurePainted();'),
+  );
+}
+
+console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
+{
+  /*
+   * 手机上最容易漏的就是协议头（`192.168.1.5:8787` 是常态）、也常有人把网页地址
+   * （`http://`）粘进来。这两种"猜"都能命中真实意图，所以在这里钉死；真正该报错的是
+   * 空地址、只有协议头、带空白这几种。
+   */
+  check('裸 IP 自动补 ws://', normalizeServerUrl('192.168.1.5:8787') === 'ws://192.168.1.5:8787');
+  check('去掉末尾斜杠', normalizeServerUrl('ws://192.168.1.5:8787/') === 'ws://192.168.1.5:8787');
+  check('https:// 映射成 wss://', normalizeServerUrl('https://mc.example.com/ws') === 'wss://mc.example.com/ws');
+  check('http:// 映射成 ws://', normalizeServerUrl('http://192.168.1.5:8787') === 'ws://192.168.1.5:8787');
+  check(
+    '空地址 / 只有协议头 / 带空白都判非法',
+    normalizeServerUrl('   ') === null &&
+      normalizeServerUrl('ws://') === null &&
+      normalizeServerUrl('ws://foo bar:8787') === null,
+  );
+
+  check('昵称去掉尖括号与控制字符', sanitizeMultiplayerName('  <小明>\t ') === '小明');
+  check(
+    `昵称按字符截到 ${MULTIPLAYER_NAME_MAX}、空则“玩家”`,
+    sanitizeMultiplayerName('一'.repeat(40)) === '一'.repeat(MULTIPLAYER_NAME_MAX) &&
+      sanitizeMultiplayerName('   ') === '玩家',
+  );
+
+  const idle = multiplayerButtons('idle');
+  const connected = multiplayerButtons('connected');
+  const reconnecting = multiplayerButtons('reconnecting');
+  check(
+    '按钮可用性：没连能连、连上能断、重连中也能断',
+    idle.connect && !idle.disconnect &&
+      !connected.connect && connected.disconnect &&
+      !reconnecting.connect && reconnecting.disconnect,
   );
 }
 

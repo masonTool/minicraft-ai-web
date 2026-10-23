@@ -173,6 +173,7 @@ import {
   type SettingsChangeMeta,
 } from './ui/SettingsScreen.ts';
 import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
+import { MultiplayerScreen } from './ui/MultiplayerScreen.ts';
 import {
   failBootLoading,
   hideBootLoading,
@@ -1841,6 +1842,9 @@ class App {
     },
     onStatus: (connected, detail) => {
       this.netStatus = detail;
+      // 联机9：面板上的状态与按钮可用性跟着会话状态走（`detail` 是服务端/连接层的原话，
+      // 比"已断开"这种通用文案有用）
+      this.multiplayerScreen.setState(this.net.sessionState, detail);
       if (!connected) {
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
@@ -1968,6 +1972,8 @@ class App {
   /** 本机设置（视距/视野/音量/灵敏度/调试信息），存在 localStorage */
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
+  /** 联机入口面板（联机9）：地址 / 昵称 / 连接 / 断开 / 状态，叠在暂停菜单上 */
+  private readonly multiplayerScreen: MultiplayerScreen;
   /** 当前生效的视距（区块）；自适应会在这个值上浮动，玩家设置的是上限 */
   private viewDistance = VIEW_DISTANCE;
   /**
@@ -2688,6 +2694,8 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
+      // 多人游戏（联机9）：暂停菜单里的入口，面板叠在暂停菜单上
+      onMultiplayer: () => this.openMultiplayer(),
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
@@ -2697,6 +2705,21 @@ class App {
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
       diagnosticsStats: () => diag.stats(),
+    });
+
+    // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
+    // 它要盖住整个视口（含触摸控件），而且主菜单阶段就可能要打开它。
+    this.multiplayerScreen = new MultiplayerScreen(document.body, {
+      onConnect: (url, name) => {
+        // 先切状态再真连：`connect()` 里会同步触发 onStatus，重复设置无害
+        this.multiplayerScreen.setState('connecting');
+        this.connect(url, name);
+      },
+      onDisconnect: () => {
+        this.disconnect();
+        this.multiplayerScreen.setState('offline');
+      },
+      onClose: () => this.multiplayerScreen.close(),
     });
 
     // 开发期初始物资（批次 181）：**默认不再发放**。
@@ -2933,6 +2956,8 @@ class App {
     else if (this.advancementScreen.isOpen) this.advancementScreen.hide();
     else if (this.statisticsScreen.isOpen) this.statisticsScreen.hide();
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
+    // 联机面板（联机9）叠在暂停菜单上，返回键先关它
+    else if (this.multiplayerScreen.isOpen) this.multiplayerScreen.close();
     // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
     // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
     else if (this.settingsScreen.isOpen) {
@@ -3056,6 +3081,18 @@ class App {
     // 于是拖动**任何一个**滑块（音量、灵敏度…）都会走一遍 `World.update` 的
     // 489 次候选排序 + 请求检查（视距 12 时）。改音量不该惊动区块流式层。
     if (viewChanged) this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  /**
+   * 打开联机面板（联机9）。
+   *
+   * 以暂停菜单为底（`openSettings()` 负责暂停与输入接管），面板叠在上面：
+   * 这样不必再给"面板打开"造一套 `uiOpen`/暂停语义。
+   */
+  openMultiplayer(): void {
+    this.openSettings();
+    this.multiplayerScreen.setState(this.net.sessionState);
+    this.multiplayerScreen.open();
   }
 
   /** 打开暂停菜单 */
@@ -18532,6 +18569,11 @@ async function boot(): Promise<void> {
       throw error;
     }
     startupTrace.mark(STARTUP_PHASES.worldConstructed);
+    // 主菜单点"多人游戏"进来的：进世界之后自动弹出联机面板（联机9）
+    if (pendingMultiplayer) {
+      pendingMultiplayer = false;
+      app.openMultiplayer();
+    }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
     app.onWorldDeleted = (id) => registry.remove(id);
@@ -18719,6 +18761,14 @@ async function boot(): Promise<void> {
     miniGameMenu.show();
   };
 
+  /**
+   * 主菜单点了"多人游戏"之后，进世界完成时要自动打开联机面板（联机9）。
+   *
+   * 联机是在**某个世界里**连的（种子要对齐、存档要按房间隔离），没有独立大厅，
+   * 所以这个按钮的作用是"把世界列表翻出来"，选完世界再弹地址栏。
+   */
+  let pendingMultiplayer = false;
+
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
     onDelete: (world) => deleteWorld(world),
@@ -18727,6 +18777,10 @@ async function boot(): Promise<void> {
     onExport: (world) => exportWorld(world),
     onImport: () => importWorld(),
     onMiniGames: openMiniGames,
+    onMultiplayer: () => {
+      pendingMultiplayer = true;
+      menu.showView('worlds');
+    },
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */

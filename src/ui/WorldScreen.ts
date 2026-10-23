@@ -75,6 +75,12 @@ export interface WorldScreenActions {
    * 不传就**不显示入口**——单机版 / 精简构建把它当可选能力，不需要改界面代码。
    */
   onMiniGames?: () => void;
+  /**
+   * 多人游戏（联机9）：打开连接小面板。
+   *
+   * 与 `onMiniGames` 同一套约定——不传就不显示入口，单机版不必改界面。
+   */
+  onMultiplayer?: () => void;
 }
 
 /**
@@ -184,6 +190,17 @@ export class WorldScreen {
       miniGames.textContent = t('menu.minigames');
       miniGames.addEventListener('click', () => this.actions.onMiniGames?.());
       menu.append(miniGames);
+    }
+
+    // 多人游戏入口（联机9）：同样是 secondary，理由同上（第一颗 primary 必须仍是"开始游戏"）
+    if (this.actions.onMultiplayer) {
+      const multiplayer = document.createElement('button');
+      multiplayer.type = 'button';
+      multiplayer.className = 'world-secondary';
+      multiplayer.id = 'world-multiplayer-button';
+      multiplayer.textContent = t('menu.multiplayer');
+      multiplayer.addEventListener('click', () => this.actions.onMultiplayer?.());
+      menu.append(multiplayer);
     }
 
     const splash = document.createElement('div');
@@ -444,6 +461,18 @@ export class WorldScreen {
   hide(): void {
     this.open = false;
     this.root.classList.add('hidden');
+  }
+
+  /**
+   * 直接落到某个视图（联机9）。
+   *
+   * 主菜单点"多人游戏"要先选一个世界——联机是在某个世界里连的（种子要对齐、存档要隔离），
+   * 不像基岩版那样有独立的大厅。所以入口不弹对话框，而是把世界列表翻出来。
+   */
+  showView(view: WorldView): void {
+    this.open = true;
+    this.setView(view);
+    this.root.classList.remove('hidden');
   }
 
   /** 重画世界列表（列表变化、打开、删除后都要调） */

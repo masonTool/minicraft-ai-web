@@ -1898,6 +1898,47 @@
       .pause-action {
         font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
+      /* ---------------- 联机入口面板（联机9） ----------------
+         手机横屏是本项目的主场景（高度只有 360~430），所以面板**矮而宽**：
+         两行输入横排（标签定宽 + 输入框吃掉剩余宽度）、一行状态、一行按钮。
+         刻意不做大厅：没有房间列表，能把地址填进去连上就够了。 */
+      #multiplayer-screen {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        background: rgba(0, 0, 0, .55);
+      }
+      #multiplayer-screen.hidden { display: none; }
+      .mp-panel {
+        width: min(92vw, 460px); max-height: 100%;
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 10px 12px; overflow: auto;
+        background: var(--mc-menu-bg); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        font-size: 13px;
+      }
+      .mp-title { font-size: 15px; text-align: center; }
+      .mp-row { display: flex; align-items: center; gap: 8px; }
+      .mp-row > span { flex: 0 0 5.5em; }
+      .mp-row input {
+        flex: 1 1 auto; min-width: 0; font: inherit; font-size: 13px;
+        padding: 6px 8px; border: 2px solid; border-color: var(--pixel-bevel-dark);
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+      }
+      .mp-status { min-height: 1.2em; font-size: 12px; }
+      .mp-status[data-state='connected'] { color: #8ee08e; }
+      .mp-status[data-state='error'] { color: #ff9a9a; }
+      .mp-actions { display: flex; gap: 8px; }
+      .mp-action {
+        flex: 1 1 0; font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+      }
+      .mp-action:disabled { cursor: default; color: var(--mc-text-disabled); }
+      .mp-hint { font-size: 11px; opacity: .75; }
+      /* 触摸端把热区再放大一点（与 `.pause-action` 同一档） */
+      body.touch-mode .mp-action { min-height: 44px; font-size: 14px; }
       .settings-row i {
         font-style: normal; color: var(--mc-text-light); text-align: right; white-space: nowrap;
         /* 数字宽度稳定：拖动滑杆时读数不会左右跳 */
