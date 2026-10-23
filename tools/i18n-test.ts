@@ -38,6 +38,7 @@ import { itemDescription, translateName } from '../src/core/registry/itemNames.t
 import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
 import { POTIONS, TIPPED_ARROWS } from '../src/core/registry/potions.ts';
 import { damageReason } from '../src/core/survival/DamageNotice.ts';
+import { glFailText } from '../src/core/render/webglSupport.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1432,6 +1433,23 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
       tp('notice.recipe.smeltingHint', { seconds: 10 }),
     ];
     check(`${code} 配方书文案不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 60));
+
+  /**
+   * WebGL 不支持提示（P6-5b，批次 20261024-0020）。
+   *
+   * `GL_FAIL_TEXT` 原来是中文常量表（4 组 reason + 9 条 advice）。玩家在**设备不支持**时
+   * 看到的那一屏就是它 —— 那时界面其余部分还没建起来，只有它，所以必须跟着语言走。
+   * 现在走 `notice.webgl.*`，且 `glFailText()` 是函数（取用这一刻才查表）。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const texts = (['no-webgl2', 'no-webgl1', 'context-lost', 'unknown'] as const).flatMap((kind) => {
+      const text = glFailText(kind);
+      return [text.reason, ...text.advice];
+    });
+    check(`${code} WebGL 提示不含中文`, !/[\u4e00-\u9fff]/.test(texts.join('')), texts.join(' | ').slice(0, 60));
+  }
+  resetLanguageForTest();
   }
   resetLanguageForTest();
   resetLanguageForTest();

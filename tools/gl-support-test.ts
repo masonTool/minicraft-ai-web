@@ -14,7 +14,7 @@
  */
 
 import {
-  GL_FAIL_TEXT,
+  glFailText,
   classifyGlSupport,
   rendererFailure,
   type GlProbe,
@@ -114,7 +114,7 @@ console.log('\n[文案：三类各有原因与建议，且不重复]');
   const kinds = ['no-webgl2', 'no-webgl1', 'context-lost', 'unknown'] as const;
   const reasons = new Set<string>();
   for (const kind of kinds) {
-    const text = GL_FAIL_TEXT[kind];
+    const text = glFailText(kind);
     check(`${kind}：有原因`, text.reason.length >= 8, text.reason);
     check(`${kind}：至少 2 条建议`, text.advice.length >= 2, String(text.advice.length));
     check(`${kind}：建议都不是空串`, text.advice.every((line) => line.trim().length > 0));
@@ -123,8 +123,8 @@ console.log('\n[文案：三类各有原因与建议，且不重复]');
   }
   equal('四类文案各不相同', reasons.size, kinds.length);
   // 玩家看得懂：不要出现 "context" 这种词（诊断码那一行才用英文）
-  check('原因里没有 "context" 这种黑话', kinds.every((kind) => !GL_FAIL_TEXT[kind].reason.toLowerCase().includes('context')));
-  check('advice 至多 3 条（手机上一屏能读完）', kinds.every((kind) => GL_FAIL_TEXT[kind].advice.length <= 3));
+  check('原因里没有 "context" 这种黑话', kinds.every((kind) => !glFailText(kind).reason.toLowerCase().includes('context')));
+  check('advice 至多 3 条（手机上一屏能读完）', kinds.every((kind) => glFailText(kind).advice.length <= 3));
 }
 
 console.log(`\n设备能力判定测试：${passed} 通过 / ${failed} 失败`);

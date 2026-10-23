@@ -16,6 +16,8 @@
  *     （提示"开硬件加速 / 更新驱动"，这在 Windows 上是最常见的一种）。
  */
 
+import { t } from '../i18n/I18n.ts';
+
 export interface GlSupportOk {
   readonly ok: true;
 }
@@ -27,7 +29,7 @@ export interface GlSupportFail {
   /** 具体怎么办（给玩家看，2~3 条） */
   readonly advice: readonly string[];
   /** 归类：给日志与断言用 */
-  readonly kind: 'no-webgl1' | 'no-webgl2' | 'context-lost' | 'unknown';
+  readonly kind: GlFailKind;
 }
 
 export type GlSupport = GlSupportOk | GlSupportFail;
@@ -42,32 +44,45 @@ export interface GlProbe {
   lost?(): boolean;
 }
 
-/** 三种情况的文案（**一处定义**：界面只负责显示） */
-export const GL_FAIL_TEXT = {
-  'no-webgl2': {
-    reason: '这台设备的浏览器只支持 WebGL1，而这个游戏需要 WebGL2。',
-    advice: [
-      '升级到较新的浏览器（Chrome / Edge / Safari 15+ / Firefox 都行）',
-      '如果是 Safari：iOS 15 与 macOS 12 以上才支持 WebGL2',
-    ],
-  },
-  'no-webgl1': {
-    reason: '浏览器拿不到任何 3D 绘图上下文（WebGL 被完全禁用了）。',
-    advice: [
-      '打开浏览器的"硬件加速"（Chrome：设置 → 系统 → 使用硬件加速）',
-      '更新显卡驱动；如果是远程桌面/虚拟机，试试在真机上打开',
-      '有些浏览器扩展会禁用 WebGL，可以先用无痕窗口试一次',
-    ],
-  },
-  'context-lost': {
-    reason: '3D 绘图上下文刚创建就丢失了（通常是显卡内存不足）。',
-    advice: ['关掉一些其它标签页再刷新', '把浏览器的硬件加速重开一次'],
-  },
-  unknown: {
-    reason: '无法创建 WebGL2 绘图上下文。',
-    advice: ['刷新页面重试', '换一个浏览器试试'],
-  },
-} as const;
+/** 四种失败归类（界面只负责显示，文案在 `notice.webgl.*`） */
+export type GlFailKind = 'no-webgl1' | 'no-webgl2' | 'context-lost' | 'unknown';
+
+/**
+ * 四种情况的文案（多语言 P6-5b：原来是一张中文常量表，德语/俄语界面上会露中文）。
+ *
+ * ⚠️ 必须是**函数**而不是常量对象：常量在模块加载时求值，记的是"那一刻的语言"，
+ * 切语言后不会变（同 `DESCRIPTIONS` 那个坑）。这里**取用这一刻**才查表。
+ *
+ * ⚠️ 每条 `t()` 都写成模板字面量/字面量，`audit:i18n` 才认得出这 13 条键被引用了。
+ */
+export function glFailText(kind: GlFailKind): { reason: string; advice: readonly string[] } {
+  switch (kind) {
+    case 'no-webgl2':
+      return {
+        reason: t('notice.webgl.noWebgl2.reason'),
+        advice: [t('notice.webgl.noWebgl2.advice1'), t('notice.webgl.noWebgl2.advice2')],
+      };
+    case 'no-webgl1':
+      return {
+        reason: t('notice.webgl.noWebgl1.reason'),
+        advice: [
+          t('notice.webgl.noWebgl1.advice1'),
+          t('notice.webgl.noWebgl1.advice2'),
+          t('notice.webgl.noWebgl1.advice3'),
+        ],
+      };
+    case 'context-lost':
+      return {
+        reason: t('notice.webgl.contextLost.reason'),
+        advice: [t('notice.webgl.contextLost.advice1'), t('notice.webgl.contextLost.advice2')],
+      };
+    default:
+      return {
+        reason: t('notice.webgl.unknown.reason'),
+        advice: [t('notice.webgl.unknown.advice1'), t('notice.webgl.unknown.advice2')],
+      };
+  }
+}
 
 /**
  * 根据探测结果给出结论。
@@ -78,12 +93,12 @@ export const GL_FAIL_TEXT = {
 export function classifyGlSupport(probe: GlProbe): GlSupport {
   const gl2 = probe.webgl2();
   if (gl2) {
-    if (probe.lost?.() === true) return { ok: false, kind: 'context-lost', ...GL_FAIL_TEXT['context-lost'] };
+    if (probe.lost?.() === true) return { ok: false, kind: 'context-lost', ...glFailText('context-lost') };
     return { ok: true };
   }
   const gl1 = probe.webgl1();
-  if (gl1) return { ok: false, kind: 'no-webgl2', ...GL_FAIL_TEXT['no-webgl2'] };
-  return { ok: false, kind: 'no-webgl1', ...GL_FAIL_TEXT['no-webgl1'] };
+  if (gl1) return { ok: false, kind: 'no-webgl2', ...glFailText('no-webgl2') };
+  return { ok: false, kind: 'no-webgl1', ...glFailText('no-webgl1') };
 }
 
 /** 浏览器里的真实探测（不碰 THREE，只碰 canvas） */
@@ -124,5 +139,5 @@ export function probeBrowserGl(): GlSupport {
 export function rendererFailure(message: string): GlSupportFail {
   const lower = message.toLowerCase();
   const kind = lower.includes('lost') ? 'context-lost' : 'unknown';
-  return { ok: false, kind, ...GL_FAIL_TEXT[kind] };
+  return { ok: false, kind, ...glFailText(kind) };
 }
