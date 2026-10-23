@@ -1088,7 +1088,12 @@ wss.on('connection', (socket, request) => {
         if (!player.buckets.chat.take()) return;
         const text = String(message.text ?? '').slice(0, 200);
         if (text.length === 0) return;
-        broadcast({ t: 'chat', id: player.id, name: player.name, text }, null, player.room);
+        /*
+         * 不发给发送者（联机30）：客户端在发送时已经**本地回显**过一次
+         * （`main.ts` 里 `chat.push` + `chatLine`），再回传一份就是同一条消息出现两次。
+         * 这与方块/容器的"广播给其他人"是同一个口径。
+         */
+        broadcast({ t: 'chat', id: player.id, name: player.name, text }, player.id, player.room);
         log(`<${player.name}> ${text}`);
         break;
       }

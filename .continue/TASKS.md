@@ -3926,6 +3926,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       而 `check:fast` 不含那一步、只有完整 `npm run check` 才暴露 → `tsconfig.tools.json` 加
       `allowJs`（只让 .mjs 参与推断，不检查 JS 内部）；`net-snapshot-policy.test.ts` 的
       `Map<string, unknown>` 改成 `Map<string, object>`。
+      —— **批次 20261023-2351 修聊天重复回显**（联机30）：服务端 `chat` 原来是
+      `broadcast(..., null, room)`（含发送者），而客户端发送时已经本地回显一次
+      （`main.ts` 的 `chat.push` + `chatLine`），于是自己发的消息出现两次。改成
+      `broadcast(..., player.id, player.room)`——与方块/容器"广播给其他人"同一个口径。
+      `test:net` **115 → 117**（接收者收到一条、发送者收不到回传）。
       —— **批次 20261023-2351 补箭与 TNT 同步**（联机23）：都是"事件 + 坐标/速度"，不
       需要实体 id——`arrow`（玩家射的箭，服务端夹速度 ≤200 与伤害 ≤50）在接收端重新生成
       一支跑物理（落点差几厘米，但"看到队友在射箭"成立，且别人的箭不可捡）；`tnt` 用坐标

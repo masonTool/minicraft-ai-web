@@ -380,6 +380,19 @@ try {
   const leave = await alice.wait('leave');
   check('离开会广播 leave', leave?.id === 3, JSON.stringify(leave));
 
+  // ---------------------------------------------------------------- 聊天不重复回显（联机30）
+  console.log('\n[聊天不重复]');
+  {
+    alice.mailbox.length = 0;
+    bob.mailbox.length = 0;
+    bob.send({ t: 'chat', text: '只该出现一次' });
+    check('接收者收到一条', (await alice.wait('chat', 2000)) !== null);
+    check(
+      '发送者不会收到服务端回传（客户端已本地回显，否则同一条消息出现两次）',
+      (await bob.wait('chat', 600)) === null,
+    );
+  }
+
   // ---------------------------------------------------------------- 异常输入
   console.log('\n[异常输入]');
   alice.mailbox.length = 0;

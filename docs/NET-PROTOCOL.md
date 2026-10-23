@@ -78,7 +78,7 @@
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
 | `item-take` | `owner, localId` | 两个正整数；每人每秒 20 次 | 捡**别人**那堆（`联机21`）：first-come 仲裁，先到的拿到，另一条回 `gone` |
-| `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃 | 服务端日志打 `<名字> 内容`；**广播包含发送者**（见已知问题） |
+| `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃；每人每秒 5 条（令牌桶） | 服务端日志打 `<名字> 内容`；**不回传给发送者**（客户端已本地回显，`联机30`） |
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
 | `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
@@ -111,7 +111,7 @@
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
 | `item-take` | `ok, owner, localId, itemId?, count?, reason?` | 只回给申请者；成功时**另**广播一条 `item-remove` 给所有人 |
-| `chat` | `id, name, text` | 收到 `chat` 后发给**所有人（含发送者）** |
+| `chat` | `id, name, text` | 收到 `chat` 后发给**同一个房间里的其他人**（不含发送者） |
 | `error` | `code, message` | 非法 JSON / 未知类型 / 重复 join / 版本或身份不合法 |
 
 `welcome` 的快照形状：
@@ -207,7 +207,7 @@
 | `item-spawn` | 建镜像（`ghost=true`）：不跑物理、不参与本地拾取，但**走近会向服务端申请**（`联机21`） | `owner === selfId` 时跳过 |
 | `item-take` | 仲裁结果：`ok` 才把 `itemId/count` 加进背包（背包满就掉脚下），无论成败都删镜像 | 成功后服务端还会广播 `item-remove`，各端镜像一起消失 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
-| `chat` | 追加到消息栏并本地回显 | 发送者会收到服务端回传 → **重复一条**（`联机30`） |
+| `chat` | 追加到消息栏（`onChat`） | 发送方自己**本地回显**一次、服务端不再回传——两侧各管一半，所以只出现一次 |
 | `error` | 写进状态与消息栏（`onError`）；致命码置 `fatal`，**不再自动重连** | 服务端拒绝 join 时它会紧接着关闭连接 |
 
 平滑：`core/net/RemoteInterpolation.ts` 用指数逼近 + 最短角 yaw；位移超过 8 格（重生/传送门）
@@ -243,7 +243,7 @@
 | `联机29` | 观测已做（`/healthz` 带吞吐、服务端每 10 秒一行统计日志、F3 面板显示延迟/丢包/上下行） | 服务端不跑 tick，所以没有真正的 TPS——统计的是**消息速率**与吞吐；客户端丢包是**应用层 ping 超时**估的，不是网络层真值 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
-| `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |
+| `联机30` | 已修：`chat` 不再回传给发送者（与方块/容器同一口径） | 客户端在发送时本地回显，服务端只发给其他人 |
 
 ## 9. 改动这份协议时的规矩
 
