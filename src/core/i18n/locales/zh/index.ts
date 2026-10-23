@@ -19,6 +19,7 @@ import { progress } from './progress.ts';
 import { minigame } from './minigame.ts';
 import { cmd } from './cmd.ts';
 import { cmdMessages } from './cmdMessages.ts';
+import { item } from './item.ts';
 import { misc } from './misc.ts';
 
 export const zh = {
@@ -32,6 +33,7 @@ export const zh = {
   ...minigame,
   ...cmd,
   ...cmdMessages,
+  ...item,
   ...misc,
 } as const;
 

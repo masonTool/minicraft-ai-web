@@ -441,7 +441,13 @@ console.log('\n[队伍前后缀（批次 1359）]');
   check('有 prefix / suffix 两个属性分支', /key === 'prefix' \|\| key === 'suffix'/.test(cmdSrc));
   check('前后缀保留中间空格（第 4 段之后全部拼回）', cmdSrc.includes('args.slice(3).join('));
   check('有剥引号的助手（支持 prefix "" 清空）', cmdSrc.includes('function stripAffixQuotes('));
-  check('回执里的 part 也过 msg()（否则英文界面会漏中文）', cmdSrc.includes("msg(key === 'prefix' ? '前缀' : '后缀')"));
+  // 多语言 P1-6 起参数换成语义键；这条守的仍是"part 要过 msg()，不能直接拼中文"。
+  // ⚠️ 它当时没红是因为 `check:fast` 只跑"被改动命中"的套件，而那一轮没命中这里 ——
+  // P2-1a 改 `itemNames.ts` 波及面大才把它翻出来（属于**潜伏了一个批次的假绿**）。
+  check(
+    '回执里的 part 也过 msg()（否则英文界面会漏中文）',
+    cmdSrc.includes("msg(key === 'prefix' ? 'cmd.reply.team.prefix' : 'cmd.reply.team.suffix')"),
+  );
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);

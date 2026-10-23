@@ -40,6 +40,8 @@ import {
   toolInfoById,
 } from './tools.ts';
 import { durabilityBar, rarityOf, type ItemRarity } from './itemVisuals.ts';
+// 多语言 P2-1a：物品名从"中文常量"改成"查表 + 模板拼装"，切语言不必重建模块
+import { t, tp } from '../i18n/I18n.ts';
 
 // ---------------------------------------------------------------- 规则生成
 
@@ -111,30 +113,67 @@ const ORE_NAMES_CN: Record<string, string> = {
 };
 
 
-const NAMES = new Map<string, string>();
+/**
+ * 名字来源：**字符串**（尚未搬进语言表的老形态，P2-2 会全部换掉）或 **函数**。
+ *
+ * 为什么要函数：物品名要按当前语言拼（`白色羊毛` / `White Wool` / `Weiße Wolle`），
+ * 而模块只在启动时求值一次。存成函数就能在**取值那一刻**再查表，
+ * 切语言（含测试里 `setLanguage()`）自然跟着变，不用重启模块。
+ */
+type NameSource = string | (() => string);
 
-function put(id: string, name: string): void {
+const NAMES = new Map<string, NameSource>();
+
+function put(id: string, name: NameSource): void {
   NAMES.set(id, name);
 }
 
-// 染料系：16 × 7 = 112 条
-for (const [color, cn] of Object.entries(COLORS_CN)) {
-  put(`${color}_dye`, `${cn}染料`);
-  put(`${color}_wool`, `${cn}羊毛`);
-  put(`${color}_carpet`, `${cn}地毯`);
-  // 床（B13，批次 79）：16 色，与羊毛/地毯同一条"配色表驱动"
-  put(`${color}_bed`, `${cn}床`);
-  put(`${color}_terracotta`, `${cn}陶瓦`);
-  put(`${color}_concrete`, `${cn}混凝土`);
-  put(`${color}_concrete_powder`, `${cn}混凝土粉末`);
-  put(`${color}_stained_glass`, `${cn}染色玻璃`);
-  put(`${color}_stained_glass_pane`, `${cn}染色玻璃板`);
-  // 潜影盒（批次 451）：16 色，与羊毛同一条配色表驱动
-  put(`${color}_shulker_box`, `${cn}潜影盒`);
+/** 染料色的 id（顺序与原 `COLORS_CN` 一致；表在 `locales/<lang>/item.ts`） */
+const COLOR_IDS = [
+  'white',
+  'orange',
+  'magenta',
+  'light_blue',
+  'yellow',
+  'lime',
+  'pink',
+  'gray',
+  'light_gray',
+  'cyan',
+  'purple',
+  'blue',
+  'brown',
+  'green',
+  'red',
+  'black',
+] as const;
+
+type ColorId = (typeof COLOR_IDS)[number];
+
+/** 颜色的显示名（`白色` / `White` / `Weiß`） */
+function colorName(color: ColorId): string {
+  return t(`item.color.${color}`);
 }
-put('terracotta', '陶瓦');
-put('glass', '玻璃');
-put('glass_pane', '玻璃板');
+
+// 染料系：16 色 × 10 件 = 160 条名字，**语序由语言表里的模板决定**（多语言 P2-1a）
+// 模板键：item.dye / item.wool / …，值形如 `{color}染料` / `{color} Wool`
+for (const color of COLOR_IDS) {
+  put(`${color}_dye`, () => tp('item.dye', { color: colorName(color) }));
+  put(`${color}_wool`, () => tp('item.wool', { color: colorName(color) }));
+  put(`${color}_carpet`, () => tp('item.carpet', { color: colorName(color) }));
+  // 床（B13，批次 79）：16 色，与羊毛/地毯同一条"配色表驱动"
+  put(`${color}_bed`, () => tp('item.bed', { color: colorName(color) }));
+  put(`${color}_terracotta`, () => tp('item.terracottaColored', { color: colorName(color) }));
+  put(`${color}_concrete`, () => tp('item.concrete', { color: colorName(color) }));
+  put(`${color}_concrete_powder`, () => tp('item.concrete_powder', { color: colorName(color) }));
+  put(`${color}_stained_glass`, () => tp('item.stained_glass', { color: colorName(color) }));
+  put(`${color}_stained_glass_pane`, () => tp('item.stained_glass_pane', { color: colorName(color) }));
+  // 潜影盒（批次 451）：16 色，与羊毛同一条配色表驱动
+  put(`${color}_shulker_box`, () => tp('item.shulker_box', { color: colorName(color) }));
+}
+put('terracotta', () => t('item.terracotta'));
+put('glass', () => t('item.glass'));
+put('glass_pane', () => t('item.glass_pane'));
 
 // 木头系：原木 / 木板 / 树叶
 for (const [wood, cn] of Object.entries(WOODS_CN)) {
@@ -1348,7 +1387,10 @@ for (const spec of SPAWN_EGG_SPECS) {
 /** 由英文 id（可带命名空间）取中文名；查不到就回退成英文 id */
 export function translateName(id: string): string {
   const key = id.startsWith('minecraft:') ? id.slice('minecraft:'.length) : id;
-  return NAMES.get(key) ?? key;
+  const value = NAMES.get(key);
+  if (value === undefined) return key;
+  // 函数形态（多语言 P2-1a）：**取值这一刻**才查表，所以切语言后立刻是新的
+  return typeof value === 'function' ? value() : value;
 }
 
 /** 方块的中文名 */
