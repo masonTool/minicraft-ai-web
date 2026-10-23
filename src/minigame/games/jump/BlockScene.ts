@@ -31,6 +31,7 @@ import {
   shadeForNormal,
   type JumpPalette,
 } from './palette.ts';
+import { ATLAS_U, createBlockAtlas, type CanvasFactory, type SpecialKind } from './blockTextures.ts';
 import type { JumpBlockKind } from './logic.ts';
 
 /** 屏幕上的一块方块（渲染层只要这些，不认识 run / 计分） */
@@ -67,7 +68,11 @@ export class BlockScene {
 
   private palette: JumpPalette;
   private readonly blockGeometry: THREE.BufferGeometry;
-  private readonly cylinderGeometry: THREE.BufferGeometry;
+  /** 特殊方块：每类一份（UV 指向图集的两格），按需创建 */
+  private readonly specialGeometries = new Map<SpecialKind, THREE.BufferGeometry>();
+  private readonly specialMaterials = new Map<SpecialKind, THREE.MeshBasicMaterial>();
+  private readonly specialTextures: THREE.Texture[] = [];
+  private readonly canvasFactory: CanvasFactory | undefined;
   private readonly shadowGeometry: THREE.PlaneGeometry;
   private readonly shadowMaterial: THREE.MeshBasicMaterial;
   private readonly shadowTexture: THREE.Texture;
@@ -86,16 +91,15 @@ export class BlockScene {
     centerZ: number;
   } | null = null;
 
-  constructor(palette: JumpPalette) {
+  constructor(palette: JumpPalette, canvasFactory?: CanvasFactory) {
     this.palette = palette;
+    this.canvasFactory = canvasFactory;
     this.scene = new THREE.Scene();
     this.scene.background = null;
     this.backgroundTexture = createBackgroundTexture(palette);
     this.scene.background = this.backgroundTexture;
 
     this.blockGeometry = bakeFaceShading(new THREE.BoxGeometry(1, 1, 1));
-    // 圆柱也给一份：音乐盒是唱片机（圆盘），圆得比方盒自然
-    this.cylinderGeometry = bakeFaceShading(new THREE.CylinderGeometry(0.5, 0.5, 1, 40, 1));
 
     this.shadowTexture = createShadowTexture();
     this.shadowGeometry = new THREE.PlaneGeometry(1, 1);
@@ -138,8 +142,11 @@ export class BlockScene {
     this.clearEntries();
     specs.forEach((spec, index) => {
       const height = Math.max(0.05, spec.size * BLOCK_HEIGHT_RATIO);
-      const geometry = spec.kind === 'music' ? this.cylinderGeometry : this.blockGeometry;
-      const mesh = new THREE.Mesh(geometry, this.materialFor(blockColorAt(this.palette, index)));
+      // 特殊方块用自己的贴图（颜色写在贴图里，不再乘色板）；普通方块走纯色材质
+      const special = spec.kind === 'normal' ? null : this.specialFor(spec.kind);
+      const geometry = special?.geometry ?? this.blockGeometry;
+      const material = special?.material ?? this.materialFor(blockColorAt(this.palette, index));
+      const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(spec.x, height / 2, spec.z);
       mesh.scale.set(spec.size, height, spec.size);
       mesh.renderOrder = 1;
@@ -201,7 +208,12 @@ export class BlockScene {
   dispose(): void {
     this.clearEntries();
     this.blockGeometry.dispose();
-    this.cylinderGeometry.dispose();
+    for (const geometry of this.specialGeometries.values()) geometry.dispose();
+    this.specialGeometries.clear();
+    for (const material of this.specialMaterials.values()) material.dispose();
+    this.specialMaterials.clear();
+    for (const texture of this.specialTextures) texture.dispose();
+    this.specialTextures.length = 0;
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
     this.shadowTexture.dispose();
@@ -268,6 +280,40 @@ export class BlockScene {
     }
   }
 
+  /**
+   * 特殊方块的几何 + 材质（每类只建一次）。
+   *
+   * 几何要改 UV：图集左半是顶面、右半是侧面，所以按顶点法线把「朝上的面」指到左格、
+   * 其余指到右格。三面明暗仍然由顶点色乘上来——特殊方块与普通方块的明暗完全一致，
+   * 不会出现"贴了图的那块看起来是另一个世界"。
+   */
+  private specialFor(kind: SpecialKind): { geometry: THREE.BufferGeometry; material: THREE.MeshBasicMaterial } {
+    let geometry = this.specialGeometries.get(kind);
+    if (!geometry) {
+      // 音乐盒是唱片机：圆柱比方盒自然（其余三类都是方的）
+      const base =
+        kind === 'music'
+          ? new THREE.CylinderGeometry(0.5, 0.5, 1, 40, 1)
+          : new THREE.BoxGeometry(1, 1, 1);
+      bakeFaceShading(base);
+      remapAtlasUV(base);
+      geometry = base;
+      this.specialGeometries.set(kind, geometry);
+    }
+
+    let material = this.specialMaterials.get(kind);
+    if (!material) {
+      const canvas = createBlockAtlas(kind, this.canvasFactory);
+      const texture = new THREE.CanvasTexture(canvas as unknown as HTMLCanvasElement);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.specialTextures.push(texture);
+      material = new THREE.MeshBasicMaterial({ map: texture, vertexColors: true });
+      this.specialMaterials.set(kind, material);
+    }
+
+    return { geometry, material };
+  }
+
   private materialFor(color: string): THREE.MeshBasicMaterial {
     const cached = this.materials.get(color);
     if (cached) return cached;
@@ -307,6 +353,22 @@ function bakeFaceShading(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geometry;
+}
+
+/**
+ * 把 UV 指到图集的两格：朝上的面 → 左格（顶面贴图），其余 → 右格（侧面贴图）。
+ *
+ * 按**法线**判断而不是按顶点下标：方盒与圆柱的顶点顺序不同，按下标写两套规则迟早错位。
+ */
+function remapAtlasUV(geometry: THREE.BufferGeometry): void {
+  const uv = geometry.getAttribute('uv');
+  const normal = geometry.getAttribute('normal');
+  for (let i = 0; i < uv.count; i++) {
+    const upward = Math.abs(normal.getY(i)) > 0.9;
+    const [u0, u1] = upward ? ATLAS_U.top : ATLAS_U.side;
+    uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), uv.getY(i));
+  }
+  uv.needsUpdate = true;
 }
 
 /** 背景：2×N 的竖直渐变（three 会把它拉满整屏），无雾、无地面 */

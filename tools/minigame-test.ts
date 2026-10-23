@@ -79,6 +79,7 @@ const hostSrc = readFileSync(new URL('../src/minigame/MiniGameHost.ts', import.m
 const smokeSrc = readFileSync(new URL('../src/minigame/games/smoke.ts', import.meta.url), 'utf8');
 const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
 const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
+const blockSceneSrc = readFileSync(new URL('../src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -139,6 +140,19 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('落地换小人尺寸（方块会随分数变小）', jumpSrc.includes('this.jumper?.setSize('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
+}
+
+console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借 MC 图集）');
+{
+  check('相机是正交的', blockSceneSrc.includes('new THREE.OrthographicCamera('));
+  check('不打灯（三面明暗靠顶点色，不靠灯）', !blockSceneSrc.includes('DirectionalLight') && !blockSceneSrc.includes('AmbientLight'));
+  check('没有雾', !blockSceneSrc.includes('scene.fog'));
+  check('不再读主世界图集', !blockSceneSrc.includes('TextureAtlas'));
+  check('三面明暗与方块色都来自 palette', blockSceneSrc.includes('shadeForNormal(') && blockSceneSrc.includes('blockColorAt('));
+  check('阴影是不写深度的透明贴片', blockSceneSrc.includes('depthWrite: false'));
+  check('特殊方块用程序化图集', blockSceneSrc.includes('createBlockAtlas('));
+  check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
+  check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
 }
 
 // ------------------------------------------------------------------ 色板与明暗
