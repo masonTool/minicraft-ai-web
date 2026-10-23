@@ -84,6 +84,7 @@ import {
   tradeDemand,
   tradePriceDelta,
   tradeSettlement,
+  professionLabel,
 } from '../src/core/registry/villagerTrades.ts';
 
 let passed = 0;
@@ -122,7 +123,7 @@ console.log('\n[职业表：工作站已经实现的职业]');
   equal('职业数（批次 569 制图师补齐到 13）', PROFESSION_COUNT, 13);
   const ids = PROFESSIONS.map((profession) => profession.id);
   equal('id 不重复', new Set(ids).size, ids.length);
-  equal('名字不重复', new Set(PROFESSIONS.map((p) => p.name)).size, PROFESSIONS.length);
+  equal('名字不重复', new Set(PROFESSIONS.map((p) => professionLabel(p.id))).size, PROFESSIONS.length);
 
   const stations = PROFESSIONS.map((profession) => profession.workstation);
   equal('工作站不撞车（两个职业不能共用一个方块）', new Set(stations).size, stations.length);
@@ -175,23 +176,23 @@ console.log('\n[职业表：工作站已经实现的职业]');
   check('没有职业用"无业色"当长袍（否则认不出无业者）', !robe.has(VILLAGER_IDLE_ROBE));
 
   const missingLevel = PROFESSIONS.filter((p) => p.levels.length !== VILLAGER_LEVELS.length);
-  check('每个职业都是 5 级', missingLevel.length === 0, missingLevel.map((p) => p.name).join(','));
+  check('每个职业都是 5 级', missingLevel.length === 0, missingLevel.map((p) => professionLabel(p.id)).join(','));
 
   const emptyLevel: string[] = [];
   const badCost: string[] = [];
   const badNumbers: string[] = [];
   for (const profession of PROFESSIONS) {
     profession.levels.forEach((specs, index) => {
-      if (specs.length === 0) emptyLevel.push(`${profession.name} L${index + 1}`);
+      if (specs.length === 0) emptyLevel.push(`${professionLabel(profession.id)} L${index + 1}`);
       for (const spec of specs) {
-        if (spec.cost.length < 1 || spec.cost.length > 2) badCost.push(`${profession.name} L${index + 1}`);
+        if (spec.cost.length < 1 || spec.cost.length > 2) badCost.push(`${professionLabel(profession.id)} L${index + 1}`);
         for (const cost of spec.cost) {
-          if (cost.count <= 0 || !Number.isInteger(cost.count)) badNumbers.push(`${profession.name}:${cost.id}`);
+          if (cost.count <= 0 || !Number.isInteger(cost.count)) badNumbers.push(`${professionLabel(profession.id)}:${cost.id}`);
           if (itemDef(cost.id) === undefined) badNumbers.push(`未知物品 ${cost.id}`);
         }
-        if (spec.result.count <= 0 || !Number.isInteger(spec.result.count)) badNumbers.push(profession.name);
+        if (spec.result.count <= 0 || !Number.isInteger(spec.result.count)) badNumbers.push(profession.id);
         if (itemDef(spec.result.id) === undefined) badNumbers.push(`未知产物 ${spec.result.id}`);
-        if (spec.maxUses <= 0 || spec.xp <= 0) badNumbers.push(`${profession.name} 次数/经验`);
+        if (spec.maxUses <= 0 || spec.xp <= 0) badNumbers.push(`${professionLabel(profession.id)} 次数/经验`);
       }
     });
   }
@@ -202,14 +203,14 @@ console.log('\n[职业表：工作站已经实现的职业]');
   // 买卖两个方向都要有：不然"绿宝石经济"是单向的（只出不进或只进不出）
   const noBuy = PROFESSIONS.filter((p) => !p.levels.some((l) => l.some((s) => s.result.id === Item.EMERALD)));
   const noSell = PROFESSIONS.filter((p) => !p.levels.some((l) => l.some((s) => s.cost.some((c) => c.id === Item.EMERALD))));
-  check('每个职业都收东西给绿宝石', noBuy.length === 0, noBuy.map((p) => p.name).join(','));
-  check('每个职业也都卖东西收绿宝石', noSell.length === 0, noSell.map((p) => p.name).join(','));
+  check('每个职业都收东西给绿宝石', noBuy.length === 0, noBuy.map((p) => professionLabel(p.id)).join(','));
+  check('每个职业也都卖东西收绿宝石', noSell.length === 0, noSell.map((p) => professionLabel(p.id)).join(','));
 }
 
 console.log('\n[职业表：规模]');
 {
   const total = PROFESSIONS.reduce((sum, p) => sum + totalOfferCount(p), 0);
-  console.log(`  共 ${total} 条交易（${PROFESSIONS.map((p) => `${p.name} ${totalOfferCount(p)}`).join(' / ')}）`);
+  console.log(`  共 ${total} 条交易（${PROFESSIONS.map((p) => `${professionLabel(p.id)} ${totalOfferCount(p)}`).join(' / ')}）`);
   check('每种职业至少 5 条交易', PROFESSIONS.every((p) => totalOfferCount(p) >= 5));
   check('总量至少 60 条', total >= 60, String(total));
 }
@@ -239,7 +240,7 @@ console.log('\n[可达性：交易两边的物品都拿得到]');
     for (const specs of profession.levels) {
       for (const spec of specs) {
         for (const cost of spec.cost) {
-          if (!obtainable.has(cost.id)) unreachable.push(`${profession.name}:收 ${itemDef(cost.id)?.name ?? cost.id}`);
+          if (!obtainable.has(cost.id)) unreachable.push(`${professionLabel(profession.id)}:收 ${itemDef(cost.id)?.name ?? cost.id}`);
         }
       }
     }

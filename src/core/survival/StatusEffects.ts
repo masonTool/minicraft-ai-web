@@ -161,7 +161,7 @@ export function resolveEffect(name: string): EffectId | undefined {
  */
 export function effectLabel(id: EffectId): string {
   const key = `label.effect.${id}`;
-  const text = t(key);
+  const text = t(`label.effect.${id}`);
   return text === key ? id : text;
 }
 

@@ -14,6 +14,11 @@ import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
 // 多语言 P2-4：生物名
 import { mobLabel } from '../src/core/entity/Mob.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
+import { DIMENSION_CYCLE } from '../src/core/gen/Dimension.ts';
+import { WORLD_TYPES } from '../src/core/gen/WorldType.ts';
+import { BIOMES } from '../src/core/gen/Biome.ts';
+import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
+import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
 import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
@@ -1023,6 +1028,27 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   const nameTagSrc = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
   check('名字牌字体栈留了 sans-serif 兜底（西里尔 / 变音符靠它接住）', /sans-serif/.test(nameTagSrc));
   check('名字牌字体栈保留中文字体（PingFang / YaHei）', nameTagSrc.includes('PingFang SC') && nameTagSrc.includes('Microsoft YaHei'));
+
+  /**
+   * 标签表族（一）（多语言 P2-5）：维度 / 世界类型 / 群系 / 附魔 / 村民等级 / 职业。
+   *
+   * 判据一律**对着枚举清单扫**，不抄条数：多数一条或少一条都会在这里红，
+   * 而"键写错 / 漏翻"则表现为查回键名本身。
+   */
+  const labelTables: ReadonlyArray<readonly [string, readonly string[], (value: string) => string]> = [
+    ['维度', DIMENSION_CYCLE, (value) => `label.dimension.${value}`],
+    ['世界类型', WORLD_TYPES, (value) => `label.worldType.${value}`],
+    ['群系', BIOMES.map((biome) => biome.name), (value) => `label.biome.${value}`],
+    ['附魔', ENCHANTMENTS.map((one) => one.id), (value) => `label.enchantment.${value}`],
+    ['村民等级', ['1', '2', '3', '4', '5'], (value) => `label.villagerLevel.${value}`],
+    ['职业', PROFESSIONS.map((one) => one.id), (value) => `label.profession.${value}`],
+  ];
+  for (const [name, values, keyOf] of labelTables) {
+    const missing = values.filter((value) => t(keyOf(value)) === keyOf(value));
+    check(`${name}的 ${values.length} 个值都有键`, missing.length === 0, missing.slice(0, 3).join(','));
+    const cjk = values.filter((value) => /[\u4e00-\u9fff]/.test(t(keyOf(value), 'en')));
+    check(`${name}的英文名没有残留中文`, cjk.length === 0, cjk.slice(0, 3).join(','));
+  }
 
   // 组件类（color / wood / coral / base / ore / toolMaterial …）必须是"词"，不是句子
   const components = itemKeys.filter((key) => !key.startsWith('item.tpl.') && key.split('.').length === 3);

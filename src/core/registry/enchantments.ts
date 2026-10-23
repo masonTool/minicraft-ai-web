@@ -1,3 +1,6 @@
+// 多语言 P2-5：附魔名走 `label.enchantment.*`
+import { t } from '../i18n/I18n.ts';
+
 /**
  * 附魔表（H9 / K3）
  *
@@ -62,8 +65,6 @@ const ARMOR: readonly EnchantTarget[] = ['helmet', 'chestplate', 'leggings', 'bo
 
 export interface EnchantmentDef {
   readonly id: string;
-  /** 中文名（与游戏内文案一致） */
-  readonly name: string;
   readonly maxLevel: number;
   readonly targets: readonly EnchantTarget[];
   /** 权重：越小越稀有（原版 rarity weight） */
@@ -80,40 +81,40 @@ export interface EnchantmentDef {
 
 export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // ---- 盔甲类
-  { id: 'protection', name: '保护', maxLevel: 4, targets: ARMOR, weight: 10, implemented: true },
-  { id: 'fire_protection', name: '火焰保护', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
-  { id: 'feather_falling', name: '摔落保护', maxLevel: 4, targets: ['boots'], weight: 5, implemented: true },
-  { id: 'blast_protection', name: '爆炸保护', maxLevel: 4, targets: ARMOR, weight: 2, implemented: true },
-  { id: 'projectile_protection', name: '弹射物保护', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
-  { id: 'respiration', name: '水下呼吸', maxLevel: 3, targets: ['helmet'], weight: 2, implemented: true },
-  { id: 'aqua_affinity', name: '水下速掘', maxLevel: 1, targets: ['helmet'], weight: 2, implemented: true },
+  { id: 'protection', maxLevel: 4, targets: ARMOR, weight: 10, implemented: true },
+  { id: 'fire_protection', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
+  { id: 'feather_falling', maxLevel: 4, targets: ['boots'], weight: 5, implemented: true },
+  { id: 'blast_protection', maxLevel: 4, targets: ARMOR, weight: 2, implemented: true },
+  { id: 'projectile_protection', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
+  { id: 'respiration', maxLevel: 3, targets: ['helmet'], weight: 2, implemented: true },
+  { id: 'aqua_affinity', maxLevel: 1, targets: ['helmet'], weight: 2, implemented: true },
   // 荆棘（批次 264）：被近战打中时反伤攻击者，数值见 `PlayerStats.thornsDamage`
-  { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1, implemented: true },
+  { id: 'thorns', maxLevel: 3, targets: ['chestplate'], weight: 1, implemented: true },
   // 深海探索者 / 灵魂疾行（批次 262）：水下与灵魂沙上的移速倍率，见 `PlayerStats`
-  { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2, implemented: true },
+  { id: 'depth_strider', maxLevel: 3, targets: ['boots'], weight: 2, implemented: true },
   // 冰霜行者（批次 263）：踩过的水面结霜冰，5 秒后化回水，见 `main.updateFrostWalker`
-  { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true, implemented: true },
-  { id: 'soul_speed', name: '灵魂疾行', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true, implemented: true },
+  { id: 'frost_walker', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true, implemented: true },
+  { id: 'soul_speed', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true, implemented: true },
   // 绑定诅咒（批次 270）：装备后无法主动脱下，判定见 `isBoundByCurse`
-  { id: 'binding_curse', name: '绑定诅咒', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true, implemented: true },
+  { id: 'binding_curse', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true, implemented: true },
 
   // ---- 武器类
-  { id: 'sharpness', name: '锋利', maxLevel: 5, targets: ['sword', 'axe'], weight: 10, implemented: true },
-  { id: 'smite', name: '亡灵杀手', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
-  { id: 'bane_of_arthropods', name: '节肢杀手', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
-  { id: 'knockback', name: '击退', maxLevel: 2, targets: ['sword'], weight: 5, implemented: true },
-  { id: 'fire_aspect', name: '火焰附加', maxLevel: 2, targets: ['sword'], weight: 2, implemented: true },
-  { id: 'looting', name: '抢夺', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
+  { id: 'sharpness', maxLevel: 5, targets: ['sword', 'axe'], weight: 10, implemented: true },
+  { id: 'smite', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
+  { id: 'bane_of_arthropods', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
+  { id: 'knockback', maxLevel: 2, targets: ['sword'], weight: 5, implemented: true },
+  { id: 'fire_aspect', maxLevel: 2, targets: ['sword'], weight: 2, implemented: true },
+  { id: 'looting', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
   // 横扫之刃（批次 262）：命中时对周围生物溅射，公式见 `tools.ts#sweepDamage`
-  { id: 'sweeping', name: '横扫之刃', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
+  { id: 'sweeping', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
 
   // ---- 工具类
-  { id: 'efficiency', name: '效率', maxLevel: 5, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 10, implemented: true },
-  { id: 'silk_touch', name: '精准采集', maxLevel: 1, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 1, implemented: true },
-  { id: 'unbreaking', name: '耐久', maxLevel: 3, targets: ALL_GEAR, weight: 5, implemented: true },
-  { id: 'fortune', name: '时运', maxLevel: 3, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 2, implemented: true },
-  { id: 'mending', name: '经验修补', maxLevel: 1, targets: ALL_GEAR, weight: 2, treasure: true, implemented: true },
-  { id: 'vanishing_curse', name: '消失诅咒', maxLevel: 1, targets: ALL_GEAR, weight: 1, treasure: true, implemented: true },
+  { id: 'efficiency', maxLevel: 5, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 10, implemented: true },
+  { id: 'silk_touch', maxLevel: 1, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 1, implemented: true },
+  { id: 'unbreaking', maxLevel: 3, targets: ALL_GEAR, weight: 5, implemented: true },
+  { id: 'fortune', maxLevel: 3, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 2, implemented: true },
+  { id: 'mending', maxLevel: 1, targets: ALL_GEAR, weight: 2, treasure: true, implemented: true },
+  { id: 'vanishing_curse', maxLevel: 1, targets: ALL_GEAR, weight: 1, treasure: true, implemented: true },
 
   // ---- 弓（J9 落地后四条全部接线）
   // ⚠️ 这四条曾经漏标 `implemented`：效果在 `core/entity/Bow.ts` 里早就按它们算了
@@ -121,27 +122,27 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // 但界面上仍按"效果未实现"标着 `*` —— 玩家附了一把力量 V 的弓，却被界面告知"这条没效果"。
   // 教训：`implemented` 是**一列手写的数据**，接线时要跟着改；覆盖度台账（`audit:coverage`）
   // 现在把"已接线条数"当众数出来，这类漂移会直接体现在百分比上。
-  { id: 'power', name: '力量', maxLevel: 5, targets: ['bow'], weight: 10, implemented: true },
-  { id: 'punch', name: '冲击', maxLevel: 2, targets: ['bow'], weight: 2, implemented: true },
-  { id: 'flame', name: '火矢', maxLevel: 1, targets: ['bow'], weight: 2, implemented: true },
-  { id: 'infinity', name: '无限', maxLevel: 1, targets: ['bow'], weight: 1, implemented: true },
+  { id: 'power', maxLevel: 5, targets: ['bow'], weight: 10, implemented: true },
+  { id: 'punch', maxLevel: 2, targets: ['bow'], weight: 2, implemented: true },
+  { id: 'flame', maxLevel: 1, targets: ['bow'], weight: 2, implemented: true },
+  { id: 'infinity', maxLevel: 1, targets: ['bow'], weight: 1, implemented: true },
   // 海之眷顾 / 诱饵（批次 81 随钓鱼接线）：前者改池子权重（`registry/fishing.ts`），
   // 后者缩短等待时间（`survival/Fishing.ts` 的 `waitSecondsFor`）
-  { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
-  { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
+  { id: 'luck_of_the_sea', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
+  { id: 'lure', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
   // 忠诚（批次 268）：投出的三叉戟插住后自己飞回手里
-  { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5, implemented: true },
+  { id: 'loyalty', maxLevel: 3, targets: ['trident'], weight: 5, implemented: true },
   // 穿刺（批次 267）：三叉戟对水生生物每级 +2.5
-  { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2, implemented: true },
+  { id: 'impaling', maxLevel: 5, targets: ['trident'], weight: 2, implemented: true },
   // 激流（批次 267）：在水里/雨中按住使用键向前冲，速度见 `tools.riptideSpeed`
-  { id: 'riptide', name: '激流', maxLevel: 3, targets: ['trident'], weight: 2, implemented: true },
+  { id: 'riptide', maxLevel: 3, targets: ['trident'], weight: 2, implemented: true },
   // 引雷（批次 269）：雷雨天命中点召唤闪电（雷雨判定在主程序）
-  { id: 'channeling', name: '引雷', maxLevel: 1, targets: ['trident'], weight: 1, implemented: true },
+  { id: 'channeling', maxLevel: 1, targets: ['trident'], weight: 1, implemented: true },
   // 多重射击 / 快速装填（批次 265）：弩装填与齐射，数值见 `Bow.ts`
-  { id: 'multishot', name: '多重射击', maxLevel: 1, targets: ['crossbow'], weight: 2, implemented: true },
-  { id: 'quick_charge', name: '快速装填', maxLevel: 3, targets: ['crossbow'], weight: 5, implemented: true },
+  { id: 'multishot', maxLevel: 1, targets: ['crossbow'], weight: 2, implemented: true },
+  { id: 'quick_charge', maxLevel: 3, targets: ['crossbow'], weight: 5, implemented: true },
   // 穿透（批次 266）：箭矢命中生物后继续飞，剩余次数 = 等级
-  { id: 'piercing', name: '穿透', maxLevel: 4, targets: ['crossbow'], weight: 10, implemented: true },
+  { id: 'piercing', maxLevel: 4, targets: ['crossbow'], weight: 10, implemented: true },
 ];
 
 /** 原版 1.18 的附魔总数（用于断言"表有没有漏"） */
@@ -153,9 +154,16 @@ export function enchantmentById(id: string): EnchantmentDef | undefined {
   return BY_ID.get(id);
 }
 
-/** 附魔的中文名；表里没有就回退成 id（`/enchant` 与提示框都用它） */
+/**
+ * 附魔名（多语言 P2-5）：键 `label.enchantment.<id>`，查不到回退成 id。
+ *
+ * 名字原来写在每条 `ENCHANTMENTS` 里（`name: '保护'`），于是 `附魔：保护 III`
+ * 这种提示在英文界面下整行是中文。现在名字只住在语言表，数据表只管数值。
+ */
 export function enchantmentName(id: string): string {
-  return BY_ID.get(id)?.name ?? id;
+  const key = `label.enchantment.${id}`;
+  const text = t(`label.enchantment.${id}`);
+  return text === key ? id : text;
 }
 
 /**
@@ -208,3 +216,4 @@ export function canEnchant(def: EnchantmentDef, kind: EnchantItemKind): boolean 
 export function offeringFor(kind: EnchantItemKind): readonly EnchantmentDef[] {
   return ENCHANTMENTS.filter((def) => canEnchant(def, kind) && !def.treasure);
 }
+

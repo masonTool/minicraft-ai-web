@@ -1,3 +1,6 @@
+// 多语言 P2-5：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
+
 /**
  * 世界类型（新建世界时选）
  *
@@ -17,13 +20,17 @@ export type WorldType = 'default' | 'flat' | 'large_biomes' | 'amplified' | 'sin
 
 export const WORLD_TYPES: readonly WorldType[] = ['default', 'flat', 'large_biomes', 'amplified', 'single_biome'];
 
-export const WORLD_TYPE_LABELS: Record<WorldType, string> = {
-  default: '默认（山地与海洋）',
-  flat: '超平坦（一层草地）',
-  large_biomes: '大型群系（群系面积 ×4）',
-  amplified: '放大化（更高的山）',
-  single_biome: '单一群系（全世界同一种群系）',
-};
+/**
+ * 世界类型的显示名（多语言 P2-5）。
+ *
+ * 名字里带着**这一档到底改了什么的短说明**（"大型群系（群系面积 ×4）"），
+ * 所以它是文案而不是枚举名 —— 键化之后德语用户可以按自己的语序写。
+ */
+export function worldTypeLabel(type: WorldType): string {
+  const key = `label.worldType.${type}`;
+  const text = t(`label.worldType.${type}`);
+  return text === key ? type : text;
+}
 
 /**
  * 每种类型"到底有什么"（批次 181）。

@@ -12,6 +12,7 @@
  */
 
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
+import { enchantmentName } from '../registry/enchantments.ts';
 // 多语言 P2-4：种类名走 `entity.<id>`
 import { mobLabel } from '../entity/Mob.ts';
 // 多语言 P1-1b：用法与说明要**按当前语言**取，不能直接抄 spec 里的键
@@ -28,7 +29,7 @@ import { ADVANCEMENTS } from '../progress/advancements.ts';
 import { BLOCKS } from '../registry/blocks.ts';
 import { CREATIVE_ITEMS, itemName } from '../registry/items.ts';
 import { blockLabel, itemLabel } from '../registry/itemNames.ts';
-import { BIOME_LABELS, BIOME_TABLE } from '../gen/Biome.ts';
+import { BIOME_TABLE, biomeLabel } from '../gen/Biome.ts';
 // `/locate structure` 的结构名下拉（批次 624 / Q22）：零依赖数据表，不拖生成器
 import { STRUCTURE_NAMES } from './structureNames.data.ts';
 
@@ -404,7 +405,8 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       index,
       name,
       optional,
-      ENCHANTMENTS.map((entry) => ({ value: entry.id, label: entry.name })),
+      // 多语言 P2-5：附魔名走 `label.enchantment.*`
+      ENCHANTMENTS.map((entry) => ({ value: entry.id, label: enchantmentName(entry.id) })),
     );
   }
   if (slug === 'type') {
@@ -500,8 +502,8 @@ const BLOCK_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string
 const BIOME_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string })[] = BIOME_TABLE.map(
   (biome) => ({
     value: biome.name,
-    label: `${BIOME_LABELS[biome.name] ?? biome.name}（${biome.name}）`,
-    search: `${BIOME_LABELS[biome.name] ?? ''} ${biome.name}`.toLowerCase(),
+    label: tp('cmd.help.ui.titleWithId', { title: biomeLabel(biome.name), id: biome.name }),
+    search: `${biomeLabel(biome.name)} ${biome.name}`.toLowerCase(),
   }),
 );
 

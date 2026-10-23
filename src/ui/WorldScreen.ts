@@ -18,14 +18,14 @@ import { t } from '../core/i18n/I18n.ts';
 import {
   WORLD_TYPES,
   WORLD_TYPE_HINTS,
-  WORLD_TYPE_LABELS,
+  worldTypeLabel,
   randomSeed,
   type WorldType,
 } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
-import { BIOMES, BIOME_LABELS } from '../core/gen/Biome.ts';
+import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
 
@@ -274,7 +274,7 @@ export class WorldScreen {
     // 世界类型 / 难度 / 模式：与设置页同一个下拉组件（批次 528，用户要求）
     this.typeSelect = new Dropdown<WorldType>(
       WORLD_TYPES,
-      WORLD_TYPE_LABELS,
+      Object.fromEntries(WORLD_TYPES.map((type) => [type, worldTypeLabel(type)])) as Record<WorldType, string>,
       'default',
       () => this.updateTypeHint(),
       { fullWidth: true, className: 'world-dropdown' },
@@ -307,7 +307,7 @@ export class WorldScreen {
     // 单一群系的群系选择（批次 533）：默认平原；列表用注册表里的全部群系
     const biomeNames = BIOMES.map((biome) => biome.name);
     const biomeLabels: Record<string, string> = {};
-    for (const biome of BIOMES) biomeLabels[biome.name] = BIOME_LABELS[biome.name] ?? biome.name;
+    for (const biome of BIOMES) biomeLabels[biome.name] = biomeLabel(biome.name);
     this.biomeSelect = new Dropdown<string>(
       biomeNames,
       biomeLabels,

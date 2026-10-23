@@ -15,6 +15,8 @@
  */
 
 import { Block } from '../registry/blocks.ts';
+// 多语言 P2-5：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
 
 /** 群系 id */
 export const Biome = {
@@ -86,59 +88,15 @@ export type BiomeId = (typeof Biome)[keyof typeof Biome];
 /** 参数区间：写成 [min, max] */
 export type Range = readonly [number, number];
 
-/** 群系英文 id → 中文名（命令帮助的自动联想用；命令里仍拼英文 id） */
-export const BIOME_LABELS: Readonly<Record<string, string>> = {
-  deep_ocean: '深海',
-  ocean: '海洋',
-  frozen_ocean: '冻洋',
-  warm_ocean: '暖水海洋',
-  cold_ocean: '冷水海洋',
-  deep_cold_ocean: '冷水深海',
-  lukewarm_ocean: '温水海洋',
-  deep_lukewarm_ocean: '温水深海',
-  deep_frozen_ocean: '冻洋深海',
-  beach: '沙滩',
-  stony_shore: '石岸',
-  snowy_plains: '雪原',
-  snowy_taiga: '积雪针叶林',
-  plains: '平原',
-  sunflower_plains: '向日葵平原',
-  forest: '森林',
-  birch_forest: '桦木森林',
-  taiga: '针叶林',
-  desert: '沙漠',
-  savanna: '热带草原',
-  jungle: '丛林',
-  swamp: '沼泽',
-  windswept_hills: '风袭丘陵',
-  meadow: '草甸',
-  stony_peaks: '石峰',
-  snowy_slopes: '积雪山坡',
-  badlands: '恶地',
-  grove: '雪林',
-  dark_forest: '黑森林',
-  sparse_jungle: '稀疏丛林',
-  bamboo_jungle: '竹林',
-  old_growth_pine_taiga: '旧生长松木针叶林',
-  old_growth_spruce_taiga: '旧生长云杉针叶林',
-  windswept_forest: '风袭森林',
-  savanna_plateau: '热带高原',
-  wooded_badlands: '疏林恶地',
-  windswept_gravelly_hills: '风袭沙砾丘陵',
-  eroded_badlands: '侵蚀恶地',
-  windswept_savanna: '风袭热带草原',
-  ice_spikes: '冰刺之地',
-  jagged_peaks: '尖峭山峰',
-  frozen_peaks: '冰封山峰',
-  mushroom_fields: '蘑菇岛',
-  flower_forest: '繁花森林',
-  old_growth_birch_forest: '旧生长桦木森林',
-  lush_caves: '繁茂洞穴',
-  dripstone_caves: '溶洞',
-  river: '河流',
-  frozen_river: '冻河',
-  snowy_beach: '积雪沙滩',
-};
+/**
+ * 群系的显示名（多语言 P2-5）：命令帮助的下拉与联想用，命令里仍拼英文 id。
+ * 查不到返回 id —— 新加群系忘了加名字时，界面上会露出 `pale_garden` 这种生 id。
+ */
+export function biomeLabel(id: string): string {
+  const key = `label.biome.${id}`;
+  const text = t(`label.biome.${id}`);
+  return text === key ? id : text;
+}
 
 export interface BiomeDef {
   readonly id: number;

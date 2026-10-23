@@ -30,7 +30,7 @@ import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survi
 import { POTIONS, TIPPED_ARROWS, potionById, type PotionEntry, type TippedArrowEntry } from './potions.ts';
 import { tippedArrowEffects } from '../survival/TippedArrow.ts';
 import { SPAWN_EGG_SPECS, spawnEggTile } from './spawnEggs.ts';
-import { enchantmentById, romanLevel } from './enchantments.ts';
+import { enchantmentName, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import {
   TOOL_SPECS,
@@ -654,7 +654,7 @@ export function enchantLabel(enchants?: Readonly<Record<string, number>>): strin
 export function enchantList(enchants?: Readonly<Record<string, number>>): string[] {
   if (!enchants) return [];
   return Object.entries(enchants).map(
-    ([id, level]) => `${enchantmentById(id)?.name ?? id} ${romanLevel(level)}`,
+    ([id, level]) => `${enchantmentName(id)} ${romanLevel(level)}`,
   );
 }
 

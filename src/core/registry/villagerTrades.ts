@@ -19,6 +19,8 @@
  */
 
 import { Block, GLASS_PANE_ID, bedId, carpetId, woolId } from './blocks.ts';
+// 多语言 P2-5：等级名与职业名走 `label.*`
+import { t } from '../i18n/I18n.ts';
 import { DYE_COLORS } from './colors.ts';
 import { Item, dyeItemId } from './items.ts';
 // 武器匠卖的是**工具/武器**（原版也是），所以这里要按"种类 × 材质"算 id
@@ -65,7 +67,6 @@ export interface TradeSpec {
 
 export interface VillagerProfession {
   readonly id: VillagerProfessionId;
-  readonly name: string;
   /** 认领哪一格方块才得到这个职业（原版 1:1；本项目只列**已经实现的方块**） */
   readonly workstation: number;
   /**
@@ -128,7 +129,6 @@ export const VILLAGER_SKIN_COLOR = 0xd6a27a;
 export const PROFESSIONS: readonly VillagerProfession[] = [
   {
     id: 'farmer',
-    name: '农民',
     workstation: Block.COMPOSTER,
     robeColor: 0xb8a05a,
     levels: [
@@ -144,7 +144,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'butcher',
-    name: '屠夫',
     workstation: Block.SMOKER,
     robeColor: 0x9c5f4a,
     levels: [
@@ -160,7 +159,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'armorer',
-    name: '盔甲匠',
     workstation: Block.BLAST_FURNACE,
     robeColor: 0x7d7f8a,
     levels: [
@@ -189,7 +187,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'cleric',
-    name: '牧师',
     workstation: Block.BREWING_STAND,
     robeColor: 0x8a5fb0,
     levels: [
@@ -205,7 +202,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'stonemason',
-    name: '石匠',
     workstation: Block.STONECUTTER,
     robeColor: 0x6f7b86,
     levels: [
@@ -221,7 +217,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'fisherman',
-    name: '渔夫',
     workstation: Block.BARREL,
     robeColor: 0x4a7fa0,
     levels: [
@@ -237,7 +232,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   },
   {
     id: 'toolsmith',
-    name: '工具匠',
     workstation: Block.SMITHING_TABLE,
     robeColor: 0x6a5b45,
     levels: [
@@ -256,7 +250,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
     // ⚠️ 原版大师那一条卖的是**现掷一条附魔的附魔书**——本项目暂时不行
     // （交易表的产物只有 `{id, count}`，装不下"附魔"这一层数据，记在 TASKS J23）
     id: 'librarian',
-    name: '图书管理员',
     workstation: Block.LECTERN,
     robeColor: 0xf2efe4,
     levels: [
@@ -273,7 +266,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
   {
     // 制箭师（J23，批次 90）：收木棍/燧石/羽毛（做箭的那几样），卖弓与箭
     id: 'fletcher',
-    name: '制箭师',
     workstation: Block.FLETCHING_TABLE,
     robeColor: 0x9c6b3f,
     levels: [
@@ -291,7 +283,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
     // 武器匠（J23，批次 90）：收煤炭与铁锭，卖**铁制武器**（工具/武器的 id 按
     // "种类 × 材质"算，见 `registry/tools.ts`）。价格是本项目定的（见文件头）
     id: 'weaponsmith',
-    name: '武器匠',
     workstation: Block.GRINDSTONE,
     robeColor: 0x4a5a6a,
     levels: [
@@ -309,7 +300,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
     // 牧羊人（J23，批次 90）：收羊毛与染料，卖剪刀、床、画、地毯。
     // ⚠️ 卖"画"这一条原版在（Bedrock 的牧羊人就有），本项目正好接上批次 86 的画
     id: 'shepherd',
-    name: '牧羊人',
     workstation: Block.LOOM,
     robeColor: 0x6f7f4a,
     levels: [
@@ -330,7 +320,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
     // 皮匠（批次 568，J23 最后一个）：工作站是**炼药锅**——G13 那批方块交互
     // 落地之前它一直留着；现在炼药锅能装水/岩浆/细雪，这一条才成立。
     id: 'leatherworker',
-    name: '皮匠',
     workstation: Block.CAULDRON,
     robeColor: 0x8a5a32,
     levels: [
@@ -375,7 +364,6 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
     // 原版的"海洋探险家地图"需要带目标结构的地图数据，这里没有那条通道，
     // 所以卖的是**空地图 / 指南针 / 玻璃板 / 旗帜**这些已有物品。
     id: 'cartographer',
-    name: '制图师',
     workstation: Block.CARTOGRAPHY_TABLE,
     robeColor: 0x5b7f8c,
     levels: [
@@ -456,7 +444,20 @@ export function levelForTradeXp(xp: number): number {
 
 /** 第 `level` 级（1~5）对应的名字 */
 export function levelName(level: number): string {
-  return VILLAGER_LEVELS[Math.max(0, Math.min(VILLAGER_LEVELS.length - 1, level - 1))]!;
+  const index = Math.max(0, Math.min(VILLAGER_LEVELS.length - 1, level - 1));
+  return t(`label.villagerLevel.${index + 1}`);
+}
+
+/**
+ * 职业名（多语言 P2-5）：键 `label.profession.<id>`。
+ *
+ * ⚠️ `PROFESSIONS` 里的 `name` 字段已删：那张表是**交易数据**，
+ * 名字留两处必然漂（改了一边另一边还是旧名）。
+ */
+export function professionLabel(id: string): string {
+  const key = `label.profession.${id}`;
+  const text = t(`label.profession.${id}`);
+  return text === key ? id : text;
 }
 
 /**

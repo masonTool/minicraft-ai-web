@@ -118,7 +118,7 @@ import {
 import { BANNER_PATTERNS } from '../core/registry/blockState.ts';
 // 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
 import { Villager } from '../core/entity/Villager.ts';
-import { adjustedTradeCosts, levelName, tradeBlocker, tradeDemand } from '../core/registry/villagerTrades.ts';
+import { adjustedTradeCosts, levelName, tradeBlocker, tradeDemand, professionLabel } from '../core/registry/villagerTrades.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
 import { Dispenser } from '../core/container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../core/container/Dropper.ts';
@@ -7094,7 +7094,7 @@ export class InventoryScreen {
     const who = document.createElement('div');
     who.className = 'trade-who';
     who.textContent = profession
-      ? `${profession.name} · ${levelName(villager.level)}`
+      ? `${professionLabel(profession.id)} · ${levelName(villager.level)}`
       : t('station.tradeUnemployed');
     const xp = document.createElement('div');
     xp.className = 'trade-xp';

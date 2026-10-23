@@ -22,6 +22,7 @@
  */
 
 import { armorInfoById } from '../registry/armor.ts';
+import { enchantmentName } from '../registry/enchantments.ts';
 import { ENCHANTMENTS, enchantmentById, romanLevel, type EnchantItemKind, type EnchantmentDef } from '../registry/enchantments.ts';
 import { SPECIAL_ITEMS } from '../registry/items.ts';
 import { toolInfoById } from '../registry/tools.ts';
@@ -164,7 +165,7 @@ export function optionLabel(enchants: readonly EnchantApplied[]): string {
     .map((enchant) => {
       const def = enchantmentById(enchant.id);
       const mark = def?.implemented === true ? '' : UNIMPLEMENTED_MARK;
-      return `${def?.name ?? enchant.id} ${romanLevel(enchant.level)}${mark}`;
+      return `${enchantmentName(enchant.id)} ${romanLevel(enchant.level)}${mark}`;
     })
     .join('、');
 }

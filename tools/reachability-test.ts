@@ -74,7 +74,7 @@ import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { DROPPING_MOB_TYPES, MOB_TYPES } from '../src/core/entity/mobs.ts';
 // 世界生成登记表（B52，批次 118）：方块侧的"种子"就是它——那张表由 `test:genregistry` 对账
 import { generatedBlockIds } from '../src/core/gen/GenerationSources.ts';
-import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
+import { PROFESSIONS, professionLabel } from '../src/core/registry/villagerTrades.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
 
 let passed = 0;
@@ -186,7 +186,7 @@ for (let changed = true; changed; ) {
     for (const level of profession.levels) {
       for (const spec of level) {
         if (spec.cost.every((cost) => reach.has(cost.id))) {
-          add('村民交易', spec.result.id, `村民交易（${profession.name}）`);
+          add('村民交易', spec.result.id, `村民交易（${professionLabel(profession.id)}）`);
         }
       }
     }

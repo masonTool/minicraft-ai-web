@@ -17,7 +17,7 @@ import {
   FLAT_SURFACE_Y,
   WORLD_SURFACE_Y,
   WORLD_TYPES,
-  WORLD_TYPE_LABELS,
+  worldTypeLabel,
   isWorldType,
   randomSeed,
 } from '../src/core/gen/WorldType.ts';
@@ -95,7 +95,7 @@ console.log('\n[世界类型]');
   );
   check(
     '每种类型都有中文标签',
-    WORLD_TYPES.every((type) => typeof WORLD_TYPE_LABELS[type] === 'string' && WORLD_TYPE_LABELS[type].length > 0),
+    WORLD_TYPES.every((type) => worldTypeLabel(type).length > 0 && worldTypeLabel(type) !== type),
   );
   check(
     'isWorldType 认得合法值',

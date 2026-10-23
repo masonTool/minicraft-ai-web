@@ -127,7 +127,7 @@ import { sanitizeMobEquipment } from './core/entity/MobEquipment.ts';
  */
 type Rideable = Boat | Minecart | Horse;
 import { Villager } from './core/entity/Villager.ts';
-import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, tradeSettlement } from './core/registry/villagerTrades.ts';
+import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, tradeSettlement, professionLabel } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { routineTarget, villagerArrived, villagerRoutine } from './core/world/VillagerRoutine.ts';
@@ -455,7 +455,7 @@ import { srgbColor } from './render/srgb.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from './core/world/Chunk.ts';
-import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
+import { DIMENSION_CYCLE, Dimension, dimensionLabel, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId,
   isBed,
   isSign,
@@ -7204,7 +7204,7 @@ class App {
       // 升级：新交易已经在 `addTradeXp` 里追加进 `offers`，这里只报喜
       const profession = villager.profession;
       this.chat.push(
-        `村民升级了：${profession?.name ?? '村民'} → ${levelName(villager.level)}（解锁了新的交易）`,
+        `村民升级了：${profession ? professionLabel(profession.id) : t('label.profession.farmer')} → ${levelName(villager.level)}（解锁了新的交易）`,
         'system',
       );
       this.audio.play('achievement', { x: villager.x, y: villager.y, z: villager.z });
@@ -16412,7 +16412,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +

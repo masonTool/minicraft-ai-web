@@ -1,3 +1,6 @@
+// 多语言 P2-5：标签表走 `label.*`
+import { t } from '../i18n/I18n.ts';
+
 /**
  * 维度
  *
@@ -17,12 +20,19 @@ export const Dimension = {
 
 export type DimensionId = (typeof Dimension)[keyof typeof Dimension];
 
-/** 中文显示名（HUD 用） */
-export const DIMENSION_LABELS: Readonly<Record<DimensionId, string>> = {
-  overworld: '主世界',
-  nether: '下界',
-  end: '末地',
-};
+/**
+ * 维度的显示名（多语言 P2-5）：HUD 与调试信息用。
+ *
+ * ⚠️ 命令域另有一套 `cmd.label.dimension.*` —— 那套是**嵌在句子里**用的
+ * （英文要 `the Nether` 这种带冠词的形式），两者语义不同，不要合并。
+ */
+export function dimensionLabel(id: DimensionId): string {
+  const key = `label.dimension.${id}`;
+  // ⚠️ 必须写成模板字面量直接进 `t()`：`t(key)` 会让 `audit:i18n` 收不到前缀，
+  // 整族键都会被报成孤儿（这个坑在 P2-2 已经踩过一次）
+  const text = t(`label.dimension.${id}`);
+  return text === key ? id : text;
+}
 
 /** 维度循环顺序（N 键依次切过去） */
 export const DIMENSION_CYCLE: readonly DimensionId[] = [Dimension.OVERWORLD, Dimension.NETHER, Dimension.END];

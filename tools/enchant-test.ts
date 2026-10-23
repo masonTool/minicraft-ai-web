@@ -81,7 +81,7 @@ function tableWith(itemId: number, lapis = 3): EnchantTable {
 console.log('\n[附魔表]');
 equal('附魔总数与原版 1.18 一致', ENCHANTMENTS.length, VANILLA_ENCHANTMENT_COUNT);
 equal('id 无重复', new Set(ENCHANTMENTS.map((def) => def.id)).size, ENCHANTMENTS.length);
-equal('中文名无重复', new Set(ENCHANTMENTS.map((def) => def.name)).size, ENCHANTMENTS.length);
+equal('中文名无重复', new Set(ENCHANTMENTS.map((def) => enchantmentName(def.id))).size, ENCHANTMENTS.length);
 check('每条都有可附魔的目标物品', ENCHANTMENTS.every((def) => def.targets.length > 0));
 check('最高等级都 ≥ 1', ENCHANTMENTS.every((def) => def.maxLevel >= 1));
 check('权重都 ≥ 1', ENCHANTMENTS.every((def) => def.weight >= 1));

@@ -22,7 +22,7 @@ import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../regi
 import { itemName } from '../registry/items.ts';
 import { Block } from '../registry/blocks.ts';
 import { mobTypeById, MOB_TYPES } from '../entity/mobs.ts';
-import { ENCHANTMENTS } from '../registry/enchantments.ts';
+import { ENCHANTMENTS, enchantmentName } from '../registry/enchantments.ts';
 import {
   DIFFICULTIES,
   clampRuleNumber,
@@ -797,7 +797,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('enchant'));
         return;
       }
-      const def = ENCHANTMENTS.find((entry) => entry.id === key || entry.name === key);
+      const def = ENCHANTMENTS.find((entry) => entry.id === key || enchantmentName(entry.id) === key);
       if (!def) {
         out.error(msg('cmd.reply.enchant.unknown-enchantment-key', { key: key }));
         return;
@@ -812,7 +812,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(msg('cmd.reply.enchant.nothing-in-hand-can-be'));
         return;
       }
-      out.info(msg('cmd.reply.enchant.applied-name-level-to-the', { name: def.name, level: level }));
+      out.info(msg('cmd.reply.enchant.applied-name-level-to-the', { name: enchantmentName(def.id), level: level }));
     },
   },
   {
