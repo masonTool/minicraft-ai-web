@@ -25,6 +25,8 @@ import { zh } from './locales/zh/index.ts';
 import { en } from './locales/en/index.ts';
 // 英文的复数形式（多语言 P0-6）：只有需要区分单复数的键才出现在这里
 import { plural } from './locales/en/plural.ts';
+import { plural as dePlural } from './locales/de/plural.ts';
+import { plural as ruPlural } from './locales/ru/plural.ts';
 import { pluralCategoryFor, type PluralCategory, type PluralTable } from './plural.ts';
 // 语言清单与匹配（多语言 P0-1 / P0-4）：6 种语言的元数据 + 设备标签匹配
 import {
@@ -84,10 +86,14 @@ export type LocaleModule = Readonly<Record<string, Readonly<Record<string, strin
  * 走异步会把启动流程改成"先白屏再出字"。
  * ru / pt / fr / de 写完表之后在 P4 各加一行：
  *   de: () => import('./locales/de/index.ts'),
+  // 多语言 P4-2：俄语按需加载
+  ru: () => import('./locales/ru/index.ts'),
  */
 const LOADERS: Partial<Record<LocaleCode, () => Promise<LocaleModule>>> = {
   // 多语言 P4-1：德语按需加载（`.webmanifest` 与界面文案都跟它走）
   de: () => import('./locales/de/index.ts'),
+  // 多语言 P4-2：俄语按需加载
+  ru: () => import('./locales/ru/index.ts'),
 };
 
 /** 登记一种语言的按需加载器（P4 加语言、以及断言里造一个假语言时用） */
@@ -123,7 +129,14 @@ export async function loadLocale(code: LocaleCode): Promise<boolean> {
  * 每种语言的**复数表**（多语言 P0-6）：只放"count 可能是 1 且读起来别扭"的键。
  * 没登记的键仍走 `t()`，所以这不是第二套文案，是一层可选的精修。
  */
-export const PLURAL_TABLES: Readonly<Partial<Record<LocaleCode, PluralTable>>> = { en: plural };
+export const PLURAL_TABLES: Readonly<Partial<Record<LocaleCode, PluralTable>>> = {
+  en: plural,
+  // 多语言 P4：德语（one/other）与俄语（one/few/many）各有自己的变格规则。
+  // ⚠️ 这两张表**静态导入**是有意的：`tn()` 必须同步拿到它，而它只有几行；
+  // 语言表本体仍按需加载（`LOADERS`），两者不要混在一起。
+  de: dePlural,
+  ru: ruPlural,
+};
 const EMPTY_PLURALS: PluralTable = {};
 
 export function pluralTableOf(language: LocaleCode): PluralTable {

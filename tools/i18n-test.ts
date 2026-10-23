@@ -938,10 +938,11 @@ console.log('\n[稀疏表与回落链（多语言 P0-4）]');
   check('存档里存了还没表的语言也不算脏数据', isLanguage('de') && isLanguage('pt'));
   check('没登记的语言仍然不合法', !isLanguage('ja') && !isLanguage('xx'));
   // 多语言 P4-1：de 已经有表（按需加载），"没装表"的例子改用 ru / pt
-  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('ru')).length === 0);
-  check('缺表时回落英文', t('pause.title', 'ru') === t('pause.title', 'en'), t('pause.title', 'ru'));
-  check('俄语同理（回落链不看具体是哪种语言）', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
-  check('一路回落到头就返回键名', t('no.such.key', 'ru') === 'no.such.key', t('no.such.key', 'ru'));
+  // 多语言 P4-2：ru 有表了（按需加载），"没装表"的例子改用 pt
+  check('没装表的语言查出来是空表（不抛异常）', Object.keys(tableOf('pt')).length === 0);
+  check('缺表时回落英文', t('pause.title', 'pt') === t('pause.title', 'en'), t('pause.title', 'pt'));
+  check('其它语言同理（回落链不看具体是哪种语言）', t('pause.resume', 'pt') === 'Resume Game', t('pause.resume', 'pt'));
+  check('一路回落到头就返回键名', t('no.such.key', 'pt') === 'no.such.key', t('no.such.key', 'pt'));
   // 回落链只留英文一档（多语言 P0-6 去掉了"最后退中文"）——前提是英文表真的完整。
   // ⚠️ 判据必须是"**键在不在**英文表里"，不能写成 `t(key) === key`：
   // 命令回执里有 `{name} Health = {value}` 这种语言中性的条目，英文值**就是键本身**，
@@ -991,18 +992,18 @@ console.log('\n[按需加载（多语言 P0-7）]');
    * P4 加真实语言时做的正是同一件事（在 `LOADERS` 里加一行）。
    */
   check('静态语言（zh / en）本来就是就位的', (await loadLocale('zh')) && (await loadLocale('en')));
-  check('没有加载器的语言加载失败（返回 false，不抛异常）', (await loadLocale('ru')) === false);
-  check('加载失败不影响查表（回落链照旧）', t('pause.title', 'ru') === 'Game Paused', t('pause.title', 'ru'));
+  check('没有加载器的语言加载失败（返回 false，不抛异常）', (await loadLocale('pt')) === false);
+  check('加载失败不影响查表（回落链照旧）', t('pause.title', 'pt') === 'Game Paused', t('pause.title', 'pt'));
 
   // 假语言：只给一条文案，足够验证"加载 → 可查"这条链
-  registerLocaleLoader('ru', async () => ({ ru: { 'pause.title': 'Пауза' } }));
-  check('登记加载器后出现在可选清单里', availableLanguages().includes('ru'), availableLanguages().join(','));
-  check('加载成功', (await loadLocale('ru')) === true);
-  check('加载后表进了池子', tableOf('ru')['pause.title'] === 'Пауза');
-  check('加载后真能查出来', t('pause.title', 'ru') === 'Пауза', t('pause.title', 'ru'));
-  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('ru')) === true);
-  check('假语言缺的键仍回落英文', t('pause.resume', 'ru') === 'Resume Game', t('pause.resume', 'ru'));
-  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('ru'));
+  registerLocaleLoader('pt', async () => ({ pt: { 'pause.title': 'Pausado' } }));
+  check('登记加载器后出现在可选清单里', availableLanguages().includes('pt'), availableLanguages().join(','));
+  check('加载成功', (await loadLocale('pt')) === true);
+  check('加载后表进了池子', tableOf('pt')['pause.title'] === 'Pausado');
+  check('加载后真能查出来', t('pause.title', 'pt') === 'Pausado', t('pause.title', 'pt'));
+  check('重复加载是幂等的（第二次直接命中表）', (await loadLocale('pt')) === true);
+  check('假语言缺的键仍回落英文', t('pause.resume', 'pt') === 'Resume Game', t('pause.resume', 'pt'));
+  check('加语言后"可选语言"的数量跟着变', availableLanguages().includes('pt'));
   resetLanguageForTest();
 }
 
@@ -1144,6 +1145,48 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     }
   }
   check('德语用法串的 <> / [] / | 与中文一致', deSyntaxDrift.length === 0, deSyntaxDrift.join(','));
+
+  /**
+   * 俄语（多语言 P4-2）。
+   *
+   * 俄语是**第一个真正需要复数变格**的语言：`1 блок / 2 блока / 5 блоков / 21 блок`。
+   * `tn()` 的那套机制（P0-6）在德语下只用到了 one/other，到这里才被完整用上，
+   * 所以这一节盯两件事：界面分组是真俄语（不是英文占位），以及四个数字各自取对形式。
+   */
+  check('俄语可加载', (await loadLocale('ru')) === true);
+  check('俄语进了可选清单', availableLanguages().includes('ru'), availableLanguages().join(','));
+  const ruKeys = Object.keys(tableOf('ru'));
+  check('俄语表条数与中文相同', ruKeys.length === allKeys().length, `${ruKeys.length} vs ${allKeys().length}`);
+
+  const ruSamples: Array<[string, string]> = [
+    ['menu.play', 'Играть'],
+    ['pause.title', 'Игра приостановлена'],
+    ['settings.row.fov', 'Угол обзора'],
+    ['statistics.title', 'Статистика мира'],
+    ['editor.cancel', 'Отмена'],
+    ['station.reason.needLevels', 'Нужно {cost} уровней опыта'],
+    ['item.toolMaterial.diamond', 'Diamond'], // 占位分组：仍是英文（P4-2b/c 再翻）
+  ];
+  for (const [key, expected] of ruSamples) {
+    check(`俄语：${key}`, t(key, 'ru') === expected, t(key, 'ru'));
+  }
+  check('俄语表里没有中文残留', !/[\u4e00-\u9fff]/.test(ruKeys.map((key) => t(key, 'ru')).join('')));
+
+  // 四个数字各自取对形式：俄语的 one 覆盖 1/21/31，few 覆盖 2~4/22~24，many 覆盖 0 与 5~20
+  setLanguage('ru');
+  const forms = [1, 2, 5, 21].map((n) => tn('statistics.blocks', n));
+  check(
+    '俄语复数：1 блок / 2 блока / 5 блоков / 21 блок',
+    forms.join('|') === '1 блок|2 блока|5 блоков|21 блок',
+    forms.join('|'),
+  );
+  check('俄语复数：数量词也跟着变（2 раза / 5 раз）', tn('station.brewLeft', 2).endsWith('2 раза') && tn('station.brewLeft', 5).endsWith('5 раз'), `${tn('station.brewLeft', 2)} / ${tn('station.brewLeft', 5)}`);
+  resetLanguageForTest();
+
+  // 德语的复数表是 P4-2 补的（P4-1 收口时漏了，tn 会印出「1 Blöcke」）
+  setLanguage('de');
+  check('德语复数：1 Block / 2 Blöcke', tn('statistics.blocks', 1) === '1 Block' && tn('statistics.blocks', 2) === '2 Blöcke', `${tn('statistics.blocks', 1)} / ${tn('statistics.blocks', 2)}`);
+  resetLanguageForTest();
 
   /**
    * 首屏与 manifest（多语言 P3-4）。

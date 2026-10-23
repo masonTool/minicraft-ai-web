@@ -1,0 +1,66 @@
+/**
+ * 俄语文案·editor（与 `locales/zh/editor.ts` **键集必须相同**）
+ *
+ * ⚠️ 多语言 P4-2：`satisfies Pick<Messages, keyof typeof zhXxx>` 把键集卡在 `typecheck`，
+ * 中文加一条、这边没跟上就编译不过。
+ */
+
+import type { Messages } from '../zh/index.ts';
+import type { editor as zhEditor } from '../zh/editor.ts';
+
+export const editor = {
+  "book.noPages": "Ни одна страница не заполнена — подписать нельзя",
+  "sign.done": "Готово",
+  "buildtools.undo.creativeOnly": "Отмена доступна только в творческом режиме",
+  "buildtools.undo.onlineOnly": "В сетевой игре отмена недоступна",
+  "buildtools.undo.empty": "Нечего отменять",
+  "buildtools.redo.empty": "Нечего повторять",
+  "buildtools.select.first": "Первый угол выбран, нажмите второй",
+  "buildtools.select.done": "Выделено {volume} блоков",
+  "buildtools.select.tooLarge": "Выделение слишком большое (не более 32768 блоков)",
+  "buildtools.select.outOfWorld": "Выделение вне мира",
+  "buildtools.fill.noSelection": "Сначала нажмите два угла, чтобы выделить область",
+  "buildtools.fill.done": "Заполнено {count} блоков",
+  "buildtools.fill.cancelled": "Заполнение отменено",
+  "buildtools.copy.done": "Скопировано {count} блоков",
+  "buildtools.copy.none": "Пока ничего не скопировано",
+  "buildtools.copy.empty": "В выделении нет блоков",
+  "buildtools.paste.done": "Вставлено {count} блоков",
+  "buildtools.paste.cancelled": "Вставка отменена",
+  "buildtools.paste.outOfWorld": "Место вставки вне мира",
+  "template.smallHouse": "Домик",
+  "template.bridge": "Мостик",
+  "template.tree": "Большое дерево",
+  "template.tower": "Каменная башня",
+  "buildtools.template.blocked": "Здесь не помещается, мешают блоки",
+  "buildtools.template.unsupported": "Снизу нет опоры, поставить нельзя",
+  "buildtools.template.outOfWorld": "За пределами мира",
+  "buildtools.template.placed": "Размещается: {name}",
+  "buildtools.toggle": "Режим строительства",
+  "buildtools.tool.select": "Выделение",
+  "buildtools.tool.fill": "Заполнить",
+  "buildtools.tool.copy": "Копировать",
+  "buildtools.tool.paste": "Вставить",
+  "buildtools.tool.mirror": "Зеркальная вставка",
+  "buildtools.tool.undo": "Отменить",
+  "buildtools.tool.redo": "Повторить",
+  "buildtools.tool.template": "Шаблоны построек",
+  "buildtools.tool.selectHint": "Нажмите блок, чтобы выбрать первый угол",
+  "buildtools.fill.noBlock": "Сначала возьмите блок в руку",
+  "editor.ok": "ОК",
+  "editor.cancel": "Отмена",
+  "editor.done": "Готово",
+  "editor.close": "Закрыть",
+  "editor.back": "Назад",
+  "editor.sign": "Подписать",
+  "book.writePlaceholder": "Напишите что-нибудь на этой странице…",
+  "book.titlePlaceholder": "Название книги",
+  "book.writingTitle": "Книга и перо",
+  "book.emptyPage": "(Эта страница пуста)",
+  "book.pageOf": "Страница {current} / {total}",
+  "sign.linePlaceholder": "Строка {n}",
+  "sign.hint": "Не более {n} символов в строке · если оставить всё пустым, надпись сотрётся",
+  "nameTag.placeholder": "Дайте ему имя",
+  "nameTag.hint": "Не более {n} символов · пусто — имя не меняется",
+  "commandBlock.title": "Командный блок",
+} satisfies Pick<Messages, keyof typeof zhEditor>;
