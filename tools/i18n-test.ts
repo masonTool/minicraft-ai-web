@@ -1190,6 +1190,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.tpl.tool', '{kind} en {material}'],
     ['item.wood.oak', 'chêne'],
     ['entity.mooshroom', 'Vache-champignon'],
+    // P4-3d 起显式物品名也是法语（不再是英文占位）
+    ['item.stone', 'Roche'],
+    ['item.cobblestone', 'Pierre'],
+    ['item.writable_book', 'Livre et plume'],
+    ['item.cooked_beef', 'Steak'],
   ];
   for (const [key, expected] of frSamples) {
     check(`法语：${key}`, t(key, 'fr') === expected, t(key, 'fr'));
