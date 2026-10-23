@@ -74,6 +74,8 @@ const MAX_ITEMS = 2000;
 const ITEM_RATE_LIMIT = 30;
 /** 每个玩家每秒最多广播多少条生物命中（联机19）：攻击频率本来就低，这个上限只挡脚本 */
 const MOB_HIT_RATE_LIMIT = 30;
+/** 每个玩家每秒最多发多少次拾取申请（联机21）：走近一堆货最多也就每秒几次 */
+const ITEM_TAKE_RATE_LIMIT = 20;
 
 /** @type {Map<string, {id:number,name:string,clientId:string,x:number,y:number,z:number,yaw:number,pitch:number,socket:import('ws').WebSocket,lastMove:number,dimension:string}>} */
 const players = new Map();
@@ -451,6 +453,9 @@ wss.on('connection', (socket, request) => {
           // 生物命中的令牌窗口（联机19，见 MOB_HIT_RATE_LIMIT）
           hitWindow: 0,
           hitCount: 0,
+          // 拾取申请的令牌窗口（联机21，见 ITEM_TAKE_RATE_LIMIT）
+          takeWindow: 0,
+          takeCount: 0,
         };
         players.set(player.id, player);
 
@@ -673,6 +678,42 @@ wss.on('connection', (socket, request) => {
         if (items.size >= MAX_ITEMS && !items.has(key)) return;
         items.set(key, { owner: player.id, localId, itemId, count, x, y, z });
         broadcast({ t: 'item-spawn', owner: player.id, localId, itemId, count, x, y, z }, player.id);
+        break;
+      }
+
+      /*
+       * 捡**别人**的掉落物（联机21）：first-come 仲裁。
+       *
+       * 谁先到谁拿到：服务端原子地"查还在不在 → 删 → 回 ok"，同时广播 `item-remove`
+       * 给所有人（含请求者），让各端的镜像一起消失。两条请求同时到达时，只有先删成功
+       * 的那条拿到 ok，另一条拿到 `gone`——这就是"双客户端抢同一堆只有一边拿到"。
+       *
+       * 自己的掉落物不走这里：那是本地权威，客户端自己捡、再发 `item-remove`。
+       */
+      case 'item-take': {
+        if (!player) return;
+        const now = Date.now();
+        if (now >= player.takeWindow) {
+          player.takeWindow = now + 1000;
+          player.takeCount = 0;
+        }
+        if (++player.takeCount > ITEM_TAKE_RATE_LIMIT) return;
+
+        const owner = Math.trunc(Number(message.owner));
+        const localId = Math.trunc(Number(message.localId));
+        if (!Number.isFinite(owner) || !Number.isFinite(localId) || owner <= 0 || localId <= 0) return;
+
+        const key = `${owner}:${localId}`;
+        const item = items.get(key);
+        if (!item) {
+          send(socket, { t: 'item-take', ok: false, owner, localId, reason: 'gone' });
+          break;
+        }
+        items.delete(key);
+        send(socket, { t: 'item-take', ok: true, owner, localId, itemId: item.itemId, count: item.count });
+        // 所有人（含请求者）都删镜像：请求者靠 `ok` 加背包，靠这条删掉地上的那堆
+        broadcast({ t: 'item-remove', owner, localId });
+        log(`${player.name}#${player.id} 捡走了 ${owner}#${localId} 那堆（${item.itemId}×${item.count}）`);
         break;
       }
 

@@ -77,6 +77,7 @@
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | 不校验目标方块是不是容器；内容由客户端 `restoreStacks` 再洗一遍 |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
+| `item-take` | `owner, localId` | 两个正整数；每人每秒 20 次 | 捡**别人**那堆（`联机21`）：first-come 仲裁，先到的拿到，另一条回 `gone` |
 | `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃 | 服务端日志打 `<名字> 内容`；**广播包含发送者**（见已知问题） |
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
@@ -101,6 +102,7 @@
 | `container` | `x, y, z, dimension, slots[], by` | 收到 `container` 后转发给其他人 |
 | `item-spawn` | `owner, localId, itemId, count, x, y, z` | 收到 `item-spawn` 后转发给其他人 |
 | `item-remove` | `owner, localId` | 收到 `item-remove`，或 owner 离线清理时 |
+| `item-take` | `ok, owner, localId, itemId?, count?, reason?` | 只回给申请者；成功时**另**广播一条 `item-remove` 给所有人 |
 | `chat` | `id, name, text` | 收到 `chat` 后发给**所有人（含发送者）** |
 | `error` | `code, message` | 非法 JSON / 未知类型 / 重复 join / 版本或身份不合法 |
 
@@ -177,7 +179,8 @@
 | `mob-hit` | 按"同类型 + 3 格内最近"找自己世界里的那只（`core/net/MobMatch.ts`），扣血 + 点火 | **找不到就忽略**：两端生物各自生成，不能凭空造一只（否则双份怪物）；击退不同步（位置由各端 AI 自己算） |
 | `block` / `blocks` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits）；应用期间 `applyingRemoteBlock > 0`，**不回发**（回声抑制） |
 | `container` | 同维度且那一格确实是**容器方块**时，按方块取容器（箱子 / 木桶 / 熔炉 / 高炉 / 烟熏炉 / 酿造台 / 发射器 / 投掷器 / 漏斗），用 `restoreStacks` 按格数清洗后逐格写回 | 写回期间 `applyingRemoteBlock` 抑制回声；本地任一类容器内容变化都会发（`containerOfBlockAt` 建出来就挂，不再只在打开界面时挂） |
-| `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
+| `item-spawn` | 建镜像（`ghost=true`）：不跑物理、不参与本地拾取，但**走近会向服务端申请**（`联机21`） | `owner === selfId` 时跳过 |
+| `item-take` | 仲裁结果：`ok` 才把 `itemId/count` 加进背包（背包满就掉脚下），无论成败都删镜像 | 成功后服务端还会广播 `item-remove`，各端镜像一起消失 |
 | `item-remove` | 标记 ghost 死亡并删表 | |
 | `chat` | 追加到消息栏并本地回显 | 发送者会收到服务端回传 → **重复一条**（`联机30`） |
 | `error` | 写进状态与消息栏（`onError`）；致命码置 `fatal`，**不再自动重连** | 服务端拒绝 join 时它会紧接着关闭连接 |
@@ -204,7 +207,8 @@
 | `联机18` | 队友昵称牌已做（复用 `Mob.customName` + 名字牌池，范围 64 格、32 格起渐隐） | 名字牌池 16 个是上限：视野里"有名字的生物 + 队友"超过 16 个时，最远的会被挤掉 |
 | `联机19` | 生物**命中**已同步（伤害 + 着火，按类型 + 邻域认） | **生物位置不同步**：两端 AI 各自跑、随机生成，同步位置会让两只怪互相拉扯并出现双份（前置见 `联机38`） |
 | `联机20` | 远端玩家的位置已按距离分级（16 格 100ms / 32 格 250ms / 更远不更新插值目标） | 只在**接收侧**省成本；真正的"更远不发"要服务端按距离决定发给谁（`联机27`） |
-| `联机21`~`联机23` | 拾取、PvP、其他实体 | 镜像捡不起来；打人不同步 |
+| `联机21` | 拾取已仲裁（`item-take` first-come：先到的拿到，另一条 `gone`） | 只仲裁"谁拿到"：物品数量与附属数据（附魔/耐久）仍以生成方上报的为准，不校验 |
+| `联机22`~`联机23` | PvP、其他实体 | 打人不同步 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |

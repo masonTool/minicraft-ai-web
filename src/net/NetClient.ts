@@ -103,6 +103,17 @@ export interface NetMobHit {
   fire: number;
 }
 
+/** 捡别人那堆掉落物的仲裁结果（联机21） */
+export interface NetItemTakeResult {
+  ok: boolean;
+  owner: number;
+  localId: number;
+  itemId: number;
+  count: number;
+  /** 失败原因：`gone` = 已经被别人先拿走了 */
+  reason: string;
+}
+
 export interface NetHandlers {
   /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动 + 已有掉落物） */
   onWelcome: (
@@ -128,6 +139,13 @@ export interface NetHandlers {
   onFrame?: (frame: NetFrameState) => void;
   /** 别人打了一只生物（联机19）：按类型 + 邻域认到自己世界里那只 */
   onMobHit?: (hit: NetMobHit) => void;
+  /**
+   * 捡别人的掉落物的仲裁结果（联机21）。
+   *
+   * `ok` 时把 `itemId/count` 加进背包并删掉镜像；失败（`gone` = 被别人先抢了）
+   * 也要删镜像——它已经不在了。
+   */
+  onItemTake?: (result: NetItemTakeResult) => void;
   /** 别人那边生成了一堆掉落物（本地只渲染，不拾取） */
   onItemSpawn: (item: NetItemState) => void;
   /** 别人那边那堆没了（被捡走/烧掉/过期） */
@@ -390,6 +408,17 @@ export class NetClient {
         });
         break;
       }
+      case 'item-take': {
+        this.handlers.onItemTake?.({
+          ok: message.ok === true,
+          owner: Number(message.owner ?? 0),
+          localId: Number(message.localId ?? 0),
+          itemId: Number(message.itemId ?? 0),
+          count: Number(message.count ?? 0),
+          reason: String(message.reason ?? ''),
+        });
+        break;
+      }
       case 'mob-hit': {
         this.handlers.onMobHit?.({
           typeId: String(message.typeId ?? ''),
@@ -570,6 +599,17 @@ export class NetClient {
         z: Number(z.toFixed(2)),
       }),
     );
+  }
+
+  /**
+   * 我要捡别人那堆掉落物（联机21）：请服务端仲裁"谁先拿到"。
+   *
+   * `owner/localId` 就是镜像表的键（服务端那侧 key 是 `owner:localId`）。
+   * **本地先不加进背包**——要等服务端回 `ok`，否则两个人都会各拿一份。
+   */
+  sendItemTake(owner: number, localId: number): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'item-take', owner: Math.trunc(owner), localId: Math.trunc(localId) }));
   }
 
   /** 本地那堆没了（被捡走/烧掉/过期）→ 让所有人删掉镜像 */

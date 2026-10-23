@@ -378,6 +378,7 @@ import {
   type NetContainerState,
   type NetFrameState,
   type NetItemState,
+  type NetItemTakeResult,
   type NetMobHit,
   type NetPlayerState,
   type NetSignState,
@@ -1898,6 +1899,8 @@ class App {
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
     onItemRemove: (owner, localId) => this.onNetItemRemove(owner, localId),
+    // 捡别人掉落物的仲裁结果（联机21）
+    onItemTake: (result) => this.onNetItemTake(result),
     // 时间权威（联机10）：服务端 2s 一条，这里只记目标值，推进在主循环里按 4 倍速追
     onTime: (timeOfDay, snap) => {
       this.netTimeTarget = timeOfDay;
@@ -2033,6 +2036,12 @@ class App {
    * 只渲染、不拾取：拾取需要"谁先拿到"的服务端仲裁，那是 L7 的下一刀。
    */
   private readonly remoteItems = new Map<string, ItemEntity>();
+  /**
+   * 已经向服务端"申请捡"、还在等仲裁的镜像（联机21）：key 与 `remoteItems` 一致。
+   *
+   * 每堆只申请一次——不记的话每 100ms 会重发一条，既浪费又让服务端限频把真请求挤掉。
+   */
+  private readonly pendingItemTakes = new Set<string>();
   /** 本地掉落物 → 广播用的 localId（L7 第一刀） */
   private readonly localNetItems = new Map<ItemEntity, number>();
   private nextLocalItemId = 1;
@@ -3761,6 +3770,26 @@ class App {
     this.entities.spawn(ghost);
   }
 
+  /**
+   * 捡别人掉落物的仲裁结果（联机21）。
+   *
+   * `ok` 才真的加进背包——**本地先不加**，否则两个人都会各拿一份。无论成败都删镜像：
+   * 成功是"我拿到了"，失败（`gone`）是"被别人先拿走了"。
+   */
+  private onNetItemTake(result: NetItemTakeResult): void {
+    const key = `${result.owner}:${result.localId}`;
+    this.pendingItemTakes.delete(key);
+    if (result.ok && result.itemId > 0 && result.count > 0) {
+      const leftover = this.inventory.add(result.itemId, result.count);
+      this.refreshHotbar();
+      // 背包满了：剩下的掉在自己脚下（与本地拾取失败同一条处理）
+      if (leftover > 0) {
+        this.spawnDrop(result.itemId, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+      }
+    }
+    this.onNetItemRemove(result.owner, result.localId);
+  }
+
   /** 队友那边那堆没了（捡走/烧掉/过期/他退出） */
   private onNetItemRemove(owner: number, localId: number): void {
     const key = `${owner}:${localId}`;
@@ -3775,6 +3804,7 @@ class App {
     for (const ghost of this.remoteItems.values()) ghost.dead = true;
     this.remoteItems.clear();
     this.localNetItems.clear();
+    this.pendingItemTakes.clear();
   }
 
   /**
@@ -3793,6 +3823,22 @@ class App {
     }
     if (now - this.lastItemScan < 100) return;
     this.lastItemScan = now;
+
+    // 联机21：镜像可捡——走近别人的那堆就向服务端申请（first-come 仲裁）。
+    // 每堆只发一次（`pendingItemTakes`），失败/成功都会在回包里清掉
+    for (const [key, ghost] of this.remoteItems) {
+      if (ghost.dead || this.pendingItemTakes.has(key)) continue;
+      const dx = ghost.x - this.physics.x;
+      const dy = ghost.y - (this.physics.y + 0.9);
+      const dz = ghost.z - this.physics.z;
+      // 拾取范围与本地一致（碰撞盒外扩 0.7）→ 这里用半径 1.2 的球近似
+      if (dx * dx + dy * dy + dz * dz > 1.44) continue;
+      const [owner, localId] = key.split(':').map(Number) as [number, number];
+      if (!owner || !localId) continue;
+      this.pendingItemTakes.add(key);
+      this.net.sendItemTake(owner, localId);
+    }
+
     for (const entity of this.entities.all) {
       if (!(entity instanceof ItemEntity) || entity.ghost) continue;
       if (this.localNetItems.has(entity)) continue;

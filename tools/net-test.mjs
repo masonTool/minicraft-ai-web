@@ -567,6 +567,47 @@ try {
     check('缺 typeId 的命中被拒', (await alice.wait('mob-hit', 600)) === null);
   }
 
+  // ---------------------------------------------------------------- 拾取仲裁（联机21）
+  console.log('\n[拾取仲裁]');
+  {
+    await sleep(80);
+    // 再来一个"别人"：alice 与 rival 抢 bob 生成的那堆，才是真正的并发仲裁。
+    // ⚠️ owner 要用**服务端分配的 id**（welcome 里的 `id`），`bob.id` 那个字段不存在、
+    // 传 undefined 会被服务端当脏数据静默丢掉（本轮踩过：两边都收不到回包）
+    const bobId = Number(welcomeB?.id ?? 0);
+    check('拿到 bob 的服务端 id（下面抢的是他名下的堆）', bobId > 0, `${bobId}`);
+    const rival = new TestClient('Rival');
+    await joinAndWaitWelcome(rival, '抢货的人', 0, 70, 0);
+    bob.send({ t: 'item-spawn', localId: 41, itemId: 3, count: 2, x: 40, y: 70, z: 40 });
+    await sleep(150);
+
+    alice.mailbox.length = 0;
+    rival.mailbox.length = 0;
+    // 两边几乎同时申请：服务端"查还在 → 删 → 回 ok"是原子的
+    alice.send({ t: 'item-take', owner: bobId, localId: 41 });
+    rival.send({ t: 'item-take', owner: bobId, localId: 41 });
+    const aliceResult = await alice.wait('item-take', 2000);
+    const rivalResult = await rival.wait('item-take', 2000);
+    const winners = [aliceResult, rivalResult].filter((result) => result?.ok === true);
+    check('同一堆只有一边抢到', winners.length === 1, JSON.stringify({ aliceResult, rivalResult }));
+    check(
+      '输的那边收到 gone',
+      [aliceResult, rivalResult].some((result) => result?.ok === false && result?.reason === 'gone'),
+      JSON.stringify({ aliceResult, rivalResult }),
+    );
+    check(
+      '抢到之后各端都收到 item-remove（镜像一起消失）',
+      (await alice.wait('item-remove', 2000)) !== null && (await rival.wait('item-remove', 2000)) !== null,
+    );
+
+    // 已经被抢走的再抢：gone（不能凭空变出一堆）
+    rival.mailbox.length = 0;
+    rival.send({ t: 'item-take', owner: bobId, localId: 41 });
+    const late = await rival.wait('item-take', 2000);
+    check('已抢走的堆再抢返回 gone', late?.ok === false && late?.reason === 'gone', JSON.stringify(late));
+    rival.close();
+  }
+
   // ---------------------------------------------------------------- 容器同步（联机15）
   console.log('\n[容器同步]');
   {
