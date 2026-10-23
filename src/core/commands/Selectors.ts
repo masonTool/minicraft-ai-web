@@ -18,6 +18,8 @@
  *  - **没有记分板/队伍/标签（`scores=` / `team=` / `tag=`）**：它们依赖 M5 还没做的记分板。
  */
 
+import { t, tp } from '../i18n/I18n.ts';
+
 /** 玩家在选择器里的固定 id（与 `Entity.id` 的数字 id 错开，不会撞） */
 export const PLAYER_ENTITY_ID = 'player';
 
@@ -96,7 +98,7 @@ export function isSelector(text: string): boolean {
  */
 function parseDistance(text: string): DistanceRange | string {
   const raw = text.trim();
-  if (raw.length === 0) return 'distance 后面没有数字';
+  if (raw.length === 0) return t('cmd.error.selector.distanceNoNumber');
   const dots = raw.indexOf('..');
   const read = (part: string): number | null => {
     if (part.length === 0) return null;
@@ -107,7 +109,7 @@ function parseDistance(text: string): DistanceRange | string {
 
   if (dots < 0) {
     const value = read(raw);
-    if (value === null || Number.isNaN(value)) return `distance 不是合法的数字：${raw}`;
+    if (value === null || Number.isNaN(value)) return tp('cmd.error.selector.distanceBadNumber', { raw });
     return { min: value, max: value };
   }
 
@@ -116,9 +118,9 @@ function parseDistance(text: string): DistanceRange | string {
   const min = head.length === 0 ? 0 : read(head);
   const max = tail.length === 0 ? Infinity : read(tail);
   if (min === null || max === null || Number.isNaN(min) || Number.isNaN(max)) {
-    return `distance 不是合法的区间：${raw}`;
+    return tp('cmd.error.selector.distanceBadRange', { raw });
   }
-  if (min > max) return `distance 的区间是反的：${raw}`;
+  if (min > max) return tp('cmd.error.selector.distanceReversed', { raw });
   return { min, max };
 }
 
@@ -128,18 +130,18 @@ function parseDistance(text: string): DistanceRange | string {
  */
 export function parseSelector(text: string): ParsedSelector | string {
   const raw = text.trim();
-  if (!raw.startsWith('@')) return `不是目标选择器：${text}`;
+  if (!raw.startsWith('@')) return tp('cmd.error.selector.notSelector', { text });
 
   const kind = raw.slice(0, 2).toLowerCase() as SelectorKind;
   if (!KINDS.includes(kind)) {
-    return `未知的选择器：${raw.slice(0, 2)}（可用 @p @s @a @e @r）`;
+    return tp('cmd.error.selector.unknown', { raw: raw.slice(0, 2) });
   }
 
   const filter = emptyFilter();
   const rest = raw.slice(2);
   if (rest.length === 0) return { kind, filter };
   if (!rest.startsWith('[') || !rest.endsWith(']')) {
-    return `选择器的过滤参数要用方括号包起来：${raw}`;
+    return tp('cmd.error.selector.filterNeedsBrackets', { raw });
   }
 
   const body = rest.slice(1, -1).trim();
@@ -150,18 +152,18 @@ export function parseSelector(text: string): ParsedSelector | string {
 
   for (const part of body.split(',')) {
     const piece = part.trim();
-    if (piece.length === 0) return `过滤参数里有空的项：${raw}`;
+    if (piece.length === 0) return tp('cmd.error.selector.filterEmptyItem', { raw });
     const eq = piece.indexOf('=');
-    if (eq < 0) return `过滤参数缺少 "="：${piece}`;
+    if (eq < 0) return tp('cmd.error.selector.filterNeedsEquals', { piece });
     const key = piece.slice(0, eq).trim().toLowerCase();
     const value = piece.slice(eq + 1).trim();
-    if (value.length === 0) return `过滤参数 ${key} 后面没有值`;
+    if (value.length === 0) return tp('cmd.error.selector.filterMissingValue', { key });
 
     switch (key) {
       case 'type': {
         // 竖线分隔多个种类（见文件头的差异说明）
         types = [...types, ...value.split('|').map((entry) => entry.trim().toLowerCase()).filter((entry) => entry.length > 0)];
-        if (types.length === 0) return `type 后面没有种类`;
+        if (types.length === 0) return t('cmd.error.selector.typeMissing');
         break;
       }
       case 'name': {
@@ -178,18 +180,18 @@ export function parseSelector(text: string): ParsedSelector | string {
       case 'limit':
       case 'c': {
         const limit = Number(value);
-        if (!Number.isInteger(limit) || limit <= 0) return `limit 必须是正整数：${value}`;
+        if (!Number.isInteger(limit) || limit <= 0) return tp('cmd.error.selector.limitBad', { value });
         filter.limit = limit;
         break;
       }
       case 'sort': {
         const sort = value.toLowerCase() as SelectorSort;
-        if (!SORTS.includes(sort)) return `未知的排序方式：${value}（可用 nearest / furthest / random / arbitrary）`;
+        if (!SORTS.includes(sort)) return tp('cmd.error.selector.unknownSort', { value });
         filter.sort = sort;
         break;
       }
       default:
-        return `未知的过滤参数：${key}（已支持 type / name / distance / limit / sort）`;
+        return tp('cmd.error.selector.unknownFilter', { key });
     }
   }
 

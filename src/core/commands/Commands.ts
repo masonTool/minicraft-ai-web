@@ -470,7 +470,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const t = parseTime(args[1]);
       if (t === null) {
-        out.error(msg('cmd.reply.time.bad-time-format-value', { value: args[1] ?? '(空)' }));
+        out.error(msg('cmd.reply.time.bad-time-format-value', { value: args[1] ?? msg('cmd.reply.emptyValue') }));
         return;
       }
       ctx.setTimeOfDay(action === 'add' ? (ctx.timeOfDay() + t) % 1 : t);
@@ -884,9 +884,16 @@ export const COMMANDS: readonly CommandSpec[] = [
         shift,
         modeArg,
       );
-      const masked = result.skipped > 0 ? `（masked：跳过 ${result.skipped} 格非空气）` : '';
+      const masked = result.skipped > 0 ? tp('cmd.reply.clone.masked', { skipped: result.skipped }) : '';
       out.info(
-        `已复制 ${result.copied} / ${result.volume} 格到 ${target.x} ${target.y} ${target.z}${masked}`,
+        tp('cmd.reply.clone.done', {
+          copied: result.copied,
+          volume: result.volume,
+          x: target.x,
+          y: target.y,
+          z: target.z,
+          masked,
+        }),
       );
     },
   },
@@ -994,7 +1001,7 @@ export const COMMANDS: readonly CommandSpec[] = [
 
       const value = Number(args[1]);
       if (!Number.isFinite(value) || value < 0) {
-        out.error(msg('cmd.reply.gamemode.invalid-amount-value', { value: args[1] ?? '(空)' }));
+        out.error(msg('cmd.reply.gamemode.invalid-amount-value', { value: args[1] ?? msg('cmd.reply.emptyValue') }));
         return;
       }
 
@@ -1278,7 +1285,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       for (const id of ids) {
         if (action === 'grant' ? tracker.grant(id) : tracker.revoke(id)) changed++;
       }
-      const verb = action === 'grant' ? '授予' : '收回';
+      const verb = action === 'grant' ? t('cmd.reply.advancement.granted') : t('cmd.reply.advancement.revoked');
       out.info(
       msg('cmd.reply.damage.verb-count-advancements-scope', {
         verb,
@@ -1519,10 +1526,10 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
           return usageError('execute');
         }
         if (!SCORE_OPERATORS.includes(op)) {
-          return `score 的运算符只能是 ${SCORE_OPERATORS.join(' / ')}：${op}`;
+          return tp('cmd.reply.score.bad-operator', { ops: SCORE_OPERATORS.join(' / '), op });
         }
         const value = Number(rawValue);
-        if (!Number.isFinite(value)) return `score 的数值不合法：${rawValue}`;
+        if (!Number.isFinite(value)) return tp('cmd.reply.score.bad-value', { value: rawValue });
         ops.push({
           kind: 'cond',
           invert: token === 'unless',
@@ -1532,10 +1539,10 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
         continue;
       }
 
-      return `execute 还不支持 ${token} ${sub || '<条件>'}（已支持 block / entity / score）`;
+      return tp('cmd.reply.execute.unsupported', { token, sub: sub || t('cmd.reply.emptyValue') });
     }
 
-    return `未知的 execute 子命令：${token}（可用 as / at / positioned / if / unless / run）`;
+    return tp('cmd.reply.execute.unknown-sub', { token });
   }
 
   return usageError('execute');
@@ -1804,7 +1811,8 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
     }
     const described = names.map((name) => {
       const objective = board.objective(name)!;
-      const shown = objective.displayName === objective.name ? '' : `，显示为“${objective.displayName}”`;
+      const shown =
+        objective.displayName === objective.name ? '' : tp('cmd.reply.objective.shownAs', { name: objective.displayName });
       return `${objective.name}（${objective.criterion}${shown}）`;
     });
     out.info(msg('cmd.reply.scoreboard.count-objectives-list', { count: names.length, list: described.join('、') }));
@@ -2281,10 +2289,19 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     }
     const described = all.map((team) => {
       const members = teams.membersOf(team.name);
-      const shown = team.displayName === team.name ? '' : `，显示为「${team.displayName}」`;
+      const shown = team.displayName === team.name ? '' : tp('cmd.reply.team.shownAs', { name: team.displayName });
       // 前后缀只在设过的时候才写出来：没设的队伍那一段是噪声
-      const affix = `${team.prefix ? `，前缀「${team.prefix}」` : ''}${team.suffix ? `，后缀「${team.suffix}」` : ''}`;
-      return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}${affix}，${members.length} 人）`;
+      const affix =
+        (team.prefix ? tp('cmd.reply.team.prefixAffix', { prefix: team.prefix }) : '') +
+        (team.suffix ? tp('cmd.reply.team.suffixAffix', { suffix: team.suffix }) : '');
+      return tp('cmd.reply.team.summary', {
+        name: team.name,
+        color: team.color,
+        state: team.friendlyFire ? t('cmd.reply.team.friendlyFireOn') : t('cmd.reply.team.friendlyFireOff'),
+        count: members.length,
+        shown,
+        affix,
+      });
     });
     out.info(msg('cmd.reply.team.count-teams-list', { count: all.length, list: described.join('；') }));
     return;

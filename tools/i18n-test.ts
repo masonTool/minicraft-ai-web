@@ -1107,6 +1107,30 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   setLanguage('zh');
   check('中文下规则名仍是原来的说法', gameRuleLabel('keepInventory') === '死亡后保留物品' && gameRuleLabel('doDaylightCycle') === '昼夜循环');
+
+  /**
+   * 命令域的错误信息与回执（C4，批次 20261024-0223）。
+   *
+   * `Selectors.ts` 的 14 条选择器错误与 `Commands.ts` 的 `/clone` 回执、队伍摘要等
+   * 原来是硬编码中文 —— 玩家打错命令就在聊天栏看到。现在走 `cmd.error.selector.*` /
+   * `cmd.reply.*`，共 30 条键。
+   */
+  const cmdSamples: Array<[string, Record<string, string | number>]> = [
+    ['cmd.error.selector.unknown', { raw: '@x' }],
+    ['cmd.error.selector.limitBad', { value: '0' }],
+    ['cmd.error.selector.filterNeedsEquals', { piece: 'a' }],
+    ['cmd.reply.clone.done', { copied: 1, volume: 2, x: 0, y: 64, z: 0, masked: '' }],
+    ['cmd.reply.team.summary', { name: 'red', color: 'red', state: 'on', count: 2, shown: '', affix: '' }],
+    ['cmd.reply.execute.unknown-sub', { token: 'nope' }],
+  ];
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const rendered = cmdSamples.map(([key, params]) => tp(key, params as never));
+    const leaked = rendered.filter((text) => /[\u4e00-\u9fff]/.test(text));
+    check(`${code} 命令错误与回执不含中文`, leaked.length === 0, leaked.slice(0, 2).join(' | '));
+  }
+  setLanguage('zh');
+  check('中文下选择器错误仍是原来的说法', t('cmd.error.selector.typeMissing') === 'type 后面没有种类');
   resetLanguageForTest();
 
   /**
