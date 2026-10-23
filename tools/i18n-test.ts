@@ -1181,6 +1181,20 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('法语用法串的 <> / [] / | 与中文一致', frSyntaxDrift.length === 0, frSyntaxDrift.join(','));
 
   /**
+   * 葡语用法串同样必须保留 `<>` `[]` `|`（多语言 P4-4d，照抄德/俄/法那条）。
+   * 帮助面板靠这些符号拆变体：少一个括号**不报错、只是表单变空**。
+   */
+  const ptSyntaxDrift: string[] = [];
+  for (const spec of COMMANDS) {
+    const zh = t(spec.usageKey, 'zh');
+    const pt = t(spec.usageKey, 'pt');
+    if (countChar(zh, '<') !== countChar(pt, '<') || countChar(zh, '[') !== countChar(pt, '[') || countChar(zh, '|') !== countChar(pt, '|')) {
+      ptSyntaxDrift.push(spec.name);
+    }
+  }
+  check('葡语用法串的 <> / [] / | 与中文一致', ptSyntaxDrift.length === 0, ptSyntaxDrift.join(','));
+
+  /**
    * 葡语（巴西，多语言 P4-4）。
    *
    * 条目点名的三件事都在这一节里：
@@ -1213,6 +1227,9 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.cobblestone', 'Pedregulho'],
     ['item.white_banner', 'Estandarte branco'],
     ['item.writable_book', 'Livro e pena'],
+    // P4-4d 起命令域也是葡语
+    ['cmd.give.desc', 'Dá itens a você (nome em português/inglês ou id numérico)'],
+    ['cmd.reply.team.prefix', 'Prefixo'],
   ];
   for (const [key, expected] of ptSamples) {
     check(`葡语：${key}`, t(key, 'pt') === expected, t(key, 'pt'));
