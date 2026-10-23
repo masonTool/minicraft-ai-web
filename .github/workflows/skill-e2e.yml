@@ -1,0 +1,87 @@
+# skill 端到端自测（需要 codebuddy CLI 登录态）
+#
+# 为什么单独一个工作流、而且**只手动触发**：
+#   它不跑单测，而是**真的起一个 codebuddy 会话**（-p 模式）把一个任务做完，
+#   用来验证 skill 的整条链路（注入 → 递任务 → 收尾 → 归档）。一次几分钟、会花 token，
+#   而且需要账号登录态（见下面「登录态怎么来」）。放在 push 上会变成"每次提交都烧钱"，
+#   所以只给 workflow_dispatch，想跑的时候点一下。
+#
+# 登录态怎么来（本机已登录的话，三条命令搞定）：
+#   cd ~/.codebuddy && tar czf - local_storage | base64 | pbcopy
+#   → 仓库 Settings → Secrets and variables → Actions → New repository secret
+#     名字：CODEBUDDY_LOCAL_STORAGE_B64，值：上一步剪贴板里的那串
+#
+# 为什么只需要 `local_storage/`：
+#   CLI 的 auth-type 是 `cli-external-link`，登录态落在配置目录的 `local_storage/` 里
+#   （实测：只拷这一个子目录到空目录 + 设 CODEBUDDY_CONFIG_DIR 就能跑，401 消失）。
+#   不要把整个 ~/.codebuddy 打包——里面有 projects/ 会话历史，几百 MB。
+#
+# 为什么用 CODEBUDDY_CONFIG_DIR 而不是覆盖 ~/.codebuddy：
+#   runner 是干净机器，指向临时目录既不动用户目录，也能随手清掉；secret 里就是登录态本身。
+name: Skill E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      turns:
+        description: '最多多少轮（--max-turns）'
+        required: false
+        default: '25'
+      model:
+        description: '模型（默认 deepseek-v4.1-flash-official）'
+        required: false
+        default: 'deepseek-v4.1-flash-official'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # 全局装 CLI。版本不锁会有一天跑出新行为——这是刻意的取舍：
+      # e2e 的目的就是"看当前这版 CLI 还能不能把框架跑起来"。
+      - name: 安装 codebuddy CLI
+        run: npm i -g @tencent-ai/codebuddy-code
+
+      - name: 还原登录态
+        env:
+          CB64: ${{ secrets.CODEBUDDY_LOCAL_STORAGE_B64 }}
+        run: |
+          if [ -z "$CB64" ]; then
+            echo "::error::缺少 CODEBUDDY_LOCAL_STORAGE_B64（生成方法见本工作流文件顶部注释）"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cb"
+          printf '%s' "$CB64" | base64 -d | tar xz -C "$RUNNER_TEMP/cb"
+          # 只在 runner 的临时目录里生效，不碰 ~/.codebuddy
+          echo "CODEBUDDY_CONFIG_DIR=$RUNNER_TEMP/cb" >> "$GITHUB_ENV"
+
+      - name: 先确认登录可用
+        run: |
+          out=$(codebuddy -p "只回两个字：可以" --model "${{ inputs.model }}" 2>&1) || true
+          echo "$out"
+          echo "$out" | grep -qi "401\|Authentication required" && {
+            echo "::error::CLI 仍未登录——secret 可能过期了（重新导出 local_storage）"
+            exit 1
+          }
+
+      - name: 跑端到端
+        # 失败时脚本会把现场留在 .codebuddy/skills/continue-task/.e2e/ 下
+        run: npm run skill:e2e -- --turns "${{ inputs.turns }}" --model "${{ inputs.model }}" --timeout 900
+
+      - name: 失败时上传现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-e2e-artifacts
+          path: .codebuddy/skills/continue-task/.e2e/
+          retention-days: 7

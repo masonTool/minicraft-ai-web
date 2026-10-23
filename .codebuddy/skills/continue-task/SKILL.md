@@ -79,17 +79,32 @@ node <本技能目录>/scripts/install.mjs
 前两个是静态的，所以挡不住"钩子写 stdout 后立刻 exit 导致注入 JSON 被截断"这类事故——那种情况静态检查全绿、但任务永远递不出来。**`e2e.mjs` 就是为了这一层。**
 
 ```bash
-npm run skill:e2e -- --dry-run   # 只看计划
-npm run skill:e2e               # 真跑（默认成功即删数据目录）
-npm run skill:e2e -- --keep     # 保留现场（.skill-e2e/run-<时间戳>/）
+npm run skill:e2e -- --dry-run   # 只看计划（不建目录、不跑模型）
+npm run skill:e2e               # 真跑（默认成功即删现场）
+npm run skill:e2e -- --keep     # 保留现场排查
+npm run skill:e2e -- --turns 15 --model <id> --timeout 900
 ```
 
-三条约定：
+五条约定：
 
-- **模型/配置继承本机**：不传 `--model`，用你平时那套；会话 ID 固定，所以断言能按 ID 推导路径。
-- **测试数据不进仓库**：全部落在 `.skill-e2e/`（已 gitignore）。**框架进库、现场不进库**。
-- **没装 CLI 就跳过**（exit 0 并说明），不会把没装环境的人卡成红。
+- **数据目录在 skill 里**：`.codebuddy/skills/continue-task/.e2e/run-<时间戳>/`，
+  同目录的 `.gitignore` 已排除。**框架进库、现场不进库**——copys skill 时不会带着一堆测试现场。
+- **模型固定**：默认 `deepseek-v4.1-flash-official`，`--model` 可覆盖。固定住是为了
+  "本机默认模型换了 → 断言跟着飘"。
+- **其余配置继承本机**（登录态、MCP、权限），不另造一套。
+- **没装 CLI 就跳过**（exit 0 并说明）；**未登录（401）也只算跳过**——那种情况下仍然验到
+  "装好 → 钩子被加载 → 注入没被截断 → 钩子没崩"，只是模型那段没发生。
 - 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
+
+**CI 怎么跑**：`.github/workflows/skill-e2e.yml`（**只手动触发**，一次几分钟且花 token）。
+它需要登录态——CLI 的 `auth-type` 是 `cli-external-link`，登录信息落在配置目录的
+`local_storage/` 里（实测：只拷这一个子目录 + 设 `CODEBUDDY_CONFIG_DIR` 就能跑）。
+
+```bash
+# 本机已登录时，把登录态打包成 secret（约 400KB，不是整个 ~/.codebuddy）
+cd ~/.codebuddy && tar czf - local_storage | base64 | pbcopy
+# → GitHub: Settings → Secrets → Actions → CODEBUDDY_LOCAL_STORAGE_B64
+```
 
 ### 2. 安装器做了什么
 

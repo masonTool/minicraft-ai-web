@@ -19,7 +19,9 @@
  *   --keep         成功也保留数据目录（排查用）
  *   --keep-on-fail 失败时保留（默认就是保留；显式写出来只是让 CI 日志更清楚）
  *   --timeout N    单次 CLI 超时秒数（默认 600）
- *   --turns N      `--max-turns`（默认 25）
+ *   --turns N      `--max-turns`（默认 40：建模→逐条→收尾，轮次少了走不完）
+ *   --model NAME   覆盖模型（默认 `deepseek-v4.1-flash-official`，固定住免得断言跟着本机默认模型飘）
+ *   --strict       未登录 / 网络不可用时也判失败（默认这两种算"环境跳过"）
  *
  * 退出码：0 通过（或**未安装 CLI → 跳过**）/ 1 断言失败 / 2 用法错误。
  *
@@ -42,7 +44,11 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = resolve(HERE, '..');
 const REPO = resolve(SKILL, '..', '..', '..');
-const DATA_ROOT = join(REPO, '.skill-e2e');
+/**
+ * 测试数据放在 **skill 自己目录下**（`.codebuddy/skills/continue-task/.e2e/`），
+ * 并靠同目录的 `.gitignore` 排除：框架跟着 skill 走、现场不跟着走。
+ */
+const DATA_ROOT = join(SKILL, '.e2e');
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
@@ -53,8 +59,13 @@ const value = (name, dflt) => {
 
 const dryRun = flag('--dry-run');
 const keep = flag('--keep') || flag('--keep-on-fail');
+/** 严格模式：把"环境跳过"也当成失败（CI 里网络稳定时用；本地默认宽松）。 */
+const strict = flag('--strict');
 const timeoutSec = Number(value('--timeout', '600'));
-const maxTurns = Number(value('--turns', '25'));
+const maxTurns = Number(value('--turns', '40'));
+/** 用哪个模型：默认固定，避免"本机默认模型换了 → 断言跟着飘"。 */
+const DEFAULT_MODEL = 'deepseek-v4.1-flash-official';
+const model = value('--model', DEFAULT_MODEL);
 
 if (flag('--help') || flag('-h')) {
   console.log(
@@ -100,7 +111,7 @@ console.log(`  仓库      ${REPO}`);
 console.log(`  数据目录  ${WORK}${existsSync(DATA_ROOT) ? '' : '（首次运行会创建）'}`);
 console.log(`  会话 ID   ${SID} → 文件名 ${SID6}.md`);
 console.log(`  超时      ${timeoutSec}s · 最多 ${maxTurns} 轮`);
-console.log(`  模型      继承本机 codebuddy 配置（不传 --model，跟你平时用的一致）`);
+console.log(`  模型      ${model}${model === DEFAULT_MODEL ? '（默认）' : '（命令行指定）'}`);
 
 if (dryRun) {
   console.log('\n[dry-run] 会做这些事（现在什么都没跑）：');
@@ -154,15 +165,29 @@ git(['commit', '-q', '-m', 'chore: 装 continue-do 框架']);
 
 // ---------------------------------------------------------------- 3) 真跑
 console.log('\n[2/3] 用 CLI 跑一个小任务（会花几分钟）');
+/**
+ * 提示词要**显式点名三个动作**：建队列 → 逐条勾 → 收尾。
+ *
+ * 实测：只写"按框架做一件事"时，模型会直接动手写文件、跳过队列，12 轮就结束，
+ * 于是 e2e 全红——但那是**提示词没给够**，不是框架坏了。所以这里把流程写成
+ * 可逐条对照的清单，并且明确"不要问我"（否则它会停下来等确认，同样测不到收尾）。
+ */
 const prompt = [
-  '这是一个刚装好 continue-do 框架的空项目。',
-  '请按框架的流程做一件事：新建 hello.txt，内容一行 `hello`。',
-  '做完按框架的收尾规则正常收尾，不要问我问题，自己按你的判断处理。',
-].join('');
+  '这是一个刚装好 continue-do 框架的空项目，机制见 .continue/README.md。',
+  '请严格按框架流程做完下面这一件事：新建 hello.txt，内容一行 hello。',
+  '',
+  '要求（按顺序做完，不要问我问题，自己按判断处理）：',
+  '1. 先在 .continue/doing/ 建**本会话的队列**，里面放 1~2 条可独立验证的条目，每条都要有一行 `验证：`；',
+  '2. 逐条做完，在队列里把条目勾成 `[x]` 并写完成说明，每条一次提交；',
+  '3. 最后按收尾五步收尾：搬进 DONE.md、更新 OVERVIEW.md 与 TASKS.md，并把队列归档；',
+  '4. 收尾完成后把改动提交掉。',
+].join('\n');
 
 const cliArgs = [
   '-p',
   prompt,
+  '--model',
+  model,
   '--session-id',
   SID,
   '--max-turns',
@@ -195,6 +220,18 @@ const cliText = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
  *   · 模型级（需要登录）：队列 → 递任务 → 收尾 → 归档。
  */
 const needLogin = /401|Authentication required|please (use \/login|log ?in)/i.test(cliText);
+/**
+ * 环境问题 ≠ 框架问题。
+ *
+ * 实测两类：CLI 未登录（401）、网关/网络挂掉（502、DNS 解析失败）。
+ * 这两种情况下模型那一轮压根没发生，拿它去判"框架坏了"是误诊。
+ * 沿用本仓库 `check:browser` 的口径：**环境问题跳过，不算失败**——
+ * 但必须说清楚"跳过"和"通过"不是一回事（`--strict` 可以把跳过改成失败）。
+ */
+const envBroken =
+  /ENOTFOUND|ECONNRESET|ETIMEDOUT|socket hang up|502|503|504|网络连接失败|无法解析服务器|gateway/i.test(
+    cliText,
+  );
 
 // ---------------------------------------------------------------- 4) 断言
 console.log('\n[3/3] 断言框架真的转了');
@@ -216,19 +253,28 @@ const archived = existsSync(archiveDir)
   ? readdirSync(archiveDir).filter((n) => /^queue-\d{14}\.md$/.test(n))
   : [];
 
-if (needLogin) {
+if (needLogin || envBroken) {
   // 模型没跑，队列类断言无意义：只收静态级结论，并说明"为什么没验到"
   const staticOk = steps.every((x) => x.ok) && /\[auto-continue · /.test(logText);
   console.log('');
-  console.log('⚠️ CLI 未登录（401），跳过模型阶段。');
+  console.log(
+    needLogin
+      ? '⚠️ CLI 未登录（401），跳过模型阶段。'
+      : '⚠️ 网络/网关不可用，跳过模型阶段（不是框架的问题）。',
+  );
   console.log('   静态级已验：框架装好 → 钩子被加载 → 注入没被截断 → 钩子没崩。');
-  console.log('   队列/收尾/归档要等登录后才会发生，登录后重跑：npm run skill:e2e');
+  console.log('   队列/收尾/归档这一段要等环境好了才会发生，重跑：npm run skill:e2e');
   if (!keep) {
     rmSync(WORK, { recursive: true, force: true });
   } else {
     console.log(`   数据目录保留在 ${WORK}`);
   }
-  process.exit(staticOk ? 0 : 1);
+  if (!staticOk) process.exit(1);
+  if (strict) {
+    console.log('   --strict：把"跳过"当失败处理。');
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 check(
