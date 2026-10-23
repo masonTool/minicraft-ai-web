@@ -26,21 +26,26 @@ import {
   jump,
   specialBonus,
   targetBlock,
+  type JumpBlock,
   type JumpRun,
   type LandingOutcome,
 } from './logic.ts';
-import { PillarScene, type PillarSpec } from './PillarScene.ts';
-import { themeForSeed, type JumpTheme } from './themes.ts';
+import { BlockScene, type BlockSpec } from './BlockScene.ts';
+import { BLOCK_HEIGHT_RATIO } from './iso.ts';
+import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
 
 type Phase = 'ready' | 'charging' | 'jumping' | 'falling' | 'over';
 
-/** 方块顶面高度 */
-const STAND_Y = 1;
+/** 站在某块方块上的脚底高度（方块高度 = 边长 × 0.6，见规格表 §2） */
+function standHeight(block: { size: number }): number {
+  return Math.max(0.05, block.size * BLOCK_HEIGHT_RATIO);
+}
+
 /** 蓄力到满时的身体压缩比例 */
 const BODY_SQUASH = 0.45;
-/** 蓄力时柱子顶面下沉的最大比例 */
-const PILLAR_SQUASH = 0.18;
+/** 蓄力时当前方块下压的最大比例（规格表 §8：顶面 y → 0.8） */
+const PILLAR_SQUASH = 0.2;
 /** 结算面板淡入前的等待（让玩家看清"掉下去了"） */
 const FALL_SECONDS = 0.75;
 
@@ -56,11 +61,10 @@ export class JumpGame implements MiniGame {
   status: MiniGameStatus = 'playing';
 
   private context: MiniGameContext | null = null;
-  private pillars: PillarScene | null = null;
+  private blocks: BlockScene | null = null;
   private player: PlayerRenderer | null = null;
   private audio: JumpAudio | null = null;
 
-  private theme: JumpTheme = themeForSeed(1);
   private run: JumpRun;
   private seed = 1;
   private phase: Phase = 'ready';
@@ -71,6 +75,9 @@ export class JumpGame implements MiniGame {
   private duration = 0.36;
   private jumpFrom = { x: 0, z: 0 };
   private jumpTo = { x: 0, z: 0 };
+  /** 起跳 / 落地时脚底的高度（方块会随分数变矮，不能当成常量） */
+  private jumpFromY = 1;
+  private jumpToY = 1;
   private jumpPeak = 1.2;
   private yaw = 0;
   private pending: LandingOutcome | null = null;
@@ -103,14 +110,13 @@ export class JumpGame implements MiniGame {
     this.run = createRun(this.seed);
     this.phase = 'ready';
 
-    this.theme = themeForSeed(this.seed);
-    const pillars = new PillarScene({ atlas: context.atlas, theme: this.theme });
-    pillars.setViewport(window.innerWidth, window.innerHeight);
-    this.pillars = pillars;
-    this.rebuildPillars();
-    pillars.snap(currentBlock(this.run), targetBlock(this.run));
+    const blocks = new BlockScene(paletteForSeed(this.seed));
+    blocks.setViewport(window.innerWidth, window.innerHeight);
+    this.blocks = blocks;
+    this.rebuildBlocks();
+    blocks.follow(0);
 
-    const player = new PlayerRenderer(pillars.scene, () => 1);
+    const player = new PlayerRenderer(blocks.scene, () => 1);
     player.setVisible(true);
     this.player = player;
 
@@ -127,8 +133,8 @@ export class JumpGame implements MiniGame {
     this.listeners.abort();
     this.player?.dispose();
     this.player = null;
-    this.pillars?.dispose();
-    this.pillars = null;
+    this.blocks?.dispose();
+    this.blocks = null;
     this.audio?.dispose();
     this.audio = null;
     this.hud?.remove();
@@ -147,9 +153,9 @@ export class JumpGame implements MiniGame {
 
   update(dt: number): void {
     const context = this.context;
-    const pillars = this.pillars;
+    const blocks = this.blocks;
     const player = this.player;
-    if (!context || !pillars || !player) return;
+    if (!context || !blocks || !player) return;
 
     const step = Math.min(0.05, Math.max(0, dt));
 
@@ -157,7 +163,7 @@ export class JumpGame implements MiniGame {
       this.charge = Math.min(JUMP_CONFIG.maxCharge, this.charge + step);
       const ratio = this.charge / JUMP_CONFIG.maxCharge;
       player.object.scale.y = 1 - BODY_SQUASH * ratio;
-      pillars.setSquash(PILLAR_SQUASH * ratio);
+      blocks.setSquash(PILLAR_SQUASH * ratio);
       this.audio?.updateCharge(ratio);
     }
 
@@ -167,21 +173,22 @@ export class JumpGame implements MiniGame {
       const charging = this.phase === 'charging';
       // 蓄力时给一点 `sneaking`：模型会前倾 0.22 rad 并下沉 0.12，
       // 把下沉补回去（脚仍贴地），观感就是"蹲下去蓄力"而不只是被压扁
-      this.drawPlayer(block.x, STAND_Y + (charging ? 0.12 : 0), block.z, this.yaw, charging);
+      this.drawPlayer(block.x, standHeight(block) + (charging ? 0.12 : 0), block.z, this.yaw, charging);
     } else if (this.phase === 'jumping') {
       this.elapsed += step;
       const progress = Math.min(1, this.elapsed / this.duration);
       const x = this.jumpFrom.x + (this.jumpTo.x - this.jumpFrom.x) * progress;
       const z = this.jumpFrom.z + (this.jumpTo.z - this.jumpFrom.z) * progress;
-      // 抛物线：起跳和落地都是 0，中间到峰值
-      const y = STAND_Y + Math.sin(Math.PI * progress) * this.jumpPeak;
+      // 抛物线：起跳和落地都是 0，中间到峰值；两端方块的顶面高度可能不同，先线性过渡
+      const base = this.jumpFromY + (this.jumpToY - this.jumpFromY) * progress;
+      const y = base + Math.sin(Math.PI * progress) * this.jumpPeak;
       this.drawPlayer(x, y, z, this.yaw);
       // `update()` 会把 rotation.x 归零，所以空翻必须写在它之后
       player.object.rotation.x = -Math.PI * 2 * progress;
       if (progress >= 1) this.land();
     } else if (this.phase === 'falling') {
       this.elapsed += step;
-      const y = STAND_Y - this.elapsed * 7;
+      const y = this.jumpToY - this.elapsed * 7;
       this.drawPlayer(this.jumpTo.x, y, this.jumpTo.z, this.yaw);
       player.object.rotation.z = this.elapsed * 2.2;
       if (this.elapsed >= FALL_SECONDS) this.finish();
@@ -189,9 +196,9 @@ export class JumpGame implements MiniGame {
 
     // 掉落与结算期间不再跟随：人已经掉出画面，镜头再追会把方块甩到奇怪的视角
     if (this.phase !== 'falling' && this.phase !== 'over') {
-      pillars.follow(currentBlock(this.run), targetBlock(this.run), step);
+      blocks.follow(step);
     }
-    pillars.render(context.renderer);
+    blocks.render(context.renderer);
   }
 
   onPointer(pointer: MiniGamePointer): void {
@@ -254,6 +261,8 @@ export class JumpGame implements MiniGame {
       x: from.x + (dx / length) * distance,
       z: from.z + (dz / length) * distance,
     };
+    this.jumpFromY = standHeight(from);
+    this.jumpToY = standHeight(to);
     this.jumpPeak = Math.min(2.4, 0.85 + distance * 0.3);
     this.duration = 0.3 + distance * 0.045;
     this.yaw = Math.atan2(-(dx / length), -(dz / length));
@@ -261,7 +270,7 @@ export class JumpGame implements MiniGame {
 
     this.phase = 'jumping';
     this.charge = 0;
-    this.pillars?.setSquash(0);
+    this.blocks?.setSquash(0);
     if (this.player) this.player.object.scale.y = 1;
     this.audio?.stopCharge();
     this.audio?.playJump();
@@ -288,7 +297,7 @@ export class JumpGame implements MiniGame {
     }
 
     this.run = outcome.run;
-    this.rebuildPillars();
+    this.rebuildBlocks();
     this.phase = 'ready';
     this.elapsed = 0;
 
@@ -335,9 +344,9 @@ export class JumpGame implements MiniGame {
       this.player.object.rotation.set(0, 0, 0);
     }
     this.overEl?.classList.add('hidden');
-    this.syncTheme();
-    this.rebuildPillars();
-    this.pillars?.snap(currentBlock(this.run), targetBlock(this.run));
+    this.syncPalette();
+    this.rebuildBlocks();
+    this.blocks?.follow(0);
     this.updateHud();
   }
 
@@ -378,32 +387,24 @@ export class JumpGame implements MiniGame {
     );
   }
 
-  private syncTheme(): void {
-    const next = themeForSeed(this.seed);
-    if (next.id === this.theme.id) return;
-    this.theme = next;
-
-    const context = this.context;
-    if (!context) return;
-    this.pillars?.dispose();
-    const pillars = new PillarScene({ atlas: context.atlas, theme: this.theme });
-    pillars.setViewport(window.innerWidth, window.innerHeight);
-    this.pillars = pillars;
-    // 玩家模型挂在旧场景的根上：重建场景后要重新挂一次
-    this.player?.dispose();
-    this.player = new PlayerRenderer(pillars.scene, () => 1);
-    this.player.setVisible(true);
-    pillars.snap(currentBlock(this.run), targetBlock(this.run));
+  /** 换一局的配色：场景与相机都留着，只换色板（比旧版重建整个场景便宜得多） */
+  private syncPalette(): void {
+    this.blocks?.setPalette(paletteForSeed(this.seed));
   }
 
-  private rebuildPillars(): void {
-    const pillars = this.pillars;
-    if (!pillars) return;
-    const specs: PillarSpec[] = [];
+  /**
+   * 重建这一屏的方块：当前块前后各一块（原版一屏 3~4 块）。
+   *
+   * 前后各留一块是为了让"刚跳过的"和"下一块"都在画面里——原版也是这么构图的。
+   */
+  private rebuildBlocks(): void {
+    const blocks = this.blocks;
+    if (!blocks) return;
+    const specs: BlockSpec[] = [];
     const from = Math.max(0, this.run.index - 1);
     const to = Math.min(this.run.blocks.length - 1, this.run.index + 2);
     for (let i = from; i <= to; i++) {
-      const block = this.run.blocks[i];
+      const block: JumpBlock | undefined = this.run.blocks[i];
       if (!block) continue;
       specs.push({
         x: block.x,
@@ -413,11 +414,11 @@ export class JumpGame implements MiniGame {
         current: i === this.run.index,
       });
     }
-    pillars.setPillars(specs);
+    blocks.setBlocks(specs);
   }
 
   private readonly onResize = (): void => {
-    this.pillars?.setViewport(window.innerWidth, window.innerHeight);
+    this.blocks?.setViewport(window.innerWidth, window.innerHeight);
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {

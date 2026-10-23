@@ -15,8 +15,13 @@
 
 import { readFileSync } from 'node:fs';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
-import { groupPillars, pillarInstanceCount, type PillarSpec } from '../src/minigame/games/jump/pillars.ts';
-import { themeById } from '../src/minigame/games/jump/themes.ts';
+import {
+  BLOCK_COLORS,
+  JUMP_PALETTES,
+  blockColorAt,
+  paletteForSeed,
+  shadeForNormal,
+} from '../src/minigame/games/jump/palette.ts';
 import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
@@ -58,6 +63,14 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+function almost(label: string, actual: number, expected: number, tolerance = 1e-6): void {
+  check(
+    label,
+    Math.abs(actual - expected) <= tolerance,
+    `实际 ${actual}，期望 ${expected} ±${tolerance}`,
+  );
 }
 
 const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -108,15 +121,17 @@ console.log('\n小游戏框架：自检游戏的资源释放');
 console.log('\n跳一跳：场景与流程（静态断言）');
 {
   check('id 是 jump', jumpSrc.includes("readonly id = 'jump'"));
-  check('柱子用 PillarScene（顶/侧/底三套 UV）', jumpSrc.includes('new PillarScene('));
+  check('场景是等距纯色方块 BlockScene', jumpSrc.includes('new BlockScene('));
+  check('不再有 MC 图集柱子', !jumpSrc.includes('PillarScene') && !jumpSrc.includes('themes.ts'));
   check('用 PlayerRenderer 画小人', jumpSrc.includes('new PlayerRenderer('));
   check('卸载时释放人物', jumpSrc.includes('this.player?.dispose()'));
-  check('卸载时释放场景', jumpSrc.includes('this.pillars?.dispose()'));
+  check('卸载时释放场景', jumpSrc.includes('this.blocks?.dispose()'));
   check('卸载时移除 HUD', jumpSrc.includes('this.hud?.remove()'));
-  check('每帧自己渲染', jumpSrc.includes('pillars.render(context.renderer)'));
+  check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
   check('蓄力压缩身体', jumpSrc.includes('BODY_SQUASH'));
   check('蓄力压缩方块', jumpSrc.includes('setSquash'));
   check('空中翻转', jumpSrc.includes('rotation.x = -Math.PI * 2 * progress'));
+  check('站高按方块高度算（方块会随分数变矮）', jumpSrc.includes('standHeight('));
   check('最高分落盘', jumpSrc.includes('recordScore(') && jumpSrc.includes('saveProgress('));
   check('特殊方块停留加分', jumpSrc.includes('specialHoldSeconds') && jumpSrc.includes('specialBonus('));
   check('音效静默降级', jumpSrc.includes('AudioContext') && jumpSrc.includes('catch'));
@@ -124,54 +139,87 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }
 
-// ------------------------------------------------------------------ 方块分组
+// ------------------------------------------------------------------ 色板与明暗
 
-console.log('\n柱子分组（一组 = 一个 draw call）');
+/** sRGB 相对亮度（0~1）：只用于断言"方块不能糊进背景" */
+function luminance(hex: string): number {
+  const channel = (offset: number): number => {
+    const v = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+console.log('\n色板与三面明暗（原版观感的两个硬指标）');
 {
-  const theme = themeById('meadow');
-  const make = (x: number, kind: PillarSpec['kind'] = 'normal'): PillarSpec => ({
-    x,
-    z: 0,
-    size: 1.8,
-    kind,
-    current: x === 0,
+  equal('背景色板 6 组', JUMP_PALETTES.length, 6);
+  equal('方块色 8 个', BLOCK_COLORS.length, 8);
+  const unknown = JUMP_PALETTES.flatMap((p) => p.blocks.filter((c) => !(BLOCK_COLORS as readonly string[]).includes(c)));
+  equal('每局的方块色都登记在 BLOCK_COLORS 里', unknown.length, 0);
+  check(
+    '每组 3~4 个方块色（一屏就是 3~4 块）',
+    JUMP_PALETTES.every((p) => p.blocks.length >= 3 && p.blocks.length <= 4),
+  );
+  check(
+    '背景一律"上亮下暗"（原版是一条很轻的竖直渐变）',
+    JUMP_PALETTES.every((p) => luminance(p.background.top) > luminance(p.background.bottom)),
+  );
+  check(
+    '渐变不过分（ΔL ≤ 0.25，原版最明显的 mist 实测 0.18）',
+    JUMP_PALETTES.every((p) => luminance(p.background.top) - luminance(p.background.bottom) <= 0.25),
+  );
+  const worst = Math.min(
+    ...JUMP_PALETTES.flatMap((p) => {
+      const mid = (luminance(p.background.top) + luminance(p.background.bottom)) / 2;
+      return p.blocks.map((c) => Math.abs(luminance(c) - mid));
+    }),
+  );
+  check('没有方块糊进背景（|ΔL| ≥ 0.04）', worst >= 0.04, `最小差 ${worst.toFixed(3)}`);
+
+  const ids = new Set(JUMP_PALETTES.map((p) => p.id));
+  equal('色板 id 唯一', ids.size, JUMP_PALETTES.length);
+  equal('同 seed 同色板（截图对比要可复现）', paletteForSeed(7).id, paletteForSeed(7).id);
+  equal('seed 0~5 覆盖 6 组', new Set([0, 1, 2, 3, 4, 5].map((i) => paletteForSeed(i).id)).size, 6);
+  const palette = JUMP_PALETTES[0]!;
+  equal('方块色按序号轮换', blockColorAt(palette, 0), blockColorAt(palette, palette.blocks.length));
+  equal('负下标不越界', blockColorAt(palette, -1), blockColorAt(palette, palette.blocks.length - 1));
+  equal('空色板回落到默认色', blockColorAt({ id: 'x', background: { top: '#fff', bottom: '#fff' }, blocks: [] }, 3), BLOCK_COLORS[0]);
+}
+
+console.log('\n三面明暗（顶 1.00 / 左 0.775 / 右 0.93，实测值）');
+{
+  almost('顶面 = 1.00', shadeForNormal(0, 1, 0), 1, 1e-9);
+  almost('+X 面（屏幕右）= 0.93', shadeForNormal(1, 0, 0), 0.93, 1e-9);
+  almost('+Z 面（屏幕左）= 0.775', shadeForNormal(0, 0, 1), 0.775, 1e-9);
+  check(
+    '右面比左面亮（交接文档曾经写反，这条钉住方向）',
+    shadeForNormal(1, 0, 0) > shadeForNormal(0, 0, 1),
+  );
+  almost('法线取反不改变亮度（-X 面不会更亮）', shadeForNormal(-1, 0, 0), 0.775, 1e-9);
+  almost('底面（永远看不见）不为负', shadeForNormal(0, -1, 0), (0.775 + 0.93) / 2, 1e-9);
+
+  // 圆柱侧面：64 段圆环。判据不是"落在两个色阶之间"，而是**没有台阶**——
+  // 把圆柱当成两面色来贴，相邻顶点会跳 0.15；连续渐变时每 5.6° 只差 0.01 量级。
+  const ring = Array.from({ length: 64 }, (_, i) => {
+    const angle = (i / 64) * Math.PI * 2;
+    return shadeForNormal(Math.cos(angle), 0, Math.sin(angle));
   });
-
-  const normal = groupPillars([make(0), make(2), make(4), make(6)], theme);
-  equal('4 根普通柱子 → 1 组', normal.length, 1);
-  equal('实例总数', pillarInstanceCount(normal), 4);
-  equal('草方块顶面用 grass_top', normal[0]?.top, 'grass_top');
-  equal('草方块侧面用 grass_side', normal[0]?.side, 'grass_side');
-  equal('草方块底面用 dirt', normal[0]?.bottom, 'dirt');
-
-  const mixed = groupPillars([make(0), make(2, 'music'), make(4), make(6, 'cube')], theme);
-  equal('普通 + 音符盒 + 羊毛 → 3 组', mixed.length, 3);
-  equal(
-    '组顺序按首次出现',
-    mixed.map((group) => group.top).join(','),
-    'grass_top,note_block,wool_light_blue',
+  const steps = ring.map((v, i) => Math.abs(v - ring[(i + 1) % ring.length]!));
+  check('圆柱侧面没有台阶（相邻 5.6° 差 < 0.02）', Math.max(...steps) < 0.02, `最大 ${Math.max(...steps).toFixed(3)}`);
+  // 相机在 +x/+z 一侧，看得见的那半边法线满足 nx + nz > 0
+  const visible = ring.filter((_, i) => {
+    const angle = (i / 64) * Math.PI * 2;
+    return Math.cos(angle) + Math.sin(angle) > 0;
+  });
+  // 圆柱的可见半边是从 0.74 到 0.96 的**连续延伸**（三个面值是插值的支点，不是天花板）：
+  // 正对 +x/−z 那条对角线的一小段最亮，正对 −x/+z 的收进暗部。方块永远只用三个轴法线，
+  // 所以仍精确落在 1.00 / 0.775 / 0.93 上。
+  check(
+    '圆柱可见半边的亮度落在 0.74~0.97（连续外延，不是新色阶）',
+    Math.min(...visible) > 0.74 && Math.max(...visible) < 0.97,
+    `${Math.min(...visible).toFixed(3)}~${Math.max(...visible).toFixed(3)}`,
   );
-  equal(
-    '音符盒三面同一张贴图',
-    `${mixed[1]?.top},${mixed[1]?.side},${mixed[1]?.bottom}`,
-    'note_block,note_block,note_block',
-  );
-  equal('空输入 → 0 组', groupPillars([], theme).length, 0);
-
-  const snow = groupPillars([make(0)], themeById('snow'));
-  equal('雪地主题顶面用 snow', snow[0]?.top, 'snow');
-  equal('雪地主题底面用 stone', snow[0]?.bottom, 'stone');
-
-  const started = performance.now();
-  const many: PillarSpec[] = [];
-  for (let i = 0; i < 5000; i++) {
-    many.push({ x: i, z: 0, size: 1.8, kind: i % 2 === 0 ? 'normal' : 'music', current: false });
-  }
-  const grouped = groupPillars(many, theme);
-  const elapsed = performance.now() - started;
-  equal('5000 根只分 2 组', grouped.length, 2);
-  equal('实例一个不少', pillarInstanceCount(grouped), 5000);
-  check('分组耗时 < 50ms', elapsed < 50, `${elapsed.toFixed(1)}ms`);
+  check('任何法线都不会算出负数或过曝', [shadeForNormal(0, -1, 0), shadeForNormal(0, 1, 0), shadeForNormal(0, 0, 0)].every((v) => v > 0.2 && v <= 1));
 }
 
 // ------------------------------------------------------------------ 最高分
