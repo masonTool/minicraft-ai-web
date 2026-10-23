@@ -15819,3 +15819,17 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 批次：20261024-0020
 
 ---
+
+---
+## 批次 20261024-0121 · 2026-10-24 · 会话 4024a9d4
+
+- [x] [R1] 品牌改名 **Minicraft**：`public/manifest.webmanifest` 的 `name` / `short_name`（再由 `gen:manifests` 派生另外 5 份）、`index.html` 的 `<title>`、`docs/store/` 六份标题、`README.md` 首行、`src/main.ts` 调试 HUD 标题行；**合规声明（非官方、不含官方素材、与 Mojang 无关）原样保留**
+  - 做了什么：品牌名统一成 **Minicraft**，五处落点全部改到：① `public/manifest.webmanifest` 的 `name` / `short_name`（基准，改完用 `npm run gen:manifests` 派生另外 5 份，**不手改六份**）；② `index.html` 的 `<title>`；③ `docs/store/` 六份标题；④ `README.md` 首行；⑤ `src/main.ts` 调试 HUD 标题行
+  - 为什么先改基准再派生：六份 manifest 由 `tools/gen-manifests.mjs` 从中文那份派生（`name` / `short_name` 在 11 个冻结字段里）。手改六份必然会漂 —— 改一处 + `gen:manifests` 一次，六份实测输出 `Minicraft Minicraft` 完全一致
+  - 新增 **3 条跨文件一致性断言**（`BRAND = 'Minicraft'` 是唯一真值）：六份 manifest 的 `name` / `short_name` 都是品牌名、`index.html` 标题是品牌名、`docs/store/` 六份标题都是品牌名 —— 品牌名散在互不相干的文件里，手改必漏一处，而漏掉的那处平时看不见（比如只在装成 PWA 后的桌面上显示）
+  - 保留不动：① 合规声明（非官方爱好者复刻、与 Mojang 和 Microsoft 无关、不含官方素材、贴图音效运行时生成、存档只在本机）—— 改名不能删保护性声明；② `index.html` 里一处**注释**提到旧名（"这里原来有一层 `#overlay`…"）—— 历史陈述，改了会让注释失真；③ 历史档案（`DONE.md` / `notes/`）里的旧名一律不改
+  - ⚠️ 踩到一个**脆弱判据**：用 `json.dumps(indent=2)` 重写 manifest 时把 `display_override` 数组展开成多行，`ui` 套件的「manifest 以横屏全屏打开」是**按文本**匹配紧凑写法的，当场红。修法不是改断言，而是把基准文件那一段恢复成紧凑写法（派生出的五份仍会展开，但那条断言只查基准）
+  - 验证：六份 manifest 实测 `Minicraft Minicraft ['fullscreen', 'standalone']`（`sort -u` 后只剩一行）；`test:i18n` **510 / 0**（新增 3 条）；`ui` 套件 **926 / 0**；`test:offline` **172 / 172 套全绿**；`check.mjs --fast` 5 项全绿；`grep` 旧名只剩 `index.html` 那条历史注释
+  - 批次：20261024-0121
+
+---

@@ -220,6 +220,19 @@
   这样它与锚点所在作用域解耦，插错也只影响自己那一块。
 - 适用面：所有“往长测试文件里追加断言”的编辑（`tools/*-test.ts` 尤其多）。
 
+### 给语言表追加键：**中文表与非中文表的结尾格式不同**，别写死一种
+
+- 症状：脚本按 `} as const;` 找插入点，中文那份顺利，另外五份直接 `AssertionError`
+  （它们的结尾是 `} satisfies Pick<Messages, keyof typeof zhXxx>;`）。
+- 更隐蔽的一层：原文件的**最后一条键后面没有逗号**，追加前必须补一个，否则 `TS1005: ',' expected`。
+  我第一次给 `misc.ts` 追加就漏了逗号，六个文件里坏了一个。
+- 稳妥写法：
+  1. 先 `rstrip()`，断言最后一行以 `}` 开头（不管是 `as const` 还是 `satisfies`）；
+  2. 从倒数第二行往上找第一个**非空行**，没有逗号就补；
+  3. 在最后一行之前插入新键；
+  4. 用 `re.sub` 先删掉同名键（重复追加时幂等）。
+- 判据：写完立刻 `npm run typecheck` —— 漏逗号/漏大括号都会在这里炸，不必等 `test:i18n`。
+
 ### 局部变量 `const t = …` 会遮蔽 i18n 的 `t`，编译器能抓，但报错信息不直说
 
 - 症状：加了 `t('cmd.reply.emptyValue')`，`TS2721: Cannot invoke an object which is possibly 'null'`

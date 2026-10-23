@@ -9,6 +9,24 @@
 
 ---
 
+## 批次 20261024-0245 · 2026-10-24 · 会话 4024a9d4
+
+- [x] [D1] 第 ⑤ 类真遗漏：`BeaconScreen` 的 6 个效果按钮（`power.label` = 速度/急迫/抗性提升/跳跃提升/力量/生命恢复）复用 `effectLabel()`；`WorldScreen` 的 `aria-label='关闭'` 与 `error.textContent='保存失败，请重试'` 入表
+  - 做了什么：`BeaconScreen` 的 **6 个效果按钮**（速度/急迫/抗性提升/跳跃提升/力量/生命恢复）不再读 `power.label`，改用 **`effectLabel(power.effect)`** —— 复用状态效果已有的 `label.effect.*`（30 条），**零新键**；`WorldScreen` 的 `aria-label='关闭'` 与 `error.textContent='保存失败，请重试'` → `misc.close` / `world.saveFailed`（**2 条新键** × 6 语言）
+  - 顺手删掉了 `BeaconPower.label` 字段（5 处 UI + `beacon-test` 的 1 条断言改用 `effectLabel()`），`Beacon.ts` 里再无中文；`BEACON_POWERS` 的顺序注释与存档语义**没动**（顺序即下标，只删了 label）
+  - ⚠️ 侦察结论修正了我上一轮的估计：说"约 20 条"，实际只有 **8 处**。两处被排除的是：① `game/appearance.ts` 的 `CHARACTER_PRESETS[].label`（成年男性等 4 条）—— `grep` 全仓**没有任何 UI 读它**，是纯数据字段；② `Rules.ts` 的 `DIFFICULTIES[].label`（和平/简单/普通/困难）—— `WorldScreen` 用的是 `difficultyLabel()`（已走 i18n），那个 label 没人读
+  - 验证：`test:i18n` **542 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2786 条、0 缺口 / 0 孤儿；`beacon-test` 通过（断言改成"每个 power 都有效果 id 且 `effectLabel()` 能解析出名字"）
+  - 批次：20261024-0245
+- [x] [D2] 兜底语义改成英文：确认 `t()` 的回落链是「本语言 → 英文 → 键名」，并加**可复现断言**（人为删一条 de 键 → 必须显示英文、不得显示中文原文）；同时说明 `advancementTitle` / `itemDescription` 里的中文原文兜底现在是否还必要
+  - 结论先说：`t()` 的回落链本来就是「**本语言表 → 英文表 → 键名**」，所以"某语言缺翻时显示英文"**已经成立**，不需要改实现。本轮把它变成**可复现的断言**
+  - 新增 3 条断言：① 造一个假语言 `yy`，只装 `pause.title` 一条键 → 查 `pause.resume` 必须等于**英文**且**不等于中文**（这正是"新增文案只加了 zh/en 就上线"的真实场景）；② `yy` 里有的那条照常取本语言；③ `advancementTitle()` 在德语下取德语（不缺翻时不落到中文原文）
+  - `advancementTitle` / `itemDescription` 里那层"中文原文兜底"**只在连英文都没有时才触发** —— 也就是**键漏了**（`satisfies Messages` 会在编译期先报）。保留它当最后一道保险；真要删，得连着回落链一起改，收益不抵风险
+  - 数据层现状（本轮复测）：四语言 2786 键 **0 缺键 / 0 含中文 / 0 空值** —— 也就是说中文原文兜底在六语言上**一次都不会触发**
+  - 验证：`test:i18n` **542 / 0**（含新增 3 条）；`test:offline` **172 / 172 套全绿**
+  - 批次：20261024-0245
+
+---
+
 ## 批次 20261024-0223 · 2026-10-24 · 会话 4024a9d4
 
 - [x] [C1] 品牌收尾：六语言 `advancement.story_root.title`（现在是「Minecraft」，zh 是「我的世界」）→ `Minicraft`；`package.json` 的 `name`（`bedrock-118-web`）→ `minicraft`；注释里残留的 `MINECRAFT` / `Bedrock 1.18 Web` 一并改；**副标题 `1.18 · WEB EDITION` 删掉**（`BRAND_EDITION` 连同首页 `edition` 元素）
@@ -150,15 +168,3 @@
 
 ---
 
-## 批次 20261024-0121 · 2026-10-24 · 会话 4024a9d4
-
-- [x] [R1] 品牌改名 **Minicraft**：`public/manifest.webmanifest` 的 `name` / `short_name`（再由 `gen:manifests` 派生另外 5 份）、`index.html` 的 `<title>`、`docs/store/` 六份标题、`README.md` 首行、`src/main.ts` 调试 HUD 标题行；**合规声明（非官方、不含官方素材、与 Mojang 无关）原样保留**
-  - 做了什么：品牌名统一成 **Minicraft**，五处落点全部改到：① `public/manifest.webmanifest` 的 `name` / `short_name`（基准，改完用 `npm run gen:manifests` 派生另外 5 份，**不手改六份**）；② `index.html` 的 `<title>`；③ `docs/store/` 六份标题；④ `README.md` 首行；⑤ `src/main.ts` 调试 HUD 标题行
-  - 为什么先改基准再派生：六份 manifest 由 `tools/gen-manifests.mjs` 从中文那份派生（`name` / `short_name` 在 11 个冻结字段里）。手改六份必然会漂 —— 改一处 + `gen:manifests` 一次，六份实测输出 `Minicraft Minicraft` 完全一致
-  - 新增 **3 条跨文件一致性断言**（`BRAND = 'Minicraft'` 是唯一真值）：六份 manifest 的 `name` / `short_name` 都是品牌名、`index.html` 标题是品牌名、`docs/store/` 六份标题都是品牌名 —— 品牌名散在互不相干的文件里，手改必漏一处，而漏掉的那处平时看不见（比如只在装成 PWA 后的桌面上显示）
-  - 保留不动：① 合规声明（非官方爱好者复刻、与 Mojang 和 Microsoft 无关、不含官方素材、贴图音效运行时生成、存档只在本机）—— 改名不能删保护性声明；② `index.html` 里一处**注释**提到旧名（"这里原来有一层 `#overlay`…"）—— 历史陈述，改了会让注释失真；③ 历史档案（`DONE.md` / `notes/`）里的旧名一律不改
-  - ⚠️ 踩到一个**脆弱判据**：用 `json.dumps(indent=2)` 重写 manifest 时把 `display_override` 数组展开成多行，`ui` 套件的「manifest 以横屏全屏打开」是**按文本**匹配紧凑写法的，当场红。修法不是改断言，而是把基准文件那一段恢复成紧凑写法（派生出的五份仍会展开，但那条断言只查基准）
-  - 验证：六份 manifest 实测 `Minicraft Minicraft ['fullscreen', 'standalone']`（`sort -u` 后只剩一行）；`test:i18n` **510 / 0**（新增 3 条）；`ui` 套件 **926 / 0**；`test:offline` **172 / 172 套全绿**；`check.mjs --fast` 5 项全绿；`grep` 旧名只剩 `index.html` 那条历史注释
-  - 批次：20261024-0121
-
----
