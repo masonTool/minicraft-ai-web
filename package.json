@@ -180,6 +180,7 @@
     "test:jumpiso": "esbuild tools/jump-iso-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-iso-test.mjs --log-level=error && node .tmp/jump-iso-test.mjs",
     "test:jumpmodel": "esbuild tools/jump-model-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-model-test.mjs --log-level=error && node .tmp/jump-model-test.mjs",
     "test:jumptex": "esbuild tools/jump-textures-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-textures-test.mjs --log-level=error && node .tmp/jump-textures-test.mjs",
+    "test:jumpmotion": "esbuild tools/jump-motion-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-motion-test.mjs --log-level=error && node .tmp/jump-motion-test.mjs",
     "test:villager": "esbuild tools/villager-test.ts --bundle --platform=node --format=esm --outfile=.tmp/villager-test.mjs --log-level=error && node .tmp/villager-test.mjs",
     "test:village": "esbuild tools/village-test.ts --bundle --platform=node --format=esm --outfile=.tmp/village-test.mjs --log-level=error && node .tmp/village-test.mjs",
     "test:reach": "esbuild tools/reachability-test.ts --bundle --platform=node --format=esm --outfile=.tmp/reachability-test.mjs --log-level=error && node .tmp/reachability-test.mjs",

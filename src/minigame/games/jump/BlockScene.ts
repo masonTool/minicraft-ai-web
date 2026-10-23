@@ -12,8 +12,13 @@
  *  · **阴影是贴片不是阴影贴图**：方块下面垫一张柔边圆角方片，往世界 −x/+z 偏移
  *    （屏幕上就是左下），浓度 35% 紫灰。原版没有可见地面，阴影其实也是贴片。
  *
+ * 动画（`[跳7]`）也在这层：新块入场弹入 400ms、被踩的块凹一下再回弹 500ms、
+ * 落后于镜头的块掉落缩小消失、完美命中在同一点扩散三层同心圆。时序与缓动全在
+ * `motion.ts`（纯函数、可离线断言），这里只负责把它们套到 mesh 上。
+ *
  * 释放契约与旧版一致：`dispose()` 之后 `renderer.info.memory` 回到进场前的值——
- * 三份几何（方盒 / 圆柱 / 阴影片）、颜色材质缓存、两张 canvas 贴图、场景本体全部还清。
+ * 方盒 / 圆柱 / 阴影片 / 波纹环四份几何、颜色材质缓存、特殊方块贴图、两张 canvas 贴图、
+ * 场景本体全部还清。
  */
 
 import * as THREE from 'three';
@@ -32,6 +37,13 @@ import {
   type JumpPalette,
 } from './palette.ts';
 import { ATLAS_U, createBlockAtlas, type CanvasFactory, type SpecialKind } from './blockTextures.ts';
+import {
+  JUMP_TIMING,
+  blockBounceScale,
+  enterScale,
+  fadeScale,
+  rippleProgress,
+} from './motion.ts';
 import type { JumpBlockKind } from './logic.ts';
 
 /** 屏幕上的一块方块（渲染层只要这些，不认识 run / 计分） */
@@ -43,6 +55,13 @@ export interface BlockSpec {
   readonly kind: JumpBlockKind;
   /** 是不是"当前站着的"那块（蓄力时它会轻微下压） */
   readonly current: boolean;
+  /**
+   * 配色下标（传方块 id）。
+   *
+   * ⚠️ 不能用"在这一屏列表里的下标"：每跳一次列表整体前移一格，同一块方块会换色，
+   * 看起来就是"跳一下整个世界重新上色"。
+   */
+  readonly colorIndex: number;
 }
 
 /** 蓄力时当前方块最多压掉多少高度（规格表 §8：y → 0.8） */
@@ -53,13 +72,25 @@ const SHADOW_SPREAD = 1.9;
 const SHADOW_OFFSET = { x: -0.43, z: 0.71 };
 /** 相机跟随的指数插值系数（越大跟得越紧） */
 const FOLLOW_RATE = 8;
+/** 完美命中的三层同心圆：外白 / 中绿 / 内红（规格表 §7） */
+const RIPPLE_RINGS = [
+  { color: '#FFFFFF', radius: 1 },
+  { color: '#7ED957', radius: 0.72 },
+  { color: '#E93A41', radius: 0.45 },
+] as const;
 
 interface BlockEntry {
-  readonly spec: BlockSpec;
+  spec: BlockSpec;
   readonly mesh: THREE.Mesh;
   readonly shadow: THREE.Mesh;
   /** 方块未压缩时的高度 */
   readonly height: number;
+  /** 位置键（同 x/z = 同一块，用于跨重建保留入场进度） */
+  readonly key: string;
+  /** 入场动画已过去的毫秒 */
+  age: number;
+  /** 掉落淡出已过去的毫秒；`null` = 不在淡出 */
+  fadeMs: number | null;
 }
 
 export class BlockScene {
@@ -80,6 +111,13 @@ export class BlockScene {
 
   private backgroundTexture: THREE.Texture;
   private entries: BlockEntry[] = [];
+  /** 已经不在屏上、正在掉落缩小的旧方块 */
+  private fading: BlockEntry[] = [];
+  /** 被踩的那块：从落地开始计时（毫秒） */
+  private bounce: { key: string; ms: number } | null = null;
+  /** 完美命中的同心圆 */
+  private ripple: { x: number; z: number; size: number; ms: number } | null = null;
+  private rippleRig: { meshes: THREE.Mesh[]; materials: THREE.MeshBasicMaterial[]; geometry: THREE.RingGeometry } | null = null;
   private viewport = { width: 1, height: 1 };
   private aspect = 1;
   private squash = 0;
@@ -137,36 +175,35 @@ export class BlockScene {
     this.setBlocks(this.entries.map((entry) => entry.spec));
   }
 
-  /** 重建整屏方块（一帧最多 6 块，重建比增量维护简单） */
+  /**
+   * 重建整屏方块（一帧最多 4 块，重建比增量维护简单）。
+   *
+   * 两个细节都是"看得见"的：
+   *  · **入场进度按位置保留**：每跳一次都会重建整屏，如果不按 x/z 把 `age` 带过来，
+   *    所有方块会每跳一次弹一次；
+   *  · **掉队的方块不直接删**：落后于镜头的块进淡出队列，掉落缩小时长 400ms。
+   */
   setBlocks(specs: readonly BlockSpec[]): void {
-    this.clearEntries();
-    specs.forEach((spec, index) => {
-      const height = Math.max(0.05, spec.size * BLOCK_HEIGHT_RATIO);
-      // 特殊方块用自己的贴图（颜色写在贴图里，不再乘色板）；普通方块走纯色材质
-      const special = spec.kind === 'normal' ? null : this.specialFor(spec.kind);
-      const geometry = special?.geometry ?? this.blockGeometry;
-      const material = special?.material ?? this.materialFor(blockColorAt(this.palette, index));
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(spec.x, height / 2, spec.z);
-      mesh.scale.set(spec.size, height, spec.size);
-      mesh.renderOrder = 1;
-      this.scene.add(mesh);
+    const ages = new Map<string, number>();
+    for (const entry of this.entries) ages.set(entry.key, entry.age);
 
-      const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
-      shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(
-        spec.x + SHADOW_OFFSET.x * spec.size,
-        0.001,
-        spec.z + SHADOW_OFFSET.z * spec.size,
-      );
-      shadow.scale.set(spec.size * SHADOW_SPREAD, spec.size * SHADOW_SPREAD, 1);
-      // 阴影永远画在方块之前，避免透明片盖住方块本体
-      shadow.renderOrder = 0;
-      this.scene.add(shadow);
+    const nextKeys = new Set(specs.map((spec) => blockKey(spec)));
+    for (const entry of this.entries) {
+      if (nextKeys.has(entry.key)) {
+        this.removeEntry(entry);
+      } else {
+        // 不再是"这一屏的方块" → 掉落消失
+        entry.fadeMs = 0;
+        entry.spec = { ...entry.spec, current: false };
+        this.fading.push(entry);
+      }
+    }
+    this.entries = [];
 
-      this.entries.push({ spec, mesh, shadow, height });
-    });
-    this.applySquash();
+    for (const spec of specs) {
+      this.entries.push(this.createEntry(spec, ages.get(blockKey(spec)) ?? 0));
+    }
+    this.refreshAll();
   }
 
   /** 蓄力压缩：只压"当前那块"（顶面下沉、底面不动），0 = 不压 */
@@ -174,7 +211,76 @@ export class BlockScene {
     const next = Math.min(MAX_SQUASH, Math.max(0, Number.isFinite(amount) ? amount : 0));
     if (Math.abs(next - this.squash) < 1e-4) return;
     this.squash = next;
-    this.applySquash();
+    this.refreshAll();
+  }
+
+  /** 落地：被踩的那块凹一下再回弹（500ms Bounce.Out） */
+  punch(x: number, z: number): void {
+    this.bounce = { key: blockKey({ x, z }), ms: 0 };
+  }
+
+  /** 完美命中：在落点扩散三层同心圆（外白 / 中绿 / 内红） */
+  playRipple(x: number, z: number, size: number): void {
+    this.ripple = { x, z, size, ms: 0 };
+    const rig = this.ensureRippleRig();
+    for (const mesh of rig.meshes) mesh.visible = true;
+    this.refreshRipple();
+  }
+
+  /** 每帧推进方块动画（入场 / 回弹 / 淡出 / 波纹）；不推进相机 */
+  tick(dt: number): void {
+    // dt 夹到 1 秒：切标签页回来别让动画一帧跳完
+    const ms = Math.min(1, Math.max(0, Number.isFinite(dt) ? dt : 0)) * 1000;
+    if (ms <= 0) return;
+    let dirty = false;
+
+    for (const entry of this.entries) {
+      if (entry.age < JUMP_TIMING.enterMs) {
+        entry.age = Math.min(JUMP_TIMING.enterMs, entry.age + ms);
+        dirty = true;
+      }
+    }
+
+    if (this.bounce) {
+      this.bounce.ms += ms;
+      if (this.bounce.ms >= JUMP_TIMING.blockBounceMs) this.bounce = null;
+      dirty = true;
+    }
+
+    if (this.fading.length > 0) {
+      dirty = true;
+      const done: BlockEntry[] = [];
+      for (const entry of this.fading) {
+        entry.fadeMs = (entry.fadeMs ?? 0) + ms;
+        if ((entry.fadeMs ?? 0) >= JUMP_TIMING.fadeMs) done.push(entry);
+      }
+      if (done.length > 0) {
+        for (const entry of done) this.removeEntry(entry);
+        this.fading = this.fading.filter((entry) => !done.includes(entry));
+      }
+    }
+
+    if (this.ripple) {
+      this.ripple.ms += ms;
+      if (this.ripple.ms >= JUMP_TIMING.rippleMs) {
+        const rig = this.rippleRig;
+        if (rig) for (const mesh of rig.meshes) mesh.visible = false;
+        this.ripple = null;
+      } else {
+        this.refreshRipple();
+      }
+      dirty = true;
+    }
+
+    if (dirty) this.refreshAll();
+  }
+
+  /** 世界坐标 → 层内归一化坐标（0~1，y 向下）：飘字要贴在方块/小人头顶 */
+  projectToScreen(x: number, y: number, z: number): { x: number; y: number } {
+    // 相机的世界矩阵是渲染时才刷新的；飘字在 render 之前算，必须自己先刷一次
+    this.camera.updateMatrixWorld();
+    const point = new THREE.Vector3(x, y, z).project(this.camera);
+    return { x: (point.x + 1) / 2, y: (1 - point.y) / 2 };
   }
 
   /**
@@ -271,13 +377,103 @@ export class BlockScene {
     this.camera.updateProjectionMatrix();
   }
 
-  private applySquash(): void {
-    for (const entry of this.entries) {
-      const factor = entry.spec.current ? 1 - this.squash : 1;
-      const height = entry.height * factor;
-      entry.mesh.scale.y = height;
-      entry.mesh.position.y = height / 2;
+  /** 建一块方块（网格 + 阴影贴片），并带上入场进度 */
+  private createEntry(spec: BlockSpec, age: number): BlockEntry {
+    const height = Math.max(0.05, spec.size * BLOCK_HEIGHT_RATIO);
+    // 特殊方块用自己的贴图（颜色写在贴图里，不再乘色板）；普通方块走纯色材质
+    const special = spec.kind === 'normal' ? null : this.specialFor(spec.kind);
+    const geometry = special?.geometry ?? this.blockGeometry;
+    const material = special?.material ?? this.materialFor(blockColorAt(this.palette, spec.colorIndex));
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 1;
+    this.scene.add(mesh);
+
+    const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
+    shadow.rotation.x = -Math.PI / 2;
+    // 阴影永远画在方块之前，避免透明片盖住方块本体
+    shadow.renderOrder = 0;
+    this.scene.add(shadow);
+
+    return { spec, mesh, shadow, height, key: blockKey(spec), age, fadeMs: null };
+  }
+
+  private removeEntry(entry: BlockEntry): void {
+    this.scene.remove(entry.mesh);
+    this.scene.remove(entry.shadow);
+  }
+
+  /** 把入场 / 回弹 / 压扁 / 淡出四个因子乘到所有方块上（只有这一处写变换） */
+  private refreshAll(): void {
+    for (const entry of this.entries) this.refreshEntry(entry);
+    for (const entry of this.fading) this.refreshEntry(entry);
+  }
+
+  private refreshEntry(entry: BlockEntry): void {
+    const enter = enterScale(entry.age);
+    const bounce = this.bounce && this.bounce.key === entry.key ? blockBounceScale(this.bounce.ms) : 1;
+    const squash = entry.spec.current ? 1 - this.squash : 1;
+    const fade = entry.fadeMs === null ? 1 : fadeScale(entry.fadeMs);
+    const shrink = enter * fade;
+
+    // 高度方向叠三个因子；横向只受入场/淡出影响（蓄力压扁要"横向鼓出来"由小人负责）
+    const height = Math.max(0, entry.height * squash * bounce * shrink);
+    entry.mesh.scale.set(entry.spec.size * shrink, height, entry.spec.size * shrink);
+    // 淡出时一边缩一边往下掉
+    entry.mesh.position.set(entry.spec.x, height / 2 - (1 - fade) * entry.height * 1.2, entry.spec.z);
+
+    const spread = entry.spec.size * SHADOW_SPREAD * shrink;
+    entry.shadow.scale.set(spread, spread, 1);
+    entry.shadow.position.set(
+      entry.spec.x + SHADOW_OFFSET.x * entry.spec.size * shrink,
+      0.001,
+      entry.spec.z + SHADOW_OFFSET.z * entry.spec.size * shrink,
+    );
+    entry.shadow.visible = fade > 0.02;
+  }
+
+  private ensureRippleRig(): { meshes: THREE.Mesh[]; materials: THREE.MeshBasicMaterial[]; geometry: THREE.RingGeometry } {
+    if (this.rippleRig) return this.rippleRig;
+    const geometry = new THREE.RingGeometry(0.86, 1, 48);
+    const meshes: THREE.Mesh[] = [];
+    const materials: THREE.MeshBasicMaterial[] = [];
+    for (const ring of RIPPLE_RINGS) {
+      const material = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(ring.color),
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.renderOrder = 2;
+      mesh.visible = false;
+      this.scene.add(mesh);
+      meshes.push(mesh);
+      materials.push(material);
     }
+    this.rippleRig = { meshes, materials, geometry };
+    return this.rippleRig;
+  }
+
+  /** 波纹：三层同心圆一起由内向外扩（600ms），越扩越淡 */
+  private refreshRipple(): void {
+    const ripple = this.ripple;
+    const rig = this.rippleRig;
+    if (!ripple || !rig) return;
+    const progress = rippleProgress(ripple.ms);
+    const topY = Math.max(0.05, ripple.size * BLOCK_HEIGHT_RATIO) + 0.02;
+    RIPPLE_RINGS.forEach((ring, index) => {
+      const mesh = rig.meshes[index];
+      const material = rig.materials[index];
+      if (!mesh || !material) return;
+      const radius = ripple.size * (0.3 + 0.75 * progress) * ring.radius;
+      mesh.scale.set(radius, radius, 1);
+      mesh.position.set(ripple.x, topY + index * 0.004, ripple.z);
+      material.opacity = Math.max(0, 0.85 * (1 - progress));
+      mesh.visible = progress < 1;
+    });
   }
 
   /**
@@ -323,11 +519,18 @@ export class BlockScene {
   }
 
   private clearEntries(): void {
-    for (const entry of this.entries) {
-      this.scene.remove(entry.mesh);
-      this.scene.remove(entry.shadow);
-    }
+    for (const entry of this.entries) this.removeEntry(entry);
+    for (const entry of this.fading) this.removeEntry(entry);
     this.entries = [];
+    this.fading = [];
+    this.bounce = null;
+    if (this.rippleRig) {
+      for (const mesh of this.rippleRig.meshes) this.scene.remove(mesh);
+      for (const material of this.rippleRig.materials) material.dispose();
+      this.rippleRig.geometry.dispose();
+      this.rippleRig = null;
+    }
+    this.ripple = null;
   }
 }
 
@@ -353,6 +556,11 @@ function bakeFaceShading(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geometry;
+}
+
+/** 方块的位置键：同一位置 = 同一块（跨重建保留入场进度） */
+function blockKey(spec: { x: number; z: number }): string {
+  return `${spec.x.toFixed(3)}|${spec.z.toFixed(3)}`;
 }
 
 /**

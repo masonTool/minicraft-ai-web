@@ -33,6 +33,7 @@ import {
 import { BlockScene, type BlockSpec } from './BlockScene.ts';
 import { JumperModel } from './JumperModel.ts';
 import { BLOCK_HEIGHT_RATIO } from './iso.ts';
+import { JUMP_TIMING, flipProgress, jumpArc, landingSquash } from './motion.ts';
 import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
 
@@ -80,6 +81,8 @@ export class JumpGame implements MiniGame {
   private jumpPeak = 1.2;
   private yaw = 0;
   private pending: LandingOutcome | null = null;
+  /** 落地压缩已过去的毫秒（> JUMP_TIMING.landSquashMs 即结束） */
+  private landSquashMs = Number.POSITIVE_INFINITY;
 
   /** 落地后正在"停留加分"的方块 id（-1 = 没有） */
   private holdBlockId = -1;
@@ -115,6 +118,7 @@ export class JumpGame implements MiniGame {
     this.rebuildBlocks();
     blocks.follow(0);
 
+    this.landSquashMs = Number.POSITIVE_INFINITY;
     const jumper = new JumperModel();
     jumper.setSize(currentBlock(this.run).size);
     jumper.setPosition(currentBlock(this.run).x, standHeight(currentBlock(this.run)), currentBlock(this.run).z);
@@ -160,6 +164,15 @@ export class JumpGame implements MiniGame {
 
     const step = Math.min(0.05, Math.max(0, dt));
 
+    // 方块侧的动画（入场 / 回弹 / 淡出 / 波纹）自己走一个钟
+    blocks.tick(step);
+
+    // 落地压缩：站直之前先被压一下（100ms 回弹），蓄力时以蓄力为准
+    if (this.phase !== 'charging' && this.landSquashMs < JUMP_TIMING.landSquashMs) {
+      this.landSquashMs += step * 1000;
+      jumper.setSquash(landingSquash(this.landSquashMs));
+    }
+
     if (this.phase === 'charging') {
       this.charge = Math.min(JUMP_CONFIG.maxCharge, this.charge + step);
       const ratio = this.charge / JUMP_CONFIG.maxCharge;
@@ -178,11 +191,12 @@ export class JumpGame implements MiniGame {
       const progress = Math.min(1, this.elapsed / this.duration);
       const x = this.jumpFrom.x + (this.jumpTo.x - this.jumpFrom.x) * progress;
       const z = this.jumpFrom.z + (this.jumpTo.z - this.jumpFrom.z) * progress;
-      // 抛物线：起跳和落地都是 0，中间到峰值；两端方块的顶面高度可能不同，先线性过渡
+      // 弧线：上升 65% Cubic.Out + 下落 35% Cubic.In（规格表 §8）。
+      // 两端方块顶面高度可能不同，先线性过渡再叠加弧线。
       const base = this.jumpFromY + (this.jumpToY - this.jumpFromY) * progress;
-      const y = base + Math.sin(Math.PI * progress) * this.jumpPeak;
+      const y = base + jumpArc(progress) * this.jumpPeak;
       this.placeJumper(x, y, z);
-      jumper.setFlip(-Math.PI * 2 * progress);
+      jumper.setFlip(-Math.PI * 2 * flipProgress(progress));
       if (progress >= 1) this.land();
     } else if (this.phase === 'falling') {
       this.elapsed += step;
@@ -263,7 +277,8 @@ export class JumpGame implements MiniGame {
     this.jumpFromY = standHeight(from);
     this.jumpToY = standHeight(to);
     this.jumpPeak = Math.min(2.4, 0.85 + distance * 0.3);
-    this.duration = 0.3 + distance * 0.045;
+    // 原版一跳固定 400ms，与跳多远无关（旧实现按距离加时长，远跳更慢、手感发飘）
+    this.duration = JUMP_TIMING.totalMs / 1000;
     this.yaw = Math.atan2(-(dx / length), -(dz / length));
     this.elapsed = 0;
 
@@ -300,9 +315,15 @@ export class JumpGame implements MiniGame {
     this.elapsed = 0;
 
     this.audio?.playLand(outcome.center);
-    if (outcome.center) this.context?.toast(`+${outcome.points}`);
 
     const landed = currentBlock(this.run);
+    // 被踩的方块凹一下再回弹；完美命中在落点扩三层同心圆 + 头顶飘 +N
+    this.blocks?.punch(landed.x, landed.z);
+    if (outcome.center) {
+      this.blocks?.playRipple(landed.x, landed.z, landed.size);
+      this.showFloat(`+${outcome.points}`, landed);
+    }
+    this.landSquashMs = 0;
     this.holdBlockId = landed.kind === 'normal' ? -1 : landed.id;
     this.holdTimer = 0;
     this.specialTaken = false;
@@ -339,6 +360,7 @@ export class JumpGame implements MiniGame {
 
     this.jumper?.resetPose();
     this.jumper?.setSize(currentBlock(this.run).size);
+    this.landSquashMs = Number.POSITIVE_INFINITY;
     this.overEl?.classList.add('hidden');
     this.syncPalette();
     this.rebuildBlocks();
@@ -359,7 +381,7 @@ export class JumpGame implements MiniGame {
 
     this.run = { ...this.run, score: this.run.score + bonus };
     this.audio?.playSpecial();
-    this.context?.toast(`+${bonus}`);
+    this.showFloat(`+${bonus}`, block);
     this.updateHud();
   }
 
@@ -371,6 +393,31 @@ export class JumpGame implements MiniGame {
     if (!jumper) return;
     jumper.setPosition(x, y, z);
     jumper.setYaw(this.yaw);
+  }
+
+  /**
+   * `+N` 飘字：贴在方块上方、向上飘并淡出。
+   *
+   * 用 DOM 而不是 3D 文字：字体、抗锯齿、DPI 缩放全部交给浏览器（3D 文字要么靠贴图、
+   * 要么引入字体文件），而且它本来就在 HUD 层里，跟分数同一个坐标系。
+   */
+  private showFloat(text: string, block: JumpBlock): void {
+    const layer = this.context?.layer;
+    const blocks = this.blocks;
+    if (!layer || !blocks) return;
+    const point = blocks.projectToScreen(
+      block.x,
+      standHeight(block) + block.size * 0.72 * 1.1,
+      block.z,
+    );
+    const element = document.createElement('div');
+    element.className = 'jump-float';
+    element.textContent = text;
+    element.style.left = `${(point.x * 100).toFixed(2)}%`;
+    element.style.top = `${(point.y * 100).toFixed(2)}%`;
+    layer.appendChild(element);
+    // 兜底清理：动画 900ms，万一 transitionend 不触发（标签页切走）也不会留节点
+    window.setTimeout(() => element.remove(), 1000);
   }
 
 
@@ -399,6 +446,7 @@ export class JumpGame implements MiniGame {
         size: block.size,
         kind: block.kind,
         current: i === this.run.index,
+        colorIndex: block.id,
       });
     }
     blocks.setBlocks(specs);

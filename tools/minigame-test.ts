@@ -132,12 +132,17 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
   check('蓄力压扁小人', jumpSrc.includes('jumper.setSquash(ratio)'));
   check('蓄力压缩方块', jumpSrc.includes('setSquash'));
-  check('空中翻转 360°', jumpSrc.includes('setFlip(-Math.PI * 2 * progress)'));
+  check('空中翻转 360°（Sinusoidal.InOut）', jumpSrc.includes('setFlip(-Math.PI * 2 * flipProgress(progress))'));
   check('站高按方块高度算（方块会随分数变矮）', jumpSrc.includes('standHeight('));
   check('最高分落盘', jumpSrc.includes('recordScore(') && jumpSrc.includes('saveProgress('));
   check('特殊方块停留加分', jumpSrc.includes('specialHoldSeconds') && jumpSrc.includes('specialBonus('));
   check('音效静默降级', jumpSrc.includes('AudioContext') && jumpSrc.includes('catch'));
   check('落地换小人尺寸（方块会随分数变小）', jumpSrc.includes('this.jumper?.setSize('));
+  check('一跳固定 400ms（与跳多远无关）', jumpSrc.includes('JUMP_TIMING.totalMs / 1000'));
+  check('弧线与空翻走 motion.ts', jumpSrc.includes('jumpArc(') && jumpSrc.includes('flipProgress('));
+  check('落地压缩 100ms 回弹', jumpSrc.includes('landingSquash('));
+  check('完美命中出同心圆 + 飘字', jumpSrc.includes('playRipple(') && jumpSrc.includes('jump-float'));
+  check('被踩的方块回弹', jumpSrc.includes('.punch('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }
@@ -151,6 +156,9 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
   check('三面明暗与方块色都来自 palette', blockSceneSrc.includes('shadeForNormal(') && blockSceneSrc.includes('blockColorAt('));
   check('阴影是不写深度的透明贴片', blockSceneSrc.includes('depthWrite: false'));
   check('特殊方块用程序化图集', blockSceneSrc.includes('createBlockAtlas('));
+  check('方块动画每帧推进', blockSceneSrc.includes('tick(dt: number)'));
+  check('入场进度跨重建保留（按位置键）', blockSceneSrc.includes('ages.set(entry.key'));
+  check('掉队的方块淡出而不是直接消失', blockSceneSrc.includes('this.fading.push(entry)'));
   check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
   check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
 }

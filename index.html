@@ -1328,6 +1328,27 @@
         white-space: nowrap;
       }
       .jump-hint.hidden { display: none; }
+      /*
+       * 完美命中 / 特殊方块的 `+N` 飘字（批次 20261024-0415）：白色半透明、细体，
+       * 从方块上方浮起并淡出。位置由 `scene.ts` 用相机投影算成百分比写进 left/top，
+       * 所以这里只需要管"长什么样、怎么动"。
+       */
+      .jump-float {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        color: rgba(255, 255, 255, .78);
+        font-size: clamp(15px, 3.6vmin, 26px);
+        font-weight: 300;
+        letter-spacing: .04em;
+        pointer-events: none;
+        z-index: 2;
+        animation: jump-float-rise .9s cubic-bezier(.2, .7, .3, 1) forwards;
+      }
+      @keyframes jump-float-rise {
+        0% { opacity: 0; transform: translate(-50%, -35%) scale(.9); }
+        25% { opacity: 1; }
+        100% { opacity: 0; transform: translate(-50%, -165%) scale(1.05); }
+      }
       .jump-over {
         position: absolute; inset: 0; z-index: 3;
         display: grid; place-items: center;
