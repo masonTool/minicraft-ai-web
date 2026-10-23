@@ -962,6 +962,31 @@ console.log('\n[按需加载（多语言 P0-7）]');
   resetLanguageForTest();
 }
 
+console.log('\n[物品名构件表（多语言 P2-1）]');
+{
+  /**
+   * 物品名走"构件 + 模板"（P2-1a/b/c）而不是 800 条平铺。这一节盯三件事：
+   *  ① 构件表非空、模板里真的有 `{占位符}`（模板写成常量就说明拼装没接上）；
+   *  ② 英文侧不许有中文残留 —— 构件是**拼装原料**，一个中文词漏进英文会污染几十条名字；
+   *  ③ `item.tpl.*` 与 `item.<id>` 两个命名空间不许混（模板挪进 `tpl.` 就是为了防撞名）。
+   */
+  const itemKeys = allKeys().filter((key) => key.startsWith('item.'));
+  // 数量用"关系 + 下界"判：16 色是硬事实（染料族按它展开），总数给个下界防空表
+  check('颜色构件正好 16 个（染料族按它展开）', itemKeys.filter((key) => key.startsWith('item.color.')).length === 16);
+  check('物品名构件表非空', itemKeys.length > 150, String(itemKeys.length));
+
+  const tplKeys = itemKeys.filter((key) => key.startsWith('item.tpl.'));
+  const badTpl = tplKeys.filter((key) => !/\{\w+\}/.test(t(key, 'zh')));
+  check(`模板都带占位符（${tplKeys.length} 个）`, badTpl.length === 0, badTpl.slice(0, 3).join(','));
+
+  const cjkInEn = itemKeys.filter((key) => /[\u4e00-\u9fff]/.test(t(key, 'en')));
+  check('英文侧没有中文残留（构件漏翻会污染几十条名字）', cjkInEn.length === 0, cjkInEn.slice(0, 3).join(','));
+
+  // 组件类（color / wood / coral / base / ore / toolMaterial …）必须是"词"，不是句子
+  const components = itemKeys.filter((key) => !key.startsWith('item.tpl.') && key.split('.').length === 3);
+  check('构件表里没有空值', components.every((key) => t(key, 'zh').trim().length > 0));
+}
+
 console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
 {
   /**

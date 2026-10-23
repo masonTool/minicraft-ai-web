@@ -75,26 +75,74 @@ const WOODS_CN: Record<string, string> = {
   dark_oak: '深色橡木',
 };
 
-/** 有"台阶 / 楼梯"两种变体的建材 */
-const STRUCTURE_BASES_CN: Record<string, string> = {
-  stone: '石头',
-  cobblestone: '圆石',
-  oak_planks: '橡木木板',
-  spruce_planks: '云杉木板',
-  birch_planks: '白桦木板',
-  jungle_planks: '丛林木板',
-  acacia_planks: '金合欢木板',
-  dark_oak_planks: '深色橡木木板',
-  sandstone: '砂岩',
-  stone_bricks: '石砖',
-  smooth_stone: '平滑石头',
-  polished_granite: '磨制花岗岩',
-  polished_diorite: '磨制闪长岩',
-  polished_andesite: '磨制安山岩',
-  deepslate_bricks: '深板岩砖',
-  bricks: '红砖块',
-  polished_deepslate: '磨制深板岩',
-};
+/**
+ * 石材基名（多语言 P2-1c）：**原来两张表**（`STRUCTURE_BASES_CN` 只出台阶/楼梯、
+ * `STONE_VARIANT_PARENTS_CN` 多出墙）在 4 个 id 上重复，两处文字必须一致才不会"看提交顺序变名字"。
+ * 现在合成**一份 id 清单** + 一份**有墙的 id 集合**：
+ *   · 清单决定生成哪些名字；集合决定要不要多生成 `_wall`（原先只有石材变体那 28 个有墙）。
+ * ⚠️ 不能简单"并对集都出台阶/楼梯/墙"：那会给 `stone` / `bricks` 之类凭空补出墙的名字，
+ * 属于**顺手改行为** —— 要补也是另一条（那些 id 现在显示裸英文 id，是既有缺口）。
+ */
+const STONE_BASE_IDS = [
+  'stone',
+  'cobblestone',
+  'oak_planks',
+  'spruce_planks',
+  'birch_planks',
+  'jungle_planks',
+  'acacia_planks',
+  'dark_oak_planks',
+  'sandstone',
+  'stone_bricks',
+  'smooth_stone',
+  'polished_granite',
+  'polished_diorite',
+  'polished_andesite',
+  'deepslate_bricks',
+  'bricks',
+  'polished_deepslate',
+  'granite',
+  'diorite',
+  'andesite',
+  'mossy_cobblestone',
+  'mossy_stone_bricks',
+  'cobbled_deepslate',
+  'cut_sandstone',
+  'smooth_sandstone',
+  'blackstone',
+  'polished_blackstone',
+  'polished_blackstone_bricks',
+  'nether_bricks',
+  'end_stone_bricks',
+  'purpur_block',
+  'quartz_block',
+  'smooth_quartz',
+  'deepslate_tiles',
+  'red_nether_bricks',
+  'prismarine',
+  'prismarine_bricks',
+  'dark_prismarine',
+  'red_sandstone',
+  'cut_red_sandstone',
+  'smooth_red_sandstone',
+] as const;
+
+/** 这些基名在原版里有"墙"这一形态（对应原来那张 28 行的 `STONE_VARIANT_PARENTS_CN`） */
+const WALL_BASE_IDS = new Set<string>([
+'granite', 'diorite', 'andesite', 'sandstone', 'deepslate_bricks', 'bricks', 'polished_deepslate', 'mossy_cobblestone', 'mossy_stone_bricks', 'cobbled_deepslate', 'cut_sandstone', 'smooth_sandstone', 'blackstone', 'polished_blackstone', 'polished_blackstone_bricks', 'nether_bricks', 'end_stone_bricks', 'purpur_block', 'quartz_block', 'smooth_quartz', 'deepslate_tiles', 'red_nether_bricks', 'prismarine', 'prismarine_bricks', 'dark_prismarine', 'red_sandstone', 'cut_red_sandstone', 'smooth_red_sandstone',
+]);
+
+/**
+ * 木板类基名**不单独存名字**：`oak_planks` 就是"橡木 + 木板"，与 `item.tpl.woodPlanks` 同一个词。
+ * 这里做一层去重（6 个 id → 0 条新文案），否则每加一种木材要翻两遍同一个词。
+ */
+function stoneBaseName(base: string): string {
+  if (base.endsWith('_planks')) {
+    const wood = base.slice(0, -'_planks'.length);
+    if (wood in WOODS_CN) return tp('item.tpl.woodPlanks', { wood: t(`item.wood.${wood}`) });
+  }
+  return t(`item.base.${base}`);
+}
 
 /**
  * 矿石：主世界的 8 种 + 深层的 8 种。
@@ -216,58 +264,13 @@ for (const kind of Object.keys(CORAL_KIND_CN)) {
 }
 
 // 台阶 / 楼梯
-for (const base of Object.keys(STRUCTURE_BASES_CN)) {
-  put(`${base}_slab`, () => tp('item.tpl.slab', { base: t(`item.base.${base}`) }));
-  put(`${base}_stairs`, () => tp('item.tpl.stairs', { base: t(`item.base.${base}`) }));
+for (const base of STONE_BASE_IDS) {
+  put(`${base}_slab`, () => tp('item.tpl.slab', { base: stoneBaseName(base) }));
+  put(`${base}_stairs`, () => tp('item.tpl.stairs', { base: stoneBaseName(base) }));
+  if (WALL_BASE_IDS.has(base)) put(`${base}_wall`, () => tp('item.tpl.wall', { base: stoneBaseName(base) }));
 }
 
-// 石材家族的变体（批次 41）：台阶 / 楼梯 / 墙的名字 = **母方块的中文名 + 后缀**。
-// ⚠️ 不能反过来"从变体名推母方块名"：`mossy_stone_bricks_stairs` 切出前缀会得到
-// `mossy_stone_bricks`（对），但 `end_stone_bricks_wall` 也是同理——真正容易错的是
-// 中文（"苔石砖楼梯" vs "苔石砖的楼梯"），所以这里显式列一张母方块中文名表。
-// 这张表与 `STRUCTURE_BASES_CN` 有 4 个重叠项（砂岩/深板岩砖/红砖块/磨制深板岩）：
-// 那批已经生成过台阶与楼梯的名字，这里再写一遍是**为了给它们补上"墙"的名字**——
-// 文字完全相同，覆盖是无害的（最怕的是两边写了不一样的中文，那就会看提交顺序变名字）。
-const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
-  granite: '花岗岩',
-  diorite: '闪长岩',
-  andesite: '安山岩',
-  sandstone: '砂岩',
-  deepslate_bricks: '深板岩砖',
-  bricks: '红砖块',
-  polished_deepslate: '磨制深板岩',
-  mossy_cobblestone: '苔石',
-  mossy_stone_bricks: '苔石砖',
-  cobbled_deepslate: '深板岩圆石',
-  cut_sandstone: '切制砂岩',
-  smooth_sandstone: '平滑砂岩',
-  blackstone: '黑石',
-  // 批次 85：黑石家族的变体词干（台/楼梯/墙由这一行派生出 6 个名字）
-  polished_blackstone: '磨制黑石',
-  polished_blackstone_bricks: '磨制黑石砖',
-  nether_bricks: '下界砖块',
-  end_stone_bricks: '末地石砖',
-  purpur_block: '紫珀块',
-  // ---- 批次 42 追加（石英家族 / 深板岩瓦 / 红色下界砖 / 海晶石三兄弟）
-  // ⚠️ 这张表是**变体名的词干**，通常等于母方块中文名，但石英是例外：
-  // 母方块叫"石英块"，它的台阶/楼梯在原版叫"石英台阶/石英楼梯"（没有"块"字）
-  quartz_block: '石英',
-  smooth_quartz: '平滑石英',
-  deepslate_tiles: '深板岩瓦',
-  red_nether_bricks: '红色下界砖',
-  prismarine: '海晶石',
-  prismarine_bricks: '海晶石砖',
-  dark_prismarine: '暗海晶石',
-  // ---- 批次 45 追加（红砂岩家族）：词干与砂岩家族一一对应
-  red_sandstone: '红砂岩',
-  cut_red_sandstone: '切制红砂岩',
-  smooth_red_sandstone: '平滑红砂岩',
-};
-for (const base of Object.keys(STONE_VARIANT_PARENTS_CN)) {
-  put(`${base}_slab`, () => tp('item.tpl.slab', { base: t(`item.base.${base}`) }));
-  put(`${base}_stairs`, () => tp('item.tpl.stairs', { base: t(`item.base.${base}`) }));
-  put(`${base}_wall`, () => tp('item.tpl.wall', { base: t(`item.base.${base}`) }));
-}
+
 
 // 铜的四档（批次 40）：铜块 / 斑驳的铜块 / 锈蚀的铜块 / 氧化的铜块 + 切制铜家族。
 // 名字由 `COPPER_STAGES` 展开（与方块表同源），加一档氧化不会漏名字。
