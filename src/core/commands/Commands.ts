@@ -425,16 +425,16 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const pos = parsePosition(args, ctx.position());
       if (!pos) {
-        out.error(msg('坐标格式不对：应为 /tp <x> <y> <z> [维度]'));
+        out.error(msg('cmd.reply.tp.bad-coordinates-expected-tp-x'));
         return;
       }
       const dimension = args[3]?.toLowerCase();
       if (!ctx.teleport(pos.x, pos.y, pos.z, dimension)) {
-        out.error(msg('传送失败：维度 {dimension} 不存在', { dimension: dimension }));
+        out.error(msg('cmd.reply.tp.teleport-failed-dimension-dimension-does', { dimension: dimension }));
         return;
       }
       const where = dimension ? `（${dimension}）` : '';
-      out.info(msg('已将 {player} 传送到 {x} {y} {z}{suffix}', { player: ctx.playerName(), x: fmt(pos.x), y: fmt(pos.y), z: fmt(pos.z), suffix: where }));
+      out.info(msg('cmd.reply.tp.teleported-player-to-x-y', { player: ctx.playerName(), x: fmt(pos.x), y: fmt(pos.y), z: fmt(pos.z), suffix: where }));
     },
   },
   {
@@ -450,20 +450,20 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const count = args[1] === undefined ? 1 : Math.floor(num(args[1]));
       if (!Number.isFinite(count) || count <= 0) {
-        out.error(msg('数量不对：{count}', { count: args[1] }));
+        out.error(msg('cmd.reply.give.bad-count-count', { count: args[1] }));
         return;
       }
       const given = ctx.give(name, count);
       if (given < 0) {
-        out.error(msg('找不到物品：{name}（可以试 /give stone 或 /give 石头）', { name: name }));
+        out.error(msg('cmd.reply.give.unknown-item-name-try-give', { name: name }));
         return;
       }
       // 背包塞不下时给出去了也会丢，这里如实告诉玩家实际给到的数量
       out.info(
-      msg('已给予 {item} ×{given}{note}', {
+      msg('cmd.reply.give.gave-item-given-note', {
         item: translateName(name),
         given,
-        note: given < count ? msg('（背包只装得下 {given} 个）', { given }) : '',
+        note: given < count ? msg('cmd.reply.give.inventory-only-had-room-for', { given }) : '',
       }),
     );
     },
@@ -475,7 +475,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     creativeOnly: true,
     run(_args, ctx, out) {
       const removed = ctx.clearInventory();
-      out.info(msg('已清空背包（移除 {removed} 组物品）', { removed: removed }));
+      out.info(msg('cmd.reply.give.cleared-the-inventory-removed-stacks', { removed: removed }));
     },
   },
   {
@@ -490,11 +490,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const t = parseTime(args[1]);
       if (t === null) {
-        out.error(msg('时间格式不对：{value}', { value: args[1] ?? '(空)' }));
+        out.error(msg('cmd.reply.time.bad-time-format-value', { value: args[1] ?? '(空)' }));
         return;
       }
       ctx.setTimeOfDay(action === 'add' ? (ctx.timeOfDay() + t) % 1 : t);
-      out.info(msg('已将时间设置为 {value}', { value: args[1] }));
+      out.info(msg('cmd.reply.time.set-the-time-to-value', { value: args[1] }));
     },
   },
   {
@@ -509,7 +509,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWeather(kind);
       // 回执用中文；预计时长由主程序的天气播报补一句（`App.announceWeather`）
-      out.info(msg('天气已切换为 {weather}', { weather: pickLabel(WEATHER_LABELS[kind], WEATHER_LABELS_EN[kind]) }));
+      out.info(msg('cmd.reply.time.weather-set-to-weather', { weather: pickLabel(WEATHER_LABELS[kind], WEATHER_LABELS_EN[kind]) }));
     },
   },
   {
@@ -523,7 +523,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setDifficulty(value);
-      out.info(msg('难度已设置为 {difficulty}（{value}）', { difficulty: pickLabel(DIFFICULTY_LABELS[value], DIFFICULTY_LABELS_EN[value]), value: value }));
+      out.info(msg('cmd.reply.time.difficulty-set-to-difficulty-value', { difficulty: pickLabel(DIFFICULTY_LABELS[value], DIFFICULTY_LABELS_EN[value]), value: value }));
     },
   },
   {
@@ -535,11 +535,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const key = args[0] as keyof GameRules | undefined;
       if (!key) {
         const lines = Object.entries(rules).map(([name, value]) => `${name} = ${value}`);
-        out.info(msg('当前游戏规则：\n{rules}', { rules: lines.join('\n') }));
+        out.info(msg('cmd.reply.time.current-game-rules-rules', { rules: lines.join('\n') }));
         return;
       }
       if (!(key in rules)) {
-        out.error(msg('未知的游戏规则：{key}', { key: key }));
+        out.error(msg('cmd.reply.time.unknown-game-rule-key', { key: key }));
         return;
       }
       const current = rules[key];
@@ -551,16 +551,16 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (typeof current === 'boolean') {
         const lower = raw.toLowerCase();
         if (lower !== 'true' && lower !== 'false') {
-          out.error(msg('{key} 只能是 true / false', { key: key }));
+          out.error(msg('cmd.reply.time.key-must-be-true-or', { key: key }));
           return;
         }
         ctx.setGameRule(key, (lower === 'true') as GameRules[typeof key]);
-        out.info(msg('{key} 已设置为 {value}', { key: key, value: lower }));
+        out.info(msg('cmd.reply.time.key-set-to-value', { key: key, value: lower }));
         return;
       }
       const value = num(raw);
       if (Number.isNaN(value)) {
-        out.error(msg('{key} 需要一个数字', { key: key }));
+        out.error(msg('cmd.reply.time.key-needs-a-number', { key: key }));
         return;
       }
       // ⚠️ 范围按**每条规则自己**取（批次 625 / Q23）：以前一律夹到 0~100，
@@ -571,8 +571,8 @@ export const COMMANDS: readonly CommandSpec[] = [
       // 夹取必须说出来：玩家设 999 时看到 100，才知道是夹了而不是没生效
       out.info(
         clamped === Math.round(value)
-          ? msg('{key} 已设置为 {value}', { key: key, value: clamped })
-          : msg('{key} 已设置为 {value}（超出范围，已夹到 {clamped}）', {
+          ? msg('cmd.reply.time.key-set-to-value', { key: key, value: clamped })
+          : msg('cmd.reply.time.key-set-to-value-out', {
               key: key,
               value: Math.round(value),
               clamped: clamped,
@@ -588,7 +588,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const action = args[0]?.toLowerCase();
       if (action === 'clear') {
         ctx.clearEffects();
-        out.info(msg('已清除全部状态效果'));
+        out.info(msg('cmd.reply.effect.cleared-all-status-effects'));
         return;
       }
       if (action !== 'give') {
@@ -602,15 +602,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const seconds = args[2] === undefined ? 30 : num(args[2]);
       if (!Number.isFinite(seconds) || seconds <= 0) {
-        out.error(msg('秒数不对：{seconds}', { seconds: args[2] }));
+        out.error(msg('cmd.reply.effect.bad-duration-seconds', { seconds: args[2] }));
         return;
       }
       const amplifier = args[3] === undefined ? 0 : Math.floor(num(args[3]));
       if (!ctx.applyEffect(name, seconds, Math.max(0, amplifier))) {
-        out.error(msg('未知的状态效果：{name}', { name: name }));
+        out.error(msg('cmd.reply.effect.unknown-status-effect-name', { name: name }));
         return;
       }
-      out.info(msg('已给予状态效果 {name} {seconds} 秒（等级 {level}）', { name: name, seconds: seconds, level: amplifier + 1 }));
+      out.info(msg('cmd.reply.effect.applied-name-for-seconds-s', { name: name, seconds: seconds, level: amplifier + 1 }));
     },
   },
   {
@@ -623,7 +623,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (!name) {
         out.error(
       usageError('summon') +
-        msg('（可用：{available}）', { available: MOB_TYPES.map((type) => type.id).join(', ') }),
+        msg('cmd.reply.damage.available-available', { available: MOB_TYPES.map((type) => type.id).join(', ') }),
     );
         return;
       }
@@ -633,14 +633,14 @@ export const COMMANDS: readonly CommandSpec[] = [
         ? parsePosition(args.slice(1), base)
         : { x: base.x, y: base.y, z: base.z };
       if (!pos) {
-        out.error(msg('坐标格式不对'));
+        out.error(msg('cmd.reply.summon.bad-coordinates'));
         return;
       }
       if (!ctx.summon(name, pos.x, pos.y, pos.z)) {
-        out.error(msg('未知的生物：{name}（可用：{available}）', { name: name, available: MOB_TYPES.map((type) => type.id).join(', ') }));
+        out.error(msg('cmd.reply.summon.unknown-entity-name-available-available', { name: name, available: MOB_TYPES.map((type) => type.id).join(', ') }));
         return;
       }
-      out.info(msg('已召唤 {name}', { name: name }));
+      out.info(msg('cmd.reply.summon.summoned-name', { name: name }));
     },
   },
   {
@@ -652,15 +652,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (first !== undefined && Number.isFinite(Number(first))) {
         const radius = Math.max(0, Number(first));
         const killed = ctx.killNearby(radius);
-        out.info(msg('已清除 {count} 个生物（半径 {radius}）', { count: killed, radius: radius }));
+        out.info(msg('cmd.reply.summon.removed-count-entities-radius-radius', { count: killed, radius: radius }));
         return;
       }
       if (!isSelfTarget(first, ctx.playerName())) {
-        out.error(msg('只能对自己使用 /kill'));
+        out.error(msg('cmd.reply.summon.kill-can-only-target-yourself'));
         return;
       }
       ctx.killPlayer();
-      out.info(msg('{player} 死了', { player: ctx.playerName() }));
+      out.info(msg('cmd.reply.summon.player-died', { player: ctx.playerName() }));
     },
   },
   {
@@ -677,14 +677,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const id = resolveBlockId(name);
       if (id === undefined) {
-        out.error(msg('找不到方块：{name}', { name: name }));
+        out.error(msg('cmd.reply.setblock.unknown-block-name', { name: name }));
         return;
       }
       if (!ctx.setBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), id)) {
-        out.error(msg('位置超出世界范围'));
+        out.error(msg('cmd.reply.setblock.position-is-outside-the-world'));
         return;
       }
-      out.info(msg('已放置 {block} 于 {x} {y} {z}', { block: translateName(name), x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
+      out.info(msg('cmd.reply.setblock.placed-block-at-x-y', { block: translateName(name), x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -698,7 +698,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setPersonalSpawn(pos.x, pos.y, pos.z);
-      out.info(msg('已将重生点设置为 {x} {y} {z}', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
+      out.info(msg('cmd.reply.setblock.spawn-point-set-to-x', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -712,7 +712,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
-      out.info(msg('已将世界出生点设置为 {x} {y} {z}', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
+      out.info(msg('cmd.reply.setblock.world-spawn-set-to-x', { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) }));
     },
   },
   {
@@ -727,15 +727,15 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const count = args[1] === undefined ? 8 : Number(args[1]);
       if (!Number.isInteger(count) || count < 1 || count > 200) {
-        out.error(msg('数量必须是 1~200 的整数'));
+        out.error(msg('cmd.reply.particle.count-must-be-an-integer'));
         return;
       }
       const pos = ctx.position();
       if (!ctx.spawnParticle(kind, pos.x, pos.y, pos.z, count)) {
-        out.error(msg('找不到粒子：{kind}', { kind: kind }));
+        out.error(msg('cmd.reply.particle.unknown-particle-kind', { kind: kind }));
         return;
       }
-      out.info(msg('已生成 {count} 个 {kind} 粒子', { count: count, kind: kind }));
+      out.info(msg('cmd.reply.particle.spawned-count-kind-particles', { count: count, kind: kind }));
     },
   },
   {
@@ -748,7 +748,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('tell'));
         return;
       }
-      out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
+      out.info(msg('cmd.reply.particle.from-you-text', { from: ctx.playerName(), text: text }));
     },
   },
   {
@@ -761,7 +761,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('msg'));
         return;
       }
-      out.info(msg('[{from} -> 你] {text}', { from: ctx.playerName(), text: text }));
+      out.info(msg('cmd.reply.particle.from-you-text', { from: ctx.playerName(), text: text }));
     },
   },
   {
@@ -775,10 +775,10 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (!ctx.playSound(name)) {
-        out.error(msg('找不到音效：{name}', { name: name }));
+        out.error(msg('cmd.reply.particle.unknown-sound-name', { name: name }));
         return;
       }
-      out.info(msg('已播放音效 {name}', { name: name }));
+      out.info(msg('cmd.reply.particle.played-sound-name', { name: name }));
     },
   },
   {
@@ -819,20 +819,20 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const def = ENCHANTMENTS.find((entry) => entry.id === key || entry.name === key);
       if (!def) {
-        out.error(msg('找不到附魔：{key}', { key: key }));
+        out.error(msg('cmd.reply.enchant.unknown-enchantment-key', { key: key }));
         return;
       }
       const requested = args[1] === undefined ? 1 : Number(args[1]);
       if (!Number.isInteger(requested) || requested < 1) {
-        out.error(msg('等级必须是正整数'));
+        out.error(msg('cmd.reply.enchant.level-must-be-a-positive'));
         return;
       }
       const level = Math.min(requested, def.maxLevel);
       if (!ctx.enchantHeld(def.id, level)) {
-        out.error(msg('手上没有可附魔的物品'));
+        out.error(msg('cmd.reply.enchant.nothing-in-hand-can-be'));
         return;
       }
-      out.info(msg('已给手持物品附上 {name} {level}', { name: def.name, level: level }));
+      out.info(msg('cmd.reply.enchant.applied-name-level-to-the', { name: def.name, level: level }));
     },
   },
   {
@@ -849,7 +849,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const from = parsePosition(args.slice(0, 3), base);
       const to = parsePosition(args.slice(3, 6), base);
       if (!from || !to) {
-        out.error(msg('坐标格式不对'));
+        out.error(msg('cmd.reply.summon.bad-coordinates'));
         return;
       }
       const offset = {
@@ -859,12 +859,12 @@ export const COMMANDS: readonly CommandSpec[] = [
       };
       if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y) || !Number.isFinite(offset.z)) {
         // 位移只接受数字（不接受 ~ / ^）：它是"相对源区域"的量，不是坐标
-        out.error(msg('位移只能是数字：<dx> <dy> <dz>'));
+        out.error(msg('cmd.reply.clone.offsets-must-be-numbers-dx'));
         return;
       }
       const modeArg = (args[9] ?? 'replace').toLowerCase();
       if (modeArg !== 'replace' && modeArg !== 'masked') {
-        out.error(msg('模式只有 masked / replace：{mode}', { mode: modeArg }));
+        out.error(msg('cmd.reply.clone.mode-must-be-masked-or', { mode: modeArg }));
         return;
       }
       const box = normalizeCloneBox(
@@ -873,7 +873,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       );
       const volume = cloneVolume(box);
       if (volume > CLONE_LIMIT) {
-        out.error(msg('区域太大（{volume} 格），上限 {limit}', { volume: volume, limit: CLONE_LIMIT }));
+        out.error(msg('cmd.reply.clone.area-too-large-volume-blocks', { volume: volume, limit: CLONE_LIMIT }));
         return;
       }
       const shift = { x: Math.floor(offset.x), y: Math.floor(offset.y), z: Math.floor(offset.z) };
@@ -881,12 +881,12 @@ export const COMMANDS: readonly CommandSpec[] = [
       // 目标压到源上直接拒绝（原版同）：允许的话"把房子往东挪 2 格"会得到
       // 半新半旧的结果，玩家会以为指令坏了（批次 622 / Q20）
       if (cloneBoxesOverlap(box, targetBox)) {
-        out.error(msg('目标区域与源区域重叠'));
+        out.error(msg('cmd.reply.clone.the-destination-overlaps-the-source'));
         return;
       }
       // 越界也拒绝：越界的写会被世界静默丢弃，那样会回"已复制 N 格"却什么都没发生
       if (!cloneBoxInWorld(targetBox, WORLD_MIN_Y, WORLD_MAX_Y)) {
-        out.error(msg('目标区域超出世界竖直范围（{min} ~ {max}）', { min: WORLD_MIN_Y, max: WORLD_MAX_Y }));
+        out.error(msg('cmd.reply.clone.the-destination-is-outside-the', { min: WORLD_MIN_Y, max: WORLD_MAX_Y }));
         return;
       }
       const target = { x: targetBox.x1, y: targetBox.y1, z: targetBox.z1 };
@@ -925,11 +925,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const to = parsePosition(args.slice(3, 6), base);
       const id = resolveBlockId(args[6]!);
       if (!from || !to) {
-        out.error(msg('坐标格式不对'));
+        out.error(msg('cmd.reply.summon.bad-coordinates'));
         return;
       }
       if (id === undefined) {
-        out.error(msg('找不到方块：{name}', { name: args[6] }));
+        out.error(msg('cmd.reply.setblock.unknown-block-name', { name: args[6] }));
         return;
       }
       const volume =
@@ -937,7 +937,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         (Math.abs(Math.floor(from.y) - Math.floor(to.y)) + 1) *
         (Math.abs(Math.floor(from.z) - Math.floor(to.z)) + 1);
       if (volume > 32768) {
-        out.error(msg('区域太大（{volume} 格），上限 {limit}', { volume, limit: 32768 }));
+        out.error(msg('cmd.reply.clone.area-too-large-volume-blocks', { volume, limit: 32768 }));
         return;
       }
       const placed = ctx.fillBlocks(
@@ -945,7 +945,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         Math.floor(to.x), Math.floor(to.y), Math.floor(to.z),
         id,
       );
-      out.info(msg('已填充 {count} 格 {block}', { count: placed, block: translateName(args[6]!) }));
+      out.info(msg('cmd.reply.clone.filled-count-blocks-with-block', { count: placed, block: translateName(args[6]!) }));
     },
   },
   {
@@ -974,7 +974,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       ctx.setGameMode(mode);
       // 飞行由 `setGameMode` 内部处理（旁观强制飞、切回生存强制落地），
       // 这里**不再**单独调 `setFlying`——两处都设会让"切到生存却还在飞"再现
-      out.info(msg('已将游戏模式设置为 {mode}', { mode: pickLabel(GAME_MODE_LABELS[mode], GAME_MODE_LABELS_EN[mode]) }));
+      out.info(msg('cmd.reply.gamemode.game-mode-set-to-mode', { mode: pickLabel(GAME_MODE_LABELS[mode], GAME_MODE_LABELS_EN[mode]) }));
     },
   },
   {
@@ -982,7 +982,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     usageKey: 'cmd.seed.usage',
     descriptionKey: 'cmd.seed.desc',
     run(_args, ctx, out) {
-      out.info(msg('世界种子：{seed}', { seed: ctx.seed() }));
+      out.info(msg('cmd.reply.gamemode.world-seed-seed', { seed: ctx.seed() }));
     },
   },
   {
@@ -991,7 +991,7 @@ export const COMMANDS: readonly CommandSpec[] = [
     descriptionKey: 'cmd.list.desc',
     run(_args, ctx, out) {
       const players = ctx.onlinePlayers();
-      out.info(msg('在线玩家（{count}）：{players}', { count: players.length, players: players.join(', ') }));
+      out.info(msg('cmd.reply.gamemode.online-players-count-players', { count: players.length, players: players.join(', ') }));
     },
   },
   {
@@ -1004,7 +1004,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const state = ctx.xpState();
 
       if (mode === 'query') {
-        out.info(msg('等级 {level}：{progress}/{next}（累计 {total} 点）', { level: state.level, progress: state.progress, next: state.toNext, total: state.total }));
+        out.info(msg('cmd.reply.gamemode.level-level-progress-next-total', { level: state.level, progress: state.progress, next: state.toNext, total: state.total }));
         return;
       }
       if (mode !== 'add' && mode !== 'set') {
@@ -1014,7 +1014,7 @@ export const COMMANDS: readonly CommandSpec[] = [
 
       const value = Number(args[1]);
       if (!Number.isFinite(value) || value < 0) {
-        out.error(msg('数量无效：{value}', { value: args[1] ?? '(空)' }));
+        out.error(msg('cmd.reply.gamemode.invalid-amount-value', { value: args[1] ?? '(空)' }));
         return;
       }
 
@@ -1022,10 +1022,10 @@ export const COMMANDS: readonly CommandSpec[] = [
         // 0.4 这样的点数允许（原版经验球是整数，但命令接受小数并向下取整）
         const gained = ctx.addXp(value);
         const after = ctx.xpState();
-        out.info(msg('已给予 {value} 点经验（实际进账 {gained} 点），当前等级 {level}', { value: value, gained: gained, level: after.level }));
+        out.info(msg('cmd.reply.gamemode.gave-value-xp-gained-counted', { value: value, gained: gained, level: after.level }));
       } else {
         ctx.setXpLevel(Math.floor(value));
-        out.info(msg('已将等级设置为 {level}', { level: Math.floor(value) }));
+        out.info(msg('cmd.reply.gamemode.level-set-to-level', { level: Math.floor(value) }));
       }
     },
   },
@@ -1044,11 +1044,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       if (mode === 'set') {
         const size = Number(args[1]);
         if (!Number.isFinite(size) || size < BORDER_MIN_SIZE) {
-          out.error(msg('边长必须是 ≥ {min} 的数字（当前 {current}）', { min: BORDER_MIN_SIZE, current: current.size }));
+          out.error(msg('cmd.reply.worldborder.size-must-be-a-number', { min: BORDER_MIN_SIZE, current: current.size }));
           return;
         }
         const next = ctx.setWorldBorder({ size: clampBorderSize(size) });
-        out.info(msg('世界边界已设为边长 {size} 格（中心 {x}, {z}）', { size: next.size, x: next.centerX, z: next.centerZ }));
+        out.info(msg('cmd.reply.worldborder.world-border-set-to-size', { size: next.size, x: next.centerX, z: next.centerZ }));
         return;
       }
       if (mode === 'center') {
@@ -1059,7 +1059,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           return;
         }
         const next = ctx.setWorldBorder({ centerX: Math.floor(centerX), centerZ: Math.floor(centerZ) });
-        out.info(msg('世界中心已设为 ({x}, {z})，边长 {size} 格', { x: next.centerX, z: next.centerZ, size: next.size }));
+        out.info(msg('cmd.reply.worldborder.world-border-center-set-to', { x: next.centerX, z: next.centerZ, size: next.size }));
         return;
       }
       out.error(usageError('worldborder'));
@@ -1095,7 +1095,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         if (!entry) {
           // 候选清单按**当前维度**给（下界只有 3 种，没必要让玩家看 18 个主世界名字）
           out.error(
-            msg('没有这种结构：{name}（这个维度有 {names}）', {
+            msg('cmd.reply.locate.no-such-structure-name-this', {
               name: raw,
               names: structureNamesIn(ctx.position().dimension as DimensionId),
             }),
@@ -1105,7 +1105,7 @@ export const COMMANDS: readonly CommandSpec[] = [
         const here = ctx.position().dimension as DimensionId;
         if (entry.dimension !== here) {
           out.error(
-            msg('{name} 只在{Dimension}生成，这里是{Current}（可定位的有 {names}）', {
+            msg('cmd.reply.locate.name-only-generates-in-dimension', {
               name: pickLabel(entry.label, entry.labelEn),
               Dimension: pickLabel(DIM_LABELS[entry.dimension], DIMENSION_LABELS_EN[entry.dimension]),
               Current: pickLabel(DIM_LABELS[here], DIMENSION_LABELS_EN[here]),
@@ -1117,21 +1117,21 @@ export const COMMANDS: readonly CommandSpec[] = [
         if (!entry.locatable) {
           // 结构会生成、但"找最近一个"还没写。说清楚，别让它冒充"附近没有"
           out.error(
-            msg('{name} 还不能用 /locate 找（结构本身会生成，只是搜索还没做）', {
+            msg('cmd.reply.locate.name-cannot-be-located-yet', {
               name: pickLabel(entry.label, entry.labelEn),
             }),
           );
           return;
         }
         if (!ctx.locateStructure) {
-          out.error(msg('这个维度读不到结构位置'));
+          out.error(msg('cmd.reply.locate.structure-positions-are-not-readable'));
           return;
         }
         const hit = ctx.locateStructure(entry.key);
         if (!hit) {
           // 名称与维度都对，纯粹是这一带没生成：换一句"没找到"并给出搜索范围
           out.error(
-            msg('{radius} 格内没有 {name}（换一个位置再试，或者往外走远一点）', {
+            msg('cmd.reply.locate.no-name-within-radius-blocks', {
               radius: LOCATE_DEFAULT_RADIUS,
               name: pickLabel(entry.label, entry.labelEn),
             }),
@@ -1139,7 +1139,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           return;
         }
         out.info(
-          msg('最近的{name}在 {x}, {y}, {z}（约 {distance} 格）', {
+          msg('cmd.reply.locate.nearest-name-at-x-y', {
             name: pickLabel(entry.label, entry.labelEn),
             x: hit.x,
             y: hit.y,
@@ -1161,7 +1161,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const hit = findNearestBiome((x, z) => ctx.biomeNameAt(x, z), target, position);
       if (!hit) {
         out.error(
-          msg('{radius} 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）', {
+          msg('cmd.reply.locate.no-target-within-radius-blocks', {
             radius: LOCATE_DEFAULT_RADIUS,
             target: target,
           }),
@@ -1170,11 +1170,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       // 脚下就是它：单独一句（原来这条也是模板字符串，英文模式下整句中文）
       if (hit.distance === 0) {
-        out.info(msg('你脚下就是 {target}（{x}, {z}）', { target: target, x: hit.x, z: hit.z }));
+        out.info(msg('cmd.reply.locate.you-are-standing-in-target', { target: target, x: hit.x, z: hit.z }));
         return;
       }
       out.info(
-        msg('最近的 {target} 在 {x}, {z}（约 {distance} 格）', {
+        msg('cmd.reply.locate.nearest-target-at-x-z', {
           target: target,
           x: hit.x,
           z: hit.z,
@@ -1192,11 +1192,11 @@ export const COMMANDS: readonly CommandSpec[] = [
       const rawAmount = args[1];
       const amount = Number(rawAmount);
       if (!target || rawAmount === undefined || !Number.isFinite(amount) || amount <= 0) {
-        out.error(usageError('damage') + msg('（伤害要大于 0）'));
+        out.error(usageError('damage') + msg('cmd.reply.damage.damage-must-be-greater-than'));
         return;
       }
       if (!ctx.damageEntity) {
-        out.error(msg('这个环境不支持 /damage'));
+        out.error(msg('cmd.reply.damage.damage-is-not-supported-here'));
         return;
       }
       const position = ctx.position();
@@ -1211,14 +1211,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
       if (found.length === 0) {
-        out.error(msg('没有匹配到实体：{target}', { target: target }));
+        out.error(msg('cmd.reply.damage.no-entities-matched-target', { target: target }));
         return;
       }
       let hit = 0;
       for (const entity of found) {
         if (ctx.damageEntity(entity.id, amount)) hit++;
       }
-      out.info(msg('对 {count} 个实体造成了 {amount} 点伤害', { count: hit, amount: amount }));
+      out.info(msg('cmd.reply.damage.dealt-amount-damage-to-count', { count: hit, amount: amount }));
     },
   },
   {
@@ -1238,17 +1238,17 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       if (!Number.isFinite(times) || times < 1 || times > 10) {
-        out.error(msg('数量要在 1~10 之间'));
+        out.error(msg('cmd.reply.damage.count-must-be-between-1'));
         return;
       }
       const index = lootTableIndex(tableKey);
       const table = index > 0 ? lootTableByIndex(index) : null;
       if (!table) {
-        out.error(msg('没有这张战利品表：{table}（用 village_house / mineshaft / dungeon 这类）', { table: tableKey }));
+        out.error(msg('cmd.reply.damage.unknown-loot-table-table-use', { table: tableKey }));
         return;
       }
       if (!ctx.giveById) {
-        out.error(msg('这个环境不支持发放物品'));
+        out.error(msg('cmd.reply.damage.giving-items-is-not-supported'));
         return;
       }
       let given = 0;
@@ -1257,7 +1257,7 @@ export const COMMANDS: readonly CommandSpec[] = [
           given += ctx.giveById(stack.id, stack.count);
         }
       }
-      out.info(msg('从 {table} 掷了 {times} 次，塞进背包 {given} 件', { table: tableKey, times: times, given: given }));
+      out.info(msg('cmd.reply.damage.rolled-table-times-times-put', { table: tableKey, times: times, given: given }));
     },
   },
   {
@@ -1290,7 +1290,7 @@ export const COMMANDS: readonly CommandSpec[] = [
       const tracker = ctx.advancements();
       const all = target === '*';
       if (!all && !advancementById(target)) {
-        out.error(msg('没有这条进度：{target}', { target: target }));
+        out.error(msg('cmd.reply.damage.unknown-advancement-target', { target: target }));
         return;
       }
       const ids = all ? tracker.defs.map((def) => def.id) : [target];
@@ -1300,10 +1300,10 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       const verb = action === 'grant' ? '授予' : '收回';
       out.info(
-      msg('已{verb} {count} 条进度{scope}', {
+      msg('cmd.reply.damage.verb-count-advancements-scope', {
         verb,
         count: changed,
-        scope: all ? msg('（全部）') : `：${target}`,
+        scope: all ? msg('cmd.reply.damage.all') : `：${target}`,
       }),
     );
     },
@@ -1566,12 +1566,12 @@ function evalCondition(condition: ExecCondition, state: ExecState, ctx: CommandC
   if (condition.kind === 'block') {
     const position = parsePosition([...condition.coords], state.origin);
     if (!position) {
-      out.error(msg('execute if block：坐标不合法'));
+      out.error(msg('cmd.reply.execute.execute-if-block-invalid-coordinates'));
       return false;
     }
     const id = resolveBlockId(condition.block);
     if (id === undefined) {
-      out.error(msg('找不到方块：{name}', { name: condition.block }));
+      out.error(msg('cmd.reply.setblock.unknown-block-name', { name: condition.block }));
       return false;
     }
     return (
@@ -1665,7 +1665,7 @@ function runExecOps(
   switch (op.kind) {
     case 'run': {
       if (executeDepth >= EXECUTE_MAX_DEPTH) {
-        out.error(msg('execute 嵌套太深（上限 {limit} 层）', { limit: EXECUTE_MAX_DEPTH }));
+        out.error(msg('cmd.reply.execute.execute-nested-too-deep-limit', { limit: EXECUTE_MAX_DEPTH }));
         return;
       }
       executeDepth++;
@@ -1680,7 +1680,7 @@ function runExecOps(
     case 'as': {
       const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
       if (targets.length === 0) {
-        out.error(msg('选择器 {selector} 没有匹配到任何目标', { selector: describeSelector(op.selector) }));
+        out.error(msg('cmd.reply.execute.selector-selector-matched-no-targets', { selector: describeSelector(op.selector) }));
         return;
       }
       for (const target of targets) {
@@ -1693,7 +1693,7 @@ function runExecOps(
     case 'at': {
       const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
       if (targets.length === 0) {
-        out.error(msg('选择器 {selector} 没有匹配到任何目标', { selector: describeSelector(op.selector) }));
+        out.error(msg('cmd.reply.execute.selector-selector-matched-no-targets', { selector: describeSelector(op.selector) }));
         return;
       }
       for (const target of targets) {
@@ -1705,7 +1705,7 @@ function runExecOps(
     case 'positioned': {
       const position = parsePosition([...op.coords], state.origin);
       if (!position) {
-        out.error(msg('execute positioned：坐标不合法'));
+        out.error(msg('cmd.reply.execute.execute-positioned-invalid-coordinates'));
         return;
       }
       runExecOps(ops, index + 1, { ...state, origin: position }, ctx, out);
@@ -1750,7 +1750,7 @@ function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): 
 function scoreboardUsage(): string {
   return (
     usageError('scoreboard') +
-    msg(' 或 ') +
+    msg('cmd.reply.damage.or') +
     usageError('scoreboard')
   );
 }
@@ -1781,22 +1781,22 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       return;
     }
     if (!isValidScoreName(name)) {
-      out.error(msg('目标名只能用字母/数字/下划线，1~16 个字符：{name}', { name: name }));
+      out.error(msg('cmd.reply.scoreboard.objective-names-allow-letters-digits', { name: name }));
       return;
     }
     if (!SUPPORTED_CRITERIA.includes(criterion)) {
-      out.error(msg('暂不支持准则 {criterion}（只有 {supported}）', { criterion: criterion, supported: SUPPORTED_CRITERIA.join(' / ') }));
+      out.error(msg('cmd.reply.scoreboard.criteria-criterion-not-supported-yet', { criterion: criterion, supported: SUPPORTED_CRITERIA.join(' / ') }));
       return;
     }
     if (!board.addObjective(name, criterion, displayName)) {
-      out.error(msg('目标 {name} 已经存在', { name: name }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-already-exists', { name: name }));
       return;
     }
     out.info(
-      msg('已创建目标 {name}（{criterion}{display}）', {
+      msg('cmd.reply.scoreboard.created-objective-name-criterion-display', {
         name,
         criterion,
-        display: displayName ? msg('，显示为“{display}”', { display: displayName }) : '',
+        display: displayName ? msg('cmd.reply.scoreboard.shown-as-display', { display: displayName }) : '',
       }),
     );
     return;
@@ -1809,17 +1809,17 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       return;
     }
     if (!board.removeObjective(name)) {
-      out.error(msg('目标 {name} 不存在', { name: name }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: name }));
       return;
     }
-    out.info(msg('已删除目标 {name}（连同它记下的所有分数）', { name: name }));
+    out.info(msg('cmd.reply.scoreboard.deleted-objective-name-along-with', { name: name }));
     return;
   }
 
   if (sub === 'list') {
     const names = board.objectiveNames();
     if (names.length === 0) {
-      out.info(msg('还没有任何记分板目标'));
+      out.info(msg('cmd.reply.scoreboard.no-scoreboard-objectives-yet'));
       return;
     }
     const described = names.map((name) => {
@@ -1827,27 +1827,27 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
       const shown = objective.displayName === objective.name ? '' : `，显示为“${objective.displayName}”`;
       return `${objective.name}（${objective.criterion}${shown}）`;
     });
-    out.info(msg('共 {count} 个目标：{list}', { count: names.length, list: described.join('、') }));
+    out.info(msg('cmd.reply.scoreboard.count-objectives-list', { count: names.length, list: described.join('、') }));
     return;
   }
 
   if (sub === 'setdisplay') {
     const slot = (args[2] ?? '').toLowerCase() as ScoreboardSlot;
     if (!SCOREBOARD_SLOTS.includes(slot)) {
-      out.error(msg('槽位只能是 {slots}', { slots: SCOREBOARD_SLOTS.join(' / ') }));
+      out.error(msg('cmd.reply.scoreboard.slot-must-be-one-of', { slots: SCOREBOARD_SLOTS.join(' / ') }));
       return;
     }
     const objective = args[3];
     if (!objective) {
       board.setDisplay(slot, null);
-      out.info(msg('已清空{slot}', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]) }));
+      out.info(msg('cmd.reply.scoreboard.cleared-slot', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]) }));
       return;
     }
     if (!board.setDisplay(slot, objective)) {
-      out.error(msg('目标 {name} 不存在', { name: objective }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: objective }));
       return;
     }
-    out.info(msg('{slot}现在显示目标 {objective}', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]), objective: objective }));
+    out.info(msg('cmd.reply.scoreboard.slot-now-shows-objective-objective', { slot: pickLabel(SLOT_LABELS[slot], SLOT_LABELS_EN[slot]), objective: objective }));
     return;
   }
 
@@ -1880,7 +1880,7 @@ function runData(args: string[], ctx: CommandContext, out: CommandFeedback): voi
   if ((mode !== 'get' && mode !== 'merge') || (kind !== 'entity' && kind !== 'block')) {
     // `modify` 单独给一句人话，而不是让它落进"用法错误"里
     if (mode === 'modify') {
-      out.error(msg('/data modify 还没实现：能被它改的只有血量一项，直接用 /data merge entity <选择器> Health <值>'));
+      out.error(msg('cmd.reply.data.data-modify-is-not-implemented'));
       return;
     }
     out.error(usage);
@@ -1915,14 +1915,14 @@ function resolveOneTarget(
   }
   const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
   if (found.length === 0) {
-    out.error(msg('没有匹配到实体：{target}', { target: target }));
+    out.error(msg('cmd.reply.damage.no-entities-matched-target', { target: target }));
     return null;
   }
   // 写回只对**第一个**匹配的实体做（原版 `merge` 也是对所有匹配的都写，
   // 但我们的写入口一次只能改一只，多目标就变成"静默只改了第一只"——
   // 不如明说一句，让玩家自己写 @e[limit=1]
   if (found.length > 1) {
-    out.error(msg('一次只能改一只实体（匹配到 {count} 只）：请把选择器写窄一点，例如 @e[type=zombie,limit=1]', {
+    out.error(msg('cmd.reply.data.only-one-entity-can-be', {
       count: found.length,
     }));
     return null;
@@ -1939,7 +1939,7 @@ function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedb
   }
   const path = parseDataPath(args[3]);
   if (path === null || !pathFitsEntity(path)) {
-    out.error(msg('实体上没有这条路径：{path}（能读的有 {paths}）', {
+    out.error(msg('cmd.reply.data.no-such-path-on-entities', {
       path: args[3] ?? '',
       paths: ENTITY_PATHS.join(' / '),
     }));
@@ -1958,7 +1958,7 @@ function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedb
   }
   const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
   if (found.length === 0) {
-    out.error(msg('没有匹配到实体：{target}', { target: target }));
+    out.error(msg('cmd.reply.damage.no-entities-matched-target', { target: target }));
     return;
   }
   // 最多列 5 只（原版也是"只显示第一个 + 数量"，这里折中）
@@ -1967,10 +1967,10 @@ function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedb
     if (path.kind === 'health') {
       if (fields?.health === undefined) {
         // 掉落物/箭/矿车这类没有血量：报一句，而不是显示 0
-        out.info(msg('{name} 没有血量这一项', { name: entity.name }));
+        out.info(msg('cmd.reply.data.name-has-no-health-field', { name: entity.name }));
         continue;
       }
-      out.info(msg('{name} Health = {value}{max}', {
+      out.info(msg('cmd.reply.data.name-health-value-max', {
         name: entity.name,
         value: fmt(fields.health),
         max: fields.maxHealth === undefined ? '' : ` / ${fmt(fields.maxHealth)}`,
@@ -1978,9 +1978,9 @@ function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedb
       continue;
     }
     if (path.kind === 'customName') {
-      out.info(msg('{name} CustomName = {value}', {
+      out.info(msg('cmd.reply.data.name-customname-value', {
         name: entity.name,
-        value: fields?.customName ?? msg('（没有名字）'),
+        value: fields?.customName ?? msg('cmd.reply.data.no-name'),
       }));
       continue;
     }
@@ -1995,7 +1995,7 @@ function runDataGetEntity(args: string[], ctx: CommandContext, out: CommandFeedb
     if (fields?.customName !== undefined) parts.push(`CustomName = ${fields.customName}`);
     out.info(`${entity.type}（${entity.name}）：${parts.join('，')}`);
   }
-  if (found.length > 5) out.info(msg('……还有 {count} 个匹配', { count: found.length - 5 }));
+  if (found.length > 5) out.info(msg('cmd.reply.data.count-more-matches', { count: found.length - 5 }));
 }
 
 /**
@@ -2033,17 +2033,17 @@ function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedba
   const by = at.y;
   const bz = at.z;
   if (!ctx.blockInfoAt) {
-    out.error(msg('这个维度读不到方块数据'));
+    out.error(msg('cmd.reply.data.block-data-is-not-readable'));
     return;
   }
   const info = ctx.blockInfoAt(bx, by, bz);
   if (!info) {
-    out.error(msg('({x}, {y}, {z}) 是空气或还没加载', { x: bx, y: by, z: bz }));
+    out.error(msg('cmd.reply.data.x-y-z-is-air', { x: bx, y: by, z: bz }));
     return;
   }
   const path = parseDataPath(args[5]);
   if (path === null || !pathFitsBlock(path)) {
-    out.error(msg('这个方块上没有这条路径：{path}（能读的有 {paths}）', {
+    out.error(msg('cmd.reply.data.no-such-path-on-this', {
       path: args[5] ?? '',
       paths: BLOCK_PATHS.join(' / '),
     }));
@@ -2053,24 +2053,24 @@ function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedba
   const data = ctx.blockEntityAt?.(bx, by, bz) ?? null;
   if (path.kind === 'slot') {
     if (!data) {
-      out.error(msg('({x}, {y}, {z}) 的 {name} 没有方块实体（不是容器）', { x: bx, y: by, z: bz, name: info.name }));
+      out.error(msg('cmd.reply.data.name-at-x-y-z', { x: bx, y: by, z: bz, name: info.name }));
       return;
     }
     const entry = slotAt(data, path.index);
     if (!entry) {
       // 越界与空格分开说：前者是格号算错了，后者是"这里本来就空"
       if (!canWriteSlot(data, path.index)) {
-        out.error(msg('格号越界：{index}（这种容器只有 {count} 格，0 ~ {last}）', {
+        out.error(msg('cmd.reply.data.slot-out-of-range-index', {
           index: path.index,
           count: data.slots.length,
           last: Math.max(0, data.slots.length - 1),
         }));
         return;
       }
-      out.info(msg('Slots[{index}] =（空）', { index: path.index }));
+      out.info(msg('cmd.reply.data.slots-index-empty', { index: path.index }));
       return;
     }
-    out.info(msg('Slots[{index}] = {item} ×{count}', {
+    out.info(msg('cmd.reply.data.slots-index-item-x-count-2', {
       index: entry.index,
       item: `${itemLabel(entry.id)}（${itemName(entry.id)}）`,
       count: entry.count,
@@ -2080,7 +2080,7 @@ function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedba
 
   // 根：方块是什么 + 方块实体里有什么
   if (!data) {
-    out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}，没有方块实体）', {
+    out.info(msg('cmd.reply.data.x-y-z-name-state-2', {
       x: bx,
       y: by,
       z: bz,
@@ -2090,7 +2090,7 @@ function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedba
     return;
   }
   const filled = filledSlots(data);
-  out.info(msg('({x}, {y}, {z}) = {name}（状态位 {state}，方块实体 {kind}，共 {total} 格，{used} 格有东西）', {
+  out.info(msg('cmd.reply.data.x-y-z-name-state-3', {
     x: bx,
     y: by,
     z: bz,
@@ -2101,7 +2101,7 @@ function runDataGetBlock(args: string[], ctx: CommandContext, out: CommandFeedba
     used: filled.length,
   }));
   for (const entry of filled) {
-    out.info(msg('  Slots[{index}] = {item} ×{count}', {
+    out.info(msg('cmd.reply.data.slots-index-item-x-count', {
       index: entry.index,
       item: `${itemLabel(entry.id)}（${itemName(entry.id)}）`,
       count: entry.count,
@@ -2123,30 +2123,30 @@ function runDataMergeBlock(args: string[], ctx: CommandContext, out: CommandFeed
   const bz = at.z;
   const index = Number(slotArg);
   if (!Number.isSafeInteger(index) || index < 0) {
-    out.error(msg('格号必须是不小于 0 的整数：{value}', { value: slotArg }));
+    out.error(msg('cmd.reply.data.slot-must-be-an-integer', { value: slotArg }));
     return;
   }
   const count = args[7] === undefined ? 1 : Number(args[7]);
   if (!Number.isFinite(count) || count <= 0 || !Number.isInteger(count)) {
-    out.error(msg('数量必须是正整数：{value}', { value: args[7] ?? '' }));
+    out.error(msg('cmd.reply.data.count-must-be-a-positive', { value: args[7] ?? '' }));
     return;
   }
   const itemId = resolveItemId(itemArg);
   if (itemId === undefined) {
-    out.error(msg('找不到物品：{name}（可以试 /data merge block … 1 stone）', { name: itemArg }));
+    out.error(msg('cmd.reply.data.unknown-item-name-try-data', { name: itemArg }));
     return;
   }
   if (!ctx.setBlockEntitySlots) {
-    out.error(msg('这个维度写不了方块实体'));
+    out.error(msg('cmd.reply.data.block-entities-are-not-writable'));
     return;
   }
   const data = ctx.blockEntityAt?.(bx, by, bz) ?? null;
   if (!data) {
-    out.error(msg('({x}, {y}, {z}) 没有方块实体（不是容器）', { x: bx, y: by, z: bz }));
+    out.error(msg('cmd.reply.data.x-y-z-has-no', { x: bx, y: by, z: bz }));
     return;
   }
   if (!canWriteSlot(data, index)) {
-    out.error(msg('格号越界：{index}（这种容器只有 {count} 格，0 ~ {last}）', {
+    out.error(msg('cmd.reply.data.slot-out-of-range-index', {
       index,
       count: data.slots.length,
       last: data.slots.length - 1,
@@ -2157,10 +2157,10 @@ function runDataMergeBlock(args: string[], ctx: CommandContext, out: CommandFeed
   const next: (ItemStack | null)[] = data.slots.map((stack) => (stack ? { ...stack } : null));
   next[index] = { id: itemId, count };
   if (!ctx.setBlockEntitySlots(bx, by, bz, next)) {
-    out.error(msg('({x}, {y}, {z}) 写不进去（这一格不是容器方块）', { x: bx, y: by, z: bz }));
+    out.error(msg('cmd.reply.data.cannot-write-to-x-y', { x: bx, y: by, z: bz }));
     return;
   }
-  out.info(msg('已把 ({x}, {y}, {z}) 的 Slots[{index}] 设为 {item} ×{count}', {
+  out.info(msg('cmd.reply.data.set-slots-index-of-x', {
     x: bx,
     y: by,
     z: bz,
@@ -2180,11 +2180,11 @@ function runDataMergeEntity(args: string[], ctx: CommandContext, out: CommandFee
     return;
   }
   if (field !== 'health' && field !== 'customname') {
-    out.error(msg('实体上能写的只有 Health 与 CustomName，没有 {field}', { field: args[3] ?? '' }));
+    out.error(msg('cmd.reply.data.entities-only-accept-health-and', { field: args[3] ?? '' }));
     return;
   }
   if (!ctx.setEntityData) {
-    out.error(msg('这个维度写不了实体数据'));
+    out.error(msg('cmd.reply.data.entity-data-is-not-writable'));
     return;
   }
   const entityId = resolveOneTarget(target, ctx, out);
@@ -2194,37 +2194,37 @@ function runDataMergeEntity(args: string[], ctx: CommandContext, out: CommandFee
   if (field === 'health') {
     const parsed = parseHealthValue(value, fields?.maxHealth ?? Infinity);
     if (parsed === null) {
-      out.error(msg('Health 需要一个数字：{value}', { value }));
+      out.error(msg('cmd.reply.data.health-must-be-a-number', { value }));
       return;
     }
     if (fields?.health === undefined) {
-      out.error(msg('这只实体没有血量这一项（只有生物有）'));
+      out.error(msg('cmd.reply.data.this-entity-has-no-health'));
       return;
     }
     if (!ctx.setEntityData(entityId, { health: parsed })) {
-      out.error(msg('写不进去：这只实体不支持改血量'));
+      out.error(msg('cmd.reply.data.cannot-write-this-entity-does'));
       return;
     }
     const clamped = fields.maxHealth !== undefined && Number(value) > fields.maxHealth;
-    out.info(msg('已把血量设为 {value}{max}{note}', {
+    out.info(msg('cmd.reply.data.set-health-to-value-max', {
       value: fmt(parsed),
       max: fields.maxHealth === undefined ? '' : ` / ${fmt(fields.maxHealth)}`,
       // 夹取必须说出来：玩家写 999 时看到 20，才知道是夹了而不是没生效
-      note: clamped ? msg('（超出上限，已夹到上限）') : '',
+      note: clamped ? msg('cmd.reply.data.above-the-maximum-clamped') : '',
     }));
     return;
   }
 
   // CustomName
   if (fields === null) {
-    out.error(msg('找不到这只实体'));
+    out.error(msg('cmd.reply.data.entity-not-found'));
     return;
   }
   if (!ctx.setEntityData(entityId, { customName: value })) {
-    out.error(msg('写不进去：这只实体不支持改名'));
+    out.error(msg('cmd.reply.data.cannot-write-this-entity-does-2'));
     return;
   }
-  out.info(msg('已把名字设为「{name}」', { name: value }));
+  out.info(msg('cmd.reply.data.set-customname-to-name', { name: value }));
 }
 
 /**
@@ -2267,13 +2267,13 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     }
     const displayName = args.slice(2).join(' ').trim();
     if (!teams.add(name, displayName)) {
-      out.error(msg('队伍 {name} 已经存在', { name: name }));
+      out.error(msg('cmd.reply.team.team-name-already-exists', { name: name }));
       return;
     }
     out.info(
-      msg('已创建队伍 {name}{display}', {
+      msg('cmd.reply.team.created-team-name-display', {
         name,
-        display: displayName ? msg('（显示为「{display}」）', { display: displayName }) : '',
+        display: displayName ? msg('cmd.reply.team.shown-as-display', { display: displayName }) : '',
       }),
     );
     return;
@@ -2286,17 +2286,17 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       return;
     }
     if (!teams.remove(name)) {
-      out.error(msg('队伍 {name} 不存在', { name: name }));
+      out.error(msg('cmd.reply.team.team-name-does-not-exist', { name: name }));
       return;
     }
-    out.info(msg('已删除队伍 {name}（成员一并解绑）', { name: name }));
+    out.info(msg('cmd.reply.team.deleted-team-name-members-unbound', { name: name }));
     return;
   }
 
   if (sub === 'list') {
     const all = teams.list();
     if (all.length === 0) {
-      out.info(msg('还没有任何队伍'));
+      out.info(msg('cmd.reply.team.no-teams-yet'));
       return;
     }
     const described = all.map((team) => {
@@ -2306,7 +2306,7 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       const affix = `${team.prefix ? `，前缀「${team.prefix}」` : ''}${team.suffix ? `，后缀「${team.suffix}」` : ''}`;
       return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}${affix}，${members.length} 人）`;
     });
-    out.info(msg('共 {count} 个队伍：{list}', { count: all.length, list: described.join('；') }));
+    out.info(msg('cmd.reply.team.count-teams-list', { count: all.length, list: described.join('；') }));
     return;
   }
 
@@ -2320,7 +2320,7 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
     // 队不存在要**先说清楚**：否则 `teams.join` 返回 false 会被下面的分支
     // 误报成"成员名字不合法"（第一版就是这么错的）
     if (sub === 'join' && !teams.get(teamName!)) {
-      out.error(msg('队伍 {name} 不存在', { name: teamName }));
+      out.error(msg('cmd.reply.team.team-name-does-not-exist', { name: teamName }));
       return;
     }
     const position = ctx.position();
@@ -2334,24 +2334,24 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       : [ctx.playerName()];
     if (members === null) return;
     if (members.length === 0) {
-      out.error(msg('成员 {member} 没有匹配到任何对象', { member: memberArg }));
+      out.error(msg('cmd.reply.team.member-member-matched-nothing', { member: memberArg }));
       return;
     }
     if (sub === 'join') {
       for (const member of members) {
         if (!teams.join(teamName!, member)) {
-          out.error(msg('成员 {name} 的名字不合法（1~16 个字符）', { name: member }));
+          out.error(msg('cmd.reply.team.invalid-member-name-1-16', { name: member }));
           continue;
         }
-        out.info(msg('已把 {member} 加入队伍 {team}', { member: member, team: teamName }));
+        out.info(msg('cmd.reply.team.added-member-to-team-team', { member: member, team: teamName }));
       }
     } else {
       for (const member of members) {
         if (!teams.leave(member)) {
-          out.info(msg('{member} 本来就不在任何队伍里', { member: member }));
+          out.info(msg('cmd.reply.team.member-was-not-on-any', { member: member }));
           continue;
         }
-        out.info(msg('已让 {member} 退出队伍', { member: member }));
+        out.info(msg('cmd.reply.team.removed-member-from-their-team', { member: member }));
       }
     }
     return;
@@ -2369,26 +2369,26 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       return;
     }
     if (!teams.get(name)) {
-      out.error(msg('队伍 {name} 不存在', { name: name }));
+      out.error(msg('cmd.reply.team.team-name-does-not-exist', { name: name }));
       return;
     }
     if (key === 'friendlyfire') {
       const on = value.toLowerCase() === 'true';
       if (value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false') {
-        out.error(msg('友好伤害只能是 true 或 false'));
+        out.error(msg('cmd.reply.team.friendly-fire-must-be-true-2'));
         return;
       }
       teams.setFriendlyFire(name, on);
       // `state` 也要过 `msg()`（理由同下面 prefix/suffix 那条注释）
-      out.info(msg('队伍 {name} 的友好伤害已{state}', { name: name, state: msg(on ? '打开' : '关闭') }));
+      out.info(msg('cmd.reply.team.team-name-friendly-fire-is', { name: name, state: msg(on ? 'cmd.reply.team.on' : 'cmd.reply.team.off') }));
       return;
     }
     if (key === 'color') {
       if (!teams.setColor(name, value.toLowerCase())) {
-        out.error(msg('颜色不认识：{value}（可用 {colors}）', { value: value, colors: TEAM_COLORS.join(' / ') }));
+        out.error(msg('cmd.reply.team.unknown-color-value-available-colors', { value: value, colors: TEAM_COLORS.join(' / ') }));
         return;
       }
-      out.info(msg('队伍 {name} 的颜色已改为 {color}', { name: name, color: value.toLowerCase() }));
+      out.info(msg('cmd.reply.team.team-name-color-changed-to', { name: name, color: value.toLowerCase() }));
       return;
     }
     if (isAffix) {
@@ -2397,23 +2397,23 @@ function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): voi
       const text = stripAffixQuotes(args.slice(3).join(' '));
       const applied = key === 'prefix' ? teams.setPrefix(name, text) : teams.setSuffix(name, text);
       if (!applied) {
-        out.error(msg('队伍 {name} 不存在', { name: name }));
+        out.error(msg('cmd.reply.team.team-name-does-not-exist', { name: name }));
         return;
       }
       // ⚠️ 参数本身也要过 `msg()`：`msg()` 只替换 {占位符}、**不会翻译传进来的值**，
       // 直接把 '前缀' 塞进去，英文界面上就会出现 "Cleared the 前缀 of team red"
       // （既有那条 `友好伤害已{state}` 是同一个问题，本轮顺手一起修）
-      const part = msg(key === 'prefix' ? '前缀' : '后缀');
+      const part = msg(key === 'prefix' ? 'cmd.reply.team.prefix' : 'cmd.reply.team.suffix');
       // 提示里用**清洗之后**的值：玩家敲了换行/超长时，看到的是真正生效的那一段
       const shown = key === 'prefix' ? (teams.get(name)?.prefix ?? '') : (teams.get(name)?.suffix ?? '');
       out.info(
         shown.length === 0
-          ? msg('队伍 {name} 的{part}已清除', { name: name, part })
-          : msg('队伍 {name} 的{part}已改为「{text}」', { name: name, part, text: shown }),
+          ? msg('cmd.reply.team.cleared-the-part-of-team', { name: name, part })
+          : msg('cmd.reply.team.team-name-part-is-now', { name: name, part, text: shown }),
       );
       return;
     }
-    out.error(msg('不认识的属性 {key}（只有 friendlyFire / color / prefix / suffix）', { key: key }));
+    out.error(msg('cmd.reply.team.unknown-property-key-only-friendlyfire', { key: key }));
     return;
   }
 
@@ -2438,7 +2438,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   const holders = holderNamesOf(target, state, ctx, out);
   if (holders === null) return;
   if (holders.length === 0) {
-    out.error(msg('目标 {target} 没有匹配到任何对象', { target: target }));
+    out.error(msg('cmd.reply.scoreboard.target-target-matched-nothing', { target: target }));
     return;
   }
 
@@ -2451,23 +2451,23 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     }
     const amount = Number(raw);
     if (!Number.isFinite(amount)) {
-      out.error(msg('分数必须是数字：{raw}', { raw: raw }));
+      out.error(msg('cmd.reply.scoreboard.score-must-be-a-number', { raw: raw }));
       return;
     }
     if (!board.objective(objective)) {
-      out.error(msg('目标 {name} 不存在', { name: objective }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: objective }));
       return;
     }
     for (const holder of holders) {
       if (sub === 'set') {
         board.setScore(holder, objective, amount);
-        out.info(msg('已将 {holder} 的 {objective} 设为 {score}', { holder: holder, objective: objective, score: board.getScore(holder, objective) }));
+        out.info(msg('cmd.reply.scoreboard.set-holder-objective-to-score', { holder: holder, objective: objective, score: board.getScore(holder, objective) }));
       } else if (sub === 'add') {
         const next = board.addScore(holder, objective, amount);
-        out.info(msg('已将 {holder} 的 {objective} 加至 {score}', { holder: holder, objective: objective, score: next }));
+        out.info(msg('cmd.reply.scoreboard.added-to-holder-objective-now', { holder: holder, objective: objective, score: next }));
       } else {
         const next = board.removeScore(holder, objective, amount);
-        out.info(msg('已将 {holder} 的 {objective} 减至 {score}', { holder: holder, objective: objective, score: next }));
+        out.info(msg('cmd.reply.scoreboard.subtracted-from-holder-objective-now', { holder: holder, objective: objective, score: next }));
       }
     }
     return;
@@ -2482,28 +2482,28 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     if (!objective || !SCORE_OPERATIONS.includes(op) || !sourceTarget || !sourceObjective) {
       // ⚠️ 合法运算符清单是**可操作的提示**，不能随"用法串统一"一起丢掉（这条曾经挂在
       // 那句临时用法串的括号里）。它只在这一条报错里需要，塞进 `/help` 的用法会让那行没法读。
-      out.error(usageError('scoreboard') + msg('（运算：{list}）', { list: SCORE_OPERATIONS.join(' ') }));
+      out.error(usageError('scoreboard') + msg('cmd.reply.give.operations-list', { list: SCORE_OPERATIONS.join(' ') }));
       return;
     }
     if (!board.objective(objective)) {
-      out.error(msg('目标 {name} 不存在', { name: objective }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: objective }));
       return;
     }
     if (!board.objective(sourceObjective)) {
-      out.error(msg('目标 {name} 不存在', { name: sourceObjective }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: sourceObjective }));
       return;
     }
     const sourceHolders = holderNamesOf(sourceTarget, state, ctx, out);
     if (sourceHolders === null) return;
     if (sourceHolders.length === 0) {
-      out.error(msg('来源 {source} 没有匹配到任何对象', { source: sourceTarget }));
+      out.error(msg('cmd.reply.scoreboard.source-source-matched-nothing', { source: sourceTarget }));
       return;
     }
     // 原版是"每个 target 与每个 source 各算一次"（两边都可以是选择器）
     for (const holder of holders) {
       for (const source of sourceHolders) {
         const next = board.operate(holder, objective, op, source, sourceObjective);
-        out.info(msg('已将 {holder} 的 {objective} 设为 {score}（{op} {source} 的 {sourceObjective}）', { holder: holder, objective: objective, score: next, op: op, source: source, sourceObjective: sourceObjective }));
+        out.info(msg('cmd.reply.scoreboard.set-holder-objective-to-score-2', { holder: holder, objective: objective, score: next, op: op, source: source, sourceObjective: sourceObjective }));
       }
     }
     return;
@@ -2516,13 +2516,13 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
       return;
     }
     if (!board.objective(objective)) {
-      out.error(msg('目标 {name} 不存在', { name: objective }));
+      out.error(msg('cmd.reply.scoreboard.objective-name-does-not-exist', { name: objective }));
       return;
     }
     for (const holder of holders) {
       const score = board.getScore(holder, objective);
-      if (score === null) out.info(msg('{holder} 没有 {objective} 的分数', { holder: holder, objective: objective }));
-      else out.info(msg('{holder} 的 {objective} 是 {score}', { holder: holder, objective: objective, score: score }));
+      if (score === null) out.info(msg('cmd.reply.scoreboard.holder-has-no-score-for', { holder: holder, objective: objective }));
+      else out.info(msg('cmd.reply.scoreboard.holder-objective-is-score', { holder: holder, objective: objective, score: score }));
     }
     return;
   }
@@ -2531,7 +2531,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     for (const holder of holders) {
       const objectives = board.objectivesOf(holder);
       if (objectives.length === 0) {
-        out.info(msg('{holder} 还没有任何分数', { holder: holder }));
+        out.info(msg('cmd.reply.scoreboard.holder-has-no-scores-yet', { holder: holder }));
         continue;
       }
       const parts = objectives.map((name) => `${name}=${board.getScore(holder, name)}`);
@@ -2545,8 +2545,8 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
       const removed = board.resetHolder(holder);
       out.info(
       removed === 0
-        ? msg('{holder} 本来就没有分数', { holder })
-        : msg('已清空 {holder} 的 {count} 个目标的分数', { holder, count: removed }),
+        ? msg('cmd.reply.scoreboard.holder-had-no-scores-to', { holder })
+        : msg('cmd.reply.scoreboard.cleared-count-objectives-for-holder', { holder, count: removed }),
     );
     }
     return;

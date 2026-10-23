@@ -7,7 +7,6 @@
  * 翻译质量靠人看，表的一致性只能靠断言。
  */
 
-import { COMMAND_MESSAGES_EN } from '../src/core/commands/commandMessages.data.ts';
 import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/commands/Commands.ts';
 import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
 import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
@@ -616,41 +615,31 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
    * 它一次就抓出了 `usageError` 默认参数写死 `'zh'`、
    * 以及 `SCOREBOARD_USAGE` 是模块级常量这两个真 bug。
    */
-  const keys = Object.keys(COMMAND_MESSAGES_EN);
-  check(`命令回执词表 ${keys.length} 条`, keys.length >= 120);
-
   /**
-   * 多语言 P1-5 护栏：新 `cmd.reply.*` 表与旧"中文原文 → 英文"表**逐条一致**。
-   *
-   * 175 条是脚本从旧表照搬的，这条断言把"照搬"变成可验证的事实：
-   * 以后谁改了一句回执却只改一边（或搬的时候手抖），这里立刻红。
-   * P1-6 删掉旧表时，这条会退化成"键都在且中英不同"。
+   * 命令回执（多语言 P1-6 起）：已并进 `cmd.reply.*`，与界面文案同一套表。
+   * 旧表 `commandMessages.data.ts` 已删除 —— P1-5 那三条"与旧表逐条一致"的护栏完成了使命
+   * （搬迁时它挡住过 `\n` 转义那次错误），现在退化成"条数够 + 中英都不是键名"。
    */
-  const msgEntries = Object.entries(TABLES.zh ?? {}).filter(([key]) => key.startsWith('cmd.reply.'));
-  const zhToKey = new Map(msgEntries.map(([key, value]) => [value, key]));
-  const lost = keys.filter((zh) => !zhToKey.has(zh));
-  const drifted = keys.filter((zh) => {
-    const key = zhToKey.get(zh);
-    return key !== undefined && t(key, 'en') !== COMMAND_MESSAGES_EN[zh];
-  });
-  check(`旧表的 ${keys.length} 条回执都搬进了 cmd.reply.*`, lost.length === 0, lost.slice(0, 3).join(' / '));
-  check('新表英文与旧表逐字一致（不是重译）', drifted.length === 0, drifted.slice(0, 3).join(' / '));
-  check('新表条数与旧表相同（没多也没漏）', msgEntries.length === keys.length, `${msgEntries.length} vs ${keys.length}`);
+  const replyKeys = allKeys().filter((key) => key.startsWith('cmd.reply.'));
+  check(`命令回执 ${replyKeys.length} 条`, replyKeys.length >= 170, String(replyKeys.length));
+  check('每条回执都能查到中文（没露出键名）', replyKeys.every((key) => t(key, 'zh') !== key));
+  // ⚠️ 判据是「中文里有汉字时英文才必须不同」：`{name} Health = {value}` 这类**语言中性**的
+  // 回执两边本来就一模一样（P0-6 判英文表完整性时同样踩过这条）
+  const notTranslated = replyKeys.filter(
+    (key) => /[\u4e00-\u9fff]/.test(t(key, 'zh')) && t(key, 'en') === t(key, 'zh'),
+  );
+  check('每条回执都真翻成英文（语言中性的除外）', notTranslated.length === 0, notTranslated.slice(0, 3).join(' / '));
 
-  setLanguage('zh');
-  const zhWrong = keys.filter((k) => t(k) !== k);
-  check('中文模式下键返回原文（键写错会立刻暴露）', zhWrong.length === 0, zhWrong.slice(0, 3).join(' / '));
-
-  setLanguage('en');
-  const stillCjk = keys.filter((k) => /[\u4e00-\u9fff]/.test(t(k)));
-  check('英文模式下没有一条返回中文', stillCjk.length === 0, stillCjk.slice(0, 3).join(' / '));
+  // 英文回执里不许有中文（这才是用户会看到的东西）
+  const stillCjk = replyKeys.filter((key) => /[\u4e00-\u9fff]/.test(t(key, 'en')));
+  check('英文模式下没有一条回执返回中文', stillCjk.length === 0, stillCjk.slice(0, 3).join(' / '));
 
   // 占位符必须一一对应：中文用 {x}、英文也得是 {x}，否则英文会缺值
   const mismatch: string[] = [];
-  for (const [zh, en] of Object.entries(COMMAND_MESSAGES_EN)) {
-    const a = (zh.match(/\{(\w+)\}/g) ?? []).sort().join(',');
-    const b = (en.match(/\{(\w+)\}/g) ?? []).sort().join(',');
-    if (a !== b) mismatch.push(`${zh} ↔ ${en}`);
+  for (const key of replyKeys) {
+    const a = (t(key, 'zh').match(/\{(\w+)\}/g) ?? []).sort().join(',');
+    const b = (t(key, 'en').match(/\{(\w+)\}/g) ?? []).sort().join(',');
+    if (a !== b) mismatch.push(`${key}：${a} ↔ ${b}`);
   }
   check('中英占位符一一对应', mismatch.length === 0, mismatch.slice(0, 3).join(' / '));
 
@@ -691,6 +680,7 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   check('用法串的 <> / [] 个数中英一致（翻译不能吃掉语法符号）', syntaxDrift.length === 0, syntaxDrift.join(','));
 
   // —— 真跑：英文模式下扫残留中文 ——
+  setLanguage('en');
   const stub = new Proxy(
     {},
     {
@@ -730,6 +720,7 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
     }
   }
   check(`英文模式下跑 ${cases.length} 条命令，输出无中文`, leaked.length === 0, [...new Set(leaked)].slice(0, 5).join(' / '));
+  resetLanguageForTest();
 
   // 源码里不该再有中文的 out.* 调用
   const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');

@@ -23,7 +23,6 @@ export const cmdMessages = {
   // ---- /time ----
   "cmd.reply.time.bad-time-format-value": "时间格式不对：{value}",
   "cmd.reply.time.set-the-time-to-value": "已将时间设置为 {value}",
-  "cmd.reply.time.empty": "(空)",
   "cmd.reply.time.weather-set-to-weather": "天气已切换为 {weather}",
   "cmd.reply.time.difficulty-set-to-difficulty-value": "难度已设置为 {difficulty}（{value}）",
   "cmd.reply.time.current-game-rules-rules": "当前游戏规则：\n{rules}",
@@ -82,9 +81,6 @@ export const cmdMessages = {
   "cmd.reply.worldborder.world-border-set-to-size": "世界边界已设为边长 {size} 格（中心 {x}, {z}）",
   "cmd.reply.worldborder.world-border-center-set-to": "世界中心已设为 ({x}, {z})，边长 {size} 格",
   // ---- /locate ----
-  "cmd.reply.locate.locate-structure-is-not-supported": "这个维度还不支持 /locate structure（目前只做了主世界）",
-  "cmd.reply.locate.no-target-found-nearby-use": "附近没有找到 {target}（结构名要用 village / stronghold / mineshaft 这类）",
-  "cmd.reply.locate.no-target-within-640-blocks": "640 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）",
   "cmd.reply.locate.no-target-within-radius-blocks": "{radius} 格内没有找到 {target}（试试点名更常见的群系，或者先走远一点）",
   "cmd.reply.locate.you-are-standing-in-target": "你脚下就是 {target}（{x}, {z}）",
   "cmd.reply.locate.nearest-target-at-x-z": "最近的 {target} 在 {x}, {z}（约 {distance} 格）",
@@ -201,5 +197,4 @@ export const cmdMessages = {
   "cmd.reply.team.on": "打开",
   "cmd.reply.team.off": "关闭",
   // ---- 其他 ----
-  "cmd.reply.misc.target-must-be-a-single": "目标必须是单一实体（选择器 {selector}）",
 } as const;

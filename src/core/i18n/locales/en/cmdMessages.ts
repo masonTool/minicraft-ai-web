@@ -26,7 +26,6 @@ export const cmdMessages = {
   // ---- /time ----
   "cmd.reply.time.bad-time-format-value": "Bad time format: {value}",
   "cmd.reply.time.set-the-time-to-value": "Set the time to {value}",
-  "cmd.reply.time.empty": "(empty)",
   "cmd.reply.time.weather-set-to-weather": "Weather set to {weather}",
   "cmd.reply.time.difficulty-set-to-difficulty-value": "Difficulty set to {difficulty} ({value})",
   "cmd.reply.time.current-game-rules-rules": "Current game rules:\n{rules}",
@@ -85,9 +84,6 @@ export const cmdMessages = {
   "cmd.reply.worldborder.world-border-set-to-size": "World border set to {size} blocks (center {x}, {z})",
   "cmd.reply.worldborder.world-border-center-set-to": "World border center set to ({x}, {z}), size {size} blocks",
   // ---- /locate ----
-  "cmd.reply.locate.locate-structure-is-not-supported": "/locate structure is not supported in this dimension yet (overworld only)",
-  "cmd.reply.locate.no-target-found-nearby-use": "No {target} found nearby (use names like village / stronghold / mineshaft)",
-  "cmd.reply.locate.no-target-within-640-blocks": "No {target} within 640 blocks (try a more common biome, or walk further)",
   "cmd.reply.locate.no-target-within-radius-blocks": "No {target} within {radius} blocks (try a more common biome, or walk further)",
   "cmd.reply.locate.you-are-standing-in-target": "You are standing in {target} ({x}, {z})",
   "cmd.reply.locate.nearest-target-at-x-z": "Nearest {target} at {x}, {z} (about {distance} blocks away)",
@@ -204,5 +200,4 @@ export const cmdMessages = {
   "cmd.reply.team.on": "on",
   "cmd.reply.team.off": "off",
   // ---- 其他 ----
-  "cmd.reply.misc.target-must-be-a-single": "Target must be a single entity (selector {selector})",
 } satisfies Pick<Messages, keyof typeof zhCmdMessages>;

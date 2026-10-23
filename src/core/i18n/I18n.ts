@@ -19,7 +19,6 @@
  *     留给"表是运行时拼出来的"那种情况（比如命令回执由数据文件合并进来）。
  */
 
-import { COMMAND_MESSAGES_EN } from '../commands/commandMessages.data.ts';
 // 中文文案本体（多语言 P0-2）：按界面分组，`index.ts` 是合并入口
 import { zh } from './locales/zh/index.ts';
 // 英文文案本体（多语言 P0-3）：与中文同构分组，键集由 `satisfies Messages` 卡齐
@@ -48,34 +47,6 @@ export type Language = LocaleCode;
 /** 当前语言的初值。首次启动会按设备语言覆盖（P0-5 把 `detectLanguage` 接到启动流程） */
 export const DEFAULT_LANGUAGE: Language = 'zh';
 
-/**
- * 中文表本体已搬到 `locales/zh/`（多语言 P0-2）；这里只留一个别名，
- * 让下面 `ZH_MERGED` / `t()` 那几处不必改写——这一步只搬不改。
- */
-const ZH: Readonly<Record<string, string>> = zh;
-
-/**
- * 英文表本体已搬到 `locales/en/`（多语言 P0-3）；这里只留一个别名，
- * 让下面 `EN_MERGED` 不必改写——这一步只搬不改。
- */
-const EN: Readonly<Record<string, string>> = en;
-
-/**
- * 命令运行时反馈的英文（批次 617）。
- *
- * 这批文案的**键就是中文原文**（见 `core/commands/messages.ts` 的说明），所以这里做两层：
- *   · `ZH` 侧原样并入 `COMMAND_MESSAGES_EN` 的键（值就是中文原文）；
- *   · `EN` 侧并入键 → 英文值。
- *
- * 放这里而不是手写进两张静态表：129 条一句话一条，手写会和中文原文**悄悄不一致**
- * ——改了一个字就再也对不上，而 `t()` 找不到键时原样返回，看起来"只是没翻译"。
- * 由同一个对象生成，两边天然对齐；`test:i18n` 另有一条断言查"每条中文都有英文"。
- */
-const ZH_MERGED: Readonly<Record<string, string>> = {
-  ...ZH,
-  ...Object.fromEntries(Object.keys(COMMAND_MESSAGES_EN).map((zh) => [zh, zh])),
-};
-const EN_MERGED: Readonly<Record<string, string>> = { ...EN, ...COMMAND_MESSAGES_EN };
 
 /**
  * 语言 → 文案表（**稀疏表**，多语言 P0-4；P0-7 起可被 `loadLocale()` 填充）。
@@ -87,8 +58,8 @@ const EN_MERGED: Readonly<Record<string, string>> = { ...EN, ...COMMAND_MESSAGES
  *   · 设备语言检测与回落用 `LOCALES`（支持的**全集**）。
  */
 const TABLE_POOL: Partial<Record<LocaleCode, Readonly<Record<string, string>>>> = {
-  zh: ZH_MERGED,
-  en: EN_MERGED,
+  zh,
+  en,
 };
 
 /** 只读视图：`loadLocale()` 往池子里填，外面通过它读 */
@@ -423,15 +394,15 @@ export function joinList(items: readonly string[], language: Language = current)
  * 正常情况下两个数组都为空——不空就是"漏翻了一条"。
  */
 export function keyParity(): { missingInEn: string[]; missingInZh: string[] } {
-  const zhKeys = Object.keys(ZH_MERGED);
-  const enKeys = Object.keys(EN_MERGED);
+  const zhKeys = Object.keys(TABLE_POOL.zh ?? {});
+  const enKeys = Object.keys(TABLE_POOL.en ?? {});
   return {
-    missingInEn: zhKeys.filter((key) => !(key in EN_MERGED)),
-    missingInZh: enKeys.filter((key) => !(key in ZH_MERGED)),
+    missingInEn: zhKeys.filter((key) => !(key in (TABLE_POOL.en ?? {}))),
+    missingInZh: enKeys.filter((key) => !(key in (TABLE_POOL.zh ?? {}))),
   };
 }
 
 /** 所有已定义的键（断言"界面用到的键都在表里"时拿它当白名单） */
 export function allKeys(): string[] {
-  return Object.keys(ZH_MERGED);
+  return Object.keys(TABLE_POOL.zh ?? {});
 }
