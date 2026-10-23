@@ -1004,7 +1004,7 @@ function writeDirReport(r, when) {
   const sc = SCENARIOS[r.name];
   const u = usageOf(r);
   const okCount = r.steps.filter((x) => x.ok).length;
-  const rows = r.steps.map((x, i) => `| ${i + 1} | ${cell(x.label)} | ${x.ok ? '✅' : '❌'} | ${x.ok ? '' : cell(x.detail || '—')} |`);
+  const rows = r.steps.map((x, i) => `| ${i + 1} | ${cell(x.label)} | ${x.ok ? '✅' : '❌'} | ${cell((x.detail || '').replace(/\s+/g, ' ').slice(0, 80)) || '—'} |`);
   writeFileSync(
     join(r.dir, 'report.md'),
     [
@@ -1015,7 +1015,7 @@ function writeDirReport(r, when) {
       `- **时间**：${when} · 耗时 ${u.sec}s · ${u.tok === null ? '未知' : u.tok.toLocaleString()} tokens`,
       '- **目录内容**：一份装好框架的临时项目（`.continue/`、`.git/`）；`.e2e-cli.json` 是 CLI 原始输出',
       '',
-      '| # | 断言 | 结果 | 原因 |',
+      '| # | 断言 | 结果 | 实测值 / 失败原因 |',
       '| --- | --- | --- | --- |',
       ...rows,
       '',
@@ -1056,6 +1056,24 @@ for (const r of results) {
   );
 }
 lines.push('');
+
+/**
+ * 明细：每个场景的**逐条断言**。
+ *
+ * 为什么汇总表里写"9/9"不够：那只回答了"过没过"，没回答"到底验了哪 9 件事"。
+ * 报告要能替代"打开目录翻 report.md"，所以这里把每条断言连同结果、失败原因都列出来。
+ */
+lines.push('### 明细（每个场景的逐条断言）', '');
+for (const r of results) {
+  const ok = r.steps.filter((x) => x.ok).length;
+  lines.push(`#### ${r.name} · ${ICON[r.ok]} ${ok}/${r.steps.length}`, '');
+  lines.push('| # | 断言 | 结果 | 实测值 / 失败原因 |');
+  lines.push('| --- | --- | --- | --- |');
+  r.steps.forEach((x, i) => {
+    lines.push(`| ${i + 1} | ${cell(x.label)} | ${x.ok ? '✅' : '❌'} | ${cell((x.detail || '').replace(/\s+/g, ' ').slice(0, 80)) || '—'} |`);
+  });
+  lines.push('');
+}
 
 const failures = [];
 for (const r of results) {
