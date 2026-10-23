@@ -1100,6 +1100,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['statistics.title', 'Weltstatistiken'],
     ['editor.cancel', 'Abbrechen'],
     ['station.reason.needLevels', 'Braucht {cost} Stufen Erfahrung'],
+    // P4-1b 起这两组也是真德语（原来是英文占位）
+    ['label.effect.speed', 'Schnelligkeit'],
+    ['panel.anvil', 'Amboss'],
+    ['inventory.tab.craftable', 'Machbar'],
   ];
   for (const [key, expected] of deSamples) {
     check(`德语：${key} 已翻`, t(key, 'de') === expected, t(key, 'de'));
