@@ -25,7 +25,8 @@
  *
  * 现场（默认**保留**，方便你看）：
  *   `.codebuddy/skills/continue-task/.e2e/<场景>-<时间戳>/`
- *   每次运行**开始前清空整个 `.e2e/`**（只留最近一次）——按你的要求"重新跑要清掉之前的"。
+ *   报告**每跑完一个场景就刷新一次**：场景目录里的 `report.md`，以及 `.e2e/test.md` 里本轮那一节
+ *   （先写「进行中」版本，整轮结束后用终版覆盖）。所以不用等十几分钟才知道前面几个场景过没过。
  *
  * 退出码：0 通过（或环境跳过）/ 1 断言失败 / 2 用法错误。
  */
@@ -919,26 +920,19 @@ if (fresh && !isAutoFresh()) {
   console.log('  --fresh：已清空上一轮现场');
 }
 
+// ---------------------------------------------------------------- 报告（现场，不入库）
+const ICON = { pass: '✅', fail: '❌', skip: '⏭' };
+const cell = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
 const startedAt = new Date();
-const results = [];
-for (const name of chosen) {
-  results.push({ name, ...runScenario(name) });
-}
+const when = `${startedAt.toISOString().slice(0, 10)} ${startedAt.toTimeString().slice(0, 5)}`;
+/**
+ * 本轮运行的唯一标记：`test.md` 靠它找到"自己那一节"并**原地更新**。
+ * 用 `stamp` 而不是数组下标——同一份报告里会累积多轮，下标会漂。
+ */
+const runId = stamp;
+const report = join(DATA_ROOT, 'test.md');
 
-// ---------------------------------------------------------------- 单测（快，几秒）
-const UNITS = [
-  ['钩子自检 selftest', 'node', [join(SKILL, 'assets', '.continue', 'hooks', 'selftest.mjs')]],
-  ['打包源自洽 check-framework', 'node', [join(HERE, 'check-framework.mjs')]],
-  ['安装器回归 test-install', 'node', [join(HERE, 'test-install.mjs')]],
-];
-const units = [];
-for (const [label, cmd, args] of UNITS) {
-  const t0 = Date.now();
-  const r = spawnSync(cmd, args, { cwd: REPO, encoding: 'utf8' });
-  units.push({ label, ok: r.status === 0, sec: Math.round((Date.now() - t0) / 100) / 10 });
-}
-
-// ---------------------------------------------------------------- 账本 + 报告
 function usageOf(r) {
   const f = join(r.dir, '.e2e-cli.json');
   if (!existsSync(f)) return { tok: 0, sec: 0 };
@@ -957,50 +951,17 @@ function usageOf(r) {
   }
 }
 
-const day = startedAt.toISOString().slice(0, 10);
-const clock = startedAt.toTimeString().slice(0, 5);
-
-// 账本（入库）：只记真跑了模型的场景
-const ledgerRows = [];
-for (const r of results) {
-  if (SCENARIOS[r.name].driver !== 'model') continue;
-  const u = usageOf(r);
-  ledgerRows.push(
-    `| ${day} ${clock} | ${r.name} | ${model} | ${u.sec}s | ${u.tok === null ? '未知' : u.tok.toLocaleString()} | ${r.ok} |`,
-  );
-}
-if (ledgerRows.length > 0) {
-  if (!existsSync(HISTORY)) {
-    writeFileSync(
-      HISTORY,
-      [
-        '# e2e 历史（入库）',
-        '',
-        '> 用途：给"跑之前估算"提供依据。token 取自 CLI 的 json 输出（本轮累计 input + output）。',
-        '> 只记**真跑了模型**的场景；probe 场景不消耗 token，不记。',
-        '> 这张表由 `scripts/e2e.mjs` 自动追加，不要手改结构。',
-        '',
-        '| 时间 | 场景 | 模型 | 耗时 | tokens | 结果 |',
-        '| --- | --- | --- | --- | --- | --- |',
-        '',
-      ].join('\n'),
-    );
-  }
-  writeFileSync(HISTORY, readFileSync(HISTORY, 'utf8').trimEnd() + '\n' + ledgerRows.join('\n') + '\n');
-}
-
-// ---------------------------------------------------------------- 报告（现场，不入库）
-const ICON = { pass: '✅', fail: '❌', skip: '⏭' };
-const cell = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
-
 /**
  * 每个场景目录里也写一份 `report.md`。
  *
  * 为什么要有：只看汇总表时，想知道"这个目录到底是干嘛的"还得回去翻代码。
  * 目录自己带一份说明，谁点进去都能看懂——测什么、什么时候、逐条结果、失败原因。
  * （用 `report.md` 而不是 `README.md`：场景目录里本来就有一份临时项目的 README。）
+ *
+ * 为什么**场景一跑完就写**、不等整轮结束：一轮全套要十几分钟，模型场景单个就四五分钟，
+ * "刚才那个场景过了没"不该等十分钟才能回答；报告的价值本来就在于边跑边能看。
  */
-function writeDirReport(r, when) {
+function writeDirReport(r) {
   const sc = SCENARIOS[r.name];
   const u = usageOf(r);
   const okCount = r.steps.filter((x) => x.ok).length;
@@ -1023,7 +984,108 @@ function writeDirReport(r, when) {
   );
 }
 
-const report = join(DATA_ROOT, 'test.md');
+/**
+ * `test.md` 里本轮那一节的内容。
+ *
+ * `unitRows` 为 `null` = 这轮还没跑完（单测在场景全部跑完之后才跑）：标题写"进行中"，
+ * 并列出还剩哪些场景。跑完再用同一函数生成一次终版、覆盖进行中的那一节，
+ * 所以**中断的运行留下的也是完整可读的一节**，不是半截表格。
+ */
+function buildRunBlock(rows, unitRows) {
+  const lines = [];
+  const okRuns = rows.filter((r) => r.ok === 'pass').length;
+  const running = !unitRows;
+  lines.push(
+    running
+      ? `## ${when} · 模型 ${model ?? '—'} · 进行中（${rows.length}/${chosen.length} 个场景）`
+      : `## ${when} · 模型 ${model ?? '—'} · ${okRuns}/${rows.length} 个场景通过`,
+    '',
+  );
+  if (running) {
+    const left = chosen.filter((n) => !rows.some((r) => r.name === n));
+    lines.push(
+      `> 还剩 ${left.length} 个场景没跑（${left.map((n) => `\`${n}\``).join('、') || '—'}）；每跑完一个就刷新本节，不等整轮结束。`,
+      '',
+    );
+  }
+  lines.push('| 场景 | 执行器 | 测什么 | 耗时 | tokens | 结果 | 现场目录 |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- |');
+  for (const r of rows) {
+    const sc = SCENARIOS[r.name];
+    const u = usageOf(r);
+    const ok = r.steps.filter((x) => x.ok).length;
+    lines.push(
+      `| \`${r.name}\` | ${sc.driver} | ${cell(sc.desc)} | ${u.sec}s | ${u.tok === null ? '未知' : u.tok.toLocaleString()} | ` +
+        `${ICON[r.ok]} ${ok}/${r.steps.length} | \`${r.dir.split('/').pop()}\` |`,
+    );
+  }
+  lines.push('');
+
+  /**
+   * 明细：每个场景的**逐条断言**。
+   *
+   * 为什么汇总表里写"9/9"不够：那只回答了"过没过"，没回答"到底验了哪 9 件事"。
+   * 报告要能替代"打开目录翻 report.md"，所以这里把每条断言连同结果、失败原因都列出来。
+   */
+  lines.push('### 明细（每个场景的逐条断言）', '');
+  for (const r of rows) {
+    const ok = r.steps.filter((x) => x.ok).length;
+    lines.push(`#### ${r.name} · ${ICON[r.ok]} ${ok}/${r.steps.length}`, '');
+    lines.push('| # | 断言 | 结果 | 实测值 / 失败原因 |');
+    lines.push('| --- | --- | --- | --- |');
+    r.steps.forEach((x, i) => {
+      lines.push(`| ${i + 1} | ${cell(x.label)} | ${x.ok ? '✅' : '❌'} | ${cell((x.detail || '').replace(/\s+/g, ' ').slice(0, 80)) || '—'} |`);
+    });
+    lines.push('');
+  }
+
+  const failures = [];
+  for (const r of rows) {
+    for (const step of r.steps) {
+      if (!step.ok) failures.push(`| \`${r.name}\` | ${cell(step.label)} | ${cell(step.detail || '—')} |`);
+    }
+  }
+  if (failures.length > 0) {
+    lines.push('**失败明细**', '');
+    lines.push('| 场景 | 断言 | 原因 |');
+    lines.push('| --- | --- | --- |');
+    lines.push(...failures);
+    lines.push('');
+  } else {
+    lines.push('**失败明细**：无。', '');
+  }
+
+  const skipped = rows.filter((r) => r.ok === 'skip').map((r) => `\`${r.name}\``);
+  if (skipped.length > 0) lines.push(`> ⏭ 跳过（环境问题，未验模型断言）：${skipped.join('、')}`, '');
+
+  if (unitRows) {
+    lines.push('**单测**', '');
+    lines.push('| 套件 | 结果 | 耗时 |');
+    lines.push('| --- | --- | --- |');
+    for (const u of unitRows) lines.push(`| ${cell(u.label)} | ${u.ok ? '✅ 通过' : '❌ 失败'} | ${u.sec}s |`);
+    lines.push('');
+  } else {
+    lines.push('**单测**：场景全部跑完后执行（`selftest` / `check-framework` / `test-install`）。', '');
+  }
+  return lines.join('\n');
+}
+
+/** 把本轮那一节写进 `test.md`：已有就**原地替换**（不重复追加），没有就追加。 */
+function upsertRunBlock(body) {
+  const start = `<!-- e2e:run ${runId}:start -->`;
+  const end = `<!-- e2e:run ${runId}:end -->`;
+  const block = `${start}\n${body.trimEnd()}\n${end}\n`;
+  const raw = readFileSync(report, 'utf8');
+  const i = raw.indexOf(start);
+  const j = i >= 0 ? raw.indexOf(end, i) : -1;
+  writeFileSync(
+    report,
+    i >= 0 && j >= 0
+      ? `${raw.slice(0, i)}${block}${raw.slice(j + end.length).replace(/^\n+/, '\n')}`
+      : `${raw.trimEnd()}\n\n${block}`,
+  );
+}
+
 if (!existsSync(report)) {
   writeFileSync(
     report,
@@ -1031,6 +1093,7 @@ if (!existsSync(report)) {
       '# e2e 测试报告',
       '',
       '> 每次运行一节，用表格列：测什么 / 结果 / 耗时 / tokens，失败的单独列原因。',
+      '> **每个场景跑完就刷新本节**（不等整轮结束）：中途停下也能看到已完成场景的结果；',
       '> 每个场景目录里另有一份 `report.md`（同一个场景的逐条断言）。',
       '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
       '',
@@ -1038,70 +1101,64 @@ if (!existsSync(report)) {
   );
 }
 
-const when = `${day} ${clock}`;
-for (const r of results) writeDirReport(r, when);
+const results = [];
+for (const name of chosen) {
+  const r = { name, ...runScenario(name) };
+  results.push(r);
+  writeDirReport(r);
+  upsertRunBlock(buildRunBlock(results, null));
+  console.log(`    报告已更新（${results.length}/${chosen.length}）：${join(r.dir, 'report.md')}`);
+}
 
-const lines = [];
-const okRuns = results.filter((r) => r.ok === 'pass').length;
-lines.push(`## ${when} · 模型 ${model ?? '—'} · ${okRuns}/${results.length} 个场景通过`, '');
-lines.push('| 场景 | 执行器 | 测什么 | 耗时 | tokens | 结果 | 现场目录 |');
-lines.push('| --- | --- | --- | --- | --- | --- | --- |');
+// ---------------------------------------------------------------- 单测（快，几秒）
+const UNITS = [
+  ['钩子自检 selftest', 'node', [join(SKILL, 'assets', '.continue', 'hooks', 'selftest.mjs')]],
+  ['打包源自洽 check-framework', 'node', [join(HERE, 'check-framework.mjs')]],
+  ['安装器回归 test-install', 'node', [join(HERE, 'test-install.mjs')]],
+];
+const units = [];
+for (const [label, cmd, args] of UNITS) {
+  const t0 = Date.now();
+  const r = spawnSync(cmd, args, { cwd: REPO, encoding: 'utf8' });
+  units.push({ label, ok: r.status === 0, sec: Math.round((Date.now() - t0) / 100) / 10 });
+}
+
+// ---------------------------------------------------------------- 账本（入库）
+// 账本只在整轮结束后写：一行就是一次"这个场景花了多少"，跑到一半的行会污染估算的中位数。
+const ledgerRows = [];
 for (const r of results) {
-  const sc = SCENARIOS[r.name];
+  if (SCENARIOS[r.name].driver !== 'model') continue;
   const u = usageOf(r);
-  const ok = r.steps.filter((x) => x.ok).length;
-  lines.push(
-    `| \`${r.name}\` | ${sc.driver} | ${cell(sc.desc)} | ${u.sec}s | ${u.tok === null ? '未知' : u.tok.toLocaleString()} | ` +
-      `${ICON[r.ok]} ${ok}/${r.steps.length} | \`${r.dir.split('/').pop()}\` |`,
+  ledgerRows.push(
+    `| ${when} | ${r.name} | ${model} | ${u.sec}s | ${u.tok === null ? '未知' : u.tok.toLocaleString()} | ${r.ok} |`,
   );
 }
-lines.push('');
-
-/**
- * 明细：每个场景的**逐条断言**。
- *
- * 为什么汇总表里写"9/9"不够：那只回答了"过没过"，没回答"到底验了哪 9 件事"。
- * 报告要能替代"打开目录翻 report.md"，所以这里把每条断言连同结果、失败原因都列出来。
- */
-lines.push('### 明细（每个场景的逐条断言）', '');
-for (const r of results) {
-  const ok = r.steps.filter((x) => x.ok).length;
-  lines.push(`#### ${r.name} · ${ICON[r.ok]} ${ok}/${r.steps.length}`, '');
-  lines.push('| # | 断言 | 结果 | 实测值 / 失败原因 |');
-  lines.push('| --- | --- | --- | --- |');
-  r.steps.forEach((x, i) => {
-    lines.push(`| ${i + 1} | ${cell(x.label)} | ${x.ok ? '✅' : '❌'} | ${cell((x.detail || '').replace(/\s+/g, ' ').slice(0, 80)) || '—'} |`);
-  });
-  lines.push('');
-}
-
-const failures = [];
-for (const r of results) {
-  for (const step of r.steps) {
-    if (!step.ok) failures.push(`| \`${r.name}\` | ${cell(step.label)} | ${cell(step.detail || '—')} |`);
+if (ledgerRows.length > 0) {
+  if (!existsSync(HISTORY)) {
+    writeFileSync(
+      HISTORY,
+      [
+        '# e2e 历史（入库）',
+        '',
+        '> 用途：给"跑之前估算"提供依据。token 取自 CLI 的 json 输出（本轮累计 input + output）。',
+        '> 只记**真跑了模型**的场景；probe 场景不消耗 token，不记。',
+        '> 这张表由 `scripts/e2e.mjs` 自动追加，不要手改结构。',
+        '',
+        '| 时间 | 场景 | 模型 | 耗时 | tokens | 结果 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '',
+      ].join('\n'),
+    );
   }
-}
-if (failures.length > 0) {
-  lines.push('**失败明细**', '');
-  lines.push('| 场景 | 断言 | 原因 |');
-  lines.push('| --- | --- | --- |');
-  lines.push(...failures);
-  lines.push('');
-} else {
-  lines.push('**失败明细**：无。', '');
+  writeFileSync(HISTORY, readFileSync(HISTORY, 'utf8').trimEnd() + '\n' + ledgerRows.join('\n') + '\n');
 }
 
-const skipped = results.filter((r) => r.ok === 'skip').map((r) => `\`${r.name}\``);
-if (skipped.length > 0) {
-  lines.push(`> ⏭ 跳过（环境问题，未验模型断言）：${skipped.join('、')}`, '');
-}
+// ---------------------------------------------------------------- 收尾：终版报告
+// 场景循环里每跑完一个就已经刷新过 test.md（进行中版本）；这里用同一个函数生成终版
+// （多了单测表、标题改成"X/Y 个场景通过"）原地覆盖，避免同一轮在报告里出现两次。
+upsertRunBlock(buildRunBlock(results, units));
 
-lines.push('**单测**', '');
-lines.push('| 套件 | 结果 | 耗时 |');
-lines.push('| --- | --- | --- |');
-for (const u of units) lines.push(`| ${cell(u.label)} | ${u.ok ? '✅ 通过' : '❌ 失败'} | ${u.sec}s |`);
-lines.push('');
-writeFileSync(report, readFileSync(report, 'utf8').trimEnd() + '\n\n' + lines.join('\n') + '\n');
+// 报告已经在 `upsertRunBlock(buildRunBlock(results, units))` 那里写完了，这里只打印汇总。
 
 // ---------------------------------------------------------------- 汇总
 console.log('\n汇总：');
