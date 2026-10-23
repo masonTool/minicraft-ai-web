@@ -365,4 +365,7 @@ export const itemDesc = {
   "item.desc.warped_stem": "Tige distordue : le « tronc » des champignons distordus géants du Nether, donne des planches distordues",
   "item.desc.crimson_planks": "Planches carmin : fabriquées à partir de tiges carmin, bois du Nether",
   "item.desc.warped_planks": "Planches distordues : fabriquées à partir de tiges distordues, bois du Nether",
+  "item.desc.tpl.stairs": "Escalier ({base}) : pour monter ou pour décorer — les marches montent d’un bloc",
+  "item.desc.tpl.slab": "Dalle ({base}) : la moitié d’un bloc, posée en bas ou en haut ; on marche entre deux dalles",
+  "item.desc.tpl.wall": "Muret ({base}) : un bloc de haut ; bloque le passage mais pas la vue",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

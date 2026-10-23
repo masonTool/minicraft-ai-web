@@ -371,4 +371,7 @@ export const itemDesc = {
   "item.desc.warped_stem": "诡异菌柄：下界诡异森林的巨型菌「树干」，能合成诡异木板",
   "item.desc.crimson_planks": "猩红木板：由猩红菌柄合成，下界木质建材",
   "item.desc.warped_planks": "诡异木板：由诡异菌柄合成，下界木质建材",
+  "item.desc.tpl.stairs": "{base}楼梯：可以走上去，也能当装饰；每级比整块方块高出一级",
+  "item.desc.tpl.slab": "{base}台阶：半格高，放在一格的下半或上半，两个半砖之间可以走",
+  "item.desc.tpl.wall": "{base}墙：一格高、一格宽的围墙，能挡住走位但挡不住视线",
 } as const;

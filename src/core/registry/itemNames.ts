@@ -637,6 +637,39 @@ for (const crop of ['pumpkin', 'melon'] as const) {
 }
 
 DESCRIPTIONS.mushroom_stem = () => t('item.desc.tpl.mushroomStem');
+// ---- 台阶 / 楼梯 / 墙（B4c，批次 20261024-0136）：95 个方块只写 3 条模板
+//
+// 这 95 个全是「{base} + 形状」，说明的差别只在基座名与形状用途。三种形状各一条模板。
+//
+// ⚠️ 基座名有两种来源，别混：**显式物品名**（`item.cobblestone` = 圆石）与**模板拼的**（木板走
+// `item.tpl.woodPlanks`，`item.oak_planks` 这个键根本不存在）。后者若直接用 `t('item.oak_planks')`
+// 会拿到键名本身 —— 实测就是这样发现 6 种木板的基座名全是 `item.xxx_planks`。
+const SHAPE_BASES = [
+  'stone', 'cobblestone', 'mossy_cobblestone', 'stone_bricks', 'mossy_stone_bricks', 'bricks',
+  'sandstone', 'cut_sandstone', 'smooth_sandstone', 'red_sandstone', 'cut_red_sandstone',
+  'smooth_red_sandstone', 'granite', 'polished_granite', 'diorite', 'polished_diorite',
+  'andesite', 'polished_andesite', 'deepslate_bricks', 'cobbled_deepslate', 'polished_deepslate',
+  'deepslate_tiles', 'blackstone', 'polished_blackstone', 'polished_blackstone_bricks',
+  'nether_bricks', 'red_nether_bricks', 'quartz_block', 'smooth_quartz', 'purpur_block',
+  'prismarine', 'prismarine_bricks', 'dark_prismarine', 'end_stone_bricks', 'smooth_stone',
+] as const;
+for (const base of SHAPE_BASES) {
+  DESCRIPTIONS[`${base}_stairs`] = () => tp('item.desc.tpl.stairs', { base: t(`item.${base}`) });
+  DESCRIPTIONS[`${base}_slab`] = () => tp('item.desc.tpl.slab', { base: t(`item.${base}`) });
+  DESCRIPTIONS[`${base}_wall`] = () => tp('item.desc.tpl.wall', { base: t(`item.${base}`) });
+}
+// ⚠️ 石砖墙的 id 是**单数**（`stone_brick_wall`），与另外两个形状（`stone_bricks_stairs` /
+// `stone_bricks_slab`）不一致 —— 遍历基座表碰不到它，只能单独补一条。
+DESCRIPTIONS['stone_brick_wall'] = () => tp('item.desc.tpl.wall', { base: t('item.stone_bricks') });
+
+// 木板基座：名字由 `item.tpl.woodPlanks` 拼（`item.oak_planks` 这种键不存在）
+for (const wood of WOOD_KEYS) {
+  const label = () => tp('item.tpl.woodPlanks', { wood: t(`item.wood.${wood}`) });
+  DESCRIPTIONS[`${wood}_planks_stairs`] = () => tp('item.desc.tpl.stairs', { base: label() });
+  DESCRIPTIONS[`${wood}_planks_slab`] = () => tp('item.desc.tpl.slab', { base: label() });
+  DESCRIPTIONS[`${wood}_planks_wall`] = () => tp('item.desc.tpl.wall', { base: label() });
+}
+
 
 for (const potion of POTIONS) {
   const key = `potion_${potion.key}`;

@@ -371,4 +371,7 @@ export const itemDesc = {
   "item.desc.warped_stem": "Warped Stem: the \"trunk\" of huge warped fungi in the Nether, crafts into warped planks",
   "item.desc.crimson_planks": "Crimson Planks: crafted from crimson stems; Nether wood building block",
   "item.desc.warped_planks": "Warped Planks: crafted from warped stems; Nether wood building block",
+  "item.desc.tpl.stairs": "{base} Stairs: walk up them or use them as decoration — each step rises one block",
+  "item.desc.tpl.slab": "{base} Slab: half a block tall, placed on the bottom or top half; you can walk between two slabs",
+  "item.desc.tpl.wall": "{base} Wall: a one-block-high fence; blocks movement but not sight",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

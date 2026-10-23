@@ -365,4 +365,7 @@ export const itemDesc = {
   "item.desc.warped_stem": "Wirrstiel (verzerrt): der \"Stamm\" riesiger verzerrter Pilze im Nether, ergibt verzerrte Bretter",
   "item.desc.crimson_planks": "Wirrholzbretter: aus Wirrstielen gefertigt, Nether-Holzblock",
   "item.desc.warped_planks": "Verzerrte Bretter: aus verzerrten Stielen gefertigt, Nether-Holzblock",
+  "item.desc.tpl.stairs": "Treppe ({base}): zum Hochgehen oder als Dekoration — jede Stufe steigt einen Block hoch",
+  "item.desc.tpl.slab": "Stufe ({base}): halb so hoch, liegt auf der unteren oder oberen Hälfte; man kann zwischen zwei Stufen laufen",
+  "item.desc.tpl.wall": "Mauer ({base}): ein Block hoch; blockiert die Bewegung, aber nicht die Sicht",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

@@ -364,4 +364,7 @@ export const itemDesc = {
   "item.desc.warped_stem": "Caule distorcido: o \"tronco\" dos fungos distorcidos gigantes do Nether, dá tábuas distorcidas",
   "item.desc.crimson_planks": "Tábuas carmesim: feitas de caules carmesim, madeira do Nether",
   "item.desc.warped_planks": "Tábuas distorcidas: feitas de caules distorcidos, madeira do Nether",
+  "item.desc.tpl.stairs": "Escada ({base}): para subir ou decorar — os degraus sobem um bloco",
+  "item.desc.tpl.slab": "Laje ({base}): metade de um bloco, na parte de baixo ou de cima; dá para andar entre duas lajes",
+  "item.desc.tpl.wall": "Muro ({base}): um bloco de altura; bloqueia a passagem mas não a visão",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;
