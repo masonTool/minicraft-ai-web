@@ -1179,6 +1179,12 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['pause.title', 'Jeu en pause'],
     ['chat.send', 'Envoyer'],
     ['statistics.title', 'Statistiques du monde'],
+    // P4-3b 起这五组也是法语
+    ['settings.row.fov', 'Champ de vision'],
+    ['inventory.tab.craftable', 'Fabricable'],
+    ['panel.dispenser', 'Lanceur'],
+    ['editor.cancel', 'Annuler'],
+    ['minigame.jump.retry', 'Rejouer'],
   ];
   for (const [key, expected] of frSamples) {
     check(`法语：${key}`, t(key, 'fr') === expected, t(key, 'fr'));

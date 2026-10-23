@@ -1,52 +1,49 @@
 /**
- * 法语文案·minigame（多语言 P4-3：**仍是英文占位，待翻**）
+ * 法语文案·minigame（与 `locales/zh/minigame.ts` **键集必须相同**）
  *
- * ⚠️ 这一组还没翻：值暂时与 `locales/en/` 逐字相同（键集仍由 satisfies 卡住）。
- * 待翻清单见 `notes/i18n-fr.md`。
+ * ⚠️ 多语言 P4-3：`satisfies Pick<Messages, keyof typeof zhXxx>` 把键集卡在 `typecheck`。
+ * ⚠️ 值里的撇号统一写成排版撇号 `’`（`l’eau`），避免转义且符合法语排版。
  */
 
 import type { Messages } from '../zh/index.ts';
-import type { minigame as zhminigame } from '../zh/minigame.ts';
+import type { minigame as zhMinigame } from '../zh/minigame.ts';
 
 export const minigame = {
-  // ---- first-run guide (batch 20261022-1954)
-  'tutorial.progress': 'Step {current} of {total}',
-  'tutorial.collapse': 'Collapse',
-  'tutorial.expand': 'Expand',
-  'tutorial.dismiss': "Don't show again",
-  'tutorial.finish': 'All done — go build something!',
-  // ---- mini-games (batch 20261022-1954)
-  'minigame.exit': 'Exit',
-  'minigame.crashed': 'The mini-game hit an error and closed',
-  'minigame.smoke.title': 'Framework check',
-  'minigame.smoke.hint': 'Tap to toggle (framework check)',
-  'minigame.smoke.won': 'Cleared!',
-  'minigame.smoke.playing': 'Continue',
-  'minigame.menu.title': 'Mini-games',
-  'minigame.menu.back': '‹ Back',
-  'minigame.menu.best': 'Best {best}',
-  // ---- jump (batch 20261022-2220)
-  'minigame.jump.title': 'Jump',
-  'minigame.jump.desc': 'Hold to charge, release to jump',
-  'minigame.jump.hint': 'Hold to charge, release to jump',
-  'minigame.jump.best': 'Best {best}',
-  'minigame.jump.over': 'Score {score}',
-  'minigame.jump.retry': 'Play again',
-  'minigame.jump.record': 'New best!',
-  'tutorial.survival.log.title': 'Chop a tree first',
-  'tutorial.survival.log.desc': 'Walk up to a trunk and hold to break it',
-  'tutorial.survival.table.title': 'Craft a crafting table',
-  'tutorial.survival.table.desc': 'Combine 4 planks in your inventory',
-  'tutorial.survival.woodPickaxe.title': 'Craft a wooden pickaxe',
-  'tutorial.survival.woodPickaxe.desc': '3 planks + 2 sticks',
-  'tutorial.survival.stonePickaxe.title': 'Mine stone, craft a stone pickaxe',
-  'tutorial.survival.stonePickaxe.desc': 'Mine cobblestone with the wooden pickaxe, then craft (stone is a few blocks down)',
-  'tutorial.creative.place10.title': 'Place 10 blocks',
-  'tutorial.creative.place10.desc': 'Pick a block from the hotbar and tap the ground',
-  'tutorial.creative.layers.title': 'Stack 3 layers high',
-  'tutorial.creative.layers.desc': 'Build upward and see how tall it gets',
-  'tutorial.creative.colors.title': 'Use 3 different blocks',
-  'tutorial.creative.colors.desc': 'Try blocks in different colours',
-  'tutorial.creative.door.title': 'Add a door',
-  'tutorial.creative.door.desc': 'Put a door in a wall so you can get in and out',
-} satisfies Pick<Messages, keyof typeof zhminigame>;
+  "tutorial.progress": "Étape {current} / {total}",
+  "tutorial.collapse": "Réduire",
+  "tutorial.expand": "Déplier",
+  "tutorial.dismiss": "Ne plus afficher",
+  "tutorial.finish": "Tutoriel terminé ! À vous de construire",
+  "minigame.exit": "Quitter",
+  "minigame.crashed": "Le mini-jeu a planté, retour au jeu",
+  "minigame.smoke.title": "Auto-test du moteur",
+  "minigame.smoke.hint": "Touchez pour changer d’état (auto-test)",
+  "minigame.smoke.won": "Réussi !",
+  "minigame.smoke.playing": "Continuer",
+  "minigame.menu.title": "Mini-jeux",
+  "minigame.menu.back": "‹ Retour",
+  "minigame.menu.best": "Record {best}",
+  "minigame.jump.title": "Saut",
+  "minigame.jump.desc": "Maintenez pour charger, relâchez pour sauter",
+  "minigame.jump.hint": "Maintenez pour charger, relâchez pour sauter",
+  "minigame.jump.best": "Record {best}",
+  "minigame.jump.over": "{score} points cette partie",
+  "minigame.jump.retry": "Rejouer",
+  "minigame.jump.record": "Nouveau record !",
+  "tutorial.survival.log.title": "Coupez d’abord un arbre",
+  "tutorial.survival.log.desc": "Approchez du tronc et maintenez (clic gauche ou doigt) pour le casser",
+  "tutorial.survival.table.title": "Fabriquez un établi",
+  "tutorial.survival.table.desc": "4 planches dans l’inventaire",
+  "tutorial.survival.woodPickaxe.title": "Fabriquez une pioche en bois",
+  "tutorial.survival.woodPickaxe.desc": "3 planches + 2 bâtons",
+  "tutorial.survival.stonePickaxe.title": "Minez de la pierre, passez à la pioche en pierre",
+  "tutorial.survival.stonePickaxe.desc": "Minez du caillou avec la pioche en bois, puis fabriquez une pioche en pierre (quelques blocs plus bas, c’est de la pierre)",
+  "tutorial.creative.place10.title": "Posez 10 blocs",
+  "tutorial.creative.place10.desc": "Choisissez un bloc dans la barre du bas, puis touchez le sol",
+  "tutorial.creative.layers.title": "Montez sur 3 niveaux",
+  "tutorial.creative.layers.desc": "Empilez quelques blocs pour voir jusqu’où vous montez",
+  "tutorial.creative.colors.title": "Changez 3 couleurs",
+  "tutorial.creative.colors.desc": "Essayez des blocs d’autres couleurs",
+  "tutorial.creative.door.title": "Posez une porte",
+  "tutorial.creative.door.desc": "Une porte dans un mur et vous entrez et sortez librement",
+} satisfies Pick<Messages, keyof typeof zhMinigame>;
