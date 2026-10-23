@@ -68,6 +68,29 @@ node <本技能目录>/scripts/install.mjs
 | `--force` | 文档已存在时也覆盖（默认是另存 `*.continue-do.md`，保护用户进度） |
 | `--ci` | 额外写 `.github/workflows/continue-do.yml`（跑与本地完全相同的 `check.mjs`）。默认不写；已有同名文件不覆盖 |
 
+### 1.5 三层自检（都不需要人肉核对）
+
+| 脚本 | 回答什么问题 | 快慢 |
+| --- | --- | --- |
+| `scripts/check-framework.mjs` | 打包源**自己**一致吗（模板↔安装器、注册命令带 `--event=`、脚本与开关都在本文里有交代） | 秒级 |
+| `scripts/test-install.mjs` | 装出来的**形状**对吗（必备文件齐不齐、装完的自检跑得通） | 秒级 |
+| `scripts/e2e.mjs` | 装好之后**真的转得动吗**：用真实 `codebuddy` CLI 跑一个小任务，断言"队列建了 → 钩子递了 → 收尾做了 → 归档落位" | 分钟级、花 token |
+
+前两个是静态的，所以挡不住"钩子写 stdout 后立刻 exit 导致注入 JSON 被截断"这类事故——那种情况静态检查全绿、但任务永远递不出来。**`e2e.mjs` 就是为了这一层。**
+
+```bash
+npm run skill:e2e -- --dry-run   # 只看计划
+npm run skill:e2e               # 真跑（默认成功即删数据目录）
+npm run skill:e2e -- --keep     # 保留现场（.skill-e2e/run-<时间戳>/）
+```
+
+三条约定：
+
+- **模型/配置继承本机**：不传 `--model`，用你平时那套；会话 ID 固定，所以断言能按 ID 推导路径。
+- **测试数据不进仓库**：全部落在 `.skill-e2e/`（已 gitignore）。**框架进库、现场不进库**。
+- **没装 CLI 就跳过**（exit 0 并说明），不会把没装环境的人卡成红。
+- 不进 `test:*` 前缀，所以 `npm run check` 不会带上它，也不会把台账里的"套数"改乱。
+
 ### 2. 安装器做了什么
 
 | 内容 | 已存在时 |

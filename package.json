@@ -212,7 +212,8 @@
     "check:browser": "node tools/browser-check.mjs",
     "test:browser-check": "node tools/browser-check-test.mjs",
     "shotdiff": "node tools/shot-diff.mjs",
-    "test:shotdiff": "node tools/shot-diff-test.mjs"
+    "test:shotdiff": "node tools/shot-diff-test.mjs",
+    "skill:e2e": "node .codebuddy/skills/continue-task/scripts/e2e.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

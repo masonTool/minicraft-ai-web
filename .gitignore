@@ -52,3 +52,8 @@ shot-*.png
 
 # 参考资料（本地存档的网页 / 截图；4.7MB 的 mhtml 进仓库会永久留在历史里）
 references/
+
+# —— skill 端到端自测的数据（临时项目、CLI 输出、钩子日志）——
+# 框架（.codebuddy/skills/continue-task/scripts/e2e.mjs）要进库，它跑出来的现场不进。
+# 每次跑会重建 run-<时间戳>/，几百个文件，提交进去只会淹掉 diff。
+.skill-e2e/
