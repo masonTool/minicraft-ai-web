@@ -658,6 +658,30 @@ for (const base of SHAPE_BASES) {
   DESCRIPTIONS[`${base}_slab`] = () => tp('item.desc.tpl.slab', { base: t(`item.${base}`) });
   DESCRIPTIONS[`${base}_wall`] = () => tp('item.desc.tpl.wall', { base: t(`item.${base}`) });
 }
+// ---- 颜色族第一批（B4d，批次 20261024-0136）：80 个方块只写 5 条模板
+//
+// 羊毛 / 地毯 / 混凝土 / 染色玻璃 / 染色玻璃板 —— 每种 16 色，共 80 个。
+// **`{name}` 传的是"整件物品名"而不是颜色词**：物品名本身已经是各语言的正确形式
+// （中文"白色羊毛"、德语 `Weißwolle`、俄语 `Шерсть (Белый)`、法语 `Laine (blanc)`），
+// 所以说明模板不用再操心性数配合 —— 这是比"颜色词 + 形状词拼接"更稳的一层复用。
+const COLOR_KEYS = [
+  'white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray',
+  'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black',
+] as const;
+for (const color of COLOR_KEYS) {
+  // 每个形状各自一条分支：键必须写成字面量，`audit:i18n` 才认得出这一族被引用了
+  DESCRIPTIONS[`${color}_wool`] = () =>
+    tp('item.desc.tpl.wool', { name: tp('item.tpl.wool', { color: t(`item.color.${color}`) }) });
+  DESCRIPTIONS[`${color}_carpet`] = () =>
+    tp('item.desc.tpl.carpet', { name: tp('item.tpl.carpet', { color: t(`item.color.${color}`) }) });
+  DESCRIPTIONS[`${color}_concrete`] = () =>
+    tp('item.desc.tpl.concrete', { name: tp('item.tpl.concrete', { color: t(`item.color.${color}`) }) });
+  DESCRIPTIONS[`${color}_stained_glass`] = () =>
+    tp('item.desc.tpl.stainedGlass', { name: tp('item.tpl.stainedGlass', { color: t(`item.color.${color}`) }) });
+  DESCRIPTIONS[`${color}_stained_glass_pane`] = () =>
+    tp('item.desc.tpl.stainedGlassPane', { name: tp('item.tpl.stainedGlassPane', { color: t(`item.color.${color}`) }) });
+}
+
 // ⚠️ 石砖墙的 id 是**单数**（`stone_brick_wall`），与另外两个形状（`stone_bricks_stairs` /
 // `stone_bricks_slab`）不一致 —— 遍历基座表碰不到它，只能单独补一条。
 DESCRIPTIONS['stone_brick_wall'] = () => tp('item.desc.tpl.wall', { base: t('item.stone_bricks') });

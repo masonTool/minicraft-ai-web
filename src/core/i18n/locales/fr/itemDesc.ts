@@ -368,4 +368,9 @@ export const itemDesc = {
   "item.desc.tpl.stairs": "Escalier ({base}) : pour monter ou pour décorer — les marches montent d’un bloc",
   "item.desc.tpl.slab": "Dalle ({base}) : la moitié d’un bloc, posée en bas ou en haut ; on marche entre deux dalles",
   "item.desc.tpl.wall": "Muret ({base}) : un bloc de haut ; bloque le passage mais pas la vue",
+  "item.desc.tpl.wool": "{name} : tondue sur un mouton ou fabriquée avec quatre ficelles ; pour les lits, les tapis et la déco",
+  "item.desc.tpl.carpet": "{name} : deux laines de la même couleur donnent trois tapis ; se pose à plat sur un bloc",
+  "item.desc.tpl.concrete": "{name} : obtenu quand la poudre de béton de la même couleur touche l’eau ; plus saturé que la terre cuite",
+  "item.desc.tpl.stainedGlass": "{name} : du verre et un colorant de la même couleur ; laisse passer une lumière colorée",
+  "item.desc.tpl.stainedGlassPane": "{name} : six blocs de verre coloré donnent seize vitres ; pour les fenêtres",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

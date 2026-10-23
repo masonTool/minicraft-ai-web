@@ -367,4 +367,9 @@ export const itemDesc = {
   "item.desc.tpl.stairs": "Escada ({base}): para subir ou decorar — os degraus sobem um bloco",
   "item.desc.tpl.slab": "Laje ({base}): metade de um bloco, na parte de baixo ou de cima; dá para andar entre duas lajes",
   "item.desc.tpl.wall": "Muro ({base}): um bloco de altura; bloqueia a passagem mas não a visão",
+  "item.desc.tpl.wool": "{name}: tosquiada da ovelha ou feita com quatro linhas; para camas, tapetes e decoração",
+  "item.desc.tpl.carpet": "{name}: duas lãs da mesma cor dão três; fica plano sobre o bloco",
+  "item.desc.tpl.concrete": "{name}: surge quando o pó de concreto da mesma cor toca a água; mais saturado que a cerâmica",
+  "item.desc.tpl.stainedGlass": "{name}: vidro e corante da mesma cor; deixa passar luz colorida",
+  "item.desc.tpl.stainedGlassPane": "{name}: seis blocos de vidro colorido dão dezesseis; para janelas",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

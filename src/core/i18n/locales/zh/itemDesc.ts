@@ -374,4 +374,9 @@ export const itemDesc = {
   "item.desc.tpl.stairs": "{base}楼梯：可以走上去，也能当装饰；每级比整块方块高出一级",
   "item.desc.tpl.slab": "{base}台阶：半格高，放在一格的下半或上半，两个半砖之间可以走",
   "item.desc.tpl.wall": "{base}墙：一格高、一格宽的围墙，能挡住走位但挡不住视线",
+  "item.desc.tpl.wool": "{name}：剪羊或用 4 根线合成；做床、地毯与装饰",
+  "item.desc.tpl.carpet": "{name}：2 块同色羊毛合成 3 块；铺在方块上，踩上去不会抬高",
+  "item.desc.tpl.concrete": "{name}：同色混凝土粉末遇水凝固而成；颜色比陶瓦更饱和",
+  "item.desc.tpl.stainedGlass": "{name}：玻璃加同色染料；透光但带颜色",
+  "item.desc.tpl.stainedGlassPane": "{name}：6 块同色染色玻璃合成 16 块；做窗格用",
 } as const;

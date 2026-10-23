@@ -374,4 +374,9 @@ export const itemDesc = {
   "item.desc.tpl.stairs": "{base} Stairs: walk up them or use them as decoration — each step rises one block",
   "item.desc.tpl.slab": "{base} Slab: half a block tall, placed on the bottom or top half; you can walk between two slabs",
   "item.desc.tpl.wall": "{base} Wall: a one-block-high fence; blocks movement but not sight",
+  "item.desc.tpl.wool": "{name}: shear a sheep or craft from four string; used for beds, carpets and decoration",
+  "item.desc.tpl.carpet": "{name}: two wool of the same color craft into three; lays flat on a block",
+  "item.desc.tpl.concrete": "{name}: concrete powder of the same color hardens in water; more saturated than terracotta",
+  "item.desc.tpl.stainedGlass": "{name}: glass plus dye of the same color; lets light through with a tint",
+  "item.desc.tpl.stainedGlassPane": "{name}: six stained glass of the same color craft into sixteen; for windows",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;

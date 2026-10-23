@@ -368,4 +368,9 @@ export const itemDesc = {
   "item.desc.tpl.stairs": "Treppe ({base}): zum Hochgehen oder als Dekoration — jede Stufe steigt einen Block hoch",
   "item.desc.tpl.slab": "Stufe ({base}): halb so hoch, liegt auf der unteren oder oberen Hälfte; man kann zwischen zwei Stufen laufen",
   "item.desc.tpl.wall": "Mauer ({base}): ein Block hoch; blockiert die Bewegung, aber nicht die Sicht",
+  "item.desc.tpl.wool": "{name}: von Schafen geschoren oder aus vier Fäden; für Betten, Teppiche und Deko",
+  "item.desc.tpl.carpet": "{name}: zwei Wolle derselben Farbe ergeben drei; liegt flach auf einem Block",
+  "item.desc.tpl.concrete": "{name}: gleichfarbiges Betonpulver härtet im Wasser; kräftiger als Keramik",
+  "item.desc.tpl.stainedGlass": "{name}: Glas plus gleichfarbiger Farbstoff; lässt Licht farbig durch",
+  "item.desc.tpl.stainedGlassPane": "{name}: sechs gleichfarbige Glasblöcke ergeben sechzehn; für Fenster",
 } satisfies Pick<Messages, keyof typeof zhItemDesc>;
