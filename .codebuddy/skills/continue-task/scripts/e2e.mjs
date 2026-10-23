@@ -1204,8 +1204,33 @@ function buildRunBlock(rows, unitRows) {
   return lines.join('\n');
 }
 
+/**
+ * `test.md` 的骨架；不存在就建。
+ *
+ * 为什么抽成函数、且**每次写之前都调**：`test.md` 掉一次（清场之外的删除、
+ * 人在跑的过程中手动清了现场）就会让 `upsertRunBlock` 的 `readFileSync` 抛 ENOENT，
+ * 整轮在"第一个场景已经跑完"之后崩掉——报告和账本全丢。
+ * 2026-10-23 实测过一次（`main` 通过后崩在 upsert）。
+ */
+function ensureReport() {
+  if (existsSync(report)) return;
+  writeFileSync(
+    report,
+    [
+      '# e2e 测试报告',
+      '',
+      '> 每次运行一节，用表格列：测什么 / 结果 / 耗时 / tokens，失败的单独列原因。',
+      '> **每个场景跑完就刷新本节**（不等整轮结束）：中途停下也能看到已完成场景的结果；',
+      '> 每个场景目录里另有一份 `report.md`（同一个场景的逐条断言）。',
+      '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
+      '',
+    ].join('\n'),
+  );
+}
+
 /** 把本轮那一节写进 `test.md`：已有就**原地替换**（不重复追加），没有就追加。 */
 function upsertRunBlock(body) {
+  ensureReport();
   const start = `<!-- e2e:run ${runId}:start -->`;
   const end = `<!-- e2e:run ${runId}:end -->`;
   const block = `${start}\n${body.trimEnd()}\n${end}\n`;
@@ -1220,20 +1245,7 @@ function upsertRunBlock(body) {
   );
 }
 
-if (!existsSync(report)) {
-  writeFileSync(
-    report,
-    [
-      '# e2e 测试报告',
-      '',
-      '> 每次运行一节，用表格列：测什么 / 结果 / 耗时 / tokens，失败的单独列原因。',
-      '> **每个场景跑完就刷新本节**（不等整轮结束）：中途停下也能看到已完成场景的结果；',
-      '> 每个场景目录里另有一份 `report.md`（同一个场景的逐条断言）。',
-      '> 本文件在 `.e2e/` 下（gitignore，不入库）；长期账本见 skill 里的 `e2e-history.md`。',
-      '',
-    ].join('\n'),
-  );
-}
+ensureReport();
 
 const results = [];
 for (const name of chosen) {
