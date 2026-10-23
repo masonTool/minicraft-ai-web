@@ -21,13 +21,13 @@
 - 文档门禁双口径（行数 + 字节）：`DOC_LIMITS` / `DOC_BYTE_LIMITS`；`audit-ids` 核对 `DONE` ↔ `notes/batches.md`，`tools/audit-docs.mjs` 防入口文档复述机制 · 批次 1950
 - continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致 · 批次 20261022-2014
 - 任务分层（**仅 >16 条的任务**）：`doing/plan-<会话ID>.md` 与队列**同名配对**（文件名即绑定，不写 `> 计划：`），里程碑 ≥2 阶段；每批做完自动取下一阶段、**完成到里程碑硬停**，最后里程碑没确认不收尾（细则 `notes/plan.md`）· 批次 2338、0022、20261023-0744
-- 收尾把队列**归档**到 `logs/doing-archive/<会话ID>-<时间戳>.md`（不再 `rm`）；并行任务走 `npm run continue:worktree`（独立树 + 分支推远程，合并由人定）· 批次 20261023-0744
+- 收尾**归档**（不 `rm`）队列 / 计划 / 决策记录到 `logs/doing-archive/<名>-<会话ID>-<时间戳>.md`；并行任务走 `npm run continue:worktree`（独立树 + 分支推远程，合并由人定）· 批次 0744、20261023-0823
 
 **坑 / 注意**
 
 - 「派生数字不要手抄」与「同一事实写在两处就查两处」是这一段的母题，见 `TIPS.md#工程与基础设施`
 - 钩子写完 stdout 立刻 `exit` 会截断长内容（零报错）：一律走 `writeFd`（`fs.writeSync`），见同节 TIPS
-- 计划机制的失效几乎都是**静默**的（绑定/反引号/门禁各写一份）：改它前先看 `npm run audit:docs` 的"计划"行；判红过严会卡住别人正在跑的批次，粒度类规则走 hints
+- 这套机制的失效几乎都是**静默**的：绑定/反引号各写一份、计划关卡连续 N 轮不推进只放行不升级、**钩子自己崩了宿主也当未阻止**（已由 `run.mjs` 包装器兜住）。改它前先跑 `audit:docs` 的"计划/决策"行
 - 文档体量的"行数"会被超长表格绕过（TIPS 曾 499 行 / 190KB）：大表格迁 `notes/`，门禁同时看字节
 - `.continue/` 的任务机制（队列 / 钩子 / 门禁）见 `README.md`；`HANDOFF.md` 只留本项目的约定与命令
 

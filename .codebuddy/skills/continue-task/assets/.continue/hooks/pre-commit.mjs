@@ -45,7 +45,19 @@ const MAX_ITEMS = Math.max(1, Number(process.env.CONTINUE_MAX_ITEMS_PER_COMMIT ?
 function completedQueueItems() {
   const res = spawnSync(
     'git',
-    ['diff', '--cached', '--unified=0', '--diff-filter=M', '--', '.continue/doing'],
+    [
+      'diff',
+      '--cached',
+      '--unified=0',
+      '--diff-filter=M',
+      '--',
+      '.continue/doing',
+      // 计划与决策记录也住在 `doing/`、也用 `- [x]`，但它们**不是队列条目**：
+      // 不排掉的话，"勾了最后一条队列条目 + 顺手勾掉阶段"这种自然写法会被判成
+      // "一次勾了 2 条"而拒绝提交，逼人去用 --no-verify（等于削弱门禁）。
+      ':(exclude).continue/doing/plan-*.md',
+      ':(exclude).continue/doing/decision-*.md',
+    ],
     { cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
   );
   if (res.status !== 0) return null; // 不是 git 仓库 / 没有 diff → 不判
