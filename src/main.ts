@@ -385,6 +385,7 @@ import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
+import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1790,6 +1791,12 @@ class App {
 
   /** 一天中的时刻 [0,1)：0 = 日出，0.25 = 正午，0.5 = 日落，0.75 = 午夜 */
   private timeOfDay = 0.12;
+  /**
+   * 联机时服务端报的时间（联机10）：`null` = 单机，走本地推进。
+   *
+   * 只存目标值、不直接赋给 `timeOfDay`——2 秒一条广播，直接赋值太阳会"跳"。
+   */
+  private netTimeTarget: number | null = null;
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
@@ -1827,6 +1834,10 @@ class App {
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
     onItemRemove: (owner, localId) => this.onNetItemRemove(owner, localId),
+    // 时间权威（联机10）：服务端 2s 一条，这里只记目标值，推进在主循环里按 4 倍速追
+    onTime: (timeOfDay) => {
+      this.netTimeTarget = timeOfDay;
+    },
     onChat: (id, name, text) => {
       this.chat.push(`<${name}> ${text}`, 'player');
       this.chatLine = `<${name}> ${text}`;
@@ -1850,6 +1861,8 @@ class App {
         this.remoteSmoothers.clear();
         this.remotePresence.clear();
         this.clearRemoteItems();
+        // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
+        this.netTimeTarget = null;
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
@@ -17042,7 +17055,13 @@ class App {
       // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）
       if (this.settings.daylightCycle) {
         const before = this.timeOfDay;
-        this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+        if (this.netTimeTarget !== null && this.net.sessionState === 'connected') {
+          // 联机（联机10）：时间是**服务端权威**，本地每帧按 4 倍速向它靠，
+          // 而不是自己按 dt 推进——否则两个人各跑各的（一个人白天一个人黑夜）
+          this.timeOfDay = stepTimeOfDayToward(this.timeOfDay, this.netTimeTarget, dt);
+        } else {
+          this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+        }
         // 跨过午夜 = 新的一天：月相往前推一格（批次 84）。判据就是"取模之后变小了"
         if (this.timeOfDay < before) this.advanceDay();
       }

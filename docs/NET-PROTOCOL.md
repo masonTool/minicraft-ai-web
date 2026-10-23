@@ -84,7 +84,8 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, players[], edits[], items[]` | 只发给刚 join 的人 |
+| `welcome` | `v, id, name, seed, timeOfDay, players[], edits[], items[]` | 只发给刚 join 的人 |
+| `time` | `timeOfDay`（0..1 的一天） | 每 2 秒广播给所有人；没人在线时不发 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
 | `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
@@ -150,6 +151,7 @@
 | `welcome` | 种子与服务端比对：**不一致就整批跳过**（不写 edits、不建远端玩家），消息栏 + HUD 提示 `/netseed reload` 或 `/netseed new`；一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像 | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档；种子冲突判定在 `core/net/SeedReconcile.ts`。远端改动**会**进本地存档（`联机6` 隔离仍未做） |
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度 | 队友走进下界时不会在主世界同坐标留一个分身 |
 | `leave` | 删远端玩家与其名下镜像 | |
+| `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`） | 直接赋值太阳会"跳"；断开后回本地推进 |
 | `block` | 一律先 `world.edits.record`（**未加载区块的改动也不再丢**）；同维度且已加载才额外 `setBlockAndUpdate` + 补建容器，否则等区块加载时 `World.onGenerated` 的 `applyTo` 叠回去；`y` 越界整条丢弃 | 分档判定在 `core/net/RemoteBlockWrite.ts` 的 `planRemoteBlock`（同一条也用于 `welcome` 的 edits） |
 | `container` | 仅当同维度、且那一格确实是箱子/木桶时，用 `restoreStacks` 清洗后写回 | 不回声（`Chest.restore` 不触发 `onMutate`） |
 | `item-spawn` | 建只渲染的镜像（`ghost=true`），不跑物理、不可拾取 | `owner === selfId` 时跳过 |
@@ -168,7 +170,8 @@
 | `联机5` | 种子冲突时**跳过**这一批 edits 并给 `/netseed reload|new`（`reload` 删库重开、`new` 另建同种子世界） | 目前入口是命令，连接界面上的按钮见 `联机9` |
 | `联机6` | 联机时切到按 roomId 派生的独立库（`worldId@mp:<room>`），断开后**停止写盘**、重进世界才回单机档 | 单机档不再被污染；无缝回切需要"世界原地重载"（`联机34`） |
 | `联机7` | 心跳已做（5s ping / 20s 无 pong 断开），状态机在 `core/net/NetSession.ts` | 客户端侧没有"服务端静默"超时：只认 socket close |
-| `联机10`/`联机11` | 无时间/天气/睡眠消息 | 一个人白天一个人黑夜 |
+| `联机10` | 时间已做（服务端推算 + 2s 校正，客户端按 4 倍速收敛）；**天气还没同步** | 时间一致了，但一个人下雨一个人晴天（天气拆到 `联机35`） |
+| `联机11` | 无睡眠/跳夜消息 | 睡觉得各自睡，跳夜不同步 |
 | `联机12` | 只有玩家动作广播方块 | 红石/流体/作物/爆炸长期分叉 |
 | `联机13` | 服务端无持久化 | 重启后新玩家看到原始地形 |
 | `联机15`/`联机16` | 容器只覆盖箱子/木桶且打开时才挂；告示牌/展示框不同步 | 熔炉、酿造台、牌子上的字各看各的 |

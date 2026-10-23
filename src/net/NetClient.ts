@@ -72,6 +72,12 @@ export interface NetHandlers {
   onItemRemove: (owner: number, localId: number) => void;
   onChat: (id: number, name: string, text: string) => void;
   /**
+   * 服务端时间（联机10）：0..1 的一天。
+   *
+   * 主线不是"每帧都发"——服务端 2 秒一条，客户端按 4 倍速往它靠（`core/net/NetTime.ts`）。
+   */
+  onTime?: (timeOfDay: number) => void;
+  /**
    * 服务端回了 `error`。
    *
    * 与 `onStatus(false, …)` 分开：`bad-json`/`unknown` 是消息级错误，连接还好好的，
@@ -222,6 +228,13 @@ export class NetClient {
     };
   }
 
+  /** `welcome` 与 `time` 共用：非法值直接丢（服务端时钟算错也不该把本地时间变成 NaN） */
+  private deliverTime(message: Record<string, unknown>): void {
+    const timeOfDay = Number(message.timeOfDay);
+    if (!Number.isFinite(timeOfDay)) return;
+    this.handlers.onTime?.(timeOfDay);
+  }
+
   private handleMessage(message: Record<string, unknown>): void {
     switch (message.t) {
       case 'welcome': {
@@ -248,6 +261,12 @@ export class NetClient {
         const edits = (message.edits as number[][] | undefined) ?? [];
         const items = (message.items as NetItemState[] | undefined) ?? [];
         this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items);
+        // 时间权威（联机10）：进服先对齐一次，之后靠 `time` 广播校正
+        this.deliverTime(message);
+        break;
+      }
+      case 'time': {
+        this.deliverTime(message);
         break;
       }
       case 'player': {

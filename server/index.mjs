@@ -98,6 +98,8 @@ function broadcast(message, exceptId = null) {
 function snapshotFor() {
   return {
     seed: WORLD_SEED,
+    // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
+    timeOfDay: currentTimeOfDay(),
     players: [...players.values()].map((p) => ({
       id: p.id,
       name: p.name,
@@ -132,6 +134,28 @@ wss.on('listening', () => {
  * 用时间戳而不是经典的单布尔 `isAlive`：后者把"超时"绑死在扫描间隔上（一次没回就断，
  * 5s 的网络抖动也会踢人），时间戳才能表达"20s 都没回"。
  */
+/**
+ * 时间权威（联机10）：服务端只推算、不 tick。
+ *
+ * 一天 20 分钟、开局 0.12（清晨），与客户端 `dayLengthSeconds` 的默认值一致。
+ * 客户端那边拿到目标值后按 4 倍速向它靠（`core/net/NetTime.ts`），所以这里
+ * 2 秒一条足够——不需要每帧广播。
+ */
+const DAY_LENGTH_MS = 20 * 60 * 1000;
+const START_TIME_OF_DAY = 0.12;
+const serverStartMs = Date.now();
+function currentTimeOfDay() {
+  const value = (Date.now() - serverStartMs) / DAY_LENGTH_MS + START_TIME_OF_DAY;
+  return value - Math.floor(value);
+}
+
+/** 时间校正广播：2 秒一条；没人时什么都不发 */
+const clockTimer = setInterval(() => {
+  if (players.size === 0) return;
+  broadcast({ t: 'time', timeOfDay: currentTimeOfDay() });
+}, 2000);
+clockTimer.unref?.();
+
 const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_TIMEOUT_MS = 20000;
 const heartbeat = setInterval(() => {

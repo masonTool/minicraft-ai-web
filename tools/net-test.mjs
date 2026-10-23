@@ -160,6 +160,11 @@ try {
       resolve(true);
     });
   });
+  /**
+   * 时间校正（联机10）的探针：服务端每 2s 广播一条 `time`。同样先挂好再跑别的用例，
+   * 不对齐 2s 窗口，套件不会因此变慢。
+   */
+  const timeSeen = alice.wait('time', 5000);
   const welcomeA = await joinAndWaitWelcome(alice, 'Alice', 10, 70, 20);
   check('Alice 收到 welcome', welcomeA !== null);
   check('welcome 带服务端种子', welcomeA?.seed === 20261014, `${welcomeA?.seed}`);
@@ -408,6 +413,17 @@ try {
       JSON.stringify(welcomePeek?.players),
     );
     peek.close();
+  }
+
+  // ---------------------------------------------------------------- 时间权威（联机10）
+  console.log('\n[时间权威]');
+  {
+    const welcomeTime = welcomeA?.timeOfDay;
+    check('welcome 带时间', typeof welcomeTime === 'number' && welcomeTime >= 0 && welcomeTime < 1, `${welcomeTime}`);
+    // 2 秒一条校正广播；值必须落在一天之内（否则客户端会算成 NaN/负数）
+    const timeMessage = await timeSeen;
+    const value = timeMessage?.timeOfDay;
+    check('收到时间校正广播', typeof value === 'number' && value >= 0 && value < 1, `${value}`);
   }
 
   // ---------------------------------------------------------------- 心跳（联机7）
