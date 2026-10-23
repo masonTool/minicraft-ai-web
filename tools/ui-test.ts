@@ -2058,8 +2058,12 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '设置面板里的"视角"下拉还在',
-    // 批次 418 起文案走 i18n 键：验"绑了哪个键"，中文表里那条由 i18n 测试管
-    settingsSource.includes("this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode')"),
+    // 批次 418 起文案走 i18n 键：验"绑了哪个键"，中文表里那条由 i18n 测试管。
+    // 20261024-0136 起选项标签也走 i18n（`cameraModeLabel()`），makeSelect 变成多行调用，
+    // 所以判据不再锚那一行，改锚"键 + 标签函数"两件事。
+    settingsSource.includes("'cameraMode'") &&
+      settingsSource.includes('cameraModeLabel(mode)') &&
+      settingsSource.includes("t('settings.row.cameraMode')"),
   );
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
@@ -2202,7 +2206,8 @@ console.log('\n[主菜单分层（批次 108）]');
       mainSrc.includes('difficulty: patch.difficulty') &&
       mainSrc.includes('await save.savePlayer('),
   );
-  check('首页品牌信号是 MINECRAFT + 基岩版标识', source.includes("logo.textContent = 'MINECRAFT';") && source.includes('world-edition'));
+  // 20261024-0136 用户拍板：首页大字从 MINECRAFT 改成品牌名，并**去掉「基岩版」字样**
+  check('首页品牌块取唯一真值（BRAND / BRAND_EDITION），不再写死 MINECRAFT 与「基岩版」', source.includes('logo.textContent = BRAND;') && source.includes('edition.textContent = BRAND_EDITION;') && source.includes('world-edition'));
   check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
   check(
     '新建世界返回世界列表（不是跳回首页）',

@@ -17,7 +17,7 @@
  * 设置是"这台设备的偏好"，换世界也不该丢；而世界存档属于某个种子。
  */
 
-import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
+import { CAMERA_MODES, cameraModeLabel, type CameraMode } from '../core/viewMode.ts';
 // 界面语言（M8，批次 403；多语言 P0-5 起多一个 `auto` = 跟随系统）：表与当前语言都在这个纯模块里
 import {
   AUTO_LANGUAGE,
@@ -1130,7 +1130,14 @@ export class SettingsScreen {
 
     // 第二块：按钮 / 下拉 / 开关（同类聚在一起）
     const controlOptions = this.makeBlock(controls);
-    this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode'), CAMERA_MODES, CAMERA_MODE_LABELS);
+    this.makeSelect(
+      controlOptions,
+      'cameraMode',
+      t('settings.row.cameraMode'),
+      CAMERA_MODES,
+      // 与 `handednessLabels()` 同一个做法：标签表在构造时生成一次
+      Object.fromEntries(CAMERA_MODES.map((mode) => [mode, cameraModeLabel(mode)])) as Record<CameraMode, string>,
+    );
     // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
     this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, handednessLabels());
     // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星

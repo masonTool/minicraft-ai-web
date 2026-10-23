@@ -339,7 +339,7 @@ import { SLOT_COUNTS, kindOf } from './core/save/ContainerSave.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
 import {
-  CAMERA_MODE_LABELS,
+  cameraModeLabel,
   THIRD_PERSON_DISTANCE,
   CAMERA_CLEARANCE,
   CLOSE_CAMERA_HIDE_PLAYER,
@@ -5020,7 +5020,7 @@ class App {
   cycleCameraMode(): CameraMode {
     const mode = this.setCameraMode(nextCameraMode(this.cameraMode));
     // 顶部按钮点完给一句反馈：图标变化在手机上不够明显
-    this.hudToast.show(`视角：${CAMERA_MODE_LABELS[mode]}`);
+    this.hudToast.show(tp('misc.cameraModeToast', { mode: cameraModeLabel(mode) }));
     return mode;
   }
 
@@ -16412,7 +16412,7 @@ class App {
       `Minicraft  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${difficultyLabel(this.difficulty)}   模式: ${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${difficultyLabel(this.difficulty)}   模式: ${gameModeLabel(this.gameMode)}${this.flying ? '(飞行)' : ''}   维度: ${dimensionLabel(this.dimension)}   视角: ${cameraModeLabel(this.cameraMode)}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +

@@ -38,7 +38,7 @@ import {
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
 import { HANDEDNESS_MODES, fingerAimPoint, handednessLabels } from '../src/ui/TouchControls.ts';
-import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../src/core/viewMode.ts';
+import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
 import {
   FRAME_TIME_DROP,
   MOBILE_VIEW_DISTANCE,
@@ -355,7 +355,7 @@ console.log('\n[云]');
 
 console.log('\n[下拉框的选项]');
 {
-  check('视角选项与标签一一对应', CAMERA_MODES.every((mode) => typeof CAMERA_MODE_LABELS[mode] === 'string'));
+  check('视角选项与标签一一对应', CAMERA_MODES.every((mode) => typeof cameraModeLabel(mode) === 'string'));
   check('粒子选项与标签一一对应', PARTICLE_LEVELS.every((level) => typeof particleLevelLabel(level) === 'string'));
   check('视角选项数量是 3', CAMERA_MODES.length === 3);
   check('粒子选项数量是 3', PARTICLE_LEVELS.length === 3);

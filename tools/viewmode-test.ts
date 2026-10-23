@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import {
-  CAMERA_MODE_LABELS,
+  cameraModeLabel,
   CAMERA_MODES,
   CAMERA_CLEARANCE,
   CLOSE_CAMERA_HIDE_PLAYER,
@@ -68,7 +68,7 @@ console.log('\n[循环与标签]');
 
   check(
     '每种模式都有中文标签',
-    CAMERA_MODES.every((entry) => typeof CAMERA_MODE_LABELS[entry] === 'string' && CAMERA_MODE_LABELS[entry].length > 0),
+    CAMERA_MODES.every((entry) => typeof cameraModeLabel(entry) === 'string' && cameraModeLabel(entry).length > 0),
   );
 }
 

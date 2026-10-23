@@ -39,6 +39,8 @@ import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
 import { POTIONS, TIPPED_ARROWS } from '../src/core/registry/potions.ts';
 import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { glFailText } from '../src/core/render/webglSupport.ts';
+import { BRAND, BRAND_EDITION } from '../src/core/brand.ts';
+import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
 import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
 import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
 import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
@@ -1046,7 +1048,7 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
    *
    * 注意：历史档案（`DONE.md` / `notes/`）里的旧名**故意不改** —— 那是"当时叫什么"的记录。
    */
-  const BRAND = 'Minicraft';
+  // 品牌名的唯一真值（`src/core/brand.ts`）—— 与首页那行大字共用同一个常量
   const brandDrift: string[] = [];
   for (const [, file] of manifestLocales) {
     const manifest = JSON.parse(readFileSync(`${manifestDir}/${file}`, 'utf8')) as Record<string, unknown>;
@@ -1055,6 +1057,33 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   }
   check('六份 manifest 的 name / short_name 都是同一个品牌名', brandDrift.length === 0, brandDrift.slice(0, 3).join(','));
   check('页面标题是品牌名', readFileSync('index.html', 'utf8').includes(`<title>${BRAND}</title>`));
+  // 判据看**赋值点**而不是全文 grep：注释里提到「基岩版」是历史说明（"原来写的是…"），
+  // 真正要保证的是「界面上取值的两个源头不再是旧字面量」。
+  const worldScreenSrc = readFileSync('src/ui/WorldScreen.ts', 'utf8');
+  check(
+    '首页品牌块从 BRAND / BRAND_EDITION 取值（旧字面量已清掉）',
+    worldScreenSrc.includes('logo.textContent = BRAND') &&
+      worldScreenSrc.includes('edition.textContent = BRAND_EDITION') &&
+      !worldScreenSrc.includes("textContent = 'MINECRAFT'") &&
+      !worldScreenSrc.includes("textContent = '基岩版"),
+  );
+  check('副标题是版本身份（不含「基岩版」）', BRAND_EDITION.includes('1.18') && !BRAND_EDITION.includes('基岩'));
+
+  /**
+   * 设置里的「视角」选项（B2，批次 20261024-0136）。
+   *
+   * `CAMERA_MODE_LABELS` 原来是中文常量（第一人称 / 第三人称（背后） / 第三人称（正面）），
+   * 与 P6-1 修的难度/模式同一个毛病。切视角的 toast（`视角：{mode}`）也一并键化。
+   */
+  for (const code of ['de', 'ru', 'fr', 'pt'] as const) {
+    setLanguage(code);
+    const labels = CAMERA_MODES.map((mode) => cameraModeLabel(mode));
+    const toast = tp('misc.cameraModeToast', { mode: labels[0]! });
+    check(`${code} 视角选项与切换提示不含中文`, !/[\u4e00-\u9fff]/.test(labels.join('') + toast), `${labels.join(' / ')} | ${toast}`);
+  }
+  setLanguage('zh');
+  check('中文下视角选项仍是原来的说法', cameraModeLabel('first') === '第一人称' && cameraModeLabel('third-back') === '第三人称（背后）');
+  resetLanguageForTest();
   check('商店文案六份的标题都是品牌名', ['zh', 'en', 'de', 'ru', 'fr', 'pt'].every((code) => readFileSync(`docs/store/${code}.md`, 'utf8').includes(`\n${BRAND}\n`)));
   check(
     '深链优先于设置里的值',

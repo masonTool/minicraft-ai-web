@@ -15,6 +15,7 @@
  */
 
 import { getLanguage, t, tp } from '../core/i18n/I18n.ts';
+import { BRAND, BRAND_EDITION } from '../core/brand.ts';
 import { localeMeta } from '../core/i18n/locale.ts';
 import {
   WORLD_TYPES,
@@ -133,10 +134,12 @@ export class WorldScreen {
     title.className = 'world-title';
     const logo = document.createElement('strong');
     logo.className = 'world-logo';
-    logo.textContent = 'MINECRAFT';
+    // 品牌名走唯一真值（`core/brand.ts`）：改名只改一处，别在这里留第二份
+    logo.textContent = BRAND;
     const edition = document.createElement('span');
     edition.className = 'world-edition';
-    edition.textContent = '基岩版 1.18 · WEB EDITION';
+    // ⚠️ 用户要求去掉「基岩版」字样：本项目是独立的浏览器实现，不借用 Mojang 的版本命名
+    edition.textContent = BRAND_EDITION;
     title.append(logo, edition);
 
     const subtitle = document.createElement('div');

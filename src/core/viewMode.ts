@@ -8,17 +8,32 @@
  *     不然只能靠肉眼看截图；
  *  3. 正负号很容易写反（背后要用视线的**反**方向），集中在一处不容易改错。
  */
+import { t } from './i18n/I18n.ts';
+
 
 export type CameraMode = 'first' | 'third-back' | 'third-front';
 
 /** `V` 键的循环顺序：第一人称 → 背后 → 正面 → 第一人称 */
 export const CAMERA_MODES: readonly CameraMode[] = ['first', 'third-back', 'third-front'];
 
-export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
-  first: '第一人称',
-  'third-back': '第三人称（背后）',
-  'third-front': '第三人称（正面）',
+/** 相机模式的键后缀（`third-back` 这种带连字符的 id 不能直接当键名的一部分） */
+const CAMERA_MODE_KEY: Record<CameraMode, string> = {
+  first: 'first',
+  'third-back': 'thirdBack',
+  'third-front': 'thirdFront',
 };
+
+/**
+ * 相机模式的显示名（批次 20261024-0136）。
+ *
+ * 原来是一张中文常量表 —— 与 P6-1 修的 `DIFFICULTY_LABELS` / `GAME_MODE_LABELS` 同一个毛病：
+ * 设置面板在德语/俄语界面上会直接显示「第一人称」。现在走 `settings.cameraMode.*`。
+ *
+ * ⚠️ 键写成模板字面量，`audit:i18n` 才认得出这一族被引用了。
+ */
+export function cameraModeLabel(mode: CameraMode): string {
+  return t(`settings.cameraMode.${CAMERA_MODE_KEY[mode]}`);
+}
 
 /** 第三人称相机距眼睛的距离（格） */
 export const THIRD_PERSON_DISTANCE = 3.8;

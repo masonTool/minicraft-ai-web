@@ -89,4 +89,7 @@ export const settings = {
   "settings.opt.sec30": "30 сек",
   "settings.opt.sec60": "60 сек",
   "settings.opt.sec120": "120 сек",
+  "settings.cameraMode.first": "От первого лица",
+  "settings.cameraMode.thirdBack": "От третьего лица (сзади)",
+  "settings.cameraMode.thirdFront": "От третьего лица (спереди)"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

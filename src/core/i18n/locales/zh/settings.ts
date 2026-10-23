@@ -97,4 +97,7 @@ export const settings = {
   'settings.opt.sec30': '30 秒',
   'settings.opt.sec60': '60 秒',
   'settings.opt.sec120': '120 秒',
+  "settings.cameraMode.first": "第一人称",
+  "settings.cameraMode.thirdBack": "第三人称（背后）",
+  "settings.cameraMode.thirdFront": "第三人称（正面）"
 } as const;

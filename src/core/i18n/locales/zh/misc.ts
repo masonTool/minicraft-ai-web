@@ -56,4 +56,5 @@ export const misc = {
   "time.seconds": "{n} 秒",
   "loading.boot": "加载中…",
   "loading.bootSub": "正在准备材质与存档",
+  "misc.cameraModeToast": "视角：{mode}"
 } as const;
