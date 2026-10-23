@@ -43,6 +43,7 @@ import {
   nextBlock,
   resolveLanding,
   scoreForLanding,
+  specialBonus,
   specialKindFor,
   targetBlock,
   type JumpBlock,
@@ -288,8 +289,20 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     [0, 10, 30, 60, 200, 9999].every((score) => gapRangeForScore(score).to <= maxReachableGap() + 1e-9),
   );
   const low = gapRangeForScore(0);
-  const high = gapRangeForScore(JUMP_CONFIG.growScore);
-  check('间距随分数单调不减', high.from >= low.from - 1e-9 && high.to >= low.to - 1e-9);
+  const high = gapRangeForScore(JUMP_CONFIG.shrinkScore);
+  check('间距随分数单调不增（方块变小，间距同比缩小）', high.from <= low.from + 1e-9 && high.to <= low.to + 1e-9);
+  check(
+    '间距与边长同比（1.15~1.9 个边长，原版相邻块几乎贴合）',
+    scores.every((score) => {
+      const size = blockSizeForScore(score);
+      const range = gapRangeForScore(score);
+      return (
+        Math.abs(range.from - size * JUMP_CONFIG.gapRatioMin) < 1e-9 ||
+        Math.abs(range.to - maxReachableGap()) < 1e-9
+      );
+    }),
+  );
+  check('间距下限永远大于一个边长（两块不会贴合）', gapRangeForScore(0).from > blockSizeForScore(0));
   check(
     '随机值被夹在范围内',
     [-1, 0, 0.5, 1, 2].every((rand) => {
@@ -325,7 +338,8 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     const { block, seed: nextSeed } = nextBlock(current, score, seed);
     const deg = Math.round((Math.atan2(-(block.x - current.x), -(block.z - current.z)) * 180) / Math.PI);
     angles.add(deg);
-    if (!(deg === -30 || deg === 0 || deg === 30)) allDirections = false;
+    // 原版只有等距两向：世界 −Z（屏幕右上）与 −X（屏幕左上）
+    if (!(deg === 0 || deg === 90)) allDirections = false;
     if (block.id !== current.id + 1) idsMonotonic = false;
 
     const gap = Math.hypot(block.x - current.x, block.z - current.z);
@@ -336,8 +350,21 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     seed = nextSeed;
     score = Math.min(200, score + 1);
   }
-  check('200 次生成只出现 −30/0/+30 三个方向', allDirections);
-  check('三个方向都会出现', angles.size === 3);
+  check('200 次生成只出现 0°/90° 两个方向（等距两向）', allDirections);
+  check('两个方向都会出现', angles.size === 2);
+  check('步进只沿一条世界轴（没有斜角）', (() => {
+    let current2 = createRun(3).blocks[0]!;
+    let seed2 = 4242;
+    for (let i = 0; i < 200; i++) {
+      const { block, seed: nextSeed } = nextBlock(current2, i, seed2);
+      const dx = Math.abs(block.x - current2.x);
+      const dz = Math.abs(block.z - current2.z);
+      if (Math.min(dx, dz) > 1e-9) return false;
+      current2 = block;
+      seed2 = nextSeed;
+    }
+    return true;
+  })());
   check('间距始终落在该分数的范围内且可达', allReachable);
   check('方块 id 单调递增', idsMonotonic);
 }
@@ -345,9 +372,23 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
 console.log('\n跳一跳：特殊方块');
 {
   check('10 分前不出特殊方块', [0, 5, 9].every((score) => specialKindFor(score, 0, 'normal') === 'normal'));
-  check('概率命中时出音乐盒或魔方', ['music', 'cube'].includes(specialKindFor(50, 0, 'normal')));
-  check('上一个已经是特殊方块时不连续出', specialKindFor(50, 0, 'music') === 'normal');
   check('概率未命中时是普通方块', specialKindFor(50, JUMP_CONFIG.specialChance + 0.01, 'normal') === 'normal');
+  check(
+    '四类特殊方块都会出现',
+    new Set([0.01, 0.06, 0.1, 0.115].map((rand) => specialKindFor(50, rand, 'normal'))).size === 4,
+    [0.01, 0.06, 0.1, 0.115].map((rand) => specialKindFor(50, rand, 'normal')).join(','),
+  );
+  check(
+    '上一个已经是特殊方块时不连续出',
+    ['well', 'cube', 'store', 'music'].every((kind) => specialKindFor(50, 0, kind as JumpBlock['kind']) === 'normal'),
+  );
+  equal('井盖 +5', specialBonus('well'), 5);
+  equal('魔方 +10', specialBonus('cube'), 10);
+  equal('便利店 +15', specialBonus('store'), 15);
+  equal('音乐盒 +30', specialBonus('music'), 30);
+  equal('普通方块不加分', specialBonus('normal'), 0);
+  equal('奖励分数严格递增（稀有度与分值一致）', [5, 10, 15, 30].every((v, i, arr) => i === 0 || v > arr[i - 1]!), true);
+  almost('停留 3 秒才加分（原版口径）', JUMP_CONFIG.specialHoldSeconds, 3, 1e-9);
 }
 
 console.log('\n跳一跳：落点判定与计分');
