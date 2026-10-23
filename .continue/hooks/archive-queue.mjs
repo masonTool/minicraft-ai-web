@@ -3,8 +3,9 @@
  * 把**本会话的队列文件**从 `doing/` 移到 `logs/doing-archive/`，文件名加时间戳后缀。
  *
  * 用法：
- *   node .continue/hooks/archive-queue.mjs <session_id>            # 归档队列 <sid>.md
- *   node .continue/hooks/archive-queue.mjs <session_id> --plan     # 归档计划 plan-<sid>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id>                # 归档队列 <sid>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id> --plan         # 归档计划 plan-<sid>.md
+ *   node .continue/hooks/archive-queue.mjs <session_id> --decision     # 归档决策记录 decision-<sid>.md
  *
  * 为什么不再直接删：
  *   收尾五步的第 5 步原来是 `rm`。队列原文确实已经整份搬进 `DONE.md`，但那是**加工过的**
@@ -26,14 +27,21 @@ import { join } from 'node:path';
 import { appendLog, CONTINUE_DIR, DOING_DIR, PROJECT_ROOT } from './lib.mjs';
 
 const sid = (process.argv[2] ?? '').trim();
-const wantPlan = process.argv.includes('--plan');
+/**
+ * 三类文件（队列 / 计划 / 决策记录）走**同一套归档规则**，只有前缀不同：
+ * `<sid>.md` / `plan-<sid>.md` / `decision-<sid>.md`。
+ */
+const kind = process.argv.includes('--plan')
+  ? 'plan'
+  : process.argv.includes('--decision')
+    ? 'decision'
+    : 'queue';
 if (!sid) {
-  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--plan]');
+  console.error('用法：node .continue/hooks/archive-queue.mjs <session_id> [--plan|--decision]');
   process.exit(2);
 }
 
-/** 队列和计划走同一套归档规则，只是前缀不同（`<sid>.md` / `plan-<sid>.md`）。 */
-const base = wantPlan ? `plan-${sid}` : sid;
+const base = kind === 'queue' ? sid : `${kind}-${sid}`;
 const src = join(DOING_DIR, `${base}.md`);
 const ARCHIVE_DIR = join(CONTINUE_DIR, 'logs', 'doing-archive');
 
@@ -63,4 +71,4 @@ try {
 
 const rel = dest.slice(PROJECT_ROOT.length + 1);
 console.log(`已归档：${rel}`);
-appendLog(sid, `${wantPlan ? '计划' : '队列'}已归档 · ${rel}`);
+appendLog(sid, `${kind === 'plan' ? '计划' : kind === 'decision' ? '决策记录' : '队列'}已归档 · ${rel}`);

@@ -96,7 +96,7 @@ const others = listQueues()
    * 都会多一条"其他会话还有未完成队列（剩 N 条）"，指着 `plan-x.md` 要你去接管——
    * 那是本会话正在用的计划，接管提示纯属噪音，还会诱导 AI 去删自己的计划。
    */
-  .filter((item) => !item.sid.startsWith('plan-'))
+  .filter((item) => !item.sid.startsWith('plan-') && !item.sid.startsWith('decision-'))
   .filter((item) => item.sid !== sid)
   .map((item) => {
     const queue = readQueue(item.file);
@@ -223,7 +223,8 @@ const injection = [
   '   **不自创需求**；`OVERVIEW` / `TIPS` 没内容就跳过，**不写占位**。',
   '7. 目录分工：`logs/` 是钩子的运行日志与**队列备份**（`logs/doing-archive/<会话ID>-<时间戳>.md`，',
   '   **已 gitignore**：不要提交、不要改；想翻"当时队列原文怎么写的"就去那儿看）；',
-  '   `doing/` 里同时住着**会话队列**（`<session_id>.md`）与**计划**（`plan-<session_id>.md`，同名配对），',
+  '   `doing/` 里住着三类文件：**会话队列**（`<session_id>.md`）、**计划**（`plan-<session_id>.md`）、\n' +
+  '   **决策记录**（`decision-<session_id>.md`）——后两类都按会话 ID 与队列同名配对，',
   '   这两类连同 `TASKS.md` / `DONE.md` / `OVERVIEW.md` / `TIPS.md` / `README.md` 都是要 review 的文档；',
   '   `OVERVIEW.md` = 按模块的实现 + 坑摘要（做某个模块前先看它）；',
   '   `TIPS.md` = 坑的细节（按模块分节，要细节再 grep）。',
@@ -247,6 +248,13 @@ const injection = [
   '   再弹窗问开发者"继续下一个 / 调整计划 / 先收在这里"。',
   '   计划里同一时间只有一条 `[~]`（它就是游标）；`- 确认：已验收 · 批次 <号>` 是"人验收过"的凭证，',
   '   **只在真的收到用户答复之后才写**，替用户写它等于自己给自己验收。',
+  '10. **需要用户拍板的地方，按你的判断做，但必须留底**（用户已明确授权）：',
+  '    不再弹窗问"选哪个"，直接按你认为对的做法做；**每一处都记进 `doing/decision-<本会话ID>.md`**。',
+  '    每条格式：`## D<n> · <一句话说清决策点>`，其下三行 `- 决定：` / `- 为什么：` / `- 影响：`。',
+  '    「为什么」写你掌握的依据 + 哪里不确定（人要能复核）；「影响」写改了哪些行为、能不能撤回。',
+  '    收尾时和队列 / 计划一起归档：`node .continue/hooks/archive-queue.mjs <本会话ID> --decision`。',
+  '    这条授权覆盖以往"该停下来问人的五种情况"——但**做过的不可逆动作必须写进「影响」**，',
+  '    让人事后一眼看到"这一步退不回去"。',
   othersBlock,
 ].join('\n');
 

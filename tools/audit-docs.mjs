@@ -32,7 +32,13 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from '
  * 现在文件名规则（`isPlanFile` / `sessionOfPlan`）与计划解析全部指向 `lib.mjs` 一处；
  * 而"绑定"已经改由文件名表达，队列头那份声明被删掉了——少一处副本就少一处会漂的地方。
  */
-import { isPlanFile, parsePlan, sessionOfPlan } from '../.continue/hooks/lib.mjs';
+import {
+  isDecisionFile,
+  isPlanFile,
+  parsePlan,
+  sessionOfDecision,
+  sessionOfPlan,
+} from '../.continue/hooks/lib.mjs';
 
 const printOnly = process.argv.includes('--print');
 
@@ -95,6 +101,8 @@ const LIMITS = {
    */
   planLines: 500,
   planBytes: 60 * 1024,
+  /** 决策记录：一次会话的拍板笔记，比计划短得多；超了说明该合并同类项。 */
+  decisionLines: 300,
 };
 
 const MARK_START = '<!-- docs-archive:start -->';
@@ -320,7 +328,9 @@ for (const [name, url] of [
   }
   /** 文件名规则来自 `lib.mjs`（钩子靠同一个前缀区分"队列"与"计划"）。 */
   const planNames = names.filter((name) => isPlanFile(name));
-  const queueNames = names.filter((name) => !isPlanFile(name));
+  const decisionNames = names.filter((name) => isDecisionFile(name));
+  /** 会话队列 = `doing/` 里既不是计划、也不是决策记录的那些。 */
+  const queueNames = names.filter((name) => !isPlanFile(name) && !isDecisionFile(name));
 
   const readIfAny = (url) => {
     try {
@@ -443,9 +453,38 @@ for (const [name, url] of [
     }
   }
 
+  // 决策记录：同样按 `<sid>` 配对，且每条都要有「决定 / 为什么」——否则它就是一份读不懂的流水
+  const queueStems = new Set(queueNames.map((name) => name.slice(0, -3)));
+  for (const name of decisionNames) {
+    const sid = sessionOfDecision(name);
+    if (!sid) continue;
+    const text = readIfAny(new URL(name, FILES.queuesDir));
+    if (!queueStems.has(sid)) {
+      problems.push(
+        `${name} 没有对应的会话队列 \`${sid}.md\`——决策记录按 \`decision-<会话ID>.md\` 与会话配对，` +
+          '孤儿文件说明它没跟着收尾一起归档',
+      );
+    }
+    const lines = lineCount(text);
+    if (lines > LIMITS.decisionLines) problems.push(`${name} ${lines} 行 > 上限 ${LIMITS.decisionLines} 行`);
+    const sections = text.split(/^## /m).slice(1);
+    if (sections.length === 0) {
+      problems.push(`${name} 里没有任何 \`## D1 …\` 条目（写了文件却没记决策？）`);
+    }
+    for (const section of sections) {
+      const title = section.split('\n')[0].trim();
+      if (!/^D\d+\b/.test(title)) continue;
+      if (!/^[-*]\s*决定\s*[:：]/m.test(section)) {
+        problems.push(`${name} 「${title}」缺 \`- 决定：\`（读者看不出你到底定了什么）`);
+      }
+      if (!/^[-*]\s*为什么\s*[:：]/m.test(section)) {
+        problems.push(`${name} 「${title}」缺 \`- 为什么：\`（只留结论、没留依据，等于没法复核）`);
+      }
+    }
+  }
+
   // 计划与队列靠**文件名配对**：`plan-<sid>.md` ↔ `<sid>.md`。
   // 配对不上就是孤儿计划——钩子按会话 ID 直接算路径，永远读不到它（且不报错）。
-  const queueStems = new Set(queueNames.map((name) => name.slice(0, -3)));
   for (const name of planNames) {
     const sid = sessionOfPlan(name);
     if (!sid) continue; // 已经被 isPlanFile 过滤过，这里只是防御
@@ -468,7 +507,7 @@ for (const [name, url] of [
   }
 
   console.log(
-    `${problems.length > 0 ? '✗' : '✓'} 计划（doing/plan-*.md）：${planNames.length} 份 · ` +
+    `${problems.length > 0 ? '✗' : '✓'} 计划 / 决策记录（doing/plan-*.md、decision-*.md）：${planNames.length} 份计划 · ${decisionNames.length} 份决策 · ` +
       `${LIMITS.planLines} 行 / ${(LIMITS.planBytes / 1024).toFixed(0)}KB 上限 · ` +
       '阶段批次号、队列引用、注入文本交叉核对',
   );

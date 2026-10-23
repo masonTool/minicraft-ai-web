@@ -850,6 +850,30 @@ export function sessionOfPlan(name) {
   return m ? m[1] : null;
 }
 
+/**
+ * 会话**决策记录**：`doing/decision-<session_id>.md`。
+ *
+ * 用户的规则：需要拍板的地方**以 AI 的意见为准**，但每一处都要记成人能看懂的形式留底。
+ * 于是它和队列 / 计划一样是"正在做"的文件，收尾时同样加时间戳归档进 `logs/doing-archive/`。
+ *
+ * 为什么也叫 `<sid>` 结尾：三类文件（队列 / 计划 / 决策）靠前缀区分、靠会话 ID 配对，
+ * 归档后还能一眼看出属于同一轮工作。
+ */
+export const DECISION_FILE_RE = /^decision-([A-Za-z0-9._-]+)\.md$/;
+export function isDecisionFile(name) {
+  return DECISION_FILE_RE.test(name);
+}
+export function decisionNameFor(sid) {
+  return `decision-${sid}.md`;
+}
+export function decisionPathFor(sid) {
+  return join(DOING_DIR, decisionNameFor(sid));
+}
+export function sessionOfDecision(name) {
+  const m = DECISION_FILE_RE.exec(name);
+  return m ? m[1] : null;
+}
+
 const MS_HEAD_RE = /^##\s+(MS\d+)\s*[·:：]\s*(.+?)\s*$/;
 const MS_ACCEPT_RE = /^[-*]\s*验收\s*[:：]\s*(.+?)\s*$/;
 const MS_CONFIRM_RE = /^[-*]\s*确认\s*[:：]\s*(.+?)\s*$/;

@@ -264,7 +264,9 @@ function wrapSteps(keepQueue = false) {
         ' 删掉的话钩子下一轮按会话 ID 就找不到这个队列了，计划链在这里无声断掉。'
       : `5. **归档队列文件**（不要 \`rm\`）：跑 \`node .continue/hooks/archive-queue.mjs ${sid}\`，` +
         '   它把队列移到 `.continue/logs/doing-archive/<会话ID>-<年月日时分秒>.md` 备查。' +
-        '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。',
+        '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
+        `   本会话写过 \`doing/decision-${sid}.md\` 的话，**再跑一次**` +
+        ` \`node .continue/hooks/archive-queue.mjs ${sid} --decision\` 一起归档。`,
     '',
     '**做完在回复里逐条回执**：五步各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
     '漏掉的当场补，不要让用户自己去翻文档核对。',

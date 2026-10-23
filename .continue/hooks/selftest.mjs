@@ -398,6 +398,24 @@ try {
     );
   });
 
+  check('archive-queue --decision · 决策记录也归档', () => {
+    queue('s-archdec', '- [x] 甲\n  - 验证：`npm test` 通过');
+    writeFileSync(
+      join(DOING, 'decision-s-archdec.md'),
+      '# 决策\n\n## D1 · 甲\n- 决定：x\n- 为什么：y\n',
+    );
+    const r = hook('archive-queue.mjs', null, {}, ['s-archdec', '--decision']);
+    if (r.code !== 0) return expect(false, '归档脚本应 exit 0', r);
+    if (existsSync(join(DOING, 'decision-s-archdec.md'))) return expect(false, '决策记录应已移出 doing/', r);
+    const dir = join(ROOT, '.continue', 'logs', 'doing-archive');
+    const moved = existsSync(dir) ? readdirSync(dir).filter((n) => n.startsWith('decision-s-archdec-')) : [];
+    return expect(
+      moved.length === 1 && /^decision-s-archdec-\d{14}\.md$/.test(moved[0]),
+      `应有一份 decision-<会话ID>-<14位时间戳>.md，实际 ${JSON.stringify(moved)}`,
+      r,
+    );
+  });
+
   // ---------------------------------------------------------------- 包装器
   /**
    * 这一组挡的是那次真实事故：`lib.mjs` 删了导出、`auto-continue.mjs` 还在 import，
