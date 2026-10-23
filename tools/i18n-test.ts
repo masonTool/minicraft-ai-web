@@ -1147,6 +1147,20 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('德语用法串的 <> / [] / | 与中文一致', deSyntaxDrift.length === 0, deSyntaxDrift.join(','));
 
   /**
+   * 俄语的用法串同样必须保留 `<>` `[]` `|`（多语言 P4-2d，照抄德语那条）。
+   * 帮助面板靠这些符号拆变体：少一个括号**不报错、只是表单变空**。
+   */
+  const ruSyntaxDrift: string[] = [];
+  for (const spec of COMMANDS) {
+    const zh = t(spec.usageKey, 'zh');
+    const ru = t(spec.usageKey, 'ru');
+    if (countChar(zh, '<') !== countChar(ru, '<') || countChar(zh, '[') !== countChar(ru, '[') || countChar(zh, '|') !== countChar(ru, '|')) {
+      ruSyntaxDrift.push(spec.name);
+    }
+  }
+  check('俄语用法串的 <> / [] / | 与中文一致', ruSyntaxDrift.length === 0, ruSyntaxDrift.join(','));
+
+  /**
    * 俄语（多语言 P4-2）。
    *
    * 俄语是**第一个真正需要复数变格**的语言：`1 блок / 2 блока / 5 блоков / 21 блок`。
