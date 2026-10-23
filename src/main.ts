@@ -383,6 +383,7 @@ import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
+import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1845,7 +1846,12 @@ class App {
         this.remoteSmoothers.clear();
         this.remotePresence.clear();
         this.clearRemoteItems();
+        // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
+        this.leaveMultiplayerSave();
+        return;
       }
+      // 联机6：连上就换到按 roomId 派生的联机库（异步换库，这里不阻塞状态回调）
+      void this.enterMultiplayerSave();
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
@@ -1872,6 +1878,49 @@ class App {
    * 所以这里只负责"拆干净 + 把意图交出去"，由 `boot()` 改世界清单并重新 `startWorld`。
    */
   onSeedRealign: ((request: { mode: 'reload' | 'new'; seed: number }) => void) | null = null;
+
+  /**
+   * 切到联机档（联机6）。
+   *
+   * 顺序有讲究：**先把单机档落一次**再换库，否则"进联机之后的自动保存"之前的
+   * 那几分钟进度就没了。换库失败（无痕模式 `open` 返回 null）时把 `save` 置空
+   * ——宁可这一局不保存，也不能继续往单机库里写联机世界。
+   */
+  private async enterMultiplayerSave(roomId: string = DEFAULT_MULTIPLAYER_ROOM): Promise<void> {
+    if (this.inMultiplayerSave) return;
+    await this.saveNow('mp-enter');
+    const solo = this.save;
+    const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId));
+    solo?.close();
+    this.save = mp;
+    this.inMultiplayerSave = mp !== null;
+    diag.event('app', 'save.mpEnter', { room: roomId, opened: mp !== null });
+  }
+
+  /**
+   * 退联机（联机6）：关掉联机库并**禁用本局的保存**。
+   *
+   * 为什么不切回单机库：内存里的世界还是联机地形（区块、edits、容器都被队友改过），
+   * 这时候写单机档就是把联机世界存进单机档。这一局到此不再落盘，玩家重进世界时
+   * `boot()` 会重新打开单机库，那才是干净的。（无缝回切需要"世界原地重载"，
+   * 记在联机34。）
+   */
+  private leaveMultiplayerSave(): void {
+    if (!this.inMultiplayerSave) return;
+    this.save?.close();
+    this.save = null;
+    this.inMultiplayerSave = false;
+    diag.event('app', 'save.mpLeave', {});
+    const hint = '已断开联机：本局不再写存档（否则联机地形会写进单机档），重进世界即回到单机存档';
+    this.chat.push(hint, 'error');
+    this.chatLine = hint;
+    this.chatUntil = performance.now() + 12000;
+  }
+
+  /** 当前存档句柄（联机时是联机库，见构造参数 `save` 的注释） */
+  private save: SaveGame | null;
+  /** 现在写的是联机库（联机6） */
+  private inMultiplayerSave = false;
   /** 联机容器同步的防抖（L4，批次 611） */
   private containerSyncTimer: number | null = null;
   private containerSyncTarget: { chest: Chest; x: number; y: number; z: number; dimension: DimensionId } | null =
@@ -2099,8 +2148,13 @@ class App {
     private readonly atlas: TextureAtlas,
     vitalsEl: HTMLElement,
     deathEl: HTMLElement,
-    /** 存档（打开失败时为 null —— 无痕模式/配额满时游戏照常可玩，只是不保存） */
-    private readonly save: SaveGame | null = null,
+    /**
+     * 存档（打开失败时为 null —— 无痕模式/配额满时游戏照常可玩，只是不保存）。
+     *
+     * ⚠️ **不是只读**：联机时这里会被换成按 roomId 派生的联机库（联机6），
+     * 退联机时置空（宁可这一局不保存，也不能把联机世界写回单机档）。
+     */
+    save: SaveGame | null = null,
     /** 本局玩的是哪个世界（主菜单选出来的）；缺省时用一个固定种子的默认世界 */
     private readonly worldConfig: WorldConfig = {
       id: LEGACY_WORLD_ID,
@@ -2130,6 +2184,7 @@ class App {
     // 上一局缓存里可能还留着"空图集时代"拼出来的坏图标：进世界整份作废，按新像素重建
     clearBlockIconCache();
 
+    this.save = save;
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     // 下落方块表只对当前世界有效；换世界/重开时清空，避免旧坐标落到新世界
     this.fallingBlocks.clear();
