@@ -1208,6 +1208,11 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ['item.tpl.tool', '{kind} de {material}'],
     ['item.wood.oak', 'carvalho'],
     ['entity.mooshroom', 'Vaca-cogumelo'],
+    // P4-4c2 起显式物品名也是葡语（不再是英文占位）
+    ['item.stone', 'Pedra'],
+    ['item.cobblestone', 'Pedregulho'],
+    ['item.white_banner', 'Estandarte branco'],
+    ['item.writable_book', 'Livro e pena'],
   ];
   for (const [key, expected] of ptSamples) {
     check(`葡语：${key}`, t(key, 'pt') === expected, t(key, 'pt'));
