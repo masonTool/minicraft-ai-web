@@ -199,3 +199,9 @@
 - 决定：本轮只产出 `src/game/worldReset.ts`（25 项清单 + 漏项检测）与其单测，**不接 `resetWorld()` 执行路径**，并插 `联机39` 作为前置（让 `world` 与渲染器可换）。
 - 为什么：`main.ts` 的 `world` 是 `private readonly`，`ChunkRenderer` 又把 `world` 作为 `private readonly` 参数绑定——换世界必须重建渲染器（连带 GPU 缓冲与 worker 池）。这条路径**只能在浏览器里验证**，而一旦清漏一项，伤的是玩家存档所在的世界（属于退不回去的那一类）。现有替代路径（联机5 的删库重开、联机6 的断开停写）已经保证了数据正确性，本条只是省掉一次"回菜单再进"，不值得用半成品去冒险。
 - 影响：本条**未完成**（保持 `[~]` 等用户定夺）；新增 `联机39` 前置。清单本身不参与运行时，零风险。
+
+## D34 · 原地重载用 `World.reset()`，不换实例
+
+- 决定：给 `World` 加 `reset()`（清 chunks/wanted/loading/pending/edits/containers/light，**保留 worker 池与 seed**），渲染侧用已有的 `ChunkRenderer.disposeAll()`；`main.ts` 新增 `reloadWorld()` 按 `WORLD_RESET_TARGETS` 清单逐项清并自检，接在 `leaveMultiplayerSave()` 上（切回单机库 → 重载，失败则 `exitToMenu`）。
+- 为什么：原计划（联机39）是"去掉 `readonly world` + 让渲染器可换"，但真正需要的只是"世界内容可清空"。换实例要重建渲染器（连带 GPU 缓冲与 worker 池），风险与工作量都高得多，而 `reset()` 达到同样效果。在途的生成请求也不用取消：清空 `wanted` 后回包会在 `onGenerated` 的 `wanted.has` 处被丢掉。
+- 影响：断开联机后不再"本局不落盘"，而是真正回到单机世界（这是联机6 承诺过的那一半）；`/netseed reload` 仍走回菜单重开。失败有兜底（回主菜单），不会把联机地形留在内存里。可撤回（`reset()` 不影响任何离线逻辑）。
