@@ -194,8 +194,13 @@ function overviewBatchIndex(text) {
   return ids;
 }
 
-const doneList = [...batchHeadings(done), ...batchHeadings(doneArchive)];
+const liveList = batchHeadings(done);
+const archivedList = batchHeadings(doneArchive);
+const doneList = [...liveList, ...archivedList];
 const doneBatches = new Set(doneList);
+/** 当期 DONE 与归档区要分开判：归档区是历史，允许早于"批次索引"这套机制。 */
+const liveBatches = new Set(liveList);
+const archivedBatches = new Set(archivedList);
 const dupes = new Map();
 for (const id of doneList) dupes.set(id, (dupes.get(id) ?? 0) + 1);
 for (const [id, count] of dupes) {
@@ -204,14 +209,30 @@ for (const [id, count] of dupes) {
 
 if (overview !== null) {
   const indexed = new Set([...overviewBatchIndex(overview), ...overviewBatchIndex(batchIndex)]);
-  for (const id of doneBatches) {
+
+  /**
+   * **当期 DONE ↔ 批次索引是硬约束，不是提示。**
+   *
+   * 这两条正对着"收尾五步有没有做完"：搬 DONE 与补索引是同一件事的两半，只做一半
+   * 就是收尾没做完。以前这里是 `warnings`，实测出过事——`DONE.md` 里一个批次标题被
+   * 写坏（塞进了引用行，`^## 批次` 匹配不到），审计只打了句"批次索引有 X 但 DONE 没有"，
+   * 然后**通过（1 个提示，不阻塞）**，坏标题就这么留了一天。
+   *
+   * 归档区那侧仍只提示：那批历史可能早于"批次索引"这套机制，判红会逼人补假数据。
+   */
+  for (const id of liveBatches) {
     if (!indexed.has(id)) {
-      warnings.push(`DONE.md 有批次 ${id}，但 OVERVIEW.md / notes/batches.md 的批次索引表里没有这一行`);
+      problems.push(`DONE.md 有批次 ${id}，但批次索引（notes/batches.md / OVERVIEW.md）里没有这一行——收尾漏了补索引`);
     }
   }
   for (const id of indexed) {
-    if (!doneBatches.has(id)) {
-      warnings.push(`批次索引有 ${id}，但 DONE.md 里没有这个批次的归档`);
+    if (!liveBatches.has(id) && !archivedBatches.has(id)) {
+      problems.push(`批次索引有 ${id}，但 DONE.md 与 DONE.archive.md 里都没有这个批次的归档——收尾漏了搬队列`);
+    }
+  }
+  for (const id of archivedBatches) {
+    if (!indexed.has(id)) {
+      warnings.push(`DONE.archive.md 有批次 ${id}，但批次索引里没有这一行（历史批次，允许）`);
     }
   }
 }
