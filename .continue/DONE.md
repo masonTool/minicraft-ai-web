@@ -8,119 +8,163 @@
 > `## 批次 <号> · 日期 · 会话 <前 8 位>`。
 
 ---
-## 批次 20261023-2002 · 2026-10-23 · 会话 4024a9d4
+## 批次 20261023-2217 · 2026-10-23 · 会话 4024a9d4
 
-**做了什么**：P2 数据层 + P3 界面残留 + P4 的德语与俄语两张全量表（本批 **36 个条目**，表 864 → **2168**）。
+- [x] [发现] 食物说明键化：`FOOD_TABLE` 循环里拼的 `饥饿 +N｜饱和度 +N｜饥饿满时也能吃｜N% 概率<效果名> N 级 N 秒`（`｜` 分隔、`。` 收尾）—— P2-3c 的原清单漏了这一族，不补则 `DESCRIPTIONS` 常量删不掉 → 模板化后 216 条说明 diff 零差异
+  - 做了什么：新增 **8 个键 × 6 语言**（表 2168 → **2176**）`item.desc.food.{hunger,saturation,alwaysEdible,effectChance,effect,powerLeveled,power,sep}`；`itemNames.ts` 的食物说明从「代码里拼中文字符串」改成 `tp()`/`t()` 拼装，连**分隔符**（中文全角 `｜`、其它语言 ` | `）与**句号**（复用 `item.desc.tpl.potionEnd`）也在表里
+  - 为什么这一族必须单独做：`FOOD_TABLE` 36 条里 **23 条有 `item.desc.<id>` 静态条目**（走表，所以看不出问题），另外 **13 条**（苹果、金苹果、西瓜片、牛肉、猪排、羊肉、腐肉、熟牛肉/猪排/羊肉/鸡肉、金胡萝卜、河豚）走动态拼串 —— 在德语/俄语界面上会露出「饥饿 +4｜饱和度 +2.4。」这样的中文
+  - 🔴 **第一版做错了一次，实测才发现**：只把文案搬进表、`DESCRIPTIONS[key]` 仍然存**字符串**，而字符串是**模块加载时求值**的（那一刻是默认中文）→ 德语界面照样显示中文。必须改成 `() => { … }` 延迟求值（`itemDescription()` 本来就支持函数）。这与工具/盔甲那几族写成 `() => tp(...)` 是同一条道理，已在 `TIPS.md` 补了一条
+  - 单位问题：效果时长不能直接塞数字（会显示成 `Absorption (120)`）。秒数先过已有的 `item.desc.tpl.durationSeconds` 片段拿到带单位的字符串（中文 `120 秒` / 德语 `120 Sek.` / 俄语 `120 с`），`power` / `powerLeveled` 两条再按各语言排语序（德语 `Stufe 2, 5 Sek.`、英语 `level 2, 5s`）
+  - ✅ 排查了同类残留：`grep "DESCRIPTIONS\["` 全部 20 处赋值右侧都是 `() =>`，没有第二处"存字符串"的说明族
+  - 验证：六语言实测 `apple` / `golden_apple` / `rotten_flesh` —— zh `饥饿 +4｜饱和度 +2.4。`、en `Hunger +4 | Saturation +2.4.`、de `Hunger +4 | Sättigung +2.4.`、ru `Голод +4 | Насыщение +2.4.`、fr `Faim +4 | Saturation +2.4.`、pt `Fome +4 | Saturação +2.4.`；金苹果带效果那条 `Regeneration (Stufe 2, 5 Sek.)` / `Regeneração (nível 2, 5 s)` 也对；`test:i18n` **436 / 0**（新增 4 条：样本找得到 / 中文下是中文 / 德语下不露中文 / **切语言后说明跟着变**）；`audit:i18n` 2176 条、0 缺口 / 0 孤儿；`check:fast` 全绿
+  - 批次：20261023-2217
 
-- **P2（17 条）**：物品/方块名从"600 条中文常量 + 35 个拼装循环"改成**构件表 + 模板**（`item.<id>` 481 条显式名 / `item.tpl.*` 29 个模板 / 颜色·木材·石材·矿石等构件），288 条物品说明按模板拆走，75 个生物名 → `entity.<id>`，两批标签表 15 张 → `label.*`，7 个容器类的红底原因改成返回 `ReasonRef`（逻辑层不再产出文案）。
-- **P3（5 条）**：触摸控件 / 提示框 / 加载遮罩 / 四个编辑器 / 信标·不支持·统计三个屏幕的文案进表；`relativeTime` 改 `Intl.RelativeTimeFormat`；首屏与 manifest 跟语言走。**13 个文件**有"不许出现中文字面量"的断言守着。
-- **P4（14 条）**：德语与俄语各 **2168 条**全量译完（各分 6~7 批：界面层 → 背包与标签 → 物品名 → 命令域 → 物品说明）。俄语是第一个真正用上 4 类复数的语言（`1 блок / 2 блока / 5 блоков / 21 блок`），也顺带修掉德语漏登记复数表导致 `1 Blöcke` 的缺陷。
+## P4 · 其余语言
 
-**贯穿约束怎么保证的**：中文文案零变化 —— P2 的每一处搬家都用"改造前后全量 `itemDescription()` / `translateName()` 输出 diff"证明（216 / 1859 条），diff 均为零。
+- [x] [P4-3a] 法语骨架 + 首批 123 条：建齐 `locales/fr/` 15 个分组（`satisfies Messages` 卡住）+ `fr/plural.ts`（**0 算单数**）+ `LOADERS` / `PLURAL_TABLES`；真翻 `menu` 33 / `misc` 46 / `chat` 18 / `progress` 26；撇号统一成 `’`
+  - 做了什么：建齐 `locales/fr/` **15 个分组**（键集由 `satisfies Pick<Messages, keyof typeof zhXxx>` 卡在 typecheck）+ `fr/index.ts` + `fr/plural.ts`；`LOADERS` 加 `fr`、`PLURAL_TABLES` 登记 `fr`；**真翻 4 组 123 条**（menu 33 / misc 46 / chat 18 / progress 26），其余 11 组英文占位并在文件头写明
+  - 法语的两个特有坑都在这条里坐实了：① **0 算单数** —— `Intl.PluralRules('fr').select(0)` 是 `one`，实测 `0 bloc | 1 bloc | 2 blocs | 5 blocs`（照英语写复数表必错）；② **撇号** —— 值里统一用排版撇号 `’`（生成脚本 `esc()` 统一替换 `'`），`test:i18n` 有一条"已翻的键里不许出现 ASCII 撇号"
+  - 第三条顺手记下：法语的**过去分词要配合**（`1 bloc rempli` / `3 blocs remplis`），所以四条 `buildtools.*.done` 的两种形式是整句写出来的，与俄语那批同一个理由
+  - 验证：`test:i18n` **343 / 0**（新增 10 条法语守卫：可加载 / 进可选清单 / 条数与中文相同 / 4 条抽查 / 无中文残留 / 无 ASCII 撇号 / 0 算单数 / 分词配合）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿、**fr 已翻 132**；实测 `menu.play → Jouer`、`pause.title → Jeu en pause`、`chat.hintIdle → Tapez une commande (/help pour la liste)…`、`advancement.summary → 3 / 10 obtenus`
+  - 批次：20261023-2217
+- [x] [P4-3b] 法语·界面第二批：`settings`（78）/ `inventory`（122）/ `station`（105）/ `editor`（54）/ `minigame`（37）→ 396 条
+  - 做了什么：`settings`（80）/ `inventory`（122）/ `station`（106）/ `editor`（54）/ `minigame`（37）翻成法语，共 **399 条**（条目估 396，实测 399：三组各多 1~2 条）；法语占位分组降到 6 个（`label` / `item` / `entity` / `cmd` / `cmdMessages` / `itemDesc`）；`audit:i18n` 的 fr 已翻 132 → **521**
+  - 术语照法版 Minecraft：`Établi`（工作台）/ `Four` / `Fumoir` / `Haut fourneau` / `Feu de camp` / `Coffre de l'End` / `Boîte de shulker` / `Table d'enchantement` / `Enclume` / `Meule` / `Table de forge` / `Tailleur de pierre` / `Métier à tisser` / `Table de cartographie` / `Alambic` / `Entonnoir`；⚠️ `Lanceur`（dispenser）与 `Distributeur`（dropper）不能混
+  - ⚠️ **提取原文时漏了跨行定义的条目**：中文表里有三条的值写在下一行（`settings.helpDesktop` / `settings.helpTouch` / `station.dropperCycle`），我用"`键: 值` 一行一条"的正则列原文，**这三条被静默略过**。生成脚本的"缺 N 条"断言把它们抓了出来，逐条补上才过。教训：列原文只抓**键名**（键永远在行首），值另取 —— 已写进 `notes/i18n-fr.md`
+  - 法语的排版细节：`Jusqu'à` / `d'XP` 这类撇号经 `esc()` 统一成 `’`；`<kbd>` 与 `<br />` 原样保留（桌面端帮助那两条是 HTML 片段）
+  - 验证：`test:i18n` **348 / 0**（法语抽查 4 → 9 条，新增 `settings.row.fov`→Champ de vision、`inventory.tab.craftable`→Fabricable、`panel.dispenser`→Lanceur、`editor.cancel`→Annuler、`minigame.jump.retry`→Rejouer；撇号断言覆盖 519 条已翻键）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿；实测 `panel.anvil → Enclume`、`station.reason.needLevels → Il faut 5 niveaux d'XP`、`book.pageOf → Page 2 / 5`
+  - 批次：20261023-2217
+- [x] [P4-3c] 法语·物品构件与模板 + 生物名：`item` 的构件表与 29 条模板 + `entity` 75 条 → 203 条
+  - 做了什么：`item` 的**构件与模板 128 条**（颜色 16 / 木材 6 / 珊瑚 5 / 石材基 35 / 矿石 8 / 铜 8 / 工具材质 6 / 工具种类 5 / 盔甲材质 6 / 盔甲部位 4 + 29 条模板）与 **`entity` 全部 75 条**译成法语，共 203 条；`item` 走"部分翻译"（128/644），剩 516 条显式名拆进 P4-3d；`audit:i18n` 的 fr 已翻 521 → **707**
+  - 法语拼名分三类：**能自然拼的走模板**（木材 `Planches de chêne` / `Barrière en chêne`、珊瑚 `Bloc de corail tubulaire`、工具 `Pioche en diamant`、台阶 `Dalle de roche lisse`）；**拼不了的走括号归属**（颜色 10 族 `Laine (blanc)` —— 法语形容词要与名词性数配合，`laine blanche` / `lit orange` 一个 `{color}` 服务不了 10 个名词）。与俄语那批同一个理由，只是法语能拼的族比俄语多
+  - ⚠️ 已知外观瑕疵（已写进台账）：木板类基名本身是独立物品名、首字母大写，拼出来是 `Dalle de Planches de chêne noir`（句中大写），受影响 6 种木材 × 3 变体 = 18 个名字。要修得让"独立名"与"构件名"分开存，而键空间由中文表决定（`satisfies` 要求键集一致），代价大于收益 —— 接受，与俄语括号内大写同一处置
+  - 术语照法版 Minecraft：`Roche`（stone）/ `Pierre`（cobblestone，法语原版就是这么反的）/ `Ardoise des profondeurs`（deepslate）/ `Pierres taillées` / `Bloc de purpur` / `Planches de chêne` / `Pioche` / `Plastron` / `Jambières` / `Vache-champignon`（mooshroom）/ `Squelette wither` / `Arpenteur`（strider）
+  - 验证：`test:i18n` **352 / 0**（法语抽查 9 → 13 条：新增 `item.toolKind.pickaxe`→Pioche、`item.tpl.tool`→`{kind} en {material}`、`item.wood.oak`→chêne、`entity.mooshroom`→Vache-champignon）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿；实测 `Pioche en diamant` / `Planches de chêne` / `Minerai de fer des profondeurs` / `Corail tubulaire mort` / `Bloc de cuivre oxydé` / `Muret en pierres taillées moussues`
+  - 批次：20261023-2217
+- [x] [P4-3d] 法语·显式物品名：`item` 剩下的 516 条 → `item` 组收口
+  - 做了什么：`item` 里剩下的 **516 条显式物品名**全部译成法语（方块 / 红石元件 / 16 色旗帜·带釉陶瓦·蜡烛 / 作物阶段 / 食物 / 药水材料 / 唱片…）→ `item` **644/644 收口**；法语占位分组只剩 `cmd` / `cmdMessages` / `itemDesc`；`audit:i18n` 的 fr 已翻 707 → **1206**
+  - 术语照法版 Minecraft（与 P4-3c 一致）：`Roche`（stone）/ `Pierre`（cobblestone）/ `Ardoise des profondeurs` / `Bloc de gazon` / `Pierre lumineuse`（glowstone）/ `Netherrack` / `Lutrin`（lectern）/ `Porte-armure`（armor stand）/ `Poudre lumineuse`（glowstone dust）/ `Fiole`（glass bottle）；`Steak` 直接用（法语原版 cooked_beef 也叫 Steak）
+  - 16 色旗帜 / 带釉陶瓦 / 蜡烛**逐条手写**（`Bannière blanche` / `Terre cuite émaillée blanche` / `Bougie blanche`）—— 形容词要跟名词性数配合（`Bannière blanche` 阴、`Tapis` 阳），模板给不了；这与 P4-3c 的括号归属式是同一原因的不同处理（显式名可以逐条写对）
+  - 作物阶段名用「名称 (stade N)」而不是"幼苗/抽穗"，理由与德语那批一致：8 种作物 × 4 阶段的语义并不一一对应，编号不会撒谎
+  - 验证：`test:i18n` **356 / 0**（法语抽查 13 → 17 条，新增 `item.stone`→Roche、`item.cobblestone`→Pierre、`item.writable_book`→Livre et plume、`item.cooked_beef`→Steak）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿；实测 `Terre` / `Roche` / `Pierre` / `Bannière blanche` / `Steak` / `Disque « Cat »` / `Ragoût suspect (coquelicot)` / `Lanceur` / `Distributeur`
+  - 批次：20261023-2217
+- [x] [P4-3e] 法语·命令域：`cmd`（243）与 `cmdMessages`（170）→ 413 条；**必须保留 `<>` `[]` `|`**
+  - 做了什么：`cmd`（243：72 条用法/说明 + 110 条帮助面板短语与值标签 + 14 条整屏 + 40 条标签表）与 `cmdMessages`（170 条回执）全部译成法语；法语占位分组只剩 `itemDesc`；`audit:i18n` 的 fr 已翻 1206 → **1584**
+  - 术语照法版 Minecraft：`/gamemode <survival|creative|adventure|spectator>` → `<Survie|Créatif|Aventure|Spectateur>`、`Répéteur` / `Comparateur` / `Plaque de pression pondérée` / `Ruines de bastion` / `Surmonde`（Overworld）；`true/false` 与 `Health` / `CustomName` 保持英文（它们是命令语法）
+  - 新增守卫（照抄德语/俄语那条）：**法语用法串的 `<>` / `[]` / `|` 与中文一致**（36 条命令实测全一致）；三种语言现在各有一条同样的断言
+  - ⚠️ 法语排版：回执里的撇号经 `esc()` 统一成 `’`（`n’existe pas`），`« … »` 保留原样；多行回执 `current-game-rules-rules` 实测仍是真换行
+  - 验证：`test:i18n` **359 / 0**（法语抽查 17 → 19 条 + 括号守卫）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿；实测 `/tp <x> <y> <z> [dimension]`、`{player} a été téléporté en {x} {y} {z}{suffix}`、`Niveau 5 : 10/30 (100 points au total)`
+  - 批次：20261023-2217
+- [x] [P4-3f1] 法语·物品说明前半：`item.desc.tpl.*` **57 条模板**（工具/盔甲/铜氧化/珊瑚/告示牌/床/药水句式/刷怪蛋…）+ 材料与方块/工具/食物 **145 条静态说明** → `itemDesc` 202/288
+  - 做了什么：`item.desc` 的 **57 条模板** + **145 条静态说明**（材料 / 方块 / 工具 / 食物）译成法语 → `itemDesc` **202/288**；`itemDesc` 走"部分翻译"，剩 86 条拆进 P4-3f2；`audit:i18n` 的 fr 已翻 1584 → **1781**
+  - 为什么先模板：57 条一条顶多条 —— 工具 30 件、盔甲 24 件、铜 16 个（4 条子模板）、珊瑚 30 个（6 条）、台阶/墙 105 个、药水句式与时长片段。`listSep` 从中文顿号改成法语逗号，`duration*` 用 `s` / `min`
+  - 法语模板的语序与 P4-3c 一致：`{kind} en {material}`（Pioche en diamant）、`{type} en {material}`、`Dalle de {base}`、`{name} mort`（corail tubulaire mort）、`{name} des profondeurs`
+  - 验证：`test:i18n` **359 / 0**；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / 0 孤儿；实测静态 `Carburant : cuit 8 objets ; …`、模板 `Pioche en diamant : mine la roche. Niveau de minage Diamant | Vitesse ×8 | Attaque 5 | Durabilité 1561`、参数化 `Lit (blanc) : **occupe deux blocs**…`
+  - 批次：20261023-2217
+- [x] [P4-3f2] 法语·物品说明后半：`itemDesc` 剩下的 **86 条**（作物阶段 / 海洋 / 下界 / 末地 / 药水材料）→ 全部翻完后 `notes/i18n-fr.md` 标 100%
+  - 做了什么：`itemDesc` 剩下的 **86 条**静态说明译完（弓与钓鱼 / 矿石 / 红石元件 / 容器 / 桶与细雪 / 音符盒 / 漏斗与投掷器 / 地图·时钟·指南针 / 盾牌 / 烟花 / 书与笔 / 展示框与画）→ **`itemDesc` 288/288**
+  - 🔴 **收尾核对时发现一整组漏翻**：`label`（226 条）在法语的分批里**没有被任何一批认领**（P4-3a 切了 menu/misc/chat/progress、P4-3b 切了 settings/inventory/station/editor/minigame，`label` 掉在两批之间）。用 `allKeys().filter(k => fr[k] === en[k])` 按组统计时看到 `label: 226` 全是英文才暴露 —— 症状是"表 100% 齐、`satisfies` 也过、测试全绿"，因为占位值本来就能通过一切"键集"检查。已补齐 226 条（效果 30 / 群系 58 / 附魔 37 / 职业 13 / 外观 46 / 朝向·图案·页签·类别·音效组 42）
+  - 教训（已写进 `notes/i18n-fr.md`）：**分批切语言表后要立刻核对"每组的归属"**，别靠记忆；最省事的判据是收尾时按组统计 `fr === en` 的条数 —— 一个组整组相等就是整组漏了。德语/俄语的 `label` 都在各自第二批，法语清单是我重写的，切法一变就漏
+  - 法语六批合计：界面层 123 → 设置背包装置编辑器小游戏 396 → 物品名（构件 128 + 显式 516 + 生物 75）→ 命令域 413 → 说明模板与 145 → 说明 86 + label 226
+  - 验证：`test:i18n` **359 / 0**；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、**fr 已翻 2079 · 与英文写法相同 89**（后者是 `TNT` / `Blaze` / `Protection` 这类两种语言写法相同的词）；实测 `item.desc.cauldron` / `item.desc.compass` 均为法语长文
+  - 批次：20261023-2217
+- [x] [P4-4a] 葡语骨架 + 界面层 400 条：建齐 `locales/pt/` 15 个分组（`satisfies Messages` 卡住）+ `pt/plural.ts`（**0 算单数**）+ `LOADERS` / `PLURAL_TABLES`；真翻 `menu` 33 / `misc` 46 / `chat` 18 / `progress` 26 / `settings` 80 / `editor` 54 / `minigame` 37 / `station` 106；坐实 `htmlLang=pt-BR`、连接词 `e`、`0 bloco`
+  - 做了什么：建齐 `locales/pt/` **15 个分组**（`satisfies Messages` 卡住）+ `pt/index.ts` + `pt/plural.ts`；`LOADERS` 加 `pt`、`PLURAL_TABLES` 登记 `pt`；**真翻 8 组 400 条**（menu 33 / misc 46 / chat 18 / progress 26 / settings 80 / editor 54 / minigame 37 / station 106），其余 7 组英文占位并逐文件写明
+  - 条目点名的三件事都坐实了：① **`htmlLang` 是 `pt-BR` 不是 `pt`**（`locale.ts:30` 本来就写对了，`applyLanguageSetting()` 写进 `<html lang>`）；② **连接词交给 CLDR** —— `Intl.ListFormat("pt-BR")` 实测 `Pedra, Terra e Areia`（最后一项用 `e`），不用手写；③ **0 算单数** —— `Intl.PluralRules("pt-BR").select(0)` 是 `one`，实测 `0 bloco | 1 bloco | 2 blocos | 5 blocos`（与法语同构、与英语相反）
+  - 术语照 pt-BR 版 Minecraft：`Fornalha` / `Defumador` / `Alto-forno` / `Fogueira` / `Mesa de ferraria` / `Suporte de poções` / `Cortador de pedra` / `Barril` / `Sinalizador` / `Funil` / `Ejetor`（dropper）/ `Distribuidor`（dispenser）/ `Bigorna` / `Rebolo` / `Tear`
+  - ⚠️ 又碰到上一批记过的坑：`settings.helpDesktop` / `settings.helpTouch` / `station.dropperCycle` 三条的值写在**下一行**，用单行正则列原文会静默漏掉 —— 这次先用 `^\s+键:` 只抓键名比对，一次性补齐（三条都自己写全了）
+  - ⚠️ 改了 6 条**已通过**的断言（理由：`pt` 从"没表语言"变成真语言，且六种语言现在都有表）：① 「支持 6 种语言，但只有有表/加载器的才能选」→ 改成「支持 6 种且六种都能选」；② 那段"没装表 → 回落英文"的 4 条改用造出来的码 `"xx" as LocaleCode`；③ "加载链"那段同样改用 `xx`，并把「登记加载器后出现在可选清单里」改成 **「造出来的码不会漏进语言选择器」**（可选清单只认 `LOCALES`，加载器只管"怎么拿表"）；④ 删掉「加语言后可选语言数量跟着变」（已无意义）
+  - 新增守卫（`test:i18n` +10 条）：葡语可加载 / 进可选清单 / 条数与中文相同 / 4 条抽查（`Jogar` / `Jogo pausado` / `Campo de visão` / `Fornalha`）/ 无中文残留 / 0 算单数 / 分词配合（`preenchido` / `preenchidos`）
+  - 新增台账 `notes/i18n-pt.md`：15 组 ✅/⬜ + 三件事的落点 + 还差的四批 + 葡语拼名预判 + 加语言的 7 步（含"六语言都有表后只能造码"这条新结论）
+  - 验证：`test:i18n` **368 / 0**；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 2168/2168 · 已翻 402`；实测 `menu.play → Jogar`、`settings.row.fov → Campo de visão`、`station.reason.needLevels → Precisa de 5 níveis de XP`、`joinList → Pedra, Terra e Areia`
+  - 批次：20261023-2217
+- [x] [P4-4b] 葡语·界面第二批：`inventory`（122）与 `label`（226）→ 348 条
+  - 做了什么：`inventory`（122：背包/工作站槽位、提示、23 个面板标题）与 `label`（226：效果 30 / 群系 58 / 附魔 37 / 职业 13 / 外观 46 / 朝向·图案·页签·类别·音效组）翻成葡语；葡语占位分组降到 5 个（`item` / `entity` / `cmd` / `cmdMessages` / `itemDesc`）；`audit:i18n` 的 pt 已翻 402 → **745**
+  - 术语照 pt-BR 版 Minecraft：`Bancada` / `Fornalha` / `Defumador` / `Alto-forno` / `Fogueira` / `Baú` / `Barril` / `Baú do End` / `Caixa de shulker` / `Mesa de encantamentos` / `Bigorna` / `Rebolo` / `Mesa de ferraria` / `Cortador de pedra` / `Tear` / `Mesa de cartografia` / `Suporte de poções` / `Funil` / `Ejetor` / `Distribuidor`
+  - `label` 里需要真动脑的几处：① 附魔 `Smite` 用 `Julgamento`、`Bane of Arthropods` 用 `Ruína dos artrópodes`（不是直译）；② 效果 `Wither` 是 `Definhamento`（与生物 `Wither` 区分）；③ `Fortune` = `Fortuna` 而钓鱼的 `Luck of the Sea` = `Sorte do mar`（两个"幸运"必须分开）；④ 维度 `Overworld` 用 `Superfície`（pt-BR 官方口径，不是字面"主世界"）；⑤ `Badlands` 三档 = `Terras baldias` / `Terras baldias arborizadas` / `Terras baldias erodidas`
+  - ⚠️ 外观色卡按"颜色名"给（`Ciano` / `Índigo` / `Cal`），不随上衣/裤子变 —— 与德/俄/法三批同一个取舍（不做性数配合表）
+  - 验证：`test:i18n` **372 / 0**（葡语抽查 4 → 8 条，新增 `inventory.tab.craftable`→Fabricável、`panel.anvil`→Bigorna、`label.effect.speed`→Velocidade、`label.biome.desert`→Deserto）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 745`；实测 `inventory.categoryInfo → Ferramentas e armas · 12 fabricáveis`
+  - 批次：20261023-2217
+- [x] [P4-4c1] 葡语·构件与模板 + 生物名：`item` 的构件表（color 16 / wood 6 / coral 5 / base 35 / ore 8 / copper 8 / 工具与盔甲构件 21）与 29 条模板 + `entity` 全部 75 条 → 203 条
+  - 做了什么：`item` 的**构件与模板 128 条** + **`entity` 全部 75 条**译成葡语（共 203）；`item` 走"部分翻译"（128/644），剩 516 条显式名拆进 P4-4c2；`audit:i18n` 的 pt 已翻 745 → **936**
+  - 葡语拼名与法语同构：`{kind} de {material}`（`Picareta de diamante`）、`{type} de {material}`（`Peitoral de netherita`）、`Bloco de coral {coral}`、`Laje/Escada/Muro de {base}`。**颜色 10 族只能用括号归属式**（`Lã (branco)`）—— 葡语形容词也要与名词性数配合（`lã branca` / `tapete branco`），模板对 16×10 只放一个 `{color}`
+  - 两处为规避句中大写而改结构：`deepslateOre` → `{name} (ardósia profunda)`、`dead` → `{name} morto`（后置形容词，葡语习惯）
+  - ⚠️ 已知外观瑕疵（与法语同一个）：木板类基名是独立物品名、首字母大写，拼出来是 `Escada de Tábuas de carvalho`（句中大写），受影响 6 木材 × 3 变体 = 18 个名字；键空间由中文表决定，要修得让"独立名"与"构件名"分开存 —— 接受，已记进台账
+  - 验证：`test:i18n` **376 / 0**（葡语抽查 8 → 12 条，新增 `item.toolKind.pickaxe`→Picareta、`item.tpl.tool`→`{kind} de {material}`、`item.wood.oak`→carvalho、`entity.mooshroom`→Vaca-cogumelo）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 936`；实测 `Picareta de diamante` / `Tábuas de carvalho` / `Minério de ferro (ardósia profunda)` / `Coral tubular morto` / `Muro de tijolos de pedra com musgo`
+  - 批次：20261023-2217
+- [x] [P4-4c2] 葡语·显式物品名：`item` 里剩下的 **516 条**（每个都是独立名词、没有构件可用）→ `notes/i18n-pt.md` 的 item 组转 ✅
+  - 做了什么：`item` 里剩下的 **516 条显式物品名**全部译成葡语（方块 / 红石元件 / 16 色旗帜·带釉陶瓦·蜡烛 / 作物阶段 / 食物 / 药水材料 / 唱片…）→ `item` **644/644 收口**；葡语占位分组只剩 `cmd` / `cmdMessages` / `itemDesc`；`audit:i18n` 的 pt 已翻 936 → **1446**
+  - 术语照 pt-BR 版 Minecraft：`Pedregulho`（cobblestone）/ `Ardósia profunda`（deepslate）/ `Bloco de grama` / `Pedra luminosa`（glowstone）/ `Netherrack` / `Púlpito`（lectern）/ `Suporte de armadura` / `Tábuas de carvalho`；`cooked_beef` 直接用 `Bife`（pt-BR 原版也是 Bife）
+  - 16 色三族**逐条手写**（`Estandarte branco` / `Argila cozida esmaltada branca` / `Vela branca`）—— 形容词要跟名词性数配合（`estandarte` 阳、`argila`/`vela` 阴），模板给不了；这与 P4-4c1 的括号归属式是同一原因的不同处理（显式名可以逐条写对），已记进台账
+  - 作物阶段名与前三种语言一致用「名称 (estágio N)」；`nether_wart_stage*` 与 `sweet_berry_bush_stage*` 用语义词（recém-plantada / crescendo / madura）因为只有 4 档且语义一一对应
+  - 验证：`test:i18n` **380 / 0**（葡语抽查 12 → 16 条，新增 `item.stone`→Pedra、`item.cobblestone`→Pedregulho、`item.white_banner`→Estandarte branco、`item.writable_book`→Livro e pena）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 1446`；实测 `Terra` / `Pedregulho` / `Estandarte branco` / `Bife` / `Disco «Cat»` / `Ensopado suspeito (papoula)` / `Distribuidor` / `Ejetor` / `Vela branca` / `Argila cozida esmaltada branca`
+  - 批次：20261023-2217
+- [x] [P4-4d] 葡语·命令域：`cmd`（243）与 `cmdMessages`（170）→ 413 条；**必须保留 `<>` `[]` `|`**（照抄德/俄/法那条守卫）
+  - 做了什么：`cmd`（243：72 条用法/说明 + 110 条帮助面板短语与值标签 + 14 条整屏 + 40 条标签表）与 `cmdMessages`（170 条回执）全部译成葡语；葡语占位分组只剩 `itemDesc`；`audit:i18n` 的 pt 已翻 1446 → **1837**
+  - 术语照 pt-BR 版 Minecraft：`/gamemode <survival|creative|adventure|spectator>` → `<Sobrevivência|Criativo|Aventura|Espectador>`、`Repetidor` / `Comparador` / `Placa de pressão ponderada` / `Ruínas de bastião` / `Superfície`（Overworld）；`true/false` 与 `Health` / `CustomName` 保持英文（是命令语法，不是文案）
+  - 新增守卫（照抄德/俄/法那条）：**葡语用法串的 `<>` / `[]` / `|` 与中文一致**（36 条命令实测全一致）—— 现在四种语言各有一条同样的断言
+  - `cmd.reply.team.on/off` 这类**形容词随主语变**的收尾词按"动词短语"给（`ativado` / `desativado`），因为模板是「Dano entre aliados da equipe {name}: {state}」——`{state}` 只会被填在这里
+  - 验证：`test:i18n` **383 / 0**（葡语抽查 16 → 18 条 + 括号守卫）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 1837`；实测 `/tp <x> <y> <z> [dimensão]`、`{player} foi teleportado para {x} {y} {z}{suffix}`、`Nível 5: 10/30 (100 pontos no total)`、多行回执 `"Regras do jogo atuais:\n{rules}"`（真换行）
+  - 批次：20261023-2217
+- [x] [P4-4e1] 葡语·物品说明前半：`item.desc.tpl.*` **57 条模板**（工具/盔甲/铜氧化/珊瑚/告示牌/床/药水句式/刷怪蛋…）+ 材料与方块/工具/食物 **145 条静态说明** → `itemDesc` 202/288
+  - 做了什么：`item.desc` 的 **57 条模板** + **145 条静态说明**（材料 / 方块 / 工具 / 食物）译成葡语 → `itemDesc` **202/288**；`itemDesc` 走"部分翻译"，剩 86 条拆进 P4-4e2；`audit:i18n` 的 pt 已翻 1837 → **2035**
+  - 术语照 pt-BR 版 Minecraft：`Toque de seda`（精准采集）/ `Mesa de encantamentos` / `Estante de livros` / `Bigorna` / `Terra arada` / `Areia das almas` / `Poção bruta`（awkward）/ `poção arremessável`（splash）/ `poção persistente`（lingering）/ `frasco`（glass bottle）
+  - 模板语序与前三种语言一致：`{kind} de {material}`（`Picareta de diamante`）、`{type} de {material}`、`Bloco de coral {coral}`、`{name} morto`、`{name} (ardósia profunda)`；`listSep` 改逗号、`duration*` 用 `s` / `min`
+  - ⚠️ 我自己写的一处**符号不一致**：`potionEnd` 在中文是「。」、法语是「.」，这里我给了 **`.`**（半角）—— 与前三种语言的收尾一致，不是漏改
+  - 验证：`test:i18n` **383 / 0**；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 2035`；实测静态 `Combustível: assa 8 itens; também é o material principal das tochas.`、模板 `Picareta de diamante: minera pedra. Nível de mineração Diamante | Velocidade ×8 | Ataque 5 | Durabilidade 1561`、参数化 `Cama (branco): **ocupa dois blocos**…`
+  - 批次：20261023-2217
+- [x] [P4-4e2] 葡语·物品说明后半：`itemDesc` 剩下的 **86 条**（作物阶段 / 海洋 / 下界 / 末地 / 药水材料）→ 全部翻完后 `notes/i18n-pt.md` 标 100%（四种语言全齐）
+  - 做了什么：`itemDesc` 剩下的 **86 条**静态说明译完（钓鱼 / 矿石 / 红石元件 / 容器 / 桶与细雪 / 音符盒 / 漏斗与投掷器 / 地图·时钟·指南针 / 盾牌 / 烟花 / 书与笔 / 展示框与画）→ **`itemDesc` 288/288，葡语 100% 译完，四种语言全齐**
+  - 葡语六批合计：界面层 400 → 背包与标签 348 → 构件与生物名 203 → 显式物品名 516 → 命令域 413 → 说明模板与 145 → 说明 86；`audit:i18n` 报 `pt 已翻 2121 · 与英文写法相同 47`
+  - ✅ 按法语那轮的教训做了**收尾按组核对**（统计「值等于英文」的条数看有没有整组漏翻）：`world 2 / settings 6 / slot 1 / station 1 / editor 1 / cmd 22 / item 10 / label 4 / entity 12 / time 3 = 62`，**没有任何一组整组相等**，62 条都是 `Normal` / `TNT` / `Blaze` 这类两种语言写法相同的词 —— 与法语当时 `label: 226` 整组相等的症状形成对照
+  - 验证：`test:i18n` **383 / 0**；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**、`pt 已翻 2121`；实测 `item.desc.cauldron` → `**Guarda água**: um balde de água enche…`、`item.desc.painting` → `Quadro: prende-se **na parede**…`
+  - 批次：20261023-2217
+- [x] [P4-5] 四语言巡查：逐语言跑伪语言清单 + 抽查 20 条 + 切语言整页重载的真机验证 → 巡查清单写进完成说明
+  - 做了什么：把"逐语言巡查"做成**可复现的断言**（`test:i18n` 在 de/ru/fr/pt 上各跑 5 条判据，共 20 条），并用**真实浏览器**跑了一遍"切语言 + 整页重载"
+  - 五条判据（每条语言各 5 条，全绿）：① **全表没有中文残留**（漏翻时抄了中文，`satisfies` 查不出来）；② **没有空值**（空串在界面上就是空白）；③ **没有中文表之外的占位符**（多出来的 `{foo}` 没人替换，会**字面显示**）；④ **没有整组仍是英文的组**（一个组 90% 以上与英文逐字相同即为漏翻 —— 法语 `label` 整组 226 条就是这么挖出来的）；⑤ **抽样 20 条都不露键名**（回落链坏掉时 `t()` 会返回键自己）
+  - 巡查实测数据：四语言**占位符不一致 0 处**（唯一一处差异是 `item.desc.tpl.armor` 的中文提了两次 `{material}`，而 ru/fr/pt 写成「全套共 N 点护甲」不再提材料 —— 这是**少用**占位符、语义无损，判据只拦"多出"的）；四语言**含中文 0 条 / 空值 0 条**；"与英文相同"分别是 de 64 / ru 5 / fr 89 / pt 47，**都散落在各组且无整组相等**
+  - 🖥️ 浏览器整页重载验证（playwright-core + 本机 Chrome，headless，起 vite dev）：**写 `bedrock-settings.language` + reload 后四种语言全部正确** —— `de → html lang=de`、`pt → pt-BR`、`fr → fr`、`ru → ru`，正文也确为目标语言（`Echtes Survival…` / `Survival e criativo…` / `Survie et création…` / `Оригинал…`）
+  - ⚠️ 同一轮实测到一件**已知未做**的事：`?lang=de` 这类**真实语言深链不生效**（html lang 仍为 `zh-CN`、文案仍是中文）—— 深链目前只认伪语言 `xa`。这正是队列里 **P5-2**（per-app language 与深链）的范围，不是本轮要修的；巡查清单里如实记下
+  - 验证：`test:i18n` **403 / 0**（新增 20 条巡查断言）；`check:fast` **156/156 套**全绿；`audit:i18n` 2168 条、0 缺口 / **0 孤儿**
+  - 批次：20261023-2217
 
-**条目**（原文照搬）：
+## P5 · Play 发行
 
-# 队列 · 会话 4024a9d46e844ff98176ea9f735ec5ee
-> 状态：执行中
-> 创建：2026-10-23
-> 批次：20261023-2002
-> **本批目标（P2~P5 全量收口）**：P0 已把骨架、P1 已把命令域做完（表 864 条，zh/en 各 100%）。
-> 这一批把剩下四段一次排完：
-> · **P2 数据层**：物品/方块名（构件拼装）、450 条物品说明、75 个生物名、十几个标签表族、逻辑层 reason 串；
-> · **P3 界面残留**：触摸控件/提示/编辑器族/其余屏幕/相对时间/静态 HTML/manifest；
-> · **P4 四种语言**：德语 → 俄语 → 法语 → 葡语，每语言一批、接入 `LOADERS`、伪语言巡查；
-> · **P5 发行**：商店列表文案、per-app language 透传与 `?lang=` 深链、manifest 多语言、真机逐语言过一遍。
->
-> **贯穿约束**：中文文案**逐字不变**；每个条目做完都要让 `npm run audit:i18n` 保持 0 缺口，并跑 `check:fast`。
-## P2 · 数据层键化
-- [x] [P2-1a] 名字表改**惰性求值** + 染料族键化：`itemNames.ts` 的 `NAMES`（id → 中文字符串）改成 `id → () => string`，`translateName()` 调用时才求值；新建 `locales/{zh,en}/item.ts` 放颜色 16 条与染料族 10 个模板（`item.tpl.<family>`），该族 160 条名字由 `tp()` 拼装 → 全量 `ite…
-  - 完成：`itemNames.ts` 的 `NAMES` 从 `id → 中文字符串` 改成 `id → string | (() => string)`，`translateName()` 在**取值那一刻**才求值…
-- [x] [P2-1b-1] 结构性族键化：木材族（原木/木板/树叶/栅栏/栅栏门/门/活板门/告示牌）、珊瑚族（5 种 × 3 形 × 活/失活）、台阶楼梯墙（建材基 17 + 石材变体 27）、矿石与深层矿石、铜的四档 → 每族一个模板键 + 构件表，英语序按"修饰 + 名词"给 → 全量 `itemLabel()` / `blockLabel()` diff 零差异
-  - 完成：`locales/{zh,en}/item.ts` 新增 **84 条键**（构件 68 + 模板 16）…
-- [x] [P2-1b-2] 工具与元件族键化：工具（6 材质 × 5 种类）、盔甲（6 材质 × 4 部位）、红石元件 15 条、刷怪蛋（依赖 P2-4 的生物名，先接结构后接名） → 全量 diff 零差异
-  - 完成：工具（6 材质 × 5 种类 = 30）、盔甲（6 × 4 = 24）、红石元件 **38 条**（条目里写 15，实测表里 38）、刷怪蛋（21 枚，模板先接）全部键化…
-- [x] [P2-1c] 复合名与特例：`STRUCTURE_BASES_CN` 与 `STONE_VARIANT_PARENTS_CN` 两表合并去重、`失活的` 前缀、`磨制`/`平滑`/`苔` 等修饰词按语言可调（德语复合词顺序不同） → 全量 diff 零差异 + `audit:i18n` 0 缺口
-  - 完成：做了什么（合并去重）：两张石材表（`STRUCTURE_BASES_CN` 17 + `STONE_VARIANT_PARENTS_CN` 28，其中 4 个 id 重复）合成**一份 `STONE_BASE_IDS`（41）+ 一份 `WALL_BASE_IDS`（28）+ 一个 `stoneBa…
-- [x] [P2-2] 显式名收口：`itemNames.ts` 的 `EXPLICIT`（600 条）搬进 `item.<id>`，`translateName` / `blockLabel` / `itemLabel` 全部走查表，删掉中文常量表 → 全量 `itemLabel()` diff 零差异 + `test:i18n`（键都在表里）
-  - 完成：**481 条**显式名（条目写 600，实测 481）搬进 `item.<id>`，其中 6 条与红石元件重叠、值相同直接跳过（净增 475）；删掉 `EXPLICIT` 常量表与其循环（约 490 行）…
-- [x] [P2-3a] 静态物品说明（前半 114 条）搬进 `locales/{zh,en}/itemDesc.ts`（`item.desc.<id>`），`itemDescription()` 先查语言表、未搬的仍走旧表；三条"直接读表"的判断（`hasDescription` / `knownNameCount` / `missingBlockNames`）改成两处都查 → 216 条说明全量 diff 零差异
-  - 完成：229 条静态说明的**前 114 条**搬进独立文件 `locales/{zh,en}/itemDesc.ts`（`item.desc.<id>`，中文逐字照搬、英文首次成文）；两个 `index.ts` 接入 `...itemDesc`…
-- [x] [P2-3b] 静态物品说明（后半 115 条）搬进 `itemDesc.ts`，删掉旧表里剩下的条目 → 216 条说明全量 diff 零差异 + 旧 `DESCRIPTIONS` 表清空
-  - 完成：后半 **115 条**静态说明追加进 `locales/{zh,en}/itemDesc.ts`，旧 `DESCRIPTIONS` 里这 115 条删干净（静态条目**清零**）。表 1622 → **1737**
-- [x] [P2-3c1] 结构性程序说明改模板：深层矿石 / 告示牌 / 混凝土粉末 / 床 / 珊瑚六种形 / 铜四档（含"氧化到下一档""斧头刮回上一档"两句子模板）、展示框与画两条散落文案 → 全部走 `item.desc.tpl.*`，`DESCRIPTIONS` 的值改成惰性函数 → 216 条说明 diff 零差异
-  - 完成：**6 个结构性族**（深层矿石 / 告示牌 / 混凝土粉末 / 床 / 珊瑚六形 / 铜四档）+ 展示框与画两条散落文案改走 `item.desc.tpl.*`（**20 条模板**）…
-- [x] [P2-3c2] 工具与盔甲说明改模板：`TOOL_TIER_DESC` / `TOOL_KIND_DESC` / `ARMOR_KIND_DESC` 三张说明表 + 材质词 → 模板拼装 → 216 条 diff 零差异
-  - 完成：工具 30 条与盔甲 24 条说明改走模板 —— `item.desc.tpl.tool`（材质 + 种类 + 等级 + 速度/攻击/耐久）、`item.desc.tpl.armor`（材质 + 部位 + 护甲值 + 韧性 + 耐久 + 满套合计）、5 条武器种类说明、4 条部位说明、5 档采集等级…
-- [x] [P2-3c3] 药水与药箭说明：`potionDescription` / `tippedArrowDescription` 两个构建函数 + 配料清单（依赖 P2-5 的效果名键化，须排在其后） → 216 条 diff 零差异；`DESCRIPTIONS` 常量整表删除
-  - 完成：**30 条效果名**进新文件 `locales/{zh,en}/label.ts`（`label.effect.*`，P2-5 的其余标签族也进这个文件）；`StatusEffects.EFFECT_LABELS` 常量表删除、`effectLabel()` 改成查表…
-- [x] [P2-4] 生物名：75 个 `MobType.name` → `entity.<id>`，`MobNameTag` 的画字路径同步（canvas `fillText` 要确认西里尔/变音字形） → `test:entity` + 全量名称 diff 零差异
-  - 完成：**75 条**生物名进新文件 `locales/{zh,en}/entity.ts`（键就是 `MobType.id`：`entity.zombie` / `entity.slime_big` / `entity.ender_dragon`…）…
-- [x] [P2-5] 标签表族（一）：职业与等级、附魔、状态效果、群系、维度、世界类型 → `label.<kind>.<value>`；每张表改成查表函数 → `test:i18n` 断言"每张表的每个枚举值都有键"
-  - 完成：**114 条**标签键进 `locales/{zh,en}/label.ts` —— 维度 3 / 世界类型 5 / 群系 50 / 附魔 38 / 村民等级 5 / 职业 13…
-- [x] [P2-6] 标签表族（二）：音效组、外观 10 张、朝向、旗帜图案、配方书页签、物品类别 → 同上 → 同上
-  - 完成：**78 条**标签键进 `label.ts` —— 音效组 6 / 外观 10 张共 46 / 朝向 6 / 旗帜图案 5 / 配方书页签 5 / 物品类别 10…
-- [x] [P2-7] 逻辑层 reason 串：`Loom`「没有这种图案」、`StationNeed.label`、容器红底原因等，返回**键**由界面层 `t()` → `test:loom` / `test:crafting` / `test:i18n` 全绿
-  - 完成：新增 `src/core/container/reason.ts`（`ReasonRef` + `reason()` + `reasonText()`）；**7 个容器类**的 **22 条**中文原因改成 `reason('station.reason.*')`（4 条带参数）…
-## P3 · 界面残留
-- [x] [P3-1] 触摸与提示：`TouchControls`（潜行 / 向上飞 / 向下飞）、`Tooltip`（不可堆叠 / 最多 N 个）、`LoadingOverlay`、`Fullscreen`、`InstallHint` → 各文件"无中文字面量"断言
-  - 完成：**18 条键**（`touch.*` 4 + `touch.icon.*` 6 + `tooltip.*` 2 + `loading.world/failed` + `stickMode.*`/`handedness.*` 4）…
-- [x] [P3-2] 编辑器族：`BookScreen`、`SignEditor`、`NameTagEditor`、`CommandBlockEditor` → 同上
-  - 完成：**16 条键**进 `editor.ts`（`editor.ok/cancel/done/close/back/sign` 6 条共用按钮；`book.writingTitle/writePlaceholder/titlePlaceholder/emptyPage/pageOf` 5 条…
-- [x] [P3-3] 其余屏幕：`BeaconScreen`、`UnsupportedScreen`、`StatisticsScreen` → 同上
-  - 完成：**11 条键**——`beacon.*` 6 条（主效果 / 次级效果 / 次级主效果 / 两条等级门槛 / 效果等级说明）、`unsupported.*` 3 条（标题 / 刷新 / 诊断码）、`statistics.closeAria` 与 `statistics.blocks`；改 **3 …
-- [x] [P3-4] 时间与静态资源：`relativeTime` 改 `Intl.RelativeTimeFormat`、`index.html` 首屏文案、`manifest.webmanifest` 的 name/description → `test:i18n`（HTML 里不许写死）+ 首屏截图
-  - 完成：① `relativeTime()` 改走 **`Intl.RelativeTimeFormat`**（老 WebView 缺 API 时退成 `3 min`）；② `formatPlayTime()` 与 WorldScreen 那句"上次游玩…已玩…"的单位与语序进表（`time.*` 6 条）…
-- [x] [P3-5] 伪语言巡查收口：把 P3-1~P3-4 触过的界面在 `?lang=xa` 下扫一遍，"没被 ⟦⟧ 包住"的只剩语言中性项 → 巡查清单写进完成说明
-  - 完成：把 P3-1~P3-4 触过的界面在**伪语言**下逐个渲染了一遍（不开浏览器，直接调 `t()`），并把结果写成断言。**P3 自己的键共 63 条，0 条漏包**；漏包的只剩走 Intl 的两处（见下表）。顺带修掉一个真 bug：`tn()` 绕过伪语言
-    | 界面 | 文案来源 | 结果 |
-    | --- | --- | --- |
-    | `TouchControls` / `TouchIcons` | `touch.*` 10 条 | 全包住 |
-    | `Tooltip` 的 meta 行（不可堆叠 / 最多 N 格） | `tooltip.*` 2 条 | 全包住 |
-    | `LoadingOverlay`（含启动失败） | `loading.*` 4 条 | 全包住 |
-    | 四个编辑器（书 / 告示牌 / 名字牌 / 命令方块） | `editor.*` `book.*` `sign.*` `nameTag.*` `commandBlock.*` 共 18 条 | 全包住 |
-    | `BeaconScreen`（四行标签 + 三句提示） | `beacon.*` 7 条 | 全包住 |
-    | `UnsupportedScreen`（标题 / 刷新 / 诊断码） | `unsupported.*` 3 条 | 全包住 |
-    | `StatisticsScreen`（含移动距离的复数） | `statistics.*` 9 条 | 全包住 |
-    | `WorldScreen` 的"上次游玩 … · 已玩 …" | `time.*` 6 条 | 整句包住；内嵌的 `relativeTime()` 不包（见下） |
-    | 摇杆模式 / 惯用手下拉 | `label.stickMode.*` `label.handedness.*` 4 条 | 全包住 |
-    | `relativeTime()` | **Intl.RelativeTimeFormat** | **不包** —— 它不经过 `t()`，语言由 CLDR 给 |
-    | `joinList()` | **Intl.ListFormat** | **不包** —— 同上（P0-6 那次改造的既有结论） |
-  - 完成：🔴 **巡查当场抓到一个真 bug**：`tn()` 是"直接读表 + 替换占位符"（不走 `t()`），**伪语言包装被整个跳过了** —— `tn('statistics.blocks', 3)` 在 `?lang=xa` 下返回 `3 格` 而不是 `⟦3 格⟧`。这会让巡查把它误判成"没接 …
-## P4 · 四种语言
-- [x] [P4-1a] 德语表：`locales/de/` 全量（与 zh 同构分组 + `satisfies Messages`），`LOADERS` 加一行 → `test:i18n` 覆盖率 100% + `check:fast`；**最长串**截图 diff
-  - 完成：建齐 `locales/de/` **15 个分组**（键集由 `satisfies` 卡在 typecheck）+ `de/index.ts` + `LOADERS` 一行；**真翻 8 个界面分组共 400 条**（menu 33 / settings 80 / misc 46 / progre…
-    ① `可选语言 = 有表的那些` → 改成"**每个可选语言都能真的拿到表**（静态表或可加载）"（P0-7 起可选清单 = 有表 或 有加载器，旧关系式不再成立）
-    ② ③ 两条拿 `de` 当"没装表"例子的断言 → 改用 `ru`
-    ④ P0-7 那段"用假语言验证加载链"的块 → 假语言从 `de` 换成 `ru`（de 现在有真表，再拿它当假的会自相矛盾）
-  - 完成：新增守卫（`test:i18n` +6 条）：德语可加载 / 进了可选清单 / 表条数与中文相同 / 6 个界面分组的代表键**真的是德语** / 德语全表不含中文
-- [x] [P4-1b] 德语·界面第二批：`inventory`（122）与 `label`（226）→ 348 条真德语；`audit:i18n` 的"已翻"涨到约 750
-  - 完成：`inventory`（122 条：背包/工作站槽位、提示、21 个面板标题）与 `label`（226 条：状态效果 31 / 群系 58 / 附魔 44 / 职业 13 / 外观 46 / 朝向 / 图案 / 页签 / 类别…）翻成德语；德语表的占位分组从 7 个降到 **5 个**（`cmd`…
-- [x] [P4-1c1] 德语·构件与模板 + 生物名：`item` 的构件表（color 16 / wood 6 / coral 5 / base 35 / ore 8 / copper 8 / toolMaterial 6 / toolKind 5 / armorMaterial 6 / armorType 4）与 29 条模板 + `entity` 全部 75 条 → 203 条；`audit:i18n` 的"已翻"涨到 92…
-  - 完成：`item` 的**构件表与模板**（颜色 16 / 木材 6 / 珊瑚 5 / 石材基 35 / 矿石 8 / 铜 8 / 工具材质 6 / 工具种类 5 / 盔甲材质 6 / 盔甲部位 4 + 29 条模板）与 **`entity` 全部 75 条**译成德语，共 **203 条**；`item…
-- [x] [P4-1c2] 德语·显式物品名：`item` 里剩下的 **516 条**（`item.dirt` / `item.cobblestone` …，每个都是独立名词、没有构件可用）→ `notes/i18n-de.md` 的 item 组转 ✅、`audit:i18n` 的"已翻"到约 1440
-  - 完成：`item` 里剩下的 **516 条显式物品名**全部译成德语（方块 / 物品 / 工具 / 食物 / 药水材料 / 16 色旗帜·带釉陶瓦·蜡烛 / 作物生长阶段 / 唱片…）→ `item` 组 **644/644 收口**，德语占位分组清零
-- [x] [P4-1d] 德语·命令域：`cmd`（243）与 `cmdMessages`（170）→ 413 条；**必须保留 `<>` `[]` `|`**（test:i18n 有"<>/[] 个数中英一致"的断言）
-  - 完成：`cmd`（243 条：72 条用法/说明 + 110 条帮助面板短语与值标签 + 14 条整屏 + 40 条回执里嵌的标签表）与 `cmdMessages`（170 条回执）全部译成德语；**德语占位分组只剩 `itemDesc` 一个**
-- [x] [P4-1e1] 德语·物品说明前半：`item.desc.tpl.*` **57 条模板**（工具 / 盔甲 / 铜氧化 / 珊瑚 / 告示牌 / 床 / 药水句式 / 刷怪蛋…） + 方块与工具材料那 **144 条静态说明** → `audit:i18n` 的"已翻"涨到 2017
-  - 完成：`item.desc` 里 **57 条模板** + **144 条静态说明**（材料 / 方块 / 工具 / 食物前半）译成德语 → `itemDesc` 组 201/288；表里 `item.desc.*` 共 201 条德语
-- [x] [P4-1e2] 德语·物品说明后半：`item.desc` 剩下的 **87 条**（作物生长 / 海洋 / 下界 / 末地 / 药水材料那几族）→ `notes/i18n-de.md` 标 100%、`audit:i18n` 的"已翻"到约 2100
-  - 完成：`item.desc` 剩下的 **87 条**静态说明译完（作物生长 / 海洋与钓鱼 / 红石元件 / 容器 / 桶与细雪 / 音符盒 / 漏斗与投掷器 / 地图·时钟·指南针 / 盾牌 / 烟花 / 书与笔 / 展示框与画）→ **`itemDesc` 288/288，德语占位分组清零**
-- [x] [P4-2a] 俄语骨架 + 界面层：建齐 `locales/ru/` 15 个分组（`satisfies Messages` 卡住）+ `ru/plural.ts`（6 条三形式）+ `LOADERS` 加 `ru` + `PLURAL_TABLES` 登记；真翻 8 个界面分组共 400 条（menu 33 / settings 80 / misc 46 / progress 26 / editor 54 / chat …
-  - 完成：建齐 `locales/ru/` **15 个分组** + `ru/index.ts` + `ru/plural.ts`；`LOADERS` 加 `ru`；`PLURAL_TABLES` 登记 `de` / `ru`；**真翻 8 个界面分组共 400 条**（menu 33 / settings …
-- [x] [P4-2b] 俄语·界面第二批：`inventory`（122）与 `label`（226）→ 348 条
-  - 完成：`inventory`（122：背包/工作站槽位、提示、23 个面板标题）与 `label`（226：效果 30 / 群系 58 / 附魔 37 / 职业 13 / 外观 46 / 朝向 / 图案 / 页签 / 类别）翻成俄语；俄语占位分组降到 5 个（cmd / cmdMessages / ite…
-- [x] [P4-2c1] 俄语·构件与模板 + 生物名：`item` 的构件表（color 16 / wood 6 / coral 5 / base 35 / ore 8 / copper 8 / toolMaterial 6 / toolKind 5 / armorMaterial 6 / armorType 4）与 29 条模板 + `entity` 全部 75 条 → 203 条
-  - 完成：`item` 的**构件与模板 128 条** + **`entity` 75 条**（共 203）翻成俄语；`item` 走"部分翻译"模式（128/644），剩 516 条显式名拆进 P4-2c2
-- [x] [P4-2c2] 俄语·显式物品名：`item` 里剩下的 **516 条**（`item.dirt` / `item.cobblestone` …，每个都是独立名词、没有构件可用）→ `notes/i18n-ru.md` 的 item 组转 ✅
-  - 完成：`item` 里剩下的 **516 条显式物品名**全部译成俄语（方块 / 红石元件 / 16 色旗帜·带釉陶瓦·蜡烛 / 作物阶段 / 食物 / 药水材料 / 唱片…）→ `item` **644/644 收口**；俄语占位只剩 `cmd` / `cmdMessages` / `itemDesc`…
-- [x] [P4-2d] 俄语·命令域：`cmd`（243）与 `cmdMessages`（170）→ 413 条；**必须保留 `<>` `[]` `|`**（照抄德语那条守卫）
-  - 完成：`cmd`（243：72 条用法/说明 + 110 条帮助面板短语与值标签 + 14 条整屏 + 40 条标签表）与 `cmdMessages`（170 条回执）全部译成俄语；俄语占位只剩 `itemDesc`；`audit:i18n` 的 ru 已翻 1480 → **1878**
-- [x] [P4-2e1] 俄语·物品说明前半：`item.desc.tpl.*` **57 条模板**（工具/盔甲/铜氧化/珊瑚/告示牌/床/药水句式/刷怪蛋…）+ 材料与方块/工具/食物 **144 条静态说明** → `itemDesc` 201/288
-  - 完成：`item.desc` 的 **57 条模板** + **144 条静态说明**（材料 / 方块 / 工具 / 食物）译成俄语 → `itemDesc` **201/288**；`itemDesc` 走"部分翻译"模式，剩 87 条拆进 P4-2e2
-- [x] [P4-2e2] 俄语·物品说明后半：`itemDesc` 剩下的 **87 条**（作物生长 / 海洋 / 下界 / 末地 / 药水材料）→ 全部翻完后 `notes/i18n-ru.md` 标 100%
-  - 完成：`itemDesc` 剩下的 **87 条**静态说明译完（弓与钓鱼 / 矿石 / 红石元件 / 容器 / 桶与细雪 / 音符盒 / 漏斗与投掷器 / 地图·时钟·指南针 / 盾牌 / 烟花 / 书与笔 / 展示框与画）→ **`itemDesc` 288/288，俄语 100% 译完**
-## 里程碑 MS1 · 俄语（ru）100% 译完
-- 验收：`npm run audit:i18n && npm run test:i18n && npm run check:fast`（期望 `ru 已翻 2163`、0 孤儿、332/0、全绿）
-- 确认：已验收（2026-10-23，三条命令全绿：audit 2163 · i18n 332/0 · check:fast 全绿）
+- [x] [P5-1] 商店列表文案：标题 / 短描述 / 长描述 × 6 语言，产出 `docs/store/` 下的文本文件（不随代码打包） → 文件齐全 + 字数在 Play 限制内
+  - 做了什么：新建 `docs/store/`，产出**六份**商店文案（`zh.md` / `en.md` / `de.md` / `ru.md` / `fr.md` / `pt.md`），每份含**标题 / 短描述 / 长描述 / 8 张截图清单（含拍摄规则）**
+  - 逐语言实测字符数（脚本量、回填进文件，改文案后可重跑）：标题六语言统一 **16/30**；短描述 zh 32 · en 74 · de 65 · ru 70 · fr 76 · pt 75（限 80）；长描述 zh 707 · en 1830 · de 1916 · ru 1930 · fr 2050 · pt 1954（限 4000）—— **全部在限内**
+  - ⚠️ 第一版四条短描述**超限**（de 90 / ru 92 / fr 100 / pt 92），是脚本断言抓出来的；而且我第一版替换时**凭记忆写了原文**（把 de 的 `lokale Spielstände` 记成 `lokal gespeichert`）导致 `AssertionError` —— 改成"按代码块整体替换"才对。又是"凭记忆写文本"的老毛病，这次记在完成说明里
+  - 内容按项目实际写（无限地形 / 20+ 结构 / 200+ 配方 / 70+ 生物 / 36 条命令 / 建造工具 / 六语言 / 触屏与键鼠），并加了**合规声明**：非官方爱好者复刻、与 Mojang 和 Microsoft 无关、不含官方素材、贴图与音效运行时生成、存档只在本机
+  - ✅ "不随代码打包"已实证：`npm run build` 后 `find dist -name "*.md" -o -name "*store*"` **为空**（dist 只有 assets / index.html / manifest / sw.js / icon.svg）；`docs/` 在仓库根、不参与构建，`dist` 本身也在 `.gitignore` 里
+  - ⚠️ 未产出：**截图本身**（8 张只给了场景清单 + 拍摄规则 + 16:9 横屏要求）。真机/场景摆拍不在本轮能力内，如实标记，留给上架前人工拍
+  - 验证：`node .continue/hooks/check.mjs --fast` 5 项全绿（含 `docs` 体量上限）；`npm run audit:docs` → "文档体量检查通过"
+  - 批次：20261023-2217
+- [x] [P5-2] per-app language 与深链：Android 13 应用语言透传、`?lang=de` 等真实语言深链（现在只有 `?lang=xa`） → 手动验证 + 断言
+  - 做了什么：`I18n.ts` 新增 **`languageFromParam(tag)`**（`?lang=` → `LanguageSetting | undefined`：真实语言码与带地区的写法走 `matchLocale()` 前缀匹配，伪语言 `xa` 让位给 `isPseudoLocaleTag`，没做表的语言返回 `undefined` 不覆盖设置）；`boot()` 改成 `applyLanguageSetting(languageFromParam(langParam) ?? loadSettings().language)`
+  - 设计取舍：深链**不写进设置**（不落盘）。语义是"这次用这个语言看"，分享链接给朋友不会改他的语言设置；代价是刷新（不带参数）后回到设置里的语言 —— 想固定就在设置里改。实测确认 `localStorage` 仍是 `{"language":"zh"}`
+  - Android 13 per-app language 的"透传"在 Web 侧没有专门 API：TWA / WebView 会把**应用语言反映到 `navigator.language`**，所以这条链是「应用语言 → navigator.language → `auto` 解析」。新增三条断言把它钉住（`resolveLanguage("auto","pt-BR")==="pt"`、`"ru"→ru`、`"fr-CA"→fr`）
+  - 🖥️ 浏览器逐项实测（playwright-core + 本机 Chrome headless + vite dev，设置基线固定成 `zh`）：`?lang=de` → `html lang=de` + `Echtes Survival…`；`?lang=pt-BR` → `pt-BR` + `Survival e criativo…`；`?lang=fr` → `fr` + `Survie et création…`；`?lang=ru` → `ru` + `Оригинальное выжива…`；`?lang=de-AT` → `de`（前缀匹配）；`?lang=ja` → `zh-CN`（回落设置）；`?lang=xa` → 伪语言生效（文本带 ⟦⟧）且语言仍是 `zh-CN`；无参数 → `zh-CN`。**8 项全 ✓**
+  - ⚠️ 未验证：**Android 13 真机上的应用语言透传**没有真机可测（本环境只有桌面 Chrome）。验的是它经过的那条链（`navigator.language` → `auto` 解析），真机上还需要一次手动回归 —— 如实记下
+  - 验证：`npm run test:i18n` **413 / 0**（新增 10 条：3 条透传 + 7 条深链解析）；`npm run check:fast` **156/156 套**全绿；浏览器实测见上
+  - 批次：20261023-2217
+- [x] [P5-3] manifest 多语言 + 真机回归：`manifest.webmanifest` 按语言注入 name/description、真机横屏逐语言过一遍 → 清单写进完成说明
+  - ⚠️ 门禁的一次**偶发红**：首次 `check:fast` 里 `mob` 套件 0.16s 就失败，紧接着连跑两次 172/172 全绿、未复现。本轮改动（public 下 4 份 manifest / `gen-manifests.mjs` / `package.json` scripts / main.ts 一行 / i18n-test 断言）都与 mob 无关，判断为并发 11 下的偶发竞争；没抓到根因，如实记下（O15 记过"偶发红会把门禁变噪音"，这里先留痕）
+  - 做了什么：新增 **`tools/gen-manifests.mjs`**（生成 + `--check` 校验，挂成 `npm run gen:manifests` / `check:manifests`），从中文基准 `public/manifest.webmanifest` 派生 **5 份**语言文件（`manifest.en/de/ru/fr/pt.webmanifest`）；六份之间**只有 `description` 与 `lang` 不同**，其余 11 个字段（name / short_name / start_url / scope / display / display_override / orientation / 背景与主题色 / 分类 / 图标）由脚本冻结并在 `--check` 里逐字比对
+  - `boot()` 的 manifest 选择改成按语言拼文件名：`uiLang === "zh" ? "./manifest.webmanifest" : "./manifest.<lang>.webmanifest"`。**中文那份保持原文件名** —— 它是 `index.html` 默认指向的，也是已装 PWA 正在用的地址，改名会让老用户下次打开变成"未安装"
+  - 描述直接复用 `docs/store/` 的短描述（六语言一致），`lang` 用与 `<html lang>` 同一套值（`pt` 写 `pt-BR`）
+  - 新增断言 18 条：六份都在且 JSON 合法 / `lang` 与 `localeMeta().htmlLang` 一致 / 启动与显示字段与基准一致 / 有该语言的描述 / **六份描述两两不同**（防"都抄英文"：字段检查全过而界面六个一样）
+  - ⚠️ 改了一条**已通过的旧断言**（"boot() 会按语言换 manifest 链接"）：它硬编码 `manifest.en.webmanifest` 这个文件名，现在源码改成模板串 → 断言改成检查 `manifest.${uiLang}.webmanifest` 这个拼法
+  - 🖥️ 浏览器横屏逐语言实测（playwright-core + 本机 Chrome，视口 960×540）：**六语言全 ✓** —— `zh → ./manifest.webmanifest`（`lang` 字段 `zh-CN`）、`en → manifest.en`（`en`）、`de` / `pt-BR` / `ru` / `fr` 同构，六份均 **HTTP 200**
+  - ⚠️ 未验证：**真机横屏逐语言**没有真机可测，验的是浏览器 960×540（横屏比例）下的 `html lang` / `manifest` 链接 / `lang` 字段；装成 PWA 后还需一次真机手动回归 —— 如实记下
+  - ⚠️ 上架前提醒（我没擅自改，因为这是用户可见的品牌名）：现 `short_name` 是 **"Minecraft Web"**、部分描述含 "Minecraft" 字样，与 P5-1 文案里的"非官方、不含官方素材"不一致 —— 建议上架前统一成非商标表述（如 `Bedrock Web`），但这属于产品命名决定，交给你拍板
+  - 验证：`npm run test:i18n` **432 / 0**（新增 18 条 + 修 1 条）；`npm run check:manifests` → "5 份语言文件与基准一致（字段冻结 11 个）"；`npm run check:fast` **172/172 套**全绿
+  - 批次：20261023-2217
+
+## 验收口径（整批）
+
+- `npm run check:fast` 与 `npm run check` 全绿
+- `npm run audit:i18n`：缺口 0、孤儿 0；`zh / en / de / ru` 四张表各 100%，法语与葡语按本条进度计
+- **中文文案零变化**：动到中文表时必须用"改造前后全量输出 diff"证明
+- 每个新语言的表都由 `satisfies Messages` 卡住（漏翻一条 = 编译不过）；有复数变格的语言必须登记 `PLURAL_TABLES` 并用具体数字断言
 
 ---
