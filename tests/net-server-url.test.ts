@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseServerUrl } from '../src/core/net/ServerUrl.ts';
+import { parseServerUrl, resolveDefaultServerUrl } from '../src/core/net/ServerUrl.ts';
 
 describe('parseServerUrl', () => {
   it('裸地址：默认房间、无口令', () => {
@@ -37,5 +37,19 @@ describe('parseServerUrl', () => {
 
   it('非法地址原样返回（真正的校验在界面那一层）', () => {
     expect(parseServerUrl('这不是地址')).toEqual({ url: '这不是地址', room: '', password: '' });
+  });
+});
+
+describe('resolveDefaultServerUrl（联机28）', () => {
+  it('https 页面走同源 wss（混合内容会被浏览器拦）', () => {
+    expect(resolveDefaultServerUrl('https:', 'mc.example.com', 'mc.example.com')).toBe('wss://mc.example.com/ws');
+  });
+
+  it('http 页面走本地默认端口', () => {
+    expect(resolveDefaultServerUrl('http:', '192.168.1.5:5173', '192.168.1.5')).toBe('ws://192.168.1.5:8787');
+  });
+
+  it('局域网 IP + 端口：host 带端口时仍只取 hostname（服务端端口固定 8787）', () => {
+    expect(resolveDefaultServerUrl('http:', 'localhost:5173', 'localhost')).toBe('ws://localhost:8787');
   });
 });

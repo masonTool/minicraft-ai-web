@@ -18,6 +18,7 @@
  */
 
 import { WebSocketServer } from 'ws';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -338,11 +339,39 @@ function snapshotFor(player) {
  * 先分配 100MB 再解析。64KB 足够容纳最大的合法消息（`blocks` 一批 256 条约 8KB，
  * 容器 8192 字节上限），超了 `ws` 会以 1009 关连接。
  */
-const wss = new WebSocketServer({ port: PORT, maxPayload: 64 * 1024 });
+/**
+ * 同一个端口既跑 WebSocket 也跑 `/healthz`（联机28）。
+ *
+ * 为什么不另开一个健康检查端口：容器/反代只需要暴露一个口；而且 `ws` 支持
+ * "挂在已有 HTTP server 上"，升级请求由它自己接管，普通请求落到这里。
+ */
+const httpServer = createServer((req, res) => {
+  const path = (req.url ?? '/').split('?')[0];
+  if (path === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        players: players.size,
+        rooms: roomsInUse().size,
+        uptime: Math.round(process.uptime()),
+        seed: WORLD_SEED,
+        protocol: PROTOCOL_VERSION,
+      }),
+    );
+    return;
+  }
+  res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+  res.end('minicraft multiplayer server（WebSocket 请连这个地址的根路径）');
+});
 
-wss.on('listening', () => {
-  log(`已启动，端口 ${PORT}，种子 ${WORLD_SEED}`);
+const wss = new WebSocketServer({ server: httpServer, maxPayload: 64 * 1024 });
+
+httpServer.listen(PORT, () => {
+  log(`已启动，端口 ${PORT}，种子 ${WORLD_SEED}（健康检查 /healthz）`);
   log(`玩家把游戏指向 ws://localhost:${PORT} 即可联机`);
+  if (ALLOWED_ORIGINS.length > 0) log(`来源白名单：${ALLOWED_ORIGINS.join(', ')}`);
+  if (ROOM_PASSWORD) log('已启用房间口令（ROOM_PASSWORD）');
 });
 
 /**
@@ -1055,7 +1084,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     log('收到退出信号，保存快照并关闭服务端');
     // 退出前补存一次（联机13）：定时器是 30 秒一轮，最后这几秒的改动不能白丢
     autoSave.stop();
-    wss.close(() => process.exit(0));
+    // 先关 ws（停止接受新连接），再关 http server（它才是监听端口的那个）
+    wss.close();
+    httpServer.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 500);
   });
 }

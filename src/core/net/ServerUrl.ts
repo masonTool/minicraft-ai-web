@@ -41,3 +41,19 @@ export function parseServerUrl(raw: string): ParsedServerUrl {
     return { url: raw, room: '', password: '' };
   }
 }
+
+/**
+ * 默认的服务端地址（联机28）。
+ *
+ * 三种部署形态各一条规则，都是踩过的坑：
+ *  - **页面在 https**：必须用 `wss://<同源>/ws`。浏览器会拦 `ws://`（混合内容），而且
+ *    同源反代是唯一不需要额外开放端口的做法；
+ *  - **页面在 http（本地开发 / 局域网直连）**：`ws://<hostname>:8787`，与服务端默认端口一致；
+ *  - **`?server=` 显式指定**（部署到子路径或别的主机时）：原样用，不做任何推断。
+ *
+ * 纯函数、不碰 `window`，`tests/net-server-url.test.ts` 直接断言。
+ */
+export function resolveDefaultServerUrl(protocol: string, host: string, hostname: string): string {
+  if (protocol === 'https:') return `wss://${host}/ws`;
+  return `ws://${hostname}:8787`;
+}

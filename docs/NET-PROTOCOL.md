@@ -168,6 +168,8 @@
 | 房间口令 | `ROOM_PASSWORD` 环境变量，空 = 不校验（**明文传输，不是鉴权**） | 同上 |
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
 | 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/aoi.mjs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol}`；其它路径 404 | `server/index.mjs` |
+| 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8787`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/protocol.mjs` |
 | 方块 state 位宽 | 255（8 位，与 `ChunkEdits.packEdit` 一致） | 同上 |
@@ -234,6 +236,7 @@
 | `联机25` | 限频与体积已做（block/container/chat 三个令牌桶 + `maxPayload` 64KB + 名字清洗） | 只限这三类：掉落物/生物命中/拾取/特效用的是各自手写的 1 秒窗口（四条老链路，没迁到桶上）；没有 Origin 校验（`联机26`） |
 | `联机26` | 房间码 / 可选口令 / 来源白名单已做（数据表按 `房名|` 前缀隔离，跨房拾取也被挡） | 种子仍是**全服同一个**（各房地形一样，只是数据不串）；口令明文走 `join`，不是鉴权；房间没有生命周期（一直存在到服务端重启） |
 | `联机27` | 广播已按 8 区块 + 维度过滤（坐标类消息）；O(n²) → O(n·k) | `player` 位置消息**不过滤**（否则远处队友直接消失，且它已被 move 限频）；`chat`/`time` 不过滤 |
+| `联机28` | wss/部署已就绪（`ws` 进生产依赖、`/healthz`、Dockerfile、nginx 反代、`notes/multiplayer-ops.md`） | 没有内置 TLS：https 站点必须挂反代；镜像不含前端静态产物（分开部署） |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |

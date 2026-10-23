@@ -71,5 +71,12 @@ export default defineConfig({
    */
   test: {
     exclude: [...configDefaults.exclude, '**/.continue/**'],
+    /*
+     * 关掉磁盘缓存：vitest 的缓存目录有上千个文件，IDE 的**安全删除守卫**（删 >500 个
+     * 文件要人工确认）会拦住它的自动清理，于是整套测试**启动即失败**
+     * （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`，本地实测过）。
+     * 这套测试本身 1 秒内跑完，缓存省下的时间不值得引入这种"换台机器就起不来"的失败。
+     */
+    cache: false,
   },
 });

@@ -16,7 +16,7 @@ import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
-import { parseServerUrl } from '../core/net/ServerUrl.ts';
+import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
 
 export interface NetPlayerState {
   id: number;
@@ -829,6 +829,9 @@ export class NetClient {
 
 /** 默认的服务端地址（本地开发用） */
 export function defaultServerUrl(): string {
-  // 与服务端默认端口一致；换成局域网地址就能和朋友联机
-  return `ws://${window.location.hostname}:8787`;
+  // 显式指定优先（部署到子路径/别的主机时用）：`?server=wss://mc.example.com/ws`
+  const override = new URLSearchParams(window.location.search).get('server');
+  if (override) return override;
+  // 同源 https 页面走 `wss://<host>/ws`（混合内容会被浏览器拦），http 页面走本地默认端口
+  return resolveDefaultServerUrl(window.location.protocol, window.location.host, window.location.hostname);
 }

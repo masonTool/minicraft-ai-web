@@ -57,10 +57,11 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
   Service Worker 按作用域注册在 `/<repo>/`，跨子路径不会串味。
 - **不用配 COOP/COEP**：项目没用到 `SharedArrayBuffer`，因此也不需要 Pages
   无法自定义的响应头。
-- **联机在 Pages 上默认不可用**：`defaultServerUrl()` 给的是 `ws://<当前域名>:8787`，
-  而 Pages 是 HTTPS 页面，浏览器会直接拦掉这种混合内容。要用联机得自己跑
-  `npm run server` 并挂一个 `wss://` 反向代理，再在游戏里连：
-  控制台执行 `mc.connect('wss://你的域名', '昵称')`（`L` 键是连默认地址）。
+- **联机在 Pages 上要自己挂服务端**：`defaultServerUrl()` 现在按页面协议分流——https
+  页面给 `wss://<同源>/ws`（配合一条反代），http 页面给 `ws://<hostname>:8787`；
+  页面地址带 `?server=wss://你的域名/ws` 时可以显式覆盖。部署步骤（Dockerfile / nginx
+  反代 / 健康检查 `/healthz` / 环境变量 / 备份）见
+  [`.continue/notes/multiplayer-ops.md`](./.continue/notes/multiplayer-ops.md)。
 
 ## 路线图
 

@@ -63,9 +63,10 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 `vite.config.ts` 的 `base` 必须是相对值 `'./'`（Pages 上项目位于 `/<repo>/`）、
 `index.html` 与 `manifest.webmanifest` 里的路径同样全是相对的、
 项目没用 `SharedArrayBuffer` 因此不需要 Pages 无法自定义的 COOP/COEP 响应头。
-⚠️ **联机在 Pages 上默认不可用**：`defaultServerUrl()` 给的是 `ws://<当前域名>:8787`，
-而 Pages 是 HTTPS 页面，浏览器会直接拦掉这种混合内容；要玩联机得自己跑 `npm run server`
-并挂 `wss://` 反向代理，再在控制台 `mc.connect('wss://你的域名', '昵称')`。
+⚠️ **联机要自己挂服务端**（Pages 只托管静态文件）：`defaultServerUrl()` 现在按页面协议分流
+——https 页面给 `wss://<同源>/ws`（配合一条反代），http 页面给 `ws://<hostname>:8787`；
+页面地址带 `?server=wss://你的域名/ws` 可显式覆盖。部署步骤（Dockerfile / nginx 反代 /
+健康检查 `/healthz` / 环境变量 / 备份）见 [`multiplayer-ops.md`](./multiplayer-ops.md)。
 
 **想套壳成 App 时**（本项目没装这些依赖，按需再加）：
 

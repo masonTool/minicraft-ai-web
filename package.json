@@ -218,7 +218,8 @@
     "skill:e2e": "node .codebuddy/skills/continue-task/scripts/e2e.mjs"
   },
   "dependencies": {
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -227,7 +228,6 @@
     "playwright-core": "^1.64.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
-    "vitest": "^5.0.4",
-    "ws": "^8.22.0"
+    "vitest": "^5.0.4"
   }
 }

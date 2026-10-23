@@ -180,6 +180,16 @@ async function startServer(extraEnv = {}, attempts = 3) {
 
 check('服务端启动成功', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
 
+// 健康检查（联机28）：容器/反代靠它判活，和 WebSocket 共用同一个端口
+{
+  const response = await fetch(`http://localhost:${PORT}/healthz`).catch(() => null);
+  const body = response ? await response.json().catch(() => null) : null;
+  check('GET /healthz 返回 ok', response?.status === 200 && body?.ok === true, JSON.stringify(body));
+  check('/healthz 带上在线人数与协议版本', typeof body?.players === 'number' && body?.protocol > 0, JSON.stringify(body));
+  const missing = await fetch(`http://localhost:${PORT}/nope`).catch(() => null);
+  check('其它路径返回 404（不误当健康检查通过）', missing?.status === 404, `${missing?.status}`);
+}
+
 try {
   // ---------------------------------------------------------------- 加入与广播
   console.log('\n[加入 / 位置广播]');
