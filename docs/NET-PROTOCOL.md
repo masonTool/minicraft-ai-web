@@ -82,6 +82,7 @@
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
 | `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
+| `ping` | 无 | 必须已 join（先连接） | 应用层延迟探测（`联机29`）：客户端每 2 秒一条，服务端只回 `pong` |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 | `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
 | `arrow` | `x, y, z, vx, vy, vz, damage` | 六个数有限；速度模长 ≤ 200；伤害夹 0~50；每人每秒 30 条 | 玩家射箭（`联机23`）：**不带 id**，各端自己生成一支跑物理 |
@@ -102,6 +103,7 @@
 | `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
+| `pong` | 无 | 回给发 `ping` 的那个人（`联机29`） |
 | `player-hit` | `fromId, fromName, fromTeam, damage` | **只发给被击者**；被击者用 `fromTeam` + 自己的队伍表再判一次友伤 |
 | `arrow` | 同上行 + `by` | 收到 `arrow` 后转发给其他人 |
 | `tnt` | 同上行 + `by` | 收到 `tnt` 后转发给其他人 |
@@ -192,6 +194,7 @@
 | `welcome` | 种子与服务端比对：**不一致就整批跳过**（不写 edits、不建远端玩家），消息栏 + HUD 提示 `/netseed reload` 或 `/netseed new`；一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像 | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档；种子冲突判定在 `core/net/SeedReconcile.ts`。远端改动**会**进本地存档（`联机6` 隔离仍未做） |
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度；外观进 `RemoteAppearance`（挥手/受伤**边沿触发 + 本地计时**，因为网络 100ms 一条而动作只有 0.25s） | 队友走进下界时不会在主世界同坐标留一个分身；手持物/挥手/着火直接接到模型上 |
 | `leave` | 删远端玩家与其名下镜像 | |
+| `pong` | `NetStats.ackPing()`——与**最早**那条未回的 ping 配对算 RTT（几条同时在飞时配错会让 RTT 虚低） | 丢包 = 3 秒没回的那几条；F3 面板显示延迟/丢包/上下行 |
 | `time` | 只记目标值，主循环里按 `dt * 4` 向它靠（`core/net/NetTime.ts` 的 `stepTimeOfDayToward`）；`snap: true` 时**立刻对齐**并顺手放晴 | 直接赋值太阳会"跳"；睡满跳夜那种大跳必须换成立即对齐，否则夜里要追 70 秒 |
 | `sign` | 写回 `signText`，当前维度立刻 `syncSigns`（渲染器下一趟 sync 画出） | 全空 = 擦除；非当前维度也存下来，切过去还在 |
 | `frame` | 写回 `itemFrames`（`item: null` = 删条目），当前维度 `syncFrames` | 与容器同理：本地放/取/转格子时也发（`联机16`） |
@@ -237,6 +240,7 @@
 | `联机26` | 房间码 / 可选口令 / 来源白名单已做（数据表按 `房名|` 前缀隔离，跨房拾取也被挡） | 种子仍是**全服同一个**（各房地形一样，只是数据不串）；口令明文走 `join`，不是鉴权；房间没有生命周期（一直存在到服务端重启） |
 | `联机27` | 广播已按 8 区块 + 维度过滤（坐标类消息）；O(n²) → O(n·k) | `player` 位置消息**不过滤**（否则远处队友直接消失，且它已被 move 限频）；`chat`/`time` 不过滤 |
 | `联机28` | wss/部署已就绪（`ws` 进生产依赖、`/healthz`、Dockerfile、nginx 反代、`notes/multiplayer-ops.md`） | 没有内置 TLS：https 站点必须挂反代；镜像不含前端静态产物（分开部署） |
+| `联机29` | 观测已做（`/healthz` 带吞吐、服务端每 10 秒一行统计日志、F3 面板显示延迟/丢包/上下行） | 服务端不跑 tick，所以没有真正的 TPS——统计的是**消息速率**与吞吐；客户端丢包是**应用层 ping 超时**估的，不是网络层真值 |
 | `联机24`~`联机27` | 无校验、无限频、无房间、无 AOI | 脏客户端能远程拆家/刷屏；人数一多广播是 O(n²) |
 | `联机28` | `ws` 在 devDependencies、无 wss | 生产装不上依赖；HTTPS 页面连不上 |
 | `联机30` | `chat` 广播含发送者 + 客户端本地回显 | 自己发的消息出现两次 |
