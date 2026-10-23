@@ -41,6 +41,8 @@ export const editor = {
   'buildtools.template.placed': 'Placing: {name}',
   // ---- build toolbar (batch 20261022-1954)
   'buildtools.toggle': 'Build mode',
+  // Short label under the collapsed toggle (batch 20261024-0344)
+  'buildtools.toggle.short': 'Build',
   'buildtools.tool.select': 'Select',
   'buildtools.tool.fill': 'Fill',
   'buildtools.tool.copy': 'Copy',

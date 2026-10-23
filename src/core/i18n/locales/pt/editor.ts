@@ -36,6 +36,8 @@ export const editor = {
   "buildtools.template.outOfWorld": "Fora do mundo",
   "buildtools.template.placed": "Colocando: {name}",
   "buildtools.toggle": "Modo construção",
+  // Rótulo curto sob o botão recolhido (lote 20261024-0344)
+  "buildtools.toggle.short": "Construir",
   "buildtools.tool.select": "Seleção",
   "buildtools.tool.fill": "Preencher",
   "buildtools.tool.copy": "Copiar",

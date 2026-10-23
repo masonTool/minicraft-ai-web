@@ -1197,55 +1197,128 @@
         .tutorial-title { font-size: 12px; }
       }
 
-      /* ---------------- 建造工具条（创造5，批次 20261022-1954） ----------------
-         横屏右侧双列竖排：44px 是平台最小手势尺寸；双列 92px 宽、5 行 236px 高。
-         844×390 下垂直居中排开（top≈77），不压顶部暂停三键（中心 422px），
-         也不压底部快捷栏。折叠时只剩总开关一列。 */
-      .build-toolbar {
-        position: fixed;
+      /* ---------------- 建造工具（创造5 批次 20261022-1954；抽屉形态 批次 20261024-0344） ----------------
+         折叠态：一颗 44×56 的总开关（26px 图标 + 9px 两字标签），贴右缘 8px、垂直居中。
+         展开态：屏幕正中一块抽屉（基准 360×196，4 列 × 2 行），遮罩吃掉全部点击。
+         ⚠️ 尺寸**只在 `src/ui/buildToolbarLayout.ts` 里算**：抽屉坐标与 `--build-*` 变量
+            都由 `BuildToolbar#applyLayout()` 写成内联样式，这里只写"长什么样"。
+            上一版 CSS 写死 92×236、常量里再写一遍，两处一漂就变成
+            "展开后压住跳跃键、还抢走它的点击"（`#hud` 没有 z-index，工具条在 9 层）。 */
+      #build-toolbar {
+        position: fixed; inset: 0;
+        z-index: 9;                 /* 低于背包（10），高于 HUD */
+        pointer-events: none;       /* 空层不挡点击；开关 / 遮罩 / 抽屉各自打开 */
+      }
+      #build-toolbar.hidden { display: none; }
+
+      .build-toggle {
+        position: absolute;
         right: calc(8px + env(safe-area-inset-right, 0px));
         top: 50%;
         transform: translateY(-50%);
-        z-index: 9;
-        display: grid;
-        grid-template-columns: repeat(2, 44px);
-        gap: 4px;
-        pointer-events: auto;
-      }
-      .build-toolbar.hidden { display: none; }
-      .build-toolbar.collapsed { grid-template-columns: 44px; }
-      .build-toolbar.collapsed .build-tool.extra { display: none; }
-
-      .build-tool {
-        width: 44px; height: 44px;
-        display: flex; align-items: center; justify-content: center;
+        width: 44px; height: 56px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
         padding: 0;
-        font: inherit;
+        font: inherit; color: #fff;
         background: rgba(20, 20, 20, .78);
         border: 2px solid #4a4a4a;
         border-radius: 4px;
-        color: #fff;
+        pointer-events: auto;
         touch-action: manipulation;
         -webkit-tap-highlight-color: transparent;
       }
-      .build-tool canvas { width: 28px; height: 28px; image-rendering: pixelated; }
-      .build-glyph { font-size: 22px; line-height: 1; }
-      .build-tool:active { background: rgba(70, 70, 70, .9); }
-      .build-tool.active { border-color: #ffd75e; }
-      .build-tool:disabled { opacity: .35; }
+      .build-toggle canvas { width: 28px; height: 28px; image-rendering: pixelated; }
+      .build-toggle-label { font-size: 9px; line-height: 1; }
+      .build-toggle:active { background: rgba(70, 70, 70, .9); }
+      .build-toggle.active { border-color: #ffd75e; background: rgba(64, 54, 20, .85); }
 
-      /* 模板弹层挂在工具条左侧，不额外占右侧宽度 */
-      .build-templates {
-        position: absolute;
-        right: calc(100% + 8px);
-        top: 0;
-        display: flex; flex-direction: column; gap: 4px;
-        padding: 4px;
-        background: rgba(20, 20, 20, .9);
-        border: 2px solid #4a4a4a;
-        border-radius: 4px;
+      .build-backdrop {
+        position: absolute; inset: 0;
+        background: rgba(0, 0, 0, .45);
+        pointer-events: auto;
       }
-      .build-templates.hidden { display: none; }
+
+      .build-drawer {
+        position: fixed;            /* left / top / width / height 由 JS 按几何写 */
+        box-sizing: border-box;
+        padding: var(--build-pad, 6px);
+        display: flex; flex-direction: column;
+        background: rgba(24, 24, 24, .96);
+        border: 2px solid #4a4a4a;
+        border-radius: 6px;
+        color: #fff;
+        pointer-events: auto;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .build-drawer-head {
+        flex: none;
+        height: var(--build-head, 40px);
+        display: flex; align-items: center; gap: 6px;
+      }
+      .build-drawer-title { flex: 1; font-size: 12px; font-weight: 600; }
+      .build-drawer-end, .build-drawer-back, .build-drawer-close {
+        height: 28px; padding: 0 8px;
+        font: inherit; font-size: 11px; color: #fff;
+        background: rgba(60, 60, 60, .9);
+        border: 2px solid #4a4a4a; border-radius: 4px;
+        display: inline-flex; align-items: center; justify-content: center;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .build-drawer-end { border-color: #9a5a3a; }
+      .build-drawer-close { width: 28px; padding: 0; font-size: 16px; line-height: 1; }
+      .build-drawer-end:active, .build-drawer-back:active, .build-drawer-close:active {
+        background: rgba(90, 90, 90, .95);
+      }
+
+      .build-drawer-body {
+        flex: 1; min-height: 0;
+        display: flex; align-items: center; justify-content: center;
+      }
+      /* `drawerFits()` 给 false（视口装不下基准抽屉）时：网格在面板内滚动，不撑出屏幕 */
+      .build-drawer-body.scroll { align-items: flex-start; overflow-y: auto; }
+
+      .build-page {
+        display: grid;
+        grid-template-columns: repeat(4, var(--build-cell-w, 84px));
+        grid-auto-rows: var(--build-cell-h, 68px);
+        gap: var(--build-gap, 4px);
+        justify-content: center;
+      }
+
+      .build-cell {
+        width: var(--build-cell-w, 84px);
+        height: var(--build-cell-h, 68px);
+        box-sizing: border-box;
+        padding: 2px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+        overflow: hidden;
+        font: inherit; color: #fff;
+        background: rgba(52, 52, 52, .9);
+        border: 2px solid #4a4a4a; border-radius: 4px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* 图标跟着触摸缩放走（画布按 26px 画，放大只是像素变大） */
+      .build-cell canvas {
+        width: calc(26px * var(--touch-scale, 1));
+        height: calc(26px * var(--touch-scale, 1));
+        image-rendering: pixelated;
+      }
+      .build-cell-glyph { font-size: 20px; line-height: 1; }
+      .build-cell-label, .build-cell-hint {
+        max-width: 100%;
+        line-height: 1.1;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .build-cell-label { font-size: 10px; }
+      .build-cell-hint { font-size: 9px; opacity: .72; }
+      .build-cell:active { background: rgba(70, 70, 70, .95); }
+      .build-cell.active { border-color: #ffd75e; }
+      .build-cell:disabled { opacity: .35; }
+
+      .build-drawer.hidden, .build-backdrop.hidden, .build-page.hidden,
+      .build-drawer-title.hidden, .build-drawer-back.hidden { display: none; }
 
       /* ---------------- 单机小游戏层（小游戏1，批次 20261022-1954） ----------------
          全屏一层，z-index 30：盖住 HUD / 背包 / 配方书（10~20），低于主菜单（40）。

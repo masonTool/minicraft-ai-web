@@ -2157,8 +2157,8 @@ class App {
       },
     );
 
-    // 建造工具条（创造5）：挂 <body>，与其它面板同一套层叠口径（z-index 9，低于背包 10）。
-    // 它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
+    // 建造工具（创造5；抽屉形态，批次 20261024-0344）：挂 <body>，与其它面板同一套层叠口径
+    // （z-index 9，低于背包 10）。它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
     this.buildToolbar = new BuildToolbar(document.body, atlas, {
       onToggleMode: (active) => {
         this.buildMode = active;
@@ -2198,6 +2198,13 @@ class App {
       },
       onTemplate: (templateId) => {
         this.placeTemplate(templateId);
+        this.refreshBuildToolbar();
+      },
+      // 「结束建造」：玩家主动收工。模式与面板由工具条那边关，这里只负责
+      // 把主程序的状态一起清零（不清的话左键仍然被当成"点选区角"，玩家会以为挖不动）
+      onEndBuild: () => {
+        this.buildMode = false;
+        this.clearSelection();
         this.refreshBuildToolbar();
       },
     });

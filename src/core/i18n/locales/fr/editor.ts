@@ -37,6 +37,8 @@ export const editor = {
   "buildtools.template.outOfWorld": "Hors du monde",
   "buildtools.template.placed": "Placement : {name}",
   "buildtools.toggle": "Mode construction",
+  // Libellé court sous le bouton replié (lot 20261024-0344)
+  "buildtools.toggle.short": "Bâtir",
   "buildtools.tool.select": "Sélection",
   "buildtools.tool.fill": "Remplir",
   "buildtools.tool.copy": "Copier",

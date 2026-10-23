@@ -37,6 +37,8 @@ export const editor = {
   "buildtools.template.outOfWorld": "За пределами мира",
   "buildtools.template.placed": "Размещается: {name}",
   "buildtools.toggle": "Режим строительства",
+  // Короткая подпись под свёрнутым переключателем (партия 20261024-0344)
+  "buildtools.toggle.short": "Стройка",
   "buildtools.tool.select": "Выделение",
   "buildtools.tool.fill": "Заполнить",
   "buildtools.tool.copy": "Копировать",

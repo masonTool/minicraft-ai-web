@@ -38,6 +38,8 @@ export const editor = {
   'buildtools.template.placed': '正在放置：{name}',
   // ---- 建造工具条（创造5）
   'buildtools.toggle': '建造模式',
+  // 折叠态那颗总开关下面的两字标签（批次 20261024-0344）
+  'buildtools.toggle.short': '建造',
   'buildtools.tool.select': '选区',
   'buildtools.tool.fill': '填充',
   'buildtools.tool.copy': '复制',

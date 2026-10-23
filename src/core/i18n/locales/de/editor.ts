@@ -37,6 +37,8 @@ export const editor = {
   "buildtools.template.outOfWorld": "Außerhalb der Welt",
   "buildtools.template.placed": "Wird gesetzt: {name}",
   "buildtools.toggle": "Baumodus",
+  // Kurze Beschriftung unter dem eingeklappten Schalter (Charge 20261024-0344)
+  "buildtools.toggle.short": "Bauen",
   "buildtools.tool.select": "Auswahl",
   "buildtools.tool.fill": "Füllen",
   "buildtools.tool.copy": "Kopieren",

@@ -77,14 +77,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** `touchScale` 下的抽屉内尺寸（内边距 / 头部 / 间隙 / 格子上限） */
-function drawerMetrics(scale: number): {
+export interface DrawerMetrics {
   readonly padding: number;
   readonly header: number;
   readonly gap: number;
   readonly cellWidth: number;
   readonly cellHeight: number;
-} {
+}
+
+/**
+ * `touchScale` 下的抽屉内尺寸（内边距 / 头部 / 间隙 / **格子上限**）。
+ *
+ * 导出的理由：`BuildToolbar` 要把这几个数写成 CSS 变量（`--build-pad` / `--build-head` /
+ * `--build-gap` / `--build-cell-w`），CSS 再拿变量排版——**几何只在 JS 里算一份**，
+ * 上一版是 CSS 与常量各写一遍，改一处另一处就漂。
+ */
+export function buildDrawerMetrics(scale = 1): DrawerMetrics {
   const s = sanitizeScale(scale);
   return {
     padding: Math.round(DRAWER_PADDING * s),
@@ -97,7 +105,7 @@ function drawerMetrics(scale: number): {
 
 /** 抽屉在 `touchScale` 下的基准宽高（格子不压缩时该占多大） */
 export function buildDrawerSize(scale = 1): { readonly width: number; readonly height: number } {
-  const m = drawerMetrics(scale);
+  const m = buildDrawerMetrics(scale);
   return {
     width: m.padding * 2 + DRAWER_COLUMNS * m.cellWidth + (DRAWER_COLUMNS - 1) * m.gap,
     height:
@@ -185,7 +193,7 @@ export function buildCellSize(
   scale = 1,
 ): BuildCellSize {
   const s = sanitizeScale(scale);
-  const m = drawerMetrics(s);
+  const m = buildDrawerMetrics(s);
   const box = buildDrawerBox(viewportWidth, viewportHeight, s);
   const innerWidth = Math.max(
     0,
