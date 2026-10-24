@@ -11,6 +11,11 @@
  *    **离它最近的玩家单方面模拟并上报**，其余端只收——不用引入服务端物理，
  *    也不用"锁定 / 交还"那套握手。
  *
+ * ⚠️ **2026-10-25 更新（MS2 之后）**：架构定成"房主唯一模拟"，所以 `pickAuthority` /
+ * `isAuthority` 那套"最近玩家当权威"**不再参与决策**（留着是因为它们描述了一个还能用的
+ * 判定，将来做"分片模拟"会回来找它）。真正在用的一半只有 `mobKey` / `parseMobKey` /
+ * `assignMobKey`——全局键，让两端说的是同一只怪。
+ *
  * 这里只放纯函数：主程序要 WebGL 起不来，判定不抽出来就只能靠手测。
  */
 
@@ -80,4 +85,21 @@ export function pickAuthority(
 /** 我是不是这只生物的权威（权威端才跑 AI 并上报，其余只插值） */
 export function isAuthority(myId: number, mob: { x: number; y: number; z: number }, candidates: readonly AuthorityCandidate[]): boolean {
   return pickAuthority(mob, candidates) === myId;
+}
+
+/**
+ * 给一只生物分配全局键（L8 · MS3）。**幂等**：已经有键就原样返回。
+ *
+ * `ownerId` 是**分配者**的服务端 id（联机时就是房主）——同一只怪在房主那端与从属端的
+ * 镜像共用这一个键，于是"3 号羊"不会再是两只不同的羊。
+ *
+ * `ownerId` 不是非负整数时不分配（返回空串）：宁可这只生物不同步，也不要造出一个
+ * 谁都对不上的键。
+ */
+export function assignMobKey(mob: { netKey: string; id: number }, ownerId: number): string {
+  if (mob.netKey.length > 0) return mob.netKey;
+  if (!Number.isInteger(ownerId) || ownerId < 0) return '';
+  if (!Number.isInteger(mob.id) || mob.id < 0) return '';
+  mob.netKey = mobKey(ownerId, mob.id);
+  return mob.netKey;
 }

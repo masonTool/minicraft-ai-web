@@ -652,6 +652,14 @@ export class Mob extends Entity {
   readonly type: MobType;
 
   health: number;
+  /**
+   * 联机全局键（L8 · MS3）：`ownerId:localId`，见 `core/net/MobAuthority.ts`。
+   *
+   * 空串 = 还没分配（单机永远是空串）。`id` 只在**本端**递增，所以两端说的"3 号"是两只
+   * 不同的怪；有了这个键，房主广播的快照与从属端建的镜像才对得上同一只。
+   */
+  netKey = '';
+
   /** 朝向（渲染用） */
   yaw = 0;
   /** 受击红闪剩余时间 */
