@@ -660,6 +660,14 @@ export class Mob extends Entity {
    * 幼体（J8）：体型按 `BABY_SCALE` 缩小、**不产出任何掉落与经验**、`BABY_GROW_SECONDS` 后长大。
    */
   baby = false;
+  /**
+   * 下蹲 / 骑乘（联机37）。
+   *
+   * 只有**远端玩家**会用到这两个：本地玩家的姿势由 `PlayerRenderer` 自己算，
+   * 而远端玩家在渲染上就是一个 `Mob`——不把状态带到这里，队友蹲下你也看不出来。
+   */
+  sneaking = false;
+  riding = false;
 
   /**
    * 已驯服（批次 242，狼 / 猫 / 豹猫）。

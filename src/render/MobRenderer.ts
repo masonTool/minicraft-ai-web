@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { BABY_SCALE, attackSwingAmount, type Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
+import { mobPoseOffsetY } from '../core/render/MobPose.ts';
 import {
   armorTint,
   mobEquipmentKey,
@@ -1250,8 +1251,12 @@ export class MobRenderer {
       // ---- 生物本体的变换
       // 幼体整体缩小（部件坐标是绝对尺寸，缩放根节点等于"以脚为原点等比缩小"）
       const scale = mob.baby ? BABY_SCALE : 1;
+      // 姿势（联机37）：远端玩家的下蹲/骑乘。数值与本地玩家的 `PlayerRenderer` 对齐，
+      // 否则「自己蹲下镜头低了 0.12，队友看你却只低了 0.05」
+      const poseY = mobPoseOffsetY(mob);
+      const crouchTilt = mob.sneaking && !mob.riding ? 0.22 : 0;
       this.rootDummy.position.set(mob.x, mob.y, mob.z);
-      this.rootDummy.rotation.set(0, mob.yaw, 0);
+      this.rootDummy.rotation.set(crouchTilt, mob.yaw, 0);
       this.rootDummy.scale.setScalar(scale);
       this.rootDummy.updateMatrix();
 
@@ -1324,7 +1329,7 @@ export class MobRenderer {
           py = spec.pivot.y + dy * cos - dz * sin;
           pz = spec.pivot.z + dy * sin + dz * cos;
         }
-        this.partDummy.position.set(px, py, pz);
+        this.partDummy.position.set(px, py + poseY, pz);
         this.partDummy.rotation.set(rotX, rotY, rotZ);
         this.partDummy.updateMatrix();
         this.partDummy.updateWorldMatrix(true, false);

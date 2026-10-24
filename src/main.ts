@@ -3732,6 +3732,9 @@ class App {
     mob.equipment = equipment;
     if (appearance.swinging) mob.attackAnim = Math.max(mob.attackAnim, 0.2);
     if (state.onFire && !mob.burning) mob.ignite(3);
+    // 姿势（联机37）：渲染层读这两个字段决定下沉/抬高
+    mob.sneaking = state.sneaking;
+    mob.riding = state.riding;
   }
 
   /** 其它玩家的位置更新 */
