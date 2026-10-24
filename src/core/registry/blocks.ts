@@ -2291,15 +2291,28 @@ const SAPLING_TREES: Readonly<Record<string, TreeKind>> = {
 /** 树苗族从 483 起（接在潜影盒 482 之后，每种木材一个，与 `WOOD_TYPES` 同序） */
 export const WOOD_SAPLING_ID_START = 483;
 
-const SAPLING_ID_MAP = new Map<string, number>();
-const SAPLING_TREE_MAP = new Map<number, TreeKind>();
+/**
+ * 树苗 id 与"长成哪种树"两张表。
+ *
+ * ⚠️ **纯算术先行生成**，不能靠在 `SAPLING_SPECS` 的 map 回调里顺带 `set()`：
+ * 这些 id 在模块初始化期就可能被读到，而方块表将来是从 `core.bin` 装的（那时 SPECS 为空）。
+ * 写成"建表顺便产出"的话，表一外置，`saplingId()` 就全返回 undefined、树苗种下去不长。
+ *
+ * 「缺树种要当场抛」这条校验**保留**在这里，不因为搬家而丢掉。
+ */
+const SAPLING_ID_MAP = new Map<string, number>(
+  WOOD_TYPES.map((wood, index) => [wood.name, WOOD_SAPLING_ID_START + index] as const),
+);
+const SAPLING_TREE_MAP = new Map<number, TreeKind>(
+  WOOD_TYPES.map((wood, index) => {
+    const kind = SAPLING_TREES[wood.name];
+    if (!kind) throw new Error(`composter: 木材 ${wood.name} 没有对应的树种（见 SAPLING_TREES）`);
+    return [WOOD_SAPLING_ID_START + index, kind] as const;
+  }),
+);
 
-const SAPLING_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood, index) => {
-  const id = WOOD_SAPLING_ID_START + index;
-  SAPLING_ID_MAP.set(wood.name, id);
-  const kind = SAPLING_TREES[wood.name];
-  if (!kind) throw new Error(`composter: 木材 ${wood.name} 没有对应的树种（见 SAPLING_TREES）`);
-  SAPLING_TREE_MAP.set(id, kind);
+const SAPLING_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood) => {
+  const id = SAPLING_ID_MAP.get(wood.name)!;
   return plantSpec(id, `${wood.name}_sapling`, `${wood.name}_sapling`);
 });
 
@@ -2820,20 +2833,35 @@ const STONE_VARIANT_FAMILIES: readonly (
   [530, 'polished_blackstone_bricks', ['slab', 'stairs', 'wall'], undefined, ['polished_blackstone_bricks', 'polished_blackstone_bricks', 'polished_blackstone_bricks']],
 ];
 
-const STONE_VARIANT_MAP = new Map<string, number>();
+/**
+ * 按家族顺序把 id 分配到 `next++`（纯算术）。
+ *
+ * 抽成独立函数是"方块表可外置"的前提之一：原来这段分配逻辑写在 `STONE_VARIANT_SPECS`
+ * 的 IIFE 里，一边分配一边 `set()` 进 map——**spec 不生成，id 就不存在**。而
+ * `stoneVariantId()` 是运行时要用的（台阶/楼梯的变体判定），表外置之后它必须仍然可用。
+ * 现在 id 分配与贴图/形状的组装各管一件事，`specs` 只是"按 id 查一遍"。
+ */
+function allocateStoneVariantIds(): readonly (readonly [string, number])[] {
+  const allocated: (readonly [string, number])[] = [];
+  let next = STONE_VARIANT_ID_START;
+  for (const [, name, kinds, explicitStart] of STONE_VARIANT_FAMILIES) {
+    // 显式起点：把游标跳到这一段该在的位置（批次 45 的红砂岩家族用它避开写死的母方块段）
+    if (explicitStart !== undefined) next = explicitStart;
+    for (const kind of kinds) allocated.push([`${name}_${kind}`, next++] as const);
+  }
+  return allocated;
+}
+
+const STONE_VARIANT_MAP = new Map<string, number>(allocateStoneVariantIds());
 
 const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   const specs: BlockSpec[] = [];
-  let next = STONE_VARIANT_ID_START;
-  for (const [parent, name, kinds, explicitStart, explicitTiles] of STONE_VARIANT_FAMILIES) {
-    // 显式起点：把游标跳到这一段该在的位置（批次 45 的红砂岩家族用它避开写死的母方块段）
-    if (explicitStart !== undefined) next = explicitStart;
+  for (const [parent, name, kinds, , explicitTiles] of STONE_VARIANT_FAMILIES) {
     // 母方块横跨好几段规格，所以查"全部已定义的段"而不是 `baseTiles`（它只认 BASE_SPECS）；
     // 晚定义的那几族直接把贴图写在表里（见上面那段的注记）
     const tiles = explicitTiles ?? tilesOfDefined(parent);
     for (const kind of kinds) {
-      const id = next++;
-      STONE_VARIANT_MAP.set(`${name}_${kind}`, id);
+      const id = STONE_VARIANT_MAP.get(`${name}_${kind}`)!;
       // 三种变体都是非完整方块：不遮挡邻居、不挡光（与 `SHAPED_SPECS` 同一套写法）
       specs.push({ id, name: `minicraft:${name}_${kind}`, tiles, shape: kind, opaque: false, lightOpacity: 0 });
     }
@@ -2873,11 +2901,13 @@ export const STONE_VARIANT_IDS: readonly number[] = [...STONE_VARIANT_MAP.values
  */
 export const BED_ID_START = 507;
 
-const BED_ID_MAP = new Map<string, number>();
+/** 同树苗：纯算术先行生成，理由见 `SAPLING_ID_MAP` 上的注释 */
+const BED_ID_MAP = new Map<string, number>(
+  DYE_COLORS.map((color, index) => [color.name, BED_ID_START + index] as const),
+);
 
-const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => {
-  const id = BED_ID_START + index;
-  BED_ID_MAP.set(color.name, id);
+const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color) => {
+  const id = BED_ID_MAP.get(color.name)!;
   const top = `bed_${color.name}_top`;
   const side = `bed_${color.name}_side`;
   return {
@@ -2931,11 +2961,13 @@ export const BED_IDS: readonly number[] = DYE_COLORS.map((_color, index) => BED_
  */
 export const SIGN_ID_START = 523;
 
-const SIGN_ID_MAP = new Map<string, number>();
+/** 同树苗：纯算术先行生成，理由见 `SAPLING_ID_MAP` 上的注释 */
+const SIGN_ID_MAP = new Map<string, number>(
+  WOOD_TYPES.map((wood, index) => [wood.name, SIGN_ID_START + index] as const),
+);
 
-const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood, index) => {
-  const id = SIGN_ID_START + index;
-  SIGN_ID_MAP.set(wood.name, id);
+const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood) => {
+  const id = SIGN_ID_MAP.get(wood.name)!;
   const plank = `${wood.name}_planks`;
   return {
     id,
