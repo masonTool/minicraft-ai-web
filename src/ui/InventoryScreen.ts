@@ -1056,25 +1056,24 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
       recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
-      // 这颗键 = **配方书开关**（批次 20261024-1152 → 1455 回退后重写）。
+      // 这颗键 = **物品分类栏的开关**（批次 20261024-1531 按用户口径恢复成最初逻辑）。
       //
-      // 三条口径（用户原话）：
-      //   ① 配方书**只能由用户手动打开/关闭**——不做"点一下就顺手关掉"这类自动行为；
-      //   ② 在仓库里点它 → 配方书打开并**自动跳到"全部/搜索"那一栏**；
-      //   ③ 打开之后不要自动关（点配方只是把材料摆进合成格，书照旧留在屏幕上）。
-      //
-      // 实现上配方书是**整屏那一层**（`.recipe-panel` + 自己的 ✕），不是嵌进左栏：
-      // 左栏那一格太窄，塞进整屏尺寸的配方面板会出现"数字乱、点不动"（批次 1455 的回归）。
+      // 用户确认（原话）："那颗键只切'全部/搜索'分类——不弹配方书，左栏换成物品分类，
+      // 点分类里的东西在右栏看配方"。所以这里**不碰配方书**：
+      //   · 左栏还在仓库（我的物品）→ 切到上次那个分类（首次是"全部/放大镜"）；
+      //   · 左栏已经是分类 → 在"只列能做的 / 把该分类全部列出来"之间切。
+      // 配方书本身仍然只能由 R 键（PC）或它自己的 ✕ 手动开关，且是**整屏那一层**
+      // （嵌进左栏那版会让配方列表错位、点不动，已彻底回退）。
       recipes.addEventListener('click', () => {
-        if (this.hooks.isRecipesOpen?.() ?? false) {
-          this.hooks.onCloseRecipes?.();
-          return;
-        }
         // 左栏停在分类上时，"看一眼某条配方"的待处理状态先收掉——同一次点击只做一件事
         this.pendingRecipeId = null;
-        // 仓库（我的物品）里打开 = 从"全部/搜索"开始；其余沿用它记住的那一栏
-        const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;
-        this.hooks.onOpenRecipes?.(tab);
+        if (this.pane === 'category') {
+          this.showUnowned = !this.showUnowned;
+          this.categoryPage = 0;
+        } else {
+          this.openPocketCategory(this.lastRecipeTab);
+        }
+        this.applyInventoryChrome();
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -2120,64 +2119,63 @@ export class InventoryScreen {
   }
 
   /**
-   * 同步一根自绘滚动条（分类栏与创造栏**共用这一份实现**）。
+   * 物品分类栏的自绘滚动条（批次 20261024-1531 按用户口径恢复成"两栏各自一套"）。
    *
-   * 批次 20261024-1455（用户："创造模式背包滚动条显示异常，参照生存模式的样式"）：
-   * 原来两栏各写一遍几乎相同的代码，只有"定位父级"和 `offsetTop` 的算法不同——
-   * 创造栏装在 `.inv-creative-section` 里（搜索框 + 网格），`offsetTop` 与父级一错位，
-   * 整根滚动条就跑到网格上方或下方。现在统一用 **rect 相减**算位置：
-   * 跟 CSS 的 `position: relative` 挂在哪一层无关，两栏必定落在同一个相对位置上。
+   * 位置策略：贴在**内容右缘 + 8px**（`scrollbarContentLeft`），离物品留一点空隙；
+   * 宽度走 CSS 的 7px。创造栏那条不同——它贴容器右边 2px、宽 6px（见下一条）。
    */
-  private syncPaneScrollbar(
-    grid: HTMLElement | null,
-    host: HTMLElement,
-    track: HTMLElement,
-    thumb: HTMLElement,
-    pane: PocketLeftPane,
-  ): void {
-    const max = grid ? grid.scrollHeight - grid.clientHeight : 0;
-    const visible = grid !== null && max > 1 && grid.clientHeight > 0 && this.pane === pane;
+  private syncCategoryScrollbar(): void {
+    const track = this.categoryScrollTrack;
+    const thumb = this.categoryScrollThumb;
+    const grid = this.categoryGrid;
+    if (!track || !thumb || !grid) return;
+    const max = grid.scrollHeight - grid.clientHeight;
+    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'category';
     track.style.display = visible ? 'block' : 'none';
-    if (!visible || !grid) return;
+    if (!visible) return;
 
     const gridRect = grid.getBoundingClientRect();
-    const hostRect = host.getBoundingClientRect();
+    const hostRect = this.categoryHostEl.getBoundingClientRect();
     track.style.right = 'auto';
-    track.style.left = `${this.scrollbarContentLeft(grid, host, track)}px`;
+    track.style.left = `${this.scrollbarContentLeft(grid, this.categoryHostEl, track)}px`;
     track.style.top = `${Math.round(gridRect.top - hostRect.top)}px`;
     track.style.height = `${Math.round(gridRect.height)}px`;
 
     const trackH = gridRect.height;
-    // 与 CSS 的 `.inv-category-scroll-thumb { min-height }` 取同一个下限，否则短列表上
-    // 滑块会被 JS 缩小到比样式更矮、看起来"头重脚轻"
     const thumbH = Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
     thumb.style.height = `${thumbH}px`;
     const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
     thumb.style.transform = `translateY(${top}px)`;
   }
 
-  /** 物品分类栏的常驻滚动条 */
-  private syncCategoryScrollbar(): void {
-    if (!this.categoryScrollTrack || !this.categoryScrollThumb) return;
-    this.syncPaneScrollbar(
-      this.categoryGrid,
-      this.categoryHostEl,
-      this.categoryScrollTrack,
-      this.categoryScrollThumb,
-      'category',
-    );
-  }
-
-  /** 创造分类列表的常驻滚动条（与分类栏同一份实现、同一套样式） */
+  /**
+   * 创造分类列表的自绘滚动条（**与分类栏分开的一份**，批次 20261024-1531）。
+   *
+   * 与分类栏的区别只有位置：这里**不写** `left/right`，交给 CSS 的
+   * `.inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px }` ——
+   * 创造栏是 `justify-content: stretch` 的满宽网格，跟着内容右缘算会贴到面板外去。
+   */
   private syncCreativeScrollbar(): void {
-    if (!this.creativeScrollTrack || !this.creativeScrollThumb) return;
-    this.syncPaneScrollbar(
-      this.creativeGrid,
-      this.creativeSection,
-      this.creativeScrollTrack,
-      this.creativeScrollThumb,
-      'creative',
-    );
+    const track = this.creativeScrollTrack;
+    const thumb = this.creativeScrollThumb;
+    const grid = this.creativeGrid;
+    if (!track || !thumb || !grid) return;
+    const max = grid.scrollHeight - grid.clientHeight;
+    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'creative';
+    track.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+
+    const gridRect = grid.getBoundingClientRect();
+    const hostRect = this.creativeSection.getBoundingClientRect();
+    track.style.left = 'auto';
+    track.style.top = `${Math.round(gridRect.top - hostRect.top)}px`;
+    track.style.height = `${Math.round(gridRect.height)}px`;
+
+    const trackH = gridRect.height;
+    const thumbH = Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
+    thumb.style.height = `${thumbH}px`;
+    const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
+    thumb.style.transform = `translateY(${top}px)`;
   }
 
   private flipCategoryPage(delta: number): void {

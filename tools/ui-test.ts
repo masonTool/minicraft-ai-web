@@ -633,17 +633,15 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-category-section {') &&
       !invSrc.includes("pane === 'recipes'"),
   );
-  // 批次 20261024-1455（自测回归）：配方书回退成**整屏面板**——嵌进左栏那版会出现
-  // "配方里莫名数字 / 点格子没反应"。用户重申的三条口径用断言钉住：
+  // 批次 20261024-1531（用户确认口径 B）：那颗键**只切物品分类**，不弹配方书。
   check(
-    '配方书按钮：开着就关、关着就开（手动开关，不自动关）',
-    invSrc.includes('if (this.hooks.isRecipesOpen?.() ?? false) {') &&
-      invSrc.includes('this.hooks.onCloseRecipes?.();') &&
-      invSrc.includes('this.hooks.onOpenRecipes?.(tab);'),
+    '标题栏那颗键只切物品分类（不碰配方书）',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.openPocketCategory\(this\.lastRecipeTab\);/.test(invSrc) &&
+      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?onOpenRecipes/.test(invSrc),
   );
   check(
-    '在仓库里打开配方书 = 定位到「全部/搜索」那一栏',
-    invSrc.includes("const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;"),
+    '分类栏里再点它就切"列出未拥有 / 只看能做的"',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.showUnowned = !this\.showUnowned;/.test(invSrc),
   );
   check(
     '左栏没有 recipes 那一份（配方书是整屏层）',
@@ -1170,12 +1168,10 @@ console.log('\n[携带版细节收口（批次 159）]');
       css.includes('.inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }') &&
       css.includes('.inv-close { grid-column: 3; justify-self: end; }'),
   );
-  // 批次 159（三）：开关改成"要不要把该分类下我没有的物品也列出来（红底）"，
-  // **不再切换分类、也不再退回我的物品**
+  // 批次 159（三）：分类栏开着时，这颗键是"要不要把该分类下我没有的物品也列出来（红底）"
   check(
-    '标题栏那颗键不再兼职「显示未拥有」开关（筛选改由配方书自己那颗）',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,700}?onOpenRecipes/.test(invSrc) &&
-      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,700}?showUnowned/.test(invSrc),
+    '分类栏里那颗键兼职「显示未拥有」开关（红底）',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.showUnowned = !this\.showUnowned;/.test(invSrc),
   );
   // 批次 206：列表 = "材料够的产物" + （开关开着时）"看过的缺料配方（红底）"
   check(
@@ -1432,13 +1428,12 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('private renderCraftGhost(): void {') &&
       css.includes('.inv-slot.ghost-missing {'),
   );
-  // R 键：背包开着时切的是分类栏，不再顶出一整屏配方书
+  // 批次 20261024-1531：配方书只能手动开（R 键 / 它自己的 ✕），那颗键不再兼职
   check(
-    'R 键与标题栏「配方书」按钮同一条路（开/关配方书，不再只切分类）',
-    !mainSrc.includes('this.inventoryScreen.toggleCategoryPane();') &&
-      !invSrc.includes('toggleCategoryPane(): void {') &&
-      invSrc.includes('this.hooks.onOpenRecipes?.(tab);') &&
-      /if \(this\.hooks\.isRecipesOpen\?\.\(\) \?\? false\) \{\s*this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSrc),
+    'R 键依旧开/关配方书（那颗键不再兼职）',
+    mainSrc.includes('private toggleRecipeBook(): void {') &&
+      !mainSrc.includes('this.inventoryScreen.toggleCategoryPane();') &&
+      !invSrc.includes('toggleCategoryPane(): void {'),
   );
 
   // ② 禁掉 HTML 自带的长按效果（长按是我们的手势）
@@ -3240,13 +3235,12 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   );
   // 批次 20261024-1152（用户）：生存与创造的滚动条位置/款式要一致，且滑条下方不能再跟着黑块
   check(
-    '生存与创造共用同一根滚动条（宽度只在 CSS 一处、间隔只有常量一处）',
+    '生存与创造各有一套滚动条样式与实现（批次 20261024-1531 用户确认）',
     (css.match(/^[ \t]*\.inv-category-scrollbar \{/gm) ?? []).length === 1 &&
-      // 不许再有一条"只针对创造栏"的滚动条覆盖（PC 那条 `body:not(.touch-mode)` 除外，见优化12）
-      !/^[ \t]*\.inv-creative-section \.inv-category-scrollbar \{/m.test(css) &&
+      /^[ \t]*\.inv-creative-section \.inv-category-scrollbar \{ right: 2px; width: 6px; \}/m.test(css) &&
       /\.inv-category-scrollbar \{[^}]*width: 7px;/.test(css) &&
-      invSrc.includes('export const SCROLLBAR_CONTENT_GAP = 8;') &&
-      (invSrc.match(/SCROLLBAR_CONTENT_GAP/g) ?? []).length >= 2,
+      invSrc.includes('private syncCategoryScrollbar(') &&
+      invSrc.includes('private syncCreativeScrollbar('),
   );
   check(
     '滚动条滑块不再描边（黑块就是 1px 深边在小宽度下滑条上留下的）',
@@ -4938,26 +4932,33 @@ console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
 
+  // 批次 20261024-1531（用户确认）：两栏**各自一套**，创造栏那条贴容器右边 2px、宽 6px。
   check(
-    '两栏共用同一个 syncPaneScrollbar（不再各写一遍）',
-    invSource.includes('private syncPaneScrollbar(') &&
-      (invSource.match(/this\.syncPaneScrollbar\(/g) ?? []).length === 2,
+    '两栏各有一份滚动条实现（不再共用同一个函数）',
+    invSource.includes('private syncCategoryScrollbar(') &&
+      invSource.includes('private syncCreativeScrollbar(') &&
+      !invSource.includes('private syncPaneScrollbar('),
   );
   check(
-    '滚动条位置用 rect 相减算（不再依赖 offsetTop 与定位父级）',
-    invSource.includes('const gridRect = grid.getBoundingClientRect();') &&
-      invSource.includes('track.style.top = `${Math.round(gridRect.top - hostRect.top)}px`;') &&
-      !invSource.includes('track.style.top = `${grid.offsetTop}px`;'),
+    '分类栏贴内容右缘（离物品留空隙），创造栏交给 CSS 的 right: 2px',
+    invSource.includes('track.style.left = `${this.scrollbarContentLeft(grid, this.categoryHostEl, track)}px`;') &&
+      /\.inv-creative-section \.inv-category-scrollbar \{ right: 2px; width: 6px; \}/.test(css),
+  );
+  check(
+    '创造栏那条不写 left（否则会把 CSS 的 right 顶掉）',
+    /private syncCreativeScrollbar\(\)[\s\S]{0,900}?track\.style\.left = 'auto';\s*[\s\S]{0,200}?track\.style\.top/.test(
+      invSource,
+    ),
+  );
+  check(
+    '滚动条位置用 rect 相减（offsetTop 会随定位父级漂）',
+    !invSource.includes('track.style.top = `${grid.offsetTop}px`;') &&
+      (invSource.match(/const gridRect = grid\.getBoundingClientRect\(\);/g) ?? []).length === 2,
   );
   check(
     '滑块最小高度 JS 与 CSS 同一个值（24）',
     invSource.includes('Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH))') &&
       /\.inv-category-scroll-thumb \{[^}]*min-height: 24px;/.test(css),
-  );
-  check(
-    '两栏滚动条的宽度/颜色只有一处定义',
-    (css.match(/\.inv-category-scrollbar \{/g) ?? []).length === 1 &&
-      !css.includes('.inv-creative-section .inv-category-scrollbar {'),
   );
 }
 
@@ -4976,13 +4977,9 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
   const recipeSource = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
 
   check(
-    '标题栏那颗键：开着就关、关着就开（手动开关）',
-    /if \(this\.hooks\.isRecipesOpen\?\.\(\) \?\? false\) \{\s*this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSource) &&
-      invSource.includes('this.hooks.onOpenRecipes?.(tab);'),
-  );
-  check(
-    '从仓库里打开 = 定位到「全部/搜索」栏',
-    invSource.includes("const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;"),
+    '标题栏那颗键只切物品分类（不弹配方书、也不自动关）',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.openPocketCategory\(this\.lastRecipeTab\);/.test(invSource) &&
+      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?onOpenRecipes/.test(invSource),
   );
   check(
     'openRecipeBook 先 show 再 syncRecipePane（顺序反了会先排布后开书）',

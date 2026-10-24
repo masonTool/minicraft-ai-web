@@ -3875,6 +3875,9 @@
         background: transparent;
         border-radius: 4px; z-index: 3; pointer-events: none;
       }
+      /* 创造栏那条**单独一套**（批次 20261024-1531，用户："回到两栏各自一套"）：
+         它贴容器右缘 2px、宽 6px；JS 那边对创造栏不写 left，交给这两条生效。 */
+      .inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }
       .inv-category-scroll-thumb {
         position: absolute; left: 0; top: 0; width: 100%; min-height: 24px;
         /* ⚠️ **不要描边**：滑条只有 7px 宽，加 1px 深边之后实心部分只剩 5px，
