@@ -39,7 +39,7 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 console.log('\n[方块]');
 {
   equal('钟的 id 是 717', BELL_ID, 717);
-  equal('注册名', blockDef(Block.BELL).name, 'minecraft:bell');
+  equal('注册名', blockDef(Block.BELL).name, 'minicraft:bell');
   equal('形状是 bell（不是整格）', blockDef(Block.BELL).shape, 'bell');
   equal('中文名', itemLabel(Block.BELL), '钟');
   equal('没有碰撞盒（能从钟边走过去）', collisionBoxes('bell', 0).length, 0);

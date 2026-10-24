@@ -118,7 +118,7 @@ const FRAME: PortalShape = { axis: 'x', x: 0, y: 64, z: 0, width: 2, height: 3 }
 console.log('\n[门方块]');
 {
   const def = blockDef(Block.NETHER_PORTAL);
-  equal('名字是 minecraft:nether_portal', def.name, 'minecraft:nether_portal');
+  equal('名字是 minecraft:nether_portal', def.name, 'minicraft:nether_portal');
   check('没有碰撞体积（能走进去）', !def.solid);
   check('不遮挡邻居', !def.opaque);
   check('走半透明渲染层（紫色门面是半透明的）', def.translucent);

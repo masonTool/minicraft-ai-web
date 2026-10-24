@@ -155,7 +155,7 @@ console.log('\n[三块建材：注册表]');
   equal('接着告示牌（6 种木材到 528）往下排', Block.POLISHED_BLACKSTONE, Block.OAK_SIGN + 6);
 
   const names = NEW_BLOCKS.map((id) => blockDef(id).name);
-  equal('注册名与顺序一致（磨制黑石 / 黑石砖 / 鎏金黑石）', names.join(','), 'minecraft:polished_blackstone,minecraft:polished_blackstone_bricks,minecraft:gilded_blackstone');
+  equal('注册名与顺序一致（磨制黑石 / 黑石砖 / 鎏金黑石）', names.join(','), 'minicraft:polished_blackstone,minicraft:polished_blackstone_bricks,minicraft:gilded_blackstone');
 
   const cubes = NEW_BLOCKS.filter((id) => blockDef(id).shape !== undefined && blockDef(id).shape !== 'cube');
   check('三块都是整块方块（没有形状特例）', cubes.length === 0, cubes.join(','));
@@ -167,7 +167,7 @@ console.log('\n[三块建材：注册表]');
   // 名字没登记时 `itemLabel` 会回退成英文注册名（也不含"未知物品"），
   // 所以那种写法**根本抓不到漏登记**（这一批第一次跑就是被它骗过去的）
   const missingNames = missingBlockNames();
-  const unnamed = NEW_BLOCKS.filter((id) => missingNames.includes(blockDef(id).name.replace('minecraft:', '')));
+  const unnamed = NEW_BLOCKS.filter((id) => missingNames.includes(blockDef(id).name.replace('minicraft:', '')));
   check('三块都有中文名（`missingBlockNames` 里没有它们）', unnamed.length === 0, unnamed.join(','));
   const undescribed = NEW_BLOCKS.filter((id) => !hasDescription(id));
   check('三块都有说明', undescribed.length === 0, undescribed.join(','));

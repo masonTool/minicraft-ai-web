@@ -64,8 +64,8 @@ console.log('\n[进度表：结构与字段]');
   const ids = ADVANCEMENTS.map((def) => def.id);
   equal('id 无重复', new Set(ids).size, ids.length);
 
-  const badPrefix = ADVANCEMENTS.filter((def) => !def.id.startsWith('minecraft:'));
-  check('id 一律用原版全名（`minecraft:` 开头）——以后好对表', badPrefix.length === 0, badPrefix.map((d) => d.id).join(','));
+  const badPrefix = ADVANCEMENTS.filter((def) => !def.id.startsWith('minicraft:'));
+  check('id 一律用原版全名（`minicraft:` 开头）——以后好对表', badPrefix.length === 0, badPrefix.map((d) => d.id).join(','));
 
   // 父一定排在子前面：判定是一趟顺序遍历，"同一件事解锁父子两条"靠的就是这个顺序
   const orderIndex = new Map(ids.map((id, index) => [id, index]));
@@ -101,7 +101,7 @@ console.log('\n[进度表：每一支的根]');
   const rootIds = ADVANCEMENT_TABS.map((tab) => tab.root);
   check('五个根互不相同', new Set(rootIds).size === rootIds.length);
   check('根条目里只有 `story/root` 是"白给"的（`auto`）', ADVANCEMENTS.filter((d) => d.trigger.kind === 'auto').length === 1);
-  equal('那个白给的就是 story/root', ADVANCEMENTS.find((d) => d.trigger.kind === 'auto')?.id, 'minecraft:story/root');
+  equal('那个白给的就是 story/root', ADVANCEMENTS.find((d) => d.trigger.kind === 'auto')?.id, 'minicraft:story/root');
 }
 
 console.log('\n[进度表：触发条件都"打得中"]');
@@ -188,11 +188,11 @@ console.log('\n[可达性：进度的目标在生存里真的拿得到]');
 
 console.log('\n[可达性：计数型条目真的能凑齐]');
 {
-  const diet = advancementById('minecraft:husbandry/balanced_diet')!;
+  const diet = advancementById('minicraft:husbandry/balanced_diet')!;
   equal('"均衡饮食"要吃的种类数就是表里声明的那个', diet.trigger.needCount, DIET_TARGET);
   check('食物池比要求数更宽（留了余量，缺一样也不至于卡死）', (diet.trigger.ids?.length ?? 0) > DIET_TARGET);
 
-  const hunter = advancementById('minecraft:adventure/kill_a_mob')!;
+  const hunter = advancementById('minicraft:adventure/kill_a_mob')!;
   equal('"怪物猎人"要三种敌对生物', hunter.trigger.needCount, 3);
   // 目标池从生物表**派生**（批次 93）：表里加了蜘蛛/烈焰人之后它自己就宽了
   // ——以前这里是手写的三种，加了新怪就会变成"打蜘蛛不算怪物"
@@ -211,43 +211,43 @@ console.log('\n[判定：父没达成，子拿不到]');
 {
   const tracker = new AdvancementTracker();
   equal('一开始一条都没有', tracker.earnedCount, 0);
-  equal('`story/root` 还没点亮时，`mine_stone` 是"未解锁"', tracker.stateOf('minecraft:story/mine_stone'), 'locked');
+  equal('`story/root` 还没点亮时，`mine_stone` 是"未解锁"', tracker.stateOf('minicraft:story/mine_stone'), 'locked');
 
   const first = tracker.handle({ kind: 'obtain', item: Block.COBBLESTONE });
   equal('没点亮根条目时，拿到圆石什么都解锁不了', first.length, 0);
 
-  equal('授予根条目', tracker.grant('minecraft:story/root'), true);
-  equal('重复授予返回 false', tracker.grant('minecraft:story/root'), false);
-  equal('根条目达成后，`mine_stone` 变成"可达成"', tracker.stateOf('minecraft:story/mine_stone'), 'available');
+  equal('授予根条目', tracker.grant('minicraft:story/root'), true);
+  equal('重复授予返回 false', tracker.grant('minicraft:story/root'), false);
+  equal('根条目达成后，`mine_stone` 变成"可达成"', tracker.stateOf('minicraft:story/mine_stone'), 'available');
 
   const second = tracker.handle({ kind: 'obtain', item: Block.COBBLESTONE });
   equal('这次拿到圆石 → 石器时代', second.length, 1);
-  equal('解锁的就是石器时代', second[0]?.id, 'minecraft:story/mine_stone');
-  equal('它的状态变成已达成', tracker.stateOf('minecraft:story/mine_stone'), 'earned');
-  equal('而"升级工具"这才变成可达成', tracker.stateOf('minecraft:story/upgrade_tools'), 'available');
+  equal('解锁的就是石器时代', second[0]?.id, 'minicraft:story/mine_stone');
+  equal('它的状态变成已达成', tracker.stateOf('minicraft:story/mine_stone'), 'earned');
+  equal('而"升级工具"这才变成可达成', tracker.stateOf('minicraft:story/upgrade_tools'), 'available');
 }
 
 console.log('\n[判定：链式解锁与 any-of]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:story/root');
+  tracker.grant('minicraft:story/root');
   tracker.handle({ kind: 'obtain', item: Block.COBBLESTONE });
 
   const stonePick = tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'stone') });
-  equal('石镐 → 升级工具', stonePick[0]?.id, 'minecraft:story/upgrade_tools');
+  equal('石镐 → 升级工具', stonePick[0]?.id, 'minicraft:story/upgrade_tools');
 
   const iron = tracker.handle({ kind: 'obtain', item: Item.IRON_INGOT });
-  equal('铁锭 → 来硬的', iron[0]?.id, 'minecraft:story/smelt_iron');
+  equal('铁锭 → 来硬的', iron[0]?.id, 'minicraft:story/smelt_iron');
   equal('一次只解锁它自己（铁镐还没造）', iron.length, 1);
 
   const ironPick = tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'iron') });
-  equal('铁镐 → 现在你掌握了铁', ironPick[0]?.id, 'minecraft:story/iron_tools');
+  equal('铁镐 → 现在你掌握了铁', ironPick[0]?.id, 'minicraft:story/iron_tools');
 
   // any-of：钻石胸甲也算"西装革履"（表里列了四档可合成材质）
   // ⚠️ 盔甲 id 要用 `armorItemId`，不是 `toolItemId`——两套 id 段完全不同，
   // 用错了会得到一个"查不到"的数字，而判定只会安静地不命中
   const chestplate = tracker.handle({ kind: 'obtain', item: armorItemId('chestplate', 'diamond') });
-  const armor = chestplate.find((def) => def.id === 'minecraft:story/obtain_armor');
+  const armor = chestplate.find((def) => def.id === 'minicraft:story/obtain_armor');
   check('钻石胸甲也算"西装革履"（同一件事的任意一种材质）', armor !== undefined, chestplate.map((d) => d.id).join(','));
 
   // 不匹配的东西不报
@@ -262,7 +262,7 @@ console.log('\n[判定：链式解锁与 any-of]');
 console.log('\n[判定：附魔只认附魔过的]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:story/root');
+  tracker.grant('minicraft:story/root');
   tracker.handle({ kind: 'obtain', item: Block.COBBLESTONE });
   tracker.handle({ kind: 'obtain', item: toolItemId('pickaxe', 'stone') });
   tracker.handle({ kind: 'obtain', item: Item.IRON_INGOT });
@@ -272,7 +272,7 @@ console.log('\n[判定：附魔只认附魔过的]');
   const plain = tracker.handle({ kind: 'obtain', item: Item.DIAMOND });
   equal('再拿一颗普通钻石不解锁附魔师', plain.length, 0);
   const enchanted = tracker.handle({ kind: 'obtain', item: Item.DIAMOND, enchanted: true });
-  equal('带附魔的那一件 → 附魔师', enchanted[0]?.id, 'minecraft:story/enchant_item');
+  equal('带附魔的那一件 → 附魔师', enchanted[0]?.id, 'minicraft:story/enchant_item');
 }
 
 console.log('\n[判定：计数型要"不同的目标"]');
@@ -281,60 +281,60 @@ console.log('\n[判定：计数型要"不同的目标"]');
   // 根条目本身要"击杀任意敌对生物"——**同一件事可以一趟点亮父子两条**
   // （表是拓扑序，父先被判定、子在同一次遍历里就能看到"父已达成"）
   const firstKill = tracker.handle({ kind: 'kill', mob: 'zombie' });
-  check('第一只僵尸点亮"冒险"根条目', firstKill.some((def) => def.id === 'minecraft:adventure/root'));
+  check('第一只僵尸点亮"冒险"根条目', firstKill.some((def) => def.id === 'minicraft:adventure/root'));
   equal(
     '同一趟里"怪物猎人"只记一笔、不算达成（它要三种）',
-    firstKill.some((def) => def.id === 'minecraft:adventure/kill_a_mob'),
+    firstKill.some((def) => def.id === 'minicraft:adventure/kill_a_mob'),
     false,
   );
 
-  equal('计数进度 1 / 3', tracker.countFor('minecraft:adventure/kill_a_mob').seen, 1);
-  equal('还没达成', tracker.stateOf('minecraft:adventure/kill_a_mob'), 'available');
+  equal('计数进度 1 / 3', tracker.countFor('minicraft:adventure/kill_a_mob').seen, 1);
+  equal('还没达成', tracker.stateOf('minicraft:adventure/kill_a_mob'), 'available');
 
   // 同一只再杀一次：**不算新的一种**
   tracker.handle({ kind: 'kill', mob: 'zombie' });
-  equal('重复击杀同一种，进度不动', tracker.countFor('minecraft:adventure/kill_a_mob').seen, 1);
+  equal('重复击杀同一种，进度不动', tracker.countFor('minicraft:adventure/kill_a_mob').seen, 1);
 
   tracker.handle({ kind: 'kill', mob: 'skeleton' });
-  equal('补上骷髅 → 2 / 3', tracker.countFor('minecraft:adventure/kill_a_mob').seen, 2);
+  equal('补上骷髅 → 2 / 3', tracker.countFor('minicraft:adventure/kill_a_mob').seen, 2);
   const third = tracker.handle({ kind: 'kill', mob: 'creeper' });
-  check('补上苦力怕 → 凑齐三种，达成', third.some((def) => def.id === 'minecraft:adventure/kill_a_mob'));
-  equal('达成之后状态是 earned', tracker.stateOf('minecraft:adventure/kill_a_mob'), 'earned');
-  equal('计数型的 need 也读得出来', tracker.countFor('minecraft:adventure/kill_a_mob').need, 3);
+  check('补上苦力怕 → 凑齐三种，达成', third.some((def) => def.id === 'minicraft:adventure/kill_a_mob'));
+  equal('达成之后状态是 earned', tracker.stateOf('minicraft:adventure/kill_a_mob'), 'earned');
+  equal('计数型的 need 也读得出来', tracker.countFor('minicraft:adventure/kill_a_mob').need, 3);
 }
 
 console.log('\n[判定：吃遍若干种食物]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:husbandry/root');
+  tracker.grant('minicraft:husbandry/root');
   const foods = [Item.APPLE, Item.BREAD, Item.BEEF, Item.PORKCHOP, Item.CHICKEN, Item.MUTTON, Item.COOKIE, Item.CARROT, Item.POTATO, Item.COD];
   equal('准备了 10 种食物', foods.length, DIET_TARGET);
 
   for (const food of foods.slice(0, DIET_TARGET - 1)) tracker.handle({ kind: 'eat', item: food });
-  equal(`吃了 ${DIET_TARGET - 1} 种还没达成`, tracker.stateOf('minecraft:husbandry/balanced_diet'), 'available');
+  equal(`吃了 ${DIET_TARGET - 1} 种还没达成`, tracker.stateOf('minicraft:husbandry/balanced_diet'), 'available');
 
   // 重复吃已经吃过的不算
   tracker.handle({ kind: 'eat', item: foods[0]! });
-  equal('重复吃同一种不算新的一种', tracker.countFor('minecraft:husbandry/balanced_diet').seen, DIET_TARGET - 1);
+  equal('重复吃同一种不算新的一种', tracker.countFor('minicraft:husbandry/balanced_diet').seen, DIET_TARGET - 1);
 
   const done = tracker.handle({ kind: 'eat', item: foods[DIET_TARGET - 1]! });
-  check(`第 ${DIET_TARGET} 种下肚 → 均衡饮食达成`, done.some((def) => def.id === 'minecraft:husbandry/balanced_diet'));
+  check(`第 ${DIET_TARGET} 种下肚 → 均衡饮食达成`, done.some((def) => def.id === 'minicraft:husbandry/balanced_diet'));
 }
 
 console.log('\n[判定：单条件事件]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:adventure/root');
-  tracker.grant('minecraft:husbandry/root');
+  tracker.grant('minicraft:adventure/root');
+  tracker.grant('minicraft:husbandry/root');
   const sleep = tracker.handle({ kind: 'sleep' });
-  equal('睡到天亮 → 甜美的梦', sleep[0]?.id, 'minecraft:adventure/sleep_in_bed');
+  equal('睡到天亮 → 甜美的梦', sleep[0]?.id, 'minicraft:adventure/sleep_in_bed');
 
   const breed = tracker.handle({ kind: 'breed', mob: 'cow' });
-  equal('繁殖一头牛 → 成双成对', breed[0]?.id, 'minecraft:adventure/breed_an_animal');
+  equal('繁殖一头牛 → 成双成对', breed[0]?.id, 'minicraft:adventure/breed_an_animal');
   equal('繁殖别的家畜也走同一条（any-of）', tracker.handle({ kind: 'breed', mob: 'chicken' }).length, 0);
 
   const fish = tracker.handle({ kind: 'fish', item: Item.COD });
-  equal('钓上一条鱼 → 腥味十足（挂在农牧那支的根下面）', fish[0]?.id, 'minecraft:husbandry/fishy_business');
+  equal('钓上一条鱼 → 腥味十足（挂在农牧那支的根下面）', fish[0]?.id, 'minicraft:husbandry/fishy_business');
   equal('农牧那支的根还没亮时，钓鱼什么都抽不到（父门槛）', tracker.handle({ kind: 'fish', item: Item.SALMON }).length, 0);
 }
 
@@ -344,33 +344,33 @@ console.log('\n[判定：换维度与末影龙]');
   // 主树那条链要先走到"冰桶挑战"（`enter_the_nether` 的父），否则进下界只会点亮
   // 下界那支的根——**父门槛是真的在拦着**（下面那条断言专门钉这个）
   const fresh = new AdvancementTracker().handle({ kind: 'dimension', dimension: Dimension.NETHER });
-  equal('什么都没做就进下界：只点亮下界那支的根', fresh.map((def) => def.id).join(','), 'minecraft:nether/root');
+  equal('什么都没做就进下界：只点亮下界那支的根', fresh.map((def) => def.id).join(','), 'minicraft:nether/root');
 
-  tracker.grant('minecraft:story/form_obsidian');
+  tracker.grant('minicraft:story/form_obsidian');
   const nether = tracker.handle({ kind: 'dimension', dimension: Dimension.NETHER });
   const ids = nether.map((def) => def.id);
-  check('先走到"冰桶挑战"再进下界：两条一起点亮', ids.includes('minecraft:story/enter_the_nether') && ids.includes('minecraft:nether/root'), ids.join(','));
+  check('先走到"冰桶挑战"再进下界：两条一起点亮', ids.includes('minicraft:story/enter_the_nether') && ids.includes('minicraft:nether/root'), ids.join(','));
 
   const overworld = tracker.handle({ kind: 'dimension', dimension: Dimension.OVERWORLD });
   equal('回主世界不解锁任何东西（没有条目认它）', overworld.length, 0);
 
   const end = tracker.handle({ kind: 'dimension', dimension: Dimension.END });
-  check('进末地点亮末地那支的根', end.some((def) => def.id === 'minecraft:end/root'));
+  check('进末地点亮末地那支的根', end.some((def) => def.id === 'minicraft:end/root'));
   // 末地那支的根是独立根（不走"我们需要更深入些"那条链），所以这次就该亮
-  equal('末地根条目已达成', tracker.isEarned('minecraft:end/root'), true);
+  equal('末地根条目已达成', tracker.isEarned('minicraft:end/root'), true);
 
   const dragon = tracker.handle({ kind: 'dragon' });
-  check('龙倒地 → 末影龙之死（挑战）', dragon.some((def) => def.id === 'minecraft:end/kill_dragon'));
-  check('那是一条挑战', advancementById('minecraft:end/kill_dragon')?.challenge === true);
+  check('龙倒地 → 末影龙之死（挑战）', dragon.some((def) => def.id === 'minicraft:end/kill_dragon'));
+  check('那是一条挑战', advancementById('minicraft:end/kill_dragon')?.challenge === true);
 }
 
 console.log('\n[判定：放下方块（种下一颗种子）]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:husbandry/root');
+  tracker.grant('minicraft:husbandry/root');
   equal('先放个无关的方块：不报', tracker.handle({ kind: 'place', block: Block.COBBLESTONE }).length, 0);
   const plant = tracker.handle({ kind: 'place', block: Block.WHEAT_STAGE0 });
-  equal('种下小麦（种子放下去就是 WHEAT_STAGE0）→ 种植', plant[0]?.id, 'minecraft:husbandry/plant_seed');
+  equal('种下小麦（种子放下去就是 WHEAT_STAGE0）→ 种植', plant[0]?.id, 'minicraft:husbandry/plant_seed');
   const beet = tracker.handle({ kind: 'place', block: Block.BEETROOTS_STAGE0 });
   equal('别的作物不算第二条（已经达成过）', beet.length, 0);
 }
@@ -379,15 +379,15 @@ console.log('\n[判定：状态与总览]');
 {
   const tracker = new AdvancementTracker();
   equal('总数就是表长', tracker.totalCount, ADVANCEMENTS.length);
-  tracker.grant('minecraft:story/root');
+  tracker.grant('minicraft:story/root');
   equal('达成数只数达成的', tracker.earnedCount, 1);
-  equal('不认识的 id → 未解锁', tracker.stateOf('minecraft:no/such'), 'locked');
-  equal('不认识的 id 授予失败', tracker.grant('minecraft:no/such'), false);
-  equal('不认识的 id 计数型读出来是 1', tracker.countFor('minecraft:no/such').need, 1);
+  equal('不认识的 id → 未解锁', tracker.stateOf('minicraft:no/such'), 'locked');
+  equal('不认识的 id 授予失败', tracker.grant('minicraft:no/such'), false);
+  equal('不认识的 id 计数型读出来是 1', tracker.countFor('minicraft:no/such').need, 1);
 
   const roots = childrenOf(null).length;
   equal('根条目数与页签数一致', roots, ADVANCEMENT_TABS.length);
-  check('`childrenOf` 找得到子条目', childrenOf('minecraft:story/root').length >= 1);
+  check('`childrenOf` 找得到子条目', childrenOf('minicraft:story/root').length >= 1);
 }
 
 // ---------------------------------------------------------------- 4. 存档
@@ -395,7 +395,7 @@ console.log('\n[判定：状态与总览]');
 console.log('\n[存档：往返与脏数据]');
 {
   const tracker = new AdvancementTracker();
-  tracker.grant('minecraft:story/root');
+  tracker.grant('minicraft:story/root');
   tracker.handle({ kind: 'obtain', item: Block.COBBLESTONE });
   tracker.handle({ kind: 'kill', mob: 'zombie' });
   tracker.handle({ kind: 'kill', mob: 'skeleton' });
@@ -404,13 +404,13 @@ console.log('\n[存档：往返与脏数据]');
   const raw = JSON.parse(JSON.stringify(tracker.serialize())) as unknown;
   const revived = new AdvancementTracker();
   equal('读回来的条数与写出去的一致', revived.restore(raw), before);
-  equal('已达成的还是达成的', revived.isEarned('minecraft:story/mine_stone'), true);
-  equal('计数进度跟着走（2 / 3）', revived.countFor('minecraft:adventure/kill_a_mob').seen, 2);
-  equal('已达成的不再写进度（存档更紧凑）', Object.prototype.hasOwnProperty.call(tracker.serialize().progress, 'minecraft:adventure/root'), false);
+  equal('已达成的还是达成的', revived.isEarned('minicraft:story/mine_stone'), true);
+  equal('计数进度跟着走（2 / 3）', revived.countFor('minicraft:adventure/kill_a_mob').seen, 2);
+  equal('已达成的不再写进度（存档更紧凑）', Object.prototype.hasOwnProperty.call(tracker.serialize().progress, 'minicraft:adventure/root'), false);
 
   // 再喂一只苦力怕就该达成——证明"打了一半的挑战"读档后继续有效
   const finish = revived.handle({ kind: 'kill', mob: 'creeper' });
-  check('读档后补上第三种 → 挑战达成', finish.some((def) => def.id === 'minecraft:adventure/kill_a_mob'));
+  check('读档后补上第三种 → 挑战达成', finish.some((def) => def.id === 'minicraft:adventure/kill_a_mob'));
 }
 
 console.log('\n[存档：脏数据逐条跳过与断链剪枝]');
@@ -418,33 +418,45 @@ console.log('\n[存档：脏数据逐条跳过与断链剪枝]');
   const tracker = new AdvancementTracker();
   const raw = {
     earned: [
-      'minecraft:story/root',
-      'minecraft:story/mine_stone',
-      'minecraft:no/such', // 不认识的（旧版本删过）
-      'minecraft:story/upgrade_tools', // 父（mine_stone）在 → 保留
-      'minecraft:end/dragon_egg', // 父链全缺 → 剪掉
-      'minecraft:end/kill_dragon',
+      'minicraft:story/root',
+      'minicraft:story/mine_stone',
+      'minicraft:no/such', // 不认识的（旧版本删过）
+      'minicraft:story/upgrade_tools', // 父（mine_stone）在 → 保留
+      'minicraft:end/dragon_egg', // 父链全缺 → 剪掉
+      'minicraft:end/kill_dragon',
     ],
     progress: {
-      'minecraft:adventure/kill_a_mob': ['zombie', 42, null, 'skeleton'], // 只收字符串
-      'minecraft:story/root': ['x'], // 非计数型：整条丢掉
-      'minecraft:no/such': ['a'],
+      'minicraft:adventure/kill_a_mob': ['zombie', 42, null, 'skeleton'], // 只收字符串
+      'minicraft:story/root': ['x'], // 非计数型：整条丢掉
+      'minicraft:no/such': ['a'],
     },
   };
   equal('读进来 3 条（其余被跳/被剪）', tracker.restore(raw), 3);
-  equal('根条目在', tracker.isEarned('minecraft:story/root'), true);
-  equal('子条目在', tracker.isEarned('minecraft:story/upgrade_tools'), true);
-  equal('不认识的 id 被跳过', tracker.isEarned('minecraft:no/such'), false);
-  equal('断链的"下一世代"被剪掉', tracker.isEarned('minecraft:end/dragon_egg'), false);
-  equal('计数进度只收字符串（2 个）', tracker.countFor('minecraft:adventure/kill_a_mob').seen, 2);
-  equal('非计数型条目的进度被丢掉', tracker.countFor('minecraft:story/root').seen, 0);
+  equal('根条目在', tracker.isEarned('minicraft:story/root'), true);
+  equal('子条目在', tracker.isEarned('minicraft:story/upgrade_tools'), true);
+  equal('不认识的 id 被跳过', tracker.isEarned('minicraft:no/such'), false);
+  equal('断链的"下一世代"被剪掉', tracker.isEarned('minicraft:end/dragon_egg'), false);
+  equal('计数进度只收字符串（2 个）', tracker.countFor('minicraft:adventure/kill_a_mob').seen, 2);
+  equal('非计数型条目的进度被丢掉', tracker.countFor('minicraft:story/root').seen, 0);
+
+  // 批次 20261025-0117（合规 6）：进度 id 换了命名空间前缀，老存档里存的是旧前缀。
+  // 读档必须归一化，否则玩家的达成记录会整片消失——这是换命名空间唯一的存档风险点。
+  const legacy = new AdvancementTracker();
+  const restoredLegacy = legacy.restore({
+    earned: ['minecraft:story/root', 'minecraft:story/upgrade_tools', 'minecraft:story/mine_stone'],
+    progress: { 'minecraft:adventure/kill_a_mob': ['zombie'] },
+  });
+  equal('旧前缀的达成记录读得回来', restoredLegacy, 3);
+  equal('旧前缀 → 新 id（根条目）', legacy.isEarned('minicraft:story/root'), true);
+  equal('旧前缀 → 新 id（子条目）', legacy.isEarned('minicraft:story/upgrade_tools'), true);
+  equal('旧前缀的计数进度也接上了', legacy.countFor('minicraft:adventure/kill_a_mob').seen, 1);
 
   equal('空存档 → 0 条', new AdvancementTracker().restore(null), 0);
   equal('结构不对 → 0 条', new AdvancementTracker().restore({ earned: 'nope' }), 0);
   equal('不是对象 → 0 条', new AdvancementTracker().restore('nope'), 0);
 
   const cleared = new AdvancementTracker();
-  cleared.grant('minecraft:story/root');
+  cleared.grant('minicraft:story/root');
   cleared.clear();
   equal('清空之后一条不剩', cleared.earnedCount, 0);
 }

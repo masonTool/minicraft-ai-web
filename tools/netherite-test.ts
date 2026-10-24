@@ -377,8 +377,8 @@ console.log('\n[下界合金块与锻造台]');
 {
   const blockDefNetherite = blockDef(Block.NETHERITE_BLOCK);
   const blockDefTable = blockDef(Block.SMITHING_TABLE);
-  equal('下界合金块的注册名', blockDefNetherite.name, 'minecraft:netherite_block');
-  equal('锻造台的注册名', blockDefTable.name, 'minecraft:smithing_table');
+  equal('下界合金块的注册名', blockDefNetherite.name, 'minicraft:netherite_block');
+  equal('锻造台的注册名', blockDefTable.name, 'minicraft:smithing_table');
   check('两者都是整格方块', blockDefNetherite.shape === 'cube' && blockDefTable.shape === 'cube');
   check(
     '贴图都在图集名单里',
@@ -418,7 +418,7 @@ function ITEMS_UNIQUE(ids: readonly number[]): boolean {
 /** 远古残骸本身也要还在（整条链的起点） */
 console.log('\n[链条起点：远古残骸]');
 {
-  equal('远古残骸这个方块还在（整条链的起点）', blockDef(Block.ANCIENT_DEBRIS).name, 'minecraft:ancient_debris');
+  equal('远古残骸这个方块还在（整条链的起点）', blockDef(Block.ANCIENT_DEBRIS).name, 'minicraft:ancient_debris');
   equal('远古残骸硬度 30（原版）', blockHardness(Block.ANCIENT_DEBRIS), 30);
   check('远古残骸要钻石镐', harvestRequirement(Block.ANCIENT_DEBRIS)?.tier === 3);
   check('远古残骸有说明（写明在哪里挖）', hasDescription(Block.ANCIENT_DEBRIS));

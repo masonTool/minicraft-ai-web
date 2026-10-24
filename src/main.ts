@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three';
+import { normalizeId, shortId } from './core/registry/ids.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
@@ -16691,7 +16692,7 @@ class App {
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
-      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
+      ? `${shortId(blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name)} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
       : t('hud.none');
 
     const armorPoints = this.stats.armorPoints;
@@ -18550,7 +18551,7 @@ class App {
    * 按名字取可以避免这类笔误，也让方块 id 变动时脚本不用跟着改。
    */
   blockId(name: string): number {
-    const full = name.includes(':') ? name : `minecraft:${name}`;
+    const full = normalizeId(name);
     return BLOCKS.findIndex((def) => def.name === full);
   }
 

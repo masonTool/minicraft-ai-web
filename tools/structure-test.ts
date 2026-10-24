@@ -390,7 +390,7 @@ check(
   STRUCTURE_KINDS.includes('desert_well'),
   STRUCTURE_KINDS.join(','),
 );
-check('结构建材名可读（调试面板会用到）', blockDef(Block.PRISMARINE).name === 'minecraft:prismarine');
+check('结构建材名可读（调试面板会用到）', blockDef(Block.PRISMARINE).name === 'minicraft:prismarine');
 check(
   '结构用到的方块都在注册表里',
   [

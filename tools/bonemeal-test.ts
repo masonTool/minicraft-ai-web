@@ -2,7 +2,7 @@
  * 骨粉离线测试（批次 69，B42 / H13）
  *
  * 这一批做的是"一件物品 + 一条使用规则"：
- *  1. **物品与配方**：骨粉（`minecraft:bone_meal`，1077）由**1 根骨头磨成 3 份**（原版）；
+ *  1. **物品与配方**：骨粉（`minicraft:bone_meal`，1077）由**1 根骨头磨成 3 份**（原版）；
  *  2. **施肥规则**（`world/BoneMeal.ts` 的纯函数 `fertilizeAt`）：对一格作物推进
  *     **2~5 个阶段**（原版 `CropBlock#performBonemeal` 的 `nextInt(2, 5)`）、**截到成熟**、
  *     不检查光照与耕地、成熟/非作物一律**失败且什么都不改**（失败就不消耗，原版口径）；
@@ -90,7 +90,7 @@ function wheatWorld(stage = 0): FakeWorld {
 console.log('\n[物品：骨粉]');
 {
   equal('物品 id 是 1077（接在弓之后）', Item.BONE_MEAL, 1077);
-  equal('注册名', itemDef(Item.BONE_MEAL)?.name, 'minecraft:bone_meal');
+  equal('注册名', itemDef(Item.BONE_MEAL)?.name, 'minicraft:bone_meal');
   equal('中文名', itemLabel(Item.BONE_MEAL), '骨粉');
   check('有物品说明', hasDescription(Item.BONE_MEAL));
   equal('可堆叠 64（原版）', maxStackOf(Item.BONE_MEAL), 64);

@@ -109,9 +109,9 @@ check(
   '每个工具都有中文名（没有回退成英文 id）',
   TOOL_SPECS.every((spec) => {
     const label = itemLabel(spec.id);
-    return label !== spec.name.replace('minecraft:', '');
+    return label !== spec.name.replace('minicraft:', '');
   }),
-  TOOL_SPECS.filter((spec) => itemLabel(spec.id) === spec.name.replace('minecraft:', ''))
+  TOOL_SPECS.filter((spec) => itemLabel(spec.id) === spec.name.replace('minicraft:', ''))
     .map((spec) => spec.name)
     .join(' '),
 );

@@ -147,7 +147,7 @@ console.log('\n[注册与外观]');
 {
   equal('方块 id 是 478（接在投掷器后面）', DISP, 478);
   equal('id 紧接在投掷器之后（477 → 478）', DISP, Block.DROPPER + 1);
-  equal('注册名', blockDef(DISP).name, 'minecraft:dispenser');
+  equal('注册名', blockDef(DISP).name, 'minicraft:dispenser');
   equal('中文名', itemLabel(DISP), '发射器');
   check('有物品说明', hasDescription(DISP));
   equal('形状是 dispenser（整格铁壳 + 挡板）', blockDef(DISP).shape, 'dispenser');

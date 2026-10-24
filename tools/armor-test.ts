@@ -102,7 +102,7 @@ check(
 );
 check(
   '每件盔甲都有中文名（没有回退成英文 id）',
-  ARMOR_SPECS.every((spec) => itemLabel(spec.id) !== spec.name.replace('minecraft:', '')),
+  ARMOR_SPECS.every((spec) => itemLabel(spec.id) !== spec.name.replace('minicraft:', '')),
 );
 equal('铁头盔的中文名', itemLabel(armorItemId('helmet', 'iron')), '铁头盔');
 equal('钻石靴子的中文名', itemLabel(armorItemId('boots', 'diamond')), '钻石靴子');

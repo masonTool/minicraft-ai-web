@@ -60,8 +60,8 @@ class Pool implements SpongeWorld {
 
 console.log('\n[注册：方块 / 物品 / 中文名]');
 {
-  equal('海绵的注册名', blockDef(Block.SPONGE).name, 'minecraft:sponge');
-  equal('湿海绵的注册名', blockDef(Block.WET_SPONGE).name, 'minecraft:wet_sponge');
+  equal('海绵的注册名', blockDef(Block.SPONGE).name, 'minicraft:sponge');
+  equal('湿海绵的注册名', blockDef(Block.WET_SPONGE).name, 'minicraft:wet_sponge');
   check('两个都是实心整格', blockDef(Block.SPONGE).solid && blockDef(Block.WET_SPONGE).solid);
   check(
     '六个面同一张贴图（原版也是如此）',

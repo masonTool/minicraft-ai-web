@@ -153,7 +153,7 @@ console.log('\n[存读档]');
 console.log('\n[方块、几何与配方]');
 {
   equal('盔甲架 id 是 718', ARMOR_STAND_ID, 718);
-  equal('注册名', blockDef(Block.ARMOR_STAND).name, 'minecraft:armor_stand');
+  equal('注册名', blockDef(Block.ARMOR_STAND).name, 'minicraft:armor_stand');
   equal('形状是 armor_stand', blockDef(Block.ARMOR_STAND).shape, 'armor_stand');
   equal('中文名', itemLabel(Block.ARMOR_STAND), '盔甲架');
   equal('没有碰撞盒（走得过去）', collisionBoxes('armor_stand', 0).length, 0);

@@ -850,10 +850,10 @@ console.log('\n[成就数据层（批次 620）]');
 
   // 中文模式必须**原样返回**（不能因为加了英文就动了中文）
   setLanguage('zh');
-  // 批次 20261024-0223：`minecraft:story/root` 的标题按用户要求统一成品牌名 `Minicraft`
+  // 批次 20261024-0223：`minicraft:story/root` 的标题按用户要求统一成品牌名 `Minicraft`
   // （中文原来是「我的世界」），所以它**故意**与原文不同；其余成就中文必须原样返回。
   const zhChanged = ADVANCEMENTS.filter(
-    (a) => a.id !== 'minecraft:story/root' && (advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc),
+    (a) => a.id !== 'minicraft:story/root' && (advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc),
   );
   check('中文模式下标题与说明原样不动', zhChanged.length === 0, zhChanged.slice(0, 2).map((a) => a.id).join(','));
 
@@ -1195,9 +1195,9 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   // 说明里的"中文原文"只在**连英文都没有**时才出现 —— 那时是"键漏了"的 bug，不是缺翻。
   check(
     '成就标题在德语下取德语（不缺翻时不落到中文原文）',
-    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }).length > 0 &&
-      advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }) !== '采集石头',
-    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }),
+    advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }).length > 0 &&
+      advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }) !== '采集石头',
+    advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }),
   );
   resetLanguageForTest();
 
@@ -1526,7 +1526,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    */
   const findItemId = (name: string): number => {
     for (let id = 0; id < 2000; id += 1) {
-      if (itemDef(id)?.name?.replace('minecraft:', '') === name) return id;
+      if (itemDef(id)?.name?.replace('minicraft:', '') === name) return id;
     }
     return -1;
   };
@@ -1562,13 +1562,13 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    * 成就文案（P6-4，批次 20261024-0020）。
    *
    * 200 条（100 × 标题+描述）从「中文在 `advancements.ts`、英文在 `advancementText.data.ts`」的
-   * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minecraft:story/root` →
+   * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minicraft:story/root` →
    * `advancement.story_root.title`）。本轮只翻德语，ru / fr / pt 仍是英文占位（巡查里有白名单）。
    */
   // `story/root` 例外：它的标题是品牌名（见上），其余中文必须逐条等于原文
   check(
     '中文成就标题与原文逐条一致（story_root 除外，它是品牌名）',
-    ADVANCEMENTS.filter((a) => a.id !== 'minecraft:story/root').every((a) => advancementTitle(a) === a.title),
+    ADVANCEMENTS.filter((a) => a.id !== 'minicraft:story/root').every((a) => advancementTitle(a) === a.title),
   );
   setLanguage('en');
   const advEn = ADVANCEMENTS.map((a) => advancementTitle(a));
@@ -1661,7 +1661,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
       for (const id of allItemIds) {
         const def = itemDef(id);
         if (!def) continue;
-        const key = def.name.replace('minecraft:', '');
+        const key = def.name.replace('minicraft:', '');
         if (/[\u4e00-\u9fff]/.test(translateName(key))) leakedOutput.push(`name:${key}`);
         if (/[\u4e00-\u9fff]/.test(itemDescription(id))) leakedOutput.push(`desc:${key}`);
       }

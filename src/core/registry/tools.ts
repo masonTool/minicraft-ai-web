@@ -8,7 +8,7 @@
  * 与原版对齐的部分：
  *  - 等级沿用原版：0 木/金 · 1 石 · 2 铁 · 3 钻石 · 4 下界合金；
  *  - 挖掘耗时 = 硬度 × (可采集 ? 1.5 : 5) ÷ 工具速度（原版 30/100 除以 20 tick 的等价写法）；
- *  - 「必须用正确工具才掉落」的方块（`minecraft:mineable/*` + `requiresCorrectToolForDrops`）：
+ *  - 「必须用正确工具才掉落」的方块（`minicraft:mineable/*` + `requiresCorrectToolForDrops`）：
  *    等级不够就**挖得动但什么都不掉**，与原版一致。
  *
  * 与原版的已知差异：
@@ -186,7 +186,7 @@ export interface ToolSpec {
 const BASE_TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
   TOOL_MATERIALS.map((material) => ({
     id: toolItemId(kind, material),
-    name: `minecraft:${material}_${kind}`,
+    name: `minicraft:${material}_${kind}`,
     tile: `item_${material}_${kind}`,
     tool: makeToolInfo(kind, material),
   })),
@@ -194,7 +194,7 @@ const BASE_TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
 
 const NETHERITE_TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.map((kind) => ({
   id: toolItemId(kind, 'netherite'),
-  name: `minecraft:netherite_${kind}`,
+  name: `minicraft:netherite_${kind}`,
   tile: `item_netherite_${kind}`,
   tool: makeToolInfo(kind, 'netherite'),
 }));

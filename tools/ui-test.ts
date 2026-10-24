@@ -4133,7 +4133,7 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
   check(
     '船物品存在（id 1478，堆叠 1）',
-    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
+    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minicraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
   );
   check(
     '5 块木板摆成 U 形 → 一艘船',
@@ -4448,7 +4448,7 @@ console.log('\n[冰霜行者（批次 263）]');
   check(
     '霜冰方块注册（id 586，无物品形态）',
     blocksSrc.includes('export const FROSTED_ICE_ID = 586') &&
-      blocksSrc.includes("name: 'minecraft:frosted_ice'") &&
+      blocksSrc.includes("name: 'minicraft:frosted_ice'") &&
       blocksSrc.includes('FROSTED_ICE: FROSTED_ICE_ID'),
   );
   check(
@@ -4499,7 +4499,7 @@ console.log('\n[弩（批次 265）]');
   check(
     '弩物品（id 1510，耐久 465）与配方',
     itemsSrc.includes('CROSSBOW: 1510') &&
-      itemsSrc.includes("name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
+      itemsSrc.includes("name: 'minicraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
       recipesSrc.includes('result: { id: Item.CROSSBOW, count: 1 }'),
   );
   check(

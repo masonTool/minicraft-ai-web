@@ -84,9 +84,9 @@ console.log('\n[物品 id 卫生]');
   );
   check(
     '每件物品都有中文名（id 撞车时名字会被静默顶替，这条能挡住）',
-    definitions.every((def) => translateName(def.name) !== def.name.replace('minecraft:', '')),
+    definitions.every((def) => translateName(def.name) !== def.name.replace('minicraft:', '')),
     definitions
-      .filter((def) => translateName(def.name) === def.name.replace('minecraft:', ''))
+      .filter((def) => translateName(def.name) === def.name.replace('minicraft:', ''))
       .map((def) => def.name)
       .join(' '),
   );
@@ -271,7 +271,7 @@ console.log('\n[开发期物资：开关 / 去重 / 非堆叠发放（批次 181
 console.log('\n[磁石与指南针绑定（批次 453）]');
 {
   // ① 方块本身
-  equal('磁石的注册名', blockDef(Block.LODESTONE).name, 'minecraft:lodestone');
+  equal('磁石的注册名', blockDef(Block.LODESTONE).name, 'minicraft:lodestone');
   equal('磁石中文名', blockLabel(Block.LODESTONE), '磁石');
   check('磁石是实心整格', blockDef(Block.LODESTONE).solid);
 

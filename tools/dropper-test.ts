@@ -121,7 +121,7 @@ console.log('\n[注册与外观]');
   equal('方块 id 是 477（接在漏斗后面）', DROPPER, 477);
   // ⚠️ 别用 `BLOCKS.length - 1` 判"最后一个"：每加一个方块它都会红
   equal('id 紧接在漏斗之后（476 → 477）', DROPPER, Block.HOPPER + 1);
-  equal('注册名', blockDef(DROPPER).name, 'minecraft:dropper');
+  equal('注册名', blockDef(DROPPER).name, 'minicraft:dropper');
   equal('中文名', itemLabel(DROPPER), '投掷器');
   check('有物品说明', hasDescription(DROPPER));
   equal('形状是 dropper（整格铁壳 + 凸口）', blockDef(DROPPER).shape, 'dropper');

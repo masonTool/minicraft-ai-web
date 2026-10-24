@@ -281,7 +281,7 @@ console.log('\n[下界疣：方块与登记]');
   check('4 张贴图都在图集名单里', missingTiles.length === 0, missingTiles.join(','));
 
   const missing = missingBlockNames();
-  const unnamed = NETHER_WART_STAGES.filter((id) => missing.includes(blockDef(id).name.replace('minecraft:', '')));
+  const unnamed = NETHER_WART_STAGES.filter((id) => missing.includes(blockDef(id).name.replace('minicraft:', '')));
   check('4 个阶段都有中文名', unnamed.length === 0, unnamed.join(','));
   check('都有说明', NETHER_WART_STAGES.every((id) => hasDescription(id)));
 

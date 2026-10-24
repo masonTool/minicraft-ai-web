@@ -41,7 +41,7 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 console.log('\n[方块与状态位]');
 {
   equal('id 是 719', CAVE_VINES_ID, 719);
-  equal('注册名', blockDef(Block.CAVE_VINES).name, 'minecraft:cave_vines');
+  equal('注册名', blockDef(Block.CAVE_VINES).name, 'minicraft:cave_vines');
   equal('形状是 cave_vines', blockDef(Block.CAVE_VINES).shape, 'cave_vines');
   equal('没有碰撞（走得过去）', collisionBoxes('cave_vines', 0).length, 0);
 

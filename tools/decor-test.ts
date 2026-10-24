@@ -428,7 +428,7 @@ console.log('\n[真实地形抽样：10×10 区块]');
   }
   const featureRatio = elapsed / Math.max(baselineMs, 1);
 
-  const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
+  const named = (id: number) => blockDef(id).name.replace('minicraft:', '');
   const interesting = [
     Block.OAK_LOG,
     Block.SHORT_GRASS,
@@ -747,7 +747,7 @@ console.log('\n[甜浆果丛与可可豆（批次 49）]');
 
 console.log('\n[睡莲（B16）]');
 {
-  equal('注册名', blockDef(Block.LILY_PAD).name, 'minecraft:lily_pad');
+  equal('注册名', blockDef(Block.LILY_PAD).name, 'minicraft:lily_pad');
   equal('中文名是"睡莲"', itemLabel(Block.LILY_PAD), '睡莲');
   equal('形状是 lily_pad（与 flat 的区别是有碰撞）', blockDef(Block.LILY_PAD).shape, 'lily_pad');
   check('走半透明层（叶片四角透明，靠 alpha 混合）', blockDef(Block.LILY_PAD).translucent === true);
@@ -803,7 +803,7 @@ console.log('\n[睡莲（B16）]');
 
 console.log('\n[雪层（批次 37）：雪原地表铺雪]');
 {
-  equal('注册名', blockDef(Block.SNOW).name, 'minecraft:snow');
+  equal('注册名', blockDef(Block.SNOW).name, 'minicraft:snow');
   equal('中文名是"雪"', itemLabel(Block.SNOW), '雪');
   equal('形状是 snow（高度随层数变）', blockDef(Block.SNOW).shape, 'snow');
   check('不遮挡邻居', !blockDef(Block.SNOW).opaque);

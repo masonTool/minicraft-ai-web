@@ -60,10 +60,10 @@ const TILES: readonly string[] = TILE_ORDER;
 // ---------------------------------------------------------------- 1. 物品数据层
 
 console.log('\n[弓与箭的物品]');
-equal('弓有注册名', itemDef(Item.BOW)?.name, 'minecraft:bow');
-equal('箭有注册名', itemDef(Item.ARROW)?.name, 'minecraft:arrow');
-equal('燧石有注册名', itemDef(Item.FLINT)?.name, 'minecraft:flint');
-equal('线有注册名', itemDef(Item.STRING)?.name, 'minecraft:string');
+equal('弓有注册名', itemDef(Item.BOW)?.name, 'minicraft:bow');
+equal('箭有注册名', itemDef(Item.ARROW)?.name, 'minicraft:arrow');
+equal('燧石有注册名', itemDef(Item.FLINT)?.name, 'minicraft:flint');
+equal('线有注册名', itemDef(Item.STRING)?.name, 'minicraft:string');
 
 equal('弓每件一叠（它是耐用品）', maxStackOf(Item.BOW), 1);
 equal('箭可以堆 64 支', maxStackOf(Item.ARROW), 64);

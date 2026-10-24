@@ -35,8 +35,8 @@
   mc.place(x + 4, y, z, id('lever'), 0b000010);
 
   await sleep(300);
-  check('blocks placed', mc.probe(x, y, z).block === 'minecraft:redstone_block', mc.probe(x, y, z).block);
-  check('surface block dug out', mc.probe(x + 3, dugY, z).block === 'minecraft:air', mc.probe(x + 3, dugY, z).block);
+  check('blocks placed', mc.probe(x, y, z).block === 'minicraft:redstone_block', mc.probe(x, y, z).block);
+  check('surface block dug out', mc.probe(x + 3, dugY, z).block === 'minicraft:air', mc.probe(x + 3, dugY, z).block);
   check('lever state written', mc.probeState(x + 4, y, z).state === 0b000010, `state=${mc.probeState(x + 4, y, z).state}`);
 
   // 4) 玩家位置与背包

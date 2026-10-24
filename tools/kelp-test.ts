@@ -130,9 +130,9 @@ function countBlocks(blocks: BlockArray, ids: readonly number[]): number {
 
 console.log('\n[注册与贴图]');
 {
-  equal('海带的注册名', blockDef(KELP).name, 'minecraft:kelp');
-  equal('海草的注册名', blockDef(SEAGRASS).name, 'minecraft:seagrass');
-  equal('干海带块的注册名', blockDef(DRIED_BLOCK).name, 'minecraft:dried_kelp_block');
+  equal('海带的注册名', blockDef(KELP).name, 'minicraft:kelp');
+  equal('海草的注册名', blockDef(SEAGRASS).name, 'minicraft:seagrass');
+  equal('干海带块的注册名', blockDef(DRIED_BLOCK).name, 'minicraft:dried_kelp_block');
   equal('海带的 id 接着最大 id（连续）', blockDef(KELP + 1).id, KELP + 1);
   equal('海草的 id 接着海带', SEAGRASS, KELP + 1);
   equal('干海带块的 id 接着海草', DRIED_BLOCK, SEAGRASS + 1);

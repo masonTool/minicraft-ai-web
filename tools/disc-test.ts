@@ -112,7 +112,7 @@ console.log('\n[交给 AudioEngine 的 spec]');
 console.log('\n[方块与物品]');
 {
   equal('唱片机 id 是 716', JUKEBOX_ID, 716);
-  equal('注册名', blockDef(Block.JUKEBOX).name, 'minecraft:jukebox');
+  equal('注册名', blockDef(Block.JUKEBOX).name, 'minicraft:jukebox');
   equal('是整格方块（要能站上去）', blockDef(Block.JUKEBOX).shape, 'cube');
 
   for (const [label, id] of [

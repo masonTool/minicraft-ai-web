@@ -12,6 +12,7 @@
  */
 
 import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
+import { shortId } from '../registry/ids.ts';
 import { enchantmentName } from '../registry/enchantments.ts';
 // 多语言 P2-4：种类名走 `entity.<id>`
 import { mobLabel } from '../entity/Mob.ts';
@@ -483,7 +484,7 @@ export interface CommandSuggestion {
 const ITEM_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string })[] = CREATIVE_ITEMS.map(
   (id) => {
     const full = itemName(id);
-    const short = full.replace(/^minecraft:/, '');
+    const short = shortId(full);
     return {
       value: short,
       label: `${itemLabel(id)}（${short}）`,
@@ -496,7 +497,7 @@ const BLOCK_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string
   (block) => block.id !== 0,
 ).map((block) => {
   const full = block.name;
-  const short = full.replace(/^minecraft:/, '');
+  const short = shortId(full);
   return {
     value: short,
     label: `${blockLabel(block.id)}（${short}）`,

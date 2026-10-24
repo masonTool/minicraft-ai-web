@@ -22,6 +22,7 @@ import {
   type ProgressEvent,
   type AdvancementTrigger,
 } from './advancements.ts';
+import { normalizeId } from '../registry/ids.ts';
 
 /** 界面要用的三种状态 */
 export type AdvancementState =
@@ -239,7 +240,11 @@ export class AdvancementTracker {
     this.clear();
     if (!raw || typeof raw !== 'object') return 0;
     const record = raw as Partial<SerializedAdvancements>;
-    const earnedSet = new Set<string>(Array.isArray(record.earned) ? record.earned : []);
+    // 批次 20261025-0117：进度 id 换过命名空间前缀，老存档里存的是旧前缀。
+    // 读的时候统一归一化，写的时候一律用新前缀（否则玩家的达成记录会整片消失）。
+    const earnedSet = new Set<string>(
+      (Array.isArray(record.earned) ? record.earned : []).filter((id): id is string => typeof id === 'string').map(normalizeId),
+    );
 
     let restored = 0;
     for (const def of this.defs) {
@@ -251,7 +256,8 @@ export class AdvancementTracker {
 
     // 进度集：只收表里认识的条目、且只收字符串目标（脏数据一律丢）
     if (record.progress && typeof record.progress === 'object') {
-      for (const [id, values] of Object.entries(record.progress)) {
+      for (const [rawId, values] of Object.entries(record.progress)) {
+        const id = normalizeId(rawId);
         const def = advancementById(id);
         if (!def || (def.trigger.needCount ?? 1) <= 1) continue;
         if (!Array.isArray(values)) continue;

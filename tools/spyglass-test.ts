@@ -43,7 +43,7 @@ function near(label: string, actual: number, expected: number): void {
 console.log('\n[物品与配方]');
 {
   check('物品已注册', itemDef(Item.SPYGLASS) !== undefined);
-  equal('注册名', itemDef(Item.SPYGLASS)?.name, 'minecraft:spyglass');
+  equal('注册名', itemDef(Item.SPYGLASS)?.name, 'minicraft:spyglass');
   equal('中文名', itemLabel(Item.SPYGLASS), '望远镜');
   equal('不能叠（原版也是 1）', maxStackOf(Item.SPYGLASS), 1);
   check('图标贴图已登记进图集', TILE_ORDER.includes('item_spyglass'));

@@ -10,7 +10,7 @@
  *
  * 数值与写法尽量对齐原版：
  *  - 坐标支持绝对、相对（`~`、`~5`）；缺省参数沿用玩家当前位置
- *  - 物品名支持 `minecraft:stone` / `stone` / `石头` / 数字 id
+ *  - 物品名支持 `minicraft:stone` / `stone` / `石头` / 数字 id
  *  - 时间支持 `day` / `noon` / `night` / `midnight` / 数字 tick
  *  - 反馈文案与原版风格一致（"已将时间设置为 day"、"找不到物品 xxx"）
  */
