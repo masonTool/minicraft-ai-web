@@ -37,6 +37,33 @@ describe('multiplayerWorldId', () => {
   it('同房间重复算出来的 id 稳定（重进联机还是同一个库）', () => {
     expect(multiplayerWorldId('w1', 'room-a')).toBe(multiplayerWorldId('w1', 'room-a'));
   });
+
+  /*
+   * 种子指纹（L9）：地形由房主的那个世界决定，所以"同一个房间名、换了世界"必须
+   * 换一个库——否则上一片大陆的方块增量会灌到新地形上（表现为刚进去就有一堆
+   * 别人世界的改动）。
+   */
+  it('带种子时 id 多一段指纹，且同房不同种子落两个库', () => {
+    const small = multiplayerWorldId('w1', 'room-a', 123);
+    const other = multiplayerWorldId('w1', 'room-a', 456);
+    expect(small).toBe('w1@mp:room-a@123');
+    expect(small).not.toBe(other);
+    expect(dbNameFor(small)).not.toBe(dbNameFor(other));
+  });
+
+  it('不传种子时仍是老格式（这一批之前的库名照旧算得出来）', () => {
+    expect(multiplayerWorldId('w1', 'room-a')).toBe('w1@mp:room-a');
+    expect(multiplayerWorldId('w1', 'room-a', undefined)).toBe('w1@mp:room-a');
+  });
+
+  it('负种子原样拼进去（种子允许负数）', () => {
+    expect(multiplayerWorldId('w1', 'room-a', -5)).toBe('w1@mp:room-a@-5');
+  });
+
+  it('带种子也能反解回单机 world id', () => {
+    expect(singlePlayerWorldId(multiplayerWorldId('w1', 'room-a', 123))).toBe('w1');
+    expect(isMultiplayerWorldId(multiplayerWorldId('w1', 'room-a', 123))).toBe(true);
+  });
 });
 
 describe('isMultiplayerWorldId / singlePlayerWorldId', () => {

@@ -1976,8 +1976,11 @@ class App {
       }
       // 天气（联机35）：连上就交给服务端，本地不再自己换天气
       this.weather.setAuthority(false);
-      // 联机6：连上就换到按 roomId 派生的联机库（异步换库，这里不阻塞状态回调）
-      void this.enterMultiplayerSave();
+      /*
+       * 联机库（联机6 / L9）**不在这里**切：库名要带"这一局是哪个世界"的种子，
+       * 而种子在 `welcome` 里才到。切早了只能瞎猜默认房间 + 无种子，结果就是
+       * "换个房间还是同一个库"。改在 `onNetWelcome` 里切。
+       */
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
@@ -2012,15 +2015,19 @@ class App {
    * 那几分钟进度就没了。换库失败（无痕模式 `open` 返回 null）时把 `save` 置空
    * ——宁可这一局不保存，也不能继续往单机库里写联机世界。
    */
-  private async enterMultiplayerSave(roomId: string = DEFAULT_MULTIPLAYER_ROOM): Promise<void> {
+  private async enterMultiplayerSave(
+    roomId: string = DEFAULT_MULTIPLAYER_ROOM,
+    seed?: number,
+  ): Promise<void> {
     if (this.inMultiplayerSave) return;
     await this.saveNow('mp-enter');
     const solo = this.save;
-    const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId));
+    // 库名带房间 + 房间世界的种子（L9）：同房换世界 = 另一片大陆 = 另一个库
+    const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId, seed));
     this.soloSave = solo;
     this.save = mp;
     this.inMultiplayerSave = mp !== null;
-    diag.event('app', 'save.mpEnter', { room: roomId, opened: mp !== null });
+    diag.event('app', 'save.mpEnter', { room: roomId, seed: seed ?? null, opened: mp !== null });
   }
 
   /**
@@ -3680,6 +3687,12 @@ class App {
     // 种子以服务端为准（联机5）：地形由种子纯函数重现，两边不同等于在两片大陆上玩，
     // 坐标对得上、风景对不上，方块改动还会互相错位
     this.serverSeed = Number.isFinite(seed) ? seed : null;
+    /*
+     * 联机库（联机6 / L9）：到这一刻才知道"这一局是哪个房间、哪个世界"，
+     * 所以换库放在这里——库名带种子，同房换世界不会把两片大陆的增量串在一起。
+     * 种子冲突时也照样切：这一局的所有写盘都该落在联机档里，绝不能写回单机档。
+     */
+    void this.enterMultiplayerSave(this.net.roomId, this.serverSeed ?? undefined);
     const conflict = seedConflict(seed, this.worldConfig.seed);
 
     if (conflict) {

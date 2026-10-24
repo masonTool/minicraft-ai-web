@@ -16,6 +16,7 @@ import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole.ts';
+import { DEFAULT_MULTIPLAYER_ROOM } from '../core/net/MultiplayerSave.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
 import { NetStats } from '../core/net/NetStats.ts';
@@ -353,6 +354,16 @@ export class NetClient {
   /** 会话状态（联机7）：`idle|connecting|connected|reconnecting|offline` */
   get sessionState(): NetSessionState {
     return this.session.state;
+  }
+
+  /**
+   * 当前房间名（L9）：空串（地址里没写房间）按默认房间算。
+   *
+   * 联机库的库名要用它（`multiplayerWorldId`）——之前调用方一律传默认房间，
+   * 于是"一房一库"只在纸面上成立：换个房间还是同一个库。
+   */
+  get roomId(): string {
+    return this.room.length > 0 ? this.room : DEFAULT_MULTIPLAYER_ROOM;
   }
 
   /**
