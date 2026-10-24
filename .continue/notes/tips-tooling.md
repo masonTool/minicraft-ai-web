@@ -150,6 +150,20 @@
 - 顺带记住：钩子自检也可以按"钩子目录内容哈希"缓存（`selftest.mjs` 顶部），它不读项目里别的东西，
   5.2s → 26ms；**只缓存通过的结论**，失败永远重跑。
 
+### 干净工作区跑 `check:fast` 是"假绿"：`--changed` 一套都不选，红树也能过门禁
+
+- 症状：代码里明明有一条过期断言（`ui` 套 977/1），`node .continue/hooks/check.mjs --fast`
+  却在干净工作区 **19s 全绿**；同一份代码在有脏文件时跑 105s 才把它照出来。
+- 根因：`test:offline:changed` 按"本次改动命中了哪些套件"来选，**工作区干净 → 命中 0 套**，
+  于是 177 套里只有 vitest + audit:i18n 真的跑了，`ui` / `structure` 这些根本不会启动。
+  提交守卫的判定是"这次 check 通过了吗"，它不知道"这次压根没测"。
+- 处置：**别把干净工作区的 `check:fast` 当成"全绿"**。要证明仓库是绿的，必须跑
+  `npm run test:offline`（全量 177 套）；`check:fast` 只用来验证"我改的这一片没坏"。
+  排查"为什么我这轮没改动却报错"时，先确认工作区是否干净——干净说明红的是上游的提交。
+- 顺带：`check:fast` 不含 `typecheck:tools`（它只跑 `tsc --noEmit` 的项目那一份），
+  所以 `tools/*.ts` 里的 TS6133 之类**只有 `npm run test` / `npm run check` 才会红**；
+  改过 `tools/` 就顺手跑一次 `npm run typecheck:tools`（2s）。
+
 ### 框架同一个文件有**三份副本**，只改实例 = 下次重装静默退回去
 
 - 症状：给 `.continue/hooks/selftest.mjs` 打完补丁、实测 5.2s → 26ms，一切正常；
