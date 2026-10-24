@@ -71,6 +71,8 @@ export const menu = {
   "mp.passwordHint": "optional",
   "mp.refreshRooms": "Räume suchen",
   "mp.recent": "Zuletzt",
+  "net.hostLeft": "Der Host ist raus – der Raum schließt in {s} s, falls er nicht zurückkommt",
+  "net.roomClosed": "Der Host hat den Raum verlassen, er wurde geschlossen",
   "net.editNoHost": "Kein Host im Raum – Änderung nicht übertragen",
   "net.editRejected": "Änderung nicht übertragen (vom Server abgelehnt)",
   "mp.hostFromWorld": "Zum Hosten „Hosten“ auf einer Weltkarte antippen (dort wird die Welt gewählt)",

@@ -272,6 +272,8 @@ const CLOSE_ORIGIN = 4004;
 const CLOSE_PASSWORD = 4005;
 /** 关闭码：这个房间已经有房主（L8） */
 const CLOSE_HOST_TAKEN = 4006;
+/** 房主退出、房间已关闭（L8 · MS4）：客户端不该再重连 */
+const CLOSE_HOST_LEFT = 4007;
 
 /**
  * 运行统计（联机29）：入/出字节与消息数。
@@ -1425,6 +1427,20 @@ wss.on('connection', (socket, request) => {
      *
      * 期间他**不在** `players` 里：位置不再广播（别人看到的是停在原地），也不占在线人数。
      */
+    /*
+     * 房主掉线（L8 · MS4）：**立刻**告诉同房其他人，别让他们对着一个没人模拟的世界发呆。
+     *
+     * 只是提示，不是关房：他可能只是切了后台，`GRACE_MS` 之内回来还是同一局。
+     * 真关房在宽限期到期那一段（那时房主位才释放）。
+     */
+    if (hosts.get(player.room)?.id === player.id) {
+      broadcast(
+        { t: 'room-closed', reason: 'host-left', graceMs: GRACE_MS },
+        player.id,
+        player.room,
+      );
+      log(`房主 ${player.name}#${player.id} 掉线，已通知房间 ${player.room}（宽限 ${Math.round(GRACE_MS / 1000)}s）`);
+    }
     const grace = {
       id: player.id,
       name: player.name,
@@ -1448,7 +1464,20 @@ wss.on('connection', (socket, request) => {
        */
       if (hosts.get(player.room)?.id === player.id) {
         hosts.delete(player.room);
-        log(`房主 ${player.name}#${player.id} 宽限期结束，房间 ${player.room} 的房主位已释放`);
+        /*
+         * 房主没回来 = 这一局没人模拟了（L8 · MS4）：**关房**，并把理由说清楚。
+         *
+         * 不关房的话，剩下的人会停在一个不推进的世界里：怪物不动、红石不亮、
+         * 熔炉不烧，而界面上一切正常——这种"看起来还能玩"的坏状态最难排查。
+         * 用 `error{code:'host-left'}` 而不是静默断开：客户端据此不再自动重连
+         * （否则它会每 3 秒撞一次，日志刷满）。
+         */
+        const room = player.room;
+        for (const other of players.values()) {
+          if (other.room !== room) continue;
+          reject(other.socket, 'host-left', '房主已退出，房间已关闭', CLOSE_HOST_LEFT);
+        }
+        log(`房间 ${room} 已关闭（房主 ${player.name}#${player.id} 宽限期结束未回来）`);
       }
       log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
     }, GRACE_MS);

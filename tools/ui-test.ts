@@ -5519,5 +5519,34 @@ console.log('\n[容器计时只在房主那端跑（L8 · MS4）]');
   );
 }
 
+/*
+ * 房主退出（L8 · MS4）
+ *
+ * 只有"一条明确的提示"是不够的，还得**别再重连**：房主走了，重连一万次也还是没房主，
+ * 每 3 秒撞一次墙只会把日志刷满、把"这局结束了"这个事实埋掉。
+ */
+console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const protoSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  check(
+    '客户端认 `room-closed` 并把它变成玩家看得见的一句话',
+    netSrc.includes("case 'room-closed':") && mainSrc.includes('onRoomClosing: (graceMs) =>'),
+  );
+  check(
+    '`host-left` 算致命（不再自动重连）',
+    protoSrc.includes("code === 'host-left'") && netSrc.includes("if (code === 'host-left') this.roomClosed = true;"),
+  );
+  check(
+    '会话状态机把"房间已关闭"当作停车理由（与致命错误分开表达）',
+    readFileSync(new URL('../src/core/net/NetSession.ts', import.meta.url), 'utf8').includes('roomClosed?: boolean'),
+  );
+  check(
+    '提示文案带宽限秒数（别让玩家对着不推进的世界猜"卡了"）',
+    mainSrc.includes("tp('net.hostLeft', { s: seconds })"),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -70,6 +70,8 @@ export const menu = {
   "mp.passwordHint": "opcional",
   "mp.refreshRooms": "Buscar salas",
   "mp.recent": "Recentes",
+  "net.hostLeft": "Quem hospeda caiu — a sala fecha em {s}s se não voltar",
+  "net.roomClosed": "Quem hospedava saiu, a sala foi fechada",
   "net.editNoHost": "Sem anfitrião nesta sala — alteração não sincronizada",
   "net.editRejected": "Alteração não sincronizada (recusada pelo servidor)",
   "mp.hostFromWorld": "Para hospedar, toque em “Hospedar” no cartão de um mundo (é ali que o mundo é escolhido)",

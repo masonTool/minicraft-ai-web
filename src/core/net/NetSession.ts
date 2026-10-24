@@ -31,6 +31,13 @@ export interface CloseReason {
   intentional?: boolean;
   /** 致命协议错误（版本/身份/重复连接）：重连多少次结果都一样 */
   fatal?: boolean;
+  /**
+   * 房间已经没了（L8 · MS4：房主退出、服务端关房）。
+   *
+   * 与 `fatal` 分开表达：它不是"协议谈了"，重连也不会变好——但重连**会**在建起
+   * 连接后立刻被同一个理由踢回来，所以要停。分开记是为了让日志/提示能说人话。
+   */
+  roomClosed?: boolean;
 }
 
 export class NetSession {
@@ -67,7 +74,7 @@ export class NetSession {
    * **`connected` 掉线也走这里**——那时既不是主动断开也不是致命错误，当然要重连。
    */
   closed(reason: CloseReason = {}): CloseAction {
-    if (reason.intentional || reason.fatal) {
+    if (reason.intentional || reason.fatal || reason.roomClosed) {
       this.current = 'offline';
       return 'stop';
     }

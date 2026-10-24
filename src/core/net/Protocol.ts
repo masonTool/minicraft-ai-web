@@ -30,11 +30,19 @@ export type ProtocolErrorCode =
   | 'clientId'
   | 'duplicate'
   | 'host-taken'
+  | 'host-left'
   | 'bad-json'
   | 'unknown'
   | 'joined';
 
 /** 这些错误码出现后不再自动重连（与服务端文档里的口径一致） */
 export function isFatalProtocolError(code: string): boolean {
-  return code === 'version' || code === 'clientId' || code === 'duplicate' || code === 'host-taken';
+  return (
+    code === 'version' ||
+    code === 'clientId' ||
+    code === 'duplicate' ||
+    code === 'host-taken' ||
+    // `host-left`（L8 · MS4）：房主退出、房间已关闭。重连只会立刻被同一个理由踢回来
+    code === 'host-left'
+  );
 }

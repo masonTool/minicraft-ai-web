@@ -73,6 +73,8 @@ export const menu = {
   'mp.passwordHint': 'optional',
   'mp.refreshRooms': 'Find rooms',
   'mp.recent': 'Recent',
+  'net.hostLeft': 'The host dropped out — the room closes in {s}s unless they return',
+  'net.roomClosed': 'The host left, so the room was closed',
   'net.editNoHost': 'No host in this room — your change was not synced',
   'net.editRejected': 'Change not synced (server rejected it)',
   'mp.hostFromWorld': 'To host, tap “Host” on a world card (that is where the world is chosen)',

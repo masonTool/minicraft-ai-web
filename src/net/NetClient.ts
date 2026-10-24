@@ -199,6 +199,14 @@ export interface NetHandlers {
   onEntityRemove?: (keys: string[]) => void;
 
   /**
+   * 房主掉线了（L8 · MS4）：服务端只发一次提示，房间还没关。
+   *
+   * `graceMs` 是房主还能重连回来的时限——客户端据此告诉玩家"等他多久"，
+   * 别让人对着一个不推进的世界猜"是不是卡了"。
+   */
+  onRoomClosing?: (graceMs: number) => void;
+
+  /**
    * 收到房主的实体快照（L8 · MS3）：从属端据此画/更新影子实体。
    * `raw` 是线上形态（未解码），由 `decodeEntities` / `SimApply` 逐条洗。
    */
@@ -311,6 +319,8 @@ export class NetClient {
    * 房主变成从属（世界当场没人模拟）。
    */
   private wantsHost = false;
+  /** 这一局是不是已经结束了（房主退出 / 服务端关房）：关 socket 时用它决定别再重连 */
+  private roomClosed = false;
   /**
    * 房主身份（L8）：服务端在 `welcome` 里下发，客户端不自己猜。
    *
@@ -369,6 +379,8 @@ export class NetClient {
     this.name = name;
     // 开房意图（L8）：随 `join` 上行；自动重连也用同一份，否则重连一次就从房主降级
     this.wantsHost = host;
+    // 明确发起新连接 = 玩家想再试一次：上一局的"房间已关闭"不跟过来
+    this.roomClosed = false;
     // 房间的世界（L9）：只有开房的人才定地形；加入的人带了也没用（服务端只认房主的）
     this.wantsWorld = host && world ? world : null;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
@@ -474,7 +486,11 @@ export class NetClient {
       // 统计归零（联机29）：重连之后是一条新连接，延迟/速率都该重新算
       this.stats.reset();
       // 状态迁移与"要不要重连"只有一个出口（联机7）：主动断开 / 致命错误 → stop
-      const action = this.session.closed({ intentional: this.disposed, fatal: this.fatal });
+      const action = this.session.closed({
+        intentional: this.disposed,
+        fatal: this.fatal,
+        roomClosed: this.roomClosed,
+      });
       this.handlers.onStatus(false, this.status);
       // 非主动断开就等一会儿重连：家里的 wifi 抖一下不该直接退出联机
       if (action === 'reconnect') {
@@ -759,6 +775,15 @@ export class NetClient {
         this.handlers.onChat(Number(message.id ?? 0), String(message.name ?? '?'), text);
         break;
       }
+      /*
+       * 房间没了（L8 · MS4）：房主掉线（房间还没关，`graceMs` 内可能回来）或房间已关闭。
+       * 真关房时服务端紧接着发 `error{code:'host-left'}` 并断开，这里只负责"先说一句"。
+       */
+      case 'room-closed': {
+        const graceMs = Number(message.graceMs);
+        this.handlers.onRoomClosing?.(Number.isFinite(graceMs) ? graceMs : 0);
+        break;
+      }
       case 'error': {
         const code = String(message.code ?? 'unknown');
         const text = String(message.message ?? '联机出错');
@@ -768,6 +793,8 @@ export class NetClient {
          * 客户端再 close 一次会提前把还没送达的 error 帧吞掉（测试里表现为"没收到 error"）。
          */
         if (isFatalProtocolError(code)) this.fatal = true;
+        // 房主退出 = 房间没了（L8 · MS4）：单独记一笔，`closed()` 据此停手不再重连
+        if (code === 'host-left') this.roomClosed = true;
         this.handlers.onError?.(code, text);
         break;
       }

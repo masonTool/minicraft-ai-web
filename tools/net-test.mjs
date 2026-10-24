@@ -1562,6 +1562,27 @@ try {
     cookFollower.close();
   }
 
+  // ---------------------------------------------------------------- 房主退出（L8 · MS4）
+  console.log('\n[房主掉线：先提示、宽限到期关房]');
+  {
+    // 宽限期在测试里是 400ms（见 spawn 的 GRACE_MS）：正好够验"先提示、后关房"
+    const leaveHost = new TestClient('LeaveHost', undefined, { room: 'leaveroom', host: true });
+    const leaveFollower = new TestClient('LeaveFollower', undefined, { room: 'leaveroom' });
+    await joinAndWaitWelcome(leaveHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(leaveFollower, '从属', 4, 70, 4);
+
+    leaveFollower.mailbox.length = 0;
+    leaveHost.close();
+    const closing = await leaveFollower.wait('room-closed', 2000);
+    check('房主一掉线就通知同房其他人', closing?.reason === 'host-left', JSON.stringify(closing));
+    check('通知里带重连宽限（客户端据此告诉玩家等多久）', typeof closing?.graceMs === 'number' && closing.graceMs > 0, `${closing?.graceMs}`);
+
+    // 到期没回来：房间关闭 + 明确理由（客户端据此不再重连）
+    const bye = await leaveFollower.wait('error', 3000);
+    check('宽限到期房间关闭并给出 host-left', bye?.code === 'host-left', JSON.stringify(bye));
+    leaveFollower.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {

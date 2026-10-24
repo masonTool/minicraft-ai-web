@@ -1956,6 +1956,18 @@ class App {
         }
       }
     },
+    /*
+     * 房主掉线（L8 · MS4）：先说一句，别让玩家对着一个不推进的世界猜"是不是卡了"。
+     * 房间这时还没关——服务端给了 `graceMs` 的重连窗口。
+     */
+    onRoomClosing: (graceMs) => {
+      const seconds = Math.max(1, Math.round(graceMs / 1000));
+      const text = tp('net.hostLeft', { s: seconds });
+      this.chat.push(text, 'error');
+      this.chatLine = text;
+      this.chatUntil = performance.now() + 8000;
+      this.multiplayerScreen.setState(this.net.sessionState, text);
+    },
     // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
     onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
     onEditRejected: (reason) => {
