@@ -2128,7 +2128,9 @@ console.log('\n[聊天栏文案（批次 20261025-0105）]');
       }
       if (!entry.name.endsWith('.ts')) continue;
       const source = readFileSync(url, 'utf8');
-      for (const match of codeOf(source).matchAll(LITERAL_INTO_CHAT)) {
+      // `match`（带 /g）而不是 `matchAll`：只关心"有没有"，不需要逐个命中项，
+      // 也就不必声明一个用不到的循环变量（TS6133）。`match` 不吃 lastIndex 状态。
+      if (codeOf(source).match(LITERAL_INTO_CHAT)) {
         const rel = decodeURIComponent(url.href).split('/src/').pop() ?? url.pathname;
         if (!offenders.includes(rel!)) offenders.push(rel!);
       }
