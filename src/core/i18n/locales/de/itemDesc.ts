@@ -42,7 +42,7 @@ export const itemDesc = {
   "item.desc.chest": "Rechtsklick öffnet 27 Felder Lagerplatz; mehrere Truhen lassen sich nebeneinander stellen.",
   "item.desc.trapped_chest": "Fasst wie eine Truhe **27 Felder**, gibt aber **beim Öffnen ein Redstonesignal der Stärke 15** aus (beim Schließen endet es). Das Schloss ist kupferfarben – nicht mit einer normalen Truhe verwechseln. An Redstone-Lampen oder Kolben angeschlossen ergibt das genau die „Truhe öffnen, Falle auslösen“-Mechanik des Originals.",
   "item.desc.ladder": "An einer Wand hoch- und runterklettern (Springen nach oben, Schleichen nach unten).",
-  "item.desc.chain": "Eine dünne Kette: Die Achse richtet sich nach der angeklickten Fläche, sie hängt also senkrecht oder verläuft waagerecht. **In Bedrock kann man Ketten hochklettern**; zum Abbauen braucht man eine Spitzhacke. Rezept: 1 Eisenbarren + 2 Eisenklumpen → 1 Kette.",
+  "item.desc.chain": "Eine dünne Kette: Die Achse richtet sich nach der angeklickten Fläche, sie hängt also senkrecht oder verläuft waagerecht. **Ketten kann man hochklettern**; zum Abbauen braucht man eine Spitzhacke. Rezept: 1 Eisenbarren + 2 Eisenklumpen → 1 Kette.",
   "item.desc.vine": "Ranken hängen an Wänden oder unter Decken: kletterbar, ohne Kollision (man kommt durch), wachsen nach unten und zur Seite. Mit der Hand abgeschlagen droppt nichts – **mit der Schere (oder Behutsamkeit)** lässt sich eine ganze Ranke ernten. In Dschungelbäumen hängen sie von Natur aus.",
   "item.desc.iron_nugget": "1 Eisenbarren ergibt 9 Klumpen (9 ergeben wieder einen Barren); Rohstoff für Ketten.",
   "item.desc.oak_door": "Zwei Blöcke hohe Tür, Rechtsklick öffnet und schließt; über dem Block muss Platz sein.",

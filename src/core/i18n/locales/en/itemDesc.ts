@@ -42,7 +42,7 @@ export const itemDesc = {
   "item.desc.chest": "Right-click to open 27 slots of storage. Chests can stand side by side.",
   "item.desc.trapped_chest": "Holds 27 slots like a chest, but emits a redstone signal of 15 while open (it stops when closed). The latch is copper-coloured so you do not mix it up. Wire it to lamps or pistons for the vanilla \"open the chest, trigger the trap\" build.",
   "item.desc.ladder": "Climb up and down a wall (jump to go up, sneak to go down).",
-  "item.desc.chain": "A thin chain; its axis follows the face you click, so it can hang or run sideways. In Bedrock you can climb chains. Mining it needs a pickaxe. Recipe: 1 iron ingot + 2 iron nuggets -> 1 chain.",
+  "item.desc.chain": "A thin chain; its axis follows the face you click, so it can hang or run sideways. You can climb chains. Mining it needs a pickaxe. Recipe: 1 iron ingot + 2 iron nuggets -> 1 chain.",
   "item.desc.vine": "Vines hang on walls or under ceilings: climbable, no collision (you can pass through), and they grow down and across. Punching them drops nothing — use shears (or Silk Touch) to take a whole one. Jungle trees have them naturally.",
   "item.desc.iron_nugget": "One iron ingot splits into 9 nuggets (and 9 make an ingot). The ingredient for chains.",
   "item.desc.oak_door": "A two-block-high door; right-click to open or close. Leave room above the block you place it on.",

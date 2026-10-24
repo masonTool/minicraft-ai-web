@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Minecraft 基岩版 1.18 复刻（Web / WebGL2）",
+  "description": "方块沙盒（Web / WebGL2）：无限地形、生存、合成与联机",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build",

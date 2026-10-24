@@ -41,7 +41,7 @@ export const itemDesc = {
   "item.desc.chest": "Clique direito abre 27 espaços; vários baús podem ficar lado a lado.",
   "item.desc.trapped_chest": "Guarda **27 espaços** como um baú, mas **ao abrir emite sinal de redstone 15** para os vizinhos (corta ao fechar). O fecho é acobreado — não confunda com o baú comum. Ligado em lâmpadas ou pistões, é a armadilha «abriu, disparou».",
   "item.desc.ladder": "Sobe e desce por uma parede (pulo para subir, agachar para descer).",
-  "item.desc.chain": "Uma corrente fina: o eixo depende da face clicada, então pode ficar em pé ou deitada. **No Bedrock dá para escalar correntes**; para tirar é preciso picareta. Receita: 1 barra de ferro + 2 pepitas de ferro → 1 corrente.",
+  "item.desc.chain": "Uma corrente fina: o eixo depende da face clicada, então pode ficar em pé ou deitada. **Dá para escalar correntes**; para tirar é preciso picareta. Receita: 1 barra de ferro + 2 pepitas de ferro → 1 corrente.",
   "item.desc.vine": "Vinhas que pendem de paredes ou tetos: dá para escalar, não têm colisão (passa-se por dentro), crescem para baixo e para os lados. Na mão não dropa nada — só com **tesoura (ou Toque de seda)** se tira a vinha inteira. Nas árvores da selva elas já vêm.",
   "item.desc.iron_nugget": "1 barra de ferro vira 9 pepitas (9 refazem uma barra); matéria-prima das correntes.",
   "item.desc.oak_door": "Porta de dois blocos de altura, clique direito abre e fecha; precisa de espaço acima do bloco.",

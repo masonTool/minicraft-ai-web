@@ -42,7 +42,7 @@ export const itemDesc = {
   "item.desc.chest": "Clic droit pour ouvrir 27 cases ; plusieurs coffres peuvent être posés côte à côte.",
   "item.desc.trapped_chest": "Contient **27 cases** comme un coffre, mais **envoie un signal de redstone de niveau 15 quand on l’ouvre** (coupé à la fermeture). Le loquet est cuivré — ne le confondez pas avec un coffre normal. Branché sur des lampes ou des pistons, c’est le fameux piège « ouverture = déclenchement ».",
   "item.desc.ladder": "Se grimpe le long d’un mur (saut pour monter, accroupi pour descendre).",
-  "item.desc.chain": "Une chaîne fine : son axe dépend de la face cliquée, elle peut donc pendre ou courir à l’horizontale. **Dans Bedrock, on grimpe aux chaînes** ; pour la récupérer il faut une pioche. Recette : 1 lingot de fer + 2 pépites de fer → 1 chaîne.",
+  "item.desc.chain": "Une chaîne fine : son axe dépend de la face cliquée, elle peut donc pendre ou courir à l’horizontale. **On peut grimper aux chaînes** ; pour la récupérer il faut une pioche. Recette : 1 lingot de fer + 2 pépites de fer → 1 chaîne.",
   "item.desc.vine": "Des lianes qui pendent aux murs ou sous les plafonds : grimpables, sans collision (on passe au travers), elles poussent vers le bas et sur les côtés. À la main, elles ne donnent rien — il faut des **cisailles (ou Toucher de soie)** pour en prendre une entière. Les arbres de la jungle en portent d’origine.",
   "item.desc.iron_nugget": "1 lingot de fer se divise en 9 pépites (9 en refont un lingot) ; matière première des chaînes.",
   "item.desc.oak_door": "Porte de deux blocs de haut, clic droit pour ouvrir et fermer ; il faut de la place au-dessus du bloc.",
