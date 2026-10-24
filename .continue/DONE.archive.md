@@ -16561,3 +16561,44 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 排除记录（找过但不算问题）：① `showUnowned`（分类栏"列出未拥有/红底"）在修1之后没有入口了——它现在恒为 false，但拆它要动 `renderCategoryGrid`/`craftableIds`/按钮 active 三处，收益小于风险，留待下次专门做；② 首页 4 颗按钮在 320 高以下仍然靠滚动兜底而不是再缩——再缩就点到手指够不稳的 40px 以下；③ 空槽提示只在左键触发（长按是"选数量/右键"语义），触摸端轻点就是左键，不需要为长按再补一条。
   - 批次：20261024-1455
 
+## 批次 20261024-1636 · 2026-10-24 · 会话 723564b3
+
+> **更正（批次 20261024-1652）**：本批把 `active` 改成"左栏在可合成视图里"仍然是错的——那样在分类页里
+> 亮着关不掉、在仓库里永远灰着。正确口径见 1652：亮灭 = 状态本身（`showUnowned`），特殊逻辑只有
+> "仓库里 + 关着 → 打开并跳到搜索分类"。
+
+
+- [x] [修14] 澄清后改回："可合成物品"键只是左栏视图的开关——不打开配方书，且**按钮不会自己灭**：`src/ui/InventoryScreen.ts`（click 分支回退 + `active` 判据改成 `leftPane === 'category'`，工作站那条同口径）→ `npm run test:ui`（断言：click 里没有 `onOpenRecipes`/`onCloseRecipes`；`active` 只看视图、两处都不再带 `showUnowned`）
+  - 做了什么：① 撤掉上一批给那颗键加的 `onOpenRecipes('all')` / `isRecipesOpen` 分支，回到"仓库→`openPocketCategory(lastRecipeTab)`、已在分类页→切 `showUnowned`"。② `active` 从 `leftPane === 'category' && this.showUnowned` 改成 `leftPane === 'category'`；工作站分支 `showCategory && this.showUnowned` 同样改成 `showCategory`（`showCategory` 本身就是"左栏在分类页"）。③ title 回到 209 那套（描述再点一下切哪种筛选）。
+  - 为什么：用户澄清"没有所谓的配方书页面，配方相关的东西全走可合成物品这颗键"——上一批把"会自动关闭"读成了"配方书被关"，实现方向错了。"按钮自己灭"的真实原因是 `active` 绑在**红底筛选**上：从仓库点进来的第一次 `showUnowned` 还是 false，于是视图开了、按钮是灭的，看起来像自动关掉、得再点一下（那一下才把 `showUnowned` 打开）。
+  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（把上一批那 3 条"那颗键开书"的断言换回"只切视图、不碰配方书"，`active` 那条改成只看视图且覆盖工作站分支）。
+  - 批次：20261024-1636
+- [x] [修15] 台账改口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 里"那颗键打开配方书"的说法全部改成"可合成物品视图开关 + 亮着跟着视图" → `npm run check`
+  - 做了什么：1609 那批的 DONE 条目补一行"更正"，本批次另开一节；OVERVIEW「物品栏与合成」、TASKS 队列落地、批次索引都改成正确口径（滚动条那部分不动）。
+  - 为什么：文档里留一句错的因果，下一轮还会把同一个误解再实现一遍。
+  - 验证：`npm run check` 全绿（编号 / 覆盖度 / 差异 / 文档体量四条台账 + 全部离线套件）。
+  - 批次：20261024-1636
+
+## 批次 20261024-1609 · 2026-10-24 · 会话 723564b3
+
+> **更正（批次 20261024-1636）**：本批 `[修11]` 的"那颗键打开配方书"是**误解**——用户澄清没有"配方书页面"，
+> 那颗键是可合成物品视图的开关；已在 1636 改回。`applyInventoryChrome` 里不关配方书那条仍然保留
+> （它修的是"R 键在容器/工作站界面里开的书被重排关掉"，与本条无关）。滚动条那两条（修12/修13）不受影响。
+
+
+- [x] [修11] 标题栏"配方书"键真的能打开配方书，且**不再自动关闭**：`src/ui/InventoryScreen.ts`（按钮 click 分支 + 把 `applyInventoryChrome` 里两处 `onCloseRecipes()` 挪到 `openWith` 的换面板处）→ `npm run test:ui`（断言：仓库里点它＝左栏切"全部/搜索"并调 `onOpenRecipes('all')`；重排函数里不再有 `onCloseRecipes`；换成别的面板时才关书）
+  - 做了什么：① 那颗键改三分支——书开着→关；左栏已在分类页→切"列出未拥有（红底）"（保留 1531 口径）；左栏在仓库→`openPocketCategory('all')` + `onOpenRecipes('all')`（容器/工作站两类不弹书，没有可摆的合成格）。② `applyInventoryChrome()` 里容器分支与工作站分支那两行 `onCloseRecipes()` 删除，"换面板就收书"并进 `openWith()` 的 `mode/容器变了` 块与 `openTrade()`；`openWith` 末尾那条只在 inventory/crafting 生效的窄条件一并去掉。③ 那颗键"亮着"的判据加上 `bookOpen`，title 改成"点下去会发生什么"。
+  - 为什么：根因是 `openRecipeBook()` 先 `show()` 再 `syncRecipePane()`，而 sync 走的就是 `applyInventoryChrome`，容器/工作站两条分支无条件 `onCloseRecipes()` → 书刚打开就被自己关掉（用户报的"配方书会自动关闭"）。关书是玩家意图（✕/R/换界面），不该是布局副作用。另外 1531 的 B 口径让手机彻底没有配方书入口（当时记成已知缺口），本轮反馈说明要的是书本身。
+  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（本批新增 8 条、改 3 条旧断言：开书 2 条、重排不关书 / 收书位置 2 条、滚动条槽位与黑色滑块 4 条；旧断言里"只切分类、不碰 `onOpenRecipes`"两条与"`active` 只看 `showUnowned`"一条按新口径重写）。
+  - 批次：20261024-1609
+- [x] [修12] 左栏滚动条与物品留出间距、滑块改成黑色：`index.html`（分类/创造网格 `padding-right` 预留槽位、列宽可缩、滑块 `#1c1c1c`）+ `src/ui/InventoryScreen.ts`（`scrollbarContentLeft` 的 clamp 不再把轨道推到物品上）→ `npm run test:ui`
+  - 做了什么：分类网格 `repeat(7, 40px)` → `repeat(7, minmax(0, 40px))`、`padding-right: 5px` → `15px`（= 8px 间距 + 7px 轨道），`.inv-category .inv-slot` 改 `width:100% / aspect-ratio:1 / max 40px`；双栏创造栏同样处理（`padding-right: 14px` = 8 + 6）；滑块 `#c2c2c2 → #1c1c1c`（按下 `#3a3a3a`）；`scrollbarContentLeft()` 的夹紧上限从 `容器宽 - 轨道 - 1` 收到 `容器宽 - 轨道`。PC 那套 48px 规则同步（`minmax(0,48px)` + `padding-right: 15px`）。
+  - 为什么：5px 的预留装不下"8px 间距 + 7px 轨道"，JS 的 `Math.min(…)` 就把轨道按回容器右缘、直接压在最后一列上——用户说的"应该与物品有一定间距"；浅灰滑块和浅灰面板同色，所以要求黑色。窄屏左栏只有 ~257px 而 7×40 要 286px，列宽不给收缩余地时最后一列本来就会被裁掉，滚动条更没地方站。
+  - 验证：`npx tsx tools/ui-test.ts` 971 通过（新增 4 条：分类预留 15px = 8+7、双栏创造预留 14px = 8+6、夹紧上限不再 `- 1`、滑块为 `#1c1c1c` 且不再出现 `#c2c2c2`）。
+  - 批次：20261024-1609
+- [x] [修13] 断言与台账：`tools/ui-test.ts` 改掉旧断言 → `npm run check`
+  - 做了什么：删/改 3 条旧断言（"那颗键只切物品分类（不碰 onOpenRecipes）"、"标题栏那颗键只切物品分类"、"`toggle('active', leftPane === 'category' && this.showUnowned)`"），补 8 条新断言；决策写进 `doing/723564-decision.md`（D1 恢复开书、D2 重排不关书、D3 间距靠 CSS 预留槽位）。
+  - 为什么：这几条断言钉的正是本轮推翻的口径，留着会红（也会把回归锁死成旧行为）。
+  - 验证：`npm run check` 全绿（typecheck + 全部离线套件 + 三张台账 + 文档体量），`ui-test` 971 通过 / 0 失败。
+  - 批次：20261024-1609
+
