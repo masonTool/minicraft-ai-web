@@ -833,15 +833,25 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
 
   hand.setItem(Item.STICK);
   const stickMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
-  const stickBox = stickMesh.geometry as THREE.BoxGeometry;
+  const stickPlane = stickMesh.geometry as THREE.PlaneGeometry;
+  // 批次 20261024-1455（用户："手持刀剑之类的显示有问题"）：非方块物品回到**单张面片**。
+  // 上一批的"有厚度盒子"把图标贴到六个面上，剑/镐这类斜向图形会被侧面拉成彩带。
   check(
-    '非方块物品不再是零厚度平面（改成薄板）',
-    stickMesh.geometry.getAttribute('position').count === 24 &&
-      stickBox.parameters.depth > 0.05 &&
-      stickBox.parameters.depth < 0.12,
-    `顶点 ${stickMesh.geometry.getAttribute('position').count} / 厚度 ${stickBox.parameters.depth}`,
+    '非方块物品用单张面片（4 个顶点，与方块区分开）',
+    stickMesh.geometry.getAttribute('position').count === 4,
+    `顶点 ${stickMesh.geometry.getAttribute('position').count}`,
   );
-  check('薄板六个面都贴了同一张图标', stickMesh.geometry.getAttribute('uv').count === 24);
+  check(
+    '面片与方块同一个显示尺寸（0.44，放大 2 倍后两类别都不一样大才对）',
+    Math.abs(stickPlane.parameters.width - 0.44) < 1e-6 && Math.abs(stickPlane.parameters.height - 0.44) < 1e-6,
+    `${stickPlane.parameters.width}×${stickPlane.parameters.height}`,
+  );
+  check('面片只贴一张图标（4 个 UV 角）', stickMesh.geometry.getAttribute('uv').count === 4);
+  check(
+    '面片材质是双面（背面也看得见，不会甩视角时忽隐忽现）',
+    (stickMesh.material as THREE.ShaderMaterial).side === THREE.DoubleSide &&
+      (blockMesh.material as THREE.ShaderMaterial).side === THREE.FrontSide,
+  );
 
   // 批次 20261024-1152（用户）：手里有东西时**不画手臂**（原版如此），空手才露出来
   const armMesh = group.children[0] as THREE.Mesh;

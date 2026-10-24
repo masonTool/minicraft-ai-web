@@ -24,13 +24,6 @@ import { srgbColor } from './srgb.ts';
  * 观感与基岩版一致：只看见一件东西，而不是"一只手捏着一粒米"。
  */
 const ITEM_SIZE = 0.44;
-/**
- * 非方块物品（工具 / 食物 / 方块物品之外的那些）的厚度（格）。
- *
- * 以前它们是一张**零厚度**的 `PlaneGeometry`：正对镜头还行，稍微侧一点就成了一条线。
- * 现在给一块薄板（0.08 格 ≈ 1.3 像素厚）——与原版"平铺但有厚度"的样子一致。
- */
-const ITEM_THICKNESS = 0.08;
 /** 手臂横截面与长度（格）：16px 皮肤里手臂是 4×4×12 像素 */
 const ARM_WIDTH = 0.15;
 const ARM_LENGTH = 0.75;
@@ -115,6 +108,14 @@ export class HandRenderer {
   private readonly itemAnchor = new THREE.Group();
 
   private readonly itemMaterial: THREE.ShaderMaterial;
+  /**
+   * 非方块物品（工具 / 武器 / 食物…）专用材质（批次 20261024-1455）。
+   *
+   * 与 `itemMaterial` 同一套着色器，**唯一的差别是 `side: DoubleSide`**：
+   * 这类物品是一片双面薄片（见 `spriteGeometry`），从背面看也要有图，
+   * 否则甩视角时会看到"半件东西忽隐忽现"。
+   */
+  private readonly spriteMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
   private readonly cuffMaterial: THREE.ShaderMaterial;
   private readonly sleeveMaterial: THREE.ShaderMaterial;
@@ -147,6 +148,21 @@ export class HandRenderer {
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       transparent: false,
+    });
+
+    // 双面版：给"扁平物品"用（同一套 uniform，只是 side 不同）
+    this.spriteMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uAtlas: { value: atlas.texture },
+        uFlatColor: { value: srgbColor(0xffffff) },
+        uUseAtlas: { value: 1 },
+        uBrightness: { value: 1 },
+        uAlphaTest: { value: 0.5 },
+      },
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
+      transparent: false,
+      side: THREE.DoubleSide,
     });
 
     this.armMaterial = new THREE.ShaderMaterial({
@@ -261,8 +277,12 @@ export class HandRenderer {
     if (itemId === undefined) return;
 
     const blockId = blockForItem(itemId);
-    const geometry = blockId === undefined ? this.spriteGeometry(itemId) : this.blockGeometry(blockId);
-    const mesh = new THREE.Mesh(geometry, this.itemMaterial);
+    // 方块 = 立方体（六面各取自己的贴图）；其余物品 = **双面薄片**（同一张图标）。
+    // ⚠️ 别给非方块物品也做"有厚度的盒子"（批次 20261024-1152 试过）：图标在六个面上
+    // 各贴一次，剑/镐这种斜向图形会被侧面拉成几条彩带 —— 用户自测报的就是这个。
+    const isBlock = blockId !== undefined;
+    const geometry = isBlock ? this.blockGeometry(blockId) : this.spriteGeometry(itemId);
+    const mesh = new THREE.Mesh(geometry, isBlock ? this.itemMaterial : this.spriteMaterial);
     // 手持物品相对手部再转一点，让方块露出"顶面 + 两个侧面"，与原版观感一致
     mesh.rotation.set(0.2, -0.5, 0.15);
     this.itemMesh = mesh;
@@ -377,19 +397,21 @@ export class HandRenderer {
   }
 
   /**
-   * 非方块物品：一块**有厚度**的薄板（手持时朝向由挂点决定，不做 billboard）。
+   * 非方块物品：一张**双面薄片**（原版第一人称就是这样——物品是 1 像素厚的面片）。
    *
-   * 批次 20261024-1152：由 `PlaneGeometry`（零厚度）改成 `BoxGeometry(ITEM_SIZE, ITEM_SIZE, ITEM_THICKNESS)`，
-   * 六个面都贴同一张物品图标，并沿用方块那套逐面明暗——这样侧着看是一件"薄片"，
-   * 而不是一条没有厚度的线。图标本身四周是透明的，`alphaTest` 会把边缘裁掉。
+   * 批次 20261024-1455（用户："手持刀剑之类的显示有问题"）：上一批把这张面片换成了
+   * 有厚度的盒子，六个面各贴同一张图标 —— 剑、镐、钓鱼竿这类斜向/细长的图标在侧面
+   * 被拉伸，看着是几条彩带。现在回到单张面片 + `DoubleSide`：正面背面都有图，
+   * 侧着看是一条细线（原版同样如此，且第一人称几乎不会正侧着看）。
+   * 图标四周是透明的，`alphaTest` 会把边缘裁掉。
    */
   private spriteGeometry(itemId: number): THREE.BufferGeometry {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const geometry = new THREE.BoxGeometry(ITEM_SIZE, ITEM_SIZE, ITEM_THICKNESS);
+    const geometry = new THREE.PlaneGeometry(ITEM_SIZE, ITEM_SIZE);
     const tile = itemIconTile(itemId);
-    applyFaceUvs(geometry, this.atlas, [tile, tile, tile, tile, tile, tile]);
+    applyFaceUvs(geometry, this.atlas, [tile]);
     applyFaceShade(geometry, FACE_SHADE);
     this.spriteGeometries.set(itemId, geometry);
     return geometry;
@@ -404,6 +426,7 @@ export class HandRenderer {
     this.cuff.geometry.dispose();
     this.armorSleeve.geometry.dispose();
     this.itemMaterial.dispose();
+    this.spriteMaterial.dispose();
     this.armMaterial.dispose();
     this.cuffMaterial.dispose();
     this.sleeveMaterial.dispose();
