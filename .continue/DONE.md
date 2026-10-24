@@ -9,6 +9,52 @@
 
 ---
 
+## 批次 20261024-1455 · 2026-10-24 · 会话 3da8ce2b
+
+- [x] [修1] 配方书回退成"整屏面板 + 手动开关"（修掉自测发现的"配方里出现莫名数字""点物品没反应"两个回归）：`ui/InventoryScreen.ts` 删掉 `recipes` 左栏页与 `.inv-recipe-host`、`index.html` 删掉对应落脚点样式、`main.openRecipeBook` 保持整屏 → `npm run test:ui`（断言：左栏只剩 items/creative/category 三份；标题栏那颗键在仓库里打开时传 `all`；开着时再点只关闭；不再有嵌入态）
+  - 做了什么：把上一批的"配方书嵌进左栏"整段撤掉——`PocketLeftPane` 回到三种、删 `recipeHostEl`、`canEmbedRecipeBook()`、`applyInventoryChrome` 里的 `recipes` 分支与 `onRecipeHost(host)` 调用、`index.html` 里 `.inv-recipe-host` 那一格样式；标题栏那颗键改成纯开关：开着 → `onCloseRecipes()`；关着 → `onOpenRecipes(tab)`，其中 `tab` 在仓库（`pane === 'items'`）时**固定为 `all`**（= 搜索/全部那一栏），其余沿用 `lastRecipeTab`。
+  - 为什么：左栏那一格只有半屏宽的 7 列，整屏尺寸的配方面板压进去之后列表里的数字与点击都对不上（用户自测报的正是这两条）。回退成整屏面板后渲染与点击都回到已知正常的路径，同时仍然满足"只有用户手动开关、从仓库打开跳到搜索栏、打开后不自动关"。
+  - 顺带：`showUnowned`（分类栏"列出未拥有/红底"）不再挂在这颗键上——它现在是纯配方书开关；未拥有筛选留给配方书自己那颗 `notice.recipe.filterOn/Off`。
+  - 验证：`npx tsx tools/ui-test.ts` **952 通过 / 0 失败**（改 6 条旧断言 + 重写自审那一段成 6 条：手动开关两个分支、仓库→`all`、`openRecipeBook` 先 show 后 sync、`fillFromBook` 不关书、✕ 仍手动关闭、左栏不再有落脚点）；`npm run typecheck` 通过。
+  - 批次：20261024-1455
+- [x] [修2] 创造模式背包的自绘滚动条位置/高度错乱：`ui/InventoryScreen.ts` 的 `syncCreativeScrollbar` 改用 rect 相对定位 + `index.html` 给创造栏容器 `position: relative` → `npm run test:ui`（断言：两栏共用同一套 rect 定位，不再用 `offsetTop`）
+  - 做了什么：把 `syncCategoryScrollbar` / `syncCreativeScrollbar` 两份几乎相同的实现合成一个 `syncPaneScrollbar(grid, host, track, thumb, pane)`；纵向位置改成 `grid.getBoundingClientRect().top - host.getBoundingClientRect().top`（不再用 `offsetTop`，那个值取决于 offsetParent 落在哪一层），高度取 grid 的实际 rect 高度；滑块最小高度与 CSS 的 `min-height: 24px` 对齐（原来 JS 写 18，比样式还矮）。
+  - 为什么：创造栏的滚动条装在 `.inv-creative-section`（搜索框 + 网格）里，而它的 `offsetTop` 基准与分类栏不同——同一套数字在一栏里对、在另一栏里就偏，表现就是"创造模式滚动条显示异常"。合成一份实现之后，"参照生存模式的样式"这件事由代码结构保证，而不是靠两处数字手动对齐。
+  - 验证：`npx tsx tools/ui-test.ts` **956 通过 / 0 失败**（新增 4 条：两栏共用同一个函数、位置走 rect 不再有 `offsetTop`、滑块下限 JS=CSS=24、宽度/颜色只有一处定义）；`npm run typecheck` 通过。
+  - 批次：20261024-1455
+- [x] [修3] 空装备槽点击要有提示：`ui/InventoryScreen.ts#handleSlotClick` 开头加一条（空格 + 空手 + 左键）→ 按部位提示；新增文案键 `inventory.armorEmptyHint` 六语言 → `npm run test:ui` + `npm run test:i18n`（断言：五个部位各有一条提示、键在六张表里）
+  - 做了什么：`handleSlotClick` 最前面加一条"空格 + 空手 + 左键"分支，命中装备槽就 `showMessage(tp('inventory.armorEmptyHint', { part }))`；部位名由 `armorSlotPartName()` 给——四个护甲位取 `item.armorType.*`（头盔/胸甲/护腿/靴子，比槽位上那一个字的"头/胸/腿/靴"更适合放进句子），第五格取 `inventory.armor.offhand`。新增文案键 `inventory.armorEmptyHint`，六个语种各一条（表 2864 → 2865）。
+  - 为什么：空槽现在只有一枚剪影图标，空手点它原来**什么都不发生**，玩家既不知道这格放什么、也不知道是不是没点中。另外判据必须限定"玩家自己的背包"——箱子/熔炉的槽号从 0 开始，会正好撞进护甲区间 36~40，不挡就会在箱子里弹出"空头盔槽"。
+  - 验证：`npx tsx tools/ui-test.ts` **958 通过 / 0 失败**（新增 2 条：提示分支存在 + 只认自己的背包 + 五个部位键齐全；文案含 `{part}` 占位符）；`npx tsx tools/i18n-test.ts` 547 通过、`npm run audit:i18n` 六语言 2865/2865 通过；`npm run typecheck` 通过。
+  - 批次：20261024-1455
+- [x] [修4] 手持刀剑类物品显示不正常：`render/HandRenderer.ts` 非方块物品改回**扁平双面贴图**（方块仍是立方体），尺寸随 2× 一起放大 → `npm run test:render`（断言：sprite 用 PlaneGeometry + DoubleSide，block 仍用 BoxGeometry；两者尺寸同为 `ITEM_SIZE`）
+  - 做了什么：非方块物品的几何体从 `BoxGeometry(0.44, 0.44, 0.08)` 回到 `PlaneGeometry(0.44, 0.44)`，并新增一份 `spriteMaterial`（同一套着色器 + `side: DoubleSide`）给它用；方块仍然走 `BoxGeometry` + 单面材质。删掉 `ITEM_THICKNESS` 常量与它的注释。
+  - 为什么：上一批为了"厚度"把图标贴到了盒子的六个面上，剑、镐、钓鱼竿这类斜向/细长图标在侧面被拉伸，看着就是几条彩带（用户自测报的"刀剑显示有问题"）。原版第一人称的物品本来就是 1 像素厚的面片，厚度对这类图标只会帮倒忙——厚度留给方块（方块本来就是立方体）。双面材质保证甩视角时不会忽隐忽现。
+  - 验证：`npx tsx tools/render-test.ts` **252 通过 / 0 失败**（把 2 条旧断言改成 4 条新的：4 顶点面片、尺寸同为 0.44、只贴一张图（4 个 UV 角）、面片 DoubleSide 而方块仍 FrontSide）；`npm run typecheck` 通过。
+  - 批次：20261024-1455
+- [x] [修5] 首页在矮屏上把标题挤出屏幕：`index.html` 首页图标/间距改成随视口高度收缩（clamp + dvh）、`.world-panel[data-view='home']` 允许内部滚动 → `npm run test:ui`（断言：logo 字号含 vh 项、菜单间距含 vh 项、home 视图有 `overflow-y: auto`）
+  - 做了什么：首页视图 `.world-view[data-view='home'].active` 的 `justify-content: center` 改成 `safe center` 并补 `overflow-y: auto`（装不下时从顶部排、还能滚回来，不再两头一起裁）；`.world-logo` 字号 `clamp(42px, 8vw, 72px)` → `clamp(28px, min(8vw, 9vh), 72px)`；`.world-menu` 的 `gap/margin-top` 与 `.world-footer` 的 `margin-top` 全部换成带 `vh` 的 clamp；触摸横屏那组覆盖也改成 `clamp(24px, 8vh, 42px)` / `clamp(4px, 1.2vh, 8px)`。
+  - 为什么：面板是固定高（`--panel-h`）+ `overflow: hidden`，内容比它高时 `center` 会同时裁掉上下两端——标题在最上面，所以第一个消失。只把字号调小治不了根（不同机型差得太多），必须"安全居中 + 可滚"打底，再把间距做成跟视口高联动。
+  - 验证：`npx tsx tools/ui-test.ts` **960 通过 / 0 失败**（改 1 条横屏断言、新增 2 条：home 视图 safe center + 可滚、三处 clamp 都带 vh）。
+  - 批次：20261024-1455
+- [x] [修6] 背包面板在矮屏上压到快捷栏：`index.html` 用 `--inv-pocket-h` 与 `#inventory-screen` 的 padding 给底部 dock 让位 → `npm run test:ui`（断言：`--inv-pocket-h` 里扣掉了 dock 高度、`#inventory-screen` 有底部安全区 padding）
+  - 做了什么：新增 `body.inv-pocket-open #inventory-screen { padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }`——携带版打开时把底部 dock 的高度从"可用高度"里让出来。`--inv-pocket-h` 的原公式（`min(100dvh-72px, max(318px, 42vh))`）没动：减掉 dock 之后剩余空间刚好容得下它，再扣一次会把背包压矮一圈。
+  - 为什么：dock 是 `position: fixed`，根本没参与 `#inventory-screen` 的 `grid-template-rows: 1fr auto`（第二行塌成 0），所以面板一直按整屏高居中，底边正好压在快捷栏上。用户说的"被挤到快捷栏上部一点"就是这个。
+  - 验证：`npx tsx tools/ui-test.ts` **962 通过 / 0 失败**（新增 2 条：dock 让位的 padding 带安全区、`--inv-pocket-h` 仍受 dvh 约束——防止有人为了"塞下"把它改回固定值）。
+  - 批次：20261024-1455
+- [x] [修7] 设置里的游戏模式下拉：只列了生存/创造两种、且回调是"切换"而不是"切到选中的那个"：`ui/SettingsScreen.ts` + `main.ts` → `npm run test:ui`（断言：选项来自 `GAME_MODES` 四种、回调签名收 mode、main 里接的是 `setGameMode(mode)`）
+  - 做了什么：hook 从 `onToggleGameMode?: () => void` 改成 `onSetGameMode?: (mode: GameMode) => void`；下拉的选项由写死的 `['survival','creative']` 换成 `GAME_MODES`（生存/创造/冒险/旁观四档），回调改成 `(mode) => this.actions.onSetGameMode?.(mode)`；`main.ts` 那边接 `onSetGameMode: (mode) => this.setGameMode(mode)`，顺手删掉不再用的 `nextGameMode` 导入；"这一行要不要显示"的判据同步换成新回调名。
+  - 为什么：原来选项只有两项，而写回却是 `nextGameMode(current)`——**无视选中的值**，在创造模式里再选"创造"会退回生存（用户看到的"切到的不是我选的那个"）。四档本来就能用 `/gamemode` 切，界面没理由只给两种。
+  - 验证：`npx tsx tools/ui-test.ts` **965 通过 / 0 失败**（新增 3 条：选项来自 GAME_MODES、回调按选中的值且 main 接 `setGameMode(mode)`、那一行的显隐判据跟着改）；`npm run typecheck` 通过。
+  - 批次：20261024-1455
+- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：7 条修复全部有"坏了就变红"的断言：配方书回退 6 条（手动开关两分支 / 仓库→all / show 先于 sync / fillFromBook 不关书 / ✕ 仍手动 / 左栏无落脚点）、滚动条 4 条、空槽提示 2 条、扁平物品 5 条、首页 2 条、背包避让 2 条、游戏模式 3 条。套件：`ui-test` 952 → **965**、`render-test` 252 → **253**（新增 1 条是自审修的那处漏项）。**薄弱点**：这 7 条全是布局/交互，离线只能断言源码接线与 CSS 取值；"看起来对不对"仍然要真机看一眼。
+  - L2：这批做了**三次故意破坏**并复现变红——① `#touch-stick.dynamic` 之外，把 `spriteMaterial` 的亮度那行删掉 → `render-test` 立刻红（这正是自审抓到的真漏项）；② 上一批把 `onRecipeHost` 改成 `null` → 配方书相关 2 条红（已回退）③ 本批把游戏模式回调改回无参 toggle → 3 条里 2 条红（`GAME_MODES` 与 `onSetGameMode` 两条）。三次都已还原（`git status` 只有本次改动）。
+  - L3：7 条全部来自用户自测的原话（数字/点不动、滚动条、空槽无提示、刀剑显示、标题被挤出、背包压快捷栏、模式切错），没有一条是我自己找的"顺手优化"；我自己定的只有实现参数——让位高度 62px、滑块下限 24px、字号 `min(8vw,9vh)`、提示句文案。其中"62px"最容易漂（dock 实际高度由 CSS 决定），已写成独立断言而不是散落在计算里。
+  - 改进（当场修了 1 条）：`spriteMaterial` 漏了 `setBrightness` —— 拿着剑进洞永远全亮、拿方块却会变暗；补上并加了一条"两份材质同时变暗"的断言。
+  - 排除记录（找过但不算问题）：① `showUnowned`（分类栏"列出未拥有/红底"）在修1之后没有入口了——它现在恒为 false，但拆它要动 `renderCategoryGrid`/`craftableIds`/按钮 active 三处，收益小于风险，留待下次专门做；② 首页 4 颗按钮在 320 高以下仍然靠滚动兜底而不是再缩——再缩就点到手指够不稳的 40px 以下；③ 空槽提示只在左键触发（长按是"选数量/右键"语义），触摸端轻点就是左键，不需要为长按再补一条。
+  - 批次：20261024-1455
+
 ## 批次 20261024-1331 · 2026-10-24 · 会话 f834a886
 
 - [x] [跳1] 重写难度与间距参数（间距改绝对格数、方块下限 1.2、最大距离 7.2/蓄力 1.25s）：`src/minigame/games/jump/config.ts` + `logic.ts` → `npm run test:minigame`（改掉「间距与边长同比 1.15~1.9」「间距随分数单调不增」两条旧断言，换成分数越高中心距绝对变大、永远 ≤ 可达上限）
@@ -71,76 +117,4 @@
   - L2：刚当场做了两次故意破坏来验"会不会红"：① 把 topple 分界 `overhang > half` 改成 `half * 0.5` → 2 条红（"悬空正好等于半径 → topple"、"倾覆不分朝向"）；② 把 `stand: landing.point` 改回方块中心 → 4 条红（落点偏移 0.45、stand 不等于中心、outcome.point、按中心距只到半路）。两次都还原后全绿。**顺手补了一条**：此前只有 `gapFloorRatio = 2.12` 的公式自证（同一份算术写两遍），现在直接量"两块之间的净空档 ≥ 小人高度"，这才真的验到"倒下有地方"。
   - L3：判断依据里 6 条来自用户原话（画质粗糙 / 间距太小要激进 / 落点别复位 / 重心在外才倒 / 底座太单一 / 跳中心要 combo），直接决定了这 11 条的分工；另外 4 处是我自己定的实现选择（95° 倾倒角、金环与 `×N` 从第 2 连起、背景噪点幅度、净空档的度量方式），全部写进 `f834a8-decision.md` 的 D1~D3，属可回退项，不是从用户那里"问来"的。
   - 批次：20261024-1331
-
-## 批次 20261024-1152 · 2026-10-24 · 会话 3da8ce2b
-
-- [x] [优化1] 出生点不再"永远是平原草地"（用户选 B）：`core/world/SpawnPoint.ts` 放宽群系偏好 + 出生搜索半径（原点 1024 格内随机挑合格点）→ `npm run test:spawn`（新增断言：同一批种子下出生群系不恒定、仍在自然地面、不与水/岩浆重叠）
-  - 做了什么：`planSpawnRegion` 从"全网格打分取最优（起伏×1000 + 群系偏好×80 + 距离）"改成两段式：① 半径内**面积均匀随机试投** 48 次，第一块"高于地表下限 + 起伏 ≤4 + 不在水面/虚空群系"的就用；试投点落水时先在 8/16 格环上找最近的岸（`flatSpotNear`），避免落点被推到远处高地；② 试投全落空才退回网格扫描（≤256 格，口径同旧版）。主世界半径 256 → **1024**，随机源用 `new Random(seed).nextDouble()`。
-  - 为什么：地形本来就是按种子生成的，但旧评分把任何种子都压到"离原点最近、最平、最像平原"的那块地 → 玩家看到的永远是"草地 + 树 + 侧边海 + 远处山"。随机源必须由种子派生，否则同一种子重进世界会换出生点（与原版口径不符）。
-  - 另一处必须改：试投如果只认中心点，能通过的只剩高地（该生成器里高地偏冷），实测 5 个种子全落在雪原/冰刺；先找最近的岸之后变成 stony_peaks / badlands / snowy_plains / ice_spikes / old_growth_pine_taiga。
-  - 验证：`npx tsx tools/world-test.ts` 87 通过 / 0 失败（新增 4 条：跨种子群系至少 2 种、≥2/3 相距 128 格以上、同种子两次完全一致、落点都高于海平面；种子 1/7/42/1337/20261024 的落点已打印进输出）；`worldmatrix-test` 29 通过、`terrain-normal-test` 43 通过（出生点仍选得出来、出生区块非空）；`npm run build:fast` 通过。
-  - 批次：20261024-1152
-- [x] [优化2] 引导未完成时切游戏模式即作废：`main.ts#setGameMode` 里判断"玩家真的换了模式"就 `tutorialDismissed = true` 并落盘；读档恢复模式不触发 → `npm run test:tutorial`（新增断言：setGameMode 后卡片不再出现、dismissed 写进存档；restore 路径不影响）
-  - 做了什么：判定抽成纯函数 `tutorial/boot.ts#shouldVoidTutorialOnModeChange`（三个不该触发的场景各一条：读档恢复 / 已作废 / 已走完）；`setGameMode` 在 `next !== this.gameMode` 之后调它，命中就 `tutorialDismissed = true` + `tutorialCard.hide()` + `saveTutorialNow()`，并记一条 `diag.event('ui','tutorial.voidOnModeChange')`。
-  - 为什么：引导每一步都长在"创建世界时那个模式"里（生存 4 步 / 创造 4 步的内容完全不同），切过之后接着教必然教错；重开又会把玩家刚做完的事抹掉，所以只作废。读档恢复模式也走同一个 `setGameMode`，必须靠 `waitingForSaveRestore` 排除，否则老存档一进世界引导就被清掉。
-  - 验证：`npx tsx tools/tutorial-test.ts` **121 通过 / 0 失败**（新增 8 条：4 条判定 + 4 条接线，接线用正则截出 `setGameMode` 函数体，避免"函数写了没人调用"的假绿）。
-  - 批次：20261024-1152
-- [x] [优化3] 背包装备槽用部位图标替代文字：`ui/InventoryScreen.ts#buildArmorGrid` + `index.html` 的 `.inv-slot-hint` → 空槽显示头盔/胸甲/护腿/靴子/副手（盾）线框图标，文字只留 title/aria；`npm run test:inventory`
-  - 做了什么：`SlotVisuals.ts` 新增 `ArmorSlotKind` + 五条 24×24 填充剪影路径 + `armorSlotHintSvg()`（与 `TouchIcons` 同一套"只画填充、不用描边"的经验）；`buildArmorGrid` 把 `hint.textContent` 换成 `innerHTML = armorSlotHintSvg(...)`，文案改挂到槽位 `aria-label` / `title`（副手仍用更详细的 `inventory.offhandHint`）；CSS 里 `.inv-slot-hint svg { 26×26, opacity .55 }`，颜色收到 `#6d6d6d`。
-  - 为什么：原版（Java + 基岩手机）装备槽画的就是部位剪影，文字"头/胸/腿/靴"既不像原版、又会在换语言/窄屏时挤成一团（副手那格当年就是被压到 11px 的）。图标是矢量的，`--touch-scale` 与窄屏都不用再单独调字号。
-  - 验证：`npx tsx tools/ui-test.ts` **936 通过 / 0 失败**（新增 2 条：`armorSlotHintSvg(kinds[i])` 且不再有 `hint.textContent = hints[i]` + CSS 有 `.inv-slot-hint svg`；五个图标都是 24×24 视口、含 path、`fill="currentColor"`）；`npm run typecheck` 通过。
-  - 批次：20261024-1152
-- [x] [优化4] 背包右上角"配方书"点开就是打开配方书（定位"全部/搜索"），再点才是关闭：`ui/InventoryScreen.ts` 配方开关回调 + `main.ts#openRecipeBook/toggleRecipeBook` → `npm run test:inventory`（断言：点击后 `isRecipesOpen() === true`、当前 tab 为 all；第二次点击后为 false）
-  - 做了什么：① 左栏新增第四种内容 `recipes` + 落脚点 `recipeHostEl`（`.inv-recipe-host`，与"我的物品 / 物品分类"同一个网格格）；配方书开着时 `applyInventoryChrome` 调 `onRecipeHost(recipeHostEl)` 把 `.recipe-panel` 搬进来（CSS 给它 `.embedded`），关着时 `detachRecipeBook()` 还回整屏层。② 标题栏那颗键改成**开关**：开着 → `onCloseRecipes()`（只关闭）；关着 → `onOpenRecipes(lastRecipeTab)`（首次是"全部/放大镜"）。③ `main.toggleRecipeBook`（R 键）删掉"切分类栏"那条，和这颗键走同一条路。④ 工作站 / 纯容器没有左栏那一格，`canEmbedRecipeBook()` 为 false，仍按旧行为（切分类 / 切"列出全部"）。
-  - 为什么：原来点它只是把左栏从仓库切成物品分类，配方书根本没打开（玩家："我点配方书，它却把配方书关掉了"）。关着的配方书是**整屏一层**（z-index 20 盖住背包 10），所以就算调 `onOpenRecipes` 也会把标题栏那颗键一起盖掉，"再点关闭"无法实现 —— 必须先把它嵌回左栏（CSS 里 `.recipe-panel.embedded` 与 `.inv-recipe-host` 的注释本来就是按这个设计的，只是 TS 侧在批次 159 被移除了）。
-  - 顺带修：配方书开着时点左轨分类图标 / 左下"物品栏"页签，都会先关书（否则 `leftPane` 判据里 `recipes` 优先，点了看不出变化）。
-  - 验证：`npx tsx tools/ui-test.ts` **939 通过 / 0 失败**（新增 3 条：开关两向、落脚点 + CSS 同格、工作站/容器不嵌；另把 3 条旧断言改成新口径）；`recipebook-test` 162 通过；`npm run typecheck` 通过。
-  - 批次：20261024-1152
-- [x] [优化5] 左栏自绘滚动条：生存与创造位置/宽度统一（都像创造那样离物品留 2px 间隔），修掉创造模式滑条下方跟着走的黑色残块：`index.html` 的 `.inv-category-scrollbar` 系列 + `ui/InventoryScreen.ts` 的滚动条同步 → `npm run test:inventory`（断言两模式滚动条 right/width 取值来自同一组常量）
-  - 做了什么：删掉 `.inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }` 这条"只改创造栏"的覆盖，宽度统一成 CSS 里唯一的 `.inv-category-scrollbar { width: 7px }`；间隔抽成 `SCROLLBAR_CONTENT_GAP = 8` + `SCROLLBAR_TRACK_WIDTH = 7`（`scrollbarContentLeft` 两个调用方共用）。
-  - 为什么两栏位置不同：宽度一个 4px 一个 6px，而 `scrollbarContentLeft` 的右边界钳制是 `host.clientWidth - width - 1`，同一个内容右缘会被钳成不同位置；另外两条右定位规则各写一份 `right`。
-  - 黑块根因：滑块原来有 `border: 1px solid #4a4a4a`。在 4~7px 宽的滑条上，1px 深边把实心部分吃到只剩 2~5px，滚动时看上去就是"灰块下面跟着一个小黑块"。现在改成无描边的浅灰实心（`#c2c2c2`，按下/悬停 `#dedede`），圆角继承轨道，`min-height` 18 → 24 更好拖。
-  - 验证：`npx tsx tools/ui-test.ts` **941 通过 / 0 失败**（新增 2 条：CSS 里 `.inv-category-scrollbar {` 只有一处且 width 7px、没有只针对创造栏的覆盖、间隔常量被两处引用；滑块规则 `border: 0` 且不再有 1px 深边）。
-  - 批次：20261024-1152
-- [x] [优化6] 第一人称手持物：拿着东西时隐藏手臂、只显示放大的物品（2 倍 + 厚度增加），空手仍画手臂：`render/HandRenderer.ts` → `npm run test:hand`（断言：持有物品时 arm/cuff/sleeve 不可见、物品尺寸为 2× 且厚度 > 0；空手时手臂可见）
-  - 做了什么：`ITEM_SIZE` 0.22 → **0.44**；非方块物品从 `PlaneGeometry`（零厚度）改成 `BoxGeometry(0.44, 0.44, 0.08)` 并六面贴同一张图标 + 逐面明暗；新增 `refreshHandVisibility()`：手臂 / 布袖 / 盔甲袖套**一起**按"手里有没有东西"显隐（`setItem`、`setArmorColor` 都走它），并把胸甲颜色记成字段 `armorColor`；挂点从 `-ARM_LENGTH - ITEM_SIZE*0.36` 收到 `*0.12`（放大后不能再往远处推，否则透视会把视觉尺寸抵消掉）。
-  - 为什么：原版第一人称拿着东西时不画那条手臂，方块本身占屏幕很大一块；原来 0.22 的方块 + 常驻手臂，观感是"一只手捏着一粒米"。非方块物品用零厚度平面侧看是一条线，用户要求"厚度也要增加"。
-  - 验证：`npx tsx tools/render-test.ts` **250 通过 / 0 失败**（改 1 条旧断言 + 新增 6 条：边长 0.44、薄板厚度 0.05~0.12、六面 UV、拿东西时手臂/布袖隐藏、拿东西时袖套不露、空手时三块回来并再收一次）；`npm run typecheck`、`ui-test` 941 通过。
-  - 批次：20261024-1152
-- [x] [优化7] 动态摇杆默认显示底圈，跟手触发逻辑不变：`index.html` `#touch-stick.dynamic` 的 opacity 规则（+ 必要时 `TouchControls.ts`）→ `npm run test:touch`（断言 CSS 里 dynamic 不再是全隐、active 才抬高）
-  - 做了什么：`#touch-stick.dynamic { opacity: .55 }`（原来 0）、`.active` 回到 1；删掉 `.dynamic.sneaking:not(.active)` 那条"底座透明只留潜行小牌"的规则（底圈常驻之后它会把圈藏掉）；`TouchControls` 新增 `clearDynamicOffset()`，在 `resetStick`（跟手模式松手）与 `setStickMode`（切回固定模式）里清掉 `beginDynamicStick` 写的内联 left/top/right/bottom，让 CSS 的左下默认位置重新生效。
-  - 为什么：`beginDynamicStick` 只写内联坐标、从不还原 —— 以前底圈是不可见的，停在哪儿都无所谓；一旦常驻显示，不归位就会"停在最后按过的位置"，看着像摇杆卡住。触发逻辑（左下拇指区内按下才跟手）一个字没改。
-  - 验证：`npx tsx tools/ui-test.ts` **943 通过 / 0 失败**（改 2 条旧断言为 `opacity: .55` 口径，新增 2 条：松手/切模式都会清内联坐标、潜行时不再藏底座）。
-  - 批次：20261024-1152
-- [x] [优化8] 首页四颗按钮高度统一：`index.html` `.world-primary` / `.world-secondary` 的 min-height 与内边距 → `npm run test:theme`（静态断言：两类按钮在同一断点下 min-height 相同）
-  - 做了什么：在共用规则 `.world-primary, .world-secondary` 上写 `min-height: 52px; box-sizing: border-box;`；触摸横屏那块 `.world-primary/.world-secondary` 的 44px 改成 52px；后面那条 `body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }` 拆开（44 只留给卡片操作键与世界列表的小键），次按钮单独给 52px。
-  - 为什么：主按钮与次按钮各写一套 min-height（52 / 44），并且**后出现的规则覆盖先出现的**——横屏块里 44/44 看着像是统一的，但文件后面那组又把次按钮拉回 44、主按钮拉到 52，于是首页一眼就能看出参差。现在只留一处高度真值，字号仍可不同（主按钮更醒目）。
-  - 验证：`npx tsx tools/ui-test.ts` **944 通过 / 0 失败**（改 1 条横屏断言为 52px，新增 1 条：共用规则里必须有 min-height 52、且触摸端不再出现 44px 的主/次按钮覆盖）。
-  - 批次：20261024-1152
-- [x] [优化9] 首页去掉"非官方 Web 复刻…"那段说明与 `WebGL2!` splash（构建版本信息按用户要求**保留**）：`ui/WorldScreen.ts` + `core/i18n/locales/*/menu.ts` 的 `menu.footer` → `npm run test:theme`（断言首页 DOM 不再有 footer 说明与 splash 节点）
-  - 做了什么：`WorldScreen` 删掉 `splash`（"WebGL2!"）节点与 `footerNote`（`t('menu.footer')`），页脚只留 `#world-build`；`index.html` 删掉 `.world-splash` 规则、`@keyframes world-splash`、触摸横屏那条 `.world-splash` 覆盖与 PC 的 `animation: none`；六个语种的 `menu.footer` 键一起删（表 2864 键，六语言 100%）。
-  - 为什么：删 DOM 不删 CSS 会留下永远不命中的规则（PC 那条 `.world-splash { animation: none; }` 会让人以为 splash 还在）；`menu.footer` 只被这一处引用，留着就是死键，i18n 表按语言对齐删才不会掉到 99%。
-  - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 1 条：splash 相关断言改成"整份 CSS 里不再有 `.world-splash`"，新增 1 条：WorldScreen 不再建 splash/footer 节点但保留 `#world-build`）；`i18n-test` 547 通过、`npm run audit:i18n` 六语言 2864/2864 通过；`npm run typecheck` 通过。
-  - 批次：20261024-1152
-- [x] [优化10] 暂停页去掉成就按钮、"游戏已暂停"标题、副标题、存档/改动/自动保存那行说明（设置页与主菜单设置面板不受影响）：`ui/SettingsScreen.ts` + `main.ts#openSettings` → `npm run test:pause`（断言暂停页 DOM 无这四块、设置页仍有标题与返回）
-  - 做了什么：`menuPage` 只 append `actionsRow + help`；删掉 `menuTitle`/`menuHeader`（"游戏已暂停"）、`menuHintEl`（"点「继续游戏」或系统返回键返回"）、`metaEl` 与 `setMeta()`、"成就"按钮（`pause-achievements`）；`setTitle()` 去掉副标题参数；`renderSubtitle()` 只保留设置页那句"改动立即生效"；`main.openSettings` 不再算存档信息，主菜单那处 `setTitle('设置','返回')`。设置页自己的标题/返回键一点没动。
-  - 为什么：这四块都是"说明性文字"，用户认为暂停页只需要按钮；成就入口仍在背包左栏（手机上唯一那条路），删掉暂停页那颗不会让成就不可达。存档信息通过暂停页看到之前也没人用，需要时能从世界列表/导出看到。
-  - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 2 条骨架断言——`makeHeader` 调用从 2 处变 1 处；新增 1 条：暂停页不再出现 `menuTitle`/`settings-meta`/`touchBack`/`pause-achievements` 且只 append `actionsRow, help`）；`i18n-test` 547、`audit:i18n` 2864/2864；`typecheck` 通过；`tools/settings-acceptance.js`（浏览器验收）里那条"存档信息"断言同步改成"四块都不出现"。
-  - 批次：20261024-1152
-- [x] [优化11] 顶部中间第三颗键（视角）图标换成"眼睛"（保持现有 currentColor 实心风格）：`ui/TouchIcons.ts` 的 `view` 路径 → `npm run test:touch`（断言 svg 含眼球+瞳孔路径、不再是望远镜的镜筒矩形组）
-  - 做了什么：`PATHS.view` 从"斜放望远镜（四段矩形 + 底座）"换成一只眼睛：杏仁形眼眶 + `fill-rule="evenodd"` 挖出虹膜 + 实心瞳孔 `<circle r="2.1">`。仍是纯填充、`currentColor`，与其他五个图标同一套画法。
-  - 为什么：用户点名"最右边那颗换视角的图标，要一个小眼睛的形状，保持当前这种风格"。望远镜在 22px 下有四段小矩形，缩小后糊成一团；眼睛只有两个形状，小尺寸更清楚。
-  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（新增 1 条：view 的 svg 里有 evenodd 眼眶 + r=2.1 瞳孔，且不再有 `rotate(-33`）。
-  - 批次：20261024-1152
-- [x] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`
-  - 做了什么：删掉 PC 那三组滚动条规则（`display: none !important` 藏掉自绘那根、另开 10px 原生滚动条 + 深色轨道/滑块），PC 与手机现在共用同一根自绘常驻滚动条；装备槽图标、配方书嵌入、暂停页结构本轮本来就是同一套 DOM/CSS（无 `body.touch-mode` 分支）。PC 的格子尺寸档（46/52/54px）与 `.inv-pager` 翻页条**保留**。
-  - 为什么：用户是在"滚动条黑块 / 装备槽图标"的上下文里说"PC 上界面内的元素要跟手机版保持一致"——指的是元素长什么样、在哪，不是把桌面的大格子压回手机档。翻页条是批次 620 按"PC 端不能翻页"专门补的入口，删掉等于推翻那条需求。取舍与边界写进 `doing/3da8ce-decision.md` 的 D3。
-  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（把"PC 用看得见的原生滚动条"那条反向改成"PC 与手机共用同一根自绘滚动条"：断言 HTML 里不再出现两条 PC 原生滚动条规则与 `scrollbar-color`）；`npm run check` 全绿（见下一条提交）。
-  - 批次：20261024-1152
-- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
-  - L1：12 条全部落成了"坏了就变红"的断言，没有一条停在"看着像"：出生点 4 条（`world-test` 打印 5 个种子的实际落点）、引导作废 8 条（4 判定 + 4 接线）、装备槽图标 2 条、滚动条 1 条（正反两面）、手持物放大 6 条（含 `ITEM_SIZE`/厚度）、摇杆常驻 2 条 + 改 2 条、按钮高度 1 条、首页删减 1 条 + 改 1 条、暂停页四块 1 条 + 改 2 条、眼睛图标 1 条。套件数：`ui-test` 936 → **950**、`world-test` 83 → **87**、`tutorial-test` 113 → **121**、`render-test` +6。**薄弱点**：配方书那条交互全在 DOM 回调里，离线跑不到，只能用源码接线断言兜（自审当场补了 4 条）。
-  - L2：这批做了**三次故意破坏**并确认变红——① `#touch-stick.dynamic` 改回 `opacity: 0` → `ui-test` 恰好 1 条红；② `HandRenderer.ITEM_SIZE` 0.44 → 0.22 → `render-test` 的"手持方块边长是原来的 2 倍"红；③ 把 `onRecipeHost(this.recipeHostEl)` 改成 `null` → "配方书嵌进左栏" + "左栏切成 recipes 时把落脚点交给配方书" 两条同时红。三次都已还原（`git status` 干净）。
-  - L3：判断依据 **12/12 来自用户逐条口述**（11 条问题 + PC 一致性），没有一条是我自创的玩法或限制；我自己定的只有实现参数——试投 48 次 / 8·16 格找岸环 / 主世界半径 1024 / 按钮 52px / 图标路径形状 / 手持物厚度 +0.08 —— 全部写进 `3da8ce-decision.md`（D1/D3）与代码注释，随时可推翻。
-  - 改进（当场修了 1 条）：配方书开关的三处接线补成 4 条断言（提交 `[自审]`）。其余找过但**不算问题**的角度：① "暂停页删掉四块后竖屏会不会显得空"——CSS 是居中列布局，空出来的高度由 `actionsRow` 撑，不是固定高度；② "`pause.title` / `settings.touchBack` 变成死键"——`i18n-test` 的必备键清单里仍有它们，且这两句将来在加载页/别处还能用，删了反而要改 6 个语种，收益小于成本；③ "出生点随机让老玩家找不到家"——同一存档的出生点存在存档里，只有新世界才走这条，不影响回档。
-  - 批次：20261024-1152
 
