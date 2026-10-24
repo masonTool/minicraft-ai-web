@@ -5399,6 +5399,26 @@ console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2�
     '没房主的回执只提示一次/3 秒（不刷屏）',
     mainSrc.includes('onEditRejected: (reason) =>') && mainSrc.includes('this.editRejectedAt < 3000'),
   );
+
+  // 房主侧落地（L8 · MS2）：不抑制回声，才能由 BlockFunnel 作为权威结果重发
+  const applyStart = mainSrc.indexOf('private applyEditRequest(');
+  const applyEnd = mainSrc.indexOf('private onNetBlock(', applyStart);
+  const applyBody = applyStart >= 0 && applyEnd > applyStart ? mainSrc.slice(applyStart, applyEnd) : '';
+  check(
+    '房主落地请求时**不**抑制回声（否则不会作为权威结果重发）',
+    applyBody.length > 0 &&
+      !applyBody.includes('applyingRemoteBlock++') &&
+      applyBody.includes('this.world.setBlockAndUpdate('),
+  );
+  check(
+    '只有房主处理请求（别的端收到也不会有副作用）',
+    applyBody.includes("if (this.net.role !== 'host') return;"),
+  );
+  check(
+    '先记增量再写世界（与 onNetBlock 同一条守卫）',
+    applyBody.indexOf('this.world.edits.record(') < applyBody.indexOf('this.world.setBlockAndUpdate(') &&
+      applyBody.includes('if (!this.remoteWorldWritable()) return;'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

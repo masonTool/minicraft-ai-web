@@ -391,7 +391,7 @@ import {
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
-import { applyRemoteBlock, planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
+import { applyRemoteBlock, planRemoteBlock, readEditRequest } from './core/net/RemoteBlockWrite.ts';
 import {
   realignedWorldSummary,
   remoteWorldWritable as remoteWritableBySeed,
@@ -1929,6 +1929,8 @@ class App {
      * 我那批改动没人接（L8 · MS2）：房里没房主。说一句就够——玩家改十格会连着发十条，
      * 每条都弹一遍等于刷屏，所以这里 3 秒内只提示一次。
      */
+    // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
+    onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
     onEditRejected: (reason) => {
       const now = performance.now();
       if (now - this.editRejectedAt < 3000) return;
@@ -4203,6 +4205,39 @@ class App {
    */
   private remoteWorldWritable(): boolean {
     return remoteWritableBySeed(this.serverSeed, this.worldConfig.seed);
+  }
+
+  /**
+   * 房主处理从属端的改动请求（L8 · MS2）。
+   *
+   * 与 `onNetBlock` 的关键差别：**不抑制回声**。远端改动通常要包一层 `applyingRemoteBlock`
+   * 免得原样发回去；但这里是"房主替别人落地"——它必须进 `BlockFunnel`，以**权威结果**
+   * 的身份广播给所有人（包括请求者本人，幂等覆盖它本地那次乐观应用）。
+   *
+   * 只有房主处理：服务端只把请求转给房主，其它端收到一律忽略（信号被伪造也不会有副作用）。
+   */
+  private applyEditRequest(from: number, payload: { t: string; blocks?: unknown; edit?: unknown }): void {
+    void from;
+    if (this.net.role !== 'host') return;
+    // 与 `onNetBlock` 同一道守卫：种子对不上时远端坐标在这边是另一格
+    if (!this.remoteWorldWritable()) return;
+    for (const edit of readEditRequest(payload)) {
+      const target: DimensionId = isDimension(edit.dimension) ? edit.dimension : this.dimension;
+      const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(edit.x, edit.z), edit.y);
+      if (action === 'drop') continue;
+      // 先记增量（区块没加载也要留下），再写世界——写世界这次**会**触发广播
+      this.world.edits.record(
+        target,
+        toChunkCoord(edit.x),
+        toChunkCoord(edit.z),
+        Chunk.index(edit.x & 15, edit.y, edit.z & 15),
+        edit.id,
+        edit.state,
+      );
+      if (action === 'buffer') continue;
+      this.world.setBlockAndUpdate(edit.x, edit.y, edit.z, edit.id, edit.state);
+      this.ensureBlockEntityAt(edit.x, edit.y, edit.z, edit.id, target);
+    }
   }
 
   private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {

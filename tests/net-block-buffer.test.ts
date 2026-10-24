@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { applyRemoteBlock, planRemoteBlock } from '../src/core/net/RemoteBlockWrite.ts';
+import { applyRemoteBlock, planRemoteBlock, readEditRequest } from '../src/core/net/RemoteBlockWrite.ts';
 import { ChunkEdits } from '../src/core/save/ChunkEdits.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
 
@@ -188,5 +188,49 @@ describe('applyRemoteBlock 的落地顺序', () => {
     const chunk = new Chunk(chunkCoord(1), chunkCoord(2));
     edits.applyTo('overworld', chunkCoord(1), chunkCoord(2), chunk);
     expect(chunk.get(1 & 15, 70, 2 & 15)).toBe(7);
+  });
+});
+
+/*
+ * 从属端改动请求的载荷解析（L8 · MS2）
+ *
+ * 房主收到的是**别人**发来的东西：形状可能被改过。坏条目单独丢（与 `blocks` 同口径），
+ * 数值范围不在这里判——那是 `planRemoteBlock` 的活。
+ */
+describe('readEditRequest', () => {
+  it('blocks：整组读出（坐标截成整数）', () => {
+    expect(readEditRequest({ t: 'blocks', blocks: [[1.7, 70, -2.2, 3, 0, 'overworld']] })).toEqual([
+      { x: 1, y: 70, z: -2, id: 3, state: 0, dimension: 'overworld' },
+    ]);
+  });
+
+  it('block：载荷是**一条**，不是一组', () => {
+    expect(readEditRequest({ t: 'block', edit: [5, 64, 6, 1, 2, 'nether'] })).toEqual([
+      { x: 5, y: 64, z: 6, id: 1, state: 2, dimension: 'nether' },
+    ]);
+  });
+
+  it('坏条目单独丢：短数组 / 字符串坐标 / NaN', () => {
+    const edits = readEditRequest({
+      t: 'blocks',
+      blocks: [
+        [1, 70, 1, 1, 0, 'overworld'],
+        [1, 70, 1],
+        ['1', 70, 1, 1, 0, 'overworld'],
+        [Number.NaN, 70, 1, 1, 0, 'overworld'],
+        [2, 70, 2, 1, 0, 'overworld'],
+      ],
+    });
+    expect(edits.map((edit) => edit.x)).toEqual([1, 2]);
+  });
+
+  it('不认识的类型 / 非数组：空列表（不抛异常）', () => {
+    expect(readEditRequest({ t: 'nonsense' })).toEqual([]);
+    expect(readEditRequest({ t: 'blocks' })).toEqual([]);
+    expect(readEditRequest({ t: 'blocks', blocks: 'nope' })).toEqual([]);
+  });
+
+  it('维度名原样带出（合法性由调用方用 isDimension 收口）', () => {
+    expect(readEditRequest({ t: 'blocks', blocks: [[1, 70, 1, 1, 0, '??']] })[0]?.dimension).toBe('??');
   });
 });

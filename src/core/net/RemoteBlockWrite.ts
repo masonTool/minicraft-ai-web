@@ -79,3 +79,34 @@ export function applyRemoteBlock(
   sink.apply(edit);
   return true;
 }
+
+/**
+ * 把一条 `edit-request` 的载荷读成改动列表（L8 · MS2）。
+ *
+ * 房主收到的是**别人**发来的东西，形状可能被改过：不是数组、长度不是 6、坐标是字符串、
+ * 维度名是垃圾……一律丢那一条，而不是整包丢弃（与 `blocks` 的"坏条目单独丢"同一口径）。
+ * 数值范围（y 越界 / 距离）不在这里判——交给 `planRemoteBlock` 与 `blockEditRejection`
+ * 那一套，免得两处各判一次、判得还不一样。
+ */
+export function readEditRequest(payload: { t: string; blocks?: unknown; edit?: unknown }): RemoteBlockEdit[] {
+  const raw = payload.t === 'blocks' ? payload.blocks : payload.t === 'block' ? payload.edit : null;
+  if (!Array.isArray(raw)) return [];
+  // `block` 的载荷是**一条**（`[x,y,z,id,state,dimension]`），`blocks` 是**一组**
+  const list: unknown[] = payload.t === 'block' ? [raw] : raw;
+  const edits: RemoteBlockEdit[] = [];
+  for (const item of list) {
+    if (!Array.isArray(item) || item.length < 6) continue;
+    const [x, y, z, id, state, dimension] = item as unknown[];
+    if (
+      typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number' ||
+      typeof id !== 'number' || typeof state !== 'number' || typeof dimension !== 'string'
+    ) {
+      continue;
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(id) || !Number.isFinite(state)) {
+      continue;
+    }
+    edits.push({ x: Math.trunc(x), y: Math.trunc(y), z: Math.trunc(z), id: Math.trunc(id), state: Math.trunc(state), dimension });
+  }
+  return edits;
+}
