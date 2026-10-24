@@ -9,6 +9,30 @@
 
 ---
 
+## 批次 20261025-0117 · 2026-10-25 · 会话 203dac00
+
+- [x] [U1] 删掉玩家可见的建造入口与全部建造工具（C2~C5）：删 `src/ui/BuildToolbar.ts`、`src/ui/buildToolbarLayout.ts`、`src/buildtools/{Selection,Fill,Clipboard,templates}.ts`；`src/main.ts` 删对应 import / `buildMode` / `buildRequest` / `buildToolbar` 字段与构造回调 / `refreshBuildToolbar` / 选区-填充-复制-粘贴-镜像-模板 的全部方法（`selectCorner` `clearSelection` `startFill` `stepFillRunner` `cancelFill` `copySelection` `pasteClipboard` `placeTemplate` `stepPasteRunner`）与每帧调用 / `setBuildModeForTest` `buildToolbarStateForTest`；Esc 面板分支、左键选区分支、`updateArmSwing` 与 `updateBreaking` 里的 `buildMode` 判断一并删；`index.html` 删 `/* ---------------- 建造工具（创造5 …` 到 `.build-page.hidden { display: none; }` 整段 CSS → `npm run typecheck` 通过且 `npm run check:fast` 全绿
+  - 做了什么：删 `src/ui/BuildToolbar.ts`、`src/ui/buildToolbarLayout.ts`、`src/buildtools/{Selection,Fill,Clipboard,templates}.ts`、`tools/buildtools-test.ts` 与 `package.json` 的 `test:buildtools`；`main.ts` 去掉 6 条 buildtools import、选区/填充/剪贴板/粘贴/建造模式 6 个字段、`BuildToolbar` 构造回调 70 行、`创造2~4` 的 12 个方法（`selectCorner`…`placeTemplate`）、`refreshBuildToolbar`、Esc 面板分支、左键一次性请求分支、`updateArmSwing`/`updateAttacking`/`updateBreaking` 三处 `buildMode` 判断、每帧 `setAvailable`+`stepFillRunner`+`stepPasteRunner`、`dispose()`、`FILL_UNDO_LIMIT`，以及 10 个 `*ForTest` 接口；`index.html` 删 123 行建造抽屉 CSS。
+  - 为什么：用户要"打开就是原版那套操作"，所以整个功能簇（界面 + 工具能力）一起删，不留死代码。**偏离原计划的两处**（都为了让这条提交自己就能编译通过）：① `tools/buildtools-test.ts` 的 5 个 import 全指向被删的模块，`typecheck:tools` 与离线 runner 都会红，所以测试的删除从 U3 提前到这里（U3 只剩文案与 `AGENTS.md` 套件数）；② `tools/texture-test.ts` 有一条静态断言读 `main.ts` 里的 `new BuildToolbar(` 位置，换成 `new CommandBlockEditor(`（守的仍是"图集铺像素早于 UI 构造"这条次序）。`BlockIcon.ts` 与 `texture-test.ts` 的历史注释同步标注"该界面已移除"。
+  - 验证：`npm run typecheck` 通过；`npm run typecheck:tools` 通过；`npm run check:fast` 全绿（vitest 372 条 + 离线 176/176 套，套件数已从 177 掉到 176）。浏览器手验留到整批收尾前统一做。
+  - 批次：20261025-0117
+- [x] [U2] 删掉撤销 / 重做（C1）与 Ctrl+Z / Ctrl+Y：删 `src/buildtools/UndoStack.ts`；`src/main.ts` 删 `undoStack` 字段、`undoAllowed` `undoBegin` `undoEnd` `undoRecord` `undoPush` `undoLast` `redoLast` `applyUndoStep` 与 `undoStateForTest`，以及破坏/放置路径上 24 处 `undoBegin/undoRecord/undoPush/undoEnd` 调用、`switchDimension` 里的 `undoStack.clear()`、键盘 Ctrl+Z / Ctrl+Y 分支 → `npm run typecheck && npm run check:fast` 全绿（重点回归：徒手破坏、放方块、门/床/旗/甘蔗整块破坏）
+  - 做了什么：删 `src/buildtools/UndoStack.ts`（`src/buildtools/` 目录随之空掉，整个目录消失）；`main.ts` 去掉 import、`undoStack` 字段、`undoAllowed`/`undoBegin`/`undoEnd`/`undoRecord`/`undoPush`/`undoLast`/`redoLast`/`applyUndoStep` 八个方法、`UNDO_WAKE_LIMIT` 常量、Ctrl+Z / Ctrl+Y 两个键盘分支、`undoForTest`/`redoForTest`/`undoStateForTest`、`switchDimension` 里的 `undoStack.clear()`；破坏路径 4 处 `undoBegin/undoEnd` 配对（门 / 旗 / 床 / 海带-甘蔗-脚手架整柱）、`breakBedPair`/`breakDoorPair`/`breakBannerPair`/`breakColumn` 里的 `undoRecord`、主破坏路径那 1 处、放置路径 3 处（`mergeInto` / `mergeIntoTarget` / 普通放置的 `undoPush`）。
+  - 为什么：撤销在原版就没有，它是建造工具的一半；留着等于一套"只有快捷键、没有入口"的隐藏功能，与"别复杂"相反。删法上有个易错点：`undoRecord(bx, by, bz, id, state, …)` 里的 `state` 是**专为撤销读的**，删调用后这四个局部 `const state` 就没人用了（`noUnusedLocals` 会红），所以连同一起删——但 `breakBannerPair` 开头那个 `state` 还喂 `isBannerTop()`，保留。放置路径的 `placeBeforeState`/`extraBeforeId`/`extraBeforeState`/`mergeBeforeId`/`mergeBeforeState`/`targetBeforeState` 同理，都是"写入前读一份给撤销用"，一并删。
+  - 验证：`npm run typecheck` 通过；`npm run check:fast` 全绿（vitest 372 条；离线 runner 报"本次改动没有离线套件覆盖 `src/main.ts`"，属预期——这条是浏览器行为）；逐处确认过删掉的都是纯旁路记录语句，主线（破坏分支的 `return`、放置分支的 `setBlockAndUpdate` / `queueBlockChange` / 掉落实体）一行没动。
+  - 批次：20261025-0117
+- [x] [U3] 删文案与套件数：六语言 `src/core/i18n/locales/{zh,en,de,ru,fr,pt}/editor.ts` 删全部 `buildtools.*` 与 `template.*` 键（含文件头注释里的 buildtools 说明），`tools/i18n-test.ts` 里两条用 `buildtools.fill.done` 验复数配合的断言换成仍存在的同形键；`AGENTS.md` 的「N 套离线测试」按实际套件数改（测试与 `test:buildtools` 已在 U1 删掉，177→176，以 `npm run audit:tasks` 的报错为准，不要手猜）→ `npm run typecheck && npm run test:i18n && npm run audit:tasks` 全绿
+  - 做了什么：六语言 `editor.ts` 删掉 `buildtools.*` 与 `template.*` 共 59 条/语言（zh 62 行含三处分组注释），并清掉 `buildtools`/`template` 相关的分组注释与残留空行；四种语言的 `plural.ts` 删掉 4 条 `buildtools.*.done` 复数表与那条分组注释；`tools/i18n-test.ts` 里葡/法两条"过去分词跟着配合"的断言原本就拿 `buildtools.fill.done` 当样本，改成 `station.brewLeft`（保住"复数表里第二条键也走同一套"这条覆盖）；`README.md`/`AGENTS.md`/`.continue/HANDOFF.md` 的「177 套」→「176 套」共 8 处。
+  - 为什么：键删了但 `plural.ts` 与测试还引用，会分别变成"指向不存在键的复数表"和 `t()` 回落原文的假绿，所以三处必须同一条提交。套件数由 `audit:tasks` 从 `package.json` 现算，它只校 README，但 AGENTS/HANDOFF 是入口文档，一起改免得下次对不上——`npm run audit:tasks` 现在会输出「README / HANDOFF / AGENTS 的离线测试套数都与 package.json 一致（176 套）」。
+  - 验证：`npm run typecheck` 通过；`npm run test:i18n` 547 通过 / 0 失败；`npm run audit:tasks` 全绿（含套数一致性）；`npm run check:fast` 全绿（vitest 372 条 + 离线 155/155 命中套）。`grep -rn buildtools src/ tools/` 已无残留。
+  - 批次：20261025-0117
+- [x] [U4] 文档与台账收尾：`.continue/HANDOFF.md` 删「建造工具条只在建造模式接管左键」那半句；`.continue/OVERVIEW.md` 删建造工具条条目；`.continue/TASKS.md` 把创造1~5 对应条目改掉（本项目扩展、不属差异台账），按脚本口径更新覆盖率；`.continue/notes/kids-features.md` §3.2 加一行「后续变更：已整体移除（批次 20261025-0117）」但**保留决策留档原文**；`.continue/notes/modules.md` 有建造模块条目则同步 → `npm run check` 全绿（含三张台账）
+  - 做了什么：`HANDOFF.md` 里"低龄向三块"改成"两块"并写明建造工具已在批次 20261025-0117 整体移除；`OVERVIEW.md` 删掉「建造工具 = 44×56 总开关 + 模态抽屉」整条，坑那一行里"建造工具条 92×236 压住跳跃键"的例子保留但标注"该工具条已移除、教训对任何边缘浮动面板仍成立"；`notes/kids-features.md` §3.2 加 `> 后续变更（批次 20261025-0117）：已整体移除` 引用块，C1~C5 表格与原文**一字未改**。
+  - 为什么：这三处是"当前状态"描述，留着会让人以为还有建造模式；`kids-features.md` 是决策留档，只加"后来怎样了"，不重写当时的理由。`TASKS.md` 与 `notes/modules.md` **没动**：查过全表，创造1~5 从来没有登记成 A~O 条目（唯一相关的是 20261024-0344 那条已完成记录，属历史事实），`modules.md` 也没有建造模块条目——覆盖度 / 差异 / 提交总数三张台账都是脚本现算的，手改只会漂。
+  - 验证：`npm run check` 全绿（typecheck + audit:i18n + vitest 372 + 离线 176/176 套 + audit:tasks/coverage/diffs/docs）；`BROWSER_CHECK=1 npm run check:browser` → 「控制台干净：跑 15 秒，0 条错误（含进世界）」，即删完后进创造世界不报错。
+  - 批次：20261025-0117
+
+---
 ## 批次 20261025-0105 · 2026-10-25 · 会话 75e33034
 
 - [x] [P1] 新建 `say` 文案分组（六语言）+ 把「状态与战斗」类聊天消息接线：新增 `src/core/i18n/locales/{zh,en,de,ru,fr,pt}/say.ts` 并注册进六份 `index.ts`，`src/main.ts` 的伤害/回血/饥饿/氧气/着火/盾牌/不死图腾/极限模式/重生回退 18 条消息改走 `t()`/`tp()` → `npm run typecheck && npm run test:i18n`
@@ -160,53 +184,4 @@
   - 为什么：面板是固定高度这一点不写在台账里，下一轮又会有人给网格加 `max-height: 42vh` 之类的"保险"。
   - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
   - 批次：20261024-1723
-
-## 批次 20261024-1706 · 2026-10-24 · 会话 723564b3
-
-- [x] [修18] 创造物品栏：点非"搜索"分类时搜索行整条收掉（列表上移，不被搜索框占位）：`src/ui/InventoryScreen.ts` `syncCreativeSearch()` + `index.html` 一条 CSS → `npm run test:ui`
-  - 做了什么：`syncCreativeSearch()` 里除了藏输入框，再按"分类按钮还在不在这一行里"给 `.inv-creative-controls` 加/去 `search-hidden`；CSS 用 `.inv-panel .inv-creative-controls.search-hidden { display: none !important; }` 收掉整行（`!important` 是因为 `.inv-panel.creative-ui.pocket-ui .inv-creative-controls` 的 `display: flex` 有 4 个类，压不过）。
-  - 为什么：双栏那条 `.inv-panel.pocket-ui.pocket-dual .inv-creative-controls { min-height: 32px }` 会在输入框藏掉之后继续占 32px + 6px 行距，物品列表被顶下去一截——用户："物品的列表应该向上平移，不要被搜索框占位"。分类按钮在左轨时整行本来就没用，可以整条收；按钮仍在这一行里的布局（非 pocket）只藏输入框，否则分类按钮会一起消失。
-  - 验证：`npx tsx tools/ui-test.ts` **975 通过 / 0 失败**（新增 1 条：`tabsInRow` 判据 + 类名切换 + CSS 收行）。
-  - 批次：20261024-1706
-- [x] [修19] 创造物品栏只剩一根滚动条（原生那条 = "滑块下面的小滚动条 / 底下小黑块"），并且只许纵向滚：`index.html` → `npm run test:ui`
-  - 做了什么：① 把 `.inv-panel.creative-ui.pocket-ui .inv-creative` 从旧的"原生滚动条要看得见"那段（`scrollbar-width: thin` + 8px `::-webkit-scrollbar` + `#b9b9b9` 槽 + `#6f6f6f` 块）里删掉，那段只留给嵌入版配方网格；新增 `.inv-panel .inv-grid.inv-creative { scrollbar-width: none; }` + `::-webkit-scrollbar { display:none; width:0; height:0 }`（带 `.inv-panel` 才压得过那 4 个类的旧规则）。② 创造网格（基础 + 双栏）补 `overflow-x: hidden`。
-  - 为什么：创造栏早就换成自绘那根（`.inv-creative-section .inv-category-scrollbar`），旧的原生那条一直没真被关掉——`.inv-grid.inv-creative { scrollbar-width: none }` 只有 2 个类，输给 `.inv-panel.creative-ui.pocket-ui .inv-creative` 的 `scrollbar-width: thin`。于是两根并排：原生 8px 槽 + 深色块压在 6px 自绘滑块下面，滚起来就是"滑块下面的小滚动条"和小黑块。另外 `overflow-y: auto` 单独写会让 `overflow-x` 变成 auto，多 1px 就在底部画一条横向滚动条。
-  - 验证：`npx tsx tools/ui-test.ts` 975 通过（新增 2 条：创造栏不再出现原生滚动条声明（thin 与 `::-webkit-scrollbar` 两处都查）、基础与双栏两条网格都是 `overflow-x: hidden; overflow-y: auto`）。
-  - 批次：20261024-1706
-- [x] [修20] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
-  - 做了什么：新增 1706 一节与批次索引一行；OVERVIEW「界面与音频」补"创造栏只有自绘一根滚动条（`scrollbar-width: none` 必须写成 `.inv-panel .inv-grid.inv-creative`，否则被 4 个类的旧 `thin` 规则压住）+ 非搜索分类要收整条搜索行"；TASKS 队列落地补一行。
-  - 为什么：`scrollbar-width: none` 写了却无效这件事，只看片段看不出来，下次还会踩；所以坑写进 OVERVIEW 那一行摘要里（`TIPS.md` 已到 500 行上限，按"宁可少写"不新增条目）。
-  - 验证：`npm run check` 全绿（含 `audit:docs` 体量门禁）。
-  - 批次：20261024-1706
-
-## 批次 20261024-1652 · 2026-10-24 · 会话 723564b3
-
-- [x] [修16] 那颗键改成"可合成物品状态"的纯开关（亮灭 = 状态本身），只保留一条特殊逻辑：仓库里 + 关着 → 打开状态并跳到搜索分类：`src/ui/InventoryScreen.ts` → `npm run test:ui`
-  - 做了什么：① click 只有两件事——仓库（`pane === 'items'`）且 `!showUnowned` → `showUnowned = true` + `openPocketCategory('all')`；其余一律 `showUnowned = !showUnowned` + 重排（左栏不跳页）。② 两处 `active` 判据（背包 / 工作站）都改成 `this.showUnowned`，不再掺"左栏在哪一页"。
-  - 为什么：上一批把 `active` 写成 `leftPane === 'category'`，结果"分类页里亮着关不掉（点一下状态灭了、按钮还亮）"和"仓库里永远灰着（状态开着也不亮）"两个都错。用户口径是：按钮亮灭 = 状态本身、由用户完全控制、所有分类同一逻辑；只有"仓库里 + 关着"这一条会顺手跳到搜索页。所以亮灭判据必须与点击所翻的那个位是同一个人（`showUnowned`），特殊逻辑只额外做"跳页"。
-  - 验证：`npx tsx tools/ui-test.ts` **972 通过 / 0 失败**（4 条断言重写：不碰配方书、正常逻辑取反且不跳页、特殊逻辑 `pane==='items' && !showUnowned` → 置真 + `openPocketCategory('all')`、两处 `active` 都是 `this.showUnowned` 且不再出现 `leftPane === 'category'` / `showCategory` 版本）。
-  - 批次：20261024-1652
-- [x] [修17] 台账跟口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 里"亮着 = 左栏在可合成视图里"的说法改成"亮着 = 状态本身"；`HANDOFF.md` 提交总数同步 → `npm run check`
-  - 做了什么：1636 那节补更正行、新开 1652 一节；OVERVIEW 里那颗键的一句话口径重写；TASKS 里 1636 那条标注被 1652 推翻、并补 1652 一行；TIPS 那条改成"亮灭判据必须就是点击所翻的那个位"。
-  - 为什么：这条口径已经连错两轮（"开书" → "跟视图走"），文档里留着错的说法下一轮还会照做。
-  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
-  - 批次：20261024-1652
-
-## 批次 20261024-1636 · 2026-10-24 · 会话 723564b3
-
-> **更正（批次 20261024-1652）**：本批把 `active` 改成"左栏在可合成视图里"仍然是错的——那样在分类页里
-> 亮着关不掉、在仓库里永远灰着。正确口径见 1652：亮灭 = 状态本身（`showUnowned`），特殊逻辑只有
-> "仓库里 + 关着 → 打开并跳到搜索分类"。
-
-
-- [x] [修14] 澄清后改回："可合成物品"键只是左栏视图的开关——不打开配方书，且**按钮不会自己灭**：`src/ui/InventoryScreen.ts`（click 分支回退 + `active` 判据改成 `leftPane === 'category'`，工作站那条同口径）→ `npm run test:ui`（断言：click 里没有 `onOpenRecipes`/`onCloseRecipes`；`active` 只看视图、两处都不再带 `showUnowned`）
-  - 做了什么：① 撤掉上一批给那颗键加的 `onOpenRecipes('all')` / `isRecipesOpen` 分支，回到"仓库→`openPocketCategory(lastRecipeTab)`、已在分类页→切 `showUnowned`"。② `active` 从 `leftPane === 'category' && this.showUnowned` 改成 `leftPane === 'category'`；工作站分支 `showCategory && this.showUnowned` 同样改成 `showCategory`（`showCategory` 本身就是"左栏在分类页"）。③ title 回到 209 那套（描述再点一下切哪种筛选）。
-  - 为什么：用户澄清"没有所谓的配方书页面，配方相关的东西全走可合成物品这颗键"——上一批把"会自动关闭"读成了"配方书被关"，实现方向错了。"按钮自己灭"的真实原因是 `active` 绑在**红底筛选**上：从仓库点进来的第一次 `showUnowned` 还是 false，于是视图开了、按钮是灭的，看起来像自动关掉、得再点一下（那一下才把 `showUnowned` 打开）。
-  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（把上一批那 3 条"那颗键开书"的断言换回"只切视图、不碰配方书"，`active` 那条改成只看视图且覆盖工作站分支）。
-  - 批次：20261024-1636
-- [x] [修15] 台账改口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 里"那颗键打开配方书"的说法全部改成"可合成物品视图开关 + 亮着跟着视图" → `npm run check`
-  - 做了什么：1609 那批的 DONE 条目补一行"更正"，本批次另开一节；OVERVIEW「物品栏与合成」、TASKS 队列落地、批次索引都改成正确口径（滚动条那部分不动）。
-  - 为什么：文档里留一句错的因果，下一轮还会把同一个误解再实现一遍。
-  - 验证：`npm run check` 全绿（编号 / 覆盖度 / 差异 / 文档体量四条台账 + 全部离线套件）。
-  - 批次：20261024-1636
 

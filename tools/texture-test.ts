@@ -178,21 +178,22 @@ console.log('\n[顺带确认这些方块的机制本身是完整的]');
 // ---------------------------------------------------------------- 图标缓存
 //
 // 2026-10-22 用户："部分图标不见了" —— 截图里空的是沙 / 原木 / 树叶 / 木板 / 圆石 /
-// 玻璃 / 工作台 / 箱子 / 砖块，**正好是建造工具条用到的 9 件**。
-// 根因：`App` 构造里 `BuildToolbar` 早于 `atlas.ensureUploaded()`，而主菜单阶段的图集是
+// 玻璃 / 工作台 / 箱子 / 砖块（当时正好是建造工具条用到的 9 件；工具条已在批次
+// 20261025-0117 移除，但这条次序约束对所有界面都成立）。
+// 根因：`App` 构造里界面早于 `atlas.ensureUploaded()`，而主菜单阶段的图集是
 // `deferPaint` 的空画布；用空图集拼出来的等轴图标全透明，还被 `BlockIcon` 按 blockId 缓存
-// 住（只按 `atlas.revision` 失效）→ 这 9 个方块在本页所有界面里永久空白。
+// 住（只按 `atlas.revision` 失效）→ 这些方块在本页所有界面里永久空白。
 // 这套断言守"次序 + 守卫"，因为这两种错都不会报错、只会少画东西。
 console.log('\n图标缓存不能被"还没铺像素的图集"毒化');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const ensureAt = mainSrc.indexOf('atlas.ensureUploaded()');
   const cardAt = mainSrc.indexOf('new TutorialCard(');
-  const toolbarAt = mainSrc.indexOf('new BuildToolbar(');
+  const editorAt = mainSrc.indexOf('new CommandBlockEditor(');
   check(
     '进世界先铺图集像素，并且排在 UI 构造之前',
-    ensureAt > 0 && cardAt > ensureAt && toolbarAt > ensureAt,
-    `ensure=${ensureAt} card=${cardAt} toolbar=${toolbarAt}`,
+    ensureAt > 0 && cardAt > ensureAt && editorAt > ensureAt,
+    `ensure=${ensureAt} card=${cardAt} editor=${editorAt}`,
   );
   check(
     '进世界时清一次方块图标缓存（上一局的坏图标能自愈）',

@@ -737,24 +737,6 @@ import { TutorialCard } from './ui/TutorialCard.ts';
 import { stepsOf } from './tutorial/steps.ts';
 import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.ts';
 import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from './tutorial/boot.ts';
-// 创造模式撤销/重做（创造1）：栈是纯逻辑，写回世界在这里做
-import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack.ts';
-// 创造2：两点选区 + 框选填充（分批跨帧）
-import { buildSelection, type BlockPos, type SelectionBox } from './buildtools/Selection.ts';
-import { FillRunner, shouldFillCell, type FillMode } from './buildtools/Fill.ts';
-// 创造3：复制 / 粘贴 / 镜像
-import {
-  PasteRunner,
-  createSnapshot,
-  defaultPasteTarget,
-  planPaste,
-  type ClipboardSnapshot,
-  type MirrorAxis,
-  type PasteCell,
-} from './buildtools/Clipboard.ts';
-// 创造4：内置建筑模板
-import { checkTemplatePlacement, templateById, templateCells, type BuildTemplate } from './buildtools/templates.ts';
-import { BuildToolbar } from './ui/BuildToolbar.ts';
 // 单机小游戏（小游戏1）：宿主 + 自检游戏
 import { MiniGameHost } from './minigame/MiniGameHost.ts';
 import { SmokeGame } from './minigame/games/smoke.ts';
@@ -1017,28 +999,12 @@ type PortalArrivalKind = 'nether' | 'end' | 'spawn';
 const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
 
 /**
- * 撤销一次最多唤醒多少格的流体（创造1）。
- *
- * 单次放置/破坏最多两格，这个上限是为将来的**批量撤销**（框选填充、模板）留的：
- * 一次撤 4096 格时逐格 `wakeFluidsAround` 会变成一次小型的流体风暴。
- */
-/**
  * 按住时两次挥动之间的间隔（秒）。
  *
  * 取值略大于一次挥动的时长（`HandRenderer` 里 `SWING_DURATION = 0.26`）：
  * 挥动中 `swing()` 不会重开，间隔给太小等于白白调用；0.3 ≈ 原版挖方块每 6 tick 一下。
  */
 const ARM_SWING_INTERVAL = 0.3;
-
-const UNDO_WAKE_LIMIT = 256;
-
-/**
- * 一次填充最多记多少格的撤销（创造2）。
- *
- * 选区上限是 32768 格，全记下来约 3~6MB（手机上偏高）。超过这个数就**整次不记**，
- * 而不是记一半——记一半的撤销会把玩家刚填好的区域撤出一个洞，比"不能撤"更糟。
- */
-const FILL_UNDO_LIMIT = 8192;
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -1679,44 +1645,6 @@ class App {
   private tutorialDismissed = false;
   /** "引导完成"只播一次（避免后续多余的 obtain/place 反复触发） */
   private tutorialFinishedAnnounced = false;
-  /**
-   * 创造模式的撤销 / 重做栈（创造1）。
-   *
-   * 只记**创造 + 单机**：生存模式撤销等于刷物品；联机协议里没有"撤销"这条消息，
-   * 撤销会让别人的世界与服务端不一致。切换维度时清空（见 `switchDimension`）。
-   */
-  private readonly undoStack = new UndoStack();
-  /** 创造2：选区第一个角（null = 还没开始选） */
-  private selectionStart: BlockPos | null = null;
-  /** 创造2：成型的选区（两点都点完才有） */
-  private selectionBox: SelectionBox | null = null;
-  /** 创造2：正在分批执行的填充（null = 空闲） */
-  private activeFill: FillRunner | null = null;
-  /**
-   * 创造2：这次填充攒下的撤销记录。
-   *
-   * 填充是跨帧的，不能靠 `undoBegin/undoEnd` 包住（那会把玩家在这期间的其它操作
-   * 也并进同一步）——所以先攒进数组，全部写完再一次性 `undoPush`。
-   * 超过 `FILL_UNDO_LIMIT` 时**整次不记**（见 `startFill` 的注释）。
-   */
-  private fillUndoBuffer: BlockEdit[] | null = null;
-  /** 创造3：剪贴板（只存非空气；`null` = 还没复制过） */
-  private clipboard: ClipboardSnapshot | null = null;
-  /** 创造3：正在分批执行的粘贴 */
-  private activePaste: PasteRunner | null = null;
-  /** 创造3：这次粘贴攒下的撤销记录（与填充同一条：超过上限整次不记） */
-  private pasteUndoBuffer: BlockEdit[] | null = null;
-  /**
-   * 建造模式（创造5）：激活后左键改为"点一个选区角"，不再破坏方块。
-   *
-   * 这是工具条与原有操作之间**唯一的耦合点**：只影响左键语义，
-   * 右键放置、移动、跳跃、界面全部照旧。
-   */
-  private buildMode = false;
-  /** 鼠标左键在建造模式下的一次性请求（按下沿；按住不会连续加角） */
-  private buildRequest = false;
-  /** 建造工具条（右侧双列竖排；折叠时只剩总开关） */
-  private readonly buildToolbar: BuildToolbar;
   /** 单机小游戏宿主（小游戏1）：激活时主循环只跑小游戏帧，世界那一帧全部跳过 */
   private readonly miniGame: MiniGameHost;
   private readonly advancementScreen: AdvancementScreen;
@@ -2440,10 +2368,9 @@ class App {
     // 上传画布（1ms 量级），让"重进游戏"也成为一条自愈路径，而不只是刷新。
     //
     // ⚠️ **必须排在所有 UI 构造之前**（2026-10-22 修）：主菜单阶段图集是 `deferPaint`
-    // 的空画布，而 `BuildToolbar` 这类界面在构造时就画物品图标。拿空图集拼出来的等轴图标
-    // 是**全透明的**，还会被 `BlockIcon` 的缓存留下来（只按 `atlas.revision` 失效），
-    // 于是那几件方块在本页任何界面里都永久空白——实测正好是工具条用到的 9 件：
-    // 沙 / 原木 / 树叶 / 木板 / 圆石 / 玻璃 / 工作台 / 箱子 / 砖块。
+    // 的空画布，而界面在构造时就会画物品图标。拿空图集拼出来的等轴图标是**全透明的**，
+    // 还会被 `BlockIcon` 的缓存留下来（只按 `atlas.revision` 失效），于是那几件方块
+    // 在本页任何界面里都永久空白（当时实测是建造工具条用到的 9 件）。
     const atlasUploadBefore = atlas.probeUpload();
     const atlasUploaded = atlas.ensureUploaded();
     diag.event('app', 'atlas.ensure', {
@@ -2511,78 +2438,6 @@ class App {
         },
       },
     );
-
-    // 建造工具（创造5；抽屉形态，批次 20261024-0344）：挂 <body>，与其它面板同一套层叠口径
-    // （z-index 9，低于背包 10）。它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
-    this.buildToolbar = new BuildToolbar(document.body, atlas, {
-      onToggleMode: (active) => {
-        this.buildMode = active;
-        // 打开面板顺手把按住的键清掉：面板是模态的，键盘却还连着——
-        // 不清的话会出现"面板开着、人还在往前走"
-        if (active) this.keys.clear();
-        // 退出建造模式时把没点完的第一个角清掉，避免下次进来"莫名其妙已经选了一半"
-        if (!active) this.clearSelection();
-        this.refreshBuildToolbar();
-      },
-      onSelect: () => {
-        this.clearSelection();
-        this.hudToast.show(t('buildtools.tool.selectHint'));
-        this.refreshBuildToolbar();
-      },
-      onFill: () => {
-        const blockId = this.selectedBlock;
-        if (blockId === undefined) {
-          this.hudToast.show(t('buildtools.fill.noBlock'));
-          return;
-        }
-        this.startFill(blockId);
-        this.refreshBuildToolbar();
-      },
-      onCopy: () => {
-        this.copySelection();
-        this.refreshBuildToolbar();
-      },
-      onPaste: (mirror) => {
-        this.pasteClipboard(mirror);
-        this.refreshBuildToolbar();
-      },
-      onUndo: () => {
-        this.undoLast();
-        this.refreshBuildToolbar();
-      },
-      onRedo: () => {
-        this.redoLast();
-        this.refreshBuildToolbar();
-      },
-      onTemplate: (templateId) => {
-        this.placeTemplate(templateId);
-        this.refreshBuildToolbar();
-      },
-      // 「结束建造」：玩家主动收工。模式与面板由工具条那边关，这里只负责
-      // 把主程序的状态一起清零（不清的话左键仍然被当成"点选区角"，玩家会以为挖不动）
-      onEndBuild: () => {
-        this.buildMode = false;
-        this.clearSelection();
-        this.refreshBuildToolbar();
-      },
-      // 抽屉开合与指针锁（批次 20261024-0344）：
-      // 开着时释放指针锁——不然鼠标还在后面转视角，面板上根本点不准；
-      // 关掉后按 `uiOpen` 决定要不要重新锁（背包还开着就别抢回来，与 `handleInventoryOpen` 同口径）。
-      // ⚠️ 这里**不**走 `uiOpen`：`handleInventoryOpen` 会清按键、收触摸层、退锁再抢锁，
-      // 每开关一次面板抖一下（取舍见 `.continue/doing/f639d3-decision.md` D4）。
-      onPanelChange: (open) => {
-        if (open) {
-          if (document.pointerLockElement) document.exitPointerLock();
-          return;
-        }
-        if (this.uiOpen || this.touch) return;
-        const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
-        result?.catch(() => {
-          /* 浏览器可能拒绝自动重新锁定，玩家点一下画面即可 */
-        });
-      },
-    });
-    this.refreshBuildToolbar();
 
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
@@ -5344,16 +5199,6 @@ class App {
         return;
       }
       if (this.sleeping && e.code !== 'Space') return;
-      // 建造抽屉（批次 20261024-0344）是模态层：Esc 收面板，其余按键一律不往下走。
-      // 遮罩只挡鼠标/触摸，键盘完全不受影响——不挡的话面板开着按 W 会一边走一边把左键
-      // 当"点选区角"，按 E 会在抽屉上面再叠一层背包，按 Esc 会先弹暂停菜单。
-      if (this.buildToolbar.isPanelOpen) {
-        if (e.code === 'Escape') {
-          e.preventDefault();
-          this.buildToolbar.closePanel();
-        }
-        return;
-      }
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
@@ -5410,19 +5255,6 @@ class App {
       if (e.code === 'KeyJ') {
         e.preventDefault();
         this.toggleAdvancements();
-        return;
-      }
-      // 创造1：撤销 / 重做（桌面快捷键；触摸端在创造5的工具条上）。
-      // 放在 `uiOpen` 判断之前：背包开着时也该能撤（按 Ctrl+Z 时人是想改刚才的建造）
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
-        e.preventDefault();
-        if (e.shiftKey) this.redoLast();
-        else this.undoLast();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
-        e.preventDefault();
-        this.redoLast();
         return;
       }
       // T / 斜杠：打开聊天与命令输入（原版就是这两个键）
@@ -5532,13 +5364,9 @@ class App {
             return;
           }
           if (e.button === 0) {
-            // 建造模式（创造5）：左键只点一个选区角，不进入"按住破坏"
-            if (this.buildMode) this.buildRequest = true;
-            else {
-              this.leftDown = true;
-              // 按下就记一次挥动：一帧内按下+松开（快速点击）也挥手
-              this.tapSwingRequest = true;
-            }
+            this.leftDown = true;
+            // 按下就记一次挥动：一帧内按下+松开（快速点击）也挥手
+            this.tapSwingRequest = true;
           }
           if (e.button === 2) this.rightDown = true;
         },
@@ -8450,13 +8278,13 @@ class App {
    * 手臂挥动的输入驱动（批次 20261024-XXXX）。
    *
    * 见字段 `tapSwingRequest` 的注释：点一下挥一次、按住按节拍连续挥。
-   * UI 打开、或者正在建造模式框选时不挥（那两下不是"使用手"）。
+   * UI 打开时不挥（那下不是"使用手"）。
    */
   private updateArmSwing(dt: number): void {
     this.armSwingCooldown = Math.max(0, this.armSwingCooldown - dt);
     const tap = this.tapSwingRequest;
     this.tapSwingRequest = false;
-    if (this.uiOpen || this.buildMode) return;
+    if (this.uiOpen) return;
     const holding = this.leftDown || this.padAttack || this.touch?.holding === true;
     if (!tap && !(holding && this.armSwingCooldown <= 0)) return;
     this.hand.swing();
@@ -8466,8 +8294,6 @@ class App {
   private updateAttacking(dt: number): void {
     // 旁观模式（批次 491）：不能攻击（连挥空都不该有）
     if (!canInteract(this.gameMode)) return;
-    // 建造模式（创造5）：左键改成选区，不攻击（`tapAttackRequest` 留给 `updateBreaking` 消费）
-    if (this.buildMode) return;
     // 批次 271：只要这一帧瞄着生物，就不许去挖方块——包括**攻击冷却期间**。
     // 原来这一行是无条件 false，冷却的 0.5 秒里 `updateBreaking` 会拿方块目标继续挖，
     // 手机上按住一只猪就会把脚下的地挖穿。
@@ -8631,22 +8457,6 @@ class App {
     // 冒险模式（批次 549）：能打怪、能交互，但不能破坏方块
     if (!canBreakBlocks(this.gameMode)) return;
 
-    // 建造模式（创造5）：左键 = 点一个选区角；**按住什么都不做**（避免误拆）。
-    // 放在 `suppressBreaking` 判断之前：上一帧攻击留下的标志不该让选区失灵。
-    if (this.buildMode) {
-      if ((this.buildRequest || this.tapAttackRequest) && this.hit && this.placeCooldown <= 0) {
-        this.placeCooldown = PLACE_COOLDOWN;
-        this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z });
-        this.refreshBuildToolbar();
-      }
-      this.buildRequest = false;
-      this.tapAttackRequest = false;
-      this.breakingKey = '';
-      this.breakProgress = 0;
-      this.digSoundTimer = 0;
-      this.suppressBreaking = false;
-      return;
-    }
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -8727,10 +8537,7 @@ class App {
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
     // 批次 38 起按形状判定（原来写死橡木门 → 云杉门拆一半会留下半扇悬空的门）
     if (blockDef(brokenId).shape === 'door') {
-      // 创造1：整扇门（两格）合成一步撤销
-      this.undoBegin();
       this.breakDoorPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -8739,10 +8546,7 @@ class App {
 
     // 旗帜（批次 484）：与门一样是两格高——拆一半带走另一半，否则会剩半面旗
     if (blockDef(brokenId).shape === 'banner') {
-      // 创造1：整面旗（两格）合成一步撤销
-      this.undoBegin();
       this.breakBannerPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -8752,10 +8556,7 @@ class App {
     // 床（批次 79）同理，只是它横着占两格：拆一半必须带走另一半，
     // 否则会留下一张**半张床**（站上去只剩 9/16 的一半，看着像 bug）
     if (blockDef(brokenId).shape === 'bed') {
-      // 创造1：整张床（两格）合成一步撤销
-      this.undoBegin();
       this.breakBedPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -8767,10 +8568,7 @@ class App {
     // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗、
     // 半空中会挂着一片脚手架——而方块本身看起来毫无问题。
     if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE || brokenId === Block.SCAFFOLDING) {
-      // 创造1：整柱海带/甘蔗（可能好几节）合成一步撤销
-      this.undoBegin();
       this.breakColumn(this.hit.x, this.hit.y, this.hit.z, brokenId);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -8840,8 +8638,6 @@ class App {
     // 判定用挖之前的 `brokenState`（上面已经读过），不看"现在还是不是那个方块"
     const afterBreakId = blockAfterBreak(brokenId, brokenState);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, afterBreakId);
-    // 创造1：破坏也进撤销栈（撤销 = 把原来那一格放回去；含水方块恢复成水的那一档也对）
-    this.undoRecord(this.hit.x, this.hit.y, this.hit.z, brokenId, brokenState, afterBreakId, 0);
     // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
     // 挖掉的一格可能是"水底/水侧"的塞子——必须唤醒它周围的液体重新评估流向。
     // 原来只有爆炸、拔海带/甘蔗那几条路会唤醒，**玩家手挖这条主路漏了**。
@@ -9282,10 +9078,7 @@ class App {
       const id = this.world.getBlock(bx, by, bz);
       // 另一半必须是**同一种**床（脏存档里可能只剩一半）
       if (!isBed(id)) continue;
-      const state = this.world.getBlockState(bx, by, bz);
       this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
-      // 创造1：整张床是一个动作（外层 `updateBreaking` 用 begin/end 包起来）
-      this.undoRecord(bx, by, bz, id, state, Block.AIR, 0);
       this.queueBlockChange(bx, by, bz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
       // 整张床只掉一次（在床脚那一格的位置掉）
@@ -10005,321 +9798,6 @@ class App {
     }
   }
 
-  // ---------------------------------------------------------------- 创造工具（创造1）
-
-  /**
-   * 撤销是否可用：**创造模式 + 单机**。
-   *
-   * 生存模式撤销等于"把用掉的方块拿回来"（刷物品）；联机协议里没有撤销这条消息，
-   * 本地撤销会让别人的世界与服务端不一致——两件事都只能关掉，而不是"尽力而为"。
-   */
-  private undoAllowed(): boolean {
-    return this.isCreative && !this.net.connected;
-  }
-
-  /** 开一次动作事务（放置门/床这种两格动作用它合成一步） */
-  private undoBegin(): void {
-    if (this.undoAllowed()) this.undoStack.begin();
-  }
-
-  private undoEnd(): void {
-    this.undoStack.end();
-  }
-
-  /** 记一格改动；不在事务里时它自己就是一步 */
-  private undoRecord(
-    x: number,
-    y: number,
-    z: number,
-    beforeId: number,
-    beforeState: number,
-    afterId: number,
-    afterState: number,
-  ): void {
-    if (!this.undoAllowed()) return;
-    this.undoStack.record({
-      dimension: this.dimension,
-      x,
-      y,
-      z,
-      beforeId,
-      beforeState,
-      afterId,
-      afterState,
-    });
-  }
-
-  /** 把一批改动记成**一步**（门/床这种两格动作用它；不在事务里时直接 push） */
-  private undoPush(batch: readonly BlockEdit[]): void {
-    if (!this.undoAllowed() || batch.length === 0) return;
-    this.undoStack.push(batch);
-  }
-
-  /** 撤销一步（Ctrl+Z / 触摸端工具条） */
-  private undoLast(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const step = this.undoStack.undo();
-    if (!step) {
-      this.hudToast.show(t('buildtools.undo.empty'));
-      return false;
-    }
-    this.applyUndoStep(step);
-    return true;
-  }
-
-  /** 重做一步（Ctrl+Y / Ctrl+Shift+Z） */
-  private redoLast(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const step = this.undoStack.redo();
-    if (!step) {
-      this.hudToast.show(t('buildtools.redo.empty'));
-      return false;
-    }
-    this.applyUndoStep(step);
-    return true;
-  }
-
-  /** 把一步写回世界（撤销写 before、重做写 after） */
-  private applyUndoStep(step: UndoStep): void {
-    let applied = 0;
-    for (const edit of step.edits) {
-      // 切过维度之后旧维度的格子不在这里（切维度本身会清空栈，这条只是兜底）
-      if (edit.dimension !== this.dimension) continue;
-      const id = step.direction === 'undo' ? edit.beforeId : edit.afterId;
-      const state = step.direction === 'undo' ? edit.beforeState : edit.afterState;
-      if (!this.world.setBlockAndUpdate(edit.x, edit.y, edit.z, id, state)) continue;
-      // 挖掉/放回水底的方块要唤醒流体，否则那一格会一直空着（与破坏路径同一条）
-      // ⚠️ 将来批量撤销（框选填充）可能一次几百格：这里限一下，避免一次唤醒风暴
-      if (applied < UNDO_WAKE_LIMIT) this.wakeFluidsAround(edit.x, edit.y, edit.z);
-      applied += 1;
-    }
-    if (applied > 0) this.vibrate(8);
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造2）
-
-  /**
-   * 点一个选区角：第一次记起点，第二次成盒。
-   *
-   * 同一格点两次 = 1×1×1 的选区（不是"取消"）：低龄玩家用"取消选框"来取消，
-   * 不该让"点了两下同一个地方"产生两种解释。
-   */
-  private selectCorner(pos: BlockPos): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionStart) {
-      this.selectionStart = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
-      this.selectionBox = null;
-      this.hudToast.show(t('buildtools.select.first'));
-      return true;
-    }
-    const result = buildSelection(this.selectionStart, pos);
-    this.selectionStart = null;
-    if (!result.ok) {
-      this.selectionBox = null;
-      this.hudToast.show(
-        t(result.reason === 'tooLarge' ? 'buildtools.select.tooLarge' : 'buildtools.select.outOfWorld'),
-      );
-      return false;
-    }
-    this.selectionBox = result.box;
-    this.hudToast.show(tp('buildtools.select.done', { volume: result.volume }));
-    return true;
-  }
-
-  private clearSelection(): void {
-    this.selectionStart = null;
-    this.selectionBox = null;
-  }
-
-  /** 开始填充：只建 runner，真正的写入由每帧的 `stepFillRunner` 推进 */
-  private startFill(blockId: number, mode: FillMode = 'fill', replaceId: number | null = null): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionBox) {
-      this.hudToast.show(t('buildtools.fill.noSelection'));
-      return false;
-    }
-    if (this.activeFill) this.activeFill.cancel();
-
-    this.fillUndoBuffer = this.undoAllowed() ? [] : null;
-    const box = this.selectionBox;
-    this.activeFill = new FillRunner(box, {
-      write: (pos) => {
-        const currentId = this.world.getBlock(pos.x, pos.y, pos.z);
-        if (!shouldFillCell({ mode, currentId, replaceId })) return false;
-        const currentState = this.world.getBlockState(pos.x, pos.y, pos.z);
-        if (!this.world.setBlockAndUpdate(pos.x, pos.y, pos.z, blockId, 0)) return false;
-        if (this.fillUndoBuffer) {
-          if (this.fillUndoBuffer.length >= FILL_UNDO_LIMIT) {
-            // 超过上限：整次不记（丢掉已攒的），避免"撤销出个洞"
-            this.fillUndoBuffer = null;
-          } else {
-            this.fillUndoBuffer.push({
-              dimension: this.dimension,
-              x: pos.x,
-              y: pos.y,
-              z: pos.z,
-              beforeId: currentId,
-              beforeState: currentState,
-              afterId: blockId,
-              afterState: 0,
-            });
-          }
-        }
-        // 与单格放置同一条：填到水底/水边要让水重新评估流向
-        this.wakeFluidsAround(pos.x, pos.y, pos.z);
-        return true;
-      },
-    });
-    return true;
-  }
-
-  /** 每帧推进一步填充（最多一批 512 格；没有填充时什么都不做） */
-  private stepFillRunner(): void {
-    const runner = this.activeFill;
-    if (!runner) return;
-    if (runner.step()) return;
-
-    this.activeFill = null;
-    const progress = runner.progress;
-    const buffered = this.fillUndoBuffer;
-    this.fillUndoBuffer = null;
-    if (buffered && buffered.length > 0) this.undoPush(buffered);
-    if (progress.cancelled) this.hudToast.show(t('buildtools.fill.cancelled'));
-    else this.hudToast.show(tp('buildtools.fill.done', { count: progress.written }));
-  }
-
-  private cancelFill(): void {
-    this.activeFill?.cancel();
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造3）
-
-  /** 复制当前选区（只存非空气；空洞保留为"不覆盖"） */
-  private copySelection(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionBox) {
-      this.hudToast.show(t('buildtools.fill.noSelection'));
-      return false;
-    }
-    const snapshot = createSnapshot(this.selectionBox, (x, y, z) => {
-      const id = this.world.getBlock(x, y, z);
-      if (id === Block.AIR) return null;
-      return { id, state: this.world.getBlockState(x, y, z) };
-    });
-    if (snapshot.cells.length === 0) {
-      this.hudToast.show(t('buildtools.copy.empty'));
-      return false;
-    }
-    this.clipboard = snapshot;
-    this.hudToast.show(tp('buildtools.copy.done', { count: snapshot.cells.length }));
-    return true;
-  }
-
-  /**
-   * 粘贴（可选镜像）。
-   *
-   * 默认落点 = 原件右边一格宽（`defaultPasteTarget`），避免"粘贴完看不出变化"
-   * ——那是最容易让人以为按钮没反应的失败方式。
-   */
-  private pasteClipboard(
-    mirror: MirrorAxis | null = null,
-    target?: { readonly x: number; readonly y: number; readonly z: number },
-  ): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const snapshot = this.clipboard;
-    if (!snapshot) {
-      this.hudToast.show(t('buildtools.copy.none'));
-      return false;
-    }
-    if (this.activePaste) this.activePaste.cancel();
-
-    const landing = target ?? defaultPasteTarget(snapshot);
-    const plan = planPaste(snapshot, landing, { mirror });
-    if (plan.cells.length === 0) {
-      this.hudToast.show(t('buildtools.paste.outOfWorld'));
-      return false;
-    }
-
-    return this.startPasteCells(plan.cells);
-  }
-
-  /**
-   * 把一批格子交给跨帧粘贴器。
-   *
-   * 剪贴板与建筑模板**共用这一条执行路径**：都是"一次动作 = 一步撤销 + 每帧一批"。
-   * 分开写只会让两边的上限与收口逻辑慢慢漂开。
-   */
-  private startPasteCells(cells: readonly PasteCell[]): boolean {
-    if (cells.length === 0) return false;
-    if (this.activePaste) this.activePaste.cancel();
-
-    this.pasteUndoBuffer = this.undoAllowed() ? [] : null;
-    this.activePaste = new PasteRunner(cells, {
-      write: (cell) => {
-        const currentId = this.world.getBlock(cell.x, cell.y, cell.z);
-        const currentState = this.world.getBlockState(cell.x, cell.y, cell.z);
-        if (!this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, cell.id, cell.state)) return false;
-        if (this.pasteUndoBuffer) {
-          if (this.pasteUndoBuffer.length >= FILL_UNDO_LIMIT) {
-            // 与填充同一条：超过上限整次不记，避免"撤销出个洞"
-            this.pasteUndoBuffer = null;
-          } else {
-            this.pasteUndoBuffer.push({
-              dimension: this.dimension,
-              x: cell.x,
-              y: cell.y,
-              z: cell.z,
-              beforeId: currentId,
-              beforeState: currentState,
-              afterId: cell.id,
-              afterState: cell.state,
-            });
-          }
-        }
-        this.wakeFluidsAround(cell.x, cell.y, cell.z);
-        return true;
-      },
-    });
-    return true;
-  }
-
-  /** 每帧推进一步粘贴 */
-  private stepPasteRunner(): void {
-    const runner = this.activePaste;
-    if (!runner) return;
-    if (runner.step()) return;
-
-    this.activePaste = null;
-    const progress = runner.progress;
-    const buffered = this.pasteUndoBuffer;
-    this.pasteUndoBuffer = null;
-    if (buffered && buffered.length > 0) this.undoPush(buffered);
-    if (progress.cancelled) this.hudToast.show(t('buildtools.paste.cancelled'));
-    else this.hudToast.show(tp('buildtools.paste.done', { count: progress.written }));
-  }
-
-  private cancelPaste(): void {
-    this.activePaste?.cancel();
-  }
-
   /**
    * 进入一局小游戏（小游戏1）：先把主世界的输入层收掉。
    *
@@ -10332,65 +9810,6 @@ class App {
     this.touch?.setEnabled(false);
     if (this.touch) this.touch.visible = false;
     this.miniGame.start(game);
-  }
-
-  /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
-  private refreshBuildToolbar(): void {
-    // 非创造时**把模式一起清零**（批次 20261024-0344）：旧实现只把工具条藏起来，
-    // `buildMode` 还是 true，左键继续被当"点选区角"吞掉——玩家会觉得"挖不动、工具也没了"。
-    if (!this.isCreative && this.buildMode) this.buildMode = false;
-    this.buildToolbar.setAvailable(this.isCreative);
-    this.buildToolbar.setUndoState(this.undoStack.canUndo, this.undoStack.canRedo);
-    this.buildToolbar.setSelectionArmed(this.selectionStart !== null);
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造4）
-
-  /** 模板落点：准星命中的方块上方；没有命中就放脚下（以建筑中心对齐） */
-  private defaultTemplateOrigin(template: BuildTemplate): { x: number; y: number; z: number } {
-    const base = this.hit
-      ? { x: this.hit.x, y: this.hit.y + 1, z: this.hit.z }
-      : {
-          x: Math.floor(this.physics.x),
-          y: Math.floor(this.physics.y),
-          z: Math.floor(this.physics.z),
-        };
-    return {
-      x: base.x - Math.floor(template.width / 2),
-      y: base.y,
-      z: base.z - Math.floor(template.depth / 2),
-    };
-  }
-
-  /**
-   * 放一座内置建筑：先检查（越界 / 挡路 / 悬空），再交给跨帧粘贴器。
-   *
-   * 检查不通过就**拒绝**并说原因，而不是尽量放——玩家挑了一个位置，
-   * 悄悄少放一半比"放不下"更难理解。
-   */
-  private placeTemplate(
-    templateId: string,
-    origin?: { readonly x: number; readonly y: number; readonly z: number },
-  ): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const template = templateById(templateId);
-    if (!template) return false;
-
-    const landing = origin ?? this.defaultTemplateOrigin(template);
-    const check = checkTemplatePlacement(template, landing, (x, y, z) => this.world.getBlock(x, y, z), {
-      isSolid: (id) => blockDef(id).solid,
-    });
-    if (!check.ok) {
-      this.hudToast.show(t(`buildtools.template.${check.reason ?? 'blocked'}`));
-      return false;
-    }
-
-    if (!this.startPasteCells(templateCells(template, landing))) return false;
-    this.hudToast.show(tp('buildtools.template.placed', { name: t(template.nameKey) }));
-    return true;
   }
 
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
@@ -11716,9 +11135,7 @@ class App {
   private breakColumn(x: number, y: number, z: number, id: number): void {
     for (let oy = y; oy < 320; oy++) {
       if (this.world.getBlock(x, oy, z) !== id) break;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       // 创造模式不产生掉落（与原版一致）
@@ -11739,9 +11156,7 @@ class App {
       const id = this.world.getBlock(x, oy, z);
       // 上半格必须是同一种门（脏存档里可能只剩半扇）
       if (blockDef(id).shape !== 'door') continue;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -11769,9 +11184,7 @@ class App {
       const oy = baseY + dy;
       const id = this.world.getBlock(x, oy, z);
       if (blockDef(id).shape !== 'banner') continue;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -12545,123 +11958,6 @@ class App {
   /** 验收脚本用：收起引导卡 */
   hideTutorialCardForTest(): void {
     this.tutorialCard.hide();
-  }
-
-  /** 验收脚本用：撤销一步（创造1） */
-  undoForTest(): boolean {
-    return this.undoLast();
-  }
-
-  /** 验收脚本用：重做一步（创造1） */
-  redoForTest(): boolean {
-    return this.redoLast();
-  }
-
-  /** 验收脚本用：撤销栈状态（不改变任何东西） */
-  get undoStateForTest(): { undo: number; redo: number; allowed: boolean } {
-    return { undo: this.undoStack.undoCount, redo: this.undoStack.redoCount, allowed: this.undoAllowed() };
-  }
-
-  /** 验收脚本用：点一个选区角（创造2） */
-  selectCornerForTest(x: number, y: number, z: number): boolean {
-    return this.selectCorner({ x, y, z });
-  }
-
-  /** 验收脚本用：同步把选区填完，返回真正写入的格数 */
-  fillSelectionForTest(blockId: number, mode: FillMode = 'fill'): number {
-    if (!this.startFill(blockId, mode)) return 0;
-    const runner = this.activeFill;
-    while (this.activeFill) this.stepFillRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：清掉选区（两个角都作废） */
-  clearSelectionForTest(): void {
-    this.clearSelection();
-  }
-
-  /** 验收脚本用：取消正在进行的填充（已写进去的格子不回滚） */
-  cancelFillForTest(): void {
-    this.cancelFill();
-  }
-
-  /** 验收脚本用：选区 / 填充状态 */
-  get selectionStateForTest(): { hasStart: boolean; box: SelectionBox | null; filling: boolean } {
-    return {
-      hasStart: this.selectionStart !== null,
-      box: this.selectionBox,
-      filling: this.activeFill !== null,
-    };
-  }
-
-  /** 验收脚本用：复制当前选区，返回复制到的格数（创造3） */
-  copySelectionForTest(): number {
-    return this.copySelection() ? (this.clipboard?.cells.length ?? 0) : 0;
-  }
-
-  /** 验收脚本用：同步把剪贴板粘贴完，返回写入格数 */
-  pasteClipboardForTest(
-    mirror: MirrorAxis | null = null,
-    x?: number,
-    y?: number,
-    z?: number,
-  ): number {
-    const target = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
-    if (!this.pasteClipboard(mirror, target)) return 0;
-    const runner = this.activePaste;
-    while (this.activePaste) this.stepPasteRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：取消正在进行的粘贴 */
-  cancelPasteForTest(): void {
-    this.cancelPaste();
-  }
-
-  /** 验收脚本用：剪贴板状态 */
-  get clipboardStateForTest(): { hasClipboard: boolean; cells: number; masked: boolean; pasting: boolean } {
-    return {
-      hasClipboard: this.clipboard !== null,
-      cells: this.clipboard?.cells.length ?? 0,
-      masked: this.clipboard?.masked ?? false,
-      pasting: this.activePaste !== null,
-    };
-  }
-
-  /** 验收脚本用：放一座内置建筑，返回写入格数（创造4） */
-  placeTemplateForTest(templateId: string, x?: number, y?: number, z?: number): number {
-    const origin = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
-    if (!this.placeTemplate(templateId, origin)) return 0;
-    const runner = this.activePaste;
-    while (this.activePaste) this.stepPasteRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：开关建造模式（创造5） */
-  setBuildModeForTest(active: boolean): void {
-    this.buildMode = active;
-    this.buildToolbar.setMode(active);
-    if (!active) this.clearSelection();
-    this.refreshBuildToolbar();
-  }
-
-  /** 验收脚本用：工具条状态 */
-  get buildToolbarStateForTest(): {
-    mode: boolean;
-    panelOpen: boolean;
-    available: boolean;
-    armed: boolean;
-    undo: number;
-    redo: number;
-  } {
-    return {
-      mode: this.buildToolbar.isOpen,
-      panelOpen: this.buildToolbar.isPanelOpen,
-      available: this.isCreative,
-      armed: this.selectionStart !== null,
-      undo: this.undoStack.undoCount,
-      redo: this.undoStack.redoCount,
-    };
   }
 
   /** 验收脚本用：进入框架自检小游戏（小游戏1） */
@@ -15897,9 +15193,6 @@ class App {
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
       const { x: hx, y: hy, z: hz } = this.hit;
-      // 创造1：撤销要记"写之前是什么"，必须在 setBlockAndUpdate 之前读
-      const mergeBeforeId = this.world.getBlock(hx, hy, hz);
-      const mergeBeforeState = this.world.getBlockState(hx, hy, hz);
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(heldId, 1);
@@ -15907,15 +15200,12 @@ class App {
         this.reportProgress({ kind: 'place', block: blockId });
         // 新手引导（引导3）：合并放置同样算"放下"，坐标取落点那一格（判"搭起来"要用 y）
         this.reportTutorial({ kind: 'place', block: blockId, y: hy });
-        this.undoRecord(hx, hy, hz, mergeBeforeId, mergeBeforeState, blockId, plan.mergeInto.state);
       }
       return;
     }
 
     // 藤蔓"再挂一面"：改的是**落点那一格**（它已经是同一种藤蔓了）
     if (plan.mergeIntoTarget) {
-      // 创造1：落点原本就是同一种藤蔓（`existing`），改的是状态
-      const targetBeforeState = this.world.getBlockState(x, y, z);
       if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
         this.statistics.add('blocksPlaced');
         this.placeCooldown = PLACE_COOLDOWN;
@@ -15924,7 +15214,6 @@ class App {
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
         this.reportTutorial({ kind: 'place', block: blockId, y });
-        this.undoRecord(x, y, z, existing, targetBeforeState, blockId, plan.mergeIntoTarget.state);
       }
       return;
     }
@@ -15933,15 +15222,6 @@ class App {
     // 放下去时打上 waterlogged 标记。没有这个标记，水下放的台阶被挖掉之后
     // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
     const placeState = waterloggedPlacementState(blockId, plan.state, existing);
-    // 创造1：撤销要记"写之前是什么"。一次放置最多两格（门/床/双台阶/多格画），
-    // 两格的 before 都必须在任何写入发生之前读出来
-    const placeBeforeState = this.world.getBlockState(x, y, z);
-    const extra = plan.extra;
-    const extraX = extra ? x + extra.dx : 0;
-    const extraY = extra ? y + extra.dy : 0;
-    const extraZ = extra ? z + extra.dz : 0;
-    const extraBeforeId = extra ? this.world.getBlock(extraX, extraY, extraZ) : Block.AIR;
-    const extraBeforeState = extra ? this.world.getBlockState(extraX, extraY, extraZ) : 0;
     if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
       this.statistics.add('blocksPlaced');
       // 多格画（批次 495）：`planPlacement` 只返回了哨兵档位，具体是哪一幅、
@@ -15953,44 +15233,6 @@ class App {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
       }
-      // 创造1：一次放置 = 一步（门/床的两格一起撤销，而不是撤两下）
-      this.undoPush(
-        extra
-          ? [
-              {
-                dimension: this.dimension,
-                x,
-                y,
-                z,
-                beforeId: existing,
-                beforeState: placeBeforeState,
-                afterId: blockId,
-                afterState: placeState,
-              },
-              {
-                dimension: this.dimension,
-                x: extraX,
-                y: extraY,
-                z: extraZ,
-                beforeId: extraBeforeId,
-                beforeState: extraBeforeState,
-                afterId: extra.id,
-                afterState: extra.state,
-              },
-            ]
-          : [
-              {
-                dimension: this.dimension,
-                x,
-                y,
-                z,
-                beforeId: existing,
-                beforeState: placeBeforeState,
-                afterId: blockId,
-                afterState: placeState,
-              },
-            ],
-      );
       // 流体（批次 235）：落点在水中/水边时，四周的水要重新评估流向。
       // 往水里放一块石头 = 抽走一格水，不唤醒的话这个洞永远没人来填。
       this.wakeFluidsAround(x, y, z);
@@ -18063,11 +17305,6 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
-      // 创造5：工具条只对创造模式可见（内部判等，没变化时不动 DOM）
-      this.buildToolbar.setAvailable(this.isCreative);
-      // 创造2/3：框选填充与粘贴每帧各推一批（512 格）；空闲时都是一次判空
-      this.stepFillRunner();
-      this.stepPasteRunner();
       this.tickContainers(dt);
       this.updateEntities(dt);
       mark = this.lap('ent', mark);
@@ -18193,7 +17430,6 @@ class App {
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
     this.tutorialCard.dispose();
-    this.buildToolbar.dispose();
     this.miniGame.dispose();
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
@@ -18468,8 +17704,6 @@ class App {
     this.touch?.resetInput('dimension');
     this.dimension = dimension;
     this.world.setDimension(dimension);
-    // 创造1：换维度之后旧维度的撤销记录没有意义（坐标只在维度内有意义，写回去会串世界）
-    this.undoStack.clear();
     // 门类的"上次电平"同样按坐标记：不清的话，新维度里同坐标的门会被误判成"电平没变"
     this.redstone.clearOpenablePower();
     // 掉落物实体属于旧维度，直接清掉

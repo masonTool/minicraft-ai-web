@@ -16561,6 +16561,24 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 排除记录（找过但不算问题）：① `showUnowned`（分类栏"列出未拥有/红底"）在修1之后没有入口了——它现在恒为 false，但拆它要动 `renderCategoryGrid`/`craftableIds`/按钮 active 三处，收益小于风险，留待下次专门做；② 首页 4 颗按钮在 320 高以下仍然靠滚动兜底而不是再缩——再缩就点到手指够不稳的 40px 以下；③ 空槽提示只在左键触发（长按是"选数量/右键"语义），触摸端轻点就是左键，不需要为长按再补一条。
   - 批次：20261024-1455
 
+## 批次 20261024-1636 · 2026-10-24 · 会话 723564b3
+
+> **更正（批次 20261024-1652）**：本批把 `active` 改成"左栏在可合成视图里"仍然是错的——那样在分类页里
+> 亮着关不掉、在仓库里永远灰着。正确口径见 1652：亮灭 = 状态本身（`showUnowned`），特殊逻辑只有
+> "仓库里 + 关着 → 打开并跳到搜索分类"。
+
+
+- [x] [修14] 澄清后改回："可合成物品"键只是左栏视图的开关——不打开配方书，且**按钮不会自己灭**：`src/ui/InventoryScreen.ts`（click 分支回退 + `active` 判据改成 `leftPane === 'category'`，工作站那条同口径）→ `npm run test:ui`（断言：click 里没有 `onOpenRecipes`/`onCloseRecipes`；`active` 只看视图、两处都不再带 `showUnowned`）
+  - 做了什么：① 撤掉上一批给那颗键加的 `onOpenRecipes('all')` / `isRecipesOpen` 分支，回到"仓库→`openPocketCategory(lastRecipeTab)`、已在分类页→切 `showUnowned`"。② `active` 从 `leftPane === 'category' && this.showUnowned` 改成 `leftPane === 'category'`；工作站分支 `showCategory && this.showUnowned` 同样改成 `showCategory`（`showCategory` 本身就是"左栏在分类页"）。③ title 回到 209 那套（描述再点一下切哪种筛选）。
+  - 为什么：用户澄清"没有所谓的配方书页面，配方相关的东西全走可合成物品这颗键"——上一批把"会自动关闭"读成了"配方书被关"，实现方向错了。"按钮自己灭"的真实原因是 `active` 绑在**红底筛选**上：从仓库点进来的第一次 `showUnowned` 还是 false，于是视图开了、按钮是灭的，看起来像自动关掉、得再点一下（那一下才把 `showUnowned` 打开）。
+  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（把上一批那 3 条"那颗键开书"的断言换回"只切视图、不碰配方书"，`active` 那条改成只看视图且覆盖工作站分支）。
+  - 批次：20261024-1636
+- [x] [修15] 台账改口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 里"那颗键打开配方书"的说法全部改成"可合成物品视图开关 + 亮着跟着视图" → `npm run check`
+  - 做了什么：1609 那批的 DONE 条目补一行"更正"，本批次另开一节；OVERVIEW「物品栏与合成」、TASKS 队列落地、批次索引都改成正确口径（滚动条那部分不动）。
+  - 为什么：文档里留一句错的因果，下一轮还会把同一个误解再实现一遍。
+  - 验证：`npm run check` 全绿（编号 / 覆盖度 / 差异 / 文档体量四条台账 + 全部离线套件）。
+  - 批次：20261024-1636
+
 ## 批次 20261024-1609 · 2026-10-24 · 会话 723564b3
 
 > **更正（批次 20261024-1636）**：本批 `[修11]` 的"那颗键打开配方书"是**误解**——用户澄清没有"配方书页面"，
@@ -16583,4 +16601,35 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 为什么：这几条断言钉的正是本轮推翻的口径，留着会红（也会把回归锁死成旧行为）。
   - 验证：`npm run check` 全绿（typecheck + 全部离线套件 + 三张台账 + 文档体量），`ui-test` 971 通过 / 0 失败。
   - 批次：20261024-1609
+
+## 批次 20261024-1706 · 2026-10-24 · 会话 723564b3
+
+- [x] [修18] 创造物品栏：点非"搜索"分类时搜索行整条收掉（列表上移，不被搜索框占位）：`src/ui/InventoryScreen.ts` `syncCreativeSearch()` + `index.html` 一条 CSS → `npm run test:ui`
+  - 做了什么：`syncCreativeSearch()` 里除了藏输入框，再按"分类按钮还在不在这一行里"给 `.inv-creative-controls` 加/去 `search-hidden`；CSS 用 `.inv-panel .inv-creative-controls.search-hidden { display: none !important; }` 收掉整行（`!important` 是因为 `.inv-panel.creative-ui.pocket-ui .inv-creative-controls` 的 `display: flex` 有 4 个类，压不过）。
+  - 为什么：双栏那条 `.inv-panel.pocket-ui.pocket-dual .inv-creative-controls { min-height: 32px }` 会在输入框藏掉之后继续占 32px + 6px 行距，物品列表被顶下去一截——用户："物品的列表应该向上平移，不要被搜索框占位"。分类按钮在左轨时整行本来就没用，可以整条收；按钮仍在这一行里的布局（非 pocket）只藏输入框，否则分类按钮会一起消失。
+  - 验证：`npx tsx tools/ui-test.ts` **975 通过 / 0 失败**（新增 1 条：`tabsInRow` 判据 + 类名切换 + CSS 收行）。
+  - 批次：20261024-1706
+- [x] [修19] 创造物品栏只剩一根滚动条（原生那条 = "滑块下面的小滚动条 / 底下小黑块"），并且只许纵向滚：`index.html` → `npm run test:ui`
+  - 做了什么：① 把 `.inv-panel.creative-ui.pocket-ui .inv-creative` 从旧的"原生滚动条要看得见"那段（`scrollbar-width: thin` + 8px `::-webkit-scrollbar` + `#b9b9b9` 槽 + `#6f6f6f` 块）里删掉，那段只留给嵌入版配方网格；新增 `.inv-panel .inv-grid.inv-creative { scrollbar-width: none; }` + `::-webkit-scrollbar { display:none; width:0; height:0 }`（带 `.inv-panel` 才压得过那 4 个类的旧规则）。② 创造网格（基础 + 双栏）补 `overflow-x: hidden`。
+  - 为什么：创造栏早就换成自绘那根（`.inv-creative-section .inv-category-scrollbar`），旧的原生那条一直没真被关掉——`.inv-grid.inv-creative { scrollbar-width: none }` 只有 2 个类，输给 `.inv-panel.creative-ui.pocket-ui .inv-creative` 的 `scrollbar-width: thin`。于是两根并排：原生 8px 槽 + 深色块压在 6px 自绘滑块下面，滚起来就是"滑块下面的小滚动条"和小黑块。另外 `overflow-y: auto` 单独写会让 `overflow-x` 变成 auto，多 1px 就在底部画一条横向滚动条。
+  - 验证：`npx tsx tools/ui-test.ts` 975 通过（新增 2 条：创造栏不再出现原生滚动条声明（thin 与 `::-webkit-scrollbar` 两处都查）、基础与双栏两条网格都是 `overflow-x: hidden; overflow-y: auto`）。
+  - 批次：20261024-1706
+- [x] [修20] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
+  - 做了什么：新增 1706 一节与批次索引一行；OVERVIEW「界面与音频」补"创造栏只有自绘一根滚动条（`scrollbar-width: none` 必须写成 `.inv-panel .inv-grid.inv-creative`，否则被 4 个类的旧 `thin` 规则压住）+ 非搜索分类要收整条搜索行"；TASKS 队列落地补一行。
+  - 为什么：`scrollbar-width: none` 写了却无效这件事，只看片段看不出来，下次还会踩；所以坑写进 OVERVIEW 那一行摘要里（`TIPS.md` 已到 500 行上限，按"宁可少写"不新增条目）。
+  - 验证：`npm run check` 全绿（含 `audit:docs` 体量门禁）。
+  - 批次：20261024-1706
+
+## 批次 20261024-1652 · 2026-10-24 · 会话 723564b3
+
+- [x] [修16] 那颗键改成"可合成物品状态"的纯开关（亮灭 = 状态本身），只保留一条特殊逻辑：仓库里 + 关着 → 打开状态并跳到搜索分类：`src/ui/InventoryScreen.ts` → `npm run test:ui`
+  - 做了什么：① click 只有两件事——仓库（`pane === 'items'`）且 `!showUnowned` → `showUnowned = true` + `openPocketCategory('all')`；其余一律 `showUnowned = !showUnowned` + 重排（左栏不跳页）。② 两处 `active` 判据（背包 / 工作站）都改成 `this.showUnowned`，不再掺"左栏在哪一页"。
+  - 为什么：上一批把 `active` 写成 `leftPane === 'category'`，结果"分类页里亮着关不掉（点一下状态灭了、按钮还亮）"和"仓库里永远灰着（状态开着也不亮）"两个都错。用户口径是：按钮亮灭 = 状态本身、由用户完全控制、所有分类同一逻辑；只有"仓库里 + 关着"这一条会顺手跳到搜索页。所以亮灭判据必须与点击所翻的那个位是同一个人（`showUnowned`），特殊逻辑只额外做"跳页"。
+  - 验证：`npx tsx tools/ui-test.ts` **972 通过 / 0 失败**（4 条断言重写：不碰配方书、正常逻辑取反且不跳页、特殊逻辑 `pane==='items' && !showUnowned` → 置真 + `openPocketCategory('all')`、两处 `active` 都是 `this.showUnowned` 且不再出现 `leftPane === 'category'` / `showCategory` 版本）。
+  - 批次：20261024-1652
+- [x] [修17] 台账跟口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 里"亮着 = 左栏在可合成视图里"的说法改成"亮着 = 状态本身"；`HANDOFF.md` 提交总数同步 → `npm run check`
+  - 做了什么：1636 那节补更正行、新开 1652 一节；OVERVIEW 里那颗键的一句话口径重写；TASKS 里 1636 那条标注被 1652 推翻、并补 1652 一行；TIPS 那条改成"亮灭判据必须就是点击所翻的那个位"。
+  - 为什么：这条口径已经连错两轮（"开书" → "跟视图走"），文档里留着错的说法下一轮还会照做。
+  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
+  - 批次：20261024-1652
 
