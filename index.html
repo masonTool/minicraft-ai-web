@@ -4607,18 +4607,18 @@
       }
       #touch-stick.sneaking .sneak-badge { opacity: 1; }
 
-      /* 动态摇杆（批次 96）：平时隐形待命，按下才出现在手指下面。
+      /* 动态摇杆（批次 96 → 批次 20261024-1152）。
+         批次 96 的写法是"平时 opacity:0，按下才出现在手指下面"；用户要求
+         **底圈默认就看得见**（不然刚进游戏根本不知道往哪按），跟手逻辑不变：
+         按下时底圈移到手指下面（`beginDynamicStick`），松手后 JS 把内联坐标清掉，
+         它自己回到左下这个默认点。
+         平时压到 .55 不抢戏，按下/潜行时回到 1。
          ⚠️ 只改透明度、不改 display：`beginDynamicStick` 要靠 getBoundingClientRect
          拿到半径与中心（display: none 下这个矩形全是 0，摇杆会"按下去就死"）。 */
-      #touch-stick.dynamic { opacity: 0; }
+      #touch-stick.dynamic { opacity: .55; }
       #touch-stick.dynamic.active { opacity: 1; }
-      /* 动态摇杆 + 潜行（批次 275）：平时整层 opacity:0 会把"潜行"小牌一起藏掉。
-         这里把整层放出来，但**底座与摇杆芯单独隐去**，只留小牌——不按也能看见潜行状态 */
+      /* 潜行时整层要亮起来（含上方那枚"潜行"小牌） */
       #touch-stick.dynamic.sneaking { opacity: 1; }
-      #touch-stick.dynamic.sneaking:not(.active) {
-        background: transparent; border-color: transparent; box-shadow: none;
-      }
-      #touch-stick.dynamic.sneaking:not(.active) .knob { opacity: 0; }
 
       #touch-hint {
         position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);

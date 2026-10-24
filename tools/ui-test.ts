@@ -1714,8 +1714,9 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
-    ['动态摇杆平时隐形', '#touch-stick.dynamic { opacity: 0; }'],
-    ['动态摇杆按下现身', '#touch-stick.dynamic.active { opacity: 1; }'],
+    // 批次 20261024-1152（用户）：动态摇杆的底圈**默认就要看得见**（以前是 opacity: 0）
+    ['动态摇杆平时就显示底圈', '#touch-stick.dynamic { opacity: .55; }'],
+    ['动态摇杆按下时提亮', '#touch-stick.dynamic.active { opacity: 1; }'],
     ['上升键画 ▲', ".touch-button.fly-up::after { content: '▲';"],
     ['下降键画 ▼', ".touch-button.fly-down::after { content: '▼';"],
     // 按钮大小（批次 97）：尺寸必须走 CSS 变量，否则设置里的滑块拖了没反应
@@ -1724,6 +1725,22 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     ['摇杆尺寸吃变量', 'width: var(--touch-stick-size);'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
+  }
+  // 批次 20261024-1152（用户）：跟手摇杆的底圈常驻显示之后，松手必须回左下默认点，
+  // 否则它会停在最后按过的位置（看着像"摇杆卡住了"）。
+  {
+    const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+    check(
+      '跟手摇杆松手后清掉内联坐标（回到左下默认点）',
+      touchSrc.includes('private clearDynamicOffset(): void {') &&
+        touchSrc.includes("if (this.stickMode === 'dynamic') this.clearDynamicOffset();") &&
+        // 切回固定模式也要清（两种模式共用同一个元素）
+        /setStickMode\(mode: StickMode\): void \{[\s\S]{0,400}?this\.clearDynamicOffset\(\);/.test(touchSrc),
+    );
+    check(
+      '潜行时不再把动态摇杆的底座藏起来（底圈是常驻的）',
+      !compact.includes('#touch-stick.dynamic.sneaking:not(.active)'),
+    );
   }
   // 批次 535（用户）：左右两组控件居中对称；起飞行时跳跃键位置不动，升降键绝对定位到上下
   check(

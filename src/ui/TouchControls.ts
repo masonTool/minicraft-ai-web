@@ -571,6 +571,9 @@ export class TouchControls {
   setStickMode(mode: StickMode): void {
     this.stickMode = mode;
     this.stickBase.classList.toggle('dynamic', mode === 'dynamic');
+    // 两种模式共用同一个元素：切换时先清掉上一次跟手写下的内联坐标，
+    // 否则切回固定模式后摇杆会停在最后按过的位置，而不是左下角。
+    this.clearDynamicOffset();
     if (mode === 'fixed') this.resetStick('stickMode');
   }
 
@@ -792,6 +795,17 @@ export class TouchControls {
     this.strafe = 0;
     this.stickKnob.style.transform = 'translate(0px, 0px)';
     this.stickBase.classList.remove('active');
+    // 跟手模式松手后回默认点（批次 20261024-1152）：底圈现在**一直看得见**，
+    // 不归位的话它会停在最后按过的位置，看起来像"摇杆卡在那儿了"。
+    if (this.stickMode === 'dynamic') this.clearDynamicOffset();
+  }
+
+  /** 清掉 `beginDynamicStick` 写的内联坐标，让 CSS 的左下默认位置重新生效 */
+  private clearDynamicOffset(): void {
+    this.stickBase.style.left = '';
+    this.stickBase.style.top = '';
+    this.stickBase.style.right = '';
+    this.stickBase.style.bottom = '';
   }
 
   private bindLookSurface(): void {

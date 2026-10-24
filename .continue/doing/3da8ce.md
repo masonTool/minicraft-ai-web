@@ -37,7 +37,11 @@
   - 为什么：原版第一人称拿着东西时不画那条手臂，方块本身占屏幕很大一块；原来 0.22 的方块 + 常驻手臂，观感是"一只手捏着一粒米"。非方块物品用零厚度平面侧看是一条线，用户要求"厚度也要增加"。
   - 验证：`npx tsx tools/render-test.ts` **250 通过 / 0 失败**（改 1 条旧断言 + 新增 6 条：边长 0.44、薄板厚度 0.05~0.12、六面 UV、拿东西时手臂/布袖隐藏、拿东西时袖套不露、空手时三块回来并再收一次）；`npm run typecheck`、`ui-test` 941 通过。
   - 批次：20261024-1152
-- [ ] [优化7] 动态摇杆默认显示底圈，跟手触发逻辑不变：`index.html` `#touch-stick.dynamic` 的 opacity 规则（+ 必要时 `TouchControls.ts`）→ `npm run test:touch`（断言 CSS 里 dynamic 不再是全隐、active 才抬高）
+- [x] [优化7] 动态摇杆默认显示底圈，跟手触发逻辑不变：`index.html` `#touch-stick.dynamic` 的 opacity 规则（+ 必要时 `TouchControls.ts`）→ `npm run test:touch`（断言 CSS 里 dynamic 不再是全隐、active 才抬高）
+  - 做了什么：`#touch-stick.dynamic { opacity: .55 }`（原来 0）、`.active` 回到 1；删掉 `.dynamic.sneaking:not(.active)` 那条"底座透明只留潜行小牌"的规则（底圈常驻之后它会把圈藏掉）；`TouchControls` 新增 `clearDynamicOffset()`，在 `resetStick`（跟手模式松手）与 `setStickMode`（切回固定模式）里清掉 `beginDynamicStick` 写的内联 left/top/right/bottom，让 CSS 的左下默认位置重新生效。
+  - 为什么：`beginDynamicStick` 只写内联坐标、从不还原 —— 以前底圈是不可见的，停在哪儿都无所谓；一旦常驻显示，不归位就会"停在最后按过的位置"，看着像摇杆卡住。触发逻辑（左下拇指区内按下才跟手）一个字没改。
+  - 验证：`npx tsx tools/ui-test.ts` **943 通过 / 0 失败**（改 2 条旧断言为 `opacity: .55` 口径，新增 2 条：松手/切模式都会清内联坐标、潜行时不再藏底座）。
+  - 批次：20261024-1152
 - [ ] [优化8] 首页四颗按钮高度统一：`index.html` `.world-primary` / `.world-secondary` 的 min-height 与内边距 → `npm run test:theme`（静态断言：两类按钮在同一断点下 min-height 相同）
 - [ ] [优化9] 首页去掉"非官方 Web 复刻…"那段说明与 `WebGL2!` splash（构建版本信息按用户要求**保留**）：`ui/WorldScreen.ts` + `core/i18n/locales/*/menu.ts` 的 `menu.footer` → `npm run test:theme`（断言首页 DOM 不再有 footer 说明与 splash 节点）
 - [ ] [优化10] 暂停页去掉成就按钮、"游戏已暂停"标题、副标题、存档/改动/自动保存那行说明（设置页与主菜单设置面板不受影响）：`ui/SettingsScreen.ts` + `main.ts#openSettings` → `npm run test:pause`（断言暂停页 DOM 无这四块、设置页仍有标题与返回）
