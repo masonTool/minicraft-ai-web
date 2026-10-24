@@ -330,17 +330,25 @@ export interface WoodBlockIds {
 
 const EXTRA_WOODS = WOOD_TYPES.filter((wood) => wood.name !== 'oak');
 
-const WOOD_ID_MAP = new Map<string, WoodBlockIds>();
-const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
+/**
+ * 每种木材 5 个方块的 id。
+ *
+ * ⚠️ 必须是**纯算术**，绝不能靠"构造方块表时顺带 `set()`"（批次 20261025-0329）：
+ * 这些 id 在**模块初始化期**就要被 `Wood` / `JUNGLE_LOG_ID` 读到，而方块表本身将来
+ * 是从 `core.bin` 装载的（那时 SPECS 是空的）。原来写在 `WOOD_SPECS` 的 flatMap 里，
+ * 表一外置这里就是空 Map，`JUNGLE_LOG_ID = Wood.jungle!.log` 当场 TypeError —— 导入即崩。
+ */
+const WOOD_IDS: readonly (readonly [string, WoodBlockIds])[] = EXTRA_WOODS.map((wood, index) => {
   const base = WOOD_BLOCK_ID_START + index * 5;
-  const ids: WoodBlockIds = {
-    log: base,
-    planks: base + 1,
-    leaves: base + 2,
-    slab: base + 3,
-    stairs: base + 4,
-  };
-  WOOD_ID_MAP.set(wood.name, ids);
+  return [
+    wood.name,
+    { log: base, planks: base + 1, leaves: base + 2, slab: base + 3, stairs: base + 4 },
+  ] as const;
+});
+const WOOD_ID_MAP = new Map<string, WoodBlockIds>(WOOD_IDS);
+
+const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood) => {
+  const ids = WOOD_ID_MAP.get(wood.name)!;
 
   const plankTile = `${wood.name}_planks`;
   return [
@@ -413,20 +421,28 @@ export interface WoodShapedIds {
 /** 橡木四件的历史 id（与 `Block` 枚举同源，这里写常量是为了在枚举定义之前就能用） */
 const OAK_WOOD_SHAPED: WoodShapedIds = { fence: 96, fenceGate: 290, door: 99, trapdoor: 289 };
 
-const WOOD_SHAPED_MAP = new Map<string, WoodShapedIds>();
-
-const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
-  const specs: BlockSpec[] = [];
+/** 同上：木制方块族的 id 也必须是纯算术，理由见 `WOOD_IDS` */
+const WOOD_SHAPED_IDS: readonly (readonly [string, WoodShapedIds])[] = (() => {
+  const entries: (readonly [string, WoodShapedIds])[] = [];
   let base = WOOD_SHAPED_ID_START;
   for (const wood of WOOD_TYPES) {
     if (wood.name === 'oak') {
       // 橡木沿用历史 id，不占新段
-      WOOD_SHAPED_MAP.set(wood.name, OAK_WOOD_SHAPED);
+      entries.push([wood.name, OAK_WOOD_SHAPED] as const);
       continue;
     }
-    const ids: WoodShapedIds = { fence: base, fenceGate: base + 1, door: base + 2, trapdoor: base + 3 };
+    entries.push([wood.name, { fence: base, fenceGate: base + 1, door: base + 2, trapdoor: base + 3 }] as const);
     base += 4;
-    WOOD_SHAPED_MAP.set(wood.name, ids);
+  }
+  return entries;
+})();
+const WOOD_SHAPED_MAP = new Map<string, WoodShapedIds>(WOOD_SHAPED_IDS);
+
+const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
+  const specs: BlockSpec[] = [];
+  for (const wood of WOOD_TYPES) {
+    const ids = WOOD_SHAPED_MAP.get(wood.name)!;
+    if (wood.name === 'oak') continue;
 
     const plankTile = `${wood.name}_planks`;
     const gateTile = `${wood.name}_fence_gate`;
