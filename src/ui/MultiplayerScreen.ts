@@ -1,9 +1,14 @@
 /**
- * 联机入口（联机9）：地址 / 昵称 / 连接 / 断开 / 状态。
+ * 联机入口（联机9）：地址 / 昵称 / **开房或加入** / 断开 / 状态。
  *
  * 刻意**不做大厅**：没有房间列表、没有玩家列表、没有服务器浏览器。这一版只要能
  * "填个地址连上去、能断开、知道现在是什么状态"，其余（房间码、密码、观战）留给
  * 后面的条目——大厅会把这块界面撑得又高又复杂，而手机横屏只有 360~430 高。
+ *
+ * **两个连接动作（L8 房主权威）**：`开房` 与 `加入` 填的是同一份地址与昵称，差别只有
+ * 一个布尔位——`join` 里的 `host`。房主是这一局**唯一**跑模拟的人（红石、生物、容器
+ * 计时都在他那边算），加入的人只渲染。所以不能合成一颗"连接"：点错了就会占住房主位，
+ * 而别人随即进不来（服务端会回 `host-taken`）。
  *
  * 布局按横屏设计（用户主要在横屏手机上玩）：两行输入横排（标签固定宽 + 输入框吃掉
  * 剩余宽度）、一行状态、一行按钮，整体约 200px 高。
@@ -19,8 +24,14 @@ import { t } from '../core/i18n/I18n.ts';
 export type MultiplayerScreenState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
 
 export interface MultiplayerScreenActions {
-  /** 点了"连接"：地址已经过 `normalizeServerUrl`，昵称已经过 `sanitizeMultiplayerName` */
-  onConnect: (url: string, name: string) => void;
+  /**
+   * 点了"开房"或"加入"：地址已经过 `normalizeServerUrl`，昵称已经过
+   * `sanitizeMultiplayerName`。
+   *
+   * `host` 是这两颗按钮**唯一**的差别，最终落到 `join` 消息的 `host` 位：
+   * 房主跑模拟，其他人只渲染（见 `core/net/NetRole.ts`）。
+   */
+  onConnect: (url: string, name: string, host: boolean) => void;
   onDisconnect: () => void;
   onClose: () => void;
 }
@@ -66,7 +77,7 @@ export function sanitizeMultiplayerName(input: string): string {
 }
 
 /**
- * 两颗按钮此刻该不该可点。
+ * 三颗按钮此刻该不该可点（`connect` 同时管"开房"与"加入"）。
  *
  * 连接中不许再点连接（会叠一个 socket），已连接时点连接也没意义（要么断开、要么改地址后重连
  * ——这版走"先断开再连"，避免一边连一边换地址的竞态）。
@@ -84,7 +95,8 @@ export class MultiplayerScreen {
   private readonly urlInput: HTMLInputElement;
   private readonly nameInput: HTMLInputElement;
   private readonly statusEl: HTMLDivElement;
-  private readonly connectButton: HTMLButtonElement;
+  private readonly hostButton: HTMLButtonElement;
+  private readonly joinButton: HTMLButtonElement;
   private readonly disconnectButton: HTMLButtonElement;
   private state: MultiplayerScreenState = 'idle';
   private openState = false;
@@ -142,12 +154,21 @@ export class MultiplayerScreen {
     const actionsRow = document.createElement('div');
     actionsRow.className = 'mp-actions';
 
-    this.connectButton = document.createElement('button');
-    this.connectButton.type = 'button';
-    this.connectButton.id = 'mp-connect';
-    this.connectButton.className = 'mp-action primary';
-    this.connectButton.textContent = t('mp.connect');
-    this.connectButton.addEventListener('click', () => this.submit());
+    // 「开房」：当这一局的房主（唯一跑模拟的人），primary 因为这是"自己一个人玩"的默认意图
+    this.hostButton = document.createElement('button');
+    this.hostButton.type = 'button';
+    this.hostButton.id = 'mp-host';
+    this.hostButton.className = 'mp-action primary';
+    this.hostButton.textContent = t('mp.host');
+    this.hostButton.addEventListener('click', () => this.submit(true));
+
+    // 「加入」：进别人的房，只渲染。点错成"开房"会占住房主位，别人随后进不来
+    this.joinButton = document.createElement('button');
+    this.joinButton.type = 'button';
+    this.joinButton.id = 'mp-join';
+    this.joinButton.className = 'mp-action';
+    this.joinButton.textContent = t('mp.join');
+    this.joinButton.addEventListener('click', () => this.submit(false));
 
     this.disconnectButton = document.createElement('button');
     this.disconnectButton.type = 'button';
@@ -163,7 +184,7 @@ export class MultiplayerScreen {
     closeButton.textContent = t('mp.close');
     closeButton.addEventListener('click', () => this.actions.onClose());
 
-    actionsRow.append(this.connectButton, this.disconnectButton, closeButton);
+    actionsRow.append(this.hostButton, this.joinButton, this.disconnectButton, closeButton);
 
     const hint = document.createElement('div');
     hint.className = 'mp-hint';
@@ -173,12 +194,17 @@ export class MultiplayerScreen {
     this.root.append(panel);
     host.append(this.root);
 
-    // 桌面端：回车即连接（手机上回车会收起键盘，也算顺手）
+    /*
+     * 桌面端：回车 = **加入**（手机上回车只是收起键盘）。
+     *
+     * 刻意不绑"开房"：回车是从"连接"时代延续下来的习惯动作，而开房会占住整局的房主位，
+     * 别人随后进不来——这种后果不该由一个回车触发。
+     */
     for (const input of [this.urlInput, this.nameInput]) {
       input.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
         event.preventDefault();
-        this.submit();
+        this.submit(false);
       });
     }
 
@@ -204,7 +230,8 @@ export class MultiplayerScreen {
   setState(state: MultiplayerScreenState, detail?: string): void {
     this.state = state;
     const buttons = multiplayerButtons(state);
-    this.connectButton.disabled = !buttons.connect;
+    this.hostButton.disabled = !buttons.connect;
+    this.joinButton.disabled = !buttons.connect;
     this.disconnectButton.disabled = !buttons.disconnect;
     // 服务端给的细节（版本不匹配之类）优先于通用文案——只说"已断开"等于没说
     this.statusEl.textContent = detail && detail.length > 0 ? detail : t(`mp.status.${state}`);
@@ -219,7 +246,7 @@ export class MultiplayerScreen {
     };
   }
 
-  private submit(): void {
+  private submit(host: boolean): void {
     const { url, name } = this.readForm();
     if (!url) {
       this.statusEl.textContent = t('mp.error.url');
@@ -229,7 +256,7 @@ export class MultiplayerScreen {
     // 记住这次填的（存规范化之后的地址，下次打开就是能直接用的形式）
     writeStored(STORAGE_URL, url);
     writeStored(STORAGE_NAME, name);
-    this.actions.onConnect(url, name);
+    this.actions.onConnect(url, name, host);
   }
 }
 

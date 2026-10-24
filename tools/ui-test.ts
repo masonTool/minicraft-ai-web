@@ -4909,6 +4909,36 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
       !connected.connect && connected.disconnect &&
       !reconnecting.connect && reconnecting.disconnect,
   );
+
+  /*
+   * 开房 / 加入（L8 房主权威）：两颗按钮唯一的差别是 `join` 里的 `host` 位。
+   * 钉住四件改回去就会出事的事：按钮没合回一颗"连接"、开房/加入各自传对布尔位、
+   * 回车只走"加入"（开房会占住房主位）、以及这个意图真的传到了 `join` 消息。
+   */
+  const screenSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mainSrcForMp = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netClientSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check(
+    '面板是「开房 / 加入」两颗按钮（不再是单颗"连接"）',
+    screenSrc.includes("this.hostButton.id = 'mp-host'") &&
+      screenSrc.includes("this.joinButton.id = 'mp-join'") &&
+      !screenSrc.includes("'mp.connect'"),
+  );
+  check(
+    '开房传 host=true、加入传 host=false',
+    screenSrc.includes("this.hostButton.addEventListener('click', () => this.submit(true))") &&
+      screenSrc.includes("this.joinButton.addEventListener('click', () => this.submit(false))"),
+  );
+  check(
+    '回车只触发"加入"（开房会占住房主位，不该由回车决定）',
+    /addEventListener\('keydown',[\s\S]{0,400}?this\.submit\(false\);/.test(screenSrc),
+  );
+  check(
+    '开房意图一路传到 join（connect → NetClient.wantsHost → host: true）',
+    mainSrcForMp.includes('onConnect: (url, name, host)') &&
+      netClientSrc.includes('this.wantsHost = host;') &&
+      netClientSrc.includes('...(this.wantsHost ? { host: true } : {})'),
+  );
 }
 
 // ------------------------------------------------------------------ 设置里的游戏模式

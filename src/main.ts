@@ -2989,10 +2989,10 @@ class App {
     // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
     // 它要盖住整个视口（含触摸控件），而且主菜单阶段就可能要打开它。
     this.multiplayerScreen = new MultiplayerScreen(document.body, {
-      onConnect: (url, name) => {
+      onConnect: (url, name, host) => {
         // 先切状态再真连：`connect()` 里会同步触发 onStatus，重复设置无害
         this.multiplayerScreen.setState('connecting');
-        this.connect(url, name);
+        this.connect(url, name, host);
       },
       onDisconnect: () => {
         this.disconnect();
@@ -4097,9 +4097,14 @@ class App {
     }
   }
 
-  /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
-  connect(url = defaultServerUrl(), name = '玩家'): string {
-    this.net.connect(url, name);
+  /**
+   * 连接服务器（也可以在控制台直接调：`mc.connect('ws://192.168.1.5:8787', '小明')`）。
+   *
+   * `host`（L8）：true = 开房（我跑模拟），false = 加入别人的房（只渲染）。
+   * 默认 false——控制台手敲 `mc.connect(...)` 的人多半是"连上去看看"，不该顺手占住房主位。
+   */
+  connect(url = defaultServerUrl(), name = '玩家', host = false): string {
+    this.net.connect(url, name, host);
     return this.netStatus;
   }
 

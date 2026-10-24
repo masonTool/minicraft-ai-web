@@ -2077,9 +2077,12 @@
       .mp-status { min-height: 1.2em; font-size: 12px; }
       .mp-status[data-state='connected'] { color: #8ee08e; }
       .mp-status[data-state='error'] { color: #ff9a9a; }
-      .mp-actions { display: flex; gap: 8px; }
+      /* 四颗按钮（开房 / 加入 / 断开 / 关闭）：窄屏放不下就折成两行，
+         而不是挤成一条读不出来的字（德语/俄语的按钮词比中文长一倍） */
+      .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
       .mp-action {
-        flex: 1 1 0; font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+        flex: 1 1 auto; min-width: 5.5em;
+        font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
       }
       .mp-action:disabled { cursor: default; color: var(--mc-text-disabled); }
       .mp-hint { font-size: 11px; opacity: .75; }

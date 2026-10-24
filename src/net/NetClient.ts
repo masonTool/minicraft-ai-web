@@ -263,6 +263,13 @@ export class NetClient {
   /** 房间口令（联机26）：空串 = 不发送（服务端没设密码时也不需要） */
   private password = '';
   /**
+   * 开房意图（L8）：`join` 里带 `host: true`，服务端据此把这一局的房主记成我。
+   *
+   * 存在字段里而不是只传一次：自动重连要原样重发同一个意图，否则断线一次就从
+   * 房主变成从属（世界当场没人模拟）。
+   */
+  private wantsHost = false;
+  /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
    * 随 `move` 一起发出去，队友据此判"是不是自己人"——队伍表本身各端各存一份，
@@ -289,7 +296,7 @@ export class NetClient {
     return this.remote.size + (this.selfId > 0 ? 1 : 0);
   }
 
-  connect(url: string, name: string): void {
+  connect(url: string, name: string, host = false): void {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
     this.fatal = false;
@@ -299,6 +306,8 @@ export class NetClient {
     this.room = parsed.room;
     this.password = parsed.password;
     this.name = name;
+    // 开房意图（L8）：随 `join` 上行；自动重连也用同一份，否则重连一次就从房主降级
+    this.wantsHost = host;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
     if (this.clientId.length === 0) this.clientId = browserClientId();
     this.session.connect();
@@ -348,6 +357,8 @@ export class NetClient {
           // 房间与口令（联机26）：没填就不带
           ...(this.room ? { room: this.room } : {}),
           ...(this.password ? { password: this.password } : {}),
+          // 开房（L8）：不带的客户端一律是从属端（服务端按 `=== true` 判）
+          ...(this.wantsHost ? { host: true } : {}),
         }),
       );
     };
