@@ -57,6 +57,8 @@ export const menu = {
   "mp.name": "Pseudo",
   "mp.host": "Héberger",
   "mp.join": "Rejoindre",
+  "mp.role.host": "Hôte",
+  "mp.role.client": "Client",
   "mp.disconnect": "Déconnexion",
   "mp.close": "Fermer",
   "mp.hint": "L’hôte fait tourner le monde (redstone, créatures, conteneurs), les autres ne font qu’afficher. / pour discuter",

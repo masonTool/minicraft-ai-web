@@ -4939,6 +4939,13 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
       netClientSrc.includes('this.wantsHost = host;') &&
       netClientSrc.includes('...(this.wantsHost ? { host: true } : {})'),
   );
+  check(
+    '连上之后状态行标出「房主 / 从属」（没连上不标，那会儿还是单机）',
+    screenSrc.includes("t('mp.role.host')") &&
+      screenSrc.includes("t('mp.role.client')") &&
+      screenSrc.includes("this.state === 'connected' ? this.role : 'solo'") &&
+      mainSrcForMp.includes('this.multiplayerScreen.setRole(this.net.role);'),
+  );
 }
 
 // ------------------------------------------------------------------ 设置里的游戏模式

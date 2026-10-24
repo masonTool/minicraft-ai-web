@@ -59,6 +59,8 @@ export const menu = {
   'mp.name': 'Nickname',
   'mp.host': 'Host',
   'mp.join': 'Join',
+  'mp.role.host': 'Host',
+  'mp.role.client': 'Client',
   'mp.disconnect': 'Disconnect',
   'mp.close': 'Close',
   'mp.hint': 'The host runs the world (redstone, mobs, containers); everyone else only renders. Press / to chat',

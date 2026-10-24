@@ -58,6 +58,8 @@ export const menu = {
   'mp.name': '昵称',
   'mp.host': '开房',
   'mp.join': '加入',
+  'mp.role.host': '房主',
+  'mp.role.client': '从属',
   'mp.disconnect': '断开',
   'mp.close': '关闭',
   'mp.hint': '开房的人负责跑世界（红石 / 生物 / 容器），加入的人只渲染；按 / 打开聊天',

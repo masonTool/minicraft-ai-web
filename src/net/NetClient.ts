@@ -15,6 +15,7 @@
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
+import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
 import { NetStats } from '../core/net/NetStats.ts';
@@ -270,6 +271,15 @@ export class NetClient {
    */
   private wantsHost = false;
   /**
+   * 房主身份（L8）：服务端在 `welcome` 里下发，客户端不自己猜。
+   *
+   * `amHost` 是"我"是不是房主；`hostId` 是房里那一名的服务端 id（没有房主时为 `null`）。
+   * 角色由它们派生（见 `get role`），"要不要跑模拟"由 `SimMode` 读角色——这条链上
+   * 只有一份事实。
+   */
+  private amHost = false;
+  hostId: number | null = null;
+  /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
    * 随 `move` 一起发出去，队友据此判"是不是自己人"——队伍表本身各端各存一份，
@@ -317,6 +327,17 @@ export class NetClient {
   /** 会话状态（联机7）：`idle|connecting|connected|reconnecting|offline` */
   get sessionState(): NetSessionState {
     return this.session.state;
+  }
+
+  /**
+   * 当前联机角色（L8）：没连上就是 `solo`，连上之后按 `welcome` 的 `isHost` 算。
+   *
+   * ⚠️ 这是**唯一**的角色来源：`SimMode` 与 HUD 都读它，别再各自拼一个
+   * `sessionState === 'connected' && isHost`——那种判断迟早有一处漏掉一个条件。
+   */
+  get role(): NetRole {
+    if (this.session.state !== 'connected') return INITIAL_ROLE;
+    return roleFromWelcome({ isHost: this.amHost });
   }
 
   private open(): void {
@@ -423,6 +444,13 @@ export class NetClient {
         }
         this.selfId = Number(message.id ?? 0);
         this.worldSeed = Number(message.seed ?? 0);
+        /*
+         * 房主（L8）：`isHost` 严格等于 `true`；`hostId` 只认正整数（缺字段/0/脏值当"没房主"）。
+         * 宽松一次就是两端同时模拟——那种不一致不会报错，只会有人在旁边看半天。
+         */
+        this.amHost = message.isHost === true;
+        const hostId = Number(message.hostId);
+        this.hostId = Number.isInteger(hostId) && hostId > 0 ? hostId : null;
         const players = (message.players as NetPlayerState[] | undefined) ?? [];
         for (const player of players) {
           if (player.id === this.selfId) continue;

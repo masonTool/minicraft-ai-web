@@ -360,6 +360,17 @@ function scopedKey(room, key) {
 function snapshotFor(player) {
   return {
     seed: WORLD_SEED,
+    /*
+     * 房主（L8）：这一局谁在跑模拟。
+     *
+     * `isHost` 只对**收快照的这个人**有意义（"我是不是房主"），`hostId` 是房里那一名的
+     * 服务端 id（从属端拿它显示"房主：#3"、后续"房主退出"也靠它对号）。
+     * 没房主的房（有人直接 join 没带 host）一律 `hostId: null`，客户端据此知道
+     * 这一局没人跑模拟——比静默当成"我在跑"安全。
+     */
+    isHost: player.isHost === true,
+    hostId: hosts.get(player.room)?.id ?? null,
+
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
     // 天气权威（联机35）：进服先对齐一次，之后靠切换时的广播

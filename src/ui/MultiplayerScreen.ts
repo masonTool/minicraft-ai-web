@@ -19,6 +19,7 @@
  */
 
 import { t } from '../core/i18n/I18n.ts';
+import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
 export type MultiplayerScreenState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
@@ -100,6 +101,10 @@ export class MultiplayerScreen {
   private readonly disconnectButton: HTMLButtonElement;
   private state: MultiplayerScreenState = 'idle';
   private openState = false;
+  /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
+  private role: NetRole = 'solo';
+  /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
+  private detailText = '';
 
   constructor(
     host: HTMLElement,
@@ -234,8 +239,29 @@ export class MultiplayerScreen {
     this.joinButton.disabled = !buttons.connect;
     this.disconnectButton.disabled = !buttons.disconnect;
     // 服务端给的细节（版本不匹配之类）优先于通用文案——只说"已断开"等于没说
-    this.statusEl.textContent = detail && detail.length > 0 ? detail : t(`mp.status.${state}`);
-    this.statusEl.dataset.state = state;
+    this.detailText = detail && detail.length > 0 ? detail : '';
+    this.refreshStatus();
+  }
+
+  /**
+   * 由主程序在 `welcome` 之后推进（L8）：房主 / 从属。
+   *
+   * 单独一个入口而不是塞进 `setState`：角色比会话状态**晚**到（`welcome` 才带
+   * `isHost`），而 `setState` 在 `connecting` 阶段就会被调用。两个状态源分开推进，
+   * 面板才不会出现"已连接"却仍写着单机。
+   */
+  setRole(role: NetRole): void {
+    this.role = role;
+    this.refreshStatus();
+  }
+
+  private refreshStatus(): void {
+    const base = this.detailText.length > 0 ? this.detailText : t(`mp.status.${this.state}`);
+    // 角色只在连上之后才有意义：没连上就是单机，不该在状态行里标"从属"
+    const role = this.state === 'connected' ? this.role : 'solo';
+    const tag = role === 'host' ? t('mp.role.host') : role === 'client' ? t('mp.role.client') : '';
+    this.statusEl.textContent = tag.length > 0 ? `${base} · ${tag}` : base;
+    this.statusEl.dataset.state = this.state;
   }
 
   /** 当前填的地址与昵称（主程序重连时也要用同一份） */

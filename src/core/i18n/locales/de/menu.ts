@@ -57,6 +57,8 @@ export const menu = {
   "mp.name": "Spielername",
   "mp.host": "Host",
   "mp.join": "Beitreten",
+  "mp.role.host": "Host",
+  "mp.role.client": "Client",
   "mp.disconnect": "Trennen",
   "mp.close": "Schließen",
   "mp.hint": "Der Host berechnet die Welt (Redstone, Kreaturen, Behälter), alle anderen zeigen sie nur an. Chat mit /",

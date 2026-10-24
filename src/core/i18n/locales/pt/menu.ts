@@ -56,6 +56,8 @@ export const menu = {
   "mp.name": "Apelido",
   "mp.host": "Hospedar",
   "mp.join": "Entrar",
+  "mp.role.host": "Anfitrião",
+  "mp.role.client": "Cliente",
   "mp.disconnect": "Desconectar",
   "mp.close": "Fechar",
   "mp.hint": "Quem hospeda calcula o mundo (redstone, criaturas, baús); os outros só desenham. Use / para conversar",

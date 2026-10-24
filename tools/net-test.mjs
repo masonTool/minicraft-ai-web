@@ -1208,10 +1208,27 @@ try {
   console.log('\n[房主：一房一名]');
   {
     const hostA = new TestClient('HostA', undefined, { room: 'hostroom', host: true });
-    check('带 host 的 join 能开房', (await joinAndWaitWelcome(hostA, '房主 A', 0, 70, 0)) !== null);
+    const welcomeHost = await joinAndWaitWelcome(hostA, '房主 A', 0, 70, 0);
+    check('带 host 的 join 能开房', welcomeHost !== null);
+    // welcome 里下发房主身份（L8）：客户端据此决定跑不跑模拟，不自己猜
+    check('房主的 welcome 带 isHost=true', welcomeHost?.isHost === true, `${welcomeHost?.isHost}`);
+    check('房主的 welcome 里 hostId 指向自己', welcomeHost?.hostId === welcomeHost?.id, `${welcomeHost?.hostId} vs ${welcomeHost?.id}`);
 
     const follower = new TestClient('Follower', undefined, { room: 'hostroom' });
-    check('同房不带 host 的能进（当从属端）', (await joinAndWaitWelcome(follower, '跟随者', 0, 70, 0)) !== null);
+    const welcomeFollower = await joinAndWaitWelcome(follower, '跟随者', 0, 70, 0);
+    check('同房不带 host 的能进（当从属端）', welcomeFollower !== null);
+    check('从属端的 welcome 带 isHost=false', welcomeFollower?.isHost === false, `${welcomeFollower?.isHost}`);
+    check(
+      '从属端的 welcome 指向房主（hostId = 房主 id）',
+      welcomeFollower?.hostId === welcomeHost?.id,
+      `${welcomeFollower?.hostId} vs ${welcomeHost?.id}`,
+    );
+
+    // 没房主的房：hostId 为 null（客户端据此知道这一局没人跑模拟，而不是默默当成自己在跑）
+    const noHostRoom = new TestClient('NoHostRoom', undefined, { room: 'nohostroom' });
+    const welcomeNoHost = await joinAndWaitWelcome(noHostRoom, '没房主', 0, 70, 0);
+    check('没房主的房：isHost=false 且 hostId=null', welcomeNoHost?.isHost === false && welcomeNoHost?.hostId === null, JSON.stringify({ isHost: welcomeNoHost?.isHost, hostId: welcomeNoHost?.hostId }));
+    noHostRoom.close();
 
     // 第二个房主：明确拒绝，并且**断开**——留在房里当"半个房主"比拒连更难查
     const hostB = new TestClient('HostB', undefined, { room: 'hostroom' });

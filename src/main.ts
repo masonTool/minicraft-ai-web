@@ -1952,6 +1952,8 @@ class App {
       // 联机9：面板上的状态与按钮可用性跟着会话状态走（`detail` 是服务端/连接层的原话，
       // 比"已断开"这种通用文案有用）
       this.multiplayerScreen.setState(this.net.sessionState, detail);
+      // 房主（L8）：断开/重连途中角色会回到 solo，顺手同步一次（面板只在"已连接"时显示它）
+      this.multiplayerScreen.setRole(this.net.role);
       if (!connected) {
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
@@ -3665,6 +3667,15 @@ class App {
     frames: NetFrameState[] = [],
   ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
+
+    /*
+     * 房主（L8）：角色由 `welcome` 的 `isHost` 决定，在这里同步给面板。
+     *
+     * 放在种子冲突判断**之前**：即使这一局因为种子不一致要先重载世界，玩家也该先看到
+     * "我是房主还是从属"——那决定了他要不要等别人。
+     */
+    this.multiplayerScreen.setRole(this.net.role);
+    console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
 
     // 种子以服务端为准（联机5）：地形由种子纯函数重现，两边不同等于在两片大陆上玩，
     // 坐标对得上、风景对不上，方块改动还会互相错位
