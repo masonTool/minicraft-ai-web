@@ -4418,8 +4418,13 @@ export function carpetId(colorIndex: number): number {
  *
  * 这里强制校验 id 从 0 开始连续——BLOCKS 是数组下标索引，一旦有空缺或错位，
  * blockDef(id) 就会静默地返回错误的方块。宁可启动时报错也不要让这种问题潜伏下去。
+ *
+ * ⚠️ 对外只给**构建工具与测试**用（`tools/gen-hostcore.ts` 用它生成二进制、
+ * `tools/hostcore-test.ts` 用它做往返比对）。运行时要方块表请用 `BLOCKS`/`blockDef()`：
+ * 线上那条路是从二进制解码来的（见 `blockTableCodec.ts`），两者必须逐字段一致，
+ * 一致性由 `npm run test:hostcore` 兜住。
  */
-function buildBlockTable(): readonly BlockDef[] {
+export function buildBlockTable(): readonly BlockDef[] {
   const table: BlockDef[] = [];
   for (const spec of SPECS) {
     if (spec.id !== table.length) {
@@ -4454,7 +4459,56 @@ function buildBlockTable(): readonly BlockDef[] {
   return table;
 }
 
-export const BLOCKS: readonly BlockDef[] = buildBlockTable();
+/**
+ * 按 id 索引的方块定义表。
+ *
+ * ⚠️ 是 `let` 而不是 `const`：**表是可以被换掉的**。线上那条路（宿主化）走的是
+ * "从 `/__host/core.bin` 解出数据 → `installBlockTable()` 装上"，而 `blocks.ts`
+ * 里的 `SPECS` 只留给构建工具与测试用。为了让两条路共用同一份代码，表就只能是可替换的。
+ *
+ * ⚠️ 因此**任何读取都必须发生在装表之后**。目前的顺序是：`boot.ts` 先装表，
+ * 再动态 `import('./main.ts')`，所以 `main.ts` 及其依赖图里的模块级代码一定看得见表
+ * （已核对：全仓 0 处模块顶层读 `BLOCKS[...]`；新增模块请保持这个约定）。
+ */
+export let BLOCKS: readonly BlockDef[] = buildBlockTable();
+
+/**
+ * 表是否被"装"过。
+ *
+ * ⚠️ 用**布尔标记**而不是"BLOCKS 是不是当初那个数组"：后者会被
+ * "装进来一份内容相同的新数组"骗过（测试里还原表时就撞上了）。
+ */
+let tableInstalled = false;
+
+/**
+ * 装表（覆盖当前表）。
+ *
+ * 校验比"信任调用方"重要：这张表决定世界里每一个方块的行为，装错一个 id 就是
+ * 静默的错方块——校验很便宜（724 次下标比对），漏检的代价很贵。
+ *
+ * 允许重复调用（测试里需要还原、将来热重载也要用），不做"只能装一次"的限制。
+ */
+export function installBlockTable(table: readonly BlockDef[]): void {
+  if (table.length === 0) {
+    throw new Error('方块表不能是空的：装表失败时应当保持旧表，而不是把世界变成一片空气');
+  }
+  for (let id = 0; id < table.length; id++) {
+    const block = table[id]!;
+    if (block.id !== id) {
+      throw new Error(`方块表 id 必须从 0 连续：第 ${id} 项 id=${block.id}（${block.name}）`);
+    }
+    if (block.name.length === 0) {
+      throw new Error(`方块表第 ${id} 项没有名字`);
+    }
+  }
+  BLOCKS = table;
+  tableInstalled = true;
+}
+
+/** 表是否被装过（诊断用：区分"SPECS 建的表"与"二进制解出来的表"） */
+export function isInstalledBlockTable(): boolean {
+  return tableInstalled;
+}
 
 export function blockDef(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[0]!;
