@@ -9,6 +9,69 @@
 
 ---
 
+## 批次 20261024-1331 · 2026-10-24 · 会话 f834a886
+
+- [x] [跳1] 重写难度与间距参数（间距改绝对格数、方块下限 1.2、最大距离 7.2/蓄力 1.25s）：`src/minigame/games/jump/config.ts` + `logic.ts` → `npm run test:minigame`（改掉「间距与边长同比 1.15~1.9」「间距随分数单调不增」两条旧断言，换成分数越高中心距绝对变大、永远 ≤ 可达上限）
+  - 做了什么：`config.ts` 把 `gapRatioMin/Max` 换成绝对格数曲线（`gapStart 4.6~5.4` → `gapEnd 4.8~6.0`，`gapGrowScore 100`），并加 `gapFloorRatio 2.12 + gapFloorMargin 0.1`；`maxCharge 1.25`、`maxDistance 7.2`、`reachMargin 0.35`、`blockSizeMin 1.2`、`shrinkScore 80`。`logic.ts` 新增 `progressToward` / `gapFloorFor` / `gapCurveForScore`，`gapRangeForScore(score, previousSize)` 的下限取「曲线下限 vs 上一块边长算出的硬下限」，`nextBlock` 传 `current.size`。
+  - 为什么：上版间距是"边长倍数"，方块缩到 0.9 时间距跟着缩水，"越往后越远"做不到；且两块之间不留倒下小人的空间，倾倒动画没地方演。下限系数 2.12 = 1 个边长 + 1.12 个边长（小人高度）。
+  - 验证：`npm run test:minigame` 204 条全绿（新断言：绝对格数 4.6/5.4/4.8/6.0、中心距随分数单调不减且严格变大、下限公式、开局 2.3~2.7 倍边长）；`npm run jump:balance` 可达率 100%、手抖 23.1 跳 / 36.4 分；`npm run check:fast` 全绿。
+  - 批次：20261024-1331
+- [x] [跳2] 底座形状与尺寸抖动（方形 + 内切圆 r=边长/2、每块 ±6% 抖动、10 分后才有圆形）：`logic.ts` 的 `JumpBlock`/`nextBlock`/`resolveLanding` → `npm run test:minigame`（新增：圆形有效面积是方的 π/4、同 seed 同序列、判定按形状分支）
+  - 做了什么：`JumpBlock` 加 `shape: 'square' | 'round'`；`nextBlock` 多吃两个随机数（r4 边长抖动 `jitteredSize`、r5 形状 `shapeFor`），特殊方块强制方形；判定抽出 `blockOverhang(block, x, z)`——方形取 `max(|dx|,|dz|) - 半边长`、圆形取 `hypot - 半边长`，`resolveLanding` 改用它。
+  - 为什么：形状必须真的参与判定，否则画圆判方，"圆形更难"就是假的。特殊方块顶面靠图集 UV 分区，圆形会采到格子边，所以只给普通方块圆形（记进 decision D1）。起点块不抖动——它是整局的参照尺寸。
+  - 验证：`npm run test:minigame` 221 条全绿，其中新增 17 条：40000 点网格采样得圆形/方形面积比 78.5%±1%（π/4）、方形四角站得住而圆形四角是空的、同一斜向落点方形 hit / 圆形非 hit、抖动端点 0.94×/1.06×、同 seed 尺寸与形状逐块一致、生成器 200 块边长都在 ±6% 内、特殊方块 300 块全方形；`npm run jump:balance` 可达率仍 100%。
+  - 批次：20261024-1331
+- [x] [跳3] 落点保留不再复位到中心：`logic.ts` 的 `JumpRun.stand` + `jump()` 记录实际落点 + `resolveLanding` 从 stand 起算 → `npm run test:minigame`（落地后 stand 偏移保留、下一跳从偏移点量距离）
+  - 做了什么：`JumpRun` 增加 `stand: {x, z}`（小人脚底的实际落点），`createRun` 把它放在起点块中心；`resolveLanding` 的第一个参数从「起点方块」改成「站姿点」，返回 `{ kind, center, point }`；`jump()` 用 `run.stand` 起算并把落点写回新 run，`LandingOutcome` 多带一个 `point` 给渲染层。
+  - 为什么：用户明确"落到哪个点就站哪个点"。判定中心仍是方块中心（`centerRatio` 不动），所以站偏只影响**下一跳的距离**，不改命中语义——这样"跳准"依然有意义，但偏一点不会白送一次复位。
+  - 验证：`npm run test:minigame` 232 条全绿，新增 11 条：落点偏 0.45 后 stand 偏移保留且不等于中心、outcome.point 与 stand 一致；合成局面（上一跳沿 z 偏 0.6、这一跳转 90°）按 5.0 的方块中心距只到半路（离中心 0.6、非中心），按 5.6 的 stand 距才回正中。
+  - 批次：20261024-1331
+- [x] [跳4] 三档落点判定（中心命中 / 边缘站稳 / 重心越界 topple）：`logic.ts#resolveLanding` + `jump()` 的 outcome → `npm run test:minigame`（重心在块外 → `topple` 而不是 `miss`；完全悬空两块之间才 `miss`）
+  - 做了什么：新增 `LandingKind = 'hit' | 'topple' | 'miss'`，`resolveLanding` 先算 `blockOverhang`：`> 半边长` → miss、`> 0` → topple、否则 hit；`Landing`/`LandingOutcome` 都带 `kind`，`jump()` 里 topple 与 miss 一样写 `status: 'over'`，只把 `kind` 和落点交回场景。
+  - 为什么：用户口径是"重心（脚底点）在外时先倾斜再倒，不要立刻掉下去"，而完全悬空（两块之间 / 跳过头太远）没有支点，直接落才合理。分界用悬空量而不是朝向——冲过头和没跳够都往前进方向扑。
+  - 验证：`npm run test:minigame` 242 条全绿，新增 10 条：悬空 1.2/1.5 个半边长 → topple（冲过头与没跳够都算）、悬空正好等于半径 → topple、超一点（2.01）× → miss、0 距离与大过头 → miss、圆形角上方形 hit / 圆形 topple、`jump()` 里 topple 结束本局且不加分、落点仍交回。
+  - 批次：20261024-1331
+- [x] [跳5] 可达性口径改成「从最坏落点仍够到下一块中心」：`logic.ts#maxReachableGap` + `tools/jump-balance.ts` → `npm run jump:balance`（可达率 ≥ 99%，且最远间距 ≤ maxDistance − margin）
+  - 做了什么：新增 `maxGapFromEdge(previousSize) = maxReachableGap() − 半边长`，`gapRangeForScore` 的上限改成它；`jump-balance` 的可达率判据改成「间距 + 上一块半边 ≤ maxDistance − margin」，并把模拟器的瞄准距离从「方块中心距」改成「stand → 目标中心」。
+  - 为什么：落点保留之后，"站中心起跳"不再是最坏情况——人可能停在上一块的后边缘，那里离下一块多出半个边长。只按中心距判可达，会生成"站偏就永远够不到"的格子。模拟器同理：玩家瞄的是自己站的地方，不是方块中心。
+  - 验证：`npm run jump:balance` 可达率 100%（0~300 分逐分）、完美玩家 300 跳不掉、手抖 23.1 跳 / 36.5 分（改瞄准口径前是 11.8 跳，说明模拟器当天确实在按方块中心瞄）；`npm run test:minigame` 245 条全绿，新增 3 条：最远间距 + 半边 ≤ maxDistance − margin、`maxGapFromEdge(2)` 的公式、四个分数点上限都不越界。
+  - 批次：20261024-1331
+- [x] [跳6] 渲染层接新规则（站姿用 stand、新增 toppling 阶段、一屏只画 3 块、debugState 暴露站姿偏移）：`src/minigame/games/jump/scene.ts` + `BlockScene.ts#nextFrame` → `npm run typecheck` + `npm run test:minigame`（debugState 字段断言同步）
+  - 做了什么：`scene.ts` 的站姿/起跳点全部改读 `run.stand`（`placeJumper(run.stand.x, …)`、`release()` 用 stand 算方向与落点、完美命中的波纹画在 `outcome.point`）；新增 `toppling` 阶段（等 `JUMP_TIMING.toppleMs = 380ms` 后接 `falling`，角度留给跳9），倾覆期间不跟镜头；`rebuildBlocks` 从 4 块收成 3 块（上一块 + 当前 + 下一块），`BlockScene.nextFrame` 同步收窄；`debugState` 新增 `standOffset`，`gap` 改成从站姿量、`axis` 仍按方块中心判。
+  - 为什么：规则层已经不在中心起跳了，渲染层若还按方块中心画，人和逻辑会越走越偏；`gap` 也必须给 E2E 真实值（它按 gap 反算按压时长）。`axis` 保留方块中心口径是因为"等距两向"是生成器约束，站偏只是让这一跳略斜。
+  - 验证：`npm run typecheck` 通过；`npm run test:minigame` 250 条全绿（新增 5 条静态断言：站姿读 run.stand、起跳点读 stand、toppling 阶段存在、一屏 3 块、倾覆不跟镜头；debugState 字段表加 standOffset）；`npm run test:jumpiso` 42 条全绿。
+  - 批次：20261024-1331
+- [x] [跳7] 清晰度：小游戏独立 renderer 像素比上限 2 → 3，白点圆 24→48 段、阴影贴图 128→256、背景渐变 2×256→2×512 加抖动：`src/main.ts`（`runStandaloneMiniGame`）+ `BlockScene.ts` → `npm run test:jumpiso` + 常量断言（分段数/尺寸写进可导出常量）
+  - 做了什么：`main.ts` 新增 `MINIGAME_PIXEL_RATIO_CAP = 3` 并用于小游戏 renderer；`BlockScene.ts` 导出 `DOT_SEGMENTS = 48`、`SHADOW_TEXTURE_SIZE = 256`、`BACKGROUND_TEXTURE_HEIGHT = 512`、`BACKGROUND_NOISE = 1/255`，背景渐变改成 512 行并逐像素叠 ±1 级确定性噪点（`backgroundNoise(idx)` 用 sin 哈希，非 `Math.random`），阴影贴图按常量取尺寸。
+  - 为什么：一屏只有 3~4 块纯色方块，填充率几乎全花在边缘抗锯齿上，像素比 3 能明显减少方块边缘毛刺；256 行的渐变在 3x 屏上会被拉出横向色带，512 + dithering 才彻底打散。噪点必须确定性，否则截图对比与"同 seed 同画面"失效。
+  - 验证：`npm run test:minigame` 256 条全绿（新增 6 条：像素比上限 3 且被 renderer 使用、白点 48 段、阴影 256、背景 512、噪点常量 + 无随机数）；`npm run test:jumpiso` 42 条、`npm run test:jumptex` 25 条全绿；`npm run typecheck` 通过。
+  - 批次：20261024-1331
+- [x] [跳8] 方块几何精致化：普通块换圆角倒角盒、圆形底座用 56 段圆柱、阴影按方/圆分两张贴图、特殊方块保持直角盒（图集 UV 原因）：`BlockScene.ts` → `npm run test:jumptex` + `npm run typecheck`
+  - 做了什么：`BlockScene` 引入 `RoundedBoxGeometry`（2 段 / 半径 0.055，导出 `BLOCK_CORNER_RADIUS` / `BLOCK_CORNER_SEGMENTS`）作为方形底座；新增 `roundGeometry = CylinderGeometry(0.5,0.5,1,56)`（`ROUND_BLOCK_SEGMENTS`）做圆形底座；`createEntry` 按 `spec.shape` 选几何与阴影材质；`createShadowTexture('square'|'round')` 生成两张贴图、两个材质，`dispose()` 一并释放；音乐盒圆柱段数 40→56；`scene.ts` 把 `block.shape` 传进 `BlockSpec`。
+  - 为什么：直角盒在 3x 屏上边缘"一刀切"、圆底座配方阴影会在四角多出灰块。特殊方块不吃圆角——它们顶面靠图集 UV 分区，倒角会把 UV 采样推到格子边缘（这条在交接里已定，测试里钉住）。
+  - 验证：`npm run typecheck` 通过；`npm run build:fast` 出包成功（`three/addons/*` 的解析真跑过一遍）；`npm run test:minigame` 263 条全绿（新增 7 条：圆角盒参数、56 段圆柱、特殊方块仍是直角盒、几何按 shape 分支、两张阴影贴图、音乐盒 56 段、卸载释放新资源）；`npm run test:jumptex` 25 条全绿。
+  - 批次：20261024-1331
+- [x] [跳9] 倾倒动画：`motion.ts` 新增 topple 角度曲线（缓入、约 380ms、90°+）、`JumperModel.ts` 新增 `setTilt()`、`scene.ts` 在 toppling 阶段播放 → `npm run test:jumpmotion`（0→1 单调、端点角度、时长常量）
+  - 做了什么：`motion.ts` 加 `TOPPLE_ANGLE = 95°` 与 `toppleAngle(ms)`（`cubicIn`，`JUMP_TIMING.toppleMs` 内 0→95°），`JUMP_TIMING` 增加 `toppleMs = 380`；`JumperModel` 加 `tilt` 字段与 `setTilt(radians)`（正数=朝行进方向，`rotation.x = flip − tilt`），`resetPose` 一并清零；`scene.ts` 的 toppling 分支每帧 `jumper.setTilt(toppleAngle(ms))`，播完清零再进 falling。
+  - 为什么：用户要"重心在外时先倾斜再倒"。用缓入（先慢后快）而不是缓出，是因为重心越过支撑面后是被重力拽下去的；正好 90° 会让人物"贴"在方块侧面，多倒 5° 才读得成"已经离开支撑面"。
+  - 验证：`npm run test:jumpmotion` 58 条全绿（新增 10 条：端点 95°、90°~100° 区间、单调不减、前半程 <20%（缓入）、最后 1/4 转过 >50%、越界夹住、负数/NaN 归零、380ms 常量）；`npm run test:jumpmodel` 全绿（新增 6 条：90° 倾倒 → rotation.x = −90°、不改朝向、负角夹 0、NaN 安全、resetPose 清倾角）；`npm run test:minigame` 264 条全绿（新增"倾覆阶段播放角度曲线"）；`npm run typecheck` 通过。
+  - 批次：20261024-1331
+- [x] [跳10] 跳中心的 combo 表现（计分规则不动）：`scene.ts` 飘字改 `×N +P`、`BlockScene.playRipple` 层数随连击增加且外圈偏金、`audio.ts` 完美命中音高随连击升调 → `npm run test:jumpaudio` + `npm run typecheck`
+  - 做了什么：`motion.ts` 加 `rippleRingCount(combo) = 3 + min(3, combo−1)` 与 `rippleRingRadius(i, n)`；`BlockScene.playRipple` 接受 combo，波纹 rig 一次建满 6 层、每跳只改可见性/颜色（颜色由 `rippleColorAt` 给，>3 层时最外圈 `RIPPLE_GOLD`）；`audio.ts` 加 `perfectPitchFactor` / `perfectSweep`（每连 +2 半音、封顶两个八度），`playLand(center, combo)` 接上；`scene.ts` 落地时用 `outcome.run.combo` 调音效与波纹，连中两次起飘 `×N  +P`，HUD 分数下方加 `.jump-combo`（`combo >= 2` 才显示，断连击当帧消失），`index.html` 补样式。
+  - 为什么：用户要"跳中心有 combo 表现"，但计分规则明确不动。所以三处加强（飘字文案 / 波纹层数与金环 / 音高）全是表现层；`×N` 与金环都从第 2 连起，第 1 连保持原样，否则"连击"这个信号在第 1 次就失效（记进 decision D3）。
+  - 验证：`npm run test:jumpaudio` 45 条全绿（新增 12 条：第 1 连原调、每连 +2 半音、严格递增、封顶 ×4、两端同倍率、时长/波形/音量不受影响、常量值）；`npm run test:jumpmotion` 71 条全绿（新增 13 条：层数 3/4/5/6 与封顶、0/NaN 兜底、半径由外向内递减、最外圈恒为 1、3 层时中间圈 0.725）；`npm run test:minigame` 270 条全绿（新增 6 条静态断言）；`npm run typecheck` + `npm run build:fast` 通过。
+  - 批次：20261024-1331
+- [x] [跳11] 断言与 E2E 口径同步（不跑 E2E，只改脚本）：`tools/jump-e2e.mjs` 的 gapRatio 区间、一屏块数、形状字段 + `tools/jump-iso-test.ts` 的取景断言 → `npm run test:jumpiso`（`npm run check` 全绿为此条完成凭证）
+  - 做了什么：`scene.debugState` 补 `onscreen` / `shape` / `nextShape`（E2E 要有得读）；`jump-e2e.mjs` 的按压时长改成按 `MAX_DISTANCE 7.2 / MAX_CHARGE_MS 1250` 反算，gapRatio 区间改成 2.2~5.1 并新增"开局 ≥4.6 格""开局 2 块 / 跳过后 3 块""形状在两类之内""10 分前不出圆形""站姿偏移有限"五条；`jump-iso-test.ts` 新增"新间距下的一屏 3 块"整节（真跑生成器取 3 块，验全部在视口内、当前块占屏宽 10%~45%、纵向撑满 ≥60%、下一块在屏幕更上方）。
+  - 为什么：E2E 脚本不在 CI 里跑（要浏览器），它引用的字段/参数一旦改名没人会发现；所以既要改脚本，也要在离线测试里用"读脚本源码 + 比对 config 数值"的方式钉住（`MAX_DISTANCE`、`MAX_CHARGE_MS` 直接与 `JUMP_CONFIG` 比）。
+  - 验证：`npm run check` **全绿**（typecheck + 177/177 离线套件 + 三张台账 + 文档门禁 + 浏览器/截图/控制台门禁自检）；`npm run test:jumpiso` 46 条、`npm run test:minigame` 275 条全绿；顺手把 HANDOFF 的"提交总数"从 1702 修到 1716（全量门禁抓出来的）。**没有跑 E2E / 浏览器**（按用户要求）。
+  - 批次：20261024-1331
+- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：这一批 11 条每条都有一条"坏了就变红"的检查，且都不是纯静态字符串——数值断言占绝大多数（间距绝对格数 4.6/5.4/4.8/6.0、悬空分界 half、stand 偏移 0.45、圆形面积比 78.5%、波纹 3→6 层、音高 ×4 封顶、倾倒前半程 <20%）。证据：`npm run check` 全绿，离线 177/177 套；本批相关断言从 204 条涨到 276（minigame）+ 71（motion）+ 45（audio）+ 46（iso）。
+  - L2：刚当场做了两次故意破坏来验"会不会红"：① 把 topple 分界 `overhang > half` 改成 `half * 0.5` → 2 条红（"悬空正好等于半径 → topple"、"倾覆不分朝向"）；② 把 `stand: landing.point` 改回方块中心 → 4 条红（落点偏移 0.45、stand 不等于中心、outcome.point、按中心距只到半路）。两次都还原后全绿。**顺手补了一条**：此前只有 `gapFloorRatio = 2.12` 的公式自证（同一份算术写两遍），现在直接量"两块之间的净空档 ≥ 小人高度"，这才真的验到"倒下有地方"。
+  - L3：判断依据里 6 条来自用户原话（画质粗糙 / 间距太小要激进 / 落点别复位 / 重心在外才倒 / 底座太单一 / 跳中心要 combo），直接决定了这 11 条的分工；另外 4 处是我自己定的实现选择（95° 倾倒角、金环与 `×N` 从第 2 连起、背景噪点幅度、净空档的度量方式），全部写进 `f834a8-decision.md` 的 D1~D3，属可回退项，不是从用户那里"问来"的。
+  - 批次：20261024-1331
+
 ## 批次 20261024-1010 · 2026-10-24 · 会话 e50bd5cb
 
 - [x] [跳11] 分数 HUD 被宿主顶栏盖住：`index.html` 的 `.jump-hud` 定位改回"让开顶栏 + 安全区"，`scene.ts` 无改动 → `npm run test:minigame`（新增静态断言：`.jump-hud` 的 top 必须含 `56px`/`safe-area`，不许用百分比贴顶）＋ 重跑 e2e 截图肉眼确认分数可见
@@ -69,82 +132,4 @@
   - L3：这批的判断依据**全部来自真实参考图**（02/03/06 三张，逐点像素取样：色值 6 处、比例 2 处、阴影 2 处、背景 2 处），没有一条是"我觉得应该是"。唯一自选的是"每组至少 3 个高饱和 + 最多 1 个灰"这条量化门限（原版没给规则，是从 6 组参考图的分布反推的），已写进 `palette.ts` 注释。
   - 改进（当场做了 2 条）：① `JumperModel.setSize` 的双份真值修掉（写死 0.72 vs `iso.ts` 的 1.12）；② 饱和度/灰块两条"洗白"防线——如果不加，下次谁把颜色调灰，只有肉眼能发现。
   - 批次：20261024-1010
-
-## 批次 20261024-0415 · 2026-10-24 · 会话 e50bd5cb
-
-- [x] [跳1] 把原版视觉规格表落成文档：新建 `.continue/notes/jump-original.md`（等距 30°/正交相机、三面明暗色值、方块与小人比例、阴影方向与柔和度、动画时序表、UI 字号与位置、音效时序，每个数值标注依据的参考图文件名）→ `test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' .continue/notes/jump-original.md)" -ge 25 ]`
-  - 做了什么：写 `.continue/notes/jump-original.md`（113 行表格），10 张分节表覆盖投影/几何/三面明暗/小人/阴影/背景色板/UI/时序/音效/特殊方块，另加「测量方法与误差」「不可 1:1 项」两节；数字全部标注【测】/【推】/【估】/【二手】来源。
-  - 为什么：交接文档里的数值是肉眼估的，其中一条（三面明暗）经测量是反的——原版是**左面最暗 0.775、右面 0.93**，不是"右侧最暗 0.72"。不先量一遍，跳3 会把明暗贴反，之后所有截图比对都白做。
-  - 怎么量的：写了一次性脚本 `.tmp/imgprobe.mjs`（sips 转 PNG + Node zlib 手解 PNG 过滤链），用 `bbox`/`mode`/`scanrow`/`scancol` 在 02/03/06 上量出：菱形 bbox 249×130 → 俯角 31°；三面亮度比 1.00/0.775/0.93（黄块与橙块互证）；块高 0.60 边长；小人高 0.72 边长、头径 0.29 身高；分数墨高 7.8%W、字号 0.10W、色 #444750；首页按钮 46.3%W×10%W。
-  - 验证：`test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' …)" -ge 25 ]` → `OK rows=113`。
-  - 批次：20261024-0415
-- [x] [跳2] 立等距相机参数模块：新建 `src/minigame/games/jump/iso.ts`（俯角 30°、方位 225°、正交视锥 framing、横竖屏缩放，纯函数）+ 新建 `tools/jump-iso-test.ts` 并在 `package.json` 注册 `test:jumpiso` → `npm run test:jumpiso`（断言：投影 ±30°、顶面菱形宽高比 2:1、844×390 与 390×844 下 ≥3 块可见且当前块在视口内、相机是正交）
-  - 做了什么：`iso.ts` 只做三件事——`isoBasis()` 由俯角/方位算正交基（与 three 的 `lookAt` 同一套约定：`x = normalize(up × z)`、`y = z × x`）、`projectPoint()` 投到屏幕平面（仍是世界单位）、`frameBlocks()` 先量方块角点的屏幕 bbox 再反解正交视锥。另导出 `BLOCK_HEIGHT_RATIO=0.6` / `JUMPER_HEIGHT_RATIO=0.72` 与 `boxesFromBlocks()`，让规格表里的比例只有一处定义。
-  - 为什么取景用"量 bbox"而不是猜相机距离：正交下缩放全在 frustum 里，横屏 844×390 与竖屏 390×844 用同一个公式就能都装下 3 块；旧 `PillarScene` 的 `PORTRAIT_PULLBACK` 那种"竖屏拉远 1.25"是猜的，改间距就得重调。决策写进 `e50bd5-decision.md` D2。
-  - 为什么方位钉成"视线方向"：225° 两种读法（视线 / 相机位置）在画面上互为左右镜像，都能自洽；钉成视线方向后"−z → 右上、−x → 左上"可断言，写反必红。决策写进 D1。
-  - 正交的判据没用 `instanceof OrthographicCamera`（那只能证明"写了这个词"），而是断言"同尺寸方块沿视线前后错开 6 格后屏幕宽度完全相同"——几何真被算成透视时只有这条会红。
-  - 验证：`npm run test:jumpiso` → 42 条全绿（基正交/俯角 30°/菱形 2:1/两向符号与斜率/远近平行/两种视口 3 块在视口内/当前块下沉 8~20% 半高/退化为空或脏坐标时不产生 NaN）；`npm run typecheck` 与 `typecheck:tools` 均 0 错。
-  - 批次：20261024-0415
-- [x] [跳3] 重写渲染层为等距纯色方块场景：新建 `src/minigame/games/jump/BlockScene.ts`（正交相机 + 盒/圆柱几何 + 顶亮/左中/右暗三面 + 软阴影 + 纯色背景、无雾），删除 `PillarScene.ts` / `pillars.ts`，`scene.ts` 接线；同步改掉 `tools/minigame-test.ts` 里锁死 `new PillarScene(` 的源码断言 → `npm run test:minigame && npm run typecheck`
-  - 做了什么：新建 `BlockScene.ts`（正交相机 + 盒/圆柱共享几何 + 三面明暗烘进顶点色 + 贴片阴影 + 竖直渐变背景、无雾、不打灯、不读图集）与 `palette.ts`（6 组背景 + 8 个方块色 + `FACE_SHADE` + `shadeForNormal()`）；删除 `PillarScene.ts` / `pillars.ts` / `themes.ts`；`scene.ts` 换成 `BlockScene`（`setBlocks` / `setSquash` / `follow` / `setPalette`），站高改成按方块高度算（方块会随分数变矮），起跳/落地两端顶面高度不同时先线性过渡再加抛物线。
-  - 与队列描述不同的一处：队列写"顶亮/左中/右暗"，但 `[跳1]` 实测是**左暗 0.775、右亮 0.93**（黄块与橙块两块独立方块互证），渲染按实测值实现，断言也钉住方向（"右面比左面亮"）。
-  - 为什么明暗不用灯光：原版是纯哑光纯色，用灯去凑那三个比值只能靠试，"差 5° 就变味"；把 `shadeForNormal()` 烘进顶点色后，立方体三面精确落在 1.00/0.775/0.93，圆柱侧面同一条公式自然连成渐变（64 段圆环相邻差 < 0.02，无穷色阶台阶）。
-  - 为什么阴影用贴片：原版没有可见地面，阴影本身就是一张柔边贴片；用 shadowMap 既贵又只能压在"不存在的平面"上。偏移按实测（屏幕左下）换算成世界 −0.43/+0.71 边长。
-  - `palette.ts` 提前到本条落地（`[跳6]` 原本也包含它）：颜色是 BlockScene 的输入，分两次建等于把同一张表写两遍；`[跳6]` 收窄为特殊方块贴图 + 贴图/色板断言。
-  - 验证：`npm run test:minigame` → 151 条全绿（含色板 6/8 数量、方块不糊进背景 |ΔL|≥0.04、同 seed 同色板、色板轮换与负下标、三面明暗精确值、圆柱无台阶）；`npm run typecheck` / `typecheck:tools` 0 错；`npm run check:fast` 全绿（改动命中 minigame 套）。
-  - 批次：20261024-0415
-- [x] [跳4] 把 MC 玩家模型换成原版棋子小人：新建 `src/minigame/games/jump/JumperModel.ts`（球头 + 锥形身体、脚底原点、深色高光材质），`scene.ts` 不再用 `PlayerRenderer`；新增 `tools/jump-model-test.ts` 注册 `test:jumpmodel` → `npm run test:jumpmodel`（断言：压扁时 y→0.6 / xz→1.3、空翻 ±360°、包围盒 min.y≈0、dispose 后无残留）
-  - 做了什么：`JumperModel.ts` 用 `LatheGeometry` 画裙摆（9 个采样点的平滑外扩曲线，叠圆柱会在接缝处出现折线）+ 球头，原点在脚底、模型高 1；三面明暗复用 `palette.shadeForNormal()` 再叠"上亮下暗"，颜色烘进顶点色（`MeshBasicMaterial`，与方块同一条管线，不会一个亮一个暗）。`scene.ts` 不再 import `PlayerRenderer`，压扁/空翻/朝向改走 `setSquash` / `setFlip` / `setYaw` 三个 setter，落地换新方块尺寸（方块变小、小人跟着变小）。
-  - 比例依据：规格表 §4 的像素测量——身高 1、头径 0.29（球心 0.855）、颈 0.18（y=0.74）、裙摆 0.35；外部再乘 `0.72 × 方块边长`。
-  - 为什么压扁要同时鼓出来（y 0.6 / xz 1.3）：原版是"被压扁"不是"蹲下"，只压不改宽会像被踩进地里；脚底原点保证压扁时人不陷进方块。
-  - 释放的断言不靠肉眼：给两个几何/两份材质挂 `dispose` 监听再调 `dispose()`，数事件（2 geometry + 2 material）+ 场景图清空 + 重复释放不炸。
-  - 验证：`npm run test:jumpmodel` → 45 条全绿；`npm run test:minigame` 152 条全绿（静态断言同步换成 JumperModel / setFlip / jumper.setSize）；`npm run check:fast` 174/174 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳5] 玩法向原版对齐：`config.ts` + `logic.ts`（前进方向改成等距两向 ±90°、间距改为 `size + 0.15~0.9`、特殊方块补成井盖 5 / 魔方 10 / 便利店 15 / 音乐盒 30 四类、停留 3 秒、中心连击与封顶不变）→ `npm run test:minigame && npm run jump:balance`（可达率 100%、完美玩家不掉、手抖玩家 8~200 跳；不达标调 `gapMax`/`maxCharge` 而不是放松断言）
-  - 做了什么：`directionDegrees` 从 `[-30, 0, 30]` 改成 `[0, 90]`（世界 −Z / −X 两条等距轴）；间距从绝对格数改成 **边长 × 1.15~1.9**（`gapRatioMin/Max`，删掉 `growScore`/`gapMin*`/`gapMax*`）；`JumpBlockKind` 扩成 `normal|well|cube|store|music`，奖励 5/10/15/30（按稀有度加权抽：40/30/20/10%），`specialHoldSeconds` 2 → 3；中心连击与封顶（2n / 32）保持不动。
-  - 为什么间距改成倍数：原版相邻块几乎贴合，中心距就是 1.15~1.9 个边长；旧参数是绝对格数，方块一小（0.9）间距还是 3 格，画面上立刻散成"MC 里搭的柱子"。改成倍数后间距随方块同比缩小，难度来自"目标变小"，与参考图 08 的三块连排一致。
-  - 平衡脚本的一处**模型**修正（不是放松断言）：`jump:balance` 里"手抖"原本是 `间距 × (1 ± 24%)` 的相对误差，在旧参数下恰好与半块同量级；间距改成倍数后 24% 的间距永远小于半块（0.24 格 vs 0.45 格），模拟里一局不死（300 跳触顶）。改成绝对误差 `±0.55 格`（= 0.1s 的按早/按晚 × maxDistance/maxCharge，注释里本来就写着"±0.18 格"的绝对口径，代码却是百分比）。三条阈值一个字没动，理由写进 `e50bd5-decision.md` D3。
-  - 验证：`npm run test:minigame` → 162 条全绿（新增"只出现 0°/90° 两向""步进只沿一条世界轴""四类特殊方块都会出现""奖励严格递增""停留 3 秒"）；`npm run jump:balance` → 可达率 100.00%、完美玩家 300 跳不掉、手抖 ±0.55 格 26.3 分 / 17.2 跳（阈值 8~200）、乱按 1.0 分；`npm run check:fast` 全绿。
-  - 批次：20261024-0415
-- [x] [跳6] 特殊方块程序化贴图与色板：新建 `src/minigame/games/jump/blockTextures.ts`（canvas 绘制井盖/魔方/便利店门脸/唱片，接受注入的 canvas 工厂）与 `palette.ts`（背景 6 色 + 方块 8 色，取自参考图），`BlockScene.ts` 接上 → `npm run test:jumpiso`（断言：色板数量与对比度阈值、贴图工厂被调用次数与尺寸、缓存键唯一）
-  - 做了什么：`blockTextures.ts` 用 canvas 现画四类特殊方块（井盖=深灰盘+24 条径向管纹+中心孔 / 魔方=3×3 白格线彩块 / 便利店=红招牌+玻璃窗+卷帘门 / 唱片=4 圈同心纹+中心孔），**一类一张图集、左半顶面右半侧面**，于是每类只要 1 张贴图 + 1 份几何（而不是六面各一个材质）。`BlockScene` 按法线把"朝上的面"UV 指到左格、其余指到右格（方盒与圆柱的顶点顺序不同，按下标写会错位），三面明暗仍由顶点色乘上来；音乐盒走圆柱，其余走方盒。`palette.ts` 已在 `[跳3]` 落地，这条补齐它的贴图部分。
-  - 为什么 canvas 工厂要注入：浏览器传 `document.createElement('canvas')`，离线测试传一个记录 2D 调用的假 canvas——于是"画了什么、画了几张、多大"都能断言，而不是只能靠截图肉眼看。四类的 2D 调用序列当指纹，撞车就说明两类在画同一张图。
-  - 与队列描述不同的两处：① 队列写的验证是 `npm run test:jumpiso`，实际拆出独立套件 `test:jumptex`（25 条），并同时跑 `test:minigame`（色板数量 / 对比度 / 明暗）——两条一起覆盖队列要求的三类断言；② 顺带把 `BlockScene` 的渲染前提补成静态断言（正交相机 / 不打灯 / 无雾 / 不读 TextureAtlas / 阴影 depthWrite:false），这几条原本只有肉眼可见。
-  - 为什么没有按参考图 1:1：井盖管纹、便利店门脸、唱片都只有小图，且无授权素材源；这里按"可辨识的特征"画（圆盘+径向纹、3×3 彩格、红招牌+玻璃、同心圆），逼近程度写在规格表 §12 的不可 1:1 项里。
-  - 验证：`npm run test:jumptex` → 25 条全绿（四类各画一张 / 图集 256×128 / 同类复用缓存 / UV 两格拼满 0~1 / 顶面在左格侧面在右格 / 四类指纹两两不同 / 井盖有圆盘与警示黄、魔方 18 个小格且三色齐、便利店有招牌红与玻璃、唱片 ≥4 圈 / 无 2D 上下文时静默降级）；`npm run test:minigame` 171 条、`test:jumpiso` 42 条、`test:jumpmodel` 45 条全绿；`npm run check:fast` 175/175 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳7] 动画与特效对齐原版：`scene.ts`（跳跃 400ms = 上升 65% Cubic.Out + 下降 35% Cubic.In、空中翻转 360°、落地压缩 100ms、方块回弹 500ms、入场 Bounce.Out、被踩 y→0.8）+ 完美命中同心圆波纹、`+N` 飘字、旧方块掉落淡出 → `npm run test:minigame && npm run jump:e2e`（E2E 四张截图落到 `.tmp/shots`，无 ✗）
-  - 做了什么：新增 `motion.ts`（纯函数：`cubicIn/Out`、`sinusInOut`、`bounceOut`、`jumpArc`、`flipProgress`、`landingSquash`、`blockBounceScale`、`enterScale`、`fadeScale`、`rippleProgress` + `JUMP_TIMING` 全部时长）；`scene.ts` 跳跃固定 **400ms**（旧实现 `0.3 + 距离×0.045` 让远跳更慢）、弧线换成 65% Cubic.Out + 35% Cubic.In、空翻走 Sinusoidal.InOut、落地压缩 100ms、`+N` 改成 DOM 飘字（投影到屏幕、浮起淡出）；`BlockScene` 加 `tick/punch/playRipple/projectToScreen`，实现新块入场 Bounce.Out、被踩方块凹 0.85 再回弹 500ms、落后方块掉落缩小 400ms、三层同心圆波纹（外白/中绿/内红）；`index.html` 加 `.jump-float` 与 `@keyframes jump-float-rise`。
-  - 顺带修掉一个真 bug：方块颜色原本按"这一屏列表下标"取色，每跳一次列表整体前移，同一块方块会换色（看起来像"跳一下世界重新上色"）。`BlockSpec` 加 `colorIndex`（传方块 id），颜色只跟方块身份走。
-  - 为什么时序要单独成文件并逐条断言：截图是静止的，时序错了看不出来；缓动写反（cubicOut↔cubicIn）在画面上只是"有点飘"。断言里专门钉了"上升段前半程已过 70% 高度""下落段前半程还没掉一半""峰值两侧斜率都≈0（无折角）"。
-  - 验证：`npm run test:jumpmotion` → 48 条全绿（缓动端点/单调性/Bounce 至少弹 2 次/弧线形状与峰值无折角/四个收敛到端值/越界与 NaN）；`npm run test:minigame` 179 条全绿；`npm run check:fast` 176/176 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - ⚠️ `npm run jump:e2e` **没有跑**：按用户长期偏好（不要主动做浏览器自动化测试），视觉/E2E 验收留给用户自己跑；离线门禁（弧线、时序、收敛性、静态接线）已全覆盖。
-  - 批次：20261024-0415
-- [x] [跳8] HUD 与结算按原版重做：`scene.ts` 的 HUD 段 + `index.html` 的 `.jump-*` 样式（分数移到左上、深色细体大字、去掉"最高分"行与底部 hint、结算面板＝大数字 + 最高分 + 再来一局/返回、横屏安全区），`src/core/i18n/locales/zh/minigame.ts` 同步 → `npm run test:minigame && npm run typecheck`
-  - 做了什么：`scene.ts` 的 HUD 只剩一个分数元素（删掉 `bestEl` / `hintEl` 与相关 DOM 分支）；结算面板改成「小标签（本局得分）+ 大数字 + 最高分/新记录 + 再来一局 / 返回」；`index.html` 的 `.jump-*` 全段重写（分数 #41454F、`font-weight:300`、`clamp(22px, 7.2vh, 44px)`；结算面板白底圆角卡片 + 白色胶囊按钮 + 极淡遮罩，四周挂 `env(safe-area-inset-*)`）；6 个语言的 `minigame.jump.hint` 删掉、`minigame.jump.over` 从"本局 {score} 分"改成纯标签。
-  - 为什么字号按 **vh** 而不是原版的"屏宽 10%"：用户是横屏手机（844×390），照屏宽换算得到 84px，比半个屏幕还高；原版那个比例是竖屏 320pt 的度量，横屏必须换基准（7.2vh ≈ 原版在 568 高的 7.2%）。
-  - 为什么删 hint 而不是留着："按住蓄力，松手起跳"是 2026-10 那版为了教学加的，原版游戏画面里没有任何提示文字——保留它就等于承认"画面里应该有字"，与 1:1 复刻冲突。`desc` 键仍在小游戏选择页用。
-  - 验证：`npm run test:minigame` 182 条全绿（新增三条静态断言：HUD 没有最高分行 / 没有底部提示 / 结算面板是大数字+最高分+按钮）；`npm run test:i18n` 547 通过 0 失败；`npm run audit:i18n` ✓ 无缺键、✓ 无孤儿键；`npm run check:fast` 161/161 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 未做：小游戏**选择页**（`MiniGameMenu`）仍是深色面板——它是两个小游戏共用的入口，按 跳一跳 首页的样子改会让"选择器"变成"跳一跳专页"；原版首页的标题/胶囊按钮那套视觉已在结算面板里复用。这条留给用户决定是否单独做。
-  - 批次：20261024-0415
-- [x] [跳9] 音效重写成原版节奏：把 `scene.ts` 里的 `JumpAudio` 抽到 `src/minigame/games/jump/audio.ts`（蓄力音阶每 0.15s 升一级、起跳、落地、完美命中"叮"、四类特殊方块各自音色、失败下滑音），新增 `tools/jump-audio-test.ts` 注册 `test:jumpaudio` → `npm run test:jumpaudio && npm run test:minigame`（音阶序列纯函数断言 + 静默降级仍保留）
-  - 做了什么：`audio.ts` 分两半——纯数据（`CHARGE_STEP_SECONDS=0.15`、大调五声 12 级音阶表、四类特殊方块的旋律表、起跳/落地/完美/失败四个 `Sweep`）与 `JumpAudio` 类（只负责把音符丢给 WebAudio）。蓄力从"频率随蓄力连续滑"改成**阶梯音阶**：`chargeStepFor(已按秒数)` 算出级数，只有跨级才改频率（连续滑音让人分不清按了几级，原版是靠数音高判断的）。特殊方块从"一个音"改成各自旋律：井盖两音 / 魔方三音 / 便利店四音 / 唱片五音（分越高越长）。`scene.ts` 删掉内联实现，改 `updateCharge(ratio, this.charge)` 与 `playSpecial(block.kind)`。
-  - 为什么用五声音阶而不是半音阶：原版蓄力音是"音乐性"的，半音阶听起来像电子表报警。0.9 秒蓄满只用到第 6 级，表里留 12 级是给参数调整留余量。
-  - 为什么音效必须静默降级：自动化环境没有音频设备、浏览器可能因"没有用户手势"拒绝创建 AudioContext；音效失败绝不能影响玩法。断言里直接把全套方法在无 AudioContext 环境下跑一遍。
-  - 验证：`npm run test:jumpaudio` → 31 条全绿（0.14/0.15 秒的级数边界、封顶、越界夹紧、频率单调且落在 200~1200Hz、四类旋律 2/3/4/5 音且时长递增、四个 Sweep 的方向与参数、无上下文时全套调用不抛异常、重复 dispose 不炸）；`npm run test:minigame` 188 条全绿（新增 audio.ts 的 5 条静态断言）；`npm run check:fast` 177/177 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳10] 验收收口：`tools/jump-e2e.mjs` 断言更新（正交相机、两向生成、四类特殊方块、`debugState` 暴露新的可测字段），跑全量并在回复里贴结果 → `npm run check && npm run jump:e2e`（`check` 0 失败；E2E 无 ✗ 且截图与参考图逐项比对结论写进完成说明）
-  - 做了什么：`debugState` 补 `orthographic` / `gapRatio` / `axis` / `kind` / `nextKind` 五个只读字段；`tools/jump-e2e.mjs` 在开局与连跳 5 次后各断言一次（相机正交、间距 1.15~1.9 边长、方向只有 x/z、种类在五类之内），文件头也写清这三条"截图里看不出来"的判据。顺带重新生成锚点文档里由脚本管着的数字（离线套件 172 → 177，TASKS/HANDOFF/README/AGENTS 四处同时改）。
-  - 验证（贴结果）：`npm run check` → **0 失败**：「离线测试：通过 177 / 177 套 · 总耗时 16.3s」「vitest 201 passed」「i18n 547 通过 / 0 失败」「任务清单自检通过」「✓ 全绿」；`npm run build:fast` → ✓ built（2.48MB，仅有既有的 chunk 体积提示）。
-  - ⚠️ **`npm run jump:e2e` 没跑、截图也没比对**：按用户长期偏好（不要主动做浏览器自动化测试），这两步留给用户自己跑。跑法：`npm run dev` 后另开终端 `npm run jump:e2e`，四张截图落 `.tmp/shots`（jump-menu / jump-ready / jump-charging / jump-after5 / jump-over），逐项对照参考图（`.continue/.logs/…/refs/jump/`）看：视角是否等距、三面明暗左暗右亮、方块高宽比 ~0.6、间距是否几乎贴合、小人比例、阴影方向左下、背景色、分数 HUD 位置与字重。
-  - 本次改动**没有**新增任何需要人工眼的"我觉得像了"结论——所有能用脚本判的都进断言了，剩下的是真·视觉判断。
-  - 批次：20261024-0415
-- [x] [自审] 审这一批的三层：L1（等距/时序/规则有没有"坏了就变红"的检查）、L2（故意改坏一次看谁变红）、L3（判断依据里几条来自真实截图、几条是自己想的）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
-  - L1：这一批每一层都有"坏了就变红"的检查，共 6 套离线套件 ≈ 400 条断言 + 约 35 条静态接线断言。投影层 `test:jumpiso`（42）守菱形 2:1、正交（远近平行）、两视口 3 块可见；明暗/色板 `test:minigame`（190）守 1.00/0.775/0.93 精确值与"右面比左面亮"的方向；模型 `test:jumpmodel`（45）守 min.y≈0、头径/裙摆比例、压扁 0.6/1.3、释放事件；贴图 `test:jumptex`（25）守图集尺寸/缓存/四类画法指纹；时序 `test:jumpmotion`（48）守弧线形状、峰值无折角、四个动画精确收敛；音效 `test:jumpaudio`（31）守 0.14/0.15 秒的级数边界与无 AudioContext 时静默。规则层 `jump:balance` 守可达率 100% / 完美玩家不掉 / 手抖 8~200 跳。唯一薄弱点：**颜色漂移那个 bug 当时没有任何断言**（已在本次自审补上静态断言），因为它表现是"每跳一次全世界重新上色"，属于只有肉眼才容易发现的一类。
-  - L2：当天做了两次故意破坏并复现变红——① 把 `ISO_VIEW.elevationDeg` 从 30 改成 35 → `test:jumpiso` 6 条红（俯角、菱形 2:1、两向斜率 0.5、竖直 cos30°）；② 把 `FACE_SHADE` 的左右对调 → `test:minigame` 4 条红（+X/+Z 面值、"右面比左面亮"、法线取反）。两次都在 10 秒内定位到具体断言，说明判据不是"看起来对"而是数值化的。另外 `jump:balance` 在 `[跳5]` 当场抓到过一次真实退化（间距改成边长倍数后手抖玩家 300 跳不死）。
-  - L3：判断依据的来源逐条分过类（规格表里带【测】/【推】/【估】/【二手】标签）：约 45 条来自参考图像素测量（投影 31°、三面明暗、方块高 0.6、小人 0.72/0.29/0.18/0.35、背景 6 组、HUD 位置与字重、中心点 0.11~0.14），约 10 条来自公开 H5 复刻技术文（400ms 时序、3 秒停留、四类分值、音效节奏），其余约 15 处是我自己拍的板——最关键的 5 个：① 6 组背景与方块色的**配对**（原版只给单帧颜色，配对是按 |ΔL|≥0.04 的对比度阈值自己定的）；② 特殊方块抽奖权重 40/30/20/10（攻略文只说"有哪几种"，没说比例）；③ 分数字号从原版"屏宽 10%"改成 7.2vh（横屏必须换基准）；④ 波纹三色与半径（05 被红框压住一半，只能近似）；⑤ 阴影偏移常量（按"屏幕左下"反解成世界 −0.43/+0.71）。这 5 处都写进了规格表 §11/§12 与 decision D1~D3，属于"看得见的自选"，不是"冒充测量"。
-  - 当场改进（2 条，各一个提交）：`2f2012b7` 离线钉住 `debugState` 的 10 个字段（E2E 不在 CI 里跑，改名没人会发现）；`3d2002d8` 钉住"配色按方块身份取"（L1 里那个颜色漂移 bug 的复盘断言）。
-  - 批次：20261024-0415
-
----
 
