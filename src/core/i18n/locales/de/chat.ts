@@ -19,6 +19,7 @@ export const chat = {
   "command.listTitle": "Verfügbare Befehle ({count}):",
   "chat.sendLabel": "Senden",
   "chat.collapse": "Zum Einklappen tippen",
+  'chat.expandBadge': 'Ausklappen',
   "chat.expand": "Zum Ausklappen tippen",
   "chat.hintIdle": "Befehl eingeben (/help zeigt alle) oder einfach schreiben, dann „Senden\"",
   "chat.hintIdleKeyboard": "Befehl eingeben (/help zeigt alle) oder schreiben, Enter sendet, Esc bricht ab",

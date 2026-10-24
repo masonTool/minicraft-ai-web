@@ -1,51 +1,52 @@
 /**
- * 画（B14，批次 86）
+ * 画（B14，批次 86；素材在批次 20261025-0117 整体换成自创）
  *
- * 原版 1.18 一共 **26 幅**画，按尺寸分七档（1×1 / 2×1 / 1×2 / 2×2 / 4×2 / 4×3 / 4×4）。
- * 放置时游戏会从**放得下**的那些里随机挑一幅——"墙上挂一幅大画"这件事的乐趣
- * 一半来自这个"随尺寸自适应"。
+ * **画名与画面全部自创**。上一版这 10 幅一一对应 Zetterstrand 为原版画的署名作品
+ * （Kebab / Aztec / Alban / Aztec2 / Bomb / Plant / Wasteland / Donkey Kong /
+ * Skeleton / Match，名字也照抄），虽然贴图是代码画的、没有打包任何素材，但"构图能认出
+ * 是哪一幅"属于改编；`大金刚` 还叠了一层任天堂的形象。上架商店前整体换掉。
  *
- * ⚠️ 本项目这一批**只做 1×1 的那 7 幅**（Kebab / Aztec / Alban / Aztec2 / Bomb /
- * Plant / Wasteland）。理由写在下面这条：
- * **多格拼贴要跨格占用**（一幅 4×4 的画占 16 个方块，拆任意一格要带走整幅），
- * 而本项目的方块状态只有一个字节——"哪一幅 + 占在第几格"塞不进一格状态，
- * 得再开一条"按坐标存画"的通道（像告示牌文字那样），并把贴图拆成每格的子图。
- * 那是下一批的量级，所以这一批先落"单格画"，把**表结构**（名字 / 尺寸 / 贴图）
- * 按原版摆好：以后加多格画时，只要给这张表补 `width/height > 1` 的行、
- * 再把放置逻辑从"单格"扩成"按尺寸找空地"即可。
+ * 保留的是**机制**，不是内容：
+ *  - 尺寸档位照旧（1×1 七幅 + 4×4 / 4×3 / 2×2 各一幅）——尺寸决定"放得下才挂得上"，
+ *    是玩法，不属于任何人的表达；
+ *  - 1×1 的七幅**顺序也不动**：变体号存在方块状态 bit3-5 里，换顺序会让老存档里
+ *    已经挂好的画集体变成另一幅（不崩，但玩家会以为自己的画被换了）；
+ *  - 多格画的**名字**会进存档（`world/Paintings.ts` 按名字存），所以旧名字保留成
+ *    `LEGACY_MULTI_NAMES` 别名，读档时仍能找回对应的那一幅。
  *
- * 名字与尺寸都是**原版事实**（不是自创），所以尺寸声明在这里、并由测试钉住
- * "表里每一幅的 size 与本文件声明的原版尺寸一致"——以后误改一行不会静默生效。
+ * 其余说明见 `render/TextureAtlas.ts` 里每幅的构图注释。
  */
 
 /** 一幅画（本项目里"一幅"= 一个方块 + 一个状态位变体） */
 export interface PaintingVariant {
-  /** 原版命名（`minecraft:painting` 的变体名，用来对照 wiki） */
+  /** 自创的英文名（只用于贴图命名与调试，不对外展示） */
   readonly name: string;
-  /** 原版中文名（基岩版） */
+  /** 中文名（提示框 / 调试用） */
   readonly cn: string;
   /** 图集里的贴图名（16×16，整幅画就是这一张） */
   readonly tile: string;
-  /** 原版尺寸：宽 × 高（单位是**方块格**） */
+  /** 尺寸：宽 × 高（单位是**方块格**）—— 本项目里 1×1 这一档共 7 幅 */
   readonly width: number;
   readonly height: number;
 }
 
 /**
- * 原版 1.18 的 26 幅画里 **1×1** 的那 7 幅（顺序照原版注册顺序）。
+ * 1×1 的七幅（自创画面：日出 / 河谷 / 远山 / 夜空 / 篝火 / 孤树 / 沙丘）。
+ *
+ * **顺序不能改**：变体号存在方块状态 bit3-5 里，调序会让老存档里挂好的画换脸。
  *
  * 贴图名一律 `painting_<name>`：与图集名单（`atlasLayout.ts`）里的写法对应，
  * 名字写错的表现是整幅画回退成 tile 0（一张石头），非常难查——
  * 所以测试里逐条反查 `TILE_ORDER`。
  */
 export const PAINTING_VARIANTS: readonly PaintingVariant[] = [
-  { name: 'kebab', cn: '烤肉串', tile: 'painting_kebab', width: 1, height: 1 },
-  { name: 'aztec', cn: '阿兹特克', tile: 'painting_aztec', width: 1, height: 1 },
-  { name: 'alban', cn: '阿尔班', tile: 'painting_alban', width: 1, height: 1 },
-  { name: 'aztec2', cn: '阿兹特克II', tile: 'painting_aztec2', width: 1, height: 1 },
-  { name: 'bomb', cn: '炸弹', tile: 'painting_bomb', width: 1, height: 1 },
-  { name: 'plant', cn: '植物', tile: 'painting_plant', width: 1, height: 1 },
-  { name: 'wasteland', cn: '荒地', tile: 'painting_wasteland', width: 1, height: 1 },
+  { name: 'dawn', cn: '日出', tile: 'painting_dawn', width: 1, height: 1 },
+  { name: 'river', cn: '河谷', tile: 'painting_river', width: 1, height: 1 },
+  { name: 'hill', cn: '远山', tile: 'painting_hill', width: 1, height: 1 },
+  { name: 'night', cn: '夜空', tile: 'painting_night', width: 1, height: 1 },
+  { name: 'campfire', cn: '篝火', tile: 'painting_campfire', width: 1, height: 1 },
+  { name: 'tree', cn: '孤树', tile: 'painting_tree', width: 1, height: 1 },
+  { name: 'desert', cn: '沙丘', tile: 'painting_desert', width: 1, height: 1 },
 ];
 
 /**
@@ -58,7 +59,9 @@ export const PAINTING_VARIANTS: readonly PaintingVariant[] = [
  *
  * 贴图按格切成 `w×h` 张子图（`paintingSubTile`）：图集里每格仍是 16×16，
  * 拼起来才是整幅画——这样不需要"跨瓦片大图"那套基础设施。
- * 尺寸与名字都是**原版事实**（donkey_kong 4×4、skeleton 4×3、match 2×2）。
+ *
+ * 画面全部自创（壁画 / 挂毯 / 旧海图），尺寸档位保持不变（4×4 / 4×3 / 2×2）：
+ * 尺寸决定"能挂在多大的墙上"，是玩法，不是素材。
  */
 export interface MultiPainting {
   readonly name: string;
@@ -68,9 +71,9 @@ export interface MultiPainting {
 }
 
 export const MULTI_PAINTINGS: readonly MultiPainting[] = [
-  { name: 'donkey_kong', cn: '大金刚', width: 4, height: 4 },
-  { name: 'skeleton', cn: '骷髅', width: 4, height: 3 },
-  { name: 'match', cn: '火柴', width: 2, height: 2 },
+  { name: 'mural', cn: '壁画', width: 4, height: 4 },
+  { name: 'banner', cn: '挂毯', width: 4, height: 3 },
+  { name: 'chart', cn: '旧海图', width: 2, height: 2 },
 ];
 
 /** 多格画的子图贴图名：`painting_<name>_<col>_<row>`（col 从左、row 从上） */
@@ -88,9 +91,25 @@ export const MULTI_PAINTINGS_LARGE_FIRST: readonly MultiPainting[] = [...MULTI_P
   (a, b) => b.width * b.height - a.width * a.height,
 );
 
-/** 按名字找一幅多格画（存档里存的是名字，改名会让它读不回来——所以名字要稳定） */
+/**
+ * 旧画名 → 现画名（批次 20261025-0117 整体换素材时留下）。
+ *
+ * 多格画的**名字会进存档**（`world/Paintings.ts` 按名字存"墙上这一片是哪一幅"），
+ * 所以改名等于让老存档里的大画读不回来——不崩，但那面墙会空掉。
+ * 尺寸档位没变（4×4 / 4×3 / 2×2），旧名字按尺寸一一对上即可。
+ *
+ * ⚠️ 只用于**读**：写存档一律写 `MULTI_PAINTINGS` 里的新名字。
+ */
+export const LEGACY_MULTI_NAMES: Readonly<Record<string, string>> = {
+  donkey_kong: 'mural',
+  skeleton: 'banner',
+  match: 'chart',
+};
+
+/** 按名字找一幅多格画；认旧名字（见 `LEGACY_MULTI_NAMES`），认不出返回 undefined */
 export function multiPaintingByName(name: string): MultiPainting | undefined {
-  return MULTI_PAINTINGS.find((painting) => painting.name === name);
+  const resolved = LEGACY_MULTI_NAMES[name] ?? name;
+  return MULTI_PAINTINGS.find((painting) => painting.name === resolved);
 }
 
 /** 原版 1.18 的画作总幅数（本项目只做其中 1×1 的 7 幅，差异记在 TASKS B14） */

@@ -89,8 +89,8 @@ console.log('\n[瓜藤方块与种子]');
   equal('结出的果实方块', `${STEM_FRUIT.pumpkin},${STEM_FRUIT.melon}`, `${Block.PUMPKIN},${Block.MELON}`);
 
   // ---- 种子物品：`block` 字段是"种植路径通用"的关键
-  equal('南瓜籽存在', itemDef(Item.PUMPKIN_SEEDS)?.name, 'minecraft:pumpkin_seeds');
-  equal('西瓜籽存在', itemDef(Item.MELON_SEEDS)?.name, 'minecraft:melon_seeds');
+  equal('南瓜籽存在', itemDef(Item.PUMPKIN_SEEDS)?.name, 'minicraft:pumpkin_seeds');
+  equal('西瓜籽存在', itemDef(Item.MELON_SEEDS)?.name, 'minicraft:melon_seeds');
   equal('南瓜籽种下去是第 0 阶段南瓜藤', itemDef(Item.PUMPKIN_SEEDS)?.block, PUMPKIN_STAGES[0]);
   equal('西瓜籽种下去是第 0 阶段西瓜藤', itemDef(Item.MELON_SEEDS)?.block, MELON_STAGES[0]);
   check('两种种子有中文名与说明', itemLabel(Item.PUMPKIN_SEEDS) === '南瓜籽' && hasDescription(Item.PUMPKIN_SEEDS));

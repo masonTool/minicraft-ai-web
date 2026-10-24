@@ -5,86 +5,177 @@
  * 这是原版的做法，好处是手臂永远不会被地形穿模、也不受雾影响，
  * 而且两个场景互不干扰（手里的方块不会真的出现在世界坐标里）。
  *
- * 几何体按物品缓存（和掉落物渲染器一样），切换手持物品只换 mesh 不重建几何体。
- * 亮度跟着世界天光走（`setBrightness`），这样夜里举着火把是亮的、洞里是暗的。
+ * ## 尺寸口径：「屏幕高比例」单位（批次 20261024-1726 重做）
+ *
+ * 这套几何**一律按屏幕比例**定义（1 单位 = 屏幕高度的 1/1，在握点深度处），
+ * 每帧再由 `syncRig()` 按 `fov`/`aspect` 换算成世界尺度。原来的写法是把
+ * 0.15 / 0.44 这类"世界格"写死，于是：换分辨率、换 FOV、上下分屏都会走形，
+ * 更要命的是**手臂根部离镜头只有 0.1 格**，透视把它放大成一块贴着屏幕的褐色墙。
+ *
+ * 换算公式（`k = tan(fov/2)`）：
+ *   · 深度 `d = GRIP_DEPTH * k / kRef`（`kRef = tan(REFERENCE_FOV/2)`）
+ *   · 1 个几何单位 → 世界 `2 * k * d` 格
+ *   · 握点世界坐标 → 屏幕比例 (fx, fy) 反推
+ * 这样"手里的东西占几成屏幕高"是个可以直接读的数，不用再靠猜。
+ *
+ * ⚠️ 手用**自己的一套视野**（`VIEWMODEL_FOV`，见 `update()`），不跟世界视野走。
+ * 第一版让手跟着世界 fov 换算尺寸，结果 90° 视野下"尺寸/距离"比也跟着放大、
+ * 透视把方块近角推得更远 —— 实测同一块石头在 fov60 是 0.57×0.66 屏高，
+ * fov90 变成 0.97×0.81 屏高、右缘跑到 118%（右半边整块出画）。
+ * 「屏幕占比固定」和「透视形状固定」在同一个相机里没法同时成立
+ * （尺寸 ∝ 屏幕占比 × 深度，而透视强度 ∝ 尺寸/深度），所以手直接钉死在
+ * `VIEWMODEL_FOV` 上：世界视野怎么调，手里的东西都是同一张脸。
+ *
+ * ## 为什么要重做（批次 20261024-1726 的用户反馈）
+ *
+ * 用户：「手持物品的显示还是有很大的问题」。实测（1280×720，创造模式天空）：
+ *   · 空手手臂：包围盒 x 72%~346%、y 75%~514%，最近处 0.10 格 —— 一块褐色墙
+ *   · 手持方块：x 59%~103%、y 47%~118% —— 比原版大一圈还顶到画面中间
+ *   · 手持钻石剑：x 61%~109%、y 31%~90%，且**斜跨整个屏幕**、翻出两条"彩带"
+ *
+ * 根因三条，各自对应本文件的一处结构性改动：
+ *   1. 手臂从"手"往镜头方向延伸，根部几乎贴在近裁面上 → 改成伸向屏幕右下角，
+ *      根部落在画面外（见 `ARM_DIRECTION` / `ARM_LENGTH`）；
+ *   2. 扁平物品的**厚度边也贴了整张图标**，16px 的图标压到 2px 宽的边上，
+ *      斜向的剑就被拉成细长的彩带 → 厚度边只取图标**最外那一列/行**
+ *      （见 `applySpriteUvs`，图标那里是透明的地方 alphaTest 直接裁掉）；
+ *   3. 物品尺寸/位置是写死的世界格数，放大 2 倍之后与握点深度不匹配
+ *      → 全部改成屏幕比例（`BLOCK_SIZE` / `SPRITE_SIZE`）。
  */
 
 import * as THREE from 'three';
-import type { TextureAtlas } from './TextureAtlas.ts';
+import { TILE_SIZE as TILE_PIXELS, type TextureAtlas } from './TextureAtlas.ts';
 import { SHIRT_COLORS, type AppearancePalette } from '../game/appearance.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
-import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
+import { blockDef } from '../core/registry/blocks.ts';
+import { isFullBlockShape } from '../core/registry/blockShapes.ts';
+import { applyFaceShade, applyFaceUvs, applySpriteFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
+import { buildHeldSprite, type HeldSprite } from './heldSprite.ts';
 import { srgbColor } from './srgb.ts';
 
 /**
- * 手持方块/物品的显示尺寸（格）。
+ * 握点：手（也就是手里的东西）在屏幕上的位置，以及它离镜头的距离（格）。
  *
- * 批次 20261024-1152（用户）：0.22 → **0.44**（"放大 2 倍"）。原版第一人称下
- * 手里的方块本来就占屏幕很大一块；同时**手臂不再画**（见 `refreshHandVisibility`），
- * 观感与基岩版一致：只看见一件东西，而不是"一只手捏着一粒米"。
+ * `x/y` 是屏幕比例（0~1，左上为原点），换成世界坐标的公式见文件头。
+ * 0.72 / 0.80 大致是原版"物品落在右下象限、下缘被屏幕切掉一点"的位置。
+ *
+ * ⚠️ 深度写死 0.95 格（不随 FOV 变）：物品离镜头太近会被透视拉歪，
+ * 太远又会挤到准星上。0.95 格 + 下面的屏幕比例缩放，在 60°~90° 视野下都稳。
  */
-const ITEM_SIZE = 0.44;
+const GRIP_SCREEN_X = 0.72;
+const GRIP_SCREEN_Y = 0.8;
+/** 握点到镜头的距离（格）——只在 `VIEWMODEL_FOV` 这个固定视角下有意义 */
+const GRIP_DEPTH = 0.95;
 /**
- * 扁平物品（工具/武器/食物…）的厚度（格）。
+ * 手部自己的视野（度）：**不跟世界视野走**。
  *
- * 批次 20261024-1531（用户："刀剑也应该有厚度"）：0.05 ≈ 0.8 像素，
- * 侧着看是一条细边，不会像纯平面那样直接消失。厚度只给**扁平物品**，方块本来就是立方体。
+ * 手画在单独的场景 + 单独的相机里，本来就该按"视图模型"处理：世界视野从 45° 调到
+ * 90°，手里的东西大小和透视都不应该变（否则 90° 时方块会被拉得又大又歪、右缘出画）。
+ * 70° 是原版桌面的默认视野，这里的构图就是在这个视角下量出来的。
  */
-const SPRITE_THICKNESS = 0.05;
+const VIEWMODEL_FOV = 70;
+
 /**
- * 扁平物品的逐面亮度（`+x, -x, +y, -y, +z, -z`）。
+ * 方块：边长与相对握点的偏移（都是屏幕高比例）。
  *
- * 正反两面（±z，也就是图标本身）给满亮度 1；四周的"厚度边"压到 0.62——
- * 上一批用同一张图标贴六面 + 默认 `FACE_SHADE`（侧面 0.54），斜向的剑会被侧面
- * 拉成几条彩带；压暗之后侧面读作"这道边的暗面"，不再抢图标的形状。
+ * 边长 0.37 → 投影后（含透视与斜放）约占屏幕高 60%；偏移把它往右下挪，
+ * 让**上缘落在屏幕 62% 附近、下缘被屏幕切掉** —— 原版举着方块就是这个构图。
+ * （实测包围盒：x 64%~96%、y 62%~128%。）
  */
-const SPRITE_SHADE: readonly number[] = [0.62, 0.62, 0.86, 0.62, 1, 1];
+const BLOCK_SIZE = 0.37;
+const BLOCK_OFFSET: readonly [number, number, number] = [0.05, -0.09, 0];
 /**
- * 方块与扁平物品的握持姿态（相对手的挂点）。
+ * 方块握持姿态：绕 Y 转 45°（露出两个侧面）、绕 X 抬 24°（露出顶面）。
  *
- * 批次 20261024-1531（用户："刀剑的显示方位，手应该拿到柄的位置"）：
- * 扁平物品的几何体**底边贴在挂点上**（见 `spriteGeometry`），所以这里的旋转
- * 决定"柄在手里、刃朝上偏前"这个姿势；方块则是握在中间，旋转沿用旧值。
+ * 原版的方块是"一个角朝着你"的：顶面 + 两个侧面一共三面可见，且顶面最亮。
+ * 不给 Z 轴滚转——滚过之后立方体的竖边是斜的，看着像没放稳。
  */
-const SPRITE_HOLD_ROTATION: readonly [number, number, number] = [0.1, -0.55, -0.32];
-const BLOCK_HOLD_ROTATION: readonly [number, number, number] = [0.2, -0.5, 0.15];
-/** 手臂横截面与长度（格）：16px 皮肤里手臂是 4×4×12 像素 */
-const ARM_WIDTH = 0.15;
-const ARM_LENGTH = 0.75;
+const BLOCK_ROTATION: readonly [number, number, number] = [0.42, Math.PI / 4, 0];
+
+/**
+ * 扁平物品（工具/武器/食物…）。
+ *
+ * · 边长 0.52（屏幕高比例）：投影后约屏幕高 58%，对齐原版"手里东西占右侧一大块"的观感；
+ * · 挤出深度 0.035（≈ 1 个像素格）：**按图标轮廓**挤出的实体，剑就是一把有厚度的剑
+ *   （批次 2136 用户："能有 3D 的效果、分辨率再高一点、同时增加一点厚度"）；
+ * · 对齐口径：**图标里不透明那块的底边中点**落在握点上（见 `spriteGeometry`）。
+ */
+const SPRITE_SIZE = 0.52;
+/**
+ * 2.5D 贴图的烘制参数（见 `heldSprite.ts`）。
+ *
+ * · `SPRITE_SCALE_PASSES = 2`：Scale2x 跑两遍 = 4×，斜边台阶补小、**颜色不变**（不糊）；
+ *   上一版用双线性放大，用户："太糊了，起码要像一把剑吧，而且要清晰"。
+ * · `SPRITE_DEPTH_PIXELS = 2`：厚度 = 2 个画布像素（4× 下 ≈ 半个像素格 ≈ 0.016 屏高），沿右下挤出。
+ *   8px 用户嫌"太厚"、要求砍到 1/4；再厚就会像给图标描了一圈投影。
+ */
+const SPRITE_SCALE_PASSES = 2;
+const SPRITE_DEPTH_PIXELS = 2;
+const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
+/**
+ * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
+ *
+ * ⚠️ 别给 Y 轴大角度（旧值 -0.55）：平面转过去之后图标会被压扁，
+ * 加上透视就成了"一条斜跨屏幕的带子"。
+ */
+const SPRITE_ROTATION: readonly [number, number, number] = [-0.1, -0.24, 0.14];
+
+/**
+ * 手臂（空手时可见）：粗细与长度（都是**屏幕高比例**）、朝向。
+ *
+ * 朝向 `(0.62, -0.55, 0.56)`：向右、向下、**并且朝镜头**。
+ *  · 朝镜头这一项是"小臂从画面外伸进来"的关键，没有它手臂会像贴纸一样平；
+ *    但也别给太多（旧值 0.6 配 0.9 格长度），否则根部会贴到近裁面上，
+ *    透视把整条手臂放大成一堵褐色墙（批次 20261024-1726 实测最近处 0.10 格）。
+ *  · 长度 0.5 个屏高：从握点沿着方向走出去刚好越过屏幕右下角，根部落在画面外。
+ *  · ⚠️ 别改回"写死世界格"（旧 `ARM_LENGTH_WORLD = 0.55`）：那样视野一变，它在屏幕上
+ *    的长度就跟着变，根部会忽远忽近。根部离镜头多远由 `syncRig` 的深度换算保证——
+ *    深度跟着 k 走，根部永远在镜头前 0.35~0.75 格，不会贴到近裁面。
+ *
+ * 粗细 0.12：屏幕上约 12% 屏高，配上"末端加粗的拳头"，读起来是一段小臂。
+ */
+const ARM_WIDTH = 0.12;
+const ARM_UNITS = 0.5;
+const ARM_DIRECTION = new THREE.Vector3(0.62, -0.55, 0.56).normalize();
+/**
+ * 手臂的逐面亮度（`+x, -x, +y, -y, +z, -z`）。
+ *
+ * 顶面最亮、底面最暗，和方块一样是"假光照"：真光照会让贴身的手臂随环境闪。
+ */
+const ARM_SHADE: readonly number[] = [0.88, 0.85, 1, 0.62, 0.9, 0.9];
 /** 皮肤色（原版默认皮肤的手臂色） */
 const SKIN_COLOR = 0xdc9a6b;
 /**
- * 胸甲袖套：第一人称下"能看到自己穿着甲"的唯一途径（其余三件在镜头的盲区里）。
- * 只覆盖手臂靠近肩膀的一段，跟原版一样露出手。
+ * 拳头：手臂末端那一小段，比手臂粗一圈。
+ *
+ * 平色手臂如果只是一根等粗的方柱，末端就是一个"被切平的断面"，读起来像一根木头；
+ * 末端加一块略粗的方块之后，形状本身就能说明"这里是手"（原版靠皮肤贴图区分，
+ * 我们没有贴图，只能靠体积）。
  */
-const SLEEVE_LENGTH = ARM_LENGTH * 0.45;
-const SLEEVE_RADIUS = ARM_WIDTH * 1.3;
+const HAND_RATIO = 0.3;
+const HAND_THICKNESS = 1.3;
 /**
- * 布袖（批次 241）：第一人称手臂靠近肩膀的一段用上衣色，手臂不再是"一整根肉色"。
- * 比手臂粗 0.004，靠"套在外面"分层；穿胸甲时会被更长的盔甲袖套盖住。
+ * 布袖 / 胸甲袖套：按"手臂长度的比例 × 手臂粗细的倍数"定义，盖在根部那一段。
+ *
+ * ⚠️ 第一人称只看得见小臂——根部（也就是这两段）基本在画面外，这是原版的行为
+ * （原版第一人称也看不见袖子）。别为了"看得见"把它们挪到手边，那会变成手套。
  */
-const CUFF_LENGTH = 0.22;
-const CUFF_RADIUS = ARM_WIDTH + 0.008;
+const CUFF_RATIO = 0.34;
+const CUFF_THICKNESS = 1.22;
+const SLEEVE_RATIO = 0.46;
+const SLEEVE_THICKNESS = 1.34;
 /** 挥动一次的时间（秒） */
 const SWING_DURATION = 0.26;
-/** 走路时的摆动频率（次/秒）与幅度 */
+/** 走路时的摆动频率（次/秒）与幅度（屏幕高比例） */
 const BOB_FREQUENCY = 6.5;
-const BOB_AMPLITUDE = 0.035;
-
+const BOB_AMPLITUDE = 0.03;
 /**
- * 肩部（手臂根部）在视图空间里的位置与角度。
+ * 挥动/拉弓的旋转支点（屏幕高比例，相对握点）。
  *
- * 原版第一人称是这个观感：手臂根部在**屏幕外的右下角**，朝屏幕里、朝上、朝左伸出，
- * 手（也就是物品）落在右下象限、完整可见。所以这里把根部放到屏幕外，再靠 rotation
- * 把手臂"伸进画面"：绕 X 抬 22°、绕 Y 左偏 20° 之后，手落在屏幕右侧偏下（约 x 68%、y 70%），
- * 整块都在画面里，尺寸约为屏高的四分之一。
- *
- * ⚠️ 这几个数是**在浏览器里量出来的**，不是纯靠投影公式推的：先用洋红把整只手染色，
- * 再用 `tools/pixel-probe.mjs` 那套解码扫出它在截图里的包围盒，按"差多少像素 ≈ 差多少格"
- * 反推修正。纯算容易漏掉挂点的复合旋转，实测定值最省事。
+ * 放在握点的右下方（≈ 肩的位置）再绕它转：绕握点转的话，物品是"原地转圈"，
+ * 而绕肩转才是原版那种"从画面外抡进来"的弧线。
  */
-const SHOULDER_POSITION: readonly [number, number, number] = [0.68, -0.58, -0.15];
-const SHOULDER_ROTATION: readonly [number, number, number] = [0.385, 0.35, 0.12];
+const SWING_PIVOT = new THREE.Vector3(0.2, -1.15, 0.3);
 
 const VERTEX_SHADER = /* glsl */ `
 attribute float aShade;
@@ -109,6 +200,7 @@ varying float vShade;
 
 void main() {
   vec4 texel = texture2D(uAtlas, vUv);
+  // 材质级开关：手臂/袖套不要图集，只用平色，且不带透明
   vec3 base = mix(uFlatColor, texel.rgb, uUseAtlas);
   float alpha = mix(1.0, texel.a, uUseAtlas);
   if (alpha < uAlphaTest) discard;
@@ -116,20 +208,46 @@ void main() {
 }
 `;
 
+const SPRITE_VERTEX_SHADER = /* glsl */ `
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const SPRITE_FRAGMENT_SHADER = /* glsl */ `
+uniform sampler2D uMap;
+uniform float uBrightness;
+uniform float uAlphaTest;
+varying vec2 vUv;
+
+void main() {
+  vec4 texel = texture2D(uMap, vUv);
+  if (texel.a < uAlphaTest) discard;
+  gl_FragColor = vec4(texel.rgb * uBrightness, texel.a);
+}
+`;
+
 export class HandRenderer {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
 
-  /** 整只手的根节点：位置/旋转都在它身上做动画 */
-  private readonly group = new THREE.Group();
+  /** 整只手的根节点：位置/缩放/挥动都在它身上做（子节点只负责姿态） */
+  private readonly root = new THREE.Group();
+  /** 手臂那一组（空手时才显示） */
+  private readonly armRig = new THREE.Group();
   /** 手臂（空手时也要画） */
   private readonly arm: THREE.Mesh;
   /** 布袖（上衣色的一段，批次 241）：空手时也能看出"穿着衣服" */
   private readonly cuff: THREE.Mesh;
+  /** 拳头（空手时与手臂一起显示） */
+  private readonly fist: THREE.Mesh;
   /** 胸甲袖套（穿着胸甲时才显示） */
   private readonly armorSleeve: THREE.Mesh;
-  /** 手持物品的挂点（在手臂末端） */
-  private readonly itemAnchor = new THREE.Group();
+  /** 手持物品的挂点（在握点上，自己只负责握持姿态） */
+  private readonly itemRig = new THREE.Group();
 
   /**
    * 手持物品的材质（方块与扁平物品**共用一份**）。
@@ -138,12 +256,19 @@ export class HandRenderer {
    * 换成薄盒子之后正反面都是真实几何，双面不再需要——两份材质只会让"改亮度时漏一份"。
    */
   private readonly itemMaterial: THREE.ShaderMaterial;
+  /**
+   * 扁平物品专用材质：贴的是**烘好的 2.5D 贴图**（不是图集）。
+   * 因为边缘是画布的抗锯齿过渡，所以它必须 `transparent`（`alphaTest` 只兜底）。
+   */
+  private readonly spriteMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
   private readonly cuffMaterial: THREE.ShaderMaterial;
   private readonly sleeveMaterial: THREE.ShaderMaterial;
 
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
+  /** 每个扁平物品一张烘好的 2.5D 贴图（首次拿起时生成，之后复用） */
+  private readonly heldSprites = new Map<number, HeldSprite>();
   private itemMesh: THREE.Mesh | null = null;
 
   private heldItem: number | undefined;
@@ -156,8 +281,13 @@ export class HandRenderer {
   private drawPull = 0;
   private bobPhase = 0;
 
+  /** 握点（世界坐标，每帧按 fov/aspect 重算） */
+  private readonly grip = new THREE.Vector3();
+  private readonly scratchQuat = new THREE.Quaternion();
+  private readonly scratchVec = new THREE.Vector3();
+
   constructor(private readonly atlas: TextureAtlas) {
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.02, 8);
+    this.camera = new THREE.PerspectiveCamera(VIEWMODEL_FOV, 1, 0.02, 8);
 
     this.itemMaterial = new THREE.ShaderMaterial({
       uniforms: {
@@ -170,6 +300,22 @@ export class HandRenderer {
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       transparent: false,
+    });
+
+    // 扁平物品的 2.5D 贴图：一次只显示一件，所以共用一个材质、切物品时换 `uMap`
+    this.spriteMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: null },
+        uBrightness: { value: 1 },
+        uAlphaTest: { value: 0.04 },
+      },
+      vertexShader: SPRITE_VERTEX_SHADER,
+      fragmentShader: SPRITE_FRAGMENT_SHADER,
+      transparent: true,
+      depthWrite: true,
+      // 烘好的贴图挂在**一个平面**上：必须双面，否则转身/挥手时背面被剔除会整件消失
+      // （薄盒子的时代不能用双面 —— 那是"两面同贴图标"才会出重影，平面没有这个问题）
+      side: THREE.DoubleSide,
     });
 
     this.armMaterial = new THREE.ShaderMaterial({
@@ -210,35 +356,46 @@ export class HandRenderer {
       fragmentShader: FRAGMENT_SHADER,
     });
 
-    const armGeometry = new THREE.BoxGeometry(ARM_WIDTH, ARM_WIDTH, ARM_LENGTH);
-    applyFaceShade(armGeometry, FACE_SHADE);
+    // 手臂几何体是**单位盒子**，沿 +Z 从拳头（z=0）伸到根部（z=1）：
+    // 粗细/长度由 `armRig` 的缩放给（见 `syncRig`），姿态由它的四元数给。
+    // 于是袖套的"长度占手臂几成、比手臂粗几成"可以直接写在几何体上。
+    const armGeometry = new THREE.BoxGeometry(1, 1, 1);
+    applyFaceShade(armGeometry, ARM_SHADE);
+    armGeometry.translate(0, 0, 0.5);
     this.arm = new THREE.Mesh(armGeometry, this.armMaterial);
-    // 几何体中心在原点，往 -Z 推半截，让手臂从"手的根部"向外伸
-    this.arm.position.set(0, 0, -ARM_LENGTH / 2);
+    this.arm.name = 'arm';
 
-    const cuffGeometry = new THREE.BoxGeometry(CUFF_RADIUS, CUFF_RADIUS, CUFF_LENGTH);
-    applyFaceShade(cuffGeometry, FACE_SHADE);
+    const fistGeometry = new THREE.BoxGeometry(HAND_THICKNESS, HAND_THICKNESS, HAND_RATIO);
+    applyFaceShade(fistGeometry, ARM_SHADE);
+    this.fist = new THREE.Mesh(fistGeometry, this.armMaterial);
+    this.fist.name = 'fist';
+    this.fist.position.set(0, 0, HAND_RATIO / 2);
+
+    const cuffGeometry = new THREE.BoxGeometry(CUFF_THICKNESS, CUFF_THICKNESS, CUFF_RATIO);
+    applyFaceShade(cuffGeometry, ARM_SHADE);
     this.cuff = new THREE.Mesh(cuffGeometry, this.cuffMaterial);
-    // 套在靠近肩膀的那一段（手臂从 z=0 往 -Z 伸）
-    this.cuff.position.set(0, 0, -CUFF_LENGTH / 2 + 0.01);
+    this.cuff.name = 'cuff';
+    // 盖在根部那一段（几何体自身居中，所以位置是"根部往里半个袖长"）
+    this.cuff.position.set(0, 0, 1 - CUFF_RATIO / 2);
 
-    const sleeveGeometry = new THREE.BoxGeometry(SLEEVE_RADIUS, SLEEVE_RADIUS, SLEEVE_LENGTH);
-    applyFaceShade(sleeveGeometry, FACE_SHADE);
+    const sleeveGeometry = new THREE.BoxGeometry(SLEEVE_THICKNESS, SLEEVE_THICKNESS, SLEEVE_RATIO);
+    applyFaceShade(sleeveGeometry, ARM_SHADE);
     this.armorSleeve = new THREE.Mesh(sleeveGeometry, this.sleeveMaterial);
-    // 套在手臂靠近肩膀的一段（手臂从 z=0 往 -Z 伸），默认不显示
-    this.armorSleeve.position.set(0, 0, -SLEEVE_LENGTH / 2 + 0.01);
+    this.armorSleeve.name = 'armor-sleeve';
+    this.armorSleeve.position.set(0, 0, 1 - SLEEVE_RATIO / 2);
     this.armorSleeve.visible = false;
 
-    // 挂点仍然在"手"的位置上：物品放大 2 倍之后不能再往远处推 0.36 个身位，
-    // 否则透视会把它拉回原来的视觉大小（甚至更小）
-    this.itemAnchor.position.set(0, 0, -ARM_LENGTH - ITEM_SIZE * 0.12);
+    this.armRig.name = 'arm-rig';
+    this.armRig.quaternion.copy(orientationFromDirection(ARM_DIRECTION));
+    this.armRig.add(this.arm, this.fist, this.cuff, this.armorSleeve);
 
-    // 顺序固定为「手臂 → 布袖 → 手持物挂点 → 袖套」：挂点必须排在袖套前面，
-    // 否则袖套会挡住手上的东西（袖套比手臂粗一圈）
-    this.group.add(this.arm, this.cuff, this.itemAnchor, this.armorSleeve);
-    this.group.position.set(...SHOULDER_POSITION);
-    this.group.rotation.set(...SHOULDER_ROTATION);
-    this.scene.add(this.group);
+    this.itemRig.name = 'item-rig';
+    this.root.name = 'hand';
+    this.root.add(this.armRig, this.itemRig);
+    this.scene.add(this.root);
+
+    // 先按默认视野摆一次，构造函数之后立刻被 update() 覆盖
+    this.syncRig(70, 1);
   }
 
   /** 当前手持物品 id（空手为 undefined） */
@@ -277,24 +434,39 @@ export class HandRenderer {
     this.heldItem = itemId;
 
     if (this.itemMesh) {
-      this.itemAnchor.remove(this.itemMesh);
+      this.itemRig.remove(this.itemMesh);
       this.itemMesh = null;
     }
     this.refreshHandVisibility();
     if (itemId === undefined) return;
 
     const blockId = blockForItem(itemId);
-    // 方块 = 立方体（六面各取自己的贴图）；其余物品 = **双面薄片**（同一张图标）。
-    // ⚠️ 别给非方块物品也做"有厚度的盒子"（批次 20261024-1152 试过）：图标在六个面上
-    // 各贴一次，剑/镐这种斜向图形会被侧面拉成几条彩带 —— 用户自测报的就是这个。
-    const isBlock = blockId !== undefined;
-    const geometry = isBlock ? this.blockGeometry(blockId) : this.spriteGeometry(itemId);
-    const mesh = new THREE.Mesh(geometry, this.itemMaterial);
-    // 方块露出"顶面 + 两个侧面"；扁平物品的柄在挂点上、刃朝上偏前
-    if (isBlock) mesh.rotation.set(...BLOCK_HOLD_ROTATION);
-    else mesh.rotation.set(...SPRITE_HOLD_ROTATION);
+    // ⚠️ 只有**完整立方体**才画成方块。火把/花/草/台阶/栅栏这些方块物品，
+    // 图标本来就是一张扁平贴图，画成立方体的话六面各贴一次、alphaTest 再把
+    // 透明处裁掉，手上会剩几片"斜着拉长的薄片"（批次 20261024-1726 实测：
+    // 手持火把被渲染成一根细长条 + 一截火头）。原版这些物品拿在手上也是图标。
+    const isBlock = blockId !== undefined && isFullBlockShape(blockDef(blockId)?.shape ?? 'cube', 0);
+    const geometry = isBlock && blockId !== undefined ? this.blockGeometry(blockId) : this.spriteGeometry(itemId);
+    let material: THREE.ShaderMaterial = this.itemMaterial;
+    if (!isBlock) {
+      const sprite = this.heldSprites.get(itemId);
+      if (sprite) {
+        // 换贴图而不是换材质：扁平物品一次只显示一件
+        this.spriteMaterial.uniforms.uMap!.value = sprite.texture;
+        material = this.spriteMaterial;
+      }
+    }
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'item';
+    if (isBlock) {
+      mesh.position.set(...BLOCK_OFFSET);
+      mesh.rotation.set(...BLOCK_ROTATION);
+    } else {
+      mesh.position.set(...SPRITE_OFFSET);
+      mesh.rotation.set(...SPRITE_ROTATION);
+    }
     this.itemMesh = mesh;
-    this.itemAnchor.add(mesh);
+    this.itemRig.add(mesh);
   }
 
   /**
@@ -306,6 +478,7 @@ export class HandRenderer {
   private refreshHandVisibility(): void {
     const empty = this.heldItem === undefined;
     this.arm.visible = empty;
+    this.fist.visible = empty;
     this.cuff.visible = empty;
     this.armorSleeve.visible = empty && this.armorColor !== null;
   }
@@ -348,42 +521,78 @@ export class HandRenderer {
 
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
+    this.spriteMaterial.uniforms.uBrightness!.value = value;
     this.armMaterial.uniforms.uBrightness!.value = value;
     this.cuffMaterial.uniforms.uBrightness!.value = value;
     this.sleeveMaterial.uniforms.uBrightness!.value = value;
   }
 
-  /** 每帧动画：挥动弧线 + 走路时的轻微上下摆动 */
-  update(dt: number, moving: boolean, fovDeg: number, aspect: number): void {
+  /**
+   * 每帧：把手摆到"屏幕比例握点"上（见文件头），再加挥动/拉弓/走路的偏移。
+   *
+   * `worldFov` 是世界视野，**故意不参与手部投影**（原因见文件头）——保留这个参数
+   * 只为调用口径统一，`void` 一下免得被"声明未使用"报警。宽高比必须跟世界一致，
+   * 否则"右下角"会落错位置。
+   */
+  update(dt: number, moving: boolean, worldFov: number, aspect: number): void {
     if (this.swingTime < SWING_DURATION) this.swingTime = Math.min(SWING_DURATION, this.swingTime + dt);
 
     this.bobPhase = moving ? this.bobPhase + dt * BOB_FREQUENCY : 0;
     const bob = Math.sin(this.bobPhase) * BOB_AMPLITUDE;
 
-    // 挥动进度 0→1，用 sin 曲线：抬手快、落下慢，比线性自然
-    const t = this.swingTime / SWING_DURATION;
-    const swing = t < 1 ? Math.sin(t * Math.PI) : 0;
-
-    // 挥动 = 绕肩部往下砸：X 角**减小**（手臂落下去），同时整体往上、往镜头方向挪一点，
-    // 这样看起来是"手臂从屏幕外抡进来"，而不是整只手在平面上滑。
-    // 拉弓：整只手往右下、朝镜头方向收一点，拉得越满收得越多
-    const pull = this.drawPull;
-    this.group.position.set(
-      SHOULDER_POSITION[0] - swing * 0.1 + pull * 0.06,
-      SHOULDER_POSITION[1] + bob + swing * 0.08 - pull * 0.04,
-      SHOULDER_POSITION[2] + swing * 0.1 + pull * 0.12,
-    );
-    this.group.rotation.set(
-      SHOULDER_ROTATION[0] - swing * 0.85 - pull * 0.18,
-      SHOULDER_ROTATION[1] - swing * 0.12,
-      SHOULDER_ROTATION[2] + swing * 0.25 + pull * 0.2,
-    );
-
-    if (this.camera.fov !== fovDeg || this.camera.aspect !== aspect) {
-      this.camera.fov = fovDeg;
+    if (this.camera.aspect !== aspect) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();
     }
+    // 世界视野只做记录：手固定自己的视角（见文件头），这里留一个引用免得参数被判"没用到"
+    void worldFov;
+    this.syncRig(aspect, bob);
+  }
+
+  /**
+   * 按宽高比把整只手摆好（见文件头"尺寸口径"）。
+   *
+   * 顺序讲究：先算握点（世界坐标）与单位长度，再让**挥动绕支点转**——
+   * 支点固定在屏幕上，所以转起来是"从画面外抡进来"，不是"整只手在原地平移"。
+   */
+  private syncRig(aspect: number, bob = 0): void {
+    const k = Math.tan((VIEWMODEL_FOV * Math.PI) / 360);
+    const halfHeight = k * GRIP_DEPTH;
+    const unit = 2 * halfHeight;
+
+    const pull = this.drawPull;
+    const t = this.swingTime / SWING_DURATION;
+    const swing = t < 1 ? Math.sin(t * Math.PI) : 0;
+
+    this.root.scale.setScalar(unit);
+    // 手臂：粗细与长度都是屏幕比例（见 ARM_WIDTH / ARM_UNITS）
+    this.armRig.scale.set(ARM_WIDTH, ARM_WIDTH, ARM_UNITS);
+    // 走路摆动也按屏幕比例（`bob` 是屏高的几成）
+    this.grip.set(
+      (GRIP_SCREEN_X * 2 - 1) * halfHeight * aspect,
+      (1 - (GRIP_SCREEN_Y + bob) * 2) * halfHeight,
+      -GRIP_DEPTH,
+    );
+
+    // 挥动 = 绕肩部往下砸；拉弓 = 整只手往右下、朝镜头收一点。
+    // ⚠️ 角度别给大：支点离握点有 1.1 个单位，0.9 弧度会把整件东西甩出画面
+    // （批次 20261024-1726 实测挥到一半手上空空如也）。
+    const rotation = new THREE.Euler(
+      -swing * 0.28 - pull * 0.2,
+      -swing * 0.05,
+      swing * 0.12 + pull * 0.22,
+    );
+    this.scratchQuat.setFromEuler(rotation);
+    // 手腕再压一下：物品自己绕握点往前倾，挥起来才像"砍"而不是"平移"
+    this.itemRig.rotation.set(-swing * 0.55, 0, swing * 0.12);
+
+    this.root.quaternion.copy(this.scratchQuat);
+    // 支点在世界里固定：root.position = 支点世界坐标 - R·(支点相对握点的世界向量)
+    this.scratchVec.copy(SWING_PIVOT).multiplyScalar(unit).applyQuaternion(this.scratchQuat);
+    this.root.position.copy(this.grip).addScaledVector(SWING_PIVOT, unit).sub(this.scratchVec);
+    // 拉弓时额外往回拉一点（支点旋转已经带了一段，这里只补位移）
+    this.root.position.x += pull * 0.06 * unit;
+    this.root.position.y -= pull * 0.03 * unit;
   }
 
   /** 画到屏幕上（调用方负责先关掉 autoClear 并 clearDepth） */
@@ -397,7 +606,7 @@ export class HandRenderer {
     const cached = this.blockGeometries.get(blockId);
     if (cached) return cached;
 
-    const geometry = new THREE.BoxGeometry(ITEM_SIZE, ITEM_SIZE, ITEM_SIZE);
+    const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
     applyFaceUvs(geometry, this.atlas, blockFaceTiles(blockId));
     applyFaceShade(geometry, FACE_SHADE);
     this.blockGeometries.set(blockId, geometry);
@@ -405,25 +614,63 @@ export class HandRenderer {
   }
 
   /**
-   * 非方块物品：一块**薄盒子**，且**底边就在手的挂点上**（也就是握住图标底部的柄）。
+   * 非方块物品：一块**薄盒子**，图标里不透明那块的**底边中点**落在握点上。
    *
    * 批次沿革值得记住：
    *   · 1455 之前：零厚度 `PlaneGeometry`，整块居中 → 手像是"捏在图标正中间"；
    *   · 1455：改成薄盒子但整块居中，六面同图标 + 默认侧面亮度 → 剑被拉成彩带；
-   *   · 1531（当前）：薄盒子（有厚度）+ **平移让底边贴挂点** + 正反面满亮度、厚度边压暗。
-   * 图标四周是透明的，`alphaTest` 会把边缘裁掉。
+   *   · 1531：薄盒子（有厚度）+ **平移让底边贴握点** + 正反面满亮度、厚度边压暗；
+   *   · 2210（当前）：不再是几何——图标烘成一张**2.5D 贴图**（`heldSprite.ts`：
+   *     双线性放大 + 剪影一层层错位叠出厚度），边缘平滑、厚度可以给得很足；
+   *   · 1726：厚度边只取图标**最外那一列/行**（+ 边缘压暗）—— 六面贴整张图标时，
+   *     16px 的图标压到 2px 宽的边上，斜向的剑会被拉成一条细长的"彩带"；
+   *     而"厚度边填一道纯色"也不对，斜向物品会在空气里多画一条孤零零的线。
    */
   private spriteGeometry(itemId: number): THREE.BufferGeometry {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const geometry = new THREE.BoxGeometry(ITEM_SIZE, ITEM_SIZE, SPRITE_THICKNESS);
-    const tile = itemIconTile(itemId);
-    applyFaceUvs(geometry, this.atlas, [tile, tile, tile, tile, tile, tile]);
-    applyFaceShade(geometry, SPRITE_SHADE);
-    // 把整块往上抬半个高度：几何体的底边落在 y=0，正好是挂点（= 手握的位置）
-    geometry.translate(0, ITEM_SIZE / 2, 0);
+    const sprite = buildHeldSprite(this.atlas, itemId, {
+      passes: SPRITE_SCALE_PASSES,
+      depthPixels: SPRITE_DEPTH_PIXELS,
+      direction: [0.55, 0.83],
+    });
+    if (!sprite) {
+      // 没有 DOM（离线测试）或图标读不出来：退回薄盒子，宁可"扁"也不要手里空着
+      const geometry = this.fallbackSpriteGeometry(itemIconTile(itemId));
+      this.spriteGeometries.set(itemId, geometry);
+      return geometry;
+    }
+    this.heldSprites.set(itemId, sprite);
+
+    // 四边形 = 整张画布（正面 + 厚度裙边）；把**正面**的中心摆到原点，
+    // 这样握点、尺寸与旧的薄盒子口径完全一致，只是右下多出一圈厚度。
+    const scale = SPRITE_SIZE / sprite.facePixels;
+    const size = sprite.canvasPixels * scale;
+    const geometry = new THREE.PlaneGeometry(size, size);
+    geometry.translate((sprite.padPixels / 2) * scale, -(sprite.padPixels / 2) * scale, 0);
+
+    // 图标里不透明那块的底边中点落在握点上（与原口径一致）
+    const bounds = this.atlas.contentBounds(itemIconTile(itemId));
+    const texel = SPRITE_SIZE / TILE_PIXELS;
+    const contentBottom = (TILE_PIXELS - bounds.bottom) * texel;
+    const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_PIXELS / 2) * texel;
+    geometry.translate(-contentCenterX, SPRITE_SIZE / 2 - contentBottom - size / 2, 0);
+
     this.spriteGeometries.set(itemId, geometry);
+    return geometry;
+  }
+
+  /** 读不到图标像素时的退路：还是那块薄盒子。 */
+  private fallbackSpriteGeometry(tile: string): THREE.BufferGeometry {
+    const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, 0.03);
+    const bounds = this.atlas.contentBounds(tile);
+    applySpriteFaceUvs(geometry, this.atlas, tile, bounds, TILE_PIXELS);
+    applyFaceShade(geometry, [0.55, 0.55, 0.55, 0.55, 1, 1]);
+    const texel = SPRITE_SIZE / TILE_PIXELS;
+    const contentBottom = (TILE_PIXELS - bounds.bottom) * texel;
+    const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_PIXELS / 2) * texel;
+    geometry.translate(-contentCenterX, SPRITE_SIZE / 2 - contentBottom, 0);
     return geometry;
   }
 
@@ -433,8 +680,12 @@ export class HandRenderer {
     this.blockGeometries.clear();
     this.spriteGeometries.clear();
     this.arm.geometry.dispose();
+    this.fist.geometry.dispose();
     this.cuff.geometry.dispose();
     this.armorSleeve.geometry.dispose();
+    for (const sprite of this.heldSprites.values()) sprite.dispose();
+    this.heldSprites.clear();
+    this.spriteMaterial.dispose();
     this.itemMaterial.dispose();
     this.armMaterial.dispose();
     this.cuffMaterial.dispose();
@@ -442,3 +693,20 @@ export class HandRenderer {
     this.scene.clear();
   }
 }
+
+/**
+ * 让盒子沿 `direction` 伸出，并且"顶面"朝上。
+ *
+ * ⚠️ 不能用 `Quaternion.setFromUnitVectors`：它给的是**最小旋转**，滚转角随方向漂移，
+ * 换个方向手臂就侧躺/立起来了（顶面不再是最亮的那一面，看着像一根木梁）。
+ * 这里直接按 `x = up × z`、`y = z × x` 建正交基，顶面永远是世界的 +Y 方向。
+ */
+function orientationFromDirection(direction: THREE.Vector3): THREE.Quaternion {
+  const z = direction.clone().normalize();
+  const x = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), z);
+  if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+  x.normalize();
+  const y = new THREE.Vector3().crossVectors(z, x).normalize();
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+

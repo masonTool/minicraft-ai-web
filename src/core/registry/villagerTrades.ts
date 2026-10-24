@@ -20,7 +20,7 @@
 
 import { Block, GLASS_PANE_ID, bedId, carpetId, woolId } from './blocks.ts';
 // 多语言 P2-5：等级名与职业名走 `label.*`
-import { t } from '../i18n/I18n.ts';
+import { t, tp } from '../i18n/I18n.ts';
 import { DYE_COLORS } from './colors.ts';
 import { Item, dyeItemId } from './items.ts';
 // 武器匠卖的是**工具/武器**（原版也是），所以这里要按"种类 × 材质"算 id
@@ -552,12 +552,15 @@ export interface TradeInventory {
  *
  * 判定顺序：先看"货还有没有"（次数用完），再看材料够不够——
  * 原版的两条提示也是这个顺序（"村民今天不卖了"比"你缺 3 个小麦"更根本）。
+ *
+ * 多语言（批次 20261025-0105）：原因串在**取值这一刻**查表（`say.trade.blocker.*`），
+ * 与 `sleepRefusal()` 同一套做法——调用点只有一处，改成原因码会让离线断言白改。
  */
 export function tradeBlocker(offer: TradeOffer, inventory: TradeInventory): string | null {
-  if (offer.uses >= offer.maxUses) return '这条交易今天已经用完了（明天补货）';
+  if (offer.uses >= offer.maxUses) return t('say.trade.blocker.usedUp');
   for (const cost of adjustedTradeCosts(offer)) {
     const have = inventory.countOf(cost.id);
-    if (have < cost.count) return `材料不够（还差 ${cost.count - have} 个）`;
+    if (have < cost.count) return tp('say.trade.blocker.needMore', { count: cost.count - have });
   }
   return null;
 }

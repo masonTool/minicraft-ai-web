@@ -90,8 +90,8 @@ function grid(rows: readonly string[], legend: Record<string, number>): number[]
 
 console.log('\n[注册与形状]');
 {
-  equal('蛋糕的注册名', blockDef(CAKE).name, 'minecraft:cake');
-  equal('花盆的注册名', blockDef(POT).name, 'minecraft:flower_pot');
+  equal('蛋糕的注册名', blockDef(CAKE).name, 'minicraft:cake');
+  equal('花盆的注册名', blockDef(POT).name, 'minicraft:flower_pot');
   equal('蛋糕与花盆的 id 紧挨着（连着上一批的最后一个）', FLOWER_POT_ID, CAKE_ID + 1);
   equal('蛋糕的中文名', itemLabel(CAKE), '蛋糕');
   equal('花盆的中文名', itemLabel(POT), '花盆');

@@ -64,8 +64,8 @@ const STONE_STAIRS = stairsId(0);
 
 console.log('\n[方块表与形状]');
 equal('台阶是独立方块', blockDef(STONE_SLAB).shape, 'slab');
-equal('石台阶名正确', blockDef(STONE_SLAB).name, 'minecraft:stone_slab');
-equal('石楼梯名正确', blockDef(STONE_STAIRS).name, 'minecraft:stone_stairs');
+equal('石台阶名正确', blockDef(STONE_SLAB).name, 'minicraft:stone_slab');
+equal('石楼梯名正确', blockDef(STONE_STAIRS).name, 'minicraft:stone_stairs');
 equal('台阶不是完整遮挡（否则上方方块的面会被错误剔除）', blockDef(STONE_SLAB).opaque, false);
 equal('台阶不阻挡光照', blockDef(STONE_SLAB).lightOpacity, 0);
 equal('火把是自发光方块', blockDef(Block.TORCH).light, 14);
@@ -357,7 +357,7 @@ console.log('\n[活板门与栅栏门（批次 30）]');
   equal('栅栏门朝向跟随玩家', gate ? facingOf(gate.state) : -1, facingFromYaw(Math.PI / 2));
 
   // ---- 注册表层面：能不能真的拿到、拿到的是什么形状
-  equal('活板门已注册', blockDef(Block.OAK_TRAPDOOR)?.name, 'minecraft:oak_trapdoor');
+  equal('活板门已注册', blockDef(Block.OAK_TRAPDOOR)?.name, 'minicraft:oak_trapdoor');
   equal('活板门的形状是 trapdoor', blockDef(Block.OAK_TRAPDOOR)?.shape, 'trapdoor');
   equal('栅栏门的形状是 fence_gate', blockDef(Block.OAK_FENCE_GATE)?.shape, 'fence_gate');
   check('两者都在创造物品栏里（否则生存里只能靠作弊拿）', CREATIVE_ITEMS.includes(Block.OAK_TRAPDOOR) && CREATIVE_ITEMS.includes(Block.OAK_FENCE_GATE));

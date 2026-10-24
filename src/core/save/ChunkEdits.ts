@@ -14,6 +14,8 @@
  */
 
 import { Chunk } from '../world/Chunk.ts';
+import { isKnownBlockId } from '../registry/blocks.ts';
+import { noteSaveIssue } from './SaveIssues.ts';
 
 /** 一个格子打包后的值：高 16 位方块 id、低 8 位状态 */
 const PACK_STATE_MASK = 0xff;
@@ -68,9 +70,18 @@ export class ChunkEdits {
 
     let applied = 0;
     for (const [index, packed] of map) {
+      const id = packEditId(packed);
+      // 批次 20261025-0117（合规 5）：id 在当前注册表里**不存在**（删过方块 / 手改过存档）
+      // → 这一格**不写**，保留地形，然后记一笔账。
+      // 为什么不是"照写"：`blockDef` 对不认识的 id 回退成空气，写进去等于把这格挖空，
+      // 玩家看到的是"我的房子被咬掉一块"，比读档失败还难解释。
+      if (!isKnownBlockId(id)) {
+        noteSaveIssue('block', `id=${id}`);
+        continue;
+      }
       // 反解用 Chunk.coordsAt：与 Chunk.index 是同一处实现的逆运算，不会两处走偏
       const { x, y, z } = Chunk.coordsAt(index);
-      chunk.set(x, y, z, packEditId(packed), packEditState(packed));
+      chunk.set(x, y, z, id, packEditState(packed));
       applied++;
     }
     return applied;

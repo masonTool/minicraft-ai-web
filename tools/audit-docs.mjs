@@ -73,7 +73,7 @@ const FILES = {
  * `export const DOC_LIMITS` / `export const DOC_BYTE_LIMITS` 块里取值，否则会取串。
  */
 const PROJECT_DOC_LIMITS = { TASKS: 7000 };
-const PROJECT_DOC_BYTE_LIMITS = { TASKS: 921600 };
+const PROJECT_DOC_BYTE_LIMITS = { TASKS: 921600, OVERVIEW: 28672 };
 
 const LIMITS = {
   /**

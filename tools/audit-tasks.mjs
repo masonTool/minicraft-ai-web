@@ -17,7 +17,8 @@
  *   3. 核对 HANDOFF 的"进度口径"那一行
  *   4. 用本表**自动重写 README 的路线图状态列**（README 里那张表是手写的，
  *      已经漂过一次：P1~P9 全部标着"未开始"，而实际早就完成大半）
- *   5. 核对 HANDOFF 的"提交总数"与 `git rev-list --count HEAD`
+ *   5. 核对 HANDOFF 的"提交总数 N（锚定 <短哈希>）"与 `git rev-list --count <短哈希>`
+ *      （锚定而不是追当前 HEAD：那个口径是自指的，永远追不上，见 §5 的注释）
  *
  * 用法：`npm run audit:tasks`（`--print` 只检查不写回 README，给 `npm run check` 用）
  */
@@ -223,28 +224,55 @@ if (rewrote > 0) {
   console.log('✓ README 路线图状态与本表一致');
 }
 
-// ---- 5. HANDOFF 的提交总数
-const claimCommits = /提交总数 (\d+)/.exec(handoff);
-if (!claimCommits) {
-  failed = true;
-  console.log('\n✗ HANDOFF.md 里找不到"提交总数 N"这一行');
-} else {
-  let actual = null;
+// ---- 5. HANDOFF 的提交总数（**锚定在某个提交上**，不是"当前 HEAD"）
+/**
+ * 旧口径是"与 `git rev-list --count HEAD` 相等（容差 2）"，那是个**自指死结**：
+ * 把这一句改成 `HEAD+1` 的那个提交本身又让 `HEAD` 变大；一批多次提交时更是每提交一次
+ * 就漂一次。结果是 `npm run check` 长期是红的（2026-10-24 实测：写着 1764、实际 1767），
+ * 每跑一次全量门禁就白等一轮 47s，然后去改一个注定追不上的数字。
+ *
+ * 改成"数字 + 锚定的短哈希"：锚点提交不会变化，这个数字**一辈子有效**，
+ * 同时仍然抓得住"手抄瞎写"（哈希与数字对不上就红）。要重新锚定，把建议行粘回去即可
+ * ——建议行由脚本算好打印，不需要心算，也不需要先提交再看。
+ */
+/** 括号里允许再补说明（`（锚定 abc1234；一句人话）`），只认前两段。 */
+const ANCHOR_RE = /提交总数 (\d+)（锚定 ([0-9a-f]{7,40})[^）]*）/;
+const anchor = ANCHOR_RE.exec(handoff);
+const gitText = (cmd) => {
   try {
-    actual = Number(execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim());
+    return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
-    // 不在 git 仓库里（例如把源码解压出来单独跑）时跳过这一项，不该因此判失败
-    console.log('· 跳过提交总数核对（当前不在 git 仓库里）');
+    return null;
   }
-  if (actual !== null) {
-    const claimed = Number(claimCommits[1]);
-    // 容差 2：一个批次通常是"内容一条 + 文档一条"，更新这一句时那两条都还没落盘
-    if (Math.abs(actual - claimed) <= 2) {
-      console.log(`✓ HANDOFF 的提交总数与实际一致（写着 ${claimed}，实际 ${actual}）`);
-    } else {
-      failed = true;
-      console.log(`\n✗ HANDOFF 的提交总数过期：写着 ${claimed}，实际 ${actual}（差 ${actual - claimed}）`);
-    }
+};
+/** 给"重新锚定"用的现成一行，直接粘回 HANDOFF 即可。 */
+const anchorSuggestion = () => {
+  const count = gitText('git rev-list --count HEAD');
+  const short = gitText('git rev-parse --short HEAD');
+  return count === null || short === null ? null : `提交总数 ${count}（锚定 ${short}）`;
+};
+
+if (!anchor) {
+  failed = true;
+  console.log('\n✗ HANDOFF.md 里找不到「提交总数 N（锚定 <短哈希>）」这一行');
+} else if (gitText('git rev-parse --is-inside-work-tree') === null) {
+  // 不在 git 仓库里（例如把源码解压出来单独跑）时跳过这一项，不该因此判失败
+  console.log('· 跳过提交总数核对（当前不在 git 仓库里）');
+} else {
+  const claimed = Number(anchor[1]);
+  const sha = anchor[2];
+  const actual = gitText(`git rev-list --count ${sha}`);
+  if (actual !== null && Number(actual) === claimed) {
+    console.log(`✓ HANDOFF 的提交总数与锚点一致（${sha} 是第 ${claimed} 个提交）`);
+  } else {
+    failed = true;
+    console.log(
+      actual === null
+        ? `\n✗ HANDOFF 锚定的提交 ${sha} 不在仓库里（历史被改写 / 浅克隆？）`
+        : `\n✗ HANDOFF 的提交总数与锚点对不上：写着 ${claimed}，${sha} 实际是 ${actual}`,
+    );
+    const suggestion = anchorSuggestion();
+    if (suggestion) console.log(`  重新锚定到当前 HEAD：${suggestion}`);
   }
 }
 

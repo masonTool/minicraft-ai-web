@@ -1182,7 +1182,7 @@ export class RedstoneEngine {
   /** 每个可开合方块上一次的"有没有电"（按坐标；见 `applyOpenableLoad` 的说明） */
   private readonly openablePower = new Map<string, boolean>();
 
-  /** 换维度时清空：坐标只在维度内有意义（与 `undoStack` 同一条理由） */
+  /** 换维度时清空：坐标只在维度内有意义（跨维度沿用会在另一个维度里误开/误关门） */
   clearOpenablePower(): void {
     this.openablePower.clear();
   }

@@ -18,6 +18,7 @@ export const chat = {
   "command.listTitle": "Comandos disponíveis ({count}):",
   "chat.sendLabel": "Enviar",
   "chat.collapse": "Toque para recolher",
+  'chat.expandBadge': 'Expandir',
   "chat.expand": "Toque para expandir",
   "chat.hintIdle": "Digite um comando (/help para ver todos) ou fale, depois toque em « Enviar »",
   "chat.hintIdleKeyboard": "Digite um comando (/help) ou fale · Enter envia · Esc cancela",

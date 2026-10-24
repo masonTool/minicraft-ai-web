@@ -160,7 +160,7 @@ export function stepsOf(track: TutorialTrack): readonly TutorialStep[] {
 /**
  * 物品/方块属于哪个"家族"。
  *
- * ⚠️ 用**方块名**判，不维护 id 表：`blockDef` 对越界 id 返回空气（`minecraft:air`），
+ * ⚠️ 用**方块名**判，不维护 id 表：`blockDef` 对越界 id 返回空气（`minicraft:air`），
  * 所以铁锭、木镐这类非方块物品会安全地落到 `null`。
  */
 export function familyOfItem(itemId: number): TutorialFamily | null {

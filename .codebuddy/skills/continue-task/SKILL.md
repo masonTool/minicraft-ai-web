@@ -5,7 +5,7 @@ description: This skill installs the continue-do persistent task-queue framework
 
 # continue-task
 
-> 版本：1.2.0（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
+> 版本：1.2.1（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
 > 这里的数字由 `scripts/check-framework.mjs` 核对，写错会红。）
 
 安装 continue-do 持续任务队列框架。这是安装器；框架怎么用，装完后看项目里的 `.continue/README.md`。

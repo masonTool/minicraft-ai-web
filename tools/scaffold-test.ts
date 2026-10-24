@@ -78,7 +78,7 @@ function connectTo(...facings: readonly number[]): (facing: number) => boolean {
 
 console.log('\n[注册与属性]');
 {
-  equal('注册名', blockDef(SCAFFOLD).name, 'minecraft:scaffolding');
+  equal('注册名', blockDef(SCAFFOLD).name, 'minicraft:scaffolding');
   equal('id 接着上一批的最后一个', SCAFFOLDING_ID, Block.FLOWER_POT + 1);
   equal('中文名', itemLabel(SCAFFOLD), '脚手架');
   check('有中文说明（写清"能爬、能站、拆底下一片全掉"）', hasDescription(SCAFFOLD));

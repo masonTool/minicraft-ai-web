@@ -59,7 +59,7 @@ const DIAMOND_PICK = makeToolInfo('pickaxe', 'diamond');
 console.log('\n[方块与外观]');
 {
   equal('方块 id 紧接在堆肥桶之后（480 → 481）', ENDER, Block.COMPOSTER + 1);
-  equal('注册名', blockDef(ENDER).name, 'minecraft:ender_chest');
+  equal('注册名', blockDef(ENDER).name, 'minicraft:ender_chest');
   equal('中文名', itemLabel(ENDER), '末影箱');
   check('有物品说明', hasDescription(ENDER));
   equal('分类是"功能方块"', categoryOf(ENDER), 'functional');

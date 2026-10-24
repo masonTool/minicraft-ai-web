@@ -21,6 +21,7 @@ export const chat = {
   // ---- 命令运行时反馈（批次 617 后续）：直接由 src/core/commands/messages.ts 生成 ----
   'chat.sendLabel': 'Send',
   'chat.collapse': 'Click to collapse',
+  'chat.expandBadge': 'Expand',
   'chat.expand': 'Click to expand',
   'chat.hintIdle': 'Type a command (/help for the list) or just talk; tap Send to post',
   'chat.hintIdleKeyboard': 'Type a command (/help for the list) or just talk; Enter to post, Esc to cancel',

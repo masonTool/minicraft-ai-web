@@ -152,8 +152,8 @@ function lampOn(world: TripwireStub): boolean {
 
 console.log('\n[注册与属性]');
 {
-  equal('绊线的注册名', blockDef(WIRE).name, 'minecraft:tripwire');
-  equal('绊线钩的注册名', blockDef(HOOK).name, 'minecraft:tripwire_hook');
+  equal('绊线的注册名', blockDef(WIRE).name, 'minicraft:tripwire');
+  equal('绊线钩的注册名', blockDef(HOOK).name, 'minicraft:tripwire_hook');
   equal('两个 id 接着上一批的最后一个', TRIPWIRE_ID, Block.DAYLIGHT_DETECTOR + 1);
   equal('绊线钩紧跟着绊线', TRIPWIRE_HOOK_ID, TRIPWIRE_ID + 1);
   equal('绊线 id 连续', BLOCKS[TRIPWIRE_ID]?.id, TRIPWIRE_ID);

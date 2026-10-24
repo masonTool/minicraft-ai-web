@@ -76,7 +76,7 @@ console.log('\n[注册：五碗]');
   const badDesc: string[] = [];
   for (const stew of STEWS) {
     const def: ItemDef | undefined = itemDef(stew.item);
-    if (!def || def.name !== `minecraft:${stew.key}`) badName.push(stew.key);
+    if (!def || def.name !== `minicraft:${stew.key}`) badName.push(stew.key);
     if (itemLabel(stew.item) !== stew.label) badLabel.push(`${stew.key}→${itemLabel(stew.item)}`);
     if (!def || !TILES.has(def.tile)) badTile.push(stew.key);
     if (!hasDescription(stew.item)) badDesc.push(stew.key);

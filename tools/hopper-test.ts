@@ -99,7 +99,7 @@ console.log('\n[注册与外观]');
   equal('方块 id 是 476（接在 TNT 后面）', Block.HOPPER, 476);
   // ⚠️ 别用 `BLOCKS.length - 1` 判"最后一个"：每加一个方块它都会红
   equal('id 紧接在 TNT 之后（475 → 476）', Block.HOPPER, Block.TNT + 1);
-  equal('注册名', blockDef(Block.HOPPER).name, 'minecraft:hopper');
+  equal('注册名', blockDef(Block.HOPPER).name, 'minicraft:hopper');
   equal('中文名', itemLabel(Block.HOPPER), '漏斗');
   check('有物品说明', hasDescription(Block.HOPPER));
   equal('形状是 hopper', blockDef(Block.HOPPER).shape, 'hopper');

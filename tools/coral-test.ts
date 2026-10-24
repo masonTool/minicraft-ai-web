@@ -168,7 +168,7 @@ console.log('\n[注册与贴图：30 个方块]');
       `dead_${kind}_coral_fan`,
     ];
     for (const name of names) {
-      if (!BLOCKS.some((def) => def.name === `minecraft:${name}`)) named = false;
+      if (!BLOCKS.some((def) => def.name === `minicraft:${name}`)) named = false;
     }
   }
   check('五种 × 三形 × 活/失活的注册名都对得上', named);

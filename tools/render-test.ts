@@ -24,6 +24,7 @@ import {
   ATLAS_ANISOTROPY_DESKTOP,
   ATLAS_ANISOTROPY_MOBILE,
   FOLIAGE_DARKEN,
+  TILE_SIZE as TILE_PIXELS,
   clampAnisotropy,
   foliage,
   paintedCoverage,
@@ -146,12 +147,54 @@ const TILE_RECTS: Record<string, [number, number, number, number]> = {
   item_stick: [0, 0.25, 0.25, 0.5],
 };
 
+/**
+ * 桩图集的"不透明内容"包围盒（批次 20261024-1726 起 `HandRenderer` 用它对齐手心）。
+ *
+ * 棒子故意给一块**不在正中**的内容（左 2 / 上 2 / 右 14 / 下 12），
+ * 这样"底边对齐"和"整块居中"两种口径能测出区别。
+ */
+const TILE_CONTENT: Record<string, { left: number; top: number; right: number; bottom: number }> = {
+  item_stick: { left: 2, top: 2, right: 14, bottom: 12 },
+};
+const FULL_TILE_CONTENT = { left: 0, top: 0, right: 16, bottom: 16 };
+
+/**
+ * 桩图集的像素：只给 `item_stick` 画一条**对角线**（从 (2,2) 到 (13,11)），
+ * 正好落在 `TILE_CONTENT.item_stick` 的框里。
+ *
+ * 为什么要给像素：手持扁平物品的 2.5D 贴图要从图标像素烘出来（`heldSprite.ts`）。
+ * ⚠️ 但烘贴图要 DOM（canvas），离线测试里没有 → 这条路径在测试里必然退回薄盒子，
+ * 所以下面关于扁平物品的断言测的是**退路**（尺寸/对齐/UV 口径），贴图本身靠手测。
+ */
+function stubTilePixels(tile: string): Uint8ClampedArray {
+  const size = 16;
+  const data = new Uint8ClampedArray(size * size * 4);
+  const paint = (x: number, y: number): void => {
+    const index = (y * size + x) * 4;
+    data[index] = 200;
+    data[index + 1] = 200;
+    data[index + 2] = 200;
+    data[index + 3] = 255;
+  };
+  if (tile === 'item_stick') {
+    for (let i = 0; i < 10; i++) paint(2 + i, 2 + i);
+    for (let i = 10; i < 12; i++) paint(2 + i, 11);
+  }
+  return data;
+}
+
 const stubAtlas = {
   texture: new THREE.Texture(),
   columns: 16,
   rows: 18,
   uv(tile: string): [number, number, number, number] {
     return TILE_RECTS[tile] ?? [0, 0, 0, 0];
+  },
+  contentBounds(tile: string) {
+    return TILE_CONTENT[tile] ?? FULL_TILE_CONTENT;
+  },
+  readTile(tile: string) {
+    return { width: 16, height: 16, data: stubTilePixels(tile) };
   },
   /** 破坏裂纹叠加层要用它换算贴图起点 */
   tileOrigin(tile: string): [number, number] {
@@ -450,7 +493,7 @@ console.log('\n[颜色空间：自定义着色器的平色必须是原始 sRGB]'
   check('对照组：new THREE.Color 会做 sRGB→线性 转换（所以要绕开）', Math.abs(managed.r - 220 / 255) > 0.05, `r=${managed.r.toFixed(3)}`);
 
   const hand = new HandRenderer(stubAtlas);
-  const arm = (hand.scene.children[0] as THREE.Group).children[0] as THREE.Mesh;
+  const arm = hand.scene.getObjectByName('arm') as THREE.Mesh;
   const armColor = (arm.material as THREE.ShaderMaterial).uniforms.uFlatColor!.value as THREE.Color;
   check('手臂材质用的是原始 sRGB 肤色', close(armColor.r, 220 / 255, 1e-6) && close(armColor.b, 107 / 255, 1e-6));
 
@@ -813,47 +856,47 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   const hand = new HandRenderer(stubAtlas);
   check('初始为空手', hand.item === undefined);
 
+  // 节点按**名字**取：批次 20261024-1726 把手拆成了「根 → 手臂组 / 物品组」，
+  // 之前按下标取的写法一改结构就全红（之后也不会再因为顺序变而误报）
+  const root = hand.scene.getObjectByName('hand') as THREE.Group;
+  const armMesh = hand.scene.getObjectByName('arm') as THREE.Mesh;
+  const fistMesh = hand.scene.getObjectByName('fist') as THREE.Mesh;
+  const cuffMesh = hand.scene.getObjectByName('cuff') as THREE.Mesh;
+  const armorSleeve = hand.scene.getObjectByName('armor-sleeve') as THREE.Mesh;
+  const itemRig = hand.scene.getObjectByName('item-rig') as THREE.Group;
+  const itemMesh = (): THREE.Mesh => itemRig.children[0] as THREE.Mesh;
+
   hand.setItem(Block.STONE);
   check('手持方块：记录物品 id', hand.item === Block.STONE);
-  const group = hand.scene.children[0] as THREE.Group;
-  check('空手时也画手臂（手臂恒在）', group.children.length >= 1);
+  check('根节点下就是手臂组与物品组', root.children.length === 2 && !!armMesh && !!itemRig);
 
-  // 方块走立方体（24 个顶点）、非方块走**有厚度的薄板**（也是 24 个顶点，批次 20261024-1152）
-  // ⚠️ 挂点下标是 2：批次 241 在手臂后面插了一块布袖（`arm → cuff → itemAnchor → 袖套`）
-  const blockMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
+  // 方块走立方体（24 个顶点）、非方块走**有厚度的薄板**（也是 24 个顶点）
+  const blockMesh = itemMesh();
   check('手持方块用立方体几何体', blockMesh.geometry.getAttribute('position').count === 24, String(blockMesh.geometry.getAttribute('position').count));
   check('方块六个面都写了 UV', blockMesh.geometry.getAttribute('uv').count === 24);
-  // 批次 20261024-1152（用户）：手持物放大 2 倍（0.22 → 0.44）
+  // 批次 20261024-1726：尺寸改成**屏幕高比例**；1912（用户给了基岩版截图对比）再放大一档：
+  // 方块 0.34 → 0.37、扁平物品 0.40 → 0.52
   const blockBox = blockMesh.geometry as THREE.BoxGeometry;
   check(
-    '手持方块边长是原来的 2 倍（0.44）',
-    Math.abs(blockBox.parameters.width - 0.44) < 1e-6 && Math.abs(blockBox.parameters.height - 0.44) < 1e-6,
+    '手持方块边长按屏幕高比例定义（0.37）',
+    close(blockBox.parameters.width, 0.37, 1e-6) && close(blockBox.parameters.height, 0.37, 1e-6),
     `${blockBox.parameters.width}`,
   );
 
   hand.setItem(Item.STICK);
-  const stickMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
-  const stickBox = stickMesh.geometry as THREE.BoxGeometry;
-  // 批次 20261024-1531（用户："刀剑也应该有厚度"）：扁平物品是**薄盒子**，不是零厚度面片。
+  const stickMesh = itemMesh();
+  // 扁平物品真正上线时是一张**烘好的 2.5D 贴图**（`heldSprite.ts`，边缘平滑 + 画出来的厚度）。
+  // ⚠️ 烘贴图要 canvas，离线测试里没有 → 这里测的是**退路**：一块 0.52×0.52×0.03 的薄盒子。
+  //    贴图那一路（放大倍率、厚度像素、剪影方向）只能靠手测，别拿这几条断言当它的保证。
+  const stickGeo = stickMesh.geometry;
+  stickGeo.computeBoundingBox();
+  const stickBounds = stickGeo.boundingBox!;
   check(
-    '扁平物品有厚度（薄盒子，不是零厚度面片）',
-    stickMesh.geometry.getAttribute('position').count === 24 &&
-      stickBox.parameters.depth > 0.03 &&
-      stickBox.parameters.depth < 0.08,
-    `顶点 ${stickMesh.geometry.getAttribute('position').count} / 厚度 ${stickBox.parameters.depth}`,
-  );
-  check(
-    '扁平物品与方块同一个显示尺寸（0.44）',
-    Math.abs(stickBox.parameters.width - 0.44) < 1e-6 && Math.abs(stickBox.parameters.height - 0.44) < 1e-6,
-    `${stickBox.parameters.width}×${stickBox.parameters.height}`,
-  );
-  // 用户："手应该拿到柄的位置" → 几何体底边必须落在锚点（y=0），而不是整块居中
-  stickMesh.geometry.computeBoundingBox();
-  const stickBoxBounds = stickMesh.geometry.boundingBox!;
-  check(
-    '扁平物品的底边贴在挂点上（手握柄，不是捏在图标正中）',
-    Math.abs(stickBoxBounds.min.y) < 1e-6 && Math.abs(stickBoxBounds.max.y - 0.44) < 1e-6,
-    `y ∈ [${stickBoxBounds.min.y.toFixed(3)}, ${stickBoxBounds.max.y.toFixed(3)}]`,
+    '离线环境（没有 canvas）退回薄盒子：尺寸仍是 0.52 屏高、厚度 0.03',
+    close(stickBounds.max.x - stickBounds.min.x, 0.52, 1e-6) &&
+      close(stickBounds.max.y - stickBounds.min.y, 0.52, 1e-6) &&
+      close(stickBounds.max.z - stickBounds.min.z, 0.03, 1e-6),
+    `${(stickBounds.max.x - stickBounds.min.x).toFixed(3)}×${(stickBounds.max.y - stickBounds.min.y).toFixed(3)}×${(stickBounds.max.z - stickBounds.min.z).toFixed(3)}`,
   );
   check(
     '方块的几何体仍然居中（握在方块中间）',
@@ -863,36 +906,40 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
       return Math.abs(box.min.y + box.max.y) < 1e-6;
     })(),
   );
-  // 侧面（厚度边）必须比正反面暗，否则斜向图标会被侧面拉成彩带
-  const shades = stickMesh.geometry.getAttribute('aShade');
+  // 用户："手应该拿到柄的位置"：**图标里不透明那块的底边**落在握点（y=0）上
+  stickGeo.computeBoundingBox();
+  const content = TILE_CONTENT.item_stick!;
+  const contentBottom = ((TILE_PIXELS - content.bottom) * 0.52) / TILE_PIXELS;
   check(
-    '厚度边压暗、正反面满亮度',
-    shades.getX(0) < 0.7 && shades.getX(16) === 1 && shades.getX(20) === 1,
-    `侧面 ${shades.getX(0)} / 正面 ${shades.getX(16)}`,
+    '扁平物品按"内容底边"对齐握点（手握柄，不是捏在图标正中）',
+    close(stickBounds.min.y, -contentBottom, 1e-6) &&
+      close(stickBounds.max.y, 0.52 - contentBottom, 1e-6),
+    `y ∈ [${stickBounds.min.y.toFixed(3)}, ${stickBounds.max.y.toFixed(3)}]`,
   );
   check(
-    '扁平物品有自己的握持姿态（刃朝上偏前，不与方块共用）',
-    Math.abs(stickMesh.rotation.z + 0.32) < 1e-6 && Math.abs(blockMesh.rotation.z - 0.15) < 1e-6,
+    '扁平物品有自己的握持姿态（刃朝上偏右，不与方块共用）',
+    Math.abs(stickMesh.rotation.z - 0.14) < 1e-6 && Math.abs(blockMesh.rotation.z) < 1e-6,
     `stick.z=${stickMesh.rotation.z} / block.z=${blockMesh.rotation.z}`,
+  );
+  check(
+    '方块是"一个角朝着你"的（绕 Y 45°）+ 顶面朝上',
+    close(blockMesh.rotation.y, Math.PI / 4, 1e-6) && blockMesh.rotation.x > 0.2,
+    `y=${blockMesh.rotation.y.toFixed(3)} / x=${blockMesh.rotation.x.toFixed(3)}`,
   );
 
   // 批次 20261024-1152（用户）：手里有东西时**不画手臂**（原版如此），空手才露出来
-  const armMesh = group.children[0] as THREE.Mesh;
-  const cuffMesh = group.children[1] as THREE.Mesh;
-  const armorSleeve = group.children[3] as THREE.Mesh;
-  check('拿东西时手臂隐藏', !armMesh.visible && !cuffMesh.visible);
+  check('拿东西时手臂隐藏', !armMesh.visible && !cuffMesh.visible && !fistMesh.visible);
   hand.setArmorColor(0xcdcdd4);
   check('拿东西时胸甲袖套也不露（否则是悬空的袖子）', !armorSleeve.visible);
   hand.setItem(undefined);
-  check('切回空手会移除手上的东西', (group.children[2] as THREE.Group).children.length === 0);
-  check('空手时手臂与袖套回来', armMesh.visible && cuffMesh.visible && armorSleeve.visible);
+  check('切回空手会移除手上的东西', itemRig.children.length === 0);
+  check('空手时手臂与袖套回来', armMesh.visible && cuffMesh.visible && fistMesh.visible && armorSleeve.visible);
   hand.setItem(Item.STICK);
   check('再拿起东西手臂又收起来', !armMesh.visible && !armorSleeve.visible);
   hand.setItem(undefined);
 
   // 批次 241：手臂根部多一段布袖；第一人称的肤色/上衣色要跟着外观走
-  const cuff = group.children[1] as THREE.Mesh;
-  check('手臂根部有布袖（也画了逐面明暗）', cuff.isMesh && cuff.geometry.getAttribute('position').count === 24);
+  check('手臂根部有布袖（也画了逐面明暗）', cuffMesh.isMesh && cuffMesh.geometry.getAttribute('position').count === 24);
   hand.setAppearance({
     skin: 0xff0000,
     shirt: 0x0000ff,
@@ -905,39 +952,75 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
     build: 'adult',
     frame: 'normal',
   });
-  const armMaterialNow = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
-  const cuffMaterialNow = cuff.material as THREE.ShaderMaterial;
+  const armMaterialNow = armMesh.material as THREE.ShaderMaterial;
+  const cuffMaterialNow = cuffMesh.material as THREE.ShaderMaterial;
   const skinColor = armMaterialNow.uniforms.uFlatColor!.value as THREE.Color;
   const shirtColor = cuffMaterialNow.uniforms.uFlatColor!.value as THREE.Color;
   check('第一人称手臂跟随肤色设置', skinColor.r === 1 && skinColor.g === 0 && skinColor.b === 0);
   check('布袖跟随上衣色设置', shirtColor.b === 1 && shirtColor.r === 0 && shirtColor.g === 0);
 
   hand.setBrightness(0.42);
-  const armMaterial = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
+  const armMaterial = armMesh.material as THREE.ShaderMaterial;
   check('亮度同步到材质 uniform', armMaterial.uniforms.uBrightness!.value === 0.42);
 
+  // ---------------------------------------------------------------- 屏幕比例骨架（1726）
+  //
+  // 这一组是这批的核心：位置/尺寸必须按 **fov 与宽高比**换算，而不是写死世界格数。
+  // 之前写死的后果就是"手臂根部离镜头 0.1 格、透视放大成一堵墙"。
+  hand.update(0.4, false, 70, 16 / 9);
+  const rest = root.position.clone();
+  const wideX = Math.abs(rest.x);
+  hand.update(0.4, false, 70, 4 / 3);
+  check(
+    '换宽高比时握点跟着投影走（屏幕比例不变）',
+    Math.abs(root.position.x) < wideX - 1e-3,
+    `16:9 |x|=${wideX.toFixed(3)} → 4:3 |x|=${Math.abs(root.position.x).toFixed(3)}`,
+  );
+  check('握点在一个合理的深度上（不会被近裁面撕开）', rest.z > -2 && rest.z < -0.5, rest.z.toFixed(3));
+  // 1726 第二轮自测的回归点：手用**自己的**视野（视图模型），世界 fov 怎么调都不变。
+  // 曾经让手跟着世界 fov 缩放：90° 下"尺寸/距离"比翻倍，方块近角被透视推到 fov60 的 1.7 倍宽。
+  hand.update(0.4, false, 60, 16 / 9);
+  const at60 = { scale: root.scale.clone(), pos: root.position.clone() };
+  hand.update(0.4, false, 90, 16 / 9);
+  check(
+    '世界视野变化不影响手（手固定用自己的视图模型视角）',
+    root.scale.distanceTo(at60.scale) < 1e-9 && root.position.distanceTo(at60.pos) < 1e-9,
+    `fov60 scale=${at60.scale.x.toFixed(3)} / fov90 scale=${root.scale.x.toFixed(3)}`,
+  );
+
   // 挥手：从静止位置出发 → 中途位移不同 → 结束后复位
-  const rest = group.position.clone();
+  hand.update(0.4, false, 72, 1.6);
+  const still = root.position.clone();
   check('静止时不在挥动', !hand.swinging);
   hand.swing();
   check('swing() 立刻进入挥动状态', hand.swinging);
   hand.update(0.13, false, 72, 1.6);
-  const mid = group.position.clone();
-  check('挥动中途位置发生偏移', mid.distanceTo(rest) > 0.05, `偏移 ${mid.distanceTo(rest).toFixed(3)}`);
+  const mid = root.position.clone();
+  check('挥动中途位置发生偏移', mid.distanceTo(still) > 0.05, `偏移 ${mid.distanceTo(still).toFixed(3)}`);
+  // ⚠️ 1726 的回归点：支点离握点 1.1 个单位，角度给大一点就会把物品甩出画面
+  check(
+    '挥到一半物品仍在画面内（不被甩出去）',
+    mid.y > -2.2 && Math.abs(mid.x) < 2.2,
+    `x=${mid.x.toFixed(2)} y=${mid.y.toFixed(2)}`,
+  );
   hand.swing();
   hand.update(0.0001, false, 72, 1.6);
-  check('挥动中再次 swing() 不会重开（防抖手）', group.position.distanceTo(mid) < 0.2);
+  check('挥动中再次 swing() 不会重开（防抖手）', root.position.distanceTo(mid) < 0.2);
   hand.update(0.4, false, 72, 1.6);
-  check('挥动结束复位到静止位置', !hand.swinging && group.position.distanceTo(rest) < 1e-6, `偏移 ${group.position.distanceTo(rest).toFixed(4)}`);
+  check('挥动结束复位到静止位置', !hand.swinging && root.position.distanceTo(still) < 1e-6, `偏移 ${root.position.distanceTo(still).toFixed(4)}`);
 
   // 走路时的摆动：动的时候有偏移，站着时归零
   hand.update(0.05, true, 72, 1.6);
-  const bobbing = group.position.y;
+  const bobbing = root.position.y;
   hand.update(0.05, false, 72, 1.6);
-  check('走路时手臂上下摆动、静止时归零', Math.abs(bobbing - rest.y) > 1e-4 && Math.abs(group.position.y - rest.y) < 1e-6);
+  check('走路时手臂上下摆动、静止时归零', Math.abs(bobbing - still.y) > 1e-4 && Math.abs(root.position.y - still.y) < 1e-6);
 
   hand.update(0.016, false, 90, 1.2);
-  check('相机会跟着视野设置走', hand.camera.fov === 90 && Math.abs(hand.camera.aspect - 1.2) < 1e-6);
+  check(
+    '手的相机只跟宽高比，视野固定（不跟着世界 90° 走）',
+    hand.camera.fov !== 90 && hand.camera.fov > 60 && Math.abs(hand.camera.aspect - 1.2) < 1e-6,
+    `fov=${hand.camera.fov}`,
+  );
   hand.dispose();
 }
 
@@ -999,12 +1082,72 @@ console.log('\n[盔甲：第三人称甲片]');
   player.dispose();
 }
 
+console.log('\n[第三人称：手里那件东西]');
+{
+  const scene = new THREE.Scene();
+  const player = new PlayerRenderer(scene, () => 1, stubAtlas);
+
+  check('空手时手里什么都没有', player.heldItem === undefined && !player.heldItemVisible);
+
+  player.setHeldItem(Block.STONE);
+  check('拿起方块：记录 id 并显示模型', player.heldItem === Block.STONE && player.heldItemVisible);
+  // 主手挂点挂在右臂上（跟着走路摆臂、挥手一起动），而不是钉在躯干上
+  const rightArm = player.object.children.find((child) => child.type === 'Group' && child.children.some((c) => c.type === 'Group' && c.position.z < -0.2));
+  check('主手挂点在手臂上（会跟着摆臂/挥手动）', !!rightArm, rightArm ? 'ok' : '没找到');
+  const heldMesh = (): THREE.Mesh | null => {
+    const found = player.object.getObjectByName('held-item');
+    return found instanceof THREE.Mesh ? found : null;
+  };
+  const blockMesh3p = heldMesh();
+  check('方块用立方体几何体（六面各自贴图）', !!blockMesh3p && blockMesh3p.geometry.getAttribute('position').count === 24);
+  check(
+    '手里的方块比第一人称的小一圈（0.34 格）',
+    !!blockMesh3p && close((blockMesh3p.geometry as THREE.BoxGeometry).parameters.width, 0.34, 1e-6),
+    blockMesh3p ? String((blockMesh3p.geometry as THREE.BoxGeometry).parameters.width) : 'null',
+  );
+
+  player.setHeldItem(Item.STICK);
+  const spriteMesh3p = heldMesh();
+  // 现在的手持物是**一个平面 + 烘好的 2.5D 贴图**，所以必须双面：
+  // 单面会让前视角/后视角总有一边整件消失（用户："三人称视角看不到手拿物品了"）。
+  // ⚠️ 与"交叉的剑"那条不矛盾：那次是**薄盒子两面同贴图标**被双面渲染透了重影，平面没有这个问题。
+  check(
+    '第三人称手持物是双面渲染（平面，否则有一侧会整件消失）',
+    !!spriteMesh3p && (spriteMesh3p!.material as THREE.MeshBasicMaterial).side === THREE.DoubleSide,
+    spriteMesh3p ? String((spriteMesh3p!.material as THREE.MeshBasicMaterial).side) : 'null',
+  );
+  check(
+    '离线环境退回薄盒子（有厚度，不是零厚度面片）',
+    !!spriteMesh3p &&
+      close(
+        (spriteMesh3p!.geometry as THREE.BoxGeometry).parameters.depth ?? 0,
+        0.04,
+        1e-6,
+      ),
+    spriteMesh3p ? String((spriteMesh3p!.geometry as THREE.BoxGeometry).parameters.depth) : 'null',
+  );
+
+  player.setHeldItem(undefined);
+  check('切回空手：模型隐藏', player.heldItem === undefined && !player.heldItemVisible);
+  check('反复切同一件物品不会重复建网格', (() => {
+    player.setHeldItem(Item.STICK);
+    const first = heldMesh();
+    player.setHeldItem(Item.STICK);
+    return heldMesh() === first;
+  })());
+
+  // 没给图集时（UI 里的角色预览 / 离线测试）不画手里的东西，也不能崩
+  const bare = new PlayerRenderer(new THREE.Scene(), () => 1);
+  bare.setHeldItem(Block.STONE);
+  check('没有图集时安全降级（不画、不报错）', !bare.heldItemVisible);
+  bare.dispose();
+  player.dispose();
+}
+
 console.log('\n[盔甲：第一人称袖套]');
 {
   const hand = new HandRenderer(stubAtlas);
-  const group = hand.scene.children[0] as THREE.Group;
-  // 下标 3：批次 241 之后是「手臂 → 布袖 → 手持物挂点 → 盔甲袖套」
-  const sleeve = group.children[3] as THREE.Mesh;
+  const sleeve = hand.scene.getObjectByName('armor-sleeve') as THREE.Mesh;
   const sleeveMaterial = sleeve.material as THREE.ShaderMaterial;
 
   check('初始不显示袖套（没穿胸甲）', !sleeve.visible);
@@ -1012,8 +1155,9 @@ console.log('\n[盔甲：第一人称袖套]');
   check('穿上胸甲后袖套出现', sleeve.visible);
   const color = sleeveMaterial.uniforms.uFlatColor!.value as THREE.Color;
   check('袖套颜色与传入的甲片色一致', close(color.r, 0xcd / 255, 1e-6) && close(color.g, 0xcd / 255, 1e-6));
-  // 手臂与袖套都用自己的几何体（不是缩放出来的），所以比的是几何体宽度
-  const armWidth = (group.children[0] as THREE.Mesh).geometry as THREE.BoxGeometry;
+  // 批次 1726：手臂几何体是**单位盒子**，粗细交给 armRig 的缩放，
+  // 所以袖套/布袖的"粗"是相对手臂的倍数（写在几何体上 > 1 就是套在外面）
+  const armWidth = (hand.scene.getObjectByName('arm') as THREE.Mesh).geometry as THREE.BoxGeometry;
   const sleeveWidth = sleeve.geometry as THREE.BoxGeometry;
   check(
     '袖套比手臂粗（套在外面而不是重叠）',

@@ -38,17 +38,18 @@
 npm run dev            # 开发服务器 http://localhost:5173
 
 # —— 改代码时的内循环（秒级）——
-npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离线套件
+npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离线套件（实测 ~4s）
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
-# —— 提交前（全量，约 10s）——
-npm run check          # typecheck + 177 套离线测试 + 三张台账，任一失败即非零退出
+# —— 提交前（全量，约 40s，大头是 176 套离线测试 26s）——
+npm run check          # typecheck + 176 套离线测试 + 三张台账，任一失败即非零退出
                        # （CI 也跑同一道：.github/workflows/check.yml）
 ```
 
 单套调试仍可直接跑老命令（`npm run test:reach`、`npm run test:perf` …）；
 离线测试的聚合入口是 `npm run test:offline`（`tools/run-tests.mjs`）。
-`git commit` 还会跑框架的 `checks.fast`（`.continue/config.json`）：编号 / 文档体量 / 配置 / `check:fast`。
+`git commit` 还会跑框架的 `checks.fast`（`.continue/config.json`）：编号 / 文档体量 / 配置 / `check:fast`
+（钩子自检按 hooks 内容哈希缓存，重复提交时是毫秒级）。
 
 ## 4. 硬性约定（细节见 `.continue/HANDOFF.md` §4 与 `README.md` §3）
 

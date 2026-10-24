@@ -91,8 +91,8 @@ const VINE = Block.VINE;
 
 console.log('\n[方块注册]');
 {
-  equal('锁链的注册名', blockDef(CHAIN).name, 'minecraft:chain');
-  equal('藤蔓的注册名', blockDef(VINE).name, 'minecraft:vine');
+  equal('锁链的注册名', blockDef(CHAIN).name, 'minicraft:chain');
+  equal('藤蔓的注册名', blockDef(VINE).name, 'minicraft:vine');
   equal('锁链的形状是 chain', blockDef(CHAIN).shape, 'chain');
   equal('藤蔓的形状是 vine', blockDef(VINE).shape, 'vine');
   check('两个 id 都在方块表里且下标一致', BLOCKS[CHAIN]!.id === CHAIN && BLOCKS[VINE]!.id === VINE);
@@ -117,7 +117,7 @@ console.log('\n[贴图与铁粒]');
 
   const nugget = Item.IRON_NUGGET;
   check('铁粒已注册', itemDef(nugget) !== undefined);
-  equal('铁粒的注册名', itemDef(nugget)?.name, 'minecraft:iron_nugget');
+  equal('铁粒的注册名', itemDef(nugget)?.name, 'minicraft:iron_nugget');
   equal('铁粒的中文名', itemLabel(nugget), '铁粒');
   equal('铁粒可堆 64', maxStackOf(nugget), 64);
   check('铁粒的图标在图集里', TILES.has(itemDef(nugget)!.tile));

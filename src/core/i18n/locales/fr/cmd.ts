@@ -207,7 +207,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "Mode créatif requis",
   "cmd.help.screen.note": "Les listes affichent les noms français, et la commande utilise automatiquement l’id anglais ; les champs texte pour les objets et les blocs acceptent aussi le français.",
   "cmd.help.screen.action": "Action",
-  "cmd.help.screen.fill": "Insérer dans le chat",
+  "cmd.help.screen.run": "Exécuter",
   "cmd.help.screen.optional": "{label} (facultatif)",
   "cmd.help.screen.none": "Ne rien remplir",
   "cmd.help.screen.customEllipsis": "Personnalisé…",

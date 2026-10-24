@@ -174,7 +174,7 @@ console.log('\n[画作表：变体状态位]');
   }
   check('200 次掷点全部落在合法范围', inRange);
 
-  equal('describeState 会说清挂的是哪一幅', describeState('painting', withPaintingVariant(withFacing(0, 0), 4)), '贴北墙·炸弹');
+  equal('describeState 会说清挂的是哪一幅', describeState('painting', withPaintingVariant(withFacing(0, 0), 4)), '贴北墙·篝火');
 }
 
 // ---------------------------------------------------------------- 2. 方块注册
@@ -184,8 +184,8 @@ console.log('\n[方块注册：展示框与画]');
   equal('展示框 id', ITEM_FRAME_ID, 541);
   equal('画 id', PAINTING_ID, 542);
   equal('Block 常量与 id 对得上', `${Block.ITEM_FRAME}/${Block.PAINTING}`, `${ITEM_FRAME_ID}/${PAINTING_ID}`);
-  equal('展示框名字是原版的 minecraft:item_frame', blockDef(ITEM_FRAME_ID).name, 'minecraft:item_frame');
-  equal('画名字是原版的 minecraft:painting', blockDef(PAINTING_ID).name, 'minecraft:painting');
+  equal('展示框名字是原版的 minecraft:item_frame', blockDef(ITEM_FRAME_ID).name, 'minicraft:item_frame');
+  equal('画名字是原版的 minecraft:painting', blockDef(PAINTING_ID).name, 'minicraft:painting');
   equal('展示框形状', blockDef(ITEM_FRAME_ID).shape, 'item_frame');
   equal('画形状', blockDef(PAINTING_ID).shape, 'painting');
 

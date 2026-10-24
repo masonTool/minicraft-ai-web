@@ -122,24 +122,24 @@ function specProblems(spec: SoundSpec | undefined): string[] {
 console.log('\n[方块材质 → 破坏音效]');
 {
   const cases: Array<[string, string]> = [
-    ['minecraft:stone', 'break_stone'],
-    ['minecraft:cobblestone', 'break_stone'],
-    ['minecraft:deepslate', 'break_stone'],
-    ['minecraft:oak_planks', 'break_wood'],
-    ['minecraft:oak_log', 'break_wood'],
-    ['minecraft:crafting_table', 'break_wood'],
-    ['minecraft:crimson_stem', 'break_wood'],
-    ['minecraft:oak_door', 'break_wood'],
-    ['minecraft:short_grass', 'break_grass'],
-    ['minecraft:oak_leaves', 'break_grass'],
-    ['minecraft:crimson_nylium', 'break_grass'],
-    ['minecraft:sand', 'break_sand'],
-    ['minecraft:gravel', 'break_sand'],
-    ['minecraft:soul_soil', 'break_sand'],
-    ['minecraft:glass', 'break_glass'],
-    ['minecraft:ice', 'break_glass'],
-    ['minecraft:white_wool', 'break_wool'],
-    ['minecraft:nether_wart_block', 'break_wool'],
+    ['minicraft:stone', 'break_stone'],
+    ['minicraft:cobblestone', 'break_stone'],
+    ['minicraft:deepslate', 'break_stone'],
+    ['minicraft:oak_planks', 'break_wood'],
+    ['minicraft:oak_log', 'break_wood'],
+    ['minicraft:crafting_table', 'break_wood'],
+    ['minicraft:crimson_stem', 'break_wood'],
+    ['minicraft:oak_door', 'break_wood'],
+    ['minicraft:short_grass', 'break_grass'],
+    ['minicraft:oak_leaves', 'break_grass'],
+    ['minicraft:crimson_nylium', 'break_grass'],
+    ['minicraft:sand', 'break_sand'],
+    ['minicraft:gravel', 'break_sand'],
+    ['minicraft:soul_soil', 'break_sand'],
+    ['minicraft:glass', 'break_glass'],
+    ['minicraft:ice', 'break_glass'],
+    ['minicraft:white_wool', 'break_wool'],
+    ['minicraft:nether_wart_block', 'break_wool'],
   ];
 
   let bad = 0;
@@ -154,27 +154,27 @@ console.log('\n[方块材质 → 破坏音效]');
 
   const kinds = new Set(cases.map(([name]) => breakSoundFor(name)));
   check('至少覆盖 5 类材质音效', kinds.size >= 5, [...kinds].join(','));
-  check('未知方块回落到石头音（不会静默）', breakSoundFor('minecraft:unknown_block') === 'break_stone');
-  check('带/不带 minecraft: 前缀结果一致', breakSoundFor('stone') === breakSoundFor('minecraft:stone'));
+  check('未知方块回落到石头音（不会静默）', breakSoundFor('minicraft:unknown_block') === 'break_stone');
+  check('带/不带命名空间前缀结果一致', breakSoundFor('stone') === breakSoundFor('minicraft:stone'));
 }
 
 console.log('\n[方块材质 → 脚步 / 放置音效（批次 232）]');
 {
   // 脚步：每一种材质都要有自己的声音（以前全借破坏音，走路像在挖方块）
   const steps: Array<[string, string]> = [
-    ['minecraft:grass_block', 'step_grass'],
-    ['minecraft:short_grass', 'step_grass'],
-    ['minecraft:oak_leaves', 'step_grass'],
-    ['minecraft:stone', 'step_stone'],
-    ['minecraft:deepslate', 'step_stone'],
-    ['minecraft:oak_planks', 'step_wood'],
-    ['minecraft:oak_log', 'step_wood'],
-    ['minecraft:sand', 'step_sand'],
-    ['minecraft:gravel', 'step_gravel'],
-    ['minecraft:snow_block', 'step_snow'],
-    ['minecraft:powder_snow', 'step_snow'],
-    ['minecraft:white_wool', 'step_wool'],
-    ['minecraft:oak_carpet', 'step_wool'],
+    ['minicraft:grass_block', 'step_grass'],
+    ['minicraft:short_grass', 'step_grass'],
+    ['minicraft:oak_leaves', 'step_grass'],
+    ['minicraft:stone', 'step_stone'],
+    ['minicraft:deepslate', 'step_stone'],
+    ['minicraft:oak_planks', 'step_wood'],
+    ['minicraft:oak_log', 'step_wood'],
+    ['minicraft:sand', 'step_sand'],
+    ['minicraft:gravel', 'step_gravel'],
+    ['minicraft:snow_block', 'step_snow'],
+    ['minicraft:powder_snow', 'step_snow'],
+    ['minicraft:white_wool', 'step_wool'],
+    ['minicraft:oak_carpet', 'step_wool'],
   ];
   let badSteps = 0;
   for (const [name, expected] of steps) {
@@ -184,17 +184,17 @@ console.log('\n[方块材质 → 脚步 / 放置音效（批次 232）]');
     }
   }
   check(`${steps.length} 种方块的脚步音分类正确`, badSteps === 0, `不匹配 ${badSteps} 种`);
-  check('脚步音不会落回破坏音（两套是分开的）', !stepSoundFor('minecraft:stone').startsWith('break_'));
-  check('未知方块回落到石头脚步（不会静默）', stepSoundFor('minecraft:unknown_block') === 'step_stone');
-  check('砂砾优先于沙子（颗粒感不能被吞掉）', stepSoundFor('minecraft:gravel') === 'step_gravel');
+  check('脚步音不会落回破坏音（两套是分开的）', !stepSoundFor('minicraft:stone').startsWith('break_'));
+  check('未知方块回落到石头脚步（不会静默）', stepSoundFor('minicraft:unknown_block') === 'step_stone');
+  check('砂砾优先于沙子（颗粒感不能被吞掉）', stepSoundFor('minicraft:gravel') === 'step_gravel');
 
   const places: Array<[string, string]> = [
-    ['minecraft:stone', 'place_stone'],
-    ['minecraft:oak_planks', 'place_wood'],
-    ['minecraft:grass_block', 'place_grass'],
-    ['minecraft:sand', 'place_sand'],
-    ['minecraft:glass', 'place_glass'],
-    ['minecraft:white_wool', 'place_wool'],
+    ['minicraft:stone', 'place_stone'],
+    ['minicraft:oak_planks', 'place_wood'],
+    ['minicraft:grass_block', 'place_grass'],
+    ['minicraft:sand', 'place_sand'],
+    ['minicraft:glass', 'place_glass'],
+    ['minicraft:white_wool', 'place_wool'],
   ];
   let badPlaces = 0;
   for (const [name, expected] of places) {
@@ -204,18 +204,18 @@ console.log('\n[方块材质 → 脚步 / 放置音效（批次 232）]');
     }
   }
   check(`${places.length} 种方块的放置音分类正确`, badPlaces === 0, `不匹配 ${badPlaces} 种`);
-  check('未知方块回落到石头放置音', placeSoundFor('minecraft:unknown_block') === 'place_stone');
+  check('未知方块回落到石头放置音', placeSoundFor('minicraft:unknown_block') === 'place_stone');
 
   // 挖掘中的摩擦（批次 233）：只有四档，但石头/木头/松软/玻璃必须分得开
   const digs: Array<[string, string]> = [
-    ['minecraft:stone', 'dig_stone'],
-    ['minecraft:deepslate', 'dig_stone'],
-    ['minecraft:oak_planks', 'dig_wood'],
-    ['minecraft:oak_log', 'dig_wood'],
-    ['minecraft:grass_block', 'dig_soft'],
-    ['minecraft:sand', 'dig_soft'],
-    ['minecraft:white_wool', 'dig_soft'],
-    ['minecraft:glass', 'dig_glass'],
+    ['minicraft:stone', 'dig_stone'],
+    ['minicraft:deepslate', 'dig_stone'],
+    ['minicraft:oak_planks', 'dig_wood'],
+    ['minicraft:oak_log', 'dig_wood'],
+    ['minicraft:grass_block', 'dig_soft'],
+    ['minicraft:sand', 'dig_soft'],
+    ['minicraft:white_wool', 'dig_soft'],
+    ['minicraft:glass', 'dig_glass'],
   ];
   let badDigs = 0;
   for (const [name, expected] of digs) {
@@ -271,8 +271,8 @@ console.log('\n[引擎行为]');
   try {
     engine.play('break_stone');
     engine.play('explode', { x: 100, y: 64, z: 100 });
-    engine.playStepForBlock('minecraft:grass_block');
-    engine.playPlaceForBlock('minecraft:glass', { x: 1, y: 64, z: 1 });
+    engine.playStepForBlock('minicraft:grass_block');
+    engine.playPlaceForBlock('minicraft:glass', { x: 1, y: 64, z: 1 });
     engine.playVoice('zombie:ambient', mobVoiceSpec('undead', 'ambient'), { x: 1, y: 64, z: 1 });
     // 批次 233：环境音与音乐在无 AudioContext 时也必须是安全空操作
     engine.setAmbience(0.7);

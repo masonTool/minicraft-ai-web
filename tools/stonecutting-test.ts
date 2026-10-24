@@ -61,14 +61,14 @@ const DIAMOND_PICK = makeToolInfo('pickaxe', 'diamond');
 
 /** 名字列表（断言里比名字比比 id 更好读，失败信息一眼能看懂） */
 function names(ids: readonly number[]): string {
-  return ids.map((id) => blockDef(id).name.replace('minecraft:', '')).join(',');
+  return ids.map((id) => blockDef(id).name.replace('minicraft:', '')).join(',');
 }
 
 // ---------------------------------------------------------------- 1. 方块与配方
 
 console.log('\n[切石机方块]');
 {
-  equal('注册名', blockDef(Block.STONECUTTER).name, 'minecraft:stonecutter');
+  equal('注册名', blockDef(Block.STONECUTTER).name, 'minicraft:stonecutter');
   equal('中文名', itemLabel(Block.STONECUTTER), '切石机');
   equal('形状是整格（没有朝向、没有状态）', blockDef(Block.STONECUTTER).shape, 'cube');
   check('id 在表里且与常量一致', BLOCKS[Block.STONECUTTER]?.id === Block.STONECUTTER);
@@ -157,7 +157,7 @@ console.log('\n[几个代表性输入]');
   check(
     '磨制深板岩还能切出深板岩砖、錾制深板岩与它自己的三件套',
     ['deepslate_bricks', 'chiseled_deepslate', 'polished_deepslate_slab', 'polished_deepslate_stairs', 'polished_deepslate_wall'].every(
-      (name) => stonecuttingOffers(Block.POLISHED_DEEPSLATE).some((offer) => blockDef(offer.output).name === `minecraft:${name}`),
+      (name) => stonecuttingOffers(Block.POLISHED_DEEPSLATE).some((offer) => blockDef(offer.output).name === `minicraft:${name}`),
     ),
   );
 
@@ -165,7 +165,7 @@ console.log('\n[几个代表性输入]');
   check(
     '深板岩能一路切到深板岩瓦（圆石深板岩 → 磨制 → 砖 → 瓦）',
     ['cobbled_deepslate', 'polished_deepslate', 'deepslate_bricks', 'deepslate_tiles', 'chiseled_deepslate'].every(
-      (name) => stonecuttingOffers(Block.DEEPSLATE).some((offer) => blockDef(offer.output).name === `minecraft:${name}`),
+      (name) => stonecuttingOffers(Block.DEEPSLATE).some((offer) => blockDef(offer.output).name === `minicraft:${name}`),
     ),
   );
   // 花岗岩：三件套 + 磨制（"变细"那一档排在后面，与登记顺序一致）
@@ -208,7 +208,7 @@ console.log('\n[切石机容器]');
 
   cutter.set(0, { id: Block.STONE, count: 3 });
   equal('放进 3 个石头 → 4 个候选', cutter.offers.length, 4);
-  equal('候选的顺序是"台阶在前"（与原版列表一致）', blockDef(cutter.offers[0]!.output).name, 'minecraft:stone_slab');
+  equal('候选的顺序是"台阶在前"（与原版列表一致）', blockDef(cutter.offers[0]!.output).name, 'minicraft:stone_slab');
 
   // 切一次：扣 1 个输入、给出 2 个台阶
   const first = cutter.cut(slabId(0));

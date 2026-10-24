@@ -75,6 +75,13 @@ export class ChatInput {
   onSubmit: ((text: string) => void) | null = null;
   /** 打开/关闭回调（App 用它暂停/恢复玩家输入） */
   onOpenChange: ((open: boolean) => void) | null = null;
+  /**
+   * 点提示行里的 `help` 时触发（批次 20261025 用户：直接开指令页）。
+   *
+   * 以前这一下只是把 `/help` 填进输入框，玩家还得再按一次发送；
+   * 现在由 App 接成"收起聊天 + 打开指令帮助页"。
+   */
+  onOpenHelp: (() => void) | null = null;
 
   private readonly logEl: HTMLDivElement;
   /** 输入行（输入框 + 发送键）单独一组：打开时放在**最上面**（左上角） */
@@ -400,8 +407,12 @@ export class ChatInput {
       if (html.scrollWidth <= html.clientWidth + 1) {
         element.classList.remove('collapsible');
         html.removeAttribute('title');
+        html.removeAttribute('data-expand-badge');
       } else {
         html.title = t('chat.expand');
+        // 右下角那个「展开」角标是 CSS 的 `::after`，文字从属性里取（`content: attr(...)`）：
+        // 写死在样式表里的话切语言永远不变（静态 CSS 不参与重绘）。
+        html.dataset.expandBadge = t('chat.expandBadge');
       }
     }
     // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置
@@ -563,8 +574,8 @@ export class ChatInput {
   /**
    * 把提示里的 `/help` 中的 `help` 做成可点击（批次 534）。
    *
-   * 用户要求省掉单独一行帮助按钮：点一下直接把 `/help` 填进输入框，
-   * 由玩家自己按发送（不自动执行）。
+   * 20261025（用户）：点一下**直接进指令页**，不再往输入框里塞 `/help`。
+   * 收起聊天框再开弹窗，和"手打 `/help` 回车"走同一条视觉路径。
    */
   private renderHint(text: string): void {
     this.hintEl.textContent = '';
@@ -585,22 +596,11 @@ export class ChatInput {
     help.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      // 已经是 /help：再点没有任何反应，也不重建提示行（用户要求那行字保持原样）
-      if (this.inputEl.value === '/help') return;
-      this.inputEl.value = '/help';
-      // ⚠️ 不要在这里 focus：输入框没聚焦时这一下会唤起软键盘/滚动视口，
-      // 游戏最右侧会留下一条竖向黑边（批次 536 用户反馈）。
-      // 玩家要发送时自己点一下输入框即可。
-      const end = this.inputEl.value.length;
-      this.inputEl.setSelectionRange(end, end);
-      // 兜底：设置值/选区后个别内核会把页面横向滚出几像素，露出右侧黑边。
-      // 下一帧把滚动归零并让画布按当前 innerWidth 重新同步一次。
-      requestAnimationFrame(() => {
-        if (document.documentElement.scrollLeft !== 0) document.documentElement.scrollLeft = 0;
-        if (document.body.scrollLeft !== 0) document.body.scrollLeft = 0;
-        window.dispatchEvent(new Event('resize'));
-      });
-      // ⚠️ 不要 updateHint：提示行保持“输入命令（/help 查看全部）…”原样
+      // 20261025（用户）：点一下**直接进指令页**，不再往输入框里塞 `/help`。
+      // 先收起聊天框再开弹窗，与"手打 /help 回车"走同一条视觉路径。
+      if (!this.onOpenHelp) return;
+      this.close();
+      this.onOpenHelp();
     });
     help.addEventListener('click', (event) => {
       event.preventDefault();

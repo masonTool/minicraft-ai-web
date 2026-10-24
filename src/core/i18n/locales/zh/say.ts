@@ -1,0 +1,105 @@
+/**
+ * 中文文案·局内提示（聊天栏：左上角弹出的那一行 + 展开后的聊天记录）
+ *
+ * 为什么单开一组，而不是塞进 `chat.*` / `misc.*`：
+ *  · `chat.*` 是**聊天框自己的界面文案**（发送键、提示行、候选）；
+ *  · `misc.toast.*` 是**快捷栏上方那条 toast**；
+ *  · 这里这一组是"游戏过程中说给玩家的一句话"——伤害、饥饿、袭击、唱片机…
+ *    它们的共同点是**都进聊天栏**，且数量多、彼此无关，混进上面任何一组都会让那份文件失去主题。
+ *
+ * ⚠️ 与 `notice.*` 的分工：`notice.*` 是**拼接用的碎片**（伤害原因、来源），
+ * 这一组是**完整的句子**。一句里既有中文又有变量就用 `tp()`，别在调用处拼字符串
+ * （英文语序会把变量挪到别的句段，这条在批次 425 踩过）。
+ */
+
+export const say = {
+  // ---- 状态与战斗（T1）
+  'say.damage.taken': '受到 {amount} 点伤害：{reasons} · 生命 {health}/20',
+  'say.damage.reason': '{cause}（{amount} 点）',
+  'say.damage.sep': '；',
+  'say.health.gain': '生命 +{amount}（自然恢复或治疗效果）· 当前 {health}/20',
+  'say.food.loss': '饥饿值 -{amount}（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）· 剩余 {food}/20{hint}',
+  'say.food.lowHint': ' · 快吃点东西，否则会饿到掉血',
+  'say.food.gain': '饥饿值 +{amount}（进食 / 饱和效果）· 当前 {food}/20',
+  'say.health.low': '生命值偏低（{health}/20）：先躲开敌人或危险方块，吃东西可以回血',
+  'say.food.starving': '饥饿值耗尽（体力透支）：会持续掉血，也无法自然回血；快吃东西',
+  'say.air.low': '氧气不足（正在水下憋气，剩余 {air}）：浮上水面换气',
+  'say.air.empty': '氧气耗尽（已经憋不住）：正在溺水掉血，立刻上浮',
+  'say.air.back': '回到水面（已能呼吸）：氧气正在恢复',
+  'say.burning': '你着火了（站在火/岩浆里或被点燃）：每秒掉血，跳进水里可熄灭',
+  'say.shield.axeBreak': '盾牌被斧头破防（{seconds} 秒）',
+  'say.shield.broken': '盾牌碎了',
+  'say.totem.saved': '不死图腾救了你一命',
+  'say.hardcore.dead': '极限模式：你已死亡，只能以旁观者继续查看这个世界',
+  'say.respawn.anchorEmpty': '重生锚的充能耗尽了，回世界出生点复活',
+  'say.respawn.bedGone': '你的床不在了，回世界出生点复活',
+
+  // ---- 交互与方块（T2）
+  'say.commandBlock.saved': '命令已保存：/{command}',
+  'say.commandBlock.cleared': '已清空这一格的命令',
+  'say.commandBlock.title': '命令方块（红石脉冲时执行）',
+  'say.milk.cured': '喝下牛奶，身上的状态效果被清除',
+  'say.potion.drunk': '喝下{potion}：{effects}',
+  'say.potion.noEffect': '无效果',
+  'say.noArrows': '没有箭了',
+  'say.flowerPot.taken': '从花盆里取出{item}',
+  'say.armorStand.empty': '盔甲架是空的（拿盔甲右键可以给它穿上）',
+  'say.jukebox.taken': '取出了唱片',
+  'say.jukebox.hint': '这里能放唱片（唱片可以在废弃矿井 / 地牢的箱子里找到）',
+  'say.jukebox.playing': '正在播放唱片：{name}（{seconds} 秒）',
+  'say.noteBlock.pitch': '音符盒：第 {pitch} 档 / 共 {total} 档',
+  'say.chest.blocked': '箱子上面压着方块，打不开（挪开它，或者换成木桶——木桶不怕压）',
+  'say.trappedChest.blocked': '陷阱箱上面压着方块，打不开（挪开它）',
+  'say.shulkerBox.blocked': '潜影盒上面压着方块，打不开（挪开它）',
+  'say.enderChest.blocked': '末影箱上面压着方块，打不开（挪开它）',
+  'say.anchor.full': '这块重生锚已经充满了',
+  'say.anchor.charged': '重生锚充能 {charge} / {max}',
+  'say.anchor.empty': '重生锚没有充能：拿荧石右键它',
+  'say.anchor.spawnSet': '重生点已设置在这块重生锚上（剩余充能 {charge}）',
+  'say.lodestone.bound': '指南针已绑定到这块磁石',
+  'say.trade.refused': '交易不成：{reason}',
+  'say.trade.levelUp': '村民升级了：{profession} → {level}（解锁了新的交易）',
+  'say.trade.blocker.usedUp': '这条交易今天已经用完了（明天补货）',
+  'say.trade.blocker.needMore': '材料不够（还差 {count} 个）',
+  'say.sleep.refusal.dead': '你正躺着，先起来再说',
+  'say.sleep.refusal.obstructed': '床的上方被挡住了，先清出空间',
+  'say.sleep.refusal.monsters': '你现在无法休息，附近有怪物',
+  'say.sleep.refusal.daytime': '你只能在夜晚或雷暴时入睡',
+  'say.sleep.wokeDawn': '天亮了。重生点已设置在这张床上。',
+  'say.sleep.interrupted': '你被惊醒了。',
+  'say.respawnPoint.broken': '你的重生点被拆掉了',
+  'say.team.friendlyFire': '同队免伤（/team friendlyfire true 可以打开）',
+  'say.fishing.bite': '咬钩了！快收杆（{seconds} 秒内）',
+  'say.fishing.notInWater': '浮标没落在水里',
+  'say.fishing.escaped': '鱼跑了…',
+  'say.fishing.caughtOne': '钓到了 {item}{extra}',
+  'say.fishing.caughtMany': '钓到了 {item} ×{count}{extra}',
+  'say.fishing.enchantedBook': '（附魔书）',
+  'say.phantom': '你已经连着 {days} 天没合眼了……天上有东西在叫。',
+  'say.disconnect.soloReloaded': '已断开联机：世界已重载回单机存档',
+  'say.net.seedMismatch': '房间的世界种子是 {server}，本世界是 {local}——两片大陆上继续玩只会把方块写到错的位置，已断开联机。请回主菜单 →「加入房间…」，那边会按房主的世界开一局',
+  'say.net.seedMismatchToast': '种子不同：已断开，请从主菜单「加入房间」进',
+
+  // ---- 世界事件、进度与天气（T3）
+  'say.progress.reconciled': '对了一次背包：已达成 {count} 条进度（详情按 J 看）',
+  'say.progress.earned': '进度已达成：{title}——{desc}',
+  'say.progress.challenge': '挑战完成：{title}——{desc}',
+  'say.effect.gained': '获得效果：{effect}{level}',
+  'say.ominous.leader': '你击败了巡逻队队长：染上了不祥之兆',
+  'say.ominous': '你染上了不祥之兆：带着它走进村庄会引来袭击',
+  'say.patrol': '附近出现了掠夺者巡逻队',
+  'say.raid.start': '袭击开始了：守住村庄！',
+  'say.raid.wave': '第 {wave} 波正在逼近…',
+  'say.raid.won': '袭击被击退了：你获得了村庄英雄',
+  'say.raid.lost': '袭击失败：没能守住村庄',
+  'say.ironGolem': '铁傀儡站了起来',
+  'say.wither': '凋灵被唤醒了',
+  'say.endPortal.returned': '末地传送门把你送回了世界出生点',
+  'say.debug.villagerProfession': '（调试）村民已认领职业：{level}',
+  'say.weather.thunderEnd': '雷暴过去了，天放晴了',
+  'say.weather.snowEnd': '雪停了',
+  'say.weather.rainEnd': '雨停了',
+  'say.weather.thunder': '雷暴来了，小心闪电（约 {minutes} 分钟）',
+  'say.weather.snow': '开始下雪了（约 {minutes} 分钟）',
+  'say.weather.rain': '开始下雨了（约 {minutes} 分钟）',
+} as const;

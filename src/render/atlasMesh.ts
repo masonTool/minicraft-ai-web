@@ -92,3 +92,54 @@ export function blockFaceTiles(blockId: number): string[] {
   const tiles = blockDef(blockId).tiles;
   return [tiles[2]!, tiles[2]!, tiles[0]!, tiles[1]!, tiles[2]!, tiles[2]!];
 }
+
+/**
+ * 扁平物品六面 UV：正反两面（±z）贴整张图标，四周的"厚度面"各取图标**最外那一列/行**。
+ *
+ * 为什么不能六面都贴整张：16px 的图标压到 2px 宽的厚度边上，斜向的剑会被拉成
+ * 一条细长的"彩带"（批次 20261024-1455/1531 的两次事故）；而"厚度面填一道纯色"也不行，
+ * 斜向物品会在空气里多画一条孤零零的线（1726 实测）。取边缘列之后，厚度面的颜色就是
+ * 图标轮廓那一圈的颜色，而且**图标那里是透明的地方 alphaTest 会直接裁掉**——
+ * 厚度只出现在内容真正顶到边的地方。
+ *
+ * 第一人称手持物与第三人称玩家模型手里的东西共用这一份（两处若各写一遍，
+ * 迟早会出现"第一人称看着对、第三人称翻一样"的差异）。
+ */
+export function applySpriteFaceUvs(
+  geometry: THREE.BufferGeometry,
+  atlas: AtlasUvSource,
+  tile: string,
+  bounds: { left: number; top: number; right: number; bottom: number },
+  tilePixels: number,
+): void {
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+  const [u0, v0, u1, v1] = atlas.uv(tile);
+  const du = (u1 - u0) / tilePixels;
+  const dv = (v1 - v0) / tilePixels;
+  // 贴图行号 → UV 的 v（画布第 0 行是图标顶部，对应 v = 1）
+  const vOf = (row: number): number => (tilePixels - row) / tilePixels;
+  const full: [number, number] = [0, tilePixels];
+
+  // 面序与 `BoxGeometry` 一致：+X -X +Y -Y +Z -Z
+  const faces: readonly (readonly [number, number, number, number])[] = [
+    [bounds.right - 1, bounds.right, ...full], // +X：右侧那一列
+    [bounds.left, bounds.left + 1, ...full], // -X：左侧那一列
+    [...full, vOf(bounds.top + 1), vOf(bounds.top)], // +Y：上面那一行
+    [...full, vOf(bounds.bottom), vOf(bounds.bottom - 1)], // -Y：下面那一行
+    [...full, ...full], // +Z：整张图标
+    [...full, ...full], // -Z：整张图标
+  ];
+
+  for (let face = 0; face < faces.length; face++) {
+    const [fu0, fu1, fv0, fv1] = faces[face]!;
+    for (let corner = 0; corner < 4; corner++) {
+      const [cu, cv] = FACE_UV_PATTERN[corner]!;
+      uv.setXY(
+        face * 4 + corner,
+        u0 + (fu0 + cu * (fu1 - fu0)) * du,
+        v0 + (fv0 + cv * (fv1 - fv0)) * dv,
+      );
+    }
+  }
+  uv.needsUpdate = true;
+}

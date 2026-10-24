@@ -1225,6 +1225,9 @@ export class SettingsScreen {
     // 第二块：导入 / 导出这类动作，各占半行
     const gameActions = this.makeBlock(game);
     gameActions.appendChild(this.makeResourcePackRow());
+    // 批次 20261025-0117：资源包这一项长期被当作"换个官方外观"的入口，法律上
+    // 本应用只能让玩家导入**自己拥有的**包，不能提供、也不能引导去下载官方素材。
+    gameActions.appendChild(this.makePackHint());
     // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起只留「导出」
     if (this.actions.onDiagnosticsExport) gameActions.appendChild(this.makeDiagnosticsRow());
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
@@ -1246,6 +1249,11 @@ export class SettingsScreen {
     footer.appendChild(resetButton);
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
+    // 批次 20261025-0117：首页那句"非官方"页脚被用户删掉了（20261024-1152 觉得碍眼），
+    // 但商店版本需要一个**用户自己找得到**的免责位置——放设置页底部、恢复默认之上。
+    // 用 `prepend` 而不是改上面的组装顺序：那段顺序有一条测试盯着"footer 一定在整页最底部"，
+    // 插在中间会把它顶出断言允许的距离。
+    footer.prepend(this.makeFooterNotice());
 
     this.root.append(panel, modal);
     panel.append(menuPage, settingsPage);
@@ -1903,6 +1911,32 @@ export class SettingsScreen {
 
     row.append(name, button, status, input);
     return row;
+  }
+
+  /**
+   * 资源包行的免责说明（批次 20261025-0117）。
+   *
+   * 单独一条而不是塞进行的 `title`：`title` 只有鼠标悬停才看得见，而这句话是**给审核与
+   * 权利人看的**（"我们只让玩家导入自己的包"），必须在不交互时就可见。
+   */
+  private makePackHint(): HTMLElement {
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+    note.textContent = t('settings.resourcePack.hint');
+    return note;
+  }
+
+  /**
+   * 设置页底部的「非官方」声明（批次 20261025-0117）。
+   *
+   * 措辞刻意只陈述"与 Mojang / Microsoft 无关 + 素材全部由代码生成"，不讲"复刻的是哪个
+   * 游戏"——免责声明的价值在于划清关系，写清对象反而等于自认使用了他人作品。
+   */
+  private makeFooterNotice(): HTMLElement {
+    const notice = document.createElement('p');
+    notice.className = 'settings-notice';
+    notice.textContent = t('settings.notice');
+    return notice;
   }
 
   /**

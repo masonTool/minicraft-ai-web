@@ -353,7 +353,7 @@ console.log('\n[黏液球、黏液块与那两条配方]');
   check('图标在图集名单里', TILES.has(itemDef(Item.SLIME_BALL)!.tile));
   check('黏液球在创造物品栏里拿得到', CREATIVE_ITEMS.includes(Item.SLIME_BALL));
 
-  equal('黏液块的注册名', blockDef(Block.SLIME_BLOCK).name, 'minecraft:slime_block');
+  equal('黏液块的注册名', blockDef(Block.SLIME_BLOCK).name, 'minicraft:slime_block');
   equal('硬度 0（原版：徒手一拍就碎）', blockHardness(Block.SLIME_BLOCK), 0);
   check('贴图在图集里', blockTiles(Block.SLIME_BLOCK, 0).every((tile) => TILES.has(tile)));
   equal('中文名', itemLabel(Block.SLIME_BLOCK), '黏液块');

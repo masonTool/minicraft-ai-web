@@ -26,6 +26,7 @@ import { misc } from './misc.ts';
 import { advancement } from './advancement.ts';
 import { notice } from './notice.ts';
 import { hud } from './hud.ts';
+import { say } from './say.ts';
 
 export const en = {
   ...menu,
@@ -46,4 +47,5 @@ export const en = {
   ...advancement,
   ...notice,
   ...hud,
+  ...say,
 } satisfies Messages;

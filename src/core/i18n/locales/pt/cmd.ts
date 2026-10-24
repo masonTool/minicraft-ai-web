@@ -206,7 +206,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "Requer modo criativo",
   "cmd.help.screen.note": "As listas mostram nomes em português e o comando usa automaticamente o id em inglês; os campos de texto de itens e blocos também aceitam português.",
   "cmd.help.screen.action": "Ação",
-  "cmd.help.screen.fill": "Inserir no chat",
+  "cmd.help.screen.run": "Executar",
   "cmd.help.screen.optional": "{label} (opcional)",
   "cmd.help.screen.none": "Não preencher",
   "cmd.help.screen.customEllipsis": "Personalizado…",

@@ -25,14 +25,14 @@
   const glowstone = mc.blockId('glowstone');
   check('peer block id resolved', glowstone > 0, `id=${glowstone}`);
   const placed = mc.probe(0, 100, 0).block;
-  check('peer-placed block exists in local world', placed === 'minecraft:glowstone', `${placed} at (0,100,0)`);
+  check('peer-placed block exists in local world', placed === 'minicraft:glowstone', `${placed} at (0,100,0)`);
 
   // 只断言"收到了聊天"，具体文字打在 detail 里：中文字符串参与断言容易受编码影响
   check('chat message received', state.chat.length > 0, `chat="${state.chat}"`);
 
   // 方块同步应当是"双向可用"的：本地改一块，队友那边也应该收到（这里只验证发送侧没抛错）
   mc.place(1, 100, 0, glowstone);
-  check('local block change accepted locally', mc.probe(1, 100, 0).block === 'minecraft:glowstone');
+  check('local block change accepted locally', mc.probe(1, 100, 0).block === 'minicraft:glowstone');
 
   return lines.join('\n');
 })();

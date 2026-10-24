@@ -141,7 +141,7 @@ function lampOn(world: RedstoneStub): boolean {
 
 console.log('\n[注册与形状]');
 {
-  equal('注册名', blockDef(DETECTOR).name, 'minecraft:daylight_detector');
+  equal('注册名', blockDef(DETECTOR).name, 'minicraft:daylight_detector');
   equal('id 接着上一批的最后一个', DAYLIGHT_DETECTOR_ID, Block.SCAFFOLDING + 1);
   equal('中文名（官方译名在红石元件那张表里，不重复登记）', itemLabel(DETECTOR), '阳光探测器');
   check('有中文说明（写清"按天光输出""右键反向"）', hasDescription(DETECTOR));
@@ -289,7 +289,7 @@ console.log('\n[配方与掉落]');
     for (let id = 0; id < 256; id++) {
       const def = BLOCKS[id];
       // 变体表里橡木那一行的母方块名叫 oak_planks，所以台阶名是 oak_planks_slab
-      if (def?.name === 'minecraft:oak_planks_slab') return id;
+      if (def?.name === 'minicraft:oak_planks_slab') return id;
     }
     return 0;
   })();

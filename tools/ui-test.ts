@@ -13,7 +13,9 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { t } from '../src/core/i18n/I18n.ts';
+import { t, tableOf } from '../src/core/i18n/I18n.ts';
+// 语言全集：跨语言一致性断言要遍历它，而不是手写六个码（以后加语言不用改测试）
+import { LOCALES } from '../src/core/i18n/locale.ts';
 import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
 import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
 import {
@@ -1218,6 +1220,33 @@ console.log('\n[携带版细节收口（批次 159）]');
       // 必须 !important：`.inv-panel.creative-ui.pocket-ui .inv-creative-controls` 那条
       // `display: flex` 是 4 个类，普通选择器压不过
       css.includes('.inv-panel .inv-creative-controls.search-hidden { display: none !important; }'),
+  );
+  // 批次 20261024-1721（用户）：创造网格要**填满面板剩余高度**，不能再用固定上限
+  // （42vh / 174px 在矮横屏上会在列表下面留一大片空白）。
+  check(
+    '创造网格填满剩余高度（不再被 42vh / 174px 封顶）',
+    // ⚠️ 认"声明"（带分号）而不是纯文本：规则块里的注释也会提到这两个旧值
+    !/\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*max-height: 174px;/.test(
+      css.replace(/\s+/g, ' '),
+    ) &&
+      !/\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*max-height: min\(42vh[^;]*;/.test(
+        css.replace(/\s+/g, ' '),
+      ) &&
+      /\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')) &&
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')),
+  );
+  // 批次 20261024-1735（用户："改完之后滚动条不见、列表也不能滚动"）：
+  // 创造栏必须拿到**确定高度**，否则里面的网格 `flex: 1 1 auto` 会跟着长成内容那么高，
+  // 既不溢出（自绘滚动条 `max > 1` 不成立 → 整根隐藏）也滚不动，多出来的行被裁掉。
+  check(
+    '创造栏显式拉伸到整格高度（否则网格长成内容高：滚动条消失且滚不动）',
+    /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative-section \{[^}]*align-self: stretch;[^}]*height: 100%;[^}]*max-height: 100%;/.test(
+      css.replace(/\s+/g, ' '),
+    ) &&
+      // 生存分类栏那条更早就有，两条必须同口径（只留一条就会出现"一栏能滚一栏不能"）
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-category-section \{[^}]*align-self: stretch;[^}]*height: 100%;/.test(
+        css.replace(/\s+/g, ' '),
+      ),
   );
 
   // ④ 点物品 → 快捷栏上方的小说明
@@ -3361,6 +3390,43 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       settingsSrc.includes('for (const refresh of this.refreshers) refresh();') &&
       settingsSrc.includes("resetButton.id = 'settings-reset'"),
   );
+  // 合规（批次 20261025-0117）：商店版本要有一个**用户自己找得到**的免责位置。
+  // 首页那句页脚被用户删掉了，所以挪到设置页底部；资源包那一行再单独一句"只导自己的包"。
+  // 三处都得在：源里引用了这两个键、CSS 有对应的两条样式、六种语言都有这两条文案——
+  // 少任何一处都不会报错，只会静默地少一行灰字（界面上根本没人会发现）。
+  const settingsHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check(
+    '设置页有「非官方」声明与资源包免责，且六语言齐全',
+    settingsSrc.includes("t('settings.notice')") &&
+      settingsSrc.includes("t('settings.resourcePack.hint')") &&
+      settingsHtml.includes('.settings-notice {') &&
+      settingsHtml.includes('.settings-note {') &&
+      LOCALES.every((locale) => {
+        const table = readFileSync(
+          new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+          'utf8',
+        );
+        return /['"]settings\.notice['"]/.test(table) && /['"]settings\.resourcePack\.hint['"]/.test(table);
+      }),
+  );
+  // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，
+  // 而网页版的"分发物"就是 `dist/`——所以这两份必须是 `public/` 里的静态文件，
+  // 不是只躺在仓库根目录（`vite build` 只复制 `public/`）。
+  let noticesOk = false;
+  let privacyOk = false;
+  try {
+    const notices = readFileSync(new URL('../public/third-party-notices.txt', import.meta.url), 'utf8');
+    noticesOk =
+      notices.includes('three.js authors') && notices.includes('Einar Otto Stangvik') && notices.includes('MIT');
+  } catch {
+    noticesOk = false;
+  }
+  try {
+    privacyOk = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8').includes('Privacy Policy');
+  } catch {
+    privacyOk = false;
+  }
+  check('第三方声明与隐私政策住在 public/ 里（会随构建产物分发）', noticesOk && privacyOk);
   // 批次 202：恢复默认必须带 `reset` 标记出去——分辨率倍率与装饰层档位不在 `GameSettings` 里，
   // 主程序不收到这个标记的话，玩家会看到"点了恢复默认，画面还是糊的 / 云还是没有"
   check(
@@ -3778,10 +3844,20 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
   check(
     '被截断的消息有明确的"展开"提示（不是只剩省略号）',
-    html.includes("content: '展开';") &&
+    // 批次 20261025-0105：角标文字不再写死在 CSS 里（静态样式不参与切语言重绘），
+    // 改由 `data-expand-badge` 提供，所以这里按**属性 + 键**判，不再找中文字面量
+    html.includes('content: attr(data-expand-badge);') &&
       html.includes('#chat.open .chat-line.collapsible::after') &&
       // 批次 617（Q14）：文案改走 t('chat.expand')，断言跟到键
-      chatSrc.includes("html.title = t('chat.expand');"),
+      chatSrc.includes("html.title = t('chat.expand');") &&
+      chatSrc.includes("html.dataset.expandBadge = t('chat.expandBadge');") &&
+      // 角标文字只住在语言表里：六种语言都得有这一条。少一条不会报错，只会让
+      // 那种语言的角标退化成一个空底色（`content` 取不到属性），肉眼很难发现。
+      LOCALES.every((locale) =>
+        /['"]chat\.expandBadge['"]/.test(
+          readFileSync(new URL(`../src/core/i18n/locales/${locale.code}/chat.ts`, import.meta.url), 'utf8'),
+        ),
+      ),
   );
   check(
     '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',
@@ -3805,15 +3881,18 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes('this.inputEl.value = \'\';') &&
       !chatSrc.includes('this.inputEl.value = prefill; this.close();'),
   );
+  // 批次 20261025（用户）：提示行里的 help 不再"填进输入框等玩家按发送"，
+  // 而是直接打开指令页 —— 省掉每一条指令都要走两道手续。
   check(
-    '提示行里的 help 可点击并填入 /help（不再单独占一行）',
+    '提示行里的 help 直接打开指令页（不再填进输入框）',
     chatSrc.includes('private renderHint(text: string): void') &&
       chatSrc.includes("help.className = 'chat-help-link'") &&
-      chatSrc.includes("this.inputEl.value = '/help';") &&
-      chatSrc.includes("if (this.inputEl.value === '/help') return;") &&
-      !/help\.addEventListener\('pointerdown'[\s\S]{0,700}?this\.updateHint\(\);/.test(chatSrc) &&
-      !/help\.addEventListener\('pointerdown'[\s\S]{0,500}?this\.inputEl\.focus\(\)/.test(chatSrc) &&
-      chatSrc.includes("window.dispatchEvent(new Event('resize'))") &&
+      chatSrc.includes('onOpenHelp: (() => void) | null = null;') &&
+      chatSrc.includes('if (!this.onOpenHelp) return;') &&
+      chatSrc.includes('this.onOpenHelp();') &&
+      !chatSrc.includes("this.inputEl.value = '/help';") &&
+      !/help\.addEventListener\('pointerdown'[\s\S]{0,600}?this\.inputEl\.focus\(\)/.test(chatSrc) &&
+      appSrc.includes('this.chat.onOpenHelp = () => this.commandHelp.show();') &&
       !chatSrc.includes('chat-help-row') &&
       html.includes('.chat-help-link {'),
   );
@@ -3827,7 +3906,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('this.commandHelp.show(help[1]?.trim().split(/\\s+/)[0]);'),
   );
   check(
-    '命令帮助弹窗能搜索、切换命令、用表单生成并填入聊天框',
+    '命令帮助弹窗能搜索、切换命令、用表单生成命令',
     helpSrc.includes('commandHelpEntries()') &&
       helpSrc.includes('buildCommand(entry, this.variantIndex, this.values)') &&
       helpSrc.includes('suggestCommandValues(field.suggest!, query, 8)') &&
@@ -3836,10 +3915,24 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       helpSrc.includes("item.addEventListener('click', (event) => {") &&
       // ⚠️ 多语言 P1-4：这两句文案已搬进 `cmd.help.screen.*`，断言跟着改成查键绑定，
       // 不再匹配中文原文（否则每次搬文案都假红一次）
-      helpSrc.includes("this.searchEl.placeholder = t('cmd.help.screen.search')") &&
-      helpSrc.includes("fill.textContent = t('cmd.help.screen.fill')") &&
-      appSrc.includes('this.commandHelp.onUse = (command) =>') &&
-      appSrc.includes('this.chat.openWith(command, { focus: true });'),
+      helpSrc.includes("this.searchEl.placeholder = t('cmd.help.screen.search')"),
+  );
+  // 批次 20261025（用户）：去掉"填入聊天框"，改成指令名那一行右端的**确认**，点完直接执行
+  check(
+    '指令页的确认按钮在指令名那一行右端，且点一下直接执行',
+    helpSrc.includes("confirm.className = 'cmd-help-confirm'") &&
+      helpSrc.includes("confirm.textContent = t('cmd.help.screen.run')") &&
+      helpSrc.includes('this.onExecute?.(command)') &&
+      helpSrc.includes('confirm.disabled = command === null;') &&
+      // 旧的"填入聊天框"整套已经删干净（按钮、样式、回填路径）
+      !helpSrc.includes('cmd-help-fill') &&
+      !helpSrc.includes('onUse') &&
+      !html.includes('.cmd-help-fill') &&
+      html.includes('.cmd-help-confirm {') &&
+      html.includes('margin-left: auto;') &&
+      appSrc.includes('this.commandHelp.onExecute = (command) =>') &&
+      appSrc.includes('this.handleChatSubmit(command);') &&
+      !appSrc.includes('this.chat.openWith(command, { focus: true });'),
   );
   check(
     '命令帮助弹窗接入返回层级/界面开关/销毁',
@@ -3867,12 +3960,23 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes("diag.event('world', 'weather', {"),
   );
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  /**
+   * 中文表的所有值拼成一条长串。
+   *
+   * 多语言（批次 20261025-0105）之后，这些话不再躺在 `main.ts` 的源码里，
+   * 所以"这句话还在"的判据从"源码里有这几个字"变成"表里有这几个字"——
+   * 守的东西没变（这条路径会给出带原因与建议的提示），只是换了存放位置。
+   */
+  const sayZh = Object.values(tableOf('zh')).join('\n');
   check(
     '掉血播报同时给出「现象 + 原因」（含具体生物名）',
     appSrc.includes('emitPlayerNotices()') &&
       appSrc.includes('takeDamageLog()') &&
       appSrc.includes('damageReason(') &&
-      appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
+      // 多语言（批次 20261025-0105）：整句搬进 `say.*`，所以这里**按文案键**判，
+      // 再回表里确认中文那句还在（判的仍然是"这条路径会给出提示"，不是"提示的措辞"）
+      appSrc.includes("tp('say.damage.taken'") &&
+      sayZh.includes('受到 {amount} 点伤害：') &&
       // 多语言 P2-4：种类名不再直接读 `type.name`（字段已改成 `nameKey`），走 `mobLabel()`
       mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this)"),
   );
@@ -3904,11 +4008,17 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
   check(
     '饥饿 / 氧气 / 着火 / 低血量也写了原因与建议',
-    appSrc.includes('（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）') &&
-      appSrc.includes('氧气不足（正在水下憋气') &&
-      appSrc.includes('你着火了（站在火/岩浆里或被点燃）') &&
-      appSrc.includes('生命值偏低') &&
-      appSrc.includes('饥饿值耗尽（体力透支）'),
+    // 句子搬进 `say.*`：源码里按**键**判，措辞回中文表里核对
+    appSrc.includes("tp('say.food.loss'") &&
+      appSrc.includes("tp('say.air.low'") &&
+      appSrc.includes("t('say.burning'") &&
+      appSrc.includes("tp('say.health.low'") &&
+      appSrc.includes("t('say.food.starving'") &&
+      sayZh.includes('（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）') &&
+      sayZh.includes('氧气不足（正在水下憋气') &&
+      sayZh.includes('你着火了（站在火/岩浆里或被点燃）') &&
+      sayZh.includes('生命值偏低') &&
+      sayZh.includes('饥饿值耗尽（体力透支）'),
   );
 }
 
@@ -4023,7 +4133,7 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
   check(
     '船物品存在（id 1478，堆叠 1）',
-    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
+    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minicraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
   );
   check(
     '5 块木板摆成 U 形 → 一艘船',
@@ -4338,7 +4448,7 @@ console.log('\n[冰霜行者（批次 263）]');
   check(
     '霜冰方块注册（id 586，无物品形态）',
     blocksSrc.includes('export const FROSTED_ICE_ID = 586') &&
-      blocksSrc.includes("name: 'minecraft:frosted_ice'") &&
+      blocksSrc.includes("name: 'minicraft:frosted_ice'") &&
       blocksSrc.includes('FROSTED_ICE: FROSTED_ICE_ID'),
   );
   check(
@@ -4389,7 +4499,7 @@ console.log('\n[弩（批次 265）]');
   check(
     '弩物品（id 1510，耐久 465）与配方',
     itemsSrc.includes('CROSSBOW: 1510') &&
-      itemsSrc.includes("name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
+      itemsSrc.includes("name: 'minicraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
       recipesSrc.includes('result: { id: Item.CROSSBOW, count: 1 }'),
   );
   check(

@@ -56,16 +56,22 @@ export const BOX_FACE_SHADE_ORDER: readonly number[] = [
  * 顶点数对不上时**什么都不做**——宁可不加这层明暗，也不要算错面把顶面涂成暗的。
  * 材质那边要同时打开 `vertexColors`，否则属性会被忽略。
  *
+ * `shades` 可替换：手持物品的正反两面要按"图标满亮度"来（±Z = 1），否则同一件东西
+ * 在第一人称和在第三人称会被压暗一档，看着像两件物品。
+ *
  * @returns 是否真的写进去了（测试与调用方都可以据此断言）
  */
-export function applyBoxFaceShade(geometry: THREE.BufferGeometry): boolean {
+export function applyBoxFaceShade(
+  geometry: THREE.BufferGeometry,
+  shades: readonly number[] = BOX_FACE_SHADE_ORDER,
+): boolean {
   const position = geometry.getAttribute('position');
   if (!position || position.count !== 24) return false;
   if (geometry.getAttribute('color')) return true; // 已经刷过，别重复分配
 
   const colors = new Float32Array(24 * 3);
   for (let vertex = 0; vertex < 24; vertex++) {
-    const shade = BOX_FACE_SHADE_ORDER[Math.floor(vertex / 4)]!;
+    const shade = shades[Math.floor(vertex / 4)]!;
     colors[vertex * 3] = shade;
     colors[vertex * 3 + 1] = shade;
     colors[vertex * 3 + 2] = shade;

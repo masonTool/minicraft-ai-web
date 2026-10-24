@@ -18,11 +18,6 @@ import type { PluralTable } from '../../plural.ts';
 export const plural = {
   // 移动距离：1 блок / 2 блока / 5 блоков
   'statistics.blocks': { one: '{count} блок', few: '{count} блока', many: '{count} блоков' },
-  // 建造工具：1 блок / 2 блока / 5 блоков（动词也要跟着变：Выделен / Выделено）
-  'buildtools.select.done': { one: 'Выделен {volume} блок', few: 'Выделено {volume} блока', many: 'Выделено {volume} блоков' },
-  'buildtools.fill.done': { one: 'Заполнен {count} блок', few: 'Заполнено {count} блока', many: 'Заполнено {count} блоков' },
-  'buildtools.copy.done': { one: 'Скопирован {count} блок', few: 'Скопировано {count} блока', many: 'Скопировано {count} блоков' },
-  'buildtools.paste.done': { one: 'Вставлен {count} блок', few: 'Вставлено {count} блока', many: 'Вставлено {count} блоков' },
   // 还能酿几次：1 раз / 2 раза / 5 раз（many 与 one 同形，这是俄语的特点）
   'station.brewLeft': { one: 'Можно сварить ещё {count} раз', few: 'Можно сварить ещё {count} раза', many: 'Можно сварить ещё {count} раз' },
 } satisfies PluralTable;

@@ -1,7 +1,7 @@
 {
   "name": "Minicraft",
   "short_name": "Minicraft",
-  "description": "浏览器里的《我的世界》基岩版 1.18 复刻：无限地形、生存、合成、生物、联机与存档",
+  "description": "浏览器里的方块世界：无限地形、生存与创造、多世界存档，无需安装",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "./",

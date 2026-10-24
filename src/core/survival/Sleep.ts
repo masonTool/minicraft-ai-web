@@ -13,6 +13,8 @@
  *  - 睡醒的时刻是**黎明**（本项目 `timeOfDay` 语义下就是 0）。
  */
 
+import { t } from '../i18n/I18n.ts';
+
 /** 敌对生物"打扰睡眠"的检测范围：水平 ±8 格 */
 export const SLEEP_MONSTER_RADIUS = 8;
 /** 敌对生物"打扰睡眠"的检测范围：竖直 ±5 格 */
@@ -89,13 +91,17 @@ export interface SleepContext {
  *
  * 提示按"最具体 → 最笼统"排序（这条经验在铁砧与锻造台上各踩过一次）：
  * 先报"附近有怪物"（玩家能立刻去解决），再报"时候不对"。
+ *
+ * 多语言（批次 20261025-0105）：返回的仍是"一句话"，但**取值这一刻**才查表
+ * （`say.sleep.refusal.*`）。没改成返回原因码是因为调用点只有一处、而离线断言
+ * 按这句话匹配——换成码等于让 `bed-test` 的 4 条断言跟着改，换不回可读性。
  */
 export function sleepRefusal(context: SleepContext): string | null {
-  if (context.dead) return '你正躺着，先起来再说';
-  if (context.obstructed) return '床的上方被挡住了，先清出空间';
-  if (context.monstersNear) return '你现在无法休息，附近有怪物';
+  if (context.dead) return t('say.sleep.refusal.dead');
+  if (context.obstructed) return t('say.sleep.refusal.obstructed');
+  if (context.monstersNear) return t('say.sleep.refusal.monsters');
   if (!isNight(context.timeOfDay) && !context.thundering) {
-    return '你只能在夜晚或雷暴时入睡';
+    return t('say.sleep.refusal.daytime');
   }
   return null;
 }

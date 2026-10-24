@@ -161,7 +161,7 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
    */
   const ratio = elapsed / Math.max(overworldMs, 1);
 
-  const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
+  const named = (id: number) => blockDef(id).name.replace('minicraft:', '');
   console.log(
     `  ${SIZE}×${SIZE} 区块耗时 ${elapsed.toFixed(0)}ms（含地物与结构）· 纯地形 ${terrainOnlyMs.toFixed(0)}ms` +
       `（地物占 ${(elapsed / Math.max(terrainOnlyMs, 1)).toFixed(1)} 倍，正常）` +

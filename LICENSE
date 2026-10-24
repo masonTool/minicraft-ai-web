@@ -1,0 +1,41 @@
+Copyright (c) 2026 Minicraft. All rights reserved.
+
+# 授权说明 / License
+
+本仓库（下称"本项目"）的**源代码、程序化贴图与音效生成逻辑、以及全部文案**归本项目作者所有，
+保留一切权利。
+
+## 中文
+
+未经作者书面许可，任何人不得：
+
+1. 复制、分发、转售本项目的源代码或构建产物；
+2. 修改后以任何形式再发布（含改名、去水印、二次打包上架应用商店）；
+3. 将本项目的全部或部分用于商业产品、付费服务或带广告的分发渠道；
+4. 以本项目名义发布任何内容，或暗示与本项目存在官方关系。
+
+**允许**：在保留本文件与 `THIRD-PARTY-NOTICES.md` 完整内容的前提下，为学习与研究目的
+在本地阅读、编译、运行本项目源码；在引用本项目时注明出处。
+
+## English
+
+All rights reserved. No part of this repository (source code, procedurally generated
+textures and sounds, and all copy) may be copied, redistributed, resold, republished in
+modified form, or used in a commercial product without prior written permission from the
+author.
+
+You may read, compile and run the source locally for study and research, provided this
+file and `THIRD-PARTY-NOTICES.md` are kept intact, and you attribute the origin when
+quoting it.
+
+## 第三方组件 / Third-party components
+
+本项目使用了 MIT 许可的第三方库，其版权声明与许可全文见 `THIRD-PARTY-NOTICES.md`
+（构建产物内另有一份 `third-party-notices.txt`）。
+
+## 关于名称与素材 / Trademarks and assets
+
+本项目是**非官方的爱好者项目**，与 Mojang Studios、Microsoft 及其关联公司**没有任何关系**，
+未获其授权或认可。项目中**不包含**任何来自其他游戏的贴图、音效、音乐、字体或语言文件：
+所有贴图与音效均在运行时由代码生成，画面（含画作）与文案均为本项目自创。
+第三方商标归各自权利人所有。

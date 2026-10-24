@@ -28,6 +28,7 @@
 /** 折线点：时间比例 0~1 → 值（包络是 0~1，音高是基频倍率） */
 // 多语言 P2-6：标签表走 `label.*`
 import { t } from '../i18n/I18n.ts';
+import { shortId } from '../registry/ids.ts';
 
 export type LayerPoint = readonly [number, number];
 
@@ -874,7 +875,7 @@ export function soundGroupLabel(group: SoundGroup): string {
  * 引擎本身需要 AudioContext（浏览器才有），但"什么材质响什么声"是纯逻辑。
  */
 export function breakSoundFor(blockName: string): SoundKind {
-  const name = blockName.replace('minecraft:', '');
+  const name = shortId(blockName);
   if (name.includes('glass') || name.includes('ice')) return 'break_glass';
   if (name.includes('wool') || name.includes('wart') || name.includes('carpet')) return 'break_wool';
   if (name.includes('sand') || name.includes('gravel') || name.includes('soul_soil')) return 'break_sand';
@@ -914,7 +915,7 @@ export function breakSoundFor(blockName: string): SoundKind {
  * `carpet`/`wool` 归软材质——与 `breakSoundFor` 的分类口径保持一致，但多了一档"砂砾"。
  */
 export function stepSoundFor(blockName: string): SoundKind {
-  const name = blockName.replace('minecraft:', '');
+  const name = shortId(blockName);
   if (name.includes('snow')) return 'step_snow';
   if (name.includes('wool') || name.includes('carpet') || name.includes('wart')) return 'step_wool';
   if (name.includes('gravel')) return 'step_gravel';
@@ -956,7 +957,7 @@ export function stepSoundFor(blockName: string): SoundKind {
  * 再多分档对"每 0.2 秒响一次"的摩擦声没有意义，反而会听出奇怪的跳变。
  */
 export function digSoundFor(blockName: string): SoundKind {
-  const name = blockName.replace('minecraft:', '');
+  const name = shortId(blockName);
   if (name.includes('glass') || name.includes('ice')) return 'dig_glass';
   if (
     name.includes('planks') ||
@@ -987,7 +988,7 @@ export function digSoundFor(blockName: string): SoundKind {
 
 /** 方块名 → 放置音效（批次 232：以前所有方块共用一个 `place`） */
 export function placeSoundFor(blockName: string): SoundKind {
-  const name = blockName.replace('minecraft:', '');
+  const name = shortId(blockName);
   if (name.includes('glass') || name.includes('ice')) return 'place_glass';
   if (name.includes('wool') || name.includes('carpet') || name.includes('wart')) return 'place_wool';
   if (name.includes('sand') || name.includes('gravel') || name.includes('soul_soil')) return 'place_sand';

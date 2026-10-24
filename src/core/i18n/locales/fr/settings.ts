@@ -78,6 +78,8 @@ export const settings = {
   "settings.import": "Importer",
   "settings.importTitle": "Choisir un pack .mcpack / .zip",
   "settings.notChosen": "Aucun",
+  "settings.resourcePack.hint": "Importe uniquement des packs de ressources que tu possèdes. Cette application ne fournit ni ne distribue aucun contenu officiel.",
+  "settings.notice": "Projet de fan non officiel, sans lien avec Mojang ou Microsoft. Toutes les textures et tous les sons sont générés par le code à l’exécution ; aucun contenu officiel n’est inclus.",
   "settings.opt.unlimited": "Illimité",
   "settings.opt.fps30": "30 i/s",
   "settings.opt.fps60": "60 i/s",

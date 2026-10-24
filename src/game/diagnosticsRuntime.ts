@@ -20,6 +20,7 @@ import {
   type LogEvent,
   type LogSession,
 } from './diagnostics.ts';
+import { saveIssueReport } from '../core/save/SaveIssues.ts';
 
 /** localStorage 的键（换版本就换键，旧的留着也不影响启动） */
 export const DIAG_STORAGE_KEY = 'mc.diag.v1';
@@ -188,7 +189,9 @@ export class DiagnosticsRuntime {
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
-      meta: { ...this.baseMeta(), ...this.metaProvider(), ...extra },
+      // 批次 20261025-0117（合规 5）：读档时被跳过的方块 / 物品 / 画，随日志一起导出——
+      // 玩家报"我的东西没了"时，这份账是唯一能对照的线索（控制台在手机上根本看不到）。
+      meta: { ...this.baseMeta(), ...this.metaProvider(), saveIssues: saveIssueReport(), ...extra },
       sessions: this.sessionsForExport(),
     };
   }

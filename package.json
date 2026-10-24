@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Minecraft 基岩版 1.18 复刻（Web / WebGL2）",
+  "description": "方块沙盒（Web / WebGL2）：无限地形、生存、合成与联机",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build",
@@ -175,7 +175,6 @@
     "test:frame": "esbuild tools/frame-test.ts --bundle --platform=node --format=esm --outfile=.tmp/frame-test.mjs --log-level=error && node .tmp/frame-test.mjs",
     "test:advancement": "esbuild tools/advancement-test.ts --bundle --platform=node --format=esm --outfile=.tmp/advancement-test.mjs --log-level=error && node .tmp/advancement-test.mjs",
     "test:tutorial": "esbuild tools/tutorial-test.ts --bundle --platform=node --format=esm --outfile=.tmp/tutorial-test.mjs --log-level=error && node .tmp/tutorial-test.mjs",
-    "test:buildtools": "esbuild tools/buildtools-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildtools-test.mjs --log-level=error && node .tmp/buildtools-test.mjs",
     "test:minigame": "esbuild tools/minigame-test.ts --bundle --platform=node --format=esm --outfile=.tmp/minigame-test.mjs --log-level=error && node .tmp/minigame-test.mjs",
     "test:jumpiso": "esbuild tools/jump-iso-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-iso-test.mjs --log-level=error && node .tmp/jump-iso-test.mjs",
     "test:jumpmodel": "esbuild tools/jump-model-test.ts --bundle --platform=node --format=esm --outfile=.tmp/jump-model-test.mjs --log-level=error && node .tmp/jump-model-test.mjs",

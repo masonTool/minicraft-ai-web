@@ -322,9 +322,9 @@ class FakeWorld implements CommandContext {
   }
   /** 方块信息（批次 479）：假世界只有 (0,64,0) 是石头，其余空气 */
   blockInfoAt(x: number, y: number, z: number): { id: number; name: string; state: number } | null {
-    if (x === 0 && y === 64 && z === 0) return { id: 1, name: 'minecraft:stone', state: 0 };
+    if (x === 0 && y === 64 && z === 0) return { id: 1, name: 'minicraft:stone', state: 0 };
     // 容器（批次 623）：(2,64,0) 是箱子，专门给 `/data get|merge block` 用
-    if (x === 2 && y === 64 && z === 0) return { id: 98, name: 'minecraft:chest', state: 0 };
+    if (x === 2 && y === 64 && z === 0) return { id: 98, name: 'minicraft:chest', state: 0 };
     return null;
   }
   /**
@@ -784,12 +784,12 @@ console.log('\n[难度与游戏规则的数据层]');
 
 console.log('\n[物品/方块名解析]');
 {
-  check('英文短名', resolveItemId('stone') === resolveItemId('minecraft:stone'));
+  check('英文短名', resolveItemId('stone') === resolveItemId('minicraft:stone'));
   check('中文名', resolveItemId('石头') === resolveItemId('stone'));
   check('数字 id', resolveItemId(String(resolveItemId('stone'))) === resolveItemId('stone'));
   check('未知名返回 undefined', resolveItemId('not_a_thing') === undefined);
   check('方块名解析（air 特判为 0）', resolveBlockId('air') === 0 && resolveBlockId('石头') === resolveItemId('stone'));
-  check('每个方块都能被解析出来（名字表与方块表一致）', BLOCKS.every((def) => !def || def.id === 0 || resolveBlockId(def.name.replace('minecraft:', '')) === def.id));
+  check('每个方块都能被解析出来（名字表与方块表一致）', BLOCKS.every((def) => !def || def.id === 0 || resolveBlockId(def.name.replace('minicraft:', '')) === def.id));
 }
 
 // ---------------------------------------------------------------- 6. 经验（I5）
@@ -1061,7 +1061,7 @@ console.log('\n[记分板（M23，批次 402）]');
   run('/data get entity @e[type=zombie]');
   check('没有匹配时报错', out.lastError.includes('没有匹配到'), out.lastError);
   run('/data get block 0 64 0');
-  check('读方块', out.lastInfo.includes('minecraft:stone'), out.lastInfo);
+  check('读方块', out.lastInfo.includes('minicraft:stone'), out.lastInfo);
   check('回执带状态位', out.lastInfo.includes('状态位'), out.lastInfo);
   check('没有方块实体时明说', out.lastInfo.includes('没有方块实体'), out.lastInfo);
   run('/data get block 1 64 0');
@@ -1813,7 +1813,7 @@ console.log('\n[/clone 区域复制（批次 431）]');
     check(
       '进度显示中文标题（值仍是英文 id）',
       progress.options!.some(
-        (option) => option.value === 'minecraft:story/root' && option.label.includes('我的世界'),
+        (option) => option.value === 'minicraft:story/root' && option.label.includes('我的世界'),
       ),
       progress.options!.slice(0, 2).map((option) => `${option.value}=${option.label}`).join(','),
     );

@@ -79,7 +79,7 @@ console.log('\n[方块与外观]');
 {
   // ⚠️ 别断言"它是最后一个方块"（`BLOCKS.length - 1`）：每加一个方块都会红（批次 59 的教训）
   equal('方块 id 紧接在木桶之后（479 → 480）', COMPOSTER, Block.BARREL + 1);
-  equal('注册名', blockDef(COMPOSTER).name, 'minecraft:composter');
+  equal('注册名', blockDef(COMPOSTER).name, 'minicraft:composter');
   equal('中文名', itemLabel(COMPOSTER), '堆肥桶');
   check('有物品说明', hasDescription(COMPOSTER));
   equal('分类是"功能方块"（右键可交互）', categoryOf(COMPOSTER), 'functional');

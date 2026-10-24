@@ -207,7 +207,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "Kreativmodus nötig",
   "cmd.help.screen.note": "Auswahlfelder zeigen deutsche Namen, der Befehl nutzt automatisch die englische ID; Textfelder für Gegenstände und Blöcke akzeptieren auch deutsche Namen.",
   "cmd.help.screen.action": "Aktion",
-  "cmd.help.screen.fill": "In den Chat übernehmen",
+  "cmd.help.screen.run": "Ausführen",
   "cmd.help.screen.optional": "{label} (optional)",
   "cmd.help.screen.none": "Leer lassen",
   "cmd.help.screen.customEllipsis": "Eigene Eingabe…",

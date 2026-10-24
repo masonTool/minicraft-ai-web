@@ -17,6 +17,7 @@
  */
 
 import type { DimensionId } from '../gen/Dimension.ts';
+import { hasNamespace, shortId } from '../registry/ids.ts';
 
 export interface StructureNameEntry {
   /** 命令里写的名字（= 生成器内部 kind） */
@@ -75,7 +76,7 @@ export const STRUCTURE_NAME_COUNT = STRUCTURE_NAMES.length;
 export function findStructureName(raw: string): StructureNameEntry | null {
   const text = raw.trim().toLowerCase();
   if (text.length === 0) return null;
-  if (text.startsWith('minecraft:')) return findStructureName(text.slice('minecraft:'.length));
+  if (hasNamespace(text)) return findStructureName(shortId(text));
   for (const entry of STRUCTURE_NAMES) {
     if (entry.key === text) return entry;
     if (entry.alias?.includes(text)) return entry;

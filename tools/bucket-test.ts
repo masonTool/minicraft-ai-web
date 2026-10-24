@@ -156,7 +156,7 @@ console.log('\n[下雨接水：走随机刻，判据用天光]');
 console.log('\n[方块 / 物品 / 贴图 / 配方]');
 {
   const def = blockDef(Block.CAULDRON);
-  check('炼药锅已注册', def !== undefined && def.name === 'minecraft:cauldron');
+  check('炼药锅已注册', def !== undefined && def.name === 'minicraft:cauldron');
   equal('形状借堆肥桶那一副（四面板条 + 薄底）', def.shape, 'composter');
   check('岩浆锅那张贴图也在图集里', (TILE_ORDER as readonly string[]).includes('cauldron_lava'));
   equal('中文名', itemLabel(Block.CAULDRON), '炼药锅');

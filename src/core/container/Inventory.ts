@@ -18,6 +18,8 @@ import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
 import { sanitizeFirework, type FireworkData } from '../items/Firework.ts';
 import { sanitizeMap, type MapData } from '../items/Map.ts';
 import { BANNER_PATTERN_COUNT } from '../registry/blockState.ts';
+// 读档丢东西时记账（纯数据，不碰 DOM；见 `save/SaveIssues.ts`）
+import { noteSaveIssue } from '../save/SaveIssues.ts';
 import { isBannerId } from '../registry/blocks.ts';
 
 export interface ItemStack {
@@ -110,7 +112,12 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
   if (typeof candidate.id !== 'number' || typeof candidate.count !== 'number') return null;
   if (candidate.count <= 0) return null;
   // 物品被删过的旧存档：留着这个 id 只会让"背包里出现一件空白"，直接丢掉
-  if (itemDef(candidate.id) === undefined) return null;
+  // 批次 20261025-0117（合规 5）：丢掉是必须的（不能让一个坏 id 毁掉整档），但要记账——
+  // 否则玩家只会看到"我背包里那件东西没了"，而导出日志里查不到任何线索。
+  if (itemDef(candidate.id) === undefined) {
+    noteSaveIssue('item', `id=${String(candidate.id)}`);
+    return null;
+  }
 
   const stack: ItemStack = { id: candidate.id, count: candidate.count };
   // 旧存档没有 damage 字段；顺手夹紧非法值，避免坏存档把工具直接判成"已损坏"

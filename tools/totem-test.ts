@@ -95,7 +95,7 @@ console.log('\n[音效：三个上行音]');
 console.log('\n[物品]');
 {
   equal('id 是 1548', Item.TOTEM_OF_UNDYING, 1548);
-  equal('注册名', itemDef(Item.TOTEM_OF_UNDYING)?.name, 'minecraft:totem_of_undying');
+  equal('注册名', itemDef(Item.TOTEM_OF_UNDYING)?.name, 'minicraft:totem_of_undying');
   equal('不能叠（原版也是）', itemDef(Item.TOTEM_OF_UNDYING)?.maxStack, 1);
   equal('中文名', itemLabel(Item.TOTEM_OF_UNDYING), '不死图腾');
   check('贴图在图集里', TILE_ORDER.includes('item_totem_of_undying'));

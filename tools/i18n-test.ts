@@ -850,10 +850,10 @@ console.log('\n[成就数据层（批次 620）]');
 
   // 中文模式必须**原样返回**（不能因为加了英文就动了中文）
   setLanguage('zh');
-  // 批次 20261024-0223：`minecraft:story/root` 的标题按用户要求统一成品牌名 `Minicraft`
+  // 批次 20261024-0223：`minicraft:story/root` 的标题按用户要求统一成品牌名 `Minicraft`
   // （中文原来是「我的世界」），所以它**故意**与原文不同；其余成就中文必须原样返回。
   const zhChanged = ADVANCEMENTS.filter(
-    (a) => a.id !== 'minecraft:story/root' && (advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc),
+    (a) => a.id !== 'minicraft:story/root' && (advancementTitle(a) !== a.title || advancementDesc(a) !== a.desc),
   );
   check('中文模式下标题与说明原样不动', zhChanged.length === 0, zhChanged.slice(0, 2).map((a) => a.id).join(','));
 
@@ -1195,9 +1195,9 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   // 说明里的"中文原文"只在**连英文都没有**时才出现 —— 那时是"键漏了"的 bug，不是缺翻。
   check(
     '成就标题在德语下取德语（不缺翻时不落到中文原文）',
-    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }).length > 0 &&
-      advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }) !== '采集石头',
-    advancementTitle({ id: 'minecraft:story/mine_stone', title: '采集石头' }),
+    advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }).length > 0 &&
+      advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }) !== '采集石头',
+    advancementTitle({ id: 'minicraft:story/mine_stone', title: '采集石头' }),
   );
   resetLanguageForTest();
 
@@ -1526,7 +1526,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    */
   const findItemId = (name: string): number => {
     for (let id = 0; id < 2000; id += 1) {
-      if (itemDef(id)?.name?.replace('minecraft:', '') === name) return id;
+      if (itemDef(id)?.name?.replace('minicraft:', '') === name) return id;
     }
     return -1;
   };
@@ -1562,13 +1562,13 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    * 成就文案（P6-4，批次 20261024-0020）。
    *
    * 200 条（100 × 标题+描述）从「中文在 `advancements.ts`、英文在 `advancementText.data.ts`」的
-   * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minecraft:story/root` →
+   * 两层结构搬进 `locales/<code>/advancement.ts`，键由 id 派生（`minicraft:story/root` →
    * `advancement.story_root.title`）。本轮只翻德语，ru / fr / pt 仍是英文占位（巡查里有白名单）。
    */
   // `story/root` 例外：它的标题是品牌名（见上），其余中文必须逐条等于原文
   check(
     '中文成就标题与原文逐条一致（story_root 除外，它是品牌名）',
-    ADVANCEMENTS.filter((a) => a.id !== 'minecraft:story/root').every((a) => advancementTitle(a) === a.title),
+    ADVANCEMENTS.filter((a) => a.id !== 'minicraft:story/root').every((a) => advancementTitle(a) === a.title),
   );
   setLanguage('en');
   const advEn = ADVANCEMENTS.map((a) => advancementTitle(a));
@@ -1661,7 +1661,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
       for (const id of allItemIds) {
         const def = itemDef(id);
         if (!def) continue;
-        const key = def.name.replace('minecraft:', '');
+        const key = def.name.replace('minicraft:', '');
         if (/[\u4e00-\u9fff]/.test(translateName(key))) leakedOutput.push(`name:${key}`);
         if (/[\u4e00-\u9fff]/.test(itemDescription(id))) leakedOutput.push(`desc:${key}`);
       }
@@ -1770,9 +1770,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ptForms.join('|'),
   );
   check(
-    '葡语的过去分词也跟着配合（preenchido / preenchidos）',
-    tn('buildtools.fill.done', 1) === '1 bloco preenchido' && tn('buildtools.fill.done', 3) === '3 blocos preenchidos',
-    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+    '葡语复数表里的第二条键也走同一套（vez / vezes）',
+    tn('station.brewLeft', 1) === 'Ainda dá para preparar 1 vez' &&
+      tn('station.brewLeft', 3) === 'Ainda dá para preparar 3 vezes',
+    `${tn('station.brewLeft', 1)} / ${tn('station.brewLeft', 3)}`,
   );
   resetLanguageForTest();
 
@@ -1836,9 +1837,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     frForms.join('|'),
   );
   check(
-    '法语的过去分词也跟着配合（rempli / remplis）',
-    tn('buildtools.fill.done', 1) === '1 bloc rempli' && tn('buildtools.fill.done', 3) === '3 blocs remplis',
-    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+    '法语复数表里的第二条键也走同一套（brassage / brassages）',
+    tn('station.brewLeft', 1) === 'Encore 1 brassage possible' &&
+      tn('station.brewLeft', 3) === 'Encore 3 brassages possibles',
+    `${tn('station.brewLeft', 1)} / ${tn('station.brewLeft', 3)}`,
   );
   resetLanguageForTest();
 
@@ -2101,6 +2103,58 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
     '复数表用 satisfies PluralTable 卡齐（写错类别名会红）',
     enFilesAll.includes('plural.ts') &&
       readFileSync(new URL('plural.ts', enDir), 'utf8').includes('satisfies PluralTable'),
+  );
+}
+
+console.log('\n[聊天栏文案（批次 20261025-0105）]');
+{
+  /**
+   * 聊天栏是**唯一一个"字符串进来就显示"的出口**：`chat.push(text)` / `hudToast.show(text)`
+   * 的入参直接落到 DOM 上，不经过任何查表。所以硬编码中文一旦走到这两个口子上，
+   * 英文模式下就是"界面全英文、左上角忽然冒一句中文"，而且**类型系统抓不到**
+   * （参数是 `string`，中文串也是合法 `string`）。
+   *
+   * 判据：剥掉注释后扫源码，`chat.push(` / `hudToast.show(` 的**第一个实参是字面量且含中文**
+   * 就算漏网。走 `t()` / `tp()` 的调用不受影响（那是另一个 token，不是字面量）。
+   * 已知边界：`chat.push(a ? '中文' : '中文')` 这种"三元里写字面量"的形态抓不到——
+   * 它的第一个实参是标识符。这一批里剩下的三元都换成了 `t(cond ? 'key' : 'key')`。
+   */
+  const LITERAL_INTO_CHAT = /(?:chat\.push|hudToast\.show)\(\s*(['"`])(?:[^'"`\\\n]|\\[\s\S])*[\u4e00-\u9fa5][\s\S]*?\1/g;
+  const offenders: string[] = [];
+  const walk = (dir: URL): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+      if (entry.isDirectory()) {
+        walk(url);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts')) continue;
+      const source = readFileSync(url, 'utf8');
+      // `match`（带 /g）而不是 `matchAll`：只关心"有没有"，不需要逐个命中项，
+      // 也就不必声明一个用不到的循环变量（TS6133）。`match` 不吃 lastIndex 状态。
+      if (codeOf(source).match(LITERAL_INTO_CHAT)) {
+        const rel = decodeURIComponent(url.href).split('/src/').pop() ?? url.pathname;
+        if (!offenders.includes(rel!)) offenders.push(rel!);
+      }
+    }
+  };
+  walk(new URL('../src/', import.meta.url));
+  check(
+    '聊天栏 / 提示条不再直接吞中文字面量（必须走 t() / tp()）',
+    offenders.length === 0,
+    offenders.slice(0, 5).join(', '),
+  );
+
+  // 静态 CSS 里的 `content: '展开'` 是同一类漏网：样式表不参与切语言重绘
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const cjkContent = [...html.matchAll(/content:\s*'([^']*)'/g)]
+    .map((match) => match[1]!)
+    .filter((value) => /[\u4e00-\u9fa5]/.test(value));
+  check('index.html 的 CSS content 里没有中文（角标文字由 JS 写 attr）', cjkContent.length === 0, cjkContent.join(', '));
+  check(
+    '聊天行的「展开」角标改由 data-expand-badge 提供',
+    html.includes('content: attr(data-expand-badge)') &&
+      readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8').includes("t('chat.expandBadge')"),
   );
 }
 

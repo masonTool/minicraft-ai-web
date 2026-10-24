@@ -15,6 +15,7 @@
  */
 
 import { BLOCKS, COPPER_STAGES, CORAL_KIND_CN, blockHardness } from './blocks.ts';
+import { normalizeId, shortId } from './ids.ts';
 import {
   itemCategoryLabel,
   categoryOf,
@@ -243,8 +244,8 @@ for (const wood of Object.keys(WOODS_CN)) {
 }
 
 // 展示框与画（B14，批次 86）：各一条——**画只有一件物品**，
-// 挂上去是 7 幅里的哪一幅由放置时决定（见 `registry/paintings.ts`），
-// 所以这里不该出现"烤肉串画""阿兹特克画"七条名字。
+// 挂上去是 10 幅里的哪一幅由放置时决定（见 `registry/paintings.ts`），
+// 所以这里不该出现"日出画""壁画"这类按画分条的名字。
 // 名字走 `item.item_frame` / `item.painting`（P6-3，批次 20261024-0020）：
 // 原来这里是 `put('item_frame', '物品展示框')` 的中文常量，德语界面露中文。
 
@@ -812,7 +813,7 @@ for (const spec of SPAWN_EGG_SPECS) {
  *  ③ 都查不到 → 回退成注册 id（宁可露出 `grasss_block` 让人发现，也不要显示空串）。
  */
 export function translateName(id: string): string {
-  const key = id.startsWith('minecraft:') ? id.slice('minecraft:'.length) : id;
+  const key = shortId(id);
   const value = NAMES.get(key);
   if (value !== undefined) {
     // 函数形态（多语言 P2-1a）：**取值这一刻**才查表，所以切语言后立刻是新的
@@ -885,7 +886,7 @@ export function categoryLabel(itemId: number): string {
 export function itemDescription(itemId: number): string {
   const def = itemDef(itemId);
   if (!def) return '';
-  const key = def.name.startsWith('minecraft:') ? def.name.slice('minecraft:'.length) : def.name;
+  const key = shortId(def.name);
   // 多语言 P2-3：先查语言表（`item.desc.<id>`，模板字面量让审计能认出这一族）；
   // 还没搬过来的仍走旧表，两部分互不重叠
   const probe = `item.desc.${key}`;
@@ -1003,7 +1004,7 @@ export function genericItemDescription(itemId: number): string {
 export function hasDescription(itemId: number): boolean {
   const def = itemDef(itemId);
   if (!def) return false;
-  const key = def.name.startsWith('minecraft:') ? def.name.slice('minecraft:'.length) : def.name;
+  const key = shortId(def.name);
   // 多语言 P2-3：说明分两处（语言表 + 还没搬走的旧表），任一处有就算「有说明」。
   // 它和 `knownNameCount` / `missingBlockNames` 是同一类"读表判断"，搬表时最容易漏改。
   return key in DESCRIPTIONS || t(`item.desc.${key}`) !== `item.desc.${key}`;
@@ -1092,7 +1093,7 @@ export function missingBlockNames(): string[] {
   const missing: string[] = [];
   for (const def of BLOCKS) {
     if (!def || def.id === 0) continue;
-    const key = def.name.replace('minecraft:', '');
+    const key = shortId(def.name);
     if (!hasName(key)) missing.push(key);
   }
   return missing;
@@ -1111,7 +1112,7 @@ function buildItemIndex(): Map<string, number> {
     const def = itemDef(id);
     if (!def) continue;
     const full = def.name;
-    const short = full.startsWith('minecraft:') ? full.slice('minecraft:'.length) : full;
+    const short = shortId(full);
     index.set(full.toLowerCase(), id);
     index.set(short.toLowerCase(), id);
     index.set(itemLabel(id), id);
@@ -1124,7 +1125,7 @@ function buildBlockIndex(): Map<string, number> {
   const index = new Map<string, number>();
   for (const def of BLOCKS) {
     if (!def || def.id === 0) continue;
-    const short = def.name.replace('minecraft:', '');
+    const short = shortId(def.name);
     index.set(short.toLowerCase(), def.id);
     index.set(def.name.toLowerCase(), def.id);
     index.set(blockLabel(def.id), def.id);
@@ -1134,23 +1135,26 @@ function buildBlockIndex(): Map<string, number> {
 
 /**
  * 按名字找物品 id。
- * 接受 `minecraft:stone` / `stone` / `石头` / 数字 id 四种写法——
+ * 接受 `minicraft:stone` / `stone` / `石头` / 数字 id 四种写法——
  * 命令与创造物品栏搜索共用同一套解析，玩家不用记英文。
  */
 export function resolveItemId(query: string): number | undefined {
   const raw = query.trim();
   if (raw.length === 0) return undefined;
   if (!itemIndex) itemIndex = buildItemIndex();
-  return itemIndex.get(raw.toLowerCase()) ?? itemIndex.get(raw);
+  // 归一化后再查：`stone` / `minicraft:stone` / `minecraft:stone`（老命令、老玩家习惯）都认
+  const key = normalizeId(raw);
+  return itemIndex.get(key.toLowerCase()) ?? itemIndex.get(shortId(key).toLowerCase()) ?? itemIndex.get(raw);
 }
 
 /** 按名字找方块 id（只含方块；空气用 `air` 或 0） */
 export function resolveBlockId(query: string): number | undefined {
   const raw = query.trim();
   if (raw.length === 0) return undefined;
-  if (raw === 'air' || raw === 'minecraft:air' || raw === '空气' || raw === '0') return 0;
+  if (shortId(raw) === 'air' || raw === '空气' || raw === '0') return 0;
   if (!blockIndex) blockIndex = buildBlockIndex();
-  return blockIndex.get(raw.toLowerCase()) ?? blockIndex.get(raw);
+  const key = normalizeId(raw);
+  return blockIndex.get(key.toLowerCase()) ?? blockIndex.get(shortId(key).toLowerCase()) ?? blockIndex.get(raw);
 }
 
 /** 供测试与调试：索引规模 */

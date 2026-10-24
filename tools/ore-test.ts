@@ -23,7 +23,7 @@ import {
 } from '../src/core/world/Chunk.ts';
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 
-const label = (id: number): string => blockDef(id).name.replace('minecraft:', '');
+const label = (id: number): string => blockDef(id).name.replace('minicraft:', '');
 
 let passed = 0;
 let failed = 0;

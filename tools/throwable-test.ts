@@ -98,8 +98,8 @@ function advance(entity: { tick: (ctx: EntityContext, dt: number) => void; dead:
 
 console.log('\n[投掷物：物品与来源]');
 
-equal('雪球有注册名', itemDef(Item.SNOWBALL)?.name, 'minecraft:snowball');
-equal('鸡蛋有注册名', itemDef(Item.EGG)?.name, 'minecraft:egg');
+equal('雪球有注册名', itemDef(Item.SNOWBALL)?.name, 'minicraft:snowball');
+equal('鸡蛋有注册名', itemDef(Item.EGG)?.name, 'minicraft:egg');
 equal('雪球 16 个一叠（原版）', maxStackOf(Item.SNOWBALL), 16);
 equal('鸡蛋 16 个一叠（原版）', maxStackOf(Item.EGG), 16);
 check(

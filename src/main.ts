@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three';
+import { normalizeId, shortId } from './core/registry/ids.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
@@ -198,7 +199,16 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { applyLanguageSetting, getLanguage, isPseudoLocaleTag, languageFromParam, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
+import {
+  applyLanguageSetting,
+  getLanguage,
+  isPseudoLocaleTag,
+  joinList,
+  languageFromParam,
+  setPseudoLocale,
+  t,
+  tp,
+} from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -620,7 +630,6 @@ import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
   flowerPotIndexFor,
   pottedPlantItem,
-  pottedPlantName,
 } from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
@@ -701,6 +710,7 @@ import {
   castVelocity,
   fishingBonuses,
   reelFishing,
+  BITE_WINDOW_SECONDS,
   CAST_GRAVITY,
   IDLE_FISHING,
   MAX_CAST_DISTANCE,
@@ -741,24 +751,6 @@ import { TutorialCard } from './ui/TutorialCard.ts';
 import { stepsOf } from './tutorial/steps.ts';
 import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.ts';
 import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from './tutorial/boot.ts';
-// 创造模式撤销/重做（创造1）：栈是纯逻辑，写回世界在这里做
-import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack.ts';
-// 创造2：两点选区 + 框选填充（分批跨帧）
-import { buildSelection, type BlockPos, type SelectionBox } from './buildtools/Selection.ts';
-import { FillRunner, shouldFillCell, type FillMode } from './buildtools/Fill.ts';
-// 创造3：复制 / 粘贴 / 镜像
-import {
-  PasteRunner,
-  createSnapshot,
-  defaultPasteTarget,
-  planPaste,
-  type ClipboardSnapshot,
-  type MirrorAxis,
-  type PasteCell,
-} from './buildtools/Clipboard.ts';
-// 创造4：内置建筑模板
-import { checkTemplatePlacement, templateById, templateCells, type BuildTemplate } from './buildtools/templates.ts';
-import { BuildToolbar } from './ui/BuildToolbar.ts';
 // 单机小游戏（小游戏1）：宿主 + 自检游戏
 import { MiniGameHost } from './minigame/MiniGameHost.ts';
 import { SmokeGame } from './minigame/games/smoke.ts';
@@ -802,6 +794,8 @@ import {
 // 成就 / 进度（M7，批次 87）：数据与判定在 core/progress/*（纯逻辑），
 // 这里只做"在事件处报一声 + 弹提示 + 面板入口 + 随存档走"四件事
 import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
+// 进度播报里的标题与说明要**按当前语言**取（批次 620 起走 `advancement.*` 派生键）
+import { advancementDesc, advancementTitle } from './core/progress/advancementText.ts';
 import type { AdvancementDef, ProgressEvent } from './core/progress/advancements.ts';
 import { AdvancementScreen } from './ui/AdvancementScreen.ts';
 import { StatisticsScreen } from './ui/StatisticsScreen.ts';
@@ -1019,20 +1013,12 @@ type PortalArrivalKind = 'nether' | 'end' | 'spawn';
 const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
 
 /**
- * 撤销一次最多唤醒多少格的流体（创造1）。
+ * 按住时两次挥动之间的间隔（秒）。
  *
- * 单次放置/破坏最多两格，这个上限是为将来的**批量撤销**（框选填充、模板）留的：
- * 一次撤 4096 格时逐格 `wakeFluidsAround` 会变成一次小型的流体风暴。
+ * 取值略大于一次挥动的时长（`HandRenderer` 里 `SWING_DURATION = 0.26`）：
+ * 挥动中 `swing()` 不会重开，间隔给太小等于白白调用；0.3 ≈ 原版挖方块每 6 tick 一下。
  */
-const UNDO_WAKE_LIMIT = 256;
-
-/**
- * 一次填充最多记多少格的撤销（创造2）。
- *
- * 选区上限是 32768 格，全记下来约 3~6MB（手机上偏高）。超过这个数就**整次不记**，
- * 而不是记一半——记一半的撤销会把玩家刚填好的区域撤出一个洞，比"不能撤"更糟。
- */
-const FILL_UNDO_LIMIT = 8192;
+const ARM_SWING_INTERVAL = 0.3;
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -1673,44 +1659,6 @@ class App {
   private tutorialDismissed = false;
   /** "引导完成"只播一次（避免后续多余的 obtain/place 反复触发） */
   private tutorialFinishedAnnounced = false;
-  /**
-   * 创造模式的撤销 / 重做栈（创造1）。
-   *
-   * 只记**创造 + 单机**：生存模式撤销等于刷物品；联机协议里没有"撤销"这条消息，
-   * 撤销会让别人的世界与服务端不一致。切换维度时清空（见 `switchDimension`）。
-   */
-  private readonly undoStack = new UndoStack();
-  /** 创造2：选区第一个角（null = 还没开始选） */
-  private selectionStart: BlockPos | null = null;
-  /** 创造2：成型的选区（两点都点完才有） */
-  private selectionBox: SelectionBox | null = null;
-  /** 创造2：正在分批执行的填充（null = 空闲） */
-  private activeFill: FillRunner | null = null;
-  /**
-   * 创造2：这次填充攒下的撤销记录。
-   *
-   * 填充是跨帧的，不能靠 `undoBegin/undoEnd` 包住（那会把玩家在这期间的其它操作
-   * 也并进同一步）——所以先攒进数组，全部写完再一次性 `undoPush`。
-   * 超过 `FILL_UNDO_LIMIT` 时**整次不记**（见 `startFill` 的注释）。
-   */
-  private fillUndoBuffer: BlockEdit[] | null = null;
-  /** 创造3：剪贴板（只存非空气；`null` = 还没复制过） */
-  private clipboard: ClipboardSnapshot | null = null;
-  /** 创造3：正在分批执行的粘贴 */
-  private activePaste: PasteRunner | null = null;
-  /** 创造3：这次粘贴攒下的撤销记录（与填充同一条：超过上限整次不记） */
-  private pasteUndoBuffer: BlockEdit[] | null = null;
-  /**
-   * 建造模式（创造5）：激活后左键改为"点一个选区角"，不再破坏方块。
-   *
-   * 这是工具条与原有操作之间**唯一的耦合点**：只影响左键语义，
-   * 右键放置、移动、跳跃、界面全部照旧。
-   */
-  private buildMode = false;
-  /** 鼠标左键在建造模式下的一次性请求（按下沿；按住不会连续加角） */
-  private buildRequest = false;
-  /** 建造工具条（右侧双列竖排；折叠时只剩总开关） */
-  private readonly buildToolbar: BuildToolbar;
   /** 单机小游戏宿主（小游戏1）：激活时主循环只跑小游戏帧，世界那一帧全部跳过 */
   private readonly miniGame: MiniGameHost;
   private readonly advancementScreen: AdvancementScreen;
@@ -2143,7 +2091,7 @@ class App {
     // 下一次自动保存就会把它写进单机档（这正是联机6 当初"断开即停写"要躲开的事）
     void this.reloadWorld()
       .then(() => {
-        const hint = '已断开联机：世界已重载回单机存档';
+        const hint = t('say.disconnect.soloReloaded');
         this.chat.push(hint, 'system');
         this.chatLine = hint;
         this.chatUntil = performance.now() + 8000;
@@ -2381,6 +2329,18 @@ class App {
   private shieldDisabled = 0;
   private leftDown = false;
   private rightDown = false;
+  /**
+   * 手臂挥动的"节拍器"（批次 20261024-XXXX，用户："点一下就应该挥一下手，长按就是快速挥手"）。
+   *
+   * 以前挥动只挂在"真的打到/挖到/放下东西"上：对着空气点一下、或者左键点完立刻松开
+   * （按下与松开落在同一帧里），手就完全不动。现在按**输入**驱动：
+   *   · `tapSwingRequest`：按下那一下立刻挥一次（哪怕一帧内就松开了）；
+   *   · 按住时每 `ARM_SWING_INTERVAL` 秒再挥一次，不看有没有目标。
+   * 攻击/挖掘/放置自己也会调 `hand.swing()`，而 `swing()` 在挥动中不会重开，
+   * 所以两条路叠加也不会"抖手"。
+   */
+  private tapSwingRequest = false;
+  private armSwingCooldown = 0;
 
   /** 盔甲外观：装备 id 串成的 key（变了才重算颜色）与四个部位的甲片颜色 */
   private armorKey = 'init';
@@ -2519,10 +2479,9 @@ class App {
     // 上传画布（1ms 量级），让"重进游戏"也成为一条自愈路径，而不只是刷新。
     //
     // ⚠️ **必须排在所有 UI 构造之前**（2026-10-22 修）：主菜单阶段图集是 `deferPaint`
-    // 的空画布，而 `BuildToolbar` 这类界面在构造时就画物品图标。拿空图集拼出来的等轴图标
-    // 是**全透明的**，还会被 `BlockIcon` 的缓存留下来（只按 `atlas.revision` 失效），
-    // 于是那几件方块在本页任何界面里都永久空白——实测正好是工具条用到的 9 件：
-    // 沙 / 原木 / 树叶 / 木板 / 圆石 / 玻璃 / 工作台 / 箱子 / 砖块。
+    // 的空画布，而界面在构造时就会画物品图标。拿空图集拼出来的等轴图标是**全透明的**，
+    // 还会被 `BlockIcon` 的缓存留下来（只按 `atlas.revision` 失效），于是那几件方块
+    // 在本页任何界面里都永久空白（当时实测是建造工具条用到的 9 件）。
     const atlasUploadBefore = atlas.probeUpload();
     const atlasUploaded = atlas.ensureUploaded();
     diag.event('app', 'atlas.ensure', {
@@ -2591,85 +2550,16 @@ class App {
       },
     );
 
-    // 建造工具（创造5；抽屉形态，批次 20261024-0344）：挂 <body>，与其它面板同一套层叠口径
-    // （z-index 9，低于背包 10）。它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
-    this.buildToolbar = new BuildToolbar(document.body, atlas, {
-      onToggleMode: (active) => {
-        this.buildMode = active;
-        // 打开面板顺手把按住的键清掉：面板是模态的，键盘却还连着——
-        // 不清的话会出现"面板开着、人还在往前走"
-        if (active) this.keys.clear();
-        // 退出建造模式时把没点完的第一个角清掉，避免下次进来"莫名其妙已经选了一半"
-        if (!active) this.clearSelection();
-        this.refreshBuildToolbar();
-      },
-      onSelect: () => {
-        this.clearSelection();
-        this.hudToast.show(t('buildtools.tool.selectHint'));
-        this.refreshBuildToolbar();
-      },
-      onFill: () => {
-        const blockId = this.selectedBlock;
-        if (blockId === undefined) {
-          this.hudToast.show(t('buildtools.fill.noBlock'));
-          return;
-        }
-        this.startFill(blockId);
-        this.refreshBuildToolbar();
-      },
-      onCopy: () => {
-        this.copySelection();
-        this.refreshBuildToolbar();
-      },
-      onPaste: (mirror) => {
-        this.pasteClipboard(mirror);
-        this.refreshBuildToolbar();
-      },
-      onUndo: () => {
-        this.undoLast();
-        this.refreshBuildToolbar();
-      },
-      onRedo: () => {
-        this.redoLast();
-        this.refreshBuildToolbar();
-      },
-      onTemplate: (templateId) => {
-        this.placeTemplate(templateId);
-        this.refreshBuildToolbar();
-      },
-      // 「结束建造」：玩家主动收工。模式与面板由工具条那边关，这里只负责
-      // 把主程序的状态一起清零（不清的话左键仍然被当成"点选区角"，玩家会以为挖不动）
-      onEndBuild: () => {
-        this.buildMode = false;
-        this.clearSelection();
-        this.refreshBuildToolbar();
-      },
-      // 抽屉开合与指针锁（批次 20261024-0344）：
-      // 开着时释放指针锁——不然鼠标还在后面转视角，面板上根本点不准；
-      // 关掉后按 `uiOpen` 决定要不要重新锁（背包还开着就别抢回来，与 `handleInventoryOpen` 同口径）。
-      // ⚠️ 这里**不**走 `uiOpen`：`handleInventoryOpen` 会清按键、收触摸层、退锁再抢锁，
-      // 每开关一次面板抖一下（取舍见 `.continue/doing/f639d3-decision.md` D4）。
-      onPanelChange: (open) => {
-        if (open) {
-          if (document.pointerLockElement) document.exitPointerLock();
-          return;
-        }
-        if (this.uiOpen || this.touch) return;
-        const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
-        result?.catch(() => {
-          /* 浏览器可能拒绝自动重新锁定，玩家点一下画面即可 */
-        });
-      },
-    });
-    this.refreshBuildToolbar();
-
     // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
     this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
     this.commandBlockEditor.onSave = (command) => {
       const target = this.editingCommandBlock;
       if (!target) return;
       this.commandBlocks.set(this.dimension, target.x, target.y, target.z, command);
-      this.chat.push(command ? `命令已保存：/${command}` : '已清空这一格的命令', 'system');
+      this.chat.push(
+        command ? tp('say.commandBlock.saved', { command }) : t('say.commandBlock.cleared'),
+        'system',
+      );
     };
     this.commandBlockEditor.onClose = () => {
       this.editingCommandBlock = null;
@@ -2751,8 +2641,13 @@ class App {
     this.scene.add(this.particles.object);
     // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
-    // 玩家模型与生物用同一套亮度口径，第三人称下才可见
-    this.playerRenderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
+    // 玩家模型与生物用同一套亮度口径，第三人称下才可见。
+    // 图集传下去是为了画**第三人称手里那件东西**（按图标/方块贴图铺 UV）
+    this.playerRenderer = new PlayerRenderer(
+      this.scene,
+      () => this.solidMaterial.skyBrightnessValue,
+      atlas,
+    );
     // 外观（批次 241）：存档里的肤色/上衣色要在**进世界那一刻**就落到第三人称与第一人称上。
     // 以前只有 `applySettings()` 会调 `setAppearance()`，等于"自定义外观要打开一次设置才生效"。
     const initialPalette = paletteOf(this.settings);
@@ -3008,12 +2903,15 @@ class App {
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
+    // 聊天提示行里的 `help` 直接开指令页（批次 20261025）：
+    // 以前是"填进输入框，让玩家自己按发送"，等于每条指令都要走两道手续。
+    this.chat.onOpenHelp = () => this.commandHelp.show();
     // `/help` 弹窗：开/关沿用"界面打开就停用移动与交互"；
-    // 点“填入聊天框”只把命令放进输入框，由玩家自己按发送。
+    // 点“确认”= 直接执行（走 `handleChatSubmit` 与手打发送同一条路径，反馈进同一条消息栏）。
     this.commandHelp.onOpenChange = (open) => this.handleInventoryOpen(open);
-    this.commandHelp.onUse = (command) => {
+    this.commandHelp.onExecute = (command) => {
       this.commandHelp.close();
-      this.chat.openWith(command, { focus: true });
+      this.handleChatSubmit(command);
     };
     this.inventory.onChange = () => {
       this.refreshHotbar();
@@ -3228,6 +3126,9 @@ class App {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: (clientX: number, clientY: number) => {
+        // 轻点就是"挥一下手"（用户 20261024）：不管这一下是打生物、放方块还是点了空气，
+        // 手都要动；长按（`onBreakStart` → leftDown）走 `updateArmSwing` 的节拍器。
+        this.tapSwingRequest = true;
         // 批次 271：瞄准方式决定"这一下打哪"——手指落点，或屏幕中心的老方式。
         // 批次 521：手指落点要先挪到**白圈的左上/右上边缘**（手指会盖住目标格），
         // 这条换算在 `TouchControls.aimPointAt` 里，白圈本身仍然跟手。
@@ -3843,18 +3744,17 @@ class App {
        *  · 只换种子重开：旧 `edits` 留在库里，落到新地形上等于一堆错位的方块。
        * 而新的入口（主菜单 → 加入房间）根本不会走到这里：世界是**先连上、拿到房主
        * 的种子之后**才加载的。所以这里只需要把这一局停下来，并告诉玩家下一步。
+       * 文案走 i18n（`say.net.seedMismatch`），六语言里已经改成同一口径。
        */
-      const hint =
-        `房间里的世界种子是 ${conflict.serverSeed}，本世界是 ${conflict.localSeed}——` +
-        '两片大陆上继续玩只会把方块写到错的位置，已断开联机。' +
-        '请回主菜单 →「加入房间…」，那边会按房主的世界直接开一局。';
+      const hint = tp('say.net.seedMismatch', { server: conflict.serverSeed, local: conflict.localSeed });
       console.warn(`[net] ${hint}`);
       this.netStatus = hint;
       this.chat.push(hint, 'error');
       this.chatLine = hint;
       this.chatUntil = performance.now() + 15000;
-      this.hudToast.show('种子不同：已断开，请从主菜单「加入房间」进');
-      // 断开之后 `leaveMultiplayerSave()` 会把世界重载回单机地形，远端改动一条也没写进去
+      this.hudToast.show(t('say.net.seedMismatchToast'));
+      // ⚠️ 种子不一致时**不应用**这批 edits：两片大陆的地形不同，同一坐标是另一格，
+      // 写进去会污染本地存档。断开之后 `leaveMultiplayerSave()` 会把世界重载回单机地形
       this.disconnect();
       return;
     }
@@ -5664,16 +5564,6 @@ class App {
         return;
       }
       if (this.sleeping && e.code !== 'Space') return;
-      // 建造抽屉（批次 20261024-0344）是模态层：Esc 收面板，其余按键一律不往下走。
-      // 遮罩只挡鼠标/触摸，键盘完全不受影响——不挡的话面板开着按 W 会一边走一边把左键
-      // 当"点选区角"，按 E 会在抽屉上面再叠一层背包，按 Esc 会先弹暂停菜单。
-      if (this.buildToolbar.isPanelOpen) {
-        if (e.code === 'Escape') {
-          e.preventDefault();
-          this.buildToolbar.closePanel();
-        }
-        return;
-      }
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
@@ -5730,19 +5620,6 @@ class App {
       if (e.code === 'KeyJ') {
         e.preventDefault();
         this.toggleAdvancements();
-        return;
-      }
-      // 创造1：撤销 / 重做（桌面快捷键；触摸端在创造5的工具条上）。
-      // 放在 `uiOpen` 判断之前：背包开着时也该能撤（按 Ctrl+Z 时人是想改刚才的建造）
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
-        e.preventDefault();
-        if (e.shiftKey) this.redoLast();
-        else this.undoLast();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
-        e.preventDefault();
-        this.redoLast();
         return;
       }
       // T / 斜杠：打开聊天与命令输入（原版就是这两个键）
@@ -5852,9 +5729,9 @@ class App {
             return;
           }
           if (e.button === 0) {
-            // 建造模式（创造5）：左键只点一个选区角，不进入"按住破坏"
-            if (this.buildMode) this.buildRequest = true;
-            else this.leftDown = true;
+            this.leftDown = true;
+            // 按下就记一次挥动：一帧内按下+松开（快速点击）也挥手
+            this.tapSwingRequest = true;
           }
           if (e.button === 2) this.rightDown = true;
         },
@@ -6417,6 +6294,7 @@ class App {
       this.statisticsLastZ = this.physics.z;
     }
 
+    this.updateArmSwing(dt);
     this.updateAttacking(dt);
     this.updateBreaking(dt);
     this.updatePlacing();
@@ -6570,8 +6448,14 @@ class App {
     const leftover = this.inventory.add(Item.GLASS_BOTTLE, 1);
     if (leftover > 0) this.spawnDrop(Item.GLASS_BOTTLE, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
 
+    // 药水名走 `itemLabel()`（`itemNames.ts` 按 variant/tier 拼），不再用 `potion.name` 那个中文串；
+    // 效果清单用 `joinList()`——分隔符是语言相关的（中文顿号 / 英文 "a, b, and c"）
+    const effects = potion.effects.map((e) => effectLabel(e.id));
     this.chat.push(
-      `喝下${potion.name}：${potion.effects.map((e) => effectLabel(e.id)).join('、') || '无效果'}`,
+      tp('say.potion.drunk', {
+        potion: itemLabel(potion.id),
+        effects: effects.length > 0 ? joinList(effects) : t('say.potion.noEffect'),
+      }),
       'system',
     );
     this.audio.play('eat');
@@ -6596,7 +6480,7 @@ class App {
     }
     if (food.clearsEffects === true) {
       this.effects.clear();
-      this.chat.push('喝下牛奶，身上的状态效果被清除', 'system');
+      this.chat.push(t('say.milk.cured'), 'system');
     }
     for (const effect of food.effects ?? []) {
       // 概率效果要在这里掷点：表里存的是"触发概率"（腐肉 80%、生鸡肉 30%）
@@ -6806,7 +6690,7 @@ class App {
     const arrows = ammo?.total ?? 0;
     const shots = crossbowVolley(enchantLevel(this.heldEnchants, 'multishot') > 0, arrows);
     if (!ammo || shots === 0) {
-      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      if (arrows < 1) this.chat.push(t('say.noArrows'), 'error');
       return;
     }
     this.inventory.consume(ammo.itemId, 1);
@@ -6854,7 +6738,7 @@ class App {
     const arrows = ammo?.total ?? 0;
     if (!canShoot(true, charge, arrows, effects)) {
       // 拉了半天没箭，得说一声——不然玩家只会觉得"弓坏了"
-      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      if (arrows < 1) this.chat.push(t('say.noArrows'), 'error');
       return;
     }
     if (!ammo) return;
@@ -8261,7 +8145,7 @@ class App {
     if (!offer || villager.dead) return false;
     const blocker = tradeBlocker(offer, this.inventory);
     if (blocker) {
-      this.chat.push(`交易不成：${blocker}`, 'system');
+      this.chat.push(tp('say.trade.refused', { reason: blocker }), 'system');
       return false;
     }
 
@@ -8289,7 +8173,10 @@ class App {
       // 升级：新交易已经在 `addTradeXp` 里追加进 `offers`，这里只报喜
       const profession = villager.profession;
       this.chat.push(
-        `村民升级了：${profession ? professionLabel(profession.id) : t('label.profession.farmer')} → ${levelName(villager.level)}（解锁了新的交易）`,
+        tp('say.trade.levelUp', {
+          profession: profession ? professionLabel(profession.id) : t('label.profession.farmer'),
+          level: levelName(villager.level),
+        }),
         'system',
       );
       this.audio.play('achievement', { x: villager.x, y: villager.y, z: villager.z });
@@ -8752,11 +8639,26 @@ class App {
     return count;
   }
 
+  /**
+   * 手臂挥动的输入驱动（批次 20261024-XXXX）。
+   *
+   * 见字段 `tapSwingRequest` 的注释：点一下挥一次、按住按节拍连续挥。
+   * UI 打开时不挥（那下不是"使用手"）。
+   */
+  private updateArmSwing(dt: number): void {
+    this.armSwingCooldown = Math.max(0, this.armSwingCooldown - dt);
+    const tap = this.tapSwingRequest;
+    this.tapSwingRequest = false;
+    if (this.uiOpen) return;
+    const holding = this.leftDown || this.padAttack || this.touch?.holding === true;
+    if (!tap && !(holding && this.armSwingCooldown <= 0)) return;
+    this.hand.swing();
+    this.armSwingCooldown = ARM_SWING_INTERVAL;
+  }
+
   private updateAttacking(dt: number): void {
     // 旁观模式（批次 491）：不能攻击（连挥空都不该有）
     if (!canInteract(this.gameMode)) return;
-    // 建造模式（创造5）：左键改成选区，不攻击（`tapAttackRequest` 留给 `updateBreaking` 消费）
-    if (this.buildMode) return;
     // 批次 271：只要这一帧瞄着生物，就不许去挖方块——包括**攻击冷却期间**。
     // 原来这一行是无条件 false，冷却的 0.5 秒里 `updateBreaking` 会拿方块目标继续挖，
     // 手机上按住一只猪就会把脚下的地挖穿。
@@ -8899,10 +8801,7 @@ class App {
         const isLeader = mob === this.patrolLeader;
         if (isLeader || Math.random() < 0.03) {
           this.effects.apply('bad_omen', 6000, 0);
-          this.chat.push(
-            isLeader ? '你击败了巡逻队队长：染上了不祥之兆' : '你染上了不祥之兆：带着它走进村庄会引来袭击',
-            'system',
-          );
+          this.chat.push(t(isLeader ? 'say.ominous.leader' : 'say.ominous'), 'system');
         }
         if (isLeader) this.patrolLeader = null;
       }
@@ -8928,22 +8827,6 @@ class App {
     // 冒险模式（批次 549）：能打怪、能交互，但不能破坏方块
     if (!canBreakBlocks(this.gameMode)) return;
 
-    // 建造模式（创造5）：左键 = 点一个选区角；**按住什么都不做**（避免误拆）。
-    // 放在 `suppressBreaking` 判断之前：上一帧攻击留下的标志不该让选区失灵。
-    if (this.buildMode) {
-      if ((this.buildRequest || this.tapAttackRequest) && this.hit && this.placeCooldown <= 0) {
-        this.placeCooldown = PLACE_COOLDOWN;
-        this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z });
-        this.refreshBuildToolbar();
-      }
-      this.buildRequest = false;
-      this.tapAttackRequest = false;
-      this.breakingKey = '';
-      this.breakProgress = 0;
-      this.digSoundTimer = 0;
-      this.suppressBreaking = false;
-      return;
-    }
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -9024,10 +8907,7 @@ class App {
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
     // 批次 38 起按形状判定（原来写死橡木门 → 云杉门拆一半会留下半扇悬空的门）
     if (blockDef(brokenId).shape === 'door') {
-      // 创造1：整扇门（两格）合成一步撤销
-      this.undoBegin();
       this.breakDoorPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -9036,10 +8916,7 @@ class App {
 
     // 旗帜（批次 484）：与门一样是两格高——拆一半带走另一半，否则会剩半面旗
     if (blockDef(brokenId).shape === 'banner') {
-      // 创造1：整面旗（两格）合成一步撤销
-      this.undoBegin();
       this.breakBannerPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -9049,10 +8926,7 @@ class App {
     // 床（批次 79）同理，只是它横着占两格：拆一半必须带走另一半，
     // 否则会留下一张**半张床**（站上去只剩 9/16 的一半，看着像 bug）
     if (blockDef(brokenId).shape === 'bed') {
-      // 创造1：整张床（两格）合成一步撤销
-      this.undoBegin();
       this.breakBedPair(this.hit.x, this.hit.y, this.hit.z);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -9064,10 +8938,7 @@ class App {
     // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗、
     // 半空中会挂着一片脚手架——而方块本身看起来毫无问题。
     if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE || brokenId === Block.SCAFFOLDING) {
-      // 创造1：整柱海带/甘蔗（可能好几节）合成一步撤销
-      this.undoBegin();
       this.breakColumn(this.hit.x, this.hit.y, this.hit.z, brokenId);
-      this.undoEnd();
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -9137,8 +9008,6 @@ class App {
     // 判定用挖之前的 `brokenState`（上面已经读过），不看"现在还是不是那个方块"
     const afterBreakId = blockAfterBreak(brokenId, brokenState);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, afterBreakId);
-    // 创造1：破坏也进撤销栈（撤销 = 把原来那一格放回去；含水方块恢复成水的那一档也对）
-    this.undoRecord(this.hit.x, this.hit.y, this.hit.z, brokenId, brokenState, afterBreakId, 0);
     // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
     // 挖掉的一格可能是"水底/水侧"的塞子——必须唤醒它周围的液体重新评估流向。
     // 原来只有爆炸、拔海带/甘蔗那几条路会唤醒，**玩家手挖这条主路漏了**。
@@ -9404,7 +9273,8 @@ class App {
     if (item !== undefined) {
       const leftover = this.inventory.add(item, 1);
       if (leftover > 0) this.spawnDrop(item, leftover, x + 0.5, y + 0.6, z + 0.5);
-      this.chat.push(`从花盆里取出${pottedPlantName(plant)}`, 'system');
+      // 名字用 `itemLabel()`（那块植物物品），不再读 `POTTED_PLANTS` 里的中文 `name`
+      this.chat.push(tp('say.flowerPot.taken', { item: itemLabel(item) }), 'system');
     }
     const next = withFlowerPotPlant(state, 0);
     this.world.setStateAndUpdate(x, y, z, next);
@@ -9529,7 +9399,7 @@ class App {
     this.applyEnvironment();
     // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
     // 这里不额外加血——只做"跳过夜晚 + 重生点"，避免凭空多一条回血规则
-    this.wakeUp('天亮了。重生点已设置在这张床上。');
+    this.wakeUp(t('say.sleep.wokeDawn'));
     // 进度（M7）：睡到天亮才算"甜美的梦"（被怪物惊醒、提前起床都不算——
     // 报事件的位置就在这个"真的跳到了黎明"的分支里）
     this.reportProgress({ kind: 'sleep' });
@@ -9578,10 +9448,7 @@ class App {
       const id = this.world.getBlock(bx, by, bz);
       // 另一半必须是**同一种**床（脏存档里可能只剩一半）
       if (!isBed(id)) continue;
-      const state = this.world.getBlockState(bx, by, bz);
       this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
-      // 创造1：整张床是一个动作（外层 `updateBreaking` 用 begin/end 包起来）
-      this.undoRecord(bx, by, bz, id, state, Block.AIR, 0);
       this.queueBlockChange(bx, by, bz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
       // 整张床只掉一次（在床脚那一格的位置掉）
@@ -9598,7 +9465,7 @@ class App {
     ) {
       this.bedSpawn = null;
       // 床与重生锚共用 `bedSpawn`，所以提示不点名（拆哪个都走这一条）
-      this.chat.push('你的重生点被拆掉了', 'system');
+      this.chat.push(t('say.respawnPoint.broken'), 'system');
     }
   }
 
@@ -9608,7 +9475,7 @@ class App {
    */
   private interruptSleep(): boolean {
     if (!this.sleeping) return false;
-    this.wakeUp('你被惊醒了。');
+    this.wakeUp(t('say.sleep.interrupted'));
     return true;
   }
 
@@ -9687,7 +9554,7 @@ class App {
     // 友伤（联机22）：同队且该队 `friendlyFire` 关 → 本地就拦（省一次往返），
     // 被击者那边还会用消息里的 `fromName` 再判一次
     if (!this.teamState.canHurt(this.playerName, targetName)) {
-      this.chat.push('同队免伤（`/team friendlyfire true` 可以打开）', 'system');
+      this.chat.push(t('say.team.friendlyFire'), 'system');
       return true;
     }
     const damage = this.isCreative ? 20 : 4;
@@ -10188,7 +10055,7 @@ class App {
     // 进世界那一趟不弹卡片（否则"创建世界"会当场跳出好几张）——
     // 但**要留一句话**，不然玩家在面板里看到一堆"已达成"会以为是 bug
     const gained = this.advancements.earnedCount - before;
-    if (gained > 0) this.chat.push(`对了一次背包：已达成 ${gained} 条进度（详情按 J 看）`, 'system');
+    if (gained > 0) this.chat.push(tp('say.progress.reconciled', { count: gained }), 'system');
     this.suppressProgressToasts = false;
 
     // 新手引导（引导3）：进度对完账再显示卡片（避免和加载遮罩抢位置）。
@@ -10249,7 +10116,14 @@ class App {
       // 批次 361：`announceAdvancements` 只影响"提示"，不影响达成与存档
       if (!this.suppressProgressToasts && this.rules.announceAdvancements) {
         this.advancementToast.push(def);
-        this.chat.push(`${def.challenge ? '挑战完成' : '进度已达成'}：${def.title}——${def.desc}`, 'system');
+        // 标题与说明按当前语言取（`advancement.*` 派生键），不再直接读 `def.title` 的中文原文
+        this.chat.push(
+          tp(def.challenge ? 'say.progress.challenge' : 'say.progress.earned', {
+            title: advancementTitle(def),
+            desc: advancementDesc(def),
+          }),
+          'system',
+        );
         this.audio.play('achievement');
       }
     }
@@ -10304,321 +10178,6 @@ class App {
     }
   }
 
-  // ---------------------------------------------------------------- 创造工具（创造1）
-
-  /**
-   * 撤销是否可用：**创造模式 + 单机**。
-   *
-   * 生存模式撤销等于"把用掉的方块拿回来"（刷物品）；联机协议里没有撤销这条消息，
-   * 本地撤销会让别人的世界与服务端不一致——两件事都只能关掉，而不是"尽力而为"。
-   */
-  private undoAllowed(): boolean {
-    return this.isCreative && !this.net.connected;
-  }
-
-  /** 开一次动作事务（放置门/床这种两格动作用它合成一步） */
-  private undoBegin(): void {
-    if (this.undoAllowed()) this.undoStack.begin();
-  }
-
-  private undoEnd(): void {
-    this.undoStack.end();
-  }
-
-  /** 记一格改动；不在事务里时它自己就是一步 */
-  private undoRecord(
-    x: number,
-    y: number,
-    z: number,
-    beforeId: number,
-    beforeState: number,
-    afterId: number,
-    afterState: number,
-  ): void {
-    if (!this.undoAllowed()) return;
-    this.undoStack.record({
-      dimension: this.dimension,
-      x,
-      y,
-      z,
-      beforeId,
-      beforeState,
-      afterId,
-      afterState,
-    });
-  }
-
-  /** 把一批改动记成**一步**（门/床这种两格动作用它；不在事务里时直接 push） */
-  private undoPush(batch: readonly BlockEdit[]): void {
-    if (!this.undoAllowed() || batch.length === 0) return;
-    this.undoStack.push(batch);
-  }
-
-  /** 撤销一步（Ctrl+Z / 触摸端工具条） */
-  private undoLast(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const step = this.undoStack.undo();
-    if (!step) {
-      this.hudToast.show(t('buildtools.undo.empty'));
-      return false;
-    }
-    this.applyUndoStep(step);
-    return true;
-  }
-
-  /** 重做一步（Ctrl+Y / Ctrl+Shift+Z） */
-  private redoLast(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const step = this.undoStack.redo();
-    if (!step) {
-      this.hudToast.show(t('buildtools.redo.empty'));
-      return false;
-    }
-    this.applyUndoStep(step);
-    return true;
-  }
-
-  /** 把一步写回世界（撤销写 before、重做写 after） */
-  private applyUndoStep(step: UndoStep): void {
-    let applied = 0;
-    for (const edit of step.edits) {
-      // 切过维度之后旧维度的格子不在这里（切维度本身会清空栈，这条只是兜底）
-      if (edit.dimension !== this.dimension) continue;
-      const id = step.direction === 'undo' ? edit.beforeId : edit.afterId;
-      const state = step.direction === 'undo' ? edit.beforeState : edit.afterState;
-      if (!this.world.setBlockAndUpdate(edit.x, edit.y, edit.z, id, state)) continue;
-      // 挖掉/放回水底的方块要唤醒流体，否则那一格会一直空着（与破坏路径同一条）
-      // ⚠️ 将来批量撤销（框选填充）可能一次几百格：这里限一下，避免一次唤醒风暴
-      if (applied < UNDO_WAKE_LIMIT) this.wakeFluidsAround(edit.x, edit.y, edit.z);
-      applied += 1;
-    }
-    if (applied > 0) this.vibrate(8);
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造2）
-
-  /**
-   * 点一个选区角：第一次记起点，第二次成盒。
-   *
-   * 同一格点两次 = 1×1×1 的选区（不是"取消"）：低龄玩家用"取消选框"来取消，
-   * 不该让"点了两下同一个地方"产生两种解释。
-   */
-  private selectCorner(pos: BlockPos): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionStart) {
-      this.selectionStart = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
-      this.selectionBox = null;
-      this.hudToast.show(t('buildtools.select.first'));
-      return true;
-    }
-    const result = buildSelection(this.selectionStart, pos);
-    this.selectionStart = null;
-    if (!result.ok) {
-      this.selectionBox = null;
-      this.hudToast.show(
-        t(result.reason === 'tooLarge' ? 'buildtools.select.tooLarge' : 'buildtools.select.outOfWorld'),
-      );
-      return false;
-    }
-    this.selectionBox = result.box;
-    this.hudToast.show(tp('buildtools.select.done', { volume: result.volume }));
-    return true;
-  }
-
-  private clearSelection(): void {
-    this.selectionStart = null;
-    this.selectionBox = null;
-  }
-
-  /** 开始填充：只建 runner，真正的写入由每帧的 `stepFillRunner` 推进 */
-  private startFill(blockId: number, mode: FillMode = 'fill', replaceId: number | null = null): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionBox) {
-      this.hudToast.show(t('buildtools.fill.noSelection'));
-      return false;
-    }
-    if (this.activeFill) this.activeFill.cancel();
-
-    this.fillUndoBuffer = this.undoAllowed() ? [] : null;
-    const box = this.selectionBox;
-    this.activeFill = new FillRunner(box, {
-      write: (pos) => {
-        const currentId = this.world.getBlock(pos.x, pos.y, pos.z);
-        if (!shouldFillCell({ mode, currentId, replaceId })) return false;
-        const currentState = this.world.getBlockState(pos.x, pos.y, pos.z);
-        if (!this.world.setBlockAndUpdate(pos.x, pos.y, pos.z, blockId, 0)) return false;
-        if (this.fillUndoBuffer) {
-          if (this.fillUndoBuffer.length >= FILL_UNDO_LIMIT) {
-            // 超过上限：整次不记（丢掉已攒的），避免"撤销出个洞"
-            this.fillUndoBuffer = null;
-          } else {
-            this.fillUndoBuffer.push({
-              dimension: this.dimension,
-              x: pos.x,
-              y: pos.y,
-              z: pos.z,
-              beforeId: currentId,
-              beforeState: currentState,
-              afterId: blockId,
-              afterState: 0,
-            });
-          }
-        }
-        // 与单格放置同一条：填到水底/水边要让水重新评估流向
-        this.wakeFluidsAround(pos.x, pos.y, pos.z);
-        return true;
-      },
-    });
-    return true;
-  }
-
-  /** 每帧推进一步填充（最多一批 512 格；没有填充时什么都不做） */
-  private stepFillRunner(): void {
-    const runner = this.activeFill;
-    if (!runner) return;
-    if (runner.step()) return;
-
-    this.activeFill = null;
-    const progress = runner.progress;
-    const buffered = this.fillUndoBuffer;
-    this.fillUndoBuffer = null;
-    if (buffered && buffered.length > 0) this.undoPush(buffered);
-    if (progress.cancelled) this.hudToast.show(t('buildtools.fill.cancelled'));
-    else this.hudToast.show(tp('buildtools.fill.done', { count: progress.written }));
-  }
-
-  private cancelFill(): void {
-    this.activeFill?.cancel();
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造3）
-
-  /** 复制当前选区（只存非空气；空洞保留为"不覆盖"） */
-  private copySelection(): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    if (!this.selectionBox) {
-      this.hudToast.show(t('buildtools.fill.noSelection'));
-      return false;
-    }
-    const snapshot = createSnapshot(this.selectionBox, (x, y, z) => {
-      const id = this.world.getBlock(x, y, z);
-      if (id === Block.AIR) return null;
-      return { id, state: this.world.getBlockState(x, y, z) };
-    });
-    if (snapshot.cells.length === 0) {
-      this.hudToast.show(t('buildtools.copy.empty'));
-      return false;
-    }
-    this.clipboard = snapshot;
-    this.hudToast.show(tp('buildtools.copy.done', { count: snapshot.cells.length }));
-    return true;
-  }
-
-  /**
-   * 粘贴（可选镜像）。
-   *
-   * 默认落点 = 原件右边一格宽（`defaultPasteTarget`），避免"粘贴完看不出变化"
-   * ——那是最容易让人以为按钮没反应的失败方式。
-   */
-  private pasteClipboard(
-    mirror: MirrorAxis | null = null,
-    target?: { readonly x: number; readonly y: number; readonly z: number },
-  ): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const snapshot = this.clipboard;
-    if (!snapshot) {
-      this.hudToast.show(t('buildtools.copy.none'));
-      return false;
-    }
-    if (this.activePaste) this.activePaste.cancel();
-
-    const landing = target ?? defaultPasteTarget(snapshot);
-    const plan = planPaste(snapshot, landing, { mirror });
-    if (plan.cells.length === 0) {
-      this.hudToast.show(t('buildtools.paste.outOfWorld'));
-      return false;
-    }
-
-    return this.startPasteCells(plan.cells);
-  }
-
-  /**
-   * 把一批格子交给跨帧粘贴器。
-   *
-   * 剪贴板与建筑模板**共用这一条执行路径**：都是"一次动作 = 一步撤销 + 每帧一批"。
-   * 分开写只会让两边的上限与收口逻辑慢慢漂开。
-   */
-  private startPasteCells(cells: readonly PasteCell[]): boolean {
-    if (cells.length === 0) return false;
-    if (this.activePaste) this.activePaste.cancel();
-
-    this.pasteUndoBuffer = this.undoAllowed() ? [] : null;
-    this.activePaste = new PasteRunner(cells, {
-      write: (cell) => {
-        const currentId = this.world.getBlock(cell.x, cell.y, cell.z);
-        const currentState = this.world.getBlockState(cell.x, cell.y, cell.z);
-        if (!this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, cell.id, cell.state)) return false;
-        if (this.pasteUndoBuffer) {
-          if (this.pasteUndoBuffer.length >= FILL_UNDO_LIMIT) {
-            // 与填充同一条：超过上限整次不记，避免"撤销出个洞"
-            this.pasteUndoBuffer = null;
-          } else {
-            this.pasteUndoBuffer.push({
-              dimension: this.dimension,
-              x: cell.x,
-              y: cell.y,
-              z: cell.z,
-              beforeId: currentId,
-              beforeState: currentState,
-              afterId: cell.id,
-              afterState: cell.state,
-            });
-          }
-        }
-        this.wakeFluidsAround(cell.x, cell.y, cell.z);
-        return true;
-      },
-    });
-    return true;
-  }
-
-  /** 每帧推进一步粘贴 */
-  private stepPasteRunner(): void {
-    const runner = this.activePaste;
-    if (!runner) return;
-    if (runner.step()) return;
-
-    this.activePaste = null;
-    const progress = runner.progress;
-    const buffered = this.pasteUndoBuffer;
-    this.pasteUndoBuffer = null;
-    if (buffered && buffered.length > 0) this.undoPush(buffered);
-    if (progress.cancelled) this.hudToast.show(t('buildtools.paste.cancelled'));
-    else this.hudToast.show(tp('buildtools.paste.done', { count: progress.written }));
-  }
-
-  private cancelPaste(): void {
-    this.activePaste?.cancel();
-  }
-
   /**
    * 进入一局小游戏（小游戏1）：先把主世界的输入层收掉。
    *
@@ -10631,65 +10190,6 @@ class App {
     this.touch?.setEnabled(false);
     if (this.touch) this.touch.visible = false;
     this.miniGame.start(game);
-  }
-
-  /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
-  private refreshBuildToolbar(): void {
-    // 非创造时**把模式一起清零**（批次 20261024-0344）：旧实现只把工具条藏起来，
-    // `buildMode` 还是 true，左键继续被当"点选区角"吞掉——玩家会觉得"挖不动、工具也没了"。
-    if (!this.isCreative && this.buildMode) this.buildMode = false;
-    this.buildToolbar.setAvailable(this.isCreative);
-    this.buildToolbar.setUndoState(this.undoStack.canUndo, this.undoStack.canRedo);
-    this.buildToolbar.setSelectionArmed(this.selectionStart !== null);
-  }
-
-  // ---------------------------------------------------------------- 创造工具（创造4）
-
-  /** 模板落点：准星命中的方块上方；没有命中就放脚下（以建筑中心对齐） */
-  private defaultTemplateOrigin(template: BuildTemplate): { x: number; y: number; z: number } {
-    const base = this.hit
-      ? { x: this.hit.x, y: this.hit.y + 1, z: this.hit.z }
-      : {
-          x: Math.floor(this.physics.x),
-          y: Math.floor(this.physics.y),
-          z: Math.floor(this.physics.z),
-        };
-    return {
-      x: base.x - Math.floor(template.width / 2),
-      y: base.y,
-      z: base.z - Math.floor(template.depth / 2),
-    };
-  }
-
-  /**
-   * 放一座内置建筑：先检查（越界 / 挡路 / 悬空），再交给跨帧粘贴器。
-   *
-   * 检查不通过就**拒绝**并说原因，而不是尽量放——玩家挑了一个位置，
-   * 悄悄少放一半比"放不下"更难理解。
-   */
-  private placeTemplate(
-    templateId: string,
-    origin?: { readonly x: number; readonly y: number; readonly z: number },
-  ): boolean {
-    if (!this.undoAllowed()) {
-      this.hudToast.show(t(this.isCreative ? 'buildtools.undo.onlineOnly' : 'buildtools.undo.creativeOnly'));
-      return false;
-    }
-    const template = templateById(templateId);
-    if (!template) return false;
-
-    const landing = origin ?? this.defaultTemplateOrigin(template);
-    const check = checkTemplatePlacement(template, landing, (x, y, z) => this.world.getBlock(x, y, z), {
-      isSolid: (id) => blockDef(id).solid,
-    });
-    if (!check.ok) {
-      this.hudToast.show(t(`buildtools.template.${check.reason ?? 'blocked'}`));
-      return false;
-    }
-
-    if (!this.startPasteCells(templateCells(template, landing))) return false;
-    this.hudToast.show(tp('buildtools.template.placed', { name: t(template.nameKey) }));
-    return true;
   }
 
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
@@ -10854,7 +10354,7 @@ class App {
       this.patrolMobs.push(mob);
       if (member.leader) this.patrolLeader = mob;
     }
-    this.chat.push('附近出现了掠夺者巡逻队', 'system');
+    this.chat.push(t('say.patrol'), 'system');
   }
 
   /**
@@ -10865,7 +10365,7 @@ class App {
   private openCommandBlockEditor(x: number, y: number, z: number): void {
     this.editingCommandBlock = { x, y, z };
     const current = this.commandBlocks.get(this.dimension, x, y, z) ?? null;
-    this.commandBlockEditor.show(current, '命令方块（红石脉冲时执行）');
+    this.commandBlockEditor.show(current, t('say.commandBlock.title'));
   }
 
   /**
@@ -10904,7 +10404,7 @@ class App {
       // 效果被消耗：原版进村那一刻就用掉
       this.effects.remove('bad_omen');
       this.spawnRaidWave(this.raid.start());
-      this.chat.push('袭击开始了：守住村庄！', 'system');
+      this.chat.push(t('say.raid.start'), 'system');
       this.hudToast.show(t('misc.toast.raidStart'));
       return;
     }
@@ -10912,16 +10412,16 @@ class App {
     const step = raid.tick(dt);
     if (step === 'spawn-next') {
       const next = raid.wave + 1;
-      this.chat.push(`第 ${next} 波正在逼近…`, 'system');
+      this.chat.push(tp('say.raid.wave', { wave: next }), 'system');
       this.spawnRaidWave(raid.nextWave());
     } else if (step === 'won') {
       this.effects.apply('hero_of_the_village', 120, 0);
       this.reportProgress({ kind: 'raid', stage: 2 });
-      this.chat.push('袭击被击退了：你获得了村庄英雄', 'system');
+      this.chat.push(t('say.raid.won'), 'system');
       this.hudToast.show(t('misc.toast.heroOfVillage'));
       this.raid = null;
     } else if (step === 'lost') {
-      this.chat.push('袭击失败：没能守住村庄', 'system');
+      this.chat.push(t('say.raid.lost'), 'system');
       this.raid = null;
     }
   }
@@ -11199,7 +10699,7 @@ class App {
     this.entities.spawn(golem);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, this.blockParticleColor(Block.IRON_BLOCK), 10);
-    this.chat.push('铁傀儡站了起来', 'system');
+    this.chat.push(t('say.ironGolem'), 'system');
     return true;
   }
 
@@ -11928,12 +11428,12 @@ class App {
         // 咬钩：水花 + 提示（浮标同时会往下沉一点，见下面那段）
         this.audio.play('splash');
         this.particles.spawnSplash(bobber.x, bobber.y, bobber.z, 0x9fd4ff, 14);
-        this.chat.push('咬钩了！快收杆（2 秒内）', 'system');
+        this.chat.push(tp('say.fishing.bite', { seconds: BITE_WINDOW_SECONDS }), 'system');
       } else if (phase === 'idle') {
         this.bobber = null;
         this.hideBobber();
-        if (before.phase === 'flying') this.chat.push('浮标没落在水里', 'error');
-        else if (before.phase === 'biting') this.chat.push('鱼跑了…', 'system');
+        if (before.phase === 'flying') this.chat.push(t('say.fishing.notInWater'), 'error');
+        else if (before.phase === 'biting') this.chat.push(t('say.fishing.escaped'), 'system');
       }
     }
 
@@ -11973,8 +11473,15 @@ class App {
     this.refreshHotbar();
 
     const label = itemLabel(caught.id);
-    const extra = Object.keys(stack.enchants ?? {}).length > 0 ? '（附魔书）' : '';
-    this.chat.push(`钓到了 ${label}${caught.count > 1 ? ` ×${caught.count}` : ''}${extra}`, 'system');
+    const extra = Object.keys(stack.enchants ?? {}).length > 0 ? t('say.fishing.enchantedBook') : '';
+    // 单/多两条模板：`×2` 这种量词在中英德俄法葡里**位置与写法都不同**，
+    // 拼一句 `{item} ×{count}` 在俄语里会把数字放到名词前面（同一类问题在批次 425 踩过）
+    this.chat.push(
+      caught.count > 1
+        ? tp('say.fishing.caughtMany', { item: label, count: caught.count, extra })
+        : tp('say.fishing.caughtOne', { item: label, extra }),
+      'system',
+    );
   }
 
   /** 建（或复用）浮标那个小方块：上白下红，与原版浮标同一个配色 */
@@ -12008,9 +11515,7 @@ class App {
   private breakColumn(x: number, y: number, z: number, id: number): void {
     for (let oy = y; oy < 320; oy++) {
       if (this.world.getBlock(x, oy, z) !== id) break;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       // 创造模式不产生掉落（与原版一致）
@@ -12031,9 +11536,7 @@ class App {
       const id = this.world.getBlock(x, oy, z);
       // 上半格必须是同一种门（脏存档里可能只剩半扇）
       if (blockDef(id).shape !== 'door') continue;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -12061,9 +11564,7 @@ class App {
       const oy = baseY + dy;
       const id = this.world.getBlock(x, oy, z);
       if (blockDef(id).shape !== 'banner') continue;
-      const state = this.world.getBlockState(x, oy, z);
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
-      this.undoRecord(x, oy, z, id, state, Block.AIR, 0);
       this.queueBlockChange(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
@@ -12154,7 +11655,7 @@ class App {
       const y = Math.min(WORLD_MAX_Y - 4, this.physics.y + 22);
       this.entities.spawn(createMob(PHANTOM_TYPE, x, y, z));
     }
-    this.chat.push(`你已经连着 ${this.daysWithoutSleep} 天没合眼了……天上有东西在叫。`, 'system');
+    this.chat.push(tp('say.phantom', { days: this.daysWithoutSleep }), 'system');
   }
 
   private updateMobSpawning(dt: number): void {
@@ -12327,7 +11828,7 @@ class App {
     if (axeHit && this.isShieldUp) {
       this.shieldDisabled = SHIELD_DISABLE_SECONDS;
       this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
-      this.chat.push('盾牌被斧头破防（5 秒）', 'system');
+      this.chat.push(tp('say.shield.axeBreak', { seconds: SHIELD_DISABLE_SECONDS }), 'system');
     }
 
     // 盾牌（批次 194）：正面挡近战、箭矢与爆炸——**挡下不等于受伤**，所以音效与震动都在下面才播
@@ -12410,7 +11911,7 @@ class App {
       if (damage >= max) {
         this.inventory.set(slot, null);
         this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
-        this.chat.push('盾牌碎了', 'system');
+        this.chat.push(t('say.shield.broken'), 'system');
       } else {
         this.inventory.set(slot, { ...stack, damage });
       }
@@ -12947,123 +12448,6 @@ class App {
     this.tutorialCard.hide();
   }
 
-  /** 验收脚本用：撤销一步（创造1） */
-  undoForTest(): boolean {
-    return this.undoLast();
-  }
-
-  /** 验收脚本用：重做一步（创造1） */
-  redoForTest(): boolean {
-    return this.redoLast();
-  }
-
-  /** 验收脚本用：撤销栈状态（不改变任何东西） */
-  get undoStateForTest(): { undo: number; redo: number; allowed: boolean } {
-    return { undo: this.undoStack.undoCount, redo: this.undoStack.redoCount, allowed: this.undoAllowed() };
-  }
-
-  /** 验收脚本用：点一个选区角（创造2） */
-  selectCornerForTest(x: number, y: number, z: number): boolean {
-    return this.selectCorner({ x, y, z });
-  }
-
-  /** 验收脚本用：同步把选区填完，返回真正写入的格数 */
-  fillSelectionForTest(blockId: number, mode: FillMode = 'fill'): number {
-    if (!this.startFill(blockId, mode)) return 0;
-    const runner = this.activeFill;
-    while (this.activeFill) this.stepFillRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：清掉选区（两个角都作废） */
-  clearSelectionForTest(): void {
-    this.clearSelection();
-  }
-
-  /** 验收脚本用：取消正在进行的填充（已写进去的格子不回滚） */
-  cancelFillForTest(): void {
-    this.cancelFill();
-  }
-
-  /** 验收脚本用：选区 / 填充状态 */
-  get selectionStateForTest(): { hasStart: boolean; box: SelectionBox | null; filling: boolean } {
-    return {
-      hasStart: this.selectionStart !== null,
-      box: this.selectionBox,
-      filling: this.activeFill !== null,
-    };
-  }
-
-  /** 验收脚本用：复制当前选区，返回复制到的格数（创造3） */
-  copySelectionForTest(): number {
-    return this.copySelection() ? (this.clipboard?.cells.length ?? 0) : 0;
-  }
-
-  /** 验收脚本用：同步把剪贴板粘贴完，返回写入格数 */
-  pasteClipboardForTest(
-    mirror: MirrorAxis | null = null,
-    x?: number,
-    y?: number,
-    z?: number,
-  ): number {
-    const target = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
-    if (!this.pasteClipboard(mirror, target)) return 0;
-    const runner = this.activePaste;
-    while (this.activePaste) this.stepPasteRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：取消正在进行的粘贴 */
-  cancelPasteForTest(): void {
-    this.cancelPaste();
-  }
-
-  /** 验收脚本用：剪贴板状态 */
-  get clipboardStateForTest(): { hasClipboard: boolean; cells: number; masked: boolean; pasting: boolean } {
-    return {
-      hasClipboard: this.clipboard !== null,
-      cells: this.clipboard?.cells.length ?? 0,
-      masked: this.clipboard?.masked ?? false,
-      pasting: this.activePaste !== null,
-    };
-  }
-
-  /** 验收脚本用：放一座内置建筑，返回写入格数（创造4） */
-  placeTemplateForTest(templateId: string, x?: number, y?: number, z?: number): number {
-    const origin = x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 };
-    if (!this.placeTemplate(templateId, origin)) return 0;
-    const runner = this.activePaste;
-    while (this.activePaste) this.stepPasteRunner();
-    return runner?.progress.written ?? 0;
-  }
-
-  /** 验收脚本用：开关建造模式（创造5） */
-  setBuildModeForTest(active: boolean): void {
-    this.buildMode = active;
-    this.buildToolbar.setMode(active);
-    if (!active) this.clearSelection();
-    this.refreshBuildToolbar();
-  }
-
-  /** 验收脚本用：工具条状态 */
-  get buildToolbarStateForTest(): {
-    mode: boolean;
-    panelOpen: boolean;
-    available: boolean;
-    armed: boolean;
-    undo: number;
-    redo: number;
-  } {
-    return {
-      mode: this.buildToolbar.isOpen,
-      panelOpen: this.buildToolbar.isPanelOpen,
-      available: this.isCreative,
-      armed: this.selectionStart !== null,
-      undo: this.undoStack.undoCount,
-      redo: this.undoStack.redoCount,
-    };
-  }
-
   /** 验收脚本用：进入框架自检小游戏（小游戏1） */
   startMinigameForTest(): boolean {
     this.startMinigame(new SmokeGame());
@@ -13155,7 +12539,7 @@ class App {
       const ok = entity.assignProfession(professionId as Parameters<Villager['assignProfession']>[0], null);
       if (ok) {
         this.inventoryScreen.refresh();
-        this.chat.push(`（调试）村民已认领职业：${levelName(entity.level)}`, 'system');
+        this.chat.push(tp('say.debug.villagerProfession', { level: levelName(entity.level) }), 'system');
       }
       return ok;
     }
@@ -13175,7 +12559,10 @@ class App {
       const def = this.advancements.defs.find((item) => item.id === id);
       if (def) {
         this.advancementToast.push(def);
-        this.chat.push(`进度已达成：${def.title}——${def.desc}`, 'system');
+        this.chat.push(
+          tp('say.progress.earned', { title: advancementTitle(def), desc: advancementDesc(def) }),
+          'system',
+        );
       }
       this.advancementScreen.refresh();
     }
@@ -13761,7 +13148,14 @@ class App {
     this.effects.apply(id, seconds, amplifier, true);
     diag.event('survival', 'effect', { effect: id, seconds, amplifier, via: 'command' });
     this.resolveInstantEffects();
-    this.chat.push(`获得效果：${effectLabel(id)}${amplifier > 0 ? ` ${romanLevel(amplifier)}` : ''}`, 'system');
+    // `{level}` 带上**前导空格**：没有等级时传空串，模板里就不必再写"可能多余的空格"
+    this.chat.push(
+      tp('say.effect.gained', {
+        effect: effectLabel(id),
+        level: amplifier > 0 ? ` ${romanLevel(amplifier)}` : '',
+      }),
+      'system',
+    );
     return true;
   }
 
@@ -13845,7 +13239,7 @@ class App {
       y: this.physics.y + 1,
       z: this.physics.z,
     });
-    this.chat.push('不死图腾救了你一命', 'system');
+    this.chat.push(t('say.totem.saved'), 'system');
     this.hudToast.show(t('misc.toast.totemSaved'));
     this.refreshHotbar();
     return true;
@@ -14390,7 +13784,7 @@ class App {
       const entry = this.armorStands.get(this.dimension, x, y, z);
       const index = entry ? entry.slots.findIndex((item) => item !== null) : -1;
       if (!entry || index < 0) {
-        this.chat.push('盔甲架是空的（拿盔甲右键可以给它穿上）', 'system');
+        this.chat.push(t('say.armorStand.empty'), 'system');
         return true;
       }
       const item = entry.slots[index]!;
@@ -14446,13 +13840,13 @@ class App {
       this.jukeboxDiscs.delete(key);
       this.spawnDrop(loaded, 1, x + 0.5, y + 1.05, z + 0.5);
       this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-      this.chat.push('取出了唱片', 'system');
+      this.chat.push(t('say.jukebox.taken'), 'system');
       return true;
     }
 
     const name = this.discNameOf(this.heldItemId);
     if (!name) {
-      this.chat.push('这里能放唱片（唱片可以在废弃矿井 / 地牢的箱子里找到）', 'system');
+      this.chat.push(t('say.jukebox.hint'), 'system');
       return true;
     }
     if (!this.inventory.consume(this.heldItemId!, 1)) return true;
@@ -14460,7 +13854,7 @@ class App {
     this.jukeboxDiscs.set(key, this.heldItemId!);
     const spec = discSoundSpec(name);
     if (spec) this.audio.playVoice(discSoundKind(name), spec, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-    this.chat.push(`正在播放唱片：${name}（${Math.round(discDuration(name))} 秒）`, 'system');
+    this.chat.push(tp('say.jukebox.playing', { name, seconds: Math.round(discDuration(name)) }), 'system');
     return true;
   }
 
@@ -14510,7 +13904,7 @@ class App {
     if (sneaking) {
       const pitch = nextNotePitch(state);
       this.world.setStateAndUpdate(x, y, z, withNotePitch(state, pitch));
-      this.chat.push(`音符盒：第 ${pitch + 1} 档 / 共 ${NOTE_BLOCK_MAX_PITCH + 1} 档`, 'system');
+      this.chat.push(tp('say.noteBlock.pitch', { pitch: pitch + 1, total: NOTE_BLOCK_MAX_PITCH + 1 }), 'system');
       this.audio.play('click', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       return;
     }
@@ -14630,7 +14024,7 @@ class App {
       // 判据用 `lightOpacity >= 15` 而不是 `opaque`：树叶（opaque 但只挡 1 级光）与玻璃
       // （0 级）在原版都不挡箱子，用 opaque 会误伤它们。
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('箱子上面压着方块，打不开（挪开它，或者换成**木桶**——木桶不怕压）', 'system');
+        this.chat.push(t('say.chest.blocked'), 'system');
         return true;
       }
       {
@@ -14643,7 +14037,7 @@ class App {
     // 陷阱箱（批次 249）：与箱子同一个容器/界面，差别是**开着的时候发红石信号**
     if (hitBlock === Block.TRAPPED_CHEST) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('陷阱箱上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.trappedChest.blocked'), 'system');
         return true;
       }
       this.openTrappedChest(x, y, z);
@@ -14657,7 +14051,7 @@ class App {
     // 潜影盒（批次 72）：与箱子同一条"头顶压着就打不开"的规矩，27 格
     if (isShulkerBox(hitBlock)) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('潜影盒上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.shulkerBox.blocked'), 'system');
         return true;
       }
       this.inventoryScreen.openWith(
@@ -14670,7 +14064,7 @@ class App {
     // 末影箱（批次 71）：与箱子同一条"头顶压着就打不开"的规矩，但开的是**你自己的那一份**
     if (hitBlock === Block.ENDER_CHEST) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('末影箱上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.enderChest.blocked'), 'system');
         return true;
       }
       // 开箱时冒一圈末影粒子（原版也有，而且是它唯一的"打开"反馈）
@@ -15463,7 +14857,7 @@ class App {
     // 荧石是**方块物品**（id 与方块相同），所以这里比的是 `Block.GLOWSTONE`
     if (this.heldItemId === Block.GLOWSTONE) {
       if (charge >= RESPAWN_ANCHOR_MAX_CHARGE) {
-        this.chat.push('这块重生锚已经充满了', 'system');
+        this.chat.push(t('say.anchor.full'), 'system');
         return true;
       }
       const next = withAnchorCharge(state, charge + 1);
@@ -15473,13 +14867,13 @@ class App {
       this.queueBlockChange(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
       this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 8);
-      this.chat.push(`重生锚充能 ${charge + 1} / ${RESPAWN_ANCHOR_MAX_CHARGE}`, 'system');
+      this.chat.push(tp('say.anchor.charged', { charge: charge + 1, max: RESPAWN_ANCHOR_MAX_CHARGE }), 'system');
       return true;
     }
 
     // ② 其他物品/空手：设重生点
     if (charge <= 0) {
-      this.chat.push('重生锚没有充能：拿荧石右键它', 'system');
+      this.chat.push(t('say.anchor.empty'), 'system');
       return true;
     }
     const next = withAnchorCharge(state, charge - 1);
@@ -15488,7 +14882,7 @@ class App {
     this.bedSpawn = { x, y, z, dimension: this.dimension };
     this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 12);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-    this.chat.push(`重生点已设置在这块重生锚上（剩余充能 ${charge - 1}）`, 'system');
+    this.chat.push(tp('say.anchor.spawnSet', { charge: charge - 1 }), 'system');
     return true;
   }
 
@@ -15510,7 +14904,7 @@ class App {
       stack.lodestone.dimension === this.dimension;
     stack.lodestone = { x, y, z, dimension: this.dimension };
     this.refreshHotbar();
-    if (!already) this.chat.push('指南针已绑定到这块磁石', 'system');
+    if (!already) this.chat.push(t('say.lodestone.bound'), 'system');
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.vibrate(6);
     return true;
@@ -16287,9 +15681,6 @@ class App {
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
       const { x: hx, y: hy, z: hz } = this.hit;
-      // 创造1：撤销要记"写之前是什么"，必须在 setBlockAndUpdate 之前读
-      const mergeBeforeId = this.world.getBlock(hx, hy, hz);
-      const mergeBeforeState = this.world.getBlockState(hx, hy, hz);
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(heldId, 1);
@@ -16297,15 +15688,12 @@ class App {
         this.reportProgress({ kind: 'place', block: blockId });
         // 新手引导（引导3）：合并放置同样算"放下"，坐标取落点那一格（判"搭起来"要用 y）
         this.reportTutorial({ kind: 'place', block: blockId, y: hy });
-        this.undoRecord(hx, hy, hz, mergeBeforeId, mergeBeforeState, blockId, plan.mergeInto.state);
       }
       return;
     }
 
     // 藤蔓"再挂一面"：改的是**落点那一格**（它已经是同一种藤蔓了）
     if (plan.mergeIntoTarget) {
-      // 创造1：落点原本就是同一种藤蔓（`existing`），改的是状态
-      const targetBeforeState = this.world.getBlockState(x, y, z);
       if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
         this.statistics.add('blocksPlaced');
         this.placeCooldown = PLACE_COOLDOWN;
@@ -16314,7 +15702,6 @@ class App {
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
         this.reportTutorial({ kind: 'place', block: blockId, y });
-        this.undoRecord(x, y, z, existing, targetBeforeState, blockId, plan.mergeIntoTarget.state);
       }
       return;
     }
@@ -16323,15 +15710,6 @@ class App {
     // 放下去时打上 waterlogged 标记。没有这个标记，水下放的台阶被挖掉之后
     // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
     const placeState = waterloggedPlacementState(blockId, plan.state, existing);
-    // 创造1：撤销要记"写之前是什么"。一次放置最多两格（门/床/双台阶/多格画），
-    // 两格的 before 都必须在任何写入发生之前读出来
-    const placeBeforeState = this.world.getBlockState(x, y, z);
-    const extra = plan.extra;
-    const extraX = extra ? x + extra.dx : 0;
-    const extraY = extra ? y + extra.dy : 0;
-    const extraZ = extra ? z + extra.dz : 0;
-    const extraBeforeId = extra ? this.world.getBlock(extraX, extraY, extraZ) : Block.AIR;
-    const extraBeforeState = extra ? this.world.getBlockState(extraX, extraY, extraZ) : 0;
     if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
       this.statistics.add('blocksPlaced');
       // 多格画（批次 495）：`planPlacement` 只返回了哨兵档位，具体是哪一幅、
@@ -16343,44 +15721,6 @@ class App {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
       }
-      // 创造1：一次放置 = 一步（门/床的两格一起撤销，而不是撤两下）
-      this.undoPush(
-        extra
-          ? [
-              {
-                dimension: this.dimension,
-                x,
-                y,
-                z,
-                beforeId: existing,
-                beforeState: placeBeforeState,
-                afterId: blockId,
-                afterState: placeState,
-              },
-              {
-                dimension: this.dimension,
-                x: extraX,
-                y: extraY,
-                z: extraZ,
-                beforeId: extraBeforeId,
-                beforeState: extraBeforeState,
-                afterId: extra.id,
-                afterState: extra.state,
-              },
-            ]
-          : [
-              {
-                dimension: this.dimension,
-                x,
-                y,
-                z,
-                beforeId: existing,
-                beforeState: placeBeforeState,
-                afterId: blockId,
-                afterState: placeState,
-              },
-            ],
-      );
       // 流体（批次 235）：落点在水中/水边时，四周的水要重新评估流向。
       // 往水里放一块石头 = 抽走一格水，不唤醒的话这个洞永远没人来填。
       this.wakeFluidsAround(x, y, z);
@@ -16477,7 +15817,7 @@ class App {
     // 凋灵生成在**中间那颗头**刚刚让出来的那一格（原版也是"从 T 形里长出来"）
     const wither = createMob(WITHER_TYPE, layout.center.x + 0.5, layout.center.y, layout.center.z + 0.5);
     this.entities.spawn(wither);
-    this.chat.push('凋灵被唤醒了', 'system');
+    this.chat.push(t('say.wither'), 'system');
   }
 
   /** 玩家脚下或身体所在的那一格是不是传送门方块 */
@@ -16582,7 +15922,7 @@ class App {
     this.setDimension(target.dimension, target);
     // 末地传送门只有"主世界 → 末地"这一侧是正门，回来时落的是**世界出生点**：
     // 与原版一致，但玩家第一次遇到会意外，所以给一句话
-    if (!toEnd) this.chat.push('末地传送门把你送回了世界出生点', 'system');
+    if (!toEnd) this.chat.push(t('say.endPortal.returned'), 'system');
   }
 
   /**
@@ -16977,7 +16317,7 @@ class App {
         if (this.respawnCountdown >= RESPAWN_DELAY) {
           this.respawnPlayer();
           this.setGameMode('spectator');
-          this.chat.push('极限模式：你已死亡，只能以旁观者继续查看这个世界', 'system');
+          this.chat.push(t('say.hardcore.dead'), 'system');
         }
       } else if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) {
         // 立即重生（批次 255）：跳过那 1 秒等待，直接回出生点
@@ -17032,10 +16372,17 @@ class App {
       }
       const list = [...groups.values()];
       const total = list.reduce((sum, item) => sum + item.amount, 0);
+      // 多语言：**句子**走 `say.*`，**原因碎片**仍由 `damageReason()` 提供（`notice.damage.*`）。
+      // 分隔符也得查表——中文是「；」，英德葡是 "; "，法语惯例是「 ; 」（空格在标点前）。
       const reasons = list
-        .map((item) => `${damageReason(item.cause, item.source)}（${fmt(item.amount)} 点）`)
-        .join('；');
-      this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
+        .map((item) =>
+          tp('say.damage.reason', {
+            cause: damageReason(item.cause, item.source),
+            amount: fmt(item.amount),
+          }),
+        )
+        .join(t('say.damage.sep'));
+      this.chat.push(tp('say.damage.taken', { amount: fmt(total), reasons, health: fmt(health) }), 'damage');
       // 受伤反馈（批次 234）：红闪 + 声音 + 触觉。
       // ⚠️ 放在这里而不是 `damagePlayer`：只有这里拿得到"**实际**掉了多少血"，
       // 而且溺水 / 着火 / 饥饿这些不走 `damagePlayer` 的伤害也要有同样的反馈。
@@ -17054,8 +16401,14 @@ class App {
     } else if (healthDelta < -0.05) {
       // 没有记录（理论上不该发生，比如读档直接改了 health）：退回最后一条，至少给出类型
       const last = this.stats.lastDamage;
+      // 这一支**没有逐条金额**（流水对不上，只有一条兜底原因），所以不套 `say.damage.reason`：
+      // 套上去会变成「受到 2 点伤害：摔落（2 点）」——同一笔数字说两遍
       this.chat.push(
-        `受到 ${fmt(-healthDelta)} 点伤害：${damageReason(last?.cause ?? 'generic', last?.source)} · 生命 ${fmt(health)}/20`,
+        tp('say.damage.taken', {
+          amount: fmt(-healthDelta),
+          reasons: damageReason(last?.cause ?? 'generic', last?.source),
+          health: fmt(health),
+        }),
         'damage',
       );
       // 这条本身就是"伤害流水对不上"的信号，必须记下来（带 `unlogged` 标记便于筛）
@@ -17070,51 +16423,50 @@ class App {
       this.reactToDamage(-healthDelta);
     }
     if (survivalMode && healthDelta >= 2) {
-      this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
+      this.chat.push(tp('say.health.gain', { amount: fmt(healthDelta), health: fmt(health) }), 'gain');
     }
 
     // ---- 饥饿：掉 1 点也播（原版没有这个提示，但手机上血条很小，等看见时已经晚了）
     if (survivalMode && food < this.noticeFood) {
       const lost = this.noticeFood - food;
-      const hint = food <= 6 ? ' · 快吃点东西，否则会饿到掉血' : '';
+      // 低饥饿那句是**附加后缀**，所以进模板当 `{hint}` 而不是在外面 + 字符串：
+      // 英文/德文的语序可能把它放到句尾以外的地方（批次 425 的教训）
+      const hint = food <= 6 ? t('say.food.lowHint') : '';
       this.chat.push(
-        `饥饿值 -${fmt(lost)}（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）· 剩余 ${fmt(food)}/20${hint}`,
+        tp('say.food.loss', { amount: fmt(lost), food: fmt(food), hint }),
         food <= 6 ? 'warning' : 'system',
       );
     } else if (survivalMode && food > this.noticeFood) {
-      this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)}（进食 / 饱和效果）· 当前 ${fmt(food)}/20`, 'gain');
+      this.chat.push(tp('say.food.gain', { amount: fmt(food - this.noticeFood), food: fmt(food) }), 'gain');
     }
 
     // ---- 低血量 / 饥饿耗尽：只在"刚跨过阈值"时报一次，恢复后复位
     // 创造模式整段跳过，但**不复位 warned**：切回生存时该提示的还要提示
     if (survivalMode && !this.lowHealthWarned && health > 0 && health <= 6) {
       this.lowHealthWarned = true;
-      this.chat.push(
-        `生命值偏低（${fmt(health)}/20）：先躲开敌人或危险方块，吃东西可以回血`,
-        'warning',
-      );
+      this.chat.push(tp('say.health.low', { health: fmt(health) }), 'warning');
     } else if (survivalMode && this.lowHealthWarned && health > 10) {
       this.lowHealthWarned = false;
     }
     if (survivalMode && !this.starveWarned && food <= 0) {
       this.starveWarned = true;
-      this.chat.push('饥饿值耗尽（体力透支）：会持续掉血，也无法自然回血；快吃东西', 'warning');
+      this.chat.push(t('say.food.starving'), 'warning');
     } else if (survivalMode && this.starveWarned && food > 6) {
       this.starveWarned = false;
     }
 
     // ---- 氧气：不足与耗尽各提示一次（之后由"受到伤害"那条接管）
     if (survivalMode && air <= 100 && this.noticeAir > 100) {
-      this.chat.push(`氧气不足（正在水下憋气，剩余 ${Math.max(0, Math.round(air))}）：浮上水面换气`, 'warning');
+      this.chat.push(tp('say.air.low', { air: Math.max(0, Math.round(air)) }), 'warning');
     } else if (survivalMode && air <= 0 && this.noticeAir > 0) {
-      this.chat.push('氧气耗尽（已经憋不住）：正在溺水掉血，立刻上浮', 'damage');
+      this.chat.push(t('say.air.empty'), 'damage');
     } else if (survivalMode && air > 120 && this.noticeAir <= 100) {
-      this.chat.push('回到水面（已能呼吸）：氧气正在恢复', 'gain');
+      this.chat.push(t('say.air.back'), 'gain');
     }
 
     // ---- 着火：点燃那一刻说一次（持续伤害由生命那条播）
     if (survivalMode && this.stats.burning && !this.noticeBurning) {
-      this.chat.push('你着火了（站在火/岩浆里或被点燃）：每秒掉血，跳进水里可熄灭', 'warning');
+      this.chat.push(t('say.burning'), 'warning');
     }
 
     this.noticeHealth = health;
@@ -17292,7 +16644,7 @@ class App {
             return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
           }
           this.bedSpawn = null;
-          this.chat.push('重生锚的充能耗尽了，回世界出生点复活', 'system');
+          this.chat.push(t('say.respawn.anchorEmpty'), 'system');
         } else {
           const other = bedOtherHalf(bed.x, bed.y, bed.z, this.world.getBlockState(bed.x, bed.y, bed.z));
           if (isBed(id) && isBed(this.world.getBlock(other[0], other[1], other[2]))) {
@@ -17300,7 +16652,7 @@ class App {
           }
           // 床没了：这一份重生点作废，下次睡觉才会重新记
           this.bedSpawn = null;
-          this.chat.push('你的床不在了，回世界出生点复活', 'system');
+          this.chat.push(t('say.respawn.bedGone'), 'system');
         }
       } else {
         // ⚠️ 床在**别的维度**：切维度会把区块重新流式加载，这一刻 `getBlock` 一律返回空气，
@@ -17832,7 +17184,7 @@ class App {
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
-      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
+      ? `${shortId(blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name)} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
       : t('hud.none');
 
     const armorPoints = this.stats.armorPoints;
@@ -18446,11 +17798,6 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
-      // 创造5：工具条只对创造模式可见（内部判等，没变化时不动 DOM）
-      this.buildToolbar.setAvailable(this.isCreative);
-      // 创造2/3：框选填充与粘贴每帧各推一批（512 格）；空闲时都是一次判空
-      this.stepFillRunner();
-      this.stepPasteRunner();
       /*
        * 容器计时（L8 · MS4）：熔炉燃烧/进度、酿造、漏斗冷却只由房主推进。
        * 从属端一旦也 tick，进度条就是各走各的（差几秒，而且不报错）。
@@ -18469,7 +17816,10 @@ class App {
       // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画。
       // 第三人称看的是玩家模型（手里没有画方块），所以第一人称的手臂要藏起来。
       this.updateCameraFov(dt);
-      this.hand.setItem(this.inventory.get(this.hotbarIndex)?.id);
+      const heldItemId = this.inventory.get(this.hotbarIndex)?.id;
+      this.hand.setItem(heldItemId);
+      // 第三人称看的是玩家模型，手里的东西也得在**那只手**上（用户 20261024 反馈）
+      this.playerRenderer.setHeldItem(heldItemId);
       this.hand.update(dt, this.isPlayerMoving(), this.camera.fov, this.camera.aspect);
       this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
       this.screenEffects.update(dt);
@@ -18583,7 +17933,6 @@ class App {
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
     this.tutorialCard.dispose();
-    this.buildToolbar.dispose();
     this.miniGame.dispose();
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
@@ -18858,8 +18207,6 @@ class App {
     this.touch?.resetInput('dimension');
     this.dimension = dimension;
     this.world.setDimension(dimension);
-    // 创造1：换维度之后旧维度的撤销记录没有意义（坐标只在维度内有意义，写回去会串世界）
-    this.undoStack.clear();
     // 门类的"上次电平"同样按坐标记：不清的话，新维度里同坐标的门会被误判成"电平没变"
     this.redstone.clearOpenablePower();
     // 掉落物实体属于旧维度，直接清掉
@@ -19706,7 +19053,7 @@ class App {
    * 按名字取可以避免这类笔误，也让方块 id 变动时脚本不用跟着改。
    */
   blockId(name: string): number {
-    const full = name.includes(':') ? name : `minecraft:${name}`;
+    const full = normalizeId(name);
     return BLOCKS.findIndex((def) => def.name === full);
   }
 

@@ -97,10 +97,10 @@ function buildPyramid(levels: number, base: number = Block.IRON_BLOCK): Map<stri
 console.log('\n[矿物块：信标底座要用的那三种]');
 {
   const cases: Array<{ id: number; name: string; label: string; tile: string; hardness: number; tier: number }> = [
-    { id: Block.GOLD_BLOCK, name: 'minecraft:gold_block', label: '金块', tile: 'gold_block', hardness: 3, tier: 1 },
+    { id: Block.GOLD_BLOCK, name: 'minicraft:gold_block', label: '金块', tile: 'gold_block', hardness: 3, tier: 1 },
     {
       id: Block.DIAMOND_BLOCK,
-      name: 'minecraft:diamond_block',
+      name: 'minicraft:diamond_block',
       label: '钻石块',
       tile: 'diamond_block',
       hardness: 5,
@@ -108,7 +108,7 @@ console.log('\n[矿物块：信标底座要用的那三种]');
     },
     {
       id: Block.EMERALD_BLOCK,
-      name: 'minecraft:emerald_block',
+      name: 'minicraft:emerald_block',
       label: '绿宝石块',
       tile: 'emerald_block',
       hardness: 5,
@@ -139,7 +139,7 @@ console.log('\n[矿物块：信标底座要用的那三种]');
 console.log('\n[信标方块]');
 {
   const def = blockDef(Block.BEACON);
-  equal('注册名', def.name, 'minecraft:beacon');
+  equal('注册名', def.name, 'minicraft:beacon');
   equal('形状是完整立方体（能用"格子"的方式理解它）', def.shape, 'cube');
   equal('**是光源**（原版亮度 15）', def.light, 15);
   equal('不遮挡邻居（那圈玻璃）', def.opaque, false);

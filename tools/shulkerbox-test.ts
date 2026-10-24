@@ -76,7 +76,7 @@ function one(id: number, count = 1): { id: number; count: number } {
 console.log('\n[方块与外观]');
 {
   equal('方块 id 紧接在末影箱之后（481 → 482）', BOX, Block.ENDER_CHEST + 1);
-  equal('注册名', blockDef(BOX).name, 'minecraft:shulker_box');
+  equal('注册名', blockDef(BOX).name, 'minicraft:shulker_box');
   equal('中文名', itemLabel(BOX), '潜影盒');
   check('有物品说明', hasDescription(BOX));
   equal('分类是"功能方块"', categoryOf(BOX), 'functional');

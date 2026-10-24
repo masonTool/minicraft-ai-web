@@ -217,7 +217,7 @@ console.log('\n[制作：扣材料只扣该扣的]');
 
 console.log('\n[注册：方块 / 配方 / 容器]');
 {
-  equal('方块注册名', blockDef(Block.CARTOGRAPHY_TABLE).name, 'minecraft:cartography_table');
+  equal('方块注册名', blockDef(Block.CARTOGRAPHY_TABLE).name, 'minicraft:cartography_table');
   equal('中文名', blockLabel(Block.CARTOGRAPHY_TABLE), '制图台');
   check('实心整格', blockDef(Block.CARTOGRAPHY_TABLE).solid);
   check('活塞推不动名单里有它', CONTAINER_BLOCKS.has(Block.CARTOGRAPHY_TABLE));

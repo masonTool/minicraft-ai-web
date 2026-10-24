@@ -46,7 +46,7 @@ console.log('\n[效果名解析]');
   check(`共 ${EFFECTS.length} 种效果（I4 要求约 30 种）`, EFFECTS.length >= 28, String(EFFECTS.length));
   check('每种都有中文名', EFFECTS.every((id) => effectLabel(id).length > 0));
   check('英文 id 可解析', resolveEffect('speed') === 'speed');
-  check('带命名空间可解析', resolveEffect('minecraft:poison') === 'poison');
+  check('带命名空间可解析', resolveEffect('minicraft:poison') === 'poison');
   check('中文名可解析', resolveEffect('夜视') === 'night_vision');
   check('别名可解析（swiftness/jump/regen）', resolveEffect('swiftness') === 'speed' && resolveEffect('jump') === 'jump_boost' && resolveEffect('regen') === 'regeneration');
   check('大小写不敏感', resolveEffect('SPEED') === 'speed');

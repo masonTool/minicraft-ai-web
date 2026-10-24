@@ -15,11 +15,6 @@ import type { PluralTable } from '../../plural.ts';
 export const plural = {
   // 移动距离：0 bloc / 1 bloc / 2 blocs
   'statistics.blocks': { one: '{count} bloc', other: '{count} blocs' },
-  // 建造工具：名词与过去分词都要配合（rempli / remplis）
-  'buildtools.select.done': { one: 'Sélection : {volume} bloc', other: 'Sélection : {volume} blocs' },
-  'buildtools.fill.done': { one: '{count} bloc rempli', other: '{count} blocs remplis' },
-  'buildtools.copy.done': { one: '{count} bloc copié', other: '{count} blocs copiés' },
-  'buildtools.paste.done': { one: '{count} bloc collé', other: '{count} blocs collés' },
   // 还能酿几次
   'station.brewLeft': { one: 'Encore {count} brassage possible', other: 'Encore {count} brassages possibles' },
 } satisfies PluralTable;

@@ -25,6 +25,8 @@ import {
 import { Scoreboard, SIDEBAR_MAX_ROWS } from '../src/core/world/Scoreboard.ts';
 import { Teams } from '../src/core/world/Teams.ts';
 import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
+import { resetSaveIssues, saveIssueReport, saveIssueTotal } from '../src/core/save/SaveIssues.ts';
+import { restoreStack } from '../src/core/container/Inventory.ts';
 import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../src/core/crafting/Brewing.ts';
 
 let passed = 0;
@@ -507,6 +509,49 @@ console.log('\n[侧边栏视图（批次 456）]');
   // 没设 sidebar 槽位 → null（HUD 整块收起）
   board.setDisplay('sidebar', null);
   equal('清掉槽位后没有视图', board.sidebarView(), null);
+}
+
+console.log('\n[读档容错：不认识的 id 跳过并记账（批次 20261025-0117）]');
+{
+  resetSaveIssues();
+
+  // 方块：id 超出注册表（删过方块 / 手改过存档）→ 不写世界、保留地形、记一笔账
+  const edits = new ChunkEdits();
+  const chunk = new Chunk(0, 0);
+  chunk.set(1, 64, 1, Block.STONE, 0);
+  edits.restore('overworld', 0, 0, {
+    indices: new Uint32Array([Chunk.index(1, 64, 1)]),
+    packed: new Uint32Array([packEdit(99999, 0)]),
+  });
+  equal('不认识的方块 id 不写进世界', edits.applyTo('overworld', 0, 0, chunk), 0);
+  equal('那一格保留原地形（不是被挖空）', chunk.get(1, 64, 1), Block.STONE);
+  equal(
+    '方块问题记了账',
+    saveIssueReport().filter((issue) => issue.kind === 'block').map((issue) => issue.detail).join(','),
+    'id=99999',
+  );
+
+  // 物品：id 不在注册表里 → 丢掉（不能让一个坏 id 毁掉整档），但同样记账
+  equal('不认识的物品 id 丢掉', restoreStack({ id: 999999, count: 1 }), null);
+  equal(
+    '物品问题记了账',
+    saveIssueReport().filter((issue) => issue.kind === 'item').map((issue) => issue.count).join(','),
+    '1',
+  );
+
+  // 同一个问题重复出现时累加，不会把清单撑爆
+  restoreStack({ id: 999999, count: 1 });
+  equal(
+    '同一个 id 累加次数而不是新增一条',
+    saveIssueReport().filter((issue) => issue.kind === 'item').length,
+    1,
+  );
+  equal('总数含重复次数', saveIssueTotal(), 3);
+
+  // 打开另一个世界会清零（`SaveGame.open` 里调）——否则旧世界的问题会挂到新世界上
+  resetSaveIssues();
+  equal('清零后没有账', saveIssueTotal(), 0);
+  check('清零后清单为空', saveIssueReport().length === 0);
 }
 
 console.log(`\n存档测试：${passed} 通过 / ${failed} 失败`);
