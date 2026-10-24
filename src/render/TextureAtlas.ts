@@ -7085,6 +7085,21 @@ export class TextureAtlas {
     return bounds;
   }
 
+  /**
+   * 读一整张贴图的 RGBA（`TILE_SIZE × TILE_SIZE`）。
+   *
+   * 手持物品的 3D 像素模型（`itemModel.buildItemModel`）要按图标的**实际轮廓**挤出实体，
+   * 所以它需要像素本身，而不只是 UV 矩形。读不到（没有 2D 上下文）时返回 null，
+   * 调用方退回"薄盒子"。
+   */
+  readTile(tile: string): { width: number; height: number; data: Uint8ClampedArray } | null {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return null;
+    const origin = this.tileSource(tile);
+    const image = ctx.getImageData(origin.x, origin.y, TILE_SIZE, TILE_SIZE);
+    return { width: TILE_SIZE, height: TILE_SIZE, data: image.data };
+  }
+
   /** 贴图在图集画布上的像素左上角（UI 用 drawImage 裁切图标） */
   tileSource(tile: string): { x: number; y: number } {
     const index = TILE_INDEX.get(tile) ?? 0;

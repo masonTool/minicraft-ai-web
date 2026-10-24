@@ -37,6 +37,7 @@ import { blockDef } from '../core/registry/blocks.ts';
 import { isFullBlockShape } from '../core/registry/blockShapes.ts';
 import { TILE_SIZE, type TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, applySpriteFaceUvs, blockFaceTiles } from './atlasMesh.ts';
+import { buildItemModel } from './itemModel.ts';
 import { applyBoxFaceShade } from './boxShading.ts';
 import {
   bodyProportions,
@@ -104,7 +105,7 @@ export interface PlayerPose {
  */
 const HELD_BLOCK_SIZE = 0.34;
 const HELD_SPRITE_SIZE = 0.52;
-const HELD_SPRITE_THICKNESS = 0.03;
+const HELD_SPRITE_THICKNESS = 0.06;
 /** 握点：右臂局部坐标（手臂从肩 y=0 垂到 y≈-0.7，手心在 -0.66 附近） */
 const HELD_GRIP: readonly [number, number, number] = [-0.2, -0.56, -0.26];
 /**
@@ -628,21 +629,25 @@ export class PlayerRenderer {
       // 那套自定义着色器用的，这里读不到）
       applyBoxFaceShade(geometry);
     } else {
-      geometry = new THREE.BoxGeometry(
-        HELD_SPRITE_SIZE,
-        HELD_SPRITE_SIZE,
-        HELD_SPRITE_THICKNESS,
-      );
       const tile = itemIconTile(itemId);
-      const bounds = atlas.contentBounds(tile);
-      applySpriteFaceUvs(geometry, atlas, tile, bounds, TILE_SIZE);
-      // 正反两面满亮度（图标本身就是"画好的颜色"），厚度面压暗——
-      // 与第一人称的 `SPRITE_SHADE` 同一口径，两边看起来才是同一件东西
-      applyBoxFaceShade(geometry, HELD_SPRITE_SHADE);
-      const texel = HELD_SPRITE_SIZE / TILE_SIZE;
-      const contentBottom = (TILE_SIZE - bounds.bottom) * texel;
-      const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_SIZE / 2) * texel;
-      geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom, 0);
+      // 与第一人称同一套 3D 像素模型（按图标轮廓挤出），只是口径是"格"而不是"屏幕比例"
+      const model = buildItemModel(atlas, tile, {
+        size: HELD_SPRITE_SIZE,
+        depth: HELD_SPRITE_THICKNESS,
+        tilePixels: TILE_SIZE,
+      });
+      if (model) {
+        geometry = model;
+      } else {
+        geometry = new THREE.BoxGeometry(HELD_SPRITE_SIZE, HELD_SPRITE_SIZE, HELD_SPRITE_THICKNESS);
+        const bounds = atlas.contentBounds(tile);
+        applySpriteFaceUvs(geometry, atlas, tile, bounds, TILE_SIZE);
+        applyBoxFaceShade(geometry, HELD_SPRITE_SHADE);
+        const texel = HELD_SPRITE_SIZE / TILE_SIZE;
+        const contentBottom = (TILE_SIZE - bounds.bottom) * texel;
+        const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_SIZE / 2) * texel;
+        geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom, 0);
+      }
     }
     this.heldGeometries.set(itemId, geometry);
     return geometry;

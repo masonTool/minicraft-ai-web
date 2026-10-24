@@ -50,6 +50,7 @@ import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 import { blockDef } from '../core/registry/blocks.ts';
 import { isFullBlockShape } from '../core/registry/blockShapes.ts';
 import { applyFaceShade, applyFaceUvs, applySpriteFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
+import { buildItemModel } from './itemModel.ts';
 import { srgbColor } from './srgb.ts';
 
 /**
@@ -94,12 +95,13 @@ const BLOCK_ROTATION: readonly [number, number, number] = [0.42, Math.PI / 4, 0]
 /**
  * 扁平物品（工具/武器/食物…）。
  *
- * · 边长 0.40（屏幕高比例）：投影后约屏幕高 40%，和原版举着剑的比例接近；
- * · 厚度 0.016：侧看是一条 1~2px 的细边（斜向物品几乎看不见，正是想要的）；
+ * · 边长 0.52（屏幕高比例）：投影后约屏幕高 58%，对齐原版"手里东西占右侧一大块"的观感；
+ * · 挤出深度 0.035（≈ 1 个像素格）：**按图标轮廓**挤出的实体，剑就是一把有厚度的剑
+ *   （批次 2136 用户："能有 3D 的效果、分辨率再高一点、同时增加一点厚度"）；
  * · 对齐口径：**图标里不透明那块的底边中点**落在握点上（见 `spriteGeometry`）。
  */
 const SPRITE_SIZE = 0.52;
-const SPRITE_THICKNESS = 0.03;
+const SPRITE_DEPTH = 0.035;
 const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
 /**
  * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
@@ -107,14 +109,7 @@ const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
  * ⚠️ 别给 Y 轴大角度（旧值 -0.55）：平面转过去之后图标会被压扁，
  * 加上透视就成了"一条斜跨屏幕的带子"。
  */
-const SPRITE_ROTATION: readonly [number, number, number] = [-0.12, -0.42, 0.16];
-/**
- * 扁平物品的逐面亮度（`+x, -x, +y, -y, +z, -z`）。
- *
- * 正反两面（±z，图标本身）满亮度；四周的"厚度面"压到 0.55 ——
- * 它承担的是"这道边的暗面"，不承担形状（贴图也只取图标最外一列/行，见 `applySpriteUvs`）。
- */
-const SPRITE_SHADE: readonly number[] = [0.55, 0.55, 0.55, 0.55, 1, 1];
+const SPRITE_ROTATION: readonly [number, number, number] = [-0.1, -0.24, 0.14];
 
 /**
  * 手臂（空手时可见）：粗细与长度（都是**屏幕高比例**）、朝向。
@@ -561,6 +556,8 @@ export class HandRenderer {
    *   · 1455 之前：零厚度 `PlaneGeometry`，整块居中 → 手像是"捏在图标正中间"；
    *   · 1455：改成薄盒子但整块居中，六面同图标 + 默认侧面亮度 → 剑被拉成彩带；
    *   · 1531：薄盒子（有厚度）+ **平移让底边贴握点** + 正反面满亮度、厚度边压暗；
+   *   · 2136（当前）：不再是盒子——按图标**轮廓**挤出实体（`itemModel.ts`），
+   *     侧壁跟着刀身走、厚度是真的厚度，轮廓用 Scale2x 抹平台阶；
    *   · 1726：厚度边只取图标**最外那一列/行**（+ 边缘压暗）—— 六面贴整张图标时，
    *     16px 的图标压到 2px 宽的边上，斜向的剑会被拉成一条细长的"彩带"；
    *     而"厚度边填一道纯色"也不对，斜向物品会在空气里多画一条孤零零的线。
@@ -569,11 +566,28 @@ export class HandRenderer {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, SPRITE_THICKNESS);
     const tile = itemIconTile(itemId);
+    // 按图标轮廓挤出的 3D 像素模型（正反两片 + 跟着轮廓走的侧壁，见 `itemModel.ts`）
+    const geometry =
+      buildItemModel(this.atlas, tile, {
+        size: SPRITE_SIZE,
+        depth: SPRITE_DEPTH,
+        tilePixels: TILE_PIXELS,
+      }) ?? this.fallbackSpriteGeometry(tile);
+
+    this.spriteGeometries.set(itemId, geometry);
+    return geometry;
+  }
+
+  /**
+   * 读不到图标像素时的退路：还是那块薄盒子（宁可"扁"一点，也不要手里空着）。
+   * 真图集不会走到这里；测试桩 / 图集还没画完时会。
+   */
+  private fallbackSpriteGeometry(tile: string): THREE.BufferGeometry {
+    const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, SPRITE_DEPTH);
     const bounds = this.atlas.contentBounds(tile);
     applySpriteFaceUvs(geometry, this.atlas, tile, bounds, TILE_PIXELS);
-    applyFaceShade(geometry, SPRITE_SHADE);
+    applyFaceShade(geometry, [0.55, 0.55, 0.55, 0.55, 1, 1]);
 
     // 对齐口径：**图标里不透明那块的底边中点**落在握点上。
     //  · 只按整块 16×16 的底边对齐：剑/镐还行（它们的柄就在底边），但面包/苹果
@@ -583,8 +597,6 @@ export class HandRenderer {
     const contentBottom = (TILE_PIXELS - bounds.bottom) * texel;
     const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_PIXELS / 2) * texel;
     geometry.translate(-contentCenterX, SPRITE_SIZE / 2 - contentBottom, 0);
-
-    this.spriteGeometries.set(itemId, geometry);
     return geometry;
   }
 
