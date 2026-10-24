@@ -5240,5 +5240,55 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
   );
 }
 
+/*
+ * 暂停菜单：本局房间信息卡（L9）
+ *
+ * 联机之后那颗键原来还是「多人游戏」、点开让你再连一次——玩家真正想要的是
+ * "我在哪个房间、谁是房主、怎么把朋友叫进来"。所以联机中改成信息卡。
+ */
+console.log('\n[暂停菜单：本局房间（L9）]');
+{
+  const cardSrc = readFileSync(new URL('../src/ui/RoomCard.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check(
+    '卡片显示房间 / 角色 / 人数 / 世界（含种子）',
+    cardSrc.includes("t('world.roomName')") &&
+      cardSrc.includes("t('room.role')") &&
+      cardSrc.includes("tp('mp.roomsPlayers', { n: info.players })") &&
+      cardSrc.includes("tp('room.seed', { seed: info.worldSeed })"),
+  );
+  check(
+    '邀请文本由 地址 + 房间 + 口令 拼（朋友只需这一行）',
+    cardSrc.includes('formatServerUrl(info.baseUrl, info.room, info.password)') &&
+      cardSrc.includes("tp('room.invite'"),
+  );
+  check(
+    '复制在非安全上下文（局域网 http）也有退路',
+    cardSrc.includes("navigator.clipboard && window.isSecureContext") &&
+      cardSrc.includes("document.execCommand('copy')"),
+  );
+  check(
+    '暂停菜单那颗键按联机状态改文案（联机中 = 本局房间）',
+    settingsSrc.includes('multiplayerLabelKey?: () => string') &&
+      settingsSrc.includes('this.refreshMultiplayerLabel();') &&
+      mainSrc.includes("? 'pause.room'") &&
+      mainSrc.includes(": 'menu.multiplayer'"),
+  );
+  check(
+    '联机中点它开信息卡，没联机才打开连接面板',
+    mainSrc.includes('this.roomCard.show({') &&
+      mainSrc.includes("this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'"),
+  );
+  check(
+    '卡片挂 body 且有专属样式与热区（触摸端 44px）',
+    mainSrc.includes('new RoomCard(document.body,') &&
+      /\.room-action \{[^}]*min-height: 38px/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+      ),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

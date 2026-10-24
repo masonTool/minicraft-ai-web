@@ -174,6 +174,7 @@ import {
 } from './ui/SettingsScreen.ts';
 import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
 import { MultiplayerScreen } from './ui/MultiplayerScreen.ts';
+import { RoomCard } from './ui/RoomCard.ts';
 import {
   failBootLoading,
   hideBootLoading,
@@ -2222,6 +2223,9 @@ class App {
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
   /** 联机入口面板（联机9）：地址 / 昵称 / 连接 / 断开 / 状态，叠在暂停菜单上 */
+  /** 本局房间信息卡（L9）：联机中暂停菜单打开的是它，而不是"再去连一次"的面板 */
+  private readonly roomCard: RoomCard;
+
   // 联机面板由 `boot()` 持有（L9）：主菜单也要能开它，所以不在 App 里 new
   /** 当前生效的视距（区块）；自适应会在这个值上浮动，玩家设置的是上限 */
   private viewDistance = VIEW_DISTANCE;
@@ -2424,6 +2428,14 @@ class App {
      */
     private readonly multiplayerScreen: MultiplayerScreen,
   ) {
+    /*
+     * 「本局房间」信息卡（L9）：挂在 `body` 上、与联机面板同级。
+     * 只显示信息与两个动作（复制邀请 / 断开）——真正的连接参数在面板里，卡片不重复。
+     */
+    this.roomCard = new RoomCard(document.body, {
+      onDisconnect: () => this.disconnect(),
+      onClose: () => this.roomCard.hide(),
+    });
     // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
     // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
     // 表现就是"退出重进、换世界都还是白，非得刷新页面"。每次进世界先铺一遍
@@ -2993,8 +3005,13 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
-      // 多人游戏（联机9）：暂停菜单里的入口，面板叠在暂停菜单上
+      // 多人游戏（联机9）/ 本局房间（L9）：暂停菜单里的入口
       onMultiplayer: () => this.openMultiplayer(),
+      // 联机中这颗键叫「本局房间」，没联机才叫「多人游戏」（SettingsScreen 每次打开重读）
+      multiplayerLabelKey: () =>
+        this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'
+          ? 'pause.room'
+          : 'menu.multiplayer',
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
@@ -3245,6 +3262,7 @@ class App {
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
     // 联机面板（联机9）叠在暂停菜单上，返回键先关它
     else if (this.multiplayerScreen.isOpen) this.multiplayerScreen.close();
+    else if (this.roomCard.isOpen) this.roomCard.hide();
     // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
     // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
     else if (this.settingsScreen.isOpen) {
@@ -3404,6 +3422,22 @@ class App {
    * 这样不必再给"面板打开"造一套 `uiOpen`/暂停语义。
    */
   openMultiplayer(): void {
+    /*
+     * 已经联机时，暂停菜单里那颗键不该再是"去连一次"——玩家想知道的是
+     * **我在哪个房间、谁是房主、怎么把朋友叫进来**（L9）。没联机才打开连接面板。
+     */
+    if (this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting') {
+      this.roomCard.show({
+        room: this.net.roomId === DEFAULT_MULTIPLAYER_ROOM ? '' : this.net.roomId,
+        role: this.net.role,
+        players: this.net.playerCount,
+        worldName: this.net.roomWorld?.name ?? '',
+        worldSeed: this.net.roomWorld?.seed ?? this.worldConfig.seed,
+        baseUrl: defaultServerUrl(),
+        password: this.net.roomPassword,
+      });
+      return;
+    }
     this.openSettings();
     this.multiplayerScreen.setState(this.net.sessionState);
     this.multiplayerScreen.open();
@@ -18161,6 +18195,8 @@ class App {
       this.pauseAfterFullscreenTimer = null;
     }
     document.body.classList.remove('pause-open');
+    // 房间卡是全局 DOM（挂 body）：这一局拆掉时也要收起来，否则回到主菜单还压着一层
+    this.roomCard.hide();
     this.wasHidden = false;
     // 批次 303：冻结标记跟着这一局一起清掉，下一局从"运行中"开始
     this.backgroundPaused = false;

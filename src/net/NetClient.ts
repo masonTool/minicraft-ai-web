@@ -358,6 +358,11 @@ export class NetClient {
     return this.session.state;
   }
 
+  /** 当前房间口令（空 = 没有）。拼"复制邀请"用；不是鉴权，明文传。 */
+  get roomPassword(): string {
+    return this.password;
+  }
+
   /**
    * 当前房间名（L9）：空串（地址里没写房间）按默认房间算。
    *

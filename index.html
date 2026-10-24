@@ -2103,6 +2103,41 @@
       }
       .mp-room-row b { font-size: 13px; }
       .mp-room-row span { opacity: .8; }
+      /* ---------------- 本局房间信息卡（L9） ---------------- */
+      #room-card {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        background: rgba(0, 0, 0, .55);
+      }
+      #room-card.hidden { display: none; }
+      .room-panel {
+        width: min(92vw, 420px); max-height: 100%;
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 10px 12px; overflow: auto;
+        background: var(--mc-menu-bg); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        font-size: 13px;
+      }
+      .room-title { font-size: 15px; text-align: center; }
+      .room-body { display: flex; flex-direction: column; gap: 2px; }
+      .room-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+      .room-row span { opacity: .8; }
+      .room-invite {
+        font: inherit; font-size: 12px; padding: 6px 8px; width: 100%;
+        border: 2px solid; border-color: var(--pixel-bevel-dark);
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+      }
+      .room-hint { font-size: 11px; opacity: .75; }
+      .room-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .room-action {
+        flex: 1 1 auto; min-width: 6em;
+        font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+      }
+      body.touch-mode .room-action { min-height: 44px; font-size: 14px; }
       .mp-rooms-empty { font-size: 11px; opacity: .75; padding: 2px 4px; }
       .mp-status { min-height: 1.2em; font-size: 12px; }
       .mp-status[data-state='connected'] { color: #8ee08e; }

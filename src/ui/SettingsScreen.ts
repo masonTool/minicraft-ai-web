@@ -646,6 +646,13 @@ export interface SettingsActions {
    */
   onMultiplayer?: () => void;
   /**
+   * 那颗键这轮该叫什么（L9）：联机中叫「本局房间」，没联机叫「多人游戏」。
+   *
+   * 返回**文案 key**而不是成品文字：i18n 只在这一层做，切语言整页重载的规矩不用改。
+   * 不传就固定用 `menu.multiplayer`。
+   */
+  multiplayerLabelKey?: () => string;
+  /**
    * 切换创造模式（飞行）（批次 107）。
    *
    * 手机端右下那一簇原来有一颗"飞行"键，批次 107 精简掉之后它搬到这里
@@ -738,7 +745,15 @@ export class SettingsScreen {
   private bindLabel(element: HTMLElement, key: string): void {
     element.textContent = t(key);
   }
+
+  /** 联机那颗键的文案（L9）：由调用方决定这一轮是「本局房间」还是「多人游戏」 */
+  private refreshMultiplayerLabel(): void {
+    if (!this.multiplayerButton) return;
+    this.multiplayerButton.textContent = t(this.actions.multiplayerLabelKey?.() ?? 'menu.multiplayer');
+  }
   /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
+  /** 暂停菜单里那颗联机键（L9：文案随是否联机变化，`show()` 里重读） */
+  private multiplayerButton: HTMLButtonElement | null = null;
   private flyingToggle: HTMLButtonElement | null = null;
   /** 飞行开关所在的右半格（批次 528：与游戏模式同一行，不是整行） */
   private flyingCell: HTMLElement | null = null;
@@ -845,9 +860,10 @@ export class SettingsScreen {
     multiplayer.type = 'button';
     multiplayer.id = 'pause-multiplayer';
     multiplayer.className = 'pause-action';
-    this.bindLabel(multiplayer, 'menu.multiplayer');
     multiplayer.addEventListener('click', () => this.actions.onMultiplayer?.());
     multiplayer.style.display = this.actions.onMultiplayer ? '' : 'none';
+    this.multiplayerButton = multiplayer;
+    this.refreshMultiplayerLabel();
 
     // 用户点名的"保存档退出"：退出前主程序会落一次盘（`exitToMenu` 里已经这么做了）
     const exitToMenu = document.createElement('button');
@@ -2026,6 +2042,8 @@ export class SettingsScreen {
     this.refreshDiagnostics();
     // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填
     this.refreshGameModeRows();
+    // 联机状态可能在这一局里变了：那颗键的文案跟着走（联机中 = 本局房间）
+    this.refreshMultiplayerLabel();
   }
 
   /**
