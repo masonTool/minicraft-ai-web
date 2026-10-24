@@ -668,12 +668,16 @@ export interface SettingsActions {
   /** 当前条数 / 占用，用来在入口上显示"离 500KB 还有多远" */
   diagnosticsStats?: () => { events: number; kb: number; marked: boolean };
   /**
-   * 游戏模式（批次 181）：生存 ↔ 创造。
+   * 游戏模式（批次 181 → 20261024-1455 改成"切到选中的那一个"）。
    *
    * 这是**唯一的模式入口**（新建世界时也能选）；双击跳跃只负责在创造模式里起降，
    * 不再顺带切模式。
+   *
+   * ⚠️ 原来这里是 `onToggleGameMode()`（无参切换），而下拉只列了生存/创造两项——
+   * 于是"选中创造"实际执行的是 `nextGameMode(current)`：已经是创造时点了会退回生存，
+   * 且冒险/旁观两个模式根本没出现在列表里。现在按**选中的值**直接设。
    */
-  onToggleGameMode?: () => void;
+  onSetGameMode?: (mode: GameMode) => void;
   gameMode?: () => GameMode;
 }
 
@@ -1169,7 +1173,7 @@ export class SettingsScreen {
     // 第一块：开关与下拉
     const gameOptions = this.makeBlock(game);
     // 批次 528（用户）：游戏模式单独成行、排第一；选中创造后"飞行"才在右边出现。
-    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
+    if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
     this.makeToggle(gameOptions, 'daylightCycle', t('settings.row.daylightCycle'));
     this.makeToggle(gameOptions, 'showDebug', t('settings.row.showDebug'));
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
@@ -1920,13 +1924,16 @@ export class SettingsScreen {
     flyCell.className = 'mode-cell';
     this.flyingCell = flyCell;
 
-    this.gameModeToggle = this.makeDropdown(
+    // 四个模式全列出来（批次 20261024-1455；用户："他也没有把所有的模式都展示出来"）。
+    // 回调按**选中的值**设，不再用无参 toggle——否则选"创造"时如果本来就在创造，
+    // 会切去生存，看起来就是"真正切换的不是我选中的"。
+    this.gameModeToggle = this.makeDropdown<GameMode>(
       modeCell,
       t('settings.row.gameMode'),
-      ['survival', 'creative'] as const,
+      GAME_MODES,
       Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>,
       () => this.actions.gameMode?.() ?? 'survival',
-      () => this.actions.onToggleGameMode?.(),
+      (mode) => this.actions.onSetGameMode?.(mode),
     );
     this.makeCreativeRow(flyCell);
     row.append(modeCell, flyCell);

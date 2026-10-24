@@ -328,7 +328,6 @@ import {
 import {
   gameModeLabel,
   isCreativeMode,
-  nextGameMode,
   normalizeGameMode,
   type GameMode,
 } from './core/world/GameMode.ts';
@@ -2979,7 +2978,8 @@ class App {
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
       // 模式（批次 181）：唯一的入口在暂停菜单；双击跳只切飞行
-      onToggleGameMode: () => this.setGameMode(nextGameMode(this.gameMode)),
+      // 批次 20261024-1455：按**选中的值**切（原来是无参 toggle，选创造可能反而退回生存）
+      onSetGameMode: (mode) => this.setGameMode(mode),
       gameMode: () => this.gameMode,
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),

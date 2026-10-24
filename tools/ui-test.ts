@@ -4889,6 +4889,33 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
   );
 }
 
+// ------------------------------------------------------------------ 设置里的游戏模式
+//
+// 批次 20261024-1455（用户自测）："设置里游戏模式切换，真正切换的不是我选中的；
+// 而且也没有把所有模式都展示出来。"
+console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
+{
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check(
+    '下拉列出全部四个模式（来自 GAME_MODES，不再写死两项）',
+    /this\.makeDropdown<GameMode>\(\s*modeCell,\s*t\('settings\.row\.gameMode'\),\s*GAME_MODES,/.test(settingsSrc) &&
+      !settingsSrc.includes("['survival', 'creative'] as const,"),
+  );
+  check(
+    '切换按选中的值（不再是无参 toggle）',
+    /\(mode\) => this\.actions\.onSetGameMode\?\.\(mode\)/.test(settingsSrc) &&
+      !settingsSrc.includes('onToggleGameMode?.(()') &&
+      !/onToggleGameMode\?\.\(\),/.test(settingsSrc) &&
+      mainSrc.includes('onSetGameMode: (mode) => this.setGameMode(mode)'),
+  );
+  check(
+    '游戏模式那一行的显隐判据跟着新回调（否则整行会消失）',
+    settingsSrc.includes('if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);'),
+  );
+}
+
 // ------------------------------------------------------------------ 背包与快捷栏的避让
 //
 // 批次 20261024-1455（用户自测）："背包在某些屏幕上被挤到快捷栏的上部一点"。
