@@ -17,7 +17,20 @@
  */
 
 import { gzipSync } from 'node:zlib';
-import { buildBlockTable, type BlockDef } from '../src/core/registry/blocks.ts';
+import {
+  BLOCKS,
+  blockDef,
+  blockTiles,
+  buildBlockTable,
+  emitLight,
+  installBlockTable,
+  isInstalledBlockTable,
+  isKnownBlockId,
+  isOpaque,
+  isSolid,
+  lightOpacity,
+  type BlockDef,
+} from '../src/core/registry/blocks.ts';
 import {
   BLOCK_TABLE_VERSION,
   decodeBlockTable,
@@ -199,6 +212,74 @@ console.log('\n[六、ArrayBuffer 入口（worker postMessage 走这条）]');
   const fromBuffer = decodeBlockTable(shared);
   equal('从 ArrayBuffer 解出的方块数一致', fromBuffer.length, decoded.length);
   check('从 ArrayBuffer 解出的内容一致', fromBuffer[1]!.name === decoded[1]!.name, fromBuffer[1]!.name);
+}
+
+console.log('\n[七、装表（encode → decode → install → 查询）]');
+{
+  const isInstalledBefore = isInstalledBlockTable();
+
+  installBlockTable(decoded);
+
+  equal('装表前未标记"已装表"', isInstalledBefore, false);
+  equal('装表后标记为"已装表"', isInstalledBlockTable(), true);
+
+  let nameMismatch = -1;
+  let flagMismatch = -1;
+  let lightMismatch = -1;
+  for (let id = 0; id < source.length; id++) {
+    const expected = source[id]!;
+    const actual = blockDef(id);
+    if (actual.name !== expected.name) {
+      nameMismatch = id;
+      break;
+    }
+    if (isOpaque(id) !== expected.opaque || isSolid(id) !== expected.solid) {
+      flagMismatch = id;
+      break;
+    }
+    if (lightOpacity(id) !== expected.lightOpacity || emitLight(id) !== expected.light) {
+      lightMismatch = id;
+      break;
+    }
+  }
+  check('装表后 blockDef 的名字全部对齐', nameMismatch === -1, `第 ${nameMismatch} 项不一致`);
+  check('装表后 isOpaque / isSolid 全部对齐', flagMismatch === -1, `第 ${flagMismatch} 项不一致`);
+  check('装表后 lightOpacity / emitLight 全部对齐', lightMismatch === -1, `第 ${lightMismatch} 项不一致`);
+
+  const stoneLike = source.find((block) => block.stateTiles === undefined && block.shape === 'cube')!;
+  check(
+    `装表后 blockTiles 仍按 id 取到贴图（${stoneLike.name}）`,
+    blockTiles(stoneLike.id, 0).join('|') === stoneLike.tiles.join('|'),
+    blockTiles(stoneLike.id, 0).join('|'),
+  );
+  equal('装表后越界 id 仍然回退成空气', blockDef(source.length).name, source[0]!.name);
+  equal('装表后越界 id 不算已知方块', isKnownBlockId(source.length), false);
+  equal('装表后末尾 id 仍是已知方块', isKnownBlockId(source.length - 1), true);
+
+  // 装表失败必须保持旧表：世界里有一张坏表比"报错退出"贵得多
+  const keepLength = BLOCKS.length;
+  let emptyThrew = false;
+  try {
+    installBlockTable([]);
+  } catch {
+    emptyThrew = true;
+  }
+  check('装空表 → 抛', emptyThrew);
+  equal('装空表失败后旧表仍在', BLOCKS.length, keepLength);
+
+  let orderThrew = false;
+  try {
+    installBlockTable([{ ...source[1]!, id: 3 }]);
+  } catch {
+    orderThrew = true;
+  }
+  check('id 不连续 → 抛', orderThrew);
+  equal('装坏表失败后旧表仍在', BLOCKS.length, keepLength);
+
+  // 还原，别把这份测试的状态漏给后面（虽然独立进程，但保持干净）
+  installBlockTable(source);
+  equal('还原后方块数一致', BLOCKS.length, source.length);
+  equal('还原后取到的仍是源表内容', blockDef(1).name, source[1]!.name);
 }
 
 console.log(`\n结果：${passed} 通过，${failed} 失败（格式 v${BLOCK_TABLE_VERSION}）`);
