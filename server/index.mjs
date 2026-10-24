@@ -132,7 +132,9 @@ const roomWorlds = new Map();
 
 /** 这个房间当前的世界元数据（没房主时用服务端默认种子兜底） */
 function worldOfRoom(room) {
-  return roomWorlds.get(room) ?? { name: '', seed: WORLD_SEED, mode: '', difficulty: '' };
+  return (
+    roomWorlds.get(room) ?? { name: '', seed: WORLD_SEED, mode: '', difficulty: '', worldType: '' }
+  );
 }
 /**
  * 容器内容（联机13）：`维度|x,y,z` → `{x,y,z,dimension,slots}`。
@@ -379,7 +381,13 @@ function snapshotFor(player) {
   const world = worldOfRoom(player.room);
   return {
     seed: world.seed,
-    world: { name: world.name, seed: world.seed, mode: world.mode, difficulty: world.difficulty },
+    world: {
+      name: world.name,
+      seed: world.seed,
+      mode: world.mode,
+      difficulty: world.difficulty,
+      worldType: world.worldType ?? '',
+    },
     /*
      * 房主（L8）：这一局谁在跑模拟。
      *

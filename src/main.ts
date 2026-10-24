@@ -397,7 +397,9 @@ import {
   seedConflict,
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
-import { formatServerUrl } from './core/net/ServerUrl.ts';
+import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
+import { summaryFromRoom } from './core/net/JoinWorld.ts';
+import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
@@ -2220,7 +2222,7 @@ class App {
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
   /** 联机入口面板（联机9）：地址 / 昵称 / 连接 / 断开 / 状态，叠在暂停菜单上 */
-  private readonly multiplayerScreen: MultiplayerScreen;
+  // 联机面板由 `boot()` 持有（L9）：主菜单也要能开它，所以不在 App 里 new
   /** 当前生效的视距（区块）；自适应会在这个值上浮动，玩家设置的是上限 */
   private viewDistance = VIEW_DISTANCE;
   /**
@@ -2416,6 +2418,11 @@ class App {
       worldType: 'default',
       difficulty: 'normal',
     },
+    /**
+     * 联机面板（L9）：由 `boot()` 创建并持有——主菜单（还没有 App）也要能打开它。
+     * App 只负责往里推进状态，不负责它的生命周期。
+     */
+    private readonly multiplayerScreen: MultiplayerScreen,
   ) {
     // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
     // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
@@ -3002,19 +3009,6 @@ class App {
 
     // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
     // 它要盖住整个视口（含触摸控件），而且主菜单阶段就可能要打开它。
-    this.multiplayerScreen = new MultiplayerScreen(document.body, {
-      onConnect: (url, name, host) => {
-        // 先切状态再真连：`connect()` 里会同步触发 onStatus，重复设置无害
-        this.multiplayerScreen.setState('connecting');
-        this.connect(url, name, host);
-      },
-      onDisconnect: () => {
-        this.disconnect();
-        this.multiplayerScreen.setState('offline');
-      },
-      onClose: () => this.multiplayerScreen.close(),
-    });
-
     // 开发期初始物资（批次 181）：**默认不再发放**。
     //
     // 用户的原话是"生存模式开局应当空手"，而创造模式本来就能从分类里随时拿，
@@ -3377,15 +3371,30 @@ class App {
   }
 
   /**
-   * 开房（L9）：把房间名与口令拼进地址、填好面板再打开。
+   * 面板里点了「开房 / 加入」（L9）：面板是全局的，只有当前有世界时才走这里。
    *
-   * 入口在**世界列表的卡片**上（「开房」），所以这里拿不到"当前地址输入框里填了什么"，
-   * 只能用默认地址（`defaultServerUrl()`）——局域网里服务端就在同一台机器/同一网段，
-   * 这也正是"开房"的场景。玩家想改地址仍然可以在面板里改。
+   * 先切状态再真连：`connect()` 里会同步触发 `onStatus`，重复设置无害。
    */
-  openHostRoom(room: string, password: string): void {
-    this.multiplayerScreen.prefill({ url: formatServerUrl(defaultServerUrl(), room, password) });
-    this.openMultiplayer();
+  connectFromPanel(url: string, name: string, host: boolean): void {
+    this.multiplayerScreen.setState('connecting');
+    this.connect(url, name, host);
+  }
+
+  /**
+   * 主菜单已经把世界连上了（L9）：这里只做连接，不再要求玩家按任何按钮。
+   *
+   * 地址由 `baseUrl + 房间 + 口令` 现拼（`formatServerUrl`），昵称取面板上记住的那个。
+   */
+  connectOnline(intent: { baseUrl: string; room: string; password: string; host: boolean }): void {
+    const name = this.multiplayerScreen.readForm().name;
+    const url = formatServerUrl(intent.baseUrl, intent.room, intent.password);
+    this.multiplayerScreen.prefill({ url });
+    this.connectFromPanel(url, name, intent.host);
+  }
+
+  /** 这个 App 还活着吗（面板是全局的，点它时要确认调用方没被拆掉） */
+  get alive(): boolean {
+    return !this.disposed;
   }
 
   /**
@@ -4181,6 +4190,8 @@ class App {
           seed: this.worldConfig.seed,
           mode: this.gameMode,
           difficulty: this.worldConfig.difficulty,
+          // 超平坦/放大化也决定地形：只对齐种子不够（L9）
+          worldType: this.worldConfig.worldType,
         }
       : undefined;
     this.net.connect(url, name, host, world);
@@ -19429,6 +19440,48 @@ async function boot(): Promise<void> {
     }
   };
 
+  /**
+   * 当前局内的 App（L9）。联机面板是**全局**的（由这里创建），主菜单与局内都要能开它，
+   * 所以面板的动作先看"现在有没有活着的 App"，再决定交给谁办。
+   */
+  let currentApp: App | null = null;
+
+  /**
+   * 主菜单"加入房间"探完房之后、世界还没加载完之前，把连接意图暂存在这里。
+   * 世界一就绪就立刻连上（`connectOnline`），玩家不需要再按任何按钮。
+   */
+  let pendingOnline: { baseUrl: string; room: string; password: string; host: boolean } | null = null;
+
+  /**
+   * 从主菜单加入别人的房（L9）：**先探房，再按房主的世界加载**。
+   *
+   * 这是"多人不再是游戏内设置"的最后一块：加入方不选世界，地形由房主的那个世界决定，
+   * 所以必须先连一次问出种子/世界类型，再用它 `startWorld`。探不到就留在主菜单给一句话，
+   * 绝不让玩家先进一个错的世界再断开。
+   */
+  const joinRoomFromMenu = async (url: string, name: string, host: boolean): Promise<void> => {
+    if (host) {
+      // 开房要指定"用哪个世界"，那件事只发生在世界卡片的「开房」上
+      multiplayerUi.setState('offline', t('mp.hostFromWorld'));
+      return;
+    }
+    const parsed = parseServerUrl(url);
+    multiplayerUi.setState('connecting', t('mp.probing'));
+    const probe = await probeRoom({
+      baseUrl: parsed.url,
+      room: parsed.room,
+      password: parsed.password,
+      name,
+    });
+    if (!probe || !probe.world) {
+      multiplayerUi.setState('offline', t('mp.probeFailed'));
+      return;
+    }
+    pendingOnline = { baseUrl: parsed.url, room: parsed.room, password: parsed.password, host: false };
+    multiplayerUi.close();
+    await startWorld(summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now()));
+  };
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     diag.event('app', 'world.enter', {
@@ -19454,16 +19507,25 @@ async function boot(): Promise<void> {
     registry.update(world.id, { lastPlayed: Date.now() });
     let app: App;
     try {
-      app = new App(container, debugEl, atlas, vitalsEl, deathEl, save, {
-        id: world.id,
-        name: world.name,
-        seed: world.seed,
-        worldType: world.worldType,
-        difficulty: world.difficulty,
-        gameMode: world.gameMode,
-        ...(world.hardcore ? { hardcore: true } : {}),
-        ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
-      });
+      app = new App(
+        container,
+        debugEl,
+        atlas,
+        vitalsEl,
+        deathEl,
+        save,
+        {
+          id: world.id,
+          name: world.name,
+          seed: world.seed,
+          worldType: world.worldType,
+          difficulty: world.difficulty,
+          gameMode: world.gameMode,
+          ...(world.hardcore ? { hardcore: true } : {}),
+          ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
+        },
+        multiplayerUi,
+      );
     } catch (error) {
       // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：
       // 走同一块界面，别把白屏留给玩家（A10，批次 85）
@@ -19477,20 +19539,29 @@ async function boot(): Promise<void> {
       throw error;
     }
     startupTrace.mark(STARTUP_PHASES.worldConstructed);
-    // 主菜单点"多人游戏"进来的：进世界之后自动弹出联机面板（联机9）
-    if (pendingMultiplayer) {
-      pendingMultiplayer = false;
-      app.openMultiplayer();
-    }
     /*
-     * 从世界卡片点「开房」进来的（L9）：房间名与口令已经收好，这里把地址拼好填进面板。
-     * ⚠️ 仍然先加载了世界——真正的"先连上、再按房主种子加载世界"是同一批的后一条，
-     * 那时这个分支会变成"连上之后才 startWorld"。
+     * 从这里开始，这一局有一个活着的 App 了（面板的动作要按它分派）。
+     */
+    currentApp = app;
+    /*
+     * 世界卡片点「开房」（L9）：房间名与口令已经收好，世界也已经按它的种子建好，
+     * 直接连上——不再要求玩家在面板里再按一次「开房」。
      */
     if (pendingHostRoom) {
       const intent = pendingHostRoom;
       pendingHostRoom = null;
-      app.openHostRoom(intent.room, intent.password);
+      app.connectOnline({
+        baseUrl: defaultServerUrl(),
+        room: intent.room,
+        password: intent.password,
+        host: true,
+      });
+    }
+    // 主菜单「加入房间」探完房进来的：世界就是房主那个，直接连
+    if (pendingOnline) {
+      const intent = pendingOnline;
+      pendingOnline = null;
+      app.connectOnline(intent);
     }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
@@ -19502,6 +19573,8 @@ async function boot(): Promise<void> {
     // 应用内退出（批次 181）：App 拆完自己之后把菜单拉回来。
     // ⚠️ 这里**不碰全屏**——全屏是页面级的，退出世界不该把它一起退掉。
     app.onExitToMenu = () => {
+      // 局内 App 已经拆掉：面板的动作不能再派发给它（否则点了没反应/报错）
+      currentApp = null;
       hideLoading();
       // 局内实例已经拆掉：调试入口也要跟着清掉，否则自动化会对着一个死对象操作
       (window as unknown as { __mc?: App }).__mc = undefined;
@@ -19694,12 +19767,32 @@ async function boot(): Promise<void> {
    * 联机是在**某个世界里**连的（种子要对齐、存档要按房间隔离），没有独立大厅，
    * 所以这个按钮的作用是"把世界列表翻出来"，选完世界再弹地址栏。
    */
-  let pendingMultiplayer = false;
   /**
    * 从世界卡片「开房」（L9）：房间名与口令先记着，进世界之后填进联机面板。
    * 只放一个意图、不复制世界对象——世界由 `startWorld` 那份说了算。
    */
   let pendingHostRoom: { room: string; password: string } | null = null;
+
+  /*
+   * 联机面板（L9）：**全局一份**，挂在 `document.body` 上。
+   *
+   * 以前它由 `App` 创建，于是"只有进了世界才有面板"——这正是"开房要先进入再按 Esc"
+   * 的根源。挪到这里之后，主菜单点「加入房间…」就能直接开会话。
+   */
+  const multiplayerUi = new MultiplayerScreen(document.body, {
+    onConnect: (url, name, host) => {
+      if (currentApp && currentApp.alive) {
+        currentApp.connectFromPanel(url, name, host);
+        return;
+      }
+      void joinRoomFromMenu(url, name, host);
+    },
+    onDisconnect: () => {
+      currentApp?.disconnect();
+      multiplayerUi.setState('offline');
+    },
+    onClose: () => multiplayerUi.close(),
+  });
 
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
@@ -19709,9 +19802,13 @@ async function boot(): Promise<void> {
     onExport: (world) => exportWorld(world),
     onImport: () => importWorld(),
     onMiniGames: openMiniGames,
+    /*
+     * 「加入房间…」（L9）：**直接开面板**，不必先选一个世界。
+     * 面板是全局的（见上面 `multiplayerUi`），地址/房间填好之后走"先探房再进世界"。
+     */
     onMultiplayer: () => {
-      pendingMultiplayer = true;
-      menu.showView('worlds');
+      multiplayerUi.setState('idle');
+      multiplayerUi.open();
     },
     /*
      * 卡片上的「开房」（L9）：这个世界就是这一局的房间。

@@ -33,6 +33,8 @@ export interface NetWorldMeta {
   seed: number;
   mode?: string;
   difficulty?: string;
+  /** 世界类型（L9）：超平坦 / 放大化…它决定地形生成，必须与种子一起对齐 */
+  worldType?: string;
 }
 
 export interface NetPlayerState {
@@ -495,13 +497,17 @@ export class NetClient {
          * 种子必须是整数——它是地形生成的输入，`NaN` 会让整片大陆变成同一格。
          */
         const rawWorld = message.world as Partial<NetWorldMeta> | undefined;
-        const worldSeed = Number(rawWorld?.seed ?? message.seed);
+        // ⚠️ 只认数字类型的整数：`Number(null)` 是 0，用 `??` + `Number()` 会把
+        // "没给种子"读成"种子 0"，于是去生成一片种子 0 的大陆（不报错，只是和队友不一样）
+        const candidate = typeof rawWorld?.seed === 'number' ? rawWorld.seed : message.seed;
+        const worldSeed = typeof candidate === 'number' && Number.isInteger(candidate) ? candidate : Number.NaN;
         if (Number.isInteger(worldSeed)) {
           this.roomWorld = {
             name: typeof rawWorld?.name === 'string' ? rawWorld.name : '',
             seed: worldSeed,
             mode: typeof rawWorld?.mode === 'string' ? rawWorld.mode : '',
             difficulty: typeof rawWorld?.difficulty === 'string' ? rawWorld.difficulty : '',
+            worldType: typeof rawWorld?.worldType === 'string' ? rawWorld.worldType : '',
           };
         }
         const players = (message.players as NetPlayerState[] | undefined) ?? [];

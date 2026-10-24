@@ -128,3 +128,14 @@
 - 处置：在**准备落地的那次提交里**把它写成"`git rev-list --count HEAD` + 1"（提交后正好相等）；
   一批多次提交时每次都要重算，别只在收尾改一次。没有脚本会自动写这个数字（`audit-tasks` 只读校验）。
 - 适用面：一切"文档里的数字要与仓库状态自指相等"的锚点（提交总数、套件数、覆盖率）。
+
+## `Number(x ?? fallback)` 会把"没给值"读成 0
+
+- 症状：协议里"没带种子"被当成**种子 0**，于是两边生成的地形完全不一样，而且不报错。
+  `Number(null)` 与 `Number('')` 都是 `0`，`0` 又是合法的整数种子——`Number.isInteger` 拦不住。
+- 根因：`value ?? fallback` 再 `Number()` 只挡 `undefined`，挡不住 `null` / `''` 这类空值，
+  而它们转换成**合法数字**。反向也成立：`Object.is(-0, 0)` 为真，别用 0 当哨兵。
+- 处置：先判类型再收 —— `typeof v === 'number' && Number.isInteger(v)`；或统一用 `null` 表示"没有"。
+  本项目 `src/net/RoomProbe.ts` 与 `src/net/NetClient.ts` 的 `welcome.world.seed` 都按这条改过，
+  各配一条脏数据断言（`tests/room-probe.test.ts`）。
+- 适用面：任何"缺字段 → 具体默认值"的协议收口；`0` / `false` / `''` 本身有意义时最容易中招。

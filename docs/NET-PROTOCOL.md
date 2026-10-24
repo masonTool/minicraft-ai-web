@@ -94,7 +94,7 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, world{name,seed,mode,difficulty}, isHost, hostId, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的；`world.seed` 与老字段 `seed` 同一份（按房间，L9），没房主时 = 服务端默认种子 |
+| `welcome` | `v, id, name, seed, world{name,seed,mode,difficulty,worldType}, isHost, hostId, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的；`world.seed` 与老字段 `seed` 同一份（按房间，L9），没房主时 = 服务端默认种子 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
 | `weather` | `kind`（`clear` / `rain` / `thunder`） | 天气**切换时**广播（`联机35`）：晴天 8~16 分钟后 45% 继续晴 / 55% 转雨（30% 雷暴），雨天与雷暴一律转晴 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
@@ -124,7 +124,7 @@
   "id": 1,
   "name": "玩家",
   "seed": 20261014,
-  "world": { "name": "草原小屋", "seed": 20261014, "mode": "survival", "difficulty": "normal" },
+  "world": { "name": "草原小屋", "seed": 20261014, "mode": "survival", "difficulty": "normal", "worldType": "default" },
   "players": [{ "id": 1, "name": "玩家", "x": 0, "y": 80, "z": 0, "yaw": 0, "pitch": 0, "dimension": "overworld" }],
   "edits": [[100, 64, -50, 1, 0, "overworld"]],
   "items": [{ "owner": 1, "localId": 7, "itemId": 12, "count": 3, "x": 10.5, "y": 70, "z": 20.5 }]

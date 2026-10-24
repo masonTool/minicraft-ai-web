@@ -180,5 +180,12 @@ export function sanitizeWorldMeta(value) {
     ? [...value.name.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, MAX_WORLD_NAME).join('')
     : '';
   const label = (raw) => (typeof raw === 'string' ? [...raw.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, 16).join('') : '');
-  return { name, seed, mode: label(value.mode), difficulty: label(value.difficulty) };
+  return {
+    name,
+    seed,
+    mode: label(value.mode),
+    difficulty: label(value.difficulty),
+    // 世界类型（L9）：超平坦 / 放大化也会改变地形，只对齐种子不够
+    worldType: label(value.worldType),
+  };
 }

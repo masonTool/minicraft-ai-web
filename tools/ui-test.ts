@@ -5153,10 +5153,10 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
   );
   check('世界列表里的多人入口改成「加入房间…」', worldSrc.includes("multiplayer.textContent = t('world.joinRoom');"));
   check(
-    '开房意图一路传到面板（进世界后把房间拼进地址）',
+    '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
     mainSrc.includes('pendingHostRoom = { room, password };') &&
-      mainSrc.includes('openHostRoom(room: string, password: string)') &&
-      mainSrc.includes('formatServerUrl(defaultServerUrl(), room, password)'),
+      mainSrc.includes('app.connectOnline({') &&
+      mainSrc.includes('baseUrl: defaultServerUrl(),'),
   );
 }
 
@@ -5201,6 +5201,42 @@ console.log('\n[加入房间：选项式面板（L9）]');
       /\.mp-rooms \{[^}]*max-height: 96px; overflow: auto;/.test(
         readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
       ),
+  );
+}
+
+/*
+ * 连接时机提前到主菜单（L9）
+ *
+ * 用户的原话是"创建多人游戏还需要进入后再按 Esc，为什么不在进入时就创建"。
+ * 这一条把联机面板从 `App` 挪到 `boot()`（全局一份），于是主菜单能直接开会话；
+ * 加入流程改为"先探房拿到房主的世界，再按它加载"。
+ */
+console.log('\n[连接时机：主菜单先连后进世界（L9）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const probeSrc = readFileSync(new URL('../src/net/RoomProbe.ts', import.meta.url), 'utf8');
+  const appSrcCount = (mainSrc.match(/new MultiplayerScreen\(/g) ?? []).length;
+
+  check('面板只在 boot 层创建一份（App 不再 new 它）', appSrcCount === 1);
+  check(
+    '面板的动作按"有没有活着的 App"分派',
+    mainSrc.includes('currentApp && currentApp.alive') &&
+      mainSrc.includes('currentApp.connectFromPanel(url, name, host)') &&
+      mainSrc.includes('void joinRoomFromMenu(url, name, host)'),
+  );
+  check(
+    '加入：先探房，再按房主的世界 startWorld',
+    mainSrc.includes('const probe = await probeRoom({') &&
+      mainSrc.includes('summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now())'),
+  );
+  check(
+    '开房：从卡片进来就直接连（不再要求玩家再按一次）',
+    mainSrc.includes('app.connectOnline({') && mainSrc.includes('host: true'),
+  );
+  check('菜单的「加入房间…」直接开面板（不再先选世界）', mainSrc.includes('multiplayerUi.open();'));
+  check(
+    '探房用一次性身份（复用本机 clientId 会被判 duplicate 拒连）',
+    probeSrc.includes('probe${Math.random()') && probeSrc.includes('setTimeout(() => finish(null)'),
   );
 }
 
