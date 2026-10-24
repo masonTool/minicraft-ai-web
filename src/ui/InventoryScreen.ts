@@ -2118,46 +2118,65 @@ export class InventoryScreen {
     return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width - 1));
   }
 
-  /** 同步自绘滚动条：只有内容超出一屏时才显示，拇指高度/位置按比例算 */
-  private syncCategoryScrollbar(): void {
-    const track = this.categoryScrollTrack;
-    const thumb = this.categoryScrollThumb;
-    if (!track || !thumb || !this.categoryGrid) return;
-    const grid = this.categoryGrid;
-    const max = grid.scrollHeight - grid.clientHeight;
-    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'category';
+  /**
+   * 同步一根自绘滚动条（分类栏与创造栏**共用这一份实现**）。
+   *
+   * 批次 20261024-1455（用户："创造模式背包滚动条显示异常，参照生存模式的样式"）：
+   * 原来两栏各写一遍几乎相同的代码，只有"定位父级"和 `offsetTop` 的算法不同——
+   * 创造栏装在 `.inv-creative-section` 里（搜索框 + 网格），`offsetTop` 与父级一错位，
+   * 整根滚动条就跑到网格上方或下方。现在统一用 **rect 相减**算位置：
+   * 跟 CSS 的 `position: relative` 挂在哪一层无关，两栏必定落在同一个相对位置上。
+   */
+  private syncPaneScrollbar(
+    grid: HTMLElement | null,
+    host: HTMLElement,
+    track: HTMLElement,
+    thumb: HTMLElement,
+    pane: PocketLeftPane,
+  ): void {
+    const max = grid ? grid.scrollHeight - grid.clientHeight : 0;
+    const visible = grid !== null && max > 1 && grid.clientHeight > 0 && this.pane === pane;
     track.style.display = visible ? 'block' : 'none';
-    if (!visible) return;
+    if (!visible || !grid) return;
+
+    const gridRect = grid.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
     track.style.right = 'auto';
-    track.style.left = `${this.scrollbarContentLeft(grid, this.categoryHostEl, track)}px`;
-    track.style.top = `${grid.offsetTop}px`;
-    track.style.height = `${grid.clientHeight}px`;
-    const trackH = grid.clientHeight;
-    const thumbH = Math.max(18, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
+    track.style.left = `${this.scrollbarContentLeft(grid, host, track)}px`;
+    track.style.top = `${Math.round(gridRect.top - hostRect.top)}px`;
+    track.style.height = `${Math.round(gridRect.height)}px`;
+
+    const trackH = gridRect.height;
+    // 与 CSS 的 `.inv-category-scroll-thumb { min-height }` 取同一个下限，否则短列表上
+    // 滑块会被 JS 缩小到比样式更矮、看起来"头重脚轻"
+    const thumbH = Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
     thumb.style.height = `${thumbH}px`;
     const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
     thumb.style.transform = `translateY(${top}px)`;
   }
 
-  /** 创造分类列表的常驻滚动条：内容超出一屏才显示，拇指按比例定位 */
+  /** 物品分类栏的常驻滚动条 */
+  private syncCategoryScrollbar(): void {
+    if (!this.categoryScrollTrack || !this.categoryScrollThumb) return;
+    this.syncPaneScrollbar(
+      this.categoryGrid,
+      this.categoryHostEl,
+      this.categoryScrollTrack,
+      this.categoryScrollThumb,
+      'category',
+    );
+  }
+
+  /** 创造分类列表的常驻滚动条（与分类栏同一份实现、同一套样式） */
   private syncCreativeScrollbar(): void {
-    const track = this.creativeScrollTrack;
-    const thumb = this.creativeScrollThumb;
-    if (!track || !thumb || !this.creativeGrid) return;
-    const grid = this.creativeGrid;
-    const max = grid.scrollHeight - grid.clientHeight;
-    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'creative';
-    track.style.display = visible ? 'block' : 'none';
-    if (!visible) return;
-    track.style.right = 'auto';
-    track.style.left = `${this.scrollbarContentLeft(grid, this.creativeSection, track)}px`;
-    track.style.top = `${grid.offsetTop}px`;
-    track.style.height = `${grid.clientHeight}px`;
-    const trackH = grid.clientHeight;
-    const thumbH = Math.max(18, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
-    thumb.style.height = `${thumbH}px`;
-    const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
-    thumb.style.transform = `translateY(${top}px)`;
+    if (!this.creativeScrollTrack || !this.creativeScrollThumb) return;
+    this.syncPaneScrollbar(
+      this.creativeGrid,
+      this.creativeSection,
+      this.creativeScrollTrack,
+      this.creativeScrollThumb,
+      'creative',
+    );
   }
 
   private flipCategoryPage(delta: number): void {

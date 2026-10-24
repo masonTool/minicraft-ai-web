@@ -4859,6 +4859,37 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
   );
 }
 
+// ------------------------------------------------------------------ 自绘滚动条（两栏同一份实现）
+//
+// 批次 20261024-1455（用户）："创造模式背包滚动条显示异常，参照生存模式的样式"。
+console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
+{
+  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+  check(
+    '两栏共用同一个 syncPaneScrollbar（不再各写一遍）',
+    invSource.includes('private syncPaneScrollbar(') &&
+      (invSource.match(/this\.syncPaneScrollbar\(/g) ?? []).length === 2,
+  );
+  check(
+    '滚动条位置用 rect 相减算（不再依赖 offsetTop 与定位父级）',
+    invSource.includes('const gridRect = grid.getBoundingClientRect();') &&
+      invSource.includes('track.style.top = `${Math.round(gridRect.top - hostRect.top)}px`;') &&
+      !invSource.includes('track.style.top = `${grid.offsetTop}px`;'),
+  );
+  check(
+    '滑块最小高度 JS 与 CSS 同一个值（24）',
+    invSource.includes('Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH))') &&
+      /\.inv-category-scroll-thumb \{[^}]*min-height: 24px;/.test(css),
+  );
+  check(
+    '两栏滚动条的宽度/颜色只有一处定义',
+    (css.match(/\.inv-category-scrollbar \{/g) ?? []).length === 1 &&
+      !css.includes('.inv-creative-section .inv-category-scrollbar {'),
+  );
+}
+
 // ------------------------------------------------------------------ 配方书开关的接线
 //
 // 批次 20261024-1455：上一版把配方书嵌进左栏，自测发现"配方里出现莫名数字 / 点格子没反应"，
