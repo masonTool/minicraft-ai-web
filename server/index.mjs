@@ -933,6 +933,16 @@ wss.on('connection', (socket, request) => {
 
       case 'block': {
         if (!player) return;
+        /*
+         * 有房主的房里只收房主的坐标类消息（L8 · MS2）。
+         *
+         * 从属端的改动走 `edit-request`（由房主落地后以权威结果重发），这条老路留着是给
+         * **没有房主的房**用的（有人直接 join、没带 host；那种房子没人推进世界，谁改都一样）。
+         * 有房主还放宽，等于把权威又还给了每个客户端。
+         */
+        if (hosts.has(player.room) && player.isHost !== true) {
+          return rejectEdit(player, 'not-host', 'block');
+        }
         // 限频（联机25）：一条改动花一个令牌
         if (!player.buckets.block.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
@@ -1007,6 +1017,10 @@ wss.on('connection', (socket, request) => {
        */
       case 'blocks': {
         if (!player) return;
+        // 同上（L8 · MS2）：有房主的房里，从属端不该再走这条老路
+        if (hosts.has(player.room) && player.isHost !== true) {
+          return rejectEdit(player, 'not-host', 'blocks');
+        }
         const list = Array.isArray(message.blocks) ? message.blocks.slice(0, MAX_BLOCKS_PER_MESSAGE) : [];
         // 限频（联机25）：**按条数**计费——一次爆炸几百格是正常的，持续每帧几百格不是
         if (!player.buckets.block.take(Date.now(), list.length)) return;

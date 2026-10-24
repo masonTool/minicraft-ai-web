@@ -1388,26 +1388,21 @@ try {
     const fromHost = await authFollower.wait('blocks', 2000);
     check('房主的方块广播带 authority: true', fromHost?.authority === true, JSON.stringify(fromHost));
 
-    // 从属端的改动 → authority: false（它是"请求"，不是权威结果）
-    authHost.mailbox.length = 0;
-    authFollower.send({ t: 'blocks', blocks: [[41, 70, 40, 1, 0, 'overworld']] });
-    const fromFollower = await authHost.wait('blocks', 2000);
-    check('从属端的方块广播 authority: false', fromFollower?.authority === false, JSON.stringify(fromFollower));
-
     /*
-     * 客户端谎报 authority 也没用：服务端按 isHost 重新标注。
-     * 这条是防"以后有人改成信任客户端字段"——那一改就等于没有权威。
+     * 从属端直接发 `blocks` / `block`：**一律被丢**（MS2 起从属端走 `edit-request`）。
+     * 连同"谎报 authority: true"一起验——服务端按 isHost 判，不看客户端字段。
      */
     authHost.mailbox.length = 0;
-    authFollower.send({ t: 'blocks', authority: true, blocks: [[42, 70, 40, 1, 0, 'overworld']] });
-    const spoofed = await authHost.wait('blocks', 2000);
-    check('从属端谎报 authority 无效（服务端按 isHost 判定）', spoofed?.authority === false, JSON.stringify(spoofed));
+    authFollower.send({ t: 'blocks', blocks: [[41, 70, 40, 1, 0, 'overworld']] });
+    check('从属端直接发 blocks 被丢弃', (await authHost.wait('blocks', 600)) === null);
 
-    // 单条 `block` 同一口径
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'blocks', authority: true, blocks: [[42, 70, 40, 1, 0, 'overworld']] });
+    check('从属端谎报 authority 也没用（照样丢）', (await authHost.wait('blocks', 600)) === null);
+
     authHost.mailbox.length = 0;
     authFollower.send({ t: 'block', x: 43, y: 70, z: 40, id: 1, state: 0, dimension: 'overworld' });
-    const single = await authHost.wait('block', 2000);
-    check('单条 block 也带 authority: false', single?.authority === false, JSON.stringify(single));
+    check('从属端单条 block 同样被丢弃', (await authHost.wait('block', 600)) === null);
 
     authHost.close();
     authFollower.close();
@@ -1445,6 +1440,20 @@ try {
     noHostFollower.send({ t: 'edit-request', payload: { t: 'blocks', blocks: [[51, 70, 50, 1, 0, 'overworld']] } });
     const rejected = await noHostFollower.wait('edit-request', 2000);
     check('没房主时回执 no-host', rejected?.ok === false && rejected?.reason === 'no-host', JSON.stringify(rejected));
+
+    // 有房主的房里：从属端走老的 `blocks` 直接被丢（改动只能走 edit-request）
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'blocks', blocks: [[52, 70, 50, 1, 0, 'overworld']] });
+    check('从属端直接发 blocks 被丢弃（房主收不到）', (await reqHost.wait('blocks', 600)) === null);
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'block', x: 53, y: 70, z: 50, id: 1, state: 0, dimension: 'overworld' });
+    check('从属端直接发 block 也被丢弃', (await reqHost.wait('block', 600)) === null);
+
+    // 房主自己发的照旧（它是权威结果）
+    reqFollower.mailbox.length = 0;
+    reqHost.send({ t: 'blocks', blocks: [[20, 70, 20, 1, 0, 'overworld']] });
+    const fromHostStillWorks = await reqFollower.wait('blocks', 2000);
+    check('房主自己发的 blocks 仍被广播', fromHostStillWorks?.authority === true, JSON.stringify(fromHostStillWorks));
 
     reqHost.close();
     reqFollower.close();
