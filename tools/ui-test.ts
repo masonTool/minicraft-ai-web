@@ -5548,5 +5548,36 @@ console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
   );
 }
 
+/*
+ * 协议文档与代码逐条对照（L8 · MS4）
+ *
+ * 文档漂移是这类项目最常见的债：消息加了、字段改了，文档还停在上一版，
+ * 下次照着文档实现就会踩空。这里只钉"这一批动过的东西文档里必须有"，
+ * 不做"文档 == 代码"的完全比对（那需要解析源码，成本远高于收益）。
+ */
+console.log('\n[协议文档 v2 与本批改动逐条对照（L8 · MS4）]');
+{
+  const doc = readFileSync(new URL('../docs/NET-PROTOCOL.md', import.meta.url), 'utf8');
+  const mustHave: Array<[string, string]> = [
+    ['world 元数据（L9）', '`world: {name, seed, mode?, difficulty?, worldType?}`'],
+    ['worldType 随 welcome 下发', 'worldType'],
+    ['改动请求（MS2）', '`edit-request`'],
+    ['权威标记（MS2）', 'authority'],
+    ['实体快照（MS3）', '`entity-snap`'],
+    ['实体消失（MS3）', '`entity-remove`'],
+    ['容器进度（MS4）', 'progress?'],
+    ['房主掉线通知（MS4）', '`room-closed`'],
+    ['房主退出错误码（MS4）', '`host-left`'],
+    ['关闭码 4007', '4007'],
+  ];
+  for (const [label, needle] of mustHave) {
+    check(`文档里有：${label}`, doc.includes(needle), needle);
+  }
+  check(
+    '缺口表里 MS2/MS3 的条目已改成现状（不再是"位置不同步"）',
+    doc.includes('模拟只由房主跑') && doc.includes('生物**位置/血量/状态/死亡**已同步'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
