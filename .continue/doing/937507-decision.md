@@ -151,3 +151,11 @@
 - 决定：6 张 id 表（木材两族 / 树苗两张 / 床 / 牌子 / 石头变体）全部改成**纯算术先行生成**，spec 数组只读不写；`STONE_VARIANT` 的 `next++` 分配器抽成 `allocateStoneVariantIds()`。**不做**搬运。
 - 为什么：这些 id 表是"运行时要用的"（`stoneVariantId()` 判定变体、`saplingId()` 放置树苗、`signId()` 放牌子…），而它们原来只在"生成 spec 数组"的副作用里存在。也就是说 **spec 不生成，这些 id 就不存在**——表一外置，这一整类函数会静默返回 undefined（不是崩溃，是"树苗种下去不长"这种更难查的错）。先解耦，搬运才有意义。`STONE_VARIANT` 那处最险（id 来自与 spec 生成共用的游标），单抽一个函数、单独验证。
 - 影响：行为零变化（两个快照哈希逐字节一致、724 块与 46 块行为全对、149 套全绿）。体积仍 716 KB——**搬运才是体积收益所在**，这一步只是把路铺平。退回方式：`git revert` 即可，改动都集中在各 spec 构造块上方几十行。
+
+## D25 · 第 2 步（搬运）这次尝试**回滚了**：两条路都被 esbuild 打包堵死，需改设计
+
+- 决定：本轮把 `SPECS` 搬到 `blockSpecs.ts` 的改动**全部回滚**，仓库退回到第 1 步的绿点（`04d0b492`）；把结论记下来，改方案再动。
+- 为什么：两条路都试过，都在**测试/工具链**（esbuild 打包）这一侧失败：
+  1. **顶层 await（TLA）方案**：`blocks.ts` 动态 `await import('./blockSpecs.ts')` 装表。单文件 ESM 下可行，但 esbuild 打包时"动态 import + 环（blockSpecs → blocks）"会**静默死锁**——实测报 `Detected unsettled top-level await`，进程直接卡死退出。
+  2. **banner 注入方案**：`blocks.ts` 保持叶子（`BLOCKS = []`），改用 `tools/run-tests.mjs` 的 esbuild `banner` 给每个测试入口前置 `import './bootstrapSpecs.ts'`。实测 banner 里的 import **不参与打包**，产物里原样保留成相对路径 → `ERR_MODULE_NOT_FOUND`（`.tmp/src/...`），而且就算路径对了，Node 也加载不了 `.ts`。
+- 影响：`SPECS` 仍在 `blocks.ts` 里，体积仍 716 KB，门禁状态不变。**下一步的正确设计**：把 `blockSpecs.ts` 依赖的那 100 多个 id 常量挪进一个**叶子模块** `blockIds.ts`（`blocks.ts` 用 `export * from './blockIds.ts'` 保持 224 个引用方不变），于是依赖变成 `blockIds → blockSpecs → blocks` **单向无环**，`blocks.ts` 可以**静态** import `SPECS`，不再需要 TLA、也不需要给 178 套测试注入任何东西；生产构建用 `resolve.alias` 把 `blockSpecs.ts` 换成一个 `export const SPECS = []` 的桩，产物里就没有明文数据了。这条路径的代价是"搬常量"这一件纯机械活（约 100 个声明）+ 一个 vite alias，风险比 TLA 低一个数量级。
