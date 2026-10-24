@@ -139,3 +139,13 @@
   本项目 `src/net/RoomProbe.ts` 与 `src/net/NetClient.ts` 的 `welcome.world.seed` 都按这条改过，
   各配一条脏数据断言（`tests/room-probe.test.ts`）。
 - 适用面：任何"缺字段 → 具体默认值"的协议收口；`0` / `false` / `''` 本身有意义时最容易中招。
+
+## `tools/run-tests.mjs` 并发跑偶尔会红一套，单跑必绿
+
+- 症状：`check:fast` / `check` 里偶发某套（`stray`、`mob` 各中过一次）报红，重跑或
+  `node tools/run-tests.mjs --only <名字>` 单跑就全绿，代码一行没动。
+- 根因：聚合器默认 `核数 - 1` 并发，几套重的（structure / guard / net / village）同时跑时
+  单套会撞到自己的隐式超时或共享临时目录；套件本身没有资源隔离。
+- 处置：先单跑确认，别急着改代码——真红会稳定复现。要复现得彻底就把 `--jobs` 调小。
+  重复遇到时优先看那套是不是写了固定端口 / 固定 `.tmp` 文件名（本仓库已把 net 改成 `PORT=0`）。
+- 适用面：任何"并发跑一套红、单跑绿"的报告，先当抖动查，再当 bug 查。

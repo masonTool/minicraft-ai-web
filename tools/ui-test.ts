@@ -5372,5 +5372,34 @@ console.log('\n[方块模拟只在房主那端跑（L8 · MS2）]');
   );
 }
 
+/*
+ * 改动请求的两个方向（L8 · MS2）
+ *
+ * 房主发的是权威结果（`blocks` + authority），从属端发的是请求（`edit-request`）——
+ * 后者由房主落地后重发。这条分支写反了，表现是"从属端建的方块别人看不见"，
+ * 而且不报错。
+ */
+console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '房主走上行 blocks + authority，从属端走 edit-request',
+    netSrc.includes("this.role === 'host'") &&
+      netSrc.includes("{ t: 'blocks', blocks, authority: true }") &&
+      netSrc.includes("{ t: 'edit-request', payload: { t: 'blocks', blocks } }"),
+  );
+  check(
+    '客户端认 `edit-request` 的两个方向（回执 / 转给房主的请求）',
+    netSrc.includes("if (message.ok === false)") &&
+      netSrc.includes('this.handlers.onEditRejected?.(String(message.reason') &&
+      netSrc.includes('this.handlers.onEditRequest?.(Number(message.from'),
+  );
+  check(
+    '没房主的回执只提示一次/3 秒（不刷屏）',
+    mainSrc.includes('onEditRejected: (reason) =>') && mainSrc.includes('this.editRejectedAt < 3000'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

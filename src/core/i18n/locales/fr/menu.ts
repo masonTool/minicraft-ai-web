@@ -71,6 +71,8 @@ export const menu = {
   "mp.passwordHint": "facultatif",
   "mp.refreshRooms": "Chercher des parties",
   "mp.recent": "Récent",
+  "net.editNoHost": "Aucun hôte dans cette partie — modification non synchronisée",
+  "net.editRejected": "Modification non synchronisée (refusée par le serveur)",
   "mp.hostFromWorld": "Pour héberger, appuyez sur « Héberger » sur une carte de monde (c’est là que le monde se choisit)",
   "mp.probing": "Connexion au monde de l’hôte…",
   "mp.probeFailed": "Serveur injoignable (ou trop ancien) — vérifiez l’adresse et le nom de la partie",

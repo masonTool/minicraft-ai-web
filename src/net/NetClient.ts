@@ -188,6 +188,14 @@ export interface NetHandlers {
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
+  /**
+   * 房主收到了别人的改动请求（L8 · MS2）：在自己的世界里落地，再由 `BlockFunnel`
+   * 作为权威结果广播。**只有房主会收到**（服务端只转给本房房主）。
+   */
+  onEditRequest?: (from: number, payload: { t: string; blocks?: unknown; edit?: unknown }) => void;
+  /** 我那批改动没人接（房里没房主 / 房主刚掉线）：reason 目前只有 `no-host` */
+  onEditRejected?: (reason: string) => void;
+
   /** 别人改了箱子/木桶的内容（L4，批次 611；联机15 扩到全部工作站） */
   onContainer?: (container: NetContainerState) => void;
   /** 别人写了/擦了牌子上的字（联机16） */
@@ -560,6 +568,21 @@ export class NetClient {
         );
         break;
       }
+      /*
+       * 改动请求（L8 · MS2）两个方向共用同一个 `t`：
+       *  · 带 `ok: false` = 服务端回给**请求者**的回执（房里没房主）；
+       *  · 带 `from` + `payload` = 服务端转给**房主**的请求。
+       */
+      case 'edit-request': {
+        if (message.ok === false) {
+          this.handlers.onEditRejected?.(String(message.reason ?? 'unknown'));
+          break;
+        }
+        const payload = message.payload as { t: string; blocks?: unknown; edit?: unknown } | undefined;
+        if (!payload || typeof payload.t !== 'string') break;
+        this.handlers.onEditRequest?.(Number(message.from ?? 0), payload);
+        break;
+      }
       case 'blocks': {
         // 批量版本（联机12）：合帧后一包多条，逐条喂同一个回调，顺序即服务端记录顺序
         const blocks = Array.isArray(message.blocks) ? (message.blocks as unknown[]) : [];
@@ -793,17 +816,22 @@ export class NetClient {
    */
   sendBlocks(batch: readonly { x: number; y: number; z: number; id: number; state: number; dimension: string }[]): void {
     if (!this.connected || batch.length === 0) return;
+    const blocks = batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]);
+    /*
+     * 谁在发、发的是什么（L8 · MS2）：
+     *
+     *  · **房主**发的是**权威结果**（`blocks` + `authority: true`）——世界就是他算的；
+     *  · **从属端**发的是**请求**（`edit-request`）——它本地先乐观应用了（手感不能等往返），
+     *    真正的落地与广播由房主完成，房主的结果回来会覆盖本地（不一致窗口只有一次往返）。
+     *
+     * 服务端不拿 `authority` 判权（谁说了算看 `isHost`），它只是下行广播的标注。
+     */
     this.sendRaw(
-      JSON.stringify({
-        t: 'blocks',
-        blocks: batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]),
-        /*
-         * 权威声明（L8 · MS2）：**我是跑模拟的那一端**，这批改动是算出来的结果，
-         * 不是"玩家想改成这样"的请求。服务端**不拿它判权**（谁说了算看 `isHost`），
-         * 它只是让下行广播能标出"这一格是房主算的"，排查与后续"客户端请求"分流都用得上。
-         */
-        ...(this.role === 'host' ? { authority: true } : {}),
-      }),
+      JSON.stringify(
+        this.role === 'host'
+          ? { t: 'blocks', blocks, authority: true }
+          : { t: 'edit-request', payload: { t: 'blocks', blocks } },
+      ),
     );
   }
 

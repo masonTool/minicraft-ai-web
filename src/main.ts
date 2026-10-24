@@ -1925,6 +1925,19 @@ class App {
     // 箭与 TNT（联机23）：事件 + 坐标/速度，各端自己模拟
     onArrow: (arrow) => this.onNetArrow(arrow),
     onTnt: (tnt) => this.onNetTnt(tnt),
+    /*
+     * 我那批改动没人接（L8 · MS2）：房里没房主。说一句就够——玩家改十格会连着发十条，
+     * 每条都弹一遍等于刷屏，所以这里 3 秒内只提示一次。
+     */
+    onEditRejected: (reason) => {
+      const now = performance.now();
+      if (now - this.editRejectedAt < 3000) return;
+      this.editRejectedAt = now;
+      const text = reason === 'no-host' ? t('net.editNoHost') : t('net.editRejected');
+      this.chat.push(text, 'error');
+      this.chatLine = text;
+      this.chatUntil = now + 6000;
+    },
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -2008,6 +2021,8 @@ class App {
    * 记它只为一件事：种子冲突时 `/netseed reload|new` 要有"对齐到哪个种子"可依，
    * 而 `welcome` 之后这个值不会变（服务端开局就定了世界）。
    */
+  /** 上次提示"改动没人接"的时刻（限频用） */
+  private editRejectedAt = 0;
   private serverSeed: number | null = null;
   /**
    * 用服务端种子重开世界（联机5）。

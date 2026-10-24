@@ -72,6 +72,8 @@ export const menu = {
   'mp.passwordHint': '可空',
   'mp.refreshRooms': '找房间',
   'mp.recent': '最近连接',
+  'net.editNoHost': '房里没有房主，你的改动没能同步',
+  'net.editRejected': '改动没能同步（服务端拒绝）',
   'mp.hostFromWorld': '开房请在世界卡片上点「开房」（那里才知道用哪个世界）',
   'mp.probing': '正在连接房主的世界…',
   'mp.probeFailed': '连不上这台服务器（或它太旧），检查地址与房间名再试',

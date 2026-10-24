@@ -70,6 +70,8 @@ export const menu = {
   "mp.passwordHint": "opcional",
   "mp.refreshRooms": "Buscar salas",
   "mp.recent": "Recentes",
+  "net.editNoHost": "Sem anfitrião nesta sala — alteração não sincronizada",
+  "net.editRejected": "Alteração não sincronizada (recusada pelo servidor)",
   "mp.hostFromWorld": "Para hospedar, toque em “Hospedar” no cartão de um mundo (é ali que o mundo é escolhido)",
   "mp.probing": "Conectando ao mundo de quem hospeda…",
   "mp.probeFailed": "Servidor inacessível (ou antigo demais) — confira o endereço e o nome da sala",
