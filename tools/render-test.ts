@@ -1099,6 +1099,13 @@ console.log('\n[第三人称：手里那件东西]');
 
   player.setHeldItem(Item.STICK);
   const spriteMesh3p = heldMesh();
+  // ⚠️ 回归点（用户："第三人称看到的是一把交叉的剑"）：薄盒子正反两面都贴了图标，
+  // 材质一旦开 `DoubleSide`，背面的**镜像图标**会透过正面的透明区显出来 = 两把剑交叉。
+  check(
+    '第三人称手持物是单面渲染（否则背面镜像会透出来，剑变成"交叉"的）',
+    !!spriteMesh3p && (spriteMesh3p.material as THREE.MeshBasicMaterial).side === THREE.FrontSide,
+    spriteMesh3p ? String((spriteMesh3p.material as THREE.MeshBasicMaterial).side) : 'null',
+  );
   check(
     '工具用薄盒子（有厚度，正反贴图标）',
     !!spriteMesh3p &&

@@ -373,10 +373,12 @@ export class PlayerRenderer {
         alphaTest: 0.5,
         vertexColors: true,
       });
+      // ⚠️ 不能用 `DoubleSide`：薄盒子的正反两面都贴了图标，双面渲染会让
+      // **背面的镜像图标透过正面的透明区显出来**，剑就变成了"一把交叉的剑"
+      // （用户 20261024 反馈）。盒子本来就有正反两组带绕序的面，单面渲染两边的看得出来。
       this.heldSpriteMaterial = new THREE.MeshBasicMaterial({
         map: this.atlas.texture,
         alphaTest: 0.5,
-        side: THREE.DoubleSide,
       });
       for (const material of [this.heldBlockMaterial, this.heldSpriteMaterial]) {
         this.setBaseColor(material, 0xffffff);
