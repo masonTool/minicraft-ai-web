@@ -50,7 +50,7 @@ import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 import { blockDef } from '../core/registry/blocks.ts';
 import { isFullBlockShape } from '../core/registry/blockShapes.ts';
 import { applyFaceShade, applyFaceUvs, applySpriteFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
-import { buildItemModel } from './itemModel.ts';
+import { buildHeldSprite, type HeldSprite } from './heldSprite.ts';
 import { srgbColor } from './srgb.ts';
 
 /**
@@ -101,7 +101,16 @@ const BLOCK_ROTATION: readonly [number, number, number] = [0.42, Math.PI / 4, 0]
  * · 对齐口径：**图标里不透明那块的底边中点**落在握点上（见 `spriteGeometry`）。
  */
 const SPRITE_SIZE = 0.52;
-const SPRITE_DEPTH = 0.035;
+/**
+ * 2.5D 贴图的烘制参数（见 `heldSprite.ts`）。
+ *
+ * · `FACE_PIXELS = 96`：图标按 6 倍放大后烘，边缘走双线性，是平滑过渡而不是硬台阶
+ *   （用户："我说的细致一点，指的是尽量**边缘平滑**"）；
+ * · `DEPTH_PIXELS = 22`：厚度 = 22 个画布像素 ≈ 3.7 个像素格 ≈ 0.12 屏高，沿右下挤出
+ *   （用户："3D 效果**厚一点**，不要搞得那么薄、那么单细"）。
+ */
+const SPRITE_FACE_PIXELS = 96;
+const SPRITE_DEPTH_PIXELS = 22;
 const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
 /**
  * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
@@ -199,6 +208,28 @@ void main() {
 }
 `;
 
+const SPRITE_VERTEX_SHADER = /* glsl */ `
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const SPRITE_FRAGMENT_SHADER = /* glsl */ `
+uniform sampler2D uMap;
+uniform float uBrightness;
+uniform float uAlphaTest;
+varying vec2 vUv;
+
+void main() {
+  vec4 texel = texture2D(uMap, vUv);
+  if (texel.a < uAlphaTest) discard;
+  gl_FragColor = vec4(texel.rgb * uBrightness, texel.a);
+}
+`;
+
 export class HandRenderer {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
@@ -225,12 +256,19 @@ export class HandRenderer {
    * 换成薄盒子之后正反面都是真实几何，双面不再需要——两份材质只会让"改亮度时漏一份"。
    */
   private readonly itemMaterial: THREE.ShaderMaterial;
+  /**
+   * 扁平物品专用材质：贴的是**烘好的 2.5D 贴图**（不是图集）。
+   * 因为边缘是画布的抗锯齿过渡，所以它必须 `transparent`（`alphaTest` 只兜底）。
+   */
+  private readonly spriteMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
   private readonly cuffMaterial: THREE.ShaderMaterial;
   private readonly sleeveMaterial: THREE.ShaderMaterial;
 
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
+  /** 每个扁平物品一张烘好的 2.5D 贴图（首次拿起时生成，之后复用） */
+  private readonly heldSprites = new Map<number, HeldSprite>();
   private itemMesh: THREE.Mesh | null = null;
 
   private heldItem: number | undefined;
@@ -262,6 +300,19 @@ export class HandRenderer {
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       transparent: false,
+    });
+
+    // 扁平物品的 2.5D 贴图：一次只显示一件，所以共用一个材质、切物品时换 `uMap`
+    this.spriteMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: null },
+        uBrightness: { value: 1 },
+        uAlphaTest: { value: 0.04 },
+      },
+      vertexShader: SPRITE_VERTEX_SHADER,
+      fragmentShader: SPRITE_FRAGMENT_SHADER,
+      transparent: true,
+      depthWrite: true,
     });
 
     this.armMaterial = new THREE.ShaderMaterial({
@@ -393,7 +444,16 @@ export class HandRenderer {
     // 手持火把被渲染成一根细长条 + 一截火头）。原版这些物品拿在手上也是图标。
     const isBlock = blockId !== undefined && isFullBlockShape(blockDef(blockId)?.shape ?? 'cube', 0);
     const geometry = isBlock && blockId !== undefined ? this.blockGeometry(blockId) : this.spriteGeometry(itemId);
-    const mesh = new THREE.Mesh(geometry, this.itemMaterial);
+    let material: THREE.ShaderMaterial = this.itemMaterial;
+    if (!isBlock) {
+      const sprite = this.heldSprites.get(itemId);
+      if (sprite) {
+        // 换贴图而不是换材质：扁平物品一次只显示一件
+        this.spriteMaterial.uniforms.uMap!.value = sprite.texture;
+        material = this.spriteMaterial;
+      }
+    }
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'item';
     if (isBlock) {
       mesh.position.set(...BLOCK_OFFSET);
@@ -458,6 +518,7 @@ export class HandRenderer {
 
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
+    this.spriteMaterial.uniforms.uBrightness!.value = value;
     this.armMaterial.uniforms.uBrightness!.value = value;
     this.cuffMaterial.uniforms.uBrightness!.value = value;
     this.sleeveMaterial.uniforms.uBrightness!.value = value;
@@ -556,8 +617,8 @@ export class HandRenderer {
    *   · 1455 之前：零厚度 `PlaneGeometry`，整块居中 → 手像是"捏在图标正中间"；
    *   · 1455：改成薄盒子但整块居中，六面同图标 + 默认侧面亮度 → 剑被拉成彩带；
    *   · 1531：薄盒子（有厚度）+ **平移让底边贴握点** + 正反面满亮度、厚度边压暗；
-   *   · 2136（当前）：不再是盒子——按图标**轮廓**挤出实体（`itemModel.ts`），
-   *     侧壁跟着刀身走、厚度是真的厚度，轮廓用 Scale2x 抹平台阶；
+   *   · 2210（当前）：不再是几何——图标烘成一张**2.5D 贴图**（`heldSprite.ts`：
+   *     双线性放大 + 剪影一层层错位叠出厚度），边缘平滑、厚度可以给得很足；
    *   · 1726：厚度边只取图标**最外那一列/行**（+ 边缘压暗）—— 六面贴整张图标时，
    *     16px 的图标压到 2px 宽的边上，斜向的剑会被拉成一条细长的"彩带"；
    *     而"厚度边填一道纯色"也不对，斜向物品会在空气里多画一条孤零零的线。
@@ -566,33 +627,44 @@ export class HandRenderer {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const tile = itemIconTile(itemId);
-    // 按图标轮廓挤出的 3D 像素模型（正反两片 + 跟着轮廓走的侧壁，见 `itemModel.ts`）
-    const geometry =
-      buildItemModel(this.atlas, tile, {
-        size: SPRITE_SIZE,
-        depth: SPRITE_DEPTH,
-        tilePixels: TILE_PIXELS,
-      }) ?? this.fallbackSpriteGeometry(tile);
+    const sprite = buildHeldSprite(this.atlas, itemId, {
+      facePixels: SPRITE_FACE_PIXELS,
+      depthPixels: SPRITE_DEPTH_PIXELS,
+      direction: [0.55, 0.83],
+      smooth: true,
+    });
+    if (!sprite) {
+      // 没有 DOM（离线测试）或图标读不出来：退回薄盒子，宁可"扁"也不要手里空着
+      const geometry = this.fallbackSpriteGeometry(itemIconTile(itemId));
+      this.spriteGeometries.set(itemId, geometry);
+      return geometry;
+    }
+    this.heldSprites.set(itemId, sprite);
+
+    // 四边形 = 整张画布（正面 + 厚度裙边）；把**正面**的中心摆到原点，
+    // 这样握点、尺寸与旧的薄盒子口径完全一致，只是右下多出一圈厚度。
+    const scale = SPRITE_SIZE / sprite.facePixels;
+    const size = sprite.canvasPixels * scale;
+    const geometry = new THREE.PlaneGeometry(size, size);
+    geometry.translate((sprite.padPixels / 2) * scale, -(sprite.padPixels / 2) * scale, 0);
+
+    // 图标里不透明那块的底边中点落在握点上（与原口径一致）
+    const bounds = this.atlas.contentBounds(itemIconTile(itemId));
+    const texel = SPRITE_SIZE / TILE_PIXELS;
+    const contentBottom = (TILE_PIXELS - bounds.bottom) * texel;
+    const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_PIXELS / 2) * texel;
+    geometry.translate(-contentCenterX, SPRITE_SIZE / 2 - contentBottom - size / 2, 0);
 
     this.spriteGeometries.set(itemId, geometry);
     return geometry;
   }
 
-  /**
-   * 读不到图标像素时的退路：还是那块薄盒子（宁可"扁"一点，也不要手里空着）。
-   * 真图集不会走到这里；测试桩 / 图集还没画完时会。
-   */
+  /** 读不到图标像素时的退路：还是那块薄盒子。 */
   private fallbackSpriteGeometry(tile: string): THREE.BufferGeometry {
-    const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, SPRITE_DEPTH);
+    const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, 0.03);
     const bounds = this.atlas.contentBounds(tile);
     applySpriteFaceUvs(geometry, this.atlas, tile, bounds, TILE_PIXELS);
     applyFaceShade(geometry, [0.55, 0.55, 0.55, 0.55, 1, 1]);
-
-    // 对齐口径：**图标里不透明那块的底边中点**落在握点上。
-    //  · 只按整块 16×16 的底边对齐：剑/镐还行（它们的柄就在底边），但面包/苹果
-    //    四周全是透明留白，整块对齐会让它们浮在手心上方（批次 20261024-1726 实测）；
-    //  · 只按整块居中：方向相反的毛病，手会捏在图标正中间（批次 1455 的问题）。
     const texel = SPRITE_SIZE / TILE_PIXELS;
     const contentBottom = (TILE_PIXELS - bounds.bottom) * texel;
     const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_PIXELS / 2) * texel;
@@ -609,6 +681,9 @@ export class HandRenderer {
     this.fist.geometry.dispose();
     this.cuff.geometry.dispose();
     this.armorSleeve.geometry.dispose();
+    for (const sprite of this.heldSprites.values()) sprite.dispose();
+    this.heldSprites.clear();
+    this.spriteMaterial.dispose();
     this.itemMaterial.dispose();
     this.armMaterial.dispose();
     this.cuffMaterial.dispose();

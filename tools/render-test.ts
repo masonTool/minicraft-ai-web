@@ -162,8 +162,9 @@ const FULL_TILE_CONTENT = { left: 0, top: 0, right: 16, bottom: 16 };
  * 桩图集的像素：只给 `item_stick` 画一条**对角线**（从 (2,2) 到 (13,11)），
  * 正好落在 `TILE_CONTENT.item_stick` 的框里。
  *
- * 为什么要给像素：手持扁平物品现在是"按图标轮廓挤出的 3D 像素模型"（`itemModel.ts`），
- * 没有像素就走不了这条主路径。斜线能同时验证"轮廓侧壁"和"Scale2x 补角"。
+ * 为什么要给像素：手持扁平物品的 2.5D 贴图要从图标像素烘出来（`heldSprite.ts`）。
+ * ⚠️ 但烘贴图要 DOM（canvas），离线测试里没有 → 这条路径在测试里必然退回薄盒子，
+ * 所以下面关于扁平物品的断言测的是**退路**（尺寸/对齐/UV 口径），贴图本身靠手测。
  */
 function stubTilePixels(tile: string): Uint8ClampedArray {
   const size = 16;
@@ -884,31 +885,18 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
 
   hand.setItem(Item.STICK);
   const stickMesh = itemMesh();
+  // 扁平物品真正上线时是一张**烘好的 2.5D 贴图**（`heldSprite.ts`，边缘平滑 + 画出来的厚度）。
+  // ⚠️ 烘贴图要 canvas，离线测试里没有 → 这里测的是**退路**：一块 0.52×0.52×0.03 的薄盒子。
+  //    贴图那一路（放大倍率、厚度像素、剪影方向）只能靠手测，别拿这几条断言当它的保证。
   const stickGeo = stickMesh.geometry;
   stickGeo.computeBoundingBox();
   const stickBounds = stickGeo.boundingBox!;
-  // 批次 2136（用户："3D 效果 + 更厚 + 更精细"）：扁平物品不再是薄盒子，
-  // 而是**按图标轮廓挤出的实体**——正反两片 + 沿轮廓走的一圈侧壁。
-  const stickVerts = stickGeo.getAttribute('position').count;
-  check('扁平物品是按图标轮廓挤出的实体（顶点数远多于一个盒子）', stickVerts > 100, `顶点 ${stickVerts}`);
   check(
-    '厚度是实体厚度（挤出 0.035 屏高，不再是一块板）',
-    close(stickBounds.max.z - stickBounds.min.z, 0.035, 1e-6),
-    `z 厚度 ${(stickBounds.max.z - stickBounds.min.z).toFixed(4)}`,
-  );
-  const content = TILE_CONTENT.item_stick!;
-  const texelSize = 0.52 / TILE_PIXELS;
-  check(
-    '尺寸按图标内容走（12×10 texel）',
-    close(stickBounds.max.x - stickBounds.min.x, (content.right - content.left) * texelSize, 1e-6) &&
-      close(stickBounds.max.y - stickBounds.min.y, (content.bottom - content.top) * texelSize, 1e-6),
-    `${(stickBounds.max.x - stickBounds.min.x).toFixed(3)}×${(stickBounds.max.y - stickBounds.min.y).toFixed(3)}`,
-  );
-  // 用户："手应该拿到柄的位置"：**图标里不透明那块的底边**落在握点（y=0）上
-  check(
-    '扁平物品按"内容底边"对齐握点（手握柄，不是捏在图标正中）',
-    close(stickBounds.min.y, 0, 1e-6) && Math.abs(stickBounds.min.x + stickBounds.max.x) < 1e-6,
-    `y ∈ [${stickBounds.min.y.toFixed(3)}, ${stickBounds.max.y.toFixed(3)}]`,
+    '离线环境（没有 canvas）退回薄盒子：尺寸仍是 0.52 屏高、厚度 0.03',
+    close(stickBounds.max.x - stickBounds.min.x, 0.52, 1e-6) &&
+      close(stickBounds.max.y - stickBounds.min.y, 0.52, 1e-6) &&
+      close(stickBounds.max.z - stickBounds.min.z, 0.03, 1e-6),
+    `${(stickBounds.max.x - stickBounds.min.x).toFixed(3)}×${(stickBounds.max.y - stickBounds.min.y).toFixed(3)}×${(stickBounds.max.z - stickBounds.min.z).toFixed(3)}`,
   );
   check(
     '方块的几何体仍然居中（握在方块中间）',
@@ -918,38 +906,15 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
       return Math.abs(box.min.y + box.max.y) < 1e-6;
     })(),
   );
-  // 每个四边形都用**自己那一格**的 UV（常量色，不会跨格采样出彩带）
-  const stickUv = stickGeo.getAttribute('uv');
-  let flatQuads = 0;
-  for (let quad = 0; quad < stickUv.count / 6; quad++) {
-    const base = quad * 6;
-    const same = [1, 2, 3, 4, 5].every(
-      (offset) =>
-        close(stickUv.getX(base + offset), stickUv.getX(base), 1e-9) &&
-        close(stickUv.getY(base + offset), stickUv.getY(base), 1e-9),
-    );
-    if (same) flatQuads++;
-  }
-  check('每个面片都取单格 UV（不把整张图标拉到一个面上）', flatQuads === stickUv.count / 6, `${flatQuads}/${stickUv.count / 6}`);
-  // 侧壁压暗、正反两片满亮度
-  const shades = stickGeo.getAttribute('aShade');
-  let minShade = 1;
-  let maxShade = 0;
-  for (let i = 0; i < shades.count; i++) {
-    minShade = Math.min(minShade, shades.getX(i));
-    maxShade = Math.max(maxShade, shades.getX(i));
-  }
+  // 用户："手应该拿到柄的位置"：**图标里不透明那块的底边**落在握点（y=0）上
+  stickGeo.computeBoundingBox();
+  const content = TILE_CONTENT.item_stick!;
+  const contentBottom = ((TILE_PIXELS - content.bottom) * 0.52) / TILE_PIXELS;
   check(
-    '侧壁压暗、正面满亮度',
-    minShade <= 0.7 && maxShade === 1,
-    `明暗 ${minShade.toFixed(2)}~${maxShade.toFixed(2)}`,
-  );
-  // 玩家模型那份材质只认顶点色：同一份明暗必须也写进 color，否则第三人称会是一片死白
-  const colors = stickGeo.getAttribute('color');
-  check(
-    '顶点色与 aShade 同源（第三人称的 MeshBasicMaterial 只认顶点色）',
-    !!colors && colors.count === shades.count && close(colors.getX(0), shades.getX(0), 1e-9),
-    colors ? `${colors.count} 个` : '没有 color 属性',
+    '扁平物品按"内容底边"对齐握点（手握柄，不是捏在图标正中）',
+    close(stickBounds.min.y, -contentBottom, 1e-6) &&
+      close(stickBounds.max.y, 0.52 - contentBottom, 1e-6),
+    `y ∈ [${stickBounds.min.y.toFixed(3)}, ${stickBounds.max.y.toFixed(3)}]`,
   );
   check(
     '扁平物品有自己的握持姿态（刃朝上偏右，不与方块共用）',
@@ -1129,12 +1094,9 @@ console.log('\n[第三人称：手里那件东西]');
   // 主手挂点挂在右臂上（跟着走路摆臂、挥手一起动），而不是钉在躯干上
   const rightArm = player.object.children.find((child) => child.type === 'Group' && child.children.some((c) => c.type === 'Group' && c.position.z < -0.2));
   check('主手挂点在手臂上（会跟着摆臂/挥手动）', !!rightArm, rightArm ? 'ok' : '没找到');
-  const heldMesh = () => {
-    let found: THREE.Mesh | null = null;
-    player.object.traverse((object) => {
-      if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshBasicMaterial && object.material.map) found = object;
-    });
-    return found as THREE.Mesh | null;
+  const heldMesh = (): THREE.Mesh | null => {
+    const found = player.object.getObjectByName('held-item');
+    return found instanceof THREE.Mesh ? found : null;
   };
   const blockMesh3p = heldMesh();
   check('方块用立方体几何体（六面各自贴图）', !!blockMesh3p && blockMesh3p.geometry.getAttribute('position').count === 24);
@@ -1146,17 +1108,22 @@ console.log('\n[第三人称：手里那件东西]');
 
   player.setHeldItem(Item.STICK);
   const spriteMesh3p = heldMesh();
-  // ⚠️ 回归点（用户："第三人称看到的是一把交叉的剑"）：薄盒子正反两面都贴了图标，
-  // 材质一旦开 `DoubleSide`，背面的**镜像图标**会透过正面的透明区显出来 = 两把剑交叉。
+  // ⚠️ 回归点（用户："第三人称看到的是一把交叉的剑"）：材质若开 `DoubleSide`，
+  // 背面的**镜像图标**会透过正面的透明区显出来 = 两把剑交叉。
   check(
     '第三人称手持物是单面渲染（否则背面镜像会透出来，剑变成"交叉"的）',
-    !!spriteMesh3p && (spriteMesh3p.material as THREE.MeshBasicMaterial).side === THREE.FrontSide,
-    spriteMesh3p ? String((spriteMesh3p.material as THREE.MeshBasicMaterial).side) : 'null',
+    !!spriteMesh3p && (spriteMesh3p!.material as THREE.MeshBasicMaterial).side === THREE.FrontSide,
+    spriteMesh3p ? String((spriteMesh3p!.material as THREE.MeshBasicMaterial).side) : 'null',
   );
   check(
-    '工具用同一套 3D 像素模型（与第一人称同源，不是一块板）',
-    !!spriteMesh3p && spriteMesh3p.geometry.getAttribute('position').count > 100,
-    spriteMesh3p ? `${spriteMesh3p.geometry.getAttribute('position').count} 个顶点` : 'null',
+    '离线环境退回薄盒子（有厚度，不是零厚度面片）',
+    !!spriteMesh3p &&
+      close(
+        (spriteMesh3p!.geometry as THREE.BoxGeometry).parameters.depth ?? 0,
+        0.04,
+        1e-6,
+      ),
+    spriteMesh3p ? String((spriteMesh3p!.geometry as THREE.BoxGeometry).parameters.depth) : 'null',
   );
 
   player.setHeldItem(undefined);

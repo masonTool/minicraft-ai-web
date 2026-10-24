@@ -37,7 +37,7 @@ import { blockDef } from '../core/registry/blocks.ts';
 import { isFullBlockShape } from '../core/registry/blockShapes.ts';
 import { TILE_SIZE, type TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, applySpriteFaceUvs, blockFaceTiles } from './atlasMesh.ts';
-import { buildItemModel } from './itemModel.ts';
+import { buildHeldSprite, type HeldSprite } from './heldSprite.ts';
 import { applyBoxFaceShade } from './boxShading.ts';
 import {
   bodyProportions,
@@ -105,7 +105,9 @@ export interface PlayerPose {
  */
 const HELD_BLOCK_SIZE = 0.34;
 const HELD_SPRITE_SIZE = 0.52;
-const HELD_SPRITE_THICKNESS = 0.06;
+/** 第三人称的 2.5D 贴图：正面 64px、厚度 10px（这个尺寸下够看，贴图也小） */
+const HELD_SPRITE_FACE_PIXELS = 64;
+const HELD_SPRITE_DEPTH_PIXELS = 10;
 /** 握点：右臂局部坐标（手臂从肩 y=0 垂到 y≈-0.7，手心在 -0.66 附近） */
 const HELD_GRIP: readonly [number, number, number] = [-0.2, -0.56, -0.26];
 /**
@@ -150,6 +152,8 @@ export class PlayerRenderer {
   private heldItemId: number | undefined;
   private heldMesh: THREE.Mesh | null = null;
   private readonly heldGeometries = new Map<number, THREE.BufferGeometry>();
+  /** 每个扁平物品一张烘好的 2.5D 贴图 */
+  private readonly heldSprites = new Map<number, HeldSprite>();
   /**
    * 按"角色部位"分组的网格（批次 187 外观）。
    * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
@@ -377,9 +381,12 @@ export class PlayerRenderer {
       // ⚠️ 不能用 `DoubleSide`：薄盒子的正反两面都贴了图标，双面渲染会让
       // **背面的镜像图标透过正面的透明区显出来**，剑就变成了"一把交叉的剑"
       // （用户 20261024 反馈）。盒子本来就有正反两组带绕序的面，单面渲染两边的看得出来。
+      // 扁平物品贴的是**烘好的 2.5D 贴图**（边缘半透明），所以关掉 alphaTest 的硬裁切、
+      // 走正常的 alpha 混合；贴图在 `setHeldItem` 里按物品换（一次只有一件）
       this.heldSpriteMaterial = new THREE.MeshBasicMaterial({
-        map: this.atlas.texture,
-        alphaTest: 0.5,
+        transparent: true,
+        alphaTest: 0.04,
+        depthWrite: true,
       });
       for (const material of [this.heldBlockMaterial, this.heldSpriteMaterial]) {
         this.setBaseColor(material, 0xffffff);
@@ -592,7 +599,13 @@ export class PlayerRenderer {
       this.mainhandGroup.visible = false;
       return;
     }
+    if (!isBlock && this.heldSpriteMaterial) {
+      const sprite = this.heldSprites.get(itemId);
+      this.heldSpriteMaterial.map = sprite ? sprite.texture : null;
+      this.heldSpriteMaterial.needsUpdate = true;
+    }
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'held-item';
     mesh.rotation.set(...(isBlock ? HELD_BLOCK_ROTATION : HELD_SPRITE_ROTATION));
     this.heldMesh = mesh;
     this.mainhandGroup.add(mesh);
@@ -630,22 +643,29 @@ export class PlayerRenderer {
       applyBoxFaceShade(geometry);
     } else {
       const tile = itemIconTile(itemId);
-      // 与第一人称同一套 3D 像素模型（按图标轮廓挤出），只是口径是"格"而不是"屏幕比例"
-      const model = buildItemModel(atlas, tile, {
-        size: HELD_SPRITE_SIZE,
-        depth: HELD_SPRITE_THICKNESS,
-        tilePixels: TILE_SIZE,
+      // 与第一人称同一套"烘好的 2.5D 贴图"，只是口径是"格"而不是"屏幕比例"
+      const sprite = buildHeldSprite(atlas, itemId, {
+        facePixels: HELD_SPRITE_FACE_PIXELS,
+        depthPixels: HELD_SPRITE_DEPTH_PIXELS,
+        direction: [0.55, 0.83],
+        smooth: true,
       });
-      if (model) {
-        geometry = model;
+      const bounds = atlas.contentBounds(tile);
+      const texel = HELD_SPRITE_SIZE / TILE_SIZE;
+      const contentBottom = (TILE_SIZE - bounds.bottom) * texel;
+      const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_SIZE / 2) * texel;
+      if (sprite) {
+        this.heldSprites.set(itemId, sprite);
+        const scale = HELD_SPRITE_SIZE / sprite.facePixels;
+        const size = sprite.canvasPixels * scale;
+        geometry = new THREE.PlaneGeometry(size, size);
+        geometry.translate((sprite.padPixels / 2) * scale, -(sprite.padPixels / 2) * scale, 0);
+        geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom - size / 2, 0);
       } else {
-        geometry = new THREE.BoxGeometry(HELD_SPRITE_SIZE, HELD_SPRITE_SIZE, HELD_SPRITE_THICKNESS);
-        const bounds = atlas.contentBounds(tile);
+        // 没有 DOM（离线测试）：退回薄盒子
+        geometry = new THREE.BoxGeometry(HELD_SPRITE_SIZE, HELD_SPRITE_SIZE, 0.04);
         applySpriteFaceUvs(geometry, atlas, tile, bounds, TILE_SIZE);
         applyBoxFaceShade(geometry, HELD_SPRITE_SHADE);
-        const texel = HELD_SPRITE_SIZE / TILE_SIZE;
-        const contentBottom = (TILE_SIZE - bounds.bottom) * texel;
-        const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_SIZE / 2) * texel;
         geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom, 0);
       }
     }
@@ -927,6 +947,8 @@ export class PlayerRenderer {
     this.heldGeometries.clear();
     this.heldBlockMaterial?.dispose();
     this.heldSpriteMaterial?.dispose();
+    for (const sprite of this.heldSprites.values()) sprite.dispose();
+    this.heldSprites.clear();
     this.geometry.dispose();
   }
 }
