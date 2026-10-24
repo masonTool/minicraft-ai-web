@@ -14,6 +14,8 @@
 
 import { readFileSync } from 'node:fs';
 import { t, tableOf } from '../src/core/i18n/I18n.ts';
+// 语言全集：跨语言一致性断言要遍历它，而不是手写六个码（以后加语言不用改测试）
+import { LOCALES } from '../src/core/i18n/locale.ts';
 import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
 import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
 import {
@@ -3811,7 +3813,14 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       html.includes('#chat.open .chat-line.collapsible::after') &&
       // 批次 617（Q14）：文案改走 t('chat.expand')，断言跟到键
       chatSrc.includes("html.title = t('chat.expand');") &&
-      chatSrc.includes("html.dataset.expandBadge = t('chat.expandBadge');"),
+      chatSrc.includes("html.dataset.expandBadge = t('chat.expandBadge');") &&
+      // 角标文字只住在语言表里：六种语言都得有这一条。少一条不会报错，只会让
+      // 那种语言的角标退化成一个空底色（`content` 取不到属性），肉眼很难发现。
+      LOCALES.every((locale) =>
+        /['"]chat\.expandBadge['"]/.test(
+          readFileSync(new URL(`../src/core/i18n/locales/${locale.code}/chat.ts`, import.meta.url), 'utf8'),
+        ),
+      ),
   );
   check(
     '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',
