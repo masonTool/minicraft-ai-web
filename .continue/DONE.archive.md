@@ -16633,3 +16633,29 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
   - 批次：20261024-1652
 
+## 批次 20261024-2015 · 2026-10-24 · 会话 723564b3
+
+- [x] [修26] 修上一批"填满面板"的副作用：创造栏没拿到确定高度 → 滚动条消失、列表也滚不动：`index.html`（`.inv-creative-section` 补 `align-self: stretch / height: 100% / max-height: 100%`）→ `npm run test:ui`
+  - 做了什么：把生存分类栏那三行（`align-self: stretch; height: 100%; max-height: 100%`）照抄到 `.inv-panel.pocket-ui.pocket-dual .inv-creative-section`，并写清"三行缺一不可"的原因。
+  - 为什么：`.inv-body` 是 `align-items: start` 的网格，格子里的元素默认**不拉伸**，创造栏的高度因此是"内容高度"。上一批把网格改成 `flex: 1 1 auto` 之后，网格就跟着撑到内容那么高 → `scrollHeight - clientHeight = 0`：自绘滚动条判 `max > 1` 不成立→整根隐藏，同时也没有可滚的余量，多出来的行直接被 `overflow: hidden` 裁掉（用户："滚动条不见，列表也不能滚动了"）。生存分类栏早就有这三行（同一个坑），创造栏一直没有。
+  - 验证：`npx tsx tools/ui-test.ts` **977 通过 / 0 失败**（新增 1 条：创造栏与分类栏两条都得有 `align-self: stretch` + `height: 100%`，缺一条就红）。
+  - 批次：20261024-2015
+- [x] [修27] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` → `npm run check`
+  - 做了什么：新增 2015 一节、批次索引一行、TASKS 队列落地一行；OVERVIEW 那条"创造网格填满剩余高度"补上"必须同时给栏 `align-self: stretch`，否则滚动条和滚动一起消失"。
+  - 为什么：这是"改一半就反向"的典型——只给网格 `flex: 1` 不给父级高度，症状从"留空白"变成"不能滚"，文档里必须成对写。
+  - 验证：`npm run check` 全绿。
+  - 批次：20261024-2015
+
+## 批次 20261024-1723 · 2026-10-24 · 会话 723564b3
+
+- [x] [修21] 创造物品栏把面板填满（列表下面的空白去掉）：`index.html` 五处 `.inv-creative` 高度上限改成 `flex: 1 1 auto; min-height: 0; max-height: none` → `npm run test:ui`
+  - 做了什么：把创造网格的固定上限全部换成"吃掉剩余高度"——`.inv-panel.creative-ui.pocket-ui .inv-creative`（原 `min-height: min(38vh,200px)` / `max-height: min(42vh,220px)`）、`body.touch-mode` 同名那条、横屏矮屏那条（原 34/38vh）、`.inv-panel.creative-ui .inv-creative`（原 `min(58vh,420px)`）、双栏 `.inv-panel.pocket-ui.pocket-dual .inv-creative`（原 174px）、`body.touch-mode ...pocket-dual` 那条（原 174px）、`body:not(.touch-mode) ...pocket-dual`（原 `min(58vh,430px)`）。
+  - 为什么：面板高度是固定的 `--inv-pocket-h`（矮横屏就是 318px），网格用 `vh` 封顶就只占一半，下面自然空一大片。面板/内容区/创建区三层都是 `flex: 1 1 auto; min-height: 0`，网格只要也 `flex: 1 1 auto` 就会把剩下的高度全部吃掉（多出来的高度就是能多看见的行）。
+  - 验证：`npx tsx tools/ui-test.ts` **976 通过 / 0 失败**（新增 1 条：两条主规则都是 `flex: 1 1 auto` 且不再出现 `max-height: 174px;` / `max-height: min(42vh…;` 这些声明——注意断言认"带分号的声明"，规则块里的注释会提到旧值）。
+  - 批次：20261024-1723
+- [x] [修22] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
+  - 做了什么：新增 1723 一节、批次索引一行、TASKS 队列落地一行、OVERVIEW「界面与音频」补"创造网格填满剩余高度，别再按 vh 封顶"。
+  - 为什么：面板是固定高度这一点不写在台账里，下一轮又会有人给网格加 `max-height: 42vh` 之类的"保险"。
+  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
+  - 批次：20261024-1723
+

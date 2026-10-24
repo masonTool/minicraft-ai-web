@@ -9,6 +9,31 @@
 
 ---
 
+## 批次 20261025-0256 · 2026-10-25 · 会话 f40a1ce1
+
+- [x] [相机1] 抽出「相机到最近实心面」的探测器与 near 映射（纯函数 + 离线断言）：新增 `src/render/cameraNear.ts`、`tools/camera-near-test.ts`，`package.json` 加 `test:cameranear` → `npm run test:cameranear` 全绿
+  - 做了什么：新增 `src/render/cameraNear.ts` 两个纯函数——`cameraClearance(world,x,y,z,radius=1)` 取 3×3×3 邻域的**碰撞盒**（不是"非空气格"），返回到最近盒面的距离（盒内 0、空场 `Infinity`）；`nearPlaneFor(clearance)` = `clamp(clearance - 0.05, 0.02, CAMERA_NEAR)`。常量 `CAMERA_PROBE_RADIUS=1` / `NEAR_MARGIN=0.05` / `CAMERA_NEAR_MIN=0.02`，上限直接 `import { CAMERA_NEAR } from './Sky.ts'`（不另抄 0.25）。`tools/camera-near-test.ts` 用"只在指定格给碰撞"的假世界断言，不引真 `World`
+  - 为什么：用碰撞盒而不是"非空气格"，是为了让水 / 岩浆 / 火 / 藤蔓 / 蛛网这些没有碰撞盒的方块不白压深度精度；非完整方块按**局部盒**算距离，否则半砖天花板那档会按整格盒底算出 0（误判成"埋在里面"）、按整格顶面算出 0.73（漏判）。距离取"到盒面最短距离"而不是"沿视线的命中距离"——最短距离 ≤ 任意方向的命中距离，于是不必把视线传进来就保证任何朝向都不裁
+  - 验证：`npm run test:cameranear` **36/0**（三档真实间隙 0.18→0.13 / 0.23→0.18 / 0.30→0.25 都严格小于间隙且贴墙那档仍等于 0.25；半砖局部盒、无碰撞方块、埋在盒里返回 0、对角距离 √0.75、单调性逐条钉死）；`npm run check:fast` 全绿（离线 **177** 套——比原来多这一套、单测 372 条）；`typecheck` + `typecheck:tools` 清洁
+  - 批次：20261025-0256
+- [x] [相机2] 把自适应近裁面接进相机：`src/main.ts#updateCamera` 每帧按 `camera.position` 探间隙并写 `camera.near` → `npm run check:fast` 全绿 + `npm run dev` 手测（两格高洞里跳起来抬头不再透视、蹲半砖下不再透视）
+  - 做了什么：`src/main.ts` 新增 `applyAdaptiveNear()`，在 `updateCamera` 摆完相机之后调用——探针读**刚摆好的 `camera.position`**（不是眼睛，第三人称被墙压到眼前那一档才覆盖得到），`nearPlaneFor(cameraClearance(world, …))`；旁观模式走 `hasBlockCollision(this.gameMode)` 判据直接给 `CAMERA_NEAR` 并跳过探针；`near` 变化超过 1e-4 才写 `camera.near` + `updateProjectionMatrix()`
+  - 为什么：只改这一处（而不是 `applySettings` / `setViewDistance`）是因为那两处只管 `far`，把 near 写死会让每帧的收缩被覆盖；`updateProjectionMatrix()` 必须跟着写，否则改了 near 画面不变
+  - 验证：`npm run typecheck` 清洁、`npm run check:fast` 全绿（离线套件里没有覆盖 `src/main.ts` 的，符合预期）；**真浏览器端到端**（临时脚本 `.tmp/camera-near-e2e.mjs`，不入库）：起 vite → 进世界 → 空场 8 帧 `near` 恒 0.25 → `/setblock ~ ~2 ~ stone` + 创造飞行顶上去（脚底 67.200、眼 68.820、天花板底 69.000，间隙 0.18）→ `near = 0.130`（18 帧全部 0.130）→ `/gamemode spectator` 回到 0.25 → 拆掉石头回到 0.25。即"贴脸收缩、旁观不收缩、离开即还原"三条都在真机跑通
+  - 批次：20261025-0256
+- [x] [相机3] 相机真埋进实心不透明方块时不再透视而是被方块色盖住：`src/render/ScreenEffects.ts` 加 `suffocate` 与动态取色、`src/main.ts#applyMediumEnvironment` 接优先级 → `npm run test:render` 全绿 + 手测（`/setblock` 埋自己、沙柱砸头）
+  - 做了什么：`ScreenEffects` 加 `suffocate` 预设（alpha 1、vignette 0、兜底色中灰）与 `setTint(hex|null)` 动态取色入口（`update()` / `snap()` 里"有覆盖色就用覆盖色，否则用预设色"，值没变时不重建 `Color`）；`main.ts` 新增 `buriedInBlock()`（相机所在格 `blockDef(id).suffocates` **且** `cameraClearance(..., 0) === 0` 才算被埋；旁观模式按 `hasBlockCollision` 排除），`applyMediumEnvironment` 的优先级改成 `portal > suffocate > lava > blindness > darkness > water`，色罩颜色取**现成的 `blockParticleColor(id)`**（顶面+侧面贴图平均色，没有再造颜色表）
+  - 为什么：相机真进了方块时眼前那面是背面、被背向剔除，near 收到多小都看不到它，几何路径是死路，只能整屏盖住（原版同理）。两个判据缺一不可：玻璃/树叶/水 `suffocates=false`（本来就该看得见外面）；`cameraClearance === 0` 保证是"在碰撞盒里面"而不是"在半砖空着那一半"。优先级把 suffocate 放在水下之前是因为"埋在石头里时水下那片青色是错的"
+  - 验证：`npm run test:render` **276/0**（新增 9 条：整屏不透明 / 无边缘加深 / 兜底色 / `setTint` 立刻生效 / 过渡后是覆盖色 / `snap()` 也吃覆盖色 / 清掉覆盖色回预设）；`typecheck` 清洁；`check:fast` 全绿。**真浏览器端到端**（临时脚本 `.tmp/suffocate-e2e.mjs`，不入库）：空场无色罩 → `/fill ~-2 ~-1 ~-2 ~2 ~3 ~2 stone` 埋住 → `effect=suffocate`、色罩色 `0x7f7f7f`（石头灰）、alpha 1.000 → 换成 sandstone → 色罩跟着变 `0xd8cca6`（砂岩黄）→ 换成 glass → 不糊屏（alpha 0.000）→ 旁观模式埋在石头里也不糊 → 挖开后色罩褪去
+  - 批次：20261025-0256
+- [x] [相机4] 全量回归与差异台账：`npm run check` + `npm run build:fast` 全绿，并把「相机贴脸会透视」这条差异写进 `.continue/TASKS.md` 的差异台账口径（若该台账无对应段则记进 `notes/decisions.md`）
+  - 做了什么：`TASKS.md` 的 F7 视角条目下补一条 `⚠️` 注记（自适应 near 的口径：正常 0.25 / 贴脸收到间隙−0.05 / 探针读相机位置 / 旁观不收缩 / 埋进不透明方块改用该方块色罩，并写明原版是固定 near ≈0.05），`npm run audit:diffs` 重算差异台账（差异 66 条 / 注意 225 条）；顺手把 `README.md` / `AGENTS.md` / `.continue/HANDOFF.md` 里"176 套"改成"177 套"（本批新增 `test:cameranear`，`audit:tasks` 会核对这个数）
+  - 为什么：差异台账是**脚本从 `⚠️` 注记汇总**的（`tools/diff-ledger.mjs`），手抄必然漂，所以只写注记、让脚本重写台账；套数同理，`audit:tasks` 拿 `package.json` 现算并反查入口文档
+  - 验证：`npm run check` **全量全绿**（typecheck + audit:i18n + vitest 372 条 + 离线 **177/177** 套 + audit:tasks/coverage/diffs/docs）；`npm run build:fast` 出包成功（2.51MB / gzip 717KB，与改动前同量级）
+  - 批次：20261025-0256
+
+---
+
 ## 批次 20261025-0117 · 2026-10-25 · 会话 203dac00
 
 - [x] [U1] 删掉玩家可见的建造入口与全部建造工具（C2~C5）：删 `src/ui/BuildToolbar.ts`、`src/ui/buildToolbarLayout.ts`、`src/buildtools/{Selection,Fill,Clipboard,templates}.ts`；`src/main.ts` 删对应 import / `buildMode` / `buildRequest` / `buildToolbar` 字段与构造回调 / `refreshBuildToolbar` / 选区-填充-复制-粘贴-镜像-模板 的全部方法（`selectCorner` `clearSelection` `startFill` `stepFillRunner` `cancelFill` `copySelection` `pasteClipboard` `placeTemplate` `stepPasteRunner`）与每帧调用 / `setBuildModeForTest` `buildToolbarStateForTest`；Esc 面板分支、左键选区分支、`updateArmSwing` 与 `updateBreaking` 里的 `buildMode` 判断一并删；`index.html` 删 `/* ---------------- 建造工具（创造5 …` 到 `.build-page.hidden { display: none; }` 整段 CSS → `npm run typecheck` 通过且 `npm run check:fast` 全绿
@@ -158,30 +183,4 @@
   - 为什么：这批把"手持物的尺寸口径"整个换掉了，不写进 OVERVIEW 的话下一轮还会有人往 `HandRenderer` 里塞世界格数常量。
   - 验证：`npm run check` 全绿（含 `audit:docs` 体量门禁与 `audit:tasks` 的台账核对）。
   - 批次：20261024-1726
-
-## 批次 20261024-2015 · 2026-10-24 · 会话 723564b3
-
-- [x] [修26] 修上一批"填满面板"的副作用：创造栏没拿到确定高度 → 滚动条消失、列表也滚不动：`index.html`（`.inv-creative-section` 补 `align-self: stretch / height: 100% / max-height: 100%`）→ `npm run test:ui`
-  - 做了什么：把生存分类栏那三行（`align-self: stretch; height: 100%; max-height: 100%`）照抄到 `.inv-panel.pocket-ui.pocket-dual .inv-creative-section`，并写清"三行缺一不可"的原因。
-  - 为什么：`.inv-body` 是 `align-items: start` 的网格，格子里的元素默认**不拉伸**，创造栏的高度因此是"内容高度"。上一批把网格改成 `flex: 1 1 auto` 之后，网格就跟着撑到内容那么高 → `scrollHeight - clientHeight = 0`：自绘滚动条判 `max > 1` 不成立→整根隐藏，同时也没有可滚的余量，多出来的行直接被 `overflow: hidden` 裁掉（用户："滚动条不见，列表也不能滚动了"）。生存分类栏早就有这三行（同一个坑），创造栏一直没有。
-  - 验证：`npx tsx tools/ui-test.ts` **977 通过 / 0 失败**（新增 1 条：创造栏与分类栏两条都得有 `align-self: stretch` + `height: 100%`，缺一条就红）。
-  - 批次：20261024-2015
-- [x] [修27] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` → `npm run check`
-  - 做了什么：新增 2015 一节、批次索引一行、TASKS 队列落地一行；OVERVIEW 那条"创造网格填满剩余高度"补上"必须同时给栏 `align-self: stretch`，否则滚动条和滚动一起消失"。
-  - 为什么：这是"改一半就反向"的典型——只给网格 `flex: 1` 不给父级高度，症状从"留空白"变成"不能滚"，文档里必须成对写。
-  - 验证：`npm run check` 全绿。
-  - 批次：20261024-2015
-
-## 批次 20261024-1723 · 2026-10-24 · 会话 723564b3
-
-- [x] [修21] 创造物品栏把面板填满（列表下面的空白去掉）：`index.html` 五处 `.inv-creative` 高度上限改成 `flex: 1 1 auto; min-height: 0; max-height: none` → `npm run test:ui`
-  - 做了什么：把创造网格的固定上限全部换成"吃掉剩余高度"——`.inv-panel.creative-ui.pocket-ui .inv-creative`（原 `min-height: min(38vh,200px)` / `max-height: min(42vh,220px)`）、`body.touch-mode` 同名那条、横屏矮屏那条（原 34/38vh）、`.inv-panel.creative-ui .inv-creative`（原 `min(58vh,420px)`）、双栏 `.inv-panel.pocket-ui.pocket-dual .inv-creative`（原 174px）、`body.touch-mode ...pocket-dual` 那条（原 174px）、`body:not(.touch-mode) ...pocket-dual`（原 `min(58vh,430px)`）。
-  - 为什么：面板高度是固定的 `--inv-pocket-h`（矮横屏就是 318px），网格用 `vh` 封顶就只占一半，下面自然空一大片。面板/内容区/创建区三层都是 `flex: 1 1 auto; min-height: 0`，网格只要也 `flex: 1 1 auto` 就会把剩下的高度全部吃掉（多出来的高度就是能多看见的行）。
-  - 验证：`npx tsx tools/ui-test.ts` **976 通过 / 0 失败**（新增 1 条：两条主规则都是 `flex: 1 1 auto` 且不再出现 `max-height: 174px;` / `max-height: min(42vh…;` 这些声明——注意断言认"带分号的声明"，规则块里的注释会提到旧值）。
-  - 批次：20261024-1723
-- [x] [修22] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
-  - 做了什么：新增 1723 一节、批次索引一行、TASKS 队列落地一行、OVERVIEW「界面与音频」补"创造网格填满剩余高度，别再按 vh 封顶"。
-  - 为什么：面板是固定高度这一点不写在台账里，下一轮又会有人给网格加 `max-height: 42vh` 之类的"保险"。
-  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
-  - 批次：20261024-1723
 
