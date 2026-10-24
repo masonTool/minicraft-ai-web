@@ -35,6 +35,7 @@ import {
   sanitizeDimension,
   sanitizeName,
   sanitizeRoom,
+  sanitizeWorldMeta,
   withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
@@ -118,6 +119,21 @@ const graces = new Map();
  * 仍然是他；宽限期过完才让出房主位，下一个开房的人才进得来。
  */
 const hosts = new Map();
+/**
+ * 每个房间"是哪个世界"（L9）：`room` → `{name, seed, mode, difficulty}`。
+ *
+ * 房主开房时随 `join` 上报，服务端只做形状收口、**不做玩法判断**（模式/难度只当标签存着）。
+ * 从属端靠 `welcome` 里这一份知道"该生成哪片大陆"，`seed` 从此按房间而不是全服一个常量。
+ *
+ * 没有房主的房间（有人直接 join、没带 host）不在表里，退回 `WORLD_SEED`——那是
+ * "单机直连服务器"的老行为，不能因为这一批就断掉。
+ */
+const roomWorlds = new Map();
+
+/** 这个房间当前的世界元数据（没房主时用服务端默认种子兜底） */
+function worldOfRoom(room) {
+  return roomWorlds.get(room) ?? { name: '', seed: WORLD_SEED, mode: '', difficulty: '' };
+}
 /**
  * 容器内容（联机13）：`维度|x,y,z` → `{x,y,z,dimension,slots}`。
  *
@@ -358,8 +374,12 @@ function scopedKey(room, key) {
  * 一次发给手机就是几 MB 的 JSON，而这个玩家真正看得见的可能只有几百格。
  */
 function snapshotFor(player) {
+  // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
+  // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
+  const world = worldOfRoom(player.room);
   return {
-    seed: WORLD_SEED,
+    seed: world.seed,
+    world: { name: world.name, seed: world.seed, mode: world.mode, difficulty: world.difficulty },
     /*
      * 房主（L8）：这一局谁在跑模拟。
      *
@@ -787,7 +807,21 @@ wss.on('connection', (socket, request) => {
           isHost: wantsHost,
         };
         players.set(player.id, player);
-        if (wantsHost) hosts.set(room, { id: player.id, clientId: player.clientId });
+        if (wantsHost) {
+          hosts.set(room, { id: player.id, clientId: player.clientId });
+          /*
+           * 世界（L9）：**只有房主能定这一局用哪个世界**。
+           *
+           * 从属端带来的 `world` 一律不看——它本来也不该带（客户端只在开房时填）。
+           * `sanitizeWorldMeta` 返回 `null` 时（没带 / 种子是脏数据）保留房间原有的那份：
+           * 房主重连、换客户端重开都能沿用，不至于把已在地图上的队友踢进另一片大陆。
+           */
+          const meta = sanitizeWorldMeta(message.world);
+          if (meta) {
+            roomWorlds.set(room, meta);
+            log(`房间 ${room} 的世界：${meta.name || '(未命名)'} · 种子 ${meta.seed}`);
+          }
+        }
 
         send(socket, {
           t: 'welcome',

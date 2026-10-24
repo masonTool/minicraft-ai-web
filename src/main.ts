@@ -4115,7 +4115,19 @@ class App {
    * 默认 false——控制台手敲 `mc.connect(...)` 的人多半是"连上去看看"，不该顺手占住房主位。
    */
   connect(url = defaultServerUrl(), name = '玩家', host = false): string {
-    this.net.connect(url, name, host);
+    /*
+     * 开房时把"这一局用哪个世界"一起报上去（L9）：种子决定队友那边的地形。
+     * 加入的人**不带**——房间的世界由房主定，带了服务端也不看（免得两边各以为是）。
+     */
+    const world = host
+      ? {
+          name: this.worldConfig.name,
+          seed: this.worldConfig.seed,
+          mode: this.gameMode,
+          difficulty: this.worldConfig.difficulty,
+        }
+      : undefined;
+    this.net.connect(url, name, host, world);
     return this.netStatus;
   }
 

@@ -70,7 +70,7 @@
 
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
-| `join` | `v, name, clientId, x, y, z, dimension, room?, password?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
+| `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效 |
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
 | `block` | `x, y, z, id, state, dimension` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条 |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
@@ -94,7 +94,7 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
+| `welcome` | `v, id, name, seed, world{name,seed,mode,difficulty}, isHost, hostId, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的；`world.seed` 与老字段 `seed` 同一份（按房间，L9），没房主时 = 服务端默认种子 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
 | `weather` | `kind`（`clear` / `rain` / `thunder`） | 天气**切换时**广播（`联机35`）：晴天 8~16 分钟后 45% 继续晴 / 55% 转雨（30% 雷暴），雨天与雷暴一律转晴 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
@@ -120,10 +120,11 @@
 ```json
 {
   "t": "welcome",
-  "v": 1,
+  "v": 2,
   "id": 1,
   "name": "玩家",
   "seed": 20261014,
+  "world": { "name": "草原小屋", "seed": 20261014, "mode": "survival", "difficulty": "normal" },
   "players": [{ "id": 1, "name": "玩家", "x": 0, "y": 80, "z": 0, "yaw": 0, "pitch": 0, "dimension": "overworld" }],
   "edits": [[100, 64, -50, 1, 0, "overworld"]],
   "items": [{ "owner": 1, "localId": 7, "itemId": 12, "count": 3, "x": 10.5, "y": 70, "z": 20.5 }]

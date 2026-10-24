@@ -151,3 +151,34 @@ const ROOM_RE = /^[A-Za-z0-9_-]{1,24}$/;
 export function sanitizeRoom(value) {
   return typeof value === 'string' && ROOM_RE.test(value) ? value : DEFAULT_ROOM;
 }
+
+// ---------------------------------------------------------------- 房间的世界（L9）
+
+/** 世界名上限（与玩家名同量级；它只是给面板显示用的标签） */
+export const MAX_WORLD_NAME = 32;
+/** 种子绝对值上限：本项目种子是 32 位整数，超了就是脏数据 */
+export const MAX_SEED = 2 ** 31 - 1;
+
+/**
+ * 房主上报的世界元数据（L9）：**这一局的地形由它决定**。
+ *
+ * 为什么必须由房主带：地形生成器是纯函数，同种子 = 同一片大陆。原来服务端用全服
+ * 一个 `WORLD_SEED` 常量，于是"在主菜单选了哪个世界"和"进联机后看到的地形"毫无关系
+ * ——玩家体感就是"我选的世界根本没生效"。
+ *
+ * 收口规则（宁可退回默认也不透传）：
+ *  · 不是对象 / `seed` 不是 32 位整数 → 返回 `null`（调用方退回服务端默认种子）；
+ *  · `name` 去控制字符与尖括号、按字符截到 32，空则空串（客户端自己兜底显示）；
+ *  · `mode` / `difficulty` 只做形状收口，服务端**不用**它们（玩法仍各端自带）。
+ */
+export function sanitizeWorldMeta(value) {
+  if (!value || typeof value !== 'object') return null;
+  const seed = Number(value.seed);
+  if (!Number.isInteger(seed) || Math.abs(seed) > MAX_SEED) return null;
+  const name = typeof value.name === 'string'
+    // eslint-disable-next-line no-control-regex
+    ? [...value.name.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, MAX_WORLD_NAME).join('')
+    : '';
+  const label = (raw) => (typeof raw === 'string' ? [...raw.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, 16).join('') : '');
+  return { name, seed, mode: label(value.mode), difficulty: label(value.difficulty) };
+}

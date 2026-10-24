@@ -20,6 +20,20 @@ import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
 import { NetStats } from '../core/net/NetStats.ts';
 
+/**
+ * 房间的世界（L9）：这一局该是哪片大陆。
+ *
+ * 由**房主**在 `join` 里上报，服务端按房记着、随 `welcome` 回给所有人。
+ * `mode` / `difficulty` 只是标签（服务端不用它们判什么），用来在面板上写
+ * "房主的世界：草原小屋 · 种子 123456 · 生存"。
+ */
+export interface NetWorldMeta {
+  name: string;
+  seed: number;
+  mode?: string;
+  difficulty?: string;
+}
+
 export interface NetPlayerState {
   id: number;
   name: string;
@@ -280,6 +294,16 @@ export class NetClient {
   private amHost = false;
   hostId: number | null = null;
   /**
+   * 房间的世界（L9）：`welcome.world` 那一份，没收到时为 `null`。
+   *
+   * 从属端靠它知道"该生成哪片大陆"，也用来在面板上说明"你进的是谁的世界"。
+   * 断线后**不清空**：重连到同一个房间要接着用同一份（房间世界以房主为准，
+   * 重连时 `welcome` 会再给一遍）。
+   */
+  roomWorld: NetWorldMeta | null = null;
+  /** 开房时要上报的世界（只有房主带；重连也带，否则房间可能退回默认种子） */
+  private wantsWorld: NetWorldMeta | null = null;
+  /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
    * 随 `move` 一起发出去，队友据此判"是不是自己人"——队伍表本身各端各存一份，
@@ -306,7 +330,7 @@ export class NetClient {
     return this.remote.size + (this.selfId > 0 ? 1 : 0);
   }
 
-  connect(url: string, name: string, host = false): void {
+  connect(url: string, name: string, host = false, world?: NetWorldMeta): void {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
     this.fatal = false;
@@ -318,6 +342,8 @@ export class NetClient {
     this.name = name;
     // 开房意图（L8）：随 `join` 上行；自动重连也用同一份，否则重连一次就从房主降级
     this.wantsHost = host;
+    // 房间的世界（L9）：只有开房的人才定地形；加入的人带了也没用（服务端只认房主的）
+    this.wantsWorld = host && world ? world : null;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
     if (this.clientId.length === 0) this.clientId = browserClientId();
     this.session.connect();
@@ -380,6 +406,8 @@ export class NetClient {
           ...(this.password ? { password: this.password } : {}),
           // 开房（L8）：不带的客户端一律是从属端（服务端按 `=== true` 判）
           ...(this.wantsHost ? { host: true } : {}),
+          // 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形
+          ...(this.wantsWorld ? { world: this.wantsWorld } : {}),
         }),
       );
     };
@@ -451,6 +479,20 @@ export class NetClient {
         this.amHost = message.isHost === true;
         const hostId = Number(message.hostId);
         this.hostId = Number.isInteger(hostId) && hostId > 0 ? hostId : null;
+        /*
+         * 房间的世界（L9）：老服务端没有 `world`，那就退回只用 `seed`（此时 `name` 为空）。
+         * 种子必须是整数——它是地形生成的输入，`NaN` 会让整片大陆变成同一格。
+         */
+        const rawWorld = message.world as Partial<NetWorldMeta> | undefined;
+        const worldSeed = Number(rawWorld?.seed ?? message.seed);
+        if (Number.isInteger(worldSeed)) {
+          this.roomWorld = {
+            name: typeof rawWorld?.name === 'string' ? rawWorld.name : '',
+            seed: worldSeed,
+            mode: typeof rawWorld?.mode === 'string' ? rawWorld.mode : '',
+            difficulty: typeof rawWorld?.difficulty === 'string' ? rawWorld.difficulty : '',
+          };
+        }
         const players = (message.players as NetPlayerState[] | undefined) ?? [];
         for (const player of players) {
           if (player.id === this.selfId) continue;

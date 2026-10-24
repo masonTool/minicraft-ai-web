@@ -13,7 +13,7 @@ import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocket } from 'ws';
-import { PROTOCOL_VERSION } from '../server/protocol.mjs';
+import { PROTOCOL_VERSION, sanitizeWorldMeta } from '../server/protocol.mjs';
 
 /**
  * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
@@ -70,6 +70,8 @@ class TestClient {
     this.password = options.password ?? '';
     /** 开房（L8）：`join` 里带 host 标记，服务端据此登记这一房的唯一房主 */
     this.host = options.host === true;
+    /** 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形 */
+    this.world = options.world ?? null;
     this.mailbox = [];
     this.socket = new WebSocket(
       `ws://localhost:${PORT}`,
@@ -278,6 +280,7 @@ try {
         ...(client.room ? { room: client.room } : {}),
         ...(client.password ? { password: client.password } : {}),
         ...(client.host ? { host: true } : {}),
+        ...(client.world ? { world: client.world } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
@@ -1260,6 +1263,70 @@ try {
     check('原房主宽限期过后房主位释放（可重新开房）', (await joinAndWaitWelcome(hostC, '新房主', 0, 70, 0)) !== null);
 
     for (const client of [follower, otherHost, hostC]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 房间的世界（L9）
+  console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
+  {
+    // 房主带世界 → welcome 下发的种子就是它（不再是全服一个常量）
+    const worldHost = new TestClient('WorldHost', undefined, {
+      room: 'worldroom',
+      host: true,
+      world: { name: '草原小屋', seed: 424242, mode: 'survival', difficulty: 'hard' },
+    });
+    const welcomeWorldHost = await joinAndWaitWelcome(worldHost, '世界房主', 0, 70, 0);
+    check(
+      '房主带世界开房：welcome.world.seed = 上报的种子',
+      welcomeWorldHost?.world?.seed === 424242,
+      JSON.stringify(welcomeWorldHost?.world),
+    );
+    check('房主带世界开房：老字段 seed 也是同一份', welcomeWorldHost?.seed === 424242, `${welcomeWorldHost?.seed}`);
+    check(
+      '房主带世界开房：世界名/模式随欢迎包下发',
+      welcomeWorldHost?.world?.name === '草原小屋' && welcomeWorldHost?.world?.mode === 'survival',
+      JSON.stringify(welcomeWorldHost?.world),
+    );
+
+    // 从属端：自己带的世界不生效，跟着房主走（否则两个人会各自生成一片大陆）
+    const worldFollower = new TestClient('WorldFollower', undefined, {
+      room: 'worldroom',
+      world: { name: '我自己的世界', seed: 999 },
+    });
+    const welcomeWorldFollower = await joinAndWaitWelcome(worldFollower, '世界从属', 0, 70, 0);
+    check(
+      '从属端跟着房主的种子（自己带的不算）',
+      welcomeWorldFollower?.seed === 424242 && welcomeWorldFollower?.world?.seed === 424242,
+      JSON.stringify(welcomeWorldFollower?.world),
+    );
+    check('从属端的世界名也是房主的', welcomeWorldFollower?.world?.name === '草原小屋', JSON.stringify(welcomeWorldFollower?.world));
+
+    // 没房主的房：退回服务端默认种子（"单机直连服务器"的老行为不能断）
+    const plainRoom = new TestClient('PlainRoom', undefined, { room: 'plainroom' });
+    const welcomePlain = await joinAndWaitWelcome(plainRoom, '普通房', 0, 70, 0);
+    check('没房主的房退回服务端默认种子', welcomePlain?.seed === 20261014, `${welcomePlain?.seed}`);
+
+    // 脏世界：种子不是整数 → 整份丢弃、保留默认（不能把 NaN 当种子发给所有人）
+    const badWorldHost = new TestClient('BadWorldHost', undefined, {
+      room: 'badworld',
+      host: true,
+      world: { name: '<b>坏种子', seed: 'abc' },
+    });
+    const welcomeBad = await joinAndWaitWelcome(badWorldHost, '坏世界房主', 0, 70, 0);
+    check('房主上报脏种子：退回默认种子', welcomeBad?.seed === 20261014, `${welcomeBad?.seed}`);
+
+    // 收口函数本身：名字超长截断、控制字符与尖括号清掉
+    const meta = sanitizeWorldMeta({ name: '<草原>\u0007' + '长'.repeat(40), seed: 7, mode: 'creative' });
+    check(
+      'sanitizeWorldMeta 清字符并截到 32 字',
+      meta?.name === '草原' + '长'.repeat(30) && meta?.seed === 7,
+      JSON.stringify(meta?.name),
+    );
+    check(
+      'sanitizeWorldMeta 拒绝非整数种子 / 非对象',
+      sanitizeWorldMeta({ seed: 1.5 }) === null && sanitizeWorldMeta(null) === null,
+    );
+
+    for (const client of [worldHost, worldFollower, plainRoom, badWorldHost]) client.close();
   }
 
   // ---------------------------------------------------------------- 房间口令（联机26）
