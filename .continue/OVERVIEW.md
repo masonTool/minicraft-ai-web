@@ -150,7 +150,7 @@
 
 **实现**
 
-- 一个世界一个 IndexedDB 库（联机按 room + 种子派生库名）；读档按版本号串链、脏数据逐项跳过；文件导出/导入 · `L1`~`L4` · 批次 193/196；**多人 44 条 + 房主权威（只完成 MS1）+ 世界即房间**（协议 `docs/NET-PROTOCOL.md`，细则 `notes/net-multiplayer.md`）：`join` 带 `host` / `world`、一房一房主、`welcome` 下发 `isHost`/`hostId`/`world`、角色 `solo|host|client`、卡片「开房」+ 菜单「加入房间」先探房再进世界、本局房间卡与最近连接 · `L4`/`L8`/`L9` · 批次 20261023-2351 / 20261024-1619 / 20261024-2114
+- 一个世界一个 IndexedDB 库（联机按 room + 种子派生库名）；读档按版本号串链、脏数据逐项跳过；文件导出/导入 · `L1`~`L4` · 批次 193/196；**多人 44 条 + 房主权威（MS1+MS2）+ 世界即房间**（协议 `docs/NET-PROTOCOL.md`，细则 `notes/net-multiplayer.md`）：`join` 带 `host` / `world`、一房一房主、`welcome` 下发 `isHost`/`hostId`/`world`、角色 `solo|host|client`、`SimMode` 裁决谁跑模拟（从属端不跑方块）、从属端改动走 `edit-request` 由房主落地重发、卡片「开房」+ 菜单「加入房间」先探房再进世界、本局房间卡与最近连接 · `L4`/`L8`/`L9` · 批次 20261023-2351 / 20261024-1619 / 20261024-2114
 
 **坑 / 注意**
 

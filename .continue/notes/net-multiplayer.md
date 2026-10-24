@@ -58,3 +58,31 @@
   是 `undefined`，必须退回 `execCommand('copy')`，再不行就选中让玩家手动复制。
 - **`/rooms` 是跨源请求**：页面在 5173、服务端在 8787，响应不带 `access-control-allow-origin`
   浏览器会直接吞掉（表现为"列不出房间"）。房名会拼进地址，所以清洗时不合规的行直接丢。
+
+## 五、MS2 世界权威（批次 20261025-0122）
+
+**目标**：让"世界只由房主推进"真正生效，同时**不没收从属端的建造**。
+
+- **`core/net/SimMode.ts`**：`shouldSimulate(role, domain)` 是"要不要推进"的**唯一入口**，
+  四个域 `blocks / mobs / containers / clock`（只增不减）。表：单机全跑；房主跑前三项、
+  不碰时钟（时间仍服务端权威）；从属一样都不跑。`describeSimMode(role)` 用来打印"这一端在跑什么"。
+- **tick 闸门**：`main.ts` 的 20Hz 循环里 `if (shouldSimulate(role,'blocks')) this.tickWorldBlocks(...)`，
+  `tickWorldBlocks(` 在全文件只出现一次（UI 断言钉住）。连上时打一行 `[net] 模拟模式：…`。
+- **权威标记**：房主上行带 `authority: true`（**声明**）；服务端不信它，`block` / `blocks` 的下行
+  广播按 `player.isHost` **重新标注**。
+- **从属端的改动走 `edit-request`**：服务端只转给本房房主（没房主回 `no-host`，客户端 3 秒提示一次）；
+  房主用 `readEditRequest()` 解析 → `planRemoteBlock` → 记增量 → 写世界，**不包 `applyingRemoteBlock`**，
+  于是 `onBlockChanged` 把它送进 `BlockFunnel`，以 `blocks + authority` 重发。
+  请求方本地是**乐观应用**的，收到同一条再写一次（幂等）——这就是"以房主结果为准"的收敛点。
+- **服务端收口**：**有房主的房里**，非房主的 `block` / `blocks` 一律丢弃（没房主的房保持老行为）。
+- **落地顺序**：`applyRemoteBlock(action, edit, sink)` 把"先记增量、再写世界"收进一个函数
+  （写世界抛异常时增量也已经落下）。
+
+**坑**
+
+- **房主落地必须"不抑制回声"**：`onNetBlock` 那层抑制是为了不回发队友的改动，但房主是**替别人落地**，
+  抑制了就进不了漏斗、请求者的改动只有房主自己看得见。
+- **丢弃要按房判定**：无条件丢非房主的 `block` 会把"有人直接 join、没带 host"的老用法打死
+  （那种房没人推进世界，谁改都一样）。
+- **从属端仍要本地先应用**：等往返才有反馈的手感在手机上像卡死。
+- `container` / `sign` / `frame` / `tnt` **还没请求化**（仍直连上行，不影响玩法，但和"只有房主写世界"不完整）。
