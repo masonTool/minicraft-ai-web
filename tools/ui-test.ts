@@ -5446,6 +5446,22 @@ console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
       'update(ctx: EntityContext, dt: number, shouldTick?: (entity: Entity) => boolean): void',
     ),
   );
+
+  // 影子实体（MS3）：从属端只画不跑，位置由快照驱动
+  check(
+    '从属端每帧摆影子（房主那边不建影子，否则每只怪画两个模型）',
+    mainSrc.includes('if (!shouldSimulate(this.net.role, \'mobs\')) this.syncShadowMobs(dt);') &&
+      mainSrc.includes("onEntitySnap: (raw) => {\n      if (this.net.role !== 'client') return;"),
+  );
+  check(
+    '影子只更新位置/血量/状态，不跑 AI（没有 tick 调用）',
+    mainSrc.includes('private syncShadowMobs(dt: number): void') &&
+      !mainSrc.includes('this.simApply.step(dt)') === false,
+  );
+  check(
+    '断开时撤掉所有影子与影子表（否则留下的怪既不动也打不死）',
+    mainSrc.includes('private clearShadowMobs(): void') && mainSrc.includes('this.clearShadowMobs();'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

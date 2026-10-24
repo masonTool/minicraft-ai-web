@@ -401,6 +401,8 @@ import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/Multipl
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
 import { summaryFromRoom } from './core/net/JoinWorld.ts';
 import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
+import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
+import { ENTITY_FLAGS, hasFlag } from './core/net/EntitySnapshot.ts';
 import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
@@ -1929,6 +1931,14 @@ class App {
      * 我那批改动没人接（L8 · MS2）：房里没房主。说一句就够——玩家改十格会连着发十条，
      * 每条都弹一遍等于刷屏，所以这里 3 秒内只提示一次。
      */
+    /*
+     * 房主的实体快照（L8 · MS3）：从属端只存影子，不做任何模拟。
+     * 只有从属端处理——房主自己那份就是真身，再建一份影子等于给每只怪画两个模型。
+     */
+    onEntitySnap: (raw) => {
+      if (this.net.role !== 'client') return;
+      this.simApply.apply(raw);
+    },
     // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
     onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
     onEditRejected: (reason) => {
@@ -1994,6 +2004,8 @@ class App {
         this.blockFunnel.clear();
         // 待恢复的容器内容同理（联机13），重连会重新拿一份 welcome 快照
         this.pendingContainers.clear();
+        // 影子实体（L8 · MS3）：断开就撤，否则留下的怪既不动也打不死
+        this.clearShadowMobs();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
@@ -2023,6 +2035,18 @@ class App {
    * 记它只为一件事：种子冲突时 `/netseed reload|new` 要有"对齐到哪个种子"可依，
    * 而 `welcome` 之后这个值不会变（服务端开局就定了世界）。
    */
+  /**
+   * 从属端的影子实体（L8 · MS3）：房主的快照推过来，这边只画不跑。
+   *
+   * 与 `remotePlayers`（远端玩家）分开：那些是真人、有自己的渲染器；这里是**生物**，
+   * 用的就是本地那套 `Mob` 渲染，只是位置/血量/状态由快照决定。
+   */
+  private readonly simApply = new SimApply({
+    maxHealthOf: (type) => mobTypeById(type)?.health,
+  });
+  /** 影子键 → 本地那个 `Mob`（渲染实体） */
+  private readonly shadowMobs = new Map<string, Mob>();
+
   /** 上次提示"改动没人接"的时刻（限频用） */
   private editRejectedAt = 0;
   private serverSeed: number | null = null;
@@ -12306,6 +12330,56 @@ class App {
   }
 
   /** 推进所有实体并同步到渲染层 */
+  /**
+   * 把影子实体摆到"这一帧该在的位置"（L8 · MS3）。
+   *
+   * 只更新位置/朝向/血量/状态：AI、寻路、掉落、经验都不在这边跑——那些是房主的活。
+   * 影子消失（宽限期过）时不直接 `dead = true` 吗？这里就是：让 `EntityManager` 下一帧
+   * 顺手把它清掉，省得自己维护一处"从表里删"的逻辑。
+   */
+  private syncShadowMobs(dt: number): void {
+    const states = this.simApply.step(dt);
+    const alive = new Set<string>();
+    for (const state of states) {
+      alive.add(state.key);
+      const mob = this.acquireShadowMob(state);
+      if (!mob) continue;
+      mob.x = state.x;
+      mob.y = state.y;
+      mob.z = state.z;
+      mob.yaw = state.yaw;
+      mob.health = state.health;
+      mob.baby = hasFlag(state.flags, ENTITY_FLAGS.baby);
+      if (hasFlag(state.flags, ENTITY_FLAGS.onFire)) mob.ignite(1);
+      mob.hitFlash = hasFlag(state.flags, ENTITY_FLAGS.hurt) ? Math.max(mob.hitFlash, 0.2) : mob.hitFlash;
+    }
+    for (const [key, mob] of this.shadowMobs) {
+      if (alive.has(key)) continue;
+      mob.dead = true;
+      this.shadowMobs.delete(key);
+    }
+  }
+
+  /** 取（或建）一只影子 `Mob`；类型不认识就返回 null（那只怪不画，比画错强） */
+  private acquireShadowMob(state: ShadowRenderState): Mob | null {
+    const existing = this.shadowMobs.get(state.key);
+    if (existing) return existing;
+    const type = mobTypeById(state.type);
+    if (!type) return null;
+    const mob = createMob(type, state.x, state.y, state.z);
+    mob.netKey = state.key;
+    this.entities.spawn(mob);
+    this.shadowMobs.set(state.key, mob);
+    return mob;
+  }
+
+  /** 退联机 / 种子冲突时把影子全撤了（否则会留下一群不动的怪） */
+  private clearShadowMobs(): void {
+    for (const mob of this.shadowMobs.values()) mob.dead = true;
+    this.shadowMobs.clear();
+    this.simApply.clear();
+  }
+
   private updateEntities(dt: number): void {
     const context: EntityContext = {
       world: this.world,
@@ -12516,6 +12590,8 @@ class App {
       dt,
       shouldSimulate(this.net.role, 'mobs') ? undefined : (entity) => !(entity instanceof Mob),
     );
+    // 从属端：把影子摆到插值后的位置上（不跑 AI，位置完全由快照驱动）
+    if (!shouldSimulate(this.net.role, 'mobs')) this.syncShadowMobs(dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
     if (this.witherWasAlive && !witherAlive) {
