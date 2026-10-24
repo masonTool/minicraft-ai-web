@@ -111,6 +111,7 @@ export class MultiplayerScreen {
   private readonly passwordInput: HTMLInputElement;
   private readonly roomsEl: HTMLDivElement;
   private readonly recentEl: HTMLDivElement;
+  private readonly titleEl: HTMLElement;
   /** 最近连接（点一颗就填回地址与房间） */
   private recents: RecentRoom[];
   private readonly refreshButton: HTMLButtonElement;
@@ -137,7 +138,8 @@ export class MultiplayerScreen {
     const panel = document.createElement('div');
     panel.className = 'mp-panel';
 
-    const title = document.createElement('b');
+    this.titleEl = document.createElement('b');
+    const title = this.titleEl;
     title.className = 'mp-title';
     title.textContent = t('mp.title');
 
@@ -285,7 +287,18 @@ export class MultiplayerScreen {
     return this.openState;
   }
 
-  open(): void {
+  /**
+   * 打开面板。
+   *
+   * `mode = 'join'`（L9）：主菜单里点「加入房间」只有"加入"这一件事——
+   * 开房要指定用哪个世界，那件事在世界卡片的「开房」上；断开在没有连接时也没有意义。
+   * 把这两颗藏掉，面板才真的是"填个地址就进去"的小面板，而不是一屏看不懂的开关。
+   */
+  open(mode: 'full' | 'join' = 'full'): void {
+    this.root.dataset.mode = mode;
+    this.titleEl.textContent = t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
+    this.hostButton.classList.toggle('hidden', mode === 'join');
+    this.disconnectButton.classList.toggle('hidden', mode === 'join');
     this.openState = true;
     this.root.classList.remove('hidden');
     this.setState(this.state);

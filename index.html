@@ -601,6 +601,25 @@
         background: #355d26;
         border-color: #8fd06b #1f3a16 #1f3a16 #8fd06b;
       }
+      /* 「⋯」：编辑 / 导出 / 删除收进这里（L9 方案 A：卡片上只留进入与开房） */
+      .world-card-actions .world-more {
+        color: #d6d6d6; background: #3a3a3a; border-color: #1a1a1a #6a6a6a #6a6a6a #1a1a1a;
+        padding: 5px 8px; line-height: 1;
+      }
+      .world-card-actions .world-more:hover { background: #4a4a4a; }
+      .world-card-extra {
+        display: flex; gap: 4px; flex-wrap: wrap;
+        margin-top: 6px; padding-left: 2px;
+      }
+      .world-card-extra.hidden { display: none; }
+      .world-card-extra button { font-size: 12px; padding: 5px 9px; white-space: nowrap; }
+      /* 世界列表顶部：新建世界 + 加入房间 并排（横屏一行放得下） */
+      .world-list-top { display: flex; gap: 6px; align-items: stretch; }
+      .world-list-top > .world-primary { flex: 1 1 auto; }
+      .world-list-top > .world-secondary { flex: 0 0 auto; white-space: nowrap; }
+      /* 「加入房间」模式的面板：藏掉只有局内才成立的按钮（开房 / 断开） */
+      #multiplayer-screen[data-mode='join'] #mp-host,
+      #multiplayer-screen[data-mode='join'] #mp-disconnect { display: none; }
       /* 危险操作 = **红字**（原版没有红色按钮），底还是那颗灰按钮 */
       .world-card-actions button.danger,
       .pause-action.danger { color: var(--mc-text-danger); }

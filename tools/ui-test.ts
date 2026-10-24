@@ -5151,7 +5151,7 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
     worldSrc.includes('sanitizeRoomName(roomInput.value, defaultRoom)') &&
       worldSrc.includes('passwordInput.value.trim().slice(0, 32)'),
   );
-  check('世界列表里的多人入口改成「加入房间…」', worldSrc.includes("multiplayer.textContent = t('world.joinRoom');"));
+  check('世界列表顶部的多人入口是「加入房间…」', worldSrc.includes("join.textContent = t('world.joinRoom');"));
   check(
     '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
     mainSrc.includes('pendingHostRoom = { room, password };') &&
@@ -5215,6 +5215,7 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const probeSrc = readFileSync(new URL('../src/net/RoomProbe.ts', import.meta.url), 'utf8');
+  const mpSource = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   const appSrcCount = (mainSrc.match(/new MultiplayerScreen\(/g) ?? []).length;
 
   check('面板只在 boot 层创建一份（App 不再 new 它）', appSrcCount === 1);
@@ -5233,7 +5234,32 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
     '开房：从卡片进来就直接连（不再要求玩家再按一次）',
     mainSrc.includes('app.connectOnline({') && mainSrc.includes('host: true'),
   );
-  check('菜单的「加入房间…」直接开面板（不再先选世界）', mainSrc.includes('multiplayerUi.open();'));
+  check(
+    '菜单的「加入房间…」直接开面板，且只显示"加入"（不显示开房/断开）',
+    mainSrc.includes("multiplayerUi.open('join');") && mpSource.includes("this.root.dataset.mode = mode;"),
+  );
+  check(
+    '卡片上只留「进入 / 开房 / ⋯」，管理动作收进折叠行（方案 A）',
+    (() => {
+      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      return (
+        worldSrc.includes('buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);') &&
+        worldSrc.includes("extra.className = 'world-card-extra hidden';") &&
+        worldSrc.includes('extra.append(edit, exportButton, remove);')
+      );
+    })(),
+  );
+  check(
+    '世界列表顶部「＋ 新建世界」与「加入房间…」并排（不再散落在首页）',
+    (() => {
+      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      return (
+        worldSrc.includes("topRow.className = 'world-list-top';") &&
+        worldSrc.includes("join.id = 'world-multiplayer-button';") &&
+        !worldSrc.includes("multiplayer.className = 'world-secondary';")
+      );
+    })(),
+  );
   check(
     '探房用一次性身份（复用本机 clientId 会被判 duplicate 拒连）',
     probeSrc.includes('probe${Math.random()') && probeSrc.includes('setTimeout(() => finish(null)'),

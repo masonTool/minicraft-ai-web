@@ -35,6 +35,8 @@ export const menu = {
   "world.enter": "Entrer",
   "world.host": "Héberger",
   "world.joinRoom": "+ Rejoindre une partie",
+  "world.more": "Plus d’actions (modifier / exporter / supprimer)",
+  "mp.joinTitle": "Rejoindre une partie",
   "world.hostTitle": "Héberger : {world}",
   "world.roomName": "Nom de la partie",
   "world.roomPassword": "Mot de passe",

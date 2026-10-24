@@ -35,6 +35,8 @@ export const menu = {
   'world.enter': '进入',
   'world.host': '开房',
   'world.joinRoom': '＋ 加入房间',
+  'world.more': '更多操作（编辑 / 导出 / 删除）',
+  'mp.joinTitle': '加入房间',
   'world.hostTitle': '开房：{world}',
   'world.roomName': '房间名',
   'world.roomPassword': '口令',

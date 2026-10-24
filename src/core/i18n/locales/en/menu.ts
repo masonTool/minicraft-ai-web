@@ -36,6 +36,8 @@ export const menu = {
   'world.enter': 'Enter',
   'world.host': 'Host',
   'world.joinRoom': '+ Join a room',
+  'world.more': 'More actions (edit / export / delete)',
+  'mp.joinTitle': 'Join a room',
   'world.hostTitle': 'Host: {world}',
   'world.roomName': 'Room name',
   'world.roomPassword': 'Password',

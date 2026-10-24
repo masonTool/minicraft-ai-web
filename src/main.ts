@@ -19844,7 +19844,8 @@ async function boot(): Promise<void> {
      */
     onMultiplayer: () => {
       multiplayerUi.setState('idle');
-      multiplayerUi.open();
+      // 主菜单只有"加入"这一件事：开房在世界卡片的「开房」上（L9 方案 A）
+      multiplayerUi.open('join');
     },
     /*
      * 卡片上的「开房」（L9）：这个世界就是这一局的房间。

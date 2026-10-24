@@ -203,18 +203,6 @@ export class WorldScreen {
       menu.append(miniGames);
     }
 
-    // 多人游戏入口（联机9）：同样是 secondary，理由同上（第一颗 primary 必须仍是"开始游戏"）
-    if (this.actions.onMultiplayer) {
-      const multiplayer = document.createElement('button');
-      multiplayer.type = 'button';
-      multiplayer.className = 'world-secondary';
-      multiplayer.id = 'world-multiplayer-button';
-      // L9：这一颗现在是"加入别人的房"，所以文案跟着改成动作（房间名/口令在面板里填）
-      multiplayer.textContent = t('world.joinRoom');
-      multiplayer.addEventListener('click', () => this.actions.onMultiplayer?.());
-      menu.append(multiplayer);
-    }
-
     const footer = document.createElement('div');
     footer.className = 'world-footer';
     // 批次 20261024-1152（用户）：页脚那行"非官方 Web 复刻 · 存档保存在此设备"去掉，
@@ -262,9 +250,28 @@ export class WorldScreen {
     });
     listLabel.appendChild(importButton);
 
+    /*
+     * 顶部并排两颗（L9，方案 A）：**＋ 新建世界** 与 **加入房间…**。
+     *
+     * 加入放在这里而不是首页菜单：它和"新建/选世界"是同一层的事（都是"开始一局"），
+     * 首页只留游戏/设置/小游戏三个入口，不再堆第二颗联机键。
+     */
+    const topRow = document.createElement('div');
+    topRow.className = 'world-list-top';
+    topRow.append(newEntry);
+    if (this.actions.onMultiplayer) {
+      const join = document.createElement('button');
+      join.type = 'button';
+      join.className = 'world-secondary';
+      join.id = 'world-multiplayer-button';
+      join.textContent = t('world.joinRoom');
+      join.addEventListener('click', () => this.actions.onMultiplayer?.());
+      topRow.append(join);
+    }
+
     worlds.append(
       this.makeNav(t('world.list'), () => this.setView('home')),
-      newEntry,
+      topRow,
       listLabel,
       this.listEl,
     );
@@ -584,14 +591,27 @@ export class WorldScreen {
       void this.confirmDelete(world);
     });
 
-    buttons.append(
-      enter,
-      ...(this.actions.onHostWorld ? [host] : []),
-      edit,
-      exportButton,
-      remove,
-    );
-    card.append(thumbnail, info, buttons);
+    /*
+     * 卡片上只留"进入 / 开房"两颗（L9，方案 A）：编辑、导出、删除都是低频动作，
+     * 五颗按钮挤在一行在横屏手机上根本点不准——收进「⋯」里，点开才展开一行。
+     */
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'world-more';
+    more.textContent = '⋯';
+    more.title = t('world.more');
+    more.setAttribute('aria-label', t('world.more'));
+
+    const extra = document.createElement('div');
+    extra.className = 'world-card-extra hidden';
+    extra.append(edit, exportButton, remove);
+    more.addEventListener('click', () => {
+      const open = extra.classList.toggle('hidden') === false;
+      more.setAttribute('aria-expanded', String(open));
+    });
+
+    buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);
+    card.append(thumbnail, info, buttons, extra);
     return card;
   }
 
