@@ -402,6 +402,8 @@ import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
 import { summaryFromRoom } from './core/net/JoinWorld.ts';
 import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
 import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
+import { ENTITY_SNAPSHOT_INTERVAL_MS, encodeEntitySnapshots, type SimEntity } from './game/sim/SimAuthority.ts';
+import { assignMobKey } from './core/net/MobAuthority.ts';
 import { ENTITY_FLAGS, hasFlag } from './core/net/EntitySnapshot.ts';
 import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
@@ -1939,6 +1941,21 @@ class App {
       if (this.net.role !== 'client') return;
       this.simApply.apply(raw);
     },
+    /*
+     * 房主说这几只没了（L8 · MS3）：影子立刻撤，不等快照宽限——
+     * 否则"打死了还站着 0.3 秒"，掉落出现的那一瞬也对不上。
+     */
+    onEntityRemove: (keys) => {
+      if (this.net.role !== 'client') return;
+      for (const key of keys) {
+        this.simApply.remove(key);
+        const mob = this.shadowMobs.get(key);
+        if (mob) {
+          mob.dead = true;
+          this.shadowMobs.delete(key);
+        }
+      }
+    },
     // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
     onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
     onEditRejected: (reason) => {
@@ -2006,6 +2023,7 @@ class App {
         this.pendingContainers.clear();
         // 影子实体（L8 · MS3）：断开就撤，否则留下的怪既不动也打不死
         this.clearShadowMobs();
+        this.lastMobKeys.clear();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
@@ -2044,6 +2062,11 @@ class App {
   private readonly simApply = new SimApply({
     maxHealthOf: (type) => mobTypeById(type)?.health,
   });
+  /** 上次推实体快照的时刻（房主每 100ms 一次） */
+  private lastEntitySnapAt = 0;
+  /** 上一帧还在实体表里的生物键（房主用它判"谁死了"） */
+  private lastMobKeys = new Set<string>();
+
   /** 影子键 → 本地那个 `Mob`（渲染实体） */
   private readonly shadowMobs = new Map<string, Mob>();
 
@@ -12337,6 +12360,48 @@ class App {
    * 影子消失（宽限期过）时不直接 `dead = true` 吗？这里就是：让 `EntityManager` 下一帧
    * 顺手把它清掉，省得自己维护一处"从表里删"的逻辑。
    */
+  private pushEntitySnapshots(): void {
+    const now = performance.now();
+    const entities: SimEntity[] = [];
+    const currentKeys = new Set<string>();
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      if (entity.dead) continue;
+      const key = assignMobKey(entity, this.net.selfId);
+      if (key.length === 0) continue;
+      currentKeys.add(key);
+      entities.push({
+        key,
+        type: entity.type.id,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        yaw: entity.yaw,
+        health: entity.health,
+        flags:
+          (entity.baby ? ENTITY_FLAGS.baby : 0) |
+          (entity.burning ? ENTITY_FLAGS.onFire : 0) |
+          (entity.hitFlash > 0 ? ENTITY_FLAGS.hurt : 0) |
+          (entity.tamed ? ENTITY_FLAGS.tamed : 0),
+        dimension: this.dimension,
+      });
+    }
+
+    // 死亡：上一帧有、这一帧没了 → 立刻点名（不等快照那 300ms 宽限）
+    const gone = [...this.lastMobKeys].filter((key) => !currentKeys.has(key));
+    this.lastMobKeys = currentKeys;
+    if (gone.length > 0) this.net.sendEntityRemove(gone);
+
+    if (now - this.lastEntitySnapAt < ENTITY_SNAPSHOT_INTERVAL_MS) return;
+    this.lastEntitySnapAt = now;
+    const wire = encodeEntitySnapshots(entities, {
+      x: this.physics.x,
+      z: this.physics.z,
+      dimension: this.dimension,
+    });
+    if (wire.length > 0) this.net.sendEntitySnapshot(wire);
+  }
+
   private syncShadowMobs(dt: number): void {
     const states = this.simApply.step(dt);
     const alive = new Set<string>();
@@ -12592,6 +12657,8 @@ class App {
     );
     // 从属端：把影子摆到插值后的位置上（不跑 AI，位置完全由快照驱动）
     if (!shouldSimulate(this.net.role, 'mobs')) this.syncShadowMobs(dt);
+    // 房主：推快照 + 报死亡（世界由它算，队友那边只收结果）
+    else this.pushEntitySnapshots();
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
     if (this.witherWasAlive && !witherAlive) {

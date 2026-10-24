@@ -36,6 +36,7 @@ import {
   sanitizeName,
   sanitizeRoom,
   sanitizeEditPayload,
+  sanitizeEntityKeys,
   sanitizeEntitySnap,
   sanitizeWorldMeta,
   withinEditReach,
@@ -980,6 +981,21 @@ wss.on('connection', (socket, request) => {
           player.room,
           { x, z, dimension },
         );
+        break;
+      }
+
+      /*
+       * 实体消失（L8 · MS3）：房主说"这几只没了"。
+       *
+       * 为什么要单独一条而不是等快照里消失：快照失踪有 300ms 宽限（AOI 边界会抖），
+       * 死亡用宽限会出现"打死了还站着 0.3 秒"，而且掉落的瞬间会看不到。
+       */
+      case 'entity-remove': {
+        if (!player) return;
+        if (hosts.has(player.room) && player.isHost !== true) return;
+        const keys = sanitizeEntityKeys(message.keys);
+        if (!keys) return;
+        broadcast({ t: 'entity-remove', keys, by: player.id }, player.id, player.room);
         break;
       }
 

@@ -188,6 +188,9 @@ export interface NetHandlers {
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
+  /** 房主说这几只实体没了（L8 · MS3）：从属端立刻撤掉影子，不等快照宽限 */
+  onEntityRemove?: (keys: string[]) => void;
+
   /**
    * 收到房主的实体快照（L8 · MS3）：从属端据此画/更新影子实体。
    * `raw` 是线上形态（未解码），由 `decodeEntities` / `SimApply` 逐条洗。
@@ -574,6 +577,13 @@ export class NetClient {
         );
         break;
       }
+      case 'entity-remove': {
+        const keys = Array.isArray(message.keys)
+          ? message.keys.filter((key): key is string => typeof key === 'string' && key.length > 0)
+          : [];
+        if (keys.length > 0) this.handlers.onEntityRemove?.(keys);
+        break;
+      }
       case 'entity-snap': {
         // 内容不可信：交出去之前不做任何假设（`decodeEntities` 会逐条丢坏条目）
         this.handlers.onEntitySnap?.(message.entities);
@@ -857,6 +867,13 @@ export class NetClient {
     if (!this.connected || entities.length === 0) return;
     if (this.role !== 'host') return;
     this.sendRaw(JSON.stringify({ t: 'entity-snap', entities }));
+  }
+
+  /** 房主：这几只实体没了（死亡 / 被移除）。非房主调用是空操作 */
+  sendEntityRemove(keys: readonly string[]): void {
+    if (!this.connected || keys.length === 0) return;
+    if (this.role !== 'host') return;
+    this.sendRaw(JSON.stringify({ t: 'entity-remove', keys: keys.slice(0, 64) }));
   }
 
   /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */

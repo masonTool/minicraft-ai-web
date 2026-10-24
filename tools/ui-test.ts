@@ -5462,6 +5462,31 @@ console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
     '断开时撤掉所有影子与影子表（否则留下的怪既不动也打不死）',
     mainSrc.includes('private clearShadowMobs(): void') && mainSrc.includes('this.clearShadowMobs();'),
   );
+
+  // 房主侧：推快照 + 报死亡（MS3 收尾那一半）
+  const pushStart = mainSrc.indexOf('private pushEntitySnapshots(');
+  const pushEnd = mainSrc.indexOf('private syncShadowMobs(', pushStart);
+  const pushBody = pushStart >= 0 && pushEnd > pushStart ? mainSrc.slice(pushStart, pushEnd) : '';
+  check(
+    '房主给每只怪分配全局键再推（否则两端对不上同一只）',
+    pushBody.includes('assignMobKey(entity, this.net.selfId)') && pushBody.includes('sendEntitySnapshot(wire)'),
+  );
+  check(
+    '按 100ms 节流（不是每帧都发）',
+    pushBody.includes('ENTITY_SNAPSHOT_INTERVAL_MS') && pushBody.includes('this.lastEntitySnapAt = now'),
+  );
+  check(
+    '死亡立刻点名（不等快照那 300ms 宽限）',
+    pushBody.includes('this.net.sendEntityRemove(gone)') && pushBody.includes('this.lastMobKeys = currentKeys'),
+  );
+  check(
+    '从属端收到点名就把影子撤掉',
+    mainSrc.includes('onEntityRemove: (keys) =>') && mainSrc.includes('this.simApply.remove(key);'),
+  );
+  check(
+    '影子不 tick（所以从属端不会自己掉战利品：掉落只有房主那一份）',
+    mainSrc.includes("(entity) => !(entity instanceof Mob)") && !pushBody.includes('dropLoot'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

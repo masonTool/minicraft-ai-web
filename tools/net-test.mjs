@@ -1498,6 +1498,21 @@ try {
     const truncated = await snapFollower.wait('entity-snap', 2000);
     check('超过 256 条的实体快照被截断', Array.isArray(truncated?.entities) && truncated.entities.length === 256, `${truncated?.entities?.length}`);
 
+    // 死亡/消失（MS3）：房主点名 → 从属端收到；从属端点名不被转发
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-remove', keys: ['1:7', '1:8'] });
+    const removed = await snapFollower.wait('entity-remove', 2000);
+    check('从属端收到实体消失', Array.isArray(removed?.keys) && removed.keys.length === 2, JSON.stringify(removed));
+
+    snapHost.mailbox.length = 0;
+    snapFollower.send({ t: 'entity-remove', keys: ['2:1'] });
+    check('从属端点名的实体消失被丢弃', (await snapHost.wait('entity-remove', 600)) === null);
+
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-remove', keys: [] });
+    snapHost.send({ t: 'entity-remove', keys: 'nope' });
+    check('空/非法键列表不转发', (await snapFollower.wait('entity-remove', 600)) === null);
+
     snapHost.close();
     snapFollower.close();
   }

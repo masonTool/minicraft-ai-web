@@ -227,3 +227,18 @@ export function sanitizeEntitySnap(raw) {
   if (!Array.isArray(raw)) return null;
   return raw.slice(0, MAX_SNAPSHOT_ENTITIES);
 }
+
+/** 一包 `entity-remove` 最多带多少个键 */
+export const MAX_ENTITY_REMOVE_KEYS = 64;
+
+/**
+ * 实体消失/死亡的键列表收口：只留**字符串**、最多 64 个。
+ *
+ * 不校验键的格式（`ownerId:localId` 的解析在客户端），也不校验"这只怪真的死了吗"——
+ * 服务端没有世界。形状不对就当没收到。
+ */
+export function sanitizeEntityKeys(raw) {
+  if (!Array.isArray(raw)) return null;
+  const keys = raw.filter((key) => typeof key === 'string' && key.length > 0 && key.length <= 32).slice(0, MAX_ENTITY_REMOVE_KEYS);
+  return keys.length === 0 ? null : keys;
+}
