@@ -95,6 +95,7 @@ import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
+import { cameraClearance, nearPlaneFor } from './render/cameraNear.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy, mobLabel } from './core/entity/Mob.ts';
@@ -5524,6 +5525,8 @@ class App {
     const placement = cameraPlacement(eye, dir, this.yaw, this.pitch, this.cameraMode, distance);
     this.camera.position.set(placement.x, placement.y, placement.z);
     this.camera.rotation.set(placement.pitch, placement.yaw, 0);
+    // 近裁面跟着"相机离最近那个面有多远"走（放在摆位之后：探针用的就是刚摆好的位置）
+    this.applyAdaptiveNear();
 
     const thirdPerson = this.cameraMode !== 'first';
     // 贴墙时相机会被压到离眼睛很近（可能为 0）：这时玩家模型会挡在镜头里/穿进头部，
@@ -5564,6 +5567,36 @@ class App {
         },
       );
     }
+  }
+
+  /**
+   * 自适应近裁面（批次 20261025-0256）：每帧量一次"相机到最近碰撞面"的距离，贴脸时
+   * 把 `near` 收进去。
+   *
+   * 不这么做会怎样：两个实心格之间的那一面是背向剔除的，`near = 0.25` 一旦把它裁掉，
+   * 屏幕上就没有东西挡着——直接看到"墙皮后面的世界"，也就是用户报的
+   * "进山洞/进石头里看到一个透明半透明的世界"。真实间隙最小只有 0.18（两格高的洞里
+   * 跳一下头就贴住天花板），比 0.25 还小。
+   *
+   * 两条实现要点：
+   *  - 探针用**相机位置**而不是眼睛：第三人称被墙压到眼前那一档（`clampedCameraDistance`
+   *    可以返回 0，相机就落在眼睛上，甚至离墙更近）只有这样才能覆盖到；
+   *  - **旁观模式跳过**：旁观本来就该穿墙看世界，`hasBlockCollision(this.gameMode)` 是
+   *    现成的判据（与物理层穿墙用的是同一条）。
+   *
+   * 正常帧仍然是 0.25（保住批次 520 的深度精度），只有真贴脸时才收缩；而 `near` 只影响
+   * 深度映射与裁剪、不影响投影的 x/y，所以收缩是无感的、不会像改 FOV 那样跳一下。
+   */
+  private applyAdaptiveNear(): void {
+    const near = hasBlockCollision(this.gameMode)
+      ? nearPlaneFor(
+          cameraClearance(this.world, this.camera.position.x, this.camera.position.y, this.camera.position.z),
+        )
+      : CAMERA_NEAR;
+    // 只在真的变了才重建投影矩阵：每帧 `updateProjectionMatrix()` 是白扔一次矩阵运算
+    if (Math.abs(near - this.camera.near) <= 1e-4) return;
+    this.camera.near = near;
+    this.camera.updateProjectionMatrix();
   }
 
   /**
