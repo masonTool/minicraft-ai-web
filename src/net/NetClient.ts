@@ -797,6 +797,12 @@ export class NetClient {
       JSON.stringify({
         t: 'blocks',
         blocks: batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]),
+        /*
+         * 权威声明（L8 · MS2）：**我是跑模拟的那一端**，这批改动是算出来的结果，
+         * 不是"玩家想改成这样"的请求。服务端**不拿它判权**（谁说了算看 `isHost`），
+         * 它只是让下行广播能标出"这一格是房主算的"，排查与后续"客户端请求"分流都用得上。
+         */
+        ...(this.role === 'host' ? { authority: true } : {}),
       }),
     );
   }

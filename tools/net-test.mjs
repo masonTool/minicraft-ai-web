@@ -1374,6 +1374,45 @@ try {
     for (const client of [worldHost, worldFollower, plainRoom, badWorldHost]) client.close();
   }
 
+  // ---------------------------------------------------------------- 方块权威标记（MS2）
+  console.log('\n[方块权威标记：谁算的]');
+  {
+    const authHost = new TestClient('AuthHost', undefined, { room: 'authroom', host: true });
+    const authFollower = new TestClient('AuthFollower', undefined, { room: 'authroom' });
+    await joinAndWaitWelcome(authHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(authFollower, '从属', 4, 70, 4);
+
+    // 房主算出来的改动 → 下行带 authority: true（从属端据此知道"这是权威结果"）
+    authFollower.mailbox.length = 0;
+    authHost.send({ t: 'blocks', blocks: [[40, 70, 40, 1, 0, 'overworld']] });
+    const fromHost = await authFollower.wait('blocks', 2000);
+    check('房主的方块广播带 authority: true', fromHost?.authority === true, JSON.stringify(fromHost));
+
+    // 从属端的改动 → authority: false（它是"请求"，不是权威结果）
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'blocks', blocks: [[41, 70, 40, 1, 0, 'overworld']] });
+    const fromFollower = await authHost.wait('blocks', 2000);
+    check('从属端的方块广播 authority: false', fromFollower?.authority === false, JSON.stringify(fromFollower));
+
+    /*
+     * 客户端谎报 authority 也没用：服务端按 isHost 重新标注。
+     * 这条是防"以后有人改成信任客户端字段"——那一改就等于没有权威。
+     */
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'blocks', authority: true, blocks: [[42, 70, 40, 1, 0, 'overworld']] });
+    const spoofed = await authHost.wait('blocks', 2000);
+    check('从属端谎报 authority 无效（服务端按 isHost 判定）', spoofed?.authority === false, JSON.stringify(spoofed));
+
+    // 单条 `block` 同一口径
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'block', x: 43, y: 70, z: 40, id: 1, state: 0, dimension: 'overworld' });
+    const single = await authHost.wait('block', 2000);
+    check('单条 block 也带 authority: false', single?.authority === false, JSON.stringify(single));
+
+    authHost.close();
+    authFollower.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {

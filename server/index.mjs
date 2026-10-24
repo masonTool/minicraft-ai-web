@@ -951,7 +951,23 @@ wss.on('connection', (socket, request) => {
           rememberEdit(edits, scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
-        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id, player.room, { x, z, dimension });
+        broadcast(
+          {
+            t: 'block',
+            x,
+            y,
+            z,
+            id,
+            state,
+            dimension,
+            by: player.id,
+            // 权威标记（MS2）：由**服务端**按 isHost 重新判定，不信客户端传上来的那个值
+            authority: player.isHost === true,
+          },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 
@@ -990,6 +1006,8 @@ wss.on('connection', (socket, request) => {
             t: 'blocks',
             blocks: accepted.map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
             by: player.id,
+            // 同上：服务端按 isHost 重新标注，不是照抄客户端的 `authority`
+            authority: player.isHost === true,
           },
           player.id,
           player.room,

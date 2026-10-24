@@ -72,8 +72,8 @@
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效 |
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
-| `block` | `x, y, z, id, state, dimension` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条 |
-| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
+| `block` | `x, y, z, id, state, dimension, authority?` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条 |
+| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断）, `authority?` | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿。`authority` 是**声明**（L8·MS2：房主说"这批是我算的"），服务端**不据此判权**，下行会按 `isHost` 重新标注 |
 | `container` | `x, y, z, dimension, slots[]` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍 |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
@@ -99,8 +99,8 @@
 | `weather` | `kind`（`clear` / `rain` / `thunder`） | 天气**切换时**广播（`联机35`）：晴天 8~16 分钟后 45% 继续晴 / 55% 转雨（30% 雷暴），雨天与雷暴一律转晴 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
-| `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
-| `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
+| `block` | `x, y, z, id, state, dimension, by, authority` | 收到 `block` 后转发给其他人；`authority` 由服务端按发送者 `isHost` 重新判定 |
+| `blocks` | `blocks[]（形状同上）, by, authority` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序）；`authority` 同上 |
 | `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
