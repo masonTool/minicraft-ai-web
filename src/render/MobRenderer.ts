@@ -506,6 +506,23 @@ function equipmentBoxes(kind: ModelKind, type: MobType, equipment: MobEquipment 
       pivot: { x: w * 0.62, y: bodyY + armLength / 2, z: 0 },
     });
   }
+  if (equipment.offHand !== undefined) {
+    // 副手（联机41）：镜像到左手。**不设 `swingArm`** —— 挥舞是主手的动作，
+    // 副手跟着挥会像在同时打两下；它只要"在那儿"就够了
+    const kindOfWeapon = weaponKindOf(equipment.offHand);
+    const tint = weaponTint(equipment.offHand) ?? 0xd8d8d8;
+    const ranged = kindOfWeapon === 'bow' || kindOfWeapon === 'crossbow';
+    out.push({
+      width: ranged ? w * 0.12 : w * 0.16,
+      height: armLength * (ranged ? 0.62 : 0.72),
+      depth: w * (ranged ? 0.2 : 0.16),
+      x: -w * 0.66,
+      y: bodyY - armLength * 0.08,
+      z: w * 0.26,
+      color: 'body',
+      tint,
+    });
+  }
   return out;
 }
 

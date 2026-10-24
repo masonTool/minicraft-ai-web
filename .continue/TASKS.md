@@ -3997,7 +3997,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       `tests/offhand.test.ts` **6 条**；单测 **363 → 369**。
       ⚠️ F 键位移是一次**行为改变**：原来 F 切飞行。理由：原版 F 就是交换副手，且副手槽
       没有别的入口。若玩家反对，改回 `Shift+F` 交换即可（一处 `if`）。
-      ⚠️ 远端仍看不到副手物品（`MobEquipment` 只有 `mainHand`），已插 `[发现]`。
+      —— **批次 20261023-2351 补远端副手渲染**（联机41 的尾巴）：`MobEquipment` 加
+      `offHand` 并排在 `MOB_EQUIPMENT_SLOTS` 末尾（插中间会让所有生物的外观 key 变化、
+      全部重建）；`MobRenderer.equipmentBoxes` 在左手镜像画手持物（**不设 `swingArm`**：
+      挥舞是主手动作）；`RemoteArmor.ts` 的 `offhandEquipmentPatch` 收口"空槽要删"。
+      `tests/net-remote-armor.test.ts` **8 → 11 条**；`check:fast` 45/172 套全绿。
       —— **批次 20261023-2351 修 `net` 套件的并发假红**（`[发现]`）：`check()` 现在标出
       "距上一条 >300ms"的耗时；否定断言窗口 500/600 → 250ms、广播窗口 150/120/100/80 → 60/50/40；
       `run-tests.mjs` 让 **`net` 独占执行**（先单跑它，其余再并发）。`net` **18.53s → 12.61s**（-32%），

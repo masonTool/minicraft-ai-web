@@ -394,7 +394,7 @@ import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
-import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch } from './core/net/RemoteArmor.ts';
+import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
@@ -3764,6 +3764,10 @@ class App {
     // 盔甲（联机40）：空槽要**删掉**而不是写 0——`MobRenderer` 看到 0 会当成"装备了 id 0"，
     // 于是 `armorTint(0)` 给出一层灰。换甲不用手动刷新视觉：`mobAppearanceKey` 已经把
     // equipment 算进去了，下一帧会整份重建
+    // 副手（联机41 的尾巴）：空槽同样要删——`MobRenderer` 现在会把它画在另一只手上
+    const offhandPatch = offhandEquipmentPatch(state.offhand);
+    if (offhandPatch.offHand !== undefined) equipment.offHand = offhandPatch.offHand;
+    else delete equipment.offHand;
     const armorPatch = armorEquipmentPatch(state.armor);
     for (const slot of ARMOR_EQUIPMENT_SLOTS) {
       const id = armorPatch[slot];

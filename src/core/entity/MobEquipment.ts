@@ -26,13 +26,21 @@ import { toolInfoById, toolItemId, type ToolMaterial, type ToolType } from '../r
 /** 会自然生成的五种盔甲材质（下界合金只靠锻造，不会出现在生物身上） */
 type ArmorMaterialName = 'leather' | 'chainmail' | 'iron' | 'golden' | 'diamond';
 
-/** 生物能穿的五个装备位（顺序固定：存档与渲染 key 都按它拼） */
-export const MOB_EQUIPMENT_SLOTS = ['mainHand', 'head', 'chest', 'legs', 'feet'] as const;
+/**
+ * 生物能穿的六个装备位（顺序固定：存档与渲染 key 都按它拼）。
+ *
+ * `offHand` 是最后加的（联机41）：远端玩家的副手物品没处可放，之前只能丢弃。
+ * 排在最后是刻意的——`mobEquipmentKey` 按这个顺序拼指纹，追加一位不会打乱
+ * 已有五位的含义（旧存档里没这格，读出来就是 `undefined`）。
+ */
+export const MOB_EQUIPMENT_SLOTS = ['mainHand', 'head', 'chest', 'legs', 'feet', 'offHand'] as const;
 export type MobEquipmentSlot = (typeof MOB_EQUIPMENT_SLOTS)[number];
 
 /** 一只生物身上的装备；空对象 = 白板（绝大多数自然生成生物都是） */
 export interface MobEquipment {
   mainHand?: number;
+  /** 副手（联机41）：远端玩家的盾/火把/食物画在另一只手上 */
+  offHand?: number;
   head?: number;
   chest?: number;
   legs?: number;

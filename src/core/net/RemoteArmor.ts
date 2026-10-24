@@ -33,3 +33,15 @@ export function armorEquipmentPatch(armor: readonly number[] | undefined): Parti
   }
   return patch;
 }
+
+/**
+ * 副手 → `MobEquipment.offHand`（联机41）。
+ *
+ * 与 `armorEquipmentPatch` 同一条口径：空槽要**删**而不是写 0（写 0 会被渲染成
+ * 一层灰的"id 0 物品"），坏值一律不收。抽成函数只为能离线断言——
+ * 真正画第二只手的是 `MobRenderer.equipmentBoxes`。
+ */
+export function offhandEquipmentPatch(offhand: number | undefined): { offHand?: number } {
+  if (typeof offhand !== 'number' || !Number.isInteger(offhand) || offhand <= 0) return {};
+  return { offHand: offhand };
+}

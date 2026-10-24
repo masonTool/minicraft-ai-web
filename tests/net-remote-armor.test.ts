@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch } from '../src/core/net/RemoteArmor.ts';
+import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from '../src/core/net/RemoteArmor.ts';
 
 describe('armorEquipmentPatch', () => {
   it('四槽齐全时逐槽映射到头/胸/腿/脚', () => {
@@ -55,5 +55,22 @@ describe('armorEquipmentPatch', () => {
 
   it('槽顺序是 头/胸/腿/脚（与 ARMOR_SLOT_BASE 一致）', () => {
     expect([...ARMOR_EQUIPMENT_SLOTS]).toEqual(['head', 'chest', 'legs', 'feet']);
+  });
+});
+
+describe('offhandEquipmentPatch（联机41 的尾巴）', () => {
+  it('有物品就写进 offHand', () => {
+    expect(offhandEquipmentPatch(42)).toEqual({ offHand: 42 });
+  });
+
+  it('0 / 缺省 = 空补丁（调用方据此删掉 offHand，而不是写 0）', () => {
+    expect(offhandEquipmentPatch(0)).toEqual({});
+    expect(offhandEquipmentPatch(undefined)).toEqual({});
+  });
+
+  it('坏值一律不收', () => {
+    expect(offhandEquipmentPatch(-1)).toEqual({});
+    expect(offhandEquipmentPatch(1.5)).toEqual({});
+    expect(offhandEquipmentPatch(Number.NaN)).toEqual({});
   });
 });
