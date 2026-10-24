@@ -1308,8 +1308,13 @@
        */
       .jump-hud {
         position: absolute;
-        top: calc(6% + env(safe-area-inset-top, 0px));
-        left: calc(5% + env(safe-area-inset-left, 0px));
+        /*
+         * ⚠️ 必须让开宿主顶栏（`.minigame-topbar`：top 8px + 36px 高的退出按钮，z-index 4）。
+         * 曾经写成 `top: 6%`，在横屏 390 高下只有 23px —— 分数正好被"退出"按钮盖住，
+         * 而离线和 E2E 都验不到"看不看得见"，只有截图能发现。
+         */
+        top: calc(56px + env(safe-area-inset-top, 0px));
+        left: calc(6% + env(safe-area-inset-left, 0px));
         pointer-events: none;
         z-index: 2;
       }
