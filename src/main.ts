@@ -13601,12 +13601,9 @@ class App {
       this.handleInventoryOpen(this.inventoryScreen.isOpen);
       return;
     }
-    // 批次 159：配方书不再嵌进背包左栏（左栏是**物品分类**）。
-    // 背包已经开着时，R 键切的是左栏的分类视图——不然按一下就顶出一整屏配方书。
-    if (this.inventoryScreen.isOpen) {
-      this.inventoryScreen.toggleCategoryPane();
-      return;
-    }
+    // 批次 20261024-1152：R 与标题栏那颗「配方书 (R)」走同一条路——
+    // 背包开着时把配方书**嵌进左栏**（不再切成物品分类：那颗键的文字一直写着"配方书"，
+    // 按下去却只是换分类，玩家会以为配方书坏了）。
     this.openRecipeBook();
   }
 

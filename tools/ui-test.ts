@@ -604,15 +604,34 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   // 批次 206：分类栏与 3×9 仓库在双栏网格里**占同一格**，工作台也不例外——
   // 同时显示就是"多一个浮层"（用户反馈的 3×3 工作台 bug）。
   check(
-    '分类栏显示时 3×9 仓库一起藏掉（工作台也不叠层）',
-    invSrc.includes("const hideMainGrid = leftPane === 'creative' || leftPane === 'category';") &&
+    '分类栏 / 配方书显示时 3×9 仓库一起藏掉（工作台也不叠层）',
+    invSrc.includes("leftPane === 'category' || leftPane === 'recipes'") &&
       invSrc.includes("this.mainGridEl.style.display = hideMainGrid ? 'none' : '';"),
   );
   check('左栏上方那行「物品栏」不再显示', invSrc.includes("this.personalInventoryTitleEl.style.display = 'none';"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
   // 批次 157：界面统一成携带版那一套，不再有"经典 UI"这个分支
   check('不再按视口宽度选 UI 形态', !invSrc.includes('isClassicUi') && !core.includes('CLASSIC_UI_MIN_WIDTH'));
-  check('左栏三份内容写在 data-pocket-left 上', invSrc.includes("dataset.pocketLeft = leftPane") && css.includes('.inv-category-section {'));
+  check('左栏四份内容写在 data-pocket-left 上', invSrc.includes('dataset.pocketLeft = leftPane') && css.includes('.inv-category-section {'));
+  // 批次 20261024-1152（用户）：标题栏那颗「配方书」是开关——关着点开（嵌进左栏），
+  // 开着点它就是关闭。整屏那一层会连开关一起盖住，所以必须嵌进左栏才做得到。
+  check(
+    '配方书按钮是开关：关着打开、开着关闭',
+    invSrc.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab)') &&
+      invSrc.includes('this.hooks.onCloseRecipes?.();'),
+  );
+  check(
+    '配方书嵌进左栏（有落脚点 + 与分类栏同一格的 CSS）',
+    invSrc.includes("this.recipeHostEl.className = 'inv-recipe-host'") &&
+      invSrc.includes('this.hooks.onRecipeHost?.(this.recipeHostEl)') &&
+      css.includes('.inv-panel.pocket-ui.pocket-dual .inv-recipe-host') &&
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-recipe-host \{[^}]*grid-row: 1 \/ span 2;/.test(css),
+  );
+  check(
+    '工作站与容器不嵌配方书（沿用切分类的老行为）',
+    invSrc.includes('private canEmbedRecipeBook(): boolean') &&
+      invSrc.includes("if (!this.canEmbedRecipeBook()) {"),
+  );
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
   check('生存与创造共用 pocket-dual 双栏', invSrc.includes("classList.add('pocket-ui', 'pocket-dual')") && css.includes('.inv-panel.pocket-ui.pocket-dual'));
@@ -1142,13 +1161,13 @@ console.log('\n[携带版细节收口（批次 159）]');
   );
   // 批次 206：列表 = "材料够的产物" + （开关开着时）"看过的缺料配方（红底）"
   check(
-    '分类栏只列能合成的产物；配方开关打开才列全部并标红',
+    '分类栏只列能合成的产物；配方书开着才列全部并标红',
     invSrc.includes('private craftableIds(): number[]') &&
       invSrc.includes('if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);') &&
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
-      invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
+      invSrc.includes("leftPane === 'recipes' || (leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
@@ -1397,8 +1416,11 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   );
   // R 键：背包开着时切的是分类栏，不再顶出一整屏配方书
   check(
-    'R 键在背包开着时切分类栏',
-    mainSrc.includes('this.inventoryScreen.toggleCategoryPane();') && invSrc.includes('toggleCategoryPane(): void {'),
+    'R 键与标题栏「配方书」按钮同一条路（开/关配方书，不再只切分类）',
+    !mainSrc.includes('this.inventoryScreen.toggleCategoryPane();') &&
+      !invSrc.includes('toggleCategoryPane(): void {') &&
+      invSrc.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab)') &&
+      invSrc.includes("if (this.hooks.isRecipesOpen?.() ?? false) {\n          this.hooks.onCloseRecipes?.();"),
   );
 
   // ② 禁掉 HTML 自带的长按效果（长按是我们的手势）
