@@ -3,6 +3,8 @@
 > 这份文档是 continue-do 的**说明书**：文件分工、编号、队列格式、钩子行为、收尾流程、已知的坑。
 > 读者是 AI。它只写**稳定规则**——当前进度不在这里（看 `doing/` 和 `DONE.md` 顶部）。
 > 数量、耗时这类会变的事实不写在这里，要看就跑命令（`check.mjs --list`、`ls .continue/hooks`）。
+> **这份文件由安装器覆盖，不要手改**——机制要改就改技能里的 `assets/.continue/README.md`；
+> 手改会在下次重装时被冲掉（`check.mjs version` 会把"被本地改过"点出来）。
 
 **用途**：给**大型项目的持续型 AI 开发**用——需求、队列、进度、踩坑都在 `.continue/` 里，
 跨会话不丢；钩子逐条递任务、拦未提交改动、提交前跑检查。
@@ -197,9 +199,9 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 
 | 事件 | 脚本（注册命令都带 `--event=<事件>`） | 做什么 |
 | --- | --- | --- |
-| UserPromptSubmit | `queue-init.mjs --event=UserPromptSubmit` | 每个会话**第一次**收到消息时，注入会话 ID、队列路径、批次号与协议；之后静默（手动跑 `--new-batch` 则直接打印一个新批次号） |
+| UserPromptSubmit | `queue-init.mjs --event=UserPromptSubmit` | 每个会话**第一次**收到消息时，注入会话 ID、队列路径、批次号与协议；之后静默——**唯一例外是协议指纹变了**（`hooks/*.mjs` 被换过，典型场景是升级），此时重新注入一次并声明旧协议作废（手动跑 `--new-batch` 则直接打印一个新批次号） |
 | UserPromptSubmit | `auto-continue.mjs --event=UserPromptSubmit` | 轮次计数归零（人工介入后重新计），并在日志记一行「收到用户消息 · 第 N 次」 |
-| Stop | `dispatch.mjs --event=Stop` | 前提是 `doing/` 里已有别的会话队列：`todo/` 有待派发内容且没派发过 → 基于 HEAD 建 `doing/.worktree/<sid6>` + 分支 `continue/<sid6>` + 拉 IDE 窗口；空收件箱 / 本会话已有队列 / 没人在跑 / 同一份已派发 / 在树里 → 放行；**失败只告警不拦会话**（拦住会让 AI 在规划区开工） |
+| Stop | `dispatch.mjs --event=Stop` | 前提是 `doing/` 里已有别的会话队列：`todo/` 有待派发内容且没派发过 → 基于 HEAD 建 `doing/.worktree/worktree_<单词>_<YYYYMMDD>` + **同名分支**（单词取 `queue.md` 头部的 `> 树名：`，没写就退化成 `task`）+ 拉 IDE 窗口；空收件箱 / 本会话已有队列 / 没人在跑 / 同一份已派发 / 在树里 → 放行；**失败只告警不拦会话**（拦住会让 AI 在规划区开工） |
 | Stop | `auto-continue.mjs --event=Stop` | 读本会话队列：没有队列 → 放行；有 `[ ]` / `[~]` → 递这一条；连续 N 轮没做完 → 标 `[阻塞]`；都没了 → **自动收尾**（有 `[阻塞]` / 未验证条目时才先请用户拍板） |
 | Stop | `auto-commit.mjs --event=Stop` | 工作区有未提交改动 → 先跑 `checks.fast`，再提醒提交；没有 → 放行 |
 | git pre-commit | `pre-commit.mjs` | 提交前跑 `checks.fast`，失败拒绝提交；**一次提交勾掉多条队列条目也拒绝**（见下） |
@@ -247,7 +249,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 
 **改了 `.codebuddy/settings.json` 不会热加载**：钩子在会话启动时拍快照，改完必须重启会话才生效。
 
-**日志**：每个会话一份 `.continue/.logs/<session_id>.md`，只在本机、已 gitignore。分两个区：
+**日志**：每个会话一份 `.continue/.logs/<session_id>/run.md`（归档的 `queue.md` / `decision.md` 在同一目录下），只在本机、已 gitignore。分两个区：
 
 ```md
 ## 任务递送（queue-init / auto-continue）
@@ -263,8 +265,10 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
   `stopSeen`。旧口径"空转不记"的代价是：正常连续放行在日志里一片空白，和"钩子压根没跑"分不出来；
 - **时间用本地时区并带偏移**，行首 `[钩子名 · 事件名]` 标明来源（事件名来自注册命令的 `--event=`，
   缺省时退回 payload 推断）——不用换算 UTC，两个钩子并发写同一份文件也能一眼分清；`lastStopAt` 仍是 ISO，给脚本读；
-- **纯问答会话（没有队列、也从来没有日志）不建日志文件**；`<!-- s:… -->` 是状态行，读取时取**最后一条**；
-- Stop 上两个钩子并发：改写前抢 `<sid>.md.lock`，抢不到降级为追加，内容不丢；每个区有行数上限，不分裂文件。
+- **纯问答会话也会有一份日志**：`queue-init` 的注入行与 `auto-continue` 的"收到用户消息"行就是它存在的理由——
+  没有这两行，就没法回答"钩子到底跑没跑"；Stop 阶段没有队列时不往里写，文件因此不会无限长；
+- `<!-- s:… -->` 是状态行，读取时取**最后一条**；
+- Stop 上多个钩子并发：改写前抢 `run.md.lock`，抢不到降级为追加，内容不丢；每个区有行数上限，不分裂文件。
 
 **`config.json` 的键**（由 `check.mjs` 与两个门禁读取；重装框架只补缺的键，改过的值保留）：
 
@@ -275,7 +279,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | `timeoutSec` | 单条检查命令的超时秒数，要小于注册钩子时的 `timeout` |
 | `project` | 项目自己的**快**检查命令（字符串或数组），由 `check.mjs` 在内置检查之后依次执行；`--fast` 与全档都跑。**安装器会自动探测并填入**（探不到就留空 + 给建议） |
 | `projectSlow` | 项目自己的**慢**检查命令（字符串或数组，如 e2e / 集成测试）：**只在全档跑**，`--fast`（pre-commit、Stop 守卫）跳过 |
-| `git.push` | 提交后是否自动 push（默认 `true`）：默认提交完就推到当前分支；设成 `false` 则只提交、推送交给用户 |
+| `git.push` | 提交后是否自动 push（默认 `true`）：默认提交完就推到当前分支；设成 `false` 则只提交、推送交给用户。**手工 `worktree.mjs` 建树也听它**——`false` 时新分支只存在本地（想推自己 `git push -u origin <分支>`） |
 | `worktree.auto` | 是否自动派发交接队列（默认 `true`）：`doing/` 里已有别的会话队列时，写 `todo/` → Stop 建树开窗；设成 `false` 只保留手工 `dispatch.mjs` |
 | `worktree.openWindow` | 派发后是否自动拉 IDE 窗口（默认 `true`）：无 GUI / CI 设 `false`，只建树 |
 
@@ -289,7 +293,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | `AUTO_COMMIT_STYLE` | 空 | 设成 `json` 时改用 `{"continue":false,"reason":…}` 而不是 exit 2 |
 | `AUTO_COMMIT_MAX_BLOCKS` | `2` | 同一份未提交改动最多拦几次 |
 | `CONTINUE_MAX_ITEMS_PER_COMMIT` | `1` | 一次提交最多把几条队列条目勾成 `[x]` |
-| `CODEBUDDY_SESSION_ID` | 宿主注入 | 只读：`worktree.mjs` 用它的前 6 位命名树目录（`.continue/doing/.worktree/<sid6>`）；不是给人设的开关 |
+| `CODEBUDDY_SESSION_ID` | 宿主注入 | 只读：钩子用它推导本会话队列路径与日志目录（`<sid6>`）；**不再用它命名工作树**（树名见 §9）；不是给人设的开关 |
 | `WORKBUDDY_SESSION_ID` | 宿主注入 | 同上，WorkBuddy 的等价变量 |
 
 ### 自测门禁
@@ -342,7 +346,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 
 旧名 `queues/`、`EXPERIENCE.md` 与旧版计划文件由 `migrateLegacyLayout()` 每会话首次启动时自动对齐/归档（幂等、不覆盖；旧计划搬进 `.logs/<会话ID>/plan.md`）。存量文档用 `<skill>/scripts/scan-docs.mjs` 只读扫描，按 `SKILL.md`「集成已有文档」合并：只搬结论不搬全文、原文件保留、不编批次号与 `T` 号，每段标一行 `> 来源：<路径>`（既是溯源，也是"已登记"标记）。
 
-**技能升级**（新版本技能目录覆盖过去之后）：重跑安装器，它打 `升级 vX → vY`，业务文档只比两边——**内容相同跳过、不同只报告差异**（实例一个字不动，也不生成任何备份文件；想同步按输出的 `diff` 命令手动合并）；`node .continue/hooks/check.mjs version` **逐文件比对实例与技能模板**，报出哪几个框架文件落后（版本号不动也看得出来）。
+**技能升级**：重跑安装器即升级。**机制文档 `README.md` 与 `hooks/` 一样总是覆盖**（真身在技能模板）；4 份数据文档（`TASKS` / `DONE` / `OVERVIEW` / `TIPS`）实例不动、不生成备份，**只在 `.installed.json` 记录的模板哈希变了时报一次**（实例被填成什么样不影响判断——它与模板不同是定义上的必然，报出来只是噪音）。`node .continue/hooks/check.mjs version` 逐文件比对实例与模板，报出落后的框架文件（版本号不动也看得出来）。
 
 ---
 
@@ -378,9 +382,12 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 
 **一份队列只归一个会话**。两个会话同时改同一份队列，条目状态会错乱；钩子不知道"另一个会话是不是也在改它"。
 默认路径是**交接模式**（§9）：`doing/` 里已有别的会话队列时，主工作区写 `todo/`、Stop 自动建树、新会话接管后队列归它一个人；`doing/` 空着就直接在本会话干。
-手工并行仍可用 `node .continue/hooks/worktree.mjs <名字> --task="…"`：建 `.continue/doing/.worktree/<本会话前6位>`（已 gitignore）、分支 `continue/<目录名>-<名字>`，把任务写进树里的 `doing/worktree.md` 并尝试拉新窗口；树里第一个会话自动把它改名接管（两份并存时不覆盖），树里还能再建树（层数会打印）。**必须在新路径另开会话**。
+手工并行仍可用 `node .continue/hooks/worktree.mjs <单词> --task="…"`：建 `.continue/doing/.worktree/worktree_<单词>_<YYYYMMDD>`（已 gitignore）、**分支同名**，把任务写进树里的 `doing/worktree.md` 并尝试拉新窗口；树里第一个会话自动把它改名接管（两份并存时不覆盖），树里还能再建树（层数会打印）。**必须在新路径另开会话**。
+`<单词>` 由 AI 按这一批的需求取（`export` / `auth` / `perf` 这类英文词，2~16 位），日期由脚本加；同一天同一个单词撞了就追加 `-2`。
 
-**收尾同步（只在工作树里）**：文档收尾提交之后跑 `node .continue/hooks/worktree-sync.mjs --run=rebase` → `--run=merge` → `--run=push`。父树与父分支由 `git worktree list` 认（不从目录名猜，父树 detached 就停手）；rebase 冲突时脚本以退出码 3 停下并列出文件，**解冲突要看语义**（`git add` → `git rebase --continue`），解不动就 `--abort` 退回报告人，不许 `--skip`；merge 在**父树**里 `--no-ff` 合回；push 只对自己这条 `continue/` 前缀分支用 `--force-with-lease`（rebase 改写了历史），父分支普通推。删树仍由人决定。
+**收尾不合并**：工作树里这批做完、文档收尾提交完就结束了。`rebase` / `merge` / 删树都由用户自己处理——
+框架既不自动做，也不在注入里要求 AI 做（2026-10-24 取消了原来的"提交后 rebase → merge → push"三步）。
+原来那条链的代价是"收尾必须等父树干净、冲突要现场按语义解"，对"做完就交给人"的用法是纯负担。
 
 **`[~]` 是「进行中」，不是「跳过」**。同时多条 `[~]` 机器能抓，但"用它假装跳过"这层意图机器看不出来。
 
@@ -420,7 +427,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | 位置 | 谁在跑 | 干什么 |
 | --- | --- | --- |
 | 主工作区 | 原会话 | 讨论需求、拆条目；把整份队列写进 `.continue/doing/.worktree/todo/queue.md`、上下文写进 `context.md`，然后**停手** |
-| （Stop 钩子） | `dispatch.mjs` | 基于 HEAD 建 `.continue/doing/.worktree/<本会话前 6 位>`、分支 `continue/<前 6 位>`，拉 IDE 新窗口 |
+| （Stop 钩子） | `dispatch.mjs` | 基于 HEAD 建 `.continue/doing/.worktree/worktree_<单词>_<YYYYMMDD>`、**同名分支**，拉 IDE 新窗口（单词取 `queue.md` 头部的 `> 树名：`） |
 | 新工作树 | 新会话 | 第一条消息由 `queue-init` 接管：`todo/queue.md` → `doing/<新会话前 6 位>.md`（批次沿用），`context.md` 附进注入并存档到 `.logs/<新会话>/handoff.md` |
 
 五条规矩：
@@ -429,16 +436,20 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
    （`dispatch` 也会判定"本会话已在干"而不再派发）；
 2. `todo/` 里已有内容时**不要覆盖**：停手让它派发，或先问用户；
 3. 派发按**内容指纹**去重：`state.json` 记着树的位置与这份队列的指纹，树还在且内容没变就不重复建；
-   内容变了（同一会话派发第二批）会再建一棵，名字带 `-2` 后缀；
+   内容变了（同一会话派发第二批）会再建一棵，同一天同一个单词撞名时追加 `-2` 后缀；
+   **树没了但内容没变也不重建**——那说明是同一批的残留（做完后清理 / 被人删掉），不是第二批；
+   再建只会多一个同名目录、甚至把做完的活重做一遍。确实要重跑：删掉 `doing/.worktree/todo/state.json`；
+   **树名来自 `queue.md` 头部的 `> 树名：<单词>`**（AI 按这一批的需求取词），不写就退化成 `worktree_task_<日期>`；
 4. `doing/` 空着时写了 `todo/` 也**不会派发**：`dispatch` 会提示把内容搬进 `doing/<sid>.md`——
    这是防"手塞收件箱"的兜底，不该当成常态；
-5. 收尾同步（rebase → merge → push）由 `worktree-sync.mjs` 在文档收尾提交之后做，**删树由人决定**；树里的会话与主工作区并行，互不递任务。
+5. **收尾不做任何合并**：树里的会话做完这批、按五步收尾并提交，就算结束；`rebase` / `merge` / 删树
+   都由用户自己处理。树里的会话与主工作区并行，互不递任务。
 
 排错与手动操作：
 
 - 只预演：`node .continue/hooks/dispatch.mjs --dry-run`（不建树、不开窗，被守卫挡住时打印原因）；
 - 关掉自动派发：`worktree.auto=false`，之后写完 `todo/` 手动跑一次 `node .continue/hooks/dispatch.mjs`；
 - 窗口没弹出来：打印的路径直接 `cd` 过去开会话，交接仍然有效；
-- 想看父子关系 / 同步卡在哪：`node .continue/hooks/worktree-sync.mjs`（`--json` 机器可读；主工作区里跑会说"无需同步"）；
+- 想看有哪些树与分支：`git worktree list`（框架不再提供"收尾同步"脚本，合并由用户自己做）；
 - 建树失败（目录 / 分支已存在）：todo **原样保留**，不会丢任务；
 - 老的手工路径（`worktree.mjs` → `doing/worktree.md`）仍可用，`queue-init` 同样会自动接管。

@@ -31,6 +31,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -102,7 +103,6 @@ const REQUIRED = [
   '.continue/hooks/archive-done.mjs',
   '.continue/hooks/archive-queue.mjs',
   '.continue/hooks/worktree.mjs',
-  '.continue/hooks/worktree-sync.mjs',
   '.continue/hooks/dispatch.mjs',
   '.continue/hooks/run.mjs',
 ];
@@ -170,7 +170,8 @@ function readInstalledState() {
 }
 
 /**
- * 业务文档：**只比两边，不落任何备份文件**。
+ * 数据文档（`TASKS` / `DONE` / `OVERVIEW` / `TIPS` / `AGENTS.md`）：**只比两边，不落任何备份文件**。
+ * 机制文档 `README.md` 不走这里——它是框架说明书，用 `copyFile(..., true)` 总是覆盖。
  *
  * | 情形 | 处理 |
  * | --- | --- |
@@ -184,8 +185,12 @@ function readInstalledState() {
  * 模板改进靠人按 SKILL §1.9 用 `diff` 比一次，代价比"项目里堆三套文件"小。
  *
  * 返回 `true` = 这份文档与模板有差异（调用方负责汇总提示）。
+ *
+ * `quietDiff`：差异成立但**不值得报**（调用方判定这是用户填过的内容）时不打印那行"跳过"。
+ * 为什么需要：数据文档与模板不同是**定义上的必然**（模板是空白骨架、实例里是进度），
+ * 逐份报"模板有更新"只会训练人无视告警，真信号反而被盖住（T45）。
  */
-function syncDoc(from, to, { label }) {
+function syncDoc(from, to, { label, quietDiff = false }) {
   const theirs = readFileSync(from, 'utf8');
   if (!existsSync(to)) {
     if (!dryRun) {
@@ -205,7 +210,7 @@ function syncDoc(from, to, { label }) {
     log(`  覆盖（--force）  ${to}`);
     return false;
   }
-  log(`  跳过（模板有更新，未合并） ${label}`);
+  if (!quietDiff) log(`  跳过（模板有更新，未合并） ${label}`);
   return true;
 }
 
@@ -332,7 +337,7 @@ const WORKTREE_CMD = 'node .continue/hooks/worktree.mjs';
 function addWorktreeAlias() {
   const file = join(TARGET, 'package.json');
   if (!existsSync(file)) {
-    log(`  跳过（没有 package.json：并行用 \`node .continue/hooks/worktree.mjs <名字>\`）`);
+    log(`  跳过（没有 package.json：并行用 \`node .continue/hooks/worktree.mjs <单词>\`）`);
     return;
   }
   let pkg;
@@ -694,12 +699,70 @@ const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest(
 const canonical = (obj) =>
   JSON.stringify(Object.fromEntries(Object.entries(obj ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))));
 
+/**
+ * 升级时**删掉框架已经不再提供的钩子**。
+ *
+ * 为什么需要（挡的是哪次事故）：`copyDir(..., true)` 只会覆盖同名文件，**从不删除**。
+ * 一个钩子从新版本里拿掉之后，旧副本会一直躺在 `.continue/hooks/` 里——
+ * 它可能还被 `settings.json` 的老注册指着继续跑（哪怕新版本已经取消那条逻辑），
+ * 症状是"文档说取消了，实际还在自动合并"。这里按 `.installed.json` 的记录清理。
+ *
+ * 三条边界：
+ *   · 只碰**记录在案**且路径在 `.continue/hooks/` 下的文件（不看别处的用户文件）；
+ *   · 磁盘内容与记录一致（= 没人改过）才删；被用户改过的保留并告警——
+ *     那是本地定制，删了等于替人做决定；
+ *   · `--dry-run` 只报告。
+ */
+function pruneStaleHooks(previous) {
+  const recorded = previous?.files ?? {};
+  const keep = new Set(trackedFiles());
+  const removed = [];
+  const kept = [];
+  for (const rel of Object.keys(recorded)) {
+    if (!rel.startsWith('.continue/hooks/') || keep.has(rel)) continue;
+    const abs = join(TARGET, rel);
+    if (!existsSync(abs)) continue;
+    let current = null;
+    try {
+      current = sha256(abs);
+    } catch {
+      continue;
+    }
+    if (current !== recorded[rel]) {
+      kept.push(rel);
+      continue;
+    }
+    if (!dryRun) unlinkSync(abs);
+    removed.push(rel);
+  }
+  if (removed.length > 0) log(`  删除（新版不再提供）${removed.join('、')}`);
+  if (kept.length > 0) {
+    warnings.push(
+      `${kept.join('、')} 是旧版本留下、新版本已不再提供的钩子，但你改过它，没有删除。` +
+        '确认不再需要就手动删掉——它可能仍被 .codebuddy/settings.json 的老注册调用。',
+    );
+  }
+}
+
+/** 托管文件对应的模板路径（`AGENTS.md` 在 assets 根下，其余在 `assets/.continue/` 下）。 */
+const templateOf = (rel) => (rel === 'AGENTS.md' ? join(ASSETS, 'AGENTS.md') : join(ASSETS, rel));
+
 function writeInstalledState() {
   const file = join(TARGET, STATE_FILE_REL);
   const files = {};
+  /**
+   * `templates`：每个托管文件**对应模板**的哈希。
+   *
+   * 为什么 `files` 不够（T45 的判据靠它）：`files` 记的是"装完那一刻磁盘上的内容"，
+   * 数据文档装完就会被填进度，两者的差异无法区分"模板变了"和"用户写了东西"。
+   * 只比模板哈希，"模板变了没有"才是个可判定的事实——也只有那样才能只报那一次。
+   */
+  const templates = {};
   for (const rel of trackedFiles()) {
     const abs = join(TARGET, rel);
     if (existsSync(abs)) files[rel] = sha256(abs);
+    const tpl = templateOf(rel);
+    if (existsSync(tpl)) templates[rel] = sha256(tpl);
   }
   let previous = null;
   if (existsSync(file)) {
@@ -709,14 +772,23 @@ function writeInstalledState() {
       previous = null; // 坏文件按"没有"处理：它只是账本，重建一份不会丢用户数据
     }
   }
-  if (previous && previous.version === FRAMEWORK_VERSION && canonical(previous.files) === canonical(files)) {
+  if (
+    previous &&
+    previous.version === FRAMEWORK_VERSION &&
+    canonical(previous.files) === canonical(files) &&
+    canonical(previous.templates) === canonical(templates)
+  ) {
     log(`  已是最新        ${file}（v${FRAMEWORK_VERSION}）`);
     return;
   }
   const upgradedFrom = previous?.version && previous.version !== FRAMEWORK_VERSION ? previous.version : null;
   writeFileSync(
     file,
-    `${JSON.stringify({ version: FRAMEWORK_VERSION, installedAt: new Date().toISOString(), files }, null, 2)}\n`,
+    `${JSON.stringify(
+      { version: FRAMEWORK_VERSION, installedAt: new Date().toISOString(), files, templates },
+      null,
+      2,
+    )}\n`,
   );
   log(
     `  写入            ${file}：v${FRAMEWORK_VERSION}` +
@@ -760,6 +832,7 @@ if (previousState?.version && previousState.version !== FRAMEWORK_VERSION) {
 
 log('· 钩子（覆盖）');
 copyDir(join(ASSETS, '.continue', 'hooks'), join(TARGET, '.continue', 'hooks'), true);
+pruneStaleHooks(previousState);
 copyFile(join(ASSETS, '.continue', '.gitignore'), join(TARGET, '.continue', '.gitignore'), true, false);
 
 /**
@@ -866,26 +939,62 @@ if (!existsSync(doingDir)) {
 }
 
 /**
- * 业务文档：**默认不覆盖，也不留备份**。
+ * 机制文档（`.continue/README.md`）：与 `hooks/` **同一策略——总是覆盖**。
+ *
+ * 为什么不能和下面那 4 份数据文档一样"只报告、不覆盖"（T43，挡的是一次真实的漏检）：
+ *   README 是**框架的说明书**，真身在 `assets/`；它不含任何项目数据（项目自己的进度进
+ *   TASKS / DONE / OVERVIEW / TIPS）。把它当"业务文档"的代价实测过一次：模板在
+ *   T39~T42 两批里改了三处（协议重注入 / `git.push` 管建树 / 树没了不重建），实例一个字
+ *   没跟上，而三处检查全绿——`audit-version` 跳过它、安装器只报告、`check-framework`
+ *   只看模板。结果是**文档说"已经这样了"，实际跑的是旧逻辑**。
+ * 覆盖会不会丢手写内容：会。所以模板 README 里写明"别手改这份文件，要改改模板"；
+ *   真要看历史，git 里有。
+ */
+log('· 机制文档（总是覆盖：真身在技能模板）');
+copyFile(join(ASSETS, '.continue', 'README.md'), join(TARGET, '.continue', 'README.md'), true);
+
+/**
+ * 数据文档：**默认不覆盖，也不留备份**。
  * 这些文件里是用户的进度、需求、踩坑记录，覆盖 = 数据丢失；另存备份 = 项目里多一套不生效的指令。
  * 内容不同就只报一句"模板有更新"，怎么合并由人按 SKILL §1.9 用 `diff` 看。
+ *
+ * **但"不同"要分两种**（T45，挡的是告警疲劳）：模板是空白骨架、实例里是进度，两者天生不同；
+ * 只有"装完之后没人动过"（实例哈希 == `.installed.json` 里的记录）才说明**模板真的变了**。
+ * 用户填过的文档一律静默——否则每次安装都固定刷 4 条永远消不掉的"未合并"，
+ * 真正该看的那一条就淹没在里面（README 漂移两批没人发现，就是这个机制漏的）。
  */
-log('· 业务文档（新装写入 / 没变跳过 / 有差异只报告不落文件）');
+const installedBefore = readInstalledState();
+/**
+ * 差异是否值得报：判据是**模板自己变没变**，不是"实例像不像模板"。
+ * 用户填过的文档与模板不同是定义上的必然（骨架 vs 进度），拿它当信号就会天天报；
+ * 老账本没有 `templates` 字段 → 不报（迁移那天刷一屏比不报更糟）。
+ */
+function worthReporting(rel) {
+  const recorded = installedBefore?.templates?.[rel];
+  if (!recorded) return false;
+  try {
+    return sha256(templateOf(rel)) !== recorded;
+  } catch {
+    return false;
+  }
+}
+
+log('· 数据文档（新装写入 / 没变跳过 / 只报"模板真的变了"的）');
 const staleDocs = [];
-for (const name of ['TASKS.md', 'DONE.md', 'OVERVIEW.md', 'TIPS.md', 'README.md']) {
-  if (
-    syncDoc(join(ASSETS, '.continue', name), join(TARGET, '.continue', name), {
-      label: `.continue/${name}`,
-    })
-  ) {
-    staleDocs.push(name);
+for (const name of ['TASKS.md', 'DONE.md', 'OVERVIEW.md', 'TIPS.md']) {
+  const rel = `.continue/${name}`;
+  const abs = join(TARGET, rel);
+  const report = worthReporting(rel);
+  if (syncDoc(join(ASSETS, '.continue', name), abs, { label: rel, quietDiff: !report })) {
+    if (report) staleDocs.push(name);
   }
 }
 
 log('· AGENTS.md');
 const agentsPath = join(TARGET, 'AGENTS.md');
-if (syncDoc(join(ASSETS, 'AGENTS.md'), agentsPath, { label: 'AGENTS.md' })) {
-  staleDocs.push('AGENTS.md');
+const agentsReport = worthReporting('AGENTS.md');
+if (syncDoc(join(ASSETS, 'AGENTS.md'), agentsPath, { label: 'AGENTS.md', quietDiff: !agentsReport })) {
+  if (agentsReport) staleDocs.push('AGENTS.md');
 }
 /**
  * 已有 `AGENTS.md` 且**没提 `.continue/`** 时框架入口等于没生效。
@@ -899,9 +1008,9 @@ if (existsSync(agentsPath) && !readFileSync(agentsPath, 'utf8').includes('.conti
 }
 if (staleDocs.length > 0) {
   warnings.push(
-    `${staleDocs.length} 份文件的模板有更新、**没有自动合并**（实例原样保留，也不生成备份）：` +
+    `${staleDocs.length} 份文档**装完之后没人改过、但模板变了**（实例原样保留，不自动合并也不生成备份）：` +
       `${staleDocs.join('、')}。要看差异：diff ${join(ASSETS, '.continue')}/TASKS.md .continue/TASKS.md` +
-      '（把 TASKS.md 换成对应文件名）；只想要模板版本就加 --force 重跑。',
+      '（把 TASKS.md 换成对应文件名）；确认不需要模板版本就加 --force 重跑。',
   );
 }
 

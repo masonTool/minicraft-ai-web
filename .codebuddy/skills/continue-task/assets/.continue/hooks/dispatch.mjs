@@ -8,7 +8,8 @@
  *     写 `.continue/doing/.worktree/todo/queue.md` + `context.md`
  *        → 停手（**不建** `doing/<sid>.md`、不在主树开工）
  *        → Stop 触发本钩子
- *     建 worktree `doing/.worktree/<sid6>`，分支 `continue/<sid6>`，基于 HEAD
+ *     建 worktree `doing/.worktree/worktree_<单词>_<YYYYMMDD>`，分支同名，基于 HEAD
+ *        （`<单词>` 由 AI 按这一批的需求取，写在 `queue.md` 头部的 `> 树名：` 里）
  *        → 拉一个 IDE 新窗口指向它
  *
  *   新窗口（执行区）
@@ -57,9 +58,9 @@ import {
   resolveEvent,
   sessionId,
   setLogTag,
-  shortSid,
   TODO_REL,
   worktreeConfig,
+  worktreeName,
   writeTodoState,
   WORKTREE_DIR,
 } from './lib.mjs';
@@ -102,7 +103,6 @@ if (!dryRun && isInsideWorktree()) {
 }
 
 const sid = sessionId(payload);
-const sid6 = (sid ? shortSid(sid) : '') || 'nosession';
 
 /**
  * **交接的前提**：`doing/` 里已经有别的会话在跑，或者本会话已经在干。
@@ -150,12 +150,34 @@ if (blockers.length > 0) {
  */
 const sourceHash = createHash('sha1').update(todo.text).digest('hex');
 
-/** 同一份内容已派发过、树还在 → 不重复建树（否则用户每说一句话就多一棵树）。 */
+/**
+ * 同一份内容已经派发过 → 两种情况都**不重复建树**：
+ *
+ *   · 树还在：去那个窗口干（否则用户每说一句话就多一棵树）；
+ *   · 树没了（被人删掉 / 做完后清理）：**也不重建**（2026-10-24 起）。
+ *     内容一个字没变，说明这不是"第二批"而是同一批的残留——再建一棵只会多出
+ *     一个同名 `-2` 目录，最糟的情况是把已经做完的活重做一遍。
+ *     真要重来就删掉 `state.json`，把"我确定要重跑"变成一次显式动作。
+ */
 const previous = todo.state?.tree;
-if (previous && existsSync(previous) && todo.state?.sourceHash === sourceHash && !dryRun) {
+const sameContent = Boolean(todo.state?.sourceHash) && todo.state.sourceHash === sourceHash;
+if (!dryRun && sameContent) {
+  if (previous && existsSync(previous)) {
+    emitAllow(
+      `已有待接管的执行树：${previous}（分支 ${todo.state.branch ?? '?'}）。\n` +
+        '请在**那个窗口**里继续，不要再在主工作区开工；确需重建就先删掉那棵树。',
+    );
+  }
   emitAllow(
-    `已有待接管的执行树：${previous}（分支 ${todo.state.branch ?? '?'}）。\n` +
-      '请在**那个窗口**里继续，不要再在主工作区开工；确需重建就先删掉那棵树。',
+    [
+      '这份队列**已经派发过**，但当时的执行树不在了（做完后被清理，或被人删掉）：',
+      `· 记录：${previous ?? '（没有记录路径）'}（分支 ${todo.state.branch ?? '?'}）`,
+      '',
+      '这一轮**不重建**——内容一个字没变，重派只会多一棵同名 `-2` 目录，甚至把做完的活再做一遍。',
+      '两条出路：',
+      `1. 这批确实做完了 → 删掉 \`${TODO_REL}/\` 里的文件（收件箱是给下一批用的）；`,
+      `2. 确实要重跑 → 删掉 \`${TODO_REL}/state.json\`，再停下让钩子重建。`,
+    ].join('\n'),
   );
 }
 
@@ -170,26 +192,36 @@ if (!inRepo) {
 }
 
 const treeRoot = WORKTREE_DIR;
-const branchOf = (name) => `continue/${name}`;
 
 /**
- * 树名 = **本会话短 ID**（前 6 位），撞了就 `-2`、`-3`。
+ * 树名 = 分支名 = `worktree_<单词>_<YYYYMMDD>`。
  *
- * 为什么用短 ID：目录名同时会出现在 `git worktree list`、分支名和 IDE 窗口路径里，
- * 完整 32 位 hex 谁也读不动；而"主工作区里同一次会话通常只派发一次"，
- * 撞名只在"同一会话连续派发两批"时出现，加序号即可，不需要引入随机串。
+ * `<单词>` 由 AI 在规划时按这一批的需求取，写在 `queue.md` 头部的 `> 树名：<单词>` 里。
+ * 钩子**不能替它取名**（它读不懂这一批要干什么），所以取不到时退回中性的 `task`，
+ * 并在派发告示里点出来——名字不好看比"派发不了"轻得多。
+ *
+ * 撞名（同一天同一个单词）追加 `-2`、`-3`，主形态只有一种。
  */
+const declared = /^>\s*树名\s*[:：]\s*([A-Za-z][A-Za-z0-9]{0,15})\s*$/m.exec(todo.text);
+const word = (declared?.[1] ?? '').toLowerCase() || 'task';
+const wordFromQueue = Boolean(declared);
 const branchTaken = (name) =>
-  git('rev-parse', '--verify', '--quiet', `refs/heads/${branchOf(name)}`).status === 0;
-let treeName = sid6;
+  git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`).status === 0;
+let seq = 1;
+let treeName = worktreeName(word, new Date(), seq);
 for (let i = 2; i < 100 && (existsSync(join(treeRoot, treeName)) || branchTaken(treeName)); i += 1) {
-  treeName = `${sid6}-${i}`;
+  seq = i;
+  treeName = worktreeName(word, new Date(), seq);
 }
 const target = join(treeRoot, treeName);
-const branch = branchOf(treeName);
+const branch = treeName;
 
 if (dryRun) {
   say(`收件箱：${todo.queuePath}（${todo.text.split(/\r?\n/).length} 行）`);
+  if (sameContent) {
+    say(`这份内容已经派发过（${previous ?? '未记录路径'}）：树在/不在都不重建，要重跑先删 ${TODO_REL}/state.json`);
+  }
+  say(`树名来源：${wordFromQueue ? `queue.md 的 \`> 树名：${word}\`` : `没写 \`> 树名：\` → 回退成 \`${word}\``}`);
   say(`建 worktree：${target}`);
   say(`开分支：${branch}（基于当前 HEAD，不含未提交改动）`);
   say(`派发状态：${todo.statePath}`);
@@ -243,11 +275,15 @@ emitAllow(
   [
     `已按交接队列建好执行树：${target}`,
     `分支：${branch}（基于当前 HEAD，不含主工作区的未提交改动）`,
+    ...(wordFromQueue
+      ? []
+      : [`（\`queue.md\` 头部没写 \`> 树名：<单词>\`、或写的不是英文单词，树名暂用 \`${word}\`；下次在 \`> 批次：\` 下面写一行，名字才有意义）`]),
     windowOk
       ? '已经让 IDE 打开新窗口指向它。'
       : `没能自动开窗口，手动打开这个目录：${target}`,
     '',
     '切到那个窗口继续：新会话的第一条消息会自动接管 todo 里的队列与上下文。',
     '这条主工作区不用再干活——在这里开工等于绕过隔离。',
+    '那棵树收尾后**不做任何合并**：做完就结束，合不合、何时合由用户处理。',
   ].join('\n'),
 );

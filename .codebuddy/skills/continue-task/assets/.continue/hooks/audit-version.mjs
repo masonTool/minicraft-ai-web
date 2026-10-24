@@ -71,11 +71,13 @@ const templatePath = (rel) =>
 
 /**
  * 天生会被填充/手改的文件：它们的差异是**预期内**的，报出来只会盖住真落后。
- * `config.json` 只补缺失键（`checks.project` 必然与模板不同），业务文档"内容不同就另存、原文件保留"，
- * 所以它们的实例内容**本来就该与模板不同**——这类文件一律跳过，不参与落后判定。
+ * `config.json` 只补缺失键（`checks.project` 必然与模板不同），数据文档（TASKS / DONE /
+ * OVERVIEW / TIPS）里是项目自己的进度，`AGENTS.md` 常被项目改写——它们的实例内容
+ * **本来就该与模板不同**，判"落后"只会永远报红，一律跳过。
  *
- * 不在这里的是"安装器总是覆盖"的那些：`hooks/*.mjs` 与 `.continue/.gitignore`。
- * 它们与模板不同 = 真的没跟上，正是这一项要报的。
+ * **不在**这里的是"安装器总是覆盖"的那些：`hooks/*.mjs`、`.continue/.gitignore` 与
+ * `.continue/README.md`（机制文档，T43 起）。它们与模板不同 = 真的没跟上，正是这一项要报的。
+ * 把 README 放进跳过名单的代价实测过一次：模板改了三处、实例没跟，而三处检查全绿。
  */
 const FILLED_REL = new Set([
   '.continue/config.json',
@@ -83,7 +85,6 @@ const FILLED_REL = new Set([
   '.continue/DONE.md',
   '.continue/OVERVIEW.md',
   '.continue/TIPS.md',
-  '.continue/README.md',
   'AGENTS.md',
 ]);
 
@@ -121,7 +122,7 @@ if (!installed) {
   } else if (skill !== installed) {
     console.log(`实例 v${installed} ≠ 技能 v${skill} → 重跑 ${INSTALL_CMD}（文件可能已一致，版本号仍要刷新）`);
   } else if (changed.length > 0) {
-    console.log(`实例 v${installed} = 技能 v${skill} · ${changed.length} 个框架文件被本地改过（${brief(changed)}，重装会先备份）`);
+    console.log(`实例 v${installed} = 技能 v${skill} · ${changed.length} 个框架文件被本地改过（${brief(changed)}，重跑安装器会覆盖成模板版）`);
   } else if (compared > 0) {
     console.log(`实例 v${installed} = 技能 v${skill} · ${compared} 个框架文件与模板一致`);
   } else {

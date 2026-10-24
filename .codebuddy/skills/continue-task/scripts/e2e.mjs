@@ -704,10 +704,10 @@ SCENARIOS.journey = {
   },
 };
 
-/** 场景 4：已有进行中的队列 → 注入提示 → 开 worktree → 隔离 → 收尾同步（rebase + merge）合回父分支。 */
+/** 场景 4：已有进行中的队列 → 注入提示 → 开 worktree → 隔离 → 收尾**不做任何合并**（交给用户）。 */
 SCENARIOS.worktree = {
   driver: 'probe',
-  desc: '并行：别的会话有队列 → 提示开 worktree → 树内隔离 → rebase + merge 合回父分支',
+  desc: '并行：别的会话有队列 → 提示开 worktree → 树内隔离 → 收尾不自动合并',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
 
@@ -746,20 +746,23 @@ SCENARIOS.worktree = {
     ctx.git(['remote', 'add', 'origin', origin]);
     ctx.git(['push', '-q', '-u', 'origin', 'main']);
 
-    // ③ 建 worktree（目录 `doing/.worktree/<本会话 sid 前 6 位>`、分支 `continue/<父目录名>-<名字>`）
+    // ③ 建 worktree：目录与分支都叫 `worktree_<单词>_<YYYYMMDD>`（单词由 AI 按批次需求取）
     const wt = spawnSync(
       process.execPath,
-      [join(ctx.dir, '.continue', 'hooks', 'worktree.mjs'), 'wt1', '--no-window'],
+      [join(ctx.dir, '.continue', 'hooks', 'worktree.mjs'), 'export', '--no-window'],
       {
         cwd: ctx.dir,
         encoding: 'utf8',
         env: { ...process.env, CODEBUDDY_SESSION_ID: s },
       },
     );
-    const wtBranch = `continue/${basename(ctx.dir)}-wt1`;
-    const wtDir = join(ctx.dir, '.continue', 'doing', '.worktree', sid6(s));
+    const today = new Date();
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const dateStamp = `${today.getFullYear()}${pad2(today.getMonth() + 1)}${pad2(today.getDate())}`;
+    const wtBranch = `worktree_export_${dateStamp}`;
+    const wtDir = join(ctx.dir, '.continue', 'doing', '.worktree', wtBranch);
     check('worktree.mjs 退出码 0', wt.status === 0, (wt.stderr || wt.stdout).slice(0, 300));
-    check('建出了工作树目录（在 doing/.worktree/<sid6> 下）', existsSync(wtDir), wtDir);
+    check(`建出了工作树目录（命名 ${wtBranch}）`, existsSync(wtDir), wtDir);
     check(
       `分支 ${wtBranch} 存在`,
       spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${wtBranch}`], { cwd: ctx.dir }).status === 0,
@@ -806,65 +809,31 @@ SCENARIOS.worktree = {
     spawnSync('git', ['checkout', '--', '.'], { cwd: wtDir });
     rmrf(join(wtDir, 'only-in-wt.txt'));
 
-    // ⑤ 收尾同步：树里提交 → 父分支前进 → rebase → 合回父分支 → 推树分支
+    // ⑤ 收尾**不合并**（2026-10-24 起取消自动 rebase / merge）：树里能提交，父分支不受影响
     write({ dir: wtDir }, 'hello.txt', 'hello from worktree\n');
     spawnSync('git', ['add', '-A'], { cwd: wtDir });
     const c = spawnSync('git', ['commit', '-q', '-m', 'feat: worktree 里的改动'], { cwd: wtDir, encoding: 'utf8' });
     check('worktree 里能提交（收尾提交）', c.status === 0, (c.stderr || '').slice(0, 160));
 
     /**
-     * 父分支必须先前进一条：没有它 rebase 是 no-op，"垫在谁下面"根本测不出来——
-     * 而这条链路存在的意义恰恰是"树干活期间父分支也在动"。
+     * 父分支**必须没被合掉**：这正是这次要钉的行为——"做完就结束，后面由用户处理"。
+     * 旧版在这里会自动 rebase + merge，那样父分支会被悄悄改动，用户没法在合并前 review。
      */
-    write({ dir: ctx.dir }, 'parent.txt', 'moved on\n');
-    ctx.git(['add', '-A']);
-    const pc = ctx.git(['commit', '-q', '-m', 'parent: 主线又前进了一条']);
-    check('父分支继续前进（rebase 的前提）', pc.status === 0, (pc.stderr || pc.stdout).slice(0, 200));
-
-    const sync = (args) =>
-      spawnSync(process.execPath, [join(wtDir, '.continue', 'hooks', 'worktree-sync.mjs'), ...args], {
-        cwd: wtDir,
-        encoding: 'utf8',
-      });
-
-    const probe = sync(['--json']);
-    let probed = {};
-    try {
-      probed = JSON.parse(probe.stdout);
-    } catch {
-      /* 让下面的断言把它报出来 */
-    }
+    const parentContains = spawnSync('git', ['merge-base', '--is-ancestor', wtBranch, 'main'], {
+      cwd: ctx.dir,
+    });
     check(
-      'worktree-sync 从 worktree 列表认出父树与父分支',
-      probed.kind === 'worktree' && probed.parent?.branch === 'main',
-      (probe.stdout || probe.stderr).slice(0, 240),
+      '收尾不自动合并：父分支没有包含树分支的改动',
+      parentContains.status !== 0 && !existsSync(join(ctx.dir, 'hello.txt')),
+      `merge-base --is-ancestor exit=${parentContains.status}`,
     );
-
-    const reb = sync(['--run=rebase']);
-    check('树分支 rebase 到父分支成功', reb.status === 0, (reb.stderr || reb.stdout).slice(0, 300));
     check(
-      'rebase 后父分支的提交垫在树分支下面（顺序真的换了）',
-      /parent: 主线又前进了一条/.test(
-        spawnSync('git', ['log', '--oneline'], { cwd: wtDir, encoding: 'utf8' }).stdout ?? '',
-      ),
+      '同步脚本已从安装产物里移除（worktree-sync.mjs 不再存在）',
+      !existsSync(join(ctx.dir, '.continue', 'hooks', 'worktree-sync.mjs')),
     );
-
-    const mrg = sync(['--run=merge']);
-    check('合回父分支成功（无冲突）', mrg.status === 0, (mrg.stderr || mrg.stdout).slice(0, 300));
-    check(
-      '父分支拿到了 worktree 的改动',
-      existsSync(join(ctx.dir, 'hello.txt')) &&
-        /feat: worktree 里的改动/.test(
-          spawnSync('git', ['log', '--oneline'], { cwd: ctx.dir, encoding: 'utf8' }).stdout ?? '',
-        ),
-    );
-
-    // rebase 改写了树分支历史 → 推它只能靠 force-with-lease（这条分支是建树时自己开的）
-    const ps = sync(['--run=push']);
-    check('推树分支成功（rebase 后用 force-with-lease）', ps.status === 0, (ps.stderr || ps.stdout).slice(0, 300));
     check(
       '父分支 doing/ 没被 worktree 的现场污染',
-      !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`)) || true,
+      !existsSync(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`)),
     );
   },
 };
@@ -937,7 +906,7 @@ SCENARIOS.dispatch = {
     );
     writeFileSync(
       join(todoDir, 'queue.md'),
-      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
+      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n> 树名：demo\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
     );
     writeFileSync(join(todoDir, 'context.md'), '# 上下文\n\n把甲做完，验证看 a.txt。\n');
 
@@ -971,7 +940,11 @@ SCENARIOS.dispatch = {
     }
     const tree = state.tree ?? '';
     check('dispatch 建出工作树并写 state.json', Boolean(tree) && existsSync(tree), tree || '没有 state.json');
-    check(`分支是 continue/${short(s)}`, state.branch === `continue/${short(s)}`, String(state.branch));
+    check(
+      '树名/分支是 worktree_<queue.md 的树名>_<YYYYMMDD>',
+      /^worktree_demo_\d{8}$/.test(String(state.treeName)) && state.branch === state.treeName,
+      `treeName=${state.treeName} branch=${state.branch}`,
+    );
     check(
       '新树基于 HEAD 检出（钩子文件都在）',
       existsSync(join(tree, '.continue', 'hooks', 'dispatch.mjs')) &&
