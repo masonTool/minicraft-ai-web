@@ -634,6 +634,10 @@
       .world-primary, .world-secondary {
         width: min(100%, 320px); max-width: 320px;
         align-self: center; justify-self: center;
+        /* 高度统一（批次 20261024-1152，用户："首页那几个按钮高度不一致"）。
+           以前主按钮与次按钮各写各的 min-height（52 / 44），同一列里一高一矮。
+           字号可以不同（主按钮更醒目），但**盒子的高度必须一样**。 */
+        min-height: 52px; box-sizing: border-box;
       }
       .world-primary { padding: 9px; font-size: 14px; letter-spacing: 1px; }
       /* 批次 528（用户）：世界列表页的「新建世界」比首页主按钮矮一点，
@@ -2335,8 +2339,9 @@
         body.touch-mode .world-edition { margin-top: 6px; font-size: 10px; }
         body.touch-mode .world-splash { top: 38px; font-size: 12px; }
         body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
-        body.touch-mode .world-primary { min-height: 44px; font-size: 14px; }
-        body.touch-mode .world-secondary { min-height: 44px; }
+        /* 高度两者一致（批次 20261024-1152）：主/次按钮只该在字号上不同 */
+        body.touch-mode .world-primary { min-height: 52px; font-size: 14px; }
+        body.touch-mode .world-secondary { min-height: 52px; }
 
         /* ---- 设置：横屏只有 ~343px 高，一屏放完全靠"更紧的行 + 更密的列" ----
            （批次 167。面板尺寸仍然不变，只是里面的行压到 30px、循环按钮再收一档） */
@@ -4785,8 +4790,9 @@
       /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
       body.touch-mode .world-card-actions button,
-      body.touch-mode .world-mini,
-      body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }
+      body.touch-mode .world-mini { min-height: 44px; padding: 8px 14px; }
+      /* 首页那几颗入口按钮高度统一（批次 20261024-1152）：次按钮不再比主按钮矮 8px */
+      body.touch-mode .world-secondary { min-height: 52px; padding: 8px 14px; }
       body.touch-mode .world-primary { min-height: 52px; }
       body.touch-mode .world-input { padding: 10px 10px; font-size: 14px; }
       /* 批次 528（用户）：返回键保持紧凑，不再是一条 44px 高的整行 */

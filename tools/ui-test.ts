@@ -2462,7 +2462,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 横屏只剩"主菜单"与"把按钮排紧一点"：**不许再碰面板尺寸**
   check('横屏不再覆盖面板尺寸（只允许把里面的按钮排紧）', !landscape.includes('.settings-panel') && !landscape.includes('.settings-columns'));
   check('横屏：暂停按钮收紧到 42px（面板尺寸不变）', landscape.includes('body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }'));
-  check('横屏：主菜单 logo 缩小、按钮高度统一到 44px', landscape.includes('body.touch-mode .world-logo { font-size: 42px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 44px;'));
+  check('横屏：主菜单 logo 缩小、按钮高度统一到 52px', landscape.includes('body.touch-mode .world-logo { font-size: 42px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 52px;'));
 }
 
 console.log('\n[按钮尺寸对齐（批次 111）]');
@@ -2518,6 +2518,13 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   check(
     '主菜单主按钮同宽居中（320px，首页与二级页共用一条规则）',
     compact.includes('.world-primary, .world-secondary { width: min(100%, 320px); max-width: 320px;'),
+  );
+  // 批次 20261024-1152（用户）：首页那几颗按钮高度要一致（原来主 52 / 次 44，一高一矮）
+  check(
+    '首页主/次按钮高度一致（共同一条 min-height）',
+    /\.world-primary, \.world-secondary \{[^}]*min-height: 52px;/.test(compact) &&
+      !/body\.touch-mode \.world-secondary \{ min-height: 44px;/.test(compact) &&
+      !/body\.touch-mode \.world-primary \{ min-height: 44px;/.test(compact),
   );
   check(
     '主菜单三视图共用同一个盒子（不再按视图各写一套宽度）',
