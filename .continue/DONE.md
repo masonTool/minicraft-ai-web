@@ -9,6 +9,78 @@
 
 ---
 
+## 批次 20261024-1152 · 2026-10-24 · 会话 3da8ce2b
+
+- [x] [优化1] 出生点不再"永远是平原草地"（用户选 B）：`core/world/SpawnPoint.ts` 放宽群系偏好 + 出生搜索半径（原点 1024 格内随机挑合格点）→ `npm run test:spawn`（新增断言：同一批种子下出生群系不恒定、仍在自然地面、不与水/岩浆重叠）
+  - 做了什么：`planSpawnRegion` 从"全网格打分取最优（起伏×1000 + 群系偏好×80 + 距离）"改成两段式：① 半径内**面积均匀随机试投** 48 次，第一块"高于地表下限 + 起伏 ≤4 + 不在水面/虚空群系"的就用；试投点落水时先在 8/16 格环上找最近的岸（`flatSpotNear`），避免落点被推到远处高地；② 试投全落空才退回网格扫描（≤256 格，口径同旧版）。主世界半径 256 → **1024**，随机源用 `new Random(seed).nextDouble()`。
+  - 为什么：地形本来就是按种子生成的，但旧评分把任何种子都压到"离原点最近、最平、最像平原"的那块地 → 玩家看到的永远是"草地 + 树 + 侧边海 + 远处山"。随机源必须由种子派生，否则同一种子重进世界会换出生点（与原版口径不符）。
+  - 另一处必须改：试投如果只认中心点，能通过的只剩高地（该生成器里高地偏冷），实测 5 个种子全落在雪原/冰刺；先找最近的岸之后变成 stony_peaks / badlands / snowy_plains / ice_spikes / old_growth_pine_taiga。
+  - 验证：`npx tsx tools/world-test.ts` 87 通过 / 0 失败（新增 4 条：跨种子群系至少 2 种、≥2/3 相距 128 格以上、同种子两次完全一致、落点都高于海平面；种子 1/7/42/1337/20261024 的落点已打印进输出）；`worldmatrix-test` 29 通过、`terrain-normal-test` 43 通过（出生点仍选得出来、出生区块非空）；`npm run build:fast` 通过。
+  - 批次：20261024-1152
+- [x] [优化2] 引导未完成时切游戏模式即作废：`main.ts#setGameMode` 里判断"玩家真的换了模式"就 `tutorialDismissed = true` 并落盘；读档恢复模式不触发 → `npm run test:tutorial`（新增断言：setGameMode 后卡片不再出现、dismissed 写进存档；restore 路径不影响）
+  - 做了什么：判定抽成纯函数 `tutorial/boot.ts#shouldVoidTutorialOnModeChange`（三个不该触发的场景各一条：读档恢复 / 已作废 / 已走完）；`setGameMode` 在 `next !== this.gameMode` 之后调它，命中就 `tutorialDismissed = true` + `tutorialCard.hide()` + `saveTutorialNow()`，并记一条 `diag.event('ui','tutorial.voidOnModeChange')`。
+  - 为什么：引导每一步都长在"创建世界时那个模式"里（生存 4 步 / 创造 4 步的内容完全不同），切过之后接着教必然教错；重开又会把玩家刚做完的事抹掉，所以只作废。读档恢复模式也走同一个 `setGameMode`，必须靠 `waitingForSaveRestore` 排除，否则老存档一进世界引导就被清掉。
+  - 验证：`npx tsx tools/tutorial-test.ts` **121 通过 / 0 失败**（新增 8 条：4 条判定 + 4 条接线，接线用正则截出 `setGameMode` 函数体，避免"函数写了没人调用"的假绿）。
+  - 批次：20261024-1152
+- [x] [优化3] 背包装备槽用部位图标替代文字：`ui/InventoryScreen.ts#buildArmorGrid` + `index.html` 的 `.inv-slot-hint` → 空槽显示头盔/胸甲/护腿/靴子/副手（盾）线框图标，文字只留 title/aria；`npm run test:inventory`
+  - 做了什么：`SlotVisuals.ts` 新增 `ArmorSlotKind` + 五条 24×24 填充剪影路径 + `armorSlotHintSvg()`（与 `TouchIcons` 同一套"只画填充、不用描边"的经验）；`buildArmorGrid` 把 `hint.textContent` 换成 `innerHTML = armorSlotHintSvg(...)`，文案改挂到槽位 `aria-label` / `title`（副手仍用更详细的 `inventory.offhandHint`）；CSS 里 `.inv-slot-hint svg { 26×26, opacity .55 }`，颜色收到 `#6d6d6d`。
+  - 为什么：原版（Java + 基岩手机）装备槽画的就是部位剪影，文字"头/胸/腿/靴"既不像原版、又会在换语言/窄屏时挤成一团（副手那格当年就是被压到 11px 的）。图标是矢量的，`--touch-scale` 与窄屏都不用再单独调字号。
+  - 验证：`npx tsx tools/ui-test.ts` **936 通过 / 0 失败**（新增 2 条：`armorSlotHintSvg(kinds[i])` 且不再有 `hint.textContent = hints[i]` + CSS 有 `.inv-slot-hint svg`；五个图标都是 24×24 视口、含 path、`fill="currentColor"`）；`npm run typecheck` 通过。
+  - 批次：20261024-1152
+- [x] [优化4] 背包右上角"配方书"点开就是打开配方书（定位"全部/搜索"），再点才是关闭：`ui/InventoryScreen.ts` 配方开关回调 + `main.ts#openRecipeBook/toggleRecipeBook` → `npm run test:inventory`（断言：点击后 `isRecipesOpen() === true`、当前 tab 为 all；第二次点击后为 false）
+  - 做了什么：① 左栏新增第四种内容 `recipes` + 落脚点 `recipeHostEl`（`.inv-recipe-host`，与"我的物品 / 物品分类"同一个网格格）；配方书开着时 `applyInventoryChrome` 调 `onRecipeHost(recipeHostEl)` 把 `.recipe-panel` 搬进来（CSS 给它 `.embedded`），关着时 `detachRecipeBook()` 还回整屏层。② 标题栏那颗键改成**开关**：开着 → `onCloseRecipes()`（只关闭）；关着 → `onOpenRecipes(lastRecipeTab)`（首次是"全部/放大镜"）。③ `main.toggleRecipeBook`（R 键）删掉"切分类栏"那条，和这颗键走同一条路。④ 工作站 / 纯容器没有左栏那一格，`canEmbedRecipeBook()` 为 false，仍按旧行为（切分类 / 切"列出全部"）。
+  - 为什么：原来点它只是把左栏从仓库切成物品分类，配方书根本没打开（玩家："我点配方书，它却把配方书关掉了"）。关着的配方书是**整屏一层**（z-index 20 盖住背包 10），所以就算调 `onOpenRecipes` 也会把标题栏那颗键一起盖掉，"再点关闭"无法实现 —— 必须先把它嵌回左栏（CSS 里 `.recipe-panel.embedded` 与 `.inv-recipe-host` 的注释本来就是按这个设计的，只是 TS 侧在批次 159 被移除了）。
+  - 顺带修：配方书开着时点左轨分类图标 / 左下"物品栏"页签，都会先关书（否则 `leftPane` 判据里 `recipes` 优先，点了看不出变化）。
+  - 验证：`npx tsx tools/ui-test.ts` **939 通过 / 0 失败**（新增 3 条：开关两向、落脚点 + CSS 同格、工作站/容器不嵌；另把 3 条旧断言改成新口径）；`recipebook-test` 162 通过；`npm run typecheck` 通过。
+  - 批次：20261024-1152
+- [x] [优化5] 左栏自绘滚动条：生存与创造位置/宽度统一（都像创造那样离物品留 2px 间隔），修掉创造模式滑条下方跟着走的黑色残块：`index.html` 的 `.inv-category-scrollbar` 系列 + `ui/InventoryScreen.ts` 的滚动条同步 → `npm run test:inventory`（断言两模式滚动条 right/width 取值来自同一组常量）
+  - 做了什么：删掉 `.inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }` 这条"只改创造栏"的覆盖，宽度统一成 CSS 里唯一的 `.inv-category-scrollbar { width: 7px }`；间隔抽成 `SCROLLBAR_CONTENT_GAP = 8` + `SCROLLBAR_TRACK_WIDTH = 7`（`scrollbarContentLeft` 两个调用方共用）。
+  - 为什么两栏位置不同：宽度一个 4px 一个 6px，而 `scrollbarContentLeft` 的右边界钳制是 `host.clientWidth - width - 1`，同一个内容右缘会被钳成不同位置；另外两条右定位规则各写一份 `right`。
+  - 黑块根因：滑块原来有 `border: 1px solid #4a4a4a`。在 4~7px 宽的滑条上，1px 深边把实心部分吃到只剩 2~5px，滚动时看上去就是"灰块下面跟着一个小黑块"。现在改成无描边的浅灰实心（`#c2c2c2`，按下/悬停 `#dedede`），圆角继承轨道，`min-height` 18 → 24 更好拖。
+  - 验证：`npx tsx tools/ui-test.ts` **941 通过 / 0 失败**（新增 2 条：CSS 里 `.inv-category-scrollbar {` 只有一处且 width 7px、没有只针对创造栏的覆盖、间隔常量被两处引用；滑块规则 `border: 0` 且不再有 1px 深边）。
+  - 批次：20261024-1152
+- [x] [优化6] 第一人称手持物：拿着东西时隐藏手臂、只显示放大的物品（2 倍 + 厚度增加），空手仍画手臂：`render/HandRenderer.ts` → `npm run test:hand`（断言：持有物品时 arm/cuff/sleeve 不可见、物品尺寸为 2× 且厚度 > 0；空手时手臂可见）
+  - 做了什么：`ITEM_SIZE` 0.22 → **0.44**；非方块物品从 `PlaneGeometry`（零厚度）改成 `BoxGeometry(0.44, 0.44, 0.08)` 并六面贴同一张图标 + 逐面明暗；新增 `refreshHandVisibility()`：手臂 / 布袖 / 盔甲袖套**一起**按"手里有没有东西"显隐（`setItem`、`setArmorColor` 都走它），并把胸甲颜色记成字段 `armorColor`；挂点从 `-ARM_LENGTH - ITEM_SIZE*0.36` 收到 `*0.12`（放大后不能再往远处推，否则透视会把视觉尺寸抵消掉）。
+  - 为什么：原版第一人称拿着东西时不画那条手臂，方块本身占屏幕很大一块；原来 0.22 的方块 + 常驻手臂，观感是"一只手捏着一粒米"。非方块物品用零厚度平面侧看是一条线，用户要求"厚度也要增加"。
+  - 验证：`npx tsx tools/render-test.ts` **250 通过 / 0 失败**（改 1 条旧断言 + 新增 6 条：边长 0.44、薄板厚度 0.05~0.12、六面 UV、拿东西时手臂/布袖隐藏、拿东西时袖套不露、空手时三块回来并再收一次）；`npm run typecheck`、`ui-test` 941 通过。
+  - 批次：20261024-1152
+- [x] [优化7] 动态摇杆默认显示底圈，跟手触发逻辑不变：`index.html` `#touch-stick.dynamic` 的 opacity 规则（+ 必要时 `TouchControls.ts`）→ `npm run test:touch`（断言 CSS 里 dynamic 不再是全隐、active 才抬高）
+  - 做了什么：`#touch-stick.dynamic { opacity: .55 }`（原来 0）、`.active` 回到 1；删掉 `.dynamic.sneaking:not(.active)` 那条"底座透明只留潜行小牌"的规则（底圈常驻之后它会把圈藏掉）；`TouchControls` 新增 `clearDynamicOffset()`，在 `resetStick`（跟手模式松手）与 `setStickMode`（切回固定模式）里清掉 `beginDynamicStick` 写的内联 left/top/right/bottom，让 CSS 的左下默认位置重新生效。
+  - 为什么：`beginDynamicStick` 只写内联坐标、从不还原 —— 以前底圈是不可见的，停在哪儿都无所谓；一旦常驻显示，不归位就会"停在最后按过的位置"，看着像摇杆卡住。触发逻辑（左下拇指区内按下才跟手）一个字没改。
+  - 验证：`npx tsx tools/ui-test.ts` **943 通过 / 0 失败**（改 2 条旧断言为 `opacity: .55` 口径，新增 2 条：松手/切模式都会清内联坐标、潜行时不再藏底座）。
+  - 批次：20261024-1152
+- [x] [优化8] 首页四颗按钮高度统一：`index.html` `.world-primary` / `.world-secondary` 的 min-height 与内边距 → `npm run test:theme`（静态断言：两类按钮在同一断点下 min-height 相同）
+  - 做了什么：在共用规则 `.world-primary, .world-secondary` 上写 `min-height: 52px; box-sizing: border-box;`；触摸横屏那块 `.world-primary/.world-secondary` 的 44px 改成 52px；后面那条 `body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }` 拆开（44 只留给卡片操作键与世界列表的小键），次按钮单独给 52px。
+  - 为什么：主按钮与次按钮各写一套 min-height（52 / 44），并且**后出现的规则覆盖先出现的**——横屏块里 44/44 看着像是统一的，但文件后面那组又把次按钮拉回 44、主按钮拉到 52，于是首页一眼就能看出参差。现在只留一处高度真值，字号仍可不同（主按钮更醒目）。
+  - 验证：`npx tsx tools/ui-test.ts` **944 通过 / 0 失败**（改 1 条横屏断言为 52px，新增 1 条：共用规则里必须有 min-height 52、且触摸端不再出现 44px 的主/次按钮覆盖）。
+  - 批次：20261024-1152
+- [x] [优化9] 首页去掉"非官方 Web 复刻…"那段说明与 `WebGL2!` splash（构建版本信息按用户要求**保留**）：`ui/WorldScreen.ts` + `core/i18n/locales/*/menu.ts` 的 `menu.footer` → `npm run test:theme`（断言首页 DOM 不再有 footer 说明与 splash 节点）
+  - 做了什么：`WorldScreen` 删掉 `splash`（"WebGL2!"）节点与 `footerNote`（`t('menu.footer')`），页脚只留 `#world-build`；`index.html` 删掉 `.world-splash` 规则、`@keyframes world-splash`、触摸横屏那条 `.world-splash` 覆盖与 PC 的 `animation: none`；六个语种的 `menu.footer` 键一起删（表 2864 键，六语言 100%）。
+  - 为什么：删 DOM 不删 CSS 会留下永远不命中的规则（PC 那条 `.world-splash { animation: none; }` 会让人以为 splash 还在）；`menu.footer` 只被这一处引用，留着就是死键，i18n 表按语言对齐删才不会掉到 99%。
+  - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 1 条：splash 相关断言改成"整份 CSS 里不再有 `.world-splash`"，新增 1 条：WorldScreen 不再建 splash/footer 节点但保留 `#world-build`）；`i18n-test` 547 通过、`npm run audit:i18n` 六语言 2864/2864 通过；`npm run typecheck` 通过。
+  - 批次：20261024-1152
+- [x] [优化10] 暂停页去掉成就按钮、"游戏已暂停"标题、副标题、存档/改动/自动保存那行说明（设置页与主菜单设置面板不受影响）：`ui/SettingsScreen.ts` + `main.ts#openSettings` → `npm run test:pause`（断言暂停页 DOM 无这四块、设置页仍有标题与返回）
+  - 做了什么：`menuPage` 只 append `actionsRow + help`；删掉 `menuTitle`/`menuHeader`（"游戏已暂停"）、`menuHintEl`（"点「继续游戏」或系统返回键返回"）、`metaEl` 与 `setMeta()`、"成就"按钮（`pause-achievements`）；`setTitle()` 去掉副标题参数；`renderSubtitle()` 只保留设置页那句"改动立即生效"；`main.openSettings` 不再算存档信息，主菜单那处 `setTitle('设置','返回')`。设置页自己的标题/返回键一点没动。
+  - 为什么：这四块都是"说明性文字"，用户认为暂停页只需要按钮；成就入口仍在背包左栏（手机上唯一那条路），删掉暂停页那颗不会让成就不可达。存档信息通过暂停页看到之前也没人用，需要时能从世界列表/导出看到。
+  - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 2 条骨架断言——`makeHeader` 调用从 2 处变 1 处；新增 1 条：暂停页不再出现 `menuTitle`/`settings-meta`/`touchBack`/`pause-achievements` 且只 append `actionsRow, help`）；`i18n-test` 547、`audit:i18n` 2864/2864；`typecheck` 通过；`tools/settings-acceptance.js`（浏览器验收）里那条"存档信息"断言同步改成"四块都不出现"。
+  - 批次：20261024-1152
+- [x] [优化11] 顶部中间第三颗键（视角）图标换成"眼睛"（保持现有 currentColor 实心风格）：`ui/TouchIcons.ts` 的 `view` 路径 → `npm run test:touch`（断言 svg 含眼球+瞳孔路径、不再是望远镜的镜筒矩形组）
+  - 做了什么：`PATHS.view` 从"斜放望远镜（四段矩形 + 底座）"换成一只眼睛：杏仁形眼眶 + `fill-rule="evenodd"` 挖出虹膜 + 实心瞳孔 `<circle r="2.1">`。仍是纯填充、`currentColor`，与其他五个图标同一套画法。
+  - 为什么：用户点名"最右边那颗换视角的图标，要一个小眼睛的形状，保持当前这种风格"。望远镜在 22px 下有四段小矩形，缩小后糊成一团；眼睛只有两个形状，小尺寸更清楚。
+  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（新增 1 条：view 的 svg 里有 evenodd 眼眶 + r=2.1 瞳孔，且不再有 `rotate(-33`）。
+  - 批次：20261024-1152
+- [x] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`
+  - 做了什么：删掉 PC 那三组滚动条规则（`display: none !important` 藏掉自绘那根、另开 10px 原生滚动条 + 深色轨道/滑块），PC 与手机现在共用同一根自绘常驻滚动条；装备槽图标、配方书嵌入、暂停页结构本轮本来就是同一套 DOM/CSS（无 `body.touch-mode` 分支）。PC 的格子尺寸档（46/52/54px）与 `.inv-pager` 翻页条**保留**。
+  - 为什么：用户是在"滚动条黑块 / 装备槽图标"的上下文里说"PC 上界面内的元素要跟手机版保持一致"——指的是元素长什么样、在哪，不是把桌面的大格子压回手机档。翻页条是批次 620 按"PC 端不能翻页"专门补的入口，删掉等于推翻那条需求。取舍与边界写进 `doing/3da8ce-decision.md` 的 D3。
+  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（把"PC 用看得见的原生滚动条"那条反向改成"PC 与手机共用同一根自绘滚动条"：断言 HTML 里不再出现两条 PC 原生滚动条规则与 `scrollbar-color`）；`npm run check` 全绿（见下一条提交）。
+  - 批次：20261024-1152
+- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：12 条全部落成了"坏了就变红"的断言，没有一条停在"看着像"：出生点 4 条（`world-test` 打印 5 个种子的实际落点）、引导作废 8 条（4 判定 + 4 接线）、装备槽图标 2 条、滚动条 1 条（正反两面）、手持物放大 6 条（含 `ITEM_SIZE`/厚度）、摇杆常驻 2 条 + 改 2 条、按钮高度 1 条、首页删减 1 条 + 改 1 条、暂停页四块 1 条 + 改 2 条、眼睛图标 1 条。套件数：`ui-test` 936 → **950**、`world-test` 83 → **87**、`tutorial-test` 113 → **121**、`render-test` +6。**薄弱点**：配方书那条交互全在 DOM 回调里，离线跑不到，只能用源码接线断言兜（自审当场补了 4 条）。
+  - L2：这批做了**三次故意破坏**并确认变红——① `#touch-stick.dynamic` 改回 `opacity: 0` → `ui-test` 恰好 1 条红；② `HandRenderer.ITEM_SIZE` 0.44 → 0.22 → `render-test` 的"手持方块边长是原来的 2 倍"红；③ 把 `onRecipeHost(this.recipeHostEl)` 改成 `null` → "配方书嵌进左栏" + "左栏切成 recipes 时把落脚点交给配方书" 两条同时红。三次都已还原（`git status` 干净）。
+  - L3：判断依据 **12/12 来自用户逐条口述**（11 条问题 + PC 一致性），没有一条是我自创的玩法或限制；我自己定的只有实现参数——试投 48 次 / 8·16 格找岸环 / 主世界半径 1024 / 按钮 52px / 图标路径形状 / 手持物厚度 +0.08 —— 全部写进 `3da8ce-decision.md`（D1/D3）与代码注释，随时可推翻。
+  - 改进（当场修了 1 条）：配方书开关的三处接线补成 4 条断言（提交 `[自审]`）。其余找过但**不算问题**的角度：① "暂停页删掉四块后竖屏会不会显得空"——CSS 是居中列布局，空出来的高度由 `actionsRow` 撑，不是固定高度；② "`pause.title` / `settings.touchBack` 变成死键"——`i18n-test` 的必备键清单里仍有它们，且这两句将来在加载页/别处还能用，删了反而要改 6 个语种，收益小于成本；③ "出生点随机让老玩家找不到家"——同一存档的出生点存在存档里，只有新世界才走这条，不影响回档。
+  - 批次：20261024-1152
+
 ## 批次 20261024-1010 · 2026-10-24 · 会话 e50bd5cb
 
 - [x] [跳11] 分数 HUD 被宿主顶栏盖住：`index.html` 的 `.jump-hud` 定位改回"让开顶栏 + 安全区"，`scene.ts` 无改动 → `npm run test:minigame`（新增静态断言：`.jump-hud` 的 top 必须含 `56px`/`safe-area`，不许用百分比贴顶）＋ 重跑 e2e 截图肉眼确认分数可见
@@ -69,82 +141,4 @@
   - L3：这批的判断依据**全部来自真实参考图**（02/03/06 三张，逐点像素取样：色值 6 处、比例 2 处、阴影 2 处、背景 2 处），没有一条是"我觉得应该是"。唯一自选的是"每组至少 3 个高饱和 + 最多 1 个灰"这条量化门限（原版没给规则，是从 6 组参考图的分布反推的），已写进 `palette.ts` 注释。
   - 改进（当场做了 2 条）：① `JumperModel.setSize` 的双份真值修掉（写死 0.72 vs `iso.ts` 的 1.12）；② 饱和度/灰块两条"洗白"防线——如果不加，下次谁把颜色调灰，只有肉眼能发现。
   - 批次：20261024-1010
-
-## 批次 20261024-0415 · 2026-10-24 · 会话 e50bd5cb
-
-- [x] [跳1] 把原版视觉规格表落成文档：新建 `.continue/notes/jump-original.md`（等距 30°/正交相机、三面明暗色值、方块与小人比例、阴影方向与柔和度、动画时序表、UI 字号与位置、音效时序，每个数值标注依据的参考图文件名）→ `test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' .continue/notes/jump-original.md)" -ge 25 ]`
-  - 做了什么：写 `.continue/notes/jump-original.md`（113 行表格），10 张分节表覆盖投影/几何/三面明暗/小人/阴影/背景色板/UI/时序/音效/特殊方块，另加「测量方法与误差」「不可 1:1 项」两节；数字全部标注【测】/【推】/【估】/【二手】来源。
-  - 为什么：交接文档里的数值是肉眼估的，其中一条（三面明暗）经测量是反的——原版是**左面最暗 0.775、右面 0.93**，不是"右侧最暗 0.72"。不先量一遍，跳3 会把明暗贴反，之后所有截图比对都白做。
-  - 怎么量的：写了一次性脚本 `.tmp/imgprobe.mjs`（sips 转 PNG + Node zlib 手解 PNG 过滤链），用 `bbox`/`mode`/`scanrow`/`scancol` 在 02/03/06 上量出：菱形 bbox 249×130 → 俯角 31°；三面亮度比 1.00/0.775/0.93（黄块与橙块互证）；块高 0.60 边长；小人高 0.72 边长、头径 0.29 身高；分数墨高 7.8%W、字号 0.10W、色 #444750；首页按钮 46.3%W×10%W。
-  - 验证：`test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' …)" -ge 25 ]` → `OK rows=113`。
-  - 批次：20261024-0415
-- [x] [跳2] 立等距相机参数模块：新建 `src/minigame/games/jump/iso.ts`（俯角 30°、方位 225°、正交视锥 framing、横竖屏缩放，纯函数）+ 新建 `tools/jump-iso-test.ts` 并在 `package.json` 注册 `test:jumpiso` → `npm run test:jumpiso`（断言：投影 ±30°、顶面菱形宽高比 2:1、844×390 与 390×844 下 ≥3 块可见且当前块在视口内、相机是正交）
-  - 做了什么：`iso.ts` 只做三件事——`isoBasis()` 由俯角/方位算正交基（与 three 的 `lookAt` 同一套约定：`x = normalize(up × z)`、`y = z × x`）、`projectPoint()` 投到屏幕平面（仍是世界单位）、`frameBlocks()` 先量方块角点的屏幕 bbox 再反解正交视锥。另导出 `BLOCK_HEIGHT_RATIO=0.6` / `JUMPER_HEIGHT_RATIO=0.72` 与 `boxesFromBlocks()`，让规格表里的比例只有一处定义。
-  - 为什么取景用"量 bbox"而不是猜相机距离：正交下缩放全在 frustum 里，横屏 844×390 与竖屏 390×844 用同一个公式就能都装下 3 块；旧 `PillarScene` 的 `PORTRAIT_PULLBACK` 那种"竖屏拉远 1.25"是猜的，改间距就得重调。决策写进 `e50bd5-decision.md` D2。
-  - 为什么方位钉成"视线方向"：225° 两种读法（视线 / 相机位置）在画面上互为左右镜像，都能自洽；钉成视线方向后"−z → 右上、−x → 左上"可断言，写反必红。决策写进 D1。
-  - 正交的判据没用 `instanceof OrthographicCamera`（那只能证明"写了这个词"），而是断言"同尺寸方块沿视线前后错开 6 格后屏幕宽度完全相同"——几何真被算成透视时只有这条会红。
-  - 验证：`npm run test:jumpiso` → 42 条全绿（基正交/俯角 30°/菱形 2:1/两向符号与斜率/远近平行/两种视口 3 块在视口内/当前块下沉 8~20% 半高/退化为空或脏坐标时不产生 NaN）；`npm run typecheck` 与 `typecheck:tools` 均 0 错。
-  - 批次：20261024-0415
-- [x] [跳3] 重写渲染层为等距纯色方块场景：新建 `src/minigame/games/jump/BlockScene.ts`（正交相机 + 盒/圆柱几何 + 顶亮/左中/右暗三面 + 软阴影 + 纯色背景、无雾），删除 `PillarScene.ts` / `pillars.ts`，`scene.ts` 接线；同步改掉 `tools/minigame-test.ts` 里锁死 `new PillarScene(` 的源码断言 → `npm run test:minigame && npm run typecheck`
-  - 做了什么：新建 `BlockScene.ts`（正交相机 + 盒/圆柱共享几何 + 三面明暗烘进顶点色 + 贴片阴影 + 竖直渐变背景、无雾、不打灯、不读图集）与 `palette.ts`（6 组背景 + 8 个方块色 + `FACE_SHADE` + `shadeForNormal()`）；删除 `PillarScene.ts` / `pillars.ts` / `themes.ts`；`scene.ts` 换成 `BlockScene`（`setBlocks` / `setSquash` / `follow` / `setPalette`），站高改成按方块高度算（方块会随分数变矮），起跳/落地两端顶面高度不同时先线性过渡再加抛物线。
-  - 与队列描述不同的一处：队列写"顶亮/左中/右暗"，但 `[跳1]` 实测是**左暗 0.775、右亮 0.93**（黄块与橙块两块独立方块互证），渲染按实测值实现，断言也钉住方向（"右面比左面亮"）。
-  - 为什么明暗不用灯光：原版是纯哑光纯色，用灯去凑那三个比值只能靠试，"差 5° 就变味"；把 `shadeForNormal()` 烘进顶点色后，立方体三面精确落在 1.00/0.775/0.93，圆柱侧面同一条公式自然连成渐变（64 段圆环相邻差 < 0.02，无穷色阶台阶）。
-  - 为什么阴影用贴片：原版没有可见地面，阴影本身就是一张柔边贴片；用 shadowMap 既贵又只能压在"不存在的平面"上。偏移按实测（屏幕左下）换算成世界 −0.43/+0.71 边长。
-  - `palette.ts` 提前到本条落地（`[跳6]` 原本也包含它）：颜色是 BlockScene 的输入，分两次建等于把同一张表写两遍；`[跳6]` 收窄为特殊方块贴图 + 贴图/色板断言。
-  - 验证：`npm run test:minigame` → 151 条全绿（含色板 6/8 数量、方块不糊进背景 |ΔL|≥0.04、同 seed 同色板、色板轮换与负下标、三面明暗精确值、圆柱无台阶）；`npm run typecheck` / `typecheck:tools` 0 错；`npm run check:fast` 全绿（改动命中 minigame 套）。
-  - 批次：20261024-0415
-- [x] [跳4] 把 MC 玩家模型换成原版棋子小人：新建 `src/minigame/games/jump/JumperModel.ts`（球头 + 锥形身体、脚底原点、深色高光材质），`scene.ts` 不再用 `PlayerRenderer`；新增 `tools/jump-model-test.ts` 注册 `test:jumpmodel` → `npm run test:jumpmodel`（断言：压扁时 y→0.6 / xz→1.3、空翻 ±360°、包围盒 min.y≈0、dispose 后无残留）
-  - 做了什么：`JumperModel.ts` 用 `LatheGeometry` 画裙摆（9 个采样点的平滑外扩曲线，叠圆柱会在接缝处出现折线）+ 球头，原点在脚底、模型高 1；三面明暗复用 `palette.shadeForNormal()` 再叠"上亮下暗"，颜色烘进顶点色（`MeshBasicMaterial`，与方块同一条管线，不会一个亮一个暗）。`scene.ts` 不再 import `PlayerRenderer`，压扁/空翻/朝向改走 `setSquash` / `setFlip` / `setYaw` 三个 setter，落地换新方块尺寸（方块变小、小人跟着变小）。
-  - 比例依据：规格表 §4 的像素测量——身高 1、头径 0.29（球心 0.855）、颈 0.18（y=0.74）、裙摆 0.35；外部再乘 `0.72 × 方块边长`。
-  - 为什么压扁要同时鼓出来（y 0.6 / xz 1.3）：原版是"被压扁"不是"蹲下"，只压不改宽会像被踩进地里；脚底原点保证压扁时人不陷进方块。
-  - 释放的断言不靠肉眼：给两个几何/两份材质挂 `dispose` 监听再调 `dispose()`，数事件（2 geometry + 2 material）+ 场景图清空 + 重复释放不炸。
-  - 验证：`npm run test:jumpmodel` → 45 条全绿；`npm run test:minigame` 152 条全绿（静态断言同步换成 JumperModel / setFlip / jumper.setSize）；`npm run check:fast` 174/174 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳5] 玩法向原版对齐：`config.ts` + `logic.ts`（前进方向改成等距两向 ±90°、间距改为 `size + 0.15~0.9`、特殊方块补成井盖 5 / 魔方 10 / 便利店 15 / 音乐盒 30 四类、停留 3 秒、中心连击与封顶不变）→ `npm run test:minigame && npm run jump:balance`（可达率 100%、完美玩家不掉、手抖玩家 8~200 跳；不达标调 `gapMax`/`maxCharge` 而不是放松断言）
-  - 做了什么：`directionDegrees` 从 `[-30, 0, 30]` 改成 `[0, 90]`（世界 −Z / −X 两条等距轴）；间距从绝对格数改成 **边长 × 1.15~1.9**（`gapRatioMin/Max`，删掉 `growScore`/`gapMin*`/`gapMax*`）；`JumpBlockKind` 扩成 `normal|well|cube|store|music`，奖励 5/10/15/30（按稀有度加权抽：40/30/20/10%），`specialHoldSeconds` 2 → 3；中心连击与封顶（2n / 32）保持不动。
-  - 为什么间距改成倍数：原版相邻块几乎贴合，中心距就是 1.15~1.9 个边长；旧参数是绝对格数，方块一小（0.9）间距还是 3 格，画面上立刻散成"MC 里搭的柱子"。改成倍数后间距随方块同比缩小，难度来自"目标变小"，与参考图 08 的三块连排一致。
-  - 平衡脚本的一处**模型**修正（不是放松断言）：`jump:balance` 里"手抖"原本是 `间距 × (1 ± 24%)` 的相对误差，在旧参数下恰好与半块同量级；间距改成倍数后 24% 的间距永远小于半块（0.24 格 vs 0.45 格），模拟里一局不死（300 跳触顶）。改成绝对误差 `±0.55 格`（= 0.1s 的按早/按晚 × maxDistance/maxCharge，注释里本来就写着"±0.18 格"的绝对口径，代码却是百分比）。三条阈值一个字没动，理由写进 `e50bd5-decision.md` D3。
-  - 验证：`npm run test:minigame` → 162 条全绿（新增"只出现 0°/90° 两向""步进只沿一条世界轴""四类特殊方块都会出现""奖励严格递增""停留 3 秒"）；`npm run jump:balance` → 可达率 100.00%、完美玩家 300 跳不掉、手抖 ±0.55 格 26.3 分 / 17.2 跳（阈值 8~200）、乱按 1.0 分；`npm run check:fast` 全绿。
-  - 批次：20261024-0415
-- [x] [跳6] 特殊方块程序化贴图与色板：新建 `src/minigame/games/jump/blockTextures.ts`（canvas 绘制井盖/魔方/便利店门脸/唱片，接受注入的 canvas 工厂）与 `palette.ts`（背景 6 色 + 方块 8 色，取自参考图），`BlockScene.ts` 接上 → `npm run test:jumpiso`（断言：色板数量与对比度阈值、贴图工厂被调用次数与尺寸、缓存键唯一）
-  - 做了什么：`blockTextures.ts` 用 canvas 现画四类特殊方块（井盖=深灰盘+24 条径向管纹+中心孔 / 魔方=3×3 白格线彩块 / 便利店=红招牌+玻璃窗+卷帘门 / 唱片=4 圈同心纹+中心孔），**一类一张图集、左半顶面右半侧面**，于是每类只要 1 张贴图 + 1 份几何（而不是六面各一个材质）。`BlockScene` 按法线把"朝上的面"UV 指到左格、其余指到右格（方盒与圆柱的顶点顺序不同，按下标写会错位），三面明暗仍由顶点色乘上来；音乐盒走圆柱，其余走方盒。`palette.ts` 已在 `[跳3]` 落地，这条补齐它的贴图部分。
-  - 为什么 canvas 工厂要注入：浏览器传 `document.createElement('canvas')`，离线测试传一个记录 2D 调用的假 canvas——于是"画了什么、画了几张、多大"都能断言，而不是只能靠截图肉眼看。四类的 2D 调用序列当指纹，撞车就说明两类在画同一张图。
-  - 与队列描述不同的两处：① 队列写的验证是 `npm run test:jumpiso`，实际拆出独立套件 `test:jumptex`（25 条），并同时跑 `test:minigame`（色板数量 / 对比度 / 明暗）——两条一起覆盖队列要求的三类断言；② 顺带把 `BlockScene` 的渲染前提补成静态断言（正交相机 / 不打灯 / 无雾 / 不读 TextureAtlas / 阴影 depthWrite:false），这几条原本只有肉眼可见。
-  - 为什么没有按参考图 1:1：井盖管纹、便利店门脸、唱片都只有小图，且无授权素材源；这里按"可辨识的特征"画（圆盘+径向纹、3×3 彩格、红招牌+玻璃、同心圆），逼近程度写在规格表 §12 的不可 1:1 项里。
-  - 验证：`npm run test:jumptex` → 25 条全绿（四类各画一张 / 图集 256×128 / 同类复用缓存 / UV 两格拼满 0~1 / 顶面在左格侧面在右格 / 四类指纹两两不同 / 井盖有圆盘与警示黄、魔方 18 个小格且三色齐、便利店有招牌红与玻璃、唱片 ≥4 圈 / 无 2D 上下文时静默降级）；`npm run test:minigame` 171 条、`test:jumpiso` 42 条、`test:jumpmodel` 45 条全绿；`npm run check:fast` 175/175 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳7] 动画与特效对齐原版：`scene.ts`（跳跃 400ms = 上升 65% Cubic.Out + 下降 35% Cubic.In、空中翻转 360°、落地压缩 100ms、方块回弹 500ms、入场 Bounce.Out、被踩 y→0.8）+ 完美命中同心圆波纹、`+N` 飘字、旧方块掉落淡出 → `npm run test:minigame && npm run jump:e2e`（E2E 四张截图落到 `.tmp/shots`，无 ✗）
-  - 做了什么：新增 `motion.ts`（纯函数：`cubicIn/Out`、`sinusInOut`、`bounceOut`、`jumpArc`、`flipProgress`、`landingSquash`、`blockBounceScale`、`enterScale`、`fadeScale`、`rippleProgress` + `JUMP_TIMING` 全部时长）；`scene.ts` 跳跃固定 **400ms**（旧实现 `0.3 + 距离×0.045` 让远跳更慢）、弧线换成 65% Cubic.Out + 35% Cubic.In、空翻走 Sinusoidal.InOut、落地压缩 100ms、`+N` 改成 DOM 飘字（投影到屏幕、浮起淡出）；`BlockScene` 加 `tick/punch/playRipple/projectToScreen`，实现新块入场 Bounce.Out、被踩方块凹 0.85 再回弹 500ms、落后方块掉落缩小 400ms、三层同心圆波纹（外白/中绿/内红）；`index.html` 加 `.jump-float` 与 `@keyframes jump-float-rise`。
-  - 顺带修掉一个真 bug：方块颜色原本按"这一屏列表下标"取色，每跳一次列表整体前移，同一块方块会换色（看起来像"跳一下世界重新上色"）。`BlockSpec` 加 `colorIndex`（传方块 id），颜色只跟方块身份走。
-  - 为什么时序要单独成文件并逐条断言：截图是静止的，时序错了看不出来；缓动写反（cubicOut↔cubicIn）在画面上只是"有点飘"。断言里专门钉了"上升段前半程已过 70% 高度""下落段前半程还没掉一半""峰值两侧斜率都≈0（无折角）"。
-  - 验证：`npm run test:jumpmotion` → 48 条全绿（缓动端点/单调性/Bounce 至少弹 2 次/弧线形状与峰值无折角/四个收敛到端值/越界与 NaN）；`npm run test:minigame` 179 条全绿；`npm run check:fast` 176/176 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - ⚠️ `npm run jump:e2e` **没有跑**：按用户长期偏好（不要主动做浏览器自动化测试），视觉/E2E 验收留给用户自己跑；离线门禁（弧线、时序、收敛性、静态接线）已全覆盖。
-  - 批次：20261024-0415
-- [x] [跳8] HUD 与结算按原版重做：`scene.ts` 的 HUD 段 + `index.html` 的 `.jump-*` 样式（分数移到左上、深色细体大字、去掉"最高分"行与底部 hint、结算面板＝大数字 + 最高分 + 再来一局/返回、横屏安全区），`src/core/i18n/locales/zh/minigame.ts` 同步 → `npm run test:minigame && npm run typecheck`
-  - 做了什么：`scene.ts` 的 HUD 只剩一个分数元素（删掉 `bestEl` / `hintEl` 与相关 DOM 分支）；结算面板改成「小标签（本局得分）+ 大数字 + 最高分/新记录 + 再来一局 / 返回」；`index.html` 的 `.jump-*` 全段重写（分数 #41454F、`font-weight:300`、`clamp(22px, 7.2vh, 44px)`；结算面板白底圆角卡片 + 白色胶囊按钮 + 极淡遮罩，四周挂 `env(safe-area-inset-*)`）；6 个语言的 `minigame.jump.hint` 删掉、`minigame.jump.over` 从"本局 {score} 分"改成纯标签。
-  - 为什么字号按 **vh** 而不是原版的"屏宽 10%"：用户是横屏手机（844×390），照屏宽换算得到 84px，比半个屏幕还高；原版那个比例是竖屏 320pt 的度量，横屏必须换基准（7.2vh ≈ 原版在 568 高的 7.2%）。
-  - 为什么删 hint 而不是留着："按住蓄力，松手起跳"是 2026-10 那版为了教学加的，原版游戏画面里没有任何提示文字——保留它就等于承认"画面里应该有字"，与 1:1 复刻冲突。`desc` 键仍在小游戏选择页用。
-  - 验证：`npm run test:minigame` 182 条全绿（新增三条静态断言：HUD 没有最高分行 / 没有底部提示 / 结算面板是大数字+最高分+按钮）；`npm run test:i18n` 547 通过 0 失败；`npm run audit:i18n` ✓ 无缺键、✓ 无孤儿键；`npm run check:fast` 161/161 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 未做：小游戏**选择页**（`MiniGameMenu`）仍是深色面板——它是两个小游戏共用的入口，按 跳一跳 首页的样子改会让"选择器"变成"跳一跳专页"；原版首页的标题/胶囊按钮那套视觉已在结算面板里复用。这条留给用户决定是否单独做。
-  - 批次：20261024-0415
-- [x] [跳9] 音效重写成原版节奏：把 `scene.ts` 里的 `JumpAudio` 抽到 `src/minigame/games/jump/audio.ts`（蓄力音阶每 0.15s 升一级、起跳、落地、完美命中"叮"、四类特殊方块各自音色、失败下滑音），新增 `tools/jump-audio-test.ts` 注册 `test:jumpaudio` → `npm run test:jumpaudio && npm run test:minigame`（音阶序列纯函数断言 + 静默降级仍保留）
-  - 做了什么：`audio.ts` 分两半——纯数据（`CHARGE_STEP_SECONDS=0.15`、大调五声 12 级音阶表、四类特殊方块的旋律表、起跳/落地/完美/失败四个 `Sweep`）与 `JumpAudio` 类（只负责把音符丢给 WebAudio）。蓄力从"频率随蓄力连续滑"改成**阶梯音阶**：`chargeStepFor(已按秒数)` 算出级数，只有跨级才改频率（连续滑音让人分不清按了几级，原版是靠数音高判断的）。特殊方块从"一个音"改成各自旋律：井盖两音 / 魔方三音 / 便利店四音 / 唱片五音（分越高越长）。`scene.ts` 删掉内联实现，改 `updateCharge(ratio, this.charge)` 与 `playSpecial(block.kind)`。
-  - 为什么用五声音阶而不是半音阶：原版蓄力音是"音乐性"的，半音阶听起来像电子表报警。0.9 秒蓄满只用到第 6 级，表里留 12 级是给参数调整留余量。
-  - 为什么音效必须静默降级：自动化环境没有音频设备、浏览器可能因"没有用户手势"拒绝创建 AudioContext；音效失败绝不能影响玩法。断言里直接把全套方法在无 AudioContext 环境下跑一遍。
-  - 验证：`npm run test:jumpaudio` → 31 条全绿（0.14/0.15 秒的级数边界、封顶、越界夹紧、频率单调且落在 200~1200Hz、四类旋律 2/3/4/5 音且时长递增、四个 Sweep 的方向与参数、无上下文时全套调用不抛异常、重复 dispose 不炸）；`npm run test:minigame` 188 条全绿（新增 audio.ts 的 5 条静态断言）；`npm run check:fast` 177/177 套全绿；`typecheck` + `typecheck:tools` 0 错。
-  - 批次：20261024-0415
-- [x] [跳10] 验收收口：`tools/jump-e2e.mjs` 断言更新（正交相机、两向生成、四类特殊方块、`debugState` 暴露新的可测字段），跑全量并在回复里贴结果 → `npm run check && npm run jump:e2e`（`check` 0 失败；E2E 无 ✗ 且截图与参考图逐项比对结论写进完成说明）
-  - 做了什么：`debugState` 补 `orthographic` / `gapRatio` / `axis` / `kind` / `nextKind` 五个只读字段；`tools/jump-e2e.mjs` 在开局与连跳 5 次后各断言一次（相机正交、间距 1.15~1.9 边长、方向只有 x/z、种类在五类之内），文件头也写清这三条"截图里看不出来"的判据。顺带重新生成锚点文档里由脚本管着的数字（离线套件 172 → 177，TASKS/HANDOFF/README/AGENTS 四处同时改）。
-  - 验证（贴结果）：`npm run check` → **0 失败**：「离线测试：通过 177 / 177 套 · 总耗时 16.3s」「vitest 201 passed」「i18n 547 通过 / 0 失败」「任务清单自检通过」「✓ 全绿」；`npm run build:fast` → ✓ built（2.48MB，仅有既有的 chunk 体积提示）。
-  - ⚠️ **`npm run jump:e2e` 没跑、截图也没比对**：按用户长期偏好（不要主动做浏览器自动化测试），这两步留给用户自己跑。跑法：`npm run dev` 后另开终端 `npm run jump:e2e`，四张截图落 `.tmp/shots`（jump-menu / jump-ready / jump-charging / jump-after5 / jump-over），逐项对照参考图（`.continue/.logs/…/refs/jump/`）看：视角是否等距、三面明暗左暗右亮、方块高宽比 ~0.6、间距是否几乎贴合、小人比例、阴影方向左下、背景色、分数 HUD 位置与字重。
-  - 本次改动**没有**新增任何需要人工眼的"我觉得像了"结论——所有能用脚本判的都进断言了，剩下的是真·视觉判断。
-  - 批次：20261024-0415
-- [x] [自审] 审这一批的三层：L1（等距/时序/规则有没有"坏了就变红"的检查）、L2（故意改坏一次看谁变红）、L3（判断依据里几条来自真实截图、几条是自己想的）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
-  - L1：这一批每一层都有"坏了就变红"的检查，共 6 套离线套件 ≈ 400 条断言 + 约 35 条静态接线断言。投影层 `test:jumpiso`（42）守菱形 2:1、正交（远近平行）、两视口 3 块可见；明暗/色板 `test:minigame`（190）守 1.00/0.775/0.93 精确值与"右面比左面亮"的方向；模型 `test:jumpmodel`（45）守 min.y≈0、头径/裙摆比例、压扁 0.6/1.3、释放事件；贴图 `test:jumptex`（25）守图集尺寸/缓存/四类画法指纹；时序 `test:jumpmotion`（48）守弧线形状、峰值无折角、四个动画精确收敛；音效 `test:jumpaudio`（31）守 0.14/0.15 秒的级数边界与无 AudioContext 时静默。规则层 `jump:balance` 守可达率 100% / 完美玩家不掉 / 手抖 8~200 跳。唯一薄弱点：**颜色漂移那个 bug 当时没有任何断言**（已在本次自审补上静态断言），因为它表现是"每跳一次全世界重新上色"，属于只有肉眼才容易发现的一类。
-  - L2：当天做了两次故意破坏并复现变红——① 把 `ISO_VIEW.elevationDeg` 从 30 改成 35 → `test:jumpiso` 6 条红（俯角、菱形 2:1、两向斜率 0.5、竖直 cos30°）；② 把 `FACE_SHADE` 的左右对调 → `test:minigame` 4 条红（+X/+Z 面值、"右面比左面亮"、法线取反）。两次都在 10 秒内定位到具体断言，说明判据不是"看起来对"而是数值化的。另外 `jump:balance` 在 `[跳5]` 当场抓到过一次真实退化（间距改成边长倍数后手抖玩家 300 跳不死）。
-  - L3：判断依据的来源逐条分过类（规格表里带【测】/【推】/【估】/【二手】标签）：约 45 条来自参考图像素测量（投影 31°、三面明暗、方块高 0.6、小人 0.72/0.29/0.18/0.35、背景 6 组、HUD 位置与字重、中心点 0.11~0.14），约 10 条来自公开 H5 复刻技术文（400ms 时序、3 秒停留、四类分值、音效节奏），其余约 15 处是我自己拍的板——最关键的 5 个：① 6 组背景与方块色的**配对**（原版只给单帧颜色，配对是按 |ΔL|≥0.04 的对比度阈值自己定的）；② 特殊方块抽奖权重 40/30/20/10（攻略文只说"有哪几种"，没说比例）；③ 分数字号从原版"屏宽 10%"改成 7.2vh（横屏必须换基准）；④ 波纹三色与半径（05 被红框压住一半，只能近似）；⑤ 阴影偏移常量（按"屏幕左下"反解成世界 −0.43/+0.71）。这 5 处都写进了规格表 §11/§12 与 decision D1~D3，属于"看得见的自选"，不是"冒充测量"。
-  - 当场改进（2 条，各一个提交）：`2f2012b7` 离线钉住 `debugState` 的 10 个字段（E2E 不在 CI 里跑，改名没人会发现）；`3d2002d8` 钉住"配色按方块身份取"（L1 里那个颜色漂移 bug 的复盘断言）。
-  - 批次：20261024-0415
-
----
 
