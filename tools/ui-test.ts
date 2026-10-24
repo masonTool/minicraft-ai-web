@@ -4163,6 +4163,12 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
 
   // 批次 245：铁轨与矿车
   const blocksSrc = readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8');
+  /**
+   * 方块**行为**（`stateTiles` / `faceTile` / `stateLight`）在批次 20261025-0329 搬到了
+   * `blockBehaviors.ts`（要能把数据放进二进制，闭包必须留在代码里）。所以"某块有哪两张贴图"
+   * 这类断言要查那个文件，查 `blocks.ts` 会永远为假。
+   */
+  const behaviorsSrc = readFileSync(new URL('../src/core/registry/blockBehaviors.ts', import.meta.url), 'utf8');
   const cartSrc = readFileSync(new URL('../src/core/entity/Minecart.ts', import.meta.url), 'utf8');
   check(
     '铁轨复用 flat 薄板形状（不新增 shape），且 6 铁锭 + 1 木棍做 16 段',
@@ -4203,8 +4209,8 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
   check(
     '两种铁轨都有通电/断电两张贴图，且各有一条原版配方',
-    blocksSrc.includes("['powered_rail_on', 'powered_rail_on', 'powered_rail_on']") &&
-      blocksSrc.includes("['detector_rail_on', 'detector_rail_on', 'detector_rail_on']") &&
+    behaviorsSrc.includes("['powered_rail_on', 'powered_rail_on', 'powered_rail_on']") &&
+      behaviorsSrc.includes("['detector_rail_on', 'detector_rail_on', 'detector_rail_on']") &&
       recipesSrc.includes('result: { id: Block.POWERED_RAIL, count: 6 }') &&
       recipesSrc.includes('result: { id: Block.DETECTOR_RAIL, count: 6 }'),
   );
@@ -4238,8 +4244,8 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
   check(
     '红石矿石：踩上去亮（贴图 + 9 级光 + 主程序 10Hz 检查）',
-    blocksSrc.includes("'redstone_ore_lit'") &&
-      blocksSrc.includes('stateLight: (state) => (isPowered(state) ? 9 : 0)') &&
+    behaviorsSrc.includes("'redstone_ore_lit'") &&
+      behaviorsSrc.includes('stateLight: (state) => (isPowered(state) ? 9 : 0)') &&
       appSrc.includes('private updatePulsingBlocks(dt: number): void') &&
       appSrc.includes('this.updatePulsingBlocks(dt);'),
   );

@@ -213,3 +213,10 @@
 - 根因：`audit-ids.mjs` 的 `tIdsIn` 扫的是**整行**，不区分"任务号"与"举例"。
 - 处置：要提别的会话的条目号就写成"条目编号 / `T` 号"，别把 `[Tn]` 原样抄进正文；
   改的只是措辞，任务语义一点没变。
+
+### 验证"宿主注入的资源"时，先怀疑 Service Worker 缓存
+
+- 症状：本地起 `vite preview`，把 `core.bin` 放进 `dist/__host/` 后用浏览器验证，页面**仍然**显示"请在应用里游玩"；而 `curl` 同一个地址是 200 + 正确字节。
+- 根因：上一次验证已经在**同一个浏览器 profile** 里注册过 Service Worker，旧版 `sw.js`（还没有 `/__host/*` 排除规则）把那次请求的响应缓存住了。浏览器里 `fetch` 先命中 SW 缓存，看到的永远是第一次那份（404 回退的 HTML），`curl` 不走 SW 所以正常。
+- 处置：给验证 URL 加 cache-busting 查询串（`?cb=<timestamp>`），或在验证脚本里先 `navigator.serviceWorker.getRegistrations()` 全部 unregister。**不要**据此改业务代码——那会让"真机首次启动"这条最该验的路径被掩盖。
+- 适用面：所有"资源由原生宿主注入 / 由 SW 缓存"的功能（`__host/*`、离线包、热更清单）。排查顺序固定为：先 curl 验服务端 → 再 cache-bust 验浏览器 → 最后才怀疑代码。
