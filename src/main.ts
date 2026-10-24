@@ -4343,6 +4343,59 @@ class App {
     if (this.net.role !== 'host') return;
     // 与 `onNetBlock` 同一道守卫：种子对不上时远端坐标在这边是另一格
     if (!this.remoteWorldWritable()) return;
+    /*
+     * 容器 / 牌子 / 展示框 / TNT 的请求（L8 · MS4 收尾）：从属端也只发"请求"，
+     * 由房主落地后再作为权威结果广播。四类的落地方式各不相同：
+     *  · 容器：写槽位会触发 `onMutate`，广播走既有的 80ms 防抖队列（**不抑制回声**）；
+     *  · 牌子 / 展示框 / TNT：本地写入不会自动广播，所以落地后**显式重发**一条。
+     */
+    const raw = payload as {
+      t: string;
+      x?: unknown;
+      y?: unknown;
+      z?: unknown;
+      dimension?: unknown;
+      slots?: unknown;
+      lines?: unknown;
+      item?: unknown;
+      rotation?: unknown;
+    };
+    const at = {
+      x: Math.trunc(Number(raw.x)),
+      y: Math.trunc(Number(raw.y)),
+      z: Math.trunc(Number(raw.z)),
+      dimension: (isDimension(String(raw.dimension)) ? String(raw.dimension) : this.dimension) as DimensionId,
+    };
+    if (raw.t === 'container') {
+      if (at.dimension !== this.dimension) return;
+      if (!this.world.isLoaded(at.x, at.z)) return;
+      const container = this.containerOfBlockAt(at.x, at.y, at.z);
+      if (!container) return;
+      const count = SLOT_COUNTS[kindOf(container)];
+      const stacks = restoreStacks(raw.slots, count);
+      // ⚠️ 不包 `applyingRemoteBlock`：这次写入要触发 `onMutate`，把结果广播给所有人
+      for (let i = 0; i < count; i++) container.set(i, stacks[i] ?? null);
+      return;
+    }
+    if (raw.t === 'sign') {
+      const lines = Array.isArray(raw.lines) ? raw.lines.map((line) => String(line)) : [];
+      this.applyRemoteSign({ ...at, lines });
+      this.net.sendSign(at.x, at.y, at.z, at.dimension, lines);
+      return;
+    }
+    if (raw.t === 'frame') {
+      const item = raw.item && typeof raw.item === 'object' ? (raw.item as { id: number; count: number }) : null;
+      const rotation = Math.trunc(Number(raw.rotation ?? 0));
+      this.applyRemoteFrame({ ...at, item, rotation });
+      this.net.sendFrame(at.x, at.y, at.z, at.dimension, item, rotation);
+      return;
+    }
+    if (raw.t === 'tnt') {
+      this.onNetTnt({ x: at.x, y: at.y, z: at.z, dimension: at.dimension } as NetTntState);
+      this.net.sendTnt(at.x, at.y, at.z, at.dimension);
+      return;
+    }
+
     for (const edit of readEditRequest(payload)) {
       const target: DimensionId = isDimension(edit.dimension) ? edit.dimension : this.dimension;
       const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(edit.x, edit.z), edit.y);

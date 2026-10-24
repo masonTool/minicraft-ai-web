@@ -906,6 +906,21 @@ export class NetClient {
     this.sendRaw(JSON.stringify({ t: 'entity-snap', entities }));
   }
 
+  /**
+   * 坐标类消息的统一出口（L8 · MS4 收尾）。
+   *
+   * 房主直发（他就是权威）；从属端包成 `edit-request` 回到房主，由房主落地后再以
+   * `authority` 广播。服务端那边也有同一道闸门（有房主的房里只收房主的这类消息）。
+   */
+  private sendEditOrRequest(message: Record<string, unknown>): void {
+    if (!this.connected) return;
+    if (this.role === 'host') {
+      this.sendRaw(JSON.stringify(message));
+      return;
+    }
+    this.sendRaw(JSON.stringify({ t: 'edit-request', payload: message }));
+  }
+
   /** 房主：这几只实体没了（死亡 / 被移除）。非房主调用是空操作 */
   sendEntityRemove(keys: readonly string[]): void {
     if (!this.connected || keys.length === 0) return;
@@ -923,18 +938,16 @@ export class NetClient {
     progress?: number,
   ): void {
     if (!this.connected) return;
-    this.sendRaw(
-      JSON.stringify({
-        t: 'container',
-        x,
-        y,
-        z,
-        dimension,
-        slots,
-        // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
-        ...(Number.isFinite(progress) ? { progress } : {}),
-      }),
-    );
+    this.sendEditOrRequest({
+      t: 'container',
+      x,
+      y,
+      z,
+      dimension,
+      slots,
+      // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
+      ...(Number.isFinite(progress) ? { progress } : {}),
+    });
   }
 
   /**
@@ -996,8 +1009,7 @@ export class NetClient {
 
   /** 我写了/擦了牌子上的字（联机16）。全空 = 擦掉 */
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+    this.sendEditOrRequest({ t: 'sign', x, y, z, dimension, lines });
   }
 
   /**
@@ -1024,8 +1036,7 @@ export class NetClient {
 
   /** 我点燃了一格 TNT（联机23）：坐标即 key，对方那边 `prime` 是幂等的 */
   sendTnt(x: number, y: number, z: number, dimension: string): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'tnt', x, y, z, dimension }));
+    this.sendEditOrRequest({ t: 'tnt', x, y, z, dimension });
   }
 
   /** 我所在的队伍名（联机22）：空串 = 没队伍；随 `move` 一起发，供对方判友伤 */
@@ -1072,8 +1083,7 @@ export class NetClient {
     item: { id: number; count: number } | null,
     rotation: number,
   ): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'frame', x, y, z, dimension, item, rotation }));
+    this.sendEditOrRequest({ t: 'frame', x, y, z, dimension, item, rotation });
   }
 
   /**

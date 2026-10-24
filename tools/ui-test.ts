@@ -5579,5 +5579,40 @@ console.log('\n[协议文档 v2 与本批改动逐条对照（L8 · MS4）]');
   );
 }
 
+/*
+ * 四类坐标消息也走请求通道（L8 · MS4 收尾）
+ *
+ * 容器 / 牌子 / 展示框 / TNT 以前从属端直发。玩法上能用，但和"只有房主写世界"不一致：
+ * 从属端的改动没经过房主，房主的权威状态就会漏掉这一笔。现在四类都包成 `edit-request`。
+ */
+console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收尾）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '四类发送都走统一出口（房主直发 / 从属端包请求）',
+    netSrc.includes('private sendEditOrRequest(message: Record<string, unknown>): void') &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'sign', x, y, z, dimension, lines });") &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'tnt', x, y, z, dimension });") &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'frame', x, y, z, dimension, item, rotation });"),
+  );
+  check(
+    '房主落地容器请求时不抑制回声（靠 onMutate 广播），其余三类显式重发',
+    mainSrc.includes('// ⚠️ 不包 `applyingRemoteBlock`：这次写入要触发 `onMutate`，把结果广播给所有人') &&
+      mainSrc.includes('this.net.sendSign(at.x, at.y, at.z, at.dimension, lines);') &&
+      mainSrc.includes('this.net.sendFrame(at.x, at.y, at.z, at.dimension, item, rotation);') &&
+      mainSrc.includes('this.net.sendTnt(at.x, at.y, at.z, at.dimension);'),
+  );
+  check(
+    '服务端对四类都有"有房主时只收房主"的闸门',
+    (() => {
+      const server = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+      return ['block', 'blocks', 'container', 'sign', 'frame', 'tnt'].every((kind) =>
+        server.includes(`rejectEdit(player, 'not-host', '${kind}')`),
+      );
+    })(),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

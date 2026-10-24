@@ -1455,6 +1455,29 @@ try {
     const fromHostStillWorks = await reqFollower.wait('blocks', 2000);
     check('房主自己发的 blocks 仍被广播', fromHostStillWorks?.authority === true, JSON.stringify(fromHostStillWorks));
 
+    /*
+     * 四条"坐标类"请求（L8 · MS4 收尾）：容器 / 牌子 / 展示框 / TNT 也走 edit-request，
+     * 服务端只转给房主；直发（老路）在有房主的房里一律被丢。
+     */
+    const payloads = [
+      ['container', { t: 'container', x: 60, y: 70, z: 60, dimension: 'overworld', slots: [null, null, null] }],
+      ['sign', { t: 'sign', x: 61, y: 70, z: 60, dimension: 'overworld', lines: ['你好', '', '', ''] }],
+      ['frame', { t: 'frame', x: 62, y: 70, z: 60, dimension: 'overworld', item: { id: 1, count: 1 }, rotation: 0 }],
+      ['tnt', { t: 'tnt', x: 63, y: 70, z: 60, dimension: 'overworld' }],
+    ];
+    for (const [label, payload] of payloads) {
+      reqHost.mailbox.length = 0;
+      reqFollower.send({ t: 'edit-request', payload });
+      const forwardedKind = await reqHost.wait('edit-request', 2000);
+      check(`${label} 请求被转给房主`, forwardedKind?.payload?.t === label, JSON.stringify(forwardedKind));
+    }
+    // 直发老路：房主收不到（有房主的房只收房主的坐标类消息）
+    for (const [label, payload] of payloads) {
+      reqHost.mailbox.length = 0;
+      reqFollower.send(payload);
+      check(`${label} 直发被丢弃（改走请求通道）`, (await reqHost.wait(label, 600)) === null);
+    }
+
     reqHost.close();
     reqFollower.close();
     noHostFollower.close();
@@ -1538,7 +1561,10 @@ try {
     const withProgress = await cookFollower.wait('container', 2000);
     check('房主的容器进度被转发', withProgress?.progress === 0.5, JSON.stringify(withProgress));
 
-    // 从属端带进度不算数：只有房主推进计时，假进度会把所有人的进度条改坏
+    /*
+     * 从属端的容器改动：MS4 收尾之后**整条直发都被丢**（改走 `edit-request`，由房主落地）。
+     * 所以这里断言的是"房主收不到直发的 container"，而不是"收到了但进度没了"。
+     */
     cookHost.mailbox.length = 0;
     cookFollower.send({
       t: 'container',
@@ -1549,8 +1575,7 @@ try {
       slots: [{ id: 1, count: 1 }, null, null],
       progress: 0.9,
     });
-    const noProgress = await cookHost.wait('container', 2000);
-    check('从属端的容器进度被丢掉（内容照转）', noProgress?.progress === undefined && Array.isArray(noProgress?.slots), JSON.stringify(noProgress));
+    check('从属端直发 container 被丢弃（改走请求通道）', (await cookHost.wait('container', 600)) === null);
 
     // 越界的进度夹到 [0,1]：进度条不该被一个 1.7 拉出框
     cookFollower.mailbox.length = 0;

@@ -209,6 +209,50 @@ export function sanitizeEditPayload(payload) {
     if (!Array.isArray(payload.blocks)) return null;
     return { t: 'blocks', blocks: payload.blocks.slice(0, MAX_REQUEST_BLOCKS) };
   }
+  /*
+   * 容器 / 牌子 / 展示框 / TNT（L8 · MS4 收尾）：这四类从属端也改走请求通道了。
+   *
+   * 与方块一样，这里只做**形状收口**（别把房主那端撑爆），内容语义由房主落地时按
+   * 各自的老路再校验一遍（`restoreStacks` / 行数截断 / 数值有限）。
+   */
+  const coords = (source) => {
+    const x = Math.trunc(Number(source.x));
+    const y = Math.trunc(Number(source.y));
+    const z = Math.trunc(Number(source.z));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    return { x, y, z, dimension: sanitizeDimension(String(source.dimension ?? '')) };
+  };
+  if (payload.t === 'container') {
+    const at = coords(payload);
+    if (!at) return null;
+    const slots = payload.slots;
+    if (!Array.isArray(slots) || slots.length > 27) return null;
+    if (JSON.stringify(slots).length > 8192) return null;
+    return { t: 'container', ...at, slots };
+  }
+  if (payload.t === 'sign') {
+    const at = coords(payload);
+    if (!at) return null;
+    if (!Array.isArray(payload.lines)) return null;
+    const lines = payload.lines.slice(0, 4).map((line) => (typeof line === 'string' ? [...line].slice(0, 64).join('') : ''));
+    return { t: 'sign', ...at, lines };
+  }
+  if (payload.t === 'frame') {
+    const at = coords(payload);
+    if (!at) return null;
+    const item = payload.item;
+    const cleaned =
+      item && typeof item === 'object' && Number.isFinite(Number(item.id)) && Number.isFinite(Number(item.count))
+        ? { id: Math.trunc(Number(item.id)), count: Math.trunc(Number(item.count)) }
+        : null;
+    const rotation = Math.trunc(Number(payload.rotation ?? 0));
+    return { t: 'frame', ...at, item: cleaned, rotation: Number.isFinite(rotation) ? rotation : 0 };
+  }
+  if (payload.t === 'tnt') {
+    const at = coords(payload);
+    if (!at) return null;
+    return { t: 'tnt', ...at };
+  }
   return null;
 }
 

@@ -1106,6 +1106,8 @@ wss.on('connection', (socket, request) => {
        */
       case 'sign': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'sign');
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -1182,6 +1184,8 @@ wss.on('connection', (socket, request) => {
 
       case 'tnt': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'tnt');
         if (!takeEffectToken(player)) return;
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -1211,6 +1215,8 @@ wss.on('connection', (socket, request) => {
 
       case 'frame': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'frame');
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -1230,6 +1236,8 @@ wss.on('connection', (socket, request) => {
 
       case 'container': {
         if (!player) return;
+        // 同上（L8 · MS4 收尾）：有房主的房里，容器改动要经 `edit-request` 回房主落地
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'container');
         if (!player.buckets.container.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));

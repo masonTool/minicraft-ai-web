@@ -74,22 +74,22 @@
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
 | `block` | `x, y, z, id, state, dimension, authority?` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条。**有房主的房里只有房主能发**（非房主改用 `edit-request`，由房主落地后重发） |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断）, `authority?` | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿。**有房主的房里只有房主能发**。`authority` 是**声明**（L8·MS2：房主说"这批是我算的"），服务端**不据此判权**，下行会按 `isHost` 重新标注 |
-| `container` | `x, y, z, dimension, slots[], progress?` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍。`progress`（0..1，L8·MS4）只有**房主**带得动：熔炉/酿造的计时只在他那边推进，服务端只转发房主的值并夹到 `[0,1]` |
+| `container`, **有房主时只收房主** | `x, y, z, dimension, slots[], progress?` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍。`progress`（0..1，L8·MS4）只有**房主**带得动：熔炉/酿造的计时只在他那边推进，服务端只转发房主的值并夹到 `[0,1]` |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
 | `item-take` | `owner, localId` | 两个正整数；每人每秒 20 次 | 捡**别人**那堆（`联机21`）：first-come 仲裁，先到的拿到，另一条回 `gone` |
 | `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃；每人每秒 5 条（令牌桶） | 服务端日志打 `<名字> 内容`；**不回传给发送者**（客户端已本地回显，`联机30`） |
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
-| `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
-| `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
-| `edit-request` | `payload: {t:'block', edit:[x,y,z,id,state,dimension]} \| {t:'blocks', blocks:[[…]]}`（L8·MS2） | 必须已 join；借用方块令牌桶（一条一格）；**只转给本房房主**，房里没房主回 `{t:'edit-request', ok:false, reason:'no-host'}`；`payload.t` 不认识直接丢 | 从属端"我要改这几格"的请求：服务端不判权、不落地、不校验内容（世界语义由房主那端把关） |
+| `sign`, **有房主时只收房主** | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
+| `frame`, **有房主时只收房主** | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
+| `edit-request` | `payload`：`{t:'block'|'blocks'|'container'|'sign'|'frame'|'tnt', …}`（L8·MS2/MS4） | 必须已 join；借用方块令牌桶（一条一格）；**只转给本房房主**，房里没房主回 `{t:'edit-request', ok:false, reason:'no-host'}`；`payload.t` 不认识直接丢 | 从属端"我要改这几格"的请求：服务端不判权、不落地、不校验内容（世界语义由房主那端把关） |
 | `entity-snap` | `entities: [[key, type, x, y, z, yaw, health, flags], …]`（L8·MS3，≤256 条） | 必须已 join；**只有房主能推**（其它人推的一律丢）；服务端只做形状收口（是不是数组、超不超过 256）与按房 + AOI 转发，**不做内容校验** | 房主每 100ms 推一次视野内实体，从属端据此画面影子实体 |
 | `entity-remove` | `keys: ["ownerId:localId", …]`（L8·MS3，≤64） | 必须已 join；**只有房主能发**；空列表 / 非数组直接丢 | 房主报告"这几只死了"——从属端立刻撤影子，不等快照那 300ms 宽限 |
 | `ping` | 无 | 必须已 join（先连接） | 应用层延迟探测（`联机29`）：客户端每 2 秒一条，服务端只回 `pong` |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 | `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
 | `arrow` | `x, y, z, vx, vy, vz, damage` | 六个数有限；速度模长 ≤ 200；伤害夹 0~50；每人每秒 30 条 | 玩家射箭（`联机23`）：**不带 id**，各端自己生成一支跑物理 |
-| `tnt` | `x, y, z, dimension` | 坐标有限；维度走 `sanitizeDimension`；每人每秒 30 条 | TNT 被点燃（`联机23`）：坐标即 key，接收端 `prime` 幂等 |
+| `tnt`, **有房主时只收房主** | `x, y, z, dimension` | 坐标有限；维度走 `sanitizeDimension`；每人每秒 30 条 | TNT 被点燃（`联机23`）：坐标即 key，接收端 `prime` 幂等 |
 
 未知 `t` 回 `error`；不是合法 JSON 也回 `error`，连接不关。
 
