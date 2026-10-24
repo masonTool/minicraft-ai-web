@@ -4850,5 +4850,41 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
   );
 }
 
+// ------------------------------------------------------------------ 配方书开关的接线
+//
+// 批次 20261024-1152 的自审补强：这条交互（点开 = 打开配方书、再点 = 关闭）全部发生在
+// DOM 事件回调里，离线跑不到；只断言"界面里有这颗键"并不能保证点下去真的会开。
+// 这里退一步，把**三处必须同时成立的接线**钉在源码上：
+//   ① 那颗键在能嵌左栏时走 `onOpenRecipes` / `onCloseRecipes`；
+//   ② 左栏切到 `recipes` 时真的把 `recipeHostEl` 交给配方书（否则 open 了也看不见）；
+//   ③ `main.openRecipeBook` 先 `show()` 再 `syncRecipePane()`（顺序反了会先排布后开书）。
+console.log('\n[配方书开关（批次 20261024-1152）]');
+{
+  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  check(
+    '标题栏那颗键：开着就关、关着就开（不再只切物品分类）',
+    /if \(this\.hooks\.isRecipesOpen\?\.\(\) \?\? false\) \{\s*this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSource) &&
+      invSource.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab);'),
+  );
+  check(
+    '左栏切成 recipes 时把落脚点交给配方书',
+    invSource.includes("if (leftPane === 'recipes') this.hooks.onRecipeHost?.(this.recipeHostEl);"),
+  );
+  check(
+    'openRecipeBook 先 show 再 syncRecipePane（顺序反了会先排布后开书）',
+    /private openRecipeBook\(tab\?: RecipeBookTab\): void \{[\s\S]{0,400}?this\.recipeBook\.show\(tab\);\s*[\s\S]{0,200}?this\.inventoryScreen\.syncRecipePane\(\);/.test(
+      mainSource,
+    ),
+  );
+  check(
+    '嵌入态的左栏那一格有样式（不是 0 宽）',
+    html.includes('.inv-panel.pocket-ui.pocket-dual .inv-recipe-host {') &&
+      html.includes('.inv-recipe-host'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
