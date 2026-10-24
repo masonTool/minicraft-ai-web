@@ -194,7 +194,7 @@
 
 | 消息 | 客户端行为 | 备注 |
 | --- | --- | --- |
-| `welcome` | 种子与服务端比对：**不一致就整批跳过**（不写 edits、不建远端玩家），消息栏 + HUD 提示 `/netseed reload` 或 `/netseed new`；一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像 | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档；种子冲突判定在 `core/net/SeedReconcile.ts`。远端改动**会**进本地存档（`联机6` 隔离仍未做） |
+| `welcome` | 种子与本地比对（`core/net/SeedReconcile.ts`）：一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像；**不一致 → 提示 + 自动断开联机**（不写 edits、不建远端玩家、不要求敲命令） | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档。L9 起不再要求手敲 `/netseed reload`：新入口是"先连上、拿到房主种子再加载世界"，冲突只可能出现在"已在某个世界里去加入别人的房"这条老路径上，直接断开并指路最省事。冲突期间 `block` / `container` / `sign` / `frame` 四条远端写入全部丢弃（`remoteWorldWritable`） |
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度；外观进 `RemoteAppearance`（挥手/受伤**边沿触发 + 本地计时**，因为网络 100ms 一条而动作只有 0.25s） | 队友走进下界时不会在主世界同坐标留一个分身；手持物/挥手/着火直接接到模型上 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `pong` | `NetStats.ackPing()`——与**最早**那条未回的 ping 配对算 RTT（几条同时在飞时配错会让 RTT 虚低） | 丢包 = 3 秒没回的那几条；F3 面板显示延迟/丢包/上下行 |

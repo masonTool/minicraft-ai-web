@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { realignedWorldSummary, seedConflict } from '../src/core/net/SeedReconcile.ts';
+import { realignedWorldSummary, remoteWorldWritable, seedConflict } from '../src/core/net/SeedReconcile.ts';
 import type { WorldSummary } from '../src/core/save/WorldRegistry.ts';
 
 const world: WorldSummary = {
@@ -84,5 +84,37 @@ describe('realignedWorldSummary', () => {
     expect(next.hardcore).toBe(true);
     expect(next.worldType).toBe('single_biome');
     expect(next.singleBiome).toBe('plains');
+  });
+});
+
+/*
+ * 远端写入守卫（L9）：种子冲突期间一条远端改动都不许落进本地世界。
+ *
+ * 这条守卫存在的理由很具体：`onNetBlock` 原来没有种子判断，于是"提示种子不一致、
+ * 跳过这批 edits"之后，**后续每一条远端方块消息照样写进本地世界**——两片大陆上
+ * 的同一个坐标是另一格方块，玩家看到的是"莫名其妙多出一堆方块"。它不报错，
+ * 只在退出联机后留下一张脏地图。
+ */
+describe('remoteWorldWritable', () => {
+  it('种子一致 → 可写', () => {
+    expect(remoteWorldWritable(12345, 12345)).toBe(true);
+  });
+
+  it('种子不一致 → 不可写', () => {
+    expect(remoteWorldWritable(999, 12345)).toBe(false);
+  });
+
+  it('还没收到 welcome（null / undefined）→ 放行（此时也没有远端改动）', () => {
+    expect(remoteWorldWritable(null, 12345)).toBe(true);
+    expect(remoteWorldWritable(undefined, 12345)).toBe(true);
+  });
+
+  it('脏种子（NaN）→ 放行（不知道就别拦）', () => {
+    expect(remoteWorldWritable(Number.NaN, 12345)).toBe(true);
+  });
+
+  it('0 也是一个合法种子，不能当成"没收到"', () => {
+    expect(remoteWorldWritable(0, 0)).toBe(true);
+    expect(remoteWorldWritable(0, 12345)).toBe(false);
   });
 });

@@ -391,7 +391,11 @@ import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
-import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
+import {
+  realignedWorldSummary,
+  remoteWorldWritable as remoteWritableBySeed,
+  seedConflict,
+} from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
@@ -3696,15 +3700,27 @@ class App {
     const conflict = seedConflict(seed, this.worldConfig.seed);
 
     if (conflict) {
-      const hint = `联机种子不一致：服务端 ${conflict.serverSeed} · 本地 ${conflict.localSeed}。输入 /netseed reload 用服务端种子重载本世界，/netseed new 新建同种子世界`;
+      /*
+       * 种子对不上（L9）：**自动断开**，不再要求玩家手敲 `/netseed reload`。
+       *
+       * 为什么不自动重建：重建只有两条路，两条都比"断开"糟——
+       *  · 删库重来：会连玩家自己在这个世界里的改动一起删（不可撤销）；
+       *  · 只换种子重开：旧 `edits` 留在库里，落到新地形上等于一堆错位的方块。
+       * 而新的入口（主菜单 → 加入房间）根本不会走到这里：世界是**先连上、拿到房主
+       * 的种子之后**才加载的。所以这里只需要把这一局停下来，并告诉玩家下一步。
+       */
+      const hint =
+        `房间里的世界种子是 ${conflict.serverSeed}，本世界是 ${conflict.localSeed}——` +
+        '两片大陆上继续玩只会把方块写到错的位置，已断开联机。' +
+        '请回主菜单 →「加入房间…」，那边会按房主的世界直接开一局。';
       console.warn(`[net] ${hint}`);
       this.netStatus = hint;
       this.chat.push(hint, 'error');
       this.chatLine = hint;
-      this.chatUntil = performance.now() + 12000;
-      this.hudToast.show('种子不一致：/netseed reload 或 /netseed new');
-      // ⚠️ 种子不一致时**不应用**这批 edits：两片大陆的地形不同，同一坐标是另一格，
-      // 写进去会污染本地存档。对齐之后重新 join 才拿得到真正该有的那批
+      this.chatUntil = performance.now() + 15000;
+      this.hudToast.show('种子不同：已断开，请从主菜单「加入房间」进');
+      // 断开之后 `leaveMultiplayerSave()` 会把世界重载回单机地形，远端改动一条也没写进去
+      this.disconnect();
       return;
     }
 
@@ -3891,6 +3907,7 @@ class App {
    * 否则刚收到的内容会原样发回去，两端来回弹。
    */
   private onNetContainer(data: NetContainerState): void {
+    if (!this.remoteWorldWritable()) return;
     if (data.dimension !== this.dimension) return;
     // 区块还没加载：先存着（联机13 的 welcome 快照会带一批容器，那时候区块多半还没生成），
     // 等 `onChunkLoaded` 里再恢复。原来的写法是直接 return，于是"走回箱子前发现是空的"
@@ -4103,7 +4120,20 @@ class App {
    * 记进 `world.edits` 之后，区块以后加载时 `World.onGenerated` 会 `applyTo` 叠回去；
    * 别的维度的改动同理，等玩家切过去再补。
    */
+  /**
+   * 远端改动能不能写进本地世界（L9）。
+   *
+   * 种子对不上 = 两片大陆，服务端的 `(x,y,z)` 在这边是另一格方块。写进去**不报错**
+   * 也不掉帧，只会让人莫名其妙多出一堆方块、拆掉不该拆的东西——所以宁可一条都不写。
+   * 判定本身在 `core/net/SeedReconcile.ts`（纯函数，可离线断言）。
+   */
+  private remoteWorldWritable(): boolean {
+    return remoteWritableBySeed(this.serverSeed, this.worldConfig.seed);
+  }
+
   private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
+    // 种子对不上时远端坐标在这边是另一格（L9）：一条都不许写，否则是静默污染
+    if (!this.remoteWorldWritable()) return;
     const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
     const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
     if (action === 'drop') return;
@@ -9316,6 +9346,7 @@ class App {
 
   /** 队友写了/擦了牌子上的字（联机16）：进表，当前维度立刻重画 */
   private applyRemoteSign(sign: NetSignState): void {
+    if (!this.remoteWorldWritable()) return;
     this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
     if (sign.dimension === this.dimension) this.syncSigns();
   }
@@ -9434,6 +9465,7 @@ class App {
 
   /** 队友往展示框里放了/取了东西（联机16）：空框 = 从表里删掉 */
   private applyRemoteFrame(frame: NetFrameState): void {
+    if (!this.remoteWorldWritable()) return;
     if (frame.item) this.itemFrames.set(frame.dimension, frame.x, frame.y, frame.z, frame.item, frame.rotation);
     else this.itemFrames.remove(frame.dimension, frame.x, frame.y, frame.z);
     if (frame.dimension === this.dimension) this.syncFrames();

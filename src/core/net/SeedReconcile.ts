@@ -32,6 +32,27 @@ export function seedConflict(serverSeed: number | null | undefined, localSeed: n
 }
 
 /**
+ * 远端改动能不能落进本地世界（L9）。
+ *
+ * 种子对不上 = 两片大陆：服务端的 `(x,y,z)` 在我这边是另一格方块，写进去就是**污染**
+ * （而且不会报错，只会"莫名其妙多出一堆方块"）。所以种子冲突期间远端的一切世界改动
+ * 都必须丢掉，直到对齐为止。
+ *
+ * 三个放行条件都是"我不知道，就别拦"：
+ *  · 还没收到 `welcome`（`null`）—— 此时也还没有远端改动可写；
+ *  · 老服务端没带种子；
+ *  · 种子不是有限数（脏数据）。
+ */
+export function remoteWorldWritable(
+  serverSeed: number | null | undefined,
+  localSeed: number,
+): boolean {
+  if (serverSeed === null || serverSeed === undefined) return true;
+  if (!Number.isFinite(serverSeed)) return true;
+  return serverSeed === localSeed;
+}
+
+/**
  * 用服务端种子重载之后，世界清单项该长什么样。
  *
  * 为什么不是"只把 seed 换掉"：种子换了等于地形整个换了一套，旧的
