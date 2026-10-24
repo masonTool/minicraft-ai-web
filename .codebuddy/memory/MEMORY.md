@@ -1,7 +1,5 @@
 - [wxminigame 分支只做主线功能的小程序化](project_wxminigame_scope.md) — 只移植主线已有功能，不新增玩法/实体/物品/配方/额外限制
-- [手机端以横屏为主场景](project_mobile_landscape.md) — 横屏视口 640~950×360~430，界面矮而宽，游戏内设置用两栏
-- [任务记账与并行开发只走 .continue](task_queue_worktrees.md) — 队列/进度唯一载体；命令照 README.md，npm run q 等旧入口已删
-- [文档冲突时以谁为准](feedback_doc_authority.md) — 代码 > TASKS.md > HANDOFF；数字只由脚本生成，摘要文件合并后删
-- [auto-commit 钩子（只当守卫）](feedback_auto_commit_hook.md) — Stop 时发现未提交改动就拦住交回 AI 提交；脚本不做 git 写操作
-- [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 要自动继续必须 continue:true + stderr + exit 2；loop_limit 决定续跑次数
-- [钩子路径必须自解析](feedback_hook_self_resolve.md) — lib.mjs 用 import.meta.url 反推项目根；别跑 agent:setup --fix-hooks
+- [手机端以横屏为主场景](project_mobile_landscape.md) — 用户要求记住；新界面先按横屏验收，细节看 HANDOFF §4
+- [任务记账只有一套（.continue）](task_queue_worktrees.md) — 进度只写 .continue/，细节看 README，别造第二套账本或复活旧入口
+- [文档冲突时以谁为准](feedback_doc_authority.md) — 代码 > TASKS.md > HANDOFF/AGENTS；数字只由脚本生成；摘要文件合并后删
+- [别跑 agent:setup --fix-hooks](feedback_hook_self_resolve.md) — 会把 run.mjs 包装与 --event 改没，钩子等于没配
