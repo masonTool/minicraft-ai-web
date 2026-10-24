@@ -4460,6 +4460,16 @@ export function blockDef(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[0]!;
 }
 
+/**
+ * 这个 id 在当前注册表里存在吗（批次 20261025-0117，合规 5）。
+ *
+ * `blockDef` 对不认识的 id 会**回退成空气**——渲染与碰撞都需要一个答案，这是对的；
+ * 但读档时不能拿这个回退去写世界（那等于把玩家那一片房子挖空），所以读档路径要先问这一句。
+ */
+export function isKnownBlockId(id: number): boolean {
+  return Number.isInteger(id) && id >= 0 && id < BLOCKS.length;
+}
+
 export function isOpaque(id: number): boolean {
   return blockDef(id).opaque;
 }

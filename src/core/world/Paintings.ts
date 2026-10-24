@@ -14,6 +14,7 @@
 
 import { isDimension } from '../gen/Dimension.ts';
 import { multiPaintingByName, type MultiPainting } from '../registry/paintings.ts';
+import { noteSaveIssue } from '../save/SaveIssues.ts';
 
 /** 一格画所属的那幅画 */
 export interface PaintingCell {
@@ -236,7 +237,13 @@ export function restorePaintings(store: PaintingStore, raw: unknown): number {
     const z = typeof record.z === 'number' ? record.z : NaN;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
     const painting = typeof record.name === 'string' ? multiPaintingByName(record.name) : undefined;
-    if (!painting) continue;
+    if (!painting) {
+      // 批次 20261025-0117（合规 5）：认不出的画名（换过素材、或手改过存档）跳过并记账。
+      // 旧名字已经进了 `LEGACY_MULTI_NAMES`，走到这里说明它是更早/更脏的数据——
+      // 静默跳过会让玩家"墙上突然空了一片"，至少导出日志里要能查到。
+      noteSaveIssue('painting', `name=${String(record.name ?? '?')}`);
+      continue;
+    }
     const rightX = record.rightX === 1 ? 1 : record.rightX === -1 ? -1 : 0;
     const rightZ = record.rightZ === 1 ? 1 : record.rightZ === -1 ? -1 : 0;
     store.place(dimension, { x: Math.round(x), y: Math.round(y), z: Math.round(z) }, painting, rightX, rightZ);
