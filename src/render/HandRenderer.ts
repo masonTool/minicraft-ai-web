@@ -24,6 +24,30 @@ import { srgbColor } from './srgb.ts';
  * 观感与基岩版一致：只看见一件东西，而不是"一只手捏着一粒米"。
  */
 const ITEM_SIZE = 0.44;
+/**
+ * 扁平物品（工具/武器/食物…）的厚度（格）。
+ *
+ * 批次 20261024-1531（用户："刀剑也应该有厚度"）：0.05 ≈ 0.8 像素，
+ * 侧着看是一条细边，不会像纯平面那样直接消失。厚度只给**扁平物品**，方块本来就是立方体。
+ */
+const SPRITE_THICKNESS = 0.05;
+/**
+ * 扁平物品的逐面亮度（`+x, -x, +y, -y, +z, -z`）。
+ *
+ * 正反两面（±z，也就是图标本身）给满亮度 1；四周的"厚度边"压到 0.62——
+ * 上一批用同一张图标贴六面 + 默认 `FACE_SHADE`（侧面 0.54），斜向的剑会被侧面
+ * 拉成几条彩带；压暗之后侧面读作"这道边的暗面"，不再抢图标的形状。
+ */
+const SPRITE_SHADE: readonly number[] = [0.62, 0.62, 0.86, 0.62, 1, 1];
+/**
+ * 方块与扁平物品的握持姿态（相对手的挂点）。
+ *
+ * 批次 20261024-1531（用户："刀剑的显示方位，手应该拿到柄的位置"）：
+ * 扁平物品的几何体**底边贴在挂点上**（见 `spriteGeometry`），所以这里的旋转
+ * 决定"柄在手里、刃朝上偏前"这个姿势；方块则是握在中间，旋转沿用旧值。
+ */
+const SPRITE_HOLD_ROTATION: readonly [number, number, number] = [0.1, -0.55, -0.32];
+const BLOCK_HOLD_ROTATION: readonly [number, number, number] = [0.2, -0.5, 0.15];
 /** 手臂横截面与长度（格）：16px 皮肤里手臂是 4×4×12 像素 */
 const ARM_WIDTH = 0.15;
 const ARM_LENGTH = 0.75;
@@ -107,15 +131,13 @@ export class HandRenderer {
   /** 手持物品的挂点（在手臂末端） */
   private readonly itemAnchor = new THREE.Group();
 
-  private readonly itemMaterial: THREE.ShaderMaterial;
   /**
-   * 非方块物品（工具 / 武器 / 食物…）专用材质（批次 20261024-1455）。
+   * 手持物品的材质（方块与扁平物品**共用一份**）。
    *
-   * 与 `itemMaterial` 同一套着色器，**唯一的差别是 `side: DoubleSide`**：
-   * 这类物品是一片双面薄片（见 `spriteGeometry`），从背面看也要有图，
-   * 否则甩视角时会看到"半件东西忽隐忽现"。
+   * 批次 20261024-1531：1455 曾为"双面薄片"单开一份 `DoubleSide` 材质，扁平物品
+   * 换成薄盒子之后正反面都是真实几何，双面不再需要——两份材质只会让"改亮度时漏一份"。
    */
-  private readonly spriteMaterial: THREE.ShaderMaterial;
+  private readonly itemMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
   private readonly cuffMaterial: THREE.ShaderMaterial;
   private readonly sleeveMaterial: THREE.ShaderMaterial;
@@ -148,21 +170,6 @@ export class HandRenderer {
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       transparent: false,
-    });
-
-    // 双面版：给"扁平物品"用（同一套 uniform，只是 side 不同）
-    this.spriteMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        uAtlas: { value: atlas.texture },
-        uFlatColor: { value: srgbColor(0xffffff) },
-        uUseAtlas: { value: 1 },
-        uBrightness: { value: 1 },
-        uAlphaTest: { value: 0.5 },
-      },
-      vertexShader: VERTEX_SHADER,
-      fragmentShader: FRAGMENT_SHADER,
-      transparent: false,
-      side: THREE.DoubleSide,
     });
 
     this.armMaterial = new THREE.ShaderMaterial({
@@ -282,9 +289,10 @@ export class HandRenderer {
     // 各贴一次，剑/镐这种斜向图形会被侧面拉成几条彩带 —— 用户自测报的就是这个。
     const isBlock = blockId !== undefined;
     const geometry = isBlock ? this.blockGeometry(blockId) : this.spriteGeometry(itemId);
-    const mesh = new THREE.Mesh(geometry, isBlock ? this.itemMaterial : this.spriteMaterial);
-    // 手持物品相对手部再转一点，让方块露出"顶面 + 两个侧面"，与原版观感一致
-    mesh.rotation.set(0.2, -0.5, 0.15);
+    const mesh = new THREE.Mesh(geometry, this.itemMaterial);
+    // 方块露出"顶面 + 两个侧面"；扁平物品的柄在挂点上、刃朝上偏前
+    if (isBlock) mesh.rotation.set(...BLOCK_HOLD_ROTATION);
+    else mesh.rotation.set(...SPRITE_HOLD_ROTATION);
     this.itemMesh = mesh;
     this.itemAnchor.add(mesh);
   }
@@ -340,9 +348,6 @@ export class HandRenderer {
 
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
-    this.spriteMaterial.uniforms.uBrightness!.value = value;
-    // ⚠️ 双面那份也要跟着调（批次 20261024-1455 的自审抓到的漏项）：
-    // 它是独立的一份 material，漏掉之后"拿着剑在洞里"永远是全亮，而拿方块会变暗。
     this.armMaterial.uniforms.uBrightness!.value = value;
     this.cuffMaterial.uniforms.uBrightness!.value = value;
     this.sleeveMaterial.uniforms.uBrightness!.value = value;
@@ -400,22 +405,24 @@ export class HandRenderer {
   }
 
   /**
-   * 非方块物品：一张**双面薄片**（原版第一人称就是这样——物品是 1 像素厚的面片）。
+   * 非方块物品：一块**薄盒子**，且**底边就在手的挂点上**（也就是握住图标底部的柄）。
    *
-   * 批次 20261024-1455（用户："手持刀剑之类的显示有问题"）：上一批把这张面片换成了
-   * 有厚度的盒子，六个面各贴同一张图标 —— 剑、镐、钓鱼竿这类斜向/细长的图标在侧面
-   * 被拉伸，看着是几条彩带。现在回到单张面片 + `DoubleSide`：正面背面都有图，
-   * 侧着看是一条细线（原版同样如此，且第一人称几乎不会正侧着看）。
+   * 批次沿革值得记住：
+   *   · 1455 之前：零厚度 `PlaneGeometry`，整块居中 → 手像是"捏在图标正中间"；
+   *   · 1455：改成薄盒子但整块居中，六面同图标 + 默认侧面亮度 → 剑被拉成彩带；
+   *   · 1531（当前）：薄盒子（有厚度）+ **平移让底边贴挂点** + 正反面满亮度、厚度边压暗。
    * 图标四周是透明的，`alphaTest` 会把边缘裁掉。
    */
   private spriteGeometry(itemId: number): THREE.BufferGeometry {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const geometry = new THREE.PlaneGeometry(ITEM_SIZE, ITEM_SIZE);
+    const geometry = new THREE.BoxGeometry(ITEM_SIZE, ITEM_SIZE, SPRITE_THICKNESS);
     const tile = itemIconTile(itemId);
-    applyFaceUvs(geometry, this.atlas, [tile]);
-    applyFaceShade(geometry, FACE_SHADE);
+    applyFaceUvs(geometry, this.atlas, [tile, tile, tile, tile, tile, tile]);
+    applyFaceShade(geometry, SPRITE_SHADE);
+    // 把整块往上抬半个高度：几何体的底边落在 y=0，正好是挂点（= 手握的位置）
+    geometry.translate(0, ITEM_SIZE / 2, 0);
     this.spriteGeometries.set(itemId, geometry);
     return geometry;
   }
@@ -429,7 +436,6 @@ export class HandRenderer {
     this.cuff.geometry.dispose();
     this.armorSleeve.geometry.dispose();
     this.itemMaterial.dispose();
-    this.spriteMaterial.dispose();
     this.armMaterial.dispose();
     this.cuffMaterial.dispose();
     this.sleeveMaterial.dispose();

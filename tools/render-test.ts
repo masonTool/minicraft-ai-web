@@ -833,33 +833,47 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
 
   hand.setItem(Item.STICK);
   const stickMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
-  const stickPlane = stickMesh.geometry as THREE.PlaneGeometry;
-  // 批次 20261024-1455（用户："手持刀剑之类的显示有问题"）：非方块物品回到**单张面片**。
-  // 上一批的"有厚度盒子"把图标贴到六个面上，剑/镐这类斜向图形会被侧面拉成彩带。
+  const stickBox = stickMesh.geometry as THREE.BoxGeometry;
+  // 批次 20261024-1531（用户："刀剑也应该有厚度"）：扁平物品是**薄盒子**，不是零厚度面片。
   check(
-    '非方块物品用单张面片（4 个顶点，与方块区分开）',
-    stickMesh.geometry.getAttribute('position').count === 4,
-    `顶点 ${stickMesh.geometry.getAttribute('position').count}`,
+    '扁平物品有厚度（薄盒子，不是零厚度面片）',
+    stickMesh.geometry.getAttribute('position').count === 24 &&
+      stickBox.parameters.depth > 0.03 &&
+      stickBox.parameters.depth < 0.08,
+    `顶点 ${stickMesh.geometry.getAttribute('position').count} / 厚度 ${stickBox.parameters.depth}`,
   );
   check(
-    '面片与方块同一个显示尺寸（0.44，放大 2 倍后两类别都不一样大才对）',
-    Math.abs(stickPlane.parameters.width - 0.44) < 1e-6 && Math.abs(stickPlane.parameters.height - 0.44) < 1e-6,
-    `${stickPlane.parameters.width}×${stickPlane.parameters.height}`,
+    '扁平物品与方块同一个显示尺寸（0.44）',
+    Math.abs(stickBox.parameters.width - 0.44) < 1e-6 && Math.abs(stickBox.parameters.height - 0.44) < 1e-6,
+    `${stickBox.parameters.width}×${stickBox.parameters.height}`,
   );
-  check('面片只贴一张图标（4 个 UV 角）', stickMesh.geometry.getAttribute('uv').count === 4);
-  // 自审（批次 20261024-1455）：双面材质是独立的一份，改亮度必须两边一起改，
-  // 否则"拿着剑进洞"永远全亮、拿方块却会变暗——这种只在一份材质上生效的漏项测不出来，
-  // 所以直接断言两份 material 的 uniform 都被写到了。
-  hand.setBrightness(0.25);
+  // 用户："手应该拿到柄的位置" → 几何体底边必须落在锚点（y=0），而不是整块居中
+  stickMesh.geometry.computeBoundingBox();
+  const stickBoxBounds = stickMesh.geometry.boundingBox!;
   check(
-    '亮度同时作用到两套物品材质（方块 + 扁平物品）',
-    (blockMesh.material as THREE.ShaderMaterial).uniforms.uBrightness!.value === 0.25 &&
-      (stickMesh.material as THREE.ShaderMaterial).uniforms.uBrightness!.value === 0.25,
+    '扁平物品的底边贴在挂点上（手握柄，不是捏在图标正中）',
+    Math.abs(stickBoxBounds.min.y) < 1e-6 && Math.abs(stickBoxBounds.max.y - 0.44) < 1e-6,
+    `y ∈ [${stickBoxBounds.min.y.toFixed(3)}, ${stickBoxBounds.max.y.toFixed(3)}]`,
   );
   check(
-    '面片材质是双面（背面也看得见，不会甩视角时忽隐忽现）',
-    (stickMesh.material as THREE.ShaderMaterial).side === THREE.DoubleSide &&
-      (blockMesh.material as THREE.ShaderMaterial).side === THREE.FrontSide,
+    '方块的几何体仍然居中（握在方块中间）',
+    (() => {
+      blockMesh.geometry.computeBoundingBox();
+      const box = blockMesh.geometry.boundingBox!;
+      return Math.abs(box.min.y + box.max.y) < 1e-6;
+    })(),
+  );
+  // 侧面（厚度边）必须比正反面暗，否则斜向图标会被侧面拉成彩带
+  const shades = stickMesh.geometry.getAttribute('aShade');
+  check(
+    '厚度边压暗、正反面满亮度',
+    shades.getX(0) < 0.7 && shades.getX(16) === 1 && shades.getX(20) === 1,
+    `侧面 ${shades.getX(0)} / 正面 ${shades.getX(16)}`,
+  );
+  check(
+    '扁平物品有自己的握持姿态（刃朝上偏前，不与方块共用）',
+    Math.abs(stickMesh.rotation.z + 0.32) < 1e-6 && Math.abs(blockMesh.rotation.z - 0.15) < 1e-6,
+    `stick.z=${stickMesh.rotation.z} / block.z=${blockMesh.rotation.z}`,
   );
 
   // 批次 20261024-1152（用户）：手里有东西时**不画手臂**（原版如此），空手才露出来
