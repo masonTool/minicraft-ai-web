@@ -597,7 +597,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     setTabBody.includes('this.applyInventoryChrome();') && !setTabBody.includes('this.hooks.onOpenRecipes'),
   );
   // 批次 159：左栏的职责是**物品分类**——点分类切的是左栏内容，不再去开配方书
-  check('只有左侧分类键切左栏（配方书不再嵌进来）', invSrc.includes('private openPocketCategory(tab: RecipeBookTab)') && !invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
+  // 批次 20261024-1455：左栏仍然只由左侧分类键切换；配方书是整屏那一层，
+  // 标题栏那颗键直接开/关书（不经过 `openPocketCategory`）。
+  check(
+    '左栏只由左侧分类键切换，配方书不占左栏',
+    invSrc.includes('private openPocketCategory(tab: RecipeBookTab)') &&
+      !invSrc.includes("pane === 'recipes'"),
+  );
   // 批次 272（用户）：右栏停在盔甲时，左栏分类不许把它切回合成。
   const openCategoryBody = /private openPocketCategory\(tab: RecipeBookTab\): void \{([\s\S]*?)\n  \}/.exec(invSrc)?.[1] ?? '';
   check('左栏换分类不再写 pocketTab（右栏保持不变）', openCategoryBody.length > 0 && !openCategoryBody.includes('this.pocketTab ='));
@@ -613,33 +619,37 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   // 批次 206：分类栏与 3×9 仓库在双栏网格里**占同一格**，工作台也不例外——
   // 同时显示就是"多一个浮层"（用户反馈的 3×3 工作台 bug）。
   check(
-    '分类栏 / 配方书显示时 3×9 仓库一起藏掉（工作台也不叠层）',
-    invSrc.includes("leftPane === 'category' || leftPane === 'recipes'") &&
+    '分类栏显示时 3×9 仓库一起藏掉（工作台也不叠层）',
+    invSrc.includes("const hideMainGrid = leftPane === 'creative' || leftPane === 'category';") &&
       invSrc.includes("this.mainGridEl.style.display = hideMainGrid ? 'none' : '';"),
   );
   check('左栏上方那行「物品栏」不再显示', invSrc.includes("this.personalInventoryTitleEl.style.display = 'none';"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
   // 批次 157：界面统一成携带版那一套，不再有"经典 UI"这个分支
   check('不再按视口宽度选 UI 形态', !invSrc.includes('isClassicUi') && !core.includes('CLASSIC_UI_MIN_WIDTH'));
-  check('左栏四份内容写在 data-pocket-left 上', invSrc.includes('dataset.pocketLeft = leftPane') && css.includes('.inv-category-section {'));
-  // 批次 20261024-1152（用户）：标题栏那颗「配方书」是开关——关着点开（嵌进左栏），
-  // 开着点它就是关闭。整屏那一层会连开关一起盖住，所以必须嵌进左栏才做得到。
   check(
-    '配方书按钮是开关：关着打开、开着关闭',
-    invSrc.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab)') &&
-      invSrc.includes('this.hooks.onCloseRecipes?.();'),
+    '左栏三份内容写在 data-pocket-left 上（配方书不再占一格）',
+    invSrc.includes('dataset.pocketLeft = leftPane') &&
+      css.includes('.inv-category-section {') &&
+      !invSrc.includes("pane === 'recipes'"),
+  );
+  // 批次 20261024-1455（自测回归）：配方书回退成**整屏面板**——嵌进左栏那版会出现
+  // "配方里莫名数字 / 点格子没反应"。用户重申的三条口径用断言钉住：
+  check(
+    '配方书按钮：开着就关、关着就开（手动开关，不自动关）',
+    invSrc.includes('if (this.hooks.isRecipesOpen?.() ?? false) {') &&
+      invSrc.includes('this.hooks.onCloseRecipes?.();') &&
+      invSrc.includes('this.hooks.onOpenRecipes?.(tab);'),
   );
   check(
-    '配方书嵌进左栏（有落脚点 + 与分类栏同一格的 CSS）',
-    invSrc.includes("this.recipeHostEl.className = 'inv-recipe-host'") &&
-      invSrc.includes('this.hooks.onRecipeHost?.(this.recipeHostEl)') &&
-      css.includes('.inv-panel.pocket-ui.pocket-dual .inv-recipe-host') &&
-      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-recipe-host \{[^}]*grid-row: 1 \/ span 2;/.test(css),
+    '在仓库里打开配方书 = 定位到「全部/搜索」那一栏',
+    invSrc.includes("const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;"),
   );
   check(
-    '工作站与容器不嵌配方书（沿用切分类的老行为）',
-    invSrc.includes('private canEmbedRecipeBook(): boolean') &&
-      invSrc.includes("if (!this.canEmbedRecipeBook()) {"),
+    '左栏没有 recipes 那一份（配方书是整屏层）',
+    !invSrc.includes("this.recipeHostEl") &&
+      !invSrc.includes('private canEmbedRecipeBook') &&
+      !css.includes('.inv-recipe-host'),
   );
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
@@ -1163,10 +1173,9 @@ console.log('\n[携带版细节收口（批次 159）]');
   // 批次 159（三）：开关改成"要不要把该分类下我没有的物品也列出来（红底）"，
   // **不再切换分类、也不再退回我的物品**
   check(
-    '配方开关只切"显不显示我没有的"，不切分类',
-    invSrc.includes("if (this.pane === 'category') {") &&
-      invSrc.includes('this.showUnowned = !this.showUnowned;') &&
-      invSrc.includes('this.openPocketCategory(this.lastRecipeTab);'),
+    '标题栏那颗键不再兼职「显示未拥有」开关（筛选改由配方书自己那颗）',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,700}?onOpenRecipes/.test(invSrc) &&
+      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,700}?showUnowned/.test(invSrc),
   );
   // 批次 206：列表 = "材料够的产物" + （开关开着时）"看过的缺料配方（红底）"
   check(
@@ -1176,7 +1185,7 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
-      invSrc.includes("leftPane === 'recipes' || (leftPane === 'category' && this.showUnowned)") &&
+      invSrc.includes("this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
@@ -1428,8 +1437,8 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     'R 键与标题栏「配方书」按钮同一条路（开/关配方书，不再只切分类）',
     !mainSrc.includes('this.inventoryScreen.toggleCategoryPane();') &&
       !invSrc.includes('toggleCategoryPane(): void {') &&
-      invSrc.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab)') &&
-      invSrc.includes("if (this.hooks.isRecipesOpen?.() ?? false) {\n          this.hooks.onCloseRecipes?.();"),
+      invSrc.includes('this.hooks.onOpenRecipes?.(tab);') &&
+      /if \(this\.hooks\.isRecipesOpen\?\.\(\) \?\? false\) \{\s*this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSrc),
   );
 
   // ② 禁掉 HTML 自带的长按效果（长按是我们的手势）
@@ -4852,37 +4861,46 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
 
 // ------------------------------------------------------------------ 配方书开关的接线
 //
-// 批次 20261024-1152 的自审补强：这条交互（点开 = 打开配方书、再点 = 关闭）全部发生在
-// DOM 事件回调里，离线跑不到；只断言"界面里有这颗键"并不能保证点下去真的会开。
-// 这里退一步，把**三处必须同时成立的接线**钉在源码上：
-//   ① 那颗键在能嵌左栏时走 `onOpenRecipes` / `onCloseRecipes`；
-//   ② 左栏切到 `recipes` 时真的把 `recipeHostEl` 交给配方书（否则 open 了也看不见）；
-//   ③ `main.openRecipeBook` 先 `show()` 再 `syncRecipePane()`（顺序反了会先排布后开书）。
-console.log('\n[配方书开关（批次 20261024-1152）]');
+// 批次 20261024-1455：上一版把配方书嵌进左栏，自测发现"配方里出现莫名数字 / 点格子没反应"，
+// 已经回退成整屏面板。这条交互仍然只发生在 DOM 回调里，离线跑不到，所以继续钉源码接线：
+//   ① 那颗键 = 手动开关：开着就关、关着就开，**不做任何自动关闭**；
+//   ② 从仓库（`items`）打开时带 `all`（= 搜索/全部那一栏）；
+//   ③ `main.openRecipeBook` 先 `show()` 再 `syncRecipePane()`，且开完把 UI 保持打开。
+console.log('\n[配方书开关（批次 20261024-1455）]');
 {
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const recipeSource = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
 
   check(
-    '标题栏那颗键：开着就关、关着就开（不再只切物品分类）',
+    '标题栏那颗键：开着就关、关着就开（手动开关）',
     /if \(this\.hooks\.isRecipesOpen\?\.\(\) \?\? false\) \{\s*this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSource) &&
-      invSource.includes('this.hooks.onOpenRecipes?.(this.lastRecipeTab);'),
+      invSource.includes('this.hooks.onOpenRecipes?.(tab);'),
   );
   check(
-    '左栏切成 recipes 时把落脚点交给配方书',
-    invSource.includes("if (leftPane === 'recipes') this.hooks.onRecipeHost?.(this.recipeHostEl);"),
+    '从仓库里打开 = 定位到「全部/搜索」栏',
+    invSource.includes("const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;"),
   );
   check(
     'openRecipeBook 先 show 再 syncRecipePane（顺序反了会先排布后开书）',
-    /private openRecipeBook\(tab\?: RecipeBookTab\): void \{[\s\S]{0,400}?this\.recipeBook\.show\(tab\);\s*[\s\S]{0,200}?this\.inventoryScreen\.syncRecipePane\(\);/.test(
+    /private openRecipeBook\(tab\?: RecipeBookTab\): void \{[\s\S]{0,400}?this\.recipeBook\.show\(tab\);\s*[\s\S]{0,220}?this\.inventoryScreen\.syncRecipePane\(\);/.test(
       mainSource,
     ),
   );
   check(
-    '嵌入态的左栏那一格有样式（不是 0 宽）',
-    html.includes('.inv-panel.pocket-ui.pocket-dual .inv-recipe-host {') &&
-      html.includes('.inv-recipe-host'),
+    '点配方只摆材料，不关配方书（背包开着时保持打开）',
+    /private fillFromBook\(recipe: Recipe\): boolean \{[\s\S]{0,400}?if \(this\.inventoryScreen\.isOpen\) \{\s*this\.recipeBook\.render\(\);/.test(
+      mainSource,
+    ),
+  );
+  check(
+    '配方书自己的 ✕ 仍然手动关闭（onHidden 通知背包重排）',
+    recipeSource.includes('onHidden?: () => void;') && mainSource.includes('onHidden: () => this.inventoryScreen.syncRecipePane()'),
+  );
+  check(
+    '左栏不再有配方书落脚点（嵌入那版已回退）',
+    !invSource.includes('inv-recipe-host') && !html.includes('.inv-recipe-host'),
   );
 }
 

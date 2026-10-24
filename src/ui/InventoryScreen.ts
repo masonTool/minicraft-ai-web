@@ -435,11 +435,14 @@ export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
  *   材料够的配方正常显示，之前真正做过、现在缺料的用红底保留；
  *   没有任何配方的原料（原木、矿石…）不出现。点一项 = 在右栏看它的配方。
  * - `creative` ：创造物品栏
- * - `recipes`  ：配方书本身（批次 20261024-1152）——标题栏那颗「配方书」点开时
- *   把配方书**嵌进左栏**（`RecipeBook.attach`），这样那颗开关不会被盖住，
- *   第二次点它就只是关闭。以前这里是整屏那一层，一开就把背包连同开关一起盖掉。
+ *
+ * ⚠️ 批次 20261024-1455（自测回归）：一度还试过第四种 `recipes`——把配方书嵌进左栏，
+ * 好让标题栏那颗开关在开着时还能点到。实际跑出来的问题是**配方列表里出现无意义的数字、
+ * 点格子没反应**（左栏那一格太窄，原本给整屏设计的配方面板压进去就糊了）。
+ * 现在回退成"配方书＝整屏面板、靠它自己的 ✕ 或那颗键手动开合"，
+ * 左栏仍旧只有这三份内容。
  */
-export type PocketLeftPane = 'items' | 'creative' | 'category' | 'recipes';
+export type PocketLeftPane = 'items' | 'creative' | 'category';
 
 /** 「全部」配方页签的放大镜（与 RecipeBook 同源；图集里没有这件物品） */
 const POCKET_RECIPE_ALL_ICON =
@@ -512,14 +515,6 @@ export class InventoryScreen {
    * "要不要把我没有的那些也列出来（红底）"。所以这里现在装的是分类物品网格。
    */
   private readonly categoryHostEl: HTMLDivElement;
-  /**
-   * **配方书**那一栏的落脚点（批次 20261024-1152）：与「我的物品 / 物品分类」同一格。
-   *
-   * 配方书开着时 `applyInventoryChrome` 把 `RecipeBook.attach(recipeHostEl)` 叫起来，
-   * 面板搬进这一格（CSS 给它 `.embedded`）。这样标题栏那颗「配方书」开关始终可点，
-   * 第二次点它就是关闭 —— 用户要的正是这个开关语义。
-   */
-  private readonly recipeHostEl: HTMLDivElement;
   /**
    * 工作站左栏的两个页签（批次 277）：可做 / 背包。
    *
@@ -1060,32 +1055,25 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
       recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
-      // 批次 20261024-1152（用户）：这颗键就是**配方书开关**。
-      //   关着时点开 → 左栏换成配方书，并停在上次那一栏（首次是"全部/放大镜"）；
-      //   开着时点它 → 只是关闭（左栏还回"物品栏"）。
-      // 以前关着时它只把左栏切到"物品分类"，配方书本身根本没开，
-      // 玩家的体感就是"我点了配方书，它却把配方书关掉了"。
-      // 能这么用是因为开着的配方书是**嵌在左栏**里的（不是整屏那一层盖住标题栏）。
+      // 这颗键 = **配方书开关**（批次 20261024-1152 → 1455 回退后重写）。
+      //
+      // 三条口径（用户原话）：
+      //   ① 配方书**只能由用户手动打开/关闭**——不做"点一下就顺手关掉"这类自动行为；
+      //   ② 在仓库里点它 → 配方书打开并**自动跳到"全部/搜索"那一栏**；
+      //   ③ 打开之后不要自动关（点配方只是把材料摆进合成格，书照旧留在屏幕上）。
+      //
+      // 实现上配方书是**整屏那一层**（`.recipe-panel` + 自己的 ✕），不是嵌进左栏：
+      // 左栏那一格太窄，塞进整屏尺寸的配方面板会出现"数字乱、点不动"（批次 1455 的回归）。
       recipes.addEventListener('click', () => {
-        // 工作站 / 纯容器没有"左栏那一格"可以嵌配方书，这里沿用旧行为：
-        // 切到物品分类，或在这颗键上切「只列能做的 / 列出全部」。
-        if (!this.canEmbedRecipeBook()) {
-          if (this.pane === 'category') {
-            this.showUnowned = !this.showUnowned;
-            this.categoryPage = 0;
-          } else {
-            this.openPocketCategory(this.lastRecipeTab);
-          }
-          this.applyInventoryChrome();
-          return;
-        }
         if (this.hooks.isRecipesOpen?.() ?? false) {
           this.hooks.onCloseRecipes?.();
           return;
         }
-        // 左栏若停在分类上，先把分类页的"看一眼"状态收起来——同一次点击只做一件事
+        // 左栏停在分类上时，"看一眼某条配方"的待处理状态先收掉——同一次点击只做一件事
         this.pendingRecipeId = null;
-        this.hooks.onOpenRecipes?.(this.lastRecipeTab);
+        // 仓库（我的物品）里打开 = 从"全部/搜索"开始；其余沿用它记住的那一栏
+        const tab = this.pane === 'items' ? 'all' : this.lastRecipeTab;
+        this.hooks.onOpenRecipes?.(tab);
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -1428,13 +1416,6 @@ export class InventoryScreen {
     this.categoryHostEl.style.position = 'relative';
     this.buildCategorySection();
 
-    // 配方书的落脚点（批次 20261024-1152）：与上面两块同一格，平时隐藏。
-    // 配方书自己只负责把 `.recipe-panel` 搬进来并加 `.embedded`，几何全交给 CSS。
-    this.recipeHostEl = document.createElement('div');
-    this.recipeHostEl.className = 'inv-recipe-host';
-    this.recipeHostEl.dataset.role = 'pocket-recipe-host';
-
-
     // 工作站左栏（批次 277）：可做 / 背包 两个页签 + 可做列表。
     // ⚠️ 必须在 `buildCreativeSection()` 之前建好：后者会调 `updateCreativeVisibility()`
     // → `applyInventoryChrome()`，而那里会直接写这两个元素的 display。
@@ -1487,7 +1468,6 @@ export class InventoryScreen {
     this.playerBody.append(
       this.creativeSection,
       this.categoryHostEl,
-      this.recipeHostEl,
       this.stationTabsEl,
       this.stationRecipeHostEl,
     );
@@ -4177,17 +4157,13 @@ export class InventoryScreen {
     if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
     if (workbench) this.pocketTab = 'crafting';
 
-    // 左栏四选一：**位置与尺寸完全一致**（同一个网格格子），换的只是内容。
-    // 批次 20261024-1152：配方书**真的会嵌进来**（`recipes`）——标题栏那颗开关
-    // 点开时左栏换成配方列表，开关自己还在原地，所以再点一次就是关闭。
-    const showRecipes = !creativePlayer && (this.hooks.isRecipesOpen?.() ?? false);
+    // 左栏三选一：**位置与尺寸完全一致**（同一个网格格子），换的只是内容。
+    // 配方书（批次 20261024-1455 起）不再占这一格：它是整屏那一层，开着的书自己盖在背包上。
     const leftPane: PocketLeftPane = showCreativeItems
       ? 'creative'
-      : showRecipes
-        ? 'recipes'
-        : !creativePlayer && this.pane === 'category'
-          ? 'category'
-          : 'items';
+      : !creativePlayer && this.pane === 'category'
+        ? 'category'
+        : 'items';
 
     this.panel.classList.add('pocket-ui', 'pocket-dual');
     // 双栏壳：成就放右轨（合成/盔甲上面），标题栏那颗收起——标题栏只有 18px，
@@ -4203,7 +4179,6 @@ export class InventoryScreen {
 
     this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
     this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';
-    this.recipeHostEl.style.display = leftPane === 'recipes' ? 'flex' : 'none';
     if (leftPane === 'category') {
       this.renderCategoryGrid();
       requestAnimationFrame(() => this.syncCategoryScrollbar());
@@ -4213,7 +4188,7 @@ export class InventoryScreen {
     // `pocket-dual` 网格里**占的是同一格**（col 1 / row 2）——工作台 + 分类栏时
     // 3×9 会直接盖在分类列表上，就是用户说的"多一个浮层"。
     // 想搬仓库里的东西时切到左下那颗"物品栏"页签即可（那才是 3×9 的入口）。
-    const hideMainGrid = leftPane === 'creative' || leftPane === 'category' || leftPane === 'recipes';
+    const hideMainGrid = leftPane === 'creative' || leftPane === 'category';
     this.mainGridEl.style.display = hideMainGrid ? 'none' : '';
     // 左栏上方那行「物品栏」也不要（基岩版左栏没有这行字）
     this.personalInventoryTitleEl.style.display = 'none';
@@ -4225,10 +4200,9 @@ export class InventoryScreen {
     this.gearEl.style.display = rightShowsCrafting ? 'none' : '';
     this.syncCraftArrow(false);
 
-    // 配方书（批次 20261024-1152）：开着就嵌进左栏那一格，关着就把面板还回整屏那层。
-    // 只有双栏壳会嵌：容器 / 工作站界面没有这一格，那里仍然用整屏那一层。
-    if (leftPane === 'recipes') this.hooks.onRecipeHost?.(this.recipeHostEl);
-    else this.detachRecipeBook();
+    // 配方书是**整屏那一层**（批次 20261024-1455 回退了"嵌进左栏"的尝试）：
+    // 这里只要确保它没有被错误地挂在左栏里。
+    this.detachRecipeBook();
 
     // 生存左轨是物品分类 + 箱子；创造左轨**始终**是创造物品分类（批次 181）
     // ⚠️ 判据是 `creativePlayer` 而不是 `leftPane === 'creative'`：
@@ -4237,15 +4211,8 @@ export class InventoryScreen {
     if (!creativePlayer) {
       this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
       this.railLeft.classList.remove('hidden');
-      // 批次 159：点亮当前分类（点了哪一颗要看得出来）；
-      // 批次 20261024-1152：左栏是配方书时点亮书里当前那一栏
-      this.syncRecipeRail(
-        leftPane === 'category'
-          ? this.categoryTab
-          : leftPane === 'recipes'
-            ? (this.hooks.currentRecipeTab?.() ?? null)
-            : null,
-      );
+      // 批次 159：点亮当前分类（点了哪一颗要看得出来）
+      this.syncRecipeRail(leftPane === 'category' ? this.categoryTab : null);
     } else {
       this.syncRecipeRail(null);
       this.updateTabHighlight();
@@ -4272,14 +4239,11 @@ export class InventoryScreen {
       // 创造模式左栏是无限物品分类，配方开关在这儿没有意义；
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
-      // 批次 20261024-1152：它现在是**配方书开关**——配方书开着就该亮着
-      this.recipesBtn.classList.toggle(
-        'active',
-        leftPane === 'recipes' || (leftPane === 'category' && this.showUnowned),
-      );
+      // 批次 20261024-1455：这颗键是配方书开关，但"亮着"仍按物品分类的筛选状态算
+      this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
       // 批次 209：开 = 配方书模式（列出该分类全部物品）；关 = 只看现在能做的
       this.recipesBtn.title = t(
-        leftPane === 'recipes' || this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable',
+        this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable',
       );
     }
     // 工作站专用的左栏配方书按钮离开工作站时必须收起（批次 316）
@@ -4301,11 +4265,10 @@ export class InventoryScreen {
     }
   }
 
-  /** 左栏四种内容各自对应的元素（淡入要用） */
+  /** 左栏三种内容各自对应的元素（淡入要用） */
   private leftPaneEl(pane: PocketLeftPane): HTMLElement {
     if (pane === 'creative') return this.creativeSection;
     if (pane === 'category') return this.categoryHostEl;
-    if (pane === 'recipes') return this.recipeHostEl;
     return this.mainGridEl;
   }
 
@@ -6199,18 +6162,6 @@ export class InventoryScreen {
    */
   syncRecipePane(): void {
     if (this.open) this.applyInventoryChrome();
-  }
-
-  /**
-   * 这一屏的左栏能不能给配方书落脚（批次 20261024-1152）。
-   *
-   * 只有"双栏壳且左栏是自己的那一格"才行：玩家背包（`inventory`）与工作台（`crafting`）。
-   * 工作站（`isWorkstationMode`）的左栏是固定的可做列表，纯容器（箱子/熔炉…）根本没有左栏——
-   * 这两处点配方书仍按旧行为处理（切分类 / 切「只列能做的」），不会去开一个盖住面板的整屏配方书。
-   */
-  private canEmbedRecipeBook(): boolean {
-    if (isWorkstationMode(this.mode)) return false;
-    return this.mode === 'inventory' || this.mode === 'crafting';
   }
 
   /** 打开为指定模式；容器模式必须传入容器实例 */

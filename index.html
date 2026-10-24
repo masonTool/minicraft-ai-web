@@ -2886,8 +2886,11 @@
         visibility: hidden; pointer-events: none;
       }
       /* ---------------- 配方书嵌进背包左栏（批次 157） ----------------
-         落脚点是 `.inv-recipe-host`（左栏那一格），配方书把 `.recipe-panel`
-         搬进来后自己加 `.embedded`。这里只把它压成"填满这一格、内容在格内滚"。 */
+         配方书把 `.recipe-panel` 搬进左栏那一格后自己加 `.embedded`。
+         这里只把它压成"填满这一格、内容在格内滚"。
+         ⚠️ 批次 20261024-1455：标题栏那颗键已改回"整屏面板 + 手动开关"，
+         左栏不再有落脚点（那一格样式已删）；这套 `.embedded`
+         样式留着是因为 `RecipeBook.attach()` 这个能力本身还在，别再往里加新东西。 */
       .recipe-panel.embedded {
         position: relative;
         width: 100%; max-width: 100%;
@@ -3788,25 +3791,6 @@
         height: 100%;
         max-height: 100%;
       }
-      /* 左栏：配方书（批次 20261024-1152）。
-         与"我的物品 / 物品分类"占同一个格子，配方书面板搬进来后自己加 `.embedded`。
-         以前配方书是**整屏那一层**，一打开就把背包连同标题栏那颗开关一起盖住，
-         "再点一次关闭"根本点不到 —— 现在它只是左栏的内容。 */
-      .inv-panel.pocket-ui.pocket-dual .inv-recipe-host {
-        position: relative;
-        grid-column: 1;
-        grid-row: 1 / span 2;
-        display: none;
-        flex-direction: column;
-        gap: 4px;
-        min-width: 0;
-        min-height: 0;
-        overflow: hidden;
-        align-self: stretch;
-        height: 100%;
-        max-height: 100%;
-      }
-
       /* ⚠️ 搜索框在**竖排**容器里不能沿用 `flex: 1`（那是"吃掉剩余高度"），
          否则它会把下面的物品网格挤出可视区——表现就是"这一栏里什么都看不见" */
       .inv-category-section .inv-search {
