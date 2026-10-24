@@ -1233,6 +1233,19 @@ console.log('\n[携带版细节收口（批次 159）]');
       /\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')) &&
       /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')),
   );
+  // 批次 20261024-1735（用户："改完之后滚动条不见、列表也不能滚动"）：
+  // 创造栏必须拿到**确定高度**，否则里面的网格 `flex: 1 1 auto` 会跟着长成内容那么高，
+  // 既不溢出（自绘滚动条 `max > 1` 不成立 → 整根隐藏）也滚不动，多出来的行被裁掉。
+  check(
+    '创造栏显式拉伸到整格高度（否则网格长成内容高：滚动条消失且滚不动）',
+    /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative-section \{[^}]*align-self: stretch;[^}]*height: 100%;[^}]*max-height: 100%;/.test(
+      css.replace(/\s+/g, ' '),
+    ) &&
+      // 生存分类栏那条更早就有，两条必须同口径（只留一条就会出现"一栏能滚一栏不能"）
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-category-section \{[^}]*align-self: stretch;[^}]*height: 100%;/.test(
+        css.replace(/\s+/g, ' '),
+      ),
+  );
 
   // ④ 点物品 → 快捷栏上方的小说明
   check('有这块说明浮层', css.includes('#inv-pick-toast {') && invSrc.includes("this.pickToastEl.id = 'inv-pick-toast'"));

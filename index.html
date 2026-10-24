@@ -3778,6 +3778,14 @@
         min-width: 0;
         min-height: 0;
         overflow: hidden;
+        /* ⚠️ 批次 20261024-1735（用户："改完之后滚动条不见、列表也不能滚动"）：
+           与生存分类栏同一条——父网格是 `align-items: start`，**不显式拉伸**
+           这一栏就只有"内容高度"：里面的创造网格 `flex: 1 1 auto` 会跟着长到内容那么高，
+           于是既不溢出（自绘滚动条 `max > 1` 不成立 → 整根隐藏）、也滚不动，
+           多出来的行直接被 `overflow: hidden` 裁掉。三行缺一不可。 */
+        align-self: stretch;
+        height: 100%;
+        max-height: 100%;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-creative-controls {
         min-height: 32px;
