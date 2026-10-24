@@ -48,6 +48,7 @@ export const inventory = {
   'inventory.armor.boots': 'Feet',
   'inventory.armor.offhand': 'Offhand',
   'inventory.offhandHint': 'Offhand: shield / torch / totem…',
+  'inventory.armorEmptyHint': 'Empty {part} slot — pick the matching gear first, then tap here',
   'inventory.recipeBook': 'Recipe Book',
   'inventory.recipeBookKey': 'Recipe Book (R)',
   'inventory.achievements': 'Advancements',

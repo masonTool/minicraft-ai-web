@@ -47,6 +47,7 @@ export const inventory = {
   'inventory.armor.boots': '靴',
   'inventory.armor.offhand': '副手',
   'inventory.offhandHint': '副手：盾牌 / 火把 / 图腾等',
+  'inventory.armorEmptyHint': '空{part}槽：先从背包里拿起对应的装备，再点这里',
   'inventory.recipeBook': '配方书',
   'inventory.recipeBookKey': '配方书 (R)',
   'inventory.achievements': '成就',

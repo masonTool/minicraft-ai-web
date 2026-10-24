@@ -46,6 +46,7 @@ export const inventory = {
   "inventory.armor.boots": "Füße",
   "inventory.armor.offhand": "Zweithand",
   "inventory.offhandHint": "Zweithand: Schild / Fackel / Totem usw.",
+  "inventory.armorEmptyHint": "Leerer {part}-Slot – erst die passende Ausrüstung nehmen, dann hier tippen",
   "inventory.recipeBook": "Rezeptbuch",
   "inventory.recipeBookKey": "Rezeptbuch (R)",
   "inventory.achievements": "Erfolge",

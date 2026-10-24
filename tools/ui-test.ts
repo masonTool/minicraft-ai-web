@@ -3510,6 +3510,17 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
       !invSrc.includes('hint.textContent = hints[i]') &&
       css.includes('.inv-slot-hint svg'),
   );
+  // 批次 20261024-1455（用户）：空槽点一下要有提示（原来点了什么都不发生）
+  check(
+    '点空的装备槽会按部位给提示',
+    invSrc.includes('private armorSlotPartName(') &&
+      invSrc.includes("this.showMessage(tp('inventory.armorEmptyHint', { part }));") &&
+      // 只认玩家自己的背包：箱子/熔炉的槽号会撞上护甲区间（36~40）
+      invSrc.includes('if (binding.source !== this.inventory) return null;') &&
+      invSrc.includes("return t('inventory.armor.offhand');") &&
+      invSrc.includes('return t(ARMOR_PART_KEYS[offset]!);'),
+  );
+  check('空槽提示文案带 {part} 占位符（六语言都要能套）', t('inventory.armorEmptyHint').includes('{part}'));
   {
     const kinds: readonly ArmorSlotKind[] = ['helmet', 'chestplate', 'leggings', 'boots', 'offhand'];
     check(
