@@ -6543,6 +6543,8 @@ export class TextureAtlas {
   private readonly averageColors = new Map<string, number>();
   /** 贴图不透明像素占比缓存（`tileOpacity` 用，懒算） */
   private readonly opacities = new Map<string, number>();
+  /** 贴图不透明内容包围盒缓存（`contentBounds` 用，懒算） */
+  private readonly bounds = new Map<string, { left: number; top: number; right: number; bottom: number }>();
   /** 画布像素被**外部**改写（资源包替换）的次数，见 `markTextureChanged` */
   private revisionValue = 0;
   /** 唯一那份 2D 上下文（重画、回读像素都要用） */
@@ -6670,13 +6672,15 @@ export class TextureAtlas {
   /**
    * 图集像素被外部改写后调用：让 three 重新上传纹理，并让所有"按像素派生"的缓存失效。
    *
-   * `averageColors` 也是按像素算的（资源包换完贴图，破坏粒子的颜色必须跟着变），
-   * 两者失效的时机一模一样，所以合并在这一处，避免以后加缓存时漏掉某一份。
+   * `averageColors` / `opacities` / `bounds` 都是按像素算的（资源包换完贴图，
+   * 破坏粒子的颜色、图标的实际轮廓必须跟着变），失效的时机一模一样，
+   * 所以合并在这一处，避免以后加缓存时漏掉某一份。
    */
   markTextureChanged(): void {
     this.revisionValue++;
     this.averageColors.clear();
     this.opacities.clear();
+    this.bounds.clear();
     // 上传画布是"未加边距画布"的派生，任何像素改动都要重新铺一遍（资源包、重画、重绘）
     this.syncUploadCanvas();
     this.texture.needsUpdate = true;
@@ -7040,6 +7044,45 @@ export class TextureAtlas {
 
     this.opacities.set(tile, ratio);
     return ratio;
+  }
+
+  /**
+   * 贴图**不透明内容**的包围盒（像素，左上角为原点，`right/bottom` 是开区间）。
+   *
+   * 手持扁平物品用它把"图标里真正画了东西的那一块"对准手心：图标的 16×16
+   * 四周有透明留白，按整块对齐的话，面包/苹果这种内容偏小的物品会浮在半空
+   * （批次 20261024-1726）。整块全透明（或读不出像素）时退回整块。
+   */
+  contentBounds(tile: string): { left: number; top: number; right: number; bottom: number } {
+    const cached = this.bounds.get(tile);
+    if (cached) return cached;
+
+    const origin = this.tileSource(tile);
+    let bounds = { left: 0, top: 0, right: TILE_SIZE, bottom: TILE_SIZE };
+    const ctx = this.canvas.getContext('2d');
+    if (ctx) {
+      const data = ctx.getImageData(origin.x, origin.y, TILE_SIZE, TILE_SIZE).data;
+      let left = TILE_SIZE;
+      let top = TILE_SIZE;
+      let right = -1;
+      let bottom = -1;
+      // 判据与 `averageColor` 一致（alpha < 8 视为全透明）
+      for (let y = 0; y < TILE_SIZE; y++) {
+        for (let x = 0; x < TILE_SIZE; x++) {
+          if (data[(y * TILE_SIZE + x) * 4 + 3]! < 8) continue;
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+      if (right >= left && bottom >= top) {
+        bounds = { left, top, right: right + 1, bottom: bottom + 1 };
+      }
+    }
+
+    this.bounds.set(tile, bounds);
+    return bounds;
   }
 
   /** 贴图在图集画布上的像素左上角（UI 用 drawImage 裁切图标） */
