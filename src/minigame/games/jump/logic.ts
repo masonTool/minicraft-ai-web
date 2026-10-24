@@ -62,6 +62,13 @@ export interface JumpRun {
   readonly status: JumpStatus;
   /** 随机数状态（下次生成从这里继续） */
   readonly seed: number;
+  /**
+   * 小人脚底的**实际落点**（世界 xz，格）。
+   *
+   * 落到哪儿就站哪儿：下一跳从这里起跳，距离也量到这里，不再悄悄复位到方块中心。
+   * 判定中心仍然按方块中心（`centerRatio`），所以"站偏了"只影响距离，不影响是否命中。
+   */
+  readonly stand: { readonly x: number; readonly z: number };
 }
 
 export interface LandingOutcome {
@@ -69,6 +76,8 @@ export interface LandingOutcome {
   readonly center: boolean;
   readonly points: number;
   readonly over: boolean;
+  /** 脚底落点（世界 xz）：场景据此把小人的站姿摆在"落下去的那个点"，不回中心 */
+  readonly point: { readonly x: number; readonly z: number };
 }
 
 // ------------------------------------------------------------------ 随机
@@ -295,6 +304,8 @@ export function createRun(seed = 1): JumpRun {
     combo: 0,
     status: 'playing',
     seed,
+    // 开局站在起点块正中
+    stand: { x: first.x, z: first.z },
   });
 }
 
@@ -315,31 +326,39 @@ export function blockOverhang(block: JumpBlock, x: number, z: number): number {
   return Math.max(dx, dz) - half;
 }
 
+/** 一次跳跃的落点判定结果 */
+export interface Landing {
+  readonly kind: 'hit' | 'miss';
+  readonly center: boolean;
+  /** 脚底落点 */
+  readonly point: { readonly x: number; readonly z: number };
+}
+
 /**
  * 落点判定。
  *
- * 方向自动对准 `to` 的中心，所以落点必定在"从 from 到 to 中心"这条线上；
- * 但判定仍按方块自身坐标做，这样角度偏移不会让"看起来在方块上"却判 miss。
+ * 从**实际站着的点**（`stand`）朝目标块中心跳，落点必定在这条线上：
+ * 方向是自动对准中心的，玩家只控制距离。判定再按落点算——站在哪儿就跳哪儿，
+ * 所以"上一跳站偏了"会实打实地改变这一跳的重心。
  */
 export function resolveLanding(
-  from: JumpBlock,
+  stand: { readonly x: number; readonly z: number },
   to: JumpBlock,
   distance: number,
-): { kind: 'hit'; center: boolean } | { kind: 'miss' } {
-  const dx = to.x - from.x;
-  const dz = to.z - from.z;
+): Landing {
+  const dx = to.x - stand.x;
+  const dz = to.z - stand.z;
   const length = Math.hypot(dx, dz);
-  if (!(length > 0)) return { kind: 'miss' };
+  if (!(length > 0)) return { kind: 'miss', center: false, point: { x: stand.x, z: stand.z } };
 
   const d = Math.min(JUMP_CONFIG.maxDistance, Math.max(0, Number.isFinite(distance) ? distance : 0));
-  const px = from.x + (dx / length) * d;
-  const pz = from.z + (dz / length) * d;
+  const point = { x: stand.x + (dx / length) * d, z: stand.z + (dz / length) * d };
 
-  if (blockOverhang(to, px, pz) > 0) return { kind: 'miss' };
+  if (blockOverhang(to, point.x, point.z) > 0) return { kind: 'miss', center: false, point };
 
   const half = to.size / 2;
-  const offCenter = Math.hypot(px - to.x, pz - to.z);
-  return { kind: 'hit', center: offCenter <= half * JUMP_CONFIG.centerRatio };
+  const offCenter = Math.hypot(point.x - to.x, point.z - to.z);
+  return { kind: 'hit', center: offCenter <= half * JUMP_CONFIG.centerRatio, point };
 }
 
 /**
@@ -359,15 +378,15 @@ export function scoreForLanding(combo: number, center: boolean): { points: numbe
 
 /** 跳一次：判定 → 计分 → 生成下一个方块（失败则整局结束） */
 export function jump(run: JumpRun, distance: number): LandingOutcome {
-  if (run.status !== 'playing') return { run, center: false, points: 0, over: true };
+  if (run.status !== 'playing') return { run, center: false, points: 0, over: true, point: run.stand };
 
-  const from = run.blocks[run.index];
   const to = run.blocks[run.index + 1];
-  if (!from || !to) return { run, center: false, points: 0, over: true };
+  if (!run.blocks[run.index] || !to) return { run, center: false, points: 0, over: true, point: run.stand };
 
-  const landing = resolveLanding(from, to, distance);
+  // 从**实际站着的点**起跳，落点也原样保留下来（不复位到方块中心）
+  const landing = resolveLanding(run.stand, to, distance);
   if (landing.kind === 'miss') {
-    return { run: { ...run, status: 'over' }, center: false, points: 0, over: true };
+    return { run: { ...run, status: 'over' }, center: false, points: 0, over: true, point: landing.point };
   }
 
   const scored = scoreForLanding(run.combo, landing.center);
@@ -376,9 +395,10 @@ export function jump(run: JumpRun, distance: number): LandingOutcome {
     index: run.index + 1,
     score: run.score + scored.points,
     combo: scored.combo,
+    stand: landing.point,
   });
 
-  return { run: next, center: landing.center, points: scored.points, over: false };
+  return { run: next, center: landing.center, points: scored.points, over: false, point: landing.point };
 }
 
 /** 当前站着的方块 / 下一个目标（渲染层与判定都用这两个） */

@@ -52,6 +52,7 @@ import {
   specialKindFor,
   targetBlock,
   type JumpBlock,
+  type JumpRun,
 } from '../src/minigame/games/jump/logic.ts';
 
 let passed = 0;
@@ -641,6 +642,53 @@ console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
   check('跳空 → 本局结束', fell.over && fell.run.status === 'over');
   equal('失败不加分', fell.run.score, 0);
   check('结束后再跳仍是 over（可重入）', jump(fell.run, exact).over);
+}
+
+console.log('\n跳一跳：落点保留（落到哪儿就站哪儿）');
+{
+  const block = (id: number, x: number, z: number): JumpBlock => ({
+    id,
+    x,
+    z,
+    size: 2,
+    kind: 'normal',
+    shape: 'square',
+  });
+
+  const run = createRun(20261024);
+  check('开局站在起点块中心', run.stand.x === 0 && run.stand.z === 0);
+
+  // 跳到方块上但没踩中心：站姿必须停在落点，不再被复位到中心
+  const to = targetBlock(run);
+  const from = currentBlock(run);
+  const exact = Math.hypot(to.x - from.x, to.z - from.z);
+  const off = 0.45; // 仍在半边长（1.0）以内，不算越界
+  const first = jump(run, exact + off);
+  check('偏 0.45 格仍然站得住', !first.over);
+  almost('落点就是实际站姿（沿前进方向偏 0.45）', Math.hypot(first.run.stand.x - to.x, first.run.stand.z - to.z), off, 1e-9);
+  check('stand 不是方块中心（没有悄悄复位）', first.run.stand.x !== to.x || first.run.stand.z !== to.z);
+  check('outcome 带着落点交给渲染层', Math.abs(first.point.x - first.run.stand.x) < 1e-12 && Math.abs(first.point.z - first.run.stand.z) < 1e-12);
+
+  // 下一跳的距离必须从 stand 量。构造一个"上一跳沿 z 偏了 0.6、这一跳转 90° 往 −x"的局面：
+  // 方块中心距是 5.0，而实际要跳 5.6 —— 只有从 stand 起算才落得回中心。
+  const synthetic: JumpRun = {
+    blocks: [block(0, 0, 0), block(1, 0, -5), block(2, -5, -5)],
+    index: 1,
+    score: 0,
+    combo: 0,
+    status: 'playing',
+    seed: 1,
+    stand: { x: 0.6, z: -5 },
+  };
+  const fromStand = Math.hypot(-5 - synthetic.stand.x, -5 - synthetic.stand.z);
+  almost('从站姿量出的距离是 5.6（方块中心距是 5.0）', fromStand, 5.6);
+  const centreAim = jump(synthetic, 5);
+  check('按"方块中心距"跳 → 落不到中心（说明距离确实从 stand 量）', !centreAim.over && !centreAim.center);
+  almost('按中心距跳会停在半路（离中心 0.6）', Math.hypot(centreAim.run.stand.x - -5, centreAim.run.stand.z - -5), 0.6, 1e-9);
+  const standAim = jump(synthetic, fromStand);
+  check('按 stand 距离跳 → 正中中心', !standAim.over && standAim.center);
+  almost('正中时 stand 回到方块中心 x', standAim.run.stand.x, -5, 1e-9);
+  almost('正中时 stand 回到方块中心 z', standAim.run.stand.z, -5, 1e-9);
 }
 
 console.log('\n最高分：纯函数');
