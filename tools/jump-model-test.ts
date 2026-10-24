@@ -8,13 +8,17 @@
  *
  *  1. **脚底在原点**：`min.y ≈ 0`。写错的话"站到方块顶面"就得靠人肉补偿，
  *     换一个方块尺寸就浮空或陷进去——这是最容易在截图里被当成'方块太高'的隐蔽 bug；
- *  2. **比例**：身高 1、头径 0.29、裙摆 0.35（规格表 §4 的像素测量）；
+ *  2. **比例**：身高 1、头径 0.33、裙摆 0.42（参考图 02 的像素测量）；
  *  3. **压扁 / 空翻**：蓄力极值 y 0.6、xz 1.3，空翻 ±2π 且不污染朝向；
  *  4. **释放**：两个几何 + 两个材质真的 dispose（挂监听数事件，不靠"看起来清了"）。
  */
 
 import * as THREE from 'three';
+import { JUMPER_HEIGHT_RATIO } from '../src/minigame/games/jump/iso.ts';
 import { JUMPER_COLOR, JumperModel, SQUASH_LIMIT } from '../src/minigame/games/jump/JumperModel.ts';
+
+/** 边长 2 时的身高：比例只有 iso.ts 一处真值，测试跟着它算，不许再手抄 0.72 */
+const BIG = 2 * JUMPER_HEIGHT_RATIO;
 
 let passed = 0;
 let failed = 0;
@@ -44,15 +48,15 @@ console.log('\n比例（以身高为 1）');
   const bounds = box(model);
   near('脚底在原点（min.y = 0）', bounds.min.y, 0, 1e-6);
   near('身高 = 1.00', bounds.max.y - bounds.min.y, 1, 0.02);
-  near('裙摆宽度 = 0.35', bounds.max.x - bounds.min.x, 0.35, 1e-3);
+  near('裙摆宽度 = 0.42', bounds.max.x - bounds.min.x, 0.42, 1e-3);
   near('左右对称（|min.x| = max.x）', Math.abs(bounds.min.x + bounds.max.x), 0, 1e-6);
 
   const head = model.object.children.find((child) => child instanceof THREE.Mesh && child.geometry.type === 'SphereGeometry');
   check('有球形的头', Boolean(head));
   if (head) {
     const headBox = new THREE.Box3().setFromObject(head);
-    near('头径 = 0.29', headBox.max.x - headBox.min.x, 0.29, 1e-3);
-    near('头心在 0.855（头顶 = 1.0）', (headBox.max.y + headBox.min.y) / 2, 0.855, 1e-3);
+    near('头径 = 0.33', headBox.max.x - headBox.min.x, 0.33, 1e-3);
+    near('头心在 0.835（头顶 = 1.0）', (headBox.max.y + headBox.min.y) / 2, 0.835, 1e-3);
     near('头顶正好是身高上限', headBox.max.y, 1, 1e-3);
     check('头与颈有重叠（不会看到脖子断层）', headBox.min.y < 0.74);
   }
@@ -64,12 +68,12 @@ console.log('\n尺寸随方块边长缩放');
   const model = new JumperModel();
   model.setSize(2);
   const big = box(model);
-  near('边长 2 → 身高 1.44（0.72 × 2）', big.max.y - big.min.y, 1.44, 1e-6);
+  near('边长 2 → 身高 = 2 × 比例', big.max.y - big.min.y, BIG, 1e-6);
   near('放大后脚底仍在原点', big.min.y, 0, 1e-6);
 
   model.setSize(0.9);
   const small = box(model);
-  near('边长 0.9 → 身高 0.648', small.max.y - small.min.y, 0.648, 1e-6);
+  near('边长 0.9 → 身高同比缩小', small.max.y - small.min.y, 0.9 * JUMPER_HEIGHT_RATIO, 1e-6);
   near('尺寸变化只影响比例，不改内部几何', small.max.x / small.max.y, big.max.x / big.max.y, 1e-12);
 
   model.setSize(0);
@@ -84,23 +88,23 @@ console.log('\n蓄力压扁');
   const model = new JumperModel();
   model.setSize(2);
   model.setSquash(0);
-  near('不蓄力：y = 1.44', model.object.scale.y, 1.44, 1e-6);
-  near('不蓄力：xz = 1.44', model.object.scale.x, 1.44, 1e-6);
+  near('不蓄力：y = 身高', model.object.scale.y, BIG, 1e-6);
+  near('不蓄力：xz = 身高', model.object.scale.x, BIG, 1e-6);
 
   model.setSquash(1);
-  near('蓄满：y → 0.6 × 基础缩放', model.object.scale.y, 1.44 * SQUASH_LIMIT.y, 1e-6);
-  near('蓄满：xz → 1.3 × 基础缩放', model.object.scale.x, 1.44 * SQUASH_LIMIT.xz, 1e-6);
+  near('蓄满：y → 0.6 × 基础缩放', model.object.scale.y, BIG * SQUASH_LIMIT.y, 1e-6);
+  near('蓄满：xz → 1.3 × 基础缩放', model.object.scale.x, BIG * SQUASH_LIMIT.xz, 1e-6);
   near('压扁时脚底不动（min.y 仍为 0）', box(model).min.y, 0, 1e-6);
 
   model.setSquash(0.5);
-  near('线性中间值', model.object.scale.y, 1.44 * 0.8, 1e-6);
+  near('线性中间值', model.object.scale.y, BIG * 0.8, 1e-6);
 
   model.setSquash(9);
-  near('超过 1 被夹住', model.object.scale.y, 1.44 * SQUASH_LIMIT.y, 1e-6);
+  near('超过 1 被夹住', model.object.scale.y, BIG * SQUASH_LIMIT.y, 1e-6);
   model.setSquash(-3);
-  near('负数被夹到 0', model.object.scale.y, 1.44, 1e-6);
+  near('负数被夹到 0', model.object.scale.y, BIG, 1e-6);
   model.setSquash(Number.NaN);
-  near('NaN 当作 0', model.object.scale.y, 1.44, 1e-6);
+  near('NaN 当作 0', model.object.scale.y, BIG, 1e-6);
   model.dispose();
 }
 

@@ -81,6 +81,7 @@ const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', impo
 const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
 const blockSceneSrc = readFileSync(new URL('../src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
 const audioSrc = readFileSync(new URL('../src/minigame/games/jump/audio.ts', import.meta.url), 'utf8');
+const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -133,6 +134,13 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('HUD 只有一个分数（没有最高分行）', !jumpSrc.includes('jump-best') && !jumpSrc.includes('bestEl'));
   check('没有底部提示', !jumpSrc.includes('jump-hint') && !jumpSrc.includes('hintEl'));
   check('结算面板是"大数字 + 最高分 + 两颗按钮"', jumpSrc.includes('jump-over-score') && jumpSrc.includes('jump-over-best'));
+  // 分数挂在 stage 上，而宿主顶栏（退出 + 标题，z-index 4）也在左上角：
+  // 用百分比贴顶会被盖住，而"看不看得见"这类问题离线断言查不到，只能钉住定位写法。
+  check(
+    '分数让开宿主顶栏（top 用 56px + 安全区，不是百分比）',
+    /\.jump-hud\s*\{[^}]*top:\s*calc\(56px\s*\+\s*env\(safe-area-inset-top/.test(htmlSrc),
+  );
+  check('分数左边留出安全区', /\.jump-hud\s*\{[^}]*left:[^;]*env\(safe-area-inset-left/.test(htmlSrc));
   check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
   check('蓄力压扁小人', jumpSrc.includes('jumper.setSquash(ratio)'));
   check('蓄力压缩方块', jumpSrc.includes('setSquash'));
@@ -179,6 +187,10 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
   check('阴影是不写深度的透明贴片', blockSceneSrc.includes('depthWrite: false'));
   check('特殊方块用程序化图集', blockSceneSrc.includes('createBlockAtlas('));
   check('方块动画每帧推进', blockSceneSrc.includes('tick(dt: number)'));
+  // 顶面白点是原版唯一的落点提示（参考图 02/03 每块都有），漏了只有截图能发现
+  check('普通方块顶面有白点', blockSceneSrc.includes('DOT_RADIUS_RATIO') && blockSceneSrc.includes("spec.kind === 'normal'"));
+  check('白点随方块高度/缩放同步', blockSceneSrc.includes('entry.dot.position.set(') && blockSceneSrc.includes('entry.dot.scale.set('));
+  check('白点随卸载释放', blockSceneSrc.includes('this.dotGeometry.dispose()') && blockSceneSrc.includes('this.dotMaterial.dispose()'));
   check('入场进度跨重建保留（按位置键）', blockSceneSrc.includes('ages.set(entry.key'));
   check('掉队的方块淡出而不是直接消失', blockSceneSrc.includes('this.fading.push(entry)'));
   // 配色必须跟"方块身份"走，不能跟"这一屏列表里的下标"走——后者会让每跳一次全世界重新上色
@@ -223,6 +235,29 @@ console.log('\n色板与三面明暗（原版观感的两个硬指标）');
     }),
   );
   check('没有方块糊进背景（|ΔL| ≥ 0.04）', worst >= 0.04, `最小差 ${worst.toFixed(3)}`);
+
+  // "洗白"防线：每局至少 3 个高饱和色（HSL 饱和度 ≥ 0.3）。
+  // 这条是"看着不对"翻译成数字的那一步——灰 + 近白 + 低饱和绿 那一局就是这么被抓住的。
+  const saturation = (hex: string): number => {
+    const channel = (offset: number): number => parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    const r = channel(1);
+    const g = channel(3);
+    const b = channel(5);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max - min < 1e-9) return 0;
+    const l = (max + min) / 2;
+    return l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+  };
+  check(
+    '每局至少 3 个高饱和方块色（饱和度 ≥ 0.3）',
+    JUMP_PALETTES.every((p) => p.blocks.filter((c) => saturation(c) >= 0.3).length >= 3),
+    JUMP_PALETTES.map((p) => `${p.id}:${p.blocks.filter((c) => saturation(c) >= 0.3).length}`).join(' '),
+  );
+  check(
+    '每局最多 1 个无彩/灰色方块（灰块不能成对出现，否则整屏发灰）',
+    JUMP_PALETTES.every((p) => p.blocks.filter((c) => saturation(c) < 0.12).length <= 1),
+  );
 
   const ids = new Set(JUMP_PALETTES.map((p) => p.id));
   equal('色板 id 唯一', ids.size, JUMP_PALETTES.length);

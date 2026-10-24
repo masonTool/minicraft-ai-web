@@ -10,7 +10,9 @@
  *    "差 5° 就变味"，而且省掉一整套阴影贴图；
  *  · **不要图集、不要雾**：`MiniGameContext.atlas` 继续由宿主传入，但跳一跳不再读它；
  *  · **阴影是贴片不是阴影贴图**：方块下面垫一张柔边圆角方片，往世界 −x/+z 偏移
- *    （屏幕上就是左下），浓度 35% 紫灰。原版没有可见地面，阴影其实也是贴片。
+ *    （屏幕上就是左下），浓度 35% 紫灰。原版没有可见地面，阴影其实也是贴片；
+ *  · **顶面中心有白点**：原版唯一的落点提示（直径 ≈ 0.13 边长）。特殊方块顶面
+ *    自己就有图案（井盖盘 / 唱片纹 / 魔方格 / 门脸），不再叠点。
  *
  * 动画（`[跳7]`）也在这层：新块入场弹入 400ms、被踩的块凹一下再回弹 500ms、
  * 落后于镜头的块掉落缩小消失、完美命中在同一点扩散三层同心圆。时序与缓动全在
@@ -66,10 +68,15 @@ export interface BlockSpec {
 
 /** 蓄力时当前方块最多压掉多少高度（规格表 §8：y → 0.8） */
 const MAX_SQUASH = 0.2;
+/**
+ * 顶面中心的白点（参考图 02/03：每个方块顶面正中都有一个直径 ≈ 0.13 边长的白点，
+ * 它是原版唯一的"落点提示"）。半径取一半，即直径 0.13 边长。
+ */
+const DOT_RADIUS_RATIO = 0.065;
 /** 阴影贴片相对方块尺寸的放大倍数（柔边要占出去一圈） */
-const SHADOW_SPREAD = 1.9;
+const SHADOW_SPREAD = 1.35;
 /** 阴影在**世界**里的偏移：屏幕上看是"左下"（光照来自 +x/−z） */
-const SHADOW_OFFSET = { x: -0.43, z: 0.71 };
+const SHADOW_OFFSET = { x: -0.3, z: 0.5 };
 /** 相机跟随的指数插值系数（越大跟得越紧） */
 const FOLLOW_RATE = 8;
 /** 完美命中的三层同心圆：外白 / 中绿 / 内红（规格表 §7） */
@@ -83,6 +90,8 @@ interface BlockEntry {
   spec: BlockSpec;
   readonly mesh: THREE.Mesh;
   readonly shadow: THREE.Mesh;
+  /** 顶面中心的白点；特殊方块顶面有自己的图案，`null` */
+  readonly dot: THREE.Mesh | null;
   /** 方块未压缩时的高度 */
   readonly height: number;
   /** 位置键（同 x/z = 同一块，用于跨重建保留入场进度） */
@@ -104,6 +113,8 @@ export class BlockScene {
   private readonly specialMaterials = new Map<SpecialKind, THREE.MeshBasicMaterial>();
   private readonly specialTextures: THREE.Texture[] = [];
   private readonly canvasFactory: CanvasFactory | undefined;
+  private readonly dotGeometry: THREE.CircleGeometry;
+  private readonly dotMaterial: THREE.MeshBasicMaterial;
   private readonly shadowGeometry: THREE.PlaneGeometry;
   private readonly shadowMaterial: THREE.MeshBasicMaterial;
   private readonly shadowTexture: THREE.Texture;
@@ -138,6 +149,16 @@ export class BlockScene {
     this.scene.background = this.backgroundTexture;
 
     this.blockGeometry = bakeFaceShading(new THREE.BoxGeometry(1, 1, 1));
+
+    this.dotGeometry = new THREE.CircleGeometry(1, 24);
+    // ⚠️ 必须是 transparent + 高 renderOrder：不透明物体会按"由近到远"排，
+    // 白点若不写深度又排在方块之前，就会被顶面整片盖掉（实测点看不见，原因就在这）。
+    this.dotMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color('#FFFFFF'),
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+    });
 
     this.shadowTexture = createShadowTexture();
     this.shadowGeometry = new THREE.PlaneGeometry(1, 1);
@@ -320,6 +341,8 @@ export class BlockScene {
     this.specialMaterials.clear();
     for (const texture of this.specialTextures) texture.dispose();
     this.specialTextures.length = 0;
+    this.dotGeometry.dispose();
+    this.dotMaterial.dispose();
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
     this.shadowTexture.dispose();
@@ -395,12 +418,22 @@ export class BlockScene {
     shadow.renderOrder = 0;
     this.scene.add(shadow);
 
-    return { spec, mesh, shadow, height, key: blockKey(spec), age, fadeMs: null };
+    // 顶面白点：特殊方块顶面是井盖/唱片/魔方/门脸，不再叠点
+    let dot: THREE.Mesh | null = null;
+    if (spec.kind === 'normal') {
+      dot = new THREE.Mesh(this.dotGeometry, this.dotMaterial);
+      dot.rotation.x = -Math.PI / 2;
+      dot.renderOrder = 3;
+      this.scene.add(dot);
+    }
+
+    return { spec, mesh, shadow, dot, height, key: blockKey(spec), age, fadeMs: null };
   }
 
   private removeEntry(entry: BlockEntry): void {
     this.scene.remove(entry.mesh);
     this.scene.remove(entry.shadow);
+    if (entry.dot) this.scene.remove(entry.dot);
   }
 
   /** 把入场 / 回弹 / 压扁 / 淡出四个因子乘到所有方块上（只有这一处写变换） */
@@ -430,6 +463,14 @@ export class BlockScene {
       entry.spec.z + SHADOW_OFFSET.z * entry.spec.size * shrink,
     );
     entry.shadow.visible = fade > 0.02;
+
+    // 白点跟着顶面走：高度/缩放都跟方块同步，方块被压扁时它也跟着沉下去
+    if (entry.dot) {
+      const radius = entry.spec.size * DOT_RADIUS_RATIO * shrink;
+      entry.dot.scale.set(radius, radius, 1);
+      entry.dot.position.set(entry.spec.x, height + 0.002, entry.spec.z);
+      entry.dot.visible = fade > 0.02 && radius > 1e-4;
+    }
   }
 
   private ensureRippleRig(): { meshes: THREE.Mesh[]; materials: THREE.MeshBasicMaterial[]; geometry: THREE.RingGeometry } {
@@ -610,7 +651,9 @@ function createShadowTexture(): THREE.Texture {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    const radius = size * 0.22;
+    // 原版的阴影**核心是实的、边缘才柔**：一直用大半径径向渐变会得到一团"雾"，
+    // 再叠上半透明的方块就像"起了层灰"。这里让 0~0.62 保持满浓度，只留最后 38% 收边。
+    const radius = size * 0.16;
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       ctx.roundRect(0, 0, size, size, radius);
@@ -618,9 +661,9 @@ function createShadowTexture(): THREE.Texture {
       ctx.rect(0, 0, size, size);
     }
     ctx.clip();
-    const gradient = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.52);
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.55);
     gradient.addColorStop(0, 'rgba(255,255,255,1)');
-    gradient.addColorStop(0.62, 'rgba(255,255,255,0.75)');
+    gradient.addColorStop(0.62, 'rgba(255,255,255,1)');
     gradient.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);

@@ -48,8 +48,14 @@ export const ISO_VIEW: IsoView = {
 
 /** 方块高度 / 边长（规格表 §2：实测 0.60） */
 export const BLOCK_HEIGHT_RATIO = 0.6;
-/** 小人高度 / 边长（规格表 §4：实测 0.72） */
-export const JUMPER_HEIGHT_RATIO = 0.72;
+/**
+ * 小人高度 / 边长。
+ *
+ * 参考图 02 实测：小人高 ≈ 0.73 × 方块**对角宽**；对角宽 ≈ 0.65 边长 → 1.12 边长。
+ * 第一版写的 0.72 是按"0.72 身高 ≈ 0.72 边长"想当然填的，渲出来小人只有 0.47 个对角宽，
+ * 明显比原版瘦小（同样只有看图能发现）。
+ */
+export const JUMPER_HEIGHT_RATIO = 1.12;
 
 const DEG = Math.PI / 180;
 /** 正交相机离目标的距离：只影响裁剪，不影响缩放 */

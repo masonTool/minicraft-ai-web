@@ -7,10 +7,14 @@
  *
  * 比例全部来自 `.continue/notes/jump-original.md` §4 的像素测量（以**身高**为单位）：
  *
- *  · 总高 1.00（外部再乘 `0.72 × 方块边长`）
- *  · 头：球，直径 0.29，球心在 0.855
- *  · 颈：最细处直径 0.18，位于 0.74
- *  · 裙摆：底部直径 0.35
+ *  · 总高 1.00（外部再乘 `1.12 × 方块边长`；02 实测小人高 ≈ 0.73 个方块对角宽）
+ *  · 头：球，直径 0.33，球心在 0.835
+ *  · 颈：最细处直径 0.196，位于 0.74
+ *  · 裙摆：底部直径 0.42
+ *
+ * ⚠️ 这几个数改过一次：第一版是头 0.29 / 裙摆 0.35 / 外部 0.72 边长，**明显偏瘦小**——
+ * 在参考图 02 里量"小人高 ÷ 方块对角宽"是 0.73，而第一版渲出来只有 0.47。
+ * 尺寸类的偏差离线断言查不出来（几何本身是自洽的），只能靠与参考图同口径测量。
  *
  * 三条刻意的做法：
  *
@@ -23,6 +27,7 @@
 
 import * as THREE from 'three';
 import { shadeForNormal } from './palette.ts';
+import { JUMPER_HEIGHT_RATIO } from './iso.ts';
 
 /** 小人默认颜色（02 实测主体 #38325A） */
 export const JUMPER_COLOR = '#38325A';
@@ -36,19 +41,19 @@ export const SQUASH_LIMIT = { y: 0.6, xz: 1.3 } as const;
  * 而原版的裙摆是一条平滑的外扩曲线。
  */
 const PROFILE: ReadonlyArray<readonly [number, number]> = [
-  [0.175, 0],
-  [0.168, 0.07],
-  [0.152, 0.16],
-  [0.133, 0.28],
-  [0.113, 0.4],
-  [0.096, 0.52],
-  [0.09, 0.62],
-  [0.094, 0.68],
-  [0.082, 0.74],
+  [0.21, 0],
+  [0.202, 0.07],
+  [0.182, 0.16],
+  [0.16, 0.28],
+  [0.136, 0.4],
+  [0.115, 0.52],
+  [0.108, 0.62],
+  [0.113, 0.68],
+  [0.098, 0.74],
 ];
 
-/** 头的球心与半径（直径 0.29 身高） */
-const HEAD_RADIUS = 0.145;
+/** 头的球心与半径（直径 0.33 身高） */
+const HEAD_RADIUS = 0.165;
 const HEAD_CENTER = 1 - HEAD_RADIUS;
 
 export class JumperModel {
@@ -88,7 +93,9 @@ export class JumperModel {
   /** 整体大小：模型高度 = 0.72 × 方块边长（规格表 §4） */
   setSize(edgeLength: number): void {
     const edge = Number.isFinite(edgeLength) && edgeLength > 0 ? edgeLength : 1;
-    this.baseScale = edge * 0.72;
+    // ⚠️ 这里原本写死 0.72，而取景用的 `JUMPER_HEIGHT_RATIO` 改到 1.12 后两边不一致——
+    // 小人没变大、镜头却按 1.12 留了头位（画面会白空一块）。比例只能有一处真值。
+    this.baseScale = edge * JUMPER_HEIGHT_RATIO;
     this.applyTransform();
   }
 
