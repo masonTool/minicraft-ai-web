@@ -206,6 +206,8 @@
     "diag:perf": "esbuild tools/diag-perf.ts --bundle --platform=node --format=esm --outfile=.tmp/diag-perf.mjs --log-level=error && node .tmp/diag-perf.mjs",
     "test:mode": "esbuild tools/mode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mode-test.mjs --log-level=error && node .tmp/mode-test.mjs",
     "test:buildinfo": "esbuild tools/buildinfo-test.ts --bundle --platform=node --format=esm --outfile=.tmp/buildinfo-test.mjs --log-level=error && node .tmp/buildinfo-test.mjs",
+    "gen:hostcore": "esbuild tools/gen-hostcore.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-hostcore.mjs --log-level=error && node .tmp/gen-hostcore.mjs",
+    "test:hostcore": "esbuild tools/hostcore-test.ts --bundle --platform=node --format=esm --outfile=.tmp/hostcore-test.mjs --log-level=error && node .tmp/hostcore-test.mjs",
     "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs",
     "test:screenshot": "node tools/screenshot-test.mjs",
     "guard": "node tools/console-guard.mjs",

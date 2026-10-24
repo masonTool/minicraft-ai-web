@@ -4418,8 +4418,13 @@ export function carpetId(colorIndex: number): number {
  *
  * 这里强制校验 id 从 0 开始连续——BLOCKS 是数组下标索引，一旦有空缺或错位，
  * blockDef(id) 就会静默地返回错误的方块。宁可启动时报错也不要让这种问题潜伏下去。
+ *
+ * ⚠️ 对外只给**构建工具与测试**用（`tools/gen-hostcore.ts` 用它生成二进制、
+ * `tools/hostcore-test.ts` 用它做往返比对）。运行时要方块表请用 `BLOCKS`/`blockDef()`：
+ * 线上那条路是从二进制解码来的（见 `blockTableCodec.ts`），两者必须逐字段一致，
+ * 一致性由 `npm run test:hostcore` 兜住。
  */
-function buildBlockTable(): readonly BlockDef[] {
+export function buildBlockTable(): readonly BlockDef[] {
   const table: BlockDef[] = [];
   for (const spec of SPECS) {
     if (spec.id !== table.length) {
