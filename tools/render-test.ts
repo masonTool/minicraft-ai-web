@@ -818,18 +818,44 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   const group = hand.scene.children[0] as THREE.Group;
   check('空手时也画手臂（手臂恒在）', group.children.length >= 1);
 
-  // 方块走立方体（24 个顶点）、非方块走平面（4 个顶点）
+  // 方块走立方体（24 个顶点）、非方块走**有厚度的薄板**（也是 24 个顶点，批次 20261024-1152）
   // ⚠️ 挂点下标是 2：批次 241 在手臂后面插了一块布袖（`arm → cuff → itemAnchor → 袖套`）
   const blockMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
   check('手持方块用立方体几何体', blockMesh.geometry.getAttribute('position').count === 24, String(blockMesh.geometry.getAttribute('position').count));
   check('方块六个面都写了 UV', blockMesh.geometry.getAttribute('uv').count === 24);
+  // 批次 20261024-1152（用户）：手持物放大 2 倍（0.22 → 0.44）
+  const blockBox = blockMesh.geometry as THREE.BoxGeometry;
+  check(
+    '手持方块边长是原来的 2 倍（0.44）',
+    Math.abs(blockBox.parameters.width - 0.44) < 1e-6 && Math.abs(blockBox.parameters.height - 0.44) < 1e-6,
+    `${blockBox.parameters.width}`,
+  );
 
   hand.setItem(Item.STICK);
   const stickMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
-  check('手持物品换成平面贴图', stickMesh.geometry.getAttribute('position').count === 4, String(stickMesh.geometry.getAttribute('position').count));
+  const stickBox = stickMesh.geometry as THREE.BoxGeometry;
+  check(
+    '非方块物品不再是零厚度平面（改成薄板）',
+    stickMesh.geometry.getAttribute('position').count === 24 &&
+      stickBox.parameters.depth > 0.05 &&
+      stickBox.parameters.depth < 0.12,
+    `顶点 ${stickMesh.geometry.getAttribute('position').count} / 厚度 ${stickBox.parameters.depth}`,
+  );
+  check('薄板六个面都贴了同一张图标', stickMesh.geometry.getAttribute('uv').count === 24);
 
+  // 批次 20261024-1152（用户）：手里有东西时**不画手臂**（原版如此），空手才露出来
+  const armMesh = group.children[0] as THREE.Mesh;
+  const cuffMesh = group.children[1] as THREE.Mesh;
+  const armorSleeve = group.children[3] as THREE.Mesh;
+  check('拿东西时手臂隐藏', !armMesh.visible && !cuffMesh.visible);
+  hand.setArmorColor(0xcdcdd4);
+  check('拿东西时胸甲袖套也不露（否则是悬空的袖子）', !armorSleeve.visible);
   hand.setItem(undefined);
   check('切回空手会移除手上的东西', (group.children[2] as THREE.Group).children.length === 0);
+  check('空手时手臂与袖套回来', armMesh.visible && cuffMesh.visible && armorSleeve.visible);
+  hand.setItem(Item.STICK);
+  check('再拿起东西手臂又收起来', !armMesh.visible && !armorSleeve.visible);
+  hand.setItem(undefined);
 
   // 批次 241：手臂根部多一段布袖；第一人称的肤色/上衣色要跟着外观走
   const cuff = group.children[1] as THREE.Mesh;

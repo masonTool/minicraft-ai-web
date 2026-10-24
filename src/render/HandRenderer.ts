@@ -16,8 +16,21 @@ import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
 import { srgbColor } from './srgb.ts';
 
-/** 手持方块/物品的显示尺寸（格）：比真实方块小，太大会顶满屏幕 */
-const ITEM_SIZE = 0.22;
+/**
+ * 手持方块/物品的显示尺寸（格）。
+ *
+ * 批次 20261024-1152（用户）：0.22 → **0.44**（"放大 2 倍"）。原版第一人称下
+ * 手里的方块本来就占屏幕很大一块；同时**手臂不再画**（见 `refreshHandVisibility`），
+ * 观感与基岩版一致：只看见一件东西，而不是"一只手捏着一粒米"。
+ */
+const ITEM_SIZE = 0.44;
+/**
+ * 非方块物品（工具 / 食物 / 方块物品之外的那些）的厚度（格）。
+ *
+ * 以前它们是一张**零厚度**的 `PlaneGeometry`：正对镜头还行，稍微侧一点就成了一条线。
+ * 现在给一块薄板（0.08 格 ≈ 1.3 像素厚）——与原版"平铺但有厚度"的样子一致。
+ */
+const ITEM_THICKNESS = 0.08;
 /** 手臂横截面与长度（格）：16px 皮肤里手臂是 4×4×12 像素 */
 const ARM_WIDTH = 0.15;
 const ARM_LENGTH = 0.75;
@@ -111,6 +124,8 @@ export class HandRenderer {
   private itemMesh: THREE.Mesh | null = null;
 
   private heldItem: number | undefined;
+  /** 胸甲袖套的颜色（`null` = 没穿）——与"手里有没有东西"一起决定袖套显隐 */
+  private armorColor: number | null = null;
   private swingTime = SWING_DURATION;
   /** 是否绘制（第三人称时关掉，改由玩家模型出场） */
   private visible = true;
@@ -191,7 +206,9 @@ export class HandRenderer {
     this.armorSleeve.position.set(0, 0, -SLEEVE_LENGTH / 2 + 0.01);
     this.armorSleeve.visible = false;
 
-    this.itemAnchor.position.set(0, 0, -ARM_LENGTH - ITEM_SIZE * 0.36);
+    // 挂点仍然在"手"的位置上：物品放大 2 倍之后不能再往远处推 0.36 个身位，
+    // 否则透视会把它拉回原来的视觉大小（甚至更小）
+    this.itemAnchor.position.set(0, 0, -ARM_LENGTH - ITEM_SIZE * 0.12);
 
     // 顺序固定为「手臂 → 布袖 → 手持物挂点 → 袖套」：挂点必须排在袖套前面，
     // 否则袖套会挡住手上的东西（袖套比手臂粗一圈）
@@ -228,6 +245,9 @@ export class HandRenderer {
   /**
    * 切换手持物品。
    * 传 undefined 表示空手——此时只画手臂（原版空手也是能攻击的）。
+   *
+   * 批次 20261024-1152（用户）：手里有东西时**不画手臂**，只画那件东西（原版如此）。
+   * 手臂/布袖/盔甲袖套的显隐统一由 `refreshHandVisibility` 决定，别在别处单独改 `visible`。
    */
   setItem(itemId: number | undefined): void {
     if (itemId === this.heldItem) return;
@@ -237,6 +257,7 @@ export class HandRenderer {
       this.itemAnchor.remove(this.itemMesh);
       this.itemMesh = null;
     }
+    this.refreshHandVisibility();
     if (itemId === undefined) return;
 
     const blockId = blockForItem(itemId);
@@ -246,6 +267,19 @@ export class HandRenderer {
     mesh.rotation.set(0.2, -0.5, 0.15);
     this.itemMesh = mesh;
     this.itemAnchor.add(mesh);
+  }
+
+  /**
+   * 手臂只在**空手**时出现（批次 20261024-1152）。
+   *
+   * 手里拿着东西时原版不画那条手臂——只看得见手里那件物品，而且它比空手时大得多。
+   * 三块（手臂 / 布袖 / 盔甲袖套）必须一起判：只藏手臂会留下"悬空的袖子"。
+   */
+  private refreshHandVisibility(): void {
+    const empty = this.heldItem === undefined;
+    this.arm.visible = empty;
+    this.cuff.visible = empty;
+    this.armorSleeve.visible = empty && this.armorColor !== null;
   }
 
   /** 挥手（攻击/放置/挖掘时调用）；已经挥到一半就不重开，避免"抖手" */
@@ -270,8 +304,10 @@ export class HandRenderer {
    * 与第三人称的甲片同源：都由调用方从装备图标取色，渲染层不认识"材质"。
    */
   setArmorColor(color: number | null): void {
-    this.armorSleeve.visible = color !== null;
+    this.armorColor = color;
     if (color !== null) this.sleeveMaterial.uniforms.uFlatColor!.value = srgbColor(color);
+    // 手里拿着东西时手臂整条都不画，袖套自然也不该露出来
+    this.refreshHandVisibility();
   }
 
   /**
@@ -340,14 +376,21 @@ export class HandRenderer {
     return geometry;
   }
 
-  /** 非方块物品：一条朝向镜头的薄板（手持时朝向由挂点决定，不做 billboard） */
+  /**
+   * 非方块物品：一块**有厚度**的薄板（手持时朝向由挂点决定，不做 billboard）。
+   *
+   * 批次 20261024-1152：由 `PlaneGeometry`（零厚度）改成 `BoxGeometry(ITEM_SIZE, ITEM_SIZE, ITEM_THICKNESS)`，
+   * 六个面都贴同一张物品图标，并沿用方块那套逐面明暗——这样侧着看是一件"薄片"，
+   * 而不是一条没有厚度的线。图标本身四周是透明的，`alphaTest` 会把边缘裁掉。
+   */
   private spriteGeometry(itemId: number): THREE.BufferGeometry {
     const cached = this.spriteGeometries.get(itemId);
     if (cached) return cached;
 
-    const geometry = new THREE.PlaneGeometry(ITEM_SIZE, ITEM_SIZE);
-    applyFaceUvs(geometry, this.atlas, [itemIconTile(itemId)]);
-    applyFaceShade(geometry, [1]);
+    const geometry = new THREE.BoxGeometry(ITEM_SIZE, ITEM_SIZE, ITEM_THICKNESS);
+    const tile = itemIconTile(itemId);
+    applyFaceUvs(geometry, this.atlas, [tile, tile, tile, tile, tile, tile]);
+    applyFaceShade(geometry, FACE_SHADE);
     this.spriteGeometries.set(itemId, geometry);
     return geometry;
   }
