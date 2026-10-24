@@ -45,7 +45,6 @@ export const inventory = {
   "inventory.armor.boots": "Pés",
   "inventory.armor.offhand": "Mão secundária",
   "inventory.offhandHint": "Mão secundária: escudo / tocha / totem…",
-  "inventory.armorEmptyHint": "Slot {part} vazio — pegue o equipamento correspondente e toque aqui",
   "inventory.recipeBook": "Livro de receitas",
   "inventory.recipeBookKey": "Livro de receitas (R)",
   "inventory.achievements": "Conquistas",

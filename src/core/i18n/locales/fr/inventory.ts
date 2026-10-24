@@ -46,7 +46,6 @@ export const inventory = {
   "inventory.armor.boots": "Pieds",
   "inventory.armor.offhand": "Main secondaire",
   "inventory.offhandHint": "Main secondaire : bouclier / torche / totem…",
-  "inventory.armorEmptyHint": "Emplacement {part} vide — prenez d’abord l’équipement correspondant, puis touchez ici",
   "inventory.recipeBook": "Livre de recettes",
   "inventory.recipeBookKey": "Livre de recettes (R)",
   "inventory.achievements": "Succès",

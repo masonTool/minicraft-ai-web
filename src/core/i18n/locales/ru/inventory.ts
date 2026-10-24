@@ -46,7 +46,6 @@ export const inventory = {
   "inventory.armor.boots": "Обувь",
   "inventory.armor.offhand": "Вторая рука",
   "inventory.offhandHint": "Вторая рука: щит / факел / тотем и т. п.",
-  "inventory.armorEmptyHint": "Пустой слот «{part}» — сначала возьмите подходящую экипировку, затем нажмите здесь",
   "inventory.recipeBook": "Книга рецептов",
   "inventory.recipeBookKey": "Книга рецептов (R)",
   "inventory.achievements": "Достижения",

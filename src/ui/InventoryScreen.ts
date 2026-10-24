@@ -414,18 +414,6 @@ export const SCROLLBAR_TRACK_WIDTH = 7;
  */
 export const PICK_TOAST_MS = 2000;
 
-/**
- * 装备槽（36~40）对应的部位文案键（批次 20261024-1455）。
- *
- * 用 `item.armorType.*`（头盔/胸甲/护腿/靴子）而不是槽位上那一个字的
- * `inventory.armor.*`（头/胸/腿/靴）：提示句里说"空头槽"很别扭，说"空头盔槽"才对。
- */
-const ARMOR_PART_KEYS = [
-  'item.armorType.helmet',
-  'item.armorType.chestplate',
-  'item.armorType.leggings',
-  'item.armorType.boots',
-] as const;
 
 /** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
 /** 右轨"成就"图标（图集里没有对应物品，用内联 SVG：奖杯） */
@@ -5861,34 +5849,9 @@ export class InventoryScreen {
     return isBoundByCurse(this.inventory.get(index)?.enchants);
   }
 
-  /**
-   * 这个槽是不是装备槽（36~40）；是就返回部位名，否则 null。
-   *
-   * 只看**玩家自己的背包**：箱子/熔炉里的槽位编号（0、1、2…）会撞上护甲区间，
-   * 不加这一条判据的话，点箱子第一格会弹出"空头盔槽"。
-   */
-  private armorSlotPartName(binding: { readonly source: SlotSource; readonly index: number }): string | null {
-    if (binding.source !== this.inventory) return null;
-    const offset = binding.index - ARMOR_START;
-    if (offset < 0 || offset > ARMOR_SIZE) return null;
-    // 第 5 格（offset === ARMOR_SIZE）是副手：它的部位名是"副手"
-    if (offset === ARMOR_SIZE) return t('inventory.armor.offhand');
-    return t(ARMOR_PART_KEYS[offset]!);
-  }
-
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
-    // 批次 20261024-1455（用户）：**点空的装备槽也要有提示**。
-    // 原来空手点空格什么都不发生，玩家不知道这一格是放什么的（槽里只有一枚剪影图标）。
-    // 只在"空格 + 空手 + 左键"时说一句，手里拿着东西时仍然走正常放置逻辑。
-    if (button === 0 && !this.held && !binding.source.get(binding.index)) {
-      const part = this.armorSlotPartName(binding);
-      if (part !== null) {
-        this.showMessage(tp('inventory.armorEmptyHint', { part }));
-        return;
-      }
-    }
     // 批次 324：手动往原料/燃料格放东西或取回时，只要还没点过目标开工，
     // 就强制保持暂停——不能因为操作槽位而自动开始烧。
     if (
