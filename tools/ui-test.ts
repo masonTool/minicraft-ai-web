@@ -13,7 +13,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { t } from '../src/core/i18n/I18n.ts';
+import { t, tableOf } from '../src/core/i18n/I18n.ts';
 import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
 import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
 import {
@@ -3911,12 +3911,23 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes("diag.event('world', 'weather', {"),
   );
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  /**
+   * 中文表的所有值拼成一条长串。
+   *
+   * 多语言（批次 20261025-0105）之后，这些话不再躺在 `main.ts` 的源码里，
+   * 所以"这句话还在"的判据从"源码里有这几个字"变成"表里有这几个字"——
+   * 守的东西没变（这条路径会给出带原因与建议的提示），只是换了存放位置。
+   */
+  const sayZh = Object.values(tableOf('zh')).join('\n');
   check(
     '掉血播报同时给出「现象 + 原因」（含具体生物名）',
     appSrc.includes('emitPlayerNotices()') &&
       appSrc.includes('takeDamageLog()') &&
       appSrc.includes('damageReason(') &&
-      appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
+      // 多语言（批次 20261025-0105）：整句搬进 `say.*`，所以这里**按文案键**判，
+      // 再回表里确认中文那句还在（判的仍然是"这条路径会给出提示"，不是"提示的措辞"）
+      appSrc.includes("tp('say.damage.taken'") &&
+      sayZh.includes('受到 {amount} 点伤害：') &&
       // 多语言 P2-4：种类名不再直接读 `type.name`（字段已改成 `nameKey`），走 `mobLabel()`
       mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this)"),
   );
@@ -3948,11 +3959,17 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
   check(
     '饥饿 / 氧气 / 着火 / 低血量也写了原因与建议',
-    appSrc.includes('（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）') &&
-      appSrc.includes('氧气不足（正在水下憋气') &&
-      appSrc.includes('你着火了（站在火/岩浆里或被点燃）') &&
-      appSrc.includes('生命值偏低') &&
-      appSrc.includes('饥饿值耗尽（体力透支）'),
+    // 句子搬进 `say.*`：源码里按**键**判，措辞回中文表里核对
+    appSrc.includes("tp('say.food.loss'") &&
+      appSrc.includes("tp('say.air.low'") &&
+      appSrc.includes("t('say.burning'") &&
+      appSrc.includes("tp('say.health.low'") &&
+      appSrc.includes("t('say.food.starving'") &&
+      sayZh.includes('（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）') &&
+      sayZh.includes('氧气不足（正在水下憋气') &&
+      sayZh.includes('你着火了（站在火/岩浆里或被点燃）') &&
+      sayZh.includes('生命值偏低') &&
+      sayZh.includes('饥饿值耗尽（体力透支）'),
   );
 }
 

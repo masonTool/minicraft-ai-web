@@ -11996,7 +11996,7 @@ class App {
     if (axeHit && this.isShieldUp) {
       this.shieldDisabled = SHIELD_DISABLE_SECONDS;
       this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
-      this.chat.push('盾牌被斧头破防（5 秒）', 'system');
+      this.chat.push(tp('say.shield.axeBreak', { seconds: SHIELD_DISABLE_SECONDS }), 'system');
     }
 
     // 盾牌（批次 194）：正面挡近战、箭矢与爆炸——**挡下不等于受伤**，所以音效与震动都在下面才播
@@ -12079,7 +12079,7 @@ class App {
       if (damage >= max) {
         this.inventory.set(slot, null);
         this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
-        this.chat.push('盾牌碎了', 'system');
+        this.chat.push(t('say.shield.broken'), 'system');
       } else {
         this.inventory.set(slot, { ...stack, damage });
       }
@@ -13410,7 +13410,7 @@ class App {
       y: this.physics.y + 1,
       z: this.physics.z,
     });
-    this.chat.push('不死图腾救了你一命', 'system');
+    this.chat.push(t('say.totem.saved'), 'system');
     this.hudToast.show(t('misc.toast.totemSaved'));
     this.refreshHotbar();
     return true;
@@ -16537,7 +16537,7 @@ class App {
         if (this.respawnCountdown >= RESPAWN_DELAY) {
           this.respawnPlayer();
           this.setGameMode('spectator');
-          this.chat.push('极限模式：你已死亡，只能以旁观者继续查看这个世界', 'system');
+          this.chat.push(t('say.hardcore.dead'), 'system');
         }
       } else if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) {
         // 立即重生（批次 255）：跳过那 1 秒等待，直接回出生点
@@ -16592,10 +16592,17 @@ class App {
       }
       const list = [...groups.values()];
       const total = list.reduce((sum, item) => sum + item.amount, 0);
+      // 多语言：**句子**走 `say.*`，**原因碎片**仍由 `damageReason()` 提供（`notice.damage.*`）。
+      // 分隔符也得查表——中文是「；」，英德葡是 "; "，法语惯例是「 ; 」（空格在标点前）。
       const reasons = list
-        .map((item) => `${damageReason(item.cause, item.source)}（${fmt(item.amount)} 点）`)
-        .join('；');
-      this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
+        .map((item) =>
+          tp('say.damage.reason', {
+            cause: damageReason(item.cause, item.source),
+            amount: fmt(item.amount),
+          }),
+        )
+        .join(t('say.damage.sep'));
+      this.chat.push(tp('say.damage.taken', { amount: fmt(total), reasons, health: fmt(health) }), 'damage');
       // 受伤反馈（批次 234）：红闪 + 声音 + 触觉。
       // ⚠️ 放在这里而不是 `damagePlayer`：只有这里拿得到"**实际**掉了多少血"，
       // 而且溺水 / 着火 / 饥饿这些不走 `damagePlayer` 的伤害也要有同样的反馈。
@@ -16614,8 +16621,14 @@ class App {
     } else if (healthDelta < -0.05) {
       // 没有记录（理论上不该发生，比如读档直接改了 health）：退回最后一条，至少给出类型
       const last = this.stats.lastDamage;
+      // 这一支**没有逐条金额**（流水对不上，只有一条兜底原因），所以不套 `say.damage.reason`：
+      // 套上去会变成「受到 2 点伤害：摔落（2 点）」——同一笔数字说两遍
       this.chat.push(
-        `受到 ${fmt(-healthDelta)} 点伤害：${damageReason(last?.cause ?? 'generic', last?.source)} · 生命 ${fmt(health)}/20`,
+        tp('say.damage.taken', {
+          amount: fmt(-healthDelta),
+          reasons: damageReason(last?.cause ?? 'generic', last?.source),
+          health: fmt(health),
+        }),
         'damage',
       );
       // 这条本身就是"伤害流水对不上"的信号，必须记下来（带 `unlogged` 标记便于筛）
@@ -16630,51 +16643,50 @@ class App {
       this.reactToDamage(-healthDelta);
     }
     if (survivalMode && healthDelta >= 2) {
-      this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
+      this.chat.push(tp('say.health.gain', { amount: fmt(healthDelta), health: fmt(health) }), 'gain');
     }
 
     // ---- 饥饿：掉 1 点也播（原版没有这个提示，但手机上血条很小，等看见时已经晚了）
     if (survivalMode && food < this.noticeFood) {
       const lost = this.noticeFood - food;
-      const hint = food <= 6 ? ' · 快吃点东西，否则会饿到掉血' : '';
+      // 低饥饿那句是**附加后缀**，所以进模板当 `{hint}` 而不是在外面 + 字符串：
+      // 英文/德文的语序可能把它放到句尾以外的地方（批次 425 的教训）
+      const hint = food <= 6 ? t('say.food.lowHint') : '';
       this.chat.push(
-        `饥饿值 -${fmt(lost)}（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）· 剩余 ${fmt(food)}/20${hint}`,
+        tp('say.food.loss', { amount: fmt(lost), food: fmt(food), hint }),
         food <= 6 ? 'warning' : 'system',
       );
     } else if (survivalMode && food > this.noticeFood) {
-      this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)}（进食 / 饱和效果）· 当前 ${fmt(food)}/20`, 'gain');
+      this.chat.push(tp('say.food.gain', { amount: fmt(food - this.noticeFood), food: fmt(food) }), 'gain');
     }
 
     // ---- 低血量 / 饥饿耗尽：只在"刚跨过阈值"时报一次，恢复后复位
     // 创造模式整段跳过，但**不复位 warned**：切回生存时该提示的还要提示
     if (survivalMode && !this.lowHealthWarned && health > 0 && health <= 6) {
       this.lowHealthWarned = true;
-      this.chat.push(
-        `生命值偏低（${fmt(health)}/20）：先躲开敌人或危险方块，吃东西可以回血`,
-        'warning',
-      );
+      this.chat.push(tp('say.health.low', { health: fmt(health) }), 'warning');
     } else if (survivalMode && this.lowHealthWarned && health > 10) {
       this.lowHealthWarned = false;
     }
     if (survivalMode && !this.starveWarned && food <= 0) {
       this.starveWarned = true;
-      this.chat.push('饥饿值耗尽（体力透支）：会持续掉血，也无法自然回血；快吃东西', 'warning');
+      this.chat.push(t('say.food.starving'), 'warning');
     } else if (survivalMode && this.starveWarned && food > 6) {
       this.starveWarned = false;
     }
 
     // ---- 氧气：不足与耗尽各提示一次（之后由"受到伤害"那条接管）
     if (survivalMode && air <= 100 && this.noticeAir > 100) {
-      this.chat.push(`氧气不足（正在水下憋气，剩余 ${Math.max(0, Math.round(air))}）：浮上水面换气`, 'warning');
+      this.chat.push(tp('say.air.low', { air: Math.max(0, Math.round(air)) }), 'warning');
     } else if (survivalMode && air <= 0 && this.noticeAir > 0) {
-      this.chat.push('氧气耗尽（已经憋不住）：正在溺水掉血，立刻上浮', 'damage');
+      this.chat.push(t('say.air.empty'), 'damage');
     } else if (survivalMode && air > 120 && this.noticeAir <= 100) {
-      this.chat.push('回到水面（已能呼吸）：氧气正在恢复', 'gain');
+      this.chat.push(t('say.air.back'), 'gain');
     }
 
     // ---- 着火：点燃那一刻说一次（持续伤害由生命那条播）
     if (survivalMode && this.stats.burning && !this.noticeBurning) {
-      this.chat.push('你着火了（站在火/岩浆里或被点燃）：每秒掉血，跳进水里可熄灭', 'warning');
+      this.chat.push(t('say.burning'), 'warning');
     }
 
     this.noticeHealth = health;
@@ -16852,7 +16864,7 @@ class App {
             return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
           }
           this.bedSpawn = null;
-          this.chat.push('重生锚的充能耗尽了，回世界出生点复活', 'system');
+          this.chat.push(t('say.respawn.anchorEmpty'), 'system');
         } else {
           const other = bedOtherHalf(bed.x, bed.y, bed.z, this.world.getBlockState(bed.x, bed.y, bed.z));
           if (isBed(id) && isBed(this.world.getBlock(other[0], other[1], other[2]))) {
@@ -16860,7 +16872,7 @@ class App {
           }
           // 床没了：这一份重生点作废，下次睡觉才会重新记
           this.bedSpawn = null;
-          this.chat.push('你的床不在了，回世界出生点复活', 'system');
+          this.chat.push(t('say.respawn.bedGone'), 'system');
         }
       } else {
         // ⚠️ 床在**别的维度**：切维度会把区块重新流式加载，这一刻 `getBlock` 一律返回空气，
