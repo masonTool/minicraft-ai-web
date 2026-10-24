@@ -1011,6 +1011,14 @@ const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
  * 单次放置/破坏最多两格，这个上限是为将来的**批量撤销**（框选填充、模板）留的：
  * 一次撤 4096 格时逐格 `wakeFluidsAround` 会变成一次小型的流体风暴。
  */
+/**
+ * 按住时两次挥动之间的间隔（秒）。
+ *
+ * 取值略大于一次挥动的时长（`HandRenderer` 里 `SWING_DURATION = 0.26`）：
+ * 挥动中 `swing()` 不会重开，间隔给太小等于白白调用；0.3 ≈ 原版挖方块每 6 tick 一下。
+ */
+const ARM_SWING_INTERVAL = 0.3;
+
 const UNDO_WAKE_LIMIT = 256;
 
 /**
@@ -2284,6 +2292,18 @@ class App {
   private shieldDisabled = 0;
   private leftDown = false;
   private rightDown = false;
+  /**
+   * 手臂挥动的"节拍器"（批次 20261024-XXXX，用户："点一下就应该挥一下手，长按就是快速挥手"）。
+   *
+   * 以前挥动只挂在"真的打到/挖到/放下东西"上：对着空气点一下、或者左键点完立刻松开
+   * （按下与松开落在同一帧里），手就完全不动。现在按**输入**驱动：
+   *   · `tapSwingRequest`：按下那一下立刻挥一次（哪怕一帧内就松开了）；
+   *   · 按住时每 `ARM_SWING_INTERVAL` 秒再挥一次，不看有没有目标。
+   * 攻击/挖掘/放置自己也会调 `hand.swing()`，而 `swing()` 在挥动中不会重开，
+   * 所以两条路叠加也不会"抖手"。
+   */
+  private tapSwingRequest = false;
+  private armSwingCooldown = 0;
 
   /** 盔甲外观：装备 id 串成的 key（变了才重算颜色）与四个部位的甲片颜色 */
   private armorKey = 'init';
@@ -2641,8 +2661,13 @@ class App {
     this.scene.add(this.particles.object);
     // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
-    // 玩家模型与生物用同一套亮度口径，第三人称下才可见
-    this.playerRenderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
+    // 玩家模型与生物用同一套亮度口径，第三人称下才可见。
+    // 图集传下去是为了画**第三人称手里那件东西**（按图标/方块贴图铺 UV）
+    this.playerRenderer = new PlayerRenderer(
+      this.scene,
+      () => this.solidMaterial.skyBrightnessValue,
+      atlas,
+    );
     // 外观（批次 241）：存档里的肤色/上衣色要在**进世界那一刻**就落到第三人称与第一人称上。
     // 以前只有 `applySettings()` 会调 `setAppearance()`，等于"自定义外观要打开一次设置才生效"。
     const initialPalette = paletteOf(this.settings);
@@ -3126,6 +3151,9 @@ class App {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: (clientX: number, clientY: number) => {
+        // 轻点就是"挥一下手"（用户 20261024）：不管这一下是打生物、放方块还是点了空气，
+        // 手都要动；长按（`onBreakStart` → leftDown）走 `updateArmSwing` 的节拍器。
+        this.tapSwingRequest = true;
         // 批次 271：瞄准方式决定"这一下打哪"——手指落点，或屏幕中心的老方式。
         // 批次 521：手指落点要先挪到**白圈的左上/右上边缘**（手指会盖住目标格），
         // 这条换算在 `TouchControls.aimPointAt` 里，白圈本身仍然跟手。
@@ -5489,7 +5517,11 @@ class App {
           if (e.button === 0) {
             // 建造模式（创造5）：左键只点一个选区角，不进入"按住破坏"
             if (this.buildMode) this.buildRequest = true;
-            else this.leftDown = true;
+            else {
+              this.leftDown = true;
+              // 按下就记一次挥动：一帧内按下+松开（快速点击）也挥手
+              this.tapSwingRequest = true;
+            }
           }
           if (e.button === 2) this.rightDown = true;
         },
@@ -6052,6 +6084,7 @@ class App {
       this.statisticsLastZ = this.physics.z;
     }
 
+    this.updateArmSwing(dt);
     this.updateAttacking(dt);
     this.updateBreaking(dt);
     this.updatePlacing();
@@ -8385,6 +8418,23 @@ class App {
     this.particles.spawnSmoke(mob.x, mob.y + 0.7, mob.z, 8, 0.22);
     this.refreshHotbar();
     return count;
+  }
+
+  /**
+   * 手臂挥动的输入驱动（批次 20261024-XXXX）。
+   *
+   * 见字段 `tapSwingRequest` 的注释：点一下挥一次、按住按节拍连续挥。
+   * UI 打开、或者正在建造模式框选时不挥（那两下不是"使用手"）。
+   */
+  private updateArmSwing(dt: number): void {
+    this.armSwingCooldown = Math.max(0, this.armSwingCooldown - dt);
+    const tap = this.tapSwingRequest;
+    this.tapSwingRequest = false;
+    if (this.uiOpen || this.buildMode) return;
+    const holding = this.leftDown || this.padAttack || this.touch?.holding === true;
+    if (!tap && !(holding && this.armSwingCooldown <= 0)) return;
+    this.hand.swing();
+    this.armSwingCooldown = ARM_SWING_INTERVAL;
   }
 
   private updateAttacking(dt: number): void {
@@ -17968,7 +18018,10 @@ class App {
       // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画。
       // 第三人称看的是玩家模型（手里没有画方块），所以第一人称的手臂要藏起来。
       this.updateCameraFov(dt);
-      this.hand.setItem(this.inventory.get(this.hotbarIndex)?.id);
+      const heldItemId = this.inventory.get(this.hotbarIndex)?.id;
+      this.hand.setItem(heldItemId);
+      // 第三人称看的是玩家模型，手里的东西也得在**那只手**上（用户 20261024 反馈）
+      this.playerRenderer.setHeldItem(heldItemId);
       this.hand.update(dt, this.isPlayerMoving(), this.camera.fov, this.camera.aspect);
       this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
       this.screenEffects.update(dt);

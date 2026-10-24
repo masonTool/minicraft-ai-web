@@ -32,7 +32,11 @@
 
 import * as THREE from 'three';
 import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
-import { Item } from '../core/registry/items.ts';
+import { blockForItem, Item, itemIconTile } from '../core/registry/items.ts';
+import { blockDef } from '../core/registry/blocks.ts';
+import { isFullBlockShape } from '../core/registry/blockShapes.ts';
+import { TILE_SIZE, type TextureAtlas } from './TextureAtlas.ts';
+import { applyFaceUvs, applySpriteFaceUvs, blockFaceTiles } from './atlasMesh.ts';
 import { applyBoxFaceShade } from './boxShading.ts';
 import {
   bodyProportions,
@@ -91,6 +95,30 @@ export interface PlayerPose {
   swimming?: boolean;
 }
 
+/**
+ * 第三人称手里那件东西的尺寸与姿态（单位：格）。
+ *
+ * 原版第三人称能看到角色举着手里的方块/工具，而之前这里什么都没画——
+ * 第一人称藏起手臂之后，切到第三人称就是"空着两只手"，很出戏（用户 20261024 反馈）。
+ * 方块比工具略小一圈：工具是扁平图标，视觉上要占满手心才不会像一根棍子。
+ */
+const HELD_BLOCK_SIZE = 0.34;
+const HELD_SPRITE_SIZE = 0.52;
+const HELD_SPRITE_THICKNESS = 0.03;
+/** 握点：右臂局部坐标（手臂从肩 y=0 垂到 y≈-0.7，手心在 -0.66 附近） */
+const HELD_GRIP: readonly [number, number, number] = [-0.2, -0.56, -0.26];
+/**
+ * 握持姿态：图标转开 45° 而不是正对/侧对镜头——
+ *
+ * ⚠️ 转 90°（让图标侧对镜头）是从"第一人称看刀身侧面"想当然推的：第三人称是从前/后
+ * 方向看角色，侧对镜头等于把图标看成一条线（实测剑只剩一根青色细条）。
+ * 转 45° 之后前视角与后视角都能看出刀形，厚度面还能补一点立体感。
+ */
+const HELD_SPRITE_ROTATION: readonly [number, number, number] = [-0.22, -0.28, 0.24];
+const HELD_BLOCK_ROTATION: readonly [number, number, number] = [0.12, 0.62, 0.1];
+/** 扁平物品的逐面亮度（`+x -x +y -y +z -z`）：正反两面满亮度，厚度面压暗 */
+const HELD_SPRITE_SHADE: readonly number[] = [0.55, 0.55, 0.55, 0.55, 1, 1];
+
 /** 亮度采样：返回该点的天光/方块光（区块未加载时返回 null） */
 export type LightSampler = (x: number, y: number, z: number) => { sky: number; block: number } | null;
 
@@ -109,6 +137,18 @@ export class PlayerRenderer {
   private readonly capeMesh: THREE.Mesh;
   /** 副手盾牌（批次 275）：挂在左臂外侧，只有副手放盾牌时才显示 */
   private readonly offhandGroup: THREE.Group;
+  /** 主手物品：挂在右臂末端（手心），没有物品时整组隐藏 */
+  private readonly mainhandGroup = new THREE.Group();
+  /**
+   * 主手物品的材质（方块一份、扁平图标一份），都要跟着环境亮度一起变暗 ——
+   * 否则站在洞里时身体是黑的、手里的木头还是亮的。
+   */
+  private heldBlockMaterial: THREE.MeshBasicMaterial | null = null;
+  private heldSpriteMaterial: THREE.MeshBasicMaterial | null = null;
+  /** 当前主手物品 id（`undefined` = 空手） */
+  private heldItemId: number | undefined;
+  private heldMesh: THREE.Mesh | null = null;
+  private readonly heldGeometries = new Map<number, THREE.BufferGeometry>();
   /**
    * 按"角色部位"分组的网格（批次 187 外观）。
    * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
@@ -180,6 +220,13 @@ export class PlayerRenderer {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly skyBrightnessOf: () => number,
+    /**
+     * 图集：主手物品要按图标/方块贴图铺 UV 才需要。
+     *
+     * 可选是因为**不是每个调用方都有图集**：UI 里的角色预览（`PlayerPreview3D`）
+     * 和离线测试都拿不到真实图集，那时就不画手里的东西（预览里本来也没在玩）。
+     */
+    private readonly atlas?: TextureAtlas,
   ) {
     this.object.visible = false;
     // 先偏航再俯仰：潜行前倾要绕着**身体朝向**的 X 轴转，默认的 XYZ 会绕世界轴转
@@ -311,6 +358,30 @@ export class PlayerRenderer {
     this.addBox(this.offhandGroup, 0.36, 0.05, 0.065, 0, -0.2, 0, SHIELD_IRON);
     this.addBox(this.offhandGroup, 0.05, 0.4, 0.065, 0, 0, 0, SHIELD_DARK);
     this.offhandGroup.visible = false;
+
+    // ---- 主手物品（批次 20261024-XXXX）：挂在右臂末端的手心
+    //
+    // ⚠️ 必须在 `captureBodyParts()` **之前**建好：那一趟会按体型比例重算零件尺寸，
+    // 晚建的网格拿不到出厂尺寸。物品自己不参与体型缩放（不放进 bodyParts），
+    // 但挂点是 armR 的子节点，所以会跟着手臂一起走。
+    this.mainhandGroup.position.set(...HELD_GRIP);
+    this.mainhandGroup.visible = false;
+    this.armR.add(this.mainhandGroup);
+    if (this.atlas) {
+      this.heldBlockMaterial = new THREE.MeshBasicMaterial({
+        map: this.atlas.texture,
+        alphaTest: 0.5,
+        vertexColors: true,
+      });
+      this.heldSpriteMaterial = new THREE.MeshBasicMaterial({
+        map: this.atlas.texture,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+      });
+      for (const material of [this.heldBlockMaterial, this.heldSpriteMaterial]) {
+        this.setBaseColor(material, 0xffffff);
+      }
+    }
 
     // 批次 333：体型比例的快照必须在**全部零件（含盔甲/披风/盾牌）建好之后**再做，
     // 否则晚建的甲片拿不到自己的出厂尺寸。
@@ -489,6 +560,90 @@ export class PlayerRenderer {
    */
   setOffhand(itemId: number | null): void {
     this.offhandGroup.visible = itemId === Item.SHIELD;
+  }
+
+  /**
+   * 主手物品（批次 20261024-XXXX，用户："第三人称时也应该能看到角色手拿的物品"）。
+   *
+   * 传 `undefined` = 空手（整组隐藏）。方块只画**完整立方体**，火把/花草/台阶这些
+   * 和第一人称一样画成图标薄片——它们在手上本来就不是方块形状。
+   */
+  setHeldItem(itemId: number | undefined): void {
+    if (itemId === this.heldItemId) return;
+    this.heldItemId = itemId;
+    if (this.heldMesh) {
+      this.mainhandGroup.remove(this.heldMesh);
+      this.heldMesh = null;
+    }
+    if (itemId === undefined || !this.atlas) {
+      this.mainhandGroup.visible = false;
+      return;
+    }
+
+    const blockId = blockForItem(itemId);
+    const isBlock =
+      blockId !== undefined && blockId !== null && isFullBlockShape(blockDef(blockId).shape, 0);
+    const geometry = this.heldGeometry(itemId, isBlock ? (blockId as number) : undefined);
+    const material = isBlock ? this.heldBlockMaterial : this.heldSpriteMaterial;
+    if (!material) {
+      this.mainhandGroup.visible = false;
+      return;
+    }
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.set(...(isBlock ? HELD_BLOCK_ROTATION : HELD_SPRITE_ROTATION));
+    this.heldMesh = mesh;
+    this.mainhandGroup.add(mesh);
+    this.mainhandGroup.visible = true;
+  }
+
+  /** 验收脚本用：第三人称手里现在有没有东西 */
+  get heldItem(): number | undefined {
+    return this.heldItemId;
+  }
+
+  /** 验收脚本用：主手模型的可见性 */
+  get heldItemVisible(): boolean {
+    return this.mainhandGroup.visible;
+  }
+
+  /**
+   * 主手物品的几何（按物品缓存：切物品只换 mesh，不重建几何）。
+   *
+   * 方块 = 立方体（六面各自贴图）；其余 = 薄盒子（正反贴图标、厚度面取图标最外一列，
+   * 与第一人称共用 `applySpriteFaceUvs`）。扁平物品把**图标里不透明那块的底边中点**
+   * 对齐到握点，手看起来才像握在柄上。
+   */
+  private heldGeometry(itemId: number, blockId?: number): THREE.BufferGeometry {
+    const cached = this.heldGeometries.get(itemId);
+    if (cached) return cached;
+
+    const atlas = this.atlas!;
+    let geometry: THREE.BufferGeometry;
+    if (blockId !== undefined) {
+      geometry = new THREE.BoxGeometry(HELD_BLOCK_SIZE, HELD_BLOCK_SIZE, HELD_BLOCK_SIZE);
+      applyFaceUvs(geometry, atlas, blockFaceTiles(blockId));
+      // 材质是 `MeshBasicMaterial`：逐面明暗只能走**顶点色**（`aShade` 是给第一人称
+      // 那套自定义着色器用的，这里读不到）
+      applyBoxFaceShade(geometry);
+    } else {
+      geometry = new THREE.BoxGeometry(
+        HELD_SPRITE_SIZE,
+        HELD_SPRITE_SIZE,
+        HELD_SPRITE_THICKNESS,
+      );
+      const tile = itemIconTile(itemId);
+      const bounds = atlas.contentBounds(tile);
+      applySpriteFaceUvs(geometry, atlas, tile, bounds, TILE_SIZE);
+      // 正反两面满亮度（图标本身就是"画好的颜色"），厚度面压暗——
+      // 与第一人称的 `SPRITE_SHADE` 同一口径，两边看起来才是同一件东西
+      applyBoxFaceShade(geometry, HELD_SPRITE_SHADE);
+      const texel = HELD_SPRITE_SIZE / TILE_SIZE;
+      const contentBottom = (TILE_SIZE - bounds.bottom) * texel;
+      const contentCenterX = ((bounds.left + bounds.right) / 2 - TILE_SIZE / 2) * texel;
+      geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom, 0);
+    }
+    this.heldGeometries.set(itemId, geometry);
+    return geometry;
   }
 
   get capeVisible(): boolean {
@@ -745,6 +900,9 @@ export class PlayerRenderer {
     for (const material of this.materials.values()) this.applyBrightness(material, brightness);
     // 甲片跟着一起明暗变化，否则站在洞里只有身体变暗、甲还是亮的
     for (const material of this.armorMaterials) this.applyBrightness(material, brightness);
+    // 手里那件东西同理：不能身体黑了、手里的木头还是亮的
+    if (this.heldBlockMaterial) this.applyBrightness(this.heldBlockMaterial, brightness);
+    if (this.heldSpriteMaterial) this.applyBrightness(this.heldSpriteMaterial, brightness);
   }
 
   private applyBrightness(material: THREE.MeshBasicMaterial, brightness: number): void {
@@ -758,6 +916,10 @@ export class PlayerRenderer {
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
     for (const material of this.armorMaterials) material.dispose();
+    for (const geometry of this.heldGeometries.values()) geometry.dispose();
+    this.heldGeometries.clear();
+    this.heldBlockMaterial?.dispose();
+    this.heldSpriteMaterial?.dispose();
     this.geometry.dispose();
   }
 }

@@ -846,11 +846,12 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   const blockMesh = itemMesh();
   check('手持方块用立方体几何体', blockMesh.geometry.getAttribute('position').count === 24, String(blockMesh.geometry.getAttribute('position').count));
   check('方块六个面都写了 UV', blockMesh.geometry.getAttribute('uv').count === 24);
-  // 批次 20261024-1726：尺寸改成**屏幕高比例**（0.34 = 屏幕高的 34%，投影后约 45%）
+  // 批次 20261024-1726：尺寸改成**屏幕高比例**；1912（用户给了基岩版截图对比）再放大一档：
+  // 方块 0.34 → 0.37、扁平物品 0.40 → 0.52
   const blockBox = blockMesh.geometry as THREE.BoxGeometry;
   check(
-    '手持方块边长按屏幕高比例定义（0.34）',
-    close(blockBox.parameters.width, 0.34, 1e-6) && close(blockBox.parameters.height, 0.34, 1e-6),
+    '手持方块边长按屏幕高比例定义（0.37）',
+    close(blockBox.parameters.width, 0.37, 1e-6) && close(blockBox.parameters.height, 0.37, 1e-6),
     `${blockBox.parameters.width}`,
   );
 
@@ -866,18 +867,18 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
     `顶点 ${stickMesh.geometry.getAttribute('position').count} / 厚度 ${stickBox.parameters.depth}`,
   );
   check(
-    '扁平物品的显示尺寸（0.40 屏幕高）',
-    close(stickBox.parameters.width, 0.4, 1e-6) && close(stickBox.parameters.height, 0.4, 1e-6),
+    '扁平物品的显示尺寸（0.52 屏幕高）',
+    close(stickBox.parameters.width, 0.52, 1e-6) && close(stickBox.parameters.height, 0.52, 1e-6),
     `${stickBox.parameters.width}×${stickBox.parameters.height}`,
   );
   // 用户："手应该拿到柄的位置"：**图标里不透明那块的底边**落在握点（y=0）上
   stickMesh.geometry.computeBoundingBox();
   const stickBoxBounds = stickMesh.geometry.boundingBox!;
   const content = TILE_CONTENT.item_stick!;
-  const contentBottom = ((TILE_PIXELS - content.bottom) * 0.4) / TILE_PIXELS;
+  const contentBottom = ((TILE_PIXELS - content.bottom) * 0.52) / TILE_PIXELS;
   check(
     '扁平物品按"内容底边"对齐握点（手握柄，不是捏在图标正中）',
-    close(stickBoxBounds.min.y, -contentBottom, 1e-6) && close(stickBoxBounds.max.y, 0.4 - contentBottom, 1e-6),
+    close(stickBoxBounds.min.y, -contentBottom, 1e-6) && close(stickBoxBounds.max.y, 0.52 - contentBottom, 1e-6),
     `y ∈ [${stickBoxBounds.min.y.toFixed(3)}, ${stickBoxBounds.max.y.toFixed(3)}] · 内容底边 ${contentBottom.toFixed(3)}`,
   );
   check(
@@ -1066,6 +1067,67 @@ console.log('\n[盔甲：第三人称甲片]');
   player.setArmor([null, null, null, null]);
   equal('脱下后甲片重新隐藏', visiblePlates(), 0);
 
+  player.dispose();
+}
+
+console.log('\n[第三人称：手里那件东西]');
+{
+  const scene = new THREE.Scene();
+  const player = new PlayerRenderer(scene, () => 1, stubAtlas);
+
+  check('空手时手里什么都没有', player.heldItem === undefined && !player.heldItemVisible);
+
+  player.setHeldItem(Block.STONE);
+  check('拿起方块：记录 id 并显示模型', player.heldItem === Block.STONE && player.heldItemVisible);
+  // 主手挂点挂在右臂上（跟着走路摆臂、挥手一起动），而不是钉在躯干上
+  const rightArm = player.object.children.find((child) => child.type === 'Group' && child.children.some((c) => c.type === 'Group' && c.position.z < -0.2));
+  check('主手挂点在手臂上（会跟着摆臂/挥手动）', !!rightArm, rightArm ? 'ok' : '没找到');
+  const heldMesh = () => {
+    let found: THREE.Mesh | null = null;
+    player.object.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.material instanceof THREE.MeshBasicMaterial && object.material.map) found = object;
+    });
+    return found as THREE.Mesh | null;
+  };
+  const blockMesh3p = heldMesh();
+  check('方块用立方体几何体（六面各自贴图）', !!blockMesh3p && blockMesh3p.geometry.getAttribute('position').count === 24);
+  check(
+    '手里的方块比第一人称的小一圈（0.34 格）',
+    !!blockMesh3p && close((blockMesh3p.geometry as THREE.BoxGeometry).parameters.width, 0.34, 1e-6),
+    blockMesh3p ? String((blockMesh3p.geometry as THREE.BoxGeometry).parameters.width) : 'null',
+  );
+
+  player.setHeldItem(Item.STICK);
+  const spriteMesh3p = heldMesh();
+  check(
+    '工具用薄盒子（有厚度，正反贴图标）',
+    !!spriteMesh3p &&
+      spriteMesh3p.geometry.getAttribute('position').count === 24 &&
+      (spriteMesh3p.geometry as THREE.BoxGeometry).parameters.depth > 0.005,
+  );
+  // 厚度面只取图标最外一列（六面同贴会把斜向的剑拉成彩带，两处必须同一口径）
+  const uSpan3p = faceUv(spriteMesh3p!.geometry, 0, 1)[0] - faceUv(spriteMesh3p!.geometry, 0, 0)[0];
+  const tileSpan3p = TILE_RECTS.item_stick![2] - TILE_RECTS.item_stick![0];
+  check(
+    '第三人称的厚度面也只取图标最外一列（与第一人称同源）',
+    close(uSpan3p, tileSpan3p / TILE_PIXELS, 1e-6),
+    `跨度 ${uSpan3p.toFixed(5)}`,
+  );
+
+  player.setHeldItem(undefined);
+  check('切回空手：模型隐藏', player.heldItem === undefined && !player.heldItemVisible);
+  check('反复切同一件物品不会重复建网格', (() => {
+    player.setHeldItem(Item.STICK);
+    const first = heldMesh();
+    player.setHeldItem(Item.STICK);
+    return heldMesh() === first;
+  })());
+
+  // 没给图集时（UI 里的角色预览 / 离线测试）不画手里的东西，也不能崩
+  const bare = new PlayerRenderer(new THREE.Scene(), () => 1);
+  bare.setHeldItem(Block.STONE);
+  check('没有图集时安全降级（不画、不报错）', !bare.heldItemVisible);
+  bare.dispose();
   player.dispose();
 }
 

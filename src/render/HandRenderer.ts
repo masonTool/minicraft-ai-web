@@ -49,7 +49,7 @@ import { SHIRT_COLORS, type AppearancePalette } from '../game/appearance.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 import { blockDef } from '../core/registry/blocks.ts';
 import { isFullBlockShape } from '../core/registry/blockShapes.ts';
-import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE, FACE_UV_PATTERN } from './atlasMesh.ts';
+import { applyFaceShade, applyFaceUvs, applySpriteFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
 import { srgbColor } from './srgb.ts';
 
 /**
@@ -77,12 +77,12 @@ const VIEWMODEL_FOV = 70;
 /**
  * 方块：边长与相对握点的偏移（都是屏幕高比例）。
  *
- * 边长 0.34 → 投影后（含透视与斜放）约占屏幕高 45%；偏移把它往右下挪，
+ * 边长 0.37 → 投影后（含透视与斜放）约占屏幕高 60%；偏移把它往右下挪，
  * 让**上缘落在屏幕 62% 附近、下缘被屏幕切掉** —— 原版举着方块就是这个构图。
  * （实测包围盒：x 64%~96%、y 62%~128%。）
  */
-const BLOCK_SIZE = 0.34;
-const BLOCK_OFFSET: readonly [number, number, number] = [0.12, -0.09, 0];
+const BLOCK_SIZE = 0.37;
+const BLOCK_OFFSET: readonly [number, number, number] = [0.05, -0.09, 0];
 /**
  * 方块握持姿态：绕 Y 转 45°（露出两个侧面）、绕 X 抬 24°（露出顶面）。
  *
@@ -98,8 +98,8 @@ const BLOCK_ROTATION: readonly [number, number, number] = [0.42, Math.PI / 4, 0]
  * · 厚度 0.016：侧看是一条 1~2px 的细边（斜向物品几乎看不见，正是想要的）；
  * · 对齐口径：**图标里不透明那块的底边中点**落在握点上（见 `spriteGeometry`）。
  */
-const SPRITE_SIZE = 0.4;
-const SPRITE_THICKNESS = 0.016;
+const SPRITE_SIZE = 0.52;
+const SPRITE_THICKNESS = 0.03;
 const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
 /**
  * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
@@ -572,7 +572,7 @@ export class HandRenderer {
     const geometry = new THREE.BoxGeometry(SPRITE_SIZE, SPRITE_SIZE, SPRITE_THICKNESS);
     const tile = itemIconTile(itemId);
     const bounds = this.atlas.contentBounds(tile);
-    this.applySpriteUvs(geometry, tile, bounds);
+    applySpriteFaceUvs(geometry, this.atlas, tile, bounds, TILE_PIXELS);
     applyFaceShade(geometry, SPRITE_SHADE);
 
     // 对齐口径：**图标里不透明那块的底边中点**落在握点上。
@@ -586,52 +586,6 @@ export class HandRenderer {
 
     this.spriteGeometries.set(itemId, geometry);
     return geometry;
-  }
-
-  /**
-   * 扁平物品的六面 UV：正反两面贴整张图标，四周的"厚度面"各取图标**最外那一列/行**。
-   *
-   * 为什么不能六面都贴整张（旧写法）：16px 的图标压到 2px 宽的厚度边上，
-   * 斜向的剑会被拉成一条细长的"彩带"（批次 20261024-1531/1455 的两次事故）。
-   * 改为取边缘列之后，厚度面的颜色就是图标轮廓那一圈的颜色，而且
-   * **图标那里是透明的地方 alphaTest 会直接裁掉**——于是厚度只会出现在
-   * 内容真正顶到边的地方，不会在空气里画出一条孤零零的线（1726 实测）。
-   */
-  private applySpriteUvs(
-    geometry: THREE.BufferGeometry,
-    tile: string,
-    bounds: { left: number; top: number; right: number; bottom: number },
-  ): void {
-    const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
-    const [u0, v0, u1, v1] = this.atlas.uv(tile);
-    const du = (u1 - u0) / TILE_PIXELS;
-    const dv = (v1 - v0) / TILE_PIXELS;
-    // 贴图行号 → UV 的 v（画布第 0 行是图标顶部，对应 v = 1）
-    const vOf = (row: number): number => (TILE_PIXELS - row) / TILE_PIXELS;
-    const full: [number, number] = [0, TILE_PIXELS];
-
-    // 面序与 `BoxGeometry` 一致：+X -X +Y -Y +Z -Z
-    const faces: readonly (readonly [number, number, number, number])[] = [
-      [bounds.right - 1, bounds.right, ...full], // +X：右侧那一列
-      [bounds.left, bounds.left + 1, ...full], // -X：左侧那一列
-      [...full, vOf(bounds.top + 1), vOf(bounds.top)], // +Y：上面那一行
-      [...full, vOf(bounds.bottom), vOf(bounds.bottom - 1)], // -Y：下面那一行
-      [...full, ...full], // +Z：整张图标
-      [...full, ...full], // -Z：整张图标
-    ];
-
-    for (let face = 0; face < faces.length; face++) {
-      const [fu0, fu1, fv0, fv1] = faces[face]!;
-      for (let corner = 0; corner < 4; corner++) {
-        const [cu, cv] = FACE_UV_PATTERN[corner]!;
-        uv.setXY(
-          face * 4 + corner,
-          u0 + (fu0 + cu * (fu1 - fu0)) * du,
-          v0 + (fv0 + cv * (fv1 - fv0)) * dv,
-        );
-      }
-    }
-    uv.needsUpdate = true;
   }
 
   dispose(): void {
