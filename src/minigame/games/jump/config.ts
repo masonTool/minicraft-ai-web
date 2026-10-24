@@ -31,6 +31,17 @@ export const JUMP_CONFIG = {
   blockSizeStart: 2.0,
   blockSizeMin: 1.2,
   shrinkScore: 80,
+  /**
+   * 每块边长的确定性抖动（±6%）。
+   *
+   * 纯表现：大小完全一样的一排方块看着像"程序生成的"，抖一点就有手工摆放的味道。
+   * 用确定性随机（同 seed 同序列）而不是 `Math.random()`，否则同一条种子的回放也变了。
+   */
+  sizeJitter: 0.06,
+
+  /** 圆形底座：这个分数之后才出现，命中概率 `roundChance`（内切圆，比方形更难） */
+  roundAfterScore: 10,
+  roundChance: 0.35,
 
   /**
    * 中心距（格）的绝对曲线：0 分从 `gapStart*` 出发，`gapGrowScore` 分封顶到 `gapEnd*`。

@@ -30,14 +30,24 @@ import { JUMP_CONFIG } from './config.ts';
  */
 export type JumpBlockKind = 'normal' | 'well' | 'cube' | 'store' | 'music';
 
+/**
+ * 底座形状：方形 / 圆形。
+ *
+ * 圆形是**内切圆**（半径 = 边长 / 2），有效面积只有方形的 π/4 ≈ 78.5%——
+ * 这是刻意的：同一边长下圆形更难站，才不会让"换个形状"变成纯装饰。
+ * 判定必须跟着形状走（方形看轴对齐、圆形看欧氏距离），否则画圆判方。
+ */
+export type JumpBlockShape = 'square' | 'round';
+
 export interface JumpBlock {
   readonly id: number;
   /** 方块中心（格子坐标，与渲染层同一口径） */
   readonly x: number;
   readonly z: number;
-  /** 边长（格） */
+  /** 边长（格）；方形 = 边长，圆形 = 直径 */
   readonly size: number;
   readonly kind: JumpBlockKind;
+  readonly shape: JumpBlockShape;
 }
 
 export type JumpStatus = 'playing' | 'over';
@@ -93,9 +103,27 @@ function mix(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
 
-/** 当前分数下新方块的边长 */
+/** 当前分数下新方块的边长（曲线值，不含 ±6% 抖动） */
 export function blockSizeForScore(score: number): number {
   return mix(JUMP_CONFIG.blockSizeStart, JUMP_CONFIG.blockSizeMin, progressOf(score));
+}
+
+/**
+ * 边长抖动：`base × (1 ± sizeJitter)`。
+ *
+ * 只是"别让整排方块一模一样"，不参与难度设计——抖动幅度远小于方块缩小量，
+ * 所以它不会把可达性算崩（间距下限用的是实际边长，抖动已被算进去）。
+ */
+export function jitteredSize(base: number, rand: number): number {
+  const t = Math.min(1, Math.max(0, Number.isFinite(rand) ? rand : 0));
+  return base * (1 + (t * 2 - 1) * JUMP_CONFIG.sizeJitter);
+}
+
+/** 这一格用不用圆形底座：门槛前一律方形，之后按概率 */
+export function shapeFor(score: number, rand: number): JumpBlockShape {
+  if (score < JUMP_CONFIG.roundAfterScore) return 'square';
+  const t = Number.isFinite(rand) ? rand : 0;
+  return t < JUMP_CONFIG.roundChance ? 'round' : 'square';
 }
 
 /** 间距上限的硬天花板：再难也不能超过"蓄满能跳的距离" */
@@ -184,16 +212,24 @@ export function nextBlock(
   const r3 = nextRandom(r2.seed);
   const kind = specialKindFor(score, r3.value, current.kind);
 
+  // 抖动与形状各吃一个随机数（顺序固定，否则同 seed 不再是同一条序列）
+  const r4 = nextRandom(r3.seed);
+  const size = jitteredSize(blockSizeForScore(score), r4.value);
+  const r5 = nextRandom(r4.seed);
+  // 特殊方块的顶面是直角图集贴图（井盖/唱片/魔方/门脸），做成圆形会把 UV 采到格子边
+  const shape: JumpBlockShape = kind === 'normal' ? shapeFor(score, r5.value) : 'square';
+
   return {
     block: {
       id: current.id + 1,
       // base = (0, -1)，绕 Y 轴转 angle：x' = -sin(angle)，z' = -cos(angle)
       x: current.x - Math.sin(angle) * gap,
       z: current.z - Math.cos(angle) * gap,
-      size: blockSizeForScore(score),
+      size,
       kind,
+      shape,
     },
-    seed: r3.seed,
+    seed: r5.seed,
   };
 }
 
@@ -247,8 +283,10 @@ export function createRun(seed = 1): JumpRun {
     id: 0,
     x: 0,
     z: 0,
+    // 起点块不抖动：它是"参照物"，抖了会让每一局的开门大小都不一样
     size: JUMP_CONFIG.blockSizeStart,
     kind: 'normal',
+    shape: 'square',
   };
   return appendBlock({
     blocks: [first],
@@ -263,11 +301,25 @@ export function createRun(seed = 1): JumpRun {
 // ------------------------------------------------------------------ 落点与计分
 
 /**
+ * 落点超出底座的量（0 = 在底座内，正值 = 悬空几格）。
+ *
+ * 形状必须真的参与判定：方形看**轴对齐**（人站在方块边缘的角上算站得住），
+ * 圆形看**欧氏距离**（内切圆之外的地方是空的）。若都用方形口径，圆形底座就是
+ * 纯视觉变化，脚下会站着人却判"没踩到"。
+ */
+export function blockOverhang(block: JumpBlock, x: number, z: number): number {
+  const half = Math.max(0, block.size) / 2;
+  const dx = Math.abs(x - block.x);
+  const dz = Math.abs(z - block.z);
+  if (block.shape === 'round') return Math.hypot(dx, dz) - half;
+  return Math.max(dx, dz) - half;
+}
+
+/**
  * 落点判定。
  *
- * 方向自动对准 `to` 的中心，所以落点必定在"从 from 中心到 to 中心"这条线上；
- * 但判定仍按方块局部坐标做（轴对齐的两个分量都查），这样角度偏移不会让
- * "看起来在方块上"却判 miss。
+ * 方向自动对准 `to` 的中心，所以落点必定在"从 from 到 to 中心"这条线上；
+ * 但判定仍按方块自身坐标做，这样角度偏移不会让"看起来在方块上"却判 miss。
  */
 export function resolveLanding(
   from: JumpBlock,
@@ -283,9 +335,9 @@ export function resolveLanding(
   const px = from.x + (dx / length) * d;
   const pz = from.z + (dz / length) * d;
 
-  const half = to.size / 2;
-  if (Math.abs(px - to.x) > half || Math.abs(pz - to.z) > half) return { kind: 'miss' };
+  if (blockOverhang(to, px, pz) > 0) return { kind: 'miss' };
 
+  const half = to.size / 2;
   const offCenter = Math.hypot(px - to.x, pz - to.z);
   return { kind: 'hit', center: offCenter <= half * JUMP_CONFIG.centerRatio };
 }

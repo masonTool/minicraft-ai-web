@@ -32,6 +32,7 @@ import {
 } from '../src/minigame/progress.ts';
 import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
 import {
+  blockOverhang,
   blockSizeForScore,
   createRun,
   currentBlock,
@@ -40,11 +41,13 @@ import {
   gapFloorFor,
   gapForScore,
   gapRangeForScore,
+  jitteredSize,
   jump,
   maxReachableGap,
   nextBlock,
   resolveLanding,
   scoreForLanding,
+  shapeFor,
   specialBonus,
   specialKindFor,
   targetBlock,
@@ -420,7 +423,9 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
 
   const seq = (seed: number): string =>
     createRun(seed)
-      .blocks.map((block) => `${block.x.toFixed(6)},${block.z.toFixed(6)},${block.kind}`)
+      .blocks.map(
+        (block) => `${block.x.toFixed(6)},${block.z.toFixed(6)},${block.kind},${block.size.toFixed(6)},${block.shape}`,
+      )
       .join('|');
   check('同 seed 生成同一条序列', seq(777) === seq(777));
   check('不同 seed 生成不同序列', seq(777) !== seq(778));
@@ -467,6 +472,112 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
   check('方块 id 单调递增', idsMonotonic);
 }
 
+console.log('\n跳一跳：底座形状（方形 / 内切圆）与尺寸抖动');
+{
+  check('10 分前一律方形', [0, 5, 9].every((score) => shapeFor(score, 0) === 'square'));
+  check(
+    '10 分后按 35% 概率出圆形',
+    shapeFor(10, 0) === 'round' && shapeFor(10, JUMP_CONFIG.roundChance - 1e-6) === 'round' && shapeFor(10, JUMP_CONFIG.roundChance) === 'square',
+  );
+  check('圆形概率是 35%', Math.abs(JUMP_CONFIG.roundChance - 0.35) < 1e-9);
+
+  // 内切圆：半径 = 边长 / 2。有效面积必须正好是方形的 π/4（≈ 78.5%），
+  // 「圆更难」不是感觉，是这 21.5% 的差。用 40000 点网格采样估算。
+  const square: JumpBlock = { id: 0, x: 0, z: 0, size: 2, kind: 'normal', shape: 'square' };
+  const round: JumpBlock = { id: 1, x: 0, z: 0, size: 2, kind: 'normal', shape: 'round' };
+  const half = square.size / 2;
+  const steps = 200;
+  let insideRound = 0;
+  for (let ix = 0; ix < steps; ix++) {
+    for (let iz = 0; iz < steps; iz++) {
+      const x = -half + ((ix + 0.5) / steps) * square.size;
+      const z = -half + ((iz + 0.5) / steps) * square.size;
+      if (blockOverhang(round, x, z) <= 0) insideRound += 1;
+    }
+  }
+  const roundAreaRatio = insideRound / (steps * steps);
+  check(
+    '圆形有效面积 = 方形的 π/4（78.5%）',
+    Math.abs(roundAreaRatio - Math.PI / 4) < 0.01,
+    `${(roundAreaRatio * 100).toFixed(1)}%`,
+  );
+  check('正中心两种形状都站得住', blockOverhang(square, 0, 0) <= 0 && blockOverhang(round, 0, 0) <= 0);
+  check('轴向边界两者一致（半径都是半边）', Math.abs(blockOverhang(round, half, 0)) < 1e-9 && Math.abs(blockOverhang(square, half, 0)) < 1e-9);
+  check('方形四角站得住', blockOverhang(square, half - 0.01, half - 0.01) <= 0);
+  check('圆形四角是空的（内切圆外）', blockOverhang(round, half - 0.01, half - 0.01) > 0);
+
+  // 判定必须真的按形状分支：同一个落点，方形站得住、圆形掉下去。
+  // （斜向落点只在"上一跳没跳正 + 这跳转向"时出现，所以拿 from 偏一格来构造）
+  const offAxis: JumpBlock = { id: 9, x: 2, z: 0, size: 2, kind: 'normal', shape: 'square' };
+  const targetAt = (shape: JumpBlock['shape']): JumpBlock => ({ id: 10, x: 0, z: -2, size: 2, kind: 'normal', shape });
+  const diag = Math.hypot(2, 2);
+  const landDistance = diag - 0.75 * Math.SQRT2; // 落点偏移 (0.75, 0.75)：方形内、圆形外
+  const squareLanding = resolveLanding(offAxis, targetAt('square'), landDistance);
+  const roundLanding = resolveLanding(offAxis, targetAt('round'), landDistance);
+  check('同一落点：方形站得住、圆形站不住', squareLanding.kind === 'hit' && roundLanding.kind !== 'hit', `${squareLanding.kind}/${roundLanding.kind}`);
+
+  // 尺寸抖动：确定性、±6%、只影响观感
+  almost('抖动下限 = 边长 × 0.94', jitteredSize(2, 0), 2 * 0.94);
+  almost('抖动上限 = 边长 × 1.06', jitteredSize(2, 1), 2 * 1.06);
+  almost('中值不抖', jitteredSize(2, 0.5), 2);
+  check('抖动幅度是 6%', Math.abs(JUMP_CONFIG.sizeJitter - 0.06) < 1e-9);
+  check(
+    '同 seed 抖动与形状完全一致（可重放）',
+    (() => {
+      const a = createRun(4242);
+      const b = createRun(4242);
+      return a.blocks.every((block, i) => block.size === b.blocks[i]?.size && block.shape === b.blocks[i]?.shape);
+    })(),
+  );
+  check(
+    '生成器产出的边长都在 ±6% 内',
+    (() => {
+      let current = createRun(7).blocks[0]!;
+      let seed = 31;
+      for (let i = 0; i < 200; i++) {
+        const generated = nextBlock(current, i * 2, seed);
+        const base = blockSizeForScore(i * 2);
+        if (Math.abs(generated.block.size / base - 1) > JUMP_CONFIG.sizeJitter + 1e-9) return false;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return true;
+    })(),
+  );
+  check(
+    '特殊方块永远是方形（顶面是直角图集贴图）',
+    (() => {
+      let current = createRun(11).blocks[0]!;
+      let seed = 505;
+      for (let i = 0; i < 300; i++) {
+        const generated = nextBlock(current, 60, seed);
+        if (generated.block.kind !== 'normal' && generated.block.shape !== 'square') return false;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return true;
+    })(),
+  );
+  check(
+    '10 分前生成器不产圆形、之后会产圆形',
+    (() => {
+      let current = createRun(13).blocks[0]!;
+      let seed = 77;
+      let early = true;
+      let lateRound = false;
+      for (let i = 0; i < 300; i++) {
+        const score = i < 100 ? 0 : 60;
+        const generated = nextBlock(current, score, seed);
+        if (score === 0 && generated.block.shape !== 'square') early = false;
+        if (score === 60 && generated.block.shape === 'round') lateRound = true;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return early && lateRound;
+    })(),
+  );
+}
+
 console.log('\n跳一跳：特殊方块');
 {
   check('10 分前不出特殊方块', [0, 5, 9].every((score) => specialKindFor(score, 0, 'normal') === 'normal'));
@@ -491,8 +602,8 @@ console.log('\n跳一跳：特殊方块');
 
 console.log('\n跳一跳：落点判定与计分');
 {
-  const from: JumpBlock = { id: 0, x: 0, z: 0, size: 1.8, kind: 'normal' };
-  const to: JumpBlock = { id: 1, x: 0, z: -2, size: 1.8, kind: 'normal' };
+  const from: JumpBlock = { id: 0, x: 0, z: 0, size: 1.8, kind: 'normal', shape: 'square' };
+  const to: JumpBlock = { id: 1, x: 0, z: -2, size: 1.8, kind: 'normal', shape: 'square' };
   const half = to.size / 2;
 
   const perfect = resolveLanding(from, to, 2);
