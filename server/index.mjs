@@ -1245,11 +1245,37 @@ wss.on('connection', (socket, request) => {
           rejectEdit(player, 'distance', `${x},${y},${z}`);
           return;
         }
+        /*
+         * 进度（L8 · MS4）：熔炉/酿造的 `cookProgress` 是 0..1。
+         *
+         * 只有房主会推进计时（`SimMode.containers`），所以只有他的进度是真的；
+         * 别人的进度字段一律忽略——否则从属端能用一个假进度把所有人的进度条改坏。
+         * 不落盘（`containers` 表只存槽位）：进度是瞬时量，重启后归零才对。
+         */
+        const rawProgress = Number(message.progress);
+        const progress =
+          player.isHost === true && Number.isFinite(rawProgress)
+            ? Math.min(Math.max(rawProgress, 0), 1)
+            : undefined;
         // 留一份副本随快照落盘（联机13）：不然重启之后箱子里的东西对新玩家不可见
         if (containers.size < MAX_CONTAINERS) {
           containers.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, slots });
         }
-        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id, player.room, { x, z, dimension });
+        broadcast(
+          {
+            t: 'container',
+            dimension,
+            x,
+            y,
+            z,
+            slots,
+            by: player.id,
+            ...(progress === undefined ? {} : { progress }),
+          },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 

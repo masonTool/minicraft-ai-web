@@ -1517,6 +1517,51 @@ try {
     snapFollower.close();
   }
 
+  // ---------------------------------------------------------------- 容器进度（L8 · MS4）
+  console.log('\n[容器进度只认房主]');
+  {
+    const cookHost = new TestClient('CookHost', undefined, { room: 'cookroom', host: true });
+    const cookFollower = new TestClient('CookFollower', undefined, { room: 'cookroom' });
+    await joinAndWaitWelcome(cookHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(cookFollower, '从属', 4, 70, 4);
+
+    cookFollower.mailbox.length = 0;
+    cookHost.send({
+      t: 'container',
+      x: 10,
+      y: 70,
+      z: 10,
+      dimension: 'overworld',
+      slots: [{ id: 1, count: 1 }, null, null],
+      progress: 0.5,
+    });
+    const withProgress = await cookFollower.wait('container', 2000);
+    check('房主的容器进度被转发', withProgress?.progress === 0.5, JSON.stringify(withProgress));
+
+    // 从属端带进度不算数：只有房主推进计时，假进度会把所有人的进度条改坏
+    cookHost.mailbox.length = 0;
+    cookFollower.send({
+      t: 'container',
+      x: 11,
+      y: 70,
+      z: 10,
+      dimension: 'overworld',
+      slots: [{ id: 1, count: 1 }, null, null],
+      progress: 0.9,
+    });
+    const noProgress = await cookHost.wait('container', 2000);
+    check('从属端的容器进度被丢掉（内容照转）', noProgress?.progress === undefined && Array.isArray(noProgress?.slots), JSON.stringify(noProgress));
+
+    // 越界的进度夹到 [0,1]：进度条不该被一个 1.7 拉出框
+    cookFollower.mailbox.length = 0;
+    cookHost.send({ t: 'container', x: 12, y: 70, z: 10, dimension: 'overworld', slots: [null, null, null], progress: 1.7 });
+    const clamped = await cookFollower.wait('container', 2000);
+    check('房主的越界进度被夹到 1', clamped?.progress === 1, JSON.stringify(clamped));
+
+    cookHost.close();
+    cookFollower.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {

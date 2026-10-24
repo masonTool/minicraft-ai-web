@@ -93,6 +93,13 @@ export interface NetContainerState {
   z: number;
   /** 27 格槽位（null 或 ItemStack 形状）；由客户端 `restoreStacks` 清洗 */
   slots: unknown[];
+  /**
+   * 熔炉 / 酿造的进度（0..1，L8 · MS4）：**只有房主算出来的才有值**。
+   *
+   * 从属端不推进计时（`SimMode.containers` 为 false），所以它只拿这个值去画进度条；
+   * 服务端只转发房主的 `progress`，别人的一律忽略（假进度会把所有人的进度条改坏）。
+   */
+  progress?: number;
 }
 
 /** 一块牌子的字（联机16）：全是空串 = 擦掉 */
@@ -712,12 +719,15 @@ export class NetClient {
       }
       case 'container': {
         const slots = Array.isArray(message.slots) ? (message.slots as unknown[]) : [];
+        const progress = Number(message.progress);
         this.handlers.onContainer?.({
           dimension: String(message.dimension ?? 'overworld'),
           x: Number(message.x),
           y: Number(message.y),
           z: Number(message.z),
           slots,
+          // 只认 0..1 的有限数；缺字段/脏值当"没有进度"（从属端就保持当前值不动）
+          ...(Number.isFinite(progress) ? { progress: Math.min(Math.max(progress, 0), 1) } : {}),
         });
         break;
       }
@@ -883,9 +893,21 @@ export class NetClient {
     z: number,
     dimension: string,
     slots: readonly unknown[],
+    progress?: number,
   ): void {
     if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'container', x, y, z, dimension, slots }));
+    this.sendRaw(
+      JSON.stringify({
+        t: 'container',
+        x,
+        y,
+        z,
+        dimension,
+        slots,
+        // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
+        ...(Number.isFinite(progress) ? { progress } : {}),
+      }),
+    );
   }
 
   /**

@@ -4048,6 +4048,15 @@ class App {
     this.applyingRemoteBlock++;
     try {
       for (let i = 0; i < count; i++) container.set(i, stacks[i] ?? null);
+      /*
+       * 进度（L8 · MS4）：从属端**不推进计时**，只把房主算出来的那个百分比摆上去。
+       * 写 `cookProgress`（而不是另建一个显示字段）是为了让既有的进度条代码原样可用；
+       * 因为这边不 tick，这个值只会在下一条快照到达时被覆盖——不会自己往前跑。
+       */
+      const furnace = container as { cookProgress?: number; cookTimeTotal?: number; progress?: number };
+      if (data.progress !== undefined && typeof furnace.cookProgress === 'number' && typeof furnace.cookTimeTotal === 'number') {
+        furnace.cookProgress = data.progress * Math.max(furnace.cookTimeTotal, 0);
+      }
     } finally {
       this.applyingRemoteBlock--;
     }
@@ -4093,10 +4102,64 @@ class App {
         const slots: (ItemStack | null)[] = [];
         // 空容器也要发：队友那边得知道"东西被拿光了"，跳过它就永远是满的
         for (let i = 0; i < count; i++) slots.push(target.container.get(i));
-        this.net.sendContainer(target.x, target.y, target.z, target.dimension, serializeStacks(slots));
+        this.net.sendContainer(
+          target.x,
+          target.y,
+          target.z,
+          target.dimension,
+          serializeStacks(slots),
+          this.containerProgressOf(target.container),
+        );
       }
     }, 80);
   }
+
+  /**
+   * 读一个容器的进度（0..1）；没有进度的容器返回 `undefined`（L8 · MS4）。
+   *
+   * 熔炉/烟熏炉/高炉有 `progress` getter，酿造台目前没有——所以这里按"有没有这个数"判断，
+   * 而不是按类型列举：以后哪个容器加了进度，不用改这里。
+   */
+  private containerProgressOf(container: object): number | undefined {
+    const value = (container as { progress?: unknown }).progress;
+    return typeof value === 'number' && Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : undefined;
+  }
+
+  /**
+   * 房主每 1 秒把"正在工作的容器"的进度推一次（L8 · MS4）。
+   *
+   * 为什么单独推：内容变化才会触发 `onMutate`，而熔炉进度是**每 tick 都在变**的——
+   * 不给它一条自己的低频上行，从属端的进度条就只在"烧出一个东西"时跳一格。
+   * 复用 80ms 防抖那条队列（`containerSyncPending`），顺带把槽位也带上：
+   * 分批各自算不如一次把它们对齐。
+   */
+  private pushContainerProgress(): void {
+    const now = performance.now();
+    if (now - this.lastContainerProgressAt < 1000) return;
+    this.lastContainerProgressAt = now;
+    const { x: px, y: py, z: pz } = this.physics;
+    const rangeSq = 64 * 64;
+    this.world.containers.forEach((container, x, y, z, dimension) => {
+      if (dimension !== this.dimension) return;
+      const progress = this.containerProgressOf(container);
+      if (progress === undefined || progress <= 0) return;
+      const dx = x + 0.5 - px;
+      const dy = y + 0.5 - py;
+      const dz = z + 0.5 - pz;
+      if (dx * dx + dy * dy + dz * dz > rangeSq) return;
+      this.containerSyncPending.set(`${dimension}|${x},${y},${z}`, {
+        container: container as SyncedContainer,
+        x,
+        y,
+        z,
+        dimension,
+      });
+      this.scheduleContainerSync();
+    });
+  }
+
+  /** 上次推容器进度的时刻（1 秒一次，别把局域网刷爆） */
+  private lastContainerProgressAt = 0;
 
   private onNetLeave(id: number): void {
     // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
@@ -18310,7 +18373,15 @@ class App {
       // 创造2/3：框选填充与粘贴每帧各推一批（512 格）；空闲时都是一次判空
       this.stepFillRunner();
       this.stepPasteRunner();
-      this.tickContainers(dt);
+      /*
+       * 容器计时（L8 · MS4）：熔炉燃烧/进度、酿造、漏斗冷却只由房主推进。
+       * 从属端一旦也 tick，进度条就是各走各的（差几秒，而且不报错）。
+       */
+      if (shouldSimulate(this.net.role, 'containers')) {
+        this.tickContainers(dt);
+        // 进度另走一条 1 秒一次的低频上行（内容不变时 `onMutate` 不会触发）
+        this.pushContainerProgress();
+      }
       this.updateEntities(dt);
       mark = this.lap('ent', mark);
       this.updateParticles(dt);

@@ -5489,5 +5489,35 @@ console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
   );
 }
 
+/*
+ * 容器计时只在房主那端跑（L8 · MS4）
+ *
+ * 从属端如果也 tick，熔炉/酿造的进度条就是各走各的（差几秒，不报错）。
+ * 从属端只把房主算出来的百分比摆上去——不推进计时，所以这个值不会自己往前跑。
+ */
+console.log('\n[容器计时只在房主那端跑（L8 · MS4）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check(
+    'tickContainers 在 shouldSimulate(containers) 闸门里',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'containers')) {") &&
+      (mainSrc.match(/this\.tickContainers\(/g) ?? []).length === 1,
+  );
+  check(
+    '房主按 1 秒节流单独推进度（内容不变时 onMutate 不触发）',
+    mainSrc.includes('private pushContainerProgress(): void') &&
+      mainSrc.includes('this.lastContainerProgressAt < 1000'),
+  );
+  check(
+    '从属端把进度写进 cookProgress（不 tick，所以只是"摆上去"）',
+    mainSrc.includes('furnace.cookProgress = data.progress * Math.max(furnace.cookTimeTotal, 0);'),
+  );
+  check(
+    '上行只由房主带 progress（服务端再按 isHost 挡一次）',
+    netSrc.includes('...(Number.isFinite(progress) ? { progress } : {})'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
