@@ -389,9 +389,10 @@ export function blockIconCanvas(atlas: TextureAtlas, blockId: number): HTMLCanva
   if (typeof document === 'undefined') return null;
 
   // ⚠️ 图集还没铺像素时**画出来是全透明的**，而这份缓存只按 `atlas.revision` 失效——
-  // 一旦存进去，这个方块在本页所有界面（快捷栏/创造栏/分类栏/工具条）都会永久空白。
-  // 2026-10-22 的实测：`BuildToolbar` 在 `atlas.ensureUploaded()` 之前构造，
-  // 用它那 9 件方块（沙/原木/树叶/木板/圆石/玻璃/工作台/箱子/砖块）毒了缓存。
+  // 一旦存进去，这个方块在本页所有界面（快捷栏/创造栏/分类栏）都会永久空白。
+  // 2026-10-22 的实测：当时有个界面（建造工具条，已在批次 20261025-0117 移除）在
+  // `atlas.ensureUploaded()` 之前构造，用它那 9 件方块（沙/原木/树叶/木板/圆石/玻璃/
+  // 工作台/箱子/砖块）毒了缓存。
   // 所以这里返回 null（调用方回退到单格贴图，同样空，但**不会留下坏缓存**），
   // 配合 `App` 构造里"先进世界铺图集、再造 UI"的次序，正常路径不会走到这一支。
   if (!atlas.isPainted) return null;
