@@ -1,0 +1,63 @@
+# 发布到 Cloudflare Pages · **宿主专属**形态（A 站）
+#
+# 与 `deploy-cf-web.yml`（完整前端形态，B 站）是**两条独立的流水线**，部署到
+# **两个不同的 Pages 项目 / 域名**。这是刻意的：
+#
+#   同一个 `dist` 只差一个文件 `__host/core.bin`——有它浏览器就能玩，没它只有宿主能玩。
+#   两条流水线共用一个项目的话，"谁最后跑"决定线上形态，一次手滑就把完整版发到
+#   生产域名上，整套门禁当场作废。物理隔离（不同项目名）比"记得别搞错"可靠。
+#
+# 触发方式：**只允许手动**（workflow_dispatch）。不挂 push 的原因：
+#   · 要在 GitHub 里配 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 两个 secret，
+#     没配时 push 触发的流水线会红，把真正的构建失败淹没；
+#   · 发布是"要人决定"的动作，尤其 B 站（完整版）不该跟着每次提交自动上线。
+name: Deploy to Cloudflare Pages (app)
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布到哪个通道（preview 先验收，再 production）'
+        required: true
+        default: preview
+        type: choice
+        options: [preview, production]
+
+permissions:
+  contents: read
+
+# 同一通道同时只跑一个；后到的取消排队中的旧任务
+concurrency:
+  group: cf-app-${{ inputs.channel }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # 类型检查 + 176 套离线测试 + 三张台账；不绿就不发
+      - run: npm run check
+
+      # build:app = SOURCEMAP=0 + release-check（断言无 .map、无 core.bin、体积不超基线）
+      - run: npm run build:app
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `--branch` 决定 Pages 把它算成 preview 还是 production：
+          # 与项目里的"生产分支"同名即为 production，其它名字都是 preview 部署
+          # （preview 会得到一个独立的 `<hash>.<project>.pages.dev` 地址，可先验收再 promote）
+          command: >-
+            pages deploy dist
+            --project-name=minicraft-app
+            --branch=${{ inputs.channel == 'production' && 'main' || format('preview-{0}', github.run_number) }}

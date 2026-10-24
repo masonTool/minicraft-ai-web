@@ -101,3 +101,27 @@
 - 决定：`evaluateHostVersion()` 返回 `ok` / `outdated` / `unknown`；`unknown`（浏览器或解析失败）继续正常流程，只有 `outdated` 才显示"请更新应用"。
 - 为什么：二态写法（`hostVersion < min` 即拒绝）会把浏览器判成"太老"，于是网页访客看到"请更新应用"——而他根本没装过应用。这类提示错一次，用户会以为是自己设备的问题。三态写法把"没装"和"装旧了"分开，正好对应两种不同的落地页。
 - 影响：多一个枚举值；`version.json` 取不到时回退到最宽松下限（不阻塞启动），代价是"清单挂了就暂时失去版本闸门"——比"清单挂了谁都进不去"划算。
+
+## D18 · 两站用两个 Pages 项目物理隔离，而不是"同一个项目的两个目录"
+
+- 决定：`minicraft-app`（宿主专属，无 `core.bin`）与 `minicraft-web`（完整前端，有 `core.bin`）是两个独立项目、两条独立流水线、两个域名。
+- 为什么：两站产物只差一个 40 KB 的文件。放到同一个项目里（比如 `/app` 与 `/web` 两个子目录），"发错"的成本是**零成本且看起来正常**——游戏能玩，门禁失效，没有任何报错。物理隔离之后，发错只剩"workflow 里 `--project-name` 写错"这一个人为动作，而且两条流水线里该字符串各出现一次、写死、review 可见。
+- 影响：多一个 Pages 项目与一条流水线（都免费）；域名要两个。退回方式：删掉 `deploy-cf-web.yml` 与 B 站项目即可，A 站不受影响。
+
+## D19 · 灰度用"部署级两段式"，不引入 Workers
+
+- 决定：`workflow_dispatch` 带 `channel=preview|production`；preview 部署挂到独立 URL（生产域名不动），验收通过再发 production。
+- 为什么：Cloudflare Pages 没有百分比流量能力，真正的灰度要 Workers 的 `wrangler versions deploy --percentage`，而那意味着产物从"静态托管"变成"Worker 读 R2/私有资源"——一份新的运行时与新的故障面。现阶段用户量小，两段式已经能挡住"发出去才发现白屏"这类事故；等真的需要按比例放量再迁，迁移是**纯加法**（不影响现有门禁与产物形态）。
+- 影响：没有真正的 A/B 分流能力；回滚依赖 Dashboard 的 "Rollback to this deployment"（秒级）或重发旧提交（一次构建时间）。这条限制已写进文档第 3、4 节。
+
+## D20 · 把 `deploy-pages.yml` 从 `build` 改成 `build:app`（顺带修掉一个线上泄漏）
+
+- 决定：GitHub Pages 的流水线改跑 `npm run build:app`。
+- 为什么：原来跑 `npm run build`，而 `vite.config.ts` 的 `sourcemap` 默认**开着**（`SOURCEMAP !== '0'`），也就是线上一直挂着 `.map`——等于把全部 TypeScript 源码公开。这一条与本批次的目标直接冲突，属于"顺手发现就必须修"的那类；改完之后 Pages 上就是 A 站形态（浏览器只见落地页），与"不能在纯网站上运行"的要求一致。
+- 影响：**上线内容发生可见变化**——GitHub Pages 从"能玩"变成"只有落地页"。这是预期行为（A 站定位），但需要用户知道；想在浏览器里玩要用 B 站。若用户希望 Pages 保持可玩，把这一行改回 `build` 即可，代价是源码继续公开。
+
+## D21 · 新增 `public/_headers`（仅 Cloudflare Pages 生效）
+
+- 决定：在 `public/` 下加 `_headers`，把 `core.bin` / `version.json` 设 `no-store`，`index.html` / `sw.js` 设 `no-cache`。
+- 为什么：Cloudflare Pages 默认对 HTML 也做缓存。而这几类文件"旧一点"就会出事：`core.bin` 旧了是**静默错方块**，`version.json` 旧了是版本闸门停在上一版判断，`index.html` 旧了配新 assets 会白屏。GitHub Pages 会把它当普通文件忽略，两地都不报错。
+- 影响：只影响 CF 托管；`dist` 里多一个 300 字节文件（已被 release-check 的断言覆盖：不参与 JS 体积统计）。

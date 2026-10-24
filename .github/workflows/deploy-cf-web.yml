@@ -1,0 +1,62 @@
+# 发布到 Cloudflare Pages · **完整前端**形态（B 站）
+#
+# 这个形态把 `__host/core.bin` 一起发上去，所以**浏览器可以直接玩**。
+# 它只用于：预览 / 演示 / 兜底（A 站出问题时的备用入口）。
+#
+# ⚠️ 绝不能发到 A 站（`minicraft-app`）那个项目上，也绝不能给它绑生产域名——
+#    一旦绑了，整套"只有宿主能玩"的门禁就失效了。项目名与域名都要与 A 站分开：
+#
+#      A 站  minicraft-app  →  game.example.com    （宿主专属，主入口）
+#      B 站  minicraft-web  →  demo.example.com    （完整前端，预览用）
+#
+# 触发方式：只允许手动。理由见 `deploy-cf-app.yml` 顶部。
+name: Deploy to Cloudflare Pages (web)
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '发布到哪个通道（preview 先验收，再 production）'
+        required: true
+        default: preview
+        type: choice
+        options: [preview, production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cf-web-${{ inputs.channel }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+      # build:web = SOURCEMAP=0 + release-check + 把 core.bin 放进 dist/__host
+      - run: npm run build:web
+
+      # release-check 已经把 core.bin 放好了；这里再确认一次，防止有人改了脚本
+      - name: 确认 core.bin 在位（B 站的全部意义就在它）
+        run: |
+          test -f dist/__host/core.bin || { echo "✗ dist/__host/core.bin 不存在，B 站发出去等于 A 站"; exit 1; }
+          head -c 4 dist/__host/core.bin | grep -q MCTB || { echo "✗ core.bin 魔数不对"; exit 1; }
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy dist
+            --project-name=minicraft-web
+            --branch=${{ inputs.channel == 'production' && 'main' || format('preview-{0}', github.run_number) }}

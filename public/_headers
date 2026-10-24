@@ -1,0 +1,24 @@
+# Cloudflare Pages 的响应头配置（批次 20261025-0329 · 宿主6）
+#
+# 只有 Cloudflare Pages 认这个文件（它随 `dist` 一起发布，被平台读取）。
+# GitHub Pages 会把它当成一个普通文件忽略掉，两边都不报错。
+#
+# 为什么必须显式写：Pages 默认对 HTML 也会做缓存，而这几类文件"旧"一点就出事——
+#   · core.bin 旧了 → 应用更新后页面还在用旧表（静默错方块，不报错）
+#   · version.json 旧了 → 版本闸门停在上一个判断上（该提示更新的时候不提示）
+#   · index.html 旧了 → 用户拿到旧入口，配合新 assets 会白屏
+
+# 版本清单：每次都要最新（它只有几百字节）
+/version.json
+  Cache-Control: no-store
+
+# 宿主注入的核心数据：更不该缓存——它由原生侧提供，线上这份是 B 站（完整版）用的
+/__host/*
+  Cache-Control: no-store
+
+# 入口与 Service Worker：必须每次校验，否则热更要等缓存过期才生效
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
