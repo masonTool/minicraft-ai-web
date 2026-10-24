@@ -134,6 +134,27 @@ console.log('\n空翻与朝向');
   model.dispose();
 }
 
+console.log('\n倾倒（重心出界时朝行进方向扑）');
+{
+  const model = new JumperModel();
+  model.setYaw(Math.PI / 3);
+  model.setTilt(Math.PI / 2);
+  near('倾倒 90° → 绕左右轴 −90°（朝前扑）', model.object.rotation.x, -Math.PI / 2, 1e-9);
+  near('倾倒不改朝向', model.object.rotation.y, Math.PI / 3, 1e-9);
+
+  model.setTilt(0);
+  near('归零后站直', model.object.rotation.x, 0, 1e-9);
+  model.setTilt(-1);
+  near('负角被夹到 0（只会往前倒）', model.object.rotation.x, 0, 1e-9);
+  model.setTilt(Number.NaN);
+  near('NaN 不炸', model.object.rotation.x, 0, 1e-9);
+
+  model.setTilt(Math.PI / 2);
+  model.resetPose();
+  near('落回站姿会清掉倾角', model.object.rotation.x, 0, 1e-9);
+  model.dispose();
+}
+
 console.log('\n站到方块顶面');
 {
   const model = new JumperModel();

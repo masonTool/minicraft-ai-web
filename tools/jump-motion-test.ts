@@ -18,6 +18,7 @@ import {
   ENTER_SCALE,
   JUMP_TIMING,
   LAND_SQUASH,
+  TOPPLE_ANGLE,
   blockBounceScale,
   bounceOut,
   cubicIn,
@@ -29,6 +30,7 @@ import {
   landingSquash,
   rippleProgress,
   sinusInOut,
+  toppleAngle,
 } from '../src/minigame/games/jump/motion.ts';
 
 let passed = 0;
@@ -124,6 +126,31 @@ console.log('\n落地压缩 / 方块回弹 / 入场 / 淡出');
   near('波纹从 0 开始', rippleProgress(0), 0);
   near('波纹 600ms 结束', rippleProgress(JUMP_TIMING.rippleMs), 1);
   near('波纹越界夹住', rippleProgress(9999), 1);
+}
+
+console.log('\n倾倒（380ms 缓入到 ~95°）');
+{
+  const ms = JUMP_TIMING.toppleMs;
+  near('起点不倾斜', toppleAngle(0), 0);
+  near('380ms 到终点', toppleAngle(ms), TOPPLE_ANGLE);
+  const degrees = (TOPPLE_ANGLE * 180) / Math.PI;
+  check('终点角度落在 90°~100°（正好 90° 会像贴着墙躺平）', degrees >= 90 && degrees <= 100, `${degrees.toFixed(1)}°`);
+  check(
+    '全程单调不减',
+    Array.from({ length: 60 }, (_, i) => toppleAngle((i / 59) * ms)).every((v, i, arr) => i === 0 || v >= arr[i - 1]! - 1e-12),
+  );
+  // 缓入：前半程几乎不动（还在"犹豫"），最后 100ms 才猛地扑下去。
+  // 写成缓出会变成"被人推倒"，截图看不出差别，只有曲线能量出来。
+  check('前半程只倒了两成不到（缓入）', toppleAngle(ms / 2) / TOPPLE_ANGLE < 0.2, `${(toppleAngle(ms / 2) / TOPPLE_ANGLE).toFixed(3)}`);
+  check(
+    '最后 1/4 时间转过一半以上',
+    toppleAngle(ms) - toppleAngle(ms * 0.75) > TOPPLE_ANGLE * 0.5,
+    `${((toppleAngle(ms) - toppleAngle(ms * 0.75)) / TOPPLE_ANGLE).toFixed(3)}`,
+  );
+  near('超过时长被夹住', toppleAngle(9999), TOPPLE_ANGLE);
+  near('负数归零', toppleAngle(-5), 0);
+  near('NaN 归零', toppleAngle(Number.NaN), 0);
+  near('倾倒时长 380ms', JUMP_TIMING.toppleMs, 380);
 }
 
 console.log('\n时序常量（对齐规格表 §8）');

@@ -34,7 +34,7 @@ import {
 import { BlockScene, type BlockSpec } from './BlockScene.ts';
 import { JumperModel } from './JumperModel.ts';
 import { BLOCK_HEIGHT_RATIO } from './iso.ts';
-import { JUMP_TIMING, flipProgress, jumpArc, landingSquash } from './motion.ts';
+import { JUMP_TIMING, flipProgress, jumpArc, landingSquash, toppleAngle } from './motion.ts';
 import { JumpAudio } from './audio.ts';
 import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
@@ -200,9 +200,13 @@ export class JumpGame implements MiniGame {
       jumper.setFlip(-Math.PI * 2 * flipProgress(progress));
       if (progress >= 1) this.land();
     } else if (this.phase === 'toppling') {
-      // 倾覆：先倾斜再倒。这一段只等时长，角度由 `motion.toppleAngle()` 驱动（见 跳9）
+      // 倾覆：380ms 缓入扑到 ~95°，播完才自由落体。方向恒为前进方向（冲过头和没跳够都往前扑）
       this.elapsed += step;
-      if (this.elapsed >= JUMP_TIMING.toppleMs / 1000) {
+      const ms = this.elapsed * 1000;
+      jumper.setTilt(toppleAngle(ms));
+      if (ms >= JUMP_TIMING.toppleMs) {
+        // 已经扑倒，落地时不必再保留倾角（下坠本身有翻转）
+        jumper.setTilt(0);
         this.phase = 'falling';
         this.elapsed = 0;
       }

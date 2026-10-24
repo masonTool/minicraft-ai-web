@@ -131,6 +131,26 @@ export function fadeScale(ms: number): number {
   return 1 - cubicIn(ms / JUMP_TIMING.fadeMs);
 }
 
+/**
+ * 倾倒的终点角度（弧度）：≈ 95°。
+ *
+ * 为什么略过 90°：正好 90° 时人躺平贴在方块侧面上，看起来像"贴着墙"；
+ * 多倒 5° 才会读成"已经离开支撑面、正在往下掉"。
+ */
+export const TOPPLE_ANGLE = (95 * Math.PI) / 180;
+
+/**
+ * 倾倒角度（0 → ~95°，`JUMP_TIMING.toppleMs` = 380ms）。
+ *
+ * 用 `cubicIn`（缓入）而不是线性/缓出：重心越过支撑面之后是被重力拽倒的，
+ * 前半段几乎不动（还在"犹豫"），最后 100ms 才猛地扑下去——这个加速度反过来写
+ * 就变成了"被人推倒"，两种观感差别很大，截图看不出来，只能靠曲线断言。
+ */
+export function toppleAngle(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  return TOPPLE_ANGLE * cubicIn(ms / JUMP_TIMING.toppleMs);
+}
+
 /** 波纹进度（0~1），渲染层用它算半径与透明度 */
 export function rippleProgress(ms: number): number {
   return clamp01(ms / JUMP_TIMING.rippleMs);

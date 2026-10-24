@@ -185,6 +185,7 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('站姿读实际落点（run.stand）', jumpSrc.includes('this.run.stand.x') && jumpSrc.includes('this.run.stand.z'));
   check('起跳点读实际落点（不用 currentBlock 中心）', jumpSrc.includes('const stand = this.run.stand;'));
   check('倾覆有独立阶段（toppling）', jumpSrc.includes("'toppling'"));
+  check('倾覆阶段播放角度曲线（toppleAngle → setTilt）', jumpSrc.includes('toppleAngle(ms)') && jumpSrc.includes('jumper.setTilt('));
   check('一屏只画 3 块（上一块 + 当前 + 下一块）', jumpSrc.includes('this.run.index + 1)') && !jumpSrc.includes('this.run.index + 2)'));
   check('倾覆期间不跟镜头（人已经倒出画面）', jumpSrc.includes("this.phase !== 'toppling'"));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
