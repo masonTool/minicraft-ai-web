@@ -2810,6 +2810,13 @@
         box-sizing: border-box;
       }
       #inventory-screen.hidden { display: none; }
+      /* 批次 20261024-1455（用户自测："背包在有些屏幕上被挤到快捷栏上面一点"）：
+         携带版的快捷栏 dock 是 `position: fixed`，**不参与**这个网格 —— 第二行塌成 0，
+         面板就按整屏高度居中，底边正好压在 dock 上。
+         这里给屏幕层留出 dock 的高度（含安全区），面板自然落到它上面。 */
+      body.inv-pocket-open #inventory-screen {
+        padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+      }
       /* 携带版外壳：左轨 | 灰框 | 右轨（页签在 border 外，对齐 Wiki） */
       .inv-shell {
         grid-row: 1;

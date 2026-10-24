@@ -4889,6 +4889,24 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
   );
 }
 
+// ------------------------------------------------------------------ 背包与快捷栏的避让
+//
+// 批次 20261024-1455（用户自测）："背包在某些屏幕上被挤到快捷栏的上部一点"。
+console.log('\n[背包面板与快捷栏避让（批次 20261024-1455）]');
+{
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  check(
+    '携带版打开时给底部 dock 留高度（面板不再压在快捷栏上）',
+    /body\.inv-pocket-open #inventory-screen \{[^}]*padding-bottom: calc\(62px \+ env\(safe-area-inset-bottom, 0px\)\);/.test(
+      css,
+    ),
+  );
+  check(
+    '面板高度仍然受视口高约束（--inv-pocket-h 里带 dvh）',
+    /--inv-pocket-h: min\(calc\(100dvh - 72px\), max\(318px, 42vh\)\);/.test(css),
+  );
+}
+
 // ------------------------------------------------------------------ 自绘滚动条（两栏同一份实现）
 //
 // 批次 20261024-1455（用户）："创造模式背包滚动条显示异常，参照生存模式的样式"。

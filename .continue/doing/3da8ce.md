@@ -30,6 +30,10 @@
   - 为什么：面板是固定高（`--panel-h`）+ `overflow: hidden`，内容比它高时 `center` 会同时裁掉上下两端——标题在最上面，所以第一个消失。只把字号调小治不了根（不同机型差得太多），必须"安全居中 + 可滚"打底，再把间距做成跟视口高联动。
   - 验证：`npx tsx tools/ui-test.ts` **960 通过 / 0 失败**（改 1 条横屏断言、新增 2 条：home 视图 safe center + 可滚、三处 clamp 都带 vh）。
   - 批次：20261024-1455
-- [ ] [修6] 背包面板在矮屏上压到快捷栏：`index.html` 用 `--inv-pocket-h` 与 `#inventory-screen` 的 padding 给底部 dock 让位 → `npm run test:ui`（断言：`--inv-pocket-h` 里扣掉了 dock 高度、`#inventory-screen` 有底部安全区 padding）
+- [x] [修6] 背包面板在矮屏上压到快捷栏：`index.html` 用 `--inv-pocket-h` 与 `#inventory-screen` 的 padding 给底部 dock 让位 → `npm run test:ui`（断言：`--inv-pocket-h` 里扣掉了 dock 高度、`#inventory-screen` 有底部安全区 padding）
+  - 做了什么：新增 `body.inv-pocket-open #inventory-screen { padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }`——携带版打开时把底部 dock 的高度从"可用高度"里让出来。`--inv-pocket-h` 的原公式（`min(100dvh-72px, max(318px, 42vh))`）没动：减掉 dock 之后剩余空间刚好容得下它，再扣一次会把背包压矮一圈。
+  - 为什么：dock 是 `position: fixed`，根本没参与 `#inventory-screen` 的 `grid-template-rows: 1fr auto`（第二行塌成 0），所以面板一直按整屏高居中，底边正好压在快捷栏上。用户说的"被挤到快捷栏上部一点"就是这个。
+  - 验证：`npx tsx tools/ui-test.ts` **962 通过 / 0 失败**（新增 2 条：dock 让位的 padding 带安全区、`--inv-pocket-h` 仍受 dvh 约束——防止有人为了"塞下"把它改回固定值）。
+  - 批次：20261024-1455
 - [ ] [修7] 设置里的游戏模式下拉：只列了生存/创造两种、且回调是"切换"而不是"切到选中的那个"：`ui/SettingsScreen.ts` + `main.ts` → `npm run test:ui`（断言：选项来自 `GAME_MODES` 四种、回调签名收 mode、main 里接的是 `setGameMode(mode)`）
 - [ ] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
