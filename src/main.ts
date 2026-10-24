@@ -394,6 +394,7 @@ import { RemotePresence } from './core/net/RemotePresence.ts';
 import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
+import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
@@ -3706,10 +3707,20 @@ class App {
    * `armorColors` 那种简化模型），硬编 0 发过去等于撒谎——队友会以为你空着手。
    * 缺的几项记在 `联机37`。
    */
+  /** 当前穿着的四件甲（槽序与 `ARMOR_SLOT_BASE + 0..3` 一致），空槽为 0（联机40） */
+  private armorIds(): number[] {
+    const ids: number[] = [];
+    for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) ids.push(this.inventory.get(ARMOR_SLOT_BASE + slot)?.id ?? 0);
+    return ids;
+  }
+
   private localAppearance(): RemoteAppearanceInput {
     const held = this.inventory.get(this.hotbarIndex);
     return {
       held: held?.id ?? 0,
+      // 盔甲（联机40）：四槽的物品 id —— 数据源本来就是它（`applyArmorAppearance` 也是从这里
+      // 算甲片颜色的），只是一直没发出去，于是队友看你永远是光着的
+      armor: this.armorIds(),
       sneak: this.frameInput.sneak,
       swing: this.hand.swingProgress > 0,
       ride: this.ridingVehicle !== null,
@@ -3729,6 +3740,15 @@ class App {
     const equipment = { ...mob.equipment };
     if (state.held > 0) equipment.mainHand = state.held;
     else delete equipment.mainHand;
+    // 盔甲（联机40）：空槽要**删掉**而不是写 0——`MobRenderer` 看到 0 会当成"装备了 id 0"，
+    // 于是 `armorTint(0)` 给出一层灰。换甲不用手动刷新视觉：`mobAppearanceKey` 已经把
+    // equipment 算进去了，下一帧会整份重建
+    const armorPatch = armorEquipmentPatch(state.armor);
+    for (const slot of ARMOR_EQUIPMENT_SLOTS) {
+      const id = armorPatch[slot];
+      if (id !== undefined) equipment[slot] = id;
+      else delete equipment[slot];
+    }
     mob.equipment = equipment;
     if (appearance.swinging) mob.attackAnim = Math.max(mob.attackAnim, 0.2);
     if (state.onFire && !mob.burning) mob.ignite(3);

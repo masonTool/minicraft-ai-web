@@ -223,3 +223,9 @@
 - 决定：新增 `core/net/MobAuthority.ts`（`mobKey` / `parseMobKey` / `pickAuthority` / `isAuthority`），**不改协议**；`mob-move` 与"权威端模拟、其余端插值"留给下一条。
 - 为什么：生物位置同步最大的坑不在传坐标，而在"两端指的是不是同一只"和"谁跑 AI"。这两个不先钉死，传得越多越乱（两只怪互相拉扯 + 双份模型）。最近者权威比服务端物理省得多，且不需要锁定/交还握手；平局按 id 小是为了保证两端算出同一个赢家（全序）。
 - 影响：纯新增，运行时零改动；下一轮可直接在这两个函数上接 `mob-move`。
+
+## D38 · 盔甲同步不需要改存档格式（核对推翻了条目的前提）
+
+- 决定：只补"上报 + 套到远端模型"两处，不动存档；空槽从 `MobEquipment` 里**删掉**而不是写 0。
+- 为什么：条目当初写的是"现在是 `armorColors` 简化模型、要改存档格式"，核对后发现数据源本来就是逐槽物品 id（`applyArmorAppearance()` 读 `inventory.get(ARMOR_SLOT_BASE + slot)?.id`），`armorColors` 只是渲染派生色；`MobRenderer` 也早已支持 `armorTint(equipment.head/chest/legs/feet)` 并把 equipment 算进外观 key。写 0 会被当成"装备了 id 0"渲染成灰甲，所以空槽必须删。
+- 影响：队友穿甲现在看得见了；存档格式没动，旧档不受影响。可撤回（三处改动）。**`联机41`（副手槽）的前提也要重新核对**——`offhand` 字段同样早在协议里，先看背包是否已有副手槽再决定要不要动存档。
