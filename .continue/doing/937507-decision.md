@@ -125,3 +125,16 @@
 - 决定：在 `public/` 下加 `_headers`，把 `core.bin` / `version.json` 设 `no-store`，`index.html` / `sw.js` 设 `no-cache`。
 - 为什么：Cloudflare Pages 默认对 HTML 也做缓存。而这几类文件"旧一点"就会出事：`core.bin` 旧了是**静默错方块**，`version.json` 旧了是版本闸门停在上一版判断，`index.html` 旧了配新 assets 会白屏。GitHub Pages 会把它当普通文件忽略，两地都不报错。
 - 影响：只影响 CF 托管；`dist` 里多一个 300 字节文件（已被 release-check 的断言覆盖：不参与 JS 体积统计）。
+
+## D22 · 方块表数据外置**暂不做**：它卡在三处模块初始化期派生依赖，不是"搬 60 个声明"
+
+- 决定：本轮核对后**不动代码**，把这条按"需要改描述"退回给用户定夺；随附已探明的两步路径。
+- 为什么：
+  1. `SPECS` 的构造过程**有副作用**：`WOOD_ID_MAP` / `WOOD_SHAPED_MAP` 是在 `WOOD_SPECS`、`WOOD_SHAPED_SPECS` 的构造体里被 `set()` 填充的（`blocks.ts:333` / `blocks.ts:416`，填充发生在 `flatMap` 与立即执行函数内部）。
+  2. 这些 map 又在**模块初始化期**被读成活值：`export const Wood = Object.fromEntries(EXTRA_WOODS.map(...WOOD_ID_MAP.get...))`（`:386`）、`export const WoodShaped = Object.fromEntries(WOOD_SHAPED_MAP)`（`:483`）、`export const JUNGLE_LOG_ID = Wood.jungle!.log`（`:5008`）。这三处在 `SPECS` 为空时会得到 `undefined` 或直接 `TypeError`，**导入即崩**，不是运行到某功能才坏。
+  3. 还有求值顺序问题：若 `blocks.ts` 静态 `import { SPECS } from './blockSpecs.ts'`，按 ESM 规则 `blockSpecs.ts` 的模块体**先**求值；而它的数组字面量要读 `blocks.ts` 的 `WOOL_ID_START` 等常量——此时那些绑定还在 TDZ，直接 `ReferenceError`。也就是说"把声明搬过去 + 加个 import"这一步本身就跑不起来，必须先解决求值顺序。
+  4. 而 `SPECS` 又必须**整体**搬走（不能只搬大的那些）：`buildBlockTable()` 要求 id 从 0 连续，任何一半留在 JS 里都会让"第 N 条就是 id=N"这条不变量失效。
+- 已探明的两步路径（各约 1 个批次）：
+  1. **先把木材 id 映射从 SPECS 里解耦**：让 `WOOD_ID_MAP` / `WOOD_SHAPED_MAP` 在装表后由 `BLOCKS` 按方块名推导（8 种木材 × ~10 个 id，按名字完全可推），并让 `Wood` / `WoodShaped` / `JUNGLE_LOG_ID` 变成装表后可得的懒值。这一步做完，`SPECS` 才是"纯数据、无副作用"，可以被整体搬走。
+  2. **再搬 SPECS**：`blockSpecs.ts` 只留数据；`blocks.ts` 用**动态 import + 顶层 await**（或构建期 alias 换成空实现）拿到 SPECS，从而绕开 TDZ；生产构建里 `SPECS` 为空、由 `hostCore` 从 `core.bin` 装表，`build:app` 的主包 gzip 应当从 716 KB 掉到 ~690 KB。
+- 影响：本轮**零代码改动**，门禁（浏览器打不开）与体积（716 KB）都维持现状。若用户不同意这条路径，另一条可选项是接受"数据仍在主包里"，把这条降级为长期待办。
