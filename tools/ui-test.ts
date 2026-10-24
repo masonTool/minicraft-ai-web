@@ -5349,5 +5349,28 @@ console.log('\n[最近连接（L9）]');
   );
 }
 
+/*
+ * 方块模拟的闸门（L8 · MS2）
+ *
+ * 从属端一旦也跑 `tickWorldBlocks`，红石/流体/作物就是两端各算一遍——靠广播收敛，
+ * 极端情况短暂不一致且不报错。这里钉住"它只能在 SimMode 的闸门里被调用"。
+ */
+console.log('\n[方块模拟只在房主那端跑（L8 · MS2）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    'tickWorldBlocks 的调用点在 shouldSimulate 闸门里',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'blocks')) this.tickWorldBlocks(TICK_SECONDS);"),
+  );
+  check(
+    'main 里没有第二处裸调 tickWorldBlocks（绕过闸门）',
+    (mainSrc.match(/this\.tickWorldBlocks\(/g) ?? []).length === 1,
+  );
+  check(
+    '连上后打印"这一端在跑什么"（排查第一句话）',
+    mainSrc.includes('describeSimMode(this.net.role)'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

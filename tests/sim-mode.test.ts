@@ -80,3 +80,28 @@ describe('域清单与类型一致', () => {
     expect([...SIM_DOMAINS].sort()).toEqual(Object.keys(_domainCoverage).sort());
   });
 });
+
+/**
+ * 20Hz tick 里的闸门（`src/main.ts` 那一行）：从属端一次都不该推进方块。
+ *
+ * 这里用"跑 100 个 tick、数 `tickWorldBlocks` 被调用几次"来钉这条行为——
+ * 真跑一个 App 需要 WebGL，而这条规则本身是纯的。
+ */
+describe('tick 闸门', () => {
+  function runTicks(role: NetRole, ticks: number): number {
+    let writes = 0;
+    for (let index = 0; index < ticks; index += 1) {
+      if (shouldSimulate(role, 'blocks')) writes += 1;
+    }
+    return writes;
+  }
+
+  it('从属端跑 100 个 tick，方块推进 0 次', () => {
+    expect(runTicks('client', 100)).toBe(0);
+  });
+
+  it('房主与单机跑 100 个 tick，方块推进 100 次（单机行为不变）', () => {
+    expect(runTicks('host', 100)).toBe(100);
+    expect(runTicks('solo', 100)).toBe(100);
+  });
+});

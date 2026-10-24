@@ -400,6 +400,7 @@ import {
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
 import { summaryFromRoom } from './core/net/JoinWorld.ts';
+import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
 import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
@@ -3743,6 +3744,8 @@ class App {
      */
     this.multiplayerScreen.setRole(this.net.role);
     console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
+    // 排查"某一端某样东西还在自己动"时，第一句话就该是"这一端在跑什么"（SimMode 的表）
+    console.info(`[net] 模拟模式：${describeSimMode(this.net.role)}`);
 
     // 种子以服务端为准（联机5）：地形由种子纯函数重现，两边不同等于在两片大陆上玩，
     // 坐标对得上、风景对不上，方块改动还会互相错位
@@ -16555,7 +16558,12 @@ class App {
       this.stats.tick(this.survivalEnvironment());
       this.tickPortal();
       this.tickEndPortal();
-      this.tickWorldBlocks(TICK_SECONDS);
+      /*
+       * 方块模拟（L8 · MS2）：**只由该跑模拟的那一端推进**（`SimMode` 是唯一入口）。
+       * 从属端一旦也跑，红石/流体/作物就是两端各算一遍——靠广播收敛，极端情况会
+       * 短暂不一致，而且不报错。单机与房主照旧（`solo` / `host` 都是 true）。
+       */
+      if (shouldSimulate(this.net.role, 'blocks')) this.tickWorldBlocks(TICK_SECONDS);
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
     }
