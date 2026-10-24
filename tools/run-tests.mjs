@@ -137,11 +137,15 @@ function changedFiles() {
 const NON_BUNDLE_TRIGGERS = {
   /** 真起服务端 + 真连 WebSocket，测的是 `server/**` 的协议行为 */
   net: ['server/'],
-  /** 下面四套都是"工具自检"：只读 `tools/*.mjs` 源码 + package.json，不碰 src */
-  guard: ['tools/'],
-  screenshot: ['tools/'],
-  shotdiff: ['tools/'],
-  'browser-check': ['tools/'],
+  /**
+   * 下面四套是"工具自检"，**逐个列出它们真正读的东西**，不用 `tools/` 一把抓：
+   * `tools/*-test.ts` 那 170 多份离线套件也住在 `tools/` 下，一把抓等于"随便改个测试
+   * 文件就要起 10 秒浏览器"（实测 guard 一套就 10s）。
+   */
+  guard: ['tools/console-guard.mjs', 'tools/console-guard-test.mjs', 'tools/browser.mjs'],
+  screenshot: ['tools/screenshot.mjs', 'tools/screenshot-test.mjs', 'tools/browser.mjs'],
+  shotdiff: ['tools/shot-diff.mjs', 'tools/shot-diff-test.mjs', 'tools/browser.mjs'],
+  'browser-check': ['tools/browser-check.mjs', 'tools/browser-check-test.mjs'],
 };
 
 /**

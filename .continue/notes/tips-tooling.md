@@ -132,3 +132,20 @@
   手抄瞎写照样红。要重新锚定，把脚本打印的"重新锚定到当前 HEAD：…"那一行粘回去即可，不用心算。
 - 适用面：一切"文档里的数字要与仓库状态自指相等"的锚点——**凡是会随提交/时间变化的值，
   要么由脚本在生成时写死锚点，要么别写进文档**（套件数、覆盖率同理）。
+
+### `--changed` 里"没有 metafile 的套件一律跑"，等于每次提交白等 22 秒
+
+- 症状：改一个 `src/` 文件，`npm run check:fast` 要 26s、`git commit` 的门禁 32s；
+  `node tools/run-tests.mjs --changed` 在**干净工作区**也报"命中 5 套"、总耗时 22.3s。
+- 根因：`run-tests.mjs` 用 esbuild metafile 反查"哪个套件引用了改动的文件"，
+  而 `net` / `guard` / `screenshot` / `shotdiff` / `browser-check` 是 `node tools/x.mjs`
+  直接跑、**没有 metafile**，旧代码用 `if (!s.bundle) return true` 兜底 → 永远全跑；
+  这五套恰好最慢（`net` 12s 真起服务端、`guard` 10s 真起浏览器），而且是**串行**的。
+- 处置：在 `NON_BUNDLE_TRIGGERS` 里**逐个登记它们真正读的文件**——
+  `net` → `server/`；四套工具自检 → 各自的 `tools/x.mjs` + `tools/x-test.mjs` + `tools/browser.mjs`。
+  别用 `tools/` 一把抓：170 多份 `tools/*-test.ts` 也住在那儿，一把抓等于"随便改个测试文件就起 10 秒浏览器"。
+  没登记的套件保持全跑（认不出依赖时保守）。
+- 适用面：任何"按改动挑测试"的聚合 runner。**兜底规则要用在"认不出来"上，不能用在"省事"上**——
+  一旦兜底覆盖了最慢的几套，内循环就名存实亡（本仓库实测：22.3s → 0.5s）。
+- 顺带记住：钩子自检也可以按"钩子目录内容哈希"缓存（`selftest.mjs` 顶部），它不读项目里别的东西，
+  5.2s → 26ms；**只缓存通过的结论**，失败永远重跑。
