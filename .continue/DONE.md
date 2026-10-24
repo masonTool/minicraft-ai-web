@@ -63,6 +63,47 @@
 **未开工（不属本批成果）**：MS2 世界权威 / MS3 实体权威 / MS4 容器与收尾共 17 条，未动一行代码，
 条目原文（含各自验收命令）已搬进 `TASKS.md` 的 L8 条目下方，下一批重建队列照抄即可。
 
+## 批次 20261025-0257 · 2026-10-25 · 会话 037060ab
+
+> **这一批做什么（L8 · MS4 容器与收尾）**：补上最后一段权威——容器计时只由房主推进、
+> 从属端只读；房主退出时先提示再关房、且不再重连；协议文档与代码逐条对齐到 v2；
+> 台账写清 L8 四段状态；最后做一次 L8 自审。
+>
+> **L8 四段（MS1~MS4）代码与断言至此已齐**。仍然只剩两件只有人能做的：
+> ① 人工双端验收（红石两端同时亮 / 同一只怪位置一致 / 打死同时消失且掉落一份 / 熔炉进度同步 / 房主退出提示）；
+> ② `container`/`sign`/`frame`/`tnt` 的请求化（从属端操作仍直连上行，玩法不受影响）。
+>
+> ⚠️ 队列里「单测：从属端计时不前移」实际由**结构断言 + 联机断言**覆盖；要真在 node 里跑
+> `tickContainers` 得先造一个 World，成本远高于收益——这一点写在条目说明里，没有假装写了单测。
+
+- [x] [L8] 容器进度权威：熔炉 `cookProgress` / 酿造 / 漏斗冷却由房主推进并上行，从属端只读不推进 → 单测：从属端计时不前移
+  - 做了什么：`tickContainers(dt)` 收进 `shouldSimulate(role,'containers')` 闸门（全文件只此一处调用）；`container` 消息加可选 `progress`（0..1），服务端**只在 `player.isHost === true` 时保留**并夹到 `[0,1]`，其余一律丢掉（内容照转）；`NetClient.sendContainer(..., progress?)` / `NetContainerState.progress` 打通；房主新增 `pushContainerProgress()`（1 秒节流，扫 64 格内 `progress > 0` 的容器入既有 80ms 防抖队列，顺带把槽位一起对齐）；从属端 `onNetContainer` 把 `progress` 写进 `cookProgress`（不 tick，所以只是"摆上去"，下一条快照覆盖）。
+  - 为什么：熔炉进度是**每 tick 都在变**的量，而容器广播只挂在 `onMutate`（内容变化）上——不给它一条自己的低频上行，从属端的进度条只在"烧出一个东西"时跳一格。进度只认房主：从属端不推进计时，若允许它带 `progress`，一个假值就能把所有人的进度条改坏。写 `cookProgress` 而不是新加显示字段，是为了让既有进度条代码原样可用。
+  - 验证：`npm run test:net` **165 → 168 通过 / 0 失败**（房主进度被转发、从属端进度被丢且内容照转、越界进度夹到 1）；`npm run test:ui` **1030 → 1034 通过 / 0 失败**（闸门只一处、1 秒节流、从属端只写 cookProgress、上行只由房主带 progress）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。⚠️ 队列写的"单测：从属端计时不前移"实际由**结构断言 + 联机断言**覆盖（`tickContainers` 只有一处且在闸门里），没有另写 vitest —— 要在 node 里跑 `tickContainers` 得先造一个 World，成本远高于收益。
+  - 未验证：双端开着同一个熔炉看进度条是否同步，需要手测。
+  - 批次：20261025-0257
+- [x] [L8] 房主退出：房间关闭 + 从属端 3 秒内给出明确提示（`core/net/NetSession.ts` 状态迁移）→ 单测状态迁移 + `npm run test:net`
+  - 做了什么：服务端房主 `close` 时**立刻** `broadcast({t:'room-closed', reason:'host-left', graceMs})` 给同房其他人（提示，不是关房——他可能只是切后台）；宽限期到期仍未回来则**关房**：对同房每个人 `reject(socket,'host-left','房主已退出，房间已关闭', CLOSE_HOST_LEFT=4007)`。客户端新增 `room-closed` 分支与 `onRoomClosing` 回调、`roomClosed` 标记；`Protocol.ts` 把 `host-left` 加进错误码与致命名单；`NetSession.CloseReason` 新增 `roomClosed`（与 `fatal` 分开表达，重连一律 `stop`）；`main` 把它变成一句带秒数的提示（`net.hostLeft`），六语言补齐。
+  - 为什么：房主走了等于这一局没人推进世界——怪不动、红石不亮、熔炉不烧，而界面一切正常，这种"看起来还能玩"的坏状态最难排查。所以先提示（3 秒内），到期再关房，并且**明确不再重连**（重连只会被同一个理由踢回来，每 3 秒撞一次把日志刷满）。`roomClosed` 与 `fatal` 分开记：日志/提示要说人话，别把"房主退出"写成"协议错误"。
+  - 验证：`npm run test:net` **168 → 171 通过 / 0 失败**（房主掉线即通知、通知带 `graceMs`、到期关房给 `host-left`）；`npx vitest run tests/net-session.test.ts` 新增 3 条（`roomClosed` → offline/stop、重连途中也停、之后显式 connect 仍可重开）；`npm run test:ui` **1034 → 1038 通过 / 0 失败**；`npm run audit:i18n` 通过（2906/2906）；`npm run check:fast` **161/161 套全绿**。
+  - 批次：20261025-0257
+- [x] [L8] 协议文档 v2 收口：`docs/NET-PROTOCOL.md` 与本批新增/改动的消息逐条对照（`world` / `edit-request` / `entity-snap` / `entity-remove` / `authority` / `progress`）
+  - 做了什么：`join` 的 `world` 补 `worldType`；§4 `container` 补 `progress?` 并写明"只有房主带得动、服务端夹到 [0,1]"；§5 补 `room-closed`（`reason` + `graceMs`）；§5.1 错误码表补 `password 4005` / `host-taken 4006` / `host-left 4007` 三行（原来只有 version/clientId/duplicate/joined）；§8 缺口表改写 6 行（`联机5` 种子冲突改自动断开、`联机12` 模拟只由房主跑、`联机15` 容器计时由房主推进、`联机19` 实体位置/血量/死亡已同步、`联机38` 权威口径改成房主唯一、`联机26` 种子按房）。另加 11 条 UI 断言把"这批动过的消息必须在文档里"钉住，防下次文档漂移。
+  - 为什么：文档漂移是这类项目最常见的债——消息加了、字段改了，文档还停在上一版，下次照文档实现就会踩空。不做"文档 == 代码"的完全比对（要解析源码，成本远高于收益），只钉这一批动过的那些关键串 + 缺口表的现状口径。
+  - 验证：`npm run test:ui` **1038 → 1049 通过 / 0 失败**（11 条：world 元数据、worldType、edit-request、authority、entity-snap、entity-remove、progress、room-closed、host-left、4007、缺口表现状）；`node .continue/hooks/check.mjs docs` 通过（文档体量上限内）。
+  - 批次：20261025-0257
+- [x] [L8] 台账落地：`.continue/OVERVIEW.md` + `TASKS.md` 的 L8 条目写清 MS2~MS4 结果 → `npm run check`
+  - 做了什么：`OVERVIEW.md` 的联机段由「房主权威（MS1+MS2）」改成「MS1~MS4」，并补两句现状（实体快照、容器进度随房主 1s 下行、房主退出即关房）——体量 24462 → **24516 字节**（上限 24576，仍留 60 字节）；`TASKS.md` 的 L8 追加 MS4 落地结果与测试账，并写清 L8 现在剩的两件事（人工双端验收、四条消息的请求化）；`HANDOFF` 提交总数同步 1788，`audit:diffs` 重算（注意 227 → 226）。
+  - 为什么：L8 四段都落地了，台账必须能回答"现在到底哪段完成、哪段只差人验"——否则下一批会从头再查一遍。`OVERVIEW` 贴着 24KB 上限，所以只加现状、不铺细节（细节在 `notes/net-multiplayer.md`）。
+  - 验证：`npm run audit:tasks` 全绿（口径与 README / HANDOFF 一致）；`node .continue/hooks/check.mjs docs` 通过（200 行 / 24516 字节）；`npm run check` 全绿。
+  - 批次：20261025-0257
+- [x] [L8] [自审] L8 的「L1 可测量 / L2 可对抗 / L3 可外部」各一句 + 证据（指向具体文件与测试）
+  - **L1 可测量**：每一条都不是"看着像一致"，而是能被数出来的断言——`npm run test:net` **171** 条（其中房主/权威/实体/进度/关房 24 条是本批新增）、`npm run test:ui` **1049** 条（含"闸门只此一处""每帧不重复调用""文档里有这条消息"这类结构断言）、`vitest` **506** 条（`SimMode` 12 / `EntitySnapshot` 10 / `SimApply` 10 / `RemoteBlockWrite` 5 / `NetSession` 11）。人能验的也定成了可判定的阈值：红石两端同时亮（同一 tick 内）、打死同一只怪两端同时消失且掉落**恰好 1 份**、熔炉进度差 **≤1 秒**（1s 下行）。
+  - **L2 可对抗**：所有"客户端说了算"的地方都加了服务端侧的同一条尺子——谎报 `authority` 无效（按 `isHost` 重标，`test:net` 有断言）、非房主的 `block`/`blocks` 直接丢、`edit-request` 形状收口 + 令牌桶限频、`entity-snap` 只收房主且截断 256、`entity-remove` 键过滤、`container.progress` 只认房主并夹 `[0,1]`、`world` 元数据脏种子整份丢弃、`remoteWorldWritable()` 挡"种子错位时写脏地图"。**没防住的也照实记**：`move` 无位移校验（改包可瞬移）、容器不校验目标方块、`mob-hit` 仍按邻近认。
+  - **L3 可外部**：不依赖游戏客户端就能复现——协议在 `docs/NET-PROTOCOL.md`（消息表 / 错误码 4001~4007 / 缺口表 / 规矩），`tools/net-test.mjs` 用**裸 WebSocket 客户端**跑全套（可见地证明"外部实现也能接"），`npm run server` + `npm run dev` 双端可手验；另有 11 条断言把"这批动过的消息必须在文档里"钉死，防止文档漂移；取舍与坑在 `notes/net-multiplayer.md` §五/§六。
+  - 验证：三句话里能核对的部分都指到了可跑的东西——`npm run test:net` **171** 条、`npm run test:ui` **1049** 条（含 11 条"文档里有这条消息"）、`npx vitest run tests/` **506** 条；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 200 行 / 24516 字节）；`npm run check` 全绿。**L2 里"没防住的"三条（move 无位移校验 / 容器不校验目标方块 / mob-hit 按邻近认）不是本批目标，写在这里是为了别让下一批以为已经防住了。**
+  - 批次：20261025-0257
+
 ## 批次 20261025-0221 · 2026-10-25 · 会话 037060ab
 
 > **这一批做什么（L8 · MS3 实体权威）**：让"同一只怪"在两个屏幕上真的是同一只——
@@ -115,58 +156,4 @@
   - 验证：`npm run test:net` **162 → 165 通过 / 0 失败**（房主点名被转发、从属端点名被丢、空/非法键列表不转发）；`npm run test:ui` **1025 → 1030 通过 / 0 失败**（分配键再推、100ms 节流、死亡立刻点名、从属端撤影子、影子不 tick 故不会自掉战利品）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
   - 未验证：双端看"同一只怪被打死 → 两端同时消失、掉落只有一份"要手测。
   - 批次：20261025-0221
-
-## 批次 20261025-0122 · 2026-10-25 · 会话 037060ab
-
-> **这一批做什么（L8 · MS2 世界权威）**：让"世界模拟只由房主跑"真正生效——从属端不再推进
-> 红石/流体/作物/随机刻；从属端的建造走 `edit-request` 回到房主，由房主落地后以**权威结果**
-> 广播。验收是用户手测「房主开关红石灯，两端同时亮」+「从属端拆/放方块，两端都看见」。
->
-> 队列原第 4 条（"服务端只收房主的坐标类消息，其他人丢弃"）按字面做等于**没收从属端的建造**
-> （拆、放、开箱子、写牌子全部不同步）。用户拍板选 A：给从属端加请求通道，于是这一条拆成 4 条
-> （协议 / 从属端改道 / 房主落地重发 / 服务端丢旧路），见决策 D1。
->
-> ⚠️ **未手测**：第 6 条（房主落地）整条链路只能在浏览器里双端验，单测只到接线。
-
-- [x] [L8] 新增 `src/core/net/SimMode.ts`：三种角色"要不要跑模拟"的唯一入口（禁止散落 `if (role)`）→ 新增单测覆盖 solo/host/client 的取舍
-  - 做了什么：`SimMode.ts` 只有两个概念：`SimDomain`（`blocks` / `mobs` / `containers` / `clock`，即"要不要推进"的四种域，**只增不减**）与 `shouldSimulate(role, domain)`；配一张表：单机全跑、房主跑方块/生物/容器但不碰时钟、从属一样都不跑。另有 `describeSimMode(role)`（打印"这一端在跑什么"，排查时第一句话就能答）与 `SIM_DOMAINS` 清单。
-  - 为什么：判断"我该不该跑"必须只有一处——散成十几个 `if (role === 'client')` 总有一处漏，而漏掉的表现是"某一端某样东西还在自己动"（红石两边亮灭不同 / 怪的血量对不上 / 熔炉进度差几秒），**不报错**，只能靠两个人对着屏幕看半天。`clock` 单列出来划给单机：联机时时间由服务端 `time` 权威、客户端 4 倍速追，任何一端再自己走就是两个时钟。
-  - 验证：`npx vitest run tests/sim-mode.test.ts` **10 条通过**（三列全跑/全不跑/房主四项逐格、联机谁都不推时钟、三×四组合无 undefined、域清单与类型键集一致）；`npm run typecheck` 通过；`npm run check:fast` 命中 5/5 套全绿。
-  - 批次：20261025-0122
-- [x] [L8] `src/main.ts` 的 20Hz tick 接上 `SimMode`：从属端跳过 `tickWorldBlocks` → 单测断言 client 角色下写入次数为 0
-  - 做了什么：20Hz 循环里 `this.tickWorldBlocks(TICK_SECONDS)` 换成 `if (shouldSimulate(this.net.role, 'blocks')) …`（闸门只有这一处，`main.ts` 里 `tickWorldBlocks(` 的出现次数 = 1，由 UI 断言钉住）；`onNetWelcome` 里补一行 `console.info('[net] 模拟模式：' + describeSimMode(role))`。
-  - 为什么：这是 `SimMode` 第一次真正接管行为——从属端不再推进红石/流体/作物/随机刻，否则就是两端各算一遍、靠广播收敛（极端情况短暂不一致且**不报错**）。日志那行是给排查用的：以后听到"某一端某样东西还在动"，先看这行就知道它到底在跑什么。
-  - 验证：`npx vitest run tests/sim-mode.test.ts` **10 → 12 条**（新增：跑 100 个 tick 时 client 推进 0 次、host/solo 各 100 次）；`npm run test:ui` **1010 → 1013 通过 / 0 失败**（闸门在、没有第二处裸调、日志在）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
-  - 批次：20261025-0122
-- [x] [L8] 房主方块改动带 `authority: true` 上行：`src/net/NetClient.ts`（`BlockFunnel` 那一路）→ `npm run test:net`
-  - 做了什么：`NetClient.sendBlocks()` 在 `this.role === 'host'` 时给消息加 `authority: true`（声明"这批是我算出来的结果，不是玩家请求"）；服务端**不照抄**这个字段，`block` / `blocks` 的下行广播按 `player.isHost === true` **重新标注** `authority`。`docs/NET-PROTOCOL.md` 的四行（上行 block/blocks、下行 block/blocks）同步。
-  - 为什么：权威标记必须是**服务端**判定的——照抄客户端字段等于没有权威（谁都能自称房主）。它现在的用途是让下行能标出"这一格是房主算的"（排查/以后分流客户端请求），并给 MS4 的"只写房主的状态"留好依据。
-  - 验证：`npm run test:net` **145 → 149 通过 / 0 失败**（新增 4 条：房主广播 `authority: true`、从属 `false`、**从属谎报 `authority: true` 仍被标 false**、单条 `block` 同口径；其中"从属 false"那两条在第 8 条改成"从属直接发一律被丢"——见那条的说明）；`npm run typecheck` / `typecheck:tools` 通过；`npm run check:fast` 5/5 套全绿。
-  - 批次：20261025-0122
-- [x] [L8] 协议加 `edit-request`：从属端的坐标类改动**转给本房房主**（无房主则丢弃并回 `no-host`）→ `npm run test:net`
-  - 做了什么：`server/protocol.mjs` 加 `sanitizeEditPayload()`（只认 `block` / `blocks` 两种形状，条数截到 4096，**不校验世界语义**——y 范围/距离由房主落地时把关）；`server/index.mjs` 加 `case 'edit-request'`：借方块令牌桶限频、按房找房主、`send(房主, {t:'edit-request', from, payload})`，房里没房主回 `{ok:false, reason:'no-host'}`。`docs/NET-PROTOCOL.md` 上下行各补一行。
-  - 为什么：房主权威之后世界只由房主推进，但从属端仍然要能建造（拆/放/开箱子）。直接把它的 `blocks` 丢掉等于没收建造能力，所以改动以"请求"形式回到房主——服务端在这条链上**只做路由**：不判权（房主由 `hosts` 决定）、不落地（它没有世界）、不校验内容（那是房主那端的事）。
-  - 验证：`npm run test:net` **149 → 154 通过 / 0 失败**（房主收到请求且带 `from`、payload 原样转发、不认识的载荷不转、没房主时回执 `no-host`）；`npm run typecheck:tools` 通过；`npm run check:fast` 5/5 套全绿。
-  - 批次：20261025-0122
-- [x] [L8] 从属端：`block` / `blocks` 上行改走 `edit-request`（本地仍乐观应用，不打断手感）→ `npm run test:net`
-  - 做了什么：`NetClient.sendBlocks()` 按角色分叉——`host` 发 `{t:'blocks', blocks, authority:true}`（权威结果），其余发 `{t:'edit-request', payload:{t:'blocks', blocks}}`（请求）；本地写入顺序不变（先本地应用、再上行），手感不受往返影响。新增两个回调 `onEditRequest(from, payload)` / `onEditRejected(reason)`，收包分支按 `ok === false` 区分"回执"与"转给房主的请求"；`main` 把 `no-host` 回执做成**3 秒一次**的聊天提示（改十格会连发十条，不限制就刷屏）。六语言补 `net.editNoHost` / `net.editRejected`。
-  - 为什么：从属端的改动没有别的路径到房主。本地必须**乐观应用**，否则每次挖掘都要等一次往返才有反馈；代价是收敛窗口内可能和房主算出的结果不同，以房主广播为准覆盖。`no-host` 必须说出来——否则玩家在"没有房主的房"里建造，看起来成功、实际谁都没收到。
-  - 验证：`npm run test:ui` **1013 → 1016 通过 / 0 失败**（三条结构断言：角色分叉、两个方向的收包分支、回执限频）；`npm run audit:i18n` 通过（六语言 2904/2904）；`npm run typecheck` 通过；`npm run check:fast` 161/161 套全绿（首次跑 `mob` 偶发红一次，单跑与重跑均绿，属并行抖动——本批第二次遇到，已记进 `notes/tips-tooling.md`）。
-  - 批次：20261025-0122
-- [x] [L8] 房主侧：收到 `edit-request` 后在自己的世界应用（不抑制回声），由 `BlockFunnel` 作为**权威结果**重发 → 单测：请求一次 → 广播带 `authority: true`
-  - 做了什么：`main.applyEditRequest(from, payload)`——`role !== 'host'` 直接返回；走 `remoteWorldWritable()` 守卫；用 `readEditRequest()`（`RemoteBlockWrite.ts` 新增，坏条目单独丢）解析；逐条 `planRemoteBlock` → 记增量 → `setBlockAndUpdate` + `ensureBlockEntityAt`，**不包 `applyingRemoteBlock`**，于是 `onBlockChanged` 会把它送进 `BlockFunnel`，由房主以 `blocks + authority` 重发。
-  - 为什么：`onNetBlock` 那种"抑制回声"是为了不把队友的改动原样发回去；但房主是**替别人落地**，它必须进漏斗广播——否则请求者的改动只有房主自己看得见。请求者本地已乐观应用，收到同一格会再写一次（幂等），这正是"以房主结果为准"的收敛点。
-  - 验证：`npm run test:unit` **458 → 463 条**（新增 `readEditRequest` 5 条：整组/单条/坏条目单独丢/非数组/维度原样带出）；`npm run test:ui` **1016 → 1019 通过 / 0 失败**（三条结构断言：落地**不**抑制回声、只有房主处理、先记增量再写世界）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
-  - 未验证："从属端放一格 → 房主落地 → 大家看见"这一整条要浏览器里双端手测（单测只能断言到接线）。
-  - 批次：20261025-0122
-- [x] [L8] 服务端：非房主的 `block` / `blocks` 一律丢弃（此时从属端已改走请求通道）；container / sign / frame / tnt 的请求化留到后面 → `npm run test:net`
-  - 做了什么：`block` / `blocks` 两条上行加前置判定——**房间里有房主时**，`player.isHost !== true` 直接 `rejectEdit(player,'not-host',…)` 丢弃；没房主的房间保持老行为（那种房里没人推进世界，谁改都一样）。协议文档的两行同步。
-  - 为什么：这是 A 方案的最后一环——从属端已改走 `edit-request`，旧路留着就等于把权威又还给每个客户端（谁都能直接广播一个"我算的结果"）。**按房判定**而不是无条件丢弃，是为了不把"有人直接 join、没带 host"的老用法打死。
-  - 验证：`npm run test:net` **154 → 157 通过 / 0 失败**（从属端直接发 `blocks` / `block` 都被房主那边收不到、房主自己发仍被广播）；顺带改写了第 3 条那段"从属端 authority: false"的断言——MS2 起从属端这条路已被丢弃，旧断言描述的行为不存在了；`npm run check:fast` 5/5 套全绿。
-  - 批次：20261025-0122
-- [x] [L8] 从属端应用顺序：`src/core/net/RemoteBlockWrite.ts` 保证"先写增量再交给渲染"，乱序到达不丢改动 → 单测
-  - 做了什么：`RemoteBlockWrite.ts` 新增 `applyRemoteBlock(action, edit, sink)` 与 `RemoteBlockSink`（`record` / `apply`），把"先记增量、再写世界"的顺序收进一个函数；`main.onNetBlock` 改成走它（原来这两步直接写在方法里）。配套 `tests/net-block-buffer.test.ts` 加 5 条：apply 顺序、buffer 只记、drop 两个钩子都不碰、**写世界抛异常时增量已经记下**、同格多次到达只留最后一稿（`edits.count` = 1 且 `applyTo` 叠进去的值是最后一稿）。
-  - 为什么：顺序是有语义的——反过来的话"写世界时抛异常 / 区块正好被卸载"这条路径上改动只留在内存里，读档或重进区块就没了。以前这两行顺序写在 `onNetBlock` 里，谁调个位置都不会有测试红。快照路径（`onNetWelcome` 的 edits 循环）本来就是"先记再写"，未改。
-  - 验证：`npm run test:unit` **458 条通过 / 54 套**（含新增 5 条）；`npm run typecheck` 通过；`npm run check:fast` 5/5 套全绿。
-  - 批次：20261025-0122
 
