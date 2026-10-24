@@ -231,6 +231,35 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
     '背景叠 ±1/255 确定性噪点（打散色带）',
     blockSceneSrc.includes('BACKGROUND_NOISE = 1 / 255') && blockSceneSrc.includes('backgroundNoise(') && !blockSceneSrc.includes('Math.random'),
   );
+
+  // 精致度（跳8）：形状决定几何，特殊方块保持直角盒
+  check(
+    '普通方块是圆角倒角盒（2 段 / 5.5% 倒角）',
+    blockSceneSrc.includes("from 'three/addons/geometries/RoundedBoxGeometry.js'") &&
+      blockSceneSrc.includes('BLOCK_CORNER_RADIUS = 0.055') &&
+      blockSceneSrc.includes('new RoundedBoxGeometry(1, 1, 1, BLOCK_CORNER_SEGMENTS, BLOCK_CORNER_RADIUS)'),
+  );
+  check(
+    '圆形底座是 56 段圆柱（半径 0.5 = 内切圆）',
+    blockSceneSrc.includes('ROUND_BLOCK_SEGMENTS = 56') &&
+      blockSceneSrc.includes('new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1)'),
+  );
+  check(
+    '特殊方块仍是直角盒（图集 UV，不吃圆角）',
+    blockSceneSrc.includes("new THREE.BoxGeometry(1, 1, 1)") && !blockSceneSrc.includes('RoundedBoxGeometry(1, 1, 1, 1'),
+  );
+  check(
+    '方块几何按形状分支（square / round）',
+    blockSceneSrc.includes("spec.shape === 'round' ? this.roundGeometry : this.blockGeometry"),
+  );
+  check(
+    '阴影按方/圆分两张贴图',
+    blockSceneSrc.includes("createShadowTexture('square')") &&
+      blockSceneSrc.includes("createShadowTexture('round')") &&
+      blockSceneSrc.includes('this.shadowMaterials[spec.shape]'),
+  );
+  check('音乐盒圆柱也是 56 段', /kind === 'music'[\s\S]{0,120}ROUND_BLOCK_SEGMENTS/.test(blockSceneSrc));
+  check('卸载时释放两张阴影贴图与圆形几何', blockSceneSrc.includes('this.roundGeometry.dispose()') && blockSceneSrc.includes('Object.values(this.shadowTextures)'));
 }
 
 // ------------------------------------------------------------------ 色板与明暗

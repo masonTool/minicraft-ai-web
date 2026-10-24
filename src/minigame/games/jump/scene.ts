@@ -481,6 +481,7 @@ export class JumpGame implements MiniGame {
         z: block.z,
         size: block.size,
         kind: block.kind,
+        shape: block.shape,
         current: i === this.run.index,
         colorIndex: block.id,
       });

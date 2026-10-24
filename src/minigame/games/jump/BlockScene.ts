@@ -24,6 +24,7 @@
  */
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {
   BLOCK_HEIGHT_RATIO,
   JUMPER_HEIGHT_RATIO,
@@ -46,7 +47,7 @@ import {
   fadeScale,
   rippleProgress,
 } from './motion.ts';
-import type { JumpBlockKind } from './logic.ts';
+import type { JumpBlockKind, JumpBlockShape } from './logic.ts';
 
 /** 屏幕上的一块方块（渲染层只要这些，不认识 run / 计分） */
 export interface BlockSpec {
@@ -55,6 +56,8 @@ export interface BlockSpec {
   /** 边长（世界单位） */
   readonly size: number;
   readonly kind: JumpBlockKind;
+  /** 底座形状：方形用圆角盒、圆形用圆柱 */
+  readonly shape: JumpBlockShape;
   /** 是不是"当前站着的"那块（蓄力时它会轻微下压） */
   readonly current: boolean;
   /**
@@ -86,6 +89,16 @@ export const BACKGROUND_TEXTURE_HEIGHT = 512;
 export const BACKGROUND_NOISE = 1 / 255;
 /** 阴影贴片相对方块尺寸的放大倍数（柔边要占出去一圈） */
 const SHADOW_SPREAD = 1.35;
+/**
+ * 普通方块的圆角：半径 0.055（= 边长 1 的 5.5%）、2 段。
+ *
+ * 直角盒子在 3x 屏上会露出"一刀切"的硬边，加一点点倒角就立刻有"模具压出来"的质感；
+ * 半径再大就不像基岩方块了。段数固定 2——再多只是增加顶点，5.5% 的弧看不出差别。
+ */
+export const BLOCK_CORNER_RADIUS = 0.055;
+export const BLOCK_CORNER_SEGMENTS = 2;
+/** 圆形底座的圆柱分段数（56：3x 屏上轮廓看不出多边形，又比方块便宜得多） */
+export const ROUND_BLOCK_SEGMENTS = 56;
 /** 阴影在**世界**里的偏移：屏幕上看是"左下"（光照来自 +x/−z） */
 const SHADOW_OFFSET = { x: -0.3, z: 0.5 };
 /** 相机跟随的指数插值系数（越大跟得越紧） */
@@ -118,7 +131,10 @@ export class BlockScene {
   readonly camera: THREE.OrthographicCamera;
 
   private palette: JumpPalette;
+  /** 普通方形底座：轻微倒角的圆角盒（特殊方块不用它，见 `specialFor`） */
   private readonly blockGeometry: THREE.BufferGeometry;
+  /** 普通圆形底座：内切圆 = 半径 0.5 的圆柱，`scale.y` 当高度 */
+  private readonly roundGeometry: THREE.BufferGeometry;
   /** 特殊方块：每类一份（UV 指向图集的两格），按需创建 */
   private readonly specialGeometries = new Map<SpecialKind, THREE.BufferGeometry>();
   private readonly specialMaterials = new Map<SpecialKind, THREE.MeshBasicMaterial>();
@@ -127,8 +143,9 @@ export class BlockScene {
   private readonly dotGeometry: THREE.CircleGeometry;
   private readonly dotMaterial: THREE.MeshBasicMaterial;
   private readonly shadowGeometry: THREE.PlaneGeometry;
-  private readonly shadowMaterial: THREE.MeshBasicMaterial;
-  private readonly shadowTexture: THREE.Texture;
+  /** 阴影按形状分两张：方形的柔边方片 / 圆形的柔边圆片 */
+  private readonly shadowMaterials: Readonly<Record<JumpBlockShape, THREE.MeshBasicMaterial>>;
+  private readonly shadowTextures: Readonly<Record<JumpBlockShape, THREE.Texture>>;
   private readonly materials = new Map<string, THREE.MeshBasicMaterial>();
 
   private backgroundTexture: THREE.Texture;
@@ -159,7 +176,12 @@ export class BlockScene {
     this.backgroundTexture = createBackgroundTexture(palette);
     this.scene.background = this.backgroundTexture;
 
-    this.blockGeometry = bakeFaceShading(new THREE.BoxGeometry(1, 1, 1));
+    // 轻微倒角的圆角盒：直角边在 3x 屏上会显出"一刀切"，5.5% 的倒角就够
+    this.blockGeometry = bakeFaceShading(
+      new RoundedBoxGeometry(1, 1, 1, BLOCK_CORNER_SEGMENTS, BLOCK_CORNER_RADIUS),
+    );
+    // 圆形底座是内切圆：半径 0.5（= 边长的一半），高度靠 mesh.scale.y
+    this.roundGeometry = bakeFaceShading(new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1));
 
     this.dotGeometry = new THREE.CircleGeometry(1, DOT_SEGMENTS);
     // ⚠️ 必须是 transparent + 高 renderOrder：不透明物体会按"由近到远"排，
@@ -171,15 +193,19 @@ export class BlockScene {
       depthWrite: false,
     });
 
-    this.shadowTexture = createShadowTexture();
     this.shadowGeometry = new THREE.PlaneGeometry(1, 1);
-    this.shadowMaterial = new THREE.MeshBasicMaterial({
-      map: this.shadowTexture,
-      color: new THREE.Color(SHADOW_COLOR),
-      transparent: true,
-      opacity: SHADOW_OPACITY,
-      depthWrite: false,
-    });
+    const squareShadow = createShadowTexture('square');
+    const roundShadow = createShadowTexture('round');
+    this.shadowTextures = { square: squareShadow, round: roundShadow };
+    const shadowMaterial = (map: THREE.Texture): THREE.MeshBasicMaterial =>
+      new THREE.MeshBasicMaterial({
+        map,
+        color: new THREE.Color(SHADOW_COLOR),
+        transparent: true,
+        opacity: SHADOW_OPACITY,
+        depthWrite: false,
+      });
+    this.shadowMaterials = { square: shadowMaterial(squareShadow), round: shadowMaterial(roundShadow) };
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
     this.camera.position.set(4, 4, 4);
@@ -346,6 +372,7 @@ export class BlockScene {
   dispose(): void {
     this.clearEntries();
     this.blockGeometry.dispose();
+    this.roundGeometry.dispose();
     for (const geometry of this.specialGeometries.values()) geometry.dispose();
     this.specialGeometries.clear();
     for (const material of this.specialMaterials.values()) material.dispose();
@@ -355,8 +382,8 @@ export class BlockScene {
     this.dotGeometry.dispose();
     this.dotMaterial.dispose();
     this.shadowGeometry.dispose();
-    this.shadowMaterial.dispose();
-    this.shadowTexture.dispose();
+    for (const material of Object.values(this.shadowMaterials)) material.dispose();
+    for (const texture of Object.values(this.shadowTextures)) texture.dispose();
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
     this.backgroundTexture.dispose();
@@ -417,14 +444,15 @@ export class BlockScene {
     const height = Math.max(0.05, spec.size * BLOCK_HEIGHT_RATIO);
     // 特殊方块用自己的贴图（颜色写在贴图里，不再乘色板）；普通方块走纯色材质
     const special = spec.kind === 'normal' ? null : this.specialFor(spec.kind);
-    const geometry = special?.geometry ?? this.blockGeometry;
+    // 普通方块按形状分：方形 = 圆角盒、圆形 = 圆柱；特殊方块始终是直角盒（图集 UV）
+    const geometry = special?.geometry ?? (spec.shape === 'round' ? this.roundGeometry : this.blockGeometry);
     const material = special?.material ?? this.materialFor(blockColorAt(this.palette, spec.colorIndex));
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = 1;
     this.scene.add(mesh);
 
-    const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
+    const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterials[spec.shape]);
     shadow.rotation.x = -Math.PI / 2;
     // 阴影永远画在方块之前，避免透明片盖住方块本体
     shadow.renderOrder = 0;
@@ -542,7 +570,7 @@ export class BlockScene {
       // 音乐盒是唱片机：圆柱比方盒自然（其余三类都是方的）
       const base =
         kind === 'music'
-          ? new THREE.CylinderGeometry(0.5, 0.5, 1, 40, 1)
+          ? new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1)
           : new THREE.BoxGeometry(1, 1, 1);
       bakeFaceShading(base);
       remapAtlasUV(base);
@@ -682,12 +710,15 @@ function clampByte(value: number): number {
 }
 
 /**
- * 阴影贴片：柔边圆角方片。
+ * 阴影贴片：柔边方片（方形底座）/ 柔边圆片（圆形底座）。
  *
- * 用"径向渐变 + 圆角矩形裁剪"而不是 CSS `filter: blur`——后者在部分浏览器里
- * 要额外的 GPU 通道，而这里就是一张 128×128 的小图，一次生成反复用。
+ * 用"径向渐变 + 形状裁剪"而不是 CSS `filter: blur`——后者在部分浏览器里
+ * 要额外的 GPU 通道，而这里就是一张 256×256 的小图，一次生成反复用。
+ *
+ * 为什么要分两张：把圆阴影画在方片上，圆底座四角会多出四块灰，看起来像"底下一块方砖"；
+ * 反过来把方阴影画成圆的，方形底座会缺四个角。形状必须跟着底座走。
  */
-function createShadowTexture(): THREE.Texture {
+function createShadowTexture(shape: JumpBlockShape): THREE.Texture {
   const size = SHADOW_TEXTURE_SIZE;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -698,7 +729,9 @@ function createShadowTexture(): THREE.Texture {
     // 再叠上半透明的方块就像"起了层灰"。这里让 0~0.62 保持满浓度，只留最后 38% 收边。
     const radius = size * 0.16;
     ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
+    if (shape === 'round') {
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    } else if (typeof ctx.roundRect === 'function') {
       ctx.roundRect(0, 0, size, size, radius);
     } else {
       ctx.rect(0, 0, size, size);
