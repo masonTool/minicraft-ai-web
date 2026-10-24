@@ -1,5 +1,7 @@
-- [自动 Git 提交与版本记录](feedback_git_auto_commit.md) — 每次改动自动 review/commit/push，且每个独立改动单独提交保留版本记录
-- [auto-commit 钩子（只当守卫）](feedback_auto_commit_hook.md) — Stop 时发现未提交改动就拦住，交回 AI 自己提交；脚本不做 git 写操作
-- [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 用户要求不停下来等确认；Stop 钩子须用 continue:true + stderr + exit 2
-- [钩子路径必须自解析](feedback_hook_self_resolve.md) — 绝对路径换机/改目录必坏；相对路径依赖 cwd；正解是 import.meta.url 上退 2 层
-- [文档冲突时以谁为准](feedback_doc_authority.md) — TASKS.md > auto-continue.md > HANDOFF.md；摘要类文件无权威性，合并信息后删除，同一事实不写两处
+- [wxminigame 分支只做主线功能的小程序化](project_wxminigame_scope.md) — 只移植主线已有功能，不新增玩法/实体/物品/配方/额外限制
+- [手机端以横屏为主场景](project_mobile_landscape.md) — 横屏视口 640~950×360~430，界面矮而宽，游戏内设置用两栏
+- [任务记账与并行开发只走 .continue](task_queue_worktrees.md) — 队列/进度唯一载体；命令照 README.md，npm run q 等旧入口已删
+- [文档冲突时以谁为准](feedback_doc_authority.md) — 代码 > TASKS.md > HANDOFF；数字只由脚本生成，摘要文件合并后删
+- [auto-commit 钩子（只当守卫）](feedback_auto_commit_hook.md) — Stop 时发现未提交改动就拦住交回 AI 提交；脚本不做 git 写操作
+- [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 要自动继续必须 continue:true + stderr + exit 2；loop_limit 决定续跑次数
+- [钩子路径必须自解析](feedback_hook_self_resolve.md) — lib.mjs 用 import.meta.url 反推项目根；别跑 agent:setup --fix-hooks
