@@ -1056,24 +1056,34 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
       recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
-      // 这颗键 = **物品分类栏的开关**（批次 20261024-1531 按用户口径恢复成最初逻辑）。
+      // 这颗键三个分支（批次 20261024-1609 按用户最新反馈定稿）：
       //
-      // 用户确认（原话）："那颗键只切'全部/搜索'分类——不弹配方书，左栏换成物品分类，
-      // 点分类里的东西在右栏看配方"。所以这里**不碰配方书**：
-      //   · 左栏还在仓库（我的物品）→ 切到上次那个分类（首次是"全部/放大镜"）；
-      //   · 左栏已经是分类 → 在"只列能做的 / 把该分类全部列出来"之间切。
-      // 配方书本身仍然只能由 R 键（PC）或它自己的 ✕ 手动开关，且是**整屏那一层**
-      // （嵌进左栏那版会让配方列表错位、点不动，已彻底回退）。
+      //   ① 书开着 → 关掉（PC 上还能点到这颗键；手机上书是整屏层，用它自己的 ✕）；
+      //   ② 左栏已经在物品分类页 → 切"列出未拥有（红底）/ 只看现在能做的"
+      //      （批次 20261024-1531 用户口径，保留）；
+      //   ③ 左栏还在仓库（我的物品）→ 切到"全部/搜索"分类 **并打开配方书**。
+      //
+      // ⚠️ ③ 是这次修的重点：上一版只切分类、"完全不碰配方书"，手机上因此没有
+      // 配方书入口（1531 决策 D2 记的已知缺口）。用户本轮反馈"点了会跳转到搜索页面、
+      // 但配方书会自动关闭"——说明他要的是书本身打开且不被自动收掉，所以这里恢复开书；
+      // 左栏同时切到搜索页，关掉书之后还能接着在分类里找。
+      // 容器/工作站界面没有可摆的合成格（书里的配方点不动），那两类只切分类。
       recipes.addEventListener('click', () => {
-        // 左栏停在分类上时，"看一眼某条配方"的待处理状态先收掉——同一次点击只做一件事
+        // 同一次点击只做一件事；"看一眼某条配方"的待处理状态先收掉
         this.pendingRecipeId = null;
+        if (this.hooks.isRecipesOpen?.() ?? false) {
+          this.hooks.onCloseRecipes?.();
+          return;
+        }
         if (this.pane === 'category') {
           this.showUnowned = !this.showUnowned;
           this.categoryPage = 0;
-        } else {
-          this.openPocketCategory(this.lastRecipeTab);
+          this.applyInventoryChrome();
+          return;
         }
-        this.applyInventoryChrome();
+        const canBook = this.mode === 'inventory' || this.mode === 'crafting';
+        this.openPocketCategory('all');
+        if (canBook) this.hooks.onOpenRecipes?.('all');
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -2115,7 +2125,12 @@ export class InventoryScreen {
     const width = track.offsetWidth || SCROLLBAR_TRACK_WIDTH;
     // 与内容留出 8px：不压最后一列，也不至于离得太远
     const left = contentRight - hostRect.left + SCROLLBAR_CONTENT_GAP;
-    return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width - 1));
+    // ⚠️ 上限只压到"贴住容器右缘"，**不能再往里收**（批次 20261024-1609）：
+    // 以前写的是 `- width - 1`，只要内容稍微宽一点（窄屏左栏 ~257px、7 列要 286px），
+    // 夹紧值就会小于"内容右缘 + 8"，轨道被按回最后一列上——用户看到的"滚动条贴着物品"。
+    // 现在间距由网格的 `padding-right`（= 8px 间距 + 7px 轨道，见 index.html）保证，
+    // 这里只兜底不让它跑到容器外。
+    return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width));
   }
 
   /**
@@ -4067,8 +4082,10 @@ export class InventoryScreen {
       this.pocketRecipeBar.classList.add('hidden');
       this.railLeft.classList.add('hidden');
       this.railRight.classList.add('hidden');
-      // 容器界面没有左栏可给配方书落脚；留着它就会整屏盖上来
-      this.hooks.onCloseRecipes?.();
+      // ⚠️ 批次 20261024-1609：这里**不再**关配方书。关书是"换面板 / 玩家自己按 ✕"
+      // 的事，已经挪到 `openWith()` 的 mode 变更块与 `openTrade()` 里。
+      // 放在重排函数里会误伤：`openRecipeBook()` 是"先 show() 再 syncRecipePane()"，
+      // 而 sync 走的就是这里 → 书刚打开就被自己关掉（用户报的"配方书会自动关闭"）。
       this.detachRecipeBook();
       this.gearEl.style.display = '';
       this.topArea.style.display = '';
@@ -4152,8 +4169,8 @@ export class InventoryScreen {
       this.gearEl.style.display = 'none';
       this.topArea.style.display = '';
       this.syncCraftArrow(false);
+      // 同上：重排不关书（批次 20261024-1609），收起时机只在换面板处
       this.detachRecipeBook();
-      this.hooks.onCloseRecipes?.();
       this.restoreInvTabToRail();
       this.placeHotbar(true);
       this.syncPocketBodyClass(true);
@@ -4257,12 +4274,20 @@ export class InventoryScreen {
       // 创造模式左栏是无限物品分类，配方开关在这儿没有意义；
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
-      // 批次 20261024-1455：这颗键是配方书开关，但"亮着"仍按物品分类的筛选状态算
-      this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
-      // 批次 209：开 = 配方书模式（列出该分类全部物品）；关 = 只看现在能做的
-      this.recipesBtn.title = t(
-        this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable',
+      // ⚠️ "亮着"的两层含义（批次 20261024-1609）：
+      //   · 配方书开着（整屏那一层）→ 亮；
+      //   · 左栏在分类页且打开了"列出未拥有（红底）"→ 亮。
+      // 只有第二层时，玩家在仓库里点完全看不到反馈，很容易读成"配方书自己关了"。
+      const bookOpen = this.hooks.isRecipesOpen?.() ?? false;
+      this.recipesBtn.classList.toggle(
+        'active',
+        bookOpen || (leftPane === 'category' && this.showUnowned),
       );
+      // 提示写的是"点下去会发生什么"：分类页里切筛选，其余情况开书
+      this.recipesBtn.title =
+        leftPane === 'category'
+          ? t(this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable')
+          : t('inventory.recipeBook');
     }
     // 工作站专用的左栏配方书按钮离开工作站时必须收起（批次 316）
 
@@ -6203,6 +6228,10 @@ export class InventoryScreen {
     if (this.mode !== mode || this.activeContainer !== container) {
       // 换面板 = 上一个容器"关掉了"（陷阱箱据此撤信号，批次 249）
       if (this.open) this.hooks.onPanelClosed?.();
+      // 换面板才收配方书（批次 20261024-1609：从 `applyInventoryChrome` 挪到这里）。
+      // ⚠️ 顺序不能反：`openRecipeBook()` 是"先 show() 再 syncRecipePane()"，
+      // 留在重排里就会把刚打开的书自己关掉。
+      this.hooks.onCloseRecipes?.();
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
       this.activeContainer = container ?? null;
@@ -6256,9 +6285,8 @@ export class InventoryScreen {
       // 创造模式默认回到"无限物品"，生存回到"个人仓库"
       this.pane = (this.hooks.isCreative?.() ?? false) ? 'creative' : 'items';
     }
-    // 打开背包 / 工作台前先收掉可能还挂着的配方书面板（批次 206）。
-    // 以前只在 `inventory` 分支收，从配方书直接去开工作台时会留下"多一层浮层"。
-    if (mode === 'inventory' || mode === 'crafting') this.hooks.onCloseRecipes?.();
+    // ⚠️ 批次 20261024-1609：这里不再单独收配方书——"换面板就收书"已经并到上面
+    // 那个 `if (mode 变了 || 容器变了)` 块里（同模式重开不该把书关掉）。
     this.applyInventoryChrome();
     this.openPanel();
     // 基岩版工作台默认把左侧那一片摊开。必须等背包先 open，
@@ -7027,6 +7055,8 @@ export class InventoryScreen {
    */
   openTrade(villager: Villager): void {
     if (this.mode !== 'trade' || this.activeVillager !== villager) {
+      // 换面板就收书（与 `openWith` 同一条，批次 20261024-1609）
+      this.hooks.onCloseRecipes?.();
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = 'trade';
       this.activeContainer = null;

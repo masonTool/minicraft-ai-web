@@ -3776,16 +3776,19 @@
         min-height: 32px;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-creative {
-        grid-template-columns: repeat(7, 40px);
+        /* 与生存分类栏同一套：列宽可缩 + 右侧留一整条滚动条槽（8px 间距 + 6px 轨道） */
+        grid-template-columns: repeat(7, minmax(0, 40px));
         gap: 2px;
+        padding-right: 14px;
         max-height: 174px;
         min-height: 0;
         overflow-y: auto;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-creative .inv-slot {
-        width: 40px;
-        height: 40px;
+        width: 100%;
         max-width: 40px;
+        height: auto;
+        aspect-ratio: 1;
         max-height: 40px;
       }
       /* 截图里的两颗右侧键在右下角：第一颗工作台，第二颗人物装备。 */
@@ -3838,12 +3841,16 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      /* 分类里的物品：半栏宽塞不下 9 列，7 列 × 40px 与创造栏一致 */
+      /* 分类里的物品：半栏宽塞不下 9 列，7 列 × 40px 与创造栏一致。
+         `minmax(0, 40px)`：窄屏（左栏只有 ~257px）时列会一起缩到 ~34px，
+         否则 7×40+缝 = 286px 会横向溢出、最后一列被裁掉，滚动条也没地方站。 */
       .inv-grid.inv-category {
-        grid-template-columns: repeat(7, 40px);
+        grid-template-columns: repeat(7, minmax(0, 40px));
         gap: 1px;
-        /* 右侧留出 5px 给自绘滚动条，避免拇指/滑块压住最后一列图标 */
-        padding-right: 5px;
+        /* 批次 20261024-1609（用户）：滚动条"要与物品栏有一定间距"。
+           这里留出整整一条槽 = 8px 间距（JS 的 `SCROLLBAR_CONTENT_GAP`）+ 7px 轨道宽，
+           间距由布局保证，不再靠 JS 夹紧（夹紧会把轨道按回最后一列上）。 */
+        padding-right: 15px;
         justify-content: center;
         align-content: start;
         min-height: 0;
@@ -3882,14 +3889,19 @@
         position: absolute; left: 0; top: 0; width: 100%; min-height: 24px;
         /* ⚠️ **不要描边**：滑条只有 7px 宽，加 1px 深边之后实心部分只剩 5px，
            滚起来看着像"灰块下面还跟着一个小黑块"（用户反馈的正是这个）。
-           只用浅色圆角实心，按下时提亮一档。 */
-        background: #c2c2c2; border: 0;
+           批次 20261024-1609（用户）：底色改**黑色**——浅灰 #c2c2c2 与面板底色几乎同色，
+           看不出是滚动条；按下时提亮一档（#3a3a3a），仍能看出"按下去了"。 */
+        background: #1c1c1c; border: 0;
         border-radius: inherit; box-sizing: border-box;
         pointer-events: auto; cursor: pointer; touch-action: none;
       }
       .inv-category-scroll-thumb:hover,
-      .inv-category-scroll-thumb:active { background: #dedede; }
-      .inv-grid.inv-category .inv-slot { width: 40px; height: 40px; max-width: 40px; max-height: 40px; }
+      .inv-category-scroll-thumb:active { background: #3a3a3a; }
+      /* 列宽可缩（见上），格子跟着列宽走；图标仍是 28px，最窄 ~34px 也放得下 */
+      .inv-grid.inv-category .inv-slot {
+        width: 100%; max-width: 40px; height: auto; aspect-ratio: 1;
+        max-height: 40px;
+      }
       .inv-grid.inv-category .inv-slot canvas { width: 28px; height: 28px; }
       /* 我没有的那些：红底（配方开关打开时才可能出现在这一栏里） */
       .inv-slot.locked {
@@ -5352,12 +5364,14 @@
           width: 42px; height: 42px; max-width: 42px; max-height: 42px;
         }
         .inv-grid.inv-category {
-          grid-template-columns: repeat(7, 48px);
+          grid-template-columns: repeat(7, minmax(0, 48px));
           gap: 2px;
-          padding-right: 8px;
+          /* 同一条槽位：8px 间距 + 7px 轨道（批次 20261024-1609） */
+          padding-right: 15px;
         }
         .inv-grid.inv-category .inv-slot {
-          width: 48px; height: 48px; max-width: 48px; max-height: 48px;
+          width: 100%; max-width: 48px; height: auto; aspect-ratio: 1;
+          max-height: 48px;
         }
         .inv-grid.inv-category .inv-slot canvas {
           width: 40px; height: 40px;

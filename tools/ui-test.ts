@@ -633,15 +633,24 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-category-section {') &&
       !invSrc.includes("pane === 'recipes'"),
   );
-  // 批次 20261024-1531（用户确认口径 B）：那颗键**只切物品分类**，不弹配方书。
+  // 批次 20261024-1609（用户）：仓库里点那颗键 = 左栏切"全部/搜索" + **打开配方书**
+  // （上一版只切分类、不碰书，手机上因此没有配方书入口；用户报的"书自动关闭"由此而来）。
+  const recipesClickBody = /recipes\.addEventListener\('click', \(\) => \{([\s\S]*?)\n      \}\);/.exec(invSrc)?.[1] ?? '';
   check(
-    '标题栏那颗键只切物品分类（不碰配方书）',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.openPocketCategory\(this\.lastRecipeTab\);/.test(invSrc) &&
-      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?onOpenRecipes/.test(invSrc),
+    '仓库里点那颗键：左栏切"全部/搜索"并打开配方书',
+    recipesClickBody.includes("this.openPocketCategory('all');") &&
+      recipesClickBody.includes("this.hooks.onOpenRecipes?.('all');") &&
+      // 容器/工作站没有可摆的合成格，那两类不弹书
+      recipesClickBody.includes("const canBook = this.mode === 'inventory' || this.mode === 'crafting';"),
+  );
+  check(
+    '书开着时再点 = 关掉（手动开关，不做自动关闭）',
+    recipesClickBody.indexOf('this.hooks.onCloseRecipes?.();') >= 0 &&
+      recipesClickBody.indexOf('isRecipesOpen') < recipesClickBody.indexOf('onOpenRecipes'),
   );
   check(
     '分类栏里再点它就切"列出未拥有 / 只看能做的"',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.showUnowned = !this\.showUnowned;/.test(invSrc),
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,900}?this\.showUnowned = !this\.showUnowned;/.test(invSrc),
   );
   check(
     '左栏没有 recipes 那一份（配方书是整屏层）',
@@ -670,7 +679,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('换栏目内容有淡入且不碰几何', css.includes('@keyframes inv-pane-in') && css.includes('.inv-pane-enter'));
   check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
   check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
-  // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
+  // 批次 149：携带版比例与分类页不能再退回"灰框很大、槽位很小、内容混在一起"
   // 批次 181：双栏左栏统一 7 列 40px（主背包 27 格重排成 4 行）；
   // 9 列在左栏会溢出、第一格被裁掉，而且与分类/创造栏不一致。
   check(
@@ -1181,7 +1190,10 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
-      invSrc.includes("this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
+      // 批次 20261024-1609：亮着 = 书开着，或分类页开了"列出未拥有（红底）"
+      /this\.recipesBtn\.classList\.toggle\(\s*'active',\s*bookOpen \|\| \(leftPane === 'category' && this\.showUnowned\),?\s*\)/.test(
+        invSrc,
+      ) &&
       css.includes('.inv-slot.locked {'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
@@ -2629,7 +2641,7 @@ console.log('\n[进游戏首页默认全屏]');
   );
   check('微信/QQ 的 X5 内核一打开就横屏全屏', htmlHead.includes('x5-orientation') && htmlHead.includes('content="landscape"') && htmlHead.includes('x5-fullscreen'));
   check(
-    '手机进游戏后不再把“视距没涨完”当成启动期光照',
+    '手机进游戏后不再把"视距没涨完"当成启动期光照',
     mainSrc.includes('isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done'),
   );
 
@@ -2658,7 +2670,7 @@ console.log('\n[进游戏首页默认全屏]');
       mainSrc.includes('installInstallHint();'),
   );
   check(
-    'iOS Safari 没有网页全屏 API：引导“分享 → 添加到主屏幕”',
+    'iOS Safari 没有网页全屏 API：引导"分享 → 添加到主屏幕"',
     installSrc.includes('isIosTouchDevice()') &&
       installSrc.includes("t('install.iosHint')") &&
       installSrc.includes('IOS_DISMISS_KEY') &&
@@ -2771,7 +2783,7 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
       mainSrc.includes("currentMode === 'crafting' ? 3 : 2"),
   );
   check(
-    '进入工作台后 3×3 配方不再误报“需要工作台”',
+    '进入工作台后 3×3 配方不再误报"需要工作台"',
     bookUi.includes('entry.gridSize > this.actions.gridSize()'),
   );
   // 一键做完改成 Shift+点：原版没有"合成"按钮这条路径，不该再占用版面
@@ -3175,7 +3187,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   );
   check('继续游戏不强制请求全屏（仍回到批次 209 的行为）', !/closeSettings\(\): void \{[\s\S]{0,400}enterMobilePresentation\(\)/.test(appSrc));
   check(
-    '“请横屏游玩”整屏任意位置都能点（document 捕获）',
+    '"请横屏游玩"整屏任意位置都能点（document 捕获）',
     fullscreenSrc.includes("if (!hint.classList.contains('visible')) return;") &&
       fullscreenSrc.includes('getComputedStyle(hint).display') &&
       /\.rotate-hint \{[\s\S]{0,900}pointer-events: auto;/.test(css),
@@ -4863,7 +4875,7 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
 
   check('昵称去掉尖括号与控制字符', sanitizeMultiplayerName('  <小明>\t ') === '小明');
   check(
-    `昵称按字符截到 ${MULTIPLAYER_NAME_MAX}、空则“玩家”`,
+    `昵称按字符截到 ${MULTIPLAYER_NAME_MAX}、空则"玩家"`,
     sanitizeMultiplayerName('一'.repeat(40)) === '一'.repeat(MULTIPLAYER_NAME_MAX) &&
       sanitizeMultiplayerName('   ') === '玩家',
   );
@@ -4960,6 +4972,28 @@ console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
     invSource.includes('Math.max(24, Math.round((grid.clientHeight / grid.scrollHeight) * trackH))') &&
       /\.inv-category-scroll-thumb \{[^}]*min-height: 24px;/.test(css),
   );
+  // 批次 20261024-1609（用户）：滚动条要"与物品栏有一定间距"，且滑块要黑色才分得清。
+  // 间距由网格的 `padding-right` 预留（= SCROLLBAR_CONTENT_GAP + 轨道宽），JS 不再往里夹。
+  check(
+    '分类栏预留"间距 + 轨道"整条槽位（8px + 7px = 15px）',
+    /\.inv-grid\.inv-category \{[^}]*padding-right: 15px;/.test(css) &&
+      invSource.includes('export const SCROLLBAR_CONTENT_GAP = 8;') &&
+      /\.inv-category-scrollbar \{[^}]*width: 7px;/.test(css),
+  );
+  check(
+    '双栏创造栏也预留槽位（8px 间距 + 6px 轨道）',
+    /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*padding-right: 14px;/.test(css),
+  );
+  check(
+    '夹紧上限不再把轨道推进物品里（只兜底不超出容器）',
+    invSource.includes('Math.max(0, host.clientWidth - width)') &&
+      !invSource.includes('host.clientWidth - width - 1'),
+  );
+  check(
+    '滑块是黑色（浅灰与面板同色，看不出是滚动条）',
+    /\.inv-category-scroll-thumb \{[^}]*background: #1c1c1c;/.test(css) &&
+      !/\.inv-category-scroll-thumb \{[^}]*background: #c2c2c2;/.test(css),
+  );
 }
 
 // ------------------------------------------------------------------ 配方书开关的接线
@@ -4976,10 +5010,27 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const recipeSource = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
 
+  // 批次 20261024-1609（用户）：那颗键在仓库里 = 打开配方书（停在"全部/搜索"），
+  // 且**重排不会把它顺手关掉**（"配方书会自动关闭"的根因）。
   check(
-    '标题栏那颗键只切物品分类（不弹配方书、也不自动关）',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?this\.openPocketCategory\(this\.lastRecipeTab\);/.test(invSource) &&
-      !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,600}?onOpenRecipes/.test(invSource),
+    '仓库里那颗键会打开配方书并停在"全部/搜索"',
+    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,1200}?this\.openPocketCategory\('all'\);[\s\S]{0,200}?this\.hooks\.onOpenRecipes\?\.\('all'\);/.test(
+      invSource,
+    ),
+  );
+  check(
+    '重排（applyInventoryChrome）不再关配方书',
+    (() => {
+      const chrome = /private applyInventoryChrome\(\): void \{([\s\S]*?)\n  \}\n/.exec(invSource)?.[1] ?? '';
+      return chrome.length > 0 && !chrome.includes('onCloseRecipes');
+    })(),
+  );
+  check(
+    '收书挪到"换面板"处（openWith 的 mode 变更 / openTrade）',
+    /if \(this\.mode !== mode \|\| this\.activeContainer !== container\) \{[\s\S]{0,400}?this\.hooks\.onCloseRecipes\?\.\(\);/.test(
+      invSource,
+    ) &&
+      /openTrade\(villager: Villager\): void \{[\s\S]{0,400}?this\.hooks\.onCloseRecipes\?\.\(\);/.test(invSource),
   );
   check(
     'openRecipeBook 先 show 再 syncRecipePane（顺序反了会先排布后开书）',
