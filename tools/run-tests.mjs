@@ -123,6 +123,28 @@ function changedFiles() {
 }
 
 /**
+ * 不走 esbuild 打包的套件（`node tools/x.mjs`）没有 metafile，`--changed` 里按依赖图
+ * 匹配不到它们，所以**必须显式登记触发范围**。
+ *
+ * 为什么要登记、而不是像旧版那样"一律跑"：这几套恰好是最慢的——
+ * `net` 12s（真起服务端 + 真 WebSocket）、`guard` 10s（真起浏览器），
+ * 而它们要么只在 `server/` 改动时才可能失败，要么只测 `tools/` 里那几份工具本身。
+ * 一律跑的代价是**每次提交都白等 22s**（实测 `--changed` 在干净工作区也要 22.3s，
+ * 全是这两套），内循环直接失去意义。
+ *
+ * 没登记的非打包套件仍然**照旧全跑**（认不出依赖时保守，宁可慢也不要漏）。
+ */
+const NON_BUNDLE_TRIGGERS = {
+  /** 真起服务端 + 真连 WebSocket，测的是 `server/**` 的协议行为 */
+  net: ['server/'],
+  /** 下面四套都是"工具自检"：只读 `tools/*.mjs` 源码 + package.json，不碰 src */
+  guard: ['tools/'],
+  screenshot: ['tools/'],
+  shotdiff: ['tools/'],
+  'browser-check': ['tools/'],
+};
+
+/**
  * 这几个文件一动，结论就不再是"改哪个模块测哪套"了——它们会改变**所有**套件的
  * 打包方式或类型环境，所以直接全跑。
  */
@@ -205,12 +227,14 @@ if (changedOnly) {
     const set = new Set(touched);
     const hit = suites.filter((s) => {
       /**
-       * 不走打包的那几套（目前只有 `test:net`）**一律跑**：
-       * 它们是"起一个真服务端子进程 + 真 WebSocket 去连"的集成测试，
-       * 依赖不在 esbuild 的 metafile 里（编辑 `server/index.mjs` 时按依赖图匹配不到），
-       * 而漏跑一条集成测试比多花 1 秒糟得多。
+       * 不走打包的套件按 `NON_BUNDLE_TRIGGERS` 的**路径前缀**匹配，不再一律跑（见那张表的注释）。
+       * 没登记 = 认不出依赖 → 保守全跑。
        */
-      if (!s.bundle) return true;
+      if (!s.bundle) {
+        const triggers = NON_BUNDLE_TRIGGERS[s.name];
+        if (!triggers) return true;
+        return touched.some((file) => triggers.some((prefix) => file.startsWith(prefix)));
+      }
       const deps = depsByEntry.get(s.entry) ?? [s.entry];
       return deps.some((d) => set.has(d));
     });
