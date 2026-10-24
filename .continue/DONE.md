@@ -9,7 +9,25 @@
 
 ---
 
+## 批次 20261024-1636 · 2026-10-24 · 会话 723564b3
+
+- [x] [修14] 澄清后改回："可合成物品"键只是左栏视图的开关——不打开配方书，且**按钮不会自己灭**：`src/ui/InventoryScreen.ts`（click 分支回退 + `active` 判据改成 `leftPane === 'category'`，工作站那条同口径）→ `npm run test:ui`（断言：click 里没有 `onOpenRecipes`/`onCloseRecipes`；`active` 只看视图、两处都不再带 `showUnowned`）
+  - 做了什么：① 撤掉上一批给那颗键加的 `onOpenRecipes('all')` / `isRecipesOpen` 分支，回到"仓库→`openPocketCategory(lastRecipeTab)`、已在分类页→切 `showUnowned`"。② `active` 从 `leftPane === 'category' && this.showUnowned` 改成 `leftPane === 'category'`；工作站分支 `showCategory && this.showUnowned` 同样改成 `showCategory`（`showCategory` 本身就是"左栏在分类页"）。③ title 回到 209 那套（描述再点一下切哪种筛选）。
+  - 为什么：用户澄清"没有所谓的配方书页面，配方相关的东西全走可合成物品这颗键"——上一批把"会自动关闭"读成了"配方书被关"，实现方向错了。"按钮自己灭"的真实原因是 `active` 绑在**红底筛选**上：从仓库点进来的第一次 `showUnowned` 还是 false，于是视图开了、按钮是灭的，看起来像自动关掉、得再点一下（那一下才把 `showUnowned` 打开）。
+  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（把上一批那 3 条"那颗键开书"的断言换回"只切视图、不碰配方书"，`active` 那条改成只看视图且覆盖工作站分支）。
+  - 批次：20261024-1636
+- [x] [修15] 台账改口径：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 里"那颗键打开配方书"的说法全部改成"可合成物品视图开关 + 亮着跟着视图" → `npm run check`
+  - 做了什么：1609 那批的 DONE 条目补一行"更正"，本批次另开一节；OVERVIEW「物品栏与合成」、TASKS 队列落地、批次索引都改成正确口径（滚动条那部分不动）。
+  - 为什么：文档里留一句错的因果，下一轮还会把同一个误解再实现一遍。
+  - 验证：`npm run check` 全绿（编号 / 覆盖度 / 差异 / 文档体量四条台账 + 全部离线套件）。
+  - 批次：20261024-1636
+
 ## 批次 20261024-1609 · 2026-10-24 · 会话 723564b3
+
+> **更正（批次 20261024-1636）**：本批 `[修11]` 的"那颗键打开配方书"是**误解**——用户澄清没有"配方书页面"，
+> 那颗键是可合成物品视图的开关；已在 1636 改回。`applyInventoryChrome` 里不关配方书那条仍然保留
+> （它修的是"R 键在容器/工作站界面里开的书被重排关掉"，与本条无关）。滚动条那两条（修12/修13）不受影响。
+
 
 - [x] [修11] 标题栏"配方书"键真的能打开配方书，且**不再自动关闭**：`src/ui/InventoryScreen.ts`（按钮 click 分支 + 把 `applyInventoryChrome` 里两处 `onCloseRecipes()` 挪到 `openWith` 的换面板处）→ `npm run test:ui`（断言：仓库里点它＝左栏切"全部/搜索"并调 `onOpenRecipes('all')`；重排函数里不再有 `onCloseRecipes`；换成别的面板时才关书）
   - 做了什么：① 那颗键改三分支——书开着→关；左栏已在分类页→切"列出未拥有（红底）"（保留 1531 口径）；左栏在仓库→`openPocketCategory('all')` + `onOpenRecipes('all')`（容器/工作站两类不弹书，没有可摆的合成格）。② `applyInventoryChrome()` 里容器分支与工作站分支那两行 `onCloseRecipes()` 删除，"换面板就收书"并进 `openWith()` 的 `mode/容器变了` 块与 `openTrade()`；`openWith` 末尾那条只在 inventory/crafting 生效的窄条件一并去掉。③ 那颗键"亮着"的判据加上 `bookOpen`，title 改成"点下去会发生什么"。
@@ -97,67 +115,4 @@
   - 改进（当场修了 1 条）：`spriteMaterial` 漏了 `setBrightness` —— 拿着剑进洞永远全亮、拿方块却会变暗；补上并加了一条"两份材质同时变暗"的断言。
   - 排除记录（找过但不算问题）：① `showUnowned`（分类栏"列出未拥有/红底"）在修1之后没有入口了——它现在恒为 false，但拆它要动 `renderCategoryGrid`/`craftableIds`/按钮 active 三处，收益小于风险，留待下次专门做；② 首页 4 颗按钮在 320 高以下仍然靠滚动兜底而不是再缩——再缩就点到手指够不稳的 40px 以下；③ 空槽提示只在左键触发（长按是"选数量/右键"语义），触摸端轻点就是左键，不需要为长按再补一条。
   - 批次：20261024-1455
-
-## 批次 20261024-1331 · 2026-10-24 · 会话 f834a886
-
-- [x] [跳1] 重写难度与间距参数（间距改绝对格数、方块下限 1.2、最大距离 7.2/蓄力 1.25s）：`src/minigame/games/jump/config.ts` + `logic.ts` → `npm run test:minigame`（改掉「间距与边长同比 1.15~1.9」「间距随分数单调不增」两条旧断言，换成分数越高中心距绝对变大、永远 ≤ 可达上限）
-  - 做了什么：`config.ts` 把 `gapRatioMin/Max` 换成绝对格数曲线（`gapStart 4.6~5.4` → `gapEnd 4.8~6.0`，`gapGrowScore 100`），并加 `gapFloorRatio 2.12 + gapFloorMargin 0.1`；`maxCharge 1.25`、`maxDistance 7.2`、`reachMargin 0.35`、`blockSizeMin 1.2`、`shrinkScore 80`。`logic.ts` 新增 `progressToward` / `gapFloorFor` / `gapCurveForScore`，`gapRangeForScore(score, previousSize)` 的下限取「曲线下限 vs 上一块边长算出的硬下限」，`nextBlock` 传 `current.size`。
-  - 为什么：上版间距是"边长倍数"，方块缩到 0.9 时间距跟着缩水，"越往后越远"做不到；且两块之间不留倒下小人的空间，倾倒动画没地方演。下限系数 2.12 = 1 个边长 + 1.12 个边长（小人高度）。
-  - 验证：`npm run test:minigame` 204 条全绿（新断言：绝对格数 4.6/5.4/4.8/6.0、中心距随分数单调不减且严格变大、下限公式、开局 2.3~2.7 倍边长）；`npm run jump:balance` 可达率 100%、手抖 23.1 跳 / 36.4 分；`npm run check:fast` 全绿。
-  - 批次：20261024-1331
-- [x] [跳2] 底座形状与尺寸抖动（方形 + 内切圆 r=边长/2、每块 ±6% 抖动、10 分后才有圆形）：`logic.ts` 的 `JumpBlock`/`nextBlock`/`resolveLanding` → `npm run test:minigame`（新增：圆形有效面积是方的 π/4、同 seed 同序列、判定按形状分支）
-  - 做了什么：`JumpBlock` 加 `shape: 'square' | 'round'`；`nextBlock` 多吃两个随机数（r4 边长抖动 `jitteredSize`、r5 形状 `shapeFor`），特殊方块强制方形；判定抽出 `blockOverhang(block, x, z)`——方形取 `max(|dx|,|dz|) - 半边长`、圆形取 `hypot - 半边长`，`resolveLanding` 改用它。
-  - 为什么：形状必须真的参与判定，否则画圆判方，"圆形更难"就是假的。特殊方块顶面靠图集 UV 分区，圆形会采到格子边，所以只给普通方块圆形（记进 decision D1）。起点块不抖动——它是整局的参照尺寸。
-  - 验证：`npm run test:minigame` 221 条全绿，其中新增 17 条：40000 点网格采样得圆形/方形面积比 78.5%±1%（π/4）、方形四角站得住而圆形四角是空的、同一斜向落点方形 hit / 圆形非 hit、抖动端点 0.94×/1.06×、同 seed 尺寸与形状逐块一致、生成器 200 块边长都在 ±6% 内、特殊方块 300 块全方形；`npm run jump:balance` 可达率仍 100%。
-  - 批次：20261024-1331
-- [x] [跳3] 落点保留不再复位到中心：`logic.ts` 的 `JumpRun.stand` + `jump()` 记录实际落点 + `resolveLanding` 从 stand 起算 → `npm run test:minigame`（落地后 stand 偏移保留、下一跳从偏移点量距离）
-  - 做了什么：`JumpRun` 增加 `stand: {x, z}`（小人脚底的实际落点），`createRun` 把它放在起点块中心；`resolveLanding` 的第一个参数从「起点方块」改成「站姿点」，返回 `{ kind, center, point }`；`jump()` 用 `run.stand` 起算并把落点写回新 run，`LandingOutcome` 多带一个 `point` 给渲染层。
-  - 为什么：用户明确"落到哪个点就站哪个点"。判定中心仍是方块中心（`centerRatio` 不动），所以站偏只影响**下一跳的距离**，不改命中语义——这样"跳准"依然有意义，但偏一点不会白送一次复位。
-  - 验证：`npm run test:minigame` 232 条全绿，新增 11 条：落点偏 0.45 后 stand 偏移保留且不等于中心、outcome.point 与 stand 一致；合成局面（上一跳沿 z 偏 0.6、这一跳转 90°）按 5.0 的方块中心距只到半路（离中心 0.6、非中心），按 5.6 的 stand 距才回正中。
-  - 批次：20261024-1331
-- [x] [跳4] 三档落点判定（中心命中 / 边缘站稳 / 重心越界 topple）：`logic.ts#resolveLanding` + `jump()` 的 outcome → `npm run test:minigame`（重心在块外 → `topple` 而不是 `miss`；完全悬空两块之间才 `miss`）
-  - 做了什么：新增 `LandingKind = 'hit' | 'topple' | 'miss'`，`resolveLanding` 先算 `blockOverhang`：`> 半边长` → miss、`> 0` → topple、否则 hit；`Landing`/`LandingOutcome` 都带 `kind`，`jump()` 里 topple 与 miss 一样写 `status: 'over'`，只把 `kind` 和落点交回场景。
-  - 为什么：用户口径是"重心（脚底点）在外时先倾斜再倒，不要立刻掉下去"，而完全悬空（两块之间 / 跳过头太远）没有支点，直接落才合理。分界用悬空量而不是朝向——冲过头和没跳够都往前进方向扑。
-  - 验证：`npm run test:minigame` 242 条全绿，新增 10 条：悬空 1.2/1.5 个半边长 → topple（冲过头与没跳够都算）、悬空正好等于半径 → topple、超一点（2.01）× → miss、0 距离与大过头 → miss、圆形角上方形 hit / 圆形 topple、`jump()` 里 topple 结束本局且不加分、落点仍交回。
-  - 批次：20261024-1331
-- [x] [跳5] 可达性口径改成「从最坏落点仍够到下一块中心」：`logic.ts#maxReachableGap` + `tools/jump-balance.ts` → `npm run jump:balance`（可达率 ≥ 99%，且最远间距 ≤ maxDistance − margin）
-  - 做了什么：新增 `maxGapFromEdge(previousSize) = maxReachableGap() − 半边长`，`gapRangeForScore` 的上限改成它；`jump-balance` 的可达率判据改成「间距 + 上一块半边 ≤ maxDistance − margin」，并把模拟器的瞄准距离从「方块中心距」改成「stand → 目标中心」。
-  - 为什么：落点保留之后，"站中心起跳"不再是最坏情况——人可能停在上一块的后边缘，那里离下一块多出半个边长。只按中心距判可达，会生成"站偏就永远够不到"的格子。模拟器同理：玩家瞄的是自己站的地方，不是方块中心。
-  - 验证：`npm run jump:balance` 可达率 100%（0~300 分逐分）、完美玩家 300 跳不掉、手抖 23.1 跳 / 36.5 分（改瞄准口径前是 11.8 跳，说明模拟器当天确实在按方块中心瞄）；`npm run test:minigame` 245 条全绿，新增 3 条：最远间距 + 半边 ≤ maxDistance − margin、`maxGapFromEdge(2)` 的公式、四个分数点上限都不越界。
-  - 批次：20261024-1331
-- [x] [跳6] 渲染层接新规则（站姿用 stand、新增 toppling 阶段、一屏只画 3 块、debugState 暴露站姿偏移）：`src/minigame/games/jump/scene.ts` + `BlockScene.ts#nextFrame` → `npm run typecheck` + `npm run test:minigame`（debugState 字段断言同步）
-  - 做了什么：`scene.ts` 的站姿/起跳点全部改读 `run.stand`（`placeJumper(run.stand.x, …)`、`release()` 用 stand 算方向与落点、完美命中的波纹画在 `outcome.point`）；新增 `toppling` 阶段（等 `JUMP_TIMING.toppleMs = 380ms` 后接 `falling`，角度留给跳9），倾覆期间不跟镜头；`rebuildBlocks` 从 4 块收成 3 块（上一块 + 当前 + 下一块），`BlockScene.nextFrame` 同步收窄；`debugState` 新增 `standOffset`，`gap` 改成从站姿量、`axis` 仍按方块中心判。
-  - 为什么：规则层已经不在中心起跳了，渲染层若还按方块中心画，人和逻辑会越走越偏；`gap` 也必须给 E2E 真实值（它按 gap 反算按压时长）。`axis` 保留方块中心口径是因为"等距两向"是生成器约束，站偏只是让这一跳略斜。
-  - 验证：`npm run typecheck` 通过；`npm run test:minigame` 250 条全绿（新增 5 条静态断言：站姿读 run.stand、起跳点读 stand、toppling 阶段存在、一屏 3 块、倾覆不跟镜头；debugState 字段表加 standOffset）；`npm run test:jumpiso` 42 条全绿。
-  - 批次：20261024-1331
-- [x] [跳7] 清晰度：小游戏独立 renderer 像素比上限 2 → 3，白点圆 24→48 段、阴影贴图 128→256、背景渐变 2×256→2×512 加抖动：`src/main.ts`（`runStandaloneMiniGame`）+ `BlockScene.ts` → `npm run test:jumpiso` + 常量断言（分段数/尺寸写进可导出常量）
-  - 做了什么：`main.ts` 新增 `MINIGAME_PIXEL_RATIO_CAP = 3` 并用于小游戏 renderer；`BlockScene.ts` 导出 `DOT_SEGMENTS = 48`、`SHADOW_TEXTURE_SIZE = 256`、`BACKGROUND_TEXTURE_HEIGHT = 512`、`BACKGROUND_NOISE = 1/255`，背景渐变改成 512 行并逐像素叠 ±1 级确定性噪点（`backgroundNoise(idx)` 用 sin 哈希，非 `Math.random`），阴影贴图按常量取尺寸。
-  - 为什么：一屏只有 3~4 块纯色方块，填充率几乎全花在边缘抗锯齿上，像素比 3 能明显减少方块边缘毛刺；256 行的渐变在 3x 屏上会被拉出横向色带，512 + dithering 才彻底打散。噪点必须确定性，否则截图对比与"同 seed 同画面"失效。
-  - 验证：`npm run test:minigame` 256 条全绿（新增 6 条：像素比上限 3 且被 renderer 使用、白点 48 段、阴影 256、背景 512、噪点常量 + 无随机数）；`npm run test:jumpiso` 42 条、`npm run test:jumptex` 25 条全绿；`npm run typecheck` 通过。
-  - 批次：20261024-1331
-- [x] [跳8] 方块几何精致化：普通块换圆角倒角盒、圆形底座用 56 段圆柱、阴影按方/圆分两张贴图、特殊方块保持直角盒（图集 UV 原因）：`BlockScene.ts` → `npm run test:jumptex` + `npm run typecheck`
-  - 做了什么：`BlockScene` 引入 `RoundedBoxGeometry`（2 段 / 半径 0.055，导出 `BLOCK_CORNER_RADIUS` / `BLOCK_CORNER_SEGMENTS`）作为方形底座；新增 `roundGeometry = CylinderGeometry(0.5,0.5,1,56)`（`ROUND_BLOCK_SEGMENTS`）做圆形底座；`createEntry` 按 `spec.shape` 选几何与阴影材质；`createShadowTexture('square'|'round')` 生成两张贴图、两个材质，`dispose()` 一并释放；音乐盒圆柱段数 40→56；`scene.ts` 把 `block.shape` 传进 `BlockSpec`。
-  - 为什么：直角盒在 3x 屏上边缘"一刀切"、圆底座配方阴影会在四角多出灰块。特殊方块不吃圆角——它们顶面靠图集 UV 分区，倒角会把 UV 采样推到格子边缘（这条在交接里已定，测试里钉住）。
-  - 验证：`npm run typecheck` 通过；`npm run build:fast` 出包成功（`three/addons/*` 的解析真跑过一遍）；`npm run test:minigame` 263 条全绿（新增 7 条：圆角盒参数、56 段圆柱、特殊方块仍是直角盒、几何按 shape 分支、两张阴影贴图、音乐盒 56 段、卸载释放新资源）；`npm run test:jumptex` 25 条全绿。
-  - 批次：20261024-1331
-- [x] [跳9] 倾倒动画：`motion.ts` 新增 topple 角度曲线（缓入、约 380ms、90°+）、`JumperModel.ts` 新增 `setTilt()`、`scene.ts` 在 toppling 阶段播放 → `npm run test:jumpmotion`（0→1 单调、端点角度、时长常量）
-  - 做了什么：`motion.ts` 加 `TOPPLE_ANGLE = 95°` 与 `toppleAngle(ms)`（`cubicIn`，`JUMP_TIMING.toppleMs` 内 0→95°），`JUMP_TIMING` 增加 `toppleMs = 380`；`JumperModel` 加 `tilt` 字段与 `setTilt(radians)`（正数=朝行进方向，`rotation.x = flip − tilt`），`resetPose` 一并清零；`scene.ts` 的 toppling 分支每帧 `jumper.setTilt(toppleAngle(ms))`，播完清零再进 falling。
-  - 为什么：用户要"重心在外时先倾斜再倒"。用缓入（先慢后快）而不是缓出，是因为重心越过支撑面后是被重力拽下去的；正好 90° 会让人物"贴"在方块侧面，多倒 5° 才读得成"已经离开支撑面"。
-  - 验证：`npm run test:jumpmotion` 58 条全绿（新增 10 条：端点 95°、90°~100° 区间、单调不减、前半程 <20%（缓入）、最后 1/4 转过 >50%、越界夹住、负数/NaN 归零、380ms 常量）；`npm run test:jumpmodel` 全绿（新增 6 条：90° 倾倒 → rotation.x = −90°、不改朝向、负角夹 0、NaN 安全、resetPose 清倾角）；`npm run test:minigame` 264 条全绿（新增"倾覆阶段播放角度曲线"）；`npm run typecheck` 通过。
-  - 批次：20261024-1331
-- [x] [跳10] 跳中心的 combo 表现（计分规则不动）：`scene.ts` 飘字改 `×N +P`、`BlockScene.playRipple` 层数随连击增加且外圈偏金、`audio.ts` 完美命中音高随连击升调 → `npm run test:jumpaudio` + `npm run typecheck`
-  - 做了什么：`motion.ts` 加 `rippleRingCount(combo) = 3 + min(3, combo−1)` 与 `rippleRingRadius(i, n)`；`BlockScene.playRipple` 接受 combo，波纹 rig 一次建满 6 层、每跳只改可见性/颜色（颜色由 `rippleColorAt` 给，>3 层时最外圈 `RIPPLE_GOLD`）；`audio.ts` 加 `perfectPitchFactor` / `perfectSweep`（每连 +2 半音、封顶两个八度），`playLand(center, combo)` 接上；`scene.ts` 落地时用 `outcome.run.combo` 调音效与波纹，连中两次起飘 `×N  +P`，HUD 分数下方加 `.jump-combo`（`combo >= 2` 才显示，断连击当帧消失），`index.html` 补样式。
-  - 为什么：用户要"跳中心有 combo 表现"，但计分规则明确不动。所以三处加强（飘字文案 / 波纹层数与金环 / 音高）全是表现层；`×N` 与金环都从第 2 连起，第 1 连保持原样，否则"连击"这个信号在第 1 次就失效（记进 decision D3）。
-  - 验证：`npm run test:jumpaudio` 45 条全绿（新增 12 条：第 1 连原调、每连 +2 半音、严格递增、封顶 ×4、两端同倍率、时长/波形/音量不受影响、常量值）；`npm run test:jumpmotion` 71 条全绿（新增 13 条：层数 3/4/5/6 与封顶、0/NaN 兜底、半径由外向内递减、最外圈恒为 1、3 层时中间圈 0.725）；`npm run test:minigame` 270 条全绿（新增 6 条静态断言）；`npm run typecheck` + `npm run build:fast` 通过。
-  - 批次：20261024-1331
-- [x] [跳11] 断言与 E2E 口径同步（不跑 E2E，只改脚本）：`tools/jump-e2e.mjs` 的 gapRatio 区间、一屏块数、形状字段 + `tools/jump-iso-test.ts` 的取景断言 → `npm run test:jumpiso`（`npm run check` 全绿为此条完成凭证）
-  - 做了什么：`scene.debugState` 补 `onscreen` / `shape` / `nextShape`（E2E 要有得读）；`jump-e2e.mjs` 的按压时长改成按 `MAX_DISTANCE 7.2 / MAX_CHARGE_MS 1250` 反算，gapRatio 区间改成 2.2~5.1 并新增"开局 ≥4.6 格""开局 2 块 / 跳过后 3 块""形状在两类之内""10 分前不出圆形""站姿偏移有限"五条；`jump-iso-test.ts` 新增"新间距下的一屏 3 块"整节（真跑生成器取 3 块，验全部在视口内、当前块占屏宽 10%~45%、纵向撑满 ≥60%、下一块在屏幕更上方）。
-  - 为什么：E2E 脚本不在 CI 里跑（要浏览器），它引用的字段/参数一旦改名没人会发现；所以既要改脚本，也要在离线测试里用"读脚本源码 + 比对 config 数值"的方式钉住（`MAX_DISTANCE`、`MAX_CHARGE_MS` 直接与 `JUMP_CONFIG` 比）。
-  - 验证：`npm run check` **全绿**（typecheck + 177/177 离线套件 + 三张台账 + 文档门禁 + 浏览器/截图/控制台门禁自检）；`npm run test:jumpiso` 46 条、`npm run test:minigame` 275 条全绿；顺手把 HANDOFF 的"提交总数"从 1702 修到 1716（全量门禁抓出来的）。**没有跑 E2E / 浏览器**（按用户要求）。
-  - 批次：20261024-1331
-- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
-  - L1：这一批 11 条每条都有一条"坏了就变红"的检查，且都不是纯静态字符串——数值断言占绝大多数（间距绝对格数 4.6/5.4/4.8/6.0、悬空分界 half、stand 偏移 0.45、圆形面积比 78.5%、波纹 3→6 层、音高 ×4 封顶、倾倒前半程 <20%）。证据：`npm run check` 全绿，离线 177/177 套；本批相关断言从 204 条涨到 276（minigame）+ 71（motion）+ 45（audio）+ 46（iso）。
-  - L2：刚当场做了两次故意破坏来验"会不会红"：① 把 topple 分界 `overhang > half` 改成 `half * 0.5` → 2 条红（"悬空正好等于半径 → topple"、"倾覆不分朝向"）；② 把 `stand: landing.point` 改回方块中心 → 4 条红（落点偏移 0.45、stand 不等于中心、outcome.point、按中心距只到半路）。两次都还原后全绿。**顺手补了一条**：此前只有 `gapFloorRatio = 2.12` 的公式自证（同一份算术写两遍），现在直接量"两块之间的净空档 ≥ 小人高度"，这才真的验到"倒下有地方"。
-  - L3：判断依据里 6 条来自用户原话（画质粗糙 / 间距太小要激进 / 落点别复位 / 重心在外才倒 / 底座太单一 / 跳中心要 combo），直接决定了这 11 条的分工；另外 4 处是我自己定的实现选择（95° 倾倒角、金环与 `×N` 从第 2 连起、背景噪点幅度、净空档的度量方式），全部写进 `f834a8-decision.md` 的 D1~D3，属可回退项，不是从用户那里"问来"的。
-  - 批次：20261024-1331
 

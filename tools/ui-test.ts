@@ -633,20 +633,22 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-category-section {') &&
       !invSrc.includes("pane === 'recipes'"),
   );
-  // 批次 20261024-1609（用户）：仓库里点那颗键 = 左栏切"全部/搜索" + **打开配方书**
-  // （上一版只切分类、不碰书，手机上因此没有配方书入口；用户报的"书自动关闭"由此而来）。
+  // 批次 20261024-1609（用户澄清）：**没有"配方书页面"这回事**，配方相关的东西全走
+  // "可合成物品"这颗键——它只切左栏的视图，绝不打开配方书那一层（那是 PC 的 R 键）。
+  // 用户报的"按钮自动关闭"= 视图开着、按钮却是灭的，原因在 `active` 的判据（见下一条）。
   const recipesClickBody = /recipes\.addEventListener\('click', \(\) => \{([\s\S]*?)\n      \}\);/.exec(invSrc)?.[1] ?? '';
   check(
-    '仓库里点那颗键：左栏切"全部/搜索"并打开配方书',
-    recipesClickBody.includes("this.openPocketCategory('all');") &&
-      recipesClickBody.includes("this.hooks.onOpenRecipes?.('all');") &&
-      // 容器/工作站没有可摆的合成格，那两类不弹书
-      recipesClickBody.includes("const canBook = this.mode === 'inventory' || this.mode === 'crafting';"),
+    '那颗键只切左栏视图（不打开、也不关闭配方书那一层）',
+    recipesClickBody.includes('this.openPocketCategory(this.lastRecipeTab);') &&
+      !recipesClickBody.includes('onOpenRecipes') &&
+      !recipesClickBody.includes('onCloseRecipes'),
   );
   check(
-    '书开着时再点 = 关掉（手动开关，不做自动关闭）',
-    recipesClickBody.indexOf('this.hooks.onCloseRecipes?.();') >= 0 &&
-      recipesClickBody.indexOf('isRecipesOpen') < recipesClickBody.indexOf('onOpenRecipes'),
+    '按钮"亮着"只看视图在不在（不再绑红底筛选，否则第一次点完是灭的）',
+    /this\.recipesBtn\.classList\.toggle\('active', leftPane === 'category'\);/.test(invSrc) &&
+      // 工作站那条同一口径（`showCategory` 就是"左栏在分类页"）
+      invSrc.includes("this.recipesBtn.classList.toggle('active', showCategory);") &&
+      !invSrc.includes("toggle('active', showCategory && this.showUnowned)"),
   );
   check(
     '分类栏里再点它就切"列出未拥有 / 只看能做的"',
@@ -1190,10 +1192,8 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
-      // 批次 20261024-1609：亮着 = 书开着，或分类页开了"列出未拥有（红底）"
-      /this\.recipesBtn\.classList\.toggle\(\s*'active',\s*bookOpen \|\| \(leftPane === 'category' && this\.showUnowned\),?\s*\)/.test(
-        invSrc,
-      ) &&
+      // 批次 20261024-1609（用户）：亮着 = 左栏正在可合成物品视图里
+      invSrc.includes("this.recipesBtn.classList.toggle('active', leftPane === 'category');") &&
       css.includes('.inv-slot.locked {'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
@@ -5010,13 +5010,10 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const recipeSource = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
 
-  // 批次 20261024-1609（用户）：那颗键在仓库里 = 打开配方书（停在"全部/搜索"），
-  // 且**重排不会把它顺手关掉**（"配方书会自动关闭"的根因）。
+  // 批次 20261024-1609（用户澄清）：那颗键不再碰配方书那一层——它只是"可合成物品"视图的开关。
   check(
-    '仓库里那颗键会打开配方书并停在"全部/搜索"',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,1200}?this\.openPocketCategory\('all'\);[\s\S]{0,200}?this\.hooks\.onOpenRecipes\?\.\('all'\);/.test(
-      invSource,
-    ),
+    '那颗键不打开配方书（没有"配方书页面"这个入口）',
+    !/recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,1200}?onOpenRecipes/.test(invSource),
   );
   check(
     '重排（applyInventoryChrome）不再关配方书',

@@ -1056,34 +1056,28 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
       recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
-      // 这颗键三个分支（批次 20261024-1609 按用户最新反馈定稿）：
+      // 这颗键 = **"可合成物品"视图的开关**（批次 20261024-1609 按用户澄清定稿）。
       //
-      //   ① 书开着 → 关掉（PC 上还能点到这颗键；手机上书是整屏层，用它自己的 ✕）；
-      //   ② 左栏已经在物品分类页 → 切"列出未拥有（红底）/ 只看现在能做的"
-      //      （批次 20261024-1531 用户口径，保留）；
-      //   ③ 左栏还在仓库（我的物品）→ 切到"全部/搜索"分类 **并打开配方书**。
+      // 用户原话："我们现在没有一个所谓的配方书的页面，所有的配方相关的东西，都是通过
+      // 可合成物品这个按钮功能来实现的……我点击可合成按钮，他会跳到搜索分类，但是不知道
+      // 什么原因，可合成按钮会自动关闭，需要再点一下才打开。"
       //
-      // ⚠️ ③ 是这次修的重点：上一版只切分类、"完全不碰配方书"，手机上因此没有
-      // 配方书入口（1531 决策 D2 记的已知缺口）。用户本轮反馈"点了会跳转到搜索页面、
-      // 但配方书会自动关闭"——说明他要的是书本身打开且不被自动收掉，所以这里恢复开书；
-      // 左栏同时切到搜索页，关掉书之后还能接着在分类里找。
-      // 容器/工作站界面没有可摆的合成格（书里的配方点不动），那两类只切分类。
+      // 所以这里**不碰配方书那一层**（那是 PC 上 R 键的东西），只切左栏：
+      //   · 左栏还在仓库（我的物品）→ 切到上次那个物品分类（首次是"全部/搜索"）；
+      //   · 左栏已经是分类 → 在"只列能做的 / 把该分类全部列出来"之间切。
+      // ⚠️ "按钮自己灭掉"的真正原因不在这段里，而在 `applyInventoryChrome()` 给
+      // `recipesBtn` 算 `active` 的那一行——它原来只跟着 `showUnowned`（红底筛选）走，
+      // 切到视图里时还没打开红底，于是"视图开了、按钮却是灭的"，看着像自动关掉。
       recipes.addEventListener('click', () => {
         // 同一次点击只做一件事；"看一眼某条配方"的待处理状态先收掉
         this.pendingRecipeId = null;
-        if (this.hooks.isRecipesOpen?.() ?? false) {
-          this.hooks.onCloseRecipes?.();
-          return;
-        }
         if (this.pane === 'category') {
           this.showUnowned = !this.showUnowned;
           this.categoryPage = 0;
-          this.applyInventoryChrome();
-          return;
+        } else {
+          this.openPocketCategory(this.lastRecipeTab);
         }
-        const canBook = this.mode === 'inventory' || this.mode === 'crafting';
-        this.openPocketCategory('all');
-        if (canBook) this.hooks.onOpenRecipes?.('all');
+        this.applyInventoryChrome();
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -4156,7 +4150,9 @@ export class InventoryScreen {
         // 批次 320：恢复 e3503c3 之前的标题栏配方书按钮
         this.recipesBtn?.classList.remove('hidden');
         if (this.recipesBtn) {
-          this.recipesBtn.classList.toggle('active', showCategory && this.showUnowned);
+          // 与背包同一条（批次 20261024-1609）：亮着 = 左栏正在可合成物品视图里，
+          // 不能再绑 `showUnowned`，否则第一次点进来的按钮是灭的
+          this.recipesBtn.classList.toggle('active', showCategory);
           this.recipesBtn.title = t(this.showUnowned ? 'inventory.bookAllStations' : 'inventory.bookThisStation');
         }
         this.syncRecipeRail(showCategory ? this.categoryTab : null);
@@ -4265,29 +4261,22 @@ export class InventoryScreen {
       this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(this.creativeCategory) ?? 0;
       requestAnimationFrame(() => this.syncCreativeScrollbar());
     }
-    // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
+    // "可合成物品"开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
     // 创造模式左栏是物品分类，用不上它。
-    // ⚠️ active = "该分类下的所有物品都列出来（没有的红底）"；
-    //    关着 = 只列自己拥有的，这就是"物品分类"本身的能力。
     if (this.recipesBtn) {
       // 批次 163：**创造模式整个不要这颗按钮**（不只是"创造物品"那一栏）。
-      // 创造模式左栏是无限物品分类，配方开关在这儿没有意义；
+      // 创造模式左栏是无限物品分类，这个开关在这儿没有意义；
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
-      // ⚠️ "亮着"的两层含义（批次 20261024-1609）：
-      //   · 配方书开着（整屏那一层）→ 亮；
-      //   · 左栏在分类页且打开了"列出未拥有（红底）"→ 亮。
-      // 只有第二层时，玩家在仓库里点完全看不到反馈，很容易读成"配方书自己关了"。
-      const bookOpen = this.hooks.isRecipesOpen?.() ?? false;
-      this.recipesBtn.classList.toggle(
-        'active',
-        bookOpen || (leftPane === 'category' && this.showUnowned),
+      // ⚠️ 批次 20261024-1609（用户）：`active` 只看"左栏是不是可合成物品视图"。
+      // 原来写的是 `leftPane === 'category' && this.showUnowned` —— 把"亮着"绑在
+      // **红底筛选**上，于是从仓库点进来的第一次（`showUnowned` 还是 false）视图开了、
+      // 按钮却是灭的，玩家读成"按钮自己关掉了，得再点一下才打开"。现在视图开着就亮。
+      this.recipesBtn.classList.toggle('active', leftPane === 'category');
+      // 提示描述"再点一下会切到哪种筛选"（批次 209）
+      this.recipesBtn.title = t(
+        this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable',
       );
-      // 提示写的是"点下去会发生什么"：分类页里切筛选，其余情况开书
-      this.recipesBtn.title =
-        leftPane === 'category'
-          ? t(this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable')
-          : t('inventory.recipeBook');
     }
     // 工作站专用的左栏配方书按钮离开工作站时必须收起（批次 316）
 
