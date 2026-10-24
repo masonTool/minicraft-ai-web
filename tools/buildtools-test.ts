@@ -48,11 +48,15 @@ import {
 } from '../src/buildtools/templates.ts';
 import {
   BUILD_BUTTON_SIZE,
-  buildToolbarBox,
-  buildToolbarFits,
-  buildToolbarOverlapsPauseBar,
-  buildToolbarSize,
+  buildCellSize,
+  buildDrawerBox,
+  buildDrawerSize,
+  buildToggleBox,
+  drawerFits,
+  pauseBarBottom,
+  toggleOverlapsPauseBar,
 } from '../src/ui/buildToolbarLayout.ts';
+import { tableOf } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;
@@ -819,34 +823,77 @@ console.log('\n复制一座小房并镜像（假世界）');
 
 // ------------------------------------------------------------------ 工具条几何
 
-console.log('\n建造工具条几何（横屏不遮挡）');
+console.log('\n建造工具条几何（抽屉不出界 / 不压暂停条 / 热区 ≥44）');
 {
-  const size = buildToolbarSize();
-  equal('宽 = 2×44 + 4', size.width, 92);
-  equal('高 = 5×44 + 4×4', size.height, 236);
-  check('按钮热区不小于 44px（平台下限）', BUILD_BUTTON_SIZE >= 44);
+  check('格子热区下限不小于 44px（平台下限）', BUILD_BUTTON_SIZE >= 44);
 
-  const cases: Array<[string, number, number]> = [
+  // ---- 基准尺寸：360×196 是"4 列 × 2 行 + 头部 + 内边距"算出来的，不是拍的
+  const base = buildDrawerSize(1);
+  equal('基准抽屉宽 = 4×84 + 3×4 + 2×6', base.width, 360);
+  equal('基准抽屉高 = 2×68 + 3×4 + 头部 40 + 2×6', base.height, 196);
+  equal('暂停条下沿 = 8 + 22×1', pauseBarBottom(1), 30);
+  equal('暂停条下沿 @1.4x = 8 + 22×1.4', pauseBarBottom(1.4), 39);
+
+  // ---- 折叠态总开关：贴右缘 8px、垂直居中、含 9px 标签后 56 高
+  const toggle = buildToggleBox(844, 390);
+  equal('844×390 开关右边界 836', toggle.right, 836);
+  equal('844×390 开关左边界 792', toggle.left, 792);
+  equal('844×390 开关顶边 167（垂直居中）', toggle.top, 167);
+  equal('开关高 56（44 图标 + 标签行）', toggle.height, 56);
+  check('844×390 开关不压顶部暂停三键', !toggleOverlapsPauseBar(toggle, 844));
+  check('640×360 开关也不压暂停三键', !toggleOverlapsPauseBar(buildToggleBox(640, 360), 640));
+
+  // ---- 抽屉：五种视口 × 三种触摸缩放，逐个量四边、暂停条、格子下限
+  const viewports: Array<[string, number, number]> = [
     ['844×390 主力横屏', 844, 390],
     ['640×360 小横屏', 640, 360],
     ['932×430 横屏', 932, 430],
     ['430×932 竖屏', 430, 932],
+    ['320×480 窄竖屏', 320, 480],
   ];
-  for (const [label, width, height] of cases) {
-    const box = buildToolbarBox(width, height);
-    check(`${label}：装得下`, buildToolbarFits(height));
-    check(`${label}：不压顶部暂停三键`, !buildToolbarOverlapsPauseBar(box, width), `左边 ${box.left}`);
-    check(`${label}：上下不出界`, box.top >= 0 && box.bottom <= height);
+  for (const [label, width, height] of viewports) {
+    for (const scale of [0.8, 1, 1.4]) {
+      const box = buildDrawerBox(width, height, scale);
+      const cell = buildCellSize(width, height, scale);
+      check(
+        `${label} @${scale}x：四边不出界`,
+        box.left >= 0 && box.top >= 0 && box.right <= width && box.bottom <= height,
+        `left ${box.left} top ${box.top} right ${box.right} bottom ${box.bottom}`,
+      );
+      check(
+        `${label} @${scale}x：顶边不压顶部暂停条`,
+        box.top >= pauseBarBottom(scale),
+        `top ${box.top} < ${pauseBarBottom(scale)}`,
+      );
+      check(
+        `${label} @${scale}x：格子热区 ≥44`,
+        cell.width >= BUILD_BUTTON_SIZE && cell.height >= BUILD_BUTTON_SIZE,
+        `${cell.width}×${cell.height}`,
+      );
+    }
   }
 
-  const main = buildToolbarBox(844, 390);
-  equal('844×390 左边界落在 744', main.left, 744);
-  equal('844×390 顶部 77（垂直居中）', main.top, 77);
-  equal('844×390 底部 313（在快捷栏之上）', main.bottom, 313);
+  // ---- 844×390 @1x 的具体落点（旧的"左 744 / 顶 77"口径已随形态变化失效）
+  const main = buildDrawerBox(844, 390);
+  equal('844×390 抽屉宽 360', main.width, 360);
+  equal('844×390 左边界 242（水平居中）', main.left, 242);
+  equal('844×390 顶边 97（垂直居中）', main.top, 97);
+  equal('844×390 底边 293（在快捷栏之上）', main.bottom, 293);
 
-  check('240 高的屏幕装不下（应保持折叠）', !buildToolbarFits(240));
-  const tiny = buildToolbarBox(320, 240);
-  check('极窄屏也不压暂停键', !buildToolbarOverlapsPauseBar(tiny, 320));
+  const mainCell = buildCellSize(844, 390);
+  equal('844×390 格子宽 84（上限）', mainCell.width, 84);
+  equal('844×390 格子高 68（上限）', mainCell.height, 68);
+
+  // ---- 装不下时压小而不是越界：格子先缩，缩到 44 还不行就交给 drawerFits 判 false
+  const cramped = buildDrawerBox(320, 480);
+  equal('320×480 抽屉压到 304 宽（视口 − 2×8）', cramped.width, 304);
+  const crampedCell = buildCellSize(320, 480);
+  check('压小后格子仍 ≥44', crampedCell.width >= 44 && crampedCell.height >= 44);
+
+  check('844×390 能完整装下', drawerFits(844, 390));
+  check('640×360 @1.4x 也能完整装下', drawerFits(640, 360, 1.4));
+  check('320×240 装不下（宽度不足 360）', !drawerFits(320, 240));
+  check('844×200 装不下（高度不足，暂停条之下只剩 162）', !drawerFits(844, 200));
 }
 
 console.log('\n主程序接线（静态断言）');
@@ -893,6 +940,118 @@ console.log('\n主程序接线（静态断言）');
   check('建造模式下不攻击', mainSrc.includes('if (this.buildMode) return;'));
   check('建造模式下左键改成选区角', mainSrc.includes('this.selectCorner({ x: this.hit.x, y: this.hit.y, z: this.hit.z })'));
   check('工具条按创造模式显隐', mainSrc.includes('this.buildToolbar.setAvailable(this.isCreative)'));
+}
+
+// ------------------------------------------------------------------ 抽屉形态（批次 20261024-0344）
+
+console.log('\n折叠态总开关与跳跃键（不重叠、不抢点击）');
+{
+  // 跳跃键的几何来自 `index.html` 的 `#touch-ui` 变量（改那边要回来改这里）：
+  //   --touch-jump-size     = 76 × touchScale
+  //   --touch-buttons-inset = 40 + (132 − 76) / 2 × touchScale
+  //   ⇒ 右边界 = 视口宽 − (40 + 28 × touchScale)
+  const jumpRight = (width: number, scale: number) => width - 40 - 28 * scale;
+  const viewports: Array<[string, number, number]> = [
+    ['844×390', 844, 390],
+    ['640×360', 640, 360],
+  ];
+  for (const scale of [0.8, 1, 1.4]) {
+    for (const [label, width, height] of viewports) {
+      const toggle = buildToggleBox(width, height);
+      const gap = toggle.left - jumpRight(width, scale);
+      // 上一版双列竖条在这里重叠 32×76，而且 `z-index: 9` 把跳跃键的点击抢走了
+      check(`${label} @${scale}x：与跳跃键横向留出间隙`, gap > 0, `间隙 ${gap}`);
+      check(
+        `${label} @${scale}x：开关四边在视口内`,
+        toggle.left >= 0 && toggle.top >= 0 && toggle.right <= width && toggle.bottom <= height,
+        `left ${toggle.left} top ${toggle.top}`,
+      );
+    }
+  }
+}
+
+console.log('\n抽屉形态（DOM / 状态机 / 被谁引用）');
+{
+  const toolbarSrc = readFileSync(new URL('../src/ui/BuildToolbar.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // 上一版 `buildToolbarFits()` 只被测试引用，等于"设计活在测试里"——这次把"被引用"本身钉成断言
+  check(
+    '抽屉几何真的被工具条用上（不是只活在测试里）',
+    toolbarSrc.includes('buildDrawerBox(') && toolbarSrc.includes('buildCellSize('),
+  );
+  check('装不下时走滚动降级（drawerFits 真的被调用）', toolbarSrc.includes('drawerFits('));
+  check(
+    '旧的"9 个按钮挤一条"已删干净',
+    !toolbarSrc.includes("'extra'") && !toolbarSrc.includes('build-templates'),
+  );
+  check(
+    'index.html 里也没有旧的双列竖条',
+    !html.includes('grid-template-columns: repeat(2, 44px)') && !html.includes('.build-templates'),
+  );
+  check('抽屉层级低于背包（z-index: 9）', /#build-toolbar \{[^}]*z-index: 9/.test(html));
+  check('遮罩吃点击（pointer-events: auto）', /\.build-backdrop \{[^}]*pointer-events: auto/.test(html));
+
+  // 状态机：开面板 = 开模式；收面板 ≠ 退模式；结束建造 = 三件事一起做
+  check('打开抽屉顺带开建造模式', /openPanel\(\): void \{[\s\S]*?setMode\(true, true\)/.test(toolbarSrc));
+  const closePanelBody = toolbarSrc.slice(
+    toolbarSrc.indexOf('closePanel(): void {'),
+    toolbarSrc.indexOf('dispose(): void {'),
+  );
+  check('收起面板不退建造模式', closePanelBody.length > 0 && !closePanelBody.includes('setMode('));
+  check(
+    '「结束建造」= 收面板 + 关模式 + 清选区回调',
+    /private endBuild\(\): void \{[\s\S]*?closePanel\(\)[\s\S]*?setMode\(false\)[\s\S]*?onEndBuild\(\)/.test(toolbarSrc),
+  );
+  check(
+    '格子里有图标 + 两字标签 + 一句短语',
+    toolbarSrc.includes('build-cell-label') && toolbarSrc.includes('build-cell-hint'),
+  );
+  check(
+    '模板在面板内翻第二页',
+    toolbarSrc.includes("setPage('templates')") && toolbarSrc.includes('build-page-templates'),
+  );
+  // ⚠️ 自审 L2 补的：把这一行删掉时原本一条断言都不红（主程序侧那句管的是 main.buildMode，
+  // 工具条自己的 mode 会留在 true，回到创造模式后"面板没开、左键却在框选"）
+  check(
+    '不可用时工具条自己也会退建造模式',
+    /private applyVisibility\(\): void \{[\s\S]*?if \(!this\.available\) this\.setMode\(false\);/.test(toolbarSrc),
+  );
+}
+
+console.log('\n抽屉接线（主程序）');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '非创造时把 buildMode 一起清零',
+    mainSrc.includes('if (!this.isCreative && this.buildMode) this.buildMode = false;'),
+  );
+  check('onEndBuild 接进主程序', mainSrc.includes('onEndBuild: () =>'));
+  check('抽屉开合接指针锁（onPanelChange）', mainSrc.includes('onPanelChange: (open) =>'));
+  check('面板开着时键盘只认 Esc', mainSrc.includes('if (this.buildToolbar.isPanelOpen) {'));
+  check('验收 API 暴露 panelOpen', mainSrc.includes('panelOpen: this.buildToolbar.isPanelOpen,'));
+}
+
+console.log('\n抽屉文案（8 个工具 × short / hint）');
+{
+  const tools = ['select', 'fill', 'copy', 'paste', 'mirror', 'undo', 'redo', 'template'] as const;
+  for (const language of ['zh', 'en'] as const) {
+    const table = tableOf(language);
+    const missing = tools.filter(
+      (id) => !table[`buildtools.tool.${id}.short`] || !table[`buildtools.tool.${id}.hint`],
+    );
+    check(`${language}：8 个工具的 short 与 hint 都在`, missing.length === 0, missing.join(' '));
+  }
+  const zh = tableOf('zh');
+  equal(
+    '中文短标签都是一句话两字',
+    tools.map((id) => [...(zh[`buildtools.tool.${id}.short`] ?? '')].length).join(','),
+    '2,2,2,2,2,2,2,2',
+  );
+  check(
+    '面板框架三条文案入表',
+    !!zh['buildtools.panel.title'] && !!zh['buildtools.panel.endBuild'] && !!zh['buildtools.toggle.short'],
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

@@ -38,6 +38,8 @@ export const editor = {
   'buildtools.template.placed': '正在放置：{name}',
   // ---- 建造工具条（创造5）
   'buildtools.toggle': '建造模式',
+  // 折叠态那颗总开关下面的两字标签（批次 20261024-0344）
+  'buildtools.toggle.short': '建造',
   'buildtools.tool.select': '选区',
   'buildtools.tool.fill': '填充',
   'buildtools.tool.copy': '复制',
@@ -48,6 +50,25 @@ export const editor = {
   'buildtools.tool.template': '建筑模板',
   'buildtools.tool.selectHint': '点一个方块，选第一个角',
   'buildtools.fill.noBlock': '先拿一块方块',
+  // ---- 建造抽屉（批次 20261024-0344）：格子里的两字标签 + 一句短语，外加面板框架
+  'buildtools.tool.select.short': '选区',
+  'buildtools.tool.fill.short': '填充',
+  'buildtools.tool.copy.short': '复制',
+  'buildtools.tool.paste.short': '粘贴',
+  'buildtools.tool.mirror.short': '镜像',
+  'buildtools.tool.undo.short': '撤销',
+  'buildtools.tool.redo.short': '重做',
+  'buildtools.tool.template.short': '模板',
+  'buildtools.tool.select.hint': '点两个方块',
+  'buildtools.tool.fill.hint': '填满选区',
+  'buildtools.tool.copy.hint': '复制选区',
+  'buildtools.tool.paste.hint': '贴在旁边',
+  'buildtools.tool.mirror.hint': '左右翻转',
+  'buildtools.tool.undo.hint': '退回一步',
+  'buildtools.tool.redo.hint': '恢复一步',
+  'buildtools.tool.template.hint': '内置小建筑',
+  'buildtools.panel.title': '建造工具',
+  'buildtools.panel.endBuild': '结束建造',
 
   // ---- 四个编辑器面板的框架文案（多语言 P3-2）
   "editor.ok": "确定",

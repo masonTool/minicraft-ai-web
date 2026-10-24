@@ -5470,6 +5470,12 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] 批次 20261024-0344 · **建造工具抽屉化（8 条）**：建造工具从"双列竖排 92×236"改成**一颗 44×56 开关 + 居中模态抽屉**
+      （基准 360×196，4 列 × 2 行，格内图标 + 两字标签 + 一句短语，模板在面板内翻第二页）；几何只在 `ui/buildToolbarLayout.ts`
+      算一份（`buildToggleBox` / `buildDrawerSize` / `buildDrawerBox` / `buildCellSize` / `drawerFits`，旧三件套删掉），
+      `applyLayout()` 写成 `--build-*` 变量交给 CSS；六语言 19 条新键（short / hint / 面板文案 / 开关短标）；
+      面板是模态的：遮罩吃点击、键盘只认 Esc、指针锁走 `onPanelChange`；非创造时把 `buildMode` 一起清零（旧实现只藏工具条、
+      左键仍被当"点选区角"吞掉）；`test:buildtools` 261 → **342** 条（几何 5 视口 × 3 缩放 + 开关对跳跃键 + 静态接线 + 文案）。
 - [x] 批次 20261024-0257 · **界面文案收口（2 条）**：`WORLD_TYPE_HINTS` 5 条 + `main.ts` 25 处 HUD toast +
       种子/生存提示 + 告示牌标题 + 外观预设 4 条入表（表 2786 → 2825）；删 `DifficultyProfile.label` 死字段；
       复查确认深链 `?lang=xx` 已生效、全仓只剩 `GenerationSources.ts` 的 19 条开发者数据未翻。

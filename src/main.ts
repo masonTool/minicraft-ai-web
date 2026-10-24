@@ -2479,11 +2479,14 @@ class App {
       },
     );
 
-    // 建造工具条（创造5）：挂 <body>，与其它面板同一套层叠口径（z-index 9，低于背包 10）。
-    // 它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
+    // 建造工具（创造5；抽屉形态，批次 20261024-0344）：挂 <body>，与其它面板同一套层叠口径
+    // （z-index 9，低于背包 10）。它只发回调——"能不能做"全在主程序这边判（模式 / 地形 / 撤销栈）。
     this.buildToolbar = new BuildToolbar(document.body, atlas, {
       onToggleMode: (active) => {
         this.buildMode = active;
+        // 打开面板顺手把按住的键清掉：面板是模态的，键盘却还连着——
+        // 不清的话会出现"面板开着、人还在往前走"
+        if (active) this.keys.clear();
         // 退出建造模式时把没点完的第一个角清掉，避免下次进来"莫名其妙已经选了一半"
         if (!active) this.clearSelection();
         this.refreshBuildToolbar();
@@ -2521,6 +2524,29 @@ class App {
       onTemplate: (templateId) => {
         this.placeTemplate(templateId);
         this.refreshBuildToolbar();
+      },
+      // 「结束建造」：玩家主动收工。模式与面板由工具条那边关，这里只负责
+      // 把主程序的状态一起清零（不清的话左键仍然被当成"点选区角"，玩家会以为挖不动）
+      onEndBuild: () => {
+        this.buildMode = false;
+        this.clearSelection();
+        this.refreshBuildToolbar();
+      },
+      // 抽屉开合与指针锁（批次 20261024-0344）：
+      // 开着时释放指针锁——不然鼠标还在后面转视角，面板上根本点不准；
+      // 关掉后按 `uiOpen` 决定要不要重新锁（背包还开着就别抢回来，与 `handleInventoryOpen` 同口径）。
+      // ⚠️ 这里**不**走 `uiOpen`：`handleInventoryOpen` 会清按键、收触摸层、退锁再抢锁，
+      // 每开关一次面板抖一下（取舍见 `.continue/doing/f639d3-decision.md` D4）。
+      onPanelChange: (open) => {
+        if (open) {
+          if (document.pointerLockElement) document.exitPointerLock();
+          return;
+        }
+        if (this.uiOpen || this.touch) return;
+        const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+        result?.catch(() => {
+          /* 浏览器可能拒绝自动重新锁定，玩家点一下画面即可 */
+        });
       },
     });
     this.refreshBuildToolbar();
@@ -5269,6 +5295,16 @@ class App {
         return;
       }
       if (this.sleeping && e.code !== 'Space') return;
+      // 建造抽屉（批次 20261024-0344）是模态层：Esc 收面板，其余按键一律不往下走。
+      // 遮罩只挡鼠标/触摸，键盘完全不受影响——不挡的话面板开着按 W 会一边走一边把左键
+      // 当"点选区角"，按 E 会在抽屉上面再叠一层背包，按 Esc 会先弹暂停菜单。
+      if (this.buildToolbar.isPanelOpen) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          this.buildToolbar.closePanel();
+        }
+        return;
+      }
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
@@ -10215,6 +10251,9 @@ class App {
 
   /** 把工具条刷新到当前状态（模式 / 撤销栈 / 选区） */
   private refreshBuildToolbar(): void {
+    // 非创造时**把模式一起清零**（批次 20261024-0344）：旧实现只把工具条藏起来，
+    // `buildMode` 还是 true，左键继续被当"点选区角"吞掉——玩家会觉得"挖不动、工具也没了"。
+    if (!this.isCreative && this.buildMode) this.buildMode = false;
     this.buildToolbar.setAvailable(this.isCreative);
     this.buildToolbar.setUndoState(this.undoStack.canUndo, this.undoStack.canRedo);
     this.buildToolbar.setSelectionArmed(this.selectionStart !== null);
@@ -12517,6 +12556,7 @@ class App {
   /** 验收脚本用：工具条状态 */
   get buildToolbarStateForTest(): {
     mode: boolean;
+    panelOpen: boolean;
     available: boolean;
     armed: boolean;
     undo: number;
@@ -12524,6 +12564,7 @@ class App {
   } {
     return {
       mode: this.buildToolbar.isOpen,
+      panelOpen: this.buildToolbar.isPanelOpen,
       available: this.isCreative,
       armed: this.selectionStart !== null,
       undo: this.undoStack.undoCount,
