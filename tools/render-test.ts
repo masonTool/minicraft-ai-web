@@ -1108,11 +1108,12 @@ console.log('\n[第三人称：手里那件东西]');
 
   player.setHeldItem(Item.STICK);
   const spriteMesh3p = heldMesh();
-  // ⚠️ 回归点（用户："第三人称看到的是一把交叉的剑"）：材质若开 `DoubleSide`，
-  // 背面的**镜像图标**会透过正面的透明区显出来 = 两把剑交叉。
+  // 现在的手持物是**一个平面 + 烘好的 2.5D 贴图**，所以必须双面：
+  // 单面会让前视角/后视角总有一边整件消失（用户："三人称视角看不到手拿物品了"）。
+  // ⚠️ 与"交叉的剑"那条不矛盾：那次是**薄盒子两面同贴图标**被双面渲染透了重影，平面没有这个问题。
   check(
-    '第三人称手持物是单面渲染（否则背面镜像会透出来，剑变成"交叉"的）',
-    !!spriteMesh3p && (spriteMesh3p!.material as THREE.MeshBasicMaterial).side === THREE.FrontSide,
+    '第三人称手持物是双面渲染（平面，否则有一侧会整件消失）',
+    !!spriteMesh3p && (spriteMesh3p!.material as THREE.MeshBasicMaterial).side === THREE.DoubleSide,
     spriteMesh3p ? String((spriteMesh3p!.material as THREE.MeshBasicMaterial).side) : 'null',
   );
   check(

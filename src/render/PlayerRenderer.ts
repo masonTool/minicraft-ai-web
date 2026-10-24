@@ -105,11 +105,11 @@ export interface PlayerPose {
  */
 const HELD_BLOCK_SIZE = 0.34;
 const HELD_SPRITE_SIZE = 0.52;
-/** 第三人称的 2.5D 贴图：正面 64px、厚度 10px（这个尺寸下够看，贴图也小） */
-const HELD_SPRITE_FACE_PIXELS = 64;
-const HELD_SPRITE_DEPTH_PIXELS = 10;
+/** 第三人称的 2.5D 贴图：Scale2x 两遍（4×）+ 厚度 10px（这个尺寸下够看，贴图也小） */
+const HELD_SPRITE_SCALE_PASSES = 2;
+const HELD_SPRITE_DEPTH_PIXELS = 7;
 /** 握点：右臂局部坐标（手臂从肩 y=0 垂到 y≈-0.7，手心在 -0.66 附近） */
-const HELD_GRIP: readonly [number, number, number] = [-0.2, -0.56, -0.26];
+const HELD_GRIP: readonly [number, number, number] = [-0.24, -0.6, -0.22];
 /**
  * 握持姿态：图标转开 45° 而不是正对/侧对镜头——
  *
@@ -117,7 +117,7 @@ const HELD_GRIP: readonly [number, number, number] = [-0.2, -0.56, -0.26];
  * 方向看角色，侧对镜头等于把图标看成一条线（实测剑只剩一根青色细条）。
  * 转 45° 之后前视角与后视角都能看出刀形，厚度面还能补一点立体感。
  */
-const HELD_SPRITE_ROTATION: readonly [number, number, number] = [-0.22, -0.28, 0.24];
+const HELD_SPRITE_ROTATION: readonly [number, number, number] = [-0.12, 0, 0.18];
 const HELD_BLOCK_ROTATION: readonly [number, number, number] = [0.12, 0.62, 0.1];
 /** 扁平物品的逐面亮度（`+x -x +y -y +z -z`）：正反两面满亮度，厚度面压暗 */
 const HELD_SPRITE_SHADE: readonly number[] = [0.55, 0.55, 0.55, 0.55, 1, 1];
@@ -387,6 +387,8 @@ export class PlayerRenderer {
         transparent: true,
         alphaTest: 0.04,
         depthWrite: true,
+        // 平面：必须双面，否则前视角/后视角总有一边看不见（用户："三人称视角看不到手拿物品了"）
+        side: THREE.DoubleSide,
       });
       for (const material of [this.heldBlockMaterial, this.heldSpriteMaterial]) {
         this.setBaseColor(material, 0xffffff);
@@ -645,10 +647,9 @@ export class PlayerRenderer {
       const tile = itemIconTile(itemId);
       // 与第一人称同一套"烘好的 2.5D 贴图"，只是口径是"格"而不是"屏幕比例"
       const sprite = buildHeldSprite(atlas, itemId, {
-        facePixels: HELD_SPRITE_FACE_PIXELS,
+        passes: HELD_SPRITE_SCALE_PASSES,
         depthPixels: HELD_SPRITE_DEPTH_PIXELS,
         direction: [0.55, 0.83],
-        smooth: true,
       });
       const bounds = atlas.contentBounds(tile);
       const texel = HELD_SPRITE_SIZE / TILE_SIZE;

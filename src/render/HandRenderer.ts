@@ -104,13 +104,13 @@ const SPRITE_SIZE = 0.52;
 /**
  * 2.5D 贴图的烘制参数（见 `heldSprite.ts`）。
  *
- * · `FACE_PIXELS = 96`：图标按 6 倍放大后烘，边缘走双线性，是平滑过渡而不是硬台阶
- *   （用户："我说的细致一点，指的是尽量**边缘平滑**"）；
- * · `DEPTH_PIXELS = 22`：厚度 = 22 个画布像素 ≈ 3.7 个像素格 ≈ 0.12 屏高，沿右下挤出
- *   （用户："3D 效果**厚一点**，不要搞得那么薄、那么单细"）。
+ * · `SPRITE_SCALE_PASSES = 2`：Scale2x 跑两遍 = 4×，斜边台阶补小、**颜色不变**（不糊）；
+ *   上一版用双线性放大，用户："太糊了，起码要像一把剑吧，而且要清晰"。
+ * · `SPRITE_DEPTH_PIXELS = 8`：厚度 = 8 个画布像素（4× 下 ≈ 2 个像素格 ≈ 0.065 屏高），沿右下挤出。
+ *   再厚就会把整件的轮廓吃掉一半（15px 那版像给图标描了一圈投影）。
  */
-const SPRITE_FACE_PIXELS = 96;
-const SPRITE_DEPTH_PIXELS = 22;
+const SPRITE_SCALE_PASSES = 2;
+const SPRITE_DEPTH_PIXELS = 8;
 const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
 /**
  * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
@@ -313,6 +313,9 @@ export class HandRenderer {
       fragmentShader: SPRITE_FRAGMENT_SHADER,
       transparent: true,
       depthWrite: true,
+      // 烘好的贴图挂在**一个平面**上：必须双面，否则转身/挥手时背面被剔除会整件消失
+      // （薄盒子的时代不能用双面 —— 那是"两面同贴图标"才会出重影，平面没有这个问题）
+      side: THREE.DoubleSide,
     });
 
     this.armMaterial = new THREE.ShaderMaterial({
@@ -628,10 +631,9 @@ export class HandRenderer {
     if (cached) return cached;
 
     const sprite = buildHeldSprite(this.atlas, itemId, {
-      facePixels: SPRITE_FACE_PIXELS,
+      passes: SPRITE_SCALE_PASSES,
       depthPixels: SPRITE_DEPTH_PIXELS,
       direction: [0.55, 0.83],
-      smooth: true,
     });
     if (!sprite) {
       // 没有 DOM（离线测试）或图标读不出来：退回薄盒子，宁可"扁"也不要手里空着
