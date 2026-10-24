@@ -30,9 +30,8 @@
  * 收尾：`[ ]` / `[~]` 都没了 → **默认自动收尾**（不弹窗、不等确认）：
  *   由 AI 把整份队列（含每条下方的完成说明）搬进 `DONE.md`、更新 `OVERVIEW.md`、
  *   把 `TASKS.md` 里对应条目改成 `[x]`、视情况补 `TIPS.md`、把队列归档到 `.logs/<会话ID>/`。
- *   **在工作树里**多一步（第 6 步）：文档收尾提交之后跑 `worktree-sync.mjs`，
- *   把树分支 rebase 到父分支、再 `merge --no-ff` 合回去。冲突由 AI/人按语义解，
- *   脚本只负责认父树、查前置、执行单步，并在冲突处停下（不替人选、不自动 abort）。
+ *   **在工作树里也一样是五步**：2026-10-24 起取消了收尾自动 `rebase → merge`，
+ *   这批做完就结束——合不合、何时合、树什么时候删，都由用户处理。
  *   **只有**出现 `[阻塞]`，或"打完勾但缺验证说明 / 自述未验证、没跑"的条目时才弹窗问用户
  *   ——那两类人没看过就等于悄悄丢活。同一份队列只催一次，之后放行（否则每轮重复同一句话）。
  */
@@ -115,14 +114,19 @@ const contMark = continuation ? ` · 续跑第${Number.isFinite(loopCount) ? loo
  */
 if (event === 'UserPromptSubmit') {
   if (sid) {
-    // 先判断"这个会话值不值得留痕"：有队列，或 queue-init 已经建过日志
-    const tracked = readQueue(queuePath(sid)) !== null || readLogText(sid) !== null;
     const resetState = loadState(sid);
     resetState.count = 0;
     resetState.promptSeen = (resetState.promptSeen ?? 0) + 1;
     resetState.lastPromptAt = new Date().toISOString();
     saveState(sid, resetState);
-    if (tracked) appendLog(sid, `收到用户消息 · 第 ${resetState.promptSeen} 次 · 轮次归零`);
+    /**
+     * **无条件**写这一行（T46）。原先的判据是"有队列，或 `queue-init` 已经建过日志"，
+     * 而这两个钩子挂在**同一个 UserPromptSubmit 事件**上、并发执行、顺序不保证——
+     * 于是同一场景两次运行，这一行时有时无（本仓库实测：会话里有 queue-init 的行、
+     * 却没有这一行）。日志是判断"钩子有没有跟着用户消息走"的唯一证据，
+     * 不能取决于另一个进程抢没抢到前面。
+     */
+    appendLog(sid, `收到用户消息 · 第 ${resetState.promptSeen} 次 · 轮次归零`);
   }
   emitAllow();
 }
@@ -377,14 +381,10 @@ function pendingMilestone(target) {
  * 所以第 5 步（归档并移走队列文件）先不做；等走到最后一个里程碑时再走完整五步。
  */
 /**
- * 当前会话是不是在一棵并行工作树里（只算一次）。
- *
- * `PROJECT_ROOT` 是模块加载时定下的，整轮运行不会变；每次收尾都 spawn 两次 git 不值当。
- * 判据用 git 自己的 worktree 事实（见 `lib.mjs` 的 `isInsideWorktree`），不靠目录名猜。
+ * 收尾标题。**工作树里也是五步**：同步（rebase / merge）已取消，不再有第 6 步——
+ * 标题跟着步数变过一次，这里留着常量是为了以后加步数时不用改三处文案。
  */
-const IN_WORKTREE = isInsideWorktree();
-/** 收尾标题跟着步数变——工作树里多一步同步，否则 AI 会以为"五步做完就结束了"。 */
-const WRAP_TITLE = IN_WORKTREE ? '五步文档 + 工作树同步，都要做完' : '五步都要做完';
+const WRAP_TITLE = '五步都要做完';
 
 function wrapSteps(includeArchive = true) {
   return [
@@ -412,22 +412,9 @@ function wrapSteps(includeArchive = true) {
         '   队列原文已经整份进了 `DONE.md`，备份只是"想翻原文时还在"，不进仓库、不进提交。' +
         '   决策记录会跟着队列一起归档，不用再单独跑 `--decision`。']
       : []),
-    ...(includeArchive && IN_WORKTREE
-      ? [
-          '6. **（只在工作树里）合回父分支**——前提是**上面的文档改动已经提交**：',
-          '   第 5 步归档会让工作区变脏，而 rebase 要求干净；先在树里提交收尾，再走这三步。',
-          '   a. `node .continue/hooks/worktree-sync.mjs` 看父子关系（认不出父树会直接说，不要自己猜）；',
-          '   b. `--run=rebase`：把树分支垫到父分支上。冲突以退出码 3 停下并列出文件——',
-          '      **逐个看语义解**（两侧都需要的改动都留），`git add` 后 `git rebase --continue`；',
-          '      解不动就 `git rebase --abort` 退回并报告用户。**不要 `--skip`**：那会让这批改动无声消失；',
-          '   c. `--run=merge`：在父树里 `merge --no-ff` 这条分支。冲突同样按语义解，',
-          '      `git add` 后 `git -C <父树> commit --no-edit`；解不动在**父树目录**跑 `git merge --abort`；',
-          '   d. `--run=push`：推树分支（force-with-lease，只对 `continue/` 前缀的自己这条分支开例外）；',
-          '      `config.json` 的 `git.push` 为 true 时顺带推父分支。',
-          '   任何一步失败都要说清停在哪一步、`git status` 什么样、怎么继续；**不要谎称已合回**。',
-          '   worktree 本身不自动删除：收尾后把 `git worktree remove <路径>` 交给用户决定。',
-        ]
-      : []),
+    '',
+    '**到此为止**：不合并、不 rebase、不删工作树。合不合、什么时候合、树什么时候删，',
+    '都由用户自己处理——不要顺手 `git merge`，那不属于这一批的收尾。',
     '',
     '**做完在回复里逐条回执**：各自"做了 / 没做（原因）"，让用户一眼看出收尾是否完整；',
     '漏掉的当场补，不要让用户自己去翻文档核对。',
@@ -619,9 +606,6 @@ if (!pick) {
         '',
         '1. 把 `DONE.md` / `OVERVIEW.md` / `TASKS.md` / `TIPS.md` 的改动和"队列归档（doing 里那份被移走）"**一起提交**，',
         `   commit message：\`批次 ${batch ?? '<n>'} · 收尾 · <这批做了什么>\`；`,
-        ...(IN_WORKTREE
-          ? ['   提交完**才**进第 6 步：rebase 要求工作区干净，脏着跑会被 `worktree-sync.mjs` 拒绝；']
-          : []),
         '2. 回复末尾写一句"收尾已自动完成"（各步各自做了还是没做）；',
         '3. 遗留问题（`[发现]` 里没做的、判断不该做的）单独列给用户，不要顺手塞进 `TASKS.md`。',
       ].join('\n'),

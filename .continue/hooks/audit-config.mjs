@@ -103,6 +103,25 @@ if (existsSync(configFile)) {
       problems.push(`config.json 用了 checks.${key}，但 README 里没有提到它`);
     }
   }
+
+  /**
+   * 已知的慢检查**不许**待在 `checks.project`（快档）。
+   *
+   * 挡的是本仓库自己踩的坑（T44）：三份文档都写着"project 必须秒级"，还是把 13 秒的
+   * 安装器回归放回了快档——每次 `git commit` 多等 13 秒，而**没有任何东西会红**。
+   * 只认本技能自带的两个慢脚本：它们不是"项目测试"，出现在快档里一定是配置错了；
+   * 别的命令快不快，框架没法猜，也不该猜。
+   */
+  const SLOW_SCRIPTS = ['scripts/test-install.mjs', 'scripts/e2e.mjs'];
+  for (const cmd of [].concat(config?.checks?.project ?? [])) {
+    const hit = SLOW_SCRIPTS.find((name) => String(cmd).includes(name));
+    if (hit) {
+      problems.push(
+        `checks.project（快档）里有慢检查 \`${hit}\`：它该放进 checks.projectSlow，` +
+          '否则每次 git commit（pre-commit）都要等它跑完',
+      );
+    }
+  }
 }
 
 // ------------------------------------------------------------------ 输出

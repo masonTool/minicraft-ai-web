@@ -3,23 +3,23 @@
  * 开一棵**并行工作树**（git worktree），用于"已有队列在跑、新任务不想排队等"的场景。
  *
  * 用法：
- *   node .continue/hooks/worktree.mjs <名字> [--task=<一句话>]... [--dry-run]
- *   （npm 项目装了 `continue:worktree` 别名时，`npm run continue:worktree -- <名字>` 等价）
+ *   node .continue/hooks/worktree.mjs <单词> [--task=<一句话>]... [--dry-run]
+ *   （npm 项目装了 `continue:worktree` 别名时，`npm run continue:worktree -- <单词>` 等价）
  *
  * 做什么：
- *   1. 在 `.continue/doing/.worktree/<本会话 sid 前 6 位>` 建一棵 worktree（该目录已被 `.continue/.gitignore` 排除）；
- *   2. 在它上面开分支 `continue/<父目录名>-<名字>`（基于当前 HEAD）；
+ *   1. 在 `.continue/doing/.worktree/worktree_<单词>_<YYYYMMDD>` 建一棵 worktree
+ *      （该目录已被 `.continue/.gitignore` 排除）；单词由 AI 按这一批的需求取；
+ *   2. 在它上面开**同名分支** `worktree_<单词>_<YYYYMMDD>`（基于当前 HEAD）；
  *   3. 把任务写进树里的 `.continue/doing/worktree.md`（含批次号与交接说明），
  *      树里的第一个会话（`queue-init`）把它改名接管——队列就是交接载体，不需要第二份文件；
  *   4. 立刻把这条分支推到远程（`git push -u origin <分支>`）。
  *
- * **递归**：树里也可以再建树。目录名永远是"当前会话 sid 前 6 位"（每一层各自不同），
- * 分支前缀是**当前目录名**，于是从分支名就能看出它从哪一层分出去。
+ * **递归**：树里也可以再建树（同一套命名，日期与单词各自独立）。
  * 不设层数上限：每层都是完整仓库副本，层数只打印出来提醒人（多了容易分不清谁是谁）。
  *
  * **不做什么**：
- *   · 建树时不合并不 rebase —— 但**收尾时**由 `worktree-sync.mjs` 自动把树分支垫到父树分支再合回，
- *     触发点是队列全打勾后的第 6 步（文档收尾提交之后）；
+ *   · **不合并、不 rebase**：这一批做完就结束，合不合、什么时候合由用户自己处理
+ *     （2026-10-24 起取消了收尾自动 `rebase → merge` 那一步）；
  *   · 不删除 worktree —— 清理时机由用户决定；
  *   · 不改父树的任何文件（`worktree.md` 写在树里，父树只在 git 层面多出一条 worktree 记录）。
  *
@@ -34,9 +34,17 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isInsideWorktree, nextBatch, shortSid } from './lib.mjs';
+import {
+  isInsideWorktree,
+  loadConfig,
+  nextBatch,
+  normalizeWorktreeWord,
+  shortSid,
+  WORKTREE_DIR,
+  worktreeName,
+} from './lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
@@ -51,50 +59,57 @@ const tasks = args
   .filter((a) => a.startsWith('--task='))
   .map((a) => a.slice('--task='.length).trim())
   .filter(Boolean);
-const name = args.find((a) => !a.startsWith('--'));
+const rawName = args.find((a) => !a.startsWith('--'));
 
 function usage(code = 2) {
   console.error(
-    '用法：node .continue/hooks/worktree.mjs <名字> [--task=<一句话>]... [--dry-run]\n' +
-      '  （npm 项目装了 `continue:worktree` 别名时，`npm run continue:worktree -- <名字>` 等价）\n' +
-      '  名字只能是字母 / 数字 / . _ -（它出现在分支名 `continue/<父目录名>-<名字>` 里）\n' +
+    '用法：node .continue/hooks/worktree.mjs <单词> [--task=<一句话>]... [--dry-run]\n' +
+      '  （npm 项目装了 `continue:worktree` 别名时，`npm run continue:worktree -- <单词>` 等价）\n' +
+      '  <单词>：按这一批的需求取一个英文词（2~16 位、字母开头，如 export / auth / perf）；\n' +
+      '          目录与分支都叫 `worktree_<单词>_<YYYYMMDD>`\n' +
       '  --task=<一句话>  写进树里的交接队列（可重复）；不给就留一条占位，等人在新会话里补\n' +
       '  --no-window      不拉 IDE 窗口（CI / 无 GUI 环境 / 自动化用例用）',
   );
   process.exit(code);
 }
 
-if (!name) usage();
-if (!/^[A-Za-z0-9._-]+$/.test(name)) {
-  console.error(`名字不合法：${name}（只允许字母 / 数字 / . _ -）`);
+if (!rawName) usage();
+const word = normalizeWorktreeWord(rawName);
+if (!word) {
+  console.error(
+    `单词不合法：${rawName}（要一个英文单词：2~16 位、字母开头、只含字母数字；` +
+      '也可以直接给完整树名 worktree_<单词>_<YYYYMMDD>）',
+  );
   usage();
 }
 
 const git = (...rest) => spawnSync('git', rest, { cwd: ROOT, encoding: 'utf8' });
 
 /**
- * 分支前缀 = **当前工作区目录名**。
+ * 树目录 = 分支名 = `worktree_<单词>_<YYYYMMDD>`（用户 2026-10-24 定的一处对一处）。
  *
- * 为什么不用固定前缀：递归建树时，一层层都叫 `continue/<名字>` 就分不清是哪一层分出来的；
- * 用目录名（主工作区 = 项目名，树里 = 那棵树的 sid 前 6 位）就能一眼看出血缘。
- * 非法字符（空格等）替换成 `-`：项目目录叫什么不由我们决定，但分支名必须合法。
- */
-const parentName = basename(ROOT).replace(/[^A-Za-z0-9._-]/g, '-');
-const branch = `continue/${parentName}-${name}`;
-
-/**
- * 树目录：`.continue/doing/.worktree/<本会话 sid 前 6 位>`。
- *
- * 为什么放进 `doing/`：`.worktree` 是队列的附属物（待派发的队列、派发出去的树），
+ * 为什么放进 `doing/.worktree/`：`.worktree` 是队列的附属物（待派发的队列、派发出去的树），
  * 和 `doing/*.md` 摆在一起才符合"这一批活在哪"的直觉；
  * 为什么必须 gitignore：每层都是完整仓库副本，进版本库等于把整个项目复制一遍。
- * sid 取不到（用户手工在裸终端跑）时用 `nosession`：目录名不合法会直接建树失败，
- * 而这里宁可建出来再提示"这个目录名不代表任何会话"。
+ *
+ * 撞名兜底（同一天同一个单词建第二棵）：追加 `-2`、`-3`，主形态只有一种。
+ * 不直接失败：递归 / 同一天连开两棵树都是正常用法，报错只会逼人来删目录。
  */
+const at = new Date();
+let seq = 1;
+let treeName = worktreeName(word, at, seq);
+while (
+  seq < 100 &&
+  (existsSync(join(WORKTREE_DIR, treeName)) ||
+    git('rev-parse', '--verify', '--quiet', `refs/heads/${treeName}`).status === 0)
+) {
+  seq += 1;
+  treeName = worktreeName(word, at, seq);
+}
+const branch = treeName;
 const sid = process.env.CODEBUDDY_SESSION_ID ?? process.env.WORKBUDDY_SESSION_ID ?? '';
 const sid6 = shortSid(sid) || 'nosession';
-const worktreeRoot = join(ROOT, '.continue', 'doing', '.worktree');
-const target = join(worktreeRoot, sid6);
+const target = join(WORKTREE_DIR, treeName);
 const relTarget = relative(ROOT, target);
 
 /** 当前在第几层：路径里出现几次 `.worktree`（主工作区 = 0）。 */
@@ -116,28 +131,13 @@ if (!inRepo) {
  */
 const isWorktree = isInsideWorktree();
 
-if (existsSync(target)) {
-  console.error(
-    `目录已存在：${target}\n` +
-      '目录名就是"当前会话 sid 前 6 位"，所以同一会话只能有一棵并行树；' +
-      '要么先 `git worktree remove <目录>`，要么换一个会话再建。',
-  );
-  process.exit(1);
-}
-
-const branchExists = git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`).status === 0;
-if (branchExists) {
-  console.error(`分支已存在：${branch}\n换个名字，或者先删掉那条分支。`);
-  process.exit(1);
-}
-
 /**
  * 交接队列。**格式必须是一份合法队列**：树里的 `audit-*` 会按队列校验它
  * （文件名合法、最后一条是 `[自审]`、批次号可被 `parseBatch` 取到）。
  * 批次号在这里就用 `nextBatch()` 定下：`queue-init` 改名接管后会沿用它，
  * 于是"一批一个号、恒定不变"在跨树交接时也成立。
  */
-const now = new Date();
+const now = at;
 const pad = (n) => String(n).padStart(2, '0');
 const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 const batch = nextBatch();
@@ -182,11 +182,20 @@ function findIdeCli() {
 const ideCli = findIdeCli();
 const step = (text) => console.log(`${dryRun ? '[dry-run] ' : ''}${text}`);
 
+/**
+ * 推不推远程，听 `config.json` 的 `git.push`（默认 true）。
+ *
+ * 为什么不再无条件推：那是**同一个开关**——用户设 `git.push=false` 就是"不要替我推"，
+ * 建树却偷偷推一条分支，等于绕过他的选择。代价只是分支先只存在本地，
+ * 想推随时 `git push -u origin <分支>`。
+ */
+const pushEnabled = loadConfig()?.git?.push !== false;
+
 step(`当前层数：${layer}${isWorktree ? '（本目录本身是一棵 worktree，允许继续递归）' : '（主工作区）'}`);
 step(`建 worktree：${target}`);
 step(`开分支：${branch}（基于当前 HEAD）`);
 step(`写交接队列：${relTarget}/.continue/doing/worktree.md（批次 ${batch}，${tasks.length > 0 ? tasks.length : 1} 条任务）`);
-step(`推到远程：git push -u origin ${branch}`);
+step(pushEnabled ? `推到远程：git push -u origin ${branch}` : '不推远程：config.json 的 git.push=false');
 step(
   ideCli && !noWindow
     ? `拉新窗口：${ideCli} -n ${target}`
@@ -215,8 +224,8 @@ writeFileSync(handoffPath, handoffBody);
 const opened =
   ideCli && !noWindow ? spawnSync(ideCli, ['-n', target], { stdio: 'ignore', timeout: 10000 }) : null;
 
-const pushed = git('push', '-u', 'origin', branch);
-if (pushed.status !== 0) {
+const pushed = pushEnabled ? git('push', '-u', 'origin', branch) : null;
+if (pushed && pushed.status !== 0) {
   console.log(
     `\n⚠️ 分支已建好，但推远程失败（不影响继续干活）：\n${(pushed.stderr || '').trim()}\n` +
       `   稍后可以在那棵树里重试：git push -u origin ${branch}`,
@@ -239,9 +248,7 @@ console.log(
     `任务已经写进 \`${relTarget}/.continue/doing/worktree.md\`（批次 ${batch}）：`,
     '新会话第一条消息会看到"发现待接管队列"，改名即为接管，不需要你再粘贴任务。',
     '',
-    '收工后：队列全打勾、文档收尾提交之后，跑 `node .continue/hooks/worktree-sync.mjs`，',
-    '按 `--run=rebase` → `--run=merge` → `--run=push` 把这条分支同步回父树；',
-    '冲突要按语义解（脚本不替你选），解不动就 abort 退回，处置约定见 `.continue/README.md` §7.2。',
-    `手工兜底（框架自动同步跑不动时）：git merge --no-ff ${branch}`,
+    '收工后：**做完就结束**——框架不自动合并、不 rebase、也不删树。',
+    `合不合、什么时候合、这棵树什么时候删，全由你决定（分支就是 \`${branch}\`）。`,
   ].join('\n'),
 );

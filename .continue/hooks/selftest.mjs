@@ -713,7 +713,7 @@ try {
     clearDoing();
     queue('s-parent', '- [ ] 父树的活');
     const wt = join(ROOT, '.continue', '.worktree', 'selftest-wt');
-    const added = sh('git', ['worktree', 'add', '-b', 'continue/selftest-wt', wt, 'HEAD']);
+    const added = sh('git', ['worktree', 'add', '-b', 'worktree_selftest_19990101', wt, 'HEAD']);
     if (added.status !== 0) return expect(false, `建树失败：${(added.stderr || '').slice(0, 200)}`, null);
     // `doing/` 在临时项目里是 gitignore 的，HEAD 带不过来——手工放一份"别人的队列"
     mkdirSync(join(wt, '.continue', 'doing'), { recursive: true });
@@ -724,7 +724,7 @@ try {
     const r = hook('queue-init.mjs', prompt('s-in-tree'), {}, [], wt);
     const ctx = injectText(r);
     sh('git', ['worktree', 'remove', '--force', wt]);
-    sh('git', ['branch', '-D', 'continue/selftest-wt']);
+    sh('git', ['branch', '-D', 'worktree_selftest_19990101']);
     if (ctx.includes('其他会话还有未完成队列')) {
       return expect(false, '树里不该列父树 / 祖先树的队列', r);
     }
@@ -732,14 +732,15 @@ try {
   });
 
   /**
-   * 工作树里的**收尾注入**必须多出第 6 步。
+   * 工作树里的收尾**不再多一步**（2026-10-24 取消自动 rebase / merge）。
    *
-   * 为什么单独钉：`worktree-sync.mjs` 写得再对，注入里不提它，AI 收完文档就停了——
-   * 而"停了"在日志里和"这批没有要同步的东西"长得一样，只能靠断言注入文案提前发现。
+   * 为什么单独钉：那一套逻辑是靠"注入里点名命令"驱动的；文案里还留着 `worktree-sync`，
+   * AI 就会去跑一条已经删掉的脚本（或者更糟：自己手搓 `git merge` 合回父分支）。
+   * 用户要的语义是"做完就结束，后面的事我自己处理"，所以这里既查"没提同步"，也查"明说不合并"。
    */
-  check('auto-continue · 工作树里收尾注入多出"提交后 rebase + merge 合回父分支"这一步', () => {
+  check('auto-continue · 工作树里收尾也是五步，明说不合并、不点名已删的 worktree-sync', () => {
     const wt = join(ROOT, '.continue', '.worktree', 'selftest-wrap-hint');
-    const added = sh('git', ['worktree', 'add', '-b', 'continue/selftest-wrap-hint', wt, 'HEAD']);
+    const added = sh('git', ['worktree', 'add', '-b', 'worktree-wrap-hint_19990101', wt, 'HEAD']);
     if (added.status !== 0) return expect(false, `建树失败：${(added.stderr || '').slice(0, 200)}`, null);
     const sid = 's-tree-wrap';
     mkdirSync(join(wt, '.continue', 'doing'), { recursive: true });
@@ -751,125 +752,79 @@ try {
     );
     const r = hook('auto-continue.mjs', stop(sid), {}, ['--event=Stop'], wt);
     sh('git', ['worktree', 'remove', '--force', wt]);
-    sh('git', ['branch', '-D', 'continue/selftest-wrap-hint']);
+    sh('git', ['branch', '-D', 'worktree-wrap-hint_19990101']);
     const text = `${r.err}${r.out}`;
-    if (!/worktree-sync\.mjs/.test(text)) {
-      return expect(false, '收尾注入应点名 worktree-sync.mjs（否则 AI 收完文档就停）', r);
+    if (/worktree-sync/.test(text)) {
+      return expect(false, '注入不该再点名 worktree-sync（脚本已删）', r);
     }
+    return expect(/不合并/.test(text), '注入应明说收尾不合并、由用户处理', r);
+  });
+
+  /**
+   * 树名里的"单词"必须是英文：AI 顺手写成中文时，**当场拒绝**比悄悄建一棵 `worktree_导出_…` 好。
+   * 中文进分支名要多一层编码，且和"完整树名可以照抄重跑"的解析规则混在一起会有歧义。
+   */
+  check('worktree.mjs · 非英文单词直接拒绝（exit 2，不建树）', () => {
+    const r = hook('worktree.mjs', '', {}, ['导出', '--no-window']);
     return expect(
-      /--run=rebase/.test(text) && /收尾提交/.test(text),
-      '注入应写清 rebase 在收尾提交之后、以及三步命令',
+      r.code === 2 && /单词不合法/.test(r.err),
+      `应 exit 2 并说明单词规则（实际 exit=${r.code}）`,
+      { err: r.err },
+    );
+  });
+
+  /**
+   * `git.push=false` 必须同时管住"建树顺手推分支"：那是同一个开关，
+   * 用户说"不要替我推"，建树却偷偷推一条，等于绕过他的选择。
+   */
+  check('worktree.mjs · config.git.push=false 时不推远程', () => {
+    const cfgPath = join(ROOT, '.continue', 'config.json');
+    const before = readFileSync(cfgPath, 'utf8');
+    let parsed = {};
+    try {
+      parsed = JSON.parse(before);
+    } catch {
+      parsed = {};
+    }
+    writeFileSync(cfgPath, JSON.stringify({ ...parsed, git: { ...(parsed.git ?? {}), push: false } }, null, 2));
+    const r = hook('worktree.mjs', '', {}, ['export', '--dry-run']);
+    writeFileSync(cfgPath, before);
+    return expect(
+      /git\.push=false/.test(r.out) && !/git push -u origin/.test(r.out),
+      '应打印"不推远程：config.json 的 git.push=false"，且计划里没有 push',
       r,
     );
   });
 
   /**
-   * 工作树收尾同步（`worktree-sync.mjs`）：认父树 → rebase → 合回父分支。
+   * 协议指纹：会话开着的时候框架被换掉 → **必须重新注入一次**并声明旧协议作废。
    *
-   * 另起一个仓库：这条会**真的** rebase / merge，而 ROOT 里其他用例随时让工作区变脏
-   * （脚本要求"收尾提交之后"才同步，脏着跑被拒是下面另一条断言），两者混在一起会互相干扰。
+   * 为什么钉这条（2026-10-24 用户实测的事故）：老会话升级后，上下文里还是旧协议，
+   * AI 把队列写到新钩子不读的位置，全程没有报错。指纹没变时仍然只注入一次（不能每轮都刷屏）。
    */
-  const SYNC_REPO = mkdtempSync(join(tmpdir(), 'continue-selftest-sync-'));
-  try {
-    const sgit = (args, cwd = SYNC_REPO) => spawnSync('git', args, { cwd, env: baseEnv, encoding: 'utf8' });
-    const syHooks = join(SYNC_REPO, '.continue', 'hooks');
-    mkdirSync(syHooks, { recursive: true });
-    for (const name of ['lib.mjs', 'worktree-sync.mjs']) cpSync(join(HERE, name), join(syHooks, name));
-    // `.worktree/` 必须忽略：子树目录在父树里面，不忽略会让父树永远"工作区不干净"
-    writeFileSync(join(SYNC_REPO, '.continue', '.gitignore'), '.logs/\n.worktree/\n');
-    sgit(['init', '-q']);
-    sgit(['add', '-A']);
-    sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'init']);
-
-    const parentDir = join(SYNC_REPO, 'parent');
-    const childDir = join(parentDir, '.continue', 'doing', '.worktree', 'child');
-    // 顺序要紧：先建父树（目标目录必须不存在/为空），再在父树里建子树。
-    // 反过来先把 `parentDir/.continue/...` mkdir 出来，`worktree add` 会因"目录非空"失败，
-    // 而失败被忽略时症状是"父树被认成主仓库"——排查起来会误以为是路径比较写错了。
-    const addParent = sgit(['worktree', 'add', '-q', parentDir, '-b', 'continue/parent']);
-    check('worktree-sync · 夹具：父树建得出来', () =>
-      expect(addParent.status === 0, `建父树失败：${(addParent.stderr || '').slice(0, 200)}`, {
-        code: addParent.status,
-      }),
+  check('queue-init · 协议变了就重新注入并声明旧协议作废', () => {
+    const sid = 's-upgrade';
+    const first = hook('queue-init.mjs', prompt(sid));
+    if (!JSON.parse(first.out || '{}')?.hookSpecificOutput) {
+      return expect(false, '首次应注入', first);
+    }
+    const quiet = hook('queue-init.mjs', prompt(sid));
+    if (quiet.out.includes('additionalContext')) {
+      return expect(false, '协议没变时第二条消息应静默', quiet);
+    }
+    // 模拟"技能升级 + 重装"：hooks 内容一变，指纹就变
+    const libFile = join(HOOKS, 'lib.mjs');
+    const original = readFileSync(libFile, 'utf8');
+    writeFileSync(libFile, `${original}\n// protocol bump for selftest\n`);
+    const again = hook('queue-init.mjs', prompt(sid));
+    writeFileSync(libFile, original);
+    const ctx = injectText(again);
+    return expect(
+      ctx.includes('框架已升级') && ctx.includes('以本次注入为准'),
+      `协议变了应重新注入并声明旧协议作废（ctx 长 ${ctx.length}）`,
+      again,
     );
-    mkdirSync(join(parentDir, '.continue', 'doing', '.worktree'), { recursive: true });
-    sgit(['worktree', 'add', '-q', childDir, '-b', 'continue/parent-child'], parentDir);
-
-    const sync = (args, cwd = childDir) =>
-      spawnSync(process.execPath, [join(syHooks, 'worktree-sync.mjs'), ...args], {
-        cwd,
-        env: baseEnv,
-        encoding: 'utf8',
-      });
-
-    check('worktree-sync · 主工作区明确"无需同步"且退出码 0', () => {
-      const r = sync(['--json'], SYNC_REPO);
-      return expect(
-        r.status === 0 && /"kind":"main"/.test(r.stdout ?? ''),
-        '主工作区不该被当成"前置条件失败"（退出码 1），否则 && 链与 e2e 分不清正常与故障',
-        { code: r.status, out: r.stdout, err: r.stderr },
-      );
-    });
-
-    check('worktree-sync · 树里认出的父分支就是父树当前 HEAD', () => {
-      const r = sync(['--json']);
-      let data = null;
-      try {
-        data = JSON.parse(r.stdout ?? '{}');
-      } catch {
-        /* 落到下面的断言里报 */
-      }
-      if (!data) return expect(false, '--json 应输出一行合法 JSON', { code: r.status, out: r.stdout, err: r.stderr });
-      if (data.parent?.branch !== 'continue/parent') {
-        return expect(false, `父分支应为 continue/parent，实际 ${JSON.stringify(data.parent)}`, { code: r.status, out: r.stdout });
-      }
-      return expect(data.kind === 'worktree', `kind 应为 worktree，实际 ${data.kind}`, { code: r.status, out: r.stdout });
-    });
-
-    check('worktree-sync · rebase + merge 把树分支合回父分支', () => {
-      writeFileSync(join(childDir, 'tree.txt'), 'from tree\n');
-      sgit(['add', '-A'], childDir);
-      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'tree work'], childDir);
-      writeFileSync(join(parentDir, 'parent.txt'), 'from parent\n');
-      sgit(['add', '-A'], parentDir);
-      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'parent moves'], parentDir);
-
-      const reb = sync(['--run=rebase']);
-      if (reb.status !== 0) return expect(false, `rebase 应成功，实际 exit=${reb.status}`, { code: reb.status, out: reb.stdout, err: reb.stderr });
-      const mrg = sync(['--run=merge']);
-      if (mrg.status !== 0) return expect(false, `merge 应成功，实际 exit=${mrg.status}`, { code: mrg.status, out: mrg.stdout, err: mrg.stderr });
-      if (!existsSync(join(parentDir, 'tree.txt'))) return expect(false, '父树应拿到 tree.txt', { code: mrg.status, out: mrg.stdout });
-      const merged = sgit(['merge-base', '--is-ancestor', 'continue/parent-child', 'HEAD'], parentDir);
-      return expect(merged.status === 0, '父分支应已包含树分支（合并在 HEAD 上）', { code: merged.status });
-    });
-
-    check('worktree-sync · 工作区脏时拒绝 rebase，并说清"先收尾提交"', () => {
-      writeFileSync(join(childDir, 'dirty.txt'), 'dirty\n');
-      const r = sync(['--run=rebase']);
-      writeFileSync(join(childDir, '.keep'), '');
-      const why = r.status === 1 && (r.stderr ?? '').includes('收尾提交');
-      sgit(['clean', '-fd'], childDir);
-      return expect(why, '脏工作区应 exit 1 且提示"同步要在收尾提交之后跑"', { code: r.status, out: r.stdout, err: r.stderr });
-    });
-
-    check('worktree-sync · 冲突时退出码 3 并列出冲突文件（不自动 abort）', () => {
-      writeFileSync(join(childDir, 'conflict.txt'), 'tree side\n');
-      sgit(['add', '-A'], childDir);
-      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'tree side'], childDir);
-      writeFileSync(join(parentDir, 'conflict.txt'), 'parent side\n');
-      sgit(['add', '-A'], parentDir);
-      sgit(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'parent side'], parentDir);
-
-      const r = sync(['--run=rebase']);
-      const ok = r.status === 3 && (r.stderr ?? '').includes('conflict.txt') && (r.stderr ?? '').includes('--continue');
-      // 收尾：把 rebase 退回去，否则后面的用例会在一棵"正在变基"的树里跑
-      sgit(['rebase', '--abort'], childDir);
-      sgit(['reset', '--hard', '-q', 'HEAD'], parentDir);
-      return expect(ok, '冲突应 exit 3、列出 conflict.txt、给 --continue 指引', { code: r.status, out: r.stdout, err: r.stderr });
-    });
-  } finally {
-    spawnSync('/bin/rm', ['-rf', SYNC_REPO]);
-  }
+  });
 
   check('queue-init · 注入里写了里程碑协议（队列内节点 + 硬停 + 不许替用户确认）', () => {
     const r = hook('queue-init.mjs', prompt('s-init-ms'));
@@ -887,6 +842,24 @@ try {
       `注入里必须有里程碑协议（ctx 长 ${ctx.length}）`,
       r,
     );
+  });
+
+  /**
+   * 旧版交接目录 `.continue/worktree/todo/` 自动并进 `doing/.worktree/todo/`。
+   *
+   * 挡的是"老会话还在用旧路径"：升级后它照样往旧路径写，新钩子只读新路径——
+   * 文件在、钩子看不见，表现成"队列生成了却不动"，而且没有任何报错。
+   */
+  check('queue-init · 旧版收件箱目录自动并进 doing/.worktree/todo', () => {
+    const legacyTodo = join(ROOT, '.continue', 'worktree', 'todo');
+    mkdirSync(legacyTodo, { recursive: true });
+    writeFileSync(join(legacyTodo, 'queue.md'), '# 队列\n\n> 状态：执行中\n> 批次：19990101-0005\n\n- [ ] 甲\n');
+    const r = hook('queue-init.mjs', prompt('s-legacy-wt'));
+    const moved = join(ROOT, '.continue', 'doing', '.worktree', 'todo', 'queue.md');
+    const ok = existsSync(moved) && !existsSync(legacyTodo);
+    // 收尾：把搬过去的收件箱删掉，后面的派生用例不该看到它
+    rmSync(moved, { force: true });
+    return expect(ok, '旧路径的待派发队列应搬到 doing/.worktree/todo/，旧目录应消失', r);
   });
 
   check('queue-init · 旧版计划文件被归档到 .logs/（机制已移除，不留在 doing/）', () => {
@@ -933,6 +906,21 @@ try {
       return expect(false, `应记两次"收到用户消息"，实际：${log.split('\n').slice(-5).join(' / ')}`, null);
     }
     return expect(log.includes('"promptSeen":2'), 'promptSeen 应累加到 2', null);
+  });
+
+  /**
+   * 上一条先跑 `queue-init`（它建了日志文件），所以掩盖了一个时序问题：
+   * 两个钩子挂在**同一个 UserPromptSubmit 事件**上、并发执行，谁先跑到不保证。
+   * 这条**只**跑 auto-continue——判据若依赖"文件已存在"，这一行就会时有时无（T46）。
+   */
+  check('日志留痕 · 只跑 auto-continue 也必须写"收到用户消息"（不依赖 queue-init 的时序）', () => {
+    const r = hook('auto-continue.mjs', prompt('s-ups-alone'));
+    const log = readFileSync(join(ROOT, '.continue', '.logs', 's-ups-alone', 'run.md'), 'utf8');
+    return expect(
+      r.code === 0 && log.includes('收到用户消息 · 第 1 次'),
+      `不依赖另一个钩子也要留痕，实际：${log.split('\n').slice(-3).join(' / ')}`,
+      r,
+    );
   });
 
   check('日志留痕 · 事件来源取自 --event，并覆盖 payload 推断', () => {
@@ -1127,6 +1115,9 @@ try {
  * 每一步都单独断言（建树 / 状态 / 幂等 / 接管 / 递任务），失败时能一眼看出断在哪一环。
  */
 const TODO_DIR = join(ROOT, '.continue', 'doing', '.worktree', 'todo');
+/** 树名里的日期（`worktree_<单词>_<YYYYMMDD>`）：按本地今天算，和钩子同一口径。 */
+const today = new Date();
+const DAY_STAMP = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
 const PARENT_SID = 'd1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1';
 const CHILD_SID = 'd2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2';
 const OTHER_SID = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -1148,7 +1139,7 @@ function writeTodo() {
   mkdirSync(TODO_DIR, { recursive: true });
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0000\n\n- [ ] 甲任务\n- [ ] [自审] 收尾前三层自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0000\n> 树名：auth\n\n- [ ] 甲任务\n- [ ] [自审] 收尾前三层自审\n`,
   );
   writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n把甲任务做完，验证方式是看 a.txt。\n');
   rmSync(join(TODO_DIR, 'state.json'), { force: true });
@@ -1163,15 +1154,15 @@ check('交接 · 主工作区不接管收件箱，只提示待派发', () => {
   return expect(r.out.includes('待派发队列'), '注入应提示收件箱有待派发队列', r);
 });
 
-check('交接 · dispatch 按会话前 6 位建树并记录状态', () => {
+check('交接 · dispatch 按 queue.md 的树名建树并记录状态', () => {
   const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
   const stateFile = join(TODO_DIR, 'state.json');
   if (!existsSync(stateFile)) return expect(false, '应写 state.json', r);
   const state = JSON.parse(readFileSync(stateFile, 'utf8'));
   dispatchedTree = state.tree;
   if (r.code !== 0) return expect(false, '应 exit 0（失败也不拦会话）', r);
-  if (state.branch !== 'continue/d1d1d1') {
-    return expect(false, `分支应为 continue/d1d1d1，实际 ${state.branch}`, r);
+  if (state.branch !== `worktree_auth_${DAY_STAMP}` || state.treeName !== state.branch) {
+    return expect(false, `树名/分支应为 worktree_auth_${DAY_STAMP}，实际 ${state.branch}`, r);
   }
   return expect(
     existsSync(join(state.tree, '.continue', 'hooks', 'queue-init.mjs')),
@@ -1214,17 +1205,60 @@ check('交接 · 新树里 Stop 正常递任务', () => {
  * 只看"树还在"会把它当成"已派发"放行，第二批永远不派发且不报错——
  * 这是**静默丢活**，比多建一棵树严重得多。
  */
-check('交接 · 收件箱内容变了 → 允许再派发一棵（-2）', () => {
+check('交接 · 收件箱内容变了 → 允许再派发一棵（同名单词加 -2）', () => {
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0001\n\n- [ ] 乙任务\n- [ ] [自审] 自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0001\n> 树名：auth\n\n- [ ] 乙任务\n- [ ] [自审] 自审\n`,
   );
   writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n第二批。\n');
   const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
   const state = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
   return expect(
-    state.treeName === 'd1d1d1-2' && existsSync(state.tree),
+    state.treeName === `worktree_auth_${DAY_STAMP}-2` && existsSync(state.tree),
     `内容变了应再派发一棵（实际 treeName=${state.treeName}）`,
+    r,
+  );
+});
+
+/**
+ * `queue.md` 没写 `> 树名：` 时**仍然要能派发**：树名退回 `worktree_task_<日期>`。
+ *
+ * 为什么不能"没树名就报错"：接管的是一份合法队列，名字只是标识；
+ * 因为少一行头信息就停下，等于让整条交接链卡在一个非关键字段上。
+ */
+check('交接 · queue.md 没写树名 → 退回 worktree_task_<日期>', () => {
+  writeFileSync(
+    join(TODO_DIR, 'queue.md'),
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0003\n\n- [ ] 丙任务\n- [ ] [自审] 自审\n`,
+  );
+  writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n第三批（没写树名）。\n');
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  const state = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
+  return expect(
+    state.treeName === `worktree_task_${DAY_STAMP}` && existsSync(state.tree),
+    `没写树名应退回 worktree_task_${DAY_STAMP}（实际 ${state.treeName}）`,
+    r,
+  );
+});
+
+/**
+ * 树被删了、但收件箱内容一个字没变 → **不重建**（2026-10-24 起）。
+ *
+ * 挡的是"做完了、树被清掉，收件箱忘了删"的情况：那时再建一棵只会多一个同名 `-2` 目录，
+ * 甚至把已经做完的活重做一遍。要重跑必须显式删 `state.json`。
+ */
+check('交接 · 树没了但内容没变 → 不重建，提示删 state.json 才能重跑', () => {
+  const stateBefore = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
+  rmSync(stateBefore.tree, { recursive: true, force: true });
+  sh('git', ['worktree', 'prune']);
+  const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
+  const stateAfter = JSON.parse(readFileSync(join(TODO_DIR, 'state.json'), 'utf8'));
+  return expect(
+    stateAfter.tree === stateBefore.tree &&
+      !existsSync(stateAfter.tree) &&
+      /已经派发过/.test(r.out) &&
+      /state\.json/.test(r.out),
+    `应保留原 state、不重建、并给出删 state.json 的出路（实际 tree=${stateAfter.tree}）`,
     r,
   );
 });

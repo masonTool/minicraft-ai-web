@@ -30,6 +30,7 @@ import {
   loadState,
   migrateLegacyLayout,
   parseBatch,
+  protocolFingerprint,
   queueFileName,
   queuePath,
   readPayload,
@@ -90,14 +91,28 @@ const prompt = typeof payload.prompt === 'string' ? payload.prompt : '';
 //    这里刻意不写日志——它每轮都会命中，记下来只会把关键事件淹掉。
 if (/auto-continue\s*第\s*\d+\s*轮/.test(prompt)) emitAllow();
 
-// ② 本会话已经注入过 → 静默。
+// ② 本会话已经注入过 → 静默；**但框架被换过就再注入一次**。
 // 状态文件用 'init' 命名空间：UserPromptSubmit 上 auto-continue 也会写状态，
 // 两个进程并行整份覆盖同一个 JSON 会互相抹字段。
+/**
+ * **协议指纹**（`lib.mjs` 的 `protocolFingerprint()`：hooks 内容哈希）。
+ *
+ * 为什么不能"注入过一次就永远静默"（2026-10-24 用户实测的事故）：技能升级 + 重跑安装器后，
+ * 钩子文件已经换新，而本会话的上下文里还是**旧协议**（旧路径 / 旧收尾步数 / 旧的合并要求）。
+ * AI 照着旧协议把队列写到新钩子不读的位置，或做完多跑一步合并——**全程没有任何报错**，
+ * 用户看到的是"队列生成了却不动"。所以协议一变，这里必须重新注入一次，
+ * 并明确告诉 AI"早先那段已经过期"。
+ */
+const protocol = protocolFingerprint();
 const state = loadState(sid, 'init');
-if (state.initialized) emitAllow();
+const staleProtocol = Boolean(state.initialized) && state.protocol !== protocol;
+if (state.initialized && !staleProtocol) emitAllow();
+if (staleProtocol) appendLog(sid, `协议已变更（${state.protocol ?? '未知'} → ${protocol}）：重新注入`);
 
 state.initialized = true;
-state.startedAt = new Date().toISOString();
+state.startedAt = state.startedAt ?? new Date().toISOString();
+state.protocol = protocol;
+if (staleProtocol) state.reinjectedAt = new Date().toISOString();
 saveState(sid, state, 'init');
 
 /**
@@ -175,10 +190,12 @@ const othersBlock =
               '**你要开工新任务、而上面还有活跃会话时：不要在同一棵树里干**，开一棵工作树并行：',
               '',
               '```bash',
-              'node .continue/hooks/worktree.mjs <名字> --task="<一句话任务>"',
+              'node .continue/hooks/worktree.mjs <单词> --task="<一句话任务>"',
               '```',
               '',
-              '它会在 `.continue/doing/.worktree/<本会话前6位>` 建树、写好交接队列，并尝试拉一个新窗口；',
+              '`<单词>` 由你按这一批的需求取一个英文词（`export` / `auth` / `perf` 这类，2~16 位）；',
+              '目录与分支都叫 `worktree_<单词>_<YYYYMMDD>`（日期脚本自己加，不用你写）。',
+              '它会在 `.continue/doing/.worktree/worktree_<单词>_<YYYYMMDD>` 建树、写好交接队列，并尝试拉一个新窗口；',
               '**必须在新路径里另开会话**（钩子按 cwd 读写，原会话里跑等于没隔离）。',
               '树里的第一个会话会自动把 `doing/worktree.md` 改名接管，任务不用再粘贴一遍。',
               '',
@@ -338,6 +355,22 @@ const batch = (existingQueue && parseBatch(existingQueue.text)) ?? nextBatch();
 
 
 const injection = [
+  ...(staleProtocol
+    ? [
+        '【continue-do · ⚠️ 框架已升级：本会话早先收到的协议作废】',
+        '',
+        '本会话启动之后，`.continue/hooks/` 被换成了新版本（协议指纹变了）。',
+        '**你之前在这个会话里读到的协议 / 技能说明已经过期**，两边冲突时一律**以本次注入为准**：',
+        '',
+        '- 队列、收件箱、归档的**路径与文件名**以本次注入为准（旧路径可能已经不读了）；',
+        '- 收尾步数、合并要求以本次注入为准（旧版要求"合回父分支"的，现在已经取消）；',
+        '- 如果本会话已经按旧协议写了队列，先 `ls .continue/doing/` 核对真实文件名，',
+        '  **改名搬进下面这个路径**，不要重建一份（重建会丢已写好的条目）；',
+        '- 钩子注册在会话启动时拍快照：**新版本新增的钩子本会话不会跑**。',
+        '  会话里出现"该动却没动"的现象时，让用户重启会话，别自己猜机制坏了。',
+        '',
+      ]
+    : []),
   '【continue-do · 会话初始化】',
   '',
   `- 会话 ID：\`${sid}\``,
@@ -370,24 +403,29 @@ const injection = [
         ...(others.length > 0
           ? [
               '这时你只做规划，执行放到独立工作树里。用户确认要做之后：',
-              `1. 把**整份队列**写进 \`${TODO_REL}/${TODO_QUEUE_NAME}\`（格式与下面的队列完全一致：头部状态 / 批次、条目、最后一条 \`[自审]\`）；`,
+              `1. 把**整份队列**写进 \`${TODO_REL}/${TODO_QUEUE_NAME}\`（格式与下面的队列完全一致：头部状态 / 批次、条目、最后一条 \`[自审]\`），`,
+              '   并在 `> 批次：` 那行下面**加一行** `> 树名：<单词>` —— 单词由你按这一批的需求取（`export` / `auth` / `perf` 这类英文词，2~16 位）；',
+              '   执行树与分支都会叫 `worktree_<单词>_<YYYYMMDD>`（日期由钩子加）。不写也能派发，但树名会退化成 `worktree_task_<日期>`；',
               `2. 把这一轮上下文用中文写进 \`${TODO_REL}/${TODO_CONTEXT_NAME}\`（目标、已定方案、否决过的方案、关键文件、验收方式）；`,
               '3. **停手**：不建 `doing/<sid>.md`、不改业务代码。Stop 钩子会基于 HEAD 建',
-              `   \`${DOING_REL}/.worktree/<sid6>\` 并拉新窗口，新窗口的第一个会话自动接管队列与上下文，那时才开工。`,
+              `   \`${DOING_REL}/.worktree/worktree_<单词>_<YYYYMMDD>\` 并拉新窗口，新窗口的第一个会话自动接管队列与上下文，那时才开工。`,
               `收件箱已有内容时不要覆盖——先停手让它派发，或问用户。`,
             ]
           : [
               '没有人在跑，**不要走交接**：按下面的常规协议直接建 `doing/<sid>.md`，在本会话把活干完。',
               '多开一个窗口只会把"一条命令能做完的事"拆成两步。',
-              `（用户明确说"开个树并行做"时才用 \`node .continue/hooks/worktree.mjs <名字>\`。）`,
+              '（用户明确说"开个树并行做"时才用 `node .continue/hooks/worktree.mjs <单词>`。）',
             ]),
         '',
       ]),
   '1. **写队列 = 规划，干活由钩子注入**。讨论阶段不要建队列；',
   '   只有用户明确要做某事、且你能把它拆成"可独立验证、能单独提交"的条目时，才创建队列文件。',
   '   **一棵树上只有一个会话在干活**：`doing/` 里已有别的会话队列时，按上面的交接模式写 todo、交给新树；',
-  '   也可以自己起名字手工开树：`node .continue/hooks/worktree.mjs <名字>`，**然后在那个新路径另开会话**',
-  '   （钩子按 cwd 判断读写哪棵树，在原会话里跑等于没隔离）。合并时机由用户定，不要自动合并。',
+  '   也可以自己起名字手工开树：`node .continue/hooks/worktree.mjs <单词>`（目录与分支都是',
+  '   `worktree_<单词>_<YYYYMMDD>`），**然后在那个新路径另开会话**',
+  '   （钩子按 cwd 判断读写哪棵树，在原会话里跑等于没隔离）。',
+  '   **收尾不合并**：工作树里这一批做完、文档收尾提交完就结束了；',
+  '   `rebase` / `merge` / 删树都由用户自己处理，框架既不自动做、也不要你顺手做。',
   '2. **四态标记，三个由你写**（与参考项目一致）：',
   '   `- [ ]` 待办（规划时写）· `- [~]` **进行中**（**钩子递给你时已自动标好，别自己改**）·',
   '   `- [x]` 完成（做完写）。',

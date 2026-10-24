@@ -15,11 +15,12 @@
  *   3. **钩子只有一处写操作**：连续 N 轮没做完时标 `[阻塞]`。
  *      其余标记（`[ ]` / `[~]` / `[x]`）由 AI 自己写——这样 AI 提交任务时会把
  *      队列文件一起带上，不会出现"提交完工作区又被钩子改脏"的记账噪音。
- *      业务文档（TASKS / DONE / OVERVIEW / TIPS / README）由 AI 写，
- *      脚本不代笔，也不替它编 commit message。
+ *      数据文档（TASKS / DONE / OVERVIEW / TIPS）由 AI 写，脚本不代笔，
+ *      也不替它编 commit message；机制文档 README 跟着安装器走（真身在技能模板）。
  */
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   appendFileSync,
   closeSync,
@@ -82,7 +83,7 @@ export const DOC_LIMITS = {
   DONE: 300,
   OVERVIEW: 200,
   /**
-   * **本项目放宽：600 → 7000（批次 1363，2026-10-24 重装后恢复）**。
+   * **本项目放宽：600 → 7000（v1.1.0 重装后恢复，2026-10-24）**。
    *
    * 框架默认 600 行是给"轻量需求清单"的；本项目的 `TASKS.md` 不是清单，是**台账**：
    * 每条条目下方挂着实现文件、批次号、⚠️ 与原版差异注记，而这些注记是脚本的输入——
@@ -115,7 +116,7 @@ export const DOC_BYTE_LIMITS = {
   DONE: 40 * 1024,
   OVERVIEW: 24 * 1024,
   /**
-   * **本项目放宽：60KB → 900KB（批次 1363，2026-10-24 重装后恢复）**。
+   * **本项目放宽：60KB → 900KB（v1.1.0 重装后恢复，2026-10-24）**。
    * TASKS 是脚本输入（差异台账 / 覆盖度 / 编号审计），按 7000 行放宽后字节也得跟上；
    * 仍要有个观察点，见上一条 `DOC_LIMITS.TASKS` 的边界说明。
    */
@@ -138,6 +139,35 @@ export const BRAKE_REL = '.continue/auto.off';
 
 export function brakeOn() {
   return existsSync(BRAKE_FILE);
+}
+
+/**
+ * **协议指纹**：`hooks/` 下所有 `.mjs` 的内容哈希（16 位）。
+ *
+ * 为什么需要它（挡的是哪次事故）：`queue-init` 的协议只在会话**第一条消息**注入一次，
+ * 那段文字一旦进了上下文就一直有效。技能升级 + 重跑安装器之后，钩子文件换新了，
+ * 而**老会话里的 AI 手里还是旧协议**（旧路径、旧收尾步数）——它会照着旧规则把队列写到
+ * 已经不读的位置，症状是"队列生成了却一点都不动"，而且没有任何报错。
+ *
+ * 判据用**文件内容**而不是版本号：开发期版本号常年不动（`audit-version` 早写过这条），
+ * 版本号一样、协议已经换过的情况才是最常见的那种。
+ *
+ * 缓存一次：每个钩子进程只跑一次，算 10 来个文件的开销可以忽略。
+ */
+let protocolCache = null;
+export function protocolFingerprint() {
+  if (protocolCache) return protocolCache;
+  try {
+    const dir = join(CONTINUE_DIR, 'hooks');
+    const parts = readdirSync(dir)
+      .filter((name) => name.endsWith('.mjs'))
+      .sort()
+      .map((name) => `${name}\n${readFileSync(join(dir, name), 'utf8')}`);
+    protocolCache = createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 16);
+  } catch {
+    protocolCache = 'unknown';
+  }
+  return protocolCache;
 }
 
 /** 队列目录在项目内的相对路径，注入给 AI 的文案统一用它拼，避免各处写死。 */
@@ -240,6 +270,37 @@ export function migrateLegacyLayout() {
     }
   } catch {
     /* 归档失败不影响主流程：那一份本来也不参与判定 */
+  }
+  /**
+   * 老版交接目录 `.continue/worktree/` → `.continue/doing/.worktree/`（2026-10-24 迁的）。
+   *
+   * 为什么必须迁：老会话里的协议还指着旧路径，它会把队列写进 `.continue/worktree/todo/`，
+   * 而新钩子只读 `doing/.worktree/todo/`——文件在、钩子看不见，表现成"队列不动"。
+   * 只搬**收件箱文件**，不搬树目录：树是 git worktree，改路径会让 git 自己的记录失效
+   * （那些树由用户按提示手工处理）。
+   */
+  try {
+    const legacyWorktree = join(CONTINUE_DIR, 'worktree');
+    const legacyTodo = join(legacyWorktree, 'todo');
+    if (existsSync(legacyTodo)) {
+      mkdirSync(TODO_DIR, { recursive: true });
+      const moved = [];
+      for (const name of readdirSync(legacyTodo)) {
+        const from = join(legacyTodo, name);
+        const to = join(TODO_DIR, name);
+        if (existsSync(to)) continue;
+        renameSync(from, to);
+        moved.push(name);
+      }
+      if (moved.length > 0) {
+        notes.push(
+          `已把待派发队列从旧的 \`worktree/todo/\` 迁到 \`.continue/doing/.worktree/todo/\`：${moved.join('、')}`,
+        );
+      }
+      if (readdirSync(legacyTodo).length === 0) rmdirSync(legacyTodo);
+    }
+  } catch {
+    /* 迁不动就维持现状：旧路径的队列还在，人手工搬一次即可 */
   }
   return notes;
 }
@@ -1228,6 +1289,48 @@ export function adoptWorktreeHandoff(sid) {
  * 目录不会被当成会话队列。
  */
 export const WORKTREE_DIR = join(DOING_DIR, '.worktree');
+
+/**
+ * 工作树命名：`worktree_<单词>_<YYYYMMDD>`，**分支同名**。
+ *
+ * 为什么是这个形状（用户 2026-10-24 定的）：目录名与分支名要能一眼看出"这棵树干什么的、
+ * 哪天的"。单词由 AI 按**这一批的需求**取（`export` / `auth` / `perf` 这类），
+ * 日期由脚本算——日期交给模型生成一定会漂，单词交给脚本只能得到 `task`。
+ *
+ * 为什么分支名不再带父目录前缀（旧形态 `continue/<父目录名>-<名字>`）：用户要求两处同名，
+ * 且收尾不再自动合并（见 README §9），所以不需要从分支名反推血缘。
+ *
+ * 同一天同一个单词撞了的兜底是 `-2`、`-3`（追加在日期后面），主形态不变。
+ */
+export const WORKTREE_NAME_RE = /^worktree_([a-z][a-z0-9]{0,15})_(\d{8})(?:-\d+)?$/;
+/** 单词本身：字母开头、字母/数字、2~16 字符。下划线不行——它会让名字切分有歧义。 */
+const WORKTREE_WORD_RE = /^[a-z][a-z0-9]{1,15}$/;
+
+/** `YYYYMMDD`（本地时区：用户看的是自己的今天）。 */
+export function dateStamp(at = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}${pad(at.getMonth() + 1)}${pad(at.getDate())}`;
+}
+
+/**
+ * 从参数里取"单词"。
+ *
+ * 接受两种写法：`<单词>`（AI / 人正常用法）与完整树名 `worktree_<单词>_<日期>`（照抄旧名字
+ * 重跑时不该报错）。取不出返回 null，由调用处报用法——**不猜**（猜错就是把树建在别的名字下，
+ * 用户按提示 `cd` 会找不到）。
+ */
+export function normalizeWorktreeWord(raw) {
+  const text = String(raw ?? '').trim().toLowerCase();
+  if (WORKTREE_WORD_RE.test(text)) return text;
+  const full = WORKTREE_NAME_RE.exec(text);
+  if (full) return full[1];
+  return null;
+}
+
+/** 树名（= 分支名）：`worktree_<单词>_<YYYYMMDD>`；`seq` > 1 时追加 `-<seq>`。 */
+export function worktreeName(word, at = new Date(), seq = 1) {
+  return `worktree_${word}_${dateStamp(at)}${seq > 1 ? `-${seq}` : ''}`;
+}
 export const TODO_DIR = join(WORKTREE_DIR, 'todo');
 export const TODO_REL = '.continue/doing/.worktree/todo';
 export const TODO_QUEUE_NAME = 'queue.md';
