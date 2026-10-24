@@ -48,6 +48,12 @@ self.addEventListener('fetch', (event) => {
   // 只处理同源请求：跨域（联机 WebSocket 是 ws:// 协议，本来也不走 fetch）不插手
   if (url.origin !== self.location.origin) return;
 
+  // 核心数据（`__host/core.bin`）**绝对不进缓存**：它由安卓宿主拦截注入、随 APK 版本走。
+  // 一旦被 Service Worker 缓存住，应用更新之后页面还会读到旧表——不会报错，
+  // 只会静默变成"新方块不存在 / 老方块贴图错"，是这类方案里最难查的一种。
+  // 反过来说：浏览器打开时这个路径是 404，也不该被缓存成"永久没有"。
+  if (url.pathname.includes('/__host/')) return;
+
   // ---- 导航：网络优先
   if (request.mode === 'navigate') {
     event.respondWith(

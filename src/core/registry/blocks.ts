@@ -9,26 +9,9 @@
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
-import { anchorLight } from '../world/RespawnAnchor.ts';
 import { railShapeOf } from '../world/RailShape.ts';
-import { bannerPatternOf, caveVinesHaveBerries } from './blockState.ts';
-import { isWaterlogged, withWaterlogged } from './blockState.ts';
-import {
-  cauldronLevelOf,
-  hasEndPortalEye,
-  isLavaCauldron,
-  isPowderSnowCauldron,
-  isComposterReady,
-  isFlash,
-  isInverted,
-  isLitState,
-  isPowered,
-  paintingVariantOf,
-  sixFacingOf,
-  sixFacingOpposite,
-  sixFacingOffset,
-  type BlockShape,
-} from './blockState.ts';
+import { BLOCK_BEHAVIORS } from './blockBehaviors.ts';
+import { isWaterlogged, type BlockShape, withWaterlogged } from './blockState.ts';
 // 画（B14，批次 86）：贴图按"哪一幅"换，而"哪一幅"的表在 `paintings.ts` 里
 // （那是纯数据、不引任何模块，所以这里引它不会成环）
 import { paintingTile } from './paintings.ts';
@@ -129,76 +112,13 @@ interface BlockSpec {
   liquid?: boolean;
   translucent?: boolean;
   shape?: BlockShape;
-  stateTiles?: (state: number) => readonly [string, string, string];
-  faceTile?: (state: number, faceDir: readonly [number, number, number]) => string | undefined;
   facesPlayer?: boolean;
   facesSneak?: boolean;
   facesNormal?: boolean;
-  stateLight?: (state: number) => number;
   itemless?: boolean;
   waterPlant?: boolean;
 }
 
-/**
- * 木桶的两个端面（批次 65）：**盖子**在朝向那一面、**桶底**在它的对面，其余四面是桶身。
- *
- * 只给"盖子"一张是不够的：盖子朝侧面时，对面那一面在原版里是桶底（不是桶身），
- * 而"哪一面是桶底"靠 `tiles` 的固定槽位表达不出来（槽位是"顶/底/侧"，不是"朝向的对面"）。
- */
-function barrelFace(state: number, faceDir: readonly [number, number, number]): string | undefined {
-  const facing = sixFacingOf(state);
-  const lid = sixFacingOffset(facing);
-  if (faceDir[0] === lid[0] && faceDir[1] === lid[1] && faceDir[2] === lid[2]) return 'barrel_top';
-  const bottom = sixFacingOffset(sixFacingOpposite(facing));
-  if (faceDir[0] === bottom[0] && faceDir[1] === bottom[1] && faceDir[2] === bottom[2]) return 'barrel_bottom';
-  return undefined;
-}
-
-/**
- * 侦测器的三张面（批次 65）：**看的那一面**是眼、**输出那一面**是红点、其余四面是石壳。
- *
- * 这张贴图分工与引擎里的语义严格对应：`facing` = 看的那一面（`componentOutput` 用
- * `FACING_OFFSET[facing]` 判定"被观察的方块"），而输出给的是 `facing + 2`（对面）。
- * 所以"眼 / 红点"绝不能贴反——贴反了玩家会以为它看反了。
- */
-function observerFace(state: number, faceDir: readonly [number, number, number]): string | undefined {
-  const facing = sixFacingOf(state);
-  const front = sixFacingOffset(facing);
-  if (faceDir[0] === front[0] && faceDir[1] === front[1] && faceDir[2] === front[2]) return 'observer_top';
-  const back = sixFacingOffset(sixFacingOpposite(facing));
-  if (faceDir[0] === back[0] && faceDir[1] === back[1] && faceDir[2] === back[2]) return 'observer_back';
-  return undefined;
-}
-
-/**
- * 凸口/挡板那一面的贴图（批次 64）：朝向那一面用 `nozzle`，其余五面返回 undefined。
- * 与 `frontTile` 同一套判据，只是不随"点着没点着"变化。
- */
-function nozzleTile(nozzle: string) {
-  return (state: number, faceDir: readonly [number, number, number]): string | undefined => {
-    // ⚠️ 用**六向**朝向：投掷器/发射器朝上/朝下时，"上下"记在另一个位上
-    // （`facingOf` 只读水平那两位，朝下的凸口会被算成"朝北"）
-    const offset = sixFacingOffset(sixFacingOf(state));
-    return faceDir[0] === offset[0] && faceDir[1] === offset[1] && faceDir[2] === offset[2]
-      ? nozzle
-      : undefined;
-  };
-}
-
-/**
- * "正脸"贴图（批次 64）：只有**朝向那一面**用 `front`（点着时用 `frontLit`），
- * 其余五面返回 undefined（由网格化器回退到普通贴图）。
- *
- * 判据用的是面的**外法线**与朝向的偏移量比对——朝向 `facing` 指的就是"正脸朝哪边"
- * （与投掷器/发射器的"凸口朝哪边"同一套语义）。
- */
-function frontTile(front: string, frontLit: string) {
-  return (state: number, faceDir: readonly [number, number, number]): string | undefined => {
-    const offset = sixFacingOffset(sixFacingOf(state));
-    if (faceDir[0] !== offset[0] || faceDir[1] !== offset[1] || faceDir[2] !== offset[2]) return undefined;
-    return isLitState(state) ? frontLit : front;
-  };
-}
 
 const BASE_SPECS: readonly BlockSpec[] = [
   { id: 0, name: 'minicraft:air', tiles: ['', '', ''], solid: false, opaque: false },
@@ -319,11 +239,6 @@ const BASE_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:redstone_ore',
     tiles: ['redstone_ore', 'redstone_ore', 'redstone_ore'],
     // 踩上去会亮（批次 248）：原版是"被打扰时发光 9 级"，状态位与红石灯同一条 `powered`
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['redstone_ore_lit', 'redstone_ore_lit', 'redstone_ore_lit']
-        : ['redstone_ore', 'redstone_ore', 'redstone_ore'],
-    stateLight: (state) => (isPowered(state) ? 9 : 0),
   },
   { id: 32, name: 'minicraft:lapis_ore', tiles: ['lapis_ore', 'lapis_ore', 'lapis_ore'] },
   { id: 33, name: 'minicraft:diamond_ore', tiles: ['diamond_ore', 'diamond_ore', 'diamond_ore'] },
@@ -340,11 +255,6 @@ const BASE_SPECS: readonly BlockSpec[] = [
     id: 39,
     name: 'minicraft:deepslate_redstone_ore',
     tiles: ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['deepslate_redstone_ore_lit', 'deepslate_redstone_ore_lit', 'deepslate_redstone_ore_lit']
-        : ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
-    stateLight: (state) => (isPowered(state) ? 9 : 0),
   },
   { id: 40, name: 'minicraft:deepslate_lapis_ore', tiles: ['deepslate_lapis_ore', 'deepslate_lapis_ore', 'deepslate_lapis_ore'] },
   {
@@ -367,9 +277,7 @@ const BASE_SPECS: readonly BlockSpec[] = [
     // 正面（批次 64，O10 的第一步）：未点 = 炉口黑洞、点着 = 有火光，**只亮正面**。
     // 在此之前四个侧面会一起亮（那时立方体只有一个"侧面"贴图槽），
     // 现在靠面级贴图 + `facing` 状态区分正反面（放置时正脸朝你）。
-    faceTile: frontTile('furnace_front', 'furnace_front_on'),
     facesPlayer: true,
-    stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   { id: 45, name: 'minicraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
   /**
@@ -991,10 +899,6 @@ const END_SPECS: readonly BlockSpec[] = [
     // 插了眼的那一格**顶面换一张**（凹槽里亮起一颗眼睛）。侧/底面始终是石框：
     // 眼睛只画在顶面上——原版就是这样（框架是一块"朝上的凹槽"）
     tiles: ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'],
-    stateTiles: (state) =>
-      hasEndPortalEye(state)
-        ? ['end_portal_frame_eye', 'end_portal_frame', 'end_portal_frame']
-        : ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'],
   },
   {
     id: 255,
@@ -1106,11 +1010,6 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:redstone_lamp',
     tiles: ['redstone_lamp', 'redstone_lamp', 'redstone_lamp'],
     // 亮起的红石灯换成发光贴图，并把方块光拉到 15——这是"红石能点亮房间"的关键
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['redstone_lamp_on', 'redstone_lamp_on', 'redstone_lamp_on']
-        : ['redstone_lamp', 'redstone_lamp', 'redstone_lamp'],
-    stateLight: (state) => (isPowered(state) ? 15 : 0),
   },
   {
     id: 267,
@@ -1118,7 +1017,6 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // 批次 65：推板（`piston_top`）只贴在**推出方向那一面**，其余五面是活塞身。
     // 在此之前推板同时贴在顶面与底面（那时没有朝向贴图能力，只能"上下都画一个"）
     tiles: ['piston_side', 'piston_side', 'piston_side'],
-    faceTile: nozzleTile('piston_top'),
     // 批次 66：活塞支持上下（引擎侧也补齐了），所以用"潜行指定六向"这条规则
     facesSneak: true,
   },
@@ -1135,7 +1033,6 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     id: 269,
     name: 'minicraft:sticky_piston',
     tiles: ['piston_side', 'piston_side', 'piston_side'],
-    faceTile: nozzleTile('sticky_piston_top'),
     facesSneak: true,
   },
   {
@@ -1145,7 +1042,6 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // **红点**贴在对面的"输出面"（`componentOutput` 给的正是 `facing + 2`），其余四面是石壳。
     // 在此之前那只眼贴在顶面与底面——而侦测器看哪边完全看不出来
     tiles: ['observer_side', 'observer_side', 'observer_side'],
-    faceTile: observerFace,
     facesSneak: true,
   },
   // ---- 附魔与书架（H9）
@@ -1585,11 +1481,8 @@ const BANNER_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
     id: BANNER_ID_START + index,
     name: `minicraft:${color.name}_banner`,
     tiles: [`banner_${color.name}`, `banner_${color.name}`, `banner_${color.name}`] as const,
-    // 图案（批次 497）：底色在 id 里，状态位只存"烫了哪种图案"
-    stateTiles: (state) => {
-      const tile = bannerPatternTile(color.name, bannerPatternOf(state));
-      return [tile, tile, tile];
-    },
+    // 图案（批次 497）：底色在 id 里，状态位只存"烫了哪种图案"。
+    // 行为已搬到 `blockBehaviors.ts`（宿主3）：16 面旗帜按颜色在那边同样循环生成。
     shape: 'banner' as const,
     solid: false,
     opaque: false,
@@ -2038,10 +1931,6 @@ const TNT_SPECS: readonly BlockSpec[] = [
     // 正常是红白相间的炸药块；"闪"的那一相位换成发白的那两张（原版引信中就是白闪）
     tiles: ['tnt_top', 'tnt_bottom', 'tnt_side'],
     // 引信中：`powered` = 已点燃（与红石系统共用同一位），`flash` = 这一相位要发白
-    stateTiles: (state) =>
-      isPowered(state) && isFlash(state)
-        ? ['tnt_primed_top', 'tnt_primed_top', 'tnt_primed_side']
-        : ['tnt_top', 'tnt_bottom', 'tnt_side'],
     shape: 'cube',
   },
 ];
@@ -2093,7 +1982,6 @@ const DROPPER_SPECS: readonly BlockSpec[] = [
     // 五个非凸口面都是外壳铁皮，**凸口那一面**用"管子口"贴图（批次 64 面级贴图）。
     // 原先钉在顶/底两面：朝下放时碰巧对，朝侧面放就完全看不出管子口（管子口只存在于几何上）
     tiles: ['dropper_side', 'dropper_side', 'dropper_side'],
-    faceTile: nozzleTile('dropper_top'),
     shape: 'dropper',
   },
 ];
@@ -2116,7 +2004,6 @@ const DISPENSER_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:dispenser',
     // 与投掷器同一条：**挡板那一面**用"挡板"贴图，其余五面是外壳
     tiles: ['dispenser_side', 'dispenser_side', 'dispenser_side'],
-    faceTile: nozzleTile('dispenser_top'),
     shape: 'dispenser',
   },
 ];
@@ -2147,10 +2034,6 @@ const COMPOSTER_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:composter',
     tiles: ['composter_top', 'composter_bottom', 'composter_side'],
     // 满仓：顶面换成"堆肥满仓"那张（桶底与桶身不动）
-    stateTiles: (state) =>
-      isComposterReady(state)
-        ? ['composter_ready', 'composter_bottom', 'composter_side']
-        : ['composter_top', 'composter_bottom', 'composter_side'],
     shape: 'composter' as const,
   },
 ];
@@ -2185,14 +2068,6 @@ const CAULDRON_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:cauldron',
     tiles: ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
     // 有水时顶面换成"水面"那张（空锅是"看得到桶底"的暗口）；装了岩浆时是橙红的那张
-    stateTiles: (state) =>
-      isLavaCauldron(state)
-        ? ['cauldron_lava', 'cauldron_bottom', 'cauldron_side']
-        : isPowderSnowCauldron(state)
-          ? ['powder_snow', 'cauldron_bottom', 'cauldron_side']
-          : cauldronLevelOf(state) > 0
-            ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
-            : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
     shape: 'composter' as const,
   },
 ];
@@ -2220,7 +2095,6 @@ const ENDER_CHEST_SPECS: readonly BlockSpec[] = [
     id: ENDER_CHEST_ID,
     name: 'minicraft:ender_chest',
     tiles: ['ender_chest_top', 'ender_chest_top', 'ender_chest_side'],
-    faceTile: nozzleTile('ender_chest_front'),
     facesPlayer: true,
     // 原版末影箱自己发亮 7（黑曜石底 + 那一圈末影气息）
     light: 7,
@@ -2319,10 +2193,6 @@ const CAVE_VINES_SPEC: BlockSpec = {
   name: 'minicraft:cave_vines',
   tiles: ['cave_vines', 'cave_vines', 'cave_vines'],
   // 有浆果换一张图（状态 bit0）
-  stateTiles: (state) => {
-    const tile = caveVinesHaveBerries(state) ? 'cave_vines_berries' : 'cave_vines';
-    return [tile, tile, tile];
-  },
   shape: 'cave_vines',
   solid: false,
   opaque: false,
@@ -2368,7 +2238,6 @@ const RESPAWN_ANCHOR_SPEC: BlockSpec = {
   id: RESPAWN_ANCHOR_ID,
   name: 'minicraft:respawn_anchor',
   tiles: ['respawn_anchor_top', 'respawn_anchor_side', 'respawn_anchor_side'],
-  stateLight: (state) => anchorLight(state),
 };
 
 const SHULKER_BOX_ID_SET = new Set<number>(SHULKER_BOX_IDS);
@@ -2514,7 +2383,6 @@ const BARREL_SPECS: readonly BlockSpec[] = [
     // 底面是 `barrel_bottom`、其余四面是木桶身。放置时盖子"远离你点的那一面"（六向）。
     // ⚠️ 木桶的朝向**只影响外观**：它不吃红石、也不按面限制漏斗（原版允许任意面取放）。
     tiles: ['barrel_side', 'barrel_side', 'barrel_side'],
-    faceTile: barrelFace,
     facesNormal: true,
   },
 ];
@@ -2535,10 +2403,6 @@ const TRIPWIRE_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:tripwire_hook',
     // 通电时换一张（原版钩子"拉起来"的样子，这里用颜色区分）
     tiles: ['tripwire_hook', 'tripwire_hook', 'tripwire_hook'],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['tripwire_hook_powered', 'tripwire_hook_powered', 'tripwire_hook_powered']
-        : ['tripwire_hook', 'tripwire_hook', 'tripwire_hook'],
     shape: 'tripwire_hook',
     opaque: false,
     lightOpacity: 0,
@@ -2551,10 +2415,6 @@ const DAYLIGHT_DETECTOR_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:daylight_detector',
     // 反向模式换的是**顶面**那张（原版就是同一块板、顶面换个颜色）
     tiles: ['daylight_detector_top', 'daylight_detector_side', 'daylight_detector_side'],
-    stateTiles: (state) =>
-      isInverted(state)
-        ? ['daylight_detector_inverted_top', 'daylight_detector_side', 'daylight_detector_side']
-        : ['daylight_detector_top', 'daylight_detector_side', 'daylight_detector_side'],
     shape: 'daylight_detector',
     opaque: false,
     lightOpacity: 0,
@@ -2603,12 +2463,7 @@ const CAMPFIRE_SPECS: readonly BlockSpec[] = [
     opaque: false,
     lightOpacity: 0,
     // 点燃时**顶面**变成火焰（三座炉子亮的是侧面——营火是"敞口"的，火光从上面看最明显）
-    stateTiles: (state) =>
-      isLitState(state)
-        ? ['campfire_fire', 'oak_log_top', 'campfire_side']
-        : ['campfire_top', 'oak_log_top', 'campfire_side'],
     // 原版营火是 15 级光源（比炉子的 13 更亮：它是明火）
-    stateLight: (state) => (isLitState(state) ? 15 : 0),
   },
 ];
 
@@ -2618,17 +2473,13 @@ const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:smoker',
     tiles: ['smoker_top', 'smoker_top', 'smoker_side'],
     // 点燃时的火光贴图与发光（批次 47，与熔炉同一套）
-    faceTile: frontTile('smoker_front', 'smoker_front_on'),
     facesPlayer: true,
-    stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   {
     id: BLAST_FURNACE_ID,
     name: 'minicraft:blast_furnace',
     tiles: ['blast_furnace_top', 'blast_furnace_top', 'blast_furnace_side'],
-    faceTile: frontTile('blast_furnace_front', 'blast_furnace_front_on'),
     facesPlayer: true,
-    stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
 ];
 
@@ -2736,10 +2587,6 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     // 形状贴图（批次 478）：六种平面形状各一张（直南北 / 直东西 / 四个弯）。
     // ⚠️ 只有**普通铁轨**做了这套图：动力/探测/激活铁轨的形状也存在（矿车照样转向），
     // 但贴图仍是直轨——4 种 × 5 张 = 20 张图，这一批先不做（差异记在 TASKS G12）
-    stateTiles: (state) => {
-      const key = railTileFor(state);
-      return [key, key, key];
-    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2750,12 +2597,6 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     name: 'minicraft:powered_rail',
     tiles: ['powered_rail', 'powered_rail', 'powered_rail'],
     // 通电状态换贴图：红石引擎在 `recompute` 里写 `powered` 位，渲染层照它取图
-    stateTiles: (state) => {
-      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
-      if (isPowered(state)) return ['powered_rail_on', 'powered_rail_on', 'powered_rail_on'];
-      const key = railTileFor(state, 'powered_rail');
-      return [key, key, key];
-    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2765,12 +2606,6 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     id: DETECTOR_RAIL_ID,
     name: 'minicraft:detector_rail',
     tiles: ['detector_rail', 'detector_rail', 'detector_rail'],
-    stateTiles: (state) => {
-      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
-      if (isPowered(state)) return ['detector_rail_on', 'detector_rail_on', 'detector_rail_on'];
-      const key = railTileFor(state, 'detector_rail');
-      return [key, key, key];
-    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2780,12 +2615,6 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     id: ACTIVATOR_RAIL_ID,
     name: 'minicraft:activator_rail',
     tiles: ['activator_rail', 'activator_rail', 'activator_rail'],
-    stateTiles: (state) => {
-      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
-      if (isPowered(state)) return ['activator_rail_on', 'activator_rail_on', 'activator_rail_on'];
-      const key = railTileFor(state, 'activator_rail');
-      return [key, key, key];
-    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2808,10 +2637,6 @@ export const TARGET_SPECS: readonly BlockSpec[] = [
     id: TARGET_ID,
     name: 'minicraft:target',
     tiles: ['target_top', 'target_top', 'target_side'],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['target_top_on', 'target_top_on', 'target_side_on']
-        : ['target_top', 'target_top', 'target_side'],
   },
 ];
 
@@ -2842,18 +2667,6 @@ export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
       'light_weighted_pressure_plate',
       'light_weighted_pressure_plate',
     ],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? [
-            'light_weighted_pressure_plate_on',
-            'light_weighted_pressure_plate_on',
-            'light_weighted_pressure_plate_on',
-          ]
-        : [
-            'light_weighted_pressure_plate',
-            'light_weighted_pressure_plate',
-            'light_weighted_pressure_plate',
-          ],
     shape: 'flat',
     solid: false,
     opaque: false,
@@ -2867,18 +2680,6 @@ export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
       'heavy_weighted_pressure_plate',
       'heavy_weighted_pressure_plate',
     ],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? [
-            'heavy_weighted_pressure_plate_on',
-            'heavy_weighted_pressure_plate_on',
-            'heavy_weighted_pressure_plate_on',
-          ]
-        : [
-            'heavy_weighted_pressure_plate',
-            'heavy_weighted_pressure_plate',
-            'heavy_weighted_pressure_plate',
-          ],
     shape: 'flat',
     solid: false,
     opaque: false,
@@ -3283,10 +3084,6 @@ const HANGING_SPECS: readonly BlockSpec[] = [
     shape: 'painting',
     // 默认贴图（状态为 0 时用）就是第一幅画；其余在 `stateTiles` 里按变体号换
     tiles: [paintingTile(0), paintingTile(0), paintingTile(0)],
-    stateTiles: (state) => {
-      const tile = paintingTile(paintingVariantOf(state));
-      return [tile, tile, tile];
-    },
     solid: false,
     opaque: false,
     lightOpacity: 0,
@@ -4446,17 +4243,31 @@ export function buildBlockTable(): readonly BlockDef[] {
       liquid: spec.liquid ?? false,
       translucent: spec.translucent ?? false,
       shape: spec.shape ?? 'cube',
-      stateTiles: spec.stateTiles,
-      faceTile: spec.faceTile,
       facesPlayer: spec.facesPlayer ?? false,
       facesSneak: spec.facesSneak ?? false,
       facesNormal: spec.facesNormal ?? false,
-      stateLight: spec.stateLight,
       itemless: spec.itemless ?? false,
       waterPlant: spec.waterPlant ?? false,
     });
   }
-  return table;
+  return applyBehaviors(table);
+}
+
+/**
+ * 把行为表按**方块名**合到数据上（宿主3）。
+ *
+ * 为什么是"按名字查一次"而不是在 SPECS 里留个标记：二进制里承载的是数据，
+ * 数据不知道自己"有没有行为"——但名字一定在，所以装表时对每个方块查一次表就够了
+ * （724 次 Map 查询，微秒级）。这样二进制格式不需要为行为加任何字段，
+ * 也就不会有"标记与行为表不一致"这种状态。
+ *
+ * 纯函数：不改入参，返回新数组（解码出来的那份表要原样保留，方便排查）。
+ */
+export function applyBehaviors(defs: readonly BlockDef[]): readonly BlockDef[] {
+  return defs.map((def) => {
+    const behavior = BLOCK_BEHAVIORS.get(def.name);
+    return behavior === undefined ? def : { ...def, ...behavior };
+  });
 }
 
 /**
@@ -4501,7 +4312,7 @@ export function installBlockTable(table: readonly BlockDef[]): void {
       throw new Error(`方块表第 ${id} 项没有名字`);
     }
   }
-  BLOCKS = table;
+  BLOCKS = applyBehaviors(table);
   tableInstalled = true;
 }
 

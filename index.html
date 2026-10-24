@@ -5705,7 +5705,10 @@
       .unsupported-code { font-size: 12px; color: #7d848f; }
     </style>
 
-    <script type="module" src="/src/main.ts"></script>
+    <!-- 真入口是 boot.ts：先取宿主注入的核心数据（/__host/core.bin），装表之后再动态
+         拉起 main.ts。浏览器里那一步会 404 → 显示"去应用里玩"的落地页，主包不下载。
+         详见 src/boot.ts 的注释。 -->
+    <script type="module" src="/src/boot.ts"></script>
     <script type="module">
       // Service Worker 只在构建产物里注册：开发时注册会把 vite 的开发资源缓存住，
       // 改代码看不到效果（这是 PWA 开发里最常见的坑）

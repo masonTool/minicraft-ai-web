@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import process from 'node:process';
+import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 /**
@@ -34,6 +37,36 @@ const buildTime = new Date().toISOString();
  * 与 `import.meta.env.PROD/DEV`，那样"快构建"和"正式构建"产物就不一样了，
  * 检查也就失去意义。这里**只差 sourcemap 一项**。
  */
+/**
+ * 开发服务器上模拟安卓宿主（批次 20261025-0329 · 宿主3）。
+ *
+ * `src/boot.ts` 启动时要取 `/__host/core.bin`——线上那个路径只由安卓宿主拦截提供，
+ * 真机上永远不该存在这个文件。开发时没有它，页面就会一直停在"去应用里玩"的落地页，
+ * 等于整个 dev 内循环都废了。
+ *
+ * 所以**只在 `apply: 'serve'`**（即 `npm run dev`）挂一个中间件，把 `gen:hostcore`
+ * 生成的产物吐出来；构建产物里不会包含它，发布路径不受影响。
+ */
+function hostCoreDev(): Plugin {
+  return {
+    name: 'hostcore-dev',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__host/core.bin', (_req, res) => {
+        try {
+          const body = readFileSync(resolve('.tmp/hostcore/core-v1.bin'));
+          res.setHeader('Content-Type', 'application/octet-stream');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(body);
+        } catch {
+          res.statusCode = 404;
+          res.end('core.bin 未生成：先跑 npm run gen:hostcore');
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   // 相对 base：产物不写死 `/assets/...`，因此在域名根目录（自建服务器）和
   // 子路径（GitHub Pages 的 `/<repo>/`、任意静态托管的子目录）下都能直接跑。
@@ -58,6 +91,7 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  plugins: [hostCoreDev()],
   /**
    * 单测的收文件范围（联机32）。
    *
