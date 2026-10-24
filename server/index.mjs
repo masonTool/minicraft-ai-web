@@ -440,8 +440,53 @@ function snapshotFor(player) {
  * 为什么不另开一个健康检查端口：容器/反代只需要暴露一个口；而且 `ws` 支持
  * "挂在已有 HTTP server 上"，升级请求由它自己接管，普通请求落到这里。
  */
+/**
+ * 房间列表（L9）：给客户端的"加入房间"面板自动列出，省得手敲房名。
+ *
+ * 只列**当前有人**的房间（空房间没有加入的意义，它们的存档还在磁盘上躺着）。
+ * **不下发口令**：口令是进房的门槛，不是菜单上的信息；这里只说"这个服务器要不要口令"。
+ * 世界名与种子要发：加入的人靠它知道"进去会是哪片大陆"（面板上直接写出来）。
+ */
+function roomsListing() {
+  const byRoom = new Map();
+  for (const p of players.values()) {
+    let entry = byRoom.get(p.room);
+    if (!entry) {
+      entry = { room: p.room, players: 0, hasHost: false };
+      byRoom.set(p.room, entry);
+    }
+    entry.players += 1;
+    if (p.isHost === true) entry.hasHost = true;
+  }
+  return [...byRoom.values()]
+    .map((entry) => ({ ...entry, world: worldOfRoom(entry.room) }))
+    .sort((a, b) => a.room.localeCompare(b.room));
+}
+
 const httpServer = createServer((req, res) => {
   const path = (req.url ?? '/').split('?')[0];
+  /*
+   * `/rooms`（L9）：浏览器要从 `http://localhost:5173` 跨源读它，所以必须带 CORS。
+   * 内容是"哪个房间有人 + 世界叫什么"，没有口令、没有玩家名——局域网里谁都能看，
+   * 这也正是"自动发现房间"想要的效果。
+   */
+  if (path === '/rooms') {
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        protocol: PROTOCOL_VERSION,
+        // 服务端级口令（`ROOM_PASSWORD`）：客端据此提示"要口令"
+        passwordRequired: Boolean(ROOM_PASSWORD),
+        rooms: roomsListing(),
+      }),
+    );
+    return;
+  }
   if (path === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     res.end(

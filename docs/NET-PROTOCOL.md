@@ -157,7 +157,8 @@
 | 项 | 值 | 位置 |
 | --- | --- | --- |
 | 默认端口 | 8787（`PORT`） | `server/index.mjs` |
-| 世界种子 | 20261014（`SEED`） | 同上 |
+| 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`） | 同上 |
+| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发口令**、只列有人的房 | `server/index.mjs` |
 | 玩家 id | 自增、不回收 | 同上 |
 | 方块增量上限 | 200000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/snapshot.mjs` |
 | `welcome` 裁剪半径 | 8 区块（128 格，切比雪夫；只带同维度） | `SNAPSHOT_RADIUS_CHUNKS` |
@@ -172,7 +173,7 @@
 | 房间口令 | `ROOM_PASSWORD` 环境变量，空 = 不校验（**明文传输，不是鉴权**） | 同上 |
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
 | 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/aoi.mjs` |
-| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol}`；其它路径 404 | `server/index.mjs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, traffic, totals}`；`/rooms` 带 `access-control-allow-origin: *`（浏览器从 5173 跨源读），其它路径 404 | `server/index.mjs` |
 | 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8787`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/protocol.mjs` |

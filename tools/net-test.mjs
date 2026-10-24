@@ -9,6 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { get } from 'node:http';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,6 +59,24 @@ function check(label, ok, detail = '') {
 
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** GET 一个 JSON 端点（L9 的 `/rooms`）；连 `headers` 一起回，好断言 CORS */
+function getJson(path) {
+  return new Promise((resolve, reject) => {
+    get(`http://localhost:${PORT}${path}`, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, headers: res.headers, json: JSON.parse(body) });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on('error', reject);
+  });
+}
 
 /** 一个测试用客户端：把收到的消息存进 mailbox，便于断言 */
 class TestClient {
@@ -1313,6 +1332,32 @@ try {
     });
     const welcomeBad = await joinAndWaitWelcome(badWorldHost, '坏世界房主', 0, 70, 0);
     check('房主上报脏种子：退回默认种子', welcomeBad?.seed === 20261014, `${welcomeBad?.seed}`);
+
+    // `/rooms`（L9）：客户端的"加入房间"面板靠它自动列出房间，不必手敲房名
+    const listing = await getJson('/rooms');
+    const worldEntry = (listing.json?.rooms ?? []).find((entry) => entry.room === 'worldroom');
+    check(
+      '/rooms 列出有人的房间（人数 + 房主标记）',
+      worldEntry?.players === 2 && worldEntry?.hasHost === true,
+      JSON.stringify(worldEntry),
+    );
+    check(
+      '/rooms 带世界名与种子（加入前就知道是哪片大陆）',
+      worldEntry?.world?.seed === 424242 && worldEntry?.world?.name === '草原小屋',
+      JSON.stringify(worldEntry?.world),
+    );
+    check(
+      '/rooms 不下发口令（只说服务端要不要口令）',
+      worldEntry !== undefined && !('password' in worldEntry) && listing.json?.passwordRequired === false,
+      JSON.stringify(listing.json),
+    );
+    check(
+      '/rooms 带 CORS（浏览器从 5173 跨源读得到）',
+      listing.headers?.['access-control-allow-origin'] === '*',
+      `${listing.headers?.['access-control-allow-origin']}`,
+    );
+    const healthz = await getJson('/healthz');
+    check('/healthz 仍然可用（没被新路由挡掉）', healthz.json?.ok === true && healthz.status === 200);
 
     // 收口函数本身：名字超长截断、控制字符与尖括号清掉
     const meta = sanitizeWorldMeta({ name: '<草原>\u0007' + '长'.repeat(40), seed: 7, mode: 'creative' });
