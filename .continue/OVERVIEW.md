@@ -22,6 +22,7 @@
 - continue-task skill 入库：`.codebuddy/skills/continue-task/` 是框架补丁的源，`assets/.continue/` 与运行版逐字节一致；e2e 脚手架「全测只跑一遍 + 先清场」（`.e2e/.lock` 运行锁、`--all` 先清旧现场、删除走绝对路径 `/bin/rm` 并校验）· 批次 20261022-2014、20261023-1603
 - 任务分层（**不另建计划文件**）：长任务在**队列内**插 `## 里程碑 MSn · 名` + `- 验收：`；前面的条目做完 → **硬停**等人工验收，确认行（`- 确认：已验收 · 批次 <号>`）只在拿到用户答复后写，最后一个里程碑验收完才收尾（细则 `notes/milestones.md`）· 批次 2338、0022、20261023-0744
 - 收尾**归档**（不 `rm`）队列 / 决策记录到 `logs/<会话ID>/queue.md` · `decision.md`（累积式）；并行任务走 `npm run continue:worktree`（独立树 + 分支推远程，合并由人定）· 批次 0744、20261023-0823
+- 上架合规（批次 20261025-0316）：注册名命名空间 `minicraft:`（`registry/ids.ts` 的 `normalizeId/shortId`，旧前缀只用于读老存档与老命令文本）、读档坏 id 跳过并记账（`save/SaveIssues.ts` → 诊断日志 `meta.saveIssues`）、`LICENSE` + `THIRD-PARTY-NOTICES.md` + `public/privacy.html`（随 `dist/` 分发）、设置页底部「非官方」与资源包免责；坑：批量改标识符要同时扫字面量 / 正则里的前缀 / 逗号连写三种形态，详见 `notes/tips-tooling.md` · 批次 20261025-0316
 
 **坑 / 注意**
 
@@ -187,8 +188,7 @@
 
 ## 三、批次索引
 
-> 已迁到 [`notes/batches.md`](./notes/batches.md)（一行一批，新→旧；与 `DONE.md` 归档标题一致）。
-> `audit-ids` 会同时读两份，`DONE` 的批次必须在这里有一行。
+> 见 [`notes/batches.md`](./notes/batches.md)（一行一批，新→旧；`audit-ids` 会与 `DONE.md` 交叉核对）。
 
 ## 维护规则
 

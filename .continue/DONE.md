@@ -9,6 +9,53 @@
 
 ---
 
+## 批次 20261025-0316 · 2026-10-25 · 会话 7e09a4a8
+
+> 上架 Google Play 的版权 / 商标处置（7 条）。
+> ⚠️ 本批的 **7 个代码提交**信息里写的是 `20261025-0117`（开工时钩子注入的号，与另一个会话同分钟开工撞号），
+> 归档时用 `queue-init --new-batch` 换成本号以满足「批次号唯一」；
+> 按批次 grep 提交请用 `20261025-0117`。
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-0316
+
+- [x] [合规1] 清掉对外文案里的「Minecraft / 我的世界 / 基岩版」字样：`public/manifest.webmanifest` 的 description 换成与商店短描述一致的说法、`package.json` 的 description 同步 → `npm run check:manifests` 通过，且 `grep -rn "我的世界\|基岩版" public/ package.json` 零命中
+  - 做了什么：manifest description 改成「浏览器里的方块世界：无限地形、生存与创造、多世界存档，无需安装」（与 `docs/store/zh.md` 的短描述同一句）；`package.json` description 改成「方块沙盒（Web / WebGL2）：无限地形、生存、合成与联机」；顺手把六语言 `itemDesc.ts` 里 `item.desc.chain` 的「基岩版里 / In Bedrock / В Bedrock…」改成不指名版本的说法
+  - 为什么：真正会出现在用户设备上的只有 manifest description（安装提示/启动器），先把这一处清掉；`item.desc.chain` 是**会显示在物品说明里**的句子，直接写竞品版本名等于自己递证据。`docs/store/` 六份文案复查后确认**本来就没有**商标字样（唯一出现 Mojang / Microsoft 的地方是那句免责声明，保留），所以没动文件
+  - 验证：`npm run check:manifests` 通过（5 份语言文件与基准一致）；`npm run audit:i18n` 通过（六语言 100%）；`npm run test:i18n` 550/0；`grep -rn "基岩版\|Bedrock" src/core/i18n/locales/*/itemDesc.ts` 零命中（`item.bedrock` 是方块名「基岩」，属于术语表，按 D3 不动）
+  - 批次：20261025-0316
+- [x] [合规2] 重写 33 条照抄原版的成就标题（6 语言共 198 条），保留 id 与触发逻辑：`src/core/progress/advancementText.data.ts` + `src/core/i18n/locales/{zh,en,de,fr,pt,ru}/advancement.ts` → `npm run test:i18n && npm run test:advancement && npm run audit:i18n`
+  - 做了什么：33 条里 **30 条**换掉（`石器时代`→`第一块圆石`、`来硬的`→`第一炉铁`、`西装革履`→`穿上胸甲`、`冰桶挑战`→`水浇岩浆`、`我们需要更深入些`→`走进下界`、`资深怪物猎人`→`狩猎清单`、`村庄英雄`→`村庄救星`、`腥味十足`→`钓上来一条`、`涂蜡`→`涂上蜂蜡`…），六语言各 30 条 + `advancementText.data.ts` 的英文副本 30 条，共 210 处；另把 `story/root` 的英文从原版的 `Minecraft` 改成品牌名 `Minicraft`（中文侧本来就是品牌名）。id、parent、tab、desc、trigger 全部未动
+  - 为什么：这 33 条的英文标题与原版逐字相同（中文也基本沿用官方译名），是唯一"成体系照抄官方本地化"的地方；其余 67 条是本项目自创进度，标题也是自创，按 D2 不动。**3 条刻意保留**：`story/root` 是品牌名；`nether/root`（下界）与 `end/root`（末地）是维度专名，属于 D3 判定不动的术语表，改了会与界面上其它地方不一致。改法上刻意避开原版的**双关/梗**（`Isn't It Iron Pick`、`Bring Home the Beacon`、`The Cake Is a Lie` 那类），改成陈述机制的说法，这样连"创造性表达"也不沾
+  - 验证：`npm run test:i18n` **550/0**（含三条硬约束：中文标题与 `advancements.ts` 原文逐条相等、de/ru/fr/pt 不含中文且与英文相同的 ≤10 条、法语不许出现 ASCII 撇号——第一次跑就靠这条抓到 3 处 `l'` 应为 `l’`）；`npm run test:advancement` **116/0**；`npm run audit:i18n` 六语言 2894/2894 通过；`npm run typecheck` + `typecheck:tools` 清洁；30 条新标题在 zh/en 表内无重复
+  - 批次：20261025-0316
+- [x] [合规3] 10 幅画改名 + 按自创构图重画（去掉 Zetterstrand 原作的构图对应，`大金刚` 必删）：`src/core/registry/paintings.ts` + `src/render/TextureAtlas.ts` → `npm run test:painting && npm run test:textures`
+  - 做了什么：1×1 七幅换成 `日出 / 河谷 / 远山 / 夜空 / 篝火 / 孤树 / 沙丘`（dawn / river / hill / night / campfire / tree / desert），多格三幅换成 `壁画 4×4 / 挂毯 4×3 / 旧海图 2×2`（mural / banner / chart，**大金刚直接消失**）；`TextureAtlas` 的七张 painter 与 `MULTI_PAINTING_ART` 全部按新构图重写（矩形清单，无任何一幅对应他人作品）；`atlasLayout` 的七个 tile 名同步；旧多格画名做成了**只读别名** `LEGACY_MULTI_NAMES`，老存档里的大画仍能读回来；顺手修掉六语言里已经过期的「画」物品说明（还写着"只有 7 幅、多格大画没做"）与 `TASKS` B14 的差异说明
+  - 为什么：这 10 幅原来是照着 Zetterstrand 的署名画作摆的构图（名字也照抄），"认得出是哪一幅"就是改编，`大金刚` 还叠了任天堂形象。**只换画面与名字、保留尺寸档位与 1×1 的下标顺序**（D9）：尺寸是玩法，下标进方块状态，调序会让老存档里挂好的画集体换脸。多格画的名字进存档，所以用别名而不是硬改（D10）
+  - 验证：`npm run test:painting` **66/0**（新增 6 条别名断言：三个旧名字各自映射正确、旧名字尺寸仍是 4×4、别名目标都在表里、现用名字不在别名键上）；`npm run test:textures` **33/0**；`npm run test:frame` **169/0**（`describeState` 的「贴北墙·炸弹」→「贴北墙·篝火」随名字改）；`npm run test:i18n` 550/0、`audit:i18n` 2894/2894 通过（物品说明改了六语言）；`typecheck` + `typecheck:tools` 清洁；`npm run audit:diffs` 重算了差异台账
+  - 批次：20261025-0316
+- [x] [合规4] 设置页补「非官方 · 与 Mojang / Microsoft 无关」声明 + 资源包免责（只导自己拥有的包）：`src/core/i18n/locales/*/settings.ts` + `src/ui/SettingsScreen.ts` → `npm run test:settings && npm run test:ui && npm run audit:i18n`
+  - 做了什么：新增两条键 `settings.notice`（设置页底部：非官方、与 Mojang / Microsoft 无关、贴图与音效全部由代码生成）与 `settings.resourcePack.hint`（资源包行下方：只能导入你自己拥有的包，本应用不提供也不分发官方素材），六语言各一份；`SettingsScreen` 加 `makeFooterNotice()` / `makePackHint()` 两个节点（footer 用 `prepend` 插在"恢复默认"之上，不动原有组装顺序）；`index.html` 加 `.settings-notice` / `.settings-note` 两条样式（10px 灰字，触屏横屏降 9px）
+  - 为什么：首页那句"非官方"页脚被用户按审美删过（批次 20261024-1152），但商店版本必须有一个**用户自己找得到**的免责位置——放设置页底部：不占首屏、六语言都有、投诉时能指出来。资源包那一行单独加免责，是因为它长期被当作"换个官方外观"的入口，法律上只能导自己的包（D6）。措辞刻意只讲"与谁无关 + 素材由代码生成"，不写"复刻的是哪个游戏"——写清对象等于自认使用了他人作品
+  - 验证：`npm run test:settings` **119/0**；`npm run test:ui` **979/0**（新增 1 条断言：三条链路都得在——源里引用两个键、CSS 有两条样式、六语言表里都有这两条键，少一处就红）；`npm run audit:i18n` 六语言 2896/2896 通过；`npm run test:i18n` 550/0；`typecheck` + `typecheck:tools` 清洁
+  - 批次：20261025-0316
+- [x] [合规5] 读档容错：不认识的方块 / 物品 id 跳过并记日志，不再整档失败：`src/core/save/` → `npm run test:save && npm run test:migration`
+  - 做了什么：新增 `src/core/save/SaveIssues.ts`（纯数据记账本：按 `种类|细节` 累加、最多 32 种、溢出只计数、可清零）；三条读档路径接上——`ChunkEdits.applyTo()` 遇到注册表里不存在的方块 id **不写世界**（保留地形）并记账、`Inventory.restoreStack()` 丢掉不认识的物品 id 时记账、`Paintings.restorePaintings()` 跳过认不出的画名时记账；`SaveGame.open()` 打开世界时清零；诊断日志的 `meta.saveIssues` 带上这份账
+  - 为什么：存档里的方块与物品都是**数字 id**，所以改命名空间其实不会让老档读不回来（这条顺带纠正了我原先的判断）；真正会丢东西的是"这个 id 当前版本不存在了"。三种路径原本都是**静默**处理：方块回退成空气（那一片被挖空）、物品直接消失、画跳过——静默是对的（不能因为一个坏 id 让整档打不开），但必须留痕，否则玩家报"我的东西没了"时导出日志里查不到任何线索
+  - 验证：`npm run test:save` **120/0**（新增 8 条：不认识的方块不写世界且保留地形、记账 detail 正确、不认识的物品丢掉且记账、同一 id 累加而不新增、总数含重复、清零后归零、清单为空）；`npm run test:migration` 28/0；`npm run test:diag` 89/0；`npm run test:unit` 全绿；`typecheck` 清洁
+  - 批次：20261025-0316
+- [x] [合规6] 内部命名空间 `minecraft:` 换成自有前缀（方块 / 物品 / 命令 / 联机协议 / 存档一起）：`src/core/registry/*`、`src/core/commands/*`、`server/` → `npm run check`（全量 177 套）
+  - 做了什么：新增 `src/core/registry/ids.ts`（`NAMESPACE = 'minicraft'` + `normalizeId()` / `shortId()` / `hasNamespace()`，旧前缀只用于**读**）；全局替换 1100 处字面量（87 个 .ts + `tools/*.js` 的验收脚本）；所有"按名字查表 / 去前缀"的地方改用 `shortId()`（`itemNames` 7 处、`advancementText` 4 处、`AudioEngine` 4 处、`CommandHelp` 3 处、`StatusEffects` 1 处、`structureNames` 1 处、`food` 1 处、`main` 2 处）；命令解析入口（`resolveItemId` / `resolveBlockId`）先 `normalizeId()` 再查，所以 `/give minecraft:stone`、`/locate structure minecraft:village` 这类**老文本仍然可用**（`command-test` 里恰好就有这两条用例）；进度读档把老 id 归一化（否则达成记录整片消失）
+  - 为什么：命名空间是内部标识符，但本项目是独立产品，没必要继续借用别人的前缀。**顺带发现一处真正在用户眼前的东西**：进度页第一个页签的标题原本是「我的世界」、英文是「Minecraft」，已改成「方块世界」/「Block World」（页签 id `minecraft` → `world`）——这才是这次改名前唯一会被玩家看见的商标痕迹
+  - 验证：`npm run test:offline` **176/176 套全绿**（85.4s）；`npm run test:unit` 372/372；`npm run test:advancement` **120/0**（新增 4 条：旧前缀的达成记录读得回来、旧→新 id 映射、计数进度也接上）；`npm run test:i18n` 550/0；`npm run audit:i18n` 2896/2896 通过；`typecheck` + `typecheck:tools` 清洁。排查中还修了两处被漏掉的正则（`CommandHelp` 的 `replace(/^minecraft:/)`、`bastion-test` 里逗号连写的混合字符串）
+  - 批次：20261025-0316
+- [x] [合规7] 补 `LICENSE` + `THIRD-PARTY-NOTICES`（three / ws 的 MIT）+ 隐私政策页（Play 强制）：根目录新增文件 + `docs/privacy.md` → `npm run build` 产物内可检索到三份声明
+  - 做了什么：新增 `LICENSE`（保留所有权利，含"不得改名二次上架 / 不得用于商业分发"条款）、`THIRD-PARTY-NOTICES.md`（three.js 0.186.1 与 ws 8.22.0 的完整 MIT 原文）、`public/third-party-notices.txt`（同内容纯文本，`vite build` 会复制进 `dist/`）、`public/privacy.html`（中英双语隐私政策：不收集个人数据、存档只在本地、联机的数据交换范围、第三方组件、变更与联系方式）；`README` 的「许可」节补三条指引
+  - 为什么：MIT 要求"分发物中保留版权声明与许可全文"，网页版的"分发物"就是 `dist/`，所以声明必须放在 `public/`（只放仓库根目录等于没分发）；隐私政策是 Play 的**必填项**，需要一个可公开访问的 HTTPS 链接，而 `/privacy.html` 就是这个项目自己的站点路径，比外链第三方托管更不容易失效。隐私文案按**代码实际行为**写（无账号、无统计/广告 SDK、存档仅在 IndexedDB/localStorage）
+  - 验证：`npm run build:fast` 后 `dist/privacy.html`（5.7KB）与 `dist/third-party-notices.txt`（3.4KB）都在；`npm run test:ui` **980/0**（新增 1 条断言：两份文件都在 `public/` 且声明里有 three.js authors / Einar Otto Stangvik）；`npm run audit:docs` 通过；`npm run check:manifests` 通过；`typecheck:tools` 清洁
+  - 批次：20261025-0316
+
 ## 批次 20261025-0117 · 2026-10-25 · 会话 203dac00
 
 - [x] [U1] 删掉玩家可见的建造入口与全部建造工具（C2~C5）：删 `src/ui/BuildToolbar.ts`、`src/ui/buildToolbarLayout.ts`、`src/buildtools/{Selection,Fill,Clipboard,templates}.ts`；`src/main.ts` 删对应 import / `buildMode` / `buildRequest` / `buildToolbar` 字段与构造回调 / `refreshBuildToolbar` / 选区-填充-复制-粘贴-镜像-模板 的全部方法（`selectCorner` `clearSelection` `startFill` `stepFillRunner` `cancelFill` `copySelection` `pasteClipboard` `placeTemplate` `stepPasteRunner`）与每帧调用 / `setBuildModeForTest` `buildToolbarStateForTest`；Esc 面板分支、左键选区分支、`updateArmSwing` 与 `updateBreaking` 里的 `buildMode` 判断一并删；`index.html` 删 `/* ---------------- 建造工具（创造5 …` 到 `.build-page.hidden { display: none; }` 整段 CSS → `npm run typecheck` 通过且 `npm run check:fast` 全绿
@@ -109,79 +156,4 @@
   - 为什么：这条错误的观感很具体（"交叉的剑"），但根因（透明贴图 + 双面渲染 + 正反同贴）不写下来下次还会犯。
   - 验证：`npm run check` 全绿。
   - 批次：20261024-2122
-
-## 批次 20261024-2101 · 2026-10-24 · 会话 167f6a14
-
-- [x] [修27] 挥手改成"输入驱动"：点一下挥一次、按住快速连挥：`src/main.ts` → 浏览器里数挥动次数（点一下=1、连点两下=2、按住 1.2s=4）
-  - 做了什么：新增 `updateArmSwing(dt)` 与 `tapSwingRequest` / `armSwingCooldown` 两个字段（`ARM_SWING_INTERVAL = 0.3`）。桌面端 `mousedown`（左键、非建造模式）置位 `tapSwingRequest`；触摸端在 `onTap` 里置位（长按走 `onBreakStart` → `leftDown`）；每帧：点了就挥一次，按住则按 0.3s 节拍继续挥；UI 打开/建造模式不挥。
-  - 为什么：以前挥动只挂在"真的打到/挖到/放下了东西"上——对着空气点一下，或者按下与松开落在同一帧里（快速点击），手完全不动（用户："基本上点一下就应该挥一下手"）。攻击/挖掘/放置各自也会调 `hand.swing()`，而 `swing()` 在挥动中不重开，两条路叠加不会抖手。
-  - 验证：`node .tmp/hand-swing.mjs`（真鼠标 + 指针锁）：静止 600ms 挥 0 次 ✓、点一下 1 次 ✓、连点两下 2 次 ✓、按住 1.2s 挥 4 次（3.3 次/秒）✓、松手后 0 次 ✓；控制台无报错。
-  - 批次：20261024-2101
-- [x] [修28] 手里的东西放大一档，并按用户的基岩版截图重排构图：`src/render/HandRenderer.ts` → 9 组视口×视野的投影包围盒 + 逐件截图对照
-  - 做了什么：`SPRITE_SIZE` 0.40 → **0.52**（投影约占屏高 58%，与用户给的截图同一量级）、`BLOCK_SIZE` 0.34 → **0.37**（约 60%）、`SPRITE_THICKNESS` 0.016 → **0.03**（侧看有一道看得见的厚度边，不再像纸片）；方块偏移跟着收（`BLOCK_OFFSET` x 0.10 → 0.05、y −0.10 → −0.09），放大之后右缘仍落在 94%、上缘 59%，不被画面切掉。
-  - 为什么：用户给了基岩版截图做对照，说"角色拿的物品要再大一点、精细度高一点"。截图里剑约占屏高 6 成，而旧值只有 4.5 成；放大之后单个 texel 也更"实"，厚度给到 0.03 才能看出这是一块有厚度的东西。
-  - 验证：`node .tmp/hand-verify.mjs` **99 组几何测量 0 失败**（3 视口 × fov45/60/90 × 11 件物品；石头 bbox 0.63×0.77 屏高、右缘 94%）；逐件截图（桌面 1280×720 + 手机 844×390）核对构图；`test:render` 同步更新尺寸断言。
-  - 批次：20261024-2101
-- [x] [修29] 第三人称也能看到角色手里那件东西：`src/render/PlayerRenderer.ts` + `src/main.ts` + `src/render/atlasMesh.ts` → 后视/前视各截一张 + 新增 10 条渲染测试
-  - 做了什么：`PlayerRenderer` 收一个可选 `atlas`，在**右臂末端**加主手挂点 `mainhandGroup`，`setHeldItem(id)` 按物品建几何（完整立方体 = 立方体；其余 = 薄盒子，正反贴图标、厚度面取最外一列）；方块与图标各一份材质（带 `map`/`alphaTest`/`vertexColors`），并跟着环境亮度一起变暗；`main.ts` 每帧与 `hand.setItem` 同步调用。为此把第一人称那份"厚度面取边缘列"的 UV 逻辑抽到 `atlasMesh.applySpriteFaceUvs`，两边共用；`applyBoxFaceShade` 增加可选的逐面亮度参数（图标正反面要满亮度）。
-  - 为什么：用户："在第三人称时，也应该能看到角色手拿的物品"。之前第一人称藏手之后，切第三人称就是空着两只手。第一版把图标绕 Y 转 90°（想"让刀身侧对镜头"），实测第三人称是**前/后视角**，侧对镜头等于把剑看成一条线；改成转 30°、往前下方挪出身体，前后视角都能看出刀形。
-  - 验证：`test:render` 260 → **270 通过 / 0 失败**（新增 10 条：空手/拿起/几何类型/尺寸/厚度面 UV 同源/切回空手/重复设置不重建/没图集时安全降级）；`node .tmp/tp-shot.mjs` 在 `third-back` 与 `third` 两种视角逐件截图核对（剑、镐、石头、面包都清晰可见，且不在身体里）。
-  - 批次：20261024-2101
-- [x] [修30] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 + 决策 D6 → `npm run check`
-  - 做了什么：新增 2101 一节与批次索引一行；OVERVIEW 的手持物条目补"尺寸 0.52/0.37、厚度 0.03、第三人称手里有东西、挥动按输入驱动"；TASKS 队列落地补一行。
-  - 为什么：这批改的是"手持物的尺寸与手感"三个可直接感知的点，不写进 OVERVIEW 下一轮调尺寸又会从旧数字出发。
-  - 验证：`npm run check` 全绿（`audit:docs` 体量、`audit:tasks` 台账、`test:render` 270）。
-  - 批次：20261024-2101
-
-## 批次 20261024-1910 · 2026-10-24 · 会话 167f6a14
-
-- [x] [修25] 手部视角钉死在"视图模型视野"，并把这轮自测脚本化（用户："请自测验证，自己核查是否正常"）：`src/render/HandRenderer.ts` + `tools/render-test.ts` → 跑 3 视口 × 3 视野 × 11 件物品的投影包围盒矩阵 + 像素级差异，全部在合理区间
-  - 做了什么：① `update()` 不再把世界视野灌进手部相机，手用固定的 `VIEWMODEL_FOV = 70`（只同步宽高比）；② 双臂长度常量从"世界格"改成屏幕比例（`ARM_UNITS = 0.5`），摆动的 `bob` 也归到屏幕比例里；③ 渲染测试新增/改写三条断言（世界视野变化时手的 scale 与 position 必须**完全不变**、手的相机 fov 不跟世界 90° 走）。
-  - 为什么：上一版让手跟着世界 fov 换算"屏幕占比"，自测矩阵当场抓到 —— 同一块石头在 fov60 是 0.57×0.66 屏高，fov90 变成 0.97×0.81 屏高、右缘 118%（右半块出画）。根因是"尺寸 ∝ 屏幕占比 × 深度"而"透视强度 ∝ 尺寸/深度"，想让屏幕占比固定，尺寸/深度比就必然随 k 上涨，方块近角被推得更远。原版手是"视图模型"，本来就不该跟世界视野一起变形。
-  - 验证：`npm run check` 全绿（`test:render` 260 通过）；另跑 `node .tmp/hand-verify.mjs`（本批新增的临时验收脚本）**99 组几何测量 + 全部功能项 0 失败**——1280×720 / 844×390 / 390×844 三个视口 × fov 45/60/90 × 空手+10 件物品，逐项判 nearZ>0.3、物品宽高/位置在右下象限、右缘不超出 0.34 屏高；像素级（藏手 vs 显示手，剔除云噪声）确认画出来的像素 99% 以上落在几何包围盒内（厚度边假影若回来会在这里崩）；挥动 7 帧、拉弓 3 档、第三人称 0 px、午夜亮度 36%（变暗但仍可见）、控制台无报错。
-  - 批次：20261024-1910
-- [x] [修26] 台账：把本批记进 `DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md`，并更正 1726 那条里"深度跟着 k 走"的旧描述 → `npm run check`
-  - 做了什么：新增 1910 一节与批次索引一行；1726 的 OVERVIEW/TASKS 行改成"手固定用自己的 `VIEWMODEL_FOV`，不跟世界视野"；新增决策 D5。
-  - 为什么：1726 收尾时写的是"深度跟着 k 缩放"，1910 换成了更强的做法（视角固定），旧描述留着会误导下一轮。
-  - 验证：`npm run check` 全绿（`audit:docs` 体量门禁、`audit:tasks` 台账核对）。
-  - 批次：20261024-1910
-
-## 批次 20261024-1726 · 2026-10-24 · 会话 167f6a14
-
-- [x] [修23] 重做第一人称手持物品/手臂的骨架（用户："手持物品的显示还是有很大的问题，参照正版效果调整"）：`src/render/HandRenderer.ts` + `src/render/TextureAtlas.ts` → 用临时截图脚本量各类物品的屏幕包围盒，对照原版构图收进合理区间
-  - 做了什么：① 整只手改成**屏幕比例口径**（`syncRig()` 每帧按 `fov`/`aspect` 把"握点屏幕比例 + 屏幕高单位"换算成相机空间），常量集中在文件头（`GRIP_SCREEN_*` / `BLOCK_SIZE` / `SPRITE_SIZE` / `ARM_*`）；② 空手手臂改成"从屏幕右下角伸进来、末端一块略粗的拳头"，根部退到画面外（实测最近处 0.10 格 → 0.57 格）；③ 扁平物品的厚度面改成只取图标**最外一列/行**（六面同贴整张 = 彩带，填纯色 = 空气里一条孤线，两种都实测复现过）；④ 对齐口径改成"图标里不透明那块的底边中点落在握点"（新增 `TextureAtlas.contentBounds()`，面包/苹果不再浮在手心上方）；⑤ 只有完整立方体才画立方体，火把/花草/台阶等改画图标（之前火把被渲染成一根细长条）；⑥ 挥动改成绕肩部支点的小角度旋转 + 手腕前压（原来 0.9 弧度会把物品整个甩出画面）。⚠️ 本条的"屏幕比例"口径当场又修了一轮（同日晚些的 1910）：**手不再跟世界视野换算**，而是钉死在视图模型视角 —— 跟着世界 fov 走时 90° 下同一块石头会大 1.7 倍并右缘出画。
-  - 为什么：用户报"还是有很大的问题"。先量化取证：空手手臂包围盒 x 72%~346%、y 75%~514%（一块贴着屏幕的褐色墙），手持方块 y 47%~118%（顶到画面中间），钻石剑 x 61%~109%、y 31%~90% 且翻出两条彩带。三条根因分别是"手臂根部贴到近裁面被透视放大""厚度面拉伸图标""尺寸是世界格数、和握点深度不匹配"。
-  - 验证：`npm run check` 全绿（含 `test:render` **260 通过 / 0 失败**，新增"换宽高比握点跟着投影走""视野变宽整只手跟着缩放""挥到一半物品仍在画面内""厚度面只取图标最外一列""按内容底边对齐握点"等断言）；另外用 `playwright-core` 起真实浏览器进创造模式逐件截图核对：1280×720 与手机横屏 844×390、FOV 60/90 下空手 / 石头 / 原木 / 玻璃 / 钻石剑 / 铁镐 / 铁斧 / 面包 / 苹果 / 火把，以及挥动中间帧（物品不再被甩出画面、无游离线条）。实测包围盒：空手手臂 x 69%~114%、y 74%~146%（最近处 0.57 格）；石头 x 64%~96%、y 62%~128%；钻石剑 x 61%~90%、y 42%~86%。
-  - 批次：20261024-1726
-- [x] [修24] 台账：把这一批记进 `DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` → `npm run check`
-  - 做了什么：新增 1726 一节与批次索引一行；OVERVIEW「渲染」那条把手持物的口径换成"屏幕比例 + 厚度面取边缘列 + 只有完整立方体才画方块"；TASKS 的「队列落地 · 当场任务」补一行。
-  - 为什么：这批把"手持物的尺寸口径"整个换掉了，不写进 OVERVIEW 的话下一轮还会有人往 `HandRenderer` 里塞世界格数常量。
-  - 验证：`npm run check` 全绿（含 `audit:docs` 体量门禁与 `audit:tasks` 的台账核对）。
-  - 批次：20261024-1726
-
-## 批次 20261024-2015 · 2026-10-24 · 会话 723564b3
-
-- [x] [修26] 修上一批"填满面板"的副作用：创造栏没拿到确定高度 → 滚动条消失、列表也滚不动：`index.html`（`.inv-creative-section` 补 `align-self: stretch / height: 100% / max-height: 100%`）→ `npm run test:ui`
-  - 做了什么：把生存分类栏那三行（`align-self: stretch; height: 100%; max-height: 100%`）照抄到 `.inv-panel.pocket-ui.pocket-dual .inv-creative-section`，并写清"三行缺一不可"的原因。
-  - 为什么：`.inv-body` 是 `align-items: start` 的网格，格子里的元素默认**不拉伸**，创造栏的高度因此是"内容高度"。上一批把网格改成 `flex: 1 1 auto` 之后，网格就跟着撑到内容那么高 → `scrollHeight - clientHeight = 0`：自绘滚动条判 `max > 1` 不成立→整根隐藏，同时也没有可滚的余量，多出来的行直接被 `overflow: hidden` 裁掉（用户："滚动条不见，列表也不能滚动了"）。生存分类栏早就有这三行（同一个坑），创造栏一直没有。
-  - 验证：`npx tsx tools/ui-test.ts` **977 通过 / 0 失败**（新增 1 条：创造栏与分类栏两条都得有 `align-self: stretch` + `height: 100%`，缺一条就红）。
-  - 批次：20261024-2015
-- [x] [修27] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` → `npm run check`
-  - 做了什么：新增 2015 一节、批次索引一行、TASKS 队列落地一行；OVERVIEW 那条"创造网格填满剩余高度"补上"必须同时给栏 `align-self: stretch`，否则滚动条和滚动一起消失"。
-  - 为什么：这是"改一半就反向"的典型——只给网格 `flex: 1` 不给父级高度，症状从"留空白"变成"不能滚"，文档里必须成对写。
-  - 验证：`npm run check` 全绿。
-  - 批次：20261024-2015
-
-## 批次 20261024-1723 · 2026-10-24 · 会话 723564b3
-
-- [x] [修21] 创造物品栏把面板填满（列表下面的空白去掉）：`index.html` 五处 `.inv-creative` 高度上限改成 `flex: 1 1 auto; min-height: 0; max-height: none` → `npm run test:ui`
-  - 做了什么：把创造网格的固定上限全部换成"吃掉剩余高度"——`.inv-panel.creative-ui.pocket-ui .inv-creative`（原 `min-height: min(38vh,200px)` / `max-height: min(42vh,220px)`）、`body.touch-mode` 同名那条、横屏矮屏那条（原 34/38vh）、`.inv-panel.creative-ui .inv-creative`（原 `min(58vh,420px)`）、双栏 `.inv-panel.pocket-ui.pocket-dual .inv-creative`（原 174px）、`body.touch-mode ...pocket-dual` 那条（原 174px）、`body:not(.touch-mode) ...pocket-dual`（原 `min(58vh,430px)`）。
-  - 为什么：面板高度是固定的 `--inv-pocket-h`（矮横屏就是 318px），网格用 `vh` 封顶就只占一半，下面自然空一大片。面板/内容区/创建区三层都是 `flex: 1 1 auto; min-height: 0`，网格只要也 `flex: 1 1 auto` 就会把剩下的高度全部吃掉（多出来的高度就是能多看见的行）。
-  - 验证：`npx tsx tools/ui-test.ts` **976 通过 / 0 失败**（新增 1 条：两条主规则都是 `flex: 1 1 auto` 且不再出现 `max-height: 174px;` / `max-height: min(42vh…;` 这些声明——注意断言认"带分号的声明"，规则块里的注释会提到旧值）。
-  - 批次：20261024-1723
-- [x] [修22] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
-  - 做了什么：新增 1723 一节、批次索引一行、TASKS 队列落地一行、OVERVIEW「界面与音频」补"创造网格填满剩余高度，别再按 vh 封顶"。
-  - 为什么：面板是固定高度这一点不写在台账里，下一轮又会有人给网格加 `max-height: 42vh` 之类的"保险"。
-  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
-  - 批次：20261024-1723
 
