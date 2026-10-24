@@ -107,7 +107,7 @@ const HELD_BLOCK_SIZE = 0.34;
 const HELD_SPRITE_SIZE = 0.52;
 /** 第三人称的 2.5D 贴图：Scale2x 两遍（4×）+ 厚度 10px（这个尺寸下够看，贴图也小） */
 const HELD_SPRITE_SCALE_PASSES = 2;
-const HELD_SPRITE_DEPTH_PIXELS = 7;
+const HELD_SPRITE_DEPTH_PIXELS = 2;
 /** 握点：右臂局部坐标（手臂从肩 y=0 垂到 y≈-0.7，手心在 -0.66 附近） */
 const HELD_GRIP: readonly [number, number, number] = [-0.24, -0.6, -0.22];
 /**
@@ -650,6 +650,8 @@ export class PlayerRenderer {
         passes: HELD_SPRITE_SCALE_PASSES,
         depthPixels: HELD_SPRITE_DEPTH_PIXELS,
         direction: [0.55, 0.83],
+        // 第三人称看得见手，就必须真的握住柄（包围盒中点会落在刀身上）
+        grip: 'handle',
       });
       const bounds = atlas.contentBounds(tile);
       const texel = HELD_SPRITE_SIZE / TILE_SIZE;
@@ -660,8 +662,13 @@ export class PlayerRenderer {
         const scale = HELD_SPRITE_SIZE / sprite.facePixels;
         const size = sprite.canvasPixels * scale;
         geometry = new THREE.PlaneGeometry(size, size);
-        geometry.translate((sprite.padPixels / 2) * scale, -(sprite.padPixels / 2) * scale, 0);
-        geometry.translate(-contentCenterX, HELD_SPRITE_SIZE / 2 - contentBottom - size / 2, 0);
+        // 画布点 (cx, cy) → 世界 (-size/2 + cx·scale, +size/2 - cy·scale)；
+        // 把**握点**（柄）平移到原点，剑柄才真的握在手里
+        geometry.translate(
+          size / 2 - sprite.grip.x * scale,
+          -size / 2 + sprite.grip.y * scale,
+          0,
+        );
       } else {
         // 没有 DOM（离线测试）：退回薄盒子
         geometry = new THREE.BoxGeometry(HELD_SPRITE_SIZE, HELD_SPRITE_SIZE, 0.04);

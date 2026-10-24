@@ -31,6 +31,13 @@ export interface HeldSpriteOptions {
   depthPixels?: number;
   /** 厚度往哪个方向挤（画布像素方向，会自动归一化） */
   direction?: readonly [number, number];
+  /**
+   * 握点怎么定：
+   *  · `center`（默认）= 内容包围盒的底边中点；
+   *  · `handle` = **图标最下面那几行不透明像素的中心**——剑/镐的柄在那里，
+   *    包围盒中点会落在刀身上（第三人称看起来"剑柄没握在手里"，用户 20261025 反馈）。
+   */
+  grip?: 'center' | 'handle';
 }
 
 export interface HeldSprite {
@@ -41,6 +48,8 @@ export interface HeldSprite {
   readonly facePixels: number;
   /** 厚度裙边在右侧/下侧各占多少像素 */
   readonly padPixels: number;
+  /** 握点（画布像素，正面左上角为原点）：摆位置时把这个点放到手心 */
+  readonly grip: { readonly x: number; readonly y: number };
   dispose(): void;
 }
 
@@ -192,6 +201,46 @@ export function buildHeldSprite(
   }
   ctx.drawImage(face, 0, 0);
 
+  // ---- 握点：内容的底边（y）与"底部那几行"的中心（x）
+  //
+  // 为什么不是包围盒中点：剑的图标是"柄在左下、刃在右上"的对角线，
+  // 包围盒中点落在刀身上，第三人称看起来就是"剑柄没握在手里"。
+  let minY = facePixels;
+  let bottomY = -1;
+  for (let y = 0; y < facePixels; y++) {
+    for (let x = 0; x < facePixels; x++) {
+      if (image.data[(y * facePixels + x) * 4 + 3]! < 128) continue;
+      if (y < minY) minY = y;
+      if (y > bottomY) bottomY = y;
+    }
+  }
+  const contentHeight = Math.max(1, bottomY - minY + 1);
+  const bandRows = Math.max(2, Math.round(contentHeight * 0.22));
+  let bandSum = 0;
+  let bandCount = 0;
+  for (let y = Math.max(0, bottomY - bandRows + 1); y <= bottomY; y++) {
+    for (let x = 0; x < facePixels; x++) {
+      if (image.data[(y * facePixels + x) * 4 + 3]! < 128) continue;
+      bandSum += x + 0.5;
+      bandCount++;
+    }
+  }
+  const contentCenterX = (() => {
+    let left = facePixels;
+    let right = -1;
+    for (let y = 0; y < facePixels; y++) {
+      for (let x = 0; x < facePixels; x++) {
+        if (image.data[(y * facePixels + x) * 4 + 3]! < 128) continue;
+        if (x < left) left = x;
+        if (x > right) right = x;
+      }
+    }
+    return right < 0 ? facePixels / 2 : (left + right + 1) / 2;
+  })();
+  const handleX = bandCount > 0 ? bandSum / bandCount : contentCenterX;
+  const gripX = (options.grip ?? 'center') === 'handle' ? handleX : contentCenterX;
+  const gripY = bottomY < 0 ? facePixels / 2 : bottomY + 1;
+
   const texture = new THREE.CanvasTexture(output);
   // 与图集同一套色彩口径（图集是 NoColorSpace），否则手里那件会偏色
   texture.colorSpace = THREE.NoColorSpace;
@@ -206,6 +255,7 @@ export function buildHeldSprite(
     canvasPixels,
     facePixels,
     padPixels: depthPixels,
+    grip: { x: gripX, y: gripY },
     dispose: () => texture.dispose(),
   };
 }

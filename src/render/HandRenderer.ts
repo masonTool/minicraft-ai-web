@@ -106,11 +106,11 @@ const SPRITE_SIZE = 0.52;
  *
  * · `SPRITE_SCALE_PASSES = 2`：Scale2x 跑两遍 = 4×，斜边台阶补小、**颜色不变**（不糊）；
  *   上一版用双线性放大，用户："太糊了，起码要像一把剑吧，而且要清晰"。
- * · `SPRITE_DEPTH_PIXELS = 8`：厚度 = 8 个画布像素（4× 下 ≈ 2 个像素格 ≈ 0.065 屏高），沿右下挤出。
- *   再厚就会把整件的轮廓吃掉一半（15px 那版像给图标描了一圈投影）。
+ * · `SPRITE_DEPTH_PIXELS = 2`：厚度 = 2 个画布像素（4× 下 ≈ 半个像素格 ≈ 0.016 屏高），沿右下挤出。
+ *   8px 用户嫌"太厚"、要求砍到 1/4；再厚就会像给图标描了一圈投影。
  */
 const SPRITE_SCALE_PASSES = 2;
-const SPRITE_DEPTH_PIXELS = 8;
+const SPRITE_DEPTH_PIXELS = 2;
 const SPRITE_OFFSET: readonly [number, number, number] = [0.06, 0, 0];
 /**
  * 扁平物品的握持姿态：图标正面朝镜头，稍微转开一点露出厚度，刃朝上偏右。
