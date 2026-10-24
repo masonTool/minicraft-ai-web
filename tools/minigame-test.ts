@@ -31,6 +31,7 @@ import {
   saveProgress,
 } from '../src/minigame/progress.ts';
 import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
+import { JUMPER_HEIGHT_RATIO } from '../src/minigame/games/jump/iso.ts';
 import {
   blockOverhang,
   blockSizeForScore,
@@ -507,6 +508,19 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     [0, 30, 80, 200].every((score) => {
       const size = blockSizeForScore(score);
       return gapRangeForScore(score, size).to <= maxGapFromEdge(size) + 1e-9;
+    }),
+  );
+
+  // 用户口径的另一半："必须给人倒下留出空间"。这条是**直接量出来**的：
+  // 两块之间的净空档（中心距 − 两块半边）要够一个小人躺下（1.12 × 上一块边长）。
+  // 只验 `gapFloorRatio = 2.12` 那个公式是自证（同一份算术写两遍），量净空才验到几何。
+  check(
+    '两块之间的净空档 ≥ 小人高度（倒下不会砸在下一块上）',
+    scores.every((score) => {
+      const sizeA = blockSizeForScore(score) * (1 + JUMP_CONFIG.sizeJitter);
+      const sizeB = blockSizeForScore(score) * (1 + JUMP_CONFIG.sizeJitter);
+      const gap = gapRangeForScore(score, sizeA).from;
+      return gap - sizeA / 2 - sizeB / 2 >= JUMPER_HEIGHT_RATIO * sizeA - 1e-9;
     }),
   );
 
