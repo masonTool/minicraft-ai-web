@@ -9,6 +9,99 @@
 
 ---
 
+## 批次 20261023-2351 · 2026-10-24 · 会话 974b5553
+
+> 本批 44 条、说明很长（原队列 60KB），这里只保留每条的一行验证；**完整说明（做了什么 / 为什么 / 未验证）见 `.continue/.logs/974b55/queue.md`**。
+
+- [x] [联机1] 补协议文档：新增 `docs/NET-PROTOCOL.md`（现有 16 条消息的方向/字段/校验），`server/index.mjs` 头注释改指它 → `npm run audit:docs` 通过
+  - 验证：`npm run audit:docs` 通过；`npm run check:fast` 全绿
+- [x] [联机2] 握手校验：`join` 带 `{v, name, clientId}`，服务端校验版本/名字长度/重复 clientId，不兼容回 `error{code:'version'}` 并关闭 → `npm run test:net` 新增“旧版本被拒 / 脏名字被截断”
+  - 验证：`npm run test:net` **35 通过 / 0 失败**；新增 `tests/net-client-id.test.ts`（8 条）+ `tests/net-protocol-version.test.ts`（4 条），单测全量 314 → **326**；`npm run check:fast` 全绿
+- [x] [联机3] 加入即上报位置与维度，远端玩家按维度过滤：`NetPlayerState` 保留 `dimension`，`main.ts` 渲染远端前比对当前维度 → `npm run test:unit` 新增 `tests/net-remote-dimension.test.ts`
+  - 验证：`npm run test:net` 35 → **39 通过**；新增 `tests/net-remote-dimension.test.ts` **6 条全过**；主树单测 **163 → 169**；`npm run check:fast` 全绿
+- [x] [联机4] 未加载区块的远端方块改动不再丢：`main.ts onNetBlock` 先 `world.edits.record` 进缓冲，区块加载回调再应用 → `npm run test:unit` 新增 `tests/net-block-buffer.test.ts`
+  - 验证：`npx vitest run tests/net-block-buffer.test.ts` **9 条全过**；主树单测 **169 → 178**（24 文件）；`npm run typecheck` 通过
+- [x] [联机5] 种子对齐：以服务端种子为准，不一致时提示并提供“用该种子新建多人世界 / 重载当前世界”；含世界重载路径（清 chunk/实体/edits/时间/玩家位置）→ `npm run test:unit` 新增 `tests/net-seed.test.ts` + `npm run test:save`
+  - 验证：`npx vitest run tests/net-seed.test.ts` **8 条全过**；主树单测 **178 → 186**（25 文件）；`npm run test:commands` 435 → **440 通过**；`npm run test:save` **111 通过**；`npm run test:net` **39 通过**；`npm run audit:i18n` 六语言 2831/2831 100%、无孤儿键
+- [x] [联机6] 多人存档隔离：联机世界按 roomId 派生独立库，服务器 edits/容器不写进单机档；退出联机回原单机世界 → `npm run test:save`
+  - 验证：新增 `tests/net-mp-save.test.ts` **7 条全过**；主树单测 **186 → 193**（26 文件）；`npm run test:save` **111 通过**；`npm run typecheck` 通过
+- [x] [联机7] 心跳、超时与会话状态机：服务端 5s ping / 20s 无 pong 断开；客户端 `connecting|connected|reconnecting|offline` 收进纯逻辑 `core/net/NetSession.ts` → `npm run test:unit` 新增 `tests/net-session.test.ts` + `npm run test:net`
+  - 验证：`npx vitest run tests/net-session.test.ts` **8 条全过**；`npm run test:net` 39 → **40 通过**；主树单测 **193 → 201**；`npm run typecheck` 通过
+- [x] [联机8] 断线重连会话恢复：服务端 30s grace 按 clientId 保留 id 与掉落物，重连复用 id；客户端保留 localId 不重发 → `npm run test:net` 新增“3 秒内重连复用 id”
+  - 验证：`npm run test:net` 40 → **43 通过**；客户端 `localId` 由 `main.ts` 分配、重连时不重置，因此重新冒出的掉落物不会与旧的撞键；`npm run typecheck` 通过；`check:fast` 全绿
+- [x] [联机9] 最小连接入口（不是大厅）：地址/昵称/连接/断开/状态，主菜单与暂停菜单各一个入口，横屏可点；新增 `src/ui/MultiplayerScreen.ts` + 六语言文案 → `npm run test:ui` + `npm run test:i18n` + `npm run shot`
+  - 验证：`npm run test:ui` **934 通过 / 0 失败**；`npm run test:i18n` **547 通过**（六语言新键齐全、分组文件同构）；`npm run typecheck` 通过；`npm run check:fast` 全绿
+- [x] [联机10] 时间与天气权威：服务端维护 `timeOfDay`/`weather`，join 下发 + 每 2s 校正广播，客户端按 dt 推算只做插值 → `npm run test:net` + `npm run test:weather`
+  - 验证：新增 `tests/net-time.test.ts` **12 条全过**；`npm run test:net` 43 → **45 通过**；主树单测 **201 → 213**；`npm run typecheck` 通过
+- [x] [联机11] 睡眠与跳夜广播：任一玩家睡满即跳夜（先按本项目口径），服务端广播时间跳变并清天气，差异记台账 → `npm run test:net` + `npm run test:bed`
+  - 验证：`npm run test:net` 45 → **48 通过**；`npm run test:bed` **117 通过 / 0 失败**（单机睡眠逻辑没动）；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 191 注意），新注记已进 `TASKS.md` 第 5686 行
+- [x] [联机12] 方块写入统一出口：在 `World.events.onBlockChanged` 上挂广播（覆盖红石/流体/火焰/作物/漏斗/爆炸），远端应用时抑制回声，100ms 合帧批量发 → `npm run test:unit` 新增 `tests/net-block-funnel.test.ts` + `npm run test:net`
+  - 验证：新增 `tests/net-block-funnel.test.ts` **9 条全过**；`npm run test:net` 48 → **50 通过**；主树单测 **213 → 222**；`redstone`/`hopper`/`furnace`/`net` 四套离线全绿；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 192 注意）
+- [x] [联机13] 服务端持久化：新增 `server/store.mjs`，edits/容器/时间/天气落盘，启动加载、定时 + 退出保存、损坏文件回退备份 → `npm run test:net` 新增“重启后快照仍在”
+  - 验证：`npm run test:net` 50 → **58 通过**（新增 8 条：重启前的客户端能加入 / 重启后服务端能再起来 / 重启后拿到 welcome / **重启后方块改动还在** / **重启后容器内容还在** / 坏快照下服务端仍能起来 / 坏快照被备份/ 坏快照之后从空世界开始）；测试用 `mkdtempSync` 的临时 `DATA_DIR`，不碰开发者自己的 `server/.data/`；`npm run typecheck` 通过；`npm…
+- [x] [联机14] 快照裁剪与容量策略：welcome 只发玩家附近 edits，`MAX_EDITS` 满时淘汰最旧并告警（不再静默丢）→ `npm run test:net` 新增大快照裁剪断言
+  - 验证：新增 `tests/net-snapshot-policy.test.ts` **10 条全过**；`npm run test:net` 58 → **60 通过**；主树单测 **222 → 232**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 194 注意）
+- [x] [联机15] 容器同步扩展到全部工作站：箱子/木桶/熔炉/高炉/烟熏炉/酿造台/发射器/投掷器/漏斗，统一“变更出口”而非打开时才挂 → `npm run test:net` + `npm run test:furnace` + `npm run test:hopper`
+  - 验证：新增 `tests/net-container-sync.test.ts` **9 条全过**；`npm run test:net` 60 → **63 通过**；主树单测 **232 → 241**；`npm run check:fast` 全绿，命中 **40 套**离线
+- [x] [联机16] 告示牌文字与展示框内容同步（B12/B14 现在写着“联机不广播”），更新差异台账 → `npm run test:net` + `npm run test:sign` + `npm run test:frame`
+  - 验证：`npm run test:net` 63 → **67 通过**；`sign` / `frame` / `net` 三套离线全绿；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 196 注意）
+- [x] [联机17] 玩家外观状态：手持物/副手/盔甲/潜行/挥手/受伤/着火/骑乘/睡觉，扩展 `NetPlayerState` 并接到渲染 → `npm run test:unit` 新增 `tests/net-player-state.test.ts`
+  - 验证：新增 `tests/net-player-state.test.ts` **12 条全过**；`npm run test:net` 67 → **69 通过**；主树单测 **241 → 253**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 197 注意）
+- [x] [联机18] 队友名字牌：`main.ts` 现在明确跳过远程玩家，改成显示昵称 + 距离衰减 → `npm run test:nametag`
+  - 验证：`npm run test:nametag` 143 → **149 通过 / 0 失败**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 198 注意）
+- [x] [联机19] 生物同步：位置/血量/状态广播 + 远端插值/降频，AI 仍各端跑（差异记台账）→ `npm run test:unit` 新增 `tests/net-mob-sync.test.ts` + `npm run test:net`
+  - 验证：新增 `tests/net-mob-sync.test.ts` **7 条全过**；`npm run test:net` 69 → **73 通过**；主树单测 **253 → 260**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 199 注意）
+- [x] [联机20] 远端实体 AOI 与分级降频：16 格每 100ms、32 格每 250ms、更远不发 → 单测分级函数 + `npm run test:perf`
+  - 验证：新增 `tests/net-aoi.test.ts` **11 条全过**；`npm run test:perf` 40 → **44 通过**；主树单测 **260 → 271**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 200 注意）
+- [x] [联机21] 掉落物拾取仲裁：服务端 first-come 锁 + 扣减广播，镜像可捡；解决 L7“远端堆拿不到” → `npm run test:net` 新增“双客户端抢同一堆只有一边拿到”
+  - 验证：`npm run test:net` 73 → **78 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 201 注意）
+- [x] [联机22] PvP 与队伍免伤：伤害来源接 `Teams.sameTeam()`，`/team friendlyfire` 真正生效（M23 卡住的两项）→ `npm run test:commands` + `npm run test:net`
+  - 验证：`npm run test:commands` 440 → **444 通过**；`npm run test:net` 78 → **82 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 203 注意）
+- [x] [联机23] 其余实体同步：箭/TNT/经验球/船与矿车按优先级；不做的写进差异台账 → `npm run test:net` + `npm run test:entity`
+  - 验证：`npm run test:net` 82 → **86 通过**；`npm run test:entity` **199 通过 / 0 失败**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 204 注意）
+- [x] [联机24] 消息校验：方块 id 白名单、y 范围、state 位宽、与玩家距离上限（block/container 都校验）→ `npm run test:net` 新增脏消息用例
+  - 验证：新增 `tests/net-block-validation.test.ts` **9 条全过**；`npm run test:net` 86 → **92 通过**；主树单测 **271 → 280**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 206 注意）
+- [x] [联机25] 限频与体积：全局令牌桶（block/container/chat）、`maxPayload` 64KB、名字字符清洗 → `npm run test:net` 新增“刷屏被限”
+  - 验证：新增 `tests/net-ratelimit.test.ts` **8 条全过**；`npm run test:net` 92 → **95 通过**；主树单测 **280 → 288**；`npm run audit:diffs` 重建台账（66 差异 / 208 注意）
+- [x] [联机26] 房间码、可选密码、Origin/Token 校验：一房一世界，拒绝跨站连接 → `npm run test:net` 新增“错 origin 被拒 / 两个房间互不串”
+  - 验证：新增 `tests/net-server-url.test.ts` **6 条全过**；`npm run test:net` 95 → **105 通过**；主树单测 **288 → 294**；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 210 注意）
+- [x] [联机27] 广播 AOI：玩家/方块/实体按 8 区块 + 维度过滤，O(n²) → O(n·k) → 单测过滤函数 + `npm run test:net`（不该收到的收不到）
+  - 验证：新增 `tests/net-aoi-broadcast.test.ts` **5 条全过**（半径内外边界 / 对角 128,128 收到而 144,144 不收（切比雪夫语意）/ 维度不同不收 / 负坐标按区块取整 / 非法坐标与缺玩家）；`npm run test:net` 105 → **110 通过**；主树单测 **294 → 299**；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / …
+- [x] [联机28] wss 与部署：`ws` 从 devDependencies 移到 dependencies、`defaultServerUrl` 支持同源 `/ws` 与 `wss://`、补 Dockerfile/反代/健康检查、更新 README 与 `notes/ops.md` → `npm run build` + 生产依赖下 `node server/index.mjs` 能起
+  - 验证：`tests/net-server-url.test.ts` **6 → 9 通过**；`npm run test:net` 110 → **113 通过**；`npm run build:fast` 出包成功；`npm run typecheck` 通过；`npm run check:fast` **172 套全量绿**（改了配置文件 → 走全量）；`npm run audit:diffs` 重建台账（66 差异 / 212 注意）
+- [x] [联机29] 观测与诊断：服务端人数/带宽/TPS 日志与 `/healthz`，客户端 F3 面板加 ping/丢包/上下行 → `npm run check` 全绿
+  - 验证：新增 `tests/net-stats.test.ts` **11 条全过**；`npm run test:net` 113 → **115 通过**；`npm run typecheck:tools` **0 错误**；**`npm run check` EXIT=0 全绿**
+- [x] [联机30] 修聊天重复回显（写协议文档时发现）：服务端 `chat` 广播包含发送者，客户端又本地回显一次；改成服务端不再回传给发送者 → `npm run test:net` 新增“发送者只收到一份”
+  - 验证：`npm run test:net` 115 → **117 通过**；`npm run audit:diffs` 台账与条目一致（66 差异 / 213 注意）
+- [x] [联机31] 远端掉落物镜像补维度（做联机3 时发现）：`NetItemState` 与 `item` / `item-remove` 广播都不带 `dimension`，队友在下界掉的东西会画在主世界同坐标；加字段并在 `main.ts` 建镜像与渲染时按维度过滤 → `npm run test:net` 新增“跨维度掉落物不通告”
+  - 验证：`npm run test:net` 117 → **119 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 214 注意）
+- [x] [联机32] 单测别把工作树副本跑进去（做联机3 时发现）：`vitest run tests` 会把 `.continue/doing/.worktree/*/tests/` 一起收集，45 文件 / 332 条里一半是副本，计数虚高一倍且工作树的红会污染主树门禁 → 在 `vite.config.ts` 加 `test.exclude` 排除 `.continue/**`，之后主树应回到 23 文件 / 169 条 → `npx vitest run` 输出 23 个文件 + `npm run check:fast` 全绿
+  - 验证：`npx vitest run` 与 `npm run test:unit` 都变成 **24 文件 / 178 条**；`npm run typecheck` 通过；`npm run check:fast` 全绿
+- [x] [联机33] 区块加载后才补上的远端容器要建实体（做联机4 时发现）：`ensureBlockEntityAt` 只在 `block`/`welcome` 的「已加载」分支调，经增量表补上的漏斗/箱子/发射器只有方块、没有容器表项（打开是空的、漏斗不搬东西）；在 `World.events.onChunkLoaded` 里按增量表里该区块的容器类方块补建 → `npm run test:unit` 新增“补上的漏斗能打开”
+  - 验证：新增 `tests/net-container-spawn.test.ts` **5 条全过**；主树单测 **313 → 318**（40 个文件）；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 215 注意）
+- [x] [联机34] 世界原地重载（做联机5/6 时拆出来的硬骨头）：`resetWorld(seed)` 重建 `World` 与渲染侧缓存、清实体/掉落物/TNT/漏斗定时器/时间/位置/维度，再从指定存档库把 edits/容器/牌子/展示框/进度叠回去
+  - 验证：`tests/world-reset.test.ts` **7 条全过**；`npm run typecheck` 通过；`npm run check:fast` 全绿（6 套命中，含 `render`）；主树单测 **318 → 325**
+- [x] [联机35] 天气权威（做联机10 时拆出来的另一半）：服务端维护 `weather`（晴/雨/雷），join 下发 + 切换时广播，客户端联机时**不再自己掷骰子**（`WeatherState.ts` 的自动切换要让位），只负责渲染降水 → `npm run test:weather` + `npm run test:net` 新增「天气广播与客户端接管」
+  - 验证：`tests/net-weather.test.ts` **4 条全过**（下一段种类 / 持续时长 / 推进（未到点与到点）/ 雨与雷暴一律转晴）——**它当场抓到一处抄错**：`STORM_SECONDS_*` 我写成 180~420，客户端实际是 120~300；`npm run test:weather` **58 通过 / 0 失败**（客户端规则没动）；`npm run test:net` 119 → **120 通过**；主树单测 **325 → 32…
+- [x] [发现] `net` 套件并发下偶发超时红：`tools/run-tests.mjs --changed` 里 `net` 与 `guard` 同时跑时，`net` 偶发跑满 10.5s 被判失败（本轮撞见两次：联机11、联机12 提交前守卫各拦下一次，重跑即过；单跑稳定 4.8s）→ 怀疑是固定端口 8787 加 5s 心跳等待叠加，改成随机空闲端口（或让 `run-tests` 把它标成独占），连续 10 次 `--changed` 不再出现 10s 红
+  - 验证：`npm run test:net` **69 通过 / 0 失败**；`node tools/run-tests.mjs --changed` **连跑 5 次全绿**
+- [x] [联机37] 外观剩下的三件事（做联机17 时拆出来）：① 远端模型的**下蹲/骑乘/睡觉姿势**（要动 `MobRenderer` 骨架）；② 玩家**盔甲**数据源（现在只有 `armorColors` 简化模型，没有逐槽物品）；③ **副手槽**（同上，且要进存档与背包界面）→ 批次按用户裁决**只做 ①**，②③ 拆成 `联机40` / `联机41`
+  - 验证：`tests/mob-pose.test.ts` **5 条全过**；主树单测 **329 → 334**；`npm run typecheck` 通过；`npm run check:fast` 命中 **30 套全绿**
+- [x] [联机38] 生物**位置**同步的前置（联机19 只做了命中事件）：① 定"谁权威"——最省的是"离这只生物最近的玩家上报"，其余端只收；② 定全局实体 id（服务端按 `ownerId:localId` 记，与 `items` 同一套）；③ 定**影子抑制**规则（收到远端生物时本地 AI 不能再生成一份同名同类型的怪，否则玩家看到双份）→ 产出：`core/net/MobAuthority.ts` 纯函数（谁该上报 / id 是否新鲜）+ 单测；做完后可以给联机19 补上位置与插值
+  - 验证：`tests/mob-authority.test.ts` **12 条** + `tests/mob-shadows.test.ts` **9 条**，全过；主树单测 **334 → 355**；`npm run typecheck` 通过
+- [x] [发现] `net` 套件已跑满 14s，并发下偶发红：`check:fast` 里它与 `guard` 并发时本轮又红了一次（单独跑 95 通过、连跑 `--changed` 三次全绿；证据：`tools/run-tests.mjs --changed` 的 `最慢：net 14.08s`）→ 把套件里重复的 join/固定 `sleep` 抽成公共夹具、限频用例改小规模或挪到独立的慢速套件，让 `net` 回到 6~8s，并连跑 5 次 `--changed` 不再出现并发红
+  - 验证：`npm run test:net` **120 通过 / 0 失败**、耗时 **18.53s → 12.61s**（-32%）；`node tools/run-tests.mjs --only net --only guard` **连跑 5 次全绿**（改前并发下两次红）；全量 `check:fast` **172/172 套全绿**，`最慢：structure 17.07s · net 13.52s · guard 11.10s`
+- [x] [联机39] 让世界可换（做联机34 时卡住的前置）：`main.ts` 的 `world` 去掉 readonly、`ChunkRenderer`（以及之后任何 `private readonly world` 的渲染器）改成 `setWorld(world)` 或可重建；配套一个 `npm run shot` 的验收步骤（换世界后画面正常、旧区块不残留）→ 先只有这一层，接通过之后再回 `联机34` 写执行路径
+  - 验证：结论由 `联机34` 的实现反向验证——`World.reset()` + `reloadWorld()` 在 `3451c264` 落地，`tests/world-reset.test.ts` **7 条全过**、`npm run check:fast` 全绿；本条自己没有代码产出（当初判断"必须换实例"是错的，`readonly world` 与 `ChunkRenderer` 的绑定一直没动）
+- [x] [联机40] 玩家盔甲改成逐槽数据源（做联机17/37 时拆出来）：现在只有 `armorColors` 简化模型（渲染用颜色，不知道是什么甲），要改成"头盔/胸甲/护腿/靴子"四槽的真实物品 id，跟随存档（`联机13` 的玩家快照）与 `move` 外观一起传 → **要改存档格式（旧档迁移）**，等用户拍；做完后 `联机37` 的 `armor[]` 字段才有真实含义
+  - 验证：`tests/net-remote-armor.test.ts` **8 条全过**；主树单测 **355 → 363**；`npm run typecheck` 通过；`npm run check:fast` 全绿（5 套）
+- [x] [联机41] 副手槽（做联机17/37 时拆出来）：背包多一个副手槽（盾牌/火把/食物），要进存档、背包界面、`F` 键交换、以及 `move` 的 `offhand` 字段真正生效 → **同样要改存档格式**，与 `联机40` 一起拍板
+  - 验证：`tests/offhand.test.ts` **6 条全过**；主树单测 **363 → 369**；`npm run typecheck` 通过；`npm run check:fast` 全绿（5 套）
+- [x] [发现] 远端看不到副手的物品：`core/entity/MobEquipment.ts` 的接口只有 `mainHand/head/chest/legs/feet`，`MobRenderer` 也只按 `equipment.mainHand` 画手持物 —— 于是联机41 传上去的 `offhand` 目前只存不用 → 给 `MobEquipment` 加 `offHand` 并在 `MobRenderer` 画第二个手持部件（左手位置），做完后队友举盾你能看见
+  - 验证：`tests/net-remote-armor.test.ts` **8 → 11 条全过**；`npm run typecheck` 通过；`npm run check:fast` 命中 **45 / 172 套全绿**（含 `equipment` / `mob` / `render`，说明改装备槽没打破既有断言）
+- [x] [自审] 全批收口自审：三层目标逐层给结论与证据，勾成 `[x]` 时下方必须有 `- L1：` / `- L2：` / `- L3：` 三行 → 收尾时补齐
+  - 验证：见 L1——369 条单测 / 47 文件、`test:net` 120 通过、守卫 6 项全绿都是本轮实际跑过的（`check:fast` 45/172 与全量 172/172 各跑过一次）；L2/L3 的证据是各功能条目自己的测试与文档，不是推断
+
 ## 批次 20261024-0257 · 2026-10-24 · 会话 4024a9d4
 
 - [x] [E1] 界面文案收口：`WORLD_TYPE_HINTS`（5 条世界类型说明）→ `world.typeHint.*`；`main.ts` 的 **25 处 HUD toast**（名字/驯服/装鞍/牵绳/猪灵交易/袭击/图腾…）→ `misc.toast.*`；`WorldScreen` 的种子提示与生存警告 → `world.seedHint` / `world.survivalWarn`；告示牌编辑器标题 → `misc.signEditorHint`；外观预设 4 条 → `label.appearance.preset.*`
