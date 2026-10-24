@@ -197,7 +197,16 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
-import { applyLanguageSetting, getLanguage, isPseudoLocaleTag, languageFromParam, setPseudoLocale, t, tp } from './core/i18n/I18n.ts';
+import {
+  applyLanguageSetting,
+  getLanguage,
+  isPseudoLocaleTag,
+  joinList,
+  languageFromParam,
+  setPseudoLocale,
+  t,
+  tp,
+} from './core/i18n/I18n.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
@@ -607,7 +616,6 @@ import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
   flowerPotIndexFor,
   pottedPlantItem,
-  pottedPlantName,
 } from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
@@ -688,6 +696,7 @@ import {
   castVelocity,
   fishingBonuses,
   reelFishing,
+  BITE_WINDOW_SECONDS,
   CAST_GRAVITY,
   IDLE_FISHING,
   MAX_CAST_DISTANCE,
@@ -2057,7 +2066,7 @@ class App {
     // 下一次自动保存就会把它写进单机档（这正是联机6 当初"断开即停写"要躲开的事）
     void this.reloadWorld()
       .then(() => {
-        const hint = '已断开联机：世界已重载回单机存档';
+        const hint = t('say.disconnect.soloReloaded');
         this.chat.push(hint, 'system');
         this.chatLine = hint;
         this.chatUntil = performance.now() + 8000;
@@ -2579,7 +2588,10 @@ class App {
       const target = this.editingCommandBlock;
       if (!target) return;
       this.commandBlocks.set(this.dimension, target.x, target.y, target.z, command);
-      this.chat.push(command ? `命令已保存：/${command}` : '已清空这一格的命令', 'system');
+      this.chat.push(
+        command ? tp('say.commandBlock.saved', { command }) : t('say.commandBlock.cleared'),
+        'system',
+      );
     };
     this.commandBlockEditor.onClose = () => {
       this.editingCommandBlock = null;
@@ -3703,13 +3715,13 @@ class App {
     const conflict = seedConflict(seed, this.worldConfig.seed);
 
     if (conflict) {
-      const hint = `联机种子不一致：服务端 ${conflict.serverSeed} · 本地 ${conflict.localSeed}。输入 /netseed reload 用服务端种子重载本世界，/netseed new 新建同种子世界`;
+      const hint = tp('say.net.seedMismatch', { server: conflict.serverSeed, local: conflict.localSeed });
       console.warn(`[net] ${hint}`);
       this.netStatus = hint;
       this.chat.push(hint, 'error');
       this.chatLine = hint;
       this.chatUntil = performance.now() + 12000;
-      this.hudToast.show('种子不一致：/netseed reload 或 /netseed new');
+      this.hudToast.show(t('say.net.seedMismatchToast'));
       // ⚠️ 种子不一致时**不应用**这批 edits：两片大陆的地形不同，同一坐标是另一格，
       // 写进去会污染本地存档。对齐之后重新 join 才拿得到真正该有的那批
       return;
@@ -6241,8 +6253,14 @@ class App {
     const leftover = this.inventory.add(Item.GLASS_BOTTLE, 1);
     if (leftover > 0) this.spawnDrop(Item.GLASS_BOTTLE, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
 
+    // 药水名走 `itemLabel()`（`itemNames.ts` 按 variant/tier 拼），不再用 `potion.name` 那个中文串；
+    // 效果清单用 `joinList()`——分隔符是语言相关的（中文顿号 / 英文 "a, b, and c"）
+    const effects = potion.effects.map((e) => effectLabel(e.id));
     this.chat.push(
-      `喝下${potion.name}：${potion.effects.map((e) => effectLabel(e.id)).join('、') || '无效果'}`,
+      tp('say.potion.drunk', {
+        potion: itemLabel(potion.id),
+        effects: effects.length > 0 ? joinList(effects) : t('say.potion.noEffect'),
+      }),
       'system',
     );
     this.audio.play('eat');
@@ -6267,7 +6285,7 @@ class App {
     }
     if (food.clearsEffects === true) {
       this.effects.clear();
-      this.chat.push('喝下牛奶，身上的状态效果被清除', 'system');
+      this.chat.push(t('say.milk.cured'), 'system');
     }
     for (const effect of food.effects ?? []) {
       // 概率效果要在这里掷点：表里存的是"触发概率"（腐肉 80%、生鸡肉 30%）
@@ -6477,7 +6495,7 @@ class App {
     const arrows = ammo?.total ?? 0;
     const shots = crossbowVolley(enchantLevel(this.heldEnchants, 'multishot') > 0, arrows);
     if (!ammo || shots === 0) {
-      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      if (arrows < 1) this.chat.push(t('say.noArrows'), 'error');
       return;
     }
     this.inventory.consume(ammo.itemId, 1);
@@ -6525,7 +6543,7 @@ class App {
     const arrows = ammo?.total ?? 0;
     if (!canShoot(true, charge, arrows, effects)) {
       // 拉了半天没箭，得说一声——不然玩家只会觉得"弓坏了"
-      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      if (arrows < 1) this.chat.push(t('say.noArrows'), 'error');
       return;
     }
     if (!ammo) return;
@@ -7932,7 +7950,7 @@ class App {
     if (!offer || villager.dead) return false;
     const blocker = tradeBlocker(offer, this.inventory);
     if (blocker) {
-      this.chat.push(`交易不成：${blocker}`, 'system');
+      this.chat.push(tp('say.trade.refused', { reason: blocker }), 'system');
       return false;
     }
 
@@ -7960,7 +7978,10 @@ class App {
       // 升级：新交易已经在 `addTradeXp` 里追加进 `offers`，这里只报喜
       const profession = villager.profession;
       this.chat.push(
-        `村民升级了：${profession ? professionLabel(profession.id) : t('label.profession.farmer')} → ${levelName(villager.level)}（解锁了新的交易）`,
+        tp('say.trade.levelUp', {
+          profession: profession ? professionLabel(profession.id) : t('label.profession.farmer'),
+          level: levelName(villager.level),
+        }),
         'system',
       );
       this.audio.play('achievement', { x: villager.x, y: villager.y, z: villager.z });
@@ -9087,7 +9108,8 @@ class App {
     if (item !== undefined) {
       const leftover = this.inventory.add(item, 1);
       if (leftover > 0) this.spawnDrop(item, leftover, x + 0.5, y + 0.6, z + 0.5);
-      this.chat.push(`从花盆里取出${pottedPlantName(plant)}`, 'system');
+      // 名字用 `itemLabel()`（那块植物物品），不再读 `POTTED_PLANTS` 里的中文 `name`
+      this.chat.push(tp('say.flowerPot.taken', { item: itemLabel(item) }), 'system');
     }
     const next = withFlowerPotPlant(state, 0);
     this.world.setStateAndUpdate(x, y, z, next);
@@ -9212,7 +9234,7 @@ class App {
     this.applyEnvironment();
     // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
     // 这里不额外加血——只做"跳过夜晚 + 重生点"，避免凭空多一条回血规则
-    this.wakeUp('天亮了。重生点已设置在这张床上。');
+    this.wakeUp(t('say.sleep.wokeDawn'));
     // 进度（M7）：睡到天亮才算"甜美的梦"（被怪物惊醒、提前起床都不算——
     // 报事件的位置就在这个"真的跳到了黎明"的分支里）
     this.reportProgress({ kind: 'sleep' });
@@ -9281,7 +9303,7 @@ class App {
     ) {
       this.bedSpawn = null;
       // 床与重生锚共用 `bedSpawn`，所以提示不点名（拆哪个都走这一条）
-      this.chat.push('你的重生点被拆掉了', 'system');
+      this.chat.push(t('say.respawnPoint.broken'), 'system');
     }
   }
 
@@ -9291,7 +9313,7 @@ class App {
    */
   private interruptSleep(): boolean {
     if (!this.sleeping) return false;
-    this.wakeUp('你被惊醒了。');
+    this.wakeUp(t('say.sleep.interrupted'));
     return true;
   }
 
@@ -9369,7 +9391,7 @@ class App {
     // 友伤（联机22）：同队且该队 `friendlyFire` 关 → 本地就拦（省一次往返），
     // 被击者那边还会用消息里的 `fromName` 再判一次
     if (!this.teamState.canHurt(this.playerName, targetName)) {
-      this.chat.push('同队免伤（`/team friendlyfire true` 可以打开）', 'system');
+      this.chat.push(t('say.team.friendlyFire'), 'system');
       return true;
     }
     const damage = this.isCreative ? 20 : 4;
@@ -10538,7 +10560,7 @@ class App {
   private openCommandBlockEditor(x: number, y: number, z: number): void {
     this.editingCommandBlock = { x, y, z };
     const current = this.commandBlocks.get(this.dimension, x, y, z) ?? null;
-    this.commandBlockEditor.show(current, '命令方块（红石脉冲时执行）');
+    this.commandBlockEditor.show(current, t('say.commandBlock.title'));
   }
 
   /**
@@ -11601,12 +11623,12 @@ class App {
         // 咬钩：水花 + 提示（浮标同时会往下沉一点，见下面那段）
         this.audio.play('splash');
         this.particles.spawnSplash(bobber.x, bobber.y, bobber.z, 0x9fd4ff, 14);
-        this.chat.push('咬钩了！快收杆（2 秒内）', 'system');
+        this.chat.push(tp('say.fishing.bite', { seconds: BITE_WINDOW_SECONDS }), 'system');
       } else if (phase === 'idle') {
         this.bobber = null;
         this.hideBobber();
-        if (before.phase === 'flying') this.chat.push('浮标没落在水里', 'error');
-        else if (before.phase === 'biting') this.chat.push('鱼跑了…', 'system');
+        if (before.phase === 'flying') this.chat.push(t('say.fishing.notInWater'), 'error');
+        else if (before.phase === 'biting') this.chat.push(t('say.fishing.escaped'), 'system');
       }
     }
 
@@ -11646,8 +11668,15 @@ class App {
     this.refreshHotbar();
 
     const label = itemLabel(caught.id);
-    const extra = Object.keys(stack.enchants ?? {}).length > 0 ? '（附魔书）' : '';
-    this.chat.push(`钓到了 ${label}${caught.count > 1 ? ` ×${caught.count}` : ''}${extra}`, 'system');
+    const extra = Object.keys(stack.enchants ?? {}).length > 0 ? t('say.fishing.enchantedBook') : '';
+    // 单/多两条模板：`×2` 这种量词在中英德俄法葡里**位置与写法都不同**，
+    // 拼一句 `{item} ×{count}` 在俄语里会把数字放到名词前面（同一类问题在批次 425 踩过）
+    this.chat.push(
+      caught.count > 1
+        ? tp('say.fishing.caughtMany', { item: label, count: caught.count, extra })
+        : tp('say.fishing.caughtOne', { item: label, extra }),
+      'system',
+    );
   }
 
   /** 建（或复用）浮标那个小方块：上白下红，与原版浮标同一个配色 */
@@ -11827,7 +11856,7 @@ class App {
       const y = Math.min(WORLD_MAX_Y - 4, this.physics.y + 22);
       this.entities.spawn(createMob(PHANTOM_TYPE, x, y, z));
     }
-    this.chat.push(`你已经连着 ${this.daysWithoutSleep} 天没合眼了……天上有东西在叫。`, 'system');
+    this.chat.push(tp('say.phantom', { days: this.daysWithoutSleep }), 'system');
   }
 
   private updateMobSpawning(dt: number): void {
@@ -13955,7 +13984,7 @@ class App {
       const entry = this.armorStands.get(this.dimension, x, y, z);
       const index = entry ? entry.slots.findIndex((item) => item !== null) : -1;
       if (!entry || index < 0) {
-        this.chat.push('盔甲架是空的（拿盔甲右键可以给它穿上）', 'system');
+        this.chat.push(t('say.armorStand.empty'), 'system');
         return true;
       }
       const item = entry.slots[index]!;
@@ -14011,13 +14040,13 @@ class App {
       this.jukeboxDiscs.delete(key);
       this.spawnDrop(loaded, 1, x + 0.5, y + 1.05, z + 0.5);
       this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-      this.chat.push('取出了唱片', 'system');
+      this.chat.push(t('say.jukebox.taken'), 'system');
       return true;
     }
 
     const name = this.discNameOf(this.heldItemId);
     if (!name) {
-      this.chat.push('这里能放唱片（唱片可以在废弃矿井 / 地牢的箱子里找到）', 'system');
+      this.chat.push(t('say.jukebox.hint'), 'system');
       return true;
     }
     if (!this.inventory.consume(this.heldItemId!, 1)) return true;
@@ -14025,7 +14054,7 @@ class App {
     this.jukeboxDiscs.set(key, this.heldItemId!);
     const spec = discSoundSpec(name);
     if (spec) this.audio.playVoice(discSoundKind(name), spec, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-    this.chat.push(`正在播放唱片：${name}（${Math.round(discDuration(name))} 秒）`, 'system');
+    this.chat.push(tp('say.jukebox.playing', { name, seconds: Math.round(discDuration(name)) }), 'system');
     return true;
   }
 
@@ -14075,7 +14104,7 @@ class App {
     if (sneaking) {
       const pitch = nextNotePitch(state);
       this.world.setStateAndUpdate(x, y, z, withNotePitch(state, pitch));
-      this.chat.push(`音符盒：第 ${pitch + 1} 档 / 共 ${NOTE_BLOCK_MAX_PITCH + 1} 档`, 'system');
+      this.chat.push(tp('say.noteBlock.pitch', { pitch: pitch + 1, total: NOTE_BLOCK_MAX_PITCH + 1 }), 'system');
       this.audio.play('click', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       return;
     }
@@ -14195,7 +14224,7 @@ class App {
       // 判据用 `lightOpacity >= 15` 而不是 `opaque`：树叶（opaque 但只挡 1 级光）与玻璃
       // （0 级）在原版都不挡箱子，用 opaque 会误伤它们。
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('箱子上面压着方块，打不开（挪开它，或者换成**木桶**——木桶不怕压）', 'system');
+        this.chat.push(t('say.chest.blocked'), 'system');
         return true;
       }
       {
@@ -14208,7 +14237,7 @@ class App {
     // 陷阱箱（批次 249）：与箱子同一个容器/界面，差别是**开着的时候发红石信号**
     if (hitBlock === Block.TRAPPED_CHEST) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('陷阱箱上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.trappedChest.blocked'), 'system');
         return true;
       }
       this.openTrappedChest(x, y, z);
@@ -14222,7 +14251,7 @@ class App {
     // 潜影盒（批次 72）：与箱子同一条"头顶压着就打不开"的规矩，27 格
     if (isShulkerBox(hitBlock)) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('潜影盒上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.shulkerBox.blocked'), 'system');
         return true;
       }
       this.inventoryScreen.openWith(
@@ -14235,7 +14264,7 @@ class App {
     // 末影箱（批次 71）：与箱子同一条"头顶压着就打不开"的规矩，但开的是**你自己的那一份**
     if (hitBlock === Block.ENDER_CHEST) {
       if (this.isCoveredAbove(x, y, z)) {
-        this.chat.push('末影箱上面压着方块，打不开（挪开它）', 'system');
+        this.chat.push(t('say.enderChest.blocked'), 'system');
         return true;
       }
       // 开箱时冒一圈末影粒子（原版也有，而且是它唯一的"打开"反馈）
@@ -15028,7 +15057,7 @@ class App {
     // 荧石是**方块物品**（id 与方块相同），所以这里比的是 `Block.GLOWSTONE`
     if (this.heldItemId === Block.GLOWSTONE) {
       if (charge >= RESPAWN_ANCHOR_MAX_CHARGE) {
-        this.chat.push('这块重生锚已经充满了', 'system');
+        this.chat.push(t('say.anchor.full'), 'system');
         return true;
       }
       const next = withAnchorCharge(state, charge + 1);
@@ -15038,13 +15067,13 @@ class App {
       this.queueBlockChange(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
       this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 8);
-      this.chat.push(`重生锚充能 ${charge + 1} / ${RESPAWN_ANCHOR_MAX_CHARGE}`, 'system');
+      this.chat.push(tp('say.anchor.charged', { charge: charge + 1, max: RESPAWN_ANCHOR_MAX_CHARGE }), 'system');
       return true;
     }
 
     // ② 其他物品/空手：设重生点
     if (charge <= 0) {
-      this.chat.push('重生锚没有充能：拿荧石右键它', 'system');
+      this.chat.push(t('say.anchor.empty'), 'system');
       return true;
     }
     const next = withAnchorCharge(state, charge - 1);
@@ -15053,7 +15082,7 @@ class App {
     this.bedSpawn = { x, y, z, dimension: this.dimension };
     this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 12);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-    this.chat.push(`重生点已设置在这块重生锚上（剩余充能 ${charge - 1}）`, 'system');
+    this.chat.push(tp('say.anchor.spawnSet', { charge: charge - 1 }), 'system');
     return true;
   }
 
@@ -15075,7 +15104,7 @@ class App {
       stack.lodestone.dimension === this.dimension;
     stack.lodestone = { x, y, z, dimension: this.dimension };
     this.refreshHotbar();
-    if (!already) this.chat.push('指南针已绑定到这块磁石', 'system');
+    if (!already) this.chat.push(t('say.lodestone.bound'), 'system');
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.vibrate(6);
     return true;
