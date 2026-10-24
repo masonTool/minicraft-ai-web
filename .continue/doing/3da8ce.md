@@ -57,6 +57,10 @@
   - 为什么：这四块都是"说明性文字"，用户认为暂停页只需要按钮；成就入口仍在背包左栏（手机上唯一那条路），删掉暂停页那颗不会让成就不可达。存档信息通过暂停页看到之前也没人用，需要时能从世界列表/导出看到。
   - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 2 条骨架断言——`makeHeader` 调用从 2 处变 1 处；新增 1 条：暂停页不再出现 `menuTitle`/`settings-meta`/`touchBack`/`pause-achievements` 且只 append `actionsRow, help`）；`i18n-test` 547、`audit:i18n` 2864/2864；`typecheck` 通过；`tools/settings-acceptance.js`（浏览器验收）里那条"存档信息"断言同步改成"四块都不出现"。
   - 批次：20261024-1152
-- [ ] [优化11] 顶部中间第三颗键（视角）图标换成"眼睛"（保持现有 currentColor 实心风格）：`ui/TouchIcons.ts` 的 `view` 路径 → `npm run test:touch`（断言 svg 含眼球+瞳孔路径、不再是望远镜的镜筒矩形组）
+- [x] [优化11] 顶部中间第三颗键（视角）图标换成"眼睛"（保持现有 currentColor 实心风格）：`ui/TouchIcons.ts` 的 `view` 路径 → `npm run test:touch`（断言 svg 含眼球+瞳孔路径、不再是望远镜的镜筒矩形组）
+  - 做了什么：`PATHS.view` 从"斜放望远镜（四段矩形 + 底座）"换成一只眼睛：杏仁形眼眶 + `fill-rule="evenodd"` 挖出虹膜 + 实心瞳孔 `<circle r="2.1">`。仍是纯填充、`currentColor`，与其他五个图标同一套画法。
+  - 为什么：用户点名"最右边那颗换视角的图标，要一个小眼睛的形状，保持当前这种风格"。望远镜在 22px 下有四段小矩形，缩小后糊成一团；眼睛只有两个形状，小尺寸更清楚。
+  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（新增 1 条：view 的 svg 里有 evenodd 眼眶 + r=2.1 瞳孔，且不再有 `rotate(-33`）。
+  - 批次：20261024-1152
 - [ ] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`
 - [ ] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据

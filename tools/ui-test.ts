@@ -166,6 +166,15 @@ console.log('\n[触摸按钮图标]');
     svgs.add(svg);
   }
   equal('图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
+
+  // 批次 20261024-1152（用户）：顶部第三颗（视角）换成一只眼睛，风格不变（仍是纯填充）
+  const viewSvg = touchIconSvg('view');
+  check(
+    '视角图标是一只眼睛（眼眶挖出虹膜 + 实心瞳孔）',
+    viewSvg.includes('fill-rule="evenodd"') &&
+      viewSvg.includes('<circle cx="12" cy="12" r="2.1"/>') &&
+      !viewSvg.includes('rotate(-33'),
+  );
 }
 
 // ---------------------------------------------------------------- 2.5 手机端操作界面
