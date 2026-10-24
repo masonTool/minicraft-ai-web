@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { normalizeId, shortId } from './core/registry/ids.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
+import { ensureHostCore } from './core/hostCore.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import {
@@ -19808,7 +19809,20 @@ async function boot(): Promise<void> {
   hideBootLoading();
 }
 
-void boot().catch((error: unknown) => {
+/**
+ * 门禁（批次 20261025-0329 · 宿主3）：先确认核心数据（方块表）在，再 `boot()`。
+ *
+ * 为什么包一层 IIFE 而不是顶层 `await`：`main.ts` 是被 `index.html` 静态引入的，
+ * 模块体本来就是同步执行的，包一层异步函数就够——不必让整个模块变成 async，
+ * 那会牵连所有依赖它的模块的求值时机。
+ *
+ * 拿不到核心数据时 `ensureHostCore()` 已经画好了"去应用里玩"的提示屏，这里**必须**
+ * 直接放弃：没有方块表的世界不报错，只会是一片空白。
+ */
+void (async () => {
+  if (!(await ensureHostCore())) return;
+  await boot();
+})().catch((error: unknown) => {
   // 启动期抛错：别让"加载中…"永远转下去（也别说谎说还在加载）。
   // 这里只负责给玩家一句人话，错误本身照旧 rethrow，交给 `unhandledrejection` 记账。
   failBootLoading();

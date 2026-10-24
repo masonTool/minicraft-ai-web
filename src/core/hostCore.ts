@@ -1,14 +1,19 @@
 /**
- * 真入口（批次 20261025-0329 · 宿主3）
+ * 启动门禁（批次 20261025-0329 · 宿主3 / 宿主4 调整）
  *
  * 顺序很重要，这一份文件的存在就是为了这个顺序：
  *
  *   1. 先取**核心数据** `/__host/core.bin`（方块表）；
  *   2. 解出来装进注册表（`installBlockTable`）；
- *   3. 再动态 `import('./main.ts')`——主包一被执行就会开始建图集、进菜单。
+ *   3. 返回 `true` 之后才允许 `main.ts` 调 `boot()`——`boot()` 会建图集、进菜单。
  *
- * 为什么不能反过来：`main.ts` 末尾直接 `void boot()`，静态 import 会**立刻**执行它。
- * 表没装上就进世界，方块全是空气、地形是一片虚空——而且不会报错。
+ * 为什么不能反过来：表没装上就进世界，方块全是空气、地形是一片虚空——而且不会报错。
+ *
+ * ⚠️ 为什么**不**做成独立入口 + 动态 `import('./main.ts')`（试过，已回退）：
+ * 那样 `blocks.ts` 会同时被入口 chunk 与 main chunk 引用，rolldown 在两个 chunk 里
+ * **各打一份**（实测主包 2.0 MB / gzip 556 KB，而单入口是 1.2 MB / 338 KB），
+ * 顺带还多一次请求。门禁要不要"连 JS 都不给"并不重要——没有核心数据，那份 JS
+ * 本来也跑不起来；而体积翻倍是实打实的体验损失。
  *
  * ## 门禁怎么成立的
  *
@@ -27,8 +32,8 @@
  * 而主包本身也要下载，所以用户感知不到这一次串行。
  */
 
-import { BLOCK_TABLE_MAGIC, decodeBlockTable } from './core/registry/blockTableCodec.ts';
-import { installBlockTable } from './core/registry/blocks.ts';
+import { BLOCK_TABLE_MAGIC, decodeBlockTable } from './registry/blockTableCodec.ts';
+import { installBlockTable } from './registry/blocks.ts';
 
 /** 核心数据路径（相对，跟随 vite `base: './'`，放在子目录也能用） */
 const CORE_URL = './__host/core.bin';
@@ -162,37 +167,34 @@ function looksLikeCore(buffer: ArrayBuffer): boolean {
   return BLOCK_TABLE_MAGIC.every((byte, index) => head[index] === byte);
 }
 
-async function start(): Promise<void> {
+/**
+ * 启动前调用：拿到并装好核心数据就返回 true；否则**已经画好提示屏**并返回 false。
+ *
+ * 调用方（`main.ts`）拿到 false 时必须直接放弃启动，不要"先跑起来再说"——
+ * 没有方块表的世界不会报错，只会是一片空白，那种失败比黑屏难查得多。
+ */
+export async function ensureHostCore(): Promise<boolean> {
   let core: ArrayBuffer;
   try {
     core = await fetchCore();
   } catch (error) {
-    // 浏览器打开就是这一条：服务器上没有 `__host/core.bin`
     console.info('[boot] 没有核心数据，显示安装引导', error);
     showScreen('install');
-    return;
+    return false;
   }
 
   if (!looksLikeCore(core)) {
-    // 200 但内容不是方块表（SPA 回退 / 被网关改写 / 静态站上放了个别的文件）
     console.info('[boot] 拿到的不是方块表，按"没有核心数据"处理');
     showScreen('install');
-    return;
+    return false;
   }
 
   try {
     installBlockTable(decodeBlockTable(core));
   } catch (error) {
-    // 文件在、但解不开 / 版本不兼容：这是"宿主与线上不同步"，不是"没装应用"
     console.error('[boot] 核心数据无法装载', error);
     showScreen('update');
-    return;
+    return false;
   }
-
-  await import('./main.ts');
+  return true;
 }
-
-void start().catch((error: unknown) => {
-  console.error('[boot] 启动失败', error);
-  showScreen('update');
-});
