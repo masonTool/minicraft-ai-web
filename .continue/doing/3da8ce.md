@@ -15,7 +15,11 @@
   - 为什么：引导每一步都长在"创建世界时那个模式"里（生存 4 步 / 创造 4 步的内容完全不同），切过之后接着教必然教错；重开又会把玩家刚做完的事抹掉，所以只作废。读档恢复模式也走同一个 `setGameMode`，必须靠 `waitingForSaveRestore` 排除，否则老存档一进世界引导就被清掉。
   - 验证：`npx tsx tools/tutorial-test.ts` **121 通过 / 0 失败**（新增 8 条：4 条判定 + 4 条接线，接线用正则截出 `setGameMode` 函数体，避免"函数写了没人调用"的假绿）。
   - 批次：20261024-1152
-- [ ] [优化3] 背包装备槽用部位图标替代文字：`ui/InventoryScreen.ts#buildArmorGrid` + `index.html` 的 `.inv-slot-hint` → 空槽显示头盔/胸甲/护腿/靴子/副手（盾）线框图标，文字只留 title/aria；`npm run test:inventory`
+- [x] [优化3] 背包装备槽用部位图标替代文字：`ui/InventoryScreen.ts#buildArmorGrid` + `index.html` 的 `.inv-slot-hint` → 空槽显示头盔/胸甲/护腿/靴子/副手（盾）线框图标，文字只留 title/aria；`npm run test:inventory`
+  - 做了什么：`SlotVisuals.ts` 新增 `ArmorSlotKind` + 五条 24×24 填充剪影路径 + `armorSlotHintSvg()`（与 `TouchIcons` 同一套"只画填充、不用描边"的经验）；`buildArmorGrid` 把 `hint.textContent` 换成 `innerHTML = armorSlotHintSvg(...)`，文案改挂到槽位 `aria-label` / `title`（副手仍用更详细的 `inventory.offhandHint`）；CSS 里 `.inv-slot-hint svg { 26×26, opacity .55 }`，颜色收到 `#6d6d6d`。
+  - 为什么：原版（Java + 基岩手机）装备槽画的就是部位剪影，文字"头/胸/腿/靴"既不像原版、又会在换语言/窄屏时挤成一团（副手那格当年就是被压到 11px 的）。图标是矢量的，`--touch-scale` 与窄屏都不用再单独调字号。
+  - 验证：`npx tsx tools/ui-test.ts` **936 通过 / 0 失败**（新增 2 条：`armorSlotHintSvg(kinds[i])` 且不再有 `hint.textContent = hints[i]` + CSS 有 `.inv-slot-hint svg`；五个图标都是 24×24 视口、含 path、`fill="currentColor"`）；`npm run typecheck` 通过。
+  - 批次：20261024-1152
 - [ ] [优化4] 背包右上角"配方书"点开就是打开配方书（定位"全部/搜索"），再点才是关闭：`ui/InventoryScreen.ts` 配方开关回调 + `main.ts#openRecipeBook/toggleRecipeBook` → `npm run test:inventory`（断言：点击后 `isRecipesOpen() === true`、当前 tab 为 all；第二次点击后为 false）
 - [ ] [优化5] 左栏自绘滚动条：生存与创造位置/宽度统一（都像创造那样离物品留 2px 间隔），修掉创造模式滑条下方跟着走的黑色残块：`index.html` 的 `.inv-category-scrollbar` 系列 + `ui/InventoryScreen.ts` 的滚动条同步 → `npm run test:inventory`（断言两模式滚动条 right/width 取值来自同一组常量）
 - [ ] [优化6] 第一人称手持物：拿着东西时隐藏手臂、只显示放大的物品（2 倍 + 厚度增加），空手仍画手臂：`render/HandRenderer.ts` → `npm run test:hand`（断言：持有物品时 arm/cuff/sleeve 不可见、物品尺寸为 2× 且厚度 > 0；空手时手臂可见）

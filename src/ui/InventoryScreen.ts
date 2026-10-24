@@ -178,7 +178,7 @@ import { drawPlayerPreview } from './PlayerPreview.ts';
 import { PlayerPreview3D } from './PlayerPreview3D.ts';
 import { paletteOf, type AppearancePalette } from '../game/appearance.ts';
 import { isTouchDevice, isTouchUi } from './TouchControls.ts';
-import { updateDurabilityBar } from './SlotVisuals.ts';
+import { armorSlotHintSvg, updateDurabilityBar, type ArmorSlotKind } from './SlotVisuals.ts';
 import {
   canSplitStack,
   initialSplitCount,
@@ -1518,11 +1518,18 @@ export class InventoryScreen {
     return grid;
   }
 
-  /** 盔甲 4 格 + 副手 1 格（槽位号 36-40，与原版一致） */
+  /**
+   * 盔甲 4 格 + 副手 1 格（槽位号 36-40，与原版一致）。
+   *
+   * 空槽显示**部位剪影图标**（头盔 / 胸甲 / 护腿 / 靴子 / 盾牌）而不是"头/胸/腿/靴/副手"
+   * 五个字（批次 20261024-1152，用户："不要用文字表示槽，要在背景上显示相应位置的图标空位"）。
+   * 文字仍然保留在 `aria-label` / `title` 上——读屏要用它，桌面端悬停也要能看懂。
+   */
   private buildArmorGrid(): HTMLDivElement {
     const grid = document.createElement('div');
     grid.className = 'inv-grid inv-armor';
-    const hints = [
+    const kinds: readonly ArmorSlotKind[] = ['helmet', 'chestplate', 'leggings', 'boots', 'offhand'];
+    const labels = [
       t('inventory.armor.helmet'),
       t('inventory.armor.chestplate'),
       t('inventory.armor.leggings'),
@@ -1533,12 +1540,16 @@ export class InventoryScreen {
       const index = ARMOR_START + i;
       const slot = this.registerSlot(`inv:${index}`, this.inventory, index);
       const hint = document.createElement('span');
+      // `inv-slot-hint-wide` 留着：盔甲页窄屏的 CSS 按它收尺寸（图标本身是矢量，不用改）
       hint.className = i === ARMOR_SIZE ? 'inv-slot-hint inv-slot-hint-wide' : 'inv-slot-hint';
-      hint.textContent = hints[i]!;
+      hint.innerHTML = armorSlotHintSvg(kinds[i]!);
+      hint.setAttribute('aria-hidden', 'true');
       slot.appendChild(hint);
+      slot.setAttribute('aria-label', labels[i]!);
       // 批次 275：副手原来只写「副」，玩家联想不到盾牌。触摸端没有悬停提示，
       // 所以文案写全 + 槽位 title 也说清能放什么。
       if (i === ARMOR_SIZE) slot.title = t('inventory.offhandHint');
+      else slot.title = labels[i]!;
       grid.appendChild(slot);
     }
     return grid;

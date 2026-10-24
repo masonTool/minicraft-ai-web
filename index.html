@@ -3884,13 +3884,15 @@
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
-      /* 空槽里写"头/胸/腿/靴/副手"：触摸端没有悬停提示，只能靠槽位自己说明。
-         副手是两个字，40px 槽位放不下 14px，单独收一号（批次 275）。 */
+      /* 空槽提示：**部位剪影图标**（批次 20261024-1152，用户："不要用文字表示槽，
+         要在背景上显示相应位置的图标空位"）。文字只留在 title / aria-label 上。
+         图标比槽位小一圈、半透明 —— 与原版一样"看得见但不抢戏"。 */
       .inv-slot-hint {
         position: absolute; inset: 0; display: grid; place-items: center;
-        color: #5f5f5f; font-size: 14px; pointer-events: none; user-select: none;
+        color: #6d6d6d; font-size: 14px; pointer-events: none; user-select: none;
       }
-      .inv-slot-hint-wide { font-size: 11px; letter-spacing: -0.5px; }
+      .inv-slot-hint svg { width: 26px; height: 26px; opacity: .55; }
+      .inv-slot-hint-wide svg { width: 24px; height: 24px; }
       .inv-slot.has-item .inv-slot-hint { display: none; }
       /* 放不下（例如把石头塞进头盔位）：抖一下，别让玩家以为是点击没生效 */
       @keyframes inv-reject-shake {

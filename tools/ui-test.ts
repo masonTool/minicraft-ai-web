@@ -31,6 +31,7 @@ import {
   slicePage,
 } from '../src/ui/ItemPager.ts';
 import { TOUCH_ICON_NAMES, touchIconLabel, touchIconSvg } from '../src/ui/TouchIcons.ts';
+import { armorSlotHintSvg, type ArmorSlotKind } from '../src/ui/SlotVisuals.ts';
 import { iconBackingScale, iconDisplaySize } from '../src/ui/ItemIcon.ts';
 import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../src/ui/BlockIcon.ts';
 import { BLOCKS } from '../src/core/registry/blocks.ts';
@@ -3414,6 +3415,23 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
       invSrc.includes("t('inventory.offhandHint')") &&
       css.includes('.inv-slot-hint-wide'),
   );
+  // 批次 20261024-1152（用户）：空槽不再写"头/胸/腿/靴/副手"，改成部位剪影图标
+  check(
+    '装备槽空位画的是部位图标，不是文字',
+    invSrc.includes('armorSlotHintSvg(kinds[i]!)') &&
+      !invSrc.includes('hint.textContent = hints[i]') &&
+      css.includes('.inv-slot-hint svg'),
+  );
+  {
+    const kinds: readonly ArmorSlotKind[] = ['helmet', 'chestplate', 'leggings', 'boots', 'offhand'];
+    check(
+      '五个部位图标都是非空、24×24 视口的填充 SVG',
+      kinds.every((kind) => {
+        const svg = armorSlotHintSvg(kind);
+        return svg.startsWith('<svg viewBox="0 0 24 24"') && svg.includes('<path d="M') && svg.includes('fill="currentColor"');
+      }),
+    );
+  }
   check(
     '640px 横屏盔甲页收窄预览与格子，避免 9 列背包被裁切',
     css.includes("[data-pocket-tab='armor'] .inv-player-preview") &&
