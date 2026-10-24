@@ -308,7 +308,18 @@ const t0 = Date.now();
 // ⚠️ 这里曾经有个"安静阶段"（把带绝对耗时预算的几套单独串行跑）——批次 103 的 B103-5
 // 把那些断言改成**比值**之后就不需要了：比值在同一次运行里量分子分母，与争用无关。
 // 见 `perf-bench.ts` / `decor-test.ts` / `nether-test.ts` 里各自的判据说明。
-await runBatch(suites, jobs);
+/*
+ * `net` 独占跑（不与其它套件并发）。
+ *
+ * 它要 spawn 真实服务端、等广播、按毫秒级的窗口确认"应该没收到"，是唯一对**时序**
+ * 敏感的套件；与别的套件抢 CPU 时会出现假红（本批撞见过两次：单跑 120 通过，
+ * 并发时红一次、重跑又绿）。而它本来也是最慢的一套（~14s），独占几乎不增加总时长
+ * ——瓶颈一直是它，其它套件并发着跑完也到不了 14s。
+ */
+const exclusive = suites.filter((s) => s.name === 'net');
+const shared = suites.filter((s) => s.name !== 'net');
+await runBatch(exclusive, 1);
+await runBatch(shared, jobs);
 const wall = Date.now() - t0;
 
 // ------------------------------------------------------------------ 汇总

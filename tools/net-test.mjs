@@ -26,15 +26,27 @@ let failed = 0;
 /** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
 let clientSeq = 0;
 
+/**
+ * 距上一条断言超过 300ms 就把耗时打在行尾。
+ *
+ * 这个套件的时间几乎全是"等"（起服务端、等 welcome、等广播），总时长看不出是哪一段；
+ * 把慢的那几条直接标出来，比事后猜快得多（也解释了为什么它并发时容易撞超时）。
+ */
+let lastCheckAt = Date.now();
 function check(label, ok, detail = '') {
+  const now = Date.now();
+  const waited = now - lastCheckAt;
+  lastCheckAt = now;
+  const took = waited >= 300 ? `  (+${waited}ms)` : '';
   if (ok) {
     passed++;
-    console.log(`  ✓ ${label}`);
+    console.log(`  ✓ ${label}${took}`);
   } else {
     failed++;
-    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}${took}`);
   }
 }
+
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -167,7 +179,7 @@ async function startServer(extraEnv = {}, attempts = 3) {
     });
     // 等服务端监听端口
     for (let i = 0; i < 100; i++) {
-      await sleep(100);
+      await sleep(40);
       if (serverOutput.includes('已启动')) return true;
       if (server.exitCode !== null) break;
     }
@@ -259,7 +271,7 @@ try {
 
   // 位置广播
   alice.send({ t: 'move', x: 11.5, y: 71.25, z: 21, yaw: 1.57, pitch: -0.2, dimension: 'overworld' });
-  await sleep(120);
+  await sleep(50);
   const moved = await bob.wait('player');
   check('位置更新被广播', moved?.id === 1 && Math.abs(moved.x - 11.5) < 0.001, JSON.stringify(moved));
   check('朝向也一起同步', Math.abs((moved?.yaw ?? 0) - 1.57) < 0.001, `${moved?.yaw}`);
@@ -267,7 +279,7 @@ try {
   // 限频：短时间内连发多条 move，只应有一条被转发
   bob.mailbox.length = 0;
   for (let i = 0; i < 10; i++) alice.send({ t: 'move', x: 20 + i, y: 70, z: 0, yaw: 0, pitch: 0 });
-  await sleep(150);
+  await sleep(60);
   const forwarded = bob.mailbox.filter((message) => message.t === 'player').length;
   check('位置消息被服务端限频', forwarded <= 2, `150ms 内转发了 ${forwarded} 条`);
 
@@ -291,7 +303,7 @@ try {
   check('广播里带 by（发送者 id）', blockMessage?.by === 1, `${blockMessage?.by}`);
 
   alice.send({ t: 'block', x: 31, y: 65, z: -20, id: 259, state: 6, dimension: 'overworld' });
-  // 等 Bob 真的收到这条广播再让 Carol 加入：`await sleep(100)` 也有"服务端还没处理完"
+  // 等 Bob 真的收到这条广播再让 Carol 加入：`await sleep(40)` 也有"服务端还没处理完"
   // 的风险（那时 Carol 的 welcome 里就少一条改动，而且是**偶发**的）
   await bob.wait('block');
 
@@ -323,7 +335,7 @@ try {
       Math.abs(itemSpawn?.x - 10.5) < 0.001,
     JSON.stringify(itemSpawn),
   );
-  check('生成者自己不会收到回传', (await alice.wait('item-spawn', 300)) === null);
+  check('生成者自己不会收到回传', (await alice.wait('item-spawn', 250)) === null);
 
   // 新玩家进来要看得见地上已有的东西（与方块改动同一个思路）
   const erin = new TestClient('Erin');
@@ -345,7 +357,7 @@ try {
   await bob.wait('item-spawn');
   // Bob 用自己的 localId=8 想删 Alice 那一堆：key 前缀不同，删不到
   bob.send({ t: 'item-remove', localId: 8 });
-  await sleep(120);
+  await sleep(50);
   const frank = new TestClient('Frank');
   const welcomeF = await joinAndWaitWelcome(frank, 'Frank', 0, 70, 0);
   check(
@@ -359,7 +371,7 @@ try {
   // 脏数据：数量超上限 / 坐标 NaN 都不该进快照
   alice.send({ t: 'item-spawn', localId: 9, itemId: 5, count: 999, x: 1, y: 70, z: 1 });
   alice.send({ t: 'item-spawn', localId: 10, itemId: 5, count: 1, x: 'abc', y: 70, z: 1 });
-  await sleep(120);
+  await sleep(50);
   const grace = new TestClient('Grace');
   const welcomeG = await joinAndWaitWelcome(grace, 'Grace', 0, 70, 0);
   check(
@@ -375,7 +387,7 @@ try {
   {
     // bob 在下界丢一堆（`dimension` 跟着消息走，而不是"接收者当前维度"）
     bob.send({ t: 'item-spawn', localId: 61, itemId: 3, count: 1, x: 9, y: 70, z: 9, dimension: 'nether' });
-    await sleep(150);
+    await sleep(60);
 
     // 主世界的新玩家不该看到它
     const overworldGuest = new TestClient('OwGuest');
@@ -432,7 +444,7 @@ try {
     check('接收者收到一条', (await alice.wait('chat', 2000)) !== null);
     check(
       '发送者不会收到服务端回传（客户端已本地回显，否则同一条消息出现两次）',
-      (await bob.wait('chat', 600)) === null,
+      (await bob.wait('chat', 250)) === null,
     );
   }
 
@@ -540,7 +552,7 @@ try {
     check('首次加入拿到 id', typeof idBefore === 'number', `${idBefore}`);
 
     reconnector.close();
-    await sleep(120); // 落在宽限期内（400ms）
+    await sleep(50); // 落在宽限期内（400ms）
     const back = new TestClient('Reconnector', reconnector.clientId);
     const welcomeR2 = await joinAndWaitWelcome(back, '重连者', 3, 70, 3);
     check('宽限期内重连复用原 id', welcomeR2?.id === idBefore, `${idBefore} → ${welcomeR2?.id}`);
@@ -606,7 +618,7 @@ try {
   // ---------------------------------------------------------------- 外观状态（联机17）
   console.log('\n[外观状态]');
   {
-    await sleep(80); // move 有 50ms 限频
+    await sleep(40); // move 有 50ms 限频
     alice.mailbox.length = 0;
     bob.send({
       t: 'move',
@@ -633,7 +645,7 @@ try {
     );
 
     // 白名单：客户端塞的未知字段不该出现在广播里（否则一个客户端就能决定别人收到的报文）
-    await sleep(80);
+    await sleep(40);
     alice.mailbox.length = 0;
     bob.send({
       t: 'move',
@@ -676,13 +688,13 @@ try {
     // 缺 typeId 整条丢（没有类型就无从匹配）
     alice.mailbox.length = 0;
     bob.send({ t: 'mob-hit', typeId: '', dimension: 'overworld', x: 0, y: 70, z: 0, damage: 4 });
-    check('缺 typeId 的命中被拒', (await alice.wait('mob-hit', 600)) === null);
+    check('缺 typeId 的命中被拒', (await alice.wait('mob-hit', 250)) === null);
   }
 
   // ---------------------------------------------------------------- 拾取仲裁（联机21）
   console.log('\n[拾取仲裁]');
   {
-    await sleep(80);
+    await sleep(40);
     // 再来一个"别人"：alice 与 rival 抢 bob 生成的那堆，才是真正的并发仲裁。
     // ⚠️ owner 要用**服务端分配的 id**（welcome 里的 `id`），`bob.id` 那个字段不存在、
     // 传 undefined 会被服务端当脏数据静默丢掉（本轮踩过：两边都收不到回包）
@@ -691,7 +703,7 @@ try {
     const rival = new TestClient('Rival');
     await joinAndWaitWelcome(rival, '抢货的人', 0, 70, 0);
     bob.send({ t: 'item-spawn', localId: 41, itemId: 3, count: 2, x: 40, y: 70, z: 40 });
-    await sleep(150);
+    await sleep(60);
 
     alice.mailbox.length = 0;
     rival.mailbox.length = 0;
@@ -723,7 +735,7 @@ try {
   // ---------------------------------------------------------------- PvP（联机22）
   console.log('\n[PvP 转发]');
   {
-    await sleep(80);
+    await sleep(40);
     const aliceId = Number(welcomeA?.id ?? 0);
     const bobServerId = Number(welcomeB?.id ?? 0);
 
@@ -736,7 +748,7 @@ try {
       hitMsg?.damage === 4 && hitMsg?.fromTeam === 'red' && hitMsg?.fromId === bobServerId,
       JSON.stringify(hitMsg),
     );
-    check('攻击者自己不会收到自己发的 player-hit', (await bob.wait('player-hit', 400)) === null);
+    check('攻击者自己不会收到自己发的 player-hit', (await bob.wait('player-hit', 250)) === null);
 
     // 服务端夹取伤害上限（无鉴权下最省的那道闸）
     alice.mailbox.length = 0;
@@ -748,7 +760,7 @@ try {
     alice.mailbox.length = 0;
     bob.send({ t: 'player-hit', targetId: bobServerId, damage: 4, team: '' });
     bob.send({ t: 'player-hit', targetId: 9999, damage: 4, team: '' });
-    check('打自己 / 打不存在的 id 都不发', (await alice.wait('player-hit', 600)) === null);
+    check('打自己 / 打不存在的 id 都不发', (await alice.wait('player-hit', 250)) === null);
   }
 
   // ---------------------------------------------------------------- 脏消息校验（联机24）
@@ -763,7 +775,7 @@ try {
     for (const [label, message] of dirty) {
       alice.mailbox.length = 0;
       bob.send(message);
-      check(`${label} 被拒`, (await alice.wait('block', 500)) === null);
+      check(`${label} 被拒`, (await alice.wait('block', 250)) === null);
     }
 
     // 批量里逐条丢：坏的那条不连累好的
@@ -781,7 +793,7 @@ try {
     // 容器也要卡距离（原来只校验形状）
     alice.mailbox.length = 0;
     bob.send({ t: 'container', x: 300, y: 70, z: 300, dimension: 'overworld', slots: [null] });
-    check('隔空改容器被拒', (await alice.wait('container', 500)) === null);
+    check('隔空改容器被拒', (await alice.wait('container', 250)) === null);
   }
 
   // ---------------------------------------------------------------- 广播范围（联机27）
@@ -795,7 +807,7 @@ try {
     far.mailbox.length = 0;
     bob.send({ t: 'block', x: 2, y: 70, z: 8, id: 1, state: 0, dimension: 'overworld' });
     check('近处的人收到方块', (await alice.wait('block', 2000)) !== null);
-    check('8 区块外的人收不到方块', (await far.wait('block', 700)) === null);
+    check('8 区块外的人收不到方块', (await far.wait('block', 250)) === null);
 
     // 聊天是文字，不受范围限制（否则远处的人就成了聋子）
     far.mailbox.length = 0;
@@ -806,7 +818,7 @@ try {
     alice.mailbox.length = 0;
     far.mailbox.length = 0;
     bob.send({ t: 'block', x: 2, y: 70, z: 8, id: 1, state: 0, dimension: 'nether' });
-    check('换维度的方块不会发给主世界的人', (await alice.wait('block', 700)) === null);
+    check('换维度的方块不会发给主世界的人', (await alice.wait('block', 250)) === null);
 
     far.close();
   }
@@ -826,7 +838,7 @@ try {
     // 速度上限：手搓一支 500 格/秒 的箭要被丢（一支箭不该飞那么快）
     alice.mailbox.length = 0;
     bob.send({ t: 'arrow', x: 5, y: 71, z: 5, vx: 500, vy: 0, vz: 0, damage: 6 });
-    check('超速的箭被拒', (await alice.wait('arrow', 600)) === null);
+    check('超速的箭被拒', (await alice.wait('arrow', 250)) === null);
 
     alice.mailbox.length = 0;
     bob.send({ t: 'tnt', x: 7, y: 70, z: 7, dimension: 'overworld' });
@@ -837,7 +849,7 @@ try {
     // 服务端 `Number(null)` 是 0，等于"合法坐标 0"——那样这条会假通过
     alice.mailbox.length = 0;
     bob.send({ t: 'tnt', x: 'abc', y: 70, z: 7, dimension: 'overworld' });
-    check('TNT 脏坐标被拒', (await alice.wait('tnt', 600)) === null);
+    check('TNT 脏坐标被拒', (await alice.wait('tnt', 250)) === null);
   }
 
   // ---------------------------------------------------------------- 限频与体积（联机25）
@@ -896,7 +908,7 @@ try {
     // 超过 27 格（最大的容器）整条丢：服务端只做形状校验
     alice.mailbox.length = 0;
     bob.send({ t: 'container', x: 41, y: 70, z: 40, dimension: 'overworld', slots: new Array(28).fill(null) });
-    check('超过 27 格的容器消息被拒', (await alice.wait('container', 600)) === null);
+    check('超过 27 格的容器消息被拒', (await alice.wait('container', 250)) === null);
   }
 
   // ---------------------------------------------------------------- 牌子 / 展示框（联机16）
@@ -1011,11 +1023,11 @@ try {
     const sender = new TestClient('SnapshotSender');
     await joinAndWaitWelcome(sender, '裁剪测试', 0, 70, 0);
     sender.send({ t: 'block', x: 8, y: 70, z: 8, id: 1, state: 0, dimension: 'overworld' });
-    await sleep(80);
+    await sleep(40);
     sender.send({ t: 'move', x: 2000, y: 70, z: 2000, yaw: 0, pitch: 0, dimension: 'overworld' });
-    await sleep(120); // move 有 50ms 限频
+    await sleep(50); // move 有 50ms 限频
     sender.send({ t: 'block', x: 2008, y: 70, z: 2008, id: 1, state: 0, dimension: 'overworld' });
-    await sleep(150);
+    await sleep(60);
 
     const newcomer = new TestClient('Newcomer');
     const welcome = await joinAndWaitWelcome(newcomer, '新人', 0, 70, 0);
@@ -1085,7 +1097,7 @@ try {
     server.kill('SIGTERM');
     await Promise.race([exited, sleep(2500)]);
     writeFileSync(join(DATA_DIR, 'world.json'), '{ 这不是 JSON');
-    await sleep(100);
+    await sleep(40);
 
     check('坏快照下服务端仍能起来', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
     check(
@@ -1119,8 +1131,8 @@ try {
     check('两个房都能加入', welcomeA !== null && welcomeB2 !== null);
 
     roomA.send({ t: 'block', x: 3, y: 70, z: 3, id: 1, state: 0, dimension: 'overworld' });
-    await sleep(150);
-    check('A 房的方块不会发给 B 房', (await roomB.wait('block', 600)) === null);
+    await sleep(60);
+    check('A 房的方块不会发给 B 房', (await roomB.wait('block', 250)) === null);
 
     const lateA = new TestClient('LateA', undefined, { room: 'alpha' });
     const lateWelcomeA = await joinAndWaitWelcome(lateA, '后进 A 房', 0, 70, 0);
