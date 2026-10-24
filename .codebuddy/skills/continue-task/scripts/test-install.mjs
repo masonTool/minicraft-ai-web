@@ -705,7 +705,7 @@ check('队列最后一条必须是 [自审]：缺它判红、补上转绿', (dir
   // 历史豁免靠"锚点"派生：DONE 是新→旧，比最上面那个带自审的批次更靠上的，都必须带自审。
   const done = join(dir, '.continue', 'DONE.md');
   const before = readFileSync(done, 'utf8');
-  const reviewBlock = '- [x] [自审] 审三层目标\n  - L1：有检查\n  - L2：有 probe\n  - L3：无外部\n';
+  const reviewBlock = '- [x] [自审] 审三层目标\n  - L1：有检查\n  - L2：先红后绿的用例\n  - L3：无外部\n';
   const newest = `## 批次 20260101-0002 · 2026-10-23 · 会话 aaaa0001\n\n`;
   const older = `## 批次 20260101-0001 · 2026-10-23 · 会话 aaaa0001\n\n- [x] 随便一条任务\n${reviewBlock}`;
   writeFileSync(done, `${before}\n${newest}- [x] 随便一条任务\n\n${older}`);

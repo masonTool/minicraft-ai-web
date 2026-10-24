@@ -104,6 +104,10 @@ const INSTANCE_TOKENS = [
   'minicraft',
   'src/world/chunk.ts',
   'test:chunk',
+  // `probe` 是本仓库 e2e 的场景名，模板里出现过一次（"一条先红后绿的用例 / probe 场景"），
+  // 装到没有 e2e.mjs 的项目里就是一句无法兑现的证据形式。只收 `probe` 不收 `e2e.mjs`：
+  // 后者在模板里是 `node scripts/e2e.mjs` 这类通用示例，收进来会误报。
+  'probe',
 ];
 if (INSTANCE_TOKENS.length === 0) {
   problems.push('INSTANCE_TOKENS 是空的——模板污染检查会静默失效（"没有痕迹"和"没查"长得一样）');

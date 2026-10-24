@@ -5,7 +5,7 @@ description: This skill installs the continue-do persistent task-queue framework
 
 # continue-task
 
-> 版本：1.1.0（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
+> 版本：1.1.1（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
 > 这里的数字由 `scripts/check-framework.mjs` 核对，写错会红。）
 
 安装 continue-do 持续任务队列框架。这是安装器；框架怎么用，装完后看项目里的 `.continue/README.md`。
@@ -48,8 +48,9 @@ description: This skill installs the continue-do persistent task-queue framework
   只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
 - **每批最后一条是自审**：最后一个条目固定审「三层目标」（L1 可测量 / L2 可对抗 / L3 可外部，
   口径见装出来的 `.continue/README.md` §8）。`audit-ids` 查它在不在最后、勾成 `[x]` 时三层凭证
-  （`- L1：`/`- L2：`/`- L3：`）齐不齐，**不判结论质量**；「没有建议」必须带排除记录，
-  连续 3 批都提不出改进项才算收敛。
+  （`- L1：`/`- L2：`/`- L3：`）齐不齐，**不判结论质量**；「没有建议」必须带排除记录。
+  三层不预设项目有测试框架：没门禁就降级成手动复现（要写明，不能只写"无"）；
+  连续 3 批都提不出改进项才算收敛，但三层全空的批次不计入这 3 批。
 - **一批多长看行数，不看条数**：判据是"完成说明预计 > ~80 行"/"队列 > 500 行"/"这一阶段目标变了"；
   条数只是经验值（通常 8~12 条），不是上限。换批要新号时跑
   `node .continue/hooks/queue-init.mjs --new-batch`（号由脚本生成，不手编）。
