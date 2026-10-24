@@ -12030,7 +12030,11 @@ class App {
       // 敌对上限随难度缩放（批次 499）：和平 0 / 简单 12 / 普通 24 / 困难 36
       hostileLimit: difficulty.hostileSpawning ? hostileLimitFor(difficulty.spawnCap) : 0,
     };
-    this.mobSpawner.update(dt, ctx);
+    /*
+     * 刷怪只在"该跑模拟"的那一端（L8 · MS3）：从属端刷出来的怪会和房主那边的撞在一起，
+     * 变成两套各走各的 AI（这就是"两个人看到同一只僵尸在不同位置"的根源）。
+     */
+    if (shouldSimulate(this.net.role, 'mobs')) this.mobSpawner.update(dt, ctx);
   }
 
   /**
@@ -12503,7 +12507,15 @@ class App {
     this.fallingBlocks.tick(this.world, dt);
     // 潮涌核心（批次 547）：框架校验与潮涌能量续期
     this.tickConduits(dt);
-    this.entities.update(context, dt);
+    /*
+     * 实体推进：从属端**跳过生物**（房主算完推快照，这边只画影子实体），
+     * 但箭/掉落物/经验球这些各端自跑的实体照旧（它们的位置不靠快照）。
+     */
+    this.entities.update(
+      context,
+      dt,
+      shouldSimulate(this.net.role, 'mobs') ? undefined : (entity) => !(entity instanceof Mob),
+    );
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
     if (this.witherWasAlive && !witherAlive) {

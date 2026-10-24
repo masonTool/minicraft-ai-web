@@ -5421,5 +5421,32 @@ console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2�
   );
 }
 
+/*
+ * 生物模拟也只在房主那端跑（L8 · MS3）
+ *
+ * 从属端刷怪 / 跑 AI 会得到两套互不相同的轨迹——这正是"两个人看到同一只僵尸在不同位置"
+ * 的根源。但箭/掉落物/经验球是各端自己跑的（联机23），所以实体推进用的是**逐实体过滤**，
+ * 不是"整个 update 别看"。
+ */
+console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '刷怪在 shouldSimulate(mobs) 闸门里，且只调用一次',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'mobs')) this.mobSpawner.update(dt, ctx);") &&
+      (mainSrc.match(/this\.mobSpawner\.update\(/g) ?? []).length === 1,
+  );
+  check(
+    '实体推进用逐实体过滤（从属端只跳过生物，箭/掉落物照旧 tick）',
+    mainSrc.includes("shouldSimulate(this.net.role, 'mobs') ? undefined : (entity) => !(entity instanceof Mob)"),
+  );
+  check(
+    '实体管理器支持 shouldTick 过滤（不传就是老行为）',
+    readFileSync(new URL('../src/core/entity/EntityManager.ts', import.meta.url), 'utf8').includes(
+      'update(ctx: EntityContext, dt: number, shouldTick?: (entity: Entity) => boolean): void',
+    ),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
