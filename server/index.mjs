@@ -118,8 +118,12 @@ function snapshotFor() {
 const wss = new WebSocketServer({ port: PORT });
 
 wss.on('listening', () => {
-  log(`已启动，端口 ${PORT}，种子 ${WORLD_SEED}`);
-  log(`玩家把游戏指向 ws://localhost:${PORT} 即可联机`);
+  // 打**实际绑定**的端口，而不是环境变量里的那个：PORT=0 时由系统挑端口
+  // （测试用，避免两棵并行工作树抢同一个 8799）
+  const bound = wss.address();
+  const port = typeof bound === 'object' && bound ? bound.port : PORT;
+  log(`已启动，端口 ${port}，种子 ${WORLD_SEED}`);
+  log(`玩家把游戏指向 ws://localhost:${port} 即可联机`);
 });
 
 /**

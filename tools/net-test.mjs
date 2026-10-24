@@ -9,11 +9,18 @@
  */
 
 import { spawn } from 'node:child_process';
-import net from 'node:net';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
-const PORT = 8799; // 用不常用的端口，避免和开发者自己的服务端撞车
+/**
+ * 端口由系统分配（`PORT=0`），起完再从服务端日志里读回来。
+ *
+ * ⚠️ 以前写死 8799，理由是"用不常用的端口避免和开发者自己的服务端撞车"。但真正的
+ * 撞车方是**另一棵并行工作树**：两边的 `npm test` 同时跑时，先起的那台占住 8799，
+ * 后起的那台 `EADDRINUSE` 崩掉（stderr 只有一段 Node 版本号），于是"服务端启动成功"红、
+ * 后面一串依赖 welcome 的断言跟着红——重跑又绿。让系统挑端口，这类偶发就彻底没有了。
+ */
+let PORT = 0;
 let passed = 0;
 let failed = 0;
 /** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
@@ -106,30 +113,6 @@ class TestClient {
 
 // ---------------------------------------------------------------- 启动服务端
 
-/**
- * 端口现在还有人听吗？
- *
- * ⚠️ 为什么需要它：`server.kill('SIGTERM')` 只是"发了信号"，进程真正退出（并释放
- * 监听端口）可能还要几十到几百毫秒。连着跑两遍（门禁 + 手动重跑、或 CI 并行）时，
- * 第二遍的服务端就会 `EADDRINUSE` 直接崩，于是"服务端启动成功"红、后面 5 条依赖
- * welcome 的断言一起红——重跑又绿。门禁时红时绿比慢一秒危险得多。
- */
-function portBusy(port) {
-  return new Promise((resolve) => {
-    const socket = net.connect({ port, host: '127.0.0.1' });
-    let settled = false;
-    const done = (busy) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(busy);
-    };
-    socket.once('connect', () => done(true));
-    socket.once('error', () => done(false));
-    setTimeout(() => done(false), 500);
-  });
-}
-
 /** 停掉子进程并**等它真的退出**（2 秒不退就 SIGKILL） */
 function stopServer(child) {
   return new Promise((resolve) => {
@@ -158,12 +141,10 @@ function stopServer(child) {
 }
 
 console.log('\n[启动服务端]');
-// 上一遍留下的服务端可能还没走干净：先等端口放开（最多 3 秒）
-for (let i = 0; i < 30 && (await portBusy(PORT)); i++) await sleep(100);
 const server = spawn('node', ['server/index.mjs'], {
   // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
   // "宽限期过后才清掉落物"的断言都要白等半分钟
-  env: { ...process.env, PORT: String(PORT), GRACE_MS: '400' },
+  env: { ...process.env, PORT: '0', GRACE_MS: '400' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverOutput = '';
@@ -174,11 +155,15 @@ server.stderr.on('data', (chunk) => {
   serverOutput += String(chunk);
 });
 
-// 等服务端监听端口
+// 等服务端监听端口，并从日志里读出系统分配的端口号
 let listening = false;
 for (let i = 0; i < 100 && !listening; i++) {
   await sleep(100);
-  listening = serverOutput.includes('已启动');
+  const match = serverOutput.match(/已启动，端口 (\d+)/);
+  if (match) {
+    PORT = Number(match[1]);
+    listening = true;
+  }
 }
 check('服务端启动成功', listening, serverOutput.trim().split('\n').slice(-3).join(' | '));
 
