@@ -35,6 +35,10 @@ import {
   sanitizeDimension,
   sanitizeName,
   sanitizeRoom,
+  sanitizeEditPayload,
+  sanitizeEntityKeys,
+  sanitizeEntitySnap,
+  sanitizeWorldMeta,
   withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
@@ -107,6 +111,34 @@ const items = new Map();
 const GRACE_MS = Number(process.env.GRACE_MS ?? 30000);
 /** clientId → { id, name, timer }：已断开但还没过宽限期的人 */
 const graces = new Map();
+/**
+ * 房主（L8）：房间名 → `{ id, clientId }`，一个房间只有一名房主。
+ *
+ * 为什么服务端要记这件事：这一批之后**世界只由房主模拟**，其他人只渲染。两个人都
+ * 以为自己在模拟，正是"同一只怪两边血量不同"的根因——所以"谁是房主"必须是服务端
+ * 说了算，而不是客户端互相约定。
+ *
+ * 房主断线时**不立刻**释放：先留一个宽限期（与 `graces` 同一把尺子），他重连回来
+ * 仍然是他；宽限期过完才让出房主位，下一个开房的人才进得来。
+ */
+const hosts = new Map();
+/**
+ * 每个房间"是哪个世界"（L9）：`room` → `{name, seed, mode, difficulty}`。
+ *
+ * 房主开房时随 `join` 上报，服务端只做形状收口、**不做玩法判断**（模式/难度只当标签存着）。
+ * 从属端靠 `welcome` 里这一份知道"该生成哪片大陆"，`seed` 从此按房间而不是全服一个常量。
+ *
+ * 没有房主的房间（有人直接 join、没带 host）不在表里，退回 `WORLD_SEED`——那是
+ * "单机直连服务器"的老行为，不能因为这一批就断掉。
+ */
+const roomWorlds = new Map();
+
+/** 这个房间当前的世界元数据（没房主时用服务端默认种子兜底） */
+function worldOfRoom(room) {
+  return (
+    roomWorlds.get(room) ?? { name: '', seed: WORLD_SEED, mode: '', difficulty: '', worldType: '' }
+  );
+}
 /**
  * 容器内容（联机13）：`维度|x,y,z` → `{x,y,z,dimension,slots}`。
  *
@@ -238,6 +270,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
 const CLOSE_ORIGIN = 4004;
 /** 关闭码：房间密码错（联机26） */
 const CLOSE_PASSWORD = 4005;
+/** 关闭码：这个房间已经有房主（L8） */
+const CLOSE_HOST_TAKEN = 4006;
+/** 房主退出、房间已关闭（L8 · MS4）：客户端不该再重连 */
+const CLOSE_HOST_LEFT = 4007;
 
 /**
  * 运行统计（联机29）：入/出字节与消息数。
@@ -345,8 +381,29 @@ function scopedKey(room, key) {
  * 一次发给手机就是几 MB 的 JSON，而这个玩家真正看得见的可能只有几百格。
  */
 function snapshotFor(player) {
+  // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
+  // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
+  const world = worldOfRoom(player.room);
   return {
-    seed: WORLD_SEED,
+    seed: world.seed,
+    world: {
+      name: world.name,
+      seed: world.seed,
+      mode: world.mode,
+      difficulty: world.difficulty,
+      worldType: world.worldType ?? '',
+    },
+    /*
+     * 房主（L8）：这一局谁在跑模拟。
+     *
+     * `isHost` 只对**收快照的这个人**有意义（"我是不是房主"），`hostId` 是房里那一名的
+     * 服务端 id（从属端拿它显示"房主：#3"、后续"房主退出"也靠它对号）。
+     * 没房主的房（有人直接 join 没带 host）一律 `hostId: null`，客户端据此知道
+     * 这一局没人跑模拟——比静默当成"我在跑"安全。
+     */
+    isHost: player.isHost === true,
+    hostId: hosts.get(player.room)?.id ?? null,
+
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
     // 天气权威（联机35）：进服先对齐一次，之后靠切换时的广播
@@ -396,8 +453,53 @@ function snapshotFor(player) {
  * 为什么不另开一个健康检查端口：容器/反代只需要暴露一个口；而且 `ws` 支持
  * "挂在已有 HTTP server 上"，升级请求由它自己接管，普通请求落到这里。
  */
+/**
+ * 房间列表（L9）：给客户端的"加入房间"面板自动列出，省得手敲房名。
+ *
+ * 只列**当前有人**的房间（空房间没有加入的意义，它们的存档还在磁盘上躺着）。
+ * **不下发口令**：口令是进房的门槛，不是菜单上的信息；这里只说"这个服务器要不要口令"。
+ * 世界名与种子要发：加入的人靠它知道"进去会是哪片大陆"（面板上直接写出来）。
+ */
+function roomsListing() {
+  const byRoom = new Map();
+  for (const p of players.values()) {
+    let entry = byRoom.get(p.room);
+    if (!entry) {
+      entry = { room: p.room, players: 0, hasHost: false };
+      byRoom.set(p.room, entry);
+    }
+    entry.players += 1;
+    if (p.isHost === true) entry.hasHost = true;
+  }
+  return [...byRoom.values()]
+    .map((entry) => ({ ...entry, world: worldOfRoom(entry.room) }))
+    .sort((a, b) => a.room.localeCompare(b.room));
+}
+
 const httpServer = createServer((req, res) => {
   const path = (req.url ?? '/').split('?')[0];
+  /*
+   * `/rooms`（L9）：浏览器要从 `http://localhost:5173` 跨源读它，所以必须带 CORS。
+   * 内容是"哪个房间有人 + 世界叫什么"，没有口令、没有玩家名——局域网里谁都能看，
+   * 这也正是"自动发现房间"想要的效果。
+   */
+  if (path === '/rooms') {
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        protocol: PROTOCOL_VERSION,
+        // 服务端级口令（`ROOM_PASSWORD`）：客端据此提示"要口令"
+        passwordRequired: Boolean(ROOM_PASSWORD),
+        rooms: roomsListing(),
+      }),
+    );
+    return;
+  }
   if (path === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     res.end(
@@ -712,6 +814,21 @@ wss.on('connection', (socket, request) => {
           return reject(socket, 'password', '房间密码不对', CLOSE_PASSWORD);
         }
 
+        /*
+         * 房主（L8）：一个房间只认一名房主，第二个带 `host: true` 的 join 直接拒。
+         *
+         * **不退化成从属端**：静默降级会让两端都以为自己说了算，而这一批要消灭的正是
+         * 那种"同一只怪两边血量不同"——退回客户端再提示，玩家还是先进来了，只是换了个
+         * 身份，看起来像成功。拒绝 + `host-taken` 才能让他停在一句明确的话上。
+         *
+         * 宽限期内重连的房主还是他本人（`grace.id` 就是原 id），不该把自己挡在门外。
+         */
+        const wantsHost = message.host === true;
+        const host = hosts.get(room);
+        if (wantsHost && host && host.id !== grace?.id) {
+          return reject(socket, 'host-taken', '这个房间已经有房主了', CLOSE_HOST_TAKEN);
+        }
+
         const name = sanitizeName(message.name);
         player = {
           id: grace ? grace.id : nextPlayerId++,
@@ -744,8 +861,25 @@ wss.on('connection', (socket, request) => {
           effectCount: 0,
           // 方块/容器/聊天的令牌桶（联机25）
           buckets: createBuckets(),
+          // 房主（L8）：他这一局跑模拟，其他人只渲染
+          isHost: wantsHost,
         };
         players.set(player.id, player);
+        if (wantsHost) {
+          hosts.set(room, { id: player.id, clientId: player.clientId });
+          /*
+           * 世界（L9）：**只有房主能定这一局用哪个世界**。
+           *
+           * 从属端带来的 `world` 一律不看——它本来也不该带（客户端只在开房时填）。
+           * `sanitizeWorldMeta` 返回 `null` 时（没带 / 种子是脏数据）保留房间原有的那份：
+           * 房主重连、换客户端重开都能沿用，不至于把已在地图上的队友踢进另一片大陆。
+           */
+          const meta = sanitizeWorldMeta(message.world);
+          if (meta) {
+            roomWorlds.set(room, meta);
+            log(`房间 ${room} 的世界：${meta.name || '(未命名)'} · 种子 ${meta.seed}`);
+          }
+        }
 
         send(socket, {
           t: 'welcome',
@@ -759,7 +893,7 @@ wss.on('connection', (socket, request) => {
         // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
         // 测试也不必白等一个完整间隔
         socket.ping();
-        log(`${name}#${player.id} 加入（来自 ${address}），当前 ${players.size} 人`);
+        log(`${name}#${player.id} 加入（来自 ${address}）${wantsHost ? ' · 房主' : ''}，当前 ${players.size} 人`);
         break;
       }
 
@@ -803,6 +937,16 @@ wss.on('connection', (socket, request) => {
 
       case 'block': {
         if (!player) return;
+        /*
+         * 有房主的房里只收房主的坐标类消息（L8 · MS2）。
+         *
+         * 从属端的改动走 `edit-request`（由房主落地后以权威结果重发），这条老路留着是给
+         * **没有房主的房**用的（有人直接 join、没带 host；那种房子没人推进世界，谁改都一样）。
+         * 有房主还放宽，等于把权威又还给了每个客户端。
+         */
+        if (hosts.has(player.room) && player.isHost !== true) {
+          return rejectEdit(player, 'not-host', 'block');
+        }
         // 限频（联机25）：一条改动花一个令牌
         if (!player.buckets.block.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
@@ -822,7 +966,86 @@ wss.on('connection', (socket, request) => {
           rememberEdit(edits, scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
-        broadcast({ t: 'block', x, y, z, id, state, dimension, by: player.id }, player.id, player.room, { x, z, dimension });
+        broadcast(
+          {
+            t: 'block',
+            x,
+            y,
+            z,
+            id,
+            state,
+            dimension,
+            by: player.id,
+            // 权威标记（MS2）：由**服务端**按 isHost 重新判定，不信客户端传上来的那个值
+            authority: player.isHost === true,
+          },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
+        break;
+      }
+
+      /*
+       * 实体消失（L8 · MS3）：房主说"这几只没了"。
+       *
+       * 为什么要单独一条而不是等快照里消失：快照失踪有 300ms 宽限（AOI 边界会抖），
+       * 死亡用宽限会出现"打死了还站着 0.3 秒"，而且掉落的瞬间会看不到。
+       */
+      case 'entity-remove': {
+        if (!player) return;
+        if (hosts.has(player.room) && player.isHost !== true) return;
+        const keys = sanitizeEntityKeys(message.keys);
+        if (!keys) return;
+        broadcast({ t: 'entity-remove', keys, by: player.id }, player.id, player.room);
+        break;
+      }
+
+      /*
+       * 实体快照（L8 · MS3）：房主每 100ms 推一次，服务端**只按房间 + AOI 转发**。
+       *
+       * 为什么不做内容校验：服务端没有世界也没有生物表，判不了"这只僵尸该不该在这"。
+       * 形状收口（是不是数组、超不超过上限）在这里，语义把关在两端。
+       */
+      case 'entity-snap': {
+        if (!player) return;
+        // 只有房主能推：别人推过来的"实体在世界哪"没有意义（谁模拟谁是权威）
+        if (hosts.has(player.room) && player.isHost !== true) return;
+        const entities = sanitizeEntitySnap(message.entities);
+        if (!entities || entities.length === 0) return;
+        broadcast(
+          { t: 'entity-snap', by: player.id, entities },
+          player.id,
+          player.room,
+          // 与方块同一条 AOI：用**发送者**的位置当中心，这批实体都在他视野内
+          { x: player.x, z: player.z, dimension: player.dimension },
+        );
+        break;
+      }
+
+      /*
+       * 从属端的改动请求（L8 · MS2）→ **只转给本房房主**。
+       *
+       * 为什么要有这条路：房主权威之后世界只由房主推进，但从属端仍然是"能建造"的
+       * （拆、放、开箱子）。直接丢弃它的 `blocks` 等于没收建造能力，所以改动以
+       * "请求"的形式回到房主：房主在自己的世界里应用、再由 `BlockFunnel` 作为
+       * **权威结果**广播出去。服务端在这条链上只做路由——不判权、不落地、不校验内容
+       * （形状收口在 `sanitizeEditPayload`，世界语义由房主那端把关）。
+       */
+      case 'edit-request': {
+        if (!player) return;
+        // 借用方块令牌桶：一条请求一格，防止有人把房主刷爆
+        if (!player.buckets.block.take()) return;
+        const hostEntry = hosts.get(player.room);
+        const hostPlayer = hostEntry ? players.get(hostEntry.id) : undefined;
+        if (!hostPlayer) {
+          // 房里没房主（或房主刚掉线）：明确回执，让从属端知道自己这刀没人接
+          send(socket, { t: 'edit-request', ok: false, reason: 'no-host' });
+          return;
+        }
+        const payload = sanitizeEditPayload(message.payload);
+        if (!payload) return;
+        send(hostPlayer.socket, { t: 'edit-request', from: player.id, payload });
         break;
       }
 
@@ -835,6 +1058,10 @@ wss.on('connection', (socket, request) => {
        */
       case 'blocks': {
         if (!player) return;
+        // 同上（L8 · MS2）：有房主的房里，从属端不该再走这条老路
+        if (hosts.has(player.room) && player.isHost !== true) {
+          return rejectEdit(player, 'not-host', 'blocks');
+        }
         const list = Array.isArray(message.blocks) ? message.blocks.slice(0, MAX_BLOCKS_PER_MESSAGE) : [];
         // 限频（联机25）：**按条数**计费——一次爆炸几百格是正常的，持续每帧几百格不是
         if (!player.buckets.block.take(Date.now(), list.length)) return;
@@ -861,6 +1088,8 @@ wss.on('connection', (socket, request) => {
             t: 'blocks',
             blocks: accepted.map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
             by: player.id,
+            // 同上：服务端按 isHost 重新标注，不是照抄客户端的 `authority`
+            authority: player.isHost === true,
           },
           player.id,
           player.room,
@@ -877,6 +1106,8 @@ wss.on('connection', (socket, request) => {
        */
       case 'sign': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'sign');
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -916,7 +1147,14 @@ wss.on('connection', (socket, request) => {
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
         if (![x, y, z, damage, fire].every(Number.isFinite)) return;
-        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id, player.room, { x, z, dimension });
+        // 全局键（L8 · MS3 收尾）：只做长度收口，服务端没有实体表不校验它是否存在
+        const key = typeof message.key === 'string' ? message.key.slice(0, 32) : '';
+        broadcast(
+          { t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id, ...(key ? { key } : {}) },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 
@@ -953,6 +1191,8 @@ wss.on('connection', (socket, request) => {
 
       case 'tnt': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'tnt');
         if (!takeEffectToken(player)) return;
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -982,6 +1222,8 @@ wss.on('connection', (socket, request) => {
 
       case 'frame': {
         if (!player) return;
+        // 有房主的房里只收房主的坐标类消息（L8 · MS4 收尾）：从属端改走 `edit-request`
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'frame');
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
         const y = Math.trunc(Number(message.y));
@@ -1001,6 +1243,8 @@ wss.on('connection', (socket, request) => {
 
       case 'container': {
         if (!player) return;
+        // 同上（L8 · MS4 收尾）：有房主的房里，容器改动要经 `edit-request` 回房主落地
+        if (hosts.has(player.room) && player.isHost !== true) return rejectEdit(player, 'not-host', 'container');
         if (!player.buckets.container.take()) return;
         const dimension = sanitizeDimension(String(message.dimension ?? player.dimension));
         const x = Math.trunc(Number(message.x));
@@ -1018,11 +1262,37 @@ wss.on('connection', (socket, request) => {
           rejectEdit(player, 'distance', `${x},${y},${z}`);
           return;
         }
+        /*
+         * 进度（L8 · MS4）：熔炉/酿造的 `cookProgress` 是 0..1。
+         *
+         * 只有房主会推进计时（`SimMode.containers`），所以只有他的进度是真的；
+         * 别人的进度字段一律忽略——否则从属端能用一个假进度把所有人的进度条改坏。
+         * 不落盘（`containers` 表只存槽位）：进度是瞬时量，重启后归零才对。
+         */
+        const rawProgress = Number(message.progress);
+        const progress =
+          player.isHost === true && Number.isFinite(rawProgress)
+            ? Math.min(Math.max(rawProgress, 0), 1)
+            : undefined;
         // 留一份副本随快照落盘（联机13）：不然重启之后箱子里的东西对新玩家不可见
         if (containers.size < MAX_CONTAINERS) {
           containers.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, slots });
         }
-        broadcast({ t: 'container', dimension, x, y, z, slots, by: player.id }, player.id, player.room, { x, z, dimension });
+        broadcast(
+          {
+            t: 'container',
+            dimension,
+            x,
+            y,
+            z,
+            slots,
+            by: player.id,
+            ...(progress === undefined ? {} : { progress }),
+          },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 
@@ -1172,6 +1442,20 @@ wss.on('connection', (socket, request) => {
      *
      * 期间他**不在** `players` 里：位置不再广播（别人看到的是停在原地），也不占在线人数。
      */
+    /*
+     * 房主掉线（L8 · MS4）：**立刻**告诉同房其他人，别让他们对着一个没人模拟的世界发呆。
+     *
+     * 只是提示，不是关房：他可能只是切了后台，`GRACE_MS` 之内回来还是同一局。
+     * 真关房在宽限期到期那一段（那时房主位才释放）。
+     */
+    if (hosts.get(player.room)?.id === player.id) {
+      broadcast(
+        { t: 'room-closed', reason: 'host-left', graceMs: GRACE_MS },
+        player.id,
+        player.room,
+      );
+      log(`房主 ${player.name}#${player.id} 掉线，已通知房间 ${player.room}（宽限 ${Math.round(GRACE_MS / 1000)}s）`);
+    }
     const grace = {
       id: player.id,
       name: player.name,
@@ -1186,6 +1470,29 @@ wss.on('connection', (socket, request) => {
         if (item.owner !== player.id) continue;
         items.delete(key);
         broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId }, null, player.room);
+      }
+      /*
+       * 房主（L8）宽限期结束 = 这一局没有人模拟了。
+       *
+       * 现在只把房主位让出来（否则这个房名永远开不了房）；"房间关闭 + 让从属端看到
+       * 一句明确提示"要等服务端能主动结束一局（MS3），那时在这里补广播即可。
+       */
+      if (hosts.get(player.room)?.id === player.id) {
+        hosts.delete(player.room);
+        /*
+         * 房主没回来 = 这一局没人模拟了（L8 · MS4）：**关房**，并把理由说清楚。
+         *
+         * 不关房的话，剩下的人会停在一个不推进的世界里：怪物不动、红石不亮、
+         * 熔炉不烧，而界面上一切正常——这种"看起来还能玩"的坏状态最难排查。
+         * 用 `error{code:'host-left'}` 而不是静默断开：客户端据此不再自动重连
+         * （否则它会每 3 秒撞一次，日志刷满）。
+         */
+        const room = player.room;
+        for (const other of players.values()) {
+          if (other.room !== room) continue;
+          reject(other.socket, 'host-left', '房主已退出，房间已关闭', CLOSE_HOST_LEFT);
+        }
+        log(`房间 ${room} 已关闭（房主 ${player.name}#${player.id} 宽限期结束未回来）`);
       }
       log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
     }, GRACE_MS);

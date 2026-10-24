@@ -103,7 +103,7 @@ const interesting = [
 ];
 const oreTotals = new Map<string, number>();
 for (const id of interesting) {
-  const name = BLOCKS[id]!.name.replace('minecraft:', '').replace('deepslate_', '');
+  const name = BLOCKS[id]!.name.replace('minicraft:', '').replace('deepslate_', '');
   oreTotals.set(name, (oreTotals.get(name) ?? 0) + (blockCounts.get(id) ?? 0));
 }
 for (const [name, count] of [...oreTotals.entries()].sort((a, b) => b[1] - a[1])) {

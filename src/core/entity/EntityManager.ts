@@ -31,10 +31,19 @@ export class EntityManager {
     return entity;
   }
 
-  update(ctx: EntityContext, dt: number): void {
+  /**
+   * 推进所有实体。
+   *
+   * `shouldTick`（L8 · MS3）：**从属端不用推进生物**——那些怪由房主算、快照推过来，
+   * 从属端只画影子实体（见 `game/sim/SimApply.ts`）。但箭、掉落物、经验球这些"各端自己
+   * 跑"的实体仍然要 tick（联机23 的箭就是各端自跑的），所以这里给的是**逐实体过滤**，
+   * 不是"整个 update 别看"。
+   */
+  update(ctx: EntityContext, dt: number, shouldTick?: (entity: Entity) => boolean): void {
     // 倒序遍历，方便原地删除
     for (let i = this.list.length - 1; i >= 0; i--) {
       const entity = this.list[i]!;
+      if (shouldTick && !shouldTick(entity)) continue;
       entity.tick(ctx, dt);
       if (entity.dead) this.list.splice(i, 1);
     }

@@ -5,7 +5,7 @@
  * 其它语言（德语/俄语/法语/葡语）一律回落到英文。P6-4 把这 200 条（100 条 × 标题+描述）
  * 搬进 `locales/<code>/advancement.ts`，**键由 id 派生**：
  *
- *   `minecraft:story/root` → `advancement.story_root.title` / `.desc`
+ *   `minicraft:story/root` → `advancement.story_root.title` / `.desc`
  *
  * 也就是说这里不再有"第二份清单"—— 加一条成就只要在 `advancements.ts` 里写中文原文，
  * 其余语言按派生出来的同一批键填。
@@ -16,19 +16,22 @@
 
 import { getLanguage, t } from '../i18n/I18n.ts';
 import { ADVANCEMENT_TAB_EN } from './advancementText.data.ts';
+import { shortId } from '../registry/ids.ts';
 
 /** 某条进度的标题（按当前语言） */
 export function advancementTitle(def: { readonly id: string; readonly title: string }): string {
   // ⚠️ 必须写成模板字面量：`audit:i18n` 靠这个形态认出"这一族键是数据驱动取的"
-  const probe = `advancement.${def.id.replace('minecraft:', '').replace(/\//g, '_')}.title`;
-  const text = t(`advancement.${def.id.replace('minecraft:', '').replace(/\//g, '_')}.title`);
+  const key = `advancement.${shortId(def.id).replace(/\//g, '_')}.title`;
+  const probe = key;
+  const text = t(key);
   return text === probe ? def.title : text;
 }
 
 /** 某条进度的说明（按当前语言） */
 export function advancementDesc(def: { readonly id: string; readonly desc: string }): string {
-  const probe = `advancement.${def.id.replace('minecraft:', '').replace(/\//g, '_')}.desc`;
-  const text = t(`advancement.${def.id.replace('minecraft:', '').replace(/\//g, '_')}.desc`);
+  const key = `advancement.${shortId(def.id).replace(/\//g, '_')}.desc`;
+  const probe = key;
+  const text = t(key);
   return text === probe ? def.desc : text;
 }
 

@@ -29,6 +29,7 @@
  */
 
 import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
+import { resetSaveIssues } from './SaveIssues.ts';
 import type { SerializedContainer } from './ContainerSave.ts';
 import type { SerializedSign } from '../world/SignText.ts';
 import type { SerializedFrame } from '../world/ItemFrame.ts';
@@ -359,6 +360,9 @@ export class SaveGame {
     factory: IDBFactory | undefined = globalThis.indexedDB,
   ): Promise<SaveGame | null> {
     if (!factory) return null;
+    // 批次 20261025-0117（合规 5）：开一个世界就把"读档丢东西"的账清零——
+    // 否则上一个世界的问题会挂在新世界头上，导出日志的人会以为这个档也坏了。
+    resetSaveIssues();
     const dbName = dbNameFor(worldId);
     try {
       const request = factory.open(dbName, DB_VERSION);

@@ -132,7 +132,7 @@ console.log('\n[木制方块族：6 种木材 × 4 件]');
   check(
     '注册名都是 minecraft:<木材>_<部件>',
     WOOD_NAMES.every((name) =>
-      PARTS.every((part) => blockDef(woodShaped(name)![part]).name === `minecraft:${name}_${PART_NAME[part]}`),
+      PARTS.every((part) => blockDef(woodShaped(name)![part]).name === `minicraft:${name}_${PART_NAME[part]}`),
     ),
   );
 }
@@ -329,7 +329,7 @@ console.log('\n[配方：每种木材 4 条，且必须用同一种木材]');
   equal('木制方块族一共 24 条配方（6 木材 × 4 件）', familyRecipes.length, 24);
   check(
     '每条配方的产物都是已注册的方块',
-    familyRecipes.every((recipe) => blockDef(recipe.result.id).name.startsWith('minecraft:')),
+    familyRecipes.every((recipe) => blockDef(recipe.result.id).name.startsWith('minicraft:')),
   );
   check(
     '同一种木材的四种产物各有一条配方（没有哪一种被漏掉）',

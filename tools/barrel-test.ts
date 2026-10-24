@@ -69,7 +69,7 @@ console.log('\n[注册与外观]');
 {
   equal('方块 id 是 479（接在发射器后面）', BARREL, 479);
   equal('id 紧接在发射器之后（478 → 479）', BARREL, Block.DISPENSER + 1);
-  equal('注册名', blockDef(BARREL).name, 'minecraft:barrel');
+  equal('注册名', blockDef(BARREL).name, 'minicraft:barrel');
   equal('中文名', itemLabel(BARREL), '木桶');
   check('有物品说明', hasDescription(BARREL));
   equal('是整格方块（走贪心网格化）', blockDef(BARREL).shape, 'cube');

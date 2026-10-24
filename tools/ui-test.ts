@@ -3409,6 +3409,24 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         return /['"]settings\.notice['"]/.test(table) && /['"]settings\.resourcePack\.hint['"]/.test(table);
       }),
   );
+  // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，
+  // 而网页版的"分发物"就是 `dist/`——所以这两份必须是 `public/` 里的静态文件，
+  // 不是只躺在仓库根目录（`vite build` 只复制 `public/`）。
+  let noticesOk = false;
+  let privacyOk = false;
+  try {
+    const notices = readFileSync(new URL('../public/third-party-notices.txt', import.meta.url), 'utf8');
+    noticesOk =
+      notices.includes('three.js authors') && notices.includes('Einar Otto Stangvik') && notices.includes('MIT');
+  } catch {
+    noticesOk = false;
+  }
+  try {
+    privacyOk = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8').includes('Privacy Policy');
+  } catch {
+    privacyOk = false;
+  }
+  check('第三方声明与隐私政策住在 public/ 里（会随构建产物分发）', noticesOk && privacyOk);
   // 批次 202：恢复默认必须带 `reset` 标记出去——分辨率倍率与装饰层档位不在 `GameSettings` 里，
   // 主程序不收到这个标记的话，玩家会看到"点了恢复默认，画面还是糊的 / 云还是没有"
   check(
@@ -4115,7 +4133,7 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
   check(
     '船物品存在（id 1478，堆叠 1）',
-    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
+    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minicraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
   );
   check(
     '5 块木板摆成 U 形 → 一艘船',
@@ -4430,7 +4448,7 @@ console.log('\n[冰霜行者（批次 263）]');
   check(
     '霜冰方块注册（id 586，无物品形态）',
     blocksSrc.includes('export const FROSTED_ICE_ID = 586') &&
-      blocksSrc.includes("name: 'minecraft:frosted_ice'") &&
+      blocksSrc.includes("name: 'minicraft:frosted_ice'") &&
       blocksSrc.includes('FROSTED_ICE: FROSTED_ICE_ID'),
   );
   check(
@@ -4481,7 +4499,7 @@ console.log('\n[弩（批次 265）]');
   check(
     '弩物品（id 1510，耐久 465）与配方',
     itemsSrc.includes('CROSSBOW: 1510') &&
-      itemsSrc.includes("name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
+      itemsSrc.includes("name: 'minicraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
       recipesSrc.includes('result: { id: Item.CROSSBOW, count: 1 }'),
   );
   check(
@@ -5001,6 +5019,43 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
       !connected.connect && connected.disconnect &&
       !reconnecting.connect && reconnecting.disconnect,
   );
+
+  /*
+   * 开房 / 加入（L8 房主权威）：两颗按钮唯一的差别是 `join` 里的 `host` 位。
+   * 钉住四件改回去就会出事的事：按钮没合回一颗"连接"、开房/加入各自传对布尔位、
+   * 回车只走"加入"（开房会占住房主位）、以及这个意图真的传到了 `join` 消息。
+   */
+  const screenSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mainSrcForMp = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netClientSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check(
+    '面板是「开房 / 加入」两颗按钮（不再是单颗"连接"）',
+    screenSrc.includes("this.hostButton.id = 'mp-host'") &&
+      screenSrc.includes("this.joinButton.id = 'mp-join'") &&
+      !screenSrc.includes("'mp.connect'"),
+  );
+  check(
+    '开房传 host=true、加入传 host=false',
+    screenSrc.includes("this.hostButton.addEventListener('click', () => this.submit(true))") &&
+      screenSrc.includes("this.joinButton.addEventListener('click', () => this.submit(false))"),
+  );
+  check(
+    '回车只触发"加入"（开房会占住房主位，不该由回车决定）',
+    /addEventListener\('keydown',[\s\S]{0,400}?this\.submit\(false\);/.test(screenSrc),
+  );
+  check(
+    '开房意图一路传到 join（connect → NetClient.wantsHost → host: true）',
+    mainSrcForMp.includes('onConnect: (url, name, host)') &&
+      netClientSrc.includes('this.wantsHost = host;') &&
+      netClientSrc.includes('...(this.wantsHost ? { host: true } : {})'),
+  );
+  check(
+    '连上之后状态行标出「房主 / 从属」（没连上不标，那会儿还是单机）',
+    screenSrc.includes("t('mp.role.host')") &&
+      screenSrc.includes("t('mp.role.client')") &&
+      screenSrc.includes("this.state === 'connected' ? this.role : 'solo'") &&
+      mainSrcForMp.includes('this.multiplayerScreen.setRole(this.net.role);'),
+  );
 }
 
 // ------------------------------------------------------------------ 设置里的游戏模式
@@ -5176,6 +5231,521 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
   check(
     '左栏不再有配方书落脚点（嵌入那版已回退）',
     !invSource.includes('inv-recipe-host') && !html.includes('.inv-recipe-host'),
+  );
+}
+
+/*
+ * 世界列表：进入 / 开房（L9）
+ *
+ * 用户的原话是"多人游戏需要选择一个世界，但进入的世界跟选的这个世界没有一点关系"。
+ * 根因是入口设计：多人被当成"游戏内设置"，必须先进世界再按 Esc，而地形又由服务端
+ * 常量种子决定。这一条把入口挪到卡片上，让"选哪个世界"与"这一局是哪片大陆"绑死。
+ */
+console.log('\n[世界列表：进入 / 开房（L9）]');
+{
+  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check('卡片上有专属的「开房」按钮类名', worldSrc.includes("host.className = 'world-host';"));
+  check(
+    '没有 onHostWorld 就不显示开房（精简构建不改界面）',
+    worldSrc.includes('...(this.actions.onHostWorld ? [host] : []),'),
+  );
+  check(
+    '开房弹窗的默认房间名由世界名派生（中文名也能用）',
+    worldSrc.includes('roomFromWorldName(world.name, world.seed)') &&
+      worldSrc.includes("roomInput.id = 'world-host-room'"),
+  );
+  check(
+    '房间名收口、口令可空',
+    worldSrc.includes('sanitizeRoomName(roomInput.value, defaultRoom)') &&
+      worldSrc.includes('passwordInput.value.trim().slice(0, 32)'),
+  );
+  check('世界列表顶部的多人入口是「加入房间…」', worldSrc.includes("join.textContent = t('world.joinRoom');"));
+  check(
+    '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
+    mainSrc.includes('pendingHostRoom = { room, password };') &&
+      mainSrc.includes('app.connectOnline({') &&
+      mainSrc.includes('baseUrl: defaultServerUrl(),'),
+  );
+}
+
+/*
+ * 加入房间面板（L9）：地址 + 房间 + 口令 + 房间列表
+ *
+ * 以前房间与口令只能写进地址（`ws://host:8787/red?pw=1234`），手机上几乎敲不对；
+ * 而"这台服务器上有哪些房"根本无从得知。这一条把它们提成独立字段，并能问服务器要列表。
+ */
+console.log('\n[加入房间：选项式面板（L9）]');
+{
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+
+  check(
+    '房间与口令是独立输入框（不再靠手写 URL）',
+    mpSrc.includes("this.roomInput.id = 'mp-room'") && mpSrc.includes("this.passwordInput.id = 'mp-password'"),
+  );
+  check(
+    '地址只存裸地址，房间/口令在 readForm 里才拼（formatServerUrl）',
+    mpSrc.includes('url: base ? formatServerUrl(base, room, password) : null') &&
+      mpSrc.includes('room,') &&
+      mpSrc.includes('password,') &&
+      mpSrc.includes('writeStored(STORAGE_URL, base)'),
+  );
+  check(
+    '粘贴老格式地址会拆成裸地址 + 房间 + 口令',
+    mpSrc.includes('private splitAddress(): void') && mpSrc.includes('parseServerUrl(normalized)'),
+  );
+  check(
+    '「找房间」拉 /rooms 并清洗（失败只提示，不挡手填）',
+    mpSrc.includes('roomsEndpoint(base)') &&
+      mpSrc.includes('parseRoomsResponse(await response.json())') &&
+      mpSrc.includes("this.showRoomsMessage(t('mp.roomsFailed'))"),
+  );
+  check(
+    '点一行房间就填好房名（要口令时把焦点送过去）',
+    mpSrc.includes('this.roomInput.value = entry.room;') && mpSrc.includes('this.passwordInput.focus();'),
+  );
+  check(
+    '房间列表有专属类名与三行高度上限（横屏不撑破）',
+    mpSrc.includes("this.roomsEl.className = 'mp-rooms hidden'") &&
+      /\.mp-rooms \{[^}]*max-height: 96px; overflow: auto;/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+      ),
+  );
+}
+
+/*
+ * 连接时机提前到主菜单（L9）
+ *
+ * 用户的原话是"创建多人游戏还需要进入后再按 Esc，为什么不在进入时就创建"。
+ * 这一条把联机面板从 `App` 挪到 `boot()`（全局一份），于是主菜单能直接开会话；
+ * 加入流程改为"先探房拿到房主的世界，再按它加载"。
+ */
+console.log('\n[连接时机：主菜单先连后进世界（L9）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const probeSrc = readFileSync(new URL('../src/net/RoomProbe.ts', import.meta.url), 'utf8');
+  const mpSource = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const appSrcCount = (mainSrc.match(/new MultiplayerScreen\(/g) ?? []).length;
+
+  check('面板只在 boot 层创建一份（App 不再 new 它）', appSrcCount === 1);
+  check(
+    '面板的动作按"有没有活着的 App"分派',
+    mainSrc.includes('currentApp && currentApp.alive') &&
+      mainSrc.includes('currentApp.connectFromPanel(url, name, host)') &&
+      mainSrc.includes('void joinRoomFromMenu(url, name, host)'),
+  );
+  check(
+    '加入：先探房，再按房主的世界 startWorld',
+    mainSrc.includes('const probe = await probeRoom({') &&
+      mainSrc.includes('summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now())'),
+  );
+  check(
+    '开房：从卡片进来就直接连（不再要求玩家再按一次）',
+    mainSrc.includes('app.connectOnline({') && mainSrc.includes('host: true'),
+  );
+  check(
+    '菜单的「加入房间…」直接开面板，且只显示"加入"（不显示开房/断开）',
+    mainSrc.includes("multiplayerUi.open('join');") && mpSource.includes("this.root.dataset.mode = mode;"),
+  );
+  check(
+    '卡片上只留「进入 / 开房 / ⋯」，管理动作收进折叠行（方案 A）',
+    (() => {
+      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      return (
+        worldSrc.includes('buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);') &&
+        worldSrc.includes("extra.className = 'world-card-extra hidden';") &&
+        worldSrc.includes('extra.append(edit, exportButton, remove);')
+      );
+    })(),
+  );
+  check(
+    '世界列表顶部「＋ 新建世界」与「加入房间…」并排（不再散落在首页）',
+    (() => {
+      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      return (
+        worldSrc.includes("topRow.className = 'world-list-top';") &&
+        worldSrc.includes("join.id = 'world-multiplayer-button';") &&
+        !worldSrc.includes("multiplayer.className = 'world-secondary';")
+      );
+    })(),
+  );
+  check(
+    '探房用一次性身份（复用本机 clientId 会被判 duplicate 拒连）',
+    probeSrc.includes('probe${Math.random()') && probeSrc.includes('setTimeout(() => finish(null)'),
+  );
+}
+
+/*
+ * 暂停菜单：本局房间信息卡（L9）
+ *
+ * 联机之后那颗键原来还是「多人游戏」、点开让你再连一次——玩家真正想要的是
+ * "我在哪个房间、谁是房主、怎么把朋友叫进来"。所以联机中改成信息卡。
+ */
+console.log('\n[暂停菜单：本局房间（L9）]');
+{
+  const cardSrc = readFileSync(new URL('../src/ui/RoomCard.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check(
+    '卡片显示房间 / 角色 / 人数 / 世界（含种子）',
+    cardSrc.includes("t('world.roomName')") &&
+      cardSrc.includes("t('room.role')") &&
+      cardSrc.includes("tp('mp.roomsPlayers', { n: info.players })") &&
+      cardSrc.includes("tp('room.seed', { seed: info.worldSeed })"),
+  );
+  check(
+    '邀请文本由 地址 + 房间 + 口令 拼（朋友只需这一行）',
+    cardSrc.includes('formatServerUrl(info.baseUrl, info.room, info.password)') &&
+      cardSrc.includes("tp('room.invite'"),
+  );
+  check(
+    '复制在非安全上下文（局域网 http）也有退路',
+    cardSrc.includes("navigator.clipboard && window.isSecureContext") &&
+      cardSrc.includes("document.execCommand('copy')"),
+  );
+  check(
+    '暂停菜单那颗键按联机状态改文案（联机中 = 本局房间）',
+    settingsSrc.includes('multiplayerLabelKey?: () => string') &&
+      settingsSrc.includes('this.refreshMultiplayerLabel();') &&
+      mainSrc.includes("? 'pause.room'") &&
+      mainSrc.includes(": 'menu.multiplayer'"),
+  );
+  check(
+    '联机中点它开信息卡，没联机才打开连接面板',
+    mainSrc.includes('this.roomCard.show({') &&
+      mainSrc.includes("this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'"),
+  );
+  check(
+    '卡片挂 body 且有专属样式与热区（触摸端 44px）',
+    mainSrc.includes('new RoomCard(document.body,') &&
+      /\.room-action \{[^}]*min-height: 38px/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+      ),
+  );
+}
+
+/*
+ * 最近连接（L9）
+ *
+ * 局域网里就那么一两台服务器、一两个房间，可地址是 `ws://192.168.1.5:8787` 这种东西，
+ * 手机上每次重敲一遍是纯折磨。点一颗小胶囊就把地址/房间/昵称填回去。
+ */
+console.log('\n[最近连接（L9）]');
+{
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+
+  check(
+    '面板有最近连接那一行（空列表时不占高度）',
+    mpSrc.includes("this.recentEl.className = 'mp-recent hidden'") &&
+      mpSrc.includes("this.recentEl.classList.add('hidden');"),
+  );
+  check(
+    '点一颗就填回地址 / 房间 / 昵称',
+    mpSrc.includes('this.urlInput.value = entry.url;') &&
+      mpSrc.includes('this.roomInput.value = entry.room;') &&
+      mpSrc.includes('this.nameInput.value = entry.name;'),
+  );
+  check(
+    '连接成功时记一条（去重后写 localStorage）',
+    mpSrc.includes('pushRecentRoom(this.recents, { url: base, room, name, at: Date.now() })') &&
+      mpSrc.includes('writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents))'),
+  );
+  check(
+    '列表里不存口令（口令只在 mp.pw 那一格）',
+    mpSrc.includes("const STORAGE_RECENT = 'mc.mp.recent';") &&
+      !/pushRecentRoom\(this\.recents, \{[^}]*password/.test(mpSrc),
+  );
+}
+
+/*
+ * 方块模拟的闸门（L8 · MS2）
+ *
+ * 从属端一旦也跑 `tickWorldBlocks`，红石/流体/作物就是两端各算一遍——靠广播收敛，
+ * 极端情况短暂不一致且不报错。这里钉住"它只能在 SimMode 的闸门里被调用"。
+ */
+console.log('\n[方块模拟只在房主那端跑（L8 · MS2）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    'tickWorldBlocks 的调用点在 shouldSimulate 闸门里',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'blocks')) this.tickWorldBlocks(TICK_SECONDS);"),
+  );
+  check(
+    'main 里没有第二处裸调 tickWorldBlocks（绕过闸门）',
+    (mainSrc.match(/this\.tickWorldBlocks\(/g) ?? []).length === 1,
+  );
+  check(
+    '连上后打印"这一端在跑什么"（排查第一句话）',
+    mainSrc.includes('describeSimMode(this.net.role)'),
+  );
+}
+
+/*
+ * 改动请求的两个方向（L8 · MS2）
+ *
+ * 房主发的是权威结果（`blocks` + authority），从属端发的是请求（`edit-request`）——
+ * 后者由房主落地后重发。这条分支写反了，表现是"从属端建的方块别人看不见"，
+ * 而且不报错。
+ */
+console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '房主走上行 blocks + authority，从属端走 edit-request',
+    netSrc.includes("this.role === 'host'") &&
+      netSrc.includes("{ t: 'blocks', blocks, authority: true }") &&
+      netSrc.includes("{ t: 'edit-request', payload: { t: 'blocks', blocks } }"),
+  );
+  check(
+    '客户端认 `edit-request` 的两个方向（回执 / 转给房主的请求）',
+    netSrc.includes("if (message.ok === false)") &&
+      netSrc.includes('this.handlers.onEditRejected?.(String(message.reason') &&
+      netSrc.includes('this.handlers.onEditRequest?.(Number(message.from'),
+  );
+  check(
+    '没房主的回执只提示一次/3 秒（不刷屏）',
+    mainSrc.includes('onEditRejected: (reason) =>') && mainSrc.includes('this.editRejectedAt < 3000'),
+  );
+
+  // 房主侧落地（L8 · MS2）：不抑制回声，才能由 BlockFunnel 作为权威结果重发
+  const applyStart = mainSrc.indexOf('private applyEditRequest(');
+  const applyEnd = mainSrc.indexOf('private onNetBlock(', applyStart);
+  const applyBody = applyStart >= 0 && applyEnd > applyStart ? mainSrc.slice(applyStart, applyEnd) : '';
+  check(
+    '房主落地请求时**不**抑制回声（否则不会作为权威结果重发）',
+    applyBody.length > 0 &&
+      !applyBody.includes('applyingRemoteBlock++') &&
+      applyBody.includes('this.world.setBlockAndUpdate('),
+  );
+  check(
+    '只有房主处理请求（别的端收到也不会有副作用）',
+    applyBody.includes("if (this.net.role !== 'host') return;"),
+  );
+  check(
+    '先记增量再写世界（与 onNetBlock 同一条守卫）',
+    applyBody.indexOf('this.world.edits.record(') < applyBody.indexOf('this.world.setBlockAndUpdate(') &&
+      applyBody.includes('if (!this.remoteWorldWritable()) return;'),
+  );
+}
+
+/*
+ * 生物模拟也只在房主那端跑（L8 · MS3）
+ *
+ * 从属端刷怪 / 跑 AI 会得到两套互不相同的轨迹——这正是"两个人看到同一只僵尸在不同位置"
+ * 的根源。但箭/掉落物/经验球是各端自己跑的（联机23），所以实体推进用的是**逐实体过滤**，
+ * 不是"整个 update 别看"。
+ */
+console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '刷怪在 shouldSimulate(mobs) 闸门里，且只调用一次',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'mobs')) this.mobSpawner.update(dt, ctx);") &&
+      (mainSrc.match(/this\.mobSpawner\.update\(/g) ?? []).length === 1,
+  );
+  check(
+    '实体推进用逐实体过滤（从属端只跳过生物，箭/掉落物照旧 tick）',
+    mainSrc.includes("shouldSimulate(this.net.role, 'mobs') ? undefined : (entity) => !(entity instanceof Mob)"),
+  );
+  check(
+    '实体管理器支持 shouldTick 过滤（不传就是老行为）',
+    readFileSync(new URL('../src/core/entity/EntityManager.ts', import.meta.url), 'utf8').includes(
+      'update(ctx: EntityContext, dt: number, shouldTick?: (entity: Entity) => boolean): void',
+    ),
+  );
+
+  // 影子实体（MS3）：从属端只画不跑，位置由快照驱动
+  check(
+    '从属端每帧摆影子（房主那边不建影子，否则每只怪画两个模型）',
+    mainSrc.includes('if (!shouldSimulate(this.net.role, \'mobs\')) this.syncShadowMobs(dt);') &&
+      mainSrc.includes("onEntitySnap: (raw) => {\n      if (this.net.role !== 'client') return;"),
+  );
+  check(
+    '影子只更新位置/血量/状态，不跑 AI（没有 tick 调用）',
+    mainSrc.includes('private syncShadowMobs(dt: number): void') &&
+      !mainSrc.includes('this.simApply.step(dt)') === false,
+  );
+  check(
+    '断开时撤掉所有影子与影子表（否则留下的怪既不动也打不死）',
+    mainSrc.includes('private clearShadowMobs(): void') && mainSrc.includes('this.clearShadowMobs();'),
+  );
+
+  // 房主侧：推快照 + 报死亡（MS3 收尾那一半）
+  const pushStart = mainSrc.indexOf('private pushEntitySnapshots(');
+  const pushEnd = mainSrc.indexOf('private syncShadowMobs(', pushStart);
+  const pushBody = pushStart >= 0 && pushEnd > pushStart ? mainSrc.slice(pushStart, pushEnd) : '';
+  check(
+    '房主给每只怪分配全局键再推（否则两端对不上同一只）',
+    pushBody.includes('assignMobKey(entity, this.net.selfId)') && pushBody.includes('sendEntitySnapshot(wire)'),
+  );
+  check(
+    '按 100ms 节流（不是每帧都发）',
+    pushBody.includes('ENTITY_SNAPSHOT_INTERVAL_MS') && pushBody.includes('this.lastEntitySnapAt = now'),
+  );
+  check(
+    '死亡立刻点名（不等快照那 300ms 宽限）',
+    pushBody.includes('this.net.sendEntityRemove(gone)') && pushBody.includes('this.lastMobKeys = currentKeys'),
+  );
+  check(
+    '从属端收到点名就把影子撤掉',
+    mainSrc.includes('onEntityRemove: (keys) =>') && mainSrc.includes('this.simApply.remove(key);'),
+  );
+  check(
+    '影子不 tick（所以从属端不会自己掉战利品：掉落只有房主那一份）',
+    mainSrc.includes("(entity) => !(entity instanceof Mob)") && !pushBody.includes('dropLoot'),
+  );
+}
+
+/*
+ * 容器计时只在房主那端跑（L8 · MS4）
+ *
+ * 从属端如果也 tick，熔炉/酿造的进度条就是各走各的（差几秒，不报错）。
+ * 从属端只把房主算出来的百分比摆上去——不推进计时，所以这个值不会自己往前跑。
+ */
+console.log('\n[容器计时只在房主那端跑（L8 · MS4）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check(
+    'tickContainers 在 shouldSimulate(containers) 闸门里',
+    mainSrc.includes("if (shouldSimulate(this.net.role, 'containers')) {") &&
+      (mainSrc.match(/this\.tickContainers\(/g) ?? []).length === 1,
+  );
+  check(
+    '房主按 1 秒节流单独推进度（内容不变时 onMutate 不触发）',
+    mainSrc.includes('private pushContainerProgress(): void') &&
+      mainSrc.includes('this.lastContainerProgressAt < 1000'),
+  );
+  check(
+    '从属端把进度写进 cookProgress（不 tick，所以只是"摆上去"）',
+    mainSrc.includes('furnace.cookProgress = data.progress * Math.max(furnace.cookTimeTotal, 0);'),
+  );
+  check(
+    '上行只由房主带 progress（服务端再按 isHost 挡一次）',
+    netSrc.includes('...(Number.isFinite(progress) ? { progress } : {})'),
+  );
+}
+
+/*
+ * 房主退出（L8 · MS4）
+ *
+ * 只有"一条明确的提示"是不够的，还得**别再重连**：房主走了，重连一万次也还是没房主，
+ * 每 3 秒撞一次墙只会把日志刷满、把"这局结束了"这个事实埋掉。
+ */
+console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const protoSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  check(
+    '客户端认 `room-closed` 并把它变成玩家看得见的一句话',
+    netSrc.includes("case 'room-closed':") && mainSrc.includes('onRoomClosing: (graceMs) =>'),
+  );
+  check(
+    '`host-left` 算致命（不再自动重连）',
+    protoSrc.includes("code === 'host-left'") && netSrc.includes("if (code === 'host-left') this.roomClosed = true;"),
+  );
+  check(
+    '会话状态机把"房间已关闭"当作停车理由（与致命错误分开表达）',
+    readFileSync(new URL('../src/core/net/NetSession.ts', import.meta.url), 'utf8').includes('roomClosed?: boolean'),
+  );
+  check(
+    '提示文案带宽限秒数（别让玩家对着不推进的世界猜"卡了"）',
+    mainSrc.includes("tp('net.hostLeft', { s: seconds })"),
+  );
+}
+
+/*
+ * 协议文档与代码逐条对照（L8 · MS4）
+ *
+ * 文档漂移是这类项目最常见的债：消息加了、字段改了，文档还停在上一版，
+ * 下次照着文档实现就会踩空。这里只钉"这一批动过的东西文档里必须有"，
+ * 不做"文档 == 代码"的完全比对（那需要解析源码，成本远高于收益）。
+ */
+console.log('\n[协议文档 v2 与本批改动逐条对照（L8 · MS4）]');
+{
+  const doc = readFileSync(new URL('../docs/NET-PROTOCOL.md', import.meta.url), 'utf8');
+  const mustHave: Array<[string, string]> = [
+    ['world 元数据（L9）', '`world: {name, seed, mode?, difficulty?, worldType?}`'],
+    ['worldType 随 welcome 下发', 'worldType'],
+    ['改动请求（MS2）', '`edit-request`'],
+    ['权威标记（MS2）', 'authority'],
+    ['实体快照（MS3）', '`entity-snap`'],
+    ['实体消失（MS3）', '`entity-remove`'],
+    ['容器进度（MS4）', 'progress?'],
+    ['房主掉线通知（MS4）', '`room-closed`'],
+    ['房主退出错误码（MS4）', '`host-left`'],
+    ['关闭码 4007', '4007'],
+  ];
+  for (const [label, needle] of mustHave) {
+    check(`文档里有：${label}`, doc.includes(needle), needle);
+  }
+  check(
+    '缺口表里 MS2/MS3 的条目已改成现状（不再是"位置不同步"）',
+    doc.includes('模拟只由房主跑') && doc.includes('生物**位置/血量/状态/死亡**已同步'),
+  );
+}
+
+/*
+ * 四类坐标消息也走请求通道（L8 · MS4 收尾）
+ *
+ * 容器 / 牌子 / 展示框 / TNT 以前从属端直发。玩法上能用，但和"只有房主写世界"不一致：
+ * 从属端的改动没经过房主，房主的权威状态就会漏掉这一笔。现在四类都包成 `edit-request`。
+ */
+console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收尾）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '四类发送都走统一出口（房主直发 / 从属端包请求）',
+    netSrc.includes('private sendEditOrRequest(message: Record<string, unknown>): void') &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'sign', x, y, z, dimension, lines });") &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'tnt', x, y, z, dimension });") &&
+      netSrc.includes("this.sendEditOrRequest({ t: 'frame', x, y, z, dimension, item, rotation });"),
+  );
+  check(
+    '房主落地容器请求时不抑制回声（靠 onMutate 广播），其余三类显式重发',
+    mainSrc.includes('// ⚠️ 不包 `applyingRemoteBlock`：这次写入要触发 `onMutate`，把结果广播给所有人') &&
+      mainSrc.includes('this.net.sendSign(at.x, at.y, at.z, at.dimension, lines);') &&
+      mainSrc.includes('this.net.sendFrame(at.x, at.y, at.z, at.dimension, item, rotation);') &&
+      mainSrc.includes('this.net.sendTnt(at.x, at.y, at.z, at.dimension);'),
+  );
+  check(
+    '服务端对四类都有"有房主时只收房主"的闸门',
+    (() => {
+      const server = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+      return ['block', 'blocks', 'container', 'sign', 'frame', 'tnt'].every((kind) =>
+        server.includes(`rejectEdit(player, 'not-host', '${kind}')`),
+      );
+    })(),
+  );
+}
+
+/*
+ * 命中按全局键认（L8 · MS3 收尾）
+ *
+ * "同类型 + 最近"在两只同类怪挨着时会打错人：两端各算的"最近"可能不是同一只。
+ * 有房主分配的全局键就按身份认，没有才退回老口径（老客户端/影子还没同步到也不会哑）。
+ */
+console.log('\n[命中按全局键认那只怪（L8 · MS3 收尾）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const matchSrc = readFileSync(new URL('../src/core/net/MobMatch.ts', import.meta.url), 'utf8');
+  check(
+    '匹配先比全局键，比不到才退回类型 + 邻域',
+    matchSrc.includes('const wanted = typeof hit.key') && matchSrc.includes('if (candidate.key === wanted) return candidate;'),
+  );
+  check(
+    '发送端把目标动物的 netKey 带上（没有键就空串，服务端不塞空 key）',
+    /sendMobHit\([\s\S]{0,400}?mob\.netKey,/.test(mainSrc) && netSrc.includes("...(key.length > 0 ? { key } : {})"),
+  );
+  check(
+    '接收端候选里带影子实体的 netKey',
+    mainSrc.includes('...(entity.netKey.length > 0 ? { key: entity.netKey } : {}),'),
   );
 }
 

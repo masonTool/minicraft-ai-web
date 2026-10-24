@@ -21,6 +21,13 @@ export interface MobMatchCandidate {
   x: number;
   y: number;
   z: number;
+  /**
+   * 全局键 `ownerId:localId`（L8 · MS3 起由房主分配）。
+   *
+   * 有它就**优先按身份认**，不再靠"同类型 + 最近"——那套在两只同类怪挨在一起时
+   * 会打错人（两个人各自算出来的"最近"可能不是同一只）。
+   */
+  key?: string;
 }
 
 export interface MobHitTarget {
@@ -28,6 +35,8 @@ export interface MobHitTarget {
   x: number;
   y: number;
   z: number;
+  /** 目标动物的全局键（新客户端带；老客户端没有，退回类型 + 邻域） */
+  key?: string;
 }
 
 /**
@@ -41,6 +50,17 @@ export function findMobMatch<T extends MobMatchCandidate>(
   hit: MobHitTarget,
   maxDistance: number = MOB_HIT_MATCH_DISTANCE,
 ): T | null {
+  /*
+   * 有全局键就按身份认（L8 · MS3 收尾）：这一步**不看距离与类型**——
+   * 键本身就代表"那只怪"，坐标只是它的当前值。找不到再退回类型 + 邻域，
+   * 这样老客户端（不带键）与"键被我这边还没收到过"这两种情况都不会变哑。
+   */
+  const wanted = typeof hit.key === 'string' && hit.key.length > 0 ? hit.key : null;
+  if (wanted) {
+    for (const candidate of candidates) {
+      if (candidate.key === wanted) return candidate;
+    }
+  }
   if (![hit.x, hit.y, hit.z].every((value) => Number.isFinite(value))) return null;
   const limit = Math.max(0, maxDistance);
 

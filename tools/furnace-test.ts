@@ -345,8 +345,8 @@ console.log('\n[站台进存档]');
 console.log('\n[烟熏炉与高炉的方块与配方]');
 {
   for (const [id, name, cn] of [
-    [Block.SMOKER, 'minecraft:smoker', '烟熏炉'],
-    [Block.BLAST_FURNACE, 'minecraft:blast_furnace', '高炉'],
+    [Block.SMOKER, 'minicraft:smoker', '烟熏炉'],
+    [Block.BLAST_FURNACE, 'minicraft:blast_furnace', '高炉'],
   ] as const) {
     equal(`${cn}的注册名`, blockDef(id).name, name);
     equal(`${cn}的中文名`, itemLabel(id), cn);
@@ -504,7 +504,7 @@ console.log('\n[营火：不要燃料、一次烤 4 个、烤好弹出来]');
 
 console.log('\n[营火：方块、配方与存档]');
 {
-  equal('营火的注册名', blockDef(Block.CAMPFIRE).name, 'minecraft:campfire');
+  equal('营火的注册名', blockDef(Block.CAMPFIRE).name, 'minicraft:campfire');
   equal('中文名', itemLabel(Block.CAMPFIRE), '营火');
   equal('形状是 campfire（7/16 高的柴堆，能站上去）', blockDef(Block.CAMPFIRE).shape, 'campfire');
   equal('硬度 2', blockHardness(Block.CAMPFIRE), 2);

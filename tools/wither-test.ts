@@ -246,7 +246,7 @@ console.log('\n[凋灵骷髅头：方块与物品]');
 {
   const id = Block.WITHER_SKELETON_SKULL;
   const def = blockDef(id);
-  equal('注册名', def.name, 'minecraft:wither_skeleton_skull');
+  equal('注册名', def.name, 'minicraft:wither_skeleton_skull');
   equal('形状是 `head`（不是整格）', def.shape, 'head');
   check('三张贴图都在图集名单里', blockTiles(id, 0).every((tile) => TILES.has(tile)), blockTiles(id, 0).join(' '));
   check('不遮挡邻居（透明方块那一档）', def.opaque === false);

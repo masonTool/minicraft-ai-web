@@ -105,7 +105,7 @@ console.log('\n[16 色床：注册表]');
   check('id 连续（颜色顺序就是 id 顺序，存档里存的就是这些数字）', contiguous, BED_IDS.join(','));
 
   const wrongName = DYE_COLORS.filter(
-    (color, index) => blockDef(bedId(index)).name !== `minecraft:${color.name}_bed`,
+    (color, index) => blockDef(bedId(index)).name !== `minicraft:${color.name}_bed`,
   ).map((color) => color.name);
   check('名字与配色表逐项对应', wrongName.length === 0, wrongName.join(','));
 
@@ -167,10 +167,10 @@ console.log('\n[16 色床：物品与可达性]');
 
 console.log('\n[16 色床：音效]');
 {
-  equal('床的破坏音效归木头', breakSoundFor('minecraft:white_bed'), 'break_wood');
-  equal('红色床也一样', breakSoundFor('minecraft:red_bed'), 'break_wood');
+  equal('床的破坏音效归木头', breakSoundFor('minicraft:white_bed'), 'break_wood');
+  equal('红色床也一样', breakSoundFor('minicraft:red_bed'), 'break_wood');
   // ⚠️ `endsWith('_bed')` 而不是 `includes('bed')`：后者会把基岩也算成木头
-  equal('基岩仍然是石头音（别被"bed"三个字母带跑）', breakSoundFor('minecraft:bedrock'), 'break_stone');
+  equal('基岩仍然是石头音（别被"bed"三个字母带跑）', breakSoundFor('minicraft:bedrock'), 'break_stone');
 }
 
 // ---------------------------------------------------------------- 2. 形状与状态

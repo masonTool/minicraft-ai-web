@@ -7,8 +7,14 @@
  * 会让服务端在 Node 20.10 以下直接起不来，不值得。
  */
 
-/** 协议版本。**改字段语义就 +1**；两端不一致时服务端拒绝连接，而不是静默错乱 */
-export const PROTOCOL_VERSION = 1;
+/**
+ * 协议版本。**改字段语义就 +1**；两端不一致时服务端拒绝连接，而不是静默错乱。
+ *
+ * v2（L8）：`join` 多了 `host`（谁开房 → 谁是唯一模拟者）、`welcome` 多了 `isHost` / `hostId`。
+ * 旧客户端没有这两个字段，连上来会当成"房主"或"普通客户端"各算一遍世界——正是要消灭的
+ * 不一致，所以**不保留 v1 兼容**，直接由版本位拒连。
+ */
+export const PROTOCOL_VERSION = 2;
 
 /**
  * 名字最长多少个**字符**（不是字节）。
@@ -144,4 +150,139 @@ const ROOM_RE = /^[A-Za-z0-9_-]{1,24}$/;
  */
 export function sanitizeRoom(value) {
   return typeof value === 'string' && ROOM_RE.test(value) ? value : DEFAULT_ROOM;
+}
+
+// ---------------------------------------------------------------- 房间的世界（L9）
+
+/** 世界名上限（与玩家名同量级；它只是给面板显示用的标签） */
+export const MAX_WORLD_NAME = 32;
+/** 种子绝对值上限：本项目种子是 32 位整数，超了就是脏数据 */
+export const MAX_SEED = 2 ** 31 - 1;
+
+/**
+ * 房主上报的世界元数据（L9）：**这一局的地形由它决定**。
+ *
+ * 为什么必须由房主带：地形生成器是纯函数，同种子 = 同一片大陆。原来服务端用全服
+ * 一个 `WORLD_SEED` 常量，于是"在主菜单选了哪个世界"和"进联机后看到的地形"毫无关系
+ * ——玩家体感就是"我选的世界根本没生效"。
+ *
+ * 收口规则（宁可退回默认也不透传）：
+ *  · 不是对象 / `seed` 不是 32 位整数 → 返回 `null`（调用方退回服务端默认种子）；
+ *  · `name` 去控制字符与尖括号、按字符截到 32，空则空串（客户端自己兜底显示）；
+ *  · `mode` / `difficulty` 只做形状收口，服务端**不用**它们（玩法仍各端自带）。
+ */
+export function sanitizeWorldMeta(value) {
+  if (!value || typeof value !== 'object') return null;
+  const seed = Number(value.seed);
+  if (!Number.isInteger(seed) || Math.abs(seed) > MAX_SEED) return null;
+  const name = typeof value.name === 'string'
+    // eslint-disable-next-line no-control-regex
+    ? [...value.name.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, MAX_WORLD_NAME).join('')
+    : '';
+  const label = (raw) => (typeof raw === 'string' ? [...raw.replace(/[\u0000-\u001f\u007f<>]/g, '').trim()].slice(0, 16).join('') : '');
+  return {
+    name,
+    seed,
+    mode: label(value.mode),
+    difficulty: label(value.difficulty),
+    // 世界类型（L9）：超平坦 / 放大化也会改变地形，只对齐种子不够
+    worldType: label(value.worldType),
+  };
+}
+
+// ---------------------------------------------------------------- 改动请求（L8·MS2）
+
+/** 一条 `edit-request` 里最多带多少格（与 `blocks` 同一上限） */
+export const MAX_REQUEST_BLOCKS = 4096;
+
+/**
+ * 从属端发来的"改动请求"载荷收口。
+ *
+ * 只认 `block` / `blocks` 两种形状：**内容不在这里校验**（y 范围、距离、id 上界
+ * 由房主落地时按 `planRemoteBlock` 再过一遍）——服务端没有方块表，也没有必要
+ * 为了转发一份别人的世界去当裁判。这里只保证"形状不会把房主那边撑爆"。
+ */
+export function sanitizeEditPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.t === 'block') return { t: 'block', edit: Array.isArray(payload.edit) ? payload.edit.slice(0, 6) : null };
+  if (payload.t === 'blocks') {
+    if (!Array.isArray(payload.blocks)) return null;
+    return { t: 'blocks', blocks: payload.blocks.slice(0, MAX_REQUEST_BLOCKS) };
+  }
+  /*
+   * 容器 / 牌子 / 展示框 / TNT（L8 · MS4 收尾）：这四类从属端也改走请求通道了。
+   *
+   * 与方块一样，这里只做**形状收口**（别把房主那端撑爆），内容语义由房主落地时按
+   * 各自的老路再校验一遍（`restoreStacks` / 行数截断 / 数值有限）。
+   */
+  const coords = (source) => {
+    const x = Math.trunc(Number(source.x));
+    const y = Math.trunc(Number(source.y));
+    const z = Math.trunc(Number(source.z));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    return { x, y, z, dimension: sanitizeDimension(String(source.dimension ?? '')) };
+  };
+  if (payload.t === 'container') {
+    const at = coords(payload);
+    if (!at) return null;
+    const slots = payload.slots;
+    if (!Array.isArray(slots) || slots.length > 27) return null;
+    if (JSON.stringify(slots).length > 8192) return null;
+    return { t: 'container', ...at, slots };
+  }
+  if (payload.t === 'sign') {
+    const at = coords(payload);
+    if (!at) return null;
+    if (!Array.isArray(payload.lines)) return null;
+    const lines = payload.lines.slice(0, 4).map((line) => (typeof line === 'string' ? [...line].slice(0, 64).join('') : ''));
+    return { t: 'sign', ...at, lines };
+  }
+  if (payload.t === 'frame') {
+    const at = coords(payload);
+    if (!at) return null;
+    const item = payload.item;
+    const cleaned =
+      item && typeof item === 'object' && Number.isFinite(Number(item.id)) && Number.isFinite(Number(item.count))
+        ? { id: Math.trunc(Number(item.id)), count: Math.trunc(Number(item.count)) }
+        : null;
+    const rotation = Math.trunc(Number(payload.rotation ?? 0));
+    return { t: 'frame', ...at, item: cleaned, rotation: Number.isFinite(rotation) ? rotation : 0 };
+  }
+  if (payload.t === 'tnt') {
+    const at = coords(payload);
+    if (!at) return null;
+    return { t: 'tnt', ...at };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- 实体快照（L8·MS3）
+
+/** 一包 `entity-snap` 最多带多少实体（与客户端 `EntitySnapshot.MAX_SNAPSHOT_ENTITIES` 对齐） */
+export const MAX_SNAPSHOT_ENTITIES = 256;
+
+/**
+ * 实体快照的形状收口：**只保证它是个不超过上限的数组**。
+ *
+ * 内容不校验——位置/血量是不是"对"的，服务端既没有世界也没有生物表；它只做转发。
+ * 真正的把关在房主那端（`SimAuthority` 只采 AOI 内）与从属端（`decodeEntities` 逐条洗）。
+ */
+export function sanitizeEntitySnap(raw) {
+  if (!Array.isArray(raw)) return null;
+  return raw.slice(0, MAX_SNAPSHOT_ENTITIES);
+}
+
+/** 一包 `entity-remove` 最多带多少个键 */
+export const MAX_ENTITY_REMOVE_KEYS = 64;
+
+/**
+ * 实体消失/死亡的键列表收口：只留**字符串**、最多 64 个。
+ *
+ * 不校验键的格式（`ownerId:localId` 的解析在客户端），也不校验"这只怪真的死了吗"——
+ * 服务端没有世界。形状不对就当没收到。
+ */
+export function sanitizeEntityKeys(raw) {
+  if (!Array.isArray(raw)) return null;
+  const keys = raw.filter((key) => typeof key === 'string' && key.length > 0 && key.length <= 32).slice(0, MAX_ENTITY_REMOVE_KEYS);
+  return keys.length === 0 ? null : keys;
 }

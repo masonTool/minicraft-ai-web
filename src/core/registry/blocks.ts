@@ -201,24 +201,24 @@ function frontTile(front: string, frontLit: string) {
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
-  { id: 0, name: 'minecraft:air', tiles: ['', '', ''], solid: false, opaque: false },
+  { id: 0, name: 'minicraft:air', tiles: ['', '', ''], solid: false, opaque: false },
 
   // ---- 基础建筑与地形方块
-  { id: 1, name: 'minecraft:stone', tiles: ['stone', 'stone', 'stone'] },
-  { id: 2, name: 'minecraft:dirt', tiles: ['dirt', 'dirt', 'dirt'] },
-  { id: 3, name: 'minecraft:grass_block', tiles: ['grass_top', 'dirt', 'grass_side'] },
-  { id: 4, name: 'minecraft:sand', tiles: ['sand', 'sand', 'sand'] },
-  { id: 5, name: 'minecraft:oak_log', tiles: ['oak_log_top', 'oak_log_top', 'oak_log_side'] },
+  { id: 1, name: 'minicraft:stone', tiles: ['stone', 'stone', 'stone'] },
+  { id: 2, name: 'minicraft:dirt', tiles: ['dirt', 'dirt', 'dirt'] },
+  { id: 3, name: 'minicraft:grass_block', tiles: ['grass_top', 'dirt', 'grass_side'] },
+  { id: 4, name: 'minicraft:sand', tiles: ['sand', 'sand', 'sand'] },
+  { id: 5, name: 'minicraft:oak_log', tiles: ['oak_log_top', 'oak_log_top', 'oak_log_side'] },
   // 树叶：不透明（渲染要剔除相邻面）但**不致窒息**，原版钻进树叶里不掉血
-  { id: 6, name: 'minecraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'], lightOpacity: 1, suffocates: false },
-  { id: 7, name: 'minecraft:oak_planks', tiles: ['oak_planks', 'oak_planks', 'oak_planks'] },
-  { id: 8, name: 'minecraft:cobblestone', tiles: ['cobblestone', 'cobblestone', 'cobblestone'] },
-  { id: 9, name: 'minecraft:bedrock', tiles: ['bedrock', 'bedrock', 'bedrock'] },
+  { id: 6, name: 'minicraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'], lightOpacity: 1, suffocates: false },
+  { id: 7, name: 'minicraft:oak_planks', tiles: ['oak_planks', 'oak_planks', 'oak_planks'] },
+  { id: 8, name: 'minicraft:cobblestone', tiles: ['cobblestone', 'cobblestone', 'cobblestone'] },
+  { id: 9, name: 'minicraft:bedrock', tiles: ['bedrock', 'bedrock', 'bedrock'] },
 
   // ---- 流体与透明方块
   {
     id: 10,
-    name: 'minecraft:water',
+    name: 'minicraft:water',
     tiles: ['water', 'water', 'water'],
     solid: false,
     opaque: false,
@@ -227,67 +227,67 @@ const BASE_SPECS: readonly BlockSpec[] = [
     translucent: true,
     lightOpacity: 1,
   },
-  { id: 11, name: 'minecraft:glass', tiles: ['glass', 'glass', 'glass'], opaque: false, translucent: true, lightOpacity: 0 },
+  { id: 11, name: 'minicraft:glass', tiles: ['glass', 'glass', 'glass'], opaque: false, translucent: true, lightOpacity: 0 },
 
   // ---- 1.18 地下岩石
-  { id: 12, name: 'minecraft:deepslate', tiles: ['deepslate', 'deepslate', 'deepslate'] },
-  { id: 13, name: 'minecraft:granite', tiles: ['granite', 'granite', 'granite'] },
-  { id: 14, name: 'minecraft:diorite', tiles: ['diorite', 'diorite', 'diorite'] },
-  { id: 15, name: 'minecraft:andesite', tiles: ['andesite', 'andesite', 'andesite'] },
-  { id: 16, name: 'minecraft:tuff', tiles: ['tuff', 'tuff', 'tuff'] },
+  { id: 12, name: 'minicraft:deepslate', tiles: ['deepslate', 'deepslate', 'deepslate'] },
+  { id: 13, name: 'minicraft:granite', tiles: ['granite', 'granite', 'granite'] },
+  { id: 14, name: 'minicraft:diorite', tiles: ['diorite', 'diorite', 'diorite'] },
+  { id: 15, name: 'minicraft:andesite', tiles: ['andesite', 'andesite', 'andesite'] },
+  { id: 16, name: 'minicraft:tuff', tiles: ['tuff', 'tuff', 'tuff'] },
   // 干草块（批次 437）：六个面同一张贴图（原版只有顶面/侧面之分，这里不细分）
-  { id: 667, name: 'minecraft:hay_block', tiles: ['hay_block', 'hay_block', 'hay_block'] },
+  { id: 667, name: 'minicraft:hay_block', tiles: ['hay_block', 'hay_block', 'hay_block'] },
   // 六面树皮的木头（批次 438）：复用原木侧面的贴图，不新画
-  { id: 668, name: 'minecraft:oak_wood', tiles: ['oak_log_side', 'oak_log_side', 'oak_log_side'] },
-  { id: 669, name: 'minecraft:spruce_wood', tiles: ['spruce_log_side', 'spruce_log_side', 'spruce_log_side'] },
-  { id: 670, name: 'minecraft:birch_wood', tiles: ['birch_log_side', 'birch_log_side', 'birch_log_side'] },
-  { id: 671, name: 'minecraft:jungle_wood', tiles: ['jungle_log_side', 'jungle_log_side', 'jungle_log_side'] },
-  { id: 672, name: 'minecraft:acacia_wood', tiles: ['acacia_log_side', 'acacia_log_side', 'acacia_log_side'] },
-  { id: 673, name: 'minecraft:dark_oak_wood', tiles: ['dark_oak_log_side', 'dark_oak_log_side', 'dark_oak_log_side'] },
+  { id: 668, name: 'minicraft:oak_wood', tiles: ['oak_log_side', 'oak_log_side', 'oak_log_side'] },
+  { id: 669, name: 'minicraft:spruce_wood', tiles: ['spruce_log_side', 'spruce_log_side', 'spruce_log_side'] },
+  { id: 670, name: 'minicraft:birch_wood', tiles: ['birch_log_side', 'birch_log_side', 'birch_log_side'] },
+  { id: 671, name: 'minicraft:jungle_wood', tiles: ['jungle_log_side', 'jungle_log_side', 'jungle_log_side'] },
+  { id: 672, name: 'minicraft:acacia_wood', tiles: ['acacia_log_side', 'acacia_log_side', 'acacia_log_side'] },
+  { id: 673, name: 'minicraft:dark_oak_wood', tiles: ['dark_oak_log_side', 'dark_oak_log_side', 'dark_oak_log_side'] },
   // 磨制玄武岩 / 蓝冰（批次 439）：复用已有贴图（玄武岩侧面、浮冰），不新画
-  { id: 674, name: 'minecraft:polished_basalt', tiles: ['basalt_side', 'basalt_side', 'basalt_side'] },
-  { id: 675, name: 'minecraft:blue_ice', tiles: ['packed_ice', 'packed_ice', 'packed_ice'] },
+  { id: 674, name: 'minicraft:polished_basalt', tiles: ['basalt_side', 'basalt_side', 'basalt_side'] },
+  { id: 675, name: 'minicraft:blue_ice', tiles: ['packed_ice', 'packed_ice', 'packed_ice'] },
   // 蜜脾块（批次 440）：纯装饰方块，没有行为
-  { id: 676, name: 'minecraft:honeycomb_block', tiles: ['honeycomb_block', 'honeycomb_block', 'honeycomb_block'] },
+  { id: 676, name: 'minicraft:honeycomb_block', tiles: ['honeycomb_block', 'honeycomb_block', 'honeycomb_block'] },
   // 蛛网（批次 441）：能穿过、会减速；渲染用一张带透明感的贴图
-  { id: 677, name: 'minecraft:cobweb', tiles: ['cobweb', 'cobweb', 'cobweb'], solid: false, opaque: false, lightOpacity: 0 },
+  { id: 677, name: 'minicraft:cobweb', tiles: ['cobweb', 'cobweb', 'cobweb'], solid: false, opaque: false, lightOpacity: 0 },
   // 剥皮原木（批次 443）：颜色比原木浅一档，贴图由 TextureAtlas 现画
-  { id: 678, name: 'minecraft:stripped_oak_log', tiles: ['stripped_oak_log', 'stripped_oak_log', 'stripped_oak_log'] },
-  { id: 679, name: 'minecraft:stripped_spruce_log', tiles: ['stripped_spruce_log', 'stripped_spruce_log', 'stripped_spruce_log'] },
-  { id: 680, name: 'minecraft:stripped_birch_log', tiles: ['stripped_birch_log', 'stripped_birch_log', 'stripped_birch_log'] },
-  { id: 681, name: 'minecraft:stripped_jungle_log', tiles: ['stripped_jungle_log', 'stripped_jungle_log', 'stripped_jungle_log'] },
-  { id: 682, name: 'minecraft:stripped_acacia_log', tiles: ['stripped_acacia_log', 'stripped_acacia_log', 'stripped_acacia_log'] },
-  { id: 683, name: 'minecraft:stripped_dark_oak_log', tiles: ['stripped_dark_oak_log', 'stripped_dark_oak_log', 'stripped_dark_oak_log'] },
+  { id: 678, name: 'minicraft:stripped_oak_log', tiles: ['stripped_oak_log', 'stripped_oak_log', 'stripped_oak_log'] },
+  { id: 679, name: 'minicraft:stripped_spruce_log', tiles: ['stripped_spruce_log', 'stripped_spruce_log', 'stripped_spruce_log'] },
+  { id: 680, name: 'minicraft:stripped_birch_log', tiles: ['stripped_birch_log', 'stripped_birch_log', 'stripped_birch_log'] },
+  { id: 681, name: 'minicraft:stripped_jungle_log', tiles: ['stripped_jungle_log', 'stripped_jungle_log', 'stripped_jungle_log'] },
+  { id: 682, name: 'minicraft:stripped_acacia_log', tiles: ['stripped_acacia_log', 'stripped_acacia_log', 'stripped_acacia_log'] },
+  { id: 683, name: 'minicraft:stripped_dark_oak_log', tiles: ['stripped_dark_oak_log', 'stripped_dark_oak_log', 'stripped_dark_oak_log'] },
   // 其余五种木材的按钮 / 压力板（批次 444）：贴图复用同种木板，形状与橡木那两个一致
-  { id: 684, name: 'minecraft:spruce_button', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 685, name: 'minecraft:birch_button', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 686, name: 'minecraft:jungle_button', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 687, name: 'minecraft:acacia_button', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 688, name: 'minecraft:dark_oak_button', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 689, name: 'minecraft:spruce_pressure_plate', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 690, name: 'minecraft:birch_pressure_plate', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 691, name: 'minecraft:jungle_pressure_plate', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 692, name: 'minecraft:acacia_pressure_plate', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
-  { id: 693, name: 'minecraft:dark_oak_pressure_plate', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 684, name: 'minicraft:spruce_button', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 685, name: 'minicraft:birch_button', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 686, name: 'minicraft:jungle_button', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 687, name: 'minicraft:acacia_button', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 688, name: 'minicraft:dark_oak_button', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 689, name: 'minicraft:spruce_pressure_plate', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 690, name: 'minicraft:birch_pressure_plate', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 691, name: 'minicraft:jungle_pressure_plate', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 692, name: 'minicraft:acacia_pressure_plate', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 693, name: 'minicraft:dark_oak_pressure_plate', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
   // 海绵 / 湿海绵（批次 449）：干海绵放下去吸水（半径 3、最多 65 格，见 `world/Sponge.ts`），
   // 吸饱了变成湿海绵；湿海绵在熔炉里烤干才会变回来（原版就是这么一条闭环）
-  { id: 694, name: 'minecraft:sponge', tiles: ['sponge', 'sponge', 'sponge'] },
-  { id: 695, name: 'minecraft:wet_sponge', tiles: ['wet_sponge', 'wet_sponge', 'wet_sponge'] },
+  { id: 694, name: 'minicraft:sponge', tiles: ['sponge', 'sponge', 'sponge'] },
+  { id: 695, name: 'minicraft:wet_sponge', tiles: ['wet_sponge', 'wet_sponge', 'wet_sponge'] },
   // 蜂蜜块（批次 450）：站在上面**跳不起来**、贴着侧面下滑被限速、摔上去只受 20% 伤害。
   // 原版还有"被活塞推动时粘走相邻方块"——本项目没有"活塞推方块实体"那条路，记在差异里
-  { id: 696, name: 'minecraft:honey_block', tiles: ['honey_block', 'honey_block', 'honey_block'] },
+  { id: 696, name: 'minicraft:honey_block', tiles: ['honey_block', 'honey_block', 'honey_block'] },
 
-  { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
-  { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
-  { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
-  { id: 20, name: 'minecraft:sandstone', tiles: ['sandstone_top', 'sandstone_top', 'sandstone'] },
+  { id: 17, name: 'minicraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
+  { id: 18, name: 'minicraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
+  { id: 19, name: 'minicraft:clay', tiles: ['clay', 'clay', 'clay'] },
+  { id: 20, name: 'minicraft:sandstone', tiles: ['sandstone_top', 'sandstone_top', 'sandstone'] },
 
   // ---- 寒冷群系
-  { id: 21, name: 'minecraft:snow_block', tiles: ['snow', 'snow', 'snow'] },
-  { id: 22, name: 'minecraft:ice', tiles: ['ice', 'ice', 'ice'], opaque: false, translucent: true, lightOpacity: 1 },
+  { id: 21, name: 'minicraft:snow_block', tiles: ['snow', 'snow', 'snow'] },
+  { id: 22, name: 'minicraft:ice', tiles: ['ice', 'ice', 'ice'], opaque: false, translucent: true, lightOpacity: 1 },
   {
     id: 23,
-    name: 'minecraft:packed_ice',
+    name: 'minicraft:packed_ice',
     tiles: ['packed_ice', 'packed_ice', 'packed_ice'],
     opaque: false,
     translucent: true,
@@ -295,10 +295,10 @@ const BASE_SPECS: readonly BlockSpec[] = [
   },
 
   // ---- 特殊
-  { id: 24, name: 'minecraft:obsidian', tiles: ['obsidian', 'obsidian', 'obsidian'] },
+  { id: 24, name: 'minicraft:obsidian', tiles: ['obsidian', 'obsidian', 'obsidian'] },
   {
     id: 25,
-    name: 'minecraft:lava',
+    name: 'minicraft:lava',
     tiles: ['lava', 'lava', 'lava'],
     solid: false,
     opaque: false,
@@ -307,16 +307,16 @@ const BASE_SPECS: readonly BlockSpec[] = [
     light: 15,
     lightOpacity: 1,
   },
-  { id: 26, name: 'minecraft:glowstone', tiles: ['glowstone', 'glowstone', 'glowstone'], light: 15 },
+  { id: 26, name: 'minicraft:glowstone', tiles: ['glowstone', 'glowstone', 'glowstone'], light: 15 },
 
   // ---- 主世界矿石（1.18 共 8 种主世界矿石 + 深层变体）
-  { id: 27, name: 'minecraft:coal_ore', tiles: ['coal_ore', 'coal_ore', 'coal_ore'] },
-  { id: 28, name: 'minecraft:iron_ore', tiles: ['iron_ore', 'iron_ore', 'iron_ore'] },
-  { id: 29, name: 'minecraft:copper_ore', tiles: ['copper_ore', 'copper_ore', 'copper_ore'] },
-  { id: 30, name: 'minecraft:gold_ore', tiles: ['gold_ore', 'gold_ore', 'gold_ore'] },
+  { id: 27, name: 'minicraft:coal_ore', tiles: ['coal_ore', 'coal_ore', 'coal_ore'] },
+  { id: 28, name: 'minicraft:iron_ore', tiles: ['iron_ore', 'iron_ore', 'iron_ore'] },
+  { id: 29, name: 'minicraft:copper_ore', tiles: ['copper_ore', 'copper_ore', 'copper_ore'] },
+  { id: 30, name: 'minicraft:gold_ore', tiles: ['gold_ore', 'gold_ore', 'gold_ore'] },
   {
     id: 31,
-    name: 'minecraft:redstone_ore',
+    name: 'minicraft:redstone_ore',
     tiles: ['redstone_ore', 'redstone_ore', 'redstone_ore'],
     // 踩上去会亮（批次 248）：原版是"被打扰时发光 9 级"，状态位与红石灯同一条 `powered`
     stateTiles: (state) =>
@@ -325,20 +325,20 @@ const BASE_SPECS: readonly BlockSpec[] = [
         : ['redstone_ore', 'redstone_ore', 'redstone_ore'],
     stateLight: (state) => (isPowered(state) ? 9 : 0),
   },
-  { id: 32, name: 'minecraft:lapis_ore', tiles: ['lapis_ore', 'lapis_ore', 'lapis_ore'] },
-  { id: 33, name: 'minecraft:diamond_ore', tiles: ['diamond_ore', 'diamond_ore', 'diamond_ore'] },
-  { id: 34, name: 'minecraft:emerald_ore', tiles: ['emerald_ore', 'emerald_ore', 'emerald_ore'] },
-  { id: 35, name: 'minecraft:deepslate_coal_ore', tiles: ['deepslate_coal_ore', 'deepslate_coal_ore', 'deepslate_coal_ore'] },
-  { id: 36, name: 'minecraft:deepslate_iron_ore', tiles: ['deepslate_iron_ore', 'deepslate_iron_ore', 'deepslate_iron_ore'] },
+  { id: 32, name: 'minicraft:lapis_ore', tiles: ['lapis_ore', 'lapis_ore', 'lapis_ore'] },
+  { id: 33, name: 'minicraft:diamond_ore', tiles: ['diamond_ore', 'diamond_ore', 'diamond_ore'] },
+  { id: 34, name: 'minicraft:emerald_ore', tiles: ['emerald_ore', 'emerald_ore', 'emerald_ore'] },
+  { id: 35, name: 'minicraft:deepslate_coal_ore', tiles: ['deepslate_coal_ore', 'deepslate_coal_ore', 'deepslate_coal_ore'] },
+  { id: 36, name: 'minicraft:deepslate_iron_ore', tiles: ['deepslate_iron_ore', 'deepslate_iron_ore', 'deepslate_iron_ore'] },
   {
     id: 37,
-    name: 'minecraft:deepslate_copper_ore',
+    name: 'minicraft:deepslate_copper_ore',
     tiles: ['deepslate_copper_ore', 'deepslate_copper_ore', 'deepslate_copper_ore'],
   },
-  { id: 38, name: 'minecraft:deepslate_gold_ore', tiles: ['deepslate_gold_ore', 'deepslate_gold_ore', 'deepslate_gold_ore'] },
+  { id: 38, name: 'minicraft:deepslate_gold_ore', tiles: ['deepslate_gold_ore', 'deepslate_gold_ore', 'deepslate_gold_ore'] },
   {
     id: 39,
-    name: 'minecraft:deepslate_redstone_ore',
+    name: 'minicraft:deepslate_redstone_ore',
     tiles: ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
     stateTiles: (state) =>
       isPowered(state)
@@ -346,23 +346,23 @@ const BASE_SPECS: readonly BlockSpec[] = [
         : ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
     stateLight: (state) => (isPowered(state) ? 9 : 0),
   },
-  { id: 40, name: 'minecraft:deepslate_lapis_ore', tiles: ['deepslate_lapis_ore', 'deepslate_lapis_ore', 'deepslate_lapis_ore'] },
+  { id: 40, name: 'minicraft:deepslate_lapis_ore', tiles: ['deepslate_lapis_ore', 'deepslate_lapis_ore', 'deepslate_lapis_ore'] },
   {
     id: 41,
-    name: 'minecraft:deepslate_diamond_ore',
+    name: 'minicraft:deepslate_diamond_ore',
     tiles: ['deepslate_diamond_ore', 'deepslate_diamond_ore', 'deepslate_diamond_ore'],
   },
   {
     id: 42,
-    name: 'minecraft:deepslate_emerald_ore',
+    name: 'minicraft:deepslate_emerald_ore',
     tiles: ['deepslate_emerald_ore', 'deepslate_emerald_ore', 'deepslate_emerald_ore'],
   },
 
   // ---- 功能方块
-  { id: 43, name: 'minecraft:crafting_table', tiles: ['crafting_table_top', 'oak_planks', 'crafting_table_side'] },
+  { id: 43, name: 'minicraft:crafting_table', tiles: ['crafting_table_top', 'oak_planks', 'crafting_table_side'] },
   {
     id: 44,
-    name: 'minecraft:furnace',
+    name: 'minicraft:furnace',
     tiles: ['furnace_top', 'furnace_top', 'furnace_side'],
     // 正面（批次 64，O10 的第一步）：未点 = 炉口黑洞、点着 = 有火光，**只亮正面**。
     // 在此之前四个侧面会一起亮（那时立方体只有一个"侧面"贴图槽），
@@ -371,26 +371,26 @@ const BASE_SPECS: readonly BlockSpec[] = [
     facesPlayer: true,
     stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
-  { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
+  { id: 45, name: 'minicraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
   /**
    * 陷阱箱（批次 249）：外观与箱子同款（红锁扣区分），**打开时向相邻红石输出 15**。
    *
    * 它没有额外的状态位：开箱/关箱由主程序写 `powered` 位（与拉杆同一个口径），
    * 红石引擎把它当电源读。容器本身与箱子共用 `getOrCreateChest`（按坐标存）。
    */
-  { id: 585, name: 'minecraft:trapped_chest', tiles: ['trapped_chest_top', 'trapped_chest_top', 'trapped_chest_side'] },
+  { id: 585, name: 'minicraft:trapped_chest', tiles: ['trapped_chest_top', 'trapped_chest_top', 'trapped_chest_side'] },
 
   // ---- 石材家族
-  { id: 62, name: 'minecraft:stone_bricks', tiles: ['stone_bricks', 'stone_bricks', 'stone_bricks'] },
-  { id: 63, name: 'minecraft:chiseled_stone_bricks', tiles: ['chiseled_stone_bricks', 'chiseled_stone_bricks', 'chiseled_stone_bricks'] },
-  { id: 64, name: 'minecraft:smooth_stone', tiles: ['smooth_stone', 'smooth_stone', 'smooth_stone'] },
-  { id: 65, name: 'minecraft:polished_granite', tiles: ['polished_granite', 'polished_granite', 'polished_granite'] },
-  { id: 66, name: 'minecraft:polished_diorite', tiles: ['polished_diorite', 'polished_diorite', 'polished_diorite'] },
-  { id: 67, name: 'minecraft:polished_andesite', tiles: ['polished_andesite', 'polished_andesite', 'polished_andesite'] },
-  { id: 68, name: 'minecraft:deepslate_bricks', tiles: ['deepslate_bricks', 'deepslate_bricks', 'deepslate_bricks'] },
-  { id: 69, name: 'minecraft:chiseled_deepslate', tiles: ['chiseled_deepslate', 'chiseled_deepslate', 'chiseled_deepslate'] },
-  { id: 70, name: 'minecraft:bricks', tiles: ['bricks', 'bricks', 'bricks'] },
-  { id: 71, name: 'minecraft:polished_deepslate', tiles: ['polished_deepslate', 'polished_deepslate', 'polished_deepslate'] },
+  { id: 62, name: 'minicraft:stone_bricks', tiles: ['stone_bricks', 'stone_bricks', 'stone_bricks'] },
+  { id: 63, name: 'minicraft:chiseled_stone_bricks', tiles: ['chiseled_stone_bricks', 'chiseled_stone_bricks', 'chiseled_stone_bricks'] },
+  { id: 64, name: 'minicraft:smooth_stone', tiles: ['smooth_stone', 'smooth_stone', 'smooth_stone'] },
+  { id: 65, name: 'minicraft:polished_granite', tiles: ['polished_granite', 'polished_granite', 'polished_granite'] },
+  { id: 66, name: 'minicraft:polished_diorite', tiles: ['polished_diorite', 'polished_diorite', 'polished_diorite'] },
+  { id: 67, name: 'minicraft:polished_andesite', tiles: ['polished_andesite', 'polished_andesite', 'polished_andesite'] },
+  { id: 68, name: 'minicraft:deepslate_bricks', tiles: ['deepslate_bricks', 'deepslate_bricks', 'deepslate_bricks'] },
+  { id: 69, name: 'minicraft:chiseled_deepslate', tiles: ['chiseled_deepslate', 'chiseled_deepslate', 'chiseled_deepslate'] },
+  { id: 70, name: 'minicraft:bricks', tiles: ['bricks', 'bricks', 'bricks'] },
+  { id: 71, name: 'minicraft:polished_deepslate', tiles: ['polished_deepslate', 'polished_deepslate', 'polished_deepslate'] },
 ];
 
 /** 羊毛 id 起始值：16 种颜色连续排列，顺序与 DYE_COLORS 一致 */
@@ -398,7 +398,7 @@ export const WOOL_ID_START = 46;
 
 const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   id: WOOL_ID_START + index,
-  name: `minecraft:${color.name}_wool`,
+  name: `minicraft:${color.name}_wool`,
   tiles: [`wool_${color.name}`, `wool_${color.name}`, `wool_${color.name}`],
 }));
 
@@ -438,13 +438,13 @@ const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
   return [
     {
       id: ids.log,
-      name: `minecraft:${wood.name}_log`,
+      name: `minicraft:${wood.name}_log`,
       tiles: [`${wood.name}_log_top`, `${wood.name}_log_top`, `${wood.name}_log_side`],
     },
-    { id: ids.planks, name: `minecraft:${wood.name}_planks`, tiles: [plankTile, plankTile, plankTile] },
+    { id: ids.planks, name: `minicraft:${wood.name}_planks`, tiles: [plankTile, plankTile, plankTile] },
     {
       id: ids.leaves,
-      name: `minecraft:${wood.name}_leaves`,
+      name: `minicraft:${wood.name}_leaves`,
       tiles: [`${wood.name}_leaves`, `${wood.name}_leaves`, `${wood.name}_leaves`],
       lightOpacity: 1,
       // 与橡树树叶同一条：不透明但**不致窒息**
@@ -452,7 +452,7 @@ const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
     },
     {
       id: ids.slab,
-      name: `minecraft:${wood.name}_planks_slab`,
+      name: `minicraft:${wood.name}_planks_slab`,
       tiles: [plankTile, plankTile, plankTile],
       shape: 'slab' as const,
       opaque: false,
@@ -460,7 +460,7 @@ const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
     },
     {
       id: ids.stairs,
-      name: `minecraft:${wood.name}_planks_stairs`,
+      name: `minicraft:${wood.name}_planks_stairs`,
       tiles: [plankTile, plankTile, plankTile],
       shape: 'stairs' as const,
       opaque: false,
@@ -527,7 +527,7 @@ const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
     specs.push(
       {
         id: ids.fence,
-        name: `minecraft:${wood.name}_fence`,
+        name: `minicraft:${wood.name}_fence`,
         tiles: [plankTile, plankTile, plankTile],
         shape: 'fence',
         opaque: false,
@@ -535,7 +535,7 @@ const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
       },
       {
         id: ids.fenceGate,
-        name: `minecraft:${wood.name}_fence_gate`,
+        name: `minicraft:${wood.name}_fence_gate`,
         tiles: [gateTile, gateTile, gateTile],
         shape: 'fence_gate',
         opaque: false,
@@ -543,7 +543,7 @@ const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
       },
       {
         id: ids.door,
-        name: `minecraft:${wood.name}_door`,
+        name: `minicraft:${wood.name}_door`,
         tiles: [doorTile, doorTile, doorTile],
         shape: 'door',
         opaque: false,
@@ -551,7 +551,7 @@ const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
       },
       {
         id: ids.trapdoor,
-        name: `minecraft:${wood.name}_trapdoor`,
+        name: `minicraft:${wood.name}_trapdoor`,
         tiles: [trapdoorTile, trapdoorTile, trapdoorTile],
         shape: 'trapdoor',
         opaque: false,
@@ -593,20 +593,20 @@ export const CONCRETE_POWDER_ID_START = 558;
 const COLORED_SPECS: readonly BlockSpec[] = [
   {
     id: TERRACOTTA_ID_START,
-    name: 'minecraft:terracotta',
+    name: 'minicraft:terracotta',
     tiles: ['terracotta', 'terracotta', 'terracotta'],
   },
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: TERRACOTTA_ID_START + 1 + index,
-      name: `minecraft:${color.name}_terracotta`,
+      name: `minicraft:${color.name}_terracotta`,
       tiles: [`terracotta_${color.name}`, `terracotta_${color.name}`, `terracotta_${color.name}`],
     }),
   ),
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: CONCRETE_ID_START + index,
-      name: `minecraft:${color.name}_concrete`,
+      name: `minicraft:${color.name}_concrete`,
       tiles: [`concrete_${color.name}`, `concrete_${color.name}`, `concrete_${color.name}`],
     }),
   ),
@@ -615,7 +615,7 @@ const COLORED_SPECS: readonly BlockSpec[] = [
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: CONCRETE_POWDER_ID_START + index,
-      name: `minecraft:${color.name}_concrete_powder`,
+      name: `minicraft:${color.name}_concrete_powder`,
       tiles: [
         `concrete_powder_${color.name}`,
         `concrete_powder_${color.name}`,
@@ -667,23 +667,23 @@ export function stainedGlassPaneId(colorIndex: number): number {
 
 const GLASS_AND_STONE_SPECS: readonly BlockSpec[] = [
   // ---- 石材补全（苔石 / 裂纹变体）
-  { id: 160, name: 'minecraft:mossy_cobblestone', tiles: ['mossy_cobblestone', 'mossy_cobblestone', 'mossy_cobblestone'] },
-  { id: 161, name: 'minecraft:mossy_stone_bricks', tiles: ['mossy_stone_bricks', 'mossy_stone_bricks', 'mossy_stone_bricks'] },
-  { id: 162, name: 'minecraft:cracked_stone_bricks', tiles: ['cracked_stone_bricks', 'cracked_stone_bricks', 'cracked_stone_bricks'] },
-  { id: 163, name: 'minecraft:cracked_deepslate_bricks', tiles: ['cracked_deepslate_bricks', 'cracked_deepslate_bricks', 'cracked_deepslate_bricks'] },
-  { id: 164, name: 'minecraft:cobbled_deepslate', tiles: ['cobbled_deepslate', 'cobbled_deepslate', 'cobbled_deepslate'] },
+  { id: 160, name: 'minicraft:mossy_cobblestone', tiles: ['mossy_cobblestone', 'mossy_cobblestone', 'mossy_cobblestone'] },
+  { id: 161, name: 'minicraft:mossy_stone_bricks', tiles: ['mossy_stone_bricks', 'mossy_stone_bricks', 'mossy_stone_bricks'] },
+  { id: 162, name: 'minicraft:cracked_stone_bricks', tiles: ['cracked_stone_bricks', 'cracked_stone_bricks', 'cracked_stone_bricks'] },
+  { id: 163, name: 'minicraft:cracked_deepslate_bricks', tiles: ['cracked_deepslate_bricks', 'cracked_deepslate_bricks', 'cracked_deepslate_bricks'] },
+  { id: 164, name: 'minicraft:cobbled_deepslate', tiles: ['cobbled_deepslate', 'cobbled_deepslate', 'cobbled_deepslate'] },
 
   // ---- 砂岩变体
-  { id: 165, name: 'minecraft:chiseled_sandstone', tiles: ['chiseled_sandstone', 'sandstone', 'chiseled_sandstone'] },
-  { id: 166, name: 'minecraft:cut_sandstone', tiles: ['cut_sandstone', 'sandstone', 'cut_sandstone'] },
-  { id: 167, name: 'minecraft:smooth_sandstone', tiles: ['smooth_sandstone', 'smooth_sandstone', 'smooth_sandstone'] },
+  { id: 165, name: 'minicraft:chiseled_sandstone', tiles: ['chiseled_sandstone', 'sandstone', 'chiseled_sandstone'] },
+  { id: 166, name: 'minicraft:cut_sandstone', tiles: ['cut_sandstone', 'sandstone', 'cut_sandstone'] },
+  { id: 167, name: 'minicraft:smooth_sandstone', tiles: ['smooth_sandstone', 'smooth_sandstone', 'smooth_sandstone'] },
 
   // ---- 染色玻璃（半透明整块）+ 玻璃板（薄片，连接方向由邻居实时决定）
-  { id: GLASS_PANE_ID, name: 'minecraft:glass_pane', tiles: ['glass', 'glass', 'glass'], shape: 'pane' as const, opaque: false, translucent: true },
+  { id: GLASS_PANE_ID, name: 'minicraft:glass_pane', tiles: ['glass', 'glass', 'glass'], shape: 'pane' as const, opaque: false, translucent: true },
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: STAINED_GLASS_ID_START + index,
-      name: `minecraft:${color.name}_stained_glass`,
+      name: `minicraft:${color.name}_stained_glass`,
       tiles: [`stained_glass_${color.name}`, `stained_glass_${color.name}`, `stained_glass_${color.name}`],
       opaque: false,
       translucent: true,
@@ -692,7 +692,7 @@ const GLASS_AND_STONE_SPECS: readonly BlockSpec[] = [
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: STAINED_GLASS_PANE_ID_START + index,
-      name: `minecraft:${color.name}_stained_glass_pane`,
+      name: `minicraft:${color.name}_stained_glass_pane`,
       tiles: [`stained_glass_${color.name}`, `stained_glass_${color.name}`, `stained_glass_${color.name}`],
       shape: 'pane' as const,
       opaque: false,
@@ -701,8 +701,8 @@ const GLASS_AND_STONE_SPECS: readonly BlockSpec[] = [
   ),
 
   // ---- 粗金属块（1.18 大矿脉里的稀有伴生方块）
-  { id: 201, name: 'minecraft:raw_copper_block', tiles: ['raw_copper_block', 'raw_copper_block', 'raw_copper_block'] },
-  { id: 202, name: 'minecraft:raw_iron_block', tiles: ['raw_iron_block', 'raw_iron_block', 'raw_iron_block'] },
+  { id: 201, name: 'minicraft:raw_copper_block', tiles: ['raw_copper_block', 'raw_copper_block', 'raw_copper_block'] },
+  { id: 202, name: 'minicraft:raw_iron_block', tiles: ['raw_iron_block', 'raw_iron_block', 'raw_iron_block'] },
 ];
 
 // ---------------------------------------------------------------- 台阶 / 楼梯
@@ -760,7 +760,7 @@ const SHAPED_SPECS: readonly BlockSpec[] = SHAPED_PARENTS.flatMap(([parentId, na
   return [
     {
       id: SLAB_ID_START + index,
-      name: `minecraft:${name}_slab`,
+      name: `minicraft:${name}_slab`,
       tiles,
       shape: 'slab' as const,
       opaque: false,
@@ -768,7 +768,7 @@ const SHAPED_SPECS: readonly BlockSpec[] = SHAPED_PARENTS.flatMap(([parentId, na
     },
     {
       id: STAIRS_ID_START + index,
-      name: `minecraft:${name}_stairs`,
+      name: `minicraft:${name}_stairs`,
       tiles,
       shape: 'stairs' as const,
       opaque: false,
@@ -782,7 +782,7 @@ const SHAPED_SPECS: readonly BlockSpec[] = SHAPED_PARENTS.flatMap(([parentId, na
 const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   {
     id: 96,
-    name: 'minecraft:oak_fence',
+    name: 'minicraft:oak_fence',
     tiles: baseTiles(7),
     shape: 'fence',
     opaque: false,
@@ -790,7 +790,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 97,
-    name: 'minecraft:cobblestone_wall',
+    name: 'minicraft:cobblestone_wall',
     tiles: baseTiles(8),
     shape: 'wall',
     opaque: false,
@@ -798,7 +798,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 98,
-    name: 'minecraft:stone_brick_wall',
+    name: 'minicraft:stone_brick_wall',
     tiles: baseTiles(62),
     shape: 'wall',
     opaque: false,
@@ -806,7 +806,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 99,
-    name: 'minecraft:oak_door',
+    name: 'minicraft:oak_door',
     tiles: ['oak_door', 'oak_door', 'oak_door'],
     shape: 'door',
     opaque: false,
@@ -814,7 +814,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 100,
-    name: 'minecraft:torch',
+    name: 'minicraft:torch',
     tiles: ['torch', 'torch', 'torch'],
     shape: 'torch',
     solid: false,
@@ -824,7 +824,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 101,
-    name: 'minecraft:ladder',
+    name: 'minicraft:ladder',
     tiles: ['ladder', 'ladder', 'ladder'],
     shape: 'ladder',
     solid: false,
@@ -849,7 +849,7 @@ export const DECORATION_ID_START = 203;
 function plantSpec(id: number, name: string, tile: string): BlockSpec {
   return {
     id,
-    name: `minecraft:${name}`,
+    name: `minicraft:${name}`,
     tiles: [tile, tile, tile],
     solid: false,
     opaque: false,
@@ -873,17 +873,17 @@ const DECORATION_SPECS: readonly BlockSpec[] = [
   plantSpec(217, 'bamboo', 'bamboo'),
   {
     id: 213,
-    name: 'minecraft:pumpkin',
+    name: 'minicraft:pumpkin',
     tiles: ['pumpkin_top', 'pumpkin_top', 'pumpkin_side'],
   },
   {
     id: 214,
-    name: 'minecraft:melon',
+    name: 'minicraft:melon',
     tiles: ['melon_top', 'melon_top', 'melon_side'],
   },
   {
     id: 215,
-    name: 'minecraft:cactus',
+    name: 'minicraft:cactus',
     tiles: ['cactus_top', 'cactus_top', 'cactus_side'],
     opaque: false,
     lightOpacity: 0,
@@ -893,12 +893,12 @@ const DECORATION_SPECS: readonly BlockSpec[] = [
 
 /** 海晶石家族（海底神殿用） */
 const PRISMARINE_SPECS: readonly BlockSpec[] = [
-  { id: 218, name: 'minecraft:prismarine', tiles: ['prismarine', 'prismarine', 'prismarine'] },
-  { id: 219, name: 'minecraft:prismarine_bricks', tiles: ['prismarine_bricks', 'prismarine_bricks', 'prismarine_bricks'] },
-  { id: 220, name: 'minecraft:dark_prismarine', tiles: ['dark_prismarine', 'dark_prismarine', 'dark_prismarine'] },
+  { id: 218, name: 'minicraft:prismarine', tiles: ['prismarine', 'prismarine', 'prismarine'] },
+  { id: 219, name: 'minicraft:prismarine_bricks', tiles: ['prismarine_bricks', 'prismarine_bricks', 'prismarine_bricks'] },
+  { id: 220, name: 'minicraft:dark_prismarine', tiles: ['dark_prismarine', 'dark_prismarine', 'dark_prismarine'] },
   {
     id: 221,
-    name: 'minecraft:sea_lantern',
+    name: 'minicraft:sea_lantern',
     tiles: ['sea_lantern', 'sea_lantern', 'sea_lantern'],
     light: 15,
   },
@@ -910,45 +910,45 @@ const PRISMARINE_SPECS: readonly BlockSpec[] = [
 // 菌柄（stem）与主世界原木结构一致，只是配色偏紫红 / 青蓝。
 
 const NETHER_SPECS: readonly BlockSpec[] = [
-  { id: 222, name: 'minecraft:netherrack', tiles: ['netherrack', 'netherrack', 'netherrack'] },
-  { id: 223, name: 'minecraft:soul_sand', tiles: ['soul_sand', 'soul_sand', 'soul_sand'] },
-  { id: 224, name: 'minecraft:soul_soil', tiles: ['soul_soil', 'soul_soil', 'soul_soil'] },
-  { id: 225, name: 'minecraft:basalt', tiles: ['basalt_top', 'basalt_top', 'basalt_side'] },
-  { id: 226, name: 'minecraft:smooth_basalt', tiles: ['smooth_basalt', 'smooth_basalt', 'smooth_basalt'] },
-  { id: 227, name: 'minecraft:blackstone', tiles: ['blackstone', 'blackstone', 'blackstone'] },
+  { id: 222, name: 'minicraft:netherrack', tiles: ['netherrack', 'netherrack', 'netherrack'] },
+  { id: 223, name: 'minicraft:soul_sand', tiles: ['soul_sand', 'soul_sand', 'soul_sand'] },
+  { id: 224, name: 'minicraft:soul_soil', tiles: ['soul_soil', 'soul_soil', 'soul_soil'] },
+  { id: 225, name: 'minicraft:basalt', tiles: ['basalt_top', 'basalt_top', 'basalt_side'] },
+  { id: 226, name: 'minicraft:smooth_basalt', tiles: ['smooth_basalt', 'smooth_basalt', 'smooth_basalt'] },
+  { id: 227, name: 'minicraft:blackstone', tiles: ['blackstone', 'blackstone', 'blackstone'] },
   {
     id: 228,
-    name: 'minecraft:magma_block',
+    name: 'minicraft:magma_block',
     tiles: ['magma', 'magma', 'magma'],
     light: 3,
   },
-  { id: 229, name: 'minecraft:crimson_nylium', tiles: ['crimson_nylium', 'netherrack', 'crimson_nylium_side'] },
-  { id: 230, name: 'minecraft:warped_nylium', tiles: ['warped_nylium', 'netherrack', 'warped_nylium_side'] },
-  { id: 231, name: 'minecraft:crimson_stem', tiles: ['crimson_stem_top', 'crimson_stem_top', 'crimson_stem_side'] },
-  { id: 232, name: 'minecraft:warped_stem', tiles: ['warped_stem_top', 'warped_stem_top', 'warped_stem_side'] },
-  { id: 233, name: 'minecraft:crimson_planks', tiles: ['crimson_planks', 'crimson_planks', 'crimson_planks'] },
-  { id: 234, name: 'minecraft:warped_planks', tiles: ['warped_planks', 'warped_planks', 'warped_planks'] },
+  { id: 229, name: 'minicraft:crimson_nylium', tiles: ['crimson_nylium', 'netherrack', 'crimson_nylium_side'] },
+  { id: 230, name: 'minicraft:warped_nylium', tiles: ['warped_nylium', 'netherrack', 'warped_nylium_side'] },
+  { id: 231, name: 'minicraft:crimson_stem', tiles: ['crimson_stem_top', 'crimson_stem_top', 'crimson_stem_side'] },
+  { id: 232, name: 'minicraft:warped_stem', tiles: ['warped_stem_top', 'warped_stem_top', 'warped_stem_side'] },
+  { id: 233, name: 'minicraft:crimson_planks', tiles: ['crimson_planks', 'crimson_planks', 'crimson_planks'] },
+  { id: 234, name: 'minicraft:warped_planks', tiles: ['warped_planks', 'warped_planks', 'warped_planks'] },
   plantSpec(235, 'crimson_fungus', 'crimson_fungus'),
   plantSpec(236, 'warped_fungus', 'warped_fungus'),
-  { id: 237, name: 'minecraft:nether_wart_block', tiles: ['nether_wart_block', 'nether_wart_block', 'nether_wart_block'] },
+  { id: 237, name: 'minicraft:nether_wart_block', tiles: ['nether_wart_block', 'nether_wart_block', 'nether_wart_block'] },
   {
     id: 238,
-    name: 'minecraft:warped_wart_block',
+    name: 'minicraft:warped_wart_block',
     tiles: ['warped_wart_block', 'warped_wart_block', 'warped_wart_block'],
   },
   {
     id: 239,
-    name: 'minecraft:shroomlight',
+    name: 'minicraft:shroomlight',
     tiles: ['shroomlight', 'shroomlight', 'shroomlight'],
     light: 15,
   },
-  { id: 240, name: 'minecraft:nether_bricks', tiles: ['nether_bricks', 'nether_bricks', 'nether_bricks'] },
+  { id: 240, name: 'minicraft:nether_bricks', tiles: ['nether_bricks', 'nether_bricks', 'nether_bricks'] },
   {
     id: 241,
-    name: 'minecraft:nether_quartz_ore',
+    name: 'minicraft:nether_quartz_ore',
     tiles: ['nether_quartz_ore', 'nether_quartz_ore', 'nether_quartz_ore'],
   },
-  { id: 242, name: 'minecraft:ancient_debris', tiles: ['ancient_debris', 'ancient_debris', 'ancient_debris'] },
+  { id: 242, name: 'minicraft:ancient_debris', tiles: ['ancient_debris', 'ancient_debris', 'ancient_debris'] },
   plantSpec(243, 'crimson_roots', 'crimson_roots'),
   plantSpec(244, 'warped_roots', 'warped_roots'),
   plantSpec(245, 'nether_sprouts', 'nether_sprouts'),
@@ -964,19 +964,19 @@ const NETHER_SPECS: readonly BlockSpec[] = [
 // 末地城因此用整块搭建，已在 TASKS.md 记录这个取舍。
 
 const END_SPECS: readonly BlockSpec[] = [
-  { id: 246, name: 'minecraft:end_stone', tiles: ['end_stone', 'end_stone', 'end_stone'] },
-  { id: 247, name: 'minecraft:end_stone_bricks', tiles: ['end_stone_bricks', 'end_stone_bricks', 'end_stone_bricks'] },
-  { id: 248, name: 'minecraft:purpur_block', tiles: ['purpur_block', 'purpur_block', 'purpur_block'] },
+  { id: 246, name: 'minicraft:end_stone', tiles: ['end_stone', 'end_stone', 'end_stone'] },
+  { id: 247, name: 'minicraft:end_stone_bricks', tiles: ['end_stone_bricks', 'end_stone_bricks', 'end_stone_bricks'] },
+  { id: 248, name: 'minicraft:purpur_block', tiles: ['purpur_block', 'purpur_block', 'purpur_block'] },
   {
     id: 249,
-    name: 'minecraft:purpur_pillar',
+    name: 'minicraft:purpur_pillar',
     tiles: ['purpur_pillar_top', 'purpur_pillar_top', 'purpur_pillar_side'],
   },
   plantSpec(250, 'chorus_plant', 'chorus_plant'),
   plantSpec(251, 'chorus_flower', 'chorus_flower'),
   {
     id: 252,
-    name: 'minecraft:end_rod',
+    name: 'minicraft:end_rod',
     tiles: ['end_rod', 'end_rod', 'end_rod'],
     solid: false,
     opaque: false,
@@ -984,10 +984,10 @@ const END_SPECS: readonly BlockSpec[] = [
     light: 14,
     shape: 'cross',
   },
-  { id: 253, name: 'minecraft:dragon_egg', tiles: ['dragon_egg', 'dragon_egg', 'dragon_egg'] },
+  { id: 253, name: 'minicraft:dragon_egg', tiles: ['dragon_egg', 'dragon_egg', 'dragon_egg'] },
   {
     id: 254,
-    name: 'minecraft:end_portal_frame',
+    name: 'minicraft:end_portal_frame',
     // 插了眼的那一格**顶面换一张**（凹槽里亮起一颗眼睛）。侧/底面始终是石框：
     // 眼睛只画在顶面上——原版就是这样（框架是一块"朝上的凹槽"）
     tiles: ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'],
@@ -998,7 +998,7 @@ const END_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 255,
-    name: 'minecraft:end_portal',
+    name: 'minicraft:end_portal',
     tiles: ['end_portal', 'end_portal', 'end_portal'],
     solid: false,
     opaque: false,
@@ -1020,7 +1020,7 @@ const END_SPECS: readonly BlockSpec[] = [
 const REDSTONE_SPECS: readonly BlockSpec[] = [
   {
     id: 256,
-    name: 'minecraft:redstone_wire',
+    name: 'minicraft:redstone_wire',
     tiles: ['redstone_wire', 'redstone_wire', 'redstone_wire'],
     shape: 'flat',
     solid: false,
@@ -1029,7 +1029,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 257,
-    name: 'minecraft:redstone_torch',
+    name: 'minicraft:redstone_torch',
     tiles: ['redstone_torch', 'redstone_torch', 'redstone_torch'],
     shape: 'torch',
     solid: false,
@@ -1037,10 +1037,10 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     lightOpacity: 0,
     light: 7,
   },
-  { id: 258, name: 'minecraft:redstone_block', tiles: ['redstone_block', 'redstone_block', 'redstone_block'] },
+  { id: 258, name: 'minicraft:redstone_block', tiles: ['redstone_block', 'redstone_block', 'redstone_block'] },
   {
     id: 259,
-    name: 'minecraft:lever',
+    name: 'minicraft:lever',
     tiles: ['lever', 'lever', 'lever'],
     shape: 'torch',
     solid: false,
@@ -1049,7 +1049,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 260,
-    name: 'minecraft:stone_button',
+    name: 'minicraft:stone_button',
     tiles: ['stone_button', 'stone_button', 'stone_button'],
     shape: 'flat',
     solid: false,
@@ -1058,7 +1058,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 261,
-    name: 'minecraft:oak_button',
+    name: 'minicraft:oak_button',
     tiles: ['oak_button', 'oak_button', 'oak_button'],
     shape: 'flat',
     solid: false,
@@ -1067,7 +1067,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 262,
-    name: 'minecraft:stone_pressure_plate',
+    name: 'minicraft:stone_pressure_plate',
     tiles: ['stone_pressure_plate', 'stone_pressure_plate', 'stone_pressure_plate'],
     shape: 'flat',
     solid: false,
@@ -1076,7 +1076,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 263,
-    name: 'minecraft:oak_pressure_plate',
+    name: 'minicraft:oak_pressure_plate',
     tiles: ['oak_pressure_plate', 'oak_pressure_plate', 'oak_pressure_plate'],
     shape: 'flat',
     solid: false,
@@ -1085,7 +1085,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 264,
-    name: 'minecraft:repeater',
+    name: 'minicraft:repeater',
     tiles: ['repeater', 'repeater', 'repeater'],
     shape: 'flat',
     solid: false,
@@ -1094,7 +1094,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 265,
-    name: 'minecraft:comparator',
+    name: 'minicraft:comparator',
     tiles: ['comparator', 'comparator', 'comparator'],
     shape: 'flat',
     solid: false,
@@ -1103,7 +1103,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 266,
-    name: 'minecraft:redstone_lamp',
+    name: 'minicraft:redstone_lamp',
     tiles: ['redstone_lamp', 'redstone_lamp', 'redstone_lamp'],
     // 亮起的红石灯换成发光贴图，并把方块光拉到 15——这是"红石能点亮房间"的关键
     stateTiles: (state) =>
@@ -1114,7 +1114,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 267,
-    name: 'minecraft:piston',
+    name: 'minicraft:piston',
     // 批次 65：推板（`piston_top`）只贴在**推出方向那一面**，其余五面是活塞身。
     // 在此之前推板同时贴在顶面与底面（那时没有朝向贴图能力，只能"上下都画一个"）
     tiles: ['piston_side', 'piston_side', 'piston_side'],
@@ -1124,7 +1124,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 268,
-    name: 'minecraft:piston_head',
+    name: 'minicraft:piston_head',
     tiles: ['piston_head', 'piston_head', 'piston_head'],
     // 批次 68：活塞头是**技术方块**（活塞伸出时才出现），原版**没有对应物品**——
     // 不给它物品，背包里就不会出现"一个孤零零的活塞头"、也无法凭空放出来。
@@ -1133,14 +1133,14 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 269,
-    name: 'minecraft:sticky_piston',
+    name: 'minicraft:sticky_piston',
     tiles: ['piston_side', 'piston_side', 'piston_side'],
     faceTile: nozzleTile('sticky_piston_top'),
     facesSneak: true,
   },
   {
     id: 270,
-    name: 'minecraft:observer',
+    name: 'minicraft:observer',
     // 批次 65：**眼**贴在"看的那一面"（引擎里 `facing` 指的就是它）、
     // **红点**贴在对面的"输出面"（`componentOutput` 给的正是 `facing + 2`），其余四面是石壳。
     // 在此之前那只眼贴在顶面与底面——而侦测器看哪边完全看不出来
@@ -1154,12 +1154,12 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // ⚠️ 简化成**整格方块**：新增一种"矮方块"形状要同时改碰撞盒、网格化与放置逻辑，
     // 与它带来的收益不成比例（见 TASKS H9 的说明）
     id: 271,
-    name: 'minecraft:enchanting_table',
+    name: 'minicraft:enchanting_table',
     tiles: ['enchanting_table_top', 'obsidian', 'enchanting_table_side'],
   },
   {
     id: 272,
-    name: 'minecraft:bookshelf',
+    name: 'minicraft:bookshelf',
     tiles: ['oak_planks', 'oak_planks', 'bookshelf'],
   },
   // ---- 铁砧（H8）
@@ -1168,13 +1168,13 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // 这里只做**单一方块**：朝向要用方块状态（B4 的旋转变体那套），
     // 落地受损则要方块状态里再存一个"损伤度"，都留给后续。
     id: 273,
-    name: 'minecraft:anvil',
+    name: 'minicraft:anvil',
     tiles: ['anvil_top', 'iron_block', 'anvil_side'],
   },
   {
     // 铁块：铁砧的配方材料。此前项目里只有"粗铁块"，而铁块是原版最基础的储物方块之一
     id: 274,
-    name: 'minecraft:iron_block',
+    name: 'minicraft:iron_block',
     tiles: ['iron_block', 'iron_block', 'iron_block'],
   },
   // ---- 农业（H13）：耕地与小麦（4 个生长阶段各占一个 id）
@@ -1182,7 +1182,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   // 状态化就要改网格化与图集两处；而 id 在这套代码里本来就充裕（台阶/楼梯/16 色都是批量生成）。
   {
     id: 275,
-    name: 'minecraft:farmland',
+    name: 'minicraft:farmland',
     tiles: ['farmland', 'dirt', 'farmland_side'],
     // ⚠️ 原版耕地是 15/16 高、而且踩上去会"退化"回泥土；这里先做成整格、不退化
     solid: true,
@@ -1194,7 +1194,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   plantSpec(279, 'wheat_stage3', 'wheat_stage3'),
   {
     id: 288,
-    name: 'minecraft:brewing_stand',
+    name: 'minicraft:brewing_stand',
     // 三段贴图：顶面（放药水的台面）/ 底面 / 侧面（石座 + 一根烈焰棒）
     tiles: ['brewing_stand_top', 'brewing_stand_bottom', 'brewing_stand_side'],
     solid: true,
@@ -1226,7 +1226,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
 const OPENABLE_SPECS: readonly BlockSpec[] = [
   {
     id: 289,
-    name: 'minecraft:oak_trapdoor',
+    name: 'minicraft:oak_trapdoor',
     tiles: ['oak_trapdoor', 'oak_trapdoor', 'oak_trapdoor'],
     shape: 'trapdoor',
     opaque: false,
@@ -1234,7 +1234,7 @@ const OPENABLE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 290,
-    name: 'minecraft:oak_fence_gate',
+    name: 'minicraft:oak_fence_gate',
     tiles: ['oak_fence_gate', 'oak_fence_gate', 'oak_fence_gate'],
     shape: 'fence_gate',
     opaque: false,
@@ -1255,7 +1255,7 @@ const OPENABLE_SPECS: readonly BlockSpec[] = [
 const FIRE_SPECS: readonly BlockSpec[] = [
   {
     id: 291,
-    name: 'minecraft:fire',
+    name: 'minicraft:fire',
     tiles: ['fire', 'fire', 'fire'],
     shape: 'cross',
     solid: false,
@@ -1276,7 +1276,7 @@ export const SOUL_FIRE_ID = 721;
 const SOUL_FIRE_SPECS: readonly BlockSpec[] = [
   {
     id: SOUL_FIRE_ID,
-    name: 'minecraft:soul_fire',
+    name: 'minicraft:soul_fire',
     tiles: ['soul_fire', 'soul_fire', 'soul_fire'],
     shape: 'cross',
     solid: false,
@@ -1292,7 +1292,7 @@ export const CONDUIT_ID = 722;
 const CONDUIT_SPECS: readonly BlockSpec[] = [
   {
     id: CONDUIT_ID,
-    name: 'minecraft:conduit',
+    name: 'minicraft:conduit',
     tiles: ['conduit', 'conduit', 'conduit'],
     light: 15,
   },
@@ -1310,7 +1310,7 @@ export const POWDER_SNOW_ID = 723;
 const POWDER_SNOW_SPECS: readonly BlockSpec[] = [
   {
     id: POWDER_SNOW_ID,
-    name: 'minecraft:powder_snow',
+    name: 'minicraft:powder_snow',
     tiles: ['powder_snow', 'powder_snow', 'powder_snow'],
     solid: false,
     opaque: false,
@@ -1334,7 +1334,7 @@ const POWDER_SNOW_SPECS: readonly BlockSpec[] = [
 const PORTAL_SPECS: readonly BlockSpec[] = [
   {
     id: 292,
-    name: 'minecraft:nether_portal',
+    name: 'minicraft:nether_portal',
     tiles: ['nether_portal', 'nether_portal', 'nether_portal'],
     solid: false,
     opaque: false,
@@ -1354,10 +1354,10 @@ const PORTAL_SPECS: readonly BlockSpec[] = [
  *   （理由同 H9：新增矮方块形状要同时改碰撞盒、网格化与放置逻辑，收益不成比例）
  */
 const NETHERITE_SPECS: readonly BlockSpec[] = [
-  { id: 293, name: 'minecraft:netherite_block', tiles: ['netherite_block', 'netherite_block', 'netherite_block'] },
+  { id: 293, name: 'minicraft:netherite_block', tiles: ['netherite_block', 'netherite_block', 'netherite_block'] },
   {
     id: 294,
-    name: 'minecraft:smithing_table',
+    name: 'minicraft:smithing_table',
     tiles: ['smithing_table_top', 'oak_planks', 'smithing_table_side'],
   },
 ];
@@ -1373,7 +1373,7 @@ const NETHERITE_SPECS: readonly BlockSpec[] = [
 const LILY_PAD_SPECS: readonly BlockSpec[] = [
   {
     id: 295,
-    name: 'minecraft:lily_pad',
+    name: 'minicraft:lily_pad',
     tiles: ['lily_pad', 'lily_pad', 'lily_pad'],
     shape: 'lily_pad',
     solid: false,
@@ -1406,7 +1406,7 @@ export const SNOW_LAYER_ID = 312;
  */
 const CARPET_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   id: CARPET_ID_START + index,
-  name: `minecraft:${color.name}_carpet`,
+  name: `minicraft:${color.name}_carpet`,
   tiles: [`carpet_${color.name}`, `carpet_${color.name}`, `carpet_${color.name}`],
   shape: 'flat' as const,
   solid: false,
@@ -1417,7 +1417,7 @@ const CARPET_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
 const GLAZED_TERRACOTTA_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
   (color, index): BlockSpec => ({
     id: 624 + index,
-    name: `minecraft:${color.name}_glazed_terracotta`,
+    name: `minicraft:${color.name}_glazed_terracotta`,
     tiles: [
       `glazed_terracotta_${color.name}`,
       `glazed_terracotta_${color.name}`,
@@ -1430,7 +1430,7 @@ const GLAZED_TERRACOTTA_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
 const CANDLE_SPECS: readonly BlockSpec[] = [
   {
     id: 607,
-    name: 'minecraft:candle',
+    name: 'minicraft:candle',
     tiles: ['candle', 'candle', 'candle'] as const,
     shape: 'flat' as const,
     solid: false,
@@ -1441,7 +1441,7 @@ const CANDLE_SPECS: readonly BlockSpec[] = [
   ...DYE_COLORS.map(
     (color, index): BlockSpec => ({
       id: 608 + index,
-      name: `minecraft:${color.name}_candle`,
+      name: `minicraft:${color.name}_candle`,
       tiles: [`candle_${color.name}`, `candle_${color.name}`, `candle_${color.name}`] as const,
       shape: 'flat' as const,
       solid: false,
@@ -1468,7 +1468,7 @@ const CANDLE_SPECS: readonly BlockSpec[] = [
 const SNOW_SPECS: readonly BlockSpec[] = [
   {
     id: SNOW_LAYER_ID,
-    name: 'minecraft:snow',
+    name: 'minicraft:snow',
     tiles: ['snow', 'snow', 'snow'],
     shape: 'snow' as const,
     opaque: false,
@@ -1489,7 +1489,7 @@ const SNOW_SPECS: readonly BlockSpec[] = [
 const CHAIN_SPECS: readonly BlockSpec[] = [
   {
     id: 333,
-    name: 'minecraft:chain',
+    name: 'minicraft:chain',
     tiles: ['chain', 'chain', 'chain'],
     shape: 'chain',
     opaque: false,
@@ -1508,7 +1508,7 @@ const CHAIN_SPECS: readonly BlockSpec[] = [
 const VINE_SPECS: readonly BlockSpec[] = [
   {
     id: 334,
-    name: 'minecraft:vine',
+    name: 'minicraft:vine',
     tiles: ['vine', 'vine', 'vine'],
     shape: 'vine',
     solid: false,
@@ -1562,7 +1562,7 @@ const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) 
       : `${stage.blockTile}`; // copper_block / exposed_copper / ...
     const base: BlockSpec = {
       id: copperId(index, kind as 0 | 1 | 2 | 3),
-      name: `minecraft:${name}`,
+      name: `minicraft:${name}`,
       tiles: [tile, tile, tile],
     };
     // 台阶与楼梯是非完整方块：不遮挡邻居、不挡光（与石材家族同一套写法）
@@ -1583,7 +1583,7 @@ export const BANNER_ID_START = 640;
 const BANNER_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
   (color, index): BlockSpec => ({
     id: BANNER_ID_START + index,
-    name: `minecraft:${color.name}_banner`,
+    name: `minicraft:${color.name}_banner`,
     tiles: [`banner_${color.name}`, `banner_${color.name}`, `banner_${color.name}`] as const,
     // 图案（批次 497）：底色在 id 里，状态位只存"烫了哪种图案"
     stateTiles: (state) => {
@@ -1635,15 +1635,15 @@ export const MORE_STONE_ID_START = 404;
 const MORE_STONE_SPECS: readonly BlockSpec[] = [
   {
     id: 404,
-    name: 'minecraft:quartz_block',
+    name: 'minicraft:quartz_block',
     tiles: ['quartz_block_top', 'quartz_block_top', 'quartz_block_side'],
   },
-  { id: 405, name: 'minecraft:chiseled_quartz_block', tiles: ['chiseled_quartz_block', 'chiseled_quartz_block', 'chiseled_quartz_block'] },
+  { id: 405, name: 'minicraft:chiseled_quartz_block', tiles: ['chiseled_quartz_block', 'chiseled_quartz_block', 'chiseled_quartz_block'] },
   // 石英柱在原版有轴向（横竖两种）；本项目与紫珀柱一样**不做轴向状态**（避免为一个方块加一条状态通道）
-  { id: 406, name: 'minecraft:quartz_pillar', tiles: ['quartz_pillar_top', 'quartz_pillar_top', 'quartz_pillar_side'] },
-  { id: 407, name: 'minecraft:smooth_quartz', tiles: ['smooth_quartz', 'smooth_quartz', 'smooth_quartz'] },
-  { id: 408, name: 'minecraft:deepslate_tiles', tiles: ['deepslate_tiles', 'deepslate_tiles', 'deepslate_tiles'] },
-  { id: 409, name: 'minecraft:red_nether_bricks', tiles: ['red_nether_bricks', 'red_nether_bricks', 'red_nether_bricks'] },
+  { id: 406, name: 'minicraft:quartz_pillar', tiles: ['quartz_pillar_top', 'quartz_pillar_top', 'quartz_pillar_side'] },
+  { id: 407, name: 'minicraft:smooth_quartz', tiles: ['smooth_quartz', 'smooth_quartz', 'smooth_quartz'] },
+  { id: 408, name: 'minicraft:deepslate_tiles', tiles: ['deepslate_tiles', 'deepslate_tiles', 'deepslate_tiles'] },
+  { id: 409, name: 'minicraft:red_nether_bricks', tiles: ['red_nether_bricks', 'red_nether_bricks', 'red_nether_bricks'] },
 ];
 
 // ---------------------------------------------------------------- 切石机（批次 44）
@@ -1662,7 +1662,7 @@ export const STONECUTTER_ID = 410;
 const STONECUTTER_SPECS: readonly BlockSpec[] = [
   {
     id: STONECUTTER_ID,
-    name: 'minecraft:stonecutter',
+    name: 'minicraft:stonecutter',
     // 贴图顺序与 BlockSpec.tiles 一致：[顶面, 底面, 侧面]
     tiles: ['stonecutter_top', 'stonecutter_bottom', 'stonecutter_side'],
   },
@@ -1762,7 +1762,7 @@ const BERRY_AND_COCOA_SPECS: readonly BlockSpec[] = [
   // 可可豆荚：形状挂在原木侧面，朝向存在状态里
   {
     id: 433,
-    name: 'minecraft:cocoa_stage0',
+    name: 'minicraft:cocoa_stage0',
     tiles: ['cocoa_stage0', 'cocoa_stage0', 'cocoa_stage0'],
     shape: 'cocoa',
     solid: false,
@@ -1771,7 +1771,7 @@ const BERRY_AND_COCOA_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 434,
-    name: 'minecraft:cocoa_stage1',
+    name: 'minicraft:cocoa_stage1',
     tiles: ['cocoa_stage1', 'cocoa_stage1', 'cocoa_stage1'],
     shape: 'cocoa',
     solid: false,
@@ -1780,7 +1780,7 @@ const BERRY_AND_COCOA_SPECS: readonly BlockSpec[] = [
   },
   {
     id: 435,
-    name: 'minecraft:cocoa_stage2',
+    name: 'minicraft:cocoa_stage2',
     tiles: ['cocoa_stage2', 'cocoa_stage2', 'cocoa_stage2'],
     shape: 'cocoa',
     solid: false,
@@ -1834,7 +1834,7 @@ const KELP_SPECS: readonly BlockSpec[] = [
   waterPlantSpec(SEAGRASS_ID, 'seagrass', 'seagrass'),
   {
     id: DRIED_KELP_BLOCK_ID,
-    name: 'minecraft:dried_kelp_block',
+    name: 'minicraft:dried_kelp_block',
     // 顶面是编织纹、侧面是横着压出来的一层层（底面孔位复用侧面：整块方块，不必为底面再画一张）
     tiles: ['dried_kelp_top', 'dried_kelp_side', 'dried_kelp_side'],
   },
@@ -1882,7 +1882,7 @@ export const CORAL_KIND_CN: Record<CoralKind, string> = {
 function coralFanSpec(id: number, name: string, tile: string): BlockSpec {
   return {
     id,
-    name: `minecraft:${name}`,
+    name: `minicraft:${name}`,
     tiles: [tile, tile, tile],
     solid: false,
     opaque: false,
@@ -1901,12 +1901,12 @@ for (let i = 0; i < CORAL_KINDS.length; i++) {
   // 珊瑚块（活/失活）：固体方块，走默认 cube
   CORAL_SPECS.push({
     id: CORAL_BLOCK_ID_START + i,
-    name: `minecraft:${blockTile}`,
+    name: `minicraft:${blockTile}`,
     tiles: [blockTile, blockTile, blockTile],
   });
   CORAL_SPECS.push({
     id: DEAD_CORAL_BLOCK_ID_START + i,
-    name: `minecraft:${deadBlockTile}`,
+    name: `minicraft:${deadBlockTile}`,
     tiles: [deadBlockTile, deadBlockTile, deadBlockTile],
   });
   // 珊瑚丛（活/失活）：与花草同一种 cross 植物，只是长在水里
@@ -2034,7 +2034,7 @@ export const TNT_ID = 475;
 const TNT_SPECS: readonly BlockSpec[] = [
   {
     id: TNT_ID,
-    name: 'minecraft:tnt',
+    name: 'minicraft:tnt',
     // 正常是红白相间的炸药块；"闪"的那一相位换成发白的那两张（原版引信中就是白闪）
     tiles: ['tnt_top', 'tnt_bottom', 'tnt_side'],
     // 引信中：`powered` = 已点燃（与红石系统共用同一位），`flash` = 这一相位要发白
@@ -2064,7 +2064,7 @@ export const HOPPER_ID = 476;
 const HOPPER_SPECS: readonly BlockSpec[] = [
   {
     id: HOPPER_ID,
-    name: 'minecraft:hopper',
+    name: 'minicraft:hopper',
     tiles: ['hopper_top', 'hopper_inside', 'hopper_side'],
     shape: 'hopper',
     // 漏斗不是整格方块：上面的碗口 6/16 高，下面的管子不挡路（见 `blockShapes`）
@@ -2089,7 +2089,7 @@ export const DROPPER_ID = 477;
 const DROPPER_SPECS: readonly BlockSpec[] = [
   {
     id: DROPPER_ID,
-    name: 'minecraft:dropper',
+    name: 'minicraft:dropper',
     // 五个非凸口面都是外壳铁皮，**凸口那一面**用"管子口"贴图（批次 64 面级贴图）。
     // 原先钉在顶/底两面：朝下放时碰巧对，朝侧面放就完全看不出管子口（管子口只存在于几何上）
     tiles: ['dropper_side', 'dropper_side', 'dropper_side'],
@@ -2113,7 +2113,7 @@ export const DISPENSER_ID = 478;
 const DISPENSER_SPECS: readonly BlockSpec[] = [
   {
     id: DISPENSER_ID,
-    name: 'minecraft:dispenser',
+    name: 'minicraft:dispenser',
     // 与投掷器同一条：**挡板那一面**用"挡板"贴图，其余五面是外壳
     tiles: ['dispenser_side', 'dispenser_side', 'dispenser_side'],
     faceTile: nozzleTile('dispenser_top'),
@@ -2144,7 +2144,7 @@ export const COMPOSTER_ID = 480;
 const COMPOSTER_SPECS: readonly BlockSpec[] = [
   {
     id: COMPOSTER_ID,
-    name: 'minecraft:composter',
+    name: 'minicraft:composter',
     tiles: ['composter_top', 'composter_bottom', 'composter_side'],
     // 满仓：顶面换成"堆肥满仓"那张（桶底与桶身不动）
     stateTiles: (state) =>
@@ -2182,7 +2182,7 @@ export const CAULDRON_ID = 575;
 const CAULDRON_SPECS: readonly BlockSpec[] = [
   {
     id: CAULDRON_ID,
-    name: 'minecraft:cauldron',
+    name: 'minicraft:cauldron',
     tiles: ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
     // 有水时顶面换成"水面"那张（空锅是"看得到桶底"的暗口）；装了岩浆时是橙红的那张
     stateTiles: (state) =>
@@ -2200,7 +2200,7 @@ const CAULDRON_SPECS: readonly BlockSpec[] = [
 const NOTE_BLOCK_SPECS: readonly BlockSpec[] = [
   {
     id: NOTE_BLOCK_ID,
-    name: 'minecraft:note_block',
+    name: 'minicraft:note_block',
     tiles: ['note_block', 'note_block', 'note_block'],
   },
 ];
@@ -2218,7 +2218,7 @@ export const ENDER_CHEST_ID = 481;
 const ENDER_CHEST_SPECS: readonly BlockSpec[] = [
   {
     id: ENDER_CHEST_ID,
-    name: 'minecraft:ender_chest',
+    name: 'minicraft:ender_chest',
     tiles: ['ender_chest_top', 'ender_chest_top', 'ender_chest_side'],
     faceTile: nozzleTile('ender_chest_front'),
     facesPlayer: true,
@@ -2248,7 +2248,7 @@ export const LODESTONE_ID = 713;
 const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
   {
     id: SHULKER_BOX_ID,
-    name: 'minecraft:shulker_box',
+    name: 'minicraft:shulker_box',
     tiles: ['shulker_top', 'shulker_bottom', 'shulker_side'],
   },
 ];
@@ -2266,7 +2266,7 @@ export const SHULKER_BOX_COLOR_START = 697;
 
 const COLORED_SHULKER_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   id: SHULKER_BOX_COLOR_START + index,
-  name: `minecraft:${color.name}_shulker_box`,
+  name: `minicraft:${color.name}_shulker_box`,
   tiles: [`shulker_top_${color.name}`, `shulker_bottom_${color.name}`, `shulker_side_${color.name}`],
 }));
 
@@ -2285,7 +2285,7 @@ export const SHULKER_BOX_IDS: readonly number[] = [
  */
 const LODESTONE_SPEC: BlockSpec = {
   id: LODESTONE_ID,
-  name: 'minecraft:lodestone',
+  name: 'minicraft:lodestone',
   tiles: ['lodestone_top', 'lodestone_side', 'lodestone_side'],
 };
 
@@ -2316,7 +2316,7 @@ export const CAVE_VINES_ID = 719;
 
 const CAVE_VINES_SPEC: BlockSpec = {
   id: CAVE_VINES_ID,
-  name: 'minecraft:cave_vines',
+  name: 'minicraft:cave_vines',
   tiles: ['cave_vines', 'cave_vines', 'cave_vines'],
   // 有浆果换一张图（状态 bit0）
   stateTiles: (state) => {
@@ -2331,7 +2331,7 @@ const CAVE_VINES_SPEC: BlockSpec = {
 
 const ARMOR_STAND_SPEC: BlockSpec = {
   id: ARMOR_STAND_ID,
-  name: 'minecraft:armor_stand',
+  name: 'minicraft:armor_stand',
   tiles: ['armor_stand', 'armor_stand', 'armor_stand'],
   shape: 'armor_stand',
   solid: false,
@@ -2341,7 +2341,7 @@ const ARMOR_STAND_SPEC: BlockSpec = {
 
 const BELL_SPEC: BlockSpec = {
   id: BELL_ID,
-  name: 'minecraft:bell',
+  name: 'minicraft:bell',
   tiles: ['bell', 'bell', 'bell'],
   shape: 'bell',
   solid: false,
@@ -2351,7 +2351,7 @@ const BELL_SPEC: BlockSpec = {
 
 const JUKEBOX_SPEC: BlockSpec = {
   id: JUKEBOX_ID,
-  name: 'minecraft:jukebox',
+  name: 'minicraft:jukebox',
   tiles: ['jukebox_top', 'jukebox_side', 'jukebox_side'],
 };
 
@@ -2360,13 +2360,13 @@ export const COMMAND_BLOCK_ID = 715;
 
 const COMMAND_BLOCK_SPEC: BlockSpec = {
   id: COMMAND_BLOCK_ID,
-  name: 'minecraft:command_block',
+  name: 'minicraft:command_block',
   tiles: ['command_block_top', 'command_block_side', 'command_block_side'],
 };
 
 const RESPAWN_ANCHOR_SPEC: BlockSpec = {
   id: RESPAWN_ANCHOR_ID,
-  name: 'minecraft:respawn_anchor',
+  name: 'minicraft:respawn_anchor',
   tiles: ['respawn_anchor_top', 'respawn_anchor_side', 'respawn_anchor_side'],
   stateLight: (state) => anchorLight(state),
 };
@@ -2509,7 +2509,7 @@ export function attachedStemId(kind: string): number | undefined {
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
-    name: 'minecraft:barrel',
+    name: 'minicraft:barrel',
     // 批次 65：盖子（`barrel_top`）贴在**朝向那一面**（原版木桶的盖子可以朝任意一面），
     // 底面是 `barrel_bottom`、其余四面是木桶身。放置时盖子"远离你点的那一面"（六向）。
     // ⚠️ 木桶的朝向**只影响外观**：它不吃红石、也不按面限制漏斗（原版允许任意面取放）。
@@ -2522,7 +2522,7 @@ const BARREL_SPECS: readonly BlockSpec[] = [
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
-    name: 'minecraft:tripwire',
+    name: 'minicraft:tripwire',
     tiles: ['tripwire', 'tripwire', 'tripwire'],
     shape: 'tripwire',
     opaque: false,
@@ -2532,7 +2532,7 @@ const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: TRIPWIRE_HOOK_ID,
-    name: 'minecraft:tripwire_hook',
+    name: 'minicraft:tripwire_hook',
     // 通电时换一张（原版钩子"拉起来"的样子，这里用颜色区分）
     tiles: ['tripwire_hook', 'tripwire_hook', 'tripwire_hook'],
     stateTiles: (state) =>
@@ -2548,7 +2548,7 @@ const TRIPWIRE_SPECS: readonly BlockSpec[] = [
 const DAYLIGHT_DETECTOR_SPECS: readonly BlockSpec[] = [
   {
     id: DAYLIGHT_DETECTOR_ID,
-    name: 'minecraft:daylight_detector',
+    name: 'minicraft:daylight_detector',
     // 反向模式换的是**顶面**那张（原版就是同一块板、顶面换个颜色）
     tiles: ['daylight_detector_top', 'daylight_detector_side', 'daylight_detector_side'],
     stateTiles: (state) =>
@@ -2564,7 +2564,7 @@ const DAYLIGHT_DETECTOR_SPECS: readonly BlockSpec[] = [
 const SCAFFOLDING_SPECS: readonly BlockSpec[] = [
   {
     id: SCAFFOLDING_ID,
-    name: 'minecraft:scaffolding',
+    name: 'minicraft:scaffolding',
     // 顶面是站人的木板、底面是木条、侧面是"带柱子的那一圈"
     tiles: ['scaffolding_top', 'scaffolding_bottom', 'scaffolding_side'],
     shape: 'scaffolding',
@@ -2576,7 +2576,7 @@ const SCAFFOLDING_SPECS: readonly BlockSpec[] = [
 const CAKE_AND_POT_SPECS: readonly BlockSpec[] = [
   {
     id: CAKE_ID,
-    name: 'minecraft:cake',
+    name: 'minicraft:cake',
     // 顶面奶油、底面蛋糕底、侧面那一圈（原版蛋糕就是这三张）
     tiles: ['cake_top', 'cake_bottom', 'cake_side'],
     shape: 'cake',
@@ -2585,7 +2585,7 @@ const CAKE_AND_POT_SPECS: readonly BlockSpec[] = [
   },
   {
     id: FLOWER_POT_ID,
-    name: 'minecraft:flower_pot',
+    name: 'minicraft:flower_pot',
     tiles: ['flower_pot_top', 'flower_pot', 'flower_pot'],
     shape: 'flower_pot',
     opaque: false,
@@ -2596,7 +2596,7 @@ const CAKE_AND_POT_SPECS: readonly BlockSpec[] = [
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
-    name: 'minecraft:campfire',
+    name: 'minicraft:campfire',
     // 底面用原木的**横截面**（oak_log_top）：营火底下看到的就是木头的断面
     tiles: ['campfire_top', 'oak_log_top', 'campfire_side'],
     shape: 'campfire',
@@ -2615,7 +2615,7 @@ const CAMPFIRE_SPECS: readonly BlockSpec[] = [
 const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
   {
     id: SMOKER_ID,
-    name: 'minecraft:smoker',
+    name: 'minicraft:smoker',
     tiles: ['smoker_top', 'smoker_top', 'smoker_side'],
     // 点燃时的火光贴图与发光（批次 47，与熔炉同一套）
     faceTile: frontTile('smoker_front', 'smoker_front_on'),
@@ -2624,7 +2624,7 @@ const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
   },
   {
     id: BLAST_FURNACE_ID,
-    name: 'minecraft:blast_furnace',
+    name: 'minicraft:blast_furnace',
     tiles: ['blast_furnace_top', 'blast_furnace_top', 'blast_furnace_side'],
     faceTile: frontTile('blast_furnace_front', 'blast_furnace_front_on'),
     facesPlayer: true,
@@ -2633,16 +2633,16 @@ const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
 ];
 
 const RED_SAND_SPECS: readonly BlockSpec[] = [
-  { id: 411, name: 'minecraft:red_sand', tiles: ['red_sand', 'red_sand', 'red_sand'] },
+  { id: 411, name: 'minicraft:red_sand', tiles: ['red_sand', 'red_sand', 'red_sand'] },
   {
     id: 412,
-    name: 'minecraft:red_sandstone',
+    name: 'minicraft:red_sandstone',
     // 贴图顺序 [顶面, 底面, 侧面]：与普通砂岩同一套结构，只是换成红砂岩那三张
     tiles: ['red_sandstone_top', 'red_sandstone_top', 'red_sandstone'],
   },
-  { id: 413, name: 'minecraft:chiseled_red_sandstone', tiles: ['chiseled_red_sandstone', 'red_sandstone', 'chiseled_red_sandstone'] },
-  { id: 414, name: 'minecraft:cut_red_sandstone', tiles: ['cut_red_sandstone', 'red_sandstone', 'cut_red_sandstone'] },
-  { id: 415, name: 'minecraft:smooth_red_sandstone', tiles: ['smooth_red_sandstone', 'smooth_red_sandstone', 'smooth_red_sandstone'] },
+  { id: 413, name: 'minicraft:chiseled_red_sandstone', tiles: ['chiseled_red_sandstone', 'red_sandstone', 'chiseled_red_sandstone'] },
+  { id: 414, name: 'minicraft:cut_red_sandstone', tiles: ['cut_red_sandstone', 'red_sandstone', 'cut_red_sandstone'] },
+  { id: 415, name: 'minicraft:smooth_red_sandstone', tiles: ['smooth_red_sandstone', 'smooth_red_sandstone', 'smooth_red_sandstone'] },
 ];
 
 // ---------------------------------------------------------------- 石材家族的变体（批次 41）
@@ -2731,7 +2731,7 @@ export function isRailId(id: number): boolean {
 export const RAIL_SPECS: readonly BlockSpec[] = [
   {
     id: RAIL_ID,
-    name: 'minecraft:rail',
+    name: 'minicraft:rail',
     tiles: ['rail', 'rail', 'rail'],
     // 形状贴图（批次 478）：六种平面形状各一张（直南北 / 直东西 / 四个弯）。
     // ⚠️ 只有**普通铁轨**做了这套图：动力/探测/激活铁轨的形状也存在（矿车照样转向），
@@ -2747,7 +2747,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
   },
   {
     id: POWERED_RAIL_ID,
-    name: 'minecraft:powered_rail',
+    name: 'minicraft:powered_rail',
     tiles: ['powered_rail', 'powered_rail', 'powered_rail'],
     // 通电状态换贴图：红石引擎在 `recompute` 里写 `powered` 位，渲染层照它取图
     stateTiles: (state) => {
@@ -2763,7 +2763,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
   },
   {
     id: DETECTOR_RAIL_ID,
-    name: 'minecraft:detector_rail',
+    name: 'minicraft:detector_rail',
     tiles: ['detector_rail', 'detector_rail', 'detector_rail'],
     stateTiles: (state) => {
       // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
@@ -2778,7 +2778,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
   },
   {
     id: ACTIVATOR_RAIL_ID,
-    name: 'minecraft:activator_rail',
+    name: 'minicraft:activator_rail',
     tiles: ['activator_rail', 'activator_rail', 'activator_rail'],
     stateTiles: (state) => {
       // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
@@ -2806,7 +2806,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
 export const TARGET_SPECS: readonly BlockSpec[] = [
   {
     id: TARGET_ID,
-    name: 'minecraft:target',
+    name: 'minicraft:target',
     tiles: ['target_top', 'target_top', 'target_side'],
     stateTiles: (state) =>
       isPowered(state)
@@ -2825,7 +2825,7 @@ export const FROSTED_ICE_ID = 586;
 export const FROSTED_ICE_SPECS: readonly BlockSpec[] = [
   {
     id: FROSTED_ICE_ID,
-    name: 'minecraft:frosted_ice',
+    name: 'minicraft:frosted_ice',
     tiles: ['frosted_ice', 'frosted_ice', 'frosted_ice'],
     // 原版挖不到霜冰（挖掉直接碎），所以它**没有物品形态**——
     // 不标这一条，方块物品自动生成会往背包里塞一个"霜冰"，各路审计立刻报缺名字/缺配方
@@ -2836,7 +2836,7 @@ export const FROSTED_ICE_SPECS: readonly BlockSpec[] = [
 export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
   {
     id: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
-    name: 'minecraft:light_weighted_pressure_plate',
+    name: 'minicraft:light_weighted_pressure_plate',
     tiles: [
       'light_weighted_pressure_plate',
       'light_weighted_pressure_plate',
@@ -2861,7 +2861,7 @@ export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
   },
   {
     id: HEAVY_WEIGHTED_PRESSURE_PLATE_ID,
-    name: 'minecraft:heavy_weighted_pressure_plate',
+    name: 'minicraft:heavy_weighted_pressure_plate',
     tiles: [
       'heavy_weighted_pressure_plate',
       'heavy_weighted_pressure_plate',
@@ -3018,7 +3018,7 @@ const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
       const id = next++;
       STONE_VARIANT_MAP.set(`${name}_${kind}`, id);
       // 三种变体都是非完整方块：不遮挡邻居、不挡光（与 `SHAPED_SPECS` 同一套写法）
-      specs.push({ id, name: `minecraft:${name}_${kind}`, tiles, shape: kind, opaque: false, lightOpacity: 0 });
+      specs.push({ id, name: `minicraft:${name}_${kind}`, tiles, shape: kind, opaque: false, lightOpacity: 0 });
     }
   }
   return specs;
@@ -3065,7 +3065,7 @@ const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => {
   const side = `bed_${color.name}_side`;
   return {
     id,
-    name: `minecraft:${color.name}_bed`,
+    name: `minicraft:${color.name}_bed`,
     // [顶面, 底面, 侧面]：床头/床脚共用同一张顶面贴图（枕头是几何，不是贴图）
     tiles: [top, top, side] as const,
     shape: 'bed' as const,
@@ -3122,7 +3122,7 @@ const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood, index) => {
   const plank = `${wood.name}_planks`;
   return {
     id,
-    name: `minecraft:${wood.name}_sign`,
+    name: `minicraft:${wood.name}_sign`,
     tiles: [plank, plank, plank] as const,
     shape: 'sign' as const,
     // 牌子**不挡路**（原版能从牌子里走过去）：没有碰撞盒（见 `blockShapes`），
@@ -3180,12 +3180,12 @@ export const CRACKED_POLISHED_BLACKSTONE_BRICKS_ID = 540;
 const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
   {
     id: POLISHED_BLACKSTONE_ID,
-    name: 'minecraft:polished_blackstone',
+    name: 'minicraft:polished_blackstone',
     tiles: ['polished_blackstone', 'polished_blackstone', 'polished_blackstone'],
   },
   {
     id: POLISHED_BLACKSTONE_BRICKS_ID,
-    name: 'minecraft:polished_blackstone_bricks',
+    name: 'minicraft:polished_blackstone_bricks',
     tiles: ['polished_blackstone_bricks', 'polished_blackstone_bricks', 'polished_blackstone_bricks'],
   },
   {
@@ -3193,7 +3193,7 @@ const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
     // 拆掉掉 2~5 个金粒（见 `items.ts` 的 `COUNT_RANGE_DROPS`），
     // 所以堡垒遗迹里它是玩家真正会去撬的那几块
     id: GILDED_BLACKSTONE_ID,
-    name: 'minecraft:gilded_blackstone',
+    name: 'minicraft:gilded_blackstone',
     tiles: ['gilded_blackstone', 'gilded_blackstone', 'gilded_blackstone'],
   },
 ];
@@ -3214,7 +3214,7 @@ export const LIGHTNING_ROD_ID = 532;
 
 const LIGHTNING_ROD_SPEC: BlockSpec = {
   id: LIGHTNING_ROD_ID,
-  name: 'minecraft:lightning_rod',
+  name: 'minicraft:lightning_rod',
   shape: 'lightning_rod',
   tiles: ['lightning_rod', 'lightning_rod', 'lightning_rod'],
   // 贴在命中的那一面上（六向），与木桶同一条规则
@@ -3235,12 +3235,12 @@ const LIGHTNING_ROD_SPEC: BlockSpec = {
 const BLACKSTONE_DECOR_SPECS: readonly BlockSpec[] = [
   {
     id: CHISELED_POLISHED_BLACKSTONE_ID,
-    name: 'minecraft:chiseled_polished_blackstone',
+    name: 'minicraft:chiseled_polished_blackstone',
     tiles: ['chiseled_polished_blackstone', 'chiseled_polished_blackstone', 'chiseled_polished_blackstone'],
   },
   {
     id: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
-    name: 'minecraft:cracked_polished_blackstone_bricks',
+    name: 'minicraft:cracked_polished_blackstone_bricks',
     tiles: [
       'cracked_polished_blackstone_bricks',
       'cracked_polished_blackstone_bricks',
@@ -3269,7 +3269,7 @@ export const PAINTING_ID = 542;
 const HANGING_SPECS: readonly BlockSpec[] = [
   {
     id: ITEM_FRAME_ID,
-    name: 'minecraft:item_frame',
+    name: 'minicraft:item_frame',
     shape: 'item_frame',
     tiles: ['item_frame', 'item_frame', 'item_frame'],
     // 框里能不能挂东西与方块无关（挂在墙上的是一块空心板），所以没有额外状态位
@@ -3279,7 +3279,7 @@ const HANGING_SPECS: readonly BlockSpec[] = [
   },
   {
     id: PAINTING_ID,
-    name: 'minecraft:painting',
+    name: 'minicraft:painting',
     shape: 'painting',
     // 默认贴图（状态为 0 时用）就是第一幅画；其余在 `stateTiles` 里按变体号换
     tiles: [paintingTile(0), paintingTile(0), paintingTile(0)],
@@ -3322,7 +3322,7 @@ export const CARTOGRAPHY_TABLE_ID = 720;
 
 const CARTOGRAPHY_TABLE_SPEC: BlockSpec = {
   id: CARTOGRAPHY_TABLE_ID,
-  name: 'minecraft:cartography_table',
+  name: 'minicraft:cartography_table',
   // 顶面：摊开的地图 + 罗盘；底面：木板；侧面：纸卷与木框
   tiles: ['cartography_table_top', 'oak_planks', 'cartography_table_side'],
 };
@@ -3330,23 +3330,23 @@ const CARTOGRAPHY_TABLE_SPEC: BlockSpec = {
 const WORKSTATION_SPECS: readonly BlockSpec[] = [
   {
     id: LECTERN_ID,
-    name: 'minecraft:lectern',
+    name: 'minicraft:lectern',
     // 顶面：摊开的书；侧面：木框 + 书脊
     tiles: ['lectern_top', 'lectern_top', 'lectern_side'],
   },
   {
     id: FLETCHING_TABLE_ID,
-    name: 'minecraft:fletching_table',
+    name: 'minicraft:fletching_table',
     tiles: ['fletching_table_top', 'fletching_table_top', 'fletching_table_side'],
   },
   {
     id: GRINDSTONE_ID,
-    name: 'minecraft:grindstone',
+    name: 'minicraft:grindstone',
     tiles: ['grindstone_top', 'grindstone_top', 'grindstone_side'],
   },
   {
     id: LOOM_ID,
-    name: 'minecraft:loom',
+    name: 'minicraft:loom',
     tiles: ['loom_top', 'loom_bottom', 'loom_side'],
   },
 ];
@@ -3374,7 +3374,7 @@ export const NETHER_WART_ID_START = 547;
 
 const NETHER_WART_SPECS: readonly BlockSpec[] = [0, 1, 2, 3].map((stage) => ({
   id: NETHER_WART_ID_START + stage,
-  name: `minecraft:nether_wart_stage${stage}`,
+  name: `minicraft:nether_wart_stage${stage}`,
   tiles: [`nether_wart_stage${stage}`, `nether_wart_stage${stage}`, `nether_wart_stage${stage}`],
   solid: false,
   opaque: false,
@@ -3414,7 +3414,7 @@ export const WITHER_SKELETON_SKULL_ID = 552;
 const SKULL_SPECS: readonly BlockSpec[] = [
   {
     id: WITHER_SKELETON_SKULL_ID,
-    name: 'minecraft:wither_skeleton_skull',
+    name: 'minicraft:wither_skeleton_skull',
     tiles: ['wither_skull_top', 'wither_skull', 'wither_skull'],
     shape: 'head',
     opaque: false,
@@ -3457,7 +3457,7 @@ export const SOUL_LANTERN_ID = 577;
 const SOUL_LIGHT_SPECS: readonly BlockSpec[] = [
   {
     id: SOUL_TORCH_ID,
-    name: 'minecraft:soul_torch',
+    name: 'minicraft:soul_torch',
     tiles: ['soul_torch', 'soul_torch', 'soul_torch'],
     shape: 'torch',
     solid: false,
@@ -3467,7 +3467,7 @@ const SOUL_LIGHT_SPECS: readonly BlockSpec[] = [
   },
   {
     id: SOUL_LANTERN_ID,
-    name: 'minecraft:soul_lantern',
+    name: 'minicraft:soul_lantern',
     tiles: ['soul_lantern', 'soul_lantern', 'soul_lantern'],
     shape: 'lantern',
     solid: false,
@@ -3480,7 +3480,7 @@ const SOUL_LIGHT_SPECS: readonly BlockSpec[] = [
 const SLIME_BLOCK_SPECS: readonly BlockSpec[] = [
   {
     id: SLIME_BLOCK_ID,
-    name: 'minecraft:slime_block',
+    name: 'minicraft:slime_block',
     tiles: ['slime_block', 'slime_block', 'slime_block'],
     // 它挡光但不像石头那样遮住邻居（原版粘液块是半透明的）
     opaque: false,
@@ -3502,20 +3502,20 @@ const SLIME_BLOCK_SPECS: readonly BlockSpec[] = [
  * 它是**光源**（原版信标亮度 15）而且不挡光（那圈玻璃）。
  */
 const MINERAL_AND_BEACON_SPECS: readonly BlockSpec[] = [
-  { id: GOLD_BLOCK_ID, name: 'minecraft:gold_block', tiles: ['gold_block', 'gold_block', 'gold_block'] },
+  { id: GOLD_BLOCK_ID, name: 'minicraft:gold_block', tiles: ['gold_block', 'gold_block', 'gold_block'] },
   {
     id: DIAMOND_BLOCK_ID,
-    name: 'minecraft:diamond_block',
+    name: 'minicraft:diamond_block',
     tiles: ['diamond_block', 'diamond_block', 'diamond_block'],
   },
   {
     id: EMERALD_BLOCK_ID,
-    name: 'minecraft:emerald_block',
+    name: 'minicraft:emerald_block',
     tiles: ['emerald_block', 'emerald_block', 'emerald_block'],
   },
   {
     id: BEACON_ID,
-    name: 'minecraft:beacon',
+    name: 'minicraft:beacon',
     tiles: ['beacon_top', 'beacon_top', 'beacon'],
     opaque: false,
     lightOpacity: 0,
@@ -3526,7 +3526,7 @@ const MINERAL_AND_BEACON_SPECS: readonly BlockSpec[] = [
 const SPAWNER_SPECS: readonly BlockSpec[] = [
   {
     id: SPAWNER_ID,
-    name: 'minecraft:spawner',
+    name: 'minicraft:spawner',
     tiles: ['spawner', 'spawner', 'spawner'],
     solid: true,
     // 不透光但**不遮挡邻居**：这样隔着笼子能看见里面的方块，与原版观感一致
@@ -3622,7 +3622,7 @@ const SPECS: readonly BlockSpec[] = [
   // 繁茂洞穴植物（批次 397）：小型 / 大型垂滴叶
   {
     id: 665,
-    name: 'minecraft:small_dripleaf',
+    name: 'minicraft:small_dripleaf',
     tiles: ['small_dripleaf', 'small_dripleaf', 'small_dripleaf'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3631,7 +3631,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 666,
-    name: 'minecraft:big_dripleaf',
+    name: 'minicraft:big_dripleaf',
     tiles: ['big_dripleaf', 'big_dripleaf', 'big_dripleaf'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3642,14 +3642,14 @@ const SPECS: readonly BlockSpec[] = [
   // 缠根泥土（批次 395）：洞穴顶部的泥土变体
   {
     id: 664,
-    name: 'minecraft:rooted_dirt',
+    name: 'minicraft:rooted_dirt',
     tiles: ['rooted_dirt', 'rooted_dirt', 'rooted_dirt'] as const,
   },
 
   // 洞穴顶部的两件（批次 392）：孢子花 / 垂根
   {
     id: 662,
-    name: 'minecraft:spore_blossom',
+    name: 'minicraft:spore_blossom',
     tiles: ['spore_blossom', 'spore_blossom', 'spore_blossom'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3659,7 +3659,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 663,
-    name: 'minecraft:hanging_roots',
+    name: 'minicraft:hanging_roots',
     tiles: ['hanging_roots', 'hanging_roots', 'hanging_roots'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3670,7 +3670,7 @@ const SPECS: readonly BlockSpec[] = [
   // 洞穴装饰（批次 391）：发光地衣 / 发光浆果 / 尖滴石 / 滴水石
   {
     id: 658,
-    name: 'minecraft:glow_lichen',
+    name: 'minicraft:glow_lichen',
     tiles: ['glow_lichen', 'glow_lichen', 'glow_lichen'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3680,7 +3680,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 659,
-    name: 'minecraft:glow_berries',
+    name: 'minicraft:glow_berries',
     tiles: ['glow_berries', 'glow_berries', 'glow_berries'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3690,7 +3690,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 660,
-    name: 'minecraft:pointed_dripstone',
+    name: 'minicraft:pointed_dripstone',
     tiles: ['pointed_dripstone', 'pointed_dripstone', 'pointed_dripstone'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3699,14 +3699,14 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 661,
-    name: 'minecraft:dripstone_block',
+    name: 'minicraft:dripstone_block',
     tiles: ['dripstone_block', 'dripstone_block', 'dripstone_block'] as const,
   },
 
   // 哭泣的黑曜石（批次 390）：猪灵以物易物的产物，发 10 级光
   {
     id: 657,
-    name: 'minecraft:crying_obsidian',
+    name: 'minicraft:crying_obsidian',
     tiles: ['crying_obsidian', 'crying_obsidian', 'crying_obsidian'] as const,
     light: 10,
   },
@@ -3714,7 +3714,7 @@ const SPECS: readonly BlockSpec[] = [
   // 遮光玻璃（批次 387）：1.17 的"不透光玻璃"，4 紫水晶碎片 + 1 玻璃
   {
     id: 656,
-    name: 'minecraft:tinted_glass',
+    name: 'minicraft:tinted_glass',
     tiles: ['tinted_glass', 'tinted_glass', 'tinted_glass'] as const,
     opaque: false,
     lightOpacity: 15,
@@ -3722,23 +3722,23 @@ const SPECS: readonly BlockSpec[] = [
   // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
   {
     id: 587,
-    name: 'minecraft:bone_block',
+    name: 'minicraft:bone_block',
     tiles: ['bone_block_top', 'bone_block_top', 'bone_block_side'] as const,
   },
   // 紫水晶族（批次 351，D21 收尾）：紫晶洞的三层壳
   {
     id: 588,
-    name: 'minecraft:amethyst_block',
+    name: 'minicraft:amethyst_block',
     tiles: ['amethyst_block', 'amethyst_block', 'amethyst_block'] as const,
   },
   {
     id: 589,
-    name: 'minecraft:budding_amethyst',
+    name: 'minicraft:budding_amethyst',
     tiles: ['budding_amethyst', 'budding_amethyst', 'budding_amethyst'] as const,
   },
   {
     id: 590,
-    name: 'minecraft:amethyst_cluster',
+    name: 'minicraft:amethyst_cluster',
     tiles: ['amethyst_cluster', 'amethyst_cluster', 'amethyst_cluster'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3749,7 +3749,7 @@ const SPECS: readonly BlockSpec[] = [
   // "一种生物一个 id"取舍一致（方块状态只有 1 字节，装不下 NBT）
   {
     id: 595,
-    name: 'minecraft:zombie_spawner',
+    name: 'minicraft:zombie_spawner',
     tiles: ['spawner', 'spawner', 'spawner'] as const,
     solid: true,
     opaque: false,
@@ -3758,7 +3758,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 596,
-    name: 'minecraft:cave_spider_spawner',
+    name: 'minicraft:cave_spider_spawner',
     tiles: ['spawner', 'spawner', 'spawner'] as const,
     solid: true,
     opaque: false,
@@ -3767,7 +3767,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 597,
-    name: 'minecraft:silverfish_spawner',
+    name: 'minicraft:silverfish_spawner',
     tiles: ['spawner', 'spawner', 'spawner'] as const,
     solid: true,
     opaque: false,
@@ -3777,12 +3777,12 @@ const SPECS: readonly BlockSpec[] = [
   // 苔藓族（批次 367）：沼泽里的苔藓块与苔藓地毯
   {
     id: 598,
-    name: 'minecraft:moss_block',
+    name: 'minicraft:moss_block',
     tiles: ['moss_block', 'moss_block', 'moss_block'] as const,
   },
   {
     id: 599,
-    name: 'minecraft:moss_carpet',
+    name: 'minicraft:moss_carpet',
     tiles: ['moss_block', 'moss_block', 'moss_block'] as const,
     shape: 'flat' as const,
     solid: false,
@@ -3792,7 +3792,7 @@ const SPECS: readonly BlockSpec[] = [
   // 杜鹃族（批次 369）：苔藓斑块上长出来的三种
   {
     id: 600,
-    name: 'minecraft:azalea',
+    name: 'minicraft:azalea',
     tiles: ['azalea', 'azalea', 'azalea'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3801,7 +3801,7 @@ const SPECS: readonly BlockSpec[] = [
   },
   {
     id: 601,
-    name: 'minecraft:flowering_azalea',
+    name: 'minicraft:flowering_azalea',
     tiles: ['flowering_azalea', 'flowering_azalea', 'flowering_azalea'] as const,
     shape: 'cross' as const,
     solid: false,
@@ -3811,49 +3811,49 @@ const SPECS: readonly BlockSpec[] = [
   // 蜂巢（批次 374）：繁花森林里的蜜蜂巢
   {
     id: 602,
-    name: 'minecraft:bee_nest',
+    name: 'minicraft:bee_nest',
     tiles: ['bee_nest_top', 'bee_nest_top', 'bee_nest_side'] as const,
   },
   // 涂蜡铜（批次 375）：四种氧化度的整块，贴图与未涂蜡版完全一致
   {
     id: 603,
-    name: 'minecraft:waxed_copper_block',
+    name: 'minicraft:waxed_copper_block',
     tiles: ['copper_block', 'copper_block', 'copper_block'] as const,
   },
   {
     id: 604,
-    name: 'minecraft:waxed_exposed_copper',
+    name: 'minicraft:waxed_exposed_copper',
     tiles: ['exposed_copper', 'exposed_copper', 'exposed_copper'] as const,
   },
   {
     id: 605,
-    name: 'minecraft:waxed_weathered_copper',
+    name: 'minicraft:waxed_weathered_copper',
     tiles: ['weathered_copper', 'weathered_copper', 'weathered_copper'] as const,
   },
   {
     id: 606,
-    name: 'minecraft:waxed_oxidized_copper',
+    name: 'minicraft:waxed_oxidized_copper',
     tiles: ['oxidized_copper', 'oxidized_copper', 'oxidized_copper'] as const,
   },
   // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
   {
     id: 591,
-    name: 'minecraft:mycelium',
+    name: 'minicraft:mycelium',
     tiles: ['mycelium_top', 'dirt', 'mycelium_side'] as const,
   },
   {
     id: 592,
-    name: 'minecraft:mushroom_stem',
+    name: 'minicraft:mushroom_stem',
     tiles: ['mushroom_stem', 'mushroom_stem', 'mushroom_stem'] as const,
   },
   {
     id: 593,
-    name: 'minecraft:brown_mushroom_block',
+    name: 'minicraft:brown_mushroom_block',
     tiles: ['brown_mushroom_block_top', 'brown_mushroom_block_top', 'brown_mushroom_block_side'] as const,
   },
   {
     id: 594,
-    name: 'minecraft:red_mushroom_block',
+    name: 'minicraft:red_mushroom_block',
     tiles: ['red_mushroom_block_top', 'red_mushroom_block_top', 'red_mushroom_block_side'] as const,
   },
 ].sort((a, b) => a.id - b.id);
@@ -4418,8 +4418,13 @@ export function carpetId(colorIndex: number): number {
  *
  * 这里强制校验 id 从 0 开始连续——BLOCKS 是数组下标索引，一旦有空缺或错位，
  * blockDef(id) 就会静默地返回错误的方块。宁可启动时报错也不要让这种问题潜伏下去。
+ *
+ * ⚠️ 对外只给**构建工具与测试**用（`tools/gen-hostcore.ts` 用它生成二进制、
+ * `tools/hostcore-test.ts` 用它做往返比对）。运行时要方块表请用 `BLOCKS`/`blockDef()`：
+ * 线上那条路是从二进制解码来的（见 `blockTableCodec.ts`），两者必须逐字段一致，
+ * 一致性由 `npm run test:hostcore` 兜住。
  */
-function buildBlockTable(): readonly BlockDef[] {
+export function buildBlockTable(): readonly BlockDef[] {
   const table: BlockDef[] = [];
   for (const spec of SPECS) {
     if (spec.id !== table.length) {
@@ -4454,10 +4459,69 @@ function buildBlockTable(): readonly BlockDef[] {
   return table;
 }
 
-export const BLOCKS: readonly BlockDef[] = buildBlockTable();
+/**
+ * 按 id 索引的方块定义表。
+ *
+ * ⚠️ 是 `let` 而不是 `const`：**表是可以被换掉的**。线上那条路（宿主化）走的是
+ * "从 `/__host/core.bin` 解出数据 → `installBlockTable()` 装上"，而 `blocks.ts`
+ * 里的 `SPECS` 只留给构建工具与测试用。为了让两条路共用同一份代码，表就只能是可替换的。
+ *
+ * ⚠️ 因此**任何读取都必须发生在装表之后**。目前的顺序是：`boot.ts` 先装表，
+ * 再动态 `import('./main.ts')`，所以 `main.ts` 及其依赖图里的模块级代码一定看得见表
+ * （已核对：全仓 0 处模块顶层读 `BLOCKS[...]`；新增模块请保持这个约定）。
+ */
+export let BLOCKS: readonly BlockDef[] = buildBlockTable();
+
+/**
+ * 表是否被"装"过。
+ *
+ * ⚠️ 用**布尔标记**而不是"BLOCKS 是不是当初那个数组"：后者会被
+ * "装进来一份内容相同的新数组"骗过（测试里还原表时就撞上了）。
+ */
+let tableInstalled = false;
+
+/**
+ * 装表（覆盖当前表）。
+ *
+ * 校验比"信任调用方"重要：这张表决定世界里每一个方块的行为，装错一个 id 就是
+ * 静默的错方块——校验很便宜（724 次下标比对），漏检的代价很贵。
+ *
+ * 允许重复调用（测试里需要还原、将来热重载也要用），不做"只能装一次"的限制。
+ */
+export function installBlockTable(table: readonly BlockDef[]): void {
+  if (table.length === 0) {
+    throw new Error('方块表不能是空的：装表失败时应当保持旧表，而不是把世界变成一片空气');
+  }
+  for (let id = 0; id < table.length; id++) {
+    const block = table[id]!;
+    if (block.id !== id) {
+      throw new Error(`方块表 id 必须从 0 连续：第 ${id} 项 id=${block.id}（${block.name}）`);
+    }
+    if (block.name.length === 0) {
+      throw new Error(`方块表第 ${id} 项没有名字`);
+    }
+  }
+  BLOCKS = table;
+  tableInstalled = true;
+}
+
+/** 表是否被装过（诊断用：区分"SPECS 建的表"与"二进制解出来的表"） */
+export function isInstalledBlockTable(): boolean {
+  return tableInstalled;
+}
 
 export function blockDef(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[0]!;
+}
+
+/**
+ * 这个 id 在当前注册表里存在吗（批次 20261025-0117，合规 5）。
+ *
+ * `blockDef` 对不认识的 id 会**回退成空气**——渲染与碰撞都需要一个答案，这是对的；
+ * 但读档时不能拿这个回退去写世界（那等于把玩家那一片房子挖空），所以读档路径要先问这一句。
+ */
+export function isKnownBlockId(id: number): boolean {
+  return Number.isInteger(id) && id >= 0 && id < BLOCKS.length;
 }
 
 export function isOpaque(id: number): boolean {
@@ -5242,7 +5306,7 @@ export function isHardnessRegistered(id: number): boolean {
  * 这一格是不是蛛网（批次 441）。
  *
  * 物理层每帧都问一次，所以它必须是"一次查表"的便宜操作——
- * 与 `isClimbableBlock` 同一个口径，别在这里写 `blockDef(...).name === 'minecraft:cobweb'`。
+ * 与 `isClimbableBlock` 同一个口径，别在这里写 `blockDef(...).name === 'minicraft:cobweb'`。
  */
 /**
  * 原木 → 剥皮原木（批次 443）。

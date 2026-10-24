@@ -128,7 +128,7 @@ console.log('\n[6 种木材的牌子：注册表]');
   const contiguous = SIGNS.every((id, index) => id === SIGN_ID_START + index);
   check('id 连续（木材顺序就是 id 顺序，存档里存的就是这些数字）', contiguous, SIGNS.join(','));
 
-  const wrongName = WOOD_TYPES.filter((wood, index) => blockDef(SIGNS[index]!).name !== `minecraft:${wood.name}_sign`);
+  const wrongName = WOOD_TYPES.filter((wood, index) => blockDef(SIGNS[index]!).name !== `minicraft:${wood.name}_sign`);
   check('名字与木材表逐项对应', wrongName.length === 0, wrongName.map((w) => w.name).join(','));
 
   const wrongShape = SIGNS.filter((id) => blockDef(id).shape !== 'sign');
@@ -170,8 +170,8 @@ console.log('\n[6 种木材的牌子：贴图与物品]');
   check('斧头更快（原版 mineable/axe）', SIGNS.every((id) => efficientToolType(id) === 'axe'));
   check('都归"建筑"分类', SIGNS.every((id) => categoryOf(id) === 'building'));
   check('木板做的，都可燃', SIGNS.every((id) => isFlammable(id)));
-  equal('破坏音效归木头', breakSoundFor('minecraft:spruce_sign'), 'break_wood');
-  equal('（基岩仍然是石头声）', breakSoundFor('minecraft:bedrock'), 'break_stone');
+  equal('破坏音效归木头', breakSoundFor('minicraft:spruce_sign'), 'break_wood');
+  equal('（基岩仍然是石头声）', breakSoundFor('minicraft:bedrock'), 'break_stone');
 }
 
 // ---------------------------------------------------------------- 2. 形状与几何

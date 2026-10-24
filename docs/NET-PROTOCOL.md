@@ -18,7 +18,7 @@
   不能主动发 `ping`，但**会自动回 `pong`**，所以这是唯一不用改应用层协议的探活手段。
   客户端侧不另做超时：它只认 socket 的 close，断开后按 `RECONNECT_DELAY_MS` 重连，
   状态机在 `core/net/NetSession.ts`（`idle|connecting|connected|reconnecting|offline`）。
-- 有协议版本位（`v`，当前 **1**）与稳定客户端标识（`clientId`）：版本不一致直接拒绝连接，
+- 有协议版本位（`v`，当前 **2**；v2 = 房主权威，`join` 带 `host`）与稳定客户端标识（`clientId`）：版本不一致直接拒绝连接，
   不进入“字段慢慢对不上”的状态（见 §5.1）。
 - `clientId` **不是鉴权**：没有密码/签名，只用来挡住同一个浏览器的两个标签页并发连接，
   以及将来重连时认回原玩家。它存在 localStorage（`core/net/ClientId.ts`）。
@@ -70,23 +70,26 @@
 
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
-| `join` | `v, name, clientId, x, y, z, dimension, room?, password?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005 | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)` |
+| `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?, worldType?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效 |
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
-| `block` | `x, y, z, id, state, dimension` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条 |
-| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断） | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿 |
-| `container` | `x, y, z, dimension, slots[]` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍 |
+| `block` | `x, y, z, id, state, dimension, authority?` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条。**有房主的房里只有房主能发**（非房主改用 `edit-request`，由房主落地后重发） |
+| `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断）, `authority?` | 逐条与 `block` 同口径（含 y / id / state / 距离）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿。**有房主的房里只有房主能发**。`authority` 是**声明**（L8·MS2：房主说"这批是我算的"），服务端**不据此判权**，下行会按 `isHost` 重新标注 |
+| `container`, **有房主时只收房主** | `x, y, z, dimension, slots[], progress?` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍。`progress`（0..1，L8·MS4）只有**房主**带得动：熔炉/酿造的计时只在他那边推进，服务端只转发房主的值并夹到 `[0,1]` |
 | `item-spawn` | `localId, itemId, count, x, y, z` | 全部有限；`localId>0`、`itemId>0`、`0<count≤64`、`|x|,|z|≤3e7`、`-2000≤y≤2000`；每人每秒最多 30 条 | key 由服务端拼成 `玩家id:localId`，**不信消息里的 owner** |
 | `item-remove` | `localId` | 有限且 > 0 | 只能删自己名下的：服务端拼 `当前玩家id:localId` |
 | `item-take` | `owner, localId` | 两个正整数；每人每秒 20 次 | 捡**别人**那堆（`联机21`）：first-come 仲裁，先到的拿到，另一条回 `gone` |
 | `chat` | `text` | 转字符串后截断到 200 字符；空串丢弃；每人每秒 5 条（令牌桶） | 服务端日志打 `<名字> 内容`；**不回传给发送者**（客户端已本地回显，`联机30`） |
 | `sleep` | 无 | 必须已 join，否则 `error.code='joined'` | 睡眠跳夜（`联机11`）：**任一玩家睡满即跳**（本项目口径，不要求全员躺下）；服务端把开局时刻重置成现在（等于拨回清晨）并广播 `time{snap:true}` |
-| `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
-| `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
+| `sign`, **有房主时只收房主** | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
+| `frame`, **有房主时只收房主** | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
+| `edit-request` | `payload`：`{t:'block'|'blocks'|'container'|'sign'|'frame'|'tnt', …}`（L8·MS2/MS4） | 必须已 join；借用方块令牌桶（一条一格）；**只转给本房房主**，房里没房主回 `{t:'edit-request', ok:false, reason:'no-host'}`；`payload.t` 不认识直接丢 | 从属端"我要改这几格"的请求：服务端不判权、不落地、不校验内容（世界语义由房主那端把关） |
+| `entity-snap` | `entities: [[key, type, x, y, z, yaw, health, flags], …]`（L8·MS3，≤256 条） | 必须已 join；**只有房主能推**（其它人推的一律丢）；服务端只做形状收口（是不是数组、超不超过 256）与按房 + AOI 转发，**不做内容校验** | 房主每 100ms 推一次视野内实体，从属端据此画面影子实体 |
+| `entity-remove` | `keys: ["ownerId:localId", …]`（L8·MS3，≤64） | 必须已 join；**只有房主能发**；空列表 / 非数组直接丢 | 房主报告"这几只死了"——从属端立刻撤影子，不等快照那 300ms 宽限 |
 | `ping` | 无 | 必须已 join（先连接） | 应用层延迟探测（`联机29`）：客户端每 2 秒一条，服务端只回 `pong` |
-| `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
+| `mob-hit` | `typeId, dimension, x, y, z, damage, fire, key?` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 | `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
 | `arrow` | `x, y, z, vx, vy, vz, damage` | 六个数有限；速度模长 ≤ 200；伤害夹 0~50；每人每秒 30 条 | 玩家射箭（`联机23`）：**不带 id**，各端自己生成一支跑物理 |
-| `tnt` | `x, y, z, dimension` | 坐标有限；维度走 `sanitizeDimension`；每人每秒 30 条 | TNT 被点燃（`联机23`）：坐标即 key，接收端 `prime` 幂等 |
+| `tnt`, **有房主时只收房主** | `x, y, z, dimension` | 坐标有限；维度走 `sanitizeDimension`；每人每秒 30 条 | TNT 被点燃（`联机23`）：坐标即 key，接收端 `prime` 幂等 |
 
 未知 `t` 回 `error`；不是合法 JSON 也回 `error`，连接不关。
 
@@ -94,16 +97,20 @@
 
 | `t` | 字段 | 何时发 |
 | --- | --- | --- |
-| `welcome` | `v, id, name, seed, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的 |
+| `welcome` | `v, id, name, seed, world{name,seed,mode,difficulty,worldType}, isHost, hostId, timeOfDay, weather, players[], edits[], items[], containers[], signs[], frames[]` | 只发给刚 join 的人；`containers`（`联机13`）与 `signs`/`frames`（`联机16`）是落盘带回来的；`world.seed` 与老字段 `seed` 同一份（按房间，L9），没房主时 = 服务端默认种子 |
 | `time` | `timeOfDay`（0..1 的一天）、`snap?` | 每 2 秒广播给所有人；没人在线时不发。`snap: true` = 有人睡满跳夜，客户端要**立刻**对齐 |
 | `weather` | `kind`（`clear` / `rain` / `thunder`） | 天气**切换时**广播（`联机35`）：晴天 8~16 分钟后 45% 继续晴 / 55% 转雨（30% 雷暴），雨天与雷暴一律转晴 |
 | `player` | `id, name, x, y, z, yaw, pitch, dimension` + 外观字段（同 `move`） | 有人加入时、以及每次 `move` 被接受时（发给其他人） |
 | `leave` | `id` | 连接关闭 |
-| `block` | `x, y, z, id, state, dimension, by` | 收到 `block` 后转发给其他人 |
-| `blocks` | `blocks[]（形状同上）, by` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序） |
+| `block` | `x, y, z, id, state, dimension, by, authority` | 收到 `block` 后转发给其他人；`authority` 由服务端按发送者 `isHost` 重新判定 |
+| `blocks` | `blocks[]（形状同上）, by, authority` | 收到 `blocks` 后**整包**转发给其他人（不合并不拆分，保持记录顺序）；`authority` 同上 |
 | `sign` | `x, y, z, dimension, lines[], by` | 收到 `sign` 后转发给其他人（同时留一份给快照） |
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
+| `edit-request` | `from, payload` | 只发给**本房房主**（房主据此在自己的世界落地，再由 `blocks` 广播权威结果）；或回给请求者 `{ok:false, reason:'no-host'}` |
+| `entity-snap` | `by, entities[]` | 收到后按房 + AOI（发送者为中心）转发给同房其他人 |
+| `entity-remove` | `keys[], by` | 收到后按房广播给其他人（不做内容校验） |
+| `room-closed` | `reason`（目前只有 `host-left`）, `graceMs`（L8·MS4） | 房主一掉线就发给**同房其他人**：房间还没关，`graceMs` 内他回来还是同一局；到期未回来则对同房每个人发 `error{code:'host-left'}` + 关闭 4007 |
 | `pong` | 无 | 回给发 `ping` 的那个人（`联机29`） |
 | `player-hit` | `fromId, fromName, fromTeam, damage` | **只发给被击者**；被击者用 `fromTeam` + 自己的队伍表再判一次友伤 |
 | `arrow` | 同上行 + `by` | 收到 `arrow` 后转发给其他人 |
@@ -120,10 +127,11 @@
 ```json
 {
   "t": "welcome",
-  "v": 1,
+  "v": 2,
   "id": 1,
   "name": "玩家",
   "seed": 20261014,
+  "world": { "name": "草原小屋", "seed": 20261014, "mode": "survival", "difficulty": "normal", "worldType": "default" },
   "players": [{ "id": 1, "name": "玩家", "x": 0, "y": 80, "z": 0, "yaw": 0, "pitch": 0, "dimension": "overworld" }],
   "edits": [[100, 64, -50, 1, 0, "overworld"]],
   "items": [{ "owner": 1, "localId": 7, "itemId": 12, "count": 3, "x": 10.5, "y": 70, "z": 20.5 }]
@@ -145,6 +153,9 @@
 | `duplicate` | 同一 clientId 已在线 | 4003 | **不重连**（先关掉另一个标签页） |
 | `joined` | 同一条连接重复 join | 不关 | 是（消息级） |
 | `bad-json` | 不是合法 JSON | 不关 | 是 |
+| `password` | 房间口令不对 | 4005 | **不重连**（先问口令） |
+| `host-taken` | 这一局已经有房主 | 4006 | **不重连**（房主不走，重连也还是他） |
+| `host-left` | 房主退出、房间已关闭（L8·MS4） | 4007 | **不重连**（这一局结束了） |
 | `unknown` | 未知 `t` | 不关 | 是 |
 
 客户端的判据是 `code`，**不是关闭码**——两者可以独立演进。
@@ -156,7 +167,8 @@
 | 项 | 值 | 位置 |
 | --- | --- | --- |
 | 默认端口 | 8787（`PORT`） | `server/index.mjs` |
-| 世界种子 | 20261014（`SEED`） | 同上 |
+| 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`） | 同上 |
+| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发口令**、只列有人的房 | `server/index.mjs` |
 | 玩家 id | 自增、不回收 | 同上 |
 | 方块增量上限 | 200000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/snapshot.mjs` |
 | `welcome` 裁剪半径 | 8 区块（128 格，切比雪夫；只带同维度） | `SNAPSHOT_RADIUS_CHUNKS` |
@@ -171,7 +183,7 @@
 | 房间口令 | `ROOM_PASSWORD` 环境变量，空 = 不校验（**明文传输，不是鉴权**） | 同上 |
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
 | 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/aoi.mjs` |
-| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol}`；其它路径 404 | `server/index.mjs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, traffic, totals}`；`/rooms` 带 `access-control-allow-origin: *`（浏览器从 5173 跨源读），其它路径 404 | `server/index.mjs` |
 | 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8787`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/protocol.mjs` |
@@ -192,7 +204,7 @@
 
 | 消息 | 客户端行为 | 备注 |
 | --- | --- | --- |
-| `welcome` | 种子与服务端比对：**不一致就整批跳过**（不写 edits、不建远端玩家），消息栏 + HUD 提示 `/netseed reload` 或 `/netseed new`；一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像 | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档；种子冲突判定在 `core/net/SeedReconcile.ts`。远端改动**会**进本地存档（`联机6` 隔离仍未做） |
+| `welcome` | 种子与本地比对（`core/net/SeedReconcile.ts`）：一致则 `edits` 逐条按 `planRemoteBlock` 走、重建远端玩家与掉落物镜像；**不一致 → 提示 + 自动断开联机**（不写 edits、不建远端玩家、不要求敲命令） | 种子不同 = 两片大陆，同一坐标是另一格，写进去只会污染本地存档。L9 起不再要求手敲 `/netseed reload`：新入口是"先连上、拿到房主种子再加载世界"，冲突只可能出现在"已在某个世界里去加入别人的房"这条老路径上，直接断开并指路最省事。冲突期间 `block` / `container` / `sign` / `frame` 四条远端写入全部丢弃（`remoteWorldWritable`） |
 | `player` | 维护 `remotePlayers` + 平滑器；维度记进 `RemotePresence`，渲染只画同维度；外观进 `RemoteAppearance`（挥手/受伤**边沿触发 + 本地计时**，因为网络 100ms 一条而动作只有 0.25s） | 队友走进下界时不会在主世界同坐标留一个分身；手持物/挥手/着火直接接到模型上 |
 | `leave` | 删远端玩家与其名下镜像 | |
 | `pong` | `NetStats.ackPing()`——与**最早**那条未回的 ping 配对算 RTT（几条同时在飞时配错会让 RTT 虚低） | 丢包 = 3 秒没回的那几条；F3 面板显示延迟/丢包/上下行 |
@@ -219,20 +231,20 @@
 | 编号 | 缺口 | 影响 |
 | --- | --- | --- |
 | `联机4` | 未加载区块的 `block` 改为进增量表等区块加载（`onNetBlock` / `welcome` 同一条判定）；补上的漏斗/投掷器/发射器在区块加载时**会**建容器实体（`联机33`） | 只补这几个「自己会动」的；箱子/木桶/熔炉仍是打开界面时懒创建（不影响使用） |
-| `联机5` | 种子冲突时**跳过**这一批 edits 并给 `/netseed reload|new`（`reload` 删库重开、`new` 另建同种子世界） | 目前入口是命令，连接界面上的按钮见 `联机9` |
+| `联机5` | 种子冲突（房主的世界 vs 本机世界）：**丢弃远端方块/容器/牌子并自动断开**，提示「回主菜单 →「加入房间…」」（`SeedReconcile.remoteWorldWritable`） | 不再手敲 `/netseed reload`；正确做法是「先连上、按房主种子加载世界」（L9 已做，只剩「已在世界里去加入别人的房」这条老路径） |
 | `联机6` | 联机时切到按 roomId 派生的独立库（`worldId@mp:<room>`），断开后**停止写盘**、重进世界才回单机档 | 单机档不再被污染；无缝回切需要"世界原地重载"（`联机34`） |
 | `联机7` | 心跳已做（5s ping / 20s 无 pong 断开），状态机在 `core/net/NetSession.ts` | 客户端侧没有"服务端静默"超时：只认 socket close |
 | `联机10` | 时间已做（服务端推算 + 2s 校正，客户端按 4 倍速收敛）；**天气还没同步** | 时间一致了，但一个人下雨一个人晴天（天气拆到 `联机35`） |
 | `联机11` | 睡眠跳夜已做（`sleep` 上行 + `time{snap}` 下行，任一玩家睡满即跳） | 口径与基岩版不同：**不要求全员躺下**；天气放晴只在客户端跟着跳夜事件做（`联机35`） |
-| `联机12` | 方块写入已统一出口（`World.events.onBlockChanged` + 40 处散点 → `BlockFunnel`，100ms 合帧、同格只留最后一稿） | 红石/流体/火焰/作物/漏斗/爆炸现在都会同步；但两端各自跑模拟，同一事件在两边得出的结果仍可能不同（如流体更新顺序） |
+| `联机12` | 方块写入已统一出口（`BlockFunnel`，100ms 合帧、同格只留最后一稿）；**模拟只由房主跑**（`SimMode`），从属端改动走 `edit-request` 由房主落地后以 `authority` 重发 | 红石/流体/作物只在房主那边算，两端不再各算一遍；`container`/`sign`/`frame`/`tnt` 的请求化还没做（仍直连上行） |
 | `联机13` | 已有持久化（`edits` / 容器 / 时间落盘，30s + 退出保存，损坏备份） | **天气还没落盘**（天气权威未做，`联机35`）；玩家背包/进度仍是各客户端自己的 |
 | `联机14` | `welcome` 已按 8 区块裁剪；增量满了淘汰最旧并告警 | 半径外的旧改动新玩家收不到，要等"按视野补发"（`联机27`）；容器与掉落物仍全量下发 |
-| `联机15` | 容器已覆盖 9 种工作站（箱子/木桶/熔炉/高炉/烟熏炉/酿造台/发射器/投掷器/漏斗），且建出来就挂、不用打开界面 | 只同步**内容**：熔炉燃烧进度、酿造进度、漏斗冷却这些计时器各端自己跑 |
+| `联机15` | 容器已覆盖 9 种工作站，且建出来就挂；**计时由房主推进**：熔炉/酿造进度每 1 秒随 `container.progress` 下行，从属端只读不 tick | 漏斗冷却、营火这类没有 `progress` 字段的计时仍只在房主那边生效（从属端不推进即视为一致）；容器内容仍是全量整份同步 |
 | `联机16` | 已同步（`sign` / `frame` 两条消息 + 快照下发） | 只同步文字与物品：牌子上的**染料颜色/发光**、框的**多件拼贴**这些本项目本来就没做 |
 | `联机17` | 外观已通（手持物/挥手/着火接到模型；潜行/骑乘/睡觉只存状态） | **副手与玩家盔甲没有数据源**（项目没有独立副手槽、盔甲是简化模型），远端模型也没有下蹲/骑乘姿势（`联机37`） |
 | `联机18` | 队友昵称牌已做（复用 `Mob.customName` + 名字牌池，范围 64 格、32 格起渐隐） | 名字牌池 16 个是上限：视野里"有名字的生物 + 队友"超过 16 个时，最远的会被挤掉 |
-| `联机19` | 生物**命中**已同步（伤害 + 着火，按类型 + 邻域认） | **生物位置不同步**：两端 AI 各自跑、随机生成，同步位置会让两只怪互相拉扯并出现双份（前置见 `联机38`） |
-| `联机38` | 前置已定：全局键 `ownerId:localId`（`mobKey`/`parseMobKey`）、权威 = **离生物最近的玩家**（`pickAuthority`，平局按 id 小，两端算出来一定一致） | 还没接协议——`mob-move` 消息与"权威端跑 AI、其余端插值"留给下一条；`mob-hit` 仍在用"类型 + 3 格内最近"认 |
+| `联机19` | 生物**位置/血量/状态/死亡**已同步：房主每 100ms 推 `entity-snap`（AOI 内、全局键 `ownerId:localId`），从属端只插值画影子；死亡走 `entity-remove` | 影子只跟位置/血量/状态位（幼体/着火/受击/驯服），**走路摆动与攻击动作**不跟随；经验球/船/矿车仍不同步 |
+| `联机38` | 全局键已落地（`mobKey`/`assignMobKey`）；权威口径改成**房主唯一模拟**（「最近玩家当权威」的 `pickAuthority` 在 MS2 之后**不再参与决策**，代码保留但别用） | `mob-hit` 仍按「类型 + 3 格内最近」认那只怪；全局键还没用到命中链路上 |
 | `联机40` | 玩家盔甲已按**逐槽物品 id** 同步并渲染（`move.armor` → `MobEquipment`；`core/net/RemoteArmor.ts`） | 存档不用改：数据源本来就是 `inventory` 的四槽 id，`armorColors` 只是派生的渲染色 |
 | `联机41` | 副手槽已上报（`move.offhand`）、按 F 交换、远端在左手画出物品（`MobEquipment.offHand`）；槽位与存档**都没改** | 副手物品只按"类武器/工具"的形状画（`weaponTint`），不是逐物品模型 |
 | `联机20` | 远端玩家的位置已按距离分级（16 格 100ms / 32 格 250ms / 更远不更新插值目标） | 只在**接收侧**省成本；真正的"更远不发"要服务端按距离决定发给谁（`联机27`） |
@@ -241,7 +253,7 @@
 | `联机23` | 箭与 TNT 已同步（玩家射的箭、任何来源点燃的 TNT） | **经验球 / 船 / 矿车不同步**：前两者与生物同属"各自生成、没有 id 空间"（`联机38`）；载具还有骑乘与摆放归属问题 |
 | `联机24` | 方块/容器消息已校验（y 范围、id 上界、state 位宽、距玩家 ≤64 格，拒收日志限频） | id 上界不是精确白名单；容器**不校验目标方块是不是容器**（服务端没有方块表） |
 | `联机25` | 限频与体积已做（block/container/chat 三个令牌桶 + `maxPayload` 64KB + 名字清洗） | 只限这三类：掉落物/生物命中/拾取/特效用的是各自手写的 1 秒窗口（四条老链路，没迁到桶上）；没有 Origin 校验（`联机26`） |
-| `联机26` | 房间码 / 可选口令 / 来源白名单已做（数据表按 `房名|` 前缀隔离，跨房拾取也被挡） | 种子仍是**全服同一个**（各房地形一样，只是数据不串）；口令明文走 `join`，不是鉴权；房间没有生命周期（一直存在到服务端重启） |
+| `联机26` | 房间码 / 可选口令 / 来源白名单已做（数据表按 `房名|` 前缀隔离）；**种子按房**：房主 `join.world` 上报、`welcome` 回发（L9） | 口令明文走 `join`，不是鉴权；房间没有生命周期之外的清理（宽限期内房主可回来，到期关房）；天气仍全服共享（未做每房天气） |
 | `联机27` | 广播已按 8 区块 + 维度过滤（坐标类消息）；O(n²) → O(n·k) | `player` 位置消息**不过滤**（否则远处队友直接消失，且它已被 move 限频）；`chat`/`time` 不过滤 |
 | `联机28` | wss/部署已就绪（`ws` 进生产依赖、`/healthz`、Dockerfile、nginx 反代、`notes/multiplayer-ops.md`） | 没有内置 TLS：https 站点必须挂反代；镜像不含前端静态产物（分开部署） |
 | `联机29` | 观测已做（`/healthz` 带吞吐、服务端每 10 秒一行统计日志、F3 面板显示延迟/丢包/上下行） | 服务端不跑 tick，所以没有真正的 TPS——统计的是**消息速率**与吞吐；客户端丢包是**应用层 ping 超时**估的，不是网络层真值 |

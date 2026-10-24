@@ -53,7 +53,7 @@ function grid3(rows: readonly string[], legend: Record<string, number>): number[
 console.log('\n[方块：注册 / 形状 / 贴图]');
 {
   const def = blockDef(Block.NOTE_BLOCK);
-  check('音符盒已注册', def !== undefined && def.name === 'minecraft:note_block');
+  check('音符盒已注册', def !== undefined && def.name === 'minicraft:note_block');
   equal('是完整立方体（碰撞与网格都用同一份几何）', def.shape, 'cube');
   check(
     '三面贴图都在图集名单里（漏一张就是一个紫黑方块）',

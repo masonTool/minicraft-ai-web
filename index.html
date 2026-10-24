@@ -587,11 +587,39 @@
         color: #fff; background: #3f6f2d;
         border-color: #1f3a16 #8fd06b #8fd06b #1f3a16;
       }
+      /*
+       * 「开房」（L9）是这张卡的**第二动作**：蓝色面，比「进入」弱一档，
+       * 但比编辑/导出/删除明显——它是"用这个世界开一局多人"，不是管理操作。
+       */
+      .world-card-actions .world-host {
+        color: #fff; background: #2f5a7d;
+        border-color: #16324a #7fb6dd #7fb6dd #16324a;
+      }
+      .world-card-actions .world-host:hover { background: #3a6d95; color: #fff; }
       .world-card-actions .world-enter:hover { background: #4a8236; color: #fff; }
       .world-card-actions .world-enter:active {
         background: #355d26;
         border-color: #8fd06b #1f3a16 #1f3a16 #8fd06b;
       }
+      /* 「⋯」：编辑 / 导出 / 删除收进这里（L9 方案 A：卡片上只留进入与开房） */
+      .world-card-actions .world-more {
+        color: #d6d6d6; background: #3a3a3a; border-color: #1a1a1a #6a6a6a #6a6a6a #1a1a1a;
+        padding: 5px 8px; line-height: 1;
+      }
+      .world-card-actions .world-more:hover { background: #4a4a4a; }
+      .world-card-extra {
+        display: flex; gap: 4px; flex-wrap: wrap;
+        margin-top: 6px; padding-left: 2px;
+      }
+      .world-card-extra.hidden { display: none; }
+      .world-card-extra button { font-size: 12px; padding: 5px 9px; white-space: nowrap; }
+      /* 世界列表顶部：新建世界 + 加入房间 并排（横屏一行放得下） */
+      .world-list-top { display: flex; gap: 6px; align-items: stretch; }
+      .world-list-top > .world-primary { flex: 1 1 auto; }
+      .world-list-top > .world-secondary { flex: 0 0 auto; white-space: nowrap; }
+      /* 「加入房间」模式的面板：藏掉只有局内才成立的按钮（开房 / 断开） */
+      #multiplayer-screen[data-mode='join'] #mp-host,
+      #multiplayer-screen[data-mode='join'] #mp-disconnect { display: none; }
       /* 危险操作 = **红字**（原版没有红色按钮），底还是那颗灰按钮 */
       .world-card-actions button.danger,
       .pause-action.danger { color: var(--mc-text-danger); }
@@ -1951,12 +1979,79 @@
         padding: 6px 8px; border: 2px solid; border-color: var(--pixel-bevel-dark);
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
       }
+      /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
+      .mp-mini {
+        flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
+      }
+      /* 房间/口令同一行：口令那一格的标签比主标签窄一半 */
+      .mp-row > span.mp-row-label-sub { flex: 0 0 2.6em; text-align: right; opacity: .8; }
+      /* 房间列表：最多三行高就滚，别把面板撑出屏幕 */
+      .mp-rooms {
+        display: flex; flex-direction: column; gap: 4px;
+        max-height: 96px; overflow: auto;
+        padding: 4px; background: rgba(0, 0, 0, .3);
+      }
+      .mp-room-row {
+        display: flex; align-items: baseline; gap: 8px;
+        font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+        padding: 5px 8px; border: 2px solid var(--pixel-bevel-dark);
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .25);
+      }
+      .mp-room-row b { font-size: 13px; }
+      .mp-room-row span { opacity: .8; }
+      /* ---------------- 本局房间信息卡（L9） ---------------- */
+      #room-card {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        background: rgba(0, 0, 0, .55);
+      }
+      #room-card.hidden { display: none; }
+      .room-panel {
+        width: min(92vw, 420px); max-height: 100%;
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 10px 12px; overflow: auto;
+        background: var(--mc-menu-bg); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        font-size: 13px;
+      }
+      .room-title { font-size: 15px; text-align: center; }
+      .room-body { display: flex; flex-direction: column; gap: 2px; }
+      .room-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+      .room-row span { opacity: .8; }
+      .room-invite {
+        font: inherit; font-size: 12px; padding: 6px 8px; width: 100%;
+        border: 2px solid; border-color: var(--pixel-bevel-dark);
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+      }
+      .room-hint { font-size: 11px; opacity: .75; }
+      .room-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .room-action {
+        flex: 1 1 auto; min-width: 6em;
+        font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+      }
+      body.touch-mode .room-action { min-height: 44px; font-size: 14px; }
+      /* 最近连接：一行小胶囊，放不下就横向滚（不换行、不撑高） */
+      .mp-recent { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding-bottom: 2px; }
+      .mp-recent-label { font-size: 11px; opacity: .7; flex: 0 0 auto; }
+      .mp-recent-chip {
+        flex: 0 0 auto; font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer;
+        border: 2px solid var(--pixel-bevel-dark); color: var(--mc-text-light);
+        background: rgba(0, 0, 0, .25); white-space: nowrap;
+      }
+      .mp-rooms-empty { font-size: 11px; opacity: .75; padding: 2px 4px; }
       .mp-status { min-height: 1.2em; font-size: 12px; }
       .mp-status[data-state='connected'] { color: #8ee08e; }
       .mp-status[data-state='error'] { color: #ff9a9a; }
-      .mp-actions { display: flex; gap: 8px; }
+      /* 四颗按钮（开房 / 加入 / 断开 / 关闭）：窄屏放不下就折成两行，
+         而不是挤成一条读不出来的字（德语/俄语的按钮词比中文长一倍） */
+      .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
       .mp-action {
-        flex: 1 1 0; font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+        flex: 1 1 auto; min-width: 5.5em;
+        font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
       }
       .mp-action:disabled { cursor: default; color: var(--mc-text-disabled); }
       .mp-hint { font-size: 11px; opacity: .75; }

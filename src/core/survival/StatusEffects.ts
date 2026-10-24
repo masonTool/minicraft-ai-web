@@ -19,6 +19,7 @@
 /** 全部效果（名称与原版一致，命令与 UI 都用它） */
 // 多语言 P2-3c3：效果名走 `label.effect.*`（原来是一张中文常量表）
 import { t } from '../i18n/I18n.ts';
+import { shortId } from '../registry/ids.ts';
 
 export const EFFECTS = [
   'speed',
@@ -149,7 +150,7 @@ const EMPTY_TICK: EffectTickResult = {
 
 /** 解析效果名（英文 id / 中文名 / 常见别名） */
 export function resolveEffect(name: string): EffectId | undefined {
-  const raw = name.trim().toLowerCase().replace(/^minecraft:/, '');
+  const raw = shortId(name.trim().toLowerCase());
   if ((EFFECTS as readonly string[]).includes(raw)) return raw as EffectId;
   if (name.trim() in ALIASES) return ALIASES[name.trim()];
   return ALIASES[raw];

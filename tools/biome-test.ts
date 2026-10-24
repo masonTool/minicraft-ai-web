@@ -187,18 +187,18 @@ equal(
 console.log('\n[地表方块随群系变化]');
 {
   const desert = findLandBiome(point({ temperature: 0.7, humidity: -0.8, erosion: 0.2 }));
-  equal('沙漠地表是沙', BLOCKS[desert.surface]!.name, 'minecraft:sand');
-  equal('沙漠次表层是砂岩', BLOCKS[desert.subSurface]!.name, 'minecraft:sandstone');
+  equal('沙漠地表是沙', BLOCKS[desert.surface]!.name, 'minicraft:sand');
+  equal('沙漠次表层是砂岩', BLOCKS[desert.subSurface]!.name, 'minicraft:sandstone');
 
   const snowy = findLandBiome(point({ temperature: -0.8, humidity: 0.5, erosion: 0.2 }));
-  equal('雪原地表是雪块', BLOCKS[snowy.surface]!.name, 'minecraft:snow_block');
+  equal('雪原地表是雪块', BLOCKS[snowy.surface]!.name, 'minicraft:snow_block');
   check('雪原标记为常年积雪', snowy.snowy);
 
   const deepOcean = biomeForColumn(point({}), 63 - 20, 63);
-  equal('深海海底是砾石', BLOCKS[deepOcean.underwater]!.name, 'minecraft:gravel');
+  equal('深海海底是砾石', BLOCKS[deepOcean.underwater]!.name, 'minicraft:gravel');
 
   const plains = findLandBiome(point({ temperature: 0, humidity: 0, erosion: 0.2 }));
-  equal('平原地表是草方块', BLOCKS[plains.surface]!.name, 'minecraft:grass_block');
+  equal('平原地表是草方块', BLOCKS[plains.surface]!.name, 'minicraft:grass_block');
 }
 
 console.log('\n[气候噪声的实际分布]');
@@ -273,7 +273,7 @@ for (let cx = -5; cx <= 5; cx++) {
 
         histogram.set(biome.name, (histogram.get(biome.name) ?? 0) + 1);
         if (biome.ocean) oceanSamples++;
-        const surfaceName = BLOCKS[biome.surface]!.name.replace('minecraft:', '');
+        const surfaceName = BLOCKS[biome.surface]!.name.replace('minicraft:', '');
         surfaceHistogram.set(surfaceName, (surfaceHistogram.get(surfaceName) ?? 0) + 1);
         samples++;
       }

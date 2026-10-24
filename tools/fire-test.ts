@@ -96,7 +96,7 @@ class FakeWorld implements TickWorld {
 console.log('\n[火焰方块]');
 {
   const def = blockDef(Block.FIRE);
-  equal('名字是 minecraft:fire', def.name, 'minecraft:fire');
+  equal('名字是 minecraft:fire', def.name, 'minicraft:fire');
   equal('形状是 cross（借用植物那套两片交叉薄面）', def.shape, 'cross');
   check('没有碰撞体积', !def.solid);
   check('不遮挡邻居（否则贴着火的方块会缺面）', !def.opaque);
@@ -339,7 +339,7 @@ console.log('\n[打火石]');
 {
   const def = itemDef(Item.FLINT_AND_STEEL);
   check('打火石已注册', def !== undefined);
-  equal('打火石的英文 id', def?.name, 'minecraft:flint_and_steel');
+  equal('打火石的英文 id', def?.name, 'minicraft:flint_and_steel');
   equal('中文名是"打火石"', itemLabel(Item.FLINT_AND_STEEL), '打火石');
   equal('不可堆叠（maxStack 1）', maxStackOf(Item.FLINT_AND_STEEL), 1);
   equal('耐久 64（原版）', durabilityOf(Item.FLINT_AND_STEEL), 64);

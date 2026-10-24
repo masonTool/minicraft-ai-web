@@ -319,7 +319,7 @@ const EXEMPT: readonly Exempt[] = [
 
 console.log('\n[四、缺口与白名单必须一一对应]');
 
-const nameOf = (id: number): string => (itemDef(id)?.name ?? String(id)).replace('minecraft:', '');
+const nameOf = (id: number): string => (itemDef(id)?.name ?? String(id)).replace('minicraft:', '');
 
 /**
  * **创造专属物品**（批次 174，J17 的刷怪蛋）：它们**本来就不该有生存来源**，
@@ -557,7 +557,7 @@ check(
   '混凝土 16 色仍然一个配方都没有（要 16 个"混凝土粉末"方块与遇水凝固，见 TASKS 的 B52）',
   DYE_COLORS.every((_color, index) => !hasRecipeFor(concreteId(index))),
 );
-check('原色陶瓦不是 `terracottaId(0)`（那是白色——荒地色带差一格就是这里踩的）', blockDef(terracottaId(0)).name === 'minecraft:white_terracotta');
+check('原色陶瓦不是 `terracottaId(0)`（那是白色——荒地色带差一格就是这里踩的）', blockDef(terracottaId(0)).name === 'minicraft:white_terracotta');
 
 // ---------------------------------------------------------------- 六、方块侧（B52，批次 118）
 
@@ -600,7 +600,7 @@ const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] 
       ...BLOCKS.filter(
         (def) =>
           def !== undefined &&
-          (def.name === 'minecraft:attached_pumpkin_stem' || def.name === 'minecraft:attached_melon_stem'),
+          (def.name === 'minicraft:attached_pumpkin_stem' || def.name === 'minicraft:attached_melon_stem'),
       ).map((def) => def.id),
     ],
   },
@@ -631,7 +631,7 @@ const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] 
 
 /** 按方块名取 id（白名单按族写，用名字比用 id 好读也好核对） */
 const idsNamed = (...names: string[]): number[] =>
-  BLOCKS.filter((def) => def !== undefined && names.includes(def.name.replace('minecraft:', ''))).map((def) => def.id);
+  BLOCKS.filter((def) => def !== undefined && names.includes(def.name.replace('minicraft:', ''))).map((def) => def.id);
 
 /**
  * 方块侧的缺口白名单（一族一条）。每一条都是**这一批量出来的真缺口**，
@@ -690,7 +690,7 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
 
 /** 一串方块 id 报成名字（报缺口用；方块名与物品名同源） */
 const namesOfBlocks = (ids: readonly number[]): string =>
-  ids.map((id) => (blockDef(id)?.name ?? String(id)).replace('minecraft:', '')).join(', ');
+  ids.map((id) => (blockDef(id)?.name ?? String(id)).replace('minicraft:', '')).join(', ');
 
 const blockGaps: number[] = [];
 {

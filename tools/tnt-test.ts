@@ -136,7 +136,7 @@ function step(
 
 console.log('\n[注册与贴图]');
 {
-  equal('注册名', blockDef(TNT).name, 'minecraft:tnt');
+  equal('注册名', blockDef(TNT).name, 'minicraft:tnt');
   equal('id 接着上一批的最后一个', TNT_ID, Block.TRIPWIRE_HOOK + 1);
   equal('中文名', itemLabel(TNT), 'TNT');
   check('有中文说明（写清三种点法、4 秒引信、威力与连锁）', hasDescription(TNT));

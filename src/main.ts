@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three';
+import { normalizeId, shortId } from './core/registry/ids.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
@@ -175,6 +176,7 @@ import {
 } from './ui/SettingsScreen.ts';
 import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
 import { MultiplayerScreen } from './ui/MultiplayerScreen.ts';
+import { RoomCard } from './ui/RoomCard.ts';
 import {
   failBootLoading,
   hideBootLoading,
@@ -400,9 +402,21 @@ import {
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
-import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
-import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
+import { applyRemoteBlock, planRemoteBlock, readEditRequest } from './core/net/RemoteBlockWrite.ts';
+import {
+  realignedWorldSummary,
+  remoteWorldWritable as remoteWritableBySeed,
+  seedConflict,
+} from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
+import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
+import { summaryFromRoom } from './core/net/JoinWorld.ts';
+import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
+import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
+import { ENTITY_SNAPSHOT_INTERVAL_MS, encodeEntitySnapshots, type SimEntity } from './game/sim/SimAuthority.ts';
+import { assignMobKey } from './core/net/MobAuthority.ts';
+import { ENTITY_FLAGS, hasFlag } from './core/net/EntitySnapshot.ts';
+import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
@@ -1864,6 +1878,56 @@ class App {
     // 箭与 TNT（联机23）：事件 + 坐标/速度，各端自己模拟
     onArrow: (arrow) => this.onNetArrow(arrow),
     onTnt: (tnt) => this.onNetTnt(tnt),
+    /*
+     * 我那批改动没人接（L8 · MS2）：房里没房主。说一句就够——玩家改十格会连着发十条，
+     * 每条都弹一遍等于刷屏，所以这里 3 秒内只提示一次。
+     */
+    /*
+     * 房主的实体快照（L8 · MS3）：从属端只存影子，不做任何模拟。
+     * 只有从属端处理——房主自己那份就是真身，再建一份影子等于给每只怪画两个模型。
+     */
+    onEntitySnap: (raw) => {
+      if (this.net.role !== 'client') return;
+      this.simApply.apply(raw);
+    },
+    /*
+     * 房主说这几只没了（L8 · MS3）：影子立刻撤，不等快照宽限——
+     * 否则"打死了还站着 0.3 秒"，掉落出现的那一瞬也对不上。
+     */
+    onEntityRemove: (keys) => {
+      if (this.net.role !== 'client') return;
+      for (const key of keys) {
+        this.simApply.remove(key);
+        const mob = this.shadowMobs.get(key);
+        if (mob) {
+          mob.dead = true;
+          this.shadowMobs.delete(key);
+        }
+      }
+    },
+    /*
+     * 房主掉线（L8 · MS4）：先说一句，别让玩家对着一个不推进的世界猜"是不是卡了"。
+     * 房间这时还没关——服务端给了 `graceMs` 的重连窗口。
+     */
+    onRoomClosing: (graceMs) => {
+      const seconds = Math.max(1, Math.round(graceMs / 1000));
+      const text = tp('net.hostLeft', { s: seconds });
+      this.chat.push(text, 'error');
+      this.chatLine = text;
+      this.chatUntil = performance.now() + 8000;
+      this.multiplayerScreen.setState(this.net.sessionState, text);
+    },
+    // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
+    onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
+    onEditRejected: (reason) => {
+      const now = performance.now();
+      if (now - this.editRejectedAt < 3000) return;
+      this.editRejectedAt = now;
+      const text = reason === 'no-host' ? t('net.editNoHost') : t('net.editRejected');
+      this.chat.push(text, 'error');
+      this.chatLine = text;
+      this.chatUntil = now + 6000;
+    },
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -1900,6 +1964,8 @@ class App {
       // 联机9：面板上的状态与按钮可用性跟着会话状态走（`detail` 是服务端/连接层的原话，
       // 比"已断开"这种通用文案有用）
       this.multiplayerScreen.setState(this.net.sessionState, detail);
+      // 房主（L8）：断开/重连途中角色会回到 solo，顺手同步一次（面板只在"已连接"时显示它）
+      this.multiplayerScreen.setRole(this.net.role);
       if (!connected) {
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
@@ -1916,14 +1982,20 @@ class App {
         this.blockFunnel.clear();
         // 待恢复的容器内容同理（联机13），重连会重新拿一份 welcome 快照
         this.pendingContainers.clear();
+        // 影子实体（L8 · MS3）：断开就撤，否则留下的怪既不动也打不死
+        this.clearShadowMobs();
+        this.lastMobKeys.clear();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         return;
       }
       // 天气（联机35）：连上就交给服务端，本地不再自己换天气
       this.weather.setAuthority(false);
-      // 联机6：连上就换到按 roomId 派生的联机库（异步换库，这里不阻塞状态回调）
-      void this.enterMultiplayerSave();
+      /*
+       * 联机库（联机6 / L9）**不在这里**切：库名要带"这一局是哪个世界"的种子，
+       * 而种子在 `welcome` 里才到。切早了只能瞎猜默认房间 + 无种子，结果就是
+       * "换个房间还是同一个库"。改在 `onNetWelcome` 里切。
+       */
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
@@ -1942,6 +2014,25 @@ class App {
    * 记它只为一件事：种子冲突时 `/netseed reload|new` 要有"对齐到哪个种子"可依，
    * 而 `welcome` 之后这个值不会变（服务端开局就定了世界）。
    */
+  /**
+   * 从属端的影子实体（L8 · MS3）：房主的快照推过来，这边只画不跑。
+   *
+   * 与 `remotePlayers`（远端玩家）分开：那些是真人、有自己的渲染器；这里是**生物**，
+   * 用的就是本地那套 `Mob` 渲染，只是位置/血量/状态由快照决定。
+   */
+  private readonly simApply = new SimApply({
+    maxHealthOf: (type) => mobTypeById(type)?.health,
+  });
+  /** 上次推实体快照的时刻（房主每 100ms 一次） */
+  private lastEntitySnapAt = 0;
+  /** 上一帧还在实体表里的生物键（房主用它判"谁死了"） */
+  private lastMobKeys = new Set<string>();
+
+  /** 影子键 → 本地那个 `Mob`（渲染实体） */
+  private readonly shadowMobs = new Map<string, Mob>();
+
+  /** 上次提示"改动没人接"的时刻（限频用） */
+  private editRejectedAt = 0;
   private serverSeed: number | null = null;
   /**
    * 用服务端种子重开世界（联机5）。
@@ -1958,15 +2049,19 @@ class App {
    * 那几分钟进度就没了。换库失败（无痕模式 `open` 返回 null）时把 `save` 置空
    * ——宁可这一局不保存，也不能继续往单机库里写联机世界。
    */
-  private async enterMultiplayerSave(roomId: string = DEFAULT_MULTIPLAYER_ROOM): Promise<void> {
+  private async enterMultiplayerSave(
+    roomId: string = DEFAULT_MULTIPLAYER_ROOM,
+    seed?: number,
+  ): Promise<void> {
     if (this.inMultiplayerSave) return;
     await this.saveNow('mp-enter');
     const solo = this.save;
-    const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId));
+    // 库名带房间 + 房间世界的种子（L9）：同房换世界 = 另一片大陆 = 另一个库
+    const mp = await SaveGame.open(multiplayerWorldId(this.worldConfig.id, roomId, seed));
     this.soloSave = solo;
     this.save = mp;
     this.inMultiplayerSave = mp !== null;
-    diag.event('app', 'save.mpEnter', { room: roomId, opened: mp !== null });
+    diag.event('app', 'save.mpEnter', { room: roomId, seed: seed ?? null, opened: mp !== null });
   }
 
   /**
@@ -2154,7 +2249,10 @@ class App {
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
   /** 联机入口面板（联机9）：地址 / 昵称 / 连接 / 断开 / 状态，叠在暂停菜单上 */
-  private readonly multiplayerScreen: MultiplayerScreen;
+  /** 本局房间信息卡（L9）：联机中暂停菜单打开的是它，而不是"再去连一次"的面板 */
+  private readonly roomCard: RoomCard;
+
+  // 联机面板由 `boot()` 持有（L9）：主菜单也要能开它，所以不在 App 里 new
   /** 当前生效的视距（区块）；自适应会在这个值上浮动，玩家设置的是上限 */
   private viewDistance = VIEW_DISTANCE;
   /**
@@ -2362,7 +2460,20 @@ class App {
       worldType: 'default',
       difficulty: 'normal',
     },
+    /**
+     * 联机面板（L9）：由 `boot()` 创建并持有——主菜单（还没有 App）也要能打开它。
+     * App 只负责往里推进状态，不负责它的生命周期。
+     */
+    private readonly multiplayerScreen: MultiplayerScreen,
   ) {
+    /*
+     * 「本局房间」信息卡（L9）：挂在 `body` 上、与联机面板同级。
+     * 只显示信息与两个动作（复制邀请 / 断开）——真正的连接参数在面板里，卡片不重复。
+     */
+    this.roomCard = new RoomCard(document.body, {
+      onDisconnect: () => this.disconnect(),
+      onClose: () => this.roomCard.hide(),
+    });
     // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
     // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
     // 表现就是"退出重进、换世界都还是白，非得刷新页面"。每次进世界先铺一遍
@@ -2870,8 +2981,13 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
-      // 多人游戏（联机9）：暂停菜单里的入口，面板叠在暂停菜单上
+      // 多人游戏（联机9）/ 本局房间（L9）：暂停菜单里的入口
       onMultiplayer: () => this.openMultiplayer(),
+      // 联机中这颗键叫「本局房间」，没联机才叫「多人游戏」（SettingsScreen 每次打开重读）
+      multiplayerLabelKey: () =>
+        this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'
+          ? 'pause.room'
+          : 'menu.multiplayer',
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
@@ -2886,19 +3002,6 @@ class App {
 
     // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
     // 它要盖住整个视口（含触摸控件），而且主菜单阶段就可能要打开它。
-    this.multiplayerScreen = new MultiplayerScreen(document.body, {
-      onConnect: (url, name) => {
-        // 先切状态再真连：`connect()` 里会同步触发 onStatus，重复设置无害
-        this.multiplayerScreen.setState('connecting');
-        this.connect(url, name);
-      },
-      onDisconnect: () => {
-        this.disconnect();
-        this.multiplayerScreen.setState('offline');
-      },
-      onClose: () => this.multiplayerScreen.close(),
-    });
-
     // 开发期初始物资（批次 181）：**默认不再发放**。
     //
     // 用户的原话是"生存模式开局应当空手"，而创造模式本来就能从分类里随时拿，
@@ -3138,6 +3241,7 @@ class App {
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
     // 联机面板（联机9）叠在暂停菜单上，返回键先关它
     else if (this.multiplayerScreen.isOpen) this.multiplayerScreen.close();
+    else if (this.roomCard.isOpen) this.roomCard.hide();
     // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
     // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
     else if (this.settingsScreen.isOpen) {
@@ -3264,12 +3368,55 @@ class App {
   }
 
   /**
+   * 面板里点了「开房 / 加入」（L9）：面板是全局的，只有当前有世界时才走这里。
+   *
+   * 先切状态再真连：`connect()` 里会同步触发 `onStatus`，重复设置无害。
+   */
+  connectFromPanel(url: string, name: string, host: boolean): void {
+    this.multiplayerScreen.setState('connecting');
+    this.connect(url, name, host);
+  }
+
+  /**
+   * 主菜单已经把世界连上了（L9）：这里只做连接，不再要求玩家按任何按钮。
+   *
+   * 地址由 `baseUrl + 房间 + 口令` 现拼（`formatServerUrl`），昵称取面板上记住的那个。
+   */
+  connectOnline(intent: { baseUrl: string; room: string; password: string; host: boolean }): void {
+    const name = this.multiplayerScreen.readForm().name;
+    const url = formatServerUrl(intent.baseUrl, intent.room, intent.password);
+    this.multiplayerScreen.prefill({ url });
+    this.connectFromPanel(url, name, intent.host);
+  }
+
+  /** 这个 App 还活着吗（面板是全局的，点它时要确认调用方没被拆掉） */
+  get alive(): boolean {
+    return !this.disposed;
+  }
+
+  /**
    * 打开联机面板（联机9）。
    *
    * 以暂停菜单为底（`openSettings()` 负责暂停与输入接管），面板叠在上面：
    * 这样不必再给"面板打开"造一套 `uiOpen`/暂停语义。
    */
   openMultiplayer(): void {
+    /*
+     * 已经联机时，暂停菜单里那颗键不该再是"去连一次"——玩家想知道的是
+     * **我在哪个房间、谁是房主、怎么把朋友叫进来**（L9）。没联机才打开连接面板。
+     */
+    if (this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting') {
+      this.roomCard.show({
+        room: this.net.roomId === DEFAULT_MULTIPLAYER_ROOM ? '' : this.net.roomId,
+        role: this.net.role,
+        players: this.net.playerCount,
+        worldName: this.net.roomWorld?.name ?? '',
+        worldSeed: this.net.roomWorld?.seed ?? this.worldConfig.seed,
+        baseUrl: defaultServerUrl(),
+        password: this.net.roomPassword,
+      });
+      return;
+    }
     this.openSettings();
     this.multiplayerScreen.setState(this.net.sessionState);
     this.multiplayerScreen.open();
@@ -3567,21 +3714,49 @@ class App {
   ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
+    /*
+     * 房主（L8）：角色由 `welcome` 的 `isHost` 决定，在这里同步给面板。
+     *
+     * 放在种子冲突判断**之前**：即使这一局因为种子不一致要先重载世界，玩家也该先看到
+     * "我是房主还是从属"——那决定了他要不要等别人。
+     */
+    this.multiplayerScreen.setRole(this.net.role);
+    console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
+    // 排查"某一端某样东西还在自己动"时，第一句话就该是"这一端在跑什么"（SimMode 的表）
+    console.info(`[net] 模拟模式：${describeSimMode(this.net.role)}`);
+
     // 种子以服务端为准（联机5）：地形由种子纯函数重现，两边不同等于在两片大陆上玩，
     // 坐标对得上、风景对不上，方块改动还会互相错位
     this.serverSeed = Number.isFinite(seed) ? seed : null;
+    /*
+     * 联机库（联机6 / L9）：到这一刻才知道"这一局是哪个房间、哪个世界"，
+     * 所以换库放在这里——库名带种子，同房换世界不会把两片大陆的增量串在一起。
+     * 种子冲突时也照样切：这一局的所有写盘都该落在联机档里，绝不能写回单机档。
+     */
+    void this.enterMultiplayerSave(this.net.roomId, this.serverSeed ?? undefined);
     const conflict = seedConflict(seed, this.worldConfig.seed);
 
     if (conflict) {
+      /*
+       * 种子对不上（L9）：**自动断开**，不再要求玩家手敲 `/netseed reload`。
+       *
+       * 为什么不自动重建：重建只有两条路，两条都比"断开"糟——
+       *  · 删库重来：会连玩家自己在这个世界里的改动一起删（不可撤销）；
+       *  · 只换种子重开：旧 `edits` 留在库里，落到新地形上等于一堆错位的方块。
+       * 而新的入口（主菜单 → 加入房间）根本不会走到这里：世界是**先连上、拿到房主
+       * 的种子之后**才加载的。所以这里只需要把这一局停下来，并告诉玩家下一步。
+       * 文案走 i18n（`say.net.seedMismatch`），六语言里已经改成同一口径。
+       */
       const hint = tp('say.net.seedMismatch', { server: conflict.serverSeed, local: conflict.localSeed });
       console.warn(`[net] ${hint}`);
       this.netStatus = hint;
       this.chat.push(hint, 'error');
       this.chatLine = hint;
-      this.chatUntil = performance.now() + 12000;
+      this.chatUntil = performance.now() + 15000;
       this.hudToast.show(t('say.net.seedMismatchToast'));
       // ⚠️ 种子不一致时**不应用**这批 edits：两片大陆的地形不同，同一坐标是另一格，
-      // 写进去会污染本地存档。对齐之后重新 join 才拿得到真正该有的那批
+      // 写进去会污染本地存档。断开之后 `leaveMultiplayerSave()` 会把世界重载回单机地形
+      this.disconnect();
       return;
     }
 
@@ -3768,6 +3943,7 @@ class App {
    * 否则刚收到的内容会原样发回去，两端来回弹。
    */
   private onNetContainer(data: NetContainerState): void {
+    if (!this.remoteWorldWritable()) return;
     if (data.dimension !== this.dimension) return;
     // 区块还没加载：先存着（联机13 的 welcome 快照会带一批容器，那时候区块多半还没生成），
     // 等 `onChunkLoaded` 里再恢复。原来的写法是直接 return，于是"走回箱子前发现是空的"
@@ -3785,6 +3961,15 @@ class App {
     this.applyingRemoteBlock++;
     try {
       for (let i = 0; i < count; i++) container.set(i, stacks[i] ?? null);
+      /*
+       * 进度（L8 · MS4）：从属端**不推进计时**，只把房主算出来的那个百分比摆上去。
+       * 写 `cookProgress`（而不是另建一个显示字段）是为了让既有的进度条代码原样可用；
+       * 因为这边不 tick，这个值只会在下一条快照到达时被覆盖——不会自己往前跑。
+       */
+      const furnace = container as { cookProgress?: number; cookTimeTotal?: number; progress?: number };
+      if (data.progress !== undefined && typeof furnace.cookProgress === 'number' && typeof furnace.cookTimeTotal === 'number') {
+        furnace.cookProgress = data.progress * Math.max(furnace.cookTimeTotal, 0);
+      }
     } finally {
       this.applyingRemoteBlock--;
     }
@@ -3830,10 +4015,64 @@ class App {
         const slots: (ItemStack | null)[] = [];
         // 空容器也要发：队友那边得知道"东西被拿光了"，跳过它就永远是满的
         for (let i = 0; i < count; i++) slots.push(target.container.get(i));
-        this.net.sendContainer(target.x, target.y, target.z, target.dimension, serializeStacks(slots));
+        this.net.sendContainer(
+          target.x,
+          target.y,
+          target.z,
+          target.dimension,
+          serializeStacks(slots),
+          this.containerProgressOf(target.container),
+        );
       }
     }, 80);
   }
+
+  /**
+   * 读一个容器的进度（0..1）；没有进度的容器返回 `undefined`（L8 · MS4）。
+   *
+   * 熔炉/烟熏炉/高炉有 `progress` getter，酿造台目前没有——所以这里按"有没有这个数"判断，
+   * 而不是按类型列举：以后哪个容器加了进度，不用改这里。
+   */
+  private containerProgressOf(container: object): number | undefined {
+    const value = (container as { progress?: unknown }).progress;
+    return typeof value === 'number' && Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : undefined;
+  }
+
+  /**
+   * 房主每 1 秒把"正在工作的容器"的进度推一次（L8 · MS4）。
+   *
+   * 为什么单独推：内容变化才会触发 `onMutate`，而熔炉进度是**每 tick 都在变**的——
+   * 不给它一条自己的低频上行，从属端的进度条就只在"烧出一个东西"时跳一格。
+   * 复用 80ms 防抖那条队列（`containerSyncPending`），顺带把槽位也带上：
+   * 分批各自算不如一次把它们对齐。
+   */
+  private pushContainerProgress(): void {
+    const now = performance.now();
+    if (now - this.lastContainerProgressAt < 1000) return;
+    this.lastContainerProgressAt = now;
+    const { x: px, y: py, z: pz } = this.physics;
+    const rangeSq = 64 * 64;
+    this.world.containers.forEach((container, x, y, z, dimension) => {
+      if (dimension !== this.dimension) return;
+      const progress = this.containerProgressOf(container);
+      if (progress === undefined || progress <= 0) return;
+      const dx = x + 0.5 - px;
+      const dy = y + 0.5 - py;
+      const dz = z + 0.5 - pz;
+      if (dx * dx + dy * dy + dz * dz > rangeSq) return;
+      this.containerSyncPending.set(`${dimension}|${x},${y},${z}`, {
+        container: container as SyncedContainer,
+        x,
+        y,
+        z,
+        dimension,
+      });
+      this.scheduleContainerSync();
+    });
+  }
+
+  /** 上次推容器进度的时刻（1 秒一次，别把局域网刷爆） */
+  private lastContainerProgressAt = 0;
 
   private onNetLeave(id: number): void {
     // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
@@ -3980,27 +4219,153 @@ class App {
    * 记进 `world.edits` 之后，区块以后加载时 `World.onGenerated` 会 `applyTo` 叠回去；
    * 别的维度的改动同理，等玩家切过去再补。
    */
-  private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
-    const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
-    const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
-    if (action === 'drop') return;
-    this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
-    if (action === 'buffer') return;
-    // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
-    this.applyingRemoteBlock++;
-    try {
-      // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
-      this.world.setBlockAndUpdate(x, y, z, id, state);
-      // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
-      this.ensureBlockEntityAt(x, y, z, id, target);
-    } finally {
-      this.applyingRemoteBlock--;
+  /**
+   * 远端改动能不能写进本地世界（L9）。
+   *
+   * 种子对不上 = 两片大陆，服务端的 `(x,y,z)` 在这边是另一格方块。写进去**不报错**
+   * 也不掉帧，只会让人莫名其妙多出一堆方块、拆掉不该拆的东西——所以宁可一条都不写。
+   * 判定本身在 `core/net/SeedReconcile.ts`（纯函数，可离线断言）。
+   */
+  private remoteWorldWritable(): boolean {
+    return remoteWritableBySeed(this.serverSeed, this.worldConfig.seed);
+  }
+
+  /**
+   * 房主处理从属端的改动请求（L8 · MS2）。
+   *
+   * 与 `onNetBlock` 的关键差别：**不抑制回声**。远端改动通常要包一层 `applyingRemoteBlock`
+   * 免得原样发回去；但这里是"房主替别人落地"——它必须进 `BlockFunnel`，以**权威结果**
+   * 的身份广播给所有人（包括请求者本人，幂等覆盖它本地那次乐观应用）。
+   *
+   * 只有房主处理：服务端只把请求转给房主，其它端收到一律忽略（信号被伪造也不会有副作用）。
+   */
+  private applyEditRequest(from: number, payload: { t: string; blocks?: unknown; edit?: unknown }): void {
+    void from;
+    if (this.net.role !== 'host') return;
+    // 与 `onNetBlock` 同一道守卫：种子对不上时远端坐标在这边是另一格
+    if (!this.remoteWorldWritable()) return;
+    /*
+     * 容器 / 牌子 / 展示框 / TNT 的请求（L8 · MS4 收尾）：从属端也只发"请求"，
+     * 由房主落地后再作为权威结果广播。四类的落地方式各不相同：
+     *  · 容器：写槽位会触发 `onMutate`，广播走既有的 80ms 防抖队列（**不抑制回声**）；
+     *  · 牌子 / 展示框 / TNT：本地写入不会自动广播，所以落地后**显式重发**一条。
+     */
+    const raw = payload as {
+      t: string;
+      x?: unknown;
+      y?: unknown;
+      z?: unknown;
+      dimension?: unknown;
+      slots?: unknown;
+      lines?: unknown;
+      item?: unknown;
+      rotation?: unknown;
+    };
+    const at = {
+      x: Math.trunc(Number(raw.x)),
+      y: Math.trunc(Number(raw.y)),
+      z: Math.trunc(Number(raw.z)),
+      dimension: (isDimension(String(raw.dimension)) ? String(raw.dimension) : this.dimension) as DimensionId,
+    };
+    if (raw.t === 'container') {
+      if (at.dimension !== this.dimension) return;
+      if (!this.world.isLoaded(at.x, at.z)) return;
+      const container = this.containerOfBlockAt(at.x, at.y, at.z);
+      if (!container) return;
+      const count = SLOT_COUNTS[kindOf(container)];
+      const stacks = restoreStacks(raw.slots, count);
+      // ⚠️ 不包 `applyingRemoteBlock`：这次写入要触发 `onMutate`，把结果广播给所有人
+      for (let i = 0; i < count; i++) container.set(i, stacks[i] ?? null);
+      return;
+    }
+    if (raw.t === 'sign') {
+      const lines = Array.isArray(raw.lines) ? raw.lines.map((line) => String(line)) : [];
+      this.applyRemoteSign({ ...at, lines });
+      this.net.sendSign(at.x, at.y, at.z, at.dimension, lines);
+      return;
+    }
+    if (raw.t === 'frame') {
+      const item = raw.item && typeof raw.item === 'object' ? (raw.item as { id: number; count: number }) : null;
+      const rotation = Math.trunc(Number(raw.rotation ?? 0));
+      this.applyRemoteFrame({ ...at, item, rotation });
+      this.net.sendFrame(at.x, at.y, at.z, at.dimension, item, rotation);
+      return;
+    }
+    if (raw.t === 'tnt') {
+      this.onNetTnt({ x: at.x, y: at.y, z: at.z, dimension: at.dimension } as NetTntState);
+      this.net.sendTnt(at.x, at.y, at.z, at.dimension);
+      return;
+    }
+
+    for (const edit of readEditRequest(payload)) {
+      const target: DimensionId = isDimension(edit.dimension) ? edit.dimension : this.dimension;
+      const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(edit.x, edit.z), edit.y);
+      if (action === 'drop') continue;
+      // 先记增量（区块没加载也要留下），再写世界——写世界这次**会**触发广播
+      this.world.edits.record(
+        target,
+        toChunkCoord(edit.x),
+        toChunkCoord(edit.z),
+        Chunk.index(edit.x & 15, edit.y, edit.z & 15),
+        edit.id,
+        edit.state,
+      );
+      if (action === 'buffer') continue;
+      this.world.setBlockAndUpdate(edit.x, edit.y, edit.z, edit.id, edit.state);
+      this.ensureBlockEntityAt(edit.x, edit.y, edit.z, edit.id, target);
     }
   }
 
-  /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
-  connect(url = defaultServerUrl(), name = '玩家'): string {
-    this.net.connect(url, name);
+  private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
+    // 种子对不上时远端坐标在这边是另一格（L9）：一条都不许写，否则是静默污染
+    if (!this.remoteWorldWritable()) return;
+    const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
+    const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
+    /*
+     * 落地顺序（"先记增量、再写世界"）由 `applyRemoteBlock` 统一保证（L8·MS2）——
+     * 以前这两步直接写在这里，谁改一下顺序都不会有测试红。
+     */
+    applyRemoteBlock(action, { x, y, z, id, state, dimension: target }, {
+      record: () => {
+        this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
+      },
+      apply: () => {
+        // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
+        this.applyingRemoteBlock++;
+        try {
+          // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
+          this.world.setBlockAndUpdate(x, y, z, id, state);
+          // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
+          this.ensureBlockEntityAt(x, y, z, id, target);
+        } finally {
+          this.applyingRemoteBlock--;
+        }
+      },
+    });
+  }
+
+  /**
+   * 连接服务器（也可以在控制台直接调：`mc.connect('ws://192.168.1.5:8787', '小明')`）。
+   *
+   * `host`（L8）：true = 开房（我跑模拟），false = 加入别人的房（只渲染）。
+   * 默认 false——控制台手敲 `mc.connect(...)` 的人多半是"连上去看看"，不该顺手占住房主位。
+   */
+  connect(url = defaultServerUrl(), name = '玩家', host = false): string {
+    /*
+     * 开房时把"这一局用哪个世界"一起报上去（L9）：种子决定队友那边的地形。
+     * 加入的人**不带**——房间的世界由房主定，带了服务端也不看（免得两边各以为是）。
+     */
+    const world = host
+      ? {
+          name: this.worldConfig.name,
+          seed: this.worldConfig.seed,
+          mode: this.gameMode,
+          difficulty: this.worldConfig.difficulty,
+          // 超平坦/放大化也决定地形：只对齐种子不够（L9）
+          worldType: this.worldConfig.worldType,
+        }
+      : undefined;
+    this.net.connect(url, name, host, world);
     return this.netStatus;
   }
 
@@ -8430,8 +8795,12 @@ class App {
       // 批次 471：玩家近战是"被打"，会让它记仇/惊动同类
       { kind: 'player' },
     );
-    // 联机19：把"我打了哪只、打掉多少"告诉队友。发的是**类型 + 坐标**而不是 id——
-    // 两端生物各自生成，没有可匹配的 id；对方按邻域找自己世界里那只同类怪
+    /*
+     * 联机19 + MS3 收尾：把"我打了哪只、打掉多少"告诉队友。
+     *
+     * 现在优先发**全局键**（`netKey`）——两只同类怪挨在一起时，"同类型 + 最近"会打错人。
+     * 键可能为空（单机、或这一只还没被房主分配），那时接收方退回老口径（类型 + 邻域）。
+     */
     if (applied && this.net.sessionState === 'connected') {
       this.net.sendMobHit(
         mob.type.id,
@@ -8442,6 +8811,7 @@ class App {
         damage,
         // 火焰附带的秒数也带上：队友那边要跟着着火（判据与下面 ignite 一致）
         fireAspect > 0 ? 4 * fireAspect : 0,
+        mob.netKey,
       );
     }
     // 被蛰（J21，批次 407）：打了蜜蜂就中毒，而且**一只蜜蜂只蜇一次**。
@@ -9205,6 +9575,7 @@ class App {
 
   /** 队友写了/擦了牌子上的字（联机16）：进表，当前维度立刻重画 */
   private applyRemoteSign(sign: NetSignState): void {
+    if (!this.remoteWorldWritable()) return;
     this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
     if (sign.dimension === this.dimension) this.syncSigns();
   }
@@ -9310,10 +9681,18 @@ class App {
    */
   private onNetMobHit(hit: NetMobHit): void {
     if (hit.dimension !== this.dimension) return;
-    const candidates: { mob: Mob; typeId: string; x: number; y: number; z: number }[] = [];
+    const candidates: { mob: Mob; typeId: string; x: number; y: number; z: number; key?: string }[] = [];
     for (const entity of this.entities.all) {
       if (!(entity instanceof Mob) || entity.dead) continue;
-      candidates.push({ mob: entity, typeId: entity.type.id, x: entity.x, y: entity.y, z: entity.z });
+      // 影子实体身上带着房主分配的全局键（L8 · MS3）：有键就按身份认那只怪
+      candidates.push({
+        mob: entity,
+        typeId: entity.type.id,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        ...(entity.netKey.length > 0 ? { key: entity.netKey } : {}),
+      });
     }
     const match = findMobMatch(candidates, hit);
     if (!match) return;
@@ -9323,6 +9702,7 @@ class App {
 
   /** 队友往展示框里放了/取了东西（联机16）：空框 = 从表里删掉 */
   private applyRemoteFrame(frame: NetFrameState): void {
+    if (!this.remoteWorldWritable()) return;
     if (frame.item) this.itemFrames.set(frame.dimension, frame.x, frame.y, frame.z, frame.item, frame.rotation);
     else this.itemFrames.remove(frame.dimension, frame.x, frame.y, frame.z);
     if (frame.dimension === this.dimension) this.syncFrames();
@@ -11402,7 +11782,11 @@ class App {
       // 敌对上限随难度缩放（批次 499）：和平 0 / 简单 12 / 普通 24 / 困难 36
       hostileLimit: difficulty.hostileSpawning ? hostileLimitFor(difficulty.spawnCap) : 0,
     };
-    this.mobSpawner.update(dt, ctx);
+    /*
+     * 刷怪只在"该跑模拟"的那一端（L8 · MS3）：从属端刷出来的怪会和房主那边的撞在一起，
+     * 变成两套各走各的 AI（这就是"两个人看到同一只僵尸在不同位置"的根源）。
+     */
+    if (shouldSimulate(this.net.role, 'mobs')) this.mobSpawner.update(dt, ctx);
   }
 
   /**
@@ -11674,6 +12058,98 @@ class App {
   }
 
   /** 推进所有实体并同步到渲染层 */
+  /**
+   * 把影子实体摆到"这一帧该在的位置"（L8 · MS3）。
+   *
+   * 只更新位置/朝向/血量/状态：AI、寻路、掉落、经验都不在这边跑——那些是房主的活。
+   * 影子消失（宽限期过）时不直接 `dead = true` 吗？这里就是：让 `EntityManager` 下一帧
+   * 顺手把它清掉，省得自己维护一处"从表里删"的逻辑。
+   */
+  private pushEntitySnapshots(): void {
+    const now = performance.now();
+    const entities: SimEntity[] = [];
+    const currentKeys = new Set<string>();
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      if (entity.dead) continue;
+      const key = assignMobKey(entity, this.net.selfId);
+      if (key.length === 0) continue;
+      currentKeys.add(key);
+      entities.push({
+        key,
+        type: entity.type.id,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        yaw: entity.yaw,
+        health: entity.health,
+        flags:
+          (entity.baby ? ENTITY_FLAGS.baby : 0) |
+          (entity.burning ? ENTITY_FLAGS.onFire : 0) |
+          (entity.hitFlash > 0 ? ENTITY_FLAGS.hurt : 0) |
+          (entity.tamed ? ENTITY_FLAGS.tamed : 0),
+        dimension: this.dimension,
+      });
+    }
+
+    // 死亡：上一帧有、这一帧没了 → 立刻点名（不等快照那 300ms 宽限）
+    const gone = [...this.lastMobKeys].filter((key) => !currentKeys.has(key));
+    this.lastMobKeys = currentKeys;
+    if (gone.length > 0) this.net.sendEntityRemove(gone);
+
+    if (now - this.lastEntitySnapAt < ENTITY_SNAPSHOT_INTERVAL_MS) return;
+    this.lastEntitySnapAt = now;
+    const wire = encodeEntitySnapshots(entities, {
+      x: this.physics.x,
+      z: this.physics.z,
+      dimension: this.dimension,
+    });
+    if (wire.length > 0) this.net.sendEntitySnapshot(wire);
+  }
+
+  private syncShadowMobs(dt: number): void {
+    const states = this.simApply.step(dt);
+    const alive = new Set<string>();
+    for (const state of states) {
+      alive.add(state.key);
+      const mob = this.acquireShadowMob(state);
+      if (!mob) continue;
+      mob.x = state.x;
+      mob.y = state.y;
+      mob.z = state.z;
+      mob.yaw = state.yaw;
+      mob.health = state.health;
+      mob.baby = hasFlag(state.flags, ENTITY_FLAGS.baby);
+      if (hasFlag(state.flags, ENTITY_FLAGS.onFire)) mob.ignite(1);
+      mob.hitFlash = hasFlag(state.flags, ENTITY_FLAGS.hurt) ? Math.max(mob.hitFlash, 0.2) : mob.hitFlash;
+    }
+    for (const [key, mob] of this.shadowMobs) {
+      if (alive.has(key)) continue;
+      mob.dead = true;
+      this.shadowMobs.delete(key);
+    }
+  }
+
+  /** 取（或建）一只影子 `Mob`；类型不认识就返回 null（那只怪不画，比画错强） */
+  private acquireShadowMob(state: ShadowRenderState): Mob | null {
+    const existing = this.shadowMobs.get(state.key);
+    if (existing) return existing;
+    const type = mobTypeById(state.type);
+    if (!type) return null;
+    const mob = createMob(type, state.x, state.y, state.z);
+    mob.netKey = state.key;
+    this.entities.spawn(mob);
+    this.shadowMobs.set(state.key, mob);
+    return mob;
+  }
+
+  /** 退联机 / 种子冲突时把影子全撤了（否则会留下一群不动的怪） */
+  private clearShadowMobs(): void {
+    for (const mob of this.shadowMobs.values()) mob.dead = true;
+    this.shadowMobs.clear();
+    this.simApply.clear();
+  }
+
   private updateEntities(dt: number): void {
     const context: EntityContext = {
       world: this.world,
@@ -11875,7 +12351,19 @@ class App {
     this.fallingBlocks.tick(this.world, dt);
     // 潮涌核心（批次 547）：框架校验与潮涌能量续期
     this.tickConduits(dt);
-    this.entities.update(context, dt);
+    /*
+     * 实体推进：从属端**跳过生物**（房主算完推快照，这边只画影子实体），
+     * 但箭/掉落物/经验球这些各端自跑的实体照旧（它们的位置不靠快照）。
+     */
+    this.entities.update(
+      context,
+      dt,
+      shouldSimulate(this.net.role, 'mobs') ? undefined : (entity) => !(entity instanceof Mob),
+    );
+    // 从属端：把影子摆到插值后的位置上（不跑 AI，位置完全由快照驱动）
+    if (!shouldSimulate(this.net.role, 'mobs')) this.syncShadowMobs(dt);
+    // 房主：推快照 + 报死亡（世界由它算，队友那边只收结果）
+    else this.pushEntitySnapshots();
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
     if (this.witherWasAlive && !witherAlive) {
@@ -15827,7 +16315,12 @@ class App {
       this.stats.tick(this.survivalEnvironment());
       this.tickPortal();
       this.tickEndPortal();
-      this.tickWorldBlocks(TICK_SECONDS);
+      /*
+       * 方块模拟（L8 · MS2）：**只由该跑模拟的那一端推进**（`SimMode` 是唯一入口）。
+       * 从属端一旦也跑，红石/流体/作物就是两端各算一遍——靠广播收敛，极端情况会
+       * 短暂不一致，而且不报错。单机与房主照旧（`solo` / `host` 都是 true）。
+       */
+      if (shouldSimulate(this.net.role, 'blocks')) this.tickWorldBlocks(TICK_SECONDS);
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
     }
@@ -16754,7 +17247,7 @@ class App {
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
-      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
+      ? `${shortId(blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name)} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
       : t('hud.none');
 
     const armorPoints = this.stats.armorPoints;
@@ -17368,7 +17861,15 @@ class App {
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
-      this.tickContainers(dt);
+      /*
+       * 容器计时（L8 · MS4）：熔炉燃烧/进度、酿造、漏斗冷却只由房主推进。
+       * 从属端一旦也 tick，进度条就是各走各的（差几秒，而且不报错）。
+       */
+      if (shouldSimulate(this.net.role, 'containers')) {
+        this.tickContainers(dt);
+        // 进度另走一条 1 秒一次的低频上行（内容不变时 `onMutate` 不会触发）
+        this.pushContainerProgress();
+      }
       this.updateEntities(dt);
       mark = this.lap('ent', mark);
       this.updateParticles(dt);
@@ -17477,6 +17978,8 @@ class App {
       this.pauseAfterFullscreenTimer = null;
     }
     document.body.classList.remove('pause-open');
+    // 房间卡是全局 DOM（挂 body）：这一局拆掉时也要收起来，否则回到主菜单还压着一层
+    this.roomCard.hide();
     this.wasHidden = false;
     // 批次 303：冻结标记跟着这一局一起清掉，下一局从"运行中"开始
     this.backgroundPaused = false;
@@ -18613,7 +19116,7 @@ class App {
    * 按名字取可以避免这类笔误，也让方块 id 变动时脚本不用跟着改。
    */
   blockId(name: string): number {
-    const full = name.includes(':') ? name : `minecraft:${name}`;
+    const full = normalizeId(name);
     return BLOCKS.findIndex((def) => def.name === full);
   }
 
@@ -18753,6 +19256,48 @@ async function boot(): Promise<void> {
     }
   };
 
+  /**
+   * 当前局内的 App（L9）。联机面板是**全局**的（由这里创建），主菜单与局内都要能开它，
+   * 所以面板的动作先看"现在有没有活着的 App"，再决定交给谁办。
+   */
+  let currentApp: App | null = null;
+
+  /**
+   * 主菜单"加入房间"探完房之后、世界还没加载完之前，把连接意图暂存在这里。
+   * 世界一就绪就立刻连上（`connectOnline`），玩家不需要再按任何按钮。
+   */
+  let pendingOnline: { baseUrl: string; room: string; password: string; host: boolean } | null = null;
+
+  /**
+   * 从主菜单加入别人的房（L9）：**先探房，再按房主的世界加载**。
+   *
+   * 这是"多人不再是游戏内设置"的最后一块：加入方不选世界，地形由房主的那个世界决定，
+   * 所以必须先连一次问出种子/世界类型，再用它 `startWorld`。探不到就留在主菜单给一句话，
+   * 绝不让玩家先进一个错的世界再断开。
+   */
+  const joinRoomFromMenu = async (url: string, name: string, host: boolean): Promise<void> => {
+    if (host) {
+      // 开房要指定"用哪个世界"，那件事只发生在世界卡片的「开房」上
+      multiplayerUi.setState('offline', t('mp.hostFromWorld'));
+      return;
+    }
+    const parsed = parseServerUrl(url);
+    multiplayerUi.setState('connecting', t('mp.probing'));
+    const probe = await probeRoom({
+      baseUrl: parsed.url,
+      room: parsed.room,
+      password: parsed.password,
+      name,
+    });
+    if (!probe || !probe.world) {
+      multiplayerUi.setState('offline', t('mp.probeFailed'));
+      return;
+    }
+    pendingOnline = { baseUrl: parsed.url, room: parsed.room, password: parsed.password, host: false };
+    multiplayerUi.close();
+    await startWorld(summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now()));
+  };
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     diag.event('app', 'world.enter', {
@@ -18778,16 +19323,25 @@ async function boot(): Promise<void> {
     registry.update(world.id, { lastPlayed: Date.now() });
     let app: App;
     try {
-      app = new App(container, debugEl, atlas, vitalsEl, deathEl, save, {
-        id: world.id,
-        name: world.name,
-        seed: world.seed,
-        worldType: world.worldType,
-        difficulty: world.difficulty,
-        gameMode: world.gameMode,
-        ...(world.hardcore ? { hardcore: true } : {}),
-        ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
-      });
+      app = new App(
+        container,
+        debugEl,
+        atlas,
+        vitalsEl,
+        deathEl,
+        save,
+        {
+          id: world.id,
+          name: world.name,
+          seed: world.seed,
+          worldType: world.worldType,
+          difficulty: world.difficulty,
+          gameMode: world.gameMode,
+          ...(world.hardcore ? { hardcore: true } : {}),
+          ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
+        },
+        multiplayerUi,
+      );
     } catch (error) {
       // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：
       // 走同一块界面，别把白屏留给玩家（A10，批次 85）
@@ -18801,10 +19355,29 @@ async function boot(): Promise<void> {
       throw error;
     }
     startupTrace.mark(STARTUP_PHASES.worldConstructed);
-    // 主菜单点"多人游戏"进来的：进世界之后自动弹出联机面板（联机9）
-    if (pendingMultiplayer) {
-      pendingMultiplayer = false;
-      app.openMultiplayer();
+    /*
+     * 从这里开始，这一局有一个活着的 App 了（面板的动作要按它分派）。
+     */
+    currentApp = app;
+    /*
+     * 世界卡片点「开房」（L9）：房间名与口令已经收好，世界也已经按它的种子建好，
+     * 直接连上——不再要求玩家在面板里再按一次「开房」。
+     */
+    if (pendingHostRoom) {
+      const intent = pendingHostRoom;
+      pendingHostRoom = null;
+      app.connectOnline({
+        baseUrl: defaultServerUrl(),
+        room: intent.room,
+        password: intent.password,
+        host: true,
+      });
+    }
+    // 主菜单「加入房间」探完房进来的：世界就是房主那个，直接连
+    if (pendingOnline) {
+      const intent = pendingOnline;
+      pendingOnline = null;
+      app.connectOnline(intent);
     }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
@@ -18816,6 +19389,8 @@ async function boot(): Promise<void> {
     // 应用内退出（批次 181）：App 拆完自己之后把菜单拉回来。
     // ⚠️ 这里**不碰全屏**——全屏是页面级的，退出世界不该把它一起退掉。
     app.onExitToMenu = () => {
+      // 局内 App 已经拆掉：面板的动作不能再派发给它（否则点了没反应/报错）
+      currentApp = null;
       hideLoading();
       // 局内实例已经拆掉：调试入口也要跟着清掉，否则自动化会对着一个死对象操作
       (window as unknown as { __mc?: App }).__mc = undefined;
@@ -19008,7 +19583,32 @@ async function boot(): Promise<void> {
    * 联机是在**某个世界里**连的（种子要对齐、存档要按房间隔离），没有独立大厅，
    * 所以这个按钮的作用是"把世界列表翻出来"，选完世界再弹地址栏。
    */
-  let pendingMultiplayer = false;
+  /**
+   * 从世界卡片「开房」（L9）：房间名与口令先记着，进世界之后填进联机面板。
+   * 只放一个意图、不复制世界对象——世界由 `startWorld` 那份说了算。
+   */
+  let pendingHostRoom: { room: string; password: string } | null = null;
+
+  /*
+   * 联机面板（L9）：**全局一份**，挂在 `document.body` 上。
+   *
+   * 以前它由 `App` 创建，于是"只有进了世界才有面板"——这正是"开房要先进入再按 Esc"
+   * 的根源。挪到这里之后，主菜单点「加入房间…」就能直接开会话。
+   */
+  const multiplayerUi = new MultiplayerScreen(document.body, {
+    onConnect: (url, name, host) => {
+      if (currentApp && currentApp.alive) {
+        currentApp.connectFromPanel(url, name, host);
+        return;
+      }
+      void joinRoomFromMenu(url, name, host);
+    },
+    onDisconnect: () => {
+      currentApp?.disconnect();
+      multiplayerUi.setState('offline');
+    },
+    onClose: () => multiplayerUi.close(),
+  });
 
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
@@ -19018,9 +19618,22 @@ async function boot(): Promise<void> {
     onExport: (world) => exportWorld(world),
     onImport: () => importWorld(),
     onMiniGames: openMiniGames,
+    /*
+     * 「加入房间…」（L9）：**直接开面板**，不必先选一个世界。
+     * 面板是全局的（见上面 `multiplayerUi`），地址/房间填好之后走"先探房再进世界"。
+     */
     onMultiplayer: () => {
-      pendingMultiplayer = true;
-      menu.showView('worlds');
+      multiplayerUi.setState('idle');
+      // 主菜单只有"加入"这一件事：开房在世界卡片的「开房」上（L9 方案 A）
+      multiplayerUi.open('join');
+    },
+    /*
+     * 卡片上的「开房」（L9）：这个世界就是这一局的房间。
+     * 进世界之后面板会带着房间名/口令打开，玩家按一下「开房」即可。
+     */
+    onHostWorld: (world, room, password) => {
+      pendingHostRoom = { room, password };
+      void startWorld(world);
     },
   });
 

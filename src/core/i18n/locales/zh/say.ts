@@ -77,8 +77,8 @@ export const say = {
   'say.fishing.enchantedBook': '（附魔书）',
   'say.phantom': '你已经连着 {days} 天没合眼了……天上有东西在叫。',
   'say.disconnect.soloReloaded': '已断开联机：世界已重载回单机存档',
-  'say.net.seedMismatch': '联机种子不一致：服务端 {server} · 本地 {local}。输入 /netseed reload 用服务端种子重载本世界，/netseed new 新建同种子世界',
-  'say.net.seedMismatchToast': '种子不一致：/netseed reload 或 /netseed new',
+  'say.net.seedMismatch': '房间的世界种子是 {server}，本世界是 {local}——两片大陆上继续玩只会把方块写到错的位置，已断开联机。请回主菜单 →「加入房间…」，那边会按房主的世界开一局',
+  'say.net.seedMismatchToast': '种子不同：已断开，请从主菜单「加入房间」进',
 
   // ---- 世界事件、进度与天气（T3）
   'say.progress.reconciled': '对了一次背包：已达成 {count} 条进度（详情按 J 看）',

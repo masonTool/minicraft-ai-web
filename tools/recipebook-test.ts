@@ -87,7 +87,7 @@ console.log('\n[物品中文名]');
   check('草方块', blockLabel(Block.GRASS_BLOCK) === '草方块', blockLabel(Block.GRASS_BLOCK));
   check('石头', blockLabel(Block.STONE) === '石头');
   check('空气', blockLabel(0) === '空气');
-  check('橙色羊毛（规则生成）', translateName('minecraft:orange_wool') === '橙色羊毛', translateName('orange_wool'));
+  check('橙色羊毛（规则生成）', translateName('minicraft:orange_wool') === '橙色羊毛', translateName('orange_wool'));
   check('淡蓝色混凝土（规则生成）', translateName('light_blue_concrete') === '淡蓝色混凝土');
   check('淡灰色染色玻璃板（规则生成）', translateName('light_gray_stained_glass_pane') === '淡灰色染色玻璃板');
   check('黄绿色染料（规则生成）', translateName('lime_dye') === '黄绿色染料');
@@ -99,7 +99,7 @@ console.log('\n[物品中文名]');
   check('深层钻石矿石（矿石规则）', translateName('deepslate_diamond_ore') === '深层钻石矿石');
   check('红石元件（单独小表）', translateName('repeater') === '红石中继器' && translateName('sticky_piston') === '黏性活塞');
   check('查不到时回退成英文 id', translateName('some_unknown_block') === 'some_unknown_block');
-  check('带命名空间也能查', translateName('minecraft:diamond') === '钻石');
+  check('带命名空间也能查', translateName('minicraft:diamond') === '钻石');
   check('物品名与方块名同源', itemLabel(Block.GRASS_BLOCK) === '草方块' && itemLabel(Item.DIAMOND) === '钻石');
 }
 
@@ -120,7 +120,7 @@ console.log('\n[物品说明]');
 
   const tooltip = itemTooltip(Item.COAL, 12);
   check('提示框：标题是中文名', tooltip.title === '煤炭', tooltip.title);
-  check('提示框：副标题是英文 id', tooltip.subtitle === 'minecraft:coal', tooltip.subtitle);
+  check('提示框：副标题是英文 id', tooltip.subtitle === 'minicraft:coal', tooltip.subtitle);
   check('提示框：带数量', tooltip.count === 12 && tooltip.maxStack === 64);
   check('提示框：专门写过说明时不再重复显示类别行', tooltip.showMeta === false);
 

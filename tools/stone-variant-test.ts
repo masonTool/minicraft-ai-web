@@ -48,12 +48,12 @@ import { terracottaId } from '../src/core/registry/blocks.ts';
 
 /** 荒地色带允许出现的方块名（与 `SurfaceRules.BADLANDS_BANDS` 的注释一一对应） */
 const BADLANDS_BAND_NAMES: ReadonlySet<string> = new Set([
-  'minecraft:terracotta',
-  'minecraft:orange_terracotta',
-  'minecraft:yellow_terracotta',
-  'minecraft:light_gray_terracotta',
-  'minecraft:brown_terracotta',
-  'minecraft:magenta_terracotta',
+  'minicraft:terracotta',
+  'minicraft:orange_terracotta',
+  'minicraft:yellow_terracotta',
+  'minicraft:light_gray_terracotta',
+  'minicraft:brown_terracotta',
+  'minicraft:magenta_terracotta',
 ]);
 
 let passed = 0;
@@ -109,7 +109,7 @@ console.log('\n[表：26 个母方块 / 59 个变体]');
 
   // 母方块名对得上（表里只能写数字 id，这一条专门防"数字抄错")
   for (const [parent, name] of STONE_VARIANT_PARENTS) {
-    equal(`${name} 的母方块 id 指向自己`, blockDef(parent).name, `minecraft:${name}`);
+    equal(`${name} 的母方块 id 指向自己`, blockDef(parent).name, `minicraft:${name}`);
   }
 
   /**
@@ -379,7 +379,7 @@ console.log('\n[第二批母方块：石英家族 / 深板岩瓦 / 红色下界�
 
   check('6 个母方块的 id 从 404 连续排下来', newParents.every(([id], i) => id === MORE_STONE_ID_START + i));
   check('都注册进了方块表', newParents.every(([id]) => BLOCKS[id]?.id === id));
-  check('注册名正确', newParents.every(([id, name]) => blockDef(id).name === `minecraft:${name}`));
+  check('注册名正确', newParents.every(([id, name]) => blockDef(id).name === `minicraft:${name}`));
   check('中文名正确', newParents.every(([id, , cn]) => itemLabel(id) === cn));
   check('都在创造物品栏里且归"建筑"', newParents.every(([id]) => CREATIVE_ITEMS.includes(id) && categoryOf(id) === 'building'));
   check('都要镐', newParents.every(([id]) => harvestRequirement(id)?.tool === 'pickaxe'));
@@ -558,10 +558,10 @@ console.log('\n[红沙与红砂岩（批次 45）：原料链闭合]');
     '色带就是原版那几种颜色（橙/黄/原色/浅灰/棕/品红）',
     bandNames.size > 0 &&
       [...bandNames].every((name) => BADLANDS_BAND_NAMES.has(name)) &&
-      bandNames.has('minecraft:orange_terracotta'),
+      bandNames.has('minicraft:orange_terracotta'),
     [...bandNames].join(','),
   );
-  check('`terracottaId(1)` 是橙色陶瓦（0-based 颜色下标，原色不在里面）', blockDef(terracottaId(1)).name === 'minecraft:orange_terracotta');
+  check('`terracottaId(1)` 是橙色陶瓦（0-based 颜色下标，原色不在里面）', blockDef(terracottaId(1)).name === 'minicraft:orange_terracotta');
   // 别的群系不受影响
   equal('沙漠地表仍是沙子', columnSurface(BIOME_TABLE[Biome.DESERT]!, 70, 63, 12, 34).surface, Block.SAND);
 }

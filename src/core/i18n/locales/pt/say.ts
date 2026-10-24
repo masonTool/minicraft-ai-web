@@ -72,8 +72,8 @@ export const say = {
   'say.fishing.enchantedBook': ' (livro encantado)',
   'say.phantom': 'Você não dorme há {days} dias… algo está gritando no céu.',
   'say.disconnect.soloReloaded': 'Desconectado: o mundo foi recarregado do save single-player',
-  'say.net.seedMismatch': 'Sementes diferentes: servidor {server} · local {local}. Digite /netseed reload para recarregar este mundo com a seed do servidor, ou /netseed new para criar um mundo com a mesma seed',
-  'say.net.seedMismatchToast': 'Sementes diferentes: /netseed reload ou /netseed new',
+  'say.net.seedMismatch': 'Sementes diferentes: a sala usa {server}, seu mundo usa {local} — continuar em dois mundos gravaria blocos nos lugares errados, então a conexão foi encerrada. Volte ao menu → “Entrar em uma sala”',
+  'say.net.seedMismatchToast': 'Sementes diferentes: desconectado — entre pelo menu',
 
   // ---- Eventos do mundo, progresso e clima (T3)
   'say.progress.reconciled': 'Inventário conferido: {count} conquistas obtidas (detalhes com J)',

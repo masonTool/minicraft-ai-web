@@ -88,3 +88,37 @@ describe('NetSession', () => {
     expect(session.opened()).toBe('connected');
   });
 });
+
+/*
+ * 房间被关掉（L8 · MS4）：房主退出、服务端主动结束一局。
+ *
+ * 这条与"致命协议错误"分开表达——重连不会变好，而且客户端每 3 秒撞一次只会把日志刷满。
+ * 状态必须停在 `offline` 且返回 `stop`（别再排重连）。
+ */
+describe('NetSession · 房间已关闭', () => {
+  it('connected 时收到 roomClosed → offline / stop', () => {
+    const session = new NetSession();
+    session.connect();
+    session.opened();
+    expect(session.closed({ roomClosed: true })).toBe('stop');
+    expect(session.state).toBe('offline');
+  });
+
+  it('重连途中也会停（不因为不是 connected 就继续重试）', () => {
+    const session = new NetSession();
+    session.connect();
+    session.opened();
+    session.closed();
+    expect(session.state).toBe('reconnecting');
+    expect(session.closed({ roomClosed: true })).toBe('stop');
+    expect(session.state).toBe('offline');
+  });
+
+  it('之后显式 connect 还能重新开始（同一份实例不粘住）', () => {
+    const session = new NetSession();
+    session.connect();
+    session.opened();
+    session.closed({ roomClosed: true });
+    expect(session.connect()).toBe('connecting');
+  });
+});

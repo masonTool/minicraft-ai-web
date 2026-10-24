@@ -17,7 +17,7 @@ P9 支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev         # 开发服务器 http://localhost:5173
 npm run typecheck   # 类型检查
-npm test            # 先过 tools 的类型检查，再跑 vitest + 177 套自建离线测试（含可达性审计）
+npm test            # 先过 tools 的类型检查，再跑 vitest + 179 套自建离线测试（含可达性审计）
 npm run check       # 提交前门禁：`typecheck` + `test` + 三张台账，任一失败即非零退出
 npm run check:fast  # 改代码时的内循环：只跑被本次改动命中的那几套离线测试
 npm run build       # 生产构建（`npm run build:fast` 是关掉 sourcemap 的快版本）
@@ -26,7 +26,7 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 ```
 
 > 用 AI 推进这个仓库时，先读 [`AGENTS.md`](./AGENTS.md)（会话入口 + 该展开哪些文档的索引）。
-> 177 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
+> 179 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
 > 单套仍可直接 `npm run test:reach` 这样跑。
 
 操作：`W/A/S/D` 移动 · `Space` 跳跃/上升 · `Shift` 潜行/下降 · `Ctrl` 疾跑 ·
@@ -125,3 +125,8 @@ tests/            vitest 用例（光照、生成、碰撞、资源包）
 
 本项目为学习/研究用途，与 Mojang / Microsoft 无关联。
 `minecraft` 及相关名称、素材版权归 Mojang Studios 所有。
+
+- 授权范围（保留所有权利）见 [`LICENSE`](./LICENSE)；
+- 分发的第三方库（three.js / ws，均 MIT）见 [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)，
+  构建产物里另有一份纯文本副本 `third-party-notices.txt`；
+- 隐私政策（上架应用商店用）见 [`public/privacy.html`](./public/privacy.html)。

@@ -25,6 +25,7 @@
  */
 
 import type { EffectId } from '../survival/StatusEffects.ts';
+import { shortId } from './ids.ts';
 
 /** 吃完附加的效果 */
 export interface FoodEffect {
@@ -104,7 +105,7 @@ export function eatSecondsFor(fast: boolean): number {
 }
 
 /**
- * 食物数值表，键是注册名去掉 `minecraft:` 前缀。
+ * 食物数值表，键是注册名去掉 `minicraft:` 前缀。
  * 数值取自原版 1.18 的 `Items.java`（食品那一段）。
  */
 export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
@@ -222,9 +223,9 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
   cooked_salmon: { hunger: 6, saturationModifier: 0.8 },
 };
 
-/** 取某个注册名（可带 `minecraft:` 前缀）的食物数值 */
+/** 取某个注册名（可带 `minicraft:` 前缀）的食物数值 */
 export function foodForName(name: string): FoodInfo | undefined {
-  return FOOD_TABLE[name.replace('minecraft:', '')];
+  return FOOD_TABLE[shortId(name)];
 }
 
 /** 这件物品能吃吗（饥饿满时还要看 `alwaysEdible`） */

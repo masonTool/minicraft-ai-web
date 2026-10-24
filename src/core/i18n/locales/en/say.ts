@@ -72,8 +72,8 @@ export const say = {
   'say.fishing.enchantedBook': ' (enchanted book)',
   'say.phantom': 'You have not slept for {days} days… something is screeching overhead.',
   'say.disconnect.soloReloaded': 'Disconnected: the world was reloaded from the single-player save',
-  'say.net.seedMismatch': 'Seed mismatch: server {server} · local {local}. Type /netseed reload to reload this world with the server seed, or /netseed new to create a world with the same seed',
-  'say.net.seedMismatchToast': 'Seed mismatch: /netseed reload or /netseed new',
+  'say.net.seedMismatch': 'Seed mismatch: the room uses {server}, your world uses {local} — playing on two worlds would write blocks in the wrong places, so multiplayer was disconnected. Back to the main menu → “Join a room” to load the host’s world',
+  'say.net.seedMismatchToast': 'Seed mismatch: disconnected — join again from the main menu',
 
   // ---- World events, progress and weather (T3)
   'say.progress.reconciled': 'Inventory checked: {count} advancements earned (press J for details)',

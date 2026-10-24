@@ -43,18 +43,18 @@
   );
 
   // 方块：三种 + 挖掉的空气 + 带状态的拉杆
-  check('redstone block survived reload', mc.probe(x, y, z).block === 'minecraft:redstone_block', mc.probe(x, y, z).block);
-  check('diamond ore survived reload', mc.probe(x + 1, y, z).block === 'minecraft:diamond_ore', mc.probe(x + 1, y, z).block);
-  check('glass survived reload', mc.probe(x + 2, y, z).block === 'minecraft:glass', mc.probe(x + 2, y, z).block);
+  check('redstone block survived reload', mc.probe(x, y, z).block === 'minicraft:redstone_block', mc.probe(x, y, z).block);
+  check('diamond ore survived reload', mc.probe(x + 1, y, z).block === 'minicraft:diamond_ore', mc.probe(x + 1, y, z).block);
+  check('glass survived reload', mc.probe(x + 2, y, z).block === 'minicraft:glass', mc.probe(x + 2, y, z).block);
   check('glass id in handoff is really glass', info.glass > 0, `id=${info.glass}`);
   check(
     `dug-out surface block stayed air at y=${info.dugY} (not regenerated)`,
-    mc.probe(x + 3, info.dugY, z).block === 'minecraft:air',
+    mc.probe(x + 3, info.dugY, z).block === 'minicraft:air',
     mc.probe(x + 3, info.dugY, z).block,
   );
   check(
     'lever restored with state',
-    mc.probe(x + 4, y, z).block === 'minecraft:lever' && mc.probeState(x + 4, y, z).state === 0b000010,
+    mc.probe(x + 4, y, z).block === 'minicraft:lever' && mc.probeState(x + 4, y, z).state === 0b000010,
     `${mc.probe(x + 4, y, z).block} state=${mc.probeState(x + 4, y, z).state}`,
   );
 
@@ -67,7 +67,7 @@
     const column = mc.column(sx, sz);
     if (column.top === -999) continue;
     sampled++;
-    if (column.block !== 'minecraft:air') solidSurface++;
+    if (column.block !== 'minicraft:air') solidSurface++;
   }
   check(`untouched terrain intact (${solidSurface}/${sampled} solid columns)`, sampled > 0 && solidSurface === sampled);
 

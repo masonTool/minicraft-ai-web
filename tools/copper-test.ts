@@ -82,10 +82,10 @@ console.log('\n[注册：4 档 × 4 种形状 = 16 个方块]');
 
   // 名字：4 档 × 4 形状的注册名都要对（`cut_copper` / `exposed_cut_copper_stairs` 这类）
   COPPER_STAGES.forEach((stage, index) => {
-    equal(`${stage.blockTile} 的注册名`, blockDef(copperId(index, 0)).name, `minecraft:${stage.blockTile}`);
-    equal(`${stage.cutTile} 的注册名`, blockDef(copperId(index, 1)).name, `minecraft:${stage.cutTile}`);
-    equal(`${stage.cutTile}_slab 的注册名`, blockDef(copperId(index, 2)).name, `minecraft:${stage.cutTile}_slab`);
-    equal(`${stage.cutTile}_stairs 的注册名`, blockDef(copperId(index, 3)).name, `minecraft:${stage.cutTile}_stairs`);
+    equal(`${stage.blockTile} 的注册名`, blockDef(copperId(index, 0)).name, `minicraft:${stage.blockTile}`);
+    equal(`${stage.cutTile} 的注册名`, blockDef(copperId(index, 1)).name, `minicraft:${stage.cutTile}`);
+    equal(`${stage.cutTile}_slab 的注册名`, blockDef(copperId(index, 2)).name, `minicraft:${stage.cutTile}_slab`);
+    equal(`${stage.cutTile}_stairs 的注册名`, blockDef(copperId(index, 3)).name, `minicraft:${stage.cutTile}_stairs`);
   });
 
   check('台阶是 slab 形状', blockDef(copperId(0, 2)).shape === 'slab');

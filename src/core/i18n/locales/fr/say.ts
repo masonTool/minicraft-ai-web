@@ -72,8 +72,8 @@ export const say = {
   'say.fishing.enchantedBook': ' (livre enchanté)',
   'say.phantom': 'Tu n’as pas dormi depuis {days} jours… quelque chose crie au-dessus de toi.',
   'say.disconnect.soloReloaded': 'Déconnecté : le monde a été rechargé depuis la sauvegarde solo',
-  'say.net.seedMismatch': 'Graines différentes : serveur {server} · local {local}. Tape /netseed reload pour recharger ce monde avec la graine du serveur, ou /netseed new pour créer un monde avec la même graine',
-  'say.net.seedMismatchToast': 'Graines différentes : /netseed reload ou /netseed new',
+  'say.net.seedMismatch': 'Graines différentes : la partie utilise {server}, votre monde {local} — continuer sur deux mondes écrirait des blocs au mauvais endroit, la partie a donc été déconnectée. Retour au menu → « Rejoindre une partie »',
+  'say.net.seedMismatchToast': 'Graines différentes : déconnecté — rejoignez depuis le menu',
 
   // ---- Événements du monde, progrès et météo (T3)
   'say.progress.reconciled': 'Inventaire vérifié : {count} succès obtenus (détails avec J)',

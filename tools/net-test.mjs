@@ -9,11 +9,12 @@
  */
 
 import { spawn } from 'node:child_process';
+import { get } from 'node:http';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocket } from 'ws';
-import { PROTOCOL_VERSION } from '../server/protocol.mjs';
+import { PROTOCOL_VERSION, sanitizeWorldMeta } from '../server/protocol.mjs';
 
 /**
  * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
@@ -59,6 +60,24 @@ function check(label, ok, detail = '') {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** GET 一个 JSON 端点（L9 的 `/rooms`）；连 `headers` 一起回，好断言 CORS */
+function getJson(path) {
+  return new Promise((resolve, reject) => {
+    get(`http://localhost:${PORT}${path}`, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, headers: res.headers, json: JSON.parse(body) });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
 /** 一个测试用客户端：把收到的消息存进 mailbox，便于断言 */
 class TestClient {
   /** @param {string} [clientId] 显式传同一个值可以测"重复身份" */
@@ -68,6 +87,10 @@ class TestClient {
     /** 房间码 / 口令（联机26）：跟着 join 一起发 */
     this.room = options.room ?? '';
     this.password = options.password ?? '';
+    /** 开房（L8）：`join` 里带 host 标记，服务端据此登记这一房的唯一房主 */
+    this.host = options.host === true;
+    /** 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形 */
+    this.world = options.world ?? null;
     this.mailbox = [];
     this.socket = new WebSocket(
       `ws://localhost:${PORT}`,
@@ -275,6 +298,8 @@ try {
         dimension,
         ...(client.room ? { room: client.room } : {}),
         ...(client.password ? { password: client.password } : {}),
+        ...(client.host ? { host: true } : {}),
+        ...(client.world ? { world: client.world } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
@@ -1199,6 +1224,437 @@ try {
     check('非法房名回默认房间（不报错）', (await joinAndWaitWelcome(weirdRoom, '怪房名', 0, 70, 0)) !== null);
 
     for (const client of [good, roomA, roomB, lateA, lateB, weirdRoom]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 房主（L8）
+  console.log('\n[房主：一房一名]');
+  {
+    const hostA = new TestClient('HostA', undefined, { room: 'hostroom', host: true });
+    const welcomeHost = await joinAndWaitWelcome(hostA, '房主 A', 0, 70, 0);
+    check('带 host 的 join 能开房', welcomeHost !== null);
+    // welcome 里下发房主身份（L8）：客户端据此决定跑不跑模拟，不自己猜
+    check('房主的 welcome 带 isHost=true', welcomeHost?.isHost === true, `${welcomeHost?.isHost}`);
+    check('房主的 welcome 里 hostId 指向自己', welcomeHost?.hostId === welcomeHost?.id, `${welcomeHost?.hostId} vs ${welcomeHost?.id}`);
+
+    const follower = new TestClient('Follower', undefined, { room: 'hostroom' });
+    const welcomeFollower = await joinAndWaitWelcome(follower, '跟随者', 0, 70, 0);
+    check('同房不带 host 的能进（当从属端）', welcomeFollower !== null);
+    check('从属端的 welcome 带 isHost=false', welcomeFollower?.isHost === false, `${welcomeFollower?.isHost}`);
+    check(
+      '从属端的 welcome 指向房主（hostId = 房主 id）',
+      welcomeFollower?.hostId === welcomeHost?.id,
+      `${welcomeFollower?.hostId} vs ${welcomeHost?.id}`,
+    );
+
+    // 没房主的房：hostId 为 null（客户端据此知道这一局没人跑模拟，而不是默默当成自己在跑）
+    const noHostRoom = new TestClient('NoHostRoom', undefined, { room: 'nohostroom' });
+    const welcomeNoHost = await joinAndWaitWelcome(noHostRoom, '没房主', 0, 70, 0);
+    check('没房主的房：isHost=false 且 hostId=null', welcomeNoHost?.isHost === false && welcomeNoHost?.hostId === null, JSON.stringify({ isHost: welcomeNoHost?.isHost, hostId: welcomeNoHost?.hostId }));
+    noHostRoom.close();
+
+    // 第二个房主：明确拒绝，并且**断开**——留在房里当"半个房主"比拒连更难查
+    const hostB = new TestClient('HostB', undefined, { room: 'hostroom' });
+    await hostB.ready();
+    hostB.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: hostB.clientId,
+      name: '抢房主',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+      room: 'hostroom',
+      host: true,
+    });
+    const hostTaken = await hostB.wait('error', 3000);
+    check('第二个房主被拒（error.code = host-taken）', hostTaken?.code === 'host-taken', JSON.stringify(hostTaken));
+    check('被拒后连接关闭', await hostB.waitClosed());
+
+    // 房主位按房名隔离：另一个房名照常开
+    const otherHost = new TestClient('OtherHost', undefined, { room: 'hostroom2', host: true });
+    check('别的房名仍可开房（登记按房隔离）', (await joinAndWaitWelcome(otherHost, '别房房主', 0, 70, 0)) !== null);
+
+    // 房主断线 → 宽限期（测试里 400ms）过完才让出房主位，下一个人才能重新开房
+    hostA.close();
+    await sleep(900);
+    const hostC = new TestClient('HostC', undefined, { room: 'hostroom', host: true });
+    check('原房主宽限期过后房主位释放（可重新开房）', (await joinAndWaitWelcome(hostC, '新房主', 0, 70, 0)) !== null);
+
+    for (const client of [follower, otherHost, hostC]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 房间的世界（L9）
+  console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
+  {
+    // 房主带世界 → welcome 下发的种子就是它（不再是全服一个常量）
+    const worldHost = new TestClient('WorldHost', undefined, {
+      room: 'worldroom',
+      host: true,
+      world: { name: '草原小屋', seed: 424242, mode: 'survival', difficulty: 'hard' },
+    });
+    const welcomeWorldHost = await joinAndWaitWelcome(worldHost, '世界房主', 0, 70, 0);
+    check(
+      '房主带世界开房：welcome.world.seed = 上报的种子',
+      welcomeWorldHost?.world?.seed === 424242,
+      JSON.stringify(welcomeWorldHost?.world),
+    );
+    check('房主带世界开房：老字段 seed 也是同一份', welcomeWorldHost?.seed === 424242, `${welcomeWorldHost?.seed}`);
+    check(
+      '房主带世界开房：世界名/模式随欢迎包下发',
+      welcomeWorldHost?.world?.name === '草原小屋' && welcomeWorldHost?.world?.mode === 'survival',
+      JSON.stringify(welcomeWorldHost?.world),
+    );
+
+    // 从属端：自己带的世界不生效，跟着房主走（否则两个人会各自生成一片大陆）
+    const worldFollower = new TestClient('WorldFollower', undefined, {
+      room: 'worldroom',
+      world: { name: '我自己的世界', seed: 999 },
+    });
+    const welcomeWorldFollower = await joinAndWaitWelcome(worldFollower, '世界从属', 0, 70, 0);
+    check(
+      '从属端跟着房主的种子（自己带的不算）',
+      welcomeWorldFollower?.seed === 424242 && welcomeWorldFollower?.world?.seed === 424242,
+      JSON.stringify(welcomeWorldFollower?.world),
+    );
+    check('从属端的世界名也是房主的', welcomeWorldFollower?.world?.name === '草原小屋', JSON.stringify(welcomeWorldFollower?.world));
+
+    // 没房主的房：退回服务端默认种子（"单机直连服务器"的老行为不能断）
+    const plainRoom = new TestClient('PlainRoom', undefined, { room: 'plainroom' });
+    const welcomePlain = await joinAndWaitWelcome(plainRoom, '普通房', 0, 70, 0);
+    check('没房主的房退回服务端默认种子', welcomePlain?.seed === 20261014, `${welcomePlain?.seed}`);
+
+    // 脏世界：种子不是整数 → 整份丢弃、保留默认（不能把 NaN 当种子发给所有人）
+    const badWorldHost = new TestClient('BadWorldHost', undefined, {
+      room: 'badworld',
+      host: true,
+      world: { name: '<b>坏种子', seed: 'abc' },
+    });
+    const welcomeBad = await joinAndWaitWelcome(badWorldHost, '坏世界房主', 0, 70, 0);
+    check('房主上报脏种子：退回默认种子', welcomeBad?.seed === 20261014, `${welcomeBad?.seed}`);
+
+    // `/rooms`（L9）：客户端的"加入房间"面板靠它自动列出房间，不必手敲房名
+    const listing = await getJson('/rooms');
+    const worldEntry = (listing.json?.rooms ?? []).find((entry) => entry.room === 'worldroom');
+    check(
+      '/rooms 列出有人的房间（人数 + 房主标记）',
+      worldEntry?.players === 2 && worldEntry?.hasHost === true,
+      JSON.stringify(worldEntry),
+    );
+    check(
+      '/rooms 带世界名与种子（加入前就知道是哪片大陆）',
+      worldEntry?.world?.seed === 424242 && worldEntry?.world?.name === '草原小屋',
+      JSON.stringify(worldEntry?.world),
+    );
+    check(
+      '/rooms 不下发口令（只说服务端要不要口令）',
+      worldEntry !== undefined && !('password' in worldEntry) && listing.json?.passwordRequired === false,
+      JSON.stringify(listing.json),
+    );
+    check(
+      '/rooms 带 CORS（浏览器从 5173 跨源读得到）',
+      listing.headers?.['access-control-allow-origin'] === '*',
+      `${listing.headers?.['access-control-allow-origin']}`,
+    );
+    const healthz = await getJson('/healthz');
+    check('/healthz 仍然可用（没被新路由挡掉）', healthz.json?.ok === true && healthz.status === 200);
+
+    // 收口函数本身：名字超长截断、控制字符与尖括号清掉
+    const meta = sanitizeWorldMeta({ name: '<草原>\u0007' + '长'.repeat(40), seed: 7, mode: 'creative' });
+    check(
+      'sanitizeWorldMeta 清字符并截到 32 字',
+      meta?.name === '草原' + '长'.repeat(30) && meta?.seed === 7,
+      JSON.stringify(meta?.name),
+    );
+    check(
+      'sanitizeWorldMeta 拒绝非整数种子 / 非对象',
+      sanitizeWorldMeta({ seed: 1.5 }) === null && sanitizeWorldMeta(null) === null,
+    );
+
+    for (const client of [worldHost, worldFollower, plainRoom, badWorldHost]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 方块权威标记（MS2）
+  console.log('\n[方块权威标记：谁算的]');
+  {
+    const authHost = new TestClient('AuthHost', undefined, { room: 'authroom', host: true });
+    const authFollower = new TestClient('AuthFollower', undefined, { room: 'authroom' });
+    await joinAndWaitWelcome(authHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(authFollower, '从属', 4, 70, 4);
+
+    // 房主算出来的改动 → 下行带 authority: true（从属端据此知道"这是权威结果"）
+    authFollower.mailbox.length = 0;
+    authHost.send({ t: 'blocks', blocks: [[40, 70, 40, 1, 0, 'overworld']] });
+    const fromHost = await authFollower.wait('blocks', 2000);
+    check('房主的方块广播带 authority: true', fromHost?.authority === true, JSON.stringify(fromHost));
+
+    /*
+     * 从属端直接发 `blocks` / `block`：**一律被丢**（MS2 起从属端走 `edit-request`）。
+     * 连同"谎报 authority: true"一起验——服务端按 isHost 判，不看客户端字段。
+     */
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'blocks', blocks: [[41, 70, 40, 1, 0, 'overworld']] });
+    check('从属端直接发 blocks 被丢弃', (await authHost.wait('blocks', 600)) === null);
+
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'blocks', authority: true, blocks: [[42, 70, 40, 1, 0, 'overworld']] });
+    check('从属端谎报 authority 也没用（照样丢）', (await authHost.wait('blocks', 600)) === null);
+
+    authHost.mailbox.length = 0;
+    authFollower.send({ t: 'block', x: 43, y: 70, z: 40, id: 1, state: 0, dimension: 'overworld' });
+    check('从属端单条 block 同样被丢弃', (await authHost.wait('block', 600)) === null);
+
+    authHost.close();
+    authFollower.close();
+  }
+
+  // ---------------------------------------------------------------- 改动请求（L8 · MS2）
+  console.log('\n[从属端的改动请求转给房主]');
+  {
+    const reqHost = new TestClient('ReqHost', undefined, { room: 'reqroom', host: true });
+    const reqFollower = new TestClient('ReqFollower', undefined, { room: 'reqroom' });
+    const welcomeReqHost = await joinAndWaitWelcome(reqHost, '房主', 0, 70, 0);
+    const welcomeReqFollower = await joinAndWaitWelcome(reqFollower, '从属', 4, 70, 4);
+
+    // 从属端请求改一格 → 只有房主收到，且带 from 与 payload
+    reqHost.mailbox.length = 0;
+    reqFollower.send({
+      t: 'edit-request',
+      payload: { t: 'blocks', blocks: [[50, 70, 50, 1, 0, 'overworld']] },
+    });
+    const forwarded = await reqHost.wait('edit-request', 2000);
+    check('房主收到从属端的改动请求', Array.isArray(forwarded?.payload?.blocks), JSON.stringify(forwarded));
+    check('请求带 from（谁点的）', forwarded?.from === welcomeReqFollower?.id, `${forwarded?.from} vs ${welcomeReqFollower?.id}`);
+    check('payload 原样转发（坐标/方块/维度不变）', JSON.stringify(forwarded?.payload?.blocks?.[0]) === JSON.stringify([50, 70, 50, 1, 0, 'overworld']));
+
+    // 不认识的载荷：服务端不转（房主那边不该被塞垃圾）
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'edit-request', payload: { t: 'nonsense' } });
+    const junk = await reqHost.wait('edit-request', 600);
+    check('不认识的载荷被丢弃（房主收不到）', junk === null, JSON.stringify(junk));
+
+    // 房里没有房主：明确回执，别让从属端以为"发出去了"
+    const noHostFollower = new TestClient('NoHostFollower', undefined, { room: 'nohostreq' });
+    await joinAndWaitWelcome(noHostFollower, '没房主', 0, 70, 0);
+    noHostFollower.mailbox.length = 0;
+    noHostFollower.send({ t: 'edit-request', payload: { t: 'blocks', blocks: [[51, 70, 50, 1, 0, 'overworld']] } });
+    const rejected = await noHostFollower.wait('edit-request', 2000);
+    check('没房主时回执 no-host', rejected?.ok === false && rejected?.reason === 'no-host', JSON.stringify(rejected));
+
+    // 有房主的房里：从属端走老的 `blocks` 直接被丢（改动只能走 edit-request）
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'blocks', blocks: [[52, 70, 50, 1, 0, 'overworld']] });
+    check('从属端直接发 blocks 被丢弃（房主收不到）', (await reqHost.wait('blocks', 600)) === null);
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'block', x: 53, y: 70, z: 50, id: 1, state: 0, dimension: 'overworld' });
+    check('从属端直接发 block 也被丢弃', (await reqHost.wait('block', 600)) === null);
+
+    // 房主自己发的照旧（它是权威结果）
+    reqFollower.mailbox.length = 0;
+    reqHost.send({ t: 'blocks', blocks: [[20, 70, 20, 1, 0, 'overworld']] });
+    const fromHostStillWorks = await reqFollower.wait('blocks', 2000);
+    check('房主自己发的 blocks 仍被广播', fromHostStillWorks?.authority === true, JSON.stringify(fromHostStillWorks));
+
+    /*
+     * 四条"坐标类"请求（L8 · MS4 收尾）：容器 / 牌子 / 展示框 / TNT 也走 edit-request，
+     * 服务端只转给房主；直发（老路）在有房主的房里一律被丢。
+     */
+    const payloads = [
+      ['container', { t: 'container', x: 60, y: 70, z: 60, dimension: 'overworld', slots: [null, null, null] }],
+      ['sign', { t: 'sign', x: 61, y: 70, z: 60, dimension: 'overworld', lines: ['你好', '', '', ''] }],
+      ['frame', { t: 'frame', x: 62, y: 70, z: 60, dimension: 'overworld', item: { id: 1, count: 1 }, rotation: 0 }],
+      ['tnt', { t: 'tnt', x: 63, y: 70, z: 60, dimension: 'overworld' }],
+    ];
+    for (const [label, payload] of payloads) {
+      reqHost.mailbox.length = 0;
+      reqFollower.send({ t: 'edit-request', payload });
+      const forwardedKind = await reqHost.wait('edit-request', 2000);
+      check(`${label} 请求被转给房主`, forwardedKind?.payload?.t === label, JSON.stringify(forwardedKind));
+    }
+    // 直发老路：房主收不到（有房主的房只收房主的坐标类消息）
+    for (const [label, payload] of payloads) {
+      reqHost.mailbox.length = 0;
+      reqFollower.send(payload);
+      check(`${label} 直发被丢弃（改走请求通道）`, (await reqHost.wait(label, 600)) === null);
+    }
+
+    reqHost.close();
+    reqFollower.close();
+    noHostFollower.close();
+  }
+
+  // ---------------------------------------------------------------- 实体快照（L8 · MS3）
+  console.log('\n[实体快照只由房主推、按房转发]');
+  {
+    const snapHost = new TestClient('SnapHost', undefined, { room: 'snaproom', host: true });
+    const snapFollower = new TestClient('SnapFollower', undefined, { room: 'snaproom' });
+    const welcomeSnapHost = await joinAndWaitWelcome(snapHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(snapFollower, '从属', 4, 70, 4);
+
+    snapFollower.mailbox.length = 0;
+    snapHost.send({
+      t: 'entity-snap',
+      entities: [
+        ['1:7', 'zombie', 10, 70, 10, 0.5, 18, 2],
+        ['1:8', 'cow', 12, 70, 12, 0, 10, 0],
+      ],
+    });
+    const snap = await snapFollower.wait('entity-snap', 2000);
+    check('从属端收到房主的实体快照', Array.isArray(snap?.entities) && snap.entities.length === 2, JSON.stringify(snap));
+    check('快照带 by（哪个房主推的）', snap?.by === welcomeSnapHost?.id, `${snap?.by} vs ${welcomeSnapHost?.id}`);
+
+    // 从属端推的快照一律不转（谁模拟谁是权威）
+    snapHost.mailbox.length = 0;
+    snapFollower.send({ t: 'entity-snap', entities: [['2:1', 'zombie', 0, 70, 0, 0, 20, 0]] });
+    check('从属端推的实体快照被丢弃', (await snapHost.wait('entity-snap', 600)) === null);
+
+    // 形状不对 / 空数组：不转（省得从属端收到一堆没用的包）
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-snap', entities: [] });
+    snapHost.send({ t: 'entity-snap', entities: 'nope' });
+    check('空数组/非数组不转发', (await snapFollower.wait('entity-snap', 600)) === null);
+
+    // 超上限截断（不整包拒绝）
+    snapFollower.mailbox.length = 0;
+    const huge = Array.from({ length: 400 }, (_unused, index) => [`1:${index}`, 'zombie', 1, 70, 1, 0, 20, 0]);
+    snapHost.send({ t: 'entity-snap', entities: huge });
+    const truncated = await snapFollower.wait('entity-snap', 2000);
+    check('超过 256 条的实体快照被截断', Array.isArray(truncated?.entities) && truncated.entities.length === 256, `${truncated?.entities?.length}`);
+
+    // 死亡/消失（MS3）：房主点名 → 从属端收到；从属端点名不被转发
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-remove', keys: ['1:7', '1:8'] });
+    const removed = await snapFollower.wait('entity-remove', 2000);
+    check('从属端收到实体消失', Array.isArray(removed?.keys) && removed.keys.length === 2, JSON.stringify(removed));
+
+    snapHost.mailbox.length = 0;
+    snapFollower.send({ t: 'entity-remove', keys: ['2:1'] });
+    check('从属端点名的实体消失被丢弃', (await snapHost.wait('entity-remove', 600)) === null);
+
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-remove', keys: [] });
+    snapHost.send({ t: 'entity-remove', keys: 'nope' });
+    check('空/非法键列表不转发', (await snapFollower.wait('entity-remove', 600)) === null);
+
+    snapHost.close();
+    snapFollower.close();
+  }
+
+  // ---------------------------------------------------------------- 容器进度（L8 · MS4）
+  console.log('\n[容器进度只认房主]');
+  {
+    const cookHost = new TestClient('CookHost', undefined, { room: 'cookroom', host: true });
+    const cookFollower = new TestClient('CookFollower', undefined, { room: 'cookroom' });
+    await joinAndWaitWelcome(cookHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(cookFollower, '从属', 4, 70, 4);
+
+    cookFollower.mailbox.length = 0;
+    cookHost.send({
+      t: 'container',
+      x: 10,
+      y: 70,
+      z: 10,
+      dimension: 'overworld',
+      slots: [{ id: 1, count: 1 }, null, null],
+      progress: 0.5,
+    });
+    const withProgress = await cookFollower.wait('container', 2000);
+    check('房主的容器进度被转发', withProgress?.progress === 0.5, JSON.stringify(withProgress));
+
+    /*
+     * 从属端的容器改动：MS4 收尾之后**整条直发都被丢**（改走 `edit-request`，由房主落地）。
+     * 所以这里断言的是"房主收不到直发的 container"，而不是"收到了但进度没了"。
+     */
+    cookHost.mailbox.length = 0;
+    cookFollower.send({
+      t: 'container',
+      x: 11,
+      y: 70,
+      z: 10,
+      dimension: 'overworld',
+      slots: [{ id: 1, count: 1 }, null, null],
+      progress: 0.9,
+    });
+    check('从属端直发 container 被丢弃（改走请求通道）', (await cookHost.wait('container', 600)) === null);
+
+    // 越界的进度夹到 [0,1]：进度条不该被一个 1.7 拉出框
+    cookFollower.mailbox.length = 0;
+    cookHost.send({ t: 'container', x: 12, y: 70, z: 10, dimension: 'overworld', slots: [null, null, null], progress: 1.7 });
+    const clamped = await cookFollower.wait('container', 2000);
+    check('房主的越界进度被夹到 1', clamped?.progress === 1, JSON.stringify(clamped));
+
+    cookHost.close();
+    cookFollower.close();
+  }
+
+  // ---------------------------------------------------------------- 房主退出（L8 · MS4）
+  console.log('\n[房主掉线：先提示、宽限到期关房]');
+  {
+    // 宽限期在测试里是 400ms（见 spawn 的 GRACE_MS）：正好够验"先提示、后关房"
+    const leaveHost = new TestClient('LeaveHost', undefined, { room: 'leaveroom', host: true });
+    const leaveFollower = new TestClient('LeaveFollower', undefined, { room: 'leaveroom' });
+    await joinAndWaitWelcome(leaveHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(leaveFollower, '从属', 4, 70, 4);
+
+    leaveFollower.mailbox.length = 0;
+    leaveHost.close();
+    const closing = await leaveFollower.wait('room-closed', 2000);
+    check('房主一掉线就通知同房其他人', closing?.reason === 'host-left', JSON.stringify(closing));
+    check('通知里带重连宽限（客户端据此告诉玩家等多久）', typeof closing?.graceMs === 'number' && closing.graceMs > 0, `${closing?.graceMs}`);
+
+    // 到期没回来：房间关闭 + 明确理由（客户端据此不再重连）
+    const bye = await leaveFollower.wait('error', 3000);
+    check('宽限到期房间关闭并给出 host-left', bye?.code === 'host-left', JSON.stringify(bye));
+    leaveFollower.close();
+  }
+
+  // ---------------------------------------------------------------- 命中带全局键（L8 · MS3 收尾）
+  console.log('\n[命中带全局键：按身份认那只怪]');
+  {
+    // 用独立的一对客户端：alice/bob 在更早的重启用例里已经断了
+    const hitSender = new TestClient('HitSender', undefined, { room: 'hitroom' });
+    const hitReceiver = new TestClient('HitReceiver', undefined, { room: 'hitroom' });
+    await joinAndWaitWelcome(hitSender, '打人的', 0, 70, 0);
+    await joinAndWaitWelcome(hitReceiver, '被打的', 2, 70, 2);
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({
+      t: 'mob-hit',
+      typeId: 'zombie',
+      dimension: 'overworld',
+      x: 5,
+      y: 70,
+      z: 5,
+      damage: 4,
+      fire: 0,
+      key: '7:12',
+    });
+    const hitMsg = await hitReceiver.wait('mob-hit', 2000);
+    check('命中里的全局键被转发', hitMsg?.key === '7:12', JSON.stringify(hitMsg));
+    check('老字段（类型/坐标/伤害）照旧', hitMsg?.typeId === 'zombie' && hitMsg?.damage === 4, JSON.stringify(hitMsg));
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({ t: 'mob-hit', typeId: 'zombie', dimension: 'overworld', x: 5, y: 70, z: 5, damage: 4, fire: 0 });
+    const noKey = await hitReceiver.wait('mob-hit', 2000);
+    check('不带键时不塞空 key（老客户端兼容）', noKey !== null && noKey.key === undefined, JSON.stringify(noKey));
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({
+      t: 'mob-hit',
+      typeId: 'zombie',
+      dimension: 'overworld',
+      x: 5,
+      y: 70,
+      z: 5,
+      damage: 4,
+      fire: 0,
+      key: 'x'.repeat(80),
+    });
+    const longKey = await hitReceiver.wait('mob-hit', 2000);
+    check('超长键被截到 32', typeof longKey?.key === 'string' && longKey.key.length === 32, `${longKey?.key?.length}`);
+
+    hitSender.close();
+    hitReceiver.close();
   }
 
   // ---------------------------------------------------------------- 房间口令（联机26）

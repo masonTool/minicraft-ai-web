@@ -63,7 +63,7 @@ console.log('\n[充能档位（纯函数）]');
 
 console.log('\n[注册：方块 / 物品 / 中文名 / 贴图]');
 {
-  equal('注册名', blockDef(Block.RESPAWN_ANCHOR).name, 'minecraft:respawn_anchor');
+  equal('注册名', blockDef(Block.RESPAWN_ANCHOR).name, 'minicraft:respawn_anchor');
   equal('中文名', blockLabel(Block.RESPAWN_ANCHOR), '重生锚');
   check('实心整格', blockDef(Block.RESPAWN_ANCHOR).solid);
   check('方块物品自动注册', ITEMS[Block.RESPAWN_ANCHOR]?.block === Block.RESPAWN_ANCHOR);

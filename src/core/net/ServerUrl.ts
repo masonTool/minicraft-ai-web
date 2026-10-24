@@ -43,6 +43,40 @@ export function parseServerUrl(raw: string): ParsedServerUrl {
 }
 
 /**
+ * 拼一条带房间与口令的地址（`parseServerUrl` 的逆运算，L9）。
+ *
+ * 房间与口令以前只能靠玩家手写进地址（`ws://host:8787/red?pw=1234`），手机上几乎不可能
+ * 敲对。现在「开房 / 加入」面板收集到这两项后再拼——所以这里必须与 `parseServerUrl`
+ * 成对：`parseServerUrl(formatServerUrl(u, r, p))` 一定还原本来的三个值。
+ *
+ * 空房间 / 空口令就不拼那一段（与"没填就别发"同一口径）。
+ */
+export function formatServerUrl(base: string, room: string, password: string): string {
+  const bare = base.replace(/\/+$/, '');
+  const path = room.length > 0 ? `/${encodeURIComponent(room)}` : '';
+  const query = password.length > 0 ? `?pw=${encodeURIComponent(password)}` : '';
+  return `${bare}${path}${query}`;
+}
+
+/**
+ * 由 WebSocket 地址推出 `/rooms` 的 HTTP 地址（L9）。
+ *
+ * `GET /rooms` 与 WebSocket 在**同一个端口**上，所以只换协议头：`ws → http`、
+ * `wss → https`；房间名在 path 里（`ws://h:8787/red`）要去掉，列表是服务器级的。
+ * 解析不出来返回 `null` —— 调用方据此直接走"手填房间名"，不必先报错。
+ */
+export function roomsEndpoint(wsUrl: string): string | null {
+  try {
+    const parsed = new URL(wsUrl);
+    const protocol = parsed.protocol === 'wss:' ? 'https:' : parsed.protocol === 'ws:' ? 'http:' : parsed.protocol;
+    if (protocol !== 'http:' && protocol !== 'https:') return null;
+    return `${protocol}//${parsed.host}/rooms`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 默认的服务端地址（联机28）。
  *
  * 三种部署形态各一条规则，都是踩过的坑：

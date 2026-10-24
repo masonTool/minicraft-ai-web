@@ -15,9 +15,27 @@
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
+import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole.ts';
+import { DEFAULT_MULTIPLAYER_ROOM } from '../core/net/MultiplayerSave.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
 import { NetStats } from '../core/net/NetStats.ts';
+
+/**
+ * 房间的世界（L9）：这一局该是哪片大陆。
+ *
+ * 由**房主**在 `join` 里上报，服务端按房记着、随 `welcome` 回给所有人。
+ * `mode` / `difficulty` 只是标签（服务端不用它们判什么），用来在面板上写
+ * "房主的世界：草原小屋 · 种子 123456 · 生存"。
+ */
+export interface NetWorldMeta {
+  name: string;
+  seed: number;
+  mode?: string;
+  difficulty?: string;
+  /** 世界类型（L9）：超平坦 / 放大化…它决定地形生成，必须与种子一起对齐 */
+  worldType?: string;
+}
 
 export interface NetPlayerState {
   id: number;
@@ -75,6 +93,13 @@ export interface NetContainerState {
   z: number;
   /** 27 格槽位（null 或 ItemStack 形状）；由客户端 `restoreStacks` 清洗 */
   slots: unknown[];
+  /**
+   * 熔炉 / 酿造的进度（0..1，L8 · MS4）：**只有房主算出来的才有值**。
+   *
+   * 从属端不推进计时（`SimMode.containers` 为 false），所以它只拿这个值去画进度条；
+   * 服务端只转发房主的 `progress`，别人的一律忽略（假进度会把所有人的进度条改坏）。
+   */
+  progress?: number;
 }
 
 /** 一块牌子的字（联机16）：全是空串 = 擦掉 */
@@ -112,6 +137,8 @@ export interface NetMobHit {
   damage: number;
   /** 着火秒数（火焰附加）；0 = 不点火 */
   fire: number;
+  /** 目标动物的全局键（`ownerId:localId`，L8 · MS3 收尾）：有它就按身份认，不用猜 */
+  key?: string;
 }
 
 /** 有人打了我（联机22） */
@@ -170,6 +197,31 @@ export interface NetHandlers {
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
+  /** 房主说这几只实体没了（L8 · MS3）：从属端立刻撤掉影子，不等快照宽限 */
+  onEntityRemove?: (keys: string[]) => void;
+
+  /**
+   * 房主掉线了（L8 · MS4）：服务端只发一次提示，房间还没关。
+   *
+   * `graceMs` 是房主还能重连回来的时限——客户端据此告诉玩家"等他多久"，
+   * 别让人对着一个不推进的世界猜"是不是卡了"。
+   */
+  onRoomClosing?: (graceMs: number) => void;
+
+  /**
+   * 收到房主的实体快照（L8 · MS3）：从属端据此画/更新影子实体。
+   * `raw` 是线上形态（未解码），由 `decodeEntities` / `SimApply` 逐条洗。
+   */
+  onEntitySnap?: (raw: unknown) => void;
+
+  /**
+   * 房主收到了别人的改动请求（L8 · MS2）：在自己的世界里落地，再由 `BlockFunnel`
+   * 作为权威结果广播。**只有房主会收到**（服务端只转给本房房主）。
+   */
+  onEditRequest?: (from: number, payload: { t: string; blocks?: unknown; edit?: unknown }) => void;
+  /** 我那批改动没人接（房里没房主 / 房主刚掉线）：reason 目前只有 `no-host` */
+  onEditRejected?: (reason: string) => void;
+
   /** 别人改了箱子/木桶的内容（L4，批次 611；联机15 扩到全部工作站） */
   onContainer?: (container: NetContainerState) => void;
   /** 别人写了/擦了牌子上的字（联机16） */
@@ -263,6 +315,34 @@ export class NetClient {
   /** 房间口令（联机26）：空串 = 不发送（服务端没设密码时也不需要） */
   private password = '';
   /**
+   * 开房意图（L8）：`join` 里带 `host: true`，服务端据此把这一局的房主记成我。
+   *
+   * 存在字段里而不是只传一次：自动重连要原样重发同一个意图，否则断线一次就从
+   * 房主变成从属（世界当场没人模拟）。
+   */
+  private wantsHost = false;
+  /** 这一局是不是已经结束了（房主退出 / 服务端关房）：关 socket 时用它决定别再重连 */
+  private roomClosed = false;
+  /**
+   * 房主身份（L8）：服务端在 `welcome` 里下发，客户端不自己猜。
+   *
+   * `amHost` 是"我"是不是房主；`hostId` 是房里那一名的服务端 id（没有房主时为 `null`）。
+   * 角色由它们派生（见 `get role`），"要不要跑模拟"由 `SimMode` 读角色——这条链上
+   * 只有一份事实。
+   */
+  private amHost = false;
+  hostId: number | null = null;
+  /**
+   * 房间的世界（L9）：`welcome.world` 那一份，没收到时为 `null`。
+   *
+   * 从属端靠它知道"该生成哪片大陆"，也用来在面板上说明"你进的是谁的世界"。
+   * 断线后**不清空**：重连到同一个房间要接着用同一份（房间世界以房主为准，
+   * 重连时 `welcome` 会再给一遍）。
+   */
+  roomWorld: NetWorldMeta | null = null;
+  /** 开房时要上报的世界（只有房主带；重连也带，否则房间可能退回默认种子） */
+  private wantsWorld: NetWorldMeta | null = null;
+  /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
    * 随 `move` 一起发出去，队友据此判"是不是自己人"——队伍表本身各端各存一份，
@@ -289,7 +369,7 @@ export class NetClient {
     return this.remote.size + (this.selfId > 0 ? 1 : 0);
   }
 
-  connect(url: string, name: string): void {
+  connect(url: string, name: string, host = false, world?: NetWorldMeta): void {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
     this.fatal = false;
@@ -299,6 +379,12 @@ export class NetClient {
     this.room = parsed.room;
     this.password = parsed.password;
     this.name = name;
+    // 开房意图（L8）：随 `join` 上行；自动重连也用同一份，否则重连一次就从房主降级
+    this.wantsHost = host;
+    // 明确发起新连接 = 玩家想再试一次：上一局的"房间已关闭"不跟过来
+    this.roomClosed = false;
+    // 房间的世界（L9）：只有开房的人才定地形；加入的人带了也没用（服务端只认房主的）
+    this.wantsWorld = host && world ? world : null;
     // 只生成一次：同一次会话里的自动重连必须还是同一个身份（联机8 要靠它认回玩家）
     if (this.clientId.length === 0) this.clientId = browserClientId();
     this.session.connect();
@@ -308,6 +394,32 @@ export class NetClient {
   /** 会话状态（联机7）：`idle|connecting|connected|reconnecting|offline` */
   get sessionState(): NetSessionState {
     return this.session.state;
+  }
+
+  /** 当前房间口令（空 = 没有）。拼"复制邀请"用；不是鉴权，明文传。 */
+  get roomPassword(): string {
+    return this.password;
+  }
+
+  /**
+   * 当前房间名（L9）：空串（地址里没写房间）按默认房间算。
+   *
+   * 联机库的库名要用它（`multiplayerWorldId`）——之前调用方一律传默认房间，
+   * 于是"一房一库"只在纸面上成立：换个房间还是同一个库。
+   */
+  get roomId(): string {
+    return this.room.length > 0 ? this.room : DEFAULT_MULTIPLAYER_ROOM;
+  }
+
+  /**
+   * 当前联机角色（L8）：没连上就是 `solo`，连上之后按 `welcome` 的 `isHost` 算。
+   *
+   * ⚠️ 这是**唯一**的角色来源：`SimMode` 与 HUD 都读它，别再各自拼一个
+   * `sessionState === 'connected' && isHost`——那种判断迟早有一处漏掉一个条件。
+   */
+  get role(): NetRole {
+    if (this.session.state !== 'connected') return INITIAL_ROLE;
+    return roleFromWelcome({ isHost: this.amHost });
   }
 
   private open(): void {
@@ -348,6 +460,10 @@ export class NetClient {
           // 房间与口令（联机26）：没填就不带
           ...(this.room ? { room: this.room } : {}),
           ...(this.password ? { password: this.password } : {}),
+          // 开房（L8）：不带的客户端一律是从属端（服务端按 `=== true` 判）
+          ...(this.wantsHost ? { host: true } : {}),
+          // 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形
+          ...(this.wantsWorld ? { world: this.wantsWorld } : {}),
         }),
       );
     };
@@ -372,7 +488,11 @@ export class NetClient {
       // 统计归零（联机29）：重连之后是一条新连接，延迟/速率都该重新算
       this.stats.reset();
       // 状态迁移与"要不要重连"只有一个出口（联机7）：主动断开 / 致命错误 → stop
-      const action = this.session.closed({ intentional: this.disposed, fatal: this.fatal });
+      const action = this.session.closed({
+        intentional: this.disposed,
+        fatal: this.fatal,
+        roomClosed: this.roomClosed,
+      });
       this.handlers.onStatus(false, this.status);
       // 非主动断开就等一会儿重连：家里的 wifi 抖一下不该直接退出联机
       if (action === 'reconnect') {
@@ -412,6 +532,31 @@ export class NetClient {
         }
         this.selfId = Number(message.id ?? 0);
         this.worldSeed = Number(message.seed ?? 0);
+        /*
+         * 房主（L8）：`isHost` 严格等于 `true`；`hostId` 只认正整数（缺字段/0/脏值当"没房主"）。
+         * 宽松一次就是两端同时模拟——那种不一致不会报错，只会有人在旁边看半天。
+         */
+        this.amHost = message.isHost === true;
+        const hostId = Number(message.hostId);
+        this.hostId = Number.isInteger(hostId) && hostId > 0 ? hostId : null;
+        /*
+         * 房间的世界（L9）：老服务端没有 `world`，那就退回只用 `seed`（此时 `name` 为空）。
+         * 种子必须是整数——它是地形生成的输入，`NaN` 会让整片大陆变成同一格。
+         */
+        const rawWorld = message.world as Partial<NetWorldMeta> | undefined;
+        // ⚠️ 只认数字类型的整数：`Number(null)` 是 0，用 `??` + `Number()` 会把
+        // "没给种子"读成"种子 0"，于是去生成一片种子 0 的大陆（不报错，只是和队友不一样）
+        const candidate = typeof rawWorld?.seed === 'number' ? rawWorld.seed : message.seed;
+        const worldSeed = typeof candidate === 'number' && Number.isInteger(candidate) ? candidate : Number.NaN;
+        if (Number.isInteger(worldSeed)) {
+          this.roomWorld = {
+            name: typeof rawWorld?.name === 'string' ? rawWorld.name : '',
+            seed: worldSeed,
+            mode: typeof rawWorld?.mode === 'string' ? rawWorld.mode : '',
+            difficulty: typeof rawWorld?.difficulty === 'string' ? rawWorld.difficulty : '',
+            worldType: typeof rawWorld?.worldType === 'string' ? rawWorld.worldType : '',
+          };
+        }
         const players = (message.players as NetPlayerState[] | undefined) ?? [];
         for (const player of players) {
           if (player.id === this.selfId) continue;
@@ -455,6 +600,34 @@ export class NetClient {
           Number(message.state ?? 0),
           String(message.dimension ?? 'overworld'),
         );
+        break;
+      }
+      case 'entity-remove': {
+        const keys = Array.isArray(message.keys)
+          ? message.keys.filter((key): key is string => typeof key === 'string' && key.length > 0)
+          : [];
+        if (keys.length > 0) this.handlers.onEntityRemove?.(keys);
+        break;
+      }
+      case 'entity-snap': {
+        // 内容不可信：交出去之前不做任何假设（`decodeEntities` 会逐条丢坏条目）
+        this.handlers.onEntitySnap?.(message.entities);
+        break;
+      }
+
+      /*
+       * 改动请求（L8 · MS2）两个方向共用同一个 `t`：
+       *  · 带 `ok: false` = 服务端回给**请求者**的回执（房里没房主）；
+       *  · 带 `from` + `payload` = 服务端转给**房主**的请求。
+       */
+      case 'edit-request': {
+        if (message.ok === false) {
+          this.handlers.onEditRejected?.(String(message.reason ?? 'unknown'));
+          break;
+        }
+        const payload = message.payload as { t: string; blocks?: unknown; edit?: unknown } | undefined;
+        if (!payload || typeof payload.t !== 'string') break;
+        this.handlers.onEditRequest?.(Number(message.from ?? 0), payload);
         break;
       }
       case 'blocks': {
@@ -547,6 +720,10 @@ export class NetClient {
           z: Number(message.z),
           damage: Number(message.damage ?? 0),
           fire: Number(message.fire ?? 0),
+          // 全局键（L8 · MS3 收尾）：服务端只做长度收口，别的不管
+          ...(typeof message.key === 'string' && message.key.length > 0 && message.key.length <= 32
+            ? { key: String(message.key) }
+            : {}),
         });
         break;
       }
@@ -564,12 +741,15 @@ export class NetClient {
       }
       case 'container': {
         const slots = Array.isArray(message.slots) ? (message.slots as unknown[]) : [];
+        const progress = Number(message.progress);
         this.handlers.onContainer?.({
           dimension: String(message.dimension ?? 'overworld'),
           x: Number(message.x),
           y: Number(message.y),
           z: Number(message.z),
           slots,
+          // 只认 0..1 的有限数；缺字段/脏值当"没有进度"（从属端就保持当前值不动）
+          ...(Number.isFinite(progress) ? { progress: Math.min(Math.max(progress, 0), 1) } : {}),
         });
         break;
       }
@@ -601,6 +781,15 @@ export class NetClient {
         this.handlers.onChat(Number(message.id ?? 0), String(message.name ?? '?'), text);
         break;
       }
+      /*
+       * 房间没了（L8 · MS4）：房主掉线（房间还没关，`graceMs` 内可能回来）或房间已关闭。
+       * 真关房时服务端紧接着发 `error{code:'host-left'}` 并断开，这里只负责"先说一句"。
+       */
+      case 'room-closed': {
+        const graceMs = Number(message.graceMs);
+        this.handlers.onRoomClosing?.(Number.isFinite(graceMs) ? graceMs : 0);
+        break;
+      }
       case 'error': {
         const code = String(message.code ?? 'unknown');
         const text = String(message.message ?? '联机出错');
@@ -610,6 +799,8 @@ export class NetClient {
          * 客户端再 close 一次会提前把还没送达的 error 帧吞掉（测试里表现为"没收到 error"）。
          */
         if (isFatalProtocolError(code)) this.fatal = true;
+        // 房主退出 = 房间没了（L8 · MS4）：单独记一笔，`closed()` 据此停手不再重连
+        if (code === 'host-left') this.roomClosed = true;
         this.handlers.onError?.(code, text);
         break;
       }
@@ -690,12 +881,57 @@ export class NetClient {
    */
   sendBlocks(batch: readonly { x: number; y: number; z: number; id: number; state: number; dimension: string }[]): void {
     if (!this.connected || batch.length === 0) return;
+    const blocks = batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]);
+    /*
+     * 谁在发、发的是什么（L8 · MS2）：
+     *
+     *  · **房主**发的是**权威结果**（`blocks` + `authority: true`）——世界就是他算的；
+     *  · **从属端**发的是**请求**（`edit-request`）——它本地先乐观应用了（手感不能等往返），
+     *    真正的落地与广播由房主完成，房主的结果回来会覆盖本地（不一致窗口只有一次往返）。
+     *
+     * 服务端不拿 `authority` 判权（谁说了算看 `isHost`），它只是下行广播的标注。
+     */
     this.sendRaw(
-      JSON.stringify({
-        t: 'blocks',
-        blocks: batch.map((edit) => [edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]),
-      }),
+      JSON.stringify(
+        this.role === 'host'
+          ? { t: 'blocks', blocks, authority: true }
+          : { t: 'edit-request', payload: { t: 'blocks', blocks } },
+      ),
     );
+  }
+
+  /**
+   * 房主推一份实体快照（L8 · MS3）。
+   *
+   * 只有房主能推：实体在世界里在哪，是"谁模拟谁说了算"的事。从属端调这个方法是空操作
+   * （服务端那边也会再挡一次）。
+   */
+  sendEntitySnapshot(entities: readonly unknown[]): void {
+    if (!this.connected || entities.length === 0) return;
+    if (this.role !== 'host') return;
+    this.sendRaw(JSON.stringify({ t: 'entity-snap', entities }));
+  }
+
+  /**
+   * 坐标类消息的统一出口（L8 · MS4 收尾）。
+   *
+   * 房主直发（他就是权威）；从属端包成 `edit-request` 回到房主，由房主落地后再以
+   * `authority` 广播。服务端那边也有同一道闸门（有房主的房里只收房主的这类消息）。
+   */
+  private sendEditOrRequest(message: Record<string, unknown>): void {
+    if (!this.connected) return;
+    if (this.role === 'host') {
+      this.sendRaw(JSON.stringify(message));
+      return;
+    }
+    this.sendRaw(JSON.stringify({ t: 'edit-request', payload: message }));
+  }
+
+  /** 房主：这几只实体没了（死亡 / 被移除）。非房主调用是空操作 */
+  sendEntityRemove(keys: readonly string[]): void {
+    if (!this.connected || keys.length === 0) return;
+    if (this.role !== 'host') return;
+    this.sendRaw(JSON.stringify({ t: 'entity-remove', keys: keys.slice(0, 64) }));
   }
 
   /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */
@@ -705,9 +941,19 @@ export class NetClient {
     z: number,
     dimension: string,
     slots: readonly unknown[],
+    progress?: number,
   ): void {
     if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'container', x, y, z, dimension, slots }));
+    this.sendEditOrRequest({
+      t: 'container',
+      x,
+      y,
+      z,
+      dimension,
+      slots,
+      // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
+      ...(Number.isFinite(progress) ? { progress } : {}),
+    });
   }
 
   /**
@@ -769,8 +1015,7 @@ export class NetClient {
 
   /** 我写了/擦了牌子上的字（联机16）。全空 = 擦掉 */
   sendSign(x: number, y: number, z: number, dimension: string, lines: readonly string[]): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'sign', x, y, z, dimension, lines }));
+    this.sendEditOrRequest({ t: 'sign', x, y, z, dimension, lines });
   }
 
   /**
@@ -797,8 +1042,7 @@ export class NetClient {
 
   /** 我点燃了一格 TNT（联机23）：坐标即 key，对方那边 `prime` 是幂等的 */
   sendTnt(x: number, y: number, z: number, dimension: string): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'tnt', x, y, z, dimension }));
+    this.sendEditOrRequest({ t: 'tnt', x, y, z, dimension });
   }
 
   /** 我所在的队伍名（联机22）：空串 = 没队伍；随 `move` 一起发，供对方判友伤 */
@@ -820,12 +1064,23 @@ export class NetClient {
    * 队友那边用它找自己世界里最近的那只同类怪扣血。**对方找不到就忽略**——
    * 两端生物是各自生成的，不能为了"看起来同步"凭空造一只出来。
    */
-  sendMobHit(typeId: string, dimension: string, x: number, y: number, z: number, damage: number, fire = 0): void {
+  sendMobHit(
+    typeId: string,
+    dimension: string,
+    x: number,
+    y: number,
+    z: number,
+    damage: number,
+    fire = 0,
+    key = '',
+  ): void {
     if (!this.connected) return;
     this.sendRaw(
       JSON.stringify({
         t: 'mob-hit',
         typeId,
+        // 目标动物的全局键（L8 · MS3 收尾）：有它接收方就不用靠"同类型最近"猜
+        ...(key.length > 0 ? { key } : {}),
         dimension,
         x: Number(x.toFixed(2)),
         y: Number(y.toFixed(2)),
@@ -845,8 +1100,7 @@ export class NetClient {
     item: { id: number; count: number } | null,
     rotation: number,
   ): void {
-    if (!this.connected) return;
-    this.sendRaw(JSON.stringify({ t: 'frame', x, y, z, dimension, item, rotation }));
+    this.sendEditOrRequest({ t: 'frame', x, y, z, dimension, item, rotation });
   }
 
   /**

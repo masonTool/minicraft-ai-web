@@ -72,8 +72,8 @@ export const say = {
   'say.fishing.enchantedBook': ' (verzaubertes Buch)',
   'say.phantom': 'Du hast {days} Tage nicht geschlafen… über dir kreischt etwas.',
   'say.disconnect.soloReloaded': 'Verbindung getrennt: Welt aus dem Einzelspieler-Speicher neu geladen',
-  'say.net.seedMismatch': 'Seed stimmt nicht überein: Server {server} · lokal {local}. Tippe /netseed reload, um die Welt mit dem Server-Seed neu zu laden, oder /netseed new für eine Welt mit gleichem Seed',
-  'say.net.seedMismatchToast': 'Seed stimmt nicht überein: /netseed reload oder /netseed new',
+  'say.net.seedMismatch': 'Seed stimmt nicht: Der Raum nutzt {server}, deine Welt {local} – auf zwei Welten weiterzuspielen schreibt Blöcke an falsche Stellen, daher wurde getrennt. Zurück zum Hauptmenü → „Raum beitreten“',
+  'say.net.seedMismatchToast': 'Seed stimmt nicht: getrennt – bitte über das Hauptmenü beitreten',
 
   // ---- Weltgeschehen, Fortschritt und Wetter (T3)
   'say.progress.reconciled': 'Inventar abgeglichen: {count} Fortschritte erreicht (Details mit J)',

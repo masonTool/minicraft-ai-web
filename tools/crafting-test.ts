@@ -503,7 +503,7 @@ console.log('\n[16 色潜影盒（批次 451）]');
   let allTiled = true;
   for (const color of DYE_COLORS) {
     const id = shulkerBoxId(color.name);
-    if (id === undefined || blockDef(id).name !== `minecraft:${color.name}_shulker_box`) {
+    if (id === undefined || blockDef(id).name !== `minicraft:${color.name}_shulker_box`) {
       allRegistered = false;
       continue;
     }

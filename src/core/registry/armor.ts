@@ -156,7 +156,7 @@ export const ARMOR_SPECS: readonly ArmorSpec[] = ARMOR_TYPES.flatMap((type) =>
     const armor = makeArmorInfo(type, material);
     return {
       id: armorItemId(type, material),
-      name: `minecraft:${material}_${type}`,
+      name: `minicraft:${material}_${type}`,
       tile: armorTile(armor),
       armor,
     };

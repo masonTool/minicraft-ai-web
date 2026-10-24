@@ -157,15 +157,15 @@ describe('存档增量编解码', () => {
 
 describe('音效材质映射', () => {
   it('石头/木头/草/沙/玻璃/羊毛能被区分开', () => {
-    expect(breakSoundFor('minecraft:stone')).toBe('break_stone');
-    expect(breakSoundFor('minecraft:oak_planks')).toBe('break_wood');
-    expect(breakSoundFor('minecraft:short_grass')).toBe('break_grass');
-    expect(breakSoundFor('minecraft:sand')).toBe('break_sand');
-    expect(breakSoundFor('minecraft:glass')).toBe('break_glass');
-    expect(breakSoundFor('minecraft:white_wool')).toBe('break_wool');
+    expect(breakSoundFor('minicraft:stone')).toBe('break_stone');
+    expect(breakSoundFor('minicraft:oak_planks')).toBe('break_wood');
+    expect(breakSoundFor('minicraft:short_grass')).toBe('break_grass');
+    expect(breakSoundFor('minicraft:sand')).toBe('break_sand');
+    expect(breakSoundFor('minicraft:glass')).toBe('break_glass');
+    expect(breakSoundFor('minicraft:white_wool')).toBe('break_wool');
   });
 
   it('未知方块回落到石头音（不会静默）', () => {
-    expect(breakSoundFor('minecraft:whatever_this_is')).toBe('break_stone');
+    expect(breakSoundFor('minicraft:whatever_this_is')).toBe('break_stone');
   });
 });

@@ -161,7 +161,7 @@ console.log('\n[职业表：工作站已经实现的职业]');
   const newBlocks = [Block.LECTERN, Block.FLETCHING_TABLE, Block.GRINDSTONE, Block.LOOM];
   const tiles = newBlocks.flatMap((id) => blockTiles(id, 0));
   check('四个新方块的贴图都在图集名单里', tiles.every((tile) => TILES.has(tile)), tiles.join(','));
-  check('四个新方块都有中文名', newBlocks.every((id) => !missingBlockNames().includes(String(blockDef(id).name).replace('minecraft:', ''))));
+  check('四个新方块都有中文名', newBlocks.every((id) => !missingBlockNames().includes(String(blockDef(id).name).replace('minicraft:', ''))));
   check('四个新方块都有说明', newBlocks.every((id) => hasDescription(id)));
   // 工具表：砂轮是石头做的（要镐），三件木制的徒手也能采、斧更快
   equal('砂轮的加速工具是镐', efficientToolType(Block.GRINDSTONE), 'pickaxe');
@@ -445,7 +445,7 @@ console.log('\n[外观：颜色跟着职业走]');
 
 console.log('\n[进度：与村民交易]');
 {
-  const def = advancementById('minecraft:adventure/trade');
+  const def = advancementById('minicraft:adventure/trade');
   check('那条进度在表里', def !== undefined);
   equal('触发条件是"成交一笔"', def?.trigger.kind, 'trade');
   equal('图标是绿宝石', def?.icon, Item.EMERALD);
@@ -453,9 +453,9 @@ console.log('\n[进度：与村民交易]');
   const tracker = new AdvancementTracker();
   const before = tracker.handle({ kind: 'trade' });
   equal('父条目没亮时拿不到', before.length, 0);
-  tracker.grant('minecraft:adventure/root');
+  tracker.grant('minicraft:adventure/root');
   const after = tracker.handle({ kind: 'trade' });
-  check('亮过根条目之后能拿到', after.some((item) => item.id === 'minecraft:adventure/trade'));
+  check('亮过根条目之后能拿到', after.some((item) => item.id === 'minicraft:adventure/trade'));
 }
 
 // ---------------------------------------------------------------- 9. 存档往返
@@ -856,7 +856,8 @@ console.log('\n[接线守卫]');
   check('主程序每 0.5 秒下发作息指令', mainSrc.includes('this.villagerRoutineTimer = 0.5'));
   check(
     '作息在实体 tick 之前',
-    mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update(context, dt)'),
+    // MS3 之后实体推进改成多行调用（多了 shouldTick 过滤），比对前缀即可
+    mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update('),
   );
 }
 

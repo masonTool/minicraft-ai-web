@@ -11,6 +11,7 @@ import {
   isAuthority,
   mobKey,
   parseMobKey,
+  assignMobKey,
   pickAuthority,
   type AuthorityCandidate,
 } from '../src/core/net/MobAuthority.ts';
@@ -97,5 +98,45 @@ describe('isAuthority', () => {
 describe('distanceSquared', () => {
   it('是欧氏距离的平方', () => {
     expect(distanceSquared({ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 0 })).toBe(25);
+  });
+});
+
+/*
+ * 全局键分配（L8 · MS3）
+ *
+ * 两端各有自己的自增 id，"3 号羊"是两只不同的羊。`ownerId:localId` 把它们对上——
+ * 这一个键之后会出现在快照、影子实体、死亡事件三处，所以它必须稳定、可反解、不重复。
+ */
+describe('assignMobKey', () => {
+  it('分配后可以反解回 房主 + 本地 id', () => {
+    const mob = { netKey: '', id: 7 };
+    const key = assignMobKey(mob, 3);
+    expect(key).toBe('3:7');
+    expect(parseMobKey(key)).toEqual({ ownerId: 3, localId: 7 });
+  });
+
+  it('幂等：同一只生物反复分配还是同一个键（快照每 100ms 读一次）', () => {
+    const mob = { netKey: '', id: 7 };
+    expect(assignMobKey(mob, 3)).toBe('3:7');
+    expect(assignMobKey(mob, 3)).toBe('3:7');
+    // 换了分配者也不改：键一旦定下就代表"这只怪"，不能半路换身份
+    expect(assignMobKey(mob, 9)).toBe('3:7');
+  });
+
+  it('不同生物 / 不同房主得到不同键', () => {
+    expect(assignMobKey({ netKey: '', id: 1 }, 3)).not.toBe(assignMobKey({ netKey: '', id: 2 }, 3));
+    expect(assignMobKey({ netKey: '', id: 1 }, 3)).not.toBe(assignMobKey({ netKey: '', id: 1 }, 4));
+  });
+
+  it('脏的 ownerId / localId 不分配（宁可不同步，也别造个对不上的键）', () => {
+    expect(assignMobKey({ netKey: '', id: 5 }, -1)).toBe('');
+    expect(assignMobKey({ netKey: '', id: 5 }, 1.5)).toBe('');
+    expect(assignMobKey({ netKey: '', id: Number.NaN }, 1)).toBe('');
+    expect(assignMobKey({ netKey: '', id: 5 }, -1)).toBe('');
+  });
+
+  it('已经有序的键原样返回空串以外的值（不会被覆盖成空）', () => {
+    const mob = { netKey: '2:9', id: 9 };
+    expect(assignMobKey(mob, 3)).toBe('2:9');
   });
 });

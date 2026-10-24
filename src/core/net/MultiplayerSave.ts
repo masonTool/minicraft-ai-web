@@ -19,9 +19,23 @@ export const DEFAULT_MULTIPLAYER_ROOM = 'default';
 /** 联机档的 world id 后缀分隔符；`isMultiplayerWorldId` 靠它判 */
 const MULTIPLAYER_MARK = '@mp:';
 
-/** 单机 world id + 房间名 → 联机档的 world id（`dbNameFor` 会据此派生出另一个库） */
-export function multiplayerWorldId(worldId: string, roomId: string = DEFAULT_MULTIPLAYER_ROOM): string {
-  return `${worldId}${MULTIPLAYER_MARK}${roomId}`;
+/**
+ * 单机 world id + 房间名 (+ 房间的世界种子) → 联机档的 world id（`dbNameFor` 据此派生库名）。
+ *
+ * 为什么第三段是**种子**（L9）：地形由房主的那个世界决定，同一个房间名换一个世界开房，
+ * 里面是**另一片大陆**——沿用同一个库就会把上一片大陆的方块增量灌到新地形上
+ * （表现为"刚进去就有一堆别人世界的改动"）。带上种子 = 一房一世界一库。
+ *
+ * 不传 `seed` 时保持老格式（`@mp:<room>`）：那是这一批之前的库名，读不读由调用方决定。
+ * 种子可以是负数，原样拼进去（`@mp:room@-5`）；`dbNameFor` 只做前缀拼接，不解析它。
+ */
+export function multiplayerWorldId(
+  worldId: string,
+  roomId: string = DEFAULT_MULTIPLAYER_ROOM,
+  seed?: number,
+): string {
+  const base = `${worldId}${MULTIPLAYER_MARK}${roomId}`;
+  return seed !== undefined && Number.isInteger(seed) ? `${base}@${seed}` : base;
 }
 
 /** 这个 world id 是不是联机档（单机 id 里不可能出现 `@mp:`） */

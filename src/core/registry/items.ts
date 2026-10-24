@@ -470,234 +470,234 @@ interface NonBlockItemSpec {
 }
 
 const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
-  { id: Item.COAL, name: 'minecraft:coal', tile: 'item_coal' },
-  { id: Item.RAW_IRON, name: 'minecraft:raw_iron', tile: 'item_raw_iron' },
-  { id: Item.RAW_COPPER, name: 'minecraft:raw_copper', tile: 'item_raw_copper' },
-  { id: Item.RAW_GOLD, name: 'minecraft:raw_gold', tile: 'item_raw_gold' },
-  { id: Item.REDSTONE, name: 'minecraft:redstone', tile: 'item_redstone' },
-  { id: Item.LAPIS_LAZULI, name: 'minecraft:lapis_lazuli', tile: 'item_lapis' },
-  { id: Item.DIAMOND, name: 'minecraft:diamond', tile: 'item_diamond' },
-  { id: Item.EMERALD, name: 'minecraft:emerald', tile: 'item_emerald' },
-  { id: Item.STICK, name: 'minecraft:stick', tile: 'item_stick' },
-  { id: Item.IRON_INGOT, name: 'minecraft:iron_ingot', tile: 'item_iron_ingot' },
+  { id: Item.COAL, name: 'minicraft:coal', tile: 'item_coal' },
+  { id: Item.RAW_IRON, name: 'minicraft:raw_iron', tile: 'item_raw_iron' },
+  { id: Item.RAW_COPPER, name: 'minicraft:raw_copper', tile: 'item_raw_copper' },
+  { id: Item.RAW_GOLD, name: 'minicraft:raw_gold', tile: 'item_raw_gold' },
+  { id: Item.REDSTONE, name: 'minicraft:redstone', tile: 'item_redstone' },
+  { id: Item.LAPIS_LAZULI, name: 'minicraft:lapis_lazuli', tile: 'item_lapis' },
+  { id: Item.DIAMOND, name: 'minicraft:diamond', tile: 'item_diamond' },
+  { id: Item.EMERALD, name: 'minicraft:emerald', tile: 'item_emerald' },
+  { id: Item.STICK, name: 'minicraft:stick', tile: 'item_stick' },
+  { id: Item.IRON_INGOT, name: 'minicraft:iron_ingot', tile: 'item_iron_ingot' },
   // 铁粒（B11）：锁链的原料；原版由铁锭拆成 9 粒，也能 9 粒合成 1 锭
-  { id: Item.IRON_NUGGET, name: 'minecraft:iron_nugget', tile: 'item_iron_nugget' },
+  { id: Item.IRON_NUGGET, name: 'minicraft:iron_nugget', tile: 'item_iron_nugget' },
   // 下界石英（批次 42）：此前**缺了这一件**——下界石英矿石掉的是"方块本身"，
   // 于是石英家族（石英块/石英柱/平滑石英/錾制石英）根本无法合成，这一批补上
-  { id: Item.QUARTZ, name: 'minecraft:quartz', tile: 'item_quartz' },
-  { id: Item.GOLD_INGOT, name: 'minecraft:gold_ingot', tile: 'item_gold_ingot' },
-  { id: Item.COPPER_INGOT, name: 'minecraft:copper_ingot', tile: 'item_copper_ingot' },
-  { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
-  { id: Item.BRICK, name: 'minecraft:brick', tile: 'item_brick' },
-  { id: Item.CLAY_BALL, name: 'minecraft:clay_ball', tile: 'item_clay_ball' },
+  { id: Item.QUARTZ, name: 'minicraft:quartz', tile: 'item_quartz' },
+  { id: Item.GOLD_INGOT, name: 'minicraft:gold_ingot', tile: 'item_gold_ingot' },
+  { id: Item.COPPER_INGOT, name: 'minicraft:copper_ingot', tile: 'item_copper_ingot' },
+  { id: Item.CHARCOAL, name: 'minicraft:charcoal', tile: 'item_charcoal' },
+  { id: Item.BRICK, name: 'minicraft:brick', tile: 'item_brick' },
+  { id: Item.CLAY_BALL, name: 'minicraft:clay_ball', tile: 'item_clay_ball' },
   // ---- 生物掉落物
-  { id: Item.ROTTEN_FLESH, name: 'minecraft:rotten_flesh', tile: 'item_rotten_flesh' },
-  { id: Item.BONE, name: 'minecraft:bone', tile: 'item_bone' },
-  { id: Item.GUNPOWDER, name: 'minecraft:gunpowder', tile: 'item_gunpowder' },
-  { id: Item.BEEF, name: 'minecraft:beef', tile: 'item_beef' },
-  { id: Item.PORKCHOP, name: 'minecraft:porkchop', tile: 'item_porkchop' },
-  { id: Item.MUTTON, name: 'minecraft:mutton', tile: 'item_mutton' },
-  { id: Item.CHICKEN, name: 'minecraft:chicken', tile: 'item_chicken' },
-  { id: Item.LEATHER, name: 'minecraft:leather', tile: 'item_leather' },
-  { id: Item.FEATHER, name: 'minecraft:feather', tile: 'item_feather' },
+  { id: Item.ROTTEN_FLESH, name: 'minicraft:rotten_flesh', tile: 'item_rotten_flesh' },
+  { id: Item.BONE, name: 'minicraft:bone', tile: 'item_bone' },
+  { id: Item.GUNPOWDER, name: 'minicraft:gunpowder', tile: 'item_gunpowder' },
+  { id: Item.BEEF, name: 'minicraft:beef', tile: 'item_beef' },
+  { id: Item.PORKCHOP, name: 'minicraft:porkchop', tile: 'item_porkchop' },
+  { id: Item.MUTTON, name: 'minicraft:mutton', tile: 'item_mutton' },
+  { id: Item.CHICKEN, name: 'minicraft:chicken', tile: 'item_chicken' },
+  { id: Item.LEATHER, name: 'minicraft:leather', tile: 'item_leather' },
+  { id: Item.FEATHER, name: 'minicraft:feather', tile: 'item_feather' },
   // ---- 附魔材料：纸（甘蔗做）与书（纸 + 皮革）
-  { id: Item.PAPER, name: 'minecraft:paper', tile: 'item_paper' },
-  { id: Item.BOOK, name: 'minecraft:book', tile: 'item_book' },
+  { id: Item.PAPER, name: 'minicraft:paper', tile: 'item_paper' },
+  { id: Item.BOOK, name: 'minicraft:book', tile: 'item_book' },
   // ---- 弓与箭
-  { id: Item.FLINT, name: 'minecraft:flint', tile: 'item_flint' },
-  { id: Item.STRING, name: 'minecraft:string', tile: 'item_string' },
-  { id: Item.ARROW, name: 'minecraft:arrow', tile: 'item_arrow' },
+  { id: Item.FLINT, name: 'minicraft:flint', tile: 'item_flint' },
+  { id: Item.STRING, name: 'minicraft:string', tile: 'item_string' },
+  { id: Item.ARROW, name: 'minicraft:arrow', tile: 'item_arrow' },
   // 分类落在"矿石与材料"（不在任何一套集合里的材料都归那里，与骨头/火药同档）
-  { id: Item.BONE_MEAL, name: 'minecraft:bone_meal', tile: 'item_bone_meal' },
+  { id: Item.BONE_MEAL, name: 'minicraft:bone_meal', tile: 'item_bone_meal' },
   // 药水箭（K4 最后一步）：28 支，id = 饮用型 + 200，贴图与名字都由药水表生成
-  ...TIPPED_ARROWS.map((entry) => ({ id: entry.id, name: `minecraft:${entry.key}`, tile: `item_${entry.key}`, maxStack: 64 })),
+  ...TIPPED_ARROWS.map((entry) => ({ id: entry.id, name: `minicraft:${entry.key}`, tile: `item_${entry.key}`, maxStack: 64 })),
   // ---- 投掷物（K4 尾巴）：扔出去的是这两个 + 喷溅药水
-  { id: Item.SNOWBALL, name: 'minecraft:snowball', tile: 'item_snowball', maxStack: 16 },
-  { id: Item.EGG, name: 'minecraft:egg', tile: 'item_egg', maxStack: 16 },
+  { id: Item.SNOWBALL, name: 'minicraft:snowball', tile: 'item_snowball', maxStack: 16 },
+  { id: Item.EGG, name: 'minicraft:egg', tile: 'item_egg', maxStack: 16 },
   // 龙息（K4 尾巴）：可堆 64（原版也是如此），它是滞留药水的原料
-  { id: Item.DRAGON_BREATH, name: 'minecraft:dragon_breath', tile: 'item_dragon_breath' },
+  { id: Item.DRAGON_BREATH, name: 'minicraft:dragon_breath', tile: 'item_dragon_breath' },
   // 喷溅药水 / 滞留药水：与饮用型共用 `POTION_ITEMS`
   // （id = 饮用型 + 50 / + 100，见 potions.ts）——不在这里单列
   // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
   // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
-  { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
+  { id: Item.BOW, name: 'minicraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
   // ---- 农业：种子（可种在耕地上）与小麦
-  { id: Item.WHEAT_SEEDS, name: 'minecraft:wheat_seeds', tile: 'item_wheat_seeds', block: Block.WHEAT_STAGE0, maxStack: 64 },
-  { id: Item.WHEAT, name: 'minecraft:wheat', tile: 'item_wheat' },
+  { id: Item.WHEAT_SEEDS, name: 'minicraft:wheat_seeds', tile: 'item_wheat_seeds', block: Block.WHEAT_STAGE0, maxStack: 64 },
+  { id: Item.WHEAT, name: 'minicraft:wheat', tile: 'item_wheat' },
   // ---- 酿造（H10）：瓶子与材料
-  { id: Item.GLASS_BOTTLE, name: 'minecraft:glass_bottle', tile: 'item_glass_bottle', maxStack: 16 },
-  { id: Item.WATER_BOTTLE, name: 'minecraft:water_bottle', tile: 'item_water_bottle', maxStack: 1 },
+  { id: Item.GLASS_BOTTLE, name: 'minicraft:glass_bottle', tile: 'item_glass_bottle', maxStack: 16 },
+  { id: Item.WATER_BOTTLE, name: 'minicraft:water_bottle', tile: 'item_water_bottle', maxStack: 1 },
   // 下界疣（批次 92）：**可种**——`block` 指向第 0 阶段，种在灵魂沙上（原版唯一的种法）
-  { id: Item.NETHER_WART, name: 'minecraft:nether_wart', tile: 'item_nether_wart', block: Block.NETHER_WART_STAGE0 },
-  { id: Item.BLAZE_POWDER, name: 'minecraft:blaze_powder', tile: 'item_blaze_powder' },
+  { id: Item.NETHER_WART, name: 'minicraft:nether_wart', tile: 'item_nether_wart', block: Block.NETHER_WART_STAGE0 },
+  { id: Item.BLAZE_POWDER, name: 'minicraft:blaze_powder', tile: 'item_blaze_powder' },
   // 烈焰棒（批次 92）：1 根棒能拆成 2 份烈焰粉（原版），也是烈焰人唯一的掉落物。
   // 它是**酿造台的燃料**（原版一份烈焰粉能酿 20 次），所以这条链断掉时整台机器都用不了
-  { id: Item.BLAZE_ROD, name: 'minecraft:blaze_rod', tile: 'item_blaze_rod' },
+  { id: Item.BLAZE_ROD, name: 'minicraft:blaze_rod', tile: 'item_blaze_rod' },
   // 末影系（批次 111，K9）：珍珠与眼睛。可堆 16 / 64 与原版一致
   //（眼睛在批次 114 起**也**能扔出去找要塞了，见 `mobs.ts` 与 TASKS K9）
-  { id: Item.ENDER_PEARL, name: 'minecraft:ender_pearl', tile: 'item_ender_pearl', maxStack: 16 },
-  { id: Item.ENDER_EYE, name: 'minecraft:ender_eye', tile: 'item_ender_eye' },
+  { id: Item.ENDER_PEARL, name: 'minicraft:ender_pearl', tile: 'item_ender_pearl', maxStack: 16 },
+  { id: Item.ENDER_EYE, name: 'minicraft:ender_eye', tile: 'item_ender_eye' },
   // 下界之星（批次 116，J14）：凋灵唯一的掉落，可堆 64（原版如此）
-  { id: Item.NETHER_STAR, name: 'minecraft:nether_star', tile: 'item_nether_star' },
+  { id: Item.NETHER_STAR, name: 'minicraft:nether_star', tile: 'item_nether_star' },
   // 黏液球（批次 120）：史莱姆掉的那一颗；9 颗压一块黏液块（原版双向）
-  { id: Item.SLIME_BALL, name: 'minecraft:slime_ball', tile: 'item_slime_ball' },
+  { id: Item.SLIME_BALL, name: 'minicraft:slime_ball', tile: 'item_slime_ball' },
   // 三叉戟（批次 123）：**不可堆叠**（原版如此——它是一件武器，不是材料）
-  { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
+  { id: Item.TRIDENT, name: 'minicraft:trident', tile: 'item_trident', maxStack: 1 },
   // 船（批次 244）：原版一次只能拿一艘（堆叠 1），放置后变成实体
-  { id: Item.OAK_BOAT, name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1 },
+  { id: Item.OAK_BOAT, name: 'minicraft:oak_boat', tile: 'item_oak_boat', maxStack: 1 },
   // 矿车（批次 245）：同样一次一辆，放到铁轨上变成实体
-  { id: Item.MINECART, name: 'minecraft:minecart', tile: 'item_minecart', maxStack: 1 },
-  { id: Item.HOPPER_MINECART, name: 'minecraft:hopper_minecart', tile: 'item_hopper_minecart', maxStack: 1 },
-  { id: Item.FURNACE_MINECART, name: 'minecraft:furnace_minecart', tile: 'item_furnace_minecart', maxStack: 1 },
-  { id: Item.SADDLE, name: 'minecraft:saddle', tile: 'item_saddle', maxStack: 1 },
-  { id: Item.LEAD, name: 'minecraft:lead', tile: 'item_lead' },
+  { id: Item.MINECART, name: 'minicraft:minecart', tile: 'item_minecart', maxStack: 1 },
+  { id: Item.HOPPER_MINECART, name: 'minicraft:hopper_minecart', tile: 'item_hopper_minecart', maxStack: 1 },
+  { id: Item.FURNACE_MINECART, name: 'minicraft:furnace_minecart', tile: 'item_furnace_minecart', maxStack: 1 },
+  { id: Item.SADDLE, name: 'minicraft:saddle', tile: 'item_saddle', maxStack: 1 },
+  { id: Item.LEAD, name: 'minicraft:lead', tile: 'item_lead' },
   // 命名牌（批次 615）：一次用一张，用完即耗
-  { id: Item.NAME_TAG, name: 'minecraft:name_tag', tile: 'item_name_tag', maxStack: 64 },
+  { id: Item.NAME_TAG, name: 'minicraft:name_tag', tile: 'item_name_tag', maxStack: 64 },
   // 弩（批次 265）：耐久与弓同档（原版 465），一次装填一发
-  { id: Item.CROSSBOW, name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465 },
-  { id: Item.AMETHYST_SHARD, name: 'minecraft:amethyst_shard', tile: 'item_amethyst_shard' },
-  { id: Item.SPYGLASS, name: 'minecraft:spyglass', tile: 'item_spyglass', maxStack: 1 },
-  { id: Item.PRISMARINE_SHARD, name: 'minecraft:prismarine_shard', tile: 'item_prismarine_shard' },
-  { id: Item.PRISMARINE_CRYSTALS, name: 'minecraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
-  { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },
-  { id: Item.HONEY_BOTTLE, name: 'minecraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
-  { id: Item.NETHER_BRICK, name: 'minecraft:nether_brick', tile: 'item_nether_brick' },
-  { id: Item.CHORUS_FRUIT, name: 'minecraft:chorus_fruit', tile: 'item_chorus_fruit' },
-  { id: Item.POPPED_CHORUS_FRUIT, name: 'minecraft:popped_chorus_fruit', tile: 'item_popped_chorus_fruit' },
+  { id: Item.CROSSBOW, name: 'minicraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465 },
+  { id: Item.AMETHYST_SHARD, name: 'minicraft:amethyst_shard', tile: 'item_amethyst_shard' },
+  { id: Item.SPYGLASS, name: 'minicraft:spyglass', tile: 'item_spyglass', maxStack: 1 },
+  { id: Item.PRISMARINE_SHARD, name: 'minicraft:prismarine_shard', tile: 'item_prismarine_shard' },
+  { id: Item.PRISMARINE_CRYSTALS, name: 'minicraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
+  { id: Item.HONEYCOMB, name: 'minicraft:honeycomb', tile: 'item_honeycomb' },
+  { id: Item.HONEY_BOTTLE, name: 'minicraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
+  { id: Item.NETHER_BRICK, name: 'minicraft:nether_brick', tile: 'item_nether_brick' },
+  { id: Item.CHORUS_FRUIT, name: 'minicraft:chorus_fruit', tile: 'item_chorus_fruit' },
+  { id: Item.POPPED_CHORUS_FRUIT, name: 'minicraft:popped_chorus_fruit', tile: 'item_popped_chorus_fruit' },
   // 唱片（批次 489）：`stack: 1`（原版唱片不能叠）
-  { id: Item.MUSIC_DISC_13, name: 'minecraft:music_disc_13', tile: 'item_music_disc_13', maxStack: 1 },
-  { id: Item.MUSIC_DISC_CAT, name: 'minecraft:music_disc_cat', tile: 'item_music_disc_cat', maxStack: 1 },
-  { id: Item.MUSIC_DISC_WARD, name: 'minecraft:music_disc_ward', tile: 'item_music_disc_ward', maxStack: 1 },
+  { id: Item.MUSIC_DISC_13, name: 'minicraft:music_disc_13', tile: 'item_music_disc_13', maxStack: 1 },
+  { id: Item.MUSIC_DISC_CAT, name: 'minicraft:music_disc_cat', tile: 'item_music_disc_cat', maxStack: 1 },
+  { id: Item.MUSIC_DISC_WARD, name: 'minicraft:music_disc_ward', tile: 'item_music_disc_ward', maxStack: 1 },
   // 不死图腾（批次 498）：原版不能叠
-  { id: Item.TOTEM_OF_UNDYING, name: 'minecraft:totem_of_undying', tile: 'item_totem_of_undying', maxStack: 1 },
+  { id: Item.TOTEM_OF_UNDYING, name: 'minicraft:totem_of_undying', tile: 'item_totem_of_undying', maxStack: 1 },
   // 潮涌核心的两件材料（批次 547）：海洋之心与鹦鹉螺壳
-  { id: Item.HEART_OF_THE_SEA, name: 'minecraft:heart_of_the_sea', tile: 'item_heart_of_the_sea' },
-  { id: Item.NAUTILUS_SHELL, name: 'minecraft:nautilus_shell', tile: 'item_nautilus_shell' },
+  { id: Item.HEART_OF_THE_SEA, name: 'minicraft:heart_of_the_sea', tile: 'item_heart_of_the_sea' },
+  { id: Item.NAUTILUS_SHELL, name: 'minicraft:nautilus_shell', tile: 'item_nautilus_shell' },
   // 细雪桶（批次 548）：与其它桶一样不可堆叠
-  { id: Item.POWDER_SNOW_BUCKET, name: 'minecraft:powder_snow_bucket', tile: 'item_powder_snow_bucket', maxStack: 1 },
+  { id: Item.POWDER_SNOW_BUCKET, name: 'minicraft:powder_snow_bucket', tile: 'item_powder_snow_bucket', maxStack: 1 },
   // 马铠（批次 570）：原版四档，不可堆叠；目前只作为战利品
-  { id: Item.LEATHER_HORSE_ARMOR, name: 'minecraft:leather_horse_armor', tile: 'item_leather_horse_armor', maxStack: 1 },
-  { id: Item.IRON_HORSE_ARMOR, name: 'minecraft:iron_horse_armor', tile: 'item_iron_horse_armor', maxStack: 1 },
-  { id: Item.GOLDEN_HORSE_ARMOR, name: 'minecraft:golden_horse_armor', tile: 'item_golden_horse_armor', maxStack: 1 },
-  { id: Item.DIAMOND_HORSE_ARMOR, name: 'minecraft:diamond_horse_armor', tile: 'item_diamond_horse_armor', maxStack: 1 },
-  { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
+  { id: Item.LEATHER_HORSE_ARMOR, name: 'minicraft:leather_horse_armor', tile: 'item_leather_horse_armor', maxStack: 1 },
+  { id: Item.IRON_HORSE_ARMOR, name: 'minicraft:iron_horse_armor', tile: 'item_iron_horse_armor', maxStack: 1 },
+  { id: Item.GOLDEN_HORSE_ARMOR, name: 'minicraft:golden_horse_armor', tile: 'item_golden_horse_armor', maxStack: 1 },
+  { id: Item.DIAMOND_HORSE_ARMOR, name: 'minicraft:diamond_horse_armor', tile: 'item_diamond_horse_armor', maxStack: 1 },
+  { id: Item.ELYTRA, name: 'minicraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
-  { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
+  { id: Item.PHANTOM_MEMBRANE, name: 'minicraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
-  { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  { id: Item.INK_SAC, name: 'minicraft:ink_sac', tile: 'item_ink_sac' },
   // 地图（批次 196）：空地图与已填好的地图都不堆叠（后者带位图数据）
-  { id: Item.MAP, name: 'minecraft:map', tile: 'item_map', maxStack: 1 },
-  { id: Item.FILLED_MAP, name: 'minecraft:filled_map', tile: 'item_filled_map', maxStack: 1 },
+  { id: Item.MAP, name: 'minicraft:map', tile: 'item_map', maxStack: 1 },
+  { id: Item.FILLED_MAP, name: 'minicraft:filled_map', tile: 'item_filled_map', maxStack: 1 },
   // 指南针 / 时钟（批次 195）：都不可堆叠（它们不是材料），图标是参数化画的表盘
-  { id: Item.CLOCK, name: 'minecraft:clock', tile: 'item_clock', maxStack: 1 },
-  { id: Item.COMPASS, name: 'minecraft:compass', tile: 'item_compass', maxStack: 1 },
+  { id: Item.CLOCK, name: 'minicraft:clock', tile: 'item_clock', maxStack: 1 },
+  { id: Item.COMPASS, name: 'minicraft:compass', tile: 'item_compass', maxStack: 1 },
   // 盾牌（批次 194）：耐久 336，铁砧用木板修（`SPECIAL_ITEMS` 里那条）
-  { id: Item.SHIELD, name: 'minecraft:shield', tile: 'item_shield', maxStack: 1, durability: 336 },
+  { id: Item.SHIELD, name: 'minicraft:shield', tile: 'item_shield', maxStack: 1, durability: 336 },
   // 烟花（批次 192，H16）：数据在 `firework`（档位 + 颜色），所以也不可堆叠
-  { id: Item.FIREWORK_STAR, name: 'minecraft:firework_star', tile: 'item_firework_star', maxStack: 1 },
-  { id: Item.FIREWORK_ROCKET, name: 'minecraft:firework_rocket', tile: 'item_firework_rocket', maxStack: 1 },
+  { id: Item.FIREWORK_STAR, name: 'minicraft:firework_star', tile: 'item_firework_star', maxStack: 1 },
+  { id: Item.FIREWORK_ROCKET, name: 'minicraft:firework_rocket', tile: 'item_firework_rocket', maxStack: 1 },
   // 书与笔 / 成书（批次 190，H16）：内容在 `pages`，所以**不可堆叠**
-  { id: Item.BOOK_AND_QUILL, name: 'minecraft:writable_book', tile: 'item_book_and_quill', maxStack: 1 },
-  { id: Item.WRITTEN_BOOK, name: 'minecraft:written_book', tile: 'item_written_book', maxStack: 1 },
-  { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
-  { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
-  { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },
-  { id: Item.GHAST_TEAR, name: 'minecraft:ghast_tear', tile: 'item_ghast_tear' },
-  { id: Item.SPIDER_EYE, name: 'minecraft:spider_eye', tile: 'item_spider_eye' },
-  { id: Item.FERMENTED_SPIDER_EYE, name: 'minecraft:fermented_spider_eye', tile: 'item_fermented_spider_eye' },
-  { id: Item.GLISTERING_MELON, name: 'minecraft:glistering_melon_slice', tile: 'item_glistering_melon_slice' },
-  { id: Item.PUFFERFISH, name: 'minecraft:pufferfish', tile: 'item_pufferfish' },
-  { id: Item.GOLDEN_CARROT, name: 'minecraft:golden_carrot', tile: 'item_golden_carrot' },
+  { id: Item.BOOK_AND_QUILL, name: 'minicraft:writable_book', tile: 'item_book_and_quill', maxStack: 1 },
+  { id: Item.WRITTEN_BOOK, name: 'minicraft:written_book', tile: 'item_written_book', maxStack: 1 },
+  { id: Item.SUGAR, name: 'minicraft:sugar', tile: 'item_sugar' },
+  { id: Item.RABBIT_FOOT, name: 'minicraft:rabbit_foot', tile: 'item_rabbit_foot' },
+  { id: Item.MAGMA_CREAM, name: 'minicraft:magma_cream', tile: 'item_magma_cream' },
+  { id: Item.GHAST_TEAR, name: 'minicraft:ghast_tear', tile: 'item_ghast_tear' },
+  { id: Item.SPIDER_EYE, name: 'minicraft:spider_eye', tile: 'item_spider_eye' },
+  { id: Item.FERMENTED_SPIDER_EYE, name: 'minicraft:fermented_spider_eye', tile: 'item_fermented_spider_eye' },
+  { id: Item.GLISTERING_MELON, name: 'minicraft:glistering_melon_slice', tile: 'item_glistering_melon_slice' },
+  { id: Item.PUFFERFISH, name: 'minicraft:pufferfish', tile: 'item_pufferfish' },
+  { id: Item.GOLDEN_CARROT, name: 'minicraft:golden_carrot', tile: 'item_golden_carrot' },
   // ---- 食物与杂物补齐（批次 48，B17）
   // 金粒：原版由 1 金锭拆成 9 粒，也是**金胡萝卜**的原料（此前金胡萝卜只能当酿造材料，
   // 因为"8 金粒"这条配方缺原料——这是那批"第一件原料从哪来"里最便宜的一个缺口）
-  { id: Item.GOLD_NUGGET, name: 'minecraft:gold_nugget', tile: 'item_gold_nugget' },
+  { id: Item.GOLD_NUGGET, name: 'minicraft:gold_nugget', tile: 'item_gold_nugget' },
   // 碗：原版"3 木板 → 4 碗"，蘑菇煲 / 甜菜汤 / 兔肉煲都要它
-  { id: Item.BOWL, name: 'minecraft:bowl', tile: 'item_bowl' },
+  { id: Item.BOWL, name: 'minicraft:bowl', tile: 'item_bowl' },
   // ⚠️ 三种汤**不可堆叠**（原版 max stack = 1）：它们是"碗装的东西"，
   // 能堆 64 的话"一碗一碗喝"这件事就没有手感了。批次 57 顺手把这条补上
-  { id: Item.MUSHROOM_STEW, name: 'minecraft:mushroom_stew', tile: 'item_mushroom_stew', maxStack: 1 },
-  { id: Item.PUMPKIN_PIE, name: 'minecraft:pumpkin_pie', tile: 'item_pumpkin_pie' },
+  { id: Item.MUSHROOM_STEW, name: 'minicraft:mushroom_stew', tile: 'item_mushroom_stew', maxStack: 1 },
+  { id: Item.PUMPKIN_PIE, name: 'minicraft:pumpkin_pie', tile: 'item_pumpkin_pie' },
   // 甜菜根（B17）：第四种作物。种子只从村庄/矿井的战利品里来（原版也是这么来的）
-  { id: Item.BEETROOT, name: 'minecraft:beetroot', tile: 'item_beetroot' },
-  { id: Item.BEETROOT_SEEDS, name: 'minecraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
+  { id: Item.BEETROOT, name: 'minicraft:beetroot', tile: 'item_beetroot' },
+  { id: Item.BEETROOT_SEEDS, name: 'minicraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
   // 南瓜/西瓜种子（批次 77）：种下去是自己的**第 0 阶段茎**
-  { id: Item.PUMPKIN_SEEDS, name: 'minecraft:pumpkin_seeds', tile: 'item_pumpkin_seeds', block: Block.PUMPKIN_STEM_STAGE0 },
-  { id: Item.MELON_SEEDS, name: 'minecraft:melon_seeds', tile: 'item_melon_seeds', block: Block.MELON_STEM_STAGE0 },
-  { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup', maxStack: 1 },
+  { id: Item.PUMPKIN_SEEDS, name: 'minicraft:pumpkin_seeds', tile: 'item_pumpkin_seeds', block: Block.PUMPKIN_STEM_STAGE0 },
+  { id: Item.MELON_SEEDS, name: 'minicraft:melon_seeds', tile: 'item_melon_seeds', block: Block.MELON_STEM_STAGE0 },
+  { id: Item.BEETROOT_SOUP, name: 'minicraft:beetroot_soup', tile: 'item_beetroot_soup', maxStack: 1 },
   // ---- 甜浆果与可可豆（批次 49）
   // 甜浆果：种下去就是**甜浆果丛**（`block` 指向第 0 阶段，与原版一致）
-  { id: Item.SWEET_BERRIES, name: 'minecraft:sweet_berries', tile: 'item_sweet_berries', block: Block.SWEET_BERRY_BUSH_STAGE0 },
+  { id: Item.SWEET_BERRIES, name: 'minicraft:sweet_berries', tile: 'item_sweet_berries', block: Block.SWEET_BERRY_BUSH_STAGE0 },
   // 可可豆：种在**丛林原木侧面**（`block` 指向第 0 阶段，朝向由放置规则算出来）
-  { id: Item.COCOA_BEANS, name: 'minecraft:cocoa_beans', tile: 'item_cocoa_beans', block: Block.COCOA_STAGE0 },
-  { id: Item.COOKIE, name: 'minecraft:cookie', tile: 'item_cookie' },
+  { id: Item.COCOA_BEANS, name: 'minicraft:cocoa_beans', tile: 'item_cocoa_beans', block: Block.COCOA_STAGE0 },
+  { id: Item.COOKIE, name: 'minicraft:cookie', tile: 'item_cookie' },
   // ---- 海带与干海带（批次 50）：干海带是食物（1 饥饿 / 0.6 饱和度，数值在 food.ts），
   // 也是"干海带块"的唯一材料（9 ↔ 1）
-  { id: Item.DRIED_KELP, name: 'minecraft:dried_kelp', tile: 'item_dried_kelp' },
+  { id: Item.DRIED_KELP, name: 'minicraft:dried_kelp', tile: 'item_dried_kelp' },
   // ---- 可疑的炖菜（批次 57）：5 个 id 的贴图各不相同（汤色按花来），
   // 于是"背包里哪一碗是哪朵花做的"一眼能看出来——这比原版"看得出效果但看不出花"更好读
-  { id: Item.SUSPICIOUS_STEW_DANDELION, name: 'minecraft:suspicious_stew_dandelion', tile: 'item_suspicious_stew_dandelion', maxStack: 1 },
-  { id: Item.SUSPICIOUS_STEW_POPPY, name: 'minecraft:suspicious_stew_poppy', tile: 'item_suspicious_stew_poppy', maxStack: 1 },
-  { id: Item.SUSPICIOUS_STEW_BLUE_ORCHID, name: 'minecraft:suspicious_stew_blue_orchid', tile: 'item_suspicious_stew_blue_orchid', maxStack: 1 },
-  { id: Item.SUSPICIOUS_STEW_OXEYE_DAISY, name: 'minecraft:suspicious_stew_oxeye_daisy', tile: 'item_suspicious_stew_oxeye_daisy', maxStack: 1 },
-  { id: Item.SUSPICIOUS_STEW_CORNFLOWER, name: 'minecraft:suspicious_stew_cornflower', tile: 'item_suspicious_stew_cornflower', maxStack: 1 },
-  { id: Item.REDSTONE_DUST, name: 'minecraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
-  { id: Item.GLOWSTONE_DUST, name: 'minecraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
+  { id: Item.SUSPICIOUS_STEW_DANDELION, name: 'minicraft:suspicious_stew_dandelion', tile: 'item_suspicious_stew_dandelion', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_POPPY, name: 'minicraft:suspicious_stew_poppy', tile: 'item_suspicious_stew_poppy', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_BLUE_ORCHID, name: 'minicraft:suspicious_stew_blue_orchid', tile: 'item_suspicious_stew_blue_orchid', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_OXEYE_DAISY, name: 'minicraft:suspicious_stew_oxeye_daisy', tile: 'item_suspicious_stew_oxeye_daisy', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_CORNFLOWER, name: 'minicraft:suspicious_stew_cornflower', tile: 'item_suspicious_stew_cornflower', maxStack: 1 },
+  { id: Item.REDSTONE_DUST, name: 'minicraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
+  { id: Item.GLOWSTONE_DUST, name: 'minicraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
   // ---- 药水（H10）：不可堆叠，一次一瓶
-  ...POTION_ITEMS.map((entry) => ({ id: entry.id, name: `minecraft:potion_${entry.key}`, tile: `item_potion_${entry.key}`, maxStack: 1 })),
-  { id: Item.CARROT, name: 'minecraft:carrot', tile: 'item_carrot', block: Block.CARROTS_STAGE0 },
-  { id: Item.POTATO, name: 'minecraft:potato', tile: 'item_potato', block: Block.POTATOES_STAGE0 },
-  { id: Item.BAKED_POTATO, name: 'minecraft:baked_potato', tile: 'item_baked_potato' },
-  { id: Item.BREAD, name: 'minecraft:bread', tile: 'item_bread' },
+  ...POTION_ITEMS.map((entry) => ({ id: entry.id, name: `minicraft:potion_${entry.key}`, tile: `item_potion_${entry.key}`, maxStack: 1 })),
+  { id: Item.CARROT, name: 'minicraft:carrot', tile: 'item_carrot', block: Block.CARROTS_STAGE0 },
+  { id: Item.POTATO, name: 'minicraft:potato', tile: 'item_potato', block: Block.POTATOES_STAGE0 },
+  { id: Item.BAKED_POTATO, name: 'minicraft:baked_potato', tile: 'item_baked_potato' },
+  { id: Item.BREAD, name: 'minicraft:bread', tile: 'item_bread' },
 
   // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
-  { id: Item.BUCKET, name: 'minecraft:bucket', tile: 'item_bucket', maxStack: 16 },
-  { id: Item.MILK_BUCKET, name: 'minecraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
+  { id: Item.BUCKET, name: 'minicraft:bucket', tile: 'item_bucket', maxStack: 16 },
+  { id: Item.MILK_BUCKET, name: 'minicraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
   // 水桶 / 岩浆桶（批次 176）：不可堆叠（原版也是——里面装着东西）
-  { id: Item.WATER_BUCKET, name: 'minecraft:water_bucket', tile: 'item_water_bucket', maxStack: 1 },
-  { id: Item.LAVA_BUCKET, name: 'minecraft:lava_bucket', tile: 'item_lava_bucket', maxStack: 1 },
+  { id: Item.WATER_BUCKET, name: 'minicraft:water_bucket', tile: 'item_water_bucket', maxStack: 1 },
+  { id: Item.LAVA_BUCKET, name: 'minicraft:lava_bucket', tile: 'item_lava_bucket', maxStack: 1 },
   // ---- 打火石（I12）：铁锭 + 燧石；耐久 64（原版），对着方块面右键点燃火焰
   {
     id: Item.FLINT_AND_STEEL,
-    name: 'minecraft:flint_and_steel',
+    name: 'minicraft:flint_and_steel',
     tile: 'item_flint_and_steel',
     maxStack: 1,
     durability: 64,
   },
   // ---- 钓鱼（批次 81，G11）：钓竿 + 四种鱼 + 两种熟鱼。
-  // ⚠️ **注册名必须是 `minecraft:fishing_rod`**：附魔表里的"诱饵/海之眷顾"
+  // ⚠️ **注册名必须是 `minicraft:fishing_rod`**：附魔表里的"诱饵/海之眷顾"
   // 早就按这个名字登记了目标（`enchantments.ts` 的 targets: ['fishing_rod']），
   // 名字写错会表现成"钓竿在附魔台里什么都附不了"，而且不报错。
   {
     id: Item.FISHING_ROD,
-    name: 'minecraft:fishing_rod',
+    name: 'minicraft:fishing_rod',
     tile: 'item_fishing_rod',
     maxStack: 1,
     durability: 64,
   },
-  { id: Item.COD, name: 'minecraft:cod', tile: 'item_cod' },
-  { id: Item.SALMON, name: 'minecraft:salmon', tile: 'item_salmon' },
-  { id: Item.TROPICAL_FISH, name: 'minecraft:tropical_fish', tile: 'item_tropical_fish' },
-  { id: Item.COOKED_COD, name: 'minecraft:cooked_cod', tile: 'item_cooked_cod' },
-  { id: Item.COOKED_SALMON, name: 'minecraft:cooked_salmon', tile: 'item_cooked_salmon' },
+  { id: Item.COD, name: 'minicraft:cod', tile: 'item_cod' },
+  { id: Item.SALMON, name: 'minicraft:salmon', tile: 'item_salmon' },
+  { id: Item.TROPICAL_FISH, name: 'minicraft:tropical_fish', tile: 'item_tropical_fish' },
+  { id: Item.COOKED_COD, name: 'minicraft:cooked_cod', tile: 'item_cooked_cod' },
+  { id: Item.COOKED_SALMON, name: 'minicraft:cooked_salmon', tile: 'item_cooked_salmon' },
   // ---- 下界合金（K8 尾巴）：远古残骸烧出来的碎片，与金锭合成下界合金锭
-  { id: Item.NETHERITE_SCRAP, name: 'minecraft:netherite_scrap', tile: 'item_netherite_scrap' },
-  { id: Item.NETHERITE_INGOT, name: 'minecraft:netherite_ingot', tile: 'item_netherite_ingot' },
+  { id: Item.NETHERITE_SCRAP, name: 'minicraft:netherite_scrap', tile: 'item_netherite_scrap' },
+  { id: Item.NETHERITE_INGOT, name: 'minicraft:netherite_ingot', tile: 'item_netherite_ingot' },
 
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
-  { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
-  { id: Item.COOKED_PORKCHOP, name: 'minecraft:cooked_porkchop', tile: 'item_cooked_porkchop' },
-  { id: Item.COOKED_MUTTON, name: 'minecraft:cooked_mutton', tile: 'item_cooked_mutton' },
-  { id: Item.COOKED_CHICKEN, name: 'minecraft:cooked_chicken', tile: 'item_cooked_chicken' },
-  { id: Item.APPLE, name: 'minecraft:apple', tile: 'item_apple' },
-  { id: Item.MELON_SLICE, name: 'minecraft:melon_slice', tile: 'item_melon_slice' },
-  { id: Item.GOLDEN_APPLE, name: 'minecraft:golden_apple', tile: 'item_golden_apple' },
+  { id: Item.COOKED_BEEF, name: 'minicraft:cooked_beef', tile: 'item_cooked_beef' },
+  { id: Item.COOKED_PORKCHOP, name: 'minicraft:cooked_porkchop', tile: 'item_cooked_porkchop' },
+  { id: Item.COOKED_MUTTON, name: 'minicraft:cooked_mutton', tile: 'item_cooked_mutton' },
+  { id: Item.COOKED_CHICKEN, name: 'minicraft:cooked_chicken', tile: 'item_cooked_chicken' },
+  { id: Item.APPLE, name: 'minicraft:apple', tile: 'item_apple' },
+  { id: Item.MELON_SLICE, name: 'minicraft:melon_slice', tile: 'item_melon_slice' },
+  { id: Item.GOLDEN_APPLE, name: 'minicraft:golden_apple', tile: 'item_golden_apple' },
 ];
 
 /** 16 种染料，id 连续且顺序与 DYE_COLORS 一致 */
 const DYE_SPECS: readonly NonBlockItemSpec[] = DYE_COLORS.map((color, index) => ({
   id: dyeItemId(index),
-  name: `minecraft:${color.name}_dye`,
+  name: `minicraft:${color.name}_dye`,
   tile: `dye_${color.name}`,
 }));
 
@@ -785,7 +785,7 @@ for (const spec of TOOL_SPECS) {
 // ---- 剪刀：单独注册（不参与「5 种类 × 5 材质」那套叉乘，只有铁的一种）
 ITEMS[Item.SHEARS] = {
   id: Item.SHEARS,
-  name: 'minecraft:shears',
+  name: 'minicraft:shears',
   maxStack: 1,
   tile: 'item_shears',
   tool: SHEARS_INFO,
@@ -869,14 +869,14 @@ export function isArmor(itemId: number): boolean {
  *
  * 原版只有**下界合金那一族**有这个性质：`ancient_debris`、`netherite_scrap`、
  * `netherite_ingot`、`netherite_block`，以及下界合金做的工具/盔甲（它们的物品名
- * 都是 `minecraft:netherite_*`）。所以这里是**按名字派生**而不是手写一张 id 表：
+ * 都是 `minicraft:netherite_*`）。所以这里是**按名字派生**而不是手写一张 id 表：
  * 以后再加下界合金的东西（比如锻造模板、下界合金锄）自动就在里面，
  * 不用记得回来改第二处——这个仓库吃过太多次"派生出来的东西清单还是手抄的"。
  */
 export function isFireproofItem(itemId: number): boolean {
   const def = itemDef(itemId);
   if (!def) return false;
-  return def.name.startsWith('minecraft:netherite_') || def.name === 'minecraft:ancient_debris';
+  return def.name.startsWith('minicraft:netherite_') || def.name === 'minicraft:ancient_debris';
 }
 
 /** 该物品的食物数值；不能吃返回 undefined */
@@ -1300,7 +1300,7 @@ export function categoryOf(itemId: number): ItemCategory {
 
 /** 物品显示名（去掉命名空间前缀） */
 export function itemName(id: number): string {
-  return (itemDef(id)?.name ?? 'minecraft:air').replace('minecraft:', '');
+  return (itemDef(id)?.name ?? 'minicraft:air').replace('minicraft:', '');
 }
 
 export function itemIconTile(id: number): string {
@@ -1353,7 +1353,7 @@ export function isLegacyItem(itemId: number): boolean {
 for (const [index, spec] of SPAWN_EGG_SPECS.entries()) {
   register({
     id: spawnEggItemId(index),
-    name: `minecraft:${spawnEggTile(spec.mobId)}`,
+    name: `minicraft:${spawnEggTile(spec.mobId)}`,
     maxStack: MAX_STACK,
     tile: spawnEggTile(spec.mobId),
     spawnEgg: spec.mobId,

@@ -39,7 +39,7 @@ for (let id = 1; id < BLOCKS.length; id++) {
   const def = blockDef(id);
   if (!def || seen.has(id) || made.has(id)) continue;
   seen.add(id);
-  const name = def.name.replace('minecraft:', '');
+  const name = def.name.replace('minicraft:', '');
   const entry = `${name}#${id}`;
   if (NEVER_CRAFTED.test(name)) buckets.neverCrafted.push(entry);
   else if (ORE.test(name)) buckets.ore.push(entry);

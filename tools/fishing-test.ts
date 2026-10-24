@@ -5,7 +5,7 @@
  * 所以断言的重点在"随机分布"与"表里的每一项都站得住"：
  *  1. **物品与食物**：钓竿（耐久 64、附魔接线）+ 四种鱼 + 两种熟鱼；
  *     河豚的三条副作用逐项对齐原版；
- *  2. **附魔接线**：注册名必须是 `minecraft:fishing_rod`（附魔表按名字登记目标）、
+ *  2. **附魔接线**：注册名必须是 `minicraft:fishing_rod`（附魔表按名字登记目标）、
  *     `SPECIAL_ITEMS` 让它能附魔、`enchantKindOf` 认得出；
  *  3. **战利品表**：三个池子（85/10/5）、池内权重、每一项都指向真东西、
  *     **海之眷顾只改池子不改池内**；
@@ -108,8 +108,8 @@ console.log('\n[物品：钓竿与六种鱼]');
   const registered = ids.filter((id) => itemDef(id) === undefined);
   check('六件都注册了', registered.length === 0, registered.join(','));
 
-  // ⚠️ 注册名必须是 `minecraft:fishing_rod`：附魔表的 targets 是按这个名字登记的
-  equal('钓竿的注册名是 minecraft:fishing_rod', itemDef(Item.FISHING_ROD)?.name, 'minecraft:fishing_rod');
+  // ⚠️ 注册名必须是 `minicraft:fishing_rod`：附魔表的 targets 是按这个名字登记的
+  equal('钓竿的注册名是 minicraft:fishing_rod', itemDef(Item.FISHING_ROD)?.name, 'minicraft:fishing_rod');
   equal('钓竿不可堆叠', itemDef(Item.FISHING_ROD)?.maxStack, 1);
   equal('钓竿耐久 64（原版）', durabilityOf(Item.FISHING_ROD), 64);
   equal('钓竿归"工具"分类', categoryOf(Item.FISHING_ROD), 'tools');

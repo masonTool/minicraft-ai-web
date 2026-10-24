@@ -4,7 +4,7 @@ const names = new Set<string>();
 for (let id = 1; id < BLOCKS.length; id++) {
   const def = blockDef(id);
   if (!def) continue;
-  const name = def.name.replace('minecraft:', '');
+  const name = def.name.replace('minicraft:', '');
   if (name === 'air') continue;
   names.add(name);
 }
