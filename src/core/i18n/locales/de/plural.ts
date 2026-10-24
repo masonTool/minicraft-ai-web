@@ -12,11 +12,6 @@ import type { PluralTable } from '../../plural.ts';
 export const plural = {
   // 移动距离：1 Block / 2 Blöcke
   'statistics.blocks': { one: '{count} Block', other: '{count} Blöcke' },
-  // 建造工具：1 Block / 2 Blöcke（德语的分词动词不变，只有名词变）
-  'buildtools.select.done': { one: 'Auswahl umfasst {volume} Block', other: 'Auswahl umfasst {volume} Blöcke' },
-  'buildtools.fill.done': { one: '{count} Block gefüllt', other: '{count} Blöcke gefüllt' },
-  'buildtools.copy.done': { one: '{count} Block kopiert', other: '{count} Blöcke kopiert' },
-  'buildtools.paste.done': { one: '{count} Block eingefügt', other: '{count} Blöcke eingefügt' },
   // 「Mal」不随数变化，只需 other 与 one 同形 —— 登记它是为了不让 t() 那条被绕过时漏掉
   'station.brewLeft': { one: 'Noch {count} Mal braubar', other: 'Noch {count} Mal braubar' },
 } satisfies PluralTable;

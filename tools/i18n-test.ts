@@ -1770,9 +1770,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     ptForms.join('|'),
   );
   check(
-    '葡语的过去分词也跟着配合（preenchido / preenchidos）',
-    tn('buildtools.fill.done', 1) === '1 bloco preenchido' && tn('buildtools.fill.done', 3) === '3 blocos preenchidos',
-    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+    '葡语复数表里的第二条键也走同一套（vez / vezes）',
+    tn('station.brewLeft', 1) === 'Ainda dá para preparar 1 vez' &&
+      tn('station.brewLeft', 3) === 'Ainda dá para preparar 3 vezes',
+    `${tn('station.brewLeft', 1)} / ${tn('station.brewLeft', 3)}`,
   );
   resetLanguageForTest();
 
@@ -1836,9 +1837,10 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     frForms.join('|'),
   );
   check(
-    '法语的过去分词也跟着配合（rempli / remplis）',
-    tn('buildtools.fill.done', 1) === '1 bloc rempli' && tn('buildtools.fill.done', 3) === '3 blocs remplis',
-    `${tn('buildtools.fill.done', 1)} / ${tn('buildtools.fill.done', 3)}`,
+    '法语复数表里的第二条键也走同一套（brassage / brassages）',
+    tn('station.brewLeft', 1) === 'Encore 1 brassage possible' &&
+      tn('station.brewLeft', 3) === 'Encore 3 brassages possibles',
+    `${tn('station.brewLeft', 1)} / ${tn('station.brewLeft', 3)}`,
   );
   resetLanguageForTest();
 
