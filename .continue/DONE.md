@@ -9,6 +9,29 @@
 
 ---
 
+## 批次 20261024-2335 · 2026-10-24 · 会话 d19faf6b
+
+- [x] [P1] `tools/run-tests.mjs`：非打包套件（net/guard/screenshot/shotdiff/browser-check）改成按触发文件命中，不再"一律跑" → `node tools/run-tests.mjs --changed` 在干净工作区 0 命中且 <2s；在 `server/` 下放一个临时未跟踪文件后应只命中 net
+  - 做了什么：新增 `NON_BUNDLE_TRIGGERS`（net → `server/`；四套工具自检 → 各自的 `tools/x.mjs` + `tools/x-test.mjs` + `tools/browser.mjs`），`--changed` 里 `if (!s.bundle) return true` 换成前缀匹配；没登记的套件保持全跑
+  - 为什么：这五套没有 esbuild metafile 才被"一律跑"兜底，而它们恰好最慢且串行（net 12s 真起服务端 + guard 10s 真起浏览器），干净工作区也要 22.3s，内循环因此失效。核对过它们的真实依赖：net 只起 `server/`，四套工具自检只 readFileSync `tools/*.mjs` 与 package.json
+  - 验证：干净工作区 `--changed` 739ms / 0 套（原 22.3s / 5 套）；改 `server/index.mjs` → 只命中 net（12.1s）；改 `tools/audit-tasks.mjs` → 0 套（600ms）；全量 `node tools/run-tests.mjs` 177/177 绿
+  - 批次：20261024-2335
+- [x] [P2] `.continue/hooks/selftest.mjs`：按 `hooks/*.mjs` 内容哈希缓存结论，文件没变时不重复跑 → 连跑两次 `node .continue/hooks/check.mjs hooks` 第二次 <500ms；动一下 `hooks/lib.mjs` 后必须重跑
+  - 做了什么：`selftest.mjs` 顶部加内容哈希 + `process.version` 缓存（落盘 `.continue/.logs/.selftest-cache.json`），只缓存通过的结论；`--no-cache` / `CONTINUE_SELFTEST_NO_CACHE=1` 强制真跑，开关登记进 `.continue/README.md` 的可调开关表
+  - 为什么：钩子自检每次提交都跑、5.2s，而它只把钩子拷进临时目录灌事件，不读项目里任何别的东西——文件没变结论不可能变。失败不缓存，避免"一次红、永远红"
+  - 验证：连跑两次第二次 26ms 且输出带"缓存"字样；给 `hooks/lib.mjs` 追加一行后 5155ms 真跑（未命中）；还原后再次真跑 5220ms；`check.mjs --fast` 的 hooks 项 5.2s → 25ms
+  - 批次：20261024-2335
+- [x] [P3] 核对整条链路的提速结果并写进 `.continue/TIPS.md` → `node .continue/hooks/check.mjs --fast` 从 32s 降到 ≤8s，`npm run check:fast` ≤5s
+  - 做了什么：把四套工具自检的 `tools/` 一把抓细化成逐个文件（改任一 `tools/*-test.ts` 不再触发 10 秒浏览器）；新增 `notes/tips-tooling.md` 条目（兜底规则不能覆盖最慢的几套 + 钩子自检缓存）；修掉 AGENTS.md 里过期的时间数字
+  - 为什么：`tools/` 下有 170 多份离线套件入口，一把抓等于"改个测试文件就起浏览器"，粗粒度兜底会把刚省下的时间又吐回去
+  - 验证：`node .continue/hooks/check.mjs --fast` 4.0s（原 31.6s）、`npm run check:fast` 3.8s（原 26.2s）；改 `tools/audit-tasks.mjs` 后 `--changed` 0 套 600ms；`git commit` 的提交前门禁 33s → 4s
+  - 批次：20261024-2335
+- [x] [P4] 修 `npm run check` 因 HANDOFF「提交总数」自指而长期红灯 → `npm run check` 退出码 0（提交总数改成"下限 + 校准点"口径）
+  - 做了什么：口径改成 `提交总数 N（锚定 <短哈希>）`，`tools/audit-tasks.mjs` 核对 `git rev-list --count <哈希> === N`，不符时直接打印"重新锚定到当前 HEAD：…"可粘一行；HANDOFF 那一行与 `notes/tips-tooling.md` 的旧"处置"（教人写 HEAD+1，正是死结来源）一起改写
+  - 为什么：旧口径要求等于 `git rev-list --count HEAD`，而每个提交都让它 +1，把它改成 `HEAD+1` 的那个提交自己又让 HEAD 变大——自指死结，实测写着 1764、实际 1767，`npm run check` 长期红，每跑一次白等 42s 再去改一个注定追不上的数字
+  - 验证：`npm run audit:tasks -- --print` 全绿（"d4340a02 是第 1769 个提交"）；把数字改成 1700 后正确报红并给出建议行；`npm run check` 退出码 0（42s，原 exit 1）
+  - 批次：20261024-2335
+
 ## 批次 20261024-2156 · 2026-10-24 · 会话 167f6a14
 
 - [x] [修33] 手持武器改成"按图标轮廓挤出的 3D 像素模型"：`src/render/itemModel.ts`（新）+ `HandRenderer` + `PlayerRenderer` + `TextureAtlas.readTile()` → `test:render` 272 通过
@@ -186,29 +209,4 @@
   - 为什么：这几条断言钉的正是本轮推翻的口径，留着会红（也会把回归锁死成旧行为）。
   - 验证：`npm run check` 全绿（typecheck + 全部离线套件 + 三张台账 + 文档体量），`ui-test` 971 通过 / 0 失败。
   - 批次：20261024-1609
-
-## 批次 20261024-1531 · 2026-10-24 · 会话 3da8ce2b
-
-- [x] [修8] 手持刀剑显示：锚点移到**柄**（贴图底边中心当握把），并给扁平物品**厚度**（薄盒子 + 侧面压暗，避免图标被拉成彩带）：`render/HandRenderer.ts` → `npm run test:render`（断言：sprite 用薄盒子且 depth ∈ [0.03,0.08]；几何包围盒底边在锚点（min.y≈0），方块仍居中；侧面亮度低于正反面）
-  - 做了什么：扁平物品改回薄盒子 `BoxGeometry(0.44, 0.44, SPRITE_THICKNESS=0.05)`，六面同图标；新增 `SPRITE_SHADE = [.62,.62,.86,.62,1,1]`（正反满亮度、厚度边压暗）取代方块那套 `FACE_SHADE`；几何体 `translate(0, ITEM_SIZE/2, 0)` 让**底边落在挂点上**（手握柄）；新增 `SPRITE_HOLD_ROTATION = [0.1,-0.55,-0.32]` 与 `BLOCK_HOLD_ROTATION` 分开，方块仍握中间。顺手把 1455 那份只为"双面面片"存在的 `spriteMaterial` 删了（薄盒子正反面都是真实几何，两份材质只会漏改亮度）。
-  - 为什么：用户要三件事——柄在手里（底边贴锚点）、有厚度（0.05）、别把图标拉成彩带（侧面压暗到 0.62，让它读作"边的暗面"而不是再来一遍图标）。
-  - 验证：`npx tsx tools/render-test.ts` **254 通过 / 0 失败**（把 1455 的 5 条改成 6 条：薄盒子厚度区间、尺寸 0.44、`min.y≈0 且 max.y≈0.44`、方块仍居中、侧面 0.62 / 正面 1、两套握持姿态各自成立）；`npm run typecheck` 通过。
-  - 批次：20261024-1531
-- [x] [修9] 空装备槽只保留部位图标，**去掉点击后的介绍文案**：`ui/InventoryScreen.ts` 删 `armorSlotPartName` 与提示分支、六个语种删 `inventory.armorEmptyHint` → `npm run test:ui` + `npm run test:i18n`（断言：不再有 `armorEmptyHint` 键与提示分支，槽位仍画图标）
-  - 做了什么：删掉 `handleSlotClick` 里那条"点空装备槽给提示"的分支、`armorSlotPartName()` 方法与 `ARMOR_PART_KEYS` 常量；六个语种同步删 `inventory.armorEmptyHint`（表回到 2864 键）。空槽里那五枚部位剪影图标**保持不变**。
-  - 为什么：用户："装备空槽有了，只需要显示放置什么就可以了，不用介绍。" 图标本身已经说明这一格放什么，再弹一句等于把说明写两遍。
-  - 验证：`npx tsx tools/ui-test.ts` **964 通过 / 0 失败**（把 1455 那 2 条"要有提示"改成 1 条"不弹介绍、图标仍在"）；`i18n-test` 547 通过、`audit:i18n` 六语言 2864/2864；`typecheck` 通过。
-  - 批次：20261024-1531
-- [x] [修10] 配方书与左栏滚动条按用户确认的口径恢复（**口径待确认**：见回复里的 A/B 选项）→ `npm run test:ui`（按选定口径写断言）
-  - 做了什么：① 配方书按用户选的 **B** 恢复：标题栏那颗键回到"只切物品分类"——在仓库里 → `openPocketCategory(lastRecipeTab)`（首次是"全部/放大镜"），已在分类栏 → 切"列出未拥有（红底）/ 只看能做的"；那颗键**完全不碰配方书**（书仍只能由 R 键或自己的 ✕ 手动开关，且是整屏那一层）。② 滚动条按用户选的 **A** 拆回两栏各自一套：`syncCategoryScrollbar` 贴内容右缘（`SCROLLBAR_CONTENT_GAP = 8`、7px 宽），`syncCreativeScrollbar` **不写 left**、交给 CSS 新增的 `.inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }`；两者都保留 1455 那次修正的"rect 相减定位"与 24px 滑块下限（`offsetTop` 取决于 offsetParent，正是创造栏错位的根因）。
-  - 为什么：用户确认"那颗键只切分类、不弹书"（B）与"回到两栏各自一套"（A）。保留 rect 定位是因为"各自一套"指的是**位置/宽度口径**分开，不是把已知会错位的算法抄回来。
-  - 验证：`npx tsx tools/ui-test.ts` **964 通过 / 0 失败**（改 5 条：那颗键只切分类且不碰 `onOpenRecipes`、分类栏里切 `showUnowned`、R 键仍独自开关书、两栏各自一套 + 创造栏交给 CSS `right: 2px`、创造栏不写 left、两处 rect 定位）；`typecheck` 通过。
-  - 副作用（按用户口径接受）：手机上配方书没有入口了（只剩 PC 的 R 键），与改动之前一致。
-  - 批次：20261024-1531
-- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
-  - L1：3 条各自都有会红的断言——手持刀剑 6 条（薄盒子厚度区间、尺寸、**底边贴锚点**（包围盒 min.y≈0）、方块仍居中、侧面压暗/正面满亮、两套握持旋转各自成立）、空槽去介绍 1 条（不再有 `armorEmptyHint` 与提示分支，图标仍在）、配方书+滚动条 6 条（那颗键只切分类且不碰 `onOpenRecipes`、分类栏切 `showUnowned`、R 键独自开关书、两栏各自一套、创造栏交给 CSS `right: 2px`、创造栏不写 left）+ 滚动条 2 条（两处 rect 定位、JS/CSS 滑块下限同为 24）。`render-test` 253 → **254**、`ui-test` 964。
-  - L2：本批做了**两次故意破坏**并确认变红——① 删掉 `geometry.translate(0, ITEM_SIZE/2, 0)`（让物品回到"捏在图标正中"）→ "扁平物品的底边贴在挂点上" 立刻红（实测 `y ∈ [-0.220, 0.220]`）；② 上一批已验过的"删 `spriteMaterial` 亮度那行"在本批重构里被合并成一份材质，旧的"两份材质同时变暗"断言已随材质合并一起删除（不再有可破坏点，属于**减少**而不是漏测）。两次都已还原（`git status` 只有文档）。
-  - L3：3 条全部来自用户实测原话（"恢复配方书和滚动条"→ 已用弹窗确认到 B/A；"手应该拿到柄的位置""刀剑也应该有厚度"；"空槽只要显示放置什么，不用介绍"）。我自己定的只有实现参数——厚度 0.05、侧面亮度 0.62、握持旋转 `[0.1,-0.55,-0.32]`、创造栏 2px/6px。其中**握持旋转**是唯一没法离线验证的（要看实际视角弧度），已在注释里标明来源，如果手感不对只需改这一个常量。
-  - 排除记录（找过但不算问题）：① 手机上配方书没有入口——这是 B 口径的必然结果，写进 decision D2 并告知用户；② 方块仍握在中间而不是"底边贴手"——用户只说刀剑要握柄，方块握中间才符合原版观感；③ 创造栏滚动条不写 `left` 会不会在 PC 上错位——PC 那条 `body:not(.touch-mode)` 规则已在 1455 删除，现在两栏共用同一套 `right` 兜底。
-  - 批次：20261024-1531
 
