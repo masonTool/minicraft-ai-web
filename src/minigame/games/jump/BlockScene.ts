@@ -42,10 +42,13 @@ import {
 import { ATLAS_U, createBlockAtlas, type CanvasFactory, type SpecialKind } from './blockTextures.ts';
 import {
   JUMP_TIMING,
+  RIPPLE_MAX_RINGS,
   blockBounceScale,
   enterScale,
   fadeScale,
   rippleProgress,
+  rippleRingCount,
+  rippleRingRadius,
 } from './motion.ts';
 import type { JumpBlockKind, JumpBlockShape } from './logic.ts';
 
@@ -103,12 +106,10 @@ export const ROUND_BLOCK_SEGMENTS = 56;
 const SHADOW_OFFSET = { x: -0.3, z: 0.5 };
 /** 相机跟随的指数插值系数（越大跟得越紧） */
 const FOLLOW_RATE = 8;
-/** 完美命中的三层同心圆：外白 / 中绿 / 内红（规格表 §7） */
-const RIPPLE_RINGS = [
-  { color: '#FFFFFF', radius: 1 },
-  { color: '#7ED957', radius: 0.72 },
-  { color: '#E93A41', radius: 0.45 },
-] as const;
+/** 完美命中的三层同心圆配色：外白 / 中绿 / 内红（规格表 §7）。下标 = 从外往里 */
+const RIPPLE_COLORS = ['#FFFFFF', '#7ED957', '#E93A41'] as const;
+/** 连击加成时最外圈换成金色（"又连中一次"的信号，不改计分） */
+export const RIPPLE_GOLD = '#F5C542';
 
 interface BlockEntry {
   spec: BlockSpec;
@@ -154,8 +155,8 @@ export class BlockScene {
   private fading: BlockEntry[] = [];
   /** 被踩的那块：从落地开始计时（毫秒） */
   private bounce: { key: string; ms: number } | null = null;
-  /** 完美命中的同心圆 */
-  private ripple: { x: number; z: number; size: number; ms: number } | null = null;
+  /** 完美命中的同心圆（`combo` 决定层数，不改计分） */
+  private ripple: { x: number; z: number; size: number; combo: number; ms: number } | null = null;
   private rippleRig: { meshes: THREE.Mesh[]; materials: THREE.MeshBasicMaterial[]; geometry: THREE.RingGeometry } | null = null;
   private viewport = { width: 1, height: 1 };
   private aspect = 1;
@@ -277,11 +278,23 @@ export class BlockScene {
     this.bounce = { key: blockKey({ x, z }), ms: 0 };
   }
 
-  /** 完美命中：在落点扩散三层同心圆（外白 / 中绿 / 内红） */
-  playRipple(x: number, z: number, size: number): void {
-    this.ripple = { x, z, size, ms: 0 };
+  /**
+   * 完美命中：在落点扩散同心圆。
+   *
+   * 层数随连击增长（3 → 6 层），从第 2 连开始最外圈换成金色——连击是纯表现，
+   * 计分规则一个字没动（见 `logic.scoreForLanding`）。
+   */
+  playRipple(x: number, z: number, size: number, combo = 1): void {
+    this.ripple = { x, z, size, combo, ms: 0 };
     const rig = this.ensureRippleRig();
-    for (const mesh of rig.meshes) mesh.visible = true;
+    const count = rippleRingCount(combo);
+    for (let i = 0; i < rig.meshes.length; i++) {
+      const material = rig.materials[i];
+      const mesh = rig.meshes[i];
+      if (!material || !mesh) continue;
+      material.color.set(rippleColorAt(i, count));
+      mesh.visible = i < count;
+    }
     this.refreshRipple();
   }
 
@@ -518,9 +531,10 @@ export class BlockScene {
     const geometry = new THREE.RingGeometry(0.86, 1, 48);
     const meshes: THREE.Mesh[] = [];
     const materials: THREE.MeshBasicMaterial[] = [];
-    for (const ring of RIPPLE_RINGS) {
+    // 一次建满最多层数（6），每跳只改可见性与颜色——波纹是高频表现，不能每次命中现建几何
+    for (let index = 0; index < RIPPLE_MAX_RINGS; index++) {
       const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(ring.color),
+        color: new THREE.Color(RIPPLE_COLORS[index % RIPPLE_COLORS.length] ?? RIPPLE_GOLD),
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -538,23 +552,28 @@ export class BlockScene {
     return this.rippleRig;
   }
 
-  /** 波纹：三层同心圆一起由内向外扩（600ms），越扩越淡 */
+  /** 波纹：`count` 层同心圆一起由内向外扩（600ms），越扩越淡 */
   private refreshRipple(): void {
     const ripple = this.ripple;
     const rig = this.rippleRig;
     if (!ripple || !rig) return;
     const progress = rippleProgress(ripple.ms);
     const topY = Math.max(0.05, ripple.size * BLOCK_HEIGHT_RATIO) + 0.02;
-    RIPPLE_RINGS.forEach((ring, index) => {
+    const count = rippleRingCount(ripple.combo);
+    for (let index = 0; index < rig.meshes.length; index++) {
       const mesh = rig.meshes[index];
       const material = rig.materials[index];
-      if (!mesh || !material) return;
-      const radius = ripple.size * (0.3 + 0.75 * progress) * ring.radius;
+      if (!mesh || !material) continue;
+      if (index >= count) {
+        mesh.visible = false;
+        continue;
+      }
+      const radius = ripple.size * (0.3 + 0.75 * progress) * rippleRingRadius(index, count);
       mesh.scale.set(radius, radius, 1);
       mesh.position.set(ripple.x, topY + index * 0.004, ripple.z);
       material.opacity = Math.max(0, 0.85 * (1 - progress));
       mesh.visible = progress < 1;
-    });
+    }
   }
 
   /**
@@ -642,6 +661,19 @@ function bakeFaceShading(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
 /** 方块的位置键：同一位置 = 同一块（跨重建保留入场进度） */
 function blockKey(spec: { x: number; z: number }): string {
   return `${spec.x.toFixed(3)}|${spec.z.toFixed(3)}`;
+}
+
+/**
+ * 第 `index` 层（从外往里）的颜色。
+ *
+ * 3 层时就是原版的外白 / 中绿 / 内红；连击加成把层数推到 4 层以上时，
+ * **最外圈换金色**，其余仍按白绿红循环——金色只在"连中"时出现，才有信号意义。
+ */
+function rippleColorAt(index: number, count: number): string {
+  const extra = count > RIPPLE_COLORS.length;
+  if (extra && index === 0) return RIPPLE_GOLD;
+  const offset = extra ? index - 1 : index;
+  return RIPPLE_COLORS[offset % RIPPLE_COLORS.length] ?? RIPPLE_GOLD;
 }
 
 /**

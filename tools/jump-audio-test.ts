@@ -20,10 +20,14 @@ import {
   FAIL_SFX,
   JUMP_SFX,
   LAND_SFX,
+  PERFECT_COMBO_MAX_SEMITONES,
+  PERFECT_COMBO_SEMITONES,
   PERFECT_SFX,
   JumpAudio,
   chargeFrequencyFor,
   chargeStepFor,
+  perfectPitchFactor,
+  perfectSweep,
   specialDuration,
   specialSequence,
   type Note,
@@ -96,6 +100,30 @@ console.log('\n单音（起跳 / 落地 / 完美 / 失败）');
   }
 }
 
+console.log('\n完美命中随连击升调（每连一次 +2 半音，封顶两个八度）');
+{
+  near('第 1 连是原调', perfectPitchFactor(1), 1);
+  near('第 2 连升 2 个半音', perfectPitchFactor(2), 2 ** (2 / 12), 1e-9);
+  near('第 3 连升 4 个半音', perfectPitchFactor(3), 2 ** (4 / 12), 1e-9);
+  check(
+    '连击越多音越高（严格递增）',
+    Array.from({ length: 10 }, (_, i) => perfectPitchFactor(i + 1)).every((v, i, arr) => i === 0 || v > arr[i - 1]!),
+  );
+  near('封顶两个八度（×4）', perfectPitchFactor(99), 4, 1e-9);
+  near('封顶后再连也不升', perfectPitchFactor(13), perfectPitchFactor(20), 1e-12);
+  near('combo 0 / 负数按第 1 连处理', perfectPitchFactor(0), 1);
+  near('NaN 不炸', perfectPitchFactor(Number.NaN), 1);
+
+  const first = perfectSweep(1);
+  near('第 1 连的起始频率 = 原调', first.from, PERFECT_SFX.from, 1e-9);
+  const third = perfectSweep(3);
+  near('第 3 连的起始频率按倍率放大', third.from, PERFECT_SFX.from * 2 ** (4 / 12), 1e-6);
+  check('整个滑音一起升调（两端同倍率）', Math.abs(third.to / third.from - PERFECT_SFX.to / PERFECT_SFX.from) < 1e-9);
+  check('时长/波形/音量不受连击影响', third.duration === PERFECT_SFX.duration && third.wave === PERFECT_SFX.wave && third.gain === PERFECT_SFX.gain);
+  check('半音步长常量是 2', PERFECT_COMBO_SEMITONES === 2);
+  check('封顶常量是两个八度', PERFECT_COMBO_MAX_SEMITONES === 24);
+}
+
 console.log('\n静默降级（没有 AudioContext 也不能炸）');
 {
   // node 里没有 AudioContext，正好就是"自动化环境 / 浏览器拦截 / 老设备"那条路径
@@ -109,6 +137,7 @@ console.log('\n静默降级（没有 AudioContext 也不能炸）');
     audio.playJump();
     audio.playLand(true);
     audio.playLand(false);
+    audio.playLand(true, 7);
     audio.playSpecial('well');
     audio.playSpecial('cube');
     audio.playSpecial('store');

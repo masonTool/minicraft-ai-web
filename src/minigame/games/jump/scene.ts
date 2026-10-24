@@ -93,6 +93,8 @@ export class JumpGame implements MiniGame {
 
   private hud: HTMLDivElement | null = null;
   private scoreEl: HTMLDivElement | null = null;
+  /** 分数下方的连击标记（`×N`，断连击即消失） */
+  private comboEl: HTMLDivElement | null = null;
   private overEl: HTMLDivElement | null = null;
   private overTitleEl: HTMLDivElement | null = null;
   private overScoreEl: HTMLDivElement | null = null;
@@ -148,6 +150,7 @@ export class JumpGame implements MiniGame {
     this.overEl?.remove();
     this.overEl = null;
     this.scoreEl = null;
+    this.comboEl = null;
     this.overTitleEl = null;
     this.overScoreEl = null;
     this.overBestEl = null;
@@ -353,14 +356,17 @@ export class JumpGame implements MiniGame {
     this.phase = 'ready';
     this.elapsed = 0;
 
-    this.audio?.playLand(outcome.center);
+    // 完美命中按连击升调（连击越高越亮），普通落地不变
+    this.audio?.playLand(outcome.center, outcome.run.combo);
 
     const landed = currentBlock(this.run);
-    // 被踩的方块凹一下再回弹；完美命中在**落点**扩三层同心圆 + 头顶飘 +N
+    // 被踩的方块凹一下再回弹；完美命中在**落点**扩散同心圆（层数随连击）+ 头顶飘字
     this.blocks?.punch(landed.x, landed.z);
     if (outcome.center) {
-      this.blocks?.playRipple(outcome.point.x, outcome.point.z, landed.size);
-      this.showFloat(`+${outcome.points}`, landed);
+      this.blocks?.playRipple(outcome.point.x, outcome.point.z, landed.size, outcome.run.combo);
+      // 连中两次起飘 `×N  +P`：只给"连击"一个视觉上的名字，计分规则一个字没动
+      const combo = outcome.run.combo;
+      this.showFloat(combo >= 2 ? `×${combo}  +${outcome.points}` : `+${outcome.points}`, landed);
     }
     this.landSquashMs = 0;
     this.holdBlockId = landed.kind === 'normal' ? -1 : landed.id;
@@ -524,7 +530,12 @@ export class JumpGame implements MiniGame {
     score.className = 'jump-score';
     this.scoreEl = score;
 
-    hud.append(score);
+    // 连击标记：贴在分数下方，只在连中两次以后出现（原版没有这行，是这一轮加的"表现层"）
+    const combo = document.createElement('div');
+    combo.className = 'jump-combo';
+    this.comboEl = combo;
+
+    hud.append(score, combo);
     context.layer.append(hud);
     this.hud = hud;
 
@@ -586,6 +597,12 @@ export class JumpGame implements MiniGame {
 
   private updateHud(): void {
     if (this.scoreEl) this.scoreEl.textContent = String(this.run.score);
+    // `×N`：连中两次起显示，落到非中心 / 掉下去就自然消失（combo 已被清零）
+    if (this.comboEl) {
+      const combo = this.run.combo;
+      this.comboEl.textContent = combo >= 2 ? `×${combo}` : '';
+      this.comboEl.classList.toggle('on', combo >= 2);
+    }
   }
 
   private showOver(score: number, newRecord = false): void {

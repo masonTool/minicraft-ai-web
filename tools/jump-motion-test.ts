@@ -29,6 +29,8 @@ import {
   jumpArc,
   landingSquash,
   rippleProgress,
+  rippleRingCount,
+  rippleRingRadius,
   sinusInOut,
   toppleAngle,
 } from '../src/minigame/games/jump/motion.ts';
@@ -151,6 +153,29 @@ console.log('\n倾倒（380ms 缓入到 ~95°）');
   near('负数归零', toppleAngle(-5), 0);
   near('NaN 归零', toppleAngle(Number.NaN), 0);
   near('倾倒时长 380ms', JUMP_TIMING.toppleMs, 380);
+}
+
+console.log('\n连击同心圆（3 层起，最多 6 层）');
+{
+  near('1 连 → 3 层', rippleRingCount(1), 3);
+  near('0 连也按 3 层（不会出现残废的 1 层圈）', rippleRingCount(0), 3);
+  near('2 连 → 4 层', rippleRingCount(2), 4);
+  near('3 连 → 5 层', rippleRingCount(3), 5);
+  near('4 连 → 6 层（封顶）', rippleRingCount(4), 6);
+  near('10 连仍是 6 层', rippleRingCount(10), 6);
+  near('NaN 按 3 层', rippleRingCount(Number.NaN), 3);
+
+  near('3 层时最外圈半径 = 1', rippleRingRadius(0, 3), 1);
+  near('3 层时最内圈 = 0.45', rippleRingRadius(2, 3), 0.45);
+  near('3 层时中间圈 = 0.725（与原版 0.72 同量级）', rippleRingRadius(1, 3), 0.725, 0.01);
+  check(
+    '每加一层都更密（同层数的半径单调由外向内递减）',
+    [3, 4, 5, 6].every((count) =>
+      Array.from({ length: count }, (_, i) => rippleRingRadius(i, count)).every((v, i, arr) => i === 0 || v < arr[i - 1]!),
+    ),
+  );
+  check('最外圈永远是 1（不会被连击挤出底座）', [3, 4, 5, 6].every((count) => rippleRingRadius(0, count) === 1));
+  near('层数越界被夹住', rippleRingRadius(99, 6), 0.45);
 }
 
 console.log('\n时序常量（对齐规格表 §8）');

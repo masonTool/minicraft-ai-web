@@ -74,6 +74,30 @@ export const PERFECT_SFX: Sweep = { from: 880, to: 1320, duration: 0.12, wave: '
 /** 失败：下滑音 */
 export const FAIL_SFX: Sweep = { from: 300, to: 80, duration: 0.35, wave: 'sine', gain: 0.11 };
 
+/** 连击每多一次，完美命中的音高升几个半音 */
+export const PERFECT_COMBO_SEMITONES = 2;
+/** 升调封顶：两个八度（24 个半音）。再高就进了刺耳的电子音区 */
+export const PERFECT_COMBO_MAX_SEMITONES = 24;
+
+/**
+ * 完美命中的音高倍率：第 1 连是原调，之后每连一次升 2 个半音，封顶两个八度。
+ *
+ * 为什么是半音而不是整音阶：连击是"连续同一种操作"，半音的递增听起来像"越爬越高"，
+ * 而五声音阶的跳进更像新的旋律，会让人误以为换了事件。
+ */
+export function perfectPitchFactor(combo: number): number {
+  const n = Number.isFinite(combo) ? Math.floor(combo) : 0;
+  const steps = Math.max(0, n - 1);
+  const semitones = Math.min(PERFECT_COMBO_MAX_SEMITONES, steps * PERFECT_COMBO_SEMITONES);
+  return 2 ** (semitones / 12);
+}
+
+/** 完美命中的单音（`combo` = 本次连击数，1 = 原调） */
+export function perfectSweep(combo: number): Sweep {
+  const factor = perfectPitchFactor(combo);
+  return { ...PERFECT_SFX, from: PERFECT_SFX.from * factor, to: PERFECT_SFX.to * factor };
+}
+
 /**
  * 特殊方块的短旋律：音符按"分越高越长"排列（+5 两个音、+30 五个音）。
  *
@@ -177,8 +201,9 @@ export class JumpAudio {
     this.sweep(JUMP_SFX);
   }
 
-  playLand(center: boolean): void {
-    if (center) this.sweep(PERFECT_SFX);
+  /** 落地音：完美命中按连击升调（`combo` 1 = 原调，见 `perfectPitchFactor`） */
+  playLand(center: boolean, combo = 1): void {
+    if (center) this.sweep(perfectSweep(combo));
     else this.sweep(LAND_SFX);
   }
 

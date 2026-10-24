@@ -188,6 +188,16 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('倾覆阶段播放角度曲线（toppleAngle → setTilt）', jumpSrc.includes('toppleAngle(ms)') && jumpSrc.includes('jumper.setTilt('));
   check('一屏只画 3 块（上一块 + 当前 + 下一块）', jumpSrc.includes('this.run.index + 1)') && !jumpSrc.includes('this.run.index + 2)'));
   check('倾覆期间不跟镜头（人已经倒出画面）', jumpSrc.includes("this.phase !== 'toppling'"));
+  // 连击表现（跳10）：计分规则没动，动的全是"看得见 / 听得见"的那一层
+  check('完美命中按连击升调', jumpSrc.includes('playLand(outcome.center, outcome.run.combo)'));
+  check(
+    '波纹层数随连击（playRipple 传 combo）',
+    jumpSrc.includes('playRipple(outcome.point.x, outcome.point.z, landed.size, outcome.run.combo)'),
+  );
+  check('连击飘字带 ×N', jumpSrc.includes('×${combo}'));
+  check('HUD 分数下方有连击标记', jumpSrc.includes("'jump-combo'") && /\.jump-combo\s*\{/.test(htmlSrc));
+  check('断连击时标记消失（combo < 2 不显示）', jumpSrc.includes('combo >= 2'));
+  check('最外圈金色（连击加成）', blockSceneSrc.includes('RIPPLE_GOLD') && blockSceneSrc.includes('rippleRingCount('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }

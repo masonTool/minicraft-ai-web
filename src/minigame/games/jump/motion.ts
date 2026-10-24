@@ -155,3 +155,27 @@ export function toppleAngle(ms: number): number {
 export function rippleProgress(ms: number): number {
   return clamp01(ms / JUMP_TIMING.rippleMs);
 }
+
+/** 完美命中的同心圆最多几层（3 层基础 + 3 层连击奖励） */
+export const RIPPLE_MAX_RINGS = 6;
+/** 最内圈的半径比例（最外圈永远是 1） */
+const RIPPLE_INNER_RATIO = 0.45;
+
+/**
+ * 完美命中的同心圆层数：`3 + min(3, combo − 1)`。
+ *
+ * 连击越多层越密，最多 6 层——再多就挤成一团，反而看不出"又连中了一次"。
+ * `combo ≤ 1` 时给 3 层（原版基础表现），不会出现"第一跳就有 1 层圈"这种残废反馈。
+ */
+export function rippleRingCount(combo: number): number {
+  const n = Number.isFinite(combo) ? Math.floor(combo) : 0;
+  return 3 + Math.min(3, Math.max(0, n - 1));
+}
+
+/** 第 `index` 层的半径比例（0 = 最外圈 = 1，向内等比缩到 0.45） */
+export function rippleRingRadius(index: number, count: number): number {
+  const n = Math.min(RIPPLE_MAX_RINGS, Math.max(1, Math.floor(count) || 1));
+  if (n <= 1) return 1;
+  const i = Math.min(n - 1, Math.max(0, Math.floor(index) || 0));
+  return 1 - (1 - RIPPLE_INNER_RATIO) * (i / (n - 1));
+}
