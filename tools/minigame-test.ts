@@ -611,10 +611,28 @@ console.log('\n跳一跳：落点判定与计分');
   check('正中心 → hit + center', perfect.kind === 'hit' && perfect.center);
   const edge = resolveLanding(from, to, 2 + half * 0.5);
   check('偏半格 → hit 但非中心', edge.kind === 'hit' && !edge.center);
-  equal('偏过头（> 半边长）→ miss', resolveLanding(from, to, 2 + half * 1.2).kind, 'miss');
-  equal('跳不够（差 > 半边长）→ miss', resolveLanding(from, to, 2 - half * 1.2).kind, 'miss');
-  equal('0 距离 → miss', resolveLanding(from, to, 0).kind, 'miss');
   equal('刚好压边（= 半边长）→ hit', resolveLanding(from, to, 2 + half).kind, 'hit');
+
+  // 三档判定的分界是「悬空量」：出界一点先倾覆，完全悬空才坠落
+  equal('冲过头一点（悬空 ≤ 半边长）→ topple', resolveLanding(from, to, 2 + half * 1.2).kind, 'topple');
+  equal('没跳够一点（悬空 ≤ 半边长）→ topple', resolveLanding(from, to, 2 - half * 1.2).kind, 'topple');
+  equal('悬空正好等于半径 → topple（边界算有支点）', resolveLanding(from, to, 2 + half * 2).kind, 'topple');
+  equal('悬空超过半径 → miss', resolveLanding(from, to, 2 + half * 2.01).kind, 'miss');
+  equal('0 距离（两块之间）→ miss', resolveLanding(from, to, 0).kind, 'miss');
+  equal('远远跳过头 → miss', resolveLanding(from, to, 2 + half * 6).kind, 'miss');
+  check(
+    '倾覆不分朝向（冲过头与没跳够都是 topple）',
+    resolveLanding(from, to, 2 + half * 1.5).kind === 'topple' && resolveLanding(from, to, 2 - half * 1.5).kind === 'topple',
+  );
+  check(
+    '圆形底座的判定更严：同一个角上方形站得住、圆形已经出界',
+    (() => {
+      const corner = { x: 0.85, z: 0.85 }; // 方形内（max=0.85<0.9）、圆形外（半径 1.2>0.9）
+      const squareTo: JumpBlock = { id: 1, x: 0, z: 0, size: 1.8, kind: 'normal', shape: 'square' };
+      const roundTo: JumpBlock = { ...squareTo, shape: 'round' };
+      return resolveLanding(corner, squareTo, 0).kind === 'hit' && resolveLanding(corner, roundTo, 0).kind === 'topple';
+    })(),
+  );
 
   equal('非中心 +1 且断连击', JSON.stringify(scoreForLanding(5, false)), JSON.stringify({ points: 1, combo: 0 }));
   equal('第 1 次中心 +2', JSON.stringify(scoreForLanding(0, true)), JSON.stringify({ points: 2, combo: 1 }));
@@ -633,6 +651,7 @@ console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
 
   const outcome = jump(run, exact);
   check('正中心跳 → 不结束', !outcome.over);
+  equal('结果是 hit', outcome.kind, 'hit');
   equal('分数 +2', outcome.run.score, 2);
   equal('索引 +1', outcome.run.index, 1);
   equal('连击 1', outcome.run.combo, 1);
@@ -640,8 +659,16 @@ console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
 
   const fell = jump(run, 0);
   check('跳空 → 本局结束', fell.over && fell.run.status === 'over');
+  equal('跳空是 miss（不是倾覆）', fell.kind, 'miss');
   equal('失败不加分', fell.run.score, 0);
   check('结束后再跳仍是 over（可重入）', jump(fell.run, exact).over);
+
+  // 倾覆：出界一点点，仍然结束这一局，但结果类型是 topple（场景据此播倾斜倒下的动画）
+  const half = to.size / 2;
+  const toppled = jump(run, exact + half * 1.5);
+  check('出界一点点 → 倾覆并结束', toppled.over && toppled.kind === 'topple' && toppled.run.status === 'over');
+  equal('倾覆不加分', toppled.run.score, 0);
+  check('倾覆落点仍然交回（人倒在哪）', Number.isFinite(toppled.point.x) && Number.isFinite(toppled.point.z));
 }
 
 console.log('\n跳一跳：落点保留（落到哪儿就站哪儿）');

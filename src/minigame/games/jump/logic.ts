@@ -76,6 +76,8 @@ export interface LandingOutcome {
   readonly center: boolean;
   readonly points: number;
   readonly over: boolean;
+  /** 三档判定：`topple` 与 `miss` 都结束这一局，只有倒下动画不同 */
+  readonly kind: LandingKind;
   /** 脚底落点（世界 xz）：场景据此把小人的站姿摆在"落下去的那个点"，不回中心 */
   readonly point: { readonly x: number; readonly z: number };
 }
@@ -326,9 +328,21 @@ export function blockOverhang(block: JumpBlock, x: number, z: number): number {
   return Math.max(dx, dz) - half;
 }
 
+/**
+ * 落点判定的三档结果。
+ *
+ *  · `hit`：脚底在底座内（再分是不是正中）；
+ *  · `topple`：脚底出界了，但悬空量没超过底座半径——**重心还在块边附近**，
+ *    人不会直接掉下去，而是先朝前倾斜、再倒下去；
+ *  · `miss`：完全悬空（两块之间、或者跳过头太远），没有任何支点，直接坠落。
+ *
+ * 三档都要结束这一局，区别只在"怎么倒"：`topple` 播倾覆再落，`miss` 直接落。
+ */
+export type LandingKind = 'hit' | 'topple' | 'miss';
+
 /** 一次跳跃的落点判定结果 */
 export interface Landing {
-  readonly kind: 'hit' | 'miss';
+  readonly kind: LandingKind;
   readonly center: boolean;
   /** 脚底落点 */
   readonly point: { readonly x: number; readonly z: number };
@@ -340,6 +354,9 @@ export interface Landing {
  * 从**实际站着的点**（`stand`）朝目标块中心跳，落点必定在这条线上：
  * 方向是自动对准中心的，玩家只控制距离。判定再按落点算——站在哪儿就跳哪儿，
  * 所以"上一跳站偏了"会实打实地改变这一跳的重心。
+ *
+ * 三档的分界线只看**悬空量**（`blockOverhang`），不看朝向：
+ * 冲过头和没跳够都往前进方向扑，不需要按偏移法线分方向。
  */
 export function resolveLanding(
   stand: { readonly x: number; readonly z: number },
@@ -354,9 +371,12 @@ export function resolveLanding(
   const d = Math.min(JUMP_CONFIG.maxDistance, Math.max(0, Number.isFinite(distance) ? distance : 0));
   const point = { x: stand.x + (dx / length) * d, z: stand.z + (dz / length) * d };
 
-  if (blockOverhang(to, point.x, point.z) > 0) return { kind: 'miss', center: false, point };
-
   const half = to.size / 2;
+  const overhang = blockOverhang(to, point.x, point.z);
+  // 悬空量还没超过底座半径 → 有支点可倾覆；超过就只剩空气
+  if (overhang > half) return { kind: 'miss', center: false, point };
+  if (overhang > 0) return { kind: 'topple', center: false, point };
+
   const offCenter = Math.hypot(point.x - to.x, point.z - to.z);
   return { kind: 'hit', center: offCenter <= half * JUMP_CONFIG.centerRatio, point };
 }
@@ -378,15 +398,27 @@ export function scoreForLanding(combo: number, center: boolean): { points: numbe
 
 /** 跳一次：判定 → 计分 → 生成下一个方块（失败则整局结束） */
 export function jump(run: JumpRun, distance: number): LandingOutcome {
-  if (run.status !== 'playing') return { run, center: false, points: 0, over: true, point: run.stand };
+  if (run.status !== 'playing') {
+    return { run, center: false, points: 0, over: true, kind: 'miss', point: run.stand };
+  }
 
   const to = run.blocks[run.index + 1];
-  if (!run.blocks[run.index] || !to) return { run, center: false, points: 0, over: true, point: run.stand };
+  if (!run.blocks[run.index] || !to) {
+    return { run, center: false, points: 0, over: true, kind: 'miss', point: run.stand };
+  }
 
   // 从**实际站着的点**起跳，落点也原样保留下来（不复位到方块中心）
   const landing = resolveLanding(run.stand, to, distance);
-  if (landing.kind === 'miss') {
-    return { run: { ...run, status: 'over' }, center: false, points: 0, over: true, point: landing.point };
+  if (landing.kind !== 'hit') {
+    // 倾覆与坠落都结束这一局：状态一样、动画不同（倾覆由场景播完再落）
+    return {
+      run: { ...run, status: 'over' },
+      center: false,
+      points: 0,
+      over: true,
+      kind: landing.kind,
+      point: landing.point,
+    };
   }
 
   const scored = scoreForLanding(run.combo, landing.center);
@@ -398,7 +430,14 @@ export function jump(run: JumpRun, distance: number): LandingOutcome {
     stand: landing.point,
   });
 
-  return { run: next, center: landing.center, points: scored.points, over: false, point: landing.point };
+  return {
+    run: next,
+    center: landing.center,
+    points: scored.points,
+    over: false,
+    kind: 'hit',
+    point: landing.point,
+  };
 }
 
 /** 当前站着的方块 / 下一个目标（渲染层与判定都用这两个） */
