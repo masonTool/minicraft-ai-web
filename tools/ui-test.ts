@@ -3409,6 +3409,24 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         return /['"]settings\.notice['"]/.test(table) && /['"]settings\.resourcePack\.hint['"]/.test(table);
       }),
   );
+  // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，
+  // 而网页版的"分发物"就是 `dist/`——所以这两份必须是 `public/` 里的静态文件，
+  // 不是只躺在仓库根目录（`vite build` 只复制 `public/`）。
+  let noticesOk = false;
+  let privacyOk = false;
+  try {
+    const notices = readFileSync(new URL('../public/third-party-notices.txt', import.meta.url), 'utf8');
+    noticesOk =
+      notices.includes('three.js authors') && notices.includes('Einar Otto Stangvik') && notices.includes('MIT');
+  } catch {
+    noticesOk = false;
+  }
+  try {
+    privacyOk = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8').includes('Privacy Policy');
+  } catch {
+    privacyOk = false;
+  }
+  check('第三方声明与隐私政策住在 public/ 里（会随构建产物分发）', noticesOk && privacyOk);
   // 批次 202：恢复默认必须带 `reset` 标记出去——分辨率倍率与装饰层档位不在 `GameSettings` 里，
   // 主程序不收到这个标记的话，玩家会看到"点了恢复默认，画面还是糊的 / 云还是没有"
   check(

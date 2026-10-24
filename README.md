@@ -125,3 +125,8 @@ tests/            vitest 用例（光照、生成、碰撞、资源包）
 
 本项目为学习/研究用途，与 Mojang / Microsoft 无关联。
 `minecraft` 及相关名称、素材版权归 Mojang Studios 所有。
+
+- 授权范围（保留所有权利）见 [`LICENSE`](./LICENSE)；
+- 分发的第三方库（three.js / ws，均 MIT）见 [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)，
+  构建产物里另有一份纯文本副本 `third-party-notices.txt`；
+- 隐私政策（上架应用商店用）见 [`public/privacy.html`](./public/privacy.html)。
