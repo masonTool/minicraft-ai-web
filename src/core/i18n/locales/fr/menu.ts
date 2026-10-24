@@ -68,6 +68,7 @@ export const menu = {
   "mp.password": "Mot de passe",
   "mp.passwordHint": "facultatif",
   "mp.refreshRooms": "Chercher des parties",
+  "mp.recent": "Récent",
   "mp.hostFromWorld": "Pour héberger, appuyez sur « Héberger » sur une carte de monde (c’est là que le monde se choisit)",
   "mp.probing": "Connexion au monde de l’hôte…",
   "mp.probeFailed": "Serveur injoignable (ou trop ancien) — vérifiez l’adresse et le nom de la partie",

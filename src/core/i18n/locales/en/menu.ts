@@ -70,6 +70,7 @@ export const menu = {
   'mp.password': 'Password',
   'mp.passwordHint': 'optional',
   'mp.refreshRooms': 'Find rooms',
+  'mp.recent': 'Recent',
   'mp.hostFromWorld': 'To host, tap “Host” on a world card (that is where the world is chosen)',
   'mp.probing': 'Connecting to the host’s world…',
   'mp.probeFailed': 'Could not reach that server (or it is too old) — check the address and room name',

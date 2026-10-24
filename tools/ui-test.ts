@@ -5290,5 +5290,38 @@ console.log('\n[暂停菜单：本局房间（L9）]');
   );
 }
 
+/*
+ * 最近连接（L9）
+ *
+ * 局域网里就那么一两台服务器、一两个房间，可地址是 `ws://192.168.1.5:8787` 这种东西，
+ * 手机上每次重敲一遍是纯折磨。点一颗小胶囊就把地址/房间/昵称填回去。
+ */
+console.log('\n[最近连接（L9）]');
+{
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+
+  check(
+    '面板有最近连接那一行（空列表时不占高度）',
+    mpSrc.includes("this.recentEl.className = 'mp-recent hidden'") &&
+      mpSrc.includes("this.recentEl.classList.add('hidden');"),
+  );
+  check(
+    '点一颗就填回地址 / 房间 / 昵称',
+    mpSrc.includes('this.urlInput.value = entry.url;') &&
+      mpSrc.includes('this.roomInput.value = entry.room;') &&
+      mpSrc.includes('this.nameInput.value = entry.name;'),
+  );
+  check(
+    '连接成功时记一条（去重后写 localStorage）',
+    mpSrc.includes('pushRecentRoom(this.recents, { url: base, room, name, at: Date.now() })') &&
+      mpSrc.includes('writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents))'),
+  );
+  check(
+    '列表里不存口令（口令只在 mp.pw 那一格）',
+    mpSrc.includes("const STORAGE_RECENT = 'mc.mp.recent';") &&
+      !/pushRecentRoom\(this\.recents, \{[^}]*password/.test(mpSrc),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -68,6 +68,7 @@ export const menu = {
   "mp.password": "Passwort",
   "mp.passwordHint": "optional",
   "mp.refreshRooms": "Räume suchen",
+  "mp.recent": "Zuletzt",
   "mp.hostFromWorld": "Zum Hosten „Hosten“ auf einer Weltkarte antippen (dort wird die Welt gewählt)",
   "mp.probing": "Verbinde mit der Welt des Hosts…",
   "mp.probeFailed": "Server nicht erreichbar (oder zu alt) – Adresse und Raumname prüfen",

@@ -2138,6 +2138,14 @@
         font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
       }
       body.touch-mode .room-action { min-height: 44px; font-size: 14px; }
+      /* 最近连接：一行小胶囊，放不下就横向滚（不换行、不撑高） */
+      .mp-recent { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding-bottom: 2px; }
+      .mp-recent-label { font-size: 11px; opacity: .7; flex: 0 0 auto; }
+      .mp-recent-chip {
+        flex: 0 0 auto; font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer;
+        border: 2px solid var(--pixel-bevel-dark); color: var(--mc-text-light);
+        background: rgba(0, 0, 0, .25); white-space: nowrap;
+      }
       .mp-rooms-empty { font-size: 11px; opacity: .75; padding: 2px 4px; }
       .mp-status { min-height: 1.2em; font-size: 12px; }
       .mp-status[data-state='connected'] { color: #8ee08e; }

@@ -20,6 +20,7 @@
 
 import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
+import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
 import { formatServerUrl, parseServerUrl, roomsEndpoint } from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
@@ -50,6 +51,8 @@ const STORAGE_URL = 'mc.mp.url';
 const STORAGE_ROOM = 'mc.mp.room';
 const STORAGE_PASSWORD = 'mc.mp.pw';
 const STORAGE_NAME = 'mc.mp.name';
+/** 最近连过的服务器/房间（L9）：只记地址与房间，**不记口令** */
+const STORAGE_RECENT = 'mc.mp.recent';
 /** 昵称上限与服务端 `sanitizeName` 对齐（按字符算，不按字节） */
 export const MULTIPLAYER_NAME_MAX = 16;
 const DEFAULT_NAME = '玩家';
@@ -107,6 +110,9 @@ export class MultiplayerScreen {
   private readonly roomInput: HTMLInputElement;
   private readonly passwordInput: HTMLInputElement;
   private readonly roomsEl: HTMLDivElement;
+  private readonly recentEl: HTMLDivElement;
+  /** 最近连接（点一颗就填回地址与房间） */
+  private recents: RecentRoom[];
   private readonly refreshButton: HTMLButtonElement;
   private readonly nameInput: HTMLInputElement;
   private readonly statusEl: HTMLDivElement;
@@ -188,6 +194,12 @@ export class MultiplayerScreen {
     this.roomsEl.className = 'mp-rooms hidden';
     this.roomsEl.id = 'mp-rooms';
 
+    // ---- 最近连接（L9）：局域网里就那么一两台服务器，别每次重敲 ws:// 加 IP
+    this.recents = parseRecentRooms(readStored(STORAGE_RECENT));
+    this.recentEl = document.createElement('div');
+    this.recentEl.className = 'mp-recent hidden';
+    this.recentEl.id = 'mp-recent';
+
     // ---- 昵称行
     const nameRow = document.createElement('label');
     nameRow.className = 'mp-row';
@@ -247,7 +259,7 @@ export class MultiplayerScreen {
     hint.className = 'mp-hint';
     hint.textContent = t('mp.hint');
 
-    panel.append(title, urlRow, roomRow, this.roomsEl, nameRow, this.statusEl, actionsRow, hint);
+    panel.append(title, urlRow, roomRow, this.roomsEl, this.recentEl, nameRow, this.statusEl, actionsRow, hint);
     this.root.append(panel);
     host.append(this.root);
 
@@ -266,6 +278,7 @@ export class MultiplayerScreen {
     }
 
     this.setState('idle');
+    this.renderRecent();
   }
 
   get isOpen(): boolean {
@@ -367,6 +380,40 @@ export class MultiplayerScreen {
   }
 
   /**
+   * 画「最近连接」（L9）。
+   *
+   * 一颗 = 一个「地址 + 房间」；点一下把地址、房间、昵称都填回去，玩家只需要按「加入」。
+   * 空列表时整行不占高度（横屏高度紧张）。
+   */
+  private renderRecent(): void {
+    this.recentEl.replaceChildren();
+    if (this.recents.length === 0) {
+      this.recentEl.classList.add('hidden');
+      return;
+    }
+    this.recentEl.classList.remove('hidden');
+    const label = document.createElement('span');
+    label.className = 'mp-recent-label';
+    label.textContent = t('mp.recent');
+    this.recentEl.append(label);
+    for (const entry of this.recents) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'mp-recent-chip';
+      chip.dataset.room = entry.room;
+      chip.textContent = entry.room.length > 0 ? entry.room : t('room.defaultRoom');
+      chip.addEventListener('click', () => {
+        this.urlInput.value = entry.url;
+        this.roomInput.value = entry.room;
+        if (entry.name.length > 0 && this.nameInput.value.trim().length === 0) {
+          this.nameInput.value = entry.name;
+        }
+      });
+      this.recentEl.append(chip);
+    }
+  }
+
+  /**
    * 拉这台服务器的房间列表（L9）。
    *
    * 浏览器发不出 UDP 广播、也收不到 mDNS，所以"局域网自动发现"只能落地成
@@ -445,7 +492,7 @@ export class MultiplayerScreen {
   private submit(host: boolean): void {
     // 粘贴来的老格式地址先拆成"裸地址 + 房间 + 口令"，再当表单读
     this.splitAddress();
-    const { url, name } = this.readForm();
+    const { url, name, room } = this.readForm();
     if (!url) {
       this.statusEl.textContent = t('mp.error.url');
       this.statusEl.dataset.state = 'error';
@@ -457,6 +504,12 @@ export class MultiplayerScreen {
     writeStored(STORAGE_ROOM, this.roomInput.value.trim());
     writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
     writeStored(STORAGE_NAME, name);
+    // 记住这一条"去过哪"（不记口令，见 `RecentRooms` 的注释）
+    if (base) {
+      this.recents = pushRecentRoom(this.recents, { url: base, room, name, at: Date.now() });
+      writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents));
+      this.renderRecent();
+    }
     this.actions.onConnect(url, name, host);
   }
 }
