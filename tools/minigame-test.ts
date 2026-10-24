@@ -171,9 +171,12 @@ console.log('\n跳一跳：场景与流程（静态断言）');
       'gap',
       'gapRatio',
       'standOffset',
+      'onscreen',
       'axis',
       'kind',
       'nextKind',
+      'shape',
+      'nextShape',
       'orthographic',
       'phase',
       'score',
@@ -200,6 +203,20 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   check('最外圈金色（连击加成）', blockSceneSrc.includes('RIPPLE_GOLD') && blockSceneSrc.includes('rippleRingCount('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
+}
+
+console.log('\nE2E 脚本与 config 同口径（脚本不在 CI 里跑，只能这样钉住）');
+{
+  const e2eSrc = readFileSync(new URL('../tools/jump-e2e.mjs', import.meta.url), 'utf8');
+  const numOf = (pattern: RegExp): number => Number(pattern.exec(e2eSrc)?.[1]);
+  equal('E2E 的最大距离与 config 一致', numOf(/MAX_DISTANCE = ([\d.]+)/), JUMP_CONFIG.maxDistance);
+  equal('E2E 的蓄满时长与 config 一致', numOf(/MAX_CHARGE_MS = ([\d.]+)/), JUMP_CONFIG.maxCharge * 1000);
+  check(
+    'E2E 的间距区间跟着新曲线（边长比 2.2~5.1）',
+    e2eSrc.includes('ready?.gapRatio >= 2.2 && ready?.gapRatio <= 5.1'),
+  );
+  check('E2E 验一屏 3 块与站姿偏移', e2eSrc.includes('after5.onscreen === 3') && e2eSrc.includes('after5.standOffset'));
+  check('E2E 验底座形状字段', e2eSrc.includes('SHAPES') && e2eSrc.includes('ready?.shape'));
 }
 
 console.log('\n音效模块（audio.ts）');

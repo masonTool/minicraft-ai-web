@@ -28,6 +28,7 @@ import {
   targetBlock,
   type JumpBlock,
   type JumpBlockKind,
+  type JumpBlockShape,
   type JumpRun,
   type LandingOutcome,
 } from './logic.ts';
@@ -248,6 +249,8 @@ export class JumpGame implements MiniGame {
     index: number;
     best: number;
     blocks: number;
+    /** 这一屏真正交给渲染层的块数（上一块 + 当前 + 下一块，最多 3） */
+    onscreen: number;
     gap: number;
     /** 间距 ÷ 边长（E2E 用它验"间距被拉大了"） */
     gapRatio: number;
@@ -259,6 +262,10 @@ export class JumpGame implements MiniGame {
     kind: JumpBlockKind;
     /** 下一块种类 */
     nextKind: JumpBlockKind;
+    /** 当前方块的底座形状 */
+    shape: JumpBlockShape;
+    /** 下一块方块的底座形状 */
+    nextShape: JumpBlockShape;
     /** 相机是不是正交的（透视相机会破坏等距观感，必须能验） */
     orthographic: boolean;
   } {
@@ -270,6 +277,9 @@ export class JumpGame implements MiniGame {
     // 方向仍按**方块中心**判：等距两向是生成器的设计约束，站偏只是让这一跳略斜
     const centreDx = to ? to.x - from.x : 0;
     const centreDz = to ? to.z - from.z : 0;
+    // 与 rebuildBlocks 同一口径：上一块 + 当前 + 下一块
+    const firstOnScreen = Math.max(0, this.run.index - 1);
+    const lastOnScreen = Math.min(this.run.blocks.length - 1, this.run.index + 1);
     return {
       phase: this.phase,
       score: this.run.score,
@@ -277,6 +287,7 @@ export class JumpGame implements MiniGame {
       index: this.run.index,
       best: this.best,
       blocks: this.run.blocks.length,
+      onscreen: Math.max(0, lastOnScreen - firstOnScreen + 1),
       // 到下一个方块中心的距离：E2E 靠它算出"该按多久"（只读，不改状态）
       gap,
       gapRatio: gap > 0 ? gap / from.size : 0,
@@ -284,6 +295,8 @@ export class JumpGame implements MiniGame {
       axis: Math.abs(centreDx) >= Math.abs(centreDz) ? 'x' : 'z',
       kind: from.kind,
       nextKind: to?.kind ?? 'normal',
+      shape: from.shape,
+      nextShape: to?.shape ?? 'square',
       orthographic: this.blocks?.camera.isOrthographicCamera === true,
     };
   }
