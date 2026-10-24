@@ -29,9 +29,8 @@ export const minigame = {
   // ---- jump (batch 20261022-2220)
   'minigame.jump.title': 'Jump',
   'minigame.jump.desc': 'Hold to charge, release to jump',
-  'minigame.jump.hint': 'Hold to charge, release to jump',
   'minigame.jump.best': 'Best {best}',
-  'minigame.jump.over': 'Score {score}',
+  'minigame.jump.over': 'Score',
   'minigame.jump.retry': 'Play again',
   'minigame.jump.record': 'New best!',
   'tutorial.survival.log.title': 'Chop a tree first',

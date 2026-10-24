@@ -15,12 +15,21 @@ import { join } from 'node:path';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
-const PORT = 8799; // 用不常用的端口，避免和开发者自己的服务端撞车
 /**
  * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
  * 否则跑一次测试就把开发者自己房间的存档覆盖了。
  */
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'minicraft-net-'));
+
+/**
+ * 端口由系统分配（`PORT=0`），起完再从服务端日志里读回来。
+ *
+ * ⚠️ 以前写死 8799，理由是"用不常用的端口避免和开发者自己的服务端撞车"。但真正的
+ * 撞车方是**另一棵并行工作树**：两边的 `npm test` 同时跑时，先起的那台占住 8799，
+ * 后起的那台 `EADDRINUSE` 崩掉（stderr 只有一段 Node 版本号），于是"服务端启动成功"红、
+ * 后面一串依赖 welcome 的断言跟着红——重跑又绿。让系统挑端口，这类偶发就彻底没有了。
+ */
+let PORT = 0;
 let passed = 0;
 let failed = 0;
 /** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
@@ -144,6 +153,33 @@ class TestClient {
 
 // ---------------------------------------------------------------- 启动服务端
 
+/** 停掉子进程并**等它真的退出**（2 秒不退就 SIGKILL） */
+function stopServer(child) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // 已经死了
+      }
+    }, 2000);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
+}
+
 console.log('\n[启动服务端]');
 /** @type {import('node:child_process').ChildProcess | null} */
 let server = null;
@@ -153,6 +189,10 @@ let serverOutput = '';
  * 起一个服务端子进程并等它监听端口。
  *
  * 抽成函数是为了"重启后快照仍在"那条用例（联机13）——它要真的杀一次再起一次。
+ *
+ * 端口交给系统挑（`PORT=0`），再从服务端日志里读回实际值：写死端口时，两棵并行
+ * 工作树同时跑 `npm test` 会撞 `EADDRINUSE`，表现为"服务端启动成功"红了、重跑又绿。
+ * 每次重启都重新传 `'0'`，不要复用上一次读到的 `PORT`（那台可能还没放开）。
  */
 async function startServer(extraEnv = {}, attempts = 3) {
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -162,7 +202,7 @@ async function startServer(extraEnv = {}, attempts = 3) {
       // "宽限期过后才清掉落物"的断言都要白等半分钟
       env: {
         ...process.env,
-        PORT: String(PORT),
+        PORT: '0',
         GRACE_MS: '400',
         DATA_DIR,
         // 来源白名单（联机26）：只有这个 origin 能连；不带 Origin 的照常放行（node 客户端）
@@ -177,10 +217,14 @@ async function startServer(extraEnv = {}, attempts = 3) {
     server.stderr.on('data', (chunk) => {
       serverOutput += String(chunk);
     });
-    // 等服务端监听端口
+    // 等服务端监听端口，并从日志里读出系统分配的端口号
     for (let i = 0; i < 100; i++) {
       await sleep(40);
-      if (serverOutput.includes('已启动')) return true;
+      const match = serverOutput.match(/已启动，端口 (\d+)/);
+      if (match) {
+        PORT = Number(match[1]);
+        return true;
+      }
       if (server.exitCode !== null) break;
     }
     // 上一次的 socket 还在 TIME_WAIT / CPU 挤到超时：等一下再起一次，
@@ -1187,8 +1231,8 @@ try {
     withPw.close();
   }
 } finally {
-  server?.kill('SIGTERM');
-  await sleep(300);
+  // 等它真的退出再走，否则下一次跑的 spawn 会撞上还没释放的端口
+  await stopServer(server);
 }
 
 console.log(`\n联机测试：${passed} 通过 / ${failed} 失败`);

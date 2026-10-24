@@ -422,8 +422,12 @@ const httpServer = createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer, maxPayload: 64 * 1024 });
 
 httpServer.listen(PORT, () => {
-  log(`已启动，端口 ${PORT}，种子 ${WORLD_SEED}（健康检查 /healthz）`);
-  log(`玩家把游戏指向 ws://localhost:${PORT} 即可联机`);
+  // 打**实际绑定**的端口，而不是环境变量里的那个：PORT=0 时由系统挑端口
+  // （测试用，避免两棵并行工作树抢同一个 8799 / 抢占同一台机器上的固定端口）
+  const bound = httpServer.address();
+  const port = typeof bound === 'object' && bound ? bound.port : PORT;
+  log(`已启动，端口 ${port}，种子 ${WORLD_SEED}（健康检查 /healthz）`);
+  log(`玩家把游戏指向 ws://localhost:${port} 即可联机`);
   if (ALLOWED_ORIGINS.length > 0) log(`来源白名单：${ALLOWED_ORIGINS.join(', ')}`);
   if (ROOM_PASSWORD) log('已启用房间口令（ROOM_PASSWORD）');
 });

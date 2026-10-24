@@ -6,7 +6,7 @@
  * 它回答三个问题（都不用开浏览器）：
  *  1. 生成器会不会造出"理论上跳不到"的间距？（可达率必须 100%）
  *  2. 一个"每次都精准"的玩家能一直跳下去吗？（不能的话难度曲线写错了）
- *  3. 一个"手抖 ±0.18 格"的玩家平均能玩多久 / 多少分？（太短 = 劝退，太长 = 无聊）
+ *  3. 一个"手抖"的玩家平均能玩多久 / 多少分？（太短 = 劝退，太长 = 无聊）
  *
  * 随机数是确定性的（`logic.nextRandom`），所以这次输出与下次一样，便于对比调参前后。
  */
@@ -50,6 +50,17 @@ interface Result {
 
 const MAX_JUMPS = 300;
 
+/**
+ * 手抖的距离误差（格）——**绝对值，不是距离的百分比**。
+ *
+ * 玩家按的是时长，误差来自"早按/晚按了 0.1 秒"：`0.1s × maxDistance / maxCharge ≈ 0.5 格`，
+ * 与目标远近无关。旧版用的是"距中心的 ±12%"，那在旧参数（间距 2.6~4.2 格、方块 2.0~0.9）
+ * 下恰好与半块边长同量级；但 `[跳5]` 把间距改成"边长的 1.15~1.9 倍"之后，12% 的间距
+ * 永远小于半块（0.24 格 vs 0.45 格），模拟里就成了一局不死——注释写着 ±0.18 格、
+ * 代码却是百分比，本来就是两套说法，这里统一成绝对误差。
+ */
+const TIMING_ERROR = 0.55;
+
 function playOne(skill: Skill, seed: number): { jumps: number; score: number; capped: boolean } {
   let run: JumpRun = createRun(seed);
   let jumps = 0;
@@ -62,9 +73,7 @@ function playOne(skill: Skill, seed: number): { jumps: number; score: number; ca
 
     let distance: number;
     if (skill === 'perfect') distance = exact;
-    // 真实玩家估的是"该跳多远"，误差是百分比而不是绝对值：
-    // 近处 ±8% 只有零点几格，远处同样 ±8% 就是大半格——这才像手感。
-    else if (skill === 'sharp') distance = exact * (1 + jitter() * 0.12);
+    else if (skill === 'sharp') distance = exact + jitter() * TIMING_ERROR;
     else distance = rand() * JUMP_CONFIG.maxDistance;
 
     distance = Math.min(JUMP_CONFIG.maxDistance, Math.max(0, distance));
@@ -137,7 +146,7 @@ console.log(`  参数：最大距离 ${JUMP_CONFIG.maxDistance} 格 · 间距上
 console.log('');
 line('可达率', `${(reach * 100).toFixed(2)}%（0~300 分逐分生成）`);
 line('完美玩家', `${perfect.avgScore.toFixed(1)} 分 / ${perfect.avgJumps.toFixed(1)} 跳`);
-line('判断误差 ±12%', `${sharp.avgScore.toFixed(1)} 分 / ${sharp.avgJumps.toFixed(1)} 跳（最高 ${sharp.bestScore}）`);
+line('手抖 ±' + TIMING_ERROR + ' 格', `${sharp.avgScore.toFixed(1)} 分 / ${sharp.avgJumps.toFixed(1)} 跳（最高 ${sharp.bestScore}）`);
 line('乱按', `${random.avgScore.toFixed(1)} 分 / ${random.avgJumps.toFixed(1)} 跳（最高 ${random.bestScore}）`);
 console.log('');
 

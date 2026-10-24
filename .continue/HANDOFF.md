@@ -20,7 +20,7 @@
 
 ## 1. 当前状态
 
-- 时间：2026-10-24 · 提交总数 1671（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-24 · 提交总数 1690（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 `three`）
 - 进度口径：`TASKS.md` 共 295 项 —— 已完成 **287**、进行中 **5**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -69,19 +69,19 @@ npm run dev            # http://localhost:5173
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 172 套离线测试 + 三张台账 + 文档门禁（check:browser 默认跳过；BROWSER_CHECK=1 才真跑浏览器）
+npm run check              # 【提交前】typecheck + 单测 + 177 套离线测试 + 三张台账 + 文档门禁（check:browser 默认跳过；BROWSER_CHECK=1 才真跑浏览器）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run shot               # 截图到 .tmp/shots/（没浏览器就跳过）；npm run guard = 控制台零错误门禁
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 172 套离线测试 + 钩子自检
+npm test                   # typecheck:tools + vitest + 177 套离线测试 + 钩子自检
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup        # 跨机器自检
 ```
 
-`npm run check` 是一条链：`typecheck` + `test`（vitest + **172 套**自建离线测试 + `test:hooks`）
+`npm run check` 是一条链：`typecheck` + `test`（vitest + **177 套**自建离线测试 + `test:hooks`）
 + 三张台账（`audit:tasks` / `audit:coverage` / `audit:diffs`）+ `audit:docs`；
 `test` 的聚合入口是 `tools/run-tests.mjs`（一次 esbuild 打包 + 多进程并行，32s → 9s）。
 单套调试仍可直接跑 `npm run test:reach` 这类老命令。
@@ -148,7 +148,7 @@ npm run agent:setup        # 跨机器自检
 
 | 位置 | 跑什么 | 谁维护 |
 | --- | --- | --- |
-| `npm run check`（人 + CI） | typecheck + 172 套离线测试 + 三张台账 + `audit:docs` | 本仓库 |
+| `npm run check`（人 + CI） | typecheck + 177 套离线测试 + 三张台账 + `audit:docs` | 本仓库 |
 | `.continue/config.json` 的 `checks.fast`（每次 `git commit`） | `node .continue/hooks/check.mjs --fast`（编号 / 文档体量 / 配置 / 项目 `check:fast`） | 框架 |
 | `.continue/hooks/lib.mjs` 的 `DOC_LIMITS` | 入口文档体量上限。**本项目把 `TASKS` 从 600 放宽到 7000**（那份台账是三个脚本的输入），重装框架会覆盖，`npm run audit:docs` 会当场报出来 | 框架 + 本项目守卫 |
 

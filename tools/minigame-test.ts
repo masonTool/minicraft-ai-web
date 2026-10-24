@@ -15,8 +15,13 @@
 
 import { readFileSync } from 'node:fs';
 import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
-import { groupPillars, pillarInstanceCount, type PillarSpec } from '../src/minigame/games/jump/pillars.ts';
-import { themeById } from '../src/minigame/games/jump/themes.ts';
+import {
+  BLOCK_COLORS,
+  JUMP_PALETTES,
+  blockColorAt,
+  paletteForSeed,
+  shadeForNormal,
+} from '../src/minigame/games/jump/palette.ts';
 import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
@@ -38,6 +43,7 @@ import {
   nextBlock,
   resolveLanding,
   scoreForLanding,
+  specialBonus,
   specialKindFor,
   targetBlock,
   type JumpBlock,
@@ -60,11 +66,22 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
+function almost(label: string, actual: number, expected: number, tolerance = 1e-6): void {
+  check(
+    label,
+    Math.abs(actual - expected) <= tolerance,
+    `实际 ${actual}，期望 ${expected} ±${tolerance}`,
+  );
+}
+
 const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
 const hostSrc = readFileSync(new URL('../src/minigame/MiniGameHost.ts', import.meta.url), 'utf8');
 const smokeSrc = readFileSync(new URL('../src/minigame/games/smoke.ts', import.meta.url), 'utf8');
 const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
 const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
+const blockSceneSrc = readFileSync(new URL('../src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
+const audioSrc = readFileSync(new URL('../src/minigame/games/jump/audio.ts', import.meta.url), 'utf8');
+const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -108,70 +125,184 @@ console.log('\n小游戏框架：自检游戏的资源释放');
 console.log('\n跳一跳：场景与流程（静态断言）');
 {
   check('id 是 jump', jumpSrc.includes("readonly id = 'jump'"));
-  check('柱子用 PillarScene（顶/侧/底三套 UV）', jumpSrc.includes('new PillarScene('));
-  check('用 PlayerRenderer 画小人', jumpSrc.includes('new PlayerRenderer('));
-  check('卸载时释放人物', jumpSrc.includes('this.player?.dispose()'));
-  check('卸载时释放场景', jumpSrc.includes('this.pillars?.dispose()'));
+  check('场景是等距纯色方块 BlockScene', jumpSrc.includes('new BlockScene('));
+  check('不再有 MC 图集柱子', !jumpSrc.includes('PillarScene') && !jumpSrc.includes('themes.ts'));
+  check('小人是棋子 JumperModel（不再用 MC 玩家模型）', jumpSrc.includes('new JumperModel(') && !jumpSrc.includes('PlayerRenderer'));
+  check('卸载时释放小人', jumpSrc.includes('this.jumper?.dispose()'));
+  check('卸载时释放场景', jumpSrc.includes('this.blocks?.dispose()'));
   check('卸载时移除 HUD', jumpSrc.includes('this.hud?.remove()'));
-  check('每帧自己渲染', jumpSrc.includes('pillars.render(context.renderer)'));
-  check('蓄力压缩身体', jumpSrc.includes('BODY_SQUASH'));
+  check('HUD 只有一个分数（没有最高分行）', !jumpSrc.includes('jump-best') && !jumpSrc.includes('bestEl'));
+  check('没有底部提示', !jumpSrc.includes('jump-hint') && !jumpSrc.includes('hintEl'));
+  check('结算面板是"大数字 + 最高分 + 两颗按钮"', jumpSrc.includes('jump-over-score') && jumpSrc.includes('jump-over-best'));
+  // 分数挂在 stage 上，而宿主顶栏（退出 + 标题，z-index 4）也在左上角：
+  // 用百分比贴顶会被盖住，而"看不看得见"这类问题离线断言查不到，只能钉住定位写法。
+  check(
+    '分数让开宿主顶栏（top 用 56px + 安全区，不是百分比）',
+    /\.jump-hud\s*\{[^}]*top:\s*calc\(56px\s*\+\s*env\(safe-area-inset-top/.test(htmlSrc),
+  );
+  check('分数左边留出安全区', /\.jump-hud\s*\{[^}]*left:[^;]*env\(safe-area-inset-left/.test(htmlSrc));
+  check('每帧自己渲染', jumpSrc.includes('blocks.render(context.renderer)'));
+  check('蓄力压扁小人', jumpSrc.includes('jumper.setSquash(ratio)'));
   check('蓄力压缩方块', jumpSrc.includes('setSquash'));
-  check('空中翻转', jumpSrc.includes('rotation.x = -Math.PI * 2 * progress'));
+  check('空中翻转 360°（Sinusoidal.InOut）', jumpSrc.includes('setFlip(-Math.PI * 2 * flipProgress(progress))'));
+  check('站高按方块高度算（方块会随分数变矮）', jumpSrc.includes('standHeight('));
   check('最高分落盘', jumpSrc.includes('recordScore(') && jumpSrc.includes('saveProgress('));
   check('特殊方块停留加分', jumpSrc.includes('specialHoldSeconds') && jumpSrc.includes('specialBonus('));
-  check('音效静默降级', jumpSrc.includes('AudioContext') && jumpSrc.includes('catch'));
+  check('音效抽到 audio.ts（场景里不再有 WebAudio 调用）', !jumpSrc.includes('createOscillator') && jumpSrc.includes("from './audio.ts'"));
+  check('特殊方块按种类播放各自音色', jumpSrc.includes('playSpecial(block.kind)'));
+  check('落地换小人尺寸（方块会随分数变小）', jumpSrc.includes('this.jumper?.setSize('));
+  check('一跳固定 400ms（与跳多远无关）', jumpSrc.includes('JUMP_TIMING.totalMs / 1000'));
+  check('弧线与空翻走 motion.ts', jumpSrc.includes('jumpArc(') && jumpSrc.includes('flipProgress('));
+  check('落地压缩 100ms 回弹', jumpSrc.includes('landingSquash('));
+  check('完美命中出同心圆 + 飘字', jumpSrc.includes('playRipple(') && jumpSrc.includes('jump-float'));
+  check('被踩的方块回弹', jumpSrc.includes('.punch('));
+  // debugState 是给 `jump:e2e` 用的只读契约，而 E2E 不在 CI 里跑（要浏览器）——
+  // 字段被改名的话，线上没人会发现，只有离线这条还能立刻变红。
+  check(
+    'debugState 暴露 E2E 依赖的字段',
+    ['gap', 'gapRatio', 'axis', 'kind', 'nextKind', 'orthographic', 'phase', 'score', 'index', 'best'].every(
+      (field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, '')),
+    ),
+  );
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }
 
-// ------------------------------------------------------------------ 方块分组
-
-console.log('\n柱子分组（一组 = 一个 draw call）');
+console.log('\n音效模块（audio.ts）');
 {
-  const theme = themeById('meadow');
-  const make = (x: number, kind: PillarSpec['kind'] = 'normal'): PillarSpec => ({
-    x,
-    z: 0,
-    size: 1.8,
-    kind,
-    current: x === 0,
+  check('蓄力每 0.15 秒升一级', audioSrc.includes('CHARGE_STEP_SECONDS = 0.15'));
+  check('蓄力是"阶梯音阶"不是连续滑音', audioSrc.includes('chargeStepFor(') && audioSrc.includes('chargeFrequencyFor('));
+  check('四类特殊方块各有旋律', audioSrc.includes('well: [') && audioSrc.includes('music: ['));
+  check('起跳/落地/完美/失败四种单音', audioSrc.includes('JUMP_SFX') && audioSrc.includes('LAND_SFX') && audioSrc.includes('PERFECT_SFX') && audioSrc.includes('FAIL_SFX'));
+  check('拿不到 AudioContext 时静默降级', audioSrc.includes('catch') && audioSrc.includes('return null'));
+}
+
+console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借 MC 图集）');
+{
+  check('相机是正交的', blockSceneSrc.includes('new THREE.OrthographicCamera('));
+  check('不打灯（三面明暗靠顶点色，不靠灯）', !blockSceneSrc.includes('DirectionalLight') && !blockSceneSrc.includes('AmbientLight'));
+  check('没有雾', !blockSceneSrc.includes('scene.fog'));
+  check('不再读主世界图集', !blockSceneSrc.includes('TextureAtlas'));
+  check('三面明暗与方块色都来自 palette', blockSceneSrc.includes('shadeForNormal(') && blockSceneSrc.includes('blockColorAt('));
+  check('阴影是不写深度的透明贴片', blockSceneSrc.includes('depthWrite: false'));
+  check('特殊方块用程序化图集', blockSceneSrc.includes('createBlockAtlas('));
+  check('方块动画每帧推进', blockSceneSrc.includes('tick(dt: number)'));
+  // 顶面白点是原版唯一的落点提示（参考图 02/03 每块都有），漏了只有截图能发现
+  check('普通方块顶面有白点', blockSceneSrc.includes('DOT_RADIUS_RATIO') && blockSceneSrc.includes("spec.kind === 'normal'"));
+  check('白点随方块高度/缩放同步', blockSceneSrc.includes('entry.dot.position.set(') && blockSceneSrc.includes('entry.dot.scale.set('));
+  check('白点随卸载释放', blockSceneSrc.includes('this.dotGeometry.dispose()') && blockSceneSrc.includes('this.dotMaterial.dispose()'));
+  check('入场进度跨重建保留（按位置键）', blockSceneSrc.includes('ages.set(entry.key'));
+  check('掉队的方块淡出而不是直接消失', blockSceneSrc.includes('this.fading.push(entry)'));
+  // 配色必须跟"方块身份"走，不能跟"这一屏列表里的下标"走——后者会让每跳一次全世界重新上色
+  check('方块配色按身份取（不是按列表下标）', blockSceneSrc.includes('blockColorAt(this.palette, spec.colorIndex)'));
+  check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
+  check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
+}
+
+// ------------------------------------------------------------------ 色板与明暗
+
+/** sRGB 相对亮度（0~1）：只用于断言"方块不能糊进背景" */
+function luminance(hex: string): number {
+  const channel = (offset: number): number => {
+    const v = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+console.log('\n色板与三面明暗（原版观感的两个硬指标）');
+{
+  equal('背景色板 6 组', JUMP_PALETTES.length, 6);
+  equal('方块色 8 个', BLOCK_COLORS.length, 8);
+  const unknown = JUMP_PALETTES.flatMap((p) => p.blocks.filter((c) => !(BLOCK_COLORS as readonly string[]).includes(c)));
+  equal('每局的方块色都登记在 BLOCK_COLORS 里', unknown.length, 0);
+  check(
+    '每组 3~4 个方块色（一屏就是 3~4 块）',
+    JUMP_PALETTES.every((p) => p.blocks.length >= 3 && p.blocks.length <= 4),
+  );
+  check(
+    '背景一律"上亮下暗"（原版是一条很轻的竖直渐变）',
+    JUMP_PALETTES.every((p) => luminance(p.background.top) > luminance(p.background.bottom)),
+  );
+  check(
+    '渐变不过分（ΔL ≤ 0.25，原版最明显的 mist 实测 0.18）',
+    JUMP_PALETTES.every((p) => luminance(p.background.top) - luminance(p.background.bottom) <= 0.25),
+  );
+  const worst = Math.min(
+    ...JUMP_PALETTES.flatMap((p) => {
+      const mid = (luminance(p.background.top) + luminance(p.background.bottom)) / 2;
+      return p.blocks.map((c) => Math.abs(luminance(c) - mid));
+    }),
+  );
+  check('没有方块糊进背景（|ΔL| ≥ 0.04）', worst >= 0.04, `最小差 ${worst.toFixed(3)}`);
+
+  // "洗白"防线：每局至少 3 个高饱和色（HSL 饱和度 ≥ 0.3）。
+  // 这条是"看着不对"翻译成数字的那一步——灰 + 近白 + 低饱和绿 那一局就是这么被抓住的。
+  const saturation = (hex: string): number => {
+    const channel = (offset: number): number => parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    const r = channel(1);
+    const g = channel(3);
+    const b = channel(5);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max - min < 1e-9) return 0;
+    const l = (max + min) / 2;
+    return l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+  };
+  check(
+    '每局至少 3 个高饱和方块色（饱和度 ≥ 0.3）',
+    JUMP_PALETTES.every((p) => p.blocks.filter((c) => saturation(c) >= 0.3).length >= 3),
+    JUMP_PALETTES.map((p) => `${p.id}:${p.blocks.filter((c) => saturation(c) >= 0.3).length}`).join(' '),
+  );
+  check(
+    '每局最多 1 个无彩/灰色方块（灰块不能成对出现，否则整屏发灰）',
+    JUMP_PALETTES.every((p) => p.blocks.filter((c) => saturation(c) < 0.12).length <= 1),
+  );
+
+  const ids = new Set(JUMP_PALETTES.map((p) => p.id));
+  equal('色板 id 唯一', ids.size, JUMP_PALETTES.length);
+  equal('同 seed 同色板（截图对比要可复现）', paletteForSeed(7).id, paletteForSeed(7).id);
+  equal('seed 0~5 覆盖 6 组', new Set([0, 1, 2, 3, 4, 5].map((i) => paletteForSeed(i).id)).size, 6);
+  const palette = JUMP_PALETTES[0]!;
+  equal('方块色按序号轮换', blockColorAt(palette, 0), blockColorAt(palette, palette.blocks.length));
+  equal('负下标不越界', blockColorAt(palette, -1), blockColorAt(palette, palette.blocks.length - 1));
+  equal('空色板回落到默认色', blockColorAt({ id: 'x', background: { top: '#fff', bottom: '#fff' }, blocks: [] }, 3), BLOCK_COLORS[0]);
+}
+
+console.log('\n三面明暗（顶 1.00 / 左 0.775 / 右 0.93，实测值）');
+{
+  almost('顶面 = 1.00', shadeForNormal(0, 1, 0), 1, 1e-9);
+  almost('+X 面（屏幕右）= 0.93', shadeForNormal(1, 0, 0), 0.93, 1e-9);
+  almost('+Z 面（屏幕左）= 0.775', shadeForNormal(0, 0, 1), 0.775, 1e-9);
+  check(
+    '右面比左面亮（交接文档曾经写反，这条钉住方向）',
+    shadeForNormal(1, 0, 0) > shadeForNormal(0, 0, 1),
+  );
+  almost('法线取反不改变亮度（-X 面不会更亮）', shadeForNormal(-1, 0, 0), 0.775, 1e-9);
+  almost('底面（永远看不见）不为负', shadeForNormal(0, -1, 0), (0.775 + 0.93) / 2, 1e-9);
+
+  // 圆柱侧面：64 段圆环。判据不是"落在两个色阶之间"，而是**没有台阶**——
+  // 把圆柱当成两面色来贴，相邻顶点会跳 0.15；连续渐变时每 5.6° 只差 0.01 量级。
+  const ring = Array.from({ length: 64 }, (_, i) => {
+    const angle = (i / 64) * Math.PI * 2;
+    return shadeForNormal(Math.cos(angle), 0, Math.sin(angle));
   });
-
-  const normal = groupPillars([make(0), make(2), make(4), make(6)], theme);
-  equal('4 根普通柱子 → 1 组', normal.length, 1);
-  equal('实例总数', pillarInstanceCount(normal), 4);
-  equal('草方块顶面用 grass_top', normal[0]?.top, 'grass_top');
-  equal('草方块侧面用 grass_side', normal[0]?.side, 'grass_side');
-  equal('草方块底面用 dirt', normal[0]?.bottom, 'dirt');
-
-  const mixed = groupPillars([make(0), make(2, 'music'), make(4), make(6, 'cube')], theme);
-  equal('普通 + 音符盒 + 羊毛 → 3 组', mixed.length, 3);
-  equal(
-    '组顺序按首次出现',
-    mixed.map((group) => group.top).join(','),
-    'grass_top,note_block,wool_light_blue',
+  const steps = ring.map((v, i) => Math.abs(v - ring[(i + 1) % ring.length]!));
+  check('圆柱侧面没有台阶（相邻 5.6° 差 < 0.02）', Math.max(...steps) < 0.02, `最大 ${Math.max(...steps).toFixed(3)}`);
+  // 相机在 +x/+z 一侧，看得见的那半边法线满足 nx + nz > 0
+  const visible = ring.filter((_, i) => {
+    const angle = (i / 64) * Math.PI * 2;
+    return Math.cos(angle) + Math.sin(angle) > 0;
+  });
+  // 圆柱的可见半边是从 0.74 到 0.96 的**连续延伸**（三个面值是插值的支点，不是天花板）：
+  // 正对 +x/−z 那条对角线的一小段最亮，正对 −x/+z 的收进暗部。方块永远只用三个轴法线，
+  // 所以仍精确落在 1.00 / 0.775 / 0.93 上。
+  check(
+    '圆柱可见半边的亮度落在 0.74~0.97（连续外延，不是新色阶）',
+    Math.min(...visible) > 0.74 && Math.max(...visible) < 0.97,
+    `${Math.min(...visible).toFixed(3)}~${Math.max(...visible).toFixed(3)}`,
   );
-  equal(
-    '音符盒三面同一张贴图',
-    `${mixed[1]?.top},${mixed[1]?.side},${mixed[1]?.bottom}`,
-    'note_block,note_block,note_block',
-  );
-  equal('空输入 → 0 组', groupPillars([], theme).length, 0);
-
-  const snow = groupPillars([make(0)], themeById('snow'));
-  equal('雪地主题顶面用 snow', snow[0]?.top, 'snow');
-  equal('雪地主题底面用 stone', snow[0]?.bottom, 'stone');
-
-  const started = performance.now();
-  const many: PillarSpec[] = [];
-  for (let i = 0; i < 5000; i++) {
-    many.push({ x: i, z: 0, size: 1.8, kind: i % 2 === 0 ? 'normal' : 'music', current: false });
-  }
-  const grouped = groupPillars(many, theme);
-  const elapsed = performance.now() - started;
-  equal('5000 根只分 2 组', grouped.length, 2);
-  equal('实例一个不少', pillarInstanceCount(grouped), 5000);
-  check('分组耗时 < 50ms', elapsed < 50, `${elapsed.toFixed(1)}ms`);
+  check('任何法线都不会算出负数或过曝', [shadeForNormal(0, -1, 0), shadeForNormal(0, 1, 0), shadeForNormal(0, 0, 0)].every((v) => v > 0.2 && v <= 1));
 }
 
 // ------------------------------------------------------------------ 最高分
@@ -239,8 +370,20 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     [0, 10, 30, 60, 200, 9999].every((score) => gapRangeForScore(score).to <= maxReachableGap() + 1e-9),
   );
   const low = gapRangeForScore(0);
-  const high = gapRangeForScore(JUMP_CONFIG.growScore);
-  check('间距随分数单调不减', high.from >= low.from - 1e-9 && high.to >= low.to - 1e-9);
+  const high = gapRangeForScore(JUMP_CONFIG.shrinkScore);
+  check('间距随分数单调不增（方块变小，间距同比缩小）', high.from <= low.from + 1e-9 && high.to <= low.to + 1e-9);
+  check(
+    '间距与边长同比（1.15~1.9 个边长，原版相邻块几乎贴合）',
+    scores.every((score) => {
+      const size = blockSizeForScore(score);
+      const range = gapRangeForScore(score);
+      return (
+        Math.abs(range.from - size * JUMP_CONFIG.gapRatioMin) < 1e-9 ||
+        Math.abs(range.to - maxReachableGap()) < 1e-9
+      );
+    }),
+  );
+  check('间距下限永远大于一个边长（两块不会贴合）', gapRangeForScore(0).from > blockSizeForScore(0));
   check(
     '随机值被夹在范围内',
     [-1, 0, 0.5, 1, 2].every((rand) => {
@@ -276,7 +419,8 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     const { block, seed: nextSeed } = nextBlock(current, score, seed);
     const deg = Math.round((Math.atan2(-(block.x - current.x), -(block.z - current.z)) * 180) / Math.PI);
     angles.add(deg);
-    if (!(deg === -30 || deg === 0 || deg === 30)) allDirections = false;
+    // 原版只有等距两向：世界 −Z（屏幕右上）与 −X（屏幕左上）
+    if (!(deg === 0 || deg === 90)) allDirections = false;
     if (block.id !== current.id + 1) idsMonotonic = false;
 
     const gap = Math.hypot(block.x - current.x, block.z - current.z);
@@ -287,8 +431,21 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     seed = nextSeed;
     score = Math.min(200, score + 1);
   }
-  check('200 次生成只出现 −30/0/+30 三个方向', allDirections);
-  check('三个方向都会出现', angles.size === 3);
+  check('200 次生成只出现 0°/90° 两个方向（等距两向）', allDirections);
+  check('两个方向都会出现', angles.size === 2);
+  check('步进只沿一条世界轴（没有斜角）', (() => {
+    let current2 = createRun(3).blocks[0]!;
+    let seed2 = 4242;
+    for (let i = 0; i < 200; i++) {
+      const { block, seed: nextSeed } = nextBlock(current2, i, seed2);
+      const dx = Math.abs(block.x - current2.x);
+      const dz = Math.abs(block.z - current2.z);
+      if (Math.min(dx, dz) > 1e-9) return false;
+      current2 = block;
+      seed2 = nextSeed;
+    }
+    return true;
+  })());
   check('间距始终落在该分数的范围内且可达', allReachable);
   check('方块 id 单调递增', idsMonotonic);
 }
@@ -296,9 +453,23 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
 console.log('\n跳一跳：特殊方块');
 {
   check('10 分前不出特殊方块', [0, 5, 9].every((score) => specialKindFor(score, 0, 'normal') === 'normal'));
-  check('概率命中时出音乐盒或魔方', ['music', 'cube'].includes(specialKindFor(50, 0, 'normal')));
-  check('上一个已经是特殊方块时不连续出', specialKindFor(50, 0, 'music') === 'normal');
   check('概率未命中时是普通方块', specialKindFor(50, JUMP_CONFIG.specialChance + 0.01, 'normal') === 'normal');
+  check(
+    '四类特殊方块都会出现',
+    new Set([0.01, 0.06, 0.1, 0.115].map((rand) => specialKindFor(50, rand, 'normal'))).size === 4,
+    [0.01, 0.06, 0.1, 0.115].map((rand) => specialKindFor(50, rand, 'normal')).join(','),
+  );
+  check(
+    '上一个已经是特殊方块时不连续出',
+    ['well', 'cube', 'store', 'music'].every((kind) => specialKindFor(50, 0, kind as JumpBlock['kind']) === 'normal'),
+  );
+  equal('井盖 +5', specialBonus('well'), 5);
+  equal('魔方 +10', specialBonus('cube'), 10);
+  equal('便利店 +15', specialBonus('store'), 15);
+  equal('音乐盒 +30', specialBonus('music'), 30);
+  equal('普通方块不加分', specialBonus('normal'), 0);
+  equal('奖励分数严格递增（稀有度与分值一致）', [5, 10, 15, 30].every((v, i, arr) => i === 0 || v > arr[i - 1]!), true);
+  almost('停留 3 秒才加分（原版口径）', JUMP_CONFIG.specialHoldSeconds, 3, 1e-9);
 }
 
 console.log('\n跳一跳：落点判定与计分');

@@ -9,242 +9,142 @@
 
 ---
 
-## 批次 20261024-0344 · 2026-10-24 · 会话 f639d350
+## 批次 20261024-1010 · 2026-10-24 · 会话 e50bd5cb
 
-> 主题：建造工具条改造（方案 A 抽屉面板 + 两字标签）。全部改动集中在 `src/ui/BuildToolbar.ts`、
-> `src/ui/buildToolbarLayout.ts`、`index.html`、6 份语言包的 `editor.ts`、`src/main.ts`、
-> `tools/buildtools-test.ts` 与两张台账。**玩法语义零改动**：左键在建造模式下仍是"点选区角"，
-> 选区/填充/复制/粘贴/镜像/模板/撤销/重做八条能力的判断与数值一条都不许动。
+- [x] [跳11] 分数 HUD 被宿主顶栏盖住：`index.html` 的 `.jump-hud` 定位改回"让开顶栏 + 安全区"，`scene.ts` 无改动 → `npm run test:minigame`（新增静态断言：`.jump-hud` 的 top 必须含 `56px`/`safe-area`，不许用百分比贴顶）＋ 重跑 e2e 截图肉眼确认分数可见
+  - 做了什么：`.jump-hud` 的 `top` 从 `6%` 改回 `calc(56px + env(safe-area-inset-top, 0px))`，`left` 用 `6% + 安全区`；`tools/minigame-test.ts` 读 `index.html`，钉住"top 必须 56px + 安全区""left 必须带安全区"两条。
+  - 为什么：`6%` 在横屏 390 高下只有 23px，正好落在宿主顶栏（top 8px + 36px 高的"退出"按钮，z-index 4）覆盖区，分数**整块看不见**。这是上一批 `[跳8]` 我自己改出来的回归。
+  - 验证：截图里 `3` / `21` 出现在顶栏下方 ✓；`npm run test:minigame` 192 条全绿。
+  - 批次：20261024-1010
 
-- [x] [B1] 几何纯函数换成「总开关盒 + 抽屉盒 + 格子尺寸」：`src/ui/buildToolbarLayout.ts` → `npm run test:buildtools` 全绿
-  - 做了什么：`buildToolbarLayout.ts` 整份重写——`buildToggleBox()`（44×56，贴右缘 8px、垂直居中）、
-    `buildDrawerSize(scale)` / `buildDrawerBox(w,h,scale)`（基准 360×196，屏幕居中，四周夹进 8px，顶边 ≥ `8 + 22*scale`）、
-    `buildCellSize(w,h,scale)`（上限 84×68 随 scale、下限 44 恒定）、`drawerFits()`、`pauseBarBottom()`；
-    删掉 `buildToolbarSize/Box/OverlapsPauseBar`。`tools/buildtools-test.ts` 的「工具条几何」段整段改到新函数：
-    5 种视口 × 3 种缩放逐条量四边/暂停条/格子热区，加 844×390 的具体落点与两个"装不下"的反例。
-  - 为什么：抽屉是居中的，旧的"右缘双列竖排 92×236 + 装不下就折叠"口径整段失效；但"不出界 / 不压暂停条 /
-    热区 ≥44"这三条必须继续能离线量。`drawerFits()` 的语义从"保持折叠"改成"给网格加滚动"，所以判据是
-    "基准尺寸不打折 + 格子 ≥44"，而不是"基准尺寸塞得进视口"——只有基准都塞不下时（如 320×240 宽度不足、
-    844×200 高度不足）才判 false。
-  - 验证：`npm run test:buildtools` → 通过 309 / 失败 0（原有 261 条全部保留语义，几何段从 13 条扩到 61 条）；
-    `npm run typecheck` 通过；`npm run check:fast` 全绿（172 套里命中 6 套）。
-  - 批次：20261024-0344
+- [x] [跳12] 每个方块顶面中心加白色小圆点（参考图 02/03 每块都有，直径 ≈ 0.11~0.14 边长）：`BlockScene.ts` 加共享几何 + 材质、随入场/淡出缩放的 `dot` mesh → `npm run test:minigame`（断言：每块都有 dot、尺寸随 size、释放时 dispose）＋ 像素取样确认顶面中心是白点
+  - 做了什么：共享 `CircleGeometry(1,24)` + 白色 `MeshBasicMaterial`，每块一个 `dot`；半径 = `0.065 × 边长`（直径 0.13）；只有普通方块叠点（特殊方块顶面自带井盖盘/唱片纹/魔方格/门脸）；位置/缩放跟着 `refreshEntry` 走，方块压扁时白点一起沉。
+  - 踩坑：**第一版白点根本看不见**。不透明物体会按"由近到远"排序，白点不写深度又排在方块之前 → 被顶面整片盖掉。改成 `transparent: true` + `renderOrder = 3` 才出来。
+  - 验证：放大截图里黄块顶面正中白点清晰 ✓；`npm run test:minigame` 新增 3 条断言，197 条全绿。
+  - 批次：20261024-1010
 
-- [x] [B2] 文案：8 条短标签 + 8 条短语 + 2 条面板文案，**6 种语言全加**：`src/core/i18n/locales/{zh,en,fr,de,pt,ru}/editor.ts` → `npm run audit:i18n` 与 `npm run test:i18n` 全绿
-  - 做了什么：6 份 `editor.ts` 各加 18 条键——`buildtools.tool.<8 个>.short`、`buildtools.tool.<8 个>.hint`
-    与 `buildtools.panel.title` / `buildtools.panel.endBuild`（原计划的 `.back` 没加，复用已有的 `editor.back`）；
-    位置紧跟在 `buildtools.fill.noBlock` 之后，每种语言都带一行本语言的注释标题。
-  - 为什么：`title` 在触摸屏永远不显示、`aria-label` 只给读屏，这就是"只有图标、没有文字"的根因；
-    六种语言一起加是因为 `audit:i18n` 按语言报覆盖率，只补 zh/en 等于给自己留半套。
-    拉丁语系的两字标签只能给"一个短词"（`Remplir` / `Rückgängig` / `Шаблоны`），这是词长差异不是漏翻。
-  - 验证：`npm run audit:i18n` → ✓ 通过，六语言 2843/2843（100%）；这 18 条暂时被报成"没人引用"
-    （B3 用完就消失，不是错误）。`npm run test:i18n` → 547 通过 / 0 失败。
-  - 批次：20261024-0344
+- [x] [跳13] 色板换成参考图取样的高饱和糖果色（顶面 `#FCF366` / `#F77E3F` / `#BEEF46` 这一档，背景 `#D1D4DD` 系），`palette.ts` 六组全换 → `npm run test:minigame`（断言：每组背景亮度在 200~240、方块色饱和度 ≥ 0.45、与背景对比度 ≥ 阈值）＋ 对截图做像素取样核对
+  - 做了什么：把近白 `#F7F6FB` 从轮换里拿掉（它属于"绿色首页"上的白块，摆到浅灰紫关卡背景上几乎与背景同亮），补进珊瑚红 `#EE7467`、天蓝 `#6A9BF9`；六组重排，**每组至少 3 个高饱和色、最多 1 个灰**；淡黄背景那组去掉黄块、浅蓝背景那组去掉柠檬绿（|ΔL| 只有 0.03~0.04，糊进背景）。
+  - 新增断言：HSL 饱和度 ≥ 0.3 的方块 ≥ 3 个（"洗白"防线）、无彩/灰方块 ≤ 1 个；既有的"没有方块糊进背景（|ΔL| ≥ 0.04）"当场抓出淡黄那组的 0.032 与浅蓝那组的 0.037。
+  - 验证：截图 coral/lime/深灰 明显比之前饱和 ✓；像素取样 ref02 顶面 rgb(252,243,102)/(247,126,63)/(190,239,70) 与色板一致 ✓；`test:minigame` 197 条全绿。
+  - 批次：20261024-1010
 
-- [x] [B3] 工具条 DOM/CSS 改成「单按钮 + 居中抽屉」：`src/ui/BuildToolbar.ts` + `index.html` → `npm run typecheck` 通过且 `npm run test:buildtools` 无回归
-  - 做了什么：`BuildToolbar` 整份重写——`#build-toolbar` 变成"开关 + 遮罩 + 抽屉"三层；抽屉 = 头部
-    （标题 / 「结束建造」/ ×）+ 两页（8 格工具，4 列 × 2 行；模板第二页 4 张卡 + ← 返回）；
-    对外接口保留 `setMode/setAvailable/setUndoState/setSelectionArmed/isOpen`，新增 `openPanel/closePanel/isPanelOpen`
-    与 `onEndBuild` 回调（main.ts 里接上：清 `buildMode` + 清选区 + 刷新）。`.extra` / `.collapsed` /
-    `.build-templates` 那套"9 个按钮挤一条 + 左侧浮层"的 DOM 与 CSS 全删。
-    `index.html` 新增 `#build-toolbar` 覆盖层、`.build-toggle`、`.build-backdrop`、`.build-drawer`、
-    `.build-cell`（图标 + 两字标签 + 一句短语，标签与短语都 `text-overflow: ellipsis`）。
-  - 为什么：抽屉是**模态**的，遮罩吃掉点击就不会出现"面板开着却挖了方块"；而 44px 双列竖条在 360 高横屏里必然撞跳跃键
-    （实测重叠 32×76，且工具条 `z-index: 9` 会**抢走**跳跃键的点击，`#hud` 没有 z-index）。
-    尺寸**只在 `buildToolbarLayout.ts` 算一份**，由 `applyLayout()` 写成 `--build-pad/--build-head/--build-gap/
-    --build-cell-w/--build-cell-h` 内联变量，CSS 只负责长相——上一版 CSS 写死 92×236、常量里再写一遍，两处已经漂过一次。
-  - 验证：`npm run typecheck` 通过；`npm run test:buildtools` 309 通过 / 0 失败（静态断言里的
-    `new BuildToolbar(document.body` 与左键三处互斥一条没动）；`npm run audit:i18n` ✓（新增的 `buildtools.toggle.short`
-    六语言齐、不再是孤儿）；`npm run check:fast` 161/161 套全绿。真机（844×390 / 640×360、80%~140% 缩放）未测，按用户口径不主动测。
-  - 批次：20261024-0344
+- [x] [跳14] 阴影按参考图收紧（只比背景暗 ~10%、边缘干净、半径缩到现在的一半）：`BlockScene.ts` 的 `SHADOW_SPREAD` / 贴图渐变 / `SHADOW_OPACITY` → `npm run test:minigame` ＋ 像素取样核对"阴影处亮度 / 背景亮度 ≈ 0.90"
+  - 做了什么：贴片 1.9 → 1.35 倍边长、偏移 0.83 → 0.58 边长（`(-0.30,+0.50)`）；贴图渐变从"一路柔到边"改成"核心 62% 实、最后 38% 收边"、圆角 0.22 → 0.16；浓度 0.35 → 0.32。
+  - 为什么：ref02 实测阴影核心 rgb(137,141,150) vs 背景 rgb(209,212,221) ≈ 暗 35%（浓度没错），但**边缘更利、面积更小**；我们原来是"大半径径向渐变 + 1.9 倍贴片"，读起来是一团雾。
+  - 验证：截图里阴影贴着方块、边缘干净 ✓；`test:minigame` 全绿。
+  - 批次：20261024-1010
 
-- [x] [B4] 抽屉的输入隔离：面板开着时键盘只认 Esc：`src/main.ts` → `npm run typecheck` 通过 + `npm run test:buildtools` 无回归
-  - 做了什么：`keydown` 里加一段 `if (this.buildToolbar.isPanelOpen)`——Esc `preventDefault()` 后收面板，其余按键直接 `return`；
-    位置在小游戏/睡觉判断之后、告示牌/地图/书那三层之前。`onToggleMode(true)` 里补 `this.keys.clear()`。
-  - 为什么：遮罩只挡鼠标与触摸，键盘完全不受影响——面板开着按 W 会一边走一边把左键当"点选区角"，
-    按 E 会在抽屉上面再叠一层背包，按 Esc 会先弹暂停菜单（书与地图那两处踩过同一个坑）。
-  - 验证：`npm run typecheck` 通过；`npm run test:buildtools` 309 通过 / 0 失败。
-  - 批次：20261024-0344
+- [x] [跳15] 小人放大到参考比例（ref02 实测：小人高 ≈ 0.73 × 方块对角宽，我们 0.47）：`iso.ts` 的 `JUMPER_HEIGHT_RATIO` 0.72 → ~1.08，`JumperModel` 头径 0.29 → 0.33、裙摆 0.35 → 0.42 → `npm run test:jumpmodel && npm run test:jumpiso && npm run test:minigame`（比例断言同步改，取景头位不许把方块挤出画面）
+  - 做了什么：`JUMPER_HEIGHT_RATIO` 0.72 → **1.12**；头径 0.29 → 0.33、头心 0.855 → 0.835、裙摆 0.35 → 0.42（PROFILE 九点等比放大 1.2）；`jump-model-test` 的期望值改成从 `JUMPER_HEIGHT_RATIO` 算出来，不再手抄 0.72。
+  - 顺带修双份真值：`JumperModel.setSize` 里写死 `edge * 0.72`，而取景用的是 `iso.ts` 的 `JUMPER_HEIGHT_RATIO`——只改一处就会出现"小人没变大、镜头却按 1.12 留头位"（画面白空一块）。现在 `setSize` 直接读 `JUMPER_HEIGHT_RATIO`。
+  - 验证：截图里小人明显变大、头顶留白正常 ✓；`test:jumpmodel` 45 条、`test:jumpiso` 42 条、`test:minigame` 197 条全绿。
+  - 批次：20261024-1010
 
-- [x] [B5] 主程序接线（含两处旧隐患）：`src/main.ts` → `npm run test:buildtools` 的静态断言全绿 + `npm run test:buildtools` 手工核对 `buildToolbarStateForTest`
-  - 做了什么：① 打开抽屉自动开建造模式（`openPanel()` 里 `setMode(true, true)`）；② `closePanel()` 不动模式；
-    ③「结束建造」= 收面板 + 关模式 + `onEndBuild()`（主程序清 `buildMode` 与选区）；
-    ④ `refreshBuildToolbar()` 里 `!isCreative && buildMode` → `this.buildMode = false`（顺手让工具条自己 `setMode(false)`）；
-    ⑤ 新增 `onPanelChange(open)`：开着时 `exitPointerLock()`，关掉后 `!uiOpen && !touch` 才重新锁；
-    ⑥ `buildToolbarStateForTest` 加 `panelOpen`。
-  - 为什么：④ 是现存的真 bug——旧实现只把工具条藏起来，`buildMode` 仍是 true，左键继续被当"点选区角"吞掉，
-    玩家会觉得"挖不动、工具也不见了"；⑤ 的取舍见 `decision.md` D4（不走 `uiOpen`，避免开关面板抖一下）。
-  - 验证：`npm run typecheck` 通过；`npm run test:buildtools` 309 通过 / 0 失败。**不跑浏览器自动化**（用户口径：不主动测）。
-  - 批次：20261024-0344
+- [x] [跳16] 背景暗角减弱 + 去掉过重的竖向渐变（参考图接近纯色）：`BlockScene.ts` 的 `createBackgroundTexture` → `npm run test:minigame` ＋ 像素取样核对"四角亮度 / 中心亮度 ≥ 0.97"
+  - 做了什么：六组背景的 `bottom` 全部收窄到 `top` 的 ~97%（原来差 10~20%，mist 那组 ΔL 达 0.20）。
+  - 为什么：ref02 实测顶 rgb(211,215,224) → 底 rgb(209,212,221)，**只差约 1%**；横屏矮屏下 10~20% 的竖直渐变会把整屏压成"上亮下暗的灰"，与参考图差别最直观。渲染层的 `createBackgroundTexture` 只负责把两个端点插值，问题在色板取值，不在函数。
+  - 验证：截图背景已接近纯色 ✓；`test:minigame` 197 条全绿（含"上亮下暗""ΔL ≤ 0.25"两条既有断言）。
+  - 批次：20261024-1010
 
-- [x] [B6] 测试补齐：`tools/buildtools-test.ts` → `npm run test:buildtools` 309 条 → ≥325 条全绿
-  - 做了什么：新增三段 32 条——① 折叠态总开关与跳跃键：2 视口 × 3 缩放量横向间隙与四边（跳跃键几何按 `#touch-ui`
-    的 `76` / `40` / `28` 公式现算，注释里写明出处）；② 抽屉形态静态断言 12 条：几何真的被工具条引用、
-    `drawerFits` 被调用、旧的 `extra`/`build-templates`/双列 grid 已删干净、`z-index: 9`、遮罩 `pointer-events: auto`、
-    开面板开模式 / 收面板不退模式 / 结束建造三件事、格子三层结构、模板第二页；③ 接线 5 条：非创造清零
-    `buildMode`、`onEndBuild` / `onPanelChange` / `isPanelOpen` 键盘隔离 / 验收 API 的 `panelOpen`；
-    ④ 文案 4 条：zh/en 的 8 组 short+hint 齐全、中文短标签都是 2 字、面板三条文案入表。
-  - 为什么：`buildToolbarFits()` 上一版就是"只被测试引用"，等于设计只活在测试里——这次把"被引用"本身也钉成断言；
-    跳跃键那条盯的正是用户报的那一下（重叠 + 抢点击），量出来比截图可靠。
-  - 验证：`npm run test:buildtools` → 通过 341 / 失败 0（≥325）；`npm run typecheck` 通过。
-  - 批次：20261024-0344
+- [x] [跳17] 重跑 e2e 四张截图，逐项比对并写结论（视角/明暗/中心点/色板/阴影/小人/背景/分数 HUD）→ `npm run jump:e2e && npm run check`，比对表贴进完成说明
+  - 验证：`npm run jump:e2e -- --url http://localhost:5175/` → **18 / 18 通过**（正交相机 ✓ / 间距 1.15~1.9 边长 ✓ / 两向无斜角 ✓ / 五类方块合法性 ✓ / 结算与重开 ✓ / 无 console 错误）；`npm run check` → **退出码 0**（离线 177/177 套 + 三张台账 + 文档门禁）。
+  - 逐项比对结论（截图 `.tmp/shots/jump-{ready,charging,after5,over}.png` vs 参考图 02/03）：
+    | 项 | 参考图 | 现在 | 结论 |
+    | --- | --- | --- | --- |
+    | 投影 | 正交、俯角 30°、方位 225° | 同 | ✓ 一致（菱形宽高比 2.0） |
+    | 三面明暗 | 顶亮、左暗、右中 | 1.00 / 0.775 / 0.93 | ✓ 一致，且方向经像素互证 |
+    | 顶面白点 | 每块顶面中心白点，直径 ≈ 0.13 边长 | 有，特殊方块不叠 | ✓ 已补齐 |
+    | 色板 | 高饱和糖果色（黄/橙/柠檬/珊瑚/蓝） | 同档，每局 ≥3 个高饱和 | ✓ 已对齐（取样值一致） |
+    | 阴影 | 左下、核心暗 35%、边缘干净、约 0.6 边长 | 同 | ✓ 已收紧 |
+    | 小人 | 高 ≈ 0.73 方块对角宽，头 0.33、裙摆 0.42 | 0.68~0.73 | ✓ 已放大 |
+    | 背景 | 近纯色，顶底差 ~1% | 差 ~3% | ✓ 可接受 |
+    | 分数 HUD | 左上、深色细体、无其他文字 | 同（让开宿主顶栏） | ✓ 已修 |
+  - 仍不一致、且**不打算装一致**的：① 原版字体拿不到，数字用系统字体（`-apple-system/Helvetica Neue`）近似；② 特殊方块美术（井盖管纹、便利店门脸、唱片）是我按特征手绘的 canvas 图，只能"可辨识"；③ 横屏取景是原创适配，原版是竖屏构图，方块占屏比例无法照搬。
+  - 批次：20261024-1010
 
-- [x] [B7] 文档与全量门禁：`.continue/OVERVIEW.md`（建造工具条目改一行）+ `.continue/TIPS.md`（补一条坑）→ `npm run check` 全绿
-  - 做了什么：OVERVIEW「界面与音频」补一条建造工具的形态（单开关 + 居中模态抽屉 + 几何只在 `buildToolbarLayout` 算一份），
-    坑区补一行「挡住常常已经是按不动」；TIPS 增一节「固定 px 的竖排工具条在横屏必压操作键——而且会抢走它的点击」
-    （症状 / 根因 / 处置 / 判据 / 适用面）；顺带跑 `npm run audit:tasks` 把 HANDOFF 的进度口径（286/6 → 287/5）
-    与提交总数（1526 → 1599）、README 路线图状态列改回与 `TASKS.md` 一致（它们是派生数字，之前已经漂了）。
-  - 为什么：坑的门槛刚好够（量了很久才定位："只是挡住"其实已经是"按不动"）；文档里留着旧形态会误导下一批。
-    `TASKS.md` 里**没有**创造5 的条目（上一批在 `notes/batches.md` 记为"会话队列，无 T 号"），所以没有"右侧竖排"的描述要改；
-    本批的落地留到收尾第③步写进「队列落地 · 当场任务」。
-  - 验证：`npm run check` 全绿（退出码 0、0 条 ✗）：typecheck + audit:i18n + 172 套离线 + 三张台账 + audit:docs + check:browser(跳过)。
-  - 批次：20261024-0344
+- [x] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：这批六处改动全部变成了可测量的断言，而不是"看着像"——分数位置（`index.html` 的两条 CSS 断言）/ 白点（3 条：存在、随高度缩放、随卸载释放）/ 色板（3 条：≥3 个高饱和、≤1 个灰、不糊进背景）/ 小人比例（1 条从 `JUMPER_HEIGHT_RATIO` 算，杜绝手抄）/ 阴影与背景（复用既有像素级断言）。合计 `test:minigame` 190 → 197 条、`test:jumpmodel` 45 条。
+  - L2：当天做了三次故意破坏并复现变红——① 把某局改成"近白 + 两块灰" → 3 条断言同时红（登记表 / 高饱和数 / 灰块数）；② 上一批验证过俯角 30°→35° 红 6 条、左右明暗对调红 4 条；③ 这批还暴露了**断言覆盖不到的一类**：分数被顶栏盖住时，元素在、文本对、E2E 全绿，只有截图能发现——所以 L1 的薄弱点是"可见性"，只能靠 `[跳17]` 的人工比对兜。
+  - L3：这批的判断依据**全部来自真实参考图**（02/03/06 三张，逐点像素取样：色值 6 处、比例 2 处、阴影 2 处、背景 2 处），没有一条是"我觉得应该是"。唯一自选的是"每组至少 3 个高饱和 + 最多 1 个灰"这条量化门限（原版没给规则，是从 6 组参考图的分布反推的），已写进 `palette.ts` 注释。
+  - 改进（当场做了 2 条）：① `JumperModel.setSize` 的双份真值修掉（写死 0.72 vs `iso.ts` 的 1.12）；② 饱和度/灰块两条"洗白"防线——如果不加，下次谁把颜色调灰，只有肉眼能发现。
+  - 批次：20261024-1010
 
-- [x] [自审] 这一批的三层自审 → 结论写进条目下方
-  - L1：抽屉的"不出界 / 不压暂停条 / 不压跳跃键 / 热区 ≥44"全部有会红的检查——几何 61 条（5 视口 × 3 缩放
-    逐条量四边与格子下限）+ 折叠态开关对跳跃键 12 条（2 视口 × 3 缩放，间隙 > 0、四边在视口内）+ 静态 16 条
-    （几何真被 `BuildToolbar` 引用、`drawerFits` 被调用、旧类名已删、层级 9、遮罩吃点击、状态机三件事、主程序四处接线）。
-  - L2：真做了两次破坏性实验。① 把 `buildDrawerBox()` 的居中改成贴底 → 2 条红（顶边 97→194、底边 293→390），
-    改回即绿；② 把 `applyVisibility()` 里的 `setMode(false)` 删掉 → **原本 341 条全绿**（盲区），当场补一条
-    「不可用时工具条自己也会退建造模式」，再删一次变红、恢复变绿（342 条）。
-  - L3：判断依据里 **2 条来自真实使用者**（"工具条展开盖住跳跃键"、"完全没有文字提示，难用不如没有"），
-    其余 6 条是我按项目既有约定推的（4 列 × 2 行排版、360×196 基准、`drawerFits()` 改成滚动降级、指针锁走
-    `onPanelChange`、键盘隔离、Esc 收面板）。真机观感（844×390 / 640×360、按钮 80%~140%、左右手模式）**没测**——
-    用户口径是不主动测，这几项留给用户过一眼。
-  - 改进：当场修了一条（上面 L2 ②），其余没有新 `T` 号（这批的问题都能在本批内收口）。
-  - 批次：20261024-0344
+## 批次 20261024-0415 · 2026-10-24 · 会话 e50bd5cb
 
----
-
-## 批次 20261023-2351 · 2026-10-24 · 会话 974b5553
-
-> 本批 44 条、说明很长（原队列 60KB），这里只保留每条的一行验证；**完整说明（做了什么 / 为什么 / 未验证）见 `.continue/.logs/974b55/queue.md`**。
-
-- [x] [联机1] 补协议文档：新增 `docs/NET-PROTOCOL.md`（现有 16 条消息的方向/字段/校验），`server/index.mjs` 头注释改指它 → `npm run audit:docs` 通过
-  - 验证：`npm run audit:docs` 通过；`npm run check:fast` 全绿
-- [x] [联机2] 握手校验：`join` 带 `{v, name, clientId}`，服务端校验版本/名字长度/重复 clientId，不兼容回 `error{code:'version'}` 并关闭 → `npm run test:net` 新增“旧版本被拒 / 脏名字被截断”
-  - 验证：`npm run test:net` **35 通过 / 0 失败**；新增 `tests/net-client-id.test.ts`（8 条）+ `tests/net-protocol-version.test.ts`（4 条），单测全量 314 → **326**；`npm run check:fast` 全绿
-- [x] [联机3] 加入即上报位置与维度，远端玩家按维度过滤：`NetPlayerState` 保留 `dimension`，`main.ts` 渲染远端前比对当前维度 → `npm run test:unit` 新增 `tests/net-remote-dimension.test.ts`
-  - 验证：`npm run test:net` 35 → **39 通过**；新增 `tests/net-remote-dimension.test.ts` **6 条全过**；主树单测 **163 → 169**；`npm run check:fast` 全绿
-- [x] [联机4] 未加载区块的远端方块改动不再丢：`main.ts onNetBlock` 先 `world.edits.record` 进缓冲，区块加载回调再应用 → `npm run test:unit` 新增 `tests/net-block-buffer.test.ts`
-  - 验证：`npx vitest run tests/net-block-buffer.test.ts` **9 条全过**；主树单测 **169 → 178**（24 文件）；`npm run typecheck` 通过
-- [x] [联机5] 种子对齐：以服务端种子为准，不一致时提示并提供“用该种子新建多人世界 / 重载当前世界”；含世界重载路径（清 chunk/实体/edits/时间/玩家位置）→ `npm run test:unit` 新增 `tests/net-seed.test.ts` + `npm run test:save`
-  - 验证：`npx vitest run tests/net-seed.test.ts` **8 条全过**；主树单测 **178 → 186**（25 文件）；`npm run test:commands` 435 → **440 通过**；`npm run test:save` **111 通过**；`npm run test:net` **39 通过**；`npm run audit:i18n` 六语言 2831/2831 100%、无孤儿键
-- [x] [联机6] 多人存档隔离：联机世界按 roomId 派生独立库，服务器 edits/容器不写进单机档；退出联机回原单机世界 → `npm run test:save`
-  - 验证：新增 `tests/net-mp-save.test.ts` **7 条全过**；主树单测 **186 → 193**（26 文件）；`npm run test:save` **111 通过**；`npm run typecheck` 通过
-- [x] [联机7] 心跳、超时与会话状态机：服务端 5s ping / 20s 无 pong 断开；客户端 `connecting|connected|reconnecting|offline` 收进纯逻辑 `core/net/NetSession.ts` → `npm run test:unit` 新增 `tests/net-session.test.ts` + `npm run test:net`
-  - 验证：`npx vitest run tests/net-session.test.ts` **8 条全过**；`npm run test:net` 39 → **40 通过**；主树单测 **193 → 201**；`npm run typecheck` 通过
-- [x] [联机8] 断线重连会话恢复：服务端 30s grace 按 clientId 保留 id 与掉落物，重连复用 id；客户端保留 localId 不重发 → `npm run test:net` 新增“3 秒内重连复用 id”
-  - 验证：`npm run test:net` 40 → **43 通过**；客户端 `localId` 由 `main.ts` 分配、重连时不重置，因此重新冒出的掉落物不会与旧的撞键；`npm run typecheck` 通过；`check:fast` 全绿
-- [x] [联机9] 最小连接入口（不是大厅）：地址/昵称/连接/断开/状态，主菜单与暂停菜单各一个入口，横屏可点；新增 `src/ui/MultiplayerScreen.ts` + 六语言文案 → `npm run test:ui` + `npm run test:i18n` + `npm run shot`
-  - 验证：`npm run test:ui` **934 通过 / 0 失败**；`npm run test:i18n` **547 通过**（六语言新键齐全、分组文件同构）；`npm run typecheck` 通过；`npm run check:fast` 全绿
-- [x] [联机10] 时间与天气权威：服务端维护 `timeOfDay`/`weather`，join 下发 + 每 2s 校正广播，客户端按 dt 推算只做插值 → `npm run test:net` + `npm run test:weather`
-  - 验证：新增 `tests/net-time.test.ts` **12 条全过**；`npm run test:net` 43 → **45 通过**；主树单测 **201 → 213**；`npm run typecheck` 通过
-- [x] [联机11] 睡眠与跳夜广播：任一玩家睡满即跳夜（先按本项目口径），服务端广播时间跳变并清天气，差异记台账 → `npm run test:net` + `npm run test:bed`
-  - 验证：`npm run test:net` 45 → **48 通过**；`npm run test:bed` **117 通过 / 0 失败**（单机睡眠逻辑没动）；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 191 注意），新注记已进 `TASKS.md` 第 5686 行
-- [x] [联机12] 方块写入统一出口：在 `World.events.onBlockChanged` 上挂广播（覆盖红石/流体/火焰/作物/漏斗/爆炸），远端应用时抑制回声，100ms 合帧批量发 → `npm run test:unit` 新增 `tests/net-block-funnel.test.ts` + `npm run test:net`
-  - 验证：新增 `tests/net-block-funnel.test.ts` **9 条全过**；`npm run test:net` 48 → **50 通过**；主树单测 **213 → 222**；`redstone`/`hopper`/`furnace`/`net` 四套离线全绿；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 192 注意）
-- [x] [联机13] 服务端持久化：新增 `server/store.mjs`，edits/容器/时间/天气落盘，启动加载、定时 + 退出保存、损坏文件回退备份 → `npm run test:net` 新增“重启后快照仍在”
-  - 验证：`npm run test:net` 50 → **58 通过**（新增 8 条：重启前的客户端能加入 / 重启后服务端能再起来 / 重启后拿到 welcome / **重启后方块改动还在** / **重启后容器内容还在** / 坏快照下服务端仍能起来 / 坏快照被备份/ 坏快照之后从空世界开始）；测试用 `mkdtempSync` 的临时 `DATA_DIR`，不碰开发者自己的 `server/.data/`；`npm run typecheck` 通过；`npm…
-- [x] [联机14] 快照裁剪与容量策略：welcome 只发玩家附近 edits，`MAX_EDITS` 满时淘汰最旧并告警（不再静默丢）→ `npm run test:net` 新增大快照裁剪断言
-  - 验证：新增 `tests/net-snapshot-policy.test.ts` **10 条全过**；`npm run test:net` 58 → **60 通过**；主树单测 **222 → 232**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 194 注意）
-- [x] [联机15] 容器同步扩展到全部工作站：箱子/木桶/熔炉/高炉/烟熏炉/酿造台/发射器/投掷器/漏斗，统一“变更出口”而非打开时才挂 → `npm run test:net` + `npm run test:furnace` + `npm run test:hopper`
-  - 验证：新增 `tests/net-container-sync.test.ts` **9 条全过**；`npm run test:net` 60 → **63 通过**；主树单测 **232 → 241**；`npm run check:fast` 全绿，命中 **40 套**离线
-- [x] [联机16] 告示牌文字与展示框内容同步（B12/B14 现在写着“联机不广播”），更新差异台账 → `npm run test:net` + `npm run test:sign` + `npm run test:frame`
-  - 验证：`npm run test:net` 63 → **67 通过**；`sign` / `frame` / `net` 三套离线全绿；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 196 注意）
-- [x] [联机17] 玩家外观状态：手持物/副手/盔甲/潜行/挥手/受伤/着火/骑乘/睡觉，扩展 `NetPlayerState` 并接到渲染 → `npm run test:unit` 新增 `tests/net-player-state.test.ts`
-  - 验证：新增 `tests/net-player-state.test.ts` **12 条全过**；`npm run test:net` 67 → **69 通过**；主树单测 **241 → 253**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 197 注意）
-- [x] [联机18] 队友名字牌：`main.ts` 现在明确跳过远程玩家，改成显示昵称 + 距离衰减 → `npm run test:nametag`
-  - 验证：`npm run test:nametag` 143 → **149 通过 / 0 失败**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 198 注意）
-- [x] [联机19] 生物同步：位置/血量/状态广播 + 远端插值/降频，AI 仍各端跑（差异记台账）→ `npm run test:unit` 新增 `tests/net-mob-sync.test.ts` + `npm run test:net`
-  - 验证：新增 `tests/net-mob-sync.test.ts` **7 条全过**；`npm run test:net` 69 → **73 通过**；主树单测 **253 → 260**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 199 注意）
-- [x] [联机20] 远端实体 AOI 与分级降频：16 格每 100ms、32 格每 250ms、更远不发 → 单测分级函数 + `npm run test:perf`
-  - 验证：新增 `tests/net-aoi.test.ts` **11 条全过**；`npm run test:perf` 40 → **44 通过**；主树单测 **260 → 271**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 200 注意）
-- [x] [联机21] 掉落物拾取仲裁：服务端 first-come 锁 + 扣减广播，镜像可捡；解决 L7“远端堆拿不到” → `npm run test:net` 新增“双客户端抢同一堆只有一边拿到”
-  - 验证：`npm run test:net` 73 → **78 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 201 注意）
-- [x] [联机22] PvP 与队伍免伤：伤害来源接 `Teams.sameTeam()`，`/team friendlyfire` 真正生效（M23 卡住的两项）→ `npm run test:commands` + `npm run test:net`
-  - 验证：`npm run test:commands` 440 → **444 通过**；`npm run test:net` 78 → **82 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 203 注意）
-- [x] [联机23] 其余实体同步：箭/TNT/经验球/船与矿车按优先级；不做的写进差异台账 → `npm run test:net` + `npm run test:entity`
-  - 验证：`npm run test:net` 82 → **86 通过**；`npm run test:entity` **199 通过 / 0 失败**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 204 注意）
-- [x] [联机24] 消息校验：方块 id 白名单、y 范围、state 位宽、与玩家距离上限（block/container 都校验）→ `npm run test:net` 新增脏消息用例
-  - 验证：新增 `tests/net-block-validation.test.ts` **9 条全过**；`npm run test:net` 86 → **92 通过**；主树单测 **271 → 280**；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 206 注意）
-- [x] [联机25] 限频与体积：全局令牌桶（block/container/chat）、`maxPayload` 64KB、名字字符清洗 → `npm run test:net` 新增“刷屏被限”
-  - 验证：新增 `tests/net-ratelimit.test.ts` **8 条全过**；`npm run test:net` 92 → **95 通过**；主树单测 **280 → 288**；`npm run audit:diffs` 重建台账（66 差异 / 208 注意）
-- [x] [联机26] 房间码、可选密码、Origin/Token 校验：一房一世界，拒绝跨站连接 → `npm run test:net` 新增“错 origin 被拒 / 两个房间互不串”
-  - 验证：新增 `tests/net-server-url.test.ts` **6 条全过**；`npm run test:net` 95 → **105 通过**；主树单测 **288 → 294**；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 210 注意）
-- [x] [联机27] 广播 AOI：玩家/方块/实体按 8 区块 + 维度过滤，O(n²) → O(n·k) → 单测过滤函数 + `npm run test:net`（不该收到的收不到）
-  - 验证：新增 `tests/net-aoi-broadcast.test.ts` **5 条全过**（半径内外边界 / 对角 128,128 收到而 144,144 不收（切比雪夫语意）/ 维度不同不收 / 负坐标按区块取整 / 非法坐标与缺玩家）；`npm run test:net` 105 → **110 通过**；主树单测 **294 → 299**；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / …
-- [x] [联机28] wss 与部署：`ws` 从 devDependencies 移到 dependencies、`defaultServerUrl` 支持同源 `/ws` 与 `wss://`、补 Dockerfile/反代/健康检查、更新 README 与 `notes/ops.md` → `npm run build` + 生产依赖下 `node server/index.mjs` 能起
-  - 验证：`tests/net-server-url.test.ts` **6 → 9 通过**；`npm run test:net` 110 → **113 通过**；`npm run build:fast` 出包成功；`npm run typecheck` 通过；`npm run check:fast` **172 套全量绿**（改了配置文件 → 走全量）；`npm run audit:diffs` 重建台账（66 差异 / 212 注意）
-- [x] [联机29] 观测与诊断：服务端人数/带宽/TPS 日志与 `/healthz`，客户端 F3 面板加 ping/丢包/上下行 → `npm run check` 全绿
-  - 验证：新增 `tests/net-stats.test.ts` **11 条全过**；`npm run test:net` 113 → **115 通过**；`npm run typecheck:tools` **0 错误**；**`npm run check` EXIT=0 全绿**
-- [x] [联机30] 修聊天重复回显（写协议文档时发现）：服务端 `chat` 广播包含发送者，客户端又本地回显一次；改成服务端不再回传给发送者 → `npm run test:net` 新增“发送者只收到一份”
-  - 验证：`npm run test:net` 115 → **117 通过**；`npm run audit:diffs` 台账与条目一致（66 差异 / 213 注意）
-- [x] [联机31] 远端掉落物镜像补维度（做联机3 时发现）：`NetItemState` 与 `item` / `item-remove` 广播都不带 `dimension`，队友在下界掉的东西会画在主世界同坐标；加字段并在 `main.ts` 建镜像与渲染时按维度过滤 → `npm run test:net` 新增“跨维度掉落物不通告”
-  - 验证：`npm run test:net` 117 → **119 通过**；`npm run typecheck` 通过；`npm run audit:diffs` 重建台账（66 差异 / 214 注意）
-- [x] [联机32] 单测别把工作树副本跑进去（做联机3 时发现）：`vitest run tests` 会把 `.continue/doing/.worktree/*/tests/` 一起收集，45 文件 / 332 条里一半是副本，计数虚高一倍且工作树的红会污染主树门禁 → 在 `vite.config.ts` 加 `test.exclude` 排除 `.continue/**`，之后主树应回到 23 文件 / 169 条 → `npx vitest run` 输出 23 个文件 + `npm run check:fast` 全绿
-  - 验证：`npx vitest run` 与 `npm run test:unit` 都变成 **24 文件 / 178 条**；`npm run typecheck` 通过；`npm run check:fast` 全绿
-- [x] [联机33] 区块加载后才补上的远端容器要建实体（做联机4 时发现）：`ensureBlockEntityAt` 只在 `block`/`welcome` 的「已加载」分支调，经增量表补上的漏斗/箱子/发射器只有方块、没有容器表项（打开是空的、漏斗不搬东西）；在 `World.events.onChunkLoaded` 里按增量表里该区块的容器类方块补建 → `npm run test:unit` 新增“补上的漏斗能打开”
-  - 验证：新增 `tests/net-container-spawn.test.ts` **5 条全过**；主树单测 **313 → 318**（40 个文件）；`npm run typecheck` 通过；`npm run check:fast` 全绿；`npm run audit:diffs` 重建台账（66 差异 / 215 注意）
-- [x] [联机34] 世界原地重载（做联机5/6 时拆出来的硬骨头）：`resetWorld(seed)` 重建 `World` 与渲染侧缓存、清实体/掉落物/TNT/漏斗定时器/时间/位置/维度，再从指定存档库把 edits/容器/牌子/展示框/进度叠回去
-  - 验证：`tests/world-reset.test.ts` **7 条全过**；`npm run typecheck` 通过；`npm run check:fast` 全绿（6 套命中，含 `render`）；主树单测 **318 → 325**
-- [x] [联机35] 天气权威（做联机10 时拆出来的另一半）：服务端维护 `weather`（晴/雨/雷），join 下发 + 切换时广播，客户端联机时**不再自己掷骰子**（`WeatherState.ts` 的自动切换要让位），只负责渲染降水 → `npm run test:weather` + `npm run test:net` 新增「天气广播与客户端接管」
-  - 验证：`tests/net-weather.test.ts` **4 条全过**（下一段种类 / 持续时长 / 推进（未到点与到点）/ 雨与雷暴一律转晴）——**它当场抓到一处抄错**：`STORM_SECONDS_*` 我写成 180~420，客户端实际是 120~300；`npm run test:weather` **58 通过 / 0 失败**（客户端规则没动）；`npm run test:net` 119 → **120 通过**；主树单测 **325 → 32…
-- [x] [发现] `net` 套件并发下偶发超时红：`tools/run-tests.mjs --changed` 里 `net` 与 `guard` 同时跑时，`net` 偶发跑满 10.5s 被判失败（本轮撞见两次：联机11、联机12 提交前守卫各拦下一次，重跑即过；单跑稳定 4.8s）→ 怀疑是固定端口 8787 加 5s 心跳等待叠加，改成随机空闲端口（或让 `run-tests` 把它标成独占），连续 10 次 `--changed` 不再出现 10s 红
-  - 验证：`npm run test:net` **69 通过 / 0 失败**；`node tools/run-tests.mjs --changed` **连跑 5 次全绿**
-- [x] [联机37] 外观剩下的三件事（做联机17 时拆出来）：① 远端模型的**下蹲/骑乘/睡觉姿势**（要动 `MobRenderer` 骨架）；② 玩家**盔甲**数据源（现在只有 `armorColors` 简化模型，没有逐槽物品）；③ **副手槽**（同上，且要进存档与背包界面）→ 批次按用户裁决**只做 ①**，②③ 拆成 `联机40` / `联机41`
-  - 验证：`tests/mob-pose.test.ts` **5 条全过**；主树单测 **329 → 334**；`npm run typecheck` 通过；`npm run check:fast` 命中 **30 套全绿**
-- [x] [联机38] 生物**位置**同步的前置（联机19 只做了命中事件）：① 定"谁权威"——最省的是"离这只生物最近的玩家上报"，其余端只收；② 定全局实体 id（服务端按 `ownerId:localId` 记，与 `items` 同一套）；③ 定**影子抑制**规则（收到远端生物时本地 AI 不能再生成一份同名同类型的怪，否则玩家看到双份）→ 产出：`core/net/MobAuthority.ts` 纯函数（谁该上报 / id 是否新鲜）+ 单测；做完后可以给联机19 补上位置与插值
-  - 验证：`tests/mob-authority.test.ts` **12 条** + `tests/mob-shadows.test.ts` **9 条**，全过；主树单测 **334 → 355**；`npm run typecheck` 通过
-- [x] [发现] `net` 套件已跑满 14s，并发下偶发红：`check:fast` 里它与 `guard` 并发时本轮又红了一次（单独跑 95 通过、连跑 `--changed` 三次全绿；证据：`tools/run-tests.mjs --changed` 的 `最慢：net 14.08s`）→ 把套件里重复的 join/固定 `sleep` 抽成公共夹具、限频用例改小规模或挪到独立的慢速套件，让 `net` 回到 6~8s，并连跑 5 次 `--changed` 不再出现并发红
-  - 验证：`npm run test:net` **120 通过 / 0 失败**、耗时 **18.53s → 12.61s**（-32%）；`node tools/run-tests.mjs --only net --only guard` **连跑 5 次全绿**（改前并发下两次红）；全量 `check:fast` **172/172 套全绿**，`最慢：structure 17.07s · net 13.52s · guard 11.10s`
-- [x] [联机39] 让世界可换（做联机34 时卡住的前置）：`main.ts` 的 `world` 去掉 readonly、`ChunkRenderer`（以及之后任何 `private readonly world` 的渲染器）改成 `setWorld(world)` 或可重建；配套一个 `npm run shot` 的验收步骤（换世界后画面正常、旧区块不残留）→ 先只有这一层，接通过之后再回 `联机34` 写执行路径
-  - 验证：结论由 `联机34` 的实现反向验证——`World.reset()` + `reloadWorld()` 在 `3451c264` 落地，`tests/world-reset.test.ts` **7 条全过**、`npm run check:fast` 全绿；本条自己没有代码产出（当初判断"必须换实例"是错的，`readonly world` 与 `ChunkRenderer` 的绑定一直没动）
-- [x] [联机40] 玩家盔甲改成逐槽数据源（做联机17/37 时拆出来）：现在只有 `armorColors` 简化模型（渲染用颜色，不知道是什么甲），要改成"头盔/胸甲/护腿/靴子"四槽的真实物品 id，跟随存档（`联机13` 的玩家快照）与 `move` 外观一起传 → **要改存档格式（旧档迁移）**，等用户拍；做完后 `联机37` 的 `armor[]` 字段才有真实含义
-  - 验证：`tests/net-remote-armor.test.ts` **8 条全过**；主树单测 **355 → 363**；`npm run typecheck` 通过；`npm run check:fast` 全绿（5 套）
-- [x] [联机41] 副手槽（做联机17/37 时拆出来）：背包多一个副手槽（盾牌/火把/食物），要进存档、背包界面、`F` 键交换、以及 `move` 的 `offhand` 字段真正生效 → **同样要改存档格式**，与 `联机40` 一起拍板
-  - 验证：`tests/offhand.test.ts` **6 条全过**；主树单测 **363 → 369**；`npm run typecheck` 通过；`npm run check:fast` 全绿（5 套）
-- [x] [发现] 远端看不到副手的物品：`core/entity/MobEquipment.ts` 的接口只有 `mainHand/head/chest/legs/feet`，`MobRenderer` 也只按 `equipment.mainHand` 画手持物 —— 于是联机41 传上去的 `offhand` 目前只存不用 → 给 `MobEquipment` 加 `offHand` 并在 `MobRenderer` 画第二个手持部件（左手位置），做完后队友举盾你能看见
-  - 验证：`tests/net-remote-armor.test.ts` **8 → 11 条全过**；`npm run typecheck` 通过；`npm run check:fast` 命中 **45 / 172 套全绿**（含 `equipment` / `mob` / `render`，说明改装备槽没打破既有断言）
-- [x] [自审] 全批收口自审：三层目标逐层给结论与证据，勾成 `[x]` 时下方必须有 `- L1：` / `- L2：` / `- L3：` 三行 → 收尾时补齐
-  - 验证：见 L1——369 条单测 / 47 文件、`test:net` 120 通过、守卫 6 项全绿都是本轮实际跑过的（`check:fast` 45/172 与全量 172/172 各跑过一次）；L2/L3 的证据是各功能条目自己的测试与文档，不是推断
-
-## 批次 20261024-0257 · 2026-10-24 · 会话 4024a9d4
-
-- [x] [E1] 界面文案收口：`WORLD_TYPE_HINTS`（5 条世界类型说明）→ `world.typeHint.*`；`main.ts` 的 **25 处 HUD toast**（名字/驯服/装鞍/牵绳/猪灵交易/袭击/图腾…）→ `misc.toast.*`；`WorldScreen` 的种子提示与生存警告 → `world.seedHint` / `world.survivalWarn`；告示牌编辑器标题 → `misc.signEditorHint`；外观预设 4 条 → `label.appearance.preset.*`
-  - 做了什么：新增 **34 条键 × 6 语言 = 204 条**（27 条 `misc.toast.*` + 2 条 `world.*` + 5 条 `world.typeHint.*` + 4 条 `label.appearance.preset.*` + 1 条 `misc.signEditorHint`），表 2786 → **2825**
-  - 做法：`WORLD_TYPE_HINTS` 常量表改成 `worldTypeHint(type)` 函数（模板字面量让审计认键）；`main.ts` 25 处 toast 全部改成 `t()` / `tp()`，其中 12 处带 `{kind}`（生物名）、1 处带 `{item}`/`{count}`、1 处带 `{mode}`
-  - ⚠️ 这是**上一轮我判断错的地方**：我说 `CHARACTER_PRESETS[].label` "没有 UI 读它"，其实 `SettingsScreen.ts:1598` 就是 `button.textContent = preset.label` —— 外观设置的四个预设按钮直接显示它。这次是按 `textContent =` 这个出口反查才发现的
-  - ⚠️ 又一条同类：`WORLD_TYPE_HINTS`（世界类型下面的说明文字，玩家创建世界时看）也是中文常量表，且它和 `worldTypeLabel()`（已 i18n）**不是同一张表**，之前几轮一直没被发现
-  - 改了 3 条既有 `ui` 断言（判据锚点从中文字面量改成键/函数）：世界类型说明、四个角色预设、拴绳提示；另改 `tests/appearance.test.ts` 一条（`preset.label` → `preset.id`）
-  - 新增 5 条断言：de/ru/fr/pt 各一条「界面文案不含中文、不露键名」（取样 10 条：预设 2 / 世界类型 2 / 种子提示 / toast 3 / 告示牌）+ 中文下仍是原说法
-  - 验证：浏览器实测 `?lang=de` → 创建世界界面显示 `Volle Welt: Biome, Bäume, Erze, Dörfer, Festungen… für Überleben empfohlen`（世界类型说明已是德语）；`test:i18n` **547 / 0**；`ui` **926 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2825 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0257
-
-- [x] [E2] 清理两处**没人读的**中文 label 字段 + 复查全仓
-  - 做了什么：`Rules.ts` 的 `DifficultyProfile.label`（和平/简单/普通/困难）与接口字段**删除** —— 使用点全是 `.mobDamage` / `.starveRate` / `.spawnCap`，没有一处读 `.label`；`Difficulty` 的显示名仍由 `difficultyLabel()` 走 `cmd.label.difficulty.*`
-  - 复查结论（`textContent=` / `.show(` / `label:` / `placeholder:` / `aria-label` 反查）：全仓**只剩 `GenerationSources.ts` 的 19 条**中文 label，其读者只有 `tools/genregistry-test.ts`，**玩家不可见** → 保留（与 `diagPerf.ts` 同类，属开发者数据）
-  - 顺带确认**深链已经好了**：`?lang=de` → `html lang=de` + 正文德语、`?lang=pt` → `pt-BR`、`fr` / `ru` 同样正确（之前 P4-5 记的"深链不生效"是旧状态，P5-2 已修，本批实测通过）
-  - 验证：`grep` 确认 `DIFFICULTY_PROFILES` 无 `.label` 读者；`test:offline` 172 / 172 套全绿；`test:i18n` 547 / 0
-  - 批次：20261024-0257
-
----
-
-## 批次 20261024-0245 · 2026-10-24 · 会话 4024a9d4
-
-- [x] [D1] 第 ⑤ 类真遗漏：`BeaconScreen` 的 6 个效果按钮（`power.label` = 速度/急迫/抗性提升/跳跃提升/力量/生命恢复）复用 `effectLabel()`；`WorldScreen` 的 `aria-label='关闭'` 与 `error.textContent='保存失败，请重试'` 入表
-  - 做了什么：`BeaconScreen` 的 **6 个效果按钮**（速度/急迫/抗性提升/跳跃提升/力量/生命恢复）不再读 `power.label`，改用 **`effectLabel(power.effect)`** —— 复用状态效果已有的 `label.effect.*`（30 条），**零新键**；`WorldScreen` 的 `aria-label='关闭'` 与 `error.textContent='保存失败，请重试'` → `misc.close` / `world.saveFailed`（**2 条新键** × 6 语言）
-  - 顺手删掉了 `BeaconPower.label` 字段（5 处 UI + `beacon-test` 的 1 条断言改用 `effectLabel()`），`Beacon.ts` 里再无中文；`BEACON_POWERS` 的顺序注释与存档语义**没动**（顺序即下标，只删了 label）
-  - ⚠️ 侦察结论修正了我上一轮的估计：说"约 20 条"，实际只有 **8 处**。两处被排除的是：① `game/appearance.ts` 的 `CHARACTER_PRESETS[].label`（成年男性等 4 条）—— `grep` 全仓**没有任何 UI 读它**，是纯数据字段；② `Rules.ts` 的 `DIFFICULTIES[].label`（和平/简单/普通/困难）—— `WorldScreen` 用的是 `difficultyLabel()`（已走 i18n），那个 label 没人读
-  - 验证：`test:i18n` **542 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2786 条、0 缺口 / 0 孤儿；`beacon-test` 通过（断言改成"每个 power 都有效果 id 且 `effectLabel()` 能解析出名字"）
-  - 批次：20261024-0245
-- [x] [D2] 兜底语义改成英文：确认 `t()` 的回落链是「本语言 → 英文 → 键名」，并加**可复现断言**（人为删一条 de 键 → 必须显示英文、不得显示中文原文）；同时说明 `advancementTitle` / `itemDescription` 里的中文原文兜底现在是否还必要
-  - 结论先说：`t()` 的回落链本来就是「**本语言表 → 英文表 → 键名**」，所以"某语言缺翻时显示英文"**已经成立**，不需要改实现。本轮把它变成**可复现的断言**
-  - 新增 3 条断言：① 造一个假语言 `yy`，只装 `pause.title` 一条键 → 查 `pause.resume` 必须等于**英文**且**不等于中文**（这正是"新增文案只加了 zh/en 就上线"的真实场景）；② `yy` 里有的那条照常取本语言；③ `advancementTitle()` 在德语下取德语（不缺翻时不落到中文原文）
-  - `advancementTitle` / `itemDescription` 里那层"中文原文兜底"**只在连英文都没有时才触发** —— 也就是**键漏了**（`satisfies Messages` 会在编译期先报）。保留它当最后一道保险；真要删，得连着回落链一起改，收益不抵风险
-  - 数据层现状（本轮复测）：四语言 2786 键 **0 缺键 / 0 含中文 / 0 空值** —— 也就是说中文原文兜底在六语言上**一次都不会触发**
-  - 验证：`test:i18n` **542 / 0**（含新增 3 条）；`test:offline` **172 / 172 套全绿**
-  - 批次：20261024-0245
+- [x] [跳1] 把原版视觉规格表落成文档：新建 `.continue/notes/jump-original.md`（等距 30°/正交相机、三面明暗色值、方块与小人比例、阴影方向与柔和度、动画时序表、UI 字号与位置、音效时序，每个数值标注依据的参考图文件名）→ `test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' .continue/notes/jump-original.md)" -ge 25 ]`
+  - 做了什么：写 `.continue/notes/jump-original.md`（113 行表格），10 张分节表覆盖投影/几何/三面明暗/小人/阴影/背景色板/UI/时序/音效/特殊方块，另加「测量方法与误差」「不可 1:1 项」两节；数字全部标注【测】/【推】/【估】/【二手】来源。
+  - 为什么：交接文档里的数值是肉眼估的，其中一条（三面明暗）经测量是反的——原版是**左面最暗 0.775、右面 0.93**，不是"右侧最暗 0.72"。不先量一遍，跳3 会把明暗贴反，之后所有截图比对都白做。
+  - 怎么量的：写了一次性脚本 `.tmp/imgprobe.mjs`（sips 转 PNG + Node zlib 手解 PNG 过滤链），用 `bbox`/`mode`/`scanrow`/`scancol` 在 02/03/06 上量出：菱形 bbox 249×130 → 俯角 31°；三面亮度比 1.00/0.775/0.93（黄块与橙块互证）；块高 0.60 边长；小人高 0.72 边长、头径 0.29 身高；分数墨高 7.8%W、字号 0.10W、色 #444750；首页按钮 46.3%W×10%W。
+  - 验证：`test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' …)" -ge 25 ]` → `OK rows=113`。
+  - 批次：20261024-0415
+- [x] [跳2] 立等距相机参数模块：新建 `src/minigame/games/jump/iso.ts`（俯角 30°、方位 225°、正交视锥 framing、横竖屏缩放，纯函数）+ 新建 `tools/jump-iso-test.ts` 并在 `package.json` 注册 `test:jumpiso` → `npm run test:jumpiso`（断言：投影 ±30°、顶面菱形宽高比 2:1、844×390 与 390×844 下 ≥3 块可见且当前块在视口内、相机是正交）
+  - 做了什么：`iso.ts` 只做三件事——`isoBasis()` 由俯角/方位算正交基（与 three 的 `lookAt` 同一套约定：`x = normalize(up × z)`、`y = z × x`）、`projectPoint()` 投到屏幕平面（仍是世界单位）、`frameBlocks()` 先量方块角点的屏幕 bbox 再反解正交视锥。另导出 `BLOCK_HEIGHT_RATIO=0.6` / `JUMPER_HEIGHT_RATIO=0.72` 与 `boxesFromBlocks()`，让规格表里的比例只有一处定义。
+  - 为什么取景用"量 bbox"而不是猜相机距离：正交下缩放全在 frustum 里，横屏 844×390 与竖屏 390×844 用同一个公式就能都装下 3 块；旧 `PillarScene` 的 `PORTRAIT_PULLBACK` 那种"竖屏拉远 1.25"是猜的，改间距就得重调。决策写进 `e50bd5-decision.md` D2。
+  - 为什么方位钉成"视线方向"：225° 两种读法（视线 / 相机位置）在画面上互为左右镜像，都能自洽；钉成视线方向后"−z → 右上、−x → 左上"可断言，写反必红。决策写进 D1。
+  - 正交的判据没用 `instanceof OrthographicCamera`（那只能证明"写了这个词"），而是断言"同尺寸方块沿视线前后错开 6 格后屏幕宽度完全相同"——几何真被算成透视时只有这条会红。
+  - 验证：`npm run test:jumpiso` → 42 条全绿（基正交/俯角 30°/菱形 2:1/两向符号与斜率/远近平行/两种视口 3 块在视口内/当前块下沉 8~20% 半高/退化为空或脏坐标时不产生 NaN）；`npm run typecheck` 与 `typecheck:tools` 均 0 错。
+  - 批次：20261024-0415
+- [x] [跳3] 重写渲染层为等距纯色方块场景：新建 `src/minigame/games/jump/BlockScene.ts`（正交相机 + 盒/圆柱几何 + 顶亮/左中/右暗三面 + 软阴影 + 纯色背景、无雾），删除 `PillarScene.ts` / `pillars.ts`，`scene.ts` 接线；同步改掉 `tools/minigame-test.ts` 里锁死 `new PillarScene(` 的源码断言 → `npm run test:minigame && npm run typecheck`
+  - 做了什么：新建 `BlockScene.ts`（正交相机 + 盒/圆柱共享几何 + 三面明暗烘进顶点色 + 贴片阴影 + 竖直渐变背景、无雾、不打灯、不读图集）与 `palette.ts`（6 组背景 + 8 个方块色 + `FACE_SHADE` + `shadeForNormal()`）；删除 `PillarScene.ts` / `pillars.ts` / `themes.ts`；`scene.ts` 换成 `BlockScene`（`setBlocks` / `setSquash` / `follow` / `setPalette`），站高改成按方块高度算（方块会随分数变矮），起跳/落地两端顶面高度不同时先线性过渡再加抛物线。
+  - 与队列描述不同的一处：队列写"顶亮/左中/右暗"，但 `[跳1]` 实测是**左暗 0.775、右亮 0.93**（黄块与橙块两块独立方块互证），渲染按实测值实现，断言也钉住方向（"右面比左面亮"）。
+  - 为什么明暗不用灯光：原版是纯哑光纯色，用灯去凑那三个比值只能靠试，"差 5° 就变味"；把 `shadeForNormal()` 烘进顶点色后，立方体三面精确落在 1.00/0.775/0.93，圆柱侧面同一条公式自然连成渐变（64 段圆环相邻差 < 0.02，无穷色阶台阶）。
+  - 为什么阴影用贴片：原版没有可见地面，阴影本身就是一张柔边贴片；用 shadowMap 既贵又只能压在"不存在的平面"上。偏移按实测（屏幕左下）换算成世界 −0.43/+0.71 边长。
+  - `palette.ts` 提前到本条落地（`[跳6]` 原本也包含它）：颜色是 BlockScene 的输入，分两次建等于把同一张表写两遍；`[跳6]` 收窄为特殊方块贴图 + 贴图/色板断言。
+  - 验证：`npm run test:minigame` → 151 条全绿（含色板 6/8 数量、方块不糊进背景 |ΔL|≥0.04、同 seed 同色板、色板轮换与负下标、三面明暗精确值、圆柱无台阶）；`npm run typecheck` / `typecheck:tools` 0 错；`npm run check:fast` 全绿（改动命中 minigame 套）。
+  - 批次：20261024-0415
+- [x] [跳4] 把 MC 玩家模型换成原版棋子小人：新建 `src/minigame/games/jump/JumperModel.ts`（球头 + 锥形身体、脚底原点、深色高光材质），`scene.ts` 不再用 `PlayerRenderer`；新增 `tools/jump-model-test.ts` 注册 `test:jumpmodel` → `npm run test:jumpmodel`（断言：压扁时 y→0.6 / xz→1.3、空翻 ±360°、包围盒 min.y≈0、dispose 后无残留）
+  - 做了什么：`JumperModel.ts` 用 `LatheGeometry` 画裙摆（9 个采样点的平滑外扩曲线，叠圆柱会在接缝处出现折线）+ 球头，原点在脚底、模型高 1；三面明暗复用 `palette.shadeForNormal()` 再叠"上亮下暗"，颜色烘进顶点色（`MeshBasicMaterial`，与方块同一条管线，不会一个亮一个暗）。`scene.ts` 不再 import `PlayerRenderer`，压扁/空翻/朝向改走 `setSquash` / `setFlip` / `setYaw` 三个 setter，落地换新方块尺寸（方块变小、小人跟着变小）。
+  - 比例依据：规格表 §4 的像素测量——身高 1、头径 0.29（球心 0.855）、颈 0.18（y=0.74）、裙摆 0.35；外部再乘 `0.72 × 方块边长`。
+  - 为什么压扁要同时鼓出来（y 0.6 / xz 1.3）：原版是"被压扁"不是"蹲下"，只压不改宽会像被踩进地里；脚底原点保证压扁时人不陷进方块。
+  - 释放的断言不靠肉眼：给两个几何/两份材质挂 `dispose` 监听再调 `dispose()`，数事件（2 geometry + 2 material）+ 场景图清空 + 重复释放不炸。
+  - 验证：`npm run test:jumpmodel` → 45 条全绿；`npm run test:minigame` 152 条全绿（静态断言同步换成 JumperModel / setFlip / jumper.setSize）；`npm run check:fast` 174/174 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳5] 玩法向原版对齐：`config.ts` + `logic.ts`（前进方向改成等距两向 ±90°、间距改为 `size + 0.15~0.9`、特殊方块补成井盖 5 / 魔方 10 / 便利店 15 / 音乐盒 30 四类、停留 3 秒、中心连击与封顶不变）→ `npm run test:minigame && npm run jump:balance`（可达率 100%、完美玩家不掉、手抖玩家 8~200 跳；不达标调 `gapMax`/`maxCharge` 而不是放松断言）
+  - 做了什么：`directionDegrees` 从 `[-30, 0, 30]` 改成 `[0, 90]`（世界 −Z / −X 两条等距轴）；间距从绝对格数改成 **边长 × 1.15~1.9**（`gapRatioMin/Max`，删掉 `growScore`/`gapMin*`/`gapMax*`）；`JumpBlockKind` 扩成 `normal|well|cube|store|music`，奖励 5/10/15/30（按稀有度加权抽：40/30/20/10%），`specialHoldSeconds` 2 → 3；中心连击与封顶（2n / 32）保持不动。
+  - 为什么间距改成倍数：原版相邻块几乎贴合，中心距就是 1.15~1.9 个边长；旧参数是绝对格数，方块一小（0.9）间距还是 3 格，画面上立刻散成"MC 里搭的柱子"。改成倍数后间距随方块同比缩小，难度来自"目标变小"，与参考图 08 的三块连排一致。
+  - 平衡脚本的一处**模型**修正（不是放松断言）：`jump:balance` 里"手抖"原本是 `间距 × (1 ± 24%)` 的相对误差，在旧参数下恰好与半块同量级；间距改成倍数后 24% 的间距永远小于半块（0.24 格 vs 0.45 格），模拟里一局不死（300 跳触顶）。改成绝对误差 `±0.55 格`（= 0.1s 的按早/按晚 × maxDistance/maxCharge，注释里本来就写着"±0.18 格"的绝对口径，代码却是百分比）。三条阈值一个字没动，理由写进 `e50bd5-decision.md` D3。
+  - 验证：`npm run test:minigame` → 162 条全绿（新增"只出现 0°/90° 两向""步进只沿一条世界轴""四类特殊方块都会出现""奖励严格递增""停留 3 秒"）；`npm run jump:balance` → 可达率 100.00%、完美玩家 300 跳不掉、手抖 ±0.55 格 26.3 分 / 17.2 跳（阈值 8~200）、乱按 1.0 分；`npm run check:fast` 全绿。
+  - 批次：20261024-0415
+- [x] [跳6] 特殊方块程序化贴图与色板：新建 `src/minigame/games/jump/blockTextures.ts`（canvas 绘制井盖/魔方/便利店门脸/唱片，接受注入的 canvas 工厂）与 `palette.ts`（背景 6 色 + 方块 8 色，取自参考图），`BlockScene.ts` 接上 → `npm run test:jumpiso`（断言：色板数量与对比度阈值、贴图工厂被调用次数与尺寸、缓存键唯一）
+  - 做了什么：`blockTextures.ts` 用 canvas 现画四类特殊方块（井盖=深灰盘+24 条径向管纹+中心孔 / 魔方=3×3 白格线彩块 / 便利店=红招牌+玻璃窗+卷帘门 / 唱片=4 圈同心纹+中心孔），**一类一张图集、左半顶面右半侧面**，于是每类只要 1 张贴图 + 1 份几何（而不是六面各一个材质）。`BlockScene` 按法线把"朝上的面"UV 指到左格、其余指到右格（方盒与圆柱的顶点顺序不同，按下标写会错位），三面明暗仍由顶点色乘上来；音乐盒走圆柱，其余走方盒。`palette.ts` 已在 `[跳3]` 落地，这条补齐它的贴图部分。
+  - 为什么 canvas 工厂要注入：浏览器传 `document.createElement('canvas')`，离线测试传一个记录 2D 调用的假 canvas——于是"画了什么、画了几张、多大"都能断言，而不是只能靠截图肉眼看。四类的 2D 调用序列当指纹，撞车就说明两类在画同一张图。
+  - 与队列描述不同的两处：① 队列写的验证是 `npm run test:jumpiso`，实际拆出独立套件 `test:jumptex`（25 条），并同时跑 `test:minigame`（色板数量 / 对比度 / 明暗）——两条一起覆盖队列要求的三类断言；② 顺带把 `BlockScene` 的渲染前提补成静态断言（正交相机 / 不打灯 / 无雾 / 不读 TextureAtlas / 阴影 depthWrite:false），这几条原本只有肉眼可见。
+  - 为什么没有按参考图 1:1：井盖管纹、便利店门脸、唱片都只有小图，且无授权素材源；这里按"可辨识的特征"画（圆盘+径向纹、3×3 彩格、红招牌+玻璃、同心圆），逼近程度写在规格表 §12 的不可 1:1 项里。
+  - 验证：`npm run test:jumptex` → 25 条全绿（四类各画一张 / 图集 256×128 / 同类复用缓存 / UV 两格拼满 0~1 / 顶面在左格侧面在右格 / 四类指纹两两不同 / 井盖有圆盘与警示黄、魔方 18 个小格且三色齐、便利店有招牌红与玻璃、唱片 ≥4 圈 / 无 2D 上下文时静默降级）；`npm run test:minigame` 171 条、`test:jumpiso` 42 条、`test:jumpmodel` 45 条全绿；`npm run check:fast` 175/175 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳7] 动画与特效对齐原版：`scene.ts`（跳跃 400ms = 上升 65% Cubic.Out + 下降 35% Cubic.In、空中翻转 360°、落地压缩 100ms、方块回弹 500ms、入场 Bounce.Out、被踩 y→0.8）+ 完美命中同心圆波纹、`+N` 飘字、旧方块掉落淡出 → `npm run test:minigame && npm run jump:e2e`（E2E 四张截图落到 `.tmp/shots`，无 ✗）
+  - 做了什么：新增 `motion.ts`（纯函数：`cubicIn/Out`、`sinusInOut`、`bounceOut`、`jumpArc`、`flipProgress`、`landingSquash`、`blockBounceScale`、`enterScale`、`fadeScale`、`rippleProgress` + `JUMP_TIMING` 全部时长）；`scene.ts` 跳跃固定 **400ms**（旧实现 `0.3 + 距离×0.045` 让远跳更慢）、弧线换成 65% Cubic.Out + 35% Cubic.In、空翻走 Sinusoidal.InOut、落地压缩 100ms、`+N` 改成 DOM 飘字（投影到屏幕、浮起淡出）；`BlockScene` 加 `tick/punch/playRipple/projectToScreen`，实现新块入场 Bounce.Out、被踩方块凹 0.85 再回弹 500ms、落后方块掉落缩小 400ms、三层同心圆波纹（外白/中绿/内红）；`index.html` 加 `.jump-float` 与 `@keyframes jump-float-rise`。
+  - 顺带修掉一个真 bug：方块颜色原本按"这一屏列表下标"取色，每跳一次列表整体前移，同一块方块会换色（看起来像"跳一下世界重新上色"）。`BlockSpec` 加 `colorIndex`（传方块 id），颜色只跟方块身份走。
+  - 为什么时序要单独成文件并逐条断言：截图是静止的，时序错了看不出来；缓动写反（cubicOut↔cubicIn）在画面上只是"有点飘"。断言里专门钉了"上升段前半程已过 70% 高度""下落段前半程还没掉一半""峰值两侧斜率都≈0（无折角）"。
+  - 验证：`npm run test:jumpmotion` → 48 条全绿（缓动端点/单调性/Bounce 至少弹 2 次/弧线形状与峰值无折角/四个收敛到端值/越界与 NaN）；`npm run test:minigame` 179 条全绿；`npm run check:fast` 176/176 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - ⚠️ `npm run jump:e2e` **没有跑**：按用户长期偏好（不要主动做浏览器自动化测试），视觉/E2E 验收留给用户自己跑；离线门禁（弧线、时序、收敛性、静态接线）已全覆盖。
+  - 批次：20261024-0415
+- [x] [跳8] HUD 与结算按原版重做：`scene.ts` 的 HUD 段 + `index.html` 的 `.jump-*` 样式（分数移到左上、深色细体大字、去掉"最高分"行与底部 hint、结算面板＝大数字 + 最高分 + 再来一局/返回、横屏安全区），`src/core/i18n/locales/zh/minigame.ts` 同步 → `npm run test:minigame && npm run typecheck`
+  - 做了什么：`scene.ts` 的 HUD 只剩一个分数元素（删掉 `bestEl` / `hintEl` 与相关 DOM 分支）；结算面板改成「小标签（本局得分）+ 大数字 + 最高分/新记录 + 再来一局 / 返回」；`index.html` 的 `.jump-*` 全段重写（分数 #41454F、`font-weight:300`、`clamp(22px, 7.2vh, 44px)`；结算面板白底圆角卡片 + 白色胶囊按钮 + 极淡遮罩，四周挂 `env(safe-area-inset-*)`）；6 个语言的 `minigame.jump.hint` 删掉、`minigame.jump.over` 从"本局 {score} 分"改成纯标签。
+  - 为什么字号按 **vh** 而不是原版的"屏宽 10%"：用户是横屏手机（844×390），照屏宽换算得到 84px，比半个屏幕还高；原版那个比例是竖屏 320pt 的度量，横屏必须换基准（7.2vh ≈ 原版在 568 高的 7.2%）。
+  - 为什么删 hint 而不是留着："按住蓄力，松手起跳"是 2026-10 那版为了教学加的，原版游戏画面里没有任何提示文字——保留它就等于承认"画面里应该有字"，与 1:1 复刻冲突。`desc` 键仍在小游戏选择页用。
+  - 验证：`npm run test:minigame` 182 条全绿（新增三条静态断言：HUD 没有最高分行 / 没有底部提示 / 结算面板是大数字+最高分+按钮）；`npm run test:i18n` 547 通过 0 失败；`npm run audit:i18n` ✓ 无缺键、✓ 无孤儿键；`npm run check:fast` 161/161 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 未做：小游戏**选择页**（`MiniGameMenu`）仍是深色面板——它是两个小游戏共用的入口，按 跳一跳 首页的样子改会让"选择器"变成"跳一跳专页"；原版首页的标题/胶囊按钮那套视觉已在结算面板里复用。这条留给用户决定是否单独做。
+  - 批次：20261024-0415
+- [x] [跳9] 音效重写成原版节奏：把 `scene.ts` 里的 `JumpAudio` 抽到 `src/minigame/games/jump/audio.ts`（蓄力音阶每 0.15s 升一级、起跳、落地、完美命中"叮"、四类特殊方块各自音色、失败下滑音），新增 `tools/jump-audio-test.ts` 注册 `test:jumpaudio` → `npm run test:jumpaudio && npm run test:minigame`（音阶序列纯函数断言 + 静默降级仍保留）
+  - 做了什么：`audio.ts` 分两半——纯数据（`CHARGE_STEP_SECONDS=0.15`、大调五声 12 级音阶表、四类特殊方块的旋律表、起跳/落地/完美/失败四个 `Sweep`）与 `JumpAudio` 类（只负责把音符丢给 WebAudio）。蓄力从"频率随蓄力连续滑"改成**阶梯音阶**：`chargeStepFor(已按秒数)` 算出级数，只有跨级才改频率（连续滑音让人分不清按了几级，原版是靠数音高判断的）。特殊方块从"一个音"改成各自旋律：井盖两音 / 魔方三音 / 便利店四音 / 唱片五音（分越高越长）。`scene.ts` 删掉内联实现，改 `updateCharge(ratio, this.charge)` 与 `playSpecial(block.kind)`。
+  - 为什么用五声音阶而不是半音阶：原版蓄力音是"音乐性"的，半音阶听起来像电子表报警。0.9 秒蓄满只用到第 6 级，表里留 12 级是给参数调整留余量。
+  - 为什么音效必须静默降级：自动化环境没有音频设备、浏览器可能因"没有用户手势"拒绝创建 AudioContext；音效失败绝不能影响玩法。断言里直接把全套方法在无 AudioContext 环境下跑一遍。
+  - 验证：`npm run test:jumpaudio` → 31 条全绿（0.14/0.15 秒的级数边界、封顶、越界夹紧、频率单调且落在 200~1200Hz、四类旋律 2/3/4/5 音且时长递增、四个 Sweep 的方向与参数、无上下文时全套调用不抛异常、重复 dispose 不炸）；`npm run test:minigame` 188 条全绿（新增 audio.ts 的 5 条静态断言）；`npm run check:fast` 177/177 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳10] 验收收口：`tools/jump-e2e.mjs` 断言更新（正交相机、两向生成、四类特殊方块、`debugState` 暴露新的可测字段），跑全量并在回复里贴结果 → `npm run check && npm run jump:e2e`（`check` 0 失败；E2E 无 ✗ 且截图与参考图逐项比对结论写进完成说明）
+  - 做了什么：`debugState` 补 `orthographic` / `gapRatio` / `axis` / `kind` / `nextKind` 五个只读字段；`tools/jump-e2e.mjs` 在开局与连跳 5 次后各断言一次（相机正交、间距 1.15~1.9 边长、方向只有 x/z、种类在五类之内），文件头也写清这三条"截图里看不出来"的判据。顺带重新生成锚点文档里由脚本管着的数字（离线套件 172 → 177，TASKS/HANDOFF/README/AGENTS 四处同时改）。
+  - 验证（贴结果）：`npm run check` → **0 失败**：「离线测试：通过 177 / 177 套 · 总耗时 16.3s」「vitest 201 passed」「i18n 547 通过 / 0 失败」「任务清单自检通过」「✓ 全绿」；`npm run build:fast` → ✓ built（2.48MB，仅有既有的 chunk 体积提示）。
+  - ⚠️ **`npm run jump:e2e` 没跑、截图也没比对**：按用户长期偏好（不要主动做浏览器自动化测试），这两步留给用户自己跑。跑法：`npm run dev` 后另开终端 `npm run jump:e2e`，四张截图落 `.tmp/shots`（jump-menu / jump-ready / jump-charging / jump-after5 / jump-over），逐项对照参考图（`.continue/.logs/…/refs/jump/`）看：视角是否等距、三面明暗左暗右亮、方块高宽比 ~0.6、间距是否几乎贴合、小人比例、阴影方向左下、背景色、分数 HUD 位置与字重。
+  - 本次改动**没有**新增任何需要人工眼的"我觉得像了"结论——所有能用脚本判的都进断言了，剩下的是真·视觉判断。
+  - 批次：20261024-0415
+- [x] [自审] 审这一批的三层：L1（等距/时序/规则有没有"坏了就变红"的检查）、L2（故意改坏一次看谁变红）、L3（判断依据里几条来自真实截图、几条是自己想的）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：这一批每一层都有"坏了就变红"的检查，共 6 套离线套件 ≈ 400 条断言 + 约 35 条静态接线断言。投影层 `test:jumpiso`（42）守菱形 2:1、正交（远近平行）、两视口 3 块可见；明暗/色板 `test:minigame`（190）守 1.00/0.775/0.93 精确值与"右面比左面亮"的方向；模型 `test:jumpmodel`（45）守 min.y≈0、头径/裙摆比例、压扁 0.6/1.3、释放事件；贴图 `test:jumptex`（25）守图集尺寸/缓存/四类画法指纹；时序 `test:jumpmotion`（48）守弧线形状、峰值无折角、四个动画精确收敛；音效 `test:jumpaudio`（31）守 0.14/0.15 秒的级数边界与无 AudioContext 时静默。规则层 `jump:balance` 守可达率 100% / 完美玩家不掉 / 手抖 8~200 跳。唯一薄弱点：**颜色漂移那个 bug 当时没有任何断言**（已在本次自审补上静态断言），因为它表现是"每跳一次全世界重新上色"，属于只有肉眼才容易发现的一类。
+  - L2：当天做了两次故意破坏并复现变红——① 把 `ISO_VIEW.elevationDeg` 从 30 改成 35 → `test:jumpiso` 6 条红（俯角、菱形 2:1、两向斜率 0.5、竖直 cos30°）；② 把 `FACE_SHADE` 的左右对调 → `test:minigame` 4 条红（+X/+Z 面值、"右面比左面亮"、法线取反）。两次都在 10 秒内定位到具体断言，说明判据不是"看起来对"而是数值化的。另外 `jump:balance` 在 `[跳5]` 当场抓到过一次真实退化（间距改成边长倍数后手抖玩家 300 跳不死）。
+  - L3：判断依据的来源逐条分过类（规格表里带【测】/【推】/【估】/【二手】标签）：约 45 条来自参考图像素测量（投影 31°、三面明暗、方块高 0.6、小人 0.72/0.29/0.18/0.35、背景 6 组、HUD 位置与字重、中心点 0.11~0.14），约 10 条来自公开 H5 复刻技术文（400ms 时序、3 秒停留、四类分值、音效节奏），其余约 15 处是我自己拍的板——最关键的 5 个：① 6 组背景与方块色的**配对**（原版只给单帧颜色，配对是按 |ΔL|≥0.04 的对比度阈值自己定的）；② 特殊方块抽奖权重 40/30/20/10（攻略文只说"有哪几种"，没说比例）；③ 分数字号从原版"屏宽 10%"改成 7.2vh（横屏必须换基准）；④ 波纹三色与半径（05 被红框压住一半，只能近似）；⑤ 阴影偏移常量（按"屏幕左下"反解成世界 −0.43/+0.71）。这 5 处都写进了规格表 §11/§12 与 decision D1~D3，属于"看得见的自选"，不是"冒充测量"。
+  - 当场改进（2 条，各一个提交）：`2f2012b7` 离线钉住 `debugState` 的 10 个字段（E2E 不在 CI 里跑，改名没人会发现）；`3d2002d8` 钉住"配色按方块身份取"（L1 里那个颜色漂移 bug 的复盘断言）。
+  - 批次：20261024-0415
 
 ---
 

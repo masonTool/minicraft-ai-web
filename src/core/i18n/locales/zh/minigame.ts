@@ -26,9 +26,8 @@ export const minigame = {
   // ---- 跳一跳（J0，批次 20261022-2220）
   'minigame.jump.title': '跳一跳',
   'minigame.jump.desc': '按住蓄力，松手起跳',
-  'minigame.jump.hint': '按住蓄力，松手起跳',
   'minigame.jump.best': '最高 {best}',
-  'minigame.jump.over': '本局 {score} 分',
+  'minigame.jump.over': '本局得分',
   'minigame.jump.retry': '再来一局',
   'minigame.jump.record': '新记录！',
   'tutorial.survival.log.title': '先去砍一棵树',

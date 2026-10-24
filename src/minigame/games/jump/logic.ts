@@ -21,7 +21,13 @@
 
 import { JUMP_CONFIG } from './config.ts';
 
-export type JumpBlockKind = 'normal' | 'music' | 'cube';
+/**
+ * 方块种类：普通 + 原版的四类特殊方块（井盖 5 / 魔方 10 / 便利店 15 / 音乐盒 30）。
+ *
+ * 特殊方块只影响"停留 3 秒给多少分"，不影响跳跃判定——所以它可以是纯表现层的东西，
+ * 但奖励必须写在规则里（否则断言只能靠截图数飘字）。
+ */
+export type JumpBlockKind = 'normal' | 'well' | 'cube' | 'store' | 'music';
 
 export interface JumpBlock {
   readonly id: number;
@@ -88,16 +94,24 @@ export function blockSizeForScore(score: number): number {
 
 /** 间距上限的硬天花板：再难也不能超过"蓄满能跳的距离" */
 export function maxReachableGap(): number {
-  return JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin;
+  return Math.min(
+    JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin,
+    JUMP_CONFIG.blockSizeStart * JUMP_CONFIG.gapRatioMax,
+  );
 }
 
-/** 当前分数下的间距范围（`to` 已被可达性夹住，`from ≤ to` 恒成立） */
+/**
+ * 当前分数下的间距范围：**边长 × 倍数**，不是绝对格数。
+ *
+ * 原版的间距永远与方块同比例缩小（相邻块几乎贴着），所以这里不引入 `growScore` 那条
+ * "越到后面间距越大"的曲线——难度来自"目标变小 + 判定占比不变"，不是"跳得更远"。
+ */
 export function gapRangeForScore(score: number): { from: number; to: number } {
-  const t = progressOf(score);
-  const gapFrom = mix(JUMP_CONFIG.gapMinStart, JUMP_CONFIG.gapMinEnd, t);
-  const gapTo = Math.min(mix(JUMP_CONFIG.gapMaxStart, JUMP_CONFIG.gapMaxEnd, t), maxReachableGap());
+  const size = blockSizeForScore(score);
+  const gapTo = Math.min(size * JUMP_CONFIG.gapRatioMax, maxReachableGap());
+  const gapFrom = Math.min(size * JUMP_CONFIG.gapRatioMin, gapTo);
   // 理论上参数怎么配都不会出现 from > to，但夹一下更安全（配置被人手改成倒挂时不会生成倒着跳）
-  return { from: Math.min(gapFrom, gapTo), to: gapTo };
+  return { from: gapFrom, to: gapTo };
 }
 
 /** 在间距范围内按 `rand` 取一个值 */
@@ -157,21 +171,36 @@ export function nextBlock(
  * 这一格要不要做成特殊方块。
  *
  * 三条约束：分数门槛前不出现、不连续两个特殊方块（否则容易连吃两次奖励）、
- * 概率命中后按 `rand` 在音乐盒 / 魔方之间二选一。
+ * 概率命中后按奖励从小到大抽：井盖 40% / 魔方 30% / 便利店 20% / 音乐盒 10%。
+ *
+ * 权重不是在模仿原版的真实概率（攻略文只给了"有哪几种"，没给比例），而是**让高分
+ * 稀有**：5 分最常见、30 分最难遇到，否则等 3 秒拿 30 分就成了唯一最优解。
  */
 export function specialKindFor(score: number, rand: number, previousKind: JumpBlockKind): JumpBlockKind {
   if (score < JUMP_CONFIG.specialAfterScore) return 'normal';
   if (previousKind !== 'normal') return 'normal';
-  if (rand >= JUMP_CONFIG.specialChance) return 'normal';
+  if (!(rand < JUMP_CONFIG.specialChance)) return 'normal';
   const t = JUMP_CONFIG.specialChance > 0 ? rand / JUMP_CONFIG.specialChance : 1;
-  return t < 0.6 ? 'music' : 'cube';
+  if (t < 0.4) return 'well';
+  if (t < 0.7) return 'cube';
+  if (t < 0.9) return 'store';
+  return 'music';
 }
 
-/** 特殊方块停留奖励（0 = 普通方块） */
+/** 特殊方块停留奖励（0 = 普通方块），数值即原版的 +5 / +10 / +15 / +30 */
 export function specialBonus(kind: JumpBlockKind): number {
-  if (kind === 'music') return JUMP_CONFIG.specialMusicBonus;
-  if (kind === 'cube') return JUMP_CONFIG.specialCubeBonus;
-  return 0;
+  switch (kind) {
+    case 'well':
+      return JUMP_CONFIG.specialWellBonus;
+    case 'cube':
+      return JUMP_CONFIG.specialCubeBonus;
+    case 'store':
+      return JUMP_CONFIG.specialStoreBonus;
+    case 'music':
+      return JUMP_CONFIG.specialMusicBonus;
+    default:
+      return 0;
+  }
 }
 
 /** 追加一个方块（内部：保证 `blocks[index + 1]` 永远存在） */

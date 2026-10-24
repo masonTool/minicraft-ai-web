@@ -1372,58 +1372,106 @@
         color: #9fb3c8; font-size: 12px; pointer-events: none;
       }
 
-      /* 跳一跳 HUD（J1~J3，批次 20261022-2220）：左上分数 + 最高分 + 底部提示 + 结算面板 */
+      /*
+       * 跳一跳 HUD（批次 20261024-0415 按原版重做）：**只有一个分数**——左上角、深色细体，
+       * 没有"最高分"行、没有底部提示。原版游戏里就这些。
+       *
+       * 字号按视口**高度**给（7.2vh）而不是宽度：用户是横屏手机（约 844×390），
+       * 照原版"屏宽 10%"换算会变成 84px，比半个屏幕还高。
+       */
       .jump-hud {
         position: absolute;
+        /*
+         * ⚠️ 必须让开宿主顶栏（`.minigame-topbar`：top 8px + 36px 高的退出按钮，z-index 4）。
+         * 曾经写成 `top: 6%`，在横屏 390 高下只有 23px —— 分数正好被"退出"按钮盖住，
+         * 而离线和 E2E 都验不到"看不看得见"，只有截图能发现。
+         */
         top: calc(56px + env(safe-area-inset-top, 0px));
-        left: calc(10px + env(safe-area-inset-left, 0px));
-        display: flex; flex-direction: column; gap: 2px;
+        left: calc(6% + env(safe-area-inset-left, 0px));
         pointer-events: none;
         z-index: 2;
       }
       .jump-score {
-        color: #fff; font-size: 34px; font-weight: 700; line-height: 1;
+        color: #41454F;
+        font-family: -apple-system, "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+        font-size: clamp(22px, 7.2vh, 44px);
+        font-weight: 300;
+        line-height: 1;
+        letter-spacing: .02em;
         font-variant-numeric: tabular-nums;
-        text-shadow: 2px 2px 0 rgba(0, 0, 0, .55);
       }
-      .jump-best {
-        color: #e8eef4; font-size: 12px;
-        text-shadow: 1px 1px 0 rgba(0, 0, 0, .6);
-      }
-      .jump-hint {
+      /*
+       * 完美命中 / 特殊方块的 `+N` 飘字（批次 20261024-0415）：白色半透明、细体，
+       * 从方块上方浮起并淡出。位置由 `scene.ts` 用相机投影算成百分比写进 left/top，
+       * 所以这里只需要管"长什么样、怎么动"。
+       */
+      .jump-float {
         position: absolute;
-        left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-        transform: translateX(-50%);
-        color: #f2f6fa; font-size: 13px;
-        text-shadow: 1px 1px 0 rgba(0, 0, 0, .75);
+        transform: translate(-50%, -50%);
+        color: rgba(255, 255, 255, .78);
+        font-size: clamp(15px, 3.6vmin, 26px);
+        font-weight: 300;
+        letter-spacing: .04em;
         pointer-events: none;
         z-index: 2;
-        white-space: nowrap;
+        animation: jump-float-rise .9s cubic-bezier(.2, .7, .3, 1) forwards;
       }
-      .jump-hint.hidden { display: none; }
+      @keyframes jump-float-rise {
+        0% { opacity: 0; transform: translate(-50%, -35%) scale(.9); }
+        25% { opacity: 1; }
+        100% { opacity: 0; transform: translate(-50%, -165%) scale(1.05); }
+      }
+      /*
+       * 结算：原版没有可参照的结算页（参考图 09 是排行榜），所以沿用首页的语言——
+       * 白色胶囊按钮 + 深色字、很轻的投影。遮罩做得很淡（原版失败后画面仍然是亮的）。
+       */
       .jump-over {
         position: absolute; inset: 0; z-index: 3;
         display: grid; place-items: center;
-        background: rgba(0, 0, 0, .55);
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+                 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        background: rgba(28, 30, 40, .22);
+        -webkit-backdrop-filter: blur(2px);
+        backdrop-filter: blur(2px);
       }
       .jump-over.hidden { display: none; }
       .jump-over-panel {
-        min-width: min(78vw, 320px);
-        padding: 14px 18px;
-        background: rgba(22, 22, 22, .96);
-        border: 3px solid #4a4a4a; border-radius: 4px;
-        color: #fff; text-align: center;
-        font-size: 13px;
+        display: flex; flex-direction: column; align-items: center;
+        min-width: min(58vw, 240px);
+        max-width: min(88vw, 420px);
+        padding: 14px 22px 16px;
+        background: rgba(255, 255, 255, .94);
+        border-radius: 16px;
+        box-shadow: 0 10px 34px rgba(30, 32, 44, .18);
+        color: #2E3242;
+        text-align: center;
       }
-      .jump-over-title { font-size: 20px; font-weight: 700; }
-      .jump-over-best { margin-top: 4px; font-size: 12px; color: #ffd75e; }
-      .jump-over-actions { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+      .jump-over-title {
+        font-size: clamp(11px, 3.2vmin, 14px);
+        font-weight: 400; color: #7C8290; letter-spacing: .08em;
+      }
+      .jump-over-score {
+        margin-top: 2px;
+        font-size: clamp(32px, 14vmin, 60px);
+        font-weight: 300; line-height: 1.05;
+        color: #2E3242; font-variant-numeric: tabular-nums;
+      }
+      .jump-over-best { margin-top: 2px; font-size: clamp(11px, 3.2vmin, 13px); color: #8A8F9C; }
+      .jump-over-actions {
+        display: flex; gap: 10px; justify-content: center;
+        margin-top: 12px; width: 100%;
+      }
       .jump-over-actions button {
-        min-height: 44px; padding: 8px 16px;
-        font: inherit; font-size: 14px; color: #fff;
-        background: #2b2b2b; border: 2px solid #5a5a5a; border-radius: 4px;
+        flex: 1 1 0; min-height: 40px; padding: 8px 16px;
+        font: inherit; font-size: clamp(13px, 3.6vmin, 15px);
+        color: #2E3242; background: #FFFFFF;
+        border: 0; border-radius: 999px;
+        box-shadow: 0 3px 10px rgba(30, 32, 44, .12);
       }
-      .jump-over-actions button:active { background: #3d3d3d; }
+      .jump-over-actions button[data-action="exit"] {
+        color: #6C7180; background: rgba(255, 255, 255, .62); box-shadow: none;
+      }
+      .jump-over-actions button:active { transform: translateY(1px); }
 
       /* ---------------- 小游戏选择页（小游戏3，批次 20261022-1954） ----------------
          与主菜单同一套深色框；z-index 45（高于主菜单 40、低于设置 50）。
