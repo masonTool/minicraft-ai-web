@@ -998,14 +998,14 @@ export const TILE_ORDER = [
   // 所以它**不需要**进半透明层（叶子/藤蔓那一档也是这么做的）。
   'item_frame',
   // 画：1×1 的 7 幅各一张（顺序与 `registry/paintings.ts` 的 `PAINTING_VARIANTS` 一致；
-  // 两边错位的表现是"挂着烤肉串、显示的是炸弹"，测试里逐条反查过）
-  'painting_kebab',
-  'painting_aztec',
-  'painting_alban',
-  'painting_aztec2',
-  'painting_bomb',
-  'painting_plant',
-  'painting_wasteland',
+  // 两边错位的表现是"挂着日出、显示的是篝火"，测试里逐条反查过）
+  'painting_dawn',
+  'painting_river',
+  'painting_hill',
+  'painting_night',
+  'painting_campfire',
+  'painting_tree',
+  'painting_desert',
   // 多格画的哨兵格：方块面全透明（画面由渲染器画，见 `registry/paintings.ts`）
   'painting_multi',
   // 多格画（批次 494）：每幅按格拆成 w×h 张子图，拼起来才是整幅

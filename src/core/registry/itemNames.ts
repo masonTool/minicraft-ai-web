@@ -243,8 +243,8 @@ for (const wood of Object.keys(WOODS_CN)) {
 }
 
 // 展示框与画（B14，批次 86）：各一条——**画只有一件物品**，
-// 挂上去是 7 幅里的哪一幅由放置时决定（见 `registry/paintings.ts`），
-// 所以这里不该出现"烤肉串画""阿兹特克画"七条名字。
+// 挂上去是 10 幅里的哪一幅由放置时决定（见 `registry/paintings.ts`），
+// 所以这里不该出现"日出画""壁画"这类按画分条的名字。
 // 名字走 `item.item_frame` / `item.painting`（P6-3，批次 20261024-0020）：
 // 原来这里是 `put('item_frame', '物品展示框')` 的中文常量，德语界面露中文。
 

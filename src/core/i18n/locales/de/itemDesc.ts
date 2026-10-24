@@ -257,7 +257,7 @@ export const itemDesc = {
   "item.desc.tpl.copperSlab": "Eine Stufe aus {cut} (3 ergeben 6).",
   "item.desc.tpl.copperStairs": "Eine Treppe aus {cut} (6 ergeben 4).",
   "item.desc.item_frame": "Der Item-Rahmen: haftet an einer **Wand** (Rechtsklick auf eine Seitenfläche) und hält **jeden Gegenstand**. Rechtsklick auf einen leeren Rahmen → das Stück aus der Hand hineinhängen (kostet 1); Rechtsklick auf einen gefüllten → **45° drehen** (8 Klicks zurück zur Ausgangslage); mit einem anderen Gegenstand in der Hand → **austauschen**. Beim Abbau fällt das Gehängte mit heraus. ⚠️ Unterschied zum Original: **nur 1 Stück pro Rahmen** (keine Anzahl), Blöcke erscheinen als **flaches Symbol** (dort als kleiner 3D-Block).",
-  "item.desc.painting": "Ein Bild: haftet an einer **Wand** (Rechtsklick auf eine Seitenfläche); **welches Bild kommt, ist zufällig**. ⚠️ Unterschied zum Original: Dieser Stand hat nur die **sieben 1×1-Bilder** aus 1.18 (Kebab / Aztec / Alban / Aztec2 / Bomb / Plant / Wasteland) – **mehrteilige Großbilder fehlen**, ein 2×2-Bild gibt es also nicht.",
+  "item.desc.painting": "Ein Bild: haftet an einer **Wand** (Klick auf eine Seitenfläche). Auf einem einzelnen Block hängt zufällig eines von sieben 1×1-Bildern (Morgenrot / Flusstal / Ferne Berge / Sternennacht / Lagerfeuer / Einzelbaum / Düne); ist die Wand groß genug, kommt zuerst ein großes (Seekarte 2×2, Wandteppich 4×3, Wandbild 4×4).",
   "item.desc.tpl.tool": "{material}{kind}: {desc} Abbaustufe {tier} | Geschwindigkeit ×{speed} | Angriff {attack} | Haltbarkeit {durability}",
   "item.desc.tpl.toolKind.pickaxe": "baut Stein, Erze und Mauerwerk ab; Erze über der eigenen Stufe fallen nicht.",
   "item.desc.tpl.toolKind.axe": "am schnellsten bei Holz; höchster Einzeltreffer im Nahkampf.",

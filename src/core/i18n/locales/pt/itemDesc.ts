@@ -256,7 +256,7 @@ export const itemDesc = {
   "item.desc.tpl.copperSlab": "Laje de {cut} (3 viram 6).",
   "item.desc.tpl.copperStairs": "Escada de {cut} (6 viram 4).",
   "item.desc.item_frame": "Moldura de item: prende-se **na parede** (clique direito na face lateral) e segura **qualquer item**. Clique direito na moldura vazia → pendura o item da mão (gasta 1); clique direito numa cheia → **gira 45°** (8 vezes volta ao início); com outro item na mão → **troca**. Ao quebrar a moldura, o item pendurado cai. ⚠️ Diferença do original: **só 1 item por moldura** (sem quantidade) e blocos aparecem como **ícone plano** (lá é um bloco 3D pequeno).",
-  "item.desc.painting": "Quadro: prende-se **na parede** (clique direito na face lateral) e **qual aparece é sorteado**. ⚠️ Diferença do original: esta versão só tem os **sete quadros 1×1** da 1.18 (Espetinho / Asteca / Alban / Asteca2 / Bomba / Planta / Terra árida) — **os quadros grandes multi-bloco não foram feitos**, então não existe quadro 2×2.",
+  "item.desc.painting": "Quadro: prende-se **na parede** (clique numa face lateral). Num único bloco, pendura um dos sete quadros 1×1 ao acaso (Amanhecer / Vale do rio / Montanhas distantes / Noite estrelada / Fogueira / Árvore solitária / Duna); se a parede for grande o bastante, prefere um grande (Carta náutica 2×2, Tapeçaria 4×3, Mural 4×4).",
   "item.desc.tpl.tool": "{kind} de {material}: {desc} Nível de mineração {tier} | Velocidade ×{speed} | Ataque {attack} | Durabilidade {durability}",
   "item.desc.tpl.toolKind.pickaxe": "minera pedra, minérios e alvenaria; minério acima do nível não cai nada.",
   "item.desc.tpl.toolKind.axe": "o mais rápido em madeira; o maior dano por golpe no corpo a corpo.",

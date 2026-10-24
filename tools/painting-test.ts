@@ -9,6 +9,7 @@
  */
 
 import {
+  LEGACY_MULTI_NAMES,
   MULTI_PAINTINGS,
   MULTI_PAINTINGS_LARGE_FIRST,
   multiPaintingByName,
@@ -47,26 +48,45 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
-const kong = multiPaintingByName('donkey_kong')!;
-const skeleton = multiPaintingByName('skeleton')!;
-const match = multiPaintingByName('match')!;
+const kong = multiPaintingByName('mural')!;
+const skeleton = multiPaintingByName('banner')!;
+const match = multiPaintingByName('chart')!;
 
 console.log('\n[三幅多格画的尺寸（照原版）]');
 {
   equal('一共三幅', MULTI_PAINTINGS.length, 3);
-  equal('大金刚 4×4', `${kong.width}×${kong.height}`, '4×4');
-  equal('骷髅 4×3', `${skeleton.width}×${skeleton.height}`, '4×3');
-  equal('火柴 2×2', `${match.width}×${match.height}`, '2×2');
+  equal('壁画 4×4', `${kong.width}×${kong.height}`, '4×4');
+  equal('挂毯 4×3', `${skeleton.width}×${skeleton.height}`, '4×3');
+  equal('旧海图 2×2', `${match.width}×${match.height}`, '2×2');
   equal('名字唯一', new Set(MULTI_PAINTINGS.map((painting) => painting.name)).size, 3);
   check('都有中文名', MULTI_PAINTINGS.every((painting) => painting.cn.length > 0));
-  equal('按面积从大到小排好', MULTI_PAINTINGS_LARGE_FIRST.map((painting) => painting.name).join(','), 'donkey_kong,skeleton,match');
+  equal('按面积从大到小排好', MULTI_PAINTINGS_LARGE_FIRST.map((painting) => painting.name).join(','), 'mural,banner,chart');
   equal('不认识的画名返回 undefined', multiPaintingByName('nope'), undefined);
+}
+
+// 批次 20261025-0117：10 幅画整体换素材并改名。多格画的名字**存在存档里**，
+// 所以旧名字必须还能读回来——否则老存档里那面墙会静默变成空白。
+console.log('\n[旧画名：老存档还能读回来]');
+{
+  equal('donkey_kong → mural', multiPaintingByName('donkey_kong')?.name, 'mural');
+  equal('skeleton → banner', multiPaintingByName('skeleton')?.name, 'banner');
+  equal('match → chart', multiPaintingByName('match')?.name, 'chart');
+  const kong = multiPaintingByName('donkey_kong')!;
+  equal('旧名字的尺寸没变（变了那面墙会缺格）', `${kong.width}×${kong.height}`, '4×4');
+  check(
+    '别名表的目标都在 MULTI_PAINTINGS 里',
+    Object.values(LEGACY_MULTI_NAMES).every((name) => MULTI_PAINTINGS.some((painting) => painting.name === name)),
+  );
+  check(
+    '现用名字不能出现在别名表的键上（否则别名自指、永远读不到新名）',
+    !MULTI_PAINTINGS.some((painting) => painting.name in LEGACY_MULTI_NAMES),
+  );
 }
 
 console.log('\n[子图：每格一张，且都在图集名单里]');
 {
   equal('4×4 有 16 张子图', paintingSubTileCount(kong), 16);
-  equal('子图名带行列', paintingSubTile(kong, 2, 3), 'painting_donkey_kong_2_3');
+  equal('子图名带行列', paintingSubTile(kong, 2, 3), 'painting_mural_2_3');
 
   const missing: string[] = [];
   for (const painting of MULTI_PAINTINGS) {
@@ -94,8 +114,8 @@ console.log('\n[占位格子与"从大到小找一幅放得下的"]');
   equal('贴南北墙时向右是 -z', `${alongZ[1]!.x},${alongZ[1]!.z}`, '10,9');
 
   // 从大到小：4×4 放得下就选它
-  equal('都放得下时选最大的', pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, () => true)?.name, 'donkey_kong');
-  equal('只有 2×2 放得下', pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, (painting) => painting.width <= 2)?.name, 'match');
+  equal('都放得下时选最大的', pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, () => true)?.name, 'mural');
+  equal('只有 2×2 放得下', pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, (painting) => painting.width <= 2)?.name, 'chart');
   equal('一幅都放不下', pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, () => false), null);
 }
 
@@ -116,7 +136,7 @@ console.log('\n[画表：拆任意一格带走整幅]');
   check('拆中间一格能删掉整幅', removed !== null);
   equal('删掉了 16 格', removed!.cells.length, 16);
   equal('表空了', store.size, 0);
-  equal('锚点信息带回来了（掉落用）', removed!.anchor.name, 'donkey_kong');
+  equal('锚点信息带回来了（掉落用）', removed!.anchor.name, 'mural');
   equal('拆空格子返回 null', store.removeAt('overworld', 5, 64, 5), null);
 
   // 两幅画互不干扰
@@ -136,7 +156,7 @@ console.log('\n[存读档]');
 
   const saved = serializePaintings(store);
   equal('只存锚点（两幅两条）', saved.length, 2);
-  equal('锚点带名字', saved.find((entry) => entry.dimension === 'overworld')?.name, 'skeleton');
+  equal('锚点带名字', saved.find((entry) => entry.dimension === 'overworld')?.name, 'banner');
 
   const restored = new PaintingStore();
   equal('读回两幅', restorePaintings(restored, JSON.parse(JSON.stringify(saved))), 2);
@@ -146,10 +166,10 @@ console.log('\n[存读档]');
 
   // 坏条目
   const broken = [
-    { dimension: 'overworld', x: 0, y: 64, z: 0, name: 'match', rightX: 1, rightZ: 0 },
-    { dimension: 'moon', x: 0, y: 64, z: 0, name: 'match', rightX: 1, rightZ: 0 },
+    { dimension: 'overworld', x: 0, y: 64, z: 0, name: 'chart', rightX: 1, rightZ: 0 },
+    { dimension: 'moon', x: 0, y: 64, z: 0, name: 'chart', rightX: 1, rightZ: 0 },
     { dimension: 'overworld', x: 0, y: 64, z: 0, name: 'nope', rightX: 1, rightZ: 0 },
-    { dimension: 'overworld', x: 'x', y: 64, z: 0, name: 'match', rightX: 1, rightZ: 0 },
+    { dimension: 'overworld', x: 'x', y: 64, z: 0, name: 'chart', rightX: 1, rightZ: 0 },
     'nope',
   ];
   const salvage = new PaintingStore();
@@ -171,7 +191,7 @@ console.log('\n[哨兵档位：多格画的那一格（批次 495）]');
   equal('哨兵是 7（1×1 的 7 幅占 0~6）', MULTI_PAINTING_VARIANT, 7);
   equal('哨兵格的贴图是全透明的占位', paintingTile(MULTI_PAINTING_VARIANT), 'painting_multi');
   check('这张占位图确实登记进图集了', TILE_ORDER.includes('painting_multi'));
-  check('1×1 的贴图不受影响', paintingTile(0) === 'painting_kebab');
+  check('1×1 的贴图不受影响', paintingTile(0) === 'painting_dawn');
 }
 
 console.log('\n[渲染层：每格一个平面（批次 495）]');
@@ -188,20 +208,20 @@ console.log('\n[渲染层：每格一个平面（批次 495）]');
 
   const state = 0; // facing 0
   renderer.update([
-    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_donkey_kong_0_0', light: 15, state },
-    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_donkey_kong_1_0', light: 15, state },
+    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_mural_0_0', light: 15, state },
+    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_mural_1_0', light: 15, state },
   ]);
   equal('两格画两个平面', renderer.cellCount, 2);
 
   // 重复更新不翻倍
   renderer.update([
-    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_donkey_kong_0_0', light: 15, state },
-    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_donkey_kong_1_0', light: 15, state },
+    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_mural_0_0', light: 15, state },
+    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_mural_1_0', light: 15, state },
   ]);
   equal('重复更新不翻倍', renderer.cellCount, 2);
 
   // 换子图 / 换光照：不崩
-  renderer.update([{ key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_match_0_0', light: 3, state: 2 }]);
+  renderer.update([{ key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_chart_0_0', light: 3, state: 2 }]);
   equal('移除不在列表里的格子', renderer.cellCount, 1);
 
   // 平面位置朝法线方向挪了一点（避免与透明方块面打架）

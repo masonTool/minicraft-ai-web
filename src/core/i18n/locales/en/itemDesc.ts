@@ -259,7 +259,7 @@ export const itemDesc = {
   "item.desc.tpl.copperSlab": "A slab made from {cut} (3 cut into 6).",
   "item.desc.tpl.copperStairs": "Stairs made from {cut} (6 cut into 4).",
   "item.desc.item_frame": "Item Frame: sticks to a **wall** (right-click a block side). It can hold **any single item**. Right-click an empty frame to hang the held item (costs 1); right-click a filled one to **rotate 45°** (8 clicks bring it back); right-click with a different item to **swap it**. Breaking the frame drops the item with it. Difference from vanilla: **only one item per frame** (no stack count), and blocks show as a **flat icon** rather than a small 3D block.",
-  "item.desc.painting": "Painting: sticks to a **wall** (right-click a block side); **which picture you get is random**. Difference from vanilla: this build only has the **seven 1x1 paintings** from 1.18 (Kebab / Aztec / Alban / Aztec2 / Bomb / Plant / Wasteland) — **multi-block paintings are not implemented**, so you will never hang a 2x2 one.",
+  "item.desc.painting": "Painting: sticks to a **wall** (click a block side). On a single block it hangs one of seven 1x1 pictures at random (dawn / river / hill / night / campfire / tree / desert); on a big enough wall it prefers a larger one (chart 2x2, banner 4x3, mural 4x4).",
 
   // ---- tool / armour description templates (P2-3c2)
   "item.desc.tpl.tool": "{material} {kind}: {desc} Harvest tier {tier} | Speed x{speed} | Attack {attack} | Durability {durability}",

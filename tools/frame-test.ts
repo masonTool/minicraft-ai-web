@@ -174,7 +174,7 @@ console.log('\n[画作表：变体状态位]');
   }
   check('200 次掷点全部落在合法范围', inRange);
 
-  equal('describeState 会说清挂的是哪一幅', describeState('painting', withPaintingVariant(withFacing(0, 0), 4)), '贴北墙·炸弹');
+  equal('describeState 会说清挂的是哪一幅', describeState('painting', withPaintingVariant(withFacing(0, 0), 4)), '贴北墙·篝火');
 }
 
 // ---------------------------------------------------------------- 2. 方块注册
