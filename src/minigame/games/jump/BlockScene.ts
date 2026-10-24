@@ -73,6 +73,17 @@ const MAX_SQUASH = 0.2;
  * 它是原版唯一的"落点提示"）。半径取一半，即直径 0.13 边长。
  */
 const DOT_RADIUS_RATIO = 0.065;
+/**
+ * 白点圆的分段数。48 段（原来是 24）：像素比抬到 3 之后，24 段在手机上能看出多边形。
+ * 导出成常量是为了"改了要不要跟着调"这件事有断言兜着。
+ */
+export const DOT_SEGMENTS = 48;
+/** 阴影贴片的边长（像素）。256：3x 屏下阴影边缘不再是方块糊 */
+export const SHADOW_TEXTURE_SIZE = 256;
+/** 背景渐变贴图的高度（像素）。512：256 在高分屏上会有可见色带 */
+export const BACKGROUND_TEXTURE_HEIGHT = 512;
+/** 背景噪点幅度（±1/255）：只为打散渐变色带，肉眼几乎看不见 */
+export const BACKGROUND_NOISE = 1 / 255;
 /** 阴影贴片相对方块尺寸的放大倍数（柔边要占出去一圈） */
 const SHADOW_SPREAD = 1.35;
 /** 阴影在**世界**里的偏移：屏幕上看是"左下"（光照来自 +x/−z） */
@@ -150,7 +161,7 @@ export class BlockScene {
 
     this.blockGeometry = bakeFaceShading(new THREE.BoxGeometry(1, 1, 1));
 
-    this.dotGeometry = new THREE.CircleGeometry(1, 24);
+    this.dotGeometry = new THREE.CircleGeometry(1, DOT_SEGMENTS);
     // ⚠️ 必须是 transparent + 高 renderOrder：不透明物体会按"由近到远"排，
     // 白点若不写深度又排在方块之前，就会被顶面整片盖掉（实测点看不见，原因就在这）。
     this.dotMaterial = new THREE.MeshBasicMaterial({
@@ -621,22 +632,53 @@ function remapAtlasUV(geometry: THREE.BufferGeometry): void {
   uv.needsUpdate = true;
 }
 
-/** 背景：2×N 的竖直渐变（three 会把它拉满整屏），无雾、无地面 */
+/**
+ * 背景：2×N 的竖直渐变（three 会把它拉满整屏），无雾、无地面。
+ *
+ * 为什么是 512 而不是 256：手机 3x 屏上"上亮下暗"的过渡只有几十个色阶，
+ * 256px 拉伸到 1200 物理像素时会出现明显的横向色带（banding）。
+ * 再叠 ±1/255 的确定性噪点（dithering），把残余的色带彻底打散。
+ */
 function createBackgroundTexture(palette: JumpPalette): THREE.Texture {
+  const height = BACKGROUND_TEXTURE_HEIGHT;
   const canvas = document.createElement('canvas');
   canvas.width = 2;
-  canvas.height = 256;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
     gradient.addColorStop(0, palette.background.top);
     gradient.addColorStop(1, palette.background.bottom);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 256);
+    ctx.fillRect(0, 0, 2, height);
+
+    const image = ctx.getImageData(0, 0, 2, height);
+    for (let i = 0; i < image.data.length; i += 4) {
+      const delta = backgroundNoise(i) * BACKGROUND_NOISE * 255;
+      image.data[i] = clampByte(image.data[i]! + delta);
+      image.data[i + 1] = clampByte(image.data[i + 1]! + delta);
+      image.data[i + 2] = clampByte(image.data[i + 2]! + delta);
+    }
+    ctx.putImageData(image, 0, 0);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+/**
+ * 确定性的 −1~1 白噪（按像素下标）。
+ *
+ * 不用随机数：截图对比与"同 seed 同画面"都要求可复现，
+ * 而这张图一局只生成一次，确定性不会带来任何"每帧重算"的成本。
+ */
+function backgroundNoise(index: number): number {
+  const t = Math.sin(index * 12.9898) * 43758.5453;
+  return (t - Math.floor(t)) * 2 - 1;
+}
+
+function clampByte(value: number): number {
+  return Math.min(255, Math.max(0, Math.round(value)));
 }
 
 /**
@@ -646,7 +688,7 @@ function createBackgroundTexture(palette: JumpPalette): THREE.Texture {
  * 要额外的 GPU 通道，而这里就是一张 128×128 的小图，一次生成反复用。
  */
 function createShadowTexture(): THREE.Texture {
-  const size = 128;
+  const size = SHADOW_TEXTURE_SIZE;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

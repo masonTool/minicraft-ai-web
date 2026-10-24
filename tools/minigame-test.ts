@@ -220,6 +220,17 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
   check('方块配色按身份取（不是按列表下标）', blockSceneSrc.includes('blockColorAt(this.palette, spec.colorIndex)'));
   check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
   check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
+
+  // 清晰度（跳7）：像素比与三张小贴图的规格都写成可断言常量
+  check('小游戏独立 renderer 像素比上限 = 3', /MINIGAME_PIXEL_RATIO_CAP = 3/.test(mainSrc));
+  check('小游戏 renderer 用的是这个上限', mainSrc.includes('Math.min(MINIGAME_PIXEL_RATIO_CAP, window.devicePixelRatio || 1)'));
+  check('顶面白点 48 段（原 24 段）', blockSceneSrc.includes('export const DOT_SEGMENTS = 48') && blockSceneSrc.includes('new THREE.CircleGeometry(1, DOT_SEGMENTS)'));
+  check('阴影贴图 256px（原 128）', blockSceneSrc.includes('export const SHADOW_TEXTURE_SIZE = 256') && blockSceneSrc.includes('const size = SHADOW_TEXTURE_SIZE'));
+  check('背景渐变 2×512（原 2×256）', blockSceneSrc.includes('export const BACKGROUND_TEXTURE_HEIGHT = 512') && blockSceneSrc.includes('canvas.height = height'));
+  check(
+    '背景叠 ±1/255 确定性噪点（打散色带）',
+    blockSceneSrc.includes('BACKGROUND_NOISE = 1 / 255') && blockSceneSrc.includes('backgroundNoise(') && !blockSceneSrc.includes('Math.random'),
+  );
 }
 
 // ------------------------------------------------------------------ 色板与明暗
