@@ -964,13 +964,15 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
     `16:9 |x|=${wideX.toFixed(3)} → 4:3 |x|=${Math.abs(root.position.x).toFixed(3)}`,
   );
   check('握点在一个合理的深度上（不会被近裁面撕开）', rest.z > -2 && rest.z < -0.5, rest.z.toFixed(3));
-  hand.update(0.4, false, 70, 16 / 9);
-  const narrowScale = root.scale.x;
+  // 1726 第二轮自测的回归点：手用**自己的**视野（视图模型），世界 fov 怎么调都不变。
+  // 曾经让手跟着世界 fov 缩放：90° 下"尺寸/距离"比翻倍，方块近角被透视推到 fov60 的 1.7 倍宽。
+  hand.update(0.4, false, 60, 16 / 9);
+  const at60 = { scale: root.scale.clone(), pos: root.position.clone() };
   hand.update(0.4, false, 90, 16 / 9);
   check(
-    '视野变宽时整只手跟着缩放（屏幕上大小不变）',
-    root.scale.x > narrowScale * 1.2,
-    `fov70 ${narrowScale.toFixed(3)} → fov90 ${root.scale.x.toFixed(3)}`,
+    '世界视野变化不影响手（手固定用自己的视图模型视角）',
+    root.scale.distanceTo(at60.scale) < 1e-9 && root.position.distanceTo(at60.pos) < 1e-9,
+    `fov60 scale=${at60.scale.x.toFixed(3)} / fov90 scale=${root.scale.x.toFixed(3)}`,
   );
 
   // 挥手：从静止位置出发 → 中途位移不同 → 结束后复位
@@ -1001,7 +1003,11 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   check('走路时手臂上下摆动、静止时归零', Math.abs(bobbing - still.y) > 1e-4 && Math.abs(root.position.y - still.y) < 1e-6);
 
   hand.update(0.016, false, 90, 1.2);
-  check('相机会跟着视野设置走', hand.camera.fov === 90 && Math.abs(hand.camera.aspect - 1.2) < 1e-6);
+  check(
+    '手的相机只跟宽高比，视野固定（不跟着世界 90° 走）',
+    hand.camera.fov !== 90 && hand.camera.fov > 60 && Math.abs(hand.camera.aspect - 1.2) < 1e-6,
+    `fov=${hand.camera.fov}`,
+  );
   hand.dispose();
 }
 

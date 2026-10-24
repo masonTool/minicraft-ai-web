@@ -13,9 +13,18 @@
  * 更要命的是**手臂根部离镜头只有 0.1 格**，透视把它放大成一块贴着屏幕的褐色墙。
  *
  * 换算公式（`k = tan(fov/2)`）：
- *   · 1 个几何单位 → 世界 `2 * k * GRIP_DEPTH` 格
+ *   · 深度 `d = GRIP_DEPTH * k / kRef`（`kRef = tan(REFERENCE_FOV/2)`）
+ *   · 1 个几何单位 → 世界 `2 * k * d` 格
  *   · 握点世界坐标 → 屏幕比例 (fx, fy) 反推
  * 这样"手里的东西占几成屏幕高"是个可以直接读的数，不用再靠猜。
+ *
+ * ⚠️ 手用**自己的一套视野**（`VIEWMODEL_FOV`，见 `update()`），不跟世界视野走。
+ * 第一版让手跟着世界 fov 换算尺寸，结果 90° 视野下"尺寸/距离"比也跟着放大、
+ * 透视把方块近角推得更远 —— 实测同一块石头在 fov60 是 0.57×0.66 屏高，
+ * fov90 变成 0.97×0.81 屏高、右缘跑到 118%（右半边整块出画）。
+ * 「屏幕占比固定」和「透视形状固定」在同一个相机里没法同时成立
+ * （尺寸 ∝ 屏幕占比 × 深度，而透视强度 ∝ 尺寸/深度），所以手直接钉死在
+ * `VIEWMODEL_FOV` 上：世界视野怎么调，手里的东西都是同一张脸。
  *
  * ## 为什么要重做（批次 20261024-1726 的用户反馈）
  *
@@ -54,7 +63,16 @@ import { srgbColor } from './srgb.ts';
  */
 const GRIP_SCREEN_X = 0.72;
 const GRIP_SCREEN_Y = 0.8;
+/** 握点到镜头的距离（格）——只在 `VIEWMODEL_FOV` 这个固定视角下有意义 */
 const GRIP_DEPTH = 0.95;
+/**
+ * 手部自己的视野（度）：**不跟世界视野走**。
+ *
+ * 手画在单独的场景 + 单独的相机里，本来就该按"视图模型"处理：世界视野从 45° 调到
+ * 90°，手里的东西大小和透视都不应该变（否则 90° 时方块会被拉得又大又歪、右缘出画）。
+ * 70° 是原版桌面的默认视野，这里的构图就是在这个视角下量出来的。
+ */
+const VIEWMODEL_FOV = 70;
 
 /**
  * 方块：边长与相对握点的偏移（都是屏幕高比例）。
@@ -99,18 +117,21 @@ const SPRITE_ROTATION: readonly [number, number, number] = [-0.12, -0.42, 0.16];
 const SPRITE_SHADE: readonly number[] = [0.55, 0.55, 0.55, 0.55, 1, 1];
 
 /**
- * 手臂（空手时可见）：粗细（屏幕高比例）、长度（**世界格**）与朝向。
+ * 手臂（空手时可见）：粗细与长度（都是**屏幕高比例**）、朝向。
  *
  * 朝向 `(0.62, -0.55, 0.56)`：向右、向下、**并且朝镜头**。
  *  · 朝镜头这一项是"小臂从画面外伸进来"的关键，没有它手臂会像贴纸一样平；
  *    但也别给太多（旧值 0.6 配 0.9 格长度），否则根部会贴到近裁面上，
  *    透视把整条手臂放大成一堵褐色墙（批次 20261024-1726 实测最近处 0.10 格）。
- *  · 长度 0.55 格：从握点沿着方向走出去刚好越过屏幕右下角，根部落在画面外。
+ *  · 长度 0.5 个屏高：从握点沿着方向走出去刚好越过屏幕右下角，根部落在画面外。
+ *  · ⚠️ 别改回"写死世界格"（旧 `ARM_LENGTH_WORLD = 0.55`）：那样视野一变，它在屏幕上
+ *    的长度就跟着变，根部会忽远忽近。根部离镜头多远由 `syncRig` 的深度换算保证——
+ *    深度跟着 k 走，根部永远在镜头前 0.35~0.75 格，不会贴到近裁面。
  *
  * 粗细 0.12：屏幕上约 12% 屏高，配上"末端加粗的拳头"，读起来是一段小臂。
  */
 const ARM_WIDTH = 0.12;
-const ARM_LENGTH_WORLD = 0.55;
+const ARM_UNITS = 0.5;
 const ARM_DIRECTION = new THREE.Vector3(0.62, -0.55, 0.56).normalize();
 /**
  * 手臂的逐面亮度（`+x, -x, +y, -y, +z, -z`）。
@@ -233,7 +254,7 @@ export class HandRenderer {
   private readonly scratchVec = new THREE.Vector3();
 
   constructor(private readonly atlas: TextureAtlas) {
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.02, 8);
+    this.camera = new THREE.PerspectiveCamera(VIEWMODEL_FOV, 1, 0.02, 8);
 
     this.itemMaterial = new THREE.ShaderMaterial({
       uniforms: {
@@ -449,29 +470,34 @@ export class HandRenderer {
 
   /**
    * 每帧：把手摆到"屏幕比例握点"上（见文件头），再加挥动/拉弓/走路的偏移。
+   *
+   * `worldFov` 是世界视野，**故意不参与手部投影**（原因见文件头）——保留这个参数
+   * 只为调用口径统一，`void` 一下免得被"声明未使用"报警。宽高比必须跟世界一致，
+   * 否则"右下角"会落错位置。
    */
-  update(dt: number, moving: boolean, fovDeg: number, aspect: number): void {
+  update(dt: number, moving: boolean, worldFov: number, aspect: number): void {
     if (this.swingTime < SWING_DURATION) this.swingTime = Math.min(SWING_DURATION, this.swingTime + dt);
 
     this.bobPhase = moving ? this.bobPhase + dt * BOB_FREQUENCY : 0;
     const bob = Math.sin(this.bobPhase) * BOB_AMPLITUDE;
 
-    if (this.camera.fov !== fovDeg || this.camera.aspect !== aspect) {
-      this.camera.fov = fovDeg;
+    if (this.camera.aspect !== aspect) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();
     }
-    this.syncRig(fovDeg, aspect, bob);
+    // 世界视野只做记录：手固定自己的视角（见文件头），这里留一个引用免得参数被判"没用到"
+    void worldFov;
+    this.syncRig(aspect, bob);
   }
 
   /**
-   * 按视野/宽高比把整只手摆好（见文件头"尺寸口径"）。
+   * 按宽高比把整只手摆好（见文件头"尺寸口径"）。
    *
    * 顺序讲究：先算握点（世界坐标）与单位长度，再让**挥动绕支点转**——
    * 支点固定在屏幕上，所以转起来是"从画面外抡进来"，不是"整只手在原地平移"。
    */
-  private syncRig(fovDeg: number, aspect: number, bob = 0): void {
-    const k = Math.tan((fovDeg * Math.PI) / 360);
+  private syncRig(aspect: number, bob = 0): void {
+    const k = Math.tan((VIEWMODEL_FOV * Math.PI) / 360);
     const halfHeight = k * GRIP_DEPTH;
     const unit = 2 * halfHeight;
 
@@ -480,11 +506,12 @@ export class HandRenderer {
     const swing = t < 1 ? Math.sin(t * Math.PI) : 0;
 
     this.root.scale.setScalar(unit);
-    // 手臂的长度写在世界上（不跟着屏幕比例缩放），粗细写在屏幕上 —— 见 ARM_LENGTH_WORLD
-    this.armRig.scale.set(ARM_WIDTH, ARM_WIDTH, ARM_LENGTH_WORLD / unit);
+    // 手臂：粗细与长度都是屏幕比例（见 ARM_WIDTH / ARM_UNITS）
+    this.armRig.scale.set(ARM_WIDTH, ARM_WIDTH, ARM_UNITS);
+    // 走路摆动也按屏幕比例（`bob` 是屏高的几成）
     this.grip.set(
       (GRIP_SCREEN_X * 2 - 1) * halfHeight * aspect,
-      (1 - GRIP_SCREEN_Y * 2) * halfHeight + bob,
+      (1 - (GRIP_SCREEN_Y + bob) * 2) * halfHeight,
       -GRIP_DEPTH,
     );
 
