@@ -617,7 +617,7 @@ try {
     const sid = 'wt-adopt';
     writeFileSync(
       join(DOING, 'worktree.md'),
-      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0000\n\n- [ ] 甲\n- [ ] [自审] 占位\n',
+      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0000\n\n- [ ] 甲\n',
     );
     const r = hook('queue-init.mjs', prompt(sid));
     const adopted = existsSync(join(DOING, `${sid}.md`)) ? readFileSync(join(DOING, `${sid}.md`), 'utf8') : '';
@@ -634,7 +634,7 @@ try {
     const sid = 'wt-conflict';
     writeFileSync(
       join(DOING, 'worktree.md'),
-      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0001\n\n- [ ] 乙\n- [ ] [自审] 占位\n',
+      '# 队列 · 会话 worktree（待接管）\n\n> 状态：执行中\n> 批次：19990101-0001\n\n- [ ] 乙\n',
     );
     queue(sid, '- [ ] 已有任务');
     const before = readFileSync(join(DOING, `${sid}.md`), 'utf8');
@@ -748,7 +748,7 @@ try {
       join(wt, '.continue', 'doing', `${sid}.md`),
       '# 队列\n\n> 状态：执行中\n> 批次：19990101-0002\n\n' +
         '- [x] 甲\n  - 做了什么：x\n  - 验证：`true`\n' +
-        '- [x] [自审] 占位\n  - L1：x\n  - L2：y\n  - L3：z\n',
+        '- [x] 乙\n  - 做了什么：y\n  - 验证：`true`\n',
     );
     const r = hook('auto-continue.mjs', stop(sid), {}, ['--event=Stop'], wt);
     sh('git', ['worktree', 'remove', '--force', wt]);
@@ -1139,7 +1139,7 @@ function writeTodo() {
   mkdirSync(TODO_DIR, { recursive: true });
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0000\n> 树名：auth\n\n- [ ] 甲任务\n- [ ] [自审] 收尾前三层自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0000\n> 树名：auth\n\n- [ ] 甲任务\n`,
   );
   writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n把甲任务做完，验证方式是看 a.txt。\n');
   rmSync(join(TODO_DIR, 'state.json'), { force: true });
@@ -1197,7 +1197,7 @@ check('交接 · 新树第一条消息接管 todo（批次沿用 + 上下文附�
 
 check('交接 · 新树里 Stop 正常递任务', () => {
   const r = hook('auto-continue.mjs', stop(CHILD_SID), {}, ['--event=Stop'], dispatchedTree);
-  return expect(r.code === 2 && /1\/2 条/.test(`${r.err}${r.out}`), '应递第 1/2 条', r);
+  return expect(r.code === 2 && /1\/1 条/.test(`${r.err}${r.out}`), '应递第 1/1 条', r);
 });
 
 /**
@@ -1208,7 +1208,7 @@ check('交接 · 新树里 Stop 正常递任务', () => {
 check('交接 · 收件箱内容变了 → 允许再派发一棵（同名单词加 -2）', () => {
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0001\n> 树名：auth\n\n- [ ] 乙任务\n- [ ] [自审] 自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0001\n> 树名：auth\n\n- [ ] 乙任务\n`,
   );
   writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n第二批。\n');
   const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
@@ -1229,7 +1229,7 @@ check('交接 · 收件箱内容变了 → 允许再派发一棵（同名单词�
 check('交接 · queue.md 没写树名 → 退回 worktree_task_<日期>', () => {
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0003\n\n- [ ] 丙任务\n- [ ] [自审] 自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0003\n\n- [ ] 丙任务\n`,
   );
   writeFileSync(join(TODO_DIR, 'context.md'), '# 上下文\n\n第三批（没写树名）。\n');
   const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
@@ -1275,7 +1275,7 @@ check('交接 · doing/ 里没人在跑 → 不派发', () => {
   mkdirSync(TODO_DIR, { recursive: true });
   writeFileSync(
     join(TODO_DIR, 'queue.md'),
-    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0002\n\n- [ ] 丙任务\n- [ ] [自审] 自审\n`,
+    `# 队列 · 会话 ${PARENT_SID}\n\n> 状态：执行中\n> 批次：19990101-0002\n\n- [ ] 丙任务\n`,
   );
   rmSync(join(TODO_DIR, 'state.json'), { force: true });
   const r = hook('dispatch.mjs', stop(PARENT_SID), {}, ['--event=Stop', '--no-window']);
