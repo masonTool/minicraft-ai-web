@@ -1219,6 +1219,20 @@ console.log('\n[携带版细节收口（批次 159）]');
       // `display: flex` 是 4 个类，普通选择器压不过
       css.includes('.inv-panel .inv-creative-controls.search-hidden { display: none !important; }'),
   );
+  // 批次 20261024-1721（用户）：创造网格要**填满面板剩余高度**，不能再用固定上限
+  // （42vh / 174px 在矮横屏上会在列表下面留一大片空白）。
+  check(
+    '创造网格填满剩余高度（不再被 42vh / 174px 封顶）',
+    // ⚠️ 认"声明"（带分号）而不是纯文本：规则块里的注释也会提到这两个旧值
+    !/\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*max-height: 174px;/.test(
+      css.replace(/\s+/g, ' '),
+    ) &&
+      !/\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*max-height: min\(42vh[^;]*;/.test(
+        css.replace(/\s+/g, ' '),
+      ) &&
+      /\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')) &&
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*flex: 1 1 auto;/.test(css.replace(/\s+/g, ' ')),
+  );
 
   // ④ 点物品 → 快捷栏上方的小说明
   check('有这块说明浮层', css.includes('#inv-pick-toast {') && invSrc.includes("this.pickToastEl.id = 'inv-pick-toast'"));

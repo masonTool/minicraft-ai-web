@@ -3478,8 +3478,12 @@
         box-sizing: border-box;
       }
       .inv-panel.creative-ui.pocket-ui .inv-creative {
-        min-height: min(38vh, 200px);
-        max-height: min(42vh, 220px);
+        /* 批次 20261024-1721（用户）：网格**吃掉面板剩余高度**，不再按 42vh / 220px
+           封顶（矮横屏面板只有 318 高，封顶后列表下面会留一大片空白——
+           用户："下面也不要留这么大的空位，尽量把窗口填满"）。 */
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
         overflow-x: hidden; overflow-y: auto;
         width: 100%;
         align-content: start;
@@ -3790,7 +3794,10 @@
         grid-template-columns: repeat(7, minmax(0, 40px));
         gap: 2px;
         padding-right: 14px;
-        max-height: 174px;
+        /* 批次 20261024-1721（用户）：填满左栏剩余高度（原 `max-height: 174px` 会在
+           矮屏上只露 4 行、下面留一大片空白） */
+        flex: 1 1 auto;
+        max-height: none;
         min-height: 0;
         /* 横向绝不滚：`overflow-y: auto` 会把 overflow-x 变成 auto，多出来的
            1~2px 就会在底部画一条横向滚动条（又一块"小黑块"） */
@@ -4803,10 +4810,13 @@
       body.touch-mode .inv-panel.creative-ui .inv-creative {
         max-height: min(40vh, 300px);
       }
-      /* 携带版创造网格高度由 .pocket-ui 规则管，别被触摸矮屏上限压成一行 */
+      /* 携带版创造网格高度由 .pocket-ui 规则管，别被触摸矮屏上限压成一行。
+         批次 20261024-1721：这里改成"填满剩余高度"——矮横屏上原来 42vh 的上限
+         会在列表下面留一大片空白（用户："尽量把窗口填满"）。 */
       body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-creative {
-        min-height: min(38vh, 200px);
-        max-height: min(42vh, 220px);
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
       }
       body.touch-mode .inv-creative-section {
         min-height: 0;
@@ -4822,9 +4832,11 @@
         body.touch-mode .inv-panel.creative-ui:not(.pocket-ui) .inv-creative {
           max-height: min(26vh, 140px);
         }
+        /* 批次 20261024-1721：横屏矮屏同样填满（原来 38vh 的上限正是空白的主因） */
         body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-creative {
-          min-height: min(34vh, 160px);
-          max-height: min(38vh, 180px);
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
         }
         body.touch-mode .inv-panel { padding: 8px 10px; }
         body.touch-mode .recipe-panel { padding: 8px 10px; }
@@ -5030,7 +5042,10 @@
       /* 创造整屏：只留创造网格 + 快捷栏（批次 142） */
       .inv-panel.creative-ui .inv-body { width: 100%; }
       .inv-panel.creative-ui .inv-creative {
-        max-height: min(58vh, 420px);
+        /* 批次 20261024-1721（用户）：填满面板剩余高度（原 58vh/420px 封顶会留空白） */
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
       }
       /* 低血量脉冲：血少了要让 HUD 自己"跳"一下，而不是等玩家发现数字变小了 */
       @keyframes low-health-pulse {
@@ -5281,9 +5296,11 @@
         max-width: min(calc(100vw - 88px), 800px);
       }
       body.touch-mode .inv-panel.creative-ui.pocket-ui.pocket-dual .inv-creative {
-        grid-template-columns: repeat(7, 40px);
+        grid-template-columns: repeat(7, minmax(0, 40px));
+        /* 批次 20261024-1721（用户）：与桌面同一条——填满左栏，不再卡 174px */
+        flex: 1 1 auto;
         min-height: 0;
-        max-height: 174px;
+        max-height: none;
       }
       /* ⚠️ 刻意**不**包含 `.inv-tabs`：那一行分类标签是"单行横向滚动"的
          （窄屏上一个都换行不下），锁掉就不会滚了（见 `ui-test` 里那条断言）。 */
@@ -5478,11 +5495,12 @@
         max-width: calc(var(--pc-inv-cell) - 10px);
         max-height: calc(var(--pc-inv-cell) - 10px);
       }
-      /* 一页 60 件要能一眼看全（5 行 × 48px ≈ 240px）；窗口矮时这一栏自己滚 */
+      /* 一页 60 件要能一眼看全；窗口矮时这一栏自己滚。
+         批次 20261024-1721（用户）：不再封顶 58vh——把左栏填满（多出来的高度就是能看见的行） */
       body:not(.touch-mode) .inv-panel.pocket-ui.pocket-dual .inv-creative {
         flex: 1 1 auto;
         min-height: 0;
-        max-height: min(58vh, 430px);
+        max-height: none;
       }
       /* 面板本身也留一条退路：窗口矮到连"搜索 + 5 行 + 翻页条"都放不下时，
          整块面板可以滚——否则翻页条会被 `overflow: hidden` 裁在面板外，等于又没法翻页。 */
