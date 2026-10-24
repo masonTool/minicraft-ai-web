@@ -10,10 +10,16 @@
  *   进小游戏 → 连跳 5 次（按 `debugState.gap` 反算蓄力时长）→ 故意跳空 → 结算
  *   → 再来一局 → 退出；同时把 菜单 / 待跳 / 蓄力 / 结算 四张截图落到 `.tmp/shots`。
  *
- * 除了"能玩"，还验三件这一轮才有的东西（都从 `debugState` 读，不碰内部对象）：
+ * 除了"能玩"，还验这几件这一轮才有的东西（都从 `debugState` 读，不碰内部对象）：
  *   · **相机是正交的**：透视相机会让画面失去等距观感，而截图比对很难一眼看出；
- *   · **间距 = 边长的 1.15~1.9 倍**：原版相邻块几乎贴合，这是"像不像"的核心；
+ *   · **间距是绝对格数**（4.6~6.0 格 → 边长比 2.3~5.0）：这一轮把间距从"边长倍数"
+ *     改回绝对格数并大幅拉开，命中横屏下"方块之间要留出倒下的空间"；
+ *   · **一屏只画 3 块**（上一块 + 当前 + 下一块）；
+ *   · **底座有方有圆**（10 分前一律方形）；
  *   · **前进方向只有 x / z 两条轴**：原版没有斜角。
+ *
+ * ⚠️ 按压时长按"距离 ÷ 最远 7.2 格 × 蓄满 1.25 秒"反算（对应 `config.ts`），
+ *    改参数要同步这两个数。
  *
  * ⚠️ 与截图 / 控制台门禁同一条契约：**没有浏览器就 exit 0**（跳过，不算失败）。
  *    真正的失败只有一种：脚本跑完了、有 ✗。
@@ -46,6 +52,10 @@ const check = (label, ok, detail = '') => {
 
 const state = () => page.evaluate(() => window.__minigame?.debugState ?? null);
 const KINDS = ['normal', 'well', 'cube', 'store', 'music'];
+const SHAPES = ['square', 'round'];
+/** 与 `config.ts` 同一口径：蓄满 maxCharge 秒对应 maxDistance 格 */
+const MAX_DISTANCE = 7.2;
+const MAX_CHARGE_MS = 1250;
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -64,16 +74,22 @@ try {
   check('开局分数 0', ready?.score === 0);
   check('相机是正交的（等距投影的前提）', ready?.orthographic === true, JSON.stringify(ready));
   check(
-    '间距 = 边长的 1.15~1.9 倍（原版相邻块几乎贴合）',
-    ready?.gapRatio >= 1.15 && ready?.gapRatio <= 1.95,
+    '间距拉到边长的 2.3~5.0 倍（4.6~6.0 格的绝对曲线）',
+    ready?.gapRatio >= 2.2 && ready?.gapRatio <= 5.1,
     `gapRatio=${Number(ready?.gapRatio).toFixed(2)}`,
   );
+  check('开局间距至少 4.6 格（横屏下要留出倒下的空间）', ready?.gap >= 4.6, `gap=${Number(ready?.gap).toFixed(2)}`);
+  // 开局没有"上一块"，所以是 2 块；跳过一次之后才是 3 块（见下面 after5 的断言）
+  check('开局只画 2 块（当前 + 下一块）', ready?.onscreen === 2, `onscreen=${ready?.onscreen}`);
+  check('开局站在方块中心（standOffset = 0）', ready?.standOffset === 0, `standOffset=${ready?.standOffset}`);
   check('前进方向只沿一条世界轴', ready?.axis === 'x' || ready?.axis === 'z', `axis=${ready?.axis}`);
   check(
     '方块种类在五类之内',
     ['normal', 'well', 'cube', 'store', 'music'].includes(ready?.kind),
     `kind=${ready?.kind}`,
   );
+  check('底座形状在两类之内', SHAPES.includes(ready?.shape) && SHAPES.includes(ready?.nextShape), `${ready?.shape}/${ready?.nextShape}`);
+  check('10 分前不出圆形底座', ready?.shape === 'square' && ready?.nextShape === 'square');
   await page.screenshot({ path: `${shotDir}/jump-ready.png` });
 
   // ---- 连跳 5 次：按到中心（蓄力时长 = gap / 最大距离 × 蓄满时间）
@@ -84,12 +100,15 @@ try {
 
   const axes = new Set();
   const kinds = new Set();
+  const shapes = new Set();
   for (let i = 0; i < 5; i++) {
     const before = await state();
     axes.add(before.axis);
     kinds.add(before.kind);
     kinds.add(before.nextKind);
-    const holdMs = Math.max(60, Math.min(900, (before.gap / 4.5) * 900));
+    shapes.add(before.shape);
+    shapes.add(before.nextShape);
+    const holdMs = Math.max(60, Math.min(MAX_CHARGE_MS, (before.gap / MAX_DISTANCE) * MAX_CHARGE_MS));
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     if (i === 0) {
@@ -110,9 +129,18 @@ try {
   );
   check('5 跳的方块种类都在五类之内', [...kinds].every((kind) => KINDS.includes(kind)), [...kinds].join(','));
 
+  check('5 跳的底座形状都在两类之内', [...shapes].every((shape) => SHAPES.includes(shape)), [...shapes].join(','));
+
   const after5 = await state();
   check('连跳 5 次都在前进', after5.index === 5, `index=${after5.index}`);
   check('分数累加', after5.score > 0, `score=${after5.score}`);
+  check('一屏稳定 3 块（上一块 + 当前 + 下一块）', after5.onscreen === 3, `onscreen=${after5.onscreen}`);
+  // 落点保留：跳到哪儿站哪儿，站姿偏移必须是个有限的实数（0 = 正好站中心）
+  check(
+    '站姿偏移被暴露且有限',
+    Number.isFinite(after5.standOffset) && after5.standOffset >= 0 && after5.standOffset <= 2,
+    `standOffset=${after5.standOffset}`,
+  );
   await page.screenshot({ path: `${shotDir}/jump-after5.png` });
 
   // ---- 故意跳空（40ms 蓄力，落点远不够）

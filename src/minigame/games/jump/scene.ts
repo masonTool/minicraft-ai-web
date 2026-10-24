@@ -28,18 +28,19 @@ import {
   targetBlock,
   type JumpBlock,
   type JumpBlockKind,
+  type JumpBlockShape,
   type JumpRun,
   type LandingOutcome,
 } from './logic.ts';
 import { BlockScene, type BlockSpec } from './BlockScene.ts';
 import { JumperModel } from './JumperModel.ts';
 import { BLOCK_HEIGHT_RATIO } from './iso.ts';
-import { JUMP_TIMING, flipProgress, jumpArc, landingSquash } from './motion.ts';
+import { JUMP_TIMING, flipProgress, jumpArc, landingSquash, toppleAngle } from './motion.ts';
 import { JumpAudio } from './audio.ts';
 import { paletteForSeed } from './palette.ts';
 import type { MiniGame, MiniGameContext, MiniGamePointer, MiniGameStatus } from '../../types.ts';
 
-type Phase = 'ready' | 'charging' | 'jumping' | 'falling' | 'over';
+type Phase = 'ready' | 'charging' | 'jumping' | 'toppling' | 'falling' | 'over';
 
 /** 站在某块方块上的脚底高度（方块高度 = 边长 × 0.6，见规格表 §2） */
 function standHeight(block: { size: number }): number {
@@ -93,6 +94,8 @@ export class JumpGame implements MiniGame {
 
   private hud: HTMLDivElement | null = null;
   private scoreEl: HTMLDivElement | null = null;
+  /** 分数下方的连击标记（`×N`，断连击即消失） */
+  private comboEl: HTMLDivElement | null = null;
   private overEl: HTMLDivElement | null = null;
   private overTitleEl: HTMLDivElement | null = null;
   private overScoreEl: HTMLDivElement | null = null;
@@ -148,6 +151,7 @@ export class JumpGame implements MiniGame {
     this.overEl?.remove();
     this.overEl = null;
     this.scoreEl = null;
+    this.comboEl = null;
     this.overTitleEl = null;
     this.overScoreEl = null;
     this.overBestEl = null;
@@ -184,8 +188,9 @@ export class JumpGame implements MiniGame {
     if (this.phase === 'ready' || this.phase === 'charging') {
       this.tickSpecialHold(step);
       const block = currentBlock(this.run);
-      // 站姿：脚底贴方块顶面中心（压扁已在上面按蓄力比例处理，脚底不动）
-      this.placeJumper(block.x, standHeight(block), block.z);
+      // 站姿：脚底贴**实际落点**（落到哪儿就站哪儿，不再被拉回方块中心）。
+      // 压扁已在上面按蓄力比例处理，脚底不动。
+      this.placeJumper(this.run.stand.x, standHeight(block), this.run.stand.z);
     } else if (this.phase === 'jumping') {
       this.elapsed += step;
       const progress = Math.min(1, this.elapsed / this.duration);
@@ -198,6 +203,17 @@ export class JumpGame implements MiniGame {
       this.placeJumper(x, y, z);
       jumper.setFlip(-Math.PI * 2 * flipProgress(progress));
       if (progress >= 1) this.land();
+    } else if (this.phase === 'toppling') {
+      // 倾覆：380ms 缓入扑到 ~95°，播完才自由落体。方向恒为前进方向（冲过头和没跳够都往前扑）
+      this.elapsed += step;
+      const ms = this.elapsed * 1000;
+      jumper.setTilt(toppleAngle(ms));
+      if (ms >= JUMP_TIMING.toppleMs) {
+        // 已经扑倒，落地时不必再保留倾角（下坠本身有翻转）
+        jumper.setTilt(0);
+        this.phase = 'falling';
+        this.elapsed = 0;
+      }
     } else if (this.phase === 'falling') {
       this.elapsed += step;
       const y = this.jumpToY - this.elapsed * 7;
@@ -208,7 +224,7 @@ export class JumpGame implements MiniGame {
     }
 
     // 掉落与结算期间不再跟随：人已经掉出画面，镜头再追会把方块甩到奇怪的视角
-    if (this.phase !== 'falling' && this.phase !== 'over') {
+    if (this.phase !== 'falling' && this.phase !== 'toppling' && this.phase !== 'over') {
       blocks.follow(step);
     }
     blocks.render(context.renderer);
@@ -233,23 +249,37 @@ export class JumpGame implements MiniGame {
     index: number;
     best: number;
     blocks: number;
+    /** 这一屏真正交给渲染层的块数（上一块 + 当前 + 下一块，最多 3） */
+    onscreen: number;
     gap: number;
-    /** 间距 ÷ 边长（原版口径 1.15~1.9；E2E 用它验"方块几乎贴合"） */
+    /** 间距 ÷ 边长（E2E 用它验"间距被拉大了"） */
     gapRatio: number;
+    /** 站姿离当前方块中心多远（0 = 站在正中；E2E 用它验"落点没有被复位"） */
+    standOffset: number;
     /** 这一步沿哪条世界轴前进（原版只有 x / z 两向） */
     axis: 'x' | 'z';
     /** 当前站着的方块种类 */
     kind: JumpBlockKind;
     /** 下一块种类 */
     nextKind: JumpBlockKind;
+    /** 当前方块的底座形状 */
+    shape: JumpBlockShape;
+    /** 下一块方块的底座形状 */
+    nextShape: JumpBlockShape;
     /** 相机是不是正交的（透视相机会破坏等距观感，必须能验） */
     orthographic: boolean;
   } {
     const from = currentBlock(this.run);
     const to = this.run.blocks[this.run.index + 1];
-    const dx = to ? to.x - from.x : 0;
-    const dz = to ? to.z - from.z : 0;
-    const gap = Math.hypot(dx, dz);
+    const stand = this.run.stand;
+    // 距离要从**站姿**量：落到哪儿就站哪儿，这一跳的实际长度不是方块中心距
+    const gap = to ? Math.hypot(to.x - stand.x, to.z - stand.z) : 0;
+    // 方向仍按**方块中心**判：等距两向是生成器的设计约束，站偏只是让这一跳略斜
+    const centreDx = to ? to.x - from.x : 0;
+    const centreDz = to ? to.z - from.z : 0;
+    // 与 rebuildBlocks 同一口径：上一块 + 当前 + 下一块
+    const firstOnScreen = Math.max(0, this.run.index - 1);
+    const lastOnScreen = Math.min(this.run.blocks.length - 1, this.run.index + 1);
     return {
       phase: this.phase,
       score: this.run.score,
@@ -257,12 +287,16 @@ export class JumpGame implements MiniGame {
       index: this.run.index,
       best: this.best,
       blocks: this.run.blocks.length,
+      onscreen: Math.max(0, lastOnScreen - firstOnScreen + 1),
       // 到下一个方块中心的距离：E2E 靠它算出"该按多久"（只读，不改状态）
       gap,
       gapRatio: gap > 0 ? gap / from.size : 0,
-      axis: Math.abs(dx) >= Math.abs(dz) ? 'x' : 'z',
+      standOffset: Math.hypot(stand.x - from.x, stand.z - from.z),
+      axis: Math.abs(centreDx) >= Math.abs(centreDz) ? 'x' : 'z',
       kind: from.kind,
       nextKind: to?.kind ?? 'normal',
+      shape: from.shape,
+      nextShape: to?.shape ?? 'square',
       orthographic: this.blocks?.camera.isOrthographicCamera === true,
     };
   }
@@ -282,15 +316,17 @@ export class JumpGame implements MiniGame {
     const from = currentBlock(this.run);
     const to = targetBlock(this.run);
     const distance = distanceForCharge(this.charge);
-    const dx = to.x - from.x;
-    const dz = to.z - from.z;
+    // 起跳点是**实际站姿**：上一跳站偏了就真的要少跳/多跳那一段
+    const stand = this.run.stand;
+    const dx = to.x - stand.x;
+    const dz = to.z - stand.z;
     const length = Math.hypot(dx, dz) || 1;
 
     this.pending = jump(this.run, distance);
-    this.jumpFrom = { x: from.x, z: from.z };
+    this.jumpFrom = { x: stand.x, z: stand.z };
     this.jumpTo = {
-      x: from.x + (dx / length) * distance,
-      z: from.z + (dz / length) * distance,
+      x: stand.x + (dx / length) * distance,
+      z: stand.z + (dz / length) * distance,
     };
     this.jumpFromY = standHeight(from);
     this.jumpToY = standHeight(to);
@@ -319,7 +355,8 @@ export class JumpGame implements MiniGame {
     this.jumper?.resetPose();
 
     if (outcome.over) {
-      this.phase = 'falling';
+      // 倾倒与坠落都从同一个落点开始，只是先播 380ms 的倾覆（跳9 接上角度曲线）
+      this.phase = outcome.kind === 'topple' ? 'toppling' : 'falling';
       this.elapsed = 0;
       this.audio?.playFall();
       return;
@@ -332,14 +369,17 @@ export class JumpGame implements MiniGame {
     this.phase = 'ready';
     this.elapsed = 0;
 
-    this.audio?.playLand(outcome.center);
+    // 完美命中按连击升调（连击越高越亮），普通落地不变
+    this.audio?.playLand(outcome.center, outcome.run.combo);
 
     const landed = currentBlock(this.run);
-    // 被踩的方块凹一下再回弹；完美命中在落点扩三层同心圆 + 头顶飘 +N
+    // 被踩的方块凹一下再回弹；完美命中在**落点**扩散同心圆（层数随连击）+ 头顶飘字
     this.blocks?.punch(landed.x, landed.z);
     if (outcome.center) {
-      this.blocks?.playRipple(landed.x, landed.z, landed.size);
-      this.showFloat(`+${outcome.points}`, landed);
+      this.blocks?.playRipple(outcome.point.x, outcome.point.z, landed.size, outcome.run.combo);
+      // 连中两次起飘 `×N  +P`：只给"连击"一个视觉上的名字，计分规则一个字没动
+      const combo = outcome.run.combo;
+      this.showFloat(combo >= 2 ? `×${combo}  +${outcome.points}` : `+${outcome.points}`, landed);
     }
     this.landSquashMs = 0;
     this.holdBlockId = landed.kind === 'normal' ? -1 : landed.id;
@@ -445,16 +485,17 @@ export class JumpGame implements MiniGame {
   }
 
   /**
-   * 重建这一屏的方块：当前块前后各一块（原版一屏 3~4 块）。
+   * 重建这一屏的方块：**上一块 + 当前 + 下一块**，共 3 块。
    *
-   * 前后各留一块是为了让"刚跳过的"和"下一块"都在画面里——原版也是这么构图的。
+   * 只画 3 块是这一轮定的口径：横屏下间距拉到 4.6~6.0 格之后，4 块会挤到看不清，
+   * 而多出来的第 4 块（下下块）本来也在画面边缘、被取景压扁，删掉不影响判断。
    */
   private rebuildBlocks(): void {
     const blocks = this.blocks;
     if (!blocks) return;
     const specs: BlockSpec[] = [];
     const from = Math.max(0, this.run.index - 1);
-    const to = Math.min(this.run.blocks.length - 1, this.run.index + 2);
+    const to = Math.min(this.run.blocks.length - 1, this.run.index + 1);
     for (let i = from; i <= to; i++) {
       const block: JumpBlock | undefined = this.run.blocks[i];
       if (!block) continue;
@@ -463,6 +504,7 @@ export class JumpGame implements MiniGame {
         z: block.z,
         size: block.size,
         kind: block.kind,
+        shape: block.shape,
         current: i === this.run.index,
         colorIndex: block.id,
       });
@@ -501,7 +543,12 @@ export class JumpGame implements MiniGame {
     score.className = 'jump-score';
     this.scoreEl = score;
 
-    hud.append(score);
+    // 连击标记：贴在分数下方，只在连中两次以后出现（原版没有这行，是这一轮加的"表现层"）
+    const combo = document.createElement('div');
+    combo.className = 'jump-combo';
+    this.comboEl = combo;
+
+    hud.append(score, combo);
     context.layer.append(hud);
     this.hud = hud;
 
@@ -563,6 +610,12 @@ export class JumpGame implements MiniGame {
 
   private updateHud(): void {
     if (this.scoreEl) this.scoreEl.textContent = String(this.run.score);
+    // `×N`：连中两次起显示，落到非中心 / 掉下去就自然消失（combo 已被清零）
+    if (this.comboEl) {
+      const combo = this.run.combo;
+      this.comboEl.textContent = combo >= 2 ? `×${combo}` : '';
+      this.comboEl.classList.toggle('on', combo >= 2);
+    }
   }
 
   private showOver(score: number, newRecord = false): void {

@@ -1393,6 +1393,23 @@
         font-variant-numeric: tabular-nums;
       }
       /*
+       * 连击标记（批次 20261024-1331）：贴在分数下方，连中两次以后才出现，
+       * 断连击（落到非中心 / 掉下去）当帧就消失。金色是"连击"的信号色，
+       * 与波纹最外圈那颗金环同一套语言。
+       */
+      .jump-combo {
+        margin-top: 2px;
+        color: #C9922B;
+        font-family: -apple-system, "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+        font-size: clamp(12px, 3.4vh, 20px);
+        font-weight: 500;
+        line-height: 1.1;
+        letter-spacing: .06em;
+        opacity: 0;
+        transition: opacity .18s ease;
+      }
+      .jump-combo.on { opacity: 1; }
+      /*
        * 完美命中 / 特殊方块的 `+N` 飘字（批次 20261024-0415）：白色半透明、细体，
        * 从方块上方浮起并淡出。位置由 `scene.ts` 用相机投影算成百分比写进 left/top，
        * 所以这里只需要管"长什么样、怎么动"。

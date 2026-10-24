@@ -157,6 +157,31 @@ console.log('\n取景：手机横屏 844×390');
   check('方块四周留了边距（不贴边）', Math.abs(focusScreen.x) < frame.right && Math.abs(focusScreen.y) < frame.top);
 }
 
+console.log('\n取景：新间距下的一屏 3 块（批次 20261024-1331）');
+{
+  // 真跑一局生成器（seed 固定），取"上一块 + 当前 + 下一块"这 3 块 —— 与 scene.rebuildBlocks 同口径
+  const run = runWithBlocks(20261024, 6);
+  const blocks = run.blocks.slice(Math.max(0, run.index - 1), run.index + 2);
+  const boxes = boxesFromBlocks(blocks);
+  const focusIndex = Math.min(1, boxes.length - 1);
+  const frame = frameBlocks({ boxes, focusIndex, width: 844, height: 390 });
+  check('3 块都在视口内（间距拉到 4.6~6.0 格之后仍然装得下）', boxes.every((box) => inside(frame, box)));
+  between('当前方块仍占屏宽 10%~45%（不会小到看不清）', blockWidthRatio(frame, boxes[focusIndex]!), 0.1, 0.45);
+
+  // 3 块的屏幕包络必须撑满视口**纵向**的 60% 以上：横屏下真正吃紧的是高度，
+  // 方块沿前进方向往上排，纵向撑不满就等于把镜头拉远了（"拉大间距"白拉）。
+  const corners = boxes.flatMap((box) => boxCorners(box));
+  const ys = corners.map((corner) => toFrameSpace(frame, corner, basis).y);
+  const spanRatio = (Math.max(...ys) - Math.min(...ys)) / (frame.top - frame.bottom);
+  check('3 块纵向撑满视口（≥ 60%）', spanRatio >= 0.6, `${(spanRatio * 100).toFixed(0)}%`);
+
+  // 下一块必须在当前块的"前方"（屏幕上方），否则镜头方向反了
+  const focusScreen = toFrameSpace(frame, { x: boxes[focusIndex]!.x, y: boxes[focusIndex]!.height, z: boxes[focusIndex]!.z }, basis);
+  const nextBox = boxes[focusIndex + 1] ?? boxes[focusIndex]!;
+  const nextScreen = toFrameSpace(frame, { x: nextBox.x, y: nextBox.height, z: nextBox.z }, basis);
+  check('下一块在当前块的前方（屏幕更靠上）', nextScreen.y > focusScreen.y, `${nextScreen.y.toFixed(2)} vs ${focusScreen.y.toFixed(2)}`);
+}
+
 console.log('\n取景：竖屏 390×844');
 {
   const run = runWithBlocks(11, 4);

@@ -19482,6 +19482,15 @@ async function boot(): Promise<void> {
   let activeMenuMiniGame: MiniGameHost | null = null;
 
   /**
+   * 小游戏独立 renderer 的像素比上限。
+   *
+   * 3 而不是主世界的 2：小游戏一屏只画 3~4 块纯色方块（没有地形、没有生物、没有雾），
+   * 填充率几乎全花在"边缘抗锯齿"上，而方块边缘正是这套等距画面里最容易被看出毛刺的地方。
+   * 横屏手机 844×390 在 3x 下是 2532×1170，量级仍远低于主世界。
+   */
+  const MINIGAME_PIXEL_RATIO_CAP = 3;
+
+  /**
    * 主菜单里跑一局小游戏（独立于 App）。
    *
    * 为什么不复用 App 里的宿主：主菜单阶段没有 renderer（App 才有），
@@ -19496,7 +19505,7 @@ async function boot(): Promise<void> {
     const canvas = document.createElement('canvas');
     canvas.className = 'minigame-canvas';
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setPixelRatio(Math.min(MINIGAME_PIXEL_RATIO_CAP, window.devicePixelRatio || 1));
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     const listeners = new AbortController();

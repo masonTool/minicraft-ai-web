@@ -118,3 +118,13 @@
   不要用 `process.stdout.write` + `process.exit` 这套组合。自检断言里带上 `ctx.length`
   与 `r.out.slice(-160)`，一眼分清"没注入"和"JSON 坏了"。
 - 适用面：任何"输出后立刻 exit"的钩子 / CLI；输出会随内容增长时（注入文本、报告、diff）必踩。
+
+### HANDOFF 的"提交总数"是**自指**的：提交前要写成"当前数 + 1"，而且只有全量 `check` 抓得住
+
+- 症状：一批做完跑 `npm run check`，`audit:tasks` 报「HANDOFF 的提交总数过期：写着 1702，实际 1715（差 13）」，
+  前面 typecheck / 177 套离线测试全绿，白跑一遍。
+- 根因：这一句要和 `git rev-list --count HEAD` 相等，而每个提交都会让计数 +1；`check:fast`（提交守卫）
+  不含 `audit:tasks`，所以提交时永远拦不到，只有**全量** `npm run check` 会红。
+- 处置：在**准备落地的那次提交里**把它写成"`git rev-list --count HEAD` + 1"（提交后正好相等）；
+  一批多次提交时每次都要重算，别只在收尾改一次。没有脚本会自动写这个数字（`audit-tasks` 只读校验）。
+- 适用面：一切"文档里的数字要与仓库状态自指相等"的锚点（提交总数、套件数、覆盖率）。

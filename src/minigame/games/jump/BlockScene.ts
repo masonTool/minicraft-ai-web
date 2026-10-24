@@ -24,6 +24,7 @@
  */
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {
   BLOCK_HEIGHT_RATIO,
   JUMPER_HEIGHT_RATIO,
@@ -41,12 +42,15 @@ import {
 import { ATLAS_U, createBlockAtlas, type CanvasFactory, type SpecialKind } from './blockTextures.ts';
 import {
   JUMP_TIMING,
+  RIPPLE_MAX_RINGS,
   blockBounceScale,
   enterScale,
   fadeScale,
   rippleProgress,
+  rippleRingCount,
+  rippleRingRadius,
 } from './motion.ts';
-import type { JumpBlockKind } from './logic.ts';
+import type { JumpBlockKind, JumpBlockShape } from './logic.ts';
 
 /** 屏幕上的一块方块（渲染层只要这些，不认识 run / 计分） */
 export interface BlockSpec {
@@ -55,6 +59,8 @@ export interface BlockSpec {
   /** 边长（世界单位） */
   readonly size: number;
   readonly kind: JumpBlockKind;
+  /** 底座形状：方形用圆角盒、圆形用圆柱 */
+  readonly shape: JumpBlockShape;
   /** 是不是"当前站着的"那块（蓄力时它会轻微下压） */
   readonly current: boolean;
   /**
@@ -73,18 +79,37 @@ const MAX_SQUASH = 0.2;
  * 它是原版唯一的"落点提示"）。半径取一半，即直径 0.13 边长。
  */
 const DOT_RADIUS_RATIO = 0.065;
+/**
+ * 白点圆的分段数。48 段（原来是 24）：像素比抬到 3 之后，24 段在手机上能看出多边形。
+ * 导出成常量是为了"改了要不要跟着调"这件事有断言兜着。
+ */
+export const DOT_SEGMENTS = 48;
+/** 阴影贴片的边长（像素）。256：3x 屏下阴影边缘不再是方块糊 */
+export const SHADOW_TEXTURE_SIZE = 256;
+/** 背景渐变贴图的高度（像素）。512：256 在高分屏上会有可见色带 */
+export const BACKGROUND_TEXTURE_HEIGHT = 512;
+/** 背景噪点幅度（±1/255）：只为打散渐变色带，肉眼几乎看不见 */
+export const BACKGROUND_NOISE = 1 / 255;
 /** 阴影贴片相对方块尺寸的放大倍数（柔边要占出去一圈） */
 const SHADOW_SPREAD = 1.35;
+/**
+ * 普通方块的圆角：半径 0.055（= 边长 1 的 5.5%）、2 段。
+ *
+ * 直角盒子在 3x 屏上会露出"一刀切"的硬边，加一点点倒角就立刻有"模具压出来"的质感；
+ * 半径再大就不像基岩方块了。段数固定 2——再多只是增加顶点，5.5% 的弧看不出差别。
+ */
+export const BLOCK_CORNER_RADIUS = 0.055;
+export const BLOCK_CORNER_SEGMENTS = 2;
+/** 圆形底座的圆柱分段数（56：3x 屏上轮廓看不出多边形，又比方块便宜得多） */
+export const ROUND_BLOCK_SEGMENTS = 56;
 /** 阴影在**世界**里的偏移：屏幕上看是"左下"（光照来自 +x/−z） */
 const SHADOW_OFFSET = { x: -0.3, z: 0.5 };
 /** 相机跟随的指数插值系数（越大跟得越紧） */
 const FOLLOW_RATE = 8;
-/** 完美命中的三层同心圆：外白 / 中绿 / 内红（规格表 §7） */
-const RIPPLE_RINGS = [
-  { color: '#FFFFFF', radius: 1 },
-  { color: '#7ED957', radius: 0.72 },
-  { color: '#E93A41', radius: 0.45 },
-] as const;
+/** 完美命中的三层同心圆配色：外白 / 中绿 / 内红（规格表 §7）。下标 = 从外往里 */
+const RIPPLE_COLORS = ['#FFFFFF', '#7ED957', '#E93A41'] as const;
+/** 连击加成时最外圈换成金色（"又连中一次"的信号，不改计分） */
+export const RIPPLE_GOLD = '#F5C542';
 
 interface BlockEntry {
   spec: BlockSpec;
@@ -107,7 +132,10 @@ export class BlockScene {
   readonly camera: THREE.OrthographicCamera;
 
   private palette: JumpPalette;
+  /** 普通方形底座：轻微倒角的圆角盒（特殊方块不用它，见 `specialFor`） */
   private readonly blockGeometry: THREE.BufferGeometry;
+  /** 普通圆形底座：内切圆 = 半径 0.5 的圆柱，`scale.y` 当高度 */
+  private readonly roundGeometry: THREE.BufferGeometry;
   /** 特殊方块：每类一份（UV 指向图集的两格），按需创建 */
   private readonly specialGeometries = new Map<SpecialKind, THREE.BufferGeometry>();
   private readonly specialMaterials = new Map<SpecialKind, THREE.MeshBasicMaterial>();
@@ -116,8 +144,9 @@ export class BlockScene {
   private readonly dotGeometry: THREE.CircleGeometry;
   private readonly dotMaterial: THREE.MeshBasicMaterial;
   private readonly shadowGeometry: THREE.PlaneGeometry;
-  private readonly shadowMaterial: THREE.MeshBasicMaterial;
-  private readonly shadowTexture: THREE.Texture;
+  /** 阴影按形状分两张：方形的柔边方片 / 圆形的柔边圆片 */
+  private readonly shadowMaterials: Readonly<Record<JumpBlockShape, THREE.MeshBasicMaterial>>;
+  private readonly shadowTextures: Readonly<Record<JumpBlockShape, THREE.Texture>>;
   private readonly materials = new Map<string, THREE.MeshBasicMaterial>();
 
   private backgroundTexture: THREE.Texture;
@@ -126,8 +155,8 @@ export class BlockScene {
   private fading: BlockEntry[] = [];
   /** 被踩的那块：从落地开始计时（毫秒） */
   private bounce: { key: string; ms: number } | null = null;
-  /** 完美命中的同心圆 */
-  private ripple: { x: number; z: number; size: number; ms: number } | null = null;
+  /** 完美命中的同心圆（`combo` 决定层数，不改计分） */
+  private ripple: { x: number; z: number; size: number; combo: number; ms: number } | null = null;
   private rippleRig: { meshes: THREE.Mesh[]; materials: THREE.MeshBasicMaterial[]; geometry: THREE.RingGeometry } | null = null;
   private viewport = { width: 1, height: 1 };
   private aspect = 1;
@@ -148,9 +177,14 @@ export class BlockScene {
     this.backgroundTexture = createBackgroundTexture(palette);
     this.scene.background = this.backgroundTexture;
 
-    this.blockGeometry = bakeFaceShading(new THREE.BoxGeometry(1, 1, 1));
+    // 轻微倒角的圆角盒：直角边在 3x 屏上会显出"一刀切"，5.5% 的倒角就够
+    this.blockGeometry = bakeFaceShading(
+      new RoundedBoxGeometry(1, 1, 1, BLOCK_CORNER_SEGMENTS, BLOCK_CORNER_RADIUS),
+    );
+    // 圆形底座是内切圆：半径 0.5（= 边长的一半），高度靠 mesh.scale.y
+    this.roundGeometry = bakeFaceShading(new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1));
 
-    this.dotGeometry = new THREE.CircleGeometry(1, 24);
+    this.dotGeometry = new THREE.CircleGeometry(1, DOT_SEGMENTS);
     // ⚠️ 必须是 transparent + 高 renderOrder：不透明物体会按"由近到远"排，
     // 白点若不写深度又排在方块之前，就会被顶面整片盖掉（实测点看不见，原因就在这）。
     this.dotMaterial = new THREE.MeshBasicMaterial({
@@ -160,15 +194,19 @@ export class BlockScene {
       depthWrite: false,
     });
 
-    this.shadowTexture = createShadowTexture();
     this.shadowGeometry = new THREE.PlaneGeometry(1, 1);
-    this.shadowMaterial = new THREE.MeshBasicMaterial({
-      map: this.shadowTexture,
-      color: new THREE.Color(SHADOW_COLOR),
-      transparent: true,
-      opacity: SHADOW_OPACITY,
-      depthWrite: false,
-    });
+    const squareShadow = createShadowTexture('square');
+    const roundShadow = createShadowTexture('round');
+    this.shadowTextures = { square: squareShadow, round: roundShadow };
+    const shadowMaterial = (map: THREE.Texture): THREE.MeshBasicMaterial =>
+      new THREE.MeshBasicMaterial({
+        map,
+        color: new THREE.Color(SHADOW_COLOR),
+        transparent: true,
+        opacity: SHADOW_OPACITY,
+        depthWrite: false,
+      });
+    this.shadowMaterials = { square: shadowMaterial(squareShadow), round: shadowMaterial(roundShadow) };
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
     this.camera.position.set(4, 4, 4);
@@ -240,11 +278,23 @@ export class BlockScene {
     this.bounce = { key: blockKey({ x, z }), ms: 0 };
   }
 
-  /** 完美命中：在落点扩散三层同心圆（外白 / 中绿 / 内红） */
-  playRipple(x: number, z: number, size: number): void {
-    this.ripple = { x, z, size, ms: 0 };
+  /**
+   * 完美命中：在落点扩散同心圆。
+   *
+   * 层数随连击增长（3 → 6 层），从第 2 连开始最外圈换成金色——连击是纯表现，
+   * 计分规则一个字没动（见 `logic.scoreForLanding`）。
+   */
+  playRipple(x: number, z: number, size: number, combo = 1): void {
+    this.ripple = { x, z, size, combo, ms: 0 };
     const rig = this.ensureRippleRig();
-    for (const mesh of rig.meshes) mesh.visible = true;
+    const count = rippleRingCount(combo);
+    for (let i = 0; i < rig.meshes.length; i++) {
+      const material = rig.materials[i];
+      const mesh = rig.meshes[i];
+      if (!material || !mesh) continue;
+      material.color.set(rippleColorAt(i, count));
+      mesh.visible = i < count;
+    }
     this.refreshRipple();
   }
 
@@ -335,6 +385,7 @@ export class BlockScene {
   dispose(): void {
     this.clearEntries();
     this.blockGeometry.dispose();
+    this.roundGeometry.dispose();
     for (const geometry of this.specialGeometries.values()) geometry.dispose();
     this.specialGeometries.clear();
     for (const material of this.specialMaterials.values()) material.dispose();
@@ -344,8 +395,8 @@ export class BlockScene {
     this.dotGeometry.dispose();
     this.dotMaterial.dispose();
     this.shadowGeometry.dispose();
-    this.shadowMaterial.dispose();
-    this.shadowTexture.dispose();
+    for (const material of Object.values(this.shadowMaterials)) material.dispose();
+    for (const texture of Object.values(this.shadowTextures)) texture.dispose();
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
     this.backgroundTexture.dispose();
@@ -358,13 +409,14 @@ export class BlockScene {
   /**
    * 本帧的目标取景。
    *
-   * 只把"当前块前后各一块"交给取景器：原版一屏就是 3~4 块，交太多会被压得看不清；
-   * 交太少则下一块可能贴边。头位按小人高度留（否则蓄力时头顶会顶出画面）。
+   * 只把"上一块 + 当前 + 下一块"（3 块）交给取景器：横屏下间距拉到 4.6~6.0 格之后，
+   * 交 4 块会被压得看不清；交太少则下一块可能贴边。
+   * 头位按小人高度留（否则蓄力时头顶会顶出画面）。
    */
   private nextFrame(): IsoFrame {
     const currentIndex = Math.max(0, this.entries.findIndex((entry) => entry.spec.current));
     const from = Math.max(0, currentIndex - 1);
-    const to = Math.min(this.entries.length - 1, currentIndex + 2);
+    const to = Math.min(this.entries.length - 1, currentIndex + 1);
     const specs = this.entries.slice(from, to + 1).map((entry) => entry.spec);
     const focus = this.entries[currentIndex]?.spec;
     const headroom = focus ? focus.size * JUMPER_HEIGHT_RATIO : 0;
@@ -405,14 +457,15 @@ export class BlockScene {
     const height = Math.max(0.05, spec.size * BLOCK_HEIGHT_RATIO);
     // 特殊方块用自己的贴图（颜色写在贴图里，不再乘色板）；普通方块走纯色材质
     const special = spec.kind === 'normal' ? null : this.specialFor(spec.kind);
-    const geometry = special?.geometry ?? this.blockGeometry;
+    // 普通方块按形状分：方形 = 圆角盒、圆形 = 圆柱；特殊方块始终是直角盒（图集 UV）
+    const geometry = special?.geometry ?? (spec.shape === 'round' ? this.roundGeometry : this.blockGeometry);
     const material = special?.material ?? this.materialFor(blockColorAt(this.palette, spec.colorIndex));
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = 1;
     this.scene.add(mesh);
 
-    const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterial);
+    const shadow = new THREE.Mesh(this.shadowGeometry, this.shadowMaterials[spec.shape]);
     shadow.rotation.x = -Math.PI / 2;
     // 阴影永远画在方块之前，避免透明片盖住方块本体
     shadow.renderOrder = 0;
@@ -478,9 +531,10 @@ export class BlockScene {
     const geometry = new THREE.RingGeometry(0.86, 1, 48);
     const meshes: THREE.Mesh[] = [];
     const materials: THREE.MeshBasicMaterial[] = [];
-    for (const ring of RIPPLE_RINGS) {
+    // 一次建满最多层数（6），每跳只改可见性与颜色——波纹是高频表现，不能每次命中现建几何
+    for (let index = 0; index < RIPPLE_MAX_RINGS; index++) {
       const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(ring.color),
+        color: new THREE.Color(RIPPLE_COLORS[index % RIPPLE_COLORS.length] ?? RIPPLE_GOLD),
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -498,23 +552,28 @@ export class BlockScene {
     return this.rippleRig;
   }
 
-  /** 波纹：三层同心圆一起由内向外扩（600ms），越扩越淡 */
+  /** 波纹：`count` 层同心圆一起由内向外扩（600ms），越扩越淡 */
   private refreshRipple(): void {
     const ripple = this.ripple;
     const rig = this.rippleRig;
     if (!ripple || !rig) return;
     const progress = rippleProgress(ripple.ms);
     const topY = Math.max(0.05, ripple.size * BLOCK_HEIGHT_RATIO) + 0.02;
-    RIPPLE_RINGS.forEach((ring, index) => {
+    const count = rippleRingCount(ripple.combo);
+    for (let index = 0; index < rig.meshes.length; index++) {
       const mesh = rig.meshes[index];
       const material = rig.materials[index];
-      if (!mesh || !material) return;
-      const radius = ripple.size * (0.3 + 0.75 * progress) * ring.radius;
+      if (!mesh || !material) continue;
+      if (index >= count) {
+        mesh.visible = false;
+        continue;
+      }
+      const radius = ripple.size * (0.3 + 0.75 * progress) * rippleRingRadius(index, count);
       mesh.scale.set(radius, radius, 1);
       mesh.position.set(ripple.x, topY + index * 0.004, ripple.z);
       material.opacity = Math.max(0, 0.85 * (1 - progress));
       mesh.visible = progress < 1;
-    });
+    }
   }
 
   /**
@@ -530,7 +589,7 @@ export class BlockScene {
       // 音乐盒是唱片机：圆柱比方盒自然（其余三类都是方的）
       const base =
         kind === 'music'
-          ? new THREE.CylinderGeometry(0.5, 0.5, 1, 40, 1)
+          ? new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1)
           : new THREE.BoxGeometry(1, 1, 1);
       bakeFaceShading(base);
       remapAtlasUV(base);
@@ -605,6 +664,19 @@ function blockKey(spec: { x: number; z: number }): string {
 }
 
 /**
+ * 第 `index` 层（从外往里）的颜色。
+ *
+ * 3 层时就是原版的外白 / 中绿 / 内红；连击加成把层数推到 4 层以上时，
+ * **最外圈换金色**，其余仍按白绿红循环——金色只在"连中"时出现，才有信号意义。
+ */
+function rippleColorAt(index: number, count: number): string {
+  const extra = count > RIPPLE_COLORS.length;
+  if (extra && index === 0) return RIPPLE_GOLD;
+  const offset = extra ? index - 1 : index;
+  return RIPPLE_COLORS[offset % RIPPLE_COLORS.length] ?? RIPPLE_GOLD;
+}
+
+/**
  * 把 UV 指到图集的两格：朝上的面 → 左格（顶面贴图），其余 → 右格（侧面贴图）。
  *
  * 按**法线**判断而不是按顶点下标：方盒与圆柱的顶点顺序不同，按下标写两套规则迟早错位。
@@ -620,18 +692,34 @@ function remapAtlasUV(geometry: THREE.BufferGeometry): void {
   uv.needsUpdate = true;
 }
 
-/** 背景：2×N 的竖直渐变（three 会把它拉满整屏），无雾、无地面 */
+/**
+ * 背景：2×N 的竖直渐变（three 会把它拉满整屏），无雾、无地面。
+ *
+ * 为什么是 512 而不是 256：手机 3x 屏上"上亮下暗"的过渡只有几十个色阶，
+ * 256px 拉伸到 1200 物理像素时会出现明显的横向色带（banding）。
+ * 再叠 ±1/255 的确定性噪点（dithering），把残余的色带彻底打散。
+ */
 function createBackgroundTexture(palette: JumpPalette): THREE.Texture {
+  const height = BACKGROUND_TEXTURE_HEIGHT;
   const canvas = document.createElement('canvas');
   canvas.width = 2;
-  canvas.height = 256;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
     gradient.addColorStop(0, palette.background.top);
     gradient.addColorStop(1, palette.background.bottom);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 256);
+    ctx.fillRect(0, 0, 2, height);
+
+    const image = ctx.getImageData(0, 0, 2, height);
+    for (let i = 0; i < image.data.length; i += 4) {
+      const delta = backgroundNoise(i) * BACKGROUND_NOISE * 255;
+      image.data[i] = clampByte(image.data[i]! + delta);
+      image.data[i + 1] = clampByte(image.data[i + 1]! + delta);
+      image.data[i + 2] = clampByte(image.data[i + 2]! + delta);
+    }
+    ctx.putImageData(image, 0, 0);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -639,13 +727,31 @@ function createBackgroundTexture(palette: JumpPalette): THREE.Texture {
 }
 
 /**
- * 阴影贴片：柔边圆角方片。
+ * 确定性的 −1~1 白噪（按像素下标）。
  *
- * 用"径向渐变 + 圆角矩形裁剪"而不是 CSS `filter: blur`——后者在部分浏览器里
- * 要额外的 GPU 通道，而这里就是一张 128×128 的小图，一次生成反复用。
+ * 不用随机数：截图对比与"同 seed 同画面"都要求可复现，
+ * 而这张图一局只生成一次，确定性不会带来任何"每帧重算"的成本。
  */
-function createShadowTexture(): THREE.Texture {
-  const size = 128;
+function backgroundNoise(index: number): number {
+  const t = Math.sin(index * 12.9898) * 43758.5453;
+  return (t - Math.floor(t)) * 2 - 1;
+}
+
+function clampByte(value: number): number {
+  return Math.min(255, Math.max(0, Math.round(value)));
+}
+
+/**
+ * 阴影贴片：柔边方片（方形底座）/ 柔边圆片（圆形底座）。
+ *
+ * 用"径向渐变 + 形状裁剪"而不是 CSS `filter: blur`——后者在部分浏览器里
+ * 要额外的 GPU 通道，而这里就是一张 256×256 的小图，一次生成反复用。
+ *
+ * 为什么要分两张：把圆阴影画在方片上，圆底座四角会多出四块灰，看起来像"底下一块方砖"；
+ * 反过来把方阴影画成圆的，方形底座会缺四个角。形状必须跟着底座走。
+ */
+function createShadowTexture(shape: JumpBlockShape): THREE.Texture {
+  const size = SHADOW_TEXTURE_SIZE;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -655,7 +761,9 @@ function createShadowTexture(): THREE.Texture {
     // 再叠上半透明的方块就像"起了层灰"。这里让 0~0.62 保持满浓度，只留最后 38% 收边。
     const radius = size * 0.16;
     ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
+    if (shape === 'round') {
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    } else if (typeof ctx.roundRect === 'function') {
       ctx.roundRect(0, 0, size, size, radius);
     } else {
       ctx.rect(0, 0, size, size);

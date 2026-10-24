@@ -67,6 +67,7 @@ export class JumperModel {
   private baseScale = 1;
   private squash = 0;
   private flip = 0;
+  private tilt = 0;
   private yaw = 0;
 
   constructor(color: string = JUMPER_COLOR) {
@@ -116,6 +117,18 @@ export class JumperModel {
     this.applyTransform();
   }
 
+  /**
+   * 倾倒（弧度，**正数 = 朝行进方向倒**）：重心出界时先倾斜再掉下去。
+   *
+   * 与空翻共用同一个轴（模型自己的左右轴）：空翻是"翻过一整圈"，倾倒只是"扑倒"。
+   * 两者不会同时出现（空中不倾倒、倾倒不再空翻），所以叠在同一个分量上最简单。
+   */
+  setTilt(radians: number): void {
+    const raw = Number.isFinite(radians) ? radians : 0;
+    this.tilt = Math.max(0, raw);
+    this.applyTransform();
+  }
+
   /** 朝向（弧度）：跳跃方向上"面朝前" */
   setYaw(radians: number): void {
     this.yaw = Number.isFinite(radians) ? radians : 0;
@@ -127,10 +140,11 @@ export class JumperModel {
     this.object.position.set(x, y, z);
   }
 
-  /** 落回站姿：清掉压扁与空翻（朝向保留） */
+  /** 落回站姿：清掉压扁、空翻与倾倒（朝向保留） */
   resetPose(): void {
     this.squash = 0;
     this.flip = 0;
+    this.tilt = 0;
     this.applyTransform();
   }
 
@@ -147,7 +161,8 @@ export class JumperModel {
     const squashY = 1 - (1 - SQUASH_LIMIT.y) * this.squash;
     const squashXZ = 1 + (SQUASH_LIMIT.xz - 1) * this.squash;
     this.object.scale.set(this.baseScale * squashXZ, this.baseScale * squashY, this.baseScale * squashXZ);
-    this.object.rotation.set(this.flip, this.yaw, 0);
+    // 朝向先转（YXZ），再绕自己的左右轴做空翻 / 倾倒。倾倒是"朝前扑"，所以取负角。
+    this.object.rotation.set(this.flip - this.tilt, this.yaw, 0);
   }
 }
 

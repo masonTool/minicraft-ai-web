@@ -31,22 +31,30 @@ import {
   saveProgress,
 } from '../src/minigame/progress.ts';
 import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
+import { JUMPER_HEIGHT_RATIO } from '../src/minigame/games/jump/iso.ts';
 import {
+  blockOverhang,
   blockSizeForScore,
   createRun,
   currentBlock,
   distanceForCharge,
+  gapCurveForScore,
+  gapFloorFor,
   gapForScore,
   gapRangeForScore,
+  jitteredSize,
   jump,
+  maxGapFromEdge,
   maxReachableGap,
   nextBlock,
   resolveLanding,
   scoreForLanding,
+  shapeFor,
   specialBonus,
   specialKindFor,
   targetBlock,
   type JumpBlock,
+  type JumpRun,
 } from '../src/minigame/games/jump/logic.ts';
 
 let passed = 0;
@@ -160,12 +168,56 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   // 字段被改名的话，线上没人会发现，只有离线这条还能立刻变红。
   check(
     'debugState 暴露 E2E 依赖的字段',
-    ['gap', 'gapRatio', 'axis', 'kind', 'nextKind', 'orthographic', 'phase', 'score', 'index', 'best'].every(
-      (field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, '')),
-    ),
+    [
+      'gap',
+      'gapRatio',
+      'standOffset',
+      'onscreen',
+      'axis',
+      'kind',
+      'nextKind',
+      'shape',
+      'nextShape',
+      'orthographic',
+      'phase',
+      'score',
+      'index',
+      'best',
+    ].every((field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, ''))),
   );
+  // 落点保留是这一轮的核心语义：站姿必须读 run.stand，不能再用方块中心
+  check('站姿读实际落点（run.stand）', jumpSrc.includes('this.run.stand.x') && jumpSrc.includes('this.run.stand.z'));
+  check('起跳点读实际落点（不用 currentBlock 中心）', jumpSrc.includes('const stand = this.run.stand;'));
+  check('倾覆有独立阶段（toppling）', jumpSrc.includes("'toppling'"));
+  check('倾覆阶段播放角度曲线（toppleAngle → setTilt）', jumpSrc.includes('toppleAngle(ms)') && jumpSrc.includes('jumper.setTilt('));
+  check('一屏只画 3 块（上一块 + 当前 + 下一块）', jumpSrc.includes('this.run.index + 1)') && !jumpSrc.includes('this.run.index + 2)'));
+  check('倾覆期间不跟镜头（人已经倒出画面）', jumpSrc.includes("this.phase !== 'toppling'"));
+  // 连击表现（跳10）：计分规则没动，动的全是"看得见 / 听得见"的那一层
+  check('完美命中按连击升调', jumpSrc.includes('playLand(outcome.center, outcome.run.combo)'));
+  check(
+    '波纹层数随连击（playRipple 传 combo）',
+    jumpSrc.includes('playRipple(outcome.point.x, outcome.point.z, landed.size, outcome.run.combo)'),
+  );
+  check('连击飘字带 ×N', jumpSrc.includes('×${combo}'));
+  check('HUD 分数下方有连击标记', jumpSrc.includes("'jump-combo'") && /\.jump-combo\s*\{/.test(htmlSrc));
+  check('断连击时标记消失（combo < 2 不显示）', jumpSrc.includes('combo >= 2'));
+  check('最外圈金色（连击加成）', blockSceneSrc.includes('RIPPLE_GOLD') && blockSceneSrc.includes('rippleRingCount('));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
+}
+
+console.log('\nE2E 脚本与 config 同口径（脚本不在 CI 里跑，只能这样钉住）');
+{
+  const e2eSrc = readFileSync(new URL('../tools/jump-e2e.mjs', import.meta.url), 'utf8');
+  const numOf = (pattern: RegExp): number => Number(pattern.exec(e2eSrc)?.[1]);
+  equal('E2E 的最大距离与 config 一致', numOf(/MAX_DISTANCE = ([\d.]+)/), JUMP_CONFIG.maxDistance);
+  equal('E2E 的蓄满时长与 config 一致', numOf(/MAX_CHARGE_MS = ([\d.]+)/), JUMP_CONFIG.maxCharge * 1000);
+  check(
+    'E2E 的间距区间跟着新曲线（边长比 2.2~5.1）',
+    e2eSrc.includes('ready?.gapRatio >= 2.2 && ready?.gapRatio <= 5.1'),
+  );
+  check('E2E 验一屏 3 块与站姿偏移', e2eSrc.includes('after5.onscreen === 3') && e2eSrc.includes('after5.standOffset'));
+  check('E2E 验底座形状字段', e2eSrc.includes('SHAPES') && e2eSrc.includes('ready?.shape'));
 }
 
 console.log('\n音效模块（audio.ts）');
@@ -197,6 +249,46 @@ console.log('\nBlockScene 的渲染前提（正交 / 不打灯 / 无雾 / 不借
   check('方块配色按身份取（不是按列表下标）', blockSceneSrc.includes('blockColorAt(this.palette, spec.colorIndex)'));
   check('每帧渲染走正交相机', blockSceneSrc.includes('renderer.render(this.scene, this.camera)'));
   check('释放时清空贴图与几何', blockSceneSrc.includes('specialTextures') && blockSceneSrc.includes('dispose()'));
+
+  // 清晰度（跳7）：像素比与三张小贴图的规格都写成可断言常量
+  check('小游戏独立 renderer 像素比上限 = 3', /MINIGAME_PIXEL_RATIO_CAP = 3/.test(mainSrc));
+  check('小游戏 renderer 用的是这个上限', mainSrc.includes('Math.min(MINIGAME_PIXEL_RATIO_CAP, window.devicePixelRatio || 1)'));
+  check('顶面白点 48 段（原 24 段）', blockSceneSrc.includes('export const DOT_SEGMENTS = 48') && blockSceneSrc.includes('new THREE.CircleGeometry(1, DOT_SEGMENTS)'));
+  check('阴影贴图 256px（原 128）', blockSceneSrc.includes('export const SHADOW_TEXTURE_SIZE = 256') && blockSceneSrc.includes('const size = SHADOW_TEXTURE_SIZE'));
+  check('背景渐变 2×512（原 2×256）', blockSceneSrc.includes('export const BACKGROUND_TEXTURE_HEIGHT = 512') && blockSceneSrc.includes('canvas.height = height'));
+  check(
+    '背景叠 ±1/255 确定性噪点（打散色带）',
+    blockSceneSrc.includes('BACKGROUND_NOISE = 1 / 255') && blockSceneSrc.includes('backgroundNoise(') && !blockSceneSrc.includes('Math.random'),
+  );
+
+  // 精致度（跳8）：形状决定几何，特殊方块保持直角盒
+  check(
+    '普通方块是圆角倒角盒（2 段 / 5.5% 倒角）',
+    blockSceneSrc.includes("from 'three/addons/geometries/RoundedBoxGeometry.js'") &&
+      blockSceneSrc.includes('BLOCK_CORNER_RADIUS = 0.055') &&
+      blockSceneSrc.includes('new RoundedBoxGeometry(1, 1, 1, BLOCK_CORNER_SEGMENTS, BLOCK_CORNER_RADIUS)'),
+  );
+  check(
+    '圆形底座是 56 段圆柱（半径 0.5 = 内切圆）',
+    blockSceneSrc.includes('ROUND_BLOCK_SEGMENTS = 56') &&
+      blockSceneSrc.includes('new THREE.CylinderGeometry(0.5, 0.5, 1, ROUND_BLOCK_SEGMENTS, 1)'),
+  );
+  check(
+    '特殊方块仍是直角盒（图集 UV，不吃圆角）',
+    blockSceneSrc.includes("new THREE.BoxGeometry(1, 1, 1)") && !blockSceneSrc.includes('RoundedBoxGeometry(1, 1, 1, 1'),
+  );
+  check(
+    '方块几何按形状分支（square / round）',
+    blockSceneSrc.includes("spec.shape === 'round' ? this.roundGeometry : this.blockGeometry"),
+  );
+  check(
+    '阴影按方/圆分两张贴图',
+    blockSceneSrc.includes("createShadowTexture('square')") &&
+      blockSceneSrc.includes("createShadowTexture('round')") &&
+      blockSceneSrc.includes('this.shadowMaterials[spec.shape]'),
+  );
+  check('音乐盒圆柱也是 56 段', /kind === 'music'[\s\S]{0,120}ROUND_BLOCK_SEGMENTS/.test(blockSceneSrc));
+  check('卸载时释放两张阴影贴图与圆形几何', blockSceneSrc.includes('this.roundGeometry.dispose()') && blockSceneSrc.includes('Object.values(this.shadowTextures)'));
 }
 
 // ------------------------------------------------------------------ 色板与明暗
@@ -353,7 +445,7 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     '封顶分边长到最小',
     Math.abs(blockSizeForScore(JUMP_CONFIG.shrinkScore) - JUMP_CONFIG.blockSizeMin) < 1e-9,
   );
-  const scores = [0, 10, 20, 30, 40, 50, 60, 120];
+  const scores = [0, 10, 20, 30, 40, 50, 60, 80, 100, 120];
   check(
     '边长随分数单调不增',
     scores.every((score, i) => i === 0 || blockSizeForScore(scores[i - 1]!) >= blockSizeForScore(score) - 1e-9),
@@ -369,20 +461,28 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     '间距上限永远可达（≤ maxDistance − margin）',
     [0, 10, 30, 60, 200, 9999].every((score) => gapRangeForScore(score).to <= maxReachableGap() + 1e-9),
   );
-  const low = gapRangeForScore(0);
-  const high = gapRangeForScore(JUMP_CONFIG.shrinkScore);
-  check('间距随分数单调不增（方块变小，间距同比缩小）', high.from <= low.from + 1e-9 && high.to <= low.to + 1e-9);
+
+  // 这一轮把间距从"边长倍数"改回"绝对格数"：方块变小不该让绝对距离跟着缩水。
+  const low = gapCurveForScore(0);
+  const high = gapCurveForScore(JUMP_CONFIG.gapGrowScore);
+  almost('开局间距下限 = 4.6 格', low.from, 4.6);
+  almost('开局间距上限 = 5.4 格', low.to, 5.4);
+  almost('封顶间距下限 = 4.8 格', high.from, 4.8);
+  almost('封顶间距上限 = 6.0 格', high.to, 6.0);
   check(
-    '间距与边长同比（1.15~1.9 个边长，原版相邻块几乎贴合）',
-    scores.every((score) => {
-      const size = blockSizeForScore(score);
-      const range = gapRangeForScore(score);
-      return (
-        Math.abs(range.from - size * JUMP_CONFIG.gapRatioMin) < 1e-9 ||
-        Math.abs(range.to - maxReachableGap()) < 1e-9
-      );
+    '分数越高中心距绝对变大（from 与 to 都单调不减）',
+    scores.every((score, i) => {
+      if (i === 0) return true;
+      const prev = gapRangeForScore(scores[i - 1]!, blockSizeForScore(scores[i - 1]!));
+      const next = gapRangeForScore(score, blockSizeForScore(score));
+      return next.from >= prev.from - 1e-9 && next.to >= prev.to - 1e-9;
     }),
   );
+  check('封顶时中心距严格大于开局', high.from > low.from && high.to > low.to);
+
+  // 间距下限不是难度参数，是"倾倒动画有没有地方演"的几何约束
+  check('间距下限 = 上一块边长 × 2.12 + 0.1', Math.abs(gapFloorFor(2) - (2 * 2.12 + 0.1)) < 1e-9, `${gapFloorFor(2)}`);
+  check('上一块越大，间距下限越大', gapFloorFor(2) > gapFloorFor(JUMP_CONFIG.blockSizeMin));
   check('间距下限永远大于一个边长（两块不会贴合）', gapRangeForScore(0).from > blockSizeForScore(0));
   check(
     '随机值被夹在范围内',
@@ -391,6 +491,45 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
       const range = gapRangeForScore(30);
       return gap >= range.from - 1e-9 && gap <= range.to + 1e-9;
     }),
+  );
+  // 可达性口径必须按"最坏落点"算：落点保留之后，人可能站在上一块的后边缘
+  // （离下一块最远，多出半个边长）。只按中心距算会漏掉"站偏就永远够不到"的格子。
+  check(
+    '最远间距 + 上一块半边 ≤ maxDistance − margin（站到后边缘也够得着）',
+    scores.every((score) => {
+      const size = blockSizeForScore(score);
+      const gap = gapRangeForScore(score, size).to;
+      return gap + size / 2 <= JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin + 1e-9;
+    }),
+  );
+  almost('最坏落点口径 = 中心距上限 − 半边', maxGapFromEdge(2), maxReachableGap() - 1, 1e-9);
+  check(
+    '间距上限从不越过最坏落点口径',
+    [0, 30, 80, 200].every((score) => {
+      const size = blockSizeForScore(score);
+      return gapRangeForScore(score, size).to <= maxGapFromEdge(size) + 1e-9;
+    }),
+  );
+
+  // 用户口径的另一半："必须给人倒下留出空间"。这条是**直接量出来**的：
+  // 两块之间的净空档（中心距 − 两块半边）要够一个小人躺下（1.12 × 上一块边长）。
+  // 只验 `gapFloorRatio = 2.12` 那个公式是自证（同一份算术写两遍），量净空才验到几何。
+  check(
+    '两块之间的净空档 ≥ 小人高度（倒下不会砸在下一块上）',
+    scores.every((score) => {
+      const sizeA = blockSizeForScore(score) * (1 + JUMP_CONFIG.sizeJitter);
+      const sizeB = blockSizeForScore(score) * (1 + JUMP_CONFIG.sizeJitter);
+      const gap = gapRangeForScore(score, sizeA).from;
+      return gap - sizeA / 2 - sizeB / 2 >= JUMPER_HEIGHT_RATIO * sizeA - 1e-9;
+    }),
+  );
+
+  // 用户口径："横屏下间距太小，要激进一点"——开局就得是边长的 2.3~2.7 倍
+  const openRatio = { from: low.from / JUMP_CONFIG.blockSizeStart, to: low.to / JUMP_CONFIG.blockSizeStart };
+  check(
+    '开局间距是边长的 2.3~2.7 倍（旧版 1.15~1.9）',
+    openRatio.from >= 2.3 - 1e-9 && openRatio.to <= 2.7 + 1e-9,
+    `${openRatio.from.toFixed(2)}~${openRatio.to.toFixed(2)}`,
   );
 }
 
@@ -403,7 +542,9 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
 
   const seq = (seed: number): string =>
     createRun(seed)
-      .blocks.map((block) => `${block.x.toFixed(6)},${block.z.toFixed(6)},${block.kind}`)
+      .blocks.map(
+        (block) => `${block.x.toFixed(6)},${block.z.toFixed(6)},${block.kind},${block.size.toFixed(6)},${block.shape}`,
+      )
       .join('|');
   check('同 seed 生成同一条序列', seq(777) === seq(777));
   check('不同 seed 生成不同序列', seq(777) !== seq(778));
@@ -424,7 +565,7 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     if (block.id !== current.id + 1) idsMonotonic = false;
 
     const gap = Math.hypot(block.x - current.x, block.z - current.z);
-    const range = gapRangeForScore(score);
+    const range = gapRangeForScore(score, current.size);
     if (gap > maxReachableGap() + 1e-6 || gap < range.from - 1e-6 || gap > range.to + 1e-6) allReachable = false;
 
     current = block;
@@ -448,6 +589,112 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
   })());
   check('间距始终落在该分数的范围内且可达', allReachable);
   check('方块 id 单调递增', idsMonotonic);
+}
+
+console.log('\n跳一跳：底座形状（方形 / 内切圆）与尺寸抖动');
+{
+  check('10 分前一律方形', [0, 5, 9].every((score) => shapeFor(score, 0) === 'square'));
+  check(
+    '10 分后按 35% 概率出圆形',
+    shapeFor(10, 0) === 'round' && shapeFor(10, JUMP_CONFIG.roundChance - 1e-6) === 'round' && shapeFor(10, JUMP_CONFIG.roundChance) === 'square',
+  );
+  check('圆形概率是 35%', Math.abs(JUMP_CONFIG.roundChance - 0.35) < 1e-9);
+
+  // 内切圆：半径 = 边长 / 2。有效面积必须正好是方形的 π/4（≈ 78.5%），
+  // 「圆更难」不是感觉，是这 21.5% 的差。用 40000 点网格采样估算。
+  const square: JumpBlock = { id: 0, x: 0, z: 0, size: 2, kind: 'normal', shape: 'square' };
+  const round: JumpBlock = { id: 1, x: 0, z: 0, size: 2, kind: 'normal', shape: 'round' };
+  const half = square.size / 2;
+  const steps = 200;
+  let insideRound = 0;
+  for (let ix = 0; ix < steps; ix++) {
+    for (let iz = 0; iz < steps; iz++) {
+      const x = -half + ((ix + 0.5) / steps) * square.size;
+      const z = -half + ((iz + 0.5) / steps) * square.size;
+      if (blockOverhang(round, x, z) <= 0) insideRound += 1;
+    }
+  }
+  const roundAreaRatio = insideRound / (steps * steps);
+  check(
+    '圆形有效面积 = 方形的 π/4（78.5%）',
+    Math.abs(roundAreaRatio - Math.PI / 4) < 0.01,
+    `${(roundAreaRatio * 100).toFixed(1)}%`,
+  );
+  check('正中心两种形状都站得住', blockOverhang(square, 0, 0) <= 0 && blockOverhang(round, 0, 0) <= 0);
+  check('轴向边界两者一致（半径都是半边）', Math.abs(blockOverhang(round, half, 0)) < 1e-9 && Math.abs(blockOverhang(square, half, 0)) < 1e-9);
+  check('方形四角站得住', blockOverhang(square, half - 0.01, half - 0.01) <= 0);
+  check('圆形四角是空的（内切圆外）', blockOverhang(round, half - 0.01, half - 0.01) > 0);
+
+  // 判定必须真的按形状分支：同一个落点，方形站得住、圆形掉下去。
+  // （斜向落点只在"上一跳没跳正 + 这跳转向"时出现，所以拿 from 偏一格来构造）
+  const offAxis: JumpBlock = { id: 9, x: 2, z: 0, size: 2, kind: 'normal', shape: 'square' };
+  const targetAt = (shape: JumpBlock['shape']): JumpBlock => ({ id: 10, x: 0, z: -2, size: 2, kind: 'normal', shape });
+  const diag = Math.hypot(2, 2);
+  const landDistance = diag - 0.75 * Math.SQRT2; // 落点偏移 (0.75, 0.75)：方形内、圆形外
+  const squareLanding = resolveLanding(offAxis, targetAt('square'), landDistance);
+  const roundLanding = resolveLanding(offAxis, targetAt('round'), landDistance);
+  check('同一落点：方形站得住、圆形站不住', squareLanding.kind === 'hit' && roundLanding.kind !== 'hit', `${squareLanding.kind}/${roundLanding.kind}`);
+
+  // 尺寸抖动：确定性、±6%、只影响观感
+  almost('抖动下限 = 边长 × 0.94', jitteredSize(2, 0), 2 * 0.94);
+  almost('抖动上限 = 边长 × 1.06', jitteredSize(2, 1), 2 * 1.06);
+  almost('中值不抖', jitteredSize(2, 0.5), 2);
+  check('抖动幅度是 6%', Math.abs(JUMP_CONFIG.sizeJitter - 0.06) < 1e-9);
+  check(
+    '同 seed 抖动与形状完全一致（可重放）',
+    (() => {
+      const a = createRun(4242);
+      const b = createRun(4242);
+      return a.blocks.every((block, i) => block.size === b.blocks[i]?.size && block.shape === b.blocks[i]?.shape);
+    })(),
+  );
+  check(
+    '生成器产出的边长都在 ±6% 内',
+    (() => {
+      let current = createRun(7).blocks[0]!;
+      let seed = 31;
+      for (let i = 0; i < 200; i++) {
+        const generated = nextBlock(current, i * 2, seed);
+        const base = blockSizeForScore(i * 2);
+        if (Math.abs(generated.block.size / base - 1) > JUMP_CONFIG.sizeJitter + 1e-9) return false;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return true;
+    })(),
+  );
+  check(
+    '特殊方块永远是方形（顶面是直角图集贴图）',
+    (() => {
+      let current = createRun(11).blocks[0]!;
+      let seed = 505;
+      for (let i = 0; i < 300; i++) {
+        const generated = nextBlock(current, 60, seed);
+        if (generated.block.kind !== 'normal' && generated.block.shape !== 'square') return false;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return true;
+    })(),
+  );
+  check(
+    '10 分前生成器不产圆形、之后会产圆形',
+    (() => {
+      let current = createRun(13).blocks[0]!;
+      let seed = 77;
+      let early = true;
+      let lateRound = false;
+      for (let i = 0; i < 300; i++) {
+        const score = i < 100 ? 0 : 60;
+        const generated = nextBlock(current, score, seed);
+        if (score === 0 && generated.block.shape !== 'square') early = false;
+        if (score === 60 && generated.block.shape === 'round') lateRound = true;
+        current = generated.block;
+        seed = generated.seed;
+      }
+      return early && lateRound;
+    })(),
+  );
 }
 
 console.log('\n跳一跳：特殊方块');
@@ -474,18 +721,36 @@ console.log('\n跳一跳：特殊方块');
 
 console.log('\n跳一跳：落点判定与计分');
 {
-  const from: JumpBlock = { id: 0, x: 0, z: 0, size: 1.8, kind: 'normal' };
-  const to: JumpBlock = { id: 1, x: 0, z: -2, size: 1.8, kind: 'normal' };
+  const from: JumpBlock = { id: 0, x: 0, z: 0, size: 1.8, kind: 'normal', shape: 'square' };
+  const to: JumpBlock = { id: 1, x: 0, z: -2, size: 1.8, kind: 'normal', shape: 'square' };
   const half = to.size / 2;
 
   const perfect = resolveLanding(from, to, 2);
   check('正中心 → hit + center', perfect.kind === 'hit' && perfect.center);
   const edge = resolveLanding(from, to, 2 + half * 0.5);
   check('偏半格 → hit 但非中心', edge.kind === 'hit' && !edge.center);
-  equal('偏过头（> 半边长）→ miss', resolveLanding(from, to, 2 + half * 1.2).kind, 'miss');
-  equal('跳不够（差 > 半边长）→ miss', resolveLanding(from, to, 2 - half * 1.2).kind, 'miss');
-  equal('0 距离 → miss', resolveLanding(from, to, 0).kind, 'miss');
   equal('刚好压边（= 半边长）→ hit', resolveLanding(from, to, 2 + half).kind, 'hit');
+
+  // 三档判定的分界是「悬空量」：出界一点先倾覆，完全悬空才坠落
+  equal('冲过头一点（悬空 ≤ 半边长）→ topple', resolveLanding(from, to, 2 + half * 1.2).kind, 'topple');
+  equal('没跳够一点（悬空 ≤ 半边长）→ topple', resolveLanding(from, to, 2 - half * 1.2).kind, 'topple');
+  equal('悬空正好等于半径 → topple（边界算有支点）', resolveLanding(from, to, 2 + half * 2).kind, 'topple');
+  equal('悬空超过半径 → miss', resolveLanding(from, to, 2 + half * 2.01).kind, 'miss');
+  equal('0 距离（两块之间）→ miss', resolveLanding(from, to, 0).kind, 'miss');
+  equal('远远跳过头 → miss', resolveLanding(from, to, 2 + half * 6).kind, 'miss');
+  check(
+    '倾覆不分朝向（冲过头与没跳够都是 topple）',
+    resolveLanding(from, to, 2 + half * 1.5).kind === 'topple' && resolveLanding(from, to, 2 - half * 1.5).kind === 'topple',
+  );
+  check(
+    '圆形底座的判定更严：同一个角上方形站得住、圆形已经出界',
+    (() => {
+      const corner = { x: 0.85, z: 0.85 }; // 方形内（max=0.85<0.9）、圆形外（半径 1.2>0.9）
+      const squareTo: JumpBlock = { id: 1, x: 0, z: 0, size: 1.8, kind: 'normal', shape: 'square' };
+      const roundTo: JumpBlock = { ...squareTo, shape: 'round' };
+      return resolveLanding(corner, squareTo, 0).kind === 'hit' && resolveLanding(corner, roundTo, 0).kind === 'topple';
+    })(),
+  );
 
   equal('非中心 +1 且断连击', JSON.stringify(scoreForLanding(5, false)), JSON.stringify({ points: 1, combo: 0 }));
   equal('第 1 次中心 +2', JSON.stringify(scoreForLanding(0, true)), JSON.stringify({ points: 2, combo: 1 }));
@@ -504,6 +769,7 @@ console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
 
   const outcome = jump(run, exact);
   check('正中心跳 → 不结束', !outcome.over);
+  equal('结果是 hit', outcome.kind, 'hit');
   equal('分数 +2', outcome.run.score, 2);
   equal('索引 +1', outcome.run.index, 1);
   equal('连击 1', outcome.run.combo, 1);
@@ -511,8 +777,63 @@ console.log('\n跳一跳：一局推进（成功后自动生成下一个）');
 
   const fell = jump(run, 0);
   check('跳空 → 本局结束', fell.over && fell.run.status === 'over');
+  equal('跳空是 miss（不是倾覆）', fell.kind, 'miss');
   equal('失败不加分', fell.run.score, 0);
   check('结束后再跳仍是 over（可重入）', jump(fell.run, exact).over);
+
+  // 倾覆：出界一点点，仍然结束这一局，但结果类型是 topple（场景据此播倾斜倒下的动画）
+  const half = to.size / 2;
+  const toppled = jump(run, exact + half * 1.5);
+  check('出界一点点 → 倾覆并结束', toppled.over && toppled.kind === 'topple' && toppled.run.status === 'over');
+  equal('倾覆不加分', toppled.run.score, 0);
+  check('倾覆落点仍然交回（人倒在哪）', Number.isFinite(toppled.point.x) && Number.isFinite(toppled.point.z));
+}
+
+console.log('\n跳一跳：落点保留（落到哪儿就站哪儿）');
+{
+  const block = (id: number, x: number, z: number): JumpBlock => ({
+    id,
+    x,
+    z,
+    size: 2,
+    kind: 'normal',
+    shape: 'square',
+  });
+
+  const run = createRun(20261024);
+  check('开局站在起点块中心', run.stand.x === 0 && run.stand.z === 0);
+
+  // 跳到方块上但没踩中心：站姿必须停在落点，不再被复位到中心
+  const to = targetBlock(run);
+  const from = currentBlock(run);
+  const exact = Math.hypot(to.x - from.x, to.z - from.z);
+  const off = 0.45; // 仍在半边长（1.0）以内，不算越界
+  const first = jump(run, exact + off);
+  check('偏 0.45 格仍然站得住', !first.over);
+  almost('落点就是实际站姿（沿前进方向偏 0.45）', Math.hypot(first.run.stand.x - to.x, first.run.stand.z - to.z), off, 1e-9);
+  check('stand 不是方块中心（没有悄悄复位）', first.run.stand.x !== to.x || first.run.stand.z !== to.z);
+  check('outcome 带着落点交给渲染层', Math.abs(first.point.x - first.run.stand.x) < 1e-12 && Math.abs(first.point.z - first.run.stand.z) < 1e-12);
+
+  // 下一跳的距离必须从 stand 量。构造一个"上一跳沿 z 偏了 0.6、这一跳转 90° 往 −x"的局面：
+  // 方块中心距是 5.0，而实际要跳 5.6 —— 只有从 stand 起算才落得回中心。
+  const synthetic: JumpRun = {
+    blocks: [block(0, 0, 0), block(1, 0, -5), block(2, -5, -5)],
+    index: 1,
+    score: 0,
+    combo: 0,
+    status: 'playing',
+    seed: 1,
+    stand: { x: 0.6, z: -5 },
+  };
+  const fromStand = Math.hypot(-5 - synthetic.stand.x, -5 - synthetic.stand.z);
+  almost('从站姿量出的距离是 5.6（方块中心距是 5.0）', fromStand, 5.6);
+  const centreAim = jump(synthetic, 5);
+  check('按"方块中心距"跳 → 落不到中心（说明距离确实从 stand 量）', !centreAim.over && !centreAim.center);
+  almost('按中心距跳会停在半路（离中心 0.6）', Math.hypot(centreAim.run.stand.x - -5, centreAim.run.stand.z - -5), 0.6, 1e-9);
+  const standAim = jump(synthetic, fromStand);
+  check('按 stand 距离跳 → 正中中心', !standAim.over && standAim.center);
+  almost('正中时 stand 回到方块中心 x', standAim.run.stand.x, -5, 1e-9);
+  almost('正中时 stand 回到方块中心 z', standAim.run.stand.z, -5, 1e-9);
 }
 
 console.log('\n最高分：纯函数');

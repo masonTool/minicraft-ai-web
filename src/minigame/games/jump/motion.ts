@@ -20,6 +20,8 @@ export const JUMP_TIMING = {
   riseRatio: 0.65,
   /** 落地压缩恢复时长 */
   landSquashMs: 100,
+  /** 倾倒（先倾斜、再落下去）的时长 */
+  toppleMs: 380,
   /** 被踩方块的 NBC 回弹时长 */
   blockBounceMs: 500,
   /** 新方块入场弹入时长 */
@@ -129,7 +131,51 @@ export function fadeScale(ms: number): number {
   return 1 - cubicIn(ms / JUMP_TIMING.fadeMs);
 }
 
+/**
+ * 倾倒的终点角度（弧度）：≈ 95°。
+ *
+ * 为什么略过 90°：正好 90° 时人躺平贴在方块侧面上，看起来像"贴着墙"；
+ * 多倒 5° 才会读成"已经离开支撑面、正在往下掉"。
+ */
+export const TOPPLE_ANGLE = (95 * Math.PI) / 180;
+
+/**
+ * 倾倒角度（0 → ~95°，`JUMP_TIMING.toppleMs` = 380ms）。
+ *
+ * 用 `cubicIn`（缓入）而不是线性/缓出：重心越过支撑面之后是被重力拽倒的，
+ * 前半段几乎不动（还在"犹豫"），最后 100ms 才猛地扑下去——这个加速度反过来写
+ * 就变成了"被人推倒"，两种观感差别很大，截图看不出来，只能靠曲线断言。
+ */
+export function toppleAngle(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  return TOPPLE_ANGLE * cubicIn(ms / JUMP_TIMING.toppleMs);
+}
+
 /** 波纹进度（0~1），渲染层用它算半径与透明度 */
 export function rippleProgress(ms: number): number {
   return clamp01(ms / JUMP_TIMING.rippleMs);
+}
+
+/** 完美命中的同心圆最多几层（3 层基础 + 3 层连击奖励） */
+export const RIPPLE_MAX_RINGS = 6;
+/** 最内圈的半径比例（最外圈永远是 1） */
+const RIPPLE_INNER_RATIO = 0.45;
+
+/**
+ * 完美命中的同心圆层数：`3 + min(3, combo − 1)`。
+ *
+ * 连击越多层越密，最多 6 层——再多就挤成一团，反而看不出"又连中了一次"。
+ * `combo ≤ 1` 时给 3 层（原版基础表现），不会出现"第一跳就有 1 层圈"这种残废反馈。
+ */
+export function rippleRingCount(combo: number): number {
+  const n = Number.isFinite(combo) ? Math.floor(combo) : 0;
+  return 3 + Math.min(3, Math.max(0, n - 1));
+}
+
+/** 第 `index` 层的半径比例（0 = 最外圈 = 1，向内等比缩到 0.45） */
+export function rippleRingRadius(index: number, count: number): number {
+  const n = Math.min(RIPPLE_MAX_RINGS, Math.max(1, Math.floor(count) || 1));
+  if (n <= 1) return 1;
+  const i = Math.min(n - 1, Math.max(0, Math.floor(index) || 0));
+  return 1 - (1 - RIPPLE_INNER_RATIO) * (i / (n - 1));
 }
