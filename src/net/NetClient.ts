@@ -189,6 +189,12 @@ export interface NetHandlers {
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
   /**
+   * 收到房主的实体快照（L8 · MS3）：从属端据此画/更新影子实体。
+   * `raw` 是线上形态（未解码），由 `decodeEntities` / `SimApply` 逐条洗。
+   */
+  onEntitySnap?: (raw: unknown) => void;
+
+  /**
    * 房主收到了别人的改动请求（L8 · MS2）：在自己的世界里落地，再由 `BlockFunnel`
    * 作为权威结果广播。**只有房主会收到**（服务端只转给本房房主）。
    */
@@ -568,6 +574,12 @@ export class NetClient {
         );
         break;
       }
+      case 'entity-snap': {
+        // 内容不可信：交出去之前不做任何假设（`decodeEntities` 会逐条丢坏条目）
+        this.handlers.onEntitySnap?.(message.entities);
+        break;
+      }
+
       /*
        * 改动请求（L8 · MS2）两个方向共用同一个 `t`：
        *  · 带 `ok: false` = 服务端回给**请求者**的回执（房里没房主）；
@@ -833,6 +845,18 @@ export class NetClient {
           : { t: 'edit-request', payload: { t: 'blocks', blocks } },
       ),
     );
+  }
+
+  /**
+   * 房主推一份实体快照（L8 · MS3）。
+   *
+   * 只有房主能推：实体在世界里在哪，是"谁模拟谁说了算"的事。从属端调这个方法是空操作
+   * （服务端那边也会再挡一次）。
+   */
+  sendEntitySnapshot(entities: readonly unknown[]): void {
+    if (!this.connected || entities.length === 0) return;
+    if (this.role !== 'host') return;
+    this.sendRaw(JSON.stringify({ t: 'entity-snap', entities }));
   }
 
   /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */

@@ -1460,6 +1460,48 @@ try {
     noHostFollower.close();
   }
 
+  // ---------------------------------------------------------------- 实体快照（L8 · MS3）
+  console.log('\n[实体快照只由房主推、按房转发]');
+  {
+    const snapHost = new TestClient('SnapHost', undefined, { room: 'snaproom', host: true });
+    const snapFollower = new TestClient('SnapFollower', undefined, { room: 'snaproom' });
+    const welcomeSnapHost = await joinAndWaitWelcome(snapHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(snapFollower, '从属', 4, 70, 4);
+
+    snapFollower.mailbox.length = 0;
+    snapHost.send({
+      t: 'entity-snap',
+      entities: [
+        ['1:7', 'zombie', 10, 70, 10, 0.5, 18, 2],
+        ['1:8', 'cow', 12, 70, 12, 0, 10, 0],
+      ],
+    });
+    const snap = await snapFollower.wait('entity-snap', 2000);
+    check('从属端收到房主的实体快照', Array.isArray(snap?.entities) && snap.entities.length === 2, JSON.stringify(snap));
+    check('快照带 by（哪个房主推的）', snap?.by === welcomeSnapHost?.id, `${snap?.by} vs ${welcomeSnapHost?.id}`);
+
+    // 从属端推的快照一律不转（谁模拟谁是权威）
+    snapHost.mailbox.length = 0;
+    snapFollower.send({ t: 'entity-snap', entities: [['2:1', 'zombie', 0, 70, 0, 0, 20, 0]] });
+    check('从属端推的实体快照被丢弃', (await snapHost.wait('entity-snap', 600)) === null);
+
+    // 形状不对 / 空数组：不转（省得从属端收到一堆没用的包）
+    snapFollower.mailbox.length = 0;
+    snapHost.send({ t: 'entity-snap', entities: [] });
+    snapHost.send({ t: 'entity-snap', entities: 'nope' });
+    check('空数组/非数组不转发', (await snapFollower.wait('entity-snap', 600)) === null);
+
+    // 超上限截断（不整包拒绝）
+    snapFollower.mailbox.length = 0;
+    const huge = Array.from({ length: 400 }, (_unused, index) => [`1:${index}`, 'zombie', 1, 70, 1, 0, 20, 0]);
+    snapHost.send({ t: 'entity-snap', entities: huge });
+    const truncated = await snapFollower.wait('entity-snap', 2000);
+    check('超过 256 条的实体快照被截断', Array.isArray(truncated?.entities) && truncated.entities.length === 256, `${truncated?.entities?.length}`);
+
+    snapHost.close();
+    snapFollower.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {

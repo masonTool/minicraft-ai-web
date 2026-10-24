@@ -36,6 +36,7 @@ import {
   sanitizeName,
   sanitizeRoom,
   sanitizeEditPayload,
+  sanitizeEntitySnap,
   sanitizeWorldMeta,
   withinEditReach,
 } from './protocol.mjs';
@@ -978,6 +979,28 @@ wss.on('connection', (socket, request) => {
           player.id,
           player.room,
           { x, z, dimension },
+        );
+        break;
+      }
+
+      /*
+       * 实体快照（L8 · MS3）：房主每 100ms 推一次，服务端**只按房间 + AOI 转发**。
+       *
+       * 为什么不做内容校验：服务端没有世界也没有生物表，判不了"这只僵尸该不该在这"。
+       * 形状收口（是不是数组、超不超过上限）在这里，语义把关在两端。
+       */
+      case 'entity-snap': {
+        if (!player) return;
+        // 只有房主能推：别人推过来的"实体在世界哪"没有意义（谁模拟谁是权威）
+        if (hosts.has(player.room) && player.isHost !== true) return;
+        const entities = sanitizeEntitySnap(message.entities);
+        if (!entities || entities.length === 0) return;
+        broadcast(
+          { t: 'entity-snap', by: player.id, entities },
+          player.id,
+          player.room,
+          // 与方块同一条 AOI：用**发送者**的位置当中心，这批实体都在他视野内
+          { x: player.x, z: player.z, dimension: player.dimension },
         );
         break;
       }

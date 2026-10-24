@@ -211,3 +211,19 @@ export function sanitizeEditPayload(payload) {
   }
   return null;
 }
+
+// ---------------------------------------------------------------- 实体快照（L8·MS3）
+
+/** 一包 `entity-snap` 最多带多少实体（与客户端 `EntitySnapshot.MAX_SNAPSHOT_ENTITIES` 对齐） */
+export const MAX_SNAPSHOT_ENTITIES = 256;
+
+/**
+ * 实体快照的形状收口：**只保证它是个不超过上限的数组**。
+ *
+ * 内容不校验——位置/血量是不是"对"的，服务端既没有世界也没有生物表；它只做转发。
+ * 真正的把关在房主那端（`SimAuthority` 只采 AOI 内）与从属端（`decodeEntities` 逐条洗）。
+ */
+export function sanitizeEntitySnap(raw) {
+  if (!Array.isArray(raw)) return null;
+  return raw.slice(0, MAX_SNAPSHOT_ENTITIES);
+}

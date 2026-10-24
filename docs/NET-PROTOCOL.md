@@ -83,6 +83,7 @@
 | `sign` | `x, y, z, dimension, lines[]` | 坐标有限；`lines` 最多 4 行、每行截到 64 字符 | 牌子文字（`联机16`）：全空 = 擦除 |
 | `frame` | `x, y, z, dimension, item, rotation` | 坐标有限；`item` 要么 `null`（空框）要么 `{id, count}` | 展示框内容（`联机16`）：放/取/转格子都会发 |
 | `edit-request` | `payload: {t:'block', edit:[x,y,z,id,state,dimension]} \| {t:'blocks', blocks:[[…]]}`（L8·MS2） | 必须已 join；借用方块令牌桶（一条一格）；**只转给本房房主**，房里没房主回 `{t:'edit-request', ok:false, reason:'no-host'}`；`payload.t` 不认识直接丢 | 从属端"我要改这几格"的请求：服务端不判权、不落地、不校验内容（世界语义由房主那端把关） |
+| `entity-snap` | `entities: [[key, type, x, y, z, yaw, health, flags], …]`（L8·MS3，≤256 条） | 必须已 join；**只有房主能推**（其它人推的一律丢）；服务端只做形状收口（是不是数组、超不超过 256）与按房 + AOI 转发，**不做内容校验** | 房主每 100ms 推一次视野内实体，从属端据此画面影子实体 |
 | `ping` | 无 | 必须已 join（先连接） | 应用层延迟探测（`联机29`）：客户端每 2 秒一条，服务端只回 `pong` |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 | `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
@@ -106,6 +107,7 @@
 | `frame` | `x, y, z, dimension, item, rotation, by` | 收到 `frame` 后转发给其他人（同时留一份给快照） |
 | `mob-hit` | `typeId, dimension, x, y, z, damage, fire, by` | 收到 `mob-hit` 后转发给其他人（不落盘：伤害是瞬时事件） |
 | `edit-request` | `from, payload` | 只发给**本房房主**（房主据此在自己的世界落地，再由 `blocks` 广播权威结果）；或回给请求者 `{ok:false, reason:'no-host'}` |
+| `entity-snap` | `by, entities[]` | 收到后按房 + AOI（发送者为中心）转发给同房其他人 |
 | `pong` | 无 | 回给发 `ping` 的那个人（`联机29`） |
 | `player-hit` | `fromId, fromName, fromTeam, damage` | **只发给被击者**；被击者用 `fromTeam` + 自己的队伍表再判一次友伤 |
 | `arrow` | 同上行 + `by` | 收到 `arrow` 后转发给其他人 |
