@@ -9,6 +9,29 @@
 
 ---
 
+## 批次 20261025-0105 · 2026-10-25 · 会话 75e33034
+
+- [x] [P1] 新建 `say` 文案分组（六语言）+ 把「状态与战斗」类聊天消息接线：新增 `src/core/i18n/locales/{zh,en,de,ru,fr,pt}/say.ts` 并注册进六份 `index.ts`，`src/main.ts` 的伤害/回血/饥饿/氧气/着火/盾牌/不死图腾/极限模式/重生回退 18 条消息改走 `t()`/`tp()` → `npm run typecheck && npm run test:i18n`
+  - 做了什么：新建 `locales/*/say.ts`（`say.*` 键，六个语言各 19 条）并加进六份 `index.ts` 的合并；`main.ts` 的 `emitPlayerNotices()` 整段（伤害/生命/饥饿/氧气/着火）+ 盾牌破防与碎裂 + 不死图腾 + 极限模式死亡 + 重生回退两条改走 `t()`/`tp()`
+  - 为什么：聊天栏（左上角弹出那一行与展开后的记录）是**唯一"字符串进来就显示"的出口**，硬编码中文一走进去就是"界面全英文、左上角冒一句中文"，而参数是 `string`，类型系统抓不到
+  - 验证：`npm run typecheck` 通过；`npm run test:i18n` 547 通过 / 0 失败；`npm run audit:i18n` 六语言 2883/2883、✓ 审计通过；`npm run test:ui` 978 通过（两条按中文字面量匹配的断言改成按键 + 回中文表核对措辞）
+  - 批次：20261025-0105
+- [x] [P2] 把「交互与方块」类提示接线（牛奶/药水/箭/花盆/盔甲架/唱片机/音符盒/容器被压/重生锚/磁石/交易/睡觉/钓鱼/幻翼/断开联机/种子不一致）：`src/main.ts` + `core/survival/Sleep.ts` + `core/registry/villagerTrades.ts` 改用文案键 → `npm run test:i18n && npm run test:sleep`
+  - 做了什么：44 条搬进 `say.*`（六语言）；药水名改 `itemLabel(potion.id)`、效果清单走 `joinList()`；花盆取物改 `itemLabel(植物物品)`；钓鱼提示的 2 秒取 `BITE_WINDOW_SECONDS`；单/多两条钓鱼模板分开（`×N` 在各语言里位置不同）；`sleepRefusal()` / `tradeBlocker()` 保持返回句子、内部查表
+  - 为什么：这些句子散在 20 多个 `this.chat.push(...)` 里，含变量的一律走 `tp()`（不在调用处拼串）；`sleepRefusal` / `tradeBlocker` 的调用点各只有一处，改成原因码会让 `bed-test`(4 条) 与 `villager-test`(3 条) 白改
+  - 验证：`test:bed` 117 / `test:villager` 233 / `test:fishing` 110 / `test:anchor` 21 / `test:note` 23 / `test:commandblock` 26 / `test:ui` 978 全绿；`test:i18n` 547 通过
+  - 批次：20261025-0105
+- [x] [P3] 把「世界事件与天气」类播报接线（袭击/巡逻队/铁傀儡/凋灵/末地门/进度/效果/不祥之兆/天气四句）：`src/main.ts` + `core/world/WeatherState.ts` → `npm run test:i18n && npm run test:weather`
+  - 做了什么：21 条搬进 `say.*`（六语言）；进度播报的标题与说明改走 `advancementTitle()` / `advancementDesc()`；效果等级走 `{level}` 占位（无等级传空串）；`weatherNotice()` 保留判据、句子取值时查表
+  - 为什么：进度播报原来直接读 `def.title` / `def.desc` 的中文原文，英文模式下会出现"Advancement made: 石器时代——用镐挖一块圆石"这种半截混排（与 Q16 修成就面板是同一个根因，只是漏了聊天栏这条）
+  - 验证：`test:weather` 58 / `test:raid` 34 / `test:advancement` 116 / `test:effects` 68 / `test:survival` 111 / `test:villager` 233 / `test:ui` 978 全绿；`test:i18n` 547 通过
+  - 批次：20261025-0105
+- [x] [P4] 聊天面板「展开」角标改成可翻译 + 加硬编码守卫：`index.html` 的 `content: '展开'` 改 `attr(data-expand-badge)`、`ui/ChatInput.ts` 写入、`tools/i18n-test.ts` 断言 `chat.push()`/`hudToast.show()` 字面量不再含中文 → `npm run test:i18n`
+  - 做了什么：新增 `chat.expandBadge`（六语言）；`index.html` 改成 `content: attr(data-expand-badge)`；`ChatInput.renderLog()` 在行确实被截断时写 `dataset.expandBadge`（放得下就摘掉）；`i18n-test` 新增 3 条守卫（聊天出口不吞中文字面量 / `index.html` 的 CSS `content` 无中文 / 角标走属性 + 键），`ui-test` 那条按 `content: '展开'` 匹配的断言跟着改
+  - 为什么：静态 CSS 不参与切语言重绘，角标写死在样式表里英文模式永远显示「展开」；而守卫挡的是整类问题——`chat.push` / `hudToast.show` 的入参直接落 DOM，漏一条就是一句中文，类型系统看不见
+  - 验证：`npm run test:i18n` 550 通过 / 0 失败（新增 3 条）；`npm run test:ui` 978 通过；`npm run typecheck` 通过
+  - 批次：20261025-0105
+
 ## 批次 20261024-2335 · 2026-10-24 · 会话 d19faf6b
 
 - [x] [P1] `tools/run-tests.mjs`：非打包套件（net/guard/screenshot/shotdiff/browser-check）改成按触发文件命中，不再"一律跑" → `node tools/run-tests.mjs --changed` 在干净工作区 0 命中且 <2s；在 `server/` 下放一个临时未跟踪文件后应只命中 net
@@ -186,27 +209,4 @@
   - 为什么：文档里留一句错的因果，下一轮还会把同一个误解再实现一遍。
   - 验证：`npm run check` 全绿（编号 / 覆盖度 / 差异 / 文档体量四条台账 + 全部离线套件）。
   - 批次：20261024-1636
-
-## 批次 20261024-1609 · 2026-10-24 · 会话 723564b3
-
-> **更正（批次 20261024-1636）**：本批 `[修11]` 的"那颗键打开配方书"是**误解**——用户澄清没有"配方书页面"，
-> 那颗键是可合成物品视图的开关；已在 1636 改回。`applyInventoryChrome` 里不关配方书那条仍然保留
-> （它修的是"R 键在容器/工作站界面里开的书被重排关掉"，与本条无关）。滚动条那两条（修12/修13）不受影响。
-
-
-- [x] [修11] 标题栏"配方书"键真的能打开配方书，且**不再自动关闭**：`src/ui/InventoryScreen.ts`（按钮 click 分支 + 把 `applyInventoryChrome` 里两处 `onCloseRecipes()` 挪到 `openWith` 的换面板处）→ `npm run test:ui`（断言：仓库里点它＝左栏切"全部/搜索"并调 `onOpenRecipes('all')`；重排函数里不再有 `onCloseRecipes`；换成别的面板时才关书）
-  - 做了什么：① 那颗键改三分支——书开着→关；左栏已在分类页→切"列出未拥有（红底）"（保留 1531 口径）；左栏在仓库→`openPocketCategory('all')` + `onOpenRecipes('all')`（容器/工作站两类不弹书，没有可摆的合成格）。② `applyInventoryChrome()` 里容器分支与工作站分支那两行 `onCloseRecipes()` 删除，"换面板就收书"并进 `openWith()` 的 `mode/容器变了` 块与 `openTrade()`；`openWith` 末尾那条只在 inventory/crafting 生效的窄条件一并去掉。③ 那颗键"亮着"的判据加上 `bookOpen`，title 改成"点下去会发生什么"。
-  - 为什么：根因是 `openRecipeBook()` 先 `show()` 再 `syncRecipePane()`，而 sync 走的就是 `applyInventoryChrome`，容器/工作站两条分支无条件 `onCloseRecipes()` → 书刚打开就被自己关掉（用户报的"配方书会自动关闭"）。关书是玩家意图（✕/R/换界面），不该是布局副作用。另外 1531 的 B 口径让手机彻底没有配方书入口（当时记成已知缺口），本轮反馈说明要的是书本身。
-  - 验证：`npx tsx tools/ui-test.ts` **971 通过 / 0 失败**（本批新增 8 条、改 3 条旧断言：开书 2 条、重排不关书 / 收书位置 2 条、滚动条槽位与黑色滑块 4 条；旧断言里"只切分类、不碰 `onOpenRecipes`"两条与"`active` 只看 `showUnowned`"一条按新口径重写）。
-  - 批次：20261024-1609
-- [x] [修12] 左栏滚动条与物品留出间距、滑块改成黑色：`index.html`（分类/创造网格 `padding-right` 预留槽位、列宽可缩、滑块 `#1c1c1c`）+ `src/ui/InventoryScreen.ts`（`scrollbarContentLeft` 的 clamp 不再把轨道推到物品上）→ `npm run test:ui`
-  - 做了什么：分类网格 `repeat(7, 40px)` → `repeat(7, minmax(0, 40px))`、`padding-right: 5px` → `15px`（= 8px 间距 + 7px 轨道），`.inv-category .inv-slot` 改 `width:100% / aspect-ratio:1 / max 40px`；双栏创造栏同样处理（`padding-right: 14px` = 8 + 6）；滑块 `#c2c2c2 → #1c1c1c`（按下 `#3a3a3a`）；`scrollbarContentLeft()` 的夹紧上限从 `容器宽 - 轨道 - 1` 收到 `容器宽 - 轨道`。PC 那套 48px 规则同步（`minmax(0,48px)` + `padding-right: 15px`）。
-  - 为什么：5px 的预留装不下"8px 间距 + 7px 轨道"，JS 的 `Math.min(…)` 就把轨道按回容器右缘、直接压在最后一列上——用户说的"应该与物品有一定间距"；浅灰滑块和浅灰面板同色，所以要求黑色。窄屏左栏只有 ~257px 而 7×40 要 286px，列宽不给收缩余地时最后一列本来就会被裁掉，滚动条更没地方站。
-  - 验证：`npx tsx tools/ui-test.ts` 971 通过（新增 4 条：分类预留 15px = 8+7、双栏创造预留 14px = 8+6、夹紧上限不再 `- 1`、滑块为 `#1c1c1c` 且不再出现 `#c2c2c2`）。
-  - 批次：20261024-1609
-- [x] [修13] 断言与台账：`tools/ui-test.ts` 改掉旧断言 → `npm run check`
-  - 做了什么：删/改 3 条旧断言（"那颗键只切物品分类（不碰 onOpenRecipes）"、"标题栏那颗键只切物品分类"、"`toggle('active', leftPane === 'category' && this.showUnowned)`"），补 8 条新断言；决策写进 `doing/723564-decision.md`（D1 恢复开书、D2 重排不关书、D3 间距靠 CSS 预留槽位）。
-  - 为什么：这几条断言钉的正是本轮推翻的口径，留着会红（也会把回归锁死成旧行为）。
-  - 验证：`npm run check` 全绿（typecheck + 全部离线套件 + 三张台账 + 文档体量），`ui-test` 971 通过 / 0 失败。
-  - 批次：20261024-1609
 
