@@ -395,6 +395,7 @@ import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import { realignedWorldSummary, seedConflict } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch } from './core/net/RemoteArmor.ts';
+import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
@@ -3707,6 +3708,23 @@ class App {
    * `armorColors` 那种简化模型），硬编 0 发过去等于撒谎——队友会以为你空着手。
    * 缺的几项记在 `联机37`。
    */
+  /**
+   * 手持 ↔ 副手（联机41）：按 F 触发。
+   *
+   * 交换规则在 `core/container/Offhand.ts`（纯函数，单测覆盖四种组合）；
+   * 这里只负责"读两个槽、写回两个槽"。副手的视觉由主循环里的
+   * `playerRenderer.setOffhand(...)` 跟着刷新，不用在这里手动改。
+   */
+  private swapOffhand(): void {
+    const heldSlot = this.hotbarIndex;
+    const next = swapOffhand({
+      held: this.inventory.get(heldSlot) ?? null,
+      offhand: this.inventory.get(OFFHAND_SLOT) ?? null,
+    });
+    this.inventory.set(heldSlot, next.held);
+    this.inventory.set(OFFHAND_SLOT, next.offhand);
+  }
+
   /** 当前穿着的四件甲（槽序与 `ARMOR_SLOT_BASE + 0..3` 一致），空槽为 0（联机40） */
   private armorIds(): number[] {
     const ids: number[] = [];
@@ -3721,6 +3739,9 @@ class App {
       // 盔甲（联机40）：四槽的物品 id —— 数据源本来就是它（`applyArmorAppearance` 也是从这里
       // 算甲片颜色的），只是一直没发出去，于是队友看你永远是光着的
       armor: this.armorIds(),
+      // 副手（联机41）：槽位本来就有（`OFFHAND_SLOT = 40`，本地渲染也早就在画），
+      // 缺的只是把它告诉队友
+      offhand: this.inventory.get(OFFHAND_SLOT)?.id ?? 0,
       sneak: this.frameInput.sneak,
       swing: this.hand.swingProgress > 0,
       ride: this.ridingVehicle !== null,
@@ -5322,7 +5343,13 @@ class App {
         return;
       }
       if (this.uiOpen) return;
-      if (e.code === 'KeyF') this.setFlying(!this.flying);
+      // F：交换手持与副手（原版语义，联机41）。飞行挪到 Shift+F——F 原来是切飞行，
+      // 但那与玩家对 F 的预期相反，而副手槽除了交换没有别的入口
+      if (e.code === 'KeyF') {
+        if (e.shiftKey) this.setFlying(!this.flying);
+        else this.swapOffhand();
+        return;
+      }
       // V：切换人称视角（第一人称 → 背后 → 正面 → …）。
       // 不用原版的 F5：浏览器里 F5 是刷新，拦不住。
       if (e.code === 'KeyV') this.cycleCameraMode();

@@ -3989,6 +3989,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       缺的只有"上报"和"套到远端模型"两处。`tests/net-remote-armor.test.ts` **8 条**；
       单测 **355 → 363**。
       ⚠️ 空槽必须**删**不能写 0：渲染器会把 0 当成"装备了 id 0"，画出一层灰。
+      —— **批次 20261023-2351 补副手槽**（联机41）：核对后发现**槽位与存档都不用改** ——
+      `Inventory.ts` 早有 `OFFHAND_SLOT = 40`，存档注释写着「41 个背包槽（含盔甲与副手）」，
+      本地第三人称也早在画副手（`setOffhand` 每帧调）。缺的只有两处：`localAppearance()`
+      补 `offhand`、`KeyF` 改成交换副手（飞行挪到 `Shift+F`）。新增
+      `core/container/Offhand.ts`（`swapOffhand` 纯函数：四种组合 + 不改入参 + 换两次回原样）；
+      `tests/offhand.test.ts` **6 条**；单测 **363 → 369**。
+      ⚠️ F 键位移是一次**行为改变**：原来 F 切飞行。理由：原版 F 就是交换副手，且副手槽
+      没有别的入口。若玩家反对，改回 `Shift+F` 交换即可（一处 `if`）。
+      ⚠️ 远端仍看不到副手物品（`MobEquipment` 只有 `mainHand`），已插 `[发现]`。
       `tests/mob-authority.test.ts` **12 条**；另有 `core/net/MobShadows.ts`（影子抑制：
       收到远端上报就压住本地刷怪，`isShadowed` 按 TTL 自动过期、`release` 立即松开）
       与 `tests/mob-shadows.test.ts` **9 条**；单测 **334 → 355**。

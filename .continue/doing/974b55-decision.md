@@ -229,3 +229,9 @@
 - 决定：只补"上报 + 套到远端模型"两处，不动存档；空槽从 `MobEquipment` 里**删掉**而不是写 0。
 - 为什么：条目当初写的是"现在是 `armorColors` 简化模型、要改存档格式"，核对后发现数据源本来就是逐槽物品 id（`applyArmorAppearance()` 读 `inventory.get(ARMOR_SLOT_BASE + slot)?.id`），`armorColors` 只是渲染派生色；`MobRenderer` 也早已支持 `armorTint(equipment.head/chest/legs/feet)` 并把 equipment 算进外观 key。写 0 会被当成"装备了 id 0"渲染成灰甲，所以空槽必须删。
 - 影响：队友穿甲现在看得见了；存档格式没动，旧档不受影响。可撤回（三处改动）。**`联机41`（副手槽）的前提也要重新核对**——`offhand` 字段同样早在协议里，先看背包是否已有副手槽再决定要不要动存档。
+
+## D39 · F 改成交换副手，飞行挪到 Shift+F
+
+- 决定：`KeyF` = 交换手持/副手，`Shift+F` = 切飞行；交互规则抽成 `core/container/Offhand.ts` 的纯函数；副手槽与存档都不动（`OFFHAND_SLOT = 40` 早就有）。
+- 为什么：条目要求 F 交换，且原版 F 的语义就是交换副手——项目把 F 拿去切飞行反而与预期相反；副手槽没有别的入口，而飞行还有 Shift+F 这个组合键可退。另一种做法（保留 F=飞行、用 Shift+F 交换）也合理，但那样"玩家最常用的动作"反而要多按一个键。
+- 影响：F 的行为变了（**可能有肌肉记忆成本**）；飞行键位移。改回只需把 `if (e.shiftKey)` 那两支对调。副手数据、存档、协议都没动。
