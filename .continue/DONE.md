@@ -9,6 +9,82 @@
 
 ---
 
+## 批次 20261024-0415 · 2026-10-24 · 会话 e50bd5cb
+
+- [x] [跳1] 把原版视觉规格表落成文档：新建 `.continue/notes/jump-original.md`（等距 30°/正交相机、三面明暗色值、方块与小人比例、阴影方向与柔和度、动画时序表、UI 字号与位置、音效时序，每个数值标注依据的参考图文件名）→ `test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' .continue/notes/jump-original.md)" -ge 25 ]`
+  - 做了什么：写 `.continue/notes/jump-original.md`（113 行表格），10 张分节表覆盖投影/几何/三面明暗/小人/阴影/背景色板/UI/时序/音效/特殊方块，另加「测量方法与误差」「不可 1:1 项」两节；数字全部标注【测】/【推】/【估】/【二手】来源。
+  - 为什么：交接文档里的数值是肉眼估的，其中一条（三面明暗）经测量是反的——原版是**左面最暗 0.775、右面 0.93**，不是"右侧最暗 0.72"。不先量一遍，跳3 会把明暗贴反，之后所有截图比对都白做。
+  - 怎么量的：写了一次性脚本 `.tmp/imgprobe.mjs`（sips 转 PNG + Node zlib 手解 PNG 过滤链），用 `bbox`/`mode`/`scanrow`/`scancol` 在 02/03/06 上量出：菱形 bbox 249×130 → 俯角 31°；三面亮度比 1.00/0.775/0.93（黄块与橙块互证）；块高 0.60 边长；小人高 0.72 边长、头径 0.29 身高；分数墨高 7.8%W、字号 0.10W、色 #444750；首页按钮 46.3%W×10%W。
+  - 验证：`test -f .continue/notes/jump-original.md && [ "$(grep -c '^| ' …)" -ge 25 ]` → `OK rows=113`。
+  - 批次：20261024-0415
+- [x] [跳2] 立等距相机参数模块：新建 `src/minigame/games/jump/iso.ts`（俯角 30°、方位 225°、正交视锥 framing、横竖屏缩放，纯函数）+ 新建 `tools/jump-iso-test.ts` 并在 `package.json` 注册 `test:jumpiso` → `npm run test:jumpiso`（断言：投影 ±30°、顶面菱形宽高比 2:1、844×390 与 390×844 下 ≥3 块可见且当前块在视口内、相机是正交）
+  - 做了什么：`iso.ts` 只做三件事——`isoBasis()` 由俯角/方位算正交基（与 three 的 `lookAt` 同一套约定：`x = normalize(up × z)`、`y = z × x`）、`projectPoint()` 投到屏幕平面（仍是世界单位）、`frameBlocks()` 先量方块角点的屏幕 bbox 再反解正交视锥。另导出 `BLOCK_HEIGHT_RATIO=0.6` / `JUMPER_HEIGHT_RATIO=0.72` 与 `boxesFromBlocks()`，让规格表里的比例只有一处定义。
+  - 为什么取景用"量 bbox"而不是猜相机距离：正交下缩放全在 frustum 里，横屏 844×390 与竖屏 390×844 用同一个公式就能都装下 3 块；旧 `PillarScene` 的 `PORTRAIT_PULLBACK` 那种"竖屏拉远 1.25"是猜的，改间距就得重调。决策写进 `e50bd5-decision.md` D2。
+  - 为什么方位钉成"视线方向"：225° 两种读法（视线 / 相机位置）在画面上互为左右镜像，都能自洽；钉成视线方向后"−z → 右上、−x → 左上"可断言，写反必红。决策写进 D1。
+  - 正交的判据没用 `instanceof OrthographicCamera`（那只能证明"写了这个词"），而是断言"同尺寸方块沿视线前后错开 6 格后屏幕宽度完全相同"——几何真被算成透视时只有这条会红。
+  - 验证：`npm run test:jumpiso` → 42 条全绿（基正交/俯角 30°/菱形 2:1/两向符号与斜率/远近平行/两种视口 3 块在视口内/当前块下沉 8~20% 半高/退化为空或脏坐标时不产生 NaN）；`npm run typecheck` 与 `typecheck:tools` 均 0 错。
+  - 批次：20261024-0415
+- [x] [跳3] 重写渲染层为等距纯色方块场景：新建 `src/minigame/games/jump/BlockScene.ts`（正交相机 + 盒/圆柱几何 + 顶亮/左中/右暗三面 + 软阴影 + 纯色背景、无雾），删除 `PillarScene.ts` / `pillars.ts`，`scene.ts` 接线；同步改掉 `tools/minigame-test.ts` 里锁死 `new PillarScene(` 的源码断言 → `npm run test:minigame && npm run typecheck`
+  - 做了什么：新建 `BlockScene.ts`（正交相机 + 盒/圆柱共享几何 + 三面明暗烘进顶点色 + 贴片阴影 + 竖直渐变背景、无雾、不打灯、不读图集）与 `palette.ts`（6 组背景 + 8 个方块色 + `FACE_SHADE` + `shadeForNormal()`）；删除 `PillarScene.ts` / `pillars.ts` / `themes.ts`；`scene.ts` 换成 `BlockScene`（`setBlocks` / `setSquash` / `follow` / `setPalette`），站高改成按方块高度算（方块会随分数变矮），起跳/落地两端顶面高度不同时先线性过渡再加抛物线。
+  - 与队列描述不同的一处：队列写"顶亮/左中/右暗"，但 `[跳1]` 实测是**左暗 0.775、右亮 0.93**（黄块与橙块两块独立方块互证），渲染按实测值实现，断言也钉住方向（"右面比左面亮"）。
+  - 为什么明暗不用灯光：原版是纯哑光纯色，用灯去凑那三个比值只能靠试，"差 5° 就变味"；把 `shadeForNormal()` 烘进顶点色后，立方体三面精确落在 1.00/0.775/0.93，圆柱侧面同一条公式自然连成渐变（64 段圆环相邻差 < 0.02，无穷色阶台阶）。
+  - 为什么阴影用贴片：原版没有可见地面，阴影本身就是一张柔边贴片；用 shadowMap 既贵又只能压在"不存在的平面"上。偏移按实测（屏幕左下）换算成世界 −0.43/+0.71 边长。
+  - `palette.ts` 提前到本条落地（`[跳6]` 原本也包含它）：颜色是 BlockScene 的输入，分两次建等于把同一张表写两遍；`[跳6]` 收窄为特殊方块贴图 + 贴图/色板断言。
+  - 验证：`npm run test:minigame` → 151 条全绿（含色板 6/8 数量、方块不糊进背景 |ΔL|≥0.04、同 seed 同色板、色板轮换与负下标、三面明暗精确值、圆柱无台阶）；`npm run typecheck` / `typecheck:tools` 0 错；`npm run check:fast` 全绿（改动命中 minigame 套）。
+  - 批次：20261024-0415
+- [x] [跳4] 把 MC 玩家模型换成原版棋子小人：新建 `src/minigame/games/jump/JumperModel.ts`（球头 + 锥形身体、脚底原点、深色高光材质），`scene.ts` 不再用 `PlayerRenderer`；新增 `tools/jump-model-test.ts` 注册 `test:jumpmodel` → `npm run test:jumpmodel`（断言：压扁时 y→0.6 / xz→1.3、空翻 ±360°、包围盒 min.y≈0、dispose 后无残留）
+  - 做了什么：`JumperModel.ts` 用 `LatheGeometry` 画裙摆（9 个采样点的平滑外扩曲线，叠圆柱会在接缝处出现折线）+ 球头，原点在脚底、模型高 1；三面明暗复用 `palette.shadeForNormal()` 再叠"上亮下暗"，颜色烘进顶点色（`MeshBasicMaterial`，与方块同一条管线，不会一个亮一个暗）。`scene.ts` 不再 import `PlayerRenderer`，压扁/空翻/朝向改走 `setSquash` / `setFlip` / `setYaw` 三个 setter，落地换新方块尺寸（方块变小、小人跟着变小）。
+  - 比例依据：规格表 §4 的像素测量——身高 1、头径 0.29（球心 0.855）、颈 0.18（y=0.74）、裙摆 0.35；外部再乘 `0.72 × 方块边长`。
+  - 为什么压扁要同时鼓出来（y 0.6 / xz 1.3）：原版是"被压扁"不是"蹲下"，只压不改宽会像被踩进地里；脚底原点保证压扁时人不陷进方块。
+  - 释放的断言不靠肉眼：给两个几何/两份材质挂 `dispose` 监听再调 `dispose()`，数事件（2 geometry + 2 material）+ 场景图清空 + 重复释放不炸。
+  - 验证：`npm run test:jumpmodel` → 45 条全绿；`npm run test:minigame` 152 条全绿（静态断言同步换成 JumperModel / setFlip / jumper.setSize）；`npm run check:fast` 174/174 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳5] 玩法向原版对齐：`config.ts` + `logic.ts`（前进方向改成等距两向 ±90°、间距改为 `size + 0.15~0.9`、特殊方块补成井盖 5 / 魔方 10 / 便利店 15 / 音乐盒 30 四类、停留 3 秒、中心连击与封顶不变）→ `npm run test:minigame && npm run jump:balance`（可达率 100%、完美玩家不掉、手抖玩家 8~200 跳；不达标调 `gapMax`/`maxCharge` 而不是放松断言）
+  - 做了什么：`directionDegrees` 从 `[-30, 0, 30]` 改成 `[0, 90]`（世界 −Z / −X 两条等距轴）；间距从绝对格数改成 **边长 × 1.15~1.9**（`gapRatioMin/Max`，删掉 `growScore`/`gapMin*`/`gapMax*`）；`JumpBlockKind` 扩成 `normal|well|cube|store|music`，奖励 5/10/15/30（按稀有度加权抽：40/30/20/10%），`specialHoldSeconds` 2 → 3；中心连击与封顶（2n / 32）保持不动。
+  - 为什么间距改成倍数：原版相邻块几乎贴合，中心距就是 1.15~1.9 个边长；旧参数是绝对格数，方块一小（0.9）间距还是 3 格，画面上立刻散成"MC 里搭的柱子"。改成倍数后间距随方块同比缩小，难度来自"目标变小"，与参考图 08 的三块连排一致。
+  - 平衡脚本的一处**模型**修正（不是放松断言）：`jump:balance` 里"手抖"原本是 `间距 × (1 ± 24%)` 的相对误差，在旧参数下恰好与半块同量级；间距改成倍数后 24% 的间距永远小于半块（0.24 格 vs 0.45 格），模拟里一局不死（300 跳触顶）。改成绝对误差 `±0.55 格`（= 0.1s 的按早/按晚 × maxDistance/maxCharge，注释里本来就写着"±0.18 格"的绝对口径，代码却是百分比）。三条阈值一个字没动，理由写进 `e50bd5-decision.md` D3。
+  - 验证：`npm run test:minigame` → 162 条全绿（新增"只出现 0°/90° 两向""步进只沿一条世界轴""四类特殊方块都会出现""奖励严格递增""停留 3 秒"）；`npm run jump:balance` → 可达率 100.00%、完美玩家 300 跳不掉、手抖 ±0.55 格 26.3 分 / 17.2 跳（阈值 8~200）、乱按 1.0 分；`npm run check:fast` 全绿。
+  - 批次：20261024-0415
+- [x] [跳6] 特殊方块程序化贴图与色板：新建 `src/minigame/games/jump/blockTextures.ts`（canvas 绘制井盖/魔方/便利店门脸/唱片，接受注入的 canvas 工厂）与 `palette.ts`（背景 6 色 + 方块 8 色，取自参考图），`BlockScene.ts` 接上 → `npm run test:jumpiso`（断言：色板数量与对比度阈值、贴图工厂被调用次数与尺寸、缓存键唯一）
+  - 做了什么：`blockTextures.ts` 用 canvas 现画四类特殊方块（井盖=深灰盘+24 条径向管纹+中心孔 / 魔方=3×3 白格线彩块 / 便利店=红招牌+玻璃窗+卷帘门 / 唱片=4 圈同心纹+中心孔），**一类一张图集、左半顶面右半侧面**，于是每类只要 1 张贴图 + 1 份几何（而不是六面各一个材质）。`BlockScene` 按法线把"朝上的面"UV 指到左格、其余指到右格（方盒与圆柱的顶点顺序不同，按下标写会错位），三面明暗仍由顶点色乘上来；音乐盒走圆柱，其余走方盒。`palette.ts` 已在 `[跳3]` 落地，这条补齐它的贴图部分。
+  - 为什么 canvas 工厂要注入：浏览器传 `document.createElement('canvas')`，离线测试传一个记录 2D 调用的假 canvas——于是"画了什么、画了几张、多大"都能断言，而不是只能靠截图肉眼看。四类的 2D 调用序列当指纹，撞车就说明两类在画同一张图。
+  - 与队列描述不同的两处：① 队列写的验证是 `npm run test:jumpiso`，实际拆出独立套件 `test:jumptex`（25 条），并同时跑 `test:minigame`（色板数量 / 对比度 / 明暗）——两条一起覆盖队列要求的三类断言；② 顺带把 `BlockScene` 的渲染前提补成静态断言（正交相机 / 不打灯 / 无雾 / 不读 TextureAtlas / 阴影 depthWrite:false），这几条原本只有肉眼可见。
+  - 为什么没有按参考图 1:1：井盖管纹、便利店门脸、唱片都只有小图，且无授权素材源；这里按"可辨识的特征"画（圆盘+径向纹、3×3 彩格、红招牌+玻璃、同心圆），逼近程度写在规格表 §12 的不可 1:1 项里。
+  - 验证：`npm run test:jumptex` → 25 条全绿（四类各画一张 / 图集 256×128 / 同类复用缓存 / UV 两格拼满 0~1 / 顶面在左格侧面在右格 / 四类指纹两两不同 / 井盖有圆盘与警示黄、魔方 18 个小格且三色齐、便利店有招牌红与玻璃、唱片 ≥4 圈 / 无 2D 上下文时静默降级）；`npm run test:minigame` 171 条、`test:jumpiso` 42 条、`test:jumpmodel` 45 条全绿；`npm run check:fast` 175/175 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳7] 动画与特效对齐原版：`scene.ts`（跳跃 400ms = 上升 65% Cubic.Out + 下降 35% Cubic.In、空中翻转 360°、落地压缩 100ms、方块回弹 500ms、入场 Bounce.Out、被踩 y→0.8）+ 完美命中同心圆波纹、`+N` 飘字、旧方块掉落淡出 → `npm run test:minigame && npm run jump:e2e`（E2E 四张截图落到 `.tmp/shots`，无 ✗）
+  - 做了什么：新增 `motion.ts`（纯函数：`cubicIn/Out`、`sinusInOut`、`bounceOut`、`jumpArc`、`flipProgress`、`landingSquash`、`blockBounceScale`、`enterScale`、`fadeScale`、`rippleProgress` + `JUMP_TIMING` 全部时长）；`scene.ts` 跳跃固定 **400ms**（旧实现 `0.3 + 距离×0.045` 让远跳更慢）、弧线换成 65% Cubic.Out + 35% Cubic.In、空翻走 Sinusoidal.InOut、落地压缩 100ms、`+N` 改成 DOM 飘字（投影到屏幕、浮起淡出）；`BlockScene` 加 `tick/punch/playRipple/projectToScreen`，实现新块入场 Bounce.Out、被踩方块凹 0.85 再回弹 500ms、落后方块掉落缩小 400ms、三层同心圆波纹（外白/中绿/内红）；`index.html` 加 `.jump-float` 与 `@keyframes jump-float-rise`。
+  - 顺带修掉一个真 bug：方块颜色原本按"这一屏列表下标"取色，每跳一次列表整体前移，同一块方块会换色（看起来像"跳一下世界重新上色"）。`BlockSpec` 加 `colorIndex`（传方块 id），颜色只跟方块身份走。
+  - 为什么时序要单独成文件并逐条断言：截图是静止的，时序错了看不出来；缓动写反（cubicOut↔cubicIn）在画面上只是"有点飘"。断言里专门钉了"上升段前半程已过 70% 高度""下落段前半程还没掉一半""峰值两侧斜率都≈0（无折角）"。
+  - 验证：`npm run test:jumpmotion` → 48 条全绿（缓动端点/单调性/Bounce 至少弹 2 次/弧线形状与峰值无折角/四个收敛到端值/越界与 NaN）；`npm run test:minigame` 179 条全绿；`npm run check:fast` 176/176 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - ⚠️ `npm run jump:e2e` **没有跑**：按用户长期偏好（不要主动做浏览器自动化测试），视觉/E2E 验收留给用户自己跑；离线门禁（弧线、时序、收敛性、静态接线）已全覆盖。
+  - 批次：20261024-0415
+- [x] [跳8] HUD 与结算按原版重做：`scene.ts` 的 HUD 段 + `index.html` 的 `.jump-*` 样式（分数移到左上、深色细体大字、去掉"最高分"行与底部 hint、结算面板＝大数字 + 最高分 + 再来一局/返回、横屏安全区），`src/core/i18n/locales/zh/minigame.ts` 同步 → `npm run test:minigame && npm run typecheck`
+  - 做了什么：`scene.ts` 的 HUD 只剩一个分数元素（删掉 `bestEl` / `hintEl` 与相关 DOM 分支）；结算面板改成「小标签（本局得分）+ 大数字 + 最高分/新记录 + 再来一局 / 返回」；`index.html` 的 `.jump-*` 全段重写（分数 #41454F、`font-weight:300`、`clamp(22px, 7.2vh, 44px)`；结算面板白底圆角卡片 + 白色胶囊按钮 + 极淡遮罩，四周挂 `env(safe-area-inset-*)`）；6 个语言的 `minigame.jump.hint` 删掉、`minigame.jump.over` 从"本局 {score} 分"改成纯标签。
+  - 为什么字号按 **vh** 而不是原版的"屏宽 10%"：用户是横屏手机（844×390），照屏宽换算得到 84px，比半个屏幕还高；原版那个比例是竖屏 320pt 的度量，横屏必须换基准（7.2vh ≈ 原版在 568 高的 7.2%）。
+  - 为什么删 hint 而不是留着："按住蓄力，松手起跳"是 2026-10 那版为了教学加的，原版游戏画面里没有任何提示文字——保留它就等于承认"画面里应该有字"，与 1:1 复刻冲突。`desc` 键仍在小游戏选择页用。
+  - 验证：`npm run test:minigame` 182 条全绿（新增三条静态断言：HUD 没有最高分行 / 没有底部提示 / 结算面板是大数字+最高分+按钮）；`npm run test:i18n` 547 通过 0 失败；`npm run audit:i18n` ✓ 无缺键、✓ 无孤儿键；`npm run check:fast` 161/161 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 未做：小游戏**选择页**（`MiniGameMenu`）仍是深色面板——它是两个小游戏共用的入口，按 跳一跳 首页的样子改会让"选择器"变成"跳一跳专页"；原版首页的标题/胶囊按钮那套视觉已在结算面板里复用。这条留给用户决定是否单独做。
+  - 批次：20261024-0415
+- [x] [跳9] 音效重写成原版节奏：把 `scene.ts` 里的 `JumpAudio` 抽到 `src/minigame/games/jump/audio.ts`（蓄力音阶每 0.15s 升一级、起跳、落地、完美命中"叮"、四类特殊方块各自音色、失败下滑音），新增 `tools/jump-audio-test.ts` 注册 `test:jumpaudio` → `npm run test:jumpaudio && npm run test:minigame`（音阶序列纯函数断言 + 静默降级仍保留）
+  - 做了什么：`audio.ts` 分两半——纯数据（`CHARGE_STEP_SECONDS=0.15`、大调五声 12 级音阶表、四类特殊方块的旋律表、起跳/落地/完美/失败四个 `Sweep`）与 `JumpAudio` 类（只负责把音符丢给 WebAudio）。蓄力从"频率随蓄力连续滑"改成**阶梯音阶**：`chargeStepFor(已按秒数)` 算出级数，只有跨级才改频率（连续滑音让人分不清按了几级，原版是靠数音高判断的）。特殊方块从"一个音"改成各自旋律：井盖两音 / 魔方三音 / 便利店四音 / 唱片五音（分越高越长）。`scene.ts` 删掉内联实现，改 `updateCharge(ratio, this.charge)` 与 `playSpecial(block.kind)`。
+  - 为什么用五声音阶而不是半音阶：原版蓄力音是"音乐性"的，半音阶听起来像电子表报警。0.9 秒蓄满只用到第 6 级，表里留 12 级是给参数调整留余量。
+  - 为什么音效必须静默降级：自动化环境没有音频设备、浏览器可能因"没有用户手势"拒绝创建 AudioContext；音效失败绝不能影响玩法。断言里直接把全套方法在无 AudioContext 环境下跑一遍。
+  - 验证：`npm run test:jumpaudio` → 31 条全绿（0.14/0.15 秒的级数边界、封顶、越界夹紧、频率单调且落在 200~1200Hz、四类旋律 2/3/4/5 音且时长递增、四个 Sweep 的方向与参数、无上下文时全套调用不抛异常、重复 dispose 不炸）；`npm run test:minigame` 188 条全绿（新增 audio.ts 的 5 条静态断言）；`npm run check:fast` 177/177 套全绿；`typecheck` + `typecheck:tools` 0 错。
+  - 批次：20261024-0415
+- [x] [跳10] 验收收口：`tools/jump-e2e.mjs` 断言更新（正交相机、两向生成、四类特殊方块、`debugState` 暴露新的可测字段），跑全量并在回复里贴结果 → `npm run check && npm run jump:e2e`（`check` 0 失败；E2E 无 ✗ 且截图与参考图逐项比对结论写进完成说明）
+  - 做了什么：`debugState` 补 `orthographic` / `gapRatio` / `axis` / `kind` / `nextKind` 五个只读字段；`tools/jump-e2e.mjs` 在开局与连跳 5 次后各断言一次（相机正交、间距 1.15~1.9 边长、方向只有 x/z、种类在五类之内），文件头也写清这三条"截图里看不出来"的判据。顺带重新生成锚点文档里由脚本管着的数字（离线套件 172 → 177，TASKS/HANDOFF/README/AGENTS 四处同时改）。
+  - 验证（贴结果）：`npm run check` → **0 失败**：「离线测试：通过 177 / 177 套 · 总耗时 16.3s」「vitest 201 passed」「i18n 547 通过 / 0 失败」「任务清单自检通过」「✓ 全绿」；`npm run build:fast` → ✓ built（2.48MB，仅有既有的 chunk 体积提示）。
+  - ⚠️ **`npm run jump:e2e` 没跑、截图也没比对**：按用户长期偏好（不要主动做浏览器自动化测试），这两步留给用户自己跑。跑法：`npm run dev` 后另开终端 `npm run jump:e2e`，四张截图落 `.tmp/shots`（jump-menu / jump-ready / jump-charging / jump-after5 / jump-over），逐项对照参考图（`.continue/.logs/…/refs/jump/`）看：视角是否等距、三面明暗左暗右亮、方块高宽比 ~0.6、间距是否几乎贴合、小人比例、阴影方向左下、背景色、分数 HUD 位置与字重。
+  - 本次改动**没有**新增任何需要人工眼的"我觉得像了"结论——所有能用脚本判的都进断言了，剩下的是真·视觉判断。
+  - 批次：20261024-0415
+- [x] [自审] 审这一批的三层：L1（等距/时序/规则有没有"坏了就变红"的检查）、L2（故意改坏一次看谁变红）、L3（判断依据里几条来自真实截图、几条是自己想的）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据
+  - L1：这一批每一层都有"坏了就变红"的检查，共 6 套离线套件 ≈ 400 条断言 + 约 35 条静态接线断言。投影层 `test:jumpiso`（42）守菱形 2:1、正交（远近平行）、两视口 3 块可见；明暗/色板 `test:minigame`（190）守 1.00/0.775/0.93 精确值与"右面比左面亮"的方向；模型 `test:jumpmodel`（45）守 min.y≈0、头径/裙摆比例、压扁 0.6/1.3、释放事件；贴图 `test:jumptex`（25）守图集尺寸/缓存/四类画法指纹；时序 `test:jumpmotion`（48）守弧线形状、峰值无折角、四个动画精确收敛；音效 `test:jumpaudio`（31）守 0.14/0.15 秒的级数边界与无 AudioContext 时静默。规则层 `jump:balance` 守可达率 100% / 完美玩家不掉 / 手抖 8~200 跳。唯一薄弱点：**颜色漂移那个 bug 当时没有任何断言**（已在本次自审补上静态断言），因为它表现是"每跳一次全世界重新上色"，属于只有肉眼才容易发现的一类。
+  - L2：当天做了两次故意破坏并复现变红——① 把 `ISO_VIEW.elevationDeg` 从 30 改成 35 → `test:jumpiso` 6 条红（俯角、菱形 2:1、两向斜率 0.5、竖直 cos30°）；② 把 `FACE_SHADE` 的左右对调 → `test:minigame` 4 条红（+X/+Z 面值、"右面比左面亮"、法线取反）。两次都在 10 秒内定位到具体断言，说明判据不是"看起来对"而是数值化的。另外 `jump:balance` 在 `[跳5]` 当场抓到过一次真实退化（间距改成边长倍数后手抖玩家 300 跳不死）。
+  - L3：判断依据的来源逐条分过类（规格表里带【测】/【推】/【估】/【二手】标签）：约 45 条来自参考图像素测量（投影 31°、三面明暗、方块高 0.6、小人 0.72/0.29/0.18/0.35、背景 6 组、HUD 位置与字重、中心点 0.11~0.14），约 10 条来自公开 H5 复刻技术文（400ms 时序、3 秒停留、四类分值、音效节奏），其余约 15 处是我自己拍的板——最关键的 5 个：① 6 组背景与方块色的**配对**（原版只给单帧颜色，配对是按 |ΔL|≥0.04 的对比度阈值自己定的）；② 特殊方块抽奖权重 40/30/20/10（攻略文只说"有哪几种"，没说比例）；③ 分数字号从原版"屏宽 10%"改成 7.2vh（横屏必须换基准）；④ 波纹三色与半径（05 被红框压住一半，只能近似）；⑤ 阴影偏移常量（按"屏幕左下"反解成世界 −0.43/+0.71）。这 5 处都写进了规格表 §11/§12 与 decision D1~D3，属于"看得见的自选"，不是"冒充测量"。
+  - 当场改进（2 条，各一个提交）：`2f2012b7` 离线钉住 `debugState` 的 10 个字段（E2E 不在 CI 里跑，改名没人会发现）；`3d2002d8` 钉住"配色按方块身份取"（L1 里那个颜色漂移 bug 的复盘断言）。
+  - 批次：20261024-0415
+
 ## 批次 20261024-0257 · 2026-10-24 · 会话 4024a9d4
 
 - [x] [E1] 界面文案收口：`WORLD_TYPE_HINTS`（5 条世界类型说明）→ `world.typeHint.*`；`main.ts` 的 **25 处 HUD toast**（名字/驯服/装鞍/牵绳/猪灵交易/袭击/图腾…）→ `misc.toast.*`；`WorldScreen` 的种子提示与生存警告 → `world.seedHint` / `world.survivalWarn`；告示牌编辑器标题 → `misc.signEditorHint`；外观预设 4 条 → `label.appearance.preset.*`
@@ -45,50 +121,6 @@
   - 数据层现状（本轮复测）：四语言 2786 键 **0 缺键 / 0 含中文 / 0 空值** —— 也就是说中文原文兜底在六语言上**一次都不会触发**
   - 验证：`test:i18n` **542 / 0**（含新增 3 条）；`test:offline` **172 / 172 套全绿**
   - 批次：20261024-0245
-
----
-
-## 批次 20261024-0223 · 2026-10-24 · 会话 4024a9d4
-
-- [x] [C1] 品牌收尾：六语言 `advancement.story_root.title`（现在是「Minecraft」，zh 是「我的世界」）→ `Minicraft`；`package.json` 的 `name`（`bedrock-118-web`）→ `minicraft`；注释里残留的 `MINECRAFT` / `Bedrock 1.18 Web` 一并改；**副标题 `1.18 · WEB EDITION` 删掉**（`BRAND_EDITION` 连同首页 `edition` 元素）
-  - 做了什么：① 六语言 `advancement.story_root.title` —— en/de/ru/fr/pt 原来是 `Minecraft`、zh 是「我的世界」，全部改成 **`Minicraft`**；② `package.json` 的 `name`：`bedrock-118-web` → **`minicraft`**；③ 注释里残留的 `MINECRAFT`（`WorldScreen` 与 `index.html` 的布局说明）改成"品牌名的字母"，`index.html` 那条历史注释里的 `Bedrock 1.18 Web` 改成 `Minicraft`；④ **副标题删除**：`WorldScreen` 不再创建 `world-edition` 元素，`BRAND_EDITION` 置空并写明原因
-  - 实测（浏览器，起 vite 5207 + 本机 Chrome）：`document.title = Minicraft`、`.world-logo = Minicraft`、`.world-edition` **已删除**，首页正文变成 `Minicraft WebGL2! 原生生存、创造与多世界存档 …` —— 只剩品牌名一行
-  - ⚠️ 改了 4 条既有断言的判据（都是"用户要求变了"的直接后果）：① `i18n`「中文模式下标题与说明原样不动」→ 排除 `minecraft:story/root`（它现在**故意**等于品牌名）；② 「首页品牌块从 BRAND / BRAND_EDITION 取值」→ 改成「首页只显示品牌名（副标题已删）」；③ 「副标题是版本身份」→ 改成「副标题已删除（`BRAND_EDITION === ''`）」；④ 「中文成就标题与原文逐条一致」→ 排除 story_root；⑤ `ui`「首页品牌块取唯一真值」→ 改成验 `logo.textContent = BRAND` 且**不含** `world-edition`
-  - 验证：`test:i18n` **523 / 0**；`ui` **926 / 0**；`test:offline` **172 / 172 套全绿**；`grep` 旧品牌名在 `src` / `public` / `index.html` / `docs` / `README.md` / `package.json` 里**只剩 `brand.ts` 的注释**（说明为什么删副标，属历史陈述）
-  - 批次：20261024-0223
-- [x] [C2] 全局语言遗漏复查：数据层面（2701 键 × 4 语言）已确认 0 缺键 / 0 含中文 / 0 空值；**源码层面 906 处硬编码中文**需要分类甄别（命令错误信息 28 处是玩家可见的、成就与物品说明 297 处是**回退原文**设计如此、diagPerf 32 处开发者面板）——调研结论写进说明，是否继续做由用户拍板
-  - 做了什么：两条口径各扫一遍 —— ① **数据层**：2701 个键 × de/ru/fr/pt，查缺键 / 含中文 / 空值 / 占位符 / 与英文同形；② **源码层**：扫 `src` 下所有 `.ts` 的非注释字符串字面量里的中文，按文件计数并抽样看上下文
-  - ✅ 数据层结论：**缺键 0 · 含中文 0 · 空值 0**（四语言全绿）；占位符不一致只有 5 处且全是**少用**（俄/法/葡的 `woodLog`/`woodPlanks`/`stemStage` 不提第二个 `{wood}`/`{crop}`、`armor` 不提 `{material}`），语义无损；与英文同形 de 78 / ru 9 / fr 102 / pt 55，**无整组可疑**（最大的 `label` 也只有 4/226）
-  - ⚠️ 源码层结论：**906 处**硬编码中文，但绝大多数**不是遗漏** —— `advancements.ts`（205 条）与 `itemNames.ts`（92 条）是**中文原文回退值**（`advancementTitle()` / `itemDescription()` 先查表、缺键才回落，设计如此）；`diagPerf.ts`（32 条）是 `?debug=1` 的开发者面板
-  - 🔴 **真遗漏（玩家可见，已立条目）**：① `Rules.ts` 的 `GAME_RULE_LABELS`（35 条规则描述，注释写明"**命令帮助的下拉用**"—— 与 P6-1 修的难度/模式同一类毛病）；② `Commands.ts` 里仍写死的中文回执（`/clone` 的「已复制 N / M 格到 …」、`（masked：跳过 N 格非空气）`、`(空)`）与 `Selectors.ts` 的 14 条选择器错误信息；③ `loot.ts` 的 30 条结构名（`村庄小屋` / `废弃矿井` …）可见性待确认
-  - 验证：巡查脚本实测四语言「缺键 0 / 含中文 0 / 空值 0」；源码扫描 906 处、73 个文件，按文件排序前几位为 `advancements.ts 205 / main.ts 154 / itemNames.ts 92 / Rules.ts 35 / diagPerf.ts 32 / loot.ts 30`；`test:i18n` 523 / 0、`test:offline` 172 / 172 套全绿
-  - 批次：20261024-0223
-
-
-- [x] [C3] `GAME_RULE_LABELS`（35 条规则描述）多语言 —— 命令帮助里的 gamerule 下拉直接显示它，与 P6-1 的难度/模式同一类；改 `gameRuleLabel(rule)` 走 `cmd.label.gamerule.*`
-  - 做了什么：`GAME_RULE_LABELS`（31 条中文规则名）→ **`gameRuleLabel(rule)`** 走 `cmd.label.gamerule.*`（31 × 6 = **186 条**），表 2701 → **2732**；使用点 `CommandHelp.ts` 的 gamerule 下拉改为 `${gameRuleLabel(rule)}（${rule}）`
-  - 为什么是真遗漏：那张表的注释写着"命令帮助的下拉用" —— 玩家在 `/help gamerule` 的候选列表里直接看到它，与 P6-1 修的 `DIFFICULTY_LABELS` / `GAME_MODE_LABELS` 完全同类（中文常量给界面用，绕过了语言表）
-  - 术语照原版：`Inventar behalten` / `Kreaturen spawnen` / `Kreaturen zerstören Blöcke`、`Сохранять инвентарь` / `Разрушение блоков мобами`、`Conserver l’inventaire` / `Créatures qui cassent des blocs`、`Manter inventário` / `Criaturas quebrando blocos`；`doInsomnia` 用 `Schlaflosigkeit` / `Бессонница` / `Insomnie` / `Insônia`（幻翼失眠）
-  - ⚠️ 改了 2 条既有断言（都是"标签搬走"的直接后果）：① `ui`「`/gamerule` 的帮助里列出了新规则」原来还检查 `Rules.ts` 里存在 `doImmediateRespawn: '立即重生'` 这个中文字面量 —— 改成只验默认值还在、且**不再**有那个字面量（标签是否翻好交给 `test:i18n`）；② `command-test`「每条规则都有中文名」改成「每条都有显示名且不是键名本身」
-  - 新增 6 条断言：规则标签覆盖 31 条 + de/ru/fr/pt 各一条「不含中文、不露英文 id」+ 中文下仍是原说法（`死亡后保留物品` / `昼夜循环`）
-  - 验证：五语言渲染 `keepInventory` → de `Inventar behalten` / ru `Сохранять инвентарь` / fr `Conserver l’inventaire` / pt `Manter inventário`；`test:i18n` **529 / 0**；`command-test` **435 / 0**；`ui` **926 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2732 条、0 缺口 / 0 孤儿
-  - 批次：20261024-0223
-- [x] [C4] 命令域剩余硬编码：`Commands.ts` 的 `/clone` `/fill` 回执与 `(空)`、`Selectors.ts` 的 14 条错误信息 → `cmdMessages.*`（约 28 条）
-  - 做了什么：`Selectors.ts` 的 **14 条**选择器错误 + `Commands.ts` 的 **13 处**回执（`/clone` 的「已复制 N / M 格」「（masked：跳过 N 格）」、`(空)` 两处、授予/收回、execute 三条、scoreboard/队伍摘要四条）全部走 `cmd.error.selector.*` / `cmd.reply.*` —— 共 **30 条键 × 6 语言 = 180 条**，表 2732 → **2762**；两个文件里**再无硬编码中文**（只剩一行行尾注释）
-  - ⚠️ 坑 1（会静默覆盖）：`cmd.reply.team.prefix` / `suffix` 这两个键**已经存在**（P4 法语批时加的，值是「前缀」/「后缀」两个字，用在 `msg(key, …)` 里）。我新写的是「，前缀「{prefix}」」（带前导逗号、给队伍摘要拼串用）→ `TS1117: duplicate property` 当场拦下。改成 `prefixAffix` / `suffixAffix` 两个新键，旧键保持不动
-  - ⚠️ 坑 2（变量遮蔽）：`/time` 那段有 `const t = parseTime(args[1])`，把 i18n 的 `t` **遮蔽**了 → `t('cmd.reply.emptyValue')` 变成"调用 parseTime 的返回值"（可能为 null），`TS2721: Cannot invoke an object which is possibly null` 抓到。改用同文件里的本地辅助 `msg('cmd.reply.emptyValue')`（它本来就是"键 + 参数"的简写），语义更贴合
-  - 新增 5 条断言：四语言各一条「命令错误与回执不含中文」（取样 6 条：选择器未知 / limit / 过滤参数缺等号 / clone 回执 / 队伍摘要 / execute 未知子命令）+ 中文下仍是原说法（`type 后面没有种类`）
-  - 验证：`test:i18n` **534 / 0**；`command-test` **435 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2762 条、0 缺口 / 0 孤儿；`node .tmp/list-c4.mjs` 复查两个文件的中文只剩注释
-  - 批次：20261024-0223
-- [x] [C5] `loot.ts` 的 30 条结构名（`村庄小屋` 等）多语言 —— 先确认它在界面上是否可见，再决定键化还是保留
-  - 侦察结论（先确认可见性）：`LOOT_TABLES[].name` **确实上界面** —— `CommandHelp.ts:426` 的 `/loot` 帮助下拉写的是 `${table.name}（${table.key}）`，与 C3 的 gamerule 下拉完全同一个模式；所以判为**真遗漏、要键化**，不是保留
-  - 做了什么：22 条战利品表名（村庄小屋 / 废弃矿井 / 地牢 / 要塞图书馆与三个要塞点 / 两处沉船 / 林地府邸 / 末地城 / 两处堡垒遗迹 / 沙漠神殿 / 丛林神庙 / 女巫小屋 / 掠夺者前哨 / 雪屋 / 废弃传送门 / 埋藏的宝藏 / 下界要塞 / 海底废墟）→ `cmd.label.lootTable.*`（22 × 6 = **132 条**），表 2762 → **2784**；`CommandHelp` 的下拉改用 `t(...)`
-  - ⚠️ 条目写的"30 条"实际是 **22 条**（`LOOT_TABLES` 就 22 张表）；另 8 条差额是我当初按 `loot.ts` 里中文字面量数量估的，含注释与函数名
-  - 一个刻意的取舍：`loot.ts` 的 `name` 字段**保留**（数据字段，调试与 `tools/*-test.ts` 在用），只在注释里写明"界面走 `cmd.label.lootTable.*`"。把字段删掉会动 `LootTable` 接口与 22 条数据表，收益不抵风险；玩家可见处已经全部走语言表
-  - 顺带核对了 `/structure` 那一支（担心同类问题）：它**已经在走** `cmd.label.structure.*`（多语言 P1-7 时改的），不是遗漏
-  - 新增 5 条断言：de/ru/fr/pt 各一条「战利品表名不含中文、也不露键名」（22 条全量扫）+ 中文下仍是原说法（`村庄小屋`）
-  - 验证：`test:i18n` **539 / 0**；`test:offline` **172 / 172 套全绿**；`audit:i18n` 2784 条、0 缺口 / 0 孤儿；`check.mjs --fast` 5 项全绿
-  - 批次：20261024-0223
 
 ---
 

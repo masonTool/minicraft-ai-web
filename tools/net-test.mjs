@@ -9,6 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
@@ -105,7 +106,60 @@ class TestClient {
 
 // ---------------------------------------------------------------- 启动服务端
 
+/**
+ * 端口现在还有人听吗？
+ *
+ * ⚠️ 为什么需要它：`server.kill('SIGTERM')` 只是"发了信号"，进程真正退出（并释放
+ * 监听端口）可能还要几十到几百毫秒。连着跑两遍（门禁 + 手动重跑、或 CI 并行）时，
+ * 第二遍的服务端就会 `EADDRINUSE` 直接崩，于是"服务端启动成功"红、后面 5 条依赖
+ * welcome 的断言一起红——重跑又绿。门禁时红时绿比慢一秒危险得多。
+ */
+function portBusy(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: '127.0.0.1' });
+    let settled = false;
+    const done = (busy) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(busy);
+    };
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+    setTimeout(() => done(false), 500);
+  });
+}
+
+/** 停掉子进程并**等它真的退出**（2 秒不退就 SIGKILL） */
+function stopServer(child) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // 已经死了
+      }
+    }, 2000);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
+}
+
 console.log('\n[启动服务端]');
+// 上一遍留下的服务端可能还没走干净：先等端口放开（最多 3 秒）
+for (let i = 0; i < 30 && (await portBusy(PORT)); i++) await sleep(100);
 const server = spawn('node', ['server/index.mjs'], {
   // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
   // "宽限期过后才清掉落物"的断言都要白等半分钟
@@ -441,8 +495,8 @@ try {
 
   bob.close();
 } finally {
-  server.kill('SIGTERM');
-  await sleep(300);
+  // 等它真的退出再走，否则下一次跑的 spawn 会撞上还没释放的端口
+  await stopServer(server);
 }
 
 console.log(`\n联机测试：${passed} 通过 / ${failed} 失败`);
