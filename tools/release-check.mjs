@@ -173,7 +173,39 @@ if (mode === 'app') {
   }
 }
 
-// ------------------------------------------------------------------ 3. 断言
+// ------------------------------------------------------------------ 3. 版本清单
+/**
+ * `dist/version.json`：站点要求的最低核心数据版本（宿主5）。
+ *
+ * 宿主启动时把自报的 `core/N` 拼进 UA，页面读这个文件判"是不是太老了"。为什么是
+ * **静态文件**而不是接口：这一整套方案刻意不要后台，多一个动态端点就多一份运维与可用性。
+ *
+ * ⚠️ `core` 从一个来源读——`blockTableCodec.ts` 的 `BLOCK_TABLE_VERSION`——而不是再抄一遍：
+ * 抄一遍必然漂（二进制升到 v2、清单还写 1，结果新前端放行了旧壳，白屏）。
+ */
+{
+  const codecSrc = readFileSync(join(ROOT, 'src/core/registry/blockTableCodec.ts'), 'utf8');
+  const versionMatch = /export const BLOCK_TABLE_VERSION = (\d+)/.exec(codecSrc);
+  if (versionMatch === null) {
+    problems.push('读不到 blockTableCodec.ts 的 BLOCK_TABLE_VERSION（改过声明形式？）');
+  } else {
+    const coreVersion = Number(versionMatch[1]);
+    const coreBin = join(ROOT, `.tmp/hostcore/core-v${coreVersion}.bin`);
+    if (mode === 'web' && !existsSync(coreBin)) {
+      problems.push(`缺少 ${coreBin}：core.bin 的版本与 BLOCK_TABLE_VERSION 对不上，先跑 npm run gen:hostcore`);
+    }
+    const manifest = {
+      core: coreVersion,
+      minSupportedCore: coreVersion,
+      builtAt: new Date().toISOString(),
+      mode,
+    };
+    writeFileSync(join(DIST, 'version.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    notes.push(`version.json core=${coreVersion} minSupportedCore=${coreVersion}`);
+  }
+}
+
+// ------------------------------------------------------------------ 4. 断言
 
 const files = walk(DIST);
 

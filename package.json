@@ -213,6 +213,7 @@
     "test:hostcore": "esbuild tools/hostcore-test.ts --bundle --platform=node --format=esm --outfile=.tmp/hostcore-test.mjs --log-level=error && node .tmp/hostcore-test.mjs",
     "gen:behaviors": "esbuild tools/gen-behavior-golden.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-behavior-golden.mjs --log-level=error && node .tmp/gen-behavior-golden.mjs",
     "test:behaviors": "esbuild tools/behaviors-test.ts --bundle --platform=node --format=esm --outfile=.tmp/behaviors-test.mjs --log-level=error && node .tmp/behaviors-test.mjs",
+    "test:hostversion": "esbuild tools/hostversion-test.ts --bundle --platform=node --format=esm --outfile=.tmp/hostversion-test.mjs --log-level=error && node .tmp/hostversion-test.mjs",
     "test:pointer": "esbuild tools/pointer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pointer-test.mjs --log-level=error && node .tmp/pointer-test.mjs",
     "test:screenshot": "node tools/screenshot-test.mjs",
     "guard": "node tools/console-guard.mjs",

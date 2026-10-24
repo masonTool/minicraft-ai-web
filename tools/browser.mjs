@@ -78,6 +78,13 @@ export function findChrome() {
 export async function openPage({
   viewport = { width: 1280, height: 720 },
   collectConsole = true,
+  /**
+   * 自定义 UA（批次 20261025-0329 · 宿主5）。
+   *
+   * 安卓宿主会在 UA 末尾拼 `MinicraftHost/1.0 core/N`，页面靠它判"宿主是不是太老了"。
+   * 要验这条判定就得能用不同 UA 打开同一个页面——否则只能靠改代码或装 APK。
+   */
+  userAgent = undefined,
 } = {}) {
   const executablePath = findChrome();
   if (!executablePath) {
@@ -94,7 +101,7 @@ export async function openPage({
     return { ok: false, reason: `浏览器起不来：${error?.message ?? error}` };
   }
 
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, ...(userAgent ? { userAgent } : {}) });
   const page = await context.newPage();
 
   const problems = [];

@@ -47,6 +47,69 @@ const CORE_TIMEOUT_MS = 4000;
  */
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.minicraft.game';
 
+/** 站点上的版本清单（静态文件，构建期生成；拿不到就用兜底值，不阻塞启动） */
+const VERSION_URL = './version.json';
+
+/**
+ * `version.json` 取不到时的兜底下限。
+ *
+ * 只在"清单文件本身没拿到"（离线 / 老构建 / 被网关改写）时用。必须是**最宽松**的值：
+ * 拿不到清单就拒绝启动，等于让一个小文件把整个游戏挡在门外，代价远大于收益。
+ */
+const CORE_VERSION_FLOOR = 1;
+
+/**
+ * 从 UA 里读宿主自报的核心数据版本。
+ *
+ * 约定形如：`… MinicraftHost/1.0 core/3`（宿主启动时把 `core/<装载的版本>` 拼在 UA 末尾）。
+ * 为什么用 UA 而不是 JSBridge：**启动早期**就要判，那时桥还没建好；而 UA 在第一个请求里就有，
+ * 多一行代码就能用，也不需要为了一个数字引一套消息通道。
+ *
+ * 返回 `null` 表示"UA 里没有这个标记"——浏览器就是这种（也包含伪造 UA 的人：
+ * 他们最多把自己伪装成"版本未知"，而版本未知的处置是**继续走正常流程**，见 `evaluateHostVersion`）。
+ */
+export function readHostCoreVersion(userAgent: string): number | null {
+  // 只认"宿主标记 + core/N"同时出现，避免把普通浏览器 UA 里的巧合数字当成版本
+  const match = /MinicraftHost\/[\d.]+\s+core\/(\d+)/i.exec(userAgent);
+  if (match === null) return null;
+  const version = Number(match[1]);
+  return Number.isInteger(version) && version >= 0 ? version : null;
+}
+
+/**
+ * 版本判定（纯函数，便于把三种组合钉成测试）。
+ *
+ *  - `unknown`：UA 里没有宿主标记（浏览器）→ **继续正常流程**，让他去撞 404，
+ *    最终看到"去应用里玩"。这里不能直接判"请更新应用"：那对浏览器是错的提示。
+ *  - `outdated`：宿主自报的版本低于站点要求的下限 → 提示"请更新应用"。
+ *  - `ok`：版本达标（或宿主没自报但站点也没有下限要求）。
+ */
+export function evaluateHostVersion(
+  hostVersion: number | null,
+  minSupported: number,
+): 'ok' | 'outdated' | 'unknown' {
+  if (hostVersion === null) return 'unknown';
+  return hostVersion < minSupported ? 'outdated' : 'ok';
+}
+
+/**
+ * 取站点要求的最低核心数据版本。
+ *
+ * 任何失败（404 / JSON 坏 / 字段缺失）都回退到兜底值，**不抛**：这个文件是"锦上添花"的
+ * 版本闸门，不该成为启动路径上的单点故障。
+ */
+async function fetchMinSupportedCore(): Promise<number> {
+  try {
+    const response = await fetch(VERSION_URL, { cache: 'no-store' });
+    if (!response.ok) return CORE_VERSION_FLOOR;
+    const data = (await response.json()) as { minSupportedCore?: unknown };
+    const value = data.minSupportedCore;
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : CORE_VERSION_FLOOR;
+  } catch {
+    return CORE_VERSION_FLOOR;
+  }
+}
+
 /** 取核心数据；任何失败都抛，由调用方决定显示哪一屏 */
 async function fetchCore(): Promise<ArrayBuffer> {
   const controller = new AbortController();
@@ -174,16 +237,35 @@ function looksLikeCore(buffer: ArrayBuffer): boolean {
  * 没有方块表的世界不会报错，只会是一片空白，那种失败比黑屏难查得多。
  */
 export async function ensureHostCore(): Promise<boolean> {
+  // 两件事并行：核心数据（宿主本地拦截，毫秒级）与版本清单（静态小文件）。
+  // 串行会让"读一个 200 字节的 JSON"挡在主包前面，白多一段等待。
+  const corePromise = fetchCore();
+  const minSupportedPromise = fetchMinSupportedCore();
+
+  // ---- 版本闸门：先判"宿主是不是太老了"，比解一遍二进制更早、也更省
+  const hostVersion = readHostCoreVersion(navigator.userAgent);
+  const minSupported = await minSupportedPromise;
+  if (evaluateHostVersion(hostVersion, minSupported) === 'outdated') {
+    // 提前返回之后 corePromise 若 reject 就成了"未处理的 rejection"（控制台冒红，
+    // 还会被控制台门禁当成真错误），所以必须先挂一个 catch
+    corePromise.catch(() => undefined);
+    console.warn(`[boot] 宿主核心数据版本过旧（core/${String(hostVersion)} < ${minSupported}）`);
+    showScreen('update');
+    return false;
+  }
+
   let core: ArrayBuffer;
   try {
-    core = await fetchCore();
+    core = await corePromise;
   } catch (error) {
+    // 浏览器打开就是这一条：服务器上没有 `__host/core.bin`
     console.info('[boot] 没有核心数据，显示安装引导', error);
     showScreen('install');
     return false;
   }
 
   if (!looksLikeCore(core)) {
+    // 200 但内容不是方块表（SPA 回退 / 被网关改写 / 静态站上放了个别的文件）
     console.info('[boot] 拿到的不是方块表，按"没有核心数据"处理');
     showScreen('install');
     return false;
@@ -192,6 +274,7 @@ export async function ensureHostCore(): Promise<boolean> {
   try {
     installBlockTable(decodeBlockTable(core));
   } catch (error) {
+    // 文件在、但解不开 / 格式版本不兼容：这是"宿主与线上不同步"，不是"没装应用"
     console.error('[boot] 核心数据无法装载', error);
     showScreen('update');
     return false;

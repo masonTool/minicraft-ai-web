@@ -54,6 +54,10 @@ self.addEventListener('fetch', (event) => {
   // 反过来说：浏览器打开时这个路径是 404，也不该被缓存成"永久没有"。
   if (url.pathname.includes('/__host/')) return;
 
+  // 版本清单同理：它是"要不要提示更新"的唯一判据，被缓存住就等于停在上一个版本的判断上
+  // （新前端已经要求 core/2 了，页面还照着旧的 core/1 放行）。它只有几百字节，每次走网络。
+  if (url.pathname.endsWith('/version.json')) return;
+
   // ---- 导航：网络优先
   if (request.mode === 'navigate') {
     event.respondWith(
