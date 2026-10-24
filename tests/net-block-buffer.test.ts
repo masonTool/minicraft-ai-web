@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planRemoteBlock } from '../src/core/net/RemoteBlockWrite.ts';
+import { applyRemoteBlock, planRemoteBlock } from '../src/core/net/RemoteBlockWrite.ts';
 import { ChunkEdits } from '../src/core/save/ChunkEdits.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
 
@@ -114,5 +114,79 @@ describe('远端改动进增量表后能被区块加载补上', () => {
     expect(edits.applyTo('overworld', -1, -1, right)).toBe(1);
     // -1 & 15 === 15
     expect(right.get(15, 70, 15)).toBe(7);
+  });
+});
+
+/*
+ * 落地顺序（L8 · MS2）：**先记增量、再写世界**。
+ *
+ * 顺序是有语义的：反过来的话，"写世界时抛异常 / 区块正好被卸载"这条路径上，
+ * 改动只留在内存世界里，读档或重进区块就没了。以前这两步直接写在 `main.onNetBlock`
+ * 里，谁调个位置都不会有测试红——现在顺序收在 `applyRemoteBlock` 里。
+ */
+describe('applyRemoteBlock 的落地顺序', () => {
+  const edit = { x: 1, y: 70, z: 2, id: 3, state: 0, dimension: 'overworld' };
+
+  function makeSink() {
+    const calls: string[] = [];
+    return {
+      calls,
+      sink: {
+        record: () => calls.push('record'),
+        apply: () => calls.push('apply'),
+      },
+    };
+  }
+
+  it('apply：先 record 再 apply，返回 true', () => {
+    const { calls, sink } = makeSink();
+    expect(applyRemoteBlock('apply', edit, sink)).toBe(true);
+    expect(calls).toEqual(['record', 'apply']);
+  });
+
+  it('buffer：只 record，不碰世界（返回 false）', () => {
+    const { calls, sink } = makeSink();
+    expect(applyRemoteBlock('buffer', edit, sink)).toBe(false);
+    expect(calls).toEqual(['record']);
+  });
+
+  it('drop：两个钩子都不调用（越界坐标不能进增量表）', () => {
+    const { calls, sink } = makeSink();
+    expect(applyRemoteBlock('drop', edit, sink)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('写世界抛异常时，增量已经记下了（顺序不能反）', () => {
+    const calls: string[] = [];
+    expect(() =>
+      applyRemoteBlock('apply', edit, {
+        record: () => calls.push('record'),
+        apply: () => {
+          calls.push('apply');
+          throw new Error('渲染炸了');
+        },
+      }),
+    ).toThrow('渲染炸了');
+    expect(calls).toEqual(['record', 'apply']);
+  });
+
+  it('同格乱序 / 重复到达：增量表只留最后一稿（世界跟着最后一稿）', () => {
+    const edits = new ChunkEdits();
+    const writes: number[] = [];
+    const sink = {
+      record: (e: typeof edit) => recordRemote(edits, e.dimension, e.x, e.y, e.z, e.id, e.state),
+      apply: (e: typeof edit) => writes.push(e.id),
+    };
+    applyRemoteBlock('apply', { ...edit, id: 5 }, sink);
+    applyRemoteBlock('apply', { ...edit, id: 9 }, sink);
+    applyRemoteBlock('apply', { ...edit, id: 7 }, sink);
+    // 三次都写了世界（网络是按到达顺序覆盖），增量表里留下最后一稿
+    expect(writes).toEqual([5, 9, 7]);
+    // 同格只留一稿：`count` 是这一区块的改动**条数**，三次写同一格仍然是 1
+    expect(edits.count('overworld', chunkCoord(1), chunkCoord(2))).toBe(1);
+    // 用 `applyTo` 把增量叠进一个干净区块，最终值应为最后一稿（7）
+    const chunk = new Chunk(1, 0, 2);
+    edits.applyTo('overworld', chunkCoord(1), chunkCoord(2), chunk);
+    expect(chunk.get(1 & 15, 70, 2 & 15)).toBe(7);
   });
 });

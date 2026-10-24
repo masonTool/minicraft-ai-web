@@ -36,3 +36,46 @@ export function planRemoteBlock(
   if (editDimension !== currentDimension) return 'buffer';
   return loaded ? 'apply' : 'buffer';
 }
+
+/** 一条远端改动（与协议 `blocks` 数组同形，展开成对象便于阅读） */
+export interface RemoteBlockEdit {
+  x: number;
+  y: number;
+  z: number;
+  id: number;
+  state: number;
+  dimension: string;
+}
+
+/**
+ * 落地时要调用的两件事，**顺序由这里保证**：
+ *  · `record`：写进增量表（存档 + 区块以后加载时由 `edits.applyTo` 叠回去）；
+ *  · `apply`：立刻写进世界（顺带刷光照/网格，可能触发渲染）。
+ *
+ * 为什么把顺序收进一个函数：这两个动作的顺序是有语义的——**先记增量再交给渲染**。
+ * 反过来的话，"写世界时抛异常 / 区块正好被卸载"这条路径上，改动就只留在内存世界
+ * （下一次读档或重进区块就没了）。以前这段顺序写在 `main.onNetBlock` 里，
+ * 谁顺手调一下两行就换了位置，改了也不会有测试红。
+ */
+export interface RemoteBlockSink {
+  record(edit: RemoteBlockEdit): void;
+  apply(edit: RemoteBlockEdit): void;
+}
+
+/**
+ * 按 `planRemoteBlock` 的判定落地一条改动。
+ *
+ * @returns 是否写进了世界（`true` = 立刻可见；`false` = 只记增量等加载 / 被丢弃）
+ */
+export function applyRemoteBlock(
+  action: RemoteBlockAction,
+  edit: RemoteBlockEdit,
+  sink: RemoteBlockSink,
+): boolean {
+  if (action === 'drop') return false;
+  // ⚠️ 顺序是语义的一部分，别交换（见 `RemoteBlockSink` 的注释）
+  sink.record(edit);
+  if (action === 'buffer') return false;
+  sink.apply(edit);
+  return true;
+}

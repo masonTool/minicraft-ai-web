@@ -391,7 +391,7 @@ import {
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
-import { planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
+import { applyRemoteBlock, planRemoteBlock } from './core/net/RemoteBlockWrite.ts';
 import {
   realignedWorldSummary,
   remoteWorldWritable as remoteWritableBySeed,
@@ -4195,19 +4195,27 @@ class App {
     if (!this.remoteWorldWritable()) return;
     const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
     const action = planRemoteBlock(target, this.dimension, this.world.isLoaded(x, z), y);
-    if (action === 'drop') return;
-    this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
-    if (action === 'buffer') return;
-    // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
-    this.applyingRemoteBlock++;
-    try {
-      // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
-      this.world.setBlockAndUpdate(x, y, z, id, state);
-      // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
-      this.ensureBlockEntityAt(x, y, z, id, target);
-    } finally {
-      this.applyingRemoteBlock--;
-    }
+    /*
+     * 落地顺序（"先记增量、再写世界"）由 `applyRemoteBlock` 统一保证（L8·MS2）——
+     * 以前这两步直接写在这里，谁改一下顺序都不会有测试红。
+     */
+    applyRemoteBlock(action, { x, y, z, id, state, dimension: target }, {
+      record: () => {
+        this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
+      },
+      apply: () => {
+        // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
+        this.applyingRemoteBlock++;
+        try {
+          // 走 setBlockAndUpdate：光照与网格会跟着更新（增量上面已经记过了）
+          this.world.setBlockAndUpdate(x, y, z, id, state);
+          // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
+          this.ensureBlockEntityAt(x, y, z, id, target);
+        } finally {
+          this.applyingRemoteBlock--;
+        }
+      },
+    });
   }
 
   /**
