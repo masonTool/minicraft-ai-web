@@ -189,3 +189,25 @@ export function sanitizeWorldMeta(value) {
     worldType: label(value.worldType),
   };
 }
+
+// ---------------------------------------------------------------- 改动请求（L8·MS2）
+
+/** 一条 `edit-request` 里最多带多少格（与 `blocks` 同一上限） */
+export const MAX_REQUEST_BLOCKS = 4096;
+
+/**
+ * 从属端发来的"改动请求"载荷收口。
+ *
+ * 只认 `block` / `blocks` 两种形状：**内容不在这里校验**（y 范围、距离、id 上界
+ * 由房主落地时按 `planRemoteBlock` 再过一遍）——服务端没有方块表，也没有必要
+ * 为了转发一份别人的世界去当裁判。这里只保证"形状不会把房主那边撑爆"。
+ */
+export function sanitizeEditPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.t === 'block') return { t: 'block', edit: Array.isArray(payload.edit) ? payload.edit.slice(0, 6) : null };
+  if (payload.t === 'blocks') {
+    if (!Array.isArray(payload.blocks)) return null;
+    return { t: 'blocks', blocks: payload.blocks.slice(0, MAX_REQUEST_BLOCKS) };
+  }
+  return null;
+}

@@ -185,7 +185,7 @@ describe('applyRemoteBlock 的落地顺序', () => {
     // 同格只留一稿：`count` 是这一区块的改动**条数**，三次写同一格仍然是 1
     expect(edits.count('overworld', chunkCoord(1), chunkCoord(2))).toBe(1);
     // 用 `applyTo` 把增量叠进一个干净区块，最终值应为最后一稿（7）
-    const chunk = new Chunk(1, 0, 2);
+    const chunk = new Chunk(chunkCoord(1), chunkCoord(2));
     edits.applyTo('overworld', chunkCoord(1), chunkCoord(2), chunk);
     expect(chunk.get(1 & 15, 70, 2 & 15)).toBe(7);
   });

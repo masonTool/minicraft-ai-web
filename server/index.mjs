@@ -35,6 +35,7 @@ import {
   sanitizeDimension,
   sanitizeName,
   sanitizeRoom,
+  sanitizeEditPayload,
   sanitizeWorldMeta,
   withinEditReach,
 } from './protocol.mjs';
@@ -968,6 +969,32 @@ wss.on('connection', (socket, request) => {
           player.room,
           { x, z, dimension },
         );
+        break;
+      }
+
+      /*
+       * 从属端的改动请求（L8 · MS2）→ **只转给本房房主**。
+       *
+       * 为什么要有这条路：房主权威之后世界只由房主推进，但从属端仍然是"能建造"的
+       * （拆、放、开箱子）。直接丢弃它的 `blocks` 等于没收建造能力，所以改动以
+       * "请求"的形式回到房主：房主在自己的世界里应用、再由 `BlockFunnel` 作为
+       * **权威结果**广播出去。服务端在这条链上只做路由——不判权、不落地、不校验内容
+       * （形状收口在 `sanitizeEditPayload`，世界语义由房主那端把关）。
+       */
+      case 'edit-request': {
+        if (!player) return;
+        // 借用方块令牌桶：一条请求一格，防止有人把房主刷爆
+        if (!player.buckets.block.take()) return;
+        const hostEntry = hosts.get(player.room);
+        const hostPlayer = hostEntry ? players.get(hostEntry.id) : undefined;
+        if (!hostPlayer) {
+          // 房里没房主（或房主刚掉线）：明确回执，让从属端知道自己这刀没人接
+          send(socket, { t: 'edit-request', ok: false, reason: 'no-host' });
+          return;
+        }
+        const payload = sanitizeEditPayload(message.payload);
+        if (!payload) return;
+        send(hostPlayer.socket, { t: 'edit-request', from: player.id, payload });
         break;
       }
 

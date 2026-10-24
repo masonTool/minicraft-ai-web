@@ -1413,6 +1413,44 @@ try {
     authFollower.close();
   }
 
+  // ---------------------------------------------------------------- 改动请求（L8 · MS2）
+  console.log('\n[从属端的改动请求转给房主]');
+  {
+    const reqHost = new TestClient('ReqHost', undefined, { room: 'reqroom', host: true });
+    const reqFollower = new TestClient('ReqFollower', undefined, { room: 'reqroom' });
+    const welcomeReqHost = await joinAndWaitWelcome(reqHost, '房主', 0, 70, 0);
+    const welcomeReqFollower = await joinAndWaitWelcome(reqFollower, '从属', 4, 70, 4);
+
+    // 从属端请求改一格 → 只有房主收到，且带 from 与 payload
+    reqHost.mailbox.length = 0;
+    reqFollower.send({
+      t: 'edit-request',
+      payload: { t: 'blocks', blocks: [[50, 70, 50, 1, 0, 'overworld']] },
+    });
+    const forwarded = await reqHost.wait('edit-request', 2000);
+    check('房主收到从属端的改动请求', Array.isArray(forwarded?.payload?.blocks), JSON.stringify(forwarded));
+    check('请求带 from（谁点的）', forwarded?.from === welcomeReqFollower?.id, `${forwarded?.from} vs ${welcomeReqFollower?.id}`);
+    check('payload 原样转发（坐标/方块/维度不变）', JSON.stringify(forwarded?.payload?.blocks?.[0]) === JSON.stringify([50, 70, 50, 1, 0, 'overworld']));
+
+    // 不认识的载荷：服务端不转（房主那边不该被塞垃圾）
+    reqHost.mailbox.length = 0;
+    reqFollower.send({ t: 'edit-request', payload: { t: 'nonsense' } });
+    const junk = await reqHost.wait('edit-request', 600);
+    check('不认识的载荷被丢弃（房主收不到）', junk === null, JSON.stringify(junk));
+
+    // 房里没有房主：明确回执，别让从属端以为"发出去了"
+    const noHostFollower = new TestClient('NoHostFollower', undefined, { room: 'nohostreq' });
+    await joinAndWaitWelcome(noHostFollower, '没房主', 0, 70, 0);
+    noHostFollower.mailbox.length = 0;
+    noHostFollower.send({ t: 'edit-request', payload: { t: 'blocks', blocks: [[51, 70, 50, 1, 0, 'overworld']] } });
+    const rejected = await noHostFollower.wait('edit-request', 2000);
+    check('没房主时回执 no-host', rejected?.ok === false && rejected?.reason === 'no-host', JSON.stringify(rejected));
+
+    reqHost.close();
+    reqFollower.close();
+    noHostFollower.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {
