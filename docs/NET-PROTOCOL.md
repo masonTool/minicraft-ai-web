@@ -18,7 +18,7 @@
   不能主动发 `ping`，但**会自动回 `pong`**，所以这是唯一不用改应用层协议的探活手段。
   客户端侧不另做超时：它只认 socket 的 close，断开后按 `RECONNECT_DELAY_MS` 重连，
   状态机在 `core/net/NetSession.ts`（`idle|connecting|connected|reconnecting|offline`）。
-- 有协议版本位（`v`，当前 **1**）与稳定客户端标识（`clientId`）：版本不一致直接拒绝连接，
+- 有协议版本位（`v`，当前 **2**；v2 = 房主权威，`join` 带 `host`）与稳定客户端标识（`clientId`）：版本不一致直接拒绝连接，
   不进入“字段慢慢对不上”的状态（见 §5.1）。
 - `clientId` **不是鉴权**：没有密码/签名，只用来挡住同一个浏览器的两个标签页并发连接，
   以及将来重连时认回原玩家。它存在 localStorage（`core/net/ClientId.ts`）。

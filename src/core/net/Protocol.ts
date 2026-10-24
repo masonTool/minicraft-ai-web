@@ -9,8 +9,12 @@
  * 什么时候 +1：**字段语义变了、旧客户端会理解错**（加一个可选字段不算，删改字段算）。
  * 版本不一致时服务端拒绝连接并回 `error.code = 'version'`，客户端据此**不重连**
  * （否则会每 3 秒撞一次墙）。
+ *
+ * v2（L8 房主权威）：`join` 带 `host`、`welcome` 下 `isHost` / `hostId`。这不只是"多了
+ * 两个可选字段"——旧客户端收不到 `hostId` 就会自己跑模拟，于是**两端各算一遍世界**，
+ * 正是这一版要消灭的不一致。所以旧版本由版本位拒连，不做兼容。
  */
-export const NET_PROTOCOL_VERSION = 1;
+export const NET_PROTOCOL_VERSION = 2;
 
 /**
  * 服务端会返回的错误码。
