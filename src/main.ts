@@ -4586,11 +4586,14 @@ class App {
     // 站在传送门里（或正在传送的等待期）时，紫色色罩**优先于**水下/岩浆色罩：
     // 原版门的紫色是盖在一切之上的，否则在门里看水面会变成一片青色。
     // 末地传送门（批次 111）走同一条色罩：原版两扇门都是那片紫。
-    const effect =
-      this.pendingArrival !== null || this.playerInPortal() || this.playerInEndPortal()
-        ? 'portal'
-        : this.eyeMedium();
+    const inPortal = this.pendingArrival !== null || this.playerInPortal() || this.playerInEndPortal();
+    // 埋在方块里（批次 20261025-0256）：优先级仅次于传送门——埋在石头里时"门里/水下"那
+    // 两种颜色都是错的，而原版"埋在方块里"本来也是盖住一切
+    const buried = inPortal ? null : this.buriedInBlock();
+    const effect = inPortal ? 'portal' : buried !== null ? 'suffocate' : this.eyeMedium();
     this.screenEffects.set(effect);
+    // 色罩取那个方块自己的颜色（贴图平均色），否则"被埋住"看起来只是屏幕突然变黑
+    this.screenEffects.setTint(buried === null ? null : this.blockParticleColor(buried));
     // 音效跟着一起"闷"（批次 138）：水下听什么都该是低通之后的
     this.audio.underwater = effect === 'water';
 
@@ -4607,6 +4610,33 @@ class App {
       this.solidMaterial.setFog(0x000000, near, far);
       this.translucentMaterial.setFog(0x000000, near, far);
     }
+  }
+
+  /**
+   * 相机是不是正埋在一个会闷死人的实心方块里（返回那个方块 id，不是则返回 null）。
+   *
+   * 这条是"贴脸透视"的第二条路径（批次 20261025-0256）：相机真的进了方块内部时，
+   * 眼前那面是**背面**、被背向剔除，近裁面收到多小都看不到它——只能整屏盖住。
+   *
+   * 两个判据缺一不可：
+   *  - `blockDef(id).suffocates`：玻璃 / 树叶 / 水本来就是透的，埋在它们里**看得见外面**
+   *    （原版也是这样），糊一屏颜色反而是错的；
+   *  - `cameraClearance(...) === 0`：必须真的在**碰撞盒里面**。半砖只填了下半格，
+   *    相机在空着的上半格时看得见外面，不算被埋住。
+   *
+   * 旁观模式直接排除：旁观者整天在方块里飞，本来就该穿墙看世界（与 `applyAdaptiveNear`
+   * 用的是同一条判据 `hasBlockCollision`）。
+   */
+  private buriedInBlock(): number | null {
+    if (!hasBlockCollision(this.gameMode)) return null;
+    const p = this.camera.position;
+    const x = Math.floor(p.x);
+    const y = Math.floor(p.y);
+    const z = Math.floor(p.z);
+    const id = this.world.getBlock(x, y, z);
+    if (id === 0 || !blockDef(id).suffocates) return null;
+    // radius 0：只看相机所在这一格（1 次 collisionAt），够判"在不在实体里"
+    return cameraClearance(this.world, p.x, p.y, p.z, 0) > 0 ? null : id;
   }
 
   /**

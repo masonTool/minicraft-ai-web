@@ -849,6 +849,47 @@ console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');
   effects.dispose();
 }
 
+console.log('\n[视野效果：埋在方块里的色罩（批次 20261025-0256）]');
+{
+  /** 逐通道比较（过渡是指数逼近，只能用容差） */
+  const nearHex = (a: number, b: number, tol = 1): boolean =>
+    Math.abs(((a >> 16) & 0xff) - ((b >> 16) & 0xff)) <= tol &&
+    Math.abs(((a >> 8) & 0xff) - ((b >> 8) & 0xff)) <= tol &&
+    Math.abs((a & 0xff) - (b & 0xff)) <= tol;
+
+  const effects = new ScreenEffects();
+  check('默认没有覆盖色', effects.tintColor === null);
+  effects.set('suffocate');
+  // 埋住是"突然发生"的（沙子砸头 / 活塞推），过渡给足时间收敛后再断言
+  for (let i = 0; i < 20; i++) effects.update(0.05);
+  const buried = effects.state;
+  check('埋在方块里是整屏不透明', buried.alpha > 0.99, `alpha=${buried.alpha.toFixed(4)}`);
+  check('整屏同色（没有边缘加深）', buried.vignette < 0.01, String(buried.vignette));
+  check('不给覆盖色时是中灰兜底', nearHex(buried.color, 0x808080), `0x${buried.color.toString(16)}`);
+
+  // 动态取色：色罩用那个方块自己的颜色（main.ts 传的是 blockParticleColor 的结果）
+  effects.setTint(0xc2b28a); // 沙子那种黄
+  check('setTint 立刻反映到 tintColor', effects.tintColor === 0xc2b28a, String(effects.tintColor));
+  for (let i = 0; i < 20; i++) effects.update(0.05);
+  check('过渡后颜色就是覆盖色', nearHex(effects.state.color, 0xc2b28a), `0x${effects.state.color.toString(16)}`);
+  check('覆盖色不影响不透明度（仍然盖住一切）', effects.state.alpha > 0.99);
+
+  const snapped = new ScreenEffects();
+  snapped.set('suffocate');
+  snapped.setTint(0x7d7d7d); // 石头那种灰
+  snapped.snap();
+  check(
+    'snap() 也吃覆盖色（传送 / 读档时会直接埋进方块）',
+    nearHex(snapped.state.color, 0x7d7d7d) && snapped.state.alpha === 1,
+    `0x${snapped.state.color.toString(16)} alpha=${snapped.state.alpha}`,
+  );
+
+  effects.setTint(null);
+  for (let i = 0; i < 20; i++) effects.update(0.05);
+  check('清掉覆盖色后回到预设色', nearHex(effects.state.color, 0x808080), `0x${effects.state.color.toString(16)}`);
+  effects.dispose();
+}
+
 // ---------------------------------------------------------------- 4. 手持物品
 
 console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');

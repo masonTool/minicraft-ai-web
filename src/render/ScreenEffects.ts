@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { srgbColor } from './srgb.ts';
 
-export type ScreenEffect = 'none' | 'water' | 'lava' | 'blindness' | 'darkness' | 'portal';
+export type ScreenEffect = 'none' | 'water' | 'lava' | 'suffocate' | 'blindness' | 'darkness' | 'portal';
 
 interface EffectPreset {
   /** 色罩颜色 */
@@ -44,6 +44,17 @@ const PRESETS: Record<ScreenEffect, EffectPreset> = {
   },
   lava: { color: 0xb83404, alpha: 0.68, vignette: 0.6 },
   /**
+   * 埋在方块里（批次 20261025-0256）：**整屏不透明**。
+   *
+   * 相机真的进了实心方块时（沙子砸头 / 活塞推 / 传送落点），眼前那面是背面、
+   * 被背向剔除，于是会直接看到"墙皮后面的世界"——近裁面调到多小都没用。
+   * 原版这时也是整屏盖住，这里用**该方块自己的颜色**（`setTint` 动态给），
+   * 于是"埋在石头里"看到的是石头的颜色而不是一片黑。
+   *
+   * color 只是个兜底（没给覆盖色时的值）；vignette 取 0：整屏都是同一个色，没有边缘。
+   */
+  suffocate: { color: 0x808080, alpha: 1, vignette: 0 },
+  /**
    * 下界传送门（K8）：紫色、很淡、**只压中心**（vignette 取 0，即越到边缘越透）。
    * 原版站在门里时整屏被紫色糊住，但还能看清方向；色罩太重会让人以为是卡住了。
    */
@@ -62,6 +73,7 @@ const PRESET_COLORS: Record<ScreenEffect, THREE.Color> = {
   none: srgbColor(PRESETS.none.color),
   water: srgbColor(PRESETS.water.color),
   lava: srgbColor(PRESETS.lava.color),
+  suffocate: srgbColor(PRESETS.suffocate.color),
   blindness: srgbColor(PRESETS.blindness.color),
   darkness: srgbColor(PRESETS.darkness.color),
   portal: srgbColor(PRESETS.portal.color),
@@ -108,6 +120,12 @@ export class ScreenEffects {
 
   /** 目标效果（`set` 设置的）；当前值每帧向它逼近 */
   private target: ScreenEffect = 'none';
+  /**
+   * 覆盖色（批次 20261025-0256）：非空时**代替**预设色。
+   * 只给"埋在方块里"用——颜色是那个方块贴图的平均色，随方块变，没法写成预设。
+   */
+  private tint: THREE.Color | null = null;
+  private tintHex: number | null = null;
   private currentColor = new THREE.Color(0x000000);
   private currentAlpha = 0;
   private currentVignette = 0;
@@ -163,12 +181,40 @@ export class ScreenEffects {
     this.target = effect;
   }
 
+  /**
+   * 覆盖色罩颜色（null = 用预设色）。
+   *
+   * 只在"埋在方块里"这条路上用：色罩取该方块贴图的平均色（见 `App.blockParticleColor`），
+   * 于是埋在石头里是石头的灰、埋在沙里是沙的黄，玩家能立刻明白"我被埋住了"。
+   * 每帧都调也无所谓——值没变时不会重建 `Color`。
+   */
+  setTint(hex: number | null): void {
+    if (hex === null) {
+      this.tint = null;
+      this.tintHex = null;
+      return;
+    }
+    if (this.tintHex === hex && this.tint) return;
+    this.tintHex = hex;
+    this.tint = srgbColor(hex);
+  }
+
+  /** 当前生效的覆盖色（测试与调试用；null = 用预设色） */
+  get tintColor(): number | null {
+    return this.tintHex;
+  }
+
+  /** 目标颜色：有覆盖色就用覆盖色，否则用预设色 */
+  private targetColor(): THREE.Color {
+    return this.tint ?? PRESET_COLORS[this.target];
+  }
+
   /** 指数逼近目标值（与帧率无关：dt 越大走得越多，但永远不会过冲） */
   update(dt: number): void {
     const preset = PRESETS[this.target];
     const k = 1 - Math.exp(-Math.max(0, dt) / TRANSITION);
 
-    this.currentColor.lerp(PRESET_COLORS[this.target], k);
+    this.currentColor.lerp(this.targetColor(), k);
     this.currentAlpha += (preset.alpha - this.currentAlpha) * k;
     this.currentVignette += (preset.vignette - this.currentVignette) * k;
 
@@ -186,7 +232,7 @@ export class ScreenEffects {
   /** 立刻切到目标状态（读档/传送这类会让画面突然变化的地方用） */
   snap(): void {
     const preset = PRESETS[this.target];
-    this.currentColor.copy(PRESET_COLORS[this.target]);
+    this.currentColor.copy(this.targetColor());
     this.currentAlpha = preset.alpha;
     this.currentVignette = preset.vignette;
     this.uniforms.uColor!.value.copy(this.currentColor);
