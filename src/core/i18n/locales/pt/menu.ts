@@ -11,7 +11,6 @@ export const menu = {
   "menu.tagline": "Survival e criativo nativos, vários mundos salvos",
   "menu.play": "Jogar",
   "menu.settings": "Configurações",
-  "menu.footer": "Recriação web não oficial · os saves ficam neste aparelho",
   "menu.newWorld": "＋ Novo mundo",
   "menu.empty": "Nenhum save ainda — toque em « ＋ Novo mundo » acima para começar.",
   "menu.back": "‹ Voltar",

@@ -410,8 +410,7 @@
         position: relative;
         display: flex; flex-direction: column; align-items: center;
         text-align: center; color: #fff;
-        /* 收缩到内容宽（批次 167）：`.world-splash` 是相对这一块绝对定位的，
-           盒子要是拉满 760px 面板宽，那行斜字就会压在品牌名的字母上。 */
+        /* 收缩到内容宽（批次 167）：标题块不拉满 760px 面板宽，品牌名居中更好看 */
         width: fit-content; align-self: center;
       }
       .world-logo {
@@ -430,19 +429,8 @@
         border: 2px solid #1d3215;
         text-shadow: 1px 1px 0 #111;
       }
-      .world-splash {
-        /* 贴在主标右上角（批次 167）：基准是标题块（已收缩到内容宽），
-           所以无论字号/面板多宽，它都落在品牌名的右侧而不是压在字母上 */
-        position: absolute; left: calc(100% - 40px); top: 64px;
-        color: #fff85b; font-size: 16px; font-weight: 700;
-        transform: rotate(-12deg);
-        text-shadow: 2px 2px 0 #3b3700;
-        animation: world-splash 1.3s ease-in-out infinite alternate;
-      }
-      @keyframes world-splash {
-        from { transform: rotate(-12deg) scale(.96); }
-        to { transform: rotate(-12deg) scale(1.06); }
-      }
+      /* 批次 20261024-1152（用户）：标题右上角那颗 "WebGL2!" splash 去掉，
+         对应的样式与无限缩放动画一并删除（不再有节点用它）。 */
       /* ---------------- 主菜单的三个层级（批次 106） ----------------
          同一份 DOM 切成"主页 / 世界列表 / 新建世界"三节，一次只放行一节。
          原来把存档列表 + 四行新建表单 + 设置按钮全摞在一屏里，面板很高、
@@ -2337,7 +2325,6 @@
         /* ---- 主菜单：横屏宽度富余、高度紧张 ---- */
         body.touch-mode .world-logo { font-size: 42px; }
         body.touch-mode .world-edition { margin-top: 6px; font-size: 10px; }
-        body.touch-mode .world-splash { top: 38px; font-size: 12px; }
         body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
         /* 高度两者一致（批次 20261024-1152）：主/次按钮只该在字号上不同 */
         body.touch-mode .world-primary { min-height: 52px; font-size: 14px; }
@@ -5268,7 +5255,6 @@
            在笔记本上会持续做全屏合成，没进世界也在发热。PC 上改成普通半透明。 */
         /* 主菜单不需要第二层整屏网格纹理：直接去掉，少一层全屏合成 */
         #world-screen::before { display: none; }
-        .world-splash { animation: none; }
 
         /* 背包/合成/配方这些界面原来全是按手机半屏做的（40~44px 槽位）。
            PC 屏大、鼠标精度高，给到 52~54px，文字也放一档。 */

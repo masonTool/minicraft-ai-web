@@ -47,7 +47,11 @@
   - 为什么：主按钮与次按钮各写一套 min-height（52 / 44），并且**后出现的规则覆盖先出现的**——横屏块里 44/44 看着像是统一的，但文件后面那组又把次按钮拉回 44、主按钮拉到 52，于是首页一眼就能看出参差。现在只留一处高度真值，字号仍可不同（主按钮更醒目）。
   - 验证：`npx tsx tools/ui-test.ts` **944 通过 / 0 失败**（改 1 条横屏断言为 52px，新增 1 条：共用规则里必须有 min-height 52、且触摸端不再出现 44px 的主/次按钮覆盖）。
   - 批次：20261024-1152
-- [ ] [优化9] 首页去掉"非官方 Web 复刻…"那段说明与 `WebGL2!` splash（构建版本信息按用户要求**保留**）：`ui/WorldScreen.ts` + `core/i18n/locales/*/menu.ts` 的 `menu.footer` → `npm run test:theme`（断言首页 DOM 不再有 footer 说明与 splash 节点）
+- [x] [优化9] 首页去掉"非官方 Web 复刻…"那段说明与 `WebGL2!` splash（构建版本信息按用户要求**保留**）：`ui/WorldScreen.ts` + `core/i18n/locales/*/menu.ts` 的 `menu.footer` → `npm run test:theme`（断言首页 DOM 不再有 footer 说明与 splash 节点）
+  - 做了什么：`WorldScreen` 删掉 `splash`（"WebGL2!"）节点与 `footerNote`（`t('menu.footer')`），页脚只留 `#world-build`；`index.html` 删掉 `.world-splash` 规则、`@keyframes world-splash`、触摸横屏那条 `.world-splash` 覆盖与 PC 的 `animation: none`；六个语种的 `menu.footer` 键一起删（表 2864 键，六语言 100%）。
+  - 为什么：删 DOM 不删 CSS 会留下永远不命中的规则（PC 那条 `.world-splash { animation: none; }` 会让人以为 splash 还在）；`menu.footer` 只被这一处引用，留着就是死键，i18n 表按语言对齐删才不会掉到 99%。
+  - 验证：`npx tsx tools/ui-test.ts` **945 通过 / 0 失败**（改 1 条：splash 相关断言改成"整份 CSS 里不再有 `.world-splash`"，新增 1 条：WorldScreen 不再建 splash/footer 节点但保留 `#world-build`）；`i18n-test` 547 通过、`npm run audit:i18n` 六语言 2864/2864 通过；`npm run typecheck` 通过。
+  - 批次：20261024-1152
 - [ ] [优化10] 暂停页去掉成就按钮、"游戏已暂停"标题、副标题、存档/改动/自动保存那行说明（设置页与主菜单设置面板不受影响）：`ui/SettingsScreen.ts` + `main.ts#openSettings` → `npm run test:pause`（断言暂停页 DOM 无这四块、设置页仍有标题与返回）
 - [ ] [优化11] 顶部中间第三颗键（视角）图标换成"眼睛"（保持现有 currentColor 实心风格）：`ui/TouchIcons.ts` 的 `view` 路径 → `npm run test:touch`（断言 svg 含眼球+瞳孔路径、不再是望远镜的镜筒矩形组）
 - [ ] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`

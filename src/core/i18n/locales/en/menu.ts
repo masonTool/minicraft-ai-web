@@ -13,7 +13,6 @@ export const menu = {
   'menu.tagline': 'Survival, Creative and Multiple Worlds',
   'menu.play': 'Play',
   'menu.settings': 'Settings',
-  'menu.footer': 'Unofficial web remake · saves live on this device',
   'menu.newWorld': '+ New World',
   'menu.empty': 'No worlds yet — use “+ New World” above to create one.',
   'menu.back': '‹ Back',

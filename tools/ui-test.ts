@@ -4733,10 +4733,21 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       htmlSource.includes('--recipe-cell: 40px;'),
   );
   check(
-    'PC 主菜单去掉额外整屏图层与无限动画',
+    'PC 主菜单去掉额外整屏图层（标题 splash 已整体删除）',
     htmlSource.includes('#world-screen::before { display: none; }') &&
-      htmlSource.includes('.world-splash { animation: none; }'),
+      // 批次 20261024-1152（用户）：首页去掉 "WebGL2!" splash 与页脚那行说明
+      !htmlSource.includes('.world-splash'),
   );
+  {
+    // 构建版本信息**保留**（用户："git 的版本信息暂时保留"），只删 splash 与页脚说明
+    const worldUiSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+    check(
+      '首页不再渲染 splash 与页脚说明（构建版本仍在）',
+      !worldUiSrc.includes("'world-splash'") &&
+        !worldUiSrc.includes("t('menu.footer')") &&
+        worldUiSrc.includes("build.id = 'world-build'"),
+    );
+  }
   check(
     'PC 创造/物品列表用满左栏高度（不再固定 174px 只露 4 行）',
     htmlSource.includes('.inv-panel.pocket-ui.pocket-dual .inv-creative-section {') &&

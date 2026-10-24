@@ -203,27 +203,17 @@ export class WorldScreen {
       menu.append(multiplayer);
     }
 
-    const splash = document.createElement('div');
-    splash.className = 'world-splash';
-    splash.textContent = 'WebGL2!';
-    splash.setAttribute('aria-hidden', 'true');
-    // ⚠️ splash 挂在**标题块里**（批次 167）：它是 `position: absolute`，
-    // 原来作为面板的直接子节点，定位基准就是那个盒子——面板从 400 宽到 760 宽之后，
-    // `left: calc(50% + 92px)` 直接落到品牌名的字母上。挂进标题块（收缩到内容宽）
-    // 之后，它始终贴在主标右上角，与字号无关。
-    title.append(splash);
-
     const footer = document.createElement('div');
     footer.className = 'world-footer';
-    const footerNote = document.createElement('div');
-    footerNote.textContent = t('menu.footer');
-    // 批次 182：当前版本的构建时间 + 提交标题——手机上确认"是不是最新那一版"用
+    // 批次 20261024-1152（用户）：页脚那行"非官方 Web 复刻 · 存档保存在此设备"去掉，
+    // 标题右上角那颗 "WebGL2!" splash 也去掉——首页只留品牌名与功能入口。
+    // 构建版本信息**保留**（用户明确要求先留着，方便确认手机上是不是最新一版）。
     const build = document.createElement('div');
     build.className = 'world-build';
     build.id = 'world-build';
     build.textContent = formatBuildInfo(readBuildInfo());
     build.title = '当前页面的构建版本';
-    footer.append(footerNote, build);
+    footer.append(build);
 
     home.append(title, subtitle, menu, footer);
 

@@ -12,7 +12,6 @@ export const menu = {
   "menu.tagline": "Echtes Survival, Kreativmodus und Welten mit Speicherung",
   "menu.play": "Spielen",
   "menu.settings": "Einstellungen",
-  "menu.footer": "Inoffizieller Web-Nachbau · Spielstände bleiben auf diesem Gerät",
   "menu.newWorld": "+ Neue Welt",
   "menu.empty": "Noch keine Welt – tippe oben auf „+ Neue Welt\".",
   "menu.back": "‹ Zurück",

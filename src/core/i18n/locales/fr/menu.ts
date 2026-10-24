@@ -12,7 +12,6 @@ export const menu = {
   "menu.tagline": "Survie et création natives, sauvegardes multi-mondes",
   "menu.play": "Jouer",
   "menu.settings": "Réglages",
-  "menu.footer": "Portage web non officiel · les sauvegardes restent sur cet appareil",
   "menu.newWorld": "＋ Nouveau monde",
   "menu.empty": "Aucune sauvegarde — touchez « ＋ Nouveau monde » ci-dessus pour commencer.",
   "menu.back": "‹ Retour",

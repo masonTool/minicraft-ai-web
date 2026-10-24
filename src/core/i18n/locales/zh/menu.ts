@@ -11,7 +11,6 @@ export const menu = {
   'menu.tagline': '原生生存、创造与多世界存档',
   'menu.play': '游戏',
   'menu.settings': '设置',
-  'menu.footer': '非官方 Web 复刻 · 存档保存在此设备',
   'menu.newWorld': '＋ 新建世界',
   'menu.empty': '还没有存档——点上面「＋ 新建世界」开一个。',
   'menu.back': '‹ 返回',

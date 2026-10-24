@@ -193,7 +193,6 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.avatar.face',
     'menu.tagline',
     'menu.play',
-    'menu.footer',
     'menu.newWorld',
     'menu.empty',
     'world.list',
