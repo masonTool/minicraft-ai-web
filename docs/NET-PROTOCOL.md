@@ -86,7 +86,7 @@
 | `entity-snap` | `entities: [[key, type, x, y, z, yaw, health, flags], …]`（L8·MS3，≤256 条） | 必须已 join；**只有房主能推**（其它人推的一律丢）；服务端只做形状收口（是不是数组、超不超过 256）与按房 + AOI 转发，**不做内容校验** | 房主每 100ms 推一次视野内实体，从属端据此画面影子实体 |
 | `entity-remove` | `keys: ["ownerId:localId", …]`（L8·MS3，≤64） | 必须已 join；**只有房主能发**；空列表 / 非数组直接丢 | 房主报告"这几只死了"——从属端立刻撤影子，不等快照那 300ms 宽限 |
 | `ping` | 无 | 必须已 join（先连接） | 应用层延迟探测（`联机29`）：客户端每 2 秒一条，服务端只回 `pong` |
-| `mob-hit` | `typeId, dimension, x, y, z, damage, fire` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
+| `mob-hit` | `typeId, dimension, x, y, z, damage, fire, key?` | 必须已 join；`typeId` 非空；伤害夹到 0~50、着火 0~16 秒；每人每秒 30 条 | 生物命中（`联机19`）：**不带实体 id**——两端生物各自生成，接收方按"类型 + 3 格内最近"认 |
 | `player-hit` | `targetId, damage, team` | 必须已 join；`targetId` 必须在线且不是自己；伤害夹到 0~50 | 打人（`联机22`）：服务端**只转发给被击者**，不做友伤判定（队伍表在客户端） |
 | `arrow` | `x, y, z, vx, vy, vz, damage` | 六个数有限；速度模长 ≤ 200；伤害夹 0~50；每人每秒 30 条 | 玩家射箭（`联机23`）：**不带 id**，各端自己生成一支跑物理 |
 | `tnt`, **有房主时只收房主** | `x, y, z, dimension` | 坐标有限；维度走 `sanitizeDimension`；每人每秒 30 条 | TNT 被点燃（`联机23`）：坐标即 key，接收端 `prime` 幂等 |

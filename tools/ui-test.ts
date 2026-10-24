@@ -5614,5 +5614,30 @@ console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收�
   );
 }
 
+/*
+ * 命中按全局键认（L8 · MS3 收尾）
+ *
+ * "同类型 + 最近"在两只同类怪挨着时会打错人：两端各算的"最近"可能不是同一只。
+ * 有房主分配的全局键就按身份认，没有才退回老口径（老客户端/影子还没同步到也不会哑）。
+ */
+console.log('\n[命中按全局键认那只怪（L8 · MS3 收尾）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const matchSrc = readFileSync(new URL('../src/core/net/MobMatch.ts', import.meta.url), 'utf8');
+  check(
+    '匹配先比全局键，比不到才退回类型 + 邻域',
+    matchSrc.includes('const wanted = typeof hit.key') && matchSrc.includes('if (candidate.key === wanted) return candidate;'),
+  );
+  check(
+    '发送端把目标动物的 netKey 带上（没有键就空串，服务端不塞空 key）',
+    /sendMobHit\([\s\S]{0,400}?mob\.netKey,/.test(mainSrc) && netSrc.includes("...(key.length > 0 ? { key } : {})"),
+  );
+  check(
+    '接收端候选里带影子实体的 netKey',
+    mainSrc.includes('...(entity.netKey.length > 0 ? { key: entity.netKey } : {}),'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

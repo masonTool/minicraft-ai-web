@@ -137,6 +137,8 @@ export interface NetMobHit {
   damage: number;
   /** 着火秒数（火焰附加）；0 = 不点火 */
   fire: number;
+  /** 目标动物的全局键（`ownerId:localId`，L8 · MS3 收尾）：有它就按身份认，不用猜 */
+  key?: string;
 }
 
 /** 有人打了我（联机22） */
@@ -718,6 +720,10 @@ export class NetClient {
           z: Number(message.z),
           damage: Number(message.damage ?? 0),
           fire: Number(message.fire ?? 0),
+          // 全局键（L8 · MS3 收尾）：服务端只做长度收口，别的不管
+          ...(typeof message.key === 'string' && message.key.length > 0 && message.key.length <= 32
+            ? { key: String(message.key) }
+            : {}),
         });
         break;
       }
@@ -1058,12 +1064,23 @@ export class NetClient {
    * 队友那边用它找自己世界里最近的那只同类怪扣血。**对方找不到就忽略**——
    * 两端生物是各自生成的，不能为了"看起来同步"凭空造一只出来。
    */
-  sendMobHit(typeId: string, dimension: string, x: number, y: number, z: number, damage: number, fire = 0): void {
+  sendMobHit(
+    typeId: string,
+    dimension: string,
+    x: number,
+    y: number,
+    z: number,
+    damage: number,
+    fire = 0,
+    key = '',
+  ): void {
     if (!this.connected) return;
     this.sendRaw(
       JSON.stringify({
         t: 'mob-hit',
         typeId,
+        // 目标动物的全局键（L8 · MS3 收尾）：有它接收方就不用靠"同类型最近"猜
+        ...(key.length > 0 ? { key } : {}),
         dimension,
         x: Number(x.toFixed(2)),
         y: Number(y.toFixed(2)),

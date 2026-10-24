@@ -8830,8 +8830,12 @@ class App {
       // 批次 471：玩家近战是"被打"，会让它记仇/惊动同类
       { kind: 'player' },
     );
-    // 联机19：把"我打了哪只、打掉多少"告诉队友。发的是**类型 + 坐标**而不是 id——
-    // 两端生物各自生成，没有可匹配的 id；对方按邻域找自己世界里那只同类怪
+    /*
+     * 联机19 + MS3 收尾：把"我打了哪只、打掉多少"告诉队友。
+     *
+     * 现在优先发**全局键**（`netKey`）——两只同类怪挨在一起时，"同类型 + 最近"会打错人。
+     * 键可能为空（单机、或这一只还没被房主分配），那时接收方退回老口径（类型 + 邻域）。
+     */
     if (applied && this.net.sessionState === 'connected') {
       this.net.sendMobHit(
         mob.type.id,
@@ -8842,6 +8846,7 @@ class App {
         damage,
         // 火焰附带的秒数也带上：队友那边要跟着着火（判据与下面 ignite 一致）
         fireAspect > 0 ? 4 * fireAspect : 0,
+        mob.netKey,
       );
     }
     // 被蛰（J21，批次 407）：打了蜜蜂就中毒，而且**一只蜜蜂只蜇一次**。
@@ -9746,10 +9751,18 @@ class App {
    */
   private onNetMobHit(hit: NetMobHit): void {
     if (hit.dimension !== this.dimension) return;
-    const candidates: { mob: Mob; typeId: string; x: number; y: number; z: number }[] = [];
+    const candidates: { mob: Mob; typeId: string; x: number; y: number; z: number; key?: string }[] = [];
     for (const entity of this.entities.all) {
       if (!(entity instanceof Mob) || entity.dead) continue;
-      candidates.push({ mob: entity, typeId: entity.type.id, x: entity.x, y: entity.y, z: entity.z });
+      // 影子实体身上带着房主分配的全局键（L8 · MS3）：有键就按身份认那只怪
+      candidates.push({
+        mob: entity,
+        typeId: entity.type.id,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        ...(entity.netKey.length > 0 ? { key: entity.netKey } : {}),
+      });
     }
     const match = findMobMatch(candidates, hit);
     if (!match) return;

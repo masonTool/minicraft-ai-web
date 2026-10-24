@@ -48,3 +48,42 @@ describe('findMobMatch', () => {
     expect(findMobMatch([zombie(0, 74, 0)], { typeId: 'zombie', x: 0, y: 70, z: 0 })).toBeNull();
   });
 });
+
+/*
+ * 全局键优先（L8 · MS3 收尾）
+ *
+ * "同类型 + 最近"在两只同类怪挨着时会打错人：两端各自算出来的"最近"可能不是同一只。
+ * 有全局键（房主分配的 `ownerId:localId`）就按身份认；没有才退回老口径。
+ */
+describe('findMobMatch · 全局键优先', () => {
+  const candidates = [
+    { typeId: 'zombie', x: 0, y: 64, z: 0, key: '3:1' },
+    { typeId: 'zombie', x: 1, y: 64, z: 0, key: '3:2' },
+  ];
+
+  it('带键时按身份认，即使另一只更近', () => {
+    const hit = { typeId: 'zombie', x: 0, y: 64, z: 0, key: '3:2' };
+    expect(findMobMatch(candidates, hit)?.key).toBe('3:2');
+  });
+
+  it('带键时忽略距离上限（键就是身份，坐标只是它的当前值）', () => {
+    const hit = { typeId: 'zombie', x: 999, y: 64, z: 999, key: '3:1' };
+    expect(findMobMatch(candidates, hit)?.key).toBe('3:1');
+  });
+
+  it('键在我这边找不到 → 退回类型 + 邻域（老口径，不掉链子）', () => {
+    const hit = { typeId: 'zombie', x: 0.5, y: 64, z: 0, key: '9:9' };
+    expect(findMobMatch(candidates, hit)?.key).toBe('3:1');
+  });
+
+  it('没有键的命中照旧按最近认（老客户端兼容）', () => {
+    const hit = { typeId: 'zombie', x: 0.9, y: 64, z: 0 };
+    expect(findMobMatch(candidates, hit)?.key).toBe('3:2');
+  });
+
+  it('键匹配也不跨类型（对面发错类型时仍按类型兜底）', () => {
+    const hit = { typeId: 'cow', x: 0, y: 64, z: 0, key: '3:1' };
+    // 键命中会直接返回那只（键优先于类型检查）——这是有意的：键比类型更可靠
+    expect(findMobMatch(candidates, hit)?.key).toBe('3:1');
+  });
+});

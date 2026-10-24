@@ -1147,7 +1147,14 @@ wss.on('connection', (socket, request) => {
         const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
         const fire = Math.min(16, Math.max(0, Number(message.fire ?? 0)));
         if (![x, y, z, damage, fire].every(Number.isFinite)) return;
-        broadcast({ t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id }, player.id, player.room, { x, z, dimension });
+        // 全局键（L8 · MS3 收尾）：只做长度收口，服务端没有实体表不校验它是否存在
+        const key = typeof message.key === 'string' ? message.key.slice(0, 32) : '';
+        broadcast(
+          { t: 'mob-hit', typeId, dimension, x, y, z, damage, fire, by: player.id, ...(key ? { key } : {}) },
+          player.id,
+          player.room,
+          { x, z, dimension },
+        );
         break;
       }
 

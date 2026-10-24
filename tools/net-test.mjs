@@ -1608,6 +1608,55 @@ try {
     leaveFollower.close();
   }
 
+  // ---------------------------------------------------------------- 命中带全局键（L8 · MS3 收尾）
+  console.log('\n[命中带全局键：按身份认那只怪]');
+  {
+    // 用独立的一对客户端：alice/bob 在更早的重启用例里已经断了
+    const hitSender = new TestClient('HitSender', undefined, { room: 'hitroom' });
+    const hitReceiver = new TestClient('HitReceiver', undefined, { room: 'hitroom' });
+    await joinAndWaitWelcome(hitSender, '打人的', 0, 70, 0);
+    await joinAndWaitWelcome(hitReceiver, '被打的', 2, 70, 2);
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({
+      t: 'mob-hit',
+      typeId: 'zombie',
+      dimension: 'overworld',
+      x: 5,
+      y: 70,
+      z: 5,
+      damage: 4,
+      fire: 0,
+      key: '7:12',
+    });
+    const hitMsg = await hitReceiver.wait('mob-hit', 2000);
+    check('命中里的全局键被转发', hitMsg?.key === '7:12', JSON.stringify(hitMsg));
+    check('老字段（类型/坐标/伤害）照旧', hitMsg?.typeId === 'zombie' && hitMsg?.damage === 4, JSON.stringify(hitMsg));
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({ t: 'mob-hit', typeId: 'zombie', dimension: 'overworld', x: 5, y: 70, z: 5, damage: 4, fire: 0 });
+    const noKey = await hitReceiver.wait('mob-hit', 2000);
+    check('不带键时不塞空 key（老客户端兼容）', noKey !== null && noKey.key === undefined, JSON.stringify(noKey));
+
+    hitReceiver.mailbox.length = 0;
+    hitSender.send({
+      t: 'mob-hit',
+      typeId: 'zombie',
+      dimension: 'overworld',
+      x: 5,
+      y: 70,
+      z: 5,
+      damage: 4,
+      fire: 0,
+      key: 'x'.repeat(80),
+    });
+    const longKey = await hitReceiver.wait('mob-hit', 2000);
+    check('超长键被截到 32', typeof longKey?.key === 'string' && longKey.key.length === 32, `${longKey?.key?.length}`);
+
+    hitSender.close();
+    hitReceiver.close();
+  }
+
   // ---------------------------------------------------------------- 房间口令（联机26）
   console.log('\n[房间口令]');
   {
