@@ -2391,9 +2391,10 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 统一标题栏：三列栅格 → 标题永远居中，两页共用同一个骨架
   check('标题栏是三列栅格（左槽 | 标题 | 右槽）', compact.includes('.settings-header { display: grid; grid-template-columns: 84px 1fr 84px;'));
   check(
-    '标题栏骨架只有一个（两页共用 makeHeader）',
+    '标题栏骨架只有一个（设置页用它；暂停页已无标题）',
     source.includes('private makeHeader(titleEl: HTMLElement, backLabel: string | null, onBack?: () => void)') &&
-      (source.match(/this\.makeHeader\(/g) ?? []).length === 2,
+      // 批次 20261024-1152：暂停页的标题整块删除，只剩设置页这一处调用
+      (source.match(/this\.makeHeader\(/g) ?? []).length === 1,
   );
   // 用户点名："暂停那个界面有继续游戏，可能就不需要关闭按钮了" → ✕ 整个删掉
   check('不再有 ✕ 关闭按钮', !compact.includes('.settings-close') && !source.includes('makeCloseButton'));
@@ -2403,7 +2404,15 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     '‹ 返回 的落点随上下文（游戏内回菜单页，主菜单里直接关）',
     source.includes('private backFromSettings(): void') && source.includes('if (this.actions.onExitToMenu) this.setPage(\'menu\');'),
   );
-  check('暂停菜单页左槽留空（标题仍然居中）', source.includes('this.makeHeader(menuTitle, null)'));
+  // 批次 20261024-1152（用户）：暂停页去掉标题 / 副标题 / 存档信息 / 成就按钮
+  check(
+    '暂停页不再有标题、副标题、存档信息与成就按钮',
+    !source.includes('menuTitle') &&
+      !source.includes('settings-meta') &&
+      !source.includes("'settings.touchBack'") &&
+      !source.includes('pause-achievements') &&
+      source.includes('menuPage.append(actionsRow, help);'),
+  );
   check('删除世界只在世界列表，暂停菜单不放不可逆删除', !source.includes("deleteWorld.textContent = '删除本世界';"));
   check(
     '主菜单设置按返回直接关闭（不会露出「游戏已暂停」）',

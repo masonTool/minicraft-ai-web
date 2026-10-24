@@ -3377,12 +3377,8 @@ class App {
   /** 打开暂停菜单 */
   openSettings(): void {
     if (this.settingsScreen.isOpen) return;
-    const save = this.saveStatus;
-    this.settingsScreen.setMeta(
-      save.enabled
-        ? `存档：${save.hasSave ? '已保存' : '新世界'} · 改动 ${save.edits} 格 / ${save.editedChunks} 区块 · 自动保存每 ${this.autoSaveInterval} 秒`
-        : '存档：不可用（浏览器未提供 IndexedDB）',
-    );
+    // 批次 20261024-1152（用户）：暂停页不再显示存档信息
+    //（"存档：已保存 · 改动 N 格 / N 区块 · 自动保存每 N 秒"整行删除）。
     // 与 `closeSettings` 同样的顺序讲究（批次 231）：**先收触摸层的壳，再让面板出现**，
     // 两个方向的"层交换"都别挤在同一帧里。
     this.handleInventoryOpen(true);
@@ -19472,8 +19468,8 @@ async function boot(): Promise<void> {
         onResume: () => menuSettings?.hide(),
         onChange: (next) => saveSettings(next),
       });
-      menuSettings.setTitle('设置', '设置保存在此设备，进入世界后立即生效', '返回');
-      menuSettings.setMeta('');
+      // 批次 20261024-1152：`setTitle` 不再收副标题（暂停页那行提示已删除）
+      menuSettings.setTitle('设置', '返回');
     }
     // 打开菜单里的设置也压一条：返回键先关设置，而不是退出页面
     pushMenuGuard();

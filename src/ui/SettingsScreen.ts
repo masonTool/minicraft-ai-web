@@ -706,11 +706,8 @@ export class SettingsScreen {
   /** `hide()` 排下的"淡出结束后隐藏"计时器 */
   private hideTimer: number | null = null;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
-  private readonly metaEl: HTMLDivElement;
   /** 设置页的标题（`setTitle` 改的是它：主菜单里打开时是"设置"） */
   private readonly settingsTitleEl: HTMLElement;
-  /** 暂停菜单那句提示（触摸端换成不含键盘的说法） */
-  private readonly menuHintEl: HTMLElement;
   /** 设置页那句提示 */
   private readonly settingsHintEl: HTMLElement;
   private readonly resumeButton: HTMLButtonElement;
@@ -725,8 +722,6 @@ export class SettingsScreen {
   private currentPage: PausePage = 'menu';
   /** 面板根节点（`setPage` 会把当前页写到它的 `data-page` 上，供 CSS 按页调宽度） */
   private readonly panel: HTMLDivElement;
-  /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
-  private subtitleText = t('settings.escResume');
 
   /**
    * 写一次文案。
@@ -805,17 +800,12 @@ export class SettingsScreen {
     // ================================================================ ① 暂停菜单
     //
     // 一页只放"几个主要按钮"（用户原话）。删除本世界是危险动作，单独排在最后。
+    //
+    // 批次 20261024-1152（用户）：这一页**不要标题、不要副标题、不要存档信息**——
+    // 原来那三块（"游戏已暂停" / "点「继续游戏」或系统返回键返回" / "存档：已保存 · 改动 N 格…"）
+    // 一起删掉，只留按钮与下面的键位说明。`pause.title` 与 `settings.touchBack`
+    // 这两条文案留在 i18n 表里（别处/将来还能用），只是这一页不再渲染它们。
     const menuPage = this.makePage('menu');
-
-    // 左槽留空（这一页没有"上一层"可回），标题仍然在正中间——
-    // 与设置页共用同一个三列骨架，切页时标题不会移位。
-    const menuTitle = document.createElement('b');
-    menuTitle.className = 'settings-title';
-    this.bindLabel(menuTitle, 'pause.title');
-    const menuHeader = this.makeHeader(menuTitle, null);
-
-    this.menuHintEl = document.createElement('div');
-    this.menuHintEl.className = 'settings-hint';
 
     const actionsRow = document.createElement('div');
     actionsRow.className = 'pause-actions';
@@ -834,14 +824,8 @@ export class SettingsScreen {
     this.bindLabel(settingsButton, 'pause.settings');
     settingsButton.addEventListener('click', () => this.setPage('settings'));
 
-    // 成就 / 进度（M7）：原版基岩版的暂停菜单里就有这一项
-    const achievements = document.createElement('button');
-    achievements.type = 'button';
-    achievements.id = 'pause-achievements';
-    achievements.className = 'pause-action';
-    this.bindLabel(achievements, 'pause.achievements');
-    achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
-    achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
+    // 成就按钮（批次 20261024-1152，用户）：暂停页去掉这一颗。
+    // 成就入口仍在背包左栏（手机上唯一的那条路），这里删掉不会让成就变成不可达。
 
     // 统计（批次 552）：与成就并排，低频但玩家会想看一眼"这世界玩了多久"
     const statistics = document.createElement('button');
@@ -875,10 +859,7 @@ export class SettingsScreen {
     // 加在按钮上没有任何效果。
     if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
 
-    actionsRow.append(this.resumeButton, settingsButton, achievements, statistics, multiplayer, exitToMenu);
-
-    this.metaEl = document.createElement('div');
-    this.metaEl.className = 'settings-hint settings-meta';
+    actionsRow.append(this.resumeButton, settingsButton, statistics, multiplayer, exitToMenu);
 
     // 按键 / 手势说明（批次 111）：原来它挂在"点击进入游戏"那层遮罩上，
     // 遮罩按用户要求删掉之后搬到这里——按 Esc（或点顶部的暂停键）就能查，
@@ -893,7 +874,7 @@ export class SettingsScreen {
     gestures.innerHTML = t('settings.helpTouch');
     help.append(keys, gestures);
 
-    menuPage.append(menuHeader, this.menuHintEl, actionsRow, this.metaEl, help);
+    menuPage.append(actionsRow, help);
 
     // ================================================================ ② 设置页
     const settingsPage = this.makePage('settings');
@@ -1982,35 +1963,26 @@ export class SettingsScreen {
     this.refreshAvatar();
   }
 
-  /** 存档信息（打开时刷新） */
-  setMeta(text: string): void {
-    this.metaEl.textContent = text;
-  }
-
   /**
-   * 改标题与副标题：同一个面板在"游戏中"与"主菜单"两处用，文案要跟着场景变。
+   * 改标题与"继续游戏"那颗按钮的文字：同一个面板在"游戏中"与"主菜单"两处用，文案要跟着场景变。
+   *
+   * 批次 20261024-1152：**副标题参数去掉了**——暂停页那行"点「继续游戏」或系统返回键返回"
+   * 按用户要求整块删除，只剩设置页标题与按钮文案需要按场景改。
    * @param resumeLabel "继续游戏"那行按钮的文字（主菜单里改成"返回"更贴切）
    */
-  setTitle(title: string, subtitle: string, resumeLabel = t('pause.resume')): void {
+  setTitle(title: string, resumeLabel = t('pause.resume')): void {
     this.settingsTitleEl.textContent = title;
-    this.subtitleText = subtitle;
     this.resumeButton.textContent = resumeLabel;
-    this.renderSubtitle();
   }
 
   /**
-   * 两句提示各管一页：暂停菜单那页说"怎么继续游戏"，设置页那页说"改动立即生效、怎么回去"。
-   * 触摸端一律换成不含键盘的说法（批次 104：手机上没有 Esc，"按 Esc"只会让人
-   * 去找一个不存在的键）。
+   * 设置页那句提示（"改动立即生效"）。
    *
    * 渲染时机放在 `show()` 而不是构造那一刻：`<body class="touch-mode">` 是
    * 触摸操作层建立时挂上的，比这个面板**晚**（主菜单里那个设置面板更晚）。
+   * 批次 20261024-1152：暂停页那句触摸/键盘提示随副标题一起删了，这里只剩设置页这一句。
    */
   private renderSubtitle(): void {
-    const touch = isTouchUi();
-    this.menuHintEl.textContent = touch
-      ? tp('settings.touchBack', { label: this.resumeButton.textContent ?? t('pause.resume') })
-      : this.subtitleText;
     // 批次 335：设置页只留一句"改动立即生效"——返回按钮与 Esc 本来就看得见/试得到
     this.settingsHintEl.textContent = t('settings.hintApplies');
   }

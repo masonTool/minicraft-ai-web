@@ -49,8 +49,14 @@
     (menuPage?.querySelectorAll('input').length ?? -1) === 0,
     `${menuPage?.querySelectorAll('input').length} inputs`,
   );
-  const meta = menuPage?.querySelector('.settings-meta');
-  check('save info shown in the pause menu', (meta?.textContent ?? '').length > 0, meta?.textContent ?? '');
+  // 批次 20261024-1152（用户）：暂停页去掉存档信息 / 标题 / 副标题 / 成就按钮
+  check(
+    'pause menu shows no save info / title / subtitle / achievements',
+    !menuPage?.querySelector('.settings-meta') &&
+      !menuPage?.querySelector('.settings-title') &&
+      !document.getElementById('pause-achievements'),
+    menuPage?.textContent ?? '',
+  );
 
   // ---- 点"设置"进二级页
   document.getElementById('pause-settings')?.click();
