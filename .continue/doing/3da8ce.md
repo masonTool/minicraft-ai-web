@@ -11,7 +11,7 @@
   - 验证：`npx tsx tools/world-test.ts` 87 通过 / 0 失败（新增 4 条：跨种子群系至少 2 种、≥2/3 相距 128 格以上、同种子两次完全一致、落点都高于海平面；种子 1/7/42/1337/20261024 的落点已打印进输出）；`worldmatrix-test` 29 通过、`terrain-normal-test` 43 通过（出生点仍选得出来、出生区块非空）；`npm run build:fast` 通过。
   - 批次：20261024-1152
 - [x] [优化2] 引导未完成时切游戏模式即作废：`main.ts#setGameMode` 里判断"玩家真的换了模式"就 `tutorialDismissed = true` 并落盘；读档恢复模式不触发 → `npm run test:tutorial`（新增断言：setGameMode 后卡片不再出现、dismissed 写进存档；restore 路径不影响）
-  - 做了什么：判定抽成纯函数 `tutorial/boot.ts#shouldVoidTutorialOnModeChange`（三个不该触发的场景各一条：读档恢复 / 已作废 / 已走完）；`setGameMode` 在 `next !== this.gameMode` 之后调它，命中就 `tutorialDismissed = true` + `tutorialCard.hide()` + `saveTutorialNow()`，并记一条 `diag.event('tutorial','void.onModeChange')`。
+  - 做了什么：判定抽成纯函数 `tutorial/boot.ts#shouldVoidTutorialOnModeChange`（三个不该触发的场景各一条：读档恢复 / 已作废 / 已走完）；`setGameMode` 在 `next !== this.gameMode` 之后调它，命中就 `tutorialDismissed = true` + `tutorialCard.hide()` + `saveTutorialNow()`，并记一条 `diag.event('ui','tutorial.voidOnModeChange')`。
   - 为什么：引导每一步都长在"创建世界时那个模式"里（生存 4 步 / 创造 4 步的内容完全不同），切过之后接着教必然教错；重开又会把玩家刚做完的事抹掉，所以只作废。读档恢复模式也走同一个 `setGameMode`，必须靠 `waitingForSaveRestore` 排除，否则老存档一进世界引导就被清掉。
   - 验证：`npx tsx tools/tutorial-test.ts` **121 通过 / 0 失败**（新增 8 条：4 条判定 + 4 条接线，接线用正则截出 `setGameMode` 函数体，避免"函数写了没人调用"的假绿）。
   - 批次：20261024-1152
@@ -62,5 +62,9 @@
   - 为什么：用户点名"最右边那颗换视角的图标，要一个小眼睛的形状，保持当前这种风格"。望远镜在 22px 下有四段小矩形，缩小后糊成一团；眼睛只有两个形状，小尺寸更清楚。
   - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（新增 1 条：view 的 svg 里有 evenodd 眼眶 + r=2.1 瞳孔，且不再有 `rotate(-33`）。
   - 批次：20261024-1152
-- [ ] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`
+- [x] [优化12] PC 端界面元素与手机版保持一致（同一套装备槽图标 / 滚动条位置与样式 / 顶部图标 / 暂停页结构，差异只保留键盘提示文案）：`index.html` 的 `body:not(.touch-mode)` 规则 + 相关 TS → `npm run test:theme` + `npm run test:inventory`
+  - 做了什么：删掉 PC 那三组滚动条规则（`display: none !important` 藏掉自绘那根、另开 10px 原生滚动条 + 深色轨道/滑块），PC 与手机现在共用同一根自绘常驻滚动条；装备槽图标、配方书嵌入、暂停页结构本轮本来就是同一套 DOM/CSS（无 `body.touch-mode` 分支）。PC 的格子尺寸档（46/52/54px）与 `.inv-pager` 翻页条**保留**。
+  - 为什么：用户是在"滚动条黑块 / 装备槽图标"的上下文里说"PC 上界面内的元素要跟手机版保持一致"——指的是元素长什么样、在哪，不是把桌面的大格子压回手机档。翻页条是批次 620 按"PC 端不能翻页"专门补的入口，删掉等于推翻那条需求。取舍与边界写进 `doing/3da8ce-decision.md` 的 D3。
+  - 验证：`npx tsx tools/ui-test.ts` **946 通过 / 0 失败**（把"PC 用看得见的原生滚动条"那条反向改成"PC 与手机共用同一根自绘滚动条"：断言 HTML 里不再出现两条 PC 原生滚动条规则与 `scrollbar-color`）；`npm run check` 全绿（见下一条提交）。
+  - 批次：20261024-1152
 - [ ] [自审] 审这一批的三层（L1 可测量 / L2 可对抗 / L3 可外部）→ 写 `- L1：` / `- L2：` / `- L3：` 各一句 + 证据

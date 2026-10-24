@@ -5456,30 +5456,12 @@
         margin-inline: auto;
         box-sizing: border-box;
       }
-      /* PC 用原生细滚动条（滚轮 / 拖滑块）；自绘那根是给 iOS/安卓 overlay 补的 */
-      body:not(.touch-mode) .inv-creative-section .inv-category-scrollbar,
-      body:not(.touch-mode) .inv-category-section .inv-category-scrollbar {
-        display: none !important;
-      }
-      body:not(.touch-mode) .inv-grid.inv-creative,
-      body:not(.touch-mode) .inv-grid.inv-category {
-        scrollbar-width: thin;
-        scrollbar-color: #6f6f6f #b9b9b9;
-      }
-      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar,
-      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar {
-        display: block;
-        width: 10px;
-      }
-      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar-track,
-      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar-track {
-        background: #b9b9b9;
-      }
-      body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar-thumb,
-      body:not(.touch-mode) .inv-grid.inv-category::-webkit-scrollbar-thumb {
-        background: #6f6f6f;
-        border: 1px solid #4a4a4a;
-      }
+      /* PC 也要用**同一根自绘滚动条**（批次 20261024-1152，用户："PC 端界面内的元素
+         要跟手机版保持一致"）。原来这里有一条 `display: none !important` 把自绘那根藏掉、
+         另开一套 10px 的原生滚动条（深色轨道 + 深色滑块），于是同一份背包在 PC 上
+         是"另一种滑块"，还带着用户反馈过的那种黑边。
+         现在两侧都只有自绘那一根：原生滚动条仍然由 base 里的
+         `::-webkit-scrollbar { display: none }` / `scrollbar-width: none` 关掉。 */
       /* 翻页条：PC 靠它翻页（触摸端在 `.inv-pager` 那条规则里整条隐藏） */
       body:not(.touch-mode) .inv-panel.creative-ui.pocket-ui .inv-pager {
         max-width: 574px;

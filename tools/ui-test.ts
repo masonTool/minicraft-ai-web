@@ -4788,10 +4788,13 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       htmlSource.includes('max-width: 574px;') &&
       htmlSource.includes('body:not(.touch-mode) .inv-panel.pocket-ui .inv-search {'),
   );
+  // 批次 20261024-1152（用户）：PC 与手机用**同一套界面元素**——滚动条不再分两套
   check(
-    'PC 物品格自己滚、且用看得见的原生滚动条',
-    htmlSource.includes('body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar,') &&
-      htmlSource.includes('body:not(.touch-mode) .inv-creative-section .inv-category-scrollbar,'),
+    'PC 与手机共用同一根自绘滚动条（不再给 PC 另开原生滚动条）',
+    !htmlSource.includes('body:not(.touch-mode) .inv-grid.inv-creative::-webkit-scrollbar,') &&
+      !htmlSource.includes('body:not(.touch-mode) .inv-creative-section .inv-category-scrollbar,') &&
+      !/body:not\(\.touch-mode\) \.inv-grid\.inv-category \{[^}]*scrollbar-color:/.test(htmlSource) &&
+      htmlSource.includes('.inv-category-scroll-thumb {'),
   );
   const webglSource = readFileSync(
     new URL('../src/core/render/webglSupport.ts', import.meta.url),
