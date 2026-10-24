@@ -82,6 +82,7 @@
     "server": "node server/index.mjs",
     "test:render": "esbuild tools/render-test.ts --bundle --platform=node --format=esm --outfile=.tmp/render-test.mjs --log-level=error && node .tmp/render-test.mjs",
     "test:viewmode": "esbuild tools/viewmode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/viewmode-test.mjs --log-level=error && node .tmp/viewmode-test.mjs",
+    "test:cameranear": "esbuild tools/camera-near-test.ts --bundle --platform=node --format=esm --outfile=.tmp/camera-near-test.mjs --log-level=error && node .tmp/camera-near-test.mjs",
     "test:world": "esbuild tools/world-test.ts --bundle --platform=node --format=esm --outfile=.tmp/world-test.mjs --log-level=error && node .tmp/world-test.mjs",
     "test:settings": "esbuild tools/settings-test.ts --bundle --platform=node --format=esm --outfile=.tmp/settings-test.mjs --log-level=error && node .tmp/settings-test.mjs",
     "test:aim": "esbuild tools/aim-test.ts --bundle --platform=node --format=esm --outfile=.tmp/aim-test.mjs --log-level=error && node .tmp/aim-test.mjs",
