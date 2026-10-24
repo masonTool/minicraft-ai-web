@@ -728,7 +728,7 @@ import { TutorialCard } from './ui/TutorialCard.ts';
 // 新手引导（引导2）：卡片只显示；步骤表与判定都在 `tutorial/` 里（纯逻辑、可离线断言）
 import { stepsOf } from './tutorial/steps.ts';
 import { TutorialTracker, type TutorialFact } from './tutorial/TutorialTracker.ts';
-import { planTutorialBoot, tutorialTrackFor } from './tutorial/boot.ts';
+import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from './tutorial/boot.ts';
 // 创造模式撤销/重做（创造1）：栈是纯逻辑，写回世界在这里做
 import { UndoStack, type BlockEdit, type UndoStep } from './buildtools/UndoStack.ts';
 // 创造2：两点选区 + 框选填充（分批跨帧）
@@ -18467,6 +18467,22 @@ class App {
     }
     diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
     this.gameMode = next;
+    // 新手引导（批次 20261024-1152，用户）：引导没走完就切了模式 → 整条作废。
+    // 卡片收掉、状态立刻落盘，之后不再弹（判定在 `tutorial/boot.ts`，可离线断言）。
+    // ⚠️ 读档恢复模式也会走到这里（`loadSaveState` 用存档里的模式覆盖），
+    //    那不是玩家切换 —— `waitingForSaveRestore` 期间一律不判，否则老存档一进来就被清掉。
+    if (
+      shouldVoidTutorialOnModeChange({
+        dismissed: this.tutorialDismissed,
+        finished: this.tutorial.finished,
+        restoringSave: this.waitingForSaveRestore,
+      })
+    ) {
+      this.tutorialDismissed = true;
+      this.tutorialCard.hide();
+      diag.event('ui', 'tutorial.voidOnModeChange', { mode: next });
+      void this.saveTutorialNow();
+    }
     // 生存与冒险都不能飞（冒险模式没有创造飞行）
     if (!canFly(next) && this.flying) this.setFlying(false);
     // 旁观模式一定在飞（批次 491）：否则"穿墙但受重力"会让人一直往下掉

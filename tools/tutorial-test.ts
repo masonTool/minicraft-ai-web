@@ -15,7 +15,7 @@ import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../src/tutorial/steps.ts'
 import { MAX_TRACKED_KINDS, TutorialTracker } from '../src/tutorial/TutorialTracker.ts';
 // 文案那一侧走 `t()` / `allKeys()` 查表，不读文案文件源码（多语言 P0-2 起中文表按界面拆分）
 import { allKeys, t } from '../src/core/i18n/I18n.ts';
-import { planTutorialBoot, tutorialTrackFor } from '../src/tutorial/boot.ts';
+import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from '../src/tutorial/boot.ts';
 import {
   TUTORIAL_CARD_MAX_WIDTH,
   isShortViewport,
@@ -340,6 +340,43 @@ console.log('\n启动决策（新世界 / 老存档 / 有数据）');
 
   const dismissedSave = planTutorialBoot({ hasSave: true, saved: { state: saved, dismissed: true }, mode: 'survival' });
   equal('点过「不再提示」：照样不弹', dismissedSave.dismissed, true);
+}
+
+// ------------------------------------------------------------------ 切模式即作废
+//
+// 批次 20261024-1152（用户）："引导没完成就切了模式（创造↔生存），引导就要直接废掉，
+// 因为它都已经乱掉了"。
+console.log('\n引导进行中切模式 → 作废（批次 20261024-1152）');
+{
+  equal(
+    '引导没走完 + 玩家切模式 → 作废',
+    shouldVoidTutorialOnModeChange({ dismissed: false, finished: false, restoringSave: false }),
+    true,
+  );
+  equal(
+    '读档恢复模式不算玩家切换（老存档不能被清掉）',
+    shouldVoidTutorialOnModeChange({ dismissed: false, finished: false, restoringSave: true }),
+    false,
+  );
+  equal(
+    '已经作废过 → 不重复处理',
+    shouldVoidTutorialOnModeChange({ dismissed: true, finished: false, restoringSave: false }),
+    false,
+  );
+  equal(
+    '引导已经走完 → 没有卡片可收',
+    shouldVoidTutorialOnModeChange({ dismissed: false, finished: true, restoringSave: false }),
+    false,
+  );
+
+  // 接线：判定必须真挂在 setGameMode 上，而且作废时要落盘。
+  // （只测纯函数的话，"函数写好了但没人调用"这种静默失败测不出来。）
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const setGameModeBody = /setGameMode\(mode: GameMode\): void \{[\s\S]*?\n  \}/.exec(mainSrc)?.[0] ?? '';
+  check('setGameMode 里调用了作废判定', setGameModeBody.includes('shouldVoidTutorialOnModeChange({'));
+  check('作废时同时把模式传给判定（restoringSave）', setGameModeBody.includes('restoringSave: this.waitingForSaveRestore'));
+  check('作废后收起卡片', setGameModeBody.includes('this.tutorialCard.hide()'));
+  check('作废后立刻写存档', setGameModeBody.includes('void this.saveTutorialNow()'));
 }
 
 // ------------------------------------------------------------------ 存档与接线（静态）

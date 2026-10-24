@@ -55,3 +55,31 @@ export function planTutorialBoot(input: TutorialBootInput): TutorialBootPlan {
   }
   return { restore: null, track: tutorialTrackFor(input.mode), dismissed: false };
 }
+
+/** 引导进行中玩家切了游戏模式 → 要不要把整条引导作废 */
+export interface TutorialModeChangeInput {
+  /** 已经「不再提示」/ 已作废过 */
+  readonly dismissed: boolean;
+  /** 引导已经走完 */
+  readonly finished: boolean;
+  /** 正在读档恢复：此时设置模式的是存档，不是玩家 */
+  readonly restoringSave: boolean;
+}
+
+/**
+ * 引导没走完就切了游戏模式 → 整条作废（用户口径，批次 20261024-1152）。
+ *
+ * 为什么不是"换一条路径重开"：引导的每一步都长在创建世界时那个模式里
+ * （生存 4 步是砍树→工作台→木镐→石镐；创造 4 步是放方块/搭高/换方块/飞）。
+ * 玩家从创造切到生存时，前面"放 10 块方块"已经做完了，剩下的生存步骤
+ * 又不能从他手里的创造物品推出来——接着教只会教错，重开又等于把他刚做的事抹掉。
+ * 所以这里的选择是**直接收掉**：卡片消失、状态落盘，以后都不再弹。
+ *
+ * 三个不该触发的场景各占一条断言：读档恢复（`restoringSave`）、
+ * 已经作废过（`dismissed`）、已经走完（`finished`，没有卡片可收）。
+ */
+export function shouldVoidTutorialOnModeChange(input: TutorialModeChangeInput): boolean {
+  if (input.restoringSave) return false;
+  if (input.dismissed) return false;
+  return !input.finished;
+}

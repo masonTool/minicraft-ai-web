@@ -10,7 +10,11 @@
   - 另一处必须改：试投如果只认中心点，能通过的只剩高地（该生成器里高地偏冷），实测 5 个种子全落在雪原/冰刺；先找最近的岸之后变成 stony_peaks / badlands / snowy_plains / ice_spikes / old_growth_pine_taiga。
   - 验证：`npx tsx tools/world-test.ts` 87 通过 / 0 失败（新增 4 条：跨种子群系至少 2 种、≥2/3 相距 128 格以上、同种子两次完全一致、落点都高于海平面；种子 1/7/42/1337/20261024 的落点已打印进输出）；`worldmatrix-test` 29 通过、`terrain-normal-test` 43 通过（出生点仍选得出来、出生区块非空）；`npm run build:fast` 通过。
   - 批次：20261024-1152
-- [ ] [优化2] 引导未完成时切游戏模式即作废：`main.ts#setGameMode` 里判断"玩家真的换了模式"就 `tutorialDismissed = true` 并落盘；读档恢复模式不触发 → `npm run test:tutorial`（新增断言：setGameMode 后卡片不再出现、dismissed 写进存档；restore 路径不影响）
+- [x] [优化2] 引导未完成时切游戏模式即作废：`main.ts#setGameMode` 里判断"玩家真的换了模式"就 `tutorialDismissed = true` 并落盘；读档恢复模式不触发 → `npm run test:tutorial`（新增断言：setGameMode 后卡片不再出现、dismissed 写进存档；restore 路径不影响）
+  - 做了什么：判定抽成纯函数 `tutorial/boot.ts#shouldVoidTutorialOnModeChange`（三个不该触发的场景各一条：读档恢复 / 已作废 / 已走完）；`setGameMode` 在 `next !== this.gameMode` 之后调它，命中就 `tutorialDismissed = true` + `tutorialCard.hide()` + `saveTutorialNow()`，并记一条 `diag.event('tutorial','void.onModeChange')`。
+  - 为什么：引导每一步都长在"创建世界时那个模式"里（生存 4 步 / 创造 4 步的内容完全不同），切过之后接着教必然教错；重开又会把玩家刚做完的事抹掉，所以只作废。读档恢复模式也走同一个 `setGameMode`，必须靠 `waitingForSaveRestore` 排除，否则老存档一进世界引导就被清掉。
+  - 验证：`npx tsx tools/tutorial-test.ts` **121 通过 / 0 失败**（新增 8 条：4 条判定 + 4 条接线，接线用正则截出 `setGameMode` 函数体，避免"函数写了没人调用"的假绿）。
+  - 批次：20261024-1152
 - [ ] [优化3] 背包装备槽用部位图标替代文字：`ui/InventoryScreen.ts#buildArmorGrid` + `index.html` 的 `.inv-slot-hint` → 空槽显示头盔/胸甲/护腿/靴子/副手（盾）线框图标，文字只留 title/aria；`npm run test:inventory`
 - [ ] [优化4] 背包右上角"配方书"点开就是打开配方书（定位"全部/搜索"），再点才是关闭：`ui/InventoryScreen.ts` 配方开关回调 + `main.ts#openRecipeBook/toggleRecipeBook` → `npm run test:inventory`（断言：点击后 `isRecipesOpen() === true`、当前 tab 为 all；第二次点击后为 false）
 - [ ] [优化5] 左栏自绘滚动条：生存与创造位置/宽度统一（都像创造那样离物品留 2px 间隔），修掉创造模式滑条下方跟着走的黑色残块：`index.html` 的 `.inv-category-scrollbar` 系列 + `ui/InventoryScreen.ts` 的滚动条同步 → `npm run test:inventory`（断言两模式滚动条 right/width 取值来自同一组常量）
