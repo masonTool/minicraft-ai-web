@@ -798,6 +798,8 @@ import {
 // 成就 / 进度（M7，批次 87）：数据与判定在 core/progress/*（纯逻辑），
 // 这里只做"在事件处报一声 + 弹提示 + 面板入口 + 随存档走"四件事
 import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
+// 进度播报里的标题与说明要**按当前语言**取（批次 620 起走 `advancement.*` 派生键）
+import { advancementDesc, advancementTitle } from './core/progress/advancementText.ts';
 import type { AdvancementDef, ProgressEvent } from './core/progress/advancements.ts';
 import { AdvancementScreen } from './ui/AdvancementScreen.ts';
 import { StatisticsScreen } from './ui/StatisticsScreen.ts';
@@ -8603,10 +8605,7 @@ class App {
         const isLeader = mob === this.patrolLeader;
         if (isLeader || Math.random() < 0.03) {
           this.effects.apply('bad_omen', 6000, 0);
-          this.chat.push(
-            isLeader ? '你击败了巡逻队队长：染上了不祥之兆' : '你染上了不祥之兆：带着它走进村庄会引来袭击',
-            'system',
-          );
+          this.chat.push(t(isLeader ? 'say.ominous.leader' : 'say.ominous'), 'system');
         }
         if (isLeader) this.patrolLeader = null;
       }
@@ -9883,7 +9882,7 @@ class App {
     // 进世界那一趟不弹卡片（否则"创建世界"会当场跳出好几张）——
     // 但**要留一句话**，不然玩家在面板里看到一堆"已达成"会以为是 bug
     const gained = this.advancements.earnedCount - before;
-    if (gained > 0) this.chat.push(`对了一次背包：已达成 ${gained} 条进度（详情按 J 看）`, 'system');
+    if (gained > 0) this.chat.push(tp('say.progress.reconciled', { count: gained }), 'system');
     this.suppressProgressToasts = false;
 
     // 新手引导（引导3）：进度对完账再显示卡片（避免和加载遮罩抢位置）。
@@ -9944,7 +9943,14 @@ class App {
       // 批次 361：`announceAdvancements` 只影响"提示"，不影响达成与存档
       if (!this.suppressProgressToasts && this.rules.announceAdvancements) {
         this.advancementToast.push(def);
-        this.chat.push(`${def.challenge ? '挑战完成' : '进度已达成'}：${def.title}——${def.desc}`, 'system');
+        // 标题与说明按当前语言取（`advancement.*` 派生键），不再直接读 `def.title` 的中文原文
+        this.chat.push(
+          tp(def.challenge ? 'say.progress.challenge' : 'say.progress.earned', {
+            title: advancementTitle(def),
+            desc: advancementDesc(def),
+          }),
+          'system',
+        );
         this.audio.play('achievement');
       }
     }
@@ -10549,7 +10555,7 @@ class App {
       this.patrolMobs.push(mob);
       if (member.leader) this.patrolLeader = mob;
     }
-    this.chat.push('附近出现了掠夺者巡逻队', 'system');
+    this.chat.push(t('say.patrol'), 'system');
   }
 
   /**
@@ -10599,7 +10605,7 @@ class App {
       // 效果被消耗：原版进村那一刻就用掉
       this.effects.remove('bad_omen');
       this.spawnRaidWave(this.raid.start());
-      this.chat.push('袭击开始了：守住村庄！', 'system');
+      this.chat.push(t('say.raid.start'), 'system');
       this.hudToast.show(t('misc.toast.raidStart'));
       return;
     }
@@ -10607,16 +10613,16 @@ class App {
     const step = raid.tick(dt);
     if (step === 'spawn-next') {
       const next = raid.wave + 1;
-      this.chat.push(`第 ${next} 波正在逼近…`, 'system');
+      this.chat.push(tp('say.raid.wave', { wave: next }), 'system');
       this.spawnRaidWave(raid.nextWave());
     } else if (step === 'won') {
       this.effects.apply('hero_of_the_village', 120, 0);
       this.reportProgress({ kind: 'raid', stage: 2 });
-      this.chat.push('袭击被击退了：你获得了村庄英雄', 'system');
+      this.chat.push(t('say.raid.won'), 'system');
       this.hudToast.show(t('misc.toast.heroOfVillage'));
       this.raid = null;
     } else if (step === 'lost') {
-      this.chat.push('袭击失败：没能守住村庄', 'system');
+      this.chat.push(t('say.raid.lost'), 'system');
       this.raid = null;
     }
   }
@@ -10894,7 +10900,7 @@ class App {
     this.entities.spawn(golem);
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, this.blockParticleColor(Block.IRON_BLOCK), 10);
-    this.chat.push('铁傀儡站了起来', 'system');
+    this.chat.push(t('say.ironGolem'), 'system');
     return true;
   }
 
@@ -12749,7 +12755,7 @@ class App {
       const ok = entity.assignProfession(professionId as Parameters<Villager['assignProfession']>[0], null);
       if (ok) {
         this.inventoryScreen.refresh();
-        this.chat.push(`（调试）村民已认领职业：${levelName(entity.level)}`, 'system');
+        this.chat.push(tp('say.debug.villagerProfession', { level: levelName(entity.level) }), 'system');
       }
       return ok;
     }
@@ -12769,7 +12775,10 @@ class App {
       const def = this.advancements.defs.find((item) => item.id === id);
       if (def) {
         this.advancementToast.push(def);
-        this.chat.push(`进度已达成：${def.title}——${def.desc}`, 'system');
+        this.chat.push(
+          tp('say.progress.earned', { title: advancementTitle(def), desc: advancementDesc(def) }),
+          'system',
+        );
       }
       this.advancementScreen.refresh();
     }
@@ -13355,7 +13364,14 @@ class App {
     this.effects.apply(id, seconds, amplifier, true);
     diag.event('survival', 'effect', { effect: id, seconds, amplifier, via: 'command' });
     this.resolveInstantEffects();
-    this.chat.push(`获得效果：${effectLabel(id)}${amplifier > 0 ? ` ${romanLevel(amplifier)}` : ''}`, 'system');
+    // `{level}` 带上**前导空格**：没有等级时传空串，模板里就不必再写"可能多余的空格"
+    this.chat.push(
+      tp('say.effect.gained', {
+        effect: effectLabel(id),
+        level: amplifier > 0 ? ` ${romanLevel(amplifier)}` : '',
+      }),
+      'system',
+    );
     return true;
   }
 
@@ -16071,7 +16087,7 @@ class App {
     // 凋灵生成在**中间那颗头**刚刚让出来的那一格（原版也是"从 T 形里长出来"）
     const wither = createMob(WITHER_TYPE, layout.center.x + 0.5, layout.center.y, layout.center.z + 0.5);
     this.entities.spawn(wither);
-    this.chat.push('凋灵被唤醒了', 'system');
+    this.chat.push(t('say.wither'), 'system');
   }
 
   /** 玩家脚下或身体所在的那一格是不是传送门方块 */
@@ -16176,7 +16192,7 @@ class App {
     this.setDimension(target.dimension, target);
     // 末地传送门只有"主世界 → 末地"这一侧是正门，回来时落的是**世界出生点**：
     // 与原版一致，但玩家第一次遇到会意外，所以给一句话
-    if (!toEnd) this.chat.push('末地传送门把你送回了世界出生点', 'system');
+    if (!toEnd) this.chat.push(t('say.endPortal.returned'), 'system');
   }
 
   /**

@@ -15,6 +15,8 @@
  * 晴天 8~16 分钟、雨天 2~5 分钟、转雨时有 30% 是雷暴。
  */
 
+import { t, tp } from '../i18n/I18n.ts';
+
 /** 天气种类（与 `render/Weather.ts` 共用同一个字符串联合） */
 export type WeatherKind = 'clear' | 'rain' | 'thunder';
 
@@ -100,15 +102,17 @@ export function weatherNotice(
 ): WeatherNotice | null {
   if (previous === next) return null;
   const minutes = Math.max(1, Math.round(seconds / 60));
+  // 多语言（批次 20261025-0105）：句子走 `say.weather.*`，**取值这一刻**才查表。
+  // 判据（哪种天气、持续多久）仍留在这里——它才是这个模块存在的理由。
   if (next === 'clear') {
     // 雷暴转晴用"过去了"，雨/雪转晴用"停了"——雷暴的重点从来不是水
-    if (previous === 'thunder') return { text: '雷暴过去了，天放晴了', kind: 'system' };
-    return { text: snowy ? '雪停了' : '雨停了', kind: 'system' };
+    if (previous === 'thunder') return { text: t('say.weather.thunderEnd'), kind: 'system' };
+    return { text: t(snowy ? 'say.weather.snowEnd' : 'say.weather.rainEnd'), kind: 'system' };
   }
   if (next === 'thunder') {
-    return { text: `雷暴来了，小心闪电（约 ${minutes} 分钟）`, kind: 'warning' };
+    return { text: tp('say.weather.thunder', { minutes }), kind: 'warning' };
   }
-  return { text: `${snowy ? '开始下雪了' : '开始下雨了'}（约 ${minutes} 分钟）`, kind: 'system' };
+  return { text: tp(snowy ? 'say.weather.snow' : 'say.weather.rain', { minutes }), kind: 'system' };
 }
 
 /**
