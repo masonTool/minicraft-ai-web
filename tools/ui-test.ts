@@ -3832,15 +3832,18 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes('this.inputEl.value = \'\';') &&
       !chatSrc.includes('this.inputEl.value = prefill; this.close();'),
   );
+  // 批次 20261025（用户）：提示行里的 help 不再"填进输入框等玩家按发送"，
+  // 而是直接打开指令页 —— 省掉每一条指令都要走两道手续。
   check(
-    '提示行里的 help 可点击并填入 /help（不再单独占一行）',
+    '提示行里的 help 直接打开指令页（不再填进输入框）',
     chatSrc.includes('private renderHint(text: string): void') &&
       chatSrc.includes("help.className = 'chat-help-link'") &&
-      chatSrc.includes("this.inputEl.value = '/help';") &&
-      chatSrc.includes("if (this.inputEl.value === '/help') return;") &&
-      !/help\.addEventListener\('pointerdown'[\s\S]{0,700}?this\.updateHint\(\);/.test(chatSrc) &&
-      !/help\.addEventListener\('pointerdown'[\s\S]{0,500}?this\.inputEl\.focus\(\)/.test(chatSrc) &&
-      chatSrc.includes("window.dispatchEvent(new Event('resize'))") &&
+      chatSrc.includes('onOpenHelp: (() => void) | null = null;') &&
+      chatSrc.includes('if (!this.onOpenHelp) return;') &&
+      chatSrc.includes('this.onOpenHelp();') &&
+      !chatSrc.includes("this.inputEl.value = '/help';") &&
+      !/help\.addEventListener\('pointerdown'[\s\S]{0,600}?this\.inputEl\.focus\(\)/.test(chatSrc) &&
+      appSrc.includes('this.chat.onOpenHelp = () => this.commandHelp.show();') &&
       !chatSrc.includes('chat-help-row') &&
       html.includes('.chat-help-link {'),
   );
@@ -3854,7 +3857,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('this.commandHelp.show(help[1]?.trim().split(/\\s+/)[0]);'),
   );
   check(
-    '命令帮助弹窗能搜索、切换命令、用表单生成并填入聊天框',
+    '命令帮助弹窗能搜索、切换命令、用表单生成命令',
     helpSrc.includes('commandHelpEntries()') &&
       helpSrc.includes('buildCommand(entry, this.variantIndex, this.values)') &&
       helpSrc.includes('suggestCommandValues(field.suggest!, query, 8)') &&
@@ -3863,10 +3866,24 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       helpSrc.includes("item.addEventListener('click', (event) => {") &&
       // ⚠️ 多语言 P1-4：这两句文案已搬进 `cmd.help.screen.*`，断言跟着改成查键绑定，
       // 不再匹配中文原文（否则每次搬文案都假红一次）
-      helpSrc.includes("this.searchEl.placeholder = t('cmd.help.screen.search')") &&
-      helpSrc.includes("fill.textContent = t('cmd.help.screen.fill')") &&
-      appSrc.includes('this.commandHelp.onUse = (command) =>') &&
-      appSrc.includes('this.chat.openWith(command, { focus: true });'),
+      helpSrc.includes("this.searchEl.placeholder = t('cmd.help.screen.search')"),
+  );
+  // 批次 20261025（用户）：去掉"填入聊天框"，改成指令名那一行右端的**确认**，点完直接执行
+  check(
+    '指令页的确认按钮在指令名那一行右端，且点一下直接执行',
+    helpSrc.includes("confirm.className = 'cmd-help-confirm'") &&
+      helpSrc.includes("confirm.textContent = t('cmd.help.screen.run')") &&
+      helpSrc.includes('this.onExecute?.(command)') &&
+      helpSrc.includes('confirm.disabled = command === null;') &&
+      // 旧的"填入聊天框"整套已经删干净（按钮、样式、回填路径）
+      !helpSrc.includes('cmd-help-fill') &&
+      !helpSrc.includes('onUse') &&
+      !html.includes('.cmd-help-fill') &&
+      html.includes('.cmd-help-confirm {') &&
+      html.includes('margin-left: auto;') &&
+      appSrc.includes('this.commandHelp.onExecute = (command) =>') &&
+      appSrc.includes('this.handleChatSubmit(command);') &&
+      !appSrc.includes('this.chat.openWith(command, { focus: true });'),
   );
   check(
     '命令帮助弹窗接入返回层级/界面开关/销毁',

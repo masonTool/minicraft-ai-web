@@ -2642,15 +2642,16 @@
       }
       .cmd-help-preview.bad { color: #ff9b8a; }
       .cmd-help-error { min-height: 14px; margin-top: 4px; color: #ff9b8a; font-size: 10px; }
-      .cmd-help-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
-      .cmd-help-fill {
-        font: inherit; font-size: 13px; min-height: 34px; padding: 6px 16px; cursor: pointer;
+      /* 确认按钮：钉在指令名那一行的**右端**（批次 20261025 用户要求） */
+      .cmd-help-confirm {
+        margin-left: auto;
+        font: inherit; font-size: 12px; min-height: 28px; padding: 4px 14px; cursor: pointer;
         background: #3f6f2d; color: #fff; border: 2px solid var(--mc-outline);
         box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
-      .cmd-help-fill:not(:disabled):hover { background: #4a8236; }
-      .cmd-help-fill:disabled { opacity: .5; cursor: default; }
+      .cmd-help-confirm:not(:disabled):hover { background: #4a8236; }
+      .cmd-help-confirm:disabled { opacity: .45; cursor: default; }
       body.touch-mode .cmd-help-panel {
         width: 96vw; height: min(92dvh, calc(100dvh - 24px)); padding: 10px;
       }

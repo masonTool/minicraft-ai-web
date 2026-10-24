@@ -207,7 +207,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "Нужен творческий режим",
   "cmd.help.screen.note": "В списках показываются русские названия, а команда сама подставит английский id; в текстовых полях для предметов и блоков можно писать по-русски.",
   "cmd.help.screen.action": "Действие",
-  "cmd.help.screen.fill": "Вставить в чат",
+  "cmd.help.screen.run": "Выполнить",
   "cmd.help.screen.optional": "{label} (необязательно)",
   "cmd.help.screen.none": "Не заполнять",
   "cmd.help.screen.customEllipsis": "Своё значение…",

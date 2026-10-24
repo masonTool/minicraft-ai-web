@@ -250,7 +250,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "需要创造模式",
   "cmd.help.screen.note": "下拉框里显示中文名，生成的命令会自动使用对应的英文 id；物品、方块等文本框也能直接填中文名。",
   "cmd.help.screen.action": "操作",
-  "cmd.help.screen.fill": "填入聊天框",
+  "cmd.help.screen.run": "确认执行",
   "cmd.help.screen.optional": "{label}（可选）",
   "cmd.help.screen.none": "不填",
   "cmd.help.screen.customEllipsis": "自定义…",

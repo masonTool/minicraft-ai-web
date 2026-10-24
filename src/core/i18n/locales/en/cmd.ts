@@ -247,7 +247,7 @@ export const cmd = {
   "cmd.help.screen.creativeOnly": "Requires Creative Mode",
   "cmd.help.screen.note": "Dropdowns show localized names; the command uses the English id. Text fields for items and blocks also accept localized names.",
   "cmd.help.screen.action": "Action",
-  "cmd.help.screen.fill": "Insert into chat",
+  "cmd.help.screen.run": "Run",
   "cmd.help.screen.optional": "{label} (optional)",
   "cmd.help.screen.none": "Leave empty",
   "cmd.help.screen.customEllipsis": "Custom…",

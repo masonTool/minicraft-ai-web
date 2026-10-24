@@ -2923,12 +2923,15 @@ class App {
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
+    // 聊天提示行里的 `help` 直接开指令页（批次 20261025）：
+    // 以前是"填进输入框，让玩家自己按发送"，等于每条指令都要走两道手续。
+    this.chat.onOpenHelp = () => this.commandHelp.show();
     // `/help` 弹窗：开/关沿用"界面打开就停用移动与交互"；
-    // 点“填入聊天框”只把命令放进输入框，由玩家自己按发送。
+    // 点“确认”= 直接执行（走 `handleChatSubmit` 与手打发送同一条路径，反馈进同一条消息栏）。
     this.commandHelp.onOpenChange = (open) => this.handleInventoryOpen(open);
-    this.commandHelp.onUse = (command) => {
+    this.commandHelp.onExecute = (command) => {
       this.commandHelp.close();
-      this.chat.openWith(command, { focus: true });
+      this.handleChatSubmit(command);
     };
     this.inventory.onChange = () => {
       this.refreshHotbar();

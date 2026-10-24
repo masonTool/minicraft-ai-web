@@ -5,7 +5,8 @@
  *  - `/help` 不再往聊天历史里刷几十行，而是弹一个单独的界面；
  *  - 每条命令除了说明，还能用表单生成命令；
  *  - 有可选项的字段用下拉框；
- *  - 点“填入聊天框”只把命令放进输入框，不自动执行。
+ *  - 20261025（用户）：去掉“填入聊天框”，改成指令名那一行右侧一个**确认**按钮，
+ *    选好参数点一下**直接执行**（参数不全会置灰，并在下方给出缺哪一项）。
  *
  * 命令解析在 `core/commands/CommandHelp.ts`（纯逻辑、可离线断言），
  * 这里只负责 DOM、搜索、表单与预览。
@@ -28,8 +29,11 @@ export class CommandHelpScreen {
 
   /** 弹窗开关（App 用它暂停/恢复玩家输入） */
   onOpenChange: ((open: boolean) => void) | null = null;
-  /** 玩家点“填入聊天框”：App 负责关闭弹窗并把命令放进聊天输入框 */
-  onUse: ((command: string) => void) | null = null;
+  /**
+   * 玩家点“确认”：App 负责关闭弹窗并**直接执行**这条命令
+   *（批次 20261025 用户：不要再经过聊天框和发送键，选好参数点确认就跑）。
+   */
+  onExecute: ((command: string) => void) | null = null;
 
   private readonly entries = commandHelpEntries();
   private readonly searchEl: HTMLInputElement;
@@ -207,6 +211,17 @@ export class CommandHelpScreen {
       tag.textContent = t('cmd.help.screen.creativeOnly');
       head.appendChild(tag);
     }
+    // 确认按钮就放在**指令名这一行的右端**（用户："指令的同一行的右侧"）。
+    // 它是这颗弹窗唯一的"执行"入口：不再回填聊天框，点完直接跑。
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'cmd-help-confirm';
+    confirm.textContent = t('cmd.help.screen.run');
+    confirm.addEventListener('click', () => {
+      const command = buildCommand(entry, this.variantIndex, this.values);
+      if (command) this.onExecute?.(command);
+    });
+    head.appendChild(confirm);
 
     const usage = document.createElement('div');
     usage.className = 'cmd-help-usage';
@@ -259,19 +274,8 @@ export class CommandHelpScreen {
     preview.className = 'cmd-help-preview';
     const error = document.createElement('div');
     error.className = 'cmd-help-error';
-    const actions = document.createElement('div');
-    actions.className = 'cmd-help-actions';
-    const fill = document.createElement('button');
-    fill.type = 'button';
-    fill.className = 'cmd-help-fill';
-    fill.textContent = t('cmd.help.screen.fill');
-    fill.addEventListener('click', () => {
-      const command = buildCommand(entry, this.variantIndex, this.values);
-      if (command) this.onUse?.(command);
-    });
-    actions.appendChild(fill);
-    this.detailEl.append(preview, error, actions);
-    this.updatePreview(entry, preview, error, fill);
+    this.detailEl.append(preview, error);
+    this.updatePreview(entry, preview, error, confirm);
   }
 
   private renderField(field: CommandHelpField): HTMLDivElement {
@@ -428,21 +432,22 @@ export class CommandHelpScreen {
     if (!entry) return;
     const preview = this.detailEl.querySelector<HTMLElement>('.cmd-help-preview');
     const error = this.detailEl.querySelector<HTMLElement>('.cmd-help-error');
-    const fill = this.detailEl.querySelector<HTMLButtonElement>('.cmd-help-fill');
-    if (preview && error && fill) this.updatePreview(entry, preview, error, fill);
+    const confirm = this.detailEl.querySelector<HTMLButtonElement>('.cmd-help-confirm');
+    if (preview && error && confirm) this.updatePreview(entry, preview, error, confirm);
   }
 
   private updatePreview(
     entry: CommandHelpEntry,
     preview: HTMLElement,
     error: HTMLElement,
-    fill: HTMLButtonElement,
+    confirm: HTMLButtonElement,
   ): void {
     const command = buildCommand(entry, this.variantIndex, this.values);
     preview.textContent = command ?? t('cmd.help.screen.needRequired');
     preview.classList.toggle('bad', command === null);
     error.textContent = command === null ? t('cmd.help.screen.stillRequired') : '';
-    fill.disabled = command === null;
+    // 参数不齐就不给按：省的玩家点一下"没反应"，还得回头看缺了哪项
+    confirm.disabled = command === null;
   }
 }
 
