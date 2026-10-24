@@ -633,26 +633,32 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-category-section {') &&
       !invSrc.includes("pane === 'recipes'"),
   );
-  // 批次 20261024-1609（用户澄清）：**没有"配方书页面"这回事**，配方相关的东西全走
-  // "可合成物品"这颗键——它只切左栏的视图，绝不打开配方书那一层（那是 PC 的 R 键）。
-  // 用户报的"按钮自动关闭"= 视图开着、按钮却是灭的，原因在 `active` 的判据（见下一条）。
+  // 批次 20261024-1645（用户口径）：这颗键 = "可合成物品"状态的开关。
+  //   ① 正常逻辑 = 状态取反（亮↔灰），左栏不动；
+  //   ② 唯一特殊逻辑 = 仓库里 + 关着 → 打开状态并跳到搜索分类；
+  //   ③ 不碰配方书那一层（那是 PC 的 R 键）。
   const recipesClickBody = /recipes\.addEventListener\('click', \(\) => \{([\s\S]*?)\n      \}\);/.exec(invSrc)?.[1] ?? '';
   check(
-    '那颗键只切左栏视图（不打开、也不关闭配方书那一层）',
-    recipesClickBody.includes('this.openPocketCategory(this.lastRecipeTab);') &&
-      !recipesClickBody.includes('onOpenRecipes') &&
-      !recipesClickBody.includes('onCloseRecipes'),
+    '那颗键不碰配方书那一层（既不打开也不关闭）',
+    !recipesClickBody.includes('onOpenRecipes') && !recipesClickBody.includes('onCloseRecipes'),
   );
   check(
-    '按钮"亮着"只看视图在不在（不再绑红底筛选，否则第一次点完是灭的）',
-    /this\.recipesBtn\.classList\.toggle\('active', leftPane === 'category'\);/.test(invSrc) &&
-      // 工作站那条同一口径（`showCategory` 就是"左栏在分类页"）
-      invSrc.includes("this.recipesBtn.classList.toggle('active', showCategory);") &&
+    '正常逻辑：点一下状态取反，左栏不跳页',
+    recipesClickBody.includes('this.showUnowned = !this.showUnowned;') &&
+      !recipesClickBody.includes('this.openPocketCategory(this.lastRecipeTab);'),
+  );
+  check(
+    '唯一特殊逻辑：仓库里 + 关着 → 打开状态并跳到搜索分类',
+    /if \(this\.pane === 'items' && !this\.showUnowned\) \{[\s\S]{0,200}?this\.showUnowned = true;[\s\S]{0,200}?this\.openPocketCategory\('all'\);/.test(
+      recipesClickBody,
+    ),
+  );
+  check(
+    '按钮亮灭 = 状态本身（两处都跟 `showUnowned`，不掺"左栏在哪一页"）',
+    (invSrc.match(/this\.recipesBtn\.classList\.toggle\('active', this\.showUnowned\);/g) ?? []).length === 2 &&
+      !/toggle\(\s*'active',\s*leftPane === 'category'/.test(invSrc) &&
+      !invSrc.includes("toggle('active', showCategory)") &&
       !invSrc.includes("toggle('active', showCategory && this.showUnowned)"),
-  );
-  check(
-    '分类栏里再点它就切"列出未拥有 / 只看能做的"',
-    /recipes\.addEventListener\('click', \(\) => \{[\s\S]{0,900}?this\.showUnowned = !this\.showUnowned;/.test(invSrc),
   );
   check(
     '左栏没有 recipes 那一份（配方书是整屏层）',
@@ -1192,8 +1198,8 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
-      // 批次 20261024-1609（用户）：亮着 = 左栏正在可合成物品视图里
-      invSrc.includes("this.recipesBtn.classList.toggle('active', leftPane === 'category');") &&
+      // 批次 20261024-1645（用户）：亮着 = 可合成物品状态打开
+      invSrc.includes("this.recipesBtn.classList.toggle('active', this.showUnowned);") &&
       css.includes('.inv-slot.locked {'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）

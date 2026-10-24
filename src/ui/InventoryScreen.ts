@@ -1056,27 +1056,32 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       this.textButtons.push({ element: recipes, key: 'inventory.recipeBookKey', touchKey: 'inventory.recipeBook' });
       recipes.textContent = t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey');
-      // 这颗键 = **"可合成物品"视图的开关**（批次 20261024-1609 按用户澄清定稿）。
+      // 这颗键 = **"可合成物品"状态的开关**（批次 20261024-1645 按用户口径重写）。
       //
-      // 用户原话："我们现在没有一个所谓的配方书的页面，所有的配方相关的东西，都是通过
-      // 可合成物品这个按钮功能来实现的……我点击可合成按钮，他会跳到搜索分类，但是不知道
-      // 什么原因，可合成按钮会自动关闭，需要再点一下才打开。"
+      // 用户口径（原话）："这个按钮的意思是可合成物品的那个状态开与关。按钮亮时，
+      // 可合成物品状态打开；按钮灰时，可合成物品状态关闭。这个状态完全由用户控制。
+      // 在所有分类中都是一样的逻辑。它唯一的一个特殊逻辑就是：如果当前是在仓库分类，
+      // 且按钮关闭时，状态会打开，同时会跳到搜索那个分类页。其它都是正常逻辑。"
       //
-      // 所以这里**不碰配方书那一层**（那是 PC 上 R 键的东西），只切左栏：
-      //   · 左栏还在仓库（我的物品）→ 切到上次那个物品分类（首次是"全部/搜索"）；
-      //   · 左栏已经是分类 → 在"只列能做的 / 把该分类全部列出来"之间切。
-      // ⚠️ "按钮自己灭掉"的真正原因不在这段里，而在 `applyInventoryChrome()` 给
-      // `recipesBtn` 算 `active` 的那一行——它原来只跟着 `showUnowned`（红底筛选）走，
-      // 切到视图里时还没打开红底，于是"视图开了、按钮却是灭的"，看着像自动关掉。
+      // 于是这里只有两件事：
+      //   ① 正常逻辑 = 状态取反（亮↔灰），**左栏停在哪一页都不动**；
+      //   ② 唯一特殊逻辑 = 左栏在仓库（我的物品）且状态是关的 → 打开状态 + 跳到搜索页。
+      // 状态存在 `showUnowned` 里（它就是"把该分类全部列出来、没有的红底"这个总开关），
+      // 按钮亮灭由 `applyInventoryChrome()` 里的 `classList.toggle('active', this.showUnowned)`
+      // 跟它一一对应——**不要**再跟"左栏在哪一页"绑定：那样在仓库里永远灭、在分类页里关不掉。
       recipes.addEventListener('click', () => {
         // 同一次点击只做一件事；"看一眼某条配方"的待处理状态先收掉
         this.pendingRecipeId = null;
-        if (this.pane === 'category') {
-          this.showUnowned = !this.showUnowned;
+        // ② 唯一的特殊逻辑：仓库里 + 关着 → 打开并跳到搜索页
+        if (this.pane === 'items' && !this.showUnowned) {
+          this.showUnowned = true;
           this.categoryPage = 0;
-        } else {
-          this.openPocketCategory(this.lastRecipeTab);
+          this.openPocketCategory('all');
+          return;
         }
+        // ① 其余一律：状态取反，页面不动（开着就关得掉）
+        this.showUnowned = !this.showUnowned;
+        this.categoryPage = 0;
         this.applyInventoryChrome();
       });
       this.recipesBtn = recipes;
@@ -4150,9 +4155,8 @@ export class InventoryScreen {
         // 批次 320：恢复 e3503c3 之前的标题栏配方书按钮
         this.recipesBtn?.classList.remove('hidden');
         if (this.recipesBtn) {
-          // 与背包同一条（批次 20261024-1609）：亮着 = 左栏正在可合成物品视图里，
-          // 不能再绑 `showUnowned`，否则第一次点进来的按钮是灭的
-          this.recipesBtn.classList.toggle('active', showCategory);
+          // 与背包同一条（批次 20261024-1645）：亮灭 = 可合成物品状态本身
+          this.recipesBtn.classList.toggle('active', this.showUnowned);
           this.recipesBtn.title = t(this.showUnowned ? 'inventory.bookAllStations' : 'inventory.bookThisStation');
         }
         this.syncRecipeRail(showCategory ? this.categoryTab : null);
@@ -4268,11 +4272,10 @@ export class InventoryScreen {
       // 创造模式左栏是无限物品分类，这个开关在这儿没有意义；
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
-      // ⚠️ 批次 20261024-1609（用户）：`active` 只看"左栏是不是可合成物品视图"。
-      // 原来写的是 `leftPane === 'category' && this.showUnowned` —— 把"亮着"绑在
-      // **红底筛选**上，于是从仓库点进来的第一次（`showUnowned` 还是 false）视图开了、
-      // 按钮却是灭的，玩家读成"按钮自己关掉了，得再点一下才打开"。现在视图开着就亮。
-      this.recipesBtn.classList.toggle('active', leftPane === 'category');
+      // ⚠️ 批次 20261024-1645（用户）：`active` = **可合成物品状态本身**（`showUnowned`），
+      // 与"左栏在哪一页"无关。这样：分类页里亮着再点一下就灭（关得掉）、
+      // 仓库里也照实反映状态（不会永远灰着）。别再掺 `leftPane === 'category'`。
+      this.recipesBtn.classList.toggle('active', this.showUnowned);
       // 提示描述"再点一下会切到哪种筛选"（批次 209）
       this.recipesBtn.title = t(
         this.showUnowned ? 'inventory.bookAllItems' : 'inventory.bookCraftable',
