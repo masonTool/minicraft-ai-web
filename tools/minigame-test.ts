@@ -167,10 +167,26 @@ console.log('\n跳一跳：场景与流程（静态断言）');
   // 字段被改名的话，线上没人会发现，只有离线这条还能立刻变红。
   check(
     'debugState 暴露 E2E 依赖的字段',
-    ['gap', 'gapRatio', 'axis', 'kind', 'nextKind', 'orthographic', 'phase', 'score', 'index', 'best'].every(
-      (field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, '')),
-    ),
+    [
+      'gap',
+      'gapRatio',
+      'standOffset',
+      'axis',
+      'kind',
+      'nextKind',
+      'orthographic',
+      'phase',
+      'score',
+      'index',
+      'best',
+    ].every((field) => new RegExp(`\\b${field}:`).test(jumpSrc.replace(/\/\/[^\n]*/g, ''))),
   );
+  // 落点保留是这一轮的核心语义：站姿必须读 run.stand，不能再用方块中心
+  check('站姿读实际落点（run.stand）', jumpSrc.includes('this.run.stand.x') && jumpSrc.includes('this.run.stand.z'));
+  check('起跳点读实际落点（不用 currentBlock 中心）', jumpSrc.includes('const stand = this.run.stand;'));
+  check('倾覆有独立阶段（toppling）', jumpSrc.includes("'toppling'"));
+  check('一屏只画 3 块（上一块 + 当前 + 下一块）', jumpSrc.includes('this.run.index + 1)') && !jumpSrc.includes('this.run.index + 2)'));
+  check('倾覆期间不跟镜头（人已经倒出画面）', jumpSrc.includes("this.phase !== 'toppling'"));
   check('退出按钮走宿主 exit', jumpSrc.includes('context.exit()'));
   check('重开不退出宿主', jumpSrc.includes('this.restart()'));
 }

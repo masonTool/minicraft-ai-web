@@ -358,13 +358,14 @@ export class BlockScene {
   /**
    * 本帧的目标取景。
    *
-   * 只把"当前块前后各一块"交给取景器：原版一屏就是 3~4 块，交太多会被压得看不清；
-   * 交太少则下一块可能贴边。头位按小人高度留（否则蓄力时头顶会顶出画面）。
+   * 只把"上一块 + 当前 + 下一块"（3 块）交给取景器：横屏下间距拉到 4.6~6.0 格之后，
+   * 交 4 块会被压得看不清；交太少则下一块可能贴边。
+   * 头位按小人高度留（否则蓄力时头顶会顶出画面）。
    */
   private nextFrame(): IsoFrame {
     const currentIndex = Math.max(0, this.entries.findIndex((entry) => entry.spec.current));
     const from = Math.max(0, currentIndex - 1);
-    const to = Math.min(this.entries.length - 1, currentIndex + 2);
+    const to = Math.min(this.entries.length - 1, currentIndex + 1);
     const specs = this.entries.slice(from, to + 1).map((entry) => entry.spec);
     const focus = this.entries[currentIndex]?.spec;
     const headroom = focus ? focus.size * JUMPER_HEIGHT_RATIO : 0;

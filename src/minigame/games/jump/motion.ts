@@ -20,6 +20,8 @@ export const JUMP_TIMING = {
   riseRatio: 0.65,
   /** 落地压缩恢复时长 */
   landSquashMs: 100,
+  /** 倾倒（先倾斜、再落下去）的时长 */
+  toppleMs: 380,
   /** 被踩方块的 NBC 回弹时长 */
   blockBounceMs: 500,
   /** 新方块入场弹入时长 */
