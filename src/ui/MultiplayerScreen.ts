@@ -18,7 +18,10 @@
  * Node 里也能测（纯函数 + DOM），不需要 WebSocket。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
+import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
+import { sanitizeRoomName } from '../core/net/RoomName.ts';
+import { formatServerUrl, parseServerUrl, roomsEndpoint } from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
@@ -37,8 +40,15 @@ export interface MultiplayerScreenActions {
   onClose: () => void;
 }
 
-/** localStorage 记住上次填的地址与昵称（手机上每次手输 ws:// 加 IP 太痛苦） */
+/**
+ * localStorage 记住上次填的地址 / 房间 / 口令 / 昵称（手机上每次手输 ws:// 加 IP 太痛苦）。
+ *
+ * 房间与口令从"藏在地址里"提成独立字段（L9）之后也要记住：局域网里就那一两个房间，
+ * 每次重开都要重新抄一遍房间名是纯折磨。
+ */
 const STORAGE_URL = 'mc.mp.url';
+const STORAGE_ROOM = 'mc.mp.room';
+const STORAGE_PASSWORD = 'mc.mp.pw';
 const STORAGE_NAME = 'mc.mp.name';
 /** 昵称上限与服务端 `sanitizeName` 对齐（按字符算，不按字节） */
 export const MULTIPLAYER_NAME_MAX = 16;
@@ -94,6 +104,10 @@ export function multiplayerButtons(state: MultiplayerScreenState): { connect: bo
 export class MultiplayerScreen {
   readonly root: HTMLDivElement;
   private readonly urlInput: HTMLInputElement;
+  private readonly roomInput: HTMLInputElement;
+  private readonly passwordInput: HTMLInputElement;
+  private readonly roomsEl: HTMLDivElement;
+  private readonly refreshButton: HTMLButtonElement;
   private readonly nameInput: HTMLInputElement;
   private readonly statusEl: HTMLDivElement;
   private readonly hostButton: HTMLButtonElement;
@@ -134,7 +148,45 @@ export class MultiplayerScreen {
     this.urlInput.spellcheck = false;
     this.urlInput.placeholder = t('mp.serverHint');
     this.urlInput.value = readStored(STORAGE_URL) ?? '';
-    urlRow.append(urlLabel, this.urlInput);
+    // 「找房间」（L9）：浏览器发不了 UDP/mDNS，所以"自动发现"= 连上这台服务器后拉它的房间列表
+    this.refreshButton = document.createElement('button');
+    this.refreshButton.type = 'button';
+    this.refreshButton.id = 'mp-refresh-rooms';
+    this.refreshButton.className = 'mp-mini';
+    this.refreshButton.textContent = t('mp.refreshRooms');
+    this.refreshButton.addEventListener('click', () => void this.refreshRooms());
+    urlRow.append(urlLabel, this.urlInput, this.refreshButton);
+
+    // ---- 房间 / 口令行（L9：不再让玩家把房间写进地址）
+    const roomRow = document.createElement('label');
+    roomRow.className = 'mp-row';
+    const roomLabel = document.createElement('span');
+    roomLabel.textContent = t('mp.room');
+    this.roomInput = document.createElement('input');
+    this.roomInput.type = 'text';
+    this.roomInput.id = 'mp-room';
+    this.roomInput.maxLength = 24;
+    this.roomInput.autocomplete = 'off';
+    this.roomInput.spellcheck = false;
+    this.roomInput.placeholder = t('mp.roomHint');
+    this.roomInput.value = readStored(STORAGE_ROOM) ?? '';
+    const passwordLabel = document.createElement('span');
+    passwordLabel.className = 'mp-row-label-sub';
+    passwordLabel.textContent = t('mp.password');
+    this.passwordInput = document.createElement('input');
+    this.passwordInput.type = 'text';
+    this.passwordInput.id = 'mp-password';
+    this.passwordInput.maxLength = 32;
+    this.passwordInput.autocomplete = 'off';
+    this.passwordInput.spellcheck = false;
+    this.passwordInput.placeholder = t('mp.passwordHint');
+    this.passwordInput.value = readStored(STORAGE_PASSWORD) ?? '';
+    roomRow.append(roomLabel, this.roomInput, passwordLabel, this.passwordInput);
+
+    // ---- 房间列表（点一行就把房名/口令填好；列不出来也不挡手填）
+    this.roomsEl = document.createElement('div');
+    this.roomsEl.className = 'mp-rooms hidden';
+    this.roomsEl.id = 'mp-rooms';
 
     // ---- 昵称行
     const nameRow = document.createElement('label');
@@ -195,7 +247,7 @@ export class MultiplayerScreen {
     hint.className = 'mp-hint';
     hint.textContent = t('mp.hint');
 
-    panel.append(title, urlRow, nameRow, this.statusEl, actionsRow, hint);
+    panel.append(title, urlRow, roomRow, this.roomsEl, nameRow, this.statusEl, actionsRow, hint);
     this.root.append(panel);
     host.append(this.root);
 
@@ -274,23 +326,136 @@ export class MultiplayerScreen {
     if (intent.url.length > 0) this.urlInput.value = intent.url;
   }
 
-  /** 当前填的地址与昵称（主程序重连时也要用同一份） */
-  readForm(): { url: string | null; name: string } {
+  /**
+   * 当前填的地址与昵称（主程序重连时也要用同一份）。
+   *
+   * 地址在这里才拼上房间与口令（`formatServerUrl`）：输入框只放裸地址，
+   * 这样「找房间」拉列表时不会把房名带到服务器请求里，玩家也不用懂 URL 语法。
+   */
+  readForm(): { url: string | null; name: string; room: string; password: string } {
+    const base = normalizeServerUrl(this.urlInput.value);
+    const rawRoom = this.roomInput.value.trim();
+    // 空 = 进默认房间（服务端 `DEFAULT_ROOM`），不硬塞一个名字
+    const room = rawRoom.length > 0 ? sanitizeRoomName(rawRoom) : '';
+    const password = this.passwordInput.value.trim().slice(0, 32);
     return {
-      url: normalizeServerUrl(this.urlInput.value),
+      url: base ? formatServerUrl(base, room, password) : null,
       name: sanitizeMultiplayerName(this.nameInput.value),
+      room,
+      password,
     };
   }
 
+  /**
+   * 地址里带了房间/口令时把它们拆到独立输入框（粘贴老格式地址的兼容）。
+   *
+   * 老格式 `ws://host:8787/red?pw=1234` 现在是"一个世界一份日志"的老习惯，
+   * 直接报错太粗暴——拆出来继续用即可。
+   */
+  private splitAddress(): void {
+    const normalized = normalizeServerUrl(this.urlInput.value);
+    if (!normalized) return;
+    const parsed = parseServerUrl(normalized);
+    if (parsed.room.length === 0 && parsed.password.length === 0) return;
+    this.urlInput.value = parsed.url;
+    if (parsed.room.length > 0 && this.roomInput.value.trim().length === 0) {
+      this.roomInput.value = parsed.room;
+    }
+    if (parsed.password.length > 0 && this.passwordInput.value.trim().length === 0) {
+      this.passwordInput.value = parsed.password;
+    }
+  }
+
+  /**
+   * 拉这台服务器的房间列表（L9）。
+   *
+   * 浏览器发不出 UDP 广播、也收不到 mDNS，所以"局域网自动发现"只能落地成
+   * "**连上这台服务器之后问它有哪些房间**"——地址对了，房名就不用问人。
+   * 任何失败都只降级成一句提示，手填房间名那条路永远可用。
+   */
+  private async refreshRooms(): Promise<void> {
+    this.splitAddress();
+    const base = normalizeServerUrl(this.urlInput.value);
+    const endpoint = base ? roomsEndpoint(base) : null;
+    if (!endpoint) {
+      this.showRoomsMessage(t('mp.roomsFailed'));
+      return;
+    }
+    this.refreshButton.disabled = true;
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 3000);
+      const response = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
+      window.clearTimeout(timer);
+      const parsed = parseRoomsResponse(await response.json());
+      if (!parsed) {
+        this.showRoomsMessage(t('mp.roomsFailed'));
+        return;
+      }
+      this.renderRooms(parsed);
+    } catch {
+      // 跨源被挡 / 服务端不在 / 超时：一句人话，别把玩家堵在异常里
+      this.showRoomsMessage(t('mp.roomsFailed'));
+    } finally {
+      this.refreshButton.disabled = false;
+    }
+  }
+
+  private renderRooms(result: RoomListResult): void {
+    this.roomsEl.replaceChildren();
+    if (result.rooms.length === 0) {
+      this.showRoomsMessage(t('mp.roomsEmpty'));
+      return;
+    }
+    this.roomsEl.classList.remove('hidden');
+    for (const entry of result.rooms) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'mp-room-row';
+      row.dataset.room = entry.room;
+      const name = document.createElement('b');
+      name.textContent = entry.room;
+      const meta = document.createElement('span');
+      const parts = [tp('mp.roomsPlayers', { n: entry.players })];
+      if (entry.worldName.length > 0) parts.push(entry.worldName);
+      // 没房主的房进去之后没人跑模拟，值得事先说一句
+      if (!entry.hasHost) parts.push(t('mp.roomsNoHost'));
+      meta.textContent = parts.join(' · ');
+      row.append(name, meta);
+      row.addEventListener('click', () => {
+        this.roomInput.value = entry.room;
+        // 要口令的服务器：把焦点送过去，省一次点击
+        if (result.passwordRequired && this.passwordInput.value.trim().length === 0) {
+          this.passwordInput.focus();
+        }
+      });
+      this.roomsEl.append(row);
+    }
+  }
+
+  private showRoomsMessage(text: string): void {
+    this.roomsEl.replaceChildren();
+    const message = document.createElement('div');
+    message.className = 'mp-rooms-empty';
+    message.textContent = text;
+    this.roomsEl.append(message);
+    this.roomsEl.classList.remove('hidden');
+  }
+
   private submit(host: boolean): void {
+    // 粘贴来的老格式地址先拆成"裸地址 + 房间 + 口令"，再当表单读
+    this.splitAddress();
     const { url, name } = this.readForm();
     if (!url) {
       this.statusEl.textContent = t('mp.error.url');
       this.statusEl.dataset.state = 'error';
       return;
     }
-    // 记住这次填的（存规范化之后的地址，下次打开就是能直接用的形式）
-    writeStored(STORAGE_URL, url);
+    // 记住这次填的（地址只存裸地址，房间/口令各存各的，下次打开都是能直接用的形式）
+    const base = normalizeServerUrl(this.urlInput.value);
+    if (base) writeStored(STORAGE_URL, base);
+    writeStored(STORAGE_ROOM, this.roomInput.value.trim());
+    writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
     writeStored(STORAGE_NAME, name);
     this.actions.onConnect(url, name, host);
   }

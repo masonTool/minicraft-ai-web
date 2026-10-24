@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatServerUrl, parseServerUrl, resolveDefaultServerUrl } from '../src/core/net/ServerUrl.ts';
+import { formatServerUrl, parseServerUrl, resolveDefaultServerUrl, roomsEndpoint } from '../src/core/net/ServerUrl.ts';
 
 describe('parseServerUrl', () => {
   it('裸地址：默认房间、无口令', () => {
@@ -77,5 +77,28 @@ describe('formatServerUrl', () => {
     expect(parsed.url).toBe('ws://10.0.0.2:8787');
     expect(parsed.room).toBe('room-a');
     expect(parsed.password).toBe('a b&c');
+  });
+});
+
+/*
+ * `/rooms` 的地址（L9）：房间列表与 WebSocket 在同一个端口，只换协议头。
+ * 房间名在 path 里要去掉——列表是服务器级的，不是房间级的。
+ */
+describe('roomsEndpoint', () => {
+  it('ws → http，同一端口', () => {
+    expect(roomsEndpoint('ws://192.168.1.5:8787')).toBe('http://192.168.1.5:8787/rooms');
+  });
+
+  it('wss → https', () => {
+    expect(roomsEndpoint('wss://mc.example.com/ws')).toBe('https://mc.example.com/rooms');
+  });
+
+  it('地址里带房间名也指向服务器级列表', () => {
+    expect(roomsEndpoint('ws://192.168.1.5:8787/red?pw=1')).toBe('http://192.168.1.5:8787/rooms');
+  });
+
+  it('解析不出来返回 null（调用方退回手填）', () => {
+    expect(roomsEndpoint('不是地址')).toBeNull();
+    expect(roomsEndpoint('')).toBeNull();
   });
 });

@@ -59,6 +59,24 @@ export function formatServerUrl(base: string, room: string, password: string): s
 }
 
 /**
+ * 由 WebSocket 地址推出 `/rooms` 的 HTTP 地址（L9）。
+ *
+ * `GET /rooms` 与 WebSocket 在**同一个端口**上，所以只换协议头：`ws → http`、
+ * `wss → https`；房间名在 path 里（`ws://h:8787/red`）要去掉，列表是服务器级的。
+ * 解析不出来返回 `null` —— 调用方据此直接走"手填房间名"，不必先报错。
+ */
+export function roomsEndpoint(wsUrl: string): string | null {
+  try {
+    const parsed = new URL(wsUrl);
+    const protocol = parsed.protocol === 'wss:' ? 'https:' : parsed.protocol === 'ws:' ? 'http:' : parsed.protocol;
+    if (protocol !== 'http:' && protocol !== 'https:') return null;
+    return `${protocol}//${parsed.host}/rooms`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 默认的服务端地址（联机28）。
  *
  * 三种部署形态各一条规则，都是踩过的坑：

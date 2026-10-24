@@ -5160,5 +5160,49 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
   );
 }
 
+/*
+ * 加入房间面板（L9）：地址 + 房间 + 口令 + 房间列表
+ *
+ * 以前房间与口令只能写进地址（`ws://host:8787/red?pw=1234`），手机上几乎敲不对；
+ * 而"这台服务器上有哪些房"根本无从得知。这一条把它们提成独立字段，并能问服务器要列表。
+ */
+console.log('\n[加入房间：选项式面板（L9）]');
+{
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+
+  check(
+    '房间与口令是独立输入框（不再靠手写 URL）',
+    mpSrc.includes("this.roomInput.id = 'mp-room'") && mpSrc.includes("this.passwordInput.id = 'mp-password'"),
+  );
+  check(
+    '地址只存裸地址，房间/口令在 readForm 里才拼（formatServerUrl）',
+    mpSrc.includes('url: base ? formatServerUrl(base, room, password) : null') &&
+      mpSrc.includes('room,') &&
+      mpSrc.includes('password,') &&
+      mpSrc.includes('writeStored(STORAGE_URL, base)'),
+  );
+  check(
+    '粘贴老格式地址会拆成裸地址 + 房间 + 口令',
+    mpSrc.includes('private splitAddress(): void') && mpSrc.includes('parseServerUrl(normalized)'),
+  );
+  check(
+    '「找房间」拉 /rooms 并清洗（失败只提示，不挡手填）',
+    mpSrc.includes('roomsEndpoint(base)') &&
+      mpSrc.includes('parseRoomsResponse(await response.json())') &&
+      mpSrc.includes("this.showRoomsMessage(t('mp.roomsFailed'))"),
+  );
+  check(
+    '点一行房间就填好房名（要口令时把焦点送过去）',
+    mpSrc.includes('this.roomInput.value = entry.room;') && mpSrc.includes('this.passwordInput.focus();'),
+  );
+  check(
+    '房间列表有专属类名与三行高度上限（横屏不撑破）',
+    mpSrc.includes("this.roomsEl.className = 'mp-rooms hidden'") &&
+      /\.mp-rooms \{[^}]*max-height: 96px; overflow: auto;/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+      ),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -2083,6 +2083,27 @@
         padding: 6px 8px; border: 2px solid; border-color: var(--pixel-bevel-dark);
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
       }
+      /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
+      .mp-mini {
+        flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
+      }
+      /* 房间/口令同一行：口令那一格的标签比主标签窄一半 */
+      .mp-row > span.mp-row-label-sub { flex: 0 0 2.6em; text-align: right; opacity: .8; }
+      /* 房间列表：最多三行高就滚，别把面板撑出屏幕 */
+      .mp-rooms {
+        display: flex; flex-direction: column; gap: 4px;
+        max-height: 96px; overflow: auto;
+        padding: 4px; background: rgba(0, 0, 0, .3);
+      }
+      .mp-room-row {
+        display: flex; align-items: baseline; gap: 8px;
+        font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+        padding: 5px 8px; border: 2px solid var(--pixel-bevel-dark);
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .25);
+      }
+      .mp-room-row b { font-size: 13px; }
+      .mp-room-row span { opacity: .8; }
+      .mp-rooms-empty { font-size: 11px; opacity: .75; padding: 2px 4px; }
       .mp-status { min-height: 1.2em; font-size: 12px; }
       .mp-status[data-state='connected'] { color: #8ee08e; }
       .mp-status[data-state='error'] { color: #ff9a9a; }
