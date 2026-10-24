@@ -399,6 +399,16 @@ const DOUBLE_CLICK_MS = 400;
 export const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_REPEAT_MS = 170;
 /**
+ * 自绘滚动条与物品内容之间的间隔（像素，批次 20261024-1152）。
+ *
+ * 生存分类栏与创造分类栏**共用这一个值**：两条滚动条以前各写各的（4px / 6px +
+ * 各自的 right），于是同一个人在两栏里看到的滑条位置不一样。
+ * 宽度本身写在 CSS（`.inv-category-scrollbar { width: 7px }`），这里只留兜底值。
+ */
+export const SCROLLBAR_CONTENT_GAP = 8;
+/** 自绘滚动条宽度（CSS 没生效时的兜底，用来算右边界钳制） */
+export const SCROLLBAR_TRACK_WIDTH = 7;
+/**
  * 点物品时那块小说明停留多久（毫秒，批次 159）。
  * 比"看一眼"长、比"碍事"短：3.5 秒够读完一行说明，又不至于一直压在快捷栏上。
  */
@@ -2122,9 +2132,9 @@ export class InventoryScreen {
     for (let i = 0; i < Math.min(cols, slots.length); i++) {
       contentRight = Math.max(contentRight, slots[i]!.getBoundingClientRect().right);
     }
-    const width = track.offsetWidth || 6;
+    const width = track.offsetWidth || SCROLLBAR_TRACK_WIDTH;
     // 与内容留出 8px：不压最后一列，也不至于离得太远
-    const left = contentRight - hostRect.left + 8;
+    const left = contentRight - hostRect.left + SCROLLBAR_CONTENT_GAP;
     return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width - 1));
   }
 

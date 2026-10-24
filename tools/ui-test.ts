@@ -3168,6 +3168,21 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       css.includes('overflow-y: scroll;') &&
       css.includes('scrollbar-width: none;'),
   );
+  // 批次 20261024-1152（用户）：生存与创造的滚动条位置/款式要一致，且滑条下方不能再跟着黑块
+  check(
+    '生存与创造共用同一根滚动条（宽度只在 CSS 一处、间隔只有常量一处）',
+    (css.match(/^[ \t]*\.inv-category-scrollbar \{/gm) ?? []).length === 1 &&
+      // 不许再有一条"只针对创造栏"的滚动条覆盖（PC 那条 `body:not(.touch-mode)` 除外，见优化12）
+      !/^[ \t]*\.inv-creative-section \.inv-category-scrollbar \{/m.test(css) &&
+      /\.inv-category-scrollbar \{[^}]*width: 7px;/.test(css) &&
+      invSrc.includes('export const SCROLLBAR_CONTENT_GAP = 8;') &&
+      (invSrc.match(/SCROLLBAR_CONTENT_GAP/g) ?? []).length >= 2,
+  );
+  check(
+    '滚动条滑块不再描边（黑块就是 1px 深边在小宽度下滑条上留下的）',
+    /\.inv-category-scroll-thumb \{[^}]*border: 0;/.test(css) &&
+      !/\.inv-category-scroll-thumb \{[^}]*border: 1px solid #4a4a4a;/.test(css),
+  );
   // ④ 点仓库时原分类取消高亮
   check(
     '点仓库后原物品分类取消选中',
