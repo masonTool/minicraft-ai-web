@@ -519,6 +519,9 @@ import {
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator } from './core/gen/OverworldGenerator.ts';
+// 出生点预选要用"跟世界种子绑定的随机源"（批次 20261024-1152）：
+// 用 Math.random 的话同一个种子重进世界会落在不同地方，与原版口径不符
+import { Random } from './core/gen/noise/Random.ts';
 import { WORLD_SURFACE_Y } from './core/gen/WorldType.ts';
 import {
   findSafeSpawn,
@@ -4842,11 +4845,16 @@ class App {
     // 地表高度下限跟着世界类型走（批次 238）：超平坦地表在 y=-61，
     // 还用海平面 64 的话出生点永远解析不出来（遮罩不撤、看起来卡死）。
     const surfaceY = WORLD_SURFACE_Y[this.worldConfig.worldType];
+    // 出生区域半径 1024（批次 20261024-1152，用户选 B）：以前 256 + "最平 + 平原"
+    // 评分，让不同种子都落在原点附近的平原上，第一眼几乎一样。
+    // 随机源由世界种子派生 —— 同种子 = 同出生点，跨种子才不同。
+    const spawnRandom = new Random(this.worldConfig.seed);
     const region = planSpawnRegion(
       (x, z) => this.biomeGenerator!.surfaceY(x, z),
       (x, z) => this.biomeGenerator!.biomeAt(x, z).name,
-      256,
+      1024,
       surfaceY,
+      () => spawnRandom.nextDouble(),
     );
     this.spawnSearchX = region.x;
     this.spawnSearchZ = region.z;

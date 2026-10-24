@@ -2,8 +2,13 @@
  * 新世界安全出生点选择。
  *
  * 只在已经加载的区域里找：脚下是自然地面、头顶两格可站、周围 5×5 起伏不超过 2 格。
- * 候选同时偏向平原 / 草甸 / 森林 / 丛林，让玩家第一次进入看到的是草、花与树林，
- * 而不是海面、树冠或裸露山尖。
+ * 有两段：进世界前用生成器的地表函数**随机**预选一片区域（`planSpawnRegion`），
+ * 区块流出来之后再在附近挑一块真正站得住的地（`findSafeSpawn`）。
+ *
+ * ⚠️ 预选那一段原来按"最平 + 平原群系 + 离原点最近"打分取最优，结果是**任何种子
+ * 第一眼都落在离原点最近的平原**（用户反馈"每个世界看起来都差不多"）。
+ * 现在改成半径内随机试投，只排掉水面与虚空——森林 / 丘陵 / 雪原 / 沙漠都可能。
+ * 但**随机源必须由世界种子派生**：否则同一个种子两次进入的出生点会不同。
  */
 
 import { Block } from '../registry/blocks.ts';
@@ -169,37 +174,122 @@ export function findSafeSpawn(
   return best;
 }
 
+/** 随机试投的次数上限：命中一块"够平 + 够高 + 不是水"的就立刻用 */
+const SPAWN_TRIES = 48;
+/** 试投点的允许起伏（格）：与 `findSafeSpawn` 的 5×5 判据同一量级 */
+const SPAWN_ROUGHNESS = 4;
+/** 兜底扫描的半径上限（格）：随机试投全军覆没时才走它，别在这里烧噪声 */
+const FALLBACK_SCAN_RADIUS = 256;
+
+/**
+ * 水/虚空这类"第一眼就不该出生"的群系。
+ *
+ * ⚠️ 这里**只排掉水与虚空**，不再像旧版那样把非平原都往下压：
+ * 用户要的是"不同种子第一眼不一样"（森林 / 丘陵 / 雪原 / 沙漠都行），
+ * 而不是每次都被送到最近的一块平原草地。
+ */
+const UNFIT_BIOMES = new Set(['ocean', 'deep_ocean', 'frozen_ocean', 'deep_frozen_ocean', 'river', 'the_void']);
+
+/** 试投点周围"挪一挪再试"的半径与步长（格）：岸边/岛上的落点靠它找回陆地 */
+const SPAWN_NUDGE_RADIUS = 16;
+const SPAWN_NUDGE_STEP = 8;
+
+/** 单个点是否够平够高；合格返回该点地表高度 */
+function flatSpotAt(
+  surfaceAt: (x: number, z: number) => number,
+  x: number,
+  z: number,
+  minGroundY: number,
+): number | null {
+  const center = surfaceAt(x, z);
+  if (!Number.isFinite(center) || center < minGroundY || center >= WORLD_MAX_Y - 4) return null;
+  let low = center;
+  let high = center;
+  for (const [dx, dz] of [[-4, 0], [4, 0], [0, -4], [0, 4]] as const) {
+    const y = surfaceAt(x + dx, z + dz);
+    low = Math.min(low, y);
+    high = Math.max(high, y);
+  }
+  return high - low > SPAWN_ROUGHNESS ? null : center;
+}
+
+/**
+ * 在试投点周围一圈圈地找第一块合格地面（先中心、再 8 格环、再 16 格环）。
+ *
+ * 为什么要"挪一挪"：试投是**面积均匀**的，落进海里的概率不低；如果只要中心点，
+ * 能通过的只剩"本来就高于海平面的高地"，而高地在这个生成器里偏冷 —— 实测
+ * 5 个种子全落在雪原/冰刺。先在同一片海域里找最近的岸，就不会把落点推到远处高山。
+ */
+function flatSpotNear(
+  surfaceAt: (x: number, z: number) => number,
+  x: number,
+  z: number,
+  minGroundY: number,
+): { x: number; z: number; y: number } | null {
+  const center = flatSpotAt(surfaceAt, x, z, minGroundY);
+  if (center !== null) return { x, z, y: center };
+  for (let r = SPAWN_NUDGE_STEP; r <= SPAWN_NUDGE_RADIUS; r += SPAWN_NUDGE_STEP) {
+    for (const [dx, dz] of [
+      [r, 0], [-r, 0], [0, r], [0, -r],
+      [r, r], [r, -r], [-r, r], [-r, -r],
+    ] as const) {
+      const y = flatSpotAt(surfaceAt, x + dx, z + dz, minGroundY);
+      if (y !== null) return { x: x + dx, z: z + dz, y };
+    }
+  }
+  return null;
+}
+
 /**
  * 区块尚未生成时，先用生成器的地表函数挑一片值得加载的陆地。
  * 这是“出生在大海且视距内没有陆地”的兜底；真正落脚仍由 `findSafeSpawn` 对实体方块复核。
+ *
+ * 两段式（批次 20261024-1152）：
+ *  ① **半径内按面积均匀随机试投**（`SPAWN_TRIES` 次）：第一块"够平、高于地表下限、
+ *     不在水里"的点就当作出生区域。旧版是"全网格打分取最优"，评分里
+ *     `起伏×1000 + 群系偏好×80 + 距离` 会把任何种子都压到**离原点最近的平原**，
+ *     于是每个世界第一眼都是"草地 + 树 + 旁边海 + 远处山"（用户反馈）。
+ *  ② 试投全部落空（例如半径内几乎全是海）才退回**整片网格扫描**（≤ 256 格），
+ *     评分口径与旧版一致——保证"出生在大海"这类极端种子仍然能选出一块陆地。
+ *
+ * @param radius 随机试投的半径（格）；旧版这里只有 256，现在主世界用 1024
+ * @param random [0,1) 随机源。**必须由世界种子派生**（`new Random(seed).nextDouble`），
+ *               否则"同一个种子两次进入的出生点不同"，与原版口径不符
  */
 export function planSpawnRegion(
   surfaceAt: (x: number, z: number) => number,
   biomeAt: (x: number, z: number) => string | null,
-  radius = 256,
+  radius = 1024,
   /** 地表高度下限（批次 238）：与 `findSafeSpawn` 同一个参数，超平坦传 `FLAT_SURFACE_Y` */
   minGroundY = 64,
+  random: () => number = Math.random,
 ): { x: number; z: number; y: number } {
+  // ---- ① 随机试投（面积均匀：半径开方，否则会全挤在圆心附近）
+  for (let i = 0; i < SPAWN_TRIES; i++) {
+    const angle = random() * Math.PI * 2;
+    const distance = Math.sqrt(random()) * radius;
+    const x = Math.round(Math.cos(angle) * distance);
+    const z = Math.round(Math.sin(angle) * distance);
+    const spot = flatSpotNear(surfaceAt, x, z, minGroundY);
+    if (spot === null) continue;
+    const biome = biomeAt(spot.x, spot.z);
+    if (biome !== null && UNFIT_BIOMES.has(biome)) continue;
+    return spot;
+  }
+
+  // ---- ② 兜底：网格扫描（旧口径：起伏优先、群系其次、距离最后）
   // `y` 一起返回：调用方要先把玩家放在"真实地表上方"等区块流出来，
   // 以前那个位置写死成 y=80（超平坦地表 -61 → 出生点没解析出来就掉 141 格摔死）。
   let best = { x: 0, z: 0, y: surfaceAt(0, 0) };
   let bestScore = Number.POSITIVE_INFINITY;
   const step = 8;
-  for (let z = -radius; z <= radius; z += step) {
-    for (let x = -radius; x <= radius; x += step) {
-      const center = surfaceAt(x, z);
-      if (center < minGroundY || center >= WORLD_MAX_Y - 4) continue;
-      let low = center;
-      let high = center;
-      for (const [dx, dz] of [[-4, 0], [4, 0], [0, -4], [0, 4]] as const) {
-        const y = surfaceAt(x + dx, z + dz);
-        low = Math.min(low, y);
-        high = Math.max(high, y);
-      }
-      const roughness = high - low;
-      if (roughness > 4) continue;
+  const scan = Math.min(radius, FALLBACK_SCAN_RADIUS);
+  for (let z = -scan; z <= scan; z += step) {
+    for (let x = -scan; x <= scan; x += step) {
+      const center = flatSpotAt(surfaceAt, x, z, minGroundY);
+      if (center === null) continue;
       const rank = biomeRank(biomeAt(x, z));
-      const score = roughness * 1000 + rank * 80 + Math.hypot(x, z);
+      const score = rank * 80 + Math.hypot(x, z);
       if (score < bestScore) {
         bestScore = score;
         best = { x, z, y: center };

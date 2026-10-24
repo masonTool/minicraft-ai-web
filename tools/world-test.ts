@@ -24,6 +24,8 @@ import {
 import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
+// 出生点随机源必须与主程序同一套（由世界种子派生），否则这里钉的"同种子同出生点"是假的
+import { Random } from '../src/core/gen/noise/Random.ts';
 import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
 import {
   findSafeSpawn,
@@ -402,7 +404,67 @@ console.log('\n[安全出生点]');
     (x) => (x >= 16 ? 'forest' : 'desert'),
     32,
   );
-  check('原点在海里时会预选附近的植被陆地', region.x >= 16);
+  // 批次 20261024-1152：预选不再"偏向植被/平原"（用户要种子之间第一眼不同），
+  // 所以这里钉的是**落点必须是海平面以上的陆地**，不再要求它恰好是 forest 那一侧。
+  check('原点在海里时会预选附近的陆地（不是海面）', region.y === 72 && Math.abs(region.x) >= 16);
+}
+
+// ---------------------------------------------------------------- 6a2. 出生点的"第一眼"多样性
+//
+// 批次 20261024-1152（用户）："不管种子是什么样子，进去看到的都差不多"。
+// 根因是旧版 `planSpawnRegion` 按"最平 + 平原 + 离原点最近"打分取最优 —— 世界是真随机，
+// 但玩家永远被送到离原点最近的那块平原。这里钉住两条：跨种子必须不同、同种子必须相同。
+console.log('\n[出生点多样性（批次 20261024-1152）]');
+{
+  const picks = [1, 7, 42, 1337, 20261024].map((seed) => {
+    const generator = new OverworldGenerator(seed);
+    const random = new Random(seed);
+    const point = planSpawnRegion(
+      (x, z) => generator.surfaceY(x, z),
+      (x, z) => generator.biomeAt(x, z).name,
+      1024,
+      SEA_LEVEL,
+      () => random.nextDouble(),
+    );
+    return { seed, point, biome: generator.biomeAt(point.x, point.z).name };
+  });
+  for (const pick of picks) {
+    console.log(`  · 种子 ${pick.seed} → (${pick.point.x}, ${pick.point.z}) ${pick.biome} y=${pick.point.y}`);
+  }
+
+  check(
+    '不同种子不会都落在同一种群系',
+    new Set(picks.map((pick) => pick.biome)).size >= 2,
+    picks.map((pick) => `${pick.seed}:${pick.biome}`).join(' / '),
+  );
+  check(
+    '不同种子的出生点不会挤在原点同一片（至少有 2/3 相距 128 格以上）',
+    picks.filter((pick, i) => picks.some((other, j) => i !== j && Math.hypot(pick.point.x - other.point.x, pick.point.z - other.point.z) >= 128)).length >= Math.ceil(picks.length * 2 / 3),
+    picks.map((pick) => `${pick.seed}:(${pick.point.x},${pick.point.z})`).join(' / '),
+  );
+
+  // 同种子两次必须一模一样：随机源由种子派生，不是 Math.random
+  const twice = [picks[0]!.seed, picks[0]!.seed].map((seed) => {
+    const generator = new OverworldGenerator(seed);
+    const random = new Random(seed);
+    return planSpawnRegion(
+      (x, z) => generator.surfaceY(x, z),
+      (x, z) => generator.biomeAt(x, z).name,
+      1024,
+      SEA_LEVEL,
+      () => random.nextDouble(),
+    );
+  });
+  check(
+    '同一个种子重进世界，出生点完全一致',
+    JSON.stringify(twice[0]) === JSON.stringify(twice[1]),
+    JSON.stringify(twice),
+  );
+  check(
+    '出生点高于海平面（不会落进海里）',
+    picks.every((pick) => pick.point.y >= SEA_LEVEL),
+    picks.map((pick) => `${pick.seed}:${pick.point.y}`).join(' / '),
+  );
 }
 
 // ---------------------------------------------------------------- 6b. 超平坦出生点
