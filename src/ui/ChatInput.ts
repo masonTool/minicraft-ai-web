@@ -407,8 +407,12 @@ export class ChatInput {
       if (html.scrollWidth <= html.clientWidth + 1) {
         element.classList.remove('collapsible');
         html.removeAttribute('title');
+        html.removeAttribute('data-expand-badge');
       } else {
         html.title = t('chat.expand');
+        // 右下角那个「展开」角标是 CSS 的 `::after`，文字从属性里取（`content: attr(...)`）：
+        // 写死在样式表里的话切语言永远不变（静态 CSS 不参与重绘）。
+        html.dataset.expandBadge = t('chat.expandBadge');
       }
     }
     // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置

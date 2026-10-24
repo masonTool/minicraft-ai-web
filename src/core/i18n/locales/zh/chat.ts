@@ -18,6 +18,7 @@ export const chat = {
   'command.listTitle': '可用命令（{count} 条）：',
   'chat.sendLabel': '发送',
   'chat.collapse': '点击收起',
+  'chat.expandBadge': '展开',
   'chat.expand': '点击展开',
   'chat.hintIdle': '输入命令（/help 查看全部）或直接发言，点"发送"提交',
   'chat.hintIdleKeyboard': '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消',

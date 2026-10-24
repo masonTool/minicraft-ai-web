@@ -22,3 +22,12 @@
   默认语言是 zh，所以这两套断言在离线跑时仍然成立。
 - 影响：这两个纯函数从此**依赖当前语言**（与 `levelName()` / `proficiencyLabel()` 同一口径）。
   切语言是整页重载，所以不存在"拿着旧语言的串渲染新界面"。
+
+## D4 · 「展开」角标走 `data-expand-badge` 而不是 CSS 里写死
+
+- 决定：`index.html` 的 `content: '展开'` 改成 `content: attr(data-expand-badge)`，由 `ChatInput.renderLog()`
+  在确认这一行被截断时写入 `dataset.expandBadge`，放得下（摘掉 `.collapsible`）时一并 `removeAttribute`。
+- 为什么：静态样式表不参与切语言重绘，写死的中文在英文模式下永远不变；改成属性后，
+  文字与 `.collapsible` 的判定在同一个地方产生，不会出现"属性还在、行已经不折叠"的残留。
+- 影响：缺属性时 `content` 为空（角标退化成一个小空底色），不会露出键名；`ui-test` 那条
+  按 `content: '展开'` 匹配的断言已改成按属性 + 文案键判。

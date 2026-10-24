@@ -2511,7 +2511,10 @@
         padding-right: 30px;
       }
       #chat.open .chat-line.collapsible::after {
-        content: '展开';
+        /* 批次 20261025-0105：角标文字不能写死在 CSS 里（静态样式不参与切语言重绘，
+           英文模式下会永远显示「展开」）。改由 `ui/ChatInput.ts` 写 `data-expand-badge`，
+           这里只负责取——缺属性时 `content` 为空，角标退化成一个空底色，不会露出键名。 */
+        content: attr(data-expand-badge);
         position: absolute; right: 3px; top: 50%;
         transform: translateY(-50%);
         padding: 1px 3px;

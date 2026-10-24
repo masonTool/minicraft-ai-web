@@ -2104,6 +2104,56 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
   );
 }
 
+console.log('\n[聊天栏文案（批次 20261025-0105）]');
+{
+  /**
+   * 聊天栏是**唯一一个"字符串进来就显示"的出口**：`chat.push(text)` / `hudToast.show(text)`
+   * 的入参直接落到 DOM 上，不经过任何查表。所以硬编码中文一旦走到这两个口子上，
+   * 英文模式下就是"界面全英文、左上角忽然冒一句中文"，而且**类型系统抓不到**
+   * （参数是 `string`，中文串也是合法 `string`）。
+   *
+   * 判据：剥掉注释后扫源码，`chat.push(` / `hudToast.show(` 的**第一个实参是字面量且含中文**
+   * 就算漏网。走 `t()` / `tp()` 的调用不受影响（那是另一个 token，不是字面量）。
+   * 已知边界：`chat.push(a ? '中文' : '中文')` 这种"三元里写字面量"的形态抓不到——
+   * 它的第一个实参是标识符。这一批里剩下的三元都换成了 `t(cond ? 'key' : 'key')`。
+   */
+  const LITERAL_INTO_CHAT = /(?:chat\.push|hudToast\.show)\(\s*(['"`])(?:[^'"`\\\n]|\\[\s\S])*[\u4e00-\u9fa5][\s\S]*?\1/g;
+  const offenders: string[] = [];
+  const walk = (dir: URL): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+      if (entry.isDirectory()) {
+        walk(url);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts')) continue;
+      const source = readFileSync(url, 'utf8');
+      for (const match of codeOf(source).matchAll(LITERAL_INTO_CHAT)) {
+        const rel = decodeURIComponent(url.href).split('/src/').pop() ?? url.pathname;
+        if (!offenders.includes(rel!)) offenders.push(rel!);
+      }
+    }
+  };
+  walk(new URL('../src/', import.meta.url));
+  check(
+    '聊天栏 / 提示条不再直接吞中文字面量（必须走 t() / tp()）',
+    offenders.length === 0,
+    offenders.slice(0, 5).join(', '),
+  );
+
+  // 静态 CSS 里的 `content: '展开'` 是同一类漏网：样式表不参与切语言重绘
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const cjkContent = [...html.matchAll(/content:\s*'([^']*)'/g)]
+    .map((match) => match[1]!)
+    .filter((value) => /[\u4e00-\u9fa5]/.test(value));
+  check('index.html 的 CSS content 里没有中文（角标文字由 JS 写 attr）', cjkContent.length === 0, cjkContent.join(', '));
+  check(
+    '聊天行的「展开」角标改由 data-expand-badge 提供',
+    html.includes('content: attr(data-expand-badge)') &&
+      readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8').includes("t('chat.expandBadge')"),
+  );
+}
+
 console.log('\n[伪语言（多语言 P0-8）]');
 {
   /**

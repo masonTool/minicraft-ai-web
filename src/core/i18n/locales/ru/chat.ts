@@ -19,6 +19,7 @@ export const chat = {
   "command.listTitle": "Доступные команды ({count}):",
   "chat.sendLabel": "Отправить",
   "chat.collapse": "Нажмите, чтобы свернуть",
+  'chat.expandBadge': 'Развернуть',
   "chat.expand": "Нажмите, чтобы развернуть",
   "chat.hintIdle": "Введите команду (/help — все команды) или просто напишите и нажмите «Отправить»",
   "chat.hintIdleKeyboard": "Введите команду (/help — все команды) или напишите: Enter отправляет, Esc отменяет",
