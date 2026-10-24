@@ -36,6 +36,8 @@ import {
   createRun,
   currentBlock,
   distanceForCharge,
+  gapCurveForScore,
+  gapFloorFor,
   gapForScore,
   gapRangeForScore,
   jump,
@@ -353,7 +355,7 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     '封顶分边长到最小',
     Math.abs(blockSizeForScore(JUMP_CONFIG.shrinkScore) - JUMP_CONFIG.blockSizeMin) < 1e-9,
   );
-  const scores = [0, 10, 20, 30, 40, 50, 60, 120];
+  const scores = [0, 10, 20, 30, 40, 50, 60, 80, 100, 120];
   check(
     '边长随分数单调不增',
     scores.every((score, i) => i === 0 || blockSizeForScore(scores[i - 1]!) >= blockSizeForScore(score) - 1e-9),
@@ -369,20 +371,28 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
     '间距上限永远可达（≤ maxDistance − margin）',
     [0, 10, 30, 60, 200, 9999].every((score) => gapRangeForScore(score).to <= maxReachableGap() + 1e-9),
   );
-  const low = gapRangeForScore(0);
-  const high = gapRangeForScore(JUMP_CONFIG.shrinkScore);
-  check('间距随分数单调不增（方块变小，间距同比缩小）', high.from <= low.from + 1e-9 && high.to <= low.to + 1e-9);
+
+  // 这一轮把间距从"边长倍数"改回"绝对格数"：方块变小不该让绝对距离跟着缩水。
+  const low = gapCurveForScore(0);
+  const high = gapCurveForScore(JUMP_CONFIG.gapGrowScore);
+  almost('开局间距下限 = 4.6 格', low.from, 4.6);
+  almost('开局间距上限 = 5.4 格', low.to, 5.4);
+  almost('封顶间距下限 = 4.8 格', high.from, 4.8);
+  almost('封顶间距上限 = 6.0 格', high.to, 6.0);
   check(
-    '间距与边长同比（1.15~1.9 个边长，原版相邻块几乎贴合）',
-    scores.every((score) => {
-      const size = blockSizeForScore(score);
-      const range = gapRangeForScore(score);
-      return (
-        Math.abs(range.from - size * JUMP_CONFIG.gapRatioMin) < 1e-9 ||
-        Math.abs(range.to - maxReachableGap()) < 1e-9
-      );
+    '分数越高中心距绝对变大（from 与 to 都单调不减）',
+    scores.every((score, i) => {
+      if (i === 0) return true;
+      const prev = gapRangeForScore(scores[i - 1]!, blockSizeForScore(scores[i - 1]!));
+      const next = gapRangeForScore(score, blockSizeForScore(score));
+      return next.from >= prev.from - 1e-9 && next.to >= prev.to - 1e-9;
     }),
   );
+  check('封顶时中心距严格大于开局', high.from > low.from && high.to > low.to);
+
+  // 间距下限不是难度参数，是"倾倒动画有没有地方演"的几何约束
+  check('间距下限 = 上一块边长 × 2.12 + 0.1', Math.abs(gapFloorFor(2) - (2 * 2.12 + 0.1)) < 1e-9, `${gapFloorFor(2)}`);
+  check('上一块越大，间距下限越大', gapFloorFor(2) > gapFloorFor(JUMP_CONFIG.blockSizeMin));
   check('间距下限永远大于一个边长（两块不会贴合）', gapRangeForScore(0).from > blockSizeForScore(0));
   check(
     '随机值被夹在范围内',
@@ -391,6 +401,13 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
       const range = gapRangeForScore(30);
       return gap >= range.from - 1e-9 && gap <= range.to + 1e-9;
     }),
+  );
+  // 用户口径："横屏下间距太小，要激进一点"——开局就得是边长的 2.3~2.7 倍
+  const openRatio = { from: low.from / JUMP_CONFIG.blockSizeStart, to: low.to / JUMP_CONFIG.blockSizeStart };
+  check(
+    '开局间距是边长的 2.3~2.7 倍（旧版 1.15~1.9）',
+    openRatio.from >= 2.3 - 1e-9 && openRatio.to <= 2.7 + 1e-9,
+    `${openRatio.from.toFixed(2)}~${openRatio.to.toFixed(2)}`,
   );
 }
 
@@ -424,7 +441,7 @@ console.log('\n跳一跳：生成器（三方向、确定性、可达）');
     if (block.id !== current.id + 1) idsMonotonic = false;
 
     const gap = Math.hypot(block.x - current.x, block.z - current.z);
-    const range = gapRangeForScore(score);
+    const range = gapRangeForScore(score, current.size);
     if (gap > maxReachableGap() + 1e-6 || gap < range.from - 1e-6 || gap > range.to + 1e-6) allReachable = false;
 
     current = block;

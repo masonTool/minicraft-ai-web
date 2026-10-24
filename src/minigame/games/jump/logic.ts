@@ -1,5 +1,5 @@
 /**
- * 跳一跳的**规则**（J0，批次 20261022-2220）
+ * 跳一跳的**规则**（J0 起，批次 20261024-1331 重调难度）
  *
  * 纯逻辑：不碰渲染、不碰 DOM、不碰计时。给它一局状态和一个蓄力距离，
  * 它告诉你"落在哪、得几分、这局结束没有"。
@@ -7,11 +7,12 @@
  * 六条口径（都有离线断言守着）：
  *
  *  1. **方向自动对准下一个方块**：玩家只控制距离（一个自由度）。方向在
- *     `−30° / 0° / +30°` 三选一，落点判定仍在方块局部坐标里做（轴对齐）。
+ *     `0° / 90°` 两选一（等距两向），落点判定仍在方块局部坐标里做。
  *  2. **蓄力→距离线性**：`d = t / maxCharge × maxDistance`，不做缓动——
  *     玩家要靠"按多久"估算距离，曲线越直越好预测。
- *  3. **可达性由生成器保证**：间距上限永远 ≤ `maxDistance − reachMargin`。
- *     难度只抬下限与缩方块，不会生成"理论跳不到"的格子。
+ *  3. **可达性由生成器保证**：中心距上限永远 ≤ `maxDistance − reachMargin`，
+ *     并且"从上一块最靠后的落脚点起跳"也够得着下一块中心。难度只抬间距、缩方块，
+ *     不会生成"理论跳不到"的格子。
  *  4. **中心判定用比例**：距方块中心 ≤ 半边长 × `centerRatio`。这样方块变小时
  *     中心圈也跟着变小，手感与原版一致。
  *  5. **连击只认连续中心**：第 n 次得 `2n` 分，封顶 32；落到非中心立刻重置。
@@ -77,10 +78,15 @@ export function nextRandom(seed: number): { value: number; seed: number } {
 
 // ------------------------------------------------------------------ 难度曲线
 
+/** 0~1 的进度：分数越高越接近 1，到 `cap` 分封顶 */
+function progressToward(score: number, cap: number): number {
+  if (!Number.isFinite(score) || score <= 0) return 0;
+  return Math.min(1, score / Math.max(1, cap));
+}
+
 /** 0~1 的进度：分数越高越接近 1，到 `shrinkScore` 封顶 */
 function progressOf(score: number): number {
-  if (!Number.isFinite(score) || score <= 0) return 0;
-  return Math.min(1, score / JUMP_CONFIG.shrinkScore);
+  return progressToward(score, JUMP_CONFIG.shrinkScore);
 }
 
 function mix(from: number, to: number, t: number): number {
@@ -94,29 +100,52 @@ export function blockSizeForScore(score: number): number {
 
 /** 间距上限的硬天花板：再难也不能超过"蓄满能跳的距离" */
 export function maxReachableGap(): number {
-  return Math.min(
-    JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin,
-    JUMP_CONFIG.blockSizeStart * JUMP_CONFIG.gapRatioMax,
-  );
+  return JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin;
 }
 
 /**
- * 当前分数下的间距范围：**边长 × 倍数**，不是绝对格数。
+ * 间距硬下限：两块之间要放得下"一块边长 + 倒下的小人"。
  *
- * 原版的间距永远与方块同比例缩小（相邻块几乎贴着），所以这里不引入 `growScore` 那条
- * "越到后面间距越大"的曲线——难度来自"目标变小 + 判定占比不变"，不是"跳得更远"。
+ * 低于这个值时人一倾倒就砸在下一块侧面，看起来像穿模——所以它不是难度参数，
+ * 是"倾倒动画有没有地方演"的几何约束。
  */
-export function gapRangeForScore(score: number): { from: number; to: number } {
-  const size = blockSizeForScore(score);
-  const gapTo = Math.min(size * JUMP_CONFIG.gapRatioMax, maxReachableGap());
-  const gapFrom = Math.min(size * JUMP_CONFIG.gapRatioMin, gapTo);
+export function gapFloorFor(previousSize: number): number {
+  const size = Number.isFinite(previousSize) && previousSize > 0 ? previousSize : JUMP_CONFIG.blockSizeStart;
+  return size * JUMP_CONFIG.gapFloorRatio + JUMP_CONFIG.gapFloorMargin;
+}
+
+/** 间距曲线的原始区间（绝对格数，不含可达性与下限夹取） */
+export function gapCurveForScore(score: number): { from: number; to: number } {
+  const t = progressToward(score, JUMP_CONFIG.gapGrowScore);
+  return {
+    from: mix(JUMP_CONFIG.gapStartMin, JUMP_CONFIG.gapEndMin, t),
+    to: mix(JUMP_CONFIG.gapStartMax, JUMP_CONFIG.gapEndMax, t),
+  };
+}
+
+/**
+ * 当前分数下的间距范围：**绝对格数**，分数越高中心距越大。
+ *
+ * 为什么不用"边长倍数"：方块从 2.0 缩到 1.2 之后，同样 1.9 倍的间距只剩 2.3 格，
+ * "越往后越远"会变成"越往后越近"。这一版把难度交给两条独立的曲线：
+ * 目标变小（`blockSizeForScore`）+ 中心距变大（本函数）。
+ *
+ * `previousSize` 参与的是**下限**：上一块越大，倒下需要的空间越多。
+ */
+export function gapRangeForScore(
+  score: number,
+  previousSize: number = JUMP_CONFIG.blockSizeStart,
+): { from: number; to: number } {
+  const curve = gapCurveForScore(score);
+  const gapTo = Math.min(curve.to, maxReachableGap());
+  const gapFrom = Math.min(Math.max(curve.from, gapFloorFor(previousSize)), gapTo);
   // 理论上参数怎么配都不会出现 from > to，但夹一下更安全（配置被人手改成倒挂时不会生成倒着跳）
   return { from: gapFrom, to: gapTo };
 }
 
 /** 在间距范围内按 `rand` 取一个值 */
-export function gapForScore(score: number, rand: number): number {
-  const { from, to } = gapRangeForScore(score);
+export function gapForScore(score: number, rand: number, previousSize?: number): number {
+  const { from, to } = gapRangeForScore(score, previousSize);
   const t = Math.min(1, Math.max(0, Number.isFinite(rand) ? rand : 0));
   return from + (to - from) * t;
 }
@@ -149,7 +178,8 @@ export function nextBlock(
   const angle = (degrees[dirIndex]! * Math.PI) / 180;
 
   const r2 = nextRandom(r1.seed);
-  const gap = gapForScore(score, r2.value);
+  // 间距下限看**上一块**的边长（倒下要占掉的空间由它决定），不是新块
+  const gap = gapForScore(score, r2.value, current.size);
 
   const r3 = nextRandom(r2.seed);
   const kind = specialKindFor(score, r3.value, current.kind);
