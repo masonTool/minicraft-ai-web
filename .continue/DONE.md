@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261024-1723 · 2026-10-24 · 会话 723564b3
+
+- [x] [修21] 创造物品栏把面板填满（列表下面的空白去掉）：`index.html` 五处 `.inv-creative` 高度上限改成 `flex: 1 1 auto; min-height: 0; max-height: none` → `npm run test:ui`
+  - 做了什么：把创造网格的固定上限全部换成"吃掉剩余高度"——`.inv-panel.creative-ui.pocket-ui .inv-creative`（原 `min-height: min(38vh,200px)` / `max-height: min(42vh,220px)`）、`body.touch-mode` 同名那条、横屏矮屏那条（原 34/38vh）、`.inv-panel.creative-ui .inv-creative`（原 `min(58vh,420px)`）、双栏 `.inv-panel.pocket-ui.pocket-dual .inv-creative`（原 174px）、`body.touch-mode ...pocket-dual` 那条（原 174px）、`body:not(.touch-mode) ...pocket-dual`（原 `min(58vh,430px)`）。
+  - 为什么：面板高度是固定的 `--inv-pocket-h`（矮横屏就是 318px），网格用 `vh` 封顶就只占一半，下面自然空一大片。面板/内容区/创建区三层都是 `flex: 1 1 auto; min-height: 0`，网格只要也 `flex: 1 1 auto` 就会把剩下的高度全部吃掉（多出来的高度就是能多看见的行）。
+  - 验证：`npx tsx tools/ui-test.ts` **976 通过 / 0 失败**（新增 1 条：两条主规则都是 `flex: 1 1 auto` 且不再出现 `max-height: 174px;` / `max-height: min(42vh…;` 这些声明——注意断言认"带分号的声明"，规则块里的注释会提到旧值）。
+  - 批次：20261024-1723
+- [x] [修22] 台账：`DONE.md` / `notes/batches.md` / `OVERVIEW.md` / `TASKS.md` 记这一批 → `npm run check`
+  - 做了什么：新增 1723 一节、批次索引一行、TASKS 队列落地一行、OVERVIEW「界面与音频」补"创造网格填满剩余高度，别再按 vh 封顶"。
+  - 为什么：面板是固定高度这一点不写在台账里，下一轮又会有人给网格加 `max-height: 42vh` 之类的"保险"。
+  - 验证：`npm run check` 全绿（含 `audit:tasks` 的提交总数核对）。
+  - 批次：20261024-1723
+
 ## 批次 20261024-1706 · 2026-10-24 · 会话 723564b3
 
 - [x] [修18] 创造物品栏：点非"搜索"分类时搜索行整条收掉（列表上移，不被搜索框占位）：`src/ui/InventoryScreen.ts` `syncCreativeSearch()` + `index.html` 一条 CSS → `npm run test:ui`
