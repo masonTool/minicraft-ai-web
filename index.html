@@ -2963,20 +2963,23 @@
       /* 熔炼属于熔炉界面；嵌在左栏时整张熔炼表会把配方网格压成一条缝 */
       .recipe-panel.embedded .recipe-smelting { display: none; }
       /* 批次 159：触摸端改成整表滚动，滚动条要**看得见**——
-         看不见就不知道下面还有东西（PC 那条路是底部翻页键，用不上滚动条）。 */
-      .recipe-panel.embedded .recipe-grid,
-      .inv-panel.creative-ui.pocket-ui .inv-creative {
+         看不见就不知道下面还有东西（PC 那条路是底部翻页键，用不上滚动条）。
+         ⚠️ 批次 20261024-1645（用户）：创造物品栏**已经换成自绘那根**（`.inv-creative-section
+         .inv-category-scrollbar`），这里再给 `.inv-creative` 开一条原生滚动条就是两条并排：
+         原生那条（8px、#b9b9b9 槽 + #6f6f6f 块）压在自绘滑块下面，滚起来就是用户说的
+         "滑块下面的小滚动条 / 底下的小黑块"。所以这段只留给嵌入版配方网格。 */
+      .recipe-panel.embedded .recipe-grid {
         scrollbar-width: thin;
         scrollbar-color: #6f6f6f #b9b9b9;
       }
-      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar,
-      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar { width: 8px; }
-      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-track,
-      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar-track { background: #b9b9b9; }
-      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-thumb,
-      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar-thumb {
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar { width: 8px; }
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-track { background: #b9b9b9; }
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-thumb {
         background: #6f6f6f; border: 1px solid #4a4a4a;
       }
+      /* 创造物品栏：原生滚动条彻底关掉（自绘那根才是一直可见的那条） */
+      .inv-panel .inv-grid.inv-creative { scrollbar-width: none; }
+      .inv-panel .inv-grid.inv-creative::-webkit-scrollbar { display: none; width: 0; height: 0; }
       .recipe-panel.embedded .inv-pager {
         flex: 0 0 auto; margin-top: 4px; gap: 4px;
       }
@@ -3775,6 +3778,13 @@
       .inv-panel.pocket-ui.pocket-dual .inv-creative-controls {
         min-height: 32px;
       }
+      /* 批次 20261024-1645（用户）：非"搜索"分类时整条搜索行收掉。
+         上面那条 `min-height: 32px` 会在列表上方留一整条空白，物品列表被顶下去
+         （用户："物品的列表应该向上平移，不要被搜索框占位"）。类名由
+         `syncCreativeSearch()` 按"分类按钮还在不在这一行里"决定要不要加。
+         ⚠️ 必须 `!important`：`.inv-panel.creative-ui.pocket-ui .inv-creative-controls`
+         那条 `display: flex` 是 4 个类，普通选择器压不过它。 */
+      .inv-panel .inv-creative-controls.search-hidden { display: none !important; }
       .inv-panel.pocket-ui.pocket-dual .inv-creative {
         /* 与生存分类栏同一套：列宽可缩 + 右侧留一整条滚动条槽（8px 间距 + 6px 轨道） */
         grid-template-columns: repeat(7, minmax(0, 40px));
@@ -3782,6 +3792,9 @@
         padding-right: 14px;
         max-height: 174px;
         min-height: 0;
+        /* 横向绝不滚：`overflow-y: auto` 会把 overflow-x 变成 auto，多出来的
+           1~2px 就会在底部画一条横向滚动条（又一块"小黑块"） */
+        overflow-x: hidden;
         overflow-y: auto;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-creative .inv-slot {
@@ -3869,9 +3882,10 @@
         touch-action: pan-y;
       }
       .inv-grid.inv-category::-webkit-scrollbar { display: none; width: 0; height: 0; }
-      /* 创造分类列表同样改用自绘常驻滚动条（原生 overlay 在 iOS 不常驻） */
-      .inv-grid.inv-creative { scrollbar-width: none; }
-      .inv-grid.inv-creative::-webkit-scrollbar { display: none; width: 0; height: 0; }
+      /* 创造分类列表同样改用自绘常驻滚动条（原生 overlay 在 iOS 不常驻）。
+         ⚠️ 真正的关闭写在上面那条带 `.inv-panel` 的选择器里（批次 20261024-1645）：
+         这里是 (0,2,0)，压不过旧版那条 `.inv-panel.creative-ui.pocket-ui .inv-creative`
+         的 `scrollbar-width: thin`，只写这一条等于没关。 */
       /* 自绘常驻滚动条（批次 20261024-1152：生存与创造**共用同一根**）。
          以前分类栏 4px、创造栏 6px，两边位置也对不齐（用户："位置不一样，
          希望都跟创造模式那样、跟物品留一点间隔"）。现在宽度只有这里一处，
@@ -4135,7 +4149,10 @@
       .inv-grid.inv-creative {
         grid-template-columns: repeat(12, 34px); gap: 2px;
         /* 右侧留出 16px：滚动条与物品之间留约 8px 的空隙，不贴图标 */
-        max-height: 46vh; overflow-y: auto; padding-right: 16px;
+        max-height: 46vh; padding-right: 16px;
+        /* 只许纵向滚：`overflow-y: auto` 单独写时 overflow-x 会变成 auto，
+           内容多出 1px 就在底部画一条横向滚动条（用户看到的"底下小黑块"） */
+        overflow-x: hidden; overflow-y: auto;
       }
 
       /* ---------------- 创造物品栏：分类、搜索与分页 ---------------- */

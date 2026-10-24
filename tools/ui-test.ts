@@ -1205,8 +1205,19 @@ console.log('\n[携带版细节收口（批次 159）]');
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
   check(
     '创造搜索框只在「搜索」分类显示',
-    invSrc.includes("private syncCreativeSearch(): void {") &&
-      invSrc.includes("this.creativeCategory === 'all' ? '' : 'none'"),
+    invSrc.includes('private syncCreativeSearch(): void {') &&
+      /const showSearch = this\.creativeCategory === 'all';/.test(invSrc) &&
+      invSrc.includes("this.creativeSearch.style.display = showSearch ? '' : 'none';"),
+  );
+  // 批次 20261024-1645（用户）：非"搜索"分类时那条搜索行要整条收掉，
+  // 否则它带着 min-height 在列表上方留一条空白（"物品列表应该向上平移"）。
+  check(
+    '非搜索分类时整条搜索行收掉（列表上移，不被搜索框占位）',
+    /const tabsInRow = this\.creativeTabs\.parentElement === this\.creativeControls;/.test(invSrc) &&
+      invSrc.includes("this.creativeControls.classList.toggle('search-hidden', !showSearch && !tabsInRow);") &&
+      // 必须 !important：`.inv-panel.creative-ui.pocket-ui .inv-creative-controls` 那条
+      // `display: flex` 是 4 个类，普通选择器压不过
+      css.includes('.inv-panel .inv-creative-controls.search-hidden { display: none !important; }'),
   );
 
   // ④ 点物品 → 快捷栏上方的小说明
@@ -3247,7 +3258,10 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       invSrc.includes("this.creativeScrollTrack.className = 'inv-category-scrollbar';") &&
       css.includes('.inv-category-scrollbar {') &&
       css.includes('background: transparent;') &&
-      css.includes('.inv-grid.inv-creative { scrollbar-width: none; }') &&
+      // 批次 20261024-1645（用户）：跑赢旧版 `.inv-panel.creative-ui.pocket-ui .inv-creative`
+      // 那条 `scrollbar-width: thin` —— 选择器要带 `.inv-panel`，否则原生滚动条根本没关掉
+      css.includes('.inv-panel .inv-grid.inv-creative { scrollbar-width: none; }') &&
+      css.includes('.inv-panel .inv-grid.inv-creative::-webkit-scrollbar { display: none; width: 0; height: 0; }') &&
       css.includes('overflow-y: scroll;') &&
       css.includes('scrollbar-width: none;'),
   );
@@ -4999,6 +5013,22 @@ console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
     '滑块是黑色（浅灰与面板同色，看不出是滚动条）',
     /\.inv-category-scroll-thumb \{[^}]*background: #1c1c1c;/.test(css) &&
       !/\.inv-category-scroll-thumb \{[^}]*background: #c2c2c2;/.test(css),
+  );
+  // 批次 20261024-1645（用户）：创造物品栏**只留自绘那一根**。
+  // 旧版还给它开了一条原生滚动条（`.inv-panel.creative-ui.pocket-ui .inv-creative` 的
+  // `scrollbar-width: thin` + 8px `::-webkit-scrollbar`），两条并排滚 → 用户看到的
+  // "滑块下面的小滚动条 / 底下的小黑块"。
+  check(
+    '创造物品栏不再另开一条原生滚动条（只留自绘那根）',
+    !css.includes('.inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar') &&
+      !/\.inv-panel\.creative-ui\.pocket-ui \.inv-creative \{[^}]*scrollbar-width: thin/.test(css) &&
+      /\.inv-panel \.inv-grid\.inv-creative \{ scrollbar-width: none; \}/.test(css) &&
+      /\.inv-panel \.inv-grid\.inv-creative::-webkit-scrollbar \{ display: none; width: 0; height: 0; \}/.test(css),
+  );
+  check(
+    '创造网格只纵向滚（横向滚动条 = 底部那条小黑块）',
+    /\.inv-grid\.inv-creative \{[^}]*overflow-x: hidden; overflow-y: auto;/.test(css) &&
+      /\.inv-panel\.pocket-ui\.pocket-dual \.inv-creative \{[^}]*overflow-x: hidden; overflow-y: auto;/.test(css),
   );
 }
 

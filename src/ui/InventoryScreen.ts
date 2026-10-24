@@ -1762,7 +1762,15 @@ export class InventoryScreen {
    * 把搜索行整条藏掉——点放大镜才有搜索框，点别的分类直接从物品格开始。
    */
   private syncCreativeSearch(): void {
-    this.creativeSearch.style.display = this.creativeCategory === 'all' ? '' : 'none';
+    const showSearch = this.creativeCategory === 'all';
+    this.creativeSearch.style.display = showSearch ? '' : 'none';
+    // ⚠️ 批次 20261024-1645（用户）：光藏输入框不够——那条 `controls` 行还带着
+    // `min-height`（双栏那条是 32px），于是列表上方留着一整条空白，物品列表被顶下去
+    // （用户："点击非搜索物品选择项时，物品的列表应该向上平移，不要被搜索框占位"）。
+    // 分类按钮已经搬到左轨时整行都没用了，一并收掉；按钮仍在这一行里（非 pocket 布局）
+    // 就只藏输入框，否则分类按钮会一起消失。
+    const tabsInRow = this.creativeTabs.parentElement === this.creativeControls;
+    this.creativeControls.classList.toggle('search-hidden', !showSearch && !tabsInRow);
   }
 
   /**
