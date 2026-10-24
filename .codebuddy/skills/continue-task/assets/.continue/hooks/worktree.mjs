@@ -133,7 +133,7 @@ const isWorktree = isInsideWorktree();
 
 /**
  * 交接队列。**格式必须是一份合法队列**：树里的 `audit-*` 会按队列校验它
- * （文件名合法、最后一条是 `[自审]`、批次号可被 `parseBatch` 取到）。
+ * （文件名合法、批次号可被 `parseBatch` 取到）。
  * 批次号在这里就用 `nextBatch()` 定下：`queue-init` 改名接管后会沿用它，
  * 于是"一批一个号、恒定不变"在跨树交接时也成立。
  */
@@ -157,7 +157,6 @@ const handoffBody = [
   ...(tasks.length > 0
     ? tasks.map((task) => `- [ ] ${task}`)
     : ['- [ ] 父会话没有传任务（`worktree.mjs --task=<一句话>`）：请让用户在这里写下要做什么，再开始']),
-  '- [ ] [自审] 本批收尾前按 `.continue/README.md` §8 审三层：`- L1：` / `- L2：` / `- L3：` 各一句 + 证据',
   '',
 ].join('\n');
 

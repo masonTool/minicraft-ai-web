@@ -5,7 +5,7 @@ description: This skill installs the continue-do persistent task-queue framework
 
 # continue-task
 
-> 版本：1.1.1（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
+> 版本：1.2.0（**唯一来源**是同目录下的 `VERSION`；改版本号只改那个文件，
 > 这里的数字由 `scripts/check-framework.mjs` 核对，写错会红。）
 
 安装 continue-do 持续任务队列框架。这是安装器；框架怎么用，装完后看项目里的 `.continue/README.md`。
@@ -46,11 +46,6 @@ description: This skill installs the continue-do persistent task-queue framework
   `worktree-sync.mjs` 一起删掉了）。
 - **收尾自动**：队列全打勾 → 直接归档进 `DONE` / `OVERVIEW` / `TASKS` 并删队列，不弹窗等确认；
   只有 `[阻塞]`、或打了勾却缺验证 / 自述"未验证、跳过"的条目，才会要你拍板。
-- **每批最后一条是自审**：最后一个条目固定审「三层目标」（L1 可测量 / L2 可对抗 / L3 可外部，
-  口径见装出来的 `.continue/README.md` §8）。`audit-ids` 查它在不在最后、勾成 `[x]` 时三层凭证
-  （`- L1：`/`- L2：`/`- L3：`）齐不齐，**不判结论质量**；「没有建议」必须带排除记录。
-  三层不预设项目有测试框架：没门禁就降级成手动复现（要写明，不能只写"无"）；
-  连续 3 批都提不出改进项才算收敛，但三层全空的批次不计入这 3 批。
 - **一批多长看行数，不看条数**：判据是"完成说明预计 > ~80 行"/"队列 > 500 行"/"这一阶段目标变了"；
   条数只是经验值（通常 8~12 条），不是上限。换批要新号时跑
   `node .continue/hooks/queue-init.mjs --new-batch`（号由脚本生成，不手编）。
@@ -105,7 +100,7 @@ node <本技能目录>/scripts/install.mjs
 
 | 文件 | 内容 |
 | --- | --- |
-| `.continue/doing/.worktree/todo/queue.md` | 整份队列（头部状态 / 批次 / **`> 树名：<单词>`**、条目、最后一条 `[自审]`） |
+| `.continue/doing/.worktree/todo/queue.md` | 整份队列（头部状态 / 批次 / **`> 树名：<单词>`**、条目） |
 | `.continue/doing/.worktree/todo/context.md` | 这一轮的中文上下文（目标 / 已定方案 / 否决过什么 / 关键文件 / 验收方式） |
 
 Stop 钩子 `dispatch.mjs` 看到它们就：建 `.continue/doing/.worktree/worktree_<单词>_<YYYYMMDD>`（已 gitignore）、
@@ -517,7 +512,7 @@ UserPromptSubmit 上 `queue-init` + `auto-continue`）——**不要照着文档
 | --- | --- |
 | `scripts/detect-tests.mjs` | 安装器装完后自动跑的测试探测（只读）：npm / Rust / Go / Python / Maven / Gradle / .NET / PHP / Ruby / Make 的识别顺序与判据。改规则后拿几种项目形态各跑一次看 `--json` |
 | `scripts/check-framework.mjs` | 模板里的钩子都在安装器 `REQUIRED` 里、必备文档都会被拷贝、`assets/` 没混入本仓库的批次号与模块名、注册命令都由 `commandFor()` 拼且带 `--event=`、模板默认值与文档说法一致、`scripts/` 下每个脚本与 `install.mjs` 的每个开关都在本文件里有交代、**文档与钩子注入里出现的 `node …mjs` 路径真实存在且 `npm run continue:*`/`skill:*` 确实被安装器创建** |
-| `scripts/test-install.mjs` | 安装器回归：全新 git 项目 / 非 git 目录 / 已有同名文档 / 已有自定义 config / 已有别的钩子 / 已有别人的 pre-commit / `--dry-run` 不落文件 / `--ci` / 老注册缺 `--event=` 时升级 / 已有文档扫描 / 来源登记幂等 / npm 项目补并行别名 / 非 npm 项目不造 package.json / 升级时"内容不同只报告、不落任何备份文件" / 升级不产生 `.baseline`、`.backup`、`*.continue-do.md` / 队列最后一条必须是 `[自审]`（缺它判红、勾掉要三层凭证）/ 版本落后按文件哈希判定 / `project` 与 `projectSlow` 的分档口径 / 升级时删掉新版不再提供的旧钩子 / README 总是覆盖 / 用户填过的文档静默、模板真变了才报 / 慢脚本进快档要红，共 31 项（**这个数字由 `check-framework` 与实际用例数核对，别手改**） |
+| `scripts/test-install.mjs` | 安装器回归：全新 git 项目 / 非 git 目录 / 已有同名文档 / 已有自定义 config / 已有别的钩子 / 已有别人的 pre-commit / `--dry-run` 不落文件 / `--ci` / 老注册缺 `--event=` 时升级 / 已有文档扫描 / 来源登记幂等 / npm 项目补并行别名 / 非 npm 项目不造 package.json / 升级时"内容不同只报告、不落任何备份文件" / 升级不产生 `.baseline`、`.backup`、`*.continue-do.md` / 版本落后按文件哈希判定 / `project` 与 `projectSlow` 的分档口径 / 升级时删掉新版不再提供的旧钩子 / README 总是覆盖 / 用户填过的文档静默、模板真变了才报 / 慢脚本进快档要红，共 30 项（**这个数字由 `check-framework` 与实际用例数核对，别手改**） |
 | `scripts/scan-docs.mjs` | 存量文档发现（只读）：目录跳过、扩展名过滤、文件名与正文分类、`> 来源：` 已登记判定。改分类规则后跑一次 `node scripts/scan-docs.mjs --all` 看效果 |
 
 两条都在**本仓库里手动跑**（这个仓库只剩技能目录，没有 `.continue/` 可以挂 `checks.fast`），

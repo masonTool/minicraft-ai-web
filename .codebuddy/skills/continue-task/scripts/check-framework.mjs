@@ -439,33 +439,6 @@ if (versionText === null) {
   }
 }
 
-// ------------------------------------------------------------------ 11. 跨文件的机制：几处都得在
-/**
- * 挡的是"机制只落在其中一处"。原理 1 说队列协议的文字写在三处、改一处要记得改另两处，
- * 而这一直只能靠人记——本批新增的"每批最后一条 = 自审"正好横跨三处，就拿它当第一个可查的例子：
- *
- *   · `assets/.continue/README.md` 的 §8（口径与收敛判据）
- *   · `assets/.continue/hooks/queue-init.mjs` 注入的第 12 条（AI 每会话必读）
- *   · `assets/.continue/hooks/audit-ids.mjs` 的判定（坏了会红）
- *
- * 为什么值得查：README 正卡在 400 行上限，下一次压缩最容易顺手删掉整整一节；
- * 注入文本里少一行没人看得出；而审计脚本不知道自己该拦的规则在协议里还提不提。
- */
-const ANCHORS = [
-  ['README 的 §8（三层目标）', join(ASSETS, '.continue', 'README.md'), /^##\s*8\.\s*持续迭代/m],
-  [
-    'queue-init 注入的第 12 条（每批最后一条 = 自审）',
-    join(ASSETS, '.continue', 'hooks', 'queue-init.mjs'),
-    /每一批的最后一条 = `\[自审\]`/,
-  ],
-  ['audit-ids 的自审判定', join(ASSETS, '.continue', 'hooks', 'audit-ids.mjs'), /REVIEW_TAG\s*=\s*'\[自审\]'/],
-];
-for (const [label, file, re] of ANCHORS) {
-  if (!re.test(read(file) ?? '')) {
-    problems.push(`${label}：找不到这条机制——它横跨 README / 注入 / 审计，删掉任一处三边就会各说一套`);
-  }
-}
-
 // ------------------------------------------------------------------ 输出
 if (problems.length > 0) {
   for (const problem of problems) console.error(`  ✗ ${problem}`);

@@ -372,9 +372,9 @@ SCENARIOS.blocked = {
   desc: '阻塞：连续 2 轮没做完 → 标 [阻塞] → 请求用户拍板',
   run(ctx, s) {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
-    // 末尾必须是 `[自审]`（T14 起的硬规则）：少写它，下面这次 commit 会被 pre-commit 拒，
-    // 工作区就一直是脏的 → 后面的"提交守卫不判脏"必然假红
-    const q = `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 创建：2026-10-23\n> 批次：20260101-0001\n\n- [ ] 甲\n  - 描述：故意一直做不完\n- [ ] [自审] 占位自审\n`;
+    // 下面这次 commit 必须真的成功（pre-commit 会跑 ids / docs）：
+    // 提交失败工作区就一直是脏的 → 后面的"提交守卫不判脏"必然假红
+    const q = `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 创建：2026-10-23\n> 批次：20260101-0001\n\n- [ ] 甲\n  - 描述：故意一直做不完\n- [ ] 收尾核对\n`;
     write(ctx, `.continue/doing/${sid6(s)}.md`, q);
     ctx.git(['add', '-A']);
     ctx.git(['commit', '-q', '-m', 'queue']);
@@ -404,7 +404,7 @@ SCENARIOS.blocked = {
     /**
      * 判据看**队列状态**而不是注入文案：递一次任务就会把那条标回 `[~]`，
      * 所以"甲 仍是 `[阻塞]`"就是"没被再递出去"的硬证据。
-     * （队列里还有 `[自审]` 这种正常条目时，第 3 轮去递它是**对的**，不能拿
+     * （队列里还有别的正常条目时，第 3 轮去递它是**对的**，不能拿
      * "这一轮做这一条"这个词判失败——那是旧夹具只有 1 条时留下的写法。）
      */
     const afterThird = readMaybe(join(ctx.dir, '.continue', 'doing', `${sid6(s)}.md`));
@@ -712,13 +712,13 @@ SCENARIOS.worktree = {
     check('install.mjs 退出码 0', ctx.install.status === 0, (ctx.install.stderr || '').slice(-300));
 
     // 已有的"另一个会话"队列：前缀必须与本次会话**不同**，否则 sid6 撞车（文件名相同＝同一份队列）
-    // 最后一条必须是 `[自审]`（README §8）：少写它，pre-commit 会拒绝提交，
-    // 于是主树 HEAD 还停在 `init`（树里连钩子都没有），后面每一步都跟着假红。
+    // 这份夹具要被提交（pre-commit 会跑 ids / docs）：提交失败的话主树 HEAD 还停在
+    // `init`（树里连钩子都没有），后面每一步都会跟着假红。
     const other = `abcdef${'0'.repeat(25)}1`;
     write(
       ctx,
       `.continue/doing/${sid6(other)}.md`,
-      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0009\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] [自审] 占位自审\n`,
+      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0009\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] 收尾核对\n`,
     );
     ctx.git(['add', '-A']);
     const prep = ctx.git(['commit', '-q', '-m', 'other session queue']);
@@ -877,7 +877,7 @@ SCENARIOS.dispatch = {
      */
     writeFileSync(
       join(todoDir, 'queue.md'),
-      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
+      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n\n- [ ] 甲\n- [ ] 收尾核对\n`,
     );
     writeFileSync(join(todoDir, 'context.md'), '# 上下文\n\n空树不该派发。\n');
     const idle = hook(ctx, 'dispatch.mjs', stop(s), { args: ['--event=Stop', '--no-window'] });
@@ -889,13 +889,13 @@ SCENARIOS.dispatch = {
 
     /**
      * 造出前提：**另一个会话**正在跑（合法队列——pre-commit 的 `audit-ids` 会校验
-     * 首行 ID 与文件名、最后一条是 `[自审]`；不合法的 fixture 会让下面每一步都假红）。
+     * 首行 ID 与文件名；不合法的 fixture 会让下面每一步都假红）。
      */
     const other = `abcdef${'0'.repeat(25)}9`;
     write(
       { dir: ctx.dir },
       `.continue/doing/${short(other)}.md`,
-      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0010\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] [自审] 占位自审\n`,
+      `# 队列 · 会话 ${other}\n\n> 状态：执行中\n> 批次：20260101-0010\n\n- [ ] 乙\n  - 描述：别人在做\n- [ ] 收尾核对\n`,
     );
     ctx.git(['add', '-A']);
     const prepOther = ctx.git(['commit', '-q', '-m', 'other session queue']);
@@ -906,7 +906,7 @@ SCENARIOS.dispatch = {
     );
     writeFileSync(
       join(todoDir, 'queue.md'),
-      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n> 树名：demo\n\n- [ ] 甲\n- [ ] [自审] 占位自审\n`,
+      `# 队列 · 会话 ${s}\n\n> 状态：执行中\n> 批次：20260101-0011\n> 树名：demo\n\n- [ ] 甲\n- [ ] 收尾核对\n`,
     );
     writeFileSync(join(todoDir, 'context.md'), '# 上下文\n\n把甲做完，验证看 a.txt。\n');
 
