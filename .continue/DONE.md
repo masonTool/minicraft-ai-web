@@ -63,6 +63,59 @@
 **未开工（不属本批成果）**：MS2 世界权威 / MS3 实体权威 / MS4 容器与收尾共 17 条，未动一行代码，
 条目原文（含各自验收命令）已搬进 `TASKS.md` 的 L8 条目下方，下一批重建队列照抄即可。
 
+## 批次 20261025-0221 · 2026-10-25 · 会话 037060ab
+
+> **这一批做什么（L8 · MS3 实体权威）**：让"同一只怪"在两个屏幕上真的是同一只——
+> 房主每 100ms 采集视野内的实体（位置/血量/朝向/状态位）推给从属端，从属端只插值画影子、
+> 不跑 AI、不刷怪、不掉战利品。验收是用户手测「双人并排看 10 秒，怪物位置 / 血量 / 死亡一致」。
+>
+> 顺序：全局键 → 快照格式 → 采集 → 转发 → 从属端不跑 → 影子插值 → 死亡事件。
+>
+> ⚠️ 两处由入口条目顺带补上的：第 3 条（`SimAuthority`）的**上行接线**落到第 7 条一起做
+> （原条目只要求模块与单测）；`MobAuthority.pickAuthority` 那套"最近玩家当权威"在 MS2 之后
+> **不再参与决策**，只有 `mobKey`/`assignMobKey` 还在用。
+>
+> ⚠️ **未手测**：第 6 条（影子真的画出来）与第 7 条（打死两端同时消失、掉落只一份）——
+> 这两条只能在浏览器里双端验，断言只到"表算对了 / 接线对得上"。
+
+- [x] [L8] `Mob` 加全局键 `ownerId:localId`（复用 `src/core/net/MobAuthority.ts`）→ 单测：键稳定且可反解
+  - 做了什么：`Mob` 加 `netKey = ''`（空串 = 单机/未分配）；`MobAuthority` 加 `assignMobKey(mob, ownerId)`——**幂等**（已有键原样返回，换分配者也不改）、脏 owner/localId 不分配（返回空串）。文件头补一段说明：`pickAuthority` / `isAuthority` 那套"最近玩家当权威"在 MS2 定下"房主唯一模拟"之后**不再参与决策**，真正在用的是 `mobKey` / `parseMobKey` / `assignMobKey`。
+  - 为什么：两端的 `Entity.id` 各自从 1 递增，"3 号羊"在两边是两只不同的羊。要同步位置/血量，先把身份对齐；键一旦定下就不能半路换（换身份等于换一只怪），所以分配必须幂等。留 `pickAuthority` 不删是因为它描述了一个仍可能用得上的判定（将来做分片模拟要回来找），但**不能**再让它参与这里的决策——两套权威同时存在必然打架。
+  - 验证：`npm run test:unit` 里 `tests/mob-authority.test.ts` 新增 5 条（分配后可反解、幂等且换分配者不改、不同生物/房主不同键、脏 id 不分配、已有键不被覆盖）；全量 **468 → 473 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 新增 `src/core/net/EntitySnapshot.ts`：实体快照序列化 / 反序列化 → 单测往返一致
+  - 做了什么：定义 `EntitySnapshot`（key/type/坐标/yaw/health/flags）与线上形态 `WireEntity = [key,type,x,y,z,yaw,health,flags]`；`encodeEntities` 按 0.01 取整、丢键不合法/类型为空/数字非有限/超上限（256 条）的条目；`decodeEntities(raw, maxHealth?)` 逐条校验、坏条目单独丢、血量可选夹住；`ENTITY_FLAGS`（baby / onFire / hurt / tamed）配 `hasFlag` / `withFlag`。
+  - 为什么：100ms 一条的快照，字段名不进包（数组比对象省一半以上字节），坐标也不该带毫米精度。**外部数据一律当不可信**：一条坏数据不该让整包作废（与 `blocks` 同口径）；血量在入口夹住，免得从属端画出负长度的血条。AOI 裁剪/分组/排序不放在这里——那些要世界状态，纯函数里做不了也就测不了。
+  - 验证：新增 `tests/entity-snapshot.test.ts` **10 条**（往返一致、编码时丢非法键/空类型/非有限数、解码时坏条目单独丢、血量夹住/不传则原样、256 上限截断、非数组输入、状态位对称与互不冲突）；全量 **473 → 483 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 房主每 100ms 采集 AOI 内实体并按房 + 维度上行：新增 `src/game/sim/SimAuthority.ts` → 单测：只采 AOI 内
+  - 做了什么：`SimAuthority.ts`——`ENTITY_SNAPSHOT_INTERVAL_MS = 100`、`ENTITY_SNAPSHOT_RADIUS_CHUNKS = 8`（与服务端 AOI 同一把尺子）、`withinEntityAoi`（同维度 + 水平**切比雪夫**）、`collectEntitySnapshots`（近的排前面，超一包上限时先丢远处的）、`encodeEntitySnapshots`（筛范围 + 编码一步到位）。
+  - 为什么：只由房主采——MS2 定下"世界只由房主模拟"之后，"最近玩家当权威"那套会让两只手交接时位置跳一下。范围必须同维度：从属端在下界收到主世界的怪只会画出幽灵。**近的优先**是因为村庄里可能几百只，一包上限 256 条，丢远处比丢近处合理（近处正被玩家看着）。半径用切比雪夫而不是欧氏，是为了和服务端 `withinAoi` 完全一致——两边尺子不同会出现"房主发了、服务端又丢掉"的怪现象。
+  - 验证：新增 `tests/sim-authority.test.ts` **11 条**（默认半径边界 8 区块 = 128 格、y 不影响、维度不同不采、NaN 不采、半径可调、只采范围内、近的排前、状态位原样、空输入、一步编码、编解码往返）；全量 **483 → 489 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 服务端转发 `entity-snap`（房间 + AOI 过滤，不做内容校验）→ `npm run test:net`
+  - 做了什么：`server/protocol.mjs` 加 `MAX_SNAPSHOT_ENTITIES = 256` 与 `sanitizeEntitySnap()`（只保证是个不超过上限的数组）；`server/index.mjs` 加 `case 'entity-snap'`——**只收房主**（房里有房主时非房主直接丢），按房 + AOI（发送者位置为中心）转发；客户端补 `sendEntitySnapshot()`（非房主空操作）与 `onEntitySnap` 回调；协议文档上下行各一行。
+  - 为什么：服务端没有世界也没有生物表，判不了"这只僵尸该不该在这"，所以只做形状收口 + 转发；语义把关放在两端（房主 `SimAuthority` 只采 AOI 内、从属端 `decodeEntities` 逐条洗）。只收房主是"谁模拟谁是权威"的直接推论——否则任何人都能广播一整套假实体。
+  - 验证：`npm run test:net` **157 → 162 通过 / 0 失败**（房主推的快照被转发且带 `by`、从属端推的被丢弃、空数组/非数组不转发、超过 256 条被截断）；`npm run typecheck` / `typecheck:tools` 通过；`npm run check:fast` 5/5 套全绿。
+  - 批次：20261025-0221
+- [x] [L8] 从属端跳过 `MobSpawner.update` 与 `updateMobs` → 单测：client 角色下生成数为 0
+  - 做了什么：`main` 里 `mobSpawner.update(dt, ctx)` 收进 `if (shouldSimulate(this.net.role,'mobs'))`（全文件只此一处）；`EntityManager.update(ctx, dt, shouldTick?)` 新增**逐实体过滤**，`main` 从属端传 `(entity) => !(entity instanceof Mob)`——生物不推进，**箭/掉落物/经验球照旧 tick**（联机23 的箭是各端自跑的）。
+  - 为什么：从属端刷怪 + 跑 AI 会得到第二套轨迹，这正是"两人看到同一只僵尸在不同位置"的根源。但不能整个 update 都跳过：箭和掉落物没有快照来源，跳了就是"从属端射出去的箭卡在原地"。被跳过的实体也**不**从表里删（下一帧快照还要用）。
+  - 验证：新增 `tests/entity-manager-filter.test.ts` **4 条**（不传过滤=老行为、按名字只跳过点名的那个、被跳过的实体留在表里）；`npm run test:ui` **1019 → 1022 通过 / 0 失败**（闸门只一处、逐实体过滤写法、`shouldTick` 签名）；全量单测 **489 → 493**；`npm run check:fast` **7/7 套全绿**。
+  - 批次：20261025-0221
+- [x] [L8] 从属端影子实体 + 插值：新增 `src/game/sim/SimApply.ts`（复用 `RemoteInterpolation`）→ 单测：给定快照序列位置收敛
+  - 做了什么：`SimApply.ts`——影子表（`key → 内部状态`）+ `apply(raw)`（新的建、旧的更新目标、缺席累计）+ `step(dt)`（按 key 排序输出渲染状态）+ `remove(key)` / `clear()`；插值直接复用 `RemotePlayerSmoother`（> 8 格瞬移对齐、最短角转向）。主程序侧：`simApply` + `shadowMobs` 两张表，`onEntitySnap` 只在 `role === 'client'` 时收，每帧 `syncShadowMobs(dt)` 把影子摆到插值位置并同步血量/幼体/着火/受击闪，影子消失时 `dead = true` 交给 `EntityManager` 清；断开时 `clearShadowMobs()` 全撤。
+  - 为什么：① 100ms 一条快照直接赋值，模型会一格一格跳；② 快照按 AOI 裁，实体走到边界会"这帧在、下帧不在"，立刻删会一闪一闪——所以留 3 次缺席宽限；③ 真死由 `entity-remove` 事件驱动（下一条），否则"走到边界"和"被打死"会混成同一种表现。房主不建影子：它自己那份就是真身。
+  - 验证：新增 `tests/sim-apply.test.ts` **10 条**（新建即到位、4 格内逐帧逼近、>8 格直接对齐、缺席 3 次仍在第 4 次消失、重新出现清零计数、`remove` 立刻删、血量按类型夹住、坏快照不搅乱已有影子、输出顺序稳定、`clear`）；`npm run test:ui` **1022 → 1025 通过 / 0 失败**；全量单测 **493 → 503**；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
+  - 未验证：从属端真的画出房主的那只怪，需要浏览器双端手测（单测只能到"影子表算对了"）。
+  - 批次：20261025-0221
+- [x] [L8] 死亡与掉落由房主事件驱动（`entity-remove` + 已有 `item-spawn`）→ 单测：只掉一份、镜像同步消失
+  - 做了什么：协议加 **`entity-remove`**（`keys[]` ≤64，**只收房主**，按房广播）；`NetClient` 补 `sendEntityRemove` / `onEntityRemove`；**顺带把第 3 条的上行接到主循环**（原条目只要求模块 + 单测）：房主每帧 `pushEntitySnapshots()` —— 先给每只怪 `assignMobKey(entity, selfId)`、收集 `SimEntity`（含幼体/着火/受击/驯服位），比对上一帧 `lastMobKeys` 把没了的立刻 `sendEntityRemove`，再按 100ms 节流 `encodeEntitySnapshots` 推快照；从属端 `onEntityRemove` 里 `simApply.remove` + 影子 `dead = true`。
+  - 为什么：只靠"快照里消失"要等 3 次宽限（300ms），表现为"打死了还站着"，而且掉落出现的那一瞬对不上。**掉落只掉一份**是结构上保证的：从属端的影子根本不 tick（`shouldTick` 过滤掉 `Mob`），`Mob.die → dropLoot` 在那端永远不会跑；房主的掉落走既有 `item-spawn` 广播。
+  - 验证：`npm run test:net` **162 → 165 通过 / 0 失败**（房主点名被转发、从属端点名被丢、空/非法键列表不转发）；`npm run test:ui` **1025 → 1030 通过 / 0 失败**（分配键再推、100ms 节流、死亡立刻点名、从属端撤影子、影子不 tick 故不会自掉战利品）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
+  - 未验证：双端看"同一只怪被打死 → 两端同时消失、掉落只有一份"要手测。
+  - 批次：20261025-0221
+
 ## 批次 20261025-0122 · 2026-10-25 · 会话 037060ab
 
 > **这一批做什么（L8 · MS2 世界权威）**：让"世界模拟只由房主跑"真正生效——从属端不再推进

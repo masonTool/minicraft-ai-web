@@ -86,3 +86,33 @@
   （那种房没人推进世界，谁改都一样）。
 - **从属端仍要本地先应用**：等往返才有反馈的手感在手机上像卡死。
 - `container` / `sign` / `frame` / `tnt` **还没请求化**（仍直连上行，不影响玩法，但和"只有房主写世界"不完整）。
+
+## 六、MS3 实体权威（批次 20261025-0221）
+
+**目标**：两端看到的是**同一只怪**（位置 / 血量 / 死亡 / 掉落一份）。
+
+- **全局键**（`core/net/MobAuthority.ts`）：`Mob.netKey = ownerId:localId`，由房主在
+  第一次采集时分配（`assignMobKey`，幂等）。`Entity.id` 是本端自增的，两端对不上；
+  有了这个键，快照 / 影子 / 死亡事件说的才是同一只。
+  ⚠️ `pickAuthority` / `isAuthority`（最近玩家当权威）是 MS2 之前的设想，**已不参与决策**。
+- **快照格式**（`core/net/EntitySnapshot.ts`）：`[key, type, x, y, z, yaw, health, flags]`，
+  坐标 0.01 取整，`flags` 压 baby/onFire/hurt/tamed 四位；编码丢非法键、解码坏条目单独丢。
+- **房主采集**（`game/sim/SimAuthority.ts`）：同维度 + 水平**切比雪夫** 8 区块（与服务端
+  `withinAoi` 同一把尺子）、近的排前面、一包 256 条上限。`main.pushEntitySnapshots()`
+  每帧分配键、每 100ms 推一次。
+- **服务端**：`entity-snap` 只收房主、按房 + AOI 转发、只做形状收口（不做内容校验）；
+  `entity-remove` 同样只收房主。
+- **从属端**（`game/sim/SimApply.ts`）：影子表 + `RemotePlayerSmoother` 插值（> 8 格瞬移对齐），
+  失踪留 3 次宽限（AOI 边界会抖），`remove()` 立刻删；主程序每帧只摆位置/血量/状态位。
+- **从属端不跑生物**：`MobSpawner.update` 进 `shouldSimulate('mobs')` 闸门；
+  `EntityManager.update(ctx, dt, shouldTick?)` 逐实体过滤掉 `Mob`（箭/掉落物照旧 tick）。
+- **掉落只一份**：结构上保证——影子不 tick，`Mob.die → dropLoot` 在从属端永不执行；
+  房主的掉落走既有 `item-spawn` 广播。
+
+**坑**
+
+- **不能整个 `update` 跳过**：箭和掉落物没有快照来源，跳了就是"从属端射出去的箭卡在原地"。
+- **消失与死亡是两件事**：快照缺席要留宽限（否则 AOI 边界一闪一闪），死亡必须立刻
+  `entity-remove`（否则"打死了还站着 0.3 秒"、掉落对不上）。
+- **被跳过的实体不能从表里删**：下一帧快照还要用它；删了影子会重新"出生"一次（模型闪一下）。
+- **房主不建影子**：它自己那份就是真身，再建一份等于每只怪画两个模型。

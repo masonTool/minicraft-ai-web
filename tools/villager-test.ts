@@ -856,7 +856,8 @@ console.log('\n[接线守卫]');
   check('主程序每 0.5 秒下发作息指令', mainSrc.includes('this.villagerRoutineTimer = 0.5'));
   check(
     '作息在实体 tick 之前',
-    mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update(context, dt)'),
+    // MS3 之后实体推进改成多行调用（多了 shouldTick 过滤），比对前缀即可
+    mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update('),
   );
 }
 
