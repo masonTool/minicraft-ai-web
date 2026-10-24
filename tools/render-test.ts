@@ -847,6 +847,15 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
     `${stickPlane.parameters.width}×${stickPlane.parameters.height}`,
   );
   check('面片只贴一张图标（4 个 UV 角）', stickMesh.geometry.getAttribute('uv').count === 4);
+  // 自审（批次 20261024-1455）：双面材质是独立的一份，改亮度必须两边一起改，
+  // 否则"拿着剑进洞"永远全亮、拿方块却会变暗——这种只在一份材质上生效的漏项测不出来，
+  // 所以直接断言两份 material 的 uniform 都被写到了。
+  hand.setBrightness(0.25);
+  check(
+    '亮度同时作用到两套物品材质（方块 + 扁平物品）',
+    (blockMesh.material as THREE.ShaderMaterial).uniforms.uBrightness!.value === 0.25 &&
+      (stickMesh.material as THREE.ShaderMaterial).uniforms.uBrightness!.value === 0.25,
+  );
   check(
     '面片材质是双面（背面也看得见，不会甩视角时忽隐忽现）',
     (stickMesh.material as THREE.ShaderMaterial).side === THREE.DoubleSide &&

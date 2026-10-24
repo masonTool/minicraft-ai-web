@@ -340,6 +340,9 @@ export class HandRenderer {
 
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
+    this.spriteMaterial.uniforms.uBrightness!.value = value;
+    // ⚠️ 双面那份也要跟着调（批次 20261024-1455 的自审抓到的漏项）：
+    // 它是独立的一份 material，漏掉之后"拿着剑在洞里"永远是全亮，而拿方块会变暗。
     this.armMaterial.uniforms.uBrightness!.value = value;
     this.cuffMaterial.uniforms.uBrightness!.value = value;
     this.sleeveMaterial.uniforms.uBrightness!.value = value;
