@@ -264,6 +264,16 @@ export class MultiplayerScreen {
     this.statusEl.dataset.state = this.state;
   }
 
+  /**
+   * 预填地址（L9）：从世界列表的「开房」过来时，房间与口令已经拼进地址了。
+   *
+   * 只填空、不自动连：让玩家看一眼"房间名对不对"再按「开房」。真正"一点就进房"要等
+   * 连接时机挪到主菜单（同批的后一条），那时这里会多一个 `auto` 参数。
+   */
+  prefill(intent: { url: string }): void {
+    if (intent.url.length > 0) this.urlInput.value = intent.url;
+  }
+
   /** 当前填的地址与昵称（主程序重连时也要用同一份） */
   readForm(): { url: string | null; name: string } {
     return {

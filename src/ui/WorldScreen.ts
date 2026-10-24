@@ -26,6 +26,7 @@ import {
 } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
+import { roomFromWorldName, sanitizeRoomName } from '../core/net/RoomName.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
@@ -76,11 +77,21 @@ export interface WorldScreenActions {
    */
   onMiniGames?: () => void;
   /**
-   * 多人游戏（联机9）：打开连接小面板。
+   * 多人游戏（联机9）：打开连接小面板（加入别人的房）。
    *
    * 与 `onMiniGames` 同一套约定——不传就不显示入口，单机版不必改界面。
    */
   onMultiplayer?: () => void;
+  /**
+   * 用这个世界开房（L9）。
+   *
+   * 语义是"**这个世界就是这一局的世界**"：种子、模式、难度都跟着它，
+   * 队友进来看到的是同一片大陆。`room` / `password` 已经收口过
+   * （`core/net/RoomName.ts`），调用方可以直接拼进地址。
+   *
+   * 不传就不显示卡片上的「开房」——老的单机构建不必改界面。
+   */
+  onHostWorld?: (world: WorldSummary, room: string, password: string) => void;
 }
 
 /**
@@ -198,7 +209,8 @@ export class WorldScreen {
       multiplayer.type = 'button';
       multiplayer.className = 'world-secondary';
       multiplayer.id = 'world-multiplayer-button';
-      multiplayer.textContent = t('menu.multiplayer');
+      // L9：这一颗现在是"加入别人的房"，所以文案跟着改成动作（房间名/口令在面板里填）
+      multiplayer.textContent = t('world.joinRoom');
       multiplayer.addEventListener('click', () => this.actions.onMultiplayer?.());
       menu.append(multiplayer);
     }
@@ -540,6 +552,16 @@ export class WorldScreen {
     enter.textContent = t('world.enter');
     enter.addEventListener('click', () => this.actions.onEnter(world));
 
+    /*
+     * 「开房」（L9）：紧挨着「进入」。这一颗把"多人"从"游戏内设置"挪到"进入方式"——
+     * 玩家在这里点一下就等于宣布"用这个世界开一局"，不必先进世界再按 Esc。
+     */
+    const host = document.createElement('button');
+    host.type = 'button';
+    host.className = 'world-host';
+    host.textContent = t('world.host');
+    host.addEventListener('click', () => this.openHostWorld(world));
+
     const edit = document.createElement('button');
     edit.type = 'button';
     edit.className = 'world-edit';
@@ -562,7 +584,13 @@ export class WorldScreen {
       void this.confirmDelete(world);
     });
 
-    buttons.append(enter, edit, exportButton, remove);
+    buttons.append(
+      enter,
+      ...(this.actions.onHostWorld ? [host] : []),
+      edit,
+      exportButton,
+      remove,
+    );
     card.append(thumbnail, info, buttons);
     return card;
   }
@@ -583,6 +611,119 @@ export class WorldScreen {
    * 世界类型与种子不在这里改——它们决定地形，改了就不是同一个世界了。
    * 模式与难度同时回写玩家存档，否则读档时会被存档里的旧值覆盖。
    */
+  /**
+   * 开房确认（L9）：房间名默认世界名派生的合法房名，口令可空。
+   *
+   * 为什么要有这一层而不是点一下直接开：房间名是朋友**唯一**要知道的东西（地址可以
+   * 复制邀请），默认值必须一眼能认，也要允许改（同一台服务器上开两局得分开）。
+   * 房间名只收 `[A-Za-z0-9_-]`——服务端把它当数据 key 前缀、还会拼进地址 path。
+   */
+  private openHostWorld(world: WorldSummary): void {
+    this.editCleanup?.();
+    const defaultRoom = roomFromWorldName(world.name, world.seed);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'world-modal';
+    const panel = document.createElement('div');
+    panel.className = 'world-modal-panel';
+
+    const header = document.createElement('div');
+    header.className = 'world-modal-header';
+    const title = document.createElement('b');
+    title.textContent = tp('world.hostTitle', { world: world.name });
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'world-modal-close';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', t('misc.close'));
+    header.append(title, close);
+
+    const form = document.createElement('div');
+    form.className = 'world-edit-form';
+
+    const roomInput = document.createElement('input');
+    roomInput.type = 'text';
+    roomInput.className = 'world-input';
+    roomInput.id = 'world-host-room';
+    roomInput.maxLength = 24;
+    roomInput.autocomplete = 'off';
+    roomInput.spellcheck = false;
+    roomInput.value = defaultRoom;
+
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'text';
+    passwordInput.className = 'world-input';
+    passwordInput.id = 'world-host-password';
+    passwordInput.maxLength = 32;
+    passwordInput.autocomplete = 'off';
+    passwordInput.spellcheck = false;
+    passwordInput.placeholder = t('world.roomPasswordHint');
+
+    const hint = document.createElement('div');
+    hint.className = 'world-edit-hint';
+    hint.textContent = t('world.roomHint');
+
+    const actions = document.createElement('div');
+    actions.className = 'world-modal-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = t('menu.cancel');
+    const start = document.createElement('button');
+    start.type = 'button';
+    start.id = 'world-host-start';
+    start.className = 'world-edit-save';
+    start.textContent = t('world.hostStart');
+    actions.append(cancel, start);
+
+    form.append(
+      this.makeRow(t('world.roomName'), roomInput, null),
+      this.makeRow(t('world.roomPassword'), passwordInput, null),
+      hint,
+    );
+    panel.append(header, form, actions);
+    overlay.appendChild(panel);
+    this.root.appendChild(overlay);
+    this.editEl = overlay;
+
+    const cleanup = (): void => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (this.editEl === overlay) this.editEl = null;
+      if (this.editCleanup === cleanup) this.editCleanup = null;
+    };
+    this.editCleanup = cleanup;
+
+    const go = (): void => {
+      // 输入框里非法字符直接删（不是玩家的错，但服务端只认这个字符集）
+      const room = sanitizeRoomName(roomInput.value, defaultRoom);
+      const password = passwordInput.value.trim().slice(0, 32);
+      cleanup();
+      this.actions.onHostWorld?.(world, room, password);
+    };
+
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        cleanup();
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        go();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    close.addEventListener('click', cleanup);
+    cancel.addEventListener('click', cleanup);
+    start.addEventListener('click', go);
+
+    requestAnimationFrame(() => {
+      roomInput.focus();
+      roomInput.select();
+    });
+  }
+
   private openEdit(world: WorldSummary): void {
     this.editCleanup?.();
     const overlay = document.createElement('div');

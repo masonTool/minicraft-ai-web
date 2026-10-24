@@ -397,6 +397,7 @@ import {
   seedConflict,
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
+import { formatServerUrl } from './core/net/ServerUrl.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
@@ -3373,6 +3374,18 @@ class App {
     // 于是拖动**任何一个**滑块（音量、灵敏度…）都会走一遍 `World.update` 的
     // 489 次候选排序 + 请求检查（视距 12 时）。改音量不该惊动区块流式层。
     if (viewChanged) this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  /**
+   * 开房（L9）：把房间名与口令拼进地址、填好面板再打开。
+   *
+   * 入口在**世界列表的卡片**上（「开房」），所以这里拿不到"当前地址输入框里填了什么"，
+   * 只能用默认地址（`defaultServerUrl()`）——局域网里服务端就在同一台机器/同一网段，
+   * 这也正是"开房"的场景。玩家想改地址仍然可以在面板里改。
+   */
+  openHostRoom(room: string, password: string): void {
+    this.multiplayerScreen.prefill({ url: formatServerUrl(defaultServerUrl(), room, password) });
+    this.openMultiplayer();
   }
 
   /**
@@ -19469,6 +19482,16 @@ async function boot(): Promise<void> {
       pendingMultiplayer = false;
       app.openMultiplayer();
     }
+    /*
+     * 从世界卡片点「开房」进来的（L9）：房间名与口令已经收好，这里把地址拼好填进面板。
+     * ⚠️ 仍然先加载了世界——真正的"先连上、再按房主种子加载世界"是同一批的后一条，
+     * 那时这个分支会变成"连上之后才 startWorld"。
+     */
+    if (pendingHostRoom) {
+      const intent = pendingHostRoom;
+      pendingHostRoom = null;
+      app.openHostRoom(intent.room, intent.password);
+    }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
     app.onWorldDeleted = (id) => registry.remove(id);
@@ -19672,6 +19695,11 @@ async function boot(): Promise<void> {
    * 所以这个按钮的作用是"把世界列表翻出来"，选完世界再弹地址栏。
    */
   let pendingMultiplayer = false;
+  /**
+   * 从世界卡片「开房」（L9）：房间名与口令先记着，进世界之后填进联机面板。
+   * 只放一个意图、不复制世界对象——世界由 `startWorld` 那份说了算。
+   */
+  let pendingHostRoom: { room: string; password: string } | null = null;
 
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
@@ -19684,6 +19712,14 @@ async function boot(): Promise<void> {
     onMultiplayer: () => {
       pendingMultiplayer = true;
       menu.showView('worlds');
+    },
+    /*
+     * 卡片上的「开房」（L9）：这个世界就是这一局的房间。
+     * 进世界之后面板会带着房间名/口令打开，玩家按一下「开房」即可。
+     */
+    onHostWorld: (world, room, password) => {
+      pendingHostRoom = { room, password };
+      void startWorld(world);
     },
   });
 

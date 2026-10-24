@@ -5124,5 +5124,41 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
   );
 }
 
+/*
+ * 世界列表：进入 / 开房（L9）
+ *
+ * 用户的原话是"多人游戏需要选择一个世界，但进入的世界跟选的这个世界没有一点关系"。
+ * 根因是入口设计：多人被当成"游戏内设置"，必须先进世界再按 Esc，而地形又由服务端
+ * 常量种子决定。这一条把入口挪到卡片上，让"选哪个世界"与"这一局是哪片大陆"绑死。
+ */
+console.log('\n[世界列表：进入 / 开房（L9）]');
+{
+  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check('卡片上有专属的「开房」按钮类名', worldSrc.includes("host.className = 'world-host';"));
+  check(
+    '没有 onHostWorld 就不显示开房（精简构建不改界面）',
+    worldSrc.includes('...(this.actions.onHostWorld ? [host] : []),'),
+  );
+  check(
+    '开房弹窗的默认房间名由世界名派生（中文名也能用）',
+    worldSrc.includes('roomFromWorldName(world.name, world.seed)') &&
+      worldSrc.includes("roomInput.id = 'world-host-room'"),
+  );
+  check(
+    '房间名收口、口令可空',
+    worldSrc.includes('sanitizeRoomName(roomInput.value, defaultRoom)') &&
+      worldSrc.includes('passwordInput.value.trim().slice(0, 32)'),
+  );
+  check('世界列表里的多人入口改成「加入房间…」', worldSrc.includes("multiplayer.textContent = t('world.joinRoom');"));
+  check(
+    '开房意图一路传到面板（进世界后把房间拼进地址）',
+    mainSrc.includes('pendingHostRoom = { room, password };') &&
+      mainSrc.includes('openHostRoom(room: string, password: string)') &&
+      mainSrc.includes('formatServerUrl(defaultServerUrl(), room, password)'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseServerUrl, resolveDefaultServerUrl } from '../src/core/net/ServerUrl.ts';
+import { formatServerUrl, parseServerUrl, resolveDefaultServerUrl } from '../src/core/net/ServerUrl.ts';
 
 describe('parseServerUrl', () => {
   it('裸地址：默认房间、无口令', () => {
@@ -51,5 +51,31 @@ describe('resolveDefaultServerUrl（联机28）', () => {
 
   it('局域网 IP + 端口：host 带端口时仍只取 hostname（服务端端口固定 8787）', () => {
     expect(resolveDefaultServerUrl('http:', 'localhost:5173', 'localhost')).toBe('ws://localhost:8787');
+  });
+});
+
+/*
+ * 拼地址（L9）：房间与口令过去只能手写进 URL，手机上根本敲不对。
+ * 现在由「开房 / 加入」面板收集后再拼，所以这一对函数必须互补。
+ */
+describe('formatServerUrl', () => {
+  it('房间与口令都填：拼成 parseServerUrl 认得的样子', () => {
+    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '1234')).toBe('ws://192.168.1.5:8787/red?pw=1234');
+  });
+
+  it('只填房间', () => {
+    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '')).toBe('ws://192.168.1.5:8787/red');
+  });
+
+  it('都不填 = 裸地址（不留尾斜杠）', () => {
+    expect(formatServerUrl('ws://192.168.1.5:8787/', '', '')).toBe('ws://192.168.1.5:8787');
+  });
+
+  it('与 parseServerUrl 互补（含空格与特殊字符要转义）', () => {
+    const url = formatServerUrl('ws://10.0.0.2:8787', 'room-a', 'a b&c');
+    const parsed = parseServerUrl(url);
+    expect(parsed.url).toBe('ws://10.0.0.2:8787');
+    expect(parsed.room).toBe('room-a');
+    expect(parsed.password).toBe('a b&c');
   });
 });
