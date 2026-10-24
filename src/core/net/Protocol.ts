@@ -15,12 +15,22 @@ export const NET_PROTOCOL_VERSION = 1;
 /**
  * 服务端会返回的错误码。
  *
- * `version` / `clientId` / `duplicate` 是**致命**的：重连也不会变好，客户端必须停下来；
- * `bad-json` / `unknown` / `joined` 是消息级错误，连接还在，继续用。
+ * `version` / `clientId` / `duplicate` / `host-taken` 是**致命**的：重连也不会变好，
+ * 客户端必须停下来；`bad-json` / `unknown` / `joined` 是消息级错误，连接还在，继续用。
+ *
+ * `host-taken`（L8）：这个房间已经有房主。**算致命**——房主不走，重连一万次也还是他；
+ * 每 3 秒撞一次墙只会把日志刷满、把"开不了房"这个事实埋掉。
  */
-export type ProtocolErrorCode = 'version' | 'clientId' | 'duplicate' | 'bad-json' | 'unknown' | 'joined';
+export type ProtocolErrorCode =
+  | 'version'
+  | 'clientId'
+  | 'duplicate'
+  | 'host-taken'
+  | 'bad-json'
+  | 'unknown'
+  | 'joined';
 
 /** 这些错误码出现后不再自动重连（与服务端文档里的口径一致） */
 export function isFatalProtocolError(code: string): boolean {
-  return code === 'version' || code === 'clientId' || code === 'duplicate';
+  return code === 'version' || code === 'clientId' || code === 'duplicate' || code === 'host-taken';
 }

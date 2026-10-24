@@ -108,6 +108,17 @@ const GRACE_MS = Number(process.env.GRACE_MS ?? 30000);
 /** clientId → { id, name, timer }：已断开但还没过宽限期的人 */
 const graces = new Map();
 /**
+ * 房主（L8）：房间名 → `{ id, clientId }`，一个房间只有一名房主。
+ *
+ * 为什么服务端要记这件事：这一批之后**世界只由房主模拟**，其他人只渲染。两个人都
+ * 以为自己在模拟，正是"同一只怪两边血量不同"的根因——所以"谁是房主"必须是服务端
+ * 说了算，而不是客户端互相约定。
+ *
+ * 房主断线时**不立刻**释放：先留一个宽限期（与 `graces` 同一把尺子），他重连回来
+ * 仍然是他；宽限期过完才让出房主位，下一个开房的人才进得来。
+ */
+const hosts = new Map();
+/**
  * 容器内容（联机13）：`维度|x,y,z` → `{x,y,z,dimension,slots}`。
  *
  * 服务端原来只转发 `container` 消息、不留副本，于是重启之后箱子里的东西对新玩家
@@ -238,6 +249,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
 const CLOSE_ORIGIN = 4004;
 /** 关闭码：房间密码错（联机26） */
 const CLOSE_PASSWORD = 4005;
+/** 关闭码：这个房间已经有房主（L8） */
+const CLOSE_HOST_TAKEN = 4006;
 
 /**
  * 运行统计（联机29）：入/出字节与消息数。
@@ -712,6 +725,21 @@ wss.on('connection', (socket, request) => {
           return reject(socket, 'password', '房间密码不对', CLOSE_PASSWORD);
         }
 
+        /*
+         * 房主（L8）：一个房间只认一名房主，第二个带 `host: true` 的 join 直接拒。
+         *
+         * **不退化成从属端**：静默降级会让两端都以为自己说了算，而这一批要消灭的正是
+         * 那种"同一只怪两边血量不同"——退回客户端再提示，玩家还是先进来了，只是换了个
+         * 身份，看起来像成功。拒绝 + `host-taken` 才能让他停在一句明确的话上。
+         *
+         * 宽限期内重连的房主还是他本人（`grace.id` 就是原 id），不该把自己挡在门外。
+         */
+        const wantsHost = message.host === true;
+        const host = hosts.get(room);
+        if (wantsHost && host && host.id !== grace?.id) {
+          return reject(socket, 'host-taken', '这个房间已经有房主了', CLOSE_HOST_TAKEN);
+        }
+
         const name = sanitizeName(message.name);
         player = {
           id: grace ? grace.id : nextPlayerId++,
@@ -744,8 +772,11 @@ wss.on('connection', (socket, request) => {
           effectCount: 0,
           // 方块/容器/聊天的令牌桶（联机25）
           buckets: createBuckets(),
+          // 房主（L8）：他这一局跑模拟，其他人只渲染
+          isHost: wantsHost,
         };
         players.set(player.id, player);
+        if (wantsHost) hosts.set(room, { id: player.id, clientId: player.clientId });
 
         send(socket, {
           t: 'welcome',
@@ -759,7 +790,7 @@ wss.on('connection', (socket, request) => {
         // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
         // 测试也不必白等一个完整间隔
         socket.ping();
-        log(`${name}#${player.id} 加入（来自 ${address}），当前 ${players.size} 人`);
+        log(`${name}#${player.id} 加入（来自 ${address}）${wantsHost ? ' · 房主' : ''}，当前 ${players.size} 人`);
         break;
       }
 
@@ -1186,6 +1217,16 @@ wss.on('connection', (socket, request) => {
         if (item.owner !== player.id) continue;
         items.delete(key);
         broadcast({ t: 'item-remove', owner: item.owner, localId: item.localId }, null, player.room);
+      }
+      /*
+       * 房主（L8）宽限期结束 = 这一局没有人模拟了。
+       *
+       * 现在只把房主位让出来（否则这个房名永远开不了房）；"房间关闭 + 让从属端看到
+       * 一句明确提示"要等服务端能主动结束一局（MS3），那时在这里补广播即可。
+       */
+      if (hosts.get(player.room)?.id === player.id) {
+        hosts.delete(player.room);
+        log(`房主 ${player.name}#${player.id} 宽限期结束，房间 ${player.room} 的房主位已释放`);
       }
       log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
     }, GRACE_MS);

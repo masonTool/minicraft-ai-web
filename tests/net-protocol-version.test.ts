@@ -32,6 +32,10 @@ describe('错误码分类', () => {
     expect(isFatalProtocolError('duplicate')).toBe(true);
   });
 
+  it('房主被占也是致命的（L8：房主不走，重连还是他）', () => {
+    expect(isFatalProtocolError('host-taken')).toBe(true);
+  });
+
   it('消息级错误不致命（连接还在）', () => {
     expect(isFatalProtocolError('bad-json')).toBe(false);
     expect(isFatalProtocolError('unknown')).toBe(false);

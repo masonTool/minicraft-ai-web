@@ -68,6 +68,8 @@ class TestClient {
     /** 房间码 / 口令（联机26）：跟着 join 一起发 */
     this.room = options.room ?? '';
     this.password = options.password ?? '';
+    /** 开房（L8）：`join` 里带 host 标记，服务端据此登记这一房的唯一房主 */
+    this.host = options.host === true;
     this.mailbox = [];
     this.socket = new WebSocket(
       `ws://localhost:${PORT}`,
@@ -275,6 +277,7 @@ try {
         dimension,
         ...(client.room ? { room: client.room } : {}),
         ...(client.password ? { password: client.password } : {}),
+        ...(client.host ? { host: true } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
@@ -1199,6 +1202,47 @@ try {
     check('非法房名回默认房间（不报错）', (await joinAndWaitWelcome(weirdRoom, '怪房名', 0, 70, 0)) !== null);
 
     for (const client of [good, roomA, roomB, lateA, lateB, weirdRoom]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 房主（L8）
+  console.log('\n[房主：一房一名]');
+  {
+    const hostA = new TestClient('HostA', undefined, { room: 'hostroom', host: true });
+    check('带 host 的 join 能开房', (await joinAndWaitWelcome(hostA, '房主 A', 0, 70, 0)) !== null);
+
+    const follower = new TestClient('Follower', undefined, { room: 'hostroom' });
+    check('同房不带 host 的能进（当从属端）', (await joinAndWaitWelcome(follower, '跟随者', 0, 70, 0)) !== null);
+
+    // 第二个房主：明确拒绝，并且**断开**——留在房里当"半个房主"比拒连更难查
+    const hostB = new TestClient('HostB', undefined, { room: 'hostroom' });
+    await hostB.ready();
+    hostB.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: hostB.clientId,
+      name: '抢房主',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+      room: 'hostroom',
+      host: true,
+    });
+    const hostTaken = await hostB.wait('error', 3000);
+    check('第二个房主被拒（error.code = host-taken）', hostTaken?.code === 'host-taken', JSON.stringify(hostTaken));
+    check('被拒后连接关闭', await hostB.waitClosed());
+
+    // 房主位按房名隔离：另一个房名照常开
+    const otherHost = new TestClient('OtherHost', undefined, { room: 'hostroom2', host: true });
+    check('别的房名仍可开房（登记按房隔离）', (await joinAndWaitWelcome(otherHost, '别房房主', 0, 70, 0)) !== null);
+
+    // 房主断线 → 宽限期（测试里 400ms）过完才让出房主位，下一个人才能重新开房
+    hostA.close();
+    await sleep(900);
+    const hostC = new TestClient('HostC', undefined, { room: 'hostroom', host: true });
+    check('原房主宽限期过后房主位释放（可重新开房）', (await joinAndWaitWelcome(hostC, '新房主', 0, 70, 0)) !== null);
+
+    for (const client of [follower, otherHost, hostC]) client.close();
   }
 
   // ---------------------------------------------------------------- 房间口令（联机26）
