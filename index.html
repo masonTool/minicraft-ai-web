@@ -414,7 +414,9 @@
         width: fit-content; align-self: center;
       }
       .world-logo {
-        font-size: clamp(42px, 8vw, 72px); line-height: .85;
+        /* 字号同时受宽与高约束（批次 20261024-1455）：横屏矮屏上 8vw 会让 42px 的下限
+           也放不下，必须让高参与进来 */
+        font-size: clamp(28px, min(8vw, 9vh), 72px); line-height: .85;
         letter-spacing: -2px; color: #e7e7e7;
         -webkit-text-stroke: 2px #161616;
         text-shadow:
@@ -440,7 +442,15 @@
          所以每一节自己负责"里面怎么排"，而不是让盒子随内容长高。 */
       .world-view.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
       /* 首页没有框，内容在盒子正中（否则固定高度下会顶在上面、下面空一大片） */
-      .world-view[data-view='home'].active { justify-content: center; }
+      /* 首页在矮屏上会"标题被挤出屏幕"（批次 20261024-1455，用户自测）：
+         内容比面板高时，`justify-content: center` 会把上下两端一起裁掉——标题首当其冲。
+         两条一起改：① 用 `safe center`（装不下就退回从顶部排，不裁开头）；
+         ② 兜底允许内部滚动，任何视口都至少能把标题滚回来。 */
+      .world-view[data-view='home'].active {
+        justify-content: safe center;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
       /* 二级页面顶部：‹ 返回 + 标题 */
       .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex: 0 0 auto; }
       .world-nav-title { font-size: 17px; letter-spacing: 1px; color: #fff; }
@@ -453,10 +463,16 @@
       }
       /* 主页那几列入口：竖着一列（按钮宽度由 `.world-primary/.world-secondary`
          统一给 320px 居中，见下面那一条） */
-      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; flex: 0 0 auto; }
+      /* 间距跟着视口高度走（批次 20261024-1455）：360 高的横屏手机上 20px + 10px 太奢侈 */
+      .world-menu {
+        display: flex; flex-direction: column;
+        gap: clamp(6px, 1.4vh, 10px);
+        margin-top: clamp(6px, 2.5vh, 20px);
+        flex: 0 0 auto;
+      }
       .world-hint { color: #e0e0e0; font-size: 12px; margin: 10px 0 0; text-align: center; }
       .world-footer {
-        margin-top: 20px; text-align: center; font-size: 10px;
+        margin-top: clamp(6px, 2vh, 20px); text-align: center; font-size: 10px;
         color: rgba(255,255,255,.65);
       }
       /* 当前构建版本（批次 182）：构建时间 + 提交标题。
@@ -2340,9 +2356,9 @@
         body.touch-mode .pause-help { display: none; }
 
         /* ---- 主菜单：横屏宽度富余、高度紧张 ---- */
-        body.touch-mode .world-logo { font-size: 42px; }
+        body.touch-mode .world-logo { font-size: clamp(24px, 8vh, 42px); }
         body.touch-mode .world-edition { margin-top: 6px; font-size: 10px; }
-        body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
+        body.touch-mode .world-menu { gap: clamp(4px, 1.2vh, 8px); margin-top: clamp(4px, 2vh, 10px); }
         /* 高度两者一致（批次 20261024-1152）：主/次按钮只该在字号上不同 */
         body.touch-mode .world-primary { min-height: 52px; font-size: 14px; }
         body.touch-mode .world-secondary { min-height: 52px; }

@@ -2489,7 +2489,12 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 横屏只剩"主菜单"与"把按钮排紧一点"：**不许再碰面板尺寸**
   check('横屏不再覆盖面板尺寸（只允许把里面的按钮排紧）', !landscape.includes('.settings-panel') && !landscape.includes('.settings-columns'));
   check('横屏：暂停按钮收紧到 42px（面板尺寸不变）', landscape.includes('body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }'));
-  check('横屏：主菜单 logo 缩小、按钮高度统一到 52px', landscape.includes('body.touch-mode .world-logo { font-size: 42px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 52px;'));
+  check(
+    '横屏：主菜单 logo 跟着视口高缩、按钮高度统一到 52px',
+    // 批次 20261024-1455：42px 固定值在更矮的机型上仍会把标题顶出去，改成 clamp 带 8vh
+    landscape.includes('body.touch-mode .world-logo { font-size: clamp(24px, 8vh, 42px); }') &&
+      landscape.includes('body.touch-mode .world-primary { min-height: 52px;'),
+  );
 }
 
 console.log('\n[按钮尺寸对齐（批次 111）]');
@@ -2545,6 +2550,20 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   check(
     '主菜单主按钮同宽居中（320px，首页与二级页共用一条规则）',
     compact.includes('.world-primary, .world-secondary { width: min(100%, 320px); max-width: 320px;'),
+  );
+  // 批次 20261024-1455（用户）：首页在矮屏上"标题被挤出屏幕"——内容比面板高时
+  // 居中会连标题一起裁掉，所以要么安全居中、要么允许滚动，间距也要跟着视口高走。
+  check(
+    '首页标题块用 safe center 且可滚动兜底',
+    /\.world-view\[data-view='home'\]\.active \{[^}]*justify-content: safe center;/.test(compact) &&
+      /\.world-view\[data-view='home'\]\.active \{[^}]*overflow-y: auto;/.test(compact),
+  );
+  check(
+    '首页字号/间距跟视口高度走（clamp 里带 vh）',
+    /\.world-logo \{[^}]*font-size: clamp\(28px, min\(8vw, 9vh\), 72px\);/.test(compact) &&
+      /\.world-menu \{[^}]*gap: clamp\(6px, 1\.4vh, 10px\);/.test(compact) &&
+      /\.world-menu \{[^}]*margin-top: clamp\(6px, 2\.5vh, 20px\);/.test(compact) &&
+      /\.world-footer \{[^}]*margin-top: clamp\(6px, 2vh, 20px\);/.test(compact),
   );
   // 批次 20261024-1152（用户）：首页那几颗按钮高度要一致（原来主 52 / 次 44，一高一矮）
   check(
