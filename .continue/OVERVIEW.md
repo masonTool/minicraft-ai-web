@@ -150,11 +150,11 @@
 
 **实现**
 
-- 一个世界一个 IndexedDB 库（联机按 room 派生 `worldId@mp:<room>`）；读档按版本号串链、脏数据逐项跳过；文件导出/导入 · `L1`~`L4` · 批次 193/196 / 20261023-2351；联机（批次 20261023-2351，44 条）：协议钉在 `docs/NET-PROTOCOL.md`（八节 + 缺口表）；握手（版本/名字/clientId）、限流 30 条/秒、口令/Origin/房名、心跳 5s ping + 20s 超时、断线 30s 宽限期复用原 id、远端玩家按维度过滤（`core/net/RemotePresence.ts`）、未加载区块的方块改动先进增量表（`core/net/RemoteBlockWrite.ts`）、种子冲突整批跳过（`SeedReconcile`）、联机库 `worldId@mp:<room>`（`MultiplayerSave`）、世界原地重载（`World.reset()` + `worldReset` 清单自检）、天气权威（`server/weather.mjs`）、远端姿势/盔甲/副手（`RemoteAppearance` / `RemoteArmor`）；入口 `ui/MultiplayerScreen.ts` · `L4` · 批次 20261023-2351
+- 一个世界一个 IndexedDB 库（联机按 room 派生 `worldId@mp:<room>`）；读档按版本号串链、脏数据逐项跳过；文件导出/导入 · `L1`~`L4` · 批次 193/196 / 20261023-2351；联机 44 条 + 房主权威 MS1：协议见 `docs/NET-PROTOCOL.md`；握手/限流/口令/心跳/30s 宽限重连、远端按维度过滤、未加载区块先记增量（`RemoteBlockWrite`）、种子冲突跳过（`SeedReconcile`）、联机库（`MultiplayerSave`）、世界原地重载（`World.reset` + `worldReset`）、天气权威（`server/weather.mjs`）、远端姿势/盔甲/副手；**v2 只让房主模拟**：`join` 带 `host`、一房一房主（第二个 `host-taken`）、`welcome` 下发 `isHost`/`hostId`、角色 `solo|host|client` 收在 `core/net/NetRole.ts`、面板「开房 / 加入」+ 状态行标房主/从属（细则 `notes/net-host-authority.md`；手测待做）· `L4`/`L8` · 批次 20261023-2351 / 20261024-1619
 
 **坑 / 注意**
 
-- 存档是**外部数据**：读的时候逐项校验、坏的那一格当空，绝不让 `NaN` 流进进度字段；联机是「客户端说了算」：`move` 没有位移校验（改包可瞬移），反作弊要从「按时间差算最大速度、超了回拉」入手；另外**协议字段存在 ≠ 生效**（`move.armor`/`offhand` 早就传了但两端都没接），"要不要改存档"要先读现有结构再判断 · 批次 20261023-2351
+- 存档是**外部数据**：读的时候逐项校验、坏的那一格当空，绝不让 `NaN` 流进进度字段；联机是「客户端说了算」：`move` 没有位移校验（改包可瞬移），反作弊要从「按时间差算最大速度、超了回拉」入手；另外**协议字段存在 ≠ 生效**（`move.armor`/`offhand` 早就传了但两端都没接），"要不要改存档"要先读现有结构再判断 · 批次 20261023-2351 —— 房主标记同理：两端必须同一把尺子（`=== true`），宽松一次就两端同时模拟且**不报错** · 批次 20261024-1619
 
 ### 界面与音频
 
