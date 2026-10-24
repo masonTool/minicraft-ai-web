@@ -43,6 +43,7 @@ import {
   gapRangeForScore,
   jitteredSize,
   jump,
+  maxGapFromEdge,
   maxReachableGap,
   nextBlock,
   resolveLanding,
@@ -406,6 +407,25 @@ console.log('\n跳一跳：难度曲线（分数越高越难，但永远可达�
       return gap >= range.from - 1e-9 && gap <= range.to + 1e-9;
     }),
   );
+  // 可达性口径必须按"最坏落点"算：落点保留之后，人可能站在上一块的后边缘
+  // （离下一块最远，多出半个边长）。只按中心距算会漏掉"站偏就永远够不到"的格子。
+  check(
+    '最远间距 + 上一块半边 ≤ maxDistance − margin（站到后边缘也够得着）',
+    scores.every((score) => {
+      const size = blockSizeForScore(score);
+      const gap = gapRangeForScore(score, size).to;
+      return gap + size / 2 <= JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin + 1e-9;
+    }),
+  );
+  almost('最坏落点口径 = 中心距上限 − 半边', maxGapFromEdge(2), maxReachableGap() - 1, 1e-9);
+  check(
+    '间距上限从不越过最坏落点口径',
+    [0, 30, 80, 200].every((score) => {
+      const size = blockSizeForScore(score);
+      return gapRangeForScore(score, size).to <= maxGapFromEdge(size) + 1e-9;
+    }),
+  );
+
   // 用户口径："横屏下间距太小，要激进一点"——开局就得是边长的 2.3~2.7 倍
   const openRatio = { from: low.from / JUMP_CONFIG.blockSizeStart, to: low.to / JUMP_CONFIG.blockSizeStart };
   check(

@@ -14,9 +14,9 @@
 import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
 import {
   createRun,
-  currentBlock,
   gapRangeForScore,
   jump,
+  maxGapFromEdge,
   maxReachableGap,
   nextBlock,
   nextRandom,
@@ -67,9 +67,9 @@ function playOne(skill: Skill, seed: number): { jumps: number; score: number; ca
   let capped = false;
 
   while (run.status === 'playing' && jumps < MAX_JUMPS) {
-    const from = currentBlock(run);
     const to = targetBlock(run);
-    const exact = Math.hypot(to.x - from.x, to.z - from.z);
+    // 玩家瞄准的是"从自己站着的地方到目标中心"——落点保留之后，站偏了距离就变了
+    const exact = Math.hypot(to.x - run.stand.x, to.z - run.stand.z);
 
     let distance: number;
     if (skill === 'perfect') distance = exact;
@@ -114,7 +114,12 @@ function simulate(skill: Skill, runs: number): Result {
   };
 }
 
-/** 可达率：用 5000 次生成覆盖 0~300 分，检查每个间距都在最大距离内 */
+/**
+ * 可达率：用 300 次生成覆盖 0~300 分，检查每个间距都够得着。
+ *
+ * 判据是**最坏落点**：上一块最靠后的落脚点（离下一块最远，多出半个边长）起跳，
+ * 仍然不能超过"蓄满能跳的距离"。只按中心距算会漏掉"站偏就永远够不到"的格子。
+ */
 function reachableRate(): number {
   let ok = 0;
   let total = 0;
@@ -123,9 +128,17 @@ function reachableRate(): number {
   for (let score = 0; score <= 300; score++) {
     const generated = nextBlock(current, score, seed);
     const gap = Math.hypot(generated.block.x - current.x, generated.block.z - current.z);
-    const range = gapRangeForScore(score);
+    const range = gapRangeForScore(score, current.size);
+    const worstCase = gap + current.size / 2;
     total += 1;
-    if (gap <= maxReachableGap() + 1e-9 && gap >= range.from - 1e-9 && gap <= range.to + 1e-9) ok += 1;
+    if (
+      worstCase <= JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin + 1e-9 &&
+      gap <= maxGapFromEdge(current.size) + 1e-9 &&
+      gap >= range.from - 1e-9 &&
+      gap <= range.to + 1e-9
+    ) {
+      ok += 1;
+    }
     current = generated.block;
     seed = generated.seed;
   }

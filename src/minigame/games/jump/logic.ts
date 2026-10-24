@@ -137,9 +137,21 @@ export function shapeFor(score: number, rand: number): JumpBlockShape {
   return t < JUMP_CONFIG.roundChance ? 'round' : 'square';
 }
 
-/** 间距上限的硬天花板：再难也不能超过"蓄满能跳的距离" */
+/** 间距上限的硬天花板：再难也不能超过"蓄满能跳的距离"（从中心起算的绝对上限） */
 export function maxReachableGap(): number {
   return JUMP_CONFIG.maxDistance - JUMP_CONFIG.reachMargin;
+}
+
+/**
+ * 真正的可达性口径：**从上一块最靠后的落脚点**起跳，还要够得到下一块中心。
+ *
+ * 落点保留（`stand`）之后，"站在中心起跳"不再是最坏情况：上一跳可以停在方块的
+ * 后半边，那里离下一块更远（多出半个边长）。所以中心距的上限要再减掉半边，
+ * 否则生成器会造出"只有站正才跳得到"的格子——玩家一旦站偏就再也够不着。
+ */
+export function maxGapFromEdge(previousSize: number): number {
+  const size = Number.isFinite(previousSize) && previousSize > 0 ? previousSize : JUMP_CONFIG.blockSizeStart;
+  return maxReachableGap() - size / 2;
 }
 
 /**
@@ -169,14 +181,15 @@ export function gapCurveForScore(score: number): { from: number; to: number } {
  * "越往后越远"会变成"越往后越近"。这一版把难度交给两条独立的曲线：
  * 目标变小（`blockSizeForScore`）+ 中心距变大（本函数）。
  *
- * `previousSize` 参与的是**下限**：上一块越大，倒下需要的空间越多。
+ * `previousSize` 同时参与两头：**下限**是"倒下要占的空间"，**上限**是"从上一块
+ * 最靠后的落脚点起跳还够得着"（`maxGapFromEdge`）。
  */
 export function gapRangeForScore(
   score: number,
   previousSize: number = JUMP_CONFIG.blockSizeStart,
 ): { from: number; to: number } {
   const curve = gapCurveForScore(score);
-  const gapTo = Math.min(curve.to, maxReachableGap());
+  const gapTo = Math.min(curve.to, maxGapFromEdge(previousSize));
   const gapFrom = Math.min(Math.max(curve.from, gapFloorFor(previousSize)), gapTo);
   // 理论上参数怎么配都不会出现 from > to，但夹一下更安全（配置被人手改成倒挂时不会生成倒着跳）
   return { from: gapFrom, to: gapTo };
