@@ -292,6 +292,7 @@ CodeBuddy IDE 缺省只采纳 1 次（安装器写 100，重启会话后连续�
 | `AUTO_COMMIT_STYLE` | 空 | 设成 `json` 时改用 `{"continue":false,"reason":…}` 而不是 exit 2 |
 | `AUTO_COMMIT_MAX_BLOCKS` | `2` | 同一份未提交改动最多拦几次 |
 | `CONTINUE_MAX_ITEMS_PER_COMMIT` | `1` | 一次提交最多把几条队列条目勾成 `[x]` |
+| `CONTINUE_SELFTEST_NO_CACHE` | 空 | 设成 `1` 时钩子自检跳过"按 hooks 内容哈希缓存"、强制真跑（等价 `--no-cache`，怀疑缓存骗人时用） |
 | `CODEBUDDY_SESSION_ID` | 宿主注入 | 只读：钩子用它推导本会话队列路径与日志目录（`<sid6>`）；**不再用它命名工作树**（树名见 §9）；不是给人设的开关 |
 | `WORKBUDDY_SESSION_ID` | 宿主注入 | 同上，WorkBuddy 的等价变量 |
 

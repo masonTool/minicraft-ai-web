@@ -17,6 +17,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -33,6 +34,43 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/**
+ * 结果缓存（挡的是"每次提交白等 5 秒"）。
+ *
+ * 这份自检只在 `hooks/*.mjs` 变化时才可能变红——它把钩子拷进临时目录、灌事件、
+ * 断言退出码，**不读项目里的任何其它东西**。所以按钩子目录的内容哈希做一次缓存，
+ * 文件没动就直接放行，`checks.fast` 从 5.6s 掉到几十毫秒。
+ *
+ * 三条边界：
+ *   · **只缓存通过**。失败永远重跑——缓存一个红结论等于把门禁变成"一次红，永远红"；
+ *   · 键里带 `process.version`：换 node 版本可能换行为，不算"没变"；
+ *   · `--no-cache` / `CONTINUE_SELFTEST_NO_CACHE=1` 可强制真跑（排查"缓存骗人"时用）。
+ */
+const PROJECT = dirname(dirname(HERE));
+const CACHE_FILE = join(PROJECT, '.continue', '.logs', '.selftest-cache.json');
+const noCache = process.argv.includes('--no-cache') || process.env.CONTINUE_SELFTEST_NO_CACHE === '1';
+
+function hooksFingerprint() {
+  const hash = createHash('sha1').update(process.version);
+  for (const name of readdirSync(HERE).filter((n) => n.endsWith('.mjs')).sort()) {
+    hash.update('\u0000').update(name).update('\u0000').update(readFileSync(join(HERE, name)));
+  }
+  return hash.digest('hex');
+}
+
+if (!noCache) {
+  const fp = hooksFingerprint();
+  try {
+    const cached = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
+    if (cached?.fp === fp && cached?.ok === true) {
+      console.log(`钩子自检通过：${cached.count} 项（缓存：hooks/*.mjs 自 ${cached.at} 未改动，加 --no-cache 可强制重跑）。`);
+      process.exit(0);
+    }
+  } catch {
+    // 没有缓存 / 缓存坏了 → 正常真跑
+  }
+}
+
 const ROOT = mkdtempSync(join(tmpdir(), 'continue-selftest-'));
 const HOOKS = join(ROOT, '.continue', 'hooks');
 const DOING = join(ROOT, '.continue', 'doing');
@@ -1386,4 +1424,18 @@ if (failed > 0) {
   console.error(`\n钩子自检未通过：${failed}/${results.length} 项。`);
   process.exit(1);
 }
+
+/** 只缓存**通过**的结论（失败永远重跑，见文件头的缓存说明）。写不进去不影响结论。 */
+if (!noCache) {
+  try {
+    mkdirSync(dirname(CACHE_FILE), { recursive: true });
+    writeFileSync(
+      CACHE_FILE,
+      `${JSON.stringify({ fp: hooksFingerprint(), ok: true, count: results.length, at: new Date().toISOString() }, null, 2)}\n`,
+    );
+  } catch {
+    // 缓存只是加速手段，写不进去照常通过
+  }
+}
+
 console.log(`钩子自检通过：${results.length} 项。`);
