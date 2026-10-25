@@ -4,7 +4,7 @@
  * 两件事：`welcome` 只发玩家附近的改动（否则跑久了的房间一进来就是几 MB），
  * 以及增量满了之后淘汰最旧的一条并告警（原来静默丢新改动，客户端完全不知道）。
  *
- * 逻辑在 `server/snapshot.mjs`——服务端只能跑 .mjs，所以不能放进 `src/` 的 TS 模块；
+ * 逻辑在 `server/node/snapshot.mjs`——服务端只能跑 .mjs，所以不能放进 `src/` 的 TS 模块；
  * 这里直接 import 那个文件断言（vitest 用 esbuild 转译，不看 tsconfig 的 include）。
  */
 
@@ -15,7 +15,7 @@ import {
   chunkDistance,
   rememberEdit,
   selectSnapshotEdits,
-} from '../server/snapshot.mjs';
+} from '../server/node/snapshot.mjs';
 
 const edit = (x: number, z: number, dimension = 'overworld', id = 1) => ({ x, y: 70, z, id, state: 0, dimension });
 

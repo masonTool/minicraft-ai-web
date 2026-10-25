@@ -80,6 +80,7 @@ npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup        # 跨机器自检
+npm run server             # 联机服务端（Node 版 :25187）；Rust 版与两颗手机示例宿主见 server/README.md
 ```
 
 `npm run check` 是一条链：`typecheck` + `test`（vitest + **181 套**自建离线测试 + `test:hooks`）

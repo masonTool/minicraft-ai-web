@@ -1,3 +1,0 @@
-# 构建产物（`bash rust-server/build-ios.sh` 几秒就能重编，没必要占 git）
-lib/
-MinicraftServer.xcframework/

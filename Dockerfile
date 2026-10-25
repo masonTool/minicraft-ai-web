@@ -12,8 +12,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# 服务端代码（`server/` 里的 .mjs 不需要编译）
-COPY server ./server
+# 服务端代码（`server/node/` 里的 .mjs 不需要编译）
+COPY server/node ./server/node
 
 # 世界快照落在 /data（挂卷，否则容器一删世界就没了）
 ENV PORT=25187 \
@@ -21,8 +21,8 @@ ENV PORT=25187 \
 VOLUME ["/data"]
 EXPOSE 25187
 
-# 与 WebSocket 共用同一个端口的健康检查（见 server/index.mjs 的 /healthz）
+# 与 WebSocket 共用同一个端口的健康检查（见 server/node/index.mjs 的 /healthz）
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||25187)+'/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server/index.mjs"]
+CMD ["node", "server/node/index.mjs"]

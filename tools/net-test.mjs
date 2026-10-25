@@ -14,10 +14,10 @@ import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocket } from 'ws';
-import { PROTOCOL_VERSION, sanitizeWorldMeta } from '../server/protocol.mjs';
+import { PROTOCOL_VERSION, sanitizeWorldMeta } from '../server/node/protocol.mjs';
 
 /**
- * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
+ * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/node/.data/`——
  * 否则跑一次测试就把开发者自己房间的存档覆盖了。
  */
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'minicraft-net-'));
@@ -33,7 +33,7 @@ const DATA_DIR = mkdtempSync(join(tmpdir(), 'minicraft-net-'));
 let PORT = 0;
 let passed = 0;
 let failed = 0;
-/** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/protocol.mjs） */
+/** 每个 TestClient 默认拿一个新身份（8~64 位字母/数字/-/_，见 server/node/protocol.mjs） */
 let clientSeq = 0;
 
 /**
@@ -212,7 +212,7 @@ let serverOutput = '';
  * 被验收的服务端进程：默认是仓库里的 JS 版。
  *
  * `NET_SERVER_BIN` / `NET_SERVER_ARGS` 可以把它换成任何"同一协议的实现"
- * （Rust 版的对齐验收就是这么跑的：`bash rust-server/run-net-test.sh`）。
+ * （Rust 版的对齐验收就是这么跑的：`bash server/rust/run-net-test.sh`）。
  * 换实现时**这套断言一条不改**——它验的是协议，不是某种语言。
  */
 const SERVER_BIN = process.env.NET_SERVER_BIN ?? 'node';
@@ -221,7 +221,7 @@ const SERVER_ARGS = process.env.NET_SERVER_ARGS != null
   // 换了二进制却没给参数 = 那个程序自己就是服务端（Rust 版读环境变量，不收位置参数）
   : process.env.NET_SERVER_BIN
     ? []
-    : ['server/index.mjs'];
+    : ['server/node/index.mjs'];
 
 /**
  * 起一个服务端子进程并等它监听端口。

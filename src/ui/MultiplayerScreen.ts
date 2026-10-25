@@ -502,7 +502,7 @@ export class MultiplayerScreen {
    * 读这台服务器的 `/healthz`，取它听到的其它设备（N6）。
    *
    * 为什么借道服务端：浏览器既发不出也收不到 UDP 组播；每台手机上的 Rust 服务端
-   * 一直在组播上听（`rust-server/src/beacon.rs`），把结果写进 `/healthz` 的 `peers`。
+   * 一直在组播上听（`server/rust/src/beacon.rs`），把结果写进 `/healthz` 的 `peers`。
    *
    * 任何失败都返回空数组：附近房间是**加分项**，不能让它把"手填地址"这条路堵住。
    */

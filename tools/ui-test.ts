@@ -5741,7 +5741,7 @@ console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收�
   check(
     '服务端对四类都有"有房主时只收房主"的闸门',
     (() => {
-      const server = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+      const server = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
       return ['block', 'blocks', 'container', 'sign', 'frame', 'tnt'].every((kind) =>
         server.includes(`rejectEdit(player, 'not-host', '${kind}')`),
       );
@@ -5917,7 +5917,7 @@ console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
 console.log('\n[加入房间：地址只填 IP]');
 {
   const serverUrlSrc = readFileSync(new URL('../src/core/net/ServerUrl.ts', import.meta.url), 'utf8');
-  const serverSrc = readFileSync(new URL('../server/protocol.mjs', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/node/protocol.mjs', import.meta.url), 'utf8');
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   check(
     '只填 IP 自动补 ws:// 与固定端口',
@@ -5934,7 +5934,7 @@ console.log('\n[加入房间：地址只填 IP]');
   check('默认端口不是 8787（换成了不常见的值）', /DEFAULT_NET_PORT = (?!8787)\d+/.test(serverUrlSrc));
   check(
     '服务端默认端口读常量而不是硬编码',
-    readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8').includes(
       'process.env.PORT ?? DEFAULT_PORT',
     ),
   );
