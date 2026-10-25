@@ -636,7 +636,29 @@ try {
     const back = new TestClient('Reconnector', reconnector.clientId);
     const welcomeR2 = await joinAndWaitWelcome(back, '重连者', 3, 70, 3);
     check('宽限期内重连复用原 id', welcomeR2?.id === idBefore, `${idBefore} → ${welcomeR2?.id}`);
+
+    /*
+     * 改名重连（用户 2026-10-25："虽然改了名儿，但那个名字还是之前的老名字"）。
+     *
+     * 宽限期复用 id 时，服务端要**重新广播**一次 `player`（带新名字）——同房的人才会更新
+     * 名字牌；否则他们记着的还是第一次进房时那个名字。
+     */
+    const watcher = new TestClient('Watcher');
+    await joinAndWaitWelcome(watcher, '看名字的人', 4, 70, 4);
     back.close();
+    await sleep(50); // 又落回宽限期内
+    watcher.mailbox.length = 0;
+    const renamed = new TestClient('Reconnector', reconnector.clientId);
+    const welcomeR3 = await joinAndWaitWelcome(renamed, '改了名字', 3, 70, 3);
+    const seenRename = await watcher.wait('player', 2000);
+    check('改名重连复用同一个 id', welcomeR3?.id === idBefore, `${idBefore} → ${welcomeR3?.id}`);
+    check(
+      '改名重连后同房收到新名字',
+      seenRename?.id === idBefore && seenRename?.name === '改了名字',
+      JSON.stringify(seenRename?.name),
+    );
+    renamed.close();
+    watcher.close();
     await sleep(600); // 让他过完宽限期
     // 宽限期过完就该从玩家表里消失（新进来的人看不到"幽灵"）
     const peek = new TestClient('Peeker');
@@ -1311,6 +1333,21 @@ try {
       `${welcomeFollower?.hostId} vs ${welcomeHost?.id}`,
     );
 
+    /*
+     * 房主标识随**每条** player 广播（用户 2026-10-25："我看所有人，他们的名字都是房主"）。
+     *
+     * 以前客户端只有 welcome 里那一份 `hostId`：房主中途离开/换人之后永远停在旧值，
+     * 名字牌于是该标的没标、不该标的还标着。
+     */
+    follower.mailbox.length = 0;
+    hostA.send({ t: 'move', x: 1, y: 70, z: 1, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const hostMove = await follower.wait('player', 2000);
+    check('房主那条 player 广播带 isHost=true', hostMove?.isHost === true, JSON.stringify(hostMove?.isHost));
+    hostA.mailbox.length = 0;
+    follower.send({ t: 'move', x: 2, y: 70, z: 2, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const followerMove = await hostA.wait('player', 2000);
+    check('从属那条 player 广播带 isHost=false', followerMove?.isHost === false, JSON.stringify(followerMove?.isHost));
+
     // 没房主的房：hostId 为 null（客户端据此知道这一局没人跑模拟，而不是默默当成自己在跑）
     const noHostRoom = new TestClient('NoHostRoom', undefined, { room: 'nohostroom' });
     const welcomeNoHost = await joinAndWaitWelcome(noHostRoom, '没房主', 0, 70, 0);
@@ -1756,7 +1793,16 @@ try {
     cfgFollower.mailbox.length = 0;
     await sleep(80);
     cfgHost.send({ t: 'room-config', timeOfDay: 0.25 });
-    const timeMsg = await cfgFollower.wait('time', 3000);
+    /*
+     * ⚠️ 不能只看第一条：服务端每 2s 还有一条**周期**校正广播，它可能抢在 snap 前面到，
+     * 于是"第一条 time 不是 0.25"被误判成失败（实测偶发）。这里按条找，找到符合的为止。
+     */
+    let timeMsg = null;
+    for (let attempt = 0; attempt < 4 && timeMsg === null; attempt += 1) {
+      const next = await cfgFollower.wait('time', 3000);
+      if (!next) break;
+      if (next.snap === true || Math.abs(Number(next.timeOfDay) - 0.25) < 0.01) timeMsg = next;
+    }
     check(
       '房主改时间 → 收到 time（snap 或数值已对齐）',
       timeMsg?.snap === true || Math.abs(Number(timeMsg?.timeOfDay) - 0.25) < 0.01,

@@ -18,6 +18,8 @@ import {
   canNameMob,
   composeNameTag,
   nameTagWidthFor,
+  nameTagWorldWidth,
+  NAME_TAG_CANVAS_HEIGHT,
   remoteNameTagOpacity,
   sanitizeName,
 } from '../src/core/entity/NameTag.ts';
@@ -115,6 +117,21 @@ console.log('\n[③ 牌子宽度]');
   check('单字有正宽度', nameTagWidthFor('A') > 0);
 
   check('高度是固定值', NAME_TAG_HEIGHT > 0 && NAME_TAG_HEIGHT < 0.5);
+
+  /*
+   * 世界宽度按**实际画出来的背景条像素**换算（用户 2026-10-25："名字有点扁，被压缩的"）。
+   *
+   * 以前宽度按字数估算、字号按实测缩放，两套算法在长名字上分叉：字号缩到 12px 时文字只占
+   * 画布高度的 1/5，Sprite 仍按估算宽度撑开 → 字被横向拉扁。这里钉住"横竖同一个比例"。
+   */
+  const ratio = NAME_TAG_HEIGHT / NAME_TAG_CANVAS_HEIGHT;
+  check('方形背景条 → 方形牌子（宽 = 高）', Math.abs(nameTagWorldWidth(NAME_TAG_CANVAS_HEIGHT) - NAME_TAG_HEIGHT) < 1e-9);
+  check('像素→世界是线性的（长度翻倍宽度翻倍）', Math.abs(nameTagWorldWidth(128) - nameTagWorldWidth(64) * 2) < 1e-9);
+  check(
+    '长名字不变形的判据：宽/像素 与 高/画布高 同一个比例',
+    Math.abs(nameTagWorldWidth(400) / 400 - ratio) < 1e-9 && Math.abs(nameTagWorldWidth(60) / 60 - ratio) < 1e-9,
+  );
+  check('没画过时也有正宽度（不会缩成 0）', nameTagWorldWidth(0) > 0);
 }
 
 console.log('\n[④ 物品登记]');
@@ -324,7 +341,14 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   check('记录了 lastColor', src.includes('this.lastColor = style.color'));
   // ---- 批次 1359：前后缀 ----
   check('牌子文本走 composeNameTag（拼法只有一处）', src.includes('composeNameTag(style.prefix, name, style.suffix)'));
-  check('宽度按拼好的文本算（不是只按名字）', src.includes('nameTagWidthFor(display)'));
+  check(
+    '宽度按拼好的文本算（不是只按名字）',
+    // 2026-10-25：宽度改由「实际画出来的背景条」换算——拼好的文本经 composeNameTag → drawName
+    // 量出像素宽并记在 drawnBoxPx 上，不再用按字数估算的 nameTagWidthFor(display)
+    src.includes('nameTagWorldWidth(this.drawnBoxPx') &&
+      src.includes('this.drawnBoxPx = boxWidth') &&
+      !src.includes('nameTagWidthFor(display)'),
+  );
   check('lastName 存的是拼好的文本（前缀变了自动重画）', src.includes('this.lastName = display'));
   check('画布画的是拼好的文本', src.includes('this.drawName(display, style.color)'));
   check('invalidate() 连颜色一起清', /invalidate\(\): void \{[\s\S]{0,120}this\.lastColor = null;/.test(src));

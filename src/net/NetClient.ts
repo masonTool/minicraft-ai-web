@@ -46,6 +46,14 @@ export interface NetPlayerState {
   yaw: number;
   pitch: number;
   dimension: string;
+  /**
+   * 这一位是不是**房主**（用户 2026-10-25）。
+   *
+   * 以前只有 `welcome.hostId` 一个标量：房主中途离开/换人之后客户端那份永远停在旧值，
+   * 名字牌于是"该标的没标、不该标的还标着"。现在每条 `player` 广播都带它。
+   * 老服务端不带 → `undefined`，此时保持原来的 `welcome.hostId` 口径。
+   */
+  isHost?: boolean;
   /** 队伍名（联机22）：空/缺省 = 没队伍。用来判友伤，也用于联机18 的名字牌颜色 */
   team?: string;
   /**
@@ -598,6 +606,14 @@ export class NetClient {
           if (player.id === this.selfId) continue;
           this.remote.set(player.id, player);
         }
+        /*
+         * 房主（用户 2026-10-25）：`welcome.hostId` 没有时，从玩家表里的 `isHost` 兜一次。
+         * 走到这里的两种情况：这一局确实还没人开房，或老服务端没给 `hostId`。
+         */
+        if (this.hostId === null) {
+          const hostPlayer = players.find((player) => player.isHost === true);
+          if (hostPlayer) this.hostId = hostPlayer.id;
+        }
         const edits = (message.edits as number[][] | undefined) ?? [];
         const items = (message.items as NetItemState[] | undefined) ?? [];
         const containers = (message.containers as NetContainerState[] | undefined) ?? [];
@@ -618,12 +634,21 @@ export class NetClient {
         const state = message as unknown as NetPlayerState;
         if (state.id === this.selfId) break;
         this.remote.set(state.id, state);
+        /*
+         * 房主身份跟着广播走（用户 2026-10-25）：谁现在是房主，由服务端每条 `player` 说一遍。
+         * 只有**明确**说了 `isHost === false` 且正好是当前记着的那位时才清空——
+         * 老服务端不带这个字段，不能因为"没带"就把房主抹掉。
+         */
+        if (state.isHost === true) this.hostId = state.id;
+        else if (state.isHost === false && state.id === this.hostId) this.hostId = null;
         this.handlers.onPlayer(state);
         break;
       }
       case 'leave': {
         const id = Number(message.id ?? 0);
         this.remote.delete(id);
+        // 走的是房主 → 这一局暂时没有房主了（名字牌的「房主 · 」要跟着消失）
+        if (id === this.hostId) this.hostId = null;
         this.handlers.onLeave(id);
         break;
       }
@@ -822,6 +847,8 @@ export class NetClient {
        * 真关房时服务端紧接着发 `error{code:'host-left'}` 并断开，这里只负责"先说一句"。
        */
       case 'room-closed': {
+        // 房主没了（L8 · MS4）：房主标识当场撤掉，别让人继续顶着「房主」跑
+        this.hostId = null;
         const graceMs = Number(message.graceMs);
         this.handlers.onRoomClosing?.(Number.isFinite(graceMs) ? graceMs : 0);
         break;

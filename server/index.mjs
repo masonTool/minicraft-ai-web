@@ -969,7 +969,29 @@ wss.on('connection', (socket, request) => {
           name: player.name,
           ...snapshotFor(player),
         });
-        broadcast({ t: 'player', id: player.id, name: player.name, x: player.x, y: player.y, z: player.z, yaw: 0, pitch: 0, dimension: player.dimension }, player.id, player.room);
+        broadcast(
+          {
+            t: 'player',
+            id: player.id,
+            name: player.name,
+            x: player.x,
+            y: player.y,
+            z: player.z,
+            yaw: 0,
+            pitch: 0,
+            dimension: player.dimension,
+            /*
+             * 房主标识（用户 2026-10-25："我看所有人都是房主"）。
+             *
+             * 以前 `hostId` 只在 `welcome` 里下发一次：房主中途离开/换人之后，客户端那份
+             * 永远停在旧值——名字牌该标的没标、不该标的还标着。把"这条 player 是不是房主"
+             * 随每条广播带出去，客户端就不用猜。
+             */
+            isHost: hosts.get(player.room)?.id === player.id,
+          },
+          player.id,
+          player.room,
+        );
         // 入服立刻探一次活（联机7）：不用等下一个 5s 心跳窗口，半开连接能早 5s 被发现，
         // 测试也不必白等一个完整间隔
         socket.ping();
@@ -998,6 +1020,8 @@ wss.on('connection', (socket, request) => {
             t: 'player',
             id: player.id,
             name: player.name,
+            // 房主标识（用户 2026-10-25）：随每条位置广播带出去，见 join 分支里的说明
+            isHost: hosts.get(player.room)?.id === player.id,
             x: player.x,
             y: player.y,
             z: player.z,

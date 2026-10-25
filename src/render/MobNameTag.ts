@@ -24,7 +24,13 @@
 
 import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
-import { NAME_TAG_HEIGHT, composeNameTag, nameTagWidthFor } from '../core/entity/NameTag.ts';
+import {
+  NAME_TAG_CANVAS_HEIGHT,
+  NAME_TAG_CANVAS_WIDTH,
+  NAME_TAG_HEIGHT,
+  composeNameTag,
+  nameTagWorldWidth,
+} from '../core/entity/NameTag.ts';
 import {
   DEFAULT_NAME_COLOR,
   PLAIN_NAME_TAG_STYLE,
@@ -44,11 +50,16 @@ const NAME_FONT = '600 {size}px -apple-system, "PingFang SC", "Microsoft YaHei",
 /**
  * 画布尺寸：宽 512、高 64。
  *
- * 宽高比 8:1 对应 `nameTagWidthFor` 的典型比例（一次名字大约 3 格宽、0.26 格高）。
- * 极限长名字（32 字）在画布里会被缩到很小，此时靠 Sprite 的世界宽度上限兜住。
+ * ⚠️ Sprite 的世界宽度**按实际画出来的背景条换算**（用户 2026-10-25："名字有点扁，被压缩的"）。
+ *
+ * 以前宽度用 `core/entity/NameTag#nameTagWidthFor` 按字数**估算**，而画布里的字号是按
+ * `measureText` **实测**缩放的——两套算法在长名字上必然分叉：字号缩到 12px 时文字只占
+ * 画布高度的 1/5，Sprite 却仍按"估算宽度"横向撑开，字就被拉扁了（越长的名字越扁）。
+ * 现在只认一个换算比例：`世界宽度 = 背景条像素宽 × NAME_TAG_HEIGHT / CANVAS_H`，
+ * 横竖同倍，任何长度的名字都不会变形。
  */
-const CANVAS_W = 512;
-const CANVAS_H = 64;
+const CANVAS_W = NAME_TAG_CANVAS_WIDTH;
+const CANVAS_H = NAME_TAG_CANVAS_HEIGHT;
 
 const COLORS = {
   /** 半透明黑底：名字压在草地/雪地/水面上都要读得出来 */
@@ -67,6 +78,13 @@ export class MobNameTag {
   private lastName: string | null = null;
   /** 上一次画的颜色（`null` = 默认白） */
   private lastColor: string | null = null;
+  /**
+   * 上一次画出来的背景条宽度（画布像素）——Sprite 的世界宽度由它换算。
+   *
+   * 为什么记画布像素而不是世界宽度：画布是固定 512×64，屏幕上的字有多宽由 `drawName`
+   * 实测决定；把**同一个**像素数按同一个比例换成世界单位，横竖才不会各缩各的。
+   */
+  private drawnBoxPx = 0;
 
   constructor(canvas?: HTMLCanvasElement) {
     this.canvas = canvas ?? document.createElement('canvas');
@@ -113,10 +131,7 @@ export class MobNameTag {
     // 牌子上的**实际文本**是「队伍前缀 + 名字 + 队伍后缀」（批次 1359）。
     // 宽度、重画判据、画布内容全都跟着这段文本走——只要拼法变了，三处自动一致。
     const display = composeNameTag(style.prefix, name, style.suffix);
-    const width = nameTagWidthFor(display);
     const height = NAME_TAG_HEIGHT;
-    this.object.scale.set(width, height, 1);
-    this.object.position.set(mob.x, mob.y + mob.height + topLift + height / 2, mob.z);
 
     const next = { name: display, color: style.color };
     if (nameTagNeedsRedraw({ name: this.lastName, color: this.lastColor }, next)) {
@@ -124,6 +139,14 @@ export class MobNameTag {
       this.lastColor = style.color;
       this.drawName(display, style.color);
     }
+
+    /*
+     * 宽度按**这一帧实际画出来的**背景条换算（`drawnBoxPx` 由 `drawName` 写下）：
+     * 画布像素 → 世界单位只差一个比例（高度已定），所以任意长度都是等比缩放，不会变扁。
+     */
+    const width = nameTagWorldWidth(this.drawnBoxPx, height);
+    this.object.scale.set(width, height, 1);
+    this.object.position.set(mob.x, mob.y + mob.height + topLift + height / 2, mob.z);
     // 距离衰减（联机18）：只对队友名字牌生效，生物传 1 进来
     // 下限留 0.05 而不是 0：0 与"隐藏"在视觉上一样，但保留一点点可以让它淡出得连续
     const material = this.object.material as THREE.SpriteMaterial;
@@ -184,6 +207,8 @@ export class MobNameTag {
     ctx.fillStyle = COLORS.background;
     roundRect(ctx, (CANVAS_W - boxWidth) / 2, (CANVAS_H - boxHeight) / 2, boxWidth, boxHeight, 8);
     ctx.fill();
+    // 交给 `show()` 换算 Sprite 宽度（横竖同一个比例）
+    this.drawnBoxPx = boxWidth;
 
     // 文字 + 深色描边：先描边再填字，笔画内侧不会被描边吃掉。
     // 描边颜色固定深色（不跟着队伍色走）：`gray` / `brown` 这类深色队伍

@@ -111,6 +111,29 @@ export function nameTagWidthFor(name: string): number {
 export const NAME_TAG_HEIGHT = 0.26;
 
 /**
+ * 名字牌画布的固定尺寸（**不能改**：运行中改 canvas 尺寸会让部分 WebGL 实现继续用旧纹理，
+ * 表现为"僵尸头顶挂着猫的条"，见 `MobNameTag` 文件头）。
+ *
+ * 放在 core 是因为它现在是**换算比例的来源**：world = px × NAME_TAG_HEIGHT / 画布高。
+ */
+export const NAME_TAG_CANVAS_WIDTH = 512;
+export const NAME_TAG_CANVAS_HEIGHT = 64;
+
+/**
+ * 名字牌的世界宽度：由**实际画出来的背景条像素宽**换算（用户 2026-10-25："名字被压扁"）。
+ *
+ * 为什么不用按字数估算的 `nameTagWidthFor`：画布里的字号是按 `measureText` **实测**缩放的，
+ * 两套算法在长名字上必然分叉——字号被缩到 12px 时文字只占画布高度的 1/5，而 Sprite 仍按
+ * 估算宽度横向撑开，字就被拉扁（越长的名字越扁）。这里只保留**一个**像素→世界的比例，
+ * 横竖同倍，任何长度都等比缩放。
+ */
+export function nameTagWorldWidth(boxPx: number, height: number = NAME_TAG_HEIGHT): number {
+  // 还没画过（首帧异常）时给一个"看起来正常"的兜底，绝不让 Sprite 宽度变成 0
+  if (!(boxPx > 0) || !(height > 0)) return Math.max(0.1, height * 4);
+  return (boxPx * height) / NAME_TAG_CANVAS_HEIGHT;
+}
+
+/**
  * 队友名字牌的范围（格）。
  *
  * 比生物名字牌（32 格）大一倍：生物是"附近有什么"，队友是"人在哪"——原版联机里

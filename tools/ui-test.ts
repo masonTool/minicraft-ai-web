@@ -6009,11 +6009,32 @@ console.log('\n[房主标识与房间配置]');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
   check(
     '房主的名字牌是金色 +「房主 ·」前缀（优先级高于队伍色）',
     mainSrc.includes("color: '#ffd24a'") && mainSrc.includes("prefix: `${t('say.net.hostTag')} · `"),
   );
   check('收集名字牌时记住谁是房主', mainSrc.includes('host: id === this.net.hostId'));
+  /*
+   * 房主标识只标一个人（用户 2026-10-25："我看所有人，他们的名字都是房主"）。
+   *
+   * 以前 `hostId` 只在 welcome 里下发一次，房主离开/换人之后永远停在旧值。
+   * 现在服务端每条 player 广播都带 `isHost`，客户端跟着改、走了就清。
+   */
+  check(
+    'player 广播带 isHost（服务端按 hosts 表算，不信任客户端）',
+    (serverSrc.match(/isHost: hosts\.get\(player\.room\)\?\.id === player\.id/g) ?? []).length >= 2,
+  );
+  check(
+    '客户端跟着广播更新房主（只在明确 false 时松手，兼容老服务端）',
+    netSrc.includes('if (state.isHost === true) this.hostId = state.id;') &&
+      netSrc.includes('else if (state.isHost === false && state.id === this.hostId) this.hostId = null;'),
+  );
+  check(
+    '房主离开/关房时撤掉标识（不会留下一个假的「房主」）',
+    /case 'leave': \{[\s\S]{0,400}?if \(id === this\.hostId\) this\.hostId = null;/.test(netSrc) &&
+      /case 'room-closed': \{[\s\S]{0,200}?this\.hostId = null;/.test(netSrc),
+  );
   check(
     '命令层拦住非房主改时间 / 天气（time 与 weather 各一处）',
     (cmdSrc.match(/canChangeWorld\?\.\(\) === false/g) ?? []).length >= 2 &&
