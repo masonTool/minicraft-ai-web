@@ -67,6 +67,7 @@ export const menu = {
   "mp.title": "Mehrspieler",
   "mp.server": "Server-IP",
   "mp.serverHint": "z. B. 192.168.1.5 oder mc.example.com – IP oder Domain, Port nicht nötig",
+  'mp.hostUnreachable': 'Raum konnte nicht geöffnet werden: Server nicht erreichbar – Adresse und Netz prüfen (läuft der Server?)',
   "mp.name": "Spielername",
   "mp.room": "Raum",
   "mp.roomHint": "leer = Standardraum",

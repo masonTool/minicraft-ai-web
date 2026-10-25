@@ -6121,7 +6121,10 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
   check('开房对话框有地址输入框（默认回填当前地址）', worldSrc.includes("addressInput.id = 'world-host-address'") && worldSrc.includes('this.actions.defaultHostAddress?.()'));
   check('房名必填：空值当场提示，不再静默退回默认房名', worldSrc.includes('const rawRoom = roomInput.value.trim();') && worldSrc.includes("showError(t('world.roomRequired'))"));
   check('地址必填：归一化失败就提示（只填 IP 也能过）', worldSrc.includes('const base = normalizeServerUrl(addressInput.value);') && worldSrc.includes("showError(t('world.addressRequired'))"));
-  check('回调把地址带出去', worldSrc.includes('onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => void;'));
+  check(
+    '回调把地址带出去（并可返回失败原因）',
+    worldSrc.includes('onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => Promise<string | null> | string | null;'),
+  );
   check(
     '开房用的是玩家填的地址（不再写死 defaultServerUrl）',
     mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') && mainSrc.includes('baseUrl: intent.baseUrl,'),
@@ -6164,6 +6167,35 @@ console.log('\n[加入失败不再留在世界里（2026-10-25 实测 ①⑤）]
     /abortJoin\(reason: string\): void \{[\s\S]{0,1600}multiplayerScreen\.open\('join'\)/.test(mainSrc),
   );
   check('加入来的世界有生成超时兜底（不会永远停在"正在生成世界…"）', mainSrc.includes('JOIN_LOAD_TIMEOUT_MS') && mainSrc.includes("this.abortJoin(t('mp.joinTimeout'))"));
+}
+
+
+console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-10-26）]');
+{
+  const mainSrc3 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const worldUiSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
+
+  // ---- ① 开房失败不许进世界：先预检，失败留在对话框里说原因
+  check('开房先跑预检（连得上 + 房名没被占）才建世界', /onHostWorld: async \(world, room, password, baseUrl\) => \{[\s\S]{0,300}?await preflightHost\(/.test(mainSrc3));
+  check(
+    '预检失败把原因还给对话框（不是静默进世界）',
+    mainSrc3.includes("return t('mp.hostUnreachable')") && mainSrc3.includes("return t('say.net.hostTaken')"),
+  );
+  check(
+    '对话框在失败时留在原地（只有成功才 cleanup）',
+    /const failure = await this\.actions\.onHostWorld[\s\S]{0,400}?if \(failure\) \{[\s\S]{0,200}?showError\(failure\)/.test(worldUiSrc) ||
+      /Promise\.resolve\(this\.actions\.onHostWorld[\s\S]{0,400}?showError\(failure\)/.test(worldUiSrc),
+  );
+
+  // ---- ② 雨声必须能真的关掉：起伏振荡器挂在独立增益上，不污染音量参数
+  check('雨声起伏挂在独立增益（swell）上', audioSrc.includes('gust.connect(gustDepth).connect(swell.gain)'));
+  check('音量参数不再被振荡器污染', !audioSrc.includes('gustDepth).connect(out.gain)'));
+  check('网络天气走同一个 setWeather 入口（环境音/雾一起收）', /onWeather: \(kind\) => \{[\s\S]{0,400}?this\.setWeather\(kind\)/.test(mainSrc3));
+
+  // ---- ③ 加入卡生成页：8 秒没落点就就地认可（不是重新规划出生点）
+  check('加入房间有"没落点就自愈"的兜底', mainSrc3.includes('JOIN_FORCE_SPAWN_MS') && mainSrc3.includes('private forceJoinSpawn()'));
+  check('自愈是就地认可（不调用 prepareNewWorldSpawn 把人挪走）', /private forceJoinSpawn\(\)[\s\S]{0,800}?this\.spawnResolved = true;/.test(mainSrc3) && !/private forceJoinSpawn\(\)[\s\S]{0,800}?prepareNewWorldSpawn\(\)/.test(mainSrc3));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

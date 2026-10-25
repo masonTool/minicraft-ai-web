@@ -1319,6 +1319,17 @@ export class AudioEngine {
       source.buffer = this.getNoiseBuffer(ctx);
       source.loop = true;
 
+      /*
+       * 起伏（0.13Hz ≈ 8 秒一轮）：雨不该是一条死平的白噪声。
+       *
+       * ⚠️ 它必须挂在**单独的**增益上，不能直接接到 `out.gain`（用户 2026-10-26："雨停了声音还在"）。
+       * `AudioParam` 的输入信号是**加在基础值上的**，`setTargetAtTime(0)` 只把基础值推到 0，
+       * 叠加的 ±0.045 仍然在振——于是晴天里雨声永远有 4.5% 的底噪，怎么调都关不掉。
+       * 现在链条是 `source → 两个滤波 → swell(1±0.045) → out(音量) → master`，音量归零就是真静音。
+       */
+      const swell = ctx.createGain();
+      swell.gain.value = 1;
+
       // 两层：高频"沙沙"（雨点打在地上）+ 低频"呼呼"（雨幕的体量）
       const hiss = ctx.createBiquadFilter();
       hiss.type = 'bandpass';
@@ -1326,7 +1337,7 @@ export class AudioEngine {
       hiss.Q.value = 0.45;
       const hissLevel = ctx.createGain();
       hissLevel.gain.value = 0.85;
-      source.connect(hiss).connect(hissLevel).connect(out);
+      source.connect(hiss).connect(hissLevel).connect(swell);
 
       const rumble = ctx.createBiquadFilter();
       rumble.type = 'lowpass';
@@ -1334,15 +1345,17 @@ export class AudioEngine {
       rumble.Q.value = 0.6;
       const rumbleLevel = ctx.createGain();
       rumbleLevel.gain.value = 0.5;
-      source.connect(rumble).connect(rumbleLevel).connect(out);
+      source.connect(rumble).connect(rumbleLevel).connect(swell);
 
-      // 缓慢起伏（0.13Hz ≈ 8 秒一轮）：雨不该是一条死平的白噪声
+      swell.connect(out);
+
       const gust = ctx.createOscillator();
       gust.type = 'sine';
       gust.frequency.value = 0.13;
       const gustDepth = ctx.createGain();
       gustDepth.gain.value = 0.045;
-      gust.connect(gustDepth).connect(out.gain);
+      // 叠加到 swell 上（音频参数是"基础值 + 输入信号"），不再污染音量那条线
+      gust.connect(gustDepth).connect(swell.gain);
       gust.start();
 
       source.start(0, Math.random() * 0.8);

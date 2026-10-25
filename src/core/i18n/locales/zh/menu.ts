@@ -68,6 +68,7 @@ export const menu = {
   'mp.title': '多人游戏',
   'mp.server': '服务器 IP',
   'mp.serverHint': '例如 192.168.1.5 或 mc.example.com（IP 或域名，端口不用填）',
+  'mp.hostUnreachable': '开房失败：连不上服务器，检查地址和网络（服务端启动了吗）',
   'mp.name': '昵称',
   'mp.room': '房间',
   'mp.roomHint': '留空 = 默认房间',

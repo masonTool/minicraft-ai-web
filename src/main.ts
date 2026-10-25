@@ -843,6 +843,7 @@ import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { PcControls } from './ui/PcControls.ts';
+import { preflightHost } from './net/HostPreflight.ts';
 import { applyManifestLink } from './ui/ManifestLink.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
@@ -978,6 +979,14 @@ const NAME_TAG_RANGE = 32;
  * 超过 30 秒几乎都是"房主走了 / 那一局没人跑模拟"，继续等只会让人以为游戏坏了。
  */
 const JOIN_LOAD_TIMEOUT_MS = 30_000;
+/**
+ * 加入房间时"地形能画了却迟迟没有落点"的自愈阈值（用户 2026-10-26："提示进入了，但卡在生成页"）。
+ *
+ * 比 `JOIN_LOAD_TIMEOUT_MS` 早得多：那一档是"彻底放弃并退回菜单"，这一档是"不等了，就地认可"。
+ * 正常情况 1~2 秒内就落点了，8 秒还没落点说明落点判定卡住（区块数/安全点判定），
+ * 而人已经在服务端给的位置上——再等只是让人盯着遮罩。
+ */
+const JOIN_FORCE_SPAWN_MS = 8000;
 
 /**
  * 光照收敛后"全量重刷已渲染区块"的最小间隔（毫秒，批次 616）。
@@ -1894,7 +1903,14 @@ class App {
     onPlayerHit: (hit) => this.onNetPlayerHit(hit),
     // 天气权威（联机35）：服务端说了算，本地只渲染
     onWeather: (kind) => {
-      if (kind === 'clear' || kind === 'rain' || kind === 'thunder') this.weather.setKind(kind);
+      /*
+       * 走 `setWeather()` 而不是直接 `weather.setKind()`（用户 2026-10-26："天气变了但雨声还在"）。
+       *
+       * `setKind()` 只改状态与降水粒子，**不跑 `applyEnvironment()`**（雾、光照、雨声那条链的
+       * 环境侧收口），于是远程改天气时画面换了、环境音还挂在上一档。走同一个入口最省事：
+       * 本地命令与网络权威从此是同一条路径。
+       */
+      if (kind === 'clear' || kind === 'rain' || kind === 'thunder') this.setWeather(kind);
     },
     // 箭与 TNT（联机23）：事件 + 坐标/速度，各端自己模拟
     onArrow: (arrow) => this.onNetArrow(arrow),
@@ -2498,6 +2514,8 @@ class App {
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
   private spawnResolved = false;
+  /** 加入房间的自愈只做一次（见 `forceJoinSpawn`） */
+  private joinForceSpawnTried = false;
   /** 这一局的加入已经被判死（`abortJoin` 只做一次：回归主菜单途中 socket 还会再关一次） */
   private joinAborted = false;
   /** 加入来的世界从什么时候开始等生成（0 = 还没开始计时；用户实测 2026-10-25 的卡死兜底） */
@@ -5585,6 +5603,26 @@ class App {
    * 批次 167：遮罩不再写在 HTML 里（那样首屏就会显示"正在生成世界…"），
    * 它由 `showLoading()` 在**进世界那一刻**挂出来，这里只负责撤掉。
    */
+  /**
+   * 加入房间卡在生成页时的自愈（用户 2026-10-26）。
+   *
+   * 为什么是"就地认可"而不是 `prepareNewWorldSpawn()`：加入方的人已经在**服务端给的位置**上
+   * （房主身边），重新规划出生点会把人瞬间挪到几百格外的"自然出生点"——比多等几秒更糟。
+   * 这里只做三件事：认可当前坐标、补一次落地校正、把脚下的区块刷出来。
+   */
+  private forceJoinSpawn(): void {
+    const x = Math.floor(this.physics.x);
+    const z = Math.floor(this.physics.z);
+    console.warn(
+      `[JOIN_DBG] 8 秒没有落点，就地认可：(${x}, ${this.physics.y.toFixed(1)}, ${z}) ` +
+        `chunks=${this.world.chunks.size} mesh=${this.chunkRenderer.chunkMeshCount} net=${this.net.sessionState}`,
+    );
+    this.spawnPoint = [x + 0.5, this.physics.y, z + 0.5];
+    this.spawnResolved = true;
+    this.requestGroundSettle('join');
+    this.refreshWorld(toChunkCoord(x), toChunkCoord(z), true);
+  }
+
   private refreshLoadingState(): void {
     if (this.loadingCleared) return;
     /*
@@ -5603,6 +5641,16 @@ class App {
         );
         this.abortJoin(t('mp.joinTimeout'));
         return;
+      }
+      /*
+       * 自愈（用户 2026-10-26："提示进入了，但还是卡在生成页"）：
+       * 地图已经能画出来（有网格）却还没有落点 → 就地认可当前位置，别再等落点判定。
+       * 只做一次；30 秒那条兜底仍然是"彻底放弃并退回菜单"。
+       */
+      if (!this.spawnResolved && !this.joinForceSpawnTried && this.chunkRenderer.chunkMeshCount > 0 &&
+          performance.now() - this.joinLoadingSince > JOIN_FORCE_SPAWN_MS) {
+        this.joinForceSpawnTried = true;
+        this.forceJoinSpawn();
       }
     }
     if (!this.spawnResolved) return;
@@ -20067,9 +20115,26 @@ async function boot(): Promise<void> {
      * 卡片上的「开房」（L9）：这个世界就是这一局的房间。
      * 进世界之后面板会带着房间名/口令打开，玩家按一下「开房」即可。
      */
-    onHostWorld: (world, room, password, baseUrl) => {
+    /*
+     * 卡片上的「开房」：**先预检、再建世界**（用户 2026-10-26："开房失败不该能进入世界"）。
+     *
+     * 以前是先把世界建起来、再在后台连——服务器没起 / 地址填错 / 房名被占时，玩家已经
+     * 站在世界里了，只能看到一句看不懂的 `host-taken` 或者静默断开。现在失败就留在对话框里
+     * 把原因写在提示行上（`preflightHost` 只连不发 join，不占房主位）。
+     */
+    onHostWorld: async (world, room, password, baseUrl) => {
+      const blocked = await preflightHost({ baseUrl, room });
+      if (blocked === 'unreachable') {
+        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
+        return t('mp.hostUnreachable');
+      }
+      if (blocked === 'taken') {
+        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
+        return t('say.net.hostTaken');
+      }
       pendingHostRoom = { room, password, baseUrl };
       void startWorld(world);
+      return null;
     },
     /*
      * 开房对话框的地址默认值（用户 2026-10-25）：以前这里写死 `defaultServerUrl()`，

@@ -66,6 +66,7 @@ export const menu = {
   "mp.title": "Multijogador",
   "mp.server": "IP do servidor",
   "mp.serverHint": "ex.: 192.168.1.5 ou mc.example.com — um IP ou um domínio, sem porta",
+  'mp.hostUnreachable': 'Não foi possível abrir a sala: servidor inacessível — confira o endereço e a rede (o servidor está rodando?)',
   "mp.name": "Apelido",
   "mp.room": "Sala",
   "mp.roomHint": "vazio = sala padrão",

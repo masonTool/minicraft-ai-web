@@ -67,6 +67,7 @@ export const menu = {
   "mp.title": "Multijoueur",
   "mp.server": "IP du serveur",
   "mp.serverHint": "ex. 192.168.1.5 ou mc.example.com — une IP ou un domaine, pas de port",
+  'mp.hostUnreachable': 'Impossible d’ouvrir la partie : serveur injoignable — vérifie l’adresse et le réseau (le serveur tourne-t-il ?)',
   "mp.name": "Pseudo",
   "mp.room": "Partie",
   "mp.roomHint": "vide = partie par défaut",

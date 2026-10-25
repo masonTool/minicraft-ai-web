@@ -99,7 +99,14 @@ export interface WorldScreenActions {
    * 返回的应当是**地址栏显示形式**（`displayServerAddress` 已经去过协议头与默认端口）。
    */
   defaultHostAddress?: () => string;
-  onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => void;
+  /**
+   * 卡片上的「开房」（L9）。返回 `string` = 失败原因（文案），对话框留着并把它显示出来；
+   * 返回 `null`/`undefined` = 已受理。
+   *
+   * 为什么改成异步（用户 2026-10-26："开房失败不该能进入世界"）：开房前要先探服务器
+   * 在不在、房名有没有被占；失败时**不能**先把世界建起来再说。
+   */
+  onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => Promise<string | null> | string | null;
 }
 
 /**
@@ -762,8 +769,26 @@ export class WorldScreen {
         return;
       }
       const password = passwordInput.value.trim().slice(0, 32);
-      cleanup();
-      this.actions.onHostWorld?.(world, room, password, base);
+      /*
+       * 开房是异步的（先探服务器在不在），所以**先不关对话框**：
+       * 失败时把原因写在这一行提示上，玩家改完地址可以重试，不用重新进一次对话框。
+       */
+      start.disabled = true;
+      void Promise.resolve(this.actions.onHostWorld?.(world, room, password, base))
+        .then((failure) => {
+          start.disabled = false;
+          if (failure) {
+            showError(failure);
+            addressInput.focus();
+            return;
+          }
+          cleanup();
+        })
+        .catch((error: unknown) => {
+          start.disabled = false;
+          console.error('[host] 开房预检失败', error);
+          showError(t('mp.hostUnreachable'));
+        });
     };
 
     const onKey = (event: KeyboardEvent): void => {

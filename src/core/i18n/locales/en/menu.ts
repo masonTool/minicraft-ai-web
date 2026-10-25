@@ -69,6 +69,7 @@ export const menu = {
   'mp.title': 'Multiplayer',
   'mp.server': 'Server IP',
   'mp.serverHint': 'e.g. 192.168.1.5 or mc.example.com — an IP or a domain, no port needed',
+  'mp.hostUnreachable': 'Could not host: server unreachable — check the address and network (is the server running?)',
   'mp.name': 'Nickname',
   'mp.room': 'Room',
   'mp.roomHint': 'blank = default room',
