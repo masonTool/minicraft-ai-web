@@ -28,6 +28,8 @@ import {
   paletteOf,
   type AppearancePalette,
 } from '../../game/appearance.ts';
+// 常量定义在协议字段的拥有者那边（`RemoteAppearance` 零依赖，反向引入会成环）
+import { REMOTE_LOOK_LENGTH } from './RemoteAppearance.ts';
 
 /**
  * FNV-1a 32 位。
@@ -60,6 +62,9 @@ function pick(hash: number, salt: number, length: number): number {
  * 昵称 → 一套固定的外观。
  *
  * 空名字（老服务端/异常）统一落到默认外观：给它随机反而不稳定。
+ *
+ * ⚠️ 现在只作为**兜底**：真正的皮肤走 `move.look`（玩家自己捏的那套）。
+ * 只有在"对端没带 look"（老客户端/协议降级）时才用它，好处是至少每个人不一样。
  */
 export function remotePaletteFromName(name: string): AppearancePalette {
   const clean = name.trim();
@@ -76,5 +81,39 @@ export function remotePaletteFromName(name: string): AppearancePalette {
     eyeColor: pick(hash, 7, EYE_COLORS.length),
     build: pick(hash, 8, BODY_BUILDS.length),
     frame: pick(hash, 9, BODY_FRAMES.length),
+  });
+}
+
+/**
+ * `move.look` 的字段顺序见 `RemoteAppearance.REMOTE_LOOK_LENGTH` 的注释。
+ *
+ * 存的是**设置里的下标**而不是颜色值：与存档同一套编码（`core/appearance` 的
+ * `AppearanceSettings`），所以"我改了什么"和"队友看到什么"用的是同一份东西；
+ * 颜色表以后扩充也不会让老客户端解析出错误颜色（下标越界由 `paletteOf` 回退默认）。
+ */
+
+/**
+ * `move.look` → 外观。长度不够/不是数组返回 `null`（调用方回退到昵称派生）。
+ *
+ * 每个下标都 `Math.trunc` 并在 `paletteOf` 里夹到合法范围——服务端只做形状收口，
+ * 真正的越界回退在这里，老客户端发什么都不会让渲染层拿到 `undefined`。
+ */
+export function remotePaletteFromLook(look: unknown): AppearancePalette | null {
+  if (!Array.isArray(look) || look.length < REMOTE_LOOK_LENGTH) return null;
+  const at = (index: number): number => {
+    const value = Math.trunc(Number(look[index]));
+    return Number.isFinite(value) ? value : 0;
+  };
+  return paletteOf({
+    skinTone: at(0),
+    shirtColor: at(1),
+    pantsColor: at(2),
+    hairColor: at(3),
+    hairStyle: at(4),
+    beard: at(5),
+    eyes: at(6),
+    eyeColor: at(7),
+    build: at(8),
+    frame: at(9),
   });
 }

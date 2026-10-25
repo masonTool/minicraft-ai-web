@@ -71,7 +71,7 @@
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
 | `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?, worldType?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效 |
-| `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 9 个白名单字段（未知字段丢掉，非正 id 不收）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
+| `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / look[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 10 个白名单字段（未知字段丢掉，非正 id 不收）；`look` 必须**恰好 10 个整数**（`[skinTone, shirtColor, pantsColor, hairColor, hairStyle, beard, eyes, eyeColor, build, frame]`，长度不符整条不下发）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`look` 是玩家自己捏的皮肤下标（与存档同一套编码），老客户端不带时对端回退"按昵称派生"；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
 | `block` | `x, y, z, id, state, dimension, authority?` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`，**房主不做距离闸**：他代发的可能是别人在远处的请求的落地结果） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条。**有房主的房里只有房主能发**（非房主改用 `edit-request`，由房主落地后重发） |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断）, `authority?` | 逐条与 `block` 同口径（含 y / id / state / 距离，房主同样豁免距离闸）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿。**有房主的房里只有房主能发**。`authority` 是**声明**（L8·MS2：房主说"这批是我算的"），服务端**不据此判权**，下行会按 `isHost` 重新标注 |
 | `container`, **有房主时只收房主** | `x, y, z, dimension, slots[], progress?` | 坐标有限；`y ∈ [-64, 320)`；水平距玩家 ≤ 64 格（`联机24`）；`slots` 是数组且 ≤ 27 格；`JSON.stringify(slots)` ≤ 8192 字节 | **不校验目标方块是不是容器**（服务端没有方块表）；内容由客户端 `restoreStacks` 再洗一遍。`progress`（0..1，L8·MS4）只有**房主**带得动：熔炉/酿造的计时只在他那边推进，服务端只转发房主的值并夹到 `[0,1]` |
@@ -156,6 +156,7 @@
 | `password` | 房间口令不对 | 4005 | **不重连**（先问口令） |
 | `host-taken` | 这一局已经有房主 | 4006 | **不重连**（房主不走，重连也还是他） |
 | `host-left` | 房主退出、房间已关闭（L8·MS4） | 4007 | **不重连**（这一局结束了） |
+| `duplicate-name` | 同一房间里已经有同名玩家 | 4008 | **不重连**（不改名重连一万次也还是重名） |
 | `unknown` | 未知 `t` | 不关 | 是 |
 
 客户端的判据是 `code`，**不是关闭码**——两者可以独立演进。

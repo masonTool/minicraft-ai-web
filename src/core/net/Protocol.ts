@@ -29,6 +29,7 @@ export type ProtocolErrorCode =
   | 'version'
   | 'clientId'
   | 'duplicate'
+  | 'duplicate-name'
   | 'host-taken'
   | 'host-left'
   | 'bad-json'
@@ -43,6 +44,8 @@ export function isFatalProtocolError(code: string): boolean {
     code === 'duplicate' ||
     code === 'host-taken' ||
     // `host-left`（L8 · MS4）：房主退出、房间已关闭。重连只会立刻被同一个理由踢回来
-    code === 'host-left'
+    code === 'host-left' ||
+    // `duplicate-name`（本轮）：房间里已经有同名玩家。不改名重连一万次也还是重名
+    code === 'duplicate-name'
   );
 }

@@ -194,9 +194,9 @@ function takeEffectToken(player) {
 }
 
 /**
- * 外观字段收口（联机17）。
+ * 外观字段收口（联机17 / 皮肤同步）。
  *
- * 只认这 9 个白名单字段，值一律规整成数字/布尔——**不让客户端把任意结构塞进广播**，
+ * 只认白名单字段，值一律规整成数字/布尔——**不让客户端把任意结构塞进广播**，
  * 否则一个客户端就能决定别人收到的报文长什么样（内存与带宽都被它牵着走）。
  */
 function readAppearance(message) {
@@ -207,10 +207,23 @@ function readAppearance(message) {
     const id = Math.trunc(Number(value));
     return Number.isFinite(id) && id > 0 ? id : 0;
   };
+  /*
+   * 外观下标（皮肤）：定长 10，多一个都不要（协议契约，见
+   * `src/core/net/RemoteAppearance.ts` 的 `REMOTE_LOOK_LENGTH`）。
+   * 服务端不校验"第几档合法"——那是各端颜色表的长度，服务端没有那张表；
+   * 只做形状收口（整数、长度），越界由客户端的 `paletteOf` 回退默认。
+   */
+  const look = Array.isArray(message.look)
+    ? message.look.slice(0, 10).map((value) => {
+        const n = Math.trunc(Number(value));
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      })
+    : undefined;
   return {
     ...(positive(message.held) ? { held: positive(message.held) } : {}),
     ...(positive(message.offhand) ? { offhand: positive(message.offhand) } : {}),
     ...(armor && armor.some((id) => id > 0) ? { armor } : {}),
+    ...(look && look.length === 10 ? { look } : {}),
     ...(message.sneak ? { sneak: true } : {}),
     ...(message.swing ? { swing: true } : {}),
     ...(message.hurt ? { hurt: true } : {}),
@@ -274,6 +287,8 @@ const CLOSE_PASSWORD = 4005;
 const CLOSE_HOST_TAKEN = 4006;
 /** 房主退出、房间已关闭（L8 · MS4）：客户端不该再重连 */
 const CLOSE_HOST_LEFT = 4007;
+/** 房间内已有同名玩家（本轮）：改名再来，重连没用，所以也是致命码 */
+const CLOSE_DUPLICATE_NAME = 4008;
 
 /**
  * 运行统计（联机29）：入/出字节与消息数。
@@ -830,6 +845,26 @@ wss.on('connection', (socket, request) => {
         }
 
         const name = sanitizeName(message.name);
+        /*
+         * 昵称唯一（用户要求）：同一个房间里不允许两个同名玩家。
+         *
+         * 为什么必须在**进房之前**拒绝而不是进去之后加后缀：房间进出提示、聊天、
+         * 队伍、友伤判定全都按昵称对号，两个"小明"会让"谁在说话、谁能打谁"全部含糊。
+         * 明确让他停在一句"改个名字再来"，比静默改名（他会以为自己叫那个）可控。
+         *
+         * 只比同房：不同房间的两个人同名互不影响。宽限期内重连的人不在 `players` 里，
+         * 所以不会把自己挡在门外。
+         */
+        for (const other of players.values()) {
+          if (other.room === room && other.name === name) {
+            return reject(
+              socket,
+              'duplicate-name',
+              `房间内已有同名玩家「${name}」，请改名后再加入`,
+              CLOSE_DUPLICATE_NAME,
+            );
+          }
+        }
         player = {
           id: grace ? grace.id : nextPlayerId++,
           name,

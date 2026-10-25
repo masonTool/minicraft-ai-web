@@ -61,6 +61,11 @@ export interface NetPlayerState {
   fire?: boolean;
   ride?: boolean;
   sleep?: boolean;
+  /**
+   * 外观下标（本轮：皮肤要真实同步）。字段顺序见 `RemoteAppearance.REMOTE_LOOK_LENGTH`。
+   * 老客户端不带 → 渲染层回退到昵称派生。
+   */
+  look?: number[];
 }
 
 /**

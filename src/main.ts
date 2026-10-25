@@ -422,7 +422,7 @@ import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
 import { REMOTE_SWING_SECONDS, RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
-import { remotePaletteFromName } from './core/net/RemoteSkin.ts';
+import { remotePaletteFromLook, remotePaletteFromName } from './core/net/RemoteSkin.ts';
 import { formatBytesPerSecond } from './core/net/NetStats.ts';
 import { findMobMatch } from './core/net/MobMatch.ts';
 import { RemoteAoiGate } from './core/net/NetAoi.ts';
@@ -1953,11 +1953,17 @@ class App {
       this.chatUntil = performance.now() + 8000;
       void id;
     },
-    onError: (_code, message) => {
-      // 协议级错误进消息栏：只写在调试面板里，手机上（没有 F3）等于没提示
-      this.netStatus = message;
-      this.chat.push(message, 'error');
-      this.chatLine = message;
+    onError: (code, message) => {
+      /*
+       * 协议级错误进消息栏：只写在调试面板里，手机上（没有 F3）等于没提示。
+       *
+       * 重名（本轮）单独走 i18n：服务端那句是中文，非中文玩家看不懂；
+       * 按 code 翻译比按 message 匹配可靠（文案随时会改）。
+       */
+      const text = code === 'duplicate-name' ? t('say.net.duplicateName') : message;
+      this.netStatus = text;
+      this.chat.push(text, 'error');
+      this.chatLine = text;
       this.chatUntil = performance.now() + 8000;
     },
     onStatus: (connected, detail) => {
@@ -2021,6 +2027,12 @@ class App {
     number,
     { pitch: number; walkPhase: number; walkAmount: number; lastX: number; lastZ: number }
   >();
+  /**
+   * 远端玩家当前生效的外观指纹（下标拼成的串）。
+   *
+   * `setAppearance` 会重算材质引用与身体比例，不能每帧调；用指纹只在**真的换了**时调一次。
+   */
+  private readonly remoteLookKeys = new Map<number, string>();
   /** 远程玩家的渲染插值（L4，批次 601）：网络位置离散到达，直接赋值会跳 */
   private readonly remoteSmoothers = new Map<number, RemotePlayerSmoother>();
   /**
@@ -3889,6 +3901,20 @@ class App {
       swing: this.hand.swingProgress > 0,
       ride: this.ridingVehicle !== null,
       sleep: this.sleeping !== null,
+      // 外观（皮肤）：玩家在设置里捏的那套，按**下标**发出去（顺序见
+      // `RemoteAppearance.REMOTE_LOOK_LENGTH`），队友用同一份下标还原
+      look: [
+        this.settings.skinTone,
+        this.settings.shirtColor,
+        this.settings.pantsColor,
+        this.settings.hairColor,
+        this.settings.hairStyle,
+        this.settings.beard,
+        this.settings.eyes,
+        this.settings.eyeColor,
+        this.settings.build,
+        this.settings.frame,
+      ],
     };
   }
 
@@ -3964,6 +3990,16 @@ class App {
       if (pose.walkAmount > 0.01) pose.walkPhase += dt * (5 + speed * 1.4);
 
       const appearance = this.remoteAppearance.get(id);
+      // 皮肤（本轮）：按对端发来的下标还原他自己捏的那套；不带才回退昵称派生。
+      // 指纹判等——`setAppearance` 会重算材质引用与身体比例，不能每帧调。
+      const look = appearance?.state.look ?? null;
+      const lookKey = look === null ? '' : look.join(',');
+      if (this.remoteLookKeys.get(id) !== lookKey) {
+        this.remoteLookKeys.set(id, lookKey);
+        renderer.setAppearance(
+          (look === null ? null : remotePaletteFromLook(look)) ?? remotePaletteFromName(mob.customName ?? ''),
+        );
+      }
       // 主手/副手：`setHeldItem` / `setOffhand` 内部都有判等，逐帧调用不会重建模型
       renderer.setHeldItem(appearance && appearance.state.held > 0 ? appearance.state.held : undefined);
       renderer.setOffhand(appearance && appearance.state.offhand > 0 ? appearance.state.offhand : null);
@@ -3992,6 +4028,7 @@ class App {
     for (const renderer of this.remoteRenderers.values()) renderer.dispose();
     this.remoteRenderers.clear();
     this.remotePoses.clear();
+    this.remoteLookKeys.clear();
   }
 
   /**
@@ -4075,6 +4112,8 @@ class App {
       fire: player.fire,
       ride: player.ride,
       sleep: player.sleep,
+      // 外观（皮肤）：队友自己捏的那套下标；不带就回退昵称派生
+      look: player.look,
     });
     const next = { x: player.x, y: player.y, z: player.z, yaw: player.yaw };
     let mob = this.remotePlayers.get(player.id);
@@ -4286,6 +4325,7 @@ class App {
     this.remoteRenderers.get(id)?.dispose();
     this.remoteRenderers.delete(id);
     this.remotePoses.delete(id);
+    this.remoteLookKeys.delete(id);
     this.remotePlayers.delete(id);
     this.remoteSmoothers.delete(id);
     this.remotePresence.remove(id);

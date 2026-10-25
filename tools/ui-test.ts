@@ -5840,5 +5840,36 @@ console.log('\n[房间进出提示]');
   );
 }
 
+/*
+ * 皮肤同步与昵称唯一（本轮）
+ *
+ * 皮肤不再按昵称猜：`move.look` 把玩家自己捏的那套下标发出去，远端按同一份下标还原；
+ * 昵称则必须唯一——否则聊天/队伍/友伤全靠名字对号，两个"小明"会让判定整体含糊。
+ */
+console.log('\n[皮肤同步与昵称唯一]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const protocolSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  const appearanceSrc = readFileSync(new URL('../src/core/net/RemoteAppearance.ts', import.meta.url), 'utf8');
+  check(
+    '外观按玩家自己的下标发送（move.look，10 个字段）',
+    mainSrc.includes('look: [') && mainSrc.includes('this.settings.skinTone') && appearanceSrc.includes('REMOTE_LOOK_LENGTH = 10'),
+  );
+  check(
+    '远端优先用对端下标，缺了才回退昵称派生',
+    mainSrc.includes('remotePaletteFromLook(look)') && mainSrc.includes('remotePaletteFromName(mob.customName ??'),
+  );
+  check(
+    '外观指纹判等（不逐帧重设材质）',
+    mainSrc.includes('this.remoteLookKeys') && mainSrc.includes('const lookKey ='),
+  );
+  check(
+    '重名是致命错误，且提示走 i18n（不是服务端那句中文）',
+    protocolSrc.includes("'duplicate-name'") &&
+      /code === 'duplicate-name'/.test(protocolSrc) &&
+      mainSrc.includes("t('say.net.duplicateName')"),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

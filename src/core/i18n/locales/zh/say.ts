@@ -85,6 +85,7 @@ export const say = {
   'say.net.playerJoined': '{name} 进入了房间',
   'say.net.playerJoinedHost': '{name} 进入了房间（房主）',
   'say.net.playerLeft': '{name} 离开了房间',
+  'say.net.duplicateName': '房间内已有同名玩家，请改名后再加入',
 
   // ---- 世界事件、进度与天气（T3）
   'say.progress.reconciled': '对了一次背包：已达成 {count} 条进度（详情按 J 看）',

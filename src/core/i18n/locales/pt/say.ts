@@ -80,6 +80,7 @@ export const say = {
   'say.net.playerJoined': '{name} entrou na sala',
   'say.net.playerJoinedHost': '{name} entrou na sala (anfitrião)',
   'say.net.playerLeft': '{name} saiu da sala',
+  'say.net.duplicateName': 'Este nome já está em uso nesta sala — escolha outro',
 
   // ---- Eventos do mundo, progresso e clima (T3)
   'say.progress.reconciled': 'Inventário conferido: {count} conquistas obtidas (detalhes com J)',

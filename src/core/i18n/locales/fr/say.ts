@@ -80,6 +80,7 @@ export const say = {
   'say.net.playerJoined': '{name} a rejoint la partie',
   'say.net.playerJoinedHost': '{name} a rejoint la partie (hôte)',
   'say.net.playerLeft': '{name} a quitté la partie',
+  'say.net.duplicateName': 'Ce nom est déjà utilisé dans la partie — choisis-en un autre',
 
   // ---- Événements du monde, progrès et météo (T3)
   'say.progress.reconciled': 'Inventaire vérifié : {count} succès obtenus (détails avec J)',

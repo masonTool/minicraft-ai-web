@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { remotePaletteFromName } from '../src/core/net/RemoteSkin.ts';
+import { remotePaletteFromLook, remotePaletteFromName } from '../src/core/net/RemoteSkin.ts';
 import { SKIN_TONES, SHIRT_COLORS, PANTS_COLORS, HAIR_COLORS, EYE_COLORS, HAIR_STYLES, BEARD_STYLES, EYE_STYLES, BODY_BUILDS, BODY_FRAMES } from '../src/game/appearance.ts';
 
 describe('remotePaletteFromName', () => {
@@ -55,5 +55,43 @@ describe('remotePaletteFromName', () => {
     const names = Array.from({ length: 40 }, (_, i) => `player${i}`);
     const styles = new Set(names.map((name) => remotePaletteFromName(name).hairStyle));
     expect(styles.size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('remotePaletteFromLook（真实皮肤同步）', () => {
+  it('按对端发来的下标还原成同一套外观', () => {
+    const palette = remotePaletteFromLook([0, 1, 2, 3, 4, 2, 1, 3, 1, 2]);
+    expect(palette).not.toBeNull();
+    expect(palette?.skin).toBe(SKIN_TONES[0]);
+    expect(palette?.shirt).toBe(SHIRT_COLORS[1]);
+    expect(palette?.pants).toBe(PANTS_COLORS[2]);
+    expect(palette?.hair).toBe(HAIR_COLORS[3]);
+    expect(palette?.hairStyle).toBe(HAIR_STYLES[4]);
+    expect(palette?.beard).toBe(BEARD_STYLES[2]);
+    expect(palette?.eyes).toBe(EYE_STYLES[1]);
+    expect(palette?.eye).toBe(EYE_COLORS[3]);
+    expect(palette?.build).toBe(BODY_BUILDS[1]);
+    expect(palette?.frame).toBe(BODY_FRAMES[2]);
+  });
+
+  it('下标越界回退默认档（不让渲染层拿到 undefined）', () => {
+    const palette = remotePaletteFromLook([99, 99, 99, 99, 99, 99, 99, 99, 99, 99]);
+    expect(palette).not.toBeNull();
+    expect(palette?.skin).toBe(SKIN_TONES[1]);
+    expect(palette?.shirt).toBe(SHIRT_COLORS[0]);
+    expect(palette?.build).toBe(BODY_BUILDS[0]);
+  });
+
+  it('长度不够 / 不是数组 → null（调用方回退昵称派生）', () => {
+    expect(remotePaletteFromLook(null)).toBeNull();
+    expect(remotePaletteFromLook([])).toBeNull();
+    expect(remotePaletteFromLook([0, 1, 2])).toBeNull();
+    expect(remotePaletteFromLook('0,1,2,3,4,5,6,7,8,9')).toBeNull();
+  });
+
+  it('坏值（NaN/字符串）落 0 而不是崩', () => {
+    const palette = remotePaletteFromLook([NaN, 'x', 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(palette?.skin).toBe(SKIN_TONES[0]);
+    expect(palette?.shirt).toBe(SHIRT_COLORS[0]);
   });
 });

@@ -80,6 +80,7 @@ export const say = {
   'say.net.playerJoined': '{name} вошёл в комнату',
   'say.net.playerJoinedHost': '{name} вошёл в комнату (хост)',
   'say.net.playerLeft': '{name} вышел из комнаты',
+  'say.net.duplicateName': 'В комнате уже есть игрок с таким именем — выберите другое',
 
   // ---- События мира, прогресс и погода (T3)
   'say.progress.reconciled': 'Инвентарь сверен: получено достижений: {count} (подробности по J)',

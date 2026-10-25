@@ -12,6 +12,15 @@
  * 纯逻辑、不碰渲染与网络，`tests/net-player-state.test.ts` 直接断言。
  */
 
+/**
+ * `move.look` 的长度（**协议契约**，只能追加不能插队）。
+ *
+ * 字段顺序：`[skinTone, shirtColor, pantsColor, hairColor, hairStyle, beard, eyes, eyeColor, build, frame]`，
+ * 与 `AppearanceSettings` 的下标一一对应。定义在这里而不是 `RemoteSkin`，是为了让
+ * 本模块保持"零依赖"（它被纯逻辑测试直接引用）。
+ */
+export const REMOTE_LOOK_LENGTH = 10;
+
 /** 挥一次手亮多久（秒）；与本地攻击动画同一个量级 */
 export const REMOTE_SWING_SECONDS = 0.25;
 /** 受伤闪红亮多久（秒） */
@@ -40,6 +49,12 @@ export interface RemoteAppearanceInput {
   ride?: boolean;
   /** 是否在睡觉 */
   sleep?: boolean;
+  /**
+   * 玩家自己捏的外观下标（`REMOTE_LOOK_LENGTH` 个，顺序见 `RemoteSkin.ts`）。
+   *
+   * 老客户端不带这个字段 → 渲染层回退到"按昵称派生"，至少每个人不一样。
+   */
+  look?: readonly number[];
 }
 
 /** 渲染侧读的状态（计时用"还剩几秒"而不是布尔） */
@@ -47,6 +62,8 @@ export interface RemoteAppearanceState {
   held: number;
   offhand: number;
   armor: [number, number, number, number];
+  /** 对端发来的外观下标；`null` = 没带（回退到昵称派生） */
+  look: number[] | null;
   sneaking: boolean;
   riding: boolean;
   sleeping: boolean;
@@ -68,12 +85,29 @@ function normalizeArmor(raw: readonly number[] | undefined): [number, number, nu
   return out;
 }
 
+/**
+ * 外观下标收口（`move.look`）。
+ *
+ * 长度不够就当作"没带"（老客户端）→ 渲染层回退到昵称派生；多余的部分直接截掉，
+ * 免得以后协议加字段时把不认识的值带进 `paletteOf`。下标越界的回退在 `paletteOf` 里。
+ */
+function normalizeLook(raw: readonly number[] | undefined): number[] | null {
+  if (!Array.isArray(raw) || raw.length < REMOTE_LOOK_LENGTH) return null;
+  const out: number[] = [];
+  for (let i = 0; i < REMOTE_LOOK_LENGTH; i++) {
+    const value = Math.trunc(Number(raw[i]));
+    out.push(Number.isFinite(value) ? value : 0);
+  }
+  return out;
+}
+
 /** 一份"什么都没有"的状态（新玩家进来、或者对端老客户端不带这些字段） */
 export function emptyAppearance(): RemoteAppearanceState {
   return {
     held: 0,
     offhand: 0,
     armor: [0, 0, 0, 0],
+    look: null,
     sneaking: false,
     riding: false,
     sleeping: false,
@@ -106,6 +140,8 @@ export class RemoteAppearance {
     this.current.held = normalizeItemId(input.held);
     this.current.offhand = normalizeItemId(input.offhand);
     this.current.armor = normalizeArmor(input.armor);
+    // 外观（皮肤）：只收前 REMOTE_LOOK_LENGTH 个下标，坏的当"没带"
+    this.current.look = normalizeLook(input.look);
     this.current.sneaking = input.sneak === true;
     this.current.riding = input.ride === true;
     this.current.sleeping = input.sleep === true;
