@@ -368,6 +368,54 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   check('背包提示不再说"点空白处关闭"（那句话本来就是错的）', invHint.length > 0 && !invHint.includes('点空白'));
 }
 
+console.log('\n[PC 端 HUD 按钮层（2026-10-25：与手机同构 + 每颗带键帽）]');
+{
+  const pcSrc = readFileSync(new URL('../src/ui/PcControls.ts', import.meta.url), 'utf8');
+  const mainPc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const htmlPc = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+
+  // ---- ① 手机上有哪几颗，PC 上就得有哪几颗（用户口径："所有的按钮都要显示"）
+  for (const action of ['chat', 'pause', 'view', 'inventory', 'jump', 'flyUp', 'flyDown'] as const) {
+    check(`键位表里有 ${action}`, pcSrc.includes(`  ${action}: `), action);
+  }
+  check(
+    'PC 只在非触摸设备建这一层（手机那边是 TouchControls，两边不共存）',
+    mainPc.includes('this.pc = isTouchDevice() ? null : this.createPcControls();'),
+  );
+
+  // ---- ② 每颗按钮都要挂键帽：`makeButton` 里 append 的那一枚，位置由 CSS 管
+  check(
+    '每颗按钮都挂一枚键帽',
+    pcSrc.includes("chip.className = 'pc-key pc-key-inside';") && pcSrc.includes('button.appendChild(chip);'),
+  );
+  check('键帽文字直接取键名（不翻译，六语言都原样显示）', pcSrc.includes('chip.textContent = key;'));
+
+  // ---- ③ 键帽上写的键必须真的在键盘处理里存在（写错一个字母就是"按了没反应"）
+  for (const code of ["e.code === 'KeyT'", "e.code === 'Escape'", "e.code === 'KeyV'", "e.code === 'KeyE'", "this.keys.has('Space')", "this.keys.has('ShiftLeft')"]) {
+    check(`main.ts 里真的有 ${code} 这条绑定`, mainPc.includes(code), code);
+  }
+
+  // ---- ④ 样式：三个位置（顶部 / 左下 / 右下）+ 快捷栏右侧的背包，与手机同一套坐标
+  for (const [label, needle] of [
+    ['PC 按钮层根节点', '#pc-ui {'],
+    ['顶部三键在屏幕正上方', '#pc-pause { position: absolute; left: 50%; top: calc(36px'],
+    ['界面打开时只收壳', '#pc-ui.ui-off > :is(#pc-pause, #pc-move, #pc-buttons)'],
+    ['键帽样式', '.pc-key {'],
+    ['按钮上的键帽在正上方', '.touch-button > .pc-key {'],
+    ['下降键的键帽挂在下方（否则压在跳跃键上）', '.touch-button.fly-down > .pc-key {'],
+    ['左下 WASD 键位图例（手机那儿是摇杆）', '#pc-move {'],
+    ['右下跳跃簇', '#pc-buttons {'],
+    ['背包键挂在快捷栏右侧', '#pc-hotbar-inventory { right: 0; }'],
+  ] as const) {
+    check(`index.html 里有"${label}"`, htmlPc.includes(needle), needle);
+  }
+
+  // ---- ⑤ 三处生命周期必须一起收放：漏一处就是"按钮留在屏幕上"或"关掉再也不出来"
+  check('面板开合会收放这一层', mainPc.includes('if (this.pc) this.pc.visible = !open;'));
+  check('切飞行会露/收升降键', mainPc.includes('this.pc?.setFlying(value);'));
+  check('App 销毁时一起拆', mainPc.includes('this.pc?.dispose();'));
+}
+
 console.log('\n[手机端物品显示与提示（批次 95 体检）]');
 {
   // ---- ① 图标在高分屏上要清晰：背板按 DPR 放大（1~2 倍）

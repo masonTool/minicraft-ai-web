@@ -1057,6 +1057,39 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
   check('六份 manifest 的描述两两不同（不是都抄英文）', manifestDescriptions.size === 6, `${manifestDescriptions.size} 种`);
 
   /**
+   * 桌面变体（用户要求 2026-10-25："PC 版不需要全屏"）。
+   *
+   * 手机那份靠 `display_override: ["fullscreen"]` 做到"装完打开就是全屏"；
+   * 桌面那份必须反过来——Chromium 桌面装成 App 会照它**全屏启动**，而那不是
+   * Fullscreen API（`exitFullscreen()` 关不掉），游戏里也没有退出入口。
+   * 所以这里钉住：六份桌面变体都在、都不含 `fullscreen`、都不写 `orientation`、
+   * 其余字段与同名手机那份一致（只有这两个字段允许不同，别的漂了就是抄漏）。
+   */
+  const desktopManifestFiles = manifestLocales.map(([, file]) => file.replace(/\.webmanifest$/, '.desktop.webmanifest'));
+  for (const [index, file] of desktopManifestFiles.entries()) {
+    const [code, mobileFile] = manifestLocales[index];
+    let desktop: Record<string, unknown>;
+    try {
+      desktop = JSON.parse(readFileSync(`${manifestDir}/${file}`, 'utf8')) as Record<string, unknown>;
+    } catch {
+      check(`桌面 manifest ${file} 存在且是合法 JSON`, false, '读不到');
+      continue;
+    }
+    const mobile = JSON.parse(readFileSync(`${manifestDir}/${mobileFile}`, 'utf8')) as Record<string, unknown>;
+    check(
+      `桌面 manifest ${file} 的 display_override 只有 standalone（不能有 fullscreen）`,
+      JSON.stringify(desktop.display_override) === '["standalone"]',
+      JSON.stringify(desktop.display_override),
+    );
+    check(`桌面 manifest ${file} 不锁方向（桌面窗口拉成竖条是玩家的自由）`, !('orientation' in desktop));
+    const allowed = new Set(['display_override', 'orientation']);
+    const drifted = Object.keys(mobile).filter((key) => !allowed.has(key) && JSON.stringify(desktop[key]) !== JSON.stringify(mobile[key]));
+    check(`桌面 manifest ${file} 与手机那份只差显示字段`, drifted.length === 0, drifted.join(','));
+    check(`桌面 manifest ${file} 的 lang 与手机那份一致`, desktop.lang === mobile.lang, String(desktop.lang));
+    check(`桌面 manifest ${file} 的语言码对得上`, file === (code === 'zh' ? 'manifest.desktop.webmanifest' : `manifest.${code}.desktop.webmanifest`));
+  }
+
+  /**
    * 品牌名一致性（批次 20261024-0121，用户拍板：这个游戏叫 **Minicraft**）。
    *
    * 品牌名散在五处**互不相干的文件**里（6 份 manifest / `index.html` / 6 份商店文案 / README / 调试 HUD），
