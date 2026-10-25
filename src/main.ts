@@ -842,6 +842,7 @@ import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { PcControls } from './ui/PcControls.ts';
+import { applyManifestLink } from './ui/ManifestLink.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
 import { updateDurabilityBar } from './ui/SlotVisuals.ts';
@@ -19517,15 +19518,13 @@ async function boot(): Promise<void> {
   if (isPseudoLocaleTag(langParam)) setPseudoLocale(true);
   await applyLanguageSetting(languageFromParam(langParam) ?? loadSettings().language);
   // 首屏静态文案与 manifest 都跟语言走（多语言 P3-4 / P5-3）：HTML 是语言无关的静态文件，
-  // 所以解析完语言之后补一次。manifest 现在**六种语言各一份**（`tools/gen-manifests.mjs` 生成，
-  // 六份之间只有 `description` / `lang` 不同），中文那份仍叫 `manifest.webmanifest` ——
+  // 所以解析完语言之后补一次。manifest **每种语言两份**（`tools/gen-manifests.mjs` 生成）：
+  // 手机那份（`display_override: fullscreen` + `orientation: landscape`）与桌面那份
+  // （只 `standalone`、不锁方向）——后者是 2026-10-25 用户要求"PC 版不需要全屏"的落点，
+  // 理由见 `ui/ManifestLink.ts`。中文那份仍叫 `manifest.webmanifest`，
   // 它是 `index.html` 里默认指向的文件，也是已装好的 PWA 正在用的地址，不能改名。
   localizeBootLoading();
-  {
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    const uiLang = getLanguage();
-    if (link) link.href = uiLang === 'zh' ? './manifest.webmanifest' : `./manifest.${uiLang}.webmanifest`;
-  }
+  applyManifestLink(getLanguage(), isTouchDevice());
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;
   // 批次 201：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）

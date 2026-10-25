@@ -146,9 +146,16 @@ export function isStandalone(): boolean {
   return standalone;
 }
 
-/** 装到主屏之后打开：没有浏览器按钮可点，能锁就立刻锁（这个上下文里通常允许）。 */
+/**
+ * 装到主屏之后打开：没有浏览器按钮可点，能锁就立刻锁（这个上下文里通常允许）。
+ *
+ * ⚠️ 用户要求 2026-10-25："PC 版不需要全屏"。桌面同样会命中 `isStandalone()`
+ * （Chromium 桌面装的 App 是 standalone 窗口），所以这里也必须先过 `isCoarsePointer()`——
+ * 否则桌面窗口会被 `screen.orientation.lock('landscape')` 强行转成横向。
+ */
 export function preferInstalledLandscape(): void {
   if (typeof window === 'undefined') return;
+  if (!isCoarsePointer()) return;
   if (isStandalone() || isFullscreen()) lockLandscape();
 }
 

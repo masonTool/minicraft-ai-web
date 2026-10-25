@@ -62,6 +62,11 @@ self.addEventListener('fetch', (event) => {
   // 而且这个坑很隐蔽——玩家看到的是"新方块没出现"，而不是任何报错。几百字节，每次走网络。
   if (url.pathname.endsWith('/core-delta.json')) return;
 
+  // manifest（2026-10-25）：它决定"装成 App 之后是全屏还是普通窗口"（手机一份 / 桌面一份，
+  // 见 `src/ui/ManifestLink.ts`）。被缓存住的话，改完显示模式的老用户要等缓存过期才生效；
+  // 而安装本身一定要联网，走网络不会多付代价。
+  if (url.pathname.endsWith('.webmanifest')) return;
+
   // ---- 导航：网络优先
   if (request.mode === 'navigate') {
     event.respondWith(

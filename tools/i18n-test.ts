@@ -1924,11 +1924,16 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   check('首屏两句有本地化入口', overlaySrc2.includes("t('loading.boot')") && overlaySrc2.includes("t('loading.bootSub')"));
   const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   check('boot() 会调用 localizeBootLoading()', mainSrc2.includes('localizeBootLoading();'));
-  // 多语言 P5-3：六种语言各一份 manifest，文件名按语言码拼（`manifest.${uiLang}.webmanifest`），
+  // 多语言 P5-3：六种语言各一份 manifest，文件名按语言码拼（`manifest.${language}.webmanifest`），
   // 中文那份仍是默认的 `manifest.webmanifest`（已装 PWA 的地址不能改）。
+  // 2026-10-25 起再加一维**设备**：桌面走 `.desktop.webmanifest`（不再 fullscreen），
+  // 拼接规则收在 `ui/ManifestLink.ts`，`boot()` 只调一次 `applyManifestLink()`。
+  const manifestLinkSrc = readFileSync(new URL('../src/ui/ManifestLink.ts', import.meta.url), 'utf8');
+  check('boot() 会按语言 + 设备换 manifest 链接', mainSrc2.includes('applyManifestLink(getLanguage(), isTouchDevice())'));
   check(
-    'boot() 会按语言换 manifest 链接（六语言）',
-    mainSrc2.includes("'./manifest.webmanifest'") && mainSrc2.includes('manifest.${uiLang}.webmanifest'),
+    'manifest 文件名规则：中文不带语言码、桌面加 .desktop',
+    manifestLinkSrc.includes('`./manifest${desktop}.webmanifest`') &&
+      manifestLinkSrc.includes('`./manifest.${language}${desktop}.webmanifest`'),
   );
 
   const zhManifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
