@@ -277,7 +277,20 @@ if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }
 notes.push(`主包 ${mainChunk.name} gzip ${kb(mainChunk.gzip)}（基线 ${kb(MAIN_GZIP_BASELINE)}，余量 ${kb(MAIN_GZIP_BASELINE - mainChunk.gzip)}）`);
-notes.push(`全部 JS 合计 gzip ${kb(totalGzip)}（含 ${gzipped.length - 1} 个懒加载 chunk，仅记录不比基线）`);
+/**
+ * 首屏成本看**合计**，不是单个 chunk。
+ *
+ * 两段式入口之后 `index-*.js` 只是引导器、游戏体在 `main-*.js`，单看任何一块都会漏掉另一半；
+ * 而懒加载 chunk（六语言包等）不在首屏，所以这里按"除懒加载外"的合计算。
+ *
+ * 2026-10-25 实测 1199.1 KB → 取 1215 KB（实测 + 余量）。这个数**包含**拆包重复的那部分，
+ * 将来用共享 chunk 收回来时应当把它调低（显式动作）。
+ */
+const TOTAL_GZIP_BASELINE = 1215 * 1024;
+if (totalGzip > TOTAL_GZIP_BASELINE) {
+  problems.push(`首屏 JS 合计 gzip ${totalGzip} 超过基线 ${TOTAL_GZIP_BASELINE}（+${totalGzip - TOTAL_GZIP_BASELINE} 字节）`);
+}
+notes.push(`首屏 JS 合计 gzip ${kb(totalGzip)}（基线 ${kb(TOTAL_GZIP_BASELINE)}，含 ${gzipped.length - 1} 个懒加载 chunk 不计入）`);
 
 const indexSize = statSync(indexPath).size;
 if (indexSize > Buffer.byteLength(before)) {
