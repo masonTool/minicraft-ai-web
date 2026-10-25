@@ -209,6 +209,21 @@ let server = null;
 let serverOutput = '';
 
 /**
+ * 被验收的服务端进程：默认是仓库里的 JS 版。
+ *
+ * `NET_SERVER_BIN` / `NET_SERVER_ARGS` 可以把它换成任何"同一协议的实现"
+ * （Rust 版的对齐验收就是这么跑的：`bash rust-server/run-net-test.sh`）。
+ * 换实现时**这套断言一条不改**——它验的是协议，不是某种语言。
+ */
+const SERVER_BIN = process.env.NET_SERVER_BIN ?? 'node';
+const SERVER_ARGS = process.env.NET_SERVER_ARGS != null
+  ? process.env.NET_SERVER_ARGS.split(' ').filter(Boolean)
+  // 换了二进制却没给参数 = 那个程序自己就是服务端（Rust 版读环境变量，不收位置参数）
+  : process.env.NET_SERVER_BIN
+    ? []
+    : ['server/index.mjs'];
+
+/**
  * 起一个服务端子进程并等它监听端口。
  *
  * 抽成函数是为了"重启后快照仍在"那条用例（联机13）——它要真的杀一次再起一次。
@@ -220,7 +235,7 @@ let serverOutput = '';
 async function startServer(extraEnv = {}, attempts = 3) {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     serverOutput = '';
-    server = spawn('node', ['server/index.mjs'], {
+    server = spawn(SERVER_BIN, SERVER_ARGS, {
       // GRACE_MS：断线宽限期（联机8）。真实值 30 秒，测试里压到 400ms——否则每条
       // "宽限期过后才清掉落物"的断言都要白等半分钟
       env: {

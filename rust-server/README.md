@@ -1,63 +1,84 @@
 # Rust 版联机服务端（Android / iOS 共用）
 
 > 目标：**一套代码编两端**（Android `cargo-ndk` → `.so`；iOS `staticlib` → `.xcframework`），
-> 让手机能自己当房主。语言选择与取舍见 `docs/` 与 `.continue/DONE.md` 的批次 20261025-1106。
+> 让手机能自己当房主。语言选择与取舍见 `docs/` 与 `.continue/DONE.md`。
 
-## 当前状态（第一阶段）
+## 当前状态
 
-已实现并跑通（`bash run-smoke.sh` **20/0**、`cargo test` **9/0**）：
+**与 JS 版 (`server/index.mjs`) 行为一致**：`tools/net-test.mjs` 的
+**195 条断言 0 失败**（`bash run-net-test.sh`，连跑 3 次稳定）。
 
-- `join`：版本 / clientId 形状 / 同 clientId 在线 / 同房重名 / 一房一房主 / 房间名清洗
-- `welcome`：种子、`isHost`、`hostId`、`timeOfDay`、`weather`、同房玩家、本房方块增量
-- `move` + `player` 广播（50ms 限频、外观白名单、队伍）
-- `block` / `blocks`（房主权威闸、y 范围 / id / state / 距离校验、`authority` 重标）
-- `edit-request` → 只转给房主（没房主回 `no-host`）
-- `chat`（截 200 字、不回给发送者）
-- `room-config`（只收房主 → 广播 `time{snap}` / `weather`）
-- 断线 `leave` 广播 + 释放房主位
-- 每 2 秒 `time` 广播
+| 判据 | 命令 | 结果 |
+| --- | --- | --- |
+| 协议清洗/校验单测 | `cargo test` | 20 / 0 |
+| 端到端冒烟（自起自停） | `bash run-smoke.sh` | 20 / 0 |
+| **全量黑盒断言**（与 JS 版共用） | `bash run-net-test.sh` | **195 / 0** |
 
-## 还没做（按优先级）
+已覆盖：`join`（版本 / clientId / 同 clientId 在线 / 同房重名 / 一房一房主 / 房间名 / 口令 /
+来源白名单 / `world` 按房种子）、`welcome`（种子 + `world` + `isHost`/`hostId` + 时间 + 天气 +
+同房玩家 + 附近方块 + 掉落物 + 容器/牌子/展示框）、`move`+`player`（50ms 限频、外观白名单、
+`look` 形状、队伍）、`block`/`blocks`（房主权威闸、y/id/state/距离校验、`authority` 重标、
+AOI、令牌桶）、`edit-request`（只转房主，没房主回 `no-host`）、`chat`（5/s、不回给自己）、
+`room-config`（只收房主）、`sign`/`frame`/`container`(+`progress`)/`tnt`/`arrow`/`mob-hit`/
+`player-hit`/`entity-snap`/`entity-remove`、`item-spawn`/`item-remove`/`item-take`（first-come
+仲裁）、`sleep` 跳夜、每 2s `time` 广播、天气状态机、断线宽限重连（复用 id / 房主位宽限 /
+到期 `room-closed` + `host-left` + 清掉落物）、心跳 ping、`/healthz` 与 `/rooms`（同端口 HTTP，
+带 CORS）、存档落盘（原子写 + 30s + SIGTERM 补存 + 损坏备份）。
 
-1. **与 `tools/net-test.mjs` 全量对齐**：21 类消息里的实体快照、容器、牌子、展示框、
-   掉落物、箭、TNT、命中；`/rooms` 与 `/healthz`（同端口 HTTP，需要在 upgrade 前分流）
-2. **断线宽限重连**（30s 复用原 id + 房主位宽限）与 `duplicate-name` 之后的清理
-3. **AOI 裁剪**（8 区块 + 同维度）、令牌桶限频、载荷上限
-4. **存档落盘**（原子写 + 30s + 退出补存）与时间/天气状态机
-5. **平台集成**：Android（`cargo-ndk` + JNI + `ForegroundService` + `MulticastLock`）、
-   iOS（`staticlib` + `NSNetService` Bonjour，且只有前台能当房主）
-6. **局域网发现**：Android UDP beacon（组播锁）；iOS 走 Bonjour
+## 模块分工
+
+| 文件 | 管什么 |
+| --- | --- |
+| `src/protocol.rs` | 常量 + 清洗/校验（名字、房间、维度、世界元数据、外观、实体键、改动载荷）+ 单测 |
+| `src/state.rs` | 全部运行时状态（一把 `tokio::Mutex`）、快照生成与读档、天气状态机 |
+| `src/handlers.rs` | 消息分发（一条消息 → 查表 → 广播）与连接关闭/宽限期 |
+| `src/aoi.rs` | 关注范围（8 区块 + 同维度，切比雪夫） |
+| `src/ratelimit.rs` | 令牌桶与"1 秒窗口计数" |
+| `src/store.rs` | 快照原子写 / 损坏备份 / 读档 |
+| `src/main.rs` | 启动、HTTP/WS 同端口分流、定时任务（时间/天气/存档）、心跳、信号 |
 
 ## 怎么跑
 
 ```bash
-# 单测（协议清洗与校验，纯函数）
 export PATH="$HOME/.cargo/bin:$PATH"
-cargo test
-
-# 端到端冒烟：起临时服务端（25199）→ 跑 20 条断言 → 关掉
-bash run-smoke.sh
-
-# 手动跑（默认端口 25187，与服务端 JS 版一致）
-cargo run
+cargo test            # 纯逻辑单测
+bash run-smoke.sh     # 自起临时服务端（25199）→ 20 条断言 → 关掉
+bash run-net-test.sh  # 用 tools/net-test.mjs 的 195 条断言验收（build 后直接跑 Rust 二进制）
+cargo run             # 手动跑（默认 25187，与 JS 版一致）
 ```
 
-冒烟脚本用 Node 23 内置的 `WebSocket`，所以**不需要** `npm ci`。
+环境变量：`PORT`（`0` = 让系统挑，日志里打实际端口）、`SEED`、`GRACE_MS`（断线宽限，默认 30000）、
+`DATA_DIR`（存档目录，默认 `./.data`）、`ROOM_PASSWORD`、`ALLOWED_ORIGINS`（逗号分隔，空 = 不校验）。
+
+冒烟/验收脚本都用 Node 23 内置的 `WebSocket`（`net-test` 走仓库自带的 `ws`），**不需要**额外装东西。
 
 ## 与 JS 版的关系
 
-- **不是替换，是并行实现**：`server/*.mjs` 仍是 Web 端的服务端，行为契约在
-  `docs/NET-PROTOCOL.md`
-- Rust 版的对齐判据是 `tools/net-test.mjs`（裸 WebSocket 客户端，1871 行）——
-  它跑通，才算"行为一致"；冒烟脚本只覆盖核心链路
-- 两边的常量（协议版本 2、端口 25187、房间名规则、名字清洗、距离闸）必须逐条相等；
-  Rust 侧已用 `protocol.rs` 的单测钉住
+- **不是替换，是并行实现**：`server/*.mjs` 仍是 Web 端的服务端，行为契约在 `docs/NET-PROTOCOL.md`
+- 对齐判据就是 `tools/net-test.mjs`（1871 行黑盒断言）。它多了一个 `NET_SERVER_BIN`
+  环境变量用来"换被验收的服务端进程"（默认仍是 `node server/index.mjs`），
+  **断言一条没改**——验的是协议，不是某种语言
+- 两边的常量（协议版本 2、端口 25187、房间名规则、名字清洗、距离闸、限频数值）必须逐条相等
 
 ## 已知坑（写在这里免得下一个人再踩）
 
-- **tokio Mutex 不可重入**：在持 `players` 锁时调 `player_broadcast_of`（它内部再锁一次）
-  会**永久死锁**，不是报错。锁边界必须收在函数内部的 `{}` 块里。
-- **拒绝加入的拒绝帧会被丢掉**：读循环 break 后立刻 `abort` 写任务，客户端就收不到
-  `error` + `close`（表现是"点加入没反应"）。必须先 `drop(tx)` 让写队列排空再收尾。
+- **单锁，不要拆回去**：第一阶段给每张表一把锁，踩到"持 `players` 锁时调一个内部再锁
+  `players` 的函数"——tokio 的 Mutex **不可重入**，那不是报错而是**永久死锁**。
+  现在所有状态在一把锁里，出站走无界 channel（`send` 是同步的），锁边界天然收得干净。
+- **拒绝帧要先排空再收尾**：读循环 break 后立刻 `abort` 写任务，客户端就收不到
+  `error` + `close`（表现是"点加入没反应"）。必须先 `drop(conn)`（它持有 tx 克隆）
+  再等写任务把队列冲完。
+- **64KB 上限自己判**：tungstenite 在 `max_message_size` 超限时直接拆连接（客户端看到
+  1006），不会替我们发 1009。要回 1009 就得在读循环里自己比长度、自己发 `Close(Size)`。
+- **来源白名单要在握手之后拒**：在握手回调里拒（`ErrorResponse`）客户端只看到 HTTP 错误，
+  拿不到 `error.code`。所以先自己读请求头、升级后回 `error{code:'origin'}` + close 4004。
+- **宽限期要带代次**：同一个人"断 → 连 → 再断"会留下两个计时任务，只比 id 的话前一个会
+  在旧截止点把刚连回来的人广播成 `leave`，还会清掉他名下的掉落物。
 - **名字清洗按字符截断**：按字节切会把 emoji 切成半个；`<` `>` 换空格但 `/` 保留
   （与 JS 的 `replace(/[<>]/g,' ')` 一致）。
+
+## 还没做
+
+1. **平台集成**：Android（`cargo-ndk` + JNI + `ForegroundService` + `MulticastLock`）、
+   iOS（`staticlib` + `NSNetService` Bonjour，且只有前台能当房主）
+2. **局域网发现**：Android UDP beacon（组播锁）；iOS 走 Bonjour

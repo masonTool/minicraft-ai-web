@@ -115,11 +115,11 @@ const blockMsg = await guest.wait('blocks', 2000);
 check('从属收到房主的方块广播', Array.isArray(blockMsg?.blocks), JSON.stringify(blockMsg));
 check('方块广播带 authority=true', blockMsg?.authority === true);
 
-// 从属直接改方块 → 被拒（有房主的房里只收房主）
-guest.inbox.length = 0;
+// 从属直接改方块 → 静默丢弃（有房主的房里只收房主；与 JS 版一致，不回 error，
+// 否则从属端每改一次就多一条错误，界面会被刷屏）
+host.inbox.length = 0;
 guest.send({ t: 'blocks', blocks: [[11, 70, 10, 1, 0, 'overworld']] });
-const denied = await guest.wait('error', 2000);
-check('从属直发 blocks 被拒（not-host）', denied?.code === 'not-host', JSON.stringify(denied));
+check('从属直发 blocks 被丢弃（房主收不到）', (await host.wait('blocks', 600)) === null);
 
 // 从属走 edit-request → 房主收到转发
 host.inbox.length = 0;
