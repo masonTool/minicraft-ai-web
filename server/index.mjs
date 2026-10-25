@@ -396,6 +396,17 @@ function scopedKey(room, key) {
  * `edits` **只发这个玩家附近的**（联机14）：跑久了的房间能攒到十几万条，
  * 一次发给手机就是几 MB 的 JSON，而这个玩家真正看得见的可能只有几百格。
  */
+/**
+ * 房间级的游戏模式（用户 2026-10-26："房主改了游戏模式，其他人收不到"）。
+ *
+ * 为什么单独存一份而不是只读 `worldOfRoom().mode`：世界元数据是房主 `join` 那一刻的快照，
+ * 之后用 `/gamemode` 改的都不会回写。晚进来的人要看到**当前**模式，只能靠这份。
+ */
+const roomGameModes = new Map();
+
+/** 客户端能收的模式（与 `src/core/world/GameMode.ts` 的 `GAME_MODES` 同一套字符串） */
+const GAME_MODE_VALUES = ['survival', 'creative', 'adventure', 'spectator'];
+
 function snapshotFor(player) {
   // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
   // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
@@ -419,6 +430,8 @@ function snapshotFor(player) {
      */
     isHost: player.isHost === true,
     hostId: hosts.get(player.room)?.id ?? null,
+    // 这一局**当前**的游戏模式（房主中途改过也认这里，见 `roomGameModes`）
+    gameMode: roomGameModes.get(player.room) ?? world.mode ?? null,
 
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
@@ -1174,6 +1187,11 @@ wss.on('connection', (socket, request) => {
           broadcast({ t: 'weather', kind: weather.kind }, null, player.room);
           applied.weather = weather.kind;
           log(`房主 ${player.name} 把天气改成 ${weather.kind}（房间 ${player.room}）`);
+        }
+        // 游戏模式（用户 2026-10-26）：房主改完，房里所有人都跟着变
+        if (GAME_MODE_VALUES.includes(String(message.gameMode ?? ''))) {
+          roomGameModes.set(player.room, message.gameMode);
+          applied.gameMode = message.gameMode;
         }
         if (Object.keys(applied).length > 0) {
           broadcast({ t: 'room-config', ...applied, by: player.name }, null, player.room);

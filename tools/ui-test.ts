@@ -6226,7 +6226,23 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
     '客户端把它变成一行系统提示（走 i18n）',
     netSrc.includes("case 'room-config': {") && mainSrc4.includes("tp('say.net.roomTime'"),
   );
-  check('天气不在这里重复提示（announceWeather 已经说过一次）', /onRoomConfig: \(config\) => \{[\s\S]{0,400}?if \(config\.timeOfDay === undefined\) return;/.test(mainSrc4));
+  check(
+    '天气不在这里重复提示（announceWeather 已经说过一次）',
+    !mainSrc4.includes('say.net.roomWeather') && mainSrc4.includes("tp('say.net.roomTime'"),
+  );
+
+  // ③ 游戏模式同步（用户 2026-10-26：房主改了模式，其他人收不到）
+  check(
+    '房主改模式后上报房间（带两个守卫：不是应用远端、也不是读档恢复）',
+    /if \(this\.net\.role === 'host' && !this\.applyingRemoteGameMode && !this\.waitingForSaveRestore\)/.test(mainSrc4) &&
+      mainSrc4.includes('this.net.sendRoomConfig({ gameMode: next });'),
+  );
+  check(
+    '收到远端模式时应用（并有回声守卫）',
+    /applyingRemoteGameMode = true;[\s\S]{0,200}?this\.setGameMode\(config\.gameMode\)/.test(mainSrc4),
+  );
+  check('晚进的人从 welcome 采用当前模式（仅从属端）', /this\.net\.role === 'client' && this\.net\.roomGameMode !== null/.test(mainSrc4));
+  check('服务端把模式记在房间上并随 welcome 下发', serverSrc4.includes('roomGameModes.get(player.room) ?? world.mode') && serverSrc4.includes('roomGameModes.set(player.room, message.gameMode)'));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

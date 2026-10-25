@@ -1808,6 +1808,19 @@ try {
      * 时间：服务端每 2s 也会推一条周期 `time`，所以这里接受"snap 广播"或
      * "数值已对齐 0.25"两种通过形态（后者说明周期广播已经跟上新开局时刻）。
      */
+    /*
+     * 游戏模式也要跟着走（用户 2026-10-26："房主改了游戏模式，其他人也没收到"）。
+     */
+    cfgFollower.mailbox.length = 0;
+    await sleep(60);
+    cfgHost.send({ t: 'room-config', gameMode: 'creative' });
+    const modeNotice = await cfgFollower.wait('room-config', 2000);
+    check('房主改模式 → 同房其他人收到 room-config{gameMode}', modeNotice?.gameMode === 'creative', JSON.stringify(modeNotice));
+    const lateCfg = new TestClient('CfgLate', undefined, { room: 'cfgroom' });
+    const lateCfgWelcome = await joinAndWaitWelcome(lateCfg, '晚进的', 4, 70, 4);
+    check('晚进的人从 welcome 拿到当前模式', lateCfgWelcome?.gameMode === 'creative', JSON.stringify(lateCfgWelcome?.gameMode));
+    lateCfg.close();
+
     cfgFollower.mailbox.length = 0;
     cfgHost.mailbox.length = 0;
     await sleep(80);

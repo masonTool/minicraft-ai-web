@@ -1899,8 +1899,21 @@ class App {
    * 远程玩家借用生物渲染器的模型，位置完全由网络驱动，不进 EntityManager（不跑 AI/物理）。
    */
   private readonly net = new NetClient({
-    onWelcome: (seed, selfId, players, edits, items) =>
-      this.onNetWelcome(seed, selfId, players, edits, items),
+    onWelcome: (seed, selfId, players, edits, items) => {
+      this.onNetWelcome(seed, selfId, players, edits, items);
+      /*
+       * 晚进的人要跟当前模式一致（用户 2026-10-26）：房主中途改过模式，世界元数据里
+       * 那份是**开房那一刻**的快照，只有 `welcome.gameMode` 是最新的。
+       */
+      if (this.net.role === 'client' && this.net.roomGameMode !== null) {
+        this.applyingRemoteGameMode = true;
+        try {
+          this.setGameMode(this.net.roomGameMode);
+        } finally {
+          this.applyingRemoteGameMode = false;
+        }
+      }
+    },
     onPlayer: (player) => this.onNetPlayer(player),
     onContainer: (container) => this.onNetContainer(container),
     // 牌子与展示框（联机16）：队友写的字、框里的东西
@@ -1918,6 +1931,21 @@ class App {
      * 打一条提示（"雨停了/下雪了"），这里再说一遍就成了两条。
      */
     onRoomConfig: (config) => {
+      /*
+       * 游戏模式（用户 2026-10-26）：房主改了，全房跟着变。
+       *
+       * `applyingRemoteGameMode` 挡住"收到 → setGameMode → 又上报"的回声；
+       * 非房主本来也不会发（`sendRoomConfig` 里还有一道 `role !== 'host'`）。
+       */
+      if (config.gameMode !== undefined) {
+        this.applyingRemoteGameMode = true;
+        try {
+          this.setGameMode(config.gameMode);
+        } finally {
+          this.applyingRemoteGameMode = false;
+        }
+        this.chat.push(tp('say.net.roomGameMode', { mode: gameModeLabel(config.gameMode) }), 'system');
+      }
       if (config.timeOfDay === undefined) return;
       const minutes = Math.round((((config.timeOfDay % 1) + 1) % 1) * 24 * 60) % (24 * 60);
       const clock = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
@@ -2157,6 +2185,8 @@ class App {
   /** 上次提示"改动没人接"的时刻（限频用） */
   private editRejectedAt = 0;
   private serverSeed: number | null = null;
+  /** 正在应用房主下发的游戏模式（挡住"收到 → setGameMode → 又上报"的回声） */
+  private applyingRemoteGameMode = false;
   /**
    * 用服务端种子重开世界（联机5）。
    *
@@ -18941,6 +18971,15 @@ class App {
     if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
     this.onGameModeChanged?.(next);
+    /*
+     * 房主改模式 = 改这一局的规则（用户 2026-10-26："房主改了游戏模式，其他人也没收到"）。
+     *
+     * 只在**房主**、且不是"应用远端配置"、也不是"读档恢复"时上报：读档恢复会把模式
+     * 改回存档里的值，那不是玩家的决定；应用远端值时上报会形成回声。
+     */
+    if (this.net.role === 'host' && !this.applyingRemoteGameMode && !this.waitingForSaveRestore) {
+      this.net.sendRoomConfig({ gameMode: next });
+    }
     this.hudToast.show(tp('misc.toast.gameMode', { mode: gameModeLabel(next) }));
     // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();

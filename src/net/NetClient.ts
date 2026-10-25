@@ -37,6 +37,12 @@ export interface NetWorldMeta {
   worldType?: string;
 }
 
+/** 协议里的游戏模式（与 `core/world/GameMode.ts` 同一套字符串；这里是网线契约，故意不 import） */
+export type NetGameMode = 'survival' | 'creative' | 'adventure' | 'spectator';
+const NET_GAME_MODES: readonly string[] = ['survival', 'creative', 'adventure', 'spectator'];
+const isNetGameMode = (value: unknown): value is NetGameMode =>
+  typeof value === 'string' && NET_GAME_MODES.includes(value);
+
 export interface NetPlayerState {
   id: number;
   name: string;
@@ -284,7 +290,13 @@ export interface NetHandlers {
    * 只用来打一行系统提示：时间/天气的**权威值**另有 `time{snap}` / `weather` 在收，
    * 这里再应用一次就成了"改一次跳两下"。
    */
-  onRoomConfig?: (config: { timeOfDay?: number; weather?: 'clear' | 'rain' | 'thunder'; by: string }) => void;
+  onRoomConfig?: (config: {
+    timeOfDay?: number;
+    weather?: 'clear' | 'rain' | 'thunder';
+    /** 房主把这一局的模式改了（用户 2026-10-26） */
+    gameMode?: NetGameMode;
+    by: string;
+  }) => void;
   /**
    * 服务端回了 `error`。
    *
@@ -380,6 +392,8 @@ export class NetClient {
    * 从属端不读它——天数由服务端下发。
    */
   localDay = 0;
+  /** 房间当前的游戏模式（`welcome.gameMode`；老服务端没有就是 null） */
+  roomGameMode: NetGameMode | null = null;
   /** 页面卸载的 `bye` 监听只挂一次 */
   private unloadHooked = false;
   /** 上一次发出去的皮肤下标（变化才发，省带宽） */
@@ -594,6 +608,8 @@ export class NetClient {
         }
         this.selfId = Number(message.id ?? 0);
         this.worldSeed = Number(message.seed ?? 0);
+        // 房间**当前**的游戏模式（用户 2026-10-26）：房主中途改过也认这里
+        this.roomGameMode = isNetGameMode(message.gameMode) ? message.gameMode : null;
         /*
          * 房主（L8）：`isHost` 严格等于 `true`；`hostId` 只认正整数（缺字段/0/脏值当"没房主"）。
          * 宽松一次就是两端同时模拟——那种不一致不会报错，只会有人在旁边看半天。
@@ -871,6 +887,7 @@ export class NetClient {
         this.handlers.onRoomConfig?.({
           timeOfDay: Number.isFinite(Number(message.timeOfDay)) ? Number(message.timeOfDay) : undefined,
           weather: kind === 'clear' || kind === 'rain' || kind === 'thunder' ? kind : undefined,
+          gameMode: isNetGameMode(message.gameMode) ? message.gameMode : undefined,
           by: typeof message.by === 'string' ? message.by : '',
         });
         break;
@@ -1048,7 +1065,12 @@ export class NetClient {
    * （服务端会在下一条 `time` 广播里把时间掰回去，天气也永远停在服务端那份）。
    * 从属端不发——命令层已经提示"只有房主能改"，服务端也会拒。
    */
-  sendRoomConfig(config: { timeOfDay?: number; weather?: 'clear' | 'rain' | 'thunder' }): void {
+  sendRoomConfig(config: {
+    timeOfDay?: number;
+    weather?: 'clear' | 'rain' | 'thunder';
+    /** 房主改了游戏模式（用户 2026-10-26）：全房跟着变 */
+    gameMode?: NetGameMode;
+  }): void {
     if (!this.connected) return;
     if (this.role !== 'host') return;
     const payload: Record<string, unknown> = { t: 'room-config' };
@@ -1056,7 +1078,8 @@ export class NetClient {
       payload.timeOfDay = config.timeOfDay;
     }
     if (config.weather !== undefined) payload.weather = config.weather;
-    if (payload.timeOfDay === undefined && payload.weather === undefined) return;
+    if (config.gameMode !== undefined) payload.gameMode = config.gameMode;
+    if (payload.timeOfDay === undefined && payload.weather === undefined && payload.gameMode === undefined) return;
     this.sendRaw(JSON.stringify(payload));
   }
 

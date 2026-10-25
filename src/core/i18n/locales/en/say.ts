@@ -83,6 +83,7 @@ export const say = {
   'say.net.duplicateName': 'Someone in this room already uses that name — please pick another one',
   'say.net.hostTaken': 'That room name already has a host — pick another one',
   'say.net.roomTime': 'The host set the time to {time}',
+  'say.net.roomGameMode': 'The host set the game mode to {mode}',
   'say.net.hostTag': 'Host',
 
   // ---- World events, progress and weather (T3)
