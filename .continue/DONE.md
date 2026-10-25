@@ -9,6 +9,44 @@
 
 ---
 
+## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
+> ③ 房主挖开水边方块后加入方的水不流；④ 改成晴天后雨声还在。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0130
+
+目标（用户 2026-10-26 反馈四条）：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
+③ 房主挖开水边方块后，加入方的水不流；④ 房主把雨改成晴天后，声音还在。
+
+- [x] [联机66] 开房失败要拦住（用户 ①）：`WorldScreen` 的开房对话框等预检结果、失败留在原地显示原因；新增 `src/net/HostPreflight.ts`（只连不发 join）→ 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做了什么：新增 `preflightHost({baseUrl, room})`——只建立一次 WebSocket（3 秒超时，连上即关，**不发 join**），再 best-effort 拉 `/rooms` 看 `hasHost`；返回 `unreachable` / `taken` / `null`。`WorldScreen.onHostWorld` 改成可返回 `Promise<string | null>`，`go()` 等结果：失败 `showError()` 并留在对话框（按钮期间 disabled），成功才 `cleanup()`。`main.ts` 里的回调改成先 `await preflightHost(...)`，`unreachable` → `t('mp.hostUnreachable')`、`taken` → `t('say.net.hostTaken')`，只有通过才 `pendingHostRoom` + `startWorld`
+  - 为什么：以前是"先建世界再后台连"，服务器没起/地址错/房名被占时人已经站在世界里了（建世界还要跑地形生成），失败只能看到一句看不懂的 `host-taken` 或静默断开。**关键约束**：预检不能发 `join`——发完就断会把房主位占进 30 秒宽限期，正式开房反而被 `host-taken` 拒掉
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **6/6**（连不上 / 超时 / 房名被占 / 同名无房主放行 / 拿不到列表放行 / URL 带房名且连上就关）；`npm run test:ui` **1155/0**（新增 3 条结构断言）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过（新增 `mp.hostUnreachable` 六语言）
+  - 批次：20261026-0130
+- [x] [联机67] 雨→晴之后环境音停不下来（用户 ④）：`AudioEngine.setAmbience` 的起伏振荡器改挂独立增益；网络天气改走 `setWeather()` → 验收：`npm run test:ui` 断言
+  - 做了什么：雨声节点链从 `… → out(音量) → master`（起伏 `gust` 直接接在 `out.gain` 上）改成 `… → swell(1±0.045) → out → master`，`gust` 只接 `swell.gain`；`main.ts` 的 `onWeather` 从 `weather.setKind(kind)` 改成 `this.setWeather(kind)`（与本地命令同一条路径，`applyEnvironment()` 一起跑）
+  - 为什么：`AudioParam` 的输入是**加在基础值上**的——`setTargetAtTime(0)` 只把基础值推到 0，叠加的 ±0.045 仍在振，于是晴天里永远有 4.5% 的雨声底噪。而 `weather.setKind()` 只改状态与降水粒子、不跑 `applyEnvironment()`，远程改天气时环境音沿用上一档
+  - 验证：`npm run test:ui` **1155/0**（断言 `gust.connect(gustDepth).connect(swell.gain)` 存在、旧的 `connect(out.gain)` 不存在、`onWeather` 里 `this.setWeather(kind)`）；`npx tsc --noEmit` 干净
+  - 未验：真人耳听"雨停即静"（无头环境听不到声）
+  - 批次：20261026-0130
+- [x] [联机68] 访客第一次加入卡在生成页（用户 ②）：`refreshLoadingState` 加 8 秒"就地认可落点"自愈 → 验收：`npm run test:ui` 断言
+  - 做了什么：新增 `JOIN_FORCE_SPAWN_MS = 8000` 与 `forceJoinSpawn()`——加入来的世界若"已经有区块网格、但 8 秒还没落点"，就地认可当前坐标（`spawnPoint` + `spawnResolved = true`）并补一次 `requestGroundSettle('join')`，只做一次；30 秒那条 `abortJoin` 兜底保持不变；日志统一打 `[JOIN_DBG]`
+  - 为什么：30 秒兜底是"彻底放弃退回菜单"，而玩家看到的是"提示进入了却卡在生成页"。**不能**用 `prepareNewWorldSpawn()` 兜——加入方的人已经在房主身边，重新规划出生点会把人瞬移到几百格外
+  - 验证：`npm run test:ui` **1155/0**（断言常量与 `forceJoinSpawn()` 存在、且自愈里**不**调用 `prepareNewWorldSpawn()`）；`npx tsc --noEmit` 干净
+  - 未验：真机双端加入（没有自动化双端环境；若仍卡，控制台会打 `[JOIN_DBG] 8 秒没有落点，就地认可：…` 带 chunks/mesh/net 三个量）
+  - 批次：20261026-0130
+- [x] [联机69] 加入方的水不流动（用户 ③）：房主挖开水边方块后，房主端水流、加入方水不动。静态读代码已确认"任何方块写入都经 `World.events.onBlockChanged → queueBlockChange → BlockFunnel.sendBlocks`"，但没找到加入方收不到/不生效的确证点 → 需要一次带日志的复现，再加 `[FLUID_DBG]` 计数（房主每秒发出的水方块数 / 加入方每秒应用的水方块数）后定位
+  - 做了什么：真服务端 + 两个真浏览器复现（房主开房、加入方走真实的「加入房间」面板），发现**加入方根本没站在那片地形上**——`loadSaveState()` 是异步的，它用**上一局**存档里的坐标 `teleport` 覆盖了 `alignSpawnToHost()` 刚放好的"房主身边"落点；人不在那片区块里，房主的流体改动只会走 `planRemoteBlock` 的 `buffer` 分支进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。修：`loadSaveState` 对 `mpjoin-` 世界**跳过位置/维度/朝向恢复**（房间里的位置与维度由房主/服务端说了算），背包/进度/规则照旧恢复。另保留 `[FLUID_DBG]` 计数（房主"发出"、加入方"应用"，附 role/net/可写）作为后续自查入口
+  - 为什么：这不是"水"独有的问题——同一个原因会让加入方看不到房主的红石、火焰、作物生长等一切"房主算出来的方块变化"，而画面看上去完全正常。相比"给水加一条专门同步"，把落点改对是唯一的正解；顺带也解释了之前"加入方在奇怪的位置""看不到别人"的零散反馈
+  - 验证：双浏览器对比同一坐标周围 13×9×13 的水方块数——修前 guest 恒为 2、host 从 2 涨到 114（完全不跟）；修后 guest 与 host 同步跟随（1→53 逐拍对齐，滞后约 0.7 秒），`guest 距房主: 0.0 格`；`[FLUID_DBG]` 两侧数字一致（发出 7 / 应用 7）。`npm run test:ui` **1157/0**（+2 条结构断言：`joinWorld` 分支跳过位置恢复、`[FLUID_DBG]` 计数在位）；`npm run test:net` 208/0；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
+  - 批次：20261026-0130
+
 ## 批次 20261026-0110 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26：加入房间与开房，地址栏只收 **IP 或域名**，前后缀自动派生——
@@ -196,45 +234,4 @@
   - 为什么：静默失败最糟——玩家会一直以为"命令坏了"。所以从属端在**命令层**就明确拒绝，服务端再兜一道（脚本/调试接口也可能直接发）。房主标识选名字牌而不是面板，是因为局内看到队友的第一眼就该知道谁能改房间设置。
   - 验证：`npm run test:net` **195 通过 / 0 失败**（新增 3 条：房主改天气被广播、房主改时间收到 snap/已对齐、从属端被拒 `not-host`；条目写的"四条"里"房主标识"由 ui 断言覆盖）；`npm run test:ui` **1087/0**（新增 5 条）；`npm run test:nametag` **149/0**（旧的"样式紧邻"断言改写成"查表结果最终传给 show"）；`test:i18n` 550/0、`audit:i18n` 2947/2947。
   - 批次：20261025-1106
-
-## 批次 20261025-1627 · 2026-10-25 · 会话 937507d0
-
-> 方块表「基线 + 增量」：改方块属性 / 加新方块不必再发 APK；发版时封基线并留台账。
-
-# 队列 · 会话 937507d0458d4277ba340bcb48207050
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1627
-
-目标：**方块表「基线 + 增量」**——让"改方块属性 / 加新方块"不再需要发 APK。
-APK 里放全量快照（不公开），线上放一个只含变化的 JSON（几十字节~几 KB），启动时装快照再套增量。
-
-- [x] [增量1] 增量格式与应用器：新增 `src/core/registry/coreDelta.ts`（`parseCoreDelta` / `applyCoreDelta` / `buildDelta` / `fingerprint`）+ `tools/core-delta-test.ts`（29 条）
-  - 做了什么：JSON 格式 `{version, baseCount, baseFingerprint, patches[], appends[]}`；patch 按**名字**匹配只改给出的字段（不改 id、不改名），append 只能接在末尾（id = 现有长度 + 序号），**删除方块直接拒绝**（会让存档 id 全错位，只能发版）。指纹用 FNV-1a over 名字表，同步实现（启动路径不多一个 await）。
-  - 为什么：id 必须 0..N-1 连续，所以"套错基线"的后果不是报错而是**整张表错位**（存档存的是数字 id）。因此 `baseCount` + `baseFingerprint` 双校验，任一不符就整体拒绝；解析层对不认识的字段也直接抛（增量跨版本存在，悄悄忽略会在语义变化时变成静默错方块）。
-  - 验证：`npm run test:coredelta` **29 通过 / 0 失败**（覆盖：空增量 / 改属性 / 追加顺序 / JSON 往返 / 数量不符 / 指纹不符 / patch 目标不存在 / append 重名 / 删除拒绝 / 版本号 / light 越界 / tiles 长度 / 未知字段 / set 为空 / 指纹稳定与敏感）。
-  - 批次：20261025-1627
-- [x] [增量2] 启动链路接入：`src/core/hostCore.ts` 装完基线后拉 `./core-delta.json` 应用，任何失败只降级
-  - 做了什么：新增 `applyRemoteDelta()`，在 `installBlockTable(解码基线)` 之后调用；`fetch` 404/格式错/指纹错一律 `console.warn` 后返回（用 warn 不用 error：控制台门禁把 error 当失败，而"没有增量"是正常状态）。
-  - 为什么：任何"可选优化"都不该拥有"让游戏起不来"的能力。增量缺失时用基线那 724 个方块照常玩。
-  - 验证：真实浏览器端到端——造一份"改 1 条 + 增 1 条"的增量，`build:app` 后注入 `core.bin` 进 `dist/__host`，Playwright 实测控制台出现 `[boot] 已应用方块增量：改 1 条 / 增 1 条`，**0 条 pageerror**。
-  - 批次：20261025-1627
-- [x] [增量3] 差分工具与发布链：`tools/gen-delta.ts` + `host/core-baseline.bin` + `release-check` 校验并拷进 dist
-  - 做了什么：`npm run gen:delta` 用「App 内置基线」`host/core-baseline.bin`（随仓库提交，40 KB）对比当前 `blockSpecs.ts` 算差分；无变化就不产出（并删掉过期文件，避免被套到新基线上）；`release-check --mode app` 校验 `baseCount` 与基线一致后拷入 `dist/core-delta.json`，web 形态明确跳过。
-  - 为什么：增量必须知道"对谁生效"，所以基线要进仓库——放本机的话换台机器/CI 就算不出来。`baseCount` 不一致意味着这份增量套不到 App 里，发出去等于白发（客户端会拒绝并降级）。
-  - 验证：`npm run gen:delta` 在无改动时输出「无变化，不产出文件」；造改动后 `build:app` 输出「方块增量已放入 dist：改 1 条 / 增 1 条（基线 724，指纹 15eff840）」。
-  - 批次：20261025-1627
-- [x] [增量4] 缓存与文档：`sw.js` / `_headers` 排除 `core-delta.json`；发布手册补"改方块不发版"流程与"什么时候必须发版"
-  - 做了什么：`public/sw.js` 与 `public/_headers` 都把 `/core-delta.json` 排除出缓存（`no-store`）；`docs/DEPLOY-CLOUDFLARE.md` 新增 §5.5「改方块不用发版」，写清三步命令、三种必须发版的情形、两条纪律（id 只能末尾追加、基线必须与 APK 一致）、以及"增量失败只降级不白屏"。
-  - 为什么：增量是**靠每次启动重新拉**才生效的，被 Service Worker 缓存住就等于"更新永远不生效"，而且症状是"新方块没出现"——不报错、极难定位。文档那节则是给未来的自己看：什么时候该发版、基线什么时候换，这两件事记在脑子里必丢。
-  - 验证：`grep -c core-delta public/sw.js public/_headers` 各 1 处；`node .continue/hooks/check.mjs docs` 通过；`npm run check:fast` 全绿。
-  - 批次：20261025-1627
-- [x] [增量5] 基线台账（发 APK 时的"封版"动作）：`host/baseline.json` + `npm run release:baseline`
-  - 做了什么：新增 `tools/promote-baseline.ts`——把候选快照（`.tmp/hostcore/core-v1.bin`）封为基线，拷贝成 `host/core-baseline.bin` 并写台账（`baselineVersion` / `cutAt` / `gitCommit` / `blockCount` / `fingerprint` / `appVersion` / `note`）；内容与现有基线完全一致时**拒绝再封一次**并明确提示"无需封版"。`gen:delta` 把 `baseVersion` 写进增量；`release-check` 新增两条校验：台账与 bin 必须自洽（条数）、增量的 `baseVersion` 必须与台账一致。`host/README.md` 与发布手册 §5.6 补了"发 APK 的完整步骤（① gen:hostcore ② release:baseline ③ 打 APK ④ 之后只发增量）"。
-  - 为什么：基线文件本身就是"哪一版"的锚点，但它是二进制，看不出是哪一版、什么时候封的、对应哪个提交。而"生成候选快照"是天天跑的（内循环也会），"封版"是发布决策——两者必须分开，否则会出现"随手跑一次生成把线上 App 的基线悄悄换掉"，之后所有增量都套不上且查不到是哪次改的。
-  - 验证：首次 `npm run release:baseline -- --app-version=1.0.0 --note=...` 产出 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）；再跑一次输出"基线未变…无需封版"（幂等，不写第二条记录）；`npm run build:app` 输出"基线 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）"且增量缺失时给出"正常状态"；`test:coredelta` 29/0、`check:fast` 181/181、`typecheck:tools` 干净。
-  - 批次：20261025-1627
-
----
 
