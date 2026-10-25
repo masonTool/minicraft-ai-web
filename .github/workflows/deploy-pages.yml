@@ -43,15 +43,17 @@ jobs:
       # 用 ci 而不是 install：严格按 package-lock.json 装，构建可复现
       - run: npm ci
 
-      # ⚠️ 必须用 build:app 而不是 build（批次 20261025-0329 · 宿主6）：
+      # ⚠️ 用 `build:web` 而不是 `build`（批次 20261025-1032 按用户要求调整）：
       #   1. `build` 的 sourcemap 默认是**开的**——发布产物里带 .map 等于把 TypeScript
-      #      原文件一起公开（这套"数据外置 + 门禁"方案会当场作废）；
-      #   2. `build:app` 会跑 `tools/release-check.mjs`，断言"无 .map / 无 core.bin"，
-      #      漏了一样就非零退出，不会静默发出去。
-      # 结果：这里发布的是**宿主专属形态**——浏览器打开只会看到"去应用里玩"的落地页。
-      # 想要能在浏览器里玩的完整版，用 `npm run build:web` 发到另一个域名（见
-      # docs/DEPLOY-CLOUDFLARE.md），**不要**把它发在这个域名上。
-      - run: npm run build:app
+      #      原文件一起公开，必须先关掉（`build:web` 内含 `SOURCEMAP=0`）；
+      #   2. `build:web` 会跑 `tools/release-check.mjs`，断言"无 .map / core.bin 形态正确 /
+      #      首屏体积不超基线"，漏了一样就非零退出，不会静默发出去。
+      #
+      # 结果：GitHub Pages 是**完整前端形态**——`dist/__host/core.bin`（40 KB 方块表）
+      # 会跟着发上去，所以浏览器打开**能直接玩**。
+      # ⚠️ 代价要知道：这个域名上任何人拿得到那 40 KB，等于"门禁"在这个站点上不生效——
+      #    它是**演示 / 可玩版**，正式入口应当是只有 App 能进的站点（用 `build:app` 发到另一个域名）。
+      - run: npm run build:web
 
       # 注入 Pages 的 base path 等环境信息（配合 vite 的 base: './' 生效）
       - uses: actions/configure-pages@v5

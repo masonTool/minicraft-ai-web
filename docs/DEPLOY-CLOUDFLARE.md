@@ -104,11 +104,13 @@ curl -s "https://game.example.com/${ENTRY}.map" | head -c 32            # 期望
 
 ## 6. 与 GitHub Pages 的关系
 
-`.github/workflows/deploy-pages.yml` 仍然存在，但它现在跑的是 **`npm run build:app`**：
+`.github/workflows/deploy-pages.yml` 仍然存在，跑的是 **`npm run build:web`**（按用户要求：
+GitHub Pages 保留"浏览器能直接玩"的形态，当时作为演示/可玩版入口）：
 
-- 之前它跑 `npm run build`，而 `vite.config.ts` 的 `sourcemap` 默认是**开的**——
-  也就是说线上一直挂着 `.map`，等于把全部 TypeScript 源码公开。这一条在本批次一并修掉。
-- 修完之后 GitHub Pages 上就是 A 站形态（浏览器只见落地页）。想在浏览器里玩请用 B 站，
-  **不要**把 B 站的东西发到 GitHub Pages（那是同一个域名，等于把门禁拆了）。
+- 它同样关掉了 sourcemap（`build:web` 内含 `SOURCEMAP=0`），并跑 `release-check` 的断言——
+  以前跑 `npm run build` 时 sourcemap 默认是开的，等于把全部 TypeScript 源码公开，那一处已修掉。
+- 因为它发布的是**完整前端形态**，`dist/__host/core.bin` 会一起上线：这个域名上任何人都能拿到
+  那 40 KB，"只有宿主能玩"的门禁在该域名上**不生效**。正式入口仍然应当是 `build:app` 发到
+  另一个域名的 A 站。
 
 如果之后完全迁到 Cloudflare，删掉 `deploy-pages.yml` 即可，其余不受影响。
