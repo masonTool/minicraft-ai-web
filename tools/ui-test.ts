@@ -5982,6 +5982,10 @@ console.log('\n[加入房间：地址只填 IP]');
     serverUrlSrc.includes('return withDefaultPort(value);') && serverUrlSrc.includes('export function normalizeServerUrl'),
   );
   check(
+    '联机面板仍导出 normalizeServerUrl（搬到 core 之后旧调用点不用改）',
+    mpSrc.includes("export { normalizeServerUrl } from '../core/net/ServerUrl.ts';"),
+  );
+  check(
     '客户端与服务端用同一个默认端口常量（各写一份迟早漂）',
     (() => {
       const client = /DEFAULT_NET_PORT = (\d+)/.exec(serverUrlSrc)?.[1];

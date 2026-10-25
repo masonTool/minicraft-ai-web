@@ -9,6 +9,57 @@
 
 ---
 
+## 批次 20261026-0000 · 2026-10-25 · 会话 0a9f5045
+
+> 用户实测进房间的六条反馈：① 加入后卡在生成页、刷新才进得去；② 天数/时间对不齐；③ 地址框被填成 `ws://` 长串；
+> ④ 开房也要能填服务器地址 + 房名必填 + 重名拒绝；⑤ 提示「clientId 已在线」却能进世界、看不到别人；
+> ⑥ 退出/刷新仍算在线、重连后名字还是旧的、所有人都标「房主」、名字牌被压扁。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261026-0000
+
+目标（用户 2026-10-25 实测进房间，六条反馈）：① 加入后卡在生成页、刷新才进得去；② 天数/时间对不齐；
+③ 加入面板的地址框被填成 `ws://…` 长串（应该只填 IP）；④ 开房时也要能填服务器地址、房名必填、重名要拒；
+⑤ 提示「clientId 已在线」却能进世界、且看不到别人；⑥ 退出/刷新后仍算在线、重连后名字还是旧的、
+所有人名字牌都标「房主」、名字牌被压扁。
+
+- [x] [联机60] 加入时被**致命拒绝**不再进入世界、也不再卡在生成页（用户 ①⑤）：`src/main.ts` 的 `onStatus(false)` 按 `net.sessionState`/致命码分流，未 playable 就退回主菜单并给出理由 → 验收：`tools/net-test.mjs` 新增「重复 clientId 被拒后不会进入世界」+ 本地双浏览器复现脚本（第二个人加入必须停在一句明确提示）
+  - 做了什么：`NetClient` 加 `get closeIsFatal()`；`main.ts` 的 `onStatus(false)` 里，致命断开 → `abortJoin()`——只对 `mpjoin-` 加入来的临时世界生效，`hideLoading()` + `returnToMenu(false)`（不落盘）+ 回菜单后 `multiplayerScreen.open('join')` 把原因摆在面板上；`refreshLoadingState()` 加 30s 看门狗（`JOIN_LOAD_TIMEOUT_MS`，超时打一行 `[JOIN_DBG]` 关键量再走同一条中止）；`onStatus(false)` 开头加 `if (this.disposed) return`（拆到一半不再重载世界）；新增文案 `mp.joinTimeout` 六语言
+  - 为什么：加入来的世界是房主种子的临时副本，**连不上就没意义**——让玩家"进得去但看不到人"比停在明确提示更糟；而"卡在生成页"是同一件事的另一半：`leaveMultiplayerSave()` 会重载世界，遮罩只等 `spawnResolved`，永远等不到就卡死。用 `worldConfig.id.startsWith('mpjoin-')` 当判据比另加一个"这次是加入"的字段可靠（存档 id 就是事实）
+  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` 1122/0（新增 6 条：致命标记存在、主程序接上、只对 mpjoin 生效、不落盘、回菜单开面板、超时兜底）；`npm run audit:i18n` 通过；`npm run check:fast` 161/161 全绿
+  - 未验：双浏览器真机复现（要真实走一遍"世界卡片开房 → 第二个标签页加入"，留给用户实测；若仍卡，`[JOIN_DBG]` 那行日志会打出 spawnResolved / mesh / pending / net 状态）
+  - 批次：20261026-0000
+- [x] [联机61] 天数与时间点一起对齐（用户 ②）：服务端维护权威 `day`，`welcome` 与 `time` 广播都带上，客户端直接采用（不再各算各的）→ 验收：`tests/net-time.test.ts` 新增天数断言；`npm run test:net` 通过
+  - 做了什么：`NetTime` 加纯函数 `dayAt(now, startMs, dayLength, startTime, startDay)`；服务端 `startDay` + `currentDay()`，`welcome` / `time` / 存档快照都带 `day`，睡满跳黎明时 `startDay+1`、房主改时间前先结算当天；房主 `join` 带 `day`（`NetClient.localDay`），服务端**只在某房间第一次开房**时采纳；客户端 `onTime` 收下 `day` → `netDay`，每帧 `applyAuthoritativeDay()` 归位天数与月相（不触发村民补货）；断开时清 `netDay`
+  - 为什么：天数原来只在各端本地累加（跨午夜 +1 / 睡满 +1），晚加入的人从第 0 天开始——月相、`hud.moonDay`、村民补货必然错开；时间已经是服务端权威，天数跟它共用同一套起点参数最省事。房主的天数要带进房间，但重连时客户端那份可能落后，所以只认第一次开房（`doing/0a9f50-decision.md` D1~D3）
+  - 验证：`npx vitest run tests/net-time.test.ts` 16/16（新增 4 组 `dayAt`：起点、跨午夜才 +1、起点时间参与判据、脏参数）；`npm run test:net` **199/0**（+4：welcome 带天数、时间广播带天数、房主 day=42 起算、后加入的人拿到同一天）；`npm run test:ui` 1127/0（+5 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 批次：20261026-0000
+- [x] [联机62] 加入面板的地址框只显示 IP（用户 ③）：`ServerUrl` 加 `displayServerAddress()`（去 `ws://`、默认端口不显示），三处回填（打开面板、最近连接、拆解粘贴地址）都用它 → 验收：`tests/net-server-url.test.ts` 往返断言；浏览器里打开面板默认值形如 `192.168.1.5`
+  - 做了什么：`ServerUrl` 加 `displayServerAddress()`（`ws://host:25187` → `host`；显式非默认端口保留；`wss://` 连协议头一起保留——裸域名会被地址栏补成 `ws://`，等于把 https 部署悄悄改成明文）；`MultiplayerScreen` 四处回填（构造时读存储、`show(intent)`、`splitAddress()`、最近连接 chip）全部走它，存储与连接仍用完整 URL
+  - 为什么：占位文案写着"只填 IP，端口已固定"，回填却塞 `ws://…:25187`，两处口径打架；地址栏该回答的是"那台机器在哪"，协议头与固定端口是实现细节
+  - 验证：`npx vitest run tests/net-server-url.test.ts` 25/25（新增 4 组：默认端口不显示、显式端口保留、`wss` 保留协议头、`normalizeServerUrl(displayServerAddress(u)) === u` 往返）；`npm run test:ui` 断言三处回填都过 `displayServerAddress`
+  - 批次：20261026-0000
+- [x] [联机63] 开房也要填服务器地址、房名必填、重名拒绝（用户 ④）：`WorldScreen` 的开房对话框加地址（默认回填当前 IP）+ 房名必填；`main.ts` 用填的地址而非 `defaultServerUrl()`；服务端房间已被占用时拒绝并提示 → 验收：`npm run test:net`（重名开房被拒）+ 浏览器手点一次
+  - 做了什么：开房对话框加「服务器地址」一行（默认 `defaultHostAddress()` 回填当前地址，口径与加入面板一致：只 IP）；房名空 → 「给房间起个名字」、地址归一化失败 → 「填一下服务器地址」，两句复用同一条 hint 只换颜色（`.world-edit-hint.error`）；`onHostWorld(world, room, password, baseUrl)`，`pendingHostRoom` 带上 `baseUrl`，`startWorld` 里改用 `intent.baseUrl`（不再写死 `defaultServerUrl()`）；`normalizeServerUrl` 从 `ui/MultiplayerScreen` 搬进 `core/net/ServerUrl.ts`（开房与加入共用，UI 之间不必互相 import）；`host-taken` 走 i18n（`say.net.hostTaken`）；新增 4 条文案六语言
+  - 为什么：开房地址以前写死且不可见，服务器在另一台机器时必然连错；房名留空会静默退回默认房间，两拨人各自开房就撞在同一个默认房名上、第二个人只看到服务端的 `host-taken` 中文。重名拒绝本身服务端已有（`tools/net-test.mjs:1303`），这里补的是"玩家能看懂 + 能改"
+  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` **1134/0**（+7 条：地址输入框、房名必填、地址必填、回调带地址、主程序用 `intent.baseUrl`、host-taken 走 i18n、错误样式；另修了三条因归一化搬家而失效的旧断言）；`npm run test:net` 199/0（含既有「第二个房主被拒 host-taken」）；`npm run test:screenshot` 14/0；`npm run audit:i18n` 通过；`npm run check:fast` 161/161 全绿
+  - 未验：浏览器手点开房对话框（看不到世界卡片需要先建世界；版式与「编辑世界」同一套 row，风险低）
+  - 批次：20261026-0000
+- [x] [联机64] 退出/刷新立刻离线（用户 ⑥前半）：页面卸载时发 `bye`，服务端收到即广播 `leave` 并清掉落物，不再留 30s 影子 → 验收：`npm run test:net` 新增「bye 之后同房立刻收到 leave」
+  - 做了什么：`NetClient.sendBye()` + `pagehide`（capture）钩子，`disconnect()` 也先发 bye；服务端新增 `case 'bye'`——收到立刻 `broadcast({t:'leave'})`、标记 `player.farewell`、然后 `socket.close()` 走既有清理路径（玩家表 / 房主提示 / 宽限期登记），宽限期到点检查 `farewell` 不再重复广播
+  - 为什么：光靠 close 分不清"主动退出/刷新"和"网断了"，一律等 30 秒宽限期才广播 leave，队友名单里就挂着幽灵。**掉落物故意不清**：刷新回来还是同一个 id（宽限期还在），清掉等于"刷新一次把自己的东西弄丢"——宽限期到点若真没回来，既有逻辑会清（见 D6）
+  - 验证：`npm run test:net` **203/0**（+4：bye 后同房立刻收到 leave、「没等 400ms 宽限期」`elapsed<300ms`、宽限期到点不重复广播）；`npm run test:ui` 1138/0（+4 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿（net 25.9s + ui）
+  - 批次：20261026-0000
+- [x] [联机65] 重连改名同步 + 房主标识唯一 + 名字牌不再压扁（用户 ⑥后半）：服务端 `player` 广播带 `isHost`、客户端 `hostId` 跟着更新；`MobNameTag` 的 sprite 宽度改为**按实际绘制尺寸**算（不再用估算宽度，长名字不再被横向拉扁）→ 验收：`npm run test:nametag` + `npm run test:net` + 截图对比
+  - 做了什么：服务端 `player` 广播（join 与 move 两条）都带 `isHost: hosts.get(room)?.id === player.id`；`NetPlayerState` 加 `isHost?: boolean`，`NetClient` 在 `player` 事件里跟随（`true` 就记、**只有明确 `false` 且正好是当前那位**才清）、`leave` 与 `room-closed` 时清空、welcome 里 `hostId` 缺失时从玩家表 `isHost` 兜一次；名字牌宽度改成按**实际画出来的背景条像素**换算——`NameTag` 新增 `NAME_TAG_CANVAS_*` 与纯函数 `nameTagWorldWidth(boxPx)`，`MobNameTag.drawName` 记下 `drawnBoxPx`，`show()` 用 `nameTagWorldWidth(this.drawnBoxPx)` 定 scale（不再用按字数估算的 `nameTagWidthFor`）
+  - 为什么：`hostId` 只在 welcome 里下发一次，房主离开/换人之后永远停在旧值——名字牌"该标的没标、不该标的还标着"；而宽度估算（按字数）与字号缩放（按 `measureText` 实测）是两套算法，长名字时字被缩到 12px 而 Sprite 仍横向撑开 → 字被压扁（越长越扁）。现在只保留一个"像素 → 世界"比例，横竖同倍。改名重连那条本来就广播新名字（`player` 带 name），补了断言钉住
+  - 验证：`npm run test:nametag` **153/0**（+4：方形条→方形牌、线性、宽/像素与高/画布高同比例、兜底正宽度；另修 1 条过时断言）；`npm run test:net` **207/0**（+4：房主那条 player 带 isHost=true、从属那条 false、改名重连复用 id、改名后同房收到新名字）；`npm run test:ui` 1141/0（+3 结构断言）；`npm run test:screenshot` 14/0；`npx tsc --noEmit` 干净；`npm run check:fast` 5/5 全绿
+  - 未验：真机肉眼看名字牌比例（无浏览器截图手段直接拍到名字牌，靠"横竖同倍"的比例断言兜住）
+  - 批次：20261026-0000
+
 ## 批次 20261025-2225 · 2026-10-25 · 会话 0a9f5045
 
 > PC 两条（用户 2026-10-25）：**PC 不再进全屏**（含"装成 App"那条绕开代码的路），
@@ -135,61 +186,3 @@ APK 里放全量快照（不公开），线上放一个只含变化的 JSON（�
 
 ---
 
-## 批次 20261025-1032 · 2026-10-25 · 会话 937507d0
-
-> 把方块表（724 块）从线上产物里搬出去：id 表 → 叶子模块、数据 → 独立模块、生产换空桩、入口改两段式。
-
-# 队列 · 会话 937507d0458d4277ba340bcb48207050
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1032
-
-目标（承接 `20261025-0329` 的 `[阻塞]` 条，用户拍板「改描述继续做」）：把 `SPECS`（724 个方块的明文数据）
-从线上 bundle 里真正搬走，使 `build:app` 的主包明显变小。上一批已探明**唯一可行路径**是让依赖单向无环：
-
-```
-blockIds.ts（叶子，纯常量） → blockSpecs.ts（数据） → blocks.ts（消费 + 再导出 ids）
-```
-
-有了这个单向链，`blocks.ts` 就能**静态** import `SPECS`，不再需要顶层 await、也不需要给 178 套测试注入任何东西
-（上一批这两条路都被 esbuild 打包堵死：环 + 动态 import 死锁；`banner` 不参与打包）。
-
-- [x] [宿主7] 抽 `blockIds.ts` 叶子模块：把 `blockSpecs` 依赖的 id 常量（各 `*_ID_START` / `*_ID` 等）从 `blocks.ts` 搬到新文件，
-  - 做了什么：新增叶子模块 `src/core/registry/blockIds.ts`（664 行，含头注释说明依赖方向），把 `blocks.ts` 里 **108 个纯字面量 id 常量**（连同各自的 JSDoc）整块搬过去；`blocks.ts` 用 `export * from './blockIds.ts'` **再导出**（224 个引用方一行没改）+ 显式 `import { … }`（`export *` 不会把名字带进本模块作用域，这是踩到的第一处）。另修 `tools/ui-test.ts`：它 greps `blocks.ts` 源码找 `export const ACTIVATOR_RAIL_ID = 581` 这类断言，改成把两个文件的源码拼起来读（断言关心的是"581 就是激活轨"，不是"这行写在哪个文件"）。
-  - 为什么：这是"让依赖单向无环"的第一步。`blockSpecs.ts` 要读这些 id，而数据反向 import `blocks.ts` 就成环——上一批实测环 + 动态 import 在 esbuild 下**静默死锁**。把这些值搬到不 import 任何东西的叶子里，`blockSpecs` 就能只依赖叶子，`blocks.ts` 再静态 import `SPECS` 也不会崩。
-  - 验证：`npm run check:fast` **149/149 全绿**（含此前失败的 `ui` 套件 1053 条断言）；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与改前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）。
-  - 批次：20261025-1032
-      `blocks.ts` 用 `export * from './blockIds.ts'` 保持 224 个引用方不变 → `npm run check:fast` 全绿，
-      且 `Wood` / `WoodShaped` / 树苗 / 床 / 牌子 / 石变体 id 快照哈希**逐字节不变**（`b3c68cc2d86da217`）
-- [x] [宿主10] **宿主8 的前置**：把"id 派生表与取值函数"搬进 `blockIds.ts`——`EXTRA_WOODS` / `WOOD_IDS` / `Wood` / `woodBlocks` /
-      `WOOD_SHAPED_IDS` / `WoodShaped` / `woodShaped` / 树苗两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS` / `BED_ID_MAP`+`bedId`/`bedIdOfColor`/`BED_IDS` /
-      `SIGN_ID_MAP`+`signId`/`SIGN_IDS` / `STONE_VARIANT_FAMILIES`+分配器+`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS` → `npm run check:fast` 全绿，
-      且 id 快照哈希 `b3c68cc2d86da217` 逐字节不变（它们只依赖 `colors.ts` 与字面量，搬过去也不会成环）
-  - 做了什么：把 30 个声明（215 行）从 `blocks.ts` 整块搬进 `blockIds.ts`——木材族（`EXTRA_WOODS`/`WOOD_IDS`/`WOOD_ID_MAP`/`Wood`/`woodBlocks`）、木制四件（`OAK_WOOD_SHAPED`/`WOOD_SHAPED_IDS`/`WOOD_SHAPED_MAP`/`WoodShaped`/`woodShaped`）、树苗（`SAPLING_TREES` + 两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS`）、床（`BED_ID_MAP`/`bedId`/`bedIdOfColor`/`BED_IDS`）、牌子（`SIGN_ID_MAP`/`signId`/`SIGN_IDS`）、石变体（`StoneVariantKind`/`STONE_VARIANT_FAMILIES`/分配器/`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS`），连同各自的 JSDoc。`blockIds.ts` 只新增两个依赖：`colors.ts`（纯数据）与 `Features.ts` 的 `TreeKind`（纯类型）。
-  - 为什么：`blockSpecs.ts` 要读 `Wood`/`saplingId()`/`stoneVariantId()`，只要它们还在 `blocks.ts` 里，`blockSpecs` 就必须 import `blocks.ts` → 环 → 静态 import 崩（前两次死锁的根）。搬进叶子后依赖变成单向 `blockIds → blockSpecs → blocks`。
-  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与搬前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）；`grep "from './blocks.ts'" blockIds.ts` **为空**（环已断）。
-  - 踩到并修掉的三处：① `EXTRA_WOODS`/`WOOD_ID_MAP`/`STONE_VARIANT_FAMILIES` 等原本是**非导出**的 `const`，搬过去后 `blocks.ts` import 不到——要给它们补 `export`；② 用"名字出现在正文里"来算出 import 清单会被**注释里的名字**骗（`// 见 WOOD_ID_MAP`），必须先剥注释再判；③ `import type {} from ...` 空导入会被 tsc 拒，树类型实参删干净时要连整条语句一起删。
-  - 批次：20261025-1032
-- [x] [宿主8] 搬 `SPECS` 到 `blockSpecs.ts` 并改静态 import：spec 声明 + `baseTiles`/`plantSpec` 等只被 spec 用的辅助函数一起搬，
-  - 做了什么：新建 `src/core/registry/blockSpecs.ts`（2191 行），把 88 个声明 / 2175 行搬过去——全部 `*_SPECS` / `*_SPEC`、聚合用的 `SPECS`，以及只被 spec 用的辅助函数 `baseTiles` / `plantSpec` / `waterPlantSpec` / `coralFanSpec` / `tilesOfDefined`；`blocks.ts` 改成**静态** `import { SPECS } from './blockSpecs.ts'`。搬运过程中 tsc 揪出 6 个还留在环上的 spec 输入表（`SHAPED_PARENTS` / `COPPER_STAGES` / `COPPER_SHAPES` / `CORAL_KINDS` / `STEM_STAGES` / `copperId`），一并搬进 `blockIds.ts`。另修 `SHULKER_BOX_IDS`：它原本从 `COLORED_SHULKER_SPECS` 取 id，改成纯算术（`SHULKER_BOX_COLOR_START + index`），否则数据搬走后运行时拿不到。
-  - 为什么：这是整条路线的核心一步——`blockSpecs.ts` 只 import 叶子（`blockIds.ts`）与纯数据/纯类型模块，**不 import `blocks.ts`**，所以静态 import 不会出现"后定义的常量在 TDZ"的循环初始化。前两次失败（顶层 await 死锁、banner 不打包）都是想绕开这个环，现在环本身没了。
-  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` **逐字节不变**；`test:hostcore` 33/0（724 块往返）、`test:behaviors` 7/0（46 块行为黄金哈希，说明"搬完还是同一张表"）；`grep "from './blocks.ts'" blockSpecs.ts` **为空**（环已断）；`build:fast` 出包成功。体积**未变**——换桩是下一条（`宿主9`）。
-  - 踩到并修掉的两处：① `tests/ui-test.ts` 有两处按源码文本断言 spec 内容（"铁轨复用 flat 薄板"、"霜冰红块注册"），数据搬家后失效——已把 `blockSpecs.ts` 也拼进它读的源码里；② spec 里读的 id 表还有 6 个留在 `blocks.ts`，靠 tsc 的 `Cannot find name` 逐个揪出来再搬，不能只按名字模式扫。
-  - 批次：20261025-1032
-      `buildBlockTable(specs)` 显式收参数 → `npm run test:hostcore`（33）与 `npm run test:behaviors`（7）全绿 + 全量 `npm run check`
-- [x] [宿主9] 生产换桩 + 体积断言：`vite.config.ts` 用 `resolve.alias` 把 `blockSpecs.ts` 换成 `blockSpecs.stub.ts`（`SPECS = []`），
-  - 做了什么：① `blockSpecs.stub.ts`（`SPECS = []`）+ `vite.config.ts` 的 `hostSpecsStub()` 插件（`resolveId` 拦 `./blockSpecs.ts`，**默认开**，`SPECS_STUB=0` 可关）；② `release-check` 的数据探针（`dragon_egg_top` 不得出现在主包；用贴图名而不是方块名，因为后者在物品表/i18n 里也有）；③ **入口改两段式**（`src/boot.ts`：先取 `core.bin` 装表，成功才 `import('./main.ts')`），`index.html` 指向 boot，`main.ts` 自己那段门禁删掉并留注释说明移交原因。
-  - 为什么：桩一打开就暴露"空表下模块初始化期崩"（`TypeError: Cannot read properties of undefined (reading 'id')`），根因是**主包在我装表之前就求值了**。只把桩关掉等于回避，所以直接把入口顺序改正——这也是上一批因"表在两个 chunk 各打一份"回退掉的那条路，现在数据已被桩掉，重复打包的前提消失。
-  - 验证：`SPECS_STUB=1` 下两种形态各跑一遍真实浏览器（Playwright + `vite preview`）——**完整前端形态**：文案"加载中… 正在准备材质与存档"、**0 条 pageerror**；**宿主形态**：文案"请在 Minicraft 应用里游玩…"、**0 条 pageerror**。构建产物：`build:app` 主包 gzip 570.9 KB（`main-*.js`）/ 全部 JS 合计 1199.1 KB，`build:web` 同样通过；探针确认 `dragon_egg_top` 不在主包。`npm run check:fast` **180/180 全绿**。
-  - 如实记一笔：**体积口径变了**——两段式之后 `index-*.js` 只是引导器（140.5 KB 的 HTML + 小入口），游戏体在 `main-*.js`；首屏成本要看合计。实测合计 1199.1 KB 对上一提交的 1196.8 KB **多了 2.3 KB**（拆包带来的共享模块重复），而数据移出只省了约 7 KB gzip —— 净收益接近打平。也就是说**这一步买的是"数据不在包里"，不是"更快"**。条目里原写的"降到 ~690 KB"是按整块估的，实测不成立。
-  - 批次：20261025-1032
-- [x] [发现] **入口必须在装表之后才加载主包**：空表下 `Cannot read properties of undefined (reading 'id')`（证据：`SPECS_STUB=1 npm run build:app` + `vite preview` + Playwright，`main.ts` 末尾的门禁还没跑到就抛）→ 改成两段式入口：`index.html` 指向新的 `src/boot.ts`，先 `fetch('/__host/core.bin')` 并 `installBlockTable()`，成功才 `await import('./main.ts')`；判据 = `SPECS_STUB=1 npm run build:app` 后浏览器只见落地页/进游戏均无 pageerror，且 `npm run check:fast` 与 `test:hostcore` 全绿。⚠️ 上一次做两段式时因"表在两个 chunk 里各打一份"回退过；现在数据已被桩掉，重复打包的前提消失了，可以重做
-  - 做了什么：新增 `src/boot.ts` 作为真入口——`await ensureHostCore()`（取 `core.bin` 并 `installBlockTable`）成功后才 `await import('./main.ts')`；失败时 `hostCore` 已画好整屏提示，直接放弃。`index.html` 的 script 指向 `/src/boot.ts`；`main.ts` 里原来的门禁 IIFE 删掉，改成直接 `void boot()` 并留注释说明"门禁已前移"。
-  - 为什么：动态 import 保证主包的模块体在装表之后才求值，不再依赖"某个模块恰好没在顶层读表"这种运气——这正是空表下 `reading 'id'` 的来源。
-  - 验证：`SPECS_STUB=1 npm run build:web` → 浏览器进游戏、0 pageerror；`SPECS_STUB=1 npm run build:app` → 落地页、0 pageerror（均 Playwright 实测）；`check:fast` 180/180。
-  - 批次：20261025-1032
-      删掉 `bootstrapSpecs` 之类过渡物 → `npm run build:app` 断言主包 gzip 从 716 KB 降到 ~690 KB，
-      且 `dist` 里 grep 不到方块明文；浏览器打开只见落地页
-
----
