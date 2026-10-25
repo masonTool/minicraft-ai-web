@@ -87,6 +87,36 @@ export function withDefaultPort(url: string): string {
 }
 
 /**
+ * 把用户输入的地址收成 `ws://` 或 `wss://`（联机26，2026-10-25 从 `ui/MultiplayerScreen` 搬来）。
+ *
+ * 为什么搬：开房对话框现在也要填地址（用户要求），而 UI 层之间互相 import 会在
+ * "世界列表 → 联机面板" 之间拉出一条没必要的依赖。归一化本来就是地址模块的事。
+ *
+ * 手机上最容易漏的是**协议头与端口**：填 `192.168.1.5` 是常态，所以：
+ *  - 没有协议头 → 补 `ws://`；
+ *  - 没有端口 → 补 `DEFAULT_NET_PORT`（玩家不该关心端口）；
+ *  - 填了 `http(s)://`（很多人记成网页地址）也顺手映射到 `ws(s)://`。
+ * 这几种"猜"都能命中真实意图，而报错只会让人退出去重来。
+ *
+ * 空串、带空白、没有主机名的一律返回 `null`（交给界面提示）。
+ */
+export function normalizeServerUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return null;
+
+  let value = trimmed;
+  if (/^https:\/\//i.test(value)) value = `wss://${value.slice('https://'.length)}`;
+  else if (/^http:\/\//i.test(value)) value = `ws://${value.slice('http://'.length)}`;
+  else if (!/^wss?:\/\//i.test(value)) value = `ws://${value}`;
+
+  // 末尾的斜杠对 WebSocket 没意义（`ws://host:25187/` 与不带斜杠等价），统一去掉
+  value = value.replace(/\/+$/, '');
+  // 主机名必须存在、且不含空白（`ws://foo bar` 这种是粘贴坏了）
+  if (!/^wss?:\/\/[^\s/]+(\/\S*)?$/i.test(value)) return null;
+  return withDefaultPort(value);
+}
+
+/**
  * 反过来：把内部用的 `ws://` 地址**显示成地址栏该有的样子**（用户要求 2026-10-25）。
  *
  * 症状（用户实测）：加入面板的地址框每次打开都被填成 `ws://192.168.1.5:25187`——

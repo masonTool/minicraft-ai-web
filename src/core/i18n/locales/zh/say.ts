@@ -86,6 +86,7 @@ export const say = {
   'say.net.playerJoinedHost': '{name} 进入了房间（房主）',
   'say.net.playerLeft': '{name} 离开了房间',
   'say.net.duplicateName': '房间内已有同名玩家，请改名后再加入',
+  'say.net.hostTaken': '这个房间名已经有房主了，换一个名字再开',
   'say.net.hostTag': '房主',
 
   // ---- 世界事件、进度与天气（T3）

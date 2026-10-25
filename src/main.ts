@@ -411,6 +411,7 @@ import {
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
 import { JOIN_WORLD_PREFIX, summaryFromRoom } from './core/net/JoinWorld.ts';
+import { displayServerAddress } from './core/net/ServerUrl.ts';
 import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
 import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
 import { ENTITY_SNAPSHOT_INTERVAL_MS, encodeEntitySnapshots, type SimEntity } from './game/sim/SimAuthority.ts';
@@ -1987,7 +1988,13 @@ class App {
        * 重名（本轮）单独走 i18n：服务端那句是中文，非中文玩家看不懂；
        * 按 code 翻译比按 message 匹配可靠（文案随时会改）。
        */
-      const text = code === 'duplicate-name' ? t('say.net.duplicateName') : message;
+      const text =
+        code === 'duplicate-name'
+          ? t('say.net.duplicateName')
+          : // 房名被占（用户 2026-10-25：开房撞名要"创建不成功"，而且得说人话）
+            code === 'host-taken'
+            ? t('say.net.hostTaken')
+            : message;
       this.netStatus = text;
       this.chat.push(text, 'error');
       this.chatLine = text;
@@ -19795,7 +19802,8 @@ async function boot(): Promise<void> {
       const intent = pendingHostRoom;
       pendingHostRoom = null;
       app.connectOnline({
-        baseUrl: defaultServerUrl(),
+        // 玩家在开房对话框里填的地址（只填 IP 也行，`normalizeServerUrl` 已补好协议头/端口）
+        baseUrl: intent.baseUrl,
         room: intent.room,
         password: intent.password,
         host: true,
@@ -20015,7 +20023,7 @@ async function boot(): Promise<void> {
    * 从世界卡片「开房」（L9）：房间名与口令先记着，进世界之后填进联机面板。
    * 只放一个意图、不复制世界对象——世界由 `startWorld` 那份说了算。
    */
-  let pendingHostRoom: { room: string; password: string } | null = null;
+  let pendingHostRoom: { room: string; password: string; baseUrl: string } | null = null;
 
   /*
    * 联机面板（L9）：**全局一份**，挂在 `document.body` 上。
@@ -20059,10 +20067,15 @@ async function boot(): Promise<void> {
      * 卡片上的「开房」（L9）：这个世界就是这一局的房间。
      * 进世界之后面板会带着房间名/口令打开，玩家按一下「开房」即可。
      */
-    onHostWorld: (world, room, password) => {
-      pendingHostRoom = { room, password };
+    onHostWorld: (world, room, password, baseUrl) => {
+      pendingHostRoom = { room, password, baseUrl };
       void startWorld(world);
     },
+    /*
+     * 开房对话框的地址默认值（用户 2026-10-25）：以前这里写死 `defaultServerUrl()`，
+     * 玩家看不到也改不了；现在把"当前该连哪台机器"以地址栏口径（只 IP）回填给他。
+     */
+    defaultHostAddress: () => displayServerAddress(defaultServerUrl()),
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */

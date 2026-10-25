@@ -5325,15 +5325,17 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
   );
   check(
     '房间名收口、口令可空',
-    worldSrc.includes('sanitizeRoomName(roomInput.value, defaultRoom)') &&
+    // 2026-10-25：房名先判必填，再走 sanitizeRoomName（空值不再静默退回默认房名）
+    worldSrc.includes('sanitizeRoomName(rawRoom, defaultRoom)') &&
       worldSrc.includes('passwordInput.value.trim().slice(0, 32)'),
   );
   check('世界列表顶部的多人入口是「加入房间…」', worldSrc.includes("join.textContent = t('world.joinRoom');"));
   check(
     '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
-    mainSrc.includes('pendingHostRoom = { room, password };') &&
+    // 2026-10-25：地址也进了意图，用的是玩家在对话框里填的那个（不再写死 defaultServerUrl）
+    mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') &&
       mainSrc.includes('app.connectOnline({') &&
-      mainSrc.includes('baseUrl: defaultServerUrl(),'),
+      mainSrc.includes('baseUrl: intent.baseUrl,'),
   );
 }
 
@@ -5976,7 +5978,8 @@ console.log('\n[加入房间：地址只填 IP]');
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   check(
     '只填 IP 自动补 ws:// 与固定端口',
-    mpSrc.includes('return withDefaultPort(value);') && mpSrc.includes('withDefaultPort'),
+    // 2026-10-25：归一化搬到 `core/net/ServerUrl.ts`（开房对话框也要用它），判据跟着搬
+    serverUrlSrc.includes('return withDefaultPort(value);') && serverUrlSrc.includes('export function normalizeServerUrl'),
   );
   check(
     '客户端与服务端用同一个默认端口常量（各写一份迟早漂）',
@@ -6035,6 +6038,23 @@ console.log('\n[房主标识与房间配置]');
  * 两件事同源：加入来的世界是 `mpjoin-` 的临时副本，连不上就没意义；而致命拒绝之后
  * `leaveMultiplayerSave()` 还会重载一次世界，加载遮罩等不到 `spawnResolved` 就永远卡住。
  */
+console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 实测 ④）]');
+{
+  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check('开房对话框有地址输入框（默认回填当前地址）', worldSrc.includes("addressInput.id = 'world-host-address'") && worldSrc.includes('this.actions.defaultHostAddress?.()'));
+  check('房名必填：空值当场提示，不再静默退回默认房名', worldSrc.includes('const rawRoom = roomInput.value.trim();') && worldSrc.includes("showError(t('world.roomRequired'))"));
+  check('地址必填：归一化失败就提示（只填 IP 也能过）', worldSrc.includes('const base = normalizeServerUrl(addressInput.value);') && worldSrc.includes("showError(t('world.addressRequired'))"));
+  check('回调把地址带出去', worldSrc.includes('onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => void;'));
+  check(
+    '开房用的是玩家填的地址（不再写死 defaultServerUrl）',
+    mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') && mainSrc.includes('baseUrl: intent.baseUrl,'),
+  );
+  check('房名被占走 i18n（不是服务端那句中文）', mainSrc.includes("code === 'host-taken'") && mainSrc.includes("t('say.net.hostTaken')"));
+  check('校验提示复用同一行、只换颜色', htmlSrc.includes('.world-edit-hint.error {'));
+}
+
 console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');

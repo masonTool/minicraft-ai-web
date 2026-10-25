@@ -81,6 +81,7 @@ export const say = {
   'say.net.playerJoinedHost': '{name} entrou na sala (anfitrião)',
   'say.net.playerLeft': '{name} saiu da sala',
   'say.net.duplicateName': 'Este nome já está em uso nesta sala — escolha outro',
+  'say.net.hostTaken': 'Esta sala já tem um anfitrião — escolha outro nome',
   'say.net.hostTag': 'Anfitrião',
 
   // ---- Eventos do mundo, progresso e clima (T3)

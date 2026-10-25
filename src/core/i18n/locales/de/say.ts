@@ -81,6 +81,7 @@ export const say = {
   'say.net.playerJoinedHost': '{name} ist dem Raum beigetreten (Gastgeber)',
   'say.net.playerLeft': '{name} hat den Raum verlassen',
   'say.net.duplicateName': 'Diesen Namen benutzt im Raum schon jemand — bitte wähle einen anderen',
+  'say.net.hostTaken': 'Dieser Raumname hat schon einen Host — bitte wähle einen anderen',
   'say.net.hostTag': 'Host',
 
   // ---- Weltgeschehen, Fortschritt und Wetter (T3)

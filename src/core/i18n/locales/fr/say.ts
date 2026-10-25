@@ -81,6 +81,7 @@ export const say = {
   'say.net.playerJoinedHost': '{name} a rejoint la partie (hôte)',
   'say.net.playerLeft': '{name} a quitté la partie',
   'say.net.duplicateName': 'Ce nom est déjà utilisé dans la partie — choisis-en un autre',
+  'say.net.hostTaken': 'Ce nom de partie a déjà un hôte — choisis-en un autre',
   'say.net.hostTag': 'Hôte',
 
   // ---- Événements du monde, progrès et météo (T3)

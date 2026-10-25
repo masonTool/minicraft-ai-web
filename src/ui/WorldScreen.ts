@@ -27,6 +27,7 @@ import {
 import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
 import { roomFromWorldName, sanitizeRoomName } from '../core/net/RoomName.ts';
+import { normalizeServerUrl } from '../core/net/ServerUrl.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
@@ -91,7 +92,14 @@ export interface WorldScreenActions {
    *
    * 不传就不显示卡片上的「开房」——老的单机构建不必改界面。
    */
-  onHostWorld?: (world: WorldSummary, room: string, password: string) => void;
+  /**
+   * 开房的服务器地址默认值（用户 2026-10-25："开房时也应该让用户去填服务器 IP"）。
+   *
+   * 由主程序给：它才知道当前页面该连哪台机器（https 同源反代 / 局域网默认端口 / `?server=`）。
+   * 返回的应当是**地址栏显示形式**（`displayServerAddress` 已经去过协议头与默认端口）。
+   */
+  defaultHostAddress?: () => string;
+  onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => void;
 }
 
 /**
@@ -661,6 +669,21 @@ export class WorldScreen {
     const form = document.createElement('div');
     form.className = 'world-edit-form';
 
+    /**
+     * 服务器地址（用户 2026-10-25）：开房以前写死 `defaultServerUrl()`，玩家既看不到也改不了——
+     * 在"服务器跑在另一台机器"的场景里必然连错。现在与加入面板同一套口径：只填 IP，
+     * 协议头与默认端口由 `normalizeServerUrl` 补。
+     */
+    const addressInput = document.createElement('input');
+    addressInput.type = 'text';
+    addressInput.className = 'world-input';
+    addressInput.id = 'world-host-address';
+    addressInput.inputMode = 'url';
+    addressInput.autocomplete = 'off';
+    addressInput.spellcheck = false;
+    addressInput.placeholder = t('mp.serverHint');
+    addressInput.value = this.actions.defaultHostAddress?.() ?? '';
+
     const roomInput = document.createElement('input');
     roomInput.type = 'text';
     roomInput.className = 'world-input';
@@ -682,6 +705,11 @@ export class WorldScreen {
     const hint = document.createElement('div');
     hint.className = 'world-edit-hint';
     hint.textContent = t('world.roomHint');
+    // 校验失败的那句话换颜色显示在同一个位置（不新造一块版式，横屏高度紧）
+    const showError = (text: string): void => {
+      hint.classList.add('error');
+      hint.textContent = text;
+    };
 
     const actions = document.createElement('div');
     actions.className = 'world-modal-actions';
@@ -696,6 +724,7 @@ export class WorldScreen {
     actions.append(cancel, start);
 
     form.append(
+      this.makeRow(t('world.serverAddress'), addressInput, null),
       this.makeRow(t('world.roomName'), roomInput, null),
       this.makeRow(t('world.roomPassword'), passwordInput, null),
       hint,
@@ -714,11 +743,27 @@ export class WorldScreen {
     this.editCleanup = cleanup;
 
     const go = (): void => {
-      // 输入框里非法字符直接删（不是玩家的错，但服务端只认这个字符集）
-      const room = sanitizeRoomName(roomInput.value, defaultRoom);
+      /*
+       * 房名必填（用户 2026-10-25）：以前留空会静默退回默认房间，两拨人各自"开房"就撞在
+       * 同一个默认房名上，第二个人得到一句看不懂的 `host-taken`。现在当场说清楚。
+       */
+      const rawRoom = roomInput.value.trim();
+      if (rawRoom.length === 0) {
+        showError(t('world.roomRequired'));
+        roomInput.focus();
+        return;
+      }
+      const room = sanitizeRoomName(rawRoom, defaultRoom);
+      // 地址必填且要能归一化（只填 IP 即可，协议头/端口这里补）
+      const base = normalizeServerUrl(addressInput.value);
+      if (base === null) {
+        showError(t('world.addressRequired'));
+        addressInput.focus();
+        return;
+      }
       const password = passwordInput.value.trim().slice(0, 32);
       cleanup();
-      this.actions.onHostWorld?.(world, room, password);
+      this.actions.onHostWorld?.(world, room, password, base);
     };
 
     const onKey = (event: KeyboardEvent): void => {
