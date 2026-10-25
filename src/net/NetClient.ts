@@ -358,6 +358,8 @@ export class NetClient {
    * 从属端不读它——天数由服务端下发。
    */
   localDay = 0;
+  /** 页面卸载的 `bye` 监听只挂一次 */
+  private unloadHooked = false;
   /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
@@ -451,6 +453,7 @@ export class NetClient {
   }
 
   private open(): void {
+    this.installUnloadHook();
     if (this.socket) {
       this.socket.onopen = null;
       this.socket.onmessage = null;
@@ -1165,7 +1168,46 @@ export class NetClient {
     this.sendRaw(JSON.stringify({ t: 'sleep' }));
   }
 
+  /**
+   * 告诉服务端"我真的走了"（用户 2026-10-25）。
+   *
+   * 为什么不能只靠 close：服务端分不清"主动退出/刷新"与"网断了"，于是一律走 30 秒宽限期
+   * （`GRACE_MS`），队友的玩家列表里就多挂半分钟的幽灵。`bye` 是个明确的意图：服务端收到就
+   * **立刻**广播 `leave`，宽限期仍然保留（刷新回来还是同一个 id、掉落物也还在）。
+   *
+   * 页面卸载时浏览器只保证"已经发出的帧尽量送出去"，所以这里只发不关——
+   * 主动关 socket 反而可能把还没 flush 的帧丢掉。
+   */
+  sendBye(): void {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    try {
+      socket.send(JSON.stringify({ t: 'bye' }));
+    } catch {
+      // 页面正在卸载：发不出去就算了，服务端还有心跳超时兜底
+    }
+  }
+
+  /**
+   * 页面要走（刷新 / 关标签 / 退出）时说一声。
+   *
+   * 用 `pagehide` 而不是 `beforeunload`：后者在手机上经常不触发，而 `pagehide` 在刷新、
+   * 关标签、进 bfcache 时都会发。`{ capture: true }` 是为了不被别人的 `stopPropagation` 挡掉。
+   */
+  private installUnloadHook(): void {
+    if (this.unloadHooked || typeof window === 'undefined') return;
+    this.unloadHooked = true;
+    window.addEventListener('pagehide', () => this.sendBye(), { capture: true });
+  }
+
   disconnect(): void {
+    /*
+     * 主动断开也要先告别（用户 2026-10-25："退出了/刷新了，它还记在在线里面"）。
+     *
+     * 光关 socket 时服务端分不清"主动退出"和"网断了"——一律给 30 秒宽限期，
+     * 于是队友的玩家列表里你还要挂半分钟。`bye` 让"我走了"变成明确的意图。
+     */
+    this.sendBye();
     this.disposed = true;
     this.session.disconnect();
     if (this.reconnectTimer !== null) {

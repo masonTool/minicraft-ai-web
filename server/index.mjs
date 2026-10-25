@@ -1543,6 +1543,24 @@ wss.on('connection', (socket, request) => {
         break;
       }
 
+      /*
+       * 主动告别（用户 2026-10-25）：页面卸载 / 点「断开」时客户端会先发这条。
+       *
+       * 为什么需要：光靠 `close` 分不清"主动退出"和"网断了"，一律走 30 秒宽限期才广播
+       * `leave`——队友的玩家列表里就挂着半分钟的幽灵（用户原话："我都刷新了，它还记在在线里面"）。
+       * 这里立刻广播，宽限期**仍然保留**：刷新/误触在窗口内回来还是同一个 id、掉落物也还在。
+       */
+      case 'bye': {
+        if (!player) return;
+        broadcast({ t: 'leave', id: player.id }, null, player.room);
+        // 关 socket 时那段宽限期到点后不要再广播一次（否则队友会看到两条"离开"）
+        player.farewell = true;
+        log(`${player.name}#${player.id} 主动离开（不等宽限期）`);
+        // 剩下的清理（玩家表 / 房主提示 / 宽限期登记）都交给 close 那条既有路径
+        socket.close();
+        break;
+      }
+
       default:
         send(socket, { t: 'error', code: 'unknown', message: `未知消息类型 ${message.t}` });
     }
@@ -1581,7 +1599,8 @@ wss.on('connection', (socket, request) => {
     };
     grace.timer = setTimeout(() => {
       graces.delete(player.clientId);
-      broadcast({ t: 'leave', id: player.id }, null, player.room);
+      // 主动告别过的（`bye`）已经在当时广播过了，这里只做清理
+      if (!player.farewell) broadcast({ t: 'leave', id: player.id }, null, player.room);
       // 宽限期过完，他名下那些掉落物再没人有权删了（owner 已离线），一并清掉；
       // 否则它们会永远躺在别人的世界里，而本地镜像又不可拾取
       for (const [key, item] of items) {

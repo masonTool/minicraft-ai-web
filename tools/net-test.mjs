@@ -649,6 +649,39 @@ try {
     peek.close();
   }
 
+  // ---------------------------------------------------------------- 主动告别（用户 2026-10-25）
+  /*
+   * 用户原话："我已经退出了，或者说我已经刷新页面了，但是它那个还记在在线里面。"
+   *
+   * 光靠 close 分不清主动退出与断网，服务端一律走 `GRACE_MS`（测试里 400ms）才广播
+   * `leave`。`bye` 就是"我走了"的明确意图：同房的人应当**立刻**收到，而不是等宽限期。
+   */
+  console.log('\n[主动告别：bye 立刻离线]');
+  {
+    const byeRoom = 'byeroom';
+    const byeHost = new TestClient('ByeHost', undefined, { room: byeRoom });
+    const byeHostWelcome = await joinAndWaitWelcome(byeHost, '送别房主', 0, 70, 0);
+    const leaver = new TestClient('Leaver', undefined, { room: byeRoom });
+    const leaverWelcome = await joinAndWaitWelcome(leaver, '要走的乙', 0, 70, 0);
+    check('两人在同一房间里', Boolean(byeHostWelcome && leaverWelcome));
+    const leaverId = leaverWelcome?.id;
+
+    byeHost.mailbox.length = 0;
+    const askedAt = Date.now();
+    leaver.send({ t: 'bye' });
+    const left = await byeHost.wait('leave', 2000);
+    const elapsed = Date.now() - askedAt;
+    check('bye 之后同房立刻收到 leave', left?.id === leaverId, JSON.stringify(left));
+    check('而且没等宽限期（测试里 400ms）', elapsed < 300, `${elapsed}ms`);
+    await leaver.waitClosed();
+    // 宽限期到点不该再补一条（队友会看到两次"离开"）
+    await sleep(600);
+    // 上面 `wait('leave')` 已经把那条取走了，邮箱里再冒出 leave 就是重复广播
+    const extraLeave = byeHost.mailbox.filter((m) => m.t === 'leave' && m.id === leaverId).length;
+    check('宽限期到点不会重复广播 leave', extraLeave === 0, `${extraLeave} 条`);
+    byeHost.close();
+  }
+
   // ---------------------------------------------------------------- 时间权威（联机10）
   console.log('\n[时间权威]');
   {

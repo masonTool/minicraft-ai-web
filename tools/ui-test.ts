@@ -6038,6 +6038,16 @@ console.log('\n[房主标识与房间配置]');
  * 两件事同源：加入来的世界是 `mpjoin-` 的临时副本，连不上就没意义；而致命拒绝之后
  * `leaveMultiplayerSave()` 还会重载一次世界，加载遮罩等不到 `spawnResolved` 就永远卡住。
  */
+console.log('\n[退出/刷新立刻离线（用户 2026-10-25 实测 ⑥前半）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  check('页面卸载时发 bye（pagehide，capture）', netSrc.includes("window.addEventListener('pagehide', () => this.sendBye(), { capture: true })"));
+  check('主动断开也先告别（不是只关 socket）', /disconnect\(\): void \{[\s\S]{0,400}?this\.sendBye\(\);/.test(netSrc));
+  check('服务端收到 bye 立刻广播 leave', /case 'bye': \{[\s\S]{0,300}?broadcast\(\{ t: 'leave'/.test(serverSrc));
+  check('宽限期到点不重复广播（主动告别过就不再报一次）', serverSrc.includes('if (!player.farewell) broadcast({ t: \'leave\''));
+}
+
 console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 实测 ④）]');
 {
   const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
