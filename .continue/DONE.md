@@ -9,6 +9,37 @@
 
 ---
 
+## 批次 20261026-0245 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 三条：① 房主改游戏模式，其他人收不到；② 访客下线，房主看不到也没有消息；
+> ③ 世界界面的按钮太高，新建世界/加入房间要等宽。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0245
+
+目标（用户 2026-10-26）：房主改了**游戏模式**，房里的其他人也要跟着变（现在完全收不到）。
+
+- [x] [联机73] 游戏模式随 `room-config` 同步给全房：房主 `setGameMode` 时上报，服务端记在房间上并广播（含房主），`welcome` 带上当前模式让晚进的人也一致 → 验收：`npm run test:net`（房主发 `room-config{gameMode}` → 全房收到；后加入者的 `welcome.gameMode` 是新值）+ `tools/ui-test.ts` 结构断言
+  - 做了什么：房主 `setGameMode` 后调 `sendRoomConfig({ gameMode })`（两个守卫：`!applyingRemoteGameMode`、`!waitingForSaveRestore`）；服务端新增 `roomGameModes` 房间表，白名单校验后广播 `room-config{gameMode}` 并随 `welcome` 下发当前值；客户端 `onRoomConfig` 应用模式（带回声守卫）并打一行 `say.net.roomGameMode`；晚进的从属端在 `onWelcome` 后采用 `welcome.gameMode`
+  - 为什么：世界元数据里的 `mode` 是房主 `join` 那一刻的快照，之后 `/gamemode` 改的从来不会回写；也从来没有一条"模式变更"的消息。现在模式和时间/天气同走 `room-config`，一份通道三种配置
+  - 验证：`npm run test:net` **212/0**（+2：房主改模式 → 同房收到 `room-config{gameMode:'creative'}`；晚进的人 `welcome.gameMode` 也是 creative）；`npm run test:ui` **1166/0**（+4 结构断言）；`npm run audit:i18n` 通过（新增 `say.net.roomGameMode` 六语言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 未验：真机双端切一次模式（读档恢复/旁观飞行这些副作用没在真机上点过）
+  - 批次：20261026-0245
+- [x] [联机74] 访客退世界时断开联机（用户 2026-10-26）：`App.dispose()` 以前**完全不碰 `net`** → socket 挂着 → 服务端收不到 `bye` 也等不到 `close` → 房主眼里对方永远在线、也没有"离开了"的提示 → 现在 `dispose()` 先 `net.disconnect()`（内部先发 `bye` 再关 socket）
+  - 做了什么：`dispose()` 开头 `this.disposed = true` 之后立刻 `this.net.disconnect()`（`disconnect()` 的首行就是 `sendBye()`）；`tests/net-client-look.test.ts` 补两条：断开时先发 `bye` 再关 socket、没连上时不抛
+  - 为什么：`bye` 分支与服务端"立刻广播 leave"上一批已经做好，缺的一环是**客户端主动断开这条链**——回主菜单/换世界走的是 `dispose()`，它以前只拆渲染与界面，网络对象直接丢掉，浏览器不保证回收，服务端就永远等不到这条连接结束
+  - 验证：`npx vitest run tests/net-client-look.test.ts` **7/7**（+2）；`npm run test:net` 212/0（`bye → leave` 那侧上一批已覆盖）；`npm run test:ui` 1168/0（+2 结构断言：`dispose` 里先断开、离开有系统提示）；`npx tsc --noEmit` 干净
+  - 未验：真机双端（访客点「退出到主菜单」/关标签页，房主那边应当立刻少一个人 + 聊天区一行"某某离开了房间"）
+  - 批次：20261026-0245
+- [x] [界面1] 世界界面入口行压矮 + 两颗按钮等宽（用户 2026-10-26）：`index.html` 的 `.world-list-top` 改成两颗 `flex: 1 1 0`（以前「新建世界」铺满、「加入房间」只有文字宽），PC 上整排压到 36px；列表标题旁的「导入存档」压到 27px
+  - 做了什么：`.world-list-top > .world-primary/.world-secondary` 统一 `flex: 1 1 0; width: auto; max-width: none; text-align: center`；新增 `@media (pointer: fine)` 把这一排压到 `min-height: 36px`、`.world-import` 压到 `padding: 3px 9px; font-size: 11px`；`#world-new-button` 只留"铺满"语义（宽度/高度交给共用规则）
+  - 为什么：两颗按钮是同一层（都是"开始一局"），一宽一窄看着像不同层级；52px 是"手指点得到"的下限，不是 PC 上该有的高度。**判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`**——`touch-mode` 是进世界、建触摸层时才挂的，主菜单阶段手机上也没有这个类，拿它当判据会把手机的 52px 一起压掉
+  - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
+  - 批次：20261026-0245
+
 ## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
@@ -182,56 +213,4 @@
   - 为什么：这类"只有截图能发现"的界面问题（少一颗按钮、键帽写错字母）纯靠人眼看；把"键帽文字 → 键盘绑定"和"桌面 manifest 不许 fullscreen"钉成断言，改坏了当场红
   - 验证：`npm run test:ui` 1115/0（+28）；`npm run test:i18n` 582/0（+30）；`npm run check:fast` 通过
   - 批次：20261025-2225
-
-## 批次 20261025-1106 · 2026-10-25 · 会话 2774879b
-
-> 联机体验六条（用户 2026-10-25 反馈）：远端玩家用真玩家模型、出生点对齐、方块距离闸、
-> 房间进出提示、真实皮肤同步 + 昵称唯一、面板左右栏、地址只填 IP、房主标识与房间配置。
-
-# 队列 · 会话 2774879b4dbf456dbc28defae2b573a8
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1106
-
-目标（用户 2026-10-25 反馈）：联机体验的五处缺口——进房提示、皮肤要真实、昵称唯一、
-加入面板布局与地址输入、房主标识与房间配置权限。
-
-- [x] [联机45] 进房/退房系统消息：服务端在 `join`/`leave` 时广播事件，客户端在左上角消息区
-      打出"已加入房间 / 谁进来了 / 谁离开了"，房主带标识 → `npm run test:net` 新增断言，
-  - 做了什么：客户端的三种提示（`say.net.roomHosted` 自己开房 / `say.net.roomJoined` 加入别人的房 / `say.net.playerJoined` + `playerJoinedHost` 有人进来 / `say.net.playerLeft` 有人离开）已在 `1c3321e9` 落地并补了六语言与 4 条 ui 断言；本轮补上条目要求的另一半：`tools/net-test.mjs` 把"离开"那条从 `await alice.wait('leave')`（只等不验）改成**带内容的断言**——先挂监听再关连接，校验广播里的 `id` 就是离开者。
-  - 为什么：**不新增协议事件**。服务端本来就在 `join` 时广播 `player`、在 `leave` 时广播 `leave`（`server/index.mjs:1501`），客户端据此差集即可；再加一条专用事件等于多一份双方同步的状态，收益为零。所以这条按"用现成广播 + 客户端推导"完成，条目字面的"服务端广播事件"由既有实现满足。
-  - 验证：`npm run test:net` **191 通过 / 0 失败**（新增 `有人离开时服务端广播 leave，且带离开者的 id`，输出里可见）；`npm run test:ui` **1070 通过 / 0 失败**（含"三条都推到左上角消息区（chat.push + chatLine）"）；`npm run typecheck` 干净。
-  - 批次：20261025-1106
-      `npm run test:ui` 钉住"三种提示都会 push 到 chat"
-- [x] [联机46] 皮肤按玩家真实外观同步（不再按昵称派生）：`move` 带外观下标、
-      服务端白名单原样转发、远端用 `paletteOf` 还原 → `npm run test:net` + 新增单测
-  - 做了什么：代码在 `d42a9cb8`（`move.look` 带外观下标 → `Protocol.ts` 放行 → `RemoteAppearance` 解出 → 远端用 `paletteOf` 还原；`RemoteSkin` 的"按昵称派生"降级为**兜底**，只在对端没带 `look` 时用）。本轮补上条目要求的 net 断言：`tools/net-test.mjs` 新增「玩家外观随 move 转发」一节——带 `look` 的转发到对端、长度不足的 `look` 不下发。
-  - 为什么：`look` 存的是**设置里的下标**而不是颜色值，与存档同一套编码；颜色表以后扩充也不会让老客户端解析出错误颜色（越界由 `paletteOf` 回退默认）。这是既有实现的取舍，我复核后确认成立。
-  - 验证：`npm run test:net` **191 通过 / 0 失败**（含外观转发断言与上一轮补的 `leave` 广播断言）；`npx vitest run tests/remote-skin.test.ts` **10/10**；`npm run test:ui` 1070/0。
-  - 批次：20261025-1106
-- [x] [联机47] 同房昵称唯一：重名加入被拒并明确提示"房间内已有同名玩家" → `npm run test:net`
-      新增两条（房主与从属各一次重名），i18n 六语言补齐
-  - 做了什么：代码与断言已在 `d42a9cb8` / `0368c130`（服务端按房判重、`Protocol` 把 `duplicate-name` 标成不可重试、`main.ts:1963` 用 `say.net.duplicateName` 给文案、六语言齐）。本轮补上条目明确要求的**第二条**：`tools/net-test.mjs` 原来只测了"从属端重名被拒"，补了"房里已有同名从属、新来的自称**房主**也必须被拒"。
-  - 为什么：条目写的是"房主与从属各一次"。只测从属侧会漏掉房主那条路径——房主能顶掉别人已经挂出去的名字牌，是比从属重名更难看的一种。补测后确认服务端按房判重、与是否房主无关，**不需要改实现**。
-  - 验证：`npm run test:net` **192 通过 / 0 失败**（新增「房主重名同样被拒（error.code = duplicate-name）」）；`npm run test:ui` 1070/0；六语言 key 齐（`grep -l say.net.duplicateName` = 6）。
-  - 批次：20261025-1106
-- [x] [联机48] 加入房间面板：短屏下房间列表被挤压 → 改左右栏布局 + 列表紧凑化 →
-      `npm run test:ui` 结构断言 + 截图手验（手机横屏）
-  - 做了什么：面板改两栏（左 = 地址/房间/昵称/状态/按钮，右 = 房间列表 + 最近连接），`#mp-rooms` 从固定 96px 改成 `flex: 1 1 auto`（吃掉右列剩余高度、列内自己滚）；列表行紧凑化（字号 11 / 内边距 3 / 允许换行）；`.mp-panel` 宽到 720px；窄屏与竖屏用媒体查询回落成单列（此时列表恢复 96px 限高）；新增 i18n `mp.roomsTitle` 六语言做右列标题。
-  - 为什么：用户原话是"短屏上房间列表显示不出来、被挤压"。根因是单列 + 死高度 96px（约三行），列表永远只有三行可看，填完地址再"找房间"等于没有。分栏后列表拿到整列高度，而**回落单列**是必须的：手机上两栏会把输入框压扁，所以窄屏/竖屏退回旧布局。
-  - 验证：`npm run test:ui` **1078 通过 / 0 失败**（新增 4 条：两栏结构、右列自适应、媒体查询回落、紧凑行；并把旧的"固定三行高度"断言改写成新契约）；`typecheck` 干净；`test:i18n` 550/0、`audit:i18n` 2945/2945。手验（手机横屏截图）留给用户。
-  - 批次：20261025-1106
-- [x] [联机49] 服务器地址只填 IP：端口固定为一个非常用端口常量，输入框只收主机名/IP，
-      自动补 `ws://` 与端口；说明文字保留 → `npm run test:ui` + `vitest tests/net-server-url.test.ts`
-  - 做了什么：新增客户端 `DEFAULT_NET_PORT = 25187` 与服务端 `DEFAULT_PORT = 25187`（两处常量，ui 测试钉住"必须相等"）；`withDefaultPort()` 只写 IP 时补 `ws://` + 端口，**显式端口原样保留**，`wss://` 不补；`normalizeServerUrl()` 收口时接上它；文案 `mp.server` →「服务器 IP」、`mp.serverHint` →「例如 192.168.1.5（只填 IP，端口已固定）」（六语言，说明文字按用户要求保留）；Dockerfile / 部署手册 / 协议文档 / `tools/net-peer.mjs` 的默认端口同步。
-  - 为什么：8787 是 dashboard/脚手架的常见默认口，本机撞车概率不低；25187 在注册端口段且避开 3000/5000/8000/8080/8888/9000/25565。**不补 `wss://` 的端口**是关键：https 站点经反代进来，端口由域名决定（443），硬补会把本来能用的地址弄坏。
-  - 验证：`vitest tests/net-server-url.test.ts` **21/21**（新增 4 条：自动补端口、显式端口保留、wss 不补、常量值）；`npm run test:ui` **1082/0**（新增 4 条）；`npm run test:net` **192/0**（测试用 `PORT=0`，不受影响）；`test:i18n` 550/0、`audit:i18n` 六语言通过。
-  - 批次：20261025-1106
-- [x] [联机50] 房主标识 + 房间配置权限：远端名字牌/房间卡标出房主；房主可改时间与天气
-      （`room-config` 消息 + 服务端应用并广播，从属端被拒） → `npm run test:net` 四条
-  - 做了什么：**先定位"为什么不成功"**——时间和天气都是服务端权威（`time` 每 2s 校正、`weather` 只在切换时广播），`/time` `/weather` 只改本地，下一轮就被覆盖。新增 `room-config`（客户端→服务端，**只收房主**，非房主回 `error.code='not-host'`），服务端应用后按房广播 `time{snap:true}` / `weather{kind}`；`NetClient.sendRoomConfig()` 只有房主发得出去；`App.commandSetTimeOfDay/Weather` 房主本地先应用再上报、从属端双重保险不改；`CommandContext.canChangeWorld()` 让 `/time` `/weather` 在从属端当场回"联机时只有房主能修改时间与天气"（六语言 `cmd.reply.time.host-only`）。房主标识：队友名字牌金色 +「房主 ·」前缀（优先级高于队伍色）。
-  - 为什么：静默失败最糟——玩家会一直以为"命令坏了"。所以从属端在**命令层**就明确拒绝，服务端再兜一道（脚本/调试接口也可能直接发）。房主标识选名字牌而不是面板，是因为局内看到队友的第一眼就该知道谁能改房间设置。
-  - 验证：`npm run test:net` **195 通过 / 0 失败**（新增 3 条：房主改天气被广播、房主改时间收到 snap/已对齐、从属端被拒 `not-host`；条目写的"四条"里"房主标识"由 ui 断言覆盖）；`npm run test:ui` **1087/0**（新增 5 条）；`npm run test:nametag` **149/0**（旧的"样式紧邻"断言改写成"查表结果最终传给 show"）；`test:i18n` 550/0、`audit:i18n` 2947/2947。
-  - 批次：20261025-1106
 
