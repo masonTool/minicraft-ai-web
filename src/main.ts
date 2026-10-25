@@ -18522,6 +18522,15 @@ class App {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    /*
+     * 先断开联机（用户 2026-10-26："访客下线，房主这边看不到、也没有消息"）。
+     *
+     * `dispose()` 以前**完全没碰 `net`**：回主菜单/换世界时那个 WebSocket 没人关，
+     * 浏览器会一直挂着它（GC 也不保证回收），服务端既收不到 `bye` 也收不到 `close`，
+     * 于是房里其他人眼里你永远在线——名字牌还在、名单还在，也不会有"谁离开了"的提示。
+     * `disconnect()` 会先发 `bye`（服务端收到立刻广播 `leave`）再关 socket。
+     */
+    this.net.disconnect();
 
     if (this.pauseAfterFullscreenTimer !== null) {
       window.clearTimeout(this.pauseAfterFullscreenTimer);

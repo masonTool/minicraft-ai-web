@@ -63,3 +63,36 @@ describe('NetClient.tick 的 move 报文', () => {
     expect(moves()[0]!.look).toBeUndefined();
   });
 });
+
+/*
+ * 下线要说一声（用户 2026-10-26："访客下线，房主这边看不到、也没有消息"）。
+ *
+ * 服务端的 `bye` 分支早就有了，缺的是**客户端主动断开这条链**：`App.dispose()` 以前
+ * 根本不碰 `net`，回主菜单时 socket 没人关——服务端既收不到 `bye` 也等不到 `close`，
+ * 房里其他人眼里你永远在线。这里钉住 `disconnect()` 的报文顺序。
+ */
+describe('NetClient.disconnect', () => {
+  it('先发 bye 再关 socket', () => {
+    const net = new NetClient({ onStatus: () => {} } as never);
+    const frames: Array<{ t?: string }> = [];
+    let closed = false;
+    (net as unknown as { socket: unknown }).socket = {
+      readyState: 1,
+      send: (payload: string) => frames.push(JSON.parse(payload) as { t?: string }),
+      close: () => {
+        closed = true;
+      },
+    };
+    (net as unknown as { selfId: number }).selfId = 3;
+
+    net.disconnect();
+
+    expect(frames.map((f) => f.t)).toEqual(['bye']);
+    expect(closed).toBe(true);
+  });
+
+  it('没连上时什么都不发（也不抛）', () => {
+    const net = new NetClient({ onStatus: () => {} } as never);
+    expect(() => net.disconnect()).not.toThrow();
+  });
+});

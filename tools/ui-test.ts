@@ -6242,6 +6242,15 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
     /applyingRemoteGameMode = true;[\s\S]{0,200}?this\.setGameMode\(config\.gameMode\)/.test(mainSrc4),
   );
   check('晚进的人从 welcome 采用当前模式（仅从属端）', /this\.net\.role === 'client' && this\.net\.roomGameMode !== null/.test(mainSrc4));
+  /*
+   * 下线要说一声（用户 2026-10-26："访客下线，房主看不到、也没消息"）。
+   * `dispose()` 以前完全不碰 net，回主菜单时 socket 挂着 → 服务端既收不到 bye 也等不到 close。
+   */
+  check(
+    '退世界时先断开联机（发 bye，服务端才会立刻广播 leave）',
+    /dispose\(\): void \{[\s\S]{0,300}?this\.disposed = true;[\s\S]{0,900}?this\.net\.disconnect\(\);/.test(mainSrc4),
+  );
+  check('离开的人会有一条系统提示', mainSrc4.includes("tp('say.net.playerLeft'"));
   check('服务端把模式记在房间上并随 welcome 下发', serverSrc4.includes('roomGameModes.get(player.room) ?? world.mode') && serverSrc4.includes('roomGameModes.set(player.room, message.gameMode)'));
 }
 
