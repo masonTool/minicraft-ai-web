@@ -6206,5 +6206,28 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   check('自愈是就地认可（不调用 prepareNewWorldSpawn 把人挪走）', /private forceJoinSpawn\(\)[\s\S]{0,800}?this\.spawnResolved = true;/.test(mainSrc3) && !/private forceJoinSpawn\(\)[\s\S]{0,800}?prepareNewWorldSpawn\(\)/.test(mainSrc3));
 }
 
+
+console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]');
+{
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc4 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const serverSrc4 = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+
+  // ① `move` 必须带 look（以前漏了 → 远端只能按昵称派生，"形式都不对"且改形象不同步）
+  check('move 报文带皮肤下标（变化时发 + 2 秒兜底）', netSrc.includes('...(lookDue ? { look } : {})') && netSrc.includes('LOOK_RESEND_MS'));
+  check('远端渲染按 look 还原（不是只按昵称）', mainSrc4.includes('remotePaletteFromLook(look)') && mainSrc4.includes('remotePaletteFromName(mob.customName'));
+
+  // ② 房间设置变更通知全房
+  check(
+    '服务端把 room-config 广播给全房（含房主）',
+    /broadcast\(\{ t: 'room-config', \.\.\.applied, by: player\.name \}, null, player\.room\)/.test(serverSrc4),
+  );
+  check(
+    '客户端把它变成一行系统提示（走 i18n）',
+    netSrc.includes("case 'room-config': {") && mainSrc4.includes("tp('say.net.roomTime'"),
+  );
+  check('天气不在这里重复提示（announceWeather 已经说过一次）', /onRoomConfig: \(config\) => \{[\s\S]{0,400}?if \(config\.timeOfDay === undefined\) return;/.test(mainSrc4));
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

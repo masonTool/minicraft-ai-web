@@ -279,6 +279,13 @@ export interface NetHandlers {
    */
   onTime?: (timeOfDay: number, snap: boolean, day?: number) => void;
   /**
+   * 房主改了房间设置（用户 2026-10-26："房里所有人都该收到消息"）。
+   *
+   * 只用来打一行系统提示：时间/天气的**权威值**另有 `time{snap}` / `weather` 在收，
+   * 这里再应用一次就成了"改一次跳两下"。
+   */
+  onRoomConfig?: (config: { timeOfDay?: number; weather?: 'clear' | 'rain' | 'thunder'; by: string }) => void;
+  /**
    * 服务端回了 `error`。
    *
    * 与 `onStatus(false, …)` 分开：`bad-json`/`unknown` 是消息级错误，连接还好好的，
@@ -294,6 +301,13 @@ export interface NetHandlers {
 /** 应用层 ping 的间隔（联机29）：浏览器不允许我们发协议层 ping 帧，只能自己定一条 */
 const PING_INTERVAL_MS = 2000;
 const MOVE_SEND_INTERVAL_MS = 100;
+/**
+ * 皮肤下标的重发间隔（用户 2026-10-26）。
+ *
+ * `move` 每 100ms 一条，但皮肤只在变化时附带；纯"变化才发"会让"先改形象、后有人进房"
+ * 的新人看不到——他们没有历史报文。2 秒一条足够便宜（10 个数字 ≈ 30 字节）。
+ */
+const LOOK_RESEND_MS = 2000;
 /** 断线重连的等待时间（毫秒） */
 const RECONNECT_DELAY_MS = 3000;
 
@@ -368,6 +382,10 @@ export class NetClient {
   localDay = 0;
   /** 页面卸载的 `bye` 监听只挂一次 */
   private unloadHooked = false;
+  /** 上一次发出去的皮肤下标（变化才发，省带宽） */
+  private lastSentLookKey = '';
+  /** 上一次发皮肤的时间（2 秒兜底，保证后来进房的人也能拿到） */
+  private lastLookSentAt = 0;
   /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
@@ -846,6 +864,17 @@ export class NetClient {
        * 房间没了（L8 · MS4）：房主掉线（房间还没关，`graceMs` 内可能回来）或房间已关闭。
        * 真关房时服务端紧接着发 `error{code:'host-left'}` 并断开，这里只负责"先说一句"。
        */
+      case 'room-config': {
+        // 房间设置变更（用户 2026-10-26）：时间/天气的权威值另有 `time`/`weather`，
+        // 这条只负责"谁改了什么"，给界面打一行系统提示
+        const kind = String(message.weather ?? '');
+        this.handlers.onRoomConfig?.({
+          timeOfDay: Number.isFinite(Number(message.timeOfDay)) ? Number(message.timeOfDay) : undefined,
+          weather: kind === 'clear' || kind === 'rain' || kind === 'thunder' ? kind : undefined,
+          by: typeof message.by === 'string' ? message.by : '',
+        });
+        break;
+      }
       case 'room-closed': {
         // 房主没了（L8 · MS4）：房主标识当场撤掉，别让人继续顶着「房主」跑
         this.hostId = null;
@@ -905,9 +934,24 @@ export class NetClient {
     }
     if (now - this.lastMoveSent < MOVE_SEND_INTERVAL_MS) return;
     this.lastMoveSent = now;
+    /*
+     * 皮肤（用户 2026-10-26："看到的人物形式都不对" + "改了形象两边看不到变化"）。
+     *
+     * 这里以前**漏了 `look`**：服务端白名单里有它、远端渲染也早就支持（`remotePaletteFromLook`），
+     * 但报文里从没带过——于是远端永远拿"按昵称派生"的那套随机外观，改形象也不会同步。
+     * 只在变化时发（10 个数字约 30 字节），另加 2 秒兜底：先改形象、后有人进房也能拿到。
+     */
+    const look = appearance.look;
+    const lookKey = look && look.length > 0 ? look.join(',') : '';
+    const lookDue = lookKey.length > 0 && (lookKey !== this.lastSentLookKey || now - this.lastLookSentAt >= LOOK_RESEND_MS);
+    if (lookDue) {
+      this.lastSentLookKey = lookKey;
+      this.lastLookSentAt = now;
+    }
     this.sendRaw(
       JSON.stringify({
         t: 'move',
+        ...(lookDue ? { look } : {}),
         x: Number(x.toFixed(3)),
         y: Number(y.toFixed(3)),
         z: Number(z.toFixed(3)),

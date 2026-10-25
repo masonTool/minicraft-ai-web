@@ -1911,6 +1911,18 @@ class App {
     // 有人打了我（联机22）：这边再用对方队伍判一次友伤
     onPlayerHit: (hit) => this.onNetPlayerHit(hit),
     // 天气权威（联机35）：服务端说了算，本地只渲染
+    /*
+     * 房主改了房间设置（用户 2026-10-26："房里所有人都该收到消息"）。
+     *
+     * 只在**时间**上说话：天气那边 `setWeather()` → `announceWeather()` 本来就会给每个端
+     * 打一条提示（"雨停了/下雪了"），这里再说一遍就成了两条。
+     */
+    onRoomConfig: (config) => {
+      if (config.timeOfDay === undefined) return;
+      const minutes = Math.round((((config.timeOfDay % 1) + 1) % 1) * 24 * 60) % (24 * 60);
+      const clock = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+      this.chat.push(tp('say.net.roomTime', { time: clock }), 'system');
+    },
     onWeather: (kind) => {
       /*
        * 走 `setWeather()` 而不是直接 `weather.setKind()`（用户 2026-10-26："天气变了但雨声还在"）。

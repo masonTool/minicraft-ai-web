@@ -1809,8 +1809,23 @@ try {
      * "数值已对齐 0.25"两种通过形态（后者说明周期广播已经跟上新开局时刻）。
      */
     cfgFollower.mailbox.length = 0;
+    cfgHost.mailbox.length = 0;
     await sleep(80);
     cfgHost.send({ t: 'room-config', timeOfDay: 0.25 });
+    /*
+     * 房间设置变更要通知**全房**（用户 2026-10-26："房里所有人都该收到消息"）。
+     * 房主自己也收——他要在聊天区看到那一行。
+     */
+    {
+      const noticeFollower = await cfgFollower.wait('room-config', 2000);
+      const noticeHost = await cfgHost.wait('room-config', 2000);
+      check(
+        '房主改设置 → 同房其他人收到 room-config 通知',
+        noticeFollower !== null && typeof noticeFollower.timeOfDay === 'number',
+        JSON.stringify(noticeFollower),
+      );
+      check('房主自己也收到那条通知（聊天区要显示）', noticeHost !== null, JSON.stringify(noticeHost));
+    }
     /*
      * ⚠️ 不能只看第一条：服务端每 2s 还有一条**周期**校正广播，它可能抢在 snap 前面到，
      * 于是"第一条 time 不是 0.25"被误判成失败（实测偶发）。这里按条找，找到符合的为止。

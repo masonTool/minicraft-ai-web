@@ -1150,6 +1150,12 @@ wss.on('connection', (socket, request) => {
           return;
         }
         const timeOfDay = Number(message.timeOfDay);
+        /*
+         * 广播给**全房**（用户 2026-10-26："房间的设置发生了变化，房里所有人都该收到消息"）。
+         * 时间/天气本身另有 `time` / `weather` 两条权威消息，这条是"谁改了什么"的通知，
+         * 客户端据此打一行系统提示；房主也收（他自己也要在聊天区看到那一行）。
+         */
+        const applied = {};
         if (Number.isFinite(timeOfDay)) {
           // 与"有人睡满跳夜"同一条路：把开局时刻重置成现在，广播 snap 让客户端立刻对齐
           // 换起点前先把"今天"结算掉：否则改时间会被当成"这一天重新开始"，天数倒退
@@ -1161,11 +1167,16 @@ wss.on('connection', (socket, request) => {
             null,
             player.room,
           );
+          applied.timeOfDay = currentTimeOfDay();
         }
         if (isWeatherKind(message.weather)) {
           weather = { kind: message.weather, seconds: weatherSecondsFor(Math.random, message.weather) };
           broadcast({ t: 'weather', kind: weather.kind }, null, player.room);
+          applied.weather = weather.kind;
           log(`房主 ${player.name} 把天气改成 ${weather.kind}（房间 ${player.room}）`);
+        }
+        if (Object.keys(applied).length > 0) {
+          broadcast({ t: 'room-config', ...applied, by: player.name }, null, player.room);
         }
         break;
       }
