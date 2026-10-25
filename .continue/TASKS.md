@@ -1341,6 +1341,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
         ⚠️ 合计 gzip 1199.1 KB 对 1196.8 KB **+2.3 KB**（拆包重复），数据移出省约 7 KB —— 净收益接近打平，
         这一步买的是「数据不在包里」，不是速度
 
+- [x] A21 方块表「基线 + 增量」（`A20` 的迭代性收口）：`src/core/registry/coreDelta.ts`（patch 按名字改属性 /
+      append 只接末尾 / 删除拒绝）+ `host/baseline.json` 台账 + `npm run release:baseline` 封版
+      · APK 内嵌全量快照（不公开），线上只放 `core-delta.json`（几条 / 几百字节），启动时装快照再套增量
+      · `baseCount` + `fingerprint` 双校验：套错基线整体拒绝并降级（存档存的是数字 id，错位比报错更贵）
+      · `gen:hostcore`（天天跑）与 `release:baseline`（发布决策）**拆开**，避免"随手生成把线上基线换掉"
+      · 台账记 `baselineVersion / cutAt / gitCommit / blockCount / fingerprint / appVersion / note`；
+        内容未变时 `release:baseline` 拒绝再封（幂等）
+      · `sw.js` / `_headers` 把 `core-delta.json` 排除出缓存（缓存住 = 更新永远不生效且不报错）
+      · 实测：`test:coredelta` 29 条；Playwright 端到端"改 1 条 + 增 1 条"增量应用成功、0 pageerror
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

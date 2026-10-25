@@ -309,7 +309,7 @@
 
 - 根因同一类：① 队友看不到你的甲/副手/蹲姿，而 `move.armor`/`offhand`/`sneak` 早进白名单并被转发——**发送端没填**或**消费端没用**；② `net` 并发偶发红、单跑又绿——它按毫秒窗口确认"应该没收到"，抢 CPU 时窗口被挤破。处置：按"发→转→收"三段各查一次，条目里"要改存档"的前提先读现有结构；`run-tests.mjs` 让 `net` **独占** + 否定窗口压到 250ms。
 
-- esbuild 打包（动态 import + 环死锁、`banner` 不打包）与"换桩后门禁晚于主包加载"、"用 resolveId 而非 alias 做打包开关"见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
+- esbuild 打包（死锁 / `banner` 不打包）、"换桩后门禁晚于主包加载"、"resolveId 做打包开关"、"基线+增量的两处坑"见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
 ## 界面与音频
 
 ### "XX 会自动关闭"先分清两件事：**浮层被重排关掉** vs **按钮 `active` 判据混了筛选**
