@@ -16,6 +16,10 @@
 /__host/*
   Cache-Control: no-store
 
+# 方块增量：改了就要立刻生效，缓存住等于"改方块不发版"这件事失效（而且不报错）
+/core-delta.json
+  Cache-Control: no-store
+
 # 入口与 Service Worker：必须每次校验，否则热更要等缓存过期才生效
 /index.html
   Cache-Control: no-cache

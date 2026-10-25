@@ -102,6 +102,39 @@ curl -s "https://game.example.com/${ENTRY}.map" | head -c 32            # 期望
 
 ---
 
+## 5.5 改方块不用发版（基线 + 增量）
+
+这是这套东西的**迭代命脉**，单独一节说清楚。
+
+**原理**：APK 里内置换算好的全量快照 `core.bin`（724 条，不公开）；线上放一个只含**变化**的
+`core-delta.json`（通常几十字节到几 KB）。App 启动时先装快照、再套增量。
+
+```bash
+# 改了方块属性（硬度/光照/贴图名/形状）或末尾新增了方块之后：
+npm run gen:delta        # 拿 host/core-baseline.bin 对比当前 blockSpecs.ts，产出增量
+npm run build:app        # release-check 会校验指纹并把增量拷进 dist
+# 把 dist 发上去 —— 老 App 下次启动自动生效，不用重新发版
+```
+
+`gen:delta` 在"没有任何变化"时会明确打印"不产出文件"并删掉过期增量。
+
+**什么时候必须发版（不能走增量）**：
+
+| 改动 | 为什么 |
+|---|---|
+| **删除方块** | 存档里存的是数字 id，删一个会让后面全部错位。`buildDelta()` 会直接抛 |
+| **改二进制格式**（`BLOCK_TABLE_VERSION` 变了） | 老 App 解不开新文件，只能整包换 |
+| **想让新基线成为所有用户的起点** | 把新的全量 `core.bin` 覆盖到 `host/core-baseline.bin`，再发一次 APK（增量从零开始） |
+
+**两条必须守住的纪律**：
+
+1. **id 只能往末尾追加**。插在中间、或者改已有方块的名字，都会让老存档里的 id 指向别的方块。
+2. **`host/core-baseline.bin` 必须与 APK 里那份完全一致**。不一致时客户端会因指纹不符**拒绝**这份增量
+   （不会错方块，但新方块等于白发）。所以每次打包 APK 后，把那份 `core.bin` 覆盖过去。
+
+**失败时会发生什么**：增量缺失 / JSON 坏 / 指纹对不上 → 客户端 `console.warn` 后**忽略增量、按基线运行**。
+老内容照常玩，只是看不到线上新加的东西。绝不会白屏。
+
 ## 6. 与 GitHub Pages 的关系
 
 `.github/workflows/deploy-pages.yml` 仍然存在，跑的是 **`npm run build:web`**（按用户要求：

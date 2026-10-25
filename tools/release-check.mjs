@@ -171,6 +171,46 @@ if (existsSync(hostDir)) {
   problems.push('dist 里出现了 __host/：两种形态都不该带 core.bin（它的去处只有 APK），已删除');
 }
 
+// ------------------------------------------------------------------ 2.5 方块表增量
+/**
+ * `dist/core-delta.json`：线上那份"改方块不用发版"的增量（批次 20261025-1032）。
+ *
+ * 只有 app 形态需要它（web 形态的数据编在包里，没有基线可套）。
+ * 文件由 `npm run gen:delta` 产出；**没有变化时不存在**——这是正常状态，不是错误。
+ *
+ * 所以这里的检查重点不是"必须存在"，而是"如果存在，它必须能被解析、且 baseCount
+ * 与 App 内置的基线一致"。发一份套不上的增量出去，等于所有老用户白跑一趟
+ * （客户端会拒绝并降级，但新方块看不到又没人知道）。
+ */
+{
+  const DELTA_SRC = join(ROOT, '.tmp/hostcore/core-delta.json');
+  const BASE_FILE = join(ROOT, 'host/core-baseline.bin');
+  if (mode === 'web') {
+    notes.push('web 形态：不产出方块增量（数据编在包里，无基线可套）');
+  } else if (!existsSync(DELTA_SRC)) {
+    notes.push('没有方块增量（基线未变）——正常状态');
+  } else {
+    const raw = JSON.parse(readFileSync(DELTA_SRC, 'utf8'));
+    let baseCount = -1;
+    if (existsSync(BASE_FILE)) {
+      const bin = readFileSync(BASE_FILE);
+      baseCount = new DataView(bin.buffer, bin.byteOffset, bin.byteLength).getUint16(6, true);
+    }
+    if (raw.baseCount !== baseCount) {
+      problems.push(
+        `core-delta.json 的 baseCount=${String(raw.baseCount)} 与 host/core-baseline.bin 的 ${baseCount} 不一致：` +
+          '这份增量套不到 App 里的基线（客户端会拒绝），要么重新 gen:delta，要么换基线',
+      );
+    } else {
+      copyFileSync(DELTA_SRC, join(DIST, 'core-delta.json'));
+      notes.push(
+        `方块增量已放入 dist：改 ${raw.patches.length} 条 / 增 ${raw.appends.length} 条` +
+          `（基线 ${raw.baseCount}，指纹 ${raw.baseFingerprint}）`,
+      );
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 3. 版本清单
 /**
  * `dist/version.json`：站点要求的最低核心数据版本（宿主5）。

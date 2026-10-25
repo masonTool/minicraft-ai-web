@@ -58,6 +58,10 @@ self.addEventListener('fetch', (event) => {
   // （新前端已经要求 core/2 了，页面还照着旧的 core/1 放行）。它只有几百字节，每次走网络。
   if (url.pathname.endsWith('/version.json')) return;
 
+  // 方块增量（批次 20261025-1627）：它是"改方块不发版"的载体，被缓存住就等于**更新永远不生效**，
+  // 而且这个坑很隐蔽——玩家看到的是"新方块没出现"，而不是任何报错。几百字节，每次走网络。
+  if (url.pathname.endsWith('/core-delta.json')) return;
+
   // ---- 导航：网络优先
   if (request.mode === 'navigate') {
     event.respondWith(

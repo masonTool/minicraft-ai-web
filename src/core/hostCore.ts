@@ -33,7 +33,8 @@
  */
 
 import { BLOCK_TABLE_MAGIC, decodeBlockTable } from './registry/blockTableCodec.ts';
-import { installBlockTable } from './registry/blocks.ts';
+import { BLOCKS, installBlockTable } from './registry/blocks.ts';
+import { applyCoreDelta, parseCoreDelta } from './registry/coreDelta.ts';
 
 /** 核心数据路径（相对，跟随 vite `base: './'`，放在子目录也能用） */
 const CORE_URL = './__host/core.bin';
@@ -49,6 +50,15 @@ const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.minicr
 
 /** 站点上的版本清单（静态文件，构建期生成；拿不到就用兜底值，不阻塞启动） */
 const VERSION_URL = './version.json';
+
+/**
+ * 方块表增量（批次 20261025-1032）。
+ *
+ * 有了它，"改方块属性 / 加新方块"就不用再发 APK：线上换一个几百字节的 JSON 即可。
+ * ⚠️ 它必须**能安全失败**：文件不在（绝大多数时候）/ JSON 坏 / 基线对不上 → 一律忽略，
+ * 照常玩老内容。绝不能因为一个可选文件把游戏挡在门外。
+ */
+const DELTA_URL = './core-delta.json';
 
 /**
  * `version.json` 取不到时的兜底下限。
@@ -236,6 +246,27 @@ function looksLikeCore(buffer: ArrayBuffer): boolean {
  * 调用方（`main.ts`）拿到 false 时必须直接放弃启动，不要"先跑起来再说"——
  * 没有方块表的世界不会报错，只会是一片空白，那种失败比黑屏难查得多。
  */
+/**
+ * 拉取并应用方块增量。
+ *
+ * 失败只降级、不抛：调用方把它包在 boot 路径里，任何"可选优化"都不该拥有
+ * "让游戏起不来"的能力。这里用 `console.warn` 而不是 `error`，是因为
+ * 控制台门禁把 error 当失败——而"没有增量"是完全正常的状态。
+ */
+async function applyRemoteDelta(): Promise<void> {
+  try {
+    const response = await fetch(DELTA_URL, { cache: 'no-store' });
+    if (!response.ok) return; // 没有增量文件：最常见的情况，静默返回
+    const delta = parseCoreDelta(await response.json());
+    const next = applyCoreDelta(BLOCKS, delta);
+    installBlockTable(next);
+    console.info(`[boot] 已应用方块增量：改 ${delta.patches.length} 条 / 增 ${delta.appends.length} 条`);
+  } catch (error) {
+    // 基线对不上、格式过期、网络抽风 —— 一律忽略，用基线那 724 个方块继续玩
+    console.warn('[boot] 方块增量未应用（已忽略，按基线运行）', error);
+  }
+}
+
 export async function ensureHostCore(): Promise<boolean> {
   // 两件事并行：核心数据（宿主本地拦截，毫秒级）与版本清单（静态小文件）。
   // 串行会让"读一个 200 字节的 JSON"挡在主包前面，白多一段等待。
@@ -273,6 +304,7 @@ export async function ensureHostCore(): Promise<boolean> {
 
   try {
     installBlockTable(decodeBlockTable(core));
+    await applyRemoteDelta();
   } catch (error) {
     // 文件在、但解不开 / 格式版本不兼容：这是"宿主与线上不同步"，不是"没装应用"
     console.error('[boot] 核心数据无法装载', error);
