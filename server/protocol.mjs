@@ -130,7 +130,18 @@ export function blockEditRejection(player, x, y, z, id, state) {
   if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 'y-range';
   if (id < 0 || id > MAX_BLOCK_ID) return 'id-range';
   if (state < 0 || state > MAX_BLOCK_STATE) return 'state-range';
-  if (!withinEditReach(player, x, z)) return 'distance';
+  /*
+   * 距离闸只对**非房主**生效（L8 · MS2 修正）。
+   *
+   * 房主是权威端：从属端的改动请求由房主落地后以 `blocks` 重发，而重发的坐标是
+   * **请求方**的位置——两人各在一处时，它离房主自己可能好几百格。用房主的坐标去量，
+   * 那条重发必然被判 `distance` 静默丢掉，表现就是"我在我这边改了方块，对方看不到"。
+   *
+   * 房主本来就能改自己世界里的任何一格（世界在他本地跑），这条闸对他没有防护意义；
+   * 真正需要它的是从属端（档"隔空改主城"），而从属端的坐标类消息在这条分支之前
+   * 已经被 `not-host` 挡掉了。
+   */
+  if (player?.isHost !== true && !withinEditReach(player, x, z)) return 'distance';
   return null;
 }
 

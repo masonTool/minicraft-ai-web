@@ -1408,6 +1408,43 @@ try {
     authFollower.close();
   }
 
+  // ---------------------------------------------------------------- 房主代发的远处改动（本轮修复）
+  console.log('\n[房主代发的远处改动不被距离闸丢弃]');
+  {
+    const farHost = new TestClient('FarHost', undefined, { room: 'farroom', host: true });
+    const farFollower = new TestClient('FarFollower', undefined, { room: 'farroom' });
+    await joinAndWaitWelcome(farHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(farFollower, '远处的从属', 500, 70, 500);
+
+    /*
+     * 房主在 (0,0)，代发从属端在 (500,500) 那一格的落地结果。
+     * 以前服务端拿**房主自己的坐标**量距离（64 格闸）→ 判 `distance` 静默丢掉，
+     * 表现是"从属端改了方块，房主和其他人都看不到"。
+     */
+    farFollower.mailbox.length = 0;
+    farHost.send({ t: 'blocks', blocks: [[500, 70, 500, 1, 0, 'overworld']] });
+    const farBroadcast = await farFollower.wait('blocks', 2000);
+    check(
+      '房主代发远处改动：从属端收得到（不再被判 distance）',
+      Array.isArray(farBroadcast?.blocks) && farBroadcast?.authority === true,
+      JSON.stringify(farBroadcast),
+    );
+
+    /*
+     * 反向确认：闸本身还在。**没房主**的房里没人代发，远处改动仍然要被挡掉，
+     * 否则"任何客户端都能隔空改主城"这条老问题会跟着一起回来。
+     */
+    const soloRoom = new TestClient('SoloRoom', undefined, { room: 'soloroom' });
+    const soloOther = new TestClient('SoloOther', undefined, { room: 'soloroom' });
+    await joinAndWaitWelcome(soloRoom, '甲', 0, 70, 0);
+    await joinAndWaitWelcome(soloOther, '乙', 0, 70, 0);
+    soloOther.mailbox.length = 0;
+    soloRoom.send({ t: 'blocks', blocks: [[500, 70, 500, 1, 0, 'overworld']] });
+    check('没房主的房里：远处改动仍被距离闸丢掉', (await soloOther.wait('blocks', 800)) === null);
+
+    for (const client of [soloRoom, soloOther, farHost, farFollower]) client.close();
+  }
+
   // ---------------------------------------------------------------- 改动请求（L8 · MS2）
   console.log('\n[从属端的改动请求转给房主]');
   {

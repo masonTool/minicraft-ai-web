@@ -22,12 +22,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildBlockTable } from '../src/core/registry/blocks.ts';
-import { SPECS } from '../src/core/registry/blockSpecs.ts';
 import { decodeBlockTable } from '../src/core/registry/blockTableCodec.ts';
 import { buildDelta, isEmptyDelta } from '../src/core/registry/coreDelta.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASE_FILE = resolve(ROOT, 'host/core-baseline.bin');
+const BASELINE_JSON = resolve(ROOT, 'host/baseline.json');
 const OUT = resolve(ROOT, '.tmp/hostcore/core-delta.json');
 
 if (!existsSync(BASE_FILE)) {
@@ -36,7 +36,7 @@ if (!existsSync(BASE_FILE)) {
 }
 
 const base = decodeBlockTable(readFileSync(BASE_FILE));
-const next = buildBlockTable(SPECS);
+const next = buildBlockTable();
 
 let delta;
 try {
@@ -54,8 +54,15 @@ if (isEmptyDelta(delta)) {
   process.exit(0);
 }
 
+// 把"基于第几版基线"写进增量：客户端能据此给出"应用太老"的明确日志，
+// 发布检查也能校验"这份增量与 App 里的基线是否同一版"
+const baselineVersion: number | undefined = existsSync(BASELINE_JSON)
+  ? (JSON.parse(readFileSync(BASELINE_JSON, 'utf8')) as { baselineVersion?: number }).baselineVersion
+  : undefined;
+const output = baselineVersion === undefined ? delta : { ...delta, baseVersion: baselineVersion };
+
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, `${JSON.stringify(delta, null, 2)}\n`);
+writeFileSync(OUT, `${JSON.stringify(output, null, 2)}\n`);
 const size = statSync(OUT).size;
 
 console.log('\n方块表增量');
@@ -65,3 +72,4 @@ console.log(`  改属性      ${delta.patches.length} 条${delta.patches.length 
 console.log(`  新增        ${delta.appends.length} 条${delta.appends.length > 0 ? `（${delta.appends.slice(0, 3).map((a) => a.name.replace('minicraft:', '')).join(', ')}${delta.appends.length > 3 ? '…' : ''}）` : ''}`);
 console.log(`  产物        ${OUT}（${size} 字节）`);
 console.log(`  基线指纹    ${delta.baseFingerprint}`);
+console.log(`  基线版本    ${baselineVersion === undefined ? '(无台账)' : `v${baselineVersion}`}`);

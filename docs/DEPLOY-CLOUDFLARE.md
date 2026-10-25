@@ -135,6 +135,34 @@ npm run build:app        # release-check 会校验指纹并把增量拷进 dist
 **失败时会发生什么**：增量缺失 / JSON 坏 / 指纹对不上 → 客户端 `console.warn` 后**忽略增量、按基线运行**。
 老内容照常玩，只是看不到线上新加的东西。绝不会白屏。
 
+## 5.6 发一个安卓 APK 的完整步骤（封版）
+
+发 APK 是**唯一需要封基线**的时刻。顺序不能反：
+
+```bash
+# ① 出这个版本的候选快照（内容来自当前 blockSpecs.ts）
+npm run gen:hostcore
+
+# ② 封版：拷成基线 + 写台账（版本号自增、记日期/提交/条数/指纹）
+npm run release:baseline -- --app-version=1.2.0 --note="1.20 内容对齐"
+
+# ③ 打 APK：把 host/core-baseline.bin 塞进 assets/core.bin（必须逐字节一致）
+#    同时把 dist（build:app 的产物）作为这个版本的网页资源发上去
+
+# ④ 之后改方块就不用再发版了：npm run gen:delta → npm run build:app → 发线上
+```
+
+**为什么 ①② 要分开**：`gen:hostcore` 是天天都会跑的动作（内循环也会），
+而"封版"是一个**发布决策**。混在一起就会出现"随手跑了一次生成，线上 App 的基线被悄悄换掉"——
+之后的增量全部套不上，而且没有任何记录能查是哪次改的。
+
+**基线未变时**，`release:baseline` 会明确告诉你"无需封版"并退出（不会写第二条记录）。
+
+**如果这次 APK 没有改方块**：① ② 都可以跳过，直接用现成的 `host/core-baseline.bin` 打包。
+
+**增量能不能一直叠下去**：可以，但建议**每个大版本重封一次基线**（用最新的全量快照覆盖），
+否则线上增量会越滚越大，而且每加一层都要重新校验一遍指纹。经验阈值：增量超过 200 条或 20 KB 时重封。
+
 ## 6. 与 GitHub Pages 的关系
 
 `.github/workflows/deploy-pages.yml` 仍然存在，跑的是 **`npm run build:web`**（按用户要求：

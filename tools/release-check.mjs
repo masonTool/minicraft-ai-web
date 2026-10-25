@@ -171,6 +171,39 @@ if (existsSync(hostDir)) {
   problems.push('dist 里出现了 __host/：两种形态都不该带 core.bin（它的去处只有 APK），已删除');
 }
 
+// ------------------------------------------------------------------ 2.4 基线台账
+/**
+ * `host/baseline.json` 与 `host/core-baseline.bin` 必须**自洽**（批次 20261025-1627）。
+ *
+ * 台账记的是"线上 App 里装的是哪一版基线"。它一旦和 bin 对不上，后面所有增量都会
+ * 基于错误的前提计算——而且不会有任何报错，只会表现为"发了增量但玩家看不到新方块"。
+ * 所以每次发布都验一遍：条数 + 指纹都对得上才算数。
+ */
+{
+  const MANIFEST = join(ROOT, 'host/baseline.json');
+  const BIN = join(ROOT, 'host/core-baseline.bin');
+  if (!existsSync(MANIFEST)) {
+    if (existsSync(BIN)) {
+      problems.push('有 host/core-baseline.bin 但没有 host/baseline.json：先跑 npm run release:baseline 补台账');
+    } else {
+      notes.push('尚无基线（还没封过版）：首次打包 APK 时跑 npm run release:baseline');
+    }
+  } else {
+    const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+    if (!existsSync(BIN)) {
+      problems.push('有 host/baseline.json 但缺 host/core-baseline.bin：台账与文件不成对');
+    } else {
+      const bin = readFileSync(BIN);
+      const count = new DataView(bin.buffer, bin.byteOffset, bin.byteLength).getUint16(6, true);
+      if (manifest.blockCount !== count) {
+        problems.push(`台账记着 ${String(manifest.blockCount)} 个方块，基线文件里是 ${count} 个：两者不成对`);
+      } else {
+        notes.push(`基线 v${String(manifest.baselineVersion)}（${count} 条 / 指纹 ${String(manifest.fingerprint)} / 截止 ${String(manifest.cutAt)}）`);
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 2.5 方块表增量
 /**
  * `dist/core-delta.json`：线上那份"改方块不用发版"的增量（批次 20261025-1032）。
@@ -195,6 +228,15 @@ if (existsSync(hostDir)) {
     if (existsSync(BASE_FILE)) {
       const bin = readFileSync(BASE_FILE);
       baseCount = new DataView(bin.buffer, bin.byteOffset, bin.byteLength).getUint16(6, true);
+    }
+    let baselineVersion;
+    const MANIFEST = join(ROOT, 'host/baseline.json');
+    if (existsSync(MANIFEST)) baselineVersion = JSON.parse(readFileSync(MANIFEST, 'utf8')).baselineVersion;
+    if (raw.baseVersion !== undefined && baselineVersion !== undefined && raw.baseVersion !== baselineVersion) {
+      problems.push(
+        `core-delta.json 基于基线 v${String(raw.baseVersion)}，而台账是 v${String(baselineVersion)}：` +
+          '这份增量是对着旧基线算的，重新跑 npm run gen:delta',
+      );
     }
     if (raw.baseCount !== baseCount) {
       problems.push(

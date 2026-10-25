@@ -58,6 +58,13 @@ export interface CoreDeltaAppend extends CoreDeltaFields {
 
 export interface CoreDelta {
   readonly version: number;
+  /**
+   * 这份增量是**基于第几版基线**算的（批次 20261025-1627）。
+   *
+   * 可选：老格式没有这个字段。但它很值钱——客户端据此能给出"你的应用太老了"的
+   * 明确日志（而不用只靠指纹猜），发布检查也据此校验"增量与 App 基线是否同一版"。
+   */
+  readonly baseVersion?: number;
   /** 应用前基线应有多少个方块（防"拿新基线算的增量套在旧基线上"） */
   readonly baseCount: number;
   /** 基线名字表的指纹（防"数量一样但内容不同的基线"） */
@@ -176,8 +183,12 @@ export function parseCoreDelta(raw: unknown): CoreDelta {
     return { name, ...readFields(entry, `appends[${index}]`, ['name']) };
   });
 
+  if (data.baseVersion !== undefined && (typeof data.baseVersion !== 'number' || !Number.isInteger(data.baseVersion))) {
+    throw new Error('baseVersion 必须是整数');
+  }
   return {
     version: CORE_DELTA_VERSION,
+    ...(data.baseVersion === undefined ? {} : { baseVersion: data.baseVersion }),
     baseCount: data.baseCount,
     baseFingerprint: data.baseFingerprint,
     patches,

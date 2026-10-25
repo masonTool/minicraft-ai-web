@@ -9,7 +9,6 @@
  */
 
 import { BLOCKS, buildBlockTable, installBlockTable } from '../src/core/registry/blocks.ts';
-import { SPECS } from '../src/core/registry/blockSpecs.ts';
 import {
   CORE_DELTA_VERSION,
   applyCoreDelta,
@@ -50,7 +49,7 @@ function throws(label: string, run: () => unknown): void {
   if (ok) console.log(`      （拒绝理由：${message.slice(0, 60)}）`);
 }
 
-const base = buildBlockTable(SPECS);
+const base = buildBlockTable();
 
 console.log('\n[一、差分的三种情况]');
 {
