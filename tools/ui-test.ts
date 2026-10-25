@@ -6004,6 +6004,23 @@ console.log('\n[加入房间：地址只填 IP]');
     // 2026-10-25：归一化搬到 `core/net/ServerUrl.ts`（开房对话框也要用它），判据跟着搬
     serverUrlSrc.includes('return withDefaultPort(value);') && serverUrlSrc.includes('export function normalizeServerUrl'),
   );
+  /*
+   * 地址栏只收 IP 或域名（用户 2026-10-26）：前后缀由 `ServerUrl` 派生。
+   *   · IP / localhost → `ws://host:25187`；· 域名 → `wss://host/ws`
+   * 面板与开房对话框共用同一个入口，文案也得说清"可以填域名"。
+   */
+  check(
+    'IP / 域名判定与派生规则都在 core（不散在界面里）',
+    serverUrlSrc.includes('export function isLanHost') &&
+      serverUrlSrc.includes('export const DEFAULT_WS_PATH') &&
+      readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8').includes('normalizeServerUrl(addressInput.value)'),
+  );
+  check(
+    '地址栏提示写明"IP 或域名"（六语言都有这条键）',
+    ['zh', 'en', 'de', 'ru', 'fr', 'pt'].every((code) =>
+      readFileSync(new URL(`../src/core/i18n/locales/${code}/menu.ts`, import.meta.url), 'utf8').includes('mp.serverHint'),
+    ) && readFileSync(new URL('../src/core/i18n/locales/zh/menu.ts', import.meta.url), 'utf8').includes('域名'),
+  );
   check(
     '联机面板仍导出 normalizeServerUrl（搬到 core 之后旧调用点不用改）',
     mpSrc.includes("export { normalizeServerUrl } from '../core/net/ServerUrl.ts';"),

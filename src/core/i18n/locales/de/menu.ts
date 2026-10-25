@@ -66,7 +66,7 @@ export const menu = {
   "menu.multiplayer": "Mehrspieler",
   "mp.title": "Mehrspieler",
   "mp.server": "Server-IP",
-  "mp.serverHint": "z. B. 192.168.1.5 – nur die IP, der Port ist fest (frag die Person, die hostet)",
+  "mp.serverHint": "z. B. 192.168.1.5 oder mc.example.com – IP oder Domain, Port nicht nötig",
   "mp.name": "Spielername",
   "mp.room": "Raum",
   "mp.roomHint": "leer = Standardraum",

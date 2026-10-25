@@ -76,7 +76,8 @@ describe('probeRoom', () => {
     expect(result?.hostId).toBe(1);
     expect(socket.closed).toBe(true);
     // 地址里带上了房间与口令（面板拼地址那一层）
-    expect(socket.url).toBe('ws://127.0.0.1:25187/red?pw=pw');
+    // 2026-10-26：房间与口令改走 query（path 留给反代端点 `/ws`）
+    expect(socket.url).toBe('ws://127.0.0.1:25187?room=red&pw=pw');
   });
 
   it('服务端拒（error）→ null', async () => {

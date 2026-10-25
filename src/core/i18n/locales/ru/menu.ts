@@ -66,7 +66,7 @@ export const menu = {
   "menu.multiplayer": "Сетевая игра",
   "mp.title": "Сетевая игра",
   "mp.server": "IP сервера",
-  "mp.serverHint": "например, 192.168.1.5 — только IP, порт фиксирован (спросите у хоста)",
+  "mp.serverHint": "например, 192.168.1.5 или mc.example.com — IP или домен, порт не нужен",
   "mp.name": "Ник",
   "mp.room": "Комната",
   "mp.roomHint": "пусто = комната по умолчанию",

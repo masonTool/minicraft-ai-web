@@ -65,7 +65,7 @@ export const menu = {
   "menu.multiplayer": "Multijogador",
   "mp.title": "Multijogador",
   "mp.server": "IP do servidor",
-  "mp.serverHint": "ex.: 192.168.1.5 — só o IP; a porta é fixa (pergunte a quem hospeda)",
+  "mp.serverHint": "ex.: 192.168.1.5 ou mc.example.com — um IP ou um domínio, sem porta",
   "mp.name": "Apelido",
   "mp.room": "Sala",
   "mp.roomHint": "vazio = sala padrão",

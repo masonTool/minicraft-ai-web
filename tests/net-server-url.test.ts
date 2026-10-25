@@ -32,9 +32,18 @@ describe('displayServerAddress', () => {
 
   it('显式非默认端口要留着（否则玩家看不出自己改过）', () => {
     expect(displayServerAddress('ws://192.168.1.5:9000')).toBe('192.168.1.5:9000');
-    // wss 连协议头一起留：裸域名会被地址栏补成 ws://，等于把 https 部署悄悄改成明文
-    expect(displayServerAddress('wss://mc.example.com:8443')).toBe('wss://mc.example.com:8443');
-    expect(displayServerAddress('wss://mc.example.com')).toBe('wss://mc.example.com');
+    expect(displayServerAddress('wss://mc.example.com:8443')).toBe('mc.example.com:8443');
+  });
+
+  it('域名只留主机名（协议头由输入类型派生，不必再摆在框里）', () => {
+    // 2026-10-26：地址栏收"IP 或域名"——`normalizeServerUrl` 会自动补 `wss://…/ws`
+    expect(displayServerAddress('wss://mc.example.com')).toBe('mc.example.com');
+    expect(displayServerAddress('wss://mc.example.com/ws')).toBe('mc.example.com');
+    expect(displayServerAddress('wss://mc.example.com:8443/ws')).toBe('mc.example.com:8443');
+  });
+
+  it('非默认路径要留着（反代端点不一定是 /ws）', () => {
+    expect(displayServerAddress('wss://mc.example.com/custom')).toBe('mc.example.com/custom');
   });
 
   it('空串与认不出的输入原样返回（不吞掉玩家的字）', () => {
@@ -47,8 +56,9 @@ describe('displayServerAddress', () => {
     for (const url of [
       `ws://192.168.1.5:${DEFAULT_NET_PORT}`,
       'ws://192.168.1.5:9000',
-      'wss://mc.example.com',
-      'wss://mc.example.com:8443',
+      'wss://mc.example.com/ws',
+      'wss://mc.example.com:8443/ws',
+      'wss://mc.example.com/custom',
     ]) {
       expect(normalizeServerUrl(displayServerAddress(url))).toBe(url);
     }
@@ -82,6 +92,22 @@ describe('parseServerUrl', () => {
     expect(parseServerUrl('ws://host:1/a/b').room).toBe('');
   });
 
+  it('`/ws` 反代端点不是房名（域名那一路的 path 属于端点）', () => {
+    const parsed = parseServerUrl('wss://mc.example.com/ws');
+    expect(parsed.room).toBe('');
+    expect(parsed.url).toBe('wss://mc.example.com/ws');
+  });
+
+  it('`?room=` 优先于 path（新格式），老格式仍然认得', () => {
+    const modern = parseServerUrl('wss://mc.example.com/ws?room=red&pw=1');
+    expect(modern.room).toBe('red');
+    expect(modern.password).toBe('1');
+    expect(modern.url).toBe('wss://mc.example.com/ws');
+    const legacy = parseServerUrl('ws://192.168.1.5:8787/red?pw=1');
+    expect(legacy.room).toBe('red');
+    expect(legacy.url).toBe('ws://192.168.1.5:8787');
+  });
+
   it('非法地址原样返回（真正的校验在界面那一层）', () => {
     expect(parseServerUrl('这不是地址')).toEqual({ url: '这不是地址', room: '', password: '' });
   });
@@ -102,6 +128,42 @@ describe('resolveDefaultServerUrl（联机28）', () => {
     expect(resolveDefaultServerUrl('http:', 'localhost:5173', 'localhost')).toBe(
       `ws://localhost:${DEFAULT_NET_PORT}`,
     );
+  });
+});
+
+/*
+ * 地址栏只收 IP 或域名（用户 2026-10-26）：协议头/端口/端点路径全部派生。
+ *   · IP / localhost → 明文 ws + 固定端口（局域网直连）
+ *   · 域名 → wss + `/ws`（公网站点有 TLS，端口交给反代）
+ */
+describe('normalizeServerUrl（IP 或域名）', () => {
+  it('IP：ws + 固定端口', () => {
+    expect(normalizeServerUrl('192.168.1.5')).toBe(`ws://192.168.1.5:${DEFAULT_NET_PORT}`);
+    expect(normalizeServerUrl('localhost')).toBe(`ws://localhost:${DEFAULT_NET_PORT}`);
+  });
+
+  it('IP + 显式端口：端口不被替换', () => {
+    expect(normalizeServerUrl('192.168.1.5:9000')).toBe('ws://192.168.1.5:9000');
+  });
+
+  it('域名：wss + /ws（不补 25187）', () => {
+    expect(normalizeServerUrl('mc.example.com')).toBe('wss://mc.example.com/ws');
+    expect(normalizeServerUrl('mc.example.com:8443')).toBe('wss://mc.example.com:8443/ws');
+  });
+
+  it('域名 + 自定义路径：路径优先，不再补 /ws', () => {
+    expect(normalizeServerUrl('mc.example.com/custom')).toBe('wss://mc.example.com/custom');
+  });
+
+  it('显式协议原样尊重（老玩家存的 ws://host:8787 仍可用）', () => {
+    expect(normalizeServerUrl('ws://192.168.1.5')).toBe(`ws://192.168.1.5:${DEFAULT_NET_PORT}`);
+    expect(normalizeServerUrl('wss://mc.example.com/ws')).toBe('wss://mc.example.com/ws');
+    expect(normalizeServerUrl('https://mc.example.com/ws')).toBe('wss://mc.example.com/ws');
+  });
+
+  it('空串 / 只有空白 → null（交给界面提示）', () => {
+    expect(normalizeServerUrl('')).toBeNull();
+    expect(normalizeServerUrl('   ')).toBeNull();
   });
 });
 
@@ -134,12 +196,14 @@ describe('withDefaultPort（地址栏只收 IP）', () => {
  * 现在由「开房 / 加入」面板收集后再拼，所以这一对函数必须互补。
  */
 describe('formatServerUrl', () => {
-  it('房间与口令都填：拼成 parseServerUrl 认得的样子', () => {
-    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '1234')).toBe('ws://192.168.1.5:8787/red?pw=1234');
+  it('房间与口令都填：走 query（path 留给反代端点）', () => {
+    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '1234')).toBe('ws://192.168.1.5:8787?room=red&pw=1234');
+    // 域名那一路的 path 是 `/ws`，再往后拼房名会让反代与解析都读错
+    expect(formatServerUrl('wss://mc.example.com/ws', 'red', '')).toBe('wss://mc.example.com/ws?room=red');
   });
 
   it('只填房间', () => {
-    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '')).toBe('ws://192.168.1.5:8787/red');
+    expect(formatServerUrl('ws://192.168.1.5:8787', 'red', '')).toBe('ws://192.168.1.5:8787?room=red');
   });
 
   it('都不填 = 裸地址（不留尾斜杠）', () => {
@@ -164,8 +228,8 @@ describe('roomsEndpoint', () => {
     expect(roomsEndpoint('ws://192.168.1.5:8787')).toBe('http://192.168.1.5:8787/rooms');
   });
 
-  it('wss → https', () => {
-    expect(roomsEndpoint('wss://mc.example.com/ws')).toBe('https://mc.example.com/rooms');
+  it('wss → https，且保留反代端点路径（只映射 /ws* 的反代会 404）', () => {
+    expect(roomsEndpoint('wss://mc.example.com/ws')).toBe('https://mc.example.com/ws/rooms');
   });
 
   it('地址里带房间名也指向服务器级列表', () => {
