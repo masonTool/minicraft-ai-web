@@ -39,6 +39,8 @@ export const misc = {
   "touch.icon.chat": "聊天与命令",
   "touch.icon.pause": "暂停与设置",
   "touch.icon.view": "切换视角",
+  "pc.sprint": "疾跑",
+  "pc.fly": "飞行",
   "tooltip.unstackable": "不可堆叠",
   "tooltip.maxStack": "最多 {n} 个/格",
   "loading.world": "正在生成世界…",

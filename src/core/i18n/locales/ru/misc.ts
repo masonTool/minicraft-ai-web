@@ -40,6 +40,8 @@ export const misc = {
   "touch.icon.chat": "Чат и команды",
   "touch.icon.pause": "Пауза и настройки",
   "touch.icon.view": "Сменить вид",
+  "pc.sprint": "Бег",
+  "pc.fly": "Полёт",
   "tooltip.unstackable": "Не складывается",
   "tooltip.maxStack": "До {n} в слоте",
   "loading.world": "Мир создаётся…",

@@ -4747,13 +4747,128 @@
       #hotbar .touch-side-btn.ui-off { visibility: hidden; }
       /* 批次 181：聊天已搬到顶部，快捷栏右侧只留背包 */
       #touch-hotbar-inventory { right: 0; }
+      /* PC 端同一颗背包键（用户要求 2026-10-25：与手机同构） */
+      #pc-hotbar-inventory { right: 0; }
       @media (min-width: 760px) {
         #hotbar .touch-side-btn { bottom: 0; }
         #touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }
+        #pc-hotbar-inventory { right: auto; left: calc(100% + 8px); }
       }
 
-      /* 顶部那一行现在被暂停键占着：血条与调试信息往下让一格，免得叠在一起 */
+      /* ---------------- PC（键鼠）HUD 按钮层 ----------------
+         用户要求（2026-10-25）：**PC 版的界面跟手机版保持一致**——手机上有的按钮
+         PC 上也全都显示，并且每颗按钮上方写清对应哪个键。
+
+         结构与手机同构，位置也同一套坐标：
+           · 顶部中间三键：聊天(T) / 暂停(Esc) / 视角(V)；
+           · 右下：跳跃(Space)，创造飞行时上下再出升降(Space / Shift)；
+           · 快捷栏右侧：背包(E)（复用上面 `.touch-side-btn` 那几条）；
+           · 左下：手机那儿是摇杆，PC 换成 **WASD 键位图例** + Shift/Ctrl/Shift+F 三枚说明。
+
+         尺寸沿用 `--touch-scale`（设置里的"按钮大小"），所以调大按钮两端一起变。
+         按钮样式直接复用 `.touch-button` 那套玻璃质感——它是**类级**选择器，
+         不需要为 PC 再抄一份配色。 */
+      #pc-ui {
+        position: fixed; inset: 0; pointer-events: none;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+        --pc-side-inset: 40px;
+        --pc-stick-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        --pc-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));
+        /* 跳跃/升降按钮的尺寸与间距**沿用触摸端那两个变量名**：
+           `.touch-button.jump` / `.fly-up` / `.fly-down` 那几条规则是按名字取值的，
+           换一套 PC 专用的名字就得把那几条再抄一遍。 */
+        --touch-jump-size: calc(76px * var(--touch-scale, 1));
+        /* 比手机端（10px）宽一些：跳跃键上方还要塞得下它自己的那枚键帽，
+           否则飞行时"Space"会压在上升键的下沿上 */
+        --touch-cluster-gap: calc(26px * var(--touch-scale, 1));
+      }
+      /* 面板打开时只收"看得见的壳"，与手机同一条约定（不拆 DOM，关掉回来不闪） */
+      #pc-ui.ui-off > :is(#pc-pause, #pc-move, #pc-buttons) { visibility: hidden; }
+
+      /* 键帽：一枚小方牌，深底 + 浅描边（纯白与深色场景里都读得出来） */
+      .pc-key {
+        display: inline-block;
+        min-width: 20px; padding: 2px 5px;
+        border-radius: 4px;
+        background: rgba(10, 14, 18, .82);
+        border: 1px solid rgba(255, 255, 255, .58);
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, .55),
+          inset 0 1px 0 rgba(255, 255, 255, .20);
+        color: #f2f5f8;
+        font-size: 10px; line-height: 1.25; font-weight: 600;
+        letter-spacing: .01em; text-align: center; white-space: nowrap;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
+      }
+      /* 按钮上的键帽固定在按钮**正上方**，不占图标位置 */
+      .touch-button > .pc-key {
+        position: absolute; left: 50%; bottom: calc(100% + 4px);
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+      /* 下降键在跳跃键**下方**：它的键帽跟着往下挂，否则会压在跳跃键上 */
+      .touch-button.fly-down > .pc-key {
+        bottom: auto; top: calc(100% + 4px);
+      }
+
+      #pc-pause {
+        position: absolute; left: 50%; top: calc(36px + env(safe-area-inset-top, 0px));
+        transform: translateX(-50%);
+        display: flex; align-items: center; gap: 14px;
+        pointer-events: none;
+      }
+      /* 顶部三键：方形（与手机同形状），但按电脑的点按尺寸放大到 34px */
+      #pc-pause .touch-button {
+        width: calc(34px * var(--touch-scale, 1));
+        height: calc(34px * var(--touch-scale, 1));
+        border-radius: 0;
+        pointer-events: auto;
+      }
+
+      /* 左下：WASD 键位图例（手机那儿的摇杆位置） */
+      #pc-move {
+        position: absolute; left: var(--pc-side-inset); bottom: var(--pc-stick-bottom);
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        pointer-events: none;
+      }
+      .pc-pad {
+        display: grid; grid-template-columns: repeat(3, auto); gap: 4px;
+        justify-items: center; align-items: center;
+      }
+      .pc-pad .pc-key {
+        min-width: 26px; padding: 5px 0; font-size: 12px;
+      }
+      /* W 在上排正中，A S D 在下排（标准键盘排法） */
+      .pc-key-w { grid-column: 2; grid-row: 1; }
+      .pc-key-a { grid-column: 1; grid-row: 2; }
+      .pc-key-s { grid-column: 2; grid-row: 2; }
+      .pc-key-d { grid-column: 3; grid-row: 2; }
+      .pc-move-notes { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: center; }
+      .pc-move-note {
+        display: inline-flex; align-items: center; gap: 4px;
+        color: #eef2f6; font-size: 11px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+      }
+
+      /* 右下：跳跃 / 升降。位置与显隐沿用 `.touch-button.jump` / `.fly-up` / `.fly-down` */
+      #pc-buttons {
+        position: absolute;
+        right: var(--pc-side-inset);
+        bottom: var(--pc-buttons-bottom);
+        width: var(--touch-jump-size);
+        height: var(--touch-jump-size);
+        pointer-events: none;
+      }
+      #pc-buttons .fly-only.hidden { display: none; }
+
+      /* 顶部那一行现在被暂停键占着：血条与调试信息往下让一格，免得叠在一起
+         （PC 端现在也有同一条顶部键栏，所以 `body.pc-mode` 一起让） */
       body.touch-mode #boss-bar { top: calc(64px + env(safe-area-inset-top, 0px)); }
+      body.pc-mode #boss-bar { top: calc(78px + env(safe-area-inset-top, 0px)); }
+      /* PC 的顶部键栏也在屏幕正中，右上那一列（性能/状态效果）整体往下让，
+         否则调试信息会直接压在键帽上（这一列本来就贴着顶边 8px） */
+      body.pc-mode #hud-right { top: calc(78px + env(safe-area-inset-top, 0px)); }
       /* 调试信息在手机上收窄（它是开发用的面板，不该挤到屏幕中间的暂停键） */
       body.touch-mode #debug { max-width: 34vw; }
 

@@ -841,6 +841,7 @@ import type { DamageAttacker, EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
+import { PcControls } from './ui/PcControls.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
 import { updateDurabilityBar } from './ui/SlotVisuals.ts';
@@ -1394,6 +1395,11 @@ class App {
    * 这样键盘/鼠标路径完全不受影响，也不会多出一层挡事件的 DOM。
    */
   private touch: TouchControls | null;
+  /**
+   * PC（键鼠）端的按钮层（用户要求 2026-10-25）：与手机同构的按钮 + 键帽说明。
+   * 只有非触摸设备才创建；它不接管任何手势，只提供"看得见的入口"和跳跃/升降的按住状态。
+   */
+  private pc: PcControls | null;
   /** 触摸端"轻点"产生的一次性放置/交互请求，由 updatePlacing 消费 */
   private touchPlaceRequest = false;
   /**
@@ -3062,6 +3068,9 @@ class App {
     // 批次 95 起也靠它决定"快捷栏能不能点、槽位要不要放大"）——
     // 用类名而不是 `@media (pointer: coarse)`，是为了与"操作层是否存在"共用**同一个判据**
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
+    // PC 端的按钮层（用户要求 2026-10-25）：与手机同构的那几颗键**看得见**，
+    // 每颗上方挂键帽写清对应的键盘键。它只建 DOM，不参与任何手势逻辑。
+    this.pc = isTouchDevice() ? null : this.createPcControls();
     // 左右手 / 瞄准方式 / 摇杆模式 / 按钮大小：启动时也要落一次，
     // 否则存下来的"左手模式"要等玩家进一次设置才生效（批次 271）
     this.applyTouchChrome();
@@ -3144,6 +3153,7 @@ class App {
         this.touch?.resetInput('minigame');
         this.touch?.setEnabled(!this.uiOpen);
         if (this.touch) this.touch.visible = true;
+        if (this.pc) this.pc.visible = true;
       },
     });
   }
@@ -3218,10 +3228,30 @@ class App {
     });
   }
 
+  /**
+   * 创建 PC（键鼠）端的按钮层（用户要求 2026-10-25）。
+   *
+   * 与 `createTouchControls` 的差别只有一件：**不建摇杆与视角面**。
+   * 鼠标走指针锁、键盘走 `bindEvents()` 里那套 keydown，两条路本来就齐了；
+   * 这里补的是"手机上有、PC 上原本看不见"的那几个入口（聊天 / 暂停 / 视角 / 背包 / 跳跃 / 升降）
+   * 以及每颗按钮上方那枚键帽。
+   */
+  private createPcControls(): PcControls {
+    return new PcControls(document.getElementById('hud') ?? document.body, {
+      // 与 Esc、E、T、V 走**同一批方法**：按钮只是"另一个入口"，不另开一条逻辑
+      onOpenPause: () => this.toggleSettings(),
+      onCycleCamera: () => this.cycleCameraMode(),
+      onToggleInventory: () => this.inventoryScreen.toggle(),
+      onOpenChat: () => this.chat.openWith(''),
+    });
+  }
+
   /** 调试/验收用：桌面端也能把触摸 UI 打开（手机上本来就是自动创建的） */
   enableTouchControls(): boolean {
     if (this.touch) return true;
     this.touch = this.createTouchControls();
+    // 桌面端临时验收触摸布局时，把 PC 那层按钮收起来：两层叠在一起既挡视线也挡点击
+    if (this.pc) this.pc.visible = false;
     // 桌面端临时打开触摸 UI 时，瞄准方式/左右手/摇杆模式也要按设置落一次
     this.applyTouchChrome();
     return true;
@@ -3693,7 +3723,11 @@ class App {
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
   private handleInventoryOpen(open: boolean): void {
-    diag.event('ui', 'ui.open.changed', { open, touch: this.touch?.debugState });
+    diag.event('ui', 'ui.open.changed', {
+      open,
+      touch: this.touch?.debugState,
+      pc: this.pc?.debugState,
+    });
     this.uiOpen = open;
     this.keys.clear();
     this.leftDown = false;
@@ -3711,6 +3745,8 @@ class App {
       this.touch.resetInput(open ? 'ui.open' : 'ui.close');
       this.touch.visible = !open;
     }
+    // PC 的按钮层跟手机同一条约定：面板打开时收起，关掉再出来
+    if (this.pc) this.pc.visible = !open;
 
     if (open) {
       if (document.pointerLockElement) document.exitPointerLock();
@@ -6119,6 +6155,8 @@ class App {
     // 外接键盘 + 手柄同时用时也不会速度翻倍
     const touch = this.touch?.input;
     const pad = this.gamepadState;
+    // PC 端的跳跃/升降按钮（用户要求 2026-10-25）：没锁指针时鼠标能点到它们
+    const pc = this.pc?.input;
 
     let forward = 0;
     let strafe = 0;
@@ -6132,8 +6170,13 @@ class App {
     return {
       forward: clampUnit(forward + (touch?.forward ?? 0) + (pad?.forward ?? 0)),
       strafe: clampUnit(strafe + (touch?.strafe ?? 0) + (pad?.strafe ?? 0)),
-      jump: this.keys.has('Space') || (touch?.jump ?? false) || (pad?.jump ?? false),
-      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (touch?.sneak ?? false) || (pad?.sneak ?? false),
+      jump: this.keys.has('Space') || (touch?.jump ?? false) || (pad?.jump ?? false) || (pc?.jump ?? false),
+      sneak:
+        this.keys.has('ShiftLeft') ||
+        this.keys.has('ShiftRight') ||
+        (touch?.sneak ?? false) ||
+        (pad?.sneak ?? false) ||
+        (pc?.sneak ?? false),
       sprint: keyboardSprint || (touch?.sprint ?? false) || (pad?.sprint ?? false),
     };
   }
@@ -10512,6 +10555,7 @@ class App {
     this.touch?.resetInput('minigame');
     this.touch?.setEnabled(false);
     if (this.touch) this.touch.visible = false;
+    if (this.pc) this.pc.visible = false;
     this.miniGame.start(game);
   }
 
@@ -13084,6 +13128,7 @@ class App {
     // 玩家看到的就是"窗口闪一下又没了"。`uiOpen` 已经挡住了摇杆与放置请求，
     // 留着这些按钮只影响观感，不影响输入。
     if (this.touch) this.touch.visible = true;
+    if (this.pc) this.pc.visible = true;
     // 打字时释放指针锁，否则鼠标动不了、点不到输入框
     if (open && document.pointerLockElement) document.exitPointerLock();
   }
@@ -18250,7 +18295,9 @@ class App {
     this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
+    this.pc?.dispose();
     this.touch = null;
+    this.pc = null;
     this.inventoryScreen.dispose();
     this.settingsScreen.destroy();
     this.chat.dispose();
@@ -18695,6 +18742,8 @@ class App {
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
     this.touch?.setFlying(value);
+    // PC 端同理：飞行时右下多出升降两颗（键帽写 Space / Shift）
+    this.pc?.setFlying(value);
     // 创造物品栏跟着显隐（批次 139）：背包开着时按 F 起飞，创造区要立刻出现
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
   }

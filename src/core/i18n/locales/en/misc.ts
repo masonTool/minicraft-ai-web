@@ -41,6 +41,8 @@ export const misc = {
   "touch.icon.chat": "Chat & commands",
   "touch.icon.pause": "Pause & settings",
   "touch.icon.view": "Change view",
+  "pc.sprint": "Sprint",
+  "pc.fly": "Fly",
   "tooltip.unstackable": "Not stackable",
   "tooltip.maxStack": "Up to {n} per slot",
   "loading.world": "Generating world…",
