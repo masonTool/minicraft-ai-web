@@ -5708,7 +5708,7 @@
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
          核心数据 /__host/core.bin），拿到表才 boot()。浏览器里那一步是 404 →
          只显示"去应用里玩"的提示屏，游戏不会启动。详见 src/core/hostCore.ts 的注释。 -->
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/boot.ts"></script>
     <script type="module">
       // Service Worker 只在构建产物里注册：开发时注册会把 vite 的开发资源缓存住，
       // 改代码看不到效果（这是 PWA 开发里最常见的坑）

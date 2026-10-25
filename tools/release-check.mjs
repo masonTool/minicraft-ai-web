@@ -268,11 +268,11 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
 /**
  * 主包 gzip 基线（字节）。
  *
- * ⚠️ 本来是"716 KB / 实测 + 余量"。方块表外置（`SPECS_STUB=1`）实测能到 709.9 KB，
- * 但那条路目前**还不能默认打开**（空表下入口在门禁前就崩，见队列 `[发现]` 条），
- * 所以基线先维持现状，等入口改成两段式后再一次性收紧到 ~712 KB。
+ * 2026-10-25（批次 20261025-1032）方块表数据移出产物后实测 709.9 KB → 按"实测 + 一点余量"取 712 KB。
+ * 数值调低是**显式动作**：把闸门收紧，别让这 12 KB 的收益被后续提交悄悄吃回去。
+ * 想复现"带数据的对照"用 `SPECS_STUB=0 npm run build:app`（那时基线不适用）。
  */
-const MAIN_GZIP_BASELINE = 740_000;
+const MAIN_GZIP_BASELINE = 712 * 1024;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }

@@ -88,11 +88,10 @@ function hostSpecsStub(): Plugin {
     apply: 'build',
     enforce: 'pre',
     resolveId(source) {
-      // ⚠️ 默认**关**：实测打开了之后，浏览器在门禁之前就抛
-      // `Cannot read properties of undefined (reading 'id')`——还有模块在顶层读方块表。
-      // 先留着这套开关（`SPECS_STUB=1`）当作"数据是否真的搬干净"的探针，等入口改成
-      // 两段式（先取 core.bin 装表、再 import main）之后再默认打开。
-      if (process.env.SPECS_STUB !== '1') return null;
+      // 默认**开**。入口已经是两段式（`src/boot.ts` 先装表、再 `import('./main.ts')`），
+      // 所以空表不再是"模块初始化期崩"的隐患。
+      // 想临时关掉做对比（比如量体积差异）用 `SPECS_STUB=0 npm run build:app`。
+      if (process.env.SPECS_STUB === '0') return null;
       // 只拦"数据本体"，别把桩自己也拦成自己
       if (source.endsWith('/blockSpecs.ts') || source === './blockSpecs.ts') return stub;
       return null;
