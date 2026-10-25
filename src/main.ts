@@ -1719,6 +1719,11 @@ class App {
   /** 世界过了几天（批次 84，月相按它取模）；随存档走，老存档按第 0 天算 */
   private dayCount = 0;
   /**
+   * 服务端权威天数（用户 2026-10-25）：`null` = 没收到（单机 / 老服务端），继续本地累加。
+   * 收到之后每帧对齐一次，本地 `advanceDay()` 仍然照跑（HUD 不能等服务端那 2 秒）。
+   */
+  private netDay: number | null = null;
+  /**
    * **连续多少天没睡**（批次 126，幻翼的依据）。睡着归零、每天日出 +1。
    * 存进存档：它是"跨会话"的状态（睡了三天没睡的存档，进来当晚就该有幻翼）。
    */
@@ -1950,8 +1955,16 @@ class App {
     // 捡别人掉落物的仲裁结果（联机21）
     onItemTake: (result) => this.onNetItemTake(result),
     // 时间权威（联机10）：服务端 2s 一条，这里只记目标值，推进在主循环里按 4 倍速追
-    onTime: (timeOfDay, snap) => {
+    onTime: (timeOfDay, snap, day) => {
       this.netTimeTarget = timeOfDay;
+      /*
+       * 天数权威（用户 2026-10-25："第几天对不齐"）：服务端发什么就用什么。
+       *
+       * 以前天数只在本机 `advanceDay()` 里累加，晚加入的人从第 0 天开始——月相、
+       * `hud.moonDay`、村民补货全和别人错开。老服务端不带 `day`（`undefined`），
+       * 这时保持本地累加，行为与以前一致。
+       */
+      if (day !== undefined) this.netDay = day;
       if (!snap) return;
       // 有人睡满跳夜（联机11）：下一秒直接对齐，别让人看着太阳慢慢爬
       this.netTimeSnap = true;
@@ -2004,6 +2017,8 @@ class App {
         this.clearRemoteItems();
         // 断开就回本地推进（联机10），否则时间会卡在服务端最后报的那一刻
         this.netTimeTarget = null;
+        // 天数同理：断开之后又变回"本机自己数"
+        this.netDay = null;
         // 天气也收回本地（联机35）
         this.weather.setAuthority(true);
         // 攒着没发的方块改动也丢掉（联机12）：重连后服务端状态可能已经不同了
@@ -4679,6 +4694,8 @@ class App {
           worldType: this.worldConfig.worldType,
         }
       : undefined;
+    // 天数（用户 2026-10-25）：房主开房时把"本机第几天"一起报上去，房间不把他重置成第 0 天
+    this.net.localDay = this.dayCount;
     this.net.connect(url, name, host, world);
     return this.netStatus;
   }
@@ -9844,8 +9861,24 @@ class App {
    * 月相是"**8 天一个循环**"的纯函数（`moonPhaseFor(dayCount)`），所以这里不存"当前相"，
    * 只存天数——存档里存派生值迟早会与天数不同步（"第 10 天显示新月"这种）。
    */
+  /**
+   * 采用服务端天数（用户 2026-10-25）：只归位天数与月相，不触发村民补货等"跨日副作用"。
+   *
+   * 副作用留给真正的 `advanceDay()`：服务端报的只是"现在是第几天"这个标签，
+   * 一次校正就补一次货会让"晚加入的人把村民的补货次数刷爆"。
+   */
+  private applyAuthoritativeDay(day: number): void {
+    if (!Number.isInteger(day) || day < 0 || day === this.dayCount) return;
+    this.dayCount = day;
+    // 房主重连时会把这份天数报给服务端，所以它要跟着走（服务端只在第一次开房时采纳）
+    this.net.localDay = day;
+    this.sky.setMoonPhase(moonPhaseFor(day));
+  }
+
   private advanceDay(): void {
     this.dayCount++;
+    // 房主重连时会把这份天数报给服务端（服务端只在第一次开房时采纳，这里只是保持一致）
+    this.net.localDay = this.dayCount;
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
     // 村民每日补货（批次 509）：次数清零、需求各降 1。
     // 只补**已加载**的村民；没加载的那批保留昨天的次数，下次加载后再跨日才补。
@@ -18095,6 +18128,13 @@ class App {
         }
         // 跨过午夜 = 新的一天：月相往前推一格（批次 84）。判据就是"取模之后变小了"
         if (this.timeOfDay < before) this.advanceDay();
+        /*
+         * 联机时以服务端天数为准（用户 2026-10-25）：本地那一步只让 HUD 立刻响应，
+         * 真正的天数在下一帧被这里校正——多算/少算一天都会当场归位。
+         * 走 `applyAuthoritativeDay` 而不是 `advanceDay()`：后者还会让村民补货，
+         * 而服务端的校正只是"标签归位"，不该凭空多给一次补货。
+         */
+        if (this.netDay !== null && this.netDay !== this.dayCount) this.applyAuthoritativeDay(this.netDay);
       }
 
       // 方块改动的合帧发（联机12）：100ms 一批。红石连锁一响就是几十格，

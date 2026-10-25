@@ -58,3 +58,31 @@ export function timeOfDayAt(nowMs: number, startMs: number, dayLengthMs: number,
   if (!(dayLengthMs > 0)) return normalizeTime(startTime);
   return normalizeTime((nowMs - startMs) / dayLengthMs + startTime);
 }
+
+/**
+ * 服务端的天数（用户 2026-10-25：加入房间时"第几天"对不齐）。
+ *
+ * 以前时间只有 `timeOfDay`（0..1 的环形量）：谁先把这一天跑完，谁的天数就 +1，
+ * 而天数**各端各算**——晚加入的人从第 0 天开始，月相、`hud.moonDay`、村民补货全错开。
+ * 现在天数也由服务端推算，与时间同一套参数（起点时刻 / 一天多少毫秒 / 起点是几点 / 起点第几天）：
+ *
+ *   `day = startDay + floor(经过的天数 + 起点时间)`
+ *
+ * 取整时机就是"跨过午夜"——与客户端 `advanceDay()` 的判据（`timeOfDay` 取模后变小）**同一条线**，
+ * 否则两边会差一天（而这种差一天只会在玩到半夜才暴露）。
+ *
+ * `startDay` 为负/非整数时按 0 处理：天数只是标签，脏数据不该把 HUD 变成 `第 -1 天`。
+ */
+export function dayAt(
+  nowMs: number,
+  startMs: number,
+  dayLengthMs: number,
+  startTime = 0.12,
+  startDay = 0,
+): number {
+  const base = Number.isFinite(startDay) ? Math.max(0, Math.trunc(startDay)) : 0;
+  if (!(dayLengthMs > 0)) return base;
+  const elapsed = (nowMs - startMs) / dayLengthMs;
+  if (!Number.isFinite(elapsed)) return base;
+  return base + Math.max(0, Math.floor(elapsed + normalizeTime(startTime)));
+}

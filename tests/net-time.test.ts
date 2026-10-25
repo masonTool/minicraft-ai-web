@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NET_TIME_CATCH_UP,
   NET_TIME_SNAP_EPSILON,
+  dayAt,
   normalizeTime,
   stepTimeOfDayToward,
   timeDelta,
@@ -96,5 +97,36 @@ describe('normalizeTime / timeOfDayAt', () => {
 
   it('一天长度非法时回落开局时刻（不返回 NaN）', () => {
     expect(timeOfDayAt(1234, 0, 0)).toBeCloseTo(0.12, 6);
+  });
+});
+
+describe('dayAt 服务端天数（用户 2026-10-25：加入时第几天对不齐）', () => {
+  const dayMs = 20 * 60 * 1000;
+
+  it('开局那一刻就是起点那一天', () => {
+    expect(dayAt(0, 0, dayMs, 0.12, 0)).toBe(0);
+    expect(dayAt(0, 0, dayMs, 0.12, 7)).toBe(7);
+  });
+
+  it('跨过午夜才 +1（与客户端 advanceDay 同一条线）', () => {
+    // 起点 0.12：走 0.87 天到 0.99，还是同一天
+    expect(dayAt(0.87 * dayMs, 0, dayMs, 0.12, 3)).toBe(3);
+    // 再走一点越过 1.0（时间环形回到 0）
+    expect(dayAt(0.88 * dayMs + 1, 0, dayMs, 0.12, 3)).toBe(4);
+    // 整整两天
+    expect(dayAt(2 * dayMs, 0, dayMs, 0.12, 0)).toBe(2);
+  });
+
+  it('起点时间也是判据（服务端读档可能停在任意时刻）', () => {
+    // 从 0.9 开始：再过 0.2 天就跨天了
+    expect(dayAt(0, 0, dayMs, 0.9, 5)).toBe(5);
+    expect(dayAt(0.2 * dayMs, 0, dayMs, 0.9, 5)).toBe(6);
+  });
+
+  it('脏参数不吃亏（负数/小数天数、非法一天长度、NaN 时刻）', () => {
+    expect(dayAt(dayMs, 0, dayMs, 0.12, -3)).toBe(1);
+    expect(dayAt(dayMs, 0, dayMs, 0.12, 2.9)).toBe(3);
+    expect(dayAt(1234, 0, 0, 0.12, 4)).toBe(4);
+    expect(dayAt(Number.NaN, 0, dayMs, 0.12, 6)).toBe(6);
   });
 });

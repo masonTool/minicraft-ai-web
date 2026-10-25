@@ -91,6 +91,8 @@ class TestClient {
     this.host = options.host === true;
     /** 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形 */
     this.world = options.world ?? null;
+    /** 本机第几天（用户 2026-10-25）：只有房主带，服务端拿它当房间天数的起点 */
+    this.day = Number.isInteger(options.day) ? options.day : undefined;
     this.mailbox = [];
     this.socket = new WebSocket(
       `ws://localhost:${PORT}`,
@@ -300,6 +302,7 @@ try {
         ...(client.password ? { password: client.password } : {}),
         ...(client.host ? { host: true } : {}),
         ...(client.world ? { world: client.world } : {}),
+        ...(client.day !== undefined ? { day: client.day } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) return welcome;
@@ -663,6 +666,27 @@ try {
     const timeMessage = await timeSeen;
     const value = timeMessage?.timeOfDay;
     check('收到时间校正广播', typeof value === 'number' && value >= 0 && value < 1, `${value}`);
+
+    /*
+     * 天数权威（用户 2026-10-25："第几天对不齐"）：以前只有 timeOfDay 下发，
+     * 天数各端本地累加，晚加入的人从第 0 天开始。现在 welcome / time 都带 day。
+     */
+    const welcomeDay = welcomeA?.day;
+    check('welcome 带天数', Number.isInteger(welcomeDay) && welcomeDay >= 0, `${welcomeDay}`);
+    check('时间广播也带天数', Number.isInteger(timeMessage?.day) && timeMessage.day >= 0, `${timeMessage?.day}`);
+  }
+
+  // ---------------------------------------------------------------- 天数起点（用户 2026-10-25）
+  console.log('\n[天数起点]');
+  {
+    const dayHost = new TestClient('DayHost', undefined, { room: 'dayroom', host: true, day: 42 });
+    const dayHostWelcome = await joinAndWaitWelcome(dayHost, '第42天房主', 0, 70, 0);
+    check('房主开房带 day=42，房间天数从 42 起算', dayHostWelcome?.day === 42, `${dayHostWelcome?.day}`);
+    const dayGuest = new TestClient('DayGuest', undefined, { room: 'dayroom' });
+    const dayGuestWelcome = await joinAndWaitWelcome(dayGuest, '第42天客人', 0, 70, 0);
+    check('后加入的人拿到的也是房主那一天', dayGuestWelcome?.day === 42, `${dayGuestWelcome?.day}`);
+    dayGuest.close();
+    dayHost.close();
   }
 
   // ---------------------------------------------------------------- 批量方块（联机12）

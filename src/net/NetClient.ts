@@ -263,7 +263,13 @@ export interface NetHandlers {
    *
    * 主线不是"每帧都发"——服务端 2 秒一条，客户端按 4 倍速往它靠（`core/net/NetTime.ts`）。
    */
-  onTime?: (timeOfDay: number, snap: boolean) => void;
+  /**
+   * 服务端时间 + 天数（用户 2026-10-25：加入时第几天对不齐）。
+   *
+   * `day` 是服务端权威天数；老服务端不带这个字段 → `undefined`（客户端继续本地累加，
+   * 行为与以前一致，不会把天数写成 NaN）。
+   */
+  onTime?: (timeOfDay: number, snap: boolean, day?: number) => void;
   /**
    * 服务端回了 `error`。
    *
@@ -347,6 +353,11 @@ export class NetClient {
   roomWorld: NetWorldMeta | null = null;
   /** 开房时要上报的世界（只有房主带；重连也带，否则房间可能退回默认种子） */
   private wantsWorld: NetWorldMeta | null = null;
+  /**
+   * 本机此刻是第几天（用户 2026-10-25）：房主开房时随 `join` 上报，服务端拿它当房间天数的起点。
+   * 从属端不读它——天数由服务端下发。
+   */
+  localDay = 0;
   /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
@@ -481,6 +492,8 @@ export class NetClient {
           ...(this.wantsHost ? { host: true } : {}),
           // 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形
           ...(this.wantsWorld ? { world: this.wantsWorld } : {}),
+          // 天数（用户 2026-10-25）：房主的世界本来就带着"第几天"，服务端据此定房间的起点
+          ...(this.wantsHost ? { day: this.localDay } : {}),
         }),
       );
     };
@@ -527,8 +540,11 @@ export class NetClient {
   private deliverTime(message: Record<string, unknown>): void {
     const timeOfDay = Number(message.timeOfDay);
     if (!Number.isFinite(timeOfDay)) return;
+    // 天数（用户 2026-10-25）：只认非负整数；缺字段（老服务端）就不传，客户端继续本地累加
+    const day = Number(message.day);
+    const authorityDay = Number.isInteger(day) && day >= 0 ? day : undefined;
     // `snap` = 有人睡满跳夜了（联机11）：本地要**立刻**对齐，不能 4 倍速慢慢追
-    this.handlers.onTime?.(timeOfDay, message.snap === true);
+    this.handlers.onTime?.(timeOfDay, message.snap === true, authorityDay);
   }
 
   private handleMessage(message: Record<string, unknown>): void {

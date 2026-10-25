@@ -422,6 +422,8 @@ function snapshotFor(player) {
 
     // 时间权威（联机10）：进服先对齐一次，之后靠每 2s 的 `time` 广播校正
     timeOfDay: currentTimeOfDay(),
+    // 天数权威（用户 2026-10-25）：与时间一起下发，晚加入的人不再从第 0 天开始
+    day: currentDay(),
     // 天气权威（联机35）：进服先对齐一次，之后靠切换时的广播
     weather: weather.kind,
     players: [...players.values()]
@@ -574,6 +576,25 @@ const DAWN_TIME_OF_DAY = 0.12;
 let serverStartMs = Date.now();
 /** 起点时刻对应的一天中的时间：读档时会换成存档里的值（重启后从上次那一刻继续） */
 let startTimeOfDay = DAWN_TIME_OF_DAY;
+/**
+ * 天数权威（用户 2026-10-25：加入房间时"第几天 / 时间"对不齐）。
+ *
+ * 以前只有 `timeOfDay`（0..1 环形量）由服务端广播，**天数各端本地累加**：晚加入的人
+ * 从第 0 天开始，月相、村民补货、`/time query` 的天数全和别人错开。现在天数也在这里算，
+ * 客户端直接采用（`welcome` / `time` 都带 `day`）。
+ *
+ * 起点由两件事决定：读档时的 `day`、或房主进房时上报的本地天数（`join.day`）——
+ * 房主的世界本来就带着"第几天"，房间不该把他重置成第 0 天。
+ *
+ * ⚠️ 取整时机必须与客户端 `advanceDay()` 同一条线（时间跨过午夜、取模变小），
+ * 否则两边会差一天，而这种差一天只在玩到半夜才暴露。纯函数版本在
+ * `src/core/net/NetTime.ts#dayAt`，`tests/net-time.test.ts` 钉着它的口径。
+ */
+let startDay = 0;
+function currentDay() {
+  const elapsed = (Date.now() - serverStartMs) / DAY_LENGTH_MS;
+  return startDay + Math.max(0, Math.floor(elapsed + startTimeOfDay));
+}
 function currentTimeOfDay() {
   const value = (Date.now() - serverStartMs) / DAY_LENGTH_MS + startTimeOfDay;
   return value - Math.floor(value);
@@ -582,7 +603,9 @@ function currentTimeOfDay() {
 /** 时间校正广播：2 秒一条；没人时什么都不发 */
 const clockTimer = setInterval(() => {
   if (players.size === 0) return;
-  for (const room of roomsInUse()) broadcast({ t: 'time', timeOfDay: currentTimeOfDay() }, null, room);
+  for (const room of roomsInUse()) {
+    broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), day: currentDay() }, null, room);
+  }
 }, 2000);
 clockTimer.unref?.();
 
@@ -630,6 +653,8 @@ function worldSnapshot() {
     savedAt: Date.now(),
     seed: WORLD_SEED,
     timeOfDay: Number(currentTimeOfDay().toFixed(6)),
+    // 天数（用户 2026-10-25）：重启之后接着数，否则一个晚上的存档会让世界回到第 0 天
+    day: currentDay(),
     // 天气（联机35）：重启后接着上次的天气跑
     weather: weather.kind,
     // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension, room]（末位 room 是联机26 加的）
@@ -717,6 +742,9 @@ if (loaded.data) {
   if (typeof saved.timeOfDay === 'number' && Number.isFinite(saved.timeOfDay)) {
     startTimeOfDay = ((saved.timeOfDay % 1) + 1) % 1;
     serverStartMs = Date.now();
+  }
+  if (typeof saved.day === 'number' && Number.isFinite(saved.day) && saved.day >= 0) {
+    startDay = Math.trunc(saved.day);
   }
   log(
     `读档完成：方块 ${edits.size} 条 / 容器 ${containers.size} 个 / 时间 ${currentTimeOfDay().toFixed(2)}`,
@@ -902,7 +930,23 @@ wss.on('connection', (socket, request) => {
         };
         players.set(player.id, player);
         if (wantsHost) {
+          // 这一房**第一次**有人开房：只有这次才采纳房主报上来的天数
+          const freshRoom = !hosts.has(room);
           hosts.set(room, { id: player.id, clientId: player.clientId });
+          /*
+           * 天数（用户 2026-10-25）：房主的世界本来就带着"第几天"，开房不该把他重置成第 0 天。
+           * 先把旧时钟的当前时刻取出来当新起点的时刻，再换天数——顺序反了会凭空多算一天。
+           *
+           * ⚠️ 只在**第一次**开房时采纳：房主断线重连时客户端那份 `localDay` 可能落后一两秒
+           * （服务端才是权威），每次都采纳会让房间的天数被拽回去。
+           */
+          const hostDay = Number(message.day);
+          if (freshRoom && Number.isInteger(hostDay) && hostDay >= 0) {
+            const nowTime = currentTimeOfDay();
+            startDay = hostDay;
+            startTimeOfDay = nowTime;
+            serverStartMs = Date.now();
+          }
           /*
            * 世界（L9）：**只有房主能定这一局用哪个世界**。
            *
@@ -1084,9 +1128,15 @@ wss.on('connection', (socket, request) => {
         const timeOfDay = Number(message.timeOfDay);
         if (Number.isFinite(timeOfDay)) {
           // 与"有人睡满跳夜"同一条路：把开局时刻重置成现在，广播 snap 让客户端立刻对齐
+          // 换起点前先把"今天"结算掉：否则改时间会被当成"这一天重新开始"，天数倒退
+          startDay = currentDay();
           startTimeOfDay = ((timeOfDay % 1) + 1) % 1;
           serverStartMs = Date.now();
-          broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true }, null, player.room);
+          broadcast(
+            { t: 'time', timeOfDay: currentTimeOfDay(), day: currentDay(), snap: true },
+            null,
+            player.room,
+          );
         }
         if (isWeatherKind(message.weather)) {
           weather = { kind: message.weather, seconds: weatherSecondsFor(Math.random, message.weather) };
@@ -1482,9 +1532,13 @@ wss.on('connection', (socket, request) => {
        */
       case 'sleep': {
         if (!player) return send(socket, { t: 'error', code: 'joined', message: '先 join 再睡' });
+        // 睡满 = 过了一天：先把"今天"定下来，再把时钟拨到明天清晨（顺序反了会少算一天）
+        startDay = currentDay() + 1;
         serverStartMs = Date.now();
         startTimeOfDay = DAWN_TIME_OF_DAY;
-        for (const room of roomsInUse()) broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true }, null, room);
+        for (const room of roomsInUse()) {
+          broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), day: currentDay(), snap: true }, null, room);
+        }
         log(`${player.name}#${player.id} 睡满，时间跳到黎明`);
         break;
       }

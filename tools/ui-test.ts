@@ -6035,6 +6035,22 @@ console.log('\n[房主标识与房间配置]');
  * 两件事同源：加入来的世界是 `mpjoin-` 的临时副本，连不上就没意义；而致命拒绝之后
  * `leaveMultiplayerSave()` 还会重载一次世界，加载遮罩等不到 `spawnResolved` 就永远卡住。
  */
+console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  check('服务端算出权威天数并随快照下发', serverSrc.includes('function currentDay()') && serverSrc.includes('day: currentDay(),'));
+  check('时间广播也带天数（每 2 秒那条）', /broadcast\(\{ t: 'time', timeOfDay: currentTimeOfDay\(\)[\s\S]{0,60}day: currentDay\(\)/.test(serverSrc));
+  check('房主开房时上报本地天数（只有房主带）', netSrc.includes('...(this.wantsHost ? { day: this.localDay } : {})'));
+  check('客户端收下权威天数', mainSrc.includes('if (day !== undefined) this.netDay = day;'));
+  check(
+    '校正天数只归位、不触发跨日副作用（村民不该被刷补货）',
+    /private applyAuthoritativeDay\(day: number\): void \{[\s\S]{0,400}?\n  \}/.test(mainSrc) &&
+      !/private applyAuthoritativeDay\(day: number\): void \{[\s\S]{0,400}?restock/.test(mainSrc),
+  );
+}
+
 console.log('\n[加入失败不再留在世界里（2026-10-25 实测 ①⑤）]');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
