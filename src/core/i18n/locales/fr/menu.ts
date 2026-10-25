@@ -79,6 +79,7 @@ export const menu = {
   "mp.hostFromWorld": "Pour héberger, appuyez sur « Héberger » sur une carte de monde (c’est là que le monde se choisit)",
   "mp.probing": "Connexion au monde de l’hôte…",
   "mp.probeFailed": "Serveur injoignable (ou trop ancien) — vérifiez l’adresse et le nom de la partie",
+  "mp.joinTimeout": "Délai dépassé : le monde n’a pas fini de charger (l’hôte est peut-être parti). Retour au menu — réessayez.",
   "mp.roomsEmpty": "Personne n’héberge encore sur ce serveur",
   "mp.roomsFailed": "Impossible de lister les parties (adresse erronée ou serveur plus ancien) — saisissez le nom à la main",
   "mp.roomsPlayers": "{n} en ligne",

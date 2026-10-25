@@ -81,6 +81,7 @@ export const menu = {
   'mp.hostFromWorld': 'To host, tap “Host” on a world card (that is where the world is chosen)',
   'mp.probing': 'Connecting to the host’s world…',
   'mp.probeFailed': 'Could not reach that server (or it is too old) — check the address and room name',
+  'mp.joinTimeout': 'Join timed out: the world never finished loading (the host may have left). Back at the menu — try again.',
   'mp.roomsEmpty': 'Nobody is hosting on this server yet',
   'mp.roomsFailed': 'Could not list rooms (wrong address or older server) — type the room name instead',
   'mp.roomsPlayers': '{n} online',

@@ -374,6 +374,18 @@ export class NetClient {
     return this.remote.size + (this.selfId > 0 ? 1 : 0);
   }
 
+  /**
+   * 上一次断开是不是**致命**的（协议版本 / clientId 重复 / 房名被占 / 重名）。
+   *
+   * 主程序要用它区分两种断开（用户实测 2026-10-25）：
+   *  · 网络抖动 → 自动重连，世界留着继续等；
+   *  · 致命拒绝 → 再连多少次都一样，**不能**让玩家留在一个"没有队友的世界"里。
+   * `connect()` 会清掉这个标记（重新连一次 = 玩家明确想再试）。
+   */
+  get closeIsFatal(): boolean {
+    return this.fatal;
+  }
+
   connect(url: string, name: string, host = false, world?: NetWorldMeta): void {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记

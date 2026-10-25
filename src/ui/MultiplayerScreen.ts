@@ -22,7 +22,13 @@ import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
-import { formatServerUrl, parseServerUrl, roomsEndpoint, withDefaultPort } from '../core/net/ServerUrl.ts';
+import {
+  displayServerAddress,
+  formatServerUrl,
+  parseServerUrl,
+  roomsEndpoint,
+  withDefaultPort,
+} from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
@@ -157,7 +163,8 @@ export class MultiplayerScreen {
     this.urlInput.autocomplete = 'off';
     this.urlInput.spellcheck = false;
     this.urlInput.placeholder = t('mp.serverHint');
-    this.urlInput.value = readStored(STORAGE_URL) ?? '';
+    // 回填时只显示 IP（用户要求 2026-10-25）：完整 URL 只存在存储里，地址栏回答的是"那台机器在哪"
+    this.urlInput.value = displayServerAddress(readStored(STORAGE_URL) ?? '');
     // 「找房间」（L9）：浏览器发不了 UDP/mDNS，所以"自动发现"= 连上这台服务器后拉它的房间列表
     this.refreshButton = document.createElement('button');
     this.refreshButton.type = 'button';
@@ -371,7 +378,7 @@ export class MultiplayerScreen {
    * 连接时机挪到主菜单（同批的后一条），那时这里会多一个 `auto` 参数。
    */
   prefill(intent: { url: string }): void {
-    if (intent.url.length > 0) this.urlInput.value = intent.url;
+    if (intent.url.length > 0) this.urlInput.value = displayServerAddress(intent.url);
   }
 
   /**
@@ -405,7 +412,7 @@ export class MultiplayerScreen {
     if (!normalized) return;
     const parsed = parseServerUrl(normalized);
     if (parsed.room.length === 0 && parsed.password.length === 0) return;
-    this.urlInput.value = parsed.url;
+    this.urlInput.value = displayServerAddress(parsed.url);
     if (parsed.room.length > 0 && this.roomInput.value.trim().length === 0) {
       this.roomInput.value = parsed.room;
     }
@@ -438,7 +445,7 @@ export class MultiplayerScreen {
       chip.dataset.room = entry.room;
       chip.textContent = entry.room.length > 0 ? entry.room : t('room.defaultRoom');
       chip.addEventListener('click', () => {
-        this.urlInput.value = entry.url;
+        this.urlInput.value = displayServerAddress(entry.url);
         this.roomInput.value = entry.room;
         if (entry.name.length > 0 && this.nameInput.value.trim().length === 0) {
           this.nameInput.value = entry.name;

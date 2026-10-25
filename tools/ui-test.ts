@@ -5516,9 +5516,16 @@ console.log('\n[最近连接（L9）]');
   );
   check(
     '点一颗就填回地址 / 房间 / 昵称',
-    mpSrc.includes('this.urlInput.value = entry.url;') &&
+    // 2026-10-25：地址回填过 `displayServerAddress`（用户实测"每次都被填成 ws:// 长串"）
+    mpSrc.includes('this.urlInput.value = displayServerAddress(entry.url);') &&
       mpSrc.includes('this.roomInput.value = entry.room;') &&
       mpSrc.includes('this.nameInput.value = entry.name;'),
+  );
+  check(
+    '地址框只在存储里放完整 URL（三处回填都走显示形式）',
+    (mpSrc.match(/this\.urlInput\.value = displayServerAddress\(/g) ?? []).length >= 3 &&
+      !mpSrc.includes('this.urlInput.value = parsed.url;') &&
+      !mpSrc.includes('this.urlInput.value = entry.url;'),
   );
   check(
     '连接成功时记一条（去重后写 localStorage）',
@@ -6017,6 +6024,35 @@ console.log('\n[房主标识与房间配置]');
     '客户端只有房主发得出去 room-config',
     /sendRoomConfig\([\s\S]{0,400}if \(this\.role !== 'host'\) return;/.test(netSrc),
   );
+}
+
+/*
+ * 加入房间被拒 / 卡在生成页（用户 2026-10-25 实测 ①⑤）
+ *
+ * 用户原话："提示 clientId 已在线的时候，他就能进入世界，但是他看不到其他的角色"、
+ * "加入后会卡在生成页面，再次刷新进入才能进入"。
+ *
+ * 两件事同源：加入来的世界是 `mpjoin-` 的临时副本，连不上就没意义；而致命拒绝之后
+ * `leaveMultiplayerSave()` 还会重载一次世界，加载遮罩等不到 `spawnResolved` 就永远卡住。
+ */
+console.log('\n[加入失败不再留在世界里（2026-10-25 实测 ①⑤）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check('NetClient 暴露致命断开标记', netSrc.includes('get closeIsFatal(): boolean'));
+  check('主程序在致命断开时中止这一局的加入', mainSrc.includes('if (this.net.closeIsFatal) this.abortJoin(this.netStatus);'));
+  check(
+    '只对加入来的临时世界生效（自己开的房/单机不能被顺手踢回菜单）',
+    /private abortJoin\(reason: string\): void \{[\s\S]{0,400}!this\.worldConfig\.id\.startsWith\(JOIN_WORLD_PREFIX\)/.test(
+      mainSrc,
+    ),
+  );
+  check('回主菜单不落盘（临时副本不值得存）', /abortJoin\(reason: string\): void \{[\s\S]{0,1200}returnToMenu\(false\)/.test(mainSrc));
+  check(
+    '回菜单后把面板打开，说明失败原因',
+    /abortJoin\(reason: string\): void \{[\s\S]{0,1600}multiplayerScreen\.open\('join'\)/.test(mainSrc),
+  );
+  check('加入来的世界有生成超时兜底（不会永远停在"正在生成世界…"）', mainSrc.includes('JOIN_LOAD_TIMEOUT_MS') && mainSrc.includes("this.abortJoin(t('mp.joinTimeout'))"));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

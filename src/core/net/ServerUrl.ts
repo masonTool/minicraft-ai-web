@@ -87,6 +87,36 @@ export function withDefaultPort(url: string): string {
 }
 
 /**
+ * 反过来：把内部用的 `ws://` 地址**显示成地址栏该有的样子**（用户要求 2026-10-25）。
+ *
+ * 症状（用户实测）：加入面板的地址框每次打开都被填成 `ws://192.168.1.5:25187`——
+ * 可输入框的占位文案写着"只填 IP，端口已固定"。两处口径打架，玩家会以为要照着长串改。
+ *
+ * 语义上地址栏回答的是"**那台机器在哪**"，`ws://` 与固定端口都是实现细节：
+ *  · `ws://host:25187` → `host`（默认端口不显示）；
+ *  · `ws://host:9000` → `host:9000`（显式端口是玩家写的，得留着，否则他看不出自己改过）；
+ *  · `wss://domain` → `wss://domain`（**协议头必须留**：地址栏对裸域名会补 `ws://`，
+ *    显示成裸域名就等于让玩家下次重填时把 https 部署改成明文，直接连不上）；
+ *  · `wss://domain:8443` → `wss://domain:8443`。
+ *
+ * ⚠️ 只用于**回填输入框**。存储、`_recent`、`formatServerUrl` 仍用完整 URL——
+ * `normalizeServerUrl(displayServerAddress(u)) === u` 这条往返由测试钉住。
+ */
+export function displayServerAddress(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'wss:') return trimmed.replace(/\/+$/, '');
+    if (parsed.protocol !== 'ws:') return trimmed;
+    const defaultPort = parsed.port === String(DEFAULT_NET_PORT);
+    return defaultPort || parsed.port === '' ? parsed.hostname : `${parsed.hostname}:${parsed.port}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
  * 由 WebSocket 地址推出 `/rooms` 的 HTTP 地址（L9）。
  *
  * `GET /rooms` 与 WebSocket 在**同一个端口**上，所以只换协议头：`ws → http`、

@@ -79,6 +79,7 @@ export const menu = {
   "mp.hostFromWorld": "Zum Hosten „Hosten“ auf einer Weltkarte antippen (dort wird die Welt gewählt)",
   "mp.probing": "Verbinde mit der Welt des Hosts…",
   "mp.probeFailed": "Server nicht erreichbar (oder zu alt) – Adresse und Raumname prüfen",
+  "mp.joinTimeout": "Beitritt abgelaufen: Die Welt wurde nicht fertig geladen (der Host ist evtl. weg). Zurueck im Menue – bitte erneut versuchen.",
   "mp.roomsEmpty": "Auf diesem Server hostet noch niemand",
   "mp.roomsFailed": "Räume konnten nicht geladen werden (falsche Adresse oder älterer Server) – Raumname von Hand eingeben",
   "mp.roomsPlayers": "{n} online",

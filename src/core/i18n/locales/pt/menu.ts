@@ -78,6 +78,7 @@ export const menu = {
   "mp.hostFromWorld": "Para hospedar, toque em “Hospedar” no cartão de um mundo (é ali que o mundo é escolhido)",
   "mp.probing": "Conectando ao mundo de quem hospeda…",
   "mp.probeFailed": "Servidor inacessível (ou antigo demais) — confira o endereço e o nome da sala",
+  "mp.joinTimeout": "Tempo esgotado: o mundo não terminou de carregar (o anfitrião pode ter saído). De volta ao menu — tente de novo.",
   "mp.roomsEmpty": "Ninguém está hospedando neste servidor ainda",
   "mp.roomsFailed": "Não foi possível listar as salas (endereço errado ou servidor antigo) — digite o nome da sala",
   "mp.roomsPlayers": "{n} online",

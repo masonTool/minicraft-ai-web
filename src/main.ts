@@ -410,7 +410,7 @@ import {
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
-import { summaryFromRoom } from './core/net/JoinWorld.ts';
+import { JOIN_WORLD_PREFIX, summaryFromRoom } from './core/net/JoinWorld.ts';
 import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
 import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
 import { ENTITY_SNAPSHOT_INTERVAL_MS, encodeEntitySnapshots, type SimEntity } from './game/sim/SimAuthority.ts';
@@ -970,6 +970,13 @@ const NAME_TAG_POOL_SIZE = 16;
  * 生物都在本地，给 32 格与 `HEARING_RANGE` 同一量级：再远的名字只会糊成几个像素点。
  */
 const NAME_TAG_RANGE = 32;
+/**
+ * 加入别人的房间时，最多等多久地形（用户实测 2026-10-25：有人卡在"正在生成世界…"，刷新才进得去）。
+ *
+ * 30 秒不是"性能预算"，是"再等下去玩家只会去按刷新"的那条线：正常局域网加入 2~5 秒就好，
+ * 超过 30 秒几乎都是"房主走了 / 那一局没人跑模拟"，继续等只会让人以为游戏坏了。
+ */
+const JOIN_LOAD_TIMEOUT_MS = 30_000;
 
 /**
  * 光照收敛后"全量重刷已渲染区块"的最小间隔（毫秒，批次 616）。
@@ -1981,6 +1988,12 @@ class App {
       // 房主（L8）：断开/重连途中角色会回到 solo，顺手同步一次（面板只在"已连接"时显示它）
       this.multiplayerScreen.setRole(this.net.role);
       if (!connected) {
+        /*
+         * 这一局已经在拆（`dispose()` 里关 socket）就别再走"断开善后"：
+         * `leaveMultiplayerSave()` 会去重载世界，对着一个拆了一半的 App 重载最容易炸在最难查的地方。
+         * socket 的 close 事件总是晚于 `dispose()` 返回，所以这里能稳定挡住。
+         */
+        if (this.disposed) return;
         this.disposeRemoteRenderers();
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
@@ -2002,6 +2015,16 @@ class App {
         this.lastMobKeys.clear();
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
+        /*
+         * 被服务端**明确拒绝**就别留在这个世界里（用户实测 2026-10-25）。
+         *
+         * 症状一（⑤）：提示「这个 clientId 已经在线」之后玩家照样进了世界，只是看不到任何人
+         * ——这一局的世界是 `mpjoin-` 的临时副本：没有 `welcome`、没有队友、没有房主在跑模拟。
+         * 症状二（①）：更早断开时连世界都没生成完，`leaveMultiplayerSave()` 会去重载世界，
+         * 而加载遮罩只等 `spawnResolved`，于是永远停在"正在生成世界…"，刷新才好。
+         * 两种都收在这里：致命错误 = 再连多少次结果一样，退回主菜单并说明原因。
+         */
+        if (this.net.closeIsFatal) this.abortJoin(this.netStatus);
         return;
       }
       // 天气（联机35）：连上就交给服务端，本地不再自己换天气
@@ -2453,6 +2476,10 @@ class App {
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
   private spawnResolved = false;
+  /** 这一局的加入已经被判死（`abortJoin` 只做一次：回归主菜单途中 socket 还会再关一次） */
+  private joinAborted = false;
+  /** 加入来的世界从什么时候开始等生成（0 = 还没开始计时；用户实测 2026-10-25 的卡死兜底） */
+  private joinLoadingSince = 0;
   /**
    * 进世界后待做的一次"落地校正"（批次 213）。
    *
@@ -5040,6 +5067,27 @@ class App {
    *
    * @param save 是否先落盘。删除世界那条路已经删库了，不能再往里写。
    */
+  /**
+   * 加入别人的房间失败（服务端明确拒绝 / 世界生成超时）：拆掉这一局的临时世界，回主菜单说明原因。
+   *
+   * 为什么不留下继续玩：`mpjoin-<房间>` 这个世界的唯一用途是"跟房里的人一起玩"——
+   * 种子是房主的、方块改动是房主同步来的；一旦连不上，它就是个没有别人的复制品。
+   * 玩家以为自己进了房间（能走动、能挖方块）比"停在一句明确的话上"更糟。
+   */
+  private abortJoin(reason: string): void {
+    if (this.disposed || this.joinAborted) return;
+    if (!this.worldConfig.id.startsWith(JOIN_WORLD_PREFIX)) return;
+    this.joinAborted = true;
+    console.warn(`[JOIN_DBG] 加入失败，退回主菜单：${reason}`);
+    diag.event('app', 'join.abort', { reason, loadingCleared: this.loadingCleared });
+    hideLoading();
+    this.multiplayerScreen.setState('offline', reason);
+    void this.returnToMenu(false).then(() => {
+      // 理由只写进局内消息栏的话，玩家回到主菜单就看不见了——顺手把面板打开
+      this.multiplayerScreen.open('join');
+    });
+  }
+
   private async returnToMenu(save: boolean): Promise<void> {
     if (this.disposed) return;
     const saved = save ? await this.saveNow('exit') : false;
@@ -5515,6 +5563,24 @@ class App {
    */
   private refreshLoadingState(): void {
     if (this.loadingCleared) return;
+    /*
+     * 加入别人的房间不能无限等（用户实测 2026-10-25：有人卡在"正在生成世界…"，刷新才进得去）。
+     *
+     * 判据放在这里而不是连接回调里：连接可能早就"成功"了（socket 开着、welcome 也到了），
+     * 卡住的是地形——房主在很远的地方，或者那一局根本没有房主在跑。日志只打一次关键量，
+     * 玩家照着 `[JOIN_DBG]` 贴出来就能定位是哪一种。
+     */
+    if (this.worldConfig.id.startsWith(JOIN_WORLD_PREFIX) && !this.joinAborted) {
+      if (this.joinLoadingSince === 0) this.joinLoadingSince = performance.now();
+      else if (performance.now() - this.joinLoadingSince > JOIN_LOAD_TIMEOUT_MS) {
+        console.warn(
+          `[JOIN_DBG] 加入超时：spawnResolved=${this.spawnResolved} mesh=${this.chunkRenderer.chunkMeshCount} ` +
+            `pending=${this.world.pendingCount} net=${this.net.sessionState} seed=${this.worldConfig.seed}`,
+        );
+        this.abortJoin(t('mp.joinTimeout'));
+        return;
+      }
+    }
     if (!this.spawnResolved) return;
     if (this.chunkRenderer.chunkMeshCount === 0) return;
     this.loadingCleared = true;

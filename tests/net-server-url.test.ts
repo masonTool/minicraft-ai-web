@@ -8,12 +8,52 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NET_PORT,
+  displayServerAddress,
   formatServerUrl,
   parseServerUrl,
   resolveDefaultServerUrl,
   roomsEndpoint,
   withDefaultPort,
 } from '../src/core/net/ServerUrl.ts';
+import { normalizeServerUrl } from '../src/ui/MultiplayerScreen.ts';
+
+/**
+ * 地址栏显示（用户要求 2026-10-25）：框里该是 IP，不是 `ws://` 长串。
+ *
+ * 这条比"字符串长什么样"更要紧的是**往返**：显示出去的那一段必须能被
+ * `normalizeServerUrl` 再收回来，否则玩家照着框里的内容重填一次就连不上了。
+ */
+describe('displayServerAddress', () => {
+  it('默认端口与协议头都不显示（只留 IP）', () => {
+    expect(displayServerAddress(`ws://192.168.1.5:${DEFAULT_NET_PORT}`)).toBe('192.168.1.5');
+    expect(displayServerAddress('ws://192.168.1.5')).toBe('192.168.1.5');
+    expect(displayServerAddress('ws://mc.example.com')).toBe('mc.example.com');
+  });
+
+  it('显式非默认端口要留着（否则玩家看不出自己改过）', () => {
+    expect(displayServerAddress('ws://192.168.1.5:9000')).toBe('192.168.1.5:9000');
+    // wss 连协议头一起留：裸域名会被地址栏补成 ws://，等于把 https 部署悄悄改成明文
+    expect(displayServerAddress('wss://mc.example.com:8443')).toBe('wss://mc.example.com:8443');
+    expect(displayServerAddress('wss://mc.example.com')).toBe('wss://mc.example.com');
+  });
+
+  it('空串与认不出的输入原样返回（不吞掉玩家的字）', () => {
+    expect(displayServerAddress('')).toBe('');
+    expect(displayServerAddress('   ')).toBe('');
+    expect(displayServerAddress('这里不是地址')).toBe('这里不是地址');
+  });
+
+  it('往返：显示出来的能被地址栏重新收成同一个 URL', () => {
+    for (const url of [
+      `ws://192.168.1.5:${DEFAULT_NET_PORT}`,
+      'ws://192.168.1.5:9000',
+      'wss://mc.example.com',
+      'wss://mc.example.com:8443',
+    ]) {
+      expect(normalizeServerUrl(displayServerAddress(url))).toBe(url);
+    }
+  });
+});
 
 describe('parseServerUrl', () => {
   it('裸地址：默认房间、无口令', () => {

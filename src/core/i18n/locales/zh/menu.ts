@@ -80,6 +80,7 @@ export const menu = {
   'mp.hostFromWorld': '开房请在世界卡片上点「开房」（那里才知道用哪个世界）',
   'mp.probing': '正在连接房主的世界…',
   'mp.probeFailed': '连不上这台服务器（或它太旧），检查地址与房间名再试',
+  'mp.joinTimeout': '加入超时：世界没能生成好（房主可能已经离开）。已回到主菜单，请再试一次。',
   'mp.roomsEmpty': '这台服务器上还没有人开房',
   'mp.roomsFailed': '列不出房间（地址不对或服务端太旧），可以直接手填房间名',
   'mp.roomsPlayers': '{n} 人',
