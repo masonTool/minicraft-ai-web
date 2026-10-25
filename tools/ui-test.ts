@@ -5765,5 +5765,45 @@ console.log('\n[命中按全局键认那只怪（L8 · MS3 收尾）]');
   );
 }
 
+/*
+ * 远端玩家用玩家模型，而不是生物的方盒人形（本轮修复）
+ *
+ * 之前所有人共用 `REMOTE_PLAYER_TYPE` 的方盒人形：没有脸/衣服，朝向约定也和玩家不同，
+ * 于是"看到他的脸其实是他的背"。这里钉住三件事：换模型、外观按昵称派生、退出时释放。
+ */
+console.log('\n[远端玩家模型（本轮修复）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const skinSrc = readFileSync(new URL('../src/core/net/RemoteSkin.ts', import.meta.url), 'utf8');
+  check(
+    '远端玩家改成 PlayerRenderer（不再借 MobRenderer 的方盒人形）',
+    mainSrc.includes('this.remoteRenderers.set(player.id, renderer)') &&
+      mainSrc.includes('new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue, this.atlas)') &&
+      // 旧写法：把远端 Mob 塞进 mobs 交给 MobRenderer —— 必须已经消失
+      !/for \(const \[id, mob\] of this\.remotePlayers\)[\s\S]{0,400}mobs\.push\(mob\)/.test(mainSrc),
+  );
+  check(
+    '位置插值仍然每帧推进一次（换模型不能把 smoother 漏掉）',
+    mainSrc.includes('this.updateRemotePlayers(dt, sampleLight);') &&
+      /private updateRemotePlayers\([\s\S]{0,600}this\.remoteSmoothers\.get\(id\)\?\.step\(dt\)/.test(mainSrc),
+  );
+  check(
+    '外观按昵称稳定派生（两端同一套配色）',
+    mainSrc.includes('remotePaletteFromName(player.name)') &&
+      skinSrc.includes('export function remotePaletteFromName'),
+  );
+  check(
+    '改名要一起换外观（否则"新名字、旧样子"）',
+    /if \(mob\.customName !== player\.name\) \{[\s\S]{0,200}setAppearance\(remotePaletteFromName/.test(mainSrc),
+  );
+  check(
+    '离开 / 断开 / 重载都释放模型（不留不动的人）',
+    mainSrc.includes('this.remoteRenderers.get(id)?.dispose();') &&
+      mainSrc.includes('private disposeRemoteRenderers()') &&
+      // 两条清理路径（onStatus(false) 与 resetWorld）都要调到
+      (mainSrc.match(/this\.disposeRemoteRenderers\(\);/g) ?? []).length >= 2,
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -421,7 +421,8 @@ import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } fro
 import { swapOffhand } from './core/container/Offhand.ts';
 import { stepTimeOfDayToward } from './core/net/NetTime.ts';
 import { BlockFunnel } from './core/net/BlockFunnel.ts';
-import { RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
+import { REMOTE_SWING_SECONDS, RemoteAppearance, type RemoteAppearanceInput } from './core/net/RemoteAppearance.ts';
+import { remotePaletteFromName } from './core/net/RemoteSkin.ts';
 import { formatBytesPerSecond } from './core/net/NetStats.ts';
 import { findMobMatch } from './core/net/MobMatch.ts';
 import { RemoteAoiGate } from './core/net/NetAoi.ts';
@@ -1967,6 +1968,7 @@ class App {
       // 房主（L8）：断开/重连途中角色会回到 solo，顺手同步一次（面板只在"已连接"时显示它）
       this.multiplayerScreen.setRole(this.net.role);
       if (!connected) {
+        this.disposeRemoteRenderers();
         this.remotePlayers.clear();
         this.remoteSmoothers.clear();
         this.remotePresence.clear();
@@ -1999,6 +2001,26 @@ class App {
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+  /**
+   * 远端玩家的**玩家模型**（本轮修复）。
+   *
+   * 以前远端玩家借 `MobRenderer` 的方盒人形：所有人长得一模一样、没有脸也没有衣服，
+   * 而且那套模型的"正面"与玩家视角约定不一致——于是出现"看到他的脸其实是他的背"。
+   * 现在每人一个 `PlayerRenderer`：与本地第三人称同一个模型（脸/头发/衣服/鞋），
+   * `rotation.y = yaw` 与视线同一条约定（正脸朝 -Z），朝向自然对上。
+   *
+   * `remotePlayers` 里的 `Mob` 仍然保留：它是**数据载体**（坐标/昵称/队伍/受击判定），
+   * 只是不再交给 `MobRenderer` 画。
+   */
+  private readonly remoteRenderers = new Map<number, PlayerRenderer>();
+  /**
+   * 远端玩家的姿势状态：`PlayerRenderer` 需要走路相位/摆幅与俯仰，
+   * 而网络只给位置与朝向——速度和摆腿节奏在这里按位移估出来。
+   */
+  private readonly remotePoses = new Map<
+    number,
+    { pitch: number; walkPhase: number; walkAmount: number; lastX: number; lastZ: number }
+  >();
   /** 远程玩家的渲染插值（L4，批次 601）：网络位置离散到达，直接赋值会跳 */
   private readonly remoteSmoothers = new Map<number, RemotePlayerSmoother>();
   /**
@@ -2136,6 +2158,7 @@ class App {
     handled.push('signText', 'itemFrames');
 
     // ④ 联机镜像与缓冲
+    this.disposeRemoteRenderers();
     this.remotePlayers.clear();
     this.remoteSmoothers.clear();
     this.remotePresence.clear();
@@ -3883,6 +3906,75 @@ class App {
     mob.riding = state.riding;
   }
 
+  /**
+   * 远端玩家的模型与动画（本轮修复：从 `MobRenderer` 的方盒人形换成 `PlayerRenderer`）。
+   *
+   * 位置仍由插值器推进；走路相位/摆幅没有网络来源，按本帧水平位移估——
+   * 队友是在跑还是在原地站着，屏幕上就靠这个区分。
+   */
+  private updateRemotePlayers(
+    dt: number,
+    sampleLight: (x: number, y: number, z: number) => { sky: number; block: number } | null,
+  ): void {
+    for (const [id, mob] of this.remotePlayers) {
+      const renderer = this.remoteRenderers.get(id);
+      if (!renderer) continue;
+
+      const smoothed = this.remoteSmoothers.get(id)?.step(dt);
+      if (smoothed) {
+        mob.x = smoothed.x;
+        mob.y = smoothed.y;
+        mob.z = smoothed.z;
+        mob.yaw = smoothed.yaw;
+      }
+      // 别的维度不画：坐标是"他所在维度"的，画出来就是主世界同坐标的分身（联机3）
+      const visible = this.remotePresence.visible(id, this.dimension);
+      renderer.object.visible = visible;
+      if (!visible) continue;
+
+      const pose = this.remotePoses.get(id);
+      if (!pose) continue;
+
+      const moved = Math.hypot(mob.x - pose.lastX, mob.z - pose.lastZ);
+      const speed = dt > 0 ? moved / dt : 0;
+      pose.lastX = mob.x;
+      pose.lastZ = mob.z;
+      // 与本地玩家同一条曲线：站着不摆腿，跑起来相位推进得更快
+      const target = speed > 0.6 ? Math.min(1, speed / 4.3) : 0;
+      pose.walkAmount += (target - pose.walkAmount) * Math.min(1, dt * 8);
+      if (pose.walkAmount > 0.01) pose.walkPhase += dt * (5 + speed * 1.4);
+
+      const appearance = this.remoteAppearance.get(id);
+      // 主手/副手：`setHeldItem` / `setOffhand` 内部都有判等，逐帧调用不会重建模型
+      renderer.setHeldItem(appearance && appearance.state.held > 0 ? appearance.state.held : undefined);
+      renderer.setOffhand(appearance && appearance.state.offhand > 0 ? appearance.state.offhand : null);
+
+      renderer.update(
+        {
+          x: mob.x,
+          y: mob.y,
+          z: mob.z,
+          yaw: mob.yaw,
+          pitch: pose.pitch,
+          walkPhase: pose.walkPhase,
+          walkAmount: pose.walkAmount,
+          // 挥手：`swingLeft` 是"还剩几秒"，换成 0→1 的进度喂给模型
+          swing: appearance?.swinging === true ? 1 - appearance.state.swingLeft / REMOTE_SWING_SECONDS : 0,
+          flying: false,
+          sneaking: appearance?.state.sneaking === true,
+        },
+        sampleLight,
+      );
+    }
+  }
+
+  /** 断开 / 重载世界时统一释放远端玩家模型（否则场景里会留下不会动的残影） */
+  private disposeRemoteRenderers(): void {
+    for (const renderer of this.remoteRenderers.values()) renderer.dispose();
+    this.remoteRenderers.clear();
+    this.remotePoses.clear();
+  }
+
   /** 其它玩家的位置更新 */
   private onNetPlayer(player: NetPlayerState): void {
     // 维度先记：下面"首次见到这个人"的分支会提前 return，放在后面就会漏掉第一次
@@ -3913,11 +4005,26 @@ class App {
       mob.customName = player.name;
       this.remotePlayers.set(player.id, mob);
       this.remoteSmoothers.set(player.id, new RemotePlayerSmoother(next));
+      // 玩家模型（本轮修复）：每人一份，外观按昵称稳定派生（两端算出同一套配色）
+      const renderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue, this.atlas);
+      renderer.setAppearance(remotePaletteFromName(player.name));
+      this.remoteRenderers.set(player.id, renderer);
+      this.remotePoses.set(player.id, {
+        pitch: player.pitch,
+        walkPhase: 0,
+        walkAmount: 0,
+        lastX: player.x,
+        lastZ: player.z,
+      });
       console.info(`[net] ${player.name}#${player.id} 加入了游戏`);
       return;
     }
-    // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新
-    if (mob.customName !== player.name) mob.customName = player.name;
+    // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新；
+    // 外观也由昵称派生，所以改名要一并换一套（否则"叫他新名字、长得还是旧样子"）
+    if (mob.customName !== player.name) {
+      mob.customName = player.name;
+      this.remoteRenderers.get(player.id)?.setAppearance(remotePaletteFromName(player.name));
+    }
     // 队伍（联机22）：判友伤要用；没带就记空串（= 没队伍）
     this.remoteTeams.set(player.id, player.team ?? '');
     // 远程玩家不跑物理：位置交给插值器，渲染前统一推进（批次 601）。
@@ -3930,7 +4037,10 @@ class App {
     if (this.remoteAoi.accept(player.id, distance, performance.now())) {
       this.remoteSmoothers.get(player.id)?.setTarget(next);
     }
-    // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
+    // 俯仰（本轮修复）：以前"不入模型"是因为方盒人形没有脖子；现在远端走 `PlayerRenderer`，
+    // 它的头会跟着 pitch 转——队友抬头看天时，你这边也能看出来
+    const pose = this.remotePoses.get(player.id);
+    if (pose) pose.pitch = player.pitch;
   }
 
   /**
@@ -4075,7 +4185,11 @@ class App {
   private lastContainerProgressAt = 0;
 
   private onNetLeave(id: number): void {
-    // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
+    // 玩家模型是每个远端玩家一份（不再由 `MobRenderer` 的池子按帧回收），
+    // 所以离开时要显式释放：`dispose()` 会把网格从场景摘掉并释放材质/几何
+    this.remoteRenderers.get(id)?.dispose();
+    this.remoteRenderers.delete(id);
+    this.remotePoses.delete(id);
     this.remotePlayers.delete(id);
     this.remoteSmoothers.delete(id);
     this.remotePresence.remove(id);
@@ -12415,19 +12529,9 @@ class App {
         mobs.push(entity);
       }
     }
-    // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
-    for (const [id, mob] of this.remotePlayers) {
-      // 只画同一维度的：远端玩家没有维度字段，坐标却是"他所在维度"的
-      if (!this.remotePresence.visible(id, this.dimension)) continue;
-      const smoothed = this.remoteSmoothers.get(id)?.step(dt);
-      if (smoothed) {
-        mob.x = smoothed.x;
-        mob.y = smoothed.y;
-        mob.z = smoothed.z;
-        mob.yaw = smoothed.yaw;
-      }
-      mobs.push(mob);
-    }
+    // 联机队友**不再**交给 `MobRenderer`（方盒人形、没有正脸与皮肤），改用自己的玩家模型。
+    // 位置插值也在这里推进：它必须每帧只 step 一次。
+    this.updateRemotePlayers(dt, sampleLight);
     // 刷怪笼里的迷你模型（批次 487）：必须在 `mobRenderer.update` **之前**灌进去，
     // 否则这一帧还是上一帧那批笼子
     this.refreshSpawnerDecorations();
