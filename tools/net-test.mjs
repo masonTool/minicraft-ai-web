@@ -1416,6 +1416,29 @@ try {
       (await joinAndWaitWelcome(otherRoomSameName, '同名', 0, 70, 0)) !== null,
     );
 
+    // 房主侧也要拦（条目要求"房主与从属各一次"）：nameroom2 里已有一个叫「同名」的从属，
+    // 新来的自称房主、名字也重复 —— 同样必须拒。不拦的话，房主能顶掉别人已经挂出去的名字牌。
+    const hostDuplicate = new TestClient('HostDuplicate', undefined, { room: 'nameroom2' });
+    await hostDuplicate.ready();
+    hostDuplicate.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: hostDuplicate.clientId,
+      name: '同名',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+      room: 'nameroom2',
+      host: true,
+    });
+    const hostDupErr = await hostDuplicate.wait('error', 3000);
+    check(
+      '房主重名同样被拒（error.code = duplicate-name）',
+      hostDupErr?.code === 'duplicate-name',
+      JSON.stringify(hostDupErr),
+    );
+
     nameHost.close();
     otherRoomSameName.close();
   }
