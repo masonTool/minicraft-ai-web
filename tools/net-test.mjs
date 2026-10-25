@@ -434,8 +434,16 @@ try {
     (welcomeF?.items ?? []).some((i) => i.owner === 1 && i.localId === 8),
     JSON.stringify(welcomeF?.items),
   );
+  // 退房提示（联机45）：客户端要靠服务端的 `leave` 广播才知道"谁走了"。
+  // 先挂好监听再关连接——关完再 wait 会漏掉（同一个坑在 `time` 那儿记过）。
+  const frankLeave = alice.wait('leave', 4000);
   frank.close();
-  await alice.wait('leave');
+  const frankLeft = await frankLeave;
+  check(
+    '有人离开时服务端广播 leave，且带离开者的 id',
+    frankLeft?.id === welcomeF?.id,
+    JSON.stringify({ left: frankLeft, welcomeId: welcomeF?.id }),
+  );
 
   // 脏数据：数量超上限 / 坐标 NaN 都不该进快照
   alice.send({ t: 'item-spawn', localId: 9, itemId: 5, count: 999, x: 1, y: 70, z: 1 });
@@ -1372,6 +1380,76 @@ try {
     );
 
     for (const client of [worldHost, worldFollower, plainRoom, badWorldHost]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 昵称唯一（本轮）
+  console.log('\n[房间内昵称唯一]');
+  {
+    const nameHost = new TestClient('NameHost', undefined, { room: 'nameroom', host: true });
+    await joinAndWaitWelcome(nameHost, '同名', 0, 70, 0);
+
+    const sameName = new TestClient('SameName', undefined, { room: 'nameroom' });
+    await sameName.ready();
+    sameName.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: sameName.clientId,
+      name: '同名',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+      room: 'nameroom',
+    });
+    const duplicateName = await sameName.wait('error', 3000);
+    check(
+      '同房重名被拒（error.code = duplicate-name）',
+      duplicateName?.code === 'duplicate-name',
+      JSON.stringify(duplicateName),
+    );
+    check('重名被拒后连接关闭', await sameName.waitClosed());
+
+    // 只按房判重：另一个房间的同名玩家照常能进
+    const otherRoomSameName = new TestClient('OtherRoomSameName', undefined, { room: 'nameroom2' });
+    check(
+      '不同房间的同名玩家可以进（只按房判重）',
+      (await joinAndWaitWelcome(otherRoomSameName, '同名', 0, 70, 0)) !== null,
+    );
+
+    nameHost.close();
+    otherRoomSameName.close();
+  }
+
+  // ---------------------------------------------------------------- 外观转发（本轮）
+  console.log('\n[玩家外观（皮肤）随 move 转发]');
+  {
+    const lookHost = new TestClient('LookHost', undefined, { room: 'lookroom', host: true });
+    const lookFollower = new TestClient('LookFollower', undefined, { room: 'lookroom' });
+    await joinAndWaitWelcome(lookHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(lookFollower, '队友', 2, 70, 2);
+
+    const look = [1, 2, 3, 4, 5, 2, 1, 3, 1, 2];
+    // move 有 50ms 节流：先让窗口过去再发
+    await sleep(80);
+    lookFollower.mailbox.length = 0;
+    lookHost.mailbox.length = 0;
+    lookFollower.send({ t: 'move', x: 2, y: 70, z: 2, yaw: 0, pitch: 0, dimension: 'overworld', look });
+    const seen = await lookHost.wait('player', 2000);
+    check(
+      'move.look 原样转发给同房其他人',
+      JSON.stringify(seen?.look) === JSON.stringify(look),
+      JSON.stringify(seen?.look),
+    );
+
+    // 形状收口：长度不够的直接不下发（客户端回退昵称派生），不能把任意结构透传
+    await sleep(80);
+    lookHost.mailbox.length = 0;
+    lookFollower.send({ t: 'move', x: 2, y: 70, z: 2, yaw: 0, pitch: 0, dimension: 'overworld', look: [1, 2, 3] });
+    const short = await lookHost.wait('player', 1500);
+    check('长度不足的 look 不下发', short?.look === undefined, JSON.stringify(short?.look));
+
+    lookHost.close();
+    lookFollower.close();
   }
 
   // ---------------------------------------------------------------- 方块权威标记（MS2）
