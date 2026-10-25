@@ -61,6 +61,7 @@ import {
   applyLanguageSetting,
   availableLanguages,
   detectLanguage,
+  deviceLanguage,
   languageFromParam,
   getLanguage,
   isLanguage,
@@ -982,7 +983,18 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
 
   check('auto 按设备标签解析', resolveLanguage('auto', 'de-AT') === 'de');
   check('auto + 认不出的标签 → 英文', resolveLanguage('auto', 'ja-JP') === 'en');
-  check('auto + 没有标签 → 英文', resolveLanguage('auto', undefined) === 'en');
+  /**
+   * ⚠️ 这里**不能写 `resolveLanguage('auto', undefined)`**：`resolveLanguage` 的
+   * `tag` 有默认值 `deviceLanguage()`，显式传 `undefined` 与"没传"在 JS 里是同一件事，
+   * 于是断言实际读到的是**跑测试这台机器**的 `navigator.language`——
+   * 本机（zh-CN）上恒红，而 CI 上恒绿，正好违背上面那句"结果不跟着机器语言变"。
+   * 空标签才是"设备没给出语言"的可判定写法（`detectLocale('')` 走回落 → 英文）。
+   */
+  check('auto + 空标签 → 英文', resolveLanguage('auto', '') === 'en');
+  check(
+    'auto + undefined 退化成"读设备语言"（默认参数，不是"没有标签"）',
+    resolveLanguage('auto', undefined) === resolveLanguage('auto', deviceLanguage()),
+  );
 
   /**
    * per-app language 与深链（多语言 P5-2）。
