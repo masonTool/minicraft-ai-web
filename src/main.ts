@@ -1321,6 +1321,15 @@ class App {
   private randomTickChanges = 0;
   /** 流体流动改动的累计次数（验收用） */
   private fluidChanges = 0;
+  /**
+   * 流体**网络同步**计数（用户 2026-10-26："房主挖开水边方块，加入方的水不流"）。
+   *
+   * 这一对计数器是为了把"没发"和"发了没应用"分开：房主端看 `发出`、加入端看 `应用`，
+   * 每 2 秒打一行 `[FLUID_DBG]`。没有这行日志，两种情况在画面上完全一样。
+   */
+  private fluidNetSent = 0;
+  private fluidNetApplied = 0;
+  private fluidNetLoggedAt = 0;
   /** 因为"玩家不在附近"被冻结的流体刻数（批次 283，诊断用） */
   private fluidTicksFar = 0;
   /** 因为"本 tick 预算用尽"被推迟一格的流体刻数（批次 283，诊断用） */
@@ -4684,6 +4693,8 @@ class App {
         this.world.edits.record(target, toChunkCoord(x), toChunkCoord(z), Chunk.index(x & 15, y, z & 15), id, state);
       },
       apply: () => {
+        // 流体同步诊断（用户 2026-10-26）：加入端"应用了几条水"，与房主端"发了几条"对着看
+        this.countFluidNet('applied', id);
         // 下面这段会触发 `onBlockChanged`：包一层抑制，别把队友的改动原样发回给他（联机12）
         this.applyingRemoteBlock++;
         try {
@@ -5603,6 +5614,28 @@ class App {
    * 批次 167：遮罩不再写在 HTML 里（那样首屏就会显示"正在生成世界…"），
    * 它由 `showLoading()` 在**进世界那一刻**挂出来，这里只负责撤掉。
    */
+  /**
+   * 记一条流体方块的网络同步并每 2 秒打一行诊断（用户 2026-10-26 的水流问题）。
+   *
+   * 只统计水/岩浆：它们是最容易"看起来没同步"的一类（房主端一直在流、加入端静止），
+   * 而普通方块（挖/放）另有 `block` 日志与既有断言兜着。
+   */
+  private countFluidNet(kind: 'sent' | 'applied', id: number): void {
+    if (id !== Block.WATER && id !== Block.LAVA) return;
+    if (kind === 'sent') this.fluidNetSent += 1;
+    else this.fluidNetApplied += 1;
+    const now = performance.now();
+    if (now - this.fluidNetLoggedAt < 2000) return;
+    if (this.fluidNetSent + this.fluidNetApplied === 0) return;
+    this.fluidNetLoggedAt = now;
+    console.info(
+      `[FLUID_DBG] 近 2 秒：发出水方块 ${this.fluidNetSent} 条 · 应用 ${this.fluidNetApplied} 条 ` +
+        `（role=${this.net.role} net=${this.net.sessionState} 可写=${this.remoteWorldWritable()}）`,
+    );
+    this.fluidNetSent = 0;
+    this.fluidNetApplied = 0;
+  }
+
   /**
    * 加入房间卡在生成页时的自愈（用户 2026-10-26）。
    *
@@ -18196,7 +18229,10 @@ class App {
       // 逐格发会把消息量放大两个数量级；一批最多 256 条，剩下的下一帧继续
       if (this.blockFunnel.tick(dt)) {
         const batch = this.blockFunnel.drain();
-        if (batch.length > 0) this.net.sendBlocks(batch);
+        if (batch.length > 0) {
+          this.net.sendBlocks(batch);
+          for (const edit of batch) this.countFluidNet('sent', edit.id);
+        }
       }
 
       // 寒冷群系下雪：每秒复查一次地表方块即可

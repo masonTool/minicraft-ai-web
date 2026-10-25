@@ -769,6 +769,24 @@ try {
     });
     const filtered = await alice.wait('blocks', 2000);
     check('批量里的非法条目被丢掉', filtered?.blocks?.length === 1, JSON.stringify(filtered));
+
+    /*
+     * 突发批量（用户 2026-10-26："房主挖开水边方块，加入方的水不流"）。
+     *
+     * 水流是**每秒几十到几百格**的连续写入，客户端按 100ms 合帧、每包最多 256 条。
+     * 这里按真实形态压三包 × 60 格，确认服务端的限流桶（200/s、容量 400）与校验不会
+     * 把这种"合法突发"整包丢掉——丢了在画面上就是"水一直不动"，而且没有任何报错。
+     */
+    alice.mailbox.length = 0;
+    // 坐标必须贴着发送者：非房主的编辑有距离闸（`withinEditReach`），远处会被判 distance 丢掉
+    const burst = Array.from({ length: 60 }, (_, i) => [-5 + (i % 10), 70, Math.floor(i / 10), 1, 0, 'overworld']);
+    for (let round = 0; round < 3; round += 1) bob.send({ t: 'blocks', blocks: burst });
+    let received = 0;
+    for (let i = 0; i < 3; i += 1) {
+      const packet = await alice.wait('blocks', 2000);
+      if (packet) received += packet.blocks.length;
+    }
+    check('连续三包、每包 60 格全部送达（限流桶不该丢合法突发）', received === 180, `${received} 条`);
   }
 
   // ---------------------------------------------------------------- 外观状态（联机17）
