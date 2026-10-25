@@ -615,8 +615,31 @@
       .world-card-extra button { font-size: 12px; padding: 5px 9px; white-space: nowrap; }
       /* 世界列表顶部：新建世界 + 加入房间 并排（横屏一行放得下） */
       .world-list-top { display: flex; gap: 6px; align-items: stretch; }
-      .world-list-top > .world-primary { flex: 1 1 auto; }
-      .world-list-top > .world-secondary { flex: 0 0 auto; white-space: nowrap; }
+      /* 用户 2026-10-26：两颗入口**等宽**。
+         以前「新建世界」是 `flex: 1 1 auto` 铺满、加入房间 `flex: 0 0 auto` 只有文字宽，
+         两颗一宽一窄看着像不同层级；而它们其实是同一层（都是"开始一局"）。 */
+      .world-list-top > .world-primary,
+      .world-list-top > .world-secondary {
+        flex: 1 1 0; min-width: 0;
+        width: auto; max-width: none;
+        align-self: stretch; justify-self: stretch;
+        text-align: center; white-space: nowrap;
+      }
+      /*
+       * 用户 2026-10-26：这一排按钮在 PC 上**太高**（52px 只是"手指点得到"，不是"该这么大"）。
+       * 压到 36px / 导入存档压到 26px，把高度让给下面的存档列表。
+       *
+       * ⚠️ 判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`：`touch-mode` 是
+       * **建触摸操作层时**才挂的（进世界之后），主菜单阶段手机身上也没有这个类——
+       * 拿它当判据等于把手机上的 52px 也一起压掉（低于 44px 的最小点按尺寸）。
+       */
+      @media (pointer: fine) {
+        .world-list-top > .world-primary,
+        .world-list-top > .world-secondary {
+          min-height: 36px; padding: 6px 12px; font-size: 13px;
+        }
+        .world-import { padding: 3px 9px; font-size: 11px; }
+      }
       /* 「加入房间」模式的面板：藏掉只有局内才成立的按钮（开房 / 断开） */
       #multiplayer-screen[data-mode='join'] #mp-host,
       #multiplayer-screen[data-mode='join'] #mp-disconnect { display: none; }
@@ -674,11 +697,12 @@
       .world-primary { padding: 9px; font-size: 14px; letter-spacing: 1px; }
       /* 批次 528（用户）：世界列表页的「新建世界」比首页主按钮矮一点，
          把高度让给下面的存档列表；批次 529 起铺满整行，与下面的卡片对齐。 */
+      /* 用户 2026-10-26：宽度/高度交给 `.world-list-top > …` 那条共用规则（要和「加入房间」等宽），
+         这里只保留"铺满"的语义。 */
       #world-new-button {
-        width: 100%; max-width: none;
+        width: auto; max-width: none;
         align-self: stretch; justify-self: stretch;
-        min-height: 40px; padding: 6px 12px; font-size: 13px;
-        text-align: left;
+        text-align: center;
       }
       /* ⚠️ 不再写 `margin-top`：主页那几颗入口的间距交给 `.world-menu` 的 `gap`，
          写了 margin 会在"列表页底部那颗新建键"上多出一截空隙 */

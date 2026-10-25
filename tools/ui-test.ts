@@ -6251,6 +6251,22 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
     /dispose\(\): void \{[\s\S]{0,300}?this\.disposed = true;[\s\S]{0,900}?this\.net\.disconnect\(\);/.test(mainSrc4),
   );
   check('离开的人会有一条系统提示', mainSrc4.includes("tp('say.net.playerLeft'"));
+
+  /*
+   * 世界列表页的入口行（用户 2026-10-26："按钮太高了 / 两个按钮要等宽"）。
+   *
+   * 判据必须走 `(pointer: fine)`：`body.touch-mode` 是**进世界之后**才挂的，
+   * 主菜单阶段手机上也没有这个类，拿它当判据会把手机上的 52px 一起压掉。
+   */
+  const cssWorld = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check(
+    '新建世界 / 加入房间等宽（flex 基线 0）',
+    /\.world-list-top > \.world-primary,\s*\n\s*\.world-list-top > \.world-secondary \{[\s\S]{0,200}?flex: 1 1 0;/.test(cssWorld),
+  );
+  check(
+    'PC 上这一排压到 36px（含导入存档），且用 pointer: fine 而不是 touch-mode 判据',
+    /@media \(pointer: fine\) \{[\s\S]{0,400}?min-height: 36px;[\s\S]{0,200}?\.world-import \{ padding: 3px 9px/.test(cssWorld),
+  );
   check('服务端把模式记在房间上并随 welcome 下发', serverSrc4.includes('roomGameModes.get(player.room) ?? world.mode') && serverSrc4.includes('roomGameModes.set(player.room, message.gameMode)'));
 }
 
