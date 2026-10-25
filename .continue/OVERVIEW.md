@@ -151,7 +151,7 @@
 **实现**
 
 - 一个世界一个 IndexedDB 库（联机按 room + 种子派生库名）；读档按版本号串链、脏数据逐项跳过；文件导出/导入 · `L1`~`L4` · 批次 193/196；**多人 + 房主权威 MS1~MS4 + 世界即房间**：`join` 带 `host`/`world`、一房一房主、`welcome` 下发 `isHost`/`hostId`/`world`、角色 `solo|host|client`、`SimMode` 裁决谁跑模拟、从属端改动走 `edit-request` 由房主落地重发、实体快照 `entity-snap`/`entity-remove`、房主退出即关房 · `L4`/`L8`/`L9`
-- 联机体验：模型 / 出生点 / 距离闸 / 进出提示 / 皮肤与重名 / 面板 / 端口 / 房主权限 · 批次 20261025-1106；**Rust 版服务端**（`rust-server/`，与 JS 版共用同一份 net-test：195/0）· 批次 20261025-2000；**手机当房主**：`android/`（Capacitor + 前台服务 + 多播锁 + JNI）与 `ios-shell/`（xcframework + C ABI + Bonjour，只有前台能当）共用 `rust-server` 的同一份生命周期，面板列出**附近房间**（世界名/人数/口令/延迟）点一下进房 · 批次 20261025-2050
+- 联机体验：模型 / 出生点 / 距离闸 / 进出提示 / 皮肤与重名 / 面板 / 端口 / 房主权限 · 批次 20261025-1106；**Rust 版服务端**（`server/rust/`，与 JS 版共用同一份 net-test：195/0）· 批次 20261025-2000；**手机当房主**：`server/android/`（Capacitor + 前台服务 + 多播锁 + JNI）与 `server/ios/`（xcframework + C ABI + Bonjour，只有前台能当）共用同一份生命周期，面板列**附近房间**点一下进房 · 批次 20261025-2050
 
 **坑 / 注意**
 

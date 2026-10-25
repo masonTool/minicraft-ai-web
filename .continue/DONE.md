@@ -9,6 +9,27 @@
 
 ---
 
+## 批次 20261025-2240 · 2026-10-25 · 会话 12afd06a
+
+> 纯重构：把"服务端相关的四份"收拢到一个 `server/` 下。没有新能力，只有位置与路径。
+> 判据是"改完之后所有既有的门禁仍然全绿"——181 套离线 + 195×2 条联机断言 + 出包。
+
+- [x] [S1] 目录收拢：`server/*.mjs` → `server/node/`、`rust-server/` → `server/rust/`、`android/` → `server/android/`、`ios-shell/` → `server/ios/`；`capacitor.config.json` 补 `android.path` → `npx cap sync android` 仍能找到工程
+  - 做了什么：四次 `git mv`（`server/node/` 是新建后 `git mv` 七个 `.mjs` 进去）；`capacitor.config.json` 补 `"android": { "path": "server/android", "allowMixedContent": true }`。
+  - 为什么：Capacitor 6 的 CLI **支持自定义平台路径**（`node_modules/@capacitor/cli/dist/config.js` 读 `extConfig.android.path`），所以不需要软链、也不需要自写 sync 脚本——一条配置就让它认 `server/android`。之所以把 JS 服务端也挪进 `node/`（而不是留在 `server/` 根）：这样四个子目录对称，`server/` 才是真正的"总目录"而不是"Node 服务端 + 三个挂件"；代价只是 `index.mjs` 的路径变了，一次性改掉。
+  - 验证：`npx cap sync android` 成功（45s，`copy android` + `update android` 都过）；`cd server/android && ./gradlew assembleDebug` 出包，APK 内含 2 个 ABI 的 `.so` 与 `assets/public/__host/core.bin`。
+  - 批次：20261025-2240
+- [x] [S2] 修所有引用：`package.json`（`server` / `android:*` 脚本）、`tools/`（net-peer / net-test / run-tests 的 `net: ['server/node/']` / ui-test / net-check.sh）、5 个 `tests/net-*.test.ts` 的 import、`Dockerfile`、`.gitignore`、`android/app/build.gradle` 的 `copyHostCore` 与 `copyRustLibs`、`ios/check*.sh`、`rust/run-net-test.sh`、`rust/build-ios.sh` → `npm run check` 与 rust 四套脚本全绿
+  - 做了什么：批量改 20 处功能性路径 + 15 处注释/文档路径；重点几处：`Dockerfile`（`COPY server/node`、`CMD node server/node/index.mjs`）、`.gitignore`（`server/node/.data/`）、`app/build.gradle`（`repoRoot` 现在要多剥一层父目录，`copyRustLibs` 的产物路径也改成 `server/rust/target/...`）、`rust/run-net-test.sh` 与 `rust/build-ios.sh` 的 `ROOT`（`cd ../..`）、`tools/run-tests.mjs` 的 `net: ['server/node/']`（决定改到 `server/node` 时哪套离线测试算"命中"）。
+  - 为什么：这些是"一改目录就静默失效"的地方。最典型的是 Gradle 的 `copyRustLibs`：路径没跟上时它只报一句"缺少 Rust 产物"，看起来像"忘了编 `.so`"，而不是"路径错了"——实测就踩到过（第一次 `assembleDebug` 报 `/rust-server/target/...` 不存在）。
+  - 验证：`npm run typecheck` + `typecheck:tools` 通过；`vitest tests/net-* tests/nearby-rooms.test.ts` **24 文件 / 243 断言**全过；`npm run test:net` **195/0**；`cargo test` **28/0**、`run-smoke` **20/0**、`run-beacon-smoke` **13/0**、`bash server/rust/run-net-test.sh` **195/0**。
+  - 批次：20261025-2240
+- [x] [S3] 文档同步 + 全量验证：新增 `server/README.md`、根 `README.md` 目录树、`.continue/HANDOFF.md` 命令、`docs/NET-PROTOCOL.md`、三个子目录 README 的路径 → `npm run check` 全绿 + rust 四套全绿 + `npx cap sync android` 成功
+  - 做了什么：新增 `server/README.md`（四个子目录表 + 一张"客户端→服务端→宿主→局域网"的关系图 + 两条不能忘的约定 + 常见操作）；根 `README.md` 的目录树把 `server/` 那行改成"服务端（node/ · rust/ · android/ios/ = 手机宿主示例）"；`.continue/HANDOFF.md` 命令区加 `npm run server` 并指路 `server/README.md`；`docs/NET-PROTOCOL.md` 顶部标注"Node 版在 `server/node/`、Rust 版在 `server/rust/`，同一份契约"；`notes/multiplayer-ops.md`、`notes/net-host-authority.md` 的路径同步。
+  - 为什么：这些文档写着"怎么起服务端"。路径改了却不同步，下一个人照旧命令敲就会 file not found，而且会怀疑是代码坏了。子目录 README 尤其要改——它们是各平台的入口文档。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线 + 三张台账 + 文档门禁）；`node .continue/hooks/check.mjs` 6 项全绿；`git status` 里 120+ 条全是 `R`（rename）与少量 `M`，没有内容丢失。
+  - 批次：20261025-2240
+
 ## 批次 20261025-2050 · 2026-10-25 · 会话 12afd06a
 
 > 里程碑 MS1 验收后继续：Rust 服务端的**两颗平台壳**（Android Capacitor / iOS xcframework）
@@ -155,44 +176,3 @@
   - 为什么：静默失败最糟——玩家会一直以为"命令坏了"。所以从属端在**命令层**就明确拒绝，服务端再兜一道（脚本/调试接口也可能直接发）。房主标识选名字牌而不是面板，是因为局内看到队友的第一眼就该知道谁能改房间设置。
   - 验证：`npm run test:net` **195 通过 / 0 失败**（新增 3 条：房主改天气被广播、房主改时间收到 snap/已对齐、从属端被拒 `not-host`；条目写的"四条"里"房主标识"由 ui 断言覆盖）；`npm run test:ui` **1087/0**（新增 5 条）；`npm run test:nametag` **149/0**（旧的"样式紧邻"断言改写成"查表结果最终传给 show"）；`test:i18n` 550/0、`audit:i18n` 2947/2947。
   - 批次：20261025-1106
-
-## 批次 20261025-1627 · 2026-10-25 · 会话 937507d0
-
-> 方块表「基线 + 增量」：改方块属性 / 加新方块不必再发 APK；发版时封基线并留台账。
-
-# 队列 · 会话 937507d0458d4277ba340bcb48207050
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1627
-
-目标：**方块表「基线 + 增量」**——让"改方块属性 / 加新方块"不再需要发 APK。
-APK 里放全量快照（不公开），线上放一个只含变化的 JSON（几十字节~几 KB），启动时装快照再套增量。
-
-- [x] [增量1] 增量格式与应用器：新增 `src/core/registry/coreDelta.ts`（`parseCoreDelta` / `applyCoreDelta` / `buildDelta` / `fingerprint`）+ `tools/core-delta-test.ts`（29 条）
-  - 做了什么：JSON 格式 `{version, baseCount, baseFingerprint, patches[], appends[]}`；patch 按**名字**匹配只改给出的字段（不改 id、不改名），append 只能接在末尾（id = 现有长度 + 序号），**删除方块直接拒绝**（会让存档 id 全错位，只能发版）。指纹用 FNV-1a over 名字表，同步实现（启动路径不多一个 await）。
-  - 为什么：id 必须 0..N-1 连续，所以"套错基线"的后果不是报错而是**整张表错位**（存档存的是数字 id）。因此 `baseCount` + `baseFingerprint` 双校验，任一不符就整体拒绝；解析层对不认识的字段也直接抛（增量跨版本存在，悄悄忽略会在语义变化时变成静默错方块）。
-  - 验证：`npm run test:coredelta` **29 通过 / 0 失败**（覆盖：空增量 / 改属性 / 追加顺序 / JSON 往返 / 数量不符 / 指纹不符 / patch 目标不存在 / append 重名 / 删除拒绝 / 版本号 / light 越界 / tiles 长度 / 未知字段 / set 为空 / 指纹稳定与敏感）。
-  - 批次：20261025-1627
-- [x] [增量2] 启动链路接入：`src/core/hostCore.ts` 装完基线后拉 `./core-delta.json` 应用，任何失败只降级
-  - 做了什么：新增 `applyRemoteDelta()`，在 `installBlockTable(解码基线)` 之后调用；`fetch` 404/格式错/指纹错一律 `console.warn` 后返回（用 warn 不用 error：控制台门禁把 error 当失败，而"没有增量"是正常状态）。
-  - 为什么：任何"可选优化"都不该拥有"让游戏起不来"的能力。增量缺失时用基线那 724 个方块照常玩。
-  - 验证：真实浏览器端到端——造一份"改 1 条 + 增 1 条"的增量，`build:app` 后注入 `core.bin` 进 `dist/__host`，Playwright 实测控制台出现 `[boot] 已应用方块增量：改 1 条 / 增 1 条`，**0 条 pageerror**。
-  - 批次：20261025-1627
-- [x] [增量3] 差分工具与发布链：`tools/gen-delta.ts` + `host/core-baseline.bin` + `release-check` 校验并拷进 dist
-  - 做了什么：`npm run gen:delta` 用「App 内置基线」`host/core-baseline.bin`（随仓库提交，40 KB）对比当前 `blockSpecs.ts` 算差分；无变化就不产出（并删掉过期文件，避免被套到新基线上）；`release-check --mode app` 校验 `baseCount` 与基线一致后拷入 `dist/core-delta.json`，web 形态明确跳过。
-  - 为什么：增量必须知道"对谁生效"，所以基线要进仓库——放本机的话换台机器/CI 就算不出来。`baseCount` 不一致意味着这份增量套不到 App 里，发出去等于白发（客户端会拒绝并降级）。
-  - 验证：`npm run gen:delta` 在无改动时输出「无变化，不产出文件」；造改动后 `build:app` 输出「方块增量已放入 dist：改 1 条 / 增 1 条（基线 724，指纹 15eff840）」。
-  - 批次：20261025-1627
-- [x] [增量4] 缓存与文档：`sw.js` / `_headers` 排除 `core-delta.json`；发布手册补"改方块不发版"流程与"什么时候必须发版"
-  - 做了什么：`public/sw.js` 与 `public/_headers` 都把 `/core-delta.json` 排除出缓存（`no-store`）；`docs/DEPLOY-CLOUDFLARE.md` 新增 §5.5「改方块不用发版」，写清三步命令、三种必须发版的情形、两条纪律（id 只能末尾追加、基线必须与 APK 一致）、以及"增量失败只降级不白屏"。
-  - 为什么：增量是**靠每次启动重新拉**才生效的，被 Service Worker 缓存住就等于"更新永远不生效"，而且症状是"新方块没出现"——不报错、极难定位。文档那节则是给未来的自己看：什么时候该发版、基线什么时候换，这两件事记在脑子里必丢。
-  - 验证：`grep -c core-delta public/sw.js public/_headers` 各 1 处；`node .continue/hooks/check.mjs docs` 通过；`npm run check:fast` 全绿。
-  - 批次：20261025-1627
-- [x] [增量5] 基线台账（发 APK 时的"封版"动作）：`host/baseline.json` + `npm run release:baseline`
-  - 做了什么：新增 `tools/promote-baseline.ts`——把候选快照（`.tmp/hostcore/core-v1.bin`）封为基线，拷贝成 `host/core-baseline.bin` 并写台账（`baselineVersion` / `cutAt` / `gitCommit` / `blockCount` / `fingerprint` / `appVersion` / `note`）；内容与现有基线完全一致时**拒绝再封一次**并明确提示"无需封版"。`gen:delta` 把 `baseVersion` 写进增量；`release-check` 新增两条校验：台账与 bin 必须自洽（条数）、增量的 `baseVersion` 必须与台账一致。`host/README.md` 与发布手册 §5.6 补了"发 APK 的完整步骤（① gen:hostcore ② release:baseline ③ 打 APK ④ 之后只发增量）"。
-  - 为什么：基线文件本身就是"哪一版"的锚点，但它是二进制，看不出是哪一版、什么时候封的、对应哪个提交。而"生成候选快照"是天天跑的（内循环也会），"封版"是发布决策——两者必须分开，否则会出现"随手跑一次生成把线上 App 的基线悄悄换掉"，之后所有增量都套不上且查不到是哪次改的。
-  - 验证：首次 `npm run release:baseline -- --app-version=1.0.0 --note=...` 产出 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）；再跑一次输出"基线未变…无需封版"（幂等，不写第二条记录）；`npm run build:app` 输出"基线 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）"且增量缺失时给出"正常状态"；`test:coredelta` 29/0、`check:fast` 181/181、`typecheck:tools` 干净。
-  - 批次：20261025-1627
-
----

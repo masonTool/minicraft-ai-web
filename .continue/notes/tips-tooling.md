@@ -272,3 +272,17 @@
 - **`test:*` 这个名字会被离线 runner 当套件解析**：`npm run test:android`（跑 Gradle）会让 `tools/run-tests.mjs` 报"认不出这些测试脚本的入口"——它按 `test:` 前缀收套件，且只认 esbuild / node 两种写法。Gradle/XCTest 这类跑法要么叫 `android:test`，要么进 `SKIP` 名单。
 - **`npx cap sync` 很慢**（本项目实测 5 分钟，因为要逐个小文件拷 12MB 的 `assets/public`）：只为看一眼效果时直接改 `android/app/src/main/assets/public` 里的文件更快，出包前再 sync。
 - 顺带两条边界（不是坑但省时间）：**`.so` / `xcframework` / `jniLibs` 都不进 git**，由 Gradle 任务与 `build-*.sh` 在构建时生成（缺产物时在配置阶段就报一句明确的话）；**`simctl spawn` 能在 iOS 模拟器里直接跑链接好的可执行**，设备级验收不必先建 Xcode 工程。
+### 改目录结构要搜的四类引用（这次收拢 `server/` 的清单）
+
+挪一个目录最容易漏的不是 `import`，而是这四处——它们都不在 TypeScript 的类型系统里：
+
+1. **`package.json` 的 scripts**（`node server/index.mjs`、`cd android && ./gradlew`）；
+2. **`tools/run-tests.mjs` 的"改动命中"映射**（`net: ['server/']` → 决定哪些离线套件算命中，
+   漏改不会报错，只会在改服务端时"没有命中任何套件"，于是门禁静默变松）；
+3. **`Dockerfile` 的 `COPY` / `CMD`**（只在构建镜像时才炸）；
+4. **Gradle / Xcode 里的相对路径**（`rootProject.projectDir.parentFile` 这类"剥几层父目录"的写法，
+   目录深了一层就全错；报错还很像"忘了编 `.so`"）。
+
+顺带一条有用的：**Capacitor 6 支持自定义平台目录** —— `capacitor.config.json` 里
+`"android": { "path": "server/android" }`（CLI 读 `extConfig.android.path`），
+所以"想把 android/ 挪进子目录"不必牺牲 `npx cap sync android`，也不用软链。
