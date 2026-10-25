@@ -5803,6 +5803,14 @@ console.log('\n[远端玩家模型（本轮修复）]');
       // 两条清理路径（onStatus(false) 与 resetWorld）都要调到
       (mainSrc.match(/this\.disposeRemoteRenderers\(\);/g) ?? []).length >= 2,
   );
+  check(
+    '出生点对齐到房主身边（加入方不再落在世界出生点）',
+    mainSrc.includes('this.alignSpawnToHost(players);') &&
+      /private alignSpawnToHost\([\s\S]{0,400}if \(this\.net\.role !== 'client'\) return;/.test(mainSrc) &&
+      /private alignSpawnToHost\([\s\S]{0,2200}this\.requestGroundSettle\('join'\)/.test(mainSrc) &&
+      // 只对同维度做：跨维度对齐会把人塞进另一片地形
+      /private alignSpawnToHost\([\s\S]{0,700}host\.dimension[\s\S]{0,80}this\.dimension/.test(mainSrc),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

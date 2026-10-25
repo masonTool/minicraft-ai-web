@@ -3783,6 +3783,10 @@ class App {
       return;
     }
 
+    // 出生点对齐（本轮修复）：加入方落到房主身边，否则两人各在世界的出生点，
+    // 房主走远之后"想一起玩"得先跑几公里
+    this.alignSpawnToHost(players);
+
     // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来。
     // 整段包一层回声抑制（联机12）：不然刚进服就把服务端那批改动原样回发一遍
     this.applyingRemoteBlock++;
@@ -3973,6 +3977,67 @@ class App {
     for (const renderer of this.remoteRenderers.values()) renderer.dispose();
     this.remoteRenderers.clear();
     this.remotePoses.clear();
+  }
+
+  /**
+   * 联机出生点对齐（本轮修复）：加入方落到**房主身边**，而不是世界的出生点。
+   *
+   * 以前两边各自落地：房主早走出一两公里，新加入的人还在原点，"一起玩"先得跑过去。
+   * 这里优先在房主周围找一列自然地面（`naturalGroundY` 已排除树冠与水面，并保证
+   * 脚上方块与头顶两格是空的）；找不到（区块还没加载）就落到房主脚底高度上，
+   * 之后交给既有的 `requestGroundSettle('join')` 校正。
+   *
+   * 只在"从属端 + 与房主同维度"时做：房主在下界时把人放到主世界同坐标，
+   * 那边是另一片地形（岩层），没有意义。
+   */
+  private alignSpawnToHost(players: NetPlayerState[]): void {
+    if (this.net.role !== 'client') return;
+    const hostId = this.net.hostId;
+    if (hostId === null) return;
+    const host = players.find((player) => player.id === hostId);
+    if (!host) return;
+    if ((host.dimension ?? 'overworld') !== this.dimension) return;
+
+    const baseX = Math.floor(host.x);
+    const baseZ = Math.floor(host.z);
+    // 先 2 格一圈、再 3 格一圈：正前方不放（房主可能正对着墙/坑在挖）
+    const offsets: ReadonlyArray<readonly [number, number]> = [
+      [2, 0],
+      [-2, 0],
+      [0, 2],
+      [0, -2],
+      [2, 2],
+      [-2, 2],
+      [2, -2],
+      [-2, -2],
+      [3, 0],
+      [-3, 0],
+      [0, 3],
+      [0, -3],
+    ];
+    let target: { x: number; y: number; z: number } | null = null;
+    for (const [dx, dz] of offsets) {
+      const x = baseX + dx;
+      const z = baseZ + dz;
+      const groundY = naturalGroundY(this.world, x, z);
+      if (groundY === null) continue;
+      target = { x: x + 0.5, y: groundY + 1.01, z: z + 0.5 };
+      break;
+    }
+    // 区块还没加载：先站到房主脚底高度（同一片地形差不了几格），settle 会再校正
+    if (target === null) target = { x: host.x + 1.5, y: host.y, z: host.z + 0.5 };
+
+    this.physics.teleport(target.x, target.y, target.z);
+    this.physics.vx = 0;
+    this.physics.vy = 0;
+    this.physics.vz = 0;
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.refreshWorld(toChunkCoord(target.x), toChunkCoord(target.z), true);
+    this.requestGroundSettle('join');
+    console.info(
+      `[net] 出生点对齐到房主附近 (${target.x.toFixed(1)}, ${target.y.toFixed(1)}, ${target.z.toFixed(1)})`,
+    );
   }
 
   /** 其它玩家的位置更新 */
