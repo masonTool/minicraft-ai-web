@@ -4868,14 +4868,29 @@ class App {
       return false;
     }
 
-    // 维度：存档在哪个维度就回哪个维度（区块会重新流式加载）
-    if (data.dimension !== this.dimension) {
-      this.setDimension(data.dimension === 'nether' ? Dimension.NETHER : data.dimension === 'end' ? Dimension.END : Dimension.OVERWORLD);
+    /*
+     * 加入别人的房间时**不恢复位置/维度/朝向**（用户 2026-10-26："加入方的水不流"的根因）。
+     *
+     * `alignSpawnToHost()` 在 `welcome` 到达时已经把人放到房主身边了，而读档是**异步**的、
+     * 更晚才回来——这里再 `teleport(存档坐标)` 就把人瞬移回**上一局**的位置（同一个房名、
+     * 不同的世界，甚至上千格外）。人不在那片地形上时，房主的水/红石改动只会 `buffer`
+     * 进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。
+     * 房间里的位置与维度由房主/服务端说了算，本地存档只负责背包与进度。
+     */
+    const joinWorld = this.worldConfig.id.startsWith(JOIN_WORLD_PREFIX);
+    if (joinWorld) {
+      console.info('[save] 加入别人的房间：跳过位置/维度恢复（按房主身边落点）');
+    } else {
+      // 维度：存档在哪个维度就回哪个维度（区块会重新流式加载）
+      if (data.dimension !== this.dimension) {
+        this.setDimension(
+          data.dimension === 'nether' ? Dimension.NETHER : data.dimension === 'end' ? Dimension.END : Dimension.OVERWORLD,
+        );
+      }
+      this.physics.teleport(data.x, data.y, data.z);
+      this.yaw = data.yaw;
+      this.pitch = data.pitch;
     }
-
-    this.physics.teleport(data.x, data.y, data.z);
-    this.yaw = data.yaw;
-    this.pitch = data.pitch;
     // 批次 181 迁移：老存档没有 `gameMode`，`flying === true` 视为创造模式
     if (data.gameMode) this.setGameMode(data.gameMode);
     else if (data.flying) this.setGameMode('creative');

@@ -6193,7 +6193,15 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   check('音量参数不再被振荡器污染', !audioSrc.includes('gustDepth).connect(out.gain)'));
   check('网络天气走同一个 setWeather 入口（环境音/雾一起收）', /onWeather: \(kind\) => \{[\s\S]{0,400}?this\.setWeather\(kind\)/.test(mainSrc3));
 
-  // ---- ③ 加入卡生成页：8 秒没落点就就地认可（不是重新规划出生点）
+  // ---- ③ 加入房间不恢复本地存档位置（否则会瞬移回上一局，房主的改动只被 buffer）
+  check(
+    '加入别人的房间时跳过位置/维度/朝向恢复',
+    /const joinWorld = this\.worldConfig\.id\.startsWith\(JOIN_WORLD_PREFIX\);/.test(mainSrc3) &&
+      /if \(joinWorld\) \{[\s\S]{0,200}?\} else \{[\s\S]{0,400}?this\.physics\.teleport\(data\.x, data\.y, data\.z\);/.test(mainSrc3),
+  );
+  check('房主侧的水方块同步有诊断计数（发出/应用 + 可写）', mainSrc3.includes('[FLUID_DBG]') && mainSrc3.includes('countFluidNet'));
+
+  // ---- ④ 加入卡生成页：8 秒没落点就就地认可（不是重新规划出生点）
   check('加入房间有"没落点就自愈"的兜底', mainSrc3.includes('JOIN_FORCE_SPAWN_MS') && mainSrc3.includes('private forceJoinSpawn()'));
   check('自愈是就地认可（不调用 prepareNewWorldSpawn 把人挪走）', /private forceJoinSpawn\(\)[\s\S]{0,800}?this\.spawnResolved = true;/.test(mainSrc3) && !/private forceJoinSpawn\(\)[\s\S]{0,800}?prepareNewWorldSpawn\(\)/.test(mainSrc3));
 }
