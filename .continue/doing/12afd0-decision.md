@@ -72,3 +72,23 @@
 - 决定：写 `connectedDebugAndroidTest` 三条——包名、JNI 起服务 + `/healthz` + 停止、前台服务 + 多播锁 + `/rooms`；在 `Pixel_3a_API_34` 模拟器上跑。**没有**做两台设备互相发现。
 - 为什么：那一条要第二台设备 + 客户端接线（网页得调 `NativeServer.start`、把端口与 `peers` 用起来），后者正是 N6 的范围；只有一台模拟器、客户端还没接时硬凑"两台互相发现"，验的是我自己造的假路径。
 - 影响：N4b 的"能互相发现并进房"这半条**未验证**，已如实写进完成说明；N6 的验收会覆盖它。
+
+## D15 · C ABI 与 JNI 共用同一份"实例生命周期"
+- 决定：把"独立线程 + 独立 runtime + 停前补存"抽成 `src/instance.rs`，`jni.rs` 与 `capi.rs` 都只是薄包装；`capi.rs` 只暴露 `minicraft_start_server` / `minicraft_stop_server` / `minicraft_server_port` 三个 C 函数。
+- 为什么：两端的生命周期一字不差，写在两处最容易分叉的是"停止时补存快照"（一端有、一端忘），而那个 bug 的表现是"手机上玩了一下午，回来还是早上的存档"。C ABI 一旦发布很难改，所以只透出这三个函数，内部（tokio / serde）随便重构。
+- 影响：Android 的 `.so` 行为不变（三个 JNI 符号仍在，`.so` 已重编确认）；新增 1 条 `cargo test`（起服务 → `/healthz` → 停 → 端口归零），覆盖两端共用的那段。
+
+## D16 · iOS 的"只有前台能当房主"做成状态机，用户可见文案只给 key
+- 决定：`ForegroundSession` 在 `didEnterBackground` 主动停服务并回 `.suspendedBySystem`，同时给一个 i18n key（`net.host.foregroundOnly`）；原生代码里**不写**任何用户可见文本。
+- 为什么：iOS 不允许普通应用后台长期持有监听 socket，硬撑会被系统杀掉（"房间还在、没人连得上"比直接停更糟）。而用户可见文本写在 Swift 里会绕过游戏的六语言表（`audit:i18n` 管不到原生代码）。
+- 影响：网页那边要在 N6 里按这个 key 显示提示；在此之前 iOS 只是"进后台就停"，没有文案。
+
+## D17 · iOS 的验收用 `simctl spawn` 真跑，而不是只 typecheck
+- 决定：把 Swift + Rust 静态库链接成一个模拟器可执行（`Tests/main.swift`），用 `xcrun simctl spawn` 在真 iOS 模拟器里跑"起服务 → `/healthz` → `/rooms` → 停"；脚本是 `ios-shell/check-sim.sh`。
+- 为什么：`xcframework` 存在 ≠ 能链接（Rust 静态库常缺系统库符号），Swift typecheck 通过 ≠ 在 iOS 上跑得起来（`System.loadLibrary` 那类问题在 iOS 上是 dylib/符号问题）。这两件事只有"编成可执行 + 真跑"才暴露，Android 那边同理（用的是 instrumented test）。
+- 影响：验收从"编译通过"升级成"在模拟器里真的起了一个服务端并答了 HTTP"；代价是脚本要拉起模拟器（约 1 分钟）。
+
+## D18 · 不生成 Capacitor 的 `ios/` 工程（CocoaPods 缺失），交付手工接入步骤
+- 决定：`ios-shell/` 只放 xcframework 构建脚本、Swift 源码、设备级冒烟与接入文档；**不**执行 `npx cap add ios`。
+- 为什么：Capacitor 6 的 iOS 模板走 CocoaPods，本机 `pod: command not found`；硬装 CocoaPods（gem + 首次 `pod install` 下载）会引入一个和本任务无关的全局依赖，而且装完还要改工程配置才能接 xcframework。相比之下，"把 xcframework + 4 个 Swift 文件加进 target + 3 个 Info.plist 键"是 5 分钟的手工步骤，写在 `ios-shell/README.md` 里可复核。
+- 影响：**"iOS 上点一下开房"没跑过**（如实记在队列完成说明里）；等装好 CocoaPods 或 Capacitor 支持 SPM 时再补一条命令即可，Rust/Swift 两侧都已验证过。

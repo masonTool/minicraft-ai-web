@@ -12,7 +12,9 @@
 
 pub mod aoi;
 pub mod beacon;
+pub mod capi;
 pub mod handlers;
+pub mod instance;
 pub mod jni;
 pub mod protocol;
 pub mod ratelimit;
