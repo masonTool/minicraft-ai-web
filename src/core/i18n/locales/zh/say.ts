@@ -79,6 +79,12 @@ export const say = {
   'say.disconnect.soloReloaded': '已断开联机：世界已重载回单机存档',
   'say.net.seedMismatch': '房间的世界种子是 {server}，本世界是 {local}——两片大陆上继续玩只会把方块写到错的位置，已断开联机。请回主菜单 →「加入房间…」，那边会按房主的世界开一局',
   'say.net.seedMismatchToast': '种子不同：已断开，请从主菜单「加入房间」进',
+  // 房间进出提示（用户要求：左上角消息区要有"我进了哪个房、谁进来了"）
+  'say.net.roomJoined': '已加入房间「{room}」，房主：{host} · 在线 {count} 人',
+  'say.net.roomHosted': '房间「{room}」已开好（你是房主）· 在线 {count} 人',
+  'say.net.playerJoined': '{name} 进入了房间',
+  'say.net.playerJoinedHost': '{name} 进入了房间（房主）',
+  'say.net.playerLeft': '{name} 离开了房间',
 
   // ---- 世界事件、进度与天气（T3）
   'say.progress.reconciled': '对了一次背包：已达成 {count} 条进度（详情按 J 看）',

@@ -3745,6 +3745,21 @@ class App {
      */
     this.multiplayerScreen.setRole(this.net.role);
     console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
+
+    /*
+     * 进房提示（用户要求）：左上角消息区要能看出"我进了哪个房间、房主是谁、现在有几个人"。
+     * 以前只有 F3 调试面板里一串 id，手机上没有 F3 等于什么提示都没有。
+     */
+    const hostName = players.find((player) => player.id === this.net.hostId)?.name ?? '?';
+    const roomLabel =
+      this.net.roomId === DEFAULT_MULTIPLAYER_ROOM ? t('room.defaultRoom') : this.net.roomId;
+    const joinedNotice =
+      this.net.role === 'host'
+        ? tp('say.net.roomHosted', { room: roomLabel, count: players.length })
+        : tp('say.net.roomJoined', { room: roomLabel, host: hostName, count: players.length });
+    this.chat.push(joinedNotice, 'system');
+    this.chatLine = joinedNotice;
+    this.chatUntil = performance.now() + 8000;
     // 排查"某一端某样东西还在自己动"时，第一句话就该是"这一端在跑什么"（SimMode 的表）
     console.info(`[net] 模拟模式：${describeSimMode(this.net.role)}`);
 
@@ -4082,6 +4097,14 @@ class App {
         lastZ: player.z,
       });
       console.info(`[net] ${player.name}#${player.id} 加入了游戏`);
+      // 进房提示（用户要求）：谁进来了要说一句，房主要带上标识
+      const joinNotice =
+        player.id === this.net.hostId
+          ? tp('say.net.playerJoinedHost', { name: player.name })
+          : tp('say.net.playerJoined', { name: player.name });
+      this.chat.push(joinNotice, 'system');
+      this.chatLine = joinNotice;
+      this.chatUntil = performance.now() + 6000;
       return;
     }
     // 名字改了（或第一次进来走上面的分支）：名字牌取的是 `customName`，跟着更新；
@@ -4250,6 +4273,14 @@ class App {
   private lastContainerProgressAt = 0;
 
   private onNetLeave(id: number): void {
+    // 离开提示（用户要求）：名字还在表里时先取出来，下面就要删了
+    const leftName = this.remotePlayers.get(id)?.customName ?? '';
+    if (leftName.length > 0) {
+      const leftNotice = tp('say.net.playerLeft', { name: leftName });
+      this.chat.push(leftNotice, 'system');
+      this.chatLine = leftNotice;
+      this.chatUntil = performance.now() + 6000;
+    }
     // 玩家模型是每个远端玩家一份（不再由 `MobRenderer` 的池子按帧回收），
     // 所以离开时要显式释放：`dispose()` 会把网格从场景摘掉并释放材质/几何
     this.remoteRenderers.get(id)?.dispose();

@@ -74,6 +74,12 @@ export const say = {
   'say.disconnect.soloReloaded': 'Disconnected: the world was reloaded from the single-player save',
   'say.net.seedMismatch': 'Seed mismatch: the room uses {server}, your world uses {local} — playing on two worlds would write blocks in the wrong places, so multiplayer was disconnected. Back to the main menu → “Join a room” to load the host’s world',
   'say.net.seedMismatchToast': 'Seed mismatch: disconnected — join again from the main menu',
+  // Room join/leave notices
+  'say.net.roomJoined': 'Joined room “{room}” · host: {host} · {count} online',
+  'say.net.roomHosted': 'Room “{room}” is open (you are the host) · {count} online',
+  'say.net.playerJoined': '{name} joined the room',
+  'say.net.playerJoinedHost': '{name} joined the room (host)',
+  'say.net.playerLeft': '{name} left the room',
 
   // ---- World events, progress and weather (T3)
   'say.progress.reconciled': 'Inventory checked: {count} advancements earned (press J for details)',

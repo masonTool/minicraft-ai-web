@@ -74,6 +74,12 @@ export const say = {
   'say.disconnect.soloReloaded': 'Déconnecté : le monde a été rechargé depuis la sauvegarde solo',
   'say.net.seedMismatch': 'Graines différentes : la partie utilise {server}, votre monde {local} — continuer sur deux mondes écrirait des blocs au mauvais endroit, la partie a donc été déconnectée. Retour au menu → « Rejoindre une partie »',
   'say.net.seedMismatchToast': 'Graines différentes : déconnecté — rejoignez depuis le menu',
+  // Entrée / sortie de la partie
+  'say.net.roomJoined': 'Partie « {room} » rejointe · hôte : {host} · {count} en ligne',
+  'say.net.roomHosted': 'Partie « {room} » ouverte (vous êtes l’hôte) · {count} en ligne',
+  'say.net.playerJoined': '{name} a rejoint la partie',
+  'say.net.playerJoinedHost': '{name} a rejoint la partie (hôte)',
+  'say.net.playerLeft': '{name} a quitté la partie',
 
   // ---- Événements du monde, progrès et météo (T3)
   'say.progress.reconciled': 'Inventaire vérifié : {count} succès obtenus (détails avec J)',

@@ -74,6 +74,12 @@ export const say = {
   'say.disconnect.soloReloaded': 'Desconectado: o mundo foi recarregado do save single-player',
   'say.net.seedMismatch': 'Sementes diferentes: a sala usa {server}, seu mundo usa {local} — continuar em dois mundos gravaria blocos nos lugares errados, então a conexão foi encerrada. Volte ao menu → “Entrar em uma sala”',
   'say.net.seedMismatchToast': 'Sementes diferentes: desconectado — entre pelo menu',
+  // Entrada / saída da sala
+  'say.net.roomJoined': 'Entrou na sala “{room}” · anfitrião: {host} · {count} online',
+  'say.net.roomHosted': 'Sala “{room}” aberta (você é o anfitrião) · {count} online',
+  'say.net.playerJoined': '{name} entrou na sala',
+  'say.net.playerJoinedHost': '{name} entrou na sala (anfitrião)',
+  'say.net.playerLeft': '{name} saiu da sala',
 
   // ---- Eventos do mundo, progresso e clima (T3)
   'say.progress.reconciled': 'Inventário conferido: {count} conquistas obtidas (detalhes com J)',

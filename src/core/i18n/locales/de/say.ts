@@ -74,6 +74,12 @@ export const say = {
   'say.disconnect.soloReloaded': 'Verbindung getrennt: Welt aus dem Einzelspieler-Speicher neu geladen',
   'say.net.seedMismatch': 'Seed stimmt nicht: Der Raum nutzt {server}, deine Welt {local} – auf zwei Welten weiterzuspielen schreibt Blöcke an falsche Stellen, daher wurde getrennt. Zurück zum Hauptmenü → „Raum beitreten“',
   'say.net.seedMismatchToast': 'Seed stimmt nicht: getrennt – bitte über das Hauptmenü beitreten',
+  // Raum betreten / verlassen
+  'say.net.roomJoined': 'Raum „{room}“ beigetreten · Gastgeber: {host} · {count} online',
+  'say.net.roomHosted': 'Raum „{room}“ ist offen (du bist der Gastgeber) · {count} online',
+  'say.net.playerJoined': '{name} ist dem Raum beigetreten',
+  'say.net.playerJoinedHost': '{name} ist dem Raum beigetreten (Gastgeber)',
+  'say.net.playerLeft': '{name} hat den Raum verlassen',
 
   // ---- Weltgeschehen, Fortschritt und Wetter (T3)
   'say.progress.reconciled': 'Inventar abgeglichen: {count} Fortschritte erreicht (Details mit J)',

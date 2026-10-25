@@ -5813,5 +5813,32 @@ console.log('\n[远端玩家模型（本轮修复）]');
   );
 }
 
+/*
+ * 房间进出提示（用户要求）：左上角消息区要说清"我进了哪个房、谁进来了、谁走了"。
+ * 以前这些只在 F3 调试面板/控制台里，手机上等于没有任何提示。
+ */
+console.log('\n[房间进出提示]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '进房时说清房间名 / 房主 / 在线人数（房主与加入方两套文案）',
+    mainSrc.includes("tp('say.net.roomHosted'") &&
+      mainSrc.includes("tp('say.net.roomJoined'") &&
+      /say\.net\.roomJoined'[\s\S]{0,120}room: roomLabel/.test(mainSrc) &&
+      /say\.net\.roomJoined'[\s\S]{0,200}host: hostName/.test(mainSrc),
+  );
+  check(
+    '有人进房要提示，且房主那条带标识',
+    mainSrc.includes("tp('say.net.playerJoinedHost'") && mainSrc.includes("tp('say.net.playerJoined'"),
+  );
+  check('有人离开要提示（名字在删除前取出来）', mainSrc.includes("tp('say.net.playerLeft'") && /const leftName = this\.remotePlayers\.get\(id\)\?\.customName/.test(mainSrc));
+  check(
+    '三条都推到左上角消息区（chat.push + chatLine）',
+    mainSrc.includes('this.chat.push(joinedNotice') &&
+      mainSrc.includes('this.chat.push(joinNotice') &&
+      mainSrc.includes('this.chat.push(leftNotice'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
