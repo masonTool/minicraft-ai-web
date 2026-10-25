@@ -6,7 +6,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatServerUrl, parseServerUrl, resolveDefaultServerUrl, roomsEndpoint } from '../src/core/net/ServerUrl.ts';
+import {
+  DEFAULT_NET_PORT,
+  formatServerUrl,
+  parseServerUrl,
+  resolveDefaultServerUrl,
+  roomsEndpoint,
+  withDefaultPort,
+} from '../src/core/net/ServerUrl.ts';
 
 describe('parseServerUrl', () => {
   it('裸地址：默认房间、无口令', () => {
@@ -45,12 +52,40 @@ describe('resolveDefaultServerUrl（联机28）', () => {
     expect(resolveDefaultServerUrl('https:', 'mc.example.com', 'mc.example.com')).toBe('wss://mc.example.com/ws');
   });
 
-  it('http 页面走本地默认端口', () => {
-    expect(resolveDefaultServerUrl('http:', '192.168.1.5:5173', '192.168.1.5')).toBe('ws://192.168.1.5:8787');
+  it('http 页面走固定的服务端端口', () => {
+    expect(resolveDefaultServerUrl('http:', '192.168.1.5:5173', '192.168.1.5')).toBe(
+      `ws://192.168.1.5:${DEFAULT_NET_PORT}`,
+    );
   });
 
-  it('局域网 IP + 端口：host 带端口时仍只取 hostname（服务端端口固定 8787）', () => {
-    expect(resolveDefaultServerUrl('http:', 'localhost:5173', 'localhost')).toBe('ws://localhost:8787');
+  it('host 带端口时仍只取 hostname（服务端端口固定，不跟页面端口走）', () => {
+    expect(resolveDefaultServerUrl('http:', 'localhost:5173', 'localhost')).toBe(
+      `ws://localhost:${DEFAULT_NET_PORT}`,
+    );
+  });
+});
+
+/*
+ * 只填 IP 也要能连（本轮）：玩家不该关心协议头与端口。
+ * 显式端口必须保留——老玩家存的 `ws://host:8787` 与自定义部署都在用这条。
+ */
+describe('withDefaultPort（地址栏只收 IP）', () => {
+  it('没写端口就补默认端口', () => {
+    expect(withDefaultPort('ws://192.168.1.5')).toBe(`ws://192.168.1.5:${DEFAULT_NET_PORT}`);
+  });
+
+  it('显式端口原样保留（老地址 ws://host:8787 仍然可用）', () => {
+    expect(withDefaultPort('ws://192.168.1.5:8787')).toBe('ws://192.168.1.5:8787');
+    expect(withDefaultPort('ws://mc.example.com:9000')).toBe('ws://mc.example.com:9000');
+  });
+
+  it('wss 不补端口（https 站点经反代，端口由域名决定）', () => {
+    expect(withDefaultPort('wss://mc.example.com')).toBe('wss://mc.example.com');
+    expect(withDefaultPort('wss://mc.example.com/ws')).toBe('wss://mc.example.com/ws');
+  });
+
+  it('默认端口常量是 25187（换端口时这条会先红）', () => {
+    expect(DEFAULT_NET_PORT).toBe(25187);
   });
 });
 

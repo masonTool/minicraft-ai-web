@@ -10,7 +10,7 @@
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../server/protocol.mjs';
 
-const port = Number(process.argv[2] ?? 8787);
+const port = Number(process.argv[2] ?? 25187);
 const blockX = Number(process.argv[3] ?? 0);
 const blockY = Number(process.argv[4] ?? 100);
 const blockZ = Number(process.argv[5] ?? 0);

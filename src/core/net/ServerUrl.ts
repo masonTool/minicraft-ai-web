@@ -12,6 +12,18 @@
  * 纯函数、不碰 WebSocket，`tests/net-server-url.test.ts` 直接断言。
  */
 
+/**
+ * 联机服务端的固定端口（**与 `server/protocol.mjs` 的 `DEFAULT_PORT` 相等**）。
+ *
+ * 为什么换掉 8787：
+ *  - 8787 是各种 dashboard / 开发脚手架的常见默认口，和本机其它服务撞车的概率不低；
+ *  - 更重要的是**不给玩家填端口**——地址栏只收 IP/主机名，端口由这里统一。
+ *
+ * 为什么是 25187：落在注册端口段（1024~49151）、避开 3000/5000/8000/8080/8888/9000/
+ * 25565（Minecraft）这些"一看就知道"的默认值，扫端口的脚本也不常光顾。
+ */
+export const DEFAULT_NET_PORT = 25187;
+
 export interface ParsedServerUrl {
   /** 去掉 path / query 的裸地址（真正用来连的） */
   url: string;
@@ -59,6 +71,22 @@ export function formatServerUrl(base: string, room: string, password: string): s
 }
 
 /**
+ * 给"只写了 IP/主机名"的地址补上默认端口（玩家不该关心端口）。
+ *
+ * 只补 `ws://`：`wss://` 是 https 站点经反代进来的，端口由域名决定（443），
+ * 硬补一个默认端口会把本来能用的地址弄坏。
+ *
+ * 已经写了端口（`host:9000`）的保持原样——那是显式指定，服务端可能真跑在别处。
+ * ⚠️ 不处理 IPv6 字面量（`[::1]`），本项目的联机场景是局域网 IPv4 / 域名。
+ */
+export function withDefaultPort(url: string): string {
+  const match = /^(wss?:\/\/)([^/:]+)$/i.exec(url);
+  if (!match) return url;
+  if (match[1]!.toLowerCase() === 'wss://') return url;
+  return `${match[1]}${match[2]}:${DEFAULT_NET_PORT}`;
+}
+
+/**
  * 由 WebSocket 地址推出 `/rooms` 的 HTTP 地址（L9）。
  *
  * `GET /rooms` 与 WebSocket 在**同一个端口**上，所以只换协议头：`ws → http`、
@@ -82,12 +110,12 @@ export function roomsEndpoint(wsUrl: string): string | null {
  * 三种部署形态各一条规则，都是踩过的坑：
  *  - **页面在 https**：必须用 `wss://<同源>/ws`。浏览器会拦 `ws://`（混合内容），而且
  *    同源反代是唯一不需要额外开放端口的做法；
- *  - **页面在 http（本地开发 / 局域网直连）**：`ws://<hostname>:8787`，与服务端默认端口一致；
+ *  - **页面在 http（本地开发 / 局域网直连）**：`ws://<hostname>:<DEFAULT_NET_PORT>`；
  *  - **`?server=` 显式指定**（部署到子路径或别的主机时）：原样用，不做任何推断。
  *
  * 纯函数、不碰 `window`，`tests/net-server-url.test.ts` 直接断言。
  */
 export function resolveDefaultServerUrl(protocol: string, host: string, hostname: string): string {
   if (protocol === 'https:') return `wss://${host}/ws`;
-  return `ws://${hostname}:8787`;
+  return `ws://${hostname}:${DEFAULT_NET_PORT}`;
 }

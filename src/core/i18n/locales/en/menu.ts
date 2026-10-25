@@ -64,8 +64,8 @@ export const menu = {
   // ---- 多人游戏（联机9）：主菜单 / 暂停菜单的入口按钮 + 连接小面板
   'menu.multiplayer': 'Multiplayer',
   'mp.title': 'Multiplayer',
-  'mp.server': 'Server address',
-  'mp.serverHint': 'e.g. ws://192.168.1.5:8787; on the same LAN enter it and tap Host or Join',
+  'mp.server': 'Server IP',
+  'mp.serverHint': 'e.g. 192.168.1.5 — just the IP; the port is fixed (ask whoever hosts)',
   'mp.name': 'Nickname',
   'mp.room': 'Room',
   'mp.roomHint': 'blank = default room',

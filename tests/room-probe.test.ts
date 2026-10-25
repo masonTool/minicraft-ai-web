@@ -46,7 +46,7 @@ function makeFakeSocket(): { socket: FakeSocket; factory: (url: string) => WebSo
   return { socket, factory };
 }
 
-const options = { baseUrl: 'ws://127.0.0.1:8787', room: 'red', password: 'pw', name: '探针' };
+const options = { baseUrl: 'ws://127.0.0.1:25187', room: 'red', password: 'pw', name: '探针' };
 
 describe('probeRoom', () => {
   it('连上 → 发 join → 收到 welcome 就带着世界返回，并关掉 socket', async () => {
@@ -76,7 +76,7 @@ describe('probeRoom', () => {
     expect(result?.hostId).toBe(1);
     expect(socket.closed).toBe(true);
     // 地址里带上了房间与口令（面板拼地址那一层）
-    expect(socket.url).toBe('ws://127.0.0.1:8787/red?pw=pw');
+    expect(socket.url).toBe('ws://127.0.0.1:25187/red?pw=pw');
   });
 
   it('服务端拒（error）→ null', async () => {

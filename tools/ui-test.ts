@@ -5004,19 +5004,19 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
 console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
 {
   /*
-   * 手机上最容易漏的就是协议头（`192.168.1.5:8787` 是常态）、也常有人把网页地址
+   * 手机上最容易漏的就是协议头（`192.168.1.5:25187` 是常态）、也常有人把网页地址
    * （`http://`）粘进来。这两种"猜"都能命中真实意图，所以在这里钉死；真正该报错的是
    * 空地址、只有协议头、带空白这几种。
    */
-  check('裸 IP 自动补 ws://', normalizeServerUrl('192.168.1.5:8787') === 'ws://192.168.1.5:8787');
-  check('去掉末尾斜杠', normalizeServerUrl('ws://192.168.1.5:8787/') === 'ws://192.168.1.5:8787');
+  check('裸 IP 自动补 ws://', normalizeServerUrl('192.168.1.5:25187') === 'ws://192.168.1.5:25187');
+  check('去掉末尾斜杠', normalizeServerUrl('ws://192.168.1.5:25187/') === 'ws://192.168.1.5:25187');
   check('https:// 映射成 wss://', normalizeServerUrl('https://mc.example.com/ws') === 'wss://mc.example.com/ws');
-  check('http:// 映射成 ws://', normalizeServerUrl('http://192.168.1.5:8787') === 'ws://192.168.1.5:8787');
+  check('http:// 映射成 ws://', normalizeServerUrl('http://192.168.1.5:25187') === 'ws://192.168.1.5:25187');
   check(
     '空地址 / 只有协议头 / 带空白都判非法',
     normalizeServerUrl('   ') === null &&
       normalizeServerUrl('ws://') === null &&
-      normalizeServerUrl('ws://foo bar:8787') === null,
+      normalizeServerUrl('ws://foo bar:25187') === null,
   );
 
   check('昵称去掉尖括号与控制字符', sanitizeMultiplayerName('  <小明>\t ') === '小明');
@@ -5289,7 +5289,7 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
 /*
  * 加入房间面板（L9）：地址 + 房间 + 口令 + 房间列表
  *
- * 以前房间与口令只能写进地址（`ws://host:8787/red?pw=1234`），手机上几乎敲不对；
+ * 以前房间与口令只能写进地址（`ws://host:25187/red?pw=1234`），手机上几乎敲不对；
  * 而"这台服务器上有哪些房"根本无从得知。这一条把它们提成独立字段，并能问服务器要列表。
  */
 console.log('\n[加入房间：选项式面板（L9）]');
@@ -5451,7 +5451,7 @@ console.log('\n[暂停菜单：本局房间（L9）]');
 /*
  * 最近连接（L9）
  *
- * 局域网里就那么一两台服务器、一两个房间，可地址是 `ws://192.168.1.5:8787` 这种东西，
+ * 局域网里就那么一两台服务器、一两个房间，可地址是 `ws://192.168.1.5:25187` 这种东西，
  * 手机上每次重敲一遍是纯折磨。点一颗小胶囊就把地址/房间/昵称填回去。
  */
 console.log('\n[最近连接（L9）]');
@@ -5903,6 +5903,38 @@ console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
     /@media \(max-width: 620px\), \(orientation: portrait\) \{[\s\S]{0,220}\.mp-columns \{ flex-direction: column/.test(css),
   );
   check('列表行更紧凑（字号 11 / 内边距 3）', /\.mp-room-row \{[\s\S]{0,220}font-size: 11px/.test(css));
+}
+
+/*
+ * 地址栏只收 IP、端口固定（本轮）
+ *
+ * 用户："不需要让玩家填什么 ws://，端口统一固定一个非常用的"。判据有三条：
+ * 输入只填 IP 也能连、显式端口不被改、两端默认端口必须同一个数字。
+ */
+console.log('\n[加入房间：地址只填 IP]');
+{
+  const serverUrlSrc = readFileSync(new URL('../src/core/net/ServerUrl.ts', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/protocol.mjs', import.meta.url), 'utf8');
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  check(
+    '只填 IP 自动补 ws:// 与固定端口',
+    mpSrc.includes('return withDefaultPort(value);') && mpSrc.includes('withDefaultPort'),
+  );
+  check(
+    '客户端与服务端用同一个默认端口常量（各写一份迟早漂）',
+    (() => {
+      const client = /DEFAULT_NET_PORT = (\d+)/.exec(serverUrlSrc)?.[1];
+      const server = /DEFAULT_PORT = (\d+)/.exec(serverSrc)?.[1];
+      return client !== undefined && client === server;
+    })(),
+  );
+  check('默认端口不是 8787（换成了不常见的值）', /DEFAULT_NET_PORT = (?!8787)\d+/.test(serverUrlSrc));
+  check(
+    '服务端默认端口读常量而不是硬编码',
+    readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8').includes(
+      'process.env.PORT ?? DEFAULT_PORT',
+    ),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

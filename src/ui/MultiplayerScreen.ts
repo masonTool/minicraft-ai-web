@@ -22,7 +22,7 @@ import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
-import { formatServerUrl, parseServerUrl, roomsEndpoint } from '../core/net/ServerUrl.ts';
+import { formatServerUrl, parseServerUrl, roomsEndpoint, withDefaultPort } from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
@@ -60,9 +60,11 @@ const DEFAULT_NAME = '玩家';
 /**
  * 把用户输入的地址收成 `ws://` 或 `wss://`。
  *
- * 手机上最容易漏的就是协议头：填 `192.168.1.5:8787` 是常态，所以不合法的话直接补
- * `ws://`；反过来填了 `http(s)://`（很多人记成网页地址）也顺手映射到 `ws(s)://`
- * ——这两种"猜"都能命中真实意图，而报错只会让人退出去重来。
+ * 手机上最容易漏的是**协议头与端口**：填 `192.168.1.5` 是常态，所以：
+ *  - 没有协议头 → 补 `ws://`；
+ *  - 没有端口 → 补 `DEFAULT_NET_PORT`（玩家不该关心端口，见 `ServerUrl.ts`）；
+ *  - 填了 `http(s)://`（很多人记成网页地址）也顺手映射到 `ws(s)://`。
+ * 这几种"猜"都能命中真实意图，而报错只会让人退出去重来。
  *
  * 空串、带空白、没有主机名的一律返回 `null`（交给界面提示 `mp.error.url`）。
  */
@@ -75,11 +77,11 @@ export function normalizeServerUrl(input: string): string | null {
   else if (/^http:\/\//i.test(value)) value = `ws://${value.slice('http://'.length)}`;
   else if (!/^wss?:\/\//i.test(value)) value = `ws://${value}`;
 
-  // 末尾的斜杠对 WebSocket 没意义（`ws://host:8787/` 与不带斜杠等价），统一去掉
+  // 末尾的斜杠对 WebSocket 没意义（`ws://host:25187/` 与不带斜杠等价），统一去掉
   value = value.replace(/\/+$/, '');
-  // 主机名必须存在、且不含空白（`ws://foo bar:8787` 这种是粘贴坏了）
+  // 主机名必须存在、且不含空白（`ws://foo bar` 这种是粘贴坏了）
   if (!/^wss?:\/\/[^\s/]+(\/\S*)?$/i.test(value)) return null;
-  return value;
+  return withDefaultPort(value);
 }
 
 /** 昵称清洗：去控制字符与尖括号、按字符截到 16、空则“玩家”（与服务端同口径） */

@@ -63,8 +63,8 @@ export const menu = {
   // ---- 多人游戏（联机9）：主菜单 / 暂停菜单的入口按钮 + 连接小面板
   'menu.multiplayer': '多人游戏',
   'mp.title': '多人游戏',
-  'mp.server': '服务器地址',
-  'mp.serverHint': '例如 ws://192.168.1.5:8787；同一间屋子填上地址后开房或加入',
+  'mp.server': '服务器 IP',
+  'mp.serverHint': '例如 192.168.1.5（只填 IP，端口已固定；开房的人会告诉你这个地址）',
   'mp.name': '昵称',
   'mp.room': '房间',
   'mp.roomHint': '留空 = 默认房间',

@@ -36,7 +36,7 @@
   `startWorld` → 自动连上。
 - **面板**：地址（+「找房间」拉 `GET /rooms`）/ 房间 + 口令 / 房间列表 / 最近连接 / 昵称。
   房间与口令是独立字段，`readForm()` 里才用 `formatServerUrl` 拼出真正的地址；粘贴老格式
-  `ws://h:8787/red?pw=1` 会自动拆开（`splitAddress`）。
+  `ws://h:25187/red?pw=1` 会自动拆开（`splitAddress`）。
 - **本局房间卡**（`ui/RoomCard.ts`）：联机中暂停菜单那颗键变成它——房间 / 角色 / 在线 / 世界 + 种子
   + 只读邀请地址 + 复制邀请 / 断开 / 关闭。复制有 clipboard → `execCommand` → 手动选中三条退路。
 - **库名带种子指纹**：`worldId@mp:<room>@<seed>`（同房换世界 = 另一片大陆 = 另一个库）；
@@ -56,7 +56,7 @@
   （合法整数），于是两边地形完全不同而不报错。只认 `typeof === 'number'` 的整数。
 - **剪贴板只在安全上下文可用**：局域网手机连 `http://192.168.x.x:5173` 时 `navigator.clipboard`
   是 `undefined`，必须退回 `execCommand('copy')`，再不行就选中让玩家手动复制。
-- **`/rooms` 是跨源请求**：页面在 5173、服务端在 8787，响应不带 `access-control-allow-origin`
+- **`/rooms` 是跨源请求**：页面在 5173、服务端在 25187，响应不带 `access-control-allow-origin`
   浏览器会直接吞掉（表现为"列不出房间"）。房名会拼进地址，所以清洗时不合规的行直接丢。
 
 ## 五、MS2 世界权威（批次 20261025-0122）
