@@ -22,7 +22,20 @@ import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
-import { formatServerUrl, parseServerUrl, roomsEndpoint, withDefaultPort } from '../core/net/ServerUrl.ts';
+import {
+  formatServerUrl,
+  healthEndpoint,
+  parseServerUrl,
+  roomsEndpoint,
+  withDefaultPort,
+} from '../core/net/ServerUrl.ts';
+import {
+  filterSelfPeers,
+  parsePeersResponse,
+  peerAddress,
+  probeLatency,
+  type NearbyPeer,
+} from '../core/net/NearbyRooms.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
@@ -459,7 +472,7 @@ export class MultiplayerScreen {
     this.splitAddress();
     const base = normalizeServerUrl(this.urlInput.value);
     const endpoint = base ? roomsEndpoint(base) : null;
-    if (!endpoint) {
+    if (!base || !endpoint) {
       this.showRoomsMessage(t('mp.roomsFailed'));
       return;
     }
@@ -475,11 +488,87 @@ export class MultiplayerScreen {
         return;
       }
       this.renderRooms(parsed);
+      // 这台服务器用 UDP 组播听到的其它设备（N6）：浏览器自己发不出 UDP，只能借它的耳朵
+      this.renderPeers(await this.loadNearbyPeers(base));
     } catch {
       // 跨源被挡 / 服务端不在 / 超时：一句人话，别把玩家堵在异常里
       this.showRoomsMessage(t('mp.roomsFailed'));
     } finally {
       this.refreshButton.disabled = false;
+    }
+  }
+
+  /**
+   * 读这台服务器的 `/healthz`，取它听到的其它设备（N6）。
+   *
+   * 为什么借道服务端：浏览器既发不出也收不到 UDP 组播；每台手机上的 Rust 服务端
+   * 一直在组播上听（`rust-server/src/beacon.rs`），把结果写进 `/healthz` 的 `peers`。
+   *
+   * 任何失败都返回空数组：附近房间是**加分项**，不能让它把"手填地址"这条路堵住。
+   */
+  private async loadNearbyPeers(base: string): Promise<NearbyPeer[]> {
+    const endpoint = healthEndpoint(base);
+    if (!endpoint) return [];
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 2000);
+      const response = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
+      window.clearTimeout(timer);
+      const peers = parsePeersResponse(await response.json());
+      if (!peers) return [];
+      /*
+       * 过滤"自己"：从**别人**的 `/healthz` 看，`peers` 里会有我们自己那一间。
+       * 我们只能可靠地知道自己"正对着哪台"（面板里那个地址），所以按它过滤——
+       * 一台手机有多个网卡地址，枚举自身 IP 既不可靠也没必要。
+       */
+      return filterSelfPeers(peers, [base]);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 画"附近设备"的行：世界名 / 人数 / 有无口令 / 延迟，点一下直接进房。
+   *
+   * 延迟异步补：先画 `— ms`，探到再改文字——不让"某台设备不回 /healthz"
+   * 把整个列表卡住 1 秒以上。
+   */
+  private renderPeers(peers: NearbyPeer[]): void {
+    if (peers.length === 0) return;
+    // 前面可能刚画了"这台服务器上还没有人开房"，附近有设备时那句话就不对了
+    const placeholder = this.roomsEl.querySelector('.mp-rooms-empty');
+    if (placeholder) placeholder.remove();
+    this.roomsEl.classList.remove('hidden');
+
+    for (const peer of peers) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'mp-room-row';
+      row.dataset.room = peer.room;
+      row.dataset.nearby = '1';
+      const name = document.createElement('b');
+      name.textContent = peer.name.length > 0 ? peer.name : `${peer.host}:${peer.port}`;
+      const meta = document.createElement('span');
+      const parts = [tp('mp.roomsPlayers', { n: peer.players }), `${peer.host}:${peer.port}`];
+      // 有口令的房：先说清楚，别让玩家点进去才知道要口令
+      if (peer.passwordRequired) parts.push(t('mp.password'));
+      const showLatency = (latencyMs: number | null): void => {
+        meta.textContent = [...parts, latencyMs === null ? '— ms' : `${latencyMs} ms`].join(' · ');
+      };
+      showLatency(null);
+      row.append(name, meta);
+      row.addEventListener('click', () => {
+        // 地址里带房间名（`ws://host:port/room`），`splitAddress` 会把它拆回房间栏
+        this.urlInput.value = peerAddress(peer);
+        this.roomInput.value = '';
+        if (peer.passwordRequired && this.passwordInput.value.trim().length === 0) {
+          this.passwordInput.focus();
+          return;
+        }
+        this.submit(false);
+      });
+      this.roomsEl.append(row);
+      void probeLatency(peer, fetch).then(showLatency);
     }
   }
 

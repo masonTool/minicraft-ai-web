@@ -92,3 +92,23 @@
 - 决定：`ios-shell/` 只放 xcframework 构建脚本、Swift 源码、设备级冒烟与接入文档；**不**执行 `npx cap add ios`。
 - 为什么：Capacitor 6 的 iOS 模板走 CocoaPods，本机 `pod: command not found`；硬装 CocoaPods（gem + 首次 `pod install` 下载）会引入一个和本任务无关的全局依赖，而且装完还要改工程配置才能接 xcframework。相比之下，"把 xcframework + 4 个 Swift 文件加进 target + 3 个 Info.plist 键"是 5 分钟的手工步骤，写在 `ios-shell/README.md` 里可复核。
 - 影响：**"iOS 上点一下开房"没跑过**（如实记在队列完成说明里）；等装好 CocoaPods 或 Capacitor 支持 SPM 时再补一条命令即可，Rust/Swift 两侧都已验证过。
+
+## D19 · 局域网发现的数据**借道服务端** `/healthz`，并为它加 CORS
+- 决定：面板刷新房间时同时读 `/healthz`，把 `peers` 当成"附近设备"；给 `/healthz` 加 `access-control-allow-origin: *`（**Rust 与 JS 两套服务端同时改**）。
+- 为什么：浏览器发不出也收不到 UDP 组播，唯一的耳朵是每台手机上的 Rust 服务端（它一直在听）。`/rooms` 早就有 CORS，`/healthz` 没有——不加的话浏览器直接拦掉，功能等于不存在。两套实现必须一起改，否则 N3 建立的"行为一致"当场破。
+- 影响：`/healthz` 从此可被任意来源读（本来也是公开信息：人数/房间数/吞吐）；多一个响应头，net-test 无断言变化（两套各 195/0）。
+
+## D20 · 发现报文加 `room`，Bonjour TXT 用同名键 + `from_txt` 单测
+- 决定：组播报文与 `/healthz.peers` 都带 `room`；iOS 的 Bonjour TXT 也用 `room` 这个键；`beacon::from_txt(service_name, txt)` 把 Bonjour 记录转成与组播**同一个结构**，并有单测。
+- 为什么：没有房间名，面板只能拼 `ws://host:port`，"点一下进房"会进默认房间——玩家看到的世界跟列表里写的不一样。而"Android 组播 ↔ iOS Bonjour 互通"如果没有一个共同的中间结构，就只能靠两边的字符串约定；`from_txt` 把这条约定变成可断言的东西（键名一致 + 转换正确）。
+- 影响：报文多一个字段（老客户端忽略未知字段即可）；`PeerBook` 里 Bonjour 来的 peer 身份是 `bonjour:<服务名>`，与组播的 8 位 id 不会撞。
+
+## D21 · "自己"的过滤：客户端只按"正对着的地址"，不枚举自身 IP
+- 决定：客户端用 `filterSelfPeers(peers, [base])`，`base` 是面板里填的那台服务器；服务端侧仍然按**实例 id**过滤自己的回声（D7 那套没动）。
+- 为什么：一台手机可能有 Wi-Fi/热点/多个网卡地址，"把自身所有 IP 列出来"既不可靠（拿不到、还可能误伤同段别人的机器）也没必要。真正会误显示的只有"我在 A 上、又去看 A 的 peers 里有没有我"这种情况——按 `base` 就够了。真正的"自己发自己收"在服务端就挡住了。
+- 影响：从**别人**的 `/healthz` 里仍可能看到自己那一间（那一栏显示的是"他那台听得见谁"），点进去只是连自己的服务器，不会出错。
+
+## D22 · 附近房间的行**复用现有 i18n 键**，不新增文案
+- 决定：行的文字由数据（世界名 / `host:port` / `{n} 人`）与现有键（`mp.roomsPlayers`、`mp.password`）拼成，延迟显示成 `12 ms` / `— ms`（单位不翻译）。
+- 为什么：新增 6 条文案要改六语言表并过 `audit:i18n`（2947 键/语言），而这一版要表达的东西全都能用已有键凑出来；等真要写"另一台设备"这类句子时再一起加，避免为了一个标签动六份语言表。
+- 影响：附近房间与同服务器房间**外观一致**（同一个 `mp-room-row`），只在 meta 里多一个 `host:port` 与延迟；以后要区分视觉风格再加 class 即可。

@@ -517,7 +517,12 @@ const httpServer = createServer((req, res) => {
     return;
   }
   if (path === '/healthz') {
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    // 联机面板要从游戏页面跨源读 `/healthz` 里的 `peers`（局域网发现），与 `/rooms` 同款 CORS
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
     res.end(
       JSON.stringify({
         ok: true,

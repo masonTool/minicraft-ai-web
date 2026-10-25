@@ -22,7 +22,9 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate {
 
     private var service: NetService?
 
-    /// 开始广播。`txt` 的键与组播报文同名（`port` / `seed` / `players` / `host` / `pw`）。
+    /// 开始广播。`txt` 的键与组播报文同名（`port` / `room` / `name` / `seed` / `players` /
+    /// `host` / `pw`）——Android 那边读的是同一组键，`rust-server/src/beacon.rs` 的
+    /// `from_txt` 就是把这几个键转成组播结构的。
     @discardableResult
     public func start(name: String, port: Int, txt: [String: String]) -> Bool {
         stop()

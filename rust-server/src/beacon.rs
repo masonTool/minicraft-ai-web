@@ -47,6 +47,8 @@ pub struct Announce {
     pub instance: String,
     /// 联机服务端的 **TCP** 端口（tcp 与 udp 不是同一个口）
     pub port: u16,
+    /// 房间名：面板"点一下进房"要拼 `ws://host:port/<room>`，光有端口会进错房
+    pub room: String,
     /// 世界名（房主开房时上报的那个；没有就是房间名）
     pub name: String,
     pub seed: i64,
@@ -62,6 +64,7 @@ impl Announce {
             "v": PROTOCOL_VERSION,
             "id": self.instance,
             "port": self.port,
+            "room": self.room,
             "name": self.name,
             "seed": self.seed,
             "players": self.players,
@@ -97,11 +100,43 @@ pub fn decode(raw: &[u8]) -> Option<Announce> {
     Some(Announce {
         instance,
         port: port as u16,
+        // 房名会拼进地址：走与协议同一套收口（非法就回 default，绝不透传）
+        room: crate::protocol::sanitize_room(map.get("room").and_then(Value::as_str)),
         name: map.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
         seed: map.get("seed").and_then(Value::as_i64).unwrap_or(0),
         players: map.get("players").and_then(Value::as_u64).unwrap_or(0) as u32,
         has_host: map.get("host").and_then(Value::as_bool).unwrap_or(false),
         password_required: map.get("pw").and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+/// 把 Bonjour 的 TXT 记录转成与组播报文**同一个结构**（iOS ↔ Android 的互通点）。
+///
+/// iOS 用 `NetService` 发布（`ios-shell/Sources/BonjourAdvertiser.swift`），TXT 的键
+/// 与组播报文**刻意同名**（`port` / `room` / `name` / `seed` / `players` / `host` / `pw`），
+/// 所以这里只是"字符串字典 → 结构体"，不存在第二套协议。
+///
+/// Bonjour 没有"实例 id"：用服务名当身份（`PeerBook` 按它去重），前缀 `bonjour:` 让
+/// 它与组播来的 id 不会撞。
+pub fn from_txt(service_name: &str, txt: &[(String, String)]) -> Option<Announce> {
+    let get = |want: &str| {
+        txt.iter()
+            .find(|(key, _)| key == want)
+            .map(|(_, value)| value.as_str())
+    };
+    let port: u16 = get("port")?.trim().parse().ok()?;
+    if port == 0 {
+        return None;
+    }
+    Some(Announce {
+        instance: format!("bonjour:{service_name}"),
+        port,
+        room: crate::protocol::sanitize_room(get("room")),
+        name: get("name").unwrap_or("").chars().take(32).collect(),
+        seed: get("seed").and_then(|value| value.trim().parse().ok()).unwrap_or(0),
+        players: get("players").and_then(|value| value.trim().parse().ok()).unwrap_or(0),
+        has_host: matches!(get("host"), Some("1") | Some("true")),
+        password_required: matches!(get("pw"), Some("1") | Some("true")),
     })
 }
 
@@ -120,7 +155,8 @@ pub fn announce_of(state: &State, instance: &str, password_required: bool) -> An
     Announce {
         instance: instance.to_string(),
         port: 0, // 调用方填（这里拿不到实际监听端口）
-        name: if world.name.is_empty() { room } else { world.name },
+        name: if world.name.is_empty() { room.clone() } else { world.name.clone() },
+        room,
         seed: world.seed,
         players,
         has_host: !state.hosts.is_empty(),
@@ -141,6 +177,8 @@ impl Peer {
         json!({
             "name": self.announce.name,
             "port": self.announce.port,
+            // 面板"点一下进房"要拼 `ws://host:port/<room>`；少了它只能进默认房间
+            "room": self.announce.room,
             "seed": self.announce.seed,
             "players": self.announce.players,
             "hasHost": self.announce.has_host,
@@ -298,6 +336,7 @@ mod tests {
         Announce {
             instance: instance.to_string(),
             port: 25187,
+            room: "smoke".to_string(),
             name: "草原小屋".to_string(),
             seed: 424242,
             players: 2,
@@ -326,6 +365,43 @@ mod tests {
         // 端口缺失 / 为 0
         assert!(decode(br#"{"mc":"minicraft","v":2,"id":"a"}"#).is_none());
         assert!(decode(br#"{"mc":"minicraft","v":2,"id":"a","port":0}"#).is_none());
+    }
+
+    #[test]
+    fn bonjour_txt_maps_to_the_same_announce() {
+        let txt = vec![
+            ("port".to_string(), "25187".to_string()),
+            ("room".to_string(), "red".to_string()),
+            ("name".to_string(), "草原小屋".to_string()),
+            ("seed".to_string(), "424242".to_string()),
+            ("players".to_string(), "2".to_string()),
+            ("host".to_string(), "1".to_string()),
+            ("pw".to_string(), "0".to_string()),
+        ];
+        let announce = from_txt("张三的 iPhone", &txt).expect("应当能转");
+        assert_eq!(announce.port, 25187);
+        assert_eq!(announce.room, "red");
+        assert_eq!(announce.name, "草原小屋");
+        assert_eq!(announce.seed, 424242);
+        assert_eq!(announce.players, 2);
+        assert!(announce.has_host);
+        assert!(!announce.password_required);
+        // 身份前缀与组播来的 id 区分开（否则 PeerBook 会把两边当成同一台）
+        assert_eq!(announce.instance, "bonjour:张三的 iPhone");
+
+        // 没有端口 / 端口是 0：这两条都拼不出可用地址
+        assert!(from_txt("x", &[]).is_none());
+        assert!(from_txt("x", &[("port".to_string(), "0".to_string())]).is_none());
+        // 脏字段回落而不是整份丢弃（Bonjour 的记录是别人写的，能用的部分要用）
+        let dirty = vec![
+            ("port".to_string(), "25187".to_string()),
+            ("room".to_string(), "不合法 房名".to_string()),
+            ("seed".to_string(), "abc".to_string()),
+        ];
+        let announce = from_txt("x", &dirty).expect("端口合法就够");
+        assert_eq!(announce.room, crate::protocol::DEFAULT_ROOM);
+        assert_eq!(announce.seed, 0);
+        assert!(!announce.has_host);
     }
 
     #[test]

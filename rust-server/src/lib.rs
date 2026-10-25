@@ -507,7 +507,15 @@ async fn serve_http(stream: &mut TcpStream, hub: &Arc<Hub>, path: &str) {
             },
         })
         .to_string();
-        write_http(stream, 200, "application/json; charset=utf-8", &body, &[]).await;
+        // 面板要从游戏页面跨源读它（`peers` 就在这里），所以和 `/rooms` 一样带 CORS
+        write_http(
+            stream,
+            200,
+            "application/json; charset=utf-8",
+            &body,
+            &[("access-control-allow-origin", "*"), ("cache-control", "no-store")],
+        )
+        .await;
         return;
     }
     write_http(

@@ -59,7 +59,8 @@ Android 与 iOS 共用同一份生命周期（`rust-server/src/instance.rs`）�
    session.begin()
    ```
    `BonjourAdvertiser.start(name:port:txt:)` 的 `txt` 用
-   `["port": ..., "seed": ..., "players": ..., "host": "1", "pw": "0"]`。
+   `["port": ..., "room": "red", "seed": ..., "players": ..., "host": "1", "pw": "0"]`
+   ——键与 Android 的组播报文同名，`rust-server` 的 `beacon::from_txt` 负责互转（有单测）。
 
 ## 只有前台能当房主（这是系统规则，不是取舍）
 

@@ -94,11 +94,27 @@ export function withDefaultPort(url: string): string {
  * 解析不出来返回 `null` —— 调用方据此直接走"手填房间名"，不必先报错。
  */
 export function roomsEndpoint(wsUrl: string): string | null {
+  return httpEndpoint(wsUrl, '/rooms');
+}
+
+/**
+ * 由 WebSocket 地址推出 `/healthz` 的 HTTP 地址（N6 的发现层要读 `peers`）。
+ *
+ * 与 `/rooms` 同一个端口、同一套协议换头，所以共用 `httpEndpoint`。
+ * `/healthz` 的响应里带 `peers`（这台服务器用 UDP 组播听到的其它设备），
+ * 是"局域网里还有谁"的唯一来源——浏览器自己发不出 UDP。
+ */
+export function healthEndpoint(wsUrl: string): string | null {
+  return httpEndpoint(wsUrl, '/healthz');
+}
+
+/** `ws(s)://host:port[/room]` → `http(s)://host:port<path>`（拼不出来返回 `null`） */
+function httpEndpoint(wsUrl: string, path: string): string | null {
   try {
     const parsed = new URL(wsUrl);
     const protocol = parsed.protocol === 'wss:' ? 'https:' : parsed.protocol === 'ws:' ? 'http:' : parsed.protocol;
     if (protocol !== 'http:' && protocol !== 'https:') return null;
-    return `${protocol}//${parsed.host}/rooms`;
+    return `${protocol}//${parsed.host}${path}`;
   } catch {
     return null;
   }

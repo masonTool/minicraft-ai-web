@@ -136,6 +136,7 @@ try {
   check('广播带种子', peerOfA?.seed === 998877, `${peerOfA?.seed}`);
   check('广播带人数与房主标记', peerOfA?.players === 1 && peerOfA?.hasHost === true, JSON.stringify(peerOfA));
   check('广播带口令开关（这里没设口令）', peerOfA?.passwordRequired === false, `${peerOfA?.passwordRequired}`);
+  check('广播带房间名（点一下进房要靠它）', peerOfA?.room === 'beaconroom', `${peerOfA?.room}`);
 
   const seenByA = await until(a.port, (health) => (health.peers ?? []).some((peer) => peer.port === b.port));
   check('A 也发现了 B（双向）', (seenByA?.peers ?? []).some((peer) => peer.port === b.port), JSON.stringify(seenByA?.peers));
