@@ -9,6 +9,65 @@
 
 ---
 
+## 批次 20261025-1032 · 2026-10-25 · 会话 937507d0
+
+> 把方块表（724 块）从线上产物里搬出去：id 表 → 叶子模块、数据 → 独立模块、生产换空桩、入口改两段式。
+
+# 队列 · 会话 937507d0458d4277ba340bcb48207050
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-1032
+
+目标（承接 `20261025-0329` 的 `[阻塞]` 条，用户拍板「改描述继续做」）：把 `SPECS`（724 个方块的明文数据）
+从线上 bundle 里真正搬走，使 `build:app` 的主包明显变小。上一批已探明**唯一可行路径**是让依赖单向无环：
+
+```
+blockIds.ts（叶子，纯常量） → blockSpecs.ts（数据） → blocks.ts（消费 + 再导出 ids）
+```
+
+有了这个单向链，`blocks.ts` 就能**静态** import `SPECS`，不再需要顶层 await、也不需要给 178 套测试注入任何东西
+（上一批这两条路都被 esbuild 打包堵死：环 + 动态 import 死锁；`banner` 不参与打包）。
+
+- [x] [宿主7] 抽 `blockIds.ts` 叶子模块：把 `blockSpecs` 依赖的 id 常量（各 `*_ID_START` / `*_ID` 等）从 `blocks.ts` 搬到新文件，
+  - 做了什么：新增叶子模块 `src/core/registry/blockIds.ts`（664 行，含头注释说明依赖方向），把 `blocks.ts` 里 **108 个纯字面量 id 常量**（连同各自的 JSDoc）整块搬过去；`blocks.ts` 用 `export * from './blockIds.ts'` **再导出**（224 个引用方一行没改）+ 显式 `import { … }`（`export *` 不会把名字带进本模块作用域，这是踩到的第一处）。另修 `tools/ui-test.ts`：它 greps `blocks.ts` 源码找 `export const ACTIVATOR_RAIL_ID = 581` 这类断言，改成把两个文件的源码拼起来读（断言关心的是"581 就是激活轨"，不是"这行写在哪个文件"）。
+  - 为什么：这是"让依赖单向无环"的第一步。`blockSpecs.ts` 要读这些 id，而数据反向 import `blocks.ts` 就成环——上一批实测环 + 动态 import 在 esbuild 下**静默死锁**。把这些值搬到不 import 任何东西的叶子里，`blockSpecs` 就能只依赖叶子，`blocks.ts` 再静态 import `SPECS` 也不会崩。
+  - 验证：`npm run check:fast` **149/149 全绿**（含此前失败的 `ui` 套件 1053 条断言）；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与改前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）。
+  - 批次：20261025-1032
+      `blocks.ts` 用 `export * from './blockIds.ts'` 保持 224 个引用方不变 → `npm run check:fast` 全绿，
+      且 `Wood` / `WoodShaped` / 树苗 / 床 / 牌子 / 石变体 id 快照哈希**逐字节不变**（`b3c68cc2d86da217`）
+- [x] [宿主10] **宿主8 的前置**：把"id 派生表与取值函数"搬进 `blockIds.ts`——`EXTRA_WOODS` / `WOOD_IDS` / `Wood` / `woodBlocks` /
+      `WOOD_SHAPED_IDS` / `WoodShaped` / `woodShaped` / 树苗两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS` / `BED_ID_MAP`+`bedId`/`bedIdOfColor`/`BED_IDS` /
+      `SIGN_ID_MAP`+`signId`/`SIGN_IDS` / `STONE_VARIANT_FAMILIES`+分配器+`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS` → `npm run check:fast` 全绿，
+      且 id 快照哈希 `b3c68cc2d86da217` 逐字节不变（它们只依赖 `colors.ts` 与字面量，搬过去也不会成环）
+  - 做了什么：把 30 个声明（215 行）从 `blocks.ts` 整块搬进 `blockIds.ts`——木材族（`EXTRA_WOODS`/`WOOD_IDS`/`WOOD_ID_MAP`/`Wood`/`woodBlocks`）、木制四件（`OAK_WOOD_SHAPED`/`WOOD_SHAPED_IDS`/`WOOD_SHAPED_MAP`/`WoodShaped`/`woodShaped`）、树苗（`SAPLING_TREES` + 两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS`）、床（`BED_ID_MAP`/`bedId`/`bedIdOfColor`/`BED_IDS`）、牌子（`SIGN_ID_MAP`/`signId`/`SIGN_IDS`）、石变体（`StoneVariantKind`/`STONE_VARIANT_FAMILIES`/分配器/`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS`），连同各自的 JSDoc。`blockIds.ts` 只新增两个依赖：`colors.ts`（纯数据）与 `Features.ts` 的 `TreeKind`（纯类型）。
+  - 为什么：`blockSpecs.ts` 要读 `Wood`/`saplingId()`/`stoneVariantId()`，只要它们还在 `blocks.ts` 里，`blockSpecs` 就必须 import `blocks.ts` → 环 → 静态 import 崩（前两次死锁的根）。搬进叶子后依赖变成单向 `blockIds → blockSpecs → blocks`。
+  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与搬前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）；`grep "from './blocks.ts'" blockIds.ts` **为空**（环已断）。
+  - 踩到并修掉的三处：① `EXTRA_WOODS`/`WOOD_ID_MAP`/`STONE_VARIANT_FAMILIES` 等原本是**非导出**的 `const`，搬过去后 `blocks.ts` import 不到——要给它们补 `export`；② 用"名字出现在正文里"来算出 import 清单会被**注释里的名字**骗（`// 见 WOOD_ID_MAP`），必须先剥注释再判；③ `import type {} from ...` 空导入会被 tsc 拒，树类型实参删干净时要连整条语句一起删。
+  - 批次：20261025-1032
+- [x] [宿主8] 搬 `SPECS` 到 `blockSpecs.ts` 并改静态 import：spec 声明 + `baseTiles`/`plantSpec` 等只被 spec 用的辅助函数一起搬，
+  - 做了什么：新建 `src/core/registry/blockSpecs.ts`（2191 行），把 88 个声明 / 2175 行搬过去——全部 `*_SPECS` / `*_SPEC`、聚合用的 `SPECS`，以及只被 spec 用的辅助函数 `baseTiles` / `plantSpec` / `waterPlantSpec` / `coralFanSpec` / `tilesOfDefined`；`blocks.ts` 改成**静态** `import { SPECS } from './blockSpecs.ts'`。搬运过程中 tsc 揪出 6 个还留在环上的 spec 输入表（`SHAPED_PARENTS` / `COPPER_STAGES` / `COPPER_SHAPES` / `CORAL_KINDS` / `STEM_STAGES` / `copperId`），一并搬进 `blockIds.ts`。另修 `SHULKER_BOX_IDS`：它原本从 `COLORED_SHULKER_SPECS` 取 id，改成纯算术（`SHULKER_BOX_COLOR_START + index`），否则数据搬走后运行时拿不到。
+  - 为什么：这是整条路线的核心一步——`blockSpecs.ts` 只 import 叶子（`blockIds.ts`）与纯数据/纯类型模块，**不 import `blocks.ts`**，所以静态 import 不会出现"后定义的常量在 TDZ"的循环初始化。前两次失败（顶层 await 死锁、banner 不打包）都是想绕开这个环，现在环本身没了。
+  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` **逐字节不变**；`test:hostcore` 33/0（724 块往返）、`test:behaviors` 7/0（46 块行为黄金哈希，说明"搬完还是同一张表"）；`grep "from './blocks.ts'" blockSpecs.ts` **为空**（环已断）；`build:fast` 出包成功。体积**未变**——换桩是下一条（`宿主9`）。
+  - 踩到并修掉的两处：① `tests/ui-test.ts` 有两处按源码文本断言 spec 内容（"铁轨复用 flat 薄板"、"霜冰红块注册"），数据搬家后失效——已把 `blockSpecs.ts` 也拼进它读的源码里；② spec 里读的 id 表还有 6 个留在 `blocks.ts`，靠 tsc 的 `Cannot find name` 逐个揪出来再搬，不能只按名字模式扫。
+  - 批次：20261025-1032
+      `buildBlockTable(specs)` 显式收参数 → `npm run test:hostcore`（33）与 `npm run test:behaviors`（7）全绿 + 全量 `npm run check`
+- [x] [宿主9] 生产换桩 + 体积断言：`vite.config.ts` 用 `resolve.alias` 把 `blockSpecs.ts` 换成 `blockSpecs.stub.ts`（`SPECS = []`），
+  - 做了什么：① `blockSpecs.stub.ts`（`SPECS = []`）+ `vite.config.ts` 的 `hostSpecsStub()` 插件（`resolveId` 拦 `./blockSpecs.ts`，**默认开**，`SPECS_STUB=0` 可关）；② `release-check` 的数据探针（`dragon_egg_top` 不得出现在主包；用贴图名而不是方块名，因为后者在物品表/i18n 里也有）；③ **入口改两段式**（`src/boot.ts`：先取 `core.bin` 装表，成功才 `import('./main.ts')`），`index.html` 指向 boot，`main.ts` 自己那段门禁删掉并留注释说明移交原因。
+  - 为什么：桩一打开就暴露"空表下模块初始化期崩"（`TypeError: Cannot read properties of undefined (reading 'id')`），根因是**主包在我装表之前就求值了**。只把桩关掉等于回避，所以直接把入口顺序改正——这也是上一批因"表在两个 chunk 各打一份"回退掉的那条路，现在数据已被桩掉，重复打包的前提消失。
+  - 验证：`SPECS_STUB=1` 下两种形态各跑一遍真实浏览器（Playwright + `vite preview`）——**完整前端形态**：文案"加载中… 正在准备材质与存档"、**0 条 pageerror**；**宿主形态**：文案"请在 Minicraft 应用里游玩…"、**0 条 pageerror**。构建产物：`build:app` 主包 gzip 570.9 KB（`main-*.js`）/ 全部 JS 合计 1199.1 KB，`build:web` 同样通过；探针确认 `dragon_egg_top` 不在主包。`npm run check:fast` **180/180 全绿**。
+  - 如实记一笔：**体积口径变了**——两段式之后 `index-*.js` 只是引导器（140.5 KB 的 HTML + 小入口），游戏体在 `main-*.js`；首屏成本要看合计。实测合计 1199.1 KB 对上一提交的 1196.8 KB **多了 2.3 KB**（拆包带来的共享模块重复），而数据移出只省了约 7 KB gzip —— 净收益接近打平。也就是说**这一步买的是"数据不在包里"，不是"更快"**。条目里原写的"降到 ~690 KB"是按整块估的，实测不成立。
+  - 批次：20261025-1032
+- [x] [发现] **入口必须在装表之后才加载主包**：空表下 `Cannot read properties of undefined (reading 'id')`（证据：`SPECS_STUB=1 npm run build:app` + `vite preview` + Playwright，`main.ts` 末尾的门禁还没跑到就抛）→ 改成两段式入口：`index.html` 指向新的 `src/boot.ts`，先 `fetch('/__host/core.bin')` 并 `installBlockTable()`，成功才 `await import('./main.ts')`；判据 = `SPECS_STUB=1 npm run build:app` 后浏览器只见落地页/进游戏均无 pageerror，且 `npm run check:fast` 与 `test:hostcore` 全绿。⚠️ 上一次做两段式时因"表在两个 chunk 里各打一份"回退过；现在数据已被桩掉，重复打包的前提消失了，可以重做
+  - 做了什么：新增 `src/boot.ts` 作为真入口——`await ensureHostCore()`（取 `core.bin` 并 `installBlockTable`）成功后才 `await import('./main.ts')`；失败时 `hostCore` 已画好整屏提示，直接放弃。`index.html` 的 script 指向 `/src/boot.ts`；`main.ts` 里原来的门禁 IIFE 删掉，改成直接 `void boot()` 并留注释说明"门禁已前移"。
+  - 为什么：动态 import 保证主包的模块体在装表之后才求值，不再依赖"某个模块恰好没在顶层读表"这种运气——这正是空表下 `reading 'id'` 的来源。
+  - 验证：`SPECS_STUB=1 npm run build:web` → 浏览器进游戏、0 pageerror；`SPECS_STUB=1 npm run build:app` → 落地页、0 pageerror（均 Playwright 实测）；`check:fast` 180/180。
+  - 批次：20261025-1032
+      删掉 `bootstrapSpecs` 之类过渡物 → `npm run build:app` 断言主包 gzip 从 716 KB 降到 ~690 KB，
+      且 `dist` 里 grep 不到方块明文；浏览器打开只见落地页
+
+---
+
 ## 批次 20261025-0329 · 2026-10-25 · 会话 937507d0
 
 > 方块表数据外置（宿主只认自己注入的 core.bin）+ 双形态发布 + 门禁与版本契约。
@@ -118,45 +177,4 @@
   - 为什么：MIT 要求"分发物中保留版权声明与许可全文"，网页版的"分发物"就是 `dist/`，所以声明必须放在 `public/`（只放仓库根目录等于没分发）；隐私政策是 Play 的**必填项**，需要一个可公开访问的 HTTPS 链接，而 `/privacy.html` 就是这个项目自己的站点路径，比外链第三方托管更不容易失效。隐私文案按**代码实际行为**写（无账号、无统计/广告 SDK、存档仅在 IndexedDB/localStorage）
   - 验证：`npm run build:fast` 后 `dist/privacy.html`（5.7KB）与 `dist/third-party-notices.txt`（3.4KB）都在；`npm run test:ui` **980/0**（新增 1 条断言：两份文件都在 `public/` 且声明里有 three.js authors / Einar Otto Stangvik）；`npm run audit:docs` 通过；`npm run check:manifests` 通过；`typecheck:tools` 清洁
   - 批次：20261025-0316
-
-## 批次 20261025-0257 · 2026-10-25 · 会话 037060ab
-
-> **这一批做什么（L8 · MS4 容器与收尾）**：补上最后一段权威——容器计时只由房主推进、
-> 从属端只读；房主退出时先提示再关房、且不再重连；协议文档与代码逐条对齐到 v2；
-> 台账写清 L8 四段状态；最后做一次 L8 自审。
->
-> **L8 四段（MS1~MS4）代码与断言至此已齐**。仍然只剩两件只有人能做的：
-> ① 人工双端验收（红石两端同时亮 / 同一只怪位置一致 / 打死同时消失且掉落一份 / 熔炉进度同步 / 房主退出提示）；
-> ② `container`/`sign`/`frame`/`tnt` 的请求化（从属端操作仍直连上行，玩法不受影响）。
->
-> ⚠️ 队列里「单测：从属端计时不前移」实际由**结构断言 + 联机断言**覆盖；要真在 node 里跑
-> `tickContainers` 得先造一个 World，成本远高于收益——这一点写在条目说明里，没有假装写了单测。
-
-- [x] [L8] 容器进度权威：熔炉 `cookProgress` / 酿造 / 漏斗冷却由房主推进并上行，从属端只读不推进 → 单测：从属端计时不前移
-  - 做了什么：`tickContainers(dt)` 收进 `shouldSimulate(role,'containers')` 闸门（全文件只此一处调用）；`container` 消息加可选 `progress`（0..1），服务端**只在 `player.isHost === true` 时保留**并夹到 `[0,1]`，其余一律丢掉（内容照转）；`NetClient.sendContainer(..., progress?)` / `NetContainerState.progress` 打通；房主新增 `pushContainerProgress()`（1 秒节流，扫 64 格内 `progress > 0` 的容器入既有 80ms 防抖队列，顺带把槽位一起对齐）；从属端 `onNetContainer` 把 `progress` 写进 `cookProgress`（不 tick，所以只是"摆上去"，下一条快照覆盖）。
-  - 为什么：熔炉进度是**每 tick 都在变**的量，而容器广播只挂在 `onMutate`（内容变化）上——不给它一条自己的低频上行，从属端的进度条只在"烧出一个东西"时跳一格。进度只认房主：从属端不推进计时，若允许它带 `progress`，一个假值就能把所有人的进度条改坏。写 `cookProgress` 而不是新加显示字段，是为了让既有进度条代码原样可用。
-  - 验证：`npm run test:net` **165 → 168 通过 / 0 失败**（房主进度被转发、从属端进度被丢且内容照转、越界进度夹到 1）；`npm run test:ui` **1030 → 1034 通过 / 0 失败**（闸门只一处、1 秒节流、从属端只写 cookProgress、上行只由房主带 progress）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。⚠️ 队列写的"单测：从属端计时不前移"实际由**结构断言 + 联机断言**覆盖（`tickContainers` 只有一处且在闸门里），没有另写 vitest —— 要在 node 里跑 `tickContainers` 得先造一个 World，成本远高于收益。
-  - 未验证：双端开着同一个熔炉看进度条是否同步，需要手测。
-  - 批次：20261025-0257
-- [x] [L8] 房主退出：房间关闭 + 从属端 3 秒内给出明确提示（`core/net/NetSession.ts` 状态迁移）→ 单测状态迁移 + `npm run test:net`
-  - 做了什么：服务端房主 `close` 时**立刻** `broadcast({t:'room-closed', reason:'host-left', graceMs})` 给同房其他人（提示，不是关房——他可能只是切后台）；宽限期到期仍未回来则**关房**：对同房每个人 `reject(socket,'host-left','房主已退出，房间已关闭', CLOSE_HOST_LEFT=4007)`。客户端新增 `room-closed` 分支与 `onRoomClosing` 回调、`roomClosed` 标记；`Protocol.ts` 把 `host-left` 加进错误码与致命名单；`NetSession.CloseReason` 新增 `roomClosed`（与 `fatal` 分开表达，重连一律 `stop`）；`main` 把它变成一句带秒数的提示（`net.hostLeft`），六语言补齐。
-  - 为什么：房主走了等于这一局没人推进世界——怪不动、红石不亮、熔炉不烧，而界面一切正常，这种"看起来还能玩"的坏状态最难排查。所以先提示（3 秒内），到期再关房，并且**明确不再重连**（重连只会被同一个理由踢回来，每 3 秒撞一次把日志刷满）。`roomClosed` 与 `fatal` 分开记：日志/提示要说人话，别把"房主退出"写成"协议错误"。
-  - 验证：`npm run test:net` **168 → 171 通过 / 0 失败**（房主掉线即通知、通知带 `graceMs`、到期关房给 `host-left`）；`npx vitest run tests/net-session.test.ts` 新增 3 条（`roomClosed` → offline/stop、重连途中也停、之后显式 connect 仍可重开）；`npm run test:ui` **1034 → 1038 通过 / 0 失败**；`npm run audit:i18n` 通过（2906/2906）；`npm run check:fast` **161/161 套全绿**。
-  - 批次：20261025-0257
-- [x] [L8] 协议文档 v2 收口：`docs/NET-PROTOCOL.md` 与本批新增/改动的消息逐条对照（`world` / `edit-request` / `entity-snap` / `entity-remove` / `authority` / `progress`）
-  - 做了什么：`join` 的 `world` 补 `worldType`；§4 `container` 补 `progress?` 并写明"只有房主带得动、服务端夹到 [0,1]"；§5 补 `room-closed`（`reason` + `graceMs`）；§5.1 错误码表补 `password 4005` / `host-taken 4006` / `host-left 4007` 三行（原来只有 version/clientId/duplicate/joined）；§8 缺口表改写 6 行（`联机5` 种子冲突改自动断开、`联机12` 模拟只由房主跑、`联机15` 容器计时由房主推进、`联机19` 实体位置/血量/死亡已同步、`联机38` 权威口径改成房主唯一、`联机26` 种子按房）。另加 11 条 UI 断言把"这批动过的消息必须在文档里"钉住，防下次文档漂移。
-  - 为什么：文档漂移是这类项目最常见的债——消息加了、字段改了，文档还停在上一版，下次照文档实现就会踩空。不做"文档 == 代码"的完全比对（要解析源码，成本远高于收益），只钉这一批动过的那些关键串 + 缺口表的现状口径。
-  - 验证：`npm run test:ui` **1038 → 1049 通过 / 0 失败**（11 条：world 元数据、worldType、edit-request、authority、entity-snap、entity-remove、progress、room-closed、host-left、4007、缺口表现状）；`node .continue/hooks/check.mjs docs` 通过（文档体量上限内）。
-  - 批次：20261025-0257
-- [x] [L8] 台账落地：`.continue/OVERVIEW.md` + `TASKS.md` 的 L8 条目写清 MS2~MS4 结果 → `npm run check`
-  - 做了什么：`OVERVIEW.md` 的联机段由「房主权威（MS1+MS2）」改成「MS1~MS4」，并补两句现状（实体快照、容器进度随房主 1s 下行、房主退出即关房）——体量 24462 → **24516 字节**（上限 24576，仍留 60 字节）；`TASKS.md` 的 L8 追加 MS4 落地结果与测试账，并写清 L8 现在剩的两件事（人工双端验收、四条消息的请求化）；`HANDOFF` 提交总数同步 1788，`audit:diffs` 重算（注意 227 → 226）。
-  - 为什么：L8 四段都落地了，台账必须能回答"现在到底哪段完成、哪段只差人验"——否则下一批会从头再查一遍。`OVERVIEW` 贴着 24KB 上限，所以只加现状、不铺细节（细节在 `notes/net-multiplayer.md`）。
-  - 验证：`npm run audit:tasks` 全绿（口径与 README / HANDOFF 一致）；`node .continue/hooks/check.mjs docs` 通过（200 行 / 24516 字节）；`npm run check` 全绿。
-  - 批次：20261025-0257
-- [x] [L8] [自审] L8 的「L1 可测量 / L2 可对抗 / L3 可外部」各一句 + 证据（指向具体文件与测试）
-  - **L1 可测量**：每一条都不是"看着像一致"，而是能被数出来的断言——`npm run test:net` **171** 条（其中房主/权威/实体/进度/关房 24 条是本批新增）、`npm run test:ui` **1049** 条（含"闸门只此一处""每帧不重复调用""文档里有这条消息"这类结构断言）、`vitest` **506** 条（`SimMode` 12 / `EntitySnapshot` 10 / `SimApply` 10 / `RemoteBlockWrite` 5 / `NetSession` 11）。人能验的也定成了可判定的阈值：红石两端同时亮（同一 tick 内）、打死同一只怪两端同时消失且掉落**恰好 1 份**、熔炉进度差 **≤1 秒**（1s 下行）。
-  - **L2 可对抗**：所有"客户端说了算"的地方都加了服务端侧的同一条尺子——谎报 `authority` 无效（按 `isHost` 重标，`test:net` 有断言）、非房主的 `block`/`blocks` 直接丢、`edit-request` 形状收口 + 令牌桶限频、`entity-snap` 只收房主且截断 256、`entity-remove` 键过滤、`container.progress` 只认房主并夹 `[0,1]`、`world` 元数据脏种子整份丢弃、`remoteWorldWritable()` 挡"种子错位时写脏地图"。**没防住的也照实记**：`move` 无位移校验（改包可瞬移）、容器不校验目标方块、`mob-hit` 仍按邻近认。
-  - **L3 可外部**：不依赖游戏客户端就能复现——协议在 `docs/NET-PROTOCOL.md`（消息表 / 错误码 4001~4007 / 缺口表 / 规矩），`tools/net-test.mjs` 用**裸 WebSocket 客户端**跑全套（可见地证明"外部实现也能接"），`npm run server` + `npm run dev` 双端可手验；另有 11 条断言把"这批动过的消息必须在文档里"钉死，防止文档漂移；取舍与坑在 `notes/net-multiplayer.md` §五/§六。
-  - 验证：三句话里能核对的部分都指到了可跑的东西——`npm run test:net` **171** 条、`npm run test:ui` **1049** 条（含 11 条"文档里有这条消息"）、`npx vitest run tests/` **506** 条；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 200 行 / 24516 字节）；`npm run check` 全绿。**L2 里"没防住的"三条（move 无位移校验 / 容器不校验目标方块 / mob-hit 按邻近认）不是本批目标，写在这里是为了别让下一批以为已经防住了。**
-  - 批次：20261025-0257
 

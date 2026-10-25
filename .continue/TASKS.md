@@ -1330,6 +1330,17 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] A19 Cloudflare 两站发布：`deploy-cf-app.yml` / `deploy-cf-web.yml`（两个 Pages 项目物理隔离）+ `docs/DEPLOY-CLOUDFLARE.md`
       + `public/_headers`；**未验证**真实部署（缺账号凭证），本地以 `vite preview` 模拟两站逐条 curl 验收通过
 
+- [x] A20 方块表数据外置（`A14`~`A19` 的收口）：`blockIds.ts`（叶子：108 个 id 常量 + 木/苗/床/牌/石变体的 id 表与取值函数）
+      → `blockSpecs.ts`（724 个方块的数据，2191 行）→ `blocks.ts`（行为与装配），依赖单向无环
+      · `blocks.ts` 由 5373 行降到 ~2400 行；`grep "from './blocks.ts'" blockIds.ts / blockSpecs.ts` 均为空
+      · 生产构建 `hostSpecsStub()` 把 `blockSpecs` 换成 `SPECS = []`（默认开，`SPECS_STUB=0` 可对照），
+        `release-check` 用探针 `dragon_egg_top` 断言数据不在主包
+      · 入口改两段式：`src/boot.ts` 先取 `core.bin` 装表、成功才 `import('./main.ts')`
+        （空表下「模块初始化期读表」会崩在门禁之前，实测过 `reading 'id'`）
+      · 实测：`SPECS_STUB=1` 的两种形态浏览器均 0 条 pageerror；`check:fast` 180/180；
+        ⚠️ 合计 gzip 1199.1 KB 对 1196.8 KB **+2.3 KB**（拆包重复），数据移出省约 7 KB —— 净收益接近打平，
+        这一步买的是「数据不在包里」，不是速度
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
