@@ -52,3 +52,23 @@
 - 决定：`BEACON_IF` 环境变量指定 `IP_MULTICAST_IF` 与加入组用的接口地址，默认 `0.0.0.0`（系统默认）；`run-beacon-smoke.sh` 传 `127.0.0.1`。
 - 为什么：这台开发机的默认路由下组播**连本机都收不到**（用 Python 最小复现确认过，不是 Rust 代码的问题）；不指接口的话"两个进程互发现"这条验收在本机永远红。手机上默认接口（Wi-Fi）是通的，所以默认值不改。
 - 影响：多一个可选环境变量，不影响任何既有行为；iOS/Android 壳不需要传它。
+
+## D11 · 用 Capacitor 6 套壳（不自写 WebView 工程）
+- 决定：加 `@capacitor/core` + `@capacitor/android`（运行期）与 `@capacitor/cli`（开发期），用 `npx cap add android` 生成 `android/`；`capacitor.config.json` 里 `androidScheme: "http"` + `allowMixedContent: true`。
+- 为什么：`notes/ops.md` 里既定的方案就是 Capacitor——它把"WebView + 资源打包 + 插件桥"这三件最容易写错的事做完了，我们只需要加一个插件；自写 WebView 工程等于把这三件重做一遍。`androidScheme: http` 是因为页面若是 https，客户端 `defaultServerUrl()` 会挑 `wss://`（要证书），而局域网联机是明文 `ws://`。
+- 影响：新增 3 个依赖 + 一个约 40 文件的 `android/` 工程（`node_modules` 之外）；退回只需删依赖与目录，web 端不受影响。
+
+## D12 · `core.bin` 放 APK assets，不写 `shouldInterceptRequest`
+- 决定：Gradle 任务 `copyHostCore` 把 `host/core-baseline.bin` 拷成 `assets/public/__host/core.bin`；WebView 直接按 `http://localhost/__host/core.bin` 读。
+- 为什么：`src/core/hostCore.ts` 的原设计是"宿主在 `shouldInterceptRequest` 里拦 `__host/core.bin`、从 assets 读"。Capacitor 的资源本来就以 http 提供，把同一份文件放进 assets 即等价，还少一层容易写错的拦截（拦错路径的表现是白屏或一直停在安装引导）。
+- 影响：724 个方块的明文随 APK 走（这正是 `build:app` 的形态），**不进 JS 主包**；浏览器那条路仍是 404 → "去 Google Play 下载"落地页，形态没变。
+
+## D13 · 壳子用 Java 写，不引 Kotlin 工具链
+- 决定：`MainActivity` / `NativeServerPlugin` / `ServerService` 全用 Java。
+- 为什么：Capacitor 生成的模板本身就是 Java + Gradle；引 Kotlin 还要把 `kotlin-gradle-plugin` 与 AGP 版本对齐（多一处会坏的地方），而这一层总共约 200 行胶水，没有一处用得上 Kotlin 的表达力。
+- 影响：以后想用 Kotlin/协程要另加插件；Java 与 Kotlin 可共存，退得回去。
+
+## D14 · 设备级验收用 3 条 instrumented test；"两台互发现并进房"留给 N6
+- 决定：写 `connectedDebugAndroidTest` 三条——包名、JNI 起服务 + `/healthz` + 停止、前台服务 + 多播锁 + `/rooms`；在 `Pixel_3a_API_34` 模拟器上跑。**没有**做两台设备互相发现。
+- 为什么：那一条要第二台设备 + 客户端接线（网页得调 `NativeServer.start`、把端口与 `peers` 用起来），后者正是 N6 的范围；只有一台模拟器、客户端还没接时硬凑"两台互相发现"，验的是我自己造的假路径。
+- 影响：N4b 的"能互相发现并进房"这半条**未验证**，已如实写进完成说明；N6 的验收会覆盖它。
