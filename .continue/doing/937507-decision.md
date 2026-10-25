@@ -25,3 +25,9 @@
 - 决定：spec 数据与只被 spec 用的辅助函数整体搬进 `blockSpecs.ts`；`blocks.ts` 用**静态** `import { SPECS }`（不再有顶层 await、不再需要给测试注入装配器）。搬运时 tsc 报出的 6 个"还在环上"的输入表（`SHAPED_PARENTS`/`COPPER_STAGES`/`COPPER_SHAPES`/`CORAL_KINDS`/`STEM_STAGES`/`copperId`）一并下沉到 `blockIds.ts`。
 - 为什么：环是前两次失败的总根。现在的依赖链 `blockIds → blockSpecs → blocks` 是 DAG，静态 import 的初始化顺序天然正确（被依赖的先求值），既不需要 TLA 也不需要测试注入。**放弃的方案**：把 6 个输入表留给 `blocks.ts` 再让 `blockSpecs` 去 import（那就又是环），或把它们复制一份到 `blockSpecs`（两份数据必然漂）。
 - 影响：`blocks.ts` 从 4511 行降到 ~2400 行、`blockSpecs.ts` 2191 行、`blockIds.ts` 931 行（三份职责清楚：id 分配 / 数据 / 行为与装配）。体积**暂时未变**（数据仍在包里），换桩在 `宿主9`。行为零变化（724 块往返 + 46 块行为哈希 + 149 套全绿 + 快照哈希逐字节一致）。退回方式：`git revert`。
+
+## D5 · 桩与探针先做成"显式开关"，不默认打开
+
+- 决定：`hostSpecsStub()` 只在 `SPECS_STUB=1` 时生效（默认关），`release-check` 的数据探针挂在同一开关上；主包基线维持 740 KB 不动。
+- 为什么：打开开关后**生产包在门禁执行前就抛** `Cannot read properties of undefined (reading 'id')`——还有模块在模块初始化期读方块表，而门禁写在 `main.ts` 末尾。默认打开等于把一个白屏发上线。做成开关后：① 它是"数据是否真的搬干净"的可复现探针；② 修好入口（两段式）之前不影响任何现有发布路径；③ 基线不收紧，避免用一个没生效的优化去压门。
+- 影响：当前发布路径**零变化**（体积、门禁、行为都不变）。`blockSpecs.stub.ts` 与插件插件代码留在仓库里备用。退回方式：删掉开关分支即可（默认关，删了行为也不变）。

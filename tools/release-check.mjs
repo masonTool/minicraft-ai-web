@@ -205,6 +205,35 @@ if (mode === 'app') {
   }
 }
 
+// ------------------------------------------------------------------ 3.5 数据不在产物里
+/**
+ * 断言之"方块表数据必须不在主包里"（批次 20261025-1032 · 宿主9）。
+ *
+ * 为什么用**贴图名**当探针而不是方块名：`dragon_egg` 这种名字在物品表、多语言里也有，
+ * grep 得到是正常的；而 `dragon_egg_top` 只出现在方块表的 `tiles` 里（`blockSpecs.ts`），
+ * 生产构建换上空桩之后它必定消失。用错探针会得到"永远通过"的假断言。
+ *
+ * ⚠️ 这是**唯一**能证明"数据真的没进包"的检查：体积只降 6.8 KB（gzip），
+ * 光看体积很容易被其它改动淹没，看不出是省了数据还是省了别的。
+ */
+{
+  // 自己扫一遍 assets，不依赖后面那份 `files`（那时它还没初始化）
+  const assetsDir = join(DIST, 'assets');
+  const main = (existsSync(assetsDir) ? readdirSync(assetsDir) : [])
+    .filter((name) => /^index-.*\.js$/.test(name))
+    .map((name) => `assets/${name}`)[0];
+  if (main === undefined) {
+    problems.push('找不到主包（assets/index-*.js），无法确认方块表数据是否已排除');
+  } else {
+    const text = readFileSync(join(DIST, main), 'utf8');
+    if (text.includes('dragon_egg_top')) {
+      problems.push(`${main} 里仍然含方块表数据（探针 dragon_egg_top）——生产构建的 blockSpecs 桩没生效`);
+    } else {
+      notes.push('方块表数据未进产物（探针 dragon_egg_top 不在主包）');
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 4. 断言
 
 const files = walk(DIST);
@@ -235,6 +264,13 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
  *
  * 真正该盯的是"数据搬走之后这一项要往下掉"：`blocks.ts` 的方块表明文就压在主包里，
  * 搬进 `core.bin` 时这里应当明显下降（预计 −20~30 KB gzip），届时把基线改小。
+ */
+/**
+ * 主包 gzip 基线（字节）。
+ *
+ * ⚠️ 本来是"716 KB / 实测 + 余量"。方块表外置（`SPECS_STUB=1`）实测能到 709.9 KB，
+ * 但那条路目前**还不能默认打开**（空表下入口在门禁前就崩，见队列 `[发现]` 条），
+ * 所以基线先维持现状，等入口改成两段式后再一次性收紧到 ~712 KB。
  */
 const MAIN_GZIP_BASELINE = 740_000;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {

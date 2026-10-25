@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 
@@ -67,6 +68,38 @@ function hostCoreDev(): Plugin {
   };
 }
 
+
+/**
+ * 生产构建把方块表数据换成空桩（批次 20261025-1032 · 宿主9）。
+ *
+ * 为什么用 `resolveId` 而不是 `resolve.alias`：别名是按**导入说明符**做字符串前缀匹配的，
+ * 而这里的说明符是相对路径 `./blockSpecs.ts`（在 `blocks.ts` 里写），别名要么匹配不到、
+ * 要么把"任何目录下的 blockSpecs.ts"一起拐走。`resolveId` 能明确判断"谁在 import 它"，
+ * 只改这一处，也不受打包器版本差异影响。
+ *
+ * ⚠️ `apply: 'build'`：开发服务器**不换**。`npm run dev` 的 `core.bin` 由 `hostCoreDev()`
+ * 从 `.tmp/hostcore/` 吐出来，一旦没跑过 `gen:hostcore` 就会落到"去应用里玩"的落地页，
+ * 内循环直接废掉——保底留一份真数据在包里更稳。
+ */
+function hostSpecsStub(): Plugin {
+  const stub = fileURLToPath(new URL('./src/core/registry/blockSpecs.stub.ts', import.meta.url));
+  return {
+    name: 'hostcore-specs-stub',
+    apply: 'build',
+    enforce: 'pre',
+    resolveId(source) {
+      // ⚠️ 默认**关**：实测打开了之后，浏览器在门禁之前就抛
+      // `Cannot read properties of undefined (reading 'id')`——还有模块在顶层读方块表。
+      // 先留着这套开关（`SPECS_STUB=1`）当作"数据是否真的搬干净"的探针，等入口改成
+      // 两段式（先取 core.bin 装表、再 import main）之后再默认打开。
+      if (process.env.SPECS_STUB !== '1') return null;
+      // 只拦"数据本体"，别把桩自己也拦成自己
+      if (source.endsWith('/blockSpecs.ts') || source === './blockSpecs.ts') return stub;
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
   // 相对 base：产物不写死 `/assets/...`，因此在域名根目录（自建服务器）和
   // 子路径（GitHub Pages 的 `/<repo>/`、任意静态托管的子目录）下都能直接跑。
@@ -102,7 +135,7 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
-  plugins: [hostCoreDev()],
+  plugins: [hostCoreDev(), hostSpecsStub()],
   /**
    * 单测的收文件范围（联机32）。
    *
