@@ -4,6 +4,69 @@
 > 这批是旧版存档（历史批次 1~613 / HANDOFF 批次流水 / 旧队列整份），不进上下文。
 > 找某个批次：`grep -n "批次 <号>" .continue/DONE.archive.md`
 
+## 批次 20261025-0329 · 2026-10-25 · 会话 937507d0
+
+> 方块表数据外置（宿主只认自己注入的 core.bin）+ 双形态发布 + 门禁与版本契约。
+
+# 队列 · 会话 937507d0458d4277ba340bcb48207050
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-0329
+
+目标：把方块表这份"核心且恒定"的数据从线上 bundle 里拿出来，落成**一个文件** `core.bin`：
+- 放进 APK → 前端必须从 `/__host/core.bin` 取，浏览器拿不到 → 只有宿主能玩
+- 放进静态服务器 → 完整前端方案（浏览器可玩，用于预览/兜底）
+
+约束：**不得影响前端加载与体验**（主包体积必须下降，冷启动不得变慢；bin 与主包并行加载，不串行）。
+
+- [x] [宿主1] 二进制编解码 + 生成脚本 + 往返一致测试：新增 `src/core/registry/blockTableCodec.ts`、`tools/gen-hostcore.ts`、`tools/hostcore-test.ts`，`blocks.ts` 导出 `buildBlockTable` 供工具直接用 → `npm run test:hostcore` 逐字段全等；`node tools/gen-hostcore.mjs`（或 npm script）能产出 `core.bin` 且体积记录在案
+  - 做了什么：定长 14 字节/块 + 全局去重字符串表 + 16 字节头（含 crc32），`encodeBlockTable`/`decodeBlockTable` 成对实现；`gen:hostcore` 产出 `.tmp/hostcore/core-v1.bin`；`test:hostcore` 钉 18 条断言（逐字段往返、id 连续、函数字段不进文件、坏文件必须抛、体积预算、ArrayBuffer 入口）
+  - 为什么：方块表是复制者最想要的那份数据，也是最恒定的一份，先把它做成独立文件，"放 APK / 放静态站"就只是同一个文件的两种部署，编译期不需要任何分叉
+  - 验证：`npm run test:hostcore` 18 通过 / 0 失败；`npm run check:fast` 全绿（离线套件 176 → 177 套，新套件按 `package.json` 自动注册）；`npm run typecheck` 与 `typecheck:tools` 均 0 错误。实测 724 个方块 → 41107 字节 / gzip 11048 字节（丢进 APK 的净成本 ≈ 10.8 KB）
+  - 踩到并修掉的：① 头部 12→16 字节时 `offset` 从 `HEADER_SIZE` 起读 `blockCount`，把第一段字符串长度当成块数（报"字符串表被截断"这种离谱错误），改成固定偏移 6/8；② 补 crc32 的起因是"长度不变但内容被补零"的损坏能静默解出垃圾表
+  - 批次：20261025-0329
+- [x] [宿主2] `blocks.ts` 的 `BLOCKS` 改成可注入 + 给 46 个带行为方块上一道行为快照回归锁（**只做 seam，不搬闭包**，搬迁留给宿主3 由快照兜底）
+  - 做了什么：`BLOCKS` 由 `const` 改 `let`；新增 `installBlockTable()`（校验非空 / id 连续 / 有名字，失败保持旧表）与 `isInstalledBlockTable()`（布尔标记，不用数组身份——被"等值新数组"骗过一次）；新增 `tools/behavior-signature.ts`（无副作用的口径库）、`gen-behavior-golden.ts`、`behaviors-test.ts`，基线固化为 `tests/fixtures/block-behaviors.golden.json`（46 块 / 2.3 KB）
+  - 为什么：闭包搬家和二进制装载是两件事，一次做两件出问题时定位成本翻倍。宿主2 先把"表可以被换掉"这条缝做出来并用 encode→decode→install→查询 全链路证明它成立，宿主3 再动 46 个闭包（届时快照就是判据）。快照本身也顺手变成这 46 块贴图/发光的长期回归锁
+  - 验证：`npm run test:hostcore` 33 通过 / 0 失败（新增第七节：装表后 `blockDef`/`isOpaque`/`isSolid`/`lightOpacity`/`emitLight`/`blockTiles` 逐 id 对齐，装空表与 id 不连续必抛且旧表保留）；`npm run test:behaviors` 7 通过（46 块行为输出未变）；`typecheck` 与 `typecheck:tools` 均 0 错误
+  - 批次：20261025-0329
+- [x] [宿主3] 搬到二进制装载 + 门禁：① 把 46 个方块的 `stateTiles`/`faceTile`/`stateLight` 抽进 `BLOCK_BEHAVIORS`（按名字索引），SPECS 只留数据；② 新增 `src/boot.ts`（并行拉 `/__host/core.bin` + 动态 import 主包，装表后放行；404/超时 → 全屏落地页指向 Google Play）；③ `index.html` 改指向 boot、`public/sw.js` 排除 `/__host/*` → `npm run test:behaviors` 仍全绿（46 块行为一字不差）、浏览器打开只见落地页且 Network 无主包、带 bin 时正常进游戏
+  - 做了什么：① 46 个方块的行为（`stateTiles`/`faceTile`/`stateLight`）搬进新文件 `blockBehaviors.ts`，按**方块名**索引（含 16 面旗帜的按色循环生成），`SPECS` 只留数据；`blocks.ts` 新增 `applyBehaviors()`，装表与 `buildBlockTable()` 都走它，二进制格式**不需要为行为加任何字段**。② 新增 `src/boot.ts`（真入口）：先 `fetch('./__host/core.bin')` → 验魔数 → 装表 → 动态 `import('./main.ts')`；两条失败路径分开——"没有核心数据"走安装引导（指向 Google Play），"有但解不开/版本不对"走提示更新。③ `index.html` 改指向 `boot.ts`；`public/sw.js` 排除 `/__host/*`；`vite.config.ts` 加 dev-only 中间件模拟安卓宿主（`apply: 'serve'`）。
+  - 为什么：闭包塞不进二进制，必须留在代码里；而"搬"这类改动的风险是**静默渲染错**（正脸贴反、亮灯不发光），所以先用快照锁住 46 块的输出再动手。门禁之所以不需要后台，是因为 `__host/core.bin` 在线上**根本不存在**：宿主用 `shouldInterceptRequest` 从 APK 读，浏览器拿到的就是 404——"缺资源"这个判据天然成立。
+  - 验证：`npm run test:behaviors` 7/0（46 块行为输出一字不差）；`npm run test:hostcore` 33/0（含 encode→decode→install 全链路）；dev 下 `curl /__host/core.bin` → 200 / 41107 字节；Playwright 实测两形态——**无 bin → 显示"请在 Minicraft 应用里游玩"，且 `main-*.js` 一个字节都没下载**；有 bin → 下载 `main-*.js` 并进入"加载中… 正在准备材质与存档"；`typecheck` 0 错误
+  - 踩到并修掉的：① `vite preview`/静态托管对不存在路径做 **SPA 回退**，`/__host/core.bin` 返回 `200 + index.html`，`response.ok` 为真 → 被误判成"版本不匹配"（提示"请更新应用"而不是"去下载"）。改成**先验魔数**：魔数不对 = 没有核心数据 = 安装引导；② 浏览器验证时读到旧 Service Worker 里缓存的 `core.bin`，害得"有 bin 也显示落地页"，加 cache-busting 查询串后才复现真实行为——这条已补进 `TIPS.md`
+  - 没做完、留到宿主4：`SPECS` 仍在 bundle 里（本批**体积未降**）。原因是它与 50 多个 id 常量交错在 `blocks.ts` 中，被 224 个文件引用，搬走要连带处理这批再导出；宿主4 做文件拆分 + 主包体积断言 + `dist` 里不得出现 `core.bin` 的断言
+  - 批次：20261025-0329
+- [x] [宿主4] 双形态发布构建：`build:web`（含 core.bin，完整前端）/ `build:app`（**不含** core.bin）＋ 关闭 sourcemap ＋ HTML minify ＋ 构建后断言（无 `.map`、无 `core.bin`、主包 gzip 显著低于 338456）→ 两条命令各自断言通过
+  - 做了什么：新增 `tools/release-check.mjs`（发布后处理 + 断言）与 `npm run build:app` / `build:web`：两条都以 `SOURCEMAP=0 vite build` 起，再由脚本 ① 用 esbuild 再压一遍 JS 并记录压缩率 ② `app` 形态**删掉** `dist/__host/` 并报红、`web` 形态校验 `core.bin` 魔数后放入 ③ 断言无 `.map`、主包 gzip 不超基线、HTML 产物不比源文件大。另把 `vite.config.ts` 的 `minify` 显式写死（不依赖默认值）。
+  - 为什么：这三件失败都**不会让构建报错**——多一个 `.map` 等于把源码发出去了，多一个 `core.bin` 等于门禁当场失效，产物没压缩则只是"手机多下两倍"。静默变差只能靠退出码兜。`build:web` 与 `build:app` 用同一个 `dist` 布局，只差一个文件：**放哪决定形态**这条设计在这里得到验证。
+  - 验证：`npm run build:app` → 主包 `index-*.js` gzip 716.0 KB / 基线 722.7 KB、全部 JS 合计 1202.7 KB，`dist` 无 `__host`；`npm run build:web` → `core.bin 已放入 dist/__host（40.1 KB）`、魔数校验通过。Playwright 两形态实测：`web` 形态进"加载中… 正在准备材质与存档"，`app` 形态只显示"请在 Minicraft 应用里游玩"，控制台无错误。
+  - ⚠️ 没达成的一条：队列里写的"主包 gzip 显著低于 338456"**没有达成（716 KB）**，因为 `SPECS` 仍在主包里。而且 338456 本身是**批次 85 的旧数字**，项目此后长了一倍多（724 方块 / 176 套测试 / 村庄要塞联机），拿它当目标属于刻舟求剑——真正该盯的是"数据搬走之后这一项要往下掉"。已把基线改成"当前实测 + 余量"并写明这一点，另插了一条 `[发现]` 条目专做数据搬迁。这一点请在收尾时定夺。
+  - 踩到并修掉的：① 一度改成"独立 boot 入口 + 动态 import main"，实测 `blocks.ts` 被两个 chunk **各打一份**（主包 2.0 MB / gzip 556 KB + 多一次请求），回退成单入口、门禁放在 `main.ts` 末尾的异步 IIFE 里；② esbuild 压缩默认把中文转 `\uXXXX`，体积反涨 14%，必须显式 `charset: 'utf8'`
+  - 批次：20261025-0329
+- [x] [宿主5] 版本契约：`version.json`（`core` / `minSupported`）+ 宿主 UA 带 `core/N` + 不匹配时提示「请更新应用」而非白屏 → 手工验三种组合（匹配 / 落后 / 浏览器）
+  - 做了什么：① `release-check.mjs` 生成 `dist/version.json`（`core` / `minSupportedCore` / `builtAt` / `mode`），`core` 直接从 `blockTableCodec.ts` 的 `BLOCK_TABLE_VERSION` 读取并与 `core-v{N}.bin` 文件名交叉校验（两处抄一遍必然漂）；② `hostCore.ts` 新增 `readHostCoreVersion(ua)` / `evaluateHostVersion()`（纯函数）与 `fetchMinSupportedCore()`，启动时与 `core.bin` **并行**取清单，先判"宿主太老"再解二进制；③ `sw.js` 把 `version.json` 也排除出缓存；④ `tools/browser.mjs` 的 `openPage` 支持自定义 UA（这是唯一能真验 UA 判定的办法）。
+  - 为什么：三种组合里最容易错的是**浏览器**——它没有宿主标记，若把它也判成"版本过旧"，浏览器用户会看到"请更新应用"这种完全误导的提示。所以判定是三态（`ok` / `outdated` / `unknown`），`unknown` 必须继续走正常流程、最终落到安装引导。另外清单取不到时**不阻塞启动**（回退到最宽松的兜底下限），不让一个几百字节的 JSON 成为单点故障。
+  - 验证：`npm run test:hostversion` 16 通过 / 0 失败（UA 解析 7 条含"只有 core/N 没有宿主标记 → null"这种误判防线；三组合与边界 9 条）；真实浏览器三组合实测（`build:web` 形态）：浏览器 UA → 进"加载中…"、宿主 `core/1` → 进"加载中…"、宿主 `core/0` → **"核心资源版本不匹配 / 请更新到最新版本"**，三次均无控制台错误。另：`build:app` 形态下浏览器 UA → 安装引导（上一轮已验证）。
+  - 批次：20261025-0329
+- [x] [宿主6] Cloudflare 静态发布与回滚：两条流水线分别部署 app 版与完整版（**不同域名/路径**，避免误把 core.bin 传到生产域），灰度与回滚步骤写进文档 → 按文档实操一次并贴出 curl 证据
+  - 做了什么：① 两条**独立的**发布流水线 `.github/workflows/deploy-cf-app.yml`（`minicraft-app` / 宿主专属）与 `deploy-cf-web.yml`（`minicraft-web` / 完整前端），项目名、域名、`dist` 形态三者物理隔离，触发方式只留 `workflow_dispatch`（手动 + `channel=preview|production` 两段式）；② `docs/DEPLOY-CLOUDFLARE.md`：两站分工、首次配置（secrets / 域名）、preview 先验收再切 production、三种回滚路径、验收清单；③ 新增 `public/_headers`（Pages 专用）：`core.bin` / `version.json` 走 `no-store`、`index.html` / `sw.js` 走 `no-cache`；④ 顺带修掉一个**线上泄漏**：`deploy-pages.yml` 原来跑 `npm run build`，而 sourcemap 默认是开的——GitHub Pages 上一直挂着 `.map`，等于把 TypeScript 全部源码公开。已改成 `npm run build:app`（关 sourcemap + release-check 断言）。
+  - 为什么：灰度这块 Cloudflare Pages **没有百分比能力**（那是 Workers 的 `versions deploy --percentage`），所以这里定义成"部署级两段式"：先发 preview（独立 URL，生产域名不动）→ 按清单验收 → 再 promote。要真按比例放量就得迁到 Workers + R2，那是纯加法、随时可做，现阶段不值得为一个还没量的问题引入动态层。两站必须**不同项目名**：它们只差一个 `core.bin`，共用项目的话"谁最后跑"决定线上形态，发错时线上看起来还一切正常（游戏能玩），没人会发现。
+  - 验证：**未验证**（缺 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 与两个 Pages 项目名，这类信息只有用户能提供）。已做的是本地等价验收：本地用 `vite preview` 模拟两站产物、按文档第 5 节逐条 curl——A 站 `/__host/core.bin` 返回 `<!do`（不是 MCTB）、`version.json` 为 `mode=app`、入口 chunk 存在、`.map` 请求拿到 HTML、`dist` 无 `__host`；B 站 `core.bin` 200 / 41107 字节 / 魔数 `MCTB`、`version.json` 为 `mode=web`、`.map` 同样不存在。两条构建命令本身也各自跑通断言（`build:app` / `build:web` 均 ✓）。工作流文件只做了静态检查（无 Tab、无未用参数），实际执行要等用户配好 secrets 手动触发。
+  - 踩到并修掉的：验收清单原本写"看 HTTP 状态码"，但 SPA 回退会把任何不存在的路径变成 `200 + index.html`（首轮实测 A 站 `core.bin` 与 `.map` 双双返回 200）——已全部改成**看内容**（魔数 / 首字节），文档里也写明了原因
+  - 批次：20261025-0329
+
+- [阻塞] [发现] 把 `blocks.ts` 里的方块表数据真搬出主包（当前门禁已成立、体积未降）：`src/core/registry/blocks.ts` 里 `SPECS` 与 60 多个声明交错（22 个 `export const *_ID_START` 导出被 224 个文件引用、若干 spec 工厂函数），整块搬运要连带处理再导出 → 判据是 `npm run build:app` 的主包 gzip 比现在（716 KB）明显下降，且 `npm run test:hostcore` 仍是 724 个方块、`npm run test:behaviors` 46 块一字不差
+
+  - 进展（2026-10-25 · **未完成，未打勾**）：**第 1 步已做完**——`SPECS` 的构造现在**没有任何副作用**（`grep _MAP.set` 为 0 处）。
+    · 原状：6 张 id 表（`WOOD_ID_MAP` / `WOOD_SHAPED_MAP` / `SAPLING_ID_MAP` / `SAPLING_TREE_MAP` / `BED_ID_MAP` / `SIGN_ID_MAP` / `STONE_VARIANT_MAP`）都是在 spec 数组的 `flatMap`/`map`/IIFE 回调里被 `set()` 填充的——"建表顺便产出 id"。
+    · 现在：先纯算术生成（`WOOD_IDS` / `WOOD_SHAPED_IDS` / `allocateStoneVariantIds()` 等），spec 只读不写；`STONE_VARIANT` 那处的 id 分配器单独抽成 `allocateStoneVariantIds()`，`stoneVariantId()` 不再依赖"表被生成过"。
+    · 验证：id 快照哈希改前改后**逐字节一致**（木材 `9c2cdaf90cf3155e`；含树苗/床/牌子/石变体的合并快照 `b3c68cc2d86da217`）；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）、`check:fast` 149 套全绿。
+  - 剩余工作（下一批的入口）：**第 2 步——把 60 多个 spec 声明搬到 `blockSpecs.ts`**。已探明的做法：spec 数组只依赖**导出的取值函数**（`woodBlocks()` / `woodShaped()` / `saplingId()` / `bedIdOfColor()` / `signId()` / `stoneVariantId()`）与字面量常量，所以搬运后 `blockSpecs.ts` 只需 `import` 这些；`blocks.ts` 用**动态 `import()`（顶层 await）+ 构建期 `define` 关掉嵌入**来绕开"blockSpecs 先求值读常量落在 TDZ"的死结，生产包里 `SPECS` 为空、由 `hostCore` 从 `core.bin` 装表，`build:app` 主包 gzip 应降到 ~690 KB。**风险点**：`blocks.ts` 会变成 async 模块（TLA），224 个引用方的求值时机整体后移——这是下一批唯一需要小心的地方。
+
+---
+
 ## 批次 20261025-0122 · 2026-10-25 · 会话 037060ab
 
 > **这一批做什么（L8 · MS2 世界权威）**：让"世界模拟只由房主跑"真正生效——从属端不再推进
