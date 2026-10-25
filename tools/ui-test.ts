@@ -4162,11 +4162,12 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
 
   // 批次 245：铁轨与矿车
-  // ⚠️ id 常量搬到了叶子模块 `blockIds.ts`（批次 20261025-1032），两处源码拼起来看：
+  // ⚠️ id 常量与方块表数据分别搬到了 `blockIds.ts` / `blockSpecs.ts`（批次 20261025-1032），三处源码拼起来看：
   //    这些断言关心的是"581 就是激活轨"，而不是"这行写在哪个文件里"。
   const blocksSrc =
     readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8');
+    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
   /**
    * 方块**行为**（`stateTiles` / `faceTile` / `stateLight`）在批次 20261025-0329 搬到了
    * `blockBehaviors.ts`（要能把数据放进二进制，闭包必须留在代码里）。所以"某块有哪两张贴图"
@@ -4452,11 +4453,12 @@ console.log('\n[位移 / 横扫附魔（批次 262）]');
 console.log('\n[冰霜行者（批次 263）]');
 {
   const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  // ⚠️ id 常量搬到了叶子模块 `blockIds.ts`（批次 20261025-1032），两处源码拼起来看：
+  // ⚠️ id 常量与方块表数据分别搬到了 `blockIds.ts` / `blockSpecs.ts`（批次 20261025-1032），三处源码拼起来看：
   //    这些断言关心的是"581 就是激活轨"，而不是"这行写在哪个文件里"。
   const blocksSrc =
     readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8');
+    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
   const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const frostAt = enchantSrc.indexOf("id: 'frost_walker'");
   check(

@@ -929,3 +929,47 @@ export function signId(woodName: string): number | undefined {
 }
 /** 全部告示牌的 id（断言与创造分类遍历用） */
 export const SIGN_IDS: readonly number[] = WOOD_TYPES.map((_wood, index) => SIGN_ID_START + index);
+
+// ---- spec 的输入表（也是纯数据，放叶子才不成环）
+/**
+ * 有台阶与楼梯变体的母方块：[母方块 id, 命名前缀]。
+ * 顺序决定 slabId / stairsId 的取值，改动顺序会导致存档不兼容。
+ */
+export const SHAPED_PARENTS: readonly (readonly [number, string])[] = [
+  [1, 'stone'],
+  [8, 'cobblestone'],
+  [7, 'oak_planks'],
+  [20, 'sandstone'],
+  [62, 'stone_bricks'],
+  [64, 'smooth_stone'],
+  [65, 'polished_granite'],
+  [66, 'polished_diorite'],
+  [67, 'polished_andesite'],
+  [68, 'deepslate_bricks'],
+  [70, 'bricks'],
+  [71, 'polished_deepslate'],
+];
+/** 每档的贴图名与中文前缀（贴图、名字、配方都由它展开） */
+export const COPPER_STAGES = [
+  { blockTile: 'copper_block', cutTile: 'cut_copper' },
+  { blockTile: 'exposed_copper', cutTile: 'exposed_cut_copper' },
+  { blockTile: 'weathered_copper', cutTile: 'weathered_cut_copper' },
+  { blockTile: 'oxidized_copper', cutTile: 'oxidized_cut_copper' },
+] as const;
+/** 档内四种形状的名字后缀（与 `copperId` 的第二维一一对应） */
+export const COPPER_SHAPES = [
+  { suffix: '_block', cut: false },
+  { suffix: '', cut: true },
+  { suffix: '_slab', cut: true },
+  { suffix: '_stairs', cut: true },
+] as const;
+/** 第 `stage` 档第 `kind` 种铜方块的 id：kind 0=铜块、1=切制铜、2=台阶、3=楼梯 */
+export function copperId(stage: number, kind: 0 | 1 | 2 | 3): number {
+  return COPPER_ID_START + stage * 4 + kind;
+}
+/** 珊瑚的五"种"（原版顺序：管 / 脑 / 气泡 / 火 / 鹿角） */
+export const CORAL_KINDS = ['tube', 'brain', 'bubble', 'fire', 'horn'] as const;
+export const STEM_STAGES: Readonly<Record<string, readonly number[]>> = {
+  pumpkin: Array.from({ length: STEM_MAX_STAGE + 1 }, (_, stage) => PUMPKIN_STEM_ID_START + stage),
+  melon: Array.from({ length: STEM_MAX_STAGE + 1 }, (_, stage) => MELON_STEM_ID_START + stage),
+};

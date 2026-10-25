@@ -19,3 +19,9 @@
 - 决定：30 个声明（木材/木制四件/树苗/床/牌子/石变体，含非导出的 `const`）一次性搬进 `blockIds.ts`；`blockIds.ts` 新增的依赖只有 `colors.ts`（纯数据）与 `TreeKind`（纯类型）。`blocks.ts` 继续 `export *`，224 个引用方零改动。
 - 为什么：这些表是 `blockSpecs.ts` 的输入，留在 `blocks.ts` 里就必然形成 `blockSpecs → blocks → blockSpecs` 的环（前两次 TLA/banner 方案都是死在环上）。整组搬而不是逐个搬，是因为它们互相引用（`Wood` 依赖 `WOOD_ID_MAP`、`WoodShaped` 依赖 `WOOD_SHAPED_MAP`），拆开搬会出现"一半在叶子里、一半还在环上"的中间态——那种态编译能过但依赖方向仍然是错的，等于白搬。
 - 影响：`blockIds.ts` 从 664 行长到 931 行，`blocks.ts` 从 4916 行降到 4511 行；行为零变化（快照哈希逐字节一致、149 套离线测试 + 724 块往返 + 46 块行为全对）。`blockIds.ts` 不再是"零 import 的绝对叶子"，但它的依赖全是纯数据/纯类型模块，无环——这是后续 `blockSpecs` 能直接读它的前提。退回方式：`git revert` 单个提交。
+
+## D4 · `blockSpecs.ts` 只依赖叶子与纯数据模块，`blocks.ts` 静态 import 它
+
+- 决定：spec 数据与只被 spec 用的辅助函数整体搬进 `blockSpecs.ts`；`blocks.ts` 用**静态** `import { SPECS }`（不再有顶层 await、不再需要给测试注入装配器）。搬运时 tsc 报出的 6 个"还在环上"的输入表（`SHAPED_PARENTS`/`COPPER_STAGES`/`COPPER_SHAPES`/`CORAL_KINDS`/`STEM_STAGES`/`copperId`）一并下沉到 `blockIds.ts`。
+- 为什么：环是前两次失败的总根。现在的依赖链 `blockIds → blockSpecs → blocks` 是 DAG，静态 import 的初始化顺序天然正确（被依赖的先求值），既不需要 TLA 也不需要测试注入。**放弃的方案**：把 6 个输入表留给 `blocks.ts` 再让 `blockSpecs` 去 import（那就又是环），或把它们复制一份到 `blockSpecs`（两份数据必然漂）。
+- 影响：`blocks.ts` 从 4511 行降到 ~2400 行、`blockSpecs.ts` 2191 行、`blockIds.ts` 931 行（三份职责清楚：id 分配 / 数据 / 行为与装配）。体积**暂时未变**（数据仍在包里），换桩在 `宿主9`。行为零变化（724 块往返 + 46 块行为哈希 + 149 套全绿 + 快照哈希逐字节一致）。退回方式：`git revert`。
