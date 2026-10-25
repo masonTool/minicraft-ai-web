@@ -261,7 +261,27 @@ export class MultiplayerScreen {
     hint.className = 'mp-hint';
     hint.textContent = t('mp.hint');
 
-    panel.append(title, urlRow, roomRow, this.roomsEl, this.recentEl, nameRow, this.statusEl, actionsRow, hint);
+    /*
+     * 左右两栏（本轮）：左 = 表单（地址 / 房间 / 昵称 / 状态 / 按钮），右 = 房间列表 + 最近连接。
+     *
+     * 以前是单列：房间列表被压在表单下面，短屏（手机横屏高度只有 360~430）固定 96px
+     * 三行，填完地址再"找房间"根本看不到几间，列表也就失去了意义。
+     * 分栏之后列表拿到整列高度（列内自己滚），表单也不必为了塞下列表而挤成一团。
+     */
+    const roomsTitle = document.createElement('div');
+    roomsTitle.className = 'mp-col-title';
+    roomsTitle.textContent = t('mp.roomsTitle');
+
+    const columns = document.createElement('div');
+    columns.className = 'mp-columns';
+    const mainCol = document.createElement('div');
+    mainCol.className = 'mp-col mp-col-main';
+    const roomsCol = document.createElement('div');
+    roomsCol.className = 'mp-col mp-col-rooms';
+    mainCol.append(title, urlRow, roomRow, nameRow, this.statusEl, actionsRow, hint);
+    roomsCol.append(roomsTitle, this.roomsEl, this.recentEl);
+    columns.append(mainCol, roomsCol);
+    panel.append(columns);
     this.root.append(panel);
     host.append(this.root);
 

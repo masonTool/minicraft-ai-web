@@ -70,6 +70,7 @@ export const menu = {
   "mp.password": "Пароль",
   "mp.passwordHint": "необязательно",
   "mp.refreshRooms": "Найти комнаты",
+  "mp.roomsTitle": "Комнаты",
   "mp.recent": "Недавние",
   "net.hostLeft": "Хост отключился — комната закроется через {s} с, если он не вернётся",
   "net.roomClosed": "Хост вышел, комната закрыта",

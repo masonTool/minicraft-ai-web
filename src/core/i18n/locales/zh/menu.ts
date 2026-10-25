@@ -71,6 +71,7 @@ export const menu = {
   'mp.password': '口令',
   'mp.passwordHint': '可空',
   'mp.refreshRooms': '找房间',
+  'mp.roomsTitle': '房间列表',
   'mp.recent': '最近连接',
   'net.hostLeft': '房主已掉线，{s} 秒内没回来房间就会关闭',
   'net.roomClosed': '房主已退出，房间已关闭',

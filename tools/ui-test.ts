@@ -5322,9 +5322,15 @@ console.log('\n[加入房间：选项式面板（L9）]');
     mpSrc.includes('this.roomInput.value = entry.room;') && mpSrc.includes('this.passwordInput.focus();'),
   );
   check(
-    '房间列表有专属类名与三行高度上限（横屏不撑破）',
+    '房间列表在右列内自适应高度并滚动（不再固定三行；窄屏回落时才限高）',
     mpSrc.includes("this.roomsEl.className = 'mp-rooms hidden'") &&
-      /\.mp-rooms \{[^}]*max-height: 96px; overflow: auto;/.test(
+      // 宽屏：吃掉右列剩余高度、列内自己滚
+      /\.mp-rooms \{[^}]*?flex: 1 1 auto[^}]*?overflow: auto;/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+      ) &&
+      // 窄屏 / 竖屏回落成单列时才限高（否则两栏会把输入框压扁、面板撑出屏幕）
+      // 注意这里不能用 `[^}]*?`：媒体查询里前面还有 `.mp-columns { … }` 与 `.mp-col-rooms { … }`
+      /@media \(max-width: 620px\), \(orientation: portrait\) \{[\s\S]*?\.mp-rooms \{ max-height: 96px; \}/.test(
         readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
       ),
   );
@@ -5869,6 +5875,34 @@ console.log('\n[皮肤同步与昵称唯一]');
       /code === 'duplicate-name'/.test(protocolSrc) &&
       mainSrc.includes("t('say.net.duplicateName')"),
   );
+}
+
+/*
+ * 加入房间面板的左右栏（本轮）
+ *
+ * 用户："短屏上房间列表被挤压，显示不出来" —— 单列时列表只有固定 96px（三行）。
+ * 现在左表单 / 右列表，列表吃掉整列高度；窄屏与竖屏回落成单列。
+ */
+console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
+{
+  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check(
+    '面板改成左表单 / 右列表两栏',
+    mpSrc.includes("columns.className = 'mp-columns'") &&
+      mpSrc.includes("mainCol.className = 'mp-col mp-col-main'") &&
+      mpSrc.includes("roomsCol.className = 'mp-col mp-col-rooms'") &&
+      mpSrc.includes('roomsCol.append(roomsTitle, this.roomsEl, this.recentEl)'),
+  );
+  check(
+    '房间列表占满右列高度（不再固定 96px）',
+    /\.mp-rooms \{[\s\S]{0,200}flex: 1 1 auto/.test(css) && /\.mp-col-rooms \{ flex: 1 1 42%/.test(css),
+  );
+  check(
+    '窄屏 / 竖屏回落成单列（否则手机上两栏会把输入框压扁）',
+    /@media \(max-width: 620px\), \(orientation: portrait\) \{[\s\S]{0,220}\.mp-columns \{ flex-direction: column/.test(css),
+  );
+  check('列表行更紧凑（字号 11 / 内边距 3）', /\.mp-room-row \{[\s\S]{0,220}font-size: 11px/.test(css));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

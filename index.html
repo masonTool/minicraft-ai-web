@@ -1962,7 +1962,8 @@
       }
       #multiplayer-screen.hidden { display: none; }
       .mp-panel {
-        width: min(92vw, 460px); max-height: 100%;
+        /* 左右两栏（本轮）：宽屏给到 720px，左表单右房间列表 */
+        width: min(94vw, 720px); max-height: 100%;
         display: flex; flex-direction: column; gap: 8px;
         padding: 10px 12px; overflow: auto;
         background: var(--mc-menu-bg); color: var(--mc-text-light);
@@ -1972,6 +1973,18 @@
         font-size: 13px;
       }
       .mp-title { font-size: 15px; text-align: center; }
+      /* 两栏：左 = 表单（地址/房间/昵称/状态/按钮），右 = 房间列表 + 最近连接。
+         手机横屏高度只有 360~430，单列时列表被压在表单下面只剩两三行，
+         "找房间"基本不可用；分栏之后列表拿到整列高度。
+         窄屏（竖屏/极窄）自动回落成单列，见文件后面的媒体查询。 */
+      .mp-columns { display: flex; gap: 10px; align-items: stretch; min-height: 0; }
+      .mp-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+      .mp-col-main { flex: 1 1 58%; }
+      .mp-col-rooms { flex: 1 1 42%; }
+      .mp-col-title {
+        font-size: 12px; opacity: .8; text-align: left;
+        padding-left: 2px; border-bottom: 1px dashed var(--pixel-bevel-dark);
+      }
       .mp-row { display: flex; align-items: center; gap: 8px; }
       .mp-row > span { flex: 0 0 5.5em; }
       .mp-row input {
@@ -1985,20 +1998,28 @@
       }
       /* 房间/口令同一行：口令那一格的标签比主标签窄一半 */
       .mp-row > span.mp-row-label-sub { flex: 0 0 2.6em; text-align: right; opacity: .8; }
-      /* 房间列表：最多三行高就滚，别把面板撑出屏幕 */
+      /* 房间列表：占满右列剩下的高度（列内自己滚），不再固定 96px 三行 */
       .mp-rooms {
-        display: flex; flex-direction: column; gap: 4px;
-        max-height: 96px; overflow: auto;
-        padding: 4px; background: rgba(0, 0, 0, .3);
+        display: flex; flex-direction: column; gap: 3px;
+        flex: 1 1 auto; min-height: 72px; max-height: none; overflow: auto;
+        padding: 3px; background: rgba(0, 0, 0, .3);
       }
+      /* 紧凑版行（本轮）：一行放下"房名 + 人数 · 世界 · 无房主"，
+         字号 11 / 上下内边距 3，短屏里能多看到两三行 */
       .mp-room-row {
-        display: flex; align-items: baseline; gap: 8px;
-        font: inherit; font-size: 12px; text-align: left; cursor: pointer;
-        padding: 5px 8px; border: 2px solid var(--pixel-bevel-dark);
+        display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+        font: inherit; font-size: 11px; line-height: 1.35; text-align: left; cursor: pointer;
+        padding: 3px 6px; border: 2px solid var(--pixel-bevel-dark);
         color: var(--mc-text-light); background: rgba(0, 0, 0, .25);
       }
-      .mp-room-row b { font-size: 13px; }
+      .mp-room-row b { font-size: 12px; }
       .mp-room-row span { opacity: .8; }
+      /* 竖屏 / 极窄：两栏回落成单列，列表回到固定高度滚动（与分栏前的观感一致） */
+      @media (max-width: 620px), (orientation: portrait) {
+        .mp-columns { flex-direction: column; }
+        .mp-col-rooms { flex: 0 0 auto; }
+        .mp-rooms { max-height: 96px; }
+      }
       /* ---------------- 本局房间信息卡（L9） ---------------- */
       #room-card {
         position: fixed; inset: 0; z-index: 60;

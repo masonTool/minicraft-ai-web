@@ -72,6 +72,7 @@ export const menu = {
   'mp.password': 'Password',
   'mp.passwordHint': 'optional',
   'mp.refreshRooms': 'Find rooms',
+  'mp.roomsTitle': 'Rooms',
   'mp.recent': 'Recent',
   'net.hostLeft': 'The host dropped out — the room closes in {s}s unless they return',
   'net.roomClosed': 'The host left, so the room was closed',

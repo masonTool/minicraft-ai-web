@@ -69,6 +69,7 @@ export const menu = {
   "mp.password": "Senha",
   "mp.passwordHint": "opcional",
   "mp.refreshRooms": "Buscar salas",
+  "mp.roomsTitle": "Salas",
   "mp.recent": "Recentes",
   "net.hostLeft": "Quem hospeda caiu — a sala fecha em {s}s se não voltar",
   "net.roomClosed": "Quem hospedava saiu, a sala foi fechada",

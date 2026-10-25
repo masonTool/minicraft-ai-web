@@ -70,6 +70,7 @@ export const menu = {
   "mp.password": "Mot de passe",
   "mp.passwordHint": "facultatif",
   "mp.refreshRooms": "Chercher des parties",
+  "mp.roomsTitle": "Parties",
   "mp.recent": "Récent",
   "net.hostLeft": "L’hôte a été déconnecté — la partie se ferme dans {s} s s’il ne revient pas",
   "net.roomClosed": "L’hôte est parti, la partie a été fermée",
