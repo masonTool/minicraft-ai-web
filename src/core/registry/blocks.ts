@@ -18,6 +18,8 @@ import { paintingTile } from './paintings.ts';
 // 方块 id 的分配表是叶子模块（见 `blockIds.ts` 头注释：依赖方向必须是单向的）。
 // 既要**再导出**（224 个引用方不用改），也要**本地导入**（`export *` 不会把名字带进本模块作用域）。
 export * from './blockIds.ts';
+// 类型不在 `export *` 的值导入里，单独按类型导一次（`verbatimModuleSyntax` 要求写明 type）
+import type { BlockSpec, WoodBlockIds, WoodShapedIds } from './blockIds.ts';
 import {
   WOOL_ID_START,
   WOOD_BLOCK_ID_START,
@@ -204,26 +206,6 @@ export interface BlockDef {
    *     （否则旁边一格水会把它当"可替换方块"直接覆盖掉，海带一放下去就没了）
    */
   readonly waterPlant: boolean;
-}
-
-interface BlockSpec {
-  id: number;
-  name: string;
-  tiles?: readonly [string, string, string];
-  solid?: boolean;
-  opaque?: boolean;
-  /** 头卡住会窒息（不填 = 跟 `opaque` 一致；树叶显式写 false） */
-  suffocates?: boolean;
-  light?: number;
-  lightOpacity?: number;
-  liquid?: boolean;
-  translucent?: boolean;
-  shape?: BlockShape;
-  facesPlayer?: boolean;
-  facesSneak?: boolean;
-  facesNormal?: boolean;
-  itemless?: boolean;
-  waterPlant?: boolean;
 }
 
 
@@ -418,14 +400,6 @@ const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
 // ---------------------------------------------------------------- 木材家族
 
 
-export interface WoodBlockIds {
-  readonly log: number;
-  readonly planks: number;
-  readonly leaves: number;
-  readonly slab: number;
-  readonly stairs: number;
-}
-
 const EXTRA_WOODS = WOOD_TYPES.filter((wood) => wood.name !== 'oak');
 
 /**
@@ -495,13 +469,6 @@ export const Wood: Readonly<Record<string, WoodBlockIds>> = Object.fromEntries(
 
 // ---------------------------------------------------------------- 木制方块族（栅栏 / 栅栏门 / 门 / 活板门）
 
-
-export interface WoodShapedIds {
-  readonly fence: number;
-  readonly fenceGate: number;
-  readonly door: number;
-  readonly trapdoor: number;
-}
 
 /** 橡木四件的历史 id（与 `Block` 枚举同源，这里写常量是为了在枚举定义之前就能用） */
 const OAK_WOOD_SHAPED: WoodShapedIds = { fence: 96, fenceGate: 290, door: 99, trapdoor: 289 };

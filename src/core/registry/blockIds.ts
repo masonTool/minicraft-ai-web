@@ -17,6 +17,51 @@
  * `SAPLING_IDS` …）都留在 `blocks.ts`，否则叶子就不"叶子"了。
  */
 
+import type { BlockShape } from './blockState.ts';
+
+/**
+ * 方块**规格**（数据层）与两种 id 结构的类型。
+ *
+ * 放叶子模块是为了让 `blockSpecs.ts` 能拿到它们而不 import `blocks.ts`（否则成环）。
+ * 这里只有类型，编译后不产生运行时代码。
+ */
+
+export interface BlockSpec {
+  id: number;
+  name: string;
+  tiles?: readonly [string, string, string];
+  solid?: boolean;
+  opaque?: boolean;
+  /** 头卡住会窒息（不填 = 跟 `opaque` 一致；树叶显式写 false） */
+  suffocates?: boolean;
+  light?: number;
+  lightOpacity?: number;
+  liquid?: boolean;
+  translucent?: boolean;
+  shape?: BlockShape;
+  facesPlayer?: boolean;
+  facesSneak?: boolean;
+  facesNormal?: boolean;
+  itemless?: boolean;
+  waterPlant?: boolean;
+}
+
+export interface WoodBlockIds {
+  readonly log: number;
+  readonly planks: number;
+  readonly leaves: number;
+  readonly slab: number;
+  readonly stairs: number;
+}
+
+export interface WoodShapedIds {
+  readonly fence: number;
+  readonly fenceGate: number;
+  readonly door: number;
+  readonly trapdoor: number;
+}
+
+
 /** 羊毛 id 起始值：16 种颜色连续排列，顺序与 DYE_COLORS 一致 */
 export const WOOL_ID_START = 46;
 /**
