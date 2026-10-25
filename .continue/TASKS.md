@@ -1317,6 +1317,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       按"一条链收尾时要问第一句：第一件原料从哪来"那条经验，宁可不做也不给一个拿不到的原料
       —— 等蜜蜂（生物整组）落地之后再补这一档
 
+- [x] A14 方块表二进制编解码：`core/registry/blockTableCodec.ts`（v1 格式：魔数 + 版本 + CRC32 + 字符串表 + 14 字节/块）
+      724 个方块 → 40.1 KB raw / 10.8 KB gzip；`npm run gen:hostcore` 生成，`npm run test:hostcore` 33 条往返/坏文件/体积断言
+- [x] A15 方块表可注入 + 行为分离：`BLOCKS` 不再内建数据（`installBlockTable()`），46 个带 `stateTiles`/`faceTile`/`stateLight`
+      的方块用 `test:behaviors` 的 46 个黄金哈希钉住"二进制那条路与 TS 源表完全等价"
+- [x] A16 宿主门禁：`core/hostCore.ts` —— 有 `core.bin` 才装表放行；浏览器（拿不到文件）→ 全屏引导去 Google Play；
+      文件坏/版本不兼容 → 提示更新应用（不是白屏）
+- [x] A17 双形态发布构建：`build:app`（**不含** core.bin）/ `build:web`（含），两条都 `SOURCEMAP=0` + `tools/release-check.mjs`
+      三条断言（无 `.map` / 无残留注释 / core.bin 形态正确）+ 体积基线门禁；HTML 产物 140.5 KB（源 247.5 KB）
+- [x] A18 版本契约：`dist/version.json`（`core` / `minSupportedCore`，`core` 直读 `BLOCK_TABLE_VERSION` 并与文件名交叉校验）
+      + 宿主 UA 尾 `MinicraftHost/1.0 core/N` + 三态判定（`ok`/`outdated`/`unknown`，浏览器绝不会被误判成"太老"）
+- [x] A19 Cloudflare 两站发布：`deploy-cf-app.yml` / `deploy-cf-web.yml`（两个 Pages 项目物理隔离）+ `docs/DEPLOY-CLOUDFLARE.md`
+      + `public/_headers`；**未验证**真实部署（缺账号凭证），本地以 `vite preview` 模拟两站逐条 curl 验收通过
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
