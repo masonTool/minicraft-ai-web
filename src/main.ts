@@ -4827,13 +4827,29 @@ class App {
       return false;
     }
 
-    // 先把全部区块增量装进内存：之后任何区块生成都会自动叠加它们
-    const records = await this.save.loadAllChunkEdits();
-    for (const record of records) {
-      this.world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
-    }
-    if (records.length > 0) {
-      console.info(`[save] 已装载 ${records.length} 个区块的增量改动，共 ${this.world.edits.totalEdits} 格`);
+    /*
+     * 加入别人的房间：**不恢复本地的方块增量**（用户 2026-10-26："地形方块有些不一致"）。
+     *
+     * 加入方的本地库名是「房间 + 种子」（`multiplayerWorldId`），同房同种子就是同一个库：
+     * 上一次会话看过的方块改动会在这次进房时被**原样复活**，再叠到房主刚发来的快照上。
+     * 房主要是后来把某处改回去了（拆掉、水退、TNT 炸完回填），旧增量就把那几格"顶"回旧样子，
+     * 两边地形于是对不上——而且只有加入方看得见，房主那边一切正常。
+     *
+     * 口径与"位置不恢复"一致：联机里**地形以房主为准**，本地库只留背包/进度/时间这类
+     * "我自己的东西"。这也是为什么用户换个新世界（= 新库名）就"没问题"。
+     */
+    const joinWorld = this.isJoinWorld();
+    if (joinWorld) {
+      console.info('[save] 加入别人的房间：跳过本地方块增量恢复（地形以房主为准）');
+    } else {
+      // 先把全部区块增量装进内存：之后任何区块生成都会自动叠加它们
+      const records = await this.save.loadAllChunkEdits();
+      for (const record of records) {
+        this.world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
+      }
+      if (records.length > 0) {
+        console.info(`[save] 已装载 ${records.length} 个区块的增量改动，共 ${this.world.edits.totalEdits} 格`);
+      }
     }
 
     // 容器内容（C7 尾巴）：箱子/熔炉/附魔台/铁砧/酿造台的东西不能丢
@@ -4919,7 +4935,6 @@ class App {
      * 进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。
      * 房间里的位置与维度由房主/服务端说了算，本地存档只负责背包与进度。
      */
-    const joinWorld = this.worldConfig.id.startsWith(JOIN_WORLD_PREFIX);
     if (joinWorld) {
       console.info('[save] 加入别人的房间：跳过位置/维度恢复（按房主身边落点）');
     } else {
@@ -5691,6 +5706,16 @@ class App {
     );
     this.fluidNetSent = 0;
     this.fluidNetApplied = 0;
+  }
+
+  /**
+   * 这一局是不是"加入别人的房间"（`mpjoin-` 临时世界）。
+   *
+   * 加入方的位置、方块增量都**以房主为准**，本地库只留背包/进度这类"我的东西"；
+   * 两处（`loadSaveState` 的位置恢复与增量恢复）都用这一条判据，别再各写一遍 `startsWith`。
+   */
+  private isJoinWorld(): boolean {
+    return this.worldConfig.id.startsWith(JOIN_WORLD_PREFIX);
   }
 
   /**

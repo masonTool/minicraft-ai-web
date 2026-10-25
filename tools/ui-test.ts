@@ -6196,10 +6196,18 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   // ---- ③ 加入房间不恢复本地存档位置（否则会瞬移回上一局，房主的改动只被 buffer）
   check(
     '加入别人的房间时跳过位置/维度/朝向恢复',
-    /const joinWorld = this\.worldConfig\.id\.startsWith\(JOIN_WORLD_PREFIX\);/.test(mainSrc3) &&
+    /const joinWorld = this\.isJoinWorld\(\);/.test(mainSrc3) &&
       /if \(joinWorld\) \{[\s\S]{0,200}?\} else \{[\s\S]{0,400}?this\.physics\.teleport\(data\.x, data\.y, data\.z\);/.test(mainSrc3),
   );
   check('房主侧的水方块同步有诊断计数（发出/应用 + 可写）', mainSrc3.includes('[FLUID_DBG]') && mainSrc3.includes('countFluidNet'));
+  /*
+   * 加入方不复活本地方块增量（用户 2026-10-26："地形方块有些不一致"）。
+   * 本地库名 = 房间 + 种子，同房同种子就是同一个库；旧增量叠在房主快照上会把改回去的格子顶回来。
+   */
+  check(
+    '加入别人的房间时跳过本地增量恢复（地形以房主为准）',
+    /const joinWorld = this\.isJoinWorld\(\);[\s\S]{0,400}?if \(joinWorld\) \{[\s\S]{0,300}?跳过本地方块增量恢复[\s\S]{0,400}?\} else \{[\s\S]{0,300}?loadAllChunkEdits\(\)/.test(mainSrc3),
+  );
 
   // ---- ④ 加入卡生成页：8 秒没落点就就地认可（不是重新规划出生点）
   check('加入房间有"没落点就自愈"的兜底', mainSrc3.includes('JOIN_FORCE_SPAWN_MS') && mainSrc3.includes('private forceJoinSpawn()'));
