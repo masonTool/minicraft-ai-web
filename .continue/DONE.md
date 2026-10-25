@@ -9,6 +9,43 @@
 
 ---
 
+## 批次 20261025-2050 · 2026-10-25 · 会话 12afd06a
+
+> 里程碑 MS1 验收后继续：Rust 服务端的**两颗平台壳**（Android Capacitor / iOS xcframework）
+> 与局域网发现的双端联调。一个"手机自己当房主、别人在附近房间列表里点一下进来"的最小闭环。
+
+## 里程碑 MS1 · Rust 服务端与 JS 版行为一致
+- 验收：`cd rust-server && cargo test && bash run-smoke.sh`，再 `bash run-net-test.sh` 全部 0 失败；`npm run test:net`（JS 路径）也仍绿
+- 确认：已验收 · 批次 20261025-2000（用户 2026-10-25 看到验收输出后答复"再继续"）
+
+- [x] [N4a] Android 集成的 Rust 半边：`crate-type` 加 `cdylib`/`staticlib` + JNI 入口（`start/stop/port`，供 Kotlin 的 ForegroundService 调）+ 纯 Rust 的 UDP beacon（广播/监听/自回声过滤，Android 侧只差一个 `MulticastLock`）→ `cargo test` 新增单测 + 两个进程互发现的本机脚本 + `cargo ndk`/`cargo build --target aarch64-linux-android` 出 `.so`
+  - 做了什么：拆成 **lib + bin**（`src/lib.rs` 装 `Config`/`Server`/`start()`，`main.rs` 只剩"读环境变量 → 起 → 等信号 → 补存"），新增 `src/jni.rs`（`startServer(dataDir, port, seed) -> 实际端口` / `stopServer` / `serverPort`，每个服务跑在独立线程 + 独立 runtime 里，停之前补存一次快照）与 `src/beacon.rs`（报文编解码 + peer 表含自回声过滤/12s TTL + 组播 socket）。`/healthz` 多 `beacon` 与 `peers`。`build-android.sh` 用 NDK 的 linker 直接编，不装 `cargo-ndk`。
+  - 为什么：Android 的 `ForegroundService` 只能通过 JNI 起停服务，而启动逻辑在 `main()` 里就必然要复制一份（端口、存档目录、读档顺序各写一遍，然后有一端漏补存）——所以把它抽成库；发现层放 Rust 是因为报文/端口必须与客户端一致，Kotlin 与 Swift 各写一份必然漂。
+  - 验证：`cargo test` **26/0**（新增 beacon 编解码、自回声、TTL、实例 id 唯一性、真 socket 组播往返，共 6 条）；`bash run-beacon-smoke.sh` **12/0**（两个真进程互相发现、广播内容跟着"有人进房/世界名/种子"变、自己的回声不进列表）；`bash build-android.sh` 出 `arm64-v8a` 与 `x86_64` 两个 `.so`（`file` 显示 ELF aarch64 / x86-64，`nm -D` 能看到三个 `Java_com_minicraft_server_NativeServer_*` 符号）；既有 195 条 net-test 与 20 条冒烟仍全绿。
+  - 踩到并修掉的：① **macOS 的 `SO_REUSEPORT` 对广播是"哈希挑一个 socket"**——两个实例只有一个收得到，症状是"A 看得见 B、B 看不见 A"，改走组播 + 按平台绑不同地址；② **收发不能用同一个 socket**（macOS 上监听 socket 绑的是组播地址，从它 `send_to` 直接 `EADDRNOTAVAIL`）；③ 这台开发机的**默认可组播网卡不在**（连自己都收不到），所以留了 `BEACON_IF`，验收脚本显式指回环；④ 实例 id 只混"时间 + pid"时，同一毫秒内两次启动会撞 → 两个实例把对方当自己的回声过滤掉（单测抓到的）。
+  - 批次：20261025-2050
+- [x] [N4b] Android 壳：Capacitor 工程（`npx cap add android`）+ Kotlin 插件加载 `.so` + `ForegroundService`（常驻通知）+ `MulticastLock` → `./gradlew assembleDebug` 出 APK，模拟器/真机装两台上能互相发现并进房
+  - 前置（开这条之前先确认）：`npm i -D @capacitor/cli @capacitor/core @capacitor/android` 会新增依赖，
+    Gradle 首次同步要联网下载几百 MB；`.so` 已能编（`bash rust-server/build-android.sh`），
+    `jni.rs` 的三个入口签名见 `rust-server/src/jni.rs`
+  - 做了什么：`npx cap add android` 生出 `android/`（Capacitor 6）；壳里加 `NativeServer.java`（JNI 声明）、`NativeServerPlugin.java`（网页可调的 `start/port/stop`）、`ServerService.java`（前台服务 + 常驻通知 + `MulticastLock`/`WifiLock`，JNI 丢工作线程避免 ANR）、`MainActivity` 注册插件；`app/build.gradle` 两个任务 `copyRustLibs`（`.so` → `jniLibs`）与 `copyHostCore`（`host/core-baseline.bin` → `assets/public/__host/core.bin`）；Manifest 补多播/唤醒/前台服务/通知/明文流量权限；根目录加 `capacitor.config.json`（`androidScheme: http` 让客户端挑 `ws://` 而不是 `wss://`），并补 `npm run android:sync` / `android:apk` / `android:test`（Gradle 那条不能叫 `test:*`：离线 runner 把它当套件解析，会因为它不是 esbuild/node 入口而报"认不出"）。
+  - 为什么：手机当房主必须有"进程不被回收"的载体——前台服务 + 常驻通知是唯一稳的做法；`MulticastLock`/`WifiLock` 不给的话息屏一会儿组播就被系统丢掉（别人再也发现不了这个房间）。`core.bin` 放 assets 而不是写 `shouldInterceptRequest`：Capacitor 的资源本来就以 http 提供，同一个文件放 assets 即等价，少一层会写错的拦截。
+  - 验证：`./gradlew assembleDebug` 出 `app-debug.apk`（内含两个 ABI 的 `libminicraft_server.so` 与 `assets/public/__host/core.bin`）；模拟器 `Pixel_3a_API_34` 上 `./gradlew connectedDebugAndroidTest` **3 条全过**（包名 / JNI 起服务 + `/healthz` 回 `ok` + 停后端口归零 / 前台服务拉起来 + `/rooms` 200）；装 APK 启动后**截图确认已进主菜单**（Play / Settings / Mini-games 正常渲染，只剩一条 SW 注册警告，WebView 里本就该失败）。
+  - **未验证（如实记）**："装两台上能互相发现并进房"——需要第二台设备 + 客户端接线（网页调 `NativeServer.start`、用 `peers` 出列表），那正是 N6 的范围；单台模拟器上硬凑只能验到假路径，所以没做。另：Gradle 8.2.1 不支持 JDK 21，构建要 `JAVA_HOME` 指 17（已写进 `android/README.md`）。
+  - 批次：20261025-2050
+- [x] [N5] iOS 集成：`staticlib` → `.xcframework` + 前台会话（锁屏即断，需提示）+ `NSNetService` Bonjour 广播 → 前台当房主、Android 能被发现
+  - 做了什么：Rust 侧加 **C ABI**（`src/capi.rs` 三个函数）+ 把两端共用的生命周期抽成 `src/instance.rs`（`jni.rs` 改成薄包装）；`rust-server/build-ios.sh` 编真机 arm64 + 模拟器 arm64/x86_64 → `ios-shell/MinicraftServer.xcframework`（带头文件）；`ios-shell/` 里 `NativeServer.swift`（三个 C 函数包装）、`ForegroundSession.swift`（进后台就停 + 提示 key `net.host.foregroundOnly`）、`BonjourAdvertiser.swift`（`NetService` 广播，TXT 字段与组播报文同名）、`Tests/main.swift`（设备级冒烟）；`check.sh` / `check-sim.sh` 两条验收脚本 + README（接入 Xcode 的手工步骤与 Info.plist 三个键）。
+  - 为什么：iOS 端只能走 C ABI（没有 JVM），而生命周期与 Android 一字不差——写在两处最容易分叉的是"停止时补存"，所以抽成一份；"只有前台能当房主"是系统规则（后台不允许长期持监听 socket，硬撑会被杀掉、表现是"房间还在但连不上"），所以做成"进后台主动停 + 回一个状态给 UI"，用户可见文案只给 i18n key（原生写文案会绕过六语言表）。
+  - 验证：`bash ios-shell/check.sh` 全过（xcframework 两个切片架构正确、Swift 在**真机 SDK 与模拟器 SDK 下各 typecheck 通过**、静态库里三个 C 符号齐全）；`bash ios-shell/check-sim.sh` **在真的 iOS 模拟器里跑通**——`simctl spawn` 起服务得到端口 50924、`/healthz` 回 `{"ok":true,…,"protocol":2}`、`/rooms` 有响应、停后端口归零且快照已补存；Rust 侧回归 `cargo test 27/0`（新增"起服务→HTTP→停"一条）、`run-smoke 20/0`、`run-beacon-smoke 12/0`、`run-net-test 195/0`；Android `.so` 重编后三个 JNI 符号仍在。
+  - **未验证（如实记）**：① 没生成 Capacitor 的 `ios/` 工程（`npx cap add ios` 走 CocoaPods，本机 `pod: command not found`），所以"iOS 上点一下开房"这条路没跑过——接入步骤写在 `ios-shell/README.md`，是 5 分钟手工；② "iOS 前台当房主、Android 能被发现"要两台真机 + N6 的客户端接线，没验；已知桥接点：Rust 组播两端同协议（Android 已验），Bonjour 只服务 Apple 生态内部，字段同名供 N6 映射。
+  - 批次：20261025-2050
+- [x] [N6] 发现层双端联调：Android UDP beacon ↔ iOS Bonjour 互通、房间里显示"世界名 / 人数 / 有无口令 / 延迟"，点一下进房；并处理"自己发自己收"的回声过滤
+  - 做了什么：① 发现报文与 `/healthz.peers` 都带上 `room`，`/healthz` 加 `access-control-allow-origin: *`（**Rust 与 JS 两套服务端同时改**）；② Rust 侧新增 `beacon::from_txt(service_name, txt)`——把 iOS 的 Bonjour TXT 记录转成与组播**同一个结构**（键名两边刻意相同），这条就是"Android 组播 ↔ iOS Bonjour"的互通点；③ 客户端新增 `src/core/net/NearbyRooms.ts`（解析 `peers`、过滤自己、拼 `ws://host:port/room`、探延迟）与 `healthEndpoint()`；④ 联机面板把附近设备并进房间列表：`世界名 · host:port · {n} 人 · 口令 · 12 ms`，点一下直接进房（地址带房间名，口令房先聚焦口令框）。
+  - 为什么：浏览器发不出也收不到 UDP，唯一的耳朵是每台手机上的 Rust 服务端，所以面板读它的 `/healthz.peers`；"点一下进房"必须知道房间名（否则进默认房间，看到的世界跟列表写的不一样），所以报文补 `room`；"自己发自己收"在服务端早已按实例 id 挡住，客户端只需再按"面板里正对着的那台地址"过滤一次（一台手机有多个网卡地址，枚举自身 IP 既不可靠也没必要）。
+  - 验证：`npx vitest run tests/nearby-rooms.test.ts` **12/12**（脏地址/越界端口逐行丢、自己那间被过滤、地址带房间名、延迟探测失败返回 null）；`cargo test` **28/0**（新增 Bonjour TXT → 组播结构的互转断言，含脏字段回落）；`bash run-beacon-smoke.sh` **13/0**（新增"广播带房间名"）；两套服务端行为仍一致（`run-net-test.sh` 与 `npm run test:net` 各 **195/0**）；`npm run check:fast` 全绿（命中 `net` 与 `ui` 两套离线套件）；实测 `curl -i /healthz` 带 `access-control-allow-origin: *`，且 B 的 `peers` 里确实有 A（世界名/种子/端口/房主标记/房间名）。
+  - **未验证（如实记）**：① 浏览器里真的点一下"附近房间"进房——要同时开两个服务端并手动点，本轮只做了类型检查 + 纯函数断言，没有浏览器自动化；② 真机 Android ↔ iOS 互相发现仍未验（要两台设备，且 iOS 侧还要把 Capacitor 工程接起来，见 N5 的未验证项）。
+  - 批次：20261025-2050
+
 ## 批次 20261025-2000 · 2026-10-25 · 会话 12afd06a
 
 > 里程碑 MS1 收口：Rust 版联机服务端与 JS 版**行为一致**——`tools/net-test.mjs` 195 条断言
@@ -157,64 +194,5 @@ APK 里放全量快照（不公开），线上放一个只含变化的 JSON（�
   - 为什么：基线文件本身就是"哪一版"的锚点，但它是二进制，看不出是哪一版、什么时候封的、对应哪个提交。而"生成候选快照"是天天跑的（内循环也会），"封版"是发布决策——两者必须分开，否则会出现"随手跑一次生成把线上 App 的基线悄悄换掉"，之后所有增量都套不上且查不到是哪次改的。
   - 验证：首次 `npm run release:baseline -- --app-version=1.0.0 --note=...` 产出 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）；再跑一次输出"基线未变…无需封版"（幂等，不写第二条记录）；`npm run build:app` 输出"基线 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）"且增量缺失时给出"正常状态"；`test:coredelta` 29/0、`check:fast` 181/181、`typecheck:tools` 干净。
   - 批次：20261025-1627
-
----
-
-## 批次 20261025-1032 · 2026-10-25 · 会话 937507d0
-
-> 把方块表（724 块）从线上产物里搬出去：id 表 → 叶子模块、数据 → 独立模块、生产换空桩、入口改两段式。
-
-# 队列 · 会话 937507d0458d4277ba340bcb48207050
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1032
-
-目标（承接 `20261025-0329` 的 `[阻塞]` 条，用户拍板「改描述继续做」）：把 `SPECS`（724 个方块的明文数据）
-从线上 bundle 里真正搬走，使 `build:app` 的主包明显变小。上一批已探明**唯一可行路径**是让依赖单向无环：
-
-```
-blockIds.ts（叶子，纯常量） → blockSpecs.ts（数据） → blocks.ts（消费 + 再导出 ids）
-```
-
-有了这个单向链，`blocks.ts` 就能**静态** import `SPECS`，不再需要顶层 await、也不需要给 178 套测试注入任何东西
-（上一批这两条路都被 esbuild 打包堵死：环 + 动态 import 死锁；`banner` 不参与打包）。
-
-- [x] [宿主7] 抽 `blockIds.ts` 叶子模块：把 `blockSpecs` 依赖的 id 常量（各 `*_ID_START` / `*_ID` 等）从 `blocks.ts` 搬到新文件，
-  - 做了什么：新增叶子模块 `src/core/registry/blockIds.ts`（664 行，含头注释说明依赖方向），把 `blocks.ts` 里 **108 个纯字面量 id 常量**（连同各自的 JSDoc）整块搬过去；`blocks.ts` 用 `export * from './blockIds.ts'` **再导出**（224 个引用方一行没改）+ 显式 `import { … }`（`export *` 不会把名字带进本模块作用域，这是踩到的第一处）。另修 `tools/ui-test.ts`：它 greps `blocks.ts` 源码找 `export const ACTIVATOR_RAIL_ID = 581` 这类断言，改成把两个文件的源码拼起来读（断言关心的是"581 就是激活轨"，不是"这行写在哪个文件"）。
-  - 为什么：这是"让依赖单向无环"的第一步。`blockSpecs.ts` 要读这些 id，而数据反向 import `blocks.ts` 就成环——上一批实测环 + 动态 import 在 esbuild 下**静默死锁**。把这些值搬到不 import 任何东西的叶子里，`blockSpecs` 就能只依赖叶子，`blocks.ts` 再静态 import `SPECS` 也不会崩。
-  - 验证：`npm run check:fast` **149/149 全绿**（含此前失败的 `ui` 套件 1053 条断言）；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与改前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）。
-  - 批次：20261025-1032
-      `blocks.ts` 用 `export * from './blockIds.ts'` 保持 224 个引用方不变 → `npm run check:fast` 全绿，
-      且 `Wood` / `WoodShaped` / 树苗 / 床 / 牌子 / 石变体 id 快照哈希**逐字节不变**（`b3c68cc2d86da217`）
-- [x] [宿主10] **宿主8 的前置**：把"id 派生表与取值函数"搬进 `blockIds.ts`——`EXTRA_WOODS` / `WOOD_IDS` / `Wood` / `woodBlocks` /
-      `WOOD_SHAPED_IDS` / `WoodShaped` / `woodShaped` / 树苗两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS` / `BED_ID_MAP`+`bedId`/`bedIdOfColor`/`BED_IDS` /
-      `SIGN_ID_MAP`+`signId`/`SIGN_IDS` / `STONE_VARIANT_FAMILIES`+分配器+`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS` → `npm run check:fast` 全绿，
-      且 id 快照哈希 `b3c68cc2d86da217` 逐字节不变（它们只依赖 `colors.ts` 与字面量，搬过去也不会成环）
-  - 做了什么：把 30 个声明（215 行）从 `blocks.ts` 整块搬进 `blockIds.ts`——木材族（`EXTRA_WOODS`/`WOOD_IDS`/`WOOD_ID_MAP`/`Wood`/`woodBlocks`）、木制四件（`OAK_WOOD_SHAPED`/`WOOD_SHAPED_IDS`/`WOOD_SHAPED_MAP`/`WoodShaped`/`woodShaped`）、树苗（`SAPLING_TREES` + 两张表 + `saplingId`/`saplingTreeOf`/`SAPLING_IDS`）、床（`BED_ID_MAP`/`bedId`/`bedIdOfColor`/`BED_IDS`）、牌子（`SIGN_ID_MAP`/`signId`/`SIGN_IDS`）、石变体（`StoneVariantKind`/`STONE_VARIANT_FAMILIES`/分配器/`stoneVariantId`/`STONE_VARIANT_PARENTS`/`STONE_VARIANT_IDS`），连同各自的 JSDoc。`blockIds.ts` 只新增两个依赖：`colors.ts`（纯数据）与 `Features.ts` 的 `TreeKind`（纯类型）。
-  - 为什么：`blockSpecs.ts` 要读 `Wood`/`saplingId()`/`stoneVariantId()`，只要它们还在 `blocks.ts` 里，`blockSpecs` 就必须 import `blocks.ts` → 环 → 静态 import 崩（前两次死锁的根）。搬进叶子后依赖变成单向 `blockIds → blockSpecs → blocks`。
-  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` 与搬前**逐字节一致**；`test:hostcore` 33/0（724 块）、`test:behaviors` 7/0（46 块）；`grep "from './blocks.ts'" blockIds.ts` **为空**（环已断）。
-  - 踩到并修掉的三处：① `EXTRA_WOODS`/`WOOD_ID_MAP`/`STONE_VARIANT_FAMILIES` 等原本是**非导出**的 `const`，搬过去后 `blocks.ts` import 不到——要给它们补 `export`；② 用"名字出现在正文里"来算出 import 清单会被**注释里的名字**骗（`// 见 WOOD_ID_MAP`），必须先剥注释再判；③ `import type {} from ...` 空导入会被 tsc 拒，树类型实参删干净时要连整条语句一起删。
-  - 批次：20261025-1032
-- [x] [宿主8] 搬 `SPECS` 到 `blockSpecs.ts` 并改静态 import：spec 声明 + `baseTiles`/`plantSpec` 等只被 spec 用的辅助函数一起搬，
-  - 做了什么：新建 `src/core/registry/blockSpecs.ts`（2191 行），把 88 个声明 / 2175 行搬过去——全部 `*_SPECS` / `*_SPEC`、聚合用的 `SPECS`，以及只被 spec 用的辅助函数 `baseTiles` / `plantSpec` / `waterPlantSpec` / `coralFanSpec` / `tilesOfDefined`；`blocks.ts` 改成**静态** `import { SPECS } from './blockSpecs.ts'`。搬运过程中 tsc 揪出 6 个还留在环上的 spec 输入表（`SHAPED_PARENTS` / `COPPER_STAGES` / `COPPER_SHAPES` / `CORAL_KINDS` / `STEM_STAGES` / `copperId`），一并搬进 `blockIds.ts`。另修 `SHULKER_BOX_IDS`：它原本从 `COLORED_SHULKER_SPECS` 取 id，改成纯算术（`SHULKER_BOX_COLOR_START + index`），否则数据搬走后运行时拿不到。
-  - 为什么：这是整条路线的核心一步——`blockSpecs.ts` 只 import 叶子（`blockIds.ts`）与纯数据/纯类型模块，**不 import `blocks.ts`**，所以静态 import 不会出现"后定义的常量在 TDZ"的循环初始化。前两次失败（顶层 await 死锁、banner 不打包）都是想绕开这个环，现在环本身没了。
-  - 验证：`npm run check:fast` **149/149 全绿**；`npm run typecheck:tools` 干净；id 快照哈希 `b3c68cc2d86da217` **逐字节不变**；`test:hostcore` 33/0（724 块往返）、`test:behaviors` 7/0（46 块行为黄金哈希，说明"搬完还是同一张表"）；`grep "from './blocks.ts'" blockSpecs.ts` **为空**（环已断）；`build:fast` 出包成功。体积**未变**——换桩是下一条（`宿主9`）。
-  - 踩到并修掉的两处：① `tests/ui-test.ts` 有两处按源码文本断言 spec 内容（"铁轨复用 flat 薄板"、"霜冰红块注册"），数据搬家后失效——已把 `blockSpecs.ts` 也拼进它读的源码里；② spec 里读的 id 表还有 6 个留在 `blocks.ts`，靠 tsc 的 `Cannot find name` 逐个揪出来再搬，不能只按名字模式扫。
-  - 批次：20261025-1032
-      `buildBlockTable(specs)` 显式收参数 → `npm run test:hostcore`（33）与 `npm run test:behaviors`（7）全绿 + 全量 `npm run check`
-- [x] [宿主9] 生产换桩 + 体积断言：`vite.config.ts` 用 `resolve.alias` 把 `blockSpecs.ts` 换成 `blockSpecs.stub.ts`（`SPECS = []`），
-  - 做了什么：① `blockSpecs.stub.ts`（`SPECS = []`）+ `vite.config.ts` 的 `hostSpecsStub()` 插件（`resolveId` 拦 `./blockSpecs.ts`，**默认开**，`SPECS_STUB=0` 可关）；② `release-check` 的数据探针（`dragon_egg_top` 不得出现在主包；用贴图名而不是方块名，因为后者在物品表/i18n 里也有）；③ **入口改两段式**（`src/boot.ts`：先取 `core.bin` 装表，成功才 `import('./main.ts')`），`index.html` 指向 boot，`main.ts` 自己那段门禁删掉并留注释说明移交原因。
-  - 为什么：桩一打开就暴露"空表下模块初始化期崩"（`TypeError: Cannot read properties of undefined (reading 'id')`），根因是**主包在我装表之前就求值了**。只把桩关掉等于回避，所以直接把入口顺序改正——这也是上一批因"表在两个 chunk 各打一份"回退掉的那条路，现在数据已被桩掉，重复打包的前提消失。
-  - 验证：`SPECS_STUB=1` 下两种形态各跑一遍真实浏览器（Playwright + `vite preview`）——**完整前端形态**：文案"加载中… 正在准备材质与存档"、**0 条 pageerror**；**宿主形态**：文案"请在 Minicraft 应用里游玩…"、**0 条 pageerror**。构建产物：`build:app` 主包 gzip 570.9 KB（`main-*.js`）/ 全部 JS 合计 1199.1 KB，`build:web` 同样通过；探针确认 `dragon_egg_top` 不在主包。`npm run check:fast` **180/180 全绿**。
-  - 如实记一笔：**体积口径变了**——两段式之后 `index-*.js` 只是引导器（140.5 KB 的 HTML + 小入口），游戏体在 `main-*.js`；首屏成本要看合计。实测合计 1199.1 KB 对上一提交的 1196.8 KB **多了 2.3 KB**（拆包带来的共享模块重复），而数据移出只省了约 7 KB gzip —— 净收益接近打平。也就是说**这一步买的是"数据不在包里"，不是"更快"**。条目里原写的"降到 ~690 KB"是按整块估的，实测不成立。
-  - 批次：20261025-1032
-- [x] [发现] **入口必须在装表之后才加载主包**：空表下 `Cannot read properties of undefined (reading 'id')`（证据：`SPECS_STUB=1 npm run build:app` + `vite preview` + Playwright，`main.ts` 末尾的门禁还没跑到就抛）→ 改成两段式入口：`index.html` 指向新的 `src/boot.ts`，先 `fetch('/__host/core.bin')` 并 `installBlockTable()`，成功才 `await import('./main.ts')`；判据 = `SPECS_STUB=1 npm run build:app` 后浏览器只见落地页/进游戏均无 pageerror，且 `npm run check:fast` 与 `test:hostcore` 全绿。⚠️ 上一次做两段式时因"表在两个 chunk 里各打一份"回退过；现在数据已被桩掉，重复打包的前提消失了，可以重做
-  - 做了什么：新增 `src/boot.ts` 作为真入口——`await ensureHostCore()`（取 `core.bin` 并 `installBlockTable`）成功后才 `await import('./main.ts')`；失败时 `hostCore` 已画好整屏提示，直接放弃。`index.html` 的 script 指向 `/src/boot.ts`；`main.ts` 里原来的门禁 IIFE 删掉，改成直接 `void boot()` 并留注释说明"门禁已前移"。
-  - 为什么：动态 import 保证主包的模块体在装表之后才求值，不再依赖"某个模块恰好没在顶层读表"这种运气——这正是空表下 `reading 'id'` 的来源。
-  - 验证：`SPECS_STUB=1 npm run build:web` → 浏览器进游戏、0 pageerror；`SPECS_STUB=1 npm run build:app` → 落地页、0 pageerror（均 Playwright 实测）；`check:fast` 180/180。
-  - 批次：20261025-1032
-      删掉 `bootstrapSpecs` 之类过渡物 → `npm run build:app` 断言主包 gzip 从 716 KB 降到 ~690 KB，
-      且 `dist` 里 grep 不到方块明文；浏览器打开只见落地页
 
 ---

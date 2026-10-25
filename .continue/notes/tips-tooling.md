@@ -266,3 +266,9 @@
 - **tungstenite 的 `max_message_size` 超限 = 直接拆连接**：客户端看到 1006，不会收到 1009。要与 `ws` 的 `maxPayload` 行为对齐（超了回 close 1009），得把库的上限设大、在业务层自己比长度并主动发 `Close(Size)`——否则只能靠改断言通过，那等于契约没了。
 - **握手回调里拒来源，客户端拿不到 `error.code`**：`accept_hdr_async` 的回调返回 `ErrorResponse` 时只写 HTTP 错误，而协议约定客户端按 `error{code}` 决定要不要重连。所以白名单要在**握手之后**判（或像 Rust 版那样自己先读请求头、决定升级与否）。
 - 顺带一条**行为契约**（不是坑但很容易想当然）：有房主的房里，从属端直发 `block/blocks/sign/frame/container/tnt` 在 JS 版是**静默丢弃**（只计数 + 限频打日志），不回 `not-host`；回错误会让从属端每改一次方块就多一条错误。
+### 手机壳的三处工具链坑（Gradle / cap / 测试命名）
+
+- **Gradle 8.2.1 不认 JDK 21**：报错看起来像语法错（`Unsupported class file major version 65`），实际是 Gradle 太老。`JAVA_HOME` 指到 17 就能编；要长期用 21 得把 wrapper 升到 8.7+。**判定口诀**：Gradle 版本 < 8.5 就别配 JDK 21。
+- **`test:*` 这个名字会被离线 runner 当套件解析**：`npm run test:android`（跑 Gradle）会让 `tools/run-tests.mjs` 报"认不出这些测试脚本的入口"——它按 `test:` 前缀收套件，且只认 esbuild / node 两种写法。Gradle/XCTest 这类跑法要么叫 `android:test`，要么进 `SKIP` 名单。
+- **`npx cap sync` 很慢**（本项目实测 5 分钟，因为要逐个小文件拷 12MB 的 `assets/public`）：只为看一眼效果时直接改 `android/app/src/main/assets/public` 里的文件更快，出包前再 sync。
+- 顺带两条边界（不是坑但省时间）：**`.so` / `xcframework` / `jniLibs` 都不进 git**，由 Gradle 任务与 `build-*.sh` 在构建时生成（缺产物时在配置阶段就报一句明确的话）；**`simctl spawn` 能在 iOS 模拟器里直接跑链接好的可执行**，设备级验收不必先建 Xcode 工程。
