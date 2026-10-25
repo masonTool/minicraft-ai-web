@@ -1154,18 +1154,30 @@ export class SettingsScreen {
       // 与 `handednessLabels()` 同一个做法：标签表在构造时生成一次
       Object.fromEntries(CAMERA_MODES.map((mode) => [mode, cameraModeLabel(mode)])) as Record<CameraMode, string>,
     );
-    // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
-    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, handednessLabels());
-    // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
-    this.makeSelect(
-      controlOptions,
-      'aimMode',
-      t('settings.row.aimMode'),
-      TOUCH_AIM_MODES,
-      Object.fromEntries(TOUCH_AIM_MODES.map((mode) => [mode, touchAimModeLabel(mode)])) as Record<TouchAimMode, string>,
-    );
-    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
-    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, stickModeLabels());
+    /*
+     * 触摸专属的三项（用户 2026-10-26）：惯用手 / 瞄准方式 / 摇杆。
+     *
+     * 它们在键鼠上**不可能生效**，摆出来只会让人以为哪里设错了：
+     *   · 惯用手、摇杆：PC 没有摇杆（WASD + 鼠标），`handedness` / `touchStick` 只影响
+     *     `TouchControls` 的布局与死区；
+     *   · 瞄准方式：PC 的取物永远是"准星 → 视线射线"（`main.ts` 那三处 `aimMode` 消费点
+     *     都带 `this.touch !== null`），没有"手指落点"这回事。
+     * 所以整组在 `isTouchUi()` 为假时**不创建**——不是 disabled，是不出现。
+     */
+    if (isTouchUi()) {
+      // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
+      this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, handednessLabels());
+      // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
+      this.makeSelect(
+        controlOptions,
+        'aimMode',
+        t('settings.row.aimMode'),
+        TOUCH_AIM_MODES,
+        Object.fromEntries(TOUCH_AIM_MODES.map((mode) => [mode, touchAimModeLabel(mode)])) as Record<TouchAimMode, string>,
+      );
+      // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
+      this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, stickModeLabels());
+    }
     this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
     this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));

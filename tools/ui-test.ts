@@ -2171,6 +2171,29 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       mainSource.includes('this.touch?.setHandedness('),
   );
 
+  /*
+   * 触摸专属的三项在 PC 上不出现（用户 2026-10-26："PC 没有手指跟随，选目标永远是中心点"）。
+   *
+   * 它们本来就对键鼠无效（`handedness`/`touchStick` 只喂 `TouchControls`，
+   * `aimMode` 的两处消费都带 `this.touch !== null`），但摆在设置里等于让人以为能调。
+   */
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const touchOnlyBlock = /if \(isTouchUi\(\)\) \{([\s\S]*?)\n {4}\}/.exec(settingsSrc)?.[1] ?? '';
+  check(
+    '惯用手 / 瞄准 / 摇杆三行在 isTouchUi() 里创建',
+    ['handedness', 'aimMode', 'touchStick'].every((id) => touchOnlyBlock.includes(`'${id}'`)),
+    touchOnlyBlock.length > 0 ? 'ok' : '没找到触摸判据块',
+  );
+  check(
+    'PC 上「瞄准」恒为中心点（aimMode 只在触摸端参与取物）',
+    /private usesCenterAim\(\): boolean \{[\s\S]{0,240}?this\.touch !== null && this\.settings\.aimMode === 'center'/.test(mainSource) &&
+      mainSource.includes("document.body.classList.toggle('aim-center', this.touch !== null && settings.aimMode === 'center')"),
+  );
+  check(
+    '键鼠取物走的是视线射线（准星），不是某个手指落点',
+    mainSource.includes('const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);'),
+  );
+
   // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
   check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));
   check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
