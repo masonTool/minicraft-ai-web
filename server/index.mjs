@@ -1068,6 +1068,34 @@ wss.on('connection', (socket, request) => {
        * **权威结果**广播出去。服务端在这条链上只做路由——不判权、不落地、不校验内容
        * （形状收口在 `sanitizeEditPayload`，世界语义由房主那端把关）。
        */
+      /*
+       * 房主改房间配置（本轮：时间 / 天气）。
+       *
+       * 这两样都是服务端权威（`time` 每 2s 广播校正、`weather` 只在切换时广播），
+       * 客户端自己改会被下一轮覆盖——所以房主改完发一条这里应用，再立刻广播给全房，
+       * 两端当场对齐。只收房主：从属端改了没有意义（它不推进世界）。
+       */
+      case 'room-config': {
+        if (!player) return;
+        if (player.isHost !== true) {
+          send(socket, { t: 'error', code: 'not-host', message: '只有房主能修改房间设置' });
+          return;
+        }
+        const timeOfDay = Number(message.timeOfDay);
+        if (Number.isFinite(timeOfDay)) {
+          // 与"有人睡满跳夜"同一条路：把开局时刻重置成现在，广播 snap 让客户端立刻对齐
+          startTimeOfDay = ((timeOfDay % 1) + 1) % 1;
+          serverStartMs = Date.now();
+          broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), snap: true }, null, player.room);
+        }
+        if (isWeatherKind(message.weather)) {
+          weather = { kind: message.weather, seconds: weatherSecondsFor(Math.random, message.weather) };
+          broadcast({ t: 'weather', kind: weather.kind }, null, player.room);
+          log(`房主 ${player.name} 把天气改成 ${weather.kind}（房间 ${player.room}）`);
+        }
+        break;
+      }
+
       case 'edit-request': {
         if (!player) return;
         // 借用方块令牌桶：一条请求一格，防止有人把房主刷爆

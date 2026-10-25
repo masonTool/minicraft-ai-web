@@ -3952,7 +3952,10 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('this.announceWeather(weatherBefore);') &&
       appSrc.includes('const weatherBeforeSleep = this.weather.current;') &&
       appSrc.includes('this.announceWeather(weatherBeforeSleep);') &&
-      appSrc.includes('setWeather: (kind) => this.setWeather(kind),'),
+      // 本轮起 `/weather` 经 `commandSetWeather` 分流（房主上报、从属端只读），
+      // 但终点仍是 `setWeather` → `announceWeather`；两种写法都算通过
+      (appSrc.includes('setWeather: (kind) => this.setWeather(kind),') ||
+        appSrc.includes('setWeather: (kind) => this.commandSetWeather(kind),')),
   );
   check(
     '天气播报只落在主世界（换维度重置不算"雨停了"）',
@@ -5934,6 +5937,37 @@ console.log('\n[加入房间：地址只填 IP]');
     readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8').includes(
       'process.env.PORT ?? DEFAULT_PORT',
     ),
+  );
+}
+
+/*
+ * 房主标识与房间配置权限（本轮）
+ *
+ * 用户："房主要有明确的标识；房主应该能改时间/天气，现在这些操作不成功"。
+ * 时间与天气都是服务端权威，所以房主改完必须**上报**，从属端则在命令层当场被拦。
+ */
+console.log('\n[房主标识与房间配置]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  check(
+    '房主的名字牌是金色 +「房主 ·」前缀（优先级高于队伍色）',
+    mainSrc.includes("color: '#ffd24a'") && mainSrc.includes("prefix: `${t('say.net.hostTag')} · `"),
+  );
+  check('收集名字牌时记住谁是房主', mainSrc.includes('host: id === this.net.hostId'));
+  check(
+    '命令层拦住非房主改时间 / 天气（time 与 weather 各一处）',
+    (cmdSrc.match(/canChangeWorld\?\.\(\) === false/g) ?? []).length >= 2 &&
+      cmdSrc.includes("msg('cmd.reply.time.host-only')"),
+  );
+  check(
+    '房主改完通过 room-config 上报（本地先应用，立刻可见）',
+    mainSrc.includes('sendRoomConfig({ timeOfDay') && mainSrc.includes('sendRoomConfig({ weather'),
+  );
+  check(
+    '客户端只有房主发得出去 room-config',
+    /sendRoomConfig\([\s\S]{0,400}if \(this\.role !== 'host'\) return;/.test(netSrc),
   );
 }
 

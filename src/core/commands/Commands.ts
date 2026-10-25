@@ -163,6 +163,14 @@ export interface CommandContext {
   setTimeOfDay(t: number): void;
   timeOfDay(): number;
   setWeather(kind: 'clear' | 'rain' | 'thunder'): void;
+  /**
+   * 这一端能不能改世界配置（时间 / 天气）。
+   *
+   * 联机时时间是**服务端权威**、天气也由服务端广播：从属端改了会被下一条覆盖，
+   * 与其"看起来成功了、一秒后弹回去"，不如当场说"只有房主能改"。
+   * 可选：单机与老 stub 不给就是"能改"。
+   */
+  canChangeWorld?(): boolean;
 
   // ---- 规则与难度
   difficulty(): Difficulty;
@@ -470,6 +478,11 @@ export const COMMANDS: readonly CommandSpec[] = [
     usageKey: 'cmd.time.usage',
     descriptionKey: 'cmd.time.desc',
     run(args, ctx, out) {
+      // 联机时只有房主能改（服务端权威，从属端改了会被下一条覆盖）
+      if (ctx.canChangeWorld?.() === false) {
+        out.error(msg('cmd.reply.time.host-only'));
+        return;
+      }
       const action = args[0]?.toLowerCase();
       if (action !== 'set' && action !== 'add') {
         out.error(usageError('time'));
@@ -489,6 +502,11 @@ export const COMMANDS: readonly CommandSpec[] = [
     usageKey: 'cmd.weather.usage',
     descriptionKey: 'cmd.weather.desc',
     run(args, ctx, out) {
+      // 同上：天气也是服务端权威（联机35），从属端改不动
+      if (ctx.canChangeWorld?.() === false) {
+        out.error(msg('cmd.reply.time.host-only'));
+        return;
+      }
       const kind = args[0]?.toLowerCase();
       if (kind !== 'clear' && kind !== 'rain' && kind !== 'thunder') {
         out.error(usageError('weather'));

@@ -81,6 +81,7 @@ export const say = {
   'say.net.playerJoinedHost': '{name} joined the room (host)',
   'say.net.playerLeft': '{name} left the room',
   'say.net.duplicateName': 'Someone in this room already uses that name — please pick another one',
+  'say.net.hostTag': 'Host',
 
   // ---- World events, progress and weather (T3)
   'say.progress.reconciled': 'Inventory checked: {count} advancements earned (press J for details)',

@@ -20,6 +20,7 @@ export const cmdMessages = {
   "cmd.reply.time.bad-time-format-value": "Formato de hora inválido: {value}",
   "cmd.reply.time.set-the-time-to-value": "Hora definida para {value}",
   "cmd.reply.time.weather-set-to-weather": "Clima alterado para {weather}",
+  "cmd.reply.time.host-only": "No multijogador, apenas o anfitrião pode mudar a hora e o clima",
   "cmd.reply.time.difficulty-set-to-difficulty-value": "Dificuldade definida para {difficulty} ({value})",
   "cmd.reply.time.current-game-rules-rules": "Regras do jogo atuais:\n{rules}",
   "cmd.reply.time.unknown-game-rule-key": "Regra do jogo desconhecida: {key}",

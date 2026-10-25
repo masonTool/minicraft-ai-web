@@ -1678,6 +1678,44 @@ try {
     snapFollower.close();
   }
 
+  // ---------------------------------------------------------------- 房主改房间配置（本轮）
+  console.log('\n[房主改时间 / 天气]');
+  {
+    const cfgHost = new TestClient('CfgHost', undefined, { room: 'cfgroom', host: true });
+    const cfgFollower = new TestClient('CfgFollower', undefined, { room: 'cfgroom' });
+    await joinAndWaitWelcome(cfgHost, '房主', 0, 70, 0);
+    await joinAndWaitWelcome(cfgFollower, '从属', 2, 70, 2);
+
+    // 天气只在切换时广播，所以这条是确定性的
+    cfgFollower.mailbox.length = 0;
+    cfgHost.send({ t: 'room-config', weather: 'rain' });
+    const weatherMsg = await cfgFollower.wait('weather', 2000);
+    check('房主改天气 → 同房其他人收到 weather', weatherMsg?.kind === 'rain', JSON.stringify(weatherMsg));
+
+    /*
+     * 时间：服务端每 2s 也会推一条周期 `time`，所以这里接受"snap 广播"或
+     * "数值已对齐 0.25"两种通过形态（后者说明周期广播已经跟上新开局时刻）。
+     */
+    cfgFollower.mailbox.length = 0;
+    await sleep(80);
+    cfgHost.send({ t: 'room-config', timeOfDay: 0.25 });
+    const timeMsg = await cfgFollower.wait('time', 3000);
+    check(
+      '房主改时间 → 收到 time（snap 或数值已对齐）',
+      timeMsg?.snap === true || Math.abs(Number(timeMsg?.timeOfDay) - 0.25) < 0.01,
+      JSON.stringify(timeMsg),
+    );
+
+    // 从属端改：明确回执（静默丢弃会让玩家以为自己成功了）
+    cfgFollower.mailbox.length = 0;
+    cfgFollower.send({ t: 'room-config', weather: 'clear' });
+    const denied = await cfgFollower.wait('error', 2000);
+    check('从属端改房间配置被拒（error.code = not-host）', denied?.code === 'not-host', JSON.stringify(denied));
+
+    cfgHost.close();
+    cfgFollower.close();
+  }
+
   // ---------------------------------------------------------------- 容器进度（L8 · MS4）
   console.log('\n[容器进度只认房主]');
   {

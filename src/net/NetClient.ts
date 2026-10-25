@@ -939,6 +939,25 @@ export class NetClient {
     this.sendRaw(JSON.stringify({ t: 'entity-remove', keys: keys.slice(0, 64) }));
   }
 
+  /**
+   * 房主改房间配置（时间 / 天气）。
+   *
+   * 这两样在联机时是**服务端权威**：本地改完必须上报，否则只有自己这边生效
+   * （服务端会在下一条 `time` 广播里把时间掰回去，天气也永远停在服务端那份）。
+   * 从属端不发——命令层已经提示"只有房主能改"，服务端也会拒。
+   */
+  sendRoomConfig(config: { timeOfDay?: number; weather?: 'clear' | 'rain' | 'thunder' }): void {
+    if (!this.connected) return;
+    if (this.role !== 'host') return;
+    const payload: Record<string, unknown> = { t: 'room-config' };
+    if (typeof config.timeOfDay === 'number' && Number.isFinite(config.timeOfDay)) {
+      payload.timeOfDay = config.timeOfDay;
+    }
+    if (config.weather !== undefined) payload.weather = config.weather;
+    if (payload.timeOfDay === undefined && payload.weather === undefined) return;
+    this.sendRaw(JSON.stringify(payload));
+  }
+
   /** 本地改了箱子/木桶：广播整份槽位（L4，批次 611） */
   sendContainer(
     x: number,

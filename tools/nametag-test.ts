@@ -343,10 +343,12 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   check('主程序导入 nameTagStyleFor', /import \{ nameTagStyleFor \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
   check(
     'updateNameTags 里把样式传给 show()',
-    // 联机18 起第 4 参是距离衰减后的透明度，样式仍按"一次查表、一次传入"走
-    /nameTagStyleFor\(entry\.mob\.customName[\s\S]{0,400}tag\.show\(entry\.mob, isAimed \? 0\.34 : 0\.12, style, opacity\)/.test(
-      mainSrc,
-    ),
+    // 联机18 起第 4 参是距离衰减后的透明度，样式仍按"一次查表、一次传入"走；
+    // 本轮起样式还可能被"房主标识"覆盖（金色 + 房主前缀），所以只要求
+    // "查表结果最终作为 style 传给 show"，不再要求两行紧邻
+    /nameTagStyleFor\(entry\.mob\.customName/.test(mainSrc) &&
+      mainSrc.includes('tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, opacity)') &&
+      /const style =[\s\S]{0,240}(teamStyle|entry\.host === true)/.test(mainSrc),
   );
   check('颜色已不再单独查一次（避免颜色接上、前后缀漏掉）', !mainSrc.includes('colorForMob('));
   check(

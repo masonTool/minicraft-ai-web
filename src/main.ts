@@ -6361,7 +6361,7 @@ class App {
     const px = this.physics.x;
     const py = this.physics.y;
     const pz = this.physics.z;
-    const candidates: { mob: Mob; distance: number }[] = [];
+    const candidates: { mob: Mob; distance: number; host?: boolean }[] = [];
     for (const entity of this.entities.all) {
       if (!(entity instanceof Mob)) continue;
       if (entity.dead || !entity.customName) continue;
@@ -6381,7 +6381,7 @@ class App {
       if (!this.remotePresence.visible(id, this.dimension)) continue;
       const distance = Math.hypot(mob.x - px, mob.y - py, mob.z - pz);
       if (distance > REMOTE_NAME_TAG_RANGE) continue;
-      candidates.push({ mob, distance });
+      candidates.push({ mob, distance, host: id === this.net.hostId });
     }
     candidates.sort((a, b) => a.distance - b.distance);
 
@@ -6400,7 +6400,17 @@ class App {
       // 判定规则在 `NameTagColor#nameTagStyleFor`，那边有断言。
       // 只有真的画的时候才查一次表——池子固定 12 个，每帧最多 12 次 Map 查询，
       // 而且颜色与前后缀是**同一次查询**取回来的，不会出现"颜色接上了、前后缀忘了"。
-      const style = nameTagStyleFor(entry.mob.customName, (member) => this.teamState.teamOf(member));
+      const teamStyle = nameTagStyleFor(entry.mob.customName, (member) => this.teamState.teamOf(member));
+      /*
+       * 房主标识（本轮）：金色 + 「房主 · 」前缀。
+       *
+       * 优先级高于队伍色——"谁是这一局的房主"是最要紧的信息（只有他能改时间/天气），
+       * 被队伍色盖掉就白标了。
+       */
+      const style =
+        entry.host === true
+          ? { color: '#ffd24a', prefix: `${t('say.net.hostTag')} · `, suffix: '' }
+          : teamStyle;
       // 距离衰减只给队友（联机18）：生物名字牌是命名牌起的，原版不渐隐
       const opacity =
         entry.mob.type.id === REMOTE_PLAYER_TYPE.id ? remoteNameTagOpacity(entry.distance) : 1;
@@ -13237,12 +13247,12 @@ class App {
         }
         return placed;
       },
-      setTimeOfDay: (t) => {
-        this.timeOfDay = ((t % 1) + 1) % 1;
-      },
+      // `/time` 与 `/weather` 在联机时要按角色分流（房主上报、从属端只读），见下面两个方法
+      setTimeOfDay: (t) => this.commandSetTimeOfDay(t),
       timeOfDay: () => this.timeOfDay,
       // `/weather` 走与调试接口同一条路径（批次 221）：这样命令切换也会播报时长
-      setWeather: (kind) => this.setWeather(kind),
+      setWeather: (kind) => this.commandSetWeather(kind),
+      canChangeWorld: () => !this.net.connected || this.net.role === 'host',
       difficulty: () => this.difficulty,
       setDifficulty: (value) => {
         // 极限模式（批次 550）：难度锁死困难，/difficulty 与设置面板都不生效
@@ -18581,6 +18591,30 @@ class App {
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
     this.applyEnvironment();
+  }
+
+  /**
+   * `/time` 与调试接口改时间（联机时按角色分流）。
+   *
+   * 时间是服务端权威：房主改完要**上报**（服务端重置开局时刻并广播 `time{snap:true}`），
+   * 否则只有自己这边天亮了、队友还是黑夜。从属端不改——命令层已经拦过一次，
+   * 这里是第二道（调试接口/脚本也可能直接调到）。
+   */
+  private commandSetTimeOfDay(t: number): void {
+    if (this.net.connected && this.net.role !== 'host') return;
+    this.setTimeOfDay(t);
+    if (this.net.connected && this.net.role === 'host') {
+      this.net.sendRoomConfig({ timeOfDay: this.timeOfDay });
+    }
+  }
+
+  /** `/weather`（同上）：房主改完上报，服务端按房广播给所有人 */
+  private commandSetWeather(kind: 'clear' | 'rain' | 'thunder'): void {
+    if (this.net.connected && this.net.role !== 'host') return;
+    this.setWeather(kind);
+    if (this.net.connected && this.net.role === 'host') {
+      this.net.sendRoomConfig({ weather: kind });
+    }
   }
 
   /**

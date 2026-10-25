@@ -21,6 +21,7 @@ export const cmdMessages = {
   "cmd.reply.time.bad-time-format-value": "Неверный формат времени: {value}",
   "cmd.reply.time.set-the-time-to-value": "Время установлено на {value}",
   "cmd.reply.time.weather-set-to-weather": "Погода переключена на {weather}",
+  "cmd.reply.time.host-only": "В сетевой игре время и погоду может менять только хост",
   "cmd.reply.time.difficulty-set-to-difficulty-value": "Сложность установлена на {difficulty} ({value})",
   "cmd.reply.time.current-game-rules-rules": "Текущие правила игры:\n{rules}",
   "cmd.reply.time.unknown-game-rule-key": "Неизвестное правило игры: {key}",

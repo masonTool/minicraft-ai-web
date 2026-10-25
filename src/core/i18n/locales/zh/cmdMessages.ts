@@ -24,6 +24,7 @@ export const cmdMessages = {
   "cmd.reply.time.bad-time-format-value": "时间格式不对：{value}",
   "cmd.reply.time.set-the-time-to-value": "已将时间设置为 {value}",
   "cmd.reply.time.weather-set-to-weather": "天气已切换为 {weather}",
+  "cmd.reply.time.host-only": "联机时只有房主能修改时间与天气",
   "cmd.reply.time.difficulty-set-to-difficulty-value": "难度已设置为 {difficulty}（{value}）",
   "cmd.reply.time.current-game-rules-rules": "当前游戏规则：\n{rules}",
   "cmd.reply.time.unknown-game-rule-key": "未知的游戏规则：{key}",
