@@ -25,6 +25,7 @@
   提交后必须 `git show --stat --oneline HEAD` 核对文件清单；发现被卷走就按 hash 记账，**不要 rewrite 历史**。
 - **结构断言写「紧邻 N 字符」**（`A[\s\S]{0,400}B`）：中间插一个分支就必红。改成"两段都存在 + 前者派生后者"。
 - **CSS 结构断言的正则 `[^}]*?` 不能跨块**：媒体查询里前面还有别的规则块时必须用 `[\s\S]*?`。
+- **JS 默认参数把"显式传 `undefined`"变成"没传"**：`resolveLanguage(setting, tag = deviceLanguage())` 里传 `undefined` 会照常求值默认值、读到**跑测试那台机器**的语言（`resolveLanguage('auto', undefined) === 'en'` 在本机 zh-CN 恒红、CI 恒绿，把提交钩子卡成常红）；"没有"要用空串这类可判定的值，默认值来自环境的参数在测试里一律别用 `undefined`。
 
 ### 队列条目写成 `[T1]` 会被门禁当成需求号，提交直接被拒
 
@@ -393,6 +394,7 @@
 - 处置：改尺寸前先 `grep -n "选择器名"` 列全所有同名规则，把常量收到**一条共用规则**上
   （例如 `.world-primary, .world-secondary { min-height: 52px; }`），其余处只留字号/内边距。
   断言也要钉"共用规则里有这个值 + 后面不再出现旧值"，否则下次又会被覆盖。
+- 同源：**复用别人的类名 ≠ 复用它的取值契约**。`.touch-button.jump` / `.fly-*` 的尺寸取 `#touch-ui` 上的 `--touch-jump-size` / `--touch-cluster-gap`，PC 的容器没声明 → `calc()` 整条失效（自定义属性未定义不是"退回初值"），飞行时升降键会压回跳跃键上。新容器里按同一套 `--touch-scale` 再声明一遍，验收看**展开态**。
 
 ## 渲染与光照
 
