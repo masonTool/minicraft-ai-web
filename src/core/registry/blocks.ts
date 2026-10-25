@@ -8,7 +8,6 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import type { TreeKind } from '../gen/Features.ts';
 import { railShapeOf } from '../world/RailShape.ts';
 import { BLOCK_BEHAVIORS } from './blockBehaviors.ts';
 import { isWaterlogged, type BlockShape, withWaterlogged } from './blockState.ts';
@@ -17,13 +16,10 @@ import { isWaterlogged, type BlockShape, withWaterlogged } from './blockState.ts
 import { paintingTile } from './paintings.ts';
 // 方块 id 的分配表是叶子模块（见 `blockIds.ts` 头注释：依赖方向必须是单向的）。
 // 既要**再导出**（224 个引用方不用改），也要**本地导入**（`export *` 不会把名字带进本模块作用域）。
+
 export * from './blockIds.ts';
-// 类型不在 `export *` 的值导入里，单独按类型导一次（`verbatimModuleSyntax` 要求写明 type）
-import type { BlockSpec, WoodBlockIds, WoodShapedIds } from './blockIds.ts';
 import {
   WOOL_ID_START,
-  WOOD_BLOCK_ID_START,
-  WOOD_SHAPED_ID_START,
   TERRACOTTA_ID_START,
   CONCRETE_ID_START,
   CONCRETE_POWDER_ID_START,
@@ -40,7 +36,6 @@ import {
   COPPER_ID_START,
   BANNER_ID_START,
   STONECUTTER_ID,
-  RED_SANDSTONE_VARIANT_ID_START,
   SMOKER_ID,
   BLAST_FURNACE_ID,
   CAMPFIRE_ID,
@@ -88,8 +83,6 @@ import {
   PUMPKIN_STEM_ATTACHED_ID,
   MELON_STEM_ATTACHED_ID,
   STEM_MAX_STAGE,
-  STONE_VARIANT_ID_START,
-  BLACKSTONE_VARIANT_ID_START,
   RAIL_ID,
   POWERED_RAIL_ID,
   DETECTOR_RAIL_ID,
@@ -123,6 +116,24 @@ import {
   SLIME_BLOCK_ID,
   SOUL_TORCH_ID,
   SOUL_LANTERN_ID,
+  EXTRA_WOODS,
+  WOOD_ID_MAP,
+  Wood,
+  WOOD_SHAPED_MAP,
+  WoodShaped,
+  SAPLING_ID_MAP,
+  SAPLING_IDS,
+  STONE_VARIANT_MAP,
+  STONE_VARIANT_FAMILIES,
+  STONE_VARIANT_PARENTS,
+  stoneVariantId,
+  BED_ID_MAP,
+  BED_IDS,
+  SIGN_ID_MAP,
+  SIGN_IDS,
+} from './blockIds.ts';
+import type {
+  BlockSpec,
 } from './blockIds.ts';
 
 export interface BlockDef {
@@ -400,24 +411,7 @@ const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
 // ---------------------------------------------------------------- 木材家族
 
 
-const EXTRA_WOODS = WOOD_TYPES.filter((wood) => wood.name !== 'oak');
 
-/**
- * 每种木材 5 个方块的 id。
- *
- * ⚠️ 必须是**纯算术**，绝不能靠"构造方块表时顺带 `set()`"（批次 20261025-0329）：
- * 这些 id 在**模块初始化期**就要被 `Wood` / `JUNGLE_LOG_ID` 读到，而方块表本身将来
- * 是从 `core.bin` 装载的（那时 SPECS 是空的）。原来写在 `WOOD_SPECS` 的 flatMap 里，
- * 表一外置这里就是空 Map，`JUNGLE_LOG_ID = Wood.jungle!.log` 当场 TypeError —— 导入即崩。
- */
-const WOOD_IDS: readonly (readonly [string, WoodBlockIds])[] = EXTRA_WOODS.map((wood, index) => {
-  const base = WOOD_BLOCK_ID_START + index * 5;
-  return [
-    wood.name,
-    { log: base, planks: base + 1, leaves: base + 2, slab: base + 3, stairs: base + 4 },
-  ] as const;
-});
-const WOOD_ID_MAP = new Map<string, WoodBlockIds>(WOOD_IDS);
 
 const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood) => {
   const ids = WOOD_ID_MAP.get(wood.name)!;
@@ -457,38 +451,12 @@ const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood) => {
   ];
 });
 
-/** 取某种木材的 5 个方块 id；未知木材返回 undefined */
-export function woodBlocks(name: string): WoodBlockIds | undefined {
-  return WOOD_ID_MAP.get(name);
-}
 
-/** 木材方块 id 的具名入口（配方与测试用；与 WOOD_SPECS 同源，不会写错） */
-export const Wood: Readonly<Record<string, WoodBlockIds>> = Object.fromEntries(
-  EXTRA_WOODS.map((wood) => [wood.name, WOOD_ID_MAP.get(wood.name)!]),
-);
 
 // ---------------------------------------------------------------- 木制方块族（栅栏 / 栅栏门 / 门 / 活板门）
 
 
-/** 橡木四件的历史 id（与 `Block` 枚举同源，这里写常量是为了在枚举定义之前就能用） */
-const OAK_WOOD_SHAPED: WoodShapedIds = { fence: 96, fenceGate: 290, door: 99, trapdoor: 289 };
 
-/** 同上：木制方块族的 id 也必须是纯算术，理由见 `WOOD_IDS` */
-const WOOD_SHAPED_IDS: readonly (readonly [string, WoodShapedIds])[] = (() => {
-  const entries: (readonly [string, WoodShapedIds])[] = [];
-  let base = WOOD_SHAPED_ID_START;
-  for (const wood of WOOD_TYPES) {
-    if (wood.name === 'oak') {
-      // 橡木沿用历史 id，不占新段
-      entries.push([wood.name, OAK_WOOD_SHAPED] as const);
-      continue;
-    }
-    entries.push([wood.name, { fence: base, fenceGate: base + 1, door: base + 2, trapdoor: base + 3 }] as const);
-    base += 4;
-  }
-  return entries;
-})();
-const WOOD_SHAPED_MAP = new Map<string, WoodShapedIds>(WOOD_SHAPED_IDS);
 
 const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
   const specs: BlockSpec[] = [];
@@ -538,17 +506,7 @@ const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
   return specs;
 })();
 
-/** 某种木材的 4 件木制方块 id；未知木材返回 undefined */
-export function woodShaped(name: string): WoodShapedIds | undefined {
-  return WOOD_SHAPED_MAP.get(name);
-}
 
-/**
- * 全部木材的木制方块 id（可燃表 / 工具加速表 / 创造分类 / 配方批量遍历用）。
- * 含橡木——它的 id 是历史值，但"这一族"必须一起走，否则又会出现
- * "云杉栅栏可燃、橡木栅栏不可燃"这种半残状态。
- */
-export const WoodShaped: Readonly<Record<string, WoodShapedIds>> = Object.fromEntries(WOOD_SHAPED_MAP);
 
 // ---------------------------------------------------------------- 陶瓦与混凝土
 
@@ -1918,60 +1876,16 @@ export function shulkerBoxId(colorName: string): number | undefined {
 
 // ---------------------------------------------------------------- 树苗（批次 75，B47）
 
-/**
- * 一棵树苗能长成哪种树（**这是 B47 唯一一处"树苗 → 树"的映射**）。
- *
- * 键是木材名（与 `Wood` 同源），值是 `Features.ts` 里的树种名。
- * ⚠️ 原版还有两处"2×2 才能长"的规矩（深色橡木与巨型丛林）：本项目的树苗**一格就能长**，
- * 树形仍按各木材的 Planter 长（深色橡木会长成一棵单干的"大树"）——这条差异写在 TASKS B47。
- */
-const SAPLING_TREES: Readonly<Record<string, TreeKind>> = {
-  oak: 'oak',
-  birch: 'birch',
-  spruce: 'spruce',
-  jungle: 'jungle',
-  acacia: 'acacia',
-  dark_oak: 'dark_oak',
-};
 
 
-/**
- * 树苗 id 与"长成哪种树"两张表。
- *
- * ⚠️ **纯算术先行生成**，不能靠在 `SAPLING_SPECS` 的 map 回调里顺带 `set()`：
- * 这些 id 在模块初始化期就可能被读到，而方块表将来是从 `core.bin` 装的（那时 SPECS 为空）。
- * 写成"建表顺便产出"的话，表一外置，`saplingId()` 就全返回 undefined、树苗种下去不长。
- *
- * 「缺树种要当场抛」这条校验**保留**在这里，不因为搬家而丢掉。
- */
-const SAPLING_ID_MAP = new Map<string, number>(
-  WOOD_TYPES.map((wood, index) => [wood.name, WOOD_SAPLING_ID_START + index] as const),
-);
-const SAPLING_TREE_MAP = new Map<number, TreeKind>(
-  WOOD_TYPES.map((wood, index) => {
-    const kind = SAPLING_TREES[wood.name];
-    if (!kind) throw new Error(`composter: 木材 ${wood.name} 没有对应的树种（见 SAPLING_TREES）`);
-    return [WOOD_SAPLING_ID_START + index, kind] as const;
-  }),
-);
 
 const SAPLING_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood) => {
   const id = SAPLING_ID_MAP.get(wood.name)!;
   return plantSpec(id, `${wood.name}_sapling`, `${wood.name}_sapling`);
 });
 
-/** 某种木材的树苗 id（未知木材返回 undefined） */
-export function saplingId(woodName: string): number | undefined {
-  return SAPLING_ID_MAP.get(woodName);
-}
 
-/** 这一格树苗会长成哪种树；不是树苗返回 null */
-export function saplingTreeOf(blockId: number): TreeKind | null {
-  return SAPLING_TREE_MAP.get(blockId) ?? null;
-}
 
-/** 全部树苗 id（断言与遍历用，不手抄一份） */
-export const SAPLING_IDS: readonly number[] = [...SAPLING_ID_MAP.values()];
 
 
 // ---------------------------------------------------------------- 瓜藤与果实（批次 77，B48）
@@ -2344,89 +2258,9 @@ function tilesOfDefined(id: number): readonly [string, string, string] {
   throw new Error(`tilesOfDefined: 找不到方块 ${id} 的贴图（石材变体表里的 id 写错了？）`);
 }
 
-export type StoneVariantKind = 'slab' | 'stairs' | 'wall';
 
-/**
- * [母方块 id, 命名前缀, 原版有的变体, 显式起点?]。
- *
- * 母方块 id 这里只能写数字：本文件在 `Block` 枚举**之前**就要把这些方块拼进 `SPECS`。
- * 代价是数字可能打错——所以套件里有一条断言核对"id 对应的方块名 == 登记名"。
- *
- * **第 4 列（显式起点）只写在每一段的第一行**：写了它就把分配器的游标跳到那个 id，
- * 后面的家族继续往后排。批次 45 的红砂岩家族就是这么接在 416 上的
- * （不写的话会从 404 接着排，直接撞进写死的石英家族与切石机）。
- */
-const STONE_VARIANT_FAMILIES: readonly (
-  readonly [
-    number,
-    string,
-    readonly StoneVariantKind[],
-    (number | undefined)?,
-    (readonly [string, string, string] | undefined)?,
-  ]
-)[] = [
-  [13, 'granite', ['slab', 'stairs', 'wall']],
-  [14, 'diorite', ['slab', 'stairs', 'wall']],
-  [15, 'andesite', ['slab', 'stairs', 'wall']],
-  [20, 'sandstone', ['wall']],
-  [68, 'deepslate_bricks', ['wall']],
-  [70, 'bricks', ['wall']],
-  [71, 'polished_deepslate', ['wall']],
-  [160, 'mossy_cobblestone', ['slab', 'stairs', 'wall']],
-  [161, 'mossy_stone_bricks', ['slab', 'stairs', 'wall']],
-  [164, 'cobbled_deepslate', ['slab', 'stairs', 'wall']],
-  [166, 'cut_sandstone', ['slab']],
-  [167, 'smooth_sandstone', ['slab', 'stairs']],
-  [227, 'blackstone', ['slab', 'stairs', 'wall']],
-  [240, 'nether_bricks', ['slab', 'stairs', 'wall']],
-  [247, 'end_stone_bricks', ['slab', 'stairs', 'wall']],
-  [248, 'purpur_block', ['slab', 'stairs']],
-  // ---- 批次 42 追加（id 387 起）：石英家族、深板岩瓦、红色下界砖、海晶石三兄弟。
-  // 石英只有台阶与楼梯（原版没有石英墙）；錾制石英块与石英柱没有任何变体。
-  [404, 'quartz_block', ['slab', 'stairs']],
-  [407, 'smooth_quartz', ['slab', 'stairs']],
-  [408, 'deepslate_tiles', ['slab', 'stairs', 'wall']],
-  [409, 'red_nether_bricks', ['slab', 'stairs', 'wall']],
-  [218, 'prismarine', ['slab', 'stairs', 'wall']],
-  [219, 'prismarine_bricks', ['slab', 'stairs']],
-  [220, 'dark_prismarine', ['slab', 'stairs']],
-  // ---- 批次 45 追加（id 416 起）：红砂岩家族（红沙长在恶地地表，原料链在这里闭合）。
-  // 原版的变体分布与普通砂岩**完全一致**（砂岩那三行就在上面几行，可以对着看）：
-  // 红砂岩三件套、切制只有台阶、平滑有台阶与楼梯、錾制没有变体。
-  [412, 'red_sandstone', ['slab', 'stairs', 'wall'], RED_SANDSTONE_VARIANT_ID_START],
-  [414, 'cut_red_sandstone', ['slab']],
-  [415, 'smooth_red_sandstone', ['slab', 'stairs']],
-  // ---- 批次 85 追加（B50）：黑石家族的装饰性补齐。这两行就是全部改动——
-  // 台阶/楼梯/墙的方块、硬度、工具、中文名、分类、配方都会自动跟上。
-  //
-  // ⚠️ 贴图这一列**必须显式给**：黑石家族是批次 82 才加进来的，它的规格段
-  // （`BLACKSTONE_FAMILY_SPECS`）声明在 `DEFINED_SPECS` **之后**，
-  // 而这张表在 `STONE_VARIANT_SPECS` 那个 IIFE 里就被求值了——按 id 去查会拿到 undefined
-  // （症状是"找不到方块 529 的贴图"）。贴图就是三个字符串，直接写下来最省事也最清楚
-  [529, 'polished_blackstone', ['slab', 'stairs', 'wall'], BLACKSTONE_VARIANT_ID_START, ['polished_blackstone', 'polished_blackstone', 'polished_blackstone']],
-  [530, 'polished_blackstone_bricks', ['slab', 'stairs', 'wall'], undefined, ['polished_blackstone_bricks', 'polished_blackstone_bricks', 'polished_blackstone_bricks']],
-];
 
-/**
- * 按家族顺序把 id 分配到 `next++`（纯算术）。
- *
- * 抽成独立函数是"方块表可外置"的前提之一：原来这段分配逻辑写在 `STONE_VARIANT_SPECS`
- * 的 IIFE 里，一边分配一边 `set()` 进 map——**spec 不生成，id 就不存在**。而
- * `stoneVariantId()` 是运行时要用的（台阶/楼梯的变体判定），表外置之后它必须仍然可用。
- * 现在 id 分配与贴图/形状的组装各管一件事，`specs` 只是"按 id 查一遍"。
- */
-function allocateStoneVariantIds(): readonly (readonly [string, number])[] {
-  const allocated: (readonly [string, number])[] = [];
-  let next = STONE_VARIANT_ID_START;
-  for (const [, name, kinds, explicitStart] of STONE_VARIANT_FAMILIES) {
-    // 显式起点：把游标跳到这一段该在的位置（批次 45 的红砂岩家族用它避开写死的母方块段）
-    if (explicitStart !== undefined) next = explicitStart;
-    for (const kind of kinds) allocated.push([`${name}_${kind}`, next++] as const);
-  }
-  return allocated;
-}
 
-const STONE_VARIANT_MAP = new Map<string, number>(allocateStoneVariantIds());
 
 const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   const specs: BlockSpec[] = [];
@@ -2443,30 +2277,12 @@ const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   return specs;
 })();
 
-/**
- * 母方块与它的变体（硬度表 / 工具表"跟随母方块"要用）。
- *
- * ⚠️ 这里**故意只暴露前 3 列**：显式起点是"分配 id"用的实现细节，
- * 下游（硬度 / 工具 / 配方 / 切石表）只关心"谁的变体有哪些"。
- */
-export const STONE_VARIANT_PARENTS: readonly (readonly [number, string, readonly StoneVariantKind[]])[] =
-  STONE_VARIANT_FAMILIES.map(([parent, name, kinds]) => [parent, name, kinds] as const);
 
-/** 某个"母方块 + 变体"的 id；表里没有这个变体时返回 undefined */
-export function stoneVariantId(parentName: string, kind: StoneVariantKind): number | undefined {
-  return STONE_VARIANT_MAP.get(`${parentName}_${kind}`);
-}
 
-/** 全部石材变体的 id（套件、创造分类、配方批量遍历用） */
-export const STONE_VARIANT_IDS: readonly number[] = [...STONE_VARIANT_MAP.values()];
 
 // ---------------------------------------------------------------- 床（B13，批次 79）
 
 
-/** 同树苗：纯算术先行生成，理由见 `SAPLING_ID_MAP` 上的注释 */
-const BED_ID_MAP = new Map<string, number>(
-  DYE_COLORS.map((color, index) => [color.name, BED_ID_START + index] as const),
-);
 
 const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color) => {
   const id = BED_ID_MAP.get(color.name)!;
@@ -2484,15 +2300,7 @@ const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color) => {
   };
 });
 
-/** 第 index 种颜色的床（顺序与 `DYE_COLORS` 一致） */
-export function bedId(colorIndex: number): number {
-  return BED_ID_START + colorIndex;
-}
 
-/** 某种颜色的床 id；未知颜色返回 undefined */
-export function bedIdOfColor(name: string): number | undefined {
-  return BED_ID_MAP.get(name);
-}
 
 /** 这张床是第几种颜色；不是床返回 -1（存档里出现越界 id 时也返回 -1） */
 export function bedColorIndex(blockId: number): number {
@@ -2505,16 +2313,10 @@ export function isBed(blockId: number): boolean {
   return bedColorIndex(blockId) >= 0;
 }
 
-/** 全部床的 id（断言与创造分类遍历用，不手抄 16 行） */
-export const BED_IDS: readonly number[] = DYE_COLORS.map((_color, index) => BED_ID_START + index);
 
 // ---------------------------------------------------------------- 告示牌（B12，批次 80）
 
 
-/** 同树苗：纯算术先行生成，理由见 `SAPLING_ID_MAP` 上的注释 */
-const SIGN_ID_MAP = new Map<string, number>(
-  WOOD_TYPES.map((wood, index) => [wood.name, SIGN_ID_START + index] as const),
-);
 
 const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood) => {
   const id = SIGN_ID_MAP.get(wood.name)!;
@@ -2532,10 +2334,6 @@ const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood) => {
   };
 });
 
-/** 某种木材的告示牌 id；未知木材返回 undefined */
-export function signId(woodName: string): number | undefined {
-  return SIGN_ID_MAP.get(woodName);
-}
 
 /** 这一格是不是告示牌（落地 / 挂墙都算） */
 export function isSign(blockId: number): boolean {
@@ -2543,8 +2341,6 @@ export function isSign(blockId: number): boolean {
   return index >= 0 && index < WOOD_TYPES.length;
 }
 
-/** 全部告示牌的 id（断言与创造分类遍历用） */
-export const SIGN_IDS: readonly number[] = WOOD_TYPES.map((_wood, index) => SIGN_ID_START + index);
 
 // ---------------------------------------------------------------- 黑石家族（K8 收尾，批次 82）
 
