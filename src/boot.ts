@@ -15,7 +15,21 @@
 
 import { ensureHostCore } from './core/hostCore.ts';
 
+/**
+ * 是否必须由宿主提供核心数据（构建期注入，见 `vite.config.ts`）。
+ *
+ * `build:web` 为 false：方块表已经编进包里（`blocks.ts` 在模块初始化时就建好表了），
+ * 既不需要取 `core.bin`，也就不涉及"宿主版本太老"那套判定——**纯网页，开箱能玩**。
+ */
+const HOST_CORE_REQUIRED: boolean =
+  typeof __HOST_CORE_REQUIRED__ === 'undefined' ? true : __HOST_CORE_REQUIRED__;
+
 void (async () => {
+  if (!HOST_CORE_REQUIRED) {
+    await import('./main.ts');
+    return;
+  }
+
   // 拿不到核心数据时 `ensureHostCore()` 已经画好了整屏提示（"去应用里玩" / "请更新应用"），
   // 这里直接放弃即可：没有方块表的世界不报错，只会是一片空白。
   if (!(await ensureHostCore())) return;

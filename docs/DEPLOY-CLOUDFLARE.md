@@ -2,8 +2,9 @@
 
 > 批次 20261025-0329 · 宿主6
 >
-> 一句话：**同一个 `dist`，只差一个文件 `__host/core.bin`。**
-> 没它 → 只有安卓宿主能玩（浏览器看到"去应用里玩"）；有它 → 浏览器也能玩。
+> 一句话：**两种形态的数据位置不同。**
+> app 形态：方块表**不在**包里，只能由安卓宿主经 `core.bin` 注入 → 浏览器打开只会看到"去应用里玩"。
+> web 形态：方块表**编在** JS 包里，开箱就能在浏览器玩（自足、不涉及宿主版本判定）。
 > 两种形态必须发到**两个不同的 Pages 项目**，不许共用。
 
 ---
@@ -15,7 +16,7 @@
 | Pages 项目名 | `minicraft-app` | `minicraft-web` |
 | 域名（示例，按实际改） | `game.example.com` | `demo.example.com` |
 | 构建命令 | `npm run build:app` | `npm run build:web` |
-| `dist/__host/core.bin` | **没有** | **有**（40 KB） |
+| 方块表数据在哪 | 不在包里（等宿主注入） | **编在 JS 包里**（自足） |
 | 浏览器打开 | 只显示"请在 Minicraft 应用里游玩" | 直接进游戏 |
 | 流水线 | `.github/workflows/deploy-cf-app.yml` | `.github/workflows/deploy-cf-web.yml` |
 
@@ -87,9 +88,8 @@ curl -s https://game.example.com/version.json                            # 期�
 curl -s https://game.example.com/ | grep -c 'assets/index-'              # 期望 >0（入口是有的）
 # 浏览器打开：应当只有"请在 Minicraft 应用里游玩 / 前往 Google Play 下载"，且不出现 3D 画面
 
-# B 站：完整前端必须能玩
-curl -s https://demo.example.com/__host/core.bin | head -c 4            # 期望 MCTB
-curl -s -o /dev/null -w '%{size_download}\n' https://demo.example.com/__host/core.bin   # 期望 ~41107
+# B 站：完整前端必须能玩（自足形态，没有 core.bin）
+curl -s https://demo.example.com/__host/core.bin | head -c 4            # 期望不是 MCTB（没有这个文件）
 # 浏览器打开：应当进入"加载中… 正在准备材质与存档"
 
 # 两站都不能有 sourcemap（有就等于把 TS 源码公开了）

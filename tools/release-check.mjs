@@ -156,21 +156,19 @@ notes.push(`index.html ${kb(Buffer.byteLength(before))} → ${kb(Buffer.byteLeng
 const hostDir = join(DIST, '__host');
 const hostFile = join(hostDir, 'core.bin');
 
-if (mode === 'app') {
-  if (existsSync(hostFile)) {
-    rmSync(hostDir, { recursive: true, force: true });
-    problems.push('dist 里出现了 __host/core.bin（已删除）：app 形态不能带它，否则门禁失效');
-  }
-} else {
-  if (!existsSync(CORE_SRC)) {
-    problems.push(`缺少 ${CORE_SRC}：先跑 npm run gen:hostcore`);
-  } else {
-    mkdirSync(hostDir, { recursive: true });
-    copyFileSync(CORE_SRC, hostFile);
-    const head = readFileSync(hostFile).subarray(0, 4).toString('latin1');
-    if (head !== 'MCTB') problems.push(`dist/__host/core.bin 魔数不对（读到 ${JSON.stringify(head)}）`);
-    notes.push(`core.bin 已放入 dist/__host（${kb(statSync(hostFile).size)}）`);
-  }
+/**
+ * ⚠️ **两种形态的 dist 里都不该有 `core.bin`**（批次 20261025-1032 重新划清）：
+ *
+ *   · app（分离形态）：数据被桩掉，门禁要求它只来自安卓宿主 → 发了等于门禁失效；
+ *   · web（自足形态）：数据**编进 JS 包里**，压根不需要这个文件。
+ *
+ * 也就是说 `core.bin` 只有两个去处：**APK 的 assets**，或者根本不生成（`npm run gen:hostcore`
+ * 生成它就是给 APK 打包用的）。线上站点永远不带它——这条比"带一份给 web 用"简单得多，
+ * 也顺带消掉了"web 站要跟着核心数据版本走"这层没必要的耦合。
+ */
+if (existsSync(hostDir)) {
+  rmSync(hostDir, { recursive: true, force: true });
+  problems.push('dist 里出现了 __host/：两种形态都不该带 core.bin（它的去处只有 APK），已删除');
 }
 
 // ------------------------------------------------------------------ 3. 版本清单
@@ -183,17 +181,16 @@ if (mode === 'app') {
  * ⚠️ `core` 从一个来源读——`blockTableCodec.ts` 的 `BLOCK_TABLE_VERSION`——而不是再抄一遍：
  * 抄一遍必然漂（二进制升到 v2、清单还写 1，结果新前端放行了旧壳，白屏）。
  */
-{
+if (mode === 'web') {
+  // 自足形态：数据在包里，页面不取 core.bin、也不看版本清单 —— 生成一份会误导（"web 也有版本契约？"）
+  notes.push('web 形态：不生成 version.json（数据自足，不做宿主版本判定）');
+} else {
   const codecSrc = readFileSync(join(ROOT, 'src/core/registry/blockTableCodec.ts'), 'utf8');
   const versionMatch = /export const BLOCK_TABLE_VERSION = (\d+)/.exec(codecSrc);
   if (versionMatch === null) {
     problems.push('读不到 blockTableCodec.ts 的 BLOCK_TABLE_VERSION（改过声明形式？）');
   } else {
     const coreVersion = Number(versionMatch[1]);
-    const coreBin = join(ROOT, `.tmp/hostcore/core-v${coreVersion}.bin`);
-    if (mode === 'web' && !existsSync(coreBin)) {
-      problems.push(`缺少 ${coreBin}：core.bin 的版本与 BLOCK_TABLE_VERSION 对不上，先跑 npm run gen:hostcore`);
-    }
     const manifest = {
       core: coreVersion,
       minSupportedCore: coreVersion,
@@ -204,6 +201,18 @@ if (mode === 'app') {
     notes.push(`version.json core=${coreVersion} minSupportedCore=${coreVersion}`);
   }
 }
+
+// ------------------------------------------------------------------ 3.5 方块表数据在不在产物里
+/**
+ * 探针：**只在 `blockSpecs.ts` 里出现的方块名**。
+ *
+ * ⚠️ 这个字符串选错过两次，两次都让断言变成"永远通过"的摆设：
+ *   ① `dragon_egg_top` —— 方块表里压根没有这个贴图名（只有 `dragon_egg`），探针永远找不到；
+ *   ② `bee_nest_top`   —— 它同时出现在图集清单（`render/atlasLayout.ts`），不带数据也在包里。
+ * 现在用"只存在于 spec 的方块全名"，并保留了选型注释；换探针前请先
+ * `grep -rl <候选> src` 确认只有 `blockSpecs.ts` 一处（外加本文件）。
+ */
+const PROBE = 'minicraft:amethyst_cluster';
 
 // ------------------------------------------------------------------ 3.5 数据不在产物里
 /**
@@ -217,19 +226,24 @@ if (mode === 'app') {
  * 光看体积很容易被其它改动淹没，看不出是省了数据还是省了别的。
  */
 {
-  // 自己扫一遍 assets，不依赖后面那份 `files`（那时它还没初始化）
+  // 扫**全部** chunk，不只 `index-*`：两段式入口之后游戏体在 `main-*.js` 里，
+  // 只盯入口会得到"数据不在包里"的假结论（这条踩过）。
   const assetsDir = join(DIST, 'assets');
-  const main = (existsSync(assetsDir) ? readdirSync(assetsDir) : [])
-    .filter((name) => /^index-.*\.js$/.test(name))
-    .map((name) => `assets/${name}`)[0];
-  if (main === undefined) {
-    problems.push('找不到主包（assets/index-*.js），无法确认方块表数据是否已排除');
+  const chunks = (existsSync(assetsDir) ? readdirSync(assetsDir) : []).filter((n) => n.endsWith('.js'));
+  if (chunks.length === 0) {
+    problems.push('dist/assets 里没有 JS，无法确认方块表数据的位置');
   } else {
-    const text = readFileSync(join(DIST, main), 'utf8');
-    if (text.includes('dragon_egg_top')) {
-      problems.push(`${main} 里仍然含方块表数据（探针 dragon_egg_top）——生产构建的 blockSpecs 桩没生效`);
+    const hit = chunks.find((n) => readFileSync(join(assetsDir, n), 'utf8').includes(PROBE));
+    if (mode === 'app') {
+      if (hit !== undefined) {
+        problems.push(`app 形态的 ${hit} 里仍有方块表数据（探针 ${PROBE}）——blockSpecs 桩没生效`);
+      } else {
+        notes.push(`app 形态：方块表数据不在产物里（探针 ${PROBE} 不在任何 chunk）`);
+      }
+    } else if (hit === undefined) {
+      problems.push(`web 形态的产物里找不到方块表数据（探针 ${PROBE} 消失）——数据没编进包，浏览器将无法游玩`);
     } else {
-      notes.push('方块表数据未进产物（探针 dragon_egg_top 不在主包）');
+      notes.push(`web 形态：方块表数据已编进 ${hit}（自足，不需要 core.bin）`);
     }
   }
 }

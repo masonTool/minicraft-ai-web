@@ -1,6 +1,6 @@
 # 发布到 Cloudflare Pages · **完整前端**形态（B 站）
 #
-# 这个形态把 `__host/core.bin` 一起发上去，所以**浏览器可以直接玩**。
+# 这个形态是**自足**的：方块表编在 JS 包里，浏览器可以直接玩，dist 里没有 core.bin。
 # 它只用于：预览 / 演示 / 兜底（A 站出问题时的备用入口）。
 #
 # ⚠️ 绝不能发到 A 站（`minicraft-app`）那个项目上，也绝不能给它绑生产域名——
@@ -43,14 +43,18 @@ jobs:
       - run: npm ci
       - run: npm run check
 
-      # build:web = SOURCEMAP=0 + release-check + 把 core.bin 放进 dist/__host
+      # build:web = 数据编进包（SPECS_STUB=0）+ 不做宿主版本判定（HOST_CORE_REQUIRED=0）
       - run: npm run build:web
 
-      # release-check 已经把 core.bin 放好了；这里再确认一次，防止有人改了脚本
-      - name: 确认 core.bin 在位（B 站的全部意义就在它）
+      # web 形态是**自足**的：方块表编在 JS 包里，dist 里不该有 core.bin。
+      # release-check 已用探针确认"数据在包内"，这里再守一道"没有多余的核心文件"。
+      - name: 确认产物是自足形态（不该有 core.bin）
         run: |
-          test -f dist/__host/core.bin || { echo "✗ dist/__host/core.bin 不存在，B 站发出去等于 A 站"; exit 1; }
-          head -c 4 dist/__host/core.bin | grep -q MCTB || { echo "✗ core.bin 魔数不对"; exit 1; }
+          if [ -e dist/__host/core.bin ]; then
+            echo "✗ dist/__host/core.bin 存在：web 形态不该带它（它的去处只有 APK）"
+            exit 1
+          fi
+          echo "✓ 无 core.bin，数据在包里"
 
       - uses: cloudflare/wrangler-action@v3
         with:

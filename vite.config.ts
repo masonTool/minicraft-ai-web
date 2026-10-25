@@ -108,6 +108,13 @@ export default defineConfig({
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
     __BUILD_TIME__: JSON.stringify(buildTime),
+    /**
+     * 页面是否**必须**由宿主提供 `core.bin`（批次 20261025-1032）。
+     *
+     * `build:app` 默认 `true`（分离形态）；`build:web` 传 `HOST_CORE_REQUIRED=0`（自足形态）。
+     * 为 false 时 `src/boot.ts` 不取 `core.bin`、不看 `version.json`，直接用编进包里的数据。
+     */
+    __HOST_CORE_REQUIRED__: (process.env.HOST_CORE_REQUIRED === '0' ? 'false' : 'true'),
   },
   server: {
     host: true,
@@ -133,6 +140,12 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+    /**
+     * ⚠️ worker 的构建走**独立的插件链**，主 `plugins` 里的桩换不进去（实测：app 形态下
+     * `chunk.worker-*.js` 里仍是完整方块表，探针一抓就中）。地形 worker 会 import `blocks.ts`，
+     * 所以这里必须把同一个插件再挂一次。
+     */
+    plugins: () => [hostSpecsStub()],
   },
   plugins: [hostCoreDev(), hostSpecsStub()],
   /**
