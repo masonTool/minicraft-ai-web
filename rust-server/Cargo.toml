@@ -3,9 +3,25 @@ name = "minicraft-server"
 version = "0.1.0"
 edition = "2024"
 
+# 三个产物：
+#   · `cdylib`  → Android 的 `libminicraft_server.so`（cargo-ndk / NDK 直接编）
+#   · `staticlib` → iOS 的 `.a`（再打成 `.xcframework`）
+#   · `rlib`    → 给 `main.rs`（桌面 / 服务器）与单测用
+[lib]
+name = "minicraft_server"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "minicraft-server"
+path = "src/main.rs"
+
 [dependencies]
 futures-util = "0.3.34"
+# JNI 胶水：Android 的 ForegroundService 只调 start/stop 两个函数
+jni = "0.21"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# UDP 发现需要 SO_REUSEADDR / SO_REUSEPORT（同一端口两个实例都要能收到广播）
+socket2 = "0.6"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
 tokio-tungstenite = "0.30.0"

@@ -54,6 +54,12 @@ pub struct Hub {
     pub password: String,
     pub allowed_origins: Vec<String>,
     pub data_file: std::path::PathBuf,
+    /// 局域网发现用的实例 id（用来过滤自己的广播回声）
+    pub instance: String,
+    /// 是否在广播（`/healthz` 里给客户端看）
+    pub beacon_on: bool,
+    /// 听到的其它实例（UDP 发现）
+    pub peers: Mutex<crate::beacon::PeerBook>,
 }
 
 impl Hub {
