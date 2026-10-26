@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261026-0345 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 拍板：方块增量跑到 20 万上限后「后进房的人地形少一截」；批准做 ① 水流不该撑大增量表、
+> ② 进房首包压缩，「能彻底解决的方案都可以接受」。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0345
+
+目标（用户 2026-10-26 拍板）：方块增量跑到 20 万上限之后，「后进房的人看到的地形少一截」。
+批准做 ①（水流不该把增量表撑大）+ ②（进房首包压缩），"能彻底解决的方案都可以接受"。
+
+- [x] [快照1] 服务端**按视野补发**方块增量：玩家跨进一个新区块时，把该区块的增量推给他（走已有的 `blocks` 消息，客户端零改动）——补上"128 格外永远收不到"的盲区（`snapshot.mjs` 里记的联机27）→ 验收：`npm run test:net`（房主在远处改一格 → 加入方走过去收到）
+  - 做了什么：`server/index.mjs` 新增 `pushChunkEdits(player)`——玩家跨进一个**新区块**时，把该区块的增量按 2048 条一批推给他（走已有的 `blocks` 消息，客户端零改动）；`player.sentEditChunks` 记已推过的区块（上限 4096 个键）；`snapshot.mjs` 新增纯函数 `editsInChunk()`；三条 `rememberEdit` 的 value 带上 `room` 以便按房筛选
+  - 为什么：进房快照只带玩家 8 个区块（128 格）内的改动，更远的**永远收不到**（`snapshot.mjs` 里记的联机27 遗留）——这就是"地形对不上"的主因
+  - 验证：`npm run test:net` **213/0**（+1：房主在 2000 格外改一格 → 新人加入时快照里没有 → 新人走进那个区块 → 收到含该格的 `blocks`）；`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（+3 `editsInChunk`）
+  - 批次：20261026-0345
+- [x] [快照2] 上限 20 万 → 50 万（配合视野补发：首包仍按半径裁剪，不会因此变大）→ 验收：`npx vitest run tests/net-snapshot-policy.test.ts`
+  - 做了什么：`DEFAULT_MAX_EDITS` 20 万 → **50 万**（`server/snapshot.mjs`，注释里写明"抬高前提是按视野补发：首包仍按半径裁剪，不会因此变大"）
+  - 为什么：有了补发，"超过上限被淘汰"从"永久丢失"变成"只是不在首包里"，抬高上限才安全
+  - 验证：`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（含 `DEFAULT_MAX_EDITS === 500_000`）
+  - 批次：20261026-0345
+- [x] [快照3] 澄清并处理"水流撑大增量表"：`EditsTable` 本来就按格覆盖（同一格多写只留最后一稿），所以中间态不进表；真正会白占的是"改了又改回世界生成原样"的格子——评估后再决定做不做
+  - 结论：**水流不会把增量表撑大**，不需要改代码。`ChunkEdits.record()` 是 `map.set(localIndex, pack(id,state))`——同一格反复写只留最后一稿，水流的液面中间态天然被覆盖；撑大表的只有"**被写过的格子数**"。
+  - 顺带查清的浪费：真正白占的是"改了又改回世界生成原样"的格子（比如水退干净后那一格其实还是空气）。要清掉它得在写入时问一次地形生成器，代价是每次流体写都多算一遍噪声——**收益不确定、成本明确**，所以这次不动，记在这里备查。
+  - 验证：`src/core/save/ChunkEdits.ts` 的 `record()` 逐行确认（key 是区块，内部 Map 的键是区块内下标）
+  - 批次：20261026-0345
+- [x] [快照4] 进房首包的方块增量改压缩格式（用户批准的第 ② 条）：`src/core/net/EditPack.ts`（客户端解码 + 测试用编码）与 `server/editpack.mjs`（服务端编码 + 测试用解码）两份实现，格式为"按区块分组 + 区块内下标"；服务端改发 `editsPack`、老字段 `edits` 留空；`NetClient` 解回老形状，`onWelcome` 零改动 → 验收：`tests/edit-pack.test.ts`（含两端交叉）
+  - 做了什么：`EditPack.ts` 提供 `encodeEditsPack/decodeEditsPack/packIndex/unpackIndex`（下标与 `Chunk.index` 同一套算术，测试交叉校验）；`server/editpack.mjs` 是纯 JS 的同构实现（服务端不能 import TS）；`snapshotFor` 改发 `editsPack`；`NetClient` 优先解 `editsPack`、解不出来退回 `edits`；`tools/net-test.mjs` 的 `joinAndWaitWelcome` 就地解包，后面几百条断言一行没改
+  - 为什么：一条从 30~40 字符降到约 10 字符。**实测**：密集改动（一面墙/一块地）降到 **0.4 倍以下**；零散改动（每条各一个区块）约 **0.67 倍**——比预想的低，因为"每块一个头"在小样本里占比高，测试里两种形态都钉了
+  - 未做：二进制/base64 版本（再小约 1.2 倍，但要两端逐字节对齐、日志不可读），收益不抵风险
+  - 验证：`npx vitest run tests/edit-pack.test.ts` **9/9**（含"服务端编码 → 客户端解码"交叉、坏数据整体拒收）；`npm run test:net` **213/0**；`npm run test:ui` **1179/0**（+2 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 批次：20261026-0345
+
 ## 批次 20261026-0815 · 2026-10-26 · 会话 d4a25f60
 
 > 用户 2026-10-26：偶尔能看到「穿透方块、里面的透明空间 / 人卡在地皮下面的空间」，
@@ -218,55 +254,4 @@
   - 为什么：PC 的"中心点"是既有行为（没有手指落点这回事），但代码里它表现为"`touch === null` 时落到 else 分支"，属于**隐式**保证；一旦有人给 PC 接上 `touchTapPoint`，取物就会变成跟着鼠标位置走。断言把这条隐式契约写死
   - 验证：`npm run test:ui` **1145/0**（+3 条）；`npx tsc --noEmit` 干净
   - 批次：20261026-0030
-
-## 批次 20261026-0000 · 2026-10-25 · 会话 0a9f5045
-
-> 用户实测进房间的六条反馈：① 加入后卡在生成页、刷新才进得去；② 天数/时间对不齐；③ 地址框被填成 `ws://` 长串；
-> ④ 开房也要能填服务器地址 + 房名必填 + 重名拒绝；⑤ 提示「clientId 已在线」却能进世界、看不到别人；
-> ⑥ 退出/刷新仍算在线、重连后名字还是旧的、所有人都标「房主」、名字牌被压扁。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261026-0000
-
-目标（用户 2026-10-25 实测进房间，六条反馈）：① 加入后卡在生成页、刷新才进得去；② 天数/时间对不齐；
-③ 加入面板的地址框被填成 `ws://…` 长串（应该只填 IP）；④ 开房时也要能填服务器地址、房名必填、重名要拒；
-⑤ 提示「clientId 已在线」却能进世界、且看不到别人；⑥ 退出/刷新后仍算在线、重连后名字还是旧的、
-所有人名字牌都标「房主」、名字牌被压扁。
-
-- [x] [联机60] 加入时被**致命拒绝**不再进入世界、也不再卡在生成页（用户 ①⑤）：`src/main.ts` 的 `onStatus(false)` 按 `net.sessionState`/致命码分流，未 playable 就退回主菜单并给出理由 → 验收：`tools/net-test.mjs` 新增「重复 clientId 被拒后不会进入世界」+ 本地双浏览器复现脚本（第二个人加入必须停在一句明确提示）
-  - 做了什么：`NetClient` 加 `get closeIsFatal()`；`main.ts` 的 `onStatus(false)` 里，致命断开 → `abortJoin()`——只对 `mpjoin-` 加入来的临时世界生效，`hideLoading()` + `returnToMenu(false)`（不落盘）+ 回菜单后 `multiplayerScreen.open('join')` 把原因摆在面板上；`refreshLoadingState()` 加 30s 看门狗（`JOIN_LOAD_TIMEOUT_MS`，超时打一行 `[JOIN_DBG]` 关键量再走同一条中止）；`onStatus(false)` 开头加 `if (this.disposed) return`（拆到一半不再重载世界）；新增文案 `mp.joinTimeout` 六语言
-  - 为什么：加入来的世界是房主种子的临时副本，**连不上就没意义**——让玩家"进得去但看不到人"比停在明确提示更糟；而"卡在生成页"是同一件事的另一半：`leaveMultiplayerSave()` 会重载世界，遮罩只等 `spawnResolved`，永远等不到就卡死。用 `worldConfig.id.startsWith('mpjoin-')` 当判据比另加一个"这次是加入"的字段可靠（存档 id 就是事实）
-  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` 1122/0（新增 6 条：致命标记存在、主程序接上、只对 mpjoin 生效、不落盘、回菜单开面板、超时兜底）；`npm run audit:i18n` 通过；`npm run check:fast` 161/161 全绿
-  - 未验：双浏览器真机复现（要真实走一遍"世界卡片开房 → 第二个标签页加入"，留给用户实测；若仍卡，`[JOIN_DBG]` 那行日志会打出 spawnResolved / mesh / pending / net 状态）
-  - 批次：20261026-0000
-- [x] [联机61] 天数与时间点一起对齐（用户 ②）：服务端维护权威 `day`，`welcome` 与 `time` 广播都带上，客户端直接采用（不再各算各的）→ 验收：`tests/net-time.test.ts` 新增天数断言；`npm run test:net` 通过
-  - 做了什么：`NetTime` 加纯函数 `dayAt(now, startMs, dayLength, startTime, startDay)`；服务端 `startDay` + `currentDay()`，`welcome` / `time` / 存档快照都带 `day`，睡满跳黎明时 `startDay+1`、房主改时间前先结算当天；房主 `join` 带 `day`（`NetClient.localDay`），服务端**只在某房间第一次开房**时采纳；客户端 `onTime` 收下 `day` → `netDay`，每帧 `applyAuthoritativeDay()` 归位天数与月相（不触发村民补货）；断开时清 `netDay`
-  - 为什么：天数原来只在各端本地累加（跨午夜 +1 / 睡满 +1），晚加入的人从第 0 天开始——月相、`hud.moonDay`、村民补货必然错开；时间已经是服务端权威，天数跟它共用同一套起点参数最省事。房主的天数要带进房间，但重连时客户端那份可能落后，所以只认第一次开房（`doing/0a9f50-decision.md` D1~D3）
-  - 验证：`npx vitest run tests/net-time.test.ts` 16/16（新增 4 组 `dayAt`：起点、跨午夜才 +1、起点时间参与判据、脏参数）；`npm run test:net` **199/0**（+4：welcome 带天数、时间广播带天数、房主 day=42 起算、后加入的人拿到同一天）；`npm run test:ui` 1127/0（+5 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
-  - 批次：20261026-0000
-- [x] [联机62] 加入面板的地址框只显示 IP（用户 ③）：`ServerUrl` 加 `displayServerAddress()`（去 `ws://`、默认端口不显示），三处回填（打开面板、最近连接、拆解粘贴地址）都用它 → 验收：`tests/net-server-url.test.ts` 往返断言；浏览器里打开面板默认值形如 `192.168.1.5`
-  - 做了什么：`ServerUrl` 加 `displayServerAddress()`（`ws://host:25187` → `host`；显式非默认端口保留；`wss://` 连协议头一起保留——裸域名会被地址栏补成 `ws://`，等于把 https 部署悄悄改成明文）；`MultiplayerScreen` 四处回填（构造时读存储、`show(intent)`、`splitAddress()`、最近连接 chip）全部走它，存储与连接仍用完整 URL
-  - 为什么：占位文案写着"只填 IP，端口已固定"，回填却塞 `ws://…:25187`，两处口径打架；地址栏该回答的是"那台机器在哪"，协议头与固定端口是实现细节
-  - 验证：`npx vitest run tests/net-server-url.test.ts` 25/25（新增 4 组：默认端口不显示、显式端口保留、`wss` 保留协议头、`normalizeServerUrl(displayServerAddress(u)) === u` 往返）；`npm run test:ui` 断言三处回填都过 `displayServerAddress`
-  - 批次：20261026-0000
-- [x] [联机63] 开房也要填服务器地址、房名必填、重名拒绝（用户 ④）：`WorldScreen` 的开房对话框加地址（默认回填当前 IP）+ 房名必填；`main.ts` 用填的地址而非 `defaultServerUrl()`；服务端房间已被占用时拒绝并提示 → 验收：`npm run test:net`（重名开房被拒）+ 浏览器手点一次
-  - 做了什么：开房对话框加「服务器地址」一行（默认 `defaultHostAddress()` 回填当前地址，口径与加入面板一致：只 IP）；房名空 → 「给房间起个名字」、地址归一化失败 → 「填一下服务器地址」，两句复用同一条 hint 只换颜色（`.world-edit-hint.error`）；`onHostWorld(world, room, password, baseUrl)`，`pendingHostRoom` 带上 `baseUrl`，`startWorld` 里改用 `intent.baseUrl`（不再写死 `defaultServerUrl()`）；`normalizeServerUrl` 从 `ui/MultiplayerScreen` 搬进 `core/net/ServerUrl.ts`（开房与加入共用，UI 之间不必互相 import）；`host-taken` 走 i18n（`say.net.hostTaken`）；新增 4 条文案六语言
-  - 为什么：开房地址以前写死且不可见，服务器在另一台机器时必然连错；房名留空会静默退回默认房间，两拨人各自开房就撞在同一个默认房名上、第二个人只看到服务端的 `host-taken` 中文。重名拒绝本身服务端已有（`tools/net-test.mjs:1303`），这里补的是"玩家能看懂 + 能改"
-  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` **1134/0**（+7 条：地址输入框、房名必填、地址必填、回调带地址、主程序用 `intent.baseUrl`、host-taken 走 i18n、错误样式；另修了三条因归一化搬家而失效的旧断言）；`npm run test:net` 199/0（含既有「第二个房主被拒 host-taken」）；`npm run test:screenshot` 14/0；`npm run audit:i18n` 通过；`npm run check:fast` 161/161 全绿
-  - 未验：浏览器手点开房对话框（看不到世界卡片需要先建世界；版式与「编辑世界」同一套 row，风险低）
-  - 批次：20261026-0000
-- [x] [联机64] 退出/刷新立刻离线（用户 ⑥前半）：页面卸载时发 `bye`，服务端收到即广播 `leave` 并清掉落物，不再留 30s 影子 → 验收：`npm run test:net` 新增「bye 之后同房立刻收到 leave」
-  - 做了什么：`NetClient.sendBye()` + `pagehide`（capture）钩子，`disconnect()` 也先发 bye；服务端新增 `case 'bye'`——收到立刻 `broadcast({t:'leave'})`、标记 `player.farewell`、然后 `socket.close()` 走既有清理路径（玩家表 / 房主提示 / 宽限期登记），宽限期到点检查 `farewell` 不再重复广播
-  - 为什么：光靠 close 分不清"主动退出/刷新"和"网断了"，一律等 30 秒宽限期才广播 leave，队友名单里就挂着幽灵。**掉落物故意不清**：刷新回来还是同一个 id（宽限期还在），清掉等于"刷新一次把自己的东西弄丢"——宽限期到点若真没回来，既有逻辑会清（见 D6）
-  - 验证：`npm run test:net` **203/0**（+4：bye 后同房立刻收到 leave、「没等 400ms 宽限期」`elapsed<300ms`、宽限期到点不重复广播）；`npm run test:ui` 1138/0（+4 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿（net 25.9s + ui）
-  - 批次：20261026-0000
-- [x] [联机65] 重连改名同步 + 房主标识唯一 + 名字牌不再压扁（用户 ⑥后半）：服务端 `player` 广播带 `isHost`、客户端 `hostId` 跟着更新；`MobNameTag` 的 sprite 宽度改为**按实际绘制尺寸**算（不再用估算宽度，长名字不再被横向拉扁）→ 验收：`npm run test:nametag` + `npm run test:net` + 截图对比
-  - 做了什么：服务端 `player` 广播（join 与 move 两条）都带 `isHost: hosts.get(room)?.id === player.id`；`NetPlayerState` 加 `isHost?: boolean`，`NetClient` 在 `player` 事件里跟随（`true` 就记、**只有明确 `false` 且正好是当前那位**才清）、`leave` 与 `room-closed` 时清空、welcome 里 `hostId` 缺失时从玩家表 `isHost` 兜一次；名字牌宽度改成按**实际画出来的背景条像素**换算——`NameTag` 新增 `NAME_TAG_CANVAS_*` 与纯函数 `nameTagWorldWidth(boxPx)`，`MobNameTag.drawName` 记下 `drawnBoxPx`，`show()` 用 `nameTagWorldWidth(this.drawnBoxPx)` 定 scale（不再用按字数估算的 `nameTagWidthFor`）
-  - 为什么：`hostId` 只在 welcome 里下发一次，房主离开/换人之后永远停在旧值——名字牌"该标的没标、不该标的还标着"；而宽度估算（按字数）与字号缩放（按 `measureText` 实测）是两套算法，长名字时字被缩到 12px 而 Sprite 仍横向撑开 → 字被压扁（越长越扁）。现在只保留一个"像素 → 世界"比例，横竖同倍。改名重连那条本来就广播新名字（`player` 带 name），补了断言钉住
-  - 验证：`npm run test:nametag` **153/0**（+4：方形条→方形牌、线性、宽/像素与高/画布高同比例、兜底正宽度；另修 1 条过时断言）；`npm run test:net` **207/0**（+4：房主那条 player 带 isHost=true、从属那条 false、改名重连复用 id、改名后同房收到新名字）；`npm run test:ui` 1141/0（+3 结构断言）；`npm run test:screenshot` 14/0；`npx tsc --noEmit` 干净；`npm run check:fast` 5/5 全绿
-  - 未验：真机肉眼看名字牌比例（无浏览器截图手段直接拍到名字牌，靠"横竖同倍"的比例断言兜住）
-  - 批次：20261026-0000
 
