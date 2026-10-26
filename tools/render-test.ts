@@ -841,23 +841,28 @@ console.log('\n[生物头顶生命条（批次 280）]');
       bar.object.position.y > 64 + 1.4 &&
       bar.object.position.y < 64 + 1.4 + 1,
   );
+  /*
+   * 条变细了（用户 2026-10-26："小一点细一点"）：
+   *  · 世界宽度 1.1~2.4 → **0.7~1.4**（0.9 宽的僵尸算出来是 1.44，现在被封到 1.4）；
+   *  · 画布从 256×40 收到 **256×16**、条本身 12px——画布贴紧条，同样的世界高度能画出更细的一条。
+   */
   check(
-    '宽 0.9 的生物 → 条宽 1.44、高按 40/256 的比例',
-    Math.abs(bar.object.scale.x - 1.44) < 1e-9 &&
-      Math.abs(bar.object.scale.y - 1.44 * (40 / 256)) < 1e-9,
+    '宽 0.9 的生物 → 条宽封顶 1.4、高按 16/256 的比例',
+    Math.abs(bar.object.scale.x - 1.4) < 1e-9 &&
+      Math.abs(bar.object.scale.y - 1.4 * (16 / 256)) < 1e-9,
   );
   const image = (bar.object.material as THREE.SpriteMaterial).map?.image as
     | { width?: number; height?: number }
     | undefined;
-  check('画布固定 256×40（不再按敌对/被动改高度）', image?.width === 256 && image?.height === 40);
+  check('画布固定 256×16（细条；不再按敌对/被动改高度）', image?.width === 256 && image?.height === 16);
 
   // 体型差异只影响世界尺寸，不改变画布分辨率
   const tiny = { ...zombie, width: 0.2 } as unknown as Mob;
   bar.show(tiny);
-  check('小体型按最小宽度 1.1 显示', Math.abs(bar.object.scale.x - 1.1) < 1e-9);
+  check('小体型按最小宽度 0.7 显示', Math.abs(bar.object.scale.x - 0.7) < 1e-9);
   const huge = { ...zombie, width: 16 } as unknown as Mob;
   bar.show(huge);
-  check('大体型封顶 2.4（不会挡住半个屏幕）', Math.abs(bar.object.scale.x - 2.4) < 1e-9);
+  check('大体型封顶 1.4（不会挡住半个屏幕）', Math.abs(bar.object.scale.x - 1.4) < 1e-9);
 
   // 掉血只重画画布，不改变 Sprite 尺寸
   const scaleBefore = bar.object.scale.x;

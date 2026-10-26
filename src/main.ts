@@ -100,7 +100,7 @@ import { cameraClearance, nearPlaneFor, pushCameraOutOfWalls } from './render/ca
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy, mobLabel } from './core/entity/Mob.ts';
-import { REMOTE_NAME_TAG_RANGE, canNameMob, remoteNameTagOpacity, sanitizeName } from './core/entity/NameTag.ts';
+import { REMOTE_NAME_TAG_RANGE, canNameMob, sanitizeName } from './core/entity/NameTag.ts';
 import { nameTagStyleFor } from './core/entity/NameTagColor.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { PASSIVE_MOBS, mobTypeById } from './core/entity/mobs.ts';
@@ -2458,6 +2458,18 @@ class App {
    * DOM 层在 `#hud` 之下，只写 opacity。
    */
   private readonly damageFlash = new DamageFlash(document.getElementById('damage-flash'));
+  /**
+   * 准星锁定队友时的生命 / 饥饿（用户 2026-10-26）：一红一黄两条细条。
+   *
+   * 只在"我在生存模式 + 准星指着一个远端玩家 + 他报过血量"时出现；
+   * 元素与样式写在 `index.html`（放在准星下方，靠 attack-cooldown 再往下一点）。
+   */
+  private readonly targetVitals = {
+    box: document.getElementById('target-vitals'),
+    name: document.getElementById('target-vitals-name'),
+    hp: document.getElementById('target-vitals-hp'),
+    food: document.getElementById('target-vitals-food'),
+  };
   /** 死亡声是否已经播过（`emitPlayerNotices` 每帧都跑，不能每帧播） */
   private deathSounded = false;
   /** 挖掘摩擦声的节拍（秒）：挖硬方块时每 0.2 秒响一次 */
@@ -4159,6 +4171,16 @@ class App {
       swing: this.hand.swingProgress > 0,
       ride: this.ridingVehicle !== null,
       sleep: this.sleeping !== null,
+      fire: this.stats.burning,
+      /*
+       * 死亡 / 生命 / 饥饿（用户 2026-10-26）：
+       *  · `dead`：死亡与复活各立刻反映出去，对端据此隐藏模型（以前尸体一直站着，
+       *    直到复活后位置变了才消失）；
+       *  · `hp` / `food`：瞄准队友时画一红一黄两条细条（0~20 点，与原版同口径）。
+       */
+      dead: this.stats.dead,
+      hp: Math.ceil(this.stats.health),
+      food: this.stats.food,
       // 外观（皮肤）：玩家在设置里捏的那套，按**下标**发出去（顺序见
       // `RemoteAppearance.REMOTE_LOOK_LENGTH`），队友用同一份下标还原
       look: [
@@ -4230,10 +4252,15 @@ class App {
         mob.z = smoothed.z;
         mob.yaw = smoothed.yaw;
       }
-      // 别的维度不画：坐标是"他所在维度"的，画出来就是主世界同坐标的分身（联机3）
+      /*
+       * 别的维度不画（联机3）：坐标是"他所在维度"的，画出来就是主世界同坐标的分身。
+       * 死了也不画（用户 2026-10-26）：死亡会上行 `dead`，对端当场把模型收掉——
+       * 以前没有任何上行，尸体只能等着他复活、位置变了才消失。
+       */
       const visible = this.remotePresence.visible(id, this.dimension);
-      renderer.object.visible = visible;
-      if (!visible) continue;
+      const dead = this.remoteAppearance.get(id)?.state.dead === true;
+      renderer.object.visible = visible && !dead;
+      if (!visible || dead) continue;
 
       const pose = this.remotePoses.get(id);
       if (!pose) continue;
@@ -4360,6 +4387,7 @@ class App {
       appearance = new RemoteAppearance();
       this.remoteAppearance.set(player.id, appearance);
     }
+    const wasDead = appearance.state.dead;
     appearance.update({
       held: player.held,
       offhand: player.offhand,
@@ -4367,12 +4395,23 @@ class App {
       sneak: player.sneak,
       swing: player.swing,
       hurt: player.hurt,
+      dead: player.dead,
+      hp: player.hp,
+      food: player.food,
       fire: player.fire,
       ride: player.ride,
       sleep: player.sleep,
       // 外观（皮肤）：队友自己捏的那套下标；不带就回退昵称派生
       look: player.look,
     });
+    /*
+     * 队友刚死（用户 2026-10-26）：模型当场收掉（`updateRemotePlayers` 读 `dead`），
+     * 消息栏里补一句——否则屏幕上就是"人凭空消失"，没有任何解释。
+     * 只在**边沿**提示一次：`dead` 会随每条 `move` 重复到达。
+     */
+    if (!wasDead && appearance.state.dead) {
+      this.chat.push(tp('say.net.playerDied', { name: player.name }), 'system');
+    }
     const next = { x: player.x, y: player.y, z: player.z, yaw: player.yaw };
     let mob = this.remotePlayers.get(player.id);
     if (!mob) {
@@ -6899,6 +6938,8 @@ class App {
       if (!mob.customName) continue;
       // 别的维度的队友不画（他在下界时主世界同坐标会有一个分身，联机3 已经处理过玩家模型）
       if (!this.remotePresence.visible(id, this.dimension)) continue;
+      // 死了的队友不挂名字牌（模型已经收了，留着牌子会像"人没了但标签还在"）
+      if (this.remoteAppearance.get(id)?.state.dead === true) continue;
       const distance = Math.hypot(mob.x - px, mob.y - py, mob.z - pz);
       if (distance > REMOTE_NAME_TAG_RANGE) continue;
       candidates.push({ mob, distance, host: id === this.net.hostId });
@@ -6931,10 +6972,12 @@ class App {
         entry.host === true
           ? { color: '#ffd24a', prefix: `${t('say.net.hostTag')} · `, suffix: '' }
           : teamStyle;
-      // 距离衰减只给队友（联机18）：生物名字牌是命名牌起的，原版不渐隐
-      const opacity =
-        entry.mob.type.id === REMOTE_PLAYER_TYPE.id ? remoteNameTagOpacity(entry.distance) : 1;
-      tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, opacity);
+      /*
+       * 不再按距离变淡（用户 2026-10-26）：视距内一律全亮，否则远处的队友名字
+       * 会因为"半透明 + 时有时无"看起来像闪烁。`REMOTE_NAME_TAG_RANGE` 已经是视距尽头，
+       * 超出就根本不进候选。
+       */
+      tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, 1);
     }
   }
 
@@ -10374,6 +10417,62 @@ class App {
     if (!this.remoteWorldWritable()) return;
     this.signText.set(sign.dimension, sign.x, sign.y, sign.z, sign.lines);
     if (sign.dimension === this.dimension) this.syncSigns();
+  }
+
+  /**
+   * 准星指向的远端玩家（用户 2026-10-26）。
+   *
+   * 与 `tryAttackRemotePlayer` 的 3 格/25° 不同：这里是"**看着**谁"而不是"够不够得着"，
+   * 所以给到 12 格、锥角收到 8°——太宽会在人多时锁到旁边的人。
+   * 死了的不算（模型已经收掉了）。
+   */
+  private aimRemotePlayer(): { id: number; mob: Mob } | null {
+    if (this.net.sessionState !== 'connected') return null;
+    const dir = this.camera.getWorldDirection(new THREE.Vector3());
+    const eyeY = this.physics.y + 1.62;
+    const maxCos = Math.cos((8 * Math.PI) / 180);
+    let best: { id: number; mob: Mob; distance: number } | null = null;
+    for (const [id, mob] of this.remotePlayers) {
+      if (!this.remotePresence.visible(id, this.dimension)) continue;
+      if (this.remoteAppearance.get(id)?.state.dead === true) continue;
+      const dx = mob.x - this.physics.x;
+      const dy = mob.y + mob.height / 2 - eyeY;
+      const dz = mob.z - this.physics.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance < 0.3 || distance > 12) continue;
+      // 视线夹角：归一化点积，比 atan2 省
+      if ((dx * dir.x + dy * dir.y + dz * dir.z) / distance < maxCos) continue;
+      if (!best || distance < best.distance) best = { id, mob, distance };
+    }
+    return best ? { id: best.id, mob: best.mob } : null;
+  }
+
+  /**
+   * 画/收那两条细条（用户 2026-10-26）。
+   *
+   * 口径：**我自己在生存模式**才显示（创造/旁观不显示）；对方还没报过血量的
+   * （老客户端）也不画——画一条恒定的满条比不画更误导。
+   */
+  private updateTargetVitals(): void {
+    const box = this.targetVitals.box;
+    if (!box) return;
+    const target =
+      this.gameMode === 'survival' && !this.uiOpen && !this.stats.dead ? this.aimRemotePlayer() : null;
+    const state = target ? this.remoteAppearance.get(target.id)?.state : null;
+    if (!target || !state || (state.hp === null && state.food === null)) {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    if (this.targetVitals.name) this.targetVitals.name.textContent = target.mob.customName ?? '';
+    if (this.targetVitals.hp) {
+      const ratio = state.hp === null ? 0 : Math.max(0, Math.min(1, state.hp / 20));
+      this.targetVitals.hp.style.width = `${(ratio * 100).toFixed(1)}%`;
+    }
+    if (this.targetVitals.food) {
+      const ratio = state.food === null ? 0 : Math.max(0, Math.min(1, state.food / 20));
+      this.targetVitals.food.style.width = `${(ratio * 100).toFixed(1)}%`;
+    }
   }
 
   /**
@@ -18547,6 +18646,8 @@ class App {
       // 名字牌与准星**无关**：有名字的生物走过去就该看得见（原版如此），
       // 所以放在 `updateInteraction` 之外——那个函数在开界面时会提前 return
       this.updateNameTags();
+      // 准星锁定队友时的生命/饥饿（用户 2026-10-26）
+      this.updateTargetVitals();
       mark = this.lap('sim', mark);
 
       // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）

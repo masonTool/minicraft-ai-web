@@ -81,6 +81,12 @@ export interface NetPlayerState {
    * 老客户端不带 → 渲染层回退到昵称派生。
    */
   look?: number[];
+  /** 这位对手死了没（用户 2026-10-26）：对端据此隐藏模型 + 播一句提示 */
+  dead?: boolean;
+  /** 生命 0~20（用户 2026-10-26）：瞄准队友时画红条 */
+  hp?: number;
+  /** 饥饿 0~20：瞄准队友时画黄条 */
+  food?: number;
 }
 
 /**
@@ -322,13 +328,6 @@ export interface NetHandlers {
 /** 应用层 ping 的间隔（联机29）：浏览器不允许我们发协议层 ping 帧，只能自己定一条 */
 const PING_INTERVAL_MS = 2000;
 const MOVE_SEND_INTERVAL_MS = 100;
-/**
- * 皮肤下标的重发间隔（用户 2026-10-26）。
- *
- * `move` 每 100ms 一条，但皮肤只在变化时附带；纯"变化才发"会让"先改形象、后有人进房"
- * 的新人看不到——他们没有历史报文。2 秒一条足够便宜（10 个数字 ≈ 30 字节）。
- */
-const LOOK_RESEND_MS = 2000;
 /** 断线重连的等待时间（毫秒） */
 const RECONNECT_DELAY_MS = 3000;
 /** 一条 `blocks` 条目：`[x, y, z, id, state, dimension]`（与协议逐项对齐） */
@@ -431,10 +430,6 @@ export class NetClient {
   roomGameMode: NetGameMode | null = null;
   /** 页面卸载的 `bye` 监听只挂一次 */
   private unloadHooked = false;
-  /** 上一次发出去的皮肤下标（变化才发，省带宽） */
-  private lastSentLookKey = '';
-  /** 上一次发皮肤的时间（2 秒兜底，保证后来进房的人也能拿到） */
-  private lastLookSentAt = 0;
   /**
    * 我所在的队伍名（联机22）：空串 = 没队伍。
    *
@@ -1013,23 +1008,20 @@ export class NetClient {
     if (now - this.lastMoveSent < MOVE_SEND_INTERVAL_MS) return;
     this.lastMoveSent = now;
     /*
-     * 皮肤（用户 2026-10-26："看到的人物形式都不对" + "改了形象两边看不到变化"）。
+     * 外观**每一条都发全量**（用户 2026-10-26 修的闪烁 bug）。
      *
-     * 这里以前**漏了 `look`**：服务端白名单里有它、远端渲染也早就支持（`remotePaletteFromLook`），
-     * 但报文里从没带过——于是远端永远拿"按昵称派生"的那套随机外观，改形象也不会同步。
-     * 只在变化时发（10 个数字约 30 字节），另加 2 秒兜底：先改形象、后有人进房也能拿到。
+     * 以前这里是"空手/没盔甲/没潜行就不带这个键"：对端收到的每一条 `move` 都只有
+     * 一部分字段，配合服务端当年的"整份覆盖"就直接把其余字段清成了默认值。
+     * 皮肤的 2 秒兜底更把周期性写死了——表现就是"每隔几秒闪一次、闪回昵称派生的样子"。
+     *
+     * 代价：一条 `move` 从 ~90 字节涨到 ~220 字节，100ms 一条 ≈ 1.3KB/s，
+     * 换"两边永远看到同一个形象"，值。
      */
     const look = appearance.look;
-    const lookKey = look && look.length > 0 ? look.join(',') : '';
-    const lookDue = lookKey.length > 0 && (lookKey !== this.lastSentLookKey || now - this.lastLookSentAt >= LOOK_RESEND_MS);
-    if (lookDue) {
-      this.lastSentLookKey = lookKey;
-      this.lastLookSentAt = now;
-    }
     this.sendRaw(
       JSON.stringify({
         t: 'move',
-        ...(lookDue ? { look } : {}),
+        ...(look && look.length === 10 ? { look } : {}),
         x: Number(x.toFixed(3)),
         y: Number(y.toFixed(3)),
         z: Number(z.toFixed(3)),
@@ -1039,16 +1031,24 @@ export class NetClient {
         dimension,
         // 队伍（联机22）：没队伍就不带，省字节
         ...(this.myTeam ? { team: this.myTeam } : {}),
-        // 外观（联机17）：字段短、都可缺省；空手/没盔甲就不带，省字节
-        ...(appearance.held ? { held: appearance.held } : {}),
-        ...(appearance.offhand ? { offhand: appearance.offhand } : {}),
-        ...(appearance.armor && appearance.armor.some((id) => id > 0) ? { armor: appearance.armor } : {}),
-        ...(appearance.sneak ? { sneak: 1 } : {}),
-        ...(appearance.swing ? { swing: 1 } : {}),
-        ...(appearance.hurt ? { hurt: 1 } : {}),
-        ...(appearance.fire ? { fire: 1 } : {}),
-        ...(appearance.ride ? { ride: 1 } : {}),
-        ...(appearance.sleep ? { sleep: 1 } : {}),
+        /*
+         * 外观（联机17）：**全部字段每条都带**，包括 0 / false。
+         * 只有"带了才能表达 0"，否则"把手里的东西收起来""松手停止潜行"
+         * 永远同步不过去（以前是靠下一条消息的整份覆盖碰巧实现的）。
+         */
+        held: appearance.held ?? 0,
+        offhand: appearance.offhand ?? 0,
+        armor: appearance.armor ?? [0, 0, 0, 0],
+        sneak: appearance.sneak ? 1 : 0,
+        swing: appearance.swing ? 1 : 0,
+        hurt: appearance.hurt ? 1 : 0,
+        fire: appearance.fire ? 1 : 0,
+        ride: appearance.ride ? 1 : 0,
+        sleep: appearance.sleep ? 1 : 0,
+        dead: appearance.dead ? 1 : 0,
+        // 生命 / 饥饿（用户 2026-10-26）：瞄准队友时画两条细条
+        hp: Math.round(appearance.hp ?? 20),
+        food: Math.round(appearance.food ?? 20),
       }),
     );
   }

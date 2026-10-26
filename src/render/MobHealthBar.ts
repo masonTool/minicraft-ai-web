@@ -17,14 +17,20 @@
 import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
 
-/** 画布尺寸（固定）：40px 高、中间 24px 是条，读起来刚好 */
+/**
+ * 画布尺寸（固定）：**16px 高、其中 12px 是条**（用户 2026-10-26："小一点细一点"）。
+ *
+ * 原来是 256×40、条高 24：可见条只占画布 60%，世界高度被 canvas 比例稀释成
+ * `宽度 × 0.156 × 0.6`，所以既粗又占地。现在画布贴紧条（12/16 = 75%），
+ * 同样的世界高度能画出更细的一条。
+ */
 const CANVAS_W = 256;
-const CANVAS_H = 40;
+const CANVAS_H = 16;
 /** 条的世界宽度（格）：按生物宽度放大，但夹住，别挡住身体/半个屏幕 */
-const BAR_MIN_WIDTH = 1.1;
-const BAR_MAX_WIDTH = 2.4;
-/** 条离头顶的高度（格） */
-const BAR_LIFT = 0.12;
+const BAR_MIN_WIDTH = 0.7;
+const BAR_MAX_WIDTH = 1.4;
+/** 条离头顶的高度（格）：细了之后也要贴得更近，否则看着像飘着 */
+const BAR_LIFT = 0.06;
 
 const COLORS = {
   track: 'rgba(10, 12, 14, 0.78)',
@@ -113,27 +119,27 @@ export class MobHealthBar {
     const ctx = this.context;
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    const x = 2;
-    const y = 8;
-    const width = CANVAS_W - 4;
-    const height = 24;
+    const x = 1;
+    const y = 2;
+    const width = CANVAS_W - 2;
+    const height = 12;
     const radius = height / 2;
 
     // 底槽 + 描边：不用面板，只靠一圈深色/浅色边把条从草地/雪地里分出来
     roundRect(ctx, x, y, width, height, radius);
     ctx.fillStyle = COLORS.track;
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
     ctx.strokeStyle = COLORS.outline;
     ctx.stroke();
 
     const clamped = Math.max(0, Math.min(1, ratio));
     if (clamped > 0) {
-      // 留 3px 内边距，条不会贴到描边上
-      const innerX = x + 3;
-      const innerY = y + 3;
-      const innerW = width - 6;
-      const innerH = height - 6;
+      // 留 2px 内边距，条不会贴到描边上
+      const innerX = x + 2;
+      const innerY = y + 2;
+      const innerW = width - 4;
+      const innerH = height - 4;
       // 血量很低时颜色更暗：不给数字，也能靠颜色看出"快死了"
       const fill = clamped <= 0.25 ? COLORS.fillLow : COLORS.fill;
       roundRect(ctx, innerX, innerY, Math.max(innerH, innerW * clamped), innerH, innerH / 2);

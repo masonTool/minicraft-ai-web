@@ -321,6 +321,28 @@
         background: rgba(0, 0, 0, .45); border-radius: 2px;
         overflow: hidden; pointer-events: none; z-index: 7;
       }
+      /* 准星锁定队友时的生命 / 饥饿（用户 2026-10-26）：一红一黄两条细条。
+         只有"我在生存模式 + 准星指着一个远端玩家 + 他报过血量"时出现。 */
+      #target-vitals {
+        position: absolute; left: 50%; top: calc(50% + 26px);
+        width: 96px; margin-left: -48px;
+        display: flex; flex-direction: column; gap: 2px;
+        pointer-events: none; z-index: 7; text-align: center;
+      }
+      #target-vitals.hidden { display: none; }
+      #target-vitals-name {
+        font-size: 11px; line-height: 13px; color: #fff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #target-vitals i {
+        display: block; height: 3px; border-radius: 2px; overflow: hidden;
+        background: rgba(12, 14, 16, .72);
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+      }
+      #target-vitals s { display: block; height: 100%; width: 100%; text-decoration: none; }
+      #target-vitals-hp { background: #d94b4b; }
+      #target-vitals-food { background: #d8a33a; }
       #attack-cooldown.hidden { display: none; }
       #attack-cooldown > i {
         display: block; height: 100%; width: 0;
@@ -5785,6 +5807,11 @@
         <div id="effects-hud"></div>
       </div>
       <div id="crosshair"></div>
+      <div id="target-vitals" class="hidden">
+        <span id="target-vitals-name"></span>
+        <i><s id="target-vitals-hp"></s></i>
+        <i><s id="target-vitals-food"></s></i>
+      </div>
       <div id="break-progress"><i></i></div>
       <div id="eat-progress"><i></i></div>
       <div id="boss-bar"><b></b><i><s id="boss-fill"></s></i></div>

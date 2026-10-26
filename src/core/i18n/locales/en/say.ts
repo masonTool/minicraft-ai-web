@@ -83,6 +83,7 @@ export const say = {
   'say.net.duplicateName': 'Someone in this room already uses that name — please pick another one',
   'say.net.hostTaken': 'That room name already has a host — pick another one',
   'say.net.hostOffline': 'The host is not in the room right now — try again when they are back',
+  'say.net.playerDied': '{name} died',
   'say.net.roomTime': 'The host set the time to {time}',
   'say.net.roomGameMode': 'The host set the game mode to {mode}',
   'say.net.hostTag': 'Host',

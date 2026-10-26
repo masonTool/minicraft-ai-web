@@ -864,8 +864,8 @@ try {
     });
     const clean = await alice.wait('player', 2000);
     check(
-      '外观只转发白名单字段（未知字段与非正 id 被丢掉）',
-      clean !== null && clean.evil === undefined && clean.held === undefined,
+      '外观只转发白名单字段（未知字段丢掉、非正 id 规整成 0）',
+      clean !== null && clean.evil === undefined && clean.held === 0,
       JSON.stringify(clean),
     );
   }
@@ -1961,6 +1961,69 @@ try {
     hostC.close();
   }
 
+  // ---------------------------------------------------------------- 外观不闪烁 / 生死 / 血量（用户 2026-10-26）
+  /*
+   * 闪烁的根因在协议层：服务端以前**整份覆盖** `player.appearance`，而客户端只在变化/
+   * 每 2 秒才带 `look` —— 其余消息把皮肤清空，对端退回昵称派生，2 秒后再纠正回来。
+   * 现在服务端**合并**，所以"不带某个字段"不该清空任何东西。
+   */
+  console.log('\n[外观合并 / 生死 / 血量]');
+  {
+    const ROOM = 'appearroom';
+    const WORLD = { name: '外观房', seed: 31337, mode: 'survival', difficulty: 'normal' };
+    const hostA = new TestClient('AppearHost', undefined, { room: ROOM, host: true, world: WORLD });
+    await joinAndWaitWelcome(hostA, '外观房主', 0, 70, 0);
+    const watcher = new TestClient('AppearWatcher', undefined, { room: ROOM });
+    await joinAndWaitWelcome(watcher, '外观队友', 0, 70, 0);
+    watcher.mailbox.length = 0;
+
+    const LOOK = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+    hostA.send({
+      t: 'move',
+      x: 1,
+      y: 70,
+      z: 1,
+      yaw: 0,
+      pitch: 0,
+      dimension: 'overworld',
+      look: LOOK,
+      held: 5,
+      hp: 17,
+      food: 13,
+      dead: 0,
+    });
+    const first = await watcher.wait('player', 2000);
+    check('player 广播带 look（皮肤下标）', Array.isArray(first?.look) && first.look[0] === 1 && first.look[9] === 0, JSON.stringify(first?.look));
+    check('player 广播带手持与血量/饥饿', first?.held === 5 && first?.hp === 17 && first?.food === 13, JSON.stringify({ held: first?.held, hp: first?.hp, food: first?.food }));
+
+    // ① 只带坐标的 move（不带 look/held）→ 服务端合并，不该把皮肤清空
+    await sleep(80);
+    hostA.send({ t: 'move', x: 2, y: 70, z: 1, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const second = await watcher.wait('player', 2000);
+    check('不带 look 的 move 不会把皮肤清空（服务端合并，闪烁的根因）', Array.isArray(second?.look) && second.look[0] === 1, JSON.stringify(second?.look));
+    check('不带 held 的 move 也不会把手持清空', second?.held === 5, JSON.stringify(second?.held));
+
+    // ② 死亡 / 复活：显式的 1/0 都要能覆盖（以前根本没有这个字段）
+    await sleep(80);
+    hostA.send({ t: 'move', x: 2, y: 70, z: 1, yaw: 0, pitch: 0, dimension: 'overworld', dead: 1, hp: 0 });
+    const died = await watcher.wait('player', 2000);
+    check('死亡上行到位（dead = true）', died?.dead === true, JSON.stringify(died?.dead));
+    check('死亡时血量 0 也要能表达', died?.hp === 0, JSON.stringify(died?.hp));
+
+    await sleep(80);
+    hostA.send({ t: 'move', x: 2, y: 70, z: 1, yaw: 0, pitch: 0, dimension: 'overworld', dead: 0, hp: 20 });
+    const revived = await watcher.wait('player', 2000);
+    check('复活也能覆盖（dead = false）', revived?.dead === false, JSON.stringify(revived?.dead));
+
+    // ③ 脏数据收口：hp 超范围夹到 20，负值夹到 0
+    await sleep(80);
+    hostA.send({ t: 'move', x: 2, y: 70, z: 1, yaw: 0, pitch: 0, dimension: 'overworld', hp: 999, food: -5 });
+    const clamped = await watcher.wait('player', 2000);
+    check('hp/food 被夹到 0~20', clamped?.hp === 20 && clamped?.food === 0, JSON.stringify({ hp: clamped?.hp, food: clamped?.food }));
+
+    for (const client of [hostA, watcher]) client.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {
@@ -2138,7 +2201,15 @@ try {
     lookHost.mailbox.length = 0;
     lookFollower.send({ t: 'move', x: 2, y: 70, z: 2, yaw: 0, pitch: 0, dimension: 'overworld', look: [1, 2, 3] });
     const short = await lookHost.wait('player', 1500);
-    check('长度不足的 look 不下发', short?.look === undefined, JSON.stringify(short?.look));
+    /*
+     * 形状收口：长度不是 10 的 `look` **不采纳**（用户 2026-10-26 改成合并语义后，
+     * "不采纳"的表现是"保持上一条的那个值"，而不是"把字段清空"——清空正是闪烁的根因）。
+     */
+    check(
+      '长度不足的 look 不被采纳（保持上一次的皮肤）',
+      JSON.stringify(short?.look) === JSON.stringify(look),
+      JSON.stringify(short?.look),
+    );
 
     lookHost.close();
     lookFollower.close();

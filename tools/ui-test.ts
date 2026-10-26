@@ -6247,8 +6247,23 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
   const mainSrc4 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const serverSrc4 = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
 
-  // ① `move` 必须带 look（以前漏了 → 远端只能按昵称派生，"形式都不对"且改形象不同步）
-  check('move 报文带皮肤下标（变化时发 + 2 秒兜底）', netSrc.includes('...(lookDue ? { look } : {})') && netSrc.includes('LOOK_RESEND_MS'));
+  /*
+   * ① `move` 必须**每次都带全量外观**（用户 2026-10-26：形象每隔几秒闪一次）。
+   *
+   * 以前是"变化才发 + 2 秒兜底"，而服务端当年整份覆盖 `player.appearance` →
+   * 不带 look 的那 99% 消息把皮肤清空、对端退回昵称派生，2 秒后再纠正回来，就是闪烁。
+   * 现在改成每条全量，`lookDue` / `LOOK_RESEND_MS` 那套一并删掉。
+   */
+  check(
+    'move 报文每次都带皮肤下标（不再靠 2 秒兜底）',
+    netSrc.includes('...(look && look.length === 10 ? { look } : {})') && !netSrc.includes('LOOK_RESEND_MS'),
+  );
+  check(
+    'move 报文每次都带完整外观与生死/血量（0 也要能表达）',
+    netSrc.includes('held: appearance.held ?? 0') &&
+      netSrc.includes("dead: appearance.dead ? 1 : 0") &&
+      netSrc.includes('hp: Math.round(appearance.hp ?? 20)'),
+  );
   check('远端渲染按 look 还原（不是只按昵称）', mainSrc4.includes('remotePaletteFromLook(look)') && mainSrc4.includes('remotePaletteFromName(mob.customName'));
 
   // ② 房间设置变更通知全房

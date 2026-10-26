@@ -83,6 +83,7 @@ export const say = {
   'say.net.duplicateName': 'Ce nom est déjà utilisé dans la partie — choisis-en un autre',
   'say.net.hostTaken': 'Ce nom de partie a déjà un hôte — choisis-en un autre',
   'say.net.hostOffline': 'L’hôte n’est pas dans la partie pour le moment — réessaie quand il sera revenu',
+  'say.net.playerDied': '{name} est mort',
   'say.net.roomTime': 'L’hôte a réglé l’heure sur {time}',
   'say.net.roomGameMode': 'L’hôte a réglé le mode de jeu sur {mode}',
   'say.net.hostTag': 'Hôte',

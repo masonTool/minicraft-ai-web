@@ -52,9 +52,20 @@ export interface RemoteAppearanceInput {
   /**
    * 玩家自己捏的外观下标（`REMOTE_LOOK_LENGTH` 个，顺序见 `RemoteSkin.ts`）。
    *
-   * 老客户端不带这个字段 → 渲染层回退到"按昵称派生"，至少每个人不一样。
+   * 老客户端不带这个字段 → 渲染层回退到"按昵称派生"，至少每个人都不一样。
    */
   look?: readonly number[];
+  /**
+   * 这位玩家此刻**死了没**（用户 2026-10-26）。
+   *
+   * 以前死亡没有任何上行：对端只知道"他在原位不动"，于是尸体一直站着，直到他复活、
+   * 位置变了才更新。现在死亡/复活都会立刻在 `move` 里带一位出来。
+   */
+  dead?: boolean;
+  /** 生命（0~20 点）：瞄准队友时画一条红条（用户 2026-10-26） */
+  hp?: number;
+  /** 饥饿（0~20 点）：瞄准队友时画一条黄条 */
+  food?: number;
 }
 
 /** 渲染侧读的状态（计时用"还剩几秒"而不是布尔） */
@@ -70,6 +81,19 @@ export interface RemoteAppearanceState {
   onFire: boolean;
   swingLeft: number;
   hurtLeft: number;
+  /** 对端是否已死亡（渲染层据此隐藏模型） */
+  dead: boolean;
+  /** 对端生命（0~20）；`null` = 他还没报过，UI 不画 */
+  hp: number | null;
+  /** 对端饥饿（0~20）；`null` = 还没报过 */
+  food: number | null;
+}
+
+/** 生命/饥饿点数收口：非有限数当 0，夹到 0~20 的整数（与 `move.hp/food` 契约一致） */
+export function normalizePoints(value: unknown): number {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(20, Math.max(0, n));
 }
 
 /** 物品 id 收口：0/负数/NaN 一律当空手 */
@@ -114,6 +138,9 @@ export function emptyAppearance(): RemoteAppearanceState {
     onFire: false,
     swingLeft: 0,
     hurtLeft: 0,
+    dead: false,
+    hp: null,
+    food: null,
   };
 }
 
@@ -135,17 +162,27 @@ export class RemoteAppearance {
     return this.current.hurtLeft > 0;
   }
 
-  /** 收到一条网络状态：静态字段（手持/盔甲/状态）直接覆盖，动作类走边沿触发 */
+  /**
+   * 收到一条网络状态。
+   *
+   * ⚠️ **没带的字段一律保持原值**（用户 2026-10-26）：以前这里是"整份覆盖"，
+   * 而对端 99% 的 `move` 不带 `look`（只在变化/2 秒兜底时带）——于是每一条不带皮肤
+   * 的消息都会把皮肤清空、退回"按昵称派生"，2 秒后再纠正回来，表现为**每隔几秒闪一次**。
+   * 服务端现在会合并，这里再兜一层：老服务端/老客户端混着用也不会闪。
+   */
   update(input: RemoteAppearanceInput): void {
-    this.current.held = normalizeItemId(input.held);
-    this.current.offhand = normalizeItemId(input.offhand);
-    this.current.armor = normalizeArmor(input.armor);
+    if (input.held !== undefined) this.current.held = normalizeItemId(input.held);
+    if (input.offhand !== undefined) this.current.offhand = normalizeItemId(input.offhand);
+    if (input.armor !== undefined) this.current.armor = normalizeArmor(input.armor);
     // 外观（皮肤）：只收前 REMOTE_LOOK_LENGTH 个下标，坏的当"没带"
-    this.current.look = normalizeLook(input.look);
-    this.current.sneaking = input.sneak === true;
-    this.current.riding = input.ride === true;
-    this.current.sleeping = input.sleep === true;
-    this.current.onFire = input.fire === true;
+    if (input.look !== undefined) this.current.look = normalizeLook(input.look);
+    if (input.sneak !== undefined) this.current.sneaking = input.sneak === true;
+    if (input.ride !== undefined) this.current.riding = input.ride === true;
+    if (input.sleep !== undefined) this.current.sleeping = input.sleep === true;
+    if (input.fire !== undefined) this.current.onFire = input.fire === true;
+    if (input.dead !== undefined) this.current.dead = input.dead === true;
+    if (input.hp !== undefined) this.current.hp = normalizePoints(input.hp);
+    if (input.food !== undefined) this.current.food = normalizePoints(input.food);
 
     // 边沿触发：网络会连续几条都带 swing:true，续期的话手就一直举着
     const swing = input.swing === true;

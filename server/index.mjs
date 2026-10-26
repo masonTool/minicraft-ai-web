@@ -209,39 +209,54 @@ function takeEffectToken(player) {
  *
  * 只认白名单字段，值一律规整成数字/布尔——**不让客户端把任意结构塞进广播**，
  * 否则一个客户端就能决定别人收到的报文长什么样（内存与带宽都被它牵着走）。
+ *
+ * ⚠️ **只返回"这条消息里真的带了的字段"**，由调用方**合并**进 `player.appearance`
+ * （用户 2026-10-26 修的闪烁 bug）：以前这里是"返回一个完整对象、整份覆盖"，
+ * 而客户端只在皮肤变化/每 2 秒才带 `look`，于是其余 99% 的 `move` 会把皮肤清成空 →
+ * 对端回退成"按昵称派生"的外观 → 2 秒后又被纠正回来，表现为**每隔几秒闪一次**。
+ *
+ * 布尔字段（潜行/挥手/受伤/着火/骑乘/睡觉/死亡）只在消息里出现该键时才收——
+ * 这样"松手不再潜行"能表达成显式的 `0`，而不是靠"下一次整份覆盖"。
  */
 function readAppearance(message) {
-  const armor = Array.isArray(message.armor)
-    ? message.armor.slice(0, 4).map((id) => Math.trunc(Number(id)) || 0)
-    : undefined;
+  const out = {};
   const positive = (value) => {
     const id = Math.trunc(Number(value));
-    return Number.isFinite(id) && id > 0 ? id : 0;
+    return Number.isFinite(id) && id >= 0 ? id : 0;
   };
+  // 0 是有效值（空手）：带的键一定收下，否则"把手里的东西收起来"同步不过去
+  if (message.held !== undefined) out.held = positive(message.held);
+  if (message.offhand !== undefined) out.offhand = positive(message.offhand);
+  if (Array.isArray(message.armor)) out.armor = message.armor.slice(0, 4).map((id) => positive(id));
   /*
    * 外观下标（皮肤）：定长 10，多一个都不要（协议契约，见
    * `src/core/net/RemoteAppearance.ts` 的 `REMOTE_LOOK_LENGTH`）。
    * 服务端不校验"第几档合法"——那是各端颜色表的长度，服务端没有那张表；
    * 只做形状收口（整数、长度），越界由客户端的 `paletteOf` 回退默认。
    */
-  const look = Array.isArray(message.look)
-    ? message.look.slice(0, 10).map((value) => {
-        const n = Math.trunc(Number(value));
-        return Number.isFinite(n) && n >= 0 ? n : 0;
-      })
-    : undefined;
-  return {
-    ...(positive(message.held) ? { held: positive(message.held) } : {}),
-    ...(positive(message.offhand) ? { offhand: positive(message.offhand) } : {}),
-    ...(armor && armor.some((id) => id > 0) ? { armor } : {}),
-    ...(look && look.length === 10 ? { look } : {}),
-    ...(message.sneak ? { sneak: true } : {}),
-    ...(message.swing ? { swing: true } : {}),
-    ...(message.hurt ? { hurt: true } : {}),
-    ...(message.fire ? { fire: true } : {}),
-    ...(message.ride ? { ride: true } : {}),
-    ...(message.sleep ? { sleep: true } : {}),
-  };
+  if (Array.isArray(message.look) && message.look.length === 10) {
+    out.look = message.look.map((value) => {
+      const n = Math.trunc(Number(value));
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    });
+  }
+  for (const key of ['sneak', 'swing', 'hurt', 'fire', 'ride', 'sleep', 'dead']) {
+    if (message[key] !== undefined) out[key] = message[key] === true || message[key] === 1;
+  }
+  /*
+   * 生命 / 饥饿（用户 2026-10-26）：瞄准队友时要画两条细条。
+   * 原版是 0~20 的整数点，这里夹住范围并取整——脏数据不会把 UI 画成一根穿出屏幕的条。
+   */
+  if (message.hp !== undefined) out.hp = clampPoints(message.hp);
+  if (message.food !== undefined) out.food = clampPoints(message.food);
+  return out;
+}
+
+/** 生命/饥饿的点数收口：0~20 的整数（非有限数按 0） */
+function clampPoints(value) {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(20, Math.max(0, n));
 }
 /**
  * 世界快照文件（联机13）。`DATA_DIR` 可覆盖——测试里指到临时目录，
@@ -1310,8 +1325,13 @@ wss.on('connection', (socket, request) => {
         if (team !== player.team) player.team = team;
         // 按视野补发（2026-10-26）：跨进新区块就把那一块的方块增量推给他
         pushChunkEdits(player);
-        // 外观（联机17）：只认白名单字段，收口后原样转发
-        player.appearance = readAppearance(message);
+        /*
+         * 外观（联机17）：只认白名单字段，收口后**合并**进上一份再转发。
+         *
+         * 合并而不是整份覆盖，是因为客户端只在"变了"的时候才带某些字段（皮肤还带 2 秒兜底）：
+         * 覆盖会把没带的字段清成空，对端就退回默认外观——这就是"每隔几秒闪一次"的根因。
+         */
+        player.appearance = { ...player.appearance, ...readAppearance(message) };
         broadcast(
           {
             t: 'player',

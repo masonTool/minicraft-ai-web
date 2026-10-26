@@ -20,7 +20,6 @@ import {
   nameTagWidthFor,
   nameTagWorldWidth,
   NAME_TAG_CANVAS_HEIGHT,
-  remoteNameTagOpacity,
   sanitizeName,
 } from '../src/core/entity/NameTag.ts';
 import { Item, itemDef, itemIconTile, itemName } from '../src/core/registry/items.ts';
@@ -367,11 +366,11 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   check('主程序导入 nameTagStyleFor', /import \{ nameTagStyleFor \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
   check(
     'updateNameTags 里把样式传给 show()',
-    // 联机18 起第 4 参是距离衰减后的透明度，样式仍按"一次查表、一次传入"走；
-    // 本轮起样式还可能被"房主标识"覆盖（金色 + 房主前缀），所以只要求
-    // "查表结果最终作为 style 传给 show"，不再要求两行紧邻
+    // 联机18 起第 4 参是透明度；用户 2026-10-26 起**不再按距离变淡**，固定传 1。
+    // 样式仍按"一次查表、一次传入"走，还可能被"房主标识"覆盖（金色 + 房主前缀），
+    // 所以只要求"查表结果最终作为 style 传给 show"，不再要求两行紧邻
     /nameTagStyleFor\(entry\.mob\.customName/.test(mainSrc) &&
-      mainSrc.includes('tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, opacity)') &&
+      mainSrc.includes('tag.show(entry.mob, isAimed ? 0.34 : 0.12, style, 1)') &&
       /const style =[\s\S]{0,240}(teamStyle|entry\.host === true)/.test(mainSrc),
   );
   check('颜色已不再单独查一次（避免颜色接上、前后缀漏掉）', !mainSrc.includes('colorForMob('));
@@ -485,15 +484,12 @@ console.log('\n[队伍前后缀（批次 1359）]');
 console.log('\n[队友名字牌的距离衰减（联机18）]');
 {
   // 从 32 格开始变淡、到 64 格全透明；近距离不衰减
-  check('32 格内全亮', remoteNameTagOpacity(0) === 1 && remoteNameTagOpacity(32) === 1);
-  check('64 格外全透明', remoteNameTagOpacity(64) === 0 && remoteNameTagOpacity(100) === 0);
-  check('中间线性（48 格正好一半）', Math.abs(remoteNameTagOpacity(48) - 0.5) < 1e-9);
-  check(
-    '单调递减（越远越淡）',
-    remoteNameTagOpacity(40) > remoteNameTagOpacity(50) && remoteNameTagOpacity(50) > remoteNameTagOpacity(60),
-  );
-  check('距离非法时按全亮处理（不返回 NaN）', remoteNameTagOpacity(Number.NaN) === 1);
-  check('队友范围比生物名字牌大一倍', REMOTE_NAME_TAG_RANGE === 64 && REMOTE_NAME_TAG_RANGE > 32);
+  /*
+   * 队友名字牌不再按距离变淡（用户 2026-10-26："视野里就一直能看到"）：
+   * 范围放到视距尽头，超出就不进候选，`remoteNameTagOpacity` 连同它的四条断言一起删掉。
+   */
+  check('队友名字牌范围 = 视距尽头（128 格）', REMOTE_NAME_TAG_RANGE === 128);
+  check('队友名字牌范围远大于生物名字牌（32 格）', REMOTE_NAME_TAG_RANGE > 32 * 2);
 }
 
 console.log(`\n命名牌测试：${passed} 通过 / ${failed} 失败`);

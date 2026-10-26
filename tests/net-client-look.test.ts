@@ -1,9 +1,13 @@
 /**
- * `move` 报文要不要带皮肤下标（用户 2026-10-26）。
+ * `move` 报文里的外观（用户 2026-10-26）。
  *
- * 症状两条：进世界后"人物形式都不对"、改形象对方也看不到。根因是 `tick()` 组包时
- * 把 `appearance.look` 漏了——服务端白名单里有、远端渲染也早就支持，唯独没发。
- * 这里用假 socket 直接看报文，把"发没发、什么时候发"钉死。
+ * 两轮症状，同一处代码：
+ *  ① 最初 `tick()` 组包时**漏了** `appearance.look`——远端只能按昵称派生，"形式都不对"；
+ *  ② 补上之后改成"变化才发 + 2 秒兜底"，于是 99% 的 `move` 不带皮肤，配合服务端当年的
+ *    "整份覆盖"把对端的皮肤清空又纠正——**每隔几秒闪一次**。
+ *
+ * 现在的口径：**每条 `move` 都带全量外观**（含 0/false），服务端再合并。
+ * 这里用假 socket 直接看报文，把"每条都带、且能表达 0"钉死。
  */
 import { describe, expect, it } from 'vitest';
 import { NetClient } from '../src/net/NetClient.ts';
@@ -33,12 +37,12 @@ describe('NetClient.tick 的 move 报文', () => {
     expect(moves()[0]!.look).toEqual(LOOK_A);
   });
 
-  it('没变化就不重复发（省带宽）', () => {
+  it('没变化也每条都带（闪烁的根因就是"这条不带"）', () => {
     const { net, moves } = newClient();
     net.tick(0, 64, 0, 0, 0, 'overworld', { look: LOOK_A }, 1000);
     net.tick(0, 64, 0, 0, 0, 'overworld', { look: LOOK_A }, 1100);
     expect(moves()).toHaveLength(2);
-    expect(moves()[1]!.look).toBeUndefined();
+    expect(moves()[1]!.look).toEqual(LOOK_A);
   });
 
   it('改了形象立刻再发一次', () => {
@@ -48,19 +52,30 @@ describe('NetClient.tick 的 move 报文', () => {
     expect(moves()[1]!.look).toEqual(LOOK_B);
   });
 
-  it('2 秒兜底：先改形象、后进房的人也能拿到', () => {
+  it('手持/盔甲/布尔也每条都带（0 与 false 必须能表达）', () => {
     const { net, moves } = newClient();
-    net.tick(0, 64, 0, 0, 0, 'overworld', { look: LOOK_A }, 1000);
-    net.tick(0, 64, 0, 0, 0, 'overworld', { look: LOOK_A }, 2000);
-    net.tick(0, 64, 0, 0, 0, 'overworld', { look: LOOK_A }, 3500);
-    // 1000 → 2000 之间是"没变化不发"；3500 距上次 2500ms，命中兜底
-    expect(moves()[2]!.look).toEqual(LOOK_A);
+    net.tick(0, 64, 0, 0, 0, 'overworld', {}, 1000);
+    net.tick(0, 64, 0, 0, 0, 'overworld', { held: 0, armor: [0, 0, 0, 0], sneak: false }, 1100);
+    const second = moves()[1]!;
+    // 手上没东西 / 没穿甲 / 没潜行 → 也必须显式发 0，否则对端永远停在上一帧的状态
+    expect(second.held).toBe(0);
+    expect(second.armor).toEqual([0, 0, 0, 0]);
+    expect(second.sneak).toBe(0);
+    expect(second.dead).toBe(0);
   });
 
-  it('没有外观数据时不带这个字段（老行为不变）', () => {
+  it('生命/饥饿随每条 move 带上（0~20 点）', () => {
+    const { net, moves } = newClient();
+    net.tick(0, 64, 0, 0, 0, 'overworld', { hp: 17, food: 13 }, 1000);
+    expect(moves()[0]!.hp).toBe(17);
+    expect(moves()[0]!.food).toBe(13);
+  });
+
+  it('没有外观数据（老调用方）时不带 look，别的东西照发', () => {
     const { net, moves } = newClient();
     net.tick(0, 64, 0, 0, 0, 'overworld', {}, 1000);
     expect(moves()[0]!.look).toBeUndefined();
+    expect(moves()[0]!.hp).toBe(20);
   });
 });
 
