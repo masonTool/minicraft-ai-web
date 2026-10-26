@@ -111,15 +111,24 @@ export async function preflightHost(
 
   const url = formatServerUrl(options.baseUrl, options.room, '');
 
-  /*
-   * 混合内容先判（用户 2026-10-26）：https 页面连 `ws://` 会被浏览器直接拒绝，
-   * 连尝试都不允许。这时给"连不上"是误导——要告诉玩家真正的原因。
-   */
   const pageProtocol = deps.pageProtocol ?? (typeof location === 'undefined' ? '' : location.protocol);
-  if (pageProtocol === 'https:' && /^ws:\/\//i.test(url)) return 'https-blocked';
+  const insecureTarget = /^ws:\/\//i.test(url);
 
+  /*
+   * **先尝试**，不要因为"页面是 https + 目标是 ws://"就提前拒绝（用户 2026-10-26）。
+   *
+   * 以前这里直接返回 `https-blocked`，理由写的是"混合内容一定拦"。但这条不绝对：
+   * Chrome 的「本地网络访问」权限（Local Network Access）开通之后，https 页面可以访问
+   * 局域网设备（`http://` / `ws://` 都行），Firefox 也有对应开关——那正是给"没有证书的
+   * 局域网服务器"留的官方口子。提前拒绝等于把一条其实可用的路堵死。
+   *
+   * 所以：照常连；连不上**且**是这种"https 连 ws://"的组合时，才把原因归到那一头
+   * （因为这时候"去授权"比"改 IP"更可能是正解），文案里两条办法都给。
+   */
   const reachable = await canOpen(url, createSocket, timeoutMs);
-  if (!reachable) return 'unreachable';
+  if (!reachable) {
+    return pageProtocol === 'https:' && insecureTarget ? 'https-blocked' : 'unreachable';
+  }
 
   const rooms = await fetchRooms(options.baseUrl);
   if (rooms !== null && rooms.some((entry) => entry.room === options.room && entry.hasHost)) return 'taken';

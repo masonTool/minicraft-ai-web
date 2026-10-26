@@ -134,7 +134,10 @@ export async function scanSubnet(
  *
  * `mode: 'no-cors'` 是必须的：局域网里的服务端不会给每个来源都加 CORS 头，
  * 而我们要的只是"这个地址有人在听"。代价是拿不到响应体（也不需要）。
- * ⚠️ 页面是 https 时这类请求会被混合内容拦掉——调用方先用 `canScanLan()` 判断。
+ * ⚠️ 页面是 https 时，这类请求默认会被混合内容策略拦掉；但**不是绝对**：
+ * Chrome 的「本地网络访问」权限（Local Network Access）开通后，https 页面可以访问
+ * 局域网里的 `http://` / `ws://` 设备（Firefox 也有对应开关）。所以调用方**不要**
+ * 因为页面是 https 就把扫描禁掉——照样扫，扫不到再用 `canScanLan()` 决定是否提示去授权。
  */
 export const browserReach: DiscoveryDeps['reach'] = async (url, timeoutMs) => {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -155,10 +158,10 @@ export const browserReach: DiscoveryDeps['reach'] = async (url, timeoutMs) => {
 };
 
 /**
- * 这个页面能不能扫局域网。
+ * 这个页面**默认**能不能扫局域网（false = 很可能被混合内容拦掉，但可通过授权解决）。
  *
- * https 页面连 `http://` 局域网地址会被混合内容策略拦掉（`ws://` 也一样），
- * 所以界面上要直接说明"当前页面是 https，扫不了"，而不是让玩家等 30 秒看到"没找到"。
+ * 用途只剩一个：决定"扫不到时要不要提示玩家去开『本地网络访问』权限"。
+ * ⚠️ 不要拿它去禁用扫描按钮（用户 2026-10-26 明确：浏览器里可以授权放行）。
  */
 export function canScanLan(protocol: string): boolean {
   return protocol !== 'https:';

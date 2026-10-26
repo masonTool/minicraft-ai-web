@@ -6266,10 +6266,10 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
    */
   const preflightSrc = readFileSync(new URL('../src/net/HostPreflight.ts', import.meta.url), 'utf8');
   check(
-    '预检区分 https 混合内容',
+    '预检区分 https 混合内容：**先尝试**，连不上才归因到"要授权"',
     preflightSrc.includes("'https-blocked'") &&
-      preflightSrc.includes("pageProtocol === 'https:'") &&
-      preflightSrc.includes('/^ws:\\/\\//i.test(url)'),
+      preflightSrc.includes("pageProtocol === 'https:' && insecureTarget") &&
+      /const reachable = await canOpen\(url, createSocket, timeoutMs\);\s*\r?\n\s*if \(!reachable\) \{/.test(preflightSrc),
   );
   check('开房失败时把这条翻成人话', mainSrc4.includes("blocked === 'https-blocked'") && mainSrc4.includes("t('mp.hostHttpsBlocked')"));
   check(
@@ -6361,7 +6361,16 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
   // ③ 面板：两个区域 + 选中回填 + 公开接口预留
   check('面板有局域网与公开两个区域', pickerSrc.includes("t('server.lan')") && pickerSrc.includes("t('server.public')"));
   check('扫描走 scanSubnet（边扫边显示）', pickerSrc.includes('scanSubnet(') && pickerSrc.includes('onFound:'));
-  check('https 页面上先把原因说清楚，而不是让人白等', pickerSrc.includes('canScanLan(location.protocol)') && pickerSrc.includes("t('server.scanBlocked')"));
+  /*
+   * https 页面**不禁用**扫描（用户 2026-10-26）：Chrome 的「本地网络访问」权限开通后，
+   * https 页面可以访问局域网设备（Firefox 也有开关）。所以只提示"扫不到就去授权"。
+   */
+  check(
+    'https 页面照样能扫，扫不到才提示去授权',
+    !/scanButton\.disabled = !canScanLan/.test(pickerSrc) &&
+      pickerSrc.includes("t('server.httpsHint')") &&
+      pickerSrc.includes('this.scanButton.disabled = false;'),
+  );
   check('公开服务器接口预留（URL 为空则不发请求）', /publicServersUrl\?\.\(\) \?\? ''/.test(pickerSrc) && pickerSrc.includes("t('server.publicSoon')"));
   check('选中后把地址写回调用方并关面板', /private pick\(address: string\): void \{[\s\S]{0,200}?this\.actions\.onPick\(address\);/.test(pickerSrc));
 

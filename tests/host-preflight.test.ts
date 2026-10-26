@@ -68,8 +68,8 @@ describe('preflightHost', () => {
    * 混合内容（用户 2026-10-26：手机上开房失败）：https 页面连 `ws://` 会被浏览器直接拒，
    * 这跟"服务器没起/地址错"是两件事——以前都回 unreachable，玩家会一直改 IP。
    */
-  it('https 页面 + ws:// → https-blocked（连尝试都不该尝试）', async () => {
-    FakeSocket.mode = 'open';
+  it('https 页面 + ws:// 连不上 → https-blocked（提示去授权，而不是只说连不上）', async () => {
+    FakeSocket.mode = 'error';
     let socketCreated = false;
     const reason = await preflightHost(
       { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
@@ -84,7 +84,19 @@ describe('preflightHost', () => {
       },
     );
     expect(reason).toBe('https-blocked');
-    expect(socketCreated).toBe(false);
+    // ⚠️ 仍然**尝试**了：Chrome 的「本地网络访问」授权后 https 页面能连 ws://，
+    //    提前拒绝会把这条可用的路堵死（用户 2026-10-26 明确过）
+    expect(socketCreated).toBe(true);
+  });
+
+  it('https 页面 + ws:// 但连得上 → 放行（授权过的浏览器就该能开房）', async () => {
+    FakeSocket.mode = 'open';
+    expect(
+      await preflightHost(
+        { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+        { ...deps(null), pageProtocol: 'https:' },
+      ),
+    ).toBeNull();
   });
 
   it('http 页面 + ws:// 正常放行（同一台机器自托管就是这条路）', async () => {

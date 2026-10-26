@@ -143,13 +143,18 @@ export class ServerPicker {
     this.status.textContent = '';
     this.lanList.replaceChildren();
     this.renderPublic();
-    // https 页面扫不了局域网（混合内容），先把话说清楚，别让人白等
-    if (!canScanLan(location.protocol)) {
-      this.status.textContent = t('server.scanBlocked');
-      this.scanButton.disabled = true;
-    } else {
-      this.scanButton.disabled = false;
-    }
+    /*
+     * https 页面**照样允许扫**（用户 2026-10-26）。
+     *
+     * 以前这里直接把按钮禁掉了，理由写的是"混合内容一定拦"。但这条并非绝对：
+     * Chrome 的「本地网络访问」权限（Local Network Access，地址栏左侧的权限图标 /
+     * 设置 → 隐私与安全 → 本地网络访问）开通之后，https 页面可以访问局域网里的
+     * `http://` / `ws://` 设备——那正是"给没有证书的局域网设备开口子"的官方通道。
+     * Firefox 也有对应开关。所以这里改成"照样扫，扫不到再提示去授权"，
+     * 不能替玩家把一条其实可用的路堵死。
+     */
+    this.scanButton.disabled = false;
+    this.status.textContent = canScanLan(location.protocol) ? '' : t('server.httpsHint');
   }
 
   close(): void {
@@ -195,11 +200,17 @@ export class ServerPicker {
       );
       if (!this.opened) return;
       const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
-      this.status.textContent =
-        found.length === 0 ? t('server.empty') : tp('server.found', { count: String(found.length), seconds });
+      if (found.length > 0) {
+        this.status.textContent = tp('server.found', { count: String(found.length), seconds });
+      } else if (!canScanLan(location.protocol)) {
+        // 一个都没扫到，且页面是 https：最可能就是没授权，把"去哪授权"写在同一行
+        this.status.textContent = `${t('server.empty')} · ${t('server.httpsHint')}`;
+      } else {
+        this.status.textContent = t('server.empty');
+      }
     } finally {
       this.scanning = false;
-      if (this.opened) this.scanButton.disabled = !canScanLan(location.protocol);
+      if (this.opened) this.scanButton.disabled = false;
     }
   }
 
