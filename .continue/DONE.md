@@ -9,6 +9,34 @@
 
 ---
 
+## 批次 20261027-0800 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 发现本机其实有 cargo（只是没进 PATH），于是把之前"盲写未验证"的 Rust 改动全部编译 + 跑黑盒断言。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0800
+
+- [x] [R1] Rust 编译验证 + 修 E0382：`server/rust/src/beacon.rs` → `cargo check` / `cargo test`
+  - 做了什么：`cargo check` 立刻抓到 `borrow of moved value: room`（`has_host` 在 `room` move 之后又借用），改成先算 `has_host` 再构造；`cargo test` **28 通过**。
+  - 为什么：之前几批 Rust 改动是在"没有工具链"的前提下写的，只能算推测；有了编译器才第一次被真正检验。
+  - 验证：`cargo check` 干净；`cargo test` 28 / 0。
+  - 批次：20261027-0800
+- [x] [R1] 补 Rust 的 `ALLOW_HOSTLESS_ROOMS` + `/ping` + `beaconPort` + `isHost`：`server/rust/src/{lib,handlers}.rs`、`run-net-test.sh` → `bash server/rust/run-net-test.sh`
+  - 做了什么：① `ALLOW_HOSTLESS_ROOMS=1`（Config/Hub/join 判断 + 验收脚本），否则单人用例全被 `no-host` 拒（第一次跑只有 **227/297**）；② `/ping` 路由（客户端扫网段只认能回它的机器，缺了它手机端永远扫不到）；③ `/healthz` 补 `beaconPort`；④ `player` 广播（join 与每条 `move`）补 `isHost`。
+  - 为什么：前两条是**产品级缺陷**（不是测试口径问题）：改名后别人扫不到手机上跑的服务端、队友的名字牌不标房主。
+  - 验证：黑盒断言 **227 → 233 / 297**；`cargo test` 28 / 0。
+  - 批次：20261027-0800
+- [x] [R1] 把剩余 64 条按 10 组写清（TASKS R1 + 两处 README）：`server/README.md`、`server/rust/README.md`
+  - 做了什么：README 的「195 条 0 失败」改成「当前基线 233/297、`cargo test` 28 绿」；缺口表扩成 10 组并标出每组的失败断言数（`day` 6 / 采纳时钟天气 6 / 快照 v2 6 / 关房清缓存 3 / `session-sync` 6 / `edits-*` 3 / `bye` 2 / 外观 1 / 掉落物 1 / 每房时钟）。
+  - 为什么：这 64 条就是可执行的验收清单——每一条都对应一句断言，不需要再猜"还缺什么"。
+  - 验证：`npm run check` exit=0。
+  - 批次：20261027-0800
+
+---
+
 ## 批次 20261027-0740 · 2026-10-27 · 会话 12c62cf0
 
 > 用户 2026-10-27："请继续，不要停" —— Rust 侧继续推进时发现剩下的都是结构性改动，先把会误导人的文档修掉、把缺口记成待办。
@@ -248,28 +276,4 @@
   - 做了什么：`join` 行第 ⑪ 条的备注从"对所有在用房间广播"改成"只对**本房**广播"；§6 的「时钟与天气」整行改写成每房一套（`room → clock` + `defaultClock` 落盘 + `sleep`/`room-config` 只动本房）；§6 的「掉落物广播」改成令牌桶 30/s + 突发 400 并写明理由；`TASKS.md` 的 L8 补第 ⑧（每房时钟）与第 ⑨（掉落物重播 + 纠正"两端都不落盘"的错说法）两点。
   - 为什么：协议表是两端共同的契约；这次改的是"谁说了算"的边界（共享 → 每房），不写进表里下次照旧实现会再踩一遍。掉落物那条顺手把上一轮我说错的话在台账里更正，避免以后被人当成事实引用。
   - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了 4 条 `tools/ui-test.ts` 的结构断言（它们钉着旧的 `currentDay()` / `startTimeOfDay = …` 字面串）——改成按新结构断言（`currentDay(clockOf(player.room))` / `clock.startTimeOfDay` / `clocks.set(room, clock)` / `const clock = createClock()`），`test:ui` **1197 通过 / 0 失败**。
-
-## 批次 20261026-2131 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26 复核："服务器上所有变更都写回房主本地"这条之前漏了**时间与天气**（只有天数跟房主）。
-> 定稿：时间/天数/天气**全部以房主本地为准**；旧 @mp: 存档不做迁移；清场仍等宽限期结束。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2131
-
-- [x] [L8] 时间/天数/天气也以房主本地为准：客户端 `join` 带上 `timeOfDay` / `weather`，服务端开房时三个量一起采纳 → `npm run check:fast`
-  - 做了什么：`NetClient` 新增 `localTimeOfDay` / `localWeather`（与 `localDay` 同组，只有 `wantsHost` 才带）；`App.connect()` 在连之前把 `this.timeOfDay` 与 `this.weather.current` 填进去。协议 `join` 从此带三个可选字段。
-  - 为什么：房主离线期间时钟/天气在他存档里走，重开房若服务端不接住，他一进来就被拽到"服务端此刻"——看起来什么都没发生，但那不是他的世界了。
-  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）。
-- [x] [L8] 采纳后按房广播对齐（`time{snap}` / `weather`），宽限期内重连的房主不覆盖 → `npm run test:net`
-  - 做了什么：服务端 `join` 的 `wantsHost` 分支把 `freshRoom` 判据统一成 `sameHostReturning`（与清场同一个谓词），三个量一次采纳：`startDay` / `startTimeOfDay`（脏值保留当前）/ `weather`（`isWeatherKind` 过滤），最后才重置 `serverStartMs`；随后对**所有在用的房间**广播 `time{snap:true}` 与 `weather`。
-  - 为什么：`snap` 是"立刻对齐"——不带的要按 4 倍速收敛，房主会看到太阳爬一段；广播到所有房间是因为时钟本来就全服共享，只发本房会让别的房停在旧值直到下次切换。重连不采纳是因为那时客户端带的是过期值（他断线前那一刻），采纳会把房间拽回去。
-  - 验证：`npm run test:net` **252 → 260 通过 / 0 失败**（新增 8 条：房主带 `day=12` / `timeOfDay=0.75` / `weather=thunder` → 自己的 welcome 三个都对上 → 后来者的 welcome 也对上 → 宽限期内带 `day=3` / `0.05` / `clear` 重连，三个都**不**覆盖）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `join` 行补三个可选字段与"谁说了算" + `TASKS.md` 的 L8 补一句 → `npm run check`
-  - 做了什么：`join` 行的字段列加 `day?/timeOfDay?/weather?`，校验列加第 ⑪ 条（三样各自兜底脏值、**只有房主带得动**、宽限期内重连不采纳），备注列写清"采纳后对所有在用房间广播"；§6 新增"时钟与天气"一行（全服共享 + 代价）；`TASKS.md` 的 L8 补第 ⑦ 点。
-  - 为什么：协议表是两端共同的契约，字段加在代码里而表里没有，下次照表实现就会漏。全文一致地把"时间也以房主为准"写进 §2 之外的地方。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/ui-test.ts` 有条结构断言钉着旧报文 `...(this.wantsHost ? { day: this.localDay } : {})`，改报文体后它当场报错——改成断言三个字段，并补两条（服务端采纳、重连不覆盖）。`test:ui` **1197 通过 / 0 失败**。
 
