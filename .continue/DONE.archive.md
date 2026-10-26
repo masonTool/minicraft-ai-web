@@ -17745,3 +17745,101 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 未验：真机在局域网里扫一次（本机开发页面是 http 可以扫；部署在 GitHub Pages 的 https 页面会被浏览器拦住，面板会直接说明原因）
   - 批次：20261026-0500
 
+## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
+> 房主离线期间的改动也只存本地；再次开房时服务器以**房主本地**为准重建——一句话：
+> **服务器上的一切变更都回到房主本地，两边始终以房主为准**。
+> 两个已拍板的取舍：① 服务端**不保留**"只读救援副本"（房主设备丢 = 这一局全丢）；
+> ② 方块增量走**按区块懒上行**（不是开房全量推）。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2011
+
+- [x] [L8] 房主联机不切 `@mp:` 库（改动直接落单机存档）+ 联机期保存压到 10 秒、断开前强制落盘：`src/main.ts` 的 `enterMultiplayerSave` / `tickAutoSave` / `onStatus(false)` → `npm run check:fast`
+  - 做了什么：`enterMultiplayerSave()` 开头按 `this.net.role === 'host'` 早退（房主全程用 `world.id` 那个单机库），`leaveMultiplayerSave()` 因此对房主自动 no-op、也不再原地重载；新增 `hostSession`（在 `onNetWelcome` 里记一份，断开善后里用掉并清掉，因为那时 `role` 已经回 `solo`）；`tickAutoSave()` 取 `min(设置值, 10s)`；`onStatus(false)` 里房主先 `saveNow('mp-host-leave')` 再做其它善后。
+  - 为什么：房间数据只存房主本地之后，"最后 30 秒"没有任何备份，而原先房主的改动写进 `@mp:` 库（只写不读）等于退出即丢。取 `min` 而不是直接赋值是为了不和玩家自己设的 5 秒打架。
+  - 验证：`npm run check:fast` 全绿（typecheck + i18n 审计 + 586 条单测；离线套件不覆盖 `src/main.ts`，脚本自己提示了这一点）。
+  - 待人工：双端手测"联机盖房 → 退出房间 → 单机进同一个世界，房子还在"（需要浏览器 + 两个客户端）。
+- [x] [L8] 服务端清场：新增 `clearRoom()`，房主新上位与关房时各清一次 → `npm run test:net`
+  - 做了什么：`clearRoom(room)` 按房名前缀清 edits/containers/signs/frames，顺手清同房玩家的掉落物、`roomWorlds`/`roomGameModes`、两张区块追踪表；三处调用——① 关房（房主宽限期结束）② `join` 里 `wantsHost` 分支（`send(welcome)` 之前）③ 由 ② 兜住"服务端崩溃重启后的残留"。
+  - 为什么：房间数据以房主本地为准，残留会在下一局被 `welcome` 发出去，等于服务端把房主的世界改回去。判据用 `sameHostReturning = grace && hosts.get(room)?.id === player.id`：**宽限期内重连的房主不清**（他切后台回来还是同一局）。原先想用 `host.id !== player.id`，但那条件实际上是死代码——新 host 在 `host-taken` 那道闸就被拒了，能进来的只有"本人重连"。
+  - 验证：`npm run test:net` **217 → 226 通过 / 0 失败**（新增 9 条：房主写方块+容器 → 队友能看到 → 断开 120ms 内同 clientId 重连仍是房主且缓存不清（新队友仍收到那 9 条）→ 宽限期过后进同房名 welcome 全空、新房主上位也不继承）。
+- [x] [L8] 服务端不再持有世界存档：`worldSnapshot()` 只留时间/天数/天气，`SNAPSHOT_VERSION` 升 2 并兼容读 v1（旧房间数据静默丢弃）→ `npm run test:net`
+  - 做了什么：`worldSnapshot()` 删掉 edits/containers/signs/frames 与 `seed`，只剩 `version/savedAt/timeOfDay/day/weather`；读档块删掉四张表的还原循环，只回填天气/时间/天数，并在版本不符时打一行说明；`roomOfDataKey()`（只为落盘拼房名）与它的 `DEFAULT_ROOM` 导入一并删掉；`store.mjs` 的 `SNAPSHOT_VERSION` 1 → 2，新增 `READABLE_VERSIONS`（v1 仍可读，不当损坏）。
+  - 为什么：房间数据以房主本地为准之后，"服务端还存着一份世界"会立刻变成第二份事实——重启后被 `welcome` 发出去就是把房主的世界改回上次的样子。v1 不当损坏是因为内容完好、只是格式旧，时间/天数/天气仍然有效。
+  - 验证：`npm run test:net` **226 → 236 通过 / 0 失败**（改写原"重启后方块还在/容器还在"两条为"不再复活"；新增直接读 `world.json` 断言 v2 + 四张表不存在 + 时间仍在；新增 v1 升级用例：手写 v1 文件 → 不被改名成 `.broken` → 方块/容器/牌子/展示框全丢弃、时间 0.5 与天气 rain 被沿用）。
+- [x] [L8] 方块增量懒上行（服务端侧）：`edits-request` 下发给房主、`edits-reply` 收下并广播 `blocks`，`pushChunkEdits` 改成"已确认直接推、未确认向房主要" → `npm run test:net`
+  - 做了什么：新增 `confirmedChunks`/`requestedChunks`（按房一份，上限 4096 / 在飞 8）+ `trackedChunks`/`rememberTracked`；`pushChunkEdits` 拆成"直接推缓存"（`sendChunkEdits`）与"向房主要"（`requestChunkFromHost`，5 秒后忘掉这次在飞，回包丢了下次 move 会重试）；新增 `edits-reply` 分支（只收本房房主、复用 `blockEditRejection`、坐标必须落在声称的那一块里、收下后按房广播 `blocks`）；`snapshotFor` 对房主不再下发 edits/容器/牌子/展示框（双保险）。
+  - 为什么：`edits-reply` 不复用 `blocks` 是因为**空区块必须能回"没改过"**——`blocks` 的空列表在现有逻辑里直接 return，而 `requested` 不清就会被无限请求。**没有房主的房**（有人直接 join）没有权威可问，退回老行为"服务端缓存就是共用那份"，否则那类房间的跨区块补发会整条失效。
+  - 验证：`npm run test:net` **236 → 243 通过 / 0 失败**（新增 7 条：队友跨进未确认区块 → 房主收到 `edits-request{dimension,cx,cz}` → 回包后队友收到 `blocks` → 另一块再要一次 → 空块确认后不再重复询问 → 确认过的块会进后来者的 welcome）。踩到一次 `move` 50ms 限频（第二次 move 被直接丢），用例里补了 `sleep(80)`。
+- [x] [L8] 房主响应 `edits-request`：`src/net/NetClient.ts` 加收发、`src/main.ts` 从 `world.edits` 取整块回包 → `npm run check:fast && npm run test:net`
+  - 做了什么：`NetClient` 加 `onEditsRequest` 回调 + `edits-request` 分支 + `sendEditsReply()`（空块也发；超过 4096 条拆包）；解包抽成纯函数 `core/net/ChunkSnapshot.ts#chunkSnapshotBlocks()`，`main.ts` 的 `replyChunkEdits()` 只负责"取快照 → 交给它 → 发出去"。
+  - 为什么：解包是最容易错的一步，抽出来才能离线断言。**实际抓到两个 bug**：① `Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标），原来忘了加 `cx*16 / cz*16`，所有补发的方块会堆在区块西北角——而原点附近的房间看起来完全正常；② 返回类型写成 `number[][]` 装不下末位的维度名。第一个由新增用例 `区块坐标必须加到局部坐标上` 直接钉住（含负区块坐标 `z = -33`）。
+  - 验证：`npm run check:fast` 全绿（typecheck + **593** 单测，较基线 586 增 7 条：空快照/空表/坐标与状态位/区块偏移含负坐标/条目形状/相邻区块不混/位运算往返）；`npm run test:net` **243 通过 / 0 失败**（服务端那条链上一批已覆盖）。
+- [x] [L8] 房主开局整份上行容器/牌子/展示框（`session-sync`）：服务端按房广播、客户端在 `welcome` 之后发 → `npm run test:net`
+  - 做了什么：服务端新增 `session-sync` 分支（只收本房房主、`kind` 分 container/sign/frame、形状校验与各自的单向消息同口径但**不设距离闸**、按条数上限 `SESSION_SYNC_MAX_MESSAGES=256`，收下后按房广播）；客户端 `NetClient.sendSessionSync()`（200 条一包，空集合也发）+ `App.flushSessionSync()` 在 `welcome` 后触发，**读档没回来就先挂起**（`waitingForSaveRestore`），在 `start()` 的读档 `.then/.catch` 里补推。
+  - 为什么：这三种不能像方块那样懒补——队友打开一个空箱子就会往里放东西，然后被服务端那份覆盖。挂起是因为时机：`welcome` 往往早于读档完成，那时容器表还是空的，直接推等于告诉服务端"这人没有箱子"。
+  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）；`npm run test:net` **243 → 252 通过 / 0 失败**（新增 9 条：清场后 welcome 无箱子 / 房主推完后**先进来的**队友当场收到 container+sign+frame 三条广播 / **后进来的**队友从 welcome 拿到三样 / 从属端伪造 `session-sync` 被无视）。
+- [x] [L8] 协议文档与台账收口：`docs/NET-PROTOCOL.md` 补两条消息与"服务端不持有存档"口径 + `TASKS.md` 落 L8 → `npm run check`
+  - 做了什么：`NET-PROTOCOL.md` —— §2 补"世界以房主本地为唯一真相 + 服务端只是会话缓存"的完整口径与代价；§4 新增 `edits-reply` / `session-sync` 两行（含校验与"空块必须回"）；§5 新增 `edits-request` 行、改写 `welcome`（房主不带世界数据）；§6 改正三处过期数字（增量上限 20 万→50 万、世界种子不落盘、快照内容 v2）并补"房间清场/懒上行在飞上限/session-sync 上限"四行；§7 新增 `edits-request` 的客户端行为；§8 改写 `联机13`/`联机14`/`联机26` 三条。`TASKS.md` 的 L 段新增 L8 条目（口径 6 点 + 两条 ⚠️ 取舍/坑 + 待人工）。`OVERVIEW.md` 的联机条目与坑各补一句（压在 200 行 / 28672 字节上限内）。`HANDOFF.md` 进度口径 303/295 → 304/296。
+  - 为什么：文档漂移是这项目最常见的债，数字更是一抄就漂——`audit:tasks` 当场抓住了 HANDOFF 的 295 与 README 的路线图状态列，按"数字只由脚本生成"的口径重写。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账；`audit:tasks` 报"共 304 项（296/5/0/3）、编号无重复、各段连续"）；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 恰好 200 行 / 27874 字节）。
+
+## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
+> 不需要我们提前拒绝——把上一批那两处「硬拦」改成「先试、再提示」。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0620
+
+目标（用户 2026-10-26）：https 页面能不能访问局域网设备，是**浏览器权限**层面的开关
+（Chrome「本地网络访问」/ Firefox 对应开关），不该由我们提前拒绝——把上一批的两处"硬拦"改成"先试、再提示"。
+
+- [x] [授权1] 「选择服务器」面板 https 页面不再禁用扫描：照样扫，扫不到才提示去开权限 → 验收：`npm run test:ui`
+  - 做什么：`ServerPicker.open()` 不再 `disabled = true`，只在状态行放一句 `server.httpsHint`；扫描结束仍为空且页面是 https 时，把"没找到 · 去授权"合并成一行提示；`server.scanBlocked` 文案换成 `server.httpsHint`（六语言，内容改为"允许本站访问本地网络"的具体路径）
+  - 为什么：Chrome 的 Local Network Access 权限开通后，https 页面可以访问 `http://` / `ws://` 局域网设备（Firefox 也有开关）。禁用按钮等于把一条其实可用的路堵死
+  - 验证：`npm run test:ui` **1195/0**（断言改成"不再禁用 + 有授权提示"）；`npx tsc --noEmit` 干净；`audit:i18n` 通过
+  - 批次：20261026-0620
+- [x] [授权2] 开房预检先尝试、连不上才归因「https 需要授权」→ 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`preflightHost` 取消提前 return，照常 `canOpen`；失败**且**（页面 https + 目标 ws://）才回 `https-blocked`；该原因的文案改成同时给两条办法（去授权 / 换 http 打开）
+  - 为什么：上一批我把它写成"连尝试都不尝试"，同样是替玩家做了决定。授权过的浏览器本来就该能开房
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **9/9**（+2：https+ws 连不上 → https-blocked 且**确实尝试过**；https+ws **连得上 → 放行**）
+  - 未验：真机在授权后开房（要 Chrome 的 LNA 权限，无头环境造不出来）
+  - 批次：20261026-0620
+
+## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0600
+
+目标（用户 2026-10-26）：服务器跑在电脑上、手机在同一局域网里**开房失败**（之前能成功）。
+
+- [x] [开房1] 预检把「连不上」与「被浏览器拦（https 页面连 ws://）」分开：`HostPreflight` 新增 `https-blocked`，开房对话框给专门文案 → 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`HostPreflightDeps` 加 `pageProtocol`（默认真实 `location.protocol`）；`pageProtocol === 'https:' && /^ws:\/\//` 时**不建 socket**直接返回 `https-blocked`；`main.ts` 映射成 `mp.hostHttpsBlocked`（六语言）；两条失败分支都补 `console.warn`（带目标 URL）
+  - 为什么：混合内容跟网络无关——https 页面连 `ws://192.168.x.x` 会被浏览器直接拒，玩家改 IP、换端口、重启服务器全都没用。以前两种情况都回 `unreachable`，于是手机（页面在 https 上）开房失败看到的是一句"连不上服务器"，方向从一开始就错了
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **8/8**（+2：https+ws → https-blocked 且**不建 socket**；http+ws 正常放行）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过
+  - 批次：20261026-0600
+- [x] [开房2] 服务端启动打印**局域网地址**（不再只打 localhost）→ 验收：真机启动输出
+  - 做什么：`server/index.mjs` 用 `os.networkInterfaces()` 列出所有非 internal 的 IPv4，逐条打 `ws://<ip>:<port>`，并把原来那句"玩家把游戏指向 ws://localhost 即可联机"改成"本机自连（只有这台机器能用）"
+  - 为什么：`localhost` 只对跑服务端那台机器成立，手机填它指的是手机自己——这正是"手机上不知道填什么/填了连不上"的常见起点
+  - 验证：实测启动输出 `192.168.66.187 → ws://192.168.66.187:25190`（本机真实网卡）
+  - 批次：20261026-0600
+- [x] [开房3] 断言：ui-test 三条（预检分支 / 文案 / 启动打印）→ 验收：`npm run check:fast`
+  - 做什么：`tools/ui-test.ts` 加三条结构断言
+  - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
+  - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
+  - 批次：20261026-0600
+

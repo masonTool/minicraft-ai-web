@@ -9,6 +9,70 @@
 
 ---
 
+## 批次 20261026-2050 · 2026-10-26 · 会话 12c62cf0
+
+> 用户 2026-10-26：按两张设计图落地「加入房间 / 开房」——默认端口 8887（只读后缀）、密码错误归入致命、昵称必填、两处共用表单、选择服务器带选中态与确定、房间显示在线/容量、客户端能力位控制「允许其它人建房」。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2050
+
+- [x] [L9] 打通密码错误码：`src/core/net/Protocol.ts` 加 `'password'` 并归入 `isFatalProtocolError`；错误码→文案抽成 `src/core/net/NetErrorText.ts`，`src/main.ts` 的 `onError` 改用它；六个语言包补 `say.net.password`，zh 文案「口令」统一成「密码」
+  - 做了什么：`ProtocolErrorCode` 与 `isFatalProtocolError` 补 `password`；新增 `core/net/NetErrorText.ts`（`netErrorText(code)`，查不到回空串让调用方回退服务端原话）；`main.ts` 的嵌套三元换成一行查表；zh/en/de/fr/pt/ru 同步加键；`zh/menu.ts` 的 `world.roomPassword` / `mp.password` 改成「密码」。
+  - 为什么：服务端在 join 那道闸就会回 `code:'password'`，漏在致命名单外会让填错密码的玩家无限重连（每 3 秒撞一次），且文案是服务端那句中文。映射抽出来是为了下一步面板错误行复用同一份口径。
+  - 验证：`npm run check:fast` 全绿（typecheck + audit:i18n + 单测 + 改动命中的 161 套离线测试全通过）。两处 ui-test 断言因映射搬家而改读新文件（断言本身没放松）。
+  - 批次：20261026-2050
+- [x] [L9] 默认端口改 8887：`server/protocol.mjs`、`src/core/net/ServerUrl.ts`、`src/core/net/ServerDiscovery.ts`、`Dockerfile`、`docs/NET-PROTOCOL.md`、`tools/net-peer.mjs`、`tools/ui-test.ts` + 5 个 test 文件的期望值
+  - 做了什么：全库 `25187 → 8887`（19 个文件，含三处常量、Dockerfile 的 ENV/EXPOSE/健康检查、协议文档、peer 工具、5 个测试的期望值）；`ServerUrl.ts` 与 `protocol.mjs` 的"为什么是这个端口"注释从"挑个好记的/避开常见值"改成产品口径（安卓/iOS 客户端要内建服务器，端口必须与客户端一致，撞车用 `PORT` 覆盖）。
+  - 为什么：用户 2026-10-26 拍板默认端口就是 8887；同一个数字在三处各写一份，漏改一处就会出现"扫描走 A、连接走 B"。
+  - 验证：`npm run check:fast` 全绿；`npm run test:net` **292 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] 抽公共表单 `src/ui/RoomForm.ts`（地址 / 房间 / 密码 / 昵称 + ▾选择服务器 + 错误行 + 校验），`MultiplayerScreen.ts` 与 `WorldScreen.openHostWorld` 都改用它（纯重构，行为不变）
+  - 做了什么：新增 `ui/RoomForm.ts`（构造时建 4 个输入框 + `splitAddress()` + `read()` + `nameIsBlank()` + `focus()` + `dispose()`，`portLabel`/`pickButton` 由宿主取用排版）；昵称清洗搬到 `core/net/PlayerName.ts`（`cleanPlayerName` 不兜底 / `sanitizeMultiplayerName` 兜底）；`MultiplayerScreen` 的 `readForm()`/`submit()`/`splitAddress()` 全部改委托，`WorldScreen` 删掉自己那套输入框；`MultiplayerScreen` 保留 `MULTIPLAYER_NAME_MAX`/`sanitizeMultiplayerName` 的旧导出以免打断调用点。
+  - 为什么：两个入口收集的是同一组字段与清洗规则，各写一遍的下场就是"加昵称那次只改了一边"。
+  - 验证：`npm run check:fast` 全绿；`test:ui` **1199 通过 / 0 失败**（14 条源码断言随实现位置迁移，语义未放松）。
+  - 批次：20261026-2050
+- [x] [L9] 昵称必填：去掉 UI 层「空 → 玩家」兜底，提交前拦住并提示；开房对话框补昵称字段；标题保留「开房：{world}」
+  - 做了什么：`RoomForm.read()` 的昵称改用 `cleanPlayerName`（空串就是没填）；加入面板与开房对话框提交前都判 `nameIsBlank()` 并聚焦昵称框；开房对话框加昵称行（默认值取联机面板记住的那个）；`WorldScreen.onHostWorld` 增加第 5 个参数 `name`，经 `pendingHostRoom` 传到 `connectOnline`；六语言补 `mp.error.name`。
+  - 为什么：空昵称被兜底成「玩家」，而房间里只要已有一个人叫「玩家」，第二个人就会被 `duplicate-name` 拒——先连上再被踢，提示还落在聊天栏而不是表单。开房那边以前根本没昵称框，用的是面板里悄悄记住的值。
+  - 验证：`npm run check:fast` 全绿（`test:ui` 同步把 5 条受签名变化影响的断言改到新结构）。
+  - 批次：20261026-2050
+- [x] [L9] 错误分类与已连接态：错误行按 `unreachable / https-blocked / host-taken / duplicate-name / password` 映射人话且致命不回重连；`join` 模式顶部显示「已连接 · 房主/从属」并保留断开按钮
+  - 做了什么：`NetClient` 收到 `error` 时把 `status` 也换成 `netErrorText(code)`（这句会随 `onStatus(false, …)` 进面板错误行），查不到才回退服务端原话；`MultiplayerScreen` 新增 `mode` + `syncModeVisibility()`，join 模式的「断开」按 `multiplayerButtons(state).disconnect` 同一判据露出；补两条 ui-test 断言（死面板 + 文案映射）。
+  - 为什么：面板错误行以前显示服务端那句中文（非中文玩家看不懂）；join 模式把「断开」藏死，联机中打开「加入房间」就是一个全灰的死界面——加入被禁用、断开看不见。
+  - 验证：`npm run check:fast` 全绿；`test:ui` **1201 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] `ServerPicker` 补选中态 + 「取消 / 确定」（确定 = 回填并关闭，未选中禁用）；房间列表改成展开某台服务器再懒加载 `/rooms`；「网速」文案改「延迟 {ms}ms」
+  - 做了什么：面板加 `selected` + 底部「取消 / 确定」，点行只 `select()` 高亮、确定才 `pick()`；`open()` 清空上次选中；未选中时确定禁用；选中服务器后 `RoomForm.onPick` 回调里自动 `refreshRooms()`（把该机器的房间列表拉进右栏）；`server.rtt` 文案改「延迟 {ms}ms」，六语言补 `server.confirm`；CSS 加 `.server-picker-item.selected` 与 `.server-picker-actions`。
+  - 为什么：扫描结果是边扫边冒出来的，点一下就关面板在手机上极易误触选错机器；而"选服务器"的动机本来就是想看这台有哪些房，以前还要再按一次「找房间」。
+  - 取舍：**没有做"服务器下嵌套房间列表"**（设计图那版）——右栏已经有同功能的房间列表，弹窗里再嵌套要对每台扫到的服务器各发一次 `/rooms`（扫 254 个地址就是几百个跨源请求），而且手机横屏高度撑不住三层嵌套。改为"选中即拉列表"，同样少一步。
+  - 验证：`npm run check:fast` 全绿（补 1 条选中态断言）。
+  - 批次：20261026-2050
+- [x] [L9] 房间人数显示 `在线/容量`：服务端 `/rooms` 下发 `maxPlayers`（默认 10），`src/core/net/RoomList.ts` 清洗该字段，列表行显示 `4/10`
+  - 做了什么：`server/index.mjs` 新增 `MAX_PLAYERS`（`MAX_PLAYERS` 环境变量，脏值/0/负数回退 10），`/rooms` 响应带 `maxPlayers`；`RoomList` 加 `DEFAULT_ROOM_CAPACITY` 与同名清洗字段（老服务端不带就退回默认）；列表行改用 `mp.roomsPlayersOf`（六语言）；`room-list` 用例补两条（带容量 / 脏数据兜底）。
+  - 为什么：用户说 4/10 指的是角色数、容量先给个默认值。**它只是显示，不是准入限制**——这一局的模拟跑在房主浏览器里，能扛多少取决于他的设备，服务端拍一个数字挡人是错的。
+  - 验证：`npm run check:fast` 全绿（**601** 单测）；`npm run test:net` **292 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] 能力位 `localServer`：新增客户端能力判定，仅支持建服务器的客户端才显示「允许其它人建房」开关（本批只做显示条件与语义，不做本地服务器实现）
+  - 做了什么：新增 `core/net/ClientCapabilities.ts`（`localServer` 恒 false，仓库里只有 web 版）；`ServerPicker` 在该位为 true 时才构造「本机」区（是/否两个按钮，状态存 `mc.mp.allowHosting`，默认允许，`aria-pressed` 高亮）；`RoomForm` 与两个宿主透传能力位；六语言补 `server.local` / `server.allowHosting` / `misc.yes` / `misc.no`；CSS 加 `.mp-mini[aria-pressed="true"]`。
+  - 为什么：用户 2026-10-26 说明这个开关是**控制客户端建服务器**的，不支持的客户端（web）不该出现。客户端无权改服务端策略，做成能点但无效的开关只会骗玩家；真值来源收成一个位，原生客户端改 true 即可，UI 不用动。
+  - 验证：`npm run check:fast` 全绿（补 1 条"web 版整块不渲染"断言）。
+  - 批次：20261026-2050
+- [x] [L9] 端口只读后缀：`RoomForm` 的地址行右侧显示 `: 8887`（取 `DEFAULT_NET_PORT`，不可编辑），输入框 placeholder 改成「只填 IP 或域名」
+  - 做了什么：`RoomForm` 新增 `portLabel`（`textContent = \`:${DEFAULT_NET_PORT}\``，title 是 `mp.portHint`）；加入面板把它排在地址框与 ▾ 之间，开房对话框把 `makeRow` 的 `extra` 扩成支持数组（端口 + ▾ 两个尾巴）；CSS 加 `.mp-port`；六语言补 `mp.portHint`。
+  - 为什么：用户要求只读显示 8887。端口显出来便于跟队友核对"连的是哪台"，但不给编辑——两端各填一个数字必然漂。
+  - 验证：`npm run check:fast` 全绿（补 1 条"后缀取常量而非写死数字"断言）。
+  - 批次：20261026-2050
+- [x] [L9] 文档与台账收口：`docs/NET-PROTOCOL.md` 的端口与 `/rooms` 字段、`TASKS.md` 落 L9、`OVERVIEW.md` 补联机界面一条
+  - 做了什么：`NET-PROTOCOL.md` 的 `/rooms` 行补 `maxPlayers` 与"不是准入限制"；`TASKS.md` 的 L9 从计划补成落地细节（①~⑦ + 验证口径）并置 `[x]`；`OVERVIEW.md` 联机体验条目追加一句摘要，同时压缩几处冗余解释把字节压回 28KB 上限内；`HANDOFF.md` 进度 296→297；根 `README.md` 路线图与 `TASKS.md` 差异台账由 `audit:tasks` / `audit:diffs` 重写。
+  - 为什么：收尾第③步要求每条在 TASKS 落地；锚点文档里的数字只能由脚本生成，手抄必漂（这次 HANDOFF 就被审计当场抓住）。
+  - 验证：`npm run check` **exit=0**（typecheck + audit:i18n + 181 套离线测试 + 601 单测 + 三张台账 + docs 体量 + 浏览器门禁自检）。
+  - 批次：20261026-2050
+
+---
+
 ## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
 
 > 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
@@ -140,102 +204,4 @@
   - 做了什么：`join` 行的字段列加 `day?/timeOfDay?/weather?`，校验列加第 ⑪ 条（三样各自兜底脏值、**只有房主带得动**、宽限期内重连不采纳），备注列写清"采纳后对所有在用房间广播"；§6 新增"时钟与天气"一行（全服共享 + 代价）；`TASKS.md` 的 L8 补第 ⑦ 点。
   - 为什么：协议表是两端共同的契约，字段加在代码里而表里没有，下次照表实现就会漏。全文一致地把"时间也以房主为准"写进 §2 之外的地方。
   - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/ui-test.ts` 有条结构断言钉着旧报文 `...(this.wantsHost ? { day: this.localDay } : {})`，改报文体后它当场报错——改成断言三个字段，并补两条（服务端采纳、重连不覆盖）。`test:ui` **1197 通过 / 0 失败**。
-
-## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
-> 房主离线期间的改动也只存本地；再次开房时服务器以**房主本地**为准重建——一句话：
-> **服务器上的一切变更都回到房主本地，两边始终以房主为准**。
-> 两个已拍板的取舍：① 服务端**不保留**"只读救援副本"（房主设备丢 = 这一局全丢）；
-> ② 方块增量走**按区块懒上行**（不是开房全量推）。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2011
-
-- [x] [L8] 房主联机不切 `@mp:` 库（改动直接落单机存档）+ 联机期保存压到 10 秒、断开前强制落盘：`src/main.ts` 的 `enterMultiplayerSave` / `tickAutoSave` / `onStatus(false)` → `npm run check:fast`
-  - 做了什么：`enterMultiplayerSave()` 开头按 `this.net.role === 'host'` 早退（房主全程用 `world.id` 那个单机库），`leaveMultiplayerSave()` 因此对房主自动 no-op、也不再原地重载；新增 `hostSession`（在 `onNetWelcome` 里记一份，断开善后里用掉并清掉，因为那时 `role` 已经回 `solo`）；`tickAutoSave()` 取 `min(设置值, 10s)`；`onStatus(false)` 里房主先 `saveNow('mp-host-leave')` 再做其它善后。
-  - 为什么：房间数据只存房主本地之后，"最后 30 秒"没有任何备份，而原先房主的改动写进 `@mp:` 库（只写不读）等于退出即丢。取 `min` 而不是直接赋值是为了不和玩家自己设的 5 秒打架。
-  - 验证：`npm run check:fast` 全绿（typecheck + i18n 审计 + 586 条单测；离线套件不覆盖 `src/main.ts`，脚本自己提示了这一点）。
-  - 待人工：双端手测"联机盖房 → 退出房间 → 单机进同一个世界，房子还在"（需要浏览器 + 两个客户端）。
-- [x] [L8] 服务端清场：新增 `clearRoom()`，房主新上位与关房时各清一次 → `npm run test:net`
-  - 做了什么：`clearRoom(room)` 按房名前缀清 edits/containers/signs/frames，顺手清同房玩家的掉落物、`roomWorlds`/`roomGameModes`、两张区块追踪表；三处调用——① 关房（房主宽限期结束）② `join` 里 `wantsHost` 分支（`send(welcome)` 之前）③ 由 ② 兜住"服务端崩溃重启后的残留"。
-  - 为什么：房间数据以房主本地为准，残留会在下一局被 `welcome` 发出去，等于服务端把房主的世界改回去。判据用 `sameHostReturning = grace && hosts.get(room)?.id === player.id`：**宽限期内重连的房主不清**（他切后台回来还是同一局）。原先想用 `host.id !== player.id`，但那条件实际上是死代码——新 host 在 `host-taken` 那道闸就被拒了，能进来的只有"本人重连"。
-  - 验证：`npm run test:net` **217 → 226 通过 / 0 失败**（新增 9 条：房主写方块+容器 → 队友能看到 → 断开 120ms 内同 clientId 重连仍是房主且缓存不清（新队友仍收到那 9 条）→ 宽限期过后进同房名 welcome 全空、新房主上位也不继承）。
-- [x] [L8] 服务端不再持有世界存档：`worldSnapshot()` 只留时间/天数/天气，`SNAPSHOT_VERSION` 升 2 并兼容读 v1（旧房间数据静默丢弃）→ `npm run test:net`
-  - 做了什么：`worldSnapshot()` 删掉 edits/containers/signs/frames 与 `seed`，只剩 `version/savedAt/timeOfDay/day/weather`；读档块删掉四张表的还原循环，只回填天气/时间/天数，并在版本不符时打一行说明；`roomOfDataKey()`（只为落盘拼房名）与它的 `DEFAULT_ROOM` 导入一并删掉；`store.mjs` 的 `SNAPSHOT_VERSION` 1 → 2，新增 `READABLE_VERSIONS`（v1 仍可读，不当损坏）。
-  - 为什么：房间数据以房主本地为准之后，"服务端还存着一份世界"会立刻变成第二份事实——重启后被 `welcome` 发出去就是把房主的世界改回上次的样子。v1 不当损坏是因为内容完好、只是格式旧，时间/天数/天气仍然有效。
-  - 验证：`npm run test:net` **226 → 236 通过 / 0 失败**（改写原"重启后方块还在/容器还在"两条为"不再复活"；新增直接读 `world.json` 断言 v2 + 四张表不存在 + 时间仍在；新增 v1 升级用例：手写 v1 文件 → 不被改名成 `.broken` → 方块/容器/牌子/展示框全丢弃、时间 0.5 与天气 rain 被沿用）。
-- [x] [L8] 方块增量懒上行（服务端侧）：`edits-request` 下发给房主、`edits-reply` 收下并广播 `blocks`，`pushChunkEdits` 改成"已确认直接推、未确认向房主要" → `npm run test:net`
-  - 做了什么：新增 `confirmedChunks`/`requestedChunks`（按房一份，上限 4096 / 在飞 8）+ `trackedChunks`/`rememberTracked`；`pushChunkEdits` 拆成"直接推缓存"（`sendChunkEdits`）与"向房主要"（`requestChunkFromHost`，5 秒后忘掉这次在飞，回包丢了下次 move 会重试）；新增 `edits-reply` 分支（只收本房房主、复用 `blockEditRejection`、坐标必须落在声称的那一块里、收下后按房广播 `blocks`）；`snapshotFor` 对房主不再下发 edits/容器/牌子/展示框（双保险）。
-  - 为什么：`edits-reply` 不复用 `blocks` 是因为**空区块必须能回"没改过"**——`blocks` 的空列表在现有逻辑里直接 return，而 `requested` 不清就会被无限请求。**没有房主的房**（有人直接 join）没有权威可问，退回老行为"服务端缓存就是共用那份"，否则那类房间的跨区块补发会整条失效。
-  - 验证：`npm run test:net` **236 → 243 通过 / 0 失败**（新增 7 条：队友跨进未确认区块 → 房主收到 `edits-request{dimension,cx,cz}` → 回包后队友收到 `blocks` → 另一块再要一次 → 空块确认后不再重复询问 → 确认过的块会进后来者的 welcome）。踩到一次 `move` 50ms 限频（第二次 move 被直接丢），用例里补了 `sleep(80)`。
-- [x] [L8] 房主响应 `edits-request`：`src/net/NetClient.ts` 加收发、`src/main.ts` 从 `world.edits` 取整块回包 → `npm run check:fast && npm run test:net`
-  - 做了什么：`NetClient` 加 `onEditsRequest` 回调 + `edits-request` 分支 + `sendEditsReply()`（空块也发；超过 4096 条拆包）；解包抽成纯函数 `core/net/ChunkSnapshot.ts#chunkSnapshotBlocks()`，`main.ts` 的 `replyChunkEdits()` 只负责"取快照 → 交给它 → 发出去"。
-  - 为什么：解包是最容易错的一步，抽出来才能离线断言。**实际抓到两个 bug**：① `Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标），原来忘了加 `cx*16 / cz*16`，所有补发的方块会堆在区块西北角——而原点附近的房间看起来完全正常；② 返回类型写成 `number[][]` 装不下末位的维度名。第一个由新增用例 `区块坐标必须加到局部坐标上` 直接钉住（含负区块坐标 `z = -33`）。
-  - 验证：`npm run check:fast` 全绿（typecheck + **593** 单测，较基线 586 增 7 条：空快照/空表/坐标与状态位/区块偏移含负坐标/条目形状/相邻区块不混/位运算往返）；`npm run test:net` **243 通过 / 0 失败**（服务端那条链上一批已覆盖）。
-- [x] [L8] 房主开局整份上行容器/牌子/展示框（`session-sync`）：服务端按房广播、客户端在 `welcome` 之后发 → `npm run test:net`
-  - 做了什么：服务端新增 `session-sync` 分支（只收本房房主、`kind` 分 container/sign/frame、形状校验与各自的单向消息同口径但**不设距离闸**、按条数上限 `SESSION_SYNC_MAX_MESSAGES=256`，收下后按房广播）；客户端 `NetClient.sendSessionSync()`（200 条一包，空集合也发）+ `App.flushSessionSync()` 在 `welcome` 后触发，**读档没回来就先挂起**（`waitingForSaveRestore`），在 `start()` 的读档 `.then/.catch` 里补推。
-  - 为什么：这三种不能像方块那样懒补——队友打开一个空箱子就会往里放东西，然后被服务端那份覆盖。挂起是因为时机：`welcome` 往往早于读档完成，那时容器表还是空的，直接推等于告诉服务端"这人没有箱子"。
-  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）；`npm run test:net` **243 → 252 通过 / 0 失败**（新增 9 条：清场后 welcome 无箱子 / 房主推完后**先进来的**队友当场收到 container+sign+frame 三条广播 / **后进来的**队友从 welcome 拿到三样 / 从属端伪造 `session-sync` 被无视）。
-- [x] [L8] 协议文档与台账收口：`docs/NET-PROTOCOL.md` 补两条消息与"服务端不持有存档"口径 + `TASKS.md` 落 L8 → `npm run check`
-  - 做了什么：`NET-PROTOCOL.md` —— §2 补"世界以房主本地为唯一真相 + 服务端只是会话缓存"的完整口径与代价；§4 新增 `edits-reply` / `session-sync` 两行（含校验与"空块必须回"）；§5 新增 `edits-request` 行、改写 `welcome`（房主不带世界数据）；§6 改正三处过期数字（增量上限 20 万→50 万、世界种子不落盘、快照内容 v2）并补"房间清场/懒上行在飞上限/session-sync 上限"四行；§7 新增 `edits-request` 的客户端行为；§8 改写 `联机13`/`联机14`/`联机26` 三条。`TASKS.md` 的 L 段新增 L8 条目（口径 6 点 + 两条 ⚠️ 取舍/坑 + 待人工）。`OVERVIEW.md` 的联机条目与坑各补一句（压在 200 行 / 28672 字节上限内）。`HANDOFF.md` 进度口径 303/295 → 304/296。
-  - 为什么：文档漂移是这项目最常见的债，数字更是一抄就漂——`audit:tasks` 当场抓住了 HANDOFF 的 295 与 README 的路线图状态列，按"数字只由脚本生成"的口径重写。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账；`audit:tasks` 报"共 304 项（296/5/0/3）、编号无重复、各段连续"）；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 恰好 200 行 / 27874 字节）。
-
-## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
-> 不需要我们提前拒绝——把上一批那两处「硬拦」改成「先试、再提示」。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0620
-
-目标（用户 2026-10-26）：https 页面能不能访问局域网设备，是**浏览器权限**层面的开关
-（Chrome「本地网络访问」/ Firefox 对应开关），不该由我们提前拒绝——把上一批的两处"硬拦"改成"先试、再提示"。
-
-- [x] [授权1] 「选择服务器」面板 https 页面不再禁用扫描：照样扫，扫不到才提示去开权限 → 验收：`npm run test:ui`
-  - 做什么：`ServerPicker.open()` 不再 `disabled = true`，只在状态行放一句 `server.httpsHint`；扫描结束仍为空且页面是 https 时，把"没找到 · 去授权"合并成一行提示；`server.scanBlocked` 文案换成 `server.httpsHint`（六语言，内容改为"允许本站访问本地网络"的具体路径）
-  - 为什么：Chrome 的 Local Network Access 权限开通后，https 页面可以访问 `http://` / `ws://` 局域网设备（Firefox 也有开关）。禁用按钮等于把一条其实可用的路堵死
-  - 验证：`npm run test:ui` **1195/0**（断言改成"不再禁用 + 有授权提示"）；`npx tsc --noEmit` 干净；`audit:i18n` 通过
-  - 批次：20261026-0620
-- [x] [授权2] 开房预检先尝试、连不上才归因「https 需要授权」→ 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做什么：`preflightHost` 取消提前 return，照常 `canOpen`；失败**且**（页面 https + 目标 ws://）才回 `https-blocked`；该原因的文案改成同时给两条办法（去授权 / 换 http 打开）
-  - 为什么：上一批我把它写成"连尝试都不尝试"，同样是替玩家做了决定。授权过的浏览器本来就该能开房
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **9/9**（+2：https+ws 连不上 → https-blocked 且**确实尝试过**；https+ws **连得上 → 放行**）
-  - 未验：真机在授权后开房（要 Chrome 的 LNA 权限，无头环境造不出来）
-  - 批次：20261026-0620
-
-## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0600
-
-目标（用户 2026-10-26）：服务器跑在电脑上、手机在同一局域网里**开房失败**（之前能成功）。
-
-- [x] [开房1] 预检把「连不上」与「被浏览器拦（https 页面连 ws://）」分开：`HostPreflight` 新增 `https-blocked`，开房对话框给专门文案 → 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做什么：`HostPreflightDeps` 加 `pageProtocol`（默认真实 `location.protocol`）；`pageProtocol === 'https:' && /^ws:\/\//` 时**不建 socket**直接返回 `https-blocked`；`main.ts` 映射成 `mp.hostHttpsBlocked`（六语言）；两条失败分支都补 `console.warn`（带目标 URL）
-  - 为什么：混合内容跟网络无关——https 页面连 `ws://192.168.x.x` 会被浏览器直接拒，玩家改 IP、换端口、重启服务器全都没用。以前两种情况都回 `unreachable`，于是手机（页面在 https 上）开房失败看到的是一句"连不上服务器"，方向从一开始就错了
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **8/8**（+2：https+ws → https-blocked 且**不建 socket**；http+ws 正常放行）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过
-  - 批次：20261026-0600
-- [x] [开房2] 服务端启动打印**局域网地址**（不再只打 localhost）→ 验收：真机启动输出
-  - 做什么：`server/index.mjs` 用 `os.networkInterfaces()` 列出所有非 internal 的 IPv4，逐条打 `ws://<ip>:<port>`，并把原来那句"玩家把游戏指向 ws://localhost 即可联机"改成"本机自连（只有这台机器能用）"
-  - 为什么：`localhost` 只对跑服务端那台机器成立，手机填它指的是手机自己——这正是"手机上不知道填什么/填了连不上"的常见起点
-  - 验证：实测启动输出 `192.168.66.187 → ws://192.168.66.187:25190`（本机真实网卡）
-  - 批次：20261026-0600
-- [x] [开房3] 断言：ui-test 三条（预检分支 / 文案 / 启动打印）→ 验收：`npm run check:fast`
-  - 做什么：`tools/ui-test.ts` 加三条结构断言
-  - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
-  - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
-  - 批次：20261026-0600
 
