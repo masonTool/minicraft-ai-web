@@ -6485,14 +6485,22 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
 
   // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
   check(
-    '开房对话框地址行有 ▾ 按钮',
+    '开房对话框地址行有 ▾ 按钮 + 端口只读后缀',
     worldUiSrc2.includes("pickButtonId: 'world-host-pick'") &&
-      worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), roomForm.urlInput, roomForm.pickButton)"),
+      worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), roomForm.urlInput, [") &&
+      worldUiSrc2.includes('roomForm.portLabel,'),
   );
   check(
-    '加入面板地址行也有 ▾ 按钮',
+    '加入面板地址行也有 ▾ 按钮与端口后缀',
     mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
-      mpSrc2.includes('urlRow.append(urlLabel, this.urlInput, this.form.pickButton as HTMLButtonElement, this.refreshButton)'),
+      mpSrc2.includes('this.form.portLabel,') &&
+      mpSrc2.includes('this.form.pickButton as HTMLButtonElement'),
+  );
+  check(
+    '端口后缀取 DEFAULT_NET_PORT，不是写死的数字',
+    readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
+      'this.portLabel.textContent = `:${DEFAULT_NET_PORT}`',
+    ),
   );
   check(
     '开房对话框关掉时一起拆面板（否则浮层留在屏幕上）',

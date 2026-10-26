@@ -133,4 +133,5 @@ export const menu = {
   'mp.status.offline': '连接已断开',
   'mp.error.url': '地址要填 ws:// 或 wss://（省略时自动补 ws://）',
   'mp.error.name': '起个名字再进：昵称不能空着',
+  'mp.portHint': '端口固定，不用填',
 } as const;

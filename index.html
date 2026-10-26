@@ -2087,6 +2087,11 @@
         color: #fff;
       }
       .server-picker-rtt { font-variant-numeric: tabular-nums; color: #9fd08a; }
+      /* 端口只读后缀（本批）：地址框右边，不可编辑，等宽数字免得跳变 */
+      .mp-port {
+        flex: 0 0 auto; font-size: 12px; color: #9a9a9a;
+        font-variant-numeric: tabular-nums; user-select: none;
+      }
       /* 底部「取消 / 确定」：确定在未选中时是禁用的 */
       .server-picker-actions {
         display: flex; align-items: center; justify-content: flex-end; gap: 8px;

@@ -454,7 +454,14 @@ export class WorldScreen {
   }
 
   /** 一行"标签 + 控件（+ 右侧小按钮）" */
-  private makeRow(label: string, control: HTMLElement, extra: HTMLElement | null): HTMLDivElement {
+  /**
+   * 一行表单。`extra` 支持数组：地址行现在有两个尾巴（端口只读后缀 + ▾ 选择服务器）。
+   */
+  private makeRow(
+    label: string,
+    control: HTMLElement,
+    extra: HTMLElement | HTMLElement[] | null,
+  ): HTMLDivElement {
     // 用 div 而不是 label：label 会把"点标签文字"转发给下拉按钮，
     // 玩家点一下"世界类型"四个字就弹出菜单，反而是误触。
     const row = document.createElement('div');
@@ -462,7 +469,8 @@ export class WorldScreen {
     const name = document.createElement('span');
     name.textContent = label;
     row.append(name, control);
-    if (extra) row.append(extra);
+    if (Array.isArray(extra)) row.append(...extra);
+    else if (extra) row.append(extra);
     return row;
   }
 
@@ -742,7 +750,11 @@ export class WorldScreen {
     actions.append(cancel, start);
 
     form.append(
-      this.makeRow(t('world.serverAddress'), roomForm.urlInput, roomForm.pickButton),
+      // 端口是只读后缀（`:8887`），紧挨地址框；然后是「▾ 选择服务器」
+      this.makeRow(t('world.serverAddress'), roomForm.urlInput, [
+        roomForm.portLabel,
+        roomForm.pickButton as HTMLButtonElement,
+      ]),
       this.makeRow(t('world.roomName'), roomForm.roomInput, null),
       this.makeRow(t('world.roomPassword'), roomForm.passwordInput, null),
       // 昵称（本批）：与加入面板同一个字段，必填（这里没传 `withName: false`，一定有这个框）

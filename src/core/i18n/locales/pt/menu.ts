@@ -131,4 +131,5 @@ export const menu = {
   "mp.status.offline": "Desconectado",
   "mp.error.url": "O endereço precisa ser ws:// ou wss:// (ws:// é adicionado automaticamente)",
   "mp.error.name": "Escolha um apelido — ele não pode ficar vazio",
+  "mp.portHint": "A porta é fixa — não precisa preencher",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

@@ -174,7 +174,14 @@ export class MultiplayerScreen {
     this.refreshButton.className = 'mp-mini';
     this.refreshButton.textContent = t('mp.refreshRooms');
     this.refreshButton.addEventListener('click', () => void this.refreshRooms());
-    urlRow.append(urlLabel, this.urlInput, this.form.pickButton as HTMLButtonElement, this.refreshButton);
+    // 端口是只读后缀（`:8887`）：地址框只收 IP/域名，端口由 DEFAULT_NET_PORT 统一
+    urlRow.append(
+      urlLabel,
+      this.urlInput,
+      this.form.portLabel,
+      this.form.pickButton as HTMLButtonElement,
+      this.refreshButton,
+    );
 
     // ---- 房间 / 密码行（L9：不再让玩家把房间写进地址）
     const roomRow = document.createElement('label');

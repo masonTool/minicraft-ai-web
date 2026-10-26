@@ -16,6 +16,7 @@ import { t } from '../core/i18n/I18n.ts';
 import { cleanPlayerName, MULTIPLAYER_NAME_MAX } from '../core/net/PlayerName.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
 import {
+  DEFAULT_NET_PORT,
   displayServerAddress,
   formatServerUrl,
   normalizeServerUrl,
@@ -81,6 +82,14 @@ export class RoomForm {
   readonly nameInput: HTMLInputElement | null;
   /** 没给 `pickButtonId` 时为 null */
   readonly pickButton: HTMLButtonElement | null;
+  /**
+   * 端口只读后缀（`:8887`，本批）：宿主把它摆在地址框右边。
+   *
+   * 为什么显出来而不是藏掉：玩家常要跟队友核对"你连的是哪台"，端口是其中一项。
+   * 但**不给编辑**——端口由 `DEFAULT_NET_PORT` 统一，两端各填一个数字必然会漂
+   * （用户 2026-10-26 定稿：默认 8887）。
+   */
+  readonly portLabel: HTMLSpanElement;
 
   private picker: ServerPicker | null = null;
 
@@ -133,6 +142,12 @@ export class RoomForm {
           })();
 
     this.pickButton = options.pickButtonId ? this.makePickButton(options.pickButtonId, options.pickButtonClass ?? '') : null;
+
+    this.portLabel = document.createElement('span');
+    this.portLabel.className = 'mp-port';
+    this.portLabel.id = options.mode === 'host' ? 'world-host-port' : 'mp-port';
+    this.portLabel.textContent = `:${DEFAULT_NET_PORT}`;
+    this.portLabel.title = t('mp.portHint');
   }
 
   /**

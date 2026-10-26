@@ -134,4 +134,5 @@ export const menu = {
   'mp.status.offline': 'Disconnected',
   'mp.error.url': 'The address must be ws:// or wss:// (ws:// is added automatically)',
   'mp.error.name': 'Pick a nickname first — it cannot be empty',
+  'mp.portHint': 'Port is fixed — nothing to fill in',
 } satisfies Pick<Messages, keyof typeof zhmenu>;
