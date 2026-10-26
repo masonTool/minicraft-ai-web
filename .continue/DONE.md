@@ -9,6 +9,29 @@
 
 ---
 
+## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2327
+
+- [x] [L8] 野怪要能追房客：`EntityContext.targetFor` + `Mob.playerTarget()`，AI 不再写死 `ctx.player`（本地玩家） → `npm run check:fast`
+  - 做了什么：`Entity.ts` 新增 `PlayerTarget`（`x/y/z` + 可选 `invisible` / `hit` / `afflict`）与 `EntityContext.targetFor(mob)`；`Mob` 新增 `protected playerTarget(ctx)`（`targetFor` 优先，否则退回 `ctx.player`），用它替换 `updateAi` / `deliverMelee` / `distanceToPlayerSq` / `flyAi` 里的目标；`flyAi` 的参数类型放宽成 `PlayerTarget | null`；`Phantom`（幻翼）也改用 `playerTarget`。
+  - 为什么：从属端根本不跑生物 AI（`SimMode`），整场模拟都在房主那边，而 `EntityContext.player` 只有一个（本地玩家 = 房主）——怪物自然看不见房客，这就是"只打房主"的根因。改目标选择，而不是给从属端也跑一份 AI（那会重新引入两端各算一遍的老问题）。
+  - 验证：新增 `tests/mob-target.test.ts` **4 条**（没 `targetFor` 时退回本地玩家、指定远端后按远端算距离、返回 null 也退回、没有本地玩家时有远端目标也能算）；`npm run check:fast` **595 → 599 单测**全绿。
+- [x] [L8] 伤害要落到房客身上：新增 `mob-attack`（房主 → 服务端 → 被打的那个人），接收方走本地 `damagePlayer` → `npm run test:net`
+  - 做了什么：`NetClient.sendMobAttack()` + `mob-attack` 接收分支 + `onMobAttack` 回调；`server/index.mjs` 新增 `mob-attack` 路由（只收本房房主、`takeEffectToken` 限频、目标必须同房且不是自己、伤害夹 0~50、坐标有限、`source` 截 32 字、**只转给目标一人**）；`main.ts` 用 `pickRemotePlayerTarget()`（房主端挑"比本地玩家更近的、同维度、没死的远端玩家"）挂在 `targetFor`，`hit` 回调接 `sendMobAttack`，收到 `mob-attack` 走 `damagePlayer`。
+  - 为什么：血量和护甲是**各端自己的**，房主不能直接改房客的血。房主只负责判定"谁被哪只怪打了、基础伤害多少"，护甲减免/无敌帧/难度倍率都在接收方本地算——这样"被野怪咬"与"被本地野怪咬"走同一条路，死亡与掉落也自然一致。
+  - 验证：`npm run test:net` **286 → 292 通过 / 0 失败**（被打的人收到 + `fromId`；旁边的房客收不到；房客伪造被无视；伤害 0/NaN 不转发；伤害夹到 50）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 补 `mob-attack` 与"AI 目标可以是远端玩家"+ `TASKS.md` 的 L8 补一节 → `npm run check`
+  - 做了什么：§4 上行表新增 `mob-attack`（校验口径 + "只转给被打的人"）、§5 下行表同样补一条；§2 的"服务端不跑 tick"那句补上"生物 AI 的目标可以是远端玩家"；`TASKS.md` 的 L8 补第 ⑬ 点，并把两处已知差异写进去（末影龙仍只追房主、远端挨打不会中毒）。
+  - 为什么：这条链路的关键约定是"**伤害由谁结算**"——房主只判定"谁被哪只怪打了"，血量和护甲归接收方。不写清楚，下次很容易改成"房主直接改血量"（那会让两端的血量各算一遍）。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/chase-test.ts` 有一条结构断言钉着 `playerInvisible: ctx.playerInvisible === true`，改成跟着目标走之后按新写法更新。
+
 ## 批次 20261026-2259 · 2026-10-26 · 会话 783135b3
 
 > 用户 2026-10-26 报的五件事：① 对方形象每隔几秒闪一次；② 队友死了对方还站着；
@@ -215,42 +238,4 @@
   - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
   - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
   - 批次：20261026-0600
-
-## 批次 20261026-0500 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：「服务器地址除了手输，右侧加一个选择按钮 → 服务器选择界面（局域网扫描 / 公开服务器）」，
-> 服务器要能被探测来测响应时间，选中自动回填；开房与加入两处都要。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0500
-
-目标（用户 2026-10-26）：服务器地址除了手输，还要能「选」——地址框右侧一个按钮，点开进服务器选择界面；
-界面里两个区域：**局域网扫描**（扫当前网段找可用服务器）与**公开服务器**（接口下发，先留入口）；
-服务器要提供探测接口（发一个包、回一个包），用来测响应时间；选中后自动把地址填回；
-**开房**与**加入房间**两处都要这个入口。
-
-- [x] [服务器1] 服务端提供无状态探测接口 `GET /ping`（禁缓存、几十字节）→ 验收：`npm run test:net`
-  - 做什么：`server/index.mjs` 在 `/healthz` 前加 `/ping`，返回 `{ok:true,t:Date.now(),v:PROTOCOL_VERSION}`，头里 `cache-control: no-store`
-  - 为什么：局域网扫描要并发打 254 个地址，只能靠「谁能最快回一个字节」判断；不能复用 `/healthz`（要算吞吐与房间数），也不能用 WebSocket 握手（每条都要完整握手+关闭，浏览器同源并发还有上限）
-  - 验证：`npm run test:net` **217/0**（+4：`/ping` 返回 ok、带协议版本、`no-store`、本机 RTT < 200ms）
-  - 批次：20261026-0500
-- [x] [服务器2] 发现逻辑收成纯模块 `core/net/ServerDiscovery.ts`（网段枚举 / 单点探测 / 并发扫描 / 可取消 / https 判定）→ 验收：`npx vitest run tests/server-discovery.test.ts`
-  - 做什么：`subnetOf`（只认 10/8、192.168/16、172.16~31/12）→ `subnetHosts`（254 个）→ `probeHost`（量 RTT）→ `scanSubnet`（并发 32、边扫边回调、可取消、按 RTT 排序）；`canScanLan(protocol)` 判 https；浏览器实现 `browserReach` 用 `fetch(mode:'no-cors') + AbortController`
-  - 为什么：这一段决定「能不能用」，必须能离线测（注入 `reach`/`now`，不打真网络）；`no-cors` 是因为局域网服务端不会给每个来源加 CORS 头，而我们要的只是「这地址有人在听」
-  - 验证：`npx vitest run tests/server-discovery.test.ts` **15/15**（网段识别/公网拒绝、254 枚举、RTT 升序、边扫边回调、取消、https 判定 + 公开列表解析 3 条）
-  - 批次：20261026-0500
-- [x] [服务器3] 新增「选择服务器」面板 `ui/ServerPicker.ts`（局域网扫描区 + 公开服务器区 + 选中回填）→ 验收：`npm run test:ui` 结构断言
-  - 做什么：标题行（关闭）、局域网区（网段输入默认从当前地址/页面地址推导 + 扫描按钮 + 状态行 + 逐条结果带 RTT）、公开区（`publicServersUrl()` 为空显示「接口还没提供」；有 URL 就拉 `{servers:[{name,address,region?}]}` 并列出）；点遮罩关闭；https 页面禁用扫描并说明原因
-  - 为什么：做成「看一眼点一下」的浮层（挂 `<body>`、点遮罩即关），它夹在「填地址」这一步中间，做成第三个视图要多两次返回
-  - 验证：`npm run test:ui` **1192/0**（+13 条结构断言）；样式 `.server-picker*` 与 `.world-pick` 落 `index.html`
-  - 批次：20261026-0500
-- [x] [服务器4] 两处入口接上：开房对话框地址行右侧 ▾（第三列）+ 加入面板地址行 ▾ → 验收：`npm run check:fast`
-  - 做什么：`WorldScreen` 用现有 `makeRow(label, control, extra)` 第三参数放按钮，面板按对话框生命周期建/拆（`cleanup()` 里 `dispose`）；`MultiplayerScreen` 在地址行插到「找房间」左边，面板按需创建后常驻（该界面只建一次）
-  - 为什么：两处填的是同一个东西，必须同一套面板；用 ▾ 而不是「选择」两个字——六语言长度差太多，`.world-row` 第三列只有 44px
-  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` 1192/0；`npm run check:fast` 全绿
-  - 未验：真机在局域网里扫一次（本机开发页面是 http 可以扫；部署在 GitHub Pages 的 https 页面会被浏览器拦住，面板会直接说明原因）
-  - 批次：20261026-0500
 
