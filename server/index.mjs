@@ -32,7 +32,6 @@ import {
   blockEditRejection,
   finiteNumber,
   isValidClientId,
-  DEFAULT_ROOM,
   sanitizeDimension,
   sanitizeName,
   sanitizeRoom,
@@ -353,16 +352,6 @@ function broadcast(message, exceptId, room, aoi = null) {
     traffic.outBytes += text.length;
     traffic.outMessages++;
   }
-}
-
-/**
- * 数据 key 里的房间名（联机26）：新格式 `room|dimension|x,y,z`，旧格式只有
- * `dimension|x,y,z`（这个版本之前存的）——旧数据归默认房间，不当作损坏。
- */
-function roomOfDataKey(key) {
-  const parts = String(key).split('|');
-  // 旧格式的第二段是 `x,y,z`（逗号分隔，不含 `|`），所以"正好两段"就是旧格式
-  return parts.length >= 3 ? parts[0] : DEFAULT_ROOM;
 }
 
 /** 取出某房间名下的全部值（key 是 `房名|...`，联机26） */
@@ -811,93 +800,42 @@ statsTimer.unref?.();
 
 /** 当前世界的完整快照（落盘用） */
 function worldSnapshot() {
+  /*
+   * ⚠️ **这里只有"服务端全局量"，没有任何世界数据**（用户 2026-10-26）。
+   *
+   * 世界（方块增量 / 容器 / 牌子 / 展示框）以**房主本地存档**为唯一真相，服务端只当
+   * 这一局的缓存；房间一结束就清（`clearRoom`）。落盘一份"世界的副本"会立刻变成
+   * 第二份事实：重启后它会被 `welcome` 发出去，把房主本地的世界改回上一次的样子。
+   *
+   * 留下的三样是**多房间共享的全局量**：时间、天数、天气由服务端统一推进，
+   * 重启后接着走（停机期间世界停着），与"谁的世界"无关。
+   */
   return {
     version: SNAPSHOT_VERSION,
     savedAt: Date.now(),
-    seed: WORLD_SEED,
     timeOfDay: Number(currentTimeOfDay().toFixed(6)),
     // 天数（用户 2026-10-25）：重启之后接着数，否则一个晚上的存档会让世界回到第 0 天
     day: currentDay(),
     // 天气（联机35）：重启后接着上次的天气跑
     weather: weather.kind,
-    // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension, room]（末位 room 是联机26 加的）
-    edits: [...edits].map(([key, e]) => [e.x, e.y, e.z, e.id, e.state, e.dimension, roomOfDataKey(key)]),
-    // 容器：[x, y, z, dimension, slots, room]
-    containers: [...containers].map(([key, c]) => [c.x, c.y, c.z, c.dimension, c.slots, roomOfDataKey(key)]),
-    // 牌子：[x, y, z, dimension, lines, room]（联机16）
-    signs: [...signs].map(([key, v]) => [v.x, v.y, v.z, v.dimension, v.lines, roomOfDataKey(key)]),
-    // 展示框：[x, y, z, dimension, item, rotation, room]
-    frames: [...frames].map(([key, f]) => [f.x, f.y, f.z, f.dimension, f.item, f.rotation, roomOfDataKey(key)]),
   };
 }
 
 /**
- * 启动时读档：把上次的快照灌回内存表。
+ * 启动时读档：**只把三个全局量灌回来**（时间 / 天数 / 天气）。
  *
  * 时间用"存档时刻的时间"做新的起点——服务端停机的那段时间不走（原版服务器关掉的
  * 时候世界也是停的），这比"按真实时间补算"更符合直觉，也不会出现"重启后突然变成深夜"。
+ *
+ * ⚠️ 老版本（v1）的存档里还有 edits/containers/signs/frames 四张表（那时候服务端自己
+ * 存世界）。它们现在**一律不读**：世界以房主本地为准，读回来就等于服务端抢先给房主
+ * 灌了一份旧世界。`readSnapshot` 仍然接受 v1（时间照样拿来用），下一次保存会写成 v2。
  */
 const loaded = readSnapshot(WORLD_FILE, log);
 if (loaded.data) {
   const saved = loaded.data;
-  for (const entry of Array.isArray(saved.edits) ? saved.edits : []) {
-    if (!Array.isArray(entry)) continue;
-    const [x, y, z, id, state, dimension, rawRoom] = entry;
-    const room = sanitizeRoom(String(rawRoom ?? DEFAULT_ROOM));
-    const edit = {
-      x: Math.trunc(Number(x)),
-      y: Math.trunc(Number(y)),
-      z: Math.trunc(Number(z)),
-      id: Math.trunc(Number(id)),
-      state: Math.trunc(Number(state ?? 0)),
-      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
-    };
-    if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
-    // 读档也走容量策略：存档比上限还大时保留最后 MAX_EDITS 条（不告警，这是读档不是溢出）
-    rememberEdit(edits, scopedKey(room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), { ...edit, room }, MAX_EDITS);
-  }
-  for (const entry of Array.isArray(saved.containers) ? saved.containers : []) {
-    if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, slots, rawRoomC] = entry;
-    const roomC = sanitizeRoom(String(rawRoomC ?? DEFAULT_ROOM));
-    const container = {
-      x: Math.trunc(Number(x)),
-      y: Math.trunc(Number(y)),
-      z: Math.trunc(Number(z)),
-      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
-      slots,
-    };
-    if (![container.x, container.y, container.z].every(Number.isFinite)) continue;
-    containers.set(scopedKey(roomC, `${container.dimension}|${container.x},${container.y},${container.z}`), container);
-  }
-  for (const entry of Array.isArray(saved.signs) ? saved.signs : []) {
-    if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, lines, rawRoomS] = entry;
-    const roomS = sanitizeRoom(String(rawRoomS ?? DEFAULT_ROOM));
-    const sign = {
-      x: Math.trunc(Number(x)),
-      y: Math.trunc(Number(y)),
-      z: Math.trunc(Number(z)),
-      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
-      lines: Array.isArray(lines) ? lines.map((line) => String(line)) : [],
-    };
-    if (![sign.x, sign.y, sign.z].every(Number.isFinite)) continue;
-    signs.set(scopedKey(roomS, `${sign.dimension}|${sign.x},${sign.y},${sign.z}`), sign);
-  }
-  for (const entry of Array.isArray(saved.frames) ? saved.frames : []) {
-    if (!Array.isArray(entry)) continue;
-    const [x, y, z, dimension, item, rotation, rawRoomF] = entry;
-    const roomF = sanitizeRoom(String(rawRoomF ?? DEFAULT_ROOM));
-    const frame = {
-      x: Math.trunc(Number(x)),
-      y: Math.trunc(Number(y)),
-      z: Math.trunc(Number(z)),
-      dimension: sanitizeDimension(String(dimension ?? 'overworld')),
-      item: item && typeof item === 'object' ? item : null,
-      rotation: Math.trunc(Number(rotation ?? 0)) || 0,
-    };
-    if (![frame.x, frame.y, frame.z].every(Number.isFinite)) continue;
-    frames.set(scopedKey(roomF, `${frame.dimension}|${frame.x},${frame.y},${frame.z}`), frame);
+  if (saved.version !== SNAPSHOT_VERSION) {
+    log(`存档是 v${saved.version}（当前 v${SNAPSHOT_VERSION}）：只沿用时间/天数/天气，房间数据不再读取`);
   }
   if (isWeatherKind(saved.weather)) {
     weather = { kind: saved.weather, seconds: weatherSecondsFor(Math.random, saved.weather) };
@@ -909,9 +847,7 @@ if (loaded.data) {
   if (typeof saved.day === 'number' && Number.isFinite(saved.day) && saved.day >= 0) {
     startDay = Math.trunc(saved.day);
   }
-  log(
-    `读档完成：方块 ${edits.size} 条 / 容器 ${containers.size} 个 / 时间 ${currentTimeOfDay().toFixed(2)}`,
-  );
+  log(`读档完成：时间 ${currentTimeOfDay().toFixed(2)} · 第 ${currentDay()} 天 · 天气 ${weather.kind}（房间数据不落盘）`);
 }
 
 /** 定时落盘（30 秒）；正常退出时再补一次 */

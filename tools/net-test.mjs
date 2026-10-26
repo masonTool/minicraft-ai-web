@@ -11,11 +11,12 @@
 import { spawn } from 'node:child_process';
 import { decodeEditsPack } from '../server/editpack.mjs';
 import { get } from 'node:http';
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, sanitizeWorldMeta } from '../server/protocol.mjs';
+import { SNAPSHOT_VERSION } from '../server/store.mjs';
 
 /**
  * 服务端快照目录（联机13）：指到临时目录，**不能**用默认的 `server/.data/`——
@@ -1260,13 +1261,23 @@ try {
     sender.close();
   }
 
-  // ---------------------------------------------------------------- 重启后快照仍在（联机13）
-  console.log('\n[持久化：重启后快照仍在]');
+  // ---------------------------------------------------------------- 服务端不持有世界存档（用户 2026-10-26）
+  /*
+   * 口径变了：世界以**房主本地存档**为唯一真相，服务端只当这一局的会话缓存。
+   *  · `world.json` 里只剩时间 / 天数 / 天气三样全局量；
+   *  · 重启之后房间数据**不复活**（复活了就等于服务端拿旧世界改房主的世界）；
+   *  · 老 v1 存档里的四张表照样不读，但时间/天数/天气要沿用。
+   */
+  console.log('\n[持久化：只存全局量，房间数据不复活]');
   {
-    // 先留一条方块 + 一个容器，然后 SIGTERM（退出流程里会补存一次）
-    const before = new TestClient('BeforeRestart');
-    const welcomeBefore = await joinAndWaitWelcome(before, '重启前', 0, 70, 0);
-    check('重启前的客户端能加入', welcomeBefore !== null);
+    const PERSIST_ROOM = 'persistroom';
+    const before = new TestClient('BeforeRestart', undefined, {
+      room: PERSIST_ROOM,
+      host: true,
+      world: { name: '重启房', seed: 909, mode: 'survival', difficulty: 'normal' },
+    });
+    const welcomeBefore = await joinAndWaitWelcome(before, '重启前房主', 0, 70, 0);
+    check('重启前的房主能加入', welcomeBefore !== null);
     before.send({ t: 'block', x: 30, y: 70, z: 30, id: 5, state: 0, dimension: 'overworld' });
     before.send({
       t: 'container',
@@ -1285,22 +1296,87 @@ try {
     await Promise.race([exited, sleep(2500)]);
     await sleep(200);
 
+    /*
+     * 直接看落盘的那份 JSON（这是"口径"本身，比间接断言更准）：
+     * 版本是 2、四张表一个都不在、时间还在。
+     */
+    let saved = null;
+    try {
+      saved = JSON.parse(readFileSync(join(DATA_DIR, 'world.json'), 'utf8'));
+    } catch {
+      saved = null;
+    }
+    check('落盘快照能读出来', saved !== null);
+    check('落盘版本是 v2', saved?.version === SNAPSHOT_VERSION, `${saved?.version} vs ${SNAPSHOT_VERSION}`);
+    check(
+      '落盘里没有任何房间数据（edits/containers/signs/frames）',
+      saved !== null &&
+        ['edits', 'containers', 'signs', 'frames'].every((key) => saved[key] === undefined),
+      JSON.stringify(Object.keys(saved ?? {})),
+    );
+    check('时间仍然落盘（多房共享的全局量）', typeof saved?.timeOfDay === 'number', `${saved?.timeOfDay}`);
+
     check('重启后服务端能再起来', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
 
-    const revived = new TestClient('Revived');
-    const welcome = await joinAndWaitWelcome(revived, '复活的玩家', 0, 70, 0);
+    const revived = new TestClient('Revived', undefined, { room: PERSIST_ROOM });
+    const welcome = await joinAndWaitWelcome(revived, '复活的队友', 0, 70, 0);
     check('重启后拿到 welcome', welcome !== null);
     check(
-      '重启后方块改动还在',
-      (welcome?.edits ?? []).some((e) => e[0] === 30 && e[1] === 70 && e[2] === 30),
-      JSON.stringify((welcome?.edits ?? []).slice(-3)),
+      '重启后方块改动**不再**复活（缓存不落盘）',
+      !(welcome?.edits ?? []).some((e) => e[0] === 30 && e[1] === 70 && e[2] === 30),
+      `${(welcome?.edits ?? []).length} 条`,
     );
     check(
-      '重启后容器内容还在',
-      (welcome?.containers ?? []).some((c) => c.x === 31 && c.z === 30),
+      '重启后容器内容也不再复活',
+      !(welcome?.containers ?? []).some((c) => c.x === 31 && c.z === 30),
       JSON.stringify(welcome?.containers),
     );
     revived.close();
+  }
+
+  // ---------------------------------------------------------------- 旧 v1 存档（升级路径）
+  console.log('\n[持久化：旧 v1 存档只沿用时间/天数/天气]');
+  {
+    // 先让它退干净，再手写一份 v1 存档（那时服务端自己存世界）
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    await Promise.race([exited, sleep(2500)]);
+    writeFileSync(
+      join(DATA_DIR, 'world.json'),
+      JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        seed: 20261014,
+        timeOfDay: 0.5,
+        day: 7,
+        weather: 'rain',
+        // v1 才有：四张房间数据表（升级后必须被丢弃）
+        edits: [[12, 70, 12, 5, 0, 'overworld', 'legacyroom']],
+        containers: [[13, 70, 12, 'overworld', [{ id: 3, count: 2 }], 'legacyroom']],
+        signs: [[14, 70, 12, 'overworld', ['旧牌子'], 'legacyroom']],
+        frames: [[15, 70, 12, 'overworld', { id: 3, count: 1 }, 0, 'legacyroom']],
+      }),
+    );
+    await sleep(40);
+
+    check('v1 存档下服务端能起来（不当损坏）', await startServer(), serverOutput.trim().split('\n').slice(-3).join(' | '));
+    check(
+      'v1 没有被改名成 .broken（它是旧格式，不是坏文件）',
+      !readdirSync(DATA_DIR).some((name) => name.startsWith('world.json.broken-')),
+      readdirSync(DATA_DIR).join(','),
+    );
+
+    const legacy = new TestClient('Legacy', undefined, { room: 'legacyroom' });
+    const welcomeLegacy = await joinAndWaitWelcome(legacy, '升级后进来', 12, 70, 12);
+    check('v1 的方块数据被丢弃（房间数据以房主为准）', (welcomeLegacy?.edits ?? []).length === 0, `${(welcomeLegacy?.edits ?? []).length}`);
+    check('v1 的容器/牌子/展示框也被丢弃', (welcomeLegacy?.containers ?? []).length === 0 && (welcomeLegacy?.signs ?? []).length === 0 && (welcomeLegacy?.frames ?? []).length === 0, JSON.stringify({ c: welcomeLegacy?.containers?.length, s: welcomeLegacy?.signs?.length, f: welcomeLegacy?.frames?.length }));
+    check(
+      'v1 的时间被沿用（0.5 附近，不是回到清晨 0.12）',
+      typeof welcomeLegacy?.timeOfDay === 'number' && welcomeLegacy.timeOfDay > 0.45 && welcomeLegacy.timeOfDay < 0.6,
+      `${welcomeLegacy?.timeOfDay}`,
+    );
+    check('v1 的天气被沿用（rain）', welcomeLegacy?.weather === 'rain', `${welcomeLegacy?.weather}`);
+    legacy.close();
   }
 
   // ---------------------------------------------------------------- 损坏快照回退（联机13）

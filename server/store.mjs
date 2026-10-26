@@ -19,8 +19,21 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-/** 快照格式版本：字段一旦不兼容就 +1，读到不认识的版本按"损坏"处理 */
-export const SNAPSHOT_VERSION = 1;
+/**
+ * 快照格式版本：字段一旦不兼容就 +1，读到不认识的版本按"损坏"处理。
+ *
+ * v2（用户 2026-10-26）：**不再存世界数据**——世界以房主本地存档为唯一真相，服务端只当
+ * 这一局的会话缓存（房间一结束就清）。v1 里那四张表（edits/containers/signs/frames）
+ * 仍然**读得进来**（时间/天数/天气照用），但调用方一律丢弃它们，下一次保存自然写成 v2。
+ */
+export const SNAPSHOT_VERSION = 2;
+/**
+ * 还读得懂的版本。
+ *
+ * 为什么不把 v1 当"损坏"：那样会把一份内容完好的存档改名成 `.broken-<时间戳>`，
+ * 日志里还得说一句"存档损坏"——而它其实只是旧格式，时间/天气/天数照样是有效的。
+ */
+const READABLE_VERSIONS = new Set([1, SNAPSHOT_VERSION]);
 
 /**
  * 读快照。
@@ -42,7 +55,7 @@ export function readSnapshot(file, log = () => {}) {
   try {
     const data = JSON.parse(text);
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('顶层不是对象');
-    if (data.version !== SNAPSHOT_VERSION) throw new Error(`版本 ${data.version} 不认识`);
+    if (!READABLE_VERSIONS.has(data.version)) throw new Error(`版本 ${data.version} 不认识`);
     return { data, reason: 'ok' };
   } catch (error) {
     // 损坏：先备份再重来。备份名带时间戳，连坏两次不会互相覆盖
