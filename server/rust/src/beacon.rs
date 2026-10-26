@@ -152,6 +152,10 @@ pub fn announce_of(state: &State, instance: &str, password_required: bool) -> An
         .unwrap_or_else(|| crate::protocol::DEFAULT_ROOM.to_string());
     let world = state.world_of_room(&room);
     let players = state.players.values().filter(|player| player.room == room).count() as u32;
+    // 只看**这一间**有没有房主：以前写 `!hosts.is_empty()`，多房间时会报"别的房间有房主"，
+    // 客户端就会对着一个没人跑模拟的房说「可以进」。
+    // ⚠️ 必须在 `room` 被 move 进结构体**之前**算好（E0382：先 move 后借用）。
+    let has_host = state.hosts.contains_key(&room);
     Announce {
         instance: instance.to_string(),
         port: 0, // 调用方填（这里拿不到实际监听端口）
@@ -159,9 +163,7 @@ pub fn announce_of(state: &State, instance: &str, password_required: bool) -> An
         room,
         seed: world.seed,
         players,
-        // 只看**这一间**有没有房主：以前写 `!hosts.is_empty()`，多房间时会报"别的房间有房主"，
-        // 客户端就会对着一个没人跑模拟的房说「可以进」。
-        has_host: state.hosts.contains_key(&room),
+        has_host,
         password_required,
     }
 }

@@ -73,6 +73,11 @@ pub struct Config {
     pub beacon_if: std::net::Ipv4Addr,
     /// 一个房间的容量（只用于 `/rooms` 显示 `在线/容量`，**不是准入限制**）
     pub max_players: u32,
+    /// 允许进"没有房主"的房间（`ALLOW_HOSTLESS_ROOMS=1`，**只给测试**）
+    ///
+    /// 与 Node 版同名开关同一口径：联机套件里绝大多数用例是"单人连上去测同步"，
+    /// 并不建立房主，不放开的话它们会全被 `no-host` 拒掉。
+    pub allow_hostless_rooms: bool,
 }
 
 impl Config {
@@ -106,6 +111,7 @@ impl Config {
             .and_then(|value| value.parse::<u32>().ok())
             .filter(|value| *value > 0)
             .unwrap_or(10);
+        let allow_hostless_rooms = std::env::var("ALLOW_HOSTLESS_ROOMS").ok().as_deref() == Some("1");
         Self {
             port,
             seed,
@@ -117,6 +123,7 @@ impl Config {
             beacon_port,
             beacon_if,
             max_players,
+            allow_hostless_rooms,
         }
     }
 }
@@ -194,6 +201,8 @@ pub async fn start(config: Config) -> io::Result<Server> {
         beacon_on: config.beacon,
         peers: Mutex::new(beacon::PeerBook::new()),
         max_players: config.max_players,
+        allow_hostless_rooms: config.allow_hostless_rooms,
+        beacon_port: config.beacon_port,
     });
 
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
@@ -454,6 +463,25 @@ async fn read_head(stream: &mut TcpStream) -> Option<(Vec<u8>, String, HashMap<S
 
 async fn serve_http(stream: &mut TcpStream, hub: &Arc<Hub>, path: &str) {
     let path = path.split('?').next().unwrap_or("/");
+    if path == "/ping" {
+        /*
+         * 局域网扫描的无状态探针（`core/net/ServerDiscovery.ts` 探它）。
+         *
+         * **必须有**：客户端"扫网段"只认能回 `/ping` 的机器；Rust 版以前没有这个路由，
+         * 于是手机上跑的服务端在「选择服务器」里永远扫不到（只有组播 beacon 能让
+         * 别的服务端看见它）。不建玩家、不占房主位，也不能被缓存。
+         */
+        let body = json!({"ok": true, "t": store::now_ms(), "v": PROTOCOL_VERSION}).to_string();
+        write_http(
+            stream,
+            200,
+            "application/json; charset=utf-8",
+            &body,
+            &[("cache-control", "no-store, no-cache, must-revalidate")],
+        )
+        .await;
+        return;
+    }
     if path == "/rooms" {
         let st = hub.state.lock().await;
         let mut rooms: Vec<(String, u32, bool)> = Vec::new();
@@ -511,6 +539,8 @@ async fn serve_http(stream: &mut TcpStream, hub: &Arc<Hub>, path: &str) {
             "protocol": PROTOCOL_VERSION,
             // 局域网发现（N4）：`beacon` 说明本进程有没有在广播，`peers` 是听到的其它实例
             "beacon": hub.beacon_on,
+            // 与 Node 版同名字段（客户端只读 peers，但两端字段对齐才好排查）
+            "beaconPort": hub.beacon_port,
             "peers": peers,
             "traffic": hub.traffic.rates(),
             "totals": {

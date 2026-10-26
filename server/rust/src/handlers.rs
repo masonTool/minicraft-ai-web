@@ -62,6 +62,10 @@ pub struct Hub {
     pub peers: Mutex<crate::beacon::PeerBook>,
     /// 一个房间的容量（只用于 `/rooms` 显示 `在线/容量`，**不是准入限制**）
     pub max_players: u32,
+    /// 允许进没有房主的房间（只给测试，见 `Config::allow_hostless_rooms`）
+    pub allow_hostless_rooms: bool,
+    /// 发现层用的 UDP 端口（`/healthz` 里给客户端看，与 Node 版 `beaconPort` 同名）
+    pub beacon_port: u16,
 }
 
 impl Hub {
@@ -285,7 +289,7 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
      * **不推进的世界**（方块能放、怪不动、红石不亮），而界面一切正常。
      * 房主在宽限期内断线同理——`hosts` 有登记，但人不在 `players` 里。
      */
-    if !wants_host {
+    if !wants_host && !hub.allow_hostless_rooms {
         match st.hosts.get(&room).copied() {
             None => {
                 drop(st);
@@ -376,6 +380,12 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
 
     let mut broadcast = join_broadcast;
     broadcast.insert("t".to_string(), Value::from("player"));
+    /*
+     * `isHost` 必须跟着 `player` 广播走（与 Node 版一致）：队友靠它把这一行标成
+     * 「房主」，也是"谁是这一局跑模拟的人"在 UI 上的唯一来源——只在 `welcome` 里给
+     * 进房的那个人是不够的。
+     */
+    broadcast.insert("isHost".to_string(), Value::Bool(wants_host));
     st.broadcast(&room, Some(id), &Value::Object(broadcast), None, &hub.traffic);
 
     let online = st.players.len();
@@ -414,9 +424,13 @@ async fn on_move(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String,
     let wire = player.to_wire();
     let room = player.room.clone();
     let aoi = Aoi::new(player.x, player.z, player.dimension.as_str());
+    // 房主标识要随**每条** `player` 广播走（用户 2026-10-25）：客户端只靠 `welcome.hostId`
+    // 的话，房主中途换人后名字牌永远停在旧值。
+    let is_host = player.is_host;
     let mut wire = wire;
     if let Some(map) = wire.as_object_mut() {
         map.insert("t".to_string(), Value::from("player"));
+        map.insert("isHost".to_string(), Value::Bool(is_host));
     }
     st.broadcast(&room, Some(id), &wire, Some(&aoi), &hub.traffic);
 }

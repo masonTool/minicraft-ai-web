@@ -10,4 +10,6 @@ export PATH="$HOME/.cargo/bin:$PATH"
 cargo build -q || exit 1
 
 cd "$ROOT" || exit 1
-NET_SERVER_BIN="$ROOT/server/rust/target/debug/minicraft-server" node tools/net-test.mjs
+# ALLOW_HOSTLESS_ROOMS=1：与 Node 那边的 net-test 同一口径——绝大多数用例是"单人连上去
+# 测同步"，不建立房主；产品默认仍然拒绝进入没有房主的房间（no-host）。
+ALLOW_HOSTLESS_ROOMS=1 NET_SERVER_BIN="$ROOT/server/rust/target/debug/minicraft-server" node tools/net-test.mjs
