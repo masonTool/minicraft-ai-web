@@ -127,6 +127,19 @@ console.log('\n[区块网格原子替换]');
   callbacks.shift()!(response([{ section: 8, solid: triangle, translucent: null }]));
   equal('首版网格已显示', renderer.chunkMeshCount, 1);
 
+  // 批次 20261026-0141：区块 mesh 的位置建好就固定，世界矩阵冻结，不再每帧白算
+  const frozen = scene.children[0] as THREE.Mesh;
+  check('区块 mesh 关掉了自动矩阵更新', frozen.matrixAutoUpdate === false);
+  check('区块 mesh 不参与父级 matrixWorld 的递归', frozen.matrixWorldAutoUpdate === false);
+  frozen.position.x = 99;
+  frozen.updateMatrixWorld(true);
+  check(
+    '冻结之后改 position 不再影响世界矩阵（要挪位置只能重建）',
+    frozen.matrixWorld.elements[12] === 0,
+    String(frozen.matrixWorld.elements[12]),
+  );
+  frozen.position.x = 0;
+
   renderer.enqueueAround(1, 1);
   renderer.processQueue(1, 0, 0);
   equal('Worker 重建期间旧网格仍留在场景里（不会整块闪空）', renderer.chunkMeshCount, 1);

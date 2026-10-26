@@ -345,7 +345,7 @@ export class ChunkRenderer {
       const geometry = this.acquireGeometry(merged);
       const mesh = new THREE.Mesh(geometry, material);
       // 顶点里已经烘入 section 的 baseY，网格只放水平偏移
-      mesh.position.set(offsetX, 0, offsetZ);
+      this.freezeAt(mesh, offsetX, 0, offsetZ);
       mesh.frustumCulled = true;
       meshes.push(mesh);
       triangles += geometry.index!.count / 3;
@@ -371,14 +371,14 @@ export class ChunkRenderer {
 
       if (solid) {
         const mesh = new THREE.Mesh(solid, this.solidMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
+        this.freezeAt(mesh, offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
         meshes.push(mesh);
         triangles += solid.index!.count / 3;
       }
       if (translucent) {
         const mesh = new THREE.Mesh(translucent, this.translucentMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
+        this.freezeAt(mesh, offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
         meshes.push(mesh);
         triangles += translucent.index!.count / 3;
@@ -387,6 +387,27 @@ export class ChunkRenderer {
 
     this.replaceMeshes(key, cx, cz, meshes, triangles);
     chunk.state = advanceChunkState(chunk.state, 'meshed');
+  }
+
+  /**
+   * 摆好位置并把世界矩阵**冻结**（批次 20261026-0141）。
+   *
+   * three 每帧的 `scene.updateMatrixWorld()` 会给每个对象做一次 compose（位置/旋转/缩放
+   * → 矩阵）并递归子节点。区块 mesh 的 position 只在创建时写这一次，之后最多被
+   * `applyViewDistance` 改 `visible`——所以 169 个区块就是 169 次每帧白算。
+   *
+   * 冻结之后矩阵仍是正确值，视锥剔除与绘制都不变（改 `visible` 不涉及矩阵）。
+   * ⚠️ 不要再对这些 mesh 调 `position.set` / `rotation` / `scale`：关了自动更新，
+   * 改了也不会生效。要挪位置就重建网格（现在的流程本来就是重建后替换）。
+   */
+  private freezeAt(mesh: THREE.Mesh, x: number, y: number, z: number): void {
+    mesh.position.set(x, y, z);
+    mesh.updateMatrix();
+    // 父级是 scene（单位矩阵），matrixWorld 就等于本地矩阵。
+    // 直接 copy 而不是 `updateMatrixWorld()`：不依赖父级此刻的状态，也不触发递归。
+    mesh.matrixWorld.copy(mesh.matrix);
+    mesh.matrixAutoUpdate = false;
+    mesh.matrixWorldAutoUpdate = false;
   }
 
   /**
