@@ -44,6 +44,11 @@ pub struct Buckets {
     pub block: Bucket,
     pub container: Bucket,
     pub chat: Bucket,
+    /// 掉落物（用户 2026-10-26）：30/s、**突发 400**。
+    ///
+    /// 突发额度是给"进房重播"的——房主进房时客户端会把世界里已有的掉落物重播一遍，
+    /// 固定窗口只能过 30 条且不重试，于是队友永远只看到前 30 堆。
+    pub item: Bucket,
 }
 
 impl Buckets {
@@ -52,6 +57,7 @@ impl Buckets {
             block: Bucket::new(200.0, 400.0),
             container: Bucket::new(20.0, 40.0),
             chat: Bucket::new(5.0, 10.0),
+            item: Bucket::new(30.0, 400.0),
         }
     }
 }

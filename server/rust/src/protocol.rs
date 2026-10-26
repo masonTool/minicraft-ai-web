@@ -450,32 +450,50 @@ pub fn sanitize_entity_keys(raw: Option<&Value>) -> Option<Vec<Value>> {
 /// 不让客户端把任意结构塞进广播——否则一个客户端就能决定别人收到的报文长什么样。
 pub fn read_appearance(message: &Map<String, Value>) -> Map<String, Value> {
     let mut out = Map::new();
-    if let Some(held) = positive_int(message.get("held")) {
+    /*
+     * 0 是有效值（空手 / 空槽）：**带的键一定收下**，负数/脏数据规整成 0。
+     * 不能像以前那样"非正就丢掉字段"——那样"把手里的东西收起来"永远同步不过去
+     * （对端一直看着你举着上一件东西）。
+     */
+    let non_negative =
+        |value: Option<&Value>| -> Option<i64> { Some(int_of(value?).unwrap_or(0).max(0)) };
+    if let Some(held) = non_negative(message.get("held")) {
         out.insert("held".to_string(), Value::from(held));
     }
-    if let Some(offhand) = positive_int(message.get("offhand")) {
+    if let Some(offhand) = non_negative(message.get("offhand")) {
         out.insert("offhand".to_string(), Value::from(offhand));
     }
     if let Some(armor) = message.get("armor").and_then(Value::as_array) {
-        let ids: Vec<i64> = armor.iter().take(4).map(|id| int_of(id).unwrap_or(0)).collect();
-        if ids.iter().any(|id| *id > 0) {
-            out.insert("armor".to_string(), Value::from(ids));
-        }
+        let ids: Vec<i64> =
+            armor.iter().take(4).map(|id| non_negative(Some(id)).unwrap_or(0)).collect();
+        out.insert("armor".to_string(), Value::from(ids));
     }
-    // 外观下标（皮肤）：定长 10，少一个都不下发（客户端据此回退昵称派生）
+    /*
+     * 外观下标（皮肤）：**定长 10，多一个都不要**（协议契约，见
+     * `src/core/net/RemoteAppearance.ts` 的 `REMOTE_LOOK_LENGTH`）。
+     * 只做形状收口（整数、长度），"第几档合法"是各端颜色表的事，服务端没有那张表。
+     */
     if let Some(look) = message.get("look").and_then(Value::as_array) {
-        let slots: Vec<i64> = look
-            .iter()
-            .take(10)
-            .map(|value| int_of(value).unwrap_or(0).max(0))
-            .collect();
-        if slots.len() == 10 {
+        if look.len() == 10 {
+            let slots: Vec<i64> =
+                look.iter().map(|value| non_negative(Some(value)).unwrap_or(0)).collect();
             out.insert("look".to_string(), Value::from(slots));
         }
     }
-    for flag in ["sneak", "swing", "hurt", "fire", "ride", "sleep"] {
-        if truthy(message.get(flag)) {
-            out.insert(flag.to_string(), Value::Bool(true));
+    /*
+     * 布尔字段：**键在就收**（用户 2026-10-26）。以前只在真值时插入，于是"松手不再潜行"
+     * 永远传不出去——下一次整份覆盖才会纠正，表现为队友那边一直潜着走。
+     */
+    for flag in ["sneak", "swing", "hurt", "fire", "ride", "sleep", "dead"] {
+        if message.contains_key(flag) {
+            out.insert(flag.to_string(), Value::Bool(truthy(message.get(flag))));
+        }
+    }
+    // 生命 / 饥饿的点数收口：0~20 的整数（非有限数按 0），脏数据不会把 UI 画成穿出屏幕的条。
+    for stat in ["hp", "food"] {
+        if let Some(value) = message.get(stat) {
+            let points = int_of(value).unwrap_or(0).clamp(0, 20);
+            out.insert(stat.to_string(), Value::from(points));
         }
     }
     out

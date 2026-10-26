@@ -209,6 +209,17 @@ impl<K: Eq + Hash + Clone, V> OrderedMap<K, V> {
         self.insert(key, value);
         evicted
     }
+
+    /// 只保留满足条件的条目（关房时按房名前缀清缓存用）。
+    ///
+    /// ⚠️ 必须同时清理 `order`：`remember` 淘汰逻辑是 `pop_front()` 后直接 `map.remove()`，
+    /// 如果队列里残留已删掉的 key，它会把"淘汰了一条"报出去、实际容量根本没释放
+    /// （下次插入仍然满，然后就一直空转）。
+    pub fn retain<F: FnMut(&K) -> bool>(&mut self, mut keep: F) {
+        self.map.retain(|key, _| keep(key));
+        let alive = &self.map;
+        self.order.retain(|key| alive.contains_key(key));
+    }
 }
 
 /// 一个宽限期条目。
@@ -370,6 +381,36 @@ impl State {
         rooms
     }
 
+    /// 关掉一个房间：清掉它名下的全部缓存（与 Node 版 `clearRoom` 同一口径）。
+    ///
+    /// 房间 = "房主开着世界"这一局。房主走了/换人了，上一局的方块、容器、牌子、展示框、
+    /// 掉落物、世界元数据都不该留给下一局——服务端只是这一局的缓存，不是世界的主人。
+    /// 返回清掉的方块增量条数（日志用）。
+    pub fn clear_room(&mut self, room: &str) -> usize {
+        let prefix = format!("{room}|");
+        let before = self.edits.len();
+        self.edits.retain(|key| !key.starts_with(&prefix));
+        let removed = before - self.edits.len();
+        self.containers.retain(|key| !key.starts_with(&prefix));
+        self.signs.retain(|key| !key.starts_with(&prefix));
+        self.frames.retain(|key| !key.starts_with(&prefix));
+        // 掉落物 key 是 `ownerId:localId`，没有房名前缀：按 owner 现在所在的房间判
+        let victims: Vec<String> = self
+            .items
+            .iter()
+            .filter(|(_, item)| {
+                self.players.get(&item.owner).map(|player| player.room == room).unwrap_or(false)
+            })
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in victims {
+            self.items.remove(&key);
+        }
+        self.worlds.remove(room);
+        self.hosts.remove(room);
+        removed
+    }
+
     /// 给一个人发一条消息（连接已断则忽略）。
     pub fn send_to(&self, id: u64, value: &Value, traffic: &Traffic) {
         let Some(player) = self.players.get(&id) else { return };
@@ -497,56 +538,21 @@ impl State {
         }))
     }
 
-    /// 落盘用的完整快照。
+    /// 落盘用的快照（v2，用户 2026-10-26）：**不再存世界数据**。
+    ///
+    /// 世界（方块增量 / 容器 / 牌子 / 展示框）以**房主本地存档**为唯一真相，服务端只当
+    /// 这一局的缓存，房间一结束就清。落盘一份"世界的副本"会立刻变成第二份事实：重启后
+    /// 它会被 `welcome` 发出去，把房主本地的世界改回上一次的样子。
+    ///
+    /// 留下的只有**兜底时钟**（没有房主的房用的那套），顺带保证"重启之后时间接着走"
+    /// （停机期间世界停着）。
     pub fn world_snapshot(&self) -> Value {
-        let edits: Vec<Value> = self
-            .edits
-            .iter()
-            .map(|(key, edit)| {
-                json!([
-                    edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension,
-                    room_of_key(key),
-                ])
-            })
-            .collect();
-        let containers: Vec<Value> = self
-            .containers
-            .iter()
-            .map(|(key, container)| {
-                json!([
-                    container.x, container.y, container.z, container.dimension,
-                    container.slots, room_of_key(key),
-                ])
-            })
-            .collect();
-        let signs: Vec<Value> = self
-            .signs
-            .iter()
-            .map(|(key, sign)| {
-                json!([sign.x, sign.y, sign.z, sign.dimension, sign.lines, room_of_key(key)])
-            })
-            .collect();
-        let frames: Vec<Value> = self
-            .frames
-            .iter()
-            .map(|(key, frame)| {
-                json!([
-                    frame.x, frame.y, frame.z, frame.dimension, frame.item, frame.rotation,
-                    room_of_key(key),
-                ])
-            })
-            .collect();
         let time = self.current_time_of_day();
         json!({
             "version": crate::store::SNAPSHOT_VERSION,
             "savedAt": crate::store::now_ms(),
-            "seed": self.seed,
             "timeOfDay": (time * 1_000_000.0).round() / 1_000_000.0,
             "weather": self.weather.kind,
-            "edits": edits,
-            "containers": containers,
-            "signs": signs,
-            "frames": frames,
         })
     }
 
@@ -555,108 +561,11 @@ impl State {
     /// 时间用"存档时刻的时间"做新的起点——服务端停机的那段时间不走（原版服务器关掉的
     /// 时候世界也是停的），不会出现"重启后突然变成深夜"。
     pub fn apply_snapshot(&mut self, data: &Value) {
-        let list = |key: &str| data.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
-        for entry in list("edits") {
-            let Some(entry) = entry.as_array() else { continue };
-            if entry.len() < 6 {
-                continue;
-            }
-            let (Some(x), Some(y), Some(z), Some(id)) = (
-                entry[0].as_f64(),
-                entry[1].as_f64(),
-                entry[2].as_f64(),
-                entry[3].as_f64(),
-            ) else {
-                continue;
-            };
-            if ![x, y, z, id].iter().all(|value| value.is_finite()) {
-                continue;
-            }
-            let state = entry[4].as_f64().unwrap_or(0.0);
-            let dimension = sanitize_dimension(entry[5].as_str());
-            let room = sanitize_room(entry.get(6).and_then(Value::as_str));
-            let edit = Edit {
-                x: x.trunc() as i64,
-                y: y.trunc() as i64,
-                z: z.trunc() as i64,
-                id: id.trunc() as i64,
-                state: state.trunc() as i64,
-                dimension: dimension.to_string(),
-            };
-            let key = scoped_key(&room, &edit.dimension, edit.x, edit.y, edit.z);
-            self.edits.remember(key, edit, MAX_EDITS);
-        }
-        for entry in list("containers") {
-            let Some(entry) = entry.as_array() else { continue };
-            if entry.len() < 5 {
-                continue;
-            }
-            let (Some(x), Some(y), Some(z)) =
-                (entry[0].as_f64(), entry[1].as_f64(), entry[2].as_f64())
-            else {
-                continue;
-            };
-            let room = sanitize_room(entry.get(5).and_then(Value::as_str));
-            let dimension = sanitize_dimension(entry[3].as_str()).to_string();
-            let container = Container {
-                x: x.trunc() as i64,
-                y: y.trunc() as i64,
-                z: z.trunc() as i64,
-                dimension: dimension.clone(),
-                slots: entry[4].clone(),
-            };
-            let key = scoped_key(&room, &dimension, container.x, container.y, container.z);
-            self.containers.insert(key, container);
-        }
-        for entry in list("signs") {
-            let Some(entry) = entry.as_array() else { continue };
-            if entry.len() < 5 {
-                continue;
-            }
-            let (Some(x), Some(y), Some(z)) =
-                (entry[0].as_f64(), entry[1].as_f64(), entry[2].as_f64())
-            else {
-                continue;
-            };
-            let room = sanitize_room(entry.get(5).and_then(Value::as_str));
-            let dimension = sanitize_dimension(entry[3].as_str()).to_string();
-            let lines: Vec<String> = entry[4]
-                .as_array()
-                .map(|lines| lines.iter().map(|line| text_of(Some(line))).collect())
-                .unwrap_or_default();
-            let sign = Sign {
-                x: x.trunc() as i64,
-                y: y.trunc() as i64,
-                z: z.trunc() as i64,
-                dimension: dimension.clone(),
-                lines,
-            };
-            let key = scoped_key(&room, &dimension, sign.x, sign.y, sign.z);
-            self.signs.insert(key, sign);
-        }
-        for entry in list("frames") {
-            let Some(entry) = entry.as_array() else { continue };
-            if entry.len() < 6 {
-                continue;
-            }
-            let (Some(x), Some(y), Some(z)) =
-                (entry[0].as_f64(), entry[1].as_f64(), entry[2].as_f64())
-            else {
-                continue;
-            };
-            let room = sanitize_room(entry.get(6).and_then(Value::as_str));
-            let dimension = sanitize_dimension(entry[3].as_str()).to_string();
-            let frame = Frame {
-                x: x.trunc() as i64,
-                y: y.trunc() as i64,
-                z: z.trunc() as i64,
-                dimension: dimension.clone(),
-                item: if entry[4].is_object() { entry[4].clone() } else { Value::Null },
-                rotation: entry[5].as_f64().map(|value| value.trunc() as i64).unwrap_or(0),
-            };
-            let key = scoped_key(&room, &dimension, frame.x, frame.y, frame.z);
-            self.frames.insert(key, frame);
-        }
+        /*
+         * v2（用户 2026-10-26）：**房间数据一概不读**——世界以房主本地存档为准，
+         * 读回来就等于服务端抢先给房主灌了一份旧世界。v1 存档里那四张表也丢掉，
+         * 只沿用时间/天气（下一次保存自然写成 v2）。
+         */
         if let Some(kind) = data.get("weather").and_then(Value::as_str) {
             if is_weather_kind(kind) {
                 self.weather = Weather { kind: kind.to_string(), left: next_weather_seconds(kind) };

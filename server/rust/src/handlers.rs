@@ -20,7 +20,9 @@ use crate::state::{
 use crate::store;
 
 /// 协议里认识的消息类型（用于区分"还没 join 的已知消息"与"真的不认识"）。
-const KNOWN_KINDS: [&str; 21] = [
+const KNOWN_KINDS: [&str; 22] = [
+    // 主动退出（用户 2026-10-26）：房主 bye = 当场关房，其他人 bye = 当场广播 leave
+    "bye",
     "join",
     "ping",
     "move",
@@ -209,12 +211,61 @@ pub async fn on_text(hub: &Arc<Hub>, conn: &mut Conn, text: &str) -> bool {
         "ping" => {
             conn.send(&hub.traffic, &json!({"t": "pong"}));
         }
+        "bye" => {
+            on_bye(hub, id).await;
+            // 主动退出 = 立刻断开，不走宽限期（否则队友要等 30 秒才看到他"离开"）
+            return false;
+        }
         "" => {}
         other => {
             conn.send_error(&hub.traffic, "unknown", &format!("未知消息类型 {other}"));
         }
     }
     true
+}
+
+/// 主动退出（`bye`，用户 2026-10-26）：**不等宽限期**。
+///
+/// 与"掉线"的区别只有一个：主动退出是玩家说"我不玩了"，没有留 30 秒重连窗口的必要。
+///  - 房主：这一局直接结束——清掉房间缓存、把同房的人踢掉（`host-left`），自己也不进宽限期；
+///  - 其他人：广播一条 `leave` 让别人当场看到他走。
+///
+/// 收尾不再依赖 `on_close`：这里已经把玩家从 `players` 里移走，`on_close` 拿不到人，
+/// 不会再登记宽限期、也不会再广播第二条"离开"。
+async fn on_bye(hub: &Arc<Hub>, id: u64) {
+    let mut st = hub.state.lock().await;
+    let Some(player) = st.players.get(&id) else { return };
+    let room = player.room.clone();
+    let is_host = player.is_host;
+    let name = player.name.clone();
+
+    if is_host {
+        st.clear_room(&room);
+        let others: Vec<Tx> = st
+            .players
+            .values()
+            .filter(|other| other.room == room && other.id != id)
+            .map(|other| other.tx.clone())
+            .collect();
+        for tx in others {
+            let _ = tx.send(text_message(&json!({
+                "t": "error", "code": "host-left", "message": "房主已退出，房间已关闭",
+            })));
+            let _ = tx.send(Message::Close(Some(CloseFrame {
+                code: CloseCode::Library(CLOSE_HOST_LEFT),
+                reason: "host-left".into(),
+            })));
+        }
+        st.players.remove(&id);
+        drop(st);
+        hub.log(&format!("{name}#{id} 主动退出（房主），房间 {room} 已关闭"));
+        return;
+    }
+
+    st.broadcast(&room, Some(id), &json!({"t": "leave", "id": id}), None, &hub.traffic);
+    st.players.remove(&id);
+    drop(st);
+    hub.log(&format!("{name}#{id} 主动离开（不等宽限期）"));
 }
 
 // ---------------------------------------------------------------- join
@@ -289,9 +340,11 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
      * **不推进的世界**（方块能放、怪不动、红石不亮），而界面一切正常。
      * 房主在宽限期内断线同理——`hosts` 有登记，但人不在 `players` 里。
      */
-    if !wants_host && !hub.allow_hostless_rooms {
+    if !wants_host {
         match st.hosts.get(&room).copied() {
-            None => {
+            // `no-host` 受测试开关保护（单人用例不建房主），`host-offline` 不受——
+            // 那是产品行为，测试自己会建好房主再验
+            None if !hub.allow_hostless_rooms => {
                 drop(st);
                 conn.reject(
                     &hub.traffic,
@@ -311,7 +364,8 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
                 );
                 return None;
             }
-            Some(_) => {}
+            // 没房主但测试开关放开（单人用例）：照旧放行
+            None | Some(_) => {}
         }
     }
 
@@ -357,6 +411,15 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
     st.players.insert(id, player);
 
     if wants_host {
+        /*
+         * 新房主上位 = **新的一局**（用户 2026-10-26）：上一局的方块/容器/牌子/展示框/
+         * 掉落物/世界元数据全部清掉，数据由房主随后用 `session-sync` 上行。
+         * 唯一例外是**宽限期内重连的房主本人**（`grace_id` 就是 hosts 里那个 id）——
+         * 那一局还在继续，清了等于把他自己的世界删了。
+         */
+        if grace_id.is_none() {
+            st.clear_room(&room);
+        }
         st.hosts.insert(room.clone(), id);
         // 世界只由房主定：从属端带来的 `world` 一律不看；脏数据保留房间原有那份
         if let Some(meta) = sanitize_world_meta(message.get("world")) {
@@ -420,7 +483,14 @@ async fn on_move(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String,
     .to_string();
     player.team = message.get("team").map(|value| text_of(Some(value))).unwrap_or_default();
     player.team = player.team.chars().take(32).collect();
-    player.appearance = read_appearance(message);
+    /*
+     * **合并**而不是整份覆盖（用户 2026-10-26 修的闪烁 bug）：客户端只在皮肤变化 / 每 2 秒
+     * 才带 `look`，其余 99% 的 `move` 不带外观字段。以前直接覆盖，于是那些 `move` 会把皮肤
+     * 清空 → 对端回退成"按昵称派生" → 2 秒后又被纠正回来，表现为每隔几秒闪一次。
+     */
+    for (key, value) in read_appearance(message) {
+        player.appearance.insert(key, value);
+    }
     let wire = player.to_wire();
     let room = player.room.clone();
     let aoi = Aoi::new(player.x, player.z, player.dimension.as_str());
@@ -951,7 +1021,8 @@ async fn on_player_hit(hub: &Arc<Hub>, _conn: &mut Conn, id: u64, message: &Map<
 // ---------------------------------------------------------------- 掉落物
 
 async fn on_item_spawn(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String, Value>) {
-    if !conn.item_window.allow(store::now_ms() as i64, 30) {
+    // 令牌桶而不是固定窗口（用户 2026-10-26）：30/s + 突发 400，进房重播的几百堆能一次过完
+    if !conn.buckets.item.take(store::now_ms() as i64, 1) {
         return;
     }
     let mut st = hub.state.lock().await;
@@ -1162,7 +1233,9 @@ pub async fn on_close(hub: &Arc<Hub>, conn: &mut Conn) {
         }
         // 房主位宽限到期 = 这一局没人模拟了：让出房主位并关房（不关房会留下"看起来还能玩"的坏状态）
         if st.hosts.get(&room).copied() == Some(id) {
-            st.hosts.remove(&room);
+            // 关房 = 这一局结束：连世界缓存（方块/容器/牌子/展示框/掉落物）一起清，
+            // 否则下一位房主上位时会继承上一局的残骸（用户 2026-10-26）
+            st.clear_room(&room);
             let others: Vec<Tx> = st
                 .players
                 .values()

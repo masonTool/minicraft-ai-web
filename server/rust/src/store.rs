@@ -14,7 +14,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 /// 快照格式版本：字段一旦不兼容就 +1，读到不认识的版本按"损坏"处理。
-pub const SNAPSHOT_VERSION: i64 = 1;
+///
+/// v2（用户 2026-10-26，与 Node 版同一口径）：**不再存世界数据**——世界以房主本地存档为
+/// 唯一真相，服务端只当这一局的会话缓存（房间一结束就清）。v1 里那四张表
+/// （edits/containers/signs/frames）仍然**读得进来**（时间/天气照用），但调用方一律丢弃，
+/// 下一次保存自然写成 v2。
+pub const SNAPSHOT_VERSION: i64 = 2;
+
+/// 还读得懂的版本。
+///
+/// 为什么不把 v1 当"损坏"：那样会把一份内容完好的存档改名成 `.broken-<时间戳>`，
+/// 日志里还得说一句"存档损坏"——而它其实只是旧格式，时间/天气照样有效。
+const READABLE_VERSIONS: [i64; 2] = [1, SNAPSHOT_VERSION];
 
 pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
@@ -48,7 +59,14 @@ pub fn read_snapshot(file: &Path, log: &dyn Fn(&str)) -> Option<Value> {
     };
     let parsed = serde_json::from_str::<Value>(&text).ok();
     match parsed {
-        Some(value) if value.is_object() && value.get("version").and_then(Value::as_i64) == Some(SNAPSHOT_VERSION) => {
+        Some(value)
+            if value.is_object()
+                && value
+                    .get("version")
+                    .and_then(Value::as_i64)
+                    .map(|version| READABLE_VERSIONS.contains(&version))
+                    .unwrap_or(false) =>
+        {
             Some(value)
         }
         other => {
