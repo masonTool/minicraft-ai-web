@@ -485,6 +485,17 @@ export class MultiplayerScreen {
       this.statusEl.dataset.state = 'error';
       return;
     }
+    /*
+     * 昵称必填（用户 2026-10-26）：以前空值被兜底成「玩家」，而房间里只要已经有一个
+     * 「玩家」，第二个人就会被服务端以 `duplicate-name` 拒掉——先连上、再被踢，
+     * 提示还出现在聊天栏而不是这张表单上。现在当场说清楚，焦点直接落到昵称框。
+     */
+    if (this.form.nameIsBlank()) {
+      this.statusEl.textContent = t('mp.error.name');
+      this.statusEl.dataset.state = 'error';
+      this.form.focus('name');
+      return;
+    }
     // 记住这次填的（地址只存裸地址，房间/密码各存各的，下次打开都是能直接用的形式）
     writeStored(STORAGE_URL, values.baseUrl);
     writeStored(STORAGE_ROOM, this.roomInput.value.trim());

@@ -13,7 +13,7 @@
  */
 
 import { t } from '../core/i18n/I18n.ts';
-import { cleanPlayerName, MULTIPLAYER_NAME_MAX, sanitizeMultiplayerName } from '../core/net/PlayerName.ts';
+import { cleanPlayerName, MULTIPLAYER_NAME_MAX } from '../core/net/PlayerName.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
 import {
   displayServerAddress,
@@ -165,7 +165,12 @@ export class RoomForm {
     const password = this.passwordInput.value.trim().slice(0, PASSWORD_MAX);
     // 空 = 进默认房间（服务端 `DEFAULT_ROOM`），不硬塞一个名字
     const room = rawRoom.length > 0 ? sanitizeRoomName(rawRoom, this.options.roomFallback) : '';
-    const name = this.nameInput ? sanitizeMultiplayerName(this.nameInput.value) : '';
+    /*
+     * 昵称**不再兜底成「玩家」**（用户 2026-10-26：必须自己填一个）。
+     * 空串就是"没填"，由宿主用 `nameIsBlank()` 当场拦下——默认名在多人场景里必然撞
+     * `duplicate-name`，而那条错要连上之后才知道，体验是"点了加入 → 被踢"。
+     */
+    const name = this.nameInput ? cleanPlayerName(this.nameInput.value) : '';
 
     let error = '';
     if (baseUrl === null) {

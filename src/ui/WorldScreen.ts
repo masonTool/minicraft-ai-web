@@ -106,7 +106,18 @@ export interface WorldScreenActions {
    * 为什么改成异步（用户 2026-10-26："开房失败不该能进入世界"）：开房前要先探服务器
    * 在不在、房名有没有被占；失败时**不能**先把世界建起来再说。
    */
-  onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => Promise<string | null> | string | null;
+  onHostWorld?: (
+    world: WorldSummary,
+    room: string,
+    password: string,
+    baseUrl: string,
+    name: string,
+  ) => Promise<string | null> | string | null;
+  /**
+   * 开房对话框昵称的默认值（本批）：取联机面板记住的那个，省得每次重填。
+   * 不传就空着——昵称必填，空着等于让玩家自己起一个。
+   */
+  defaultPlayerName?: () => string;
 }
 
 /**
@@ -693,7 +704,8 @@ export class WorldScreen {
       initialRoom: defaultRoom,
       // 非法字符被删光时回退到"世界名派生的房名"，而不是服务端的默认房
       roomFallback: defaultRoom,
-      withName: false,
+      // 昵称（本批）：开房也收，且必填——它会进房间公告、聊天与队友的名字牌
+      initialName: this.actions.defaultPlayerName?.() ?? '',
       inputClass: 'world-input',
       pickButtonId: 'world-host-pick',
       pickButtonClass: 'world-mini world-pick',
@@ -730,6 +742,8 @@ export class WorldScreen {
       this.makeRow(t('world.serverAddress'), roomForm.urlInput, roomForm.pickButton),
       this.makeRow(t('world.roomName'), roomForm.roomInput, null),
       this.makeRow(t('world.roomPassword'), roomForm.passwordInput, null),
+      // 昵称（本批）：与加入面板同一个字段，必填（这里没传 `withName: false`，一定有这个框）
+      this.makeRow(t('mp.name'), roomForm.nameInput as HTMLInputElement, null),
       hint,
     );
     panel.append(header, form, actions);
@@ -767,12 +781,20 @@ export class WorldScreen {
         roomForm.focus('address');
         return;
       }
+      // 昵称必填（本批）：空名会被服务端兜底成「玩家」，同房再进来一个人就直接撞名
+      if (roomForm.nameIsBlank()) {
+        showError(t('mp.error.name'));
+        roomForm.focus('name');
+        return;
+      }
       /*
        * 开房是异步的（先探服务器在不在），所以**先不关对话框**：
        * 失败时把原因写在这一行提示上，玩家改完地址可以重试，不用重新进一次对话框。
        */
       start.disabled = true;
-      void Promise.resolve(this.actions.onHostWorld?.(world, values.room, values.password, values.baseUrl))
+      void Promise.resolve(
+        this.actions.onHostWorld?.(world, values.room, values.password, values.baseUrl, values.name),
+      )
         .then((failure) => {
           start.disabled = false;
           if (failure) {

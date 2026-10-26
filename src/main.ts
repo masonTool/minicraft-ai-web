@@ -3667,8 +3667,16 @@ class App {
    *
    * 地址由 `baseUrl + 房间 + 口令` 现拼（`formatServerUrl`），昵称取面板上记住的那个。
    */
-  connectOnline(intent: { baseUrl: string; room: string; password: string; host: boolean }): void {
-    const name = this.multiplayerScreen.readForm().name;
+  connectOnline(intent: {
+    baseUrl: string;
+    room: string;
+    password: string;
+    host: boolean;
+    /** 开房对话框里填的昵称（本批）：没有才回退面板记住的那个 */
+    name?: string;
+  }): void {
+    const name =
+      intent.name !== undefined && intent.name.length > 0 ? intent.name : this.multiplayerScreen.readForm().name;
     const url = formatServerUrl(intent.baseUrl, intent.room, intent.password);
     this.multiplayerScreen.prefill({ url });
     this.connectFromPanel(url, name, intent.host);
@@ -20418,6 +20426,8 @@ async function boot(): Promise<void> {
         room: intent.room,
         password: intent.password,
         host: true,
+        // 昵称也来自那个对话框（本批）：以前这里悄悄用面板里记住的值
+        name: intent.name,
       });
     }
     // 主菜单「加入房间」探完房进来的：世界就是房主那个，直接连
@@ -20634,7 +20644,7 @@ async function boot(): Promise<void> {
    * 从世界卡片「开房」（L9）：房间名与口令先记着，进世界之后填进联机面板。
    * 只放一个意图、不复制世界对象——世界由 `startWorld` 那份说了算。
    */
-  let pendingHostRoom: { room: string; password: string; baseUrl: string } | null = null;
+  let pendingHostRoom: { room: string; password: string; baseUrl: string; name: string } | null = null;
 
   /*
    * 联机面板（L9）：**全局一份**，挂在 `document.body` 上。
@@ -20685,7 +20695,7 @@ async function boot(): Promise<void> {
      * 站在世界里了，只能看到一句看不懂的 `host-taken` 或者静默断开。现在失败就留在对话框里
      * 把原因写在提示行上（`preflightHost` 只连不发 join，不占房主位）。
      */
-    onHostWorld: async (world, room, password, baseUrl) => {
+    onHostWorld: async (world, room, password, baseUrl, name) => {
       const blocked = await preflightHost({ baseUrl, room });
       if (blocked === 'https-blocked') {
         /*
@@ -20705,7 +20715,7 @@ async function boot(): Promise<void> {
         diag.event('app', 'hostPreflight.taken', { room, baseUrl });
         return t('say.net.hostTaken');
       }
-      pendingHostRoom = { room, password, baseUrl };
+      pendingHostRoom = { room, password, baseUrl, name };
       void startWorld(world);
       return null;
     },
@@ -20714,6 +20724,11 @@ async function boot(): Promise<void> {
      * 玩家看不到也改不了；现在把"当前该连哪台机器"以地址栏口径（只 IP）回填给他。
      */
     defaultHostAddress: () => displayServerAddress(defaultServerUrl()),
+    /*
+     * 开房对话框昵称的默认值（本批）：取联机面板记住的那个。
+     * 昵称必填，但"上次填过"没有理由让玩家再抄一遍。
+     */
+    defaultPlayerName: () => multiplayerUi.readForm().name,
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */

@@ -127,4 +127,5 @@ export const menu = {
   "mp.status.reconnecting": "Переподключение…",
   "mp.status.offline": "Соединение разорвано",
   "mp.error.url": "Адрес должен быть ws:// или wss:// (ws:// добавится автоматически)",
+  "mp.error.name": "Придумайте ник — он не может быть пустым",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

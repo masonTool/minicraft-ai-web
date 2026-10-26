@@ -127,4 +127,5 @@ export const menu = {
   "mp.status.reconnecting": "Verbinde neu…",
   "mp.status.offline": "Verbindung getrennt",
   "mp.error.url": "Die Adresse muss ws:// oder wss:// sein (ws:// wird automatisch ergänzt)",
+  "mp.error.name": "Bitte einen Namen wählen – der Nickname darf nicht leer sein",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

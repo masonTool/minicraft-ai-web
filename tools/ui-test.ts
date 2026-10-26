@@ -5358,9 +5358,11 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
   check(
     '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
     // 2026-10-25：地址也进了意图，用的是玩家在对话框里填的那个（不再写死 defaultServerUrl）
-    mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') &&
+    // 本批：昵称也进意图（对话框里填的那个），不再悄悄用面板记住的值
+    mainSrc.includes('pendingHostRoom = { room, password, baseUrl, name };') &&
       mainSrc.includes('app.connectOnline({') &&
-      mainSrc.includes('baseUrl: intent.baseUrl,'),
+      mainSrc.includes('baseUrl: intent.baseUrl,') &&
+      mainSrc.includes('name: intent.name,'),
   );
 }
 
@@ -6157,12 +6159,14 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
       worldSrc.includes("showError(t('world.addressRequired'))"),
   );
   check(
-    '回调把地址带出去（并可返回失败原因）',
-    worldSrc.includes('onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => Promise<string | null> | string | null;'),
+    '回调把地址与昵称带出去（并可返回失败原因）',
+    worldSrc.includes('name: string,') &&
+      worldSrc.includes(') => Promise<string | null> | string | null;'),
   );
   check(
     '开房用的是玩家填的地址（不再写死 defaultServerUrl）',
-    mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') && mainSrc.includes('baseUrl: intent.baseUrl,'),
+    mainSrc.includes('pendingHostRoom = { room, password, baseUrl, name };') &&
+      mainSrc.includes('baseUrl: intent.baseUrl,'),
   );
   check(
     '房名被占走 i18n（不是服务端那句中文）',
@@ -6237,7 +6241,7 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
 
   // ---- ① 开房失败不许进世界：先预检，失败留在对话框里说原因
-  check('开房先跑预检（连得上 + 房名没被占）才建世界', /onHostWorld: async \(world, room, password, baseUrl\) => \{[\s\S]{0,300}?await preflightHost\(/.test(mainSrc3));
+  check('开房先跑预检（连得上 + 房名没被占）才建世界', /onHostWorld: async \(world, room, password, baseUrl, name\) => \{[\s\S]{0,300}?await preflightHost\(/.test(mainSrc3));
   check(
     '预检失败把原因还给对话框（不是静默进世界）',
     mainSrc3.includes("return t('mp.hostUnreachable')") && mainSrc3.includes("return t('say.net.hostTaken')"),
@@ -6245,7 +6249,8 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   check(
     '对话框在失败时留在原地（只有成功才 cleanup）',
     /const failure = await this\.actions\.onHostWorld[\s\S]{0,400}?if \(failure\) \{[\s\S]{0,200}?showError\(failure\)/.test(worldUiSrc) ||
-      /Promise\.resolve\(this\.actions\.onHostWorld[\s\S]{0,400}?showError\(failure\)/.test(worldUiSrc),
+      // 本批 `Promise.resolve(` 后面换了一行（参数变长），正则允许空白
+      /Promise\.resolve\(\s*this\.actions\.onHostWorld[\s\S]{0,600}?showError\(failure\)/.test(worldUiSrc),
   );
 
   // ---- ② 雨声必须能真的关掉：起伏振荡器挂在独立增益上，不污染音量参数

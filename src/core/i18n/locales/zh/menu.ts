@@ -128,4 +128,5 @@ export const menu = {
   'mp.status.reconnecting': '重连中…',
   'mp.status.offline': '连接已断开',
   'mp.error.url': '地址要填 ws:// 或 wss://（省略时自动补 ws://）',
+  'mp.error.name': '起个名字再进：昵称不能空着',
 } as const;
