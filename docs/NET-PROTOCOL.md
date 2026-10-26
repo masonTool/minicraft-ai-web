@@ -202,7 +202,7 @@
 | 默认端口 | 8887（`PORT`） | `server/index.mjs` |
 | 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`）。**不落盘**：重启后房间退回默认种子 | 同上 |
 | 时钟与天气 | **每房一套**（用户 2026-10-26）：`room → clock` 存 `startMs/startTimeOfDay/startDay/weather`，房主开房时用他上报的 `day`/`timeOfDay`/`weather` 初始化，`clearRoom` 时删掉；没有房主的房与读档后的默认值用 `defaultClock`（落盘的就是它）。`time` 每 2 秒按房各发一份、`weather` 切换时按房广播，`sleep` 与 `room-config` 只动本房 | `server/index.mjs` |
-| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发口令**、只列有人的房 | `server/index.mjs` |
+| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, maxPlayers, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发密码**、只列有人的房。`maxPlayers` 只用于界面显示 `在线/容量`（默认 10，`MAX_PLAYERS` 可覆盖），**不是准入限制** | `server/index.mjs` |
 | 玩家 id | 自增、不回收 | 同上 |
 | 方块增量上限 | 500000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/snapshot.mjs` |
 | 房间清场 | 新房主开房（`send(welcome)` 之前）与房主宽限期结束各清一次 `clearRoom(room)`；**宽限期内重连的房主不清** | `server/index.mjs` |
