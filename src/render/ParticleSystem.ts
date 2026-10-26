@@ -16,6 +16,21 @@ import * as THREE from 'three';
 /** 池子容量：同时存在的粒子数上限（超出后新粒子被丢弃，不会挤掉旧粒子） */
 export const PARTICLE_POOL = 1024;
 
+/**
+ * 只把活跃段标脏（批次 20261026-0141）。
+ *
+ * 直接写 `needsUpdate = true` 会让 three 把**整个** buffer 重传（1024 点 ≈ 32KB/帧）；
+ * 这里改成登记一段 `updateRanges`，驱动层只上传这一区间。池尾的数据不参与绘制
+ * （`setDrawRange` 卡住活跃段），传它纯属带宽浪费。
+ *
+ * ⚠️ 必须先 `clearUpdateRanges()`：three 会把新区间**追加**到旧区间上，不清就越传越长。
+ */
+function uploadActiveRange(attribute: THREE.BufferAttribute, length: number): void {
+  attribute.clearUpdateRanges();
+  attribute.addUpdateRange(0, length);
+  attribute.needsUpdate = true;
+}
+
 const VERTEX_SHADER = /* glsl */ `
 attribute float aSize;
 attribute float aAlpha;
@@ -481,6 +496,14 @@ export class ParticleSystem {
   }
 
   private writeBuffers(): void {
+    const count = this.count;
+    // 场上一颗粒子都没有：**一个字节都不传**（批次 20261026-0141）。
+    // `needsUpdate` 会把整个 1024 点的池子全量重传（约 32KB/帧），而这时连 drawRange 都是 0。
+    if (count === 0) {
+      this.geometry.setDrawRange(0, 0);
+      return;
+    }
+
     const position = this.geometry.getAttribute('position') as THREE.BufferAttribute;
     const color = this.geometry.getAttribute('aColor') as THREE.BufferAttribute;
     const size = this.geometry.getAttribute('aSize') as THREE.BufferAttribute;
@@ -491,7 +514,7 @@ export class ParticleSystem {
     const sizes = size.array as Float32Array;
     const alphas = alpha.array as Float32Array;
 
-    for (let i = 0; i < this.count; i++) {
+    for (let i = 0; i < count; i++) {
       const p = i * 3;
       positions[p] = this.px[i]!;
       positions[p + 1] = this.py[i]!;
@@ -505,11 +528,13 @@ export class ParticleSystem {
       alphas[i] = this.alpha[i]! * (1 - Math.pow(t, 1.6));
     }
 
-    position.needsUpdate = true;
-    color.needsUpdate = true;
-    size.needsUpdate = true;
-    alpha.needsUpdate = true;
-    this.geometry.setDrawRange(0, this.count);
+    // 只上传**活跃段**（批次 20261026-0141）：池尾那些数据不参与绘制，传它纯属带宽浪费。
+    // ⚠️ 必须先 `clearUpdateRanges()`——three 会把区间往后累加，不清就会越传越长。
+    uploadActiveRange(position, count * 3);
+    uploadActiveRange(color, count * 3);
+    uploadActiveRange(size, count);
+    uploadActiveRange(alpha, count);
+    this.geometry.setDrawRange(0, count);
   }
 
   /** 立即清空（切维度时用，免得旧维度的粒子飘在新世界里） */

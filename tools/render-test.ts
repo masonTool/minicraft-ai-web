@@ -444,6 +444,36 @@ console.log('\n[粒子系统：生成 / 重力 / 淘汰 / 上限]');
   const colorAttr = points.geometry.getAttribute('aColor') as THREE.BufferAttribute;
   check('颜色与透明度属性都在', colorAttr.count === PARTICLE_POOL && points.geometry.getAttribute('aAlpha') !== undefined);
 
+  // 批次 20261026-0141：上传区间只覆盖活跃段，池尾那段不传
+  const posAttr = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const sizeAttr = points.geometry.getAttribute('aSize') as THREE.BufferAttribute;
+  const alphaAttr = points.geometry.getAttribute('aAlpha') as THREE.BufferAttribute;
+  const live = particles.active;
+  check(
+    '位置只登记活跃段（0..count×3）',
+    posAttr.updateRanges.length === 1 &&
+      posAttr.updateRanges[0]!.start === 0 &&
+      posAttr.updateRanges[0]!.count === live * 3,
+    JSON.stringify(posAttr.updateRanges),
+  );
+  check(
+    '标量属性按活跃点数登记（0..count）',
+    sizeAttr.updateRanges[0]!.count === live && alphaAttr.updateRanges[0]!.count === live,
+  );
+  check(
+    '颜色也只传活跃段',
+    colorAttr.updateRanges[0]!.count === live * 3,
+    JSON.stringify(colorAttr.updateRanges),
+  );
+
+  // 没有粒子时一个字节都不该标脏（以前整池 32KB 每帧白传）
+  const versionBefore = posAttr.version;
+  particles.clear();
+  particles.update(0.016);
+  check('没有粒子时不标脏', posAttr.version === versionBefore, `version ${posAttr.version}`);
+  check('没有粒子时 drawRange 归零', points.geometry.drawRange.count === 0);
+  particles.clear();
+
   // ---- 批次 171（E22）新增的四类：爆炸闪光 / 气泡柱 / 雨滴溅落 / 红石尘
   particles.clear();
   particles.spawnExplosion(0.5, 64.5, 0.5, 3);
