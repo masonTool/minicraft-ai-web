@@ -103,6 +103,7 @@ export const menu = {
   'mp.roomsEmpty': '这台服务器上还没有人开房',
   'mp.roomsFailed': '列不出房间（地址不对或服务端太旧），可以直接手填房间名',
   'mp.roomsPlayers': '{n} 人',
+  'mp.roomsPlayersOf': '{n}/{max} 在线',
   'mp.roomsNoHost': '无房主',
   'pause.room': '本局房间',
   'room.title': '本局房间',

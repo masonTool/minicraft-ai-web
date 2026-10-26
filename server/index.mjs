@@ -50,6 +50,17 @@ import { withinAoi } from './aoi.mjs';
 import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
 
 const PORT = Number(process.env.PORT ?? DEFAULT_PORT);
+/**
+ * 一个房间的容量（本批，用户 2026-10-26）：**只用于界面显示 `在线/容量`**，不是准入限制。
+ *
+ * 为什么不拿来拒绝人：这一局的模拟跑在房主浏览器里，能扛多少人取决于他的设备，
+ * 服务端拍一个数字就把人挡在门外是错的。默认 10 与设计图一致，也接近房主端
+ * 跑 10 个远端玩家的保守上限；真要限制时用 `MAX_PLAYERS` 覆盖。
+ */
+const MAX_PLAYERS = (() => {
+  const value = Math.trunc(Number(process.env.MAX_PLAYERS ?? 10));
+  return Number.isFinite(value) && value > 0 ? value : 10;
+})();
 /** 世界种子：服务端说了算，客户端不再用自己配置的种子 */
 const WORLD_SEED = Number(process.env.SEED ?? 20261014);
 /**
@@ -749,8 +760,10 @@ const httpServer = createServer((req, res) => {
       JSON.stringify({
         ok: true,
         protocol: PROTOCOL_VERSION,
-        // 服务端级口令（`ROOM_PASSWORD`）：客端据此提示"要口令"
+        // 服务端级密码（`ROOM_PASSWORD`）：客端据此提示"要密码"
         passwordRequired: Boolean(ROOM_PASSWORD),
+        // 一个房间的容量（本批）：列表里显示 `在线/容量`。**不是准入限制**，见常量注释
+        maxPlayers: MAX_PLAYERS,
         rooms: roomsListing(),
       }),
     );

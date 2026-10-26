@@ -102,6 +102,7 @@ export const menu = {
   "mp.roomsEmpty": "Auf diesem Server hostet noch niemand",
   "mp.roomsFailed": "Räume konnten nicht geladen werden (falsche Adresse oder älterer Server) – Raumname von Hand eingeben",
   "mp.roomsPlayers": "{n} online",
+  "mp.roomsPlayersOf": "{n}/{max} online",
   "mp.roomsNoHost": "kein Host",
   "pause.room": "Dieser Raum",
   "room.title": "Dieser Raum",

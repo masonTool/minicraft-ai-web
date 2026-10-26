@@ -479,7 +479,10 @@ export class MultiplayerScreen {
       const name = document.createElement('b');
       name.textContent = entry.room;
       const meta = document.createElement('span');
-      const parts = [tp('mp.roomsPlayers', { n: entry.players })];
+      // 在线 / 容量（本批）：容量由服务端下发（默认 10），不是准入限制
+      const parts = [
+        tp('mp.roomsPlayersOf', { n: entry.players, max: result.maxPlayers }),
+      ];
       if (entry.worldName.length > 0) parts.push(entry.worldName);
       // 没房主的房进去之后没人跑模拟，值得事先说一句
       if (!entry.hasHost) parts.push(t('mp.roomsNoHost'));

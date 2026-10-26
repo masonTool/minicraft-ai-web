@@ -102,6 +102,7 @@ export const menu = {
   "mp.roomsEmpty": "На этом сервере пока никто не хостит",
   "mp.roomsFailed": "Не удалось получить список (неверный адрес или старый сервер) — введите название вручную",
   "mp.roomsPlayers": "{n} онлайн",
+  "mp.roomsPlayersOf": "{n}/{max} в сети",
   "mp.roomsNoHost": "без хоста",
   "pause.room": "Эта комната",
   "room.title": "Эта комната",

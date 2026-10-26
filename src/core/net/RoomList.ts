@@ -23,10 +23,18 @@ export interface RoomListEntry {
   worldSeed: number;
 }
 
+/** 房间容量默认值（与服务端 `MAX_PLAYERS` 的默认一致） */
+export const DEFAULT_ROOM_CAPACITY = 10;
+
 /** 一次列表响应的清洗结果 */
 export interface RoomListResult {
-  /** 这台服务器要不要口令（服务端级，不是每房一套） */
+  /** 这台服务器要不要密码（服务端级，不是每房一套） */
   passwordRequired: boolean;
+  /**
+   * 一个房间的容量（本批）：只用于显示 `在线/容量`，**不是准入限制**。
+   * 老服务端不带这个字段，这里退回 `DEFAULT_ROOM_CAPACITY`（界面不至于显示 `4/undefined`）。
+   */
+  maxPlayers: number;
   rooms: RoomListEntry[];
 }
 
@@ -41,7 +49,7 @@ const ROOM_RE = /^[A-Za-z0-9_-]{1,24}$/;
  */
 export function parseRoomsResponse(raw: unknown): RoomListResult | null {
   if (!raw || typeof raw !== 'object') return null;
-  const payload = raw as { rooms?: unknown; passwordRequired?: unknown };
+  const payload = raw as { rooms?: unknown; passwordRequired?: unknown; maxPlayers?: unknown };
   if (!Array.isArray(payload.rooms)) return null;
 
   const rooms: RoomListEntry[] = [];
@@ -69,5 +77,10 @@ export function parseRoomsResponse(raw: unknown): RoomListResult | null {
   }
   // 人多的排前面：局域网里"去热闹那间"是唯一的选择依据
   rooms.sort((a, b) => b.players - a.players || a.room.localeCompare(b.room));
-  return { passwordRequired: payload.passwordRequired === true, rooms };
+  const rawMax = Number(payload.maxPlayers);
+  return {
+    passwordRequired: payload.passwordRequired === true,
+    maxPlayers: Number.isFinite(rawMax) && rawMax > 0 ? Math.trunc(rawMax) : DEFAULT_ROOM_CAPACITY,
+    rooms,
+  };
 }

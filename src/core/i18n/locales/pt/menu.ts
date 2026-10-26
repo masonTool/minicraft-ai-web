@@ -101,6 +101,7 @@ export const menu = {
   "mp.roomsEmpty": "Ninguém está hospedando neste servidor ainda",
   "mp.roomsFailed": "Não foi possível listar as salas (endereço errado ou servidor antigo) — digite o nome da sala",
   "mp.roomsPlayers": "{n} online",
+  "mp.roomsPlayersOf": "{n}/{max} online",
   "mp.roomsNoHost": "sem anfitrião",
   "pause.room": "Esta sala",
   "room.title": "Esta sala",

@@ -6,20 +6,32 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseRoomsResponse } from '../src/core/net/RoomList.ts';
+import { DEFAULT_ROOM_CAPACITY, parseRoomsResponse } from '../src/core/net/RoomList.ts';
 
 describe('parseRoomsResponse', () => {
   it('正常响应：房间名 / 人数 / 房主标记 / 世界名与种子', () => {
     const result = parseRoomsResponse({
       passwordRequired: false,
+      maxPlayers: 12,
       rooms: [
         { room: 'hostroom', players: 2, hasHost: true, world: { name: '草原小屋', seed: 424242 } },
       ],
     });
     expect(result).toEqual({
       passwordRequired: false,
+      maxPlayers: 12,
       rooms: [{ room: 'hostroom', players: 2, hasHost: true, worldName: '草原小屋', worldSeed: 424242 }],
     });
+  });
+
+  it('老服务端不带 maxPlayers → 退回默认容量（界面不会显示 4/undefined）', () => {
+    expect(parseRoomsResponse({ rooms: [] })?.maxPlayers).toBe(DEFAULT_ROOM_CAPACITY);
+  });
+
+  it('maxPlayers 脏数据（0 / 负数 / 非数字）一律退回默认容量', () => {
+    for (const bad of [0, -3, 'many', null, undefined]) {
+      expect(parseRoomsResponse({ rooms: [], maxPlayers: bad })?.maxPlayers).toBe(DEFAULT_ROOM_CAPACITY);
+    }
   });
 
   it('人多的排前面（局域网里"去热闹那间"是唯一依据）', () => {
