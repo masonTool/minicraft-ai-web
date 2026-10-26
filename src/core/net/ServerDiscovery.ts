@@ -17,7 +17,7 @@
  */
 
 /** 联机服务端的默认端口（与 `ServerUrl.DEFAULT_NET_PORT` 同值；这里不 import 是为了让本模块能独立测） */
-export const DEFAULT_SCAN_PORT = 25187;
+export const DEFAULT_SCAN_PORT = 8887;
 
 /** 扫一个地址的默认超时：局域网正常 < 20ms，600ms 已经能覆盖"那台机器开着但很慢" */
 export const DEFAULT_PROBE_TIMEOUT_MS = 600;

@@ -45,7 +45,7 @@ describe('subnetOf / subnetHosts', () => {
 });
 
 describe('pingEndpoint', () => {
-  it('默认端口 25187，走 /ping', () => {
+  it('默认端口 8887，走 /ping', () => {
     expect(pingEndpoint('192.168.1.5')).toBe(`http://192.168.1.5:${DEFAULT_SCAN_PORT}/ping`);
     expect(pingEndpoint('10.0.0.2', 9000)).toBe('http://10.0.0.2:9000/ping');
   });

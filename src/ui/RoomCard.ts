@@ -25,7 +25,7 @@ export interface RoomCardInfo {
   worldName: string;
   /** 房间的世界种子 */
   worldSeed: number;
-  /** 服务端裸地址（`ws://192.168.1.5:25187`），拼邀请时用 */
+  /** 服务端裸地址（`ws://192.168.1.5:8887`），拼邀请时用 */
   baseUrl: string;
   /** 房间口令（空 = 没有） */
   password: string;

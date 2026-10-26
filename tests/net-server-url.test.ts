@@ -146,7 +146,7 @@ describe('normalizeServerUrl（IP 或域名）', () => {
     expect(normalizeServerUrl('192.168.1.5:9000')).toBe('ws://192.168.1.5:9000');
   });
 
-  it('域名：wss + /ws（不补 25187）', () => {
+  it('域名：wss + /ws（不补 8887）', () => {
     expect(normalizeServerUrl('mc.example.com')).toBe('wss://mc.example.com/ws');
     expect(normalizeServerUrl('mc.example.com:8443')).toBe('wss://mc.example.com:8443/ws');
   });
@@ -186,8 +186,8 @@ describe('withDefaultPort（地址栏只收 IP）', () => {
     expect(withDefaultPort('wss://mc.example.com/ws')).toBe('wss://mc.example.com/ws');
   });
 
-  it('默认端口常量是 25187（换端口时这条会先红）', () => {
-    expect(DEFAULT_NET_PORT).toBe(25187);
+  it('默认端口常量是 8887（换端口时这条会先红）', () => {
+    expect(DEFAULT_NET_PORT).toBe(8887);
   });
 });
 

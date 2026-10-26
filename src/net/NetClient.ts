@@ -481,7 +481,7 @@ export class NetClient {
     this.disposed = false;
     // 重新发起连接 = 玩家明确想再试一次，清掉上一次的致命错误标记
     this.fatal = false;
-    // 房间/口令从地址里拆（联机26）：`ws://host:25187/red?pw=1234`
+    // 房间/口令从地址里拆（联机26）：`ws://host:8887/red?pw=1234`
     const parsed = parseServerUrl(url);
     this.url = parsed.url;
     this.room = parsed.room;

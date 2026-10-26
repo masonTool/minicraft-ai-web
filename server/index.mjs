@@ -11,7 +11,7 @@
  * 换句话说，这里的"区块同步"是**零带宽**的：算力换带宽，区块同步退化成
  * "同步一份（种子 + 增量列表）"——与 K1 的增量存档是同一套思路。
  *
- * 运行：node server/index.mjs           （默认端口 25187，见 protocol.mjs 的 DEFAULT_PORT）
+ * 运行：node server/index.mjs           （默认端口 8887，见 protocol.mjs 的 DEFAULT_PORT）
  *      PORT=9000 node server/index.mjs
  *
  * 协议：JSON 文本帧，消息表与校验规则见 docs/NET-PROTOCOL.md（客户端实现在 src/net/NetClient.ts）

@@ -34,19 +34,19 @@ const deps = (rooms: Array<{ room: string; hasHost: boolean }> | null) => ({
 describe('preflightHost', () => {
   it('连不上 → unreachable（拦住，别建世界）', async () => {
     FakeSocket.mode = 'error';
-    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:25187', room: 'red' }, deps(null))).toBe('unreachable');
+    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:8887', room: 'red' }, deps(null))).toBe('unreachable');
   });
 
   it('超时没 open → 也算 unreachable', async () => {
     FakeSocket.mode = 'hang';
-    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:25187', room: 'red' }, deps(null))).toBe('unreachable');
+    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:8887', room: 'red' }, deps(null))).toBe('unreachable');
   });
 
   it('房名已被占 → taken', async () => {
     FakeSocket.mode = 'open';
     expect(
       await preflightHost(
-        { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+        { baseUrl: 'ws://192.168.1.5:8887', room: 'red' },
         deps([{ room: 'red', hasHost: true }, { room: 'blue', hasHost: false }]),
       ),
     ).toBe('taken');
@@ -55,13 +55,13 @@ describe('preflightHost', () => {
   it('同名房间但没房主 → 放行（宽限期里的空房可以接手）', async () => {
     FakeSocket.mode = 'open';
     expect(
-      await preflightHost({ baseUrl: 'ws://192.168.1.5:25187', room: 'red' }, deps([{ room: 'red', hasHost: false }])),
+      await preflightHost({ baseUrl: 'ws://192.168.1.5:8887', room: 'red' }, deps([{ room: 'red', hasHost: false }])),
     ).toBeNull();
   });
 
   it('拿不到房间列表 → 不影响放行（best-effort）', async () => {
     FakeSocket.mode = 'open';
-    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:25187', room: 'red' }, deps(null))).toBeNull();
+    expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:8887', room: 'red' }, deps(null))).toBeNull();
   });
 
   /*
@@ -72,7 +72,7 @@ describe('preflightHost', () => {
     FakeSocket.mode = 'error';
     let socketCreated = false;
     const reason = await preflightHost(
-      { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+      { baseUrl: 'ws://192.168.1.5:8887', room: 'red' },
       {
         createSocket: (url) => {
           socketCreated = true;
@@ -93,7 +93,7 @@ describe('preflightHost', () => {
     FakeSocket.mode = 'open';
     expect(
       await preflightHost(
-        { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+        { baseUrl: 'ws://192.168.1.5:8887', room: 'red' },
         { ...deps(null), pageProtocol: 'https:' },
       ),
     ).toBeNull();
@@ -103,7 +103,7 @@ describe('preflightHost', () => {
     FakeSocket.mode = 'open';
     expect(
       await preflightHost(
-        { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+        { baseUrl: 'ws://192.168.1.5:8887', room: 'red' },
         { ...deps(null), pageProtocol: 'http:' },
       ),
     ).toBeNull();

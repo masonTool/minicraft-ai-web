@@ -21,7 +21,7 @@ import { formatServerUrl } from '../core/net/ServerUrl.ts';
 import type { NetWorldMeta } from './NetClient.ts';
 
 export interface RoomProbeOptions {
-  /** 裸服务器地址（`ws://host:25187`，不带房间） */
+  /** 裸服务器地址（`ws://host:8887`，不带房间） */
   baseUrl: string;
   room: string;
   password: string;

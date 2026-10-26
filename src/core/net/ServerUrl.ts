@@ -15,14 +15,14 @@
 /**
  * 联机服务端的固定端口（**与 `server/protocol.mjs` 的 `DEFAULT_PORT` 相等**）。
  *
- * 为什么换掉 8787：
- *  - 8787 是各种 dashboard / 开发脚手架的常见默认口，和本机其它服务撞车的概率不低；
- *  - 更重要的是**不给玩家填端口**——地址栏只收 IP/主机名，端口由这里统一。
+ * 为什么不给玩家填端口：地址栏只收 IP/主机名，端口由这里统一——手机上敲端口是纯折磨，
+ * 而且两端各填一个数字必然会漂。表单里只把它当**只读后缀**显示（`: 8887`）。
  *
- * 为什么是 25187：落在注册端口段（1024~49151）、避开 3000/5000/8000/8080/8888/9000/
- * 25565（Minecraft）这些"一看就知道"的默认值，扫端口的脚本也不常光顾。
+ * 为什么是 8887（用户 2026-10-26 定稿）：这是产品口径——安卓/iOS 客户端要内建服务器，
+ * 端口必须和客户端一致，不再按"好不好记"挑。与 8080/8888 相邻、撞车时用 `PORT`
+ * 环境变量覆盖即可（地址栏不填端口 = 用这个默认值）。
  */
-export const DEFAULT_NET_PORT = 25187;
+export const DEFAULT_NET_PORT = 8887;
 
 export interface ParsedServerUrl {
   /** 去掉 path / query 的裸地址（真正用来连的） */
@@ -126,7 +126,7 @@ function legacyRoomFromPath(parsed: URL): string {
  * 两条规则，各自对应一种部署形态：
  *  - **局域网地址**（IP / localhost）：`ws://host:<DEFAULT_NET_PORT>`，玩家不填端口；
  *  - **域名**：`wss://host/ws`，端口走 443 由反代终结——域名几乎总是公网 + TLS，
- *    补成 `ws://域名:25187` 是必然连不上的那种"看起来填对了"。
+ *    补成 `ws://域名:8887` 是必然连不上的那种"看起来填对了"。
  * 玩家显式写了端口/路径就保留（那是他清楚自己在做什么）。
  */
 function deriveFromBare(input: string): string | null {
@@ -185,7 +185,7 @@ export function normalizeServerUrl(input: string): string | null {
     value = derived;
   }
 
-  // 末尾的斜杠对 WebSocket 没意义（`ws://host:25187/` 与不带斜杠等价），统一去掉
+  // 末尾的斜杠对 WebSocket 没意义（`ws://host:8887/` 与不带斜杠等价），统一去掉
   value = value.replace(/\/+$/, '');
   // 主机名必须存在、且不含空白（`ws://foo bar` 这种是粘贴坏了）
   if (!/^wss?:\/\/[^\s/]+(\/\S*)?$/i.test(value)) return null;
@@ -195,11 +195,11 @@ export function normalizeServerUrl(input: string): string | null {
 /**
  * 反过来：把内部用的 `ws://` 地址**显示成地址栏该有的样子**（用户要求 2026-10-25）。
  *
- * 症状（用户实测）：加入面板的地址框每次打开都被填成 `ws://192.168.1.5:25187`——
+ * 症状（用户实测）：加入面板的地址框每次打开都被填成 `ws://192.168.1.5:8887`——
  * 可输入框的占位文案写着"只填 IP，端口已固定"。两处口径打架，玩家会以为要照着长串改。
  *
  * 语义上地址栏回答的是"**那台机器在哪**"，协议头、端口、反代端点都是实现细节：
- *  · `ws://host:25187` → `host`（默认端口不显示）；
+ *  · `ws://host:8887` → `host`（默认端口不显示）；
  *  · `ws://host:9000` → `host:9000`（显式端口是玩家写的，得留着，否则他看不出自己改过）；
  *  · `wss://domain/ws` → `domain`（`/ws` 是反代端点，`normalizeServerUrl` 会补回来）；
  *  · `wss://domain:8443/ws` → `domain:8443`；

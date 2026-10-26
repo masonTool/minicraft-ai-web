@@ -20,8 +20,8 @@ const entry = (url: string, room: string, at = 1, name = ''): RecentRoom => ({ u
 
 describe('parseRecentRooms', () => {
   it('正常数组原样读出', () => {
-    expect(parseRecentRooms(JSON.stringify([entry('ws://h:25187', 'red')]))).toEqual([
-      { url: 'ws://h:25187', room: 'red', name: '', at: 1 },
+    expect(parseRecentRooms(JSON.stringify([entry('ws://h:8887', 'red')]))).toEqual([
+      { url: 'ws://h:8887', room: 'red', name: '', at: 1 },
     ]);
   });
 
