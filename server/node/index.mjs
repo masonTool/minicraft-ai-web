@@ -26,6 +26,7 @@ import {
   CLOSE_DUPLICATE,
   CLOSE_VERSION,
   DEFAULT_PORT,
+  DEFAULT_ROOM,
   PROTOCOL_VERSION,
   WORLD_MAX_Y,
   WORLD_MIN_Y,
@@ -45,6 +46,7 @@ import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './
 import { networkInterfaces } from 'node:os';
 import { DEFAULT_MAX_EDITS, editsInChunk, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
 import { encodeEditsPack } from '../editpack.mjs';
+import { BEACON_PORT, createBeacon } from './beacon.mjs';
 import { createBuckets } from './ratelimit.mjs';
 import { withinAoi } from './aoi.mjs';
 import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
@@ -103,6 +105,38 @@ const MAX_ITEMS = 2000;
 const MOB_HIT_RATE_LIMIT = 30;
 /** 每个玩家每秒最多发多少次拾取申请（联机21）：走近一堆货最多也就每秒几次 */
 const ITEM_TAKE_RATE_LIMIT = 20;
+
+/**
+ * 局域网发现（N4/N6）：UDP 组播，与 `server/rust/src/beacon.rs` 同一份协议。
+ *
+ * 为什么 Node 版也要一份：浏览器发不出 UDP 组播，联机面板只能"借服务端的耳朵"读
+ * `/healthz` 的 `peers` 来列「附近房间」。以前只有 Rust 版（手机内建）有，
+ * 于是 Web/桌面自建的服务端上这个功能一直是空的。
+ *
+ * 默认**开**（`BEACON=0` 可关）；Rust 版默认关、由平台壳显式打开——那边的宿主是手机 App，
+ * 什么时候听组播要跟着前台服务走；这台是常驻服务端，开着才合理。
+ */
+const BEACON_ENABLED = process.env.BEACON !== '0';
+/** @type {ReturnType<typeof createBeacon> | null} */
+let beacon = null;
+
+/**
+ * 这一帧该广播哪一间房：**有房主的优先**（那才是别人能加进来玩的那一间），
+ * 其次任意有人的房，最后退回默认房间（此时 `host:false`，客户端会标「无房主」）。
+ */
+function announceRoom() {
+  const hostRoom = [...hosts.keys()].sort()[0];
+  const busyRoom = [...new Set([...players.values()].map((player) => player.room))].sort()[0];
+  const room = hostRoom ?? busyRoom ?? DEFAULT_ROOM;
+  const world = worldOfRoom(room);
+  return {
+    room,
+    name: world.name.length > 0 ? world.name : room,
+    seed: world.seed,
+    players: [...players.values()].filter((player) => player.room === room).length,
+    hasHost: hosts.has(room),
+  };
+}
 
 /** @type {Map<string, {id:number,name:string,clientId:string,x:number,y:number,z:number,yaw:number,pitch:number,socket:import('ws').WebSocket,lastMove:number,dimension:string}>} */
 const players = new Map();
@@ -819,6 +853,14 @@ const httpServer = createServer((req, res) => {
         uptime: Math.round(process.uptime()),
         seed: WORLD_SEED,
         protocol: PROTOCOL_VERSION,
+        /*
+         * 局域网发现（N4/N6）：`beacon` 是"组播听/发是否起来了"，`peers` 是这台机器
+         * 听到的其它设备。联机面板据此列「附近房间」——浏览器自己发不出 UDP。
+         * 字段形状与 Rust 版 `Peer::to_wire` 一一对应（两端可以互相看到）。
+         */
+        beacon: beacon !== null && beacon.running,
+        beaconPort: BEACON_PORT,
+        peers: beacon === null ? [] : beacon.snapshot(),
         // 最近一段时间的平均吞吐（联机29）：容器/反代拿它看"这条线路是不是堵了"
         traffic: trafficRates(),
         totals: { inBytes: traffic.inBytes, outBytes: traffic.outBytes },
@@ -846,6 +888,24 @@ httpServer.listen(PORT, () => {
    * 顺带把网卡列表打全：一台机器常见「有线 + 无线 + 虚拟网卡」好几个地址，
    * 玩家可以逐个在手机浏览器里试 `http://<ip>:<port>/healthz`。
    */
+  /*
+   * 发现层在这里启动（而不是模块顶层）：`PORT=0` 时端口是监听之后才知道的，
+   * 而广播帧里必须带**实际**端口，否则别人照它连过去会连到 0。
+   */
+  if (BEACON_ENABLED) {
+    beacon = createBeacon({
+      port: () => {
+        const address = httpServer.address();
+        return typeof address === 'object' && address !== null ? address.port : DEFAULT_PORT;
+      },
+      protocol: PROTOCOL_VERSION,
+      passwordRequired: Boolean(ROOM_PASSWORD),
+      announce: announceRoom,
+      log,
+    });
+    beacon.start();
+  }
+
   const lanAddresses = Object.values(networkInterfaces())
     .flat()
     .filter((entry) => entry !== undefined && entry.internal === false && entry.family === 'IPv4')
@@ -2264,6 +2324,8 @@ wss.on('connection', (socket, request) => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     log('收到退出信号，保存快照并关闭服务端');
+    // 发现层先停：别在关端口的过程中还往外发帧（别人列表里会立刻闪一下）
+    beacon?.stop();
     // 退出前补存一次（联机13）：定时器是 30 秒一轮，最后这几秒的改动不能白丢
     autoSave.stop();
     // 先关 ws（停止接受新连接），再关 http server（它才是监听端口的那个）

@@ -313,6 +313,16 @@ check('服务端启动成功', await startServer(), serverOutput.trim().split('\
     typeof body?.traffic?.inBytesPerSecond === 'number' && typeof body?.traffic?.outBytesPerSecond === 'number',
     JSON.stringify(body?.traffic),
   );
+  /*
+   * 发现层（N4/N6）：`beacon` 只是个"组播听/发起来了没有"的布尔——CI / 容器里可能起不来，
+   * 所以这里不断言它是 true，只断言**字段形状**：客户端拿 `peers` 渲染「附近房间」，
+   * 少了这个键会直接 `undefined.length`。
+   */
+  check(
+    '/healthz 带发现层字段（beacon / beaconPort / peers）',
+    typeof body?.beacon === 'boolean' && typeof body?.beaconPort === 'number' && Array.isArray(body?.peers),
+    JSON.stringify({ beacon: body?.beacon, beaconPort: body?.beaconPort, peers: body?.peers?.length }),
+  );
   const missing = await fetch(`http://localhost:${PORT}/nope`).catch(() => null);
   check('其它路径返回 404（不误当健康检查通过）', missing?.status === 404, `${missing?.status}`);
 }

@@ -222,7 +222,7 @@
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
 | 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/node/aoi.mjs` |
 | 局域网发现（N4/N6） | 每台服务端用 **UDP 组播** `239.255.42.99:25188` 广播一帧 `{mc, v, id, port, room, name, seed, players, host, pw}`（3 秒一次，12 秒听不到就下线），并按 `id` 过滤自己的回声；iOS 另外用 `NetService` 发布同样的字段（Bonjour，`_minicraft._tcp`），`server/rust` 的 `beacon::from_txt` 负责两种记录互转 | `server/rust/src/beacon.rs` |
-| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, beacon, peers, traffic, totals}`；`peers` 是这台服务器用 UDP 组播听到的其它设备（`{name, room, port, addr, seed, players, hasHost, passwordRequired, seenMs}`），联机面板据此列出"附近房间"；`/rooms` 与 `/healthz` 都带 `access-control-allow-origin: *`（浏览器跨源读），其它路径 404 | `server/node/index.mjs` / `server/rust/src/lib.rs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, beacon, beaconPort, peers, traffic, totals}`；`peers` 是这台服务器用 UDP 组播听到的其它设备（`{name, room, port, addr, seed, players, hasHost, passwordRequired, seenMs}`），联机面板据此列出"附近房间"；`/rooms` 与 `/healthz` 都带 `access-control-allow-origin: *`（浏览器跨源读），其它路径 404。⚠️ Node 版的端口字段叫 `beaconPort`、Rust 版叫 `beacon_port`（两边历史命名不同），客户端只读 `peers`，不依赖它 | `server/node/index.mjs` / `server/rust/src/lib.rs` |
 | 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8887`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/node/protocol.mjs` |
