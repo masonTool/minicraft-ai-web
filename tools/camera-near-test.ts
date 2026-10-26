@@ -18,7 +18,9 @@ import {
   CAMERA_PROBE_RADIUS,
   NEAR_MARGIN,
   cameraClearance,
+  cameraClearanceInfo,
   nearPlaneFor,
+  pushCameraOutOfWalls,
 } from '../src/render/cameraNear.ts';
 import type { CollisionWorld, VoxelCollision } from '../src/core/physics/AABB.ts';
 
@@ -169,6 +171,43 @@ console.log('\n[邻域半径与对角距离]');
   ]);
   const nearest = cameraClearance(two, 0.5, 1.9, 0.5);
   check('多个盒子取最近的（0.1 而不是 0.9）', close(nearest, 0.1, 1e-9), String(nearest));
+}
+
+// ---------------------------------------------------------------- 6. 相机推出墙面（批次 20261026-0141）
+
+console.log('\n[相机推出墙面]');
+{
+  // 墙角：后墙在 z=1（相机背后）、侧墙在 x=1。第三人称的射线只朝背后打，
+  // 所以相机可能停在离**侧墙**只有 1 厘米的位置 —— 比 near 下限（0.02）还小。
+  const corner = worldOf([
+    { x: 0, y: 0, z: 1, collision: 'full' },
+    { x: 1, y: 0, z: 0, collision: 'full' },
+  ]);
+  const pos = { x: 0.99, y: 0.5, z: 0.9 };
+  const before = cameraClearance(corner, pos.x, pos.y, pos.z);
+  check('前提：侧墙只剩 1 厘米（小于 near 下限 0.02）', close(before, 0.01, 1e-6), String(before));
+
+  const info = cameraClearanceInfo(corner, pos.x, pos.y, pos.z);
+  check('推出方向朝 -X（远离侧墙）', close(info.nx, -1, 1e-9) && close(info.ny, 0, 1e-9), String(info.nx));
+
+  const pushed = pushCameraOutOfWalls(corner, pos);
+  check('推出去有实际位移', pushed > 0, String(pushed));
+  check(
+    '推完之后离最近面 ≥ NEAR_MARGIN',
+    cameraClearance(corner, pos.x, pos.y, pos.z) >= NEAR_MARGIN,
+    String(cameraClearance(corner, pos.x, pos.y, pos.z)),
+  );
+  check('确实往远离侧墙的方向退了（x 变小）', pos.x < 0.99, String(pos.x));
+  check('推的距离是小量（≤ 10 厘米，肉眼无感）', pushed <= 0.1, String(pushed));
+  check('y/z 不该被这笔推向带偏（只远离最近那一面）', close(pos.z, 0.9, 1e-9));
+
+  // 空场：一个毫米都不该动
+  const open = { x: 1.5, y: 2.5, z: 3.5 };
+  check('空场不推', pushCameraOutOfWalls(EMPTY, open) === 0 && open.x === 1.5);
+
+  // 相机已经在方块内部：推不出去（方向为零向量），返回 -1 交给 suffocate 色罩
+  const inside = worldOf([{ x: 0, y: 0, z: 0, collision: 'full' }]);
+  check('相机在方块内部返回 -1（交给色罩兜底）', pushCameraOutOfWalls(inside, { x: 0.5, y: 0.5, z: 0.5 }) === -1);
 }
 
 console.log(`\n近裁面测试：${passed} 通过 / ${failed} 失败`);

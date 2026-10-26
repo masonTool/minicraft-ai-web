@@ -18,7 +18,8 @@
  */
 
 import * as THREE from 'three';
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { BLOCKS, Block, blockDef } from '../src/core/registry/blocks.ts';
+import { isCrossShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
 import { Item } from '../src/core/registry/items.ts';
 import {
   ATLAS_ANISOTROPY_DESKTOP,
@@ -1599,6 +1600,35 @@ console.log('\n[顶点光照/明暗量化（N1 / 批次 567）]');
     light.array.byteLength + shade.array.byteLength === 9,
     `${light.array.byteLength + shade.array.byteLength}`,
   );
+}
+
+console.log('\n[方块形状的盒子坐标（批次 20261026-0141）]');
+{
+  // 盒子坐标写反（x0 > x1）会让 `emitFace` 的顶点顺序整体反转 → 面朝内 →
+  // 从外面看被背面剔除（画面是洞）、从里面看反而正常。这正是"偶尔卡视角看到方块内部"
+  // 的镜像症状，所以把**所有实际使用的形状 × 全部状态位 × 连接两种取值**都扫一遍。
+  const shapes = [...new Set(BLOCKS.map((def) => def.shape))];
+  // 十字形状（草/花/藤蔓/下界疣…）走 `emitCross`，本来就不产出盒子 —— 不算"整块消失"
+  const bad: string[] = [];
+  /** 至少有一种状态能画出几何的形状（藤蔓/栅栏这类"没有邻居就不画"的，state 0 可能是空的） */
+  const produced = new Set<string>();
+  for (const shape of shapes) {
+    for (let state = 0; state < 64; state++) {
+      for (const connect of [() => true, () => false]) {
+        const boxes = meshBoxes(shape, state, { connect, neighbor: () => null });
+        if (boxes.length > 0) produced.add(shape);
+        for (const box of boxes) {
+          if (box[0]! >= box[3]! || box[1]! >= box[4]! || box[2]! >= box[5]!) {
+            bad.push(`${shape}/${state}: [${box.join(',')}]`);
+          }
+        }
+      }
+    }
+  }
+  check('所有形状的盒子都满足 min < max（反序会让面朝内、从外面看不见）', bad.length === 0, bad.slice(0, 4).join(' | '));
+  const silent = shapes.filter((shape) => !isCrossShape(shape) && !produced.has(shape));
+  check('每个形状至少有一种状态能画出几何（否则就是整块消失）', silent.length === 0, silent.join(' | '));
+  check('形状表覆盖了所有实际使用的形状', shapes.length >= 20, String(shapes.length));
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);

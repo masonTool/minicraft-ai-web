@@ -96,7 +96,7 @@ import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky, CAMERA_NEAR, cameraFarFor, domeOcclusionSafe } from './render/Sky.ts';
-import { cameraClearance, nearPlaneFor } from './render/cameraNear.ts';
+import { cameraClearance, nearPlaneFor, pushCameraOutOfWalls } from './render/cameraNear.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy, mobLabel } from './core/entity/Mob.ts';
@@ -2570,6 +2570,8 @@ class App {
   private frames = 0;
   private fpsTimer = 0;
   private fps = 0;
+  /** 相机贴脸诊断的上次记录时间（批次 20261026-0141）：1 秒最多一条，避免刷满环形缓冲 */
+  private lastViewDiagAt = 0;
   /**
    * 调试面板当前是不是显示着（批次 20261026-0141）。
    *
@@ -5470,11 +5472,9 @@ class App {
    * 这条是"贴脸透视"的第二条路径（批次 20261025-0256）：相机真的进了方块内部时，
    * 眼前那面是**背面**、被背向剔除，近裁面收到多小都看不到它——只能整屏盖住。
    *
-   * 两个判据缺一不可：
-   *  - `blockDef(id).suffocates`：玻璃 / 树叶 / 水本来就是透的，埋在它们里**看得见外面**
-   *    （原版也是这样），糊一屏颜色反而是错的；
-   *  - `cameraClearance(...) === 0`：必须真的在**碰撞盒里面**。半砖只填了下半格，
-   *    相机在空着的上半格时看得见外面，不算被埋住。
+   * 两个判据缺一不可（判据口径见下面 `opaque` 那行，批次 20261026-0141 从
+   * `suffocates` 改过来）：方块必须**不透明**（玻璃 / 水 / 冰里能看见外面，糊色罩是错的），
+   * 且相机真的在**碰撞盒里面**（半砖只填了下半格，相机在空着的上半格时看得见外面）。
    *
    * 旁观模式直接排除：旁观者整天在方块里飞，本来就该穿墙看世界（与 `applyAdaptiveNear`
    * 用的是同一条判据 `hasBlockCollision`）。
@@ -5486,7 +5486,13 @@ class App {
     const y = Math.floor(p.y);
     const z = Math.floor(p.z);
     const id = this.world.getBlock(x, y, z);
-    if (id === 0 || !blockDef(id).suffocates) return null;
+    if (id === 0) return null;
+    const def = blockDef(id);
+    // 判据用 `opaque` 而不是 `suffocates`（批次 20261026-0141）：
+    // 不透明方块的面在相邻实心格之间被剔除，相机在里面时六面全无，只能看见
+    // "墙皮后面的世界"；而 `suffocates` 只回答"掉不掉血"，树叶这类会漏掉。
+    // 玻璃 / 水 / 冰本来是透的（`opaque === false`），埋在里面能看见外面，不糊。
+    if (!def.opaque) return null;
     // radius 0：只看相机所在这一格（1 次 collisionAt），够判"在不在实体里"
     return cameraClearance(this.world, p.x, p.y, p.z, 0) > 0 ? null : id;
   }
@@ -6494,10 +6500,15 @@ class App {
     const placement = cameraPlacement(eye, dir, this.yaw, this.pitch, this.cameraMode, distance);
     this.camera.position.set(placement.x, placement.y, placement.z);
     this.camera.rotation.set(placement.pitch, placement.yaw, 0);
+    const thirdPerson = this.cameraMode !== 'first';
+    // 第三人称相机的射线只朝**背后**那一个方向打，撞到后墙就停；但玩家背靠墙角时，
+    // 相机离**侧墙**可能只剩 1~2 厘米 —— 比近裁面的下限（0.02）还小，那一面会被裁掉，
+    // 而方块相邻面是背向剔除的，一裁就"看见墙皮后面还有一个世界"。
+    // 这里沿最近面的法线把相机推出去几厘米（画面不变，比降 near 更划算；批次 20261026-0141）。
+    if (thirdPerson) this.nudgeCameraOutOfWalls();
     // 近裁面跟着"相机离最近那个面有多远"走（放在摆位之后：探针用的就是刚摆好的位置）
     this.applyAdaptiveNear();
 
-    const thirdPerson = this.cameraMode !== 'first';
     // 贴墙时相机会被压到离眼睛很近（可能为 0）：这时玩家模型会挡在镜头里/穿进头部，
     // 藏掉它。隐身（K4 尾巴）同理——第三人称看不到自己；第一人称的手仍然照画。
     // 注意 `distance` 是**裁剪后**的真实距离，不是固定的 3.8。
@@ -6566,6 +6577,42 @@ class App {
     if (Math.abs(near - this.camera.near) <= 1e-4) return;
     this.camera.near = near;
     this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * 把第三人称相机推出贴身的面（批次 20261026-0141）。
+   *
+   * 用户反馈"偶尔卡视角就能看到方块里面 / 墙皮后面还有一片空间"：第三人称的射线只朝
+   * **背后**那一个方向打，撞到后墙就停；可玩家背靠墙角时，相机离**侧墙**可能只剩 1~2 厘米，
+   * 比近裁面的下限（0.02）还小 —— 那一面被裁掉，而方块相邻面是背向剔除的，于是"看穿"。
+   *
+   * 三条出路里选最自然的一条：把相机沿最近面的法线推出去到 `NEAR_MARGIN`（5 厘米）。
+   *  - 不降 near：near 是全局的，贴墙时压到 0.02 会白丢远景深度精度（共面闪烁）；
+   *  - 不做色罩：对"贴墙走"来说是过度反应；
+   *  - 推 5 厘米：肉眼无感，推完 near 自然回到 0.25。
+   *
+   * 推不出去（相机已经在方块内部）返回 -1，交给 `buriedInBlock` 的色罩兜底，
+   * 同时记一条诊断 —— 真机上再遇到"看到墙后"就有据可查。
+   */
+  private nudgeCameraOutOfWalls(): void {
+    const pushed = pushCameraOutOfWalls(this.world, this.camera.position);
+    if (pushed === 0) return;
+    const now = performance.now();
+    if (now - this.lastViewDiagAt < 1000) return;
+    this.lastViewDiagAt = now;
+    const p = this.camera.position;
+    diag.event('world', 'cameraPush', {
+      mode: this.cameraMode,
+      // -1 = 相机在方块内部，推不出去
+      pushed: Number(pushed.toFixed(3)),
+      inside: pushed < 0,
+      clearance: Number(cameraClearance(this.world, p.x, p.y, p.z).toFixed(3)),
+      near: Number(this.camera.near.toFixed(3)),
+      block: this.world.getBlock(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)),
+      x: Math.round(p.x * 100) / 100,
+      y: Math.round(p.y * 100) / 100,
+      z: Math.round(p.z * 100) / 100,
+    });
   }
 
   /**
