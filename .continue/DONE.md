@@ -59,6 +59,49 @@
   - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
   - 批次：20261026-0245
 
+## 批次 20261026-0141 · 2026-10-26 · 会话 d4a25f60
+
+> 用户 2026-10-26：低端机上「不卡但发热明显」，只要**不影响画质和体验**的优化。
+
+# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0141
+
+目标（用户 2026-10-26）：低端机上"不卡但发热明显"。这一批只做**不降画质、不降帧率、
+不降视距**的优化——把"本来就算错 / 白算 / 白传"的部分去掉，画面结果保持逐像素一致。
+
+- [x] [性能1] 天空穹顶改"地形画完再画"：`src/render/Sky.ts` + `src/main.ts` → `npm run check:fast`
+  - 做了什么：穹顶从 `depthTest:false` + `renderOrder:-1000`（先铺底）改成 `depthTest:true` + `renderOrder:+1000`；新增纯函数 `domeOcclusionSafe(视距)`（地形最远 `(视距+2)×16` 必须 ≤ 穹顶半径 180），小于则走遮挡、超过则回退成先铺底；`applySettings` 与 `setViewDistance` 两处落这条守卫
+  - 为什么：原来整屏每个像素都先被天空着色一遍、再被地形盖掉，被遮挡那部分（通常半屏以上）是纯浪费；改成地形先写完深度，穹顶只画真正露出来的天空，**可见像素完全不变**。回退分支保证视距将来放开时不会出现"天空盖住远山"
+  - 验证：`npm run test:render` **282 通过 / 0 失败**（新增 6 条：视距 6/8 走遮挡、10/16 回退、非法值按 0、穹顶 `depthTest/depthWrite` 结构守卫）；`npm run check:fast` 全绿
+  - 未验：真机上的像素对比与洞穴/地平线观感（本机无浏览器）；若真机发现远景天色异常，把 `setDomeBehindTerrain(false)` 即可逐像素退回原状
+  - 批次：20261026-0141
+- [x] [性能2] 区块 mesh 冻结世界矩阵：`src/render/ChunkRenderer.ts` → `npm run check:fast`
+  - 做了什么：新增 `ChunkRenderer.freezeAt(mesh, x, y, z)`——写位置 → `updateMatrix()` → 把本地矩阵抄进 `matrixWorld`（父级是 scene，单位矩阵）→ 关掉 `matrixAutoUpdate` 与 `matrixWorldAutoUpdate`；Worker 分支与本地分支共 4 处 mesh 创建都改走它
+  - 为什么：区块 mesh 的 position 只在创建时写一次，之后最多改 `visible`，但 three 每帧的 `scene.updateMatrixWorld()` 仍给 169 个对象各做一次 compose 并递归——纯白算。冻结后矩阵仍是正确值，视锥剔除与绘制不变
+  - 验证：`npm run test:render` **285 通过 / 0 失败**（新增 3 条：两个 autoupdate 标志为 false、冻结后改 `position` 不再影响 `matrixWorld`）；`npm run check:fast` 全绿（命中 mesh / render 两套）
+  - 影响 / 回滚：以后不能再对这些 mesh 直接改 position/rotation/scale（要挪位置就重建网格，现有流程本来就是重建后替换）；回滚只需把这 4 处换回 `mesh.position.set`
+  - 批次：20261026-0141
+- [x] [性能3] 粒子顶点只上传活跃段、0 粒子跳过上传：`src/render/ParticleSystem.ts` → `npm run check:fast`
+  - 做了什么：`writeBuffers()` 里 `count === 0` 直接归零 drawRange 并返回；否则用新辅助 `uploadActiveRange()`（`clearUpdateRanges` + `addUpdateRange(0, 活跃长度)` + `needsUpdate`）替换原来的整包 `needsUpdate = true`
+  - 为什么：`needsUpdate` 会把 1024 点的整池全量重传（约 32KB/帧），而画面上只画前 `count` 个；池尾数据根本没有任何消费者。清空后（0 粒子）也不例外，等于每帧白传一次空池
+  - 验证：`npm run test:render` **290 通过 / 0 失败**（新增 5 条：位置/颜色按 count×3、标量按 count 登记区间、0 粒子不标脏（version 不变）、0 粒子 drawRange 归零）；`npm run check:fast` 全绿
+  - 影响 / 回滚：上传区间依赖 three 的 `updateRanges`（r159+）；回滚把这 4 行换回 `needsUpdate = true` 即可
+  - 批次：20261026-0141
+- [x] [性能4] 每帧 DOM 收干（调试面板节流 / display 变化才写 / 进度条缓存引用）：`src/main.ts` → `npm run check:fast`
+  - 做了什么：① 新增 `syncDebugVisibility()`，把 `#debug` 的显隐收敛成唯一入口（`applySettings` 与 `updateDebug` 共用），只在值变化时写 `style.display`；② 调试文本按 `DEBUG_TEXT_REFRESH_MS = 200`（5Hz）节流，不再每帧拼十几行字符串写 `textContent`；③ 新增 `progressBarEls(id)` 懒查一次并缓存 `#break-progress` / `#eat-progress`，百分比量化到 1%，同档不重复写 `style.width`
+  - 为什么：调试面板默认开着（手机上 3 行、桌面上十几行），以前每帧一次临时字符串分配 + 一次 `textContent` 写入 + 一次合成器重绘；两个进度条每帧各一次 `getElementById`（纯 DOM 树查询），挖掘/进食时还会每帧写一次 width。这些都属于"画面完全相同、只是白做"
+  - 验证：`npm run test:ui` **1177 通过 / 0 失败**（新增 6 条：节流常量 ≤ 250ms、`syncDebugVisibility` 唯一入口、`updateDebug` 里不再出现 `style.display`、`progressBarEls` 存在、两个进度条不再 `getElementById`）；`npm run check:fast` 全绿
+  - 未验：真机上"面板数字刷新变慢"的观感（5Hz 是标准做法，但没人肉眼盯过）；若觉得跳得难受，把常量调到 100 即可
+  - 批次：20261026-0141
+- [x] [性能5] draw call 合并的可行性结论留档（做/不做与理由）：本会话 decision 文件 → 文档门禁
+  - 做了什么：把"约 170 次/帧的 draw call 要不要合并"评估完并留档——本会话 `d4a25f-decision.md` 的 D1（评估过程与暂不做的理由）、`notes/decisions.md` 新增「判定不做：区块 draw call 合并」一节（含代价与"什么时候该重看"）
+  - 为什么：`BatchedMesh` 要预留几十到上百 MB 顶点缓冲（显存换 CPU 提交），2×2 静态合并要重写跨区块网格化与 Worker 协议、改一格还要重拼一整组；收益（170 → ~43 次提交）必须真机前后对比才能确认，风险与这一批"零画质损失小改"不匹配，所以明确不做
+  - 验证：`npm run audit:docs` 通过；决策节格式与 `notes/decisions.md` 现有四节一致（做了什么 / 理由 / 代价与边界 / 什么时候该重看）
+  - 批次：20261026-0141
+
 ## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
@@ -199,37 +242,4 @@
   - 验证：`npm run test:nametag` **153/0**（+4：方形条→方形牌、线性、宽/像素与高/画布高同比例、兜底正宽度；另修 1 条过时断言）；`npm run test:net` **207/0**（+4：房主那条 player 带 isHost=true、从属那条 false、改名重连复用 id、改名后同房收到新名字）；`npm run test:ui` 1141/0（+3 结构断言）；`npm run test:screenshot` 14/0；`npx tsc --noEmit` 干净；`npm run check:fast` 5/5 全绿
   - 未验：真机肉眼看名字牌比例（无浏览器截图手段直接拍到名字牌，靠"横竖同倍"的比例断言兜住）
   - 批次：20261026-0000
-
-## 批次 20261025-2225 · 2026-10-25 · 会话 0a9f5045
-
-> PC 两条（用户 2026-10-25）：**PC 不再进全屏**（含"装成 App"那条绕开代码的路），
-> **PC 的 HUD 与手机同构**——手机上那几颗按钮 PC 上也全都显示，且每颗上方挂一枚键帽写清对应键盘键。
-> 顺带修掉一条"结论随机器语言变"的 i18n 断言（它把提交钩子在本机卡成常红）。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-2225
-
-- [x] [P1] PC 端 HUD 按钮层与手机同构（聊天/暂停/视角 + 跳跃/升降 + 背包 + 左下 WASD 图例），每颗按钮上方挂对应键帽：新增 `src/ui/PcControls.ts`、接入 `src/main.ts`、样式写进 `index.html` → 验收：`npm run check:fast` 通过；桌面视口截图里能看到全部按钮与键帽
-  - 做了什么：新增 `PcControls`（顶部聊天 T / 暂停 Esc / 视角 V、右下跳跃 Space 与飞行时的升降 Space/Shift、快捷栏右侧背包 E、左下 WASD 键位图例 + Shift 潜行 / Ctrl 疾跑 / Shift+F 飞行）；`main.ts` 在非触摸设备构造它，并接到 `handleInventoryOpen` / 聊天 / 小游戏 / `setFlying` / `dispose` / `collectInput`；`index.html` 新增 `#pc-ui` 一段样式，复用 `.touch-button` 与 `--touch-scale`
-  - 为什么：PC 原来只有准星与快捷栏，入口全靠记快捷键。按钮只做"看得见的入口"，键帽才是真正的操作说明；样式复用手机的类级选择器，不抄第二套玻璃质感
-  - 验证：`npx tsc --noEmit` 通过；`npm run test:ui` 1087 通过 0 失败；1280×720 截图里 T/Esc/V、Space、E、WASD 图例齐全；点击暂停/视角/聊天/背包实测分别打开面板、切到第三人称、聚焦输入框、打开背包；`/gamemode creative` + 起飞后升降两颗出现在跳跃键上下
-  - 批次：20261025-2225
-- [x] [发现] `tools/i18n-test.ts` 的「auto + 没有标签 → 英文」在本机（zh-CN）必红：`resolveLanguage('auto', undefined)` 显式传 `undefined` 会触发默认参数 `deviceLanguage()`，实际读到 Node 的 `navigator.language = zh-CN`，于是断言值随跑测试那台机器的语言变——它自己的注释却写着"tag 一律显式传入，否则结果会跟着机器语言变"。表现为 `npm run check` 与提交前的 `checks.fast` 在本机恒红 → 改成不依赖机器语言的写法（空标签），验收 `npm run test:i18n` 与 `LANG=en_US npm run test:i18n` 都通过
-  - 做了什么：把那条断言改成 `resolveLanguage('auto', '')`（空标签 → 回落英文），并补一条「显式 `undefined` 等于读设备语言」的断言把默认参数的真实语义钉住；`deviceLanguage` 加进导入
-  - 为什么：`tag` 参数有默认值 `deviceLanguage()`，JS 里"显式传 undefined"与"不传"完全等价，所以原断言在本机（`navigator.language=zh-CN`）恒红、在 CI（en）恒绿——它不是不稳定的偶发，而是**结论随机器变**；顺带发现它是提交钩子的常红项，不修就会让每次 `git commit` 都被拦
-  - 验证：`npm run test:i18n` 551 通过 0 失败（本机 zh-CN）；`LANG=en_US.UTF-8 npm run test:i18n` 同样 551/0
-  - 批次：20261025-2225
-- [x] [P2] PC 装上 PWA 也不再全屏：manifest 生成桌面变体（`display_override` 不含 fullscreen、不锁方向），运行时按设备切换 → 验收：`node tools/gen-manifests.mjs --check` 与 `npm run check:fast` 通过；桌面页面里 `link[rel=manifest]` 指向 desktop 变体
-  - 做了什么：`tools/gen-manifests.mjs` 每种语言多生成一份 `.desktop.webmanifest`（`display_override` 只留 `standalone`、去掉 `orientation`），`--check` 一起校验；新增 `src/ui/ManifestLink.ts`（`manifestHref()` 纯函数 + `applyManifestLink()`），`boot()` 用 `applyManifestLink(getLanguage(), isTouchDevice())` 取代原来那段只按语言拼的代码；`preferInstalledLandscape()` 补 `isCoarsePointer()` 守卫；`public/sw.js` 让 `.webmanifest` 走网络
-  - 为什么：代码侧的自动全屏早就被 `isCoarsePointer()` 挡住，PC 上剩下的唯一全屏入口是"桌面把网页装成 App"——Chrome 会照 `display_override: ["fullscreen"]` 直接全屏启动，而那不是 Fullscreen API，`exitFullscreen()` 关不掉，游戏里也没入口退出。手机那份 manifest 一个字没动，不冒"装完打开不是全屏"的回归
-  - 验证：`node tools/gen-manifests.mjs --check` → 「6 种语言 ×（手机 + 桌面）与基准一致」；浏览器实测 `link[href]`：桌面 zh = `./manifest.desktop.webmanifest`、桌面 en = `./manifest.en.desktop.webmanifest`、手机 zh = `./manifest.webmanifest`、手机 pt = `./manifest.pt.webmanifest`；`npm run test:i18n` 552/0、`npm run test:ui` 1087/0、`npm run check:fast` 通过
-  - 批次：20261025-2225
-- [x] [P3] 离线断言盯着两件事：`tools/ui-test.ts` 断言 PC 按钮层与键帽存在、`tools/i18n-test.ts` 断言桌面 manifest 存在且不再 fullscreen → 验收：`npm run check:fast` 通过
-  - 做了什么：`tools/ui-test.ts` 新增一节「PC 端 HUD 按钮层」——键位表七项齐全、只在非触摸设备创建、每颗按钮挂键帽、键帽上写的键在 keydown 里真的有绑定、`index.html` 里九条关键 CSS 规则在位、面板/飞行/销毁三处生命周期都接上；`tools/i18n-test.ts` 新增桌面 manifest 一节——六份都在、`display_override` 只有 `standalone`、不写 `orientation`、除显示字段外与同名手机那份逐字一致、语言码对得上；顺带把原来那条"boot() 按语言换 manifest"的断言改成盯 `ManifestLink.ts` 的拼接规则
-  - 为什么：这类"只有截图能发现"的界面问题（少一颗按钮、键帽写错字母）纯靠人眼看；把"键帽文字 → 键盘绑定"和"桌面 manifest 不许 fullscreen"钉成断言，改坏了当场红
-  - 验证：`npm run test:ui` 1115/0（+28）；`npm run test:i18n` 582/0（+30）；`npm run check:fast` 通过
-  - 批次：20261025-2225
 
