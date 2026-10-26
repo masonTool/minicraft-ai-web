@@ -20,9 +20,15 @@ use crate::state::{
 use crate::store;
 
 /// 协议里认识的消息类型（用于区分"还没 join 的已知消息"与"真的不认识"）。
-const KNOWN_KINDS: [&str; 22] = [
+const KNOWN_KINDS: [&str; 25] = [
+    // 房主回某个区块的整块增量（用户 2026-10-26）
+    "edits-reply",
+    // 房主开局把容器/牌子/展示框整份推上来（用户 2026-10-26）
+    "session-sync",
     // 主动退出（用户 2026-10-26）：房主 bye = 当场关房，其他人 bye = 当场广播 leave
     "bye",
+    // 房主替野怪"咬"某个队友（用户 2026-10-26）：只转给被打的那一个人
+    "mob-attack",
     "join",
     "ping",
     "move",
@@ -202,6 +208,9 @@ pub async fn on_text(hub: &Arc<Hub>, conn: &mut Conn, text: &str) -> bool {
         "tnt" => on_tnt(hub, conn, id, message).await,
         "arrow" => on_arrow(hub, conn, id, message).await,
         "mob-hit" => on_mob_hit(hub, conn, id, message).await,
+        "mob-attack" => on_mob_attack(hub, conn, id, message).await,
+        "session-sync" => on_session_sync(hub, id, message).await,
+        "edits-reply" => on_edits_reply(hub, id, message).await,
         "player-hit" => on_player_hit(hub, conn, id, message).await,
         "item-spawn" => on_item_spawn(hub, conn, id, message).await,
         "item-remove" => on_item_remove(hub, conn, id, message).await,
@@ -405,6 +414,8 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
         is_host: wants_host,
         team: String::new(),
         appearance: Map::new(),
+        sync_messages: 0,
+        sent_edit_chunks: std::collections::HashSet::new(),
         tx: conn.tx.clone(),
     };
     let join_broadcast = player.base_wire();
@@ -551,6 +562,190 @@ async fn on_move(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String,
         map.insert("isHost".to_string(), Value::Bool(is_host));
     }
     st.broadcast(&room, Some(id), &wire, Some(&aoi), &hub.traffic);
+
+    /*
+     * 按视野补发（用户 2026-10-26）：走进一个还没推过的区块 →
+     * 已确认的直接推缓存，没确认的向房主要（`edits-request`）。
+     * 放在广播之后：补发可能一次发几百条，别让它挡在"队友看到我动了"前面。
+     */
+    push_chunk_for_player(&mut st, hub, id);
+}
+
+/// 同时在飞的区块请求上限：队友传送到几万格外时会跨越上千个区块，
+/// 不设上限等于让房主手机一次性收几百条请求。
+const MAX_INFLIGHT_REQUESTS: usize = 8;
+/// 一条 `blocks` 最多带多少格（与 Node 的 `CHUNK_EDITS_BATCH` 相同）
+const CHUNK_EDITS_BATCH: usize = 2048;
+
+/// 走进新区块时补发那块的历史方块（懒上行）。
+///
+/// 服务端不再"自己攒"世界，缓存里的东西全部来自房主：
+///  - 这一块**已确认**（房主给过整块）→ 直接推缓存；
+///  - 还没确认 → 向房主要（`edits-request`），房主回 `edits-reply`，服务端再按房广播；
+///  - **没有房主的房**没有权威可问，退回老行为（服务端缓存就是大家共用的那份）。
+///
+/// `sent_edit_chunks` 只在**真的推了**之后才记：回包丢了下一次 move 会重试
+/// （`requested_chunks` 挡的是"同一块被连点"，不是"永久只问一次"）。
+fn push_chunk_for_player(st: &mut State, hub: &Arc<Hub>, id: u64) {
+    let Some(player) = st.players.get(&id) else { return };
+    if player.is_host {
+        return;
+    }
+    let cx = (player.x.floor() as i64) >> 4;
+    let cz = (player.z.floor() as i64) >> 4;
+    let dimension = player.dimension.clone();
+    let room = player.room.clone();
+    let key = format!("{dimension}|{cx},{cz}");
+    if player.sent_edit_chunks.contains(&key) {
+        return;
+    }
+    let host_id = st.hosts.get(&room).copied();
+    let confirmed = host_id.is_none()
+        || st.confirmed_chunks.get(&room).map(|set| set.contains(&key)).unwrap_or(false);
+
+    if !confirmed {
+        let Some(host_id) = host_id else { return };
+        let Some(host) = st.players.get(&host_id) else { return };
+        let host_tx = host.tx.clone();
+        let requested = st.requested_chunks.entry(room.clone()).or_default();
+        if requested.contains(&key) || requested.len() >= MAX_INFLIGHT_REQUESTS {
+            return;
+        }
+        requested.insert(key.clone());
+        let _ = host_tx.send(text_message(&json!({
+            "t": "edits-request", "dimension": dimension, "cx": cx, "cz": cz,
+        })));
+        /*
+         * 回包丢了不能永远卡在"在飞"：5 秒后忘掉这次请求，玩家下一次 move 会重试。
+         * 不用"回包才算数"是因为房主可能刚好在切维度/卡顿，卡住的代价是队友永远缺一块。
+         */
+        let hub = hub.clone();
+        let room = room.clone();
+        let key = key.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(5000)).await;
+            let mut guard = hub.state.lock().await;
+            if let Some(set) = guard.requested_chunks.get_mut(&room) {
+                set.remove(&key);
+            }
+        });
+        return;
+    }
+
+    // 已确认（或无房主）：把缓存里这一块整块推给他
+    let prefix = format!("{room}|");
+    let found: Vec<Value> = st
+        .edits
+        .iter()
+        .filter(|(stored, edit)| {
+            stored.starts_with(&prefix)
+                && edit.dimension == dimension
+                && (edit.x >> 4) == cx
+                && (edit.z >> 4) == cz
+        })
+        .map(|(_, edit)| json!([edit.x, edit.y, edit.z, edit.id, edit.state, edit.dimension]))
+        .collect();
+    if let Some(player) = st.players.get_mut(&id) {
+        // 只保留最近 4096 个键，防止长跑把集合撑大（走回头路会重推一次，无害）
+        if player.sent_edit_chunks.len() > 4096 {
+            player.sent_edit_chunks.clear();
+        }
+        player.sent_edit_chunks.insert(key);
+    }
+    for chunk in found.chunks(CHUNK_EDITS_BATCH) {
+        st.send_to(
+            id,
+            &json!({"t": "blocks", "blocks": chunk, "authority": true}),
+            &hub.traffic,
+        );
+    }
+}
+
+/// 房主回某个区块的整块增量（`edits-reply`，用户 2026-10-26）。
+///
+/// 校验三件事：**只有本房房主能回**、坐标必须落在信封声明的那个区块里（防止一次回包
+/// 把远处的东西写进缓存）、每条过一遍与单格 `block` 相同的收口。收下之后记入
+/// `confirmed_chunks`（后来者直接推缓存）并按房广播成普通 `blocks`。
+async fn on_edits_reply(hub: &Arc<Hub>, id: u64, message: &Map<String, Value>) {
+    let mut st = hub.state.lock().await;
+    let Some(player) = st.players.get(&id) else { return };
+    if st.hosts.get(&player.room).copied() != Some(id) {
+        return;
+    }
+    let room = player.room.clone();
+    let player_xz = (player.x, player.z);
+    let dimension = sanitize_dimension(message.get("dimension").and_then(Value::as_str)).to_string();
+    let (Some(cx), Some(cz)) =
+        (message.get("cx").and_then(int_of), message.get("cz").and_then(int_of))
+    else {
+        return;
+    };
+    let key = format!("{dimension}|{cx},{cz}");
+    let list = message.get("blocks").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut accepted: Vec<Value> = Vec::new();
+
+    for raw in list.iter().take(MAX_BLOCKS_PER_MESSAGE) {
+        let Some(entry) = raw.as_array() else { continue };
+        if entry.len() < 4 {
+            continue;
+        }
+        let (Some(x), Some(y), Some(z), Some(block_id)) = (
+            entry[0].as_i64(),
+            entry[1].as_i64(),
+            entry[2].as_i64(),
+            entry[3].as_i64(),
+        ) else {
+            continue;
+        };
+        let block_state = entry.get(4).and_then(Value::as_i64).unwrap_or(0);
+        // 维度以信封为准：一条回包只属于一个区块
+        if (x >> 4) != cx || (z >> 4) != cz {
+            continue;
+        }
+        if block_edit_rejection(
+            player_xz,
+            true,
+            x as i32,
+            y as i32,
+            z as i32,
+            block_id as i32,
+            block_state as i32,
+        )
+        .is_some()
+        {
+            continue;
+        }
+        let edit = Edit {
+            x,
+            y,
+            z,
+            id: block_id,
+            state: block_state,
+            dimension: dimension.clone(),
+        };
+        st.edits.remember(scoped_key(&room, &dimension, x, y, z), edit, MAX_EDITS);
+        accepted.push(json!([x, y, z, block_id, block_state, dimension]));
+    }
+
+    if let Some(set) = st.confirmed_chunks.get_mut(&room) {
+        set.insert(key.clone());
+    } else {
+        let mut set = std::collections::HashSet::new();
+        set.insert(key.clone());
+        st.confirmed_chunks.insert(room.clone(), set);
+    }
+    if let Some(set) = st.requested_chunks.get_mut(&room) {
+        set.remove(&key);
+    }
+    if !accepted.is_empty() {
+        st.broadcast(
+            &room,
+            Some(id),
+            &json!({"t": "blocks", "blocks": accepted, "authority": true}),
+            None,
+            &hub.traffic,
+        );
+    }
 }
 
 // ---------------------------------------------------------------- 方块
@@ -980,6 +1175,202 @@ async fn on_tnt(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String, 
     let message = json!({"t": "tnt", "x": x, "y": y, "z": z, "dimension": dimension, "by": id});
     let aoi = Aoi::new(x as f64, z as f64, &dimension);
     st.broadcast(&room, Some(id), &message, Some(&aoi), &hub.traffic);
+}
+
+/// 房主那边的野怪打中了某个队友（`mob-attack`，用户 2026-10-26）。
+///
+/// 从属端不跑生物 AI（`SimMode`），所以"被野怪咬了一口"只能由房主判定后发过来。
+/// 服务端只做两件事：**只转给被打的那一个人**（伤害是私事，不广播）+ 形状收口；
+/// 真正的扣血在接收方本地走 `damagePlayer`（护甲/无敌帧/难度倍率按他那边的算）。
+/// 一条 `session-sync` 最多带多少条（与客户端 `SESSION_SYNC_BATCH` 对齐）
+const SESSION_SYNC_BATCH: usize = 200;
+/// 一条连接最多发多少条 `session-sync`：一次整份推最多几十条，这个上限只挡脚本
+const SESSION_SYNC_MAX_MESSAGES: u32 = 256;
+
+/// 房主开局把容器 / 牌子 / 展示框**整份**推上来（`session-sync`，用户 2026-10-26）。
+///
+/// 服务端清场之后这三张表是空的，而队友 `welcome` 里的箱子内容只能来自房主——
+/// 方块可以按区块懒补，箱子不行（打开看到空的就会往里放东西，然后被覆盖）。
+///
+/// 与单条 `container`/`sign`/`frame` 的区别：
+///  - **不走令牌桶**（一次性整份推，走限频会被砍掉大半）；
+///  - **不做距离闸**（房主推的是整个世界，不能只收他脚下那几个）；
+///  - 只收本房房主（别人推来的"世界散件"没有权威性）。
+async fn on_session_sync(hub: &Arc<Hub>, id: u64, message: &Map<String, Value>) {
+    let mut st = hub.state.lock().await;
+    let Some(player) = st.players.get(&id) else { return };
+    if st.hosts.get(&player.room).copied() != Some(id) {
+        return;
+    }
+    let room = player.room.clone();
+    let default_dimension = player.dimension.clone();
+    if let Some(player) = st.players.get_mut(&id) {
+        if player.sync_messages >= SESSION_SYNC_MAX_MESSAGES {
+            return;
+        }
+        player.sync_messages += 1;
+    }
+
+    let kind = message.get("kind").and_then(Value::as_str).unwrap_or("");
+    if !matches!(kind, "container" | "sign" | "frame") {
+        return;
+    }
+    let items = message.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
+    let mut out: Vec<Value> = Vec::new();
+
+    for raw in items.iter().take(SESSION_SYNC_BATCH) {
+        let Some(raw) = raw.as_object() else { continue };
+        let dimension = match raw.get("dimension").and_then(Value::as_str) {
+            Some(value) => sanitize_dimension(Some(value)).to_string(),
+            None => default_dimension.clone(),
+        };
+        let (Some(x), Some(y), Some(z)) = (
+            raw.get("x").and_then(int_of),
+            raw.get("y").and_then(int_of),
+            raw.get("z").and_then(int_of),
+        ) else {
+            continue;
+        };
+        match kind {
+            "container" => {
+                if y < i64::from(WORLD_MIN_Y) || y >= i64::from(WORLD_MAX_Y) {
+                    continue;
+                }
+                let Some(slots) = raw.get("slots").and_then(Value::as_array) else { continue };
+                if slots.len() > 27 {
+                    continue;
+                }
+                let text_len = serde_json::to_string(&Value::Array(slots.clone()))
+                    .map(|text| text.len())
+                    .unwrap_or(usize::MAX);
+                if text_len > 8192 || st.containers.len() >= MAX_CONTAINERS {
+                    continue;
+                }
+                let key = scoped_key(&room, &dimension, x, y, z);
+                st.containers.insert(
+                    key,
+                    Container {
+                        x,
+                        y,
+                        z,
+                        dimension: dimension.clone(),
+                        slots: Value::Array(slots.clone()),
+                    },
+                );
+                out.push(json!({
+                    "t": "container", "dimension": dimension, "x": x, "y": y, "z": z,
+                    "slots": slots, "by": id,
+                }));
+            }
+            "sign" => {
+                let lines: Vec<String> = raw
+                    .get("lines")
+                    .and_then(Value::as_array)
+                    .map(|lines| {
+                        lines
+                            .iter()
+                            .take(4)
+                            .map(|line| text_of(Some(line)).chars().take(64).collect())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if st.signs.len() >= MAX_SIGNS {
+                    continue;
+                }
+                let key = scoped_key(&room, &dimension, x, y, z);
+                st.signs.insert(
+                    key,
+                    Sign { x, y, z, dimension: dimension.clone(), lines: lines.clone() },
+                );
+                out.push(json!({
+                    "t": "sign", "x": x, "y": y, "z": z, "dimension": dimension,
+                    "lines": lines, "by": id,
+                }));
+            }
+            _ => {
+                // 展示框：`item = null` 是空框；带 item 时只认 `{id, count}`
+                let item = match raw.get("item") {
+                    None | Some(Value::Null) => Value::Null,
+                    Some(value) => {
+                        let Some(map) = value.as_object() else { continue };
+                        let id_value = map.get("id").and_then(int_of).unwrap_or(0);
+                        let count = map.get("count").and_then(int_of).unwrap_or(1);
+                        json!({"id": id_value, "count": count})
+                    }
+                };
+                let rotation = raw.get("rotation").and_then(int_of).unwrap_or(0);
+                if st.frames.len() >= MAX_FRAMES {
+                    continue;
+                }
+                let key = scoped_key(&room, &dimension, x, y, z);
+                st.frames.insert(
+                    key,
+                    Frame {
+                        x,
+                        y,
+                        z,
+                        dimension: dimension.clone(),
+                        item: item.clone(),
+                        rotation,
+                    },
+                );
+                out.push(json!({
+                    "t": "frame", "x": x, "y": y, "z": z, "dimension": dimension,
+                    "item": item, "rotation": rotation, "by": id,
+                }));
+            }
+        }
+    }
+
+    // 收下之后按房广播：先进来的队友当场看到，后进来的从 `welcome` 拿（两边都不需要握手）
+    for payload in out {
+        st.broadcast(&room, Some(id), &payload, None, &hub.traffic);
+    }
+}
+
+async fn on_mob_attack(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String, Value>) {
+    let st = hub.state.lock().await;
+    let Some(player) = st.players.get(&id) else { return };
+    // 只有本房房主能发：别人"替我打我自己"没有意义
+    if st.hosts.get(&player.room).copied() != Some(id) {
+        return;
+    }
+    let room = player.room.clone();
+    if !conn.effect_window.allow(store::now_ms() as i64, 30) {
+        return;
+    }
+    let Some(target_id) = message.get("targetId").and_then(int_of).and_then(|raw| u64::try_from(raw).ok()) else {
+        return;
+    };
+    let Some(target) = st.players.get(&target_id) else { return };
+    // 跨房不给打：目标必须和我同一间，也不能是我自己
+    if target.room != room || target_id == id {
+        return;
+    }
+    let tx = target.tx.clone();
+    let damage = message.get("damage").and_then(number_of).unwrap_or(0.0).clamp(0.0, 50.0);
+    if !(damage > 0.0) {
+        return;
+    }
+    let (Some(x), Some(z)) =
+        (message.get("x").and_then(number_of), message.get("z").and_then(number_of))
+    else {
+        return;
+    };
+    let source: String = message
+        .get("source")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .chars()
+        .take(32)
+        .collect();
+    let mut out = json!({"t": "mob-attack", "damage": damage, "x": x, "z": z, "fromId": id});
+    if !source.is_empty() {
+        if let Some(map) = out.as_object_mut() {
+            map.insert("source".to_string(), Value::from(source));
+        }
+    }
+    let _ = tx.send(text_message(&out));
 }
 
 async fn on_arrow(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String, Value>) {

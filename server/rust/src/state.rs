@@ -54,6 +54,10 @@ pub struct Player {
     pub team: String,
     /// 这一帧上报的外观（`held/armor/look/...`），已按白名单收口
     pub appearance: Map<String, Value>,
+    /// 已经发了几条 `session-sync`（用户 2026-10-26）：只有房主用得上，防脚本无限刷
+    pub sync_messages: u32,
+    /// 已经推过哪些区块的增量（键是 `维度|cx,cz`）：走开再回来不重复推
+    pub sent_edit_chunks: std::collections::HashSet<String>,
     pub tx: Tx,
 }
 
@@ -335,6 +339,10 @@ pub struct State {
     /// 房间 → 当前游戏模式（用户 2026-10-26）：房主中途用 `room-config` 改过也认这里，
     /// 晚进来的人从 `welcome.gameMode` 拿到**当前**模式，而不是开房那一刻的快照。
     pub room_game_modes: HashMap<String, String>,
+    /// 房主已经把哪几个区块**整块**回给我们了（键 `维度|cx,cz`）：之后谁走进来直接推缓存
+    pub confirmed_chunks: HashMap<String, std::collections::HashSet<String>>,
+    /// 正在向房主要的区块（挡"同一块被连点"，5 秒后忘掉，回包丢了还能重试）
+    pub requested_chunks: HashMap<String, std::collections::HashSet<String>>,
     /// 没有房主的房（以及读档后的默认值）用这一套；**落盘的就是它**。
     pub default_clock: RoomClock,
 }
@@ -399,6 +407,8 @@ impl State {
             next_id: 1,
             clocks: HashMap::new(),
             room_game_modes: HashMap::new(),
+            confirmed_chunks: HashMap::new(),
+            requested_chunks: HashMap::new(),
             default_clock: RoomClock::new(),
         }
     }
@@ -484,6 +494,8 @@ impl State {
         // 每房一套的时钟与模式：房间结束就丢，下一位房主带自己的设置进来
         self.clocks.remove(room);
         self.room_game_modes.remove(room);
+        self.confirmed_chunks.remove(room);
+        self.requested_chunks.remove(room);
         removed
     }
 
