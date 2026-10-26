@@ -83,6 +83,20 @@
         --mc-menu-bg: #232323;
         --mc-menu-overlay: rgba(0, 0, 0, .58);
 
+        /* ---- 控件与弹层的统一规格（2026-10-27） ----
+           用户："设置里所有的按钮、文字、输入框都应该符合一个统一的规则，
+           不应该有的大有的小、有的高有的低；弹框的位置、背景、关闭按钮也要统一。"
+           所以尺寸只在这里出现一次，下面有一整段"控件统一规格"把它们套到各处。
+           新增控件挂上那几个选择器即可，不要各写一套 padding。 */
+        --ctl-h: 32px;            /* 输入框 / 下拉 / 次级按钮的统一高度 */
+        --ctl-h-lg: 40px;         /* 主按钮高一档（一处只出现一颗） */
+        --ctl-font: 13px;         /* 控件字号；标签统一 12px */
+        --ctl-pad-x: 9px;         /* 控件左右内边距 */
+        --modal-w: 460px;         /* 对话框面板宽度（上限，窄屏按 92vw 收） */
+        --modal-pad: 12px 14px;   /* 对话框/浮窗的内边距 */
+        --modal-bg: rgba(22, 22, 22, .97);
+        --modal-close: 28px;      /* 关闭按钮：正方形，钉在右上角 */
+
         /* ---- 暂停/设置面板的**固定尺寸**（批次 110） ----
            用户要求"不管手机还是 PC，设置界面都是固定宽高、统一大小的"。
            尺寸只在这两个变量里出现一次，暂停菜单页与设置页**共用**——
@@ -1987,6 +2001,121 @@
       }
       /* 状态文字跟在按钮右边、左对齐（`.settings-row i` 的右对齐特异性更高，单独覆盖） */
       .settings-row i.settings-status { text-align: left; }
+
+      /* ==================================================================
+         控件统一规格（2026-10-27）
+         用户："设置里所有的按钮、文字、输入框都应该符合一个统一的规则，不应该有的
+         大有的小、有的高有的低；弹框的位置、背景、关闭按钮也应该是统一规格。"
+         规则就七条，尺寸全部来自 `:root` 的 `--ctl-*` / `--modal-*`：
+           ① 输入框：同高度、同字号、同内边距
+           ② 次级按钮：同高度（图形开关 `.settings-switch` 不在此列）
+           ③ 主按钮：统一高一档，一处只出现一颗
+           ④ 弹层：同宽、同内边距、同背景、同边框
+           ⑤ 关闭按钮：同一个正方形尺寸 + 同一个位置（右上角）
+           ⑥ 浮窗是第二层：窄一档，并把下层压暗 + 虚化
+           ⑦ 标签：全站 12px
+         新增控件挂上对应选择器即可，**不要**再各写一套 padding / height。
+         ================================================================== */
+
+      /* ① 输入框 */
+      .world-input,
+      .mp-row input,
+      .settings-row input[type='text'],
+      .settings-row input[type='number'],
+      .settings-row select {
+        box-sizing: border-box;
+        height: var(--ctl-h);
+        padding: 0 var(--ctl-pad-x);
+        font: inherit;
+        font-size: var(--ctl-font);
+        line-height: 1;
+      }
+
+      /* ② 次级按钮 */
+      .settings-cycle,
+      .settings-dropdown-button,
+      .settings-reset,
+      .world-mini,
+      .server-picker-button {
+        box-sizing: border-box;
+        min-height: var(--ctl-h);
+        font: inherit;
+        font-size: var(--ctl-font);
+      }
+
+      /* 「选择」是文字按钮：高度对齐，但不加边框（设计图里它就是一段文字） */
+      .mp-pick {
+        box-sizing: border-box;
+        height: var(--ctl-h);
+        display: inline-flex;
+        align-items: center;
+        font-size: var(--ctl-font);
+      }
+
+      /* ③ 主按钮 */
+      .mp-action.primary,
+      .world-edit-save {
+        box-sizing: border-box;
+        height: var(--ctl-h-lg);
+        font-size: 14px;
+      }
+
+      /* ④ 弹层：对话框两份（联机 / 世界卡片）共用一套盒子 */
+      .mp-panel,
+      .world-modal-panel {
+        box-sizing: border-box;
+        width: min(92vw, var(--modal-w));
+        padding: var(--modal-pad);
+        background: var(--modal-bg);
+        border: 3px solid;
+        border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+      }
+
+      /* ⑤ 关闭按钮：两个对话框同一个尺寸、同一个位置 */
+      .mp-close,
+      .world-modal-close {
+        box-sizing: border-box;
+        position: absolute; right: 0; top: 0;
+        width: var(--modal-close); height: var(--modal-close);
+        min-width: var(--modal-close); min-height: var(--modal-close);
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; font-size: 14px; line-height: 1;
+      }
+
+      /* ⑥ 浮窗（第二层）：窄一档 + 把下层压暗虚化，避免两层文字打架 */
+      .server-picker {
+        background: rgba(0, 0, 0, .45);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+      }
+      .server-picker-panel {
+        box-sizing: border-box;
+        width: min(92vw, 340px);
+        padding: var(--modal-pad);
+        background: var(--modal-bg);
+        border: 3px solid;
+        border-color: var(--pixel-bevel-dark);
+      }
+      .server-picker-toggle {
+        box-sizing: border-box;
+        height: 26px; padding: 0 10px;
+        font: inherit; font-size: 12px;
+      }
+
+      /* ⑦ 标签 */
+      .mp-row > span,
+      .world-row > span,
+      .settings-row > span {
+        font-size: 12px;
+      }
+
+      /* 对话框背后那层也轻微虚化：层次靠"暗 + 糊"，不靠再叠一层边框 */
+      #multiplayer-screen,
+      .world-modal {
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+      }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
