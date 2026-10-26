@@ -1887,6 +1887,22 @@ class App {
    * 默认 30——与原版的自动保存节奏接近；`applySettings()` 会按设置覆盖它。
    */
   private autoSaveInterval = 30;
+  /**
+   * 房主联机时的保存间隔上限（秒，用户 2026-10-26）。
+   *
+   * 房间数据现在**只**存在于房主本地（服务端不落盘），所以"最后 30 秒的改动"从
+   * "服务端还有一份"变成了**没有任何备份**。压到 10 秒是把这段窗口缩小 3 倍，
+   * 代价是 IDB 写入更频繁（一次通常几十 KB，实测可忽略）。
+   */
+  private readonly hostMultiplayerSaveSeconds = 10;
+  /**
+   * 这一局我是房主且还在联机（用户 2026-10-26）。
+   *
+   * 为什么不直接读 `this.net.role`：断线善后（`onStatus(false)`）执行时会话已经
+   * 切回 `solo`，那里正需要知道"刚断开的是不是房主这一局"——所以要在 `welcome`
+   * 时记一份，断开时用掉再清。
+   */
+  private hostSession = false;
   private autoSaveTimer = 0;
   /** 上次保存的结果（调试面板与验收脚本用） */
   private lastSaveAt = 0;
@@ -2109,6 +2125,15 @@ class App {
         // 影子实体（L8 · MS3）：断开就撤，否则留下的怪既不动也打不死
         this.clearShadowMobs();
         this.lastMobKeys.clear();
+        /*
+         * 房主（用户 2026-10-26）：房间数据只在他本地，断开这一刻必须先落一次。
+         * 不落的话，队友在这 10 秒窗口里盖的东西只有服务端内存里有，而房间一关就清了
+         * ——等于白干。`saveNow` 是异步的，这里不等它（断开善后不能被写盘拖住）。
+         */
+        if (this.hostSession) {
+          this.hostSession = false;
+          void this.saveNow('mp-host-leave');
+        }
         // 联机6：断开就关掉联机库并停止写盘（世界还是联机地形，写回单机档就是污染）
         this.leaveMultiplayerSave();
         /*
@@ -2210,12 +2235,24 @@ class App {
    * 顺序有讲究：**先把单机档落一次**再换库，否则"进联机之后的自动保存"之前的
    * 那几分钟进度就没了。换库失败（无痕模式 `open` 返回 null）时把 `save` 置空
    * ——宁可这一局不保存，也不能继续往单机库里写联机世界。
+   *
+   * ⚠️ **房主不切库**（用户 2026-10-26：世界以房主本地为准）。
+   *
+   * 这一局的世界就是房主那个存档：联机期间从属端的改动是经 `edit-request` 由房主
+   * 在自己的世界里落地的，所以"写回本地"只要不换库就天然成立。切到 `@mp:<房名>`
+   * 库的后果是那些改动写进一个**只写不读**的账本（见 `core/net/MultiplayerSave.ts`），
+   * 房主退出房间后世界会原地重载回开房前的样子。
+   * 从属端仍然切：队友盖的东西绝不能落进他的单机档。
    */
   private async enterMultiplayerSave(
     roomId: string = DEFAULT_MULTIPLAYER_ROOM,
     seed?: number,
   ): Promise<void> {
     if (this.inMultiplayerSave) return;
+    if (this.net.role === 'host') {
+      diag.event('app', 'save.mpEnter.skip', { reason: 'host', room: roomId });
+      return;
+    }
     await this.saveNow('mp-enter');
     const solo = this.save;
     // 库名带房间 + 房间世界的种子（L9）：同房换世界 = 另一片大陆 = 另一个库
@@ -3940,6 +3977,8 @@ class App {
      * "我是房主还是从属"——那决定了他要不要等别人。
      */
     this.multiplayerScreen.setRole(this.net.role);
+    // 房主这一局（用户 2026-10-26）：保存间隔与"断开前落盘"都要读它，断开时角色已经回 solo 了
+    this.hostSession = this.net.role === 'host';
     console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
 
     /*
@@ -5182,7 +5221,15 @@ class App {
   private tickAutoSave(dt: number): void {
     if (!this.save) return;
     this.autoSaveTimer += dt;
-    if (this.autoSaveTimer < this.autoSaveInterval) return;
+    /*
+     * 房主联机时按更短的间隔存（用户 2026-10-26）：这一局的世界只在他本地，
+     * 服务端不落盘，30 秒窗口里的改动没有任何备份。
+     * 取 `min` 而不是直接赋值：玩家自己设成 5 秒时不该被拉回 10 秒。
+     */
+    const interval = this.hostSession
+      ? Math.min(this.autoSaveInterval, this.hostMultiplayerSaveSeconds)
+      : this.autoSaveInterval;
+    if (this.autoSaveTimer < interval) return;
     this.autoSaveTimer = 0;
     void this.saveNow('auto');
   }
