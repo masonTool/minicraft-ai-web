@@ -6462,6 +6462,14 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
   );
   check('公开服务器接口预留（URL 为空则不发请求）', /publicServersUrl\?\.\(\) \?\? ''/.test(pickerSrc) && pickerSrc.includes("t('server.publicSoon')"));
   check('选中后把地址写回调用方并关面板', /private pick\(address: string\): void \{[\s\S]{0,200}?this\.actions\.onPick\(address\);/.test(pickerSrc));
+  // 本批：点一行只是选中（扫描结果边扫边冒，点一下就关太容易误触），「确定」才回填
+  check(
+    '点行只选中、确定才回填（未选中时确定禁用）',
+    pickerSrc.includes("row.addEventListener('click', () => this.select(") &&
+      pickerSrc.includes('private confirm(): void') &&
+      pickerSrc.includes('this.confirmButton.disabled = true;') &&
+      pickerSrc.includes("t('server.confirm')"),
+  );
 
   // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
   check(

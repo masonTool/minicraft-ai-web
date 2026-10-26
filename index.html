@@ -2080,7 +2080,17 @@
         text-align: left;
       }
       .server-picker-item:hover { background: rgba(255, 255, 255, .08); }
+      /* 选中态（本批）：点一行只选中、不关闭，所以高亮必须一眼能看出来 */
+      .server-picker-item.selected {
+        background: rgba(120, 190, 255, .22);
+        border-color: #8fc7ff;
+        color: #fff;
+      }
       .server-picker-rtt { font-variant-numeric: tabular-nums; color: #9fd08a; }
+      /* 底部「取消 / 确定」：确定在未选中时是禁用的 */
+      .server-picker-actions {
+        display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+      }
       .mp-mini {
         flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
       }

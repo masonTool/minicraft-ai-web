@@ -142,8 +142,16 @@ export class MultiplayerScreen {
       pickButtonId: 'mp-pick-server',
       pickButtonClass: 'mp-mini',
       addressError: t('mp.error.url'),
-      // 选中服务器后把焦点还给「找房间」：玩家下一步通常就是拉这台机器的房间列表
-      onPick: () => this.refreshButton.focus(),
+      /*
+       * 选中服务器后**直接把它的房间列表拉出来**（本批）。
+       *
+       * 以前要玩家再按一次「找房间」——两步才看到"这台上有哪些房"，而那正是他选服务器的
+       * 原因。现在回填地址的同时拉一次，右栏列表直接填上（失败仍只提示，不挡手填）。
+       */
+      onPick: () => {
+        this.refreshButton.focus();
+        void this.refreshRooms();
+      },
     });
     this.urlInput = this.form.urlInput;
     this.roomInput = this.form.roomInput;

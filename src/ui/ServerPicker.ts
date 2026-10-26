@@ -52,9 +52,17 @@ export class ServerPicker {
   private readonly status: HTMLDivElement;
   private readonly lanList: HTMLDivElement;
   private readonly publicList: HTMLDivElement;
+  private readonly confirmButton: HTMLButtonElement;
 
   private opened = false;
   private scanning = false;
+  /**
+   * 当前选中项（本批）：点一行只是**选中**，不立刻回填——底部「确定」才应用。
+   *
+   * 为什么改：以前点一下就关面板并回填，手机上很容易误触（列表行本来就窄，
+   * 扫描结果是"边扫边冒出来"的，手指还没抬起来列表就重排了）。
+   */
+  private selected: { address: string; row: HTMLElement } | null = null;
 
   constructor(private readonly actions: ServerPickerActions) {
     this.element = document.createElement('div');
@@ -128,7 +136,30 @@ export class ServerPicker {
     this.publicList.id = 'server-public-list';
     publicSection.append(publicHead, this.publicList);
 
-    this.panel.append(head, lanSection, publicSection);
+    /*
+     * ---- 底部：取消 / 确定（本批）
+     *
+     * 「确定」未选中时禁用：选中是这一层的唯一前提，先让玩家看见自己选的是哪台机器
+     * 再应用，比"点一下就走"更可控（选错服务器的代价是连错一台机器）。
+     */
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'server-picker-actions';
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'mp-mini';
+    cancelButton.id = 'server-picker-cancel';
+    cancelButton.textContent = t('menu.cancel');
+    cancelButton.addEventListener('click', () => this.close());
+    this.confirmButton = document.createElement('button');
+    this.confirmButton.type = 'button';
+    this.confirmButton.className = 'mp-mini';
+    this.confirmButton.id = 'server-picker-confirm';
+    this.confirmButton.textContent = t('server.confirm');
+    this.confirmButton.disabled = true;
+    this.confirmButton.addEventListener('click', () => this.confirm());
+    actionsRow.append(cancelButton, this.confirmButton);
+
+    this.panel.append(head, lanSection, publicSection, actionsRow);
     this.element.append(this.panel);
     // 点遮罩关掉：这一层是"辅助面板"，不该有必须点按钮才能离开的感觉
     this.element.addEventListener('click', (event) => {
@@ -142,6 +173,8 @@ export class ServerPicker {
     this.subnetInput.value = this.suggestSubnet();
     this.status.textContent = '';
     this.lanList.replaceChildren();
+    // 每次打开都是"重新挑一台"：上一次的选中不能留着，否则「确定」会悄悄沿用旧地址
+    this.clearSelection();
     this.renderPublic();
     /*
      * https 页面**照样允许扫**（用户 2026-10-26）。
@@ -227,7 +260,8 @@ export class ServerPicker {
     rtt.className = 'server-picker-rtt';
     rtt.textContent = tp('server.rtt', { ms: String(server.rttMs) });
     row.append(label, rtt);
-    row.addEventListener('click', () => this.pick(name));
+    // 选中而不是直接回填（本批）：扫描结果是边扫边冒出来的，点一下就关面板太容易误触
+    row.addEventListener('click', () => this.select(name, row));
     this.lanList.append(row);
   }
 
@@ -268,10 +302,41 @@ export class ServerPicker {
       address.className = 'server-picker-rtt';
       address.textContent = server.address;
       row.append(name, address);
-      row.addEventListener('click', () => this.pick(server.address));
+      row.addEventListener('click', () => this.select(server.address, row));
       return row;
     });
     this.publicList.replaceChildren(...rows);
+  }
+
+  /**
+   * 选中一行（不应用）：高亮 + 点亮「确定」。
+   *
+   * 单选语义靠"移除上一行的高亮"维持——扫描过程中列表还在增长，玩家可能连点两行。
+   */
+  private select(address: string, row: HTMLElement): void {
+    if (this.selected) {
+      this.selected.row.classList.remove('selected');
+      this.selected.row.removeAttribute('aria-selected');
+    }
+    this.selected = { address, row };
+    row.classList.add('selected');
+    row.setAttribute('aria-selected', 'true');
+    this.confirmButton.disabled = false;
+  }
+
+  private clearSelection(): void {
+    if (this.selected) {
+      this.selected.row.classList.remove('selected');
+      this.selected.row.removeAttribute('aria-selected');
+    }
+    this.selected = null;
+    this.confirmButton.disabled = true;
+  }
+
+  /** 「确定」：把选中的地址交给调用方并关面板（未选中时按钮是禁用的，这里再兜一层） */
+  private confirm(): void {
+    if (!this.selected) return;
+    this.pick(this.selected.address);
   }
 
   private pick(address: string): void {
