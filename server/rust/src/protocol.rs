@@ -1,6 +1,6 @@
 //! 协议常量与清洗函数
 //!
-//! **单一事实来源是 `server/protocol.mjs` 与 `docs/NET-PROTOCOL.md`**：这里逐条对齐，
+//! **单一事实来源是 `server/node/protocol.mjs` 与 `docs/NET-PROTOCOL.md`**：这里逐条对齐，
 //! 任何一处不一致都会让 Rust 版与 JS 版行为不同（最典型的是"名字截断把 emoji 切成半个"
 //! 或"房间名回落规则不同 → 两个人进了两个房"）。
 //!
@@ -25,8 +25,8 @@ pub const DEFAULT_ROOM: &str = "default";
 /// 房间名最长多少个字符。
 pub const MAX_ROOM_LENGTH: usize = 24;
 
-/// 联机服务端默认端口（与 `server/protocol.mjs` 的 `DEFAULT_PORT` 相等）。
-pub const DEFAULT_PORT: u16 = 25187;
+/// 联机服务端默认端口（与 `server/node/protocol.mjs` 的 `DEFAULT_PORT` 相等）。
+pub const DEFAULT_PORT: u16 = 8887;
 
 /// 服务端默认世界种子（没房主的房间退回它，"单机直连服务器"的老行为）。
 pub const WORLD_SEED_DEFAULT: i64 = 20261014;

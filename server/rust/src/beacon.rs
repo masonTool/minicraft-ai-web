@@ -7,7 +7,7 @@
 //! 报文是极简 JSON 文本（一秒钟才几条，可读性比省字节重要）：
 //!
 //! ```json
-//! {"mc":"minicraft","v":2,"id":"3f9a1c07","port":25187,"name":"草原小屋",
+//! {"mc":"minicraft","v":2,"id":"3f9a1c07","port":8887,"name":"草原小屋",
 //!  "seed":424242,"players":2,"host":true,"pw":false}
 //! ```
 //!
@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 use crate::protocol::PROTOCOL_VERSION;
 use crate::state::State;
 
-/// 发现用的 UDP 端口（与 TCP 的 25187 相邻但不冲突）。
+/// 发现用的 UDP 端口（与 TCP 的 8887 相邻但不冲突）。
 pub const BEACON_PORT: u16 = 25188;
 /// 发现用的组播组（IPv4 本地管理段 239.0.0.0/8）。
 ///
@@ -335,7 +335,7 @@ mod tests {
     fn sample(instance: &str) -> Announce {
         Announce {
             instance: instance.to_string(),
-            port: 25187,
+            port: 8887,
             room: "smoke".to_string(),
             name: "草原小屋".to_string(),
             seed: 424242,
@@ -353,7 +353,7 @@ mod tests {
         // 字段名是协议的一部分（客户端按它读），改名字要一起改
         let text = String::from_utf8(bytes).unwrap();
         assert!(text.contains("\"mc\":\"minicraft\""));
-        assert!(text.contains("\"port\":25187"));
+        assert!(text.contains("\"port\":8887"));
     }
 
     #[test]
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn bonjour_txt_maps_to_the_same_announce() {
         let txt = vec![
-            ("port".to_string(), "25187".to_string()),
+            ("port".to_string(), "8887".to_string()),
             ("room".to_string(), "red".to_string()),
             ("name".to_string(), "草原小屋".to_string()),
             ("seed".to_string(), "424242".to_string()),
@@ -379,7 +379,7 @@ mod tests {
             ("pw".to_string(), "0".to_string()),
         ];
         let announce = from_txt("张三的 iPhone", &txt).expect("应当能转");
-        assert_eq!(announce.port, 25187);
+        assert_eq!(announce.port, 8887);
         assert_eq!(announce.room, "red");
         assert_eq!(announce.name, "草原小屋");
         assert_eq!(announce.seed, 424242);
@@ -394,7 +394,7 @@ mod tests {
         assert!(from_txt("x", &[("port".to_string(), "0".to_string())]).is_none());
         // 脏字段回落而不是整份丢弃（Bonjour 的记录是别人写的，能用的部分要用）
         let dirty = vec![
-            ("port".to_string(), "25187".to_string()),
+            ("port".to_string(), "8887".to_string()),
             ("room".to_string(), "不合法 房名".to_string()),
             ("seed".to_string(), "abc".to_string()),
         ];

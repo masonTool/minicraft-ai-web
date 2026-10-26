@@ -34,7 +34,7 @@
 
 ## 两条不能忘的约定
 
-1. **`node/` 与 `rust/` 是并行实现，不共享代码**：常量（协议版本 2、端口 25187、房间名规则、
+1. **`node/` 与 `rust/` 是并行实现，不共享代码**：常量（协议版本 2、端口 8887、房间名规则、
    名字清洗、距离闸、限频数值）必须逐条相等，靠**同一份黑盒断言** `tools/net-test.mjs` 兜底——
    它跑两遍，分别指向两套实现（`npm run test:net` 与 `bash server/rust/run-net-test.sh`）。
 2. **改协议两头一起改**：`docs/NET-PROTOCOL.md` 是契约，`node/`、`rust/`、`src/net/NetClient.ts`
@@ -43,8 +43,8 @@
 ## 常见操作
 
 ```bash
-npm run server                  # 起 Node 版（:25187）
-cd server/rust && cargo run     # 起 Rust 版（:25187，二选一）
+npm run server                  # 起 Node 版（:8887）
+cd server/rust && cargo run     # 起 Rust 版（:8887，二选一）
 npm run test:net                # 195 条黑盒断言（指向 Node 版）
 bash server/rust/run-net-test.sh   # 同一份断言，指向 Rust 版
 bash server/rust/build-android.sh  # 出 .so（Gradle 构建时会自己拷进 jniLibs）

@@ -55,7 +55,7 @@ bash run-smoke.sh        # 自起临时服务端（25199）→ 20 条断言 → 
 bash run-net-test.sh     # 用 tools/net-test.mjs 的 195 条断言验收（build 后直接跑 Rust 二进制）
 bash run-beacon-smoke.sh # 起两个真进程验"互相发现"（组播 + 自回声过滤）
 bash build-android.sh    # 交叉编译 Android 的 .so（arm64-v8a / x86_64）
-cargo run                # 手动跑（默认 25187，与 JS 版一致）
+cargo run                # 手动跑（默认 8887，与 JS 版一致）
 ```
 
 环境变量：`PORT`（`0` = 让系统挑，日志里打实际端口）、`SEED`、`GRACE_MS`（断线宽限，默认 30000）、
@@ -71,11 +71,11 @@ cargo run                # 手动跑（默认 25187，与 JS 版一致）
 - 对齐判据就是 `tools/net-test.mjs`（1871 行黑盒断言）。它多了一个 `NET_SERVER_BIN`
   环境变量用来"换被验收的服务端进程"（默认仍是 `node server/node/index.mjs`），
   **断言一条没改**——验的是协议，不是某种语言
-- 两边的常量（协议版本 2、端口 25187、房间名规则、名字清洗、距离闸、限频数值）必须逐条相等
+- 两边的常量（协议版本 2、端口 8887、房间名规则、名字清洗、距离闸、限频数值）必须逐条相等
 
 ## 局域网发现（N4 的 Rust 半边）
 
-- 报文：`{"mc":"minicraft","v":2,"id":"<8位hex>","port":25187,"name":"世界名","seed":…,"players":…,"host":true,"pw":false}`
+- 报文：`{"mc":"minicraft","v":2,"id":"<8位hex>","port":8887,"name":"世界名","seed":…,"players":…,"host":true,"pw":false}`
 - 通道：**组播** `239.255.42.99:25188`（主）+ 广播 `255.255.255.255:25188`（兜底）
 - 自己的回声按 `id` 过滤（不然房间列表里会看到自己两遍）；peer 12 秒没再听到就下线
 - `/healthz` 里多了 `beacon` 与 `peers`（名字/端口/种子/人数/有无房主/有无口令/来源 IP）；

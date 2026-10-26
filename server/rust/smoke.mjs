@@ -10,7 +10,7 @@
  * 运行：`bash run-smoke.sh`（会把服务器起在 25199、跑完自动 kill）
  */
 
-const URL = process.env.URL ?? 'ws://127.0.0.1:25187';
+const URL = process.env.URL ?? 'ws://127.0.0.1:8887';
 
 let passed = 0;
 let failed = 0;
