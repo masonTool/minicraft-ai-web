@@ -575,6 +575,24 @@ const httpServer = createServer((req, res) => {
     );
     return;
   }
+  /*
+   * 局域网探测（用户 2026-10-26）。
+   *
+   * 「选择服务器」要先知道哪个地址有人在听：客户端对一个网段的 254 个地址并发打这个接口，
+   * 谁能马上回谁就是候选，耗时差就是 RTT。所以这条必须：
+   *  · **无状态**——不建玩家、不占房主位、不碰任何房间状态（打一次只花几微秒）；
+   *  · **不缓存**——`no-store`，否则第二次扫描拿到的是缓存，测出来的"0ms"是假的；
+   *  · 负载极小——几十字节，254 个并发也不会把服务端压出问题。
+   * 为什么不复用 `/healthz`：那个要算吞吐/房间数，是给人看的；探测只想要"最快的一个字节"。
+   */
+  if (path === '/ping') {
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store, no-cache, must-revalidate',
+    });
+    res.end(JSON.stringify({ ok: true, t: Date.now(), v: PROTOCOL_VERSION }));
+    return;
+  }
   if (path === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     res.end(

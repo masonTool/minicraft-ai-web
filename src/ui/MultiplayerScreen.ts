@@ -22,6 +22,7 @@ import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { sanitizeRoomName } from '../core/net/RoomName.ts';
+import { ServerPicker } from './ServerPicker.ts';
 import {
   displayServerAddress,
   formatServerUrl,
@@ -112,6 +113,13 @@ export class MultiplayerScreen {
   private openState = false;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
+  /**
+   * 「选择服务器」的引子按钮与它点开的面板（用户 2026-10-26）。
+   *
+   * 面板按需创建、之后常驻：这个界面本身就是启动时建一次、活到关页面，
+   * 反复开关面板不该重复建 DOM（也没必要每次重建再扫一遍）。
+   */
+  private serverPicker: ServerPicker | null = null;
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
   private detailText = '';
 
@@ -152,7 +160,20 @@ export class MultiplayerScreen {
     this.refreshButton.className = 'mp-mini';
     this.refreshButton.textContent = t('mp.refreshRooms');
     this.refreshButton.addEventListener('click', () => void this.refreshRooms());
-    urlRow.append(urlLabel, this.urlInput, this.refreshButton);
+    /*
+     * 「选择服务器」（用户 2026-10-26）：与开房对话框同一套面板，选中后把地址填回地址框。
+     * 这个面板是启动时建一次、活到关页面（`MultiplayerScreen` 本身就只建一次），
+     * 所以这里用字段持有它，不必按次销毁。
+     */
+    const pickServer = document.createElement('button');
+    pickServer.type = 'button';
+    pickServer.className = 'mp-mini';
+    pickServer.id = 'mp-pick-server';
+    pickServer.textContent = '▾';
+    pickServer.title = t('server.pick');
+    pickServer.setAttribute('aria-label', t('server.pick'));
+    pickServer.addEventListener('click', () => this.openServerPicker());
+    urlRow.append(urlLabel, this.urlInput, pickServer, this.refreshButton);
 
     // ---- 房间 / 口令行（L9：不再让玩家把房间写进地址）
     const roomRow = document.createElement('label');
@@ -387,6 +408,27 @@ export class MultiplayerScreen {
    * 老格式 `ws://host:8787/red?pw=1234` 现在是"一个世界一份日志"的老习惯，
    * 直接报错太粗暴——拆出来继续用即可。
    */
+  /**
+   * 打开「选择服务器」（用户 2026-10-26）：扫局域网 / 挑公开服务器，选中就填回地址框。
+   *
+   * 填完顺手跑一次 `splitAddress()`：老格式地址里带的房名/口令会被拆到各自输入框，
+   * 面板选出来的地址本来就不带这些，但走同一条路能保证"填进去的东西一定被规整过"。
+   */
+  private openServerPicker(): void {
+    if (!this.serverPicker) {
+      this.serverPicker = new ServerPicker({
+        currentAddress: () => this.urlInput.value,
+        onPick: (address) => {
+          this.urlInput.value = address;
+          this.splitAddress();
+          this.refreshButton.focus();
+        },
+      });
+      document.body.append(this.serverPicker.element);
+    }
+    this.serverPicker.open();
+  }
+
   private splitAddress(): void {
     const normalized = normalizeServerUrl(this.urlInput.value);
     if (!normalized) return;

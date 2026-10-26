@@ -267,6 +267,21 @@ check('服务端启动成功', await startServer(), serverOutput.trim().split('\
   const response = await fetch(`http://localhost:${PORT}/healthz`).catch(() => null);
   const body = response ? await response.json().catch(() => null) : null;
   check('GET /healthz 返回 ok', response?.status === 200 && body?.ok === true, JSON.stringify(body));
+
+  /*
+   * 探测接口（用户 2026-10-26）：「选择服务器」靠它判断哪个地址有人在听、并量 RTT。
+   *
+   * 三条要求都要钉住：**无状态**（不打就不该有玩家/房间变化）、**禁缓存**（否则第二次扫描
+   * 拿到缓存，测出来恒 0ms）、负载小到可以 254 并发。
+   */
+  const pingStartedAt = Date.now();
+  const pingResponse = await fetch(`http://localhost:${PORT}/ping`).catch(() => null);
+  const pingBody = pingResponse ? await pingResponse.json().catch(() => null) : null;
+  const pingRtt = Date.now() - pingStartedAt;
+  check('GET /ping 返回 ok', pingResponse?.status === 200 && pingBody?.ok === true, JSON.stringify(pingBody));
+  check('POST 不建玩家/不占房主位（无状态探测）', typeof pingBody?.t === 'number' && pingBody?.v === PROTOCOL_VERSION, JSON.stringify(pingBody));
+  check('禁缓存（否则第二次扫描恒 0ms）', (pingResponse?.headers.get('cache-control') ?? '').includes('no-store'), pingResponse?.headers.get('cache-control') ?? '');
+  check('本机探测 RTT 很小（局域网量级）', pingRtt < 200, `${pingRtt}ms`);
   check('/healthz 带上在线人数与协议版本', typeof body?.players === 'number' && body?.protocol > 0, JSON.stringify(body));
   check(
     '/healthz 带吞吐统计（联机29）',

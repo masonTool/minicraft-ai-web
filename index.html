@@ -656,6 +656,9 @@
       .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px 12px; align-content: start; }
       .world-new > .world-primary { grid-column: 1 / -1; }
       .world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; }
+      /* 「选择服务器」的引子（用户 2026-10-26）：挂在地址行右侧那一列（44px）。
+         用 ▾ 而不是文字——六种语言的"选择"长度差得多，44px 里只有图标不会溢出。 */
+      .world-pick { padding: 5px 0; width: 100%; text-align: center; font-size: 12px; line-height: 1; }
       /* 标签右对齐、单行：一列里四项标签的左端不在同一条线上，右端对齐才看得成"一栏" */
       .world-row > span {
         color: #d6d6d6; font-size: 12px; text-align: right;
@@ -2019,6 +2022,43 @@
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
       }
       /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
+      /* ---- 选择服务器面板（用户 2026-10-26）
+         两个区域：局域网扫描 / 公开服务器。它是"看一眼点一下"的辅助层，
+         所以和别的浮层一样挂 <body>，点遮罩即可关闭。 */
+      .server-picker {
+        position: fixed; inset: 0; z-index: 46;
+        display: flex; align-items: center; justify-content: center;
+        padding: 12px; background: rgba(0, 0, 0, .55);
+      }
+      .server-picker.hidden { display: none; }
+      .server-picker-panel {
+        width: min(94vw, 560px); max-height: 86vh; overflow: auto;
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px;
+        background: rgba(22, 22, 22, .97); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+      }
+      .server-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .server-picker-title { font-size: 14px; letter-spacing: .5px; }
+      .server-picker-section { display: flex; flex-direction: column; gap: 5px; }
+      .server-picker-label {
+        font-size: 12px; color: #d8d8d8;
+        border-bottom: 1px solid rgba(255, 255, 255, .16); padding-bottom: 3px;
+      }
+      .server-picker-row { display: flex; align-items: center; gap: 6px; }
+      .server-picker-row > input { flex: 1 1 auto; min-width: 0; }
+      .server-picker-status { font-size: 11px; line-height: 1.5; color: #a8a8a8; min-height: 15px; }
+      .server-picker-list { display: flex; flex-direction: column; gap: 4px; }
+      /* 一行 = 一台服务器：左地址、右 RTT（等宽数字，跳变时不抖） */
+      .server-picker-item {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 6px 10px; font: inherit; font-size: 12px;
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+        border: 2px solid; border-color: var(--pixel-bevel-dark); cursor: pointer;
+        text-align: left;
+      }
+      .server-picker-item:hover { background: rgba(255, 255, 255, .08); }
+      .server-picker-rtt { font-variant-numeric: tabular-nums; color: #9fd08a; }
       .mp-mini {
         flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
       }

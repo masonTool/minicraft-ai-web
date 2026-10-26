@@ -6324,5 +6324,36 @@ console.log('\n[每帧 DOM 收干（批次 20261026-0141）]');
   }
 }
 
+console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 2026-10-26）]');
+{
+  const pickerSrc = readFileSync(new URL('../src/ui/ServerPicker.ts', import.meta.url), 'utf8');
+  const discoverySrc = readFileSync(new URL('../src/core/net/ServerDiscovery.ts', import.meta.url), 'utf8');
+  const worldUiSrc2 = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mpSrc2 = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const htmlSrc2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const serverSrc5 = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+
+  // ① 服务端必须有探测接口（无状态 + 禁缓存），否则扫描永远扫不到
+  check('服务端有 /ping 探测接口', serverSrc5.includes("if (path === '/ping')"));
+  check('探测接口禁缓存（否则第二次扫描恒 0ms）', /path === '\/ping'[\s\S]{0,300}?no-store/.test(serverSrc5));
+
+  // ② 发现逻辑：只扫私网、并发、可取消、https 页面拒绝
+  check('只扫三个私网段（公网/域名返回空）', discoverySrc.includes('a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)'));
+  check('https 页面不能扫（混合内容会拦掉）', discoverySrc.includes('export function canScanLan') && discoverySrc.includes("return protocol !== 'https:';"));
+
+  // ③ 面板：两个区域 + 选中回填 + 公开接口预留
+  check('面板有局域网与公开两个区域', pickerSrc.includes("t('server.lan')") && pickerSrc.includes("t('server.public')"));
+  check('扫描走 scanSubnet（边扫边显示）', pickerSrc.includes('scanSubnet(') && pickerSrc.includes('onFound:'));
+  check('https 页面上先把原因说清楚，而不是让人白等', pickerSrc.includes('canScanLan(location.protocol)') && pickerSrc.includes("t('server.scanBlocked')"));
+  check('公开服务器接口预留（URL 为空则不发请求）', /publicServersUrl\?\.\(\) \?\? ''/.test(pickerSrc) && pickerSrc.includes("t('server.publicSoon')"));
+  check('选中后把地址写回调用方并关面板', /private pick\(address: string\): void \{[\s\S]{0,200}?this\.actions\.onPick\(address\);/.test(pickerSrc));
+
+  // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
+  check('开房对话框地址行有 ▾ 按钮', worldUiSrc2.includes("pickAddress.id = 'world-host-pick'") && worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), addressInput, pickAddress)"));
+  check('加入面板地址行也有 ▾ 按钮', mpSrc2.includes("pickServer.id = 'mp-pick-server'") && mpSrc2.includes('urlRow.append(urlLabel, this.urlInput, pickServer, this.refreshButton)'));
+  check('开房对话框关掉时一起拆面板（否则浮层留在屏幕上）', /const cleanup = \(\): void => \{[\s\S]{0,400}?addressPicker\?\.dispose\(\);/.test(worldUiSrc2));
+  check('两处样式在位', htmlSrc2.includes('.world-pick {') && htmlSrc2.includes('.server-picker-item {'));
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -32,6 +32,7 @@ import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts'
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
+import { ServerPicker } from './ServerPicker.ts';
 
 /** 列表里的世界类型短名（新建表单仍然用带说明的全名） */
 /**
@@ -690,6 +691,35 @@ export class WorldScreen {
     addressInput.spellcheck = false;
     addressInput.placeholder = t('mp.serverHint');
     addressInput.value = this.actions.defaultHostAddress?.() ?? '';
+    /*
+     * 「选择服务器」（用户 2026-10-26）：地址右侧一个 ▾，点开可以**扫局域网**或挑公开服务器，
+     * 选中后把地址填回这个框（只填 IP/域名，协议头与端口交给 `normalizeServerUrl`）。
+     * 面板按对话框生命周期建/拆：这个对话框是每开一次建一份的浮层。
+     */
+    const pickAddress = document.createElement('button');
+    pickAddress.type = 'button';
+    pickAddress.className = 'world-mini world-pick';
+    pickAddress.id = 'world-host-pick';
+    pickAddress.textContent = '▾';
+    pickAddress.title = t('server.pick');
+    pickAddress.setAttribute('aria-label', t('server.pick'));
+    let addressPicker: ServerPicker | null = null;
+    pickAddress.addEventListener('click', () => {
+      if (!addressPicker) {
+        addressPicker = new ServerPicker({
+          currentAddress: () => addressInput.value,
+          onPick: (address) => {
+            addressInput.value = address;
+            // 选完把上一次的报错擦掉，否则会让人以为新地址也是错的
+            hint.classList.remove('error');
+            hint.textContent = t('world.roomHint');
+            addressInput.focus();
+          },
+        });
+        document.body.append(addressPicker.element);
+      }
+      addressPicker.open();
+    });
 
     const roomInput = document.createElement('input');
     roomInput.type = 'text';
@@ -731,7 +761,7 @@ export class WorldScreen {
     actions.append(cancel, start);
 
     form.append(
-      this.makeRow(t('world.serverAddress'), addressInput, null),
+      this.makeRow(t('world.serverAddress'), addressInput, pickAddress),
       this.makeRow(t('world.roomName'), roomInput, null),
       this.makeRow(t('world.roomPassword'), passwordInput, null),
       hint,
@@ -744,6 +774,9 @@ export class WorldScreen {
     const cleanup = (): void => {
       document.removeEventListener('keydown', onKey, true);
       overlay.remove();
+      // 选择服务器的浮层挂在 <body> 上，不比对话框活得久（否则关掉对话框它还压着一层）
+      addressPicker?.dispose();
+      addressPicker = null;
       if (this.editEl === overlay) this.editEl = null;
       if (this.editCleanup === cleanup) this.editCleanup = null;
     };
