@@ -469,8 +469,13 @@ export class WorldScreen {
     const name = document.createElement('span');
     name.textContent = label;
     row.append(name, control);
-    if (Array.isArray(extra)) row.append(...extra);
-    else if (extra) row.append(extra);
+    if (Array.isArray(extra)) {
+      // 多尾巴（地址行的 `:` + 端口 + 选择）用 flex 版式：那个 3 列 grid 放不下 5 个元素
+      row.classList.add('world-row-inline');
+      row.append(...extra);
+    } else if (extra) {
+      row.append(extra);
+    }
     return row;
   }
 
@@ -709,7 +714,10 @@ export class WorldScreen {
      */
     const roomForm = new RoomForm({
       mode: 'host',
-      initialAddress: this.actions.defaultHostAddress?.() ?? '',
+      // 设计图里开房这一栏默认写「本机」：地址框认这个词，真正连的地址由宿主给
+      initialAddress: t('server.local'),
+      localAlias: t('server.local'),
+      localAddress: () => this.actions.defaultHostAddress?.() ?? '',
       initialRoom: defaultRoom,
       // 非法字符被删光时回退到"世界名派生的房名"，而不是服务端的默认房
       roomFallback: defaultRoom,
@@ -737,24 +745,33 @@ export class WorldScreen {
       hint.textContent = text;
     };
 
+    /*
+     * 底部只有一个大按钮「确定并进入」（设计图）：关闭用右上角的 ✕。
+     * 少一颗"取消"在触屏上反而少一次误触，退出这件事 ✕ 已经够了。
+     */
     const actions = document.createElement('div');
     actions.className = 'world-modal-actions';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = t('menu.cancel');
     const start = document.createElement('button');
     start.type = 'button';
     start.id = 'world-host-start';
-    start.className = 'world-edit-save';
+    start.className = 'world-edit-save world-modal-wide';
     start.textContent = t('world.hostStart');
-    actions.append(cancel, start);
+    actions.append(start);
+
+    // 地址行：`[IP/本机] : [8887] [选择]`——端口可编辑（用户 2026-10-27）
+    const addressRow = this.makeRow(t('mp.server'), roomForm.urlInput, [
+      (() => {
+        const colon = document.createElement('span');
+        colon.className = 'mp-colon';
+        colon.textContent = ':';
+        return colon;
+      })(),
+      roomForm.portInput,
+      roomForm.pickButton as HTMLButtonElement,
+    ]);
 
     form.append(
-      // 端口是只读后缀（`:8887`），紧挨地址框；然后是「▾ 选择服务器」
-      this.makeRow(t('world.serverAddress'), roomForm.urlInput, [
-        roomForm.portLabel,
-        roomForm.pickButton as HTMLButtonElement,
-      ]),
+      addressRow,
       this.makeRow(t('world.roomName'), roomForm.roomInput, null),
       this.makeRow(t('world.roomPassword'), roomForm.passwordInput, null),
       // 昵称（本批）：与加入面板同一个字段，必填（这里没传 `withName: false`，一定有这个框）
@@ -840,7 +857,6 @@ export class WorldScreen {
     };
     document.addEventListener('keydown', onKey, true);
     close.addEventListener('click', cleanup);
-    cancel.addEventListener('click', cleanup);
     start.addEventListener('click', go);
 
     requestAnimationFrame(() => {

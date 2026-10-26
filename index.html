@@ -678,6 +678,14 @@
       .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px 12px; align-content: start; }
       .world-new > .world-primary { grid-column: 1 / -1; }
       .world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; }
+      /* 地址行是 5 个元素（标签 / 地址 / `:` / 端口 / 选择），3 列 grid 放不下 → 改 flex。
+         版式对齐设计图：地址吃掉剩余宽度，端口固定窄格，选择是文字按钮。 */
+      .world-row.world-row-inline { display: flex; align-items: center; gap: 6px; }
+      .world-row-inline > span:first-child { flex: 0 0 64px; text-align: right; }
+      .world-row-inline > input:first-of-type { flex: 1 1 auto; min-width: 0; }
+      .world-row-inline input.mp-port-input { flex: 0 0 62px; text-align: center; font-variant-numeric: tabular-nums; }
+      .world-row-inline .world-pick { flex: 0 0 auto; width: auto; padding: 6px 8px; font-size: 12px; }
+      .world-row-inline .mp-colon { flex: 0 0 auto; color: #cfcfcf; }
       /* 「选择服务器」的引子（用户 2026-10-26）：挂在地址行右侧那一列（44px）。
          用 ▾ 而不是文字——六种语言的"选择"长度差得多，44px 里只有图标不会溢出。 */
       .world-pick { padding: 5px 0; width: 100%; text-align: center; font-size: 12px; line-height: 1; }
@@ -775,15 +783,17 @@
         box-shadow: var(--panel-shadow);
         font-size: 13px; text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
+      /* 标题居中、✕ 钉在右上角（与「加入房间」同一版式，设计图两张图都是这样） */
       .world-modal-header {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        padding-bottom: 8px; margin-bottom: 8px;
+        position: relative; display: flex; align-items: center; justify-content: center;
+        min-height: 28px; padding-bottom: 8px; margin-bottom: 8px;
         border-bottom: 2px solid rgba(255, 255, 255, .16);
       }
-      .world-modal-header b { font-size: 15px; color: #fff; }
+      .world-modal-header b { font-size: 16px; color: #fff; letter-spacing: 1px; }
       .world-modal-close {
+        position: absolute; right: 0; top: 0;
         font: inherit; font-size: 13px; line-height: 1;
-        min-width: 26px; min-height: 24px; padding: 0 6px; cursor: pointer;
+        min-width: 26px; min-height: 26px; padding: 0 6px; cursor: pointer;
       }
       .world-edit-form { display: flex; flex-direction: column; gap: 6px; }
       .world-edit-hint { font-size: 10px; line-height: 1.45; color: #a8a8a8; margin-top: 2px; }
@@ -801,6 +811,8 @@
       }
       .world-modal-actions .world-edit-save { background: #3f6f2d; color: #fff; }
       .world-modal-actions .world-edit-save:hover { background: #4a8236; color: #fff; }
+      /* 「确定并进入」通栏（设计图里它就是一整条大按钮） */
+      .world-modal-wide { flex: 1 1 100%; font-size: 14px; min-height: 40px; }
       /* 极窄（竖屏手机）：三颗操作键换到卡片下面一行，名字与标签不再被挤成一条 */
       @media (max-width: 560px) {
         .world-card { flex-wrap: wrap; }
@@ -2012,90 +2024,127 @@
         background: rgba(0, 0, 0, .55);
       }
       #multiplayer-screen.hidden { display: none; }
+      /* 单列卡片（2026-10-27 按设计图重排）：居中标题 + 四行表单 + 红字错误 + 通栏按钮。
+         宽度收在 460px：横屏手机上它只是屏幕中间一条，不铺满。 */
       .mp-panel {
-        /* 左右两栏（本轮）：宽屏给到 720px，左表单右房间列表 */
-        width: min(94vw, 720px); max-height: 100%;
-        display: flex; flex-direction: column; gap: 8px;
-        padding: 10px 12px; overflow: auto;
+        width: min(92vw, 460px); max-height: 100%;
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 12px 14px; overflow: auto;
         background: var(--mc-menu-bg); color: var(--mc-text-light);
         border: 3px solid; border-color: var(--pixel-bevel-dark);
         box-shadow: var(--panel-shadow);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
         font-size: 13px;
       }
-      .mp-title { font-size: 15px; text-align: center; }
-      /* 两栏：左 = 表单（地址/房间/昵称/状态/按钮），右 = 房间列表 + 最近连接。
-         手机横屏高度只有 360~430，单列时列表被压在表单下面只剩两三行，
-         "找房间"基本不可用；分栏之后列表拿到整列高度。
-         窄屏（竖屏/极窄）自动回落成单列，见文件后面的媒体查询。 */
-      .mp-columns { display: flex; gap: 10px; align-items: stretch; min-height: 0; }
-      .mp-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
-      .mp-col-main { flex: 1 1 58%; }
-      .mp-col-rooms { flex: 1 1 42%; }
-      .mp-col-title {
-        font-size: 12px; opacity: .8; text-align: left;
-        padding-left: 2px; border-bottom: 1px dashed var(--pixel-bevel-dark);
+      /* 标题居中、✕ 钉在右上角（设计图第一行就是这样） */
+      .mp-head {
+        position: relative; display: flex; align-items: center; justify-content: center;
+        min-height: 26px;
       }
+      .mp-title { font-size: 16px; letter-spacing: 1px; }
+      .mp-close {
+        position: absolute; right: 0; top: 0;
+        width: 26px; height: 26px; padding: 0;
+        font: inherit; font-size: 14px; line-height: 1;
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+        border: 2px solid; border-color: var(--pixel-bevel-dark); cursor: pointer;
+      }
+      .mp-form { display: flex; flex-direction: column; gap: 8px; }
+      /* 一行 = 标签（定宽）+ 输入框（吃满剩余）；地址行后面还挂 `:` 端口 与「选择」 */
       .mp-row { display: flex; align-items: center; gap: 8px; }
-      .mp-row > span { flex: 0 0 5.5em; }
+      .mp-row > span { flex: 0 0 5em; white-space: nowrap; }
       .mp-row input {
         flex: 1 1 auto; min-width: 0; font: inherit; font-size: 13px;
         padding: 6px 8px; border: 2px solid; border-color: var(--pixel-bevel-dark);
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
       }
-      /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
-      /* ---- 选择服务器面板（用户 2026-10-26）
-         两个区域：局域网扫描 / 公开服务器。它是"看一眼点一下"的辅助层，
-         所以和别的浮层一样挂 <body>，点遮罩即可关闭。 */
-      .server-picker {
-        position: fixed; inset: 0; z-index: 46;
-        display: flex; align-items: center; justify-content: center;
-        padding: 12px; background: rgba(0, 0, 0, .55);
+      /* 地址与端口之间的冒号 */
+      .mp-colon { flex: 0 0 auto; color: #cfcfcf; }
+      /* 端口：窄一格、数字等宽居中（可编辑，默认 8887） */
+      .mp-row input.mp-port-input {
+        flex: 0 0 5.2em; text-align: center; font-variant-numeric: tabular-nums;
       }
+      /* 「选择」：跟在端口后面，纯文字按钮（设计图里没有框） */
+      .mp-pick {
+        flex: 0 0 auto; font: inherit; font-size: 13px; padding: 2px 4px;
+        background: none; border: none; color: var(--mc-text-light);
+        text-decoration: underline; cursor: pointer;
+      }
+      /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
+      /* ---- 「选择房间 / 选择服务器」浮窗（2026-10-27 按设计图）
+         贴着「选择」按钮弹出的**小卡片**，不是全屏遮罩：外层透明，只负责接"点外面关闭"，
+         卡片用 fixed 定位、坐标由 JS 算（右边缘对齐按钮、下方优先、放不下就翻到上方）。 */
+      .server-picker { position: fixed; inset: 0; z-index: 70; }
       .server-picker.hidden { display: none; }
       .server-picker-panel {
-        width: min(94vw, 560px); max-height: 86vh; overflow: auto;
+        position: fixed; width: min(340px, 92vw); max-height: min(76vh, 460px);
         display: flex; flex-direction: column; gap: 8px;
-        padding: 12px 14px;
-        background: rgba(22, 22, 22, .97); color: var(--mc-text-light);
+        padding: 10px 12px;
+        background: rgba(22, 22, 22, .98); color: var(--mc-text-light);
         border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
-      .server-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-      .server-picker-title { font-size: 14px; letter-spacing: .5px; }
-      .server-picker-section { display: flex; flex-direction: column; gap: 5px; }
-      .server-picker-label {
-        font-size: 12px; color: #d8d8d8;
-        border-bottom: 1px solid rgba(255, 255, 255, .16); padding-bottom: 3px;
+      .server-picker-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .server-picker-title { font-size: 16px; letter-spacing: 1px; }
+      .server-picker-sub { font-size: 11px; color: #a8a8a8; }
+      /* 正文自己滚：标题与底部按钮固定，列表再长也不会把「确定」顶出屏幕 */
+      .server-picker-body {
+        display: flex; flex-direction: column; gap: 6px;
+        overflow-y: auto; min-height: 0;
       }
-      .server-picker-row { display: flex; align-items: center; gap: 6px; }
-      .server-picker-row > input { flex: 1 1 auto; min-width: 0; }
+      .server-picker-section { display: flex; flex-direction: column; gap: 4px; }
+      .server-picker-label { font-size: 13px; color: #e6e6e6; padding: 2px 0; }
       .server-picker-status { font-size: 11px; line-height: 1.5; color: #a8a8a8; min-height: 15px; }
-      .server-picker-list { display: flex; flex-direction: column; gap: 4px; }
-      /* 一行 = 一台服务器：左地址、右 RTT（等宽数字，跳变时不抖） */
+      .server-picker-list { display: flex; flex-direction: column; gap: 2px; }
+      /* 一台服务器：`IP -------- 延迟`（虚线用 flex 撑开，对应设计图那串横线） */
       .server-picker-item {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        padding: 6px 10px; font: inherit; font-size: 12px;
+        display: flex; align-items: baseline; gap: 6px; width: 100%;
+        padding: 4px 2px; font: inherit; font-size: 12px; text-align: left;
+        color: var(--mc-text-light); background: none; border: none; cursor: pointer;
+      }
+      .server-picker-item:hover { background: rgba(255, 255, 255, .06); }
+      .server-picker-item.selected { background: rgba(120, 190, 255, .22); color: #fff; }
+      .server-picker-host { flex: 0 0 auto; }
+      .server-picker-dash {
+        flex: 1 1 auto; min-width: 12px; height: 0; align-self: center;
+        border-top: 2px dotted rgba(255, 255, 255, .45);
+      }
+      .server-picker-rtt { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #9fd08a; }
+      /* 房间缩进在服务器下面（设计图里房间是服务器的子项） */
+      .server-picker-rooms { display: flex; flex-direction: column; gap: 1px; padding-left: 18px; }
+      .server-picker-room {
+        display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+        padding: 3px 4px; font: inherit; font-size: 12px; text-align: left;
+        color: #dcdcdc; background: none; border: none; cursor: pointer;
+      }
+      .server-picker-room:hover { background: rgba(255, 255, 255, .06); }
+      .server-picker-room.selected { background: rgba(120, 190, 255, .22); color: #fff; }
+      /* 开房模式下房间行只展示（不能选别人的房名） */
+      .server-picker-room.readonly { cursor: default; color: #b9b9b9; }
+      .server-picker-room.readonly:hover { background: none; }
+      .server-picker-room-online { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #9fd08a; }
+      .server-picker-room-empty { font-size: 11px; color: #8d8d8d; padding: 2px 4px; }
+      /* 本机：`本机  允许其它人建房？ 是 否` */
+      .server-picker-local { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+      .server-picker-local-ask { flex: 1 1 auto; text-align: right; color: #cfcfcf; }
+      .server-picker-toggle {
+        flex: 0 0 auto; padding: 2px 8px; font: inherit; font-size: 12px;
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
         border: 2px solid; border-color: var(--pixel-bevel-dark); cursor: pointer;
-        text-align: left;
       }
-      .server-picker-item:hover { background: rgba(255, 255, 255, .08); }
-      /* 选中态（本批）：点一行只选中、不关闭，所以高亮必须一眼能看出来 */
-      .server-picker-item.selected {
-        background: rgba(120, 190, 255, .22);
-        border-color: #8fc7ff;
-        color: #fff;
+      .server-picker-toggle[aria-pressed="true"] {
+        background: rgba(120, 190, 255, .3); border-color: #8fc7ff;
       }
-      .server-picker-rtt { font-variant-numeric: tabular-nums; color: #9fd08a; }
-      /* 端口只读后缀（本批）：地址框右边，不可编辑，等宽数字免得跳变 */
-      .mp-port {
-        flex: 0 0 auto; font-size: 12px; color: #9a9a9a;
-        font-variant-numeric: tabular-nums; user-select: none;
+      /* 底部 取消 / 确定：两颗等宽（设计图里就是左右各一颗） */
+      .server-picker-actions { display: flex; gap: 8px; }
+      .server-picker-button {
+        flex: 1 1 0; padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer;
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+        border: 2px solid; border-color: var(--pixel-bevel-dark);
       }
-      /* 底部「取消 / 确定」：确定在未选中时是禁用的 */
-      .server-picker-actions {
-        display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-      }
+      .server-picker-button.primary { background: rgba(90, 140, 90, .55); }
+      .server-picker-button:disabled { opacity: .45; cursor: default; }
       .mp-mini {
         flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
       }
@@ -2179,11 +2228,16 @@
       .mp-status[data-state='error'] { color: #ff9a9a; }
       /* 四颗按钮（开房 / 加入 / 断开 / 关闭）：窄屏放不下就折成两行，
          而不是挤成一条读不出来的字（德语/俄语的按钮词比中文长一倍） */
+      /* 主按钮通栏（设计图：加入 / 确定并进入都是一整条大按钮） */
       .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
       .mp-action {
-        flex: 1 1 auto; min-width: 5.5em;
-        font: inherit; font-size: 13px; padding: 8px; min-height: 38px; cursor: pointer;
+        flex: 1 1 100%; min-width: 5.5em;
+        font: inherit; font-size: 14px; padding: 8px; min-height: 40px; cursor: pointer;
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+        border: 2px solid; border-color: var(--pixel-bevel-dark);
       }
+      .mp-action.primary { background: #3f6f2d; color: #fff; }
+      .mp-action.primary:hover { background: #4a8236; }
       .mp-action:disabled { cursor: default; color: var(--mc-text-disabled); }
       .mp-hint { font-size: 11px; opacity: .75; }
       /* 触摸端把热区再放大一点（与 `.pause-action` 同一档） */

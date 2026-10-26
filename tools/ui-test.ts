@@ -5383,9 +5383,10 @@ console.log('\n[加入房间：选项式面板（L9）]');
       roomFormSrc.includes("options.mode === 'host' ? 'world-host-password' : 'mp-password'"),
   );
   check(
-    '地址只存裸地址，房间/密码在 read() 里才拼（formatServerUrl）',
-    roomFormSrc.includes('formatServerUrl(baseUrl, room, password)') &&
-      mpSrc.includes('writeStored(STORAGE_URL, values.baseUrl)') &&
+    '地址与端口分开存，read() 时才拼回 URL（withPort + formatServerUrl）',
+    roomFormSrc.includes('withPort(normalized, port)') &&
+      roomFormSrc.includes('formatServerUrl(baseUrl, room, password)') &&
+      mpSrc.includes('writeStored(STORAGE_PORT, this.form.portInput.value.trim())') &&
       mpSrc.includes('this.form.read()'),
   );
   check(
@@ -5394,15 +5395,18 @@ console.log('\n[加入房间：选项式面板（L9）]');
       roomFormSrc.includes('parseServerUrl(normalized)') &&
       mpSrc.includes('this.form.splitAddress()'),
   );
+  // 房间列表从主面板搬进了「选择」浮窗（2026-10-27）：拉取与清洗也跟着搬
+  const pickerSrcEarly = readFileSync(new URL('../src/ui/ServerPicker.ts', import.meta.url), 'utf8');
   check(
-    '「找房间」拉 /rooms 并清洗（失败只提示，不挡手填）',
-    mpSrc.includes('roomsEndpoint(base)') &&
-      mpSrc.includes('parseRoomsResponse(await response.json())') &&
-      mpSrc.includes("this.showRoomsMessage(t('mp.roomsFailed'))"),
+    '浮窗拉 /rooms 并清洗（失败只提示一行，不挡手填）',
+    pickerSrcEarly.includes('roomsEndpoint(url)') &&
+      pickerSrcEarly.includes('parseRoomsResponse(await response.json())') &&
+      pickerSrcEarly.includes("t('server.roomsFailed')"),
   );
   check(
-    '点一行房间就填好房名（要密码时把焦点送过去）',
-    mpSrc.includes('this.roomInput.value = entry.room;') && mpSrc.includes('this.passwordInput.focus();'),
+    '点一间房就选中（确定后才回填房名）',
+    pickerSrcEarly.includes('this.select({ address, port: this.port(), room }, row)') &&
+      roomFormSrc.includes('if (picked.room !== undefined) this.roomInput.value = picked.room;'),
   );
   check(
     'join 模式连着时也露出「断开」（否则联机中打开面板是个死界面）',
@@ -5414,17 +5418,8 @@ console.log('\n[加入房间：选项式面板（L9）]');
     readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
   );
   check(
-    '房间列表在右列内自适应高度并滚动（不再固定三行；窄屏回落时才限高）',
-    mpSrc.includes("this.roomsEl.className = 'mp-rooms hidden'") &&
-      // 宽屏：吃掉右列剩余高度、列内自己滚
-      /\.mp-rooms \{[^}]*?flex: 1 1 auto[^}]*?overflow: auto;/.test(
-        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
-      ) &&
-      // 窄屏 / 竖屏回落成单列时才限高（否则两栏会把输入框压扁、面板撑出屏幕）
-      // 注意这里不能用 `[^}]*?`：媒体查询里前面还有 `.mp-columns { … }` 与 `.mp-col-rooms { … }`
-      /@media \(max-width: 620px\), \(orientation: portrait\) \{[\s\S]*?\.mp-rooms \{ max-height: 96px; \}/.test(
-        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
-      ),
+    '主面板不再有右栏房间列表（2026-10-27：列表搬进「选择」浮窗）',
+    !mpSrc.includes('mp-columns') && !mpSrc.includes('roomsEl') && !mpSrc.includes('mp-rooms'),
   );
 }
 
@@ -5546,43 +5541,17 @@ console.log('\n[暂停菜单：本局房间（L9）]');
  * 局域网里就那么一两台服务器、一两个房间，可地址是 `ws://192.168.1.5:8887` 这种东西，
  * 手机上每次重敲一遍是纯折磨。点一颗小胶囊就把地址/房间/昵称填回去。
  */
-console.log('\n[最近连接（L9）]');
+console.log('\n[最近连接（已撤）]');
 {
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
-
+  /*
+   * 2026-10-27：设计图里的加入面板只有四行 + 一颗按钮，"最近去过哪"随右栏一起撤掉，
+   * 历史与房间都在「选择」浮窗里。这里留反向守卫，防止旧结构被无声地加回来
+   * （那会让面板重新变两栏、把设计图的版式顶掉）。
+   */
   check(
-    '面板有最近连接那一行（空列表时不占高度）',
-    mpSrc.includes("this.recentEl.className = 'mp-recent hidden'") &&
-      mpSrc.includes("this.recentEl.classList.add('hidden');"),
-  );
-  check(
-    '点一颗就填回地址 / 房间 / 昵称',
-    // 2026-10-25：地址回填过 `displayServerAddress`（用户实测"每次都被填成 ws:// 长串"）
-    mpSrc.includes('this.urlInput.value = displayServerAddress(entry.url);') &&
-      mpSrc.includes('this.roomInput.value = entry.room;') &&
-      mpSrc.includes('this.nameInput.value = entry.name;'),
-  );
-  check(
-    '地址框只在存储里放完整 URL（各处回填都走显示形式）',
-    // 本批 `displayServerAddress` 的回填点有 2 处搬到 RoomForm（初始值 + 拆分老地址）
-    (
-      (mpSrc + readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8')).match(
-        /displayServerAddress\(/g,
-      ) ?? []
-    ).length >= 3 &&
-      !mpSrc.includes('this.urlInput.value = parsed.url;') &&
-      !mpSrc.includes('this.urlInput.value = entry.url;'),
-  );
-  check(
-    '连接成功时记一条（去重后写 localStorage）',
-    mpSrc.includes('pushRecentRoom(this.recents, {') &&
-      mpSrc.includes('url: values.baseUrl,') &&
-      mpSrc.includes('writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents))'),
-  );
-  check(
-    '列表里不存口令（口令只在 mp.pw 那一格）',
-    mpSrc.includes("const STORAGE_RECENT = 'mc.mp.recent';") &&
-      !/pushRecentRoom\(this\.recents, \{[^}]*password/.test(mpSrc),
+    '主面板不再有最近连接（历史与房间都在「选择」浮窗里）',
+    !mpSrc.includes('mp-recent') && !mpSrc.includes('RecentRoom'),
   );
 }
 
@@ -5999,21 +5968,20 @@ console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   check(
-    '面板改成左表单 / 右列表两栏',
-    mpSrc.includes("columns.className = 'mp-columns'") &&
-      mpSrc.includes("mainCol.className = 'mp-col mp-col-main'") &&
-      mpSrc.includes("roomsCol.className = 'mp-col mp-col-rooms'") &&
-      mpSrc.includes('roomsCol.append(roomsTitle, this.roomsEl, this.recentEl)'),
+    '面板改成单列卡片（设计图：标题居中 + 四行表单 + 通栏按钮）',
+    mpSrc.includes("form.className = 'mp-form'") &&
+      mpSrc.includes("this.statusEl.className = 'mp-status mp-error'") &&
+      mpSrc.includes("this.joinButton.className = 'mp-action primary'"),
   );
   check(
-    '房间列表占满右列高度（不再固定 96px）',
-    /\.mp-rooms \{[\s\S]{0,200}flex: 1 1 auto/.test(css) && /\.mp-col-rooms \{ flex: 1 1 42%/.test(css),
+    '标题居中、✕ 钉在右上角',
+    /\.mp-head \{[\s\S]{0,160}justify-content: center/.test(css) &&
+      /\.mp-close \{[\s\S]{0,120}position: absolute; right: 0; top: 0/.test(css),
   );
   check(
-    '窄屏 / 竖屏回落成单列（否则手机上两栏会把输入框压扁）',
-    /@media \(max-width: 620px\), \(orientation: portrait\) \{[\s\S]{0,220}\.mp-columns \{ flex-direction: column/.test(css),
+    '主按钮通栏（flex: 1 1 100%）',
+    /\.mp-action \{[\s\S]{0,160}flex: 1 1 100%/.test(css),
   );
-  check('列表行更紧凑（字号 11 / 内边距 3）', /\.mp-room-row \{[\s\S]{0,220}font-size: 11px/.test(css));
 }
 
 /*
@@ -6456,19 +6424,45 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
    */
   check(
     'https 页面照样能扫，扫不到才提示去授权',
-    !/scanButton\.disabled = !canScanLan/.test(pickerSrc) &&
+    !/disabled = !canScanLan/.test(pickerSrc) &&
       pickerSrc.includes("t('server.httpsHint')") &&
-      pickerSrc.includes('this.scanButton.disabled = false;'),
+      pickerSrc.includes('canScanLan(location.protocol)'),
   );
   check('公开服务器接口预留（URL 为空则不发请求）', /publicServersUrl\?\.\(\) \?\? ''/.test(pickerSrc) && pickerSrc.includes("t('server.publicSoon')"));
-  check('选中后把地址写回调用方并关面板', /private pick\(address: string\): void \{[\s\S]{0,200}?this\.actions\.onPick\(address\);/.test(pickerSrc));
-  // 本批：点一行只是选中（扫描结果边扫边冒，点一下就关太容易误触），「确定」才回填
+  check(
+    '选中后把结果（地址 + 端口 + 房间）交给调用方并关浮窗',
+    /private confirm\(\): void \{[\s\S]{0,220}?this\.actions\.onPick\(picked\);/.test(pickerSrc),
+  );
+  // 点一行只是选中（扫描结果边扫边冒，点一下就关太容易误触），「确定」才回填
   check(
     '点行只选中、确定才回填（未选中时确定禁用）',
-    pickerSrc.includes("row.addEventListener('click', () => this.select(") &&
+    pickerSrc.includes('this.select(') &&
       pickerSrc.includes('private confirm(): void') &&
       pickerSrc.includes('this.confirmButton.disabled = true;') &&
       pickerSrc.includes("t('server.confirm')"),
+  );
+  // 用户 2026-10-27：点「选择」弹出浮窗，且是**贴着按钮的小卡片**，不是全屏遮罩
+  check(
+    '「选择」打开浮窗并贴按钮定位（不是全屏遮罩卡片）',
+    pickerSrc.includes('open(anchor: HTMLElement): void') &&
+      pickerSrc.includes('anchor.getBoundingClientRect()') &&
+      /\.server-picker-panel \{[\s\S]{0,120}position: fixed; width: min\(340px, 92vw\)/.test(
+        htmlSrc2.replace(/\s+/g, ' '),
+      ),
+  );
+  // 用户 2026-10-27：局域网按"自己 IP 去掉最后一位"自动扫，打开就扫
+  check(
+    '局域网自动检索：打开即扫 + 网段取当前 IP 前三段',
+    pickerSrc.includes('void this.scan();') &&
+      pickerSrc.includes('subnetOf(current.split') &&
+      pickerSrc.includes('subnetOf(location.hostname)'),
+  );
+  // 每台服务器下面要列它自己的房间（设计图里房间是服务器的子项）
+  check(
+    '服务器行下面缩进列房间（4/10 在线）',
+    pickerSrc.includes('server-picker-rooms') &&
+      pickerSrc.includes('this.loadRooms(address, rooms)') &&
+      pickerSrc.includes("tp('mp.roomsPlayersOf'"),
   );
   /*
    * 「允许其它人建房」是**客户端能力**开关（用户 2026-10-26）：不是服务端策略，
@@ -6485,22 +6479,23 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
 
   // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
   check(
-    '开房对话框地址行有 ▾ 按钮 + 端口只读后缀',
+    '开房对话框地址行：地址 + `:` + 端口输入框 + 选择',
     worldUiSrc2.includes("pickButtonId: 'world-host-pick'") &&
-      worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), roomForm.urlInput, [") &&
-      worldUiSrc2.includes('roomForm.portLabel,'),
+      worldUiSrc2.includes('roomForm.portInput,') &&
+      worldUiSrc2.includes("colon.className = 'mp-colon'"),
   );
   check(
-    '加入面板地址行也有 ▾ 按钮与端口后缀',
+    '加入面板地址行：地址 + `:` + 端口输入框 + 选择',
     mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
-      mpSrc2.includes('this.form.portLabel,') &&
-      mpSrc2.includes('this.form.pickButton as HTMLButtonElement'),
+      mpSrc2.includes('this.form.portInput,') &&
+      mpSrc2.includes("colon.className = 'mp-colon'"),
   );
+  // 用户 2026-10-27 改口径：端口**可编辑**（不再是只读后缀）
   check(
-    '端口后缀取 DEFAULT_NET_PORT，不是写死的数字',
+    '端口是可编辑输入框，默认取 DEFAULT_NET_PORT',
     readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
-      'this.portLabel.textContent = `:${DEFAULT_NET_PORT}`',
-    ),
+      "this.portInput.value = String(options.initialPort ?? DEFAULT_NET_PORT);",
+    ) && !readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes('portLabel'),
   );
   check(
     '开房对话框关掉时一起拆面板（否则浮层留在屏幕上）',

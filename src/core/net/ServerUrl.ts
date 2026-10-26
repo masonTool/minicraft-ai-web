@@ -156,6 +156,69 @@ export function withDefaultPort(url: string): string {
 }
 
 /**
+ * 端口输入清洗（2026-10-27：端口改成**可编辑输入框**）。
+ *
+ * 只收 1~65535 的整数；`''` / `0` / `70000` / 非数字一律返回 `null`，由界面回退到默认端口
+ * （而不是报错——端口框就在地址旁边，玩家改坏了应该"自动回到 8887"而不是被拦住）。
+ */
+export function parsePort(input: string | number): number | null {
+  const text = String(input).trim();
+  if (text.length === 0) return null;
+  const value = Math.trunc(Number(text));
+  return Number.isFinite(value) && value >= 1 && value <= 65535 ? value : null;
+}
+
+/**
+ * 把地址的端口换成指定值（`ws://h:1` → `ws://h:2`）。
+ *
+ * ⚠️ **只动 `ws://`**：`wss://` 是域名走反代的那一路，端口归 443、由反代终结，
+ * 硬改一个数字只会把本来能连的地址弄坏（与 `withDefaultPort` 同一条口径）。
+ */
+export function withPort(url: string, port: number): string {
+  if (!Number.isFinite(port) || port < 1 || port > 65535) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'ws:') return url;
+    parsed.port = String(port);
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return url;
+  }
+}
+
+/** 从完整地址里取端口（没写显式端口时按协议给默认值） */
+export function portOf(url: string): number {
+  try {
+    const parsed = new URL(url);
+    if (parsed.port !== '') return Number(parsed.port);
+    return parsed.protocol === 'wss:' ? 443 : DEFAULT_NET_PORT;
+  } catch {
+    return DEFAULT_NET_PORT;
+  }
+}
+
+/**
+ * 只取主机名（端口由旁边的独立输入框承担，2026-10-27）。
+ *
+ * 与 `displayServerAddress` 的区别：后者会把**非默认端口**留在字符串里，而端口独立成
+ * 输入框之后，地址框再带着 `:9000` 就会出现"两处都能改端口、以谁为准"的歧义。
+ * `wss://` 的非默认路径（反代端点）仍然保留——那不是端口，是真正要连的路径。
+ */
+export function displayServerHost(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') return trimmed;
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const keepPath = parsed.protocol === 'wss:' && path.length > 0 && path !== DEFAULT_WS_PATH;
+    return keepPath ? `${parsed.hostname}${path}` : parsed.hostname;
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
  * 把用户输入的地址收成 `ws://` 或 `wss://`（联机26，2026-10-25 从 `ui/MultiplayerScreen` 搬来）。
  *
  * 为什么搬：开房对话框现在也要填地址（用户要求），而 UI 层之间互相 import 会在

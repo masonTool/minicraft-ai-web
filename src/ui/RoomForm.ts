@@ -18,11 +18,15 @@ import { sanitizeRoomName } from '../core/net/RoomName.ts';
 import {
   DEFAULT_NET_PORT,
   displayServerAddress,
+  displayServerHost,
   formatServerUrl,
   normalizeServerUrl,
+  parsePort,
   parseServerUrl,
+  portOf,
+  withPort,
 } from '../core/net/ServerUrl.ts';
-import { ServerPicker } from './ServerPicker.ts';
+import { ServerPicker, type PickedServer } from './ServerPicker.ts';
 
 export interface RoomFormOptions {
   /**
@@ -31,8 +35,17 @@ export interface RoomFormOptions {
    * 第二个开房的人只会得到一句看不懂的 `host-taken`。
    */
   mode: 'join' | 'host';
-  /** 地址框初始值（显示形式，只 IP/域名；协议头与端口由 `normalizeServerUrl` 补） */
+  /** 地址框初始值（显示形式，只 IP/域名；协议头由 `normalizeServerUrl` 补） */
   initialAddress?: string;
+  /** 端口框初始值（用户 2026-10-27：端口可编辑，默认 8887） */
+  initialPort?: number;
+  /**
+   * 地址框里认的"本机"别名（设计图：开房那一栏默认写「本机」）。
+   * 输入框里正好等于这个词时，实际用 `localAddress()` 返回的地址。
+   */
+  localAlias?: string;
+  /** 「本机」对应的真实地址（开房时由主程序给 `defaultHostAddress()`） */
+  localAddress?: () => string;
   initialRoom?: string;
   initialPassword?: string;
   initialName?: string;
@@ -54,8 +67,8 @@ export interface RoomFormOptions {
   addressError?: string;
   /** 房间为空时的文案（仅 `mode: 'host'` 用得上） */
   roomError?: string;
-  /** 选中服务器之后宿主要做的事（清错误、挪焦点） */
-  onPick?: (address: string) => void;
+  /** 选中服务器/房间之后宿主要做的事（清错误、挪焦点、刷新房间列表） */
+  onPick?: (picked: PickedServer) => void;
 }
 
 export interface RoomFormValues {
@@ -83,13 +96,13 @@ export class RoomForm {
   /** 没给 `pickButtonId` 时为 null */
   readonly pickButton: HTMLButtonElement | null;
   /**
-   * 端口只读后缀（`:8887`，本批）：宿主把它摆在地址框右边。
+   * 端口输入框（用户 2026-10-27 改口径：**端口可编辑**，默认 8887）。
    *
-   * 为什么显出来而不是藏掉：玩家常要跟队友核对"你连的是哪台"，端口是其中一项。
-   * 但**不给编辑**——端口由 `DEFAULT_NET_PORT` 统一，两端各填一个数字必然会漂
-   * （用户 2026-10-26 定稿：默认 8887）。
+   * 与地址框分开是为了照设计图的 `服务器 [IP] : [8887] [选择]` 版式；`read()` 时
+   * 用 `withPort()` 把它拼回 URL。端口框留空/填坏时静默回退默认值——旁边就是地址，
+   * 为一个数字弹红字不值当。
    */
-  readonly portLabel: HTMLSpanElement;
+  readonly portInput: HTMLInputElement;
 
   private picker: ServerPicker | null = null;
 
@@ -143,11 +156,17 @@ export class RoomForm {
 
     this.pickButton = options.pickButtonId ? this.makePickButton(options.pickButtonId, options.pickButtonClass ?? '') : null;
 
-    this.portLabel = document.createElement('span');
-    this.portLabel.className = 'mp-port';
-    this.portLabel.id = options.mode === 'host' ? 'world-host-port' : 'mp-port';
-    this.portLabel.textContent = `:${DEFAULT_NET_PORT}`;
-    this.portLabel.title = t('mp.portHint');
+    this.portInput = document.createElement('input');
+    this.portInput.type = 'text';
+    this.portInput.id = options.mode === 'host' ? 'world-host-port' : 'mp-port';
+    this.portInput.className = 'mp-port-input';
+    this.portInput.inputMode = 'numeric';
+    this.portInput.maxLength = 5;
+    this.portInput.autocomplete = 'off';
+    this.portInput.spellcheck = false;
+    this.portInput.title = t('mp.portHint');
+    this.portInput.setAttribute('aria-label', t('mp.port'));
+    this.portInput.value = String(options.initialPort ?? DEFAULT_NET_PORT);
   }
 
   /**
@@ -156,12 +175,44 @@ export class RoomForm {
    * 老格式 `ws://host:8887/red?pw=1234` 是"一个世界一份日志"的老习惯，直接报错太粗暴；
    * 只在**对应输入框还空着**的时候填，避免覆盖玩家已经手打的内容。
    */
+  /**
+   * 地址框实际代表什么：填的是「本机」别名就换成宿主给的地址，否则原样。
+   *
+   * 别名只在**完全等于**那个词时生效（`本机` 里带空格、带别名都不算），
+   * 免得玩家手打一个含"本机"的主机名被吞掉。
+   */
+  private resolveAddress(): string {
+    const alias = this.options.localAlias;
+    if (alias !== undefined && alias.length > 0 && this.urlInput.value.trim() === alias) {
+      return this.options.localAddress?.() ?? '';
+    }
+    return this.urlInput.value;
+  }
+
   splitAddress(): void {
+    if (this.options.localAlias !== undefined && this.urlInput.value.trim() === this.options.localAlias) {
+      // 「本机」是个占位词，没有端口/房名可拆（真地址要提交时才展开）
+      return;
+    }
     const normalized = normalizeServerUrl(this.urlInput.value);
     if (!normalized) return;
+
+    /*
+     * 端口先"提"到独立输入框（2026-10-27）：地址栏只留主机名，端口由 `: [8887]` 那一格负责。
+     * 玩家粘一条 `ws://h:9000/red?pw=1` 进来时，三个字段各归各位。
+     */
+    const port = portOf(normalized);
+    if (this.portInput.value.trim().length === 0 || port !== DEFAULT_NET_PORT) {
+      this.portInput.value = String(port);
+    }
+
     const parsed = parseServerUrl(normalized);
-    if (parsed.room.length === 0 && parsed.password.length === 0) return;
-    this.urlInput.value = displayServerAddress(parsed.url);
+    if (parsed.room.length === 0 && parsed.password.length === 0) {
+      // 只有端口也要落到地址框：`ws://h:9000` → `h`
+      this.urlInput.value = displayServerHost(parsed.url);
+      return;
+    }
+    this.urlInput.value = displayServerHost(parsed.url);
     if (parsed.room.length > 0 && this.roomInput.value.trim().length === 0) {
       this.roomInput.value = parsed.room;
     }
@@ -177,7 +228,10 @@ export class RoomForm {
    * 服务端才知道的错（重名、房名被占、密码不对）要走连接后的 `onError`。
    */
   read(): RoomFormValues {
-    const baseUrl = normalizeServerUrl(this.urlInput.value);
+    const normalized = normalizeServerUrl(this.resolveAddress());
+    // 端口以独立输入框为准（2026-10-27）；填坏/留空就静默回退默认 8887
+    const port = parsePort(this.portInput.value) ?? DEFAULT_NET_PORT;
+    const baseUrl = normalized === null ? null : withPort(normalized, port);
     const rawRoom = this.roomInput.value.trim();
     const password = this.passwordInput.value.trim().slice(0, PASSWORD_MAX);
     // 空 = 进默认房间（服务端 `DEFAULT_ROOM`），不硬塞一个名字
@@ -212,15 +266,17 @@ export class RoomForm {
   }
 
   /** 把焦点送到某个输入框（对话框打开时聚焦房名、选中服务器后回到地址） */
-  focus(target: 'address' | 'room' | 'name' | 'password'): void {
+  focus(target: 'address' | 'port' | 'room' | 'name' | 'password'): void {
     const input =
       target === 'address'
         ? this.urlInput
-        : target === 'room'
-          ? this.roomInput
-          : target === 'name'
-            ? this.nameInput
-            : this.passwordInput;
+        : target === 'port'
+          ? this.portInput
+          : target === 'room'
+            ? this.roomInput
+            : target === 'name'
+              ? this.nameInput
+              : this.passwordInput;
     input?.focus();
   }
 
@@ -239,7 +295,8 @@ export class RoomForm {
     button.type = 'button';
     button.className = className;
     button.id = id;
-    button.textContent = '▾';
+    // 设计图里这颗是文字「选择」（不是 ▾ 图标，也不是「选择服务器」那种长词）
+    button.textContent = t('mp.pick');
     button.title = t('server.pick');
     button.setAttribute('aria-label', t('server.pick'));
     button.addEventListener('click', () => this.openPicker());
@@ -257,15 +314,21 @@ export class RoomForm {
     if (!this.picker) {
       this.picker = new ServerPicker({
         currentAddress: () => this.urlInput.value,
+        currentPort: () => parsePort(this.portInput.value) ?? DEFAULT_NET_PORT,
+        // 加入 = 选房间（点房间行有意义）；开房 = 只选机器（房间由玩家自己起名）
+        mode: this.options.mode === 'join' ? 'room' : 'server',
         localServer: this.options.localServer === true,
-        onPick: (address) => {
-          this.urlInput.value = address;
-          this.splitAddress();
-          this.options.onPick?.(address);
+        onPick: (picked) => {
+          this.urlInput.value = picked.address;
+          this.portInput.value = String(picked.port);
+          // 选了具体房间就覆盖房名（那是玩家刚才明确点的那一行）
+          if (picked.room !== undefined) this.roomInput.value = picked.room;
+          this.options.onPick?.(picked);
         },
       });
       document.body.append(this.picker.element);
     }
-    this.picker.open();
+    // 浮窗贴着「选择」按钮弹出（用户 2026-10-27）
+    this.picker.open(this.pickButton ?? this.portInput);
   }
 }

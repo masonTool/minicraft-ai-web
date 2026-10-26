@@ -9,11 +9,15 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NET_PORT,
   displayServerAddress,
+  displayServerHost,
   formatServerUrl,
+  parsePort,
   parseServerUrl,
+  portOf,
   resolveDefaultServerUrl,
   roomsEndpoint,
   withDefaultPort,
+  withPort,
 } from '../src/core/net/ServerUrl.ts';
 import { normalizeServerUrl } from '../src/ui/MultiplayerScreen.ts';
 
@@ -239,5 +243,59 @@ describe('roomsEndpoint', () => {
   it('解析不出来返回 null（调用方退回手填）', () => {
     expect(roomsEndpoint('不是地址')).toBeNull();
     expect(roomsEndpoint('')).toBeNull();
+  });
+});
+
+/*
+ * 端口可编辑（2026-10-27）：表单里地址与端口是两个字段，读表单时才拼回 URL。
+ * 这组函数就是那条"拆开—拼回"的边界，错一个数字就会连到别的机器上。
+ */
+describe('parsePort', () => {
+  it('收 1~65535 的整数', () => {
+    expect(parsePort('8887')).toBe(8887);
+    expect(parsePort(9000)).toBe(9000);
+    expect(parsePort(' 8080 ')).toBe(8080);
+  });
+
+  it('空 / 0 / 超范围 / 非数字 → null（界面回退默认端口，不弹错）', () => {
+    for (const bad of ['', '0', '70000', '-1', 'abc']) expect(parsePort(bad)).toBeNull();
+  });
+});
+
+describe('withPort', () => {
+  it('换掉 ws:// 的端口，保留房间与密码', () => {
+    expect(withPort('ws://192.168.1.5:8887', 9000)).toBe('ws://192.168.1.5:9000');
+    const swapped = withPort('ws://h:1/x?room=a&pw=1', 2);
+    expect(swapped).toContain(':2');
+    expect(swapped).toContain('room=a&pw=1');
+  });
+
+  it('wss:// 不动（端口归反代 443，改了就把地址弄坏）', () => {
+    expect(withPort('wss://mc.example.com/ws', 9000)).toBe('wss://mc.example.com/ws');
+  });
+
+  it('非法端口原样返回', () => {
+    expect(withPort('ws://h:8887', 0)).toBe('ws://h:8887');
+    expect(withPort('ws://h:8887', 70000)).toBe('ws://h:8887');
+  });
+});
+
+describe('portOf', () => {
+  it('显式端口原样取；wss 没写端口给 443；解析不出来给默认', () => {
+    expect(portOf('ws://h:9000')).toBe(9000);
+    expect(portOf('wss://d/ws')).toBe(443);
+    expect(portOf('不是地址')).toBe(DEFAULT_NET_PORT);
+  });
+});
+
+describe('displayServerHost', () => {
+  it('只留主机名：端口由独立输入框承担，地址框不再带 :9000', () => {
+    expect(displayServerHost('ws://192.168.1.5:9000')).toBe('192.168.1.5');
+    expect(displayServerHost('ws://192.168.1.5:8887')).toBe('192.168.1.5');
+  });
+
+  it('wss 的默认端点 /ws 不显示，非默认路径要留着', () => {
+    expect(displayServerHost('wss://mc.example.com/ws')).toBe('mc.example.com');
+    expect(displayServerHost('wss://mc.example.com/custom')).toBe('mc.example.com/custom');
   });
 });
