@@ -4247,6 +4247,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
+- [ ] R1 **Rust 版跟进 2026-10-26 之后的协议**（需要 `cargo`；改动量大，**必须**编译 + 跑 net-test 验收）。
+  - `session-sync`：容器/牌子/展示框整份上行（房主开局推 → 服务端按房存 → 后来者的 `welcome` 里带上）。
+  - `edits-request` / `edits-reply`：区块级懒上行（`confirmed` / `requested` 两张表 + 5 秒超时重试 + 上限 4096/8）。
+  - **每房一套时钟**：Rust 的 `day_start_ms` / `weather` 仍是全局，多房间时会互相拨表；
+    `join` 也还没采纳房主上报的 `day` / `timeOfDay` / `weather`。
+  - 已补但**未编译验证**（L13）：`no-host`(4010) / `host-offline`(4009) / `maxPlayers` / beacon 的 `has_host` 按房间判断。
+  - 验收：`bash server/rust/run-net-test.sh`（同一份 `tools/net-test.mjs`，当前 **297** 条）+ `cargo test`。
 - [x] L13 **Rust 版补齐 `no-host` / `host-offline` / `maxPlayers`**（用户 2026-10-27）。
   - `join`：`hosts` 里没登记这个房名 → `no-host`(4010)；房主登记着但人不在 `players`
     （宽限期内断线）→ `host-offline`(4009)；`protocol.rs` 补这两个关闭码。

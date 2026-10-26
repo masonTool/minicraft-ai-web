@@ -5,8 +5,20 @@
 
 ## 当前状态
 
-**与 JS 版 (`server/node/index.mjs`) 行为一致**：`tools/net-test.mjs` 的
-**195 条断言 0 失败**（`bash run-net-test.sh`，连跑 3 次稳定）。
+**与 JS 版 (`server/node/index.mjs`) 行为对齐到 2026-10-25 那一版协议**：当时 `tools/net-test.mjs`
+有 195 条断言、0 失败（`bash run-net-test.sh`，连跑 3 次稳定）。
+
+⚠️ **之后主线又涨到 297 条**，新增的这几项 Rust 侧**还没有**（`no-host` / `host-offline` /
+`maxPlayers` 已补，但**本机没有 cargo，未编译验证**）：
+
+| 缺的 | 影响 |
+| --- | --- |
+| `session-sync` | 手机当房主时，队友的 `welcome` 里看不到容器/牌子/展示框 |
+| `edits-request` / `edits-reply` | 跨区块的历史方块补发退化成"服务端缓存那份"（无房主的房才该这样） |
+| **每房一套时钟** | Rust 的 `day_start_ms` / `weather` 仍是全局，多房间时互相拨表 |
+| `join` 采纳房主的 `day`/`timeOfDay`/`weather` | 队友进房看到的时间/天气从服务端自己的那份开始 |
+
+验收口径不变：`bash run-net-test.sh`（同一份 `tools/net-test.mjs`，当前 297 条）。
 
 | 判据 | 命令 | 结果 |
 | --- | --- | --- |
