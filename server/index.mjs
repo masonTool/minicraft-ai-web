@@ -395,18 +395,40 @@ function scopedKey(room, key) {
  * 一次最多推 `CHUNK_EDITS_BATCH` 条，密集区也不会推出一条巨包。
  */
 function pushChunkEdits(player) {
-  // 房主自己就是权威，不需要把自己的改动再收回去
+  // 房主自己就是权威，不需要把自己的改动再收回去（他的本地世界本来就是全的）
   if (player.isHost === true) return;
   const cx = player.x >> 4;
   const cz = player.z >> 4;
   const key = `${player.dimension}|${cx},${cz}`;
   if (player.sentEditChunks.has(key)) return;
+
+  /*
+   * 懒上行（用户 2026-10-26）：服务端不再"自己攒"世界，缓存里的东西全部来自房主。
+   *
+   *  · 这一块**已确认**（房主给过整块）→ 直接推缓存，和以前一样；
+   *  · 还没确认 → 向房主要（`edits-request`），房主回 `edits-reply`，服务端再按房广播；
+   *  · **没有房主的房**（有人直接 join、没带 host）没有权威可问，退回老行为：
+   *    服务端缓存就是大家共用的那份（那种房子里本来就没人跑模拟，谁改都一样）。
+   *
+   * `sentEditChunks` 只在**真的推了**之后才记：回包丢了的话，玩家下一次 move 会重试
+   * （`requestedChunks` 挡的是"同一块被连点"，不是"永久只问一次"）。
+   */
+  const waitingForHost = hosts.has(player.room) && confirmedChunks.get(player.room)?.has(key) !== true;
+  if (waitingForHost) {
+    requestChunkFromHost(player, cx, cz);
+    return;
+  }
   player.sentEditChunks.add(key);
   // 只保留最近 4096 个键，防止长跑把 Set 撑大（走回头路会重推一次，无害）
   if (player.sentEditChunks.size > 4096) {
     const oldest = player.sentEditChunks.values().next();
     if (!oldest.done) player.sentEditChunks.delete(oldest.value);
   }
+  sendChunkEdits(player, cx, cz);
+}
+
+/** 把某个区块的缓存整块推给这个玩家（没有改动就什么都不发） */
+function sendChunkEdits(player, cx, cz) {
   const found = editsInChunk(edits.values(), player.room, player.dimension, cx, cz);
   if (found.length === 0) return;
   for (let i = 0; i < found.length; i += CHUNK_EDITS_BATCH) {
@@ -418,6 +440,31 @@ function pushChunkEdits(player) {
       authority: true,
     });
   }
+}
+
+/**
+ * 向房主要一个区块的增量（懒上行）。
+ *
+ * 三道闸：房主在线、这一块还没在飞、在飞总数不超过 `MAX_INFLIGHT_REQUESTS`
+ * （队友传送到几万格外时会连带跨过上千个区块，不设上限就等于让他的手机一次性
+ * 收几百条请求）。
+ */
+function requestChunkFromHost(player, cx, cz) {
+  const hostId = hosts.get(player.room)?.id;
+  const host = hostId === undefined ? undefined : players.get(hostId);
+  if (!host) return;
+  const key = `${player.dimension}|${cx},${cz}`;
+  const requested = trackedChunks(requestedChunks, player.room);
+  if (requested.has(key)) return;
+  if (requested.size >= MAX_INFLIGHT_REQUESTS) return;
+  rememberTracked(requestedChunks, player.room, key);
+  send(host.socket, { t: 'edits-request', dimension: player.dimension, cx, cz });
+  /*
+   * 回包丢了的话不能永远卡在"在飞"里：5 秒后忘掉这次请求，玩家下一次 move 会重试。
+   * 不用"回包才算数"是因为房主可能刚好在切维度/卡顿，卡住的代价是队友那边永远缺一块。
+   */
+  const timer = setTimeout(() => requestedChunks.get(player.room)?.delete(key), 5000);
+  timer.unref?.();
 }
 
 /** 给新玩家准备的世界快照 */
@@ -513,8 +560,16 @@ function snapshotFor(player) {
   // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
   // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
   const world = worldOfRoom(player.room);
+  /*
+   * 房主的 welcome **不带任何世界数据**（用户 2026-10-26）。
+   *
+   * 他本地那个存档就是真相，服务端缓存里的东西（清场之后通常本来就是空的）对他只有
+   * 害处：万一哪天清场漏了，这些内容会在进房那一刻把他刚改的东西顶回旧值。
+   * 从属端照旧拿（他们的地形就是靠这份 + 按区块补发来的）。
+   */
+  const isHost = player.isHost === true;
   // 这个玩家附近的增量（半径裁剪照旧，只发他看得见的那一圈）
-  const nearEdits = selectSnapshotEdits(roomScopedValues(edits, player.room), player);
+  const nearEdits = isHost ? [] : selectSnapshotEdits(roomScopedValues(edits, player.room), player);
   return {
     seed: world.seed,
     world: {
@@ -567,14 +622,15 @@ function snapshotFor(player) {
     edits: [],
     editsPack: encodeEditsPack(nearEdits, player.dimension),
     // 地上的掉落物：新玩家进来要看得见（L7 第一刀）；owner 必须同房
-    // 同房 + **同维度**（联机31）：下界掉的东西不该画在主世界同坐标
+    // 同房 + **同维度**（联机31）：下界掉的东西不该画在主世界同坐标。
+    // 房主也收（他要看见队友丢在地上的东西），这不是"世界数据"。
     items: [...items.values()].filter(
       (item) => players.get(item.owner)?.room === player.room && item.dimension === player.dimension,
     ),
-    // 容器内容（联机13）与牌子/展示框（联机16）：同样只带本房
-    containers: roomScopedValues(containers, player.room),
-    signs: roomScopedValues(signs, player.room),
-    frames: roomScopedValues(frames, player.room),
+    // 容器内容（联机13）与牌子/展示框（联机16）：同样只带本房；房主不带（见上面 isHost 的说明）
+    containers: isHost ? [] : roomScopedValues(containers, player.room),
+    signs: isHost ? [] : roomScopedValues(signs, player.room),
+    frames: isHost ? [] : roomScopedValues(frames, player.room),
   };
 }
 
@@ -1384,6 +1440,69 @@ wss.on('connection', (socket, request) => {
           player.id,
           player.room,
         );
+        break;
+      }
+
+      /*
+       * 房主回一个区块的整块增量（用户 2026-10-26 懒上行）。
+       *
+       * 为什么要一条独立消息、而不是复用 `blocks`：
+       *  · **空区块必须能回答"这块没改过"**，否则服务端永远不知道该块已确认，会无限请求；
+       *    而 `blocks` 的空列表在现有逻辑里是直接 return 的（连广播都不发）。
+       *  · 回包要能精确对上"我请求过的那一块"：清 `requested`、标 `confirmed`，
+       *    这是 `blocks`（房主的实时改动）不该做的事。
+       *
+       * 校验与 `blocks` 同口径（`blockEditRejection` 对房主不设距离闸），坏条目单独丢。
+       * 收下后按房广播 `blocks`——客户端零改动，走的就是它本来就在处理的补发消息。
+       */
+      case 'edits-reply': {
+        if (!player) return;
+        // 只有本房房主能回（别人的"整块快照"没有权威性）
+        if (hosts.get(player.room)?.id !== player.id) return;
+        const dimension = sanitizeDimension(String(message.dimension ?? 'overworld'));
+        const cx = Math.trunc(Number(message.cx));
+        const cz = Math.trunc(Number(message.cz));
+        if (!Number.isFinite(cx) || !Number.isFinite(cz)) return;
+        const key = `${dimension}|${cx},${cz}`;
+        const list = Array.isArray(message.blocks) ? message.blocks.slice(0, MAX_BLOCKS_PER_MESSAGE) : [];
+        const accepted = [];
+        for (const raw of list) {
+          if (!Array.isArray(raw)) continue;
+          const [rawX, rawY, rawZ, rawId, rawState] = raw;
+          const edit = {
+            x: Math.trunc(Number(rawX)),
+            y: Math.trunc(Number(rawY)),
+            z: Math.trunc(Number(rawZ)),
+            id: Math.trunc(Number(rawId)),
+            state: Math.trunc(Number(rawState ?? 0)),
+            // 维度以信封为准：一条回包只属于一个区块，条目里带什么维度都不该改这件事
+            dimension,
+          };
+          if (blockEditRejection(player, edit.x, edit.y, edit.z, edit.id, edit.state)) continue;
+          // 收到的必须是这一块里的坐标（防止一次回包把远处的东西写进缓存）
+          if (edit.x >> 4 !== cx || edit.z >> 4 !== cz) continue;
+          rememberEdit(
+            edits,
+            scopedKey(player.room, `${dimension}|${edit.x},${edit.y},${edit.z}`),
+            { ...edit, room: player.room },
+            MAX_EDITS,
+            warnEvictedEdit,
+          );
+          accepted.push(edit);
+        }
+        rememberTracked(confirmedChunks, player.room, key);
+        requestedChunks.get(player.room)?.delete(key);
+        if (accepted.length > 0) {
+          broadcast(
+            {
+              t: 'blocks',
+              blocks: accepted.map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
+              authority: true,
+            },
+            player.id,
+            player.room,
+          );
+        }
         break;
       }
 

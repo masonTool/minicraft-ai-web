@@ -1590,6 +1590,78 @@ try {
     h2.close();
   }
 
+  // ---------------------------------------------------------------- 懒上行（用户 2026-10-26）
+  /*
+   * 服务端不再自己攒世界，历史方块要向房主要：队友跨进**未确认**的区块时，
+   * 服务端下发 `edits-request`，房主用 `edits-reply` 回整块，服务端再按房广播 `blocks`。
+   *
+   * 这里用"假房主"直接回包而不是让真客户端跑：这一套测的是**协议与服务端的记账**
+   * （请求、确认、空块不重复问），客户端那半边由 `src/net/NetClient.ts` 的收发保证。
+   */
+  console.log('\n[懒上行：历史方块向房主要]');
+  {
+    const LAZY_ROOM = 'lazyroom';
+    const hostL = new TestClient('LazyHost', undefined, {
+      room: LAZY_ROOM,
+      host: true,
+      world: { name: '懒上行房', seed: 1234, mode: 'survival', difficulty: 'normal' },
+    });
+    check('懒上行：房主能开房', (await joinAndWaitWelcome(hostL, '懒房主', 500, 70, 500)) !== null);
+
+    const guestL = new TestClient('LazyGuest', undefined, { room: LAZY_ROOM });
+    check('懒上行：队友能进房', (await joinAndWaitWelcome(guestL, '懒队友', 500, 70, 500)) !== null);
+
+    // 队友跨进 (31,31) 区块 → 服务端向房主要这一块
+    hostL.mailbox.length = 0;
+    guestL.send({ t: 'move', x: 500, y: 70, z: 500, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const request = await hostL.wait('edits-request', 2000);
+    check('未确认区块 → 服务端向房主要（edits-request）', request?.dimension === 'overworld' && request?.cx === 31 && request?.cz === 31, JSON.stringify(request));
+
+    // 房主回整块 → 服务端记下并广播给队友
+    hostL.send({
+      t: 'edits-reply',
+      dimension: 'overworld',
+      cx: 31,
+      cz: 31,
+      blocks: [[500, 70, 500, 5, 0]],
+    });
+    const pushed = await guestL.wait('blocks', 2000);
+    check(
+      '房主回包 → 队友收到那一条（转成普通 blocks）',
+      (pushed?.blocks ?? []).some((b) => b[0] === 500 && b[2] === 500),
+      JSON.stringify(pushed?.blocks),
+    );
+
+    /*
+     * 空区块也要能"确认"：房主回一个空列表，服务端就该记住这块没改动，
+     * 不能每次 move 都再问一遍（否则站在空地上一秒问 20 次）。
+     */
+    hostL.mailbox.length = 0;
+    await sleep(80); // move 有 50ms 限频：太密的那条会被服务端直接丢掉
+    guestL.send({ t: 'move', x: 520, y: 70, z: 500, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const requestEmpty = await hostL.wait('edits-request', 2000);
+    check('走进另一个未确认区块 → 再要一次', requestEmpty?.cx === 32, JSON.stringify(requestEmpty));
+    hostL.send({ t: 'edits-reply', dimension: 'overworld', cx: 32, cz: 31, blocks: [] });
+    await sleep(120);
+    hostL.mailbox.length = 0;
+    // 还在同一块里走动（50ms 限频，先等一下）
+    await sleep(60);
+    guestL.send({ t: 'move', x: 524, y: 70, z: 500, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const repeat = await hostL.wait('edits-request', 400);
+    check('空区块被确认之后不再重复询问', repeat === null, JSON.stringify(repeat));
+
+    // 确认过的区块，后来者从 welcome 直接拿到（缓存里已经有了）
+    const lateL = new TestClient('LazyLate', undefined, { room: LAZY_ROOM });
+    const welcomeLate = await joinAndWaitWelcome(lateL, '后到的队友', 500, 70, 500);
+    check(
+      '确认过的区块会进后来者的 welcome',
+      (welcomeLate?.edits ?? []).some((e) => e[0] === 500 && e[2] === 500),
+      `${(welcomeLate?.edits ?? []).length} 条`,
+    );
+
+    for (const client of [hostL, guestL, lateL]) client.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {
