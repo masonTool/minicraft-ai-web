@@ -83,6 +83,7 @@ export const say = {
   'say.net.duplicateName': 'Someone in this room already uses that name — please pick another one',
   'say.net.hostTaken': 'That room name already has a host — pick another one',
   'say.net.hostOffline': 'The host is not in the room right now — try again when they are back',
+  'say.net.noHost': 'Nobody is hosting this room yet — the host must open it first',
   'say.net.password': 'Wrong room password — check it and try again',
   'say.net.playerDied': '{name} died',
   'say.net.roomTime': 'The host set the time to {time}',

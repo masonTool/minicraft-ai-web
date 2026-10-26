@@ -416,7 +416,9 @@ export class ServerPicker {
         return;
       }
       container.replaceChildren(
-        ...parsed.rooms.map((entry) => this.makeRoomRow(address, entry.room, entry.players, parsed.maxPlayers)),
+        ...parsed.rooms.map((entry) =>
+          this.makeRoomRow(address, entry.room, entry.players, parsed.maxPlayers, entry.hasHost),
+        ),
       );
     } catch {
       // 跨源被挡 / 服务端不在 / 超时：一行灰字，不影响选这台机器本身
@@ -425,9 +427,22 @@ export class ServerPicker {
     }
   }
 
-  /** 房间行；`server` 模式下只展示不可点（开房不能选别人的房名） */
-  private makeRoomRow(address: string, room: string, players: number, maxPlayers: number): HTMLElement {
-    const selectable = this.actions.mode === 'room';
+  /**
+   * 房间行。
+   *
+   * 两种情况下**不可点**（渲染成 `div`，不挂 click）：
+   *  - `server` 模式（开房）：房名要自己起，选别人的名字必撞 `host-taken`；
+   *  - 没有房主（`hasHost === false`）：这一局没有人在跑模拟，进去就是一个不推进的世界
+   *    （用户 2026-10-27）。服务端也会拒（`no-host`），这里提前挡是为了不让人白等一次连接。
+   */
+  private makeRoomRow(
+    address: string,
+    room: string,
+    players: number,
+    maxPlayers: number,
+    hasHost: boolean,
+  ): HTMLElement {
+    const selectable = this.actions.mode === 'room' && hasHost;
     const row = document.createElement(selectable ? 'button' : 'div');
     if (row instanceof HTMLButtonElement) row.type = 'button';
     row.className = `server-picker-room${selectable ? '' : ' readonly'}`;
@@ -437,7 +452,10 @@ export class ServerPicker {
     name.textContent = tp('server.roomName', { room });
     const online = document.createElement('span');
     online.className = 'server-picker-room-online';
-    online.textContent = tp('mp.roomsPlayersOf', { n: players, max: maxPlayers });
+    // 没有房主的房间加一句说明：为什么点不动
+    online.textContent = hasHost
+      ? tp('mp.roomsPlayersOf', { n: players, max: maxPlayers })
+      : `${tp('mp.roomsPlayersOf', { n: players, max: maxPlayers })} · ${t('mp.roomsNoHost')}`;
     row.append(name, online);
     if (selectable) row.addEventListener('click', () => this.select({ address, port: this.port(), room }, row));
     return row;

@@ -36,6 +36,8 @@ export type ProtocolErrorCode =
   | 'duplicate-name'
   | 'host-taken'
   | 'host-left'
+  /** 这个房名从来没有房主（用户 2026-10-27）：空房间不许进 */
+  | 'no-host'
   | 'host-offline'
   | 'password'
   | 'bad-json'
@@ -57,6 +59,8 @@ export function isFatalProtocolError(code: string): boolean {
     code === 'host-offline' ||
     // `duplicate-name`（本轮）：房间里已经有同名玩家。不改名重连一万次也还是重名
     code === 'duplicate-name' ||
+    // `no-host`（2026-10-27）：这个房名没有房主。房主不来，重连多少次也进不去
+    code === 'no-host' ||
     // `password`（本批）：房间密码不对。重连只会被同一句话再拒一次
     code === 'password'
   );

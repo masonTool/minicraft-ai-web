@@ -336,6 +336,23 @@ const CLOSE_DUPLICATE_NAME = 4008;
 const CLOSE_HOST_OFFLINE = 4009;
 
 /**
+ * 这个房名从来没有房主（用户 2026-10-27）。
+ *
+ * 房间 = "房主开着世界"这一局的代称：`hosts` 里没登记就是这一局不存在。
+ * 以前访客能直接进一个空房名，进去看到的是一个**不推进的世界**（方块能放、怪不动、
+ * 红石不亮），界面却一切正常——比报错更难查。所以一律挡在门外。
+ */
+const CLOSE_NO_HOST = 4010;
+
+/**
+ * 允许进入"没有房主"的房间（**只给测试用**，用户 2026-10-27 要求产品路径严格拒绝）。
+ *
+ * 联机套件里大量用例是"单人连上去测同步"，不关心房主语义，它们跑在
+ * `ALLOW_HOSTLESS_ROOMS=1` 下；默认（不设这个环境变量）一律拒，见 join 里的 `no-host`。
+ */
+const ALLOW_HOSTLESS_ROOMS = process.env.ALLOW_HOSTLESS_ROOMS === '1';
+
+/**
  * 运行统计（联机29）：入/出字节与消息数。
  *
  * 只累计、不按窗口清零；速率由"两个采样点的差值 / 经过秒数"算出来——这样即使
@@ -1149,6 +1166,17 @@ wss.on('connection', (socket, request) => {
          */
         if (!wantsHost && host && !players.has(host.id)) {
           return reject(socket, 'host-offline', '房主暂时不在房间，等他回来再来', CLOSE_HOST_OFFLINE);
+        }
+        /*
+         * 没有房主的房间不许进（用户 2026-10-27）。
+         *
+         * 判据是 `hosts` 里根本没登记：这个房名从来没人开过，或房主退出后已经清场。
+         * 也不做"先进空房等房主"——房名是玩家自己敲的字符串，服务端分不清"等朋友"
+         * 和"打错字"，后者会把人困在一个永远不会有房主的空世界里。
+         * 要与基岩版"加入游戏"一致：房主先把房开起来，别人才能进。
+         */
+        if (!wantsHost && !host && !ALLOW_HOSTLESS_ROOMS) {
+          return reject(socket, 'no-host', '这个房间还没有房主，先让房主开房再进', CLOSE_NO_HOST);
         }
 
         const name = sanitizeName(message.name);

@@ -20343,7 +20343,8 @@ async function boot(): Promise<void> {
        */
       multiplayerUi.setState(
         'offline',
-        probe?.error === 'host-offline' ? t('say.net.hostOffline') : t('mp.probeFailed'),
+        // 按码说人话（no-host / host-offline / password …），查不到才用通用的"连不上"
+        netErrorText(probe?.error ?? '') || t('mp.probeFailed'),
       );
       return;
     }

@@ -18,6 +18,8 @@ export function netErrorText(code: string): string {
       return t('say.net.hostTaken');
     case 'host-offline':
       return t('say.net.hostOffline');
+    case 'no-host':
+      return t('say.net.noHost');
     case 'password':
       return t('say.net.password');
     default:

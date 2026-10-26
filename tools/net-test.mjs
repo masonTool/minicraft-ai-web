@@ -237,6 +237,12 @@ async function startServer(extraEnv = {}, attempts = 3) {
         DATA_DIR,
         // 来源白名单（联机26）：只有这个 origin 能连；不带 Origin 的照常放行（node 客户端）
         ALLOWED_ORIGINS: 'http://good.example',
+        /*
+         * 上面绝大多数用例是"单人连上去测同步"，并不建立房主，而产品默认**拒绝**进入
+         * 没有房主的房间（用户 2026-10-27）。所以这套用例统一跑在放开的口径下；
+         * 严格口径由末尾那组「没有房主的房间不许进」单独重启一次来验。
+         */
+        ALLOW_HOSTLESS_ROOMS: '1',
         ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -2688,6 +2694,44 @@ try {
     const withPw = new TestClient('WithPw', undefined, { password: 'sesame' });
     check('带对口令能进', (await joinAndWaitWelcome(withPw, '有口令', 0, 70, 0)) !== null);
     withPw.close();
+  }
+
+  // ---------------------------------------------------------------- 没有房主的房间不许进（2026-10-27）
+  console.log('\n[没有房主的房间不许进]');
+  {
+    // 产品默认严格；上面所有用例跑在 ALLOW_HOSTLESS_ROOMS=1 下，这里单独重启一个严格的
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill('SIGTERM');
+    await Promise.race([exited, sleep(2500)]);
+    check('严格模式服务端起来了', await startServer({ ALLOW_HOSTLESS_ROOMS: '' }));
+
+    const ghost = new TestClient('Ghost', undefined, { room: 'ghostroom' });
+    await ghost.ready();
+    ghost.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: ghost.clientId,
+      name: '幽灵',
+      room: 'ghostroom',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+    });
+    const ghostError = await ghost.wait('error', 3000);
+    check('空房名被拒（no-host）', ghostError?.code === 'no-host', JSON.stringify(ghostError));
+    ghost.close();
+
+    const host = new TestClient('Host', undefined, {
+      room: 'realroom',
+      host: true,
+      world: { name: '空地', seed: 1 },
+    });
+    check('房主能开这个房', (await joinAndWaitWelcome(host, '房主', 0, 70, 0)) !== null);
+    const guest = new TestClient('Guest', undefined, { room: 'realroom' });
+    check('房主在线后访客能进', (await joinAndWaitWelcome(guest, '访客', 1, 70, 1)) !== null);
+    guest.close();
+    host.close();
   }
 } finally {
   // 等它真的退出再走，否则下一次跑的 spawn 会撞上还没释放的端口
