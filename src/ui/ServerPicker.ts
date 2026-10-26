@@ -23,7 +23,7 @@ import {
   subnetOf,
   type DiscoveredServer,
 } from '../core/net/ServerDiscovery.ts';
-import { filterSelfPeers, parsePeersResponse } from '../core/net/NearbyRooms.ts';
+import { filterSelfPeers, parsePeersResponse, probeLatency, type NearbyPeer } from '../core/net/NearbyRooms.ts';
 import { parseRoomsResponse } from '../core/net/RoomList.ts';
 import { DEFAULT_WS_PATH, displayServerHost, healthEndpoint, isLanHost, roomsEndpoint } from '../core/net/ServerUrl.ts';
 import { t, tp } from '../core/i18n/I18n.ts';
@@ -370,7 +370,7 @@ export class ServerPicker {
   // ---------------------------------------------------------------- 列表渲染
 
   /** 一台服务器：`IP -------- 延迟` + 它下面的房间列表（room 模式才拉） */
-  private appendServerRow(server: DiscoveredServer, host: HTMLElement): void {
+  private appendServerRow(server: DiscoveredServer, host: HTMLElement, peer?: NearbyPeer): void {
     const address = server.host;
     const row = document.createElement('button');
     row.type = 'button';
@@ -397,6 +397,18 @@ export class ServerPicker {
     rooms.className = 'server-picker-rooms';
 
     host.append(row, rooms);
+    if (peer !== undefined) {
+      /*
+       * 附近设备（别人 `/healthz` 里听到的）：它自己上报了房间名与人数，直接列一行，
+       * 不再去拉它的 `/rooms`——那台设备可能根本还没连上我们这台。
+       */
+      rooms.replaceChildren(this.makeRoomRow(address, peer.room, peer.players, 0, peer.hasHost));
+      // 延迟异步补：先 `--`，探到再改文字（某台不回 /healthz 不该拖住整个列表）
+      void probeLatency(peer, fetch).then((ms) => {
+        rtt.textContent = ms === null ? '--' : tp('server.rtt', { ms: String(ms) });
+      });
+      return;
+    }
     /*
      * 两种模式都列房间（设计图里"选择服务器"也带房间行）。
      * 差别在可点性：room 模式点房间 = 选中这间房；server 模式只展示"这台机器上有谁"，
@@ -463,7 +475,7 @@ export class ServerPicker {
       if (peers === null || token !== this.token) return;
       for (const peer of filterSelfPeers(peers, [url])) {
         if (this.seen.has(`${peer.host}:${peer.port}`)) continue;
-        this.appendServerRow({ host: peer.host, port: peer.port, rttMs: 0 }, this.lanList);
+        this.appendServerRow({ host: peer.host, port: peer.port, rttMs: 0 }, this.lanList, peer);
       }
     } catch {
       // 这台不回 /healthz（或跨源被挡）：跳过，不影响已列出的服务器
@@ -492,13 +504,20 @@ export class ServerPicker {
     row.dataset.room = room;
     const name = document.createElement('span');
     name.className = 'server-picker-room-name';
-    name.textContent = tp('server.roomName', { room });
+    // 空房名 = 服务端默认房间；别显示成"房间: "后面什么都没有
+    name.textContent = tp('server.roomName', { room: room.length > 0 ? room : t('room.defaultRoom') });
     const online = document.createElement('span');
     online.className = 'server-picker-room-online';
+    /*
+     * 人数写法分两种：知道容量（`/rooms` 给的）写 `4/10`；不知道（附近设备只上报人数）
+     * 只写 `4`——不要编一个分母出来（`1/0 在线` 比不写更糟）。
+     */
+    const playersText =
+      maxPlayers > 0
+        ? tp('mp.roomsPlayersOf', { n: players, max: maxPlayers })
+        : tp('mp.roomsPlayers', { n: players });
     // 没有房主的房间加一句说明：为什么点不动
-    online.textContent = hasHost
-      ? tp('mp.roomsPlayersOf', { n: players, max: maxPlayers })
-      : `${tp('mp.roomsPlayersOf', { n: players, max: maxPlayers })} · ${t('mp.roomsNoHost')}`;
+    online.textContent = hasHost ? playersText : `${playersText} · ${t('mp.roomsNoHost')}`;
     row.append(name, online);
     if (selectable) row.addEventListener('click', () => this.select({ address, port: this.port(), room }, row));
     return row;

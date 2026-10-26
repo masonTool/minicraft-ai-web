@@ -6465,6 +6465,16 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       pickerSrc.includes("tp('mp.roomsPlayersOf'"),
   );
   /*
+   * 附近设备（工作树带来的 N6）：它自报房间与人名，房间里没有容量分母——
+   * 只写人数，别编一个 `/0` 出来；延迟异步补，探不到就 `--`。
+   */
+  check(
+    '附近设备：列它自报的房间、延迟异步补（探不到显示 --）',
+    pickerSrc.includes('this.appendServerRow({ host: peer.host, port: peer.port, rttMs: 0 }, this.lanList, peer)') &&
+      pickerSrc.includes('void probeLatency(peer, fetch)') &&
+      pickerSrc.includes("ms === null ? '--'"),
+  );
+  /*
    * 「允许其它人建房」是**客户端能力**开关（用户 2026-10-26）：不是服务端策略，
    * 客户端无权决定别的设备能不能开房。web 版没有内建服务端，整块不渲染。
    */
