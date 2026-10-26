@@ -403,6 +403,7 @@ import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import { RemotePlayerSmoother } from './core/net/RemoteInterpolation.ts';
 import { RemotePresence } from './core/net/RemotePresence.ts';
 import { applyRemoteBlock, planRemoteBlock, readEditRequest } from './core/net/RemoteBlockWrite.ts';
+import { chunkSnapshotBlocks } from './core/net/ChunkSnapshot.ts';
 import {
   realignedWorldSummary,
   remoteWorldWritable as remoteWritableBySeed,
@@ -2030,6 +2031,14 @@ class App {
     },
     // 房主收到别人的改动请求（L8 · MS2）：落地，再由 BlockFunnel 作为权威结果广播
     onEditRequest: (from, payload) => this.applyEditRequest(from, payload),
+    /*
+     * 服务端向我要一块历史增量（用户 2026-10-26 懒上行）。
+     *
+     * 服务端已经不再存世界了：队友走到没被确认过的区块时，它回头问我"这块你改过什么"。
+     * 我从本地 `world.edits` 把那一块的增量原样回过去——**空块也要回**，
+     * 否则它会每次都问（见 `sendEditsReply` 的说明）。
+     */
+    onEditsRequest: (dimension, cx, cz) => this.replyChunkEdits(dimension, cx, cz),
     onEditRejected: (reason) => {
       const now = performance.now();
       if (now - this.editRejectedAt < 3000) return;
@@ -4701,6 +4710,25 @@ class App {
    */
   private remoteWorldWritable(): boolean {
     return remoteWritableBySeed(this.serverSeed, this.worldConfig.seed);
+  }
+
+  /**
+   * 房主回一块历史增量（用户 2026-10-26 懒上行）。
+   *
+   * 服务端已经不再存世界了，队友走到"没被确认过"的区块时会回头问房主；
+   * 这里从本地 `world.edits`（区块增量表）把那一块整块拿出来，原样回过去。
+   *
+   * 为什么不用 `world.getBlock` 逐格扫：一块是 16×384×16 ≈ 9.8 万格，逐格读要把整块
+   * 加载起来，而增量表里只有玩家真正动过的那几十/几百格——这也正是"零带宽同步"的前提。
+   *
+   * `dimension` 不做白名单校验：`serialize()` 读不到就返回 null，回一个空块即可
+   * （空块也是一条有效回答，服务端靠它停止追问）。
+   */
+  private replyChunkEdits(dimension: string, cx: number, cz: number): void {
+    if (this.net.role !== 'host') return;
+    // 解包在 `core/net/ChunkSnapshot.ts`（纯函数，`tests/net-chunk-snapshot.test.ts` 钉着）
+    const blocks = chunkSnapshotBlocks(this.world.edits.serialize(dimension, cx, cz), dimension, cx, cz);
+    this.net.sendEditsReply(dimension, cx, cz, blocks);
   }
 
   /**

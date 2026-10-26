@@ -242,6 +242,14 @@ export interface NetHandlers {
   /** 我那批改动没人接（房里没房主 / 房主刚掉线）：reason 目前只有 `no-host` */
   onEditRejected?: (reason: string) => void;
 
+  /**
+   * 服务端向房主要一个区块的历史增量（用户 2026-10-26 懒上行）。
+   *
+   * 服务端不再自己攒世界，队友走到某块时才发现"这块我不认识"——于是回头问房主。
+   * **只有房主会收到**；回包走 `sendEditsReply()`（空区块也要回，理由见那边的说明）。
+   */
+  onEditsRequest?: (dimension: string, cx: number, cz: number) => void;
+
   /** 别人改了箱子/木桶的内容（L4，批次 611；联机15 扩到全部工作站） */
   onContainer?: (container: NetContainerState) => void;
   /** 别人写了/擦了牌子上的字（联机16） */
@@ -323,6 +331,16 @@ const MOVE_SEND_INTERVAL_MS = 100;
 const LOOK_RESEND_MS = 2000;
 /** 断线重连的等待时间（毫秒） */
 const RECONNECT_DELAY_MS = 3000;
+/** 一条 `blocks` 条目：`[x, y, z, id, state, dimension]`（与协议逐项对齐） */
+export type NetBlockEntry = readonly [number, number, number, number, number, string];
+
+/**
+ * 一包 `edits-reply` 最多带多少条（用户 2026-10-26 懒上行）。
+ *
+ * 服务端单包上限就是 4096 条（`MAX_BLOCKS_PER_MESSAGE`），一个区块的增量正常只有几十上百条，
+ * 只有大范围爆炸才会逼近这个数——超过就拆成几包，服务端逐包入库，结果一样。
+ */
+const EDITS_REPLY_BATCH = 4096;
 
 export class NetClient {
   /** 自己的玩家 id（未连接时为 0） */
@@ -752,6 +770,22 @@ export class NetClient {
         break;
       }
       /*
+       * 服务端向房主要历史增量（用户 2026-10-26 懒上行）：只有房主会收到。
+       * 坐标不可信也照单全收地交给上层——`sendEditsReply()` 只按 (cx,cz) 读自己的
+       * 区块增量表，读不到就是空块，越界不会崩。
+       */
+      case 'edits-request': {
+        const cx = Math.trunc(Number(message.cx));
+        const cz = Math.trunc(Number(message.cz));
+        if (!Number.isFinite(cx) || !Number.isFinite(cz)) break;
+        this.handlers.onEditsRequest?.(
+          typeof message.dimension === 'string' ? message.dimension : this.position.dimension,
+          cx,
+          cz,
+        );
+        break;
+      }
+      /*
        * 牌子与展示框（联机16）：与方块、容器同理——服务端只转发 + 留一份给快照，
        * 内容按坐标存，不关心渲染。
        */
@@ -1112,6 +1146,34 @@ export class NetClient {
       // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
       ...(Number.isFinite(progress) ? { progress } : {}),
     });
+  }
+
+  /**
+   * 回服务端要的那一块历史增量（用户 2026-10-26 懒上行）。
+   *
+   * ⚠️ **空列表也必须发**：服务端靠这条回执把"这一块问过了"记下来；不发的话它会
+   * 每次 `move` 都回头问一遍——队友站在一块空地上就能把房主刷爆。
+   *
+   * 条目格式与 `blocks` 一致（`[x, y, z, id, state, dimension]`），服务端转手就当
+   * 普通 `blocks` 广播，其他客户端一行都不用改。
+   */
+  sendEditsReply(dimension: string, cx: number, cz: number, blocks: readonly NetBlockEntry[]): void {
+    if (!this.connected) return;
+    if (blocks.length === 0) {
+      this.sendRaw(JSON.stringify({ t: 'edits-reply', dimension, cx, cz, blocks: [] }));
+      return;
+    }
+    for (let i = 0; i < blocks.length; i += EDITS_REPLY_BATCH) {
+      this.sendRaw(
+        JSON.stringify({
+          t: 'edits-reply',
+          dimension,
+          cx,
+          cz,
+          blocks: blocks.slice(i, i + EDITS_REPLY_BATCH),
+        }),
+      );
+    }
   }
 
   /**
