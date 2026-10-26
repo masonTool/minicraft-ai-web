@@ -4211,6 +4211,17 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       已有的掉落物重播一遍，卡点只是服务端 `item-spawn` 的固定 1 秒窗口（30 条，超出丢弃且
       不重试）→ 改成令牌桶 **30/s + 突发 400**。同时纠正旧说法："掉落物两端都不落盘"是错的，
       房主本地存档**存**（`snapshotPlayer().entities` 里的非 ghost 项），只有服务端不存。
+      ⑩ **房主主动退出 = 当场关房**（用户 2026-10-26）：`bye` 时若自己是本房房主，直接
+      `closeRoomNow()`——删 `hosts` → 广播 `room-closed{reason:'host-out', graceMs:0}` →
+      把同房所有人 `reject('host-left', 4007)` → `clearRoom`，**不等 30 秒宽限期**。
+      客户端按 `graceMs === 0` 说"房主已退出，房间已关闭"（不说倒计时）。
+      ⚠️ 页面卸载（刷新/关标签）也发 `bye`，所以**房主刷新 = 关房**，这是"主动退出"的应有
+      语义；世界在他本地，重开即可。
+      ⑪ **房主不在线 → 访客进不来**（用户 2026-10-26）：`hosts` 里登记着房主但他已不在
+      `players`（断线进宽限期）时，从属端的 `join` 一律 `error{code:'host-offline'}` +
+      关闭 4009；`Protocol.ts` 把它归进致命名单（自动重连只会空转）；六语言补
+      `say.net.hostOffline`；`RoomProbe` 的 `RoomProbeResult` 增 `error?`，探房被拒时说
+      "房主暂时不在房间"而不是"连不上服务器"。
       验证：`test:net` **217 → 252 通过 / 0 失败**（清场 9 条 / 懒上行 7 条 / 散件 9 条 /
       v1 升级 6 条 / 改写的持久化 4 条）；`npm run check:fast` 全绿（**593** 单测，新增 7 条
       `tests/net-chunk-snapshot.test.ts`）。
