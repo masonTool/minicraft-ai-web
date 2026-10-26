@@ -6278,5 +6278,37 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
   check('服务端把模式记在房间上并随 welcome 下发', serverSrc4.includes('roomGameModes.get(player.room) ?? world.mode') && serverSrc4.includes('roomGameModes.set(player.room, message.gameMode)'));
 }
 
+console.log('\n[每帧 DOM 收干（批次 20261026-0141）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  // 调试面板文本节流：fps 本来就 0.5 秒一算，5Hz 刷新肉眼看不出差别
+  const throttle = Number(/const DEBUG_TEXT_REFRESH_MS = (\d+);/.exec(mainSrc)?.[1] ?? 0);
+  check('调试面板文本按 5Hz 节流（200ms 左右）', throttle > 0 && throttle <= 250, String(throttle));
+
+  // 显隐只有一个入口：以前 applySettings 与 updateDebug 各写一次 style.display
+  check('显隐对账收敛到 syncDebugVisibility()', mainSrc.includes('private syncDebugVisibility(): boolean'));
+  const updateDebugBody = /private updateDebug\(dt: number\): void \{([\s\S]*?)\n  \}/.exec(mainSrc)?.[1] ?? '';
+  check(
+    'updateDebug 不再每帧写 style.display',
+    updateDebugBody.length > 0 && !updateDebugBody.includes('style.display'),
+    String(updateDebugBody.length),
+  );
+
+  // 进度条容器懒查一次后缓存：以前两个函数每帧各 getElementById 一次
+  check('进度条容器走 progressBarEls() 缓存', mainSrc.includes('private progressBarEls(id: string)'));
+  for (const [name, label] of [
+    ['updateBreakProgressUi', '破坏'],
+    ['updateEatingProgressUi', '进食'],
+  ] as const) {
+    const body = new RegExp(`private ${name}\\(\\): void \\{([\\s\\S]*?)\\n  \\}`).exec(mainSrc)?.[1] ?? '';
+    check(
+      `${label}进度条不再每帧 getElementById`,
+      body.length > 0 && !body.includes('getElementById'),
+      String(body.length),
+    );
+  }
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

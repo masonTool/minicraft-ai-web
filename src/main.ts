@@ -998,6 +998,15 @@ const JOIN_FORCE_SPAWN_MS = 8000;
 const REMESH_MIN_INTERVAL = 1000;
 
 /**
+ * 调试面板文本的刷新间隔（毫秒，批次 20261026-0141）。
+ *
+ * 面板里的 fps 本来就是 0.5 秒算一次，坐标/朝向/区块数按 5Hz 刷新肉眼看不出差别；
+ * 而每帧拼十几行字符串再写 `textContent`，等于每帧一次临时字符串分配 + 一次合成器重绘。
+ * 手机上（尤其低端机）这是可持续的额外开销，所以降到 5Hz。
+ */
+const DEBUG_TEXT_REFRESH_MS = 200;
+
+/**
  * ---------------------------------------------------------------- App 类的段落目录
  *
  * 这个类很长（约 7000 行），**不要整份读**。它内部按职责分了段，每段的开头都有一行
@@ -2561,6 +2570,20 @@ class App {
   private frames = 0;
   private fpsTimer = 0;
   private fps = 0;
+  /**
+   * 调试面板当前是不是显示着（批次 20261026-0141）。
+   *
+   * 以前每帧写一次 `style.display`（值没变也写）；现在只在真变化时落一次 CSSOM。
+   */
+  private debugShown = true;
+  /** 调试面板文本上次刷新的时间戳（与 `DEBUG_TEXT_REFRESH_MS` 搭配做 5Hz 节流） */
+  private debugRefreshAt = 0;
+  /** 破坏 / 进食进度条的元素（懒查一次后缓存，不再每帧 `getElementById`） */
+  private breakProgressEls: { container: HTMLElement; bar: HTMLElement } | null = null;
+  private eatProgressEls: { container: HTMLElement; bar: HTMLElement } | null = null;
+  /** 上一次写进 DOM 的进度百分比（-1 = 还没写过） */
+  private breakBarPercent = -1;
+  private eatBarPercent = -1;
   private lastTime = performance.now();
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
@@ -3534,7 +3557,8 @@ class App {
     // 调试面板的可见性由**设置开关与 `/gamerule reducedDebugInfo` 共同**决定，
     // 每帧在 `updateDebug` 里按这两者算（规则优先：它模拟的是服务端不肯给你坐标）
     this.showDebugSetting = settings.showDebug;
-    this.debugEl.style.display = settings.showDebug && !this.rules.reducedDebugInfo ? '' : 'none';
+    // 走同一个对账入口：显隐只有一处判据，避免这里写一次、`updateDebug` 又写一次
+    this.syncDebugVisibility();
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
     this.applyEnvironment();
@@ -15638,14 +15662,32 @@ class App {
     this.world.setStateAndUpdate(x, y, z, withLitState(state, lit));
   }
 
+  /**
+   * 懒查一次进度条容器并缓存（批次 20261026-0141）。
+   *
+   * `#break-progress` / `#eat-progress` 是 `index.html` 里的静态节点，不随世界重建，
+   * 引用可以一直用。以前每帧各查两次 `getElementById`，是白给的 DOM 树查询。
+   */
+  private progressBarEls(id: string): { container: HTMLElement; bar: HTMLElement } | null {
+    const container = document.getElementById(id);
+    const bar = container?.firstElementChild as HTMLElement | null;
+    if (!container || !bar) return null;
+    return { container, bar };
+  }
+
   /** 破坏进度条：只在真正挖掘时显示，创造模式瞬间破坏不显示 */
   private updateBreakProgressUi(): void {
-    const container = document.getElementById('break-progress');
-    const bar = container?.firstElementChild as HTMLElement | null;
-    if (!container || !bar) return;
+    if (!this.breakProgressEls) this.breakProgressEls = this.progressBarEls('break-progress');
+    const els = this.breakProgressEls;
+    if (!els) return;
     const active = this.breakProgress > 0 && this.breakProgress < 1;
-    container.classList.toggle('on', active);
-    if (active) bar.style.width = `${Math.round(this.breakProgress * 100)}%`;
+    els.container.classList.toggle('on', active);
+    if (!active) return;
+    // 百分比量化到 1%：同一档不重复写 style（挖掘时每帧都会走到这里）
+    const percent = Math.round(this.breakProgress * 100);
+    if (percent === this.breakBarPercent) return;
+    this.breakBarPercent = percent;
+    els.bar.style.width = `${percent}%`;
   }
 
   /**
@@ -15659,12 +15701,16 @@ class App {
    * 进食要求准星**没**对着方块，判据互斥。
    */
   private updateEatingProgressUi(): void {
-    const container = document.getElementById('eat-progress');
-    const bar = container?.firstElementChild as HTMLElement | null;
-    if (!container || !bar) return;
+    if (!this.eatProgressEls) this.eatProgressEls = this.progressBarEls('eat-progress');
+    const els = this.eatProgressEls;
+    if (!els) return;
     const active = this.eatProgress > 0 && this.eatProgress < 1;
-    container.classList.toggle('on', active);
-    if (active) bar.style.width = `${Math.round(this.eatProgress * 100)}%`;
+    els.container.classList.toggle('on', active);
+    if (!active) return;
+    const percent = Math.round(this.eatProgress * 100);
+    if (percent === this.eatBarPercent) return;
+    this.eatBarPercent = percent;
+    els.bar.style.width = `${percent}%`;
   }
 
   /**
@@ -17784,11 +17830,26 @@ class App {
     this.simulatedFrameTime = milliseconds;
   }
 
+  /**
+   * 调试面板的显隐对账（批次 20261026-0141）。
+   *
+   * 判据只有一处：设置开关与 `/gamerule reducedDebugInfo`（规则优先）。
+   * 以前每帧都写一次 `style.display`——值没变也写，等于每帧白给一次 CSSOM；
+   * 现在只在真变化时落一次。
+   */
+  private syncDebugVisibility(): boolean {
+    const visible = this.showDebugSetting && !this.rules.reducedDebugInfo;
+    if (visible !== this.debugShown) {
+      this.debugShown = visible;
+      this.debugEl.style.display = visible ? '' : 'none';
+    }
+    return visible;
+  }
+
   private updateDebug(dt: number): void {
     // `/gamerule reducedDebugInfo true`（批次 409）：整块收起，且**不影响帧率统计**
     // （`frames`/`fpsTimer` 要先走完，否则关掉面板再打开会显示一个错的 fps）
-    const debugVisible = this.showDebugSetting && !this.rules.reducedDebugInfo;
-    this.debugEl.style.display = debugVisible ? '' : 'none';
+    const debugVisible = this.syncDebugVisibility();
     this.frames++;
     this.fpsTimer += dt;
     if (this.fpsTimer >= 0.5) {
@@ -17799,6 +17860,11 @@ class App {
 
     // 收起时直接返回：面板里每一行都带坐标/种子，逐行裁剪不如不写
     if (!debugVisible) return;
+    // 文本按 5Hz 刷新（批次 20261026-0141）：fps 本来 0.5 秒一算，坐标/朝向 5Hz 看不出差别。
+    // 以前每帧都拼一遍十几行字符串再写 textContent —— 每帧一次临时字符串 + 一次合成重绘。
+    const nowMs = performance.now();
+    if (nowMs - this.debugRefreshAt < DEBUG_TEXT_REFRESH_MS) return;
+    this.debugRefreshAt = nowMs;
 
     const p = this.physics;
     const cx = toChunkCoord(p.x);
