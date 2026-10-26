@@ -65,4 +65,17 @@ describe('createBuckets', () => {
     // 一次 256 格的批量（合帧上限）必须放行，否则正常的红石/爆炸会被掐
     expect(buckets.block.take(0, 256)).toBe(true);
   });
+
+  it('掉落物桶能一次放行"进房重播"的几百堆（用户 2026-10-26）', () => {
+    const buckets = createBuckets();
+    /*
+     * 房主进房时客户端会把世界里已有的掉落物重播一遍（100ms 扫描）。
+     * 固定 1 秒窗口只能过 30 条，剩下的被丢掉且不重试 → 队友那边凭空少一地东西。
+     */
+    expect(buckets.item.take(0, RATE_LIMITS.item.capacity)).toBe(true);
+    // 突发用完之后仍按 30/s 补充：连发两批就不行了
+    expect(buckets.item.take(0, RATE_LIMITS.item.capacity)).toBe(false);
+    // 1 秒之后又能过 30 条（不是"永久封禁"）
+    expect(buckets.item.take(1000, 30)).toBe(true);
+  });
 });

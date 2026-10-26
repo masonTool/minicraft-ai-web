@@ -57,6 +57,14 @@ export const RATE_LIMITS = {
   container: { perSecond: 20 },
   /** 聊天：原版也是每人每秒几条 */
   chat: { perSecond: 5 },
+  /**
+   * 掉落物（用户 2026-10-26）：平时每秒 30 条够用，但**进房那一刻要能一次性吐完**。
+   *
+   * 房主进房间时，客户端会把世界里已有的掉落物重新广播一遍（`syncNetItems` 的 100ms
+   * 扫描），一个住过的世界地上可能有上百堆。固定 1 秒窗口只能过 30 条，剩下的被丢掉
+   * 且不会重试——队友那边就"少了一地的东西"。桶的 `capacity` 就是为这一波准备的。
+   */
+  item: { perSecond: 30, capacity: 400 },
 };
 
 /** 给一个新连接建全套桶 */
@@ -65,5 +73,6 @@ export function createBuckets() {
     block: createBucket(RATE_LIMITS.block.perSecond, RATE_LIMITS.block.capacity),
     container: createBucket(RATE_LIMITS.container.perSecond),
     chat: createBucket(RATE_LIMITS.chat.perSecond),
+    item: createBucket(RATE_LIMITS.item.perSecond, RATE_LIMITS.item.capacity),
   };
 }

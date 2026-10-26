@@ -1802,6 +1802,95 @@ try {
     for (const client of [clockBack, clockGuest]) client.close();
   }
 
+  // ---------------------------------------------------------------- 每房一套时钟（用户 2026-10-26）
+  /*
+   * 以前时钟是整个服务端一套：房主 B 在另一个房开房，会把房主 A 那个房间的太阳一起拨过去。
+   * 现在 `room → clock`，房间之间互不影响；`sleep` 也只翻本房的天。
+   */
+  console.log('\n[每房一套时钟：两间房互不影响]');
+  {
+    const hostOf = async (room, day, timeOfDay, weather) => {
+      const client = new TestClient(`Clock-${room}`, undefined, {
+        room,
+        host: true,
+        world: { name: room, seed: 1000, mode: 'survival', difficulty: 'normal' },
+        day,
+        timeOfDay,
+        weather,
+      });
+      return { client, welcome: await joinAndWaitWelcome(client, `房主-${room}`, 0, 70, 0) };
+    };
+
+    const a = await hostOf('clocka', 20, 0.2, 'clear');
+    const b = await hostOf('clockb', 5, 0.85, 'rain');
+    check('甲房按自己的时间开房', Math.abs(Number(a.welcome?.timeOfDay) - 0.2) < 0.02, `${a.welcome?.timeOfDay}`);
+    check('乙房按自己的时间开房', Math.abs(Number(b.welcome?.timeOfDay) - 0.85) < 0.02, `${b.welcome?.timeOfDay}`);
+    check('甲房天数没被乙房拨走', a.welcome?.day === 20, `${a.welcome?.day}`);
+    check('乙房天气没被甲房拨走', b.welcome?.weather === 'rain', `${b.welcome?.weather}`);
+
+    // 甲房有人睡满 → 只翻甲房的天
+    const sleeper = new TestClient('ClockSleeper', undefined, { room: 'clocka' });
+    await joinAndWaitWelcome(sleeper, '睡觉的人', 0, 70, 0);
+    sleeper.send({ t: 'sleep' });
+    await sleep(150);
+
+    const afterA = new TestClient('ClockAfterA', undefined, { room: 'clocka' });
+    const welcomeA2 = await joinAndWaitWelcome(afterA, '甲房后来者', 0, 70, 0);
+    check('甲房睡满后跳到黎明', Math.abs(Number(welcomeA2?.timeOfDay) - 0.12) < 0.03, `${welcomeA2?.timeOfDay}`);
+    check('甲房睡满天+1', welcomeA2?.day === 21, `${welcomeA2?.day}`);
+
+    const afterB = new TestClient('ClockAfterB', undefined, { room: 'clockb' });
+    const welcomeB2 = await joinAndWaitWelcome(afterB, '乙房后来者', 0, 70, 0);
+    check(
+      '乙房没被甲房的睡眠影响',
+      Math.abs(Number(welcomeB2?.timeOfDay) - 0.85) < 0.03 && welcomeB2?.day === 5,
+      `${welcomeB2?.timeOfDay} / 第 ${welcomeB2?.day} 天`,
+    );
+
+    for (const client of [a.client, b.client, sleeper, afterA, afterB]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 掉落物进房重播（用户 2026-10-26）
+  /*
+   * 房主进房时客户端会把世界里已有的掉落物重播一遍（`syncNetItems` 的 100ms 扫描）。
+   * 这里模拟"一次冒出 100 堆"，断言服务端**全部收下**并且后来者能在 welcome 里拿到——
+   * 固定 1 秒窗口那套在这里只会放过 30 条。
+   */
+  console.log('\n[掉落物进房重播：突发额度够用]');
+  {
+    const ITEM_ROOM = 'itemburst';
+    const itemHost = new TestClient('BurstHost', undefined, {
+      room: ITEM_ROOM,
+      host: true,
+      world: { name: '掉落房', seed: 4242, mode: 'survival', difficulty: 'normal' },
+    });
+    check('掉落物用例：房主能开房', (await joinAndWaitWelcome(itemHost, '掉落房主', 0, 70, 0)) !== null);
+    const BURST = 100;
+    for (let i = 0; i < BURST; i++) {
+      itemHost.send({
+        t: 'item-spawn',
+        localId: i + 1,
+        itemId: 4,
+        count: 1,
+        x: 10 + (i % 10),
+        y: 70,
+        z: 10 + Math.floor(i / 10),
+        dimension: 'overworld',
+      });
+    }
+    await sleep(200);
+
+    const burstGuest = new TestClient('BurstGuest', undefined, { room: ITEM_ROOM });
+    const welcomeBurst = await joinAndWaitWelcome(burstGuest, '掉落房队友', 0, 70, 0);
+    check(
+      `${BURST} 堆一次性上行的掉落物全部收下`,
+      (welcomeBurst?.items ?? []).length === BURST,
+      `${(welcomeBurst?.items ?? []).length} 堆`,
+    );
+    burstGuest.close();
+    itemHost.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {
