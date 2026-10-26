@@ -376,17 +376,23 @@ notes.push(`主包 ${mainChunk.name} gzip ${kb(mainChunk.gzip)}（基线 ${kb(MA
 /**
  * 首屏成本看**合计**，不是单个 chunk。
  *
- * 两段式入口之后 `index-*.js` 只是引导器、游戏体在 `main-*.js`，单看任何一块都会漏掉另一半；
- * 而懒加载 chunk（六语言包等）不在首屏，所以这里按"除懒加载外"的合计算。
+ * 两段式入口之后 `index-*.js` 只是引导器、游戏体在 `main-*.js`，单看任何一块都会漏掉另一半。
  *
- * 2026-10-25 实测 1199.1 KB → 取 1215 KB（实测 + 余量）。这个数**包含**拆包重复的那部分，
- * 将来用共享 chunk 收回来时应当把它调低（显式动作）。
+ * ⚠️ 口径：这里把 `dist` 里**所有** JS 加在一起（含六语言包、worker 这些懒加载 chunk）。
+ * 之所以不是"真首屏"：懒加载清单要靠构建清单才数得准，多一层解析就多一个会漂的口径；
+ * 而语言包增长（加一句 UI 文案 = 六份文案同时长）恰恰是最容易被忽略的那部分成本。
+ * 代价是这个名字有点误导：它是"全部 JS 合计"，不是"首屏"。
+ *
+ * 2026-10-25 实测 1199.1 KB → 取 1215 KB（实测 + 16 KB 余量）。
+ * 2026-10-26 实测 1218.0 KB → 取 1230 KB（CI 红过一次：那天只留了 16 KB 余量，
+ *   一天的内网/联网功能（main +19.4、语言包 +3.0、worker +3.1）就吃光了）。
+ * 这个数**包含**拆包重复的那部分，将来用共享 chunk 收回来时应当把它调低（显式动作）。
  */
-const TOTAL_GZIP_BASELINE = 1215 * 1024;
+const TOTAL_GZIP_BASELINE = 1230 * 1024;
 if (totalGzip > TOTAL_GZIP_BASELINE) {
-  problems.push(`首屏 JS 合计 gzip ${totalGzip} 超过基线 ${TOTAL_GZIP_BASELINE}（+${totalGzip - TOTAL_GZIP_BASELINE} 字节）`);
+  problems.push(`全部 JS 合计 gzip ${totalGzip} 超过基线 ${TOTAL_GZIP_BASELINE}（+${totalGzip - TOTAL_GZIP_BASELINE} 字节）`);
 }
-notes.push(`首屏 JS 合计 gzip ${kb(totalGzip)}（基线 ${kb(TOTAL_GZIP_BASELINE)}，含 ${gzipped.length - 1} 个懒加载 chunk 不计入）`);
+notes.push(`全部 JS 合计 gzip ${kb(totalGzip)}（基线 ${kb(TOTAL_GZIP_BASELINE)}，含 ${gzipped.length - 1} 个懒加载 chunk 也计入）`);
 
 const indexSize = statSync(indexPath).size;
 if (indexSize > Buffer.byteLength(before)) {
