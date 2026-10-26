@@ -9,6 +9,50 @@
 
 ---
 
+## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
+> 房主离线期间的改动也只存本地；再次开房时服务器以**房主本地**为准重建——一句话：
+> **服务器上的一切变更都回到房主本地，两边始终以房主为准**。
+> 两个已拍板的取舍：① 服务端**不保留**"只读救援副本"（房主设备丢 = 这一局全丢）；
+> ② 方块增量走**按区块懒上行**（不是开房全量推）。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2011
+
+- [x] [L8] 房主联机不切 `@mp:` 库（改动直接落单机存档）+ 联机期保存压到 10 秒、断开前强制落盘：`src/main.ts` 的 `enterMultiplayerSave` / `tickAutoSave` / `onStatus(false)` → `npm run check:fast`
+  - 做了什么：`enterMultiplayerSave()` 开头按 `this.net.role === 'host'` 早退（房主全程用 `world.id` 那个单机库），`leaveMultiplayerSave()` 因此对房主自动 no-op、也不再原地重载；新增 `hostSession`（在 `onNetWelcome` 里记一份，断开善后里用掉并清掉，因为那时 `role` 已经回 `solo`）；`tickAutoSave()` 取 `min(设置值, 10s)`；`onStatus(false)` 里房主先 `saveNow('mp-host-leave')` 再做其它善后。
+  - 为什么：房间数据只存房主本地之后，"最后 30 秒"没有任何备份，而原先房主的改动写进 `@mp:` 库（只写不读）等于退出即丢。取 `min` 而不是直接赋值是为了不和玩家自己设的 5 秒打架。
+  - 验证：`npm run check:fast` 全绿（typecheck + i18n 审计 + 586 条单测；离线套件不覆盖 `src/main.ts`，脚本自己提示了这一点）。
+  - 待人工：双端手测"联机盖房 → 退出房间 → 单机进同一个世界，房子还在"（需要浏览器 + 两个客户端）。
+- [x] [L8] 服务端清场：新增 `clearRoom()`，房主新上位与关房时各清一次 → `npm run test:net`
+  - 做了什么：`clearRoom(room)` 按房名前缀清 edits/containers/signs/frames，顺手清同房玩家的掉落物、`roomWorlds`/`roomGameModes`、两张区块追踪表；三处调用——① 关房（房主宽限期结束）② `join` 里 `wantsHost` 分支（`send(welcome)` 之前）③ 由 ② 兜住"服务端崩溃重启后的残留"。
+  - 为什么：房间数据以房主本地为准，残留会在下一局被 `welcome` 发出去，等于服务端把房主的世界改回去。判据用 `sameHostReturning = grace && hosts.get(room)?.id === player.id`：**宽限期内重连的房主不清**（他切后台回来还是同一局）。原先想用 `host.id !== player.id`，但那条件实际上是死代码——新 host 在 `host-taken` 那道闸就被拒了，能进来的只有"本人重连"。
+  - 验证：`npm run test:net` **217 → 226 通过 / 0 失败**（新增 9 条：房主写方块+容器 → 队友能看到 → 断开 120ms 内同 clientId 重连仍是房主且缓存不清（新队友仍收到那 9 条）→ 宽限期过后进同房名 welcome 全空、新房主上位也不继承）。
+- [x] [L8] 服务端不再持有世界存档：`worldSnapshot()` 只留时间/天数/天气，`SNAPSHOT_VERSION` 升 2 并兼容读 v1（旧房间数据静默丢弃）→ `npm run test:net`
+  - 做了什么：`worldSnapshot()` 删掉 edits/containers/signs/frames 与 `seed`，只剩 `version/savedAt/timeOfDay/day/weather`；读档块删掉四张表的还原循环，只回填天气/时间/天数，并在版本不符时打一行说明；`roomOfDataKey()`（只为落盘拼房名）与它的 `DEFAULT_ROOM` 导入一并删掉；`store.mjs` 的 `SNAPSHOT_VERSION` 1 → 2，新增 `READABLE_VERSIONS`（v1 仍可读，不当损坏）。
+  - 为什么：房间数据以房主本地为准之后，"服务端还存着一份世界"会立刻变成第二份事实——重启后被 `welcome` 发出去就是把房主的世界改回上次的样子。v1 不当损坏是因为内容完好、只是格式旧，时间/天数/天气仍然有效。
+  - 验证：`npm run test:net` **226 → 236 通过 / 0 失败**（改写原"重启后方块还在/容器还在"两条为"不再复活"；新增直接读 `world.json` 断言 v2 + 四张表不存在 + 时间仍在；新增 v1 升级用例：手写 v1 文件 → 不被改名成 `.broken` → 方块/容器/牌子/展示框全丢弃、时间 0.5 与天气 rain 被沿用）。
+- [x] [L8] 方块增量懒上行（服务端侧）：`edits-request` 下发给房主、`edits-reply` 收下并广播 `blocks`，`pushChunkEdits` 改成"已确认直接推、未确认向房主要" → `npm run test:net`
+  - 做了什么：新增 `confirmedChunks`/`requestedChunks`（按房一份，上限 4096 / 在飞 8）+ `trackedChunks`/`rememberTracked`；`pushChunkEdits` 拆成"直接推缓存"（`sendChunkEdits`）与"向房主要"（`requestChunkFromHost`，5 秒后忘掉这次在飞，回包丢了下次 move 会重试）；新增 `edits-reply` 分支（只收本房房主、复用 `blockEditRejection`、坐标必须落在声称的那一块里、收下后按房广播 `blocks`）；`snapshotFor` 对房主不再下发 edits/容器/牌子/展示框（双保险）。
+  - 为什么：`edits-reply` 不复用 `blocks` 是因为**空区块必须能回"没改过"**——`blocks` 的空列表在现有逻辑里直接 return，而 `requested` 不清就会被无限请求。**没有房主的房**（有人直接 join）没有权威可问，退回老行为"服务端缓存就是共用那份"，否则那类房间的跨区块补发会整条失效。
+  - 验证：`npm run test:net` **236 → 243 通过 / 0 失败**（新增 7 条：队友跨进未确认区块 → 房主收到 `edits-request{dimension,cx,cz}` → 回包后队友收到 `blocks` → 另一块再要一次 → 空块确认后不再重复询问 → 确认过的块会进后来者的 welcome）。踩到一次 `move` 50ms 限频（第二次 move 被直接丢），用例里补了 `sleep(80)`。
+- [x] [L8] 房主响应 `edits-request`：`src/net/NetClient.ts` 加收发、`src/main.ts` 从 `world.edits` 取整块回包 → `npm run check:fast && npm run test:net`
+  - 做了什么：`NetClient` 加 `onEditsRequest` 回调 + `edits-request` 分支 + `sendEditsReply()`（空块也发；超过 4096 条拆包）；解包抽成纯函数 `core/net/ChunkSnapshot.ts#chunkSnapshotBlocks()`，`main.ts` 的 `replyChunkEdits()` 只负责"取快照 → 交给它 → 发出去"。
+  - 为什么：解包是最容易错的一步，抽出来才能离线断言。**实际抓到两个 bug**：① `Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标），原来忘了加 `cx*16 / cz*16`，所有补发的方块会堆在区块西北角——而原点附近的房间看起来完全正常；② 返回类型写成 `number[][]` 装不下末位的维度名。第一个由新增用例 `区块坐标必须加到局部坐标上` 直接钉住（含负区块坐标 `z = -33`）。
+  - 验证：`npm run check:fast` 全绿（typecheck + **593** 单测，较基线 586 增 7 条：空快照/空表/坐标与状态位/区块偏移含负坐标/条目形状/相邻区块不混/位运算往返）；`npm run test:net` **243 通过 / 0 失败**（服务端那条链上一批已覆盖）。
+- [x] [L8] 房主开局整份上行容器/牌子/展示框（`session-sync`）：服务端按房广播、客户端在 `welcome` 之后发 → `npm run test:net`
+  - 做了什么：服务端新增 `session-sync` 分支（只收本房房主、`kind` 分 container/sign/frame、形状校验与各自的单向消息同口径但**不设距离闸**、按条数上限 `SESSION_SYNC_MAX_MESSAGES=256`，收下后按房广播）；客户端 `NetClient.sendSessionSync()`（200 条一包，空集合也发）+ `App.flushSessionSync()` 在 `welcome` 后触发，**读档没回来就先挂起**（`waitingForSaveRestore`），在 `start()` 的读档 `.then/.catch` 里补推。
+  - 为什么：这三种不能像方块那样懒补——队友打开一个空箱子就会往里放东西，然后被服务端那份覆盖。挂起是因为时机：`welcome` 往往早于读档完成，那时容器表还是空的，直接推等于告诉服务端"这人没有箱子"。
+  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）；`npm run test:net` **243 → 252 通过 / 0 失败**（新增 9 条：清场后 welcome 无箱子 / 房主推完后**先进来的**队友当场收到 container+sign+frame 三条广播 / **后进来的**队友从 welcome 拿到三样 / 从属端伪造 `session-sync` 被无视）。
+- [x] [L8] 协议文档与台账收口：`docs/NET-PROTOCOL.md` 补两条消息与"服务端不持有存档"口径 + `TASKS.md` 落 L8 → `npm run check`
+  - 做了什么：`NET-PROTOCOL.md` —— §2 补"世界以房主本地为唯一真相 + 服务端只是会话缓存"的完整口径与代价；§4 新增 `edits-reply` / `session-sync` 两行（含校验与"空块必须回"）；§5 新增 `edits-request` 行、改写 `welcome`（房主不带世界数据）；§6 改正三处过期数字（增量上限 20 万→50 万、世界种子不落盘、快照内容 v2）并补"房间清场/懒上行在飞上限/session-sync 上限"四行；§7 新增 `edits-request` 的客户端行为；§8 改写 `联机13`/`联机14`/`联机26` 三条。`TASKS.md` 的 L 段新增 L8 条目（口径 6 点 + 两条 ⚠️ 取舍/坑 + 待人工）。`OVERVIEW.md` 的联机条目与坑各补一句（压在 200 行 / 28672 字节上限内）。`HANDOFF.md` 进度口径 303/295 → 304/296。
+  - 为什么：文档漂移是这项目最常见的债，数字更是一抄就漂——`audit:tasks` 当场抓住了 HANDOFF 的 295 与 README 的路线图状态列，按"数字只由脚本生成"的口径重写。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账；`audit:tasks` 报"共 304 项（296/5/0/3）、编号无重复、各段连续"）；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 恰好 200 行 / 27874 字节）。
+
 ## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
@@ -213,85 +257,4 @@
   - 为什么：两颗按钮是同一层（都是"开始一局"），一宽一窄看着像不同层级；52px 是"手指点得到"的下限，不是 PC 上该有的高度。**判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`**——`touch-mode` 是进世界、建触摸层时才挂的，主菜单阶段手机上也没有这个类，拿它当判据会把手机的 52px 一起压掉
   - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
   - 批次：20261026-0245
-
-## 批次 20261026-0141 · 2026-10-26 · 会话 d4a25f60
-
-> 用户 2026-10-26：低端机上「不卡但发热明显」，只要**不影响画质和体验**的优化。
-
-# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0141
-
-目标（用户 2026-10-26）：低端机上"不卡但发热明显"。这一批只做**不降画质、不降帧率、
-不降视距**的优化——把"本来就算错 / 白算 / 白传"的部分去掉，画面结果保持逐像素一致。
-
-- [x] [性能1] 天空穹顶改"地形画完再画"：`src/render/Sky.ts` + `src/main.ts` → `npm run check:fast`
-  - 做了什么：穹顶从 `depthTest:false` + `renderOrder:-1000`（先铺底）改成 `depthTest:true` + `renderOrder:+1000`；新增纯函数 `domeOcclusionSafe(视距)`（地形最远 `(视距+2)×16` 必须 ≤ 穹顶半径 180），小于则走遮挡、超过则回退成先铺底；`applySettings` 与 `setViewDistance` 两处落这条守卫
-  - 为什么：原来整屏每个像素都先被天空着色一遍、再被地形盖掉，被遮挡那部分（通常半屏以上）是纯浪费；改成地形先写完深度，穹顶只画真正露出来的天空，**可见像素完全不变**。回退分支保证视距将来放开时不会出现"天空盖住远山"
-  - 验证：`npm run test:render` **282 通过 / 0 失败**（新增 6 条：视距 6/8 走遮挡、10/16 回退、非法值按 0、穹顶 `depthTest/depthWrite` 结构守卫）；`npm run check:fast` 全绿
-  - 未验：真机上的像素对比与洞穴/地平线观感（本机无浏览器）；若真机发现远景天色异常，把 `setDomeBehindTerrain(false)` 即可逐像素退回原状
-  - 批次：20261026-0141
-- [x] [性能2] 区块 mesh 冻结世界矩阵：`src/render/ChunkRenderer.ts` → `npm run check:fast`
-  - 做了什么：新增 `ChunkRenderer.freezeAt(mesh, x, y, z)`——写位置 → `updateMatrix()` → 把本地矩阵抄进 `matrixWorld`（父级是 scene，单位矩阵）→ 关掉 `matrixAutoUpdate` 与 `matrixWorldAutoUpdate`；Worker 分支与本地分支共 4 处 mesh 创建都改走它
-  - 为什么：区块 mesh 的 position 只在创建时写一次，之后最多改 `visible`，但 three 每帧的 `scene.updateMatrixWorld()` 仍给 169 个对象各做一次 compose 并递归——纯白算。冻结后矩阵仍是正确值，视锥剔除与绘制不变
-  - 验证：`npm run test:render` **285 通过 / 0 失败**（新增 3 条：两个 autoupdate 标志为 false、冻结后改 `position` 不再影响 `matrixWorld`）；`npm run check:fast` 全绿（命中 mesh / render 两套）
-  - 影响 / 回滚：以后不能再对这些 mesh 直接改 position/rotation/scale（要挪位置就重建网格，现有流程本来就是重建后替换）；回滚只需把这 4 处换回 `mesh.position.set`
-  - 批次：20261026-0141
-- [x] [性能3] 粒子顶点只上传活跃段、0 粒子跳过上传：`src/render/ParticleSystem.ts` → `npm run check:fast`
-  - 做了什么：`writeBuffers()` 里 `count === 0` 直接归零 drawRange 并返回；否则用新辅助 `uploadActiveRange()`（`clearUpdateRanges` + `addUpdateRange(0, 活跃长度)` + `needsUpdate`）替换原来的整包 `needsUpdate = true`
-  - 为什么：`needsUpdate` 会把 1024 点的整池全量重传（约 32KB/帧），而画面上只画前 `count` 个；池尾数据根本没有任何消费者。清空后（0 粒子）也不例外，等于每帧白传一次空池
-  - 验证：`npm run test:render` **290 通过 / 0 失败**（新增 5 条：位置/颜色按 count×3、标量按 count 登记区间、0 粒子不标脏（version 不变）、0 粒子 drawRange 归零）；`npm run check:fast` 全绿
-  - 影响 / 回滚：上传区间依赖 three 的 `updateRanges`（r159+）；回滚把这 4 行换回 `needsUpdate = true` 即可
-  - 批次：20261026-0141
-- [x] [性能4] 每帧 DOM 收干（调试面板节流 / display 变化才写 / 进度条缓存引用）：`src/main.ts` → `npm run check:fast`
-  - 做了什么：① 新增 `syncDebugVisibility()`，把 `#debug` 的显隐收敛成唯一入口（`applySettings` 与 `updateDebug` 共用），只在值变化时写 `style.display`；② 调试文本按 `DEBUG_TEXT_REFRESH_MS = 200`（5Hz）节流，不再每帧拼十几行字符串写 `textContent`；③ 新增 `progressBarEls(id)` 懒查一次并缓存 `#break-progress` / `#eat-progress`，百分比量化到 1%，同档不重复写 `style.width`
-  - 为什么：调试面板默认开着（手机上 3 行、桌面上十几行），以前每帧一次临时字符串分配 + 一次 `textContent` 写入 + 一次合成器重绘；两个进度条每帧各一次 `getElementById`（纯 DOM 树查询），挖掘/进食时还会每帧写一次 width。这些都属于"画面完全相同、只是白做"
-  - 验证：`npm run test:ui` **1177 通过 / 0 失败**（新增 6 条：节流常量 ≤ 250ms、`syncDebugVisibility` 唯一入口、`updateDebug` 里不再出现 `style.display`、`progressBarEls` 存在、两个进度条不再 `getElementById`）；`npm run check:fast` 全绿
-  - 未验：真机上"面板数字刷新变慢"的观感（5Hz 是标准做法，但没人肉眼盯过）；若觉得跳得难受，把常量调到 100 即可
-  - 批次：20261026-0141
-- [x] [性能5] draw call 合并的可行性结论留档（做/不做与理由）：本会话 decision 文件 → 文档门禁
-  - 做了什么：把"约 170 次/帧的 draw call 要不要合并"评估完并留档——本会话 `d4a25f-decision.md` 的 D1（评估过程与暂不做的理由）、`notes/decisions.md` 新增「判定不做：区块 draw call 合并」一节（含代价与"什么时候该重看"）
-  - 为什么：`BatchedMesh` 要预留几十到上百 MB 顶点缓冲（显存换 CPU 提交），2×2 静态合并要重写跨区块网格化与 Worker 协议、改一格还要重拼一整组；收益（170 → ~43 次提交）必须真机前后对比才能确认，风险与这一批"零画质损失小改"不匹配，所以明确不做
-  - 验证：`npm run audit:docs` 通过；决策节格式与 `notes/decisions.md` 现有四节一致（做了什么 / 理由 / 代价与边界 / 什么时候该重看）
-  - 批次：20261026-0141
-
-## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
-> ③ 房主挖开水边方块后加入方的水不流；④ 改成晴天后雨声还在。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0130
-
-目标（用户 2026-10-26 反馈四条）：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
-③ 房主挖开水边方块后，加入方的水不流；④ 房主把雨改成晴天后，声音还在。
-
-- [x] [联机66] 开房失败要拦住（用户 ①）：`WorldScreen` 的开房对话框等预检结果、失败留在原地显示原因；新增 `src/net/HostPreflight.ts`（只连不发 join）→ 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做了什么：新增 `preflightHost({baseUrl, room})`——只建立一次 WebSocket（3 秒超时，连上即关，**不发 join**），再 best-effort 拉 `/rooms` 看 `hasHost`；返回 `unreachable` / `taken` / `null`。`WorldScreen.onHostWorld` 改成可返回 `Promise<string | null>`，`go()` 等结果：失败 `showError()` 并留在对话框（按钮期间 disabled），成功才 `cleanup()`。`main.ts` 里的回调改成先 `await preflightHost(...)`，`unreachable` → `t('mp.hostUnreachable')`、`taken` → `t('say.net.hostTaken')`，只有通过才 `pendingHostRoom` + `startWorld`
-  - 为什么：以前是"先建世界再后台连"，服务器没起/地址错/房名被占时人已经站在世界里了（建世界还要跑地形生成），失败只能看到一句看不懂的 `host-taken` 或静默断开。**关键约束**：预检不能发 `join`——发完就断会把房主位占进 30 秒宽限期，正式开房反而被 `host-taken` 拒掉
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **6/6**（连不上 / 超时 / 房名被占 / 同名无房主放行 / 拿不到列表放行 / URL 带房名且连上就关）；`npm run test:ui` **1155/0**（新增 3 条结构断言）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过（新增 `mp.hostUnreachable` 六语言）
-  - 批次：20261026-0130
-- [x] [联机67] 雨→晴之后环境音停不下来（用户 ④）：`AudioEngine.setAmbience` 的起伏振荡器改挂独立增益；网络天气改走 `setWeather()` → 验收：`npm run test:ui` 断言
-  - 做了什么：雨声节点链从 `… → out(音量) → master`（起伏 `gust` 直接接在 `out.gain` 上）改成 `… → swell(1±0.045) → out → master`，`gust` 只接 `swell.gain`；`main.ts` 的 `onWeather` 从 `weather.setKind(kind)` 改成 `this.setWeather(kind)`（与本地命令同一条路径，`applyEnvironment()` 一起跑）
-  - 为什么：`AudioParam` 的输入是**加在基础值上**的——`setTargetAtTime(0)` 只把基础值推到 0，叠加的 ±0.045 仍在振，于是晴天里永远有 4.5% 的雨声底噪。而 `weather.setKind()` 只改状态与降水粒子、不跑 `applyEnvironment()`，远程改天气时环境音沿用上一档
-  - 验证：`npm run test:ui` **1155/0**（断言 `gust.connect(gustDepth).connect(swell.gain)` 存在、旧的 `connect(out.gain)` 不存在、`onWeather` 里 `this.setWeather(kind)`）；`npx tsc --noEmit` 干净
-  - 未验：真人耳听"雨停即静"（无头环境听不到声）
-  - 批次：20261026-0130
-- [x] [联机68] 访客第一次加入卡在生成页（用户 ②）：`refreshLoadingState` 加 8 秒"就地认可落点"自愈 → 验收：`npm run test:ui` 断言
-  - 做了什么：新增 `JOIN_FORCE_SPAWN_MS = 8000` 与 `forceJoinSpawn()`——加入来的世界若"已经有区块网格、但 8 秒还没落点"，就地认可当前坐标（`spawnPoint` + `spawnResolved = true`）并补一次 `requestGroundSettle('join')`，只做一次；30 秒那条 `abortJoin` 兜底保持不变；日志统一打 `[JOIN_DBG]`
-  - 为什么：30 秒兜底是"彻底放弃退回菜单"，而玩家看到的是"提示进入了却卡在生成页"。**不能**用 `prepareNewWorldSpawn()` 兜——加入方的人已经在房主身边，重新规划出生点会把人瞬移到几百格外
-  - 验证：`npm run test:ui` **1155/0**（断言常量与 `forceJoinSpawn()` 存在、且自愈里**不**调用 `prepareNewWorldSpawn()`）；`npx tsc --noEmit` 干净
-  - 未验：真机双端加入（没有自动化双端环境；若仍卡，控制台会打 `[JOIN_DBG] 8 秒没有落点，就地认可：…` 带 chunks/mesh/net 三个量）
-  - 批次：20261026-0130
-- [x] [联机69] 加入方的水不流动（用户 ③）：房主挖开水边方块后，房主端水流、加入方水不动。静态读代码已确认"任何方块写入都经 `World.events.onBlockChanged → queueBlockChange → BlockFunnel.sendBlocks`"，但没找到加入方收不到/不生效的确证点 → 需要一次带日志的复现，再加 `[FLUID_DBG]` 计数（房主每秒发出的水方块数 / 加入方每秒应用的水方块数）后定位
-  - 做了什么：真服务端 + 两个真浏览器复现（房主开房、加入方走真实的「加入房间」面板），发现**加入方根本没站在那片地形上**——`loadSaveState()` 是异步的，它用**上一局**存档里的坐标 `teleport` 覆盖了 `alignSpawnToHost()` 刚放好的"房主身边"落点；人不在那片区块里，房主的流体改动只会走 `planRemoteBlock` 的 `buffer` 分支进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。修：`loadSaveState` 对 `mpjoin-` 世界**跳过位置/维度/朝向恢复**（房间里的位置与维度由房主/服务端说了算），背包/进度/规则照旧恢复。另保留 `[FLUID_DBG]` 计数（房主"发出"、加入方"应用"，附 role/net/可写）作为后续自查入口
-  - 为什么：这不是"水"独有的问题——同一个原因会让加入方看不到房主的红石、火焰、作物生长等一切"房主算出来的方块变化"，而画面看上去完全正常。相比"给水加一条专门同步"，把落点改对是唯一的正解；顺带也解释了之前"加入方在奇怪的位置""看不到别人"的零散反馈
-  - 验证：双浏览器对比同一坐标周围 13×9×13 的水方块数——修前 guest 恒为 2、host 从 2 涨到 114（完全不跟）；修后 guest 与 host 同步跟随（1→53 逐拍对齐，滞后约 0.7 秒），`guest 距房主: 0.0 格`；`[FLUID_DBG]` 两侧数字一致（发出 7 / 应用 7）。`npm run test:ui` **1157/0**（+2 条结构断言：`joinWorld` 分支跳过位置恢复、`[FLUID_DBG]` 计数在位）；`npm run test:net` 208/0；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
-  - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
-  - 批次：20261026-0130
 
