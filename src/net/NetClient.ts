@@ -14,6 +14,7 @@
 
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
+import { netErrorText } from '../core/net/NetErrorText.ts';
 import { decodeEditsPack } from '../core/net/EditPack.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole.ts';
@@ -980,7 +981,12 @@ export class NetClient {
       case 'error': {
         const code = String(message.code ?? 'unknown');
         const text = String(message.message ?? '联机出错');
-        this.status = text;
+        /*
+         * 状态文案按 code 翻（本批）：这句会随 `onStatus(false, …)` 进联机面板的错误行，
+         * 面板不该显示服务端那句中文（非中文玩家看不懂）。`netErrorText` 查不到时
+         * 仍回退服务端原话——比一律显示"服务器错误"更有信息量。
+         */
+        this.status = netErrorText(code) || text;
         /*
          * 致命错误只置标记、**不在这里 close**：服务端拒绝 join 时已经在关连接，
          * 客户端再 close 一次会提前把还没送达的 error 帧吞掉（测试里表现为"没收到 error"）。

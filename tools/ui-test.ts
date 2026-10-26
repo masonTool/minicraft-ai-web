@@ -5401,8 +5401,17 @@ console.log('\n[加入房间：选项式面板（L9）]');
       mpSrc.includes("this.showRoomsMessage(t('mp.roomsFailed'))"),
   );
   check(
-    '点一行房间就填好房名（要口令时把焦点送过去）',
+    '点一行房间就填好房名（要密码时把焦点送过去）',
     mpSrc.includes('this.roomInput.value = entry.room;') && mpSrc.includes('this.passwordInput.focus();'),
+  );
+  check(
+    'join 模式连着时也露出「断开」（否则联机中打开面板是个死界面）',
+    mpSrc.includes('private syncModeVisibility(): void') &&
+      mpSrc.includes('joinMode && !multiplayerButtons(this.state).disconnect'),
+  );
+  check(
+    '协议错误的状态文案按 code 出人话（面板错误行与消息栏同一份映射）',
+    readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
   );
   check(
     '房间列表在右列内自适应高度并滚动（不再固定三行；窄屏回落时才限高）',

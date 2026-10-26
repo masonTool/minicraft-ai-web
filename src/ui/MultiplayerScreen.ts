@@ -105,6 +105,8 @@ export class MultiplayerScreen {
   private readonly disconnectButton: HTMLButtonElement;
   private state: MultiplayerScreenState = 'idle';
   private openState = false;
+  /** 当前期望的模式（`join` = 主菜单「加入房间」；`full` = 联机面板全量） */
+  private mode: 'full' | 'join' = 'full';
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
@@ -285,18 +287,33 @@ export class MultiplayerScreen {
   /**
    * 打开面板。
    *
-   * `mode = 'join'`（L9）：主菜单里点「加入房间」只有"加入"这一件事——
-   * 开房要指定用哪个世界，那件事在世界卡片的「开房」上；断开在没有连接时也没有意义。
-   * 把这两颗藏掉，面板才真的是"填个地址就进去"的小面板，而不是一屏看不懂的开关。
+   * `mode = 'join'`（L9）：主菜单里点「加入房间」主要是"加入"这一件事——
+   * 开房要指定用哪个世界，那件事在世界卡片的「开房」上，所以那颗恒藏。
+   * 「断开」只在真连着时露出来（见 `syncModeVisibility`），没连时不占位置。
    */
   open(mode: 'full' | 'join' = 'full'): void {
+    this.mode = mode;
     this.root.dataset.mode = mode;
     this.titleEl.textContent = t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
-    this.hostButton.classList.toggle('hidden', mode === 'join');
-    this.disconnectButton.classList.toggle('hidden', mode === 'join');
+    this.syncModeVisibility();
     this.openState = true;
     this.root.classList.remove('hidden');
     this.setState(this.state);
+  }
+
+  /**
+   * 按模式决定两颗按钮的可见性（本批修正）。
+   *
+   * 「开房」在 join 模式恒藏：开房要指定用哪个世界，那件事在世界卡片的「开房」上。
+   *
+   * 「断开」相反——以前 join 模式也把它藏了，于是**联机中打开「加入房间」会看到一个死面板**：
+   * 「加入」是灰的（已连接）、「断开」又看不见，玩家没有任何出路。现在只要真有连接
+   * （含重连中）就露出来，判据与 `multiplayerButtons()` 同源。
+   */
+  private syncModeVisibility(): void {
+    const joinMode = this.mode === 'join';
+    this.hostButton.classList.toggle('hidden', joinMode);
+    this.disconnectButton.classList.toggle('hidden', joinMode && !multiplayerButtons(this.state).disconnect);
   }
 
   close(): void {
@@ -314,6 +331,8 @@ export class MultiplayerScreen {
     // 服务端给的细节（版本不匹配之类）优先于通用文案——只说"已断开"等于没说
     this.detailText = detail && detail.length > 0 ? detail : '';
     this.refreshStatus();
+    // 连接状态变化会改变「断开」该不该露出来（join 模式只在这种情况下显示它）
+    this.syncModeVisibility();
   }
 
   /**
