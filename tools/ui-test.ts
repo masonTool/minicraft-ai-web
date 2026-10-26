@@ -6140,7 +6140,21 @@ console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]')
   const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
   check('服务端算出权威天数并随快照下发', serverSrc.includes('function currentDay()') && serverSrc.includes('day: currentDay(),'));
   check('时间广播也带天数（每 2 秒那条）', /broadcast\(\{ t: 'time', timeOfDay: currentTimeOfDay\(\)[\s\S]{0,60}day: currentDay\(\)/.test(serverSrc));
-  check('房主开房时上报本地天数（只有房主带）', netSrc.includes('...(this.wantsHost ? { day: this.localDay } : {})'));
+  check(
+    '房主开房时上报本地天数/时刻/天气（只有房主带）',
+    /\.\.\.\(this\.wantsHost\s*\?\s*\{ day: this\.localDay, timeOfDay: this\.localTimeOfDay, weather: this\.localWeather \}/.test(
+      netSrc,
+    ),
+  );
+  check(
+    '服务端开房时采纳房主的时刻与天气（用户 2026-10-26）',
+    serverSrc.includes('if (Number.isFinite(hostTime)) startTimeOfDay') &&
+      serverSrc.includes('if (isWeatherKind(message.weather))'),
+  );
+  check(
+    '宽限期内重连不覆盖时刻/天气（与清场同一个判据）',
+    /if \(!sameHostReturning\) \{\s*\n\s*const hostDay = Number\(message\.day\)/.test(serverSrc),
+  );
   check('客户端收下权威天数', mainSrc.includes('if (day !== undefined) this.netDay = day;'));
   check(
     '校正天数只归位、不触发跨日副作用（村民不该被刷补货）',
