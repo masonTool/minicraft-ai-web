@@ -22,7 +22,7 @@ extern "C" {
  * 起服务。
  *
  * @param data_dir 存档目录（UTF-8，`world.json` 落在它下面）；传 NULL 用 `./.data`
- * @param port     0 = 让系统挑端口
+ * @param port     0 = 用默认端口（不是随机端口：客户端与发现广播都用默认端口）
  * @param seed     0 = 服务端默认种子
  * @param beacon   非 0 = 开局域网发现（手机当房主时的主线功能）
  * @return 实际监听端口；-1 = 启动失败

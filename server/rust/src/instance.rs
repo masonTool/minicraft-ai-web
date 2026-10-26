@@ -44,7 +44,16 @@ pub fn start_instance(data_dir: &str, want_port: u16, seed: i64, beacon: bool) -
 
     let mut config = Config::from_env();
     config.data_dir = std::path::PathBuf::from(data_dir);
-    config.port = want_port;
+    /*
+     * 宿主没指定端口时**不要**把它设成 0（用户 2026-10-27 实测发现）：
+     * `TcpListener::bind(("0.0.0.0", 0))` 会由系统随机分配，而客户端默认连 8887、
+     * 发现层广播的也是 8887——别人照着广播过来的端口连过去才连得上，但界面里手填
+     * 的默认地址就永远是错的（表现为"手机开了房，别人怎么填都连不上"）。
+     * 安卓的 Intent、iOS 的默认参数都是 0，所以这条是默认路径。
+     */
+    if want_port > 0 {
+        config.port = want_port;
+    }
     if seed != 0 {
         config.seed = seed;
     }
