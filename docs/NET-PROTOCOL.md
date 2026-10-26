@@ -84,7 +84,7 @@
 
 | `t` | 字段 | 服务端校验 | 备注 |
 | --- | --- | --- | --- |
-| `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?, day?, timeOfDay?, weather?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?, worldType?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子）；⑪ `day?`/`timeOfDay?`/`weather?` **同样只有房主带得动**（用户 2026-10-26）：`day` 必须是非负整数、`timeOfDay` 是有限数并折到 `[0,1)`、`weather` 只认三个值，脏数据**各自**丢弃（不整份丢，缺哪个就保留服务端当前那个） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效。⑪ 决定**开房那一刻的时钟与天气**（世界以房主本地为准，时间语意相同）：服务端采纳后立刻对**所有在用房间**广播 `time{snap:true}` / `weather`；**宽限期内重连的房主不采纳**（他带的是断线前那一刻的过期值） |
+| `join` | `v, name, clientId, x, y, z, dimension, room?, password?, host?, world?, day?, timeOfDay?, weather?` | ① `v` 必须等于服务端版本，否则 `error.code='version'` + 关闭 4001；② `clientId` 必须是 8~64 位字母/数字/`-`/`_`，否则 `clientId` + 4002；③ 同一 clientId 已在线 → `duplicate` + 4003；④ 名字清洗（去控制字符与 `<>`、按字符截到 16、空则“玩家”）；⑤ 重复 join → `joined`；⑥ 坐标非有限数回落 `0/80/0`，维度只认 `overworld|nether|end`，其余回落主世界；⑦ `room` 只认 1~24 位字母/数字/`-`/`_`，其余回落默认房间；⑧ 服务端设了 `ROOM_PASSWORD` 时口令必须一致，否则 `error.code='password'` + 关闭 4005；⑨ `host: true` = 开房，一房只认一名房主（已有房主 → `host-taken` + 关闭 4006）；⑩ `world: {name, seed, mode?, difficulty?, worldType?}` **只有房主带得动**，`seed` 必须是 32 位整数、`name` 去掉控制字符与 `<>` 后截到 32 字，脏数据整份丢弃（房间沿用原世界 / 服务端默认种子）；⑪ `day?`/`timeOfDay?`/`weather?` **同样只有房主带得动**（用户 2026-10-26）：`day` 必须是非负整数、`timeOfDay` 是有限数并折到 `[0,1)`、`weather` 只认三个值，脏数据**各自**丢弃（不整份丢，缺哪个就保留服务端当前那个） | 客户端发的是**最后一次 tick 的位置**，所以入服不会先在原点闪一下；重连也用这份最新值。缺坐标时按 `(0, 80, 0)`。`world` 决定**这一局的地形**（L9）：地形是种子的纯函数，所以房主选的哪个世界，队友看到的就是哪片大陆；从属端带了也无效。⑪ 决定**本房开房那一刻的时钟与天气**（世界以房主本地为准，时间语意相同）：服务端采纳后立刻对**本房**广播 `time{snap:true}` / `weather`；**宽限期内重连的房主不采纳**（他带的是断线前那一刻的过期值） |
 | `move` | `x, y, z, yaw, pitch, dimension` + 外观 `held / offhand / armor[] / look[] / sneak / swing / hurt / fire / ride / sleep`（都可缺省）+ `team`（队伍名，可缺省） | 距上一条 < 50ms 直接丢弃；缺字段保留旧值；外观只认这 10 个白名单字段（未知字段丢掉，非正 id 不收）；`look` 必须**恰好 10 个整数**（`[skinTone, shirtColor, pantsColor, hairColor, hairStyle, beard, eyes, eyeColor, build, frame]`，长度不符整条不下发）；`team` 截到 32 字符 | 客户端 100ms 发一条；**没有速度/距离校验**；外观（`联机17`）与队伍（`联机22`）都跟 `move` 走；`look` 是玩家自己捏的皮肤下标（与存档同一套编码），老客户端不带时对端回退"按昵称派生"；`sneak` / `ride` 已被客户端消费成姿势（`联机37`：下沉 0.12 / 抬高 0.42） |
 | `block` | `x, y, z, id, state, dimension, authority?` | 五个数有限；`y ∈ [-64, 320)`；`id ∈ [0, 2000]`；`state ∈ [0, 255]`；水平距玩家 ≤ 64 格（`联机24`，**房主不做距离闸**：他代发的可能是别人在远处的请求的落地结果） | 单条版本，客户端现在走 `blocks`；id 上界**不是精确白名单**（见 §6）；拒收日志限频到 5 秒一条。**有房主的房里只有房主能发**（非房主改用 `edit-request`，由房主落地后重发） |
 | `blocks` | `blocks: [[x, y, z, id, state, dimension], …]`（≤ 4096 条，超出截断）, `authority?` | 逐条与 `block` 同口径（含 y / id / state / 距离，房主同样豁免距离闸）；非法条目单独丢，不整包拒绝 | 合帧版本（`联机12`）：客户端 100ms 一批、同格只留最后一稿。**有房主的房里只有房主能发**。`authority` 是**声明**（L8·MS2：房主说"这批是我算的"），服务端**不据此判权**，下行会按 `isHost` 重新标注 |
@@ -188,7 +188,7 @@
 | --- | --- | --- |
 | 默认端口 | 25187（`PORT`） | `server/index.mjs` |
 | 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`）。**不落盘**：重启后房间退回默认种子 | 同上 |
-| 时钟与天气 | **全服共享一套**（不按房隔离）。开房时以房主上报的 `day`/`timeOfDay`/`weather` 为准（用户 2026-10-26），之后由服务端推进：`time` 每 2 秒、`weather` 切换时广播。代价：多房同服时最后一个开房的人会把时钟拨到自己那儿 | `server/index.mjs` |
+| 时钟与天气 | **每房一套**（用户 2026-10-26）：`room → clock` 存 `startMs/startTimeOfDay/startDay/weather`，房主开房时用他上报的 `day`/`timeOfDay`/`weather` 初始化，`clearRoom` 时删掉；没有房主的房与读档后的默认值用 `defaultClock`（落盘的就是它）。`time` 每 2 秒按房各发一份、`weather` 切换时按房广播，`sleep` 与 `room-config` 只动本房 | `server/index.mjs` |
 | 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发口令**、只列有人的房 | `server/index.mjs` |
 | 玩家 id | 自增、不回收 | 同上 |
 | 方块增量上限 | 500000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/snapshot.mjs` |
@@ -197,7 +197,7 @@
 | `session-sync` | 每包 ≤ 200 条，一条连接最多 256 条 | 同上 |
 | `welcome` 裁剪半径 | 8 区块（128 格，切比雪夫；只带同维度） | `SNAPSHOT_RADIUS_CHUNKS` |
 | 掉落物上限 | 2000 条，满了丢弃新 key | `MAX_ITEMS` |
-| 掉落物广播 | 每人每秒 30 条（固定 1 秒窗口） | `ITEM_RATE_LIMIT` |
+| 掉落物广播 | 令牌桶：每秒 30 条、**突发 400**（用户 2026-10-26）。突发额度是给"进房重播"的——房主进房时客户端会把世界里已有的掉落物重播一遍，固定窗口只能过 30 条且不重试 | `RATE_LIMITS.item` |
 | 位置限频 | 50ms | `MOVE_INTERVAL_MS` |
 | 方块限频 | 令牌桶：每秒 200 格、可攒 400（按**条数**计费，红石连锁一次几十格是正常的） | `server/ratelimit.mjs` |
 | 容器限频 | 令牌桶：每秒 20 次 | 同上 |

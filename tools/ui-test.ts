@@ -6138,8 +6138,15 @@ console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]')
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
   const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
-  check('服务端算出权威天数并随快照下发', serverSrc.includes('function currentDay()') && serverSrc.includes('day: currentDay(),'));
-  check('时间广播也带天数（每 2 秒那条）', /broadcast\(\{ t: 'time', timeOfDay: currentTimeOfDay\(\)[\s\S]{0,60}day: currentDay\(\)/.test(serverSrc));
+  check(
+    '服务端算出权威天数并随快照下发（每房一套时钟，用户 2026-10-26）',
+    serverSrc.includes('function currentDay(clock = defaultClock)') &&
+      serverSrc.includes('day: currentDay(clockOf(player.room)),'),
+  );
+  check(
+    '时间广播也带天数（每 2 秒那条，按房各发一份）',
+    /broadcast\(\{ t: 'time', timeOfDay: currentTimeOfDay\(clock\)[\s\S]{0,60}day: currentDay\(clock\)/.test(serverSrc),
+  );
   check(
     '房主开房时上报本地天数/时刻/天气（只有房主带）',
     /\.\.\.\(this\.wantsHost\s*\?\s*\{ day: this\.localDay, timeOfDay: this\.localTimeOfDay, weather: this\.localWeather \}/.test(
@@ -6148,12 +6155,13 @@ console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]')
   );
   check(
     '服务端开房时采纳房主的时刻与天气（用户 2026-10-26）',
-    serverSrc.includes('if (Number.isFinite(hostTime)) startTimeOfDay') &&
-      serverSrc.includes('if (isWeatherKind(message.weather))'),
+    serverSrc.includes('if (Number.isFinite(hostTime)) clock.startTimeOfDay') &&
+      serverSrc.includes('if (isWeatherKind(message.weather))') &&
+      serverSrc.includes('clocks.set(room, clock)'),
   );
   check(
     '宽限期内重连不覆盖时刻/天气（与清场同一个判据）',
-    /if \(!sameHostReturning\) \{\s*\n\s*const hostDay = Number\(message\.day\)/.test(serverSrc),
+    /if \(!sameHostReturning\) \{\s*\n\s*const clock = createClock\(\)/.test(serverSrc),
   );
   check('客户端收下权威天数', mainSrc.includes('if (day !== undefined) this.netDay = day;'));
   check(

@@ -4202,6 +4202,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       `sameHostReturning`，**宽限期内重连不采纳**），随后对所有在用房间广播
       `time{snap:true}` / `weather`。时钟仍是**全服共享一套**：多房同服时最后一个开房的人
       会把它拨到自己那儿（用户已接受）；`day`/`timeOfDay`/`weather` 各自独立兜底脏数据。
+      ⑧ **时钟改成每房一套**（用户 2026-10-26 复核）：`room → clock`（`startMs` /
+      `startTimeOfDay` / `startDay` / `weather`），房主开房时初始化、`clearRoom` 时删掉；
+      `clockTimer` / `weatherTimer` 按房各推一份，`sleep` 与 `room-config` **只动本房**
+      （以前 `sleep` 会把所有房间的天一起翻过去）；没房主的房用 `defaultClock`
+      （落盘的就是它）。
+      ⑨ **掉落物进房重播**（用户 2026-10-26 复核）：客户端 `syncNetItems` 本来就会把世界里
+      已有的掉落物重播一遍，卡点只是服务端 `item-spawn` 的固定 1 秒窗口（30 条，超出丢弃且
+      不重试）→ 改成令牌桶 **30/s + 突发 400**。同时纠正旧说法："掉落物两端都不落盘"是错的，
+      房主本地存档**存**（`snapshotPlayer().entities` 里的非 ghost 项），只有服务端不存。
       验证：`test:net` **217 → 252 通过 / 0 失败**（清场 9 条 / 懒上行 7 条 / 散件 9 条 /
       v1 升级 6 条 / 改写的持久化 4 条）；`npm run check:fast` 全绿（**593** 单测，新增 7 条
       `tests/net-chunk-snapshot.test.ts`）。
