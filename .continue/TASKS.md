@@ -4247,13 +4247,22 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
-- [ ] R1 **Rust 版跟进 2026-10-26 之后的协议**（需要 `cargo`；改动量大，**必须**编译 + 跑 net-test 验收）。
-  - `session-sync`：容器/牌子/展示框整份上行（房主开局推 → 服务端按房存 → 后来者的 `welcome` 里带上）。
-  - `edits-request` / `edits-reply`：区块级懒上行（`confirmed` / `requested` 两张表 + 5 秒超时重试 + 上限 4096/8）。
-  - **每房一套时钟**：Rust 的 `day_start_ms` / `weather` 仍是全局，多房间时会互相拨表；
-    `join` 也还没采纳房主上报的 `day` / `timeOfDay` / `weather`。
-  - 已补但**未编译验证**（L13）：`no-host`(4010) / `host-offline`(4009) / `maxPlayers` / beacon 的 `has_host` 按房间判断。
-  - 验收：`bash server/rust/run-net-test.sh`（同一份 `tools/net-test.mjs`，当前 **297** 条）+ `cargo test`。
+- [ ] R1 **Rust 版跟进 2026-10-26 之后的协议**（**当前基线 233 / 297**，差 64 条）。
+  - 已补且**编译验证通过**（批次 20261027-0800，`cargo test` 28 绿）：`no-host` / `host-offline` /
+    `maxPlayers` / `/ping` 路由 / `/healthz.beaconPort` / `player` 广播（join 与每条 move）的 `isHost` /
+    `ALLOW_HOSTLESS_ROOMS` 测试开关。
+  - 剩余 64 条按功能分组，**每组的失败断言就是验收**：
+    ① **`day`（天数）** 6 条：`welcome` / `time` 广播带 `day`、房主上报的 `day` 被采纳、晚进的人拿同一天。
+    ② **`join` 采纳时刻/天气** 6 条：房主报的 `timeOfDay` / `weather` 要成为这一房的起点。
+    ③ **每房一套时钟**：Rust 的 `day_start_ms` / `weather` 仍是全局，多房会互相拨表。
+    ④ **快照 v2** 6 条：`version` 1→2，`edits` / `containers` / `signs` / `frames` 不再落盘（房间数据以房主为准）。
+    ⑤ **关房清缓存** 3 条：房主宽限期结束 / 新房主上位时 `welcome` 必须干净。
+    ⑥ **`session-sync`** 6 条：容器/牌子/展示框整份上行 + 给后来者的 `welcome`。
+    ⑦ **`edits-request` / `edits-reply`** 3 条：区块级懒上行（`confirmed` / `requested` + 5 秒重试）。
+    ⑧ **`bye` 当场关房** 2 条：房主主动退出立刻踢人，不等宽限期。
+    ⑨ **外观白名单** 1 条：`appearance` 只转发白名单字段、非正 id 规整成 0。
+    ⑩ **掉落物突发** 1 条：固定窗口 30/s 换成令牌桶（30/s + 突发 400）。
+  - 验收：`bash server/rust/run-net-test.sh`（现在应为 **233/297**，逐项补齐后往 297 走）+ `cargo test`。
 - [x] L13 **Rust 版补齐 `no-host` / `host-offline` / `maxPlayers`**（用户 2026-10-27）。
   - `join`：`hosts` 里没登记这个房名 → `no-host`(4010)；房主登记着但人不在 `players`
     （宽限期内断线）→ `host-offline`(4009)；`protocol.rs` 补这两个关闭码。

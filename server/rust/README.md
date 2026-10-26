@@ -5,26 +5,35 @@
 
 ## 当前状态
 
-**与 JS 版 (`server/node/index.mjs`) 行为对齐到 2026-10-25 那一版协议**：当时 `tools/net-test.mjs`
-有 195 条断言、0 失败（`bash run-net-test.sh`，连跑 3 次稳定）。
+**当前基线：233 / 297 通过**（`bash run-net-test.sh`，同一份 `tools/net-test.mjs`）。
+`cargo test` 28 条全绿。
 
-⚠️ **之后主线又涨到 297 条**，新增的这几项 Rust 侧**还没有**（`no-host` / `host-offline` /
-`maxPlayers` 已补，但**本机没有 cargo，未编译验证**）：
+对齐到 2026-10-25 那一版协议时是 **195 / 195 全绿**；之后主线涨到 297 条，
+Rust 侧已补上一部分（`no-host` / `host-offline` / `maxPlayers` / `/ping` / `isHost` / 测试开关），
+**还剩 64 条**，分布如下（每组的失败断言就是验收）：
 
-| 缺的 | 影响 |
+| 缺的（失败断言数） | 影响 |
 | --- | --- |
-| `session-sync` | 手机当房主时，队友的 `welcome` 里看不到容器/牌子/展示框 |
-| `edits-request` / `edits-reply` | 跨区块的历史方块补发退化成"服务端缓存那份"（无房主的房才该这样） |
-| **每房一套时钟** | Rust 的 `day_start_ms` / `weather` 仍是全局，多房间时互相拨表 |
-| `join` 采纳房主的 `day`/`timeOfDay`/`weather` | 队友进房看到的时间/天气从服务端自己的那份开始 |
+| `day` 天数（6） | 队友 HUD 从第 0 天开始、房主上报的 `day` 不被采纳 |
+| `join` 采纳时刻/天气（6） | 队友进房看到的时间/天气从服务端自己那份开始 |
+| 每房一套时钟（含在上面两组里） | `day_start_ms` / `weather` 是全局，多房会互相拨表 |
+| 快照 v2（6） | `world.json` 仍是 v1、还存着 edits/containers/signs/frames（房间数据该以房主为准） |
+| 关房清缓存（3） | 房主宽限期结束 / 新房主上位后 `welcome` 还带着上一局的东西 |
+| `session-sync`（6） | 队友看不到容器/牌子/展示框 |
+| `edits-request` / `edits-reply`（3） | 跨区块的历史方块补发退化 |
+| `bye` 当场关房（2） | 房主主动退出要等宽限期才踢人 |
+| 外观白名单（1） | `appearance` 会转发未知字段 |
+| 掉落物突发（1） | 固定 30/s 窗口，进房重播被截断 |
 
-验收口径不变：`bash run-net-test.sh`（同一份 `tools/net-test.mjs`，当前 297 条）。
+验收：`bash run-net-test.sh`（现在 **233 / 297**，逐项补齐往 297 走）。
+
+## 验收矩阵
 
 | 判据 | 命令 | 结果 |
 | --- | --- | --- |
-| 协议清洗/校验单测 | `cargo test` | 26 / 0 |
+| 协议清洗/校验单测 | `cargo test` | 28 / 0 |
 | 端到端冒烟（自起自停） | `bash run-smoke.sh` | 20 / 0 |
-| **全量黑盒断言**（与 JS 版共用） | `bash run-net-test.sh` | **195 / 0** |
+| **全量黑盒断言**（与 JS 版共用） | `bash run-net-test.sh` | **233 / 297**（差 64） |
 | 局域网发现（两个真进程互相发现） | `bash run-beacon-smoke.sh` | 12 / 0 |
 | Android 产物 | `bash build-android.sh` | `arm64-v8a` + `x86_64` 各一个 `.so` |
 
