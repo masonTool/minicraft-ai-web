@@ -59,6 +59,8 @@ export const misc = {
   "loading.bootSub": "Texturen und Spielstand werden vorbereitet",
   "misc.cameraModeToast": "Ansicht: {mode}",
   "misc.close": "Schließen",
+  "misc.yes": "Ja",
+  "misc.no": "Nein",
   "misc.toast.nameEmpty": "Der Name darf nicht leer sein",
   "misc.toast.named": "Die {kind} heißt jetzt \"{name}\"",
   "misc.toast.nameUseless": "Dieser Name bringt hier nichts",

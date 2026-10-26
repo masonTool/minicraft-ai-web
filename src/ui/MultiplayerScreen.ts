@@ -19,6 +19,7 @@
  */
 
 import { t, tp } from '../core/i18n/I18n.ts';
+import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
 import { displayServerAddress, normalizeServerUrl, roomsEndpoint } from '../core/net/ServerUrl.ts';
@@ -141,6 +142,8 @@ export class MultiplayerScreen {
       initialName: readStored(STORAGE_NAME) ?? '',
       pickButtonId: 'mp-pick-server',
       pickButtonClass: 'mp-mini',
+      // web 版没有内建服务端：选择面板里「本机 / 允许其它人建房」整块不渲染
+      localServer: clientCapabilities().localServer,
       addressError: t('mp.error.url'),
       /*
        * 选中服务器后**直接把它的房间列表拉出来**（本批）。

@@ -83,6 +83,8 @@ export const menu = {
   'server.pick': 'Choose a server',
   'server.rtt': 'Latency {ms} ms',
   'server.confirm': 'OK',
+  'server.local': 'This device',
+  'server.allowHosting': 'Let others open rooms',
   'mp.hostUnreachable': 'Could not host: server unreachable — check the address and network (is the server running?)',
   'mp.hostHttpsBlocked': 'This page is https and cannot reach that LAN server: allow this site to access the local network (Chrome: the permission icon in the address bar, or Settings → Privacy and security → Local network access), or open the game over http',
   'mp.name': 'Nickname',

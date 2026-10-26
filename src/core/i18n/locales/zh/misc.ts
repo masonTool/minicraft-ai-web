@@ -60,6 +60,8 @@ export const misc = {
   "loading.bootSub": "正在准备材质与存档",
   "misc.cameraModeToast": "视角：{mode}",
   "misc.close": "关闭",
+  "misc.yes": "是",
+  "misc.no": "否",
   "misc.toast.nameEmpty": "名字不能为空",
   "misc.toast.named": "给{kind}起名为「{name}」",
   "misc.toast.nameUseless": "这个名字对它没用",

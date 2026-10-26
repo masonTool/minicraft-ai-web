@@ -26,6 +26,7 @@ import {
 } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
+import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
 import { roomFromWorldName } from '../core/net/RoomName.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
@@ -709,6 +710,8 @@ export class WorldScreen {
       inputClass: 'world-input',
       pickButtonId: 'world-host-pick',
       pickButtonClass: 'world-mini world-pick',
+      // web 版没有内建服务端：选择面板里「本机 / 允许其它人建房」整块不渲染
+      localServer: clientCapabilities().localServer,
       onPick: () => {
         // 选完把上一次的报错擦掉，否则会让人以为新地址也是错的
         hint.classList.remove('error');

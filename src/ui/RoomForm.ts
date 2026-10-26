@@ -47,6 +47,8 @@ export interface RoomFormOptions {
   /** 地址行右侧「▾」的 id 与 class——两个宿主的样式不同，由它们自己给 */
   pickButtonId?: string;
   pickButtonClass?: string;
+  /** 这个客户端能不能内建服务端（透传给选择服务器面板的「本机」区） */
+  localServer?: boolean;
   /** 地址不合法时的文案（加入面板与开房对话框原本文案不同，保持各自主张） */
   addressError?: string;
   /** 房间为空时的文案（仅 `mode: 'host'` 用得上） */
@@ -240,6 +242,7 @@ export class RoomForm {
     if (!this.picker) {
       this.picker = new ServerPicker({
         currentAddress: () => this.urlInput.value,
+        localServer: this.options.localServer === true,
         onPick: (address) => {
           this.urlInput.value = address;
           this.splitAddress();

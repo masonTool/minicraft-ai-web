@@ -23,6 +23,9 @@ import {
 import { displayServerAddress } from '../core/net/ServerUrl.ts';
 import { t, tp } from '../core/i18n/I18n.ts';
 
+/** 本机「允许其它人建房」的状态键（只有内建服务端能力的客户端会读它） */
+const ALLOW_HOSTING_KEY = 'mc.mp.allowHosting';
+
 export interface ServerPickerActions {
   /** 当前输入框里的地址（用来推导默认网段，以及"当前"标记） */
   currentAddress: () => string;
@@ -35,6 +38,13 @@ export interface ServerPickerActions {
    * 以后定了地址只要让这个方法返回 URL，列表就长出来了，别处不用改。
    */
   publicServersUrl?: () => string;
+  /**
+   * 这个客户端能不能内建服务端（`clientCapabilities().localServer`）。
+   *
+   * 为 false（web 版）时**整块「本机 / 允许其它人建房」都不渲染**：浏览器起不了监听
+   * socket，做成能点的开关只会骗玩家。原生客户端把这个位改成 true，界面自动长出来。
+   */
+  localServer?: boolean;
 }
 
 interface PublicServer {
@@ -159,7 +169,15 @@ export class ServerPicker {
     this.confirmButton.addEventListener('click', () => this.confirm());
     actionsRow.append(cancelButton, this.confirmButton);
 
-    this.panel.append(head, lanSection, publicSection, actionsRow);
+    // 「本机」只在能内建服务端的客户端出现（web 版没有这一块）
+    const localSection = this.buildLocalSection();
+    this.panel.append(
+      head,
+      ...(localSection ? [localSection] : []),
+      lanSection,
+      publicSection,
+      actionsRow,
+    );
     this.element.append(this.panel);
     // 点遮罩关掉：这一层是"辅助面板"，不该有必须点按钮才能离开的感觉
     this.element.addEventListener('click', (event) => {
@@ -201,6 +219,75 @@ export class ServerPicker {
 
   dispose(): void {
     this.element.remove();
+  }
+
+  /**
+   * 「本机」区（本批）：只有能内建服务端的客户端才有。
+   *
+   * 开关表达的是"这台设备是否作为服务器开放给别人建房"——状态存在本机，默认允许。
+   * 真正的执行在原生客户端的内建服务器里；本批只把入口、默认值与语义定下来，
+   * web 版整块不渲染（`localServer` 为 false）。
+   */
+  private buildLocalSection(): HTMLDivElement | null {
+    if (this.actions.localServer !== true) return null;
+
+    const section = document.createElement('div');
+    section.className = 'server-picker-section';
+    const label = document.createElement('div');
+    label.className = 'server-picker-label';
+    label.textContent = t('server.local');
+
+    const row = document.createElement('div');
+    row.className = 'server-picker-row';
+    const title = document.createElement('span');
+    title.className = 'server-picker-status';
+    title.textContent = t('server.allowHosting');
+
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'mp-mini';
+    yes.id = 'server-allow-hosting-yes';
+    yes.textContent = t('misc.yes');
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'mp-mini';
+    no.id = 'server-allow-hosting-no';
+    no.textContent = t('misc.no');
+
+    const sync = (value: boolean): void => {
+      yes.setAttribute('aria-pressed', String(value));
+      no.setAttribute('aria-pressed', String(!value));
+    };
+    yes.addEventListener('click', () => {
+      this.writeAllowHosting(true);
+      sync(true);
+    });
+    no.addEventListener('click', () => {
+      this.writeAllowHosting(false);
+      sync(false);
+    });
+    sync(this.readAllowHosting());
+
+    row.append(title, yes, no);
+    section.append(label, row);
+    return section;
+  }
+
+  /** 本机开关状态（默认允许）：读不到（无痕模式）就当允许 */
+  private readAllowHosting(): boolean {
+    try {
+      return window.localStorage.getItem(ALLOW_HOSTING_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  }
+
+  private writeAllowHosting(value: boolean): void {
+    try {
+      window.localStorage.setItem(ALLOW_HOSTING_KEY, value ? '1' : '0');
+    } catch {
+      // 同上：记不住不影响这一局
+    }
   }
 
   /** 默认网段：当前地址 → 页面地址 → 常见私网兜底 */

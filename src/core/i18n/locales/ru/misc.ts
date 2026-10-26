@@ -59,6 +59,8 @@ export const misc = {
   "loading.bootSub": "Подготовка текстур и сохранения",
   "misc.cameraModeToast": "Вид: {mode}",
   "misc.close": "Закрыть",
+  "misc.yes": "Да",
+  "misc.no": "Нет",
   "misc.toast.nameEmpty": "Имя не может быть пустым",
   "misc.toast.named": "Имя {kind}: «{name}»",
   "misc.toast.nameUseless": "Это имя здесь ничего не даёт",

@@ -81,6 +81,8 @@ export const menu = {
   'server.pick': 'Server wählen',
   'server.rtt': 'Latenz {ms} ms',
   'server.confirm': 'OK',
+  'server.local': 'Dieses Gerät',
+  'server.allowHosting': 'Andere Räume öffnen lassen',
   'mp.hostUnreachable': 'Raum konnte nicht geöffnet werden: Server nicht erreichbar – Adresse und Netz prüfen (läuft der Server?)',
   'mp.hostHttpsBlocked': 'Diese Seite läuft über https und erreicht diesen LAN-Server nicht: erlaube der Seite den Zugriff aufs lokale Netzwerk (Chrome: Symbol in der Adressleiste oder Einstellungen → Datenschutz und Sicherheit → Lokales Netzwerk) oder öffne das Spiel über http',
   "mp.name": "Spielername",

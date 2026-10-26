@@ -2094,6 +2094,13 @@
       .mp-mini {
         flex: 0 0 auto; font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer;
       }
+      /* 开关型按钮（本批：「允许其它人建房」的是/否）：选中的那个高亮。
+         用 outline 而不是 border —— 不改 .mp-mini 的盒模型，其它按钮不受影响 */
+      .mp-mini[aria-pressed="true"] {
+        background: rgba(120, 190, 255, .22);
+        outline: 2px solid #8fc7ff;
+        color: #fff;
+      }
       /* 房间/口令同一行：口令那一格的标签比主标签窄一半 */
       .mp-row > span.mp-row-label-sub { flex: 0 0 2.6em; text-align: right; opacity: .8; }
       /* 房间列表：占满右列剩下的高度（列内自己滚），不再固定 96px 三行 */

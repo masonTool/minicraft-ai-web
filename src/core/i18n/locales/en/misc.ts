@@ -62,6 +62,8 @@ export const misc = {
   "loading.bootSub": "Preparing textures and save data",
   "misc.cameraModeToast": "Camera: {mode}",
   "misc.close": "Close",
+  "misc.yes": "Yes",
+  "misc.no": "No",
   "misc.toast.nameEmpty": "Name cannot be empty",
   "misc.toast.named": "Named the {kind} \"{name}\"",
   "misc.toast.nameUseless": "That name does nothing here",

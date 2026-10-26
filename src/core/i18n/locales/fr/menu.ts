@@ -81,6 +81,8 @@ export const menu = {
   'server.pick': 'Choisir un serveur',
   'server.rtt': 'Latence {ms} ms',
   'server.confirm': 'OK',
+  'server.local': 'Cet appareil',
+  'server.allowHosting': 'Autoriser d’autres à ouvrir',
   'mp.hostUnreachable': 'Impossible d’ouvrir la partie : serveur injoignable — vérifie l’adresse et le réseau (le serveur tourne-t-il ?)',
   'mp.hostHttpsBlocked': 'La page est en https et ne joint pas ce serveur local : autorisez ce site à accéder au réseau local (Chrome : icône dans la barre d’adresse, ou Paramètres → Confidentialité → Accès au réseau local), ou ouvrez le jeu en http',
   "mp.name": "Pseudo",

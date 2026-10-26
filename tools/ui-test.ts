@@ -6470,6 +6470,18 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       pickerSrc.includes('this.confirmButton.disabled = true;') &&
       pickerSrc.includes("t('server.confirm')"),
   );
+  /*
+   * 「允许其它人建房」是**客户端能力**开关（用户 2026-10-26）：不是服务端策略，
+   * 客户端无权决定别的设备能不能开房。web 版没有内建服务端，整块不渲染。
+   */
+  check(
+    '「允许其它人建房」只给能内建服务端的客户端（web 版整块不渲染）',
+    pickerSrc.includes('if (this.actions.localServer !== true) return null;') &&
+      pickerSrc.includes("t('server.allowHosting')") &&
+      readFileSync(new URL('../src/core/net/ClientCapabilities.ts', import.meta.url), 'utf8').includes(
+        'localServer: false',
+      ),
+  );
 
   // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
   check(

@@ -80,6 +80,8 @@ export const menu = {
   'server.pick': 'Escolher servidor',
   'server.rtt': 'Latência {ms} ms',
   'server.confirm': 'OK',
+  'server.local': 'Este dispositivo',
+  'server.allowHosting': 'Permitir que outros abram salas',
   'mp.hostUnreachable': 'Não foi possível abrir a sala: servidor inacessível — confira o endereço e a rede (o servidor está rodando?)',
   'mp.hostHttpsBlocked': 'A página está em https e não alcança esse servidor da rede local: permita que este site acesse a rede local (Chrome: ícone na barra de endereço ou Configurações → Privacidade → Acesso à rede local), ou abra o jogo por http',
   "mp.name": "Apelido",

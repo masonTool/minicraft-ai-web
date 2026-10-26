@@ -82,6 +82,8 @@ export const menu = {
   'server.pick': '选择服务器',
   'server.rtt': '延迟 {ms}ms',
   'server.confirm': '确定',
+  'server.local': '本机',
+  'server.allowHosting': '允许其它人建房',
   'mp.hostUnreachable': '开房失败：连不上服务器，检查地址和网络（服务端启动了吗）',
   'mp.hostHttpsBlocked': '当前页面是 https，连不上这台局域网服务器：请在浏览器里允许本站「访问本地网络」（Chrome：地址栏左侧的权限图标，或设置 → 隐私与安全 → 本地网络访问），或改用 http 地址打开游戏',
   'mp.name': '昵称',
