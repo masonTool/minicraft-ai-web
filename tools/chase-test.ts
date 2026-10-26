@@ -88,7 +88,12 @@ console.log('\n[接线守卫]');
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check('updateAi 用纯函数判追击', mobSrc.includes('const chasing = shouldChasePlayer(chaseInput)'));
   check('不再自己拼 pacified', !mobSrc.includes('const pacified ='));
-  check('六个维度都传进去了', mobSrc.includes('neutralInLight: this.type.neutralInLight') && mobSrc.includes('playerInvisible: ctx.playerInvisible === true'));
+  // 用户 2026-10-26：隐身现在跟着"这一帧的目标"走（房主联机时目标可能是远端玩家）
+  check(
+    '六个维度都传进去了',
+    mobSrc.includes('neutralInLight: this.type.neutralInLight') &&
+      mobSrc.includes('playerInvisible: player?.invisible === true'),
+  );
   check(
     '记仇只在"非环境"来源时置位（批次 471）',
     mobSrc.includes("const provoked = source !== undefined && source.kind !== 'environment'") &&

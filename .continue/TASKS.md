@@ -4230,6 +4230,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       去掉距离渐隐（`remoteNameTagOpacity` 整段删除，固定传 1）；④ **生存模式**下准星锁定
       队友显示一红（`hp`）一黄（`food`）两条细条——为此 `move` 新增 0~20 的 `hp`/`food`；
       ⑤ 野怪血条变小变细（世界宽 `1.1~2.4` → `0.7~1.4`、画布 `256×40` → `256×16`、条 24px → 12px）。
+      ⑬ **野怪也要打房客**（用户 2026-10-26）：根因是 `EntityContext.player` 只有一个（本地玩家 =
+      房主），从属端又不跑 AI，于是怪物看不见房客。新增 `EntityContext.targetFor(mob)` 与
+      `PlayerTarget`，`Mob` 统一走 `playerTarget(ctx)`（`updateAi` / `deliverMelee` /
+      `distanceToPlayerSq` / `flyAi`），幻翼同步改；房主端按"最近的玩家"挑目标。伤害走新消息
+      `mob-attack`（房主 → 服务端 → **只转给被打的那个人**），接收方本地 `damagePlayer`——
+      护甲/无敌帧/难度倍率都按他那边的算。⚠️ 两处已知差异：末影龙（`EndBoss`）仍只追房主；
+      远端玩家挨这一下**不会**中洞穴蜘蛛的毒（`PlayerTarget.afflict` 没有对应的网络通道）。
       验证：`test:net` **217 → 252 通过 / 0 失败**（清场 9 条 / 懒上行 7 条 / 散件 9 条 /
       v1 升级 6 条 / 改写的持久化 4 条）；`npm run check:fast` 全绿（**593** 单测，新增 7 条
       `tests/net-chunk-snapshot.test.ts`）。
