@@ -9,6 +9,34 @@
 
 ---
 
+## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0600
+
+目标（用户 2026-10-26）：服务器跑在电脑上、手机在同一局域网里**开房失败**（之前能成功）。
+
+- [x] [开房1] 预检把「连不上」与「被浏览器拦（https 页面连 ws://）」分开：`HostPreflight` 新增 `https-blocked`，开房对话框给专门文案 → 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`HostPreflightDeps` 加 `pageProtocol`（默认真实 `location.protocol`）；`pageProtocol === 'https:' && /^ws:\/\//` 时**不建 socket**直接返回 `https-blocked`；`main.ts` 映射成 `mp.hostHttpsBlocked`（六语言）；两条失败分支都补 `console.warn`（带目标 URL）
+  - 为什么：混合内容跟网络无关——https 页面连 `ws://192.168.x.x` 会被浏览器直接拒，玩家改 IP、换端口、重启服务器全都没用。以前两种情况都回 `unreachable`，于是手机（页面在 https 上）开房失败看到的是一句"连不上服务器"，方向从一开始就错了
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **8/8**（+2：https+ws → https-blocked 且**不建 socket**；http+ws 正常放行）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过
+  - 批次：20261026-0600
+- [x] [开房2] 服务端启动打印**局域网地址**（不再只打 localhost）→ 验收：真机启动输出
+  - 做什么：`server/index.mjs` 用 `os.networkInterfaces()` 列出所有非 internal 的 IPv4，逐条打 `ws://<ip>:<port>`，并把原来那句"玩家把游戏指向 ws://localhost 即可联机"改成"本机自连（只有这台机器能用）"
+  - 为什么：`localhost` 只对跑服务端那台机器成立，手机填它指的是手机自己——这正是"手机上不知道填什么/填了连不上"的常见起点
+  - 验证：实测启动输出 `192.168.66.187 → ws://192.168.66.187:25190`（本机真实网卡）
+  - 批次：20261026-0600
+- [x] [开房3] 断言：ui-test 三条（预检分支 / 文案 / 启动打印）→ 验收：`npm run check:fast`
+  - 做什么：`tools/ui-test.ts` 加三条结构断言
+  - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
+  - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
+  - 批次：20261026-0600
+
 ## 批次 20261026-0500 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26：「服务器地址除了手输，右侧加一个选择按钮 → 服务器选择界面（局域网扫描 / 公开服务器）」，
@@ -266,30 +294,4 @@
   - 验证：`npm run test:ui` **1147/0**（+2 结构断言：派生规则在 core 且面板共用、提示六语言都有且中文含"域名"）；`npm run audit:i18n` 通过；`npm run check:fast` 全绿（顺带修两条跟着改口径的旧断言：`tests/room-probe.test.ts` 的地址形态、`tests/net-server-url.test.ts` 的显示与 `/rooms`）
   - 未验：连一台真实公网服务器（手头没有 `wss://…/ws` 的部署；派生结果由单测钉住）
   - 批次：20261026-0110
-
-## 批次 20261026-0030 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：PC 端有些设置项本来就无效，不该出现在设置里——「手指跟随」（摇杆跟随手指）、
-> 「瞄准方式」（手指落点 / 屏幕中心）。PC 靠键鼠，没有摇杆、瞄准永远是屏幕中心。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0030
-
-目标（用户 2026-10-26 反馈）：PC 端有些设置项本来就无效，不该出现在设置里——
-「手指跟随」（摇杆跟随手指）、「瞄准方式」（手指落点 / 屏幕中心）。PC 靠键盘鼠标，
-没有摇杆、瞄准永远是屏幕中心。
-
-- [x] [PC设置1] PC 端不再显示触摸专属的三个控制项（惯用手 / 瞄准 / 摇杆）：`src/ui/SettingsScreen.ts` 的 `controls` 块把这三行包进 `isTouchUi()` → 验收：`npm run test:ui` 断言三行都在触摸判据里 + 桌面截图设置页控制组只剩视角/反转/自动跳跃/快速进食/按钮大小与滑杆
-  - 做了什么：`SettingsScreen` 控制页里「惯用手 / 瞄准 / 摇杆」三行包进 `if (isTouchUi())`（不创建，不是 disabled），并写明为什么它们对键鼠无效
-  - 为什么：三项都是触摸控制器的输入（`handedness`/`touchStick` 只喂 `TouchControls` 的布局与死区，`aimMode` 的两处消费都带 `this.touch !== null`）。摆在 PC 设置里只会让人以为"设错了"
-  - 验证：桌面 1280×720 打开主菜单设置 → 控制页行名 `视野/按钮大小/灵敏度/视角/反转视角/自动跳跃/快速进食`（**无**惯用手/瞄准/摇杆，20 行）；手机 792×360 仍有这三行（23 行）；截图 `.tmp/shots/settings-pc.png` 两列布局正常；`npm run test:ui` **1145/0**
-  - 批次：20261026-0030
-- [x] [PC设置2] 把「瞄准恒为中心点」从"只是没显示"变成"钉住"：`main.ts` 三处 `aimMode` 消费点都带 `this.touch !== null`，补断言防以后有人把它用到键鼠上 → 验收：`npm run test:ui` 通过
-  - 做了什么：`tools/ui-test.ts` 补三条断言——三行确实在 `isTouchUi()` 块里、`usesCenterAim()` 与 `aim-center` body class 两处消费都带 `this.touch !== null`、键鼠分支走 `PlayerPhysics.lookDirection` 的视线射线
-  - 为什么：PC 的"中心点"是既有行为（没有手指落点这回事），但代码里它表现为"`touch === null` 时落到 else 分支"，属于**隐式**保证；一旦有人给 PC 接上 `touchTapPoint`，取物就会变成跟着鼠标位置走。断言把这条隐式契约写死
-  - 验证：`npm run test:ui` **1145/0**（+3 条）；`npx tsc --noEmit` 干净
-  - 批次：20261026-0030
 
