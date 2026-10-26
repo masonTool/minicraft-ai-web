@@ -9,6 +9,32 @@
 
 ---
 
+## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
+> 不需要我们提前拒绝——把上一批那两处「硬拦」改成「先试、再提示」。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0620
+
+目标（用户 2026-10-26）：https 页面能不能访问局域网设备，是**浏览器权限**层面的开关
+（Chrome「本地网络访问」/ Firefox 对应开关），不该由我们提前拒绝——把上一批的两处"硬拦"改成"先试、再提示"。
+
+- [x] [授权1] 「选择服务器」面板 https 页面不再禁用扫描：照样扫，扫不到才提示去开权限 → 验收：`npm run test:ui`
+  - 做什么：`ServerPicker.open()` 不再 `disabled = true`，只在状态行放一句 `server.httpsHint`；扫描结束仍为空且页面是 https 时，把"没找到 · 去授权"合并成一行提示；`server.scanBlocked` 文案换成 `server.httpsHint`（六语言，内容改为"允许本站访问本地网络"的具体路径）
+  - 为什么：Chrome 的 Local Network Access 权限开通后，https 页面可以访问 `http://` / `ws://` 局域网设备（Firefox 也有开关）。禁用按钮等于把一条其实可用的路堵死
+  - 验证：`npm run test:ui` **1195/0**（断言改成"不再禁用 + 有授权提示"）；`npx tsc --noEmit` 干净；`audit:i18n` 通过
+  - 批次：20261026-0620
+- [x] [授权2] 开房预检先尝试、连不上才归因「https 需要授权」→ 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`preflightHost` 取消提前 return，照常 `canOpen`；失败**且**（页面 https + 目标 ws://）才回 `https-blocked`；该原因的文案改成同时给两条办法（去授权 / 换 http 打开）
+  - 为什么：上一批我把它写成"连尝试都不尝试"，同样是替玩家做了决定。授权过的浏览器本来就该能开房
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **9/9**（+2：https+ws 连不上 → https-blocked 且**确实尝试过**；https+ws **连得上 → 放行**）
+  - 未验：真机在授权后开房（要 Chrome 的 LNA 权限，无头环境造不出来）
+  - 批次：20261026-0620
+
 ## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
@@ -268,30 +294,4 @@
   - 验证：双浏览器对比同一坐标周围 13×9×13 的水方块数——修前 guest 恒为 2、host 从 2 涨到 114（完全不跟）；修后 guest 与 host 同步跟随（1→53 逐拍对齐，滞后约 0.7 秒），`guest 距房主: 0.0 格`；`[FLUID_DBG]` 两侧数字一致（发出 7 / 应用 7）。`npm run test:ui` **1157/0**（+2 条结构断言：`joinWorld` 分支跳过位置恢复、`[FLUID_DBG]` 计数在位）；`npm run test:net` 208/0；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
   - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
   - 批次：20261026-0130
-
-## 批次 20261026-0110 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：加入房间与开房，地址栏只收 **IP 或域名**，前后缀自动派生——
-> IP 走局域网明文 ws + 固定端口，域名走 `wss://域名/ws`。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0110
-
-目标（用户 2026-10-26）：加入房间与开房，地址栏只收 **IP 或域名**，
-前缀/后缀自动派生——IP 走局域网明文 ws + 固定端口，域名走 `wss://域名/ws`。
-
-- [x] [地址1] 地址栏只收 IP 或域名，前后缀自动派生：`src/core/net/ServerUrl.ts` 新增 `isLanHost` / `deriveFromBare`，`normalizeServerUrl` 与 `displayServerAddress` 按地址类型收放 → 验收：`npx vitest run tests/net-server-url.test.ts`
-  - 做了什么：新增 `DEFAULT_WS_PATH='/ws'`、`isLanHost()`（IPv4 / `[IPv6]` / `localhost` / `*.local`，域名不算）、`deriveFromBare()`（IP → `ws://host:25187`、域名 → `wss://host/ws`，显式端口/路径保留）；`normalizeServerUrl` 对**裸输入**走派生、对显式协议仍原样尊重；`displayServerAddress` 改成只显示 `host[:端口][/非默认路径]`（wss 不再保留协议头、默认 `/ws` 不显示）
-  - 为什么：用户的两句原话是"局域网直接填 IP""是域名就自动用 wss 前后缀"。派生规则必须与 `resolveDefaultServerUrl()` 给 https 页面的那条**同一个**路径常量，否则会出现"默认能连、手填连不上"
-  - 验证：`npx vitest run tests/net-server-url.test.ts` **35/35**（新增 6 组派生：IP/localhost、IP+显式端口、域名、域名+端口、域名+自定义路径、显式协议；`displayServerAddress` 与往返各 1 组）；`npx tsc --noEmit` 干净
-  - 批次：20261026-0110
-- [x] [地址2] 房间与口令改走 query、`/rooms` 保留反代端点前缀、占位文案改成"IP 或域名"：`formatServerUrl` / `parseServerUrl` / `roomsEndpoint` + 六语言 `mp.serverHint` → 验收：`npm run test:ui` + `npm run audit:i18n`
-  - 做了什么：`formatServerUrl` 从 `/red?pw=1` 改成 `?room=red&pw=1`（path 留给 `/ws`）；`parseServerUrl` 优先读 query，老格式仍按 path 解析但**跳过 `/ws` 端点段**，且 `url` 现在保留端点路径；`roomsEndpoint` 保留 WS 的路径前缀（`wss://d/ws` → `https://d/ws/rooms`），老格式的房名段仍去掉；`mp.serverHint` 六语言改为"IP 或域名"
-  - 为什么：`wss://domain/ws` 的 path 已经被反代端点占住，再往后拼房名会变成 `/ws/red`——`parseServerUrl` 会把 `ws` 当房名、反代也可能按 `handle_path /ws*` 剥错前缀。房间/口令走 query 后两条地址形态共用一套解析
-  - 验证：`npm run test:ui` **1147/0**（+2 结构断言：派生规则在 core 且面板共用、提示六语言都有且中文含"域名"）；`npm run audit:i18n` 通过；`npm run check:fast` 全绿（顺带修两条跟着改口径的旧断言：`tests/room-probe.test.ts` 的地址形态、`tests/net-server-url.test.ts` 的显示与 `/rooms`）
-  - 未验：连一台真实公网服务器（手头没有 `wss://…/ws` 的部署；派生结果由单测钉住）
-  - 批次：20261026-0110
 
