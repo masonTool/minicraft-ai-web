@@ -411,6 +411,7 @@ import {
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
+import { netErrorText } from './core/net/NetErrorText.ts';
 import { JOIN_WORLD_PREFIX, summaryFromRoom } from './core/net/JoinWorld.ts';
 import { displayServerAddress } from './core/net/ServerUrl.ts';
 import { describeSimMode, shouldSimulate } from './core/net/SimMode.ts';
@@ -2102,19 +2103,11 @@ class App {
       /*
        * 协议级错误进消息栏：只写在调试面板里，手机上（没有 F3）等于没提示。
        *
-       * 重名（本轮）单独走 i18n：服务端那句是中文，非中文玩家看不懂；
-       * 按 code 翻译比按 message 匹配可靠（文案随时会改）。
+       * 按 code 查 `netErrorText()`：服务端那句是中文，非中文玩家看不懂；
+       * 按 code 翻译比按 message 匹配可靠（文案随时会改）。查不到专门文案才回退原话
+       * ——比一律显示"服务器错误"更有信息量。
        */
-      const text =
-        code === 'duplicate-name'
-          ? t('say.net.duplicateName')
-          : // 房名被占（用户 2026-10-25：开房撞名要"创建不成功"，而且得说人话）
-            code === 'host-taken'
-            ? t('say.net.hostTaken')
-            : // 房主不在线时访客被挡在门外（用户 2026-10-26）
-              code === 'host-offline'
-              ? t('say.net.hostOffline')
-              : message;
+      const text = netErrorText(code) || message;
       this.netStatus = text;
       this.chat.push(text, 'error');
       this.chatLine = text;

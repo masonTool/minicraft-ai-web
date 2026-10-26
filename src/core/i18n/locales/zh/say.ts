@@ -88,6 +88,7 @@ export const say = {
   'say.net.duplicateName': '房间内已有同名玩家，请改名后再加入',
   'say.net.hostTaken': '这个房间名已经有房主了，换一个名字再开',
   'say.net.hostOffline': '房主暂时不在房间，等他回来再进',
+  'say.net.password': '房间密码不对，检查一下再进',
   'say.net.playerDied': '「{name}」死了',
   'say.net.roomTime': '房主把时间调到了 {time}',
   'say.net.roomGameMode': '房主把游戏模式改成了{mode}',

@@ -24,6 +24,10 @@ export const NET_PROTOCOL_VERSION = 2;
  *
  * `host-taken`（L8）：这个房间已经有房主。**算致命**——房主不走，重连一万次也还是他；
  * 每 3 秒撞一次墙只会把日志刷满、把"开不了房"这个事实埋掉。
+ *
+ * `password`（本批）：房间密码不对。**算致命**——服务端在 `join` 那道闸就拒了，密码
+ * 不改重连多少次都一样。漏掉它会让填错密码的玩家看到状态在「重连中/已断开」之间跳，
+ * 而真正该看到的是「密码不对，改一下」。
  */
 export type ProtocolErrorCode =
   | 'version'
@@ -33,6 +37,7 @@ export type ProtocolErrorCode =
   | 'host-taken'
   | 'host-left'
   | 'host-offline'
+  | 'password'
   | 'bad-json'
   | 'unknown'
   | 'joined';
@@ -51,6 +56,8 @@ export function isFatalProtocolError(code: string): boolean {
     // 正确做法是等房主回来再手动进（面板上的房间列表会跟着出现/消失）。
     code === 'host-offline' ||
     // `duplicate-name`（本轮）：房间里已经有同名玩家。不改名重连一万次也还是重名
-    code === 'duplicate-name'
+    code === 'duplicate-name' ||
+    // `password`（本批）：房间密码不对。重连只会被同一句话再拒一次
+    code === 'password'
   );
 }

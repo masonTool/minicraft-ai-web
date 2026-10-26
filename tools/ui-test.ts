@@ -5943,6 +5943,8 @@ console.log('\n[皮肤同步与昵称唯一]');
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const protocolSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  // 错误码 → 文案的映射本批搬出了 main.ts（`netErrorText`），断言跟着改读新位置
+  const netErrorSrc = readFileSync(new URL('../src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
   const appearanceSrc = readFileSync(new URL('../src/core/net/RemoteAppearance.ts', import.meta.url), 'utf8');
   check(
     '外观按玩家自己的下标发送（move.look，10 个字段）',
@@ -5960,7 +5962,7 @@ console.log('\n[皮肤同步与昵称唯一]');
     '重名是致命错误，且提示走 i18n（不是服务端那句中文）',
     protocolSrc.includes("'duplicate-name'") &&
       /code === 'duplicate-name'/.test(protocolSrc) &&
-      mainSrc.includes("t('say.net.duplicateName')"),
+      netErrorSrc.includes("t('say.net.duplicateName')"),
   );
 }
 
@@ -6122,6 +6124,8 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
   const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  // 错误码 → 文案的映射本批搬到 `NetErrorText.ts`，这里两处都认：预检直接用的那句 + 映射表
+  const netErrorSrc = readFileSync(new URL('../src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
   check('开房对话框有地址输入框（默认回填当前地址）', worldSrc.includes("addressInput.id = 'world-host-address'") && worldSrc.includes('this.actions.defaultHostAddress?.()'));
   check('房名必填：空值当场提示，不再静默退回默认房名', worldSrc.includes('const rawRoom = roomInput.value.trim();') && worldSrc.includes("showError(t('world.roomRequired'))"));
   check('地址必填：归一化失败就提示（只填 IP 也能过）', worldSrc.includes('const base = normalizeServerUrl(addressInput.value);') && worldSrc.includes("showError(t('world.addressRequired'))"));
@@ -6133,7 +6137,10 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
     '开房用的是玩家填的地址（不再写死 defaultServerUrl）',
     mainSrc.includes('pendingHostRoom = { room, password, baseUrl };') && mainSrc.includes('baseUrl: intent.baseUrl,'),
   );
-  check('房名被占走 i18n（不是服务端那句中文）', mainSrc.includes("code === 'host-taken'") && mainSrc.includes("t('say.net.hostTaken')"));
+  check(
+    '房名被占走 i18n（不是服务端那句中文）',
+    netErrorSrc.includes("t('say.net.hostTaken')") && mainSrc.includes("t('say.net.hostTaken')"),
+  );
   check('校验提示复用同一行、只换颜色', htmlSrc.includes('.world-edit-hint.error {'));
 }
 
