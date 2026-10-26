@@ -40,6 +40,10 @@ pub const CLOSE_PASSWORD: u16 = 4005;
 pub const CLOSE_HOST_TAKEN: u16 = 4006;
 pub const CLOSE_HOST_LEFT: u16 = 4007;
 pub const CLOSE_DUPLICATE_NAME: u16 = 4008;
+/// 房主暂时不在房间（宽限期内断线）：与 Node 版 `CLOSE_HOST_OFFLINE` 同值
+pub const CLOSE_HOST_OFFLINE: u16 = 4009;
+/// 这个房名从来没有房主（用户 2026-10-27）：空房间不许进
+pub const CLOSE_NO_HOST: u16 = 4010;
 
 /// 世界高度范围（与客户端 `core/world/Chunk.ts` 一致）。
 pub const WORLD_MIN_Y: i32 = -64;

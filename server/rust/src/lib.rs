@@ -71,6 +71,8 @@ pub struct Config {
     pub beacon_port: u16,
     /// 发现用哪块网卡（`0.0.0.0` = 系统默认；同机验收时显式指 `127.0.0.1`）
     pub beacon_if: std::net::Ipv4Addr,
+    /// 一个房间的容量（只用于 `/rooms` 显示 `在线/容量`，**不是准入限制**）
+    pub max_players: u32,
 }
 
 impl Config {
@@ -98,6 +100,12 @@ impl Config {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(std::net::Ipv4Addr::UNSPECIFIED);
+        // 房间容量（默认 10，与 Node 版 `MAX_PLAYERS` 同口径）；脏值/0 退回默认
+        let max_players = std::env::var("MAX_PLAYERS")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(10);
         Self {
             port,
             seed,
@@ -108,6 +116,7 @@ impl Config {
             beacon,
             beacon_port,
             beacon_if,
+            max_players,
         }
     }
 }
@@ -184,6 +193,7 @@ pub async fn start(config: Config) -> io::Result<Server> {
         instance: beacon::new_instance_id(),
         beacon_on: config.beacon,
         peers: Mutex::new(beacon::PeerBook::new()),
+        max_players: config.max_players,
     });
 
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;
@@ -473,6 +483,8 @@ async fn serve_http(stream: &mut TcpStream, hub: &Arc<Hub>, path: &str) {
             "protocol": PROTOCOL_VERSION,
             // 服务端级口令：只说"要不要"，不下发口令本身
             "passwordRequired": !hub.password.is_empty(),
+            // 房间容量（只给界面显示 `在线/容量`；不拒绝第 N+1 个人，见 Node 版同名字段）
+            "maxPlayers": hub.max_players,
             "rooms": listing,
         })
         .to_string();

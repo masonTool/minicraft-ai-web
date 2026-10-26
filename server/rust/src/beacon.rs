@@ -159,7 +159,9 @@ pub fn announce_of(state: &State, instance: &str, password_required: bool) -> An
         room,
         seed: world.seed,
         players,
-        has_host: !state.hosts.is_empty(),
+        // 只看**这一间**有没有房主：以前写 `!hosts.is_empty()`，多房间时会报"别的房间有房主"，
+        // 客户端就会对着一个没人跑模拟的房说「可以进」。
+        has_host: state.hosts.contains_key(&room),
         password_required,
     }
 }

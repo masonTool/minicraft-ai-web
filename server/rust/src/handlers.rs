@@ -60,6 +60,8 @@ pub struct Hub {
     pub beacon_on: bool,
     /// 听到的其它实例（UDP 发现）
     pub peers: Mutex<crate::beacon::PeerBook>,
+    /// 一个房间的容量（只用于 `/rooms` 显示 `在线/容量`，**不是准入限制**）
+    pub max_players: u32,
 }
 
 impl Hub {
@@ -273,6 +275,39 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
                 conn.reject(&hub.traffic, "host-taken", "这个房间已经有房主了", CLOSE_HOST_TAKEN);
                 return None;
             }
+        }
+    }
+
+    /*
+     * 没有房主的房间不许进（用户 2026-10-27，与 Node 版同一口径）。
+     *
+     * 房间 = "房主开着世界"这一局：`hosts` 里没登记就是这一局不存在，进去只会看到一个
+     * **不推进的世界**（方块能放、怪不动、红石不亮），而界面一切正常。
+     * 房主在宽限期内断线同理——`hosts` 有登记，但人不在 `players` 里。
+     */
+    if !wants_host {
+        match st.hosts.get(&room).copied() {
+            None => {
+                drop(st);
+                conn.reject(
+                    &hub.traffic,
+                    "no-host",
+                    "这个房间还没有房主，先让房主开房再进",
+                    CLOSE_NO_HOST,
+                );
+                return None;
+            }
+            Some(host_id) if !st.players.contains_key(&host_id) => {
+                drop(st);
+                conn.reject(
+                    &hub.traffic,
+                    "host-offline",
+                    "房主暂时不在房间，等他回来再来",
+                    CLOSE_HOST_OFFLINE,
+                );
+                return None;
+            }
+            Some(_) => {}
         }
     }
 

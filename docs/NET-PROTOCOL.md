@@ -203,7 +203,7 @@
 | 默认端口 | 8887（`PORT`） | `server/node/index.mjs` |
 | 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`）。**不落盘**：重启后房间退回默认种子 | 同上 |
 | 时钟与天气 | **每房一套**（用户 2026-10-26）：`room → clock` 存 `startMs/startTimeOfDay/startDay/weather`，房主开房时用他上报的 `day`/`timeOfDay`/`weather` 初始化，`clearRoom` 时删掉；没有房主的房与读档后的默认值用 `defaultClock`（落盘的就是它）。`time` 每 2 秒按房各发一份、`weather` 切换时按房广播，`sleep` 与 `room-config` 只动本房 | `server/node/index.mjs` |
-| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, maxPlayers, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发密码**、只列有人的房。`maxPlayers` 只用于界面显示 `在线/容量`（默认 10，`MAX_PLAYERS` 可覆盖），**不是准入限制**；`hasHost` 为 false 的房**不允许进入**（`join` 回 `no-host`） | `server/node/index.mjs` |
+| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, maxPlayers, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发密码**、只列有人的房。`maxPlayers` 只用于界面显示 `在线/容量`（默认 10，`MAX_PLAYERS` 可覆盖），**不是准入限制**；`hasHost` 为 false 的房**不允许进入**（`join` 回 `no-host`）。Rust 版同口径（`maxPlayers` 由 `MAX_PLAYERS` 配，默认 10） | `server/node/index.mjs` / `server/rust/src/lib.rs` |
 | 玩家 id | 自增、不回收 | 同上 |
 | 方块增量上限 | 500000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/node/snapshot.mjs` |
 | 房间清场 | 新房主开房（`send(welcome)` 之前）与房主宽限期结束各清一次 `clearRoom(room)`；**宽限期内重连的房主不清** | `server/node/index.mjs` |
@@ -222,7 +222,7 @@
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
 | 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/node/aoi.mjs` |
 | 局域网发现（N4/N6） | 每台服务端用 **UDP 组播** `239.255.42.99:25188` 广播一帧 `{mc, v, id, port, room, name, seed, players, host, pw}`（3 秒一次，12 秒听不到就下线），并按 `id` 过滤自己的回声；iOS 另外用 `NetService` 发布同样的字段（Bonjour，`_minicraft._tcp`），`server/rust` 的 `beacon::from_txt` 负责两种记录互转 | `server/rust/src/beacon.rs` |
-| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, beacon, beaconPort, peers, traffic, totals}`；`peers` 是这台服务器用 UDP 组播听到的其它设备（`{name, room, port, addr, seed, players, hasHost, passwordRequired, seenMs}`），联机面板据此列出"附近房间"；`/rooms` 与 `/healthz` 都带 `access-control-allow-origin: *`（浏览器跨源读），其它路径 404。⚠️ Node 版的端口字段叫 `beaconPort`、Rust 版叫 `beacon_port`（两边历史命名不同），客户端只读 `peers`，不依赖它 | `server/node/index.mjs` / `server/rust/src/lib.rs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, beacon, beaconPort, peers, traffic, totals}`；`peers` 是这台服务器用 UDP 组播听到的其它设备（`{name, room, port, addr, seed, players, hasHost, passwordRequired, seenMs}`），联机面板据此列出"附近房间"；`/rooms` 与 `/healthz` 都带 `access-control-allow-origin: *`（浏览器跨源读），其它路径 404。⚠️ Rust 版的 `/healthz` **不输出端口字段**（Node 版给 `beaconPort`）；客户端只读 `peers`，两版都不依赖它 | `server/node/index.mjs` / `server/rust/src/lib.rs` |
 | 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8887`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
 | 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/node/protocol.mjs` |
