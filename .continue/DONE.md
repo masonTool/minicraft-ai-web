@@ -9,6 +9,56 @@
 
 ---
 
+## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
+
+> 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0900
+
+- [x] [R1] 快照 v2 + 关房清缓存 + bye + 外观 + 掉落物：`server/rust/src/{store,state,handlers,protocol,ratelimit}.rs` → `run-net-test.sh`
+  - 做了什么：① 快照 1→2（可读 v1），落盘只留 `savedAt/timeOfDay/day/weather`，`apply_snapshot` 不再读四张房间表；② `State::clear_room`（按房名前缀清 edits/containers/signs/frames/items/worlds/hosts/clocks）+ `OrderedMap::retain`（连带清顺序队列，否则 `remember` 会以为淘汰了却没释放容量）；③ `bye`：房主当场关房踢人、其他人当场广播 `leave`；④ 外观改成"白名单 + 合并写 + 能表达 false + 补 dead/hp/food"；⑤ 掉落物固定窗口 → 令牌桶 30/s + 突发 400。
+  - 为什么：这些都是 10-26 之后主线上已经定稿的行为，Rust 版缺一项队友就会看到不同的世界。
+  - 验证：黑盒 233 → **261 / 297**；`cargo test` 28 通过。
+  - 批次：20261027-0900
+
+---
+
+## 批次 20261027-0930 · 2026-10-27 · 会话 12c62cf0
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0930
+
+- [x] [R1] 每房一套时钟 + 天数 + `room-config` 模式 + `sleep` 过一天：`server/rust/src/{state,handlers,lib}.rs` → `run-net-test.sh`
+  - 做了什么：`RoomClock { start_ms, start_time_of_day, start_day, weather }` + `State.clocks` / `default_clock`；`welcome`/`time` 广播/`sleep`/`room-config`/天气推进全部按房；`join` 采纳房主上报的 `day`·`timeOfDay`·`weather`（宽限重连不覆盖，顺序是"先定天数与时刻、最后重置起点"）；`sleep` 先结算今天再 +1；`room-config` 累积 `applied` 并广播 `{t:room-config, by}`，`welcome.gameMode` 取当前模式。
+  - 为什么：以前是全服一套时钟——房主 B 在乙房开房会把甲房的太阳一起拨过去；而房主本地继续玩之后，重开房还会被拽回"服务端此刻"。
+  - 验证：黑盒 261 → **283 / 297**；`cargo test` 28 通过。
+  - 批次：20261027-0930
+
+---
+
+## 批次 20261027-1000 · 2026-10-27 · 会话 12c62cf0
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1000
+
+- [x] [R1] `session-sync` / `mob-attack` / `edits-request`·`edits-reply`：`server/rust/src/{state,handlers}.rs` → `run-net-test.sh`
+  - 做了什么：① `session-sync` 房主整份上行容器/牌子/展示框（每批 200、每连接 256 条上限、不走令牌桶、不做距离闸），存表并按房广播；② `mob-attack` 只转给被打的那一个人（跨房/打自己一律丢，伤害夹 0~50，带 `fromId`）；③ 懒上行：`confirmed_chunks`/`requested_chunks`/`sent_edit_chunks`，未确认区块向房主要（8 条在飞上限、5 秒忘记以便重试），`edits-reply` 按区块校验后存缓存 + 标已确认 + 广播成普通 `blocks`，已确认或无房主时直接推缓存（每批 2048）。
+  - 为什么：这三块是"房主权威"的最后一块拼图——手机当房主时队友看不到箱子、野怪打不动人、远处的方块补不上。
+  - 验证：`bash server/rust/run-net-test.sh` → **297 通过 / 0 失败**（与 Node 同一份断言）；`cargo test` 28、`cargo check` 零警告。
+  - 批次：20261027-1000
+
+---
+
 ## 批次 20261027-0800 · 2026-10-27 · 会话 12c62cf0
 
 > 用户 2026-10-27："继续" —— 发现本机其实有 cargo（只是没进 PATH），于是把之前"盲写未验证"的 Rust 改动全部编译 + 跑黑盒断言。
@@ -228,52 +278,4 @@
   - 做了什么：§4 的 `move` 行字段补 `dead / hp / food`，备注写清"每条带全量 + 服务端合并"以及闪烁的来龙去脉与 2 秒周期；§7 的 `player` 行补"没带的字段保持原值""dead 为真时模型与名字牌一起收掉并提示"；`TASKS.md` 的 L8 补第 ⑫ 点（观感四件套）。
   - 为什么：这几条都是"看起来像 bug 的行为其实是约定"（外观必须每条全量、`dead` 会随每条 move 重复到达），不写进协议表下次又会按"变化才发"改回去。
   - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。
-
-## 批次 20261026-2242 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26：① 房主**主动退出**就立刻把访客全部踢出；② 服务器上那个房间还在、
-> 但房主不在线时，访客不许进来。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2242
-
-- [x] [L8] 房主**主动退出**（`bye`）→ 当场关房并踢掉所有访客（不等 30 秒宽限期）：`server/index.mjs` 的 `bye` 分支 + 新增 `closeRoomNow()`；客户端按 `graceMs === 0` 说"房主已退出，房间已关闭" → `npm run test:net`
-  - 做了什么：新增 `closeRoomNow(host)`：删 `hosts` → 广播 `room-closed{reason:'host-out', graceMs:0}` → 对同房其他人逐个 `reject('host-left', 4007)` → `clearRoom`，日志带"踢出 N 人 / 丢弃 N 条缓存"；`bye` 分支先判"我是不是本房房主"，是就走这条路（并置 `farewell`，避免宽限期到点再广播一次 `leave`）；客户端 `onRoomClosing` 按 `graceMs > 0 ? 倒计时 : net.roomClosed` 分两种文案。
-  - 为什么：主动退出是玩家说"我不玩了"，没有留重连窗口的必要，房间里剩下的也不是"暂时没人模拟"而是"这一局结束了"。继续挂着只会让访客对着一个不推进的世界发呆。**注意**：页面卸载（刷新/关标签）也会发 `bye`，所以房主刷新页面同样会关房——这是"主动退出"的应有语义，数据在房主本地，重开即可。
-  - 验证：`npm run test:net` **269 → 278 通过 / 0 失败**（新增 9 条：两个访客同时建房 → 房主 `bye` → 两人都立刻收到 `host-left` 且连接关闭 → 用时 < 900ms → 同名房可**马上**重开 → 新房主的 welcome 里没有上一局那格方块（缓存当场清了）→ 房主掉线后访客被拒 → 宽限期过后房主位释放）。
-- [x] [L8] 房主不在线时访客进不来：`join` 里判"有房主登记但人不在 `players`" → `error{code:'host-offline'}` + 关闭 4009；探房（`RoomProbe`）把这句翻成人话 → `npm run test:net`
-  - 做了什么：服务端新增关闭码 `CLOSE_HOST_OFFLINE = 4009` 与 `join` 里的检查（`!wantsHost && host && !players.has(host.id)`）；`Protocol.ts` 把 `host-offline` 加进错误码联合与**致命名单**（自动重连只会空转：30 秒内一直被同一句挡住，之后房间就没了）；`main.ts` 的 `onError` 按 code 翻成 `say.net.hostOffline`（六语言补齐）；`RoomProbe` 的 `RoomProbeResult` 增 `error?`，`joinRoomFromMenu` 遇到 `host-offline` 说"房主暂时不在房间"而不是"连不上服务器"。
-  - 为什么：房里登记着房主、但人不在线时，访客进来看到的是一个**不推进的世界**（怪物不动、红石不亮），而界面一切正常——这正是最难查的坏状态。探房那句必须区分开，否则会把玩家送去改 IP/换端口，方向完全错了。
-  - 验证：`npm run test:net` 含"房主不在线时访客被拒（host-offline）+ 连接关闭"；`npm run test:ui` **1198 通过 / 0 失败**（原有 1 条钉着旧文案的结构断言改成新写法，另加一条"graceMs=0 说房间已关闭"）；`npm run audit:i18n` 通过（2972 键 × 6 语言）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `bye` / `room-closed` / 错误码表补这三处 + `TASKS.md` 的 L8 补两点 → `npm run check`
-  - 做了什么：§4 上行表**新增 `bye` 行**（原来表里根本没有这条消息，只在代码里），并顺手修正 `sleep` 的说明（现在只拨本房）；§5 下行表 `room-closed` 补 `host-out` 与 `graceMs: 0`；§5.1 错误码表补 `host-offline` / 4009；§3 生命周期加"房主的两条额外规则"（主动退出即关房 + 房主不在线访客进不来）；`TASKS.md` 的 L8 补第 ⑩⑪ 点。
-  - 为什么：`bye` 这条消息在协议表里缺席很久了（代码里一直有），这次它变成"能关一整间房"的关键消息，必须进表；两条新规则都是可被误判的行为（"为什么我一刷新队友就被踢了"、"为什么我进不去"），文档要能回答。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）；`node .continue/hooks/check.mjs docs` 通过。
-
-## 批次 20261026-2150 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26 复核后追加两条：① 掉落物也是世界的一部分，房主进房要能把它带进来；
-> ② 时钟/天气改成**每房一套**（两间房同时开时互不影响）。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2150
-
-- [x] [L8] 掉落物进房重播要能一次吐完：服务端 `item-spawn` 改成令牌桶（30/s、突发 400）+ 单测断言突发额度 → `npm run test:net`
-  - 做了什么：`server/ratelimit.mjs` 的 `RATE_LIMITS` 增 `item: {perSecond:30, capacity:400}`，`createBuckets()` 加 `item` 桶；`item-spawn` 分支把手写的"1 秒窗口 + 计数"换成 `player.buckets.item.take()`，删掉 `ITEM_RATE_LIMIT` / `itemWindow` / `itemCount` 三个已无用的东西。
-  - 为什么：房主进房间时客户端本来就会把世界里已有的掉落物重播一遍（`syncNetItems` 每 100ms 扫实体表，`localNetItems` 断线时被清空），机制一直在，卡点只有服务端的 30/秒——一个住过的世界地上可能上百堆，超出的被丢掉**且不重试**，队友那边就凭空少一地东西。所以修法不是新加一条上行协议，而是给这个已有通道一个够用的突发额度。
-  - 验证：`tests/net-ratelimit.test.ts` 新增 1 条（一次取满 capacity 通过、连取两次失败、1 秒后恢复 30/s）；`npm run test:net` 新增"100 堆一次性上行全部收下"（`welcome.items` 恰好 100）。
-- [x] [L8] 每房一套时钟：服务端 `room → clock`（时间/天数/天气），`sleep` 与 `room-config` 只动本房，`clearRoom` 删掉 → `npm run test:net`
-  - 做了什么：`createClock()` + `defaultClock` + `clocks: Map<room, clock>` + `clockOf(room)`；`currentDay/currentTimeOfDay` 改成收一个 clock；`clockTimer`/`weatherTimer` 按房各推一份（兜底时钟给没有房主的房）；`snapshotFor`、`room-config`、`sleep` 全部改成本房那份；`worldSnapshot`/读档只回填 `defaultClock`；`clearRoom` 增 `clocks.delete(room)`。
-  - 为什么：以前是全服一套，房主 B 在另一个房开房会把握着 A 那个房间的太阳一起拨过去；`sleep` 更狠——遍历所有房间，甲房有人睡觉会把乙房的天翻过去。房间本来就是各是各的世界，时钟没有共享的理由。
-  - 验证：`npm run test:net` **260 → 269 通过 / 0 失败**（新增 9 条：甲房 0.2/第 20 天、乙房 0.85/雨、天数与天气互不干扰、甲房睡满跳到黎明且天+1、乙房完全不受影响；另含掉落物 1 条）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 记「每房一套时钟」与掉落物突发额度 + `TASKS.md` 的 L8 补两点 → `npm run check`
-  - 做了什么：`join` 行第 ⑪ 条的备注从"对所有在用房间广播"改成"只对**本房**广播"；§6 的「时钟与天气」整行改写成每房一套（`room → clock` + `defaultClock` 落盘 + `sleep`/`room-config` 只动本房）；§6 的「掉落物广播」改成令牌桶 30/s + 突发 400 并写明理由；`TASKS.md` 的 L8 补第 ⑧（每房时钟）与第 ⑨（掉落物重播 + 纠正"两端都不落盘"的错说法）两点。
-  - 为什么：协议表是两端共同的契约；这次改的是"谁说了算"的边界（共享 → 每房），不写进表里下次照旧实现会再踩一遍。掉落物那条顺手把上一轮我说错的话在台账里更正，避免以后被人当成事实引用。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了 4 条 `tools/ui-test.ts` 的结构断言（它们钉着旧的 `currentDay()` / `startTimeOfDay = …` 字面串）——改成按新结构断言（`currentDay(clockOf(player.room))` / `clock.startTimeOfDay` / `clocks.set(room, clock)` / `const clock = createClock()`），`test:ui` **1197 通过 / 0 失败**。
 

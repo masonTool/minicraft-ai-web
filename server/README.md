@@ -8,7 +8,7 @@
 | 目录 | 是什么 | 怎么跑 | 验收 |
 | --- | --- | --- | --- |
 | **`node/`** | Node 版服务端（现行 Web 端用的就是它）。纯 `.mjs`，不经过打包，`node` 直接跑 | `npm run server`（或 `node server/node/index.mjs`） | `npm run test:net`（条数以脚本输出为准） |
-| **`rust/`** | Rust 版服务端，可编成 Android `.so` / iOS `.xcframework` / 桌面可执行。⚠️ **它的"逐条对齐"只到 2026-10-25 那一版协议**：之后主线新增的 `session-sync`、`edits-request`/`edits-reply`、每房一套时钟、`join` 采纳房主时钟，它都还没有（`no-host` / `host-offline` / `maxPlayers` 已补，但**没编译验证过**）。缺口与验收口径见 `.continue/TASKS.md` | `cd server/rust && cargo run` | `cargo test` · `run-smoke.sh` · `run-beacon-smoke.sh` · `run-net-test.sh` |
+| **`rust/`** | Rust 版服务端，可编成 Android `.so` / iOS `.xcframework` / 桌面可执行。**与 `node/` 逐条对齐（297 / 0）**：每房一套时钟、快照 v2、`session-sync`、区块懒上行、`bye`、`mob-attack` 都已跟上 | `cd server/rust && cargo run` | `cargo test` · `run-smoke.sh` · `run-beacon-smoke.sh` · `run-net-test.sh` |
 | **`android/`** | **示例宿主**：Capacitor 6 的 Android 工程 —— WebView 跑游戏，前台服务跑 `rust` 编出来的 `.so` | `npm run android:apk` | `npm run android:test`（3 条设备断言） |
 | **`ios/`** | **示例宿主**：`MinicraftServer.xcframework` + Swift 胶水（没有生成 Xcode 工程，接入步骤见它的 README） | `bash server/ios/check-sim.sh` | 在 iOS 模拟器里 `simctl spawn` 真跑 |
 
