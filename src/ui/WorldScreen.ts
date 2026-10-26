@@ -26,13 +26,12 @@ import {
 } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
-import { roomFromWorldName, sanitizeRoomName } from '../core/net/RoomName.ts';
-import { normalizeServerUrl } from '../core/net/ServerUrl.ts';
+import { roomFromWorldName } from '../core/net/RoomName.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { BIOMES, biomeLabel } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
-import { ServerPicker } from './ServerPicker.ts';
+import { RoomForm } from './RoomForm.ts';
 
 /** 列表里的世界类型短名（新建表单仍然用带说明的全名） */
 /**
@@ -677,67 +676,34 @@ export class WorldScreen {
     const form = document.createElement('div');
     form.className = 'world-edit-form';
 
-    /**
-     * 服务器地址（用户 2026-10-25）：开房以前写死 `defaultServerUrl()`，玩家既看不到也改不了——
-     * 在"服务器跑在另一台机器"的场景里必然连错。现在与加入面板同一套口径：只填 IP，
-     * 协议头与默认端口由 `normalizeServerUrl` 补。
-     */
-    const addressInput = document.createElement('input');
-    addressInput.type = 'text';
-    addressInput.className = 'world-input';
-    addressInput.id = 'world-host-address';
-    addressInput.inputMode = 'url';
-    addressInput.autocomplete = 'off';
-    addressInput.spellcheck = false;
-    addressInput.placeholder = t('mp.serverHint');
-    addressInput.value = this.actions.defaultHostAddress?.() ?? '';
     /*
+     * 服务器地址 / 房间 / 密码与「▾ 选择服务器」都来自共用表单（L9）：加入面板收集的是
+     * 同一组东西，规则只有一份。开房这边**暂不渲染昵称**（沿用联机面板里记住的那个）。
+     *
+     * 地址口径（用户 2026-10-25）：开房以前写死 `defaultServerUrl()`，玩家既看不到也改不了——
+     * 在"服务器跑在另一台机器"的场景里必然连错。现在与加入面板同一套：只填 IP，
+     * 协议头与默认端口由 `normalizeServerUrl` 补。
+     *
      * 「选择服务器」（用户 2026-10-26）：地址右侧一个 ▾，点开可以**扫局域网**或挑公开服务器，
-     * 选中后把地址填回这个框（只填 IP/域名，协议头与端口交给 `normalizeServerUrl`）。
-     * 面板按对话框生命周期建/拆：这个对话框是每开一次建一份的浮层。
+     * 选中后把地址填回这个框。面板按对话框生命周期建/拆（`cleanup` 里 `dispose`）。
      */
-    const pickAddress = document.createElement('button');
-    pickAddress.type = 'button';
-    pickAddress.className = 'world-mini world-pick';
-    pickAddress.id = 'world-host-pick';
-    pickAddress.textContent = '▾';
-    pickAddress.title = t('server.pick');
-    pickAddress.setAttribute('aria-label', t('server.pick'));
-    let addressPicker: ServerPicker | null = null;
-    pickAddress.addEventListener('click', () => {
-      if (!addressPicker) {
-        addressPicker = new ServerPicker({
-          currentAddress: () => addressInput.value,
-          onPick: (address) => {
-            addressInput.value = address;
-            // 选完把上一次的报错擦掉，否则会让人以为新地址也是错的
-            hint.classList.remove('error');
-            hint.textContent = t('world.roomHint');
-            addressInput.focus();
-          },
-        });
-        document.body.append(addressPicker.element);
-      }
-      addressPicker.open();
+    const roomForm = new RoomForm({
+      mode: 'host',
+      initialAddress: this.actions.defaultHostAddress?.() ?? '',
+      initialRoom: defaultRoom,
+      // 非法字符被删光时回退到"世界名派生的房名"，而不是服务端的默认房
+      roomFallback: defaultRoom,
+      withName: false,
+      inputClass: 'world-input',
+      pickButtonId: 'world-host-pick',
+      pickButtonClass: 'world-mini world-pick',
+      onPick: () => {
+        // 选完把上一次的报错擦掉，否则会让人以为新地址也是错的
+        hint.classList.remove('error');
+        hint.textContent = t('world.roomHint');
+        roomForm.focus('address');
+      },
     });
-
-    const roomInput = document.createElement('input');
-    roomInput.type = 'text';
-    roomInput.className = 'world-input';
-    roomInput.id = 'world-host-room';
-    roomInput.maxLength = 24;
-    roomInput.autocomplete = 'off';
-    roomInput.spellcheck = false;
-    roomInput.value = defaultRoom;
-
-    const passwordInput = document.createElement('input');
-    passwordInput.type = 'text';
-    passwordInput.className = 'world-input';
-    passwordInput.id = 'world-host-password';
-    passwordInput.maxLength = 32;
-    passwordInput.autocomplete = 'off';
-    passwordInput.spellcheck = false;
-    passwordInput.placeholder = t('world.roomPasswordHint');
 
     const hint = document.createElement('div');
     hint.className = 'world-edit-hint';
@@ -761,9 +727,9 @@ export class WorldScreen {
     actions.append(cancel, start);
 
     form.append(
-      this.makeRow(t('world.serverAddress'), addressInput, pickAddress),
-      this.makeRow(t('world.roomName'), roomInput, null),
-      this.makeRow(t('world.roomPassword'), passwordInput, null),
+      this.makeRow(t('world.serverAddress'), roomForm.urlInput, roomForm.pickButton),
+      this.makeRow(t('world.roomName'), roomForm.roomInput, null),
+      this.makeRow(t('world.roomPassword'), roomForm.passwordInput, null),
       hint,
     );
     panel.append(header, form, actions);
@@ -775,8 +741,7 @@ export class WorldScreen {
       document.removeEventListener('keydown', onKey, true);
       overlay.remove();
       // 选择服务器的浮层挂在 <body> 上，不比对话框活得久（否则关掉对话框它还压着一层）
-      addressPicker?.dispose();
-      addressPicker = null;
+      roomForm.dispose();
       if (this.editEl === overlay) this.editEl = null;
       if (this.editCleanup === cleanup) this.editCleanup = null;
     };
@@ -786,33 +751,33 @@ export class WorldScreen {
       /*
        * 房名必填（用户 2026-10-25）：以前留空会静默退回默认房间，两拨人各自"开房"就撞在
        * 同一个默认房名上，第二个人得到一句看不懂的 `host-taken`。现在当场说清楚。
+       *
+       * 顺序先房名后地址（与老版一致）：地址栏有默认值、房名默认也可能被清空，
+       * 先报"最可能要改的那一项"。
        */
-      const rawRoom = roomInput.value.trim();
-      if (rawRoom.length === 0) {
+      if (roomForm.roomInput.value.trim().length === 0) {
         showError(t('world.roomRequired'));
-        roomInput.focus();
+        roomForm.focus('room');
         return;
       }
-      const room = sanitizeRoomName(rawRoom, defaultRoom);
-      // 地址必填且要能归一化（只填 IP 即可，协议头/端口这里补）
-      const base = normalizeServerUrl(addressInput.value);
-      if (base === null) {
+      // 地址必填且要能归一化（只填 IP 即可，协议头/端口这里补）；房名清洗也在 read() 里
+      const values = roomForm.read();
+      if (values.baseUrl === null) {
         showError(t('world.addressRequired'));
-        addressInput.focus();
+        roomForm.focus('address');
         return;
       }
-      const password = passwordInput.value.trim().slice(0, 32);
       /*
        * 开房是异步的（先探服务器在不在），所以**先不关对话框**：
        * 失败时把原因写在这一行提示上，玩家改完地址可以重试，不用重新进一次对话框。
        */
       start.disabled = true;
-      void Promise.resolve(this.actions.onHostWorld?.(world, room, password, base))
+      void Promise.resolve(this.actions.onHostWorld?.(world, values.room, values.password, values.baseUrl))
         .then((failure) => {
           start.disabled = false;
           if (failure) {
             showError(failure);
-            addressInput.focus();
+            roomForm.focus('address');
             return;
           }
           cleanup();
@@ -842,8 +807,8 @@ export class WorldScreen {
     start.addEventListener('click', go);
 
     requestAnimationFrame(() => {
-      roomInput.focus();
-      roomInput.select();
+      roomForm.focus('room');
+      roomForm.roomInput.select();
     });
   }
 

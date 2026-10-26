@@ -21,15 +21,8 @@
 import { t, tp } from '../core/i18n/I18n.ts';
 import { parseRoomsResponse, type RoomListResult } from '../core/net/RoomList.ts';
 import { parseRecentRooms, pushRecentRoom, serializeRecentRooms, type RecentRoom } from '../core/net/RecentRooms.ts';
-import { sanitizeRoomName } from '../core/net/RoomName.ts';
-import { ServerPicker } from './ServerPicker.ts';
-import {
-  displayServerAddress,
-  formatServerUrl,
-  normalizeServerUrl,
-  parseServerUrl,
-  roomsEndpoint,
-} from '../core/net/ServerUrl.ts';
+import { displayServerAddress, normalizeServerUrl, roomsEndpoint } from '../core/net/ServerUrl.ts';
+import { RoomForm } from './RoomForm.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
@@ -58,11 +51,8 @@ const STORAGE_URL = 'mc.mp.url';
 const STORAGE_ROOM = 'mc.mp.room';
 const STORAGE_PASSWORD = 'mc.mp.pw';
 const STORAGE_NAME = 'mc.mp.name';
-/** 最近连过的服务器/房间（L9）：只记地址与房间，**不记口令** */
+/** 最近连过的服务器/房间（L9）：只记地址与房间，**不记密码** */
 const STORAGE_RECENT = 'mc.mp.recent';
-/** 昵称上限与服务端 `sanitizeName` 对齐（按字符算，不按字节） */
-export const MULTIPLAYER_NAME_MAX = 16;
-const DEFAULT_NAME = '玩家';
 
 /**
  * 地址归一化（联机26）已搬到 `core/net/ServerUrl.ts#normalizeServerUrl`：
@@ -71,13 +61,11 @@ const DEFAULT_NAME = '玩家';
  */
 export { normalizeServerUrl } from '../core/net/ServerUrl.ts';
 
-/** 昵称清洗：去控制字符与尖括号、按字符截到 16、空则“玩家”（与服务端同口径） */
-export function sanitizeMultiplayerName(input: string): string {
-  // eslint-disable-next-line no-control-regex
-  const cleaned = input.replace(/[\u0000-\u001f\u007f<>]/g, '').trim();
-  const chars = [...cleaned].slice(0, MULTIPLAYER_NAME_MAX).join('');
-  return chars.length > 0 ? chars : DEFAULT_NAME;
-}
+/**
+ * 昵称清洗与上限本批搬到 `core/net/PlayerName.ts`（加入面板与开房对话框共用）。
+ * 这里保留导出只为不打断既有调用点与测试（`tools/ui-test.ts` 仍从这里取）。
+ */
+export { MULTIPLAYER_NAME_MAX, sanitizeMultiplayerName } from '../core/net/PlayerName.ts';
 
 /**
  * 三颗按钮此刻该不该可点（`connect` 同时管"开房"与"加入"）。
@@ -95,6 +83,12 @@ export function multiplayerButtons(state: MultiplayerScreenState): { connect: bo
 
 export class MultiplayerScreen {
   readonly root: HTMLDivElement;
+  /**
+   * 表单字段（L9）：地址 / 房间 / 密码 / 昵称 + 「▾ 选择服务器」+ 清洗规则。
+   *
+   * 与开房对话框共用同一个 `RoomForm`——两组输入以前各写一遍，"加昵称"那次就漏了开房那边。
+   */
+  private readonly form: RoomForm;
   private readonly urlInput: HTMLInputElement;
   private readonly roomInput: HTMLInputElement;
   private readonly passwordInput: HTMLInputElement;
@@ -113,13 +107,6 @@ export class MultiplayerScreen {
   private openState = false;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
-  /**
-   * 「选择服务器」的引子按钮与它点开的面板（用户 2026-10-26）。
-   *
-   * 面板按需创建、之后常驻：这个界面本身就是启动时建一次、活到关页面，
-   * 反复开关面板不该重复建 DOM（也没必要每次重建再扫一遍）。
-   */
-  private serverPicker: ServerPicker | null = null;
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
   private detailText = '';
 
@@ -139,20 +126,34 @@ export class MultiplayerScreen {
     title.className = 'mp-title';
     title.textContent = t('mp.title');
 
+    /*
+     * 表单字段来自 `RoomForm`（L9）：两个入口收集的是同一组东西，字段与清洗规则只有一份。
+     * 这里只负责排版——地址与「找房间」同一行、房间与密码同一行（横屏高度紧张）。
+     */
+    this.form = new RoomForm({
+      mode: 'join',
+      // 回填时只显示 IP（用户要求 2026-10-25）：完整 URL 只存在存储里，地址栏回答的是"那台机器在哪"
+      initialAddress: readStored(STORAGE_URL) ?? '',
+      initialRoom: readStored(STORAGE_ROOM) ?? '',
+      initialPassword: readStored(STORAGE_PASSWORD) ?? '',
+      initialName: readStored(STORAGE_NAME) ?? '',
+      pickButtonId: 'mp-pick-server',
+      pickButtonClass: 'mp-mini',
+      addressError: t('mp.error.url'),
+      // 选中服务器后把焦点还给「找房间」：玩家下一步通常就是拉这台机器的房间列表
+      onPick: () => this.refreshButton.focus(),
+    });
+    this.urlInput = this.form.urlInput;
+    this.roomInput = this.form.roomInput;
+    this.passwordInput = this.form.passwordInput;
+    // join 模式一定建昵称框（`withName` 默认 true）
+    this.nameInput = this.form.nameInput as HTMLInputElement;
+
     // ---- 地址行（标签固定宽 + 输入框吃掉剩余宽度，横屏下只占一行）
     const urlRow = document.createElement('label');
     urlRow.className = 'mp-row';
     const urlLabel = document.createElement('span');
     urlLabel.textContent = t('mp.server');
-    this.urlInput = document.createElement('input');
-    this.urlInput.type = 'text';
-    this.urlInput.id = 'mp-url';
-    this.urlInput.inputMode = 'url';
-    this.urlInput.autocomplete = 'off';
-    this.urlInput.spellcheck = false;
-    this.urlInput.placeholder = t('mp.serverHint');
-    // 回填时只显示 IP（用户要求 2026-10-25）：完整 URL 只存在存储里，地址栏回答的是"那台机器在哪"
-    this.urlInput.value = displayServerAddress(readStored(STORAGE_URL) ?? '');
     // 「找房间」（L9）：浏览器发不了 UDP/mDNS，所以"自动发现"= 连上这台服务器后拉它的房间列表
     this.refreshButton = document.createElement('button');
     this.refreshButton.type = 'button';
@@ -160,45 +161,16 @@ export class MultiplayerScreen {
     this.refreshButton.className = 'mp-mini';
     this.refreshButton.textContent = t('mp.refreshRooms');
     this.refreshButton.addEventListener('click', () => void this.refreshRooms());
-    /*
-     * 「选择服务器」（用户 2026-10-26）：与开房对话框同一套面板，选中后把地址填回地址框。
-     * 这个面板是启动时建一次、活到关页面（`MultiplayerScreen` 本身就只建一次），
-     * 所以这里用字段持有它，不必按次销毁。
-     */
-    const pickServer = document.createElement('button');
-    pickServer.type = 'button';
-    pickServer.className = 'mp-mini';
-    pickServer.id = 'mp-pick-server';
-    pickServer.textContent = '▾';
-    pickServer.title = t('server.pick');
-    pickServer.setAttribute('aria-label', t('server.pick'));
-    pickServer.addEventListener('click', () => this.openServerPicker());
-    urlRow.append(urlLabel, this.urlInput, pickServer, this.refreshButton);
+    urlRow.append(urlLabel, this.urlInput, this.form.pickButton as HTMLButtonElement, this.refreshButton);
 
-    // ---- 房间 / 口令行（L9：不再让玩家把房间写进地址）
+    // ---- 房间 / 密码行（L9：不再让玩家把房间写进地址）
     const roomRow = document.createElement('label');
     roomRow.className = 'mp-row';
     const roomLabel = document.createElement('span');
     roomLabel.textContent = t('mp.room');
-    this.roomInput = document.createElement('input');
-    this.roomInput.type = 'text';
-    this.roomInput.id = 'mp-room';
-    this.roomInput.maxLength = 24;
-    this.roomInput.autocomplete = 'off';
-    this.roomInput.spellcheck = false;
-    this.roomInput.placeholder = t('mp.roomHint');
-    this.roomInput.value = readStored(STORAGE_ROOM) ?? '';
     const passwordLabel = document.createElement('span');
     passwordLabel.className = 'mp-row-label-sub';
     passwordLabel.textContent = t('mp.password');
-    this.passwordInput = document.createElement('input');
-    this.passwordInput.type = 'text';
-    this.passwordInput.id = 'mp-password';
-    this.passwordInput.maxLength = 32;
-    this.passwordInput.autocomplete = 'off';
-    this.passwordInput.spellcheck = false;
-    this.passwordInput.placeholder = t('mp.passwordHint');
-    this.passwordInput.value = readStored(STORAGE_PASSWORD) ?? '';
     roomRow.append(roomLabel, this.roomInput, passwordLabel, this.passwordInput);
 
     // ---- 房间列表（点一行就把房名/口令填好；列不出来也不挡手填）
@@ -217,13 +189,6 @@ export class MultiplayerScreen {
     nameRow.className = 'mp-row';
     const nameLabel = document.createElement('span');
     nameLabel.textContent = t('mp.name');
-    this.nameInput = document.createElement('input');
-    this.nameInput.type = 'text';
-    this.nameInput.id = 'mp-name';
-    this.nameInput.maxLength = MULTIPLAYER_NAME_MAX;
-    this.nameInput.autocomplete = 'off';
-    this.nameInput.spellcheck = false;
-    this.nameInput.value = readStored(STORAGE_NAME) ?? '';
     nameRow.append(nameLabel, this.nameInput);
 
     // ---- 状态行（服务端错误（版本/重复连接）也走这里）
@@ -385,62 +350,22 @@ export class MultiplayerScreen {
   /**
    * 当前填的地址与昵称（主程序重连时也要用同一份）。
    *
-   * 地址在这里才拼上房间与口令（`formatServerUrl`）：输入框只放裸地址，
+   * 地址在这里才拼上房间与密码（`RoomForm.read()` → `formatServerUrl`）：输入框只放裸地址，
    * 这样「找房间」拉列表时不会把房名带到服务器请求里，玩家也不用懂 URL 语法。
    */
   readForm(): { url: string | null; name: string; room: string; password: string } {
-    const base = normalizeServerUrl(this.urlInput.value);
-    const rawRoom = this.roomInput.value.trim();
-    // 空 = 进默认房间（服务端 `DEFAULT_ROOM`），不硬塞一个名字
-    const room = rawRoom.length > 0 ? sanitizeRoomName(rawRoom) : '';
-    const password = this.passwordInput.value.trim().slice(0, 32);
+    const values = this.form.read();
     return {
-      url: base ? formatServerUrl(base, room, password) : null,
-      name: sanitizeMultiplayerName(this.nameInput.value),
-      room,
-      password,
+      url: values.url.length > 0 ? values.url : null,
+      name: values.name,
+      room: values.room,
+      password: values.password,
     };
   }
 
-  /**
-   * 地址里带了房间/口令时把它们拆到独立输入框（粘贴老格式地址的兼容）。
-   *
-   * 老格式 `ws://host:8787/red?pw=1234` 现在是"一个世界一份日志"的老习惯，
-   * 直接报错太粗暴——拆出来继续用即可。
-   */
-  /**
-   * 打开「选择服务器」（用户 2026-10-26）：扫局域网 / 挑公开服务器，选中就填回地址框。
-   *
-   * 填完顺手跑一次 `splitAddress()`：老格式地址里带的房名/口令会被拆到各自输入框，
-   * 面板选出来的地址本来就不带这些，但走同一条路能保证"填进去的东西一定被规整过"。
-   */
-  private openServerPicker(): void {
-    if (!this.serverPicker) {
-      this.serverPicker = new ServerPicker({
-        currentAddress: () => this.urlInput.value,
-        onPick: (address) => {
-          this.urlInput.value = address;
-          this.splitAddress();
-          this.refreshButton.focus();
-        },
-      });
-      document.body.append(this.serverPicker.element);
-    }
-    this.serverPicker.open();
-  }
-
+  /** 老格式地址（房名/密码塞在 URL 里）拆到独立输入框——规则在 `RoomForm` 里 */
   private splitAddress(): void {
-    const normalized = normalizeServerUrl(this.urlInput.value);
-    if (!normalized) return;
-    const parsed = parseServerUrl(normalized);
-    if (parsed.room.length === 0 && parsed.password.length === 0) return;
-    this.urlInput.value = displayServerAddress(parsed.url);
-    if (parsed.room.length > 0 && this.roomInput.value.trim().length === 0) {
-      this.roomInput.value = parsed.room;
-    }
-    if (parsed.password.length > 0 && this.passwordInput.value.trim().length === 0) {
-      this.passwordInput.value = parsed.password;
-    }
+    this.form.splitAddress();
   }
 
   /**
@@ -554,27 +479,27 @@ export class MultiplayerScreen {
   }
 
   private submit(host: boolean): void {
-    // 粘贴来的老格式地址先拆成"裸地址 + 房间 + 口令"，再当表单读
-    this.splitAddress();
-    const { url, name, room } = this.readForm();
-    if (!url) {
-      this.statusEl.textContent = t('mp.error.url');
+    const values = this.form.read();
+    if (values.error.length > 0 || values.baseUrl === null) {
+      this.statusEl.textContent = values.error.length > 0 ? values.error : t('mp.error.url');
       this.statusEl.dataset.state = 'error';
       return;
     }
-    // 记住这次填的（地址只存裸地址，房间/口令各存各的，下次打开都是能直接用的形式）
-    const base = normalizeServerUrl(this.urlInput.value);
-    if (base) writeStored(STORAGE_URL, base);
+    // 记住这次填的（地址只存裸地址，房间/密码各存各的，下次打开都是能直接用的形式）
+    writeStored(STORAGE_URL, values.baseUrl);
     writeStored(STORAGE_ROOM, this.roomInput.value.trim());
-    writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
-    writeStored(STORAGE_NAME, name);
-    // 记住这一条"去过哪"（不记口令，见 `RecentRooms` 的注释）
-    if (base) {
-      this.recents = pushRecentRoom(this.recents, { url: base, room, name, at: Date.now() });
-      writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents));
-      this.renderRecent();
-    }
-    this.actions.onConnect(url, name, host);
+    writeStored(STORAGE_PASSWORD, values.password);
+    writeStored(STORAGE_NAME, values.name);
+    // 记住这一条"去过哪"（不记密码，见 `RecentRooms` 的注释）
+    this.recents = pushRecentRoom(this.recents, {
+      url: values.baseUrl,
+      room: values.room,
+      name: values.name,
+      at: Date.now(),
+    });
+    writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents));
+    this.renderRecent();
+    this.actions.onConnect(values.url, values.name, host);
   }
 }
 

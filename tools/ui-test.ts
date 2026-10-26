@@ -5335,6 +5335,8 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
 {
   const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  // 开房与加入共用的表单字段（L9）：房名/密码输入框与清洗规则本批搬到这里
+  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
 
   check('卡片上有专属的「开房」按钮类名', worldSrc.includes("host.className = 'world-host';"));
   check(
@@ -5344,13 +5346,13 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
   check(
     '开房弹窗的默认房间名由世界名派生（中文名也能用）',
     worldSrc.includes('roomFromWorldName(world.name, world.seed)') &&
-      worldSrc.includes("roomInput.id = 'world-host-room'"),
+      roomFormSrc.includes("options.mode === 'host' ? 'world-host-room' : 'mp-room'"),
   );
   check(
-    '房间名收口、口令可空',
-    // 2026-10-25：房名先判必填，再走 sanitizeRoomName（空值不再静默退回默认房名）
-    worldSrc.includes('sanitizeRoomName(rawRoom, defaultRoom)') &&
-      worldSrc.includes('passwordInput.value.trim().slice(0, 32)'),
+    '房间名收口、密码可空',
+    // 2026-10-25：房名先判必填，再走 sanitizeRoomName；本批这两步都收进 RoomForm
+    roomFormSrc.includes('sanitizeRoomName(rawRoom, this.options.roomFallback)') &&
+      roomFormSrc.includes('this.passwordInput.value.trim().slice(0, PASSWORD_MAX)'),
   );
   check('世界列表顶部的多人入口是「加入房间…」', worldSrc.includes("join.textContent = t('world.joinRoom');"));
   check(
@@ -5371,21 +5373,24 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
 console.log('\n[加入房间：选项式面板（L9）]');
 {
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
 
   check(
-    '房间与口令是独立输入框（不再靠手写 URL）',
-    mpSrc.includes("this.roomInput.id = 'mp-room'") && mpSrc.includes("this.passwordInput.id = 'mp-password'"),
+    '房间与密码是独立输入框（不再靠手写 URL）',
+    roomFormSrc.includes("options.mode === 'host' ? 'world-host-room' : 'mp-room'") &&
+      roomFormSrc.includes("options.mode === 'host' ? 'world-host-password' : 'mp-password'"),
   );
   check(
-    '地址只存裸地址，房间/口令在 readForm 里才拼（formatServerUrl）',
-    mpSrc.includes('url: base ? formatServerUrl(base, room, password) : null') &&
-      mpSrc.includes('room,') &&
-      mpSrc.includes('password,') &&
-      mpSrc.includes('writeStored(STORAGE_URL, base)'),
+    '地址只存裸地址，房间/密码在 read() 里才拼（formatServerUrl）',
+    roomFormSrc.includes('formatServerUrl(baseUrl, room, password)') &&
+      mpSrc.includes('writeStored(STORAGE_URL, values.baseUrl)') &&
+      mpSrc.includes('this.form.read()'),
   );
   check(
-    '粘贴老格式地址会拆成裸地址 + 房间 + 口令',
-    mpSrc.includes('private splitAddress(): void') && mpSrc.includes('parseServerUrl(normalized)'),
+    '粘贴老格式地址会拆成裸地址 + 房间 + 密码',
+    roomFormSrc.includes('splitAddress(): void') &&
+      roomFormSrc.includes('parseServerUrl(normalized)') &&
+      mpSrc.includes('this.form.splitAddress()'),
   );
   check(
     '「找房间」拉 /rooms 并清洗（失败只提示，不挡手填）',
@@ -5547,14 +5552,20 @@ console.log('\n[最近连接（L9）]');
       mpSrc.includes('this.nameInput.value = entry.name;'),
   );
   check(
-    '地址框只在存储里放完整 URL（三处回填都走显示形式）',
-    (mpSrc.match(/this\.urlInput\.value = displayServerAddress\(/g) ?? []).length >= 3 &&
+    '地址框只在存储里放完整 URL（各处回填都走显示形式）',
+    // 本批 `displayServerAddress` 的回填点有 2 处搬到 RoomForm（初始值 + 拆分老地址）
+    (
+      (mpSrc + readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8')).match(
+        /displayServerAddress\(/g,
+      ) ?? []
+    ).length >= 3 &&
       !mpSrc.includes('this.urlInput.value = parsed.url;') &&
       !mpSrc.includes('this.urlInput.value = entry.url;'),
   );
   check(
     '连接成功时记一条（去重后写 localStorage）',
-    mpSrc.includes('pushRecentRoom(this.recents, { url: base, room, name, at: Date.now() })') &&
+    mpSrc.includes('pushRecentRoom(this.recents, {') &&
+      mpSrc.includes('url: values.baseUrl,') &&
       mpSrc.includes('writeStored(STORAGE_RECENT, serializeRecentRooms(this.recents))'),
   );
   check(
@@ -6019,7 +6030,10 @@ console.log('\n[加入房间：地址只填 IP]');
     'IP / 域名判定与派生规则都在 core（不散在界面里）',
     serverUrlSrc.includes('export function isLanHost') &&
       serverUrlSrc.includes('export const DEFAULT_WS_PATH') &&
-      readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8').includes('normalizeServerUrl(addressInput.value)'),
+      // 两个入口共用 RoomForm，归一化只在它那里调一次
+      readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
+        'normalizeServerUrl(this.urlInput.value)',
+      ),
   );
   check(
     '地址栏提示写明"IP 或域名"（六语言都有这条键）',
@@ -6126,9 +6140,22 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
   const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   // 错误码 → 文案的映射本批搬到 `NetErrorText.ts`，这里两处都认：预检直接用的那句 + 映射表
   const netErrorSrc = readFileSync(new URL('../src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
-  check('开房对话框有地址输入框（默认回填当前地址）', worldSrc.includes("addressInput.id = 'world-host-address'") && worldSrc.includes('this.actions.defaultHostAddress?.()'));
-  check('房名必填：空值当场提示，不再静默退回默认房名', worldSrc.includes('const rawRoom = roomInput.value.trim();') && worldSrc.includes("showError(t('world.roomRequired'))"));
-  check('地址必填：归一化失败就提示（只填 IP 也能过）', worldSrc.includes('const base = normalizeServerUrl(addressInput.value);') && worldSrc.includes("showError(t('world.addressRequired'))"));
+  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
+  check(
+    '开房对话框有地址输入框（默认回填当前地址）',
+    roomFormSrc.includes("options.mode === 'host' ? 'world-host-address' : 'mp-url'") &&
+      worldSrc.includes('this.actions.defaultHostAddress?.() ??'),
+  );
+  check(
+    '房名必填：空值当场提示，不再静默退回默认房名',
+    worldSrc.includes('roomForm.roomInput.value.trim().length === 0') &&
+      worldSrc.includes("showError(t('world.roomRequired'))"),
+  );
+  check(
+    '地址必填：归一化失败就提示（只填 IP 也能过）',
+    worldSrc.includes('const values = roomForm.read();') &&
+      worldSrc.includes("showError(t('world.addressRequired'))"),
+  );
   check(
     '回调把地址带出去（并可返回失败原因）',
     worldSrc.includes('onHostWorld?: (world: WorldSummary, room: string, password: string, baseUrl: string) => Promise<string | null> | string | null;'),
@@ -6423,9 +6450,20 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
   check('选中后把地址写回调用方并关面板', /private pick\(address: string\): void \{[\s\S]{0,200}?this\.actions\.onPick\(address\);/.test(pickerSrc));
 
   // ④ 两处入口都接上（开房对话框 + 加入面板），且都是 ▾ 图标（六语言文字长度差太多）
-  check('开房对话框地址行有 ▾ 按钮', worldUiSrc2.includes("pickAddress.id = 'world-host-pick'") && worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), addressInput, pickAddress)"));
-  check('加入面板地址行也有 ▾ 按钮', mpSrc2.includes("pickServer.id = 'mp-pick-server'") && mpSrc2.includes('urlRow.append(urlLabel, this.urlInput, pickServer, this.refreshButton)'));
-  check('开房对话框关掉时一起拆面板（否则浮层留在屏幕上）', /const cleanup = \(\): void => \{[\s\S]{0,400}?addressPicker\?\.dispose\(\);/.test(worldUiSrc2));
+  check(
+    '开房对话框地址行有 ▾ 按钮',
+    worldUiSrc2.includes("pickButtonId: 'world-host-pick'") &&
+      worldUiSrc2.includes("this.makeRow(t('world.serverAddress'), roomForm.urlInput, roomForm.pickButton)"),
+  );
+  check(
+    '加入面板地址行也有 ▾ 按钮',
+    mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
+      mpSrc2.includes('urlRow.append(urlLabel, this.urlInput, this.form.pickButton as HTMLButtonElement, this.refreshButton)'),
+  );
+  check(
+    '开房对话框关掉时一起拆面板（否则浮层留在屏幕上）',
+    /const cleanup = \(\): void => \{[\s\S]{0,400}?roomForm\.dispose\(\);/.test(worldUiSrc2),
+  );
   check('两处样式在位', htmlSrc2.includes('.world-pick {') && htmlSrc2.includes('.server-picker-item {'));
 }
 
