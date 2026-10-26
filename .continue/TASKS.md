@@ -4247,6 +4247,17 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
+- [x] L12 **局域网发现补到 Node 版 + 附近房间收尾**（用户 2026-10-27）。
+  - 新增 `server/node/beacon.mjs`：与 `server/rust/src/beacon.rs` **同一份报文**
+    （`239.255.42.99:25188`、3 秒一帧、12 秒过期、按 id 过滤自己的回声），
+    收发分成两个 socket（macOS 的 `SO_REUSEPORT` 对广播是"哈希挑一个 socket"）；`BEACON=0` 可关。
+  - `/healthz` 补 `beacon` / `beaconPort` / `peers`：以前只有 CORS 头、body 里没有字段，
+    于是「附近房间」在 Node 服务端下**永远是空的**（只有 Rust 版有数据）。
+  - 广播哪一间：有房主优先 → 有人的房 → 默认房间；端口支持延迟取值（`PORT=0` 时监听后才知道）。
+  - 客户端：附近设备行用它自报的 `room/players/hasHost` 列一行房间（点它进的就是那间房），
+    延迟交给 `probeLatency()` 异步补（探不到显示 `--`，不编数字）。
+  - 验证：本机双实例互相发现（8887 ↔ 9001）；房主开房后 peers 变成
+    `name=草原小屋 / room=newplayer / players=1 / hasHost=true`；`test:net` **297 通过**、`npm run check` exit=0。
 - [x] L11 **界面统一规格 + 空房间不许进**（用户 2026-10-27）。
   - 控件统一：`:root` 新增 `--ctl-h` / `--ctl-h-lg` / `--ctl-font` / `--ctl-pad-x` / `--modal-w` /
     `--modal-pad` / `--modal-bg` / `--modal-close`，并加一段"控件统一规格"：
