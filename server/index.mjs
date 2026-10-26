@@ -1102,8 +1102,6 @@ wss.on('connection', (socket, request) => {
         };
         players.set(player.id, player);
         if (wantsHost) {
-          // 这一房**第一次**有人开房：只有这次才采纳房主报上来的天数
-          const freshRoom = !hosts.has(room);
           /*
            * 清场（用户 2026-10-26）：**新房主上位 = 新的一局**，服务端从这一刻起只当缓存，
            * 数据全部由房主本地上行（`session-sync` + 按区块的 `edits-reply`）。
@@ -1122,18 +1120,40 @@ wss.on('connection', (socket, request) => {
           }
           hosts.set(room, { id: player.id, clientId: player.clientId });
           /*
-           * 天数（用户 2026-10-25）：房主的世界本来就带着"第几天"，开房不该把他重置成第 0 天。
-           * 先把旧时钟的当前时刻取出来当新起点的时刻，再换天数——顺序反了会凭空多算一天。
+           * 时间 / 天数 / 天气（用户 2026-10-25 起，2026-10-26 扩到三者全部）：
+           * **开房时以房主本地为准**。
            *
-           * ⚠️ 只在**第一次**开房时采纳：房主断线重连时客户端那份 `localDay` 可能落后一两秒
-           * （服务端才是权威），每次都采纳会让房间的天数被拽回去。
+           * 为什么这三个也要跟房主：房主退出房间后在本地继续玩，时间和天气都在他存档里走；
+           * 重开房时若服务端还按自己那套时钟，房主一进来就会被拽到"服务端此刻"——
+           * 界面上一句话都没有，但那不是他的世界了。`day` 只在第一次采纳（旧口径）是因为
+           * 重连时客户端那份可能落后一两秒；现在三者同进退，判据统一成 `sameHostReturning`。
+           *
+           * ⚠️ 时钟仍是**全服共享**一套（房间之间不隔离）：最后一个开房的人会把它拨到自己的
+           * 时间。多房同服时这是取舍，用户 2026-10-26 明确接受了。
+           *
+           * 顺序：先定天数与时刻，最后才重置起点 `serverStartMs`——反了会凭空多算一天。
            */
-          const hostDay = Number(message.day);
-          if (freshRoom && Number.isInteger(hostDay) && hostDay >= 0) {
-            const nowTime = currentTimeOfDay();
-            startDay = hostDay;
-            startTimeOfDay = nowTime;
+          if (!sameHostReturning) {
+            const hostDay = Number(message.day);
+            const hostTime = Number(message.timeOfDay);
+            if (Number.isInteger(hostDay) && hostDay >= 0) startDay = hostDay;
+            // 脏数据（没带/NaN）就保留当前时刻：老客户端不带这个字段，不能因此把时间清零
+            if (Number.isFinite(hostTime)) startTimeOfDay = ((hostTime % 1) + 1) % 1;
             serverStartMs = Date.now();
+            if (isWeatherKind(message.weather)) {
+              weather = { kind: message.weather, seconds: weatherSecondsFor(Math.random, message.weather) };
+            }
+            /*
+             * 广播对齐：时钟是共享的，别的房间正在玩的人也得立刻跟上（`snap` = 立刻对齐，
+             * 不走"4 倍速收敛"那套）。这时房主本人在 `players` 里，所以也收得到，无害。
+             */
+            for (const activeRoom of roomsInUse()) {
+              broadcast({ t: 'time', timeOfDay: currentTimeOfDay(), day: currentDay(), snap: true }, null, activeRoom);
+              broadcast({ t: 'weather', kind: weather.kind }, null, activeRoom);
+            }
+            log(
+              `房间 ${room} 采用房主的时间：第 ${currentDay()} 天 ${currentTimeOfDay().toFixed(2)} · 天气 ${weather.kind}`,
+            );
           }
           /*
            * 世界（L9）：**只有房主能定这一局用哪个世界**。

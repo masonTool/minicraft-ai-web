@@ -95,6 +95,9 @@ class TestClient {
     this.world = options.world ?? null;
     /** 本机第几天（用户 2026-10-25）：只有房主带，服务端拿它当房间天数的起点 */
     this.day = Number.isInteger(options.day) ? options.day : undefined;
+    /** 本机时刻与天气（用户 2026-10-26）：只有房主带，开房时三者一起以房主本地为准 */
+    this.timeOfDay = Number.isFinite(options.timeOfDay) ? options.timeOfDay : undefined;
+    this.weather = typeof options.weather === 'string' ? options.weather : undefined;
     this.mailbox = [];
     this.socket = new WebSocket(
       `ws://localhost:${PORT}`,
@@ -320,6 +323,8 @@ try {
         ...(client.host ? { host: true } : {}),
         ...(client.world ? { world: client.world } : {}),
         ...(client.day !== undefined ? { day: client.day } : {}),
+        ...(client.timeOfDay !== undefined ? { timeOfDay: client.timeOfDay } : {}),
+        ...(client.weather !== undefined ? { weather: client.weather } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
       if (welcome) {
@@ -1733,6 +1738,68 @@ try {
     );
 
     for (const client of [hostS, early, late, probeS]) client.close();
+  }
+
+  // ---------------------------------------------------------------- 时间/天数/天气以房主为准（用户 2026-10-26）
+  /*
+   * 房主退出房间后在本地继续玩，时钟和天气都在他存档里走。重开房时服务端必须接住这三样，
+   * 否则他一进来就被拽到"服务端此刻"——界面上一句话都没有，但那已经不是他的世界了。
+   *
+   * 三条断言对应三件事：房主自己的 welcome 对得上、后来者按房主的进来、**宽限期内重连不覆盖**
+   * （重连时客户端带的是过期值，采纳了就会把房间的时刻拽回去）。
+   */
+  console.log('\n[开房时间/天数/天气以房主为准]');
+  {
+    const CLOCK_ROOM = 'clockroom';
+    const CLOCK_WORLD = { name: '时钟房', seed: 888, mode: 'survival', difficulty: 'normal' };
+    const clockHost = new TestClient('ClockHost', undefined, {
+      room: CLOCK_ROOM,
+      host: true,
+      world: CLOCK_WORLD,
+      day: 12,
+      timeOfDay: 0.75,
+      weather: 'thunder',
+    });
+    const welcomeClock = await joinAndWaitWelcome(clockHost, '时钟房主', 0, 70, 0);
+    check('房主报的天数被采纳', welcomeClock?.day === 12, `${welcomeClock?.day}`);
+    check(
+      '房主报的时刻被采纳（≈0.75，不是服务端此刻）',
+      Math.abs(Number(welcomeClock?.timeOfDay) - 0.75) < 0.02,
+      `${welcomeClock?.timeOfDay}`,
+    );
+    check('房主报的天气被采纳', welcomeClock?.weather === 'thunder', `${welcomeClock?.weather}`);
+
+    const clockGuest = new TestClient('ClockGuest', undefined, { room: CLOCK_ROOM });
+    const welcomeGuest = await joinAndWaitWelcome(clockGuest, '时钟队友', 0, 70, 0);
+    check(
+      '队友按房主的时刻进来',
+      Math.abs(Number(welcomeGuest?.timeOfDay) - 0.75) < 0.02,
+      `${welcomeGuest?.timeOfDay}`,
+    );
+    check('队友按房主的天气进来', welcomeGuest?.weather === 'thunder', `${welcomeGuest?.weather}`);
+
+    // 宽限期内重连：客户端带的是他自己那份（过期）值，服务端不能采纳
+    clockHost.close();
+    await clockHost.waitClosed();
+    await sleep(120);
+    const clockBack = new TestClient('ClockHostBack', clockHost.clientId, {
+      room: CLOCK_ROOM,
+      host: true,
+      world: CLOCK_WORLD,
+      day: 3,
+      timeOfDay: 0.05,
+      weather: 'clear',
+    });
+    const welcomeBack = await joinAndWaitWelcome(clockBack, '时钟房主（回来了）', 0, 70, 0);
+    check(
+      '宽限期内重连不覆盖房间时刻',
+      Math.abs(Number(welcomeBack?.timeOfDay) - 0.75) < 0.02,
+      `${welcomeBack?.timeOfDay}`,
+    );
+    check('宽限期内重连不覆盖房间天气', welcomeBack?.weather === 'thunder', `${welcomeBack?.weather}`);
+    check('宽限期内重连不覆盖房间天数', welcomeBack?.day === 12, `${welcomeBack?.day}`);
+
+    for (const client of [clockBack, clockGuest]) client.close();
   }
 
   // ---------------------------------------------------------------- 房间的世界（L9）

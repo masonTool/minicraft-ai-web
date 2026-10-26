@@ -418,6 +418,15 @@ export class NetClient {
    * 从属端不读它——天数由服务端下发。
    */
   localDay = 0;
+  /**
+   * 本机此刻的一天中的时间（0..1）与天气（用户 2026-10-26）。
+   *
+   * 与 `localDay` 一起上报：**开房时时间/天数/天气三者都以房主本地为准**。
+   * 房主退出房间后在本地继续玩，时钟和天气都在他存档里走；重开房时服务端要接住这三样，
+   * 否则他一进来就被拽到"服务端此刻"——那不是他的世界了。
+   */
+  localTimeOfDay = 0.12;
+  localWeather: 'clear' | 'rain' | 'thunder' = 'clear';
   /** 房间当前的游戏模式（`welcome.gameMode`；老服务端没有就是 null） */
   roomGameMode: NetGameMode | null = null;
   /** 页面卸载的 `bye` 监听只挂一次 */
@@ -561,8 +570,10 @@ export class NetClient {
           ...(this.wantsHost ? { host: true } : {}),
           // 这一局用哪个世界（L9）：只有房主带，种子决定队友那边的地形
           ...(this.wantsWorld ? { world: this.wantsWorld } : {}),
-          // 天数（用户 2026-10-25）：房主的世界本来就带着"第几天"，服务端据此定房间的起点
-          ...(this.wantsHost ? { day: this.localDay } : {}),
+          // 时间/天数/天气（用户 2026-10-26）：房主的世界本来就带着这三样，服务端据此定房间起点
+          ...(this.wantsHost
+            ? { day: this.localDay, timeOfDay: this.localTimeOfDay, weather: this.localWeather }
+            : {}),
         }),
       );
     };

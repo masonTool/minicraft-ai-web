@@ -4928,8 +4928,13 @@ class App {
           worldType: this.worldConfig.worldType,
         }
       : undefined;
-    // 天数（用户 2026-10-25）：房主开房时把"本机第几天"一起报上去，房间不把他重置成第 0 天
+    /*
+     * 时间 / 天数 / 天气（用户 2026-10-26）：房主开房时把这三样一起报上去，
+     * 房间以他的本地为准。从属端不用管——它们由服务端下发（`welcome` / `time` / `weather`）。
+     */
     this.net.localDay = this.dayCount;
+    this.net.localTimeOfDay = this.timeOfDay;
+    this.net.localWeather = this.weather.current;
     this.net.connect(url, name, host, world);
     return this.netStatus;
   }
