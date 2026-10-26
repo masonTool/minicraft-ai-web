@@ -43,6 +43,7 @@ import {
   withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
+import { networkInterfaces } from 'node:os';
 import { DEFAULT_MAX_EDITS, editsInChunk, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
 import { encodeEditsPack } from './editpack.mjs';
 import { createBuckets } from './ratelimit.mjs';
@@ -622,7 +623,23 @@ httpServer.listen(PORT, () => {
   const bound = httpServer.address();
   const port = typeof bound === 'object' && bound ? bound.port : PORT;
   log(`已启动，端口 ${port}，种子 ${WORLD_SEED}（健康检查 /healthz）`);
-  log(`玩家把游戏指向 ws://localhost:${port} 即可联机`);
+  /*
+   * 把**局域网地址**打出来（用户 2026-10-26："手机上想连电脑上的服务器，不知道填什么"）。
+   *
+   * 以前这里只打 `ws://localhost:${port}`——那句话只对**跑服务端的这台机器**成立，
+   * 别的设备填 localhost 指的是它自己，必然连不上，而且看不出是哪里错了。
+   * 顺带把网卡列表打全：一台机器常见「有线 + 无线 + 虚拟网卡」好几个地址，
+   * 玩家可以逐个在手机浏览器里试 `http://<ip>:<port>/healthz`。
+   */
+  const lanAddresses = Object.values(networkInterfaces())
+    .flat()
+    .filter((entry) => entry !== undefined && entry.internal === false && entry.family === 'IPv4')
+    .map((entry) => entry.address);
+  if (lanAddresses.length > 0) {
+    log('局域网地址（同一 Wi-Fi 下的手机/别的电脑填这些）：');
+    for (const address of lanAddresses) log(`  ${address}   →  ws://${address}:${port}`);
+  }
+  log(`本机自连：ws://localhost:${port}（只有这台机器能用）`);
   if (ALLOWED_ORIGINS.length > 0) log(`来源白名单：${ALLOWED_ORIGINS.join(', ')}`);
   if (ROOM_PASSWORD) log('已启用房间口令（ROOM_PASSWORD）');
 });

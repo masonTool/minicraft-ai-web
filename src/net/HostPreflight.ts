@@ -17,8 +17,15 @@ import { formatServerUrl, roomsEndpoint as roomsEndpointFrom } from '../core/net
  * ——那正是"预检反而把功能弄坏"的经典翻车方式。
  */
 
-/** 被挡住的原因：连不上 / 房名已被占 */
-export type HostBlockReason = 'unreachable' | 'taken';
+/**
+ * 被挡住的原因：连不上 / 房名已被占 / 页面协议不允许（https 页面连 `ws://`）。
+ *
+ * 最后那条单独列出来不是为了好看：**它跟网络无关**，是浏览器的混合内容策略，
+ * 玩家改地址、换端口、重启服务器都白搭。以前这两种情况都回 `unreachable`，
+ * 于是手机（页面在 https 上）开房失败时，看到的是一句"连不上服务器"，
+ * 而真正的解决办法是"换个 http 地址打开游戏"或"给服务器上 wss"。
+ */
+export type HostBlockReason = 'unreachable' | 'taken' | 'https-blocked';
 
 /** 服务端 `/rooms` 里我们关心的那一行 */
 export interface RoomListingEntry {
@@ -32,6 +39,8 @@ export interface HostPreflightDeps {
   /** 只为可测：默认去 `roomsEndpoint()` 拉列表；`null` = 拿不到（不影响判定） */
   fetchRooms?: (baseUrl: string) => Promise<RoomListingEntry[] | null>;
   timeoutMs?: number;
+  /** 只为可测：页面协议，默认读 `location.protocol` */
+  pageProtocol?: string;
 }
 
 const OPEN_TIMEOUT_MS = 3000;
@@ -101,6 +110,14 @@ export async function preflightHost(
   const fetchRooms = deps.fetchRooms ?? fetchRoomsDefault;
 
   const url = formatServerUrl(options.baseUrl, options.room, '');
+
+  /*
+   * 混合内容先判（用户 2026-10-26）：https 页面连 `ws://` 会被浏览器直接拒绝，
+   * 连尝试都不允许。这时给"连不上"是误导——要告诉玩家真正的原因。
+   */
+  const pageProtocol = deps.pageProtocol ?? (typeof location === 'undefined' ? '' : location.protocol);
+  if (pageProtocol === 'https:' && /^ws:\/\//i.test(url)) return 'https-blocked';
+
   const reachable = await canOpen(url, createSocket, timeoutMs);
   if (!reachable) return 'unreachable';
 

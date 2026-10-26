@@ -81,6 +81,7 @@ export const menu = {
   'server.pick': 'Choisir un serveur',
   'server.rtt': '{ms} ms',
   'mp.hostUnreachable': 'Impossible d’ouvrir la partie : serveur injoignable — vérifie l’adresse et le réseau (le serveur tourne-t-il ?)',
+  'mp.hostHttpsBlocked': 'La page est servie en https : le navigateur bloque la connexion à un serveur local en ws:// — ouvrez le jeu via l’adresse http de cette machine, ou servez le serveur en wss',
   "mp.name": "Pseudo",
   "mp.room": "Partie",
   "mp.roomHint": "vide = partie par défaut",

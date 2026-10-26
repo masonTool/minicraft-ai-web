@@ -81,6 +81,7 @@ export const menu = {
   'server.pick': 'Server wählen',
   'server.rtt': '{ms} ms',
   'mp.hostUnreachable': 'Raum konnte nicht geöffnet werden: Server nicht erreichbar – Adresse und Netz prüfen (läuft der Server?)',
+  'mp.hostHttpsBlocked': 'Diese Seite läuft über https, deshalb blockiert der Browser die Verbindung zu einem LAN-Server per ws:// — öffne das Spiel über die http-Adresse des Rechners oder biete den Server per wss an',
   "mp.name": "Spielername",
   "mp.room": "Raum",
   "mp.roomHint": "leer = Standardraum",

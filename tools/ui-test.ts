@@ -6261,6 +6261,23 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
   check('离开的人会有一条系统提示', mainSrc4.includes("tp('say.net.playerLeft'"));
 
   /*
+   * 开房失败要分得清"连不上"和"被浏览器拦了"（用户 2026-10-26 手机开房失败）：
+   * https 页面连 `ws://` 是混合内容，跟网络无关，必须给专门的提示。
+   */
+  const preflightSrc = readFileSync(new URL('../src/net/HostPreflight.ts', import.meta.url), 'utf8');
+  check(
+    '预检区分 https 混合内容',
+    preflightSrc.includes("'https-blocked'") &&
+      preflightSrc.includes("pageProtocol === 'https:'") &&
+      preflightSrc.includes('/^ws:\\/\\//i.test(url)'),
+  );
+  check('开房失败时把这条翻成人话', mainSrc4.includes("blocked === 'https-blocked'") && mainSrc4.includes("t('mp.hostHttpsBlocked')"));
+  check(
+    '服务端启动打印局域网地址（不是只打 localhost）',
+    serverSrc4.includes('局域网地址（同一 Wi-Fi 下的手机/别的电脑填这些）') && serverSrc4.includes('networkInterfaces()'),
+  );
+
+  /*
    * 世界列表页的入口行（用户 2026-10-26："按钮太高了 / 两个按钮要等宽"）。
    *
    * 判据必须走 `(pointer: fine)`：`body.touch-mode` 是**进世界之后**才挂的，

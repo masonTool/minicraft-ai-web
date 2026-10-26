@@ -64,6 +64,39 @@ describe('preflightHost', () => {
     expect(await preflightHost({ baseUrl: 'ws://192.168.1.5:25187', room: 'red' }, deps(null))).toBeNull();
   });
 
+  /*
+   * 混合内容（用户 2026-10-26：手机上开房失败）：https 页面连 `ws://` 会被浏览器直接拒，
+   * 这跟"服务器没起/地址错"是两件事——以前都回 unreachable，玩家会一直改 IP。
+   */
+  it('https 页面 + ws:// → https-blocked（连尝试都不该尝试）', async () => {
+    FakeSocket.mode = 'open';
+    let socketCreated = false;
+    const reason = await preflightHost(
+      { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+      {
+        createSocket: (url) => {
+          socketCreated = true;
+          return new FakeSocket(url) as unknown as WebSocket;
+        },
+        fetchRooms: async () => null,
+        pageProtocol: 'https:',
+        timeoutMs: 50,
+      },
+    );
+    expect(reason).toBe('https-blocked');
+    expect(socketCreated).toBe(false);
+  });
+
+  it('http 页面 + ws:// 正常放行（同一台机器自托管就是这条路）', async () => {
+    FakeSocket.mode = 'open';
+    expect(
+      await preflightHost(
+        { baseUrl: 'ws://192.168.1.5:25187', room: 'red' },
+        { ...deps(null), pageProtocol: 'http:' },
+      ),
+    ).toBeNull();
+  });
+
   it('探测用的 URL 带上了房名，但**不发 join**（连上就关）', async () => {
     FakeSocket.mode = 'open';
     let socket: FakeSocket | null = null;

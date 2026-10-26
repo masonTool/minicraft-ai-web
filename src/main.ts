@@ -20378,8 +20378,18 @@ async function boot(): Promise<void> {
      */
     onHostWorld: async (world, room, password, baseUrl) => {
       const blocked = await preflightHost({ baseUrl, room });
+      if (blocked === 'https-blocked') {
+        /*
+         * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
+         * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
+         */
+        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
+        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
+        return t('mp.hostHttpsBlocked');
+      }
       if (blocked === 'unreachable') {
         diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
+        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
         return t('mp.hostUnreachable');
       }
       if (blocked === 'taken') {

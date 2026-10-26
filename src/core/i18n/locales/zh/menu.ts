@@ -82,6 +82,7 @@ export const menu = {
   'server.pick': '选择服务器',
   'server.rtt': '{ms} 毫秒',
   'mp.hostUnreachable': '开房失败：连不上服务器，检查地址和网络（服务端启动了吗）',
+  'mp.hostHttpsBlocked': '当前页面是 https，浏览器不允许连局域网服务器（ws://）——请用同一台机器的 http 地址打开游戏，或给服务器配 wss',
   'mp.name': '昵称',
   'mp.room': '房间',
   'mp.roomHint': '留空 = 默认房间',

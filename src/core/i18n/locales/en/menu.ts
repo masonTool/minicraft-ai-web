@@ -83,6 +83,7 @@ export const menu = {
   'server.pick': 'Choose a server',
   'server.rtt': '{ms} ms',
   'mp.hostUnreachable': 'Could not host: server unreachable — check the address and network (is the server running?)',
+  'mp.hostHttpsBlocked': 'This page is served over https, so the browser blocks connecting to a LAN server over ws:// — open the game from the http address of that machine, or serve the server over wss',
   'mp.name': 'Nickname',
   'mp.room': 'Room',
   'mp.roomHint': 'blank = default room',

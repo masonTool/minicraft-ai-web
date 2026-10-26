@@ -80,6 +80,7 @@ export const menu = {
   'server.pick': 'Escolher servidor',
   'server.rtt': '{ms} ms',
   'mp.hostUnreachable': 'Não foi possível abrir a sala: servidor inacessível — confira o endereço e a rede (o servidor está rodando?)',
+  'mp.hostHttpsBlocked': 'A página está em https, então o navegador bloqueia a conexão com um servidor da rede local via ws:// — abra o jogo pelo endereço http daquela máquina ou sirva o servidor em wss',
   "mp.name": "Apelido",
   "mp.room": "Sala",
   "mp.roomHint": "vazio = sala padrão",
