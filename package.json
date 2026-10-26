@@ -10,6 +10,8 @@
     "build:fast": "SOURCEMAP=0 vite build",
     "build:app": "SPECS_STUB=1 HOST_CORE_REQUIRED=1 SOURCEMAP=0 vite build && node tools/release-check.mjs --mode app",
     "build:web": "SPECS_STUB=0 HOST_CORE_REQUIRED=0 SOURCEMAP=0 vite build && node tools/release-check.mjs --mode web",
+    "android:sync": "npm run build:app && npx cap sync android",
+    "android:apk": "npm run android:sync && cd server/android && ./gradlew assembleDebug",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
@@ -81,7 +83,7 @@
     "test:hooks": "node .continue/hooks/check.mjs hooks",
     "shot": "node tools/screenshot.mjs",
     "test:offline:changed": "node tools/run-tests.mjs --changed",
-    "server": "node server/index.mjs",
+    "server": "node server/node/index.mjs",
     "test:render": "esbuild tools/render-test.ts --bundle --platform=node --format=esm --outfile=.tmp/render-test.mjs --log-level=error && node .tmp/render-test.mjs",
     "test:viewmode": "esbuild tools/viewmode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/viewmode-test.mjs --log-level=error && node .tmp/viewmode-test.mjs",
     "test:cameranear": "esbuild tools/camera-near-test.ts --bundle --platform=node --format=esm --outfile=.tmp/camera-near-test.mjs --log-level=error && node .tmp/camera-near-test.mjs",
@@ -230,13 +232,17 @@
     "test:browser-check": "node tools/browser-check-test.mjs",
     "shotdiff": "node tools/shot-diff.mjs",
     "test:shotdiff": "node tools/shot-diff-test.mjs",
-    "skill:e2e": "node .codebuddy/skills/continue-task/scripts/e2e.mjs"
+    "skill:e2e": "node .codebuddy/skills/continue-task/scripts/e2e.mjs",
+    "android:test": "cd server/android && ./gradlew connectedDebugAndroidTest"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "three": "^0.186.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.2",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
     "esbuild": "^0.28.2",

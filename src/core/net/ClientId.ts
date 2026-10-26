@@ -12,7 +12,7 @@
 /** localStorage 的键。改它等于让所有老玩家换一个身份，非必要别动 */
 export const CLIENT_ID_KEY = 'mc.clientId';
 
-/** 与 `server/protocol.mjs` 的 `CLIENT_ID_RE` 同一形状：8~64 位字母/数字/-/_ */
+/** 与 `server/node/protocol.mjs` 的 `CLIENT_ID_RE` 同一形状：8~64 位字母/数字/-/_ */
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** 只要能读能写这两个方法就够——测试可以塞一个假 storage，不必依赖浏览器 */

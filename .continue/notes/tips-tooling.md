@@ -260,3 +260,29 @@
 - **增量被 Service Worker 缓存住 → 更新永远不生效**。症状不是报错，而是"线上明明发了新方块，玩家看不到"。处置：把增量文件与版本清单一样排除出 SW 缓存（`no-store`），每次启动重新拉。
 - **"生成快照"与"封版"必须是两个命令**。生成是高频动作（内循环、CI 会跑），封版是发布决策。合成一条的话，随手跑一次生成就会把线上 App 的基线悄悄换掉——之后所有增量都套不上（客户端指纹校验会拒绝），且没有任何记录能查是哪次动的。处置：`gen:hostcore` 只产候选，`release:baseline` 才提升并写台账（版本/日期/提交/条数/指纹/App 版本）。
 - 判据：任何"增量/补丁"类设计，都要能回答"这份补丁基于哪一版"——回答不出来的设计，出问题时只能靠猜。
+### Rust 服务端：一处锁语义 + 两处库默认值（都只在真跑起来之后才暴露）
+
+- **tokio 的 `Mutex` 不可重入**：持着 `players` 锁去调一个内部还会锁 `players` 的函数，结果是**永久死锁**——不报错、不 panic、不掉日志，表现是"客户端点了加入没反应"。两条出路：把锁边界收进块内，或干脆把全部状态收进**一把**锁（Rust 版最终这么做，从此不存在锁顺序问题）。JS 版单线程无锁，照搬逻辑时最容易漏这一层。
+- **tungstenite 的 `max_message_size` 超限 = 直接拆连接**：客户端看到 1006，不会收到 1009。要与 `ws` 的 `maxPayload` 行为对齐（超了回 close 1009），得把库的上限设大、在业务层自己比长度并主动发 `Close(Size)`——否则只能靠改断言通过，那等于契约没了。
+- **握手回调里拒来源，客户端拿不到 `error.code`**：`accept_hdr_async` 的回调返回 `ErrorResponse` 时只写 HTTP 错误，而协议约定客户端按 `error{code}` 决定要不要重连。所以白名单要在**握手之后**判（或像 Rust 版那样自己先读请求头、决定升级与否）。
+- 顺带一条**行为契约**（不是坑但很容易想当然）：有房主的房里，从属端直发 `block/blocks/sign/frame/container/tnt` 在 JS 版是**静默丢弃**（只计数 + 限频打日志），不回 `not-host`；回错误会让从属端每改一次方块就多一条错误。
+### 手机壳的三处工具链坑（Gradle / cap / 测试命名）
+
+- **Gradle 8.2.1 不认 JDK 21**：报错看起来像语法错（`Unsupported class file major version 65`），实际是 Gradle 太老。`JAVA_HOME` 指到 17 就能编；要长期用 21 得把 wrapper 升到 8.7+。**判定口诀**：Gradle 版本 < 8.5 就别配 JDK 21。
+- **`test:*` 这个名字会被离线 runner 当套件解析**：`npm run test:android`（跑 Gradle）会让 `tools/run-tests.mjs` 报"认不出这些测试脚本的入口"——它按 `test:` 前缀收套件，且只认 esbuild / node 两种写法。Gradle/XCTest 这类跑法要么叫 `android:test`，要么进 `SKIP` 名单。
+- **`npx cap sync` 很慢**（本项目实测 5 分钟，因为要逐个小文件拷 12MB 的 `assets/public`）：只为看一眼效果时直接改 `android/app/src/main/assets/public` 里的文件更快，出包前再 sync。
+- 顺带两条边界（不是坑但省时间）：**`.so` / `xcframework` / `jniLibs` 都不进 git**，由 Gradle 任务与 `build-*.sh` 在构建时生成（缺产物时在配置阶段就报一句明确的话）；**`simctl spawn` 能在 iOS 模拟器里直接跑链接好的可执行**，设备级验收不必先建 Xcode 工程。
+### 改目录结构要搜的四类引用（这次收拢 `server/` 的清单）
+
+挪一个目录最容易漏的不是 `import`，而是这四处——它们都不在 TypeScript 的类型系统里：
+
+1. **`package.json` 的 scripts**（`node server/index.mjs`、`cd android && ./gradlew`）；
+2. **`tools/run-tests.mjs` 的"改动命中"映射**（`net: ['server/']` → 决定哪些离线套件算命中，
+   漏改不会报错，只会在改服务端时"没有命中任何套件"，于是门禁静默变松）；
+3. **`Dockerfile` 的 `COPY` / `CMD`**（只在构建镜像时才炸）；
+4. **Gradle / Xcode 里的相对路径**（`rootProject.projectDir.parentFile` 这类"剥几层父目录"的写法，
+   目录深了一层就全错；报错还很像"忘了编 `.so`"）。
+
+顺带一条有用的：**Capacitor 6 支持自定义平台目录** —— `capacitor.config.json` 里
+`"android": { "path": "server/android" }`（CLI 读 `extConfig.android.path`），
+所以"想把 android/ 挪进子目录"不必牺牲 `npx cap sync android`，也不用软链。

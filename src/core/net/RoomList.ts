@@ -38,7 +38,7 @@ export interface RoomListResult {
   rooms: RoomListEntry[];
 }
 
-/** 服务端只认这个字符集（与 `server/protocol.mjs` 的 `ROOM_RE` 一致） */
+/** 服务端只认这个字符集（与 `server/node/protocol.mjs` 的 `ROOM_RE` 一致） */
 const ROOM_RE = /^[A-Za-z0-9_-]{1,24}$/;
 
 /**

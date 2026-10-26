@@ -11,8 +11,8 @@
  * 换句话说，这里的"区块同步"是**零带宽**的：算力换带宽，区块同步退化成
  * "同步一份（种子 + 增量列表）"——与 K1 的增量存档是同一套思路。
  *
- * 运行：node server/index.mjs           （默认端口 8887，见 protocol.mjs 的 DEFAULT_PORT）
- *      PORT=9000 node server/index.mjs
+ * 运行：node server/node/index.mjs           （默认端口 8887，见 protocol.mjs 的 DEFAULT_PORT）
+ *      PORT=9000 node server/node/index.mjs
  *
  * 协议：JSON 文本帧，消息表与校验规则见 docs/NET-PROTOCOL.md（客户端实现在 src/net/NetClient.ts）
  */
@@ -44,7 +44,7 @@ import {
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
 import { networkInterfaces } from 'node:os';
 import { DEFAULT_MAX_EDITS, editsInChunk, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
-import { encodeEditsPack } from './editpack.mjs';
+import { encodeEditsPack } from '../editpack.mjs';
 import { createBuckets } from './ratelimit.mjs';
 import { withinAoi } from './aoi.mjs';
 import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
@@ -805,7 +805,12 @@ const httpServer = createServer((req, res) => {
     return;
   }
   if (path === '/healthz') {
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    // 联机面板要从游戏页面跨源读 `/healthz` 里的 `peers`（局域网发现），与 `/rooms` 同款 CORS
+    res.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    });
     res.end(
       JSON.stringify({
         ok: true,

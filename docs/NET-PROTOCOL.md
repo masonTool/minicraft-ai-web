@@ -1,6 +1,7 @@
 # 联机协议（WebSocket · JSON 文本帧）
 
-> 服务端：`server/index.mjs`（端口默认 8887，`PORT` / `SEED` 可覆盖）
+> 服务端：`server/node/index.mjs`（Node 版，端口默认 8887，`PORT` / `SEED` 可覆盖）；
+> Rust 版在 `server/rust/`，与这份文档逐条对齐（`bash server/rust/run-net-test.sh` 验收）
 > 客户端：`src/net/NetClient.ts`
 > 协议验收：`npm run test:net`（真服务端 + 真 WebSocket 客户端）
 > 端到端：`tools/net-check.sh`（浏览器 + node 机器人，需要 dev server）
@@ -172,7 +173,7 @@
 
 ### 5.1 版本与错误码
 
-版本号在两端各有一份（`server/protocol.mjs` 与 `src/core/net/Protocol.ts`），
+版本号在两端各有一份（`server/node/protocol.mjs` 与 `src/core/net/Protocol.ts`），
 相等由 `tests/net-protocol-version.test.ts` 断言。**什么时候 +1**：字段语义变了、
 旧客户端会理解错；加一个可选字段不算。
 
@@ -199,34 +200,35 @@
 
 | 项 | 值 | 位置 |
 | --- | --- | --- |
-| 默认端口 | 8887（`PORT`） | `server/index.mjs` |
+| 默认端口 | 8887（`PORT`） | `server/node/index.mjs` |
 | 世界种子 | 每个房间由**房主**随 `join.world` 上报（L9）；没房主的房退回 20261014（`SEED`）。**不落盘**：重启后房间退回默认种子 | 同上 |
-| 时钟与天气 | **每房一套**（用户 2026-10-26）：`room → clock` 存 `startMs/startTimeOfDay/startDay/weather`，房主开房时用他上报的 `day`/`timeOfDay`/`weather` 初始化，`clearRoom` 时删掉；没有房主的房与读档后的默认值用 `defaultClock`（落盘的就是它）。`time` 每 2 秒按房各发一份、`weather` 切换时按房广播，`sleep` 与 `room-config` 只动本房 | `server/index.mjs` |
-| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, maxPlayers, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发密码**、只列有人的房。`maxPlayers` 只用于界面显示 `在线/容量`（默认 10，`MAX_PLAYERS` 可覆盖），**不是准入限制** | `server/index.mjs` |
+| 时钟与天气 | **每房一套**（用户 2026-10-26）：`room → clock` 存 `startMs/startTimeOfDay/startDay/weather`，房主开房时用他上报的 `day`/`timeOfDay`/`weather` 初始化，`clearRoom` 时删掉；没有房主的房与读档后的默认值用 `defaultClock`（落盘的就是它）。`time` 每 2 秒按房各发一份、`weather` 切换时按房广播，`sleep` 与 `room-config` 只动本房 | `server/node/index.mjs` |
+| 房间列表 | `GET /rooms`（同一端口）→ `{ok, protocol, passwordRequired, maxPlayers, rooms[{room, players, hasHost, world{name,seed,mode,difficulty}}]}`；**不下发密码**、只列有人的房。`maxPlayers` 只用于界面显示 `在线/容量`（默认 10，`MAX_PLAYERS` 可覆盖），**不是准入限制**；`hasHost` 为 false 的房**不允许进入**（`join` 回 `no-host`） | `server/node/index.mjs` |
 | 玩家 id | 自增、不回收 | 同上 |
-| 方块增量上限 | 500000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/snapshot.mjs` |
-| 房间清场 | 新房主开房（`send(welcome)` 之前）与房主宽限期结束各清一次 `clearRoom(room)`；**宽限期内重连的房主不清** | `server/index.mjs` |
+| 方块增量上限 | 500000 条，满了**淘汰最旧的一条并告警**（每 100 条报一次） | `MAX_EDITS` / `server/node/snapshot.mjs` |
+| 房间清场 | 新房主开房（`send(welcome)` 之前）与房主宽限期结束各清一次 `clearRoom(room)`；**宽限期内重连的房主不清** | `server/node/index.mjs` |
 | 懒上行在飞上限 | 每房最多 8 个区块同时在请求；单次请求 5 秒超时后可重试；已确认区块最多记 4096 个 | `MAX_INFLIGHT_REQUESTS` / `MAX_TRACKED_CHUNKS` |
 | `session-sync` | 每包 ≤ 200 条，一条连接最多 256 条 | 同上 |
 | `welcome` 裁剪半径 | 8 区块（128 格，切比雪夫；只带同维度） | `SNAPSHOT_RADIUS_CHUNKS` |
 | 掉落物上限 | 2000 条，满了丢弃新 key | `MAX_ITEMS` |
 | 掉落物广播 | 令牌桶：每秒 30 条、**突发 400**（用户 2026-10-26）。突发额度是给"进房重播"的——房主进房时客户端会把世界里已有的掉落物重播一遍，固定窗口只能过 30 条且不重试 | `RATE_LIMITS.item` |
 | 位置限频 | 50ms | `MOVE_INTERVAL_MS` |
-| 方块限频 | 令牌桶：每秒 200 格、可攒 400（按**条数**计费，红石连锁一次几十格是正常的） | `server/ratelimit.mjs` |
+| 方块限频 | 令牌桶：每秒 200 格、可攒 400（按**条数**计费，红石连锁一次几十格是正常的） | `server/node/ratelimit.mjs` |
 | 容器限频 | 令牌桶：每秒 20 次 | 同上 |
 | 聊天限频 | 令牌桶：每秒 5 条 | 同上 |
-| 单帧上限 | 64KB（`maxPayload`） | `server/index.mjs` |
-| 房间 | `room` 字段（1~24 位字母/数字/`-`/`_`），默认 `default`；数据表 key 前缀就是房名 | `server/protocol.mjs` / 同上 |
+| 单帧上限 | 64KB（`maxPayload`） | `server/node/index.mjs` |
+| 房间 | `room` 字段（1~24 位字母/数字/`-`/`_`），默认 `default`；数据表 key 前缀就是房名 | `server/node/protocol.mjs` / 同上 |
 | 房间口令 | `ROOM_PASSWORD` 环境变量，空 = 不校验（**明文传输，不是鉴权**） | 同上 |
 | 来源白名单 | `ALLOWED_ORIGINS`（逗号分隔），空 = 不校验；**无 Origin 的连接放行**（node 机器人/原生客户端不带） | 同上 |
-| 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/aoi.mjs` |
-| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, traffic, totals}`；`/rooms` 带 `access-control-allow-origin: *`（浏览器从 5173 跨源读），其它路径 404 | `server/index.mjs` |
+| 广播关注范围 | 8 区块 + 同维度（`AOI_RADIUS_CHUNKS`）；只作用于**坐标类**消息（方块/容器/牌子/展示框/TNT/掉落物/生物命中/箭），聊天与时间不过滤 | `server/node/aoi.mjs` |
+| 局域网发现（N4/N6） | 每台服务端用 **UDP 组播** `239.255.42.99:25188` 广播一帧 `{mc, v, id, port, room, name, seed, players, host, pw}`（3 秒一次，12 秒听不到就下线），并按 `id` 过滤自己的回声；iOS 另外用 `NetService` 发布同样的字段（Bonjour，`_minicraft._tcp`），`server/rust` 的 `beacon::from_txt` 负责两种记录互转 | `server/rust/src/beacon.rs` |
+| 健康检查 | `GET /healthz`（与 WebSocket **同一个端口**），返回 `{ok, players, rooms, uptime, seed, protocol, beacon, peers, traffic, totals}`；`peers` 是这台服务器用 UDP 组播听到的其它设备（`{name, room, port, addr, seed, players, hasHost, passwordRequired, seenMs}`），联机面板据此列出"附近房间"；`/rooms` 与 `/healthz` 都带 `access-control-allow-origin: *`（浏览器跨源读），其它路径 404 | `server/node/index.mjs` / `server/rust/src/lib.rs` |
 | 客户端默认地址 | https 页面 → `wss://<同源>/ws`；http 页面 → `ws://<hostname>:8887`；`?server=` 显式覆盖 | `core/net/ServerUrl.ts` |
 | 容器快照上限 | 5000 个，满了丢弃新 key | `MAX_CONTAINERS` |
-| 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/protocol.mjs` |
+| 方块 id 上界 | 2000（`MAX_BLOCK_ID`，**不是精确白名单**；`tests/net-block-validation.test.ts` 断言真实注册表最大 id 小于它） | `server/node/protocol.mjs` |
 | 方块 state 位宽 | 255（8 位，与 `ChunkEdits.packEdit` 一致） | 同上 |
 | 改动距离上限 | 64 格（水平；`MAX_EDIT_DISTANCE`）。**房主不受这条限制**：他重发的是从属端请求的落地结果，坐标是请求方的位置 | 同上 |
-| 快照文件 | `server/.data/world.json`（`DATA_DIR` 可覆盖） | `server/store.mjs` |
+| 快照文件 | `server/.data/world.json`（`DATA_DIR` 可覆盖） | `server/node/store.mjs` |
 | 保存时机 | 每 30 秒一次 + SIGINT/SIGTERM 退出前补存一次 | 同上 |
 | 快照内容 | `version(2) / savedAt / timeOfDay / day / weather`——**只有多房共享的全局量，没有任何世界数据**（用户 2026-10-26）。v1 存档仍能读，但里面那四张房间数据表一律丢弃 | 同上 |
 | 损坏处理 | 读不出来就改名成 `world.json.broken-<时间戳>` 再按空世界启动（**不静默删**） | 同上 |

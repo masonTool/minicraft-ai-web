@@ -4,6 +4,336 @@
 > 这批是旧版存档（历史批次 1~613 / HANDOFF 批次流水 / 旧队列整份），不进上下文。
 > 找某个批次：`grep -n "批次 <号>" .continue/DONE.archive.md`
 
+## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
+> 房主离线期间的改动也只存本地；再次开房时服务器以**房主本地**为准重建——一句话：
+> **服务器上的一切变更都回到房主本地，两边始终以房主为准**。
+> 两个已拍板的取舍：① 服务端**不保留**"只读救援副本"（房主设备丢 = 这一局全丢）；
+> ② 方块增量走**按区块懒上行**（不是开房全量推）。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2011
+
+- [x] [L8] 房主联机不切 `@mp:` 库（改动直接落单机存档）+ 联机期保存压到 10 秒、断开前强制落盘：`src/main.ts` 的 `enterMultiplayerSave` / `tickAutoSave` / `onStatus(false)` → `npm run check:fast`
+  - 做了什么：`enterMultiplayerSave()` 开头按 `this.net.role === 'host'` 早退（房主全程用 `world.id` 那个单机库），`leaveMultiplayerSave()` 因此对房主自动 no-op、也不再原地重载；新增 `hostSession`（在 `onNetWelcome` 里记一份，断开善后里用掉并清掉，因为那时 `role` 已经回 `solo`）；`tickAutoSave()` 取 `min(设置值, 10s)`；`onStatus(false)` 里房主先 `saveNow('mp-host-leave')` 再做其它善后。
+  - 为什么：房间数据只存房主本地之后，"最后 30 秒"没有任何备份，而原先房主的改动写进 `@mp:` 库（只写不读）等于退出即丢。取 `min` 而不是直接赋值是为了不和玩家自己设的 5 秒打架。
+  - 验证：`npm run check:fast` 全绿（typecheck + i18n 审计 + 586 条单测；离线套件不覆盖 `src/main.ts`，脚本自己提示了这一点）。
+  - 待人工：双端手测"联机盖房 → 退出房间 → 单机进同一个世界，房子还在"（需要浏览器 + 两个客户端）。
+- [x] [L8] 服务端清场：新增 `clearRoom()`，房主新上位与关房时各清一次 → `npm run test:net`
+  - 做了什么：`clearRoom(room)` 按房名前缀清 edits/containers/signs/frames，顺手清同房玩家的掉落物、`roomWorlds`/`roomGameModes`、两张区块追踪表；三处调用——① 关房（房主宽限期结束）② `join` 里 `wantsHost` 分支（`send(welcome)` 之前）③ 由 ② 兜住"服务端崩溃重启后的残留"。
+  - 为什么：房间数据以房主本地为准，残留会在下一局被 `welcome` 发出去，等于服务端把房主的世界改回去。判据用 `sameHostReturning = grace && hosts.get(room)?.id === player.id`：**宽限期内重连的房主不清**（他切后台回来还是同一局）。原先想用 `host.id !== player.id`，但那条件实际上是死代码——新 host 在 `host-taken` 那道闸就被拒了，能进来的只有"本人重连"。
+  - 验证：`npm run test:net` **217 → 226 通过 / 0 失败**（新增 9 条：房主写方块+容器 → 队友能看到 → 断开 120ms 内同 clientId 重连仍是房主且缓存不清（新队友仍收到那 9 条）→ 宽限期过后进同房名 welcome 全空、新房主上位也不继承）。
+- [x] [L8] 服务端不再持有世界存档：`worldSnapshot()` 只留时间/天数/天气，`SNAPSHOT_VERSION` 升 2 并兼容读 v1（旧房间数据静默丢弃）→ `npm run test:net`
+  - 做了什么：`worldSnapshot()` 删掉 edits/containers/signs/frames 与 `seed`，只剩 `version/savedAt/timeOfDay/day/weather`；读档块删掉四张表的还原循环，只回填天气/时间/天数，并在版本不符时打一行说明；`roomOfDataKey()`（只为落盘拼房名）与它的 `DEFAULT_ROOM` 导入一并删掉；`store.mjs` 的 `SNAPSHOT_VERSION` 1 → 2，新增 `READABLE_VERSIONS`（v1 仍可读，不当损坏）。
+  - 为什么：房间数据以房主本地为准之后，"服务端还存着一份世界"会立刻变成第二份事实——重启后被 `welcome` 发出去就是把房主的世界改回上次的样子。v1 不当损坏是因为内容完好、只是格式旧，时间/天数/天气仍然有效。
+  - 验证：`npm run test:net` **226 → 236 通过 / 0 失败**（改写原"重启后方块还在/容器还在"两条为"不再复活"；新增直接读 `world.json` 断言 v2 + 四张表不存在 + 时间仍在；新增 v1 升级用例：手写 v1 文件 → 不被改名成 `.broken` → 方块/容器/牌子/展示框全丢弃、时间 0.5 与天气 rain 被沿用）。
+- [x] [L8] 方块增量懒上行（服务端侧）：`edits-request` 下发给房主、`edits-reply` 收下并广播 `blocks`，`pushChunkEdits` 改成"已确认直接推、未确认向房主要" → `npm run test:net`
+  - 做了什么：新增 `confirmedChunks`/`requestedChunks`（按房一份，上限 4096 / 在飞 8）+ `trackedChunks`/`rememberTracked`；`pushChunkEdits` 拆成"直接推缓存"（`sendChunkEdits`）与"向房主要"（`requestChunkFromHost`，5 秒后忘掉这次在飞，回包丢了下次 move 会重试）；新增 `edits-reply` 分支（只收本房房主、复用 `blockEditRejection`、坐标必须落在声称的那一块里、收下后按房广播 `blocks`）；`snapshotFor` 对房主不再下发 edits/容器/牌子/展示框（双保险）。
+  - 为什么：`edits-reply` 不复用 `blocks` 是因为**空区块必须能回"没改过"**——`blocks` 的空列表在现有逻辑里直接 return，而 `requested` 不清就会被无限请求。**没有房主的房**（有人直接 join）没有权威可问，退回老行为"服务端缓存就是共用那份"，否则那类房间的跨区块补发会整条失效。
+  - 验证：`npm run test:net` **236 → 243 通过 / 0 失败**（新增 7 条：队友跨进未确认区块 → 房主收到 `edits-request{dimension,cx,cz}` → 回包后队友收到 `blocks` → 另一块再要一次 → 空块确认后不再重复询问 → 确认过的块会进后来者的 welcome）。踩到一次 `move` 50ms 限频（第二次 move 被直接丢），用例里补了 `sleep(80)`。
+- [x] [L8] 房主响应 `edits-request`：`src/net/NetClient.ts` 加收发、`src/main.ts` 从 `world.edits` 取整块回包 → `npm run check:fast && npm run test:net`
+  - 做了什么：`NetClient` 加 `onEditsRequest` 回调 + `edits-request` 分支 + `sendEditsReply()`（空块也发；超过 4096 条拆包）；解包抽成纯函数 `core/net/ChunkSnapshot.ts#chunkSnapshotBlocks()`，`main.ts` 的 `replyChunkEdits()` 只负责"取快照 → 交给它 → 发出去"。
+  - 为什么：解包是最容易错的一步，抽出来才能离线断言。**实际抓到两个 bug**：① `Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标），原来忘了加 `cx*16 / cz*16`，所有补发的方块会堆在区块西北角——而原点附近的房间看起来完全正常；② 返回类型写成 `number[][]` 装不下末位的维度名。第一个由新增用例 `区块坐标必须加到局部坐标上` 直接钉住（含负区块坐标 `z = -33`）。
+  - 验证：`npm run check:fast` 全绿（typecheck + **593** 单测，较基线 586 增 7 条：空快照/空表/坐标与状态位/区块偏移含负坐标/条目形状/相邻区块不混/位运算往返）；`npm run test:net` **243 通过 / 0 失败**（服务端那条链上一批已覆盖）。
+- [x] [L8] 房主开局整份上行容器/牌子/展示框（`session-sync`）：服务端按房广播、客户端在 `welcome` 之后发 → `npm run test:net`
+  - 做了什么：服务端新增 `session-sync` 分支（只收本房房主、`kind` 分 container/sign/frame、形状校验与各自的单向消息同口径但**不设距离闸**、按条数上限 `SESSION_SYNC_MAX_MESSAGES=256`，收下后按房广播）；客户端 `NetClient.sendSessionSync()`（200 条一包，空集合也发）+ `App.flushSessionSync()` 在 `welcome` 后触发，**读档没回来就先挂起**（`waitingForSaveRestore`），在 `start()` 的读档 `.then/.catch` 里补推。
+  - 为什么：这三种不能像方块那样懒补——队友打开一个空箱子就会往里放东西，然后被服务端那份覆盖。挂起是因为时机：`welcome` 往往早于读档完成，那时容器表还是空的，直接推等于告诉服务端"这人没有箱子"。
+  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）；`npm run test:net` **243 → 252 通过 / 0 失败**（新增 9 条：清场后 welcome 无箱子 / 房主推完后**先进来的**队友当场收到 container+sign+frame 三条广播 / **后进来的**队友从 welcome 拿到三样 / 从属端伪造 `session-sync` 被无视）。
+- [x] [L8] 协议文档与台账收口：`docs/NET-PROTOCOL.md` 补两条消息与"服务端不持有存档"口径 + `TASKS.md` 落 L8 → `npm run check`
+  - 做了什么：`NET-PROTOCOL.md` —— §2 补"世界以房主本地为唯一真相 + 服务端只是会话缓存"的完整口径与代价；§4 新增 `edits-reply` / `session-sync` 两行（含校验与"空块必须回"）；§5 新增 `edits-request` 行、改写 `welcome`（房主不带世界数据）；§6 改正三处过期数字（增量上限 20 万→50 万、世界种子不落盘、快照内容 v2）并补"房间清场/懒上行在飞上限/session-sync 上限"四行；§7 新增 `edits-request` 的客户端行为；§8 改写 `联机13`/`联机14`/`联机26` 三条。`TASKS.md` 的 L 段新增 L8 条目（口径 6 点 + 两条 ⚠️ 取舍/坑 + 待人工）。`OVERVIEW.md` 的联机条目与坑各补一句（压在 200 行 / 28672 字节上限内）。`HANDOFF.md` 进度口径 303/295 → 304/296。
+  - 为什么：文档漂移是这项目最常见的债，数字更是一抄就漂——`audit:tasks` 当场抓住了 HANDOFF 的 295 与 README 的路线图状态列，按"数字只由脚本生成"的口径重写。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账；`audit:tasks` 报"共 304 项（296/5/0/3）、编号无重复、各段连续"）；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 恰好 200 行 / 27874 字节）。
+
+## 批次 20261026-0815 · 2026-10-26 · 会话 d4a25f60
+
+> 用户 2026-10-26：偶尔能看到「穿透方块、里面的透明空间 / 人卡在地皮下面的空间」，
+> 要求彻底解决（之前修过一次没修完）。
+
+# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0815
+
+目标（用户 2026-10-26）：偶尔能看到"穿透方块、里面的透明空间 / 人卡在地皮下面的空间"。
+要求彻底解决（之前修过一次没修完）。不允许再靠"把近裁面调更小"这类补丁——那只是把
+穿透的临界点往后挪。
+
+- [x] [穿模1] 相机贴脸/埋在方块里的穿透兜底：`src/render/cameraNear.ts` + `src/main.ts` → `npm run test:cameranear`
+  - 做了什么：① `cameraNear` 新增 `cameraClearanceInfo()`（距离 + 由面指向相机的单位方向）与 `pushCameraOutOfWalls()`（沿法线推出到 `NEAR_MARGIN`，最多 3 次迭代）；② 第三人称每帧摆好相机后调用它；③ `buriedInBlock` 的判据从 `suffocates` 改成 `opaque`（树叶这类"不窒息但面被剔除"的方块也兜住，玻璃/水仍不糊）；④ 新增 `world/cameraPush` 诊断（1 秒最多一条）
+  - 为什么：第三人称相机的射线**只朝背后那一个方向**打，撞到后墙就停在 0.22 格前；但玩家背靠墙角时相机离**侧墙**可能只剩 1~2 厘米，比近裁面下限 0.02 还小 → 那一面被裁掉，而方块相邻面是背向剔除的 → "看见墙皮后面还有一个世界"（用户说的"偶尔卡视角"）。原来的色罩只认 `suffocates`，恰好漏掉"不透明但不止窒息"的那一批
+  - 验证：`npm run test:cameranear` **45 通过 / 0 失败**（新增 9 条：墙角只剩 1 厘米的前提、推出方向朝 -X、推后 clearance ≥ 5 厘米、位移 ≤ 10 厘米、空场一个毫米都不推、相机在方块内返回 -1 交给色罩）；`npm run check:fast` 全绿；`npm run test:ui` **1177/0**
+  - 未验：真机复现（本机无浏览器）。若再出现，`__mc.diag.exportText()` 里会有 `world/cameraPush` 事件（带推出距离、clearance、near、方块 id），能直接区分"相机贴脸"还是别的原因
+  - 批次：20261026-0815
+- [x] [穿模2] 排除"盒子坐标反序导致面朝内"：`tools/render-test.ts` → `npm run test:render`
+  - 做了什么：遍历 `BLOCKS` 里所有实际使用的形状 × state 0~63 × 连接两种取值，断言 `meshBoxes` 产出的每个盒子都满足 `min < max`，且每个形状至少有一种状态能画出几何（十字形状走 `emitCross`，排除）
+  - 为什么：盒子坐标写反会让 `emitFace` 的顶点顺序整体反转 → 面朝内 → 从外面看被背面剔除（画面是洞）、从里面看反而正常。这与用户描述的"从某个角度看穿方块"是同一类症状，而这条此前没有任何断言覆盖
+  - 验证：`npm run test:render` **293 通过 / 0 失败**（新增 3 条；当前全部形状都通过，说明这一类是干净的，可以排除）
+  - 批次：20261026-0815
+
+## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
+> 不需要我们提前拒绝——把上一批那两处「硬拦」改成「先试、再提示」。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0620
+
+目标（用户 2026-10-26）：https 页面能不能访问局域网设备，是**浏览器权限**层面的开关
+（Chrome「本地网络访问」/ Firefox 对应开关），不该由我们提前拒绝——把上一批的两处"硬拦"改成"先试、再提示"。
+
+- [x] [授权1] 「选择服务器」面板 https 页面不再禁用扫描：照样扫，扫不到才提示去开权限 → 验收：`npm run test:ui`
+  - 做什么：`ServerPicker.open()` 不再 `disabled = true`，只在状态行放一句 `server.httpsHint`；扫描结束仍为空且页面是 https 时，把"没找到 · 去授权"合并成一行提示；`server.scanBlocked` 文案换成 `server.httpsHint`（六语言，内容改为"允许本站访问本地网络"的具体路径）
+  - 为什么：Chrome 的 Local Network Access 权限开通后，https 页面可以访问 `http://` / `ws://` 局域网设备（Firefox 也有开关）。禁用按钮等于把一条其实可用的路堵死
+  - 验证：`npm run test:ui` **1195/0**（断言改成"不再禁用 + 有授权提示"）；`npx tsc --noEmit` 干净；`audit:i18n` 通过
+  - 批次：20261026-0620
+- [x] [授权2] 开房预检先尝试、连不上才归因「https 需要授权」→ 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`preflightHost` 取消提前 return，照常 `canOpen`；失败**且**（页面 https + 目标 ws://）才回 `https-blocked`；该原因的文案改成同时给两条办法（去授权 / 换 http 打开）
+  - 为什么：上一批我把它写成"连尝试都不尝试"，同样是替玩家做了决定。授权过的浏览器本来就该能开房
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **9/9**（+2：https+ws 连不上 → https-blocked 且**确实尝试过**；https+ws **连得上 → 放行**）
+  - 未验：真机在授权后开房（要 Chrome 的 LNA 权限，无头环境造不出来）
+  - 批次：20261026-0620
+
+## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0600
+
+目标（用户 2026-10-26）：服务器跑在电脑上、手机在同一局域网里**开房失败**（之前能成功）。
+
+- [x] [开房1] 预检把「连不上」与「被浏览器拦（https 页面连 ws://）」分开：`HostPreflight` 新增 `https-blocked`，开房对话框给专门文案 → 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做什么：`HostPreflightDeps` 加 `pageProtocol`（默认真实 `location.protocol`）；`pageProtocol === 'https:' && /^ws:\/\//` 时**不建 socket**直接返回 `https-blocked`；`main.ts` 映射成 `mp.hostHttpsBlocked`（六语言）；两条失败分支都补 `console.warn`（带目标 URL）
+  - 为什么：混合内容跟网络无关——https 页面连 `ws://192.168.x.x` 会被浏览器直接拒，玩家改 IP、换端口、重启服务器全都没用。以前两种情况都回 `unreachable`，于是手机（页面在 https 上）开房失败看到的是一句"连不上服务器"，方向从一开始就错了
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **8/8**（+2：https+ws → https-blocked 且**不建 socket**；http+ws 正常放行）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过
+  - 批次：20261026-0600
+- [x] [开房2] 服务端启动打印**局域网地址**（不再只打 localhost）→ 验收：真机启动输出
+  - 做什么：`server/index.mjs` 用 `os.networkInterfaces()` 列出所有非 internal 的 IPv4，逐条打 `ws://<ip>:<port>`，并把原来那句"玩家把游戏指向 ws://localhost 即可联机"改成"本机自连（只有这台机器能用）"
+  - 为什么：`localhost` 只对跑服务端那台机器成立，手机填它指的是手机自己——这正是"手机上不知道填什么/填了连不上"的常见起点
+  - 验证：实测启动输出 `192.168.66.187 → ws://192.168.66.187:25190`（本机真实网卡）
+  - 批次：20261026-0600
+- [x] [开房3] 断言：ui-test 三条（预检分支 / 文案 / 启动打印）→ 验收：`npm run check:fast`
+  - 做什么：`tools/ui-test.ts` 加三条结构断言
+  - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
+  - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
+  - 批次：20261026-0600
+
+## 批次 20261026-0500 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：「服务器地址除了手输，右侧加一个选择按钮 → 服务器选择界面（局域网扫描 / 公开服务器）」，
+> 服务器要能被探测来测响应时间，选中自动回填；开房与加入两处都要。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0500
+
+目标（用户 2026-10-26）：服务器地址除了手输，还要能「选」——地址框右侧一个按钮，点开进服务器选择界面；
+界面里两个区域：**局域网扫描**（扫当前网段找可用服务器）与**公开服务器**（接口下发，先留入口）；
+服务器要提供探测接口（发一个包、回一个包），用来测响应时间；选中后自动把地址填回；
+**开房**与**加入房间**两处都要这个入口。
+
+- [x] [服务器1] 服务端提供无状态探测接口 `GET /ping`（禁缓存、几十字节）→ 验收：`npm run test:net`
+  - 做什么：`server/index.mjs` 在 `/healthz` 前加 `/ping`，返回 `{ok:true,t:Date.now(),v:PROTOCOL_VERSION}`，头里 `cache-control: no-store`
+  - 为什么：局域网扫描要并发打 254 个地址，只能靠「谁能最快回一个字节」判断；不能复用 `/healthz`（要算吞吐与房间数），也不能用 WebSocket 握手（每条都要完整握手+关闭，浏览器同源并发还有上限）
+  - 验证：`npm run test:net` **217/0**（+4：`/ping` 返回 ok、带协议版本、`no-store`、本机 RTT < 200ms）
+  - 批次：20261026-0500
+- [x] [服务器2] 发现逻辑收成纯模块 `core/net/ServerDiscovery.ts`（网段枚举 / 单点探测 / 并发扫描 / 可取消 / https 判定）→ 验收：`npx vitest run tests/server-discovery.test.ts`
+  - 做什么：`subnetOf`（只认 10/8、192.168/16、172.16~31/12）→ `subnetHosts`（254 个）→ `probeHost`（量 RTT）→ `scanSubnet`（并发 32、边扫边回调、可取消、按 RTT 排序）；`canScanLan(protocol)` 判 https；浏览器实现 `browserReach` 用 `fetch(mode:'no-cors') + AbortController`
+  - 为什么：这一段决定「能不能用」，必须能离线测（注入 `reach`/`now`，不打真网络）；`no-cors` 是因为局域网服务端不会给每个来源加 CORS 头，而我们要的只是「这地址有人在听」
+  - 验证：`npx vitest run tests/server-discovery.test.ts` **15/15**（网段识别/公网拒绝、254 枚举、RTT 升序、边扫边回调、取消、https 判定 + 公开列表解析 3 条）
+  - 批次：20261026-0500
+- [x] [服务器3] 新增「选择服务器」面板 `ui/ServerPicker.ts`（局域网扫描区 + 公开服务器区 + 选中回填）→ 验收：`npm run test:ui` 结构断言
+  - 做什么：标题行（关闭）、局域网区（网段输入默认从当前地址/页面地址推导 + 扫描按钮 + 状态行 + 逐条结果带 RTT）、公开区（`publicServersUrl()` 为空显示「接口还没提供」；有 URL 就拉 `{servers:[{name,address,region?}]}` 并列出）；点遮罩关闭；https 页面禁用扫描并说明原因
+  - 为什么：做成「看一眼点一下」的浮层（挂 `<body>`、点遮罩即关），它夹在「填地址」这一步中间，做成第三个视图要多两次返回
+  - 验证：`npm run test:ui` **1192/0**（+13 条结构断言）；样式 `.server-picker*` 与 `.world-pick` 落 `index.html`
+  - 批次：20261026-0500
+- [x] [服务器4] 两处入口接上：开房对话框地址行右侧 ▾（第三列）+ 加入面板地址行 ▾ → 验收：`npm run check:fast`
+  - 做什么：`WorldScreen` 用现有 `makeRow(label, control, extra)` 第三参数放按钮，面板按对话框生命周期建/拆（`cleanup()` 里 `dispose`）；`MultiplayerScreen` 在地址行插到「找房间」左边，面板按需创建后常驻（该界面只建一次）
+  - 为什么：两处填的是同一个东西，必须同一套面板；用 ▾ 而不是「选择」两个字——六语言长度差太多，`.world-row` 第三列只有 44px
+  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` 1192/0；`npm run check:fast` 全绿
+  - 未验：真机在局域网里扫一次（本机开发页面是 http 可以扫；部署在 GitHub Pages 的 https 页面会被浏览器拦住，面板会直接说明原因）
+  - 批次：20261026-0500
+
+## 批次 20261026-0345 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 拍板：方块增量跑到 20 万上限后「后进房的人地形少一截」；批准做 ① 水流不该撑大增量表、
+> ② 进房首包压缩，「能彻底解决的方案都可以接受」。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0345
+
+目标（用户 2026-10-26 拍板）：方块增量跑到 20 万上限之后，「后进房的人看到的地形少一截」。
+批准做 ①（水流不该把增量表撑大）+ ②（进房首包压缩），"能彻底解决的方案都可以接受"。
+
+- [x] [快照1] 服务端**按视野补发**方块增量：玩家跨进一个新区块时，把该区块的增量推给他（走已有的 `blocks` 消息，客户端零改动）——补上"128 格外永远收不到"的盲区（`snapshot.mjs` 里记的联机27）→ 验收：`npm run test:net`（房主在远处改一格 → 加入方走过去收到）
+  - 做了什么：`server/index.mjs` 新增 `pushChunkEdits(player)`——玩家跨进一个**新区块**时，把该区块的增量按 2048 条一批推给他（走已有的 `blocks` 消息，客户端零改动）；`player.sentEditChunks` 记已推过的区块（上限 4096 个键）；`snapshot.mjs` 新增纯函数 `editsInChunk()`；三条 `rememberEdit` 的 value 带上 `room` 以便按房筛选
+  - 为什么：进房快照只带玩家 8 个区块（128 格）内的改动，更远的**永远收不到**（`snapshot.mjs` 里记的联机27 遗留）——这就是"地形对不上"的主因
+  - 验证：`npm run test:net` **213/0**（+1：房主在 2000 格外改一格 → 新人加入时快照里没有 → 新人走进那个区块 → 收到含该格的 `blocks`）；`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（+3 `editsInChunk`）
+  - 批次：20261026-0345
+- [x] [快照2] 上限 20 万 → 50 万（配合视野补发：首包仍按半径裁剪，不会因此变大）→ 验收：`npx vitest run tests/net-snapshot-policy.test.ts`
+  - 做了什么：`DEFAULT_MAX_EDITS` 20 万 → **50 万**（`server/snapshot.mjs`，注释里写明"抬高前提是按视野补发：首包仍按半径裁剪，不会因此变大"）
+  - 为什么：有了补发，"超过上限被淘汰"从"永久丢失"变成"只是不在首包里"，抬高上限才安全
+  - 验证：`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（含 `DEFAULT_MAX_EDITS === 500_000`）
+  - 批次：20261026-0345
+- [x] [快照3] 澄清并处理"水流撑大增量表"：`EditsTable` 本来就按格覆盖（同一格多写只留最后一稿），所以中间态不进表；真正会白占的是"改了又改回世界生成原样"的格子——评估后再决定做不做
+  - 结论：**水流不会把增量表撑大**，不需要改代码。`ChunkEdits.record()` 是 `map.set(localIndex, pack(id,state))`——同一格反复写只留最后一稿，水流的液面中间态天然被覆盖；撑大表的只有"**被写过的格子数**"。
+  - 顺带查清的浪费：真正白占的是"改了又改回世界生成原样"的格子（比如水退干净后那一格其实还是空气）。要清掉它得在写入时问一次地形生成器，代价是每次流体写都多算一遍噪声——**收益不确定、成本明确**，所以这次不动，记在这里备查。
+  - 验证：`src/core/save/ChunkEdits.ts` 的 `record()` 逐行确认（key 是区块，内部 Map 的键是区块内下标）
+  - 批次：20261026-0345
+- [x] [快照4] 进房首包的方块增量改压缩格式（用户批准的第 ② 条）：`src/core/net/EditPack.ts`（客户端解码 + 测试用编码）与 `server/editpack.mjs`（服务端编码 + 测试用解码）两份实现，格式为"按区块分组 + 区块内下标"；服务端改发 `editsPack`、老字段 `edits` 留空；`NetClient` 解回老形状，`onWelcome` 零改动 → 验收：`tests/edit-pack.test.ts`（含两端交叉）
+  - 做了什么：`EditPack.ts` 提供 `encodeEditsPack/decodeEditsPack/packIndex/unpackIndex`（下标与 `Chunk.index` 同一套算术，测试交叉校验）；`server/editpack.mjs` 是纯 JS 的同构实现（服务端不能 import TS）；`snapshotFor` 改发 `editsPack`；`NetClient` 优先解 `editsPack`、解不出来退回 `edits`；`tools/net-test.mjs` 的 `joinAndWaitWelcome` 就地解包，后面几百条断言一行没改
+  - 为什么：一条从 30~40 字符降到约 10 字符。**实测**：密集改动（一面墙/一块地）降到 **0.4 倍以下**；零散改动（每条各一个区块）约 **0.67 倍**——比预想的低，因为"每块一个头"在小样本里占比高，测试里两种形态都钉了
+  - 未做：二进制/base64 版本（再小约 1.2 倍，但要两端逐字节对齐、日志不可读），收益不抵风险
+  - 验证：`npx vitest run tests/edit-pack.test.ts` **9/9**（含"服务端编码 → 客户端解码"交叉、坏数据整体拒收）；`npm run test:net` **213/0**；`npm run test:ui` **1179/0**（+2 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 批次：20261026-0345
+
+## 批次 20261026-0320 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26：加入房间后「地形方块有些不一致」，怀疑是用了之前的种子/世界/存档。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0320
+
+目标（用户 2026-10-26）：加入房间后"地形方块有些不一致"，怀疑是用了之前的种子/世界/存档。
+
+- [x] [联机75] 加入方不再复活本地旧方块增量（地形以房主为准）：`loadSaveState()` 对 `mpjoin-` 世界跳过 `loadAllChunkEdits()` 的恢复；顺带把"是不是加入世界"收成一个 `isJoinWorld()` 判据（位置恢复与增量恢复共用）→ 验收：`npm run test:ui` 断言
+  - 做了什么：`loadSaveState()` 里增量恢复包进 `if (!joinWorld)`；新增 `isJoinWorld()`；两处 `startsWith(JOIN_WORLD_PREFIX)` 收口到它
+  - 为什么：加入方的本地库名是「房间 + 种子」（`multiplayerWorldId`），**同房同种子 = 同一个库**——上一次会话看过的方块改动会在这次进房时被原样复活，再叠到房主刚发来的快照上。房主后来把某处改回去（拆掉、水退、TNT 回填）之后，旧增量把格子"顶"回旧样子，于是只有加入方看到的地形对不上。这也解释了"换个新世界就没问题"：换了世界就是另一个库
+  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` **1171/0**（+1 断言：加入世界跳过增量恢复；并把旧的 `startsWith` 断言改成 `isJoinWorld()`）
+  - 未验：真机双端对地形（需要"房主拆掉一处在旧会话里改过的方块"这种场面；逻辑上等价于位置恢复那条已验的路径）
+  - 批次：20261026-0320
+
+## 批次 20261026-0245 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 三条：① 房主改游戏模式，其他人收不到；② 访客下线，房主看不到也没有消息；
+> ③ 世界界面的按钮太高，新建世界/加入房间要等宽。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0245
+
+目标（用户 2026-10-26）：房主改了**游戏模式**，房里的其他人也要跟着变（现在完全收不到）。
+
+- [x] [联机73] 游戏模式随 `room-config` 同步给全房：房主 `setGameMode` 时上报，服务端记在房间上并广播（含房主），`welcome` 带上当前模式让晚进的人也一致 → 验收：`npm run test:net`（房主发 `room-config{gameMode}` → 全房收到；后加入者的 `welcome.gameMode` 是新值）+ `tools/ui-test.ts` 结构断言
+  - 做了什么：房主 `setGameMode` 后调 `sendRoomConfig({ gameMode })`（两个守卫：`!applyingRemoteGameMode`、`!waitingForSaveRestore`）；服务端新增 `roomGameModes` 房间表，白名单校验后广播 `room-config{gameMode}` 并随 `welcome` 下发当前值；客户端 `onRoomConfig` 应用模式（带回声守卫）并打一行 `say.net.roomGameMode`；晚进的从属端在 `onWelcome` 后采用 `welcome.gameMode`
+  - 为什么：世界元数据里的 `mode` 是房主 `join` 那一刻的快照，之后 `/gamemode` 改的从来不会回写；也从来没有一条"模式变更"的消息。现在模式和时间/天气同走 `room-config`，一份通道三种配置
+  - 验证：`npm run test:net` **212/0**（+2：房主改模式 → 同房收到 `room-config{gameMode:'creative'}`；晚进的人 `welcome.gameMode` 也是 creative）；`npm run test:ui` **1166/0**（+4 结构断言）；`npm run audit:i18n` 通过（新增 `say.net.roomGameMode` 六语言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 未验：真机双端切一次模式（读档恢复/旁观飞行这些副作用没在真机上点过）
+  - 批次：20261026-0245
+- [x] [联机74] 访客退世界时断开联机（用户 2026-10-26）：`App.dispose()` 以前**完全不碰 `net`** → socket 挂着 → 服务端收不到 `bye` 也等不到 `close` → 房主眼里对方永远在线、也没有"离开了"的提示 → 现在 `dispose()` 先 `net.disconnect()`（内部先发 `bye` 再关 socket）
+  - 做了什么：`dispose()` 开头 `this.disposed = true` 之后立刻 `this.net.disconnect()`（`disconnect()` 的首行就是 `sendBye()`）；`tests/net-client-look.test.ts` 补两条：断开时先发 `bye` 再关 socket、没连上时不抛
+  - 为什么：`bye` 分支与服务端"立刻广播 leave"上一批已经做好，缺的一环是**客户端主动断开这条链**——回主菜单/换世界走的是 `dispose()`，它以前只拆渲染与界面，网络对象直接丢掉，浏览器不保证回收，服务端就永远等不到这条连接结束
+  - 验证：`npx vitest run tests/net-client-look.test.ts` **7/7**（+2）；`npm run test:net` 212/0（`bye → leave` 那侧上一批已覆盖）；`npm run test:ui` 1168/0（+2 结构断言：`dispose` 里先断开、离开有系统提示）；`npx tsc --noEmit` 干净
+  - 未验：真机双端（访客点「退出到主菜单」/关标签页，房主那边应当立刻少一个人 + 聊天区一行"某某离开了房间"）
+  - 批次：20261026-0245
+- [x] [界面1] 世界界面入口行压矮 + 两颗按钮等宽（用户 2026-10-26）：`index.html` 的 `.world-list-top` 改成两颗 `flex: 1 1 0`（以前「新建世界」铺满、「加入房间」只有文字宽），PC 上整排压到 36px；列表标题旁的「导入存档」压到 27px
+  - 做了什么：`.world-list-top > .world-primary/.world-secondary` 统一 `flex: 1 1 0; width: auto; max-width: none; text-align: center`；新增 `@media (pointer: fine)` 把这一排压到 `min-height: 36px`、`.world-import` 压到 `padding: 3px 9px; font-size: 11px`；`#world-new-button` 只留"铺满"语义（宽度/高度交给共用规则）
+  - 为什么：两颗按钮是同一层（都是"开始一局"），一宽一窄看着像不同层级；52px 是"手指点得到"的下限，不是 PC 上该有的高度。**判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`**——`touch-mode` 是进世界、建触摸层时才挂的，主菜单阶段手机上也没有这个类，拿它当判据会把手机的 52px 一起压掉
+  - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
+  - 批次：20261026-0245
+
+## 批次 20261026-0141 · 2026-10-26 · 会话 d4a25f60
+
+> 用户 2026-10-26：低端机上「不卡但发热明显」，只要**不影响画质和体验**的优化。
+
+# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0141
+
+目标（用户 2026-10-26）：低端机上"不卡但发热明显"。这一批只做**不降画质、不降帧率、
+不降视距**的优化——把"本来就算错 / 白算 / 白传"的部分去掉，画面结果保持逐像素一致。
+
+- [x] [性能1] 天空穹顶改"地形画完再画"：`src/render/Sky.ts` + `src/main.ts` → `npm run check:fast`
+  - 做了什么：穹顶从 `depthTest:false` + `renderOrder:-1000`（先铺底）改成 `depthTest:true` + `renderOrder:+1000`；新增纯函数 `domeOcclusionSafe(视距)`（地形最远 `(视距+2)×16` 必须 ≤ 穹顶半径 180），小于则走遮挡、超过则回退成先铺底；`applySettings` 与 `setViewDistance` 两处落这条守卫
+  - 为什么：原来整屏每个像素都先被天空着色一遍、再被地形盖掉，被遮挡那部分（通常半屏以上）是纯浪费；改成地形先写完深度，穹顶只画真正露出来的天空，**可见像素完全不变**。回退分支保证视距将来放开时不会出现"天空盖住远山"
+  - 验证：`npm run test:render` **282 通过 / 0 失败**（新增 6 条：视距 6/8 走遮挡、10/16 回退、非法值按 0、穹顶 `depthTest/depthWrite` 结构守卫）；`npm run check:fast` 全绿
+  - 未验：真机上的像素对比与洞穴/地平线观感（本机无浏览器）；若真机发现远景天色异常，把 `setDomeBehindTerrain(false)` 即可逐像素退回原状
+  - 批次：20261026-0141
+- [x] [性能2] 区块 mesh 冻结世界矩阵：`src/render/ChunkRenderer.ts` → `npm run check:fast`
+  - 做了什么：新增 `ChunkRenderer.freezeAt(mesh, x, y, z)`——写位置 → `updateMatrix()` → 把本地矩阵抄进 `matrixWorld`（父级是 scene，单位矩阵）→ 关掉 `matrixAutoUpdate` 与 `matrixWorldAutoUpdate`；Worker 分支与本地分支共 4 处 mesh 创建都改走它
+  - 为什么：区块 mesh 的 position 只在创建时写一次，之后最多改 `visible`，但 three 每帧的 `scene.updateMatrixWorld()` 仍给 169 个对象各做一次 compose 并递归——纯白算。冻结后矩阵仍是正确值，视锥剔除与绘制不变
+  - 验证：`npm run test:render` **285 通过 / 0 失败**（新增 3 条：两个 autoupdate 标志为 false、冻结后改 `position` 不再影响 `matrixWorld`）；`npm run check:fast` 全绿（命中 mesh / render 两套）
+  - 影响 / 回滚：以后不能再对这些 mesh 直接改 position/rotation/scale（要挪位置就重建网格，现有流程本来就是重建后替换）；回滚只需把这 4 处换回 `mesh.position.set`
+  - 批次：20261026-0141
+- [x] [性能3] 粒子顶点只上传活跃段、0 粒子跳过上传：`src/render/ParticleSystem.ts` → `npm run check:fast`
+  - 做了什么：`writeBuffers()` 里 `count === 0` 直接归零 drawRange 并返回；否则用新辅助 `uploadActiveRange()`（`clearUpdateRanges` + `addUpdateRange(0, 活跃长度)` + `needsUpdate`）替换原来的整包 `needsUpdate = true`
+  - 为什么：`needsUpdate` 会把 1024 点的整池全量重传（约 32KB/帧），而画面上只画前 `count` 个；池尾数据根本没有任何消费者。清空后（0 粒子）也不例外，等于每帧白传一次空池
+  - 验证：`npm run test:render` **290 通过 / 0 失败**（新增 5 条：位置/颜色按 count×3、标量按 count 登记区间、0 粒子不标脏（version 不变）、0 粒子 drawRange 归零）；`npm run check:fast` 全绿
+  - 影响 / 回滚：上传区间依赖 three 的 `updateRanges`（r159+）；回滚把这 4 行换回 `needsUpdate = true` 即可
+  - 批次：20261026-0141
+- [x] [性能4] 每帧 DOM 收干（调试面板节流 / display 变化才写 / 进度条缓存引用）：`src/main.ts` → `npm run check:fast`
+  - 做了什么：① 新增 `syncDebugVisibility()`，把 `#debug` 的显隐收敛成唯一入口（`applySettings` 与 `updateDebug` 共用），只在值变化时写 `style.display`；② 调试文本按 `DEBUG_TEXT_REFRESH_MS = 200`（5Hz）节流，不再每帧拼十几行字符串写 `textContent`；③ 新增 `progressBarEls(id)` 懒查一次并缓存 `#break-progress` / `#eat-progress`，百分比量化到 1%，同档不重复写 `style.width`
+  - 为什么：调试面板默认开着（手机上 3 行、桌面上十几行），以前每帧一次临时字符串分配 + 一次 `textContent` 写入 + 一次合成器重绘；两个进度条每帧各一次 `getElementById`（纯 DOM 树查询），挖掘/进食时还会每帧写一次 width。这些都属于"画面完全相同、只是白做"
+  - 验证：`npm run test:ui` **1177 通过 / 0 失败**（新增 6 条：节流常量 ≤ 250ms、`syncDebugVisibility` 唯一入口、`updateDebug` 里不再出现 `style.display`、`progressBarEls` 存在、两个进度条不再 `getElementById`）；`npm run check:fast` 全绿
+  - 未验：真机上"面板数字刷新变慢"的观感（5Hz 是标准做法，但没人肉眼盯过）；若觉得跳得难受，把常量调到 100 即可
+  - 批次：20261026-0141
+- [x] [性能5] draw call 合并的可行性结论留档（做/不做与理由）：本会话 decision 文件 → 文档门禁
+  - 做了什么：把"约 170 次/帧的 draw call 要不要合并"评估完并留档——本会话 `d4a25f-decision.md` 的 D1（评估过程与暂不做的理由）、`notes/decisions.md` 新增「判定不做：区块 draw call 合并」一节（含代价与"什么时候该重看"）
+  - 为什么：`BatchedMesh` 要预留几十到上百 MB 顶点缓冲（显存换 CPU 提交），2×2 静态合并要重写跨区块网格化与 Worker 协议、改一格还要重拼一整组；收益（170 → ~43 次提交）必须真机前后对比才能确认，风险与这一批"零画质损失小改"不匹配，所以明确不做
+  - 验证：`npm run audit:docs` 通过；决策节格式与 `notes/decisions.md` 现有四节一致（做了什么 / 理由 / 代价与边界 / 什么时候该重看）
+  - 批次：20261026-0141
+
+## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
+> ③ 房主挖开水边方块后加入方的水不流；④ 改成晴天后雨声还在。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0130
+
+目标（用户 2026-10-26 反馈四条）：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
+③ 房主挖开水边方块后，加入方的水不流；④ 房主把雨改成晴天后，声音还在。
+
+- [x] [联机66] 开房失败要拦住（用户 ①）：`WorldScreen` 的开房对话框等预检结果、失败留在原地显示原因；新增 `src/net/HostPreflight.ts`（只连不发 join）→ 验收：`npx vitest run tests/host-preflight.test.ts`
+  - 做了什么：新增 `preflightHost({baseUrl, room})`——只建立一次 WebSocket（3 秒超时，连上即关，**不发 join**），再 best-effort 拉 `/rooms` 看 `hasHost`；返回 `unreachable` / `taken` / `null`。`WorldScreen.onHostWorld` 改成可返回 `Promise<string | null>`，`go()` 等结果：失败 `showError()` 并留在对话框（按钮期间 disabled），成功才 `cleanup()`。`main.ts` 里的回调改成先 `await preflightHost(...)`，`unreachable` → `t('mp.hostUnreachable')`、`taken` → `t('say.net.hostTaken')`，只有通过才 `pendingHostRoom` + `startWorld`
+  - 为什么：以前是"先建世界再后台连"，服务器没起/地址错/房名被占时人已经站在世界里了（建世界还要跑地形生成），失败只能看到一句看不懂的 `host-taken` 或静默断开。**关键约束**：预检不能发 `join`——发完就断会把房主位占进 30 秒宽限期，正式开房反而被 `host-taken` 拒掉
+  - 验证：`npx vitest run tests/host-preflight.test.ts` **6/6**（连不上 / 超时 / 房名被占 / 同名无房主放行 / 拿不到列表放行 / URL 带房名且连上就关）；`npm run test:ui` **1155/0**（新增 3 条结构断言）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过（新增 `mp.hostUnreachable` 六语言）
+  - 批次：20261026-0130
+- [x] [联机67] 雨→晴之后环境音停不下来（用户 ④）：`AudioEngine.setAmbience` 的起伏振荡器改挂独立增益；网络天气改走 `setWeather()` → 验收：`npm run test:ui` 断言
+  - 做了什么：雨声节点链从 `… → out(音量) → master`（起伏 `gust` 直接接在 `out.gain` 上）改成 `… → swell(1±0.045) → out → master`，`gust` 只接 `swell.gain`；`main.ts` 的 `onWeather` 从 `weather.setKind(kind)` 改成 `this.setWeather(kind)`（与本地命令同一条路径，`applyEnvironment()` 一起跑）
+  - 为什么：`AudioParam` 的输入是**加在基础值上**的——`setTargetAtTime(0)` 只把基础值推到 0，叠加的 ±0.045 仍在振，于是晴天里永远有 4.5% 的雨声底噪。而 `weather.setKind()` 只改状态与降水粒子、不跑 `applyEnvironment()`，远程改天气时环境音沿用上一档
+  - 验证：`npm run test:ui` **1155/0**（断言 `gust.connect(gustDepth).connect(swell.gain)` 存在、旧的 `connect(out.gain)` 不存在、`onWeather` 里 `this.setWeather(kind)`）；`npx tsc --noEmit` 干净
+  - 未验：真人耳听"雨停即静"（无头环境听不到声）
+  - 批次：20261026-0130
+- [x] [联机68] 访客第一次加入卡在生成页（用户 ②）：`refreshLoadingState` 加 8 秒"就地认可落点"自愈 → 验收：`npm run test:ui` 断言
+  - 做了什么：新增 `JOIN_FORCE_SPAWN_MS = 8000` 与 `forceJoinSpawn()`——加入来的世界若"已经有区块网格、但 8 秒还没落点"，就地认可当前坐标（`spawnPoint` + `spawnResolved = true`）并补一次 `requestGroundSettle('join')`，只做一次；30 秒那条 `abortJoin` 兜底保持不变；日志统一打 `[JOIN_DBG]`
+  - 为什么：30 秒兜底是"彻底放弃退回菜单"，而玩家看到的是"提示进入了却卡在生成页"。**不能**用 `prepareNewWorldSpawn()` 兜——加入方的人已经在房主身边，重新规划出生点会把人瞬移到几百格外
+  - 验证：`npm run test:ui` **1155/0**（断言常量与 `forceJoinSpawn()` 存在、且自愈里**不**调用 `prepareNewWorldSpawn()`）；`npx tsc --noEmit` 干净
+  - 未验：真机双端加入（没有自动化双端环境；若仍卡，控制台会打 `[JOIN_DBG] 8 秒没有落点，就地认可：…` 带 chunks/mesh/net 三个量）
+  - 批次：20261026-0130
+- [x] [联机69] 加入方的水不流动（用户 ③）：房主挖开水边方块后，房主端水流、加入方水不动。静态读代码已确认"任何方块写入都经 `World.events.onBlockChanged → queueBlockChange → BlockFunnel.sendBlocks`"，但没找到加入方收不到/不生效的确证点 → 需要一次带日志的复现，再加 `[FLUID_DBG]` 计数（房主每秒发出的水方块数 / 加入方每秒应用的水方块数）后定位
+  - 做了什么：真服务端 + 两个真浏览器复现（房主开房、加入方走真实的「加入房间」面板），发现**加入方根本没站在那片地形上**——`loadSaveState()` 是异步的，它用**上一局**存档里的坐标 `teleport` 覆盖了 `alignSpawnToHost()` 刚放好的"房主身边"落点；人不在那片区块里，房主的流体改动只会走 `planRemoteBlock` 的 `buffer` 分支进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。修：`loadSaveState` 对 `mpjoin-` 世界**跳过位置/维度/朝向恢复**（房间里的位置与维度由房主/服务端说了算），背包/进度/规则照旧恢复。另保留 `[FLUID_DBG]` 计数（房主"发出"、加入方"应用"，附 role/net/可写）作为后续自查入口
+  - 为什么：这不是"水"独有的问题——同一个原因会让加入方看不到房主的红石、火焰、作物生长等一切"房主算出来的方块变化"，而画面看上去完全正常。相比"给水加一条专门同步"，把落点改对是唯一的正解；顺带也解释了之前"加入方在奇怪的位置""看不到别人"的零散反馈
+  - 验证：双浏览器对比同一坐标周围 13×9×13 的水方块数——修前 guest 恒为 2、host 从 2 涨到 114（完全不跟）；修后 guest 与 host 同步跟随（1→53 逐拍对齐，滞后约 0.7 秒），`guest 距房主: 0.0 格`；`[FLUID_DBG]` 两侧数字一致（发出 7 / 应用 7）。`npm run test:ui` **1157/0**（+2 条结构断言：`joinWorld` 分支跳过位置恢复、`[FLUID_DBG]` 计数在位）；`npm run test:net` 208/0；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
+  - 批次：20261026-0130
+
 ## 批次 20261026-0110 · 2026-10-26 · 会话 0a9f5045
 
 > 用户 2026-10-26：加入房间与开房，地址栏只收 **IP 或域名**，前后缀自动派生——
@@ -107,6 +437,80 @@
   - 未验：真机肉眼看名字牌比例（无浏览器截图手段直接拍到名字牌，靠"横竖同倍"的比例断言兜住）
   - 批次：20261026-0000
 
+## 批次 20261025-2225 · 2026-10-25 · 会话 0a9f5045
+
+> PC 两条（用户 2026-10-25）：**PC 不再进全屏**（含"装成 App"那条绕开代码的路），
+> **PC 的 HUD 与手机同构**——手机上那几颗按钮 PC 上也全都显示，且每颗上方挂一枚键帽写清对应键盘键。
+> 顺带修掉一条"结论随机器语言变"的 i18n 断言（它把提交钩子在本机卡成常红）。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-2225
+
+- [x] [P1] PC 端 HUD 按钮层与手机同构（聊天/暂停/视角 + 跳跃/升降 + 背包 + 左下 WASD 图例），每颗按钮上方挂对应键帽：新增 `src/ui/PcControls.ts`、接入 `src/main.ts`、样式写进 `index.html` → 验收：`npm run check:fast` 通过；桌面视口截图里能看到全部按钮与键帽
+  - 做了什么：新增 `PcControls`（顶部聊天 T / 暂停 Esc / 视角 V、右下跳跃 Space 与飞行时的升降 Space/Shift、快捷栏右侧背包 E、左下 WASD 键位图例 + Shift 潜行 / Ctrl 疾跑 / Shift+F 飞行）；`main.ts` 在非触摸设备构造它，并接到 `handleInventoryOpen` / 聊天 / 小游戏 / `setFlying` / `dispose` / `collectInput`；`index.html` 新增 `#pc-ui` 一段样式，复用 `.touch-button` 与 `--touch-scale`
+  - 为什么：PC 原来只有准星与快捷栏，入口全靠记快捷键。按钮只做"看得见的入口"，键帽才是真正的操作说明；样式复用手机的类级选择器，不抄第二套玻璃质感
+  - 验证：`npx tsc --noEmit` 通过；`npm run test:ui` 1087 通过 0 失败；1280×720 截图里 T/Esc/V、Space、E、WASD 图例齐全；点击暂停/视角/聊天/背包实测分别打开面板、切到第三人称、聚焦输入框、打开背包；`/gamemode creative` + 起飞后升降两颗出现在跳跃键上下
+  - 批次：20261025-2225
+- [x] [发现] `tools/i18n-test.ts` 的「auto + 没有标签 → 英文」在本机（zh-CN）必红：`resolveLanguage('auto', undefined)` 显式传 `undefined` 会触发默认参数 `deviceLanguage()`，实际读到 Node 的 `navigator.language = zh-CN`，于是断言值随跑测试那台机器的语言变——它自己的注释却写着"tag 一律显式传入，否则结果会跟着机器语言变"。表现为 `npm run check` 与提交前的 `checks.fast` 在本机恒红 → 改成不依赖机器语言的写法（空标签），验收 `npm run test:i18n` 与 `LANG=en_US npm run test:i18n` 都通过
+  - 做了什么：把那条断言改成 `resolveLanguage('auto', '')`（空标签 → 回落英文），并补一条「显式 `undefined` 等于读设备语言」的断言把默认参数的真实语义钉住；`deviceLanguage` 加进导入
+  - 为什么：`tag` 参数有默认值 `deviceLanguage()`，JS 里"显式传 undefined"与"不传"完全等价，所以原断言在本机（`navigator.language=zh-CN`）恒红、在 CI（en）恒绿——它不是不稳定的偶发，而是**结论随机器变**；顺带发现它是提交钩子的常红项，不修就会让每次 `git commit` 都被拦
+  - 验证：`npm run test:i18n` 551 通过 0 失败（本机 zh-CN）；`LANG=en_US.UTF-8 npm run test:i18n` 同样 551/0
+  - 批次：20261025-2225
+- [x] [P2] PC 装上 PWA 也不再全屏：manifest 生成桌面变体（`display_override` 不含 fullscreen、不锁方向），运行时按设备切换 → 验收：`node tools/gen-manifests.mjs --check` 与 `npm run check:fast` 通过；桌面页面里 `link[rel=manifest]` 指向 desktop 变体
+  - 做了什么：`tools/gen-manifests.mjs` 每种语言多生成一份 `.desktop.webmanifest`（`display_override` 只留 `standalone`、去掉 `orientation`），`--check` 一起校验；新增 `src/ui/ManifestLink.ts`（`manifestHref()` 纯函数 + `applyManifestLink()`），`boot()` 用 `applyManifestLink(getLanguage(), isTouchDevice())` 取代原来那段只按语言拼的代码；`preferInstalledLandscape()` 补 `isCoarsePointer()` 守卫；`public/sw.js` 让 `.webmanifest` 走网络
+  - 为什么：代码侧的自动全屏早就被 `isCoarsePointer()` 挡住，PC 上剩下的唯一全屏入口是"桌面把网页装成 App"——Chrome 会照 `display_override: ["fullscreen"]` 直接全屏启动，而那不是 Fullscreen API，`exitFullscreen()` 关不掉，游戏里也没入口退出。手机那份 manifest 一个字没动，不冒"装完打开不是全屏"的回归
+  - 验证：`node tools/gen-manifests.mjs --check` → 「6 种语言 ×（手机 + 桌面）与基准一致」；浏览器实测 `link[href]`：桌面 zh = `./manifest.desktop.webmanifest`、桌面 en = `./manifest.en.desktop.webmanifest`、手机 zh = `./manifest.webmanifest`、手机 pt = `./manifest.pt.webmanifest`；`npm run test:i18n` 552/0、`npm run test:ui` 1087/0、`npm run check:fast` 通过
+  - 批次：20261025-2225
+- [x] [P3] 离线断言盯着两件事：`tools/ui-test.ts` 断言 PC 按钮层与键帽存在、`tools/i18n-test.ts` 断言桌面 manifest 存在且不再 fullscreen → 验收：`npm run check:fast` 通过
+  - 做了什么：`tools/ui-test.ts` 新增一节「PC 端 HUD 按钮层」——键位表七项齐全、只在非触摸设备创建、每颗按钮挂键帽、键帽上写的键在 keydown 里真的有绑定、`index.html` 里九条关键 CSS 规则在位、面板/飞行/销毁三处生命周期都接上；`tools/i18n-test.ts` 新增桌面 manifest 一节——六份都在、`display_override` 只有 `standalone`、不写 `orientation`、除显示字段外与同名手机那份逐字一致、语言码对得上；顺带把原来那条"boot() 按语言换 manifest"的断言改成盯 `ManifestLink.ts` 的拼接规则
+  - 为什么：这类"只有截图能发现"的界面问题（少一颗按钮、键帽写错字母）纯靠人眼看；把"键帽文字 → 键盘绑定"和"桌面 manifest 不许 fullscreen"钉成断言，改坏了当场红
+  - 验证：`npm run test:ui` 1115/0（+28）；`npm run test:i18n` 582/0（+30）；`npm run check:fast` 通过
+  - 批次：20261025-2225
+
+## 批次 20261025-1627 · 2026-10-25 · 会话 937507d0
+
+> 方块表「基线 + 增量」：改方块属性 / 加新方块不必再发 APK；发版时封基线并留台账。
+
+# 队列 · 会话 937507d0458d4277ba340bcb48207050
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-1627
+
+目标：**方块表「基线 + 增量」**——让"改方块属性 / 加新方块"不再需要发 APK。
+APK 里放全量快照（不公开），线上放一个只含变化的 JSON（几十字节~几 KB），启动时装快照再套增量。
+
+- [x] [增量1] 增量格式与应用器：新增 `src/core/registry/coreDelta.ts`（`parseCoreDelta` / `applyCoreDelta` / `buildDelta` / `fingerprint`）+ `tools/core-delta-test.ts`（29 条）
+  - 做了什么：JSON 格式 `{version, baseCount, baseFingerprint, patches[], appends[]}`；patch 按**名字**匹配只改给出的字段（不改 id、不改名），append 只能接在末尾（id = 现有长度 + 序号），**删除方块直接拒绝**（会让存档 id 全错位，只能发版）。指纹用 FNV-1a over 名字表，同步实现（启动路径不多一个 await）。
+  - 为什么：id 必须 0..N-1 连续，所以"套错基线"的后果不是报错而是**整张表错位**（存档存的是数字 id）。因此 `baseCount` + `baseFingerprint` 双校验，任一不符就整体拒绝；解析层对不认识的字段也直接抛（增量跨版本存在，悄悄忽略会在语义变化时变成静默错方块）。
+  - 验证：`npm run test:coredelta` **29 通过 / 0 失败**（覆盖：空增量 / 改属性 / 追加顺序 / JSON 往返 / 数量不符 / 指纹不符 / patch 目标不存在 / append 重名 / 删除拒绝 / 版本号 / light 越界 / tiles 长度 / 未知字段 / set 为空 / 指纹稳定与敏感）。
+  - 批次：20261025-1627
+- [x] [增量2] 启动链路接入：`src/core/hostCore.ts` 装完基线后拉 `./core-delta.json` 应用，任何失败只降级
+  - 做了什么：新增 `applyRemoteDelta()`，在 `installBlockTable(解码基线)` 之后调用；`fetch` 404/格式错/指纹错一律 `console.warn` 后返回（用 warn 不用 error：控制台门禁把 error 当失败，而"没有增量"是正常状态）。
+  - 为什么：任何"可选优化"都不该拥有"让游戏起不来"的能力。增量缺失时用基线那 724 个方块照常玩。
+  - 验证：真实浏览器端到端——造一份"改 1 条 + 增 1 条"的增量，`build:app` 后注入 `core.bin` 进 `dist/__host`，Playwright 实测控制台出现 `[boot] 已应用方块增量：改 1 条 / 增 1 条`，**0 条 pageerror**。
+  - 批次：20261025-1627
+- [x] [增量3] 差分工具与发布链：`tools/gen-delta.ts` + `host/core-baseline.bin` + `release-check` 校验并拷进 dist
+  - 做了什么：`npm run gen:delta` 用「App 内置基线」`host/core-baseline.bin`（随仓库提交，40 KB）对比当前 `blockSpecs.ts` 算差分；无变化就不产出（并删掉过期文件，避免被套到新基线上）；`release-check --mode app` 校验 `baseCount` 与基线一致后拷入 `dist/core-delta.json`，web 形态明确跳过。
+  - 为什么：增量必须知道"对谁生效"，所以基线要进仓库——放本机的话换台机器/CI 就算不出来。`baseCount` 不一致意味着这份增量套不到 App 里，发出去等于白发（客户端会拒绝并降级）。
+  - 验证：`npm run gen:delta` 在无改动时输出「无变化，不产出文件」；造改动后 `build:app` 输出「方块增量已放入 dist：改 1 条 / 增 1 条（基线 724，指纹 15eff840）」。
+  - 批次：20261025-1627
+- [x] [增量4] 缓存与文档：`sw.js` / `_headers` 排除 `core-delta.json`；发布手册补"改方块不发版"流程与"什么时候必须发版"
+  - 做了什么：`public/sw.js` 与 `public/_headers` 都把 `/core-delta.json` 排除出缓存（`no-store`）；`docs/DEPLOY-CLOUDFLARE.md` 新增 §5.5「改方块不用发版」，写清三步命令、三种必须发版的情形、两条纪律（id 只能末尾追加、基线必须与 APK 一致）、以及"增量失败只降级不白屏"。
+  - 为什么：增量是**靠每次启动重新拉**才生效的，被 Service Worker 缓存住就等于"更新永远不生效"，而且症状是"新方块没出现"——不报错、极难定位。文档那节则是给未来的自己看：什么时候该发版、基线什么时候换，这两件事记在脑子里必丢。
+  - 验证：`grep -c core-delta public/sw.js public/_headers` 各 1 处；`node .continue/hooks/check.mjs docs` 通过；`npm run check:fast` 全绿。
+  - 批次：20261025-1627
+- [x] [增量5] 基线台账（发 APK 时的"封版"动作）：`host/baseline.json` + `npm run release:baseline`
+  - 做了什么：新增 `tools/promote-baseline.ts`——把候选快照（`.tmp/hostcore/core-v1.bin`）封为基线，拷贝成 `host/core-baseline.bin` 并写台账（`baselineVersion` / `cutAt` / `gitCommit` / `blockCount` / `fingerprint` / `appVersion` / `note`）；内容与现有基线完全一致时**拒绝再封一次**并明确提示"无需封版"。`gen:delta` 把 `baseVersion` 写进增量；`release-check` 新增两条校验：台账与 bin 必须自洽（条数）、增量的 `baseVersion` 必须与台账一致。`host/README.md` 与发布手册 §5.6 补了"发 APK 的完整步骤（① gen:hostcore ② release:baseline ③ 打 APK ④ 之后只发增量）"。
+  - 为什么：基线文件本身就是"哪一版"的锚点，但它是二进制，看不出是哪一版、什么时候封的、对应哪个提交。而"生成候选快照"是天天跑的（内循环也会），"封版"是发布决策——两者必须分开，否则会出现"随手跑一次生成把线上 App 的基线悄悄换掉"，之后所有增量都套不上且查不到是哪次改的。
+  - 验证：首次 `npm run release:baseline -- --app-version=1.0.0 --note=...` 产出 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）；再跑一次输出"基线未变…无需封版"（幂等，不写第二条记录）；`npm run build:app` 输出"基线 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）"且增量缺失时给出"正常状态"；`test:coredelta` 29/0、`check:fast` 181/181、`typecheck:tools` 干净。
+  - 批次：20261025-1627
+
+---
+
 ## 批次 20261025-1106 · 2026-10-25 · 会话 2774879b
 
 > 联机体验六条（用户 2026-10-25 反馈）：远端玩家用真玩家模型、出生点对齐、方块距离闸、
@@ -158,47 +562,6 @@
   - 为什么：静默失败最糟——玩家会一直以为"命令坏了"。所以从属端在**命令层**就明确拒绝，服务端再兜一道（脚本/调试接口也可能直接发）。房主标识选名字牌而不是面板，是因为局内看到队友的第一眼就该知道谁能改房间设置。
   - 验证：`npm run test:net` **195 通过 / 0 失败**（新增 3 条：房主改天气被广播、房主改时间收到 snap/已对齐、从属端被拒 `not-host`；条目写的"四条"里"房主标识"由 ui 断言覆盖）；`npm run test:ui` **1087/0**（新增 5 条）；`npm run test:nametag` **149/0**（旧的"样式紧邻"断言改写成"查表结果最终传给 show"）；`test:i18n` 550/0、`audit:i18n` 2947/2947。
   - 批次：20261025-1106
-
-## 批次 20261025-1627 · 2026-10-25 · 会话 937507d0
-
-> 方块表「基线 + 增量」：改方块属性 / 加新方块不必再发 APK；发版时封基线并留台账。
-
-# 队列 · 会话 937507d0458d4277ba340bcb48207050
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-1627
-
-目标：**方块表「基线 + 增量」**——让"改方块属性 / 加新方块"不再需要发 APK。
-APK 里放全量快照（不公开），线上放一个只含变化的 JSON（几十字节~几 KB），启动时装快照再套增量。
-
-- [x] [增量1] 增量格式与应用器：新增 `src/core/registry/coreDelta.ts`（`parseCoreDelta` / `applyCoreDelta` / `buildDelta` / `fingerprint`）+ `tools/core-delta-test.ts`（29 条）
-  - 做了什么：JSON 格式 `{version, baseCount, baseFingerprint, patches[], appends[]}`；patch 按**名字**匹配只改给出的字段（不改 id、不改名），append 只能接在末尾（id = 现有长度 + 序号），**删除方块直接拒绝**（会让存档 id 全错位，只能发版）。指纹用 FNV-1a over 名字表，同步实现（启动路径不多一个 await）。
-  - 为什么：id 必须 0..N-1 连续，所以"套错基线"的后果不是报错而是**整张表错位**（存档存的是数字 id）。因此 `baseCount` + `baseFingerprint` 双校验，任一不符就整体拒绝；解析层对不认识的字段也直接抛（增量跨版本存在，悄悄忽略会在语义变化时变成静默错方块）。
-  - 验证：`npm run test:coredelta` **29 通过 / 0 失败**（覆盖：空增量 / 改属性 / 追加顺序 / JSON 往返 / 数量不符 / 指纹不符 / patch 目标不存在 / append 重名 / 删除拒绝 / 版本号 / light 越界 / tiles 长度 / 未知字段 / set 为空 / 指纹稳定与敏感）。
-  - 批次：20261025-1627
-- [x] [增量2] 启动链路接入：`src/core/hostCore.ts` 装完基线后拉 `./core-delta.json` 应用，任何失败只降级
-  - 做了什么：新增 `applyRemoteDelta()`，在 `installBlockTable(解码基线)` 之后调用；`fetch` 404/格式错/指纹错一律 `console.warn` 后返回（用 warn 不用 error：控制台门禁把 error 当失败，而"没有增量"是正常状态）。
-  - 为什么：任何"可选优化"都不该拥有"让游戏起不来"的能力。增量缺失时用基线那 724 个方块照常玩。
-  - 验证：真实浏览器端到端——造一份"改 1 条 + 增 1 条"的增量，`build:app` 后注入 `core.bin` 进 `dist/__host`，Playwright 实测控制台出现 `[boot] 已应用方块增量：改 1 条 / 增 1 条`，**0 条 pageerror**。
-  - 批次：20261025-1627
-- [x] [增量3] 差分工具与发布链：`tools/gen-delta.ts` + `host/core-baseline.bin` + `release-check` 校验并拷进 dist
-  - 做了什么：`npm run gen:delta` 用「App 内置基线」`host/core-baseline.bin`（随仓库提交，40 KB）对比当前 `blockSpecs.ts` 算差分；无变化就不产出（并删掉过期文件，避免被套到新基线上）；`release-check --mode app` 校验 `baseCount` 与基线一致后拷入 `dist/core-delta.json`，web 形态明确跳过。
-  - 为什么：增量必须知道"对谁生效"，所以基线要进仓库——放本机的话换台机器/CI 就算不出来。`baseCount` 不一致意味着这份增量套不到 App 里，发出去等于白发（客户端会拒绝并降级）。
-  - 验证：`npm run gen:delta` 在无改动时输出「无变化，不产出文件」；造改动后 `build:app` 输出「方块增量已放入 dist：改 1 条 / 增 1 条（基线 724，指纹 15eff840）」。
-  - 批次：20261025-1627
-- [x] [增量4] 缓存与文档：`sw.js` / `_headers` 排除 `core-delta.json`；发布手册补"改方块不发版"流程与"什么时候必须发版"
-  - 做了什么：`public/sw.js` 与 `public/_headers` 都把 `/core-delta.json` 排除出缓存（`no-store`）；`docs/DEPLOY-CLOUDFLARE.md` 新增 §5.5「改方块不用发版」，写清三步命令、三种必须发版的情形、两条纪律（id 只能末尾追加、基线必须与 APK 一致）、以及"增量失败只降级不白屏"。
-  - 为什么：增量是**靠每次启动重新拉**才生效的，被 Service Worker 缓存住就等于"更新永远不生效"，而且症状是"新方块没出现"——不报错、极难定位。文档那节则是给未来的自己看：什么时候该发版、基线什么时候换，这两件事记在脑子里必丢。
-  - 验证：`grep -c core-delta public/sw.js public/_headers` 各 1 处；`node .continue/hooks/check.mjs docs` 通过；`npm run check:fast` 全绿。
-  - 批次：20261025-1627
-- [x] [增量5] 基线台账（发 APK 时的"封版"动作）：`host/baseline.json` + `npm run release:baseline`
-  - 做了什么：新增 `tools/promote-baseline.ts`——把候选快照（`.tmp/hostcore/core-v1.bin`）封为基线，拷贝成 `host/core-baseline.bin` 并写台账（`baselineVersion` / `cutAt` / `gitCommit` / `blockCount` / `fingerprint` / `appVersion` / `note`）；内容与现有基线完全一致时**拒绝再封一次**并明确提示"无需封版"。`gen:delta` 把 `baseVersion` 写进增量；`release-check` 新增两条校验：台账与 bin 必须自洽（条数）、增量的 `baseVersion` 必须与台账一致。`host/README.md` 与发布手册 §5.6 补了"发 APK 的完整步骤（① gen:hostcore ② release:baseline ③ 打 APK ④ 之后只发增量）"。
-  - 为什么：基线文件本身就是"哪一版"的锚点，但它是二进制，看不出是哪一版、什么时候封的、对应哪个提交。而"生成候选快照"是天天跑的（内循环也会），"封版"是发布决策——两者必须分开，否则会出现"随手跑一次生成把线上 App 的基线悄悄换掉"，之后所有增量都套不上且查不到是哪次改的。
-  - 验证：首次 `npm run release:baseline -- --app-version=1.0.0 --note=...` 产出 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）；再跑一次输出"基线未变…无需封版"（幂等，不写第二条记录）；`npm run build:app` 输出"基线 v1（724 条 / 指纹 15eff840 / 截止 2026-10-25）"且增量缺失时给出"正常状态"；`test:coredelta` 29/0、`check:fast` 181/181、`typecheck:tools` 干净。
-  - 批次：20261025-1627
-
----
 
 ## 批次 20261025-1032 · 2026-10-25 · 会话 937507d0
 
@@ -321,6 +684,171 @@ blockIds.ts（叶子，纯常量） → blockSpecs.ts（数据） → blocks.ts�
   - 剩余工作（下一批的入口）：**第 2 步——把 60 多个 spec 声明搬到 `blockSpecs.ts`**。已探明的做法：spec 数组只依赖**导出的取值函数**（`woodBlocks()` / `woodShaped()` / `saplingId()` / `bedIdOfColor()` / `signId()` / `stoneVariantId()`）与字面量常量，所以搬运后 `blockSpecs.ts` 只需 `import` 这些；`blocks.ts` 用**动态 `import()`（顶层 await）+ 构建期 `define` 关掉嵌入**来绕开"blockSpecs 先求值读常量落在 TDZ"的死结，生产包里 `SPECS` 为空、由 `hostCore` 从 `core.bin` 装表，`build:app` 主包 gzip 应降到 ~690 KB。**风险点**：`blocks.ts` 会变成 async 模块（TLA），224 个引用方的求值时机整体后移——这是下一批唯一需要小心的地方。
 
 ---
+
+## 批次 20261025-0316 · 2026-10-25 · 会话 7e09a4a8
+
+> 上架 Google Play 的版权 / 商标处置（7 条）。
+> ⚠️ 本批的 **7 个代码提交**信息里写的是 `20261025-0117`（开工时钩子注入的号，与另一个会话同分钟开工撞号），
+> 归档时用 `queue-init --new-batch` 换成本号以满足「批次号唯一」；
+> 按批次 grep 提交请用 `20261025-0117`。
+
+> 状态：执行中
+> 创建：2026-10-25
+> 批次：20261025-0316
+
+- [x] [合规1] 清掉对外文案里的「Minecraft / 我的世界 / 基岩版」字样：`public/manifest.webmanifest` 的 description 换成与商店短描述一致的说法、`package.json` 的 description 同步 → `npm run check:manifests` 通过，且 `grep -rn "我的世界\|基岩版" public/ package.json` 零命中
+  - 做了什么：manifest description 改成「浏览器里的方块世界：无限地形、生存与创造、多世界存档，无需安装」（与 `docs/store/zh.md` 的短描述同一句）；`package.json` description 改成「方块沙盒（Web / WebGL2）：无限地形、生存、合成与联机」；顺手把六语言 `itemDesc.ts` 里 `item.desc.chain` 的「基岩版里 / In Bedrock / В Bedrock…」改成不指名版本的说法
+  - 为什么：真正会出现在用户设备上的只有 manifest description（安装提示/启动器），先把这一处清掉；`item.desc.chain` 是**会显示在物品说明里**的句子，直接写竞品版本名等于自己递证据。`docs/store/` 六份文案复查后确认**本来就没有**商标字样（唯一出现 Mojang / Microsoft 的地方是那句免责声明，保留），所以没动文件
+  - 验证：`npm run check:manifests` 通过（5 份语言文件与基准一致）；`npm run audit:i18n` 通过（六语言 100%）；`npm run test:i18n` 550/0；`grep -rn "基岩版\|Bedrock" src/core/i18n/locales/*/itemDesc.ts` 零命中（`item.bedrock` 是方块名「基岩」，属于术语表，按 D3 不动）
+  - 批次：20261025-0316
+- [x] [合规2] 重写 33 条照抄原版的成就标题（6 语言共 198 条），保留 id 与触发逻辑：`src/core/progress/advancementText.data.ts` + `src/core/i18n/locales/{zh,en,de,fr,pt,ru}/advancement.ts` → `npm run test:i18n && npm run test:advancement && npm run audit:i18n`
+  - 做了什么：33 条里 **30 条**换掉（`石器时代`→`第一块圆石`、`来硬的`→`第一炉铁`、`西装革履`→`穿上胸甲`、`冰桶挑战`→`水浇岩浆`、`我们需要更深入些`→`走进下界`、`资深怪物猎人`→`狩猎清单`、`村庄英雄`→`村庄救星`、`腥味十足`→`钓上来一条`、`涂蜡`→`涂上蜂蜡`…），六语言各 30 条 + `advancementText.data.ts` 的英文副本 30 条，共 210 处；另把 `story/root` 的英文从原版的 `Minecraft` 改成品牌名 `Minicraft`（中文侧本来就是品牌名）。id、parent、tab、desc、trigger 全部未动
+  - 为什么：这 33 条的英文标题与原版逐字相同（中文也基本沿用官方译名），是唯一"成体系照抄官方本地化"的地方；其余 67 条是本项目自创进度，标题也是自创，按 D2 不动。**3 条刻意保留**：`story/root` 是品牌名；`nether/root`（下界）与 `end/root`（末地）是维度专名，属于 D3 判定不动的术语表，改了会与界面上其它地方不一致。改法上刻意避开原版的**双关/梗**（`Isn't It Iron Pick`、`Bring Home the Beacon`、`The Cake Is a Lie` 那类），改成陈述机制的说法，这样连"创造性表达"也不沾
+  - 验证：`npm run test:i18n` **550/0**（含三条硬约束：中文标题与 `advancements.ts` 原文逐条相等、de/ru/fr/pt 不含中文且与英文相同的 ≤10 条、法语不许出现 ASCII 撇号——第一次跑就靠这条抓到 3 处 `l'` 应为 `l’`）；`npm run test:advancement` **116/0**；`npm run audit:i18n` 六语言 2894/2894 通过；`npm run typecheck` + `typecheck:tools` 清洁；30 条新标题在 zh/en 表内无重复
+  - 批次：20261025-0316
+- [x] [合规3] 10 幅画改名 + 按自创构图重画（去掉 Zetterstrand 原作的构图对应，`大金刚` 必删）：`src/core/registry/paintings.ts` + `src/render/TextureAtlas.ts` → `npm run test:painting && npm run test:textures`
+  - 做了什么：1×1 七幅换成 `日出 / 河谷 / 远山 / 夜空 / 篝火 / 孤树 / 沙丘`（dawn / river / hill / night / campfire / tree / desert），多格三幅换成 `壁画 4×4 / 挂毯 4×3 / 旧海图 2×2`（mural / banner / chart，**大金刚直接消失**）；`TextureAtlas` 的七张 painter 与 `MULTI_PAINTING_ART` 全部按新构图重写（矩形清单，无任何一幅对应他人作品）；`atlasLayout` 的七个 tile 名同步；旧多格画名做成了**只读别名** `LEGACY_MULTI_NAMES`，老存档里的大画仍能读回来；顺手修掉六语言里已经过期的「画」物品说明（还写着"只有 7 幅、多格大画没做"）与 `TASKS` B14 的差异说明
+  - 为什么：这 10 幅原来是照着 Zetterstrand 的署名画作摆的构图（名字也照抄），"认得出是哪一幅"就是改编，`大金刚` 还叠了任天堂形象。**只换画面与名字、保留尺寸档位与 1×1 的下标顺序**（D9）：尺寸是玩法，下标进方块状态，调序会让老存档里挂好的画集体换脸。多格画的名字进存档，所以用别名而不是硬改（D10）
+  - 验证：`npm run test:painting` **66/0**（新增 6 条别名断言：三个旧名字各自映射正确、旧名字尺寸仍是 4×4、别名目标都在表里、现用名字不在别名键上）；`npm run test:textures` **33/0**；`npm run test:frame` **169/0**（`describeState` 的「贴北墙·炸弹」→「贴北墙·篝火」随名字改）；`npm run test:i18n` 550/0、`audit:i18n` 2894/2894 通过（物品说明改了六语言）；`typecheck` + `typecheck:tools` 清洁；`npm run audit:diffs` 重算了差异台账
+  - 批次：20261025-0316
+- [x] [合规4] 设置页补「非官方 · 与 Mojang / Microsoft 无关」声明 + 资源包免责（只导自己拥有的包）：`src/core/i18n/locales/*/settings.ts` + `src/ui/SettingsScreen.ts` → `npm run test:settings && npm run test:ui && npm run audit:i18n`
+  - 做了什么：新增两条键 `settings.notice`（设置页底部：非官方、与 Mojang / Microsoft 无关、贴图与音效全部由代码生成）与 `settings.resourcePack.hint`（资源包行下方：只能导入你自己拥有的包，本应用不提供也不分发官方素材），六语言各一份；`SettingsScreen` 加 `makeFooterNotice()` / `makePackHint()` 两个节点（footer 用 `prepend` 插在"恢复默认"之上，不动原有组装顺序）；`index.html` 加 `.settings-notice` / `.settings-note` 两条样式（10px 灰字，触屏横屏降 9px）
+  - 为什么：首页那句"非官方"页脚被用户按审美删过（批次 20261024-1152），但商店版本必须有一个**用户自己找得到**的免责位置——放设置页底部：不占首屏、六语言都有、投诉时能指出来。资源包那一行单独加免责，是因为它长期被当作"换个官方外观"的入口，法律上只能导自己的包（D6）。措辞刻意只讲"与谁无关 + 素材由代码生成"，不写"复刻的是哪个游戏"——写清对象等于自认使用了他人作品
+  - 验证：`npm run test:settings` **119/0**；`npm run test:ui` **979/0**（新增 1 条断言：三条链路都得在——源里引用两个键、CSS 有两条样式、六语言表里都有这两条键，少一处就红）；`npm run audit:i18n` 六语言 2896/2896 通过；`npm run test:i18n` 550/0；`typecheck` + `typecheck:tools` 清洁
+  - 批次：20261025-0316
+- [x] [合规5] 读档容错：不认识的方块 / 物品 id 跳过并记日志，不再整档失败：`src/core/save/` → `npm run test:save && npm run test:migration`
+  - 做了什么：新增 `src/core/save/SaveIssues.ts`（纯数据记账本：按 `种类|细节` 累加、最多 32 种、溢出只计数、可清零）；三条读档路径接上——`ChunkEdits.applyTo()` 遇到注册表里不存在的方块 id **不写世界**（保留地形）并记账、`Inventory.restoreStack()` 丢掉不认识的物品 id 时记账、`Paintings.restorePaintings()` 跳过认不出的画名时记账；`SaveGame.open()` 打开世界时清零；诊断日志的 `meta.saveIssues` 带上这份账
+  - 为什么：存档里的方块与物品都是**数字 id**，所以改命名空间其实不会让老档读不回来（这条顺带纠正了我原先的判断）；真正会丢东西的是"这个 id 当前版本不存在了"。三种路径原本都是**静默**处理：方块回退成空气（那一片被挖空）、物品直接消失、画跳过——静默是对的（不能因为一个坏 id 让整档打不开），但必须留痕，否则玩家报"我的东西没了"时导出日志里查不到任何线索
+  - 验证：`npm run test:save` **120/0**（新增 8 条：不认识的方块不写世界且保留地形、记账 detail 正确、不认识的物品丢掉且记账、同一 id 累加而不新增、总数含重复、清零后归零、清单为空）；`npm run test:migration` 28/0；`npm run test:diag` 89/0；`npm run test:unit` 全绿；`typecheck` 清洁
+  - 批次：20261025-0316
+- [x] [合规6] 内部命名空间 `minecraft:` 换成自有前缀（方块 / 物品 / 命令 / 联机协议 / 存档一起）：`src/core/registry/*`、`src/core/commands/*`、`server/` → `npm run check`（全量 177 套）
+  - 做了什么：新增 `src/core/registry/ids.ts`（`NAMESPACE = 'minicraft'` + `normalizeId()` / `shortId()` / `hasNamespace()`，旧前缀只用于**读**）；全局替换 1100 处字面量（87 个 .ts + `tools/*.js` 的验收脚本）；所有"按名字查表 / 去前缀"的地方改用 `shortId()`（`itemNames` 7 处、`advancementText` 4 处、`AudioEngine` 4 处、`CommandHelp` 3 处、`StatusEffects` 1 处、`structureNames` 1 处、`food` 1 处、`main` 2 处）；命令解析入口（`resolveItemId` / `resolveBlockId`）先 `normalizeId()` 再查，所以 `/give minecraft:stone`、`/locate structure minecraft:village` 这类**老文本仍然可用**（`command-test` 里恰好就有这两条用例）；进度读档把老 id 归一化（否则达成记录整片消失）
+  - 为什么：命名空间是内部标识符，但本项目是独立产品，没必要继续借用别人的前缀。**顺带发现一处真正在用户眼前的东西**：进度页第一个页签的标题原本是「我的世界」、英文是「Minecraft」，已改成「方块世界」/「Block World」（页签 id `minecraft` → `world`）——这才是这次改名前唯一会被玩家看见的商标痕迹
+  - 验证：`npm run test:offline` **176/176 套全绿**（85.4s）；`npm run test:unit` 372/372；`npm run test:advancement` **120/0**（新增 4 条：旧前缀的达成记录读得回来、旧→新 id 映射、计数进度也接上）；`npm run test:i18n` 550/0；`npm run audit:i18n` 2896/2896 通过；`typecheck` + `typecheck:tools` 清洁。排查中还修了两处被漏掉的正则（`CommandHelp` 的 `replace(/^minecraft:/)`、`bastion-test` 里逗号连写的混合字符串）
+  - 批次：20261025-0316
+- [x] [合规7] 补 `LICENSE` + `THIRD-PARTY-NOTICES`（three / ws 的 MIT）+ 隐私政策页（Play 强制）：根目录新增文件 + `docs/privacy.md` → `npm run build` 产物内可检索到三份声明
+  - 做了什么：新增 `LICENSE`（保留所有权利，含"不得改名二次上架 / 不得用于商业分发"条款）、`THIRD-PARTY-NOTICES.md`（three.js 0.186.1 与 ws 8.22.0 的完整 MIT 原文）、`public/third-party-notices.txt`（同内容纯文本，`vite build` 会复制进 `dist/`）、`public/privacy.html`（中英双语隐私政策：不收集个人数据、存档只在本地、联机的数据交换范围、第三方组件、变更与联系方式）；`README` 的「许可」节补三条指引
+  - 为什么：MIT 要求"分发物中保留版权声明与许可全文"，网页版的"分发物"就是 `dist/`，所以声明必须放在 `public/`（只放仓库根目录等于没分发）；隐私政策是 Play 的**必填项**，需要一个可公开访问的 HTTPS 链接，而 `/privacy.html` 就是这个项目自己的站点路径，比外链第三方托管更不容易失效。隐私文案按**代码实际行为**写（无账号、无统计/广告 SDK、存档仅在 IndexedDB/localStorage）
+  - 验证：`npm run build:fast` 后 `dist/privacy.html`（5.7KB）与 `dist/third-party-notices.txt`（3.4KB）都在；`npm run test:ui` **980/0**（新增 1 条断言：两份文件都在 `public/` 且声明里有 three.js authors / Einar Otto Stangvik）；`npm run audit:docs` 通过；`npm run check:manifests` 通过；`typecheck:tools` 清洁
+  - 批次：20261025-0316
+## 批次 20261025-0257 · 2026-10-25 · 会话 037060ab
+
+> **这一批做什么（L8 · MS4 容器与收尾）**：补上最后一段权威——容器计时只由房主推进、
+> 从属端只读；房主退出时先提示再关房、且不再重连；协议文档与代码逐条对齐到 v2；
+> 台账写清 L8 四段状态；最后做一次 L8 自审。
+>
+> **L8 四段（MS1~MS4）代码与断言至此已齐**。仍然只剩两件只有人能做的：
+> ① 人工双端验收（红石两端同时亮 / 同一只怪位置一致 / 打死同时消失且掉落一份 / 熔炉进度同步 / 房主退出提示）；
+> ② `container`/`sign`/`frame`/`tnt` 的请求化（从属端操作仍直连上行，玩法不受影响）。
+>
+> ⚠️ 队列里「单测：从属端计时不前移」实际由**结构断言 + 联机断言**覆盖；要真在 node 里跑
+> `tickContainers` 得先造一个 World，成本远高于收益——这一点写在条目说明里，没有假装写了单测。
+
+- [x] [L8] 容器进度权威：熔炉 `cookProgress` / 酿造 / 漏斗冷却由房主推进并上行，从属端只读不推进 → 单测：从属端计时不前移
+  - 做了什么：`tickContainers(dt)` 收进 `shouldSimulate(role,'containers')` 闸门（全文件只此一处调用）；`container` 消息加可选 `progress`（0..1），服务端**只在 `player.isHost === true` 时保留**并夹到 `[0,1]`，其余一律丢掉（内容照转）；`NetClient.sendContainer(..., progress?)` / `NetContainerState.progress` 打通；房主新增 `pushContainerProgress()`（1 秒节流，扫 64 格内 `progress > 0` 的容器入既有 80ms 防抖队列，顺带把槽位一起对齐）；从属端 `onNetContainer` 把 `progress` 写进 `cookProgress`（不 tick，所以只是"摆上去"，下一条快照覆盖）。
+  - 为什么：熔炉进度是**每 tick 都在变**的量，而容器广播只挂在 `onMutate`（内容变化）上——不给它一条自己的低频上行，从属端的进度条只在"烧出一个东西"时跳一格。进度只认房主：从属端不推进计时，若允许它带 `progress`，一个假值就能把所有人的进度条改坏。写 `cookProgress` 而不是新加显示字段，是为了让既有进度条代码原样可用。
+  - 验证：`npm run test:net` **165 → 168 通过 / 0 失败**（房主进度被转发、从属端进度被丢且内容照转、越界进度夹到 1）；`npm run test:ui` **1030 → 1034 通过 / 0 失败**（闸门只一处、1 秒节流、从属端只写 cookProgress、上行只由房主带 progress）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。⚠️ 队列写的"单测：从属端计时不前移"实际由**结构断言 + 联机断言**覆盖（`tickContainers` 只有一处且在闸门里），没有另写 vitest —— 要在 node 里跑 `tickContainers` 得先造一个 World，成本远高于收益。
+  - 未验证：双端开着同一个熔炉看进度条是否同步，需要手测。
+  - 批次：20261025-0257
+- [x] [L8] 房主退出：房间关闭 + 从属端 3 秒内给出明确提示（`core/net/NetSession.ts` 状态迁移）→ 单测状态迁移 + `npm run test:net`
+  - 做了什么：服务端房主 `close` 时**立刻** `broadcast({t:'room-closed', reason:'host-left', graceMs})` 给同房其他人（提示，不是关房——他可能只是切后台）；宽限期到期仍未回来则**关房**：对同房每个人 `reject(socket,'host-left','房主已退出，房间已关闭', CLOSE_HOST_LEFT=4007)`。客户端新增 `room-closed` 分支与 `onRoomClosing` 回调、`roomClosed` 标记；`Protocol.ts` 把 `host-left` 加进错误码与致命名单；`NetSession.CloseReason` 新增 `roomClosed`（与 `fatal` 分开表达，重连一律 `stop`）；`main` 把它变成一句带秒数的提示（`net.hostLeft`），六语言补齐。
+  - 为什么：房主走了等于这一局没人推进世界——怪不动、红石不亮、熔炉不烧，而界面一切正常，这种"看起来还能玩"的坏状态最难排查。所以先提示（3 秒内），到期再关房，并且**明确不再重连**（重连只会被同一个理由踢回来，每 3 秒撞一次把日志刷满）。`roomClosed` 与 `fatal` 分开记：日志/提示要说人话，别把"房主退出"写成"协议错误"。
+  - 验证：`npm run test:net` **168 → 171 通过 / 0 失败**（房主掉线即通知、通知带 `graceMs`、到期关房给 `host-left`）；`npx vitest run tests/net-session.test.ts` 新增 3 条（`roomClosed` → offline/stop、重连途中也停、之后显式 connect 仍可重开）；`npm run test:ui` **1034 → 1038 通过 / 0 失败**；`npm run audit:i18n` 通过（2906/2906）；`npm run check:fast` **161/161 套全绿**。
+  - 批次：20261025-0257
+- [x] [L8] 协议文档 v2 收口：`docs/NET-PROTOCOL.md` 与本批新增/改动的消息逐条对照（`world` / `edit-request` / `entity-snap` / `entity-remove` / `authority` / `progress`）
+  - 做了什么：`join` 的 `world` 补 `worldType`；§4 `container` 补 `progress?` 并写明"只有房主带得动、服务端夹到 [0,1]"；§5 补 `room-closed`（`reason` + `graceMs`）；§5.1 错误码表补 `password 4005` / `host-taken 4006` / `host-left 4007` 三行（原来只有 version/clientId/duplicate/joined）；§8 缺口表改写 6 行（`联机5` 种子冲突改自动断开、`联机12` 模拟只由房主跑、`联机15` 容器计时由房主推进、`联机19` 实体位置/血量/死亡已同步、`联机38` 权威口径改成房主唯一、`联机26` 种子按房）。另加 11 条 UI 断言把"这批动过的消息必须在文档里"钉住，防下次文档漂移。
+  - 为什么：文档漂移是这类项目最常见的债——消息加了、字段改了，文档还停在上一版，下次照文档实现就会踩空。不做"文档 == 代码"的完全比对（要解析源码，成本远高于收益），只钉这一批动过的那些关键串 + 缺口表的现状口径。
+  - 验证：`npm run test:ui` **1038 → 1049 通过 / 0 失败**（11 条：world 元数据、worldType、edit-request、authority、entity-snap、entity-remove、progress、room-closed、host-left、4007、缺口表现状）；`node .continue/hooks/check.mjs docs` 通过（文档体量上限内）。
+  - 批次：20261025-0257
+- [x] [L8] 台账落地：`.continue/OVERVIEW.md` + `TASKS.md` 的 L8 条目写清 MS2~MS4 结果 → `npm run check`
+  - 做了什么：`OVERVIEW.md` 的联机段由「房主权威（MS1+MS2）」改成「MS1~MS4」，并补两句现状（实体快照、容器进度随房主 1s 下行、房主退出即关房）——体量 24462 → **24516 字节**（上限 24576，仍留 60 字节）；`TASKS.md` 的 L8 追加 MS4 落地结果与测试账，并写清 L8 现在剩的两件事（人工双端验收、四条消息的请求化）；`HANDOFF` 提交总数同步 1788，`audit:diffs` 重算（注意 227 → 226）。
+  - 为什么：L8 四段都落地了，台账必须能回答"现在到底哪段完成、哪段只差人验"——否则下一批会从头再查一遍。`OVERVIEW` 贴着 24KB 上限，所以只加现状、不铺细节（细节在 `notes/net-multiplayer.md`）。
+  - 验证：`npm run audit:tasks` 全绿（口径与 README / HANDOFF 一致）；`node .continue/hooks/check.mjs docs` 通过（200 行 / 24516 字节）；`npm run check` 全绿。
+  - 批次：20261025-0257
+- [x] [L8] [自审] L8 的「L1 可测量 / L2 可对抗 / L3 可外部」各一句 + 证据（指向具体文件与测试）
+  - **L1 可测量**：每一条都不是"看着像一致"，而是能被数出来的断言——`npm run test:net` **171** 条（其中房主/权威/实体/进度/关房 24 条是本批新增）、`npm run test:ui` **1049** 条（含"闸门只此一处""每帧不重复调用""文档里有这条消息"这类结构断言）、`vitest` **506** 条（`SimMode` 12 / `EntitySnapshot` 10 / `SimApply` 10 / `RemoteBlockWrite` 5 / `NetSession` 11）。人能验的也定成了可判定的阈值：红石两端同时亮（同一 tick 内）、打死同一只怪两端同时消失且掉落**恰好 1 份**、熔炉进度差 **≤1 秒**（1s 下行）。
+  - **L2 可对抗**：所有"客户端说了算"的地方都加了服务端侧的同一条尺子——谎报 `authority` 无效（按 `isHost` 重标，`test:net` 有断言）、非房主的 `block`/`blocks` 直接丢、`edit-request` 形状收口 + 令牌桶限频、`entity-snap` 只收房主且截断 256、`entity-remove` 键过滤、`container.progress` 只认房主并夹 `[0,1]`、`world` 元数据脏种子整份丢弃、`remoteWorldWritable()` 挡"种子错位时写脏地图"。**没防住的也照实记**：`move` 无位移校验（改包可瞬移）、容器不校验目标方块、`mob-hit` 仍按邻近认。
+  - **L3 可外部**：不依赖游戏客户端就能复现——协议在 `docs/NET-PROTOCOL.md`（消息表 / 错误码 4001~4007 / 缺口表 / 规矩），`tools/net-test.mjs` 用**裸 WebSocket 客户端**跑全套（可见地证明"外部实现也能接"），`npm run server` + `npm run dev` 双端可手验；另有 11 条断言把"这批动过的消息必须在文档里"钉死，防止文档漂移；取舍与坑在 `notes/net-multiplayer.md` §五/§六。
+  - 验证：三句话里能核对的部分都指到了可跑的东西——`npm run test:net` **171** 条、`npm run test:ui` **1049** 条（含 11 条"文档里有这条消息"）、`npx vitest run tests/` **506** 条；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 200 行 / 24516 字节）；`npm run check` 全绿。**L2 里"没防住的"三条（move 无位移校验 / 容器不校验目标方块 / mob-hit 按邻近认）不是本批目标，写在这里是为了别让下一批以为已经防住了。**
+  - 批次：20261025-0257
+
+## 批次 20261025-0256 · 2026-10-25 · 会话 f40a1ce1
+
+- [x] [相机1] 抽出「相机到最近实心面」的探测器与 near 映射（纯函数 + 离线断言）：新增 `src/render/cameraNear.ts`、`tools/camera-near-test.ts`，`package.json` 加 `test:cameranear` → `npm run test:cameranear` 全绿
+  - 做了什么：新增 `src/render/cameraNear.ts` 两个纯函数——`cameraClearance(world,x,y,z,radius=1)` 取 3×3×3 邻域的**碰撞盒**（不是"非空气格"），返回到最近盒面的距离（盒内 0、空场 `Infinity`）；`nearPlaneFor(clearance)` = `clamp(clearance - 0.05, 0.02, CAMERA_NEAR)`。常量 `CAMERA_PROBE_RADIUS=1` / `NEAR_MARGIN=0.05` / `CAMERA_NEAR_MIN=0.02`，上限直接 `import { CAMERA_NEAR } from './Sky.ts'`（不另抄 0.25）。`tools/camera-near-test.ts` 用"只在指定格给碰撞"的假世界断言，不引真 `World`
+  - 为什么：用碰撞盒而不是"非空气格"，是为了让水 / 岩浆 / 火 / 藤蔓 / 蛛网这些没有碰撞盒的方块不白压深度精度；非完整方块按**局部盒**算距离，否则半砖天花板那档会按整格盒底算出 0（误判成"埋在里面"）、按整格顶面算出 0.73（漏判）。距离取"到盒面最短距离"而不是"沿视线的命中距离"——最短距离 ≤ 任意方向的命中距离，于是不必把视线传进来就保证任何朝向都不裁
+  - 验证：`npm run test:cameranear` **36/0**（三档真实间隙 0.18→0.13 / 0.23→0.18 / 0.30→0.25 都严格小于间隙且贴墙那档仍等于 0.25；半砖局部盒、无碰撞方块、埋在盒里返回 0、对角距离 √0.75、单调性逐条钉死）；`npm run check:fast` 全绿（离线 **177** 套——比原来多这一套、单测 372 条）；`typecheck` + `typecheck:tools` 清洁
+  - 批次：20261025-0256
+- [x] [相机2] 把自适应近裁面接进相机：`src/main.ts#updateCamera` 每帧按 `camera.position` 探间隙并写 `camera.near` → `npm run check:fast` 全绿 + `npm run dev` 手测（两格高洞里跳起来抬头不再透视、蹲半砖下不再透视）
+  - 做了什么：`src/main.ts` 新增 `applyAdaptiveNear()`，在 `updateCamera` 摆完相机之后调用——探针读**刚摆好的 `camera.position`**（不是眼睛，第三人称被墙压到眼前那一档才覆盖得到），`nearPlaneFor(cameraClearance(world, …))`；旁观模式走 `hasBlockCollision(this.gameMode)` 判据直接给 `CAMERA_NEAR` 并跳过探针；`near` 变化超过 1e-4 才写 `camera.near` + `updateProjectionMatrix()`
+  - 为什么：只改这一处（而不是 `applySettings` / `setViewDistance`）是因为那两处只管 `far`，把 near 写死会让每帧的收缩被覆盖；`updateProjectionMatrix()` 必须跟着写，否则改了 near 画面不变
+  - 验证：`npm run typecheck` 清洁、`npm run check:fast` 全绿（离线套件里没有覆盖 `src/main.ts` 的，符合预期）；**真浏览器端到端**（临时脚本 `.tmp/camera-near-e2e.mjs`，不入库）：起 vite → 进世界 → 空场 8 帧 `near` 恒 0.25 → `/setblock ~ ~2 ~ stone` + 创造飞行顶上去（脚底 67.200、眼 68.820、天花板底 69.000，间隙 0.18）→ `near = 0.130`（18 帧全部 0.130）→ `/gamemode spectator` 回到 0.25 → 拆掉石头回到 0.25。即"贴脸收缩、旁观不收缩、离开即还原"三条都在真机跑通
+  - 批次：20261025-0256
+- [x] [相机3] 相机真埋进实心不透明方块时不再透视而是被方块色盖住：`src/render/ScreenEffects.ts` 加 `suffocate` 与动态取色、`src/main.ts#applyMediumEnvironment` 接优先级 → `npm run test:render` 全绿 + 手测（`/setblock` 埋自己、沙柱砸头）
+  - 做了什么：`ScreenEffects` 加 `suffocate` 预设（alpha 1、vignette 0、兜底色中灰）与 `setTint(hex|null)` 动态取色入口（`update()` / `snap()` 里"有覆盖色就用覆盖色，否则用预设色"，值没变时不重建 `Color`）；`main.ts` 新增 `buriedInBlock()`（相机所在格 `blockDef(id).suffocates` **且** `cameraClearance(..., 0) === 0` 才算被埋；旁观模式按 `hasBlockCollision` 排除），`applyMediumEnvironment` 的优先级改成 `portal > suffocate > lava > blindness > darkness > water`，色罩颜色取**现成的 `blockParticleColor(id)`**（顶面+侧面贴图平均色，没有再造颜色表）
+  - 为什么：相机真进了方块时眼前那面是背面、被背向剔除，near 收到多小都看不到它，几何路径是死路，只能整屏盖住（原版同理）。两个判据缺一不可：玻璃/树叶/水 `suffocates=false`（本来就该看得见外面）；`cameraClearance === 0` 保证是"在碰撞盒里面"而不是"在半砖空着那一半"。优先级把 suffocate 放在水下之前是因为"埋在石头里时水下那片青色是错的"
+  - 验证：`npm run test:render` **276/0**（新增 9 条：整屏不透明 / 无边缘加深 / 兜底色 / `setTint` 立刻生效 / 过渡后是覆盖色 / `snap()` 也吃覆盖色 / 清掉覆盖色回预设）；`typecheck` 清洁；`check:fast` 全绿。**真浏览器端到端**（临时脚本 `.tmp/suffocate-e2e.mjs`，不入库）：空场无色罩 → `/fill ~-2 ~-1 ~-2 ~2 ~3 ~2 stone` 埋住 → `effect=suffocate`、色罩色 `0x7f7f7f`（石头灰）、alpha 1.000 → 换成 sandstone → 色罩跟着变 `0xd8cca6`（砂岩黄）→ 换成 glass → 不糊屏（alpha 0.000）→ 旁观模式埋在石头里也不糊 → 挖开后色罩褪去
+  - 批次：20261025-0256
+- [x] [相机4] 全量回归与差异台账：`npm run check` + `npm run build:fast` 全绿，并把「相机贴脸会透视」这条差异写进 `.continue/TASKS.md` 的差异台账口径（若该台账无对应段则记进 `notes/decisions.md`）
+  - 做了什么：`TASKS.md` 的 F7 视角条目下补一条 `⚠️` 注记（自适应 near 的口径：正常 0.25 / 贴脸收到间隙−0.05 / 探针读相机位置 / 旁观不收缩 / 埋进不透明方块改用该方块色罩，并写明原版是固定 near ≈0.05），`npm run audit:diffs` 重算差异台账（差异 66 条 / 注意 225 条）；顺手把 `README.md` / `AGENTS.md` / `.continue/HANDOFF.md` 里"176 套"改成"177 套"（本批新增 `test:cameranear`，`audit:tasks` 会核对这个数）
+  - 为什么：差异台账是**脚本从 `⚠️` 注记汇总**的（`tools/diff-ledger.mjs`），手抄必然漂，所以只写注记、让脚本重写台账；套数同理，`audit:tasks` 拿 `package.json` 现算并反查入口文档
+  - 验证：`npm run check` **全量全绿**（typecheck + audit:i18n + vitest 372 条 + 离线 **177/177** 套 + audit:tasks/coverage/diffs/docs）；`npm run build:fast` 出包成功（2.51MB / gzip 717KB，与改动前同量级）
+  - 批次：20261025-0256
+
+---
+
+## 批次 20261025-0221 · 2026-10-25 · 会话 037060ab
+
+> **这一批做什么（L8 · MS3 实体权威）**：让"同一只怪"在两个屏幕上真的是同一只——
+> 房主每 100ms 采集视野内的实体（位置/血量/朝向/状态位）推给从属端，从属端只插值画影子、
+> 不跑 AI、不刷怪、不掉战利品。验收是用户手测「双人并排看 10 秒，怪物位置 / 血量 / 死亡一致」。
+>
+> 顺序：全局键 → 快照格式 → 采集 → 转发 → 从属端不跑 → 影子插值 → 死亡事件。
+>
+> ⚠️ 两处由入口条目顺带补上的：第 3 条（`SimAuthority`）的**上行接线**落到第 7 条一起做
+> （原条目只要求模块与单测）；`MobAuthority.pickAuthority` 那套"最近玩家当权威"在 MS2 之后
+> **不再参与决策**，只有 `mobKey`/`assignMobKey` 还在用。
+>
+> ⚠️ **未手测**：第 6 条（影子真的画出来）与第 7 条（打死两端同时消失、掉落只一份）——
+> 这两条只能在浏览器里双端验，断言只到"表算对了 / 接线对得上"。
+
+- [x] [L8] `Mob` 加全局键 `ownerId:localId`（复用 `src/core/net/MobAuthority.ts`）→ 单测：键稳定且可反解
+  - 做了什么：`Mob` 加 `netKey = ''`（空串 = 单机/未分配）；`MobAuthority` 加 `assignMobKey(mob, ownerId)`——**幂等**（已有键原样返回，换分配者也不改）、脏 owner/localId 不分配（返回空串）。文件头补一段说明：`pickAuthority` / `isAuthority` 那套"最近玩家当权威"在 MS2 定下"房主唯一模拟"之后**不再参与决策**，真正在用的是 `mobKey` / `parseMobKey` / `assignMobKey`。
+  - 为什么：两端的 `Entity.id` 各自从 1 递增，"3 号羊"在两边是两只不同的羊。要同步位置/血量，先把身份对齐；键一旦定下就不能半路换（换身份等于换一只怪），所以分配必须幂等。留 `pickAuthority` 不删是因为它描述了一个仍可能用得上的判定（将来做分片模拟要回来找），但**不能**再让它参与这里的决策——两套权威同时存在必然打架。
+  - 验证：`npm run test:unit` 里 `tests/mob-authority.test.ts` 新增 5 条（分配后可反解、幂等且换分配者不改、不同生物/房主不同键、脏 id 不分配、已有键不被覆盖）；全量 **468 → 473 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 新增 `src/core/net/EntitySnapshot.ts`：实体快照序列化 / 反序列化 → 单测往返一致
+  - 做了什么：定义 `EntitySnapshot`（key/type/坐标/yaw/health/flags）与线上形态 `WireEntity = [key,type,x,y,z,yaw,health,flags]`；`encodeEntities` 按 0.01 取整、丢键不合法/类型为空/数字非有限/超上限（256 条）的条目；`decodeEntities(raw, maxHealth?)` 逐条校验、坏条目单独丢、血量可选夹住；`ENTITY_FLAGS`（baby / onFire / hurt / tamed）配 `hasFlag` / `withFlag`。
+  - 为什么：100ms 一条的快照，字段名不进包（数组比对象省一半以上字节），坐标也不该带毫米精度。**外部数据一律当不可信**：一条坏数据不该让整包作废（与 `blocks` 同口径）；血量在入口夹住，免得从属端画出负长度的血条。AOI 裁剪/分组/排序不放在这里——那些要世界状态，纯函数里做不了也就测不了。
+  - 验证：新增 `tests/entity-snapshot.test.ts` **10 条**（往返一致、编码时丢非法键/空类型/非有限数、解码时坏条目单独丢、血量夹住/不传则原样、256 上限截断、非数组输入、状态位对称与互不冲突）；全量 **473 → 483 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 房主每 100ms 采集 AOI 内实体并按房 + 维度上行：新增 `src/game/sim/SimAuthority.ts` → 单测：只采 AOI 内
+  - 做了什么：`SimAuthority.ts`——`ENTITY_SNAPSHOT_INTERVAL_MS = 100`、`ENTITY_SNAPSHOT_RADIUS_CHUNKS = 8`（与服务端 AOI 同一把尺子）、`withinEntityAoi`（同维度 + 水平**切比雪夫**）、`collectEntitySnapshots`（近的排前面，超一包上限时先丢远处的）、`encodeEntitySnapshots`（筛范围 + 编码一步到位）。
+  - 为什么：只由房主采——MS2 定下"世界只由房主模拟"之后，"最近玩家当权威"那套会让两只手交接时位置跳一下。范围必须同维度：从属端在下界收到主世界的怪只会画出幽灵。**近的优先**是因为村庄里可能几百只，一包上限 256 条，丢远处比丢近处合理（近处正被玩家看着）。半径用切比雪夫而不是欧氏，是为了和服务端 `withinAoi` 完全一致——两边尺子不同会出现"房主发了、服务端又丢掉"的怪现象。
+  - 验证：新增 `tests/sim-authority.test.ts` **11 条**（默认半径边界 8 区块 = 128 格、y 不影响、维度不同不采、NaN 不采、半径可调、只采范围内、近的排前、状态位原样、空输入、一步编码、编解码往返）；全量 **483 → 489 条通过**；`npm run typecheck` 通过。
+  - 批次：20261025-0221
+- [x] [L8] 服务端转发 `entity-snap`（房间 + AOI 过滤，不做内容校验）→ `npm run test:net`
+  - 做了什么：`server/protocol.mjs` 加 `MAX_SNAPSHOT_ENTITIES = 256` 与 `sanitizeEntitySnap()`（只保证是个不超过上限的数组）；`server/index.mjs` 加 `case 'entity-snap'`——**只收房主**（房里有房主时非房主直接丢），按房 + AOI（发送者位置为中心）转发；客户端补 `sendEntitySnapshot()`（非房主空操作）与 `onEntitySnap` 回调；协议文档上下行各一行。
+  - 为什么：服务端没有世界也没有生物表，判不了"这只僵尸该不该在这"，所以只做形状收口 + 转发；语义把关放在两端（房主 `SimAuthority` 只采 AOI 内、从属端 `decodeEntities` 逐条洗）。只收房主是"谁模拟谁是权威"的直接推论——否则任何人都能广播一整套假实体。
+  - 验证：`npm run test:net` **157 → 162 通过 / 0 失败**（房主推的快照被转发且带 `by`、从属端推的被丢弃、空数组/非数组不转发、超过 256 条被截断）；`npm run typecheck` / `typecheck:tools` 通过；`npm run check:fast` 5/5 套全绿。
+  - 批次：20261025-0221
+- [x] [L8] 从属端跳过 `MobSpawner.update` 与 `updateMobs` → 单测：client 角色下生成数为 0
+  - 做了什么：`main` 里 `mobSpawner.update(dt, ctx)` 收进 `if (shouldSimulate(this.net.role,'mobs'))`（全文件只此一处）；`EntityManager.update(ctx, dt, shouldTick?)` 新增**逐实体过滤**，`main` 从属端传 `(entity) => !(entity instanceof Mob)`——生物不推进，**箭/掉落物/经验球照旧 tick**（联机23 的箭是各端自跑的）。
+  - 为什么：从属端刷怪 + 跑 AI 会得到第二套轨迹，这正是"两人看到同一只僵尸在不同位置"的根源。但不能整个 update 都跳过：箭和掉落物没有快照来源，跳了就是"从属端射出去的箭卡在原地"。被跳过的实体也**不**从表里删（下一帧快照还要用）。
+  - 验证：新增 `tests/entity-manager-filter.test.ts` **4 条**（不传过滤=老行为、按名字只跳过点名的那个、被跳过的实体留在表里）；`npm run test:ui` **1019 → 1022 通过 / 0 失败**（闸门只一处、逐实体过滤写法、`shouldTick` 签名）；全量单测 **489 → 493**；`npm run check:fast` **7/7 套全绿**。
+  - 批次：20261025-0221
+- [x] [L8] 从属端影子实体 + 插值：新增 `src/game/sim/SimApply.ts`（复用 `RemoteInterpolation`）→ 单测：给定快照序列位置收敛
+  - 做了什么：`SimApply.ts`——影子表（`key → 内部状态`）+ `apply(raw)`（新的建、旧的更新目标、缺席累计）+ `step(dt)`（按 key 排序输出渲染状态）+ `remove(key)` / `clear()`；插值直接复用 `RemotePlayerSmoother`（> 8 格瞬移对齐、最短角转向）。主程序侧：`simApply` + `shadowMobs` 两张表，`onEntitySnap` 只在 `role === 'client'` 时收，每帧 `syncShadowMobs(dt)` 把影子摆到插值位置并同步血量/幼体/着火/受击闪，影子消失时 `dead = true` 交给 `EntityManager` 清；断开时 `clearShadowMobs()` 全撤。
+  - 为什么：① 100ms 一条快照直接赋值，模型会一格一格跳；② 快照按 AOI 裁，实体走到边界会"这帧在、下帧不在"，立刻删会一闪一闪——所以留 3 次缺席宽限；③ 真死由 `entity-remove` 事件驱动（下一条），否则"走到边界"和"被打死"会混成同一种表现。房主不建影子：它自己那份就是真身。
+  - 验证：新增 `tests/sim-apply.test.ts` **10 条**（新建即到位、4 格内逐帧逼近、>8 格直接对齐、缺席 3 次仍在第 4 次消失、重新出现清零计数、`remove` 立刻删、血量按类型夹住、坏快照不搅乱已有影子、输出顺序稳定、`clear`）；`npm run test:ui` **1022 → 1025 通过 / 0 失败**；全量单测 **493 → 503**；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
+  - 未验证：从属端真的画出房主的那只怪，需要浏览器双端手测（单测只能到"影子表算对了"）。
+  - 批次：20261025-0221
+- [x] [L8] 死亡与掉落由房主事件驱动（`entity-remove` + 已有 `item-spawn`）→ 单测：只掉一份、镜像同步消失
+  - 做了什么：协议加 **`entity-remove`**（`keys[]` ≤64，**只收房主**，按房广播）；`NetClient` 补 `sendEntityRemove` / `onEntityRemove`；**顺带把第 3 条的上行接到主循环**（原条目只要求模块 + 单测）：房主每帧 `pushEntitySnapshots()` —— 先给每只怪 `assignMobKey(entity, selfId)`、收集 `SimEntity`（含幼体/着火/受击/驯服位），比对上一帧 `lastMobKeys` 把没了的立刻 `sendEntityRemove`，再按 100ms 节流 `encodeEntitySnapshots` 推快照；从属端 `onEntityRemove` 里 `simApply.remove` + 影子 `dead = true`。
+  - 为什么：只靠"快照里消失"要等 3 次宽限（300ms），表现为"打死了还站着"，而且掉落出现的那一瞬对不上。**掉落只掉一份**是结构上保证的：从属端的影子根本不 tick（`shouldTick` 过滤掉 `Mob`），`Mob.die → dropLoot` 在那端永远不会跑；房主的掉落走既有 `item-spawn` 广播。
+  - 验证：`npm run test:net` **162 → 165 通过 / 0 失败**（房主点名被转发、从属端点名被丢、空/非法键列表不转发）；`npm run test:ui` **1025 → 1030 通过 / 0 失败**（分配键再推、100ms 节流、死亡立刻点名、从属端撤影子、影子不 tick 故不会自掉战利品）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
+  - 未验证：双端看"同一只怪被打死 → 两端同时消失、掉落只有一份"要手测。
+  - 批次：20261025-0221
 
 ## 批次 20261025-0122 · 2026-10-25 · 会话 037060ab
 
@@ -17315,531 +17843,119 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 - 遗留：Q20 / Q21 同源的"未加载区块静默返回空气"差异记在根 `TASKS.md`；
   旧队列文件里的机制说明（卡死保护 / 自插额度 / 风险弹窗 / 流程七步）已并入
   [`.continue/HANDOFF.md`](./HANDOFF.md)，这里不再重复。
-## 批次 20261025-0221 · 2026-10-25 · 会话 037060ab
-
-> **这一批做什么（L8 · MS3 实体权威）**：让"同一只怪"在两个屏幕上真的是同一只——
-> 房主每 100ms 采集视野内的实体（位置/血量/朝向/状态位）推给从属端，从属端只插值画影子、
-> 不跑 AI、不刷怪、不掉战利品。验收是用户手测「双人并排看 10 秒，怪物位置 / 血量 / 死亡一致」。
->
-> 顺序：全局键 → 快照格式 → 采集 → 转发 → 从属端不跑 → 影子插值 → 死亡事件。
->
-> ⚠️ 两处由入口条目顺带补上的：第 3 条（`SimAuthority`）的**上行接线**落到第 7 条一起做
-> （原条目只要求模块与单测）；`MobAuthority.pickAuthority` 那套"最近玩家当权威"在 MS2 之后
-> **不再参与决策**，只有 `mobKey`/`assignMobKey` 还在用。
->
-> ⚠️ **未手测**：第 6 条（影子真的画出来）与第 7 条（打死两端同时消失、掉落只一份）——
-> 这两条只能在浏览器里双端验，断言只到"表算对了 / 接线对得上"。
-
-- [x] [L8] `Mob` 加全局键 `ownerId:localId`（复用 `src/core/net/MobAuthority.ts`）→ 单测：键稳定且可反解
-  - 做了什么：`Mob` 加 `netKey = ''`（空串 = 单机/未分配）；`MobAuthority` 加 `assignMobKey(mob, ownerId)`——**幂等**（已有键原样返回，换分配者也不改）、脏 owner/localId 不分配（返回空串）。文件头补一段说明：`pickAuthority` / `isAuthority` 那套"最近玩家当权威"在 MS2 定下"房主唯一模拟"之后**不再参与决策**，真正在用的是 `mobKey` / `parseMobKey` / `assignMobKey`。
-  - 为什么：两端的 `Entity.id` 各自从 1 递增，"3 号羊"在两边是两只不同的羊。要同步位置/血量，先把身份对齐；键一旦定下就不能半路换（换身份等于换一只怪），所以分配必须幂等。留 `pickAuthority` 不删是因为它描述了一个仍可能用得上的判定（将来做分片模拟要回来找），但**不能**再让它参与这里的决策——两套权威同时存在必然打架。
-  - 验证：`npm run test:unit` 里 `tests/mob-authority.test.ts` 新增 5 条（分配后可反解、幂等且换分配者不改、不同生物/房主不同键、脏 id 不分配、已有键不被覆盖）；全量 **468 → 473 条通过**；`npm run typecheck` 通过。
-  - 批次：20261025-0221
-- [x] [L8] 新增 `src/core/net/EntitySnapshot.ts`：实体快照序列化 / 反序列化 → 单测往返一致
-  - 做了什么：定义 `EntitySnapshot`（key/type/坐标/yaw/health/flags）与线上形态 `WireEntity = [key,type,x,y,z,yaw,health,flags]`；`encodeEntities` 按 0.01 取整、丢键不合法/类型为空/数字非有限/超上限（256 条）的条目；`decodeEntities(raw, maxHealth?)` 逐条校验、坏条目单独丢、血量可选夹住；`ENTITY_FLAGS`（baby / onFire / hurt / tamed）配 `hasFlag` / `withFlag`。
-  - 为什么：100ms 一条的快照，字段名不进包（数组比对象省一半以上字节），坐标也不该带毫米精度。**外部数据一律当不可信**：一条坏数据不该让整包作废（与 `blocks` 同口径）；血量在入口夹住，免得从属端画出负长度的血条。AOI 裁剪/分组/排序不放在这里——那些要世界状态，纯函数里做不了也就测不了。
-  - 验证：新增 `tests/entity-snapshot.test.ts` **10 条**（往返一致、编码时丢非法键/空类型/非有限数、解码时坏条目单独丢、血量夹住/不传则原样、256 上限截断、非数组输入、状态位对称与互不冲突）；全量 **473 → 483 条通过**；`npm run typecheck` 通过。
-  - 批次：20261025-0221
-- [x] [L8] 房主每 100ms 采集 AOI 内实体并按房 + 维度上行：新增 `src/game/sim/SimAuthority.ts` → 单测：只采 AOI 内
-  - 做了什么：`SimAuthority.ts`——`ENTITY_SNAPSHOT_INTERVAL_MS = 100`、`ENTITY_SNAPSHOT_RADIUS_CHUNKS = 8`（与服务端 AOI 同一把尺子）、`withinEntityAoi`（同维度 + 水平**切比雪夫**）、`collectEntitySnapshots`（近的排前面，超一包上限时先丢远处的）、`encodeEntitySnapshots`（筛范围 + 编码一步到位）。
-  - 为什么：只由房主采——MS2 定下"世界只由房主模拟"之后，"最近玩家当权威"那套会让两只手交接时位置跳一下。范围必须同维度：从属端在下界收到主世界的怪只会画出幽灵。**近的优先**是因为村庄里可能几百只，一包上限 256 条，丢远处比丢近处合理（近处正被玩家看着）。半径用切比雪夫而不是欧氏，是为了和服务端 `withinAoi` 完全一致——两边尺子不同会出现"房主发了、服务端又丢掉"的怪现象。
-  - 验证：新增 `tests/sim-authority.test.ts` **11 条**（默认半径边界 8 区块 = 128 格、y 不影响、维度不同不采、NaN 不采、半径可调、只采范围内、近的排前、状态位原样、空输入、一步编码、编解码往返）；全量 **483 → 489 条通过**；`npm run typecheck` 通过。
-  - 批次：20261025-0221
-- [x] [L8] 服务端转发 `entity-snap`（房间 + AOI 过滤，不做内容校验）→ `npm run test:net`
-  - 做了什么：`server/protocol.mjs` 加 `MAX_SNAPSHOT_ENTITIES = 256` 与 `sanitizeEntitySnap()`（只保证是个不超过上限的数组）；`server/index.mjs` 加 `case 'entity-snap'`——**只收房主**（房里有房主时非房主直接丢），按房 + AOI（发送者位置为中心）转发；客户端补 `sendEntitySnapshot()`（非房主空操作）与 `onEntitySnap` 回调；协议文档上下行各一行。
-  - 为什么：服务端没有世界也没有生物表，判不了"这只僵尸该不该在这"，所以只做形状收口 + 转发；语义把关放在两端（房主 `SimAuthority` 只采 AOI 内、从属端 `decodeEntities` 逐条洗）。只收房主是"谁模拟谁是权威"的直接推论——否则任何人都能广播一整套假实体。
-  - 验证：`npm run test:net` **157 → 162 通过 / 0 失败**（房主推的快照被转发且带 `by`、从属端推的被丢弃、空数组/非数组不转发、超过 256 条被截断）；`npm run typecheck` / `typecheck:tools` 通过；`npm run check:fast` 5/5 套全绿。
-  - 批次：20261025-0221
-- [x] [L8] 从属端跳过 `MobSpawner.update` 与 `updateMobs` → 单测：client 角色下生成数为 0
-  - 做了什么：`main` 里 `mobSpawner.update(dt, ctx)` 收进 `if (shouldSimulate(this.net.role,'mobs'))`（全文件只此一处）；`EntityManager.update(ctx, dt, shouldTick?)` 新增**逐实体过滤**，`main` 从属端传 `(entity) => !(entity instanceof Mob)`——生物不推进，**箭/掉落物/经验球照旧 tick**（联机23 的箭是各端自跑的）。
-  - 为什么：从属端刷怪 + 跑 AI 会得到第二套轨迹，这正是"两人看到同一只僵尸在不同位置"的根源。但不能整个 update 都跳过：箭和掉落物没有快照来源，跳了就是"从属端射出去的箭卡在原地"。被跳过的实体也**不**从表里删（下一帧快照还要用）。
-  - 验证：新增 `tests/entity-manager-filter.test.ts` **4 条**（不传过滤=老行为、按名字只跳过点名的那个、被跳过的实体留在表里）；`npm run test:ui` **1019 → 1022 通过 / 0 失败**（闸门只一处、逐实体过滤写法、`shouldTick` 签名）；全量单测 **489 → 493**；`npm run check:fast` **7/7 套全绿**。
-  - 批次：20261025-0221
-- [x] [L8] 从属端影子实体 + 插值：新增 `src/game/sim/SimApply.ts`（复用 `RemoteInterpolation`）→ 单测：给定快照序列位置收敛
-  - 做了什么：`SimApply.ts`——影子表（`key → 内部状态`）+ `apply(raw)`（新的建、旧的更新目标、缺席累计）+ `step(dt)`（按 key 排序输出渲染状态）+ `remove(key)` / `clear()`；插值直接复用 `RemotePlayerSmoother`（> 8 格瞬移对齐、最短角转向）。主程序侧：`simApply` + `shadowMobs` 两张表，`onEntitySnap` 只在 `role === 'client'` 时收，每帧 `syncShadowMobs(dt)` 把影子摆到插值位置并同步血量/幼体/着火/受击闪，影子消失时 `dead = true` 交给 `EntityManager` 清；断开时 `clearShadowMobs()` 全撤。
-  - 为什么：① 100ms 一条快照直接赋值，模型会一格一格跳；② 快照按 AOI 裁，实体走到边界会"这帧在、下帧不在"，立刻删会一闪一闪——所以留 3 次缺席宽限；③ 真死由 `entity-remove` 事件驱动（下一条），否则"走到边界"和"被打死"会混成同一种表现。房主不建影子：它自己那份就是真身。
-  - 验证：新增 `tests/sim-apply.test.ts` **10 条**（新建即到位、4 格内逐帧逼近、>8 格直接对齐、缺席 3 次仍在第 4 次消失、重新出现清零计数、`remove` 立刻删、血量按类型夹住、坏快照不搅乱已有影子、输出顺序稳定、`clear`）；`npm run test:ui` **1022 → 1025 通过 / 0 失败**；全量单测 **493 → 503**；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
-  - 未验证：从属端真的画出房主的那只怪，需要浏览器双端手测（单测只能到"影子表算对了"）。
-  - 批次：20261025-0221
-- [x] [L8] 死亡与掉落由房主事件驱动（`entity-remove` + 已有 `item-spawn`）→ 单测：只掉一份、镜像同步消失
-  - 做了什么：协议加 **`entity-remove`**（`keys[]` ≤64，**只收房主**，按房广播）；`NetClient` 补 `sendEntityRemove` / `onEntityRemove`；**顺带把第 3 条的上行接到主循环**（原条目只要求模块 + 单测）：房主每帧 `pushEntitySnapshots()` —— 先给每只怪 `assignMobKey(entity, selfId)`、收集 `SimEntity`（含幼体/着火/受击/驯服位），比对上一帧 `lastMobKeys` 把没了的立刻 `sendEntityRemove`，再按 100ms 节流 `encodeEntitySnapshots` 推快照；从属端 `onEntityRemove` 里 `simApply.remove` + 影子 `dead = true`。
-  - 为什么：只靠"快照里消失"要等 3 次宽限（300ms），表现为"打死了还站着"，而且掉落出现的那一瞬对不上。**掉落只掉一份**是结构上保证的：从属端的影子根本不 tick（`shouldTick` 过滤掉 `Mob`），`Mob.die → dropLoot` 在那端永远不会跑；房主的掉落走既有 `item-spawn` 广播。
-  - 验证：`npm run test:net` **162 → 165 通过 / 0 失败**（房主点名被转发、从属端点名被丢、空/非法键列表不转发）；`npm run test:ui` **1025 → 1030 通过 / 0 失败**（分配键再推、100ms 节流、死亡立刻点名、从属端撤影子、影子不 tick 故不会自掉战利品）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。
-  - 未验证：双端看"同一只怪被打死 → 两端同时消失、掉落只有一份"要手测。
-  - 批次：20261025-0221
-
-## 批次 20261025-0256 · 2026-10-25 · 会话 f40a1ce1
-
-- [x] [相机1] 抽出「相机到最近实心面」的探测器与 near 映射（纯函数 + 离线断言）：新增 `src/render/cameraNear.ts`、`tools/camera-near-test.ts`，`package.json` 加 `test:cameranear` → `npm run test:cameranear` 全绿
-  - 做了什么：新增 `src/render/cameraNear.ts` 两个纯函数——`cameraClearance(world,x,y,z,radius=1)` 取 3×3×3 邻域的**碰撞盒**（不是"非空气格"），返回到最近盒面的距离（盒内 0、空场 `Infinity`）；`nearPlaneFor(clearance)` = `clamp(clearance - 0.05, 0.02, CAMERA_NEAR)`。常量 `CAMERA_PROBE_RADIUS=1` / `NEAR_MARGIN=0.05` / `CAMERA_NEAR_MIN=0.02`，上限直接 `import { CAMERA_NEAR } from './Sky.ts'`（不另抄 0.25）。`tools/camera-near-test.ts` 用"只在指定格给碰撞"的假世界断言，不引真 `World`
-  - 为什么：用碰撞盒而不是"非空气格"，是为了让水 / 岩浆 / 火 / 藤蔓 / 蛛网这些没有碰撞盒的方块不白压深度精度；非完整方块按**局部盒**算距离，否则半砖天花板那档会按整格盒底算出 0（误判成"埋在里面"）、按整格顶面算出 0.73（漏判）。距离取"到盒面最短距离"而不是"沿视线的命中距离"——最短距离 ≤ 任意方向的命中距离，于是不必把视线传进来就保证任何朝向都不裁
-  - 验证：`npm run test:cameranear` **36/0**（三档真实间隙 0.18→0.13 / 0.23→0.18 / 0.30→0.25 都严格小于间隙且贴墙那档仍等于 0.25；半砖局部盒、无碰撞方块、埋在盒里返回 0、对角距离 √0.75、单调性逐条钉死）；`npm run check:fast` 全绿（离线 **177** 套——比原来多这一套、单测 372 条）；`typecheck` + `typecheck:tools` 清洁
-  - 批次：20261025-0256
-- [x] [相机2] 把自适应近裁面接进相机：`src/main.ts#updateCamera` 每帧按 `camera.position` 探间隙并写 `camera.near` → `npm run check:fast` 全绿 + `npm run dev` 手测（两格高洞里跳起来抬头不再透视、蹲半砖下不再透视）
-  - 做了什么：`src/main.ts` 新增 `applyAdaptiveNear()`，在 `updateCamera` 摆完相机之后调用——探针读**刚摆好的 `camera.position`**（不是眼睛，第三人称被墙压到眼前那一档才覆盖得到），`nearPlaneFor(cameraClearance(world, …))`；旁观模式走 `hasBlockCollision(this.gameMode)` 判据直接给 `CAMERA_NEAR` 并跳过探针；`near` 变化超过 1e-4 才写 `camera.near` + `updateProjectionMatrix()`
-  - 为什么：只改这一处（而不是 `applySettings` / `setViewDistance`）是因为那两处只管 `far`，把 near 写死会让每帧的收缩被覆盖；`updateProjectionMatrix()` 必须跟着写，否则改了 near 画面不变
-  - 验证：`npm run typecheck` 清洁、`npm run check:fast` 全绿（离线套件里没有覆盖 `src/main.ts` 的，符合预期）；**真浏览器端到端**（临时脚本 `.tmp/camera-near-e2e.mjs`，不入库）：起 vite → 进世界 → 空场 8 帧 `near` 恒 0.25 → `/setblock ~ ~2 ~ stone` + 创造飞行顶上去（脚底 67.200、眼 68.820、天花板底 69.000，间隙 0.18）→ `near = 0.130`（18 帧全部 0.130）→ `/gamemode spectator` 回到 0.25 → 拆掉石头回到 0.25。即"贴脸收缩、旁观不收缩、离开即还原"三条都在真机跑通
-  - 批次：20261025-0256
-- [x] [相机3] 相机真埋进实心不透明方块时不再透视而是被方块色盖住：`src/render/ScreenEffects.ts` 加 `suffocate` 与动态取色、`src/main.ts#applyMediumEnvironment` 接优先级 → `npm run test:render` 全绿 + 手测（`/setblock` 埋自己、沙柱砸头）
-  - 做了什么：`ScreenEffects` 加 `suffocate` 预设（alpha 1、vignette 0、兜底色中灰）与 `setTint(hex|null)` 动态取色入口（`update()` / `snap()` 里"有覆盖色就用覆盖色，否则用预设色"，值没变时不重建 `Color`）；`main.ts` 新增 `buriedInBlock()`（相机所在格 `blockDef(id).suffocates` **且** `cameraClearance(..., 0) === 0` 才算被埋；旁观模式按 `hasBlockCollision` 排除），`applyMediumEnvironment` 的优先级改成 `portal > suffocate > lava > blindness > darkness > water`，色罩颜色取**现成的 `blockParticleColor(id)`**（顶面+侧面贴图平均色，没有再造颜色表）
-  - 为什么：相机真进了方块时眼前那面是背面、被背向剔除，near 收到多小都看不到它，几何路径是死路，只能整屏盖住（原版同理）。两个判据缺一不可：玻璃/树叶/水 `suffocates=false`（本来就该看得见外面）；`cameraClearance === 0` 保证是"在碰撞盒里面"而不是"在半砖空着那一半"。优先级把 suffocate 放在水下之前是因为"埋在石头里时水下那片青色是错的"
-  - 验证：`npm run test:render` **276/0**（新增 9 条：整屏不透明 / 无边缘加深 / 兜底色 / `setTint` 立刻生效 / 过渡后是覆盖色 / `snap()` 也吃覆盖色 / 清掉覆盖色回预设）；`typecheck` 清洁；`check:fast` 全绿。**真浏览器端到端**（临时脚本 `.tmp/suffocate-e2e.mjs`，不入库）：空场无色罩 → `/fill ~-2 ~-1 ~-2 ~2 ~3 ~2 stone` 埋住 → `effect=suffocate`、色罩色 `0x7f7f7f`（石头灰）、alpha 1.000 → 换成 sandstone → 色罩跟着变 `0xd8cca6`（砂岩黄）→ 换成 glass → 不糊屏（alpha 0.000）→ 旁观模式埋在石头里也不糊 → 挖开后色罩褪去
-  - 批次：20261025-0256
-- [x] [相机4] 全量回归与差异台账：`npm run check` + `npm run build:fast` 全绿，并把「相机贴脸会透视」这条差异写进 `.continue/TASKS.md` 的差异台账口径（若该台账无对应段则记进 `notes/decisions.md`）
-  - 做了什么：`TASKS.md` 的 F7 视角条目下补一条 `⚠️` 注记（自适应 near 的口径：正常 0.25 / 贴脸收到间隙−0.05 / 探针读相机位置 / 旁观不收缩 / 埋进不透明方块改用该方块色罩，并写明原版是固定 near ≈0.05），`npm run audit:diffs` 重算差异台账（差异 66 条 / 注意 225 条）；顺手把 `README.md` / `AGENTS.md` / `.continue/HANDOFF.md` 里"176 套"改成"177 套"（本批新增 `test:cameranear`，`audit:tasks` 会核对这个数）
-  - 为什么：差异台账是**脚本从 `⚠️` 注记汇总**的（`tools/diff-ledger.mjs`），手抄必然漂，所以只写注记、让脚本重写台账；套数同理，`audit:tasks` 拿 `package.json` 现算并反查入口文档
-  - 验证：`npm run check` **全量全绿**（typecheck + audit:i18n + vitest 372 条 + 离线 **177/177** 套 + audit:tasks/coverage/diffs/docs）；`npm run build:fast` 出包成功（2.51MB / gzip 717KB，与改动前同量级）
-  - 批次：20261025-0256
-
----
-
-## 批次 20261025-0257 · 2026-10-25 · 会话 037060ab
-
-> **这一批做什么（L8 · MS4 容器与收尾）**：补上最后一段权威——容器计时只由房主推进、
-> 从属端只读；房主退出时先提示再关房、且不再重连；协议文档与代码逐条对齐到 v2；
-> 台账写清 L8 四段状态；最后做一次 L8 自审。
->
-> **L8 四段（MS1~MS4）代码与断言至此已齐**。仍然只剩两件只有人能做的：
-> ① 人工双端验收（红石两端同时亮 / 同一只怪位置一致 / 打死同时消失且掉落一份 / 熔炉进度同步 / 房主退出提示）；
-> ② `container`/`sign`/`frame`/`tnt` 的请求化（从属端操作仍直连上行，玩法不受影响）。
->
-> ⚠️ 队列里「单测：从属端计时不前移」实际由**结构断言 + 联机断言**覆盖；要真在 node 里跑
-> `tickContainers` 得先造一个 World，成本远高于收益——这一点写在条目说明里，没有假装写了单测。
-
-- [x] [L8] 容器进度权威：熔炉 `cookProgress` / 酿造 / 漏斗冷却由房主推进并上行，从属端只读不推进 → 单测：从属端计时不前移
-  - 做了什么：`tickContainers(dt)` 收进 `shouldSimulate(role,'containers')` 闸门（全文件只此一处调用）；`container` 消息加可选 `progress`（0..1），服务端**只在 `player.isHost === true` 时保留**并夹到 `[0,1]`，其余一律丢掉（内容照转）；`NetClient.sendContainer(..., progress?)` / `NetContainerState.progress` 打通；房主新增 `pushContainerProgress()`（1 秒节流，扫 64 格内 `progress > 0` 的容器入既有 80ms 防抖队列，顺带把槽位一起对齐）；从属端 `onNetContainer` 把 `progress` 写进 `cookProgress`（不 tick，所以只是"摆上去"，下一条快照覆盖）。
-  - 为什么：熔炉进度是**每 tick 都在变**的量，而容器广播只挂在 `onMutate`（内容变化）上——不给它一条自己的低频上行，从属端的进度条只在"烧出一个东西"时跳一格。进度只认房主：从属端不推进计时，若允许它带 `progress`，一个假值就能把所有人的进度条改坏。写 `cookProgress` 而不是新加显示字段，是为了让既有进度条代码原样可用。
-  - 验证：`npm run test:net` **165 → 168 通过 / 0 失败**（房主进度被转发、从属端进度被丢且内容照转、越界进度夹到 1）；`npm run test:ui` **1030 → 1034 通过 / 0 失败**（闸门只一处、1 秒节流、从属端只写 cookProgress、上行只由房主带 progress）；`npm run typecheck` 通过；`npm run check:fast` **6/6 套全绿**。⚠️ 队列写的"单测：从属端计时不前移"实际由**结构断言 + 联机断言**覆盖（`tickContainers` 只有一处且在闸门里），没有另写 vitest —— 要在 node 里跑 `tickContainers` 得先造一个 World，成本远高于收益。
-  - 未验证：双端开着同一个熔炉看进度条是否同步，需要手测。
-  - 批次：20261025-0257
-- [x] [L8] 房主退出：房间关闭 + 从属端 3 秒内给出明确提示（`core/net/NetSession.ts` 状态迁移）→ 单测状态迁移 + `npm run test:net`
-  - 做了什么：服务端房主 `close` 时**立刻** `broadcast({t:'room-closed', reason:'host-left', graceMs})` 给同房其他人（提示，不是关房——他可能只是切后台）；宽限期到期仍未回来则**关房**：对同房每个人 `reject(socket,'host-left','房主已退出，房间已关闭', CLOSE_HOST_LEFT=4007)`。客户端新增 `room-closed` 分支与 `onRoomClosing` 回调、`roomClosed` 标记；`Protocol.ts` 把 `host-left` 加进错误码与致命名单；`NetSession.CloseReason` 新增 `roomClosed`（与 `fatal` 分开表达，重连一律 `stop`）；`main` 把它变成一句带秒数的提示（`net.hostLeft`），六语言补齐。
-  - 为什么：房主走了等于这一局没人推进世界——怪不动、红石不亮、熔炉不烧，而界面一切正常，这种"看起来还能玩"的坏状态最难排查。所以先提示（3 秒内），到期再关房，并且**明确不再重连**（重连只会被同一个理由踢回来，每 3 秒撞一次把日志刷满）。`roomClosed` 与 `fatal` 分开记：日志/提示要说人话，别把"房主退出"写成"协议错误"。
-  - 验证：`npm run test:net` **168 → 171 通过 / 0 失败**（房主掉线即通知、通知带 `graceMs`、到期关房给 `host-left`）；`npx vitest run tests/net-session.test.ts` 新增 3 条（`roomClosed` → offline/stop、重连途中也停、之后显式 connect 仍可重开）；`npm run test:ui` **1034 → 1038 通过 / 0 失败**；`npm run audit:i18n` 通过（2906/2906）；`npm run check:fast` **161/161 套全绿**。
-  - 批次：20261025-0257
-- [x] [L8] 协议文档 v2 收口：`docs/NET-PROTOCOL.md` 与本批新增/改动的消息逐条对照（`world` / `edit-request` / `entity-snap` / `entity-remove` / `authority` / `progress`）
-  - 做了什么：`join` 的 `world` 补 `worldType`；§4 `container` 补 `progress?` 并写明"只有房主带得动、服务端夹到 [0,1]"；§5 补 `room-closed`（`reason` + `graceMs`）；§5.1 错误码表补 `password 4005` / `host-taken 4006` / `host-left 4007` 三行（原来只有 version/clientId/duplicate/joined）；§8 缺口表改写 6 行（`联机5` 种子冲突改自动断开、`联机12` 模拟只由房主跑、`联机15` 容器计时由房主推进、`联机19` 实体位置/血量/死亡已同步、`联机38` 权威口径改成房主唯一、`联机26` 种子按房）。另加 11 条 UI 断言把"这批动过的消息必须在文档里"钉住，防下次文档漂移。
-  - 为什么：文档漂移是这类项目最常见的债——消息加了、字段改了，文档还停在上一版，下次照文档实现就会踩空。不做"文档 == 代码"的完全比对（要解析源码，成本远高于收益），只钉这一批动过的那些关键串 + 缺口表的现状口径。
-  - 验证：`npm run test:ui` **1038 → 1049 通过 / 0 失败**（11 条：world 元数据、worldType、edit-request、authority、entity-snap、entity-remove、progress、room-closed、host-left、4007、缺口表现状）；`node .continue/hooks/check.mjs docs` 通过（文档体量上限内）。
-  - 批次：20261025-0257
-- [x] [L8] 台账落地：`.continue/OVERVIEW.md` + `TASKS.md` 的 L8 条目写清 MS2~MS4 结果 → `npm run check`
-  - 做了什么：`OVERVIEW.md` 的联机段由「房主权威（MS1+MS2）」改成「MS1~MS4」，并补两句现状（实体快照、容器进度随房主 1s 下行、房主退出即关房）——体量 24462 → **24516 字节**（上限 24576，仍留 60 字节）；`TASKS.md` 的 L8 追加 MS4 落地结果与测试账，并写清 L8 现在剩的两件事（人工双端验收、四条消息的请求化）；`HANDOFF` 提交总数同步 1788，`audit:diffs` 重算（注意 227 → 226）。
-  - 为什么：L8 四段都落地了，台账必须能回答"现在到底哪段完成、哪段只差人验"——否则下一批会从头再查一遍。`OVERVIEW` 贴着 24KB 上限，所以只加现状、不铺细节（细节在 `notes/net-multiplayer.md`）。
-  - 验证：`npm run audit:tasks` 全绿（口径与 README / HANDOFF 一致）；`node .continue/hooks/check.mjs docs` 通过（200 行 / 24516 字节）；`npm run check` 全绿。
-  - 批次：20261025-0257
-- [x] [L8] [自审] L8 的「L1 可测量 / L2 可对抗 / L3 可外部」各一句 + 证据（指向具体文件与测试）
-  - **L1 可测量**：每一条都不是"看着像一致"，而是能被数出来的断言——`npm run test:net` **171** 条（其中房主/权威/实体/进度/关房 24 条是本批新增）、`npm run test:ui` **1049** 条（含"闸门只此一处""每帧不重复调用""文档里有这条消息"这类结构断言）、`vitest` **506** 条（`SimMode` 12 / `EntitySnapshot` 10 / `SimApply` 10 / `RemoteBlockWrite` 5 / `NetSession` 11）。人能验的也定成了可判定的阈值：红石两端同时亮（同一 tick 内）、打死同一只怪两端同时消失且掉落**恰好 1 份**、熔炉进度差 **≤1 秒**（1s 下行）。
-  - **L2 可对抗**：所有"客户端说了算"的地方都加了服务端侧的同一条尺子——谎报 `authority` 无效（按 `isHost` 重标，`test:net` 有断言）、非房主的 `block`/`blocks` 直接丢、`edit-request` 形状收口 + 令牌桶限频、`entity-snap` 只收房主且截断 256、`entity-remove` 键过滤、`container.progress` 只认房主并夹 `[0,1]`、`world` 元数据脏种子整份丢弃、`remoteWorldWritable()` 挡"种子错位时写脏地图"。**没防住的也照实记**：`move` 无位移校验（改包可瞬移）、容器不校验目标方块、`mob-hit` 仍按邻近认。
-  - **L3 可外部**：不依赖游戏客户端就能复现——协议在 `docs/NET-PROTOCOL.md`（消息表 / 错误码 4001~4007 / 缺口表 / 规矩），`tools/net-test.mjs` 用**裸 WebSocket 客户端**跑全套（可见地证明"外部实现也能接"），`npm run server` + `npm run dev` 双端可手验；另有 11 条断言把"这批动过的消息必须在文档里"钉死，防止文档漂移；取舍与坑在 `notes/net-multiplayer.md` §五/§六。
-  - 验证：三句话里能核对的部分都指到了可跑的东西——`npm run test:net` **171** 条、`npm run test:ui` **1049** 条（含 11 条"文档里有这条消息"）、`npx vitest run tests/` **506** 条；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 200 行 / 24516 字节）；`npm run check` 全绿。**L2 里"没防住的"三条（move 无位移校验 / 容器不校验目标方块 / mob-hit 按邻近认）不是本批目标，写在这里是为了别让下一批以为已经防住了。**
-  - 批次：20261025-0257
-
-## 批次 20261025-0316 · 2026-10-25 · 会话 7e09a4a8
-
-> 上架 Google Play 的版权 / 商标处置（7 条）。
-> ⚠️ 本批的 **7 个代码提交**信息里写的是 `20261025-0117`（开工时钩子注入的号，与另一个会话同分钟开工撞号），
-> 归档时用 `queue-init --new-batch` 换成本号以满足「批次号唯一」；
-> 按批次 grep 提交请用 `20261025-0117`。
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-0316
-
-- [x] [合规1] 清掉对外文案里的「Minecraft / 我的世界 / 基岩版」字样：`public/manifest.webmanifest` 的 description 换成与商店短描述一致的说法、`package.json` 的 description 同步 → `npm run check:manifests` 通过，且 `grep -rn "我的世界\|基岩版" public/ package.json` 零命中
-  - 做了什么：manifest description 改成「浏览器里的方块世界：无限地形、生存与创造、多世界存档，无需安装」（与 `docs/store/zh.md` 的短描述同一句）；`package.json` description 改成「方块沙盒（Web / WebGL2）：无限地形、生存、合成与联机」；顺手把六语言 `itemDesc.ts` 里 `item.desc.chain` 的「基岩版里 / In Bedrock / В Bedrock…」改成不指名版本的说法
-  - 为什么：真正会出现在用户设备上的只有 manifest description（安装提示/启动器），先把这一处清掉；`item.desc.chain` 是**会显示在物品说明里**的句子，直接写竞品版本名等于自己递证据。`docs/store/` 六份文案复查后确认**本来就没有**商标字样（唯一出现 Mojang / Microsoft 的地方是那句免责声明，保留），所以没动文件
-  - 验证：`npm run check:manifests` 通过（5 份语言文件与基准一致）；`npm run audit:i18n` 通过（六语言 100%）；`npm run test:i18n` 550/0；`grep -rn "基岩版\|Bedrock" src/core/i18n/locales/*/itemDesc.ts` 零命中（`item.bedrock` 是方块名「基岩」，属于术语表，按 D3 不动）
-  - 批次：20261025-0316
-- [x] [合规2] 重写 33 条照抄原版的成就标题（6 语言共 198 条），保留 id 与触发逻辑：`src/core/progress/advancementText.data.ts` + `src/core/i18n/locales/{zh,en,de,fr,pt,ru}/advancement.ts` → `npm run test:i18n && npm run test:advancement && npm run audit:i18n`
-  - 做了什么：33 条里 **30 条**换掉（`石器时代`→`第一块圆石`、`来硬的`→`第一炉铁`、`西装革履`→`穿上胸甲`、`冰桶挑战`→`水浇岩浆`、`我们需要更深入些`→`走进下界`、`资深怪物猎人`→`狩猎清单`、`村庄英雄`→`村庄救星`、`腥味十足`→`钓上来一条`、`涂蜡`→`涂上蜂蜡`…），六语言各 30 条 + `advancementText.data.ts` 的英文副本 30 条，共 210 处；另把 `story/root` 的英文从原版的 `Minecraft` 改成品牌名 `Minicraft`（中文侧本来就是品牌名）。id、parent、tab、desc、trigger 全部未动
-  - 为什么：这 33 条的英文标题与原版逐字相同（中文也基本沿用官方译名），是唯一"成体系照抄官方本地化"的地方；其余 67 条是本项目自创进度，标题也是自创，按 D2 不动。**3 条刻意保留**：`story/root` 是品牌名；`nether/root`（下界）与 `end/root`（末地）是维度专名，属于 D3 判定不动的术语表，改了会与界面上其它地方不一致。改法上刻意避开原版的**双关/梗**（`Isn't It Iron Pick`、`Bring Home the Beacon`、`The Cake Is a Lie` 那类），改成陈述机制的说法，这样连"创造性表达"也不沾
-  - 验证：`npm run test:i18n` **550/0**（含三条硬约束：中文标题与 `advancements.ts` 原文逐条相等、de/ru/fr/pt 不含中文且与英文相同的 ≤10 条、法语不许出现 ASCII 撇号——第一次跑就靠这条抓到 3 处 `l'` 应为 `l’`）；`npm run test:advancement` **116/0**；`npm run audit:i18n` 六语言 2894/2894 通过；`npm run typecheck` + `typecheck:tools` 清洁；30 条新标题在 zh/en 表内无重复
-  - 批次：20261025-0316
-- [x] [合规3] 10 幅画改名 + 按自创构图重画（去掉 Zetterstrand 原作的构图对应，`大金刚` 必删）：`src/core/registry/paintings.ts` + `src/render/TextureAtlas.ts` → `npm run test:painting && npm run test:textures`
-  - 做了什么：1×1 七幅换成 `日出 / 河谷 / 远山 / 夜空 / 篝火 / 孤树 / 沙丘`（dawn / river / hill / night / campfire / tree / desert），多格三幅换成 `壁画 4×4 / 挂毯 4×3 / 旧海图 2×2`（mural / banner / chart，**大金刚直接消失**）；`TextureAtlas` 的七张 painter 与 `MULTI_PAINTING_ART` 全部按新构图重写（矩形清单，无任何一幅对应他人作品）；`atlasLayout` 的七个 tile 名同步；旧多格画名做成了**只读别名** `LEGACY_MULTI_NAMES`，老存档里的大画仍能读回来；顺手修掉六语言里已经过期的「画」物品说明（还写着"只有 7 幅、多格大画没做"）与 `TASKS` B14 的差异说明
-  - 为什么：这 10 幅原来是照着 Zetterstrand 的署名画作摆的构图（名字也照抄），"认得出是哪一幅"就是改编，`大金刚` 还叠了任天堂形象。**只换画面与名字、保留尺寸档位与 1×1 的下标顺序**（D9）：尺寸是玩法，下标进方块状态，调序会让老存档里挂好的画集体换脸。多格画的名字进存档，所以用别名而不是硬改（D10）
-  - 验证：`npm run test:painting` **66/0**（新增 6 条别名断言：三个旧名字各自映射正确、旧名字尺寸仍是 4×4、别名目标都在表里、现用名字不在别名键上）；`npm run test:textures` **33/0**；`npm run test:frame` **169/0**（`describeState` 的「贴北墙·炸弹」→「贴北墙·篝火」随名字改）；`npm run test:i18n` 550/0、`audit:i18n` 2894/2894 通过（物品说明改了六语言）；`typecheck` + `typecheck:tools` 清洁；`npm run audit:diffs` 重算了差异台账
-  - 批次：20261025-0316
-- [x] [合规4] 设置页补「非官方 · 与 Mojang / Microsoft 无关」声明 + 资源包免责（只导自己拥有的包）：`src/core/i18n/locales/*/settings.ts` + `src/ui/SettingsScreen.ts` → `npm run test:settings && npm run test:ui && npm run audit:i18n`
-  - 做了什么：新增两条键 `settings.notice`（设置页底部：非官方、与 Mojang / Microsoft 无关、贴图与音效全部由代码生成）与 `settings.resourcePack.hint`（资源包行下方：只能导入你自己拥有的包，本应用不提供也不分发官方素材），六语言各一份；`SettingsScreen` 加 `makeFooterNotice()` / `makePackHint()` 两个节点（footer 用 `prepend` 插在"恢复默认"之上，不动原有组装顺序）；`index.html` 加 `.settings-notice` / `.settings-note` 两条样式（10px 灰字，触屏横屏降 9px）
-  - 为什么：首页那句"非官方"页脚被用户按审美删过（批次 20261024-1152），但商店版本必须有一个**用户自己找得到**的免责位置——放设置页底部：不占首屏、六语言都有、投诉时能指出来。资源包那一行单独加免责，是因为它长期被当作"换个官方外观"的入口，法律上只能导自己的包（D6）。措辞刻意只讲"与谁无关 + 素材由代码生成"，不写"复刻的是哪个游戏"——写清对象等于自认使用了他人作品
-  - 验证：`npm run test:settings` **119/0**；`npm run test:ui` **979/0**（新增 1 条断言：三条链路都得在——源里引用两个键、CSS 有两条样式、六语言表里都有这两条键，少一处就红）；`npm run audit:i18n` 六语言 2896/2896 通过；`npm run test:i18n` 550/0；`typecheck` + `typecheck:tools` 清洁
-  - 批次：20261025-0316
-- [x] [合规5] 读档容错：不认识的方块 / 物品 id 跳过并记日志，不再整档失败：`src/core/save/` → `npm run test:save && npm run test:migration`
-  - 做了什么：新增 `src/core/save/SaveIssues.ts`（纯数据记账本：按 `种类|细节` 累加、最多 32 种、溢出只计数、可清零）；三条读档路径接上——`ChunkEdits.applyTo()` 遇到注册表里不存在的方块 id **不写世界**（保留地形）并记账、`Inventory.restoreStack()` 丢掉不认识的物品 id 时记账、`Paintings.restorePaintings()` 跳过认不出的画名时记账；`SaveGame.open()` 打开世界时清零；诊断日志的 `meta.saveIssues` 带上这份账
-  - 为什么：存档里的方块与物品都是**数字 id**，所以改命名空间其实不会让老档读不回来（这条顺带纠正了我原先的判断）；真正会丢东西的是"这个 id 当前版本不存在了"。三种路径原本都是**静默**处理：方块回退成空气（那一片被挖空）、物品直接消失、画跳过——静默是对的（不能因为一个坏 id 让整档打不开），但必须留痕，否则玩家报"我的东西没了"时导出日志里查不到任何线索
-  - 验证：`npm run test:save` **120/0**（新增 8 条：不认识的方块不写世界且保留地形、记账 detail 正确、不认识的物品丢掉且记账、同一 id 累加而不新增、总数含重复、清零后归零、清单为空）；`npm run test:migration` 28/0；`npm run test:diag` 89/0；`npm run test:unit` 全绿；`typecheck` 清洁
-  - 批次：20261025-0316
-- [x] [合规6] 内部命名空间 `minecraft:` 换成自有前缀（方块 / 物品 / 命令 / 联机协议 / 存档一起）：`src/core/registry/*`、`src/core/commands/*`、`server/` → `npm run check`（全量 177 套）
-  - 做了什么：新增 `src/core/registry/ids.ts`（`NAMESPACE = 'minicraft'` + `normalizeId()` / `shortId()` / `hasNamespace()`，旧前缀只用于**读**）；全局替换 1100 处字面量（87 个 .ts + `tools/*.js` 的验收脚本）；所有"按名字查表 / 去前缀"的地方改用 `shortId()`（`itemNames` 7 处、`advancementText` 4 处、`AudioEngine` 4 处、`CommandHelp` 3 处、`StatusEffects` 1 处、`structureNames` 1 处、`food` 1 处、`main` 2 处）；命令解析入口（`resolveItemId` / `resolveBlockId`）先 `normalizeId()` 再查，所以 `/give minecraft:stone`、`/locate structure minecraft:village` 这类**老文本仍然可用**（`command-test` 里恰好就有这两条用例）；进度读档把老 id 归一化（否则达成记录整片消失）
-  - 为什么：命名空间是内部标识符，但本项目是独立产品，没必要继续借用别人的前缀。**顺带发现一处真正在用户眼前的东西**：进度页第一个页签的标题原本是「我的世界」、英文是「Minecraft」，已改成「方块世界」/「Block World」（页签 id `minecraft` → `world`）——这才是这次改名前唯一会被玩家看见的商标痕迹
-  - 验证：`npm run test:offline` **176/176 套全绿**（85.4s）；`npm run test:unit` 372/372；`npm run test:advancement` **120/0**（新增 4 条：旧前缀的达成记录读得回来、旧→新 id 映射、计数进度也接上）；`npm run test:i18n` 550/0；`npm run audit:i18n` 2896/2896 通过；`typecheck` + `typecheck:tools` 清洁。排查中还修了两处被漏掉的正则（`CommandHelp` 的 `replace(/^minecraft:/)`、`bastion-test` 里逗号连写的混合字符串）
-  - 批次：20261025-0316
-- [x] [合规7] 补 `LICENSE` + `THIRD-PARTY-NOTICES`（three / ws 的 MIT）+ 隐私政策页（Play 强制）：根目录新增文件 + `docs/privacy.md` → `npm run build` 产物内可检索到三份声明
-  - 做了什么：新增 `LICENSE`（保留所有权利，含"不得改名二次上架 / 不得用于商业分发"条款）、`THIRD-PARTY-NOTICES.md`（three.js 0.186.1 与 ws 8.22.0 的完整 MIT 原文）、`public/third-party-notices.txt`（同内容纯文本，`vite build` 会复制进 `dist/`）、`public/privacy.html`（中英双语隐私政策：不收集个人数据、存档只在本地、联机的数据交换范围、第三方组件、变更与联系方式）；`README` 的「许可」节补三条指引
-  - 为什么：MIT 要求"分发物中保留版权声明与许可全文"，网页版的"分发物"就是 `dist/`，所以声明必须放在 `public/`（只放仓库根目录等于没分发）；隐私政策是 Play 的**必填项**，需要一个可公开访问的 HTTPS 链接，而 `/privacy.html` 就是这个项目自己的站点路径，比外链第三方托管更不容易失效。隐私文案按**代码实际行为**写（无账号、无统计/广告 SDK、存档仅在 IndexedDB/localStorage）
-  - 验证：`npm run build:fast` 后 `dist/privacy.html`（5.7KB）与 `dist/third-party-notices.txt`（3.4KB）都在；`npm run test:ui` **980/0**（新增 1 条断言：两份文件都在 `public/` 且声明里有 three.js authors / Einar Otto Stangvik）；`npm run audit:docs` 通过；`npm run check:manifests` 通过；`typecheck:tools` 清洁
-  - 批次：20261025-0316
-## 批次 20261025-2225 · 2026-10-25 · 会话 0a9f5045
-
-> PC 两条（用户 2026-10-25）：**PC 不再进全屏**（含"装成 App"那条绕开代码的路），
-> **PC 的 HUD 与手机同构**——手机上那几颗按钮 PC 上也全都显示，且每颗上方挂一枚键帽写清对应键盘键。
-> 顺带修掉一条"结论随机器语言变"的 i18n 断言（它把提交钩子在本机卡成常红）。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-25
-> 批次：20261025-2225
-
-- [x] [P1] PC 端 HUD 按钮层与手机同构（聊天/暂停/视角 + 跳跃/升降 + 背包 + 左下 WASD 图例），每颗按钮上方挂对应键帽：新增 `src/ui/PcControls.ts`、接入 `src/main.ts`、样式写进 `index.html` → 验收：`npm run check:fast` 通过；桌面视口截图里能看到全部按钮与键帽
-  - 做了什么：新增 `PcControls`（顶部聊天 T / 暂停 Esc / 视角 V、右下跳跃 Space 与飞行时的升降 Space/Shift、快捷栏右侧背包 E、左下 WASD 键位图例 + Shift 潜行 / Ctrl 疾跑 / Shift+F 飞行）；`main.ts` 在非触摸设备构造它，并接到 `handleInventoryOpen` / 聊天 / 小游戏 / `setFlying` / `dispose` / `collectInput`；`index.html` 新增 `#pc-ui` 一段样式，复用 `.touch-button` 与 `--touch-scale`
-  - 为什么：PC 原来只有准星与快捷栏，入口全靠记快捷键。按钮只做"看得见的入口"，键帽才是真正的操作说明；样式复用手机的类级选择器，不抄第二套玻璃质感
-  - 验证：`npx tsc --noEmit` 通过；`npm run test:ui` 1087 通过 0 失败；1280×720 截图里 T/Esc/V、Space、E、WASD 图例齐全；点击暂停/视角/聊天/背包实测分别打开面板、切到第三人称、聚焦输入框、打开背包；`/gamemode creative` + 起飞后升降两颗出现在跳跃键上下
-  - 批次：20261025-2225
-- [x] [发现] `tools/i18n-test.ts` 的「auto + 没有标签 → 英文」在本机（zh-CN）必红：`resolveLanguage('auto', undefined)` 显式传 `undefined` 会触发默认参数 `deviceLanguage()`，实际读到 Node 的 `navigator.language = zh-CN`，于是断言值随跑测试那台机器的语言变——它自己的注释却写着"tag 一律显式传入，否则结果会跟着机器语言变"。表现为 `npm run check` 与提交前的 `checks.fast` 在本机恒红 → 改成不依赖机器语言的写法（空标签），验收 `npm run test:i18n` 与 `LANG=en_US npm run test:i18n` 都通过
-  - 做了什么：把那条断言改成 `resolveLanguage('auto', '')`（空标签 → 回落英文），并补一条「显式 `undefined` 等于读设备语言」的断言把默认参数的真实语义钉住；`deviceLanguage` 加进导入
-  - 为什么：`tag` 参数有默认值 `deviceLanguage()`，JS 里"显式传 undefined"与"不传"完全等价，所以原断言在本机（`navigator.language=zh-CN`）恒红、在 CI（en）恒绿——它不是不稳定的偶发，而是**结论随机器变**；顺带发现它是提交钩子的常红项，不修就会让每次 `git commit` 都被拦
-  - 验证：`npm run test:i18n` 551 通过 0 失败（本机 zh-CN）；`LANG=en_US.UTF-8 npm run test:i18n` 同样 551/0
-  - 批次：20261025-2225
-- [x] [P2] PC 装上 PWA 也不再全屏：manifest 生成桌面变体（`display_override` 不含 fullscreen、不锁方向），运行时按设备切换 → 验收：`node tools/gen-manifests.mjs --check` 与 `npm run check:fast` 通过；桌面页面里 `link[rel=manifest]` 指向 desktop 变体
-  - 做了什么：`tools/gen-manifests.mjs` 每种语言多生成一份 `.desktop.webmanifest`（`display_override` 只留 `standalone`、去掉 `orientation`），`--check` 一起校验；新增 `src/ui/ManifestLink.ts`（`manifestHref()` 纯函数 + `applyManifestLink()`），`boot()` 用 `applyManifestLink(getLanguage(), isTouchDevice())` 取代原来那段只按语言拼的代码；`preferInstalledLandscape()` 补 `isCoarsePointer()` 守卫；`public/sw.js` 让 `.webmanifest` 走网络
-  - 为什么：代码侧的自动全屏早就被 `isCoarsePointer()` 挡住，PC 上剩下的唯一全屏入口是"桌面把网页装成 App"——Chrome 会照 `display_override: ["fullscreen"]` 直接全屏启动，而那不是 Fullscreen API，`exitFullscreen()` 关不掉，游戏里也没入口退出。手机那份 manifest 一个字没动，不冒"装完打开不是全屏"的回归
-  - 验证：`node tools/gen-manifests.mjs --check` → 「6 种语言 ×（手机 + 桌面）与基准一致」；浏览器实测 `link[href]`：桌面 zh = `./manifest.desktop.webmanifest`、桌面 en = `./manifest.en.desktop.webmanifest`、手机 zh = `./manifest.webmanifest`、手机 pt = `./manifest.pt.webmanifest`；`npm run test:i18n` 552/0、`npm run test:ui` 1087/0、`npm run check:fast` 通过
-  - 批次：20261025-2225
-- [x] [P3] 离线断言盯着两件事：`tools/ui-test.ts` 断言 PC 按钮层与键帽存在、`tools/i18n-test.ts` 断言桌面 manifest 存在且不再 fullscreen → 验收：`npm run check:fast` 通过
-  - 做了什么：`tools/ui-test.ts` 新增一节「PC 端 HUD 按钮层」——键位表七项齐全、只在非触摸设备创建、每颗按钮挂键帽、键帽上写的键在 keydown 里真的有绑定、`index.html` 里九条关键 CSS 规则在位、面板/飞行/销毁三处生命周期都接上；`tools/i18n-test.ts` 新增桌面 manifest 一节——六份都在、`display_override` 只有 `standalone`、不写 `orientation`、除显示字段外与同名手机那份逐字一致、语言码对得上；顺带把原来那条"boot() 按语言换 manifest"的断言改成盯 `ManifestLink.ts` 的拼接规则
-  - 为什么：这类"只有截图能发现"的界面问题（少一颗按钮、键帽写错字母）纯靠人眼看；把"键帽文字 → 键盘绑定"和"桌面 manifest 不许 fullscreen"钉成断言，改坏了当场红
-  - 验证：`npm run test:ui` 1115/0（+28）；`npm run test:i18n` 582/0（+30）；`npm run check:fast` 通过
-  - 批次：20261025-2225
-
-## 批次 20261026-0141 · 2026-10-26 · 会话 d4a25f60
-
-> 用户 2026-10-26：低端机上「不卡但发热明显」，只要**不影响画质和体验**的优化。
-
-# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0141
-
-目标（用户 2026-10-26）：低端机上"不卡但发热明显"。这一批只做**不降画质、不降帧率、
-不降视距**的优化——把"本来就算错 / 白算 / 白传"的部分去掉，画面结果保持逐像素一致。
-
-- [x] [性能1] 天空穹顶改"地形画完再画"：`src/render/Sky.ts` + `src/main.ts` → `npm run check:fast`
-  - 做了什么：穹顶从 `depthTest:false` + `renderOrder:-1000`（先铺底）改成 `depthTest:true` + `renderOrder:+1000`；新增纯函数 `domeOcclusionSafe(视距)`（地形最远 `(视距+2)×16` 必须 ≤ 穹顶半径 180），小于则走遮挡、超过则回退成先铺底；`applySettings` 与 `setViewDistance` 两处落这条守卫
-  - 为什么：原来整屏每个像素都先被天空着色一遍、再被地形盖掉，被遮挡那部分（通常半屏以上）是纯浪费；改成地形先写完深度，穹顶只画真正露出来的天空，**可见像素完全不变**。回退分支保证视距将来放开时不会出现"天空盖住远山"
-  - 验证：`npm run test:render` **282 通过 / 0 失败**（新增 6 条：视距 6/8 走遮挡、10/16 回退、非法值按 0、穹顶 `depthTest/depthWrite` 结构守卫）；`npm run check:fast` 全绿
-  - 未验：真机上的像素对比与洞穴/地平线观感（本机无浏览器）；若真机发现远景天色异常，把 `setDomeBehindTerrain(false)` 即可逐像素退回原状
-  - 批次：20261026-0141
-- [x] [性能2] 区块 mesh 冻结世界矩阵：`src/render/ChunkRenderer.ts` → `npm run check:fast`
-  - 做了什么：新增 `ChunkRenderer.freezeAt(mesh, x, y, z)`——写位置 → `updateMatrix()` → 把本地矩阵抄进 `matrixWorld`（父级是 scene，单位矩阵）→ 关掉 `matrixAutoUpdate` 与 `matrixWorldAutoUpdate`；Worker 分支与本地分支共 4 处 mesh 创建都改走它
-  - 为什么：区块 mesh 的 position 只在创建时写一次，之后最多改 `visible`，但 three 每帧的 `scene.updateMatrixWorld()` 仍给 169 个对象各做一次 compose 并递归——纯白算。冻结后矩阵仍是正确值，视锥剔除与绘制不变
-  - 验证：`npm run test:render` **285 通过 / 0 失败**（新增 3 条：两个 autoupdate 标志为 false、冻结后改 `position` 不再影响 `matrixWorld`）；`npm run check:fast` 全绿（命中 mesh / render 两套）
-  - 影响 / 回滚：以后不能再对这些 mesh 直接改 position/rotation/scale（要挪位置就重建网格，现有流程本来就是重建后替换）；回滚只需把这 4 处换回 `mesh.position.set`
-  - 批次：20261026-0141
-- [x] [性能3] 粒子顶点只上传活跃段、0 粒子跳过上传：`src/render/ParticleSystem.ts` → `npm run check:fast`
-  - 做了什么：`writeBuffers()` 里 `count === 0` 直接归零 drawRange 并返回；否则用新辅助 `uploadActiveRange()`（`clearUpdateRanges` + `addUpdateRange(0, 活跃长度)` + `needsUpdate`）替换原来的整包 `needsUpdate = true`
-  - 为什么：`needsUpdate` 会把 1024 点的整池全量重传（约 32KB/帧），而画面上只画前 `count` 个；池尾数据根本没有任何消费者。清空后（0 粒子）也不例外，等于每帧白传一次空池
-  - 验证：`npm run test:render` **290 通过 / 0 失败**（新增 5 条：位置/颜色按 count×3、标量按 count 登记区间、0 粒子不标脏（version 不变）、0 粒子 drawRange 归零）；`npm run check:fast` 全绿
-  - 影响 / 回滚：上传区间依赖 three 的 `updateRanges`（r159+）；回滚把这 4 行换回 `needsUpdate = true` 即可
-  - 批次：20261026-0141
-- [x] [性能4] 每帧 DOM 收干（调试面板节流 / display 变化才写 / 进度条缓存引用）：`src/main.ts` → `npm run check:fast`
-  - 做了什么：① 新增 `syncDebugVisibility()`，把 `#debug` 的显隐收敛成唯一入口（`applySettings` 与 `updateDebug` 共用），只在值变化时写 `style.display`；② 调试文本按 `DEBUG_TEXT_REFRESH_MS = 200`（5Hz）节流，不再每帧拼十几行字符串写 `textContent`；③ 新增 `progressBarEls(id)` 懒查一次并缓存 `#break-progress` / `#eat-progress`，百分比量化到 1%，同档不重复写 `style.width`
-  - 为什么：调试面板默认开着（手机上 3 行、桌面上十几行），以前每帧一次临时字符串分配 + 一次 `textContent` 写入 + 一次合成器重绘；两个进度条每帧各一次 `getElementById`（纯 DOM 树查询），挖掘/进食时还会每帧写一次 width。这些都属于"画面完全相同、只是白做"
-  - 验证：`npm run test:ui` **1177 通过 / 0 失败**（新增 6 条：节流常量 ≤ 250ms、`syncDebugVisibility` 唯一入口、`updateDebug` 里不再出现 `style.display`、`progressBarEls` 存在、两个进度条不再 `getElementById`）；`npm run check:fast` 全绿
-  - 未验：真机上"面板数字刷新变慢"的观感（5Hz 是标准做法，但没人肉眼盯过）；若觉得跳得难受，把常量调到 100 即可
-  - 批次：20261026-0141
-- [x] [性能5] draw call 合并的可行性结论留档（做/不做与理由）：本会话 decision 文件 → 文档门禁
-  - 做了什么：把"约 170 次/帧的 draw call 要不要合并"评估完并留档——本会话 `d4a25f-decision.md` 的 D1（评估过程与暂不做的理由）、`notes/decisions.md` 新增「判定不做：区块 draw call 合并」一节（含代价与"什么时候该重看"）
-  - 为什么：`BatchedMesh` 要预留几十到上百 MB 顶点缓冲（显存换 CPU 提交），2×2 静态合并要重写跨区块网格化与 Worker 协议、改一格还要重拼一整组；收益（170 → ~43 次提交）必须真机前后对比才能确认，风险与这一批"零画质损失小改"不匹配，所以明确不做
-  - 验证：`npm run audit:docs` 通过；决策节格式与 `notes/decisions.md` 现有四节一致（做了什么 / 理由 / 代价与边界 / 什么时候该重看）
-  - 批次：20261026-0141
-
-## 批次 20261026-0130 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26 四条反馈：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
-> ③ 房主挖开水边方块后加入方的水不流；④ 改成晴天后雨声还在。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0130
-
-目标（用户 2026-10-26 反馈四条）：① 开房失败不该进世界；② 访客第一次加入提示进入了却卡在生成页；
-③ 房主挖开水边方块后，加入方的水不流；④ 房主把雨改成晴天后，声音还在。
-
-- [x] [联机66] 开房失败要拦住（用户 ①）：`WorldScreen` 的开房对话框等预检结果、失败留在原地显示原因；新增 `src/net/HostPreflight.ts`（只连不发 join）→ 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做了什么：新增 `preflightHost({baseUrl, room})`——只建立一次 WebSocket（3 秒超时，连上即关，**不发 join**），再 best-effort 拉 `/rooms` 看 `hasHost`；返回 `unreachable` / `taken` / `null`。`WorldScreen.onHostWorld` 改成可返回 `Promise<string | null>`，`go()` 等结果：失败 `showError()` 并留在对话框（按钮期间 disabled），成功才 `cleanup()`。`main.ts` 里的回调改成先 `await preflightHost(...)`，`unreachable` → `t('mp.hostUnreachable')`、`taken` → `t('say.net.hostTaken')`，只有通过才 `pendingHostRoom` + `startWorld`
-  - 为什么：以前是"先建世界再后台连"，服务器没起/地址错/房名被占时人已经站在世界里了（建世界还要跑地形生成），失败只能看到一句看不懂的 `host-taken` 或静默断开。**关键约束**：预检不能发 `join`——发完就断会把房主位占进 30 秒宽限期，正式开房反而被 `host-taken` 拒掉
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **6/6**（连不上 / 超时 / 房名被占 / 同名无房主放行 / 拿不到列表放行 / URL 带房名且连上就关）；`npm run test:ui` **1155/0**（新增 3 条结构断言）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过（新增 `mp.hostUnreachable` 六语言）
-  - 批次：20261026-0130
-- [x] [联机67] 雨→晴之后环境音停不下来（用户 ④）：`AudioEngine.setAmbience` 的起伏振荡器改挂独立增益；网络天气改走 `setWeather()` → 验收：`npm run test:ui` 断言
-  - 做了什么：雨声节点链从 `… → out(音量) → master`（起伏 `gust` 直接接在 `out.gain` 上）改成 `… → swell(1±0.045) → out → master`，`gust` 只接 `swell.gain`；`main.ts` 的 `onWeather` 从 `weather.setKind(kind)` 改成 `this.setWeather(kind)`（与本地命令同一条路径，`applyEnvironment()` 一起跑）
-  - 为什么：`AudioParam` 的输入是**加在基础值上**的——`setTargetAtTime(0)` 只把基础值推到 0，叠加的 ±0.045 仍在振，于是晴天里永远有 4.5% 的雨声底噪。而 `weather.setKind()` 只改状态与降水粒子、不跑 `applyEnvironment()`，远程改天气时环境音沿用上一档
-  - 验证：`npm run test:ui` **1155/0**（断言 `gust.connect(gustDepth).connect(swell.gain)` 存在、旧的 `connect(out.gain)` 不存在、`onWeather` 里 `this.setWeather(kind)`）；`npx tsc --noEmit` 干净
-  - 未验：真人耳听"雨停即静"（无头环境听不到声）
-  - 批次：20261026-0130
-- [x] [联机68] 访客第一次加入卡在生成页（用户 ②）：`refreshLoadingState` 加 8 秒"就地认可落点"自愈 → 验收：`npm run test:ui` 断言
-  - 做了什么：新增 `JOIN_FORCE_SPAWN_MS = 8000` 与 `forceJoinSpawn()`——加入来的世界若"已经有区块网格、但 8 秒还没落点"，就地认可当前坐标（`spawnPoint` + `spawnResolved = true`）并补一次 `requestGroundSettle('join')`，只做一次；30 秒那条 `abortJoin` 兜底保持不变；日志统一打 `[JOIN_DBG]`
-  - 为什么：30 秒兜底是"彻底放弃退回菜单"，而玩家看到的是"提示进入了却卡在生成页"。**不能**用 `prepareNewWorldSpawn()` 兜——加入方的人已经在房主身边，重新规划出生点会把人瞬移到几百格外
-  - 验证：`npm run test:ui` **1155/0**（断言常量与 `forceJoinSpawn()` 存在、且自愈里**不**调用 `prepareNewWorldSpawn()`）；`npx tsc --noEmit` 干净
-  - 未验：真机双端加入（没有自动化双端环境；若仍卡，控制台会打 `[JOIN_DBG] 8 秒没有落点，就地认可：…` 带 chunks/mesh/net 三个量）
-  - 批次：20261026-0130
-- [x] [联机69] 加入方的水不流动（用户 ③）：房主挖开水边方块后，房主端水流、加入方水不动。静态读代码已确认"任何方块写入都经 `World.events.onBlockChanged → queueBlockChange → BlockFunnel.sendBlocks`"，但没找到加入方收不到/不生效的确证点 → 需要一次带日志的复现，再加 `[FLUID_DBG]` 计数（房主每秒发出的水方块数 / 加入方每秒应用的水方块数）后定位
-  - 做了什么：真服务端 + 两个真浏览器复现（房主开房、加入方走真实的「加入房间」面板），发现**加入方根本没站在那片地形上**——`loadSaveState()` 是异步的，它用**上一局**存档里的坐标 `teleport` 覆盖了 `alignSpawnToHost()` 刚放好的"房主身边"落点；人不在那片区块里，房主的流体改动只会走 `planRemoteBlock` 的 `buffer` 分支进 `world.edits` 而不落地，画面上就是"他那边水一直不动"。修：`loadSaveState` 对 `mpjoin-` 世界**跳过位置/维度/朝向恢复**（房间里的位置与维度由房主/服务端说了算），背包/进度/规则照旧恢复。另保留 `[FLUID_DBG]` 计数（房主"发出"、加入方"应用"，附 role/net/可写）作为后续自查入口
-  - 为什么：这不是"水"独有的问题——同一个原因会让加入方看不到房主的红石、火焰、作物生长等一切"房主算出来的方块变化"，而画面看上去完全正常。相比"给水加一条专门同步"，把落点改对是唯一的正解；顺带也解释了之前"加入方在奇怪的位置""看不到别人"的零散反馈
-  - 验证：双浏览器对比同一坐标周围 13×9×13 的水方块数——修前 guest 恒为 2、host 从 2 涨到 114（完全不跟）；修后 guest 与 host 同步跟随（1→53 逐拍对齐，滞后约 0.7 秒），`guest 距房主: 0.0 格`；`[FLUID_DBG]` 两侧数字一致（发出 7 / 应用 7）。`npm run test:ui` **1157/0**（+2 条结构断言：`joinWorld` 分支跳过位置恢复、`[FLUID_DBG]` 计数在位）；`npm run test:net` 208/0；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
-  - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
-  - 批次：20261026-0130
-
-## 批次 20261026-0245 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26 三条：① 房主改游戏模式，其他人收不到；② 访客下线，房主看不到也没有消息；
-> ③ 世界界面的按钮太高，新建世界/加入房间要等宽。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0245
-
-目标（用户 2026-10-26）：房主改了**游戏模式**，房里的其他人也要跟着变（现在完全收不到）。
-
-- [x] [联机73] 游戏模式随 `room-config` 同步给全房：房主 `setGameMode` 时上报，服务端记在房间上并广播（含房主），`welcome` 带上当前模式让晚进的人也一致 → 验收：`npm run test:net`（房主发 `room-config{gameMode}` → 全房收到；后加入者的 `welcome.gameMode` 是新值）+ `tools/ui-test.ts` 结构断言
-  - 做了什么：房主 `setGameMode` 后调 `sendRoomConfig({ gameMode })`（两个守卫：`!applyingRemoteGameMode`、`!waitingForSaveRestore`）；服务端新增 `roomGameModes` 房间表，白名单校验后广播 `room-config{gameMode}` 并随 `welcome` 下发当前值；客户端 `onRoomConfig` 应用模式（带回声守卫）并打一行 `say.net.roomGameMode`；晚进的从属端在 `onWelcome` 后采用 `welcome.gameMode`
-  - 为什么：世界元数据里的 `mode` 是房主 `join` 那一刻的快照，之后 `/gamemode` 改的从来不会回写；也从来没有一条"模式变更"的消息。现在模式和时间/天气同走 `room-config`，一份通道三种配置
-  - 验证：`npm run test:net` **212/0**（+2：房主改模式 → 同房收到 `room-config{gameMode:'creative'}`；晚进的人 `welcome.gameMode` 也是 creative）；`npm run test:ui` **1166/0**（+4 结构断言）；`npm run audit:i18n` 通过（新增 `say.net.roomGameMode` 六语言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
-  - 未验：真机双端切一次模式（读档恢复/旁观飞行这些副作用没在真机上点过）
-  - 批次：20261026-0245
-- [x] [联机74] 访客退世界时断开联机（用户 2026-10-26）：`App.dispose()` 以前**完全不碰 `net`** → socket 挂着 → 服务端收不到 `bye` 也等不到 `close` → 房主眼里对方永远在线、也没有"离开了"的提示 → 现在 `dispose()` 先 `net.disconnect()`（内部先发 `bye` 再关 socket）
-  - 做了什么：`dispose()` 开头 `this.disposed = true` 之后立刻 `this.net.disconnect()`（`disconnect()` 的首行就是 `sendBye()`）；`tests/net-client-look.test.ts` 补两条：断开时先发 `bye` 再关 socket、没连上时不抛
-  - 为什么：`bye` 分支与服务端"立刻广播 leave"上一批已经做好，缺的一环是**客户端主动断开这条链**——回主菜单/换世界走的是 `dispose()`，它以前只拆渲染与界面，网络对象直接丢掉，浏览器不保证回收，服务端就永远等不到这条连接结束
-  - 验证：`npx vitest run tests/net-client-look.test.ts` **7/7**（+2）；`npm run test:net` 212/0（`bye → leave` 那侧上一批已覆盖）；`npm run test:ui` 1168/0（+2 结构断言：`dispose` 里先断开、离开有系统提示）；`npx tsc --noEmit` 干净
-  - 未验：真机双端（访客点「退出到主菜单」/关标签页，房主那边应当立刻少一个人 + 聊天区一行"某某离开了房间"）
-  - 批次：20261026-0245
-- [x] [界面1] 世界界面入口行压矮 + 两颗按钮等宽（用户 2026-10-26）：`index.html` 的 `.world-list-top` 改成两颗 `flex: 1 1 0`（以前「新建世界」铺满、「加入房间」只有文字宽），PC 上整排压到 36px；列表标题旁的「导入存档」压到 27px
-  - 做了什么：`.world-list-top > .world-primary/.world-secondary` 统一 `flex: 1 1 0; width: auto; max-width: none; text-align: center`；新增 `@media (pointer: fine)` 把这一排压到 `min-height: 36px`、`.world-import` 压到 `padding: 3px 9px; font-size: 11px`；`#world-new-button` 只留"铺满"语义（宽度/高度交给共用规则）
-  - 为什么：两颗按钮是同一层（都是"开始一局"），一宽一窄看着像不同层级；52px 是"手指点得到"的下限，不是 PC 上该有的高度。**判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`**——`touch-mode` 是进世界、建触摸层时才挂的，主菜单阶段手机上也没有这个类，拿它当判据会把手机的 52px 一起压掉
-  - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
-  - 批次：20261026-0245
-
-## 批次 20261026-0320 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：加入房间后「地形方块有些不一致」，怀疑是用了之前的种子/世界/存档。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0320
-
-目标（用户 2026-10-26）：加入房间后"地形方块有些不一致"，怀疑是用了之前的种子/世界/存档。
-
-- [x] [联机75] 加入方不再复活本地旧方块增量（地形以房主为准）：`loadSaveState()` 对 `mpjoin-` 世界跳过 `loadAllChunkEdits()` 的恢复；顺带把"是不是加入世界"收成一个 `isJoinWorld()` 判据（位置恢复与增量恢复共用）→ 验收：`npm run test:ui` 断言
-  - 做了什么：`loadSaveState()` 里增量恢复包进 `if (!joinWorld)`；新增 `isJoinWorld()`；两处 `startsWith(JOIN_WORLD_PREFIX)` 收口到它
-  - 为什么：加入方的本地库名是「房间 + 种子」（`multiplayerWorldId`），**同房同种子 = 同一个库**——上一次会话看过的方块改动会在这次进房时被原样复活，再叠到房主刚发来的快照上。房主后来把某处改回去（拆掉、水退、TNT 回填）之后，旧增量把格子"顶"回旧样子，于是只有加入方看到的地形对不上。这也解释了"换个新世界就没问题"：换了世界就是另一个库
-  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` **1171/0**（+1 断言：加入世界跳过增量恢复；并把旧的 `startsWith` 断言改成 `isJoinWorld()`）
-  - 未验：真机双端对地形（需要"房主拆掉一处在旧会话里改过的方块"这种场面；逻辑上等价于位置恢复那条已验的路径）
-  - 批次：20261026-0320
-
-## 批次 20261026-0345 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26 拍板：方块增量跑到 20 万上限后「后进房的人地形少一截」；批准做 ① 水流不该撑大增量表、
-> ② 进房首包压缩，「能彻底解决的方案都可以接受」。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0345
-
-目标（用户 2026-10-26 拍板）：方块增量跑到 20 万上限之后，「后进房的人看到的地形少一截」。
-批准做 ①（水流不该把增量表撑大）+ ②（进房首包压缩），"能彻底解决的方案都可以接受"。
-
-- [x] [快照1] 服务端**按视野补发**方块增量：玩家跨进一个新区块时，把该区块的增量推给他（走已有的 `blocks` 消息，客户端零改动）——补上"128 格外永远收不到"的盲区（`snapshot.mjs` 里记的联机27）→ 验收：`npm run test:net`（房主在远处改一格 → 加入方走过去收到）
-  - 做了什么：`server/index.mjs` 新增 `pushChunkEdits(player)`——玩家跨进一个**新区块**时，把该区块的增量按 2048 条一批推给他（走已有的 `blocks` 消息，客户端零改动）；`player.sentEditChunks` 记已推过的区块（上限 4096 个键）；`snapshot.mjs` 新增纯函数 `editsInChunk()`；三条 `rememberEdit` 的 value 带上 `room` 以便按房筛选
-  - 为什么：进房快照只带玩家 8 个区块（128 格）内的改动，更远的**永远收不到**（`snapshot.mjs` 里记的联机27 遗留）——这就是"地形对不上"的主因
-  - 验证：`npm run test:net` **213/0**（+1：房主在 2000 格外改一格 → 新人加入时快照里没有 → 新人走进那个区块 → 收到含该格的 `blocks`）；`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（+3 `editsInChunk`）
-  - 批次：20261026-0345
-- [x] [快照2] 上限 20 万 → 50 万（配合视野补发：首包仍按半径裁剪，不会因此变大）→ 验收：`npx vitest run tests/net-snapshot-policy.test.ts`
-  - 做了什么：`DEFAULT_MAX_EDITS` 20 万 → **50 万**（`server/snapshot.mjs`，注释里写明"抬高前提是按视野补发：首包仍按半径裁剪，不会因此变大"）
-  - 为什么：有了补发，"超过上限被淘汰"从"永久丢失"变成"只是不在首包里"，抬高上限才安全
-  - 验证：`npx vitest run tests/net-snapshot-policy.test.ts` 13/13（含 `DEFAULT_MAX_EDITS === 500_000`）
-  - 批次：20261026-0345
-- [x] [快照3] 澄清并处理"水流撑大增量表"：`EditsTable` 本来就按格覆盖（同一格多写只留最后一稿），所以中间态不进表；真正会白占的是"改了又改回世界生成原样"的格子——评估后再决定做不做
-  - 结论：**水流不会把增量表撑大**，不需要改代码。`ChunkEdits.record()` 是 `map.set(localIndex, pack(id,state))`——同一格反复写只留最后一稿，水流的液面中间态天然被覆盖；撑大表的只有"**被写过的格子数**"。
-  - 顺带查清的浪费：真正白占的是"改了又改回世界生成原样"的格子（比如水退干净后那一格其实还是空气）。要清掉它得在写入时问一次地形生成器，代价是每次流体写都多算一遍噪声——**收益不确定、成本明确**，所以这次不动，记在这里备查。
-  - 验证：`src/core/save/ChunkEdits.ts` 的 `record()` 逐行确认（key 是区块，内部 Map 的键是区块内下标）
-  - 批次：20261026-0345
-- [x] [快照4] 进房首包的方块增量改压缩格式（用户批准的第 ② 条）：`src/core/net/EditPack.ts`（客户端解码 + 测试用编码）与 `server/editpack.mjs`（服务端编码 + 测试用解码）两份实现，格式为"按区块分组 + 区块内下标"；服务端改发 `editsPack`、老字段 `edits` 留空；`NetClient` 解回老形状，`onWelcome` 零改动 → 验收：`tests/edit-pack.test.ts`（含两端交叉）
-  - 做了什么：`EditPack.ts` 提供 `encodeEditsPack/decodeEditsPack/packIndex/unpackIndex`（下标与 `Chunk.index` 同一套算术，测试交叉校验）；`server/editpack.mjs` 是纯 JS 的同构实现（服务端不能 import TS）；`snapshotFor` 改发 `editsPack`；`NetClient` 优先解 `editsPack`、解不出来退回 `edits`；`tools/net-test.mjs` 的 `joinAndWaitWelcome` 就地解包，后面几百条断言一行没改
-  - 为什么：一条从 30~40 字符降到约 10 字符。**实测**：密集改动（一面墙/一块地）降到 **0.4 倍以下**；零散改动（每条各一个区块）约 **0.67 倍**——比预想的低，因为"每块一个头"在小样本里占比高，测试里两种形态都钉了
-  - 未做：二进制/base64 版本（再小约 1.2 倍，但要两端逐字节对齐、日志不可读），收益不抵风险
-  - 验证：`npx vitest run tests/edit-pack.test.ts` **9/9**（含"服务端编码 → 客户端解码"交叉、坏数据整体拒收）；`npm run test:net` **213/0**；`npm run test:ui` **1179/0**（+2 结构断言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
-  - 批次：20261026-0345
-
-## 批次 20261026-0815 · 2026-10-26 · 会话 d4a25f60
-
-> 用户 2026-10-26：偶尔能看到「穿透方块、里面的透明空间 / 人卡在地皮下面的空间」，
-> 要求彻底解决（之前修过一次没修完）。
-
-# 队列 · 会话 d4a25f6059e34cce97009da8f730a3b3
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0815
-
-目标（用户 2026-10-26）：偶尔能看到"穿透方块、里面的透明空间 / 人卡在地皮下面的空间"。
-要求彻底解决（之前修过一次没修完）。不允许再靠"把近裁面调更小"这类补丁——那只是把
-穿透的临界点往后挪。
-
-- [x] [穿模1] 相机贴脸/埋在方块里的穿透兜底：`src/render/cameraNear.ts` + `src/main.ts` → `npm run test:cameranear`
-  - 做了什么：① `cameraNear` 新增 `cameraClearanceInfo()`（距离 + 由面指向相机的单位方向）与 `pushCameraOutOfWalls()`（沿法线推出到 `NEAR_MARGIN`，最多 3 次迭代）；② 第三人称每帧摆好相机后调用它；③ `buriedInBlock` 的判据从 `suffocates` 改成 `opaque`（树叶这类"不窒息但面被剔除"的方块也兜住，玻璃/水仍不糊）；④ 新增 `world/cameraPush` 诊断（1 秒最多一条）
-  - 为什么：第三人称相机的射线**只朝背后那一个方向**打，撞到后墙就停在 0.22 格前；但玩家背靠墙角时相机离**侧墙**可能只剩 1~2 厘米，比近裁面下限 0.02 还小 → 那一面被裁掉，而方块相邻面是背向剔除的 → "看见墙皮后面还有一个世界"（用户说的"偶尔卡视角"）。原来的色罩只认 `suffocates`，恰好漏掉"不透明但不止窒息"的那一批
-  - 验证：`npm run test:cameranear` **45 通过 / 0 失败**（新增 9 条：墙角只剩 1 厘米的前提、推出方向朝 -X、推后 clearance ≥ 5 厘米、位移 ≤ 10 厘米、空场一个毫米都不推、相机在方块内返回 -1 交给色罩）；`npm run check:fast` 全绿；`npm run test:ui` **1177/0**
-  - 未验：真机复现（本机无浏览器）。若再出现，`__mc.diag.exportText()` 里会有 `world/cameraPush` 事件（带推出距离、clearance、near、方块 id），能直接区分"相机贴脸"还是别的原因
-  - 批次：20261026-0815
-- [x] [穿模2] 排除"盒子坐标反序导致面朝内"：`tools/render-test.ts` → `npm run test:render`
-  - 做了什么：遍历 `BLOCKS` 里所有实际使用的形状 × state 0~63 × 连接两种取值，断言 `meshBoxes` 产出的每个盒子都满足 `min < max`，且每个形状至少有一种状态能画出几何（十字形状走 `emitCross`，排除）
-  - 为什么：盒子坐标写反会让 `emitFace` 的顶点顺序整体反转 → 面朝内 → 从外面看被背面剔除（画面是洞）、从里面看反而正常。这与用户描述的"从某个角度看穿方块"是同一类症状，而这条此前没有任何断言覆盖
-  - 验证：`npm run test:render` **293 通过 / 0 失败**（新增 3 条；当前全部形状都通过，说明这一类是干净的，可以排除）
-  - 批次：20261026-0815
-
-## 批次 20261026-0500 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：「服务器地址除了手输，右侧加一个选择按钮 → 服务器选择界面（局域网扫描 / 公开服务器）」，
-> 服务器要能被探测来测响应时间，选中自动回填；开房与加入两处都要。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0500
-
-目标（用户 2026-10-26）：服务器地址除了手输，还要能「选」——地址框右侧一个按钮，点开进服务器选择界面；
-界面里两个区域：**局域网扫描**（扫当前网段找可用服务器）与**公开服务器**（接口下发，先留入口）；
-服务器要提供探测接口（发一个包、回一个包），用来测响应时间；选中后自动把地址填回；
-**开房**与**加入房间**两处都要这个入口。
-
-- [x] [服务器1] 服务端提供无状态探测接口 `GET /ping`（禁缓存、几十字节）→ 验收：`npm run test:net`
-  - 做什么：`server/index.mjs` 在 `/healthz` 前加 `/ping`，返回 `{ok:true,t:Date.now(),v:PROTOCOL_VERSION}`，头里 `cache-control: no-store`
-  - 为什么：局域网扫描要并发打 254 个地址，只能靠「谁能最快回一个字节」判断；不能复用 `/healthz`（要算吞吐与房间数），也不能用 WebSocket 握手（每条都要完整握手+关闭，浏览器同源并发还有上限）
-  - 验证：`npm run test:net` **217/0**（+4：`/ping` 返回 ok、带协议版本、`no-store`、本机 RTT < 200ms）
-  - 批次：20261026-0500
-- [x] [服务器2] 发现逻辑收成纯模块 `core/net/ServerDiscovery.ts`（网段枚举 / 单点探测 / 并发扫描 / 可取消 / https 判定）→ 验收：`npx vitest run tests/server-discovery.test.ts`
-  - 做什么：`subnetOf`（只认 10/8、192.168/16、172.16~31/12）→ `subnetHosts`（254 个）→ `probeHost`（量 RTT）→ `scanSubnet`（并发 32、边扫边回调、可取消、按 RTT 排序）；`canScanLan(protocol)` 判 https；浏览器实现 `browserReach` 用 `fetch(mode:'no-cors') + AbortController`
-  - 为什么：这一段决定「能不能用」，必须能离线测（注入 `reach`/`now`，不打真网络）；`no-cors` 是因为局域网服务端不会给每个来源加 CORS 头，而我们要的只是「这地址有人在听」
-  - 验证：`npx vitest run tests/server-discovery.test.ts` **15/15**（网段识别/公网拒绝、254 枚举、RTT 升序、边扫边回调、取消、https 判定 + 公开列表解析 3 条）
-  - 批次：20261026-0500
-- [x] [服务器3] 新增「选择服务器」面板 `ui/ServerPicker.ts`（局域网扫描区 + 公开服务器区 + 选中回填）→ 验收：`npm run test:ui` 结构断言
-  - 做什么：标题行（关闭）、局域网区（网段输入默认从当前地址/页面地址推导 + 扫描按钮 + 状态行 + 逐条结果带 RTT）、公开区（`publicServersUrl()` 为空显示「接口还没提供」；有 URL 就拉 `{servers:[{name,address,region?}]}` 并列出）；点遮罩关闭；https 页面禁用扫描并说明原因
-  - 为什么：做成「看一眼点一下」的浮层（挂 `<body>`、点遮罩即关），它夹在「填地址」这一步中间，做成第三个视图要多两次返回
-  - 验证：`npm run test:ui` **1192/0**（+13 条结构断言）；样式 `.server-picker*` 与 `.world-pick` 落 `index.html`
-  - 批次：20261026-0500
-- [x] [服务器4] 两处入口接上：开房对话框地址行右侧 ▾（第三列）+ 加入面板地址行 ▾ → 验收：`npm run check:fast`
-  - 做什么：`WorldScreen` 用现有 `makeRow(label, control, extra)` 第三参数放按钮，面板按对话框生命周期建/拆（`cleanup()` 里 `dispose`）；`MultiplayerScreen` 在地址行插到「找房间」左边，面板按需创建后常驻（该界面只建一次）
-  - 为什么：两处填的是同一个东西，必须同一套面板；用 ▾ 而不是「选择」两个字——六语言长度差太多，`.world-row` 第三列只有 44px
-  - 验证：`npx tsc --noEmit` 干净；`npm run test:ui` 1192/0；`npm run check:fast` 全绿
-  - 未验：真机在局域网里扫一次（本机开发页面是 http 可以扫；部署在 GitHub Pages 的 https 页面会被浏览器拦住，面板会直接说明原因）
-  - 批次：20261026-0500
-
-## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
-> 房主离线期间的改动也只存本地；再次开房时服务器以**房主本地**为准重建——一句话：
-> **服务器上的一切变更都回到房主本地，两边始终以房主为准**。
-> 两个已拍板的取舍：① 服务端**不保留**"只读救援副本"（房主设备丢 = 这一局全丢）；
-> ② 方块增量走**按区块懒上行**（不是开房全量推）。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2011
-
-- [x] [L8] 房主联机不切 `@mp:` 库（改动直接落单机存档）+ 联机期保存压到 10 秒、断开前强制落盘：`src/main.ts` 的 `enterMultiplayerSave` / `tickAutoSave` / `onStatus(false)` → `npm run check:fast`
-  - 做了什么：`enterMultiplayerSave()` 开头按 `this.net.role === 'host'` 早退（房主全程用 `world.id` 那个单机库），`leaveMultiplayerSave()` 因此对房主自动 no-op、也不再原地重载；新增 `hostSession`（在 `onNetWelcome` 里记一份，断开善后里用掉并清掉，因为那时 `role` 已经回 `solo`）；`tickAutoSave()` 取 `min(设置值, 10s)`；`onStatus(false)` 里房主先 `saveNow('mp-host-leave')` 再做其它善后。
-  - 为什么：房间数据只存房主本地之后，"最后 30 秒"没有任何备份，而原先房主的改动写进 `@mp:` 库（只写不读）等于退出即丢。取 `min` 而不是直接赋值是为了不和玩家自己设的 5 秒打架。
-  - 验证：`npm run check:fast` 全绿（typecheck + i18n 审计 + 586 条单测；离线套件不覆盖 `src/main.ts`，脚本自己提示了这一点）。
-  - 待人工：双端手测"联机盖房 → 退出房间 → 单机进同一个世界，房子还在"（需要浏览器 + 两个客户端）。
-- [x] [L8] 服务端清场：新增 `clearRoom()`，房主新上位与关房时各清一次 → `npm run test:net`
-  - 做了什么：`clearRoom(room)` 按房名前缀清 edits/containers/signs/frames，顺手清同房玩家的掉落物、`roomWorlds`/`roomGameModes`、两张区块追踪表；三处调用——① 关房（房主宽限期结束）② `join` 里 `wantsHost` 分支（`send(welcome)` 之前）③ 由 ② 兜住"服务端崩溃重启后的残留"。
-  - 为什么：房间数据以房主本地为准，残留会在下一局被 `welcome` 发出去，等于服务端把房主的世界改回去。判据用 `sameHostReturning = grace && hosts.get(room)?.id === player.id`：**宽限期内重连的房主不清**（他切后台回来还是同一局）。原先想用 `host.id !== player.id`，但那条件实际上是死代码——新 host 在 `host-taken` 那道闸就被拒了，能进来的只有"本人重连"。
-  - 验证：`npm run test:net` **217 → 226 通过 / 0 失败**（新增 9 条：房主写方块+容器 → 队友能看到 → 断开 120ms 内同 clientId 重连仍是房主且缓存不清（新队友仍收到那 9 条）→ 宽限期过后进同房名 welcome 全空、新房主上位也不继承）。
-- [x] [L8] 服务端不再持有世界存档：`worldSnapshot()` 只留时间/天数/天气，`SNAPSHOT_VERSION` 升 2 并兼容读 v1（旧房间数据静默丢弃）→ `npm run test:net`
-  - 做了什么：`worldSnapshot()` 删掉 edits/containers/signs/frames 与 `seed`，只剩 `version/savedAt/timeOfDay/day/weather`；读档块删掉四张表的还原循环，只回填天气/时间/天数，并在版本不符时打一行说明；`roomOfDataKey()`（只为落盘拼房名）与它的 `DEFAULT_ROOM` 导入一并删掉；`store.mjs` 的 `SNAPSHOT_VERSION` 1 → 2，新增 `READABLE_VERSIONS`（v1 仍可读，不当损坏）。
-  - 为什么：房间数据以房主本地为准之后，"服务端还存着一份世界"会立刻变成第二份事实——重启后被 `welcome` 发出去就是把房主的世界改回上次的样子。v1 不当损坏是因为内容完好、只是格式旧，时间/天数/天气仍然有效。
-  - 验证：`npm run test:net` **226 → 236 通过 / 0 失败**（改写原"重启后方块还在/容器还在"两条为"不再复活"；新增直接读 `world.json` 断言 v2 + 四张表不存在 + 时间仍在；新增 v1 升级用例：手写 v1 文件 → 不被改名成 `.broken` → 方块/容器/牌子/展示框全丢弃、时间 0.5 与天气 rain 被沿用）。
-- [x] [L8] 方块增量懒上行（服务端侧）：`edits-request` 下发给房主、`edits-reply` 收下并广播 `blocks`，`pushChunkEdits` 改成"已确认直接推、未确认向房主要" → `npm run test:net`
-  - 做了什么：新增 `confirmedChunks`/`requestedChunks`（按房一份，上限 4096 / 在飞 8）+ `trackedChunks`/`rememberTracked`；`pushChunkEdits` 拆成"直接推缓存"（`sendChunkEdits`）与"向房主要"（`requestChunkFromHost`，5 秒后忘掉这次在飞，回包丢了下次 move 会重试）；新增 `edits-reply` 分支（只收本房房主、复用 `blockEditRejection`、坐标必须落在声称的那一块里、收下后按房广播 `blocks`）；`snapshotFor` 对房主不再下发 edits/容器/牌子/展示框（双保险）。
-  - 为什么：`edits-reply` 不复用 `blocks` 是因为**空区块必须能回"没改过"**——`blocks` 的空列表在现有逻辑里直接 return，而 `requested` 不清就会被无限请求。**没有房主的房**（有人直接 join）没有权威可问，退回老行为"服务端缓存就是共用那份"，否则那类房间的跨区块补发会整条失效。
-  - 验证：`npm run test:net` **236 → 243 通过 / 0 失败**（新增 7 条：队友跨进未确认区块 → 房主收到 `edits-request{dimension,cx,cz}` → 回包后队友收到 `blocks` → 另一块再要一次 → 空块确认后不再重复询问 → 确认过的块会进后来者的 welcome）。踩到一次 `move` 50ms 限频（第二次 move 被直接丢），用例里补了 `sleep(80)`。
-- [x] [L8] 房主响应 `edits-request`：`src/net/NetClient.ts` 加收发、`src/main.ts` 从 `world.edits` 取整块回包 → `npm run check:fast && npm run test:net`
-  - 做了什么：`NetClient` 加 `onEditsRequest` 回调 + `edits-request` 分支 + `sendEditsReply()`（空块也发；超过 4096 条拆包）；解包抽成纯函数 `core/net/ChunkSnapshot.ts#chunkSnapshotBlocks()`，`main.ts` 的 `replyChunkEdits()` 只负责"取快照 → 交给它 → 发出去"。
-  - 为什么：解包是最容易错的一步，抽出来才能离线断言。**实际抓到两个 bug**：① `Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标），原来忘了加 `cx*16 / cz*16`，所有补发的方块会堆在区块西北角——而原点附近的房间看起来完全正常；② 返回类型写成 `number[][]` 装不下末位的维度名。第一个由新增用例 `区块坐标必须加到局部坐标上` 直接钉住（含负区块坐标 `z = -33`）。
-  - 验证：`npm run check:fast` 全绿（typecheck + **593** 单测，较基线 586 增 7 条：空快照/空表/坐标与状态位/区块偏移含负坐标/条目形状/相邻区块不混/位运算往返）；`npm run test:net` **243 通过 / 0 失败**（服务端那条链上一批已覆盖）。
-- [x] [L8] 房主开局整份上行容器/牌子/展示框（`session-sync`）：服务端按房广播、客户端在 `welcome` 之后发 → `npm run test:net`
-  - 做了什么：服务端新增 `session-sync` 分支（只收本房房主、`kind` 分 container/sign/frame、形状校验与各自的单向消息同口径但**不设距离闸**、按条数上限 `SESSION_SYNC_MAX_MESSAGES=256`，收下后按房广播）；客户端 `NetClient.sendSessionSync()`（200 条一包，空集合也发）+ `App.flushSessionSync()` 在 `welcome` 后触发，**读档没回来就先挂起**（`waitingForSaveRestore`），在 `start()` 的读档 `.then/.catch` 里补推。
-  - 为什么：这三种不能像方块那样懒补——队友打开一个空箱子就会往里放东西，然后被服务端那份覆盖。挂起是因为时机：`welcome` 往往早于读档完成，那时容器表还是空的，直接推等于告诉服务端"这人没有箱子"。
-  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）；`npm run test:net` **243 → 252 通过 / 0 失败**（新增 9 条：清场后 welcome 无箱子 / 房主推完后**先进来的**队友当场收到 container+sign+frame 三条广播 / **后进来的**队友从 welcome 拿到三样 / 从属端伪造 `session-sync` 被无视）。
-- [x] [L8] 协议文档与台账收口：`docs/NET-PROTOCOL.md` 补两条消息与"服务端不持有存档"口径 + `TASKS.md` 落 L8 → `npm run check`
-  - 做了什么：`NET-PROTOCOL.md` —— §2 补"世界以房主本地为唯一真相 + 服务端只是会话缓存"的完整口径与代价；§4 新增 `edits-reply` / `session-sync` 两行（含校验与"空块必须回"）；§5 新增 `edits-request` 行、改写 `welcome`（房主不带世界数据）；§6 改正三处过期数字（增量上限 20 万→50 万、世界种子不落盘、快照内容 v2）并补"房间清场/懒上行在飞上限/session-sync 上限"四行；§7 新增 `edits-request` 的客户端行为；§8 改写 `联机13`/`联机14`/`联机26` 三条。`TASKS.md` 的 L 段新增 L8 条目（口径 6 点 + 两条 ⚠️ 取舍/坑 + 待人工）。`OVERVIEW.md` 的联机条目与坑各补一句（压在 200 行 / 28672 字节上限内）。`HANDOFF.md` 进度口径 303/295 → 304/296。
-  - 为什么：文档漂移是这项目最常见的债，数字更是一抄就漂——`audit:tasks` 当场抓住了 HANDOFF 的 295 与 README 的路线图状态列，按"数字只由脚本生成"的口径重写。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账；`audit:tasks` 报"共 304 项（296/5/0/3）、编号无重复、各段连续"）；`node .continue/hooks/check.mjs docs` 通过（OVERVIEW 恰好 200 行 / 27874 字节）。
-
-## 批次 20261026-0620 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：https 访问局域网设备是**浏览器权限**层面的开关（Chrome 本地网络访问 / Firefox 对应开关），
-> 不需要我们提前拒绝——把上一批那两处「硬拦」改成「先试、再提示」。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0620
-
-目标（用户 2026-10-26）：https 页面能不能访问局域网设备，是**浏览器权限**层面的开关
-（Chrome「本地网络访问」/ Firefox 对应开关），不该由我们提前拒绝——把上一批的两处"硬拦"改成"先试、再提示"。
-
-- [x] [授权1] 「选择服务器」面板 https 页面不再禁用扫描：照样扫，扫不到才提示去开权限 → 验收：`npm run test:ui`
-  - 做什么：`ServerPicker.open()` 不再 `disabled = true`，只在状态行放一句 `server.httpsHint`；扫描结束仍为空且页面是 https 时，把"没找到 · 去授权"合并成一行提示；`server.scanBlocked` 文案换成 `server.httpsHint`（六语言，内容改为"允许本站访问本地网络"的具体路径）
-  - 为什么：Chrome 的 Local Network Access 权限开通后，https 页面可以访问 `http://` / `ws://` 局域网设备（Firefox 也有开关）。禁用按钮等于把一条其实可用的路堵死
-  - 验证：`npm run test:ui` **1195/0**（断言改成"不再禁用 + 有授权提示"）；`npx tsc --noEmit` 干净；`audit:i18n` 通过
-  - 批次：20261026-0620
-- [x] [授权2] 开房预检先尝试、连不上才归因「https 需要授权」→ 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做什么：`preflightHost` 取消提前 return，照常 `canOpen`；失败**且**（页面 https + 目标 ws://）才回 `https-blocked`；该原因的文案改成同时给两条办法（去授权 / 换 http 打开）
-  - 为什么：上一批我把它写成"连尝试都不尝试"，同样是替玩家做了决定。授权过的浏览器本来就该能开房
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **9/9**（+2：https+ws 连不上 → https-blocked 且**确实尝试过**；https+ws **连得上 → 放行**）
-  - 未验：真机在授权后开房（要 Chrome 的 LNA 权限，无头环境造不出来）
-  - 批次：20261026-0620
-
-## 批次 20261026-0600 · 2026-10-26 · 会话 0a9f5045
-
-> 用户 2026-10-26：服务器跑在电脑上、手机在同一局域网里开房失败（之前能成功）。
-
-# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-0600
-
-目标（用户 2026-10-26）：服务器跑在电脑上、手机在同一局域网里**开房失败**（之前能成功）。
-
-- [x] [开房1] 预检把「连不上」与「被浏览器拦（https 页面连 ws://）」分开：`HostPreflight` 新增 `https-blocked`，开房对话框给专门文案 → 验收：`npx vitest run tests/host-preflight.test.ts`
-  - 做什么：`HostPreflightDeps` 加 `pageProtocol`（默认真实 `location.protocol`）；`pageProtocol === 'https:' && /^ws:\/\//` 时**不建 socket**直接返回 `https-blocked`；`main.ts` 映射成 `mp.hostHttpsBlocked`（六语言）；两条失败分支都补 `console.warn`（带目标 URL）
-  - 为什么：混合内容跟网络无关——https 页面连 `ws://192.168.x.x` 会被浏览器直接拒，玩家改 IP、换端口、重启服务器全都没用。以前两种情况都回 `unreachable`，于是手机（页面在 https 上）开房失败看到的是一句"连不上服务器"，方向从一开始就错了
-  - 验证：`npx vitest run tests/host-preflight.test.ts` **8/8**（+2：https+ws → https-blocked 且**不建 socket**；http+ws 正常放行）；`npx tsc --noEmit` 干净；`npm run audit:i18n` 通过
-  - 批次：20261026-0600
-- [x] [开房2] 服务端启动打印**局域网地址**（不再只打 localhost）→ 验收：真机启动输出
-  - 做什么：`server/index.mjs` 用 `os.networkInterfaces()` 列出所有非 internal 的 IPv4，逐条打 `ws://<ip>:<port>`，并把原来那句"玩家把游戏指向 ws://localhost 即可联机"改成"本机自连（只有这台机器能用）"
-  - 为什么：`localhost` 只对跑服务端那台机器成立，手机填它指的是手机自己——这正是"手机上不知道填什么/填了连不上"的常见起点
-  - 验证：实测启动输出 `192.168.66.187 → ws://192.168.66.187:25190`（本机真实网卡）
-  - 批次：20261026-0600
-- [x] [开房3] 断言：ui-test 三条（预检分支 / 文案 / 启动打印）→ 验收：`npm run check:fast`
-  - 做什么：`tools/ui-test.ts` 加三条结构断言
-  - 验证：`npm run test:ui` **1195/0**（+3）；`npm run check:fast` 全绿
-  - 未验：手机真机开房（无头复现不出"跨设备 + https 页面"这两个条件；已按最可能的原因把错误提示改准，并给出验证办法）
-  - 批次：20261026-0600
+## 批次 20261025-2240 · 2026-10-25 · 会话 12afd06a
+
+> 纯重构：把"服务端相关的四份"收拢到一个 `server/` 下。没有新能力，只有位置与路径。
+> 判据是"改完之后所有既有的门禁仍然全绿"——181 套离线 + 195×2 条联机断言 + 出包。
+
+- [x] [S1] 目录收拢：`server/*.mjs` → `server/node/`、`rust-server/` → `server/rust/`、`android/` → `server/android/`、`ios-shell/` → `server/ios/`；`capacitor.config.json` 补 `android.path` → `npx cap sync android` 仍能找到工程
+  - 做了什么：四次 `git mv`（`server/node/` 是新建后 `git mv` 七个 `.mjs` 进去）；`capacitor.config.json` 补 `"android": { "path": "server/android", "allowMixedContent": true }`。
+  - 为什么：Capacitor 6 的 CLI **支持自定义平台路径**（`node_modules/@capacitor/cli/dist/config.js` 读 `extConfig.android.path`），所以不需要软链、也不需要自写 sync 脚本——一条配置就让它认 `server/android`。之所以把 JS 服务端也挪进 `node/`（而不是留在 `server/` 根）：这样四个子目录对称，`server/` 才是真正的"总目录"而不是"Node 服务端 + 三个挂件"；代价只是 `index.mjs` 的路径变了，一次性改掉。
+  - 验证：`npx cap sync android` 成功（45s，`copy android` + `update android` 都过）；`cd server/android && ./gradlew assembleDebug` 出包，APK 内含 2 个 ABI 的 `.so` 与 `assets/public/__host/core.bin`。
+  - 批次：20261025-2240
+- [x] [S2] 修所有引用：`package.json`（`server` / `android:*` 脚本）、`tools/`（net-peer / net-test / run-tests 的 `net: ['server/node/']` / ui-test / net-check.sh）、5 个 `tests/net-*.test.ts` 的 import、`Dockerfile`、`.gitignore`、`android/app/build.gradle` 的 `copyHostCore` 与 `copyRustLibs`、`ios/check*.sh`、`rust/run-net-test.sh`、`rust/build-ios.sh` → `npm run check` 与 rust 四套脚本全绿
+  - 做了什么：批量改 20 处功能性路径 + 15 处注释/文档路径；重点几处：`Dockerfile`（`COPY server/node`、`CMD node server/node/index.mjs`）、`.gitignore`（`server/node/.data/`）、`app/build.gradle`（`repoRoot` 现在要多剥一层父目录，`copyRustLibs` 的产物路径也改成 `server/rust/target/...`）、`rust/run-net-test.sh` 与 `rust/build-ios.sh` 的 `ROOT`（`cd ../..`）、`tools/run-tests.mjs` 的 `net: ['server/node/']`（决定改到 `server/node` 时哪套离线测试算"命中"）。
+  - 为什么：这些是"一改目录就静默失效"的地方。最典型的是 Gradle 的 `copyRustLibs`：路径没跟上时它只报一句"缺少 Rust 产物"，看起来像"忘了编 `.so`"，而不是"路径错了"——实测就踩到过（第一次 `assembleDebug` 报 `/rust-server/target/...` 不存在）。
+  - 验证：`npm run typecheck` + `typecheck:tools` 通过；`vitest tests/net-* tests/nearby-rooms.test.ts` **24 文件 / 243 断言**全过；`npm run test:net` **195/0**；`cargo test` **28/0**、`run-smoke` **20/0**、`run-beacon-smoke` **13/0**、`bash server/rust/run-net-test.sh` **195/0**。
+  - 批次：20261025-2240
+- [x] [S3] 文档同步 + 全量验证：新增 `server/README.md`、根 `README.md` 目录树、`.continue/HANDOFF.md` 命令、`docs/NET-PROTOCOL.md`、三个子目录 README 的路径 → `npm run check` 全绿 + rust 四套全绿 + `npx cap sync android` 成功
+  - 做了什么：新增 `server/README.md`（四个子目录表 + 一张"客户端→服务端→宿主→局域网"的关系图 + 两条不能忘的约定 + 常见操作）；根 `README.md` 的目录树把 `server/` 那行改成"服务端（node/ · rust/ · android/ios/ = 手机宿主示例）"；`.continue/HANDOFF.md` 命令区加 `npm run server` 并指路 `server/README.md`；`docs/NET-PROTOCOL.md` 顶部标注"Node 版在 `server/node/`、Rust 版在 `server/rust/`，同一份契约"；`notes/multiplayer-ops.md`、`notes/net-host-authority.md` 的路径同步。
+  - 为什么：这些文档写着"怎么起服务端"。路径改了却不同步，下一个人照旧命令敲就会 file not found，而且会怀疑是代码坏了。子目录 README 尤其要改——它们是各平台的入口文档。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线 + 三张台账 + 文档门禁）；`node .continue/hooks/check.mjs` 6 项全绿；`git status` 里 120+ 条全是 `R`（rename）与少量 `M`，没有内容丢失。
+  - 批次：20261025-2240
+
+## 批次 20261025-2050 · 2026-10-25 · 会话 12afd06a
+
+> 里程碑 MS1 验收后继续：Rust 服务端的**两颗平台壳**（Android Capacitor / iOS xcframework）
+> 与局域网发现的双端联调。一个"手机自己当房主、别人在附近房间列表里点一下进来"的最小闭环。
+
+## 里程碑 MS1 · Rust 服务端与 JS 版行为一致
+- 验收：`cd rust-server && cargo test && bash run-smoke.sh`，再 `bash run-net-test.sh` 全部 0 失败；`npm run test:net`（JS 路径）也仍绿
+- 确认：已验收 · 批次 20261025-2000（用户 2026-10-25 看到验收输出后答复"再继续"）
+
+- [x] [N4a] Android 集成的 Rust 半边：`crate-type` 加 `cdylib`/`staticlib` + JNI 入口（`start/stop/port`，供 Kotlin 的 ForegroundService 调）+ 纯 Rust 的 UDP beacon（广播/监听/自回声过滤，Android 侧只差一个 `MulticastLock`）→ `cargo test` 新增单测 + 两个进程互发现的本机脚本 + `cargo ndk`/`cargo build --target aarch64-linux-android` 出 `.so`
+  - 做了什么：拆成 **lib + bin**（`src/lib.rs` 装 `Config`/`Server`/`start()`，`main.rs` 只剩"读环境变量 → 起 → 等信号 → 补存"），新增 `src/jni.rs`（`startServer(dataDir, port, seed) -> 实际端口` / `stopServer` / `serverPort`，每个服务跑在独立线程 + 独立 runtime 里，停之前补存一次快照）与 `src/beacon.rs`（报文编解码 + peer 表含自回声过滤/12s TTL + 组播 socket）。`/healthz` 多 `beacon` 与 `peers`。`build-android.sh` 用 NDK 的 linker 直接编，不装 `cargo-ndk`。
+  - 为什么：Android 的 `ForegroundService` 只能通过 JNI 起停服务，而启动逻辑在 `main()` 里就必然要复制一份（端口、存档目录、读档顺序各写一遍，然后有一端漏补存）——所以把它抽成库；发现层放 Rust 是因为报文/端口必须与客户端一致，Kotlin 与 Swift 各写一份必然漂。
+  - 验证：`cargo test` **26/0**（新增 beacon 编解码、自回声、TTL、实例 id 唯一性、真 socket 组播往返，共 6 条）；`bash run-beacon-smoke.sh` **12/0**（两个真进程互相发现、广播内容跟着"有人进房/世界名/种子"变、自己的回声不进列表）；`bash build-android.sh` 出 `arm64-v8a` 与 `x86_64` 两个 `.so`（`file` 显示 ELF aarch64 / x86-64，`nm -D` 能看到三个 `Java_com_minicraft_server_NativeServer_*` 符号）；既有 195 条 net-test 与 20 条冒烟仍全绿。
+  - 踩到并修掉的：① **macOS 的 `SO_REUSEPORT` 对广播是"哈希挑一个 socket"**——两个实例只有一个收得到，症状是"A 看得见 B、B 看不见 A"，改走组播 + 按平台绑不同地址；② **收发不能用同一个 socket**（macOS 上监听 socket 绑的是组播地址，从它 `send_to` 直接 `EADDRNOTAVAIL`）；③ 这台开发机的**默认可组播网卡不在**（连自己都收不到），所以留了 `BEACON_IF`，验收脚本显式指回环；④ 实例 id 只混"时间 + pid"时，同一毫秒内两次启动会撞 → 两个实例把对方当自己的回声过滤掉（单测抓到的）。
+  - 批次：20261025-2050
+- [x] [N4b] Android 壳：Capacitor 工程（`npx cap add android`）+ Kotlin 插件加载 `.so` + `ForegroundService`（常驻通知）+ `MulticastLock` → `./gradlew assembleDebug` 出 APK，模拟器/真机装两台上能互相发现并进房
+  - 前置（开这条之前先确认）：`npm i -D @capacitor/cli @capacitor/core @capacitor/android` 会新增依赖，
+    Gradle 首次同步要联网下载几百 MB；`.so` 已能编（`bash rust-server/build-android.sh`），
+    `jni.rs` 的三个入口签名见 `rust-server/src/jni.rs`
+  - 做了什么：`npx cap add android` 生出 `android/`（Capacitor 6）；壳里加 `NativeServer.java`（JNI 声明）、`NativeServerPlugin.java`（网页可调的 `start/port/stop`）、`ServerService.java`（前台服务 + 常驻通知 + `MulticastLock`/`WifiLock`，JNI 丢工作线程避免 ANR）、`MainActivity` 注册插件；`app/build.gradle` 两个任务 `copyRustLibs`（`.so` → `jniLibs`）与 `copyHostCore`（`host/core-baseline.bin` → `assets/public/__host/core.bin`）；Manifest 补多播/唤醒/前台服务/通知/明文流量权限；根目录加 `capacitor.config.json`（`androidScheme: http` 让客户端挑 `ws://` 而不是 `wss://`），并补 `npm run android:sync` / `android:apk` / `android:test`（Gradle 那条不能叫 `test:*`：离线 runner 把它当套件解析，会因为它不是 esbuild/node 入口而报"认不出"）。
+  - 为什么：手机当房主必须有"进程不被回收"的载体——前台服务 + 常驻通知是唯一稳的做法；`MulticastLock`/`WifiLock` 不给的话息屏一会儿组播就被系统丢掉（别人再也发现不了这个房间）。`core.bin` 放 assets 而不是写 `shouldInterceptRequest`：Capacitor 的资源本来就以 http 提供，同一个文件放 assets 即等价，少一层会写错的拦截。
+  - 验证：`./gradlew assembleDebug` 出 `app-debug.apk`（内含两个 ABI 的 `libminicraft_server.so` 与 `assets/public/__host/core.bin`）；模拟器 `Pixel_3a_API_34` 上 `./gradlew connectedDebugAndroidTest` **3 条全过**（包名 / JNI 起服务 + `/healthz` 回 `ok` + 停后端口归零 / 前台服务拉起来 + `/rooms` 200）；装 APK 启动后**截图确认已进主菜单**（Play / Settings / Mini-games 正常渲染，只剩一条 SW 注册警告，WebView 里本就该失败）。
+  - **未验证（如实记）**："装两台上能互相发现并进房"——需要第二台设备 + 客户端接线（网页调 `NativeServer.start`、用 `peers` 出列表），那正是 N6 的范围；单台模拟器上硬凑只能验到假路径，所以没做。另：Gradle 8.2.1 不支持 JDK 21，构建要 `JAVA_HOME` 指 17（已写进 `android/README.md`）。
+  - 批次：20261025-2050
+- [x] [N5] iOS 集成：`staticlib` → `.xcframework` + 前台会话（锁屏即断，需提示）+ `NSNetService` Bonjour 广播 → 前台当房主、Android 能被发现
+  - 做了什么：Rust 侧加 **C ABI**（`src/capi.rs` 三个函数）+ 把两端共用的生命周期抽成 `src/instance.rs`（`jni.rs` 改成薄包装）；`rust-server/build-ios.sh` 编真机 arm64 + 模拟器 arm64/x86_64 → `ios-shell/MinicraftServer.xcframework`（带头文件）；`ios-shell/` 里 `NativeServer.swift`（三个 C 函数包装）、`ForegroundSession.swift`（进后台就停 + 提示 key `net.host.foregroundOnly`）、`BonjourAdvertiser.swift`（`NetService` 广播，TXT 字段与组播报文同名）、`Tests/main.swift`（设备级冒烟）；`check.sh` / `check-sim.sh` 两条验收脚本 + README（接入 Xcode 的手工步骤与 Info.plist 三个键）。
+  - 为什么：iOS 端只能走 C ABI（没有 JVM），而生命周期与 Android 一字不差——写在两处最容易分叉的是"停止时补存"，所以抽成一份；"只有前台能当房主"是系统规则（后台不允许长期持监听 socket，硬撑会被杀掉、表现是"房间还在但连不上"），所以做成"进后台主动停 + 回一个状态给 UI"，用户可见文案只给 i18n key（原生写文案会绕过六语言表）。
+  - 验证：`bash ios-shell/check.sh` 全过（xcframework 两个切片架构正确、Swift 在**真机 SDK 与模拟器 SDK 下各 typecheck 通过**、静态库里三个 C 符号齐全）；`bash ios-shell/check-sim.sh` **在真的 iOS 模拟器里跑通**——`simctl spawn` 起服务得到端口 50924、`/healthz` 回 `{"ok":true,…,"protocol":2}`、`/rooms` 有响应、停后端口归零且快照已补存；Rust 侧回归 `cargo test 27/0`（新增"起服务→HTTP→停"一条）、`run-smoke 20/0`、`run-beacon-smoke 12/0`、`run-net-test 195/0`；Android `.so` 重编后三个 JNI 符号仍在。
+  - **未验证（如实记）**：① 没生成 Capacitor 的 `ios/` 工程（`npx cap add ios` 走 CocoaPods，本机 `pod: command not found`），所以"iOS 上点一下开房"这条路没跑过——接入步骤写在 `ios-shell/README.md`，是 5 分钟手工；② "iOS 前台当房主、Android 能被发现"要两台真机 + N6 的客户端接线，没验；已知桥接点：Rust 组播两端同协议（Android 已验），Bonjour 只服务 Apple 生态内部，字段同名供 N6 映射。
+  - 批次：20261025-2050
+- [x] [N6] 发现层双端联调：Android UDP beacon ↔ iOS Bonjour 互通、房间里显示"世界名 / 人数 / 有无口令 / 延迟"，点一下进房；并处理"自己发自己收"的回声过滤
+  - 做了什么：① 发现报文与 `/healthz.peers` 都带上 `room`，`/healthz` 加 `access-control-allow-origin: *`（**Rust 与 JS 两套服务端同时改**）；② Rust 侧新增 `beacon::from_txt(service_name, txt)`——把 iOS 的 Bonjour TXT 记录转成与组播**同一个结构**（键名两边刻意相同），这条就是"Android 组播 ↔ iOS Bonjour"的互通点；③ 客户端新增 `src/core/net/NearbyRooms.ts`（解析 `peers`、过滤自己、拼 `ws://host:port/room`、探延迟）与 `healthEndpoint()`；④ 联机面板把附近设备并进房间列表：`世界名 · host:port · {n} 人 · 口令 · 12 ms`，点一下直接进房（地址带房间名，口令房先聚焦口令框）。
+  - 为什么：浏览器发不出也收不到 UDP，唯一的耳朵是每台手机上的 Rust 服务端，所以面板读它的 `/healthz.peers`；"点一下进房"必须知道房间名（否则进默认房间，看到的世界跟列表写的不一样），所以报文补 `room`；"自己发自己收"在服务端早已按实例 id 挡住，客户端只需再按"面板里正对着的那台地址"过滤一次（一台手机有多个网卡地址，枚举自身 IP 既不可靠也没必要）。
+  - 验证：`npx vitest run tests/nearby-rooms.test.ts` **12/12**（脏地址/越界端口逐行丢、自己那间被过滤、地址带房间名、延迟探测失败返回 null）；`cargo test` **28/0**（新增 Bonjour TXT → 组播结构的互转断言，含脏字段回落）；`bash run-beacon-smoke.sh` **13/0**（新增"广播带房间名"）；两套服务端行为仍一致（`run-net-test.sh` 与 `npm run test:net` 各 **195/0**）；`npm run check:fast` 全绿（命中 `net` 与 `ui` 两套离线套件）；实测 `curl -i /healthz` 带 `access-control-allow-origin: *`，且 B 的 `peers` 里确实有 A（世界名/种子/端口/房主标记/房间名）。
+  - **未验证（如实记）**：① 浏览器里真的点一下"附近房间"进房——要同时开两个服务端并手动点，本轮只做了类型检查 + 纯函数断言，没有浏览器自动化；② 真机 Android ↔ iOS 互相发现仍未验（要两台设备，且 iOS 侧还要把 Capacitor 工程接起来，见 N5 的未验证项）。
+  - 批次：20261025-2050
+
+## 批次 20261025-2000 · 2026-10-25 · 会话 12afd06a
+
+> 里程碑 MS1 收口：Rust 版联机服务端与 JS 版**行为一致**——`tools/net-test.mjs` 195 条断言
+> 0 失败（`bash rust-server/run-net-test.sh`），`cargo test` 20 / 冒烟 20 也全绿。
+> 这一段是"能不能用同一份黑盒断言验收另一套实现"的答案。
+
+# 队列 · 会话 12afd06a599745d78ae8d88cedd715eb（本段 N3a~N3f）
+
+- [x] [N3a] 与 `tools/net-test.mjs` 对齐·基础设施：`PORT=0` 打印实际端口、`/healthz` + `/rooms` + 404（同端口 HTTP 分流 + CORS）、`ALLOWED_ORIGINS` 来源白名单、`ROOM_PASSWORD`、`join.world`（按房种子）、64KB 载荷上限（超了回 1009 而不是无声断）→ `cargo test` + `bash run-smoke.sh` 全绿，且 net-test 里健康检查/来源/口令/世界四段通过
+  - 做了什么：`main.rs` 先自己读请求头再分流——普通 GET 就地答 `/healthz`（在线人数 / 房间数 / 吞吐速率）、`/rooms`（人数 + `hasHost` + 世界名与种子 + CORS，**不下发口令**）、其余 404；升级请求把已读的字节用 `Prefixed` 流接回 tungstenite 完成握手（所以来源白名单能在**握手之后**回 `error{code:'origin'}` + close 4004，与 JS 版同形）。`PORT=0` 时打印 `local_addr()` 的实际端口。`protocol.rs` 补 `sanitize_world_meta`（种子必须是 32 位整数，脏数据保留房间原有那份）、`ROOM_PASSWORD` 校验、`MAX_PAYLOAD_BYTES`。
+  - 为什么：HTTP 与 WS 共用一个端口是"容器/反代只暴露一个口"的前提；而来源拒绝必须发生在握手之后——在握手阶段拒（tungstenite 的 ErrorResponse）客户端只会看到 HTTP 错误，拿不到 `error.code`，浏览器端无从判断"该不该重连"。
+  - 验证：net-test 的 `[启动服务端]` 四段（healthz 三段 + 404 一段）、`[房间的世界]` 的 `/rooms` 四段、`[房间与来源校验]` 的 origin 两段、`[房间口令]` 两段全绿；`cargo test` 20 通过。
+  - 批次：20261025-2000
+- [x] [N3b] 与 `tools/net-test.mjs` 对齐·玩家生命周期：`GRACE_MS` 断线宽限重连（复用原 id、房主位宽限、到期 `room-closed`/`host-left`/清掉落物）、心跳 ping 5s、`sleep` 跳夜、时间状态机（黎明 0.12 / 按房广播）→ net-test 的"断线重连 / 睡眠跳夜 / 房主掉线"三段通过
+  - 做了什么：`on_close` 把玩家移出在线表但不广播 leave，只记一条 `Grace{id, seq}` 并起计时；`join` 在宽限期内认回原 id（房主位也留给他）。到期才广播 `leave`、清他名下掉落物、释放房主位；房主到期没回来 → 同房其他人各收 `error{code:'host-left'}` + close 4007。心跳按连接起 5s 的 ping 任务，20s 没回 pong 主动断。时间状态机改成 `day_start_ms + start_time_of_day`（默认 0.12），`sleep` 与房主改时间都走"重置起点 + 广播 `snap`"。
+  - 为什么：手机切后台/断 wifi 不会触发 close 语义上的"人走了"；立刻广播 leave 会让队友眼里你"消失又出现"，你名下的掉落物也没人有权删（owner 就是 id）。宽限期条目带 `seq` 是为了修一个 net-test 覆盖不到的坑：连断两次会留下两个计时器，只比 id 的话前一个会把刚连回来的人广播成离开。
+  - 验证：net-test 的 `[断线重连]` 三段、`[睡眠跳夜]` 三段、`[房主掉线：先提示、宽限到期关房]` 三段、`[时间权威]` 三段全绿；`[房主：一房一名]` 里"原房主宽限期过后房主位释放"也绿。
+  - 批次：20261025-2000
+- [x] [N3c] 与 `tools/net-test.mjs` 对齐·消息族：`item-spawn/item-remove/item-take`、`mob-hit`、`player-hit`、`container`(+progress)、`sign`、`frame`、`arrow`、`tnt`、`entity-snap`、`entity-remove`、外观白名单（`look` 形状）→ net-test 的掉落物/命中/PvP/容器/牌子/箭与 TNT/实体快照各段通过
+  - 做了什么：`handlers.rs` 补齐 13 类消息，每条都带形状收口（掉落物数量 1~64、坐标 ±3e7、容器 ≤27 格且序列化 ≤8192 字节、牌子 4 行 × 64 字、展示框 `item=null` 表示空框、箭速 ≤200、伤害夹到 0~50、着火 0~16、`entity-snap` 截到 256 条、`entity-remove` 只留 1~32 字符的键）；`welcome` 补齐 `items/containers/signs/frames`；`item-take` 用单锁做"查还在 → 删 → 回 ok"的原子仲裁；`read_appearance` 按白名单收口（`look` 必须正好 10 个整数才下发）。
+  - 为什么：这些"事件 + 坐标"的消息（箭/TNT/命中）服务端没有世界也没有实体表，能做且只该做两件事——形状收口与转发；一旦它开始判"这只怪该不该在这"，就得同步整个生物注册表，那是客户端的事。掉落物的 owner 一律由服务端填，所以"删别人的掉落物"在协议层就不成立。
+  - 验证：net-test 的 `[掉落物镜像]` 七段、`[掉落物维度]` 三段、`[拾取仲裁]` 五段、`[生物命中]` 四段、`[PvP 转发]` 四段、`[容器同步]` 四段、`[牌子与展示框]` 四段、`[箭与 TNT]` 四段、`[实体快照只由房主推]` 九段、`[命中带全局键]` 四段、`[容器进度只认房主]` 四段、`[玩家外观（皮肤）随 move 转发]` 两段全绿。
+  - 批次：20261025-2000
+- [x] [N3d] 与 `tools/net-test.mjs` 对齐·范围与限频：AOI 裁剪（8 区块 + 同维度，快照与广播两条路）+ 令牌桶（block 200/s·400、container 20/s、chat 5/s）+ 拒收日志限频 → net-test 的"广播范围 / 快照裁剪 / 限频与体积"三段通过
+  - 做了什么：新增 `aoi.rs`（切比雪夫距离按区块算，`>> 4` 与 JS 的负数取整一致）与 `ratelimit.rs`（令牌桶 + "1 秒窗口计数"两套）；`broadcast` 多一个 `Aoi` 参数，坐标类消息（方块/容器/牌子/展示框/TNT/掉落物/命中/箭/实体快照）按"同维度 + 8 区块"过滤，聊天与时间不过滤；`welcome.edits` 同样按玩家位置裁剪；`move` 的转发中心用发起者坐标。
+  - 为什么：不过滤时"出生点改一格"会发给 5000 格外的观察者（人多时是 O(n²) 的纯浪费）；而聊天是文字、时间全局，过滤它们只会让远处的人变聋/时间错乱。方块用令牌桶**按条数**计费（红石连锁一次几十格是正常的，持续每帧几百格不是），比固定窗口少了"边界双倍流量"的漏洞。
+  - 验证：net-test 的 `[广播范围]` 四段、`[快照裁剪]` 两段、`[限频与体积]` 四段（含"第一批 256 格放行、紧接着的第二批被限"）、以及 `[脏消息校验]` 里"隔空改容器被拒"全绿；`ratelimit`/`aoi` 单测 5 条通过。
+  - 批次：20261025-2000
+- [x] [N3e] 与 `tools/net-test.mjs` 对齐·存档落盘：`DATA_DIR/world.json` 原子写（tmp+rename）+ 30s 定时 + SIGTERM 补存 + 损坏备份 `world.json.broken-*`，重启后 edits/containers/signs/frames/时间/天气都在 → net-test 的"持久化"两段通过
+  - 做了什么：新增 `store.rs`（原子写 + 损坏改名备份 + 读档版本校验）；`State::world_snapshot` 把 edits/containers/signs/frames 按 `[x,y,z,…,room]` 摊平（房间名从 key 前缀取回），`State::apply_snapshot` 反向灌回并走 `sanitize_room`/`sanitize_dimension` 收口；时间用"存档那一刻"当新起点（停机那段不走），天气接着存档那档跑。SIGINT/SIGTERM 走"补存一次再 exit(0)"。
+  - 为什么：不做落盘时，重启后箱子里东西对新玩家完全不可见（只有打开过它的老玩家本地还记得），队友搭的东西也全没了；损坏时**备份而不是删掉**，是因为里面可能还有人工能救的部分，而"删掉 + 下轮保存"会让现场彻底消失。
+  - 验证：net-test 的 `[持久化：重启后快照仍在]` 四段（真的 SIGTERM 杀一次再起，断言方块与容器都还在）、`[持久化：损坏快照被备份而不是覆盖]` 四段（先写坏文件，断言 `world.json.broken-*` 存在且从空世界开始）全绿。
+  - 批次：20261025-2000
+- [x] [N3f] 让 net-test 能指向 Rust 服务端并全量跑绿：`tools/net-test.mjs` 加 `NET_SERVER_BIN`/`NET_SERVER_ARGS`（默认仍是 `node server/index.mjs`，JS 路径行为不变）+ `rust-server/run-net-test.sh` → `bash rust-server/run-net-test.sh` 0 失败
+  - 做了什么：`tools/net-test.mjs` 的 `spawn('node', ['server/index.mjs'])` 抽成 `SERVER_BIN`/`SERVER_ARGS`（默认值保持原样；换了二进制又没给参数时按"那个程序自己就是服务端"处理）；新增 `rust-server/run-net-test.sh`（build → 用 Rust 二进制跑同一套断言）。断言一条未改。
+  - 为什么：Rust 版的对齐判据必须**就是**这套 1871 行黑盒断言——复制一份会立刻漂，改断言更是把契约改没了。把"起哪个进程"做成环境变量，是让两套实现共用同一份验收脚本的最小改动。
+  - 验证：`bash rust-server/run-net-test.sh` → **195 通过 / 0 失败**（连跑 3 次都全绿，排除偶发）；`npm run test:net`（JS 路径）同样 195/0；把 `NET_SERVER_BIN` 指到 `/usr/bin/false` 时启动段立刻红，证明变量确实生效。
+  - 批次：20261025-2000
+
+## 批次 20261025-1946 · 2026-10-25 · 会话 abbdd915
+
+> Rust 版联机服务端第一阶段：协议层 + 核心 10 类消息跑通（本段在 20261025-2000 的
+> 里程碑 MS1 里一起收口，因为那时它还没走过收尾）。
+
+# 队列 · 会话 abbdd9159d0b4bf084c8a8a9fdcf439b（本段 N1~N2）
+
+- [x] [N1] Rust 工程 + 协议层（常量 / 清洗 / 校验，逐条对齐 `server/protocol.mjs`）→ `cargo test` 9 条全绿
+  - 做了什么：新建 `rust-server/`（tokio + tokio-tungstenite + serde）；`protocol.rs` 落协议版本 2、关闭码 4001~4008、`WORLD_MIN_Y/-MAX`、`MAX_BLOCK_ID/STATE`、`MAX_EDIT_DISTANCE`、名字清洗（去控制字符与 `<>`、压缩空白、按**字符**截 16、空则"玩家"）、房间名回落、clientId 形状、方块改动的 y/id/state/距离校验（**房主豁免距离闸**）、`scoped_key`。
+  - 为什么：这些清洗规则是"两个人进了两个房""名字被切成半个 emoji""房主代发的远处改动被丢"这三类老 bug 的防线，重写时**必须逐条等价**；用单测钉住比人眼比对可靠。
+  - 验证：`cargo test` 9 通过 / 0 失败（含 emoji 不被切开、`<b>坏</b>` 的斜杠保留、房主豁免距离闸、非房主仍被挡）。
+  - 批次：20261025-1946
+- [x] [N2] 核心消息链路跑通（join / welcome / move+player / block+blocks / edit-request / chat / room-config / leave / time 广播）→ `bash run-smoke.sh` 20 条全绿
+  - 做了什么：`state.rs` 的 Hub（玩家表 / 出站队列 / 房主表 / 方块增量表 / 时间与天气）；`main.rs` 的连接任务与消息分发；冒烟脚本 `smoke.mjs` 用 Node 23 内置 `WebSocket`（不需要 `npm ci`），`run-smoke.sh` 起临时服务端（25199）跑完自动关。
+  - 为什么：先用"核心 21 类里的 10 类"验证架构（读写分离 + Hub 锁边界 + 房主语义），再决定是否为剩余 11 类继续投入；这一步能暴露 Rust 侧独有的两类坑（见下）。
+  - 验证：`bash run-smoke.sh` **20 通过 / 0 失败**——覆盖 welcome 字段、房主/从属身份、move 转发与队伍、方块 `authority` 重标、从属直发被拒（not-host）、edit-request 转发、同房重名被拒（duplicate-name）、房主改天气、从属改配置被拒、聊天不回给自己、断线 leave 带 id。
+  - 踩到并修掉的：① **tokio Mutex 不可重入**——持 `players` 锁时调 `player_broadcast_of`（内部再锁一次）会永久死锁，锁边界收进块内；② **拒绝帧被丢**——读循环 break 后立即 abort 写任务，客户端收不到 `error`+"close"，表现是"点加入没反应"，改成先 `drop(tx)` 排空再收尾。
+  - 批次：20261025-1946
 

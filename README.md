@@ -111,7 +111,7 @@ src/
   worker/         区块生成与网格化的 Worker
   main.ts         应用入口（纯入口 + `App` 类；**按段落名 grep 定位，不要整份读**）
 docs/             HANDOFF 的历史归档与"已定论的经验"（按需读，不是每轮必读）
-server/           联机用的 Node WebSocket 服务端
+server/           服务端（node/ = Node 版 · rust/ = Rust 版 · android/ios/ = 手机宿主示例）
 tools/            离线测试与自检脚本（每个 test:* 一个）
 tests/            vitest 用例（光照、生成、碰撞、资源包）
 ```

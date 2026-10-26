@@ -23,8 +23,9 @@ import {
   subnetOf,
   type DiscoveredServer,
 } from '../core/net/ServerDiscovery.ts';
+import { filterSelfPeers, parsePeersResponse } from '../core/net/NearbyRooms.ts';
 import { parseRoomsResponse } from '../core/net/RoomList.ts';
-import { DEFAULT_WS_PATH, displayServerHost, isLanHost, roomsEndpoint } from '../core/net/ServerUrl.ts';
+import { DEFAULT_WS_PATH, displayServerHost, healthEndpoint, isLanHost, roomsEndpoint } from '../core/net/ServerUrl.ts';
 import { t, tp } from '../core/i18n/I18n.ts';
 
 /** 本机「允许其它人建房」的状态键（只有内建服务端能力的客户端会读它） */
@@ -85,6 +86,13 @@ export class ServerPicker {
   private token = 0;
   /** 当前选中项（服务器行或房间行） */
   private selected: { picked: PickedServer; row: HTMLElement } | null = null;
+  /**
+   * 已经画过的 `host:port`。
+   *
+   * 两个来源会重叠：① 自己扫网段扫到的；② 某台服务器 `/healthz` 里听到的 peers。
+   * 不去重的话同一台机器会出现两行（而且点哪一行都一样）。
+   */
+  private readonly seen = new Set<string>();
 
   constructor(private readonly actions: ServerPickerActions) {
     this.element = document.createElement('div');
@@ -234,6 +242,7 @@ export class ServerPicker {
   private resetList(): void {
     this.lanList.replaceChildren();
     this.publicList.replaceChildren();
+    this.seen.clear();
     this.clearSelection();
     this.scanning = false;
   }
@@ -379,7 +388,10 @@ export class ServerPicker {
     // 公开服务器没有测延迟（rttMs 为 0）：显示 `--`，别假装"0ms"
     rtt.textContent = server.rttMs > 0 ? tp('server.rtt', { ms: String(server.rttMs) }) : '--';
     row.append(name, dash, rtt);
-    row.addEventListener('click', () => this.select({ address, port: this.port() }, row));
+    // 端口用这台服务器自己的（附近设备上报的端口可能不是表单里那个）
+    const port = server.port > 0 ? server.port : this.port();
+    this.seen.add(`${address}:${port}`);
+    row.addEventListener('click', () => this.select({ address, port }, row));
 
     const rooms = document.createElement('div');
     rooms.className = 'server-picker-rooms';
@@ -424,6 +436,37 @@ export class ServerPicker {
       // 跨源被挡 / 服务端不在 / 超时：一行灰字，不影响选这台机器本身
       if (token !== this.token) return;
       this.showNoRooms(container, t('server.roomsFailed'));
+    }
+    // 顺手借这台服务器的耳朵：它用 UDP 组播听到的其它设备（浏览器自己发不出 UDP）
+    void this.loadPeers(address, token);
+  }
+
+  /**
+   * 读某台服务器的 `/healthz`，把它听到的**其它设备**补进局域网列表（N6 · 由工作树合并进来）。
+   *
+   * 为什么借道：浏览器既发不出也收不到 UDP 组播/mDNS。每台原生客户端的服务端一直在组播上听，
+   * 把结果写进 `/healthz` 的 `peers`——所以"顺着已知的一台找到同网段的其它设备"这条路是通的。
+   *
+   * 失败一律静默：附近设备是**加分项**，不能让它把"手填地址"那条路堵住。
+   */
+  private async loadPeers(address: string, token: number): Promise<void> {
+    const url = this.serverUrlFor(address);
+    const endpoint = healthEndpoint(url);
+    if (!endpoint) return;
+    try {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 2000);
+      const response = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
+      window.clearTimeout(timer);
+      if (token !== this.token) return;
+      const peers = parsePeersResponse(await response.json());
+      if (peers === null || token !== this.token) return;
+      for (const peer of filterSelfPeers(peers, [url])) {
+        if (this.seen.has(`${peer.host}:${peer.port}`)) continue;
+        this.appendServerRow({ host: peer.host, port: peer.port, rttMs: 0 }, this.lanList);
+      }
+    } catch {
+      // 这台不回 /healthz（或跨源被挡）：跳过，不影响已列出的服务器
     }
   }
 

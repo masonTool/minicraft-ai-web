@@ -6440,7 +6440,7 @@ class App {
       if (e.code === 'KeyV') this.cycleCameraMode();
       // N：在主世界与下界之间切换（临时的维度入口；下界传送门要等火焰方块与打火石做完）
       if (e.code === 'KeyN') this.toggleDimension();
-      // L：连接/断开联机服务器（服务端见 server/index.mjs）
+      // L：连接/断开联机服务器（服务端见 server/node/index.mjs）
       if (e.code === 'KeyL') {
         if (this.net.connected) this.disconnect();
         else this.connect();

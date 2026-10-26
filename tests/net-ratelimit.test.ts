@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { RATE_LIMITS, createBucket, createBuckets } from '../server/ratelimit.mjs';
+import { RATE_LIMITS, createBucket, createBuckets } from '../server/node/ratelimit.mjs';
 
 describe('createBucket', () => {
   it('满桶时能连续取 capacity 次，再取就失败', () => {

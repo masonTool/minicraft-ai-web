@@ -1,6 +1,6 @@
 # 联机服务端部署（联机28）
 
-> 代码：`server/index.mjs`（+ `protocol.mjs` / `store.mjs` / `snapshot.mjs` / `ratelimit.mjs` / `aoi.mjs`）
+> 代码：`server/node/index.mjs`（+ `protocol.mjs` / `store.mjs` / `snapshot.mjs` / `ratelimit.mjs` / `aoi.mjs`）
 > 协议：`docs/NET-PROTOCOL.md`　验收：`npm run test:net`
 > 运维手册（调试接口 / 打包发布）在 [`ops.md`](./ops.md)，本文只管**联机服务端怎么部署**。
 
@@ -8,7 +8,7 @@
 
 | 形态 | 客户端怎么连 | 说明 |
 | --- | --- | --- |
-| 本地开发 | `ws://localhost:25187` | `node server/index.mjs` 直接起，端口 `PORT` 可改 |
+| 本地开发 | `ws://localhost:25187` | `node server/node/index.mjs` 直接起，端口 `PORT` 可改 |
 | 局域网直连 | `ws://192.168.1.5:25187` | 手机在联机面板里填这条地址 |
 | **https 站点** | `wss://<同源>/ws` | 必须走 **wss**：https 页面连 `ws://` 会被浏览器当混合内容拦掉 |
 
@@ -22,7 +22,7 @@ https 页面 → `wss://<host>/ws`，http 页面 → `ws://<hostname>:25187`；
 | --- | --- | --- |
 | `PORT` | `25187` | 监听端口（WebSocket 与 `/healthz` 共用） |
 | `SEED` | `20261014` | 世界种子（**全服一个**：房间只隔离数据，不隔离地形） |
-| `DATA_DIR` | `server/.data` | 世界快照目录（容器里指到卷上，否则重建容器 = 世界没了） |
+| `DATA_DIR` | `server/node/.data` | 世界快照目录（容器里指到卷上，否则重建容器 = 世界没了） |
 | `ROOM_PASSWORD` | 空 | 房间口令；空 = 不校验。**明文传输，不是鉴权** |
 | `ALLOWED_ORIGINS` | 空 | 逗号分隔的来源白名单；空 = 不校验。**无 Origin 的连接放行**（node 机器人） |
 | `GRACE_MS` | `30000` | 断线宽限期（测试里压到 400ms） |

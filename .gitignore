@@ -60,4 +60,4 @@ shot-*.png
 references/
 
 # 联机服务端的世界快照（联机13）：本地运行时产物，不进版本库
-server/.data/
+server/node/.data/

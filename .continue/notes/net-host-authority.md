@@ -13,7 +13,7 @@
 
 ## 已落地的三段（批次 20261024-1619 · MS1）
 
-1. **协议 v2**（`server/protocol.mjs` / `src/core/net/Protocol.ts`）：`join` 带 `host: true` 表示开房；
+1. **协议 v2**（`server/node/protocol.mjs` / `src/core/net/Protocol.ts`）：`join` 带 `host: true` 表示开房；
    服务端 `hosts` 按房名记一名房主（`{id, clientId}`），第二个房主 → `reject('host-taken', 4006)`
    并**直接关连接**（不做静默降级成从属端——降级也是"进房成功"，玩家看不出两端都在自己算）。
    房主位在 `GRACE_MS` 宽限期过后才释放，所以手机切后台回来仍是原房主。

@@ -5816,7 +5816,7 @@ console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收�
   check(
     '服务端对四类都有"有房主时只收房主"的闸门',
     (() => {
-      const server = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+      const server = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
       return ['block', 'blocks', 'container', 'sign', 'frame', 'tnt'].every((kind) =>
         server.includes(`rejectEdit(player, 'not-host', '${kind}')`),
       );
@@ -5993,7 +5993,7 @@ console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
 console.log('\n[加入房间：地址只填 IP]');
 {
   const serverUrlSrc = readFileSync(new URL('../src/core/net/ServerUrl.ts', import.meta.url), 'utf8');
-  const serverSrc = readFileSync(new URL('../server/protocol.mjs', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/node/protocol.mjs', import.meta.url), 'utf8');
   const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   check(
     '只填 IP 自动补 ws:// 与固定端口',
@@ -6035,7 +6035,7 @@ console.log('\n[加入房间：地址只填 IP]');
   check('默认端口不是 8787（换成了不常见的值）', /DEFAULT_NET_PORT = (?!8787)\d+/.test(serverUrlSrc));
   check(
     '服务端默认端口读常量而不是硬编码',
-    readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8').includes(
       'process.env.PORT ?? DEFAULT_PORT',
     ),
   );
@@ -6052,7 +6052,7 @@ console.log('\n[房主标识与房间配置]');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check(
     '房主的名字牌是金色 +「房主 ·」前缀（优先级高于队伍色）',
     mainSrc.includes("color: '#ffd24a'") && mainSrc.includes("prefix: `${t('say.net.hostTag')} · `"),
@@ -6105,7 +6105,7 @@ console.log('\n[房主标识与房间配置]');
 console.log('\n[退出/刷新立刻离线（用户 2026-10-25 实测 ⑥前半）]');
 {
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check('页面卸载时发 bye（pagehide，capture）', netSrc.includes("window.addEventListener('pagehide', () => this.sendBye(), { capture: true })"));
   check('主动断开也先告别（不是只关 socket）', /disconnect\(\): void \{[\s\S]{0,400}?this\.sendBye\(\);/.test(netSrc));
   check('服务端收到 bye 立刻广播 leave', /case 'bye': \{[\s\S]{0,300}?broadcast\(\{ t: 'leave'/.test(serverSrc));
@@ -6156,7 +6156,7 @@ console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]')
 {
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const serverSrc = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check(
     '服务端算出权威天数并随快照下发（每房一套时钟，用户 2026-10-26）',
     serverSrc.includes('function currentDay(clock = defaultClock)') &&
@@ -6261,7 +6261,7 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
 {
   const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
   const mainSrc4 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const serverSrc4 = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const serverSrc4 = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
 
   /*
    * ① `move` 必须**每次都带全量外观**（用户 2026-10-26：形象每隔几秒闪一次）。
@@ -6405,7 +6405,7 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
   const worldUiSrc2 = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   const mpSrc2 = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   const htmlSrc2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const serverSrc5 = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
+  const serverSrc5 = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
 
   // ① 服务端必须有探测接口（无状态 + 禁缓存），否则扫描永远扫不到
   check('服务端有 /ping 探测接口', serverSrc5.includes("if (path === '/ping')"));

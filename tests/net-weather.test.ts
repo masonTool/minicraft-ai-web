@@ -11,7 +11,7 @@ import {
   nextWeatherKind as serverNextKind,
   tickWeather as serverTick,
   weatherSecondsFor as serverSeconds,
-} from '../server/weather.mjs';
+} from '../server/node/weather.mjs';
 import {
   nextWeatherKind as clientNextKind,
   tickWeather as clientTick,

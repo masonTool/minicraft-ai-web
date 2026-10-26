@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../src/core/net/Protocol.ts';
 
-const serverSource = readFileSync(new URL('../server/protocol.mjs', import.meta.url), 'utf8');
+const serverSource = readFileSync(new URL('../server/node/protocol.mjs', import.meta.url), 'utf8');
 
 describe('协议版本', () => {
   it('客户端与服务端的版本号相等', () => {

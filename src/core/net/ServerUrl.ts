@@ -13,7 +13,7 @@
  */
 
 /**
- * 联机服务端的固定端口（**与 `server/protocol.mjs` 的 `DEFAULT_PORT` 相等**）。
+ * 联机服务端的固定端口（**与 `server/node/protocol.mjs` 的 `DEFAULT_PORT` 相等**）。
  *
  * 为什么不给玩家填端口：地址栏只收 IP/主机名，端口由这里统一——手机上敲端口是纯折磨，
  * 而且两端各填一个数字必然会漂。表单里只把它当**只读后缀**显示（`: 8887`）。
@@ -300,6 +300,22 @@ export function displayServerAddress(url: string): string {
  * 解析不出来返回 `null` —— 调用方据此直接走"手填房间名"，不必先报错。
  */
 export function roomsEndpoint(wsUrl: string): string | null {
+  return httpEndpoint(wsUrl, '/rooms');
+}
+
+/**
+ * 由 WebSocket 地址推出 `/healthz` 的 HTTP 地址（发现层要读 `peers`）。
+ *
+ * 与 `/rooms` 同一个端口、同一套协议换头，所以共用 `httpEndpoint`。
+ * `/healthz` 的响应里带 `peers`（这台服务器用 UDP 组播听到的其它设备），
+ * 是"局域网里还有谁"的唯一来源——浏览器自己发不出 UDP。
+ */
+export function healthEndpoint(wsUrl: string): string | null {
+  return httpEndpoint(wsUrl, '/healthz');
+}
+
+/** `ws(s)://host:port[/room]` → `http(s)://host:port<端点路径><path>`（拼不出来返回 `null`） */
+function httpEndpoint(wsUrl: string, path: string): string | null {
   try {
     const parsed = new URL(wsUrl);
     const protocol = parsed.protocol === 'wss:' ? 'https:' : parsed.protocol === 'ws:' ? 'http:' : parsed.protocol;
@@ -307,12 +323,15 @@ export function roomsEndpoint(wsUrl: string): string | null {
     /*
      * 2026-10-26：保留 WS 的**端点路径**（`wss://domain/ws` → `https://domain/ws/rooms`）。
      * 公网那一路的反代通常只映射 `/ws*`（`handle_path /ws*` 会去掉前缀再转发），
-     * 写死根路径的 `/rooms` 会 404——表现是"房间列表永远为空"，很难归因。
+     * 写死根路径会 404——表现是"房间列表永远为空"，很难归因。
+     *
+     * 合并（2026-10-27）：worktree 把这里重构成 `httpEndpoint(url, path)` 以复用给 `/healthz`；
+     * 端点路径那一段对两个接口都成立，所以两者都在这里拼。
      */
     // 老格式的 `/red` 是房名、不是端点，要去掉；`/ws` 这类端点路径要留着
     const legacyRoom = legacyRoomFromPath(parsed);
-    const path = legacyRoom.length > 0 ? '' : parsed.pathname.replace(/\/+$/, '');
-    return `${protocol}//${parsed.host}${path}/rooms`;
+    const basePath = legacyRoom.length > 0 ? '' : parsed.pathname.replace(/\/+$/, '');
+    return `${protocol}//${parsed.host}${basePath}${path}`;
   } catch {
     return null;
   }

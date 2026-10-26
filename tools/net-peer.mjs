@@ -8,7 +8,7 @@
  */
 
 import { WebSocket } from 'ws';
-import { PROTOCOL_VERSION } from '../server/protocol.mjs';
+import { PROTOCOL_VERSION } from '../server/node/protocol.mjs';
 
 const port = Number(process.argv[2] ?? 8887);
 const blockX = Number(process.argv[3] ?? 0);

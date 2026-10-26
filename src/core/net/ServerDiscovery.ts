@@ -32,7 +32,7 @@ export interface DiscoveredServer {
   rttMs: number;
 }
 
-/** 探测用的接口路径（服务端 `server/index.mjs` 的 `/ping`） */
+/** 探测用的接口路径（服务端 `server/node/index.mjs` 的 `/ping`） */
 export const PING_PATH = '/ping';
 
 /** `192.168.1.5` → `192.168.1`；不像 IPv4 就返回 `null`（域名/`localhost` 没法扫网段） */

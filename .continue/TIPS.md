@@ -307,7 +307,8 @@
 
 - 根因同一类：① 队友看不到你的甲/副手/蹲姿，而 `move.armor`/`offhand`/`sneak` 早进白名单并被转发——**发送端没填**或**消费端没用**；② `net` 并发偶发红、单跑又绿——它按毫秒窗口确认"应该没收到"，抢 CPU 时窗口被挤破。处置：按"发→转→收"三段各查一次，条目里"要改存档"的前提先读现有结构；`run-tests.mjs` 让 `net` **独占** + 否定窗口压到 250ms。
 
-- esbuild 打包（死锁 / `banner` 不打包）、"换桩后门禁晚于主包加载"、"resolveId 做打包开关"、"基线+增量的两处坑"见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
+- esbuild 打包（死锁 / `banner` 不打包）、"换桩后门禁晚于主包加载"、"resolveId 做打包开关"、"基线+增量的两处坑"、**Rust 服务端的 tokio 锁不可重入 / tungstenite 不回 1009 / 握手回调拿不到 `error.code`**、**手机壳的 Gradle/JDK21 / `test:*` 命名 / cap sync 慢** 见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
+
 ## 界面与音频
 ### 名字牌这类"世界里的文字"：宽度只能有一个换算比例
 - 症状：名字越长越扁（用户原话"有点扁，被压缩的"）。根因：Sprite 宽度按**字数估算**、画布字号按 `measureText` **实测**缩放——长名字时字号被压到 12px 而 Sprite 仍按估算撑开，两套比例必然分叉。处置：宽度只由"实际画出的背景条像素"换算（`NameTag.nameTagWorldWidth`），横竖同倍；别再用估算函数定 Sprite 尺寸。
@@ -496,5 +497,4 @@
 - 症状：背包在"某些屏幕"上被挤到快捷栏上面一点点（不同机型压得多少不一样）。
 - 根因：`#inventory-screen` 是 `grid-template-rows: 1fr auto`，而快捷栏 dock 是
   `position: fixed` —— 它**脱离文档流**，第二行高度塌成 0，面板就按整屏高度居中。
-- 处置：给父层加 `padding-bottom = dock 高度 + env(safe-area-inset-bottom)`（本项目 62px），
-  不要指望网格自动避让。断言要盯"让位值里含 `safe-area`"，否则刘海屏又会压回来。
+- 处置：给父层加 `padding-bottom = dock 高度 + env(safe-area-inset-bottom)`（本项目 62px），不要指望网格自动避让；断言要盯"让位值里含 `safe-area`"，否则刘海屏又会压回来。

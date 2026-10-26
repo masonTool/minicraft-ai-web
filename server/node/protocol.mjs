@@ -1,7 +1,7 @@
 /**
  * 联机协议的共享常量与清洗函数（服务端）。
  *
- * 为什么不是 `.ts`：`server/index.mjs` 是直接 `node` 跑的原生 ESM，不经过打包。
+ * 为什么不是 `.ts`：`server/node/index.mjs` 是直接 `node` 跑的原生 ESM，不经过打包。
  * 版本号在客户端另有一份（`src/core/net/Protocol.ts`），两处相等由
  * `tests/net-protocol-version.test.ts` 断言——为一个数字引入 JSON import attributes
  * 会让服务端在 Node 20.10 以下直接起不来，不值得。

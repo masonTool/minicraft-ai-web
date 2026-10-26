@@ -16,7 +16,7 @@ import {
   WORLD_MIN_Y,
   blockEditRejection,
   withinEditReach,
-} from '../server/protocol.mjs';
+} from '../server/node/protocol.mjs';
 
 const player = { x: 0, y: 70, z: 0 };
 

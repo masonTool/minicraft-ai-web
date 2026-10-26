@@ -1,7 +1,7 @@
 /**
  * 联机协议版本（客户端侧）。
  *
- * ⚠️ **必须与 `server/protocol.mjs` 的 `PROTOCOL_VERSION` 相等**。
+ * ⚠️ **必须与 `server/node/protocol.mjs` 的 `PROTOCOL_VERSION` 相等**。
  * 两处各写一份是有意的：服务端是直接 `node` 跑的原生 ESM、客户端要经 TS 编译，
  * 为一个数字引入 JSON import attributes 会让服务端在 Node 20.10 以下起不来。
  * 防漂的办法是一条断言——`tests/net-protocol-version.test.ts` 读两份源码比数字。

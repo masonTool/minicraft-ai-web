@@ -19,7 +19,7 @@ BLOCK_Y=100
 BLOCK_Z=0
 
 echo "== 启动联机服务端（端口 $PORT） =="
-PORT=$PORT node server/index.mjs > .tmp/net-server.log 2>&1 &
+PORT=$PORT node server/node/index.mjs > .tmp/net-server.log 2>&1 &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 sleep 1

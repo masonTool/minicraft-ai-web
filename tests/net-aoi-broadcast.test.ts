@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { AOI_RADIUS_CHUNKS, withinAoi } from '../server/aoi.mjs';
+import { AOI_RADIUS_CHUNKS, withinAoi } from '../server/node/aoi.mjs';
 
 const player = (x: number, z: number, dimension = 'overworld') => ({ x, y: 70, z, dimension });
 

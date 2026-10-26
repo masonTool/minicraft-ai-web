@@ -6,7 +6,7 @@
  * 把模拟拆回多份，两只手交接时位置必然跳一下。所以这里只有一个视角：**房主自己**。
  *
  * 采集范围与广播同一把尺子：同维度 + 水平**切比雪夫** ≤ `radiusChunks` 个区块
- * （与 `server/aoi.mjs` 的 `withinAoi` 同一个口径，房主先筛一遍，服务端还会再筛一遍——
+ * （与 `server/node/aoi.mjs` 的 `withinAoi` 同一个口径，房主先筛一遍，服务端还会再筛一遍——
  * 两边同样便宜，但房主这层能少发一半包）。
  *
  * 纯函数、不碰世界与网络：主程序每 100ms 把实体表拍平传进来，得到一份可编码的快照。
@@ -17,7 +17,7 @@ import { decodeEntities, encodeEntities, type EntitySnapshot, type WireEntity } 
 /** 采集间隔（毫秒）：与远端玩家位置的近档同频（`AOI_NEAR_INTERVAL_MS`） */
 export const ENTITY_SNAPSHOT_INTERVAL_MS = 100;
 
-/** 默认采集半径（区块，切比雪夫）：与 `server/aoi.mjs` 的 `AOI_RADIUS_CHUNKS` 一致 */
+/** 默认采集半径（区块，切比雪夫）：与 `server/node/aoi.mjs` 的 `AOI_RADIUS_CHUNKS` 一致 */
 export const ENTITY_SNAPSHOT_RADIUS_CHUNKS = 8;
 
 /** 一份可采集的实体（调用方从 `EntityManager` 拍平出来） */
