@@ -430,6 +430,54 @@ async fn join(hub: &Arc<Hub>, conn: &mut Conn, message: &Map<String, Value>) -> 
             ));
             st.worlds.insert(room.clone(), meta);
         }
+        /*
+         * 时间 / 天数 / 天气：**开房时以房主本地为准，而且只影响这一个房间**
+         * （用户 2026-10-25 起，2026-10-26 扩到三者 + 每房一套）。
+         *
+         * 房主退出后在本地继续玩，时间和天气都在他存档里走；重开房时若服务端还按自己
+         * 那套时钟，房主一进来就会被拽到"服务端此刻"——界面上一句话都没有，但那不是
+         * 他的世界了。宽限期内重连的房主不覆盖（那一局还在继续）。
+         */
+        if grace_id.is_none() {
+            let host_day = message.get("day").and_then(int_of);
+            let host_time = message.get("timeOfDay").and_then(number_of);
+            let host_weather = message
+                .get("weather")
+                .and_then(Value::as_str)
+                .filter(|kind| is_weather_kind(kind))
+                .map(|kind| kind.to_string());
+            let (time, day, kind) = {
+                let clock = st.clock_mut(&room);
+                if let Some(day) = host_day {
+                    if day >= 0 {
+                        clock.start_day = day;
+                    }
+                }
+                if let Some(time) = host_time {
+                    if time.is_finite() {
+                        clock.start_time_of_day = ((time % 1.0) + 1.0) % 1.0;
+                    }
+                }
+                if let Some(kind) = host_weather {
+                    clock.weather = crate::state::Weather {
+                        kind: kind.clone(),
+                        left: crate::state::next_weather_seconds(&kind),
+                    };
+                }
+                // 顺序：先定天数与时刻，最后才重置起点——反了会凭空多算一天
+                clock.start_ms = store::now_ms() as f64;
+                (clock.time_of_day(), clock.day(), clock.weather.kind.clone())
+            };
+            st.broadcast(
+                &room,
+                None,
+                &json!({"t": "time", "timeOfDay": time, "day": day, "snap": true}),
+                None,
+                &hub.traffic,
+            );
+            st.broadcast(&room, None, &json!({"t": "weather", "kind": kind}), None, &hub.traffic);
+            hub.log(&format!("房间 {room} 采用房主的时间：第 {day} 天 {time:.2} · 天气 {kind}"));
+        }
     }
 
     let mut welcome = st.snapshot_for(id).unwrap_or_else(|| json!({}));
@@ -690,21 +738,60 @@ async fn on_room_config(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<
         conn.send_error(&hub.traffic, "not-host", "只有房主能修改房间设置");
         return;
     }
-    let room = player.room.clone();
+    let (room, name) = (player.room.clone(), player.name.clone());
+    /*
+     * 只改**本房**（用户 2026-10-26：每房一套时钟 / 一份模式）。
+     * `applied` 累积"这次真的改了什么"，最后广播一条 `room-config` 通知给**全房**
+     * （含房主自己——他也要在聊天区看到那一行），时间/天气另有 `time`/`weather` 权威消息。
+     */
+    let mut applied = Map::new();
+
     if let Some(time_of_day) = message.get("timeOfDay").and_then(number_of) {
         if time_of_day.is_finite() {
-            st.start_time_of_day = ((time_of_day % 1.0) + 1.0) % 1.0;
-            st.day_start_ms = store::now_ms() as f64;
-            let value = st.current_time_of_day();
-            st.broadcast(&room, None, &json!({"t": "time", "timeOfDay": value, "snap": true}), None, &hub.traffic);
+            let (time, day) = {
+                let clock = st.clock_mut(&room);
+                // 换起点前先把"今天"结算掉：否则改时间会被当成"这一天重新开始"，天数倒退
+                clock.start_day = clock.day();
+                clock.start_time_of_day = ((time_of_day % 1.0) + 1.0) % 1.0;
+                clock.start_ms = store::now_ms() as f64;
+                (clock.time_of_day(), clock.day())
+            };
+            st.broadcast(
+                &room,
+                None,
+                &json!({"t": "time", "timeOfDay": time, "day": day, "snap": true}),
+                None,
+                &hub.traffic,
+            );
+            applied.insert("timeOfDay".to_string(), Value::from(time));
         }
     }
     if let Some(kind) = message.get("weather").and_then(Value::as_str) {
         if is_weather_kind(kind) {
-            st.weather = crate::state::Weather { kind: kind.to_string(), left: crate::state::next_weather_seconds(kind) };
+            {
+                let clock = st.clock_mut(&room);
+                clock.weather = crate::state::Weather {
+                    kind: kind.to_string(),
+                    left: crate::state::next_weather_seconds(kind),
+                };
+            }
             st.broadcast(&room, None, &json!({"t": "weather", "kind": kind}), None, &hub.traffic);
+            applied.insert("weather".to_string(), Value::from(kind));
             hub.log(&format!("房主把天气改成 {kind}（房间 {room}）"));
         }
+    }
+    // 游戏模式（用户 2026-10-26）：房主改完，房里所有人跟着变；晚进来的从 welcome 拿当前值
+    if let Some(mode) = message.get("gameMode").and_then(Value::as_str) {
+        if crate::protocol::GAME_MODES.contains(&mode) {
+            st.room_game_modes.insert(room.clone(), mode.to_string());
+            applied.insert("gameMode".to_string(), Value::from(mode));
+        }
+    }
+
+    if !applied.is_empty() {
+        applied.insert("t".to_string(), Value::from("room-config"));
+        applied.insert("by".to_string(), Value::from(name));
+        st.broadcast(&room, None, &Value::Object(applied), None, &hub.traffic);
     }
 }
 
@@ -1157,17 +1244,25 @@ async fn on_chat(hub: &Arc<Hub>, conn: &mut Conn, id: u64, message: &Map<String,
 async fn on_sleep(hub: &Arc<Hub>, id: u64) {
     let mut st = hub.state.lock().await;
     let Some(player) = st.players.get(&id) else { return };
-    let name = player.name.clone();
-    let rooms: Vec<String> = {
-        let mut rooms = st.rooms_in_use();
-        rooms.dedup();
-        rooms
+    let (name, room) = (player.name.clone(), player.room.clone());
+    // 只跳**本房**的夜（每房一套时钟）：甲房的人睡满，乙房不该跟着天亮
+    let (time, day) = {
+        let clock = st.clock_mut(&room);
+        // 睡满 = **过了一天**（用户 2026-10-25）：先把"今天"结算出来再加 1，然后才拨到黎明。
+        // 顺序反了会少算一天（先用新起点算 day 再 +1 就变成跳两天）。
+        clock.start_day = clock.day() + 1;
+        clock.start_time_of_day = DAWN_TIME_OF_DAY;
+        clock.start_ms = store::now_ms() as f64;
+        (clock.time_of_day(), clock.day())
     };
-    st.start_time_of_day = DAWN_TIME_OF_DAY;
-    st.day_start_ms = store::now_ms() as f64;
-    let time = st.current_time_of_day();
-    for room in rooms {
-        st.broadcast(&room, None, &json!({"t": "time", "timeOfDay": time, "snap": true}), None, &hub.traffic);
+    {
+        st.broadcast(
+            &room,
+            None,
+            &json!({"t": "time", "timeOfDay": time, "day": day, "snap": true}),
+            None,
+            &hub.traffic,
+        );
     }
     drop(st);
     hub.log(&format!("{name}#{id} 睡满，时间跳到黎明"));

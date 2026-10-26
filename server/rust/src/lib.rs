@@ -261,10 +261,21 @@ fn spawn_clock(hub: Arc<Hub>) -> JoinHandle<()> {
             if st.players.is_empty() {
                 continue;
             }
-            let time = st.current_time_of_day();
+            // **按房各发一份**（用户 2026-10-26：每房一套时钟）——以前是全服一个时间戳，
+            // 甲房在半夜、乙房在正午也只能发同一个值。
             let rooms = st.rooms_in_use();
             for room in rooms {
-                st.broadcast(&room, None, &json!({"t": "time", "timeOfDay": time}), None, &hub.traffic);
+                let (time, day) = {
+                    let clock = st.clock_of(&room);
+                    (clock.time_of_day(), clock.day())
+                };
+                st.broadcast(
+                    &room,
+                    None,
+                    &json!({"t": "time", "timeOfDay": time, "day": day}),
+                    None,
+                    &hub.traffic,
+                );
             }
         }
     })
@@ -277,22 +288,35 @@ fn spawn_weather(hub: Arc<Hub>) -> JoinHandle<()> {
         loop {
             ticker.tick().await;
             let mut st = hub.state.lock().await;
-            st.weather.left -= CLOCK_INTERVAL.as_secs_f64();
-            if st.weather.left > 0.0 {
-                continue;
-            }
-            let next = state::next_weather_kind(&st.weather.kind);
-            st.weather = state::Weather {
-                kind: next.to_string(),
-                left: state::next_weather_seconds(next),
-            };
-            let kind = st.weather.kind.clone();
             if st.players.is_empty() {
                 continue;
             }
+            // **每个房间各跑各的天气**（每房一套时钟）：甲房下着雨，乙房可以是晴天
             let rooms = st.rooms_in_use();
             for room in rooms {
-                st.broadcast(&room, None, &json!({"t": "weather", "kind": kind}), None, &hub.traffic);
+                let changed = {
+                    let clock = st.clock_mut(&room);
+                    clock.weather.left -= CLOCK_INTERVAL.as_secs_f64();
+                    if clock.weather.left <= 0.0 {
+                        let next = state::next_weather_kind(&clock.weather.kind);
+                        clock.weather = state::Weather {
+                            kind: next.to_string(),
+                            left: state::next_weather_seconds(next),
+                        };
+                        Some(clock.weather.kind.clone())
+                    } else {
+                        None
+                    }
+                };
+                if let Some(kind) = changed {
+                    st.broadcast(
+                        &room,
+                        None,
+                        &json!({"t": "weather", "kind": kind}),
+                        None,
+                        &hub.traffic,
+                    );
+                }
             }
         }
     })

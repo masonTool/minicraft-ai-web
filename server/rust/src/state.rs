@@ -326,11 +326,60 @@ pub struct State {
     pub frames: OrderedMap<String, Frame>,
     pub items: HashMap<String, Item>,
     pub next_id: u64,
-    /// 这一天起点的墙钟（毫秒）；`sleep` 会把它重置成"现在"
-    pub day_start_ms: f64,
-    /// 起点对应的"一天中的时刻"（读档时换成存档里的值）
+    /// **每房一套时钟**（用户 2026-10-26）：房主开房时带上他的「第几天 / 时刻 / 天气」，
+    /// 房间一结束就跟着 `clear_room` 一起丢。
+    ///
+    /// 以前是全服一套：房主 B 在乙房开房会把甲房的太阳一起拨过去。房间之间本来就是
+    /// 各是各的世界，时钟没有共享的理由。
+    pub clocks: HashMap<String, RoomClock>,
+    /// 房间 → 当前游戏模式（用户 2026-10-26）：房主中途用 `room-config` 改过也认这里，
+    /// 晚进来的人从 `welcome.gameMode` 拿到**当前**模式，而不是开房那一刻的快照。
+    pub room_game_modes: HashMap<String, String>,
+    /// 没有房主的房（以及读档后的默认值）用这一套；**落盘的就是它**。
+    pub default_clock: RoomClock,
+}
+
+/// 一个房间的时钟（每房一套，用户 2026-10-26）。
+#[derive(Debug, Clone)]
+pub struct RoomClock {
+    /// 起点墙钟（毫秒）；`sleep` 会把它重置成"现在"
+    pub start_ms: f64,
+    /// 起点对应的"一天中的时刻"（0..1）
     pub start_time_of_day: f64,
+    /// 起点是第几天（房主开房时上报；读档时来自快照）
+    pub start_day: i64,
     pub weather: Weather,
+}
+
+impl RoomClock {
+    pub fn new() -> Self {
+        Self {
+            start_ms: crate::store::now_ms() as f64,
+            start_time_of_day: DAWN_TIME_OF_DAY,
+            start_day: 0,
+            weather: Weather { kind: "clear".to_string(), left: next_weather_seconds("clear") },
+        }
+    }
+
+    /// 现在是一天的第几（0..1）
+    pub fn time_of_day(&self) -> f64 {
+        let value = (crate::store::now_ms() as f64 - self.start_ms) / DAY_LENGTH_MS
+            + self.start_time_of_day;
+        value - value.floor()
+    }
+
+    /// 现在是第几天（与 Node 的 `currentDay` 同一算法）：
+    /// `start_day + floor(elapsed + start_time_of_day)`，未满一天的部分也算一天。
+    pub fn day(&self) -> i64 {
+        let elapsed = (crate::store::now_ms() as f64 - self.start_ms) / DAY_LENGTH_MS;
+        self.start_day + (elapsed + self.start_time_of_day).max(0.0).floor() as i64
+    }
+}
+
+impl Default for RoomClock {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl State {
@@ -348,13 +397,34 @@ impl State {
             frames: OrderedMap::new(),
             items: HashMap::new(),
             next_id: 1,
-            day_start_ms: crate::store::now_ms() as f64,
-            start_time_of_day: DAWN_TIME_OF_DAY,
-            weather: Weather {
-                kind: "clear".to_string(),
-                left: next_weather_seconds("clear"),
-            },
+            clocks: HashMap::new(),
+            room_game_modes: HashMap::new(),
+            default_clock: RoomClock::new(),
         }
+    }
+
+    /// 这一房的时钟（没有就退回兜底那份，**不创建**——读取路径不该改状态）
+    pub fn clock_of(&self, room: &str) -> &RoomClock {
+        self.clocks.get(room).unwrap_or(&self.default_clock)
+    }
+
+    /// 这一房的时钟（可改）：没有就按兜底那份**复制一份**出来
+    pub fn clock_mut(&mut self, room: &str) -> &mut RoomClock {
+        if !self.clocks.contains_key(room) {
+            let base = self.default_clock.clone();
+            self.clocks.insert(room.to_string(), base);
+        }
+        self.clocks.get_mut(room).expect("刚插入过")
+    }
+
+    /// 这一房现在是一天的第几（0..1）
+    pub fn time_of_day_of(&self, room: &str) -> f64 {
+        self.clock_of(room).time_of_day()
+    }
+
+    /// 这一房现在是第几天
+    pub fn day_of(&self, room: &str) -> i64 {
+        self.clock_of(room).day()
     }
 
     pub fn alloc_id(&mut self) -> u64 {
@@ -363,11 +433,14 @@ impl State {
         id
     }
 
-    /// 现在是一天的第几（0..1）。
+    /// **兜底时钟**现在是一天的第几（0..1）——落盘与"没有房主的房"用它。
     pub fn current_time_of_day(&self) -> f64 {
-        let elapsed = (crate::store::now_ms() as f64 - self.day_start_ms) / DAY_LENGTH_MS;
-        let value = elapsed + self.start_time_of_day;
-        value - value.floor()
+        self.default_clock.time_of_day()
+    }
+
+    /// **兜底时钟**现在是第几天（落盘用）
+    pub fn current_day(&self) -> i64 {
+        self.default_clock.day()
     }
 
     pub fn world_of_room(&self, room: &str) -> WorldMeta {
@@ -408,6 +481,9 @@ impl State {
         }
         self.worlds.remove(room);
         self.hosts.remove(room);
+        // 每房一套的时钟与模式：房间结束就丢，下一位房主带自己的设置进来
+        self.clocks.remove(room);
+        self.room_game_modes.remove(room);
         removed
     }
 
@@ -522,13 +598,26 @@ impl State {
             .filter(|other| other.room == player.room)
             .map(|other| Value::Object(other.base_wire()))
             .collect();
+        /*
+         * 这一局**当前**的游戏模式（用户 2026-10-26）：房主中途用 `room-config` 改过之后
+         * 要以此为准，否则晚进来的人看到的是开房那一刻的快照。
+         */
+        let game_mode = self
+            .room_game_modes
+            .get(&player.room)
+            .cloned()
+            .unwrap_or_else(|| world.mode.clone());
+        let game_mode = if game_mode.is_empty() { Value::Null } else { Value::from(game_mode) };
         Some(json!({
             "seed": world.seed,
             "world": world.to_wire(),
             "isHost": player.is_host,
             "hostId": self.hosts.get(&player.room).copied().map(Value::from).unwrap_or(Value::Null),
-            "timeOfDay": self.current_time_of_day(),
-            "weather": self.weather.kind,
+            "gameMode": game_mode,
+            // 时间 / 天数 / 天气都取**本房**的时钟（用户 2026-10-26：每房一套）
+            "timeOfDay": self.time_of_day_of(&player.room),
+            "day": self.day_of(&player.room),
+            "weather": self.clock_of(&player.room).weather.kind,
             "players": players,
             "edits": edits,
             "items": items,
@@ -552,7 +641,10 @@ impl State {
             "version": crate::store::SNAPSHOT_VERSION,
             "savedAt": crate::store::now_ms(),
             "timeOfDay": (time * 1_000_000.0).round() / 1_000_000.0,
-            "weather": self.weather.kind,
+            // 天数（用户 2026-10-25）：重启之后接着数，否则一个晚上的存档会让世界回到第 0 天
+            "day": self.current_day(),
+            // 天气（联机35）：重启后接着上次的天气跑
+            "weather": self.default_clock.weather.kind,
         })
     }
 
@@ -566,15 +658,22 @@ impl State {
          * 读回来就等于服务端抢先给房主灌了一份旧世界。v1 存档里那四张表也丢掉，
          * 只沿用时间/天气（下一次保存自然写成 v2）。
          */
+        // 只回填**兜底时钟**：有房主的房间用自己的那份（房主开房时上报）
         if let Some(kind) = data.get("weather").and_then(Value::as_str) {
             if is_weather_kind(kind) {
-                self.weather = Weather { kind: kind.to_string(), left: next_weather_seconds(kind) };
+                self.default_clock.weather =
+                    Weather { kind: kind.to_string(), left: next_weather_seconds(kind) };
+            }
+        }
+        if let Some(day) = data.get("day").and_then(Value::as_i64) {
+            if day >= 0 {
+                self.default_clock.start_day = day;
             }
         }
         if let Some(time) = data.get("timeOfDay").and_then(Value::as_f64) {
             if time.is_finite() {
-                self.start_time_of_day = ((time % 1.0) + 1.0) % 1.0;
-                self.day_start_ms = crate::store::now_ms() as f64;
+                self.default_clock.start_time_of_day = ((time % 1.0) + 1.0) % 1.0;
+                self.default_clock.start_ms = crate::store::now_ms() as f64;
             }
         }
     }

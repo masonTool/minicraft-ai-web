@@ -501,6 +501,12 @@ pub fn read_appearance(message: &Map<String, Value>) -> Map<String, Value> {
 
 // ---------------------------------------------------------------- 时间 / 天气
 
+/// 合法的游戏模式（与 Node 版 `GAME_MODE_VALUES` 一致）。
+///
+/// 只做白名单校验：`room-config` 里带别的字符串一律忽略，晚进来的人从
+/// `welcome.gameMode` 拿到的是这里允许过的值。
+pub const GAME_MODES: [&str; 4] = ["survival", "creative", "adventure", "spectator"];
+
 /// 天气三档（与 `server/weather.mjs` 一致）。
 pub fn is_weather_kind(value: &str) -> bool {
     matches!(value, "clear" | "rain" | "thunder")
@@ -638,15 +644,31 @@ mod tests {
         assert_eq!(appearance.get("sneak"), Some(&json!(true)));
         assert_eq!(appearance.get("look"), Some(&json!([1, 2, 3, 4, 5, 2, 1, 3, 1, 2])));
         assert!(appearance.get("evil").is_none());
-        // 非正 id 当作空手，不下发
-        assert!(appearance.get("offhand").is_none());
+        /*
+         * 非正 id **规整成 0 并仍然下发**（用户 2026-10-26）：0 是有效值（空手）。
+         * 以前"非正就丢掉字段"，于是"把手里的东西收起来"永远同步不过去——
+         * 对端一直看着你举着上一件东西。
+         */
+        assert_eq!(appearance.get("offhand"), Some(&json!(0)));
 
-        // 长度不足 10 的 look 不下发
+        // 长度不足 10 的 look 不下发（协议契约：定长 10，客户端据此回退昵称派生）
         let short = json!({"look": [1, 2, 3]});
         assert!(read_appearance(short.as_object().unwrap()).get("look").is_none());
-        // 非正 id 的 held 不下发
+        // 非正 id 的 held 规整成 0，仍然下发
         let negative = json!({"held": -3});
-        assert!(read_appearance(negative.as_object().unwrap()).get("held").is_none());
+        assert_eq!(read_appearance(negative.as_object().unwrap()).get("held"), Some(&json!(0)));
+
+        // 布尔键**在就收**：显式 false 也要能表达（松手不再潜行）
+        let released = json!({"sneak": false, "ride": 0});
+        let map = read_appearance(released.as_object().unwrap());
+        assert_eq!(map.get("sneak"), Some(&json!(false)));
+        assert_eq!(map.get("ride"), Some(&json!(false)));
+
+        // 生命/饥饿夹到 0~20（脏数据不会把 UI 画成穿出屏幕的条）
+        let stats = json!({"hp": 999, "food": -5});
+        let map = read_appearance(stats.as_object().unwrap());
+        assert_eq!(map.get("hp"), Some(&json!(20)));
+        assert_eq!(map.get("food"), Some(&json!(0)));
     }
 
     #[test]
