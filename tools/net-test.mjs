@@ -1662,6 +1662,79 @@ try {
     for (const client of [hostL, guestL, lateL]) client.close();
   }
 
+  // ---------------------------------------------------------------- 房主上行散件（用户 2026-10-26）
+  /*
+   * 容器/牌子/展示框走"房主进房整份推"：这三种不能像方块那样等玩家走过去再补——
+   * 队友打开一个箱子看到空的，就会往里放东西，然后被服务端那份覆盖掉。
+   *
+   * 两条路都要成立：**先进来的**队友从广播拿，**后进来的**从 `welcome` 拿。
+   */
+  console.log('\n[房主上行容器/牌子/展示框（session-sync）]');
+  {
+    const SYNC_ROOM = 'syncroom';
+    const hostS = new TestClient('SyncHost', undefined, {
+      room: SYNC_ROOM,
+      host: true,
+      world: { name: '散件房', seed: 555, mode: 'survival', difficulty: 'normal' },
+    });
+    check('散件：房主能开房', (await joinAndWaitWelcome(hostS, '散件房主', 0, 70, 0)) !== null);
+
+    // 先进来的队友（此时服务端是空的）
+    const early = new TestClient('SyncEarly', undefined, { room: SYNC_ROOM });
+    const welcomeEarly = await joinAndWaitWelcome(early, '先进来的队友', 0, 70, 0);
+    check('散件：清场后进来的队友 welcome 里没有箱子', (welcomeEarly?.containers ?? []).length === 0, JSON.stringify(welcomeEarly?.containers));
+
+    // 房主整份上行
+    hostS.send({
+      t: 'session-sync',
+      kind: 'container',
+      items: [{ dimension: 'overworld', x: 60, y: 70, z: 60, slots: [{ id: 3, count: 12 }] }],
+    });
+    hostS.send({
+      t: 'session-sync',
+      kind: 'sign',
+      items: [{ dimension: 'overworld', x: 61, y: 70, z: 60, lines: ['欢迎', '', '', ''] }],
+    });
+    hostS.send({
+      t: 'session-sync',
+      kind: 'frame',
+      items: [{ dimension: 'overworld', x: 62, y: 70, z: 60, item: { id: 264, count: 1 }, rotation: 2 }],
+    });
+
+    const containerMsg = await early.wait('container', 2000);
+    check(
+      '先进来的队友当场收到容器（按房广播）',
+      containerMsg?.x === 60 && Array.isArray(containerMsg?.slots) && containerMsg.slots[0]?.id === 3,
+      JSON.stringify(containerMsg),
+    );
+    check('先进来的队友收到牌子', (await early.wait('sign', 2000))?.lines?.[0] === '欢迎');
+    check('先进来的队友收到展示框', (await early.wait('frame', 2000))?.item?.id === 264);
+
+    // 后进来的队友：从 welcome 拿
+    const late = new TestClient('SyncLate', undefined, { room: SYNC_ROOM });
+    const welcomeLate = await joinAndWaitWelcome(late, '后进来的队友', 0, 70, 0);
+    check('后进来的队友 welcome 里有容器', (welcomeLate?.containers ?? []).some((c) => c.x === 60), JSON.stringify(welcomeLate?.containers));
+    check('后进来的队友 welcome 里有牌子', (welcomeLate?.signs ?? []).some((s) => s.x === 61), JSON.stringify(welcomeLate?.signs));
+    check('后进来的队友 welcome 里有展示框', (welcomeLate?.frames ?? []).some((f) => f.x === 62), JSON.stringify(welcomeLate?.frames));
+
+    // 从属端伪造 session-sync：不该进缓存
+    late.send({
+      t: 'session-sync',
+      kind: 'container',
+      items: [{ dimension: 'overworld', x: 70, y: 70, z: 70, slots: [{ id: 4, count: 1 }] }],
+    });
+    await sleep(80);
+    const probeS = new TestClient('SyncProbe', undefined, { room: SYNC_ROOM });
+    const welcomeProbe = await joinAndWaitWelcome(probeS, '验伪队友', 0, 70, 0);
+    check(
+      '从属端的 session-sync 被无视（只有房主能推）',
+      !(welcomeProbe?.containers ?? []).some((c) => c.x === 70),
+      JSON.stringify(welcomeProbe?.containers),
+    );
+
+    for (const client of [hostS, early, late, probeS]) client.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {

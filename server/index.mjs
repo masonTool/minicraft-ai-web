@@ -164,6 +164,15 @@ const signs = new Map();
 const frames = new Map();
 const MAX_SIGNS = 5000;
 const MAX_FRAMES = 5000;
+/**
+ * 一条 `session-sync` 最多带多少条（用户 2026-10-26，与客户端 `SESSION_SYNC_BATCH` 对齐）。
+ *
+ * 房主进房时把容器/牌子/展示框整份推上来，服务端存一份再按房广播——
+ * 队友的 `welcome` 里能看到的箱子内容只能来自这一推（服务端清场之后是空的）。
+ */
+const SESSION_SYNC_BATCH = 200;
+/** 一条连接最多发多少条 `session-sync`：一次整份推最多几十条，这个上限只挡脚本 */
+const SESSION_SYNC_MAX_MESSAGES = 256;
 
 /**
  * 拒收日志（联机24）：限频到每 5 秒最多一条。
@@ -1088,6 +1097,8 @@ wss.on('connection', (socket, request) => {
            * （回来时那些格子已经在他本地世界里了）。
            */
           sentEditChunks: new Set(),
+          // 已经发了几条 `session-sync`（用户 2026-10-26）：只有房主用得上，防脚本无限刷
+          syncMessages: 0,
         };
         players.set(player.id, player);
         if (wantsHost) {
@@ -1503,6 +1514,87 @@ wss.on('connection', (socket, request) => {
             player.room,
           );
         }
+        break;
+      }
+
+      /*
+       * 房主进房时把容器/牌子/展示框整份推上来（用户 2026-10-26）。
+       *
+       * 服务端清场之后这三张表是空的，而队友 `welcome` 里的箱子内容只能来自房主——
+       * 方块可以按区块懒补，箱子不行（打开看到空的就会往里放东西，然后被覆盖）。
+       *
+       * 为什么不像 `container` 那样走令牌桶：这是一次性整份推（一世界通常几十条），
+       * 按条限频会让"箱子多的世界"永远推不完。改成**按条数计上限**（`syncMessages`）。
+       *
+       * 形状校验与各自的单向消息同口径（坐标/y 范围/slots 长度与字节数/四行文字），
+       * 但不设距离闸：房主的位置与世界里的箱子毫无关系，他可能在几千格外。
+       */
+      case 'session-sync': {
+        if (!player) return;
+        // 只有本房房主能推：别人推来的"世界散件"没有权威性
+        if (hosts.get(player.room)?.id !== player.id) return;
+        if (player.syncMessages >= SESSION_SYNC_MAX_MESSAGES) return;
+        player.syncMessages++;
+
+        const kind = String(message.kind ?? '');
+        const list = Array.isArray(message.items) ? message.items.slice(0, SESSION_SYNC_BATCH) : [];
+        const out = [];
+        if (kind === 'container') {
+          for (const raw of list) {
+            if (!raw || typeof raw !== 'object') continue;
+            const dimension = sanitizeDimension(String(raw.dimension ?? player.dimension));
+            const x = Math.trunc(Number(raw.x));
+            const y = Math.trunc(Number(raw.y));
+            const z = Math.trunc(Number(raw.z));
+            if (![x, y, z].every(Number.isFinite)) continue;
+            if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) continue;
+            const slots = raw.slots;
+            if (!Array.isArray(slots) || slots.length > 27) continue;
+            if (JSON.stringify(slots).length > 8192) continue;
+            if (containers.size >= MAX_CONTAINERS) continue;
+            containers.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, slots });
+            out.push({ t: 'container', dimension, x, y, z, slots, by: player.id });
+          }
+        } else if (kind === 'sign') {
+          for (const raw of list) {
+            if (!raw || typeof raw !== 'object') continue;
+            const dimension = sanitizeDimension(String(raw.dimension ?? player.dimension));
+            const x = Math.trunc(Number(raw.x));
+            const y = Math.trunc(Number(raw.y));
+            const z = Math.trunc(Number(raw.z));
+            if (![x, y, z].every(Number.isFinite)) continue;
+            const lines = Array.isArray(raw.lines)
+              ? raw.lines.slice(0, 4).map((line) => String(line).slice(0, 64))
+              : [];
+            if (signs.size >= MAX_SIGNS) continue;
+            signs.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, lines });
+            out.push({ t: 'sign', x, y, z, dimension, lines, by: player.id });
+          }
+        } else if (kind === 'frame') {
+          for (const raw of list) {
+            if (!raw || typeof raw !== 'object') continue;
+            const dimension = sanitizeDimension(String(raw.dimension ?? player.dimension));
+            const x = Math.trunc(Number(raw.x));
+            const y = Math.trunc(Number(raw.y));
+            const z = Math.trunc(Number(raw.z));
+            if (![x, y, z].every(Number.isFinite)) continue;
+            const rawItem = raw.item;
+            const item =
+              rawItem && typeof rawItem === 'object'
+                ? { id: Math.trunc(Number(rawItem.id)), count: Math.trunc(Number(rawItem.count ?? 1)) }
+                : null;
+            if (item && (!Number.isFinite(item.id) || !Number.isFinite(item.count))) continue;
+            const rotation = Math.trunc(Number(raw.rotation ?? 0)) || 0;
+            if (frames.size >= MAX_FRAMES) continue;
+            frames.set(scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, dimension, item, rotation });
+            out.push({ t: 'frame', x, y, z, dimension, item, rotation, by: player.id });
+          }
+        } else {
+          // 不认识的 kind：直接丢（不要因为一条脏消息把整条连接关掉）
+          return;
+        }
+        // 收下之后按房广播：先进来的队友当场看到，后进来的从 `welcome` 拿（两边都不需要握手）
+        for (const payload of out) broadcast(payload, player.id, player.room);
         break;
       }
 

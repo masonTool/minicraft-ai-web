@@ -1904,6 +1904,12 @@ class App {
    * 时记一份，断开时用掉再清。
    */
   private hostSession = false;
+  /**
+   * 房主还有一份"散件快照"没推给服务端（用户 2026-10-26）。
+   *
+   * 挂起的原因是时机：`welcome` 可能早于读档完成，那时容器/牌子还是空的。
+   */
+  private pendingSessionSync = false;
   private autoSaveTimer = 0;
   /** 上次保存的结果（调试面板与验收脚本用） */
   private lastSaveAt = 0;
@@ -3988,6 +3994,17 @@ class App {
     this.multiplayerScreen.setRole(this.net.role);
     // 房主这一局（用户 2026-10-26）：保存间隔与"断开前落盘"都要读它，断开时角色已经回 solo 了
     this.hostSession = this.net.role === 'host';
+    /*
+     * 房主：把这一局的容器/牌子/展示框整份推给服务端（用户 2026-10-26）。
+     *
+     * 服务端清场之后是空的，队友 `welcome` 里能看到的箱子内容只能来自房主这一推。
+     * 读档还没回来时先挂起（`flushSessionSync` 会在读档结束那一刻补发），
+     * 否则推上去的是一份"所有箱子都是空的"的假快照。
+     */
+    if (this.hostSession) {
+      this.pendingSessionSync = true;
+      this.flushSessionSync();
+    }
     console.info(`[net] 本机角色：${this.net.role}${this.net.hostId !== null ? `（房主 #${this.net.hostId}）` : '（本房暂无房主）'}`);
 
     /*
@@ -4710,6 +4727,49 @@ class App {
    */
   private remoteWorldWritable(): boolean {
     return remoteWritableBySeed(this.serverSeed, this.worldConfig.seed);
+  }
+
+  /**
+   * 房主把容器/牌子/展示框整份推给服务端（用户 2026-10-26）。
+   *
+   * 三样都"按坐标存、数量有限"，所以走整份而不是按区块懒：方块可以等到玩家走过去再补，
+   * 箱子不行——队友打开一个箱子看到空的，就会往里放东西（然后被服务端那份覆盖掉）。
+   *
+   * 只推**有内容的**（`serializeContainers` 自己会跳过空容器、空牌子、空展示框）：
+   * 服务端那边清场之后本来就是空的，推空条目只会白占配额。
+   */
+  private flushSessionSync(): void {
+    if (!this.pendingSessionSync) return;
+    // 读档还没回来：容器/牌子此刻还是空的，推上去等于告诉服务端"这人没有箱子"
+    if (this.waitingForSaveRestore) return;
+    // 已经断开（或已经不是房主）：留着这次挂起，下次 `welcome` 会重新触发
+    if (this.net.role !== 'host') return;
+    this.pendingSessionSync = false;
+
+    const containers = serializeContainers(this.world.containers).map((entry) => ({
+      dimension: entry.dimension,
+      x: entry.x,
+      y: entry.y,
+      z: entry.z,
+      slots: entry.stacks,
+    }));
+    // 牌子与展示框的存档形状就是线上形状（展示框只要 id/count，多余的附加数据不传）
+    const signs = serializeSigns(this.signText);
+    const frames = serializeFrames(this.itemFrames).map((entry) => ({
+      dimension: entry.dimension,
+      x: entry.x,
+      y: entry.y,
+      z: entry.z,
+      item: entry.item ? { id: entry.item.id, count: entry.item.count } : null,
+      rotation: entry.rotation,
+    }));
+
+    this.net.sendSessionSync('container', containers);
+    this.net.sendSessionSync('sign', signs);
+    this.net.sendSessionSync('frame', frames);
+    console.info(
+      `[net] 已向服务端同步本房的散件：容器 ${containers.length} / 牌子 ${signs.length} / 展示框 ${frames.length}`,
+    );
   }
 
   /**
@@ -18077,6 +18137,8 @@ class App {
             this.prepareNewWorldSpawn();
             this.armProgress();
           }
+          // 容器/牌子/展示框到这一刻才齐（房主挂起的散件快照在这里补推）
+          this.flushSessionSync();
         })
         .catch((error: unknown) => {
           if (this.disposed) return;
@@ -18084,6 +18146,7 @@ class App {
           this.waitingForSaveRestore = false;
           this.prepareNewWorldSpawn();
           this.armProgress();
+          this.flushSessionSync();
         });
     } else {
       // 新世界：没有存档要读，进度系统直接上岗（背包里此刻是开发期初始物资 → 记账为基线）

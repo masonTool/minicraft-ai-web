@@ -341,6 +341,13 @@ export type NetBlockEntry = readonly [number, number, number, number, number, st
  * 只有大范围爆炸才会逼近这个数——超过就拆成几包，服务端逐包入库，结果一样。
  */
 const EDITS_REPLY_BATCH = 4096;
+/**
+ * 一包 `session-sync` 最多带多少条（用户 2026-10-26）。
+ *
+ * 一条容器/牌子/展示框的 JSON 大约 100~800 字节，200 条放在 64KB 单帧上限里很宽裕；
+ * 一整个世界通常几十条，所以绝大多数情况只有一包。
+ */
+const SESSION_SYNC_BATCH = 200;
 
 export class NetClient {
   /** 自己的玩家 id（未连接时为 0） */
@@ -1146,6 +1153,28 @@ export class NetClient {
       // 进度只由**房主**带（服务端会用 `isHost` 再挡一次）：从属端传了也不会生效
       ...(Number.isFinite(progress) ? { progress } : {}),
     });
+  }
+
+  /**
+   * 房主把"散件"整份推给服务端（用户 2026-10-26）。
+   *
+   * 服务端不再持有世界之后，队友进房时 `welcome` 里的容器/牌子/展示框只能来自房主——
+   * 这些是"按坐标存、数量有限"的东西，整份推比按区块懒要简单得多，也不会有
+   * "开箱子看到空的"那种几十毫秒的空窗（方块可以懒，箱子不行）。
+   *
+   * 空集合也发一条：语义是"这一类我这边就是没有"，省得服务端留着一个永远不完整的印象。
+   */
+  sendSessionSync(kind: 'container' | 'sign' | 'frame', items: readonly unknown[]): void {
+    if (!this.connected) return;
+    if (items.length === 0) {
+      this.sendRaw(JSON.stringify({ t: 'session-sync', kind, items: [] }));
+      return;
+    }
+    for (let i = 0; i < items.length; i += SESSION_SYNC_BATCH) {
+      this.sendRaw(
+        JSON.stringify({ t: 'session-sync', kind, items: items.slice(i, i + SESSION_SYNC_BATCH) }),
+      );
+    }
   }
 
   /**
