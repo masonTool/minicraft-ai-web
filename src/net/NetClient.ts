@@ -249,6 +249,14 @@ export interface NetHandlers {
   onEditRejected?: (reason: string) => void;
 
   /**
+   * 房主那边的怪物打中了我（用户 2026-10-26）。
+   *
+   * 从属端不跑生物 AI，所以"被野怪咬了一口"只能由房主判定后发过来；
+   * 伤害在本地走 `damagePlayer`（护甲/无敌帧/难度倍率都按接收方算）。
+   */
+  onMobAttack?: (damage: number, x: number, z: number, source: string) => void;
+
+  /**
    * 服务端向房主要一个区块的历史增量（用户 2026-10-26 懒上行）。
    *
    * 服务端不再自己攒世界，队友走到某块时才发现"这块我不认识"——于是回头问房主。
@@ -782,6 +790,20 @@ export class NetClient {
         }
         break;
       }
+      /* 房主那边的怪打中了我（用户 2026-10-26）：只有被击者会收到 */
+      case 'mob-attack': {
+        const damage = Number(message.damage);
+        const x = Number(message.x);
+        const z = Number(message.z);
+        if (!Number.isFinite(damage) || !Number.isFinite(x) || !Number.isFinite(z)) break;
+        this.handlers.onMobAttack?.(
+          damage,
+          x,
+          z,
+          typeof message.source === 'string' ? message.source : '',
+        );
+        break;
+      }
       /*
        * 服务端向房主要历史增量（用户 2026-10-26 懒上行）：只有房主会收到。
        * 坐标不可信也照单全收地交给上层——`sendEditsReply()` 只按 (cx,cz) 读自己的
@@ -1049,6 +1071,25 @@ export class NetClient {
         // 生命 / 饥饿（用户 2026-10-26）：瞄准队友时画两条细条
         hp: Math.round(appearance.hp ?? 20),
         food: Math.round(appearance.food ?? 20),
+      }),
+    );
+  }
+
+  /**
+   * 房主：我这边的某只怪打中了某个队友（用户 2026-10-26）。
+   *
+   * 服务端只把它转给那一个人（不广播）——伤害是"私事"，别人不需要知道。
+   */
+  sendMobAttack(targetId: number, damage: number, x: number, z: number, source: string): void {
+    if (!this.connected) return;
+    this.sendRaw(
+      JSON.stringify({
+        t: 'mob-attack',
+        targetId,
+        damage: Math.round(damage * 10) / 10,
+        x: Math.round(x * 100) / 100,
+        z: Math.round(z * 100) / 100,
+        ...(source ? { source: source.slice(0, 32) } : {}),
       }),
     );
   }

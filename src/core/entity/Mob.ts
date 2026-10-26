@@ -11,7 +11,7 @@
  * 矮生物能钻过 1 格高的洞，高生物必须要 2 格。
  */
 
-import { Entity, type EntityContext } from './Entity.ts';
+import { Entity, type EntityContext, type PlayerTarget } from './Entity.ts';
 // 多语言 P2-4：种类名走 `entity.<id>`
 import { t } from '../i18n/I18n.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
@@ -1174,6 +1174,21 @@ export class Mob extends Entity {
   }
 
   /**
+   * 这一帧要追的玩家（用户 2026-10-26）。
+   *
+   * 默认就是 `ctx.player`（本地玩家）；房主联机时主程序会通过 `ctx.targetFor` 指定
+   * 某个**远端玩家**——不然怪物只会追房主，房客站在旁边完全安全。
+   */
+  protected playerTarget(ctx: EntityContext): PlayerTarget | null {
+    const override = ctx.targetFor?.(this);
+    if (override) return override;
+    const player = ctx.player;
+    return player
+      ? { x: player.x, y: player.y, z: player.z, invisible: ctx.playerInvisible === true }
+      : null;
+  }
+
+  /**
    * 飞行生物的 AI（批次 92，烈焰人是第一种）。子类覆盖它来加自己的招数。
    *
    * 默认行为：**悬停在玩家上方、靠到 2.5 格内就撞上去**；没在追人时原地上下浮动、
@@ -1185,11 +1200,7 @@ export class Mob extends Entity {
    * ⚠️ 这里只**改速度**，位置仍然由 `tick` 里的 `moveBody` 推进——
    * 于是飞行不穿墙，撞到方块照样被拦下（撞墙时它会贴着墙滑，与原版差不多）。
    */
-  protected flyAi(
-    ctx: EntityContext,
-    dt: number,
-    player: { x: number; y: number; z: number } | null,
-  ): void {
+  protected flyAi(ctx: EntityContext, dt: number, player: PlayerTarget | null): void {
     this.hoverPhase += dt * 2.4;
     const bob = Math.sin(this.hoverPhase) * 0.35;
 
@@ -1221,7 +1232,7 @@ export class Mob extends Entity {
       dt,
     );
 
-    if (this.attackCooldown <= 0 && this.deliverMelee(ctx, 2.5)) this.attackCooldown = 1;
+    if (this.attackCooldown <= 0 && this.deliverMelee(ctx, 2.5, player)) this.attackCooldown = 1;
   }
 
   /**
@@ -1236,9 +1247,8 @@ export class Mob extends Entity {
    *
    * @returns 真的打中了（没够着返回 false，调用方不要因此进冷却）
    */
-  private deliverMelee(ctx: EntityContext, reach: number): boolean {
-    const player = ctx.player;
-    if (!player || !this.canMeleeReach(ctx, player, reach)) return false;
+  private deliverMelee(ctx: EntityContext, reach: number, target = this.playerTarget(ctx)): boolean {
+    if (!target || !this.canMeleeReach(ctx, target, reach)) return false;
     // 主手武器（批次 562）：有武器就按 `tools.ts` 的伤害表，没有才退回种类基础伤害。
     // 之前武器只影响外观与掉落，僵尸拿铁剑和空手一样疼——这是 J27 留下的差异。
     const weapon = this.equipment.mainHand !== undefined ? toolInfoById(this.equipment.mainHand) : undefined;
@@ -1247,8 +1257,17 @@ export class Mob extends Entity {
     const damage = Math.max(0, base + this.effects.attackBonus());
     // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
     // 把 `this` 一起传下去（批次 264）：荆棘要靠它反伤"是谁打的"
-    ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this);
-    if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
+    /*
+     * 伤害落到"这个目标"身上：本地玩家走 `ctx.hurtPlayer`，远端玩家由主程序接到
+     * `hit`（一条网络消息，见 `PlayerTarget`）。以前这里写死 `ctx.hurtPlayer`，
+     * 于是房主端的怪永远只能打房主。
+     */
+    if (target.hit) target.hit(damage, this.x, this.z, 'generic', mobLabel(this.type), this);
+    else ctx.hurtPlayer(damage, this.x, this.z, 'generic', mobLabel(this.type), this);
+    if (this.type.venom) {
+      if (target.afflict) target.afflict(this.type.venom.effect, this.type.venom.seconds);
+      else ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
+    }
     // 真的打中了才挥臂（J12）：没够着的那一下不该有动作，否则站在墙后也会"空挥"
     this.attackAnim = ATTACK_ANIM_SECONDS;
     return true;
@@ -1327,7 +1346,8 @@ export class Mob extends Entity {
   // `protected`（批次 253）：马这类"可骑乘生物"要覆写 AI——骑着时由玩家控制方向，
   // 没骑时仍然走这套游荡/追逐/繁殖
   protected updateAi(ctx: EntityContext, dt: number): void {
-    const player = ctx.player;
+    // 目标可能是远端玩家（房主联机，用户 2026-10-26）：见 `playerTarget`
+    const player = this.playerTarget(ctx);
     const dx = player ? player.x - this.x : 0;
     const dz = player ? player.z - this.z : 0;
     const distanceSq = dx * dx + dz * dz;
@@ -1343,7 +1363,7 @@ export class Mob extends Entity {
       angerRemaining: this.angerTimer,
       lightLevel: ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0,
       playerPresent: player !== null,
-      playerInvisible: ctx.playerInvisible === true,
+      playerInvisible: player?.invisible === true,
       distanceSq,
       followRange: this.type.followRange,
     };
@@ -2405,7 +2425,8 @@ export class Mob extends Entity {
 
   /** 与玩家的水平距离（战斗判定用） */
   distanceToPlayerSq(ctx: EntityContext): number {
-    const player = ctx.player;
+    // 与 AI 用同一个目标（可能是远端玩家）
+    const player = this.playerTarget(ctx);
     if (!player) return Number.POSITIVE_INFINITY;
     const dx = player.x - this.x;
     const dz = player.z - this.z;

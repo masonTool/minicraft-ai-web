@@ -106,7 +106,8 @@ export class Phantom extends Mob {
     if (this.dead) return;
     if (this.hitTimer > 0) this.hitTimer -= dt;
 
-    const player = ctx.player;
+    // 目标可能是远端玩家（房主联机，用户 2026-10-26）
+    const player = this.playerTarget(ctx);
 
     // 没有玩家（离线测试、玩家还没进来）：原地慢慢浮动，别往地里钻
     if (!player) {
@@ -179,7 +180,7 @@ export class Phantom extends Mob {
 
   /** 与玩家的**三维**距离（俯冲撞人用它；水平距离会让"擦着头顶飞过"也算撞上） */
   private distanceToPlayer(ctx: EntityContext): number {
-    const player = ctx.player;
+    const player = this.playerTarget(ctx);
     if (!player) return Number.POSITIVE_INFINITY;
     return Math.hypot(player.x - this.x, player.y - this.y, player.z - this.z);
   }

@@ -2024,6 +2024,56 @@ try {
     for (const client of [hostA, watcher]) client.close();
   }
 
+  // ---------------------------------------------------------------- 野怪打房客（用户 2026-10-26）
+  /*
+   * 从属端不跑生物 AI，所以"被野怪咬了一口"只能由房主判定后用 `mob-attack` 发过来。
+   * 服务端只做两件事：**只转给被打的那一个人**（不广播）+ 拒收非房主发的。
+   */
+  console.log('\n[野怪打房客：mob-attack 只转给被打的人]');
+  {
+    const ROOM = 'mobattackroom';
+    const WORLD = { name: '野怪房', seed: 5150, mode: 'survival', difficulty: 'normal' };
+    const mobHost = new TestClient('MobHost', undefined, { room: ROOM, host: true, world: WORLD });
+    await joinAndWaitWelcome(mobHost, '野怪房主', 0, 70, 0);
+    const victim = new TestClient('MobVictim', undefined, { room: ROOM });
+    const victimWelcome = await joinAndWaitWelcome(victim, '挨打的房客', 1, 70, 1);
+    const bystander = new TestClient('MobBystander', undefined, { room: ROOM });
+    await joinAndWaitWelcome(bystander, '旁观的房客', 2, 70, 2);
+
+    victim.mailbox.length = 0;
+    bystander.mailbox.length = 0;
+    mobHost.send({ t: 'mob-attack', targetId: victimWelcome.id, damage: 4, x: 1, z: 2, source: '僵尸' });
+    const hit = await victim.wait('mob-attack', 2000);
+    check(
+      '被打的房客收到 mob-attack（伤害 + 来源 + 击退方向）',
+      hit?.damage === 4 && hit?.source === '僵尸' && hit?.x === 1 && hit?.z === 2,
+      JSON.stringify(hit),
+    );
+    check('服务端填了 fromId（谁那边的怪）', typeof hit?.fromId === 'number', `${hit?.fromId}`);
+    check('旁边的房客收不到（伤害是私事，不广播）', (await bystander.wait('mob-attack', 400)) === null);
+
+    // 房客伪造：非房主发的直接丢
+    bystander.mailbox.length = 0;
+    victim.send({ t: 'mob-attack', targetId: bystander.id ?? 0, damage: 20, x: 0, z: 0 });
+    await sleep(120);
+    check('房客伪造的 mob-attack 被无视（只有房主能发）', bystander.mailbox.every((m) => m.t !== 'mob-attack'));
+
+    // 脏数据：伤害为 0 / 负数 / 非有限数都不转
+    victim.mailbox.length = 0;
+    mobHost.send({ t: 'mob-attack', targetId: victimWelcome.id, damage: 0, x: 0, z: 0 });
+    mobHost.send({ t: 'mob-attack', targetId: victimWelcome.id, damage: Number.NaN, x: 0, z: 0 });
+    await sleep(120);
+    check('伤害 <= 0 或 NaN 不转发', victim.mailbox.every((m) => m.t !== 'mob-attack'));
+
+    // 伤害上限 50（一只怪不该一发打死满血的人）
+    victim.mailbox.length = 0;
+    mobHost.send({ t: 'mob-attack', targetId: victimWelcome.id, damage: 999, x: 0, z: 0 });
+    const clamped = await victim.wait('mob-attack', 2000);
+    check('伤害夹到 50 以内', clamped?.damage === 50, `${clamped?.damage}`);
+
+    for (const client of [mobHost, victim, bystander]) client.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {

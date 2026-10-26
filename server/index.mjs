@@ -1647,6 +1647,39 @@ wss.on('connection', (socket, request) => {
       }
 
       /*
+       * 房主那边的怪物打中了某个队友（用户 2026-10-26）。
+       *
+       * 从属端不跑生物 AI（`SimMode`），所以"被野怪咬了一口"只能由房主判定后发过来；
+       * 服务端只做两件事：**只转给那一个人**（不广播，伤害是私事）+ 形状收口。
+       * 伤害在接收方本地走 `damagePlayer`（护甲/无敌帧/难度倍率都按他那边的算）。
+       */
+      case 'mob-attack': {
+        if (!player) return;
+        // 只有本房房主能发：别人"替我打我自己"没有意义
+        if (hosts.get(player.room)?.id !== player.id) return;
+        if (!takeEffectToken(player)) return;
+        const targetId = Math.trunc(Number(message.targetId));
+        const target = players.get(targetId);
+        // 跨房不给打：目标必须和我同一个房间，也不能是我自己
+        if (!target || target.room !== player.room || target.id === player.id) return;
+        const damage = Math.min(50, Math.max(0, Number(message.damage ?? 0)));
+        const x = Number(message.x);
+        const z = Number(message.z);
+        if (!Number.isFinite(damage) || damage <= 0) return;
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        const source = String(message.source ?? '').slice(0, 32);
+        send(target.socket, {
+          t: 'mob-attack',
+          damage,
+          x,
+          z,
+          ...(source ? { source } : {}),
+          fromId: player.id,
+        });
+        break;
+      }
+
+      /*
        * 房主进房时把容器/牌子/展示框整份推上来（用户 2026-10-26）。
        *
        * 服务端清场之后这三张表是空的，而队友 `welcome` 里的箱子内容只能来自房主——

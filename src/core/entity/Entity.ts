@@ -80,6 +80,29 @@ export interface DamageAttacker {
   ): boolean;
 }
 
+/** 一只生物这一帧要追的"玩家"（本地玩家或房主端的远端玩家） */
+export interface PlayerTarget {
+  x: number;
+  y: number;
+  z: number;
+  /** 这个目标是不是隐身的（只有本地玩家有这个概念；远端潜行不算） */
+  invisible?: boolean;
+  /**
+   * 伤害落到谁身上。缺省 = 本地玩家（`Mob` 会改走 `ctx.hurtPlayer`）；
+   * 远端玩家由主程序接到一条网络消息上。
+   */
+  hit?: (
+    amount: number,
+    sourceX: number,
+    sourceZ: number,
+    cause?: EntityDamageCause,
+    source?: string,
+    attacker?: unknown,
+  ) => void;
+  /** 负面效果（洞穴蜘蛛的中毒）。缺省 = 本地玩家（走 `ctx.afflictPlayer`） */
+  afflict?: (effect: EffectId, seconds: number) => void;
+}
+
 export interface EntityContext {
   /** 碰撞与流体查询 */
   world: PhysicsWorld;
@@ -170,6 +193,14 @@ export interface EntityContext {
   raining?: boolean;
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
+  /**
+   * 这一帧这只生物该追谁（用户 2026-10-26：房主联机时野怪只打房主）。
+   *
+   * `ctx.player` 只有一个（**本地玩家**），而房主端跑 AI 时必须能把远端玩家当成目标，
+   * 否则房客站在怪物旁边完全安全。主程序按生物逐个挑"最近的玩家"，
+   * 返回 `null`（或不实现）就退回 `ctx.player`。
+   */
+  targetFor?: (mob: Entity) => PlayerTarget | null;
   /**
    * 玩家现在是不是隐身的（K4 尾巴）。
    *

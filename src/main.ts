@@ -839,7 +839,7 @@ import {
 } from './core/entity/Bow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
 import { XpOrb, splitXpOrbs } from './core/entity/XpOrb.ts';
-import type { DamageAttacker, EntityContext } from './core/entity/Entity.ts';
+import type { DamageAttacker, EntityContext, PlayerTarget } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
@@ -2060,6 +2060,12 @@ class App {
       this.chatLine = text;
       this.chatUntil = now + 6000;
     },
+    /*
+     * 房主那边的野怪打中了我（用户 2026-10-26）：走本地 `damagePlayer`，
+     * 护甲减免、无敌帧、难度倍率、死亡结算全都与我被本地怪打时完全一致。
+     */
+    onMobAttack: (damage, x, z, source) =>
+      this.damagePlayer(damage, x, z, 'generic', source || undefined),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onItemSpawn: (item) => this.onNetItemSpawn(item),
@@ -13046,6 +13052,50 @@ class App {
     this.simApply.clear();
   }
 
+  /**
+   * 房主端：这只生物该追谁（用户 2026-10-26）。
+   *
+   * 从属端不跑生物 AI（`SimMode`），所以"野怪只打房主"的根因就在房主这边：
+   * `EntityContext.player` 只有一个（本地玩家 = 房主），怪物自然看不见房客。
+   * 这里给每只生物挑"水平距离最近的玩家"，比本地玩家还近的远端玩家才会成为目标；
+   * 返回 `null` = 维持原样（追本地玩家）。
+   *
+   * 伤害不在这里结算：`PlayerTarget.hit` 接一条网络消息，由**接收方**走自己的
+   * `damagePlayer`（护甲/无敌帧/难度倍率都按他那边的算）。
+   */
+  private pickRemotePlayerTarget(mob: { x: number; y: number; z: number }): PlayerTarget | null {
+    if (this.net.role !== 'host') return null;
+    if (this.remotePlayers.size === 0) return null;
+    const localDistance = Math.hypot(this.physics.x - mob.x, this.physics.z - mob.z);
+    let best: { id: number; distance: number; target: PlayerTarget } | null = null;
+    for (const [id, remote] of this.remotePlayers) {
+      if (!this.remotePresence.visible(id, this.dimension)) continue;
+      // 死了的不打（他那边模型都收了，追着空气咬没有意义）
+      if (this.remoteAppearance.get(id)?.state.dead === true) continue;
+      const distance = Math.hypot(remote.x - mob.x, remote.z - mob.z);
+      if (distance >= localDistance) continue;
+      if (best && distance >= best.distance) continue;
+      const targetX = remote.x;
+      const targetY = remote.y;
+      const targetZ = remote.z;
+      best = {
+        id,
+        distance,
+        target: {
+          x: targetX,
+          y: targetY,
+          z: targetZ,
+          // 潜行不算隐身：只有本地玩家的隐身效果才让怪看不见
+          invisible: false,
+          hit: (amount, sourceX, sourceZ, _cause, source) =>
+            this.net.sendMobAttack(id, amount, sourceX, sourceZ, source ?? ''),
+          // 中毒这类效果没有对应的网络通道：远端挨这一下只掉血（记在差异台账里）
+        },
+      };
+    }
+    return best?.target ?? null;
+  }
+
   private updateEntities(dt: number): void {
     const context: EntityContext = {
       world: this.world,
@@ -13073,6 +13123,12 @@ class App {
       // 桥接层不接等于白传（批次 218 用户"被不明原因打死"就是这个）。
       hurtPlayer: (amount, sourceX, sourceZ, cause, source, attacker) =>
         this.damagePlayer(amount, sourceX, sourceZ, cause, source, attacker),
+      /*
+       * 野怪该追谁（用户 2026-10-26：以前只会追房主，房客站在旁边完全安全）。
+       * 只有房主端跑 AI，所以也只有他会给出"追某个远端玩家"的答案；
+       * 返回 null 就退回本地玩家。
+       */
+      targetFor: (mob) => this.pickRemotePlayerTarget(mob),
       // 蜘蛛在亮处中立（批次 93）：亮度取"方块光与折算后的天光"的较大者，
       // 与刷怪判据同一套折算（天光要按昼夜折算，否则夜里也算 15 → 蜘蛛永不打人）
       lightAt: (x, y, z) =>
