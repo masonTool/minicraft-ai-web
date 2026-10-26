@@ -1444,6 +1444,76 @@ try {
     for (const client of [follower, otherHost, hostC]) client.close();
   }
 
+  // ---------------------------------------------------------------- 会话缓存（用户 2026-10-26）
+  /*
+   * 服务端从"世界存档"退化成"这一局的会话缓存"：
+   *  · 新房主上位 / 关房 → 清场（房间数据以房主本地为准，服务端不积累）；
+   *  · **宽限期内重连的房主不清**（他切后台回来还是同一局，清了等于把队友眼前的世界抹掉）。
+   *
+   * 这两条都靠"另一个客户端进来能不能看到旧数据"来断言——比查内部表更接近玩家感受。
+   */
+  console.log('\n[会话缓存：清场与重连]');
+  {
+    const CACHE_ROOM = 'cacheroom';
+    const CACHE_WORLD = { name: '缓存房', seed: 777, mode: 'survival', difficulty: 'normal' };
+    const h1 = new TestClient('CacheHost1', undefined, { room: CACHE_ROOM, host: true, world: CACHE_WORLD });
+    check('缓存用例：房主能开房', (await joinAndWaitWelcome(h1, '缓存房主', 0, 70, 0)) !== null);
+    h1.send({ t: 'block', x: 40, y: 70, z: 40, id: 5, state: 0, dimension: 'overworld' });
+    h1.send({ t: 'container', x: 41, y: 70, z: 40, dimension: 'overworld', slots: [{ id: 3, count: 9 }] });
+    await sleep(80);
+
+    const f1 = new TestClient('CacheFollower', undefined, { room: CACHE_ROOM });
+    const wf1 = await joinAndWaitWelcome(f1, '缓存队友', 0, 70, 0);
+    check(
+      '队友 welcome 里有房主刚写的方块',
+      (wf1?.edits ?? []).some((e) => e[0] === 40 && e[2] === 40),
+      `${(wf1?.edits ?? []).length} 条`,
+    );
+    check('队友 welcome 里有房主的容器', (wf1?.containers ?? []).some((c) => c.x === 41), JSON.stringify(wf1?.containers));
+
+    // ① 宽限期内重连（同一 clientId + host:true）：房主位还在，缓存也不清
+    h1.close();
+    await h1.waitClosed();
+    await sleep(120); // < GRACE_MS(400)：此时 hosts 里还挂着原来那个 id
+    const h1back = new TestClient('CacheHostBack', h1.clientId, {
+      room: CACHE_ROOM,
+      host: true,
+      world: CACHE_WORLD,
+    });
+    const wBack = await joinAndWaitWelcome(h1back, '缓存房主（回来了）', 0, 70, 0);
+    check('宽限期内重连仍是我当房主', wBack?.isHost === true, JSON.stringify(wBack?.isHost));
+
+    const f2 = new TestClient('CacheFollower2', undefined, { room: CACHE_ROOM });
+    const wf2 = await joinAndWaitWelcome(f2, '重连后的队友', 0, 70, 0);
+    check(
+      '宽限期内重连**不清场**：新队友还能收到重连前那条方块',
+      (wf2?.edits ?? []).some((e) => e[0] === 40 && e[2] === 40),
+      `${(wf2?.edits ?? []).length} 条`,
+    );
+    check('宽限期内重连不清场：容器也还在', (wf2?.containers ?? []).some((c) => c.x === 41), JSON.stringify(wf2?.containers));
+
+    // ② 房主宽限期结束 = 关房 = 清场：之后进同一个房名，一条旧数据都不该有
+    h1back.close();
+    f2.close();
+    f1.close();
+    await sleep(900); // > GRACE_MS(400)，等关房那一刀落完
+    const probe = new TestClient('CacheProbe', undefined, { room: CACHE_ROOM });
+    const wProbe = await joinAndWaitWelcome(probe, '清场后进来', 0, 70, 0);
+    check('房主宽限期结束 → 房间缓存已清（方块没了）', (wProbe?.edits ?? []).length === 0, JSON.stringify(wProbe?.edits));
+    check('房主宽限期结束 → 容器也没了', (wProbe?.containers ?? []).length === 0, JSON.stringify(wProbe?.containers));
+
+    // 同房再开：新房主上位，welcome 干净（不继承上一局）
+    const h2 = new TestClient('CacheHost2', undefined, { room: CACHE_ROOM, host: true, world: CACHE_WORLD });
+    const w2 = await joinAndWaitWelcome(h2, '新房主', 0, 70, 0);
+    check(
+      '新房主上位后 welcome 干净（不继承上一局）',
+      (w2?.edits ?? []).length === 0 && (w2?.containers ?? []).length === 0,
+      JSON.stringify({ edits: w2?.edits?.length, containers: w2?.containers?.length }),
+    );
+    probe.close();
+    h2.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {

@@ -449,6 +449,77 @@ const roomGameModes = new Map();
 /** 客户端能收的模式（与 `src/core/world/GameMode.ts` 的 `GAME_MODES` 同一套字符串） */
 const GAME_MODE_VALUES = ['survival', 'creative', 'adventure', 'spectator'];
 
+/**
+ * 房间的"哪些区块已经有房主给的权威数据"（用户 2026-10-26 懒上行）。
+ *
+ * `confirmed`：房主已经把这一整块回给我们了（`edits-reply`）；之后谁走进来直接推缓存。
+ * `requested`：已经向房主要过、还没回；用来防"同一个区块被连点 8 次"。
+ * 两张表都按房一份，键是 `维度|cx,cz`，各自有上限（长跑的房间会走遍整张地图）。
+ */
+const confirmedChunks = new Map();
+const requestedChunks = new Map();
+const MAX_TRACKED_CHUNKS = 4096;
+/** 同时在飞的请求上限：队友传送到远处时别一口气把房主的手机压死 */
+const MAX_INFLIGHT_REQUESTS = 8;
+
+/** 取（必要时建）某个房间的区块追踪集合 */
+function trackedChunks(store, room) {
+  let set = store.get(room);
+  if (!set) {
+    set = new Set();
+    store.set(room, set);
+  }
+  return set;
+}
+
+/** 记一个区块键并保住上限（走回头路会重推一次，无害） */
+function rememberTracked(store, room, key) {
+  const set = trackedChunks(store, room);
+  set.add(key);
+  if (set.size > MAX_TRACKED_CHUNKS) {
+    const oldest = set.values().next();
+    if (!oldest.done) set.delete(oldest.value);
+  }
+  return set;
+}
+
+/**
+ * 把一个房间的会话缓存整个清掉（用户 2026-10-26：**服务器不持有世界存档**）。
+ *
+ * 口径：世界以房主本地为准，服务端只当"这一局的转发 + 缓存"，房间一结束就不该留下任何
+ * 东西——留下的旧数据会在下一局被 `welcome` 发出去，变成"房主本地的世界被服务端改回去"。
+ *
+ * 只清**这个房名**前缀下的 key：同一台服务器上的其它房间互不影响。
+ * `hosts` 不在这里动（清场之后调用方马上就会写它，分两步写清楚更好读）。
+ *
+ * @returns 丢掉的方块增量条数（只为日志）
+ */
+function clearRoom(room) {
+  const prefix = `${room}|`;
+  let removed = 0;
+  for (const key of [...edits.keys()]) {
+    if (!key.startsWith(prefix)) continue;
+    edits.delete(key);
+    removed++;
+  }
+  for (const key of [...containers.keys()]) if (key.startsWith(prefix)) containers.delete(key);
+  for (const key of [...signs.keys()]) if (key.startsWith(prefix)) signs.delete(key);
+  for (const key of [...frames.keys()]) if (key.startsWith(prefix)) frames.delete(key);
+  /*
+   * 掉落物（key 是 `ownerId:localId`，没有房名前缀）：按 owner 现在所在的房间判。
+   * 房间关掉时同房的人马上就要被踢，他们的掉落物本来也会在各自宽限期里清掉；
+   * 这里顺手清是为了"房主新上位"那条路——上一局的残留不该出现在新房主的世界里。
+   */
+  for (const [key, item] of [...items]) {
+    if (players.get(item.owner)?.room === room) items.delete(key);
+  }
+  roomWorlds.delete(room);
+  roomGameModes.delete(room);
+  confirmedChunks.delete(room);
+  requestedChunks.delete(room);
+  return removed;
+}
+
 function snapshotFor(player) {
   // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
   // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
@@ -1030,6 +1101,22 @@ wss.on('connection', (socket, request) => {
         if (wantsHost) {
           // 这一房**第一次**有人开房：只有这次才采纳房主报上来的天数
           const freshRoom = !hosts.has(room);
+          /*
+           * 清场（用户 2026-10-26）：**新房主上位 = 新的一局**，服务端从这一刻起只当缓存，
+           * 数据全部由房主本地上行（`session-sync` + 按区块的 `edits-reply`）。
+           *
+           * 唯一的例外是**宽限期内重连的房主本人**：`grace.id` 与 `hosts` 里那个 id 相同，
+           * 他切后台 10 秒回来还是同一局，清了等于把队友眼前的世界抹掉一片。
+           * 正常新开房时 `hosts` 里通常是空的（关房那一步已经清过），这里的清是**兜底**：
+           * 服务端崩溃重启、或某个房名残留了上一轮的数据时，只有这一刀能保证
+           * "房主一进来，前面的历史就不存在了"。
+           * 清场必须在 `send(welcome)` 之前：`snapshotFor()` 读的就是这几张表。
+           */
+          const sameHostReturning = Boolean(grace) && hosts.get(room)?.id === player.id;
+          if (!sameHostReturning) {
+            const dropped = clearRoom(room);
+            if (dropped > 0) log(`房间 ${room} 开房前清场（丢弃 ${dropped} 条残留改动）`);
+          }
           hosts.set(room, { id: player.id, clientId: player.clientId });
           /*
            * 天数（用户 2026-10-25）：房主的世界本来就带着"第几天"，开房不该把他重置成第 0 天。
@@ -1763,9 +1850,6 @@ wss.on('connection', (socket, request) => {
       }
       /*
        * 房主（L8）宽限期结束 = 这一局没有人模拟了。
-       *
-       * 现在只把房主位让出来（否则这个房名永远开不了房）；"房间关闭 + 让从属端看到
-       * 一句明确提示"要等服务端能主动结束一局（MS3），那时在这里补广播即可。
        */
       if (hosts.get(player.room)?.id === player.id) {
         hosts.delete(player.room);
@@ -1782,7 +1866,14 @@ wss.on('connection', (socket, request) => {
           if (other.room !== room) continue;
           reject(other.socket, 'host-left', '房主已退出，房间已关闭', CLOSE_HOST_LEFT);
         }
-        log(`房间 ${room} 已关闭（房主 ${player.name}#${player.id} 宽限期结束未回来）`);
+        /*
+         * 关房 = 这一局结束：会话缓存整份清掉（用户 2026-10-26）。
+         *
+         * 世界已经回到房主本地了（他退出前那次 `saveNow`），服务端留着这些数据只会
+         * 在下一局污染房主的世界。这也让"房间结束"这件事在内存占用上是可见的。
+         */
+        const dropped = clearRoom(room);
+        log(`房间 ${room} 已关闭（房主 ${player.name}#${player.id} 宽限期结束未回来），丢弃 ${dropped} 条缓存改动`);
       }
       log(`${player.name}#${player.id} 宽限期结束，已移出房间`);
     }, GRACE_MS);
