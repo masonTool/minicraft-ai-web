@@ -17594,3 +17594,34 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 未验：用户当时的原始场面（若仍出现，`[FLUID_DBG]` 那行的 `可写` 与两端"发出/应用"数字能直接区分是没发、被闸挡住、还是距离太远只 buffered）
   - 批次：20261026-0130
 
+## 批次 20261026-0245 · 2026-10-26 · 会话 0a9f5045
+
+> 用户 2026-10-26 三条：① 房主改游戏模式，其他人收不到；② 访客下线，房主看不到也没有消息；
+> ③ 世界界面的按钮太高，新建世界/加入房间要等宽。
+
+# 队列 · 会话 0a9f50455e4c4bc9beab90e5c768d9b8
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-0245
+
+目标（用户 2026-10-26）：房主改了**游戏模式**，房里的其他人也要跟着变（现在完全收不到）。
+
+- [x] [联机73] 游戏模式随 `room-config` 同步给全房：房主 `setGameMode` 时上报，服务端记在房间上并广播（含房主），`welcome` 带上当前模式让晚进的人也一致 → 验收：`npm run test:net`（房主发 `room-config{gameMode}` → 全房收到；后加入者的 `welcome.gameMode` 是新值）+ `tools/ui-test.ts` 结构断言
+  - 做了什么：房主 `setGameMode` 后调 `sendRoomConfig({ gameMode })`（两个守卫：`!applyingRemoteGameMode`、`!waitingForSaveRestore`）；服务端新增 `roomGameModes` 房间表，白名单校验后广播 `room-config{gameMode}` 并随 `welcome` 下发当前值；客户端 `onRoomConfig` 应用模式（带回声守卫）并打一行 `say.net.roomGameMode`；晚进的从属端在 `onWelcome` 后采用 `welcome.gameMode`
+  - 为什么：世界元数据里的 `mode` 是房主 `join` 那一刻的快照，之后 `/gamemode` 改的从来不会回写；也从来没有一条"模式变更"的消息。现在模式和时间/天气同走 `room-config`，一份通道三种配置
+  - 验证：`npm run test:net` **212/0**（+2：房主改模式 → 同房收到 `room-config{gameMode:'creative'}`；晚进的人 `welcome.gameMode` 也是 creative）；`npm run test:ui` **1166/0**（+4 结构断言）；`npm run audit:i18n` 通过（新增 `say.net.roomGameMode` 六语言）；`npx tsc --noEmit` 干净；`npm run check:fast` 全绿
+  - 未验：真机双端切一次模式（读档恢复/旁观飞行这些副作用没在真机上点过）
+  - 批次：20261026-0245
+- [x] [联机74] 访客退世界时断开联机（用户 2026-10-26）：`App.dispose()` 以前**完全不碰 `net`** → socket 挂着 → 服务端收不到 `bye` 也等不到 `close` → 房主眼里对方永远在线、也没有"离开了"的提示 → 现在 `dispose()` 先 `net.disconnect()`（内部先发 `bye` 再关 socket）
+  - 做了什么：`dispose()` 开头 `this.disposed = true` 之后立刻 `this.net.disconnect()`（`disconnect()` 的首行就是 `sendBye()`）；`tests/net-client-look.test.ts` 补两条：断开时先发 `bye` 再关 socket、没连上时不抛
+  - 为什么：`bye` 分支与服务端"立刻广播 leave"上一批已经做好，缺的一环是**客户端主动断开这条链**——回主菜单/换世界走的是 `dispose()`，它以前只拆渲染与界面，网络对象直接丢掉，浏览器不保证回收，服务端就永远等不到这条连接结束
+  - 验证：`npx vitest run tests/net-client-look.test.ts` **7/7**（+2）；`npm run test:net` 212/0（`bye → leave` 那侧上一批已覆盖）；`npm run test:ui` 1168/0（+2 结构断言：`dispose` 里先断开、离开有系统提示）；`npx tsc --noEmit` 干净
+  - 未验：真机双端（访客点「退出到主菜单」/关标签页，房主那边应当立刻少一个人 + 聊天区一行"某某离开了房间"）
+  - 批次：20261026-0245
+- [x] [界面1] 世界界面入口行压矮 + 两颗按钮等宽（用户 2026-10-26）：`index.html` 的 `.world-list-top` 改成两颗 `flex: 1 1 0`（以前「新建世界」铺满、「加入房间」只有文字宽），PC 上整排压到 36px；列表标题旁的「导入存档」压到 27px
+  - 做了什么：`.world-list-top > .world-primary/.world-secondary` 统一 `flex: 1 1 0; width: auto; max-width: none; text-align: center`；新增 `@media (pointer: fine)` 把这一排压到 `min-height: 36px`、`.world-import` 压到 `padding: 3px 9px; font-size: 11px`；`#world-new-button` 只留"铺满"语义（宽度/高度交给共用规则）
+  - 为什么：两颗按钮是同一层（都是"开始一局"），一宽一窄看着像不同层级；52px 是"手指点得到"的下限，不是 PC 上该有的高度。**判据用 `(pointer: fine)` 而不是 `body:not(.touch-mode)`**——`touch-mode` 是进世界、建触摸层时才挂的，主菜单阶段手机上也没有这个类，拿它当判据会把手机的 52px 一起压掉
+  - 验证：1280×720 实测两颗 **358×36 等宽等高**、导入存档 70×27；792×360 触屏实测两颗 **350×52**（保留可点高度）、导入存档 72×33；截图 `.tmp/shots/worlds-pc.png`；`npm run test:ui` **1170/0**（+2 条 CSS 结构断言）
+  - 批次：20261026-0245
+
