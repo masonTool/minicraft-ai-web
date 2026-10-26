@@ -14,6 +14,7 @@
 
 import { browserClientId } from '../core/net/ClientId.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
+import { decodeEditsPack } from '../core/net/EditPack.ts';
 import { NetSession, type NetSessionState } from '../core/net/NetSession.ts';
 import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole.ts';
 import { DEFAULT_MULTIPLAYER_ROOM } from '../core/net/MultiplayerSave.ts';
@@ -648,7 +649,15 @@ export class NetClient {
           const hostPlayer = players.find((player) => player.isHost === true);
           if (hostPlayer) this.hostId = hostPlayer.id;
         }
-        const edits = (message.edits as number[][] | undefined) ?? [];
+        /*
+         * 方块增量（2026-10-26）：服务端现在发**压缩格式** `editsPack`（按区块分组 + 区块内下标）。
+         * 这里解回旧的 `[x,y,z,id,state,dim]` 数组，`onWelcome` 一行都不用改；
+         * 解不出来（版本/结构不认识）就退回老字段 `edits`——宁可少画几格，也别把错位地形写进世界。
+         */
+        const packedEdits = decodeEditsPack(message.editsPack);
+        // 形状与老字段一致（最后一位是维度名），`onWelcome` 的签名历史上写成 `number[][]`，
+        // 这里按原样透传（改签名会牵动 main.ts，收益为零）
+        const edits = (packedEdits as unknown as number[][] | null) ?? (message.edits as number[][] | undefined) ?? [];
         const items = (message.items as NetItemState[] | undefined) ?? [];
         const containers = (message.containers as NetContainerState[] | undefined) ?? [];
         const signs = (message.signs as NetSignState[] | undefined) ?? [];

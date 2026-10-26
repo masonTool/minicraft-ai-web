@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAX_EDITS,
+  editsInChunk,
   SNAPSHOT_RADIUS_CHUNKS,
   chunkDistance,
   rememberEdit,
@@ -88,6 +89,36 @@ describe('rememberEdit 容量策略', () => {
   });
 
   it('默认上限是 20 万条', () => {
-    expect(DEFAULT_MAX_EDITS).toBe(200_000);
+    // 2026-10-26：20 万 → 50 万（按视野补发之后，首包仍按半径裁剪，抬上限不抬首包）
+    expect(DEFAULT_MAX_EDITS).toBe(500_000);
+  });
+});
+
+
+/*
+ * 按视野补发（2026-10-26）：快照只发玩家附近 8 个区块内的改动，更远的要等他走过去。
+ * 这条纯函数决定"某一块里有哪些增量"，服务端在玩家跨区块时调它。
+ */
+describe('editsInChunk', () => {
+  const list = [
+    { x: 3, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld', room: 'red' },
+    { x: 20, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld', room: 'red' },
+    { x: 3, y: 70, z: 5, id: 1, state: 0, dimension: 'nether', room: 'red' },
+    { x: 3, y: 70, z: 5, id: 1, state: 0, dimension: 'overworld', room: 'blue' },
+  ];
+
+  it('只挑同一房、同维度、同一区块的', () => {
+    const found = editsInChunk(list, 'red', 'overworld', 0, 0);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.x).toBe(3);
+  });
+
+  it('区块坐标按 >>4 算（x=20 落在第 1 块）', () => {
+    expect(editsInChunk(list, 'red', 'overworld', 1, 0)).toHaveLength(1);
+    expect(editsInChunk(list, 'red', 'overworld', 2, 0)).toHaveLength(0);
+  });
+
+  it('空表返回空数组（不抛）', () => {
+    expect(editsInChunk([], 'red', 'overworld', 0, 0)).toEqual([]);
   });
 });

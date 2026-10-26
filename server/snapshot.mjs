@@ -22,8 +22,41 @@
 /** 快照里带的改动半径（区块）。8 区块 = 128 格，比默认视距还大一圈，足够覆盖"看得见的范围" */
 export const SNAPSHOT_RADIUS_CHUNKS = 8;
 
-/** 方块增量的默认上限 */
-export const DEFAULT_MAX_EDITS = 200_000;
+/**
+ * 方块增量的默认上限。
+ *
+ * 2026-10-26：20 万 → 50 万。抬高的前提是**按视野补发**（`editsInChunk` +
+ * `index.mjs` 的 `pushChunkEdits`）——进房首包仍然只发玩家附近 8 个区块内的改动，
+ * 所以抬高上限不会让首包变大；远处的东西等他走过去再补。
+ *
+ * 每条大概 40~60 字节（对象 + Map 键），50 万约 25~30MB 常驻内存。
+ */
+export const DEFAULT_MAX_EDITS = 500_000;
+
+/**
+ * 挑出某一个区块里的改动（2026-10-26，按视野补发用）。
+ *
+ * 为什么需要它：`selectSnapshotEdits` 只发玩家 8 个区块内的改动，128 格以外的改动
+ * 新玩家**永远收不到**（除非他自己在那边改过）——跑久了的房间里，这就表现为
+ * "他那边地形和我这边对不上"。补发走"玩家跨进新区块就推这一块"的路子，
+ * 客户端不用改：服务端推的还是普通的 `blocks` 消息。
+ *
+ * @param {Iterable<{x:number,z:number,dimension:string,room?:string}>} list
+ * @param {string} room
+ * @param {string} dimension
+ * @param {number} cx 区块坐标
+ * @param {number} cz
+ */
+export function editsInChunk(list, room, dimension, cx, cz) {
+  const out = [];
+  for (const edit of list) {
+    if (edit.room !== room) continue;
+    if (edit.dimension !== dimension) continue;
+    if (edit.x >> 4 !== cx || edit.z >> 4 !== cz) continue;
+    out.push(edit);
+  }
+  return out;
+}
 
 /** 两个世界坐标之间的切比雪夫距离（按区块算，与"方形视距"一致） */
 export function chunkDistance(ax, az, bx, bz) {

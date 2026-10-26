@@ -9,6 +9,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { decodeEditsPack } from '../server/editpack.mjs';
 import { get } from 'node:http';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -305,7 +306,15 @@ try {
         ...(client.day !== undefined ? { day: client.day } : {}),
       });
       const welcome = await client.wait('welcome', attempt === 0 ? 4000 : 6000);
-      if (welcome) return welcome;
+      if (welcome) {
+        /*
+         * 方块增量现在是压缩格式（2026-10-26，`editsPack`），老字段 `edits` 留空。
+         * 这里就地解回老形状，后面所有"快照里有没有这一格"的断言都不用改；
+         * 解码用的是服务端那份实现（与客户端 `EditPack.ts` 交叉验证过）。
+         */
+        if (welcome.editsPack !== undefined) welcome.edits = decodeEditsPack(welcome.editsPack) ?? [];
+        return welcome;
+      }
     }
     return null;
   }
@@ -1215,6 +1224,22 @@ try {
       'welcome 不带远处改动（按玩家位置裁剪）',
       !edits.some((e) => e[0] === 2008),
       `${edits.length} 条`,
+    );
+
+    /*
+     * 按视野补发（2026-10-26，用户："地形有些不一致"）。
+     *
+     * 128 格以外的改动以前**永远收不到**（除非自己在那里改过），跑久了的房间里
+     * 就表现为"他那边的地形和我这边不一样"。现在玩家跨进新区块，服务端就把那一块的
+     * 增量推给他（走普通的 `blocks`，客户端零改动）。
+     */
+    newcomer.mailbox.length = 0;
+    newcomer.send({ t: 'move', x: 2000, y: 70, z: 2000, yaw: 0, pitch: 0, dimension: 'overworld' });
+    const pushed = await newcomer.wait('blocks', 2000);
+    check(
+      '走进远处的区块 → 收到那一块的增量（补上 128 格盲区）',
+      (pushed?.blocks ?? []).some((b) => b[0] === 2008 && b[2] === 2008),
+      `${pushed?.blocks?.length ?? 0} 条`,
     );
     newcomer.close();
     sender.close();

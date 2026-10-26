@@ -6276,6 +6276,20 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
     /@media \(pointer: fine\) \{[\s\S]{0,400}?min-height: 36px;[\s\S]{0,200}?\.world-import \{ padding: 3px 9px/.test(cssWorld),
   );
   check('服务端把模式记在房间上并随 welcome 下发', serverSrc4.includes('roomGameModes.get(player.room) ?? world.mode') && serverSrc4.includes('roomGameModes.set(player.room, message.gameMode)'));
+
+  /*
+   * 进房首包的方块增量压缩（用户 2026-10-26 批准的第 ② 条）：
+   * 服务端改发 `editsPack`（按区块分组 + 区块内下标），客户端在 `NetClient` 里解回老形状，
+   * `onWelcome` 不用改。解不出来就退回老字段（老服务端）。
+   */
+  check(
+    '服务端发压缩增量（老字段留空）',
+    serverSrc4.includes('editsPack: encodeEditsPack(nearEdits, player.dimension)') && /edits: \[\],\n\s*editsPack:/.test(serverSrc4),
+  );
+  check(
+    '客户端解包后透传，解不出来才退回 edits',
+    netSrc.includes('decodeEditsPack(message.editsPack)') && netSrc.includes('?? (message.edits as number[][] | undefined) ?? []'),
+  );
 }
 
 console.log('\n[每帧 DOM 收干（批次 20261026-0141）]');

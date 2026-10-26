@@ -43,7 +43,8 @@ import {
   withinEditReach,
 } from './protocol.mjs';
 import { readSnapshot, SNAPSHOT_VERSION, startAutoSave, writeSnapshot } from './store.mjs';
-import { DEFAULT_MAX_EDITS, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
+import { DEFAULT_MAX_EDITS, editsInChunk, rememberEdit, selectSnapshotEdits } from './snapshot.mjs';
+import { encodeEditsPack } from './editpack.mjs';
 import { createBuckets } from './ratelimit.mjs';
 import { withinAoi } from './aoi.mjs';
 import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
@@ -58,6 +59,8 @@ const WORLD_SEED = Number(process.env.SEED ?? 20261014);
  * 客户端完全不知道，队友那边就"我改的东西不见了"。
  */
 const MAX_EDITS = DEFAULT_MAX_EDITS;
+/** 按视野补发时，一条 `blocks` 消息最多带多少格（密集区也别推巨包） */
+const CHUNK_EDITS_BATCH = 2048;
 /** 淘汰计数：告警限频用（每 100 条报一次，否则一炸就是几千行日志） */
 let evictedEdits = 0;
 function warnEvictedEdit(key) {
@@ -389,6 +392,44 @@ function scopedKey(room, key) {
   return `${room}|${key}`;
 }
 
+/**
+ * 按视野补发方块增量（2026-10-26）。
+ *
+ * 进房时的快照只带玩家 8 个区块（128 格）内的改动，更远的改动新玩家**永远收不到**——
+ * 这就是"他那边地形和我这边对不上"的主因之一（跑久了的房间尤其明显）。
+ *
+ * 这里补上：玩家每跨进一个**新区块**，就把那个区块的增量推给他。走的是普通的
+ * `blocks` 消息，客户端一行都不用改（`NetClient` 本来就会逐条喂 `onNetBlock`）。
+ *
+ * 为什么按区块而不是按半径：区块是加载单位，玩家走进来的就是这一块；
+ * 一次最多推 `CHUNK_EDITS_BATCH` 条，密集区也不会推出一条巨包。
+ */
+function pushChunkEdits(player) {
+  // 房主自己就是权威，不需要把自己的改动再收回去
+  if (player.isHost === true) return;
+  const cx = player.x >> 4;
+  const cz = player.z >> 4;
+  const key = `${player.dimension}|${cx},${cz}`;
+  if (player.sentEditChunks.has(key)) return;
+  player.sentEditChunks.add(key);
+  // 只保留最近 4096 个键，防止长跑把 Set 撑大（走回头路会重推一次，无害）
+  if (player.sentEditChunks.size > 4096) {
+    const oldest = player.sentEditChunks.values().next();
+    if (!oldest.done) player.sentEditChunks.delete(oldest.value);
+  }
+  const found = editsInChunk(edits.values(), player.room, player.dimension, cx, cz);
+  if (found.length === 0) return;
+  for (let i = 0; i < found.length; i += CHUNK_EDITS_BATCH) {
+    const slice = found.slice(i, i + CHUNK_EDITS_BATCH);
+    send(player.socket, {
+      t: 'blocks',
+      blocks: slice.map((e) => [e.x, e.y, e.z, e.id, e.state, e.dimension]),
+      // 服务端补发：不是谁"刚改的"，但客户端只认 blocks 里的坐标，`by` 只用于区分自己
+      authority: true,
+    });
+  }
+}
+
 /** 给新玩家准备的世界快照 */
 /**
  * 给新玩家准备的世界快照。
@@ -411,6 +452,8 @@ function snapshotFor(player) {
   // 地形由**房主那个世界**的种子决定（L9）：`seed` 与 `world.seed` 同一份，
   // 老客户端只读 `seed` 也能对上；没房主的房退回服务端默认种子
   const world = worldOfRoom(player.room);
+  // 这个玩家附近的增量（半径裁剪照旧，只发他看得见的那一圈）
+  const nearEdits = selectSnapshotEdits(roomScopedValues(edits, player.room), player);
   return {
     seed: world.seed,
     world: {
@@ -453,14 +496,15 @@ function snapshotFor(player) {
     })),
     // 方块改动用数组传更紧凑：[x, y, z, id, state, dimension]；**按玩家位置裁剪**（联机14）
     // 且**只带本房**的（联机26：key 前缀就是房名）
-    edits: selectSnapshotEdits(roomScopedValues(edits, player.room), player).map((e) => [
-      e.x,
-      e.y,
-      e.z,
-      e.id,
-      e.state,
-      e.dimension,
-    ]),
+    /*
+     * 方块增量（2026-10-26）：改发**压缩格式**（`editsPack`），老字段 `edits` 留空。
+     *
+     * 两者的内容是同一批（`selectSnapshotEdits` 的半径裁剪没变）：压缩只是把
+     * `[x,y,z,id,state,"overworld"]` 换成"按区块分组 + 区块内下标"，一条从 30 多字符
+     * 降到 10 个左右。客户端在 `NetClient` 里解包，`onWelcome` 拿到的还是老形状。
+     */
+    edits: [],
+    editsPack: encodeEditsPack(nearEdits, player.dimension),
     // 地上的掉落物：新玩家进来要看得见（L7 第一刀）；owner 必须同房
     // 同房 + **同维度**（联机31）：下界掉的东西不该画在主世界同坐标
     items: [...items.values()].filter(
@@ -704,7 +748,7 @@ if (loaded.data) {
     };
     if (![edit.x, edit.y, edit.z, edit.id, edit.state].every(Number.isFinite)) continue;
     // 读档也走容量策略：存档比上限还大时保留最后 MAX_EDITS 条（不告警，这是读档不是溢出）
-    rememberEdit(edits, scopedKey(room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), edit, MAX_EDITS);
+    rememberEdit(edits, scopedKey(room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), { ...edit, room }, MAX_EDITS);
   }
   for (const entry of Array.isArray(saved.containers) ? saved.containers : []) {
     if (!Array.isArray(entry)) continue;
@@ -940,6 +984,12 @@ wss.on('connection', (socket, request) => {
           buckets: createBuckets(),
           // 房主（L8）：他这一局跑模拟，其他人只渲染
           isHost: wantsHost,
+          /*
+           * 按视野补发（2026-10-26）：已经推过哪些区块的增量。
+           * 键是 `维度|cx,cz`；玩家跨进新区块才推一次，走开再回来不重复推
+           * （回来时那些格子已经在他本地世界里了）。
+           */
+          sentEditChunks: new Set(),
         };
         players.set(player.id, player);
         if (wantsHost) {
@@ -1026,6 +1076,8 @@ wss.on('connection', (socket, request) => {
         // 队伍（联机22）：空串 = 没队伍；只在变了的时候改，避免每条 move 都写一遍
         const team = String(message.team ?? '').slice(0, 32);
         if (team !== player.team) player.team = team;
+        // 按视野补发（2026-10-26）：跨进新区块就把那一块的方块增量推给他
+        pushChunkEdits(player);
         // 外观（联机17）：只认白名单字段，收口后原样转发
         player.appearance = readAppearance(message);
         broadcast(
@@ -1080,7 +1132,14 @@ wss.on('connection', (socket, request) => {
         }
 
         if (edits.size < MAX_EDITS) {
-          rememberEdit(edits, scopedKey(player.room, `${dimension}|${x},${y},${z}`), { x, y, z, id, state, dimension }, MAX_EDITS, warnEvictedEdit);
+          rememberEdit(
+            edits,
+            scopedKey(player.room, `${dimension}|${x},${y},${z}`),
+            // `room` 一起存：按视野补发时按房间筛（见 `pushChunkEdits`）
+            { x, y, z, id, state, dimension, room: player.room },
+            MAX_EDITS,
+            warnEvictedEdit,
+          );
         }
         // 广播给其他人（含 by，方便客户端区分"自己改的"）
         broadcast(
@@ -1246,7 +1305,13 @@ wss.on('connection', (socket, request) => {
           };
           // 与单条 `block` 同一套校验（联机24）：坏条目单独丢，不整包拒绝
           if (blockEditRejection(player, edit.x, edit.y, edit.z, edit.id, edit.state)) continue;
-          rememberEdit(edits, scopedKey(player.room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`), edit, MAX_EDITS, warnEvictedEdit);
+          rememberEdit(
+            edits,
+            scopedKey(player.room, `${edit.dimension}|${edit.x},${edit.y},${edit.z}`),
+            { ...edit, room: player.room },
+            MAX_EDITS,
+            warnEvictedEdit,
+          );
           accepted.push(edit);
         }
         if (accepted.length === 0) return;
