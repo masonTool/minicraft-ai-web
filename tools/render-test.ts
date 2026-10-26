@@ -52,6 +52,7 @@ import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt, tileSpanAt } from '../src/render/atlasCoords.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING, TILE_SIZE, TILE_STRIDE } from '../src/render/atlasLayout.ts';
 import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
+import { domeOcclusionSafe } from '../src/render/Sky.ts';
 import { createGeometry } from '../src/core/mesh/ChunkMesher.ts';
 import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
@@ -677,6 +678,25 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
   );
 
   material.material.dispose();
+}
+
+console.log('\n[天空穹顶的绘制顺序（批次 20261026-0141）]');
+{
+  // 判据：最远的可见地形 = (视距 + 2) × 16，必须留在半径 180 的穹顶内侧。
+  // 越界时穹顶会盖住远山，所以 `App` 会回退成"先铺底"。
+  check('手机上限 6 走"地形画完再画"', domeOcclusionSafe(6));
+  check('桌面 8 仍在安全区（160 ≤ 180）', domeOcclusionSafe(8));
+  check('视距 10 已越过穹顶（192 > 180）→ 必须回退', !domeOcclusionSafe(10));
+  check('视距 16 必须回退', !domeOcclusionSafe(16));
+  check('非法视距按 0 处理', domeOcclusionSafe(Number.NaN));
+
+  // 源码结构守卫：这两行是"被地形挡住的像素直接死掉"的前提。
+  // 用多行模式匹配材质对象本体，避免命中文件头注释里的同一串字。
+  const skySrc = readFileSync(new URL('../src/render/Sky.ts', import.meta.url), 'utf8');
+  check(
+    '穹顶默认开深度测试、不写深度',
+    /depthTest:\s*true,\s*\n\s*depthWrite:\s*false,/.test(skySrc),
+  );
 }
 
 // ---------------------------------------------------------------- 2.12 镂空贴图的覆盖率补偿

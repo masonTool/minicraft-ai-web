@@ -2,8 +2,10 @@
  * 天空：渐变穹顶 + 太阳 / 月亮 + 星空 + 云层
  *
  * 全部挂在跟随相机的一个 Group 上，因此不需要"无限大"的天球：
- *   - 穹顶半径小于相机远裁面，用 depthTest:false + renderOrder:-1000 先铺底，
- *     地形随后正常盖在上面；
+ *   - 穹顶半径小于相机远裁面；**默认等地形画完再画**（批次 20261026-0141）：
+ *     `depthTest: true` + 大 `renderOrder`，被地形挡住的那部分像素在 early-z 就被丢掉，
+ *     不必先给整屏铺一层天空再被盖掉。地形比穹顶远（视距过大）时回退成"先铺底"
+ *     （见 `domeOcclusionSafe`），保证任何时候都不会出现"天空盖住远山"；
  *   - 太阳 / 月亮 / 星星开深度测试，于是"躲进洞里就看不见太阳"，与原版一致；
  *   - 云层是 y=192 的一层平面（原版云高度），只跟随相机的水平坐标，所以
  *     玩家上升下降时云会从身边掠过，而不是黏在镜头上。
@@ -25,6 +27,33 @@ const CELESTIAL_DISTANCE = 150;
  * 颜色与周围不一样"（中心露出的是 `scene.background` 那个纯色，周围才是穹顶的渐变色）。
  */
 export const SKY_MAX_RADIUS = DOME_RADIUS;
+
+/**
+ * 穹顶"等地形画完再画"的两个排序值（批次 20261026-0141）。
+ *
+ * `renderOrder` 只在**同一个渲染组内**（不透明 / 透明）生效，地形的区块 mesh 都是默认 0：
+ *  - 走遮挡路径时排到 +1000 → 所有地形先写完深度，穹顶只画真正露出来的天空；
+ *  - 回退到"先铺底"时排回 -1000 → 与这一批之前的绘制顺序逐帧一致。
+ */
+const DOME_RENDER_LAST = 1000;
+const DOME_RENDER_FIRST = -1000;
+
+/**
+ * 穹顶能不能改成"地形画完再画"（批次 20261026-0141）。
+ *
+ * 判据只有一条：**最远的可见地形必须仍在穹顶内侧**。穹顶是半径 180 的球，
+ * 深度测试靠的是"球面深度比地形大"；一旦地形跑到 180 以外，穹顶就会**盖住**它
+ * （画面表现是远处地形被一片天色糊掉，而不是报错）。
+ *
+ * `ChunkRenderer.applyViewDistance` 画到"视距 + 0.5 区块"，最远世界距离约
+ * `视距×16 + 16`；这里按 `(视距 + 2) × 16` 判，多留一圈缓冲的余量。
+ * 当前手机上限 6、桌面 8（= 160 格），都在安全区；视距滑杆已从界面移除，
+ * 这条主要是防止将来放开 `VIEW_DISTANCE_MAX` 时静默画错。
+ */
+export function domeOcclusionSafe(viewDistance: number): boolean {
+  const view = Number.isFinite(viewDistance) ? Math.max(0, viewDistance) : 0;
+  return (view + 2) * 16 <= SKY_MAX_RADIUS;
+}
 
 /**
  * 某个视距对应的相机远裁面。
@@ -246,6 +275,7 @@ export class Sky {
   readonly object = new THREE.Group();
 
   private readonly domeMaterial: THREE.ShaderMaterial;
+  private readonly dome: THREE.Mesh;
   private readonly sun: THREE.Mesh;
   private readonly moon: THREE.Mesh;
   private readonly stars: THREE.Points;
@@ -253,6 +283,8 @@ export class Sky {
   private readonly cloudMesh: THREE.Mesh;
   /** 云是否可见（设置里可以关掉：省一点填充率，也能看清远处地形） */
   private cloudsVisible = true;
+  /** 穹顶当前是不是"等地形画完再画"（批次 20261026-0141） */
+  private domeBehindTerrain = true;
   /** 8 张月相贴图（批次 84）：懒建，第一次用到哪一张就画哪一张 */
   private readonly moonTextures: (THREE.Texture | null)[] = new Array(MOON_PHASE_COUNT).fill(null);
   /** 现在挂的是哪一个相（避免每帧重复设 map） */
@@ -270,13 +302,16 @@ export class Sky {
       vertexShader: DOME_VERTEX,
       fragmentShader: DOME_FRAGMENT,
       side: THREE.BackSide,
-      depthTest: false,
+      // 默认"等地形画完再画"：不写深度、但**要**做深度测试——
+      // 被地形挡住的像素在这里就死掉，省掉整屏天空的着色。
+      // 视距大到地形跑到穹顶外面时由 `App` 调 `setDomeBehindTerrain(false)` 回退。
+      depthTest: true,
       depthWrite: false,
     });
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(DOME_RADIUS, 24, 16), this.domeMaterial);
-    dome.renderOrder = -1000;
-    dome.frustumCulled = false;
-    this.object.add(dome);
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(DOME_RADIUS, 24, 16), this.domeMaterial);
+    this.dome.renderOrder = DOME_RENDER_LAST;
+    this.dome.frustumCulled = false;
+    this.object.add(this.dome);
 
     // ---- 太阳 / 月亮
     this.sun = new THREE.Mesh(
@@ -332,6 +367,27 @@ export class Sky {
     this.cloudMesh.renderOrder = -800;
     this.cloudMesh.frustumCulled = false;
     this.object.add(this.cloudMesh);
+  }
+
+  /**
+   * 穹顶的两种画法（批次 20261026-0141）。
+   *
+   * `true`（默认）= **地形画完再画**：靠深度测试把被地形遮住的那部分像素直接否掉，
+   * 画面与"先铺底"逐像素一致（那些天空本来也看不见），省的是填充率。
+   *
+   * `false` = **先铺底**：关掉深度测试、排到最前。这是视距大到地形跑到穹顶外面时的
+   * 安全回退（见 `domeOcclusionSafe`），观感与这一批之前完全一致。
+   */
+  setDomeBehindTerrain(enabled: boolean): void {
+    if (enabled === this.domeBehindTerrain) return;
+    this.domeBehindTerrain = enabled;
+    this.domeMaterial.depthTest = enabled;
+    this.dome.renderOrder = enabled ? DOME_RENDER_LAST : DOME_RENDER_FIRST;
+  }
+
+  /** 穹顶现在走的是哪条路径（调试 / 验收用） */
+  get domeOccludes(): boolean {
+    return this.domeBehindTerrain;
   }
 
   /** 天空顶部 / 地平线颜色（由天气与昼夜共同决定） */

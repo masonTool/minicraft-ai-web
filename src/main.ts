@@ -95,7 +95,7 @@ import {
 import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
-import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
+import { Sky, CAMERA_NEAR, cameraFarFor, domeOcclusionSafe } from './render/Sky.ts';
 import { cameraClearance, nearPlaneFor } from './render/cameraNear.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
@@ -3511,6 +3511,9 @@ class App {
     // ⚠️ 这一处也要走 `cameraFarFor`：它是最容易被漏掉的一处（改设置时重算远裁面）
     this.camera.far = cameraFarFor(view);
     this.camera.updateProjectionMatrix();
+    // 穹顶能不能"等地形画完再画"取决于视距（批次 20261026-0141）：
+    // 地形比穹顶远时会被穹顶盖住，所以这里按最终生效的视距落一次守卫
+    this.sky.setDomeBehindTerrain(domeOcclusionSafe(view));
     this.audio.volume = settings.volume;
     // 四组音量（批次 178，M20）：与主音量相乘，各自独立
     this.audio.setGroupVolume('blocks', settings.volumeBlocks);
@@ -17767,6 +17770,8 @@ class App {
     this.viewDistance = distance;
     this.camera.far = cameraFarFor(distance);
     this.camera.updateProjectionMatrix();
+    // 自适应升降视距同样要带着穹顶守卫走（批次 20261026-0141）
+    this.sky.setDomeBehindTerrain(domeOcclusionSafe(distance));
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
   }
