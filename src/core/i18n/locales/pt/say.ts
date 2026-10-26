@@ -82,6 +82,7 @@ export const say = {
   'say.net.playerLeft': '{name} saiu da sala',
   'say.net.duplicateName': 'Este nome já está em uso nesta sala — escolha outro',
   'say.net.hostTaken': 'Esta sala já tem um anfitrião — escolha outro nome',
+  'say.net.hostOffline': 'Quem hospeda não está na sala agora — tente quando voltar',
   'say.net.roomTime': 'O anfitrião definiu a hora para {time}',
   'say.net.roomGameMode': 'O anfitrião definiu o modo de jogo para {mode}',
   'say.net.hostTag': 'Anfitrião',

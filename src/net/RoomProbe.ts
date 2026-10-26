@@ -44,6 +44,13 @@ export interface RoomProbeResult {
   world: NetWorldMeta | null;
   isHost: boolean;
   hostId: number | null;
+  /**
+   * 被服务端拒绝时的错误码（用户 2026-10-26）。
+   *
+   * 只有 `error` 帧会填它：`host-offline` = 房里登记着房主但他不在线。调用方据此说
+   * "房主暂时不在"而不是"连不上服务器"——后者会把人送去改 IP，方向完全错了。
+   */
+  error?: string;
 }
 
 /** 一次性身份：`probe` + 随机串（8~64 位字母数字，满足服务端的 clientId 校验） */
@@ -116,7 +123,8 @@ export function probeRoom(
         return;
       }
       if (message.t === 'error') {
-        finish(null);
+        // 把错误码带出去（见 `RoomProbeResult.error`）：超时/断线才走 `null`
+        finish({ world: null, isHost: false, hostId: null, error: String(message.code ?? '') });
         return;
       }
       if (message.t !== 'welcome') return;

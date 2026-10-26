@@ -82,6 +82,7 @@ export const say = {
   'say.net.playerLeft': '{name} hat den Raum verlassen',
   'say.net.duplicateName': 'Diesen Namen benutzt im Raum schon jemand — bitte wähle einen anderen',
   'say.net.hostTaken': 'Dieser Raumname hat schon einen Host — bitte wähle einen anderen',
+  'say.net.hostOffline': 'Der Host ist gerade nicht im Raum — versuche es wieder, wenn er zurück ist',
   'say.net.roomTime': 'Der Host hat die Zeit auf {time} gesetzt',
   'say.net.roomGameMode': 'Der Host hat den Spielmodus auf {mode} gesetzt',
   'say.net.hostTag': 'Host',

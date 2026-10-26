@@ -82,6 +82,7 @@ export const say = {
   'say.net.playerLeft': '{name} вышел из комнаты',
   'say.net.duplicateName': 'В комнате уже есть игрок с таким именем — выберите другое',
   'say.net.hostTaken': 'У этой комнаты уже есть хост — выберите другое название',
+  'say.net.hostOffline': 'Хост сейчас не в комнате — попробуйте, когда он вернётся',
   'say.net.roomTime': 'Хост установил время {time}',
   'say.net.roomGameMode': 'Хост изменил режим игры на {mode}',
   'say.net.hostTag': 'Хост',

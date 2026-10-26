@@ -300,6 +300,14 @@ const CLOSE_HOST_TAKEN = 4006;
 const CLOSE_HOST_LEFT = 4007;
 /** 房间内已有同名玩家（本轮）：改名再来，重连没用，所以也是致命码 */
 const CLOSE_DUPLICATE_NAME = 4008;
+/**
+ * 房间里登记着房主、但人目前不在线（用户 2026-10-26）。
+ *
+ * 典型场景：房主 wifi 断了，`hosts` 里还挂着他（30 秒宽限期内）。此时访客进来会看到
+ * 一个**不推进的世界**（怪物不动、红石不亮、熔炉不烧），而界面一切正常——这正是最难查
+ * 的那种坏状态。所以直接挡在门外，让他等房主回来再来。
+ */
+const CLOSE_HOST_OFFLINE = 4009;
 
 /**
  * 运行统计（联机29）：入/出字节与消息数。
@@ -563,6 +571,37 @@ function clearRoom(room) {
   confirmedChunks.delete(room);
   requestedChunks.delete(room);
   return removed;
+}
+
+/**
+ * 房主**主动退出** → 当场关房（用户 2026-10-26）。
+ *
+ * 与"掉线"的区别只有一个：主动退出是玩家说"我不玩了"，没有给他留 30 秒重连窗口的必要，
+ * 房间里剩下的也不是"暂时没人模拟"，而是**这一局结束了**。继续留着只会让访客对着一个
+ * 不推进的世界发呆（怪物不动、红石不亮），所以当场踢人 + 清缓存。
+ *
+ * 顺序：先删 `hosts`（后面所有人都在关连接，别让他们的 close 再走一遍"房主掉了"），
+ * 再通知 + 踢人，最后清缓存。清除时 `players` 里还有这些人，掉落物能按房一起清掉。
+ *
+ * @returns 被踢出的人数（只为日志）
+ */
+function closeRoomNow(host) {
+  const room = host.room;
+  hosts.delete(room);
+  // `reason: 'host-out'` + `graceMs: 0`：客户端据此显示"房主已退出"而不是倒计时
+  broadcast({ t: 'room-closed', reason: 'host-out', graceMs: 0 }, null, room);
+  let kicked = 0;
+  for (const other of players.values()) {
+    if (other.room !== room) continue;
+    if (other.id === host.id) continue;
+    reject(other.socket, 'host-left', '房主已退出，房间已关闭', CLOSE_HOST_LEFT);
+    kicked++;
+  }
+  const dropped = clearRoom(room);
+  log(
+    `房间 ${room} 已关闭（房主 ${host.name}#${host.id} 主动退出），踢出 ${kicked} 人，丢弃 ${dropped} 条缓存改动`,
+  );
+  return kicked;
 }
 
 function snapshotFor(player) {
@@ -1071,6 +1110,17 @@ wss.on('connection', (socket, request) => {
         const host = hosts.get(room);
         if (wantsHost && host && host.id !== grace?.id) {
           return reject(socket, 'host-taken', '这个房间已经有房主了', CLOSE_HOST_TAKEN);
+        }
+        /*
+         * 房主不在线 → 访客不许进（用户 2026-10-26）。
+         *
+         * `hosts` 里登记着房主、但那名玩家已经不在 `players` 里（断线进宽限期了）：
+         * 这时房间里没有人在跑模拟。以前访客照样能进来，看到的是一个**不推进的世界**
+         * ——怪物不动、红石不亮、熔炉不烧，而界面一切正常，最难查。
+         * 宽限期一过房间就关，所以他下一次试也进不来（要么房主回来了，要么房没了）。
+         */
+        if (!wantsHost && host && !players.has(host.id)) {
+          return reject(socket, 'host-offline', '房主暂时不在房间，等他回来再来', CLOSE_HOST_OFFLINE);
         }
 
         const name = sanitizeName(message.name);
@@ -2002,9 +2052,19 @@ wss.on('connection', (socket, request) => {
        * 为什么需要：光靠 `close` 分不清"主动退出"和"网断了"，一律走 30 秒宽限期才广播
        * `leave`——队友的玩家列表里就挂着半分钟的幽灵（用户原话："我都刷新了，它还记在在线里面"）。
        * 这里立刻广播，宽限期**仍然保留**：刷新/误触在窗口内回来还是同一个 id、掉落物也还在。
+       *
+       * **房主主动退出 = 这一局结束**（用户 2026-10-26）：不再等 30 秒宽限期，当场关房
+       * 并把同房所有人踢出去。区分"主动退出"与"网断了"是这条消息唯一的价值——
+       * 前者是玩家说"我不玩了"，后者要留一次重连机会。
        */
       case 'bye': {
         if (!player) return;
+        if (hosts.get(player.room)?.id === player.id) {
+          closeRoomNow(player);
+          player.farewell = true;
+          socket.close();
+          break;
+        }
         broadcast({ t: 'leave', id: player.id }, null, player.room);
         // 关 socket 时那段宽限期到点后不要再广播一次（否则队友会看到两条"离开"）
         player.farewell = true;

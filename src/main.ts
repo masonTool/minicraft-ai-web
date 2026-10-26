@@ -2028,8 +2028,14 @@ class App {
      * 房间这时还没关——服务端给了 `graceMs` 的重连窗口。
      */
     onRoomClosing: (graceMs) => {
-      const seconds = Math.max(1, Math.round(graceMs / 1000));
-      const text = tp('net.hostLeft', { s: seconds });
+      /*
+       * `graceMs === 0` = 房主**主动退出**（用户 2026-10-26），当场关房。
+       * 这时说"还有 N 秒"是错的（没有等待窗口了），改成一句确定的话。
+       */
+      const text =
+        graceMs > 0
+          ? tp('net.hostLeft', { s: Math.max(1, Math.round(graceMs / 1000)) })
+          : t('net.roomClosed');
       this.chat.push(text, 'error');
       this.chatLine = text;
       this.chatUntil = performance.now() + 8000;
@@ -2099,7 +2105,10 @@ class App {
           : // 房名被占（用户 2026-10-25：开房撞名要"创建不成功"，而且得说人话）
             code === 'host-taken'
             ? t('say.net.hostTaken')
-            : message;
+            : // 房主不在线时访客被挡在门外（用户 2026-10-26）
+              code === 'host-offline'
+              ? t('say.net.hostOffline')
+              : message;
       this.netStatus = text;
       this.chat.push(text, 'error');
       this.chatLine = text;
@@ -20170,7 +20179,14 @@ async function boot(): Promise<void> {
       name,
     });
     if (!probe || !probe.world) {
-      multiplayerUi.setState('offline', t('mp.probeFailed'));
+      /*
+       * 被拒时优先用错误码说人话（用户 2026-10-26）：房主不在线不是"连不上服务器"，
+       * 报后者会把玩家送去改 IP / 换端口，方向完全错了。
+       */
+      multiplayerUi.setState(
+        'offline',
+        probe?.error === 'host-offline' ? t('say.net.hostOffline') : t('mp.probeFailed'),
+      );
       return;
     }
     pendingOnline = { baseUrl: parsed.url, room: parsed.room, password: parsed.password, host: false };

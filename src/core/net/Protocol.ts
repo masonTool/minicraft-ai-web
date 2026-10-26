@@ -32,6 +32,7 @@ export type ProtocolErrorCode =
   | 'duplicate-name'
   | 'host-taken'
   | 'host-left'
+  | 'host-offline'
   | 'bad-json'
   | 'unknown'
   | 'joined';
@@ -45,6 +46,10 @@ export function isFatalProtocolError(code: string): boolean {
     code === 'host-taken' ||
     // `host-left`（L8 · MS4）：房主退出、房间已关闭。重连只会立刻被同一个理由踢回来
     code === 'host-left' ||
+    // `host-offline`（用户 2026-10-26）：房里登记着房主但他不在线。**算致命**——
+    // 自动重连会在 30 秒内被同一句话挡住，宽限期过后房间就没了，重连只是空转。
+    // 正确做法是等房主回来再手动进（面板上的房间列表会跟着出现/消失）。
+    code === 'host-offline' ||
     // `duplicate-name`（本轮）：房间里已经有同名玩家。不改名重连一万次也还是重名
     code === 'duplicate-name'
   );

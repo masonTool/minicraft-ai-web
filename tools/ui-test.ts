@@ -5759,7 +5759,11 @@ console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
   );
   check(
     '提示文案带宽限秒数（别让玩家对着不推进的世界猜"卡了"）',
-    mainSrc.includes("tp('net.hostLeft', { s: seconds })"),
+    mainSrc.includes("tp('net.hostLeft', { s: Math.max(1, Math.round(graceMs / 1000)) })"),
+  );
+  check(
+    '房主主动退出（graceMs = 0）说的是"房间已关闭"，不是倒计时（用户 2026-10-26）',
+    /graceMs > 0[\s\S]{0,140}t\('net\.roomClosed'\)/.test(mainSrc),
   );
 }
 

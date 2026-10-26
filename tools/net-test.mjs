@@ -1891,6 +1891,76 @@ try {
     itemHost.close();
   }
 
+  // ---------------------------------------------------------------- 主动退出 / 房主不在线（用户 2026-10-26）
+  /*
+   * 两条规则：
+   *  ① 房主**主动退出**（`bye`）= 这一局结束了，当场踢掉所有访客（不等 30 秒宽限期）；
+   *  ② 房里登记着房主、但他人不在线（断线进宽限期）时，**访客不许进**——进去只会看到
+   *     一个不推进的世界，而界面一切正常。
+   */
+  console.log('\n[房主主动退出 → 当场关房 / 房主不在线 → 访客进不来]');
+  {
+    const ROOM = 'closeroom';
+    const WORLD = { name: '关房测试', seed: 777, mode: 'survival', difficulty: 'normal' };
+    const host = new TestClient('CloseHost', undefined, { room: ROOM, host: true, world: WORLD });
+    await joinAndWaitWelcome(host, '关房房主', 0, 70, 0);
+    host.send({ t: 'block', x: 20, y: 70, z: 20, id: 5, state: 0, dimension: 'overworld' });
+    await sleep(80);
+
+    const guestA = new TestClient('CloseGuestA', undefined, { room: ROOM });
+    const guestB = new TestClient('CloseGuestB', undefined, { room: ROOM });
+    check('主动退出用例：两个访客都进得来', (await joinAndWaitWelcome(guestA, '访客A', 0, 70, 0)) !== null && (await joinAndWaitWelcome(guestB, '访客B', 0, 70, 0)) !== null);
+
+    const startedAt = Date.now();
+    host.send({ t: 'bye' });
+    const errA = await guestA.wait('error', 2000);
+    const errB = await guestB.wait('error', 2000);
+    check('房主主动退出 → 两个访客都收到 host-left', errA?.code === 'host-left' && errB?.code === 'host-left', JSON.stringify([errA?.code, errB?.code]));
+    check('两个访客的连接都被关掉', (await guestA.waitClosed()) && (await guestB.waitClosed()));
+    check(
+      '是**立刻**踢的（不等 30 秒宽限期；测试里宽限期也才 400ms）',
+      Date.now() - startedAt < 900,
+      `${Date.now() - startedAt}ms`,
+    );
+
+    // 房主位立刻释放 + 缓存已清
+    const hostB = new TestClient('CloseHostB', undefined, { room: ROOM, host: true, world: WORLD });
+    const welcomeB = await joinAndWaitWelcome(hostB, '新房主', 0, 70, 0);
+    check('主动退出后同名房可以马上重开', welcomeB !== null);
+    check('主动退出时就把缓存清了（新房主看不到上一局那条方块）', (welcomeB?.edits ?? []).length === 0, `${(welcomeB?.edits ?? []).length} 条`);
+
+    /*
+     * ② 房主**掉线**（不发 bye）→ 宽限期内访客被挡。
+     * 这里不走 `joinAndWaitWelcome`（它等 welcome，会被 error 拖到重试超时），
+     * 直接发一条 join 再看 error。
+     */
+    hostB.close();
+    await hostB.waitClosed();
+    await sleep(80);
+    const lateGuest = new TestClient('CloseGuestLate', undefined, { room: ROOM });
+    await lateGuest.ready();
+    lateGuest.send({
+      t: 'join',
+      v: PROTOCOL_VERSION,
+      clientId: lateGuest.clientId,
+      name: '迟到的人',
+      x: 0,
+      y: 70,
+      z: 0,
+      dimension: 'overworld',
+      room: ROOM,
+    });
+    const lateErr = await lateGuest.wait('error', 3000);
+    check('房主不在线时访客被拒（error.code = host-offline）', lateErr?.code === 'host-offline', JSON.stringify(lateErr));
+    check('被拒的访客连接关闭', await lateGuest.waitClosed());
+
+    // 宽限期过完 → 房主位与房间都没了，新房主可以重新开
+    await sleep(900);
+    const hostC = new TestClient('CloseHostC', undefined, { room: ROOM, host: true, world: WORLD });
+    check('宽限期过后房主位释放（新一局能开）', (await joinAndWaitWelcome(hostC, '又一位房主', 0, 70, 0)) !== null);
+    hostC.close();
+  }
+
   // ---------------------------------------------------------------- 房间的世界（L9）
   console.log('\n[房间的世界：地形由房主那个世界决定（L9）]');
   {

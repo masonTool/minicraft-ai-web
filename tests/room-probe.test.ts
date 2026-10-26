@@ -80,12 +80,18 @@ describe('probeRoom', () => {
     expect(socket.url).toBe('ws://127.0.0.1:25187?room=red&pw=pw');
   });
 
-  it('服务端拒（error）→ null', async () => {
+  it('服务端拒（error）→ world 为 null，并把错误码带回来', async () => {
+    /*
+     * 用户 2026-10-26：被拒时要把 code 交给调用方，否则"房主不在线"会被说成
+     * "连不上服务器"，把玩家送去改 IP/换端口。超时/断线才是真正的 null。
+     */
     const { socket, factory } = makeFakeSocket();
     const pending = probeRoom(options, { createSocket: factory });
     socket.onopen!();
-    socket.onmessage!({ data: JSON.stringify({ t: 'error', code: 'host-taken', message: 'no' }) });
-    expect(await pending).toBeNull();
+    socket.onmessage!({ data: JSON.stringify({ t: 'error', code: 'host-offline', message: 'no' }) });
+    const result = await pending;
+    expect(result?.world).toBeNull();
+    expect(result?.error).toBe('host-offline');
     expect(socket.closed).toBe(true);
   });
 
