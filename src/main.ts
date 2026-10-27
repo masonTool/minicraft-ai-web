@@ -46,6 +46,7 @@ import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
 import {
   Hud2D,
+  InventoryPanelHost,
   MenuScreen2D,
   Touch2D,
   Ui2DOverlay,
@@ -663,7 +664,7 @@ import {
 // 主程序只负责照它们找另一半、拆对与定重生点
 import { bedFootPos, bedOtherHalf } from './core/registry/blockState.ts';
 import {
-  TOTAL_SLOTS, HOTBAR_SIZE, Inventory, stackExtras, type ItemStack } from './core/container/Inventory.ts';
+  TOTAL_SLOTS, HOTBAR_SIZE, Inventory, sameStack, stackExtras, type ItemStack } from './core/container/Inventory.ts';
 import { BrewingStand } from './core/container/BrewingStand.ts';
 // 末影箱（批次 71）：它**不进容器表**（那张表按坐标存），这里直接持有一份共享的 27 格
 import { EnderChest } from './core/world/EnderChest.ts';
@@ -887,6 +888,7 @@ import { PcControls } from './ui/PcControls.ts';
 import { preflightHost } from './net/HostPreflight.ts';
 import { applyManifestLink } from './ui/ManifestLink.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
+import { ItemIconCache } from './ui/ItemIconCache.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
 import { maxDurabilityOf, updateDurabilityBar } from './ui/SlotVisuals.ts';
 import { durabilityBar } from './core/registry/itemVisuals.ts';
@@ -902,6 +904,7 @@ import {
   type FoodInfo,
   Item,
   extraCropDrop,
+  maxStackOf,
 } from './core/registry/items.ts';
 import { CAKE_SLICE_FOOD, canEat, eatSecondsFor } from './core/registry/food.ts';
 import { SPYGLASS_EASE_IN, SPYGLASS_EASE_OUT, spyglassFov } from './core/items/Spyglass.ts';
@@ -1103,6 +1106,18 @@ const ARM_SWING_INTERVAL = 0.3;
  * 只有下面三处更新函数在开关打开时提前 return。
  */
 const UI2D_ENABLED = readUi2DFlag();
+/**
+ * `?ui2dinv2d=1`：背包额外叠加一层**自绘**面板（M26b 的旁路验证）。
+ *
+ * 为什么做成"叠加"而不是"替换"：自绘这条路还不支持 19 种工作站的布局，
+ * 直接替换会丢功能；而叠加在同一位置，就能在真机上肉眼比对"镜像画的"和"自绘画的"
+ * 是否一致 —— 这是 TASKS 里 M26b 的判据（并排截图无差异）。
+ * 它**不吃输入**（覆盖层 `pointer-events: none`），所以开着也不影响正常操作。
+ */
+const UI2D_INV2D = (() => {
+  if (typeof location === 'undefined') return false;
+  return new URLSearchParams(location.search).get('ui2dinv2d') === '1';
+})();
 /**
  * 调试遮罩：把 canvas 画出来的像素统一染黄（`?ui2dtint=1`）。
  *
@@ -1307,6 +1322,16 @@ class App {
    * 所以背包那个镜像（根是 `.inv-shell`）覆盖不到它 —— 结果是"左半是 canvas、右边的配方书还是 DOM"。
    * 单开一个实例即可，`z-index` 比背包那层（12）高一档。
    */
+  /**
+   * 背包的自绘旁路（`?ui2dinv2d=1`，M26b 第一步的验证手段）。
+   *
+   * 数据直接读 `Inventory`（它本来就有 `get/set`，结构上就是 `SlotAccess`），
+   * 图标走 `ItemIconCache`（内部用 `drawItemIcon` + 图集）。
+   * 显示顺序：前面 27 格 = 主背包（库存 9~35），后面 9 格 = 快捷栏（库存 0~8）。
+   */
+  private inv2d: InventoryPanelHost | null = null;
+  private inv2dIcons: ItemIconCache | null = null;
+  private inv2dOn = false;
   private recipe2d: MenuScreen2D | null = null;
   private recipe2dOn = false;
   private touch2d: Touch2D | null = null;
@@ -3115,6 +3140,26 @@ class App {
        * `opacity: 0` 不影响 pointer 事件，拖动摇杆的手势一点没变。
        */
       this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
+      if (UI2D_INV2D) {
+        const icons = new ItemIconCache((canvas, itemId) => drawItemIcon(canvas, this.atlas, itemId));
+        this.inv2dIcons = icons;
+        const toInvIndex = (display: number): number => (display < 27 ? 9 + display : display - 27);
+        this.inv2d = new InventoryPanelHost(
+          document.body,
+          {
+            get: (display) => this.inventory.get(toInvIndex(display)),
+            set: (display, stack) => this.inventory.set(toInvIndex(display), (stack as ItemStack | null) ?? null),
+          },
+          {
+            title: t('inventory.title'),
+            limitOf: maxStackOf,
+            sameItem: (a, b) => sameStack(a as ItemStack, b as ItemStack),
+            iconOf: (itemId) => icons.get(itemId),
+            tint: UI2D_TINT_ENABLED,
+            zIndex: 12,
+          },
+        );
+      }
       // 配方书在 `body` 上，与背包镜像不是同一棵树（见字段注释）
       this.recipe2d = new MenuScreen2D(document.body, {
         tint: UI2D_TINT_ENABLED,
@@ -6883,6 +6928,15 @@ class App {
     const visible = !!panel && panel.offsetParent !== null;
     if (visible && panel) {
       mirror.engage(panel);
+      // 旁路：同一位置再画一层自绘面板（不吃输入，只用来比对）
+      if (this.inv2d) {
+        if (!this.inv2dOn) {
+          this.inv2dOn = true;
+          this.inv2d.open();
+        } else {
+          this.inv2d.render();
+        }
+      }
       this.recipe2dOn = true;
       return;
     }
@@ -6981,10 +7035,23 @@ class App {
         document.documentElement.classList.add('ui2d-inv');
       }
       mirror.engage(panel);
+      // 旁路：同一位置再画一层自绘面板（不吃输入，只用来比对）
+      if (this.inv2d) {
+        if (!this.inv2dOn) {
+          this.inv2dOn = true;
+          this.inv2d.open();
+        } else {
+          this.inv2d.render();
+        }
+      }
       // 悬停高亮：`.inv-slot` 的 `:hover` 在 `opacity: 0` 的子树里看不见，自己算一格画上去
       const host = this.ui2dOverlay?.canvas.getBoundingClientRect();
       mirror.setHighlight(host ? this.inventoryHoverRect(host) : null);
       return;
+    }
+    if (this.inv2dOn) {
+      this.inv2dOn = false;
+      this.inv2d?.close();
     }
     if (this.invMirrorOn) {
       this.invMirrorOn = false;
@@ -20146,6 +20213,10 @@ class App {
     this.chatEntry2d = null;
     this.invMirror?.dispose();
     this.invMirror = null;
+    this.inv2d?.dispose();
+    this.inv2d = null;
+    this.inv2dIcons?.clear();
+    this.inv2dIcons = null;
     this.recipe2d?.dispose();
     this.recipe2d = null;
     this.touch2d?.dispose();
