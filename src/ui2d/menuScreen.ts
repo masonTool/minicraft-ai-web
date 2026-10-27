@@ -22,7 +22,7 @@
  */
 
 import { applyDebugTint } from './debug.ts';
-import { roundRectPath } from './widgets.ts';
+import { roundRectPath, type Rect } from './widgets.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import {
   drawCanvasBlits,
@@ -152,6 +152,8 @@ export class MenuScreen2D {
   private lastFrameAt = 0;
   /** 这一帧要画的滚动条（`refresh` 里算，`draw` 里画） */
   private scrollBars: ScrollBarEntry[] = [];
+  /** 悬停高亮（背包槽位那种"DOM 的 :hover 看不见"的情况由调用方喂进来） */
+  private highlight: Rect | null = null;
   /**
    * 正在拖的那根滚动条。
    *
@@ -201,6 +203,7 @@ export class MenuScreen2D {
     this.runs = [];
     this.blocks = [];
     this.blits = [];
+    this.highlight = null;
     this.signature = '';
     this.overlay?.clear();
   }
@@ -349,6 +352,26 @@ export class MenuScreen2D {
     inertia.v = decayVelocity(inertia.v, dt);
     if (inertia.v === 0 || next === 0 || next === max) this.inertia = null;
     this.refresh(true);
+  }
+
+  /**
+   * 悬停高亮（`null` = 不高亮）。
+   *
+   * 只重画、不重读 DOM：调用方每帧都可能喂同一个矩形，而"重读整棵树"要几十次
+   * `getComputedStyle` —— 这里只比一次矩形，变了才 `draw()`（用的是上次的缓存）。
+   */
+  setHighlight(rect: Rect | null): void {
+    const same =
+      (rect === null && this.highlight === null) ||
+      (rect !== null &&
+        this.highlight !== null &&
+        Math.round(rect.x) === Math.round(this.highlight.x) &&
+        Math.round(rect.y) === Math.round(this.highlight.y) &&
+        Math.round(rect.w) === Math.round(this.highlight.w) &&
+        Math.round(rect.h) === Math.round(this.highlight.h));
+    if (same) return;
+    this.highlight = rect;
+    if (this.source) this.draw();
   }
 
   /** 命中测试：按下的点落在哪根滚动条上（横向给 ±3px 的宽容，4px 宽的条太细） */
@@ -542,6 +565,17 @@ export class MenuScreen2D {
     drawCanvasBlits(ctx, this.blits);
     // 留一个字宽的余量：DOM 的 letter-spacing 会让标题盒子比 canvas 量出的字窄
     drawTextRuns(ctx, this.runs, 10);
+    // 悬停高亮：压在所有内容之上（`opacity: 0` 的子树里 CSS 的 `:hover` 画不出来）
+    if (this.highlight) {
+      const h = this.highlight;
+      roundRectPath(ctx, h, 3);
+      ctx.fillStyle = 'rgba(255, 255, 255, .22)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, .55)';
+      ctx.lineWidth = 2;
+      roundRectPath(ctx, { x: h.x + 1, y: h.y + 1, w: h.w - 2, h: h.h - 2 }, 3);
+      ctx.stroke();
+    }
     // 滚动条：DOM 的是 UA 画的，canvas 里没有，得自己补（否则"能滚但看不出能滚"）
     this.drawScrollBars(ctx);
     // 焦点在输入框上时，光标/选区由我们画：DOM 那份被 `opacity: 0` 一起藏了

@@ -402,6 +402,13 @@ const SHOTS = [
     what: '摇杆 + 六颗按钮 + 遮罩（整片按钮黄 = 全是 canvas 画的）',
     status: '遮罩 · 阶段 6',
   },
+  {
+    file: '31-inventory-hover.png',
+    page: 'tools/preview/inventory-mirror.html?hover=13',
+    size: [864, 410],
+    what: '背包悬停高亮：第 13 格一圈白框 + 薄白底（`opacity: 0` 的子树里 CSS `:hover` 画不出来）',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

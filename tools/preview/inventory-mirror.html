@@ -201,6 +201,21 @@
       const screen = new MenuScreen2D(document.getElementById('stage'), { tint, zIndex: 12 });
       screen.engage(panel);
 
+      /*
+       * `?hover=N`：把第 N 格的高亮画出来。
+       * 游戏里这一步由 `main.ts` 用 `elementFromPoint` 算（`opacity: 0` 的子树仍参与命中），
+       * 这里直接给矩形 —— 截图里要能看见"鼠标停在哪一格"。
+       */
+      const hoverParam = params.get('hover');
+      if (hoverParam !== null) {
+        const slot = panel.querySelectorAll('.inv-slot')[Number(hoverParam)];
+        if (slot) {
+          const host = document.getElementById('stage').getBoundingClientRect();
+          const r = slot.getBoundingClientRect();
+          screen.setHighlight({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+        }
+      }
+
       document.getElementById('caption').textContent =
         (creative
           ? `创造物品栏（滚动 ${scrollBy}px）：只画滚动区里看得见的那几行，超出的部分被裁掉`

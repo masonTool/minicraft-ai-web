@@ -1302,6 +1302,14 @@ class App {
   /** 触控摇杆（阶段 6 第一块）：自己画，几何量 DOM，输入仍归 DOM */
   private touch2d: Touch2D | null = null;
   private touch2dOn = false;
+  /**
+   * 指针在视口里的位置（`?ui2d=1` 的背包悬停高亮用）。
+   *
+   * 为什么不给覆盖层绑 `pointermove`：它平时 `pointer-events: none`（要放过视角手势），
+   * 打开又关掉会打断正在进行的拖动。全局记两个数最简单，也最不容易出错。
+   */
+  private pointerX = Number.NaN;
+  private pointerY = Number.NaN;
   private invMirrorOn = false;
   private readonly invStyleEl: HTMLStyleElement | null = null;
   /**
@@ -3094,19 +3102,17 @@ class App {
         pollMs: 120,
       });
       /*
-       * `#inv-held`（拿在手上的那一叠）在面板**外面**，镜像覆盖不到，用一条挂在
-       * `<html>` 上的类藏掉。用类而不是逐个元素设内联样式：这个元素是常驻的，
-       * 但风格与「背包切模式会重建槽位 DOM」那条一致，省得以后再踩。
-       */
-      /*
        * 触控摇杆（阶段 6）：底座与芯子都由 canvas 重画，但**命中仍归 DOM** ——
        * `opacity: 0` 不影响 pointer 事件，拖动摇杆的手势一点没变。
        */
       this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
       const style = document.createElement('style');
-      style.textContent =
-        'html.ui2d-inv #inv-held { opacity: 0; }\n' +
-        'html.ui2d-touch #touch-stick, html.ui2d-touch .touch-button { opacity: 0; }';
+      /*
+       * ⚠️ **`#inv-held` 不能藏**：它挂在 `#inventory-screen` 下、在 `.inv-shell` **外面**，
+       * 镜像覆盖不到；上一批把它设成 `opacity: 0` 之后，拖动物品的过程里那一叠就"消失"了
+       * （松手才又出现）。所以它继续由 DOM 画 —— 镜像的覆盖层是透明的，它照样看得见。
+       */
+      style.textContent = 'html.ui2d-touch #touch-stick, html.ui2d-touch .touch-button { opacity: 0; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -3114,6 +3120,14 @@ class App {
        * ——开着会把触摸端的视角手势全吃掉；只有菜单/设置页打开时 `syncPauseCanvas2d()`
        * 才把它打开，关掉时立刻还原。
        */
+      window.addEventListener(
+        'pointermove',
+        (event) => {
+          this.pointerX = event.clientX;
+          this.pointerY = event.clientY;
+        },
+        { passive: true },
+      );
       const overlayCanvas = this.ui2dOverlay.canvas;
       const localPoint = (event: PointerEvent): { x: number; y: number } => {
         const rect = overlayCanvas.getBoundingClientRect();
@@ -6844,6 +6858,23 @@ class App {
    * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
    */
   /**
+   * 指针下面那一格（背包悬停高亮用）。
+   *
+   * 用 `elementFromPoint` 而不是"遍历所有槽位算包含"：`opacity: 0` 的子树仍然参与命中，
+   * 所以这一句就拿到了玩家真正指着的那一格 —— 而且它天然跟着滚动、跟着布局走，
+   * 不用自己维护一套几何。
+   */
+  private inventoryHoverRect(host: DOMRect): Ui2DRect | null {
+    if (!Number.isFinite(this.pointerX) || !Number.isFinite(this.pointerY)) return null;
+    const el = document.elementFromPoint(this.pointerX, this.pointerY);
+    const slot = el?.closest<HTMLElement>('.inv-slot');
+    if (!slot) return null;
+    const rect = slot.getBoundingClientRect();
+    if (!(rect.width > 0)) return null;
+    return ui2dRectOf(rect, host);
+  }
+
+  /**
    * 触控摇杆的接管（`?ui2d=1` + 触控 UI 可见时）。
    *
    * 每帧只读两个矩形（底座 + 芯子），不做 `getComputedStyle` —— 摇杆芯子一直跟着
@@ -6915,6 +6946,9 @@ class App {
         document.documentElement.classList.add('ui2d-inv');
       }
       mirror.engage(panel);
+      // 悬停高亮：`.inv-slot` 的 `:hover` 在 `opacity: 0` 的子树里看不见，自己算一格画上去
+      const host = this.ui2dOverlay?.canvas.getBoundingClientRect();
+      mirror.setHighlight(host ? this.inventoryHoverRect(host) : null);
       return;
     }
     if (this.invMirrorOn) {
