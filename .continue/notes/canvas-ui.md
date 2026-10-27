@@ -1171,6 +1171,29 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 顺带说明：**铁砧改名**不需要单独处理 —— 提示框标题就是调用方给的 `title`，改过名的物品
 传改过的名字即可（DOM 那边也是把 `name` 放进标题）。
 
+## 5.46 遗漏盘点（第二轮：背包之外）+ 补上三块从没上过 canvas 的面板
+
+用户又问了一次"看有没有遗漏"，这次把范围从背包扩到**全部界面**，逐个数 DOM 里还有哪些
+"整块面板"没进任何镜像：
+
+| 面板 | 之前的状态 | 现在 |
+| --- | --- | --- |
+| `#advancements`（成就） | **没有任何镜像覆盖** | `mountPanelMirror('#advancements', 58)` |
+| `#statistics`（世界统计） | 同上 | `mountPanelMirror('#statistics', 58)` |
+| `#server-picker`（服务器选择） | 同上 | `mountPanelMirror('#server-picker', 58)` |
+| `#death-screen`（死亡界面） | 未覆盖 | 留给后续（交互是按钮，不需要逐帧） |
+| 引导卡（tutorial） | 未覆盖 | 同上 |
+
+为什么之前没被发现：任务表里从来没有"这三块上 canvas"这一条 —— 它们不在阶段 3 的六块清单里，
+也不在阶段的背包线里，于是"逐条打勾"永远打不到它们。**盘点必须按"DOM 里还有哪些整块面板"
+来数，而不是按任务表来数。**
+
+修法是一条通用函数：`mountPanelMirror(selector, zIndex)` —— 可见就 `engage`、收起就 `disengage`，
+`pollMs: 200` 兜住滚动与状态变化。三块面板第一次进镜像。
+
+⚠️ 这三块**没有预览页**（它们的内容来自存档与网络扫描），所以只有 `tsc` 与 `check` 保证，
+真机验收时值得各开一次看看 z 序（58，在 `#advancements` / `#statistics` 的 55 之上）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

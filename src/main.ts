@@ -22228,6 +22228,13 @@ async function boot(): Promise<void> {
   mountMenuMirror(menu);
   // 多人面板同理（它不在 `#world-screen` 里，是另一棵树，所以单开一个镜像）
   mountMultiplayerMirror(multiplayerUi);
+  /*
+   * 成就 / 统计 / 服务器选择：这三块一直是 DOM，之前的镜像都没覆盖（`#advancements` 与
+   * `#statistics` 是 z-index 55、`#server-picker` 自带一层），所以各挂一个（z 58）。
+   */
+  mountPanelMirror('#advancements', 58);
+  mountPanelMirror('#statistics', 58);
+  mountPanelMirror('#server-picker', 58);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
   // 主菜单已经铺好，撤掉首屏启动遮罩（那之前一直由它盖着准星那个"加号"）。
   // 必须在 `menu.show()` 之后：菜单是不透明的整屏，先撤会闪一下黑底 + 准星。
@@ -22250,6 +22257,30 @@ async function boot(): Promise<void> {
  * ⚠️ 让位用的是 `opacity: 0`（不是 `visibility` / `display`）：按钮必须继续可点，
  * 镜像只换"谁产像素"，不换"谁收输入"。
  */
+/**
+ * 通用"只读面板"镜像（`?ui2d=1`）：成就 / 统计 / 服务器选择这类**整页列表**。
+ *
+ * 它们的共同点：静态内容为主、交互都是点击行（不需要每帧重读），而且各有自己的 z-index。
+ * 所以一条函数挂三个面板 —— 不必为每个写一遍 engage/disengage。
+ */
+function mountPanelMirror(selector: string, zIndex: number): void {
+  if (!UI2D_ENABLED) return;
+  const mirror = new MenuScreen2D(document.body, {
+    tint: UI2D_TINT_ENABLED,
+    zIndex,
+    // 列表会滚动、成就状态也会变，定期重读兜底
+    pollMs: 200,
+  });
+  const sync = (): void => {
+    const panel = document.querySelector<HTMLElement>(selector);
+    if (panel && panel.offsetParent !== null) mirror.engage(panel);
+    else if (mirror.engaged) mirror.disengage();
+  };
+  window.setInterval(sync, 200);
+  window.addEventListener('resize', sync);
+  sync();
+}
+
 /**
  * 多人面板的 canvas 镜像（`?ui2d=1`）。
  *
