@@ -6075,6 +6075,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-2324 · **自绘背包真正接管输入（3 条，M26b 最后一步）**：新增 `?ui2dinv=1` —— 覆盖层 `pointer-events: auto` 吃指针（down/move/up 连同右键与触摸标记喂给 `InventoryPanelHost`），DOM 面板用 `html.ui2dinv .inv-shell { visibility: hidden }` 退场（**不是 `display: none`**：里面的按钮/输入框还要能被 `elementFromPoint` 命中、被读值），光标通过 `externalCursor.set` 写回 `InventoryScreen.setHeldStack()`（两份状态在此合成一份）。面板**外面**的控件（关闭 ×、左右立栏）这一批不重画，改用 `ui2d/forwardClick.ts`：同一帧内把画布的 `pointer-events` 临时关掉 → `elementFromPoint` → 派发 `click` → 立刻恢复，**只在没拖动过且落点在面板外时**转发（拖动松手不该顺手点别的东西）。验证：预览页点面板外的 DOM 按钮 → `closed: false → true`；点面板内第 0 格 → 拿起 64 且 `closed` 仍为 `false`（无误转发）；`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、66 张截图。⚠️ 接管是**可选开关**，`?ui2d=1` 默认仍走镜像；只转发 `click`（拖拽序列类控件不含）。详见 `notes/canvas-ui.md` §5.41 与决策 D53。
 
+- [x] 批次 20261027-2340 · **输入补齐 + 遗漏盘点（3 条）**：用户要求"看有没有遗漏"，于是先补三样输入再逐项对账。① **数字键 1-9**：`swapSlots()`（不经光标、不合并）+ `host.handleKey("DigitN")`，作用在悬停那格 —— **不能让 DOM 处理**，因为 DOM 的 swap 依赖它自己的 `hovered`，而接管后 DOM 收不到 `pointermove`，`hovered` 恒为 null，按键会静默失效。② **Shift+左键 = 快速移动**、**拖到面板外松手 = 丢弃**（`onDrop` 回调，掉落属游戏逻辑）；这里踩了个坑：拖出面板丢弃时**不经过任何格子**，旧的"经过别的格子才算拖动"判定导致丢弃永远不触发。③ **遗漏盘点**：§5.42 列了 11 项能力对照（输入已齐；缺盔甲副手、创造栏、工作站进度条、提示里的附魔/改名、Q 键归属），新增 M37~M41。验证：预览里数字键换槽（`1x64 ↔ 2x41`）、Shift 移动落到快捷栏、拖出丢弃 `dropped=["1x64"]`；`test:ui2d-inventory-model` **46/46**、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、66 张截图。详见 `notes/canvas-ui.md` §5.42 与决策 D54。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
