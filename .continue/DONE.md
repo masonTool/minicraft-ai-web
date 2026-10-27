@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261027-1618 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1618
+
+> 用户 2026-10-27：「继续实现，不要停」—— 按任务表推进 M26：**把背包整页接进游戏**。
+> 这一批先落"整页镜像"（19 种工作站一次全覆盖、零回归），自绘版继续在预览页演进。
+
+- [x] [P1] `src/ui2d/textPanel.ts` + `menuScreen.ts`：新增 `readCanvasBlits` / `drawCanvasBlits`，镜像绘制顺序定为 底 → 位图 → 文字 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`CanvasBlit` + `readCanvasBlits(root, origin, view)`（读范围内所有 `<canvas>` 的矩形与位图）+ `drawCanvasBlits`（关掉平滑按原位贴）；`MenuScreen2D` 多存一份 `blits` 并在 `blocks` 与 `runs` 之间画；同时新增 `pollMs` 选项。
+  - 为什么：背包的图标不是文字也不是底色，而是 DOM 里已经画好的位图；不搬只能得到"有边框、没图标"的背包。顺序必须与 DOM 一致（槽位底 → 图标 → 数量）。
+  - 验证：`tests/ui2d.test.ts` → **68 passed**（新增 2 条：按原位贴并关平滑、空列表不画）。
+  - 批次：20261027-1618
+
+- [x] [P2] `src/main.ts`：背包改成整页镜像（`invMirror`，zIndex 12 + `pollMs: 120`），`#inv-held` 单独藏 → `npm run check:fast`
+  - 做了什么：把上一批的 `Inventory2D`（逐槽位读 DOM）换成 `MenuScreen2D` 镜像 `.inv-panel`；`syncInventory2d()` 简化为"开着就 `engage(panel)`、关了就 `disengage()`"；`#inv-held` 用 `html.ui2d-inv #inv-held { opacity: 0 }` 藏掉；`pollMs: 120` 兜住"只换图标不换字"的变化。
+  - 为什么：`Inventory2D` 只画槽位、面板底与标题仍是 DOM，遮罩版看得出来"只有格子黄"；整页镜像之后**面板里每一像素都是 canvas**。而 19 种工作站共用同一批 `.inv-slot`，镜像一次全覆盖。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
+  - 批次：20261027-1618
+
+- [x] [P3] 预览页 `tools/preview/inventory-mirror.html` + 2 张截图（含遮罩版）→ `node tools/preview/shoot-all.mjs`
+  - 做了什么：按 `index.html` 的 `.inv-*` 搭一块 27+9 格的真 DOM（每格含真 `<canvas>` 图标、数量、耐久条、红底格、选择态），`MenuScreen2D.engage(panel)` 镜像它；`?tint=1` 加遮罩；`shoot-all` 累计 43 张。
+  - 为什么：镜像的卖点是"面板里每一像素都由 canvas 产出"，遮罩版一张就能证明（整块黄、背景不黄）。
+  - 验证：`node tools/preview/shoot-all.mjs` 43 张全出；截图看过：面板底/斜面/图标/64·12·3·32 数量/黄色耐久条/红底格都在，遮罩版整块面板变黄。
+  - 批次：20261027-1618
+
+- [x] [P4] 文档：`notes/canvas-ui.md` §5.20（整页镜像 + 位图搬运 + `pollMs` 的坑）、决策 D32 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.20 记下"为什么先镜像"、"位图必须一起搬"、`pollMs` 兜底的原因，以及三条边界（悬停、tooltip、`#inv-held`）；决策 D32 记下"背包分两步：先镜像覆盖全部，再自绘替换"。
+  - 为什么：`pollMs` 那条尤其反直觉——"只换图不换字"的镜像会静默显示旧图标，不写清楚下一次会当成渲染 bug 查半天。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1618
+
+
 ## 批次 20261027-1548 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -243,31 +279,5 @@
   - 为什么：镜像的卖点是"一像素不自己排"，那就必须能一眼看出**它画出来的和 DOM 完全一致**——预览页里 DOM 面板被设成 `opacity: 0`，屏幕上看到的每一块都是 canvas 画的。
   - 验证：`node tools/preview/shoot-all.mjs` 34 张全出；截图看过：首页标题完整（`MINICRAFT` 不再被截）、四颗按钮有边框与文字、世界列表三张卡片 + 每张两个小按钮 + 新建/返回；遮罩版整块黄。
   - 批次：20261027-1334
-
-
-## 批次 20261027-1327 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1327
-
-> 用户 2026-10-27：「继续继续继续」—— 收一个上一批留下的尾巴：
-> 文字面板画的是**边框盒**，没扣元素自己的 `padding`，于是 `#debug` 与状态效果胶囊里的字
-> 都顶到了边框上（胶囊左侧那颗 `::before` 色点也因此被字压住）。
-
-- [x] [F1] `src/ui2d/textPanel.ts`：`readTextRuns` 改成按**内容盒**出矩形（扣 `padding` 四边）→ 预览页 + 截图
-  - 做了什么：读 `paddingLeft/Right/Top/Bottom`，把每段文字的绘制矩形内缩到内容盒；`drawTextRuns` 的对齐/换行逻辑没动（它本来就以传入矩形为准）。
-  - 为什么：`#debug` 是 `padding: 6px 9px`、状态效果胶囊是 `3px 9px` —— 不扣的话字比 DOM 里偏左/偏上 9px，胶囊里还会压住左边的色点。**这类偏差不会让功能坏**，只是"看着有点挤"，所以只有截图能发现。
-  - 尝试过又撤掉的：读 `::before` 的宽高把色点画出来。撤掉的原因见 D24（伪元素的占位不在元素自身 `rect` 里，字会压在色点上；要正确得先用伪元素宽度偏移文字，牵动排版，不值）。
-  - 验证：`npx tsc --noEmit` 干净；截图重拍 2 张（`16-text-panels.png` / `16b`），F3 与三个胶囊的文字都回到内边距以内、与 DOM 一致。
-  - 批次：20261027-1327
-
-- [x] [F2] 文档：`notes/canvas-ui.md` §5.12 补 padding 那条；决策 D24（伪元素色点为什么不画）→ `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.12 的"三个必须写下来的细节"补第 4 条（内容盒）；决策 D24 记下试过 `::before` 又撤掉的原因与正确做法。
-  - 为什么：下一个人看到"状态效果胶囊少了颗色点"会想顺手补 —— 不写清楚试过什么、为什么撤，就会重走一遍（还可能顺手把文字排版搞乱）。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1327
 
 
