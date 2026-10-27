@@ -927,6 +927,15 @@ export class InventoryScreen {
   private refreshPending = false;
 
   private held: ItemStack | null = null;
+  /**
+   * "拿在手上的那一叠"的只读视图（自绘面板用）。
+   *
+   * 自绘背包要画这一叠，但**不能自己再存一份** —— 两份状态的表现是"拖动时出现两叠"。
+   * 现在先开放读；替换 DOM 面板时再加 setter（那时才由自绘侧写回）。
+   */
+  get heldStack(): ItemStack | null {
+    return this.held;
+  }
   private open = false;
   /** 鼠标**悬停**在哪一格（批次 128：数字键 1-9 / F 作用在它上面） */
   private hovered: { key: string; source: SlotSource; index: number } | null = null;

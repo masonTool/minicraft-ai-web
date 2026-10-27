@@ -101,6 +101,12 @@
       // 只有 id=4（铁镐）画耐久条，用来验证"槽位里的耐久条"这条路
       const durabilityOf = (stack) => (stack.id === 4 ? { ratio: 0.75, level: 'high' } : null);
 
+      /*
+       * `?ext=1`：模拟"与 DOM 合流"——光标由外部提供（只读）。
+       * 用来验证"只拉不推"：canvas 上画出来的那一叠就是外部的，而外部不会被写脏。
+       */
+      let externalHeld = params.get('ext') === '1' ? { id: 3, count: 5 } : null;
+
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
         title: craft ? '合成台' : '生存背包',
@@ -114,6 +120,7 @@
         iconOf,
         describeOf,
         durabilityOf,
+        ...(externalHeld !== null ? { externalCursor: { get: () => externalHeld } } : {}),
       });
       host.open();
 
@@ -155,6 +162,7 @@
           return stack ? `${stack.id}x${stack.count}` : null;
         }),
         held: host.heldStack ? `${host.heldStack.id}x${host.heldStack.count}` : null,
+        externalHeld: externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null,
       });
       window.addEventListener('resize', () => host.relayout());
 

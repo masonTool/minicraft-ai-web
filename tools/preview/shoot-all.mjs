@@ -451,6 +451,13 @@ const SHOTS = [
     what: '**自绘提示框**：悬停铁镐 → 名称 / 数量 / 耐久（紫底 + 稀有度色条 + 耐久条）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '37-inventory-external-held.png',
+    page: 'tools/preview/inventory-selfdrawn.html?ext=1',
+    size: [864, 470],
+    what: '**光标合流**：手上的那一叠由外部提供（模拟 DOM 的 `held`），自绘面板只读地画出来',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

@@ -65,6 +65,18 @@ export interface InventoryPanelHostOptions extends MoveRules {
   readonly describeOf?: (stack: StackLike) => TooltipModel | null;
   /** 耐久条（0..1 + 三档颜色）；游戏里按 `itemDef(id).durability` 与 `stack.damage` 算 */
   readonly durabilityOf?: (stack: StackLike) => { ratio: number; level: 'high' | 'mid' | 'low' } | null;
+  /**
+   * 外部光标（与 `InventoryScreen.held` 合流）。
+   *
+   * 为什么需要：DOM 面板自己也有一份"拿在手上的那一叠"。两边各存一份的话，
+   * 拖动时会出现**两叠**（一叠 DOM 的 `#inv-held`、一叠这里画的）。给了这一对读写函数之后，
+   * 这里只做视图：每次操作前拉一次、操作后推一次。
+   */
+  readonly externalCursor?: {
+    readonly get: () => StackLike | null;
+    /** 只读合流（例如"叠加比对"阶段）可以不传 setter */
+    readonly set?: (stack: StackLike | null) => void;
+  };
   /** 快捷移动的目标范围（主背包 ↔ 快捷栏） */
   readonly targetRange?: (index: number) => readonly number[];
   readonly skin?: InvSlotSkin;
@@ -125,6 +137,8 @@ export class InventoryPanelHost {
     if (!this.overlay) this.overlay = new Ui2DOverlay(this.host);
     if (this.options.zIndex !== undefined) this.overlay.canvas.style.zIndex = String(this.options.zIndex);
     this.relayout();
+    // 开场先拉一次外部光标：否则打开背包时手上已经有东西要等到第一次指针事件才显示
+    this.pullCursor();
     this.render();
   }
 
@@ -184,6 +198,7 @@ export class InventoryPanelHost {
     const model = hovered && this.options.describeOf ? this.options.describeOf(hovered) : null;
     this.tooltip = model ? { model, x, y } : null;
 
+    this.pullCursor();
     const button = input.button ?? 0;
     const now = input.timeStamp ?? (typeof performance === 'undefined' ? Date.now() : performance.now());
 
@@ -283,6 +298,20 @@ export class InventoryPanelHost {
     return false;
   }
 
+  /** 从外部拉一次光标（没配 `externalCursor` 就什么都不做） */
+  private pullCursor(): void {
+    const external = this.options.externalCursor;
+    if (!external) return;
+    this.cursor.stack = external.get();
+  }
+
+  /** 把光标推回外部（每次操作之后调） */
+  private pushCursor(): void {
+    const external = this.options.externalCursor;
+    if (!external?.set) return;
+    external.set(this.cursor.stack);
+  }
+
   /** 全部槽位下标（双击收集的范围） */
   private allIndices(): number[] {
     // 以**当前布局**为准（工作站会多出那几格 + 结果格）
@@ -341,6 +370,7 @@ export class InventoryPanelHost {
 
   /** 重画（数据变了就调它；本批不做签名缓存 —— 36 格 + 36 次 drawImage 很便宜） */
   render(): void {
+    this.pushCursor();
     const overlay = this.overlay;
     const layout = this.layout;
     if (!overlay || !layout || !this.opened) return;

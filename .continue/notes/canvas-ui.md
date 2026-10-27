@@ -1034,6 +1034,31 @@ DOM 的 `hover` 就再也收不到事件 —— 提示框会**彻底消失**，�
 
 ⚠️ 提示框只画"名字 + 说明行 + 耐久"，**附魔列表与铁砧改名还没画**（DOM 版有）。
 
+## 5.40 合流（"拿在手上那一叠"只能有一份状态）
+
+替换前最后一块地基：**光标合流**。
+
+DOM 面板自己有一份 `held`（画在 `#inv-held` 里），自绘面板也有一个 `cursor`。两份各画各的
+结果很具体：拖动时屏幕上出现**两叠**，一叠跟着 `#inv-held`、一叠跟着 canvas。
+
+所以 `InventoryPanelHost` 加了 `externalCursor: { get, set? }`：
+
+- 入口（`handlePointer` / `open`）先 `pullCursor()` 从外部拉一次；
+- 出口在 `render()` 里 `pushCursor()` 推回去（没给 `set` 就只读）。
+
+游戏侧现在这样接（`?ui2dinv2d=1` 的叠加层）：
+
+```ts
+externalCursor: { get: () => this.inventoryScreen.heldStack }
+```
+
+`InventoryScreen` 因此开放了一个只读的 `heldStack` getter。**只读是刻意的**：这一阶段自绘面板
+不吃输入，`set` 一旦写上就会与 DOM 的逻辑打架；等自绘真正接管输入时再加 setter，那时 DOM 面板
+已经不渲染了，也就不存在两份。
+
+断言/验证：预览页 `?ext=1` 用一个外部对象模拟 DOM 的 `held` —— 打开时面板立刻画出 `3×5`，
+移动指针后仍是 `3×5`，而**外部对象没被写脏**（只拉不推）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

@@ -3155,6 +3155,11 @@ class App {
             limitOf: maxStackOf,
             sameItem: (a, b) => sameStack(a as ItemStack, b as ItemStack),
             iconOf: (itemId) => icons.get(itemId),
+            /*
+             * 与 DOM 的"拿在手上那一叠"合流（只读）：这一层只是比对用的叠加，
+             * 不接管输入，所以只拉不推 —— 两份状态各画各的就会出现两叠。
+             */
+            externalCursor: { get: () => this.inventoryScreen.heldStack },
             tint: UI2D_TINT_ENABLED,
             zIndex: 12,
           },
