@@ -11,8 +11,10 @@
  * 换句话说，这里的"区块同步"是**零带宽**的：算力换带宽，区块同步退化成
  * "同步一份（种子 + 增量列表）"——与 K1 的增量存档是同一套思路。
  *
- * 运行：node server/node/index.mjs           （默认端口 8887，见 protocol.mjs 的 DEFAULT_PORT）
- *      PORT=9000 node server/node/index.mjs
+ * 运行：node server/node/index.mjs                （默认端口 8887，见 protocol.mjs 的 DEFAULT_PORT）
+ *      node server/node/index.mjs --port 9000
+ *      PORT=9000 node server/node/index.mjs        （环境变量，被命令行参数覆盖）
+ *      npm run server -- --port 9000
  *
  * 协议：JSON 文本帧，消息表与校验规则见 docs/NET-PROTOCOL.md（客户端实现在 src/net/NetClient.ts）
  */
@@ -50,8 +52,22 @@ import { BEACON_PORT, createBeacon } from './beacon.mjs';
 import { createBuckets } from './ratelimit.mjs';
 import { withinAoi } from './aoi.mjs';
 import { isWeatherKind, tickWeather, weatherSecondsFor } from './weather.mjs';
+import { PORT_USAGE, resolvePort } from './cli.mjs';
 
-const PORT = Number(process.env.PORT ?? DEFAULT_PORT);
+/**
+ * 端口：`--port 9000` 与 `PORT=9000` 都支持（命令行优先，见 cli.mjs）。
+ *
+ * 非法值**当场退出**，不静默回落默认端口：回落的表现是"以为连上了、其实各跑一套世界"，
+ * 比多敲一次命令贵得多。
+ */
+const PORT = (() => {
+  try {
+    return resolvePort();
+  } catch (error) {
+    console.error(`${error.message}\n${PORT_USAGE}`);
+    process.exit(2);
+  }
+})();
 /**
  * 一个房间的容量（本批，用户 2026-10-26）：**只用于界面显示 `在线/容量`**，不是准入限制。
  *

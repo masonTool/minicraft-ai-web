@@ -6045,9 +6045,19 @@ console.log('\n[加入房间：地址只填 IP]');
   check('默认端口不是 8787（换成了不常见的值）', /DEFAULT_NET_PORT = (?!8787)\d+/.test(serverUrlSrc));
   check(
     '服务端默认端口读常量而不是硬编码',
-    readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8').includes(
-      'process.env.PORT ?? DEFAULT_PORT',
-    ),
+    /*
+     * 端口解析搬到了 cli.mjs（`--port` 参数 / `PORT` 环境变量两层，index.mjs 只负责调用）：
+     * 钉住两头——入口确实走解析函数，回落值来自 DEFAULT_PORT 常量而不是写死数字。
+     */
+    (() => {
+      const indexSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
+      const cliSrc = readFileSync(new URL('../server/node/cli.mjs', import.meta.url), 'utf8');
+      return (
+        indexSrc.includes('resolvePort(') &&
+        /return DEFAULT_PORT;/.test(cliSrc) &&
+        !/DEFAULT_PORT\s*=\s*\d/.test(cliSrc)
+      );
+    })(),
   );
 }
 
