@@ -21,6 +21,7 @@
  *  3. **签名检查**：菜单是静态的，只有"文字 / 滚动位置 / 视口尺寸"变了才重读计算样式。
  */
 
+import { loadedBackgroundImages } from './backgroundImages.ts';
 import { applyDebugTint } from './debug.ts';
 import { roundRectPath, type Rect } from './widgets.ts';
 import { Ui2DOverlay } from './overlay.ts';
@@ -551,7 +552,8 @@ export class MenuScreen2D {
      */
     const box = source.getBoundingClientRect();
     const geometry = `${Math.round(box.left)},${Math.round(box.top)},${Math.round(box.width)},${Math.round(box.height)}|${source.scrollWidth}x${source.scrollHeight}`;
-    return `${Math.round(width)}x${Math.round(height)}|${geometry}|${scroll}|${fields}|${source.textContent ?? ''}`;
+    // `bg${...}`：背景图是异步载入的，载完必须触发一次重画（否则缩略图永远空白）
+    return `${Math.round(width)}x${Math.round(height)}|${geometry}|${scroll}|${fields}|bg${loadedBackgroundImages()}|${source.textContent ?? ''}`;
   }
 
   private draw(): void {

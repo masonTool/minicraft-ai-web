@@ -181,6 +181,27 @@
       const panel = host.querySelector('.world-panel');
 
       // 镜像：DOM 让位像素（opacity 0，仍可点），canvas 按原位重画
+      /*
+       * `?shot=1`：给第一张世界卡片塞一张"真截图"（`world.thumbnail` 在游戏里就是这么写的：
+       * `style.backgroundImage = url(data:...)`）。镜像要能把它画出来，否则缩略图是一块纯色。
+       */
+      if (params.get('shot') === '1') {
+        const shot = document.createElement('canvas');
+        shot.width = 56;
+        shot.height = 40;
+        const g = shot.getContext('2d');
+        g.fillStyle = '#7ec0ee';
+        g.fillRect(0, 0, 56, 22);
+        g.fillStyle = '#4e7440';
+        g.fillRect(0, 22, 56, 18);
+        g.fillStyle = '#8b5a2b';
+        g.fillRect(18, 12, 20, 16);
+        g.fillStyle = '#c6c6c6';
+        g.fillRect(22, 6, 12, 8);
+        const thumb = document.querySelector('.world-card-thumb');
+        if (thumb) thumb.style.backgroundImage = `url(${shot.toDataURL()})`;
+      }
+
       const screen = new MenuScreen2D(document.getElementById('stage'), { tint });
       screen.engage(panel);
 

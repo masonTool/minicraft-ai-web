@@ -20069,3 +20069,38 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 为什么：这三态（点/长按/滑出）任何一处顺序写反都会变成"点一下就没东西"或"长按整叠"。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
   - 批次：20261027-2204
+## 批次 20261027-2900 · 2026-10-27 · 会话 12c62c
+
+> 用户：浮层挡不住触摸、世界页三按钮、⋯下拉、缩略图、.mc 包
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2900
+
+- [x] [L22] 浮层遮罩真正拦截：`InputOverlay.ts` → playwright
+  - 做了什么：window 捕获阶段吞掉 pointer/touch/mouse/click/wheel（输入框放行），pointerdown 收起浮层。
+  - 为什么：遮罩只挡视觉，事件仍冒泡到 document；页面大量交互是 document 委托，点遮罩会被当成点下层。
+  - 验证：点下层按钮位置 → lowerClicks=0、浮层收起。
+  - 批次：20261027-2900
+- [x] [L22] 世界页三按钮一排：`WorldScreen.ts` + CSS
+  - 做了什么：去掉「世界 N」标题行；新建/加入等宽并排（317px），导入存档小一号靠右（72px）。
+  - 验证：截图 + 实测宽度。
+  - 批次：20261027-2900
+- [x] [L22] 「⋯」下拉菜单：`WorldScreen.ts` + CSS
+  - 做了什么：导出/编辑/删除竖排浮层，点别处 `pointerdown` 收起。
+  - 验证：items=[导出,编辑,删除]，点别处 hidden=true。
+  - 批次：20261027-2900
+- [x] [L22] 世界缩略图存真实画面：`WorldRegistry.ts`、`WorldScreen.ts`、`main.ts`
+  - 做了什么：`thumbnail` 存清单；`onSaved` 抓 160×90 jpeg（10 秒限频）；renderer 开 `preserveDrawingBuffer`。
+  - 为什么：原来按世界类型画 CSS 渐变，所有同类世界看起来一样。
+  - 验证：min=2/max=255/颜色丰富（非空白），截图能看到天空与草地。
+  - 批次：20261027-2900
+- [x] [L22] 导出/导入改 `.mc`（zip）：`McPack.ts`（新）、`SaveTransfer.ts`、`main.ts`、`tests/mc-pack.test.ts`
+  - 做了什么：手写 store zip；包内 `world.json` + `thumbnail.jpg`；包名空格→中划线，导入优先用包内真名。
+  - 验证：导出 `新的世界-1.mc`，python zipfile 解出两个条目；3 条往返单测。
+  - 批次：20261027-2900
+
+---
+

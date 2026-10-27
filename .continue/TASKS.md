@@ -6108,6 +6108,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261028-0126 · **第二轮遗漏盘点（4 条）**：用户又问"有没有遗漏"，这次把范围从背包扩到**全部界面**，按"DOM 里还有哪些整块面板"重数了一遍 —— 发现 `#advancements`（成就）、`#statistics`（世界统计）、`#server-picker`（服务器选择）**从来没进过任何镜像**，而任务表里也从来没有这一条（所以逐条打勾永远打不到）。新增通用 `mountPanelMirror(selector, zIndex)`（可见就 engage、收起就 disengage、`pollMs: 200` 兜住滚动），三块各挂一个（z 58，在它们自身 55 之上）；同时补了 M42（已完成）与 M43（死亡界面/引导卡，待办）。**教训**：盘点必须按 DOM 数，不能按任务表数。验证：`tsc` 干净、`npm run check` exit=0、`build:fast` 出包。这三块**没有预览页**（内容来自存档与网络扫描），只有类型与门禁保证，真机验收时值得各开一次看 z 序。详见 `notes/canvas-ui.md` §5.46。
 
+- [x] 批次 20261028-0240 · **合并 `origin/main` + canvas 再应用（4 条）**：先纠正前提 —— 本仓 `origin/master` 停得很早（`bd258634`），真正在推进的是 **`origin/main`**（合并时领先 53 个提交）。合并结果：**源码零冲突**（`src/main.ts` 自动合并），冲突只在 6 个台账文件，按"批次段落并集"重建（`DONE.md` 25 段 / `DONE.archive.md` 142 段），主分支新增的 L14~L33 二十条需求补进 `TASKS.md`（351 项）。逐条核对界面变化：缩略图改真实截图（`style.backgroundImage = url(data:…)`）是**唯一必须补的** ——镜像只读 `backgroundColor`，缩略图会变成纯色；其余（三按钮一排、⋯ 下拉挂 `body`、浮层遮罩、联机三层重做、暂停菜单去掉联机键、输入浮层 z 9999）都对 canvas 无影响。补法：新增 `ui2d/backgroundImages.ts`（按 URL 缓存 / 异步载入 / cover 裁切）+ `TextBlock.imageUrl`，并把**载完的图片数放进镜像签名**（不进签名就永远不重画，缩略图一直空 —— 第一版现象）。验证：预览 `?view=worlds&shot=1` 截图 `43-world-thumb.png`、`test:ui2d*` 127/127、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、71 张截图。详见 `notes/canvas-ui.md` §5.47。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

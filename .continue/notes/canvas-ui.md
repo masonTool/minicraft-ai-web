@@ -1194,6 +1194,44 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 ⚠️ 这三块**没有预览页**（它们的内容来自存档与网络扫描），所以只有 `tsc` 与 `check` 保证，
 真机验收时值得各开一次看看 z 序（58，在 `#advancements` / `#statistics` 的 55 之上）。
 
+## 5.47 合并主分支（`origin/main`）后的界面变化与 canvas 再应用
+
+用户 2026-10-28：「把当前 master 最新的代码合并到这个分支，看看有没有界面上的变化，把相应的 canvas 变化重新应用过来」。
+
+**先纠正一个前提**：这个仓库的 `origin/master` 停在很早的位置（`bd258634`），真正在推进的是
+**`origin/main`**（合并时领先 53 个提交，含 2026-10-28 的批次）。所以合并的是 `origin/main`。
+
+### 合并结果
+
+- 源码**零冲突**（`src/main.ts` 自动合并成功），冲突只在 6 个台账文件（`.continue/*`、`README.md`）；
+- 台账按"批次段落并集"重建（`DONE.md` 25 段、`DONE.archive.md` 142 段），主分支新增的
+  L14~L33 二十条需求补进 `TASKS.md`（现 351 项）；README/HANDOFF 的数字交给 `audit:tasks` 重算。
+
+### 主分支的界面变化（逐条核对 canvas 影响）
+
+| 主分支的改动 | 对 canvas 的影响 |
+| --- | --- |
+| **世界缩略图改成真实截图**（`style.backgroundImage = url(data:…)`） | ⚠️ **必须补**：镜像只读 `backgroundColor`，缩略图会变成一块纯色 |
+| 世界页三按钮一排 + ⋯ 下拉菜单 | 无（按钮是子元素，镜像自动跟上；下拉菜单挂在 `body`，仍是 DOM） |
+| 浮层遮罩硬拦截下层事件 | 无（遮罩是面板子元素，按底色块画） |
+| 联机面板三层重做（左输入 / 右列表、新增 `.server-list`） | 无（`.mp-panel` 类名未变，镜像照旧覆盖整棵子树） |
+| 去掉暂停菜单的「多人游戏」入口 | 无（`buildMenu2d` 从 DOM 按钮现读；`pause-check` 的 ↓+Enter 仍落在「设置」） |
+| 设置项控件未变 | 无（`readFormRows` 照样读得出来） |
+| 手机端输入浮层 `InputOverlay`（`.inp-layer`，z 9999） | 无（在所有 canvas 之上，且不属于被镜像的子树） |
+
+### 补的那一块：`backgroundImages.ts`
+
+`background-image: url(...)` 在 canvas 里没有对应机制，只能自己 `new Image()` 载入再 `drawImage`：
+
+- 按 URL 缓存（缩略图是几十 KB 的 base64，不能每次重读）；
+- **异步**：第一帧通常还没解码完，先画底色，载完再画图；
+- 载完的图片数进镜像签名（`bg${loadedBackgroundImages()}`）—— 不进签名就永远不会重画，
+  缩略图会一直是空的（第一版就是这个现象）；
+- 贴图按 `background-size: cover` 的语义裁切，不用 `drawImage(img,x,y,w,h)` 拉变形。
+
+断言/验证：预览页 `?view=worlds&shot=1` 给第一张卡片塞一张 `data:` 截图 → 截图
+`43-world-thumb.png` 里能看见它（另两张只有 CSS 渐变，仍走"退化成一整块色"的老规则）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

@@ -493,6 +493,13 @@ const SHOTS = [
     what: '**提示框的附魔行**：锋利 IV / 耐久 III（蓝紫色，与 DOM 的 `.tooltip-enchants` 一致）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '43-world-thumb.png',
+    page: 'tools/preview/menu-mirror.html?view=worlds&shot=1',
+    size: [864, 410],
+    what: '**世界卡片缩略图**：`style.backgroundImage = url(data:...)` 由镜像贴图（cover 裁切）',
+    status: '已迁 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

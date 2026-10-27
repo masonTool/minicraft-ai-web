@@ -18,6 +18,7 @@
  * 但它只有 1~5 个叶子节点，一帧几次 `getComputedStyle` 是可接受的；计分板几乎不变）。
  */
 
+import { drawImageCover, getBackgroundImage } from './backgroundImages.ts';
 import { drawText, uiFont } from './text.ts';
 import { roundRectPath, type Rect } from './widgets.ts';
 
@@ -50,6 +51,18 @@ export interface TextRun {
 /** 渐变底的近似色（见 `hasBackground` 的注释） */
 export const HUD_GRADIENT_FALLBACK = 'rgba(16, 17, 21, .66)';
 
+/**
+ * 从 `background-image` 里抠出 URL（只认 `url(...)`，渐变一律返回 null）。
+ *
+ * 世界卡片的缩略图是 `url("data:image/webp;base64,...")`，必须走这条路才画得出来。
+ */
+export function readBackgroundUrl(backgroundImage: string): string | null {
+  const match = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(backgroundImage);
+  if (!match) return null;
+  const url = match[1]!.trim();
+  return url.length > 0 ? url : null;
+}
+
 /** 一块带底色的区域（F3 的 `rgba(0,0,0,.35)`、计分板的 `.45` 都是它） */
 export interface TextBlock {
   readonly rect: Rect;
@@ -58,6 +71,13 @@ export interface TextBlock {
   /** 边框（宽度 0 表示没有；MC 风格的按钮靠它出"凸起"感） */
   readonly borderWidth: number;
   readonly borderColor: string;
+  /**
+   * 背景图的 URL（CSS `background-image: url(...)`）。
+   *
+   * 世界卡片的缩略图就是这条路：`world.thumbnail` 被写成 `style.backgroundImage`，
+   * 而 `backgroundColor` 是透明的 —— 不读它，镜像里的缩略图会变成一块纯色。
+   */
+  readonly imageUrl?: string;
   /** 裁剪矩形（见 `TextRun.clip`） */
   readonly clip?: Rect;
 }
@@ -66,7 +86,7 @@ export interface TextBlock {
 /** 元素自身的可画外观：底色（渐变退化）+ 圆角 + 边框；都没有就返回 `null` */
 function readSurface(
   el: Element,
-): { color: string; radius: number; borderWidth: number; borderColor: string } | null {
+): { color: string; radius: number; borderWidth: number; borderColor: string; url?: string } | null {
   const style = window.getComputedStyle(el);
   const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
   const borderWidth = Number.parseFloat(style.borderTopWidth) || 0;
@@ -84,7 +104,15 @@ function readSurface(
    * 却要解析整串 `linear-gradient(...)`。
    */
   if (style.backgroundImage && style.backgroundImage !== 'none') {
-    return { color: HUD_GRADIENT_FALLBACK, radius, borderWidth: hasBorder ? borderWidth : 0, borderColor };
+    // 纯色/渐变之外还有一种：`url(...)`（世界卡片的缩略图）。能抠出 URL 就带着走，画的时候贴图。
+    const url = readBackgroundUrl(style.backgroundImage);
+    return {
+      color: HUD_GRADIENT_FALLBACK,
+      radius,
+      borderWidth: hasBorder ? borderWidth : 0,
+      borderColor,
+      ...(url ? { url } : {}),
+    };
   }
   // 只有边框（"描边按钮"）：底色透明，但边框要画出来
   if (hasBorder) return { color: 'transparent', radius, borderWidth, borderColor };
@@ -115,6 +143,7 @@ export function readTextBlocks(
       radius: background.radius,
       borderWidth: background.borderWidth,
       borderColor: background.borderColor,
+      ...(background.url ? { imageUrl: background.url } : {}),
     });
   }
   return blocks;
@@ -131,10 +160,21 @@ export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly T
 function drawOneBlock(ctx: CanvasRenderingContext2D, block: TextBlock): void {
   {
     ctx.save();
-    if (block.color !== 'transparent') {
+    if (block.color !== 'transparent' || block.imageUrl) {
       roundRectPath(ctx, block.rect, block.radius);
-      ctx.fillStyle = block.color;
+      ctx.fillStyle = block.color === 'transparent' ? HUD_GRADIENT_FALLBACK : block.color;
       ctx.fill();
+    }
+    if (block.imageUrl) {
+      // 背景图（世界卡片缩略图）：等它载完再画，第一帧先显示底色
+      const image = getBackgroundImage(block.imageUrl);
+      if (image) {
+        ctx.save();
+        roundRectPath(ctx, block.rect, block.radius);
+        ctx.clip();
+        drawImageCover(ctx, image, block.rect);
+        ctx.restore();
+      }
     }
     if (block.borderWidth > 0) {
       // 描边画在内侧半像素上：与 CSS 的 border-box 对齐（否则整块会胖 1px）

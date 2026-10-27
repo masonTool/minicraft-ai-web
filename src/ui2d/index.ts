@@ -257,6 +257,12 @@ export {
   type TouchButtonState,
 } from './Touch2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
+export {
+  backgroundImageCount,
+  clearBackgroundImages,
+  drawImageCover,
+  getBackgroundImage,
+} from './backgroundImages.ts';
 export { forwardClickAt } from './forwardClick.ts';
 export {
   ARMOR_PER_ICON,
