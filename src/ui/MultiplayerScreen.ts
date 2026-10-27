@@ -18,7 +18,9 @@
 
 import { t } from '../core/i18n/I18n.ts';
 import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
+import { parsePort } from '../core/net/ServerUrl.ts';
 import { RoomForm } from './RoomForm.ts';
+import { ServerListPanel } from './ServerListPanel.ts';
 import { displayServerAddress, normalizeServerUrl } from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
@@ -84,6 +86,10 @@ export class MultiplayerScreen {
   private mode: 'full' | 'join' = 'full';
   /** 退出动画的定时器（快速开关时用来掐掉上一次） */
   private closeTimer = 0;
+  /** 右栏：常驻的服务器/房间列表 */
+  private list!: ServerListPanel;
+  /** 端口确认弹窗（同一时刻只开一个） */
+  private portDialog: HTMLDivElement | null = null;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
@@ -98,7 +104,7 @@ export class MultiplayerScreen {
     this.root.classList.add('hidden');
 
     const panel = document.createElement('div');
-    panel.className = 'mp-panel';
+    panel.className = 'mp-panel mp-panel-wide';
 
     // ---- 标题行：居中标题 + 右上角 ✕（设计图版式）
     const head = document.createElement('div');
@@ -127,9 +133,7 @@ export class MultiplayerScreen {
       initialRoom: readStored(STORAGE_ROOM) ?? '',
       initialPassword: readStored(STORAGE_PASSWORD) ?? '',
       initialName: readStored(STORAGE_NAME) ?? '',
-      pickButtonId: 'mp-pick-server',
-      pickButtonClass: 'mp-pick',
-      // web 版没有内建服务端：浮窗里「本机 / 允许其它人建房」整块不渲染
+      // 列表常驻右栏（2026-10-27 第三版）：不再需要「选择」按钮，也就没有第二层浮窗
       localServer: clientCapabilities().localServer,
       addressError: t('mp.error.url'),
     });
@@ -148,12 +152,7 @@ export class MultiplayerScreen {
     colon.textContent = ':';
     // 地址行用 grid（标签/地址/`:`/端口/选择），右边缘才能和下面三行对齐
     urlRow.classList.add('mp-row-address');
-    urlRow.append(
-      this.urlInput,
-      colon,
-      this.form.portInput,
-      this.form.pickButton as HTMLButtonElement,
-    );
+    urlRow.append(this.urlInput, colon, this.form.portInput);
 
     const roomRow = this.makeRow(t('mp.room'));
     roomRow.append(this.roomInput);
@@ -197,8 +196,34 @@ export class MultiplayerScreen {
 
     actionsRow.append(this.joinButton, this.hostButton, this.disconnectButton);
 
-    form.append(head, urlRow, roomRow, passwordRow, nameRow, this.statusEl, actionsRow);
-    panel.append(form);
+    form.append(urlRow, roomRow, passwordRow, nameRow, this.statusEl, actionsRow);
+
+    /*
+     * 右栏 = 常驻的服务器/房间列表（2026-10-27 第三版，用户定稿）。
+     *
+     * 两件事一起解决：① 加入与开房共用同一套界面（左边永远是那四行）；
+     * ② 不再有第二层弹窗——点右边任意一项，左边立刻填好。
+     */
+    this.list = new ServerListPanel();
+    this.list.onPick = (picked) => {
+      this.urlInput.value = picked.address;
+      this.form.portInput.value = String(picked.port);
+      if (picked.room !== undefined) this.roomInput.value = picked.room;
+      this.showError('');
+    };
+    this.list.onPortRequest = () => this.openPortDialog();
+
+    const columns = document.createElement('div');
+    columns.className = 'mp-columns';
+    const formCol = document.createElement('div');
+    formCol.className = 'mp-col mp-col-form';
+    formCol.append(form);
+    const listCol = document.createElement('div');
+    listCol.className = 'mp-col mp-col-list';
+    listCol.append(this.list.element);
+    columns.append(formCol, listCol);
+
+    panel.append(head, columns);
     this.root.append(panel);
     host.append(this.root);
 
@@ -238,6 +263,9 @@ export class MultiplayerScreen {
     // 上一次的关闭动画还没播完就又被打开：掐掉它，别让面板在动画中途被隐藏
     window.clearTimeout(this.closeTimer);
     this.root.classList.remove('closing', 'hidden');
+    // 右栏：打开就重新扫一遍（端口按表单当前值）
+    this.list.setPort(Number(this.form.portInput.value) || 8887);
+    void this.list.refresh();
     // 每次打开都从存储里刷新一次地址/端口（上一次连接可能刚写过）
     this.form.portInput.value = readStored(STORAGE_PORT) ?? String(this.form.portInput.value || '');
     this.setState(this.state);
@@ -370,6 +398,83 @@ export class MultiplayerScreen {
     writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
     writeStored(STORAGE_NAME, values.name);
     this.actions.onConnect(values.url, values.name, host);
+  }
+
+  /**
+   * 改端口要**确认**（用户 2026-10-27）：端口一变，右边扫的就是另一批机器，
+   * 必须立刻按新端口重扫——所以不能在输入框里随手打字就生效。
+   */
+  private openPortDialog(): void {
+    if (this.portDialog !== null) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-port-dialog';
+    wrap.id = 'mp-port-dialog';
+
+    const card = document.createElement('div');
+    card.className = 'mp-port-card';
+    const title = document.createElement('b');
+    title.className = 'mp-port-title';
+    title.textContent = t('server.changePort');
+    const hint = document.createElement('div');
+    hint.className = 'mp-port-hint';
+    hint.textContent = t('server.portRescan');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'mp-port-field';
+    input.className = 'mp-port-field';
+    input.inputMode = 'numeric';
+    input.maxLength = 5;
+    input.autocomplete = 'off';
+    input.value = String(parsePort(this.form.portInput.value) ?? 8887);
+
+    const actions = document.createElement('div');
+    actions.className = 'mp-port-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = 'mp-port-cancel';
+    cancel.className = 'mp-action';
+    cancel.textContent = t('menu.cancel');
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.id = 'mp-port-ok';
+    ok.className = 'mp-action primary';
+    ok.textContent = t('server.confirm');
+    actions.append(cancel, ok);
+
+    const close = (): void => {
+      wrap.remove();
+      this.portDialog = null;
+    };
+    cancel.addEventListener('click', close);
+    ok.addEventListener('click', () => {
+      const next = parsePort(input.value);
+      // 填坏了就停在弹窗里让玩家改，不要静默回退（他刚明确要改端口）
+      if (next === null) {
+        input.focus();
+        input.select();
+        return;
+      }
+      this.form.portInput.value = String(next);
+      this.list.setPort(next);
+      close();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') ok.click();
+      if (event.key === 'Escape') close();
+    });
+    // 点遮罩空白处关掉（与其它弹层一致）
+    wrap.addEventListener('click', (event) => {
+      if (event.target === wrap) close();
+    });
+
+    card.append(title, hint, input, actions);
+    wrap.append(card);
+    this.root.append(wrap);
+    this.portDialog = wrap;
+    input.focus();
+    input.select();
   }
 
   private showError(text: string): void {

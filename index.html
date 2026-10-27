@@ -6347,7 +6347,10 @@
         pointer-events: none;
         z-index: 0;
       }
-      #multiplayer-screen > *,
+      /* ⚠️ 必须排除弹层：`#multiplayer-screen > *` 的特异性 (1,0,0) 比
+         `.mp-port-dialog` (0,1,0) 高，会把它的 `position: absolute` 覆盖成 relative，
+         于是它参与 flex 布局、把主面板挤到一边（踩过一次）。 */
+      #multiplayer-screen > *:not(.mp-port-dialog),
       .server-picker > *,
       .world-modal > * {
         position: relative;
@@ -6479,6 +6482,143 @@
         #multiplayer-screen .mp-panel, .world-modal .world-modal-panel,
         .server-picker .server-picker-panel {
           animation: none !important;
+        }
+      }
+
+      /* ==================================================================
+         左输入 / 右列表（2026-10-27 第三版）
+         用户：加入和开房两套界面几乎一样，不如共用一套；改成左填右看、各占一半，
+         点右边就自动填到左边——这样不需要二级弹窗，也不需要背景遮盖。
+         ================================================================== */
+      /* 宽卡片（两栏）。box-sizing 必须有：主定义里只写了 width，
+         不加的话 border+padding 会把它撑出容器，居中会偏左。 */
+      .mp-panel.mp-panel-wide { box-sizing: border-box; width: min(94vw, 800px); }
+      .mp-columns {
+        display: flex; gap: 14px; min-height: 0; flex: 1 1 auto;
+      }
+      .mp-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+      .mp-col-form { flex: 1 1 50%; gap: 8px; }
+      .mp-col-list {
+        flex: 1 1 50%;
+        padding-left: 14px;
+        border-left: 2px solid rgba(255, 255, 255, .08);
+      }
+
+      /* ---- 右栏列表 ---- */
+      .server-list { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 0; }
+      .server-list-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        font-size: 12px; color: #cfcfcf;
+        padding-bottom: 6px;
+        border-bottom: 2px solid rgba(255, 255, 255, .1);
+      }
+      .server-list-rescan {
+        box-sizing: border-box; height: 24px; padding: 0 8px;
+        font: inherit; font-size: 11px; cursor: pointer;
+        color: #dcdcdc; background: #3a3a3a;
+        border: 2px solid;
+        border-top-color: #5a5a5a; border-left-color: #545454;
+        border-right-color: #2c2c2c; border-bottom-color: #282828;
+      }
+      .server-list-rescan:hover { background: #454545; color: #fff; }
+      .server-list-body {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 3px;
+      }
+      .server-list-label {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 11px; color: #b9b9b9; letter-spacing: .5px;
+        padding: 4px 0 2px;
+      }
+      .server-list-label::after {
+        content: ''; flex: 1 1 auto; height: 1px; background: rgba(255, 255, 255, .14);
+      }
+      .server-list-status { font-size: 11px; line-height: 1.6; color: #9a9a9a; }
+      .server-list-status.empty {
+        display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+        padding: 10px 0; color: #b5b5b5;
+      }
+      .server-list-hint { font-size: 11px; color: #8f8f8f; }
+      .server-list-port {
+        box-sizing: border-box; height: 26px; padding: 0 10px;
+        font: inherit; font-size: 11px; cursor: pointer;
+        color: #dcdcdc; background: #3a3a3a;
+        border: 2px solid;
+        border-top-color: #5a5a5a; border-left-color: #545454;
+        border-right-color: #2c2c2c; border-bottom-color: #282828;
+      }
+      .server-list-port:hover { background: #454545; color: #fff; }
+
+      /* 一台服务器：`IP …… 延迟` */
+      .server-list-host { display: flex; flex-direction: column; gap: 1px; }
+      .server-list-item {
+        display: flex; align-items: baseline; gap: 6px; width: 100%;
+        padding: 5px 6px; font: inherit; font-size: 12px; text-align: left;
+        color: #e2e2e2; background: none; border: 2px solid transparent; cursor: pointer;
+      }
+      .server-list-item:hover { background: rgba(255, 255, 255, .06); }
+      .server-list-item.picked { background: rgba(120, 190, 255, .18); border-color: #6f9a5f; }
+      .server-list-ip { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+      .server-list-dash {
+        flex: 1 1 auto; min-width: 10px; height: 0; align-self: center;
+        border-top: 2px dotted rgba(255, 255, 255, .3);
+      }
+      .server-list-rtt { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #9fd08a; }
+
+      /* 房间缩进在服务器下面 */
+      .server-list-rooms { display: flex; flex-direction: column; gap: 1px; padding-left: 16px; }
+      .server-list-room {
+        display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+        padding: 3px 6px; font: inherit; font-size: 11px; text-align: left;
+        color: #d4d4d4; background: none; border: 2px solid transparent; cursor: pointer;
+      }
+      .server-list-room:hover { background: rgba(255, 255, 255, .06); }
+      .server-list-room.picked { background: rgba(120, 190, 255, .18); border-color: #6f9a5f; }
+      .server-list-room.readonly { cursor: default; color: #a5a5a5; }
+      .server-list-room.readonly:hover { background: none; }
+      .server-list-room-online { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #9fd08a; }
+      .server-list-room-empty { font-size: 11px; color: #8a8a8a; padding: 2px 6px; }
+
+      /* ---- 端口确认弹窗 ---- */
+      .mp-port-dialog {
+        position: absolute; inset: 0; z-index: 5;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, .6);
+        animation: page-fade-in 140ms ease-out both;
+      }
+      .mp-port-card {
+        width: min(88%, 300px);
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 14px 16px;
+        background: linear-gradient(#3a3a3a, #2c2c2c);
+        border: 3px solid;
+        border-top-color: #5c5c5c; border-left-color: #545454;
+        border-right-color: #3a3a3a; border-bottom-color: #303030;
+        box-shadow: 0 22px 52px rgba(0, 0, 0, .6);
+        animation: panel-pop-in 160ms cubic-bezier(.2, .8, .3, 1) both;
+      }
+      .mp-port-title { font-size: 14px; letter-spacing: .5px; }
+      .mp-port-hint { font-size: 11px; color: #a8a8a8; line-height: 1.5; }
+      .mp-port-field {
+        box-sizing: border-box; height: var(--ctl-h); width: 100%;
+        padding: 0 10px; font: inherit; font-size: 15px; text-align: center;
+        letter-spacing: 2px; font-variant-numeric: tabular-nums;
+        color: #eaeaea; background: #1e1e1e;
+        border: 2px solid;
+        border-top-color: #141414; border-left-color: #171717;
+        border-right-color: #4c4c4c; border-bottom-color: #545454;
+      }
+      .mp-port-actions { display: flex; gap: 8px; }
+      .mp-port-actions .mp-action { flex: 1 1 0; min-height: 34px; font-size: 13px; }
+
+      /* 窄屏：两栏叠成上下，**列表在上**（先看到有哪些房，再决定填什么） */
+      @media (max-width: 760px) {
+        .mp-panel.mp-panel-wide { width: min(94vw, 520px); }
+        .mp-columns { flex-direction: column; gap: 10px; }
+        .mp-col-list {
+          order: -1; padding-left: 0; border-left: none;
+          padding-bottom: 10px; border-bottom: 2px solid rgba(255, 255, 255, .08);
+          max-height: 42vh;
         }
       }
 </style>

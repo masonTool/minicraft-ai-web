@@ -5427,9 +5427,18 @@ console.log('\n[加入房间：选项式面板（L9）]');
     '协议错误的状态文案按 code 出人话（面板错误行与消息栏同一份映射）',
     readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
   );
+  /*
+   * 2026-10-27 第三版：加入和开房共用一套界面，改成**左输入 / 右列表**，
+   * 列表常驻（不再有二级弹窗），点右边任意一项左边自动填好。
+   */
   check(
-    '主面板不再有右栏房间列表（2026-10-27：列表搬进「选择」浮窗）',
-    !mpSrc.includes('mp-columns') && !mpSrc.includes('roomsEl') && !mpSrc.includes('mp-rooms'),
+    '主面板是左输入 / 右列表两栏（点右边自动填到左边）',
+    mpSrc.includes("columns.className = 'mp-columns'") &&
+      mpSrc.includes('this.list = new ServerListPanel()') &&
+      mpSrc.includes('this.list.onPick = (picked) => {') &&
+      readFileSync(new URL('../src/ui/ServerListPanel.ts', import.meta.url), 'utf8').includes(
+        "this.onPick?.({ address, port, room });",
+      ),
   );
 }
 
@@ -6429,10 +6438,21 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
 
   // ① 服务端必须有探测接口（无状态 + 禁缓存），否则扫描永远扫不到
   check('服务端有 /ping 探测接口', serverSrc5.includes("if (path === '/ping')"));
-  check('探测接口禁缓存（否则第二次扫描恒 0ms）', /path === '\/ping'[\s\S]{0,300}?no-store/.test(serverSrc5));
+  // `/ping` 上现在还有 CORS 头与注释，窗口放宽一点（禁缓存仍然是硬要求）
+  check(
+    '探测接口禁缓存（否则第二次扫描恒 0ms）',
+    /path === '\/ping'[\s\S]{0,600}?no-store/.test(serverSrc5),
+  );
 
   // ② 发现逻辑：只扫私网、并发、可取消、https 页面拒绝
-  check('只扫三个私网段（公网/域名返回空）', discoverySrc.includes('a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)'));
+  check(
+    '只扫私网/回环（公网/域名返回空）；回环只探 .1',
+    discoverySrc.includes('a === 10') &&
+      discoverySrc.includes('(a === 192 && b === 168)') &&
+      discoverySrc.includes('(a === 172 && b >= 16 && b <= 31)') &&
+      discoverySrc.includes('a === 127') &&
+      discoverySrc.includes("if (prefix === '127.0.0') return ['127.0.0.1'];"),
+  );
   check('https 页面不能扫（混合内容会拦掉）', discoverySrc.includes('export function canScanLan') && discoverySrc.includes("return protocol !== 'https:';"));
 
   // ③ 面板：两个区域 + 选中回填 + 公开接口预留
@@ -6532,10 +6552,11 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       worldUiSrc2.includes('roomForm.portInput,') &&
       worldUiSrc2.includes("colon.className = 'mp-colon'"),
   );
+  // 列表常驻右栏，所以地址行不再需要「选择」按钮（第三版）
   check(
-    '加入面板地址行：地址 + `:` + 端口输入框 + 选择',
-    mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
-      mpSrc2.includes('this.form.portInput,') &&
+    '加入面板地址行：地址 + `:` + 端口输入框（列表在右栏，无「选择」按钮）',
+    !mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
+      mpSrc2.includes('urlRow.append(this.urlInput, colon, this.form.portInput)') &&
       mpSrc2.includes("colon.className = 'mp-colon'"),
   );
   // 用户 2026-10-27 改口径：端口**可编辑**（不再是只读后缀）

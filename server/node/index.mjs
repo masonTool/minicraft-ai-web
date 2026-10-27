@@ -847,8 +847,15 @@ const httpServer = createServer((req, res) => {
    * 为什么不复用 `/healthz`：那个要算吞吐/房间数，是给人看的；探测只想要"最快的一个字节"。
    */
   if (path === '/ping') {
+    /*
+     * **必须带 CORS**（2026-10-27 实测踩到）：联机面板的"局域网自动检索"是
+     * 浏览器从页面（5173/5177 或 App 的 webview）跨源去打各台机器的 `/ping`。
+     * 少了这个头，fetch 会被浏览器直接拦掉——表现是"一台都扫不到"，
+     * 而服务端明明在跑、`/rooms` 也读得到。
+     */
     res.writeHead(200, {
       'content-type': 'application/json; charset=utf-8',
+      'access-control-allow-origin': '*',
       'cache-control': 'no-store, no-cache, must-revalidate',
     });
     res.end(JSON.stringify({ ok: true, t: Date.now(), v: PROTOCOL_VERSION }));

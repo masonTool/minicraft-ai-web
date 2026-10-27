@@ -501,7 +501,11 @@ async fn serve_http(stream: &mut TcpStream, hub: &Arc<Hub>, path: &str) {
             200,
             "application/json; charset=utf-8",
             &body,
-            &[("cache-control", "no-store, no-cache, must-revalidate")],
+            // CORS 必须有：浏览器从页面跨源探 `/ping` 做局域网扫描（同 `/rooms`）
+            &[
+                ("access-control-allow-origin", "*"),
+                ("cache-control", "no-store, no-cache, must-revalidate"),
+            ],
         )
         .await;
         return;

@@ -42,7 +42,11 @@ export function subnetOf(host: string): string | null {
   // 只支持常见的私网 /24：其它网段扫了也是给别人添麻烦
   const [a, b] = [Number(match[1]), Number(match[2])];
   const isPrivate =
-    a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    a === 10 ||
+    (a === 192 && b === 168) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    // 回环（2026-10-27）：页面在 `localhost` 打开时扫的是本机，服务端就在 127.0.0.1
+    a === 127;
   return isPrivate ? `${match[1]}.${match[2]}.${match[3]}` : null;
 }
 
@@ -50,6 +54,8 @@ export function subnetOf(host: string): string | null {
 export function subnetHosts(base: string): string[] {
   const prefix = subnetOf(`${base}.1`);
   if (prefix === null) return [];
+  // 回环只有 `.1` 有意义：扫 127.0.0.2~254 是纯浪费（还会拖慢整轮扫描）
+  if (prefix === '127.0.0') return ['127.0.0.1'];
   const out: string[] = [];
   for (let i = 1; i <= 254; i += 1) out.push(`${prefix}.${i}`);
   return out;
