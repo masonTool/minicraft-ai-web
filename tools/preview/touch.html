@@ -36,7 +36,7 @@
        * 这一页必须显式写上，否则截图里 DOM 与 canvas 两份会叠在一起 —— 看着"一样"，
        * 实际什么也没证明。
        */
-      #touch-stick { opacity: 0; }
+      #touch-stick, .touch-button { opacity: 0; }
     </style>
   </head>
   <body>
@@ -46,12 +46,16 @@
           <div class="knob"></div>
           <div class="sneak-badge">潜行</div>
         </div>
+        <!-- 顶部三颗（聊天 / 暂停 / 视角）：位置由 `#touch-pause` 的 CSS 决定 -->
+        <div id="touch-pause"></div>
+        <!-- 右下按钮簇：跳跃 + 飞行升降（`fly-only` 平时 display:none） -->
+        <div id="touch-buttons"></div>
       </div>
       <div class="caption" id="caption"></div>
     </div>
 
     <script type="module">
-      import { Touch2D } from '../../src/ui2d/index.ts';
+      import { Touch2D, touchIconSvgMarkup } from '../../src/ui2d/index.ts';
 
       // ① 搬游戏里的样式：摇杆的尺寸（含 --touch-scale）、渐变、描边全在 index.html 里
       const html = await fetch('/index.html').then((res) => res.text());
@@ -70,6 +74,28 @@
         stick.classList.add('sneaking');
         stick.classList.add('active');
       }
+
+      // ② 按钮：图标用**与 DOM 同一份**形状数据（`ui2d/touchArt.ts`），所以两边不会画成两个样子
+      const makeButton = (icon) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'touch-button';
+        button.dataset.icon = icon;
+        button.innerHTML = touchIconSvgMarkup(icon);
+        return button;
+      };
+      const pauseBar = document.getElementById('touch-pause');
+      for (const icon of ['chat', 'pause', 'view']) pauseBar.appendChild(makeButton(icon));
+      const cluster = document.getElementById('touch-buttons');
+      const flyUp = makeButton('jump');
+      flyUp.classList.add('fly-only', 'fly-up');
+      const flyDown = makeButton('sneak');
+      flyDown.classList.add('fly-only', 'fly-down');
+      const jump = makeButton('jump');
+      jump.classList.add('jump');
+      cluster.append(flyUp, jump, flyDown);
+      // `?fly=1` 显示飞行升降两颗（游戏里创造模式飞行时才出现）
+      if (params.get('fly') === '1') for (const el of [flyUp, flyDown]) el.classList.remove('fly-only');
 
       const screen = new Touch2D(stage, { tint, zIndex: 30 });
       screen.open();
@@ -112,8 +138,24 @@
       });
 
       // ② 每帧只读两个矩形，交给 canvas 画
+      function updateButtons() {
+        const host = stage.getBoundingClientRect();
+        const buttons = [];
+        for (const el of stage.querySelectorAll('.touch-button')) {
+          if (el.offsetParent === null) continue;
+          const r = el.getBoundingClientRect();
+          buttons.push({
+            rect: { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height },
+            icon: el.dataset.icon,
+            pressed: el.matches(':active'),
+          });
+        }
+        screen.setButtons(buttons);
+      }
+
       function update() {
         const host = stage.getBoundingClientRect();
+        updateButtons();
         const base = stick.getBoundingClientRect();
         const k = knob.getBoundingClientRect();
         screen.setStick({

@@ -220,12 +220,25 @@ export {
   type InventoryLayout,
 } from './InventoryPanel2D.ts';
 export {
+  TOUCH_ICON_NAMES as TOUCH_ART_ICON_NAMES,
+  TOUCH_ICON_SCALE,
+  TOUCH_ICON_SHAPES,
+  shapeToSvgMarkup,
+  touchIconSvgMarkup,
+  type TouchIconName as TouchArtIconName,
+  type TouchIconShape,
+} from './touchArt.ts';
+export {
   STICK_COLORS,
   Touch2D,
   clampKnobOffset,
   drawStick,
   knobOffset,
+  TOUCH_BUTTON_COLORS,
+  drawTouchButton,
+  drawTouchIcon,
   type StickState,
+  type TouchButtonState,
 } from './Touch2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {

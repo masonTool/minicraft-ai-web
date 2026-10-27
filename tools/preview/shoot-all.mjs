@@ -388,6 +388,20 @@ const SHOTS = [
     what: '摇杆 + 遮罩（两块黄 = canvas 画的）',
     status: '遮罩 · 阶段 6',
   },
+  {
+    file: '30-touch-buttons.png',
+    page: 'tools/preview/touch.html?state=active&fly=1',
+    size: [864, 410],
+    what: '**触控按钮簇**：顶部三颗（聊天/暂停/视角）+ 右下跳跃与飞行升降，图标与 DOM 同一份数据',
+    status: '已迁 · 阶段 6',
+  },
+  {
+    file: '30b-touch-buttons-tinted.png',
+    page: 'tools/preview/touch.html?state=active&fly=1&tint=1',
+    size: [864, 410],
+    what: '摇杆 + 六颗按钮 + 遮罩（整片按钮黄 = 全是 canvas 画的）',
+    status: '遮罩 · 阶段 6',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

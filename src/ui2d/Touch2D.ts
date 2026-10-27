@@ -16,6 +16,7 @@
  */
 
 import { applyDebugTint } from './debug.ts';
+import { TOUCH_ICON_SHAPES, TOUCH_ICON_SCALE, type TouchIconName } from './touchArt.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import { drawText, uiFont } from './text.ts';
 import { roundRectPath } from './widgets.ts';
@@ -142,6 +143,145 @@ export function drawStick(ctx: CanvasRenderingContext2D, stick: StickState): voi
   ctx.restore();
 }
 
+/** 一颗圆形触控按钮的状态 */
+export interface TouchButtonState {
+  /** 按钮矩形（含 2px 描边，与 DOM 的 border-box 一致） */
+  readonly rect: Rect;
+  /** 图标名（`data-icon`；没有就只画底） */
+  readonly icon: TouchIconName | null;
+  /** 按下态（CSS 的 `:active` 是 `scale(.96)`） */
+  readonly pressed: boolean;
+}
+
+/** 触控按钮的观感（照 `.touch-button` 手写一份） */
+export const TOUCH_BUTTON_COLORS = {
+  /** 玻璃底：上亮下暗 */
+  fillTop: 'rgba(44, 52, 60, .82)',
+  fillBottom: 'rgba(12, 16, 20, .82)',
+  rim: 'rgba(255, 255, 255, .72)',
+  icon: '#f5f7fa',
+  /** 图标下面那层暗影（CSS 的 `text-shadow: 0 1px 2px`） */
+  iconShadow: 'rgba(0, 0, 0, .90)',
+} as const;
+
+/** `Path2D` 按 `d` 缓存：一帧要画好几颗按钮，重复解析同一串路径是白花钱 */
+const pathCache = new Map<string, Path2D>();
+
+function cachedPath(d: string): Path2D {
+  const hit = pathCache.get(d);
+  if (hit) return hit;
+  const path = new Path2D(d);
+  pathCache.set(d, path);
+  return path;
+}
+
+/**
+ * 画一个图标（把 24×24 的形状缩放填进 `rect`）。
+ *
+ * 与 DOM 用同一份形状数据（`touchArt.ts`），所以两边不会画成两个样子。
+ */
+export function drawTouchIcon(
+  ctx: CanvasRenderingContext2D,
+  name: TouchIconName,
+  rect: Rect,
+  color: string,
+  shadow?: string,
+): void {
+  if (!(rect.w > 0) || !(rect.h > 0)) return;
+  const paint = (offsetY: number, fill: string): void => {
+    ctx.save();
+    ctx.translate(rect.x, rect.y + offsetY);
+    ctx.scale(rect.w / 24, rect.h / 24);
+    ctx.fillStyle = fill;
+    for (const shape of TOUCH_ICON_SHAPES[name]) {
+      const alpha = shape.alpha;
+      const previous = ctx.globalAlpha;
+      if (alpha !== undefined) ctx.globalAlpha = previous * alpha;
+      if (shape.kind === 'path') {
+        const path = cachedPath(shape.d);
+        if (shape.evenodd) ctx.fill(path, 'evenodd');
+        else ctx.fill(path);
+      } else if (shape.kind === 'rect') {
+        const r = shape.rx ?? 0;
+        ctx.beginPath();
+        if (r > 0 && typeof ctx.roundRect === 'function') ctx.roundRect(shape.x, shape.y, shape.w, shape.h, r);
+        else ctx.rect(shape.x, shape.y, shape.w, shape.h);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(shape.cx, shape.cy, shape.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = previous;
+    }
+    ctx.restore();
+  };
+  // 阴影：CSS 是 `text-shadow`，这里用同一形状整体下移 1px 画一遍（比 shadowBlur 便宜且够像）
+  if (shadow) paint(1, shadow);
+  paint(0, color);
+}
+
+/** 画一颗触控按钮（圆底 + 图标） */
+export function drawTouchButton(
+  ctx: CanvasRenderingContext2D,
+  button: TouchButtonState,
+): void {
+  const { rect } = button;
+  if (!(rect.w > 0) || !(rect.h > 0)) return;
+  // 按下态缩到 96%（CSS 的 `:active { transform: scale(.96) }`）
+  const k = button.pressed ? 0.96 : 1;
+  const box: Rect =
+    k === 1
+      ? rect
+      : { x: rect.x + (rect.w * (1 - k)) / 2, y: rect.y + (rect.h * (1 - k)) / 2, w: rect.w * k, h: rect.h * k };
+
+  ctx.save();
+  // 外圈暗边 + 投影（`box-shadow: 0 2px 6px … , 0 0 0 1px …`）
+  circle(ctx, { x: box.x - 1, y: box.y - 1, w: box.w + 2, h: box.h + 2 });
+  ctx.fillStyle = 'rgba(0, 0, 0, .55)';
+  ctx.fill();
+
+  // 玻璃底：顶部高光（radial）+ 上下渐变（linear）
+  circle(ctx, box);
+  const vertical = ctx.createLinearGradient(0, box.y, 0, box.y + box.h);
+  vertical.addColorStop(0, TOUCH_BUTTON_COLORS.fillTop);
+  vertical.addColorStop(1, TOUCH_BUTTON_COLORS.fillBottom);
+  ctx.fillStyle = vertical;
+  ctx.fill();
+  const highlight = ctx.createRadialGradient(
+    box.x + box.w / 2,
+    box.y + box.h * 0.28,
+    0,
+    box.x + box.w / 2,
+    box.y + box.h * 0.28,
+    box.w * 0.62,
+  );
+  highlight.addColorStop(0, 'rgba(255, 255, 255, .22)');
+  highlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  circle(ctx, box);
+  ctx.fillStyle = highlight;
+  ctx.fill();
+
+  // 描边
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = TOUCH_BUTTON_COLORS.rim;
+  circle(ctx, box);
+  ctx.stroke();
+
+  // 图标：居中，占按钮直径的一半
+  if (button.icon) {
+    const size = Math.min(box.w, box.h) * TOUCH_ICON_SCALE;
+    drawTouchIcon(
+      ctx,
+      button.icon,
+      { x: box.x + (box.w - size) / 2, y: box.y + (box.h - size) / 2, w: size, h: size },
+      TOUCH_BUTTON_COLORS.icon,
+      TOUCH_BUTTON_COLORS.iconShadow,
+    );
+  }
+  ctx.restore();
+}
+
 /**
  * 摇杆的绘制单元（自带一层覆盖层，`z-index` 默认 30 —— 要压在 `#app` 与 `#touch-ui` 之上）。
  *
@@ -150,7 +290,9 @@ export function drawStick(ctx: CanvasRenderingContext2D, stick: StickState): voi
 export class Touch2D {
   private overlay: Ui2DOverlay | null = null;
   private stick: StickState | null = null;
+  private buttons: readonly TouchButtonState[] = [];
   private signature = '';
+  private buttonsSignature = '';
   private opened = false;
 
   constructor(
@@ -175,6 +317,7 @@ export class Touch2D {
   close(): void {
     this.opened = false;
     this.stick = null;
+    this.buttons = [];
     this.overlay?.clear();
   }
 
@@ -182,6 +325,23 @@ export class Touch2D {
     this.close();
     this.overlay?.dispose();
     this.overlay = null;
+  }
+
+  /** 每帧喂一次按钮（按下态、显隐都会变；签名不变就不重画） */
+  setButtons(buttons: readonly TouchButtonState[]): void {
+    if (!this.opened) return;
+    const signature = buttons
+      .map(
+        (b) =>
+          `${Math.round(b.rect.x)},${Math.round(b.rect.y)},${Math.round(b.rect.w)}|${b.icon ?? '-'}|${
+            b.pressed ? 'p' : ''
+          }`,
+      )
+      .join(';');
+    if (signature === this.buttonsSignature) return;
+    this.buttonsSignature = signature;
+    this.buttons = buttons;
+    this.draw();
   }
 
   /** 每帧喂一次状态（`null` = 摇杆不显示） */
@@ -203,6 +363,7 @@ export class Touch2D {
     if (!overlay) return;
     overlay.syncSize();
     overlay.clear();
+    for (const button of this.buttons) drawTouchButton(overlay.context, button);
     if (this.stick) drawStick(overlay.context, this.stick);
     if (this.options.tint) applyDebugTint(overlay.context, overlay.width, overlay.height);
   }

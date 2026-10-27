@@ -74,6 +74,8 @@ import {
   type FormRow,
   type HotbarSlotState,
   type StickState,
+  type TouchArtIconName,
+  type TouchButtonState,
   type MenuInput,
   type Rect as Ui2DRect,
   type TextBlock,
@@ -3103,7 +3105,8 @@ class App {
       this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
       const style = document.createElement('style');
       style.textContent =
-        'html.ui2d-inv #inv-held { opacity: 0; }\nhtml.ui2d-touch #touch-stick { opacity: 0; }';
+        'html.ui2d-inv #inv-held { opacity: 0; }\n' +
+        'html.ui2d-touch #touch-stick, html.ui2d-touch .touch-button { opacity: 0; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -6875,6 +6878,22 @@ class App {
       sneakLabel: baseEl.querySelector<HTMLElement>('.sneak-badge')?.textContent?.trim() ?? '',
     };
     touch.setStick(stick);
+
+    /*
+     * 按钮：`.touch-button` 一个选择器就够 —— 顶部三颗（聊天/暂停/视角）、右下的跳跃与
+     * 飞行升降、以及快捷栏右侧那颗背包，都是 `makeIconButton()` 造出来的同一个类。
+     * 图标名在 `data-icon` 上（`ui/TouchIcons.ts` 的六个之一），按下态用 `:active`。
+     */
+    const buttons: TouchButtonState[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('#touch-ui .touch-button, #hotbar .touch-button')) {
+      if (el.offsetParent === null) continue;
+      buttons.push({
+        rect: ui2dRectOf(el.getBoundingClientRect(), host),
+        icon: (el.dataset.icon as TouchArtIconName | undefined) ?? null,
+        pressed: el.matches(':active'),
+      });
+    }
+    touch.setButtons(buttons);
   }
 
   private syncInventory2d(): void {
