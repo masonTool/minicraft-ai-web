@@ -77,3 +77,48 @@ iOS 不允许普通应用在后台长期持有监听 socket；硬撑会被系统
 - **"Android 能被 iOS 发现、iOS 能被 Android 发现"没验**：要两台真机 + N6 的客户端接线。
   已知的桥接点：Rust 的组播（两端同协议，Android 已验）覆盖了"互相找到"，
   Bonjour 只服务 Apple 生态内部；两种记录的字段同名，N6 映射一次即可。
+
+## 上机验收清单（真机，2026-10-27）
+
+> iOS 专属的五条。**通用的进房/同步/发现步骤见
+> `server/android/README.md` 的「上机验收清单」**（D 段那些两端通用）。
+
+### 1. 本地网络权限（第一次开房）
+
+- **看**：首次点「开房」时系统弹「允许「xx」查找并连接本地网络中的设备？」→ 必须点允许。
+- **不对查**：点了拒绝之后**不会**再弹，也没有任何报错——只能在
+  「设置 → 隐私与安全性 → 本地网络」里手动打开。表现为：服务端起来了、`/healthz` 也通，
+  但**别的设备永远看不到这台**（Bonjour 发布被系统静默拦掉）。
+
+### 2. Bonjour 真的发出去了
+
+在 Mac 上（与手机同一个 Wi-Fi）用系统自带的工具看：
+
+```bash
+dns-sd -B _minicraft._tcp local.        # 应该列出这台 iPhone 的实例名
+```
+
+- **看**：能列出实例名，且 `dns-sd -L <名字> _minicraft._tcp local.` 里能读到 `port=8887`。
+- **不对查**：`Info.plist` 的 `NSBonjourServices` 是否写了 `_minicraft._tcp`
+  （与 `BonjourAdvertiser.serviceType` 一致；少这一条是静默失败）。
+
+### 3. iOS ↔ iOS 互发现
+
+- **看**：两台都开房时，双方「选择服务器」里能看到对方。
+- **注意**：这一条依赖 **`NetServiceBrowser`**，目前**只做了发布、没做浏览**
+  （`server/ios/Sources/BonjourAdvertiser.swift` 只有 publish）。所以现在 iOS 侧看不到
+  纯 Bonjour 的邻居——能看到的是"对方也发了 UDP 组播"的情况。这是已知缺口，不是配置错。
+
+### 4. 前台限制（系统规则，不是取舍）
+
+- 房主切到后台 / 锁屏 30 秒后，另一台设备看：
+- **看**：对方收到「房主暂时不在房间」或页面上出现 `net.host.foregroundOnly` 的文案，
+  并且**继续等下去能重连**（宽限期）。
+- **不对查**：`ForegroundSession` 的 `suspendedBySystem` 回调有没有接上；
+  没接的话网页端只会静默掉线，玩家不知道是"手机锁屏"。
+
+### 5. 明文 `ws://` 要放行
+
+- **看**：局域网直连能用（`ws://192.168.x.x:8887`）。
+- **不对查**：`Info.plist` 的 `NSAppTransportSecurity` → 只开 `NSAllowsLocalNetworking = true`，
+  **不要**用 `NSAllowsArbitraryLoads`（会被上架审核问）。

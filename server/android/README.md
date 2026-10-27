@@ -69,3 +69,64 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
   Gradle 会在配置阶段报一句明确的话，而不是编出一个没有 JNI 的 APK。
 - **WebView 里 Service Worker 注册会失败**（`http://localhost` + Capacitor 的 scheme）：
   APK 里的资源本来就是本地的，不需要 SW 缓存，这条警告可以忽略。
+
+## 上机验收清单（真机，2026-10-27）
+
+> 这几条 CI 跑不了（要真机、要么要两台设备）。每条给「看什么」和「不对先查哪里」。
+
+### A. 服务起没起来
+
+1. `adb install -r app-debug.apk` → 打开 App → 点「开房」。
+   - **看**：通知栏出现「联机服务已启动 · 端口 8887」。
+   - 不对查：`adb logcat -s MinicraftServer`；端口不是 8887 说明宿主传了非 0 端口
+     （`instance.rs` 里 `want_port > 0` 才覆盖，0 必须落回默认 8887）。
+2. 手机浏览器开 `http://localhost:8887/healthz`。
+   - **看**：`{"ok":true,…,"beacon":true,…}`，`peers` 是数组（此时可能为空）。
+   - 不对查：`beacon:false` → 组播没起来（`MulticastLock` 没拿到 / 没连 Wi-Fi）。
+
+### B. 同机 webview 连得上
+
+3. App 里「加入房间」→ 地址 `127.0.0.1`、端口 8887 → 加入。
+   - **看**：进得去，自己是房主/从属。
+   - 不对查：Capacitor 的 `server.hostname` 是否改过（webview 的 `localhost` 与 App 的
+     不一定同一个网络命名空间）；`adb logcat` 里找 `ERR_CONNECTION_REFUSED`。
+
+### C. 另一台设备能不能发现
+
+4. 两台手机连**同一个 Wi-Fi**，都开房，各自「加入房间」→「选择」。
+   - **看**：局域网区块里出现对方 IP + 房间行。
+   - 不对查：只有一个方向看得到 → 典型是**组播**问题（路由器开了「AP 隔离」/ IGMP snooping；
+     安卓要确认 `MulticastLock` 真的持有）。两边都看不到 → 先确认
+     `http://<对方IP>:8887/ping` 通（不通就是网络隔离，不是发现层）。
+5. Android ↔ iOS 混测。
+   - **看**：安卓能看到 iOS（iOS 发 Bonjour，安卓靠 `beacon::from_txt` 互转）；
+     反过来 iOS **目前只做了发布没做浏览**，看不到安卓是已知缺口。
+   - 不对查：先看 iOS 的 `Info.plist` 三件套（少了是**静默失败**，不报错）。
+
+### D. 进房之后世界对不对
+
+6. 房主在 A 机放方块，B 机看；B 走远再走回来。
+   - **看**：立刻出现；走回来还在（懒上行 `edits-reply`）。
+   - 不对查：B 走过去时 A 的 log 里有没有 `edits-request`；没有说明 B 认为那块已确认，
+     或者 B 自己就是房主（房主不向自己发请求）。
+7. 房主打开箱子放东西，B 机开同一个箱子。
+   - **看**：内容一致（`session-sync` 整份上行）。
+   - 不对查：A 进房时有没有发 `session-sync`。
+8. 房主点「断开」→ B 机。
+   - **看**：立刻收到「房主已退出，房间已关闭」并被踢回，**不是**等 30 秒。
+   - 不对查：A 的客户端有没有发 `bye`（缺失时走宽限期，表现就是"过一会儿才断"）。
+
+### E. 后台与省电
+
+9. 房主切后台 / 息屏 2 分钟，B 机看。
+   - **看**：B 那边房主仍在线（前台服务 + 心跳）。
+   - 不对查：`adb shell dumpsys activity services | grep minicraft`；被系统杀了会在 log 里留 `onDestroy`。
+
+### F. 改动之后的离线回归（不需要真机）
+
+```bash
+npm run check
+bash server/rust/run-net-test.sh    # 297 / 0
+bash server/rust/run-smoke.sh       # 20 / 0
+bash server/rust/run-beacon-smoke.sh # 13 / 0
+```

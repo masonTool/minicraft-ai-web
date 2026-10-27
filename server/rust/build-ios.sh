@@ -22,9 +22,9 @@ SIM_X86=x86_64-apple-ios
 echo "── 安装 Rust 的 iOS 目标（已装则跳过）"
 rustup target add "$DEVICE" "$SIM_ARM" "$SIM_X86"
 
-echo "── 编真机（$DEVICE）"
+echo "── 编真机（${DEVICE}）"
 cargo build --release --lib --target "$DEVICE"
-echo "── 编模拟器（$SIM_ARM / $SIM_X86）"
+echo "── 编模拟器（${SIM_ARM} / ${SIM_X86}）"
 cargo build --release --lib --target "$SIM_ARM"
 if cargo build --release --lib --target "$SIM_X86" 2>/dev/null; then
   SIM_LIBS=(
