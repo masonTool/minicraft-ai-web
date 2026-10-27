@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 设置页（canvas，DOM 驱动）</title>
+    <!--
+      阶段 3 第二页：设置表单。
+
+      ⚠️ 这一页**故意用"隐藏的真实 DOM"当数据源**：先建出一排
+      `.settings-row`（`.settings-switch` / `.settings-cycle` / `input[type=range]`），
+      用 `readFormRows()` 读成模型再画；点/拖也是**写回那些 DOM 控件**（`click()` /
+      `writeRangeRatio`）。所以这一页验证的正是游戏里那条路：
+      DOM 是真源、canvas 只是画与转发。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/form.html
+        open http://localhost:5173/tools/preview/form.html?tint=1
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage { position: relative; width: 844px; height: 390px; }
+      #stage canvas { pointer-events: auto; }
+      /* 数据源：真的设置行，但不显示（canvas 才是显示层） */
+      #model { display: none; }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption">点开关 / 点循环按钮 / 拖滑杆 —— 改的都是隐藏的 DOM 控件</div></div>
+
+    <!-- 数据源（`readFormRows` 扫的就是这里） -->
+    <div id="model"></div>
+
+    <script type="module">
+      import {
+        FORM_ROW_HEIGHT,
+        Ui2DOverlay,
+        applyDebugTint,
+        clampListScroll,
+        drawFormRow,
+        drawModalFrame,
+        drawTabs,
+        formContentHeight,
+        formControlRect,
+        formRatioFromX,
+        formRowRects,
+        modalRect,
+        readFormRows,
+        writeRangeRatio,
+      } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+
+      // ---------------- 数据源：一排真实的设置行 ----------------
+      const model = document.getElementById('model');
+      const addPair = (label, kind, values) => {
+        const row = document.createElement('div');
+        row.className = 'settings-row pair';
+        const name = document.createElement('span');
+        name.textContent = label;
+        row.appendChild(name);
+        if (kind === 'switch') {
+          const button = document.createElement('button');
+          button.className = 'settings-switch';
+          button.setAttribute('aria-checked', 'true');
+          button.classList.add('on');
+          button.addEventListener('click', () => {
+            const on = button.getAttribute('aria-checked') !== 'true';
+            button.setAttribute('aria-checked', String(on));
+            button.classList.toggle('on', on);
+          });
+          row.appendChild(button);
+        } else {
+          const button = document.createElement('button');
+          button.className = 'settings-cycle';
+          let index = 0;
+          button.textContent = values[0];
+          button.addEventListener('click', () => {
+            index = (index + 1) % values.length;
+            button.textContent = values[index];
+          });
+          row.appendChild(button);
+        }
+        model.appendChild(row);
+      };
+      const addRange = (label, value, min, max, step) => {
+        const row = document.createElement('div');
+        row.className = 'settings-row slider';
+        const name = document.createElement('span');
+        name.textContent = label;
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(value);
+        row.append(name, input);
+        model.appendChild(row);
+      };
+
+      addPair('粒子效果', 'switch');
+      addPair('云', 'cycle', ['关闭', '流畅', '高品质']);
+      addRange('视距', 8, 4, 16, 1);
+      addRange('视野', 60, 60, 90, 5);
+      addPair('自动跳跃', 'switch');
+      addPair('视角模式', 'cycle', ['第一人称', '第三人称']);
+      addRange('灵敏度', 50, 0, 100, 1);
+      addPair('反转上下视角', 'switch');
+      addPair('平滑光照', 'cycle', ['关闭', '开启']);
+      addRange('音量', 70, 0, 100, 5);
+      addPair('昼夜循环', 'switch');
+      addRange('亮度', 100, 50, 150, 5);
+
+      // ---------------- 画布 ----------------
+      const stage = document.getElementById('stage');
+      const overlay = new Ui2DOverlay(stage);
+      const ctx = overlay.context;
+      const W = 844;
+      const H = 390;
+      stage.style.width = `${W}px`;
+      stage.style.height = `${H}px`;
+      overlay.syncSize();
+
+      const caption = document.getElementById('caption');
+      const TABS = ['图形', '操作', '声音', '游戏'];
+      let activeTab = 0;
+      let scroll = 0;
+      let focus = 0;
+
+      const panel = modalRect(W, H, 620, 340);
+      const tabsBar = { x: panel.x + 12, y: panel.y + 40, w: panel.w - 24, h: 26 };
+      const listRect = { x: panel.x + 12, y: tabsBar.y + tabsBar.h + 10, w: panel.w - 24, h: panel.y + panel.h - (tabsBar.y + tabsBar.h + 10) - 12 };
+
+      function rows() {
+        return readFormRows(model);
+      }
+
+      function paint() {
+        const items = rows();
+        ctx.clearRect(0, 0, W, H);
+        // 底下的世界
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, '#7ec0ee');
+        bg.addColorStop(0.46, '#a8d8f0');
+        bg.addColorStop(0.46, '#6f9a5a');
+        bg.addColorStop(1, '#3b5a32');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(0, 0, 0, .45)';
+        ctx.fillRect(0, 0, W, H);
+
+        drawModalFrame(ctx, panel, '设置');
+        drawTabs(ctx, tabsBar, TABS, activeTab);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(listRect.x, listRect.y, listRect.w, listRect.h);
+        ctx.clip();
+        const rects = formRowRects({ ...listRect, y: listRect.y - scroll }, items.length);
+        for (let i = 0; i < items.length; i++) {
+          drawFormRow(ctx, rects[i], items[i], i === focus);
+        }
+        ctx.restore();
+
+        // 右侧滚动条（内容装不下才画）
+        const content = formContentHeight(items.length);
+        if (content > listRect.h) {
+          const trackH = listRect.h;
+          const thumbH = Math.max(16, (trackH * listRect.h) / content);
+          const max = content - listRect.h;
+          const y = listRect.y + (trackH - thumbH) * (max > 0 ? scroll / max : 0);
+          ctx.fillStyle = 'rgba(255, 255, 255, .35)';
+          ctx.fillRect(listRect.x + listRect.w + 2, y, 5, thumbH);
+        }
+
+        if (tint) applyDebugTint(ctx, W, H);
+      }
+
+      // ---------------- 交互：写回那排隐藏的 DOM ----------------
+      function localPoint(event) {
+        const rect = overlay.canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+
+      function rowAt(point) {
+        const items = rows();
+        const rects = formRowRects({ ...listRect, y: listRect.y - scroll }, items.length);
+        for (let i = 0; i < rects.length; i++) {
+          const r = rects[i];
+          if (point.x >= r.x && point.x < r.x + r.w && point.y >= r.y && point.y < r.y + r.h) {
+            return { index: i, row: items[i], rect: r };
+          }
+        }
+        return null;
+      }
+
+      let dragging = null;
+
+      function applyPointer(point, phase) {
+        if (point.y >= tabsBar.y && point.y < tabsBar.y + tabsBar.h) {
+          if (phase !== 'down') return;
+          const index = Math.min(TABS.length - 1, Math.max(0, Math.floor(((point.x - tabsBar.x) / tabsBar.w) * TABS.length)));
+          activeTab = index;
+          scroll = 0;
+          paint();
+          return;
+        }
+        const hit = rowAt(point);
+        if (!hit) return;
+        focus = hit.index;
+        const control = formControlRect(hit.rect);
+        const item = hit.row;
+        if (item.kind === 'range') {
+          if (phase === 'down') dragging = item;
+          if (phase !== 'up' && dragging === item && item.element) {
+            writeRangeRatio(item.element, formRatioFromX(control, point.x));
+            caption.textContent = `${item.label} = ${item.element.value}`;
+          }
+        } else if (phase === 'down' && item.element) {
+          item.element.click();
+          const after = rows()[hit.index];
+          caption.textContent =
+            item.kind === 'switch' ? `${after.label}：${after.on ? '开' : '关'}` : `${after.label}：${after.value}`;
+        }
+        paint();
+      }
+
+      overlay.canvas.addEventListener('pointerdown', (event) => applyPointer(localPoint(event), 'down'));
+      overlay.canvas.addEventListener('pointermove', (event) => {
+        if (!dragging) return;
+        applyPointer(localPoint(event), 'move');
+      });
+      overlay.canvas.addEventListener('pointerup', () => {
+        dragging = null;
+      });
+      overlay.canvas.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault();
+          const content = formContentHeight(rows().length);
+          scroll = clampListScroll(scroll + event.deltaY, Math.ceil(content / (FORM_ROW_HEIGHT + 6)), listRect.h);
+          paint();
+        },
+        { passive: false },
+      );
+      window.addEventListener('keydown', (event) => {
+        const items = rows();
+        if (event.key === 'ArrowDown') focus = Math.min(items.length - 1, focus + 1);
+        else if (event.key === 'ArrowUp') focus = Math.max(0, focus - 1);
+        else if ((event.key === 'Enter' || event.key === ' ') && items[focus]?.element) items[focus].element.click();
+        else return;
+        event.preventDefault();
+        paint();
+      });
+
+      paint();
+    </script>
+  </body>
+</html>

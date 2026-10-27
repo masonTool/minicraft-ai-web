@@ -123,6 +123,20 @@ export {
   type MenuInput,
   type MenuRow,
 } from './menu.ts';
+export {
+  FORM_CONTROL_WIDTH,
+  FORM_ROW_GAP,
+  FORM_ROW_HEIGHT,
+  drawFormRow,
+  formContentHeight,
+  formControlRect,
+  formRatioFromX,
+  formRowRects,
+  readFormRows,
+  writeRangeRatio,
+  type FormRow,
+  type FormRowKind,
+} from './form.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

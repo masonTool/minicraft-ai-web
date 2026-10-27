@@ -280,6 +280,23 @@ this.pause2dButtons[index].click();
 菜单开着时**整段键盘都归它**（↑↓ / Home·End / Enter·空格 / Esc），其余键一律 `preventDefault`
 并 return —— 否则按 W 会让角色在面板后面走（DOM 版靠浏览器焦点挡住了这一层，canvas 版得自己挡）。
 
+## 5.10 原型（阶段 3 第二页：设置表单，**未接线**）
+
+`ui2d/form.ts`：把 `.settings-row` 读成模型再画。三类控件按**控件元素**判据
+（有 `.settings-switch` → 开关、有 `input[type=range]` → 滑杆、有 `.settings-cycle` → 循环按钮），
+交互一律转发：开关/循环 `click()`、滑杆 `writeRangeRatio()`（写 `value` 再派发 `input`/`change`）。
+
+- 这样做的理由与暂停菜单一致（D18/D19）：**取值范围、当前值、文案都只在 DOM 里**，
+  抄一份到 canvas 侧就会"静默过期"——表现是"滑块拖了没反应"，很难联想到两套表。
+- 本批**不画**的行：纯说明、外观预览、诊断导出（没有可对应控件）。
+- ⚠️ `cycle` 里混着"动作"（导出诊断）与"切换值"两类，本批一视同仁按点击处理，
+  接线时要确认不会"连点两次执行两次"（D19 的"不确定"那一条）。
+
+**验证到哪一步**：`tests/ui2d-form.test.ts` 4 条几何断言 + 预览页 `tools/preview/form.html`
+（数据源是**隐藏的真实 DOM 行**，点/拖/滚都会写回并重读）+ 截图 `15-settings-form.png`。
+**游戏里没接线**：`?ui2d=1` 时设置页仍是 DOM；下一步先把暂停菜单那套 `engaged` 机制泛化成
+"菜单 / 设置"两态，再接（D20）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

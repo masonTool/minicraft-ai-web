@@ -192,6 +192,20 @@ const SHOTS = [
     what: '暂停菜单（游戏里那一版）：行标签直接取自 DOM 按钮的 textContent（4 颗真实按钮）',
     status: '已接线 · 阶段 3',
   },
+  {
+    file: '15-settings-form.png',
+    page: 'tools/preview/form.html',
+    size: [864, 410],
+    what: '设置表单（canvas）：页签 + 开关 / 循环按钮 / 滑杆 + 滚动条（数据来自隐藏的真实 DOM 行）',
+    status: '原型 · 阶段 3',
+  },
+  {
+    file: '15b-settings-form-tinted.png',
+    page: 'tools/preview/form.html?tint=1',
+    size: [864, 410],
+    what: '设置表单 + 遮罩',
+    status: '遮罩 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
