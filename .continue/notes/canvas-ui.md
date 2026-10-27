@@ -55,7 +55,7 @@ src/ui2d/
 | **1 控件库** ✅ | 开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗 | 21 条离线断言（命中 → 状态 → 回调）；`tools/preview/controls.html` 摆一排且能真的点/拖/滚 | `npx vitest run tests/ui2d-controls.test.ts` + 预览页 |
 | **1.5 快捷栏** ✅ | 面板 + 9 格 + 图标 + 数量 + 序号 + 耐久条 + 选中框 | 34 条断言绿；`?ui2d=1` 与默认版逐格对照，换槽/捡东西/掉耐久都跟上 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
 | **2 HUD** ✅ | 血条/饥饿/护甲/氧气、经验条与等级、快捷栏（1.5）、目标名/蓄力条/物品名浮标、指南针·时钟表盘；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
-| 3 菜单/表单 | 主菜单 / 世界列表 / 新建世界 / 多人 / 服务器选择 / 设置 | 隐藏 input + canvas 显示的**输入法定型**（见 §6）；设置项读写与存档一致 | `npm run check` + 真机输入法验收 |
+| **3 菜单/表单** 🟡 | **暂停菜单页 ✅ 已接线**；设置子页 / 主菜单 / 世界列表 / 新建世界 / 多人 / 服务器选择 仍未开始（控件库与输入通道已就绪；设置页还要处理输入法） | 暂停菜单：键盘与鼠标各走一遍（Esc 开/关、↑↓、Enter、进设置子页再退回）；其余面板：设置项读写与存档一致 | 真机 + `tools/preview/menu.html` |
 | 4 背包/工作站 | 36 格 + 快捷栏 + 19 种工作站 + 拖拽/长按分堆 | 交互表逐条过（按 `notes/modules.md` 的 H2/H19）；配方书嵌入位置不回归 | `npm run check` + 真机 |
 | 5 次级面板 | 配方书 / 成就 / 统计 / 地图 / 书 / 告示牌 / 命令帮助 / 交易 | 每条面板都能开、能关、Esc 自己收；文案 6 语言不溢出 | `npm run check` + `npm run test:i18n` |
 | 6 触摸/PC 控件 | 摇杆 / 视角面 / 按钮组 / 长按 | 手势不吃错层（`pointer-events` 默认关）；`body.touch-mode` 的断点等价 | 真机（横屏为主场景） |
@@ -240,6 +240,45 @@ npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotb
 ⚠️ **这一批没有接线**：游戏里的 `Esc` 仍然走 `SettingsScreen`。预览页 `tools/preview/menu.html`
 把它跑起来了（键盘 + 鼠标都能操作），截图 `13-menu.png`。下一步才是把 DOM 暂停面板
 藏起来、由 canvas 接管那一页的输入 —— 那一步接错就是"Esc 打不开/关不掉"，值得单独一批。
+
+## 5.9 已接线（阶段 3 第一页：暂停菜单）
+
+`?ui2d=1` 时，Esc 唤出的**暂停菜单页**由 canvas 画、canvas 收输入；设置子页仍是 DOM。
+`main.ts#syncPauseMenu2d()` 每帧做一次边沿检测（`settingsScreen.isOpen && page === 'menu'`），
+打开 / 从设置页退回 / 关掉三种转换都从这一处进出，所以**不必在 `SettingsScreen` 里埋钩子**
+（埋了就分成两套时序）。
+
+### 关键做法：不重写任何动作
+
+行标签取 DOM 按钮的 `textContent`，激活就是 `button.click()`：
+
+```ts
+const buttons = [...panel.querySelectorAll('.pause-actions button')].filter((b) => b.offsetParent !== null);
+this.pause2d = new CanvasMenu(title, buttons.map((b, i) => ({ id: `pause${i}`, label: b.textContent.trim() })));
+// 激活：
+this.pause2dButtons[index].click();
+```
+
+于是**文案（6 种语言）、条件显隐（多人那颗只在联机时出现）、删除世界的二次确认、
+"继续游戏 = onResume = closeSettings" 全都自动继承**。抄一份动作表就一定会漂
+（`pause.advancements` 那颗按钮在批次 20261024-1152 就被删过，抄表的人不会知道）。
+
+### 三处必须"让位再还原"的 DOM
+
+| 元素 | 处理 | 为什么 |
+| --- | --- | --- |
+| `#settings-screen .settings-panel` | `visibility: hidden` | 用 `display: none` 会打乱它自己那套 130ms 淡出时序 |
+| `#settings-screen` 的**遮罩背景** | 改为 `transparent` | 它排在 canvas 之上，42% 黑底会把整块面板压暗；遮罩改由 canvas 画 |
+| `#hud` | `visibility: hidden` | 它是 body 级定位元素，不藏就压在 canvas 上面（面板后面露出 HUD） |
+
+⚠️ **还原判据不能用 `menu.isOpen`**：激活某一项时我们先 `close()` 再点按钮，此刻 `isOpen`
+已经是 false，用它当判据就会漏还原 —— 第一次就是这么写的，症状是"退出暂停后 HUD 永久消失"。
+现在用独立的 `pause2dEngaged` 记"canvas 这一层是否接着"（决策 D17）。
+
+### 键盘
+
+菜单开着时**整段键盘都归它**（↑↓ / Home·End / Enter·空格 / Esc），其余键一律 `preventDefault`
+并 return —— 否则按 W 会让角色在面板后面走（DOM 版靠浏览器焦点挡住了这一层，canvas 版得自己挡）。
 
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
