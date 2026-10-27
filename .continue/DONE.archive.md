@@ -18398,3 +18398,61 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261027-0848 · 2026-10-27 · 会话 49866712
+
+> 界面迁 canvas 的第一步：先立地基（文字 / 命中 / 覆盖层 / 控件）＋试点三样纯展示 HUD，
+> `?ui2d=1` 做 A/B；并把"哪些不搬、为什么"写成表（`notes/canvas-ui.md`）。
+
+# 队列 · 会话 498667122b7f4c508a73dac8f5e7e792
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0848
+
+> 本队列在并行工作树 `.continue/doing/.worktree/worktree_canvasui_20261027` 里执行
+> （分支 `worktree_canvasui_20261027`，基于 `88175334`）。父树没有队列 —— 这一批从头到尾只在这棵树里。
+
+- [x] [C1] 修 net-client-look 红灯：NetClient.tick 的 look 改成「变化 / 2 秒兜底」才发 → npx vitest run tests/net-client-look.test.ts
+  - 做了什么：**没有改代码**。上游 `88175334` 已把这条口径定成「每条 `move` 都带全量外观」，测试也同步改成 `expect(moves()[1].look).toEqual(LOOK_A)`。我先按旧断言写了去重补丁（`LOOK_RESEND_MS` + `lastLookKey/lastLookAt`），跑到一半发现与 HEAD 的测试冲突，于是三处编辑**完整回退**，`git status src/` 干净。
+  - 为什么：同一件事只能有一个口径。服务端 `readAppearance` 已改成**合并**语义，客户端"每条都带"不会再引发闪烁；去重是更省字节，但会与"每条都带"的断言直接冲突 —— 既然上游已经拍板并落了测试，就不该在迁移分支里偷偷改回去。
+  - 验证：`npx vitest run tests/net-client-look.test.ts` → **8 passed**；`git status --short src/` 无输出（确认回退干净）。
+  - 批次：20261027-0848
+
+- [x] [C2] 建 src/ui2d/ 骨架：overlay（DPR/尺寸）、text（测量/裁切/换行）、input（命中测试/焦点/层栈）、widgets（按钮）→ npm run check:fast
+  - 做了什么：新增 5 个模块 + 1 个汇总入口：`text.ts`（字体栈、测量缓存 512 条、`tokenize`/`truncateToWidth`/`wrapToWidth`、`drawText`）、`input.ts`（`hitRegionAt` 纯函数 + `Ui2DInput` 指针路由，空命中表时强制 `pointer-events: none`）、`overlay.ts`（2D 覆盖层、DPR 夹到 3、ResizeObserver、绘制单位统一 CSS px）、`widgets.ts`（圆角矩形/HUD 底板/进度条/原版按钮，色值抄 `index.html` 的 `--mc-*` 与 `--hud-*`）、`index.ts`（分层入口与"不许反向依赖 main"的约定）。
+  - 为什么：**文字走 `fillText` 而不是 SDF 字形图集** —— 6 种语言含中日韩，图集等于把字体搬进构建期；覆盖层做成**独立 2D canvas** 而不是塞进 WebGL，也是同一条理由。命中表默认为空且强制关掉 `pointer-events`，避免铺满全屏的层吃掉触摸端的视角手势（`TIPS.md` 里"按钮看得见、点了没反应"那条坑的 canvas 版）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **22 passed**（**抓到 1 个真实 bug**：`hitRegionAt` 原本反向遍历又用 `>=`，导致下层覆盖上层，已改正向遍历）；`npx tsc --noEmit` 干净；`npm run check:fast` 绿（643 条单测）。
+  - 批次：20261027-0848
+
+- [x] [C3] 试点：把准星 / 伤害闪 / Boss 条迁到 ui2d 覆盖层，DOM 版本保留为可回退开关 → check:fast + build:fast
+  - 做了什么：`src/ui2d/Hud2D.ts` 画三样 —— 受伤红闪（预渲染 320×180 三层 radial 精灵 + `globalAlpha`，只在上一帧真画过时才清屏）、Boss 血条（龙/凋灵/护盾三套渐变，几何照抄 `#boss-bar`）、破坏与进食进度条。`main.ts` 只加 3 处分支 + 1 处绘制调用：`updateBossBar` 改成"先算数值再分路画"、两个进度条函数开头提前 return、`damageFlash.update()` 之后调 `hud2d.render()`；`DamageFlash` 在开关打开时传 `null`（数值照算、不写 DOM opacity）。开关是 `?ui2d=1`，DOM 版本一行没删。
+  - 为什么：**准星没有搬**（与条目原文不同，见决策 D3）。它靠 `mix-blend-mode: difference` 与下层画面做差值混合，那是 DOM 合成器的能力；2D canvas 里 `difference` 只在本图层内生效，叠到 WebGL 上就是一块白十字，雪地/沙漠上反而看不见。换成"破坏/进食进度条"：同样是纯展示、每帧变、且没有混合模式依赖。
+  - 验证：`npm run check:fast` 绿；`npm run build:fast` 出包成功（`main-C75H5CHE.js` 2,126.25 kB / gzip 594.93 kB）；`npx tsc --noEmit` 干净。⚠️ **真机/浏览器观感与帧率未验**：本会话没有浏览器，且 dev 模式下 `__host/core.bin` 缺失会停在"去应用里玩"落地页 —— 需要用户用 `?ui2d=1` 进一次世界对比。
+  - 批次：20261027-0848
+
+- [x] [C4] 写迁移方案与阶段门禁到 .continue/notes/canvas-ui.md（含验收命令）
+  - 做了什么：`notes/canvas-ui.md` 九节 —— 现状三层与代码量、A/B 路线对比（选 2D 覆盖层的决定性理由是文字）、目录与依赖方向、阶段 0~6 的判据与验收命令（含"停在哪一格"的判据）、阶段 0 已落地清单与真机 A/B 步骤、**判定不搬/搬法特殊** 六条（准星混合模式、IME 必须留 DOM、拖拽、原生控件、无障碍退化、全屏剪贴板不变）、七个迁移 checklist（色值同步 / 文案走 t() / CSS px / pointer-events 默认关 / 横屏优先 / 可回退）、测试改写策略（先加后删）、四条风险。
+  - 为什么：这次迁移真正的成本不是"画出来"，而是**回归面**与**判定边界**。把"哪些不能搬、为什么"写成表，比写"要搬什么"更值钱 —— 准星那条如果不写，下一批一定会有人顺手搬过去，然后在雪地上发现白十字。
+  - 验证：`node .continue/hooks/check.mjs --fast` 通过（文档体量 / 编号 / 配置 / hooks 自检）；`npm run audit:docs` 通过（`npm run check` 里已跑过一遍）。
+  - 批次：20261027-0848
+
+---
+
+## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
+
+> 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0900
+
+- [x] [R1] 快照 v2 + 关房清缓存 + bye + 外观 + 掉落物：`server/rust/src/{store,state,handlers,protocol,ratelimit}.rs` → `run-net-test.sh`
+  - 做了什么：① 快照 1→2（可读 v1），落盘只留 `savedAt/timeOfDay/day/weather`，`apply_snapshot` 不再读四张房间表；② `State::clear_room`（按房名前缀清 edits/containers/signs/frames/items/worlds/hosts/clocks）+ `OrderedMap::retain`（连带清顺序队列，否则 `remember` 会以为淘汰了却没释放容量）；③ `bye`：房主当场关房踢人、其他人当场广播 `leave`；④ 外观改成"白名单 + 合并写 + 能表达 false + 补 dead/hp/food"；⑤ 掉落物固定窗口 → 令牌桶 30/s + 突发 400。
+  - 为什么：这些都是 10-26 之后主线上已经定稿的行为，Rust 版缺一项队友就会看到不同的世界。
+  - 验证：黑盒 233 → **261 / 297**；`cargo test` 28 通过。
+  - 批次：20261027-0900
+
+---
+

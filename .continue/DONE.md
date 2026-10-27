@@ -9,6 +9,45 @@
 
 ---
 
+## 批次 20261027-1235 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1235
+
+> 用户 2026-10-27：「继续继续继续继续」—— 把上一批做好的**输入通道接进游戏**：
+> `?ui2d=1` 时 Esc 唤出的暂停菜单页由 canvas 画、canvas 收输入。
+> 关键取舍：**不给每个按钮重写动作**，而是把 DOM 里那排按钮的 `textContent` 当标签、
+> `click()` 当动作 —— 文案（6 种语言）、条件显隐（联机按钮只在房里出现）、
+> 删除世界的二次确认全都自动继承，一条都不用抄。
+
+- [x] [Z1] `src/main.ts`：`syncPauseMenu2d()` 跟着 `settingsScreen.isOpen/page` 进出，DOM 面板让位（`visibility: hidden`）、HUD 让位、遮罩与面板都由 canvas 画 → `npm run check:fast`
+  - 做了什么：新增 `syncPauseMenu2d()`（每帧一次边沿检测：面板开着且 `page === 'menu'` 就接管）与 `renderPauseMenu2d()`（canvas 自己画 45% 遮罩 + 面板）；让位三处 —— `.settings-panel` 设 `visibility: hidden`（不能用 `display`，会打乱它自己 130ms 的淡出时序）、`#settings-screen` 的遮罩背景改 `transparent`（它排在 canvas 之上，不透明会把面板一起压暗）、`#hud` 设 `visibility: hidden`（body 级定位元素，不藏就压在 canvas 上）。退出时逐项还原。
+  - 为什么：三种转换（打开 / 从设置子页退回 / 关掉）都从这一处进出，就不必在 `SettingsScreen` 里埋钩子——埋了会分成两套时序。**还原判据用独立的 `pause2dEngaged` 而不是 `menu.isOpen`**（决策 D17）：激活时要先 `close()` 再点按钮，那时 `isOpen` 已经 false，用它当判据会漏还原（第一版就这么错，症状是"退出暂停后 HUD 永久消失"）。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-1235
+
+- [x] [Z2] 输入路由：Esc / ↑↓ / Home·End / Enter·空格 走 `CanvasMenu`，指针点击走 `handlePointer`，激活 = `button.click()`；关掉时恢复原样 → `npm run check && npm run build:fast`
+  - 做了什么：keydown 监听开头加一段"菜单开着时整段键盘归它"（认 ↑↓/Home/End/Enter/空格/Esc，其余键 `preventDefault` 后 return）；覆盖层 canvas 上绑 `pointerdown`（平时 `pointer-events: none`，只有菜单打开时由 `syncPauseMenu2d` 打开），点击走 `handlePointer` → `dispatchPauseMenu`。激活时先 `menu.close()` 再 `button.click()`（按钮可能切页签或直接关面板），随后立刻 `syncPauseMenu2d()` 完成还原。
+  - 为什么：菜单开着时按 W 不该让角色在面板后面走——DOM 版靠浏览器焦点挡住了这一层，canvas 版必须自己挡（`preventDefault` + return）。
+  - 验证：`npm run check` 全量（含 181 套离线）通过；`npm run build:fast` 出包成功；`tsc` 干净。⚠️ **真机/浏览器没在游戏里跑过**：dev 模式缺 `__host/core.bin` 只能停在落地页，所以"Esc 打开→点设置→退回→再 Esc 关掉"这条链只有静态推演 + 预览页验证。
+  - 批次：20261027-1235
+
+- [x] [Z3] 预览页补一张"游戏里那一版"的对照（同一份 DOM 按钮 → canvas 行），`shoot-all` 补图并重拍 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`menu.html` 加 `?from=dom`：真的建出四颗 `<button>`（标签走 `t('pause.resume')` 等真实 i18n 键），再把它们的 `textContent` 喂给 `CanvasMenu`，激活时 `button.click()` —— 与 `main.ts` 完全同一条路。截图 `14-pause-dom-driven.png`；`shoot-all` 累计 27 张。
+  - 为什么：接线里最容易错的是"行与按钮的对应关系"，而这条关系在预览页里能一眼看出来（截图里四行就是真实那四颗按钮的文案）。
+  - 验证：`node tools/preview/shoot-all.mjs` 27 张全出；截图里四行分别是「继续游戏 / 设置 / 统计 / 保存并退出到主菜单」——正是 `SettingsScreen` 菜单页当前那四颗（成就那颗已在批次 20261024-1152 删除，多人那颗单机时不显示）。
+  - 批次：20261027-1235
+
+- [x] [Z4] 文档：`notes/canvas-ui.md` 阶段 3 前进一格（暂停菜单已接线）、决策 D17/D18 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段 3 标 🟡（暂停菜单页 ✅，其余未开始）；新增 §5.9（边沿检测、不重写动作的代码骨架、三处让位的表、"还原判据不能用 isOpen"的警告、键盘整段接管）；决策 D17（独立标志）、D18（行来自 DOM）。
+  - 为什么：D18 是这一批的核心取舍，也解释了一个反直觉的结论——"canvas 菜单的能力上限 = DOM 面板现有按钮"，这被当成优点写下来（避免两套 UI 各自长功能）。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿；`npm run check` 通过（TASKS 台账随收尾补齐）。
+  - 批次：20261027-1235
+
+
 ## 批次 20261027-1226 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -228,62 +267,4 @@
   - 为什么：这次的教训是**选样品的方式**，不是某个函数写错了。不写下来，下一批还会有人挑"最安全的三样"去证明"改造值不值"。
   - 验证：`npm run check` exit=0（`audit:docs` 与文档体量检查都在里面）；决策写在 `doing/9f2dcf-decision.md` D1~D4。
   - 批次：20261027-1009
-
-## 批次 20261027-0848 · 2026-10-27 · 会话 49866712
-
-> 界面迁 canvas 的第一步：先立地基（文字 / 命中 / 覆盖层 / 控件）＋试点三样纯展示 HUD，
-> `?ui2d=1` 做 A/B；并把"哪些不搬、为什么"写成表（`notes/canvas-ui.md`）。
-
-# 队列 · 会话 498667122b7f4c508a73dac8f5e7e792
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0848
-
-> 本队列在并行工作树 `.continue/doing/.worktree/worktree_canvasui_20261027` 里执行
-> （分支 `worktree_canvasui_20261027`，基于 `88175334`）。父树没有队列 —— 这一批从头到尾只在这棵树里。
-
-- [x] [C1] 修 net-client-look 红灯：NetClient.tick 的 look 改成「变化 / 2 秒兜底」才发 → npx vitest run tests/net-client-look.test.ts
-  - 做了什么：**没有改代码**。上游 `88175334` 已把这条口径定成「每条 `move` 都带全量外观」，测试也同步改成 `expect(moves()[1].look).toEqual(LOOK_A)`。我先按旧断言写了去重补丁（`LOOK_RESEND_MS` + `lastLookKey/lastLookAt`），跑到一半发现与 HEAD 的测试冲突，于是三处编辑**完整回退**，`git status src/` 干净。
-  - 为什么：同一件事只能有一个口径。服务端 `readAppearance` 已改成**合并**语义，客户端"每条都带"不会再引发闪烁；去重是更省字节，但会与"每条都带"的断言直接冲突 —— 既然上游已经拍板并落了测试，就不该在迁移分支里偷偷改回去。
-  - 验证：`npx vitest run tests/net-client-look.test.ts` → **8 passed**；`git status --short src/` 无输出（确认回退干净）。
-  - 批次：20261027-0848
-
-- [x] [C2] 建 src/ui2d/ 骨架：overlay（DPR/尺寸）、text（测量/裁切/换行）、input（命中测试/焦点/层栈）、widgets（按钮）→ npm run check:fast
-  - 做了什么：新增 5 个模块 + 1 个汇总入口：`text.ts`（字体栈、测量缓存 512 条、`tokenize`/`truncateToWidth`/`wrapToWidth`、`drawText`）、`input.ts`（`hitRegionAt` 纯函数 + `Ui2DInput` 指针路由，空命中表时强制 `pointer-events: none`）、`overlay.ts`（2D 覆盖层、DPR 夹到 3、ResizeObserver、绘制单位统一 CSS px）、`widgets.ts`（圆角矩形/HUD 底板/进度条/原版按钮，色值抄 `index.html` 的 `--mc-*` 与 `--hud-*`）、`index.ts`（分层入口与"不许反向依赖 main"的约定）。
-  - 为什么：**文字走 `fillText` 而不是 SDF 字形图集** —— 6 种语言含中日韩，图集等于把字体搬进构建期；覆盖层做成**独立 2D canvas** 而不是塞进 WebGL，也是同一条理由。命中表默认为空且强制关掉 `pointer-events`，避免铺满全屏的层吃掉触摸端的视角手势（`TIPS.md` 里"按钮看得见、点了没反应"那条坑的 canvas 版）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **22 passed**（**抓到 1 个真实 bug**：`hitRegionAt` 原本反向遍历又用 `>=`，导致下层覆盖上层，已改正向遍历）；`npx tsc --noEmit` 干净；`npm run check:fast` 绿（643 条单测）。
-  - 批次：20261027-0848
-
-- [x] [C3] 试点：把准星 / 伤害闪 / Boss 条迁到 ui2d 覆盖层，DOM 版本保留为可回退开关 → check:fast + build:fast
-  - 做了什么：`src/ui2d/Hud2D.ts` 画三样 —— 受伤红闪（预渲染 320×180 三层 radial 精灵 + `globalAlpha`，只在上一帧真画过时才清屏）、Boss 血条（龙/凋灵/护盾三套渐变，几何照抄 `#boss-bar`）、破坏与进食进度条。`main.ts` 只加 3 处分支 + 1 处绘制调用：`updateBossBar` 改成"先算数值再分路画"、两个进度条函数开头提前 return、`damageFlash.update()` 之后调 `hud2d.render()`；`DamageFlash` 在开关打开时传 `null`（数值照算、不写 DOM opacity）。开关是 `?ui2d=1`，DOM 版本一行没删。
-  - 为什么：**准星没有搬**（与条目原文不同，见决策 D3）。它靠 `mix-blend-mode: difference` 与下层画面做差值混合，那是 DOM 合成器的能力；2D canvas 里 `difference` 只在本图层内生效，叠到 WebGL 上就是一块白十字，雪地/沙漠上反而看不见。换成"破坏/进食进度条"：同样是纯展示、每帧变、且没有混合模式依赖。
-  - 验证：`npm run check:fast` 绿；`npm run build:fast` 出包成功（`main-C75H5CHE.js` 2,126.25 kB / gzip 594.93 kB）；`npx tsc --noEmit` 干净。⚠️ **真机/浏览器观感与帧率未验**：本会话没有浏览器，且 dev 模式下 `__host/core.bin` 缺失会停在"去应用里玩"落地页 —— 需要用户用 `?ui2d=1` 进一次世界对比。
-  - 批次：20261027-0848
-
-- [x] [C4] 写迁移方案与阶段门禁到 .continue/notes/canvas-ui.md（含验收命令）
-  - 做了什么：`notes/canvas-ui.md` 九节 —— 现状三层与代码量、A/B 路线对比（选 2D 覆盖层的决定性理由是文字）、目录与依赖方向、阶段 0~6 的判据与验收命令（含"停在哪一格"的判据）、阶段 0 已落地清单与真机 A/B 步骤、**判定不搬/搬法特殊** 六条（准星混合模式、IME 必须留 DOM、拖拽、原生控件、无障碍退化、全屏剪贴板不变）、七个迁移 checklist（色值同步 / 文案走 t() / CSS px / pointer-events 默认关 / 横屏优先 / 可回退）、测试改写策略（先加后删）、四条风险。
-  - 为什么：这次迁移真正的成本不是"画出来"，而是**回归面**与**判定边界**。把"哪些不能搬、为什么"写成表，比写"要搬什么"更值钱 —— 准星那条如果不写，下一批一定会有人顺手搬过去，然后在雪地上发现白十字。
-  - 验证：`node .continue/hooks/check.mjs --fast` 通过（文档体量 / 编号 / 配置 / hooks 自检）；`npm run audit:docs` 通过（`npm run check` 里已跑过一遍）。
-  - 批次：20261027-0848
-
----
-
-## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
-
-> 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0900
-
-- [x] [R1] 快照 v2 + 关房清缓存 + bye + 外观 + 掉落物：`server/rust/src/{store,state,handlers,protocol,ratelimit}.rs` → `run-net-test.sh`
-  - 做了什么：① 快照 1→2（可读 v1），落盘只留 `savedAt/timeOfDay/day/weather`，`apply_snapshot` 不再读四张房间表；② `State::clear_room`（按房名前缀清 edits/containers/signs/frames/items/worlds/hosts/clocks）+ `OrderedMap::retain`（连带清顺序队列，否则 `remember` 会以为淘汰了却没释放容量）；③ `bye`：房主当场关房踢人、其他人当场广播 `leave`；④ 外观改成"白名单 + 合并写 + 能表达 false + 补 dead/hp/food"；⑤ 掉落物固定窗口 → 令牌桶 30/s + 突发 400。
-  - 为什么：这些都是 10-26 之后主线上已经定稿的行为，Rust 版缺一项队友就会看到不同的世界。
-  - 验证：黑盒 233 → **261 / 297**；`cargo test` 28 通过。
-  - 批次：20261027-0900
-
----
 

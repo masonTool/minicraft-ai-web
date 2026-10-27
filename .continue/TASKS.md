@@ -5986,6 +5986,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1226 · **表盘收场 + canvas 面板输入通道（4 条）**：新增 `src/ui2d/ToolDial2D.ts`（指南针/时钟的 52×52 圆盘、铜色/铁蓝边框、N/E/S/W 方位字母、上红下白的三角指针、10px 读数；指针用 `dialNeedlePoints` **按角度算三角顶点**，不用 `ctx.rotate` —— 否则"现在指向哪"藏在变换栈里、顺逆时针搞反也没有断言抓得到），阶段 2 到此完整；新增 `src/ui2d/menu.ts` 的 `CanvasMenu` **面板输入通道**（焦点行循环 / `Home`·`End` / `Enter`·空格激活 / `Esc` 关闭 / 指针命中 / `regions()` 供 `hitRegionAt`），它只把按键与点击翻译成"意图"（`activate id` / `close` / `move`），**不含任何游戏动作**、也不管"菜单打开时游戏该不该暂停"（都留在主循环）；预览页 `tools/preview/menu.html`（键盘 + 鼠标都能操作）与 `dial.html`，`shoot-all` 补 4 张。验证：`test:ui2d` **57/57**（+6 表盘：0/90/180/270 尖端、底边对称、非法角度、刻度在盘内、边框色）、新增 `test:ui2d-menu` **14/14**（布局随行数、焦点循环、未打开不理输入、Enter 返回行 id、Esc 关闭、点行/点外、regions 的 id 与层号）、`tsc` 干净、`npm run check` exit=0、26 张截图逐张看过。⚠️ 游戏里的暂停流程**还没接线**（Esc 仍走 `SettingsScreen`），单独一批做。坑记 `notes/canvas-ui.md` §5.7/§5.8。
 
+- [x] 批次 20261027-1235 · **暂停菜单页接线到 canvas（4 条）**：`main.ts#syncPauseMenu2d()` 每帧对 `settingsScreen.isOpen && page === 'menu'` 做边沿检测，打开 / 从设置子页退回 / 关掉三种转换都从这一处进出，不在 `SettingsScreen` 里埋钩子；接管时三处 DOM 让位（`.settings-panel` 用 `visibility: hidden` 而不是 `display`（会打乱它自己的 130ms 淡出）、`#settings-screen` 的 42% 遮罩改 `transparent`（它排在 canvas 之上会压暗面板，遮罩改由 canvas 画）、`#hud` 藏起来（body 级定位元素会压住 canvas）），退出时逐项还原；**菜单行不手写**：扫 `.pause-actions button` 的 `textContent` 当标签、`button.click()` 当动作，于是 6 种语言文案 / 条件显隐（联机那颗只在房里出现）/ 删除世界的二次确认全部自动继承（手写动作表必然与 `SettingsScreen` 漂，`pause.advancements` 那颗就被删过）；键盘在菜单打开时整段接管（↑↓/Home·End/Enter·空格/Esc，其余键 `preventDefault` + return，否则 W 会让角色在面板后面走），指针只在菜单打开时打开 `pointer-events`。验证：`tsc` 干净、`npm run check` 全量通过、`build:fast` 出包、27 张截图逐张看过。⚠️ **游戏内未实测**（dev 缺 `__host/core.bin` 只能停在落地页）。坑：**还原判据不能用 `menu.isOpen`** —— 激活时先 `close()` 再点按钮，`isOpen` 已是 false，第一版因此漏还原（症状：退出暂停后 HUD 永久消失），改用独立的 `pause2dEngaged`。详见 `notes/canvas-ui.md` §5.9。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6066,7 +6068,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（233 条，不是差异，但同样"集中查"更好）
+### 实现注意（235 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6302,6 +6304,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O11 面级贴图的合并优化 | ④ ⚠️ 顺手记下的一处坑：`faceTileOn` 的第四个参数是**贴图槽位**（0 顶 / 1 底 / 2 侧， 与 `face.tile` 同一套），不是 `FACES` 数组的下标——写错会静默回退到 `tiles[0]` （本批写错过一次，被新断言抓住）。 |
 | O6 让离线测试本身也过类型检查 | ——这一笔一改就掉 81 条。⚠️ 顺手记住：`types` 只加在**工具那一份**里， 往主配置加会让 `src` 也能看见 `process`，"浏览器里没有 process"就要等运行时才暴露。 ② **方块数组 63 处**：测试里手写 `Uint8Array`，而项目的 `BlockArray` 是 `Uint16Array`。 |
 | O6 让离线测试本身也过类型检查 | ⚠️ 同批那条"那颗键恢复成开书入口"已被 1636/1652 推翻：那颗键是"可合成物品"状态开关，不是配方书入口。 套件：`test:ui` 964 → **971**。取舍见 `doing/723564-decision.md` D1~D3。 |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1226 · **表盘收场 + canvas 面板输入通道（4 条）**：新增 `src/ui2d/ToolDial2D.ts`（指南针/时钟的 52×52 圆盘、铜色/铁蓝边框、N/E/S/W 方位字母、上红下白的三角指针、10px 读数；指针用 `dialNeedlePoints` **按角度算三角顶点**，不用 `ctx.rotate` —— 否则"现在指向哪"藏在变换栈里、顺逆时针搞反也没有断言抓得到），阶段 2 到此完整；新增 `… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1235 · **暂停菜单页接线到 canvas（4 条）**：`main.ts#syncPauseMenu2d()` 每帧对 `settingsScreen.isOpen && page === 'menu'` 做边沿检测，打开 / 从设置子页退回 / 关掉三种转换都从这一处进出，不在 `SettingsScreen` 里埋钩子；接管时三处 DOM 让位（`.settings-panel` 用 `visibility: hidden` 而… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
