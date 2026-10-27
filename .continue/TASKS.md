@@ -4317,6 +4317,14 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L27 **新建世界做落地校正（人物不再卡方块里）**（用户 2026-10-27）。
+  - 根因：`prepareNewWorldSpawn()` 只用 `generator.surfaceY()` 估落点
+    （`region.y + 1.01`），真实区块还要算树、水、洞穴、群系混合，落点可能正好在
+    树干/石头里；而落地校正只有"读档"和"联机加入"会 `requestGroundSettle`，
+    **新世界这条路径没有** → 卡住了永远卡着。
+  - 修法：`prepareNewWorldSpawn()` 末尾补 `requestGroundSettle('spawn')`。
+  - 验证：连续新建两个世界（y=66 / y=100）→ 脚/头都是空气、下方实体、`onGround=true`；
+    手动 teleport 进地里 → 2.5 秒内自愈。
 - [x] L26 **「⋯」菜单项风格对齐 chip + 自动翻转**（用户 2026-10-27）。
   - 风格：改用 `.world-chip` 那套语言（半透明底 `rgba(255,255,255,.07)` + 1px 细边
     `rgba(255,255,255,.22)` + 12px 字），删除复用 chip 里 hard 难度那组红色。
