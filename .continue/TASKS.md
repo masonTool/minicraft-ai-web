@@ -4317,6 +4317,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L24 **手机端输入框不再自动弹键盘**（用户 2026-10-27）。
+  - 在 `focusin` 里判断"这次聚焦是不是用户点出来的"：真点击一定先有
+    `pointerdown`/`touchstart`（window 捕获阶段记时间），程序调用的 `focus()` 没有。
+    不是用户点出来的 → 直接 `blur()`，**连浮层都不弹**。
+  - 这样不用逐个删 `focus()`（`BookScreen`/`ChatInput`/`CommandBlockEditor`/
+    `NameTagEditor`/`RoomCard`/`InventoryScreen`… 十几处），一处兜住。
+  - 验证（触屏 context + `?lift=1`）：打开面板后 `active=BUTTON`、无浮层；
+    程序 `focus('#mp-name')` → `active=BODY`、无浮层；真点击 → `layer=true`、
+    `active=inp-field`。
 - [x] L23 **局域网 IP 改由 native 桥提供；非完整版禁止联机**（用户 2026-10-27）。
   - `core/net/LanIp.ts`：`hasNativeLanBridge()` / `getLanIp()`，只问宿主
     （`Capacitor.Plugins.NativeServer.localIp()`），1.5 秒超时、异常一律收敛成 null。
