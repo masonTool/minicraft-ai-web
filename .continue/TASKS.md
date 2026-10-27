@@ -4317,6 +4317,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L28 **弹窗不再自动弹键盘 + 浮层遮罩硬拦截**（用户 2026-10-28）。
+  - ① 进「编辑世界」就弹键盘：之前只判断"600ms 内有没有按下"——点「编辑」按钮也满足，
+    弹窗里代码的 `focus()` 被误判成用户点击。补一条：**按下的元素必须就是获得焦点的那个**。
+  - ② 遮罩挡不住下层点击：`stopPropagation` 不拦**同一元素上**已注册的其它监听，
+    而页面大量委托挂在 window/document。改用 `stopImmediatePropagation`，并在打开浮层时
+    给 `body` 加 `.inp-open` → CSS `body.inp-open > *:not(.inp-layer){pointer-events:none}`，
+    从浏览器层面让下层收不到指针事件（滚动/长按/合成 click 全都过不去）。
+  - 验证：编辑弹窗 → `active=BODY`、无浮层、body 无 `inp-open`；浮层开着时点下层
+    「修改端口」坐标 → `lowerClicks=0` 且浮层收起。
 - [x] L27 **新建世界做落地校正（人物不再卡方块里）**（用户 2026-10-27）。
   - 根因：`prepareNewWorldSpawn()` 只用 `generator.surfaceY()` 估落点
     （`region.y + 1.01`），真实区块还要算树、水、洞穴、群系混合，落点可能正好在
