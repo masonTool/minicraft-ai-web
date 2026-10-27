@@ -240,7 +240,7 @@ export class WorldScreen {
     build.className = 'world-build';
     build.id = 'world-build';
     build.textContent = formatBuildInfo(readBuildInfo());
-    build.title = '当前页面的构建版本';
+    build.title = t('world.buildHint');
     footer.append(build);
 
     home.append(title, subtitle, menu, footer);
@@ -561,7 +561,7 @@ export class WorldScreen {
     const card = document.createElement('div');
     card.className = 'world-card';
     // 完整信息留在悬停提示里（桌面端可看；手机端不占行高）
-    card.title = `种子 ${world.seed} · 改动 ${world.edits} 格`;
+    card.title = tp('world.cardHint', { seed: String(world.seed), edits: String(world.edits) });
 
     const thumbnail = document.createElement('div');
     thumbnail.className = 'world-card-thumb';

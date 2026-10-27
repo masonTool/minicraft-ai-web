@@ -1,3 +1,4 @@
+import { t } from '../i18n/I18n.ts';
 /**
  * 世界列表（多存档）
  *
@@ -220,7 +221,8 @@ function normalizeWorld(value: unknown): WorldSummary | null {
   const hardcore = raw.hardcore === true;
   return {
     id: raw.id,
-    name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : '未命名世界',
+    name:
+      typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : t('world.unnamed'),
     seed: typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.floor(raw.seed) : randomSeed(),
     // 极限模式（批次 550）：老清单/脏数据里如果困难或创造被改过，这里一律拉回困难 + 生存
     difficulty: hardcore ? 'hard' : normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),

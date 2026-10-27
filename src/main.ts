@@ -20570,7 +20570,8 @@ async function boot(): Promise<void> {
         onChange: (next) => saveSettings(next),
       });
       // 批次 20261024-1152：`setTitle` 不再收副标题（暂停页那行提示已删除）
-      menuSettings.setTitle('设置', '返回');
+      // 标题与返回键都走 i18n（原来写死中文，德语下标题还是「设置」——用户 2026-10-28）
+      menuSettings.setTitle(t('settings.title'), t('settings.back'));
     }
     // 打开菜单里的设置也压一条：返回键先关设置，而不是退出页面
     pushMenuGuard();
