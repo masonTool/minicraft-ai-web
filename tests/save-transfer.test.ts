@@ -15,6 +15,7 @@ import {
   transferFileName,
   type SaveTransferFile,
 } from '../src/core/save/SaveTransfer.ts';
+import { worldNameFromFile } from '../src/core/save/SaveTransfer.ts';
 import type { WorldSummary } from '../src/core/save/WorldRegistry.ts';
 
 const world: WorldSummary = {
@@ -119,9 +120,16 @@ describe('导入文件校验', () => {
     expect(parsed!.stores.chunks).toBeUndefined();
   });
 
-  it('文件名剔除路径分隔符并保留 .json 后缀', () => {
-    expect(transferFileName('a/b:c*?"<>|')).toBe('a_b_c______.mcworld.json');
-    expect(transferFileName('   ')).toBe('world.mcworld.json');
+  it('文件名剔除非法字符、空格转中划线、后缀是 .mc', () => {
+    // 2026-10-27 用户口径：导出的是 `.mc` 包（内部是 zip）
+    expect(transferFileName('a/b:c*?"<>|')).toBe('a_b_c______.mc');
+    expect(transferFileName('我的 世界')).toBe('我的-世界.mc');
+    expect(transferFileName('   ')).toBe('world.mc');
+  });
+
+  it('导入时中划线还原成空格（仅在没有包内名字时兜底）', () => {
+    expect(worldNameFromFile('我的-世界.mc')).toBe('我的 世界');
+    expect(worldNameFromFile('.mc')).toBe('导入的世界');
   });
 
   it('格式常量稳定（导出的文件靠它识别）', () => {

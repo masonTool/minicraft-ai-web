@@ -382,6 +382,7 @@ import {
   parseSaveTransfer,
   transferFileName,
 } from './core/save/SaveTransfer.ts';
+import { unzipStore, zipStore, type PackEntry } from './core/save/McPack.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { collectContainerSpawns } from './core/save/EditSpawns.ts';
 import { missingResetTargets, type WorldResetTarget } from './game/worldReset.ts';
@@ -20817,13 +20818,40 @@ async function boot(): Promise<void> {
    * 为什么不导出 localStorage 清单：导入到另一台设备时 id 会撞、时间戳也没意义；
    * 导入方按文件里的种子/类型/模式重新建一个**新世界**，数据原样放进去。
    */
+  /** dataURL（`data:image/jpeg;base64,...`）→ 二进制，塞进包里当 `thumbnail.jpg` */
+  const thumbnailBytes = (dataUrl: string | undefined): Uint8Array | null => {
+    if (dataUrl === undefined) return null;
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) return null;
+    try {
+      const binary = atob(dataUrl.slice(comma + 1));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    } catch {
+      return null;
+    }
+  };
+
   const exportWorld = async (world: WorldSummary): Promise<void> => {
     let save: SaveGame | null = null;
     try {
       save = await SaveGame.open(world.id);
       if (!save) return;
+      /*
+       * `.mc` = 标准 zip（用户 2026-10-27）：`world.json` + 缩略图。
+       * 用 zip 而不是自定义格式，是因为玩家拿系统解压工具就能打开、能抢救。
+       */
       const file = buildSaveTransfer(world, await save.exportStores());
-      const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+      const entries: PackEntry[] = [
+        { name: 'world.json', data: new TextEncoder().encode(JSON.stringify(file)) },
+      ];
+      const shot = thumbnailBytes(world.thumbnail);
+      if (shot !== null) entries.push({ name: 'thumbnail.jpg', data: shot });
+      // TS 的 `Uint8Array<ArrayBufferLike>` 与 `BlobPart` 不兼容（可能是 SharedArrayBuffer），
+      // 运行时没问题，这里收一次窄
+      const packed = zipStore(entries) as unknown as BlobPart;
+      const blob = new Blob([packed], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -20849,7 +20877,7 @@ async function boot(): Promise<void> {
   const importWorld = async (): Promise<void> => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,application/json';
+    input.accept = '.mc';
     input.style.display = 'none';
     document.body.appendChild(input);
     input.addEventListener('change', () => {
@@ -20861,7 +20889,14 @@ async function boot(): Promise<void> {
         return;
       }
       void (async () => {
-        const parsed = parseSaveTransfer(await file.text());
+        // `.mc` 是 zip：解出 `world.json` 再走原来的解析（格式没变，只是外壳换了）
+        const packed = unzipStore(new Uint8Array(await file.arrayBuffer()));
+        const worldJson = packed.get('world.json');
+        if (worldJson === undefined) {
+          console.warn('[world] 这个 .mc 包里没有 world.json');
+          return;
+        }
+        const parsed = parseSaveTransfer(new TextDecoder().decode(worldJson));
         if (!parsed) {
           console.warn('[world] 导入文件格式不正确');
           return;
