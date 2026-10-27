@@ -1,3 +1,4 @@
+import { t } from '../i18n/I18n.ts';
 /**
  * 世界列表（多存档）
  *
@@ -29,6 +30,14 @@ export interface WorldSummary {
   createdAt: number;
   /** 上次游玩时间（毫秒时间戳） */
   lastPlayed: number;
+  /**
+   * 退出世界时那一帧的画面（用户 2026-10-27）：160×90 的 jpeg dataURL。
+   *
+   * 放在清单里而不是存档里，是因为**世界列表要立刻显示它**——为了画一张缩略图
+   * 去打开每个世界的存档（几十 MB）显然不行。清单本身只有几百字节，多这 5~8KB 无所谓。
+   * 老存档没有这个字段 → 退回按世界类型画的程序化预览图。
+   */
+  thumbnail?: string;
   /** 累计游玩秒数 */
   playTime: number;
   /** 玩家改过的方块数（展示用） */
@@ -212,7 +221,8 @@ function normalizeWorld(value: unknown): WorldSummary | null {
   const hardcore = raw.hardcore === true;
   return {
     id: raw.id,
-    name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : '未命名世界',
+    name:
+      typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : t('world.unnamed'),
     seed: typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.floor(raw.seed) : randomSeed(),
     // 极限模式（批次 550）：老清单/脏数据里如果困难或创造被改过，这里一律拉回困难 + 生存
     difficulty: hardcore ? 'hard' : normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),

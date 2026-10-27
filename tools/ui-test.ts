@@ -3236,8 +3236,22 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   check(
     '新建世界表单：标签与输入框同一行（窄屏也不再拆两行）',
     !css.includes('.world-row .world-input { grid-column: 1 / -1; }') &&
-      css.includes('.world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px;') &&
-      css.includes('.world-row > span {'),
+      // 2026-10-28：首列改成 `var(--label-w, 64px)`——按语言给宽度（德语/俄语标签更长）
+      /\.world-row \{[^}]*grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\)/.test(css) &&
+      css.includes('.world-row > span:first-child {') &&
+      // 按语言覆盖标签宽度：没有这几条，非中文的长标签会被截成 "Schwier…"
+      css.includes("html[lang='de']") &&
+      css.includes("html[lang='ru']"),
+  );
+  /*
+   * 2026-10-27 第二版：以前固定三列（第三列 44px 只有"重新掷色子"用得上），
+   * 其余行空着一格 → 输入框右边缘比地址行短一截。现在按"有没有尾巴"分三档，
+   * 地址行单独五列，右边缘一律对齐。
+   */
+  check(
+    '地址行五列（标签/地址/`:`/端口/选择），其余行不留空列',
+    /\.world-row\.world-row-address \{[^}]*grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\) auto 62px auto/.test(css) &&
+      !/grid-template-columns: 64px minmax\(0, 1fr\) 44px/.test(css),
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
@@ -5411,15 +5425,26 @@ console.log('\n[加入房间：选项式面板（L9）]');
   check(
     'join 模式连着时也露出「断开」（否则联机中打开面板是个死界面）',
     mpSrc.includes('private syncModeVisibility(): void') &&
-      mpSrc.includes('joinMode && !multiplayerButtons(this.state).disconnect'),
+      // 2026-10-27：join/host 都算"单入口"（compact），只有 full 才三颗按钮
+      mpSrc.includes('const compact = this.mode !== \'full\'') &&
+      mpSrc.includes('multiplayerButtons(this.state).disconnect'),
   );
   check(
     '协议错误的状态文案按 code 出人话（面板错误行与消息栏同一份映射）',
     readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
   );
+  /*
+   * 2026-10-27 第三版：加入和开房共用一套界面，改成**左输入 / 右列表**，
+   * 列表常驻（不再有二级弹窗），点右边任意一项左边自动填好。
+   */
   check(
-    '主面板不再有右栏房间列表（2026-10-27：列表搬进「选择」浮窗）',
-    !mpSrc.includes('mp-columns') && !mpSrc.includes('roomsEl') && !mpSrc.includes('mp-rooms'),
+    '主面板是左输入 / 右列表两栏（点右边自动填到左边）',
+    mpSrc.includes("columns.className = 'mp-columns'") &&
+      mpSrc.includes('this.list = new ServerListPanel()') &&
+      mpSrc.includes('this.list.onPick = (picked) => {') &&
+      readFileSync(new URL('../src/ui/ServerListPanel.ts', import.meta.url), 'utf8').includes(
+        "this.onPick?.({ address, port, room });",
+      ),
   );
 }
 
@@ -5458,13 +5483,16 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
     mainSrc.includes("multiplayerUi.open('join');") && mpSource.includes("this.root.dataset.mode = mode;"),
   );
   check(
-    '卡片上只留「进入 / 开房 / ⋯」，管理动作收进折叠行（方案 A）',
+    '卡片上只留「进入 / 开房 / ⋯」，管理动作是「⋯」的下拉菜单（导出/编辑/删除）',
     (() => {
       const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
       return (
         worldSrc.includes('buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);') &&
         worldSrc.includes("extra.className = 'world-card-extra hidden';") &&
-        worldSrc.includes('extra.append(edit, exportButton, remove);')
+        // 2026-10-27 用户口径：下拉里依次是 导出 / 编辑 / 删除
+        worldSrc.includes('extra.append(exportButton, edit, remove);') &&
+        // 点别处收起
+        worldSrc.includes('private closeCardMenus(): void')
       );
     })(),
   );
@@ -5486,10 +5514,11 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
 }
 
 /*
- * 暂停菜单：本局房间信息卡（L9）
+ * 本局房间信息卡（L9；L30 删掉了它原来的入口）
  *
- * 联机之后那颗键原来还是「多人游戏」、点开让你再连一次——玩家真正想要的是
- * "我在哪个房间、谁是房主、怎么把朋友叫进来"。所以联机中改成信息卡。
+ * 卡片本身还在（`RoomCard.ts` + `openMultiplayer()` 里的分支），但暂停菜单那颗键
+ * 2026-10-28 被用户删掉了，所以它现在**没有界面入口**。下面的断言只保证卡片与
+ * 相关样式没被顺手拆坏——要恢复入口或彻底删卡片，先改这一节。
  */
 console.log('\n[暂停菜单：本局房间（L9）]');
 {
@@ -5514,12 +5543,16 @@ console.log('\n[暂停菜单：本局房间（L9）]');
     cardSrc.includes("navigator.clipboard && window.isSecureContext") &&
       cardSrc.includes("document.execCommand('copy')"),
   );
+  /*
+   * 2026-10-28（L30）：用户确认暂停菜单里那颗联机键是有意删除的，入口只留主菜单的
+   * 「加入房间…」与卡片上的「开房」。所以这条断言反过来写——**它不该再长回来**。
+   * 原来那条"按联机状态改文案（联机中 = 本局房间）"随按钮一起去掉。
+   */
   check(
-    '暂停菜单那颗键按联机状态改文案（联机中 = 本局房间）',
-    settingsSrc.includes('multiplayerLabelKey?: () => string') &&
-      settingsSrc.includes('this.refreshMultiplayerLabel();') &&
-      mainSrc.includes("? 'pause.room'") &&
-      mainSrc.includes(": 'menu.multiplayer'"),
+    '暂停菜单不再有联机键（入口只在主菜单与世界卡片）',
+    !settingsSrc.includes('pause-multiplayer') &&
+      !settingsSrc.includes('multiplayerLabelKey') &&
+      !mainSrc.includes('multiplayerLabelKey'),
   );
   check(
     '联机中点它开信息卡，没联机才打开连接面板',
@@ -6035,9 +6068,19 @@ console.log('\n[加入房间：地址只填 IP]');
   check('默认端口不是 8787（换成了不常见的值）', /DEFAULT_NET_PORT = (?!8787)\d+/.test(serverUrlSrc));
   check(
     '服务端默认端口读常量而不是硬编码',
-    readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8').includes(
-      'process.env.PORT ?? DEFAULT_PORT',
-    ),
+    /*
+     * 端口解析搬到了 cli.mjs（`--port` 参数 / `PORT` 环境变量两层，index.mjs 只负责调用）：
+     * 钉住两头——入口确实走解析函数，回落值来自 DEFAULT_PORT 常量而不是写死数字。
+     */
+    (() => {
+      const indexSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
+      const cliSrc = readFileSync(new URL('../server/node/cli.mjs', import.meta.url), 'utf8');
+      return (
+        indexSrc.includes('resolvePort(') &&
+        /return DEFAULT_PORT;/.test(cliSrc) &&
+        !/DEFAULT_PORT\s*=\s*\d/.test(cliSrc)
+      );
+    })(),
   );
 }
 
@@ -6218,7 +6261,16 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
 
   // ---- ① 开房失败不许进世界：先预检，失败留在对话框里说原因
-  check('开房先跑预检（连得上 + 房名没被占）才建世界', /onHostWorld: async \(world, room, password, baseUrl, name\) => \{[\s\S]{0,300}?await preflightHost\(/.test(mainSrc3));
+  /*
+   * 2026-10-27：开房与「加入房间」合并成同一套界面后，这段预检从
+   * `onHostWorld: async (...)` 抽成了独立常量 `hostWorldFlow`（两个入口共用）。
+   * 断言跟着改成"存在这个流程、且先预检再建世界"。
+   */
+  check(
+    '开房先跑预检（连得上 + 房名没被占）才建世界',
+    /const hostWorldFlow = async \([\s\S]{0,220}?await preflightHost\(/.test(mainSrc3) &&
+      /await preflightHost\([\s\S]{0,900}?void startWorld\(world\)/.test(mainSrc3),
+  );
   check(
     '预检失败把原因还给对话框（不是静默进世界）',
     mainSrc3.includes("return t('mp.hostUnreachable')") && mainSrc3.includes("return t('say.net.hostTaken')"),
@@ -6409,10 +6461,21 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
 
   // ① 服务端必须有探测接口（无状态 + 禁缓存），否则扫描永远扫不到
   check('服务端有 /ping 探测接口', serverSrc5.includes("if (path === '/ping')"));
-  check('探测接口禁缓存（否则第二次扫描恒 0ms）', /path === '\/ping'[\s\S]{0,300}?no-store/.test(serverSrc5));
+  // `/ping` 上现在还有 CORS 头与注释，窗口放宽一点（禁缓存仍然是硬要求）
+  check(
+    '探测接口禁缓存（否则第二次扫描恒 0ms）',
+    /path === '\/ping'[\s\S]{0,600}?no-store/.test(serverSrc5),
+  );
 
   // ② 发现逻辑：只扫私网、并发、可取消、https 页面拒绝
-  check('只扫三个私网段（公网/域名返回空）', discoverySrc.includes('a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)'));
+  check(
+    '只扫私网/回环（公网/域名返回空）；回环只探 .1',
+    discoverySrc.includes('a === 10') &&
+      discoverySrc.includes('(a === 192 && b === 168)') &&
+      discoverySrc.includes('(a === 172 && b >= 16 && b <= 31)') &&
+      discoverySrc.includes('a === 127') &&
+      discoverySrc.includes("if (prefix === '127.0.0') return ['127.0.0.1'];"),
+  );
   check('https 页面不能扫（混合内容会拦掉）', discoverySrc.includes('export function canScanLan') && discoverySrc.includes("return protocol !== 'https:';"));
 
   // ③ 面板：两个区域 + 选中回填 + 公开接口预留
@@ -6441,12 +6504,30 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       pickerSrc.includes('this.confirmButton.disabled = true;') &&
       pickerSrc.includes("t('server.confirm')"),
   );
-  // 用户 2026-10-27：点「选择」弹出浮窗，且是**贴着按钮的小卡片**，不是全屏遮罩
+  /*
+   * 用户 2026-10-27 第二版："层级太高、弹窗上面在弹窗" —— 「选择」不再贴按钮弹小浮窗，
+   * 改成**与主面板同宽同位置的二级页面**（左上「‹ 返回」、标题居中）：
+   * 切换时是翻页，而不是套娃。断言跟着改口径。
+   */
+  /*
+   * 转场（2026-10-27 第二版）：进入淡入放大、退出淡出收回，二级页带横向位移。
+   * 退出动画靠 JS 加 `.closing` + 160ms 后隐藏，所以三个条件都得在：
+   * 关键帧、class 挂接、以及 `prefers-reduced-motion` 的关闭开关。
+   */
   check(
-    '「选择」打开浮窗并贴按钮定位（不是全屏遮罩卡片）',
-    pickerSrc.includes('open(anchor: HTMLElement): void') &&
-      pickerSrc.includes('anchor.getBoundingClientRect()') &&
-      /\.server-picker-panel \{[\s\S]{0,120}position: fixed; width: min\(340px, 92vw\)/.test(
+    '三层都有转场（进入淡入 / 退出淡出），且 reduced-motion 下关闭',
+    htmlSrc2.includes('@keyframes panel-pop-in') &&
+      htmlSrc2.includes('@keyframes panel-slide-out') &&
+      htmlSrc2.includes('prefers-reduced-motion') &&
+      mpSrc2.includes("this.root.classList.add('closing')") &&
+      pickerSrc.includes("this.element.classList.add('closing')"),
+  );
+  check(
+    '「选择」是二级页面（返回按钮 + 与主面板同宽），不再叠小浮窗',
+    pickerSrc.includes('open(): void') &&
+      pickerSrc.includes("back.className = 'server-picker-back'") &&
+      !pickerSrc.includes('getBoundingClientRect()') &&
+      /\.server-picker-panel \{[\s\S]{0,200}width: min\(92vw, var\(--modal-w\)\)/.test(
         htmlSrc2.replace(/\s+/g, ' '),
       ),
   );
@@ -6494,10 +6575,11 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       worldUiSrc2.includes('roomForm.portInput,') &&
       worldUiSrc2.includes("colon.className = 'mp-colon'"),
   );
+  // 列表常驻右栏，所以地址行不再需要「选择」按钮（第三版）
   check(
-    '加入面板地址行：地址 + `:` + 端口输入框 + 选择',
-    mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
-      mpSrc2.includes('this.form.portInput,') &&
+    '加入面板地址行：地址 + `:` + 端口输入框（列表在右栏，无「选择」按钮）',
+    !mpSrc2.includes("pickButtonId: 'mp-pick-server'") &&
+      mpSrc2.includes('urlRow.append(this.urlInput, colon, this.form.portInput)') &&
       mpSrc2.includes("colon.className = 'mp-colon'"),
   );
   // 用户 2026-10-27 改口径：端口**可编辑**（不再是只读后缀）

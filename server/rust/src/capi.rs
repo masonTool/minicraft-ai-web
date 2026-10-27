@@ -9,6 +9,7 @@
 //! 很难改，而内部结构（tokio、serde）会一直变。
 
 use std::ffi::{c_char, CStr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::instance;
 
@@ -52,4 +53,67 @@ pub extern "C" fn minicraft_stop_server() {
 #[unsafe(no_mangle)]
 pub extern "C" fn minicraft_server_port() -> i32 {
     instance::port()
+}
+
+/// 把一条 Bonjour 记录塞进 peer 表（iOS 的 `NetServiceBrowser` 解析完地址后调它）。
+///
+/// 为什么不让 Rust 自己浏览 Bonjour：`NetServiceBrowser` 是 Foundation 的 API，
+/// 在 Rust 里用等于再引一套 DNS-SD 绑定；而**发布**已经在 Rust 里（`beacon.rs`，
+/// 两端同协议），浏览放壳里只需要多这一个入口。
+///
+/// - `service_name`：`NetService.name`（当实例 id；`bonjour:` 前缀由 `beacon::from_txt` 补）
+/// - `ip`：点分十进制 IPv4（`NetService` 解析出来的地址；Rust 侧只认 IPv4）
+/// - `txt_json`：`{"port":"8887","room":"x","name":"…","seed":"1","players":"2","host":"1","pw":"0"}`
+///
+/// 返回 `1` = 新发现或内容有变，`0` = 没变，`-1` = 参数/服务状态不对。
+///
+/// # Safety
+/// 三个指针要么是 `NULL`，要么是 NUL 结尾的合法 C 字符串。
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn minicraft_add_bonjour_peer(
+    service_name: *const c_char,
+    ip: *const c_char,
+    txt_json: *const c_char,
+) -> i32 {
+    let (Some(name), Some(ip), Some(txt)) = (
+        unsafe { cstr(service_name) },
+        unsafe { cstr(ip) },
+        unsafe { cstr(txt_json) },
+    ) else {
+        return -1;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&txt) else { return -1 };
+    let Some(map) = value.as_object() else { return -1 };
+    let pairs: Vec<(String, String)> = map
+        .iter()
+        .map(|(key, value)| {
+            let text = match value {
+                serde_json::Value::String(text) => text.clone(),
+                other => other.to_string(),
+            };
+            (key.clone(), text)
+        })
+        .collect();
+    let Some(announce) = crate::beacon::from_txt(&name, &pairs) else { return -1 };
+    let Ok(addr) = ip.parse::<Ipv4Addr>() else { return -1 };
+    let addr = SocketAddr::new(IpAddr::V4(addr), announce.port);
+
+    let changed = crate::instance::with_hub(|hub| {
+        // 宿主线程（非 tokio runtime）→ 可以 blocking_lock
+        let mut peers = hub.peers.blocking_lock();
+        peers.observe(&hub.instance, announce, addr, crate::store::now_ms())
+    });
+    match changed {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
+    }
+}
+
+/// C 字符串 → `String`（`NULL` 或非 UTF-8 返回 `None`）
+unsafe fn cstr(ptr: *const c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(ptr) }.to_str().ok().map(|text| text.to_string())
 }

@@ -152,7 +152,7 @@ export function blockEditRejection(player, x, y, z, id, state) {
  *
  * 用户 2026-10-26 定稿为 8887：安卓/iOS 客户端要内建服务器，端口必须与客户端一致，
  * 不再按"好不好记 / 避不避开常见值"挑。客户端那边也不让玩家填端口（只填 IP），
- * 两端必须用同一个数字；撞车时用 `PORT` 环境变量覆盖。
+ * 两端必须用同一个数字；撞车时用 `--port` 参数（或 `PORT` 环境变量）覆盖，见 cli.mjs。
  */
 export const DEFAULT_PORT = 8887;
 

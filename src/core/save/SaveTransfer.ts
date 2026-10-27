@@ -110,12 +110,34 @@ export function decodeStoresFromJson(value: unknown): unknown {
 }
 
 /** 文件名里剔除路径分隔符与控制字符，避免各平台另存为失败 */
+/**
+ * 包名：`世界名.mc`（用户 2026-10-27）。
+ *
+ * 规则：**空格换成中划线**（`我的 世界` → `我的-世界.mc`），导入时再换回来。
+ * 文件系统不允许的字符（`/ \ : * ? " < > |`）仍然替换成 `_`，否则下载会被浏览器拒绝。
+ *
+ * ⚠️ 转换是**有损**的：世界名里原本就有中划线时会被还原成空格。所以导入时
+ * **优先用包内 `world.json` 里的真实名字**，文件名只是兜底——这样既满足"以世界名命名"，
+ * 又不会因为文件名规则把玩家的世界名改掉。
+ */
 export function transferFileName(name: string): string {
   const safe = name
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+    // **先 trim 再换中划线**：反过来会让"全是空格的名字"变成 `-`，trim 已经无从下手
     .trim()
-    .slice(0, 40);
-  return `${safe || 'world'}.mcworld.json`;
+    .replace(/\s+/g, '-')
+    .slice(0, 40)
+    .trim();
+  return `${safe || 'world'}.mc`;
+}
+
+/**
+ * 从包名还原世界名（导入时的兜底路径）：中划线换回空格。
+ * 正常情况用不到——包里就有真实名字。
+ */
+export function worldNameFromFile(fileName: string): string {
+  const base = fileName.replace(/\.[^.]*$/, '');
+  return base.replace(/-/g, ' ').trim() || '导入的世界';
 }
 
 /** 导出前把清单项裁成传输需要的字段（id/时间戳不带走，导入时重新生成） */

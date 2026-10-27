@@ -25,6 +25,7 @@
 | --- | --- |
 | 这个模块现在有什么、有哪些坑（**动它之前先看这一节**） | [`.continue/OVERVIEW.md`](./.continue/OVERVIEW.md) |
 | 动手前想避开已经踩过的坑（渲染/光照/地形/界面/生物 AI） | [`.continue/TIPS.md`](./.continue/TIPS.md)（**按关键词 grep，别整份读**） |
+| **一批做完了要收尾** | `node tools/ledger.mjs --batch <批次号> --note "一句话背景"`：DONE 插入 + 超限归档 + HANDOFF 数字（`audit-tasks --fix`）+ 队列归档，**一条命令**。仍然手写的只有 `batches.md` 一行摘要和 `TASKS.md` 的任务条目（脚本会打印该用哪个编号） |
 | 想知道某个模块当时怎么做的、为什么这么做 | [`.continue/notes/modules.md`](./.continue/notes/modules.md)（模块台账）+ [`.continue/notes/decisions.md`](./.continue/notes/decisions.md)（设计决策与判定不做） |
 | 想查某一批当时做了什么、怎么验的 | [`.continue/DONE.md`](./.continue/DONE.md)（最近的在上）；更早的在 `DONE.archive.md` |
 | **要改任意"操作型工作站"（熔炉/酿造台/营火/锻造台…）** | [`.continue/notes/stations.md`](./.continue/notes/stations.md)（通用契约 + 站台矩阵 + 接入 checklist） |

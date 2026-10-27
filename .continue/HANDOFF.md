@@ -22,7 +22,7 @@
 
 - 时间：2026-10-24 · 提交总数 1769（锚定 d4340a02；每个功能点一条，可逐条回滚。数字锚在某个提交上而不是追当前 HEAD——`npm run audit:tasks` 核对锚点，要重新锚定它会直接给出可粘的一行）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 `three`）
-- 进度口径：`TASKS.md` 共 324 项 —— 已完成 **314**、进行中 **10**、待办 4 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 304 项 —— 已完成 **334**、进行中 **10**、待办 4 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.continue/doing/<session_id>.md` 队列为准**，队列与总表分工不同，别只看总表
@@ -80,7 +80,8 @@ npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup        # 跨机器自检
-npm run server             # 联机服务端（Node 版 :25187）；Rust 版与两颗手机示例宿主见 server/README.md
+npm run server             # 联机服务端（Node 版 :8887；换端口 = npm run server -- --port 9000）
+                           # Rust 版与两颗手机示例宿主见 server/README.md
 ```
 
 `npm run check` 是一条链：`typecheck` + `test`（vitest + **181 套**自建离线测试 + `test:hooks`）

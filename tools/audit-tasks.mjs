@@ -27,6 +27,15 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 /**
+ * `--fix`：把**能自动算出来的数字**直接写回，而不是只报错。
+ *
+ * 为什么要有：收尾时 HANDOFF 的"进度口径"每次都要手改三个数字，改完还得重跑一遍
+ * 才敢说"全绿"——一轮下来几十秒到几分钟，而且很容易漏。数字本来就是从 TASKS 算出来的，
+ * 让脚本自己写回去更合理。
+ */
+const FIX = process.argv.includes('--fix');
+
+/**
  * `--print` = **只检查、不改文件**。
  *
  * 为什么需要这个开关：本脚本默认会**顺手把 README 的路线图状态列改对**（那是它的设计），
@@ -153,11 +162,20 @@ if (!claim) {
   const ok = done === counts.done && doing === counts.doing && todo === counts.todo;
   if (ok) {
     console.log('✓ HANDOFF 的进度口径与本表一致');
+  } else if (FIX) {
+    const fixed = handoff.replace(
+      /已完成 \*\*\d+\*\*、进行中 \*\*\d+\*\*、待办 \d+/,
+      `已完成 **${counts.done}**、进行中 **${counts.doing}**、待办 ${counts.todo}`,
+    );
+    writeFileSync(HANDOFF_FILE, fixed);
+    console.log(
+      `✓ 已把 HANDOFF 的进度口径修成 已完成 ${counts.done} / 进行中 ${counts.doing} / 待办 ${counts.todo}`,
+    );
   } else {
     failed = true;
     console.log(
       `\n✗ HANDOFF 的进度口径过期：写着 已完成 ${done} / 进行中 ${doing} / 待办 ${todo}，` +
-        `实际是 ${counts.done} / ${counts.doing} / ${counts.todo}`,
+        `实际是 ${counts.done} / ${counts.doing} / 待办 ${counts.todo}（加 --fix 可自动改）`,
     );
   }
 }

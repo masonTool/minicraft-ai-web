@@ -29,11 +29,11 @@ xcrun --sdk iphonesimulator swiftc -typecheck -sdk "$SIM_SDK" -target arm64-appl
   -import-objc-header include/minicraft_server.h Sources/*.swift
 echo "   ✓ arm64-apple-ios15.0-simulator"
 
-echo "④ 静态库里要有三个 C 入口"
+echo "④ 静态库里要有四个 C 入口"
 # 先把符号表抓成变量再 grep：`nm | grep -q` 在 `set -o pipefail` 下会因为 grep 提前退出
 # （nm 收到 SIGPIPE）被判成失败，看起来像"符号不存在"
 SYMBOLS=$(nm -gU MinicraftServer.xcframework/ios-arm64/libminicraft_server.a 2>&1)
-for symbol in minicraft_start_server minicraft_stop_server minicraft_server_port; do
+for symbol in minicraft_start_server minicraft_stop_server minicraft_server_port minicraft_add_bonjour_peer; do
   case "$SYMBOLS" in
     *"_$symbol"*) echo "   ✓ $symbol" ;;
     *) echo "   ✗ 缺少符号 $symbol"; exit 1 ;;

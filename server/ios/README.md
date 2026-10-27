@@ -74,10 +74,11 @@ iOS 不允许普通应用在后台长期持有监听 socket；硬撑会被系统
 - **没有生成 Capacitor 的 `ios/` 工程**：`npx cap add ios` 走 CocoaPods，本机没装 `pod`
   （`pod: command not found`）。上面的"接进 Xcode 工程"是手工步骤，等装好 CocoaPods
   或改用 SPM 时再补一条命令。**所以"iOS 上点一下开房"这条路没有跑过。**
-- **iOS 只**发布** Bonjour、没**浏览**：`BonjourAdvertiser.swift` 里只有 `NetService`（publish），
-  没有 `NetServiceBrowser`。所以"iOS 之间靠 Bonjour 互相发现"还不成立——现在能看到邻居，
-  是因为对方也发了 UDP 组播（`beacon.rs` 两端同协议）。补浏览器约 60 行 Swift，
-  模拟器里可以用 Mac 的 `dns-sd -R` 发布一条假记录来验（`check-sim.sh` 可以加一条）。
+- **Bonjour 浏览已补**（`Sources/BonjourBrowser.swift`，2026-10-27）：搜 `_minicraft._tcp`、
+  解析 IPv4 + TXT、每 8 秒重 resolve 以刷新 Rust 侧 12 秒 TTL，发现的邻居经
+  `minicraft_add_bonjour_peer` 进 `/healthz.peers`。**桥接链路已在模拟器里验过**
+  （注入一条记录 → peers 里出现）；**真实 mDNS 发现还没验**，要两台真机或一个可用的
+  mDNS 域，见下面上机清单第 3 条。
 - **"Android 能被 iOS 发现、iOS 能被 Android 发现"没验**：要两台真机 + N6 的客户端接线。
   已知的桥接点：Rust 的组播（两端同协议，Android 已验）覆盖了"互相找到"，
   Bonjour 只服务 Apple 生态内部；两种记录的字段同名，N6 映射一次即可。
@@ -126,3 +127,22 @@ dns-sd -B _minicraft._tcp local.        # 应该列出这台 iPhone 的实例名
 - **看**：局域网直连能用（`ws://192.168.x.x:8887`）。
 - **不对查**：`Info.plist` 的 `NSAppTransportSecurity` → 只开 `NSAllowsLocalNetworking = true`，
   **不要**用 `NSAllowsArbitraryLoads`（会被上架审核问）。
+
+## 宿主必须提供的一个桥方法（2026-10-27）
+
+网页侧的联机界面**不再猜本机网段**，只从原生要：
+
+```js
+Capacitor.Plugins.NativeServer.localIp()  // → { ip: "192.168.1.20" } 或 { ip: null }
+```
+
+拿不到 → 网页会弹「需要完整版」并关掉联机界面（这是产品要求，不是兜底）。
+
+安卓侧已在 `NativeServerPlugin.localIp()` 实现（`NetworkInterface` 遍历，跳过回环与
+`169.254.*`）。**iOS 侧需要宿主按同样签名暴露**：`getifaddrs` 取 `en0` 的 IPv4 即可：
+
+```swift
+import Foundation
+// 在 Capacitor 插件里注册 @objc func localIp(_ call: CAPPluginCall) { ... }
+// 或由 App 层直接挂到 window.Capacitor.Plugins.NativeServer.localIp
+```

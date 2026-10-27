@@ -388,9 +388,42 @@ notes.push(`主包 ${mainChunk.name} gzip ${kb(mainChunk.gzip)}（基线 ${kb(MA
  *   一天的内网/联网功能（main +19.4、语言包 +3.0、worker +3.1）就吃光了）。
  * 这个数**包含**拆包重复的那部分，将来用共享 chunk 收回来时应当把它调低（显式动作）。
  */
-const TOTAL_GZIP_BASELINE = 1230 * 1024;
-if (totalGzip > TOTAL_GZIP_BASELINE) {
-  problems.push(`全部 JS 合计 gzip ${totalGzip} 超过基线 ${TOTAL_GZIP_BASELINE}（+${totalGzip - TOTAL_GZIP_BASELINE} 字节）`);
+/**
+ * 全部 JS 合计 gzip 基线（字节）。
+ *
+ * 2026-10-28（用户拍板）：**1230 → 1536 KB（1.5 MB）**。
+ * 理由：这个项目实测合计 1230 KB、真实首屏约 1 MB，本来就不大；为了几百字节
+ * 的波动反复调基线、卡发布，投入产出不成比例。用户原话"项目已经很小了，
+ * 没有必要费那么大劲"。
+ *
+ * 放宽是**显式动作**，不是让闸门失效：它仍然拦"突然暴涨"（比如误把整个资源包
+ * 编进产物）。真到 1.5 MB 时再谈拆 chunk——那时才值得花力气。
+ * 另保留 0.5% 容差吸收正常迭代抖动，见下面 `TOTAL_SLACK`。
+ */
+const TOTAL_GZIP_BASELINE = 1536 * 1024;
+/**
+ * 容差（2026-10-28，用户报 GitHub Pages 发布失败）。
+ *
+ * 那天只超了 **255 字节**（1259775 vs 1259520），卡住了整个发布。这不是"代码膨胀"，
+ * 是"上次留的 12 KB 余量被日常提交慢慢吃光了"——用 255 字节的溢出否决一次发布，
+ * 和用 255 字节的"通过"掩盖真膨胀，一样没信息量。
+ *
+ * 所以基线改成"基线 + 容差"：
+ *  - 落在容差内 → 通过，但打一条 note **把余量消耗显式写出来**（别让它无声无息）；
+ *  - 超容差 → 红。0.5% ≈ 6 KB，够吸收一次正常迭代，又拦得住真的失控。
+ * 基线本身仍然是"显式收紧/放宽"的动作，不随构建自动漂移。
+ */
+const TOTAL_SLACK = Math.round(TOTAL_GZIP_BASELINE * 0.005);
+if (totalGzip > TOTAL_GZIP_BASELINE + TOTAL_SLACK) {
+  problems.push(
+    `全部 JS 合计 gzip ${totalGzip} 超过基线 ${TOTAL_GZIP_BASELINE} + 容差 ${TOTAL_SLACK}` +
+      `（超 ${totalGzip - TOTAL_GZIP_BASELINE - TOTAL_SLACK} 字节）`,
+  );
+} else if (totalGzip > TOTAL_GZIP_BASELINE) {
+  notes.push(
+    `⚠️ 全部 JS 合计已用掉容差 ${totalGzip - TOTAL_GZIP_BASELINE}/${TOTAL_SLACK} 字节——` +
+      `下次再涨就红了，该收一收（拆共享 chunk / 删冗余文案）`,
+  );
 }
 notes.push(`全部 JS 合计 gzip ${kb(totalGzip)}（基线 ${kb(TOTAL_GZIP_BASELINE)}，含 ${gzipped.length - 1} 个懒加载 chunk 也计入）`);
 

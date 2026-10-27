@@ -16,14 +16,29 @@
  * `disconnect()`），状态由 `onStatus` 回调推进来。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
+import { getLanIp, hasNativeLanBridge } from '../core/net/LanIp.ts';
+import { roomFromWorldName } from '../core/net/RoomName.ts';
 import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
+import { parsePort } from '../core/net/ServerUrl.ts';
 import { RoomForm } from './RoomForm.ts';
+import { ServerListPanel } from './ServerListPanel.ts';
 import { displayServerAddress, normalizeServerUrl } from '../core/net/ServerUrl.ts';
 import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
 export type MultiplayerScreenState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
+
+/**
+ * 开房时带过来的世界。
+ *
+ * 这里只声明用得到的两个字段，宿主传完整的世界摘要即可（它要拿 `id` 去开存档）——
+ * 面板不关心其余字段，也不应该依赖 `WorldSummary`（那是世界列表层的类型）。
+ */
+export interface HostWorld {
+  name: string;
+  seed?: number;
+}
 
 export interface MultiplayerScreenActions {
   /**
@@ -35,6 +50,19 @@ export interface MultiplayerScreenActions {
   onConnect: (url: string, name: string, host: boolean) => void;
   onDisconnect: () => void;
   onClose: () => void;
+  /**
+   * 开房模式下点「确定并进入」：带着世界信息一起交给宿主。
+   *
+   * 为什么不用 `onConnect(url, name, true)`：开房要先**把这个世界建起来**
+   * （预检 → 预占房名 → startWorld），不是一个 `setTimeout` 的连接动作。
+   */
+  onHostWorld?: (
+    world: HostWorld,
+    room: string,
+    password: string,
+    baseUrl: string,
+    name: string,
+  ) => void;
 }
 
 /** localStorage 记住上次填的地址 / 端口 / 房间 / 密码 / 昵称（手机上每次手输太痛苦） */
@@ -43,6 +71,9 @@ const STORAGE_PORT = 'mc.mp.port';
 const STORAGE_ROOM = 'mc.mp.room';
 const STORAGE_PASSWORD = 'mc.mp.pw';
 const STORAGE_NAME = 'mc.mp.name';
+/** 完整版下载页（用户 2026-10-27：提示里给一个"前往下载"的入口，可换） */
+const FULL_VERSION_URL = 'https://minicraft.example.com/download';
+
 /** 昵称上限与服务端 `sanitizeName` 对齐（按字符算，不按字节） */
 export const MULTIPLAYER_NAME_MAX = 16;
 const DEFAULT_NAME = '玩家';
@@ -81,7 +112,19 @@ export class MultiplayerScreen {
   private state: MultiplayerScreenState = 'idle';
   private openState = false;
   /** 当前期望的模式（`join` = 主菜单「加入房间」；`full` = 联机面板全量） */
-  private mode: 'full' | 'join' = 'full';
+  private mode: 'full' | 'join' | 'host' = 'full';
+  /** 退出动画的定时器（快速开关时用来掐掉上一次） */
+  private closeTimer = 0;
+  /** 右栏：常驻的服务器/房间列表 */
+  private list!: ServerListPanel;
+  /** 开房模式下的世界（加入模式为 null） */
+  private hostWorld: HostWorld | null = null;
+  /** 本机局域网 IP（来自 native 桥；null = 拿不到，说明不是完整版） */
+  private lanIp: string | null = null;
+  /** “需要完整版”提示层（同一时刻只开一个） */
+  private fullPrompt: HTMLDivElement | null = null;
+  /** 端口确认弹窗（同一时刻只开一个） */
+  private portDialog: HTMLDivElement | null = null;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
@@ -96,7 +139,7 @@ export class MultiplayerScreen {
     this.root.classList.add('hidden');
 
     const panel = document.createElement('div');
-    panel.className = 'mp-panel';
+    panel.className = 'mp-panel mp-panel-wide';
 
     // ---- 标题行：居中标题 + 右上角 ✕（设计图版式）
     const head = document.createElement('div');
@@ -125,9 +168,7 @@ export class MultiplayerScreen {
       initialRoom: readStored(STORAGE_ROOM) ?? '',
       initialPassword: readStored(STORAGE_PASSWORD) ?? '',
       initialName: readStored(STORAGE_NAME) ?? '',
-      pickButtonId: 'mp-pick-server',
-      pickButtonClass: 'mp-pick',
-      // web 版没有内建服务端：浮窗里「本机 / 允许其它人建房」整块不渲染
+      // 列表常驻右栏（2026-10-27 第三版）：不再需要「选择」按钮，也就没有第二层浮窗
       localServer: clientCapabilities().localServer,
       addressError: t('mp.error.url'),
     });
@@ -137,6 +178,19 @@ export class MultiplayerScreen {
     // join 模式一定建昵称框（`withName` 默认 true）
     this.nameInput = this.form.nameInput as HTMLInputElement;
 
+    /*
+     * 端口**不允许直接编辑**（用户 2026-10-27）：改了端口要按新端口重扫，
+     * 所以统一走确认弹窗。点它 / 焦点落到它身上都直接开弹窗。
+     */
+    this.form.portInput.readOnly = true;
+    this.form.portInput.classList.add('mp-port-readonly');
+    this.form.portInput.addEventListener('click', () => this.openPortDialog());
+    this.form.portInput.addEventListener('focus', () => {
+      this.form.portInput.blur();
+      this.openPortDialog();
+    });
+    this.syncPortDefault();
+
     const form = document.createElement('div');
     form.className = 'mp-form';
 
@@ -144,12 +198,9 @@ export class MultiplayerScreen {
     const colon = document.createElement('span');
     colon.className = 'mp-colon';
     colon.textContent = ':';
-    urlRow.append(
-      this.urlInput,
-      colon,
-      this.form.portInput,
-      this.form.pickButton as HTMLButtonElement,
-    );
+    // 地址行用 grid（标签/地址/`:`/端口/选择），右边缘才能和下面三行对齐
+    urlRow.classList.add('mp-row-address');
+    urlRow.append(this.urlInput, colon, this.form.portInput);
 
     const roomRow = this.makeRow(t('mp.room'));
     roomRow.append(this.roomInput);
@@ -193,8 +244,38 @@ export class MultiplayerScreen {
 
     actionsRow.append(this.joinButton, this.hostButton, this.disconnectButton);
 
-    form.append(head, urlRow, roomRow, passwordRow, nameRow, this.statusEl, actionsRow);
-    panel.append(form);
+    form.append(urlRow, roomRow, passwordRow, nameRow, this.statusEl);
+
+    /*
+     * 右栏 = 常驻的服务器/房间列表（2026-10-27 第三版，用户定稿）。
+     *
+     * 两件事一起解决：① 加入与开房共用同一套界面（左边永远是那四行）；
+     * ② 不再有第二层弹窗——点右边任意一项，左边立刻填好。
+     */
+    this.list = new ServerListPanel();
+    this.list.onPick = (picked) => {
+      this.urlInput.value = picked.address;
+      this.form.portInput.value = String(picked.port);
+      if (picked.room !== undefined) this.roomInput.value = picked.room;
+      this.showError('');
+    };
+    this.list.onPortRequest = () => this.openPortDialog();
+    // 本机 IP 只从 native 桥拿（用户 2026-10-27：不猜网段）
+    this.list.lanIp = () => this.lanIp;
+
+    const columns = document.createElement('div');
+    columns.className = 'mp-columns';
+    const formCol = document.createElement('div');
+    formCol.className = 'mp-col mp-col-form';
+    // 按钮放在 form **外面**（左栏直接子元素）：`margin-top: auto` 才会把它压到底部，
+    // 状态行出现/消失时按钮不会跟着上下跳。
+    formCol.append(form, actionsRow);
+    const listCol = document.createElement('div');
+    listCol.className = 'mp-col mp-col-list';
+    listCol.append(this.list.element);
+    columns.append(formCol, listCol);
+
+    panel.append(head, columns);
     this.root.append(panel);
     host.append(this.root);
 
@@ -225,13 +306,51 @@ export class MultiplayerScreen {
    * `mode = 'join'`：主菜单里点「加入房间」主要是"加入"这一件事——开房要指定用哪个世界，
    * 那件事在世界卡片的「开房」上，所以那颗恒藏；「断开」只在真连着时露出来。
    */
-  open(mode: 'full' | 'join' = 'full'): void {
+  /**
+   * 打开面板。
+   *
+   * `mode`：
+   *  - `full`  主菜单「联机」；
+   *  - `join`  主菜单「加入房间」（只留表单 + 加入）；
+   *  - `host`  **世界卡片的「开房」**（用户 2026-10-27：和加入共用同一套界面，
+   *            区别只有标题、按钮文案，以及右栏多一个「选择本机」）。
+   */
+  open(mode: 'full' | 'join' | 'host' = 'full', world?: HostWorld): void {
     this.mode = mode;
+    this.hostWorld = mode === 'host' && world !== undefined ? { ...world } : null;
     this.root.dataset.mode = mode;
-    this.titleEl.textContent = t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
+    this.titleEl.textContent =
+      this.hostWorld !== null
+        ? tp('mp.hostTitle', { world: this.hostWorld.name })
+        : t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
+    if (this.hostWorld !== null) {
+      // 开房：房名由世界名派生（玩家仍可改），主按钮换成「确定并进入」
+      this.roomInput.value = roomFromWorldName(this.hostWorld.name, this.hostWorld.seed ?? 0);
+      this.joinButton.textContent = t('world.hostStart');
+      this.hostButton.classList.add('hidden');
+    } else {
+      this.joinButton.textContent = t('mp.join');
+      this.hostButton.classList.remove('hidden');
+    }
+    // 「选择本机」只在开房时露出：加入时填本机没有意义（本机没服务端）
+    this.list.setLocalVisible(this.hostWorld !== null);
+    /*
+     * 联机只在**完整版**可用（用户 2026-10-27）：完整版的原生壳能通过 JS bridge
+     * 报出本机局域网 IP；拿不到就说明是精简版/网页版，直接弹提示并关掉这个界面。
+     */
+    if (mode === 'join' || mode === 'host') {
+      void this.ensureFullVersion();
+    }
+    // 刚打开时清掉上一次的错误/断线提示（否则一进来就写"连接已断开"）
+    this.showError('');
     this.syncModeVisibility();
     this.openState = true;
-    this.root.classList.remove('hidden');
+    // 上一次的关闭动画还没播完就又被打开：掐掉它，别让面板在动画中途被隐藏
+    window.clearTimeout(this.closeTimer);
+    this.root.classList.remove('closing', 'hidden');
+    // 右栏：打开就重新扫一遍（端口按表单当前值）
+    this.list.setPort(Number(this.form.portInput.value) || 8887);
+    void this.list.refresh();
     // 每次打开都从存储里刷新一次地址/端口（上一次连接可能刚写过）
     this.form.portInput.value = readStored(STORAGE_PORT) ?? String(this.form.portInput.value || '');
     this.setState(this.state);
@@ -243,15 +362,33 @@ export class MultiplayerScreen {
    * 「开房」在 join 模式恒藏；「断开」只在真有连接（含重连中）时露出来——
    * 否则联机中打开「加入房间」会是一个全灰的死面板。
    */
+  /**
+   * 三个按钮的可见性。
+   *
+   * `join` / `host` 都是"单入口"模式（用户 2026-10-27：开房与加入共用一套界面），
+   * 只留一颗主按钮；只有主菜单的 `full` 才三颗都给。
+   * 开房模式下主按钮是「确定并进入」，那颗「开房」按钮必须藏起来——
+   * 否则玩家会看到两个都在说"开房"，分不清该点哪个。
+   */
   private syncModeVisibility(): void {
-    const joinMode = this.mode === 'join';
-    this.hostButton.classList.toggle('hidden', joinMode);
-    this.disconnectButton.classList.toggle('hidden', joinMode && !multiplayerButtons(this.state).disconnect);
+    const compact = this.mode !== 'full';
+    this.hostButton.classList.toggle('hidden', compact);
+    this.disconnectButton.classList.toggle('hidden', compact && !multiplayerButtons(this.state).disconnect);
   }
 
   close(): void {
+    if (!this.openState) return;
     this.openState = false;
-    this.root.classList.add('hidden');
+    /*
+     * 淡出而不是"啪"一下没了（2026-10-27）：面板是淡入放大的，退出对称地收回去。
+     * 固定 160ms，与 CSS 的动画时长一致。
+     */
+    this.root.classList.add('closing');
+    window.clearTimeout(this.closeTimer);
+    this.closeTimer = window.setTimeout(() => {
+      this.root.classList.remove('closing');
+      this.root.classList.add('hidden');
+    }, 160);
   }
 
   /** 由主程序在 `onStatus` 里推进：状态文案 + 按钮可用性 */
@@ -353,7 +490,170 @@ export class MultiplayerScreen {
     writeStored(STORAGE_ROOM, this.roomInput.value.trim());
     writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
     writeStored(STORAGE_NAME, values.name);
+    // 开房：交给宿主做预检 + 建世界（不是连上去就算）
+    if (this.hostWorld !== null) {
+      this.actions.onHostWorld?.(this.hostWorld, values.room, values.password, values.baseUrl, values.name);
+      return;
+    }
     this.actions.onConnect(values.url, values.name, host);
+  }
+
+  /**
+   * 改端口要**确认**（用户 2026-10-27）：端口一变，右边扫的就是另一批机器，
+   * 必须立刻按新端口重扫——所以不能在输入框里随手打字就生效。
+   */
+  /**
+   * 联机前的完整版校验（用户 2026-10-27）。
+   *
+   * 有桥 → 拿到本机 IP，右栏按这个网段扫；没桥 → 弹"需要完整版"并关掉界面。
+   */
+  private async ensureFullVersion(): Promise<void> {
+    if (!hasNativeLanBridge()) {
+      this.showFullVersionPrompt();
+      return;
+    }
+    const ip = await getLanIp();
+    if (ip === null) {
+      this.showFullVersionPrompt();
+      return;
+    }
+    this.lanIp = ip;
+    void this.list.refresh();
+  }
+
+  /**
+   * 「完整版才支持联机」的提示（用户 2026-10-27）。
+   *
+   * 两个按钮（关闭 / 前往下载）**都把提示和联机界面一起关掉**——这一页在精简版里
+   * 本来就没有可用功能，留着只会让人反复点。
+   */
+  private showFullVersionPrompt(): void {
+    if (this.fullPrompt !== null) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-full-prompt';
+    wrap.id = 'mp-full-prompt';
+
+    const card = document.createElement('div');
+    card.className = 'mp-full-card';
+    const title = document.createElement('b');
+    title.className = 'mp-full-title';
+    title.textContent = t('mp.needFullTitle');
+    const body = document.createElement('div');
+    body.className = 'mp-full-body';
+    body.textContent = t('mp.needFullBody');
+
+    const actions = document.createElement('div');
+    actions.className = 'mp-full-actions';
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.className = 'mp-action';
+    later.id = 'mp-full-close';
+    later.textContent = t('mp.close');
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'mp-action primary';
+    go.id = 'mp-full-go';
+    go.textContent = t('mp.needFullGo');
+    const dismiss = (): void => {
+      wrap.remove();
+      this.fullPrompt = null;
+      this.close();
+    };
+    later.addEventListener('click', dismiss);
+    go.addEventListener('click', () => {
+      try {
+        window.open(FULL_VERSION_URL, '_blank', 'noopener');
+      } catch {
+        // 有些 webview 会拦新窗口：给个入口就行，关闭界面才是主行为
+      }
+      dismiss();
+    });
+
+    actions.append(later, go);
+    card.append(title, body, actions);
+    wrap.append(card);
+    this.root.append(wrap);
+    this.fullPrompt = wrap;
+  }
+
+  /** 端口等于默认值时界面显示灰底（表示"没改过"），改过就恢复正常态 */
+  private syncPortDefault(): void {
+    const port = parsePort(this.form.portInput.value) ?? 8887;
+    this.form.portInput.classList.toggle('is-default', port === 8887);
+  }
+
+  private openPortDialog(): void {
+    if (this.portDialog !== null) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-port-dialog';
+    wrap.id = 'mp-port-dialog';
+
+    const card = document.createElement('div');
+    card.className = 'mp-port-card';
+    const title = document.createElement('b');
+    title.className = 'mp-port-title';
+    title.textContent = t('server.changePort');
+    const hint = document.createElement('div');
+    hint.className = 'mp-port-hint';
+    hint.textContent = t('server.portRescan');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'mp-port-field';
+    input.className = 'mp-port-field';
+    input.inputMode = 'numeric';
+    input.maxLength = 5;
+    input.autocomplete = 'off';
+    input.value = String(parsePort(this.form.portInput.value) ?? 8887);
+
+    const actions = document.createElement('div');
+    actions.className = 'mp-port-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = 'mp-port-cancel';
+    cancel.className = 'mp-action';
+    cancel.textContent = t('menu.cancel');
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.id = 'mp-port-ok';
+    ok.className = 'mp-action primary';
+    ok.textContent = t('server.confirm');
+    actions.append(cancel, ok);
+
+    const close = (): void => {
+      wrap.remove();
+      this.portDialog = null;
+    };
+    cancel.addEventListener('click', close);
+    ok.addEventListener('click', () => {
+      const next = parsePort(input.value);
+      // 填坏了就停在弹窗里让玩家改，不要静默回退（他刚明确要改端口）
+      if (next === null) {
+        input.focus();
+        input.select();
+        return;
+      }
+      this.form.portInput.value = String(next);
+      this.syncPortDefault();
+      this.list.setPort(next);
+      close();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') ok.click();
+      if (event.key === 'Escape') close();
+    });
+    // 点遮罩空白处关掉（与其它弹层一致）
+    wrap.addEventListener('click', (event) => {
+      if (event.target === wrap) close();
+    });
+
+    card.append(title, hint, input, actions);
+    wrap.append(card);
+    this.root.append(wrap);
+    this.portDialog = wrap;
+    input.focus();
+    input.select();
   }
 
   private showError(text: string): void {

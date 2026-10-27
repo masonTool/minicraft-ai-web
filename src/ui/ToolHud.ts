@@ -1,3 +1,4 @@
+import { tp } from '../core/i18n/I18n.ts';
 /**
  * 指南针 / 时钟的读数（批次 195，B19）
  *
@@ -84,7 +85,7 @@ export class ToolHud {
       this.root.classList.toggle('compass', kind === 'compass');
     }
 
-    const label = kind === 'compass' ? `${Math.round(detail)} 格` : timeOfDayLabel(detail);
+    const label = kind === 'compass' ? tp('hud.blocks', { n: String(Math.round(detail)) }) : timeOfDayLabel(detail);
     if (label !== this.lastLabel) {
       this.lastLabel = label;
       this.labelEl.textContent = label;

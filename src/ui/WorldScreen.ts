@@ -114,6 +114,8 @@ export interface WorldScreenActions {
     baseUrl: string,
     name: string,
   ) => Promise<string | null> | string | null;
+  /** 卡片上的「开房」：打开统一的多人界面（host 模式），世界名带过去 */
+  onHostOpen?: (world: WorldSummary) => void;
   /**
    * 开房对话框昵称的默认值（本批）：取联机面板记住的那个，省得每次重填。
    * 不传就空着——昵称必填，空着等于让玩家自己起一个。
@@ -132,7 +134,6 @@ export class WorldScreen {
   readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly listEl: HTMLDivElement;
-  private readonly worldCountEl: HTMLSpanElement;
   private readonly nameInput: HTMLInputElement;
   private readonly seedInput: HTMLInputElement;
   /** 批次 528：三张原生 select 换成与设置页同一套下拉 */
@@ -239,10 +240,22 @@ export class WorldScreen {
     build.className = 'world-build';
     build.id = 'world-build';
     build.textContent = formatBuildInfo(readBuildInfo());
-    build.title = '当前页面的构建版本';
+    build.title = t('world.buildHint');
     footer.append(build);
 
     home.append(title, subtitle, menu, footer);
+
+    /*
+     * 点页面其它任何地方收起卡片菜单（用户 2026-10-27）。
+     * 用 `pointerdown` 而不是 `click`：手机上 click 有 300ms 延迟，菜单会"晚一拍"才收。
+     */
+    document.addEventListener('pointerdown', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.closest('.world-card-extra') !== null || target.closest('.world-more') !== null)) {
+        return;
+      }
+      this.closeCardMenus();
+    });
 
     // ---------------------------------------------------------------- ② 世界列表
     //
@@ -260,14 +273,10 @@ export class WorldScreen {
     newEntry.textContent = t('menu.newWorld');
     newEntry.addEventListener('click', () => this.setView('create'));
 
-    const listLabel = document.createElement('div');
-    listLabel.className = 'world-group-label';
-    listLabel.append(t('world.list'));
-    this.worldCountEl = document.createElement('span');
-    this.worldCountEl.className = 'world-count';
-    listLabel.appendChild(this.worldCountEl);
-
-    // 导入（批次 591，L2）：入口放在世界列表标题旁，不占卡片按钮位
+    /*
+     * 顶部一颗「导入存档」——原来是「世界 12」标题旁边的一颗小按钮（用户 2026-10-27：
+     * 那一行的标题和数字不用显示）。现在并进下面那一排的**最右**，比其他两颗小一号。
+     */
     const importButton = document.createElement('button');
     importButton.type = 'button';
     importButton.className = 'world-mini world-import';
@@ -275,13 +284,17 @@ export class WorldScreen {
     importButton.addEventListener('click', () => {
       void this.actions.onImport?.();
     });
-    listLabel.appendChild(importButton);
 
     /*
      * 顶部并排两颗（L9，方案 A）：**＋ 新建世界** 与 **加入房间…**。
      *
      * 加入放在这里而不是首页菜单：它和"新建/选世界"是同一层的事（都是"开始一局"），
      * 首页只留游戏/设置/小游戏三个入口，不再堆第二颗联机键。
+     */
+    /*
+     * 顶部这一排（用户 2026-10-27）：**新建世界 / 加入房间 两颗大的并排，导入存档放最后小一号**。
+     * 以前「新建世界 / 加入房间」在上面一行、`世界 12` 标题和导入按钮在下面一行——两行都是
+     * 入口，玩家要在两处找，而且标题那行还占着高度。
      */
     const topRow = document.createElement('div');
     topRow.className = 'world-list-top';
@@ -296,10 +309,10 @@ export class WorldScreen {
       topRow.append(join);
     }
 
+    topRow.append(importButton);
     worlds.append(
       this.makeNav(t('world.list'), () => this.setView('home')),
       topRow,
-      listLabel,
       this.listEl,
     );
 
@@ -470,10 +483,12 @@ export class WorldScreen {
     name.textContent = label;
     row.append(name, control);
     if (Array.isArray(extra)) {
-      // 多尾巴（地址行的 `:` + 端口 + 选择）用 flex 版式：那个 3 列 grid 放不下 5 个元素
-      row.classList.add('world-row-inline');
+      // 地址行：标签 / 地址 / `:` / 端口 / 选择 五格，列宽见 .world-row-address
+      row.classList.add('world-row-address');
       row.append(...extra);
     } else if (extra) {
+      // 单个尾巴（种子的重新掷色子）：三列
+      row.classList.add('world-row-inline');
       row.append(extra);
     }
     return row;
@@ -528,7 +543,6 @@ export class WorldScreen {
   render(): void {
     this.listEl.textContent = '';
     const worlds = this.registry.list();
-    this.worldCountEl.textContent = String(worlds.length);
 
     if (worlds.length === 0) {
       const empty = document.createElement('div');
@@ -547,11 +561,19 @@ export class WorldScreen {
     const card = document.createElement('div');
     card.className = 'world-card';
     // 完整信息留在悬停提示里（桌面端可看；手机端不占行高）
-    card.title = `种子 ${world.seed} · 改动 ${world.edits} 格`;
+    card.title = tp('world.cardHint', { seed: String(world.seed), edits: String(world.edits) });
 
     const thumbnail = document.createElement('div');
     thumbnail.className = 'world-card-thumb';
     thumbnail.dataset.worldType = world.worldType;
+    /*
+     * 有截图就用截图（退出时存下来的那一帧），没有才退回按世界类型画的预览图。
+     * 老存档没有 `thumbnail`，所以两套并存——不是"过渡期代码"，是新旧存档都合法。
+     */
+    if (world.thumbnail !== undefined && world.thumbnail.length > 0) {
+      thumbnail.classList.add('has-shot');
+      thumbnail.style.backgroundImage = `url(${JSON.stringify(world.thumbnail)})`;
+    }
     thumbnail.setAttribute('aria-hidden', 'true');
 
     const info = document.createElement('div');
@@ -644,15 +666,60 @@ export class WorldScreen {
 
     const extra = document.createElement('div');
     extra.className = 'world-card-extra hidden';
-    extra.append(edit, exportButton, remove);
-    more.addEventListener('click', () => {
-      const open = extra.classList.toggle('hidden') === false;
-      more.setAttribute('aria-expanded', String(open));
+    extra.append(exportButton, edit, remove);
+    /*
+     * 「⋯」= **下拉菜单**（用户 2026-10-27）：点开在按钮下方浮出一列
+     * 导出 / 编辑 / 删除，点页面其它任何地方收起。
+     *
+     * 以前是"在卡片底部展开一行"——卡片高度会跳，而且横屏下这一行会把
+     * 下面那张卡挤走；下拉浮在卡片之上，不参与一局布局。
+     */
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = extra.classList.contains('hidden');
+      this.closeCardMenus();
+      more.setAttribute('aria-expanded', String(willOpen));
+      if (!willOpen) {
+        extra.classList.add('hidden');
+        return;
+      }
+      extra.classList.remove('hidden');
+      /*
+       * 定位（用户 2026-10-27：条目在下面时菜单会被遮住/裁掉）。
+       *
+       * 两个问题一起解决：
+       *  1. `.world-list` 是 `overflow-y: auto`，absolute 的菜单超出列表就看不见
+       *     → 改成 `position: fixed`（相对视口，不受滚动容器裁剪）；
+       *  2. 靠底部的那几张卡片下方没空间 → 量一下剩余高度，不够就**翻到按钮上方**。
+       */
+      const rect = more.getBoundingClientRect();
+      const menuHeight = extra.offsetHeight;
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const top =
+        spaceBelow >= menuHeight ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+      extra.style.position = 'fixed';
+      extra.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+      extra.style.left = 'auto';
+      extra.style.top = `${top}px`;
     });
+    // 菜单内部点击不要冒泡到"点别处收起"那条（否则点菜单项时先收起来了）
+    extra.addEventListener('click', (event) => event.stopPropagation());
 
     buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);
     card.append(thumbnail, info, buttons, extra);
     return card;
+  }
+
+  /** 收起所有卡片的下拉菜单（点别处 / 打开另一个时调用） */
+  private closeCardMenus(): void {
+    for (const menu of this.listEl.querySelectorAll('.world-card-extra')) {
+      menu.classList.add('hidden');
+      // 清掉上次算出来的 fixed 坐标：不同条目的位置不一样，下次必须重算
+      menu.removeAttribute('style');
+    }
+    for (const button of this.listEl.querySelectorAll('.world-more')) {
+      button.setAttribute('aria-expanded', 'false');
+    }
   }
 
   /** 列表里的彩色小标签（模式 / 难度 / 类型） */
@@ -678,8 +745,26 @@ export class WorldScreen {
    * 复制邀请），默认值必须一眼能认，也要允许改（同一台服务器上开两局得分开）。
    * 房间名只收 `[A-Za-z0-9_-]`——服务端把它当数据 key 前缀、还会拼进地址 path。
    */
+  /**
+   * 卡片上的「开房」。
+   *
+   * 2026-10-27 第三版：**不再弹一个自己的对话框**——加入和开房字段完全一样，
+   * 共用「左输入 / 右列表」那一套界面即可（用户原话：为什么不用同一套 UI）。
+   * 世界名带过去，那边会把房间名预填成由世界名派生的那个、按钮换成「确定并进入」。
+   *
+   * 旧的独立对话框保留在 `showHostDialog()`（未删）：万一统一界面在某些平台上
+   * 需要退回旧路径，改一行就能切回来。
+   */
   private openHostWorld(world: WorldSummary): void {
     this.editCleanup?.();
+    if (this.actions.onHostOpen) {
+      this.actions.onHostOpen(world);
+      return;
+    }
+    this.showHostDialog(world);
+  }
+
+  private showHostDialog(world: WorldSummary): void {
     const defaultRoom = roomFromWorldName(world.name, world.seed);
 
     const overlay = document.createElement('div');

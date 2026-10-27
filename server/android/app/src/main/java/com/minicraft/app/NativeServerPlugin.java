@@ -11,6 +11,11 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.minicraft.server.NativeServer;
 
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Collections;
+
 /**
  * 给网页用的插件：{@code Capacitor.Plugins.NativeServer.start({ port, seed })}。
  *
@@ -46,6 +51,36 @@ public class NativeServerPlugin extends Plugin {
     }
 
     /** 当前端口（0 = 还没起来 / 没在跑）。网页轮询它拿"进房地址"。 */
+    /**
+     * 本机局域网 IPv4（用户 2026-10-27）。
+     *
+     * <p>网页侧**不再猜网段**：拿不到这个地址就说明不是完整版，联机界面直接不让进。
+     * 所以这里要挑"能用来看局域网的那一个"：跳过回环、跳过 169.254（没拿到 DHCP 时的
+     * 链路本地地址，它扫不出任何东西）。
+     */
+    @PluginMethod
+    public void localIp(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("ip", findLocalIpv4());
+        call.resolve(ret);
+    }
+
+    private String findLocalIpv4() {
+        try {
+            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
+                    if (!(addr instanceof Inet4Address) || addr.isLoopbackAddress()) continue;
+                    String host = addr.getHostAddress();
+                    if (host != null && !host.startsWith("169.254.")) return host;
+                }
+            }
+        } catch (Exception ignored) {
+            // 拿不到就返回 null：JS 侧会当成"不是完整版"处理，这里不该抛
+        }
+        return null;
+    }
+
     @PluginMethod
     public void port(PluginCall call) {
         int port;

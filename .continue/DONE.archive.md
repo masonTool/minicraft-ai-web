@@ -4,6 +4,1845 @@
 > 这批是旧版存档（历史批次 1~613 / HANDOFF 批次流水 / 旧队列整份），不进上下文。
 > 找某个批次：`grep -n "批次 <号>" .continue/DONE.archive.md`
 
+## 批次 20261027-2400 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：回退了之前"挪原框"那版，重新按他的口径做——整层黑遮罩 + 左上角输入区，
+> 无边框、只留下方一条线；PC 端不要这套逻辑。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2400
+
+- [x] [L19] 手机端输入浮层按定稿重做：`src/ui/InputOverlay.ts`、`index.html` → playwright
+  - 做了什么：新增 `.inp-layer`（全屏 `rgba(0,0,0,.75)`、`z-index: 9999`、`touch-action: none`）作为遮罩层，输入框 `.inp-field` 是它的子元素、绝对定位到左上角（`(12,12)`，宽 `min(62vw,340px)`）；输入区**无边框**，只有 `border-bottom: 2px` 主色线，透明底白字 17px；点原框 → 层出现 + `focus()` + `select()` 全选；`input` 事件**边打边写回**原框并派发 `input`；点遮罩（`pointerdown` on layer）→ `blur()` → 走统一的 `finish()`：落值 + 派发 `change` + 收层。
+  - 为什么：用户明确"左上角那个输入框不是单独的输入框，而是整个界面加一层黑色半透明遮罩，输入框在遮罩的左上角"。这样才能同时做到"看得见输入"和"拦住下面所有触摸"。
+  - 验证：触屏 → `layer.visible`、`bg rgba(0,0,0,.75)`、`z 9999`、输入区 `(12,12,340)`、`borderTop 0px` + `borderBottom 2px rgb(127,168,111)`、`focused: true`、`elementFromPoint(600,400)` 返回 `.inp-layer`；输入 `192.168.1.88` 实时写回 `#mp-url`，点遮罩后层消失、值保留。桌面（不带参数）→ `.inp-layer` 完全不创建。截图 `N-final.png`。
+  - 批次：20261027-2400
+- [x] [L19] PC 端完全不启用 + 桌面自检开关
+  - 做了什么：`shouldLift()` 取三项并集（`maxTouchPoints` / `ontouchstart` / `pointer: coarse`），全假时再排除"有鼠标精确指针的桌面"；`?lift=1` 强制启用。
+  - 为什么：只依赖 `maxTouchPoints` 会漏（部分手机浏览器报 0，这正是之前"手机上没效果"的隐患之一）；而三项全假的明确桌面才该让路。
+  - 验证：桌面不带参数 → `layer: false`；加 `?lift=1` → 正常出现。
+  - 批次：20261027-2400
+- [x] [L19] 修 `maxLength = -1` 的静默异常
+  - 做了什么：`element.maxLength >= 0` 才赋值，否则 `removeAttribute('maxlength')`。
+  - 为什么：`maxLength` 在没设上限时是 **-1**，直接赋给 input 会抛 `IndexSizeError`，异常打断 `open()` 在"显示遮罩"之前——表现是"点了输入框什么都不发生"（第一版就是这个症状）。
+  - 验证：修前 `layer: false`，修后 `layer: true`。
+  - 批次：20261027-2400
+
+---
+
+## 批次 20261027-2158 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2158
+
+> 用户 2026-10-27：「请继续执行未完成的任务」—— 接着 M26b：把自绘面板**接进游戏**。
+> 直接替换会丢功能（19 种工作站布局还没搬），所以先做"同位置叠加"来做真机比对。
+
+- [x] [C1] `src/main.ts`：`?ui2dinv2d=1` 开关 + `InventoryPanelHost` 接入（读真实 `Inventory`、图标走 `ItemIconCache`）→ `npm run check`
+  - 做了什么：`UI2D_INV2D` 常量；`inv2d` / `inv2dIcons` 字段；背包打开时 `open()` 并每帧 `render()`，关掉就 `close()`；显示索引映射（前 27 格 → 库存 9~35，后 9 格 → 0~8）。
+  - 为什么：自绘这条路的判据是"与镜像并排无差异"，只有**同位置叠加**才能在真机上看出来；而它不吃输入，所以零回归风险。
+  - 验证：`tsc` 干净、`npm run check` exit=0（缺省不开启 → 对现有行为零影响）、`build:fast` 出包。
+  - 批次：20261027-2158
+
+- [x] [C2] 文档：§5.35（叠加的原因 + 三条边界）、决策 D47、`TASKS` 的 M26b 更新 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"只覆盖 36 格""标题不跟工作台变""cursor 与 held 是两份状态"三条边界。
+  - 为什么：第三条是替换时最容易出事的地方（拖动物品会出现两叠），现在写下来，替换那一批才不会踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2158
+
+## 批次 20261027-2121 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2121
+
+> 用户 2026-10-27：「继续完成」—— 剩下的大件只有 M26b（背包自绘）。这一批开工第一步：
+> 把"自己排版 + 自己命中 + 自己画"这条路跑通，并做出图标缓存。
+
+- [x] [B1] `src/ui/ItemIconCache.ts`：按 itemId 缓存图标位图（画法由调用方注入）→ `npx vitest run tests/ui2d-iconcache.test.ts`
+  - 做了什么：`get(itemId)` 第一次才画、之后命中；`clear()` 供资源包热重载；构造参数里注入 `painter` 与 `createCanvas`（后者让测试能在 node 里跑）。
+  - 为什么：自绘面板每帧要画 36 个图标，若不缓存就是每帧 36 次图集采样；而按 id 缓存与原版一致（同种物品共用一张图）。
+  - 验证：`tests/ui2d-iconcache.test.ts` **3 passed**（同 id 只画一次、异 id 各一张、clear 后重画）。
+  - 批次：20261027-2121
+
+- [x] [B2] `src/ui2d/InventoryPanelHost.ts`：自绘宿主（布局/命中/交互/绘制/光标叠）+ 预览页 → 截图
+  - 做了什么：复用 `layoutInventoryPanel` / `slotIndexAt` / `drawInventoryPanel`；交互走 `leftClick` / `rightClick` / `quickMove` / `distributeDrag`；数据直接吃 `SlotAccess`；预览页里整页没有背包 DOM，只有一块 canvas（自己接 pointer）。
+  - 为什么：这是 M26b 的地基 —— 镜像依赖 DOM 布局，这一步证明"不依赖 DOM 也能排版、命中、画"。
+  - 验证：截图 `32-inventory-selfdrawn.png`（面板 + 图标 + 数量）与 `32b`（手上那一叠跟随指针）；`tsc` 干净。
+  - 批次：20261027-2121
+
+- [x] [B3] 踩到的细节：抬起事件也要带真实坐标（否则"手上那一叠"被画到左上角）；`Inventory` 不需要适配器（结构上就是 `SlotAccess`）
+  - 做了什么：修预览页的 `pointerup` 传坐标；把"不需要适配器"写进 §5.34。
+  - 为什么：这两条都是"看起来能跑、但结果是错的"的典型；尤其坐标那条，只有截图能看出来。
+  - 验证：`32b` 里那一叠正确地跟着指针；`tsc` 干净。
+  - 批次：20261027-2121
+
+- [x] [B4] 文档：`notes/canvas-ui.md` §5.34（自绘第一条路 + 两个细节 + "还没做"表）、决策 D46、`TASKS` 的 M26b 改 `[~]` → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"镜像依赖 DOM、自绘不依赖"，以及剩下三件事（接进游戏 / 19 种工作站布局 / 长按 UI）。
+  - 为什么：M26b 是"实现方式升级"而不是"功能缺口"，边界写清楚才不会让人以为界面还缺东西。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2121
+
+## 批次 20261027-2114 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2114
+
+> 用户 2026-10-27：「继续完成」—— 把背包这几条任务（M27~M31）的"到底还差什么"查清楚，
+> 查到一处真缺口（配方书没在镜像里）并补掉。
+
+- [x] [A1] 证据盘点：M27~M31 逐条查实现路径（`.inv-slot` 通路、tooltip 层级、占比条位置、`<input>` 取值）→ 结论写进 §5.33 表
+  - 做了什么：确认 M27/M29/M30/M31 已被镜像覆盖（同一批 `.inv-slot` / `.inv-panel`），`#item-tooltip` 在 `body`、`z-index: 60` 不会被镜像（12）盖住。
+  - 为什么：这几条一直挂着"待办"，但没人说得清还差什么；逐条查过之后才知道只剩"自绘替换"这一件。
+  - 验证：`grep` 证据见 §5.33 表；`tsc` 干净。
+  - 批次：20261027-2114
+
+- [x] [A2] 补真缺口：配方书（`.recipe-panel`）挂在 `body`，背包镜像覆盖不到 → 单开一个镜像实例
+  - 做了什么：`main.ts` 新增 `recipe2d`（`MenuScreen2D`，zIndex 13、pollMs 150）与 `syncRecipe2d()`（可见就 engage、收起就 disengage），dispose 里一并释放。
+  - 为什么：`RecipeBook` 是 `new RecipeBook(document.body, …)`，它的面板不在 `#inventory-screen` 里 —— 不补就是"左半 canvas、右边 DOM"，而配方书里还有搜索框与滚动列表。
+  - 验证：`tsc` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 core.bin）。
+  - 批次：20261027-2114
+
+- [x] [A3] `TASKS`：M27~M31 按证据标完成（各自写明"为什么算完成"），剩下 M26b 与 M34 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：五条待办改 `[x]` 并补上依据；M34 仍是 `[~]`（验收脚本就绪、通过分支待首跑）。
+  - 为什么：待办里挂着"已完成功能的可能性"会让人重复劳动，也会让"还差多少"永远说不清。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2114
+
+## 批次 20261027-2106 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2106
+
+> 用户 2026-10-27：「继续执行未完成的任务」—— 上一件是"空白检测门禁"，这一件是 **M34**：
+> 暂停弹窗那条链一直"只能在真游戏里验"，所以把它写成一条命令。
+
+- [x] [Z1] `tools/pause-check.mjs` + `npm run check:pause`：暂停弹窗端到端 8 条断言（让位 / HUD / canvas 像素 / 进设置 / 退回 / 关闭恢复）→ 跳过分支实测
+  - 做了什么：`?ui2d=1` 加载 → 判"进没进世界"（`#hud` 与 `#settings-screen` 都在才算）→ Esc 后断言 `.settings-panel` 与 `#hud` 都是 `visibility: hidden`、canvas 有像素 → ↓+Enter 进设置、断言 `data-page` → Esc 退回 → Esc 关闭并断言 HUD 与面板 DOM 恢复。
+  - 为什么：这条链涉及三处让位 + engaged 标志 + 两套键鼠路由，任何一处错都表现为"Esc 打不开/关不掉/HUD 不回来"，而它只能在有 `core.bin` 的环境验；写成命令才能"一条命令过一遍"。
+  - 验证：落地页 → **跳过 exit 0**；连不上 dev server → 跳过 exit 0；`tsc` 无关、`node --check` 通过。
+  - 批次：20261027-2106
+
+- [x] [Z2] 修脚本自身的两个坑：落地页被误判成"进了世界"、`getComputedStyle(null)` 抛错
+  - 做了什么：进游戏判据加上"`#settings-screen` 必须存在"（它由 `SettingsScreen` 构造时创建、只在游戏里有）；所有 `getComputedStyle` 加空保护。
+  - 为什么：落地页 `#world-screen` 与 `#settings-screen` 都不存在，只判 `#hud` 会把落地页当成世界内 —— 第一次跑就是这么红的（还留下一条 `getComputedStyle` 异常）。
+  - 验证：修正后落地页正确跳过（exit 0）。
+  - 批次：20261027-2106
+
+- [x] [Z3] 文档：`notes/canvas-ui.md` §5.32（8 条判据表 + "跳过分支已验、通过分支待首跑"）、决策 D44、`TASKS` 的 M34 改 `[~]` → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：把每条断言对应的"坏掉症状"列成表，并如实写明通过分支尚未执行。
+  - 为什么：验收脚本最怕"写了但没人跑、也没人知道它没跑过"；把边界写在正面，下次跑红了才知道该往哪查。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2106
+
+## 批次 20261027-2050 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2050
+
+> 用户 2026-10-27：「请继续执行未完成的任务」。
+> M34（暂停弹窗验收）缺的是"能不能自动发现问题"，而今天连着两次"截图成功、页面全空"。
+> 所以先把这道门禁补上：**预览页空白检测**。
+
+- [x] [Y1] `tools/ui2d-visual-check.mjs` + `npm run check:ui2d-visual`：7 个预览页的像素统计（非透明占比 + 颜色种类 + pageerror）→ 正反两个方向各跑一次
+  - 做了什么：对每页取**面积最大那块 canvas**，算非透明占比与颜色种类，阈值按页给（镜像 3~5%、触控 0.5%、纯文字 0.2%）；`pageerror` 计入失败；没浏览器时跳过并 exit 0。
+  - 为什么：脚本语法错（`as const` 写进内联 `<script>`）与"抓太早"都会得到一张"看着像还没画"的截图，`npm run check` 覆盖不到，肉眼也难判断。
+  - 验证：正跑 7 页全绿（背包 36.6%/151 色 … 纯文字 100%/1921 色）；反跑（`UI2D_BASE` 指向不存在的路径）7 页全红且 **exit 1**，修复后 exit 0。
+  - 批次：20261027-2050
+
+- [x] [Y2] 修工具本身的坑：`querySelector('canvas')` 会拿到 36×36 的物品图标
+  - 做了什么：改成遍历所有 canvas 取面积最大的那块。
+  - 为什么：第一版统计到的是图标（36×36、3 种色、45% 非透明），**看着很健康于是全部通过** —— 等于没测。
+  - 验证：修正后背包页变成 844×390、151 种色，与截图一致。
+  - 批次：20261027-2050
+
+- [x] [Y3] 文档：`notes/canvas-ui.md` §5.31（两次空白 + 两条实现坑 + 阈值表）、决策 D43 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：记下"为什么需要这道门禁"、"必须挑最大 canvas"、"阈值按页给"。
+  - 为什么：这道门禁的价值全在"它能红"；写清楚它为什么这么写，才不会被后来的人"简化"成 `querySelector`。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2050
+
+## 批次 20261027-2023 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2023
+
+> 用户 2026-10-27：「继续完成，多做一点」—— 先修背包的两个真问题（一个是我自己引入的回归），
+> 再继续往 M26b 走。
+
+- [x] [X1] 修回归：`html.ui2d-inv #inv-held { opacity: 0 }` 删掉 —— 拖动物品时那一叠会消失
+  - 做了什么：去掉那条让位规则（`#inv-held` 在镜像根 `.inv-shell` 外面，藏了没人画），改由 DOM 继续绘制；顺手把注释改成"为什么不能藏"。
+  - 为什么：让位 + 没人接手 = 内容消失；而它只在拖动时出现，静态截图完全正常（与 `.inv-shell` 那次同源）。
+  - 验证：`tsc` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-2023
+
+- [x] [X2] `MenuScreen2D.setHighlight()` + `main.ts` 用 `elementFromPoint` 算悬停格 → 截图
+  - 做了什么：镜像新增"悬停高亮"（白框 + 薄白底，画在所有内容之上）；`setHighlight()` 只比重画、不重读 DOM；`main.ts` 全局记指针位置，`inventoryHoverRect()` 用 `elementFromPoint(...).closest('.inv-slot')` 找那一格。
+  - 为什么：`.inv-slot:hover` 在 `opacity: 0` 的子树里看不见，玩家会以为"这格点不动"；而 `elementFromPoint` 天然跟着滚动与布局走，比自己算几何稳。
+  - 验证：预览页 `?hover=13` 截图里第 13 格有白框+薄白底；`tsc` 干净；`check:fast` 绿。
+  - 批次：20261027-2023
+
+- [x] [X3] 文档：`notes/canvas-ui.md` §5.30（两处修复 + "让位前先确认由谁画"的教训）、决策 D42 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：记下"让位 + 没人接手 = 内容消失"这条通用教训（第二次踩），以及 `setHighlight` 只重画不重读的取舍。
+  - 为什么：这两条都会在接 M26b 时反复出现，写清楚能少踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2023
+
+## 批次 20261027-2017 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2017
+
+> 用户 2026-10-27：「继续完成」—— 把 M35 的另一半补上：**滚动条要能拖**。
+
+- [x] [W1] `src/ui2d/menuScreen.ts`：滚动条命中 + 拖动（抓拇指不跳、抓轨道先对齐、两端夹住）→ Playwright 实测
+  - 做了什么：`scrollBars` 带上元素引用（`ScrollBarEntry`）；按下时先 `scrollBarAt()` 命中（±3px 宽容），命中就进"拖条"模式；抓拇指记 `offset`，抓轨道先把拇指中心跳过去；`applyBarDrag()` 把手指 y 换算成 `scrollTop` 并夹在两端。
+  - 为什么：不先做命中，右边缘的拖动会被内容拖拽抢走（拇指纹丝不动）；不记 `offset`，抓在拇指中间一拖拇指就往上跳。
+  - 验证：合成 touch 拖拇指 72px → `scrollTop` **0 → 153**（可滚 168），松手停住；`tsc` 干净。
+  - 批次：20261027-2017
+
+- [x] [W2] 文档：`notes/canvas-ui.md` §5.29、决策 D41、`TASKS` 的 M35 标完成 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.29 记下"先命中再拖"、"offset 防跳"、"抓轨道先对齐"三条，以及"拖条不产生惯性"（与手机一致）。
+  - 为什么：这三条都是"不做就像坏了"的细节，写下来下次接别的滚动容器不用重想。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2017
+
+## 批次 20261027-2001 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2001
+
+> 用户 2026-10-27：「继续完成」—— 把 M33 的另一半做完：**顶部三颗 + 跳跃/飞行升降**。
+> 障碍是图标：它们是内联 SVG 字符串，canvas 拿不到。所以先做"图标真源上移"。
+
+- [x] [Z1] `src/ui2d/touchArt.ts`：六个图标的形状数据（path/rect/circle）+ `shapeToSvgMarkup` / `touchIconSvgMarkup`；`ui/TouchIcons.ts` 改为从它拼 SVG → `npx tsx tools/ui-test.ts`
+  - 做了什么：`TouchIconShape` 支持 `path`（含 `evenodd`）/`rect`（含 `rx`/`alpha`）/`circle`；`TOUCH_ICON_SHAPES` 收下六颗图标的原始几何；`ui/TouchIcons.ts` 只剩 i18n 标签 + 一层转发（依赖方向 `ui/ → ui2d/`）。
+  - 为什么：canvas 要画同一组图标，而"照着 SVG 抄一份路径"必然悄悄画歪，且没有断言抓得到（歪了只是看着不像）。与 `vitalsArt.ts` 同一条理由。
+  - 验证：`npm run test:ui` 图标段全绿（六个图标名齐全、SVG 合法且互不相同）；`tsc` 干净。
+  - 批次：20261027-2001
+
+- [x] [Z2] `src/ui2d/Touch2D.ts`：`drawTouchIcon`（`Path2D` 缓存）+ `drawTouchButton`（玻璃底 + 描边 + 图标 + 按下缩放）+ `setButtons` → `npx vitest run tests/ui2d-touch.test.ts`
+  - 做了什么：图标按 24×24 形状用 `ctx.scale` 缩进按钮，`Path2D` 按 `d` 缓存；按钮底用真 `createLinearGradient` + `createRadialGradient`；阴影用"同形状下移 1px 画一遍"（比 `shadowBlur` 便宜且够像）。
+  - 为什么：`shadowBlur` 每帧对 6 个图标会明显掉帧，而 `text-shadow` 的观感只需要一层偏移。
+  - 验证：`tests/ui2d-touch.test.ts` **11 passed**（新增 4 条：六名都有形状、两种拼法非空且互不相同、evenodd/opacity 不丢、图标占直径一半）。
+  - 批次：20261027-2001
+
+- [x] [Z3] `src/main.ts`：`syncTouch2d()` 收集 `.touch-button`（顶部三颗 + 跳跃/飞行 + 快捷栏侧键一个选择器全覆盖）并让位 → 预览页加按钮 → `npm run check:fast`
+  - 做了什么：按钮矩形/`data-icon`/`:active` 每帧读；`html.ui2d-touch .touch-button { opacity: 0 }` 让位。
+  - 为什么：这些按钮都是 `makeIconButton()` 造的同一个类，所以一个选择器就够 —— 将来加按钮也不用改 canvas 侧。
+  - 验证：截图里顶部三颗（气泡/两杠/眼睛）与右下三颗（上箭/上箭/下箭）都由 canvas 画，DOM 那份不可见；`tsc` 干净、`check:fast` 绿。
+  - 批次：20261027-2001
+
+- [x] [Z4] 文档：`notes/canvas-ui.md` §5.28（图标真源 + 按钮画法 + 阶段 6 账）、决策 D40、`TASKS` 的 M33 标完成 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.28 记下"为什么把图标数据上移"、"阴影为什么不用 shadowBlur"、"一个选择器覆盖全部按钮"；M33 收口。
+  - 为什么：M33 是"触控控件"整条线，收口时要把"视角面判定不搬"写清楚，否则以后会有人问"为什么视角没画"。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2001
+
+## 批次 20261027-1943 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1943
+
+> 用户 2026-10-27：「还有游戏场景内的摇杆、跳跃按键、顶部的三个按钮」。
+> 这一批先做**摇杆**：它是唯一"连续跟随手指"的控件，不能再走镜像那条路。
+
+- [x] [Y1] `src/ui2d/Touch2D.ts`：摇杆的画法与几何（`knobOffset` / `clampKnobOffset` / `drawStick` / `Touch2D`）→ `npx vitest run tests/ui2d-touch.test.ts`
+  - 做了什么：底座（暗底 + 径向高光 + 浅色描边 + 外圈暗边）、芯子（真线性渐变 + 深色描边）、潜行态绿芯与小牌；`Touch2D` 自带覆盖层（zIndex 30），每帧只喂两个矩形 + 两个 class 状态。
+  - 为什么：**摇杆不能镜像** —— 芯子一直动，镜像要么每帧读计算样式，要么落后几帧（黏手）。它只有两个圆，自己画更准更便宜。
+  - 验证：`tests/ui2d-touch.test.ts` **7 passed**（圆心偏移、芯子尺寸无关、内圈夹取按方向缩、NaN 回中、芯子大于底座时上限 0）；`tsc` 干净。
+  - 批次：20261027-1943
+
+- [x] [Y2] `src/main.ts`：`syncTouch2d()` 接线（可见才接管、`html.ui2d-touch` 让位、小牌文字从 DOM 读）→ `npm run check:fast`
+  - 做了什么：每帧读 `#touch-stick` 与 `.knob` 两个矩形 + `.active`/`.sneaking` + `.sneak-badge` 的文案；`html.ui2d-touch #touch-stick { opacity: 0 }` 让位（命中仍归 DOM）。
+  - 为什么：与快捷栏同一条结论——`opacity: 0` 不杀 pointer 事件，所以拖摇杆的手势一行没改；而小牌文字走 DOM 才能跟着语言切换。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-1943
+
+- [x] [Y3] 预览页 `tools/preview/touch.html`（拖得动、`?state=active|sneak`、`?dx&dy` 定位置）+ 3 张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：把 `index.html` 的样式整段搬进预览页（尺寸/渐变/描边全在 CSS 里），DOM 的摇杆按游戏里同一条规则 `opacity: 0`，canvas 那份才看得出是它画的；拖动芯子实时跟手。
+  - 为什么：**不藏 DOM 的话截图里两份会叠在一起**，看着"一样"但什么也没证明（第一版就是这样，连潜行小牌都分不清是 DOM 还是 canvas）。
+  - 验证：3 张截图（按下态 / 潜行态 / 遮罩），累计 55 张。
+  - 批次：20261027-1943
+
+- [x] [Y4] 文档：`notes/canvas-ui.md` §5.27（为什么不镜像 + 三条边界 + 阶段 6 还剩什么）、决策 D39、`TASKS` 的 M33 改 `[~]` → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.27 记下"自己画 + 几何量 DOM"的理由，以及"渐变必须用真渐变（两段纯色会留硬缝）"、`opacity: 0` 不影响命中；M33 标成进行中。
+  - 为什么：这一段是唯一"绕开镜像"的例外，不写清楚以后会有人想"统一改成镜像"，然后摇杆就黏手了。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-1943
+
+## 批次 20261027-1922 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1922
+
+> 用户 2026-10-27：「继续啊，把任务都放到任务列表里去，一件一件去做吧」。
+> 这一件是 **M35 + M36**：把"能滚"补成"看得出能滚 + 松手继续滑"。
+
+- [x] [W1] `src/ui2d/menuScreen.ts`：`scrollBarRects()` + 自绘滚动条 → `npx vitest run tests/ui2d-scroll.test.ts`
+  - 做了什么：`refresh()` 里遍历镜像子树，找出真的能滚的容器，按 `scrollBarRects()` 画 4px 半透明圆角拇指（右缩 2px，最小 18px）；`draw()` 里在文字之后画（压在内容右侧）。
+  - 为什么：DOM 的滚动条是 UA 画的，canvas 里没有 —— 不补就是"能滚但看不出能滚"。
+  - 验证：`tests/ui2d-scroll.test.ts` **9 passed**（装得下不画、比例、贴顶/贴底、极长内容用最小长度、越界与 NaN 夹住）。
+  - 批次：20261027-1922
+
+- [x] [W2] 惯性：采样最近 5 次移动算速度、`decayVelocity()` 衰减、`stepInertia()` 每帧推进 → 合成 touch 事件实测
+  - 做了什么：`drag.samples` 只留 5 个；`onDragEnd` 用 `(first.y - last.y)/dt*16.67` 算 px/帧；`stepInertia()` 每帧 `scrollTop += v` 并按 `0.94^frames`（dt 归一）衰减，`|v| < 0.25` 停；重新按下立刻停住惯性。
+  - 为什么：松手即停的手感很硬；而"按帧衰减 + dt 归一"能在掉帧时不至于冲很远。
+  - 验证：Playwright 合成 touch 向上拖 60px 松手 → `scrollTop` **60 → 73 → 109 → 129 → 144 → 162 → 168**（到底停住）；`decayVelocity` 4 条断言（单帧/多帧归一、阈值、方向、NaN）。
+  - 批次：20261027-1922
+
+- [x] [W3] 截图 `28-inventory-scrollbar.png` + `shoot-all` + 文档 §5.26 / 决策 D38 + TASKS 的 M35 改 `[~]`、M36 标完成 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：滚动 48px 的截图里能看到细拇指在轨道上约 1/3 处；§5.26 记下两件事的做法与断言清单，并明确"滚动条还不能拖"。
+  - 为什么：M35 只做了一半（不能拖），如果不写清楚，下一批会以为它已完成。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-1922
+
+## 批次 20261027-1900 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：端口那个格子应该是个**按钮**（点开弹窗）而不是输入框；弹窗里的输入框要走浮层逻辑；
+> 浮层出现时背景淡入一层模糊；默认选中的字要白色。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1900
+
+- [x] [L18] 端口格按钮化 + 浮条遮罩 + 选中白字：`index.html`、`InputOverlay.ts` → 截图 + `npm run check`
+  - 做了什么：`.mp-port-readonly` 从内凹输入框改成凸起按钮（`hover` 提亮、`:active` 位移 1px、默认值暗一档）；`.inp-bar` 改成全屏遮罩 `rgba(0,0,0,.26)` + `blur(4px)` 并淡入 140ms，点遮罩收起；`.inp-bar-field::selection` 绿底白字；端口弹窗那层遮罩从 .6 调到 .42（避免与浮条叠加过暗）。
+  - 为什么：端口格点开的是弹窗、不是打字，外观该是按钮（内凹的输入框框暗示"可以输入"）；浮层出现时底层信息还在动会分心。
+  - 验证：截图 `G-port-row.png`（按钮态）、`E-port-dialog.png`（弹窗 + 浮条同时出现）、`B-input-bar.png`（遮罩 + 白字选中）；`npm run check` exit=0。
+  - 批次：20261027-1900
+
+---
+
+## 批次 20261027-1800 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：修改端口按钮移到重新扫描左边；服务器分「本地 / 远程」两大类、可折叠、默认展开；
+> 去掉「局域网」那条线；把两个类别突出出来。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1800
+
+- [x] [L17] 右栏两类可折叠分组 + 按钮归位：`ServerListPanel.ts`、`index.html`、六语言 → playwright 实测
+  - 做了什么：头部改成 `附近的房间 | [修改端口] [重新扫描]`；正文拆成 `本地服务器` / `远程服务器` 两个分组（`aria-expanded` + body 隐藏，默认展开）；标题条是整条色块 + 左侧 3px 主色竖条；删掉 `.server-list-rule` 与 `.server-list-label`；六语言的 `server.lan` / `server.public` 文案改成「本地服务器 / 远程服务器」。
+  - 为什么：原来只是一条细虚线加一行小字，两类东西在视觉上完全没有分组感；而「局域网 / 公共服务器」这两个词对玩家也不准确（前者其实是本机网段，后者其实是别人机器）。
+  - 验证：playwright 实测两组初始 `aria-expanded=true`、点一次变 `false` 且正文隐藏；`npm run check` exit=0；截图 `9-empty-state.png` / `C-collapsed.png`。
+  - 批次：20261027-1800
+- [x] [L17] 折叠箭头改用 CSS 三角
+  - 做了什么：`▾` / `▸` 字符换成 `border` 三角，朝向由 `aria-expanded` + `transform: rotate(-90deg)` 控制。
+  - 为什么：截图里 `▾` 被字体回退渲染成了 `•`（一个小圆点），完全看不出"能折叠"。
+  - 验证：截图确认三角朝下 / 收起时朝右。
+  - 批次：20261027-1800
+
+---
+
+## 批次 20261027-1739 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1739
+
+> 用户 2026-10-27：「背包左右两边的按钮（左：分类、仓库；右：人物、成就、配方）也还是 DOM」。
+> 根因：镜像根取的是 `.inv-panel`，而立栏挂在 `.inv-shell` 上、在 panel **外面**。
+
+- [x] [V1] `src/main.ts`：背包镜像根 `.inv-panel` → `.inv-shell`（带 `.inv-panel` 兜底）→ `npm run check:fast`
+  - 做了什么：`syncInventory2d()` 里先找 `#inventory-screen .inv-shell`、找不到再退回 `.inv-panel`。
+  - 为什么：`#inventory-screen > .inv-shell > [ 左立栏 | .inv-panel | 右立栏 ]` —— 只镜像 panel 就会"中间 canvas、两侧还是 DOM"，一屏两种渲染。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿；截图里左右立栏（分类/仓库 · 人物/成就/配方）都由 canvas 画出。
+  - 批次：20261027-1739
+
+- [x] [V2] 预览页补左右立栏 + 2 张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`inventory-mirror.html` 外面套 `.inv-shell`，左右各放立栏按钮，镜像根同步改成 `.inv-shell`；`shoot-all` 累计 51 张。
+  - 为什么：立栏的选中态与抽屉展开全靠 DOM class 变化，镜像自动跟上——但这一点必须有图证明，不能只写在注释里。
+  - 验证：截图 `27-inventory-rails.png` / `27b-…-tinted.png`：面板 + 两侧立栏都在 canvas 上，遮罩版整片黄。
+  - 批次：20261027-1739
+
+- [x] [V3] 文档：`notes/canvas-ui.md` §5.25（"接手整页前先看清根是哪个节点"）、`TASKS.md` 的 M32 标完成 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.25 记下 DOM 层级与"差一层就漏一整块"的教训；M32 从待办移到已完成，进度口径与差异台账同步。
+  - 为什么：这个错很隐蔽 —— 漏掉的部分**看着正常**（因为它还是 DOM），只有开遮罩才看得出来。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-1739
+
+## 批次 20261027-1732 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1732
+
+> 用户 2026-10-27：「滑动物品滚动的能力不行，世界列表也滑不动；就应该是手贴着列表上下移动，它跟手」。
+> 根因：游戏把 `html, body` 的 `touch-action` 设成 `none`（为了拖动视角），内层滚动容器
+> 每家 WebView 处理不一致 → 手指贴着列表滑，列表纹丝不动。
+> 同时把用户点名要做的后续都写进 `TASKS.md`（M32~M36）。
+
+- [x] [U1] `src/ui2d/menuScreen.ts`：`bindDragScroll` —— 接管触摸拖拽滚动（找可滚祖先 / 8px 阈值 / 跟手 / 立刻重画）→ 合成指针事件验证
+  - 做了什么：`pointerdown`（非鼠标）→ 从命中元素往上找第一个真的能滚的祖先（`scrollHeight > clientHeight + 2` 且 `overflow-y: auto/scroll`）；纵向位移超过 8px 才劫持；之后每次 `pointermove` 设 `scrollTop = startScroll - dy` 并立刻 `refresh(true)`；`pointerup/cancel` 结束；`input/textarea/select` 不劫持。
+  - 为什么：`html, body { touch-action: none }` 让内层滚动容器在部分 WebView 上完全不响应滑动；镜像既然已经在画这一屏，就顺手把"跟手"这件事做掉，不依赖 UA 的滚动实现。
+  - 验证：Playwright 合成 touch 指针事件，在 `inventory-mirror.html?creative=1` 里向上拖 60px → `grid.scrollTop` 从 **0 → 60**，画面同步重画；`tsc` 干净。
+  - 批次：20261027-1732
+
+- [x] [U2] `TASKS.md`：把用户点名的后续拆成 M32~M36（立栏上 canvas / 触控控件 / 暂停弹窗验收 / 自绘滚动条 / 拖拽惯性）→ `node tools/audit-tasks.mjs`
+  - 做了什么：新增五条待办，并把进度口径与差异台账重算（HANDOFF 303/6/12、共 324 项）。
+  - 为什么：用户明确说过"后面要做的事都加到任务列表里，不用一个个确认"。
+  - 验证：`npm run check` exit=0。
+  - 批次：20261027-1732
+
+- [x] [U3] 文档：`notes/canvas-ui.md` §5.24（为什么自己做拖拽滚动、三条边界、验证方式）→ `node .continue/hooks/check.mjs --fast`
+  - 做了什么：记下根因（`touch-action: none`）、8px 阈值的理由（别把点击/物品拖拽/横向拖动一起劫持）、以及"滚动条（M35）与惯性（M36）还没做"。
+  - 为什么：这一层最容易被后来的人当成"我也可以顺手加个平滑滚动"，结果把点击阈值改坏。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-1732
+
+## 批次 20261027-1706 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1706
+
+> 用户 2026-10-27：「首页三个按钮的**显示位置**是错的，**点击位置**也是错的」。
+> 用真 `WorldScreen` 复现：首页在字体/排版稳定后按钮整体上移（y 483 → 309），
+> 而镜像只在第一帧量过一次，之后再也不重量 —— 画在旧位置、点在新位置。
+
+- [x] [S1] 复现页 `tools/preview/world-real.html`：真 `WorldScreen` + `fetch('/index.html')` 搬真样式 → 截图
+  - 做了什么：页面构造真的 `WorldScreen`（空存档表 + no-op actions），把 `index.html` 里那段 `<style>` 整段注入，再镜像 `.world-panel`；`?plain=1` 出 DOM 基准；报告晚 1.2s 再打（早期的数字是布局稳定前的旧值）。
+  - 为什么：手写假 DOM 测不出定位问题（第一版就是：没有游戏 CSS，元素全是裸节点，什么也没复现）。
+  - 验证：`node` 里读同一个按钮在不同时刻的 `y`：**150ms 时 483，1650ms 时 309** —— 差 174px，根因坐实。
+  - 批次：20261027-1706
+
+- [x] [S2] `MenuScreen2D`：签名带上几何；`main.ts` 给所有镜像开 `pollMs` 并在 `document.fonts.ready` 后重量 → `npm run check:fast`
+  - 做了什么：`computeSignature` 加 `getBoundingClientRect()` + `scrollWidth/scrollHeight`；主菜单 `pollMs: 200`、聊天输入行 `pollMs: 250`（原来 0）；主菜单挂载处加 `document.fonts.ready.then(sync)`。
+  - 为什么：几何不在签名里 → 第一帧的旧位置会被永久沿用；而"盒子尺寸没变、内部按钮却动了"的情况签名也抓不到，所以要定期重读兜底。
+  - 验证：`tsc` 干净；`npm run check:fast` 绿；镜像版截图（`26-world-mirror.png`）与 DOM 基准（`26b-world-dom.png`）位置一致。
+  - 批次：20261027-1706
+
+- [x] [S3] `textPanel`：`letter-spacing` 补偿（大标题不再被截成 `Minicra…`）+ 2 条断言 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`readTextRuns` 读 `letter-spacing`，负值按 `-spacing × 字数` 记进 `TextRun.widthSlack`（上限 64）；`drawTextRuns` 把补偿加到 `maxWidth`。
+  - 为什么：`world-logo` 是 48px + 负字距，盒子比 canvas 量出来的字窄，`maxWidth` 一夹就出省略号。
+  - 验证：`tests/ui2d.test.ts` → **73 passed**（新增 2 条：补偿生效、补偿为 0 时行为不变）。
+  - 批次：20261027-1706
+
+## 批次 20261027-1700 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27 纠正上一版的输入浮层：不要居中卡片、不要标题、不要按钮——就要**左上角一条**
+> 承接输入，键盘上的「完成」写回，键盘收起就消失。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1700
+
+- [x] [L16] 输入浮条按定稿重做：`src/ui/InputOverlay.ts`、`index.html` → playwright 实测
+  - 做了什么：`focusin` 委托 → 焦点让给左上角那条 `input`（`top/left: 8px`），进去即 `select()` 全选；`input` 事件**边打边同步**回原框并派发 `input`，`change` 只在「完成」时补发；`visualViewport` 变矮过又恢复（键盘收起）或浮条失焦 → 收起；无标题、无按钮、无遮罩。
+  - 为什么：它只是解决"键盘盖住输入框"，不是对话框——多一个标题/按钮就多一层语义、多一次点击。
+  - 验证：390×844 实测——浮条在 `(8,8)`、无标题无按钮、焦点在条内、全选 `[0,11]`、输入实时同步回原框、回车写回并收起、失焦收起；截图 `B-input-bar.png`。
+  - 批次：20261027-1700
+- [x] [L16] 修两个让浮条"完全不出现"的 bug
+  - 做了什么：① `field.maxLength = -1` 会抛 `IndexSizeError`（-1 表示没限制，但赋值非法），异常打断 `open()` 在"显示"之前 → 改成 `>= 0` 才赋、否则 `removeAttribute`；② `close()` 曾把 `field` 置空，而 `build()` 只判 `bar` 是否存在 → 第二次打开永不重建，改成 `bar && field` 都判。
+  - 为什么：两条都表现为"点了输入框什么都不发生"，没有任何报错提示（一条是静默异常、一条是静默 return）。
+  - 验证：修后同一套 playwright 脚本从 `visible:false` 变为 `visible:true`。
+  - 批次：20261027-1700
+
+---
+
+## 批次 20261027-1654 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1654
+
+> 用户 2026-10-27：「点左侧分类按钮时，会把所有内容平铺出来、伸出弹窗；应该收在弹框内、物品滚动显示」。
+> 根因是**镜像不知道 `overflow`**：`readTextRuns`/`readTextBlocks`/`readCanvasBlits` 全按
+> `getBoundingClientRect()` 画，而 DOM 是靠 `overflow: hidden/auto` 裁的。
+
+- [x] [R1] `src/ui2d/textPanel.ts`：裁剪 —— `makeClipQuery`（祖先 padding-box 求交 + 缓存）、记录带 `clip`、裁空的跳过、绘制 `paintClipped` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：新增 `intersectRect` / `makeClipQuery` / `outsideClip` / `paintClipped`；三个读取函数给 `TextRun`/`TextBlock`/`CanvasBlit` 带上 `clip` 并跳过完全在框外的；三个绘制函数按 `clip` 做 `save→clip→paint→restore`。
+  - 为什么：`overflow` 是 DOM 才有的语义，canvas 不裁就会把滚出去、溢出面板的内容全画出来（用户报的正是这个）。
+  - 验证：`tests/ui2d.test.ts` → **71 passed**（新增 3 条：相交取公共部分、包含取小的、只贴边返回 null）。
+  - 批次：20261027-1654
+
+- [x] [R2] 预览页复现 + 修复验证：`inventory-mirror.html?creative=1&scroll=80`（96 项 / 150px 高滚动区）→ 截图
+  - 做了什么：预览页加"创造物品栏"模式：12 列 96 格塞进 `max-height: 150px; overflow-y: auto` 的网格并滚 80px，网格外面还有一行翻页条；截图 `25-inventory-scroll.png`。
+  - 为什么：这个 bug 只在"内容比容器高"的时候出现，普通背包（27 格）复现不了。
+  - 验证：截图里只画出滚动区里看得见的 4 行（最后一行在容器边缘被裁开），翻页条留在面板内，没有任何东西伸出面板。
+  - 批次：20261027-1654
+
+- [x] [R3] 文档：`notes/canvas-ui.md` §5.22、决策 D34 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.22 写清根因、修法三段（求交 / 跳过 / 裁剪绘制）与"滚动仍归 DOM"的边界；决策 D34 记下"镜像必须复刻 overflow 语义"。
+  - 为什么：这是**第二条**"DOM 有、canvas 没有"的语义（第一条是位图），不记下来还会再踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1654
+
+## 批次 20261027-1650 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1650
+
+> 用户 2026-10-27：「继续实现，不要停」—— 把**阶段 3 的最后一块**（多人面板）收掉。
+> 它不在 `#world-screen` 那棵树里，所以单开一个镜像；面板里全是 `<input>`，
+> 正好检验上一批补的"值 + 光标"能不能用。
+
+- [x] [Q1] `src/main.ts`：`mountMultiplayerMirror()`（`#multiplayer-screen .mp-panel`，zIndex 65、`pollMs: 200`）→ `npm run check:fast`
+  - 做了什么：在 `mountMenuMirror(menu)` 之后挂 `mountMultiplayerMirror(multiplayerUi)`；200ms 轮询 `screen.isOpen`，开着就 `engage(.mp-panel)`、关了就 `disengage()`。
+  - 为什么：`#multiplayer-screen` 的 z-index 是 60，主菜单镜像（45）盖不到；而面板里是输入框，正好验证"镜像能画值与光标、输入仍归 DOM"这条路。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
+  - 批次：20261027-1650
+
+- [x] [Q2] 预览页 `tools/preview/multiplayer-mirror.html` + 2 张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：按 `index.html` 的 `.mp-*` 搭一块真面板（标题 + ✕ + 三行输入框带值 + 红色状态行 + 取消/加入），`MenuScreen2D.engage(panel)`；把焦点放进"房间号"并置于末尾，让镜像画出光标；`?tint=1` 加遮罩；`shoot-all` 累计 46 张。
+  - 为什么：`<input>` 的值与光标是这一批唯一"新东西"，必须在能看见的页面上验一次（而不是只在代码里相信它）。
+  - 验证：`node tools/preview/shoot-all.mjs` 46 张全出；截图里三个输入框的值、红色状态行、两颗按钮都由 canvas 画出；遮罩版整块面板变黄。
+  - 批次：20261027-1650
+
+- [x] [Q3] 文档：`notes/canvas-ui.md` §5.21（镜像根的另一棵树 + 阶段 3 的账）、决策 D33 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.21 记下"独立一棵树要单开镜像、z-index 按它给"，并列出阶段 3 六块界面的完成账；决策 D33 记下"镜像没有"统一一个大根"，而是每个 z-index 层一个实例"。
+  - 为什么：镜像的 z-index 判据已经踩过一次（主菜单用默认 1 → 游戏里整块消失），这次要写清"按被镜像那一层的 z-index 往上给"。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1650
+
+## 批次 20261027-1618 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1618
+
+> 用户 2026-10-27：「继续实现，不要停」—— 按任务表推进 M26：**把背包整页接进游戏**。
+> 这一批先落"整页镜像"（19 种工作站一次全覆盖、零回归），自绘版继续在预览页演进。
+
+- [x] [P1] `src/ui2d/textPanel.ts` + `menuScreen.ts`：新增 `readCanvasBlits` / `drawCanvasBlits`，镜像绘制顺序定为 底 → 位图 → 文字 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`CanvasBlit` + `readCanvasBlits(root, origin, view)`（读范围内所有 `<canvas>` 的矩形与位图）+ `drawCanvasBlits`（关掉平滑按原位贴）；`MenuScreen2D` 多存一份 `blits` 并在 `blocks` 与 `runs` 之间画；同时新增 `pollMs` 选项。
+  - 为什么：背包的图标不是文字也不是底色，而是 DOM 里已经画好的位图；不搬只能得到"有边框、没图标"的背包。顺序必须与 DOM 一致（槽位底 → 图标 → 数量）。
+  - 验证：`tests/ui2d.test.ts` → **68 passed**（新增 2 条：按原位贴并关平滑、空列表不画）。
+  - 批次：20261027-1618
+
+- [x] [P2] `src/main.ts`：背包改成整页镜像（`invMirror`，zIndex 12 + `pollMs: 120`），`#inv-held` 单独藏 → `npm run check:fast`
+  - 做了什么：把上一批的 `Inventory2D`（逐槽位读 DOM）换成 `MenuScreen2D` 镜像 `.inv-panel`；`syncInventory2d()` 简化为"开着就 `engage(panel)`、关了就 `disengage()`"；`#inv-held` 用 `html.ui2d-inv #inv-held { opacity: 0 }` 藏掉；`pollMs: 120` 兜住"只换图标不换字"的变化。
+  - 为什么：`Inventory2D` 只画槽位、面板底与标题仍是 DOM，遮罩版看得出来"只有格子黄"；整页镜像之后**面板里每一像素都是 canvas**。而 19 种工作站共用同一批 `.inv-slot`，镜像一次全覆盖。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
+  - 批次：20261027-1618
+
+- [x] [P3] 预览页 `tools/preview/inventory-mirror.html` + 2 张截图（含遮罩版）→ `node tools/preview/shoot-all.mjs`
+  - 做了什么：按 `index.html` 的 `.inv-*` 搭一块 27+9 格的真 DOM（每格含真 `<canvas>` 图标、数量、耐久条、红底格、选择态），`MenuScreen2D.engage(panel)` 镜像它；`?tint=1` 加遮罩；`shoot-all` 累计 43 张。
+  - 为什么：镜像的卖点是"面板里每一像素都由 canvas 产出"，遮罩版一张就能证明（整块黄、背景不黄）。
+  - 验证：`node tools/preview/shoot-all.mjs` 43 张全出；截图看过：面板底/斜面/图标/64·12·3·32 数量/黄色耐久条/红底格都在，遮罩版整块面板变黄。
+  - 批次：20261027-1618
+
+- [x] [P4] 文档：`notes/canvas-ui.md` §5.20（整页镜像 + 位图搬运 + `pollMs` 的坑）、决策 D32 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.20 记下"为什么先镜像"、"位图必须一起搬"、`pollMs` 兜底的原因，以及三条边界（悬停、tooltip、`#inv-held`）；决策 D32 记下"背包分两步：先镜像覆盖全部，再自绘替换"。
+  - 为什么：`pollMs` 那条尤其反直觉——"只换图不换字"的镜像会静默显示旧图标，不写清楚下一次会当成渲染 bug 查半天。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1618
+
+## 批次 20261027-1600 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27 提了 6 点：端口不能直接编辑（默认值灰底）、修改端口按钮归位、空态文案精简、
+> 去掉顶部绿条且加入按钮贴底、公共服务器说明没显示/右栏要可滚、**所有输入框改成浮层编辑**。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1600
+
+- [x] [L16] 端口只读 + 默认值灰底 + 修改端口归位：`MultiplayerScreen.ts`、`ServerListPanel.ts`、`index.html` → 截图
+  - 做了什么：`portInput.readOnly = true`，点它/焦点落到它都直接开确认弹窗；`is-default` 手动同步（值 == 8887 时灰底，改过就恢复正常）；「修改端口」按钮从空状态搬到「局域网」行右侧（`重新扫描` 的下一行）。
+  - 为什么：改端口必须以新端口重扫，随手打字就生效会让人以为列表坏了；按钮放在它服务的那个分组旁才对应得上。
+  - 验证：截图 `9-empty-state.png` / `3-join-empty.png`。
+  - 批次：20261027-1600
+- [x] [L16] 空状态精简为小字分条：`ServerListPanel.showEmpty()` + 六语言 → 截图
+  - 做了什么：一行标题「没找到服务器」+ `<ul>` 两条（确认房主已开房 / 端口可能不是 {port}），https 页面才追加第三条授权提示。
+  - 为什么：原来是一大段连着的说明，扫一眼抓不到重点。
+  - 验证：截图确认三条（本次两条 + 公共服务器说明）。
+  - 批次：20261027-1600
+- [x] [L16] 去绿条 + 加入按钮贴底：`index.html` + `MultiplayerScreen.ts` → 截图
+  - 做了什么：`.mp-panel::before` 高光条删掉（世界对话框保留）；卡片改成固定高度 `min(88vh, 640px)`；**按钮行移出 `form` 直接挂左栏**，靠 `margin-top: auto` 压到底。
+  - 为什么：按钮原来在 `form` 里，`margin-top: auto` 对非直接 flex 子项无效，状态行一出现就被往下推。
+  - 验证：computed `marginTop` = 271.59px（贴底）；截图确认。
+  - 批次：20261027-1600
+- [x] [L16] 修「公共服务器」下方空白：`ServerListPanel.refresh()` → 截图
+  - 做了什么：去掉 `publicList.replaceChildren()`——那块是静态说明，重扫时清掉就只剩一个空 label。
+  - 为什么：用户看到的"没显示出来"不是被遮挡，是被 `replaceChildren()` 清了。
+  - 验证：截图里「暂时没有可用的公共服务器」正常显示。
+  - 批次：20261027-1600
+- [x] [L16] 全站输入浮层：`src/ui/InputOverlay.ts`（新）、`src/main.ts`、`index.html` → playwright 实测
+  - 做了什么：`document` 上拦 `focusin`（捕获阶段），文本输入框先 `blur` 再开固定浮层（贴上方 `padding-top: 9vh`，输入法压不到）；标题取 `aria-label` → `placeholder`；确认后写回并补发 `input`/`change`（原有校验/过滤/联动照旧），取消或 Esc 关闭；只读、禁用、`range`/`checkbox`/`radio`/`file` 等不接管。
+  - 为什么：手机上系统键盘从底部弹起会盖住输入框本身，而表单的框大多在下半屏——玩家看不见自己在打什么。
+  - 验证：playwright 实测「点地址框 → 浮层出现（标题 `IP 或域名`）→ 输入 192.168.1.9 → 确认 → 原框值变为 192.168.1.9 且浮层关闭」；截图 `8-input-overlay.png`。
+  - 批次：20261027-1600
+
+---
+
+## 批次 20261027-1548 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1548
+
+> 用户 2026-10-27：「好的，你的建议处理。后面所有要做的事加到任务列表里，不用一个个找我确认。
+> 我们的目标是把背包完全复原」。
+> 所以先把**背包完全复原**拆成 M25~M31 写进 `TASKS.md`（M25 本批做完），然后执行 M25：
+> 补齐双击收集 / 右键拖拽逐格 / 长按分堆这三条规则。
+
+- [x] [N1] `src/ui2d/inventoryModel.ts`：`rightDragDistribute` / `doubleClickGather` / `splitTake` + 断言 → `npx vitest run tests/ui2d-inventory-model.test.ts`
+  - 做了什么：右键拖拽每格放一个（重复经过只放一次）；双击收集（先拿起那一格，再把同类凑到上限；光标本来就有货时把被点那格也并进来）；长按分堆取指定数量（异类拒绝、受上限）。测试从 19 条增到 **31 条**。
+  - 为什么：这是"逻辑一模一样"的核心 —— 之前只有左键/右键/Shift/左键拖拽四种，DOM 版还有这三种。
+  - 验证：`npx vitest run tests/ui2d-inventory-model.test.ts` → **31 passed**（新增 12 条：右键拖拽 4、双击收集 4、长按分堆 4）；`tsc` 干净。
+  - 批次：20261027-1548
+
+- [x] [N2] 对照页接上三种新操作 + **像素探针**验收 → 截图
+  - 做了什么：`inventory-compare.html` 双击（400ms 内同格）、右键拖拽（按下时放一个，之后每经过新格放一个）、触摸长按（500ms 取一半）；另外用 Playwright 读 `getImageData` 验证"点 canvas 第 0 格后该格中心从图标色变槽位底色，且 DOM 侧也空了"。
+  - 为什么：截图会骗人 —— 第一版两张截图看起来"没变化"，实际是**手上那叠浮在被点的那格上盖住了**；读像素才是硬证据。
+  - 验证：像素探针 `before=[139,90,43]` → `after=[139,139,139]`（槽位底色），DOM 侧 `.inv-count` 变空；截图 `22b-inventory-held.png`（手上那叠跟随指针）。
+  - 批次：20261027-1548
+
+- [x] [N3] `TASKS.md`：把"背包完全复原"拆成 M25~M31（含验收判据），M25 标记完成；文档 §5.19 + 决策 D31
+  - 做了什么：M25 交互规则（本批完成）、M26 接进游戏、M27 视觉对齐、M28 合成、M29 容器工作站、M30 重配方块、M31 触摸 UI 全套；§5.19 记录六种鼠标操作与像素探针手法。
+  - 为什么：用户要求"后面要做的事都进任务列表，不用逐个确认" —— 所以把整条路线写死在 TASKS 里，后续批次直接照着做。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1548
+
+## 批次 20261027-1531 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1531
+
+> 用户 2026-10-27：「重点把背包逻辑和界面用 canvas 来复原实现……最好能跟 DOM 实现的一模一样」。
+> 这一批先把**逻辑**与**面板**自己写一份（不再镜像），并做成 DOM/canvas 并排对照页：
+> 同一份数据、同一套逻辑，点哪边两边都变 —— "是否一样"不用我说，你自己点。
+
+- [x] [M1] `src/ui2d/inventoryModel.ts`：左键/右键/Shift 快速移动/拖拽均分的纯逻辑 → `npx vitest run tests/ui2d-inventory-model.test.ts`
+  - 做了什么：`leftClick` / `rightClick` / `quickMove` / `distributeDrag`，四个函数只操作 `SlotAccess(get/set)` 与 `Cursor`，堆叠上限与"同种物品"由调用方注入 `MoveRules`。
+  - 为什么：要做到"一模一样"，规则就不能散在绘制代码里；抽成纯逻辑之后，同一份逻辑可以套在真实 `Inventory` 上，也能被逐条断言钉住。
+  - 验证：`npx vitest run tests/ui2d-inventory-model.test.ts` → **19 passed**（左键 7 条、右键 5 条、Shift 3 条、拖拽 4 条）；`tsc` 干净。
+  - 批次：20261027-1531
+
+- [x] [M2] `src/ui2d/InventoryPanel2D.ts`：自己排版（面板/标题/36 格/光标叠）+ 命中 + 绘制 → 对照页 `tools/preview/inventory-compare.html` + 截图
+  - 做了什么：`layoutInventoryPanel()`（`INV_LAYOUT` 照抄 `.inv-*` 的 px）、`drawInventoryPanel()`（面板底 + 3px 斜面 + 标题 + 逐格用 `drawInvSlot` + 光标上那一叠）、`slotIndexAt()`；对照页左边 DOM、右边 canvas，共用同一份 `slots` 与 `cursor`，两边都绑了指针事件（左键/右键/Shift/拖拽均分）。
+  - 为什么：用户要"界面也复原"，而镜像的天花板是"DOM 长什么样就是什么样"；自己排版之后 `ui2d` 只有一份几何。对照页则把"一样不一样"变成可肉眼验证的东西。
+  - 验证：`node tools/preview/shoot-all.mjs` 41 张全出；截图 `22-inventory-compare.png` 里两边的格子位置、数量（64/12/3/28/7/41/10）、快捷栏行位置都一致；`tsc` 干净。
+  - 批次：20261027-1531
+
+- [x] [M3] 文档：`notes/canvas-ui.md` §5.18（规则表 + 未做的三件事）、决策 D30 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.18 记下"逻辑与排版都自己写"的理由、四条规则的对照表、以及下一批必须补的（接进游戏 / 双击收集 / 右键拖拽每格一个 / 长按分堆 / 专用槽位）；决策 D30 记下"逻辑纯函数化 + 规则注入"的分层。
+  - 为什么：DOM 版还有**双击收集、右键拖拽逐格放一个、触摸长按分堆**这些规则没搬 —— 不写清楚，"一模一样"会被误认为已经达成。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1531
+
+## 批次 20261027-1530 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：加入和开房界面几乎一样，为什么不用同一套；改成左输入右列表、各占一半，
+> 右边点了左边自动填；不用二级弹窗也不用背景遮盖；右边为空提示调端口；改端口要弹窗确认
+> （改完要以新端口重扫）；局域网扫描要用**本机 IP 段**，不是输入框里的地址。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1530
+
+- [x] [L15] 两栏常驻 + 点右边回填左边：`src/ui/ServerListPanel.ts`（新）、`MultiplayerScreen.ts` → `npm run check`
+  - 做了什么：新增 `ServerListPanel`（扫描/房间/peers 从 `ServerPicker` 抽出，去掉遮罩与「取消/确定」）；面板改 `.mp-columns` 两栏（窄屏列表在上）；点服务器填地址+端口、点房间连房名一起填，行有 `picked` 高亮。
+  - 为什么：两件事界面一样，各弹一层纯属重复；列表常驻还能让"有哪些房/填什么"同屏可见。
+  - 验证：起本地服务端 + 假房主，右栏 `127.0.0.1 ··· 延迟 7ms / 房间: newplayer 1/10 在线`，点房间行左边填好。
+  - 批次：20261027-1530
+- [x] [L15] 端口确认弹窗：`MultiplayerScreen.openPortDialog()` + `index.html` → 截图
+  - 做了什么：不再让端口框随手改；空状态点「修改端口」弹小卡片（当前值预选、取消/确定、Enter 确认、Esc 关闭），确认后 `list.setPort()` 立即按新端口重扫。
+  - 为什么：端口一变扫的就是另一批机器，"改完没重扫"会让人以为列表坏了。
+  - 验证：截图 4-port-dialog（弹窗居中、下方提示"确认后会按新端口重新扫描"）。
+  - 批次：20261027-1530
+- [x] [L15] 扫描用本机网段：`ServerListPanel.subnet()` + `ServerDiscovery.ts` → `npm run check`
+  - 做了什么：`subnetOf(location.hostname)` 推导；`localhost` 打开时扫 `127.0.0.1`；`subnetOf` 认回环、`subnetHosts` 对回环只探 `.1`。
+  - 为什么：输入框里的地址可能是上一台服务器或公网域名，按它扫会扫错一片网；而页面本身是在用这台设备打开的。
+  - 验证：`127.0.0.1 ··· 延迟 7ms` 出现在列表里；断言"只扫私网/回环"同步更新。
+  - 批次：20261027-1530
+- [x] [L15] 修两个真 bug：`/ping` 缺 CORS、peers 递归扩散 → `npm run test:net` + 截图
+  - 做了什么：`/ping` 补 `access-control-allow-origin: *`（Node 与 Rust 两端）；`loadPeers` 只听一层（peer 来源的服务器不再扩散）并过滤非私网地址。
+  - 为什么：前者表现为"服务端明明在跑，一台都扫不到"（浏览器跨源被拦）；后者让同一台机器在列表里出现四遍。
+  - 验证：列表干净（1 台 1 行）；`/healthz` peers 为空时不再凭空多出行。
+  - 批次：20261027-1530
+- [x] [L15] 开房入口预留 `onHostOpen`：`WorldScreen.ts` → `npm run check`
+  - 做了什么：卡片的「开房」优先调 `onHostOpen`（有就打开统一界面并带世界名），没有则回落旧对话框 `showHostDialog()`（保留未删）。
+  - 为什么：`main.ts` 的预检+建世界流程写在 `actions.onHostWorld` 里，多入口复用它要先抽公共函数，且要迁移十几条旧对话框断言——**留到下一批**，混在这次布局改造里风险太大。
+  - 验证：`npm run check` exit=0（行为未变，仍是旧对话框）。
+  - 批次：20261027-1530
+
+---
+
+## 批次 20261027-1517 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1517
+
+> 用户 2026-10-27：「请直接处理背包」—— 进阶段 4。
+> 背包是整个迁移里最大的一块（7564 行），但它有个有利结构：**每格槽位就是 42×42 盒子 +
+> 一张 36×36 图标 canvas + 一个数量文本**，与快捷栏几乎同构。所以先做「槽位像素」，
+> 交互（拖拽/分堆/连发）**一行都不动**。
+
+- [x] [L1] `src/ui2d/Inventory2D.ts`：槽位几何与绘制（底/斜面/图标/数量/耐久/红底/白框）+ 签名 + 读 DOM → `npx vitest run tests/ui2d-inventory.test.ts`
+  - 做了什么：`Inventory2D.ts`（约 330 行）—— `invContentRect` / `invIconRect`（等比居中）/ `invCountAnchor` / `invDurabilityRect` / `invSignature` / `drawInvSlot`；`readInvSlots()` 从 DOM 读每格的矩形、图标 canvas、数量、耐久条比例与档位、`:hover`/`:active`、`.locked`/`.held`；`readSlotSkin()` 从 CSS 变量读底面与四边斜面颜色（不抄常量）；`Inventory2D` 自带一层覆盖层（zIndex 12）+ 签名缓存，`update()` 每帧读 DOM、变了才重画。
+  - 为什么：槽位与快捷栏同构，直接复用那套结论（量 DOM、像素换手不换输入）；`#inv-held`（拿在手上的那一叠）也一起画，否则拖动时图标会消失。
+  - 验证：`npx vitest run tests/ui2d-inventory.test.ts` → **9 passed**（内容盒、图标居中与收窄、数量/耐久锚点、自定义边框宽度、签名稳定性与各字段变化）；`tsc` 干净。
+  - 批次：20261027-1517
+
+- [x] [K2→L2] `src/main.ts`：打开背包时接管（让位用挂在 `<html>` 上的类，扛得住槽位重建）→ `npm run check:fast`
+  - 做了什么：新增 `inventory2d`（`Inventory2D`，zIndex 12）与 `syncInventory2d()`：`inventoryScreen.isOpen` 变化时开关，开着时每帧 `update()`；让位靠 `<style>` 里一条 `html.ui2d-inv #inventory-screen .inv-slot, html.ui2d-inv #inv-held { opacity: 0 }` + 切换 `<html>` 上的类（**不用逐元素内联样式**：背包切模式/换容器会重建槽位 DOM）。
+  - 为什么：`opacity: 0` 保住了命中测试，于是拖拽分配、长按分堆、连发、悬停提示全都不用改；而"逐元素设 opacity"在重建后失效 —— 槽位会闪回 DOM 原样。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
+  - 批次：20261027-1517
+
+- [x] [L3] 预览页 `tools/preview/inventory.html`（27 格 + 快捷栏行 + 红底格 + 选择白框）+ 2 张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：造了 27 格 + 9 格假槽位（图标用纯色块代替真实图集裁切、数量 64/12/3/32、两格带耐久条、一格红底、一格选择态），`Inventory2D` 接管绘制；`?tint=1` 加遮罩；`shoot-all` 加 2 张（累计 40 张）。
+  - 为什么：背包的槽位在各种工作台上数量不同（27/36/45），但**绘制代码只有一份**；预览页用 27 格就能看清底、斜面、图标、数量、耐久、红底、白框是否都对。
+  - 验证：`node tools/preview/shoot-all.mjs` 40 张全出；截图看过：格子斜面方向（上/左暗、下/右亮）、64/12/3/32 数字贴右下、黄/红耐久条、红底格、白框选择态都对。
+  - 批次：20261027-1517
+
+- [x] [L4] 文档：`notes/canvas-ui.md` §5.17（两条沿用 + 两个专坑 + "还没做的"表）、决策 D29 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.17 记下"槽位与快捷栏同构"的判断、`<html>` 类让位的原因、z-index 12 的理由，并明确列出"布局与交互仍是 DOM"的边界；决策 D29 记下"背包只换像素不换交互"。
+  - 为什么：背包最容易被误解成"整个界面都要重画"。写清楚"槽位是像素、交互是 DOM"这条线，才不会被后来的人越改越多。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1517
+
+## 批次 20261027-1404 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1404
+
+> 用户 2026-10-27：「继续继续」—— 接着把**聊天输入行**交给 canvas（上一批补的输入框
+> 取值 + 焦点光标正好能复用），并顺手修一个只在游戏里才会炸的层叠问题。
+
+- [x] [K1] `src/main.ts`：聊天输入行接入 `MenuScreen2D`（`.chat-entry` 让位像素，打开时才接管）→ `npm run check:fast`
+  - 做了什么：新增 `chatEntry2d`（`MenuScreen2D`，`zIndex: 12`）与 `syncChatEntry2d()`（每帧看 `.chat-entry` 的 `offsetParent` 是否非空，出现就 `engage`、收起就 `disengage`），在帧循环里排在 `syncTextPanels2d()` 之后；`dispose()` 里一起销毁。
+  - 为什么：输入本身一行都不用改（历史、命令补全、回车发送、发送键的 `pointerdown` 都留在 DOM），只需要"谁产像素"换人 —— 这正是镜像路线的价值。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-1404
+
+- [x] [K2] `src/ui2d/menuScreen.ts`：新增 `MenuScreenOptions.zIndex`，并给主菜单镜像补上 45 → 预览页 + 截图
+  - 做了什么：`MenuScreen2D` 建覆盖层时按选项设 `zIndex`；主菜单传 45（`#world-screen` 是 40）、聊天传 12（`#chat` 是 8）。预览页 `tools/preview/chat.html`（`?value=`、`?tint=1`），截图 `20-chat-entry.png`。
+  - 为什么：`Ui2DOverlay` 默认 `zIndex` 是 1 —— 上一批主菜单镜像**在预览页看着正常、在游戏里会被 `#world-screen` 的背景整个盖住**（表现是"开了 `?ui2d=1` 主菜单直接没了"）。这类层叠问题离线断言查不到、预览页也照不出来。
+  - 验证：`node tools/preview/shoot-all.mjs` 38 张全出；截图看过：输入框有值「你好，有人在吗」、绿色发送键有斜面边框、提示行仍在（它是 DOM）。
+  - 批次：20261027-1404
+
+- [x] [K3] 文档：`notes/canvas-ui.md` §5.16（含 z-index 判据表）、决策 D28 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.16 记下聊天输入行的做法与"镜像哪棵树、覆盖层就要在它之上"的判据表；决策 D28 记下"覆盖层 z-index 必须按被镜像目标的层叠顺序给"。
+  - 为什么：这个坑的形态很隐蔽 —— 预览页正常、游戏里整块消失，很容易被当成"`?ui2d=1` 又坏了"。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1404
+
+## 批次 20261027-1400 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："加吧，现在体验是不太好" —— 三层界面之前都是硬切，补上转场。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1400
+
+- [x] [L14] 三层转场动画：`index.html` + `src/ui/{MultiplayerScreen,ServerPicker}.ts` → `npm run check`
+  - 做了什么：进入——遮罩 `page-fade-in` 160ms、主面板与开房对话框 `panel-pop-in` 170ms（淡入 + 轻微放大 + 上移 8px）、选择页 `panel-slide-in` 180ms（右侧滑入 14px，读起来像翻页）；退出——`close()` 不再直接 `display:none`，改成加 `.closing` 播 160ms 反向动画、播完才隐藏，快速开关时 `clearTimeout` 上一次的定时器。附：按钮 `:active` 位移 1px；`prefers-reduced-motion` 下全关。
+  - 为什么：硬切在"世界列表 → 联机面板 → 选择页"这条路上尤其突兀（界面连着换两张），而且没有"我进到了更深一层"的方向感。
+  - 验证：playwright 读 computed `animationName/duration`——`panel-pop-in` 0.17s / `page-fade-in` 0.16s / `panel-slide-in` 0.18s / 退出 `panel-slide-out` 0.16s，播完 class 从 `server-picker closing` 变 `server-picker hidden`；`npm run check` exit=0（621 单测 + 1 条动画守卫）。
+  - 批次：20261027-1400
+
+---
+
+## 批次 20261027-1354 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1354
+
+> 用户 2026-10-27：「继续继续继续」—— 把**新建世界表单**也交给 canvas，
+> 让"整页镜像"覆盖主菜单的第三个视图。上一批说过：`<input>` 的值不在 `textContent` 里，
+> 所以镜像一直绕开这个视图；这一批就把这个缺口补上。
+
+- [x] [J1] `src/ui2d/textPanel.ts`：输入框取值（`textFieldValue` / `inputDisplayText`，占位提示 0.55 不透明度）+ `TextRun.alpha` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`readTextRuns` 现在优先认 `<input>` / `<textarea>`（`type` 只认 text/search/number，密码与隐藏框跳过），值为空时用 `placeholder` 并标为占位；`TextRun` 加 `alpha`，占位提示画成 0.55 透明（`::placeholder` 的计算样式读不到）；签名里带上 alpha。
+  - 为什么：`<input>` 的**当前值不在 `textContent` 里** —— 这是"整页镜像"最初不敢碰新建世界的原因，也是这一批的唯一硬缺口。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **66 passed**（新增 4 条：有值画值 / 空值画占位并标记 / 没有占位就不画 / 单个空格算有值）；`tsc` 干净。
+  - 批次：20261027-1354
+
+- [x] [J2] `src/ui2d/menuScreen.ts`：`drawFieldCaret()` 画焦点框的光标与选区；**签名补上 input 的 value** → 预览页 + 截图
+  - 做了什么：`drawFieldCaret()` 在镜像画完文字之后，检查 `document.activeElement` 是否属于被镜像的子树，是就按 `selectionStart/End` + `visibleSlice`/`rangeRect`/`caretRect` 画选区与光标（DOM 那份插入符被 `opacity: 0` 一起藏了）。同时修了签名：原来只比 `scrollTop` + `textContent`，**而敲字时 `textContent` 一点没变** → canvas 永远不重画、输入框一直显示占位提示（第一版截图就是这样）。
+  - 为什么：镜像路线下"输入"仍归 DOM，但"看得见"归 canvas —— 光标和选区不画，玩家打字时完全看不到自己在哪。
+  - 验证：预览页 `menu-mirror.html?view=create` 里把光标真的放进输入框，截图 `19-create-form.png` 显示出"我的世界"（值而非占位）与输入框边框。
+  - 批次：20261027-1354
+
+- [x] [J3] `src/main.ts`：镜像白名单加 `create`（`home` / `worlds` / `create`），更新注释 → `npm run check:fast`
+  - 做了什么：`mountMenuMirror()` 的视图白名单从两个扩到三个；注释写清"`create` 为什么现在能进来"（取值 + 光标都补上了）以及"多人面板是另一棵树，不在本批范围"。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
+  - 批次：20261027-1354
+
+- [x] [J4] 文档：`notes/canvas-ui.md` §5.15（含"签名要看输入框的值"这个坑）、决策 D27 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.15 记录输入框取值与焦点光标的两处实现、"签名要看 value"的坑，以及"阶段 3 还剩多人面板"的清单；决策 D27 记下"镜像路线里输入仍归 DOM、光标归 canvas"的分工。
+  - 为什么：那个签名坑**只在真人敲字时才出现**（截图、静态页面都正常），不写清楚下一个人会当成"输入框不刷新"的玄学。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1354
+
+## 批次 20261027-1345 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1345
+
+> 用户 2026-10-27：「去完成」—— 做上一轮说的**输入法定型**。
+> 这是新建世界、多人面板、聊天三条线共同的前置件：canvas 自己收不到输入法组合态，
+> 唯一正路是"屏幕外放一个看不见但可聚焦的 `<input>` 收字，canvas 只画"。
+
+- [x] [H1] `src/ui2d/textInput.ts`：`CanvasTextInput`（隐藏 input 收字 + 画光标/选区/组合态下划线）+ 一组纯几何/编辑函数 → `npx vitest run tests/ui2d-textinput.test.ts`
+  - 做了什么：`textInput.ts`（约 420 行）—— 隐藏 `<input>`（`opacity: 0` + 1×1 + 固定视口内 + `pointer-events: none`）承接输入；`metricsFor` / `caretXOf` / `clampCaret` / `applyInsert` / `backspaceAt`（按码点）/ `visibleSlice`（超宽滚动窗口）/ `rangeRect` / `caretRect` / `caretBlinkOn`；`CanvasTextInput` 负责 `open/close/focus/render/dispose`，Enter 提交、Esc 取消（两者都先看 `isComposing`）。
+  - 为什么：canvas 没有输入框，也收不到组合态。三条约束见 §5.14 —— 尤其"不能用 `display: none`"（拿不到焦点、移动端不弹键盘）和"组合态靠事件不靠 value"（拼音阶段 `value` 里已经有字母了）。
+  - 验证：`npx vitest run tests/ui2d-textinput.test.ts` → **18 passed**；`tsc` 干净。
+  - 批次：20261027-1345
+
+- [x] [H2] 预览页 `tools/preview/textinput.html`：能**真的打字**（含中文输入法）、可预填内容与选区；两张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：一页"新建世界"面板，两块 `CanvasTextInput`（世界名称 / 种子），点一下就能打字；`?value=我的世界&sel=1,3` 预填并选中一段（截图用），`?tint=1` 加遮罩。`shoot-all` 加 2 张（累计 36 张）。
+  - 为什么：这一层的正确性一半只能靠"真的敲一遍"——组合态下划线、光标闪烁、选区宽度都只有在动起来时才看得出问题；截图至少能把"中文 + 选区"这一幕定住。
+  - 验证：`node tools/preview/shoot-all.mjs` 36 张全出；截图看过：`18b` 里"我的世界"四个字、第 2~3 个字上有蓝色选区、种子框是未聚焦空框 + 占位提示。
+  - 批次：20261027-1345
+
+- [x] [H3] 文档：`notes/canvas-ui.md` §5.14（三条约束 + 未接线的边界）、决策 D26 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.14 把三条约束做成表格（每条都写"为什么"），并明确写了**还没接进游戏**；决策 D26 记下"为什么用隐藏 input 而不是自己实现键盘"。
+  - 为什么：这一层最容易被后来的人"简化"——把 `opacity: 0` 改成 `display: none`、或者干脆用 `value` 判组合态。两种改法在桌面 Chrome 上**都能跑**，只在移动端输入法下坏掉，不写清楚就会被改回去。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1345
+
+## 批次 20261027-1334 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1334
+
+> 用户 2026-10-27：「继续继续」—— 接着做**主菜单 / 世界列表**。
+> 这一块与前面都不同：菜单在 `App` 之外（**没有覆盖层、没有主循环**），而且它是个
+> **静态整页**。所以不再"自己排版"，改走**整页镜像**：DOM 把 `opacity` 设 0 让位像素，
+> canvas 把每段文字、每块底色与边框按原位重画 —— 加按钮、改文案、换语言都自动跟上。
+
+- [x] [G1] `src/ui2d/textPanel.ts`：底块支持**边框**（`readSurface`），并给 `drawTextRuns` 加 `slack` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`readTextBlocks` 现在读 `borderTopWidth/TopColor` 与圆角，绘制时"先底后边"（描边画在内侧半像素上，与 `border-box` 对齐）；只有边框没有底色的元素也会被画。`drawTextRuns(ctx, runs, slack)` 给 `maxWidth` 留余量。
+  - 为什么：MC 风格的按钮靠边框出"凸起"感，没有边框整页就是一堆灰块；`slack` 是因为 DOM 的 `letter-spacing`（标题常写负值）会让元素盒子比 canvas 量出的字**窄**，不给余量 "MINICRAFT" 会被截成 "MINICRA…"（第一版截图就是这样）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **62 passed**（新增 2 条：不给余量按盒子截断、给余量完整画出）；`tsc` 干净。
+  - 批次：20261027-1334
+
+- [x] [G2] `src/ui2d/menuScreen.ts`：`MenuScreen2D` —— 独立覆盖层 + `engage/disengage`（`opacity: 0` 让位）+ rAF 循环 + 签名比对
+  - 做了什么：`engage(el)` 建（或复用）一个 `Ui2DOverlay`、把元素的 `opacity` 设 0、起一个 `requestAnimationFrame` 循环；每 4 帧比一次签名（视口尺寸 + 所有可滚动元素的 `scrollTop` + 整块 `textContent`），变了才重读计算样式并重画；`disengage()` 还原 opacity 并停止循环。
+  - 为什么：菜单是静态的，每帧读整棵树的计算样式纯属浪费；而 `WorldScreen` 没有"打开/切视图/滚动"事件，只能靠签名自己发现变化。
+  - 验证：预览页 `tools/preview/menu-mirror.html` 跑通（首页与世界列表两种视图），`tsc` 干净。
+  - 批次：20261027-1334
+
+- [x] [G3] `src/main.ts`：主菜单接线 `?ui2d=1`（`mountMenuMirror`，200ms 轮询 + resize），只镜像 `home` / `worlds` → `npm run check:fast`
+  - 做了什么：`boot()` 里在 `installInstallHint()` 之后调 `mountMenuMirror(menu)`；它建一个 `MenuScreen2D`，每 200ms 检查"菜单是否开着且停在 `home`/`worlds`"，是就 `engage(.world-panel)`，否则 `disengage()`；`resize` 时立刻同步一次。
+  - 为什么：**只镜像这两个视图**——`create` 与多人面板里有 `<input>`，而 `<input>` 的当前值不在 `textContent` 里（镜像过去是空框），输入法那一摊要单独做。轮询是因为 `WorldScreen` 不暴露事件，而菜单静态、200ms 的代价可忽略。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ **游戏内未实测**（dev 缺 `__host/core.bin` 停在落地页），镜像效果由预览页与截图验证。
+  - 批次：20261027-1334
+
+- [x] [G4] 预览页 `tools/preview/menu-mirror.html` + 3 张截图 + 文档（§5.13、决策 D25）→ `node tools/preview/shoot-all.mjs`
+  - 做了什么：预览页按 `index.html` 的配色搭了一块"世界面板"（首页 / 世界列表两个视图），用 `MenuScreen2D` 镜像它；`?view=worlds`、`?tint=1`；`shoot-all` 加 3 张（累计 34 张）；`notes/canvas-ui.md` 新增 §5.13，决策 D25 记下"整页镜像"的适用边界。
+  - 为什么：镜像的卖点是"一像素不自己排"，那就必须能一眼看出**它画出来的和 DOM 完全一致**——预览页里 DOM 面板被设成 `opacity: 0`，屏幕上看到的每一块都是 canvas 画的。
+  - 验证：`node tools/preview/shoot-all.mjs` 34 张全出；截图看过：首页标题完整（`MINICRAFT` 不再被截）、四颗按钮有边框与文字、世界列表三张卡片 + 每张两个小按钮 + 新建/返回；遮罩版整块黄。
+  - 批次：20261027-1334
+
+## 批次 20261027-1327 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1327
+
+> 用户 2026-10-27：「继续继续继续」—— 收一个上一批留下的尾巴：
+> 文字面板画的是**边框盒**，没扣元素自己的 `padding`，于是 `#debug` 与状态效果胶囊里的字
+> 都顶到了边框上（胶囊左侧那颗 `::before` 色点也因此被字压住）。
+
+- [x] [F1] `src/ui2d/textPanel.ts`：`readTextRuns` 改成按**内容盒**出矩形（扣 `padding` 四边）→ 预览页 + 截图
+  - 做了什么：读 `paddingLeft/Right/Top/Bottom`，把每段文字的绘制矩形内缩到内容盒；`drawTextRuns` 的对齐/换行逻辑没动（它本来就以传入矩形为准）。
+  - 为什么：`#debug` 是 `padding: 6px 9px`、状态效果胶囊是 `3px 9px` —— 不扣的话字比 DOM 里偏左/偏上 9px，胶囊里还会压住左边的色点。**这类偏差不会让功能坏**，只是"看着有点挤"，所以只有截图能发现。
+  - 尝试过又撤掉的：读 `::before` 的宽高把色点画出来。撤掉的原因见 D24（伪元素的占位不在元素自身 `rect` 里，字会压在色点上；要正确得先用伪元素宽度偏移文字，牵动排版，不值）。
+  - 验证：`npx tsc --noEmit` 干净；截图重拍 2 张（`16-text-panels.png` / `16b`），F3 与三个胶囊的文字都回到内边距以内、与 DOM 一致。
+  - 批次：20261027-1327
+
+- [x] [F2] 文档：`notes/canvas-ui.md` §5.12 补 padding 那条；决策 D24（伪元素色点为什么不画）→ `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.12 的"三个必须写下来的细节"补第 4 条（内容盒）；决策 D24 记下试过 `::before` 又撤掉的原因与正确做法。
+  - 为什么：下一个人看到"状态效果胶囊少了颗色点"会想顺手补 —— 不写清楚试过什么、为什么撤，就会重走一遍（还可能顺手把文字排版搞乱）。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1327
+
+## 批次 20261027-1319 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1319
+
+> 用户 2026-10-27：「继续继续」—— 把上一批那条「原位重画」的路子用到**剩下的纯展示 HUD**上：
+> 状态效果胶囊（`#effects-hud`）与聊天消息列表（`.chat-log`）。
+> 这两块本来就要重排一遍才好看，但它们的版式（胶囊/分行）已经在 CSS 里写好了，
+> 直接原位重画既省事又不会漂。
+
+- [x] [E1] `src/main.ts`：`#effects-hud` 与 `.chat-log` 纳入纯文字面板（让位 + 每帧签名同步）→ `npm run check:fast`
+  - 做了什么：`applyTextPanelsDomFallback()` 加上 `#effects-hud`，并**只藏 `.chat-log`**（输入行/提示/发送键仍是 DOM —— 那是阶段 3 输入法那一摊）；`syncTextPanels2d()` 把这两块一起纳入"文字内容 + 视口"签名与读取，根节点列表化（`roots[]` 逐个 `readTextRuns` + `readTextBlocks`）。
+  - 为什么：聊天**不能整块藏**——`#chat` 里还挂着输入行，一藏就把打字界面也藏了（与快捷栏"容器不能整体透明"同一个道理）。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-1319
+
+- [x] [E2] `src/ui2d/textPanel.ts`：渐变底的近似（状态效果胶囊的 `--hud-bg` 是 `linear-gradient`，`backgroundColor` 是透明的）→ 预览页 + 截图
+  - 做了什么：`hasBackground()` 在 `backgroundColor` 透明但 `backgroundImage !== 'none'` 时，退化成一块半透明深色 `HUD_GRADIENT_FALLBACK = rgba(16,17,21,.66)`；预览页 `textpanels.html` 加状态效果胶囊（3 个，好/坏两种边框）与聊天 4 行（系统黄 / 普通白 / 提示蓝 / 报错红），两张截图重拍。
+  - 为什么：不退化的话这三个胶囊会**完全没有底**，白字直接压在世界画面上（截图里一眼就看出来）。复刻整条 CSS 渐变要解析 `linear-gradient(...)` 字符串，只为"上下差 2% 亮度"，不值得（决策 D22）。
+  - 验证：`node tools/preview/shoot-all.mjs` 31 张全出；截图看过：三个胶囊有底、边框分好坏、文字不溢出；聊天四行颜色分别对（黄/白/蓝/红）。
+  - 批次：20261027-1319
+
+- [x] [E3] 文档：`notes/canvas-ui.md` §5.12 + 决策 D22 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.12 记下"纯展示 HUD 到此清零"、渐变底的近似，以及聊天只藏消息列表的理由；决策 D22（渐变底退化成半透明深色）。
+  - 为什么：这是"纯展示 HUD 全部搬完"的收口，得写清**还剩什么**（聊天输入行、效果色点这类 pseudo 元素），否则下一批会以为还有活。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1319
+
+## 批次 20261027-1307 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1307
+
+> 用户 2026-10-27：「继续」—— 接着做**纯文字 HUD**：F3 调试信息与计分板侧边栏。
+> 这两块没有控件、没有命中测试，内容就是"一块底 + 几行字"，正好试一条新路子：
+> **不重排、按原位重画** —— 把 DOM 里直接带文字的元素连矩形/颜色/字号一起读出来画。
+
+- [x] [P1] `src/ui2d/textPanel.ts`：`readTextRuns` / `readTextBlocks` / `drawTextRuns` / `drawTextBlocks` + 归一化字号与签名 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：读 DOM 里**直接带文字**的元素（叶子）→ 「矩形 + 文本 + 计算样式的颜色/字号/字重/对齐 + 有无阴影」；另外单独读"有色底"的元素（F3 的 `.35`、计分板的 `.45`）连同圆角。绘制时先画底块再按行画字（多行文本按 `\n` 拆开、行高 1.35 倍字号、竖直居中）。
+  - 为什么：F3 那串文案是**拼出来的多行字符串**，计分板是"名字左、分数右"的 flex 行 —— 重排一遍就要把格式与对齐规则各抄一份；颜色字号还会随夜间/低血量/断点变（`ui2d/textPanel.ts` 顶部三条理由）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **60 passed**（新增 3 条：字重归一、基线、签名稳定性）；`tsc` 干净。
+  - 批次：20261027-1307
+
+- [x] [P2] `src/main.ts` 接线：`#debug` 与 `#scoreboard-hud` 让位，`syncTextPanels2d()` 按"文字内容 + 视口"签名决定要不要重读 → `npm run check:fast`
+  - 做了什么：`applyTextPanelsDomFallback()` 把两块设 `visibility: hidden`（保留布局：F3 的换行、计分板两列对齐都要靠 DOM 量）；`syncTextPanels2d()` 每帧拼一个"文字内容 + 视口尺寸"的签名，**没变就不碰 `getComputedStyle`**（那是会触发样式重算的调用），变了才 `readTextRuns` + `readTextBlocks` 喂给 `Hud2D.setTextPanels`；`Hud2D` 在最上层画（先底色块再文字），resize 时把签名清空。
+  - 为什么：F3 开着时每帧都变（帧率/坐标），那是它本来就该重画；**关着时一次都不读** —— 默认 F3 是关的，所以常态零成本。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
+  - 批次：20261027-1307
+
+- [x] [P3] 预览页 `tools/preview/textpanels.html`（真 DOM 当数据源）+ `shoot-all` 补图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：按 `index.html` 的 `#debug` / `.scoreboard-hud` CSS 建真 DOM（`visibility: hidden`），读 runs + blocks 后原位重画；两张截图（含遮罩版），`shoot-all` 累计 31 张。
+  - 为什么：这一路线的卖点是"原位重画"，那就必须能一眼看出**位置/颜色/对齐都与 DOM 一致**——截图里 F3 五行等宽、计分板分数右对齐且是黄色（`#ffd75e` 来自计算样式）。
+  - 验证：截图看过：F3 块左上带半透明底、计分板右上带圆角底，名字左/分数右、分数黄色；遮罩版两块都是黄的。
+  - 批次：20261027-1307
+
+- [x] [P4] 文档：`notes/canvas-ui.md` §5.11 + 决策 D21 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.11 记下"原位重画"这条路线的三条理由与代价（`getComputedStyle` 的门禁）；决策 D21（纯文字面板按原位重画，不重排版）。
+  - 为什么：这是本项目**第一次**"不重排、只重画"的迁移，与前面"画法全部自己实现"的路线不同 —— 不写清楚，下一块（聊天栏 / 状态效果）会重新纠结用哪条路。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1307
+
+## 批次 20261027-1300 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：进房/开房功能可用了，但"界面不够整齐、UI 不够美观、层级过高（弹窗上又弹窗）、
+> 界面没有居中"，要按专业交互/UI 设计师的角度重做一版，自己测试到满意。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1300
+
+- [x] [L14] 消掉"弹窗上弹窗"：`src/ui/ServerPicker.ts` + `src/ui/RoomForm.ts` → `npm run check`
+  - 做了什么：`open(anchor)` → `open()`，删掉 `position()` 与 `getBoundingClientRect()` 定位；标题区改成「‹ 返回 + 居中标题 + 一行副标题」，面板宽度取 `var(--modal-w)`（与主面板同宽）。
+  - 为什么：浮窗贴在按钮下方会盖住表单、尺寸又比主面板小一圈，两个不同大小的卡片叠在一起就是"层级过高"的观感来源。
+  - 验证：截图 3-picker / 5-host-picker——两张卡片与主面板同宽同位，切页像翻页。
+  - 批次：20261027-1300
+- [x] [L14] 三层改不透明全屏页 + 卡片视觉重做：`index.html` → 截图比对
+  - 做了什么：`#multiplayer-screen` / `.server-picker` / `.world-modal` 从 `rgba(0,0,0,.55~.68)` 改成**不透明底**（径向暖光 + 四周压暗 + 3px 一条的极淡扫描线），层次用明度表达（联机 `#232323`、选择 `#1b1b1b`）；卡片 `linear-gradient(#3a3a3a,#2c2c2c)` + 斜角 bevel + 投影 + 顶部 3px 主色高光条；输入框反过来**内凹**（上暗下亮）+ 焦点环。
+  - 为什么：半透明遮罩会把底下的世界列表糊进来，"一个窗口压另一个窗口"永远显乱；纯灰卡片+纯灰输入框则完全没有"能点/能输入"的暗示。
+  - 验证：截图 2-join 与改前对比——底层彻底消失、卡片浮起、输入框边界清晰。
+  - 批次：20261027-1300
+- [x] [L14] 控件对齐：`index.html` + `src/ui/WorldScreen.ts` + `src/ui/MultiplayerScreen.ts` → `npm run check`
+  - 做了什么：世界表单原固定三列 `64/1fr/44`（第三列只有"重新掷色子"用得上），改成按"有没有尾巴"分档：`.world-row`（2 列）/ `.world-row-inline`（3 列）/ `.world-row-address`（5 列）；联机地址行改 5 列 grid；三页统一 `min-height: 300px`、底部按钮 `margin-top: auto`。
+  - 为什么：空着的第三列让"房间名/密码/昵称"三行的输入框比地址行短 44px，整片表单看着参差；切页时高度不同，居中卡片会上下跳。
+  - 验证：截图 4-host——地址行与下面三行右边缘对齐。
+  - 批次：20261027-1300
+- [x] [L14] 窄屏适配：`index.html`（`@media (max-width: 520px)`）→ 竖屏截图
+  - 做了什么：地址行拆两行——标签跨两行居左、地址吃满第一行、"`: 端口 选择`"贴右占第二行；窄屏取消 `min-height`。
+  - 为什么：390px 宽下五格并排，地址框只剩 ~90px，`IP 或域名` 占位都被截断，而地址正是玩家要手打的那一格。
+  - 验证：截图 6-portrait-join / 7-portrait-picker（390×844）。
+  - 批次：20261027-1300
+- [x] [L14] 空状态与文案：`src/ui/ServerPicker.ts` + 六语言 → `npm run check`
+  - 做了什么：加「重新扫描」按钮（原来扫不到只能关掉面板重开）；`server.publicSoon` 从"接口还没提供，先留个入口"改成"暂时没有可用的公共服务器"；副标题从"所有端口 8887 的房间"简化成"端口 8887"；`server.titleServer` 去掉重复的 `({port})`；禁用态按钮从半透明绿改成明确的灰。
+  - 为什么：前两条是开发者的口吻，玩家读到的是"这东西坏了"。
+  - 验证：截图 3-picker；`npm run check` exit=0（621 单测）。
+  - 批次：20261027-1300
+
+---
+
+## 批次 20261027-1258 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1258
+
+> 用户 2026-10-27：「继续继续」—— 往**设置页**走一步。
+> 这一批只做"能不能画对、点得着"：把 `.settings-row` 读成模型、用控件库画出来、
+> 交互写回 DOM 控件（`click()` / 写 `value` 再派发事件），并在预览页用**真实 DOM 行**验证。
+> ⚠️ **游戏里还没接线**（`?ui2d=1` 时设置页仍是 DOM）：接线要先把暂停菜单那套
+> `engaged` 机制泛化成"菜单/设置两态"，混在一起改容易把上一批刚通的 Esc 弄坏。
+
+- [x] [W1] `src/ui2d/form.ts`：`readFormRows()`（DOM → 模型）+ 行/控件几何纯函数 + `drawFormRow` + `writeRangeRatio` → `npx vitest run tests/ui2d-form.test.ts`
+  - 做了什么：`form.ts`（约 210 行）—— `readFormRows(host)` 扫 `.settings-row`：有 `.settings-switch` → `switch`（读 `aria-checked`/`.on`）、有 `input[type=range]` → `range`（按 min/max 算 0~1）、有 `.settings-cycle` → `cycle`（`textContent` 当值）；`formRowRects` / `formContentHeight` / `formControlRect` / `formRatioFromX` / `drawFormRow` / `writeRangeRatio`（写 `value` + 派发 `input`/`change`，让原有设置逻辑照常跑）。
+  - 为什么：与暂停菜单同一条思路（D18）——**DOM 是唯一真源**，这里不定义"有哪些设置项、什么范围、什么文案"，只负责画与转发；否则设置项一改，两套表必漂。
+  - 验证：`tests/ui2d-form.test.ts` **4 passed**（行距、内容高、控件右贴边与小行收窄、滑杆比例的 0/0.5/1 与 NaN）；`tsc` 干净。
+  - 批次：20261027-1258
+
+- [x] [W2] `tools/preview/form.html`：用**隐藏的真实 DOM 行**当数据源（开关 / 循环按钮 / 滑杆），画出并支持点/拖/滚/键盘；`shoot-all` 补图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：页面里先建 13 行真的 `.settings-row`（`.settings-switch` / `.settings-cycle` / `input[type=range]`，开关点击会翻转、循环按钮点击会换值），`readFormRows()` 读成模型后画到 canvas；点开关/循环按钮 = `element.click()`、拖滑杆 = `writeRangeRatio()`，每次交互后**重新读模型重画**。加 `?tint=1`；`shoot-all` 累计 29 张。
+  - 为什么：读取与写回靠 DOM，光看代码不算验证——这一页把"隐藏 DOM 当数据源"那条路真的跑通了（截图中四行开关/三行循环/三行滑杆的值都来自那些 DOM 元素）。
+  - 验证：`node tools/preview/shoot-all.mjs` 29 张全出；截图 `15-settings-form.png` 里页签、开关（绿）、循环按钮（关闭/第一人称）、滑杆（读数 8 / 60 / 50 在轨道左侧）都对；`15b` 是遮罩版。
+  - 批次：20261027-1258
+
+- [x] [W3] 游戏里接线：`syncPauseCanvas2d()` 统一管"菜单 / 设置"两态（DOM 让位、遮罩、HUD、`pointer-events`、键盘路由），设置页滚轮与页签点击走 `form.ts` 的模型 → `npm run check && npm run build:fast`
+  - 做了什么：把上一批的 `syncPauseMenu2d()` 泛化成 `syncPauseCanvas2d()`——每帧算一个模式（`null` / `'menu'` / `'settings'`），模式变了先 `teardownPauseCanvas2d()` 逐项还原、再按模式建状态。菜单页仍是 `CanvasMenu`（行来自 DOM 按钮）；设置页新增 `buildSettings2d()` / `refreshSettings2d()` / `renderSettings2d()`（标题栏 + 页签 + 行 + 滚动条）与 `handleSettingsPointer()` / `handleSettingsKey()`。键盘分两态路由（设置页自己吃 ↑↓/Enter/空格/Esc，并把焦点行滚进视口）；指针加了 `pointermove` / `pointerup`（滑杆要按下拖动）与 `wheel`（滚列表）。
+  - 为什么：两种页面**共用一个覆盖层、一批 DOM 让位/还原**，所以必须由同一个地方决定"现在是谁在接管"——放在别处就会出现"菜单收了、设置页没接上"这种半状态。还原判据继续用 `pauseCanvasMode`（D17），不用 `menu.isOpen`。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check` 全量通过；`npm run build:fast` 出包。⚠️ **游戏内仍未实测**（dev 缺 `__host/core.bin` 只能停在落地页）：设置页的"读 DOM → 画 → 写回"链路在 `tools/preview/form.html` 里跑通过（同一份 `form.ts`），但 `main.ts` 这段接线只有类型检查与静态推演。
+  - 批次：20261027-1258
+
+## 批次 20261027-1235 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1235
+
+> 用户 2026-10-27：「继续继续继续继续」—— 把上一批做好的**输入通道接进游戏**：
+> `?ui2d=1` 时 Esc 唤出的暂停菜单页由 canvas 画、canvas 收输入。
+> 关键取舍：**不给每个按钮重写动作**，而是把 DOM 里那排按钮的 `textContent` 当标签、
+> `click()` 当动作 —— 文案（6 种语言）、条件显隐（联机按钮只在房里出现）、
+> 删除世界的二次确认全都自动继承，一条都不用抄。
+
+- [x] [Z1] `src/main.ts`：`syncPauseMenu2d()` 跟着 `settingsScreen.isOpen/page` 进出，DOM 面板让位（`visibility: hidden`）、HUD 让位、遮罩与面板都由 canvas 画 → `npm run check:fast`
+  - 做了什么：新增 `syncPauseMenu2d()`（每帧一次边沿检测：面板开着且 `page === 'menu'` 就接管）与 `renderPauseMenu2d()`（canvas 自己画 45% 遮罩 + 面板）；让位三处 —— `.settings-panel` 设 `visibility: hidden`（不能用 `display`，会打乱它自己 130ms 的淡出时序）、`#settings-screen` 的遮罩背景改 `transparent`（它排在 canvas 之上，不透明会把面板一起压暗）、`#hud` 设 `visibility: hidden`（body 级定位元素，不藏就压在 canvas 上）。退出时逐项还原。
+  - 为什么：三种转换（打开 / 从设置子页退回 / 关掉）都从这一处进出，就不必在 `SettingsScreen` 里埋钩子——埋了会分成两套时序。**还原判据用独立的 `pause2dEngaged` 而不是 `menu.isOpen`**（决策 D17）：激活时要先 `close()` 再点按钮，那时 `isOpen` 已经 false，用它当判据会漏还原（第一版就这么错，症状是"退出暂停后 HUD 永久消失"）。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-1235
+
+- [x] [Z2] 输入路由：Esc / ↑↓ / Home·End / Enter·空格 走 `CanvasMenu`，指针点击走 `handlePointer`，激活 = `button.click()`；关掉时恢复原样 → `npm run check && npm run build:fast`
+  - 做了什么：keydown 监听开头加一段"菜单开着时整段键盘归它"（认 ↑↓/Home/End/Enter/空格/Esc，其余键 `preventDefault` 后 return）；覆盖层 canvas 上绑 `pointerdown`（平时 `pointer-events: none`，只有菜单打开时由 `syncPauseMenu2d` 打开），点击走 `handlePointer` → `dispatchPauseMenu`。激活时先 `menu.close()` 再 `button.click()`（按钮可能切页签或直接关面板），随后立刻 `syncPauseMenu2d()` 完成还原。
+  - 为什么：菜单开着时按 W 不该让角色在面板后面走——DOM 版靠浏览器焦点挡住了这一层，canvas 版必须自己挡（`preventDefault` + return）。
+  - 验证：`npm run check` 全量（含 181 套离线）通过；`npm run build:fast` 出包成功；`tsc` 干净。⚠️ **真机/浏览器没在游戏里跑过**：dev 模式缺 `__host/core.bin` 只能停在落地页，所以"Esc 打开→点设置→退回→再 Esc 关掉"这条链只有静态推演 + 预览页验证。
+  - 批次：20261027-1235
+
+- [x] [Z3] 预览页补一张"游戏里那一版"的对照（同一份 DOM 按钮 → canvas 行），`shoot-all` 补图并重拍 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`menu.html` 加 `?from=dom`：真的建出四颗 `<button>`（标签走 `t('pause.resume')` 等真实 i18n 键），再把它们的 `textContent` 喂给 `CanvasMenu`，激活时 `button.click()` —— 与 `main.ts` 完全同一条路。截图 `14-pause-dom-driven.png`；`shoot-all` 累计 27 张。
+  - 为什么：接线里最容易错的是"行与按钮的对应关系"，而这条关系在预览页里能一眼看出来（截图里四行就是真实那四颗按钮的文案）。
+  - 验证：`node tools/preview/shoot-all.mjs` 27 张全出；截图里四行分别是「继续游戏 / 设置 / 统计 / 保存并退出到主菜单」——正是 `SettingsScreen` 菜单页当前那四颗（成就那颗已在批次 20261024-1152 删除，多人那颗单机时不显示）。
+  - 批次：20261027-1235
+
+- [x] [Z4] 文档：`notes/canvas-ui.md` 阶段 3 前进一格（暂停菜单已接线）、决策 D17/D18 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段 3 标 🟡（暂停菜单页 ✅，其余未开始）；新增 §5.9（边沿检测、不重写动作的代码骨架、三处让位的表、"还原判据不能用 isOpen"的警告、键盘整段接管）；决策 D17（独立标志）、D18（行来自 DOM）。
+  - 为什么：D18 是这一批的核心取舍，也解释了一个反直觉的结论——"canvas 菜单的能力上限 = DOM 面板现有按钮"，这被当成优点写下来（避免两套 UI 各自长功能）。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿；`npm run check` 通过（TASKS 台账随收尾补齐）。
+  - 批次：20261027-1235
+
+## 批次 20261027-1226 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1226
+
+> 用户 2026-10-27：「继续继续」—— 两件事：① 把**阶段 2 的最后一样**（指南针 / 时钟表盘）收掉，
+> 阶段 2 就此完整；② 做**阶段 3 的前置**：canvas 面板的**输入通道**（焦点行 / 上下键 / 回车 /
+> Esc / 指针点击），并在预览页里用它拼出一个能用的暂停菜单。
+> ⚠️ 这一批**不动游戏里的暂停流程**：真正的接线（把 DOM 面板藏起来、canvas 接管输入）
+> 单独一批做，因为那里一旦接错就是"Esc 打不开 / 关不掉"。
+
+- [x] [Y1] `src/ui2d/ToolDial2D.ts`：表盘（圆 + 铜边 / 白边）+ 四个方位刻度 + 旋转指针 + 读数文字，`dialNeedlePoints` 等纯函数 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`ToolDial2D.ts`（约 210 行）—— 52×52 圆盘（径向渐变 + 铜色/铁蓝边框）、N/E/S/W 四个方位字母（只有指南针画）、上红下白的三角指针（时钟是一根细白针）、表盘下方一行 10px 读数；纯函数 `dialCenter` / `dialNeedlePoints`（按角度算三角三顶点）/ `dialTickAnchors` / `dialBorderColor`。
+  - 为什么：**指针不用 `ctx.rotate` 而是算顶点**（决策 D15）—— 用 rotate 的话"指向哪"藏在变换栈里，没法离线断言；而顺/逆时针搞反在触摸端几乎发现不了。刻度锚点同理（随盘面尺寸变）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **57 passed**（本批 +6：圆心、0/90/180/270 尖端、底边对称、非法角度按 0°、四个刻度在盘内、两种边框色不同）；`tsc` 干净。
+  - 批次：20261027-1226
+
+- [x] [Y2] `src/ui2d/menu.ts`：`CanvasMenu` 输入通道（焦点行、`ArrowUp/Down/Home/End`、`Enter/Space` 激活、`Esc` 关闭、指针命中），纯状态机 + 绘制 → `npx vitest run tests/ui2d-menu.test.ts`
+  - 做了什么：`menu.ts`（约 240 行）—— `menuPanelSize` / `menuRowRects` / `menuFocusAfterKey`（上下循环、Home/End、越界夹回）+ `CanvasMenu` 类（`open/close/isOpen/focus`、`handleKey`、`handlePointer`、`regions()`、`render()`）；面板复用 `drawModalFrame`，焦点行用按钮 hover 态 + 左侧 ▶，底部一行操作提示。
+  - 为什么：**只返回"意图"不含游戏动作**（决策 D16）—— 写进动作就得 import 存档/网络/世界列表，这一层立刻变第二份真相，也没法在预览页里跑；"打开时游戏该不该暂停/还收不收其它键"同样留在主循环（否则重演"暂停时角色还在走"）。
+  - 验证：新建 `tests/ui2d-menu.test.ts` → **14 passed**（布局随行数增高、行等距居中、焦点循环与 Home/End、未打开时不理输入、Enter/空格激活返回 id、Esc 关闭、点行激活并移焦点、点外面关闭可关掉、`regions()` 的 id 与层号）；`tsc` 干净。
+  - 批次：20261027-1226
+
+- [x] [Y3] 预览页 `tools/preview/menu.html`（整页暂停菜单，键盘可操作）、`tools/preview/dial.html`（指南针/时钟）；`shoot-all` 补图并重拍 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`dial.html`（两块表盘并排、`?deg=&kind=&tint=1`）、`menu.html`（整页暂停菜单：↑↓ 移动焦点、Enter 激活、Esc 关、点行激活、点面板外关闭，底部一行实时显示"焦点/激活了什么"）；`SHOTS` 加 4 张（`12-tool-dial` / `12b-dial-tinted` / `13-menu` / `13b-menu-tinted`），累计 26 张；`.tmp/canvas-version/README.md` 同步。
+  - 为什么：输入通道的正确性一半在断言里（14 条），另一半只能在**能按**的页面上验——键盘导航尤其如此，触摸端完全测不到。
+  - 验证：`node tools/preview/shoot-all.mjs` 26 张全出；逐张看过：两块表盘（时钟蓝盘细针 210°、指南针米色盘红白针 45° + N/E/S/W）、暂停菜单四行 + 焦点 ▶ + 遮罩 + 底部提示。
+  - 批次：20261027-1226
+
+- [x] [Y4] 文档：`notes/canvas-ui.md` 阶段 2 标 ✅、新增 §5.7（表盘）与 §5.8（输入通道契约）、决策 D15/D16 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段 2 整行改 ✅（只剩准星判定不搬）；新增 §5.7（表盘两处自己算的东西）与 §5.8（"浏览器给的 vs 要自己做的"对照表 + 三条边界 + 明确写了"这一批没有接线"）；决策 D15（指针算顶点）、D16（只返回意图）。
+  - 为什么：§5.8 那三条边界里，"Esc 一律先关菜单、调用方不要再判一遍"是最容易在接线时写错的——写下来才能防止"按一次 Esc 关两层"。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1226
+
+## 批次 20261027-1218 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1218
+
+> 用户 2026-10-27：「继续继续继续」—— 把**阶段 2 的最后一块**（提示条族）收掉：
+> 目标名、攻击蓄力条、切槽时浮出的物品名。三样都是纯展示、都不吃事件，
+> 做完之后「底部 HUD + 准星周围的东西」就全是 canvas 的了。
+
+- [x] [X1] `src/ui2d/overlays.ts`：三样提示条的画法 + 纯函数（`attackChargeRect` / `attackChargePercent` / `itemNameAlpha`），`Hud2D.setTips()` 统一收口 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`overlays.ts`（约 200 行）—— `drawTargetLabel` / `drawAttackCharge` / `drawItemNamePop` / `drawTips` + `attackChargeRect`（44×3、准星下 16px）/ `attackChargePercent`（量化到 2%，与 DOM 版同口径）/ `itemNameAlpha`（350ms 淡入 → 保持 2000ms → 350ms 淡出）；`Hud2D.setTips()` 在**所有绘制之后**画（提示条在原 DOM 里就是最上面那层）。
+  - 为什么：**不做快照缓存**（决策 D13）—— 三样加起来每帧就两次 `fillText` + 一块 44×3 小矩形，为它维护签名比直画还贵；缓存是按量级决定的，不是按"要不要优化"。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **51 passed**（本批 +5）；`npx tsc --noEmit` 干净。
+  - 批次：20261027-1218
+
+- [x] [X2] `src/main.ts` 接线 `?ui2d=1`：三样 DOM 让位（`visibility: hidden`），矩形仍从 DOM 量（文本长度/触摸 pinned 位置都在 CSS 里），alpha 按时间算 → `npm run check:fast && npm run build:fast`
+  - 做了什么：`applyTipsDomFallback()` 把 `#target-info` / `#attack-cooldown` / `#selected-item-name` 设 `visibility: hidden`（保留布局，canvas 才能量到"随文本变宽、触摸时被 JS 挪位"的矩形）；`syncTips2D()` 每帧喂状态——目标名与物品名**只在文本/锚点/视口变时量 DOM**，蓄力条的几何直接由 `attackChargeRect(overlay.width, overlay.height)` 算；`showSelectedItemName()` 里记 `itemNameShownAt`，淡化交给 `itemNameAlpha`；resize 时 `tips2dEpoch += 1`。
+  - 为什么：物品名的淡出 canvas 里没有 transition，要么按时间算要么每帧 `getComputedStyle`（更贵且不可断言）；按时间算还顺带解决了"暂停时不淡"（决策 D14）。
+  - 验证：`npm run check:fast` 绿；`npm run check` exit=0；`npm run build:fast` 出包；`tsc` 干净。⚠️ 真机观感未验。
+  - 批次：20261027-1218
+
+- [x] [X3] 预览页 `tools/preview/tips.html` + `shoot-all` 补图，重拍 `.tmp/canvas-version/` 并更新 README → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`tips.html` 按 `index.html` 那几条 CSS 建真 DOM（`visibility: hidden`）只为测量，再把矩形喂给 `Hud2D.setTips()`；参数 `?target=&item=&charge=&age=&tint=1`。`SHOTS` 加 3 张（`11-tips` / `11b-tips-fade` / `11c-tips-tinted`），累计 22 张；`.tmp/canvas-version/README.md` 的进度表与 URL 表同步。
+  - 为什么：提示条是"一闪而过"的东西（物品名 2 秒、蓄力条不到 1 秒），截图必须能把状态定住；`age=2175` 那张专门展示"淡出到一半"。
+  - 验证：`node tools/preview/shoot-all.mjs` 22 张全出；逐张看过：目标名贴在准星下方、蓄力条 44px 在它上面不远、物品名胶囊在快捷栏上方；`charge=100` 那版条确实消失；`age=2175` 那版半透明。
+  - 批次：20261027-1218
+
+- [x] [X4] 文档：`notes/canvas-ui.md` §5.6（阶段 2 收尾 + 还剩表盘）、决策 D13/D14 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段 2 行改成"只剩指南针·时钟表盘"；新增 §5.6（三处与前面不同的做法 + "阶段 2 还剩什么"表）；决策 D13（不做快照缓存）、D14（淡出按时间算）。
+  - 为什么：D13 容易被误解成"偷懒"——所以写清了判据是**量级**；D14 的代价（低帧率跳格）也写在正面，免得以后有人当成 bug 去修。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1218
+
+## 批次 20261027-1209 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1209
+
+> 用户 2026-10-27：「继续继续」—— 接着做**阶段 1：控件库**。
+> 这是"整页搬走"的前提：设置页 / 主菜单 / 背包里的每一个交互，拆开都是这几个控件
+> （开关、滑块、下拉、页签、滚动列表、提示框、弹窗）。控件库一天，整页才有资格谈。
+
+- [x] [W1] `src/ui2d/controls.ts`：七个控件的**画法 + 纯状态机**（开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗），几何与命中全部做成可断言的纯函数 → `npx vitest run tests/ui2d-controls.test.ts`
+  - 做了什么：`controls.ts`（约 470 行）—— 七个 `draw*` + 一组纯函数：`toggleNext`、`sliderTrackRange`/`sliderRatioFromX`/`sliderRatioStep`、`dropdownMenuRect`/`dropdownIndexAt`、`tabRects`/`tabIndexAt`、`listMaxScroll`/`clampListScroll`/`listScrollByWheel`/`listVisibleRange`、`tooltipRect`、`modalRect`；另有 `controlRegion`（矩形登记命中）与 `insetRect`。色值延续 `PALETTE`，新增 `CONTROL_COLORS` / `MODAL_COLORS`。
+  - 为什么：**状态留在调用方、控件只给画法与状态机**（决策 D10）。canvas 没有"元素自己记得自己开着没有"，混在一起就会长出第二份真相（DOM 那套 `class` 正是如此）；而纯函数能离线断言，绘制不能。
+  - 验证：`npx tsc --noEmit` 干净；`npx vitest run tests/ui2d-controls.test.ts` → **21 passed**。
+  - 批次：20261027-1209
+
+- [x] [W2] `tests/ui2d-controls.test.ts`：每个控件"命中 → 状态 → 回调"的离线断言（滑块的 0/0.5/1、下拉的翻转与越界、列表的滚动夹取、提示框防溢出）→ `npm run test:unit`
+  - 做了什么：21 条断言，分七组：控件命中区域（矩形 + 开区间边界）、开关翻转、滑块（可拖范围两端各留半钮 / 0-0.5-1 / 越界与 NaN / 键盘步进同一夹取）、下拉（默认向下 / 下方放不下翻上 / 上下都放不下选空间大的那侧 / 菜单项越界 -1）、页签（等分 / 左闭右开 / 最右边界算最后一个）、列表（内容高 / 最大滚动 / 夹取 / 滚轮按整行含"恰好半行向上取整" / 可见范围首尾）、提示框（下方 / 翻上 / 左右夹进视口）、弹窗（居中 / 小屏夹进视口）。
+  - 为什么：这些错每一条都只表现为"手感不对"或"偶尔点不到"，真机上间歇出现、手指复现不出来 —— 只有纯函数断言能钉住。
+  - 验证：`npm run test:unit` 绿（新增文件被 `vitest run tests` 自动收进去，不需要注册）。
+  - 批次：20261027-1209
+
+- [x] [W3] `tools/preview/controls.html`：把七个控件摆一排并能真的点/拖/滚（canvas 直接接指针事件），加 `?tint=1`；`shoot-all.mjs` 补图并重拍 `.tmp/canvas-version/` → `node tools/preview/shoot-all.mjs`
+  - 做了什么：一页 900×560 的可交互画廊 —— 开关两枚、滑块（按住拖）、下拉（点开选中）、三页签、20 行滚动列表（滚轮 + 点行选中 + 右侧滚动条）、"?" 悬停提示框、"打开弹窗"（不透明深色面板 + 标题栏 + ✕ + Esc）。命中一律走 `hitRegionAt(regions(), x, y)`，就是将来设置页要用的那条路。`?state=dropdown|tooltip|modal` 把浮层固定打开（截图用），`?tint=1` 加遮罩。`shoot-all` 加 5 张，累计 19 张。
+  - 为什么：阶段 1 的判据就是"能在调试面板里摆一排"；而且**交互只能靠手**验，截图不行 —— 所以这一页刻意打开 `pointer-events`（游戏里铺满全屏的覆盖层必须关着，否则吃掉视角手势）。
+  - 验证：`node tools/preview/shoot-all.mjs` 19 张全出；逐张看过：下拉展开贴字段下方、已选项高亮；列表滚到 03~14 且滚动条在中段；提示框贴 "?" 下方两行；弹窗不透出底下列表；遮罩版整页黄。
+  - 批次：20261027-1209
+
+- [x] [W4] 文档：`notes/canvas-ui.md` 阶段表把 1 标成 ✅、新增 §5.5（七个控件的接口与"为什么状态留在调用方"）、决策 D10~D12 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段表补回 `1 控件库 ✅` 一行（上一批那次表格编辑把它整行替换掉了，这次顺手补回来）；新增 §5.5（七行接口表 + 三条经验：状态留调用方 / 翻转与避让必须自己算 / 弹窗要不透明）；决策 D10（画法与状态机分离）、D11（下拉与提示框自己避让）、D12（弹窗不复用 HUD 底板）。
+  - 为什么：D12 是这一批唯一"踩到才改"的一条 —— 第一版弹窗用半透明 HUD 底板，截图里底下列表的字全透上来，像字叠字。不写下来，下一个人做设置页还会再踩一次。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1209
+
+## 批次 20261027-1200 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 把 R2（iOS 只发布不浏览 Bonjour）补完，并在模拟器里验通桥接链路。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1200
+
+- [x] [R2] `NetServiceBrowser` + C 桥接：`server/ios/Sources/BonjourBrowser.swift`（新）、`ForegroundSession.swift`、`server/rust/src/{instance,capi}.rs`、`minicraft_server.h` → `check.sh` + `check-sim.sh`
+  - 做了什么：① Swift 侧搜 `_minicraft._tcp`、解析 IPv4 + TXT、**每 8 秒重 resolve**（刷新 Rust 侧 12 秒 TTL，否则邻居会闪一下就没）、只认 IPv4（Rust 只 parse `Ipv4Addr`）；② `ForegroundSession` 在服务起来时 start、停止/进后台时 stop；③ Rust 侧 `instance` 加 `HUB` 槽 + `with_hub`，`capi` 新增 `minicraft_add_bonjour_peer(name, ip, txt_json)`：`beacon::from_txt` → `PeerBook::observe`。
+  - 为什么：`BonjourAdvertiser` 只发布，我们能被人看见、看不见别人；组播在部分 Wi-Fi 上会被挡（AP 隔离 / IGMP snooping），mDNS 能补这一段。
+  - 验证：`check.sh` 的 C 入口检查三个 → 四个全过；`check-sim.sh` 在模拟器里注入一条记录 → `/healthz.peers` 出现该邻居（C 入口 → peer 表 → healthz 链路通）；`npm run check` exit=0。
+  - 边界：**真实 mDNS 发现未验**（要两台真机或可用 mDNS 域），已写进 `server/ios/README.md` 上机清单第 3 条。
+  - 批次：20261027-1200
+
+---
+
+## 批次 20261027-1153 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1153
+
+> 用户 2026-10-27：「继续」—— 接着做**阶段 2 的第一块**：状态栏四行（生命 / 饥饿 / 护甲 / 氧气）
+> 与经验条。它们和快捷栏一样"每帧都在眼前"，而且**全是纯展示**（没有命中测试），
+> 是整条底栏里最后两块 DOM。做完之后打开 `?ui2dtint=1`，屏幕底部会整排变黄。
+
+- [x] [V1] 抽出图标真源 + `src/ui2d/Vitals2D.ts`：`vitalsArt.ts`（心/鸡腿/护甲/气泡的 SVG 路径与色值，`ui/VitalsHud.ts` 改成 import 它）；`Vitals2D` 用 Path2D 画四行、离屏快照、低血量脉冲按帧外挂变换 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`ui2d/vitalsArt.ts` 收下四条 SVG 路径 / 七个色值 / 两个三态判据（`vitalIconState`、`bubbleIconState`），`ui/VitalsHud.ts` 删掉本地常量改为 import（依赖方向 `ui/ → ui2d/`）。`ui2d/Vitals2D.ts` 用 `Path2D` 填同一份 `d`，半颗在 **9×9 坐标系**里裁 `rect(0,0,4.5,9)`；整块画进离屏快照（签名不含脉冲），低血量脉冲在 blit 时套 `1→1.06` 变换。
+  - 为什么：图标两边都要画，路径抄两份必然漂，而"DOM 的心胖一点"没有任何断言抓得到；三态判据分家更糟（会出现一半整颗一半半颗）。脉冲写进签名就等于每帧重画 20 个图标、而它每秒一个来回（见决策 D7、D9）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **46 passed**（新增 6 条：三态 / 气泡分档 / 行内等距 / 包围盒 / 脉冲曲线 / 签名不含脉冲）。
+  - 批次：20261027-1153
+
+- [x] [V2] `src/ui2d/Xp2D.ts`：经验条（轨道 / 渐变填充 / 柔光）+ 等级牌（黑描边绿字，压在条中间），快照按 1% 取整 → 同上
+  - 做了什么：轨道 `#14150f` 圆角 3 + 顶部暗线近似内阴影 + 外侧一圈淡黑边；填充 `#c2ff7a→#63c335` 竖向渐变、顶 1px 高光、右端 2px 柔光；等级牌宽 = 文字宽 + 10、高 18、圆角 4、半透明黑底，绿字四向黑描边。签名把进度**取整到 1%**。
+  - 为什么：DOM 版自己就是 `Math.round(ratio*100)%`，canvas 按同一粒度重建才既跟得上又不会因浮点每帧重建。柔光只在快照里付一次（`shadowBlur` 在手机上是真开销）。
+  - 验证：同上 46 条（其中 4 条打在这里：百分比取整/夹取、填充宽度、等级牌居中、签名 1% 粒度）。
+  - 批次：20261027-1153
+
+- [x] [V3] `src/main.ts` 接线 `?ui2d=1`：状态栏与经验条 DOM 让位（纯展示，用 `visibility: hidden`）、几何量 DOM、按 key 变脏才量 → `npm run check:fast && npm run build:fast`
+  - 做了什么：`applyVitalsDomFallback()` 把 `#vitals` / `#xp-bar` 设 `visibility: hidden`（保留布局，canvas 才能量到随断点变化的 18/14/22px 图标）；`syncVitals2D(noVitals)` 每帧拼一个 key（生命/饥饿/氧气/护甲/等级/经验百分比/模式/`epoch`），变了才量 40 个 `svg.vital-icon` 与 `#xp-bar` 并喂给 `Hud2D`；resize 时 `vitals2dEpoch += 1` 强制重量。
+  - 为什么：DOM 版内部本来就按 key 早退，但"每帧量 40 个 rect"是强制布局，必须挡在 key 后面；`epoch` 解决"数值没变、转屏后矩形变了"这件 key 看不见的事。`visibility` 而非 `opacity`：这两块没有命中测试，`visibility` 还能让浏览器跳过这层绘制（决策 D8）。
+  - 验证：`npm run check:fast` 绿（46 条单测 + typecheck）；`npm run build:fast` 出包成功；`npx tsc --noEmit` 干净。⚠️ 真机观感未验（本会话没有浏览器进世界）。
+  - 批次：20261027-1153
+
+- [x] [V4] 预览页 `tools/preview/vitals.html` + `shoot-all.mjs` 补图，重拍 `.tmp/canvas-version/` 并更新其 README → `node tools/preview/shoot-all.mjs`
+  - 做了什么：新页 `vitals.html` 用**真的** `VitalsHud` / `XpHud` 建 DOM（只为测量，设 `visibility: hidden`），再把矩形喂给 `Hud2D`，所以它走的与游戏里同一条路；参数 `?health&food&air&armor&level&xp&tint&pulse`。`SHOTS` 加 3 张（`09-vitals` / `09b-vitals-low` / `09c-vitals-tinted`），累计 14 张，README 的进度表与"URL → 看到什么"同步更新。
+  - 为什么：截图是这一批的唯一"凭证"——用户上一轮的原话就是"截图发我"。顺带踩到一个真实的坑：预览页把 `MAX_AIR` 写成 30，而真值是 300（10 颗气泡、每颗 30 点），结果"氧气是否满""每颗几点"全算错；改成 import 真源后立刻对上了。
+  - 验证：`node tools/preview/shoot-all.mjs` 14 张全出；逐张看过：13 点生命 = 6 整 + 1 半 + 3 空、17 饥饿 = 8 整 + 1 半 + 1 空、5 护甲 = 2 整 + 1 半、180/300 氧气 = 6 颗；残血版护甲/气泡两行整行不显示；遮罩版底部整块黄。
+  - 批次：20261027-1153
+
+- [x] [V5] 文档：`notes/canvas-ui.md` 加 §5.4（阶段 2 已落地部分与"哪些还没搬"）、决策 D7~D9 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段表把 2 标成 🟡（血条/饥饿/护甲/氧气/经验条 ✅，只剩提示条）；新增 §5.4（Path2D 与 9×9 裁剪、量 DOM 的理由、`visibility` vs `opacity`、脉冲不重建快照、断言清单、预览页与三张截图、以及"阶段 2 还剩什么"表）；决策 D7（图标真源上移）、D8（`visibility: hidden` 的适用边界）、D9（脉冲走变换）。
+  - 为什么：这三条决策都不是"随手这么写"——尤其 D8，它和快捷栏的结论**相反**，不写清边界，下一个人会给快捷栏套 `visibility` 然后点不动。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1153
+
+## 批次 20261027-1143 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1143
+
+> 用户 2026-10-27：「现在看的还是不太清楚。要不然这样，如果是 canvas 画的，统一先加一层黄色遮罩，
+> 这样就容易区分了。」—— 对，这是"改造进度"最省事的一种可视化：不靠肉眼比对像素，
+> 而是让 canvas 产出的每一块像素自己"亮明身份"。
+
+- [x] [U5] 加调试遮罩：`src/ui2d/debug.ts` 的 `applyDebugTint()`（`source-atop` 整层刷）+ `Hud2D.setDebugTint()` + `main.ts` 解析 `?ui2dtint=1` + 两个预览页支持 `?tint=1` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：新增 `ui2d/debug.ts`（`applyDebugTint(ctx,w,h)`：`save` → `globalCompositeOperation='source-atop'` → 整块刷 `rgba(255,214,0,.52)` → `restore`）；`Hud2D` 加 `setDebugTint()`，在**所有绘制之后**刷遮罩；`main.ts` 把 `readUi2DFlag()` 拆成通用 `readFlag(name)`，新增 `UI2D_TINT_ENABLED = UI2D_ENABLED && readFlag('ui2dtint')`；两个预览页加 `?tint=1`。
+  - 为什么：`source-atop` 让**合成器**替我们判断"哪些地方有像素" —— 不用维护"这一帧画了哪些矩形"的账，将来新增控件自动被覆盖。遮罩单独一个参数、不跟 `ui2d=1` 绑定：多一次全屏填充会让帧率 A/B 失真，颜色不对也容易被当成 bug（见决策 D5/D6）。
+  - 验证：`tests/ui2d.test.ts` **36 passed**（新增 2 条：假 ctx 断言调用序列 = `save → op source-atop → fill → fillRect 0,0,w,h → restore`；尺寸非法时一笔不画）；`tsc` 干净；`npm run check` exit=0。
+  - 批次：20261027-1143
+
+- [x] [U6] `tools/preview/shoot-all.mjs` 补遮罩版截图并重拍全部；更新 `.tmp/canvas-version/README.md` 的进度表 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`SHOTS` 加 4 张遮罩版（`06-hotbar-tinted`、`06b-hotbar-tinted-dom-vs-canvas`、`07-boss-tinted`、`08-all-tinted`），重拍共 11 张；README 的表格补上四行，并加一张"URL → 看到什么"的表（不带参数 / `?ui2d=1` / `?ui2d=1&ui2dtint=1` / 关掉）。
+  - 为什么：用户要的是"一眼能判断实现到哪"，那截图里就必须有**同一份数据的染色/不染色对照** —— `06b` 那张（上排 DOM 不染色、下排 canvas 全黄）比任何文字说明都直接。
+  - 验证：`node tools/preview/shoot-all.mjs --base http://localhost:5199` 11 张全出，逐张看过：快捷栏整条染黄、DOM 那排原色；Boss 条只有那条被染、周围画面原色；红闪那版整屏偏黄（符合预期，红闪本身就是全屏填充）。
+  - 批次：20261027-1143
+
+- [x] [U7] 文档：`notes/canvas-ui.md` 记下这个调试开关与用法；决策写进 `doing/9f2dcf-decision.md` D5/D6 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：`notes/canvas-ui.md` 新增 §5.3（实现一句话、为什么需要它、三条边界、以及"红闪打开时整屏都黄"这个反直觉现象）；决策 D5（`source-atop` 整层刷而非逐块算矩形）、D6（开关独立成 `ui2dtint=1`）。
+  - 为什么：这个开关的价值不在代码而在**验收方式**——以后每迁一块界面，只要拍一张带遮罩的图就能说明"这块换了"，不必再靠肉眼比像素。不写下来，下一批会重新发明一遍。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1143
+
+## 批次 20261027-1120 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："请继续" —— 把两份原生壳的上机验收清单写下来，顺手跑通了 iOS 的模拟器级验收。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1120
+
+- [x] [R1] 修 `build-ios.sh` 的变量边界 bug：`server/rust/build-ios.sh` → `bash server/ios/check.sh`
+  - 做了什么：`echo "编真机（$DEVICE）"` 里全角右括号紧贴变量名，bash 把多字节首字节并进变量名（`DEVICE\xef: unbound variable`），整个 iOS 构建断在第一行。改成 `${DEVICE}`；同类的 `${SIM_ARM} / ${SIM_X86}` 一起改。
+  - 为什么：这不是"环境问题"，是脚本自己的错——`$VAR` 后面接中文/全角符号必须加花括号。
+  - 验证：`bash server/ios/check.sh` 全部通过（两架构 xcframework + 两 SDK typecheck + 三个 C 入口）；`check-sim.sh` 在模拟器里真跑 → **端口 8887**、`/healthz`、`/rooms`、停止后归零。
+  - 批次：20261027-1120
+- [x] [R1] 两份上机验收清单：`server/android/README.md`、`server/ios/README.md`
+  - 做了什么：安卓 11 步（服务起没起来 / 同机 webview / 另一台设备发现含 AP 隔离与 MulticastLock 排查 / 进房后世界对不对 / 后台省电 / 离线回归）；iOS 5 步（本地网络权限"拒绝后不再弹"、`dns-sd` 验 Bonjour、iOS↔iOS 互发现、前台限制、ATS）。
+  - 为什么：这几条 CI 跑不了，但每条都能写成"看什么 / 不对先查哪里"，真机时不至于重新推。
+  - 验证：`npm run check` exit=0。
+  - 批次：20261027-1120
+- [x] [R2] 记下 iOS 只发布不浏览的缺口：`server/ios/README.md`、`.continue/TASKS.md`
+  - 做了什么：README 的"还没做"补一条（`BonjourAdvertiser` 只有 `NetService`，没有 `NetServiceBrowser`）；TASKS 新增 `R2`。
+  - 为什么：现在 iOS 能看到邻居是因为对方也发了 UDP 组播，"靠 Bonjour 互相发现"这条其实不成立——不写清楚，下一个人会以为已经支持。
+  - 验证：`npm run check` exit=0（HANDOFF 待办 0→1）。
+  - 批次：20261027-1120
+
+---
+
+## 批次 20261027-1040 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— R1 全绿之后，把原生壳（安卓/iOS）与 Rust 的接线做了一遍静态核对，并跑掉两个冒烟套件。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1040
+
+- [x] [R1] 手机壳 port=0 的语义修正：`server/rust/src/instance.rs`、`capi.rs`、`server/ios/include/minicraft_server.h` → `cargo check` + `run-smoke.sh`
+  - 做了什么：`start_instance` 只在 `want_port > 0` 时覆盖 `config.port`；0 走 `Config::from_env()` 的默认（8887 或 `PORT`）。注释与 iOS 头文件同步改口径。
+  - 为什么：安卓 Intent 不传 port（`wantPort=0`）、iOS `start(port: 0)` 都是默认路径，以前 `bind(0)` 会让系统随机分配——客户端与发现广播都用 8887，别人照着界面里的地址永远连不上。
+  - 验证：`cargo check` 零警告；`bash server/rust/run-smoke.sh` **20 / 0**；`run-beacon-smoke.sh` **13 / 0**。
+  - 批次：20261027-1040
+- [x] [R1] 原生壳接线核对（静态）：`Cargo.toml` / `app/build.gradle` / `NativeServer.java` / `jni.rs` / `capi.rs` / `minicraft_server.h`
+  - 做了什么：逐项确认真实名字与签名一致——`lib name = minicraft_server` ↔ gradle 拷 `libminicraft_server.so`；`Java_com_minicraft_server_NativeServer_{startServer,stopServer,serverPort}` 三对；`minicraft_{start,stop}_server` / `minicraft_server_port` 的 4/0/0 参数与 `.h` 一致；安卓的 `MulticastLock` 在位（不拿它会丢组播帧）。
+  - 为什么：真机之前能静态查的接线先查掉，剩下的（前台服务类型、真机权限、Bonjour 发布）只能上机验。
+  - 验证：无代码改动，只核对。
+  - 批次：20261027-1040
+
+---
+
+## 批次 20261027-1009 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1009
+
+> 用户 2026-10-27：「你改的这几个地方都不太明显，看不出来效果如何。要不把快捷栏改一下？」
+> 阶段 0 那三样（红闪 / Boss 条 / 破坏与进食进度）本来就是为了"不打扰任何人"才挑的纯展示 HUD，
+> 结果也确实没人能看出差别。这一批换成**每帧都在眼前、9 格 + 图标 + 数量 + 耐久 + 选中框**的
+> 快捷栏 —— 它才是"一眼就能对比出 DOM 与 canvas"的那块。
+
+- [x] [U1] 新建 `src/ui2d/Hotbar2D.ts`：几何纯函数 + 状态签名 + 离屏快照；`tests/ui2d.test.ts` 加断言 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：新增 `ui2d/Hotbar2D.ts` —— 面板（`#c6c6c6` + 3px 斜面 + 2px 黑描边）、9 个格子（`#8b8b8b` + 2px 斜面）、图标 blit、数量（12px 四向描边）、序号（10px，选中时不透明）、耐久条（3px 三档）、选中格（白框 + 半透明白底 + 上抬 2px + 放大 1.08 + 柔光）；8 个几何纯函数（内容盒 / 图标居中 / 序号与数量锚点 / 耐久轨道与比例 / 选中矩形 / 快照原点）+ `hotbarSignature()`；`Hotbar2D` 类把整条栏画进一张离屏快照，签名不变时每帧只 `drawImage`。`Hud2D` 收下 `setHotbar()` 并最后画它（红闪在 DOM 里在它下面，不该给它上色）。`index.ts` 补导出。
+  - 为什么：几何**不抄 CSS 常量**，输入是 `getBoundingClientRect()` 量出来的矩形 —— `--hotbar-slot` 跟断点走、底部还有 `env(safe-area-inset-bottom)`，抄一份常量就是埋一个"转屏错几像素"的回归面。快照缓存是因为 9 格每帧重画要付二十几次填充 + 十几次文字，而快捷栏的变化率极低（见决策 D1、D3）。图标不自己实现，沿用现成的 `.slot canvas`（`ui/ItemIcon` 是唯一入口，见 D4）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **34 passed**（新增 12 条）；`npx tsc --noEmit` 干净。
+  - 批次：20261027-1009
+
+- [x] [U2] `src/main.ts` 接线 `?ui2d=1`：DOM 快捷栏让位（保留布局与命中），pixels 全由 canvas 画；`?ui2d=0` 完全回退 → `npm run check:fast && npm run build:fast`
+  - 做了什么：`refreshHotbar()` 末尾只做两件事——`hotbar2dRevision += 1` 与置脏（**不量 DOM**：它被十几个事件路径调用，量 10 个 `getBoundingClientRect()` 每次都会强制布局）；真正测量与喂状态在每帧的 `updateHotbar2D()` 里，一帧最多一次。`applyHotbar2DDomFallback()` 把 `#hotbar` 的底/斜角/描边设成透明（**边框宽度保留**，否则两侧背包按钮位移 3px），9 个 `.slot` 设 `opacity: 0`。`#hotbar` 被 `visibility: hidden` 藏起来时（打开携带版背包）每 8 帧复查一次。
+  - 为什么：**命中继续借 DOM**（见决策 D2）。覆盖层的 `pointer-events` 是元素级、铺满全屏，打开就吃掉 `#touch-look` 的视角手势；而 `visibility: hidden` / `display: none` 会让格子退出命中，连 `bindHotbarTouch` 与长按看物品一起失效 —— 所以只能用 `opacity: 0`。
+  - 验证：`npm run check:fast` 绿（655 条单测）；`npm run check` 全量 **exit=0**（181 套离线 + 三张台账 + 文档体量）；`npm run build:fast` 出包成功；`npx tsc --noEmit` 干净。⚠️ **真机观感未验**：本会话没有浏览器，dev 模式下 `__host/core.bin` 缺失会停在落地页 —— A/B 步骤写在 `notes/canvas-ui.md` 的 §5.1。
+  - 批次：20261027-1009
+
+- [x] [U4] 加 `tools/preview/hotbar.html` 对照页：不用进世界就能把 DOM 版与 canvas 版摆在一起看；顺手把数量字重对齐 CSS → `node tools/screenshot.mjs --url http://localhost:5173/tools/preview/hotbar.html --out hotbar-preview.png`
+  - 做了什么：一页 HTML —— 上半是照抄 `index.html` 那几条 CSS 的 DOM 版，下半是 `Hotbar2D` 画进 canvas 的版本，同一份假数据（空槽 / 数量 / 选中格 / 黄耐久 / 红耐久）。几何照样用 `getBoundingClientRect()` 量 DOM 再喂给 canvas，与 `main.ts` 走同一条路。数量字号原来是 700，改成跟 CSS 一致（`.count` 没写 `font-weight`）——迁移期两边并存，字重不同在 A/B 里就是"像素不一致"。
+  - 为什么：用户说的"看不出来效果"有一部分是**验收成本**问题 —— `?ui2d=1` 得先能进世界才看得到，而 dev 缺 `__host/core.bin` 会停在落地页。有了这一页，"画得对不对"不再被"能不能进世界"卡住；阶段 1 的控件库、阶段 2 的血条也能往这里加。
+  - 验证：`npx vite --port 5199` + `node tools/screenshot.mjs --url .../tools/preview/hotbar.html --out hotbar-preview.png` → 截图已存 `.tmp/shots/hotbar-preview.png`，逐项对照两排：格子尺寸/斜面、图标位置、数量与序号锚点、耐久条位置与长度、选中格的白色边框与上抬都对得上（唯一剩下的差异是文字抗锯齿）。⚠️ 页面自带 1 条 `console.error`：favicon 404，与页面无关。
+  - 批次：20261027-1009
+
+- [x] [U3] 更新 `.continue/notes/canvas-ui.md`：把"阶段 1.5 快捷栏"的判据、命中仍借 DOM 的理由、A/B 步骤写进去 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段表加 `1.5 快捷栏 ✅` 一行；新增 §5.1（做法 + 四条 A/B 步骤 + "这一版不能用来量省了多少 DOM 开销"的警告）与 §5.2（复盘阶段 0 为什么证明不了任何东西：三样都低频、都在屏幕边缘，选样品的判据从"最不打扰"改成"最容易对比"）；§6 判定表补一行"快捷栏的点击/长按：画在 canvas、命中仍走 DOM"。
+  - 为什么：这次的教训是**选样品的方式**，不是某个函数写错了。不写下来，下一批还会有人挑"最安全的三样"去证明"改造值不值"。
+  - 验证：`npm run check` exit=0（`audit:docs` 与文档体量检查都在里面）；决策写在 `doing/9f2dcf-decision.md` D1~D4。
+  - 批次：20261027-1009
+
+## 批次 20261027-1000 · 2026-10-27 · 会话 12c62cf0
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1000
+
+- [x] [R1] `session-sync` / `mob-attack` / `edits-request`·`edits-reply`：`server/rust/src/{state,handlers}.rs` → `run-net-test.sh`
+  - 做了什么：① `session-sync` 房主整份上行容器/牌子/展示框（每批 200、每连接 256 条上限、不走令牌桶、不做距离闸），存表并按房广播；② `mob-attack` 只转给被打的那一个人（跨房/打自己一律丢，伤害夹 0~50，带 `fromId`）；③ 懒上行：`confirmed_chunks`/`requested_chunks`/`sent_edit_chunks`，未确认区块向房主要（8 条在飞上限、5 秒忘记以便重试），`edits-reply` 按区块校验后存缓存 + 标已确认 + 广播成普通 `blocks`，已确认或无房主时直接推缓存（每批 2048）。
+  - 为什么：这三块是"房主权威"的最后一块拼图——手机当房主时队友看不到箱子、野怪打不动人、远处的方块补不上。
+  - 验证：`bash server/rust/run-net-test.sh` → **297 通过 / 0 失败**（与 Node 同一份断言）；`cargo test` 28、`cargo check` 零警告。
+  - 批次：20261027-1000
+
+---
+
+## 批次 20261027-0930 · 2026-10-27 · 会话 12c62cf0
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0930
+
+- [x] [R1] 每房一套时钟 + 天数 + `room-config` 模式 + `sleep` 过一天：`server/rust/src/{state,handlers,lib}.rs` → `run-net-test.sh`
+  - 做了什么：`RoomClock { start_ms, start_time_of_day, start_day, weather }` + `State.clocks` / `default_clock`；`welcome`/`time` 广播/`sleep`/`room-config`/天气推进全部按房；`join` 采纳房主上报的 `day`·`timeOfDay`·`weather`（宽限重连不覆盖，顺序是"先定天数与时刻、最后重置起点"）；`sleep` 先结算今天再 +1；`room-config` 累积 `applied` 并广播 `{t:room-config, by}`，`welcome.gameMode` 取当前模式。
+  - 为什么：以前是全服一套时钟——房主 B 在乙房开房会把甲房的太阳一起拨过去；而房主本地继续玩之后，重开房还会被拽回"服务端此刻"。
+  - 验证：黑盒 261 → **283 / 297**；`cargo test` 28 通过。
+  - 批次：20261027-0930
+
+---
+
+## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
+
+> 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0900
+
+- [x] [R1] 快照 v2 + 关房清缓存 + bye + 外观 + 掉落物：`server/rust/src/{store,state,handlers,protocol,ratelimit}.rs` → `run-net-test.sh`
+  - 做了什么：① 快照 1→2（可读 v1），落盘只留 `savedAt/timeOfDay/day/weather`，`apply_snapshot` 不再读四张房间表；② `State::clear_room`（按房名前缀清 edits/containers/signs/frames/items/worlds/hosts/clocks）+ `OrderedMap::retain`（连带清顺序队列，否则 `remember` 会以为淘汰了却没释放容量）；③ `bye`：房主当场关房踢人、其他人当场广播 `leave`；④ 外观改成"白名单 + 合并写 + 能表达 false + 补 dead/hp/food"；⑤ 掉落物固定窗口 → 令牌桶 30/s + 突发 400。
+  - 为什么：这些都是 10-26 之后主线上已经定稿的行为，Rust 版缺一项队友就会看到不同的世界。
+  - 验证：黑盒 233 → **261 / 297**；`cargo test` 28 通过。
+  - 批次：20261027-0900
+
+---
+
+## 批次 20261027-0848 · 2026-10-27 · 会话 49866712
+
+> 界面迁 canvas 的第一步：先立地基（文字 / 命中 / 覆盖层 / 控件）＋试点三样纯展示 HUD，
+> `?ui2d=1` 做 A/B；并把"哪些不搬、为什么"写成表（`notes/canvas-ui.md`）。
+
+# 队列 · 会话 498667122b7f4c508a73dac8f5e7e792
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0848
+
+> 本队列在并行工作树 `.continue/doing/.worktree/worktree_canvasui_20261027` 里执行
+> （分支 `worktree_canvasui_20261027`，基于 `88175334`）。父树没有队列 —— 这一批从头到尾只在这棵树里。
+
+- [x] [C1] 修 net-client-look 红灯：NetClient.tick 的 look 改成「变化 / 2 秒兜底」才发 → npx vitest run tests/net-client-look.test.ts
+  - 做了什么：**没有改代码**。上游 `88175334` 已把这条口径定成「每条 `move` 都带全量外观」，测试也同步改成 `expect(moves()[1].look).toEqual(LOOK_A)`。我先按旧断言写了去重补丁（`LOOK_RESEND_MS` + `lastLookKey/lastLookAt`），跑到一半发现与 HEAD 的测试冲突，于是三处编辑**完整回退**，`git status src/` 干净。
+  - 为什么：同一件事只能有一个口径。服务端 `readAppearance` 已改成**合并**语义，客户端"每条都带"不会再引发闪烁；去重是更省字节，但会与"每条都带"的断言直接冲突 —— 既然上游已经拍板并落了测试，就不该在迁移分支里偷偷改回去。
+  - 验证：`npx vitest run tests/net-client-look.test.ts` → **8 passed**；`git status --short src/` 无输出（确认回退干净）。
+  - 批次：20261027-0848
+
+- [x] [C2] 建 src/ui2d/ 骨架：overlay（DPR/尺寸）、text（测量/裁切/换行）、input（命中测试/焦点/层栈）、widgets（按钮）→ npm run check:fast
+  - 做了什么：新增 5 个模块 + 1 个汇总入口：`text.ts`（字体栈、测量缓存 512 条、`tokenize`/`truncateToWidth`/`wrapToWidth`、`drawText`）、`input.ts`（`hitRegionAt` 纯函数 + `Ui2DInput` 指针路由，空命中表时强制 `pointer-events: none`）、`overlay.ts`（2D 覆盖层、DPR 夹到 3、ResizeObserver、绘制单位统一 CSS px）、`widgets.ts`（圆角矩形/HUD 底板/进度条/原版按钮，色值抄 `index.html` 的 `--mc-*` 与 `--hud-*`）、`index.ts`（分层入口与"不许反向依赖 main"的约定）。
+  - 为什么：**文字走 `fillText` 而不是 SDF 字形图集** —— 6 种语言含中日韩，图集等于把字体搬进构建期；覆盖层做成**独立 2D canvas** 而不是塞进 WebGL，也是同一条理由。命中表默认为空且强制关掉 `pointer-events`，避免铺满全屏的层吃掉触摸端的视角手势（`TIPS.md` 里"按钮看得见、点了没反应"那条坑的 canvas 版）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **22 passed**（**抓到 1 个真实 bug**：`hitRegionAt` 原本反向遍历又用 `>=`，导致下层覆盖上层，已改正向遍历）；`npx tsc --noEmit` 干净；`npm run check:fast` 绿（643 条单测）。
+  - 批次：20261027-0848
+
+- [x] [C3] 试点：把准星 / 伤害闪 / Boss 条迁到 ui2d 覆盖层，DOM 版本保留为可回退开关 → check:fast + build:fast
+  - 做了什么：`src/ui2d/Hud2D.ts` 画三样 —— 受伤红闪（预渲染 320×180 三层 radial 精灵 + `globalAlpha`，只在上一帧真画过时才清屏）、Boss 血条（龙/凋灵/护盾三套渐变，几何照抄 `#boss-bar`）、破坏与进食进度条。`main.ts` 只加 3 处分支 + 1 处绘制调用：`updateBossBar` 改成"先算数值再分路画"、两个进度条函数开头提前 return、`damageFlash.update()` 之后调 `hud2d.render()`；`DamageFlash` 在开关打开时传 `null`（数值照算、不写 DOM opacity）。开关是 `?ui2d=1`，DOM 版本一行没删。
+  - 为什么：**准星没有搬**（与条目原文不同，见决策 D3）。它靠 `mix-blend-mode: difference` 与下层画面做差值混合，那是 DOM 合成器的能力；2D canvas 里 `difference` 只在本图层内生效，叠到 WebGL 上就是一块白十字，雪地/沙漠上反而看不见。换成"破坏/进食进度条"：同样是纯展示、每帧变、且没有混合模式依赖。
+  - 验证：`npm run check:fast` 绿；`npm run build:fast` 出包成功（`main-C75H5CHE.js` 2,126.25 kB / gzip 594.93 kB）；`npx tsc --noEmit` 干净。⚠️ **真机/浏览器观感与帧率未验**：本会话没有浏览器，且 dev 模式下 `__host/core.bin` 缺失会停在"去应用里玩"落地页 —— 需要用户用 `?ui2d=1` 进一次世界对比。
+  - 批次：20261027-0848
+
+- [x] [C4] 写迁移方案与阶段门禁到 .continue/notes/canvas-ui.md（含验收命令）
+  - 做了什么：`notes/canvas-ui.md` 九节 —— 现状三层与代码量、A/B 路线对比（选 2D 覆盖层的决定性理由是文字）、目录与依赖方向、阶段 0~6 的判据与验收命令（含"停在哪一格"的判据）、阶段 0 已落地清单与真机 A/B 步骤、**判定不搬/搬法特殊** 六条（准星混合模式、IME 必须留 DOM、拖拽、原生控件、无障碍退化、全屏剪贴板不变）、七个迁移 checklist（色值同步 / 文案走 t() / CSS px / pointer-events 默认关 / 横屏优先 / 可回退）、测试改写策略（先加后删）、四条风险。
+  - 为什么：这次迁移真正的成本不是"画出来"，而是**回归面**与**判定边界**。把"哪些不能搬、为什么"写成表，比写"要搬什么"更值钱 —— 准星那条如果不写，下一批一定会有人顺手搬过去，然后在雪地上发现白十字。
+  - 验证：`node .continue/hooks/check.mjs --fast` 通过（文档体量 / 编号 / 配置 / hooks 自检）；`npm run audit:docs` 通过（`npm run check` 里已跑过一遍）。
+  - 批次：20261027-0848
+
+---
+
+## 批次 20261027-0800 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 发现本机其实有 cargo（只是没进 PATH），于是把之前"盲写未验证"的 Rust 改动全部编译 + 跑黑盒断言。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0800
+
+- [x] [R1] Rust 编译验证 + 修 E0382：`server/rust/src/beacon.rs` → `cargo check` / `cargo test`
+  - 做了什么：`cargo check` 立刻抓到 `borrow of moved value: room`（`has_host` 在 `room` move 之后又借用），改成先算 `has_host` 再构造；`cargo test` **28 通过**。
+  - 为什么：之前几批 Rust 改动是在"没有工具链"的前提下写的，只能算推测；有了编译器才第一次被真正检验。
+  - 验证：`cargo check` 干净；`cargo test` 28 / 0。
+  - 批次：20261027-0800
+- [x] [R1] 补 Rust 的 `ALLOW_HOSTLESS_ROOMS` + `/ping` + `beaconPort` + `isHost`：`server/rust/src/{lib,handlers}.rs`、`run-net-test.sh` → `bash server/rust/run-net-test.sh`
+  - 做了什么：① `ALLOW_HOSTLESS_ROOMS=1`（Config/Hub/join 判断 + 验收脚本），否则单人用例全被 `no-host` 拒（第一次跑只有 **227/297**）；② `/ping` 路由（客户端扫网段只认能回它的机器，缺了它手机端永远扫不到）；③ `/healthz` 补 `beaconPort`；④ `player` 广播（join 与每条 `move`）补 `isHost`。
+  - 为什么：前两条是**产品级缺陷**（不是测试口径问题）：改名后别人扫不到手机上跑的服务端、队友的名字牌不标房主。
+  - 验证：黑盒断言 **227 → 233 / 297**；`cargo test` 28 / 0。
+  - 批次：20261027-0800
+- [x] [R1] 把剩余 64 条按 10 组写清（TASKS R1 + 两处 README）：`server/README.md`、`server/rust/README.md`
+  - 做了什么：README 的「195 条 0 失败」改成「当前基线 233/297、`cargo test` 28 绿」；缺口表扩成 10 组并标出每组的失败断言数（`day` 6 / 采纳时钟天气 6 / 快照 v2 6 / 关房清缓存 3 / `session-sync` 6 / `edits-*` 3 / `bye` 2 / 外观 1 / 掉落物 1 / 每房时钟）。
+  - 为什么：这 64 条就是可执行的验收清单——每一条都对应一句断言，不需要再猜"还缺什么"。
+  - 验证：`npm run check` exit=0。
+  - 批次：20261027-0800
+
+---
+
+## 批次 20261027-0740 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："请继续，不要停" —— Rust 侧继续推进时发现剩下的都是结构性改动，先把会误导人的文档修掉、把缺口记成待办。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0740
+
+- [x] [R1] 修正「Rust 已逐条对齐」的过时声明 + 记下缺口：`server/README.md`、`server/rust/README.md`、`.continue/TASKS.md` → `npm run check`
+  - 做了什么：两处 README 原来都写「与 JS 版逐条对齐 / 195 条 0 失败」，改成「**对齐到 2026-10-25 那一版**」，并列出 Rust 还缺的四项（`session-sync`、`edits-request`/`edits-reply`、每房一套时钟、`join` 采纳房主时钟），已补的三项标「未编译验证」；TASKS 增 `R1`（含验收口径），HANDOFF 待办 0→1。
+  - 为什么：这句话正是本次合并把我误导的地方——文档说"逐条对齐"，实际 Rust 缺 5 项、且我补的 3 项没编译过。文档比代码更该保守。
+  - 验证：`npm run check` exit=0（HANDOFF 口径 / TASKS 差异台账已由脚本重写）。
+  - 批次：20261027-0740
+
+---
+
+## 批次 20261027-0720 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 把合并后列出的 P0（Rust 与 Node 的协议差异）能安全补齐的部分先做掉。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0720
+
+- [x] [L13] Rust `join` 补 `no-host` / `host-offline`：`server/rust/src/{handlers,protocol}.rs` → 语法自查
+  - 做了什么：`protocol.rs` 补 `CLOSE_HOST_OFFLINE = 4009` / `CLOSE_NO_HOST = 4010`；`handlers.rs` 在 `wants_host` 判定之后加一段——`hosts` 里没登记房名就拒 `no-host`，登记着但人不在 `players`（宽限期断线）就拒 `host-offline`；用 `st.hosts.get(&room).copied()` 先取出 id 再判，避免 `drop(st)` 与借用打架。
+  - 为什么：与 Node 版同一口径。没有房主的房间是一个**不推进的世界**（方块能放、怪不动、红石不亮），界面却一切正常。
+  - 验证：**只做了语法与类型自查**——本机没有 `cargo`，`bash server/rust/run-net-test.sh` 未跑。
+  - 批次：20261027-0720
+- [x] [L13] Rust `/rooms` 补 `maxPlayers`、beacon 的 `has_host` 按房间判断：`server/rust/src/{lib,beacon}.rs` → 语法自查
+  - 做了什么：`Config` 加 `max_players`（`MAX_PLAYERS`，默认 10，脏值/0 退回默认）→ `Hub` → `/rooms` 输出 `maxPlayers`；`beacon::announce_of` 的 `has_host` 从 `!state.hosts.is_empty()`（任意房间有房主）改成 `state.hosts.contains_key(&room)`（这一间）。
+  - 为什么：前者让浮窗在手机内建服务端上也显示 `在线/容量`；后者在多房间时会对着一个没人跑模拟的房说「可以进」，客户端照它进房就踩到同一个坑。
+  - 验证：同上，未经编译验证。
+  - 批次：20261027-0720
+
+---
+
+## 批次 20261027-0700 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："请继续" —— 承接合并后列的待补项：把「附近房间」在 Node 服务端上真正跑通。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0700
+
+- [x] [L12] Node 服务端补上 UDP 组播发现：`server/node/beacon.mjs` + `server/node/index.mjs` → `npm run test:net`
+  - 做了什么：照 `server/rust/src/beacon.rs` 写同一份报文（`mc/v/id/port/room/name/seed/players/host/pw`、组播 `239.255.42.99:25188`、3 秒一帧、12 秒过期、按 id 过滤回声），收发分成两个 socket；`/healthz` 补 `beacon` / `beaconPort` / `peers`；监听回调里启动（端口要等 `PORT=0` 分配完才知道）；`SIGTERM` 时先停发现层；`BEACON=0` 可关。
+  - 为什么：文档写着"Node 版 `/healthz` 返回 peers"，实际 body 里没有（只有 CORS 头），所以「附近房间」在 Node 服务端下永远是空的——只有手机上那份 Rust 才有数据。
+  - 验证：本机双实例互相发现（8887 ↔ 9001，`addr=192.168.1.72`）；假房主进 8887 的 `newplayer` 后，9001 的 peers 变成 `name=草原小屋 / room=newplayer / players=1 / hasHost=true`；`test:net` **297 通过 / 0 失败**。
+  - 批次：20261027-0700
+- [x] [L12] 附近房间收尾：`src/ui/ServerPicker.ts` → `npm run check:fast`
+  - 做了什么：附近设备行用它自报的 `room/players/hasHost` 直接列一行房间（不再去拉它的 `/rooms`，那台可能根本没连过来），延迟交给 `probeLatency()` 异步补；房间行支持"只知道人数不知道容量"（只写 `4`，不编 `1/0`）；空房名显示成「默认房间」。
+  - 为什么：合并时只移植了"列出来"，worktree 里的 `probeLatency` 没人调用，附近设备的延迟一直是 `--`；而它自报的房间名比"进默认房"准得多。
+  - 验证：`npm run check:fast` 全绿；补一条 ui-test 断言（自报房间 + 异步延迟 + `--` 兜底）。
+  - 批次：20261027-0700
+
+---
+
+## 批次 20261027-0140 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：① 设置里所有按钮 / 文字 / 输入框要统一规格，不要有大有小有高有低，弹框的位置 / 背景 /
+> 关闭按钮也要统一；② 有浮层时下层不要干扰浮层信息；③ **一个房间没有房主时不允许别人进入**。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0140
+
+- [x] [L11] 没有房主的房间不许进：`server/index.mjs` + `src/core/net/Protocol.ts` + `src/util/net…` → `npm run test:net`
+  - 做了什么：`join` 时 `hosts` 里没登记该房名 → `reject('no-host', CLOSE_NO_HOST)`；`ProtocolErrorCode` 与 `isFatalProtocolError` 加 `no-host`；`NetErrorText` 加映射、六语言补 `say.net.noHost`；`main.ts` 探房失败改成"按码说人话"；浮窗里 `hasHost === false` 的房间行渲染成不可点并标「无房主」。产品默认严格，测试用 `ALLOW_HOSTLESS_ROOMS=1` 放开。
+  - 为什么：房间 = 房主开着世界那一局，没有他就是**不推进的世界**（方块能放、怪不动、红石不亮），而界面一切正常——比报错更难查。不做"先进空房等房主"：房名是玩家自己敲的，服务端分不清"等朋友"和"打错字"，后者会把人困死。
+  - 验证：`test:net` **296 通过 / 0 失败**（新增 4 条：空房名被拒 / 房主开起来后访客能进 / 严格模式启动）。
+  - 批次：20261027-0140
+- [x] [L11] 控件与弹层统一规格：`index.html`（`:root` 变量 + 一段统一规则） → `npm run check`
+  - 做了什么：新增 `--ctl-h(32)` / `--ctl-h-lg(40)` / `--ctl-font(13)` / `--ctl-pad-x(9)` / `--modal-w(460)` / `--modal-pad` / `--modal-bg` / `--modal-close(28)`；输入框（world / mp / settings）统一高度字号内边距，次级按钮 32、主按钮 40、标签 12；两个对话框同宽同内边距同边框，关闭按钮统一 28×28 钉右上。
+  - 为什么：用户看到的"有的高有的低"来自三套各自为政的尺寸（world-row 7px padding / mp-row 6px / settings 默认），弹层也各写一套背景与关闭按钮。
+  - 验证：截图 `ui-settings.png` / `ui-join-full.png` 对比，同一行控件基线一致；`npm run check` exit=0。
+  - 批次：20261027-0140
+- [x] [L11] 浮层降噪：`index.html` → 截图比对
+  - 做了什么：`.server-picker` 加 `rgba(0,0,0,.45)` 遮罩 + `backdrop-filter: blur(2px)`；`#multiplayer-screen` 与 `.world-modal` 背后的世界列表同样轻微虚化。
+  - 为什么：浮窗打开时下层「加入房间」面板的字还清晰可见，两层文字叠在一起读不出重点（用户原话"下层的信息不要对我的浮层信息造成干扰"）。
+  - 验证：截图 `ui-picker-full.png`——下层压暗虚化、浮窗清晰，层级一眼可分。
+  - 批次：20261027-0140
+
+---
+
+## 批次 20261027-0035 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：上一批"没有按视觉实现"——端口要**可编辑**、局域网要按**自己 IP 段去掉最后一位自动检索**、
+> 「选择」要以**浮窗**形式弹出（选择房间 / 选择服务器），要求完全照设计图。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0035
+
+- [x] [L10] 端口改成可编辑：`src/core/net/ServerUrl.ts` + `src/ui/RoomForm.ts` → `npm run check:fast`
+  - 做了什么：新增 `parsePort` / `withPort` / `portOf` / `displayServerHost`；`RoomForm` 的 `portLabel`（只读后缀）换成 `portInput`（`mp-port-input`，默认 8887），`read()` 用 `withPort(normalized, port)` 拼回 URL；存储拆成 `mc.mp.url` + `mc.mp.port`；`splitAddress()` 把老地址里的端口提到端口框、地址框只留主机名。
+  - 为什么：设计图是 `服务器 [IP] : [8887] [选择]`，端口是独立可改的一格；`wss://` 那一路的端口归反代 443，`withPort` 只动 `ws://`，否则会把公网地址改坏。
+  - 验证：`tests/net-server-url.test.ts` 新增 11 条（parsePort 边界 / withPort 保留 query / wss 不动 / portOf / displayServerHost），全套 **43 通过**；`npm run check:fast` 全绿。
+  - 批次：20261027-0035
+- [x] [L10] 「选择」改成贴按钮的浮窗：`src/ui/ServerPicker.ts` 重写 → `npm run check:fast`
+  - 做了什么：`open(anchor)` 用 `getBoundingClientRect()` 算坐标（右边缘对齐按钮、下方优先、放不下翻到上方、横向夹在视口内）；标题随 `mode` 变「选择房间」/「选择服务器(8887)」，副标题「所有端口 8887 的房间/服务器」；正文 `server-picker-body` 自己滚，标题与底部按钮固定；外层容器改成透明（只负责接"点外面关闭"）。
+  - 为什么：以前是全屏遮罩 + 居中大卡片，不是设计图要的"浮窗"；而且列表一长「确定」会被顶出屏幕。
+  - 验证：`npm run check:fast` 全绿；dev server 截图（`.tmp/shots/picker.png`）与设计图对齐：标题居中、副标题在下一行、取消/确定两颗等宽。
+  - 批次：20261027-0035
+- [x] [L10] 浮窗按「服务器 → 房间」两级 + 打开即扫：`ServerPicker.ts` + `src/core/net/RoomList.ts` → `npm run check:fast`
+  - 做了什么：扫描发现一台就 append 一行 `IP …… 延迟 4ms`（虚线用 flex 撑开）+ 一个房间容器，随即 `loadRooms()` 拉这台机器的 `/rooms` 并渲染缩进的 `房间: xxx  1/10 在线`；`room` 模式房间行可点选中，`server` 模式渲染成 `div.readonly` 只展示；打开浮窗即 `scan()`，网段由 `suggestSubnet()` 从地址框/页面 hostname 推出。
+  - 为什么：设计图里房间是服务器的子项；开房模式如果允许选别人的房名，必然撞 `host-taken`。
+  - 验证：起本地服务端 + 假房主后截图，`192.168.1.72 —— 延迟 4ms / 房间: newplayer  1/10 在线` 与图一致；`check:fast` 全绿。
+  - 批次：20261027-0035
+- [x] [L10] 两个对话框改成单列版式（去掉右栏）：`MultiplayerScreen.ts` / `WorldScreen.ts` / `index.html` → `npm run check:fast`
+  - 做了什么：`MultiplayerScreen` 重排成 `mp-head`（居中标题 + 右上 ✕）/ 四行 `mp-row`（服务器、房间、密码、昵称）/ `mp-status mp-error` 红字行 / 通栏 `mp-action.primary`；删掉 `mp-columns`、`mp-rooms`、`mp-recent`、`refreshRooms()` 与 `RecentRoom` 那一套（房间与历史都进了浮窗）。`WorldScreen` 的开房对话框同版式：标题居中 + ✕、地址行 `[本机] : [8887] [选择]`、只有一个通栏「确定并进入」。`makeRow` 的 `extra` 支持数组并加 `world-row-inline`（flex）——那个 3 列 grid 放不下 5 个元素。
+  - 为什么：设计图两张图都是单列；`.world-row` 是 `grid-template-columns: 64px 1fr 44px`，多出来的元素会静默换行（第一次截图里端口和「选择」被挤到下一行）。
+  - 验证：截图 `join.png` / `host.png` 与设计图逐行比对；`test:ui` 21 条断言随版式迁移（右栏/最近连接改成反向守卫）；`check:fast` 全绿（**609** 单测）。
+  - 批次：20261027-0035
+- [x] [L10] 台账收口：`TASKS.md` 落 L10、`OVERVIEW.md` 摘要改成最终版式、批次索引加行
+  - 做了什么：TASKS 追加 L10（五条实现要点 + 验证口径）；OVERVIEW 那句"联机界面两个对话框"改写为"端口可编辑 / 选择浮窗=服务器→房间两级 / 局域网打开即扫 / 单列版式"（同时控制字节数，仍在上限内）；`notes/batches.md` 顶部加一行并记下 grid 那个坑。
+  - 为什么：锚点文档只留一句摘要，细节落在 TASKS 与本文件；TIPS 已满 500 行，坑先进批次索引。
+  - 验证：`node .continue/hooks/check.mjs --fast` 的 ids / docs 两项通过。
+  - 批次：20261027-0035
+
+---
+
+## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2327
+
+- [x] [L8] 野怪要能追房客：`EntityContext.targetFor` + `Mob.playerTarget()`，AI 不再写死 `ctx.player`（本地玩家） → `npm run check:fast`
+  - 做了什么：`Entity.ts` 新增 `PlayerTarget`（`x/y/z` + 可选 `invisible` / `hit` / `afflict`）与 `EntityContext.targetFor(mob)`；`Mob` 新增 `protected playerTarget(ctx)`（`targetFor` 优先，否则退回 `ctx.player`），用它替换 `updateAi` / `deliverMelee` / `distanceToPlayerSq` / `flyAi` 里的目标；`flyAi` 的参数类型放宽成 `PlayerTarget | null`；`Phantom`（幻翼）也改用 `playerTarget`。
+  - 为什么：从属端根本不跑生物 AI（`SimMode`），整场模拟都在房主那边，而 `EntityContext.player` 只有一个（本地玩家 = 房主）——怪物自然看不见房客，这就是"只打房主"的根因。改目标选择，而不是给从属端也跑一份 AI（那会重新引入两端各算一遍的老问题）。
+  - 验证：新增 `tests/mob-target.test.ts` **4 条**（没 `targetFor` 时退回本地玩家、指定远端后按远端算距离、返回 null 也退回、没有本地玩家时有远端目标也能算）；`npm run check:fast` **595 → 599 单测**全绿。
+- [x] [L8] 伤害要落到房客身上：新增 `mob-attack`（房主 → 服务端 → 被打的那个人），接收方走本地 `damagePlayer` → `npm run test:net`
+  - 做了什么：`NetClient.sendMobAttack()` + `mob-attack` 接收分支 + `onMobAttack` 回调；`server/index.mjs` 新增 `mob-attack` 路由（只收本房房主、`takeEffectToken` 限频、目标必须同房且不是自己、伤害夹 0~50、坐标有限、`source` 截 32 字、**只转给目标一人**）；`main.ts` 用 `pickRemotePlayerTarget()`（房主端挑"比本地玩家更近的、同维度、没死的远端玩家"）挂在 `targetFor`，`hit` 回调接 `sendMobAttack`，收到 `mob-attack` 走 `damagePlayer`。
+  - 为什么：血量和护甲是**各端自己的**，房主不能直接改房客的血。房主只负责判定"谁被哪只怪打了、基础伤害多少"，护甲减免/无敌帧/难度倍率都在接收方本地算——这样"被野怪咬"与"被本地野怪咬"走同一条路，死亡与掉落也自然一致。
+  - 验证：`npm run test:net` **286 → 292 通过 / 0 失败**（被打的人收到 + `fromId`；旁边的房客收不到；房客伪造被无视；伤害 0/NaN 不转发；伤害夹到 50）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 补 `mob-attack` 与"AI 目标可以是远端玩家"+ `TASKS.md` 的 L8 补一节 → `npm run check`
+  - 做了什么：§4 上行表新增 `mob-attack`（校验口径 + "只转给被打的人"）、§5 下行表同样补一条；§2 的"服务端不跑 tick"那句补上"生物 AI 的目标可以是远端玩家"；`TASKS.md` 的 L8 补第 ⑬ 点，并把两处已知差异写进去（末影龙仍只追房主、远端挨打不会中毒）。
+  - 为什么：这条链路的关键约定是"**伤害由谁结算**"——房主只判定"谁被哪只怪打了"，血量和护甲归接收方。不写清楚，下次很容易改成"房主直接改血量"（那会让两端的血量各算一遍）。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/chase-test.ts` 有一条结构断言钉着 `playerInvisible: ctx.playerInvisible === true`，改成跟着目标走之后按新写法更新。
+
+## 批次 20261026-2259 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26 报的五件事：① 对方形象每隔几秒闪一次；② 队友死了对方还站着；
+> ③ 名字要像网游那样一直看得到、正面朝向；④ 生存模式瞄准队友要看到生命/饥饿；
+> ⑤ 野怪血条小一点细一点。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2259
+
+- [x] [L8] 修"对方形象每隔几秒闪一次"：`move` 每条带全量外观 + 服务端 `player.appearance` 改成合并 + 接收端"没带就不动" → `npm run test:net`
+  - 做了什么：`NetClient.tick()` 不再按 `lookDue` 节流，`held/offhand/armor/look/sneak/swing/hurt/fire/ride/sleep/dead/hp/food` **每条都带**（0/false 也带）；`server/index.mjs` 的 `readAppearance()` 改成"只返回消息里真的带了的键"，`move` 分支用 `player.appearance = { ...player.appearance, ...readAppearance(message) }` 合并；`RemoteAppearance.update()` 每个字段 `!== undefined` 才覆盖；删掉 `LOOK_RESEND_MS`/`lastSentLookKey`/`lastLookSentAt`。
+  - 为什么：根因是"整份覆盖 + 客户端只在变化/每 2 秒带 look"——不带 look 的那 99% 消息把服务端的 appearance 清成空，对端回退到"按昵称派生"的外观，2 秒后再纠正回来，周期正好 2 秒。三层都改是为了老服务端/老客户端混着用也不闪。
+  - 验证：`npm run test:net` **278 → 286 通过 / 0 失败**（新增 8 条：带 look/held/hp/food 转发、**不带 look 的 move 不清空皮肤**、不带 held 不清空手持、dead 1/0 都能覆盖、死亡时 hp=0 能表达、hp/food 夹到 0~20）；两条旧断言按新语义改写（"非正 id 被丢掉" → "规整成 0"、"长度不足的 look 不下发" → "不被采纳、保持上一次"）；`tests/net-client-look.test.ts` 重写 4 条为"每条都带"；`npm run check:fast` 595 单测。
+- [x] [L8] 队友死亡：上行 `dead` + 对端当场收掉模型 + 消息栏说一句 → `npm run test:net`
+  - 做了什么：`localAppearance()` 补 `dead/hp/food/fire`；服务端白名单加 `dead/hp/food`（`clampPoints` 夹 0~20）；`updateRemotePlayers()` 的可见性改成 `visible && !dead`；`updateNameTags()` 跳过死者；`onNetPlayer` 在 `dead` 的**边沿**推一句 `say.net.playerDied`（六语言新增）。
+  - 为什么：以前死亡没有任何上行，服务端只看到"他在原位不动"，尸体就一直站着，直到复活后位置变了才更新；模型凭空消失也得有一句解释。
+  - 验证：`npm run test:net` 见上（dead 的两条）；`npm run audit:i18n` 2973 键 × 6 语言通过。
+- [x] [L8] 队友名字牌：范围 64 → **视距尽头 128 格**、去掉距离渐隐 → `npm run check:fast`
+  - 做了什么：`REMOTE_NAME_TAG_RANGE` 64 → 128；删掉 `REMOTE_NAME_TAG_FADE_FROM` 与 `remoteNameTagOpacity()`，`updateNameTags` 固定传 1；`tools/nametag-test.ts` 的四条渐隐断言换成两条范围断言；`tools/render-test.ts` 无关。
+  - 为什么：用户要的是"像常见网游那样，视野里就一直能看到"——64 格 + 32 格起变淡 + 固定 16 个牌子池，观感就是"名字时有时无"。
+  - 验证：`npm run check:fast` 全绿（`nametag` 套件通过）。
+- [x] [L8] 生存模式下准星锁定队友 → 显示一红（生命）一黄（饥饿）两条细条 → `npm run check:fast`
+  - 做了什么：`index.html` 加 `#target-vitals`（96×两条 3px，在准星与冷却条下方）+ 样式；`main.ts` 新增 `aimRemotePlayer()`（12 格、8° 锥、跳过死者/他维度）与 `updateTargetVitals()`（只在 `gameMode === 'survival' && !uiOpen && !dead` 且对方报过血量时显示，宽度按 `hp/20`、`food/20`），每帧跟着 `updateNameTags()` 调。
+  - 为什么：`player` 消息以前完全不带血量/饥饿，所以这次先把数据补上（随每条 `move` 发 0~20 的整数），再画 UI；"对方没报过就不画"是为了不显示一根恒满的假条。
+  - 验证：`npm run check:fast` 全绿（typecheck + 595 单测）；`npm run test:ui` 1199 通过。
+- [x] [L8] 野怪血条变小变细 → `npm run check:fast`（`render` 套件）
+  - 做了什么：`MobHealthBar` 世界宽度 `1.1~2.4` → **`0.7~1.4`**、画布 `256×40` → **`256×16`**（条 24px → 12px、描边 2 → 1、内边距 3 → 2）、离头顶 `0.12` → `0.06`；`tools/render-test.ts` 三条尺寸断言按新值改写。
+  - 为什么：画布原来 40px 高、条只占 24px（60%），世界高度被画布比例稀释，看起来既粗又占地；画布贴紧条（12/16 = 75%）之后同样是"细条"但分辨率没浪费。
+  - 验证：`npm run check:fast` 全绿（`render` 套件通过）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `move` 行补 `dead/hp/food` 与"外观每条全量、服务端合并" + `TASKS.md` 的 L8 补一节 → `npm run check`
+  - 做了什么：§4 的 `move` 行字段补 `dead / hp / food`，备注写清"每条带全量 + 服务端合并"以及闪烁的来龙去脉与 2 秒周期；§7 的 `player` 行补"没带的字段保持原值""dead 为真时模型与名字牌一起收掉并提示"；`TASKS.md` 的 L8 补第 ⑫ 点（观感四件套）。
+  - 为什么：这几条都是"看起来像 bug 的行为其实是约定"（外观必须每条全量、`dead` 会随每条 move 重复到达），不写进协议表下次又会按"变化才发"改回去。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。
+
+## 批次 20261026-2242 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：① 房主**主动退出**就立刻把访客全部踢出；② 服务器上那个房间还在、
+> 但房主不在线时，访客不许进来。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2242
+
+- [x] [L8] 房主**主动退出**（`bye`）→ 当场关房并踢掉所有访客（不等 30 秒宽限期）：`server/index.mjs` 的 `bye` 分支 + 新增 `closeRoomNow()`；客户端按 `graceMs === 0` 说"房主已退出，房间已关闭" → `npm run test:net`
+  - 做了什么：新增 `closeRoomNow(host)`：删 `hosts` → 广播 `room-closed{reason:'host-out', graceMs:0}` → 对同房其他人逐个 `reject('host-left', 4007)` → `clearRoom`，日志带"踢出 N 人 / 丢弃 N 条缓存"；`bye` 分支先判"我是不是本房房主"，是就走这条路（并置 `farewell`，避免宽限期到点再广播一次 `leave`）；客户端 `onRoomClosing` 按 `graceMs > 0 ? 倒计时 : net.roomClosed` 分两种文案。
+  - 为什么：主动退出是玩家说"我不玩了"，没有留重连窗口的必要，房间里剩下的也不是"暂时没人模拟"而是"这一局结束了"。继续挂着只会让访客对着一个不推进的世界发呆。**注意**：页面卸载（刷新/关标签）也会发 `bye`，所以房主刷新页面同样会关房——这是"主动退出"的应有语义，数据在房主本地，重开即可。
+  - 验证：`npm run test:net` **269 → 278 通过 / 0 失败**（新增 9 条：两个访客同时建房 → 房主 `bye` → 两人都立刻收到 `host-left` 且连接关闭 → 用时 < 900ms → 同名房可**马上**重开 → 新房主的 welcome 里没有上一局那格方块（缓存当场清了）→ 房主掉线后访客被拒 → 宽限期过后房主位释放）。
+- [x] [L8] 房主不在线时访客进不来：`join` 里判"有房主登记但人不在 `players`" → `error{code:'host-offline'}` + 关闭 4009；探房（`RoomProbe`）把这句翻成人话 → `npm run test:net`
+  - 做了什么：服务端新增关闭码 `CLOSE_HOST_OFFLINE = 4009` 与 `join` 里的检查（`!wantsHost && host && !players.has(host.id)`）；`Protocol.ts` 把 `host-offline` 加进错误码联合与**致命名单**（自动重连只会空转：30 秒内一直被同一句挡住，之后房间就没了）；`main.ts` 的 `onError` 按 code 翻成 `say.net.hostOffline`（六语言补齐）；`RoomProbe` 的 `RoomProbeResult` 增 `error?`，`joinRoomFromMenu` 遇到 `host-offline` 说"房主暂时不在房间"而不是"连不上服务器"。
+  - 为什么：房里登记着房主、但人不在线时，访客进来看到的是一个**不推进的世界**（怪物不动、红石不亮），而界面一切正常——这正是最难查的坏状态。探房那句必须区分开，否则会把玩家送去改 IP/换端口，方向完全错了。
+  - 验证：`npm run test:net` 含"房主不在线时访客被拒（host-offline）+ 连接关闭"；`npm run test:ui` **1198 通过 / 0 失败**（原有 1 条钉着旧文案的结构断言改成新写法，另加一条"graceMs=0 说房间已关闭"）；`npm run audit:i18n` 通过（2972 键 × 6 语言）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `bye` / `room-closed` / 错误码表补这三处 + `TASKS.md` 的 L8 补两点 → `npm run check`
+  - 做了什么：§4 上行表**新增 `bye` 行**（原来表里根本没有这条消息，只在代码里），并顺手修正 `sleep` 的说明（现在只拨本房）；§5 下行表 `room-closed` 补 `host-out` 与 `graceMs: 0`；§5.1 错误码表补 `host-offline` / 4009；§3 生命周期加"房主的两条额外规则"（主动退出即关房 + 房主不在线访客进不来）；`TASKS.md` 的 L8 补第 ⑩⑪ 点。
+  - 为什么：`bye` 这条消息在协议表里缺席很久了（代码里一直有），这次它变成"能关一整间房"的关键消息，必须进表；两条新规则都是可被误判的行为（"为什么我一刷新队友就被踢了"、"为什么我进不去"），文档要能回答。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）；`node .continue/hooks/check.mjs docs` 通过。
+
+## 批次 20261026-2150 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26 复核后追加两条：① 掉落物也是世界的一部分，房主进房要能把它带进来；
+> ② 时钟/天气改成**每房一套**（两间房同时开时互不影响）。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2150
+
+- [x] [L8] 掉落物进房重播要能一次吐完：服务端 `item-spawn` 改成令牌桶（30/s、突发 400）+ 单测断言突发额度 → `npm run test:net`
+  - 做了什么：`server/ratelimit.mjs` 的 `RATE_LIMITS` 增 `item: {perSecond:30, capacity:400}`，`createBuckets()` 加 `item` 桶；`item-spawn` 分支把手写的"1 秒窗口 + 计数"换成 `player.buckets.item.take()`，删掉 `ITEM_RATE_LIMIT` / `itemWindow` / `itemCount` 三个已无用的东西。
+  - 为什么：房主进房间时客户端本来就会把世界里已有的掉落物重播一遍（`syncNetItems` 每 100ms 扫实体表，`localNetItems` 断线时被清空），机制一直在，卡点只有服务端的 30/秒——一个住过的世界地上可能上百堆，超出的被丢掉**且不重试**，队友那边就凭空少一地东西。所以修法不是新加一条上行协议，而是给这个已有通道一个够用的突发额度。
+  - 验证：`tests/net-ratelimit.test.ts` 新增 1 条（一次取满 capacity 通过、连取两次失败、1 秒后恢复 30/s）；`npm run test:net` 新增"100 堆一次性上行全部收下"（`welcome.items` 恰好 100）。
+- [x] [L8] 每房一套时钟：服务端 `room → clock`（时间/天数/天气），`sleep` 与 `room-config` 只动本房，`clearRoom` 删掉 → `npm run test:net`
+  - 做了什么：`createClock()` + `defaultClock` + `clocks: Map<room, clock>` + `clockOf(room)`；`currentDay/currentTimeOfDay` 改成收一个 clock；`clockTimer`/`weatherTimer` 按房各推一份（兜底时钟给没有房主的房）；`snapshotFor`、`room-config`、`sleep` 全部改成本房那份；`worldSnapshot`/读档只回填 `defaultClock`；`clearRoom` 增 `clocks.delete(room)`。
+  - 为什么：以前是全服一套，房主 B 在另一个房开房会把握着 A 那个房间的太阳一起拨过去；`sleep` 更狠——遍历所有房间，甲房有人睡觉会把乙房的天翻过去。房间本来就是各是各的世界，时钟没有共享的理由。
+  - 验证：`npm run test:net` **260 → 269 通过 / 0 失败**（新增 9 条：甲房 0.2/第 20 天、乙房 0.85/雨、天数与天气互不干扰、甲房睡满跳到黎明且天+1、乙房完全不受影响；另含掉落物 1 条）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 记「每房一套时钟」与掉落物突发额度 + `TASKS.md` 的 L8 补两点 → `npm run check`
+  - 做了什么：`join` 行第 ⑪ 条的备注从"对所有在用房间广播"改成"只对**本房**广播"；§6 的「时钟与天气」整行改写成每房一套（`room → clock` + `defaultClock` 落盘 + `sleep`/`room-config` 只动本房）；§6 的「掉落物广播」改成令牌桶 30/s + 突发 400 并写明理由；`TASKS.md` 的 L8 补第 ⑧（每房时钟）与第 ⑨（掉落物重播 + 纠正"两端都不落盘"的错说法）两点。
+  - 为什么：协议表是两端共同的契约；这次改的是"谁说了算"的边界（共享 → 每房），不写进表里下次照旧实现会再踩一遍。掉落物那条顺手把上一轮我说错的话在台账里更正，避免以后被人当成事实引用。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了 4 条 `tools/ui-test.ts` 的结构断言（它们钉着旧的 `currentDay()` / `startTimeOfDay = …` 字面串）——改成按新结构断言（`currentDay(clockOf(player.room))` / `clock.startTimeOfDay` / `clocks.set(room, clock)` / `const clock = createClock()`），`test:ui` **1197 通过 / 0 失败**。
+
+## 批次 20261026-2131 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26 复核："服务器上所有变更都写回房主本地"这条之前漏了**时间与天气**（只有天数跟房主）。
+> 定稿：时间/天数/天气**全部以房主本地为准**；旧 @mp: 存档不做迁移；清场仍等宽限期结束。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2131
+
+- [x] [L8] 时间/天数/天气也以房主本地为准：客户端 `join` 带上 `timeOfDay` / `weather`，服务端开房时三个量一起采纳 → `npm run check:fast`
+  - 做了什么：`NetClient` 新增 `localTimeOfDay` / `localWeather`（与 `localDay` 同组，只有 `wantsHost` 才带）；`App.connect()` 在连之前把 `this.timeOfDay` 与 `this.weather.current` 填进去。协议 `join` 从此带三个可选字段。
+  - 为什么：房主离线期间时钟/天气在他存档里走，重开房若服务端不接住，他一进来就被拽到"服务端此刻"——看起来什么都没发生，但那不是他的世界了。
+  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）。
+- [x] [L8] 采纳后按房广播对齐（`time{snap}` / `weather`），宽限期内重连的房主不覆盖 → `npm run test:net`
+  - 做了什么：服务端 `join` 的 `wantsHost` 分支把 `freshRoom` 判据统一成 `sameHostReturning`（与清场同一个谓词），三个量一次采纳：`startDay` / `startTimeOfDay`（脏值保留当前）/ `weather`（`isWeatherKind` 过滤），最后才重置 `serverStartMs`；随后对**所有在用的房间**广播 `time{snap:true}` 与 `weather`。
+  - 为什么：`snap` 是"立刻对齐"——不带的要按 4 倍速收敛，房主会看到太阳爬一段；广播到所有房间是因为时钟本来就全服共享，只发本房会让别的房停在旧值直到下次切换。重连不采纳是因为那时客户端带的是过期值（他断线前那一刻），采纳会把房间拽回去。
+  - 验证：`npm run test:net` **252 → 260 通过 / 0 失败**（新增 8 条：房主带 `day=12` / `timeOfDay=0.75` / `weather=thunder` → 自己的 welcome 三个都对上 → 后来者的 welcome 也对上 → 宽限期内带 `day=3` / `0.05` / `clear` 重连，三个都**不**覆盖）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `join` 行补三个可选字段与"谁说了算" + `TASKS.md` 的 L8 补一句 → `npm run check`
+  - 做了什么：`join` 行的字段列加 `day?/timeOfDay?/weather?`，校验列加第 ⑪ 条（三样各自兜底脏值、**只有房主带得动**、宽限期内重连不采纳），备注列写清"采纳后对所有在用房间广播"；§6 新增"时钟与天气"一行（全服共享 + 代价）；`TASKS.md` 的 L8 补第 ⑦ 点。
+  - 为什么：协议表是两端共同的契约，字段加在代码里而表里没有，下次照表实现就会漏。全文一致地把"时间也以房主为准"写进 §2 之外的地方。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/ui-test.ts` 有条结构断言钉着旧报文 `...(this.wantsHost ? { day: this.localDay } : {})`，改报文体后它当场报错——改成断言三个字段，并补两条（服务端采纳、重连不覆盖）。`test:ui` **1197 通过 / 0 失败**。
+
+## 批次 20261026-2050 · 2026-10-26 · 会话 12c62cf0
+
+> 用户 2026-10-26：按两张设计图落地「加入房间 / 开房」——默认端口 8887（只读后缀）、密码错误归入致命、昵称必填、两处共用表单、选择服务器带选中态与确定、房间显示在线/容量、客户端能力位控制「允许其它人建房」。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2050
+
+- [x] [L9] 打通密码错误码：`src/core/net/Protocol.ts` 加 `'password'` 并归入 `isFatalProtocolError`；错误码→文案抽成 `src/core/net/NetErrorText.ts`，`src/main.ts` 的 `onError` 改用它；六个语言包补 `say.net.password`，zh 文案「口令」统一成「密码」
+  - 做了什么：`ProtocolErrorCode` 与 `isFatalProtocolError` 补 `password`；新增 `core/net/NetErrorText.ts`（`netErrorText(code)`，查不到回空串让调用方回退服务端原话）；`main.ts` 的嵌套三元换成一行查表；zh/en/de/fr/pt/ru 同步加键；`zh/menu.ts` 的 `world.roomPassword` / `mp.password` 改成「密码」。
+  - 为什么：服务端在 join 那道闸就会回 `code:'password'`，漏在致命名单外会让填错密码的玩家无限重连（每 3 秒撞一次），且文案是服务端那句中文。映射抽出来是为了下一步面板错误行复用同一份口径。
+  - 验证：`npm run check:fast` 全绿（typecheck + audit:i18n + 单测 + 改动命中的 161 套离线测试全通过）。两处 ui-test 断言因映射搬家而改读新文件（断言本身没放松）。
+  - 批次：20261026-2050
+- [x] [L9] 默认端口改 8887：`server/protocol.mjs`、`src/core/net/ServerUrl.ts`、`src/core/net/ServerDiscovery.ts`、`Dockerfile`、`docs/NET-PROTOCOL.md`、`tools/net-peer.mjs`、`tools/ui-test.ts` + 5 个 test 文件的期望值
+  - 做了什么：全库 `25187 → 8887`（19 个文件，含三处常量、Dockerfile 的 ENV/EXPOSE/健康检查、协议文档、peer 工具、5 个测试的期望值）；`ServerUrl.ts` 与 `protocol.mjs` 的"为什么是这个端口"注释从"挑个好记的/避开常见值"改成产品口径（安卓/iOS 客户端要内建服务器，端口必须与客户端一致，撞车用 `PORT` 覆盖）。
+  - 为什么：用户 2026-10-26 拍板默认端口就是 8887；同一个数字在三处各写一份，漏改一处就会出现"扫描走 A、连接走 B"。
+  - 验证：`npm run check:fast` 全绿；`npm run test:net` **292 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] 抽公共表单 `src/ui/RoomForm.ts`（地址 / 房间 / 密码 / 昵称 + ▾选择服务器 + 错误行 + 校验），`MultiplayerScreen.ts` 与 `WorldScreen.openHostWorld` 都改用它（纯重构，行为不变）
+  - 做了什么：新增 `ui/RoomForm.ts`（构造时建 4 个输入框 + `splitAddress()` + `read()` + `nameIsBlank()` + `focus()` + `dispose()`，`portLabel`/`pickButton` 由宿主取用排版）；昵称清洗搬到 `core/net/PlayerName.ts`（`cleanPlayerName` 不兜底 / `sanitizeMultiplayerName` 兜底）；`MultiplayerScreen` 的 `readForm()`/`submit()`/`splitAddress()` 全部改委托，`WorldScreen` 删掉自己那套输入框；`MultiplayerScreen` 保留 `MULTIPLAYER_NAME_MAX`/`sanitizeMultiplayerName` 的旧导出以免打断调用点。
+  - 为什么：两个入口收集的是同一组字段与清洗规则，各写一遍的下场就是"加昵称那次只改了一边"。
+  - 验证：`npm run check:fast` 全绿；`test:ui` **1199 通过 / 0 失败**（14 条源码断言随实现位置迁移，语义未放松）。
+  - 批次：20261026-2050
+- [x] [L9] 昵称必填：去掉 UI 层「空 → 玩家」兜底，提交前拦住并提示；开房对话框补昵称字段；标题保留「开房：{world}」
+  - 做了什么：`RoomForm.read()` 的昵称改用 `cleanPlayerName`（空串就是没填）；加入面板与开房对话框提交前都判 `nameIsBlank()` 并聚焦昵称框；开房对话框加昵称行（默认值取联机面板记住的那个）；`WorldScreen.onHostWorld` 增加第 5 个参数 `name`，经 `pendingHostRoom` 传到 `connectOnline`；六语言补 `mp.error.name`。
+  - 为什么：空昵称被兜底成「玩家」，而房间里只要已有一个人叫「玩家」，第二个人就会被 `duplicate-name` 拒——先连上再被踢，提示还落在聊天栏而不是表单。开房那边以前根本没昵称框，用的是面板里悄悄记住的值。
+  - 验证：`npm run check:fast` 全绿（`test:ui` 同步把 5 条受签名变化影响的断言改到新结构）。
+  - 批次：20261026-2050
+- [x] [L9] 错误分类与已连接态：错误行按 `unreachable / https-blocked / host-taken / duplicate-name / password` 映射人话且致命不回重连；`join` 模式顶部显示「已连接 · 房主/从属」并保留断开按钮
+  - 做了什么：`NetClient` 收到 `error` 时把 `status` 也换成 `netErrorText(code)`（这句会随 `onStatus(false, …)` 进面板错误行），查不到才回退服务端原话；`MultiplayerScreen` 新增 `mode` + `syncModeVisibility()`，join 模式的「断开」按 `multiplayerButtons(state).disconnect` 同一判据露出；补两条 ui-test 断言（死面板 + 文案映射）。
+  - 为什么：面板错误行以前显示服务端那句中文（非中文玩家看不懂）；join 模式把「断开」藏死，联机中打开「加入房间」就是一个全灰的死界面——加入被禁用、断开看不见。
+  - 验证：`npm run check:fast` 全绿；`test:ui` **1201 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] `ServerPicker` 补选中态 + 「取消 / 确定」（确定 = 回填并关闭，未选中禁用）；房间列表改成展开某台服务器再懒加载 `/rooms`；「网速」文案改「延迟 {ms}ms」
+  - 做了什么：面板加 `selected` + 底部「取消 / 确定」，点行只 `select()` 高亮、确定才 `pick()`；`open()` 清空上次选中；未选中时确定禁用；选中服务器后 `RoomForm.onPick` 回调里自动 `refreshRooms()`（把该机器的房间列表拉进右栏）；`server.rtt` 文案改「延迟 {ms}ms」，六语言补 `server.confirm`；CSS 加 `.server-picker-item.selected` 与 `.server-picker-actions`。
+  - 为什么：扫描结果是边扫边冒出来的，点一下就关面板在手机上极易误触选错机器；而"选服务器"的动机本来就是想看这台有哪些房，以前还要再按一次「找房间」。
+  - 取舍：**没有做"服务器下嵌套房间列表"**（设计图那版）——右栏已经有同功能的房间列表，弹窗里再嵌套要对每台扫到的服务器各发一次 `/rooms`（扫 254 个地址就是几百个跨源请求），而且手机横屏高度撑不住三层嵌套。改为"选中即拉列表"，同样少一步。
+  - 验证：`npm run check:fast` 全绿（补 1 条选中态断言）。
+  - 批次：20261026-2050
+- [x] [L9] 房间人数显示 `在线/容量`：服务端 `/rooms` 下发 `maxPlayers`（默认 10），`src/core/net/RoomList.ts` 清洗该字段，列表行显示 `4/10`
+  - 做了什么：`server/index.mjs` 新增 `MAX_PLAYERS`（`MAX_PLAYERS` 环境变量，脏值/0/负数回退 10），`/rooms` 响应带 `maxPlayers`；`RoomList` 加 `DEFAULT_ROOM_CAPACITY` 与同名清洗字段（老服务端不带就退回默认）；列表行改用 `mp.roomsPlayersOf`（六语言）；`room-list` 用例补两条（带容量 / 脏数据兜底）。
+  - 为什么：用户说 4/10 指的是角色数、容量先给个默认值。**它只是显示，不是准入限制**——这一局的模拟跑在房主浏览器里，能扛多少取决于他的设备，服务端拍一个数字挡人是错的。
+  - 验证：`npm run check:fast` 全绿（**601** 单测）；`npm run test:net` **292 通过 / 0 失败**。
+  - 批次：20261026-2050
+- [x] [L9] 能力位 `localServer`：新增客户端能力判定，仅支持建服务器的客户端才显示「允许其它人建房」开关（本批只做显示条件与语义，不做本地服务器实现）
+  - 做了什么：新增 `core/net/ClientCapabilities.ts`（`localServer` 恒 false，仓库里只有 web 版）；`ServerPicker` 在该位为 true 时才构造「本机」区（是/否两个按钮，状态存 `mc.mp.allowHosting`，默认允许，`aria-pressed` 高亮）；`RoomForm` 与两个宿主透传能力位；六语言补 `server.local` / `server.allowHosting` / `misc.yes` / `misc.no`；CSS 加 `.mp-mini[aria-pressed="true"]`。
+  - 为什么：用户 2026-10-26 说明这个开关是**控制客户端建服务器**的，不支持的客户端（web）不该出现。客户端无权改服务端策略，做成能点但无效的开关只会骗玩家；真值来源收成一个位，原生客户端改 true 即可，UI 不用动。
+  - 验证：`npm run check:fast` 全绿（补 1 条"web 版整块不渲染"断言）。
+  - 批次：20261026-2050
+- [x] [L9] 端口只读后缀：`RoomForm` 的地址行右侧显示 `: 8887`（取 `DEFAULT_NET_PORT`，不可编辑），输入框 placeholder 改成「只填 IP 或域名」
+  - 做了什么：`RoomForm` 新增 `portLabel`（`textContent = \`:${DEFAULT_NET_PORT}\``，title 是 `mp.portHint`）；加入面板把它排在地址框与 ▾ 之间，开房对话框把 `makeRow` 的 `extra` 扩成支持数组（端口 + ▾ 两个尾巴）；CSS 加 `.mp-port`；六语言补 `mp.portHint`。
+  - 为什么：用户要求只读显示 8887。端口显出来便于跟队友核对"连的是哪台"，但不给编辑——两端各填一个数字必然漂。
+  - 验证：`npm run check:fast` 全绿（补 1 条"后缀取常量而非写死数字"断言）。
+  - 批次：20261026-2050
+- [x] [L9] 文档与台账收口：`docs/NET-PROTOCOL.md` 的端口与 `/rooms` 字段、`TASKS.md` 落 L9、`OVERVIEW.md` 补联机界面一条
+  - 做了什么：`NET-PROTOCOL.md` 的 `/rooms` 行补 `maxPlayers` 与"不是准入限制"；`TASKS.md` 的 L9 从计划补成落地细节（①~⑦ + 验证口径）并置 `[x]`；`OVERVIEW.md` 联机体验条目追加一句摘要，同时压缩几处冗余解释把字节压回 28KB 上限内；`HANDOFF.md` 进度 296→297；根 `README.md` 路线图与 `TASKS.md` 差异台账由 `audit:tasks` / `audit:diffs` 重写。
+  - 为什么：收尾第③步要求每条在 TASKS 落地；锚点文档里的数字只能由脚本生成，手抄必漂（这次 HANDOFF 就被审计当场抓住）。
+  - 验证：`npm run check` **exit=0**（typecheck + audit:i18n + 181 套离线测试 + 601 单测 + 三张台账 + docs 体量 + 浏览器门禁自检）。
+  - 批次：20261026-2050
+
+---
+
 ## 批次 20261026-2011 · 2026-10-26 · 会话 783135b3
 
 > 用户 2026-10-26：**联机期间创建的所有东西都写回房主本地**；房主离开后服务器把这个房间的信息清掉；
@@ -437,6 +2276,27 @@
   - 未验：真机肉眼看名字牌比例（无浏览器截图手段直接拍到名字牌，靠"横竖同倍"的比例断言兜住）
   - 批次：20261026-0000
 
+## 批次 20261025-2240 · 2026-10-25 · 会话 12afd06a
+
+> 纯重构：把"服务端相关的四份"收拢到一个 `server/` 下。没有新能力，只有位置与路径。
+> 判据是"改完之后所有既有的门禁仍然全绿"——181 套离线 + 195×2 条联机断言 + 出包。
+
+- [x] [S1] 目录收拢：`server/*.mjs` → `server/node/`、`rust-server/` → `server/rust/`、`android/` → `server/android/`、`ios-shell/` → `server/ios/`；`capacitor.config.json` 补 `android.path` → `npx cap sync android` 仍能找到工程
+  - 做了什么：四次 `git mv`（`server/node/` 是新建后 `git mv` 七个 `.mjs` 进去）；`capacitor.config.json` 补 `"android": { "path": "server/android", "allowMixedContent": true }`。
+  - 为什么：Capacitor 6 的 CLI **支持自定义平台路径**（`node_modules/@capacitor/cli/dist/config.js` 读 `extConfig.android.path`），所以不需要软链、也不需要自写 sync 脚本——一条配置就让它认 `server/android`。之所以把 JS 服务端也挪进 `node/`（而不是留在 `server/` 根）：这样四个子目录对称，`server/` 才是真正的"总目录"而不是"Node 服务端 + 三个挂件"；代价只是 `index.mjs` 的路径变了，一次性改掉。
+  - 验证：`npx cap sync android` 成功（45s，`copy android` + `update android` 都过）；`cd server/android && ./gradlew assembleDebug` 出包，APK 内含 2 个 ABI 的 `.so` 与 `assets/public/__host/core.bin`。
+  - 批次：20261025-2240
+- [x] [S2] 修所有引用：`package.json`（`server` / `android:*` 脚本）、`tools/`（net-peer / net-test / run-tests 的 `net: ['server/node/']` / ui-test / net-check.sh）、5 个 `tests/net-*.test.ts` 的 import、`Dockerfile`、`.gitignore`、`android/app/build.gradle` 的 `copyHostCore` 与 `copyRustLibs`、`ios/check*.sh`、`rust/run-net-test.sh`、`rust/build-ios.sh` → `npm run check` 与 rust 四套脚本全绿
+  - 做了什么：批量改 20 处功能性路径 + 15 处注释/文档路径；重点几处：`Dockerfile`（`COPY server/node`、`CMD node server/node/index.mjs`）、`.gitignore`（`server/node/.data/`）、`app/build.gradle`（`repoRoot` 现在要多剥一层父目录，`copyRustLibs` 的产物路径也改成 `server/rust/target/...`）、`rust/run-net-test.sh` 与 `rust/build-ios.sh` 的 `ROOT`（`cd ../..`）、`tools/run-tests.mjs` 的 `net: ['server/node/']`（决定改到 `server/node` 时哪套离线测试算"命中"）。
+  - 为什么：这些是"一改目录就静默失效"的地方。最典型的是 Gradle 的 `copyRustLibs`：路径没跟上时它只报一句"缺少 Rust 产物"，看起来像"忘了编 `.so`"，而不是"路径错了"——实测就踩到过（第一次 `assembleDebug` 报 `/rust-server/target/...` 不存在）。
+  - 验证：`npm run typecheck` + `typecheck:tools` 通过；`vitest tests/net-* tests/nearby-rooms.test.ts` **24 文件 / 243 断言**全过；`npm run test:net` **195/0**；`cargo test` **28/0**、`run-smoke` **20/0**、`run-beacon-smoke` **13/0**、`bash server/rust/run-net-test.sh` **195/0**。
+  - 批次：20261025-2240
+- [x] [S3] 文档同步 + 全量验证：新增 `server/README.md`、根 `README.md` 目录树、`.continue/HANDOFF.md` 命令、`docs/NET-PROTOCOL.md`、三个子目录 README 的路径 → `npm run check` 全绿 + rust 四套全绿 + `npx cap sync android` 成功
+  - 做了什么：新增 `server/README.md`（四个子目录表 + 一张"客户端→服务端→宿主→局域网"的关系图 + 两条不能忘的约定 + 常见操作）；根 `README.md` 的目录树把 `server/` 那行改成"服务端（node/ · rust/ · android/ios/ = 手机宿主示例）"；`.continue/HANDOFF.md` 命令区加 `npm run server` 并指路 `server/README.md`；`docs/NET-PROTOCOL.md` 顶部标注"Node 版在 `server/node/`、Rust 版在 `server/rust/`，同一份契约"；`notes/multiplayer-ops.md`、`notes/net-host-authority.md` 的路径同步。
+  - 为什么：这些文档写着"怎么起服务端"。路径改了却不同步，下一个人照旧命令敲就会 file not found，而且会怀疑是代码坏了。子目录 README 尤其要改——它们是各平台的入口文档。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线 + 三张台账 + 文档门禁）；`node .continue/hooks/check.mjs` 6 项全绿；`git status` 里 120+ 条全是 `R`（rename）与少量 `M`，没有内容丢失。
+  - 批次：20261025-2240
+
 ## 批次 20261025-2225 · 2026-10-25 · 会话 0a9f5045
 
 > PC 两条（用户 2026-10-25）：**PC 不再进全屏**（含"装成 App"那条绕开代码的路），
@@ -469,6 +2329,101 @@
   - 为什么：这类"只有截图能发现"的界面问题（少一颗按钮、键帽写错字母）纯靠人眼看；把"键帽文字 → 键盘绑定"和"桌面 manifest 不许 fullscreen"钉成断言，改坏了当场红
   - 验证：`npm run test:ui` 1115/0（+28）；`npm run test:i18n` 582/0（+30）；`npm run check:fast` 通过
   - 批次：20261025-2225
+
+## 批次 20261025-2050 · 2026-10-25 · 会话 12afd06a
+
+> 里程碑 MS1 验收后继续：Rust 服务端的**两颗平台壳**（Android Capacitor / iOS xcframework）
+> 与局域网发现的双端联调。一个"手机自己当房主、别人在附近房间列表里点一下进来"的最小闭环。
+
+## 里程碑 MS1 · Rust 服务端与 JS 版行为一致
+- 验收：`cd rust-server && cargo test && bash run-smoke.sh`，再 `bash run-net-test.sh` 全部 0 失败；`npm run test:net`（JS 路径）也仍绿
+- 确认：已验收 · 批次 20261025-2000（用户 2026-10-25 看到验收输出后答复"再继续"）
+
+- [x] [N4a] Android 集成的 Rust 半边：`crate-type` 加 `cdylib`/`staticlib` + JNI 入口（`start/stop/port`，供 Kotlin 的 ForegroundService 调）+ 纯 Rust 的 UDP beacon（广播/监听/自回声过滤，Android 侧只差一个 `MulticastLock`）→ `cargo test` 新增单测 + 两个进程互发现的本机脚本 + `cargo ndk`/`cargo build --target aarch64-linux-android` 出 `.so`
+  - 做了什么：拆成 **lib + bin**（`src/lib.rs` 装 `Config`/`Server`/`start()`，`main.rs` 只剩"读环境变量 → 起 → 等信号 → 补存"），新增 `src/jni.rs`（`startServer(dataDir, port, seed) -> 实际端口` / `stopServer` / `serverPort`，每个服务跑在独立线程 + 独立 runtime 里，停之前补存一次快照）与 `src/beacon.rs`（报文编解码 + peer 表含自回声过滤/12s TTL + 组播 socket）。`/healthz` 多 `beacon` 与 `peers`。`build-android.sh` 用 NDK 的 linker 直接编，不装 `cargo-ndk`。
+  - 为什么：Android 的 `ForegroundService` 只能通过 JNI 起停服务，而启动逻辑在 `main()` 里就必然要复制一份（端口、存档目录、读档顺序各写一遍，然后有一端漏补存）——所以把它抽成库；发现层放 Rust 是因为报文/端口必须与客户端一致，Kotlin 与 Swift 各写一份必然漂。
+  - 验证：`cargo test` **26/0**（新增 beacon 编解码、自回声、TTL、实例 id 唯一性、真 socket 组播往返，共 6 条）；`bash run-beacon-smoke.sh` **12/0**（两个真进程互相发现、广播内容跟着"有人进房/世界名/种子"变、自己的回声不进列表）；`bash build-android.sh` 出 `arm64-v8a` 与 `x86_64` 两个 `.so`（`file` 显示 ELF aarch64 / x86-64，`nm -D` 能看到三个 `Java_com_minicraft_server_NativeServer_*` 符号）；既有 195 条 net-test 与 20 条冒烟仍全绿。
+  - 踩到并修掉的：① **macOS 的 `SO_REUSEPORT` 对广播是"哈希挑一个 socket"**——两个实例只有一个收得到，症状是"A 看得见 B、B 看不见 A"，改走组播 + 按平台绑不同地址；② **收发不能用同一个 socket**（macOS 上监听 socket 绑的是组播地址，从它 `send_to` 直接 `EADDRNOTAVAIL`）；③ 这台开发机的**默认可组播网卡不在**（连自己都收不到），所以留了 `BEACON_IF`，验收脚本显式指回环；④ 实例 id 只混"时间 + pid"时，同一毫秒内两次启动会撞 → 两个实例把对方当自己的回声过滤掉（单测抓到的）。
+  - 批次：20261025-2050
+- [x] [N4b] Android 壳：Capacitor 工程（`npx cap add android`）+ Kotlin 插件加载 `.so` + `ForegroundService`（常驻通知）+ `MulticastLock` → `./gradlew assembleDebug` 出 APK，模拟器/真机装两台上能互相发现并进房
+  - 前置（开这条之前先确认）：`npm i -D @capacitor/cli @capacitor/core @capacitor/android` 会新增依赖，
+    Gradle 首次同步要联网下载几百 MB；`.so` 已能编（`bash rust-server/build-android.sh`），
+    `jni.rs` 的三个入口签名见 `rust-server/src/jni.rs`
+  - 做了什么：`npx cap add android` 生出 `android/`（Capacitor 6）；壳里加 `NativeServer.java`（JNI 声明）、`NativeServerPlugin.java`（网页可调的 `start/port/stop`）、`ServerService.java`（前台服务 + 常驻通知 + `MulticastLock`/`WifiLock`，JNI 丢工作线程避免 ANR）、`MainActivity` 注册插件；`app/build.gradle` 两个任务 `copyRustLibs`（`.so` → `jniLibs`）与 `copyHostCore`（`host/core-baseline.bin` → `assets/public/__host/core.bin`）；Manifest 补多播/唤醒/前台服务/通知/明文流量权限；根目录加 `capacitor.config.json`（`androidScheme: http` 让客户端挑 `ws://` 而不是 `wss://`），并补 `npm run android:sync` / `android:apk` / `android:test`（Gradle 那条不能叫 `test:*`：离线 runner 把它当套件解析，会因为它不是 esbuild/node 入口而报"认不出"）。
+  - 为什么：手机当房主必须有"进程不被回收"的载体——前台服务 + 常驻通知是唯一稳的做法；`MulticastLock`/`WifiLock` 不给的话息屏一会儿组播就被系统丢掉（别人再也发现不了这个房间）。`core.bin` 放 assets 而不是写 `shouldInterceptRequest`：Capacitor 的资源本来就以 http 提供，同一个文件放 assets 即等价，少一层会写错的拦截。
+  - 验证：`./gradlew assembleDebug` 出 `app-debug.apk`（内含两个 ABI 的 `libminicraft_server.so` 与 `assets/public/__host/core.bin`）；模拟器 `Pixel_3a_API_34` 上 `./gradlew connectedDebugAndroidTest` **3 条全过**（包名 / JNI 起服务 + `/healthz` 回 `ok` + 停后端口归零 / 前台服务拉起来 + `/rooms` 200）；装 APK 启动后**截图确认已进主菜单**（Play / Settings / Mini-games 正常渲染，只剩一条 SW 注册警告，WebView 里本就该失败）。
+  - **未验证（如实记）**："装两台上能互相发现并进房"——需要第二台设备 + 客户端接线（网页调 `NativeServer.start`、用 `peers` 出列表），那正是 N6 的范围；单台模拟器上硬凑只能验到假路径，所以没做。另：Gradle 8.2.1 不支持 JDK 21，构建要 `JAVA_HOME` 指 17（已写进 `android/README.md`）。
+  - 批次：20261025-2050
+- [x] [N5] iOS 集成：`staticlib` → `.xcframework` + 前台会话（锁屏即断，需提示）+ `NSNetService` Bonjour 广播 → 前台当房主、Android 能被发现
+  - 做了什么：Rust 侧加 **C ABI**（`src/capi.rs` 三个函数）+ 把两端共用的生命周期抽成 `src/instance.rs`（`jni.rs` 改成薄包装）；`rust-server/build-ios.sh` 编真机 arm64 + 模拟器 arm64/x86_64 → `ios-shell/MinicraftServer.xcframework`（带头文件）；`ios-shell/` 里 `NativeServer.swift`（三个 C 函数包装）、`ForegroundSession.swift`（进后台就停 + 提示 key `net.host.foregroundOnly`）、`BonjourAdvertiser.swift`（`NetService` 广播，TXT 字段与组播报文同名）、`Tests/main.swift`（设备级冒烟）；`check.sh` / `check-sim.sh` 两条验收脚本 + README（接入 Xcode 的手工步骤与 Info.plist 三个键）。
+  - 为什么：iOS 端只能走 C ABI（没有 JVM），而生命周期与 Android 一字不差——写在两处最容易分叉的是"停止时补存"，所以抽成一份；"只有前台能当房主"是系统规则（后台不允许长期持监听 socket，硬撑会被杀掉、表现是"房间还在但连不上"），所以做成"进后台主动停 + 回一个状态给 UI"，用户可见文案只给 i18n key（原生写文案会绕过六语言表）。
+  - 验证：`bash ios-shell/check.sh` 全过（xcframework 两个切片架构正确、Swift 在**真机 SDK 与模拟器 SDK 下各 typecheck 通过**、静态库里三个 C 符号齐全）；`bash ios-shell/check-sim.sh` **在真的 iOS 模拟器里跑通**——`simctl spawn` 起服务得到端口 50924、`/healthz` 回 `{"ok":true,…,"protocol":2}`、`/rooms` 有响应、停后端口归零且快照已补存；Rust 侧回归 `cargo test 27/0`（新增"起服务→HTTP→停"一条）、`run-smoke 20/0`、`run-beacon-smoke 12/0`、`run-net-test 195/0`；Android `.so` 重编后三个 JNI 符号仍在。
+  - **未验证（如实记）**：① 没生成 Capacitor 的 `ios/` 工程（`npx cap add ios` 走 CocoaPods，本机 `pod: command not found`），所以"iOS 上点一下开房"这条路没跑过——接入步骤写在 `ios-shell/README.md`，是 5 分钟手工；② "iOS 前台当房主、Android 能被发现"要两台真机 + N6 的客户端接线，没验；已知桥接点：Rust 组播两端同协议（Android 已验），Bonjour 只服务 Apple 生态内部，字段同名供 N6 映射。
+  - 批次：20261025-2050
+- [x] [N6] 发现层双端联调：Android UDP beacon ↔ iOS Bonjour 互通、房间里显示"世界名 / 人数 / 有无口令 / 延迟"，点一下进房；并处理"自己发自己收"的回声过滤
+  - 做了什么：① 发现报文与 `/healthz.peers` 都带上 `room`，`/healthz` 加 `access-control-allow-origin: *`（**Rust 与 JS 两套服务端同时改**）；② Rust 侧新增 `beacon::from_txt(service_name, txt)`——把 iOS 的 Bonjour TXT 记录转成与组播**同一个结构**（键名两边刻意相同），这条就是"Android 组播 ↔ iOS Bonjour"的互通点；③ 客户端新增 `src/core/net/NearbyRooms.ts`（解析 `peers`、过滤自己、拼 `ws://host:port/room`、探延迟）与 `healthEndpoint()`；④ 联机面板把附近设备并进房间列表：`世界名 · host:port · {n} 人 · 口令 · 12 ms`，点一下直接进房（地址带房间名，口令房先聚焦口令框）。
+  - 为什么：浏览器发不出也收不到 UDP，唯一的耳朵是每台手机上的 Rust 服务端，所以面板读它的 `/healthz.peers`；"点一下进房"必须知道房间名（否则进默认房间，看到的世界跟列表写的不一样），所以报文补 `room`；"自己发自己收"在服务端早已按实例 id 挡住，客户端只需再按"面板里正对着的那台地址"过滤一次（一台手机有多个网卡地址，枚举自身 IP 既不可靠也没必要）。
+  - 验证：`npx vitest run tests/nearby-rooms.test.ts` **12/12**（脏地址/越界端口逐行丢、自己那间被过滤、地址带房间名、延迟探测失败返回 null）；`cargo test` **28/0**（新增 Bonjour TXT → 组播结构的互转断言，含脏字段回落）；`bash run-beacon-smoke.sh` **13/0**（新增"广播带房间名"）；两套服务端行为仍一致（`run-net-test.sh` 与 `npm run test:net` 各 **195/0**）；`npm run check:fast` 全绿（命中 `net` 与 `ui` 两套离线套件）；实测 `curl -i /healthz` 带 `access-control-allow-origin: *`，且 B 的 `peers` 里确实有 A（世界名/种子/端口/房主标记/房间名）。
+  - **未验证（如实记）**：① 浏览器里真的点一下"附近房间"进房——要同时开两个服务端并手动点，本轮只做了类型检查 + 纯函数断言，没有浏览器自动化；② 真机 Android ↔ iOS 互相发现仍未验（要两台设备，且 iOS 侧还要把 Capacitor 工程接起来，见 N5 的未验证项）。
+  - 批次：20261025-2050
+
+## 批次 20261025-2000 · 2026-10-25 · 会话 12afd06a
+
+> 里程碑 MS1 收口：Rust 版联机服务端与 JS 版**行为一致**——`tools/net-test.mjs` 195 条断言
+> 0 失败（`bash rust-server/run-net-test.sh`），`cargo test` 20 / 冒烟 20 也全绿。
+> 这一段是"能不能用同一份黑盒断言验收另一套实现"的答案。
+
+# 队列 · 会话 12afd06a599745d78ae8d88cedd715eb（本段 N3a~N3f）
+
+- [x] [N3a] 与 `tools/net-test.mjs` 对齐·基础设施：`PORT=0` 打印实际端口、`/healthz` + `/rooms` + 404（同端口 HTTP 分流 + CORS）、`ALLOWED_ORIGINS` 来源白名单、`ROOM_PASSWORD`、`join.world`（按房种子）、64KB 载荷上限（超了回 1009 而不是无声断）→ `cargo test` + `bash run-smoke.sh` 全绿，且 net-test 里健康检查/来源/口令/世界四段通过
+  - 做了什么：`main.rs` 先自己读请求头再分流——普通 GET 就地答 `/healthz`（在线人数 / 房间数 / 吞吐速率）、`/rooms`（人数 + `hasHost` + 世界名与种子 + CORS，**不下发口令**）、其余 404；升级请求把已读的字节用 `Prefixed` 流接回 tungstenite 完成握手（所以来源白名单能在**握手之后**回 `error{code:'origin'}` + close 4004，与 JS 版同形）。`PORT=0` 时打印 `local_addr()` 的实际端口。`protocol.rs` 补 `sanitize_world_meta`（种子必须是 32 位整数，脏数据保留房间原有那份）、`ROOM_PASSWORD` 校验、`MAX_PAYLOAD_BYTES`。
+  - 为什么：HTTP 与 WS 共用一个端口是"容器/反代只暴露一个口"的前提；而来源拒绝必须发生在握手之后——在握手阶段拒（tungstenite 的 ErrorResponse）客户端只会看到 HTTP 错误，拿不到 `error.code`，浏览器端无从判断"该不该重连"。
+  - 验证：net-test 的 `[启动服务端]` 四段（healthz 三段 + 404 一段）、`[房间的世界]` 的 `/rooms` 四段、`[房间与来源校验]` 的 origin 两段、`[房间口令]` 两段全绿；`cargo test` 20 通过。
+  - 批次：20261025-2000
+- [x] [N3b] 与 `tools/net-test.mjs` 对齐·玩家生命周期：`GRACE_MS` 断线宽限重连（复用原 id、房主位宽限、到期 `room-closed`/`host-left`/清掉落物）、心跳 ping 5s、`sleep` 跳夜、时间状态机（黎明 0.12 / 按房广播）→ net-test 的"断线重连 / 睡眠跳夜 / 房主掉线"三段通过
+  - 做了什么：`on_close` 把玩家移出在线表但不广播 leave，只记一条 `Grace{id, seq}` 并起计时；`join` 在宽限期内认回原 id（房主位也留给他）。到期才广播 `leave`、清他名下掉落物、释放房主位；房主到期没回来 → 同房其他人各收 `error{code:'host-left'}` + close 4007。心跳按连接起 5s 的 ping 任务，20s 没回 pong 主动断。时间状态机改成 `day_start_ms + start_time_of_day`（默认 0.12），`sleep` 与房主改时间都走"重置起点 + 广播 `snap`"。
+  - 为什么：手机切后台/断 wifi 不会触发 close 语义上的"人走了"；立刻广播 leave 会让队友眼里你"消失又出现"，你名下的掉落物也没人有权删（owner 就是 id）。宽限期条目带 `seq` 是为了修一个 net-test 覆盖不到的坑：连断两次会留下两个计时器，只比 id 的话前一个会把刚连回来的人广播成离开。
+  - 验证：net-test 的 `[断线重连]` 三段、`[睡眠跳夜]` 三段、`[房主掉线：先提示、宽限到期关房]` 三段、`[时间权威]` 三段全绿；`[房主：一房一名]` 里"原房主宽限期过后房主位释放"也绿。
+  - 批次：20261025-2000
+- [x] [N3c] 与 `tools/net-test.mjs` 对齐·消息族：`item-spawn/item-remove/item-take`、`mob-hit`、`player-hit`、`container`(+progress)、`sign`、`frame`、`arrow`、`tnt`、`entity-snap`、`entity-remove`、外观白名单（`look` 形状）→ net-test 的掉落物/命中/PvP/容器/牌子/箭与 TNT/实体快照各段通过
+  - 做了什么：`handlers.rs` 补齐 13 类消息，每条都带形状收口（掉落物数量 1~64、坐标 ±3e7、容器 ≤27 格且序列化 ≤8192 字节、牌子 4 行 × 64 字、展示框 `item=null` 表示空框、箭速 ≤200、伤害夹到 0~50、着火 0~16、`entity-snap` 截到 256 条、`entity-remove` 只留 1~32 字符的键）；`welcome` 补齐 `items/containers/signs/frames`；`item-take` 用单锁做"查还在 → 删 → 回 ok"的原子仲裁；`read_appearance` 按白名单收口（`look` 必须正好 10 个整数才下发）。
+  - 为什么：这些"事件 + 坐标"的消息（箭/TNT/命中）服务端没有世界也没有实体表，能做且只该做两件事——形状收口与转发；一旦它开始判"这只怪该不该在这"，就得同步整个生物注册表，那是客户端的事。掉落物的 owner 一律由服务端填，所以"删别人的掉落物"在协议层就不成立。
+  - 验证：net-test 的 `[掉落物镜像]` 七段、`[掉落物维度]` 三段、`[拾取仲裁]` 五段、`[生物命中]` 四段、`[PvP 转发]` 四段、`[容器同步]` 四段、`[牌子与展示框]` 四段、`[箭与 TNT]` 四段、`[实体快照只由房主推]` 九段、`[命中带全局键]` 四段、`[容器进度只认房主]` 四段、`[玩家外观（皮肤）随 move 转发]` 两段全绿。
+  - 批次：20261025-2000
+- [x] [N3d] 与 `tools/net-test.mjs` 对齐·范围与限频：AOI 裁剪（8 区块 + 同维度，快照与广播两条路）+ 令牌桶（block 200/s·400、container 20/s、chat 5/s）+ 拒收日志限频 → net-test 的"广播范围 / 快照裁剪 / 限频与体积"三段通过
+  - 做了什么：新增 `aoi.rs`（切比雪夫距离按区块算，`>> 4` 与 JS 的负数取整一致）与 `ratelimit.rs`（令牌桶 + "1 秒窗口计数"两套）；`broadcast` 多一个 `Aoi` 参数，坐标类消息（方块/容器/牌子/展示框/TNT/掉落物/命中/箭/实体快照）按"同维度 + 8 区块"过滤，聊天与时间不过滤；`welcome.edits` 同样按玩家位置裁剪；`move` 的转发中心用发起者坐标。
+  - 为什么：不过滤时"出生点改一格"会发给 5000 格外的观察者（人多时是 O(n²) 的纯浪费）；而聊天是文字、时间全局，过滤它们只会让远处的人变聋/时间错乱。方块用令牌桶**按条数**计费（红石连锁一次几十格是正常的，持续每帧几百格不是），比固定窗口少了"边界双倍流量"的漏洞。
+  - 验证：net-test 的 `[广播范围]` 四段、`[快照裁剪]` 两段、`[限频与体积]` 四段（含"第一批 256 格放行、紧接着的第二批被限"）、以及 `[脏消息校验]` 里"隔空改容器被拒"全绿；`ratelimit`/`aoi` 单测 5 条通过。
+  - 批次：20261025-2000
+- [x] [N3e] 与 `tools/net-test.mjs` 对齐·存档落盘：`DATA_DIR/world.json` 原子写（tmp+rename）+ 30s 定时 + SIGTERM 补存 + 损坏备份 `world.json.broken-*`，重启后 edits/containers/signs/frames/时间/天气都在 → net-test 的"持久化"两段通过
+  - 做了什么：新增 `store.rs`（原子写 + 损坏改名备份 + 读档版本校验）；`State::world_snapshot` 把 edits/containers/signs/frames 按 `[x,y,z,…,room]` 摊平（房间名从 key 前缀取回），`State::apply_snapshot` 反向灌回并走 `sanitize_room`/`sanitize_dimension` 收口；时间用"存档那一刻"当新起点（停机那段不走），天气接着存档那档跑。SIGINT/SIGTERM 走"补存一次再 exit(0)"。
+  - 为什么：不做落盘时，重启后箱子里东西对新玩家完全不可见（只有打开过它的老玩家本地还记得），队友搭的东西也全没了；损坏时**备份而不是删掉**，是因为里面可能还有人工能救的部分，而"删掉 + 下轮保存"会让现场彻底消失。
+  - 验证：net-test 的 `[持久化：重启后快照仍在]` 四段（真的 SIGTERM 杀一次再起，断言方块与容器都还在）、`[持久化：损坏快照被备份而不是覆盖]` 四段（先写坏文件，断言 `world.json.broken-*` 存在且从空世界开始）全绿。
+  - 批次：20261025-2000
+- [x] [N3f] 让 net-test 能指向 Rust 服务端并全量跑绿：`tools/net-test.mjs` 加 `NET_SERVER_BIN`/`NET_SERVER_ARGS`（默认仍是 `node server/index.mjs`，JS 路径行为不变）+ `rust-server/run-net-test.sh` → `bash rust-server/run-net-test.sh` 0 失败
+  - 做了什么：`tools/net-test.mjs` 的 `spawn('node', ['server/index.mjs'])` 抽成 `SERVER_BIN`/`SERVER_ARGS`（默认值保持原样；换了二进制又没给参数时按"那个程序自己就是服务端"处理）；新增 `rust-server/run-net-test.sh`（build → 用 Rust 二进制跑同一套断言）。断言一条未改。
+  - 为什么：Rust 版的对齐判据必须**就是**这套 1871 行黑盒断言——复制一份会立刻漂，改断言更是把契约改没了。把"起哪个进程"做成环境变量，是让两套实现共用同一份验收脚本的最小改动。
+  - 验证：`bash rust-server/run-net-test.sh` → **195 通过 / 0 失败**（连跑 3 次都全绿，排除偶发）；`npm run test:net`（JS 路径）同样 195/0；把 `NET_SERVER_BIN` 指到 `/usr/bin/false` 时启动段立刻红，证明变量确实生效。
+  - 批次：20261025-2000
+
+## 批次 20261025-1946 · 2026-10-25 · 会话 abbdd915
+
+> Rust 版联机服务端第一阶段：协议层 + 核心 10 类消息跑通（本段在 20261025-2000 的
+> 里程碑 MS1 里一起收口，因为那时它还没走过收尾）。
+
+# 队列 · 会话 abbdd9159d0b4bf084c8a8a9fdcf439b（本段 N1~N2）
+
+- [x] [N1] Rust 工程 + 协议层（常量 / 清洗 / 校验，逐条对齐 `server/protocol.mjs`）→ `cargo test` 9 条全绿
+  - 做了什么：新建 `rust-server/`（tokio + tokio-tungstenite + serde）；`protocol.rs` 落协议版本 2、关闭码 4001~4008、`WORLD_MIN_Y/-MAX`、`MAX_BLOCK_ID/STATE`、`MAX_EDIT_DISTANCE`、名字清洗（去控制字符与 `<>`、压缩空白、按**字符**截 16、空则"玩家"）、房间名回落、clientId 形状、方块改动的 y/id/state/距离校验（**房主豁免距离闸**）、`scoped_key`。
+  - 为什么：这些清洗规则是"两个人进了两个房""名字被切成半个 emoji""房主代发的远处改动被丢"这三类老 bug 的防线，重写时**必须逐条等价**；用单测钉住比人眼比对可靠。
+  - 验证：`cargo test` 9 通过 / 0 失败（含 emoji 不被切开、`<b>坏</b>` 的斜杠保留、房主豁免距离闸、非房主仍被挡）。
+  - 批次：20261025-1946
+- [x] [N2] 核心消息链路跑通（join / welcome / move+player / block+blocks / edit-request / chat / room-config / leave / time 广播）→ `bash run-smoke.sh` 20 条全绿
+  - 做了什么：`state.rs` 的 Hub（玩家表 / 出站队列 / 房主表 / 方块增量表 / 时间与天气）；`main.rs` 的连接任务与消息分发；冒烟脚本 `smoke.mjs` 用 Node 23 内置 `WebSocket`（不需要 `npm ci`），`run-smoke.sh` 起临时服务端（25199）跑完自动关。
+  - 为什么：先用"核心 21 类里的 10 类"验证架构（读写分离 + Hub 锁边界 + 房主语义），再决定是否为剩余 11 类继续投入；这一步能暴露 Rust 侧独有的两类坑（见下）。
+  - 验证：`bash run-smoke.sh` **20 通过 / 0 失败**——覆盖 welcome 字段、房主/从属身份、move 转发与队伍、方块 `authority` 重标、从属直发被拒（not-host）、edit-request 转发、同房重名被拒（duplicate-name）、房主改天气、从属改配置被拒、聊天不回给自己、断线 leave 带 id。
+  - 踩到并修掉的：① **tokio Mutex 不可重入**——持 `players` 锁时调 `player_broadcast_of`（内部再锁一次）会永久死锁，锁边界收进块内；② **拒绝帧被丢**——读循环 break 后立即 abort 写任务，客户端收不到 `error`+"close"，表现是"点加入没反应"，改成先 `drop(tx)` 排空再收尾。
+  - 批次：20261025-1946
 
 ## 批次 20261025-1627 · 2026-10-25 · 会话 937507d0
 
@@ -731,6 +2686,7 @@ blockIds.ts（叶子，纯常量） → blockSpecs.ts（数据） → blocks.ts�
   - 为什么：MIT 要求"分发物中保留版权声明与许可全文"，网页版的"分发物"就是 `dist/`，所以声明必须放在 `public/`（只放仓库根目录等于没分发）；隐私政策是 Play 的**必填项**，需要一个可公开访问的 HTTPS 链接，而 `/privacy.html` 就是这个项目自己的站点路径，比外链第三方托管更不容易失效。隐私文案按**代码实际行为**写（无账号、无统计/广告 SDK、存档仅在 IndexedDB/localStorage）
   - 验证：`npm run build:fast` 后 `dist/privacy.html`（5.7KB）与 `dist/third-party-notices.txt`（3.4KB）都在；`npm run test:ui` **980/0**（新增 1 条断言：两份文件都在 `public/` 且声明里有 three.js authors / Einar Otto Stangvik）；`npm run audit:docs` 通过；`npm run check:manifests` 通过；`typecheck:tools` 清洁
   - 批次：20261025-0316
+
 ## 批次 20261025-0257 · 2026-10-25 · 会话 037060ab
 
 > **这一批做什么（L8 · MS4 容器与收尾）**：补上最后一段权威——容器计时只由房主推进、
@@ -17843,1736 +19799,273 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 - 遗留：Q20 / Q21 同源的"未加载区块静默返回空气"差异记在根 `TASKS.md`；
   旧队列文件里的机制说明（卡死保护 / 自插额度 / 风险弹窗 / 流程七步）已并入
   [`.continue/HANDOFF.md`](./HANDOFF.md)，这里不再重复。
-## 批次 20261025-2240 · 2026-10-25 · 会话 12afd06a
+## 批次 20261027-2600 · 2026-10-27 · 会话 12c62c
 
-> 纯重构：把"服务端相关的四份"收拢到一个 `server/` 下。没有新能力，只有位置与路径。
-> 判据是"改完之后所有既有的门禁仍然全绿"——181 套离线 + 195×2 条联机断言 + 出包。
-
-- [x] [S1] 目录收拢：`server/*.mjs` → `server/node/`、`rust-server/` → `server/rust/`、`android/` → `server/android/`、`ios-shell/` → `server/ios/`；`capacitor.config.json` 补 `android.path` → `npx cap sync android` 仍能找到工程
-  - 做了什么：四次 `git mv`（`server/node/` 是新建后 `git mv` 七个 `.mjs` 进去）；`capacitor.config.json` 补 `"android": { "path": "server/android", "allowMixedContent": true }`。
-  - 为什么：Capacitor 6 的 CLI **支持自定义平台路径**（`node_modules/@capacitor/cli/dist/config.js` 读 `extConfig.android.path`），所以不需要软链、也不需要自写 sync 脚本——一条配置就让它认 `server/android`。之所以把 JS 服务端也挪进 `node/`（而不是留在 `server/` 根）：这样四个子目录对称，`server/` 才是真正的"总目录"而不是"Node 服务端 + 三个挂件"；代价只是 `index.mjs` 的路径变了，一次性改掉。
-  - 验证：`npx cap sync android` 成功（45s，`copy android` + `update android` 都过）；`cd server/android && ./gradlew assembleDebug` 出包，APK 内含 2 个 ABI 的 `.so` 与 `assets/public/__host/core.bin`。
-  - 批次：20261025-2240
-- [x] [S2] 修所有引用：`package.json`（`server` / `android:*` 脚本）、`tools/`（net-peer / net-test / run-tests 的 `net: ['server/node/']` / ui-test / net-check.sh）、5 个 `tests/net-*.test.ts` 的 import、`Dockerfile`、`.gitignore`、`android/app/build.gradle` 的 `copyHostCore` 与 `copyRustLibs`、`ios/check*.sh`、`rust/run-net-test.sh`、`rust/build-ios.sh` → `npm run check` 与 rust 四套脚本全绿
-  - 做了什么：批量改 20 处功能性路径 + 15 处注释/文档路径；重点几处：`Dockerfile`（`COPY server/node`、`CMD node server/node/index.mjs`）、`.gitignore`（`server/node/.data/`）、`app/build.gradle`（`repoRoot` 现在要多剥一层父目录，`copyRustLibs` 的产物路径也改成 `server/rust/target/...`）、`rust/run-net-test.sh` 与 `rust/build-ios.sh` 的 `ROOT`（`cd ../..`）、`tools/run-tests.mjs` 的 `net: ['server/node/']`（决定改到 `server/node` 时哪套离线测试算"命中"）。
-  - 为什么：这些是"一改目录就静默失效"的地方。最典型的是 Gradle 的 `copyRustLibs`：路径没跟上时它只报一句"缺少 Rust 产物"，看起来像"忘了编 `.so`"，而不是"路径错了"——实测就踩到过（第一次 `assembleDebug` 报 `/rust-server/target/...` 不存在）。
-  - 验证：`npm run typecheck` + `typecheck:tools` 通过；`vitest tests/net-* tests/nearby-rooms.test.ts` **24 文件 / 243 断言**全过；`npm run test:net` **195/0**；`cargo test` **28/0**、`run-smoke` **20/0**、`run-beacon-smoke` **13/0**、`bash server/rust/run-net-test.sh` **195/0**。
-  - 批次：20261025-2240
-- [x] [S3] 文档同步 + 全量验证：新增 `server/README.md`、根 `README.md` 目录树、`.continue/HANDOFF.md` 命令、`docs/NET-PROTOCOL.md`、三个子目录 README 的路径 → `npm run check` 全绿 + rust 四套全绿 + `npx cap sync android` 成功
-  - 做了什么：新增 `server/README.md`（四个子目录表 + 一张"客户端→服务端→宿主→局域网"的关系图 + 两条不能忘的约定 + 常见操作）；根 `README.md` 的目录树把 `server/` 那行改成"服务端（node/ · rust/ · android/ios/ = 手机宿主示例）"；`.continue/HANDOFF.md` 命令区加 `npm run server` 并指路 `server/README.md`；`docs/NET-PROTOCOL.md` 顶部标注"Node 版在 `server/node/`、Rust 版在 `server/rust/`，同一份契约"；`notes/multiplayer-ops.md`、`notes/net-host-authority.md` 的路径同步。
-  - 为什么：这些文档写着"怎么起服务端"。路径改了却不同步，下一个人照旧命令敲就会 file not found，而且会怀疑是代码坏了。子目录 README 尤其要改——它们是各平台的入口文档。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线 + 三张台账 + 文档门禁）；`node .continue/hooks/check.mjs` 6 项全绿；`git status` 里 120+ 条全是 `R`（rename）与少量 `M`，没有内容丢失。
-  - 批次：20261025-2240
-
-## 批次 20261025-2050 · 2026-10-25 · 会话 12afd06a
-
-> 里程碑 MS1 验收后继续：Rust 服务端的**两颗平台壳**（Android Capacitor / iOS xcframework）
-> 与局域网发现的双端联调。一个"手机自己当房主、别人在附近房间列表里点一下进来"的最小闭环。
-
-## 里程碑 MS1 · Rust 服务端与 JS 版行为一致
-- 验收：`cd rust-server && cargo test && bash run-smoke.sh`，再 `bash run-net-test.sh` 全部 0 失败；`npm run test:net`（JS 路径）也仍绿
-- 确认：已验收 · 批次 20261025-2000（用户 2026-10-25 看到验收输出后答复"再继续"）
-
-- [x] [N4a] Android 集成的 Rust 半边：`crate-type` 加 `cdylib`/`staticlib` + JNI 入口（`start/stop/port`，供 Kotlin 的 ForegroundService 调）+ 纯 Rust 的 UDP beacon（广播/监听/自回声过滤，Android 侧只差一个 `MulticastLock`）→ `cargo test` 新增单测 + 两个进程互发现的本机脚本 + `cargo ndk`/`cargo build --target aarch64-linux-android` 出 `.so`
-  - 做了什么：拆成 **lib + bin**（`src/lib.rs` 装 `Config`/`Server`/`start()`，`main.rs` 只剩"读环境变量 → 起 → 等信号 → 补存"），新增 `src/jni.rs`（`startServer(dataDir, port, seed) -> 实际端口` / `stopServer` / `serverPort`，每个服务跑在独立线程 + 独立 runtime 里，停之前补存一次快照）与 `src/beacon.rs`（报文编解码 + peer 表含自回声过滤/12s TTL + 组播 socket）。`/healthz` 多 `beacon` 与 `peers`。`build-android.sh` 用 NDK 的 linker 直接编，不装 `cargo-ndk`。
-  - 为什么：Android 的 `ForegroundService` 只能通过 JNI 起停服务，而启动逻辑在 `main()` 里就必然要复制一份（端口、存档目录、读档顺序各写一遍，然后有一端漏补存）——所以把它抽成库；发现层放 Rust 是因为报文/端口必须与客户端一致，Kotlin 与 Swift 各写一份必然漂。
-  - 验证：`cargo test` **26/0**（新增 beacon 编解码、自回声、TTL、实例 id 唯一性、真 socket 组播往返，共 6 条）；`bash run-beacon-smoke.sh` **12/0**（两个真进程互相发现、广播内容跟着"有人进房/世界名/种子"变、自己的回声不进列表）；`bash build-android.sh` 出 `arm64-v8a` 与 `x86_64` 两个 `.so`（`file` 显示 ELF aarch64 / x86-64，`nm -D` 能看到三个 `Java_com_minicraft_server_NativeServer_*` 符号）；既有 195 条 net-test 与 20 条冒烟仍全绿。
-  - 踩到并修掉的：① **macOS 的 `SO_REUSEPORT` 对广播是"哈希挑一个 socket"**——两个实例只有一个收得到，症状是"A 看得见 B、B 看不见 A"，改走组播 + 按平台绑不同地址；② **收发不能用同一个 socket**（macOS 上监听 socket 绑的是组播地址，从它 `send_to` 直接 `EADDRNOTAVAIL`）；③ 这台开发机的**默认可组播网卡不在**（连自己都收不到），所以留了 `BEACON_IF`，验收脚本显式指回环；④ 实例 id 只混"时间 + pid"时，同一毫秒内两次启动会撞 → 两个实例把对方当自己的回声过滤掉（单测抓到的）。
-  - 批次：20261025-2050
-- [x] [N4b] Android 壳：Capacitor 工程（`npx cap add android`）+ Kotlin 插件加载 `.so` + `ForegroundService`（常驻通知）+ `MulticastLock` → `./gradlew assembleDebug` 出 APK，模拟器/真机装两台上能互相发现并进房
-  - 前置（开这条之前先确认）：`npm i -D @capacitor/cli @capacitor/core @capacitor/android` 会新增依赖，
-    Gradle 首次同步要联网下载几百 MB；`.so` 已能编（`bash rust-server/build-android.sh`），
-    `jni.rs` 的三个入口签名见 `rust-server/src/jni.rs`
-  - 做了什么：`npx cap add android` 生出 `android/`（Capacitor 6）；壳里加 `NativeServer.java`（JNI 声明）、`NativeServerPlugin.java`（网页可调的 `start/port/stop`）、`ServerService.java`（前台服务 + 常驻通知 + `MulticastLock`/`WifiLock`，JNI 丢工作线程避免 ANR）、`MainActivity` 注册插件；`app/build.gradle` 两个任务 `copyRustLibs`（`.so` → `jniLibs`）与 `copyHostCore`（`host/core-baseline.bin` → `assets/public/__host/core.bin`）；Manifest 补多播/唤醒/前台服务/通知/明文流量权限；根目录加 `capacitor.config.json`（`androidScheme: http` 让客户端挑 `ws://` 而不是 `wss://`），并补 `npm run android:sync` / `android:apk` / `android:test`（Gradle 那条不能叫 `test:*`：离线 runner 把它当套件解析，会因为它不是 esbuild/node 入口而报"认不出"）。
-  - 为什么：手机当房主必须有"进程不被回收"的载体——前台服务 + 常驻通知是唯一稳的做法；`MulticastLock`/`WifiLock` 不给的话息屏一会儿组播就被系统丢掉（别人再也发现不了这个房间）。`core.bin` 放 assets 而不是写 `shouldInterceptRequest`：Capacitor 的资源本来就以 http 提供，同一个文件放 assets 即等价，少一层会写错的拦截。
-  - 验证：`./gradlew assembleDebug` 出 `app-debug.apk`（内含两个 ABI 的 `libminicraft_server.so` 与 `assets/public/__host/core.bin`）；模拟器 `Pixel_3a_API_34` 上 `./gradlew connectedDebugAndroidTest` **3 条全过**（包名 / JNI 起服务 + `/healthz` 回 `ok` + 停后端口归零 / 前台服务拉起来 + `/rooms` 200）；装 APK 启动后**截图确认已进主菜单**（Play / Settings / Mini-games 正常渲染，只剩一条 SW 注册警告，WebView 里本就该失败）。
-  - **未验证（如实记）**："装两台上能互相发现并进房"——需要第二台设备 + 客户端接线（网页调 `NativeServer.start`、用 `peers` 出列表），那正是 N6 的范围；单台模拟器上硬凑只能验到假路径，所以没做。另：Gradle 8.2.1 不支持 JDK 21，构建要 `JAVA_HOME` 指 17（已写进 `android/README.md`）。
-  - 批次：20261025-2050
-- [x] [N5] iOS 集成：`staticlib` → `.xcframework` + 前台会话（锁屏即断，需提示）+ `NSNetService` Bonjour 广播 → 前台当房主、Android 能被发现
-  - 做了什么：Rust 侧加 **C ABI**（`src/capi.rs` 三个函数）+ 把两端共用的生命周期抽成 `src/instance.rs`（`jni.rs` 改成薄包装）；`rust-server/build-ios.sh` 编真机 arm64 + 模拟器 arm64/x86_64 → `ios-shell/MinicraftServer.xcframework`（带头文件）；`ios-shell/` 里 `NativeServer.swift`（三个 C 函数包装）、`ForegroundSession.swift`（进后台就停 + 提示 key `net.host.foregroundOnly`）、`BonjourAdvertiser.swift`（`NetService` 广播，TXT 字段与组播报文同名）、`Tests/main.swift`（设备级冒烟）；`check.sh` / `check-sim.sh` 两条验收脚本 + README（接入 Xcode 的手工步骤与 Info.plist 三个键）。
-  - 为什么：iOS 端只能走 C ABI（没有 JVM），而生命周期与 Android 一字不差——写在两处最容易分叉的是"停止时补存"，所以抽成一份；"只有前台能当房主"是系统规则（后台不允许长期持监听 socket，硬撑会被杀掉、表现是"房间还在但连不上"），所以做成"进后台主动停 + 回一个状态给 UI"，用户可见文案只给 i18n key（原生写文案会绕过六语言表）。
-  - 验证：`bash ios-shell/check.sh` 全过（xcframework 两个切片架构正确、Swift 在**真机 SDK 与模拟器 SDK 下各 typecheck 通过**、静态库里三个 C 符号齐全）；`bash ios-shell/check-sim.sh` **在真的 iOS 模拟器里跑通**——`simctl spawn` 起服务得到端口 50924、`/healthz` 回 `{"ok":true,…,"protocol":2}`、`/rooms` 有响应、停后端口归零且快照已补存；Rust 侧回归 `cargo test 27/0`（新增"起服务→HTTP→停"一条）、`run-smoke 20/0`、`run-beacon-smoke 12/0`、`run-net-test 195/0`；Android `.so` 重编后三个 JNI 符号仍在。
-  - **未验证（如实记）**：① 没生成 Capacitor 的 `ios/` 工程（`npx cap add ios` 走 CocoaPods，本机 `pod: command not found`），所以"iOS 上点一下开房"这条路没跑过——接入步骤写在 `ios-shell/README.md`，是 5 分钟手工；② "iOS 前台当房主、Android 能被发现"要两台真机 + N6 的客户端接线，没验；已知桥接点：Rust 组播两端同协议（Android 已验），Bonjour 只服务 Apple 生态内部，字段同名供 N6 映射。
-  - 批次：20261025-2050
-- [x] [N6] 发现层双端联调：Android UDP beacon ↔ iOS Bonjour 互通、房间里显示"世界名 / 人数 / 有无口令 / 延迟"，点一下进房；并处理"自己发自己收"的回声过滤
-  - 做了什么：① 发现报文与 `/healthz.peers` 都带上 `room`，`/healthz` 加 `access-control-allow-origin: *`（**Rust 与 JS 两套服务端同时改**）；② Rust 侧新增 `beacon::from_txt(service_name, txt)`——把 iOS 的 Bonjour TXT 记录转成与组播**同一个结构**（键名两边刻意相同），这条就是"Android 组播 ↔ iOS Bonjour"的互通点；③ 客户端新增 `src/core/net/NearbyRooms.ts`（解析 `peers`、过滤自己、拼 `ws://host:port/room`、探延迟）与 `healthEndpoint()`；④ 联机面板把附近设备并进房间列表：`世界名 · host:port · {n} 人 · 口令 · 12 ms`，点一下直接进房（地址带房间名，口令房先聚焦口令框）。
-  - 为什么：浏览器发不出也收不到 UDP，唯一的耳朵是每台手机上的 Rust 服务端，所以面板读它的 `/healthz.peers`；"点一下进房"必须知道房间名（否则进默认房间，看到的世界跟列表写的不一样），所以报文补 `room`；"自己发自己收"在服务端早已按实例 id 挡住，客户端只需再按"面板里正对着的那台地址"过滤一次（一台手机有多个网卡地址，枚举自身 IP 既不可靠也没必要）。
-  - 验证：`npx vitest run tests/nearby-rooms.test.ts` **12/12**（脏地址/越界端口逐行丢、自己那间被过滤、地址带房间名、延迟探测失败返回 null）；`cargo test` **28/0**（新增 Bonjour TXT → 组播结构的互转断言，含脏字段回落）；`bash run-beacon-smoke.sh` **13/0**（新增"广播带房间名"）；两套服务端行为仍一致（`run-net-test.sh` 与 `npm run test:net` 各 **195/0**）；`npm run check:fast` 全绿（命中 `net` 与 `ui` 两套离线套件）；实测 `curl -i /healthz` 带 `access-control-allow-origin: *`，且 B 的 `peers` 里确实有 A（世界名/种子/端口/房主标记/房间名）。
-  - **未验证（如实记）**：① 浏览器里真的点一下"附近房间"进房——要同时开两个服务端并手动点，本轮只做了类型检查 + 纯函数断言，没有浏览器自动化；② 真机 Android ↔ iOS 互相发现仍未验（要两台设备，且 iOS 侧还要把 Capacitor 工程接起来，见 N5 的未验证项）。
-  - 批次：20261025-2050
-
-## 批次 20261025-2000 · 2026-10-25 · 会话 12afd06a
-
-> 里程碑 MS1 收口：Rust 版联机服务端与 JS 版**行为一致**——`tools/net-test.mjs` 195 条断言
-> 0 失败（`bash rust-server/run-net-test.sh`），`cargo test` 20 / 冒烟 20 也全绿。
-> 这一段是"能不能用同一份黑盒断言验收另一套实现"的答案。
-
-# 队列 · 会话 12afd06a599745d78ae8d88cedd715eb（本段 N3a~N3f）
-
-- [x] [N3a] 与 `tools/net-test.mjs` 对齐·基础设施：`PORT=0` 打印实际端口、`/healthz` + `/rooms` + 404（同端口 HTTP 分流 + CORS）、`ALLOWED_ORIGINS` 来源白名单、`ROOM_PASSWORD`、`join.world`（按房种子）、64KB 载荷上限（超了回 1009 而不是无声断）→ `cargo test` + `bash run-smoke.sh` 全绿，且 net-test 里健康检查/来源/口令/世界四段通过
-  - 做了什么：`main.rs` 先自己读请求头再分流——普通 GET 就地答 `/healthz`（在线人数 / 房间数 / 吞吐速率）、`/rooms`（人数 + `hasHost` + 世界名与种子 + CORS，**不下发口令**）、其余 404；升级请求把已读的字节用 `Prefixed` 流接回 tungstenite 完成握手（所以来源白名单能在**握手之后**回 `error{code:'origin'}` + close 4004，与 JS 版同形）。`PORT=0` 时打印 `local_addr()` 的实际端口。`protocol.rs` 补 `sanitize_world_meta`（种子必须是 32 位整数，脏数据保留房间原有那份）、`ROOM_PASSWORD` 校验、`MAX_PAYLOAD_BYTES`。
-  - 为什么：HTTP 与 WS 共用一个端口是"容器/反代只暴露一个口"的前提；而来源拒绝必须发生在握手之后——在握手阶段拒（tungstenite 的 ErrorResponse）客户端只会看到 HTTP 错误，拿不到 `error.code`，浏览器端无从判断"该不该重连"。
-  - 验证：net-test 的 `[启动服务端]` 四段（healthz 三段 + 404 一段）、`[房间的世界]` 的 `/rooms` 四段、`[房间与来源校验]` 的 origin 两段、`[房间口令]` 两段全绿；`cargo test` 20 通过。
-  - 批次：20261025-2000
-- [x] [N3b] 与 `tools/net-test.mjs` 对齐·玩家生命周期：`GRACE_MS` 断线宽限重连（复用原 id、房主位宽限、到期 `room-closed`/`host-left`/清掉落物）、心跳 ping 5s、`sleep` 跳夜、时间状态机（黎明 0.12 / 按房广播）→ net-test 的"断线重连 / 睡眠跳夜 / 房主掉线"三段通过
-  - 做了什么：`on_close` 把玩家移出在线表但不广播 leave，只记一条 `Grace{id, seq}` 并起计时；`join` 在宽限期内认回原 id（房主位也留给他）。到期才广播 `leave`、清他名下掉落物、释放房主位；房主到期没回来 → 同房其他人各收 `error{code:'host-left'}` + close 4007。心跳按连接起 5s 的 ping 任务，20s 没回 pong 主动断。时间状态机改成 `day_start_ms + start_time_of_day`（默认 0.12），`sleep` 与房主改时间都走"重置起点 + 广播 `snap`"。
-  - 为什么：手机切后台/断 wifi 不会触发 close 语义上的"人走了"；立刻广播 leave 会让队友眼里你"消失又出现"，你名下的掉落物也没人有权删（owner 就是 id）。宽限期条目带 `seq` 是为了修一个 net-test 覆盖不到的坑：连断两次会留下两个计时器，只比 id 的话前一个会把刚连回来的人广播成离开。
-  - 验证：net-test 的 `[断线重连]` 三段、`[睡眠跳夜]` 三段、`[房主掉线：先提示、宽限到期关房]` 三段、`[时间权威]` 三段全绿；`[房主：一房一名]` 里"原房主宽限期过后房主位释放"也绿。
-  - 批次：20261025-2000
-- [x] [N3c] 与 `tools/net-test.mjs` 对齐·消息族：`item-spawn/item-remove/item-take`、`mob-hit`、`player-hit`、`container`(+progress)、`sign`、`frame`、`arrow`、`tnt`、`entity-snap`、`entity-remove`、外观白名单（`look` 形状）→ net-test 的掉落物/命中/PvP/容器/牌子/箭与 TNT/实体快照各段通过
-  - 做了什么：`handlers.rs` 补齐 13 类消息，每条都带形状收口（掉落物数量 1~64、坐标 ±3e7、容器 ≤27 格且序列化 ≤8192 字节、牌子 4 行 × 64 字、展示框 `item=null` 表示空框、箭速 ≤200、伤害夹到 0~50、着火 0~16、`entity-snap` 截到 256 条、`entity-remove` 只留 1~32 字符的键）；`welcome` 补齐 `items/containers/signs/frames`；`item-take` 用单锁做"查还在 → 删 → 回 ok"的原子仲裁；`read_appearance` 按白名单收口（`look` 必须正好 10 个整数才下发）。
-  - 为什么：这些"事件 + 坐标"的消息（箭/TNT/命中）服务端没有世界也没有实体表，能做且只该做两件事——形状收口与转发；一旦它开始判"这只怪该不该在这"，就得同步整个生物注册表，那是客户端的事。掉落物的 owner 一律由服务端填，所以"删别人的掉落物"在协议层就不成立。
-  - 验证：net-test 的 `[掉落物镜像]` 七段、`[掉落物维度]` 三段、`[拾取仲裁]` 五段、`[生物命中]` 四段、`[PvP 转发]` 四段、`[容器同步]` 四段、`[牌子与展示框]` 四段、`[箭与 TNT]` 四段、`[实体快照只由房主推]` 九段、`[命中带全局键]` 四段、`[容器进度只认房主]` 四段、`[玩家外观（皮肤）随 move 转发]` 两段全绿。
-  - 批次：20261025-2000
-- [x] [N3d] 与 `tools/net-test.mjs` 对齐·范围与限频：AOI 裁剪（8 区块 + 同维度，快照与广播两条路）+ 令牌桶（block 200/s·400、container 20/s、chat 5/s）+ 拒收日志限频 → net-test 的"广播范围 / 快照裁剪 / 限频与体积"三段通过
-  - 做了什么：新增 `aoi.rs`（切比雪夫距离按区块算，`>> 4` 与 JS 的负数取整一致）与 `ratelimit.rs`（令牌桶 + "1 秒窗口计数"两套）；`broadcast` 多一个 `Aoi` 参数，坐标类消息（方块/容器/牌子/展示框/TNT/掉落物/命中/箭/实体快照）按"同维度 + 8 区块"过滤，聊天与时间不过滤；`welcome.edits` 同样按玩家位置裁剪；`move` 的转发中心用发起者坐标。
-  - 为什么：不过滤时"出生点改一格"会发给 5000 格外的观察者（人多时是 O(n²) 的纯浪费）；而聊天是文字、时间全局，过滤它们只会让远处的人变聋/时间错乱。方块用令牌桶**按条数**计费（红石连锁一次几十格是正常的，持续每帧几百格不是），比固定窗口少了"边界双倍流量"的漏洞。
-  - 验证：net-test 的 `[广播范围]` 四段、`[快照裁剪]` 两段、`[限频与体积]` 四段（含"第一批 256 格放行、紧接着的第二批被限"）、以及 `[脏消息校验]` 里"隔空改容器被拒"全绿；`ratelimit`/`aoi` 单测 5 条通过。
-  - 批次：20261025-2000
-- [x] [N3e] 与 `tools/net-test.mjs` 对齐·存档落盘：`DATA_DIR/world.json` 原子写（tmp+rename）+ 30s 定时 + SIGTERM 补存 + 损坏备份 `world.json.broken-*`，重启后 edits/containers/signs/frames/时间/天气都在 → net-test 的"持久化"两段通过
-  - 做了什么：新增 `store.rs`（原子写 + 损坏改名备份 + 读档版本校验）；`State::world_snapshot` 把 edits/containers/signs/frames 按 `[x,y,z,…,room]` 摊平（房间名从 key 前缀取回），`State::apply_snapshot` 反向灌回并走 `sanitize_room`/`sanitize_dimension` 收口；时间用"存档那一刻"当新起点（停机那段不走），天气接着存档那档跑。SIGINT/SIGTERM 走"补存一次再 exit(0)"。
-  - 为什么：不做落盘时，重启后箱子里东西对新玩家完全不可见（只有打开过它的老玩家本地还记得），队友搭的东西也全没了；损坏时**备份而不是删掉**，是因为里面可能还有人工能救的部分，而"删掉 + 下轮保存"会让现场彻底消失。
-  - 验证：net-test 的 `[持久化：重启后快照仍在]` 四段（真的 SIGTERM 杀一次再起，断言方块与容器都还在）、`[持久化：损坏快照被备份而不是覆盖]` 四段（先写坏文件，断言 `world.json.broken-*` 存在且从空世界开始）全绿。
-  - 批次：20261025-2000
-- [x] [N3f] 让 net-test 能指向 Rust 服务端并全量跑绿：`tools/net-test.mjs` 加 `NET_SERVER_BIN`/`NET_SERVER_ARGS`（默认仍是 `node server/index.mjs`，JS 路径行为不变）+ `rust-server/run-net-test.sh` → `bash rust-server/run-net-test.sh` 0 失败
-  - 做了什么：`tools/net-test.mjs` 的 `spawn('node', ['server/index.mjs'])` 抽成 `SERVER_BIN`/`SERVER_ARGS`（默认值保持原样；换了二进制又没给参数时按"那个程序自己就是服务端"处理）；新增 `rust-server/run-net-test.sh`（build → 用 Rust 二进制跑同一套断言）。断言一条未改。
-  - 为什么：Rust 版的对齐判据必须**就是**这套 1871 行黑盒断言——复制一份会立刻漂，改断言更是把契约改没了。把"起哪个进程"做成环境变量，是让两套实现共用同一份验收脚本的最小改动。
-  - 验证：`bash rust-server/run-net-test.sh` → **195 通过 / 0 失败**（连跑 3 次都全绿，排除偶发）；`npm run test:net`（JS 路径）同样 195/0；把 `NET_SERVER_BIN` 指到 `/usr/bin/false` 时启动段立刻红，证明变量确实生效。
-  - 批次：20261025-2000
-
-## 批次 20261025-1946 · 2026-10-25 · 会话 abbdd915
-
-> Rust 版联机服务端第一阶段：协议层 + 核心 10 类消息跑通（本段在 20261025-2000 的
-> 里程碑 MS1 里一起收口，因为那时它还没走过收尾）。
-
-# 队列 · 会话 abbdd9159d0b4bf084c8a8a9fdcf439b（本段 N1~N2）
-
-- [x] [N1] Rust 工程 + 协议层（常量 / 清洗 / 校验，逐条对齐 `server/protocol.mjs`）→ `cargo test` 9 条全绿
-  - 做了什么：新建 `rust-server/`（tokio + tokio-tungstenite + serde）；`protocol.rs` 落协议版本 2、关闭码 4001~4008、`WORLD_MIN_Y/-MAX`、`MAX_BLOCK_ID/STATE`、`MAX_EDIT_DISTANCE`、名字清洗（去控制字符与 `<>`、压缩空白、按**字符**截 16、空则"玩家"）、房间名回落、clientId 形状、方块改动的 y/id/state/距离校验（**房主豁免距离闸**）、`scoped_key`。
-  - 为什么：这些清洗规则是"两个人进了两个房""名字被切成半个 emoji""房主代发的远处改动被丢"这三类老 bug 的防线，重写时**必须逐条等价**；用单测钉住比人眼比对可靠。
-  - 验证：`cargo test` 9 通过 / 0 失败（含 emoji 不被切开、`<b>坏</b>` 的斜杠保留、房主豁免距离闸、非房主仍被挡）。
-  - 批次：20261025-1946
-- [x] [N2] 核心消息链路跑通（join / welcome / move+player / block+blocks / edit-request / chat / room-config / leave / time 广播）→ `bash run-smoke.sh` 20 条全绿
-  - 做了什么：`state.rs` 的 Hub（玩家表 / 出站队列 / 房主表 / 方块增量表 / 时间与天气）；`main.rs` 的连接任务与消息分发；冒烟脚本 `smoke.mjs` 用 Node 23 内置 `WebSocket`（不需要 `npm ci`），`run-smoke.sh` 起临时服务端（25199）跑完自动关。
-  - 为什么：先用"核心 21 类里的 10 类"验证架构（读写分离 + Hub 锁边界 + 房主语义），再决定是否为剩余 11 类继续投入；这一步能暴露 Rust 侧独有的两类坑（见下）。
-  - 验证：`bash run-smoke.sh` **20 通过 / 0 失败**——覆盖 welcome 字段、房主/从属身份、move 转发与队伍、方块 `authority` 重标、从属直发被拒（not-host）、edit-request 转发、同房重名被拒（duplicate-name）、房主改天气、从属改配置被拒、聊天不回给自己、断线 leave 带 id。
-  - 踩到并修掉的：① **tokio Mutex 不可重入**——持 `players` 锁时调 `player_broadcast_of`（内部再锁一次）会永久死锁，锁边界收进块内；② **拒绝帧被丢**——读循环 break 后立即 abort 写任务，客户端收不到 `error`+"close"，表现是"点加入没反应"，改成先 `drop(tx)` 排空再收尾。
-  - 批次：20261025-1946
-
-## 批次 20261026-2050 · 2026-10-26 · 会话 12c62cf0
-
-> 用户 2026-10-26：按两张设计图落地「加入房间 / 开房」——默认端口 8887（只读后缀）、密码错误归入致命、昵称必填、两处共用表单、选择服务器带选中态与确定、房间显示在线/容量、客户端能力位控制「允许其它人建房」。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2050
-
-- [x] [L9] 打通密码错误码：`src/core/net/Protocol.ts` 加 `'password'` 并归入 `isFatalProtocolError`；错误码→文案抽成 `src/core/net/NetErrorText.ts`，`src/main.ts` 的 `onError` 改用它；六个语言包补 `say.net.password`，zh 文案「口令」统一成「密码」
-  - 做了什么：`ProtocolErrorCode` 与 `isFatalProtocolError` 补 `password`；新增 `core/net/NetErrorText.ts`（`netErrorText(code)`，查不到回空串让调用方回退服务端原话）；`main.ts` 的嵌套三元换成一行查表；zh/en/de/fr/pt/ru 同步加键；`zh/menu.ts` 的 `world.roomPassword` / `mp.password` 改成「密码」。
-  - 为什么：服务端在 join 那道闸就会回 `code:'password'`，漏在致命名单外会让填错密码的玩家无限重连（每 3 秒撞一次），且文案是服务端那句中文。映射抽出来是为了下一步面板错误行复用同一份口径。
-  - 验证：`npm run check:fast` 全绿（typecheck + audit:i18n + 单测 + 改动命中的 161 套离线测试全通过）。两处 ui-test 断言因映射搬家而改读新文件（断言本身没放松）。
-  - 批次：20261026-2050
-- [x] [L9] 默认端口改 8887：`server/protocol.mjs`、`src/core/net/ServerUrl.ts`、`src/core/net/ServerDiscovery.ts`、`Dockerfile`、`docs/NET-PROTOCOL.md`、`tools/net-peer.mjs`、`tools/ui-test.ts` + 5 个 test 文件的期望值
-  - 做了什么：全库 `25187 → 8887`（19 个文件，含三处常量、Dockerfile 的 ENV/EXPOSE/健康检查、协议文档、peer 工具、5 个测试的期望值）；`ServerUrl.ts` 与 `protocol.mjs` 的"为什么是这个端口"注释从"挑个好记的/避开常见值"改成产品口径（安卓/iOS 客户端要内建服务器，端口必须与客户端一致，撞车用 `PORT` 覆盖）。
-  - 为什么：用户 2026-10-26 拍板默认端口就是 8887；同一个数字在三处各写一份，漏改一处就会出现"扫描走 A、连接走 B"。
-  - 验证：`npm run check:fast` 全绿；`npm run test:net` **292 通过 / 0 失败**。
-  - 批次：20261026-2050
-- [x] [L9] 抽公共表单 `src/ui/RoomForm.ts`（地址 / 房间 / 密码 / 昵称 + ▾选择服务器 + 错误行 + 校验），`MultiplayerScreen.ts` 与 `WorldScreen.openHostWorld` 都改用它（纯重构，行为不变）
-  - 做了什么：新增 `ui/RoomForm.ts`（构造时建 4 个输入框 + `splitAddress()` + `read()` + `nameIsBlank()` + `focus()` + `dispose()`，`portLabel`/`pickButton` 由宿主取用排版）；昵称清洗搬到 `core/net/PlayerName.ts`（`cleanPlayerName` 不兜底 / `sanitizeMultiplayerName` 兜底）；`MultiplayerScreen` 的 `readForm()`/`submit()`/`splitAddress()` 全部改委托，`WorldScreen` 删掉自己那套输入框；`MultiplayerScreen` 保留 `MULTIPLAYER_NAME_MAX`/`sanitizeMultiplayerName` 的旧导出以免打断调用点。
-  - 为什么：两个入口收集的是同一组字段与清洗规则，各写一遍的下场就是"加昵称那次只改了一边"。
-  - 验证：`npm run check:fast` 全绿；`test:ui` **1199 通过 / 0 失败**（14 条源码断言随实现位置迁移，语义未放松）。
-  - 批次：20261026-2050
-- [x] [L9] 昵称必填：去掉 UI 层「空 → 玩家」兜底，提交前拦住并提示；开房对话框补昵称字段；标题保留「开房：{world}」
-  - 做了什么：`RoomForm.read()` 的昵称改用 `cleanPlayerName`（空串就是没填）；加入面板与开房对话框提交前都判 `nameIsBlank()` 并聚焦昵称框；开房对话框加昵称行（默认值取联机面板记住的那个）；`WorldScreen.onHostWorld` 增加第 5 个参数 `name`，经 `pendingHostRoom` 传到 `connectOnline`；六语言补 `mp.error.name`。
-  - 为什么：空昵称被兜底成「玩家」，而房间里只要已有一个人叫「玩家」，第二个人就会被 `duplicate-name` 拒——先连上再被踢，提示还落在聊天栏而不是表单。开房那边以前根本没昵称框，用的是面板里悄悄记住的值。
-  - 验证：`npm run check:fast` 全绿（`test:ui` 同步把 5 条受签名变化影响的断言改到新结构）。
-  - 批次：20261026-2050
-- [x] [L9] 错误分类与已连接态：错误行按 `unreachable / https-blocked / host-taken / duplicate-name / password` 映射人话且致命不回重连；`join` 模式顶部显示「已连接 · 房主/从属」并保留断开按钮
-  - 做了什么：`NetClient` 收到 `error` 时把 `status` 也换成 `netErrorText(code)`（这句会随 `onStatus(false, …)` 进面板错误行），查不到才回退服务端原话；`MultiplayerScreen` 新增 `mode` + `syncModeVisibility()`，join 模式的「断开」按 `multiplayerButtons(state).disconnect` 同一判据露出；补两条 ui-test 断言（死面板 + 文案映射）。
-  - 为什么：面板错误行以前显示服务端那句中文（非中文玩家看不懂）；join 模式把「断开」藏死，联机中打开「加入房间」就是一个全灰的死界面——加入被禁用、断开看不见。
-  - 验证：`npm run check:fast` 全绿；`test:ui` **1201 通过 / 0 失败**。
-  - 批次：20261026-2050
-- [x] [L9] `ServerPicker` 补选中态 + 「取消 / 确定」（确定 = 回填并关闭，未选中禁用）；房间列表改成展开某台服务器再懒加载 `/rooms`；「网速」文案改「延迟 {ms}ms」
-  - 做了什么：面板加 `selected` + 底部「取消 / 确定」，点行只 `select()` 高亮、确定才 `pick()`；`open()` 清空上次选中；未选中时确定禁用；选中服务器后 `RoomForm.onPick` 回调里自动 `refreshRooms()`（把该机器的房间列表拉进右栏）；`server.rtt` 文案改「延迟 {ms}ms」，六语言补 `server.confirm`；CSS 加 `.server-picker-item.selected` 与 `.server-picker-actions`。
-  - 为什么：扫描结果是边扫边冒出来的，点一下就关面板在手机上极易误触选错机器；而"选服务器"的动机本来就是想看这台有哪些房，以前还要再按一次「找房间」。
-  - 取舍：**没有做"服务器下嵌套房间列表"**（设计图那版）——右栏已经有同功能的房间列表，弹窗里再嵌套要对每台扫到的服务器各发一次 `/rooms`（扫 254 个地址就是几百个跨源请求），而且手机横屏高度撑不住三层嵌套。改为"选中即拉列表"，同样少一步。
-  - 验证：`npm run check:fast` 全绿（补 1 条选中态断言）。
-  - 批次：20261026-2050
-- [x] [L9] 房间人数显示 `在线/容量`：服务端 `/rooms` 下发 `maxPlayers`（默认 10），`src/core/net/RoomList.ts` 清洗该字段，列表行显示 `4/10`
-  - 做了什么：`server/index.mjs` 新增 `MAX_PLAYERS`（`MAX_PLAYERS` 环境变量，脏值/0/负数回退 10），`/rooms` 响应带 `maxPlayers`；`RoomList` 加 `DEFAULT_ROOM_CAPACITY` 与同名清洗字段（老服务端不带就退回默认）；列表行改用 `mp.roomsPlayersOf`（六语言）；`room-list` 用例补两条（带容量 / 脏数据兜底）。
-  - 为什么：用户说 4/10 指的是角色数、容量先给个默认值。**它只是显示，不是准入限制**——这一局的模拟跑在房主浏览器里，能扛多少取决于他的设备，服务端拍一个数字挡人是错的。
-  - 验证：`npm run check:fast` 全绿（**601** 单测）；`npm run test:net` **292 通过 / 0 失败**。
-  - 批次：20261026-2050
-- [x] [L9] 能力位 `localServer`：新增客户端能力判定，仅支持建服务器的客户端才显示「允许其它人建房」开关（本批只做显示条件与语义，不做本地服务器实现）
-  - 做了什么：新增 `core/net/ClientCapabilities.ts`（`localServer` 恒 false，仓库里只有 web 版）；`ServerPicker` 在该位为 true 时才构造「本机」区（是/否两个按钮，状态存 `mc.mp.allowHosting`，默认允许，`aria-pressed` 高亮）；`RoomForm` 与两个宿主透传能力位；六语言补 `server.local` / `server.allowHosting` / `misc.yes` / `misc.no`；CSS 加 `.mp-mini[aria-pressed="true"]`。
-  - 为什么：用户 2026-10-26 说明这个开关是**控制客户端建服务器**的，不支持的客户端（web）不该出现。客户端无权改服务端策略，做成能点但无效的开关只会骗玩家；真值来源收成一个位，原生客户端改 true 即可，UI 不用动。
-  - 验证：`npm run check:fast` 全绿（补 1 条"web 版整块不渲染"断言）。
-  - 批次：20261026-2050
-- [x] [L9] 端口只读后缀：`RoomForm` 的地址行右侧显示 `: 8887`（取 `DEFAULT_NET_PORT`，不可编辑），输入框 placeholder 改成「只填 IP 或域名」
-  - 做了什么：`RoomForm` 新增 `portLabel`（`textContent = \`:${DEFAULT_NET_PORT}\``，title 是 `mp.portHint`）；加入面板把它排在地址框与 ▾ 之间，开房对话框把 `makeRow` 的 `extra` 扩成支持数组（端口 + ▾ 两个尾巴）；CSS 加 `.mp-port`；六语言补 `mp.portHint`。
-  - 为什么：用户要求只读显示 8887。端口显出来便于跟队友核对"连的是哪台"，但不给编辑——两端各填一个数字必然漂。
-  - 验证：`npm run check:fast` 全绿（补 1 条"后缀取常量而非写死数字"断言）。
-  - 批次：20261026-2050
-- [x] [L9] 文档与台账收口：`docs/NET-PROTOCOL.md` 的端口与 `/rooms` 字段、`TASKS.md` 落 L9、`OVERVIEW.md` 补联机界面一条
-  - 做了什么：`NET-PROTOCOL.md` 的 `/rooms` 行补 `maxPlayers` 与"不是准入限制"；`TASKS.md` 的 L9 从计划补成落地细节（①~⑦ + 验证口径）并置 `[x]`；`OVERVIEW.md` 联机体验条目追加一句摘要，同时压缩几处冗余解释把字节压回 28KB 上限内；`HANDOFF.md` 进度 296→297；根 `README.md` 路线图与 `TASKS.md` 差异台账由 `audit:tasks` / `audit:diffs` 重写。
-  - 为什么：收尾第③步要求每条在 TASKS 落地；锚点文档里的数字只能由脚本生成，手抄必漂（这次 HANDOFF 就被审计当场抓住）。
-  - 验证：`npm run check` **exit=0**（typecheck + audit:i18n + 181 套离线测试 + 601 单测 + 三张台账 + docs 体量 + 浏览器门禁自检）。
-  - 批次：20261026-2050
-
----
-
-## 批次 20261026-2131 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26 复核："服务器上所有变更都写回房主本地"这条之前漏了**时间与天气**（只有天数跟房主）。
-> 定稿：时间/天数/天气**全部以房主本地为准**；旧 @mp: 存档不做迁移；清场仍等宽限期结束。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2131
-
-- [x] [L8] 时间/天数/天气也以房主本地为准：客户端 `join` 带上 `timeOfDay` / `weather`，服务端开房时三个量一起采纳 → `npm run check:fast`
-  - 做了什么：`NetClient` 新增 `localTimeOfDay` / `localWeather`（与 `localDay` 同组，只有 `wantsHost` 才带）；`App.connect()` 在连之前把 `this.timeOfDay` 与 `this.weather.current` 填进去。协议 `join` 从此带三个可选字段。
-  - 为什么：房主离线期间时钟/天气在他存档里走，重开房若服务端不接住，他一进来就被拽到"服务端此刻"——看起来什么都没发生，但那不是他的世界了。
-  - 验证：`npm run check:fast` 全绿（typecheck + 593 单测）。
-- [x] [L8] 采纳后按房广播对齐（`time{snap}` / `weather`），宽限期内重连的房主不覆盖 → `npm run test:net`
-  - 做了什么：服务端 `join` 的 `wantsHost` 分支把 `freshRoom` 判据统一成 `sameHostReturning`（与清场同一个谓词），三个量一次采纳：`startDay` / `startTimeOfDay`（脏值保留当前）/ `weather`（`isWeatherKind` 过滤），最后才重置 `serverStartMs`；随后对**所有在用的房间**广播 `time{snap:true}` 与 `weather`。
-  - 为什么：`snap` 是"立刻对齐"——不带的要按 4 倍速收敛，房主会看到太阳爬一段；广播到所有房间是因为时钟本来就全服共享，只发本房会让别的房停在旧值直到下次切换。重连不采纳是因为那时客户端带的是过期值（他断线前那一刻），采纳会把房间拽回去。
-  - 验证：`npm run test:net` **252 → 260 通过 / 0 失败**（新增 8 条：房主带 `day=12` / `timeOfDay=0.75` / `weather=thunder` → 自己的 welcome 三个都对上 → 后来者的 welcome 也对上 → 宽限期内带 `day=3` / `0.05` / `clear` 重连，三个都**不**覆盖）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `join` 行补三个可选字段与"谁说了算" + `TASKS.md` 的 L8 补一句 → `npm run check`
-  - 做了什么：`join` 行的字段列加 `day?/timeOfDay?/weather?`，校验列加第 ⑪ 条（三样各自兜底脏值、**只有房主带得动**、宽限期内重连不采纳），备注列写清"采纳后对所有在用房间广播"；§6 新增"时钟与天气"一行（全服共享 + 代价）；`TASKS.md` 的 L8 补第 ⑦ 点。
-  - 为什么：协议表是两端共同的契约，字段加在代码里而表里没有，下次照表实现就会漏。全文一致地把"时间也以房主为准"写进 §2 之外的地方。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/ui-test.ts` 有条结构断言钉着旧报文 `...(this.wantsHost ? { day: this.localDay } : {})`，改报文体后它当场报错——改成断言三个字段，并补两条（服务端采纳、重连不覆盖）。`test:ui` **1197 通过 / 0 失败**。
-
-## 批次 20261026-2242 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26：① 房主**主动退出**就立刻把访客全部踢出；② 服务器上那个房间还在、
-> 但房主不在线时，访客不许进来。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2242
-
-- [x] [L8] 房主**主动退出**（`bye`）→ 当场关房并踢掉所有访客（不等 30 秒宽限期）：`server/index.mjs` 的 `bye` 分支 + 新增 `closeRoomNow()`；客户端按 `graceMs === 0` 说"房主已退出，房间已关闭" → `npm run test:net`
-  - 做了什么：新增 `closeRoomNow(host)`：删 `hosts` → 广播 `room-closed{reason:'host-out', graceMs:0}` → 对同房其他人逐个 `reject('host-left', 4007)` → `clearRoom`，日志带"踢出 N 人 / 丢弃 N 条缓存"；`bye` 分支先判"我是不是本房房主"，是就走这条路（并置 `farewell`，避免宽限期到点再广播一次 `leave`）；客户端 `onRoomClosing` 按 `graceMs > 0 ? 倒计时 : net.roomClosed` 分两种文案。
-  - 为什么：主动退出是玩家说"我不玩了"，没有留重连窗口的必要，房间里剩下的也不是"暂时没人模拟"而是"这一局结束了"。继续挂着只会让访客对着一个不推进的世界发呆。**注意**：页面卸载（刷新/关标签）也会发 `bye`，所以房主刷新页面同样会关房——这是"主动退出"的应有语义，数据在房主本地，重开即可。
-  - 验证：`npm run test:net` **269 → 278 通过 / 0 失败**（新增 9 条：两个访客同时建房 → 房主 `bye` → 两人都立刻收到 `host-left` 且连接关闭 → 用时 < 900ms → 同名房可**马上**重开 → 新房主的 welcome 里没有上一局那格方块（缓存当场清了）→ 房主掉线后访客被拒 → 宽限期过后房主位释放）。
-- [x] [L8] 房主不在线时访客进不来：`join` 里判"有房主登记但人不在 `players`" → `error{code:'host-offline'}` + 关闭 4009；探房（`RoomProbe`）把这句翻成人话 → `npm run test:net`
-  - 做了什么：服务端新增关闭码 `CLOSE_HOST_OFFLINE = 4009` 与 `join` 里的检查（`!wantsHost && host && !players.has(host.id)`）；`Protocol.ts` 把 `host-offline` 加进错误码联合与**致命名单**（自动重连只会空转：30 秒内一直被同一句挡住，之后房间就没了）；`main.ts` 的 `onError` 按 code 翻成 `say.net.hostOffline`（六语言补齐）；`RoomProbe` 的 `RoomProbeResult` 增 `error?`，`joinRoomFromMenu` 遇到 `host-offline` 说"房主暂时不在房间"而不是"连不上服务器"。
-  - 为什么：房里登记着房主、但人不在线时，访客进来看到的是一个**不推进的世界**（怪物不动、红石不亮），而界面一切正常——这正是最难查的坏状态。探房那句必须区分开，否则会把玩家送去改 IP/换端口，方向完全错了。
-  - 验证：`npm run test:net` 含"房主不在线时访客被拒（host-offline）+ 连接关闭"；`npm run test:ui` **1198 通过 / 0 失败**（原有 1 条钉着旧文案的结构断言改成新写法，另加一条"graceMs=0 说房间已关闭"）；`npm run audit:i18n` 通过（2972 键 × 6 语言）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `bye` / `room-closed` / 错误码表补这三处 + `TASKS.md` 的 L8 补两点 → `npm run check`
-  - 做了什么：§4 上行表**新增 `bye` 行**（原来表里根本没有这条消息，只在代码里），并顺手修正 `sleep` 的说明（现在只拨本房）；§5 下行表 `room-closed` 补 `host-out` 与 `graceMs: 0`；§5.1 错误码表补 `host-offline` / 4009；§3 生命周期加"房主的两条额外规则"（主动退出即关房 + 房主不在线访客进不来）；`TASKS.md` 的 L8 补第 ⑩⑪ 点。
-  - 为什么：`bye` 这条消息在协议表里缺席很久了（代码里一直有），这次它变成"能关一整间房"的关键消息，必须进表；两条新规则都是可被误判的行为（"为什么我一刷新队友就被踢了"、"为什么我进不去"），文档要能回答。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）；`node .continue/hooks/check.mjs docs` 通过。
-
-## 批次 20261026-2150 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26 复核后追加两条：① 掉落物也是世界的一部分，房主进房要能把它带进来；
-> ② 时钟/天气改成**每房一套**（两间房同时开时互不影响）。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2150
-
-- [x] [L8] 掉落物进房重播要能一次吐完：服务端 `item-spawn` 改成令牌桶（30/s、突发 400）+ 单测断言突发额度 → `npm run test:net`
-  - 做了什么：`server/ratelimit.mjs` 的 `RATE_LIMITS` 增 `item: {perSecond:30, capacity:400}`，`createBuckets()` 加 `item` 桶；`item-spawn` 分支把手写的"1 秒窗口 + 计数"换成 `player.buckets.item.take()`，删掉 `ITEM_RATE_LIMIT` / `itemWindow` / `itemCount` 三个已无用的东西。
-  - 为什么：房主进房间时客户端本来就会把世界里已有的掉落物重播一遍（`syncNetItems` 每 100ms 扫实体表，`localNetItems` 断线时被清空），机制一直在，卡点只有服务端的 30/秒——一个住过的世界地上可能上百堆，超出的被丢掉**且不重试**，队友那边就凭空少一地东西。所以修法不是新加一条上行协议，而是给这个已有通道一个够用的突发额度。
-  - 验证：`tests/net-ratelimit.test.ts` 新增 1 条（一次取满 capacity 通过、连取两次失败、1 秒后恢复 30/s）；`npm run test:net` 新增"100 堆一次性上行全部收下"（`welcome.items` 恰好 100）。
-- [x] [L8] 每房一套时钟：服务端 `room → clock`（时间/天数/天气），`sleep` 与 `room-config` 只动本房，`clearRoom` 删掉 → `npm run test:net`
-  - 做了什么：`createClock()` + `defaultClock` + `clocks: Map<room, clock>` + `clockOf(room)`；`currentDay/currentTimeOfDay` 改成收一个 clock；`clockTimer`/`weatherTimer` 按房各推一份（兜底时钟给没有房主的房）；`snapshotFor`、`room-config`、`sleep` 全部改成本房那份；`worldSnapshot`/读档只回填 `defaultClock`；`clearRoom` 增 `clocks.delete(room)`。
-  - 为什么：以前是全服一套，房主 B 在另一个房开房会把握着 A 那个房间的太阳一起拨过去；`sleep` 更狠——遍历所有房间，甲房有人睡觉会把乙房的天翻过去。房间本来就是各是各的世界，时钟没有共享的理由。
-  - 验证：`npm run test:net` **260 → 269 通过 / 0 失败**（新增 9 条：甲房 0.2/第 20 天、乙房 0.85/雨、天数与天气互不干扰、甲房睡满跳到黎明且天+1、乙房完全不受影响；另含掉落物 1 条）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 记「每房一套时钟」与掉落物突发额度 + `TASKS.md` 的 L8 补两点 → `npm run check`
-  - 做了什么：`join` 行第 ⑪ 条的备注从"对所有在用房间广播"改成"只对**本房**广播"；§6 的「时钟与天气」整行改写成每房一套（`room → clock` + `defaultClock` 落盘 + `sleep`/`room-config` 只动本房）；§6 的「掉落物广播」改成令牌桶 30/s + 突发 400 并写明理由；`TASKS.md` 的 L8 补第 ⑧（每房时钟）与第 ⑨（掉落物重播 + 纠正"两端都不落盘"的错说法）两点。
-  - 为什么：协议表是两端共同的契约；这次改的是"谁说了算"的边界（共享 → 每房），不写进表里下次照旧实现会再踩一遍。掉落物那条顺手把上一轮我说错的话在台账里更正，避免以后被人当成事实引用。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了 4 条 `tools/ui-test.ts` 的结构断言（它们钉着旧的 `currentDay()` / `startTimeOfDay = …` 字面串）——改成按新结构断言（`currentDay(clockOf(player.room))` / `clock.startTimeOfDay` / `clocks.set(room, clock)` / `const clock = createClock()`），`test:ui` **1197 通过 / 0 失败**。
-
-## 批次 20261026-2259 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26 报的五件事：① 对方形象每隔几秒闪一次；② 队友死了对方还站着；
-> ③ 名字要像网游那样一直看得到、正面朝向；④ 生存模式瞄准队友要看到生命/饥饿；
-> ⑤ 野怪血条小一点细一点。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2259
-
-- [x] [L8] 修"对方形象每隔几秒闪一次"：`move` 每条带全量外观 + 服务端 `player.appearance` 改成合并 + 接收端"没带就不动" → `npm run test:net`
-  - 做了什么：`NetClient.tick()` 不再按 `lookDue` 节流，`held/offhand/armor/look/sneak/swing/hurt/fire/ride/sleep/dead/hp/food` **每条都带**（0/false 也带）；`server/index.mjs` 的 `readAppearance()` 改成"只返回消息里真的带了的键"，`move` 分支用 `player.appearance = { ...player.appearance, ...readAppearance(message) }` 合并；`RemoteAppearance.update()` 每个字段 `!== undefined` 才覆盖；删掉 `LOOK_RESEND_MS`/`lastSentLookKey`/`lastLookSentAt`。
-  - 为什么：根因是"整份覆盖 + 客户端只在变化/每 2 秒带 look"——不带 look 的那 99% 消息把服务端的 appearance 清成空，对端回退到"按昵称派生"的外观，2 秒后再纠正回来，周期正好 2 秒。三层都改是为了老服务端/老客户端混着用也不闪。
-  - 验证：`npm run test:net` **278 → 286 通过 / 0 失败**（新增 8 条：带 look/held/hp/food 转发、**不带 look 的 move 不清空皮肤**、不带 held 不清空手持、dead 1/0 都能覆盖、死亡时 hp=0 能表达、hp/food 夹到 0~20）；两条旧断言按新语义改写（"非正 id 被丢掉" → "规整成 0"、"长度不足的 look 不下发" → "不被采纳、保持上一次"）；`tests/net-client-look.test.ts` 重写 4 条为"每条都带"；`npm run check:fast` 595 单测。
-- [x] [L8] 队友死亡：上行 `dead` + 对端当场收掉模型 + 消息栏说一句 → `npm run test:net`
-  - 做了什么：`localAppearance()` 补 `dead/hp/food/fire`；服务端白名单加 `dead/hp/food`（`clampPoints` 夹 0~20）；`updateRemotePlayers()` 的可见性改成 `visible && !dead`；`updateNameTags()` 跳过死者；`onNetPlayer` 在 `dead` 的**边沿**推一句 `say.net.playerDied`（六语言新增）。
-  - 为什么：以前死亡没有任何上行，服务端只看到"他在原位不动"，尸体就一直站着，直到复活后位置变了才更新；模型凭空消失也得有一句解释。
-  - 验证：`npm run test:net` 见上（dead 的两条）；`npm run audit:i18n` 2973 键 × 6 语言通过。
-- [x] [L8] 队友名字牌：范围 64 → **视距尽头 128 格**、去掉距离渐隐 → `npm run check:fast`
-  - 做了什么：`REMOTE_NAME_TAG_RANGE` 64 → 128；删掉 `REMOTE_NAME_TAG_FADE_FROM` 与 `remoteNameTagOpacity()`，`updateNameTags` 固定传 1；`tools/nametag-test.ts` 的四条渐隐断言换成两条范围断言；`tools/render-test.ts` 无关。
-  - 为什么：用户要的是"像常见网游那样，视野里就一直能看到"——64 格 + 32 格起变淡 + 固定 16 个牌子池，观感就是"名字时有时无"。
-  - 验证：`npm run check:fast` 全绿（`nametag` 套件通过）。
-- [x] [L8] 生存模式下准星锁定队友 → 显示一红（生命）一黄（饥饿）两条细条 → `npm run check:fast`
-  - 做了什么：`index.html` 加 `#target-vitals`（96×两条 3px，在准星与冷却条下方）+ 样式；`main.ts` 新增 `aimRemotePlayer()`（12 格、8° 锥、跳过死者/他维度）与 `updateTargetVitals()`（只在 `gameMode === 'survival' && !uiOpen && !dead` 且对方报过血量时显示，宽度按 `hp/20`、`food/20`），每帧跟着 `updateNameTags()` 调。
-  - 为什么：`player` 消息以前完全不带血量/饥饿，所以这次先把数据补上（随每条 `move` 发 0~20 的整数），再画 UI；"对方没报过就不画"是为了不显示一根恒满的假条。
-  - 验证：`npm run check:fast` 全绿（typecheck + 595 单测）；`npm run test:ui` 1199 通过。
-- [x] [L8] 野怪血条变小变细 → `npm run check:fast`（`render` 套件）
-  - 做了什么：`MobHealthBar` 世界宽度 `1.1~2.4` → **`0.7~1.4`**、画布 `256×40` → **`256×16`**（条 24px → 12px、描边 2 → 1、内边距 3 → 2）、离头顶 `0.12` → `0.06`；`tools/render-test.ts` 三条尺寸断言按新值改写。
-  - 为什么：画布原来 40px 高、条只占 24px（60%），世界高度被画布比例稀释，看起来既粗又占地；画布贴紧条（12/16 = 75%）之后同样是"细条"但分辨率没浪费。
-  - 验证：`npm run check:fast` 全绿（`render` 套件通过）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `move` 行补 `dead/hp/food` 与"外观每条全量、服务端合并" + `TASKS.md` 的 L8 补一节 → `npm run check`
-  - 做了什么：§4 的 `move` 行字段补 `dead / hp / food`，备注写清"每条带全量 + 服务端合并"以及闪烁的来龙去脉与 2 秒周期；§7 的 `player` 行补"没带的字段保持原值""dead 为真时模型与名字牌一起收掉并提示"；`TASKS.md` 的 L8 补第 ⑫ 点（观感四件套）。
-  - 为什么：这几条都是"看起来像 bug 的行为其实是约定"（外观必须每条全量、`dead` 会随每条 move 重复到达），不写进协议表下次又会按"变化才发"改回去。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。
-
-## 批次 20261027-0035 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27：上一批"没有按视觉实现"——端口要**可编辑**、局域网要按**自己 IP 段去掉最后一位自动检索**、
-> 「选择」要以**浮窗**形式弹出（选择房间 / 选择服务器），要求完全照设计图。
+> 用户：开房界面复用加入房间，只加「选择本机」；另外扫描坏了，先分析原因
 
 # 队列 · 会话 12c62cf015444720a2a57c257f80c045
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-0035
+> 批次：20261027-2600
 
-- [x] [L10] 端口改成可编辑：`src/core/net/ServerUrl.ts` + `src/ui/RoomForm.ts` → `npm run check:fast`
-  - 做了什么：新增 `parsePort` / `withPort` / `portOf` / `displayServerHost`；`RoomForm` 的 `portLabel`（只读后缀）换成 `portInput`（`mp-port-input`，默认 8887），`read()` 用 `withPort(normalized, port)` 拼回 URL；存储拆成 `mc.mp.url` + `mc.mp.port`；`splitAddress()` 把老地址里的端口提到端口框、地址框只留主机名。
-  - 为什么：设计图是 `服务器 [IP] : [8887] [选择]`，端口是独立可改的一格；`wss://` 那一路的端口归反代 443，`withPort` 只动 `ws://`，否则会把公网地址改坏。
-  - 验证：`tests/net-server-url.test.ts` 新增 11 条（parsePort 边界 / withPort 保留 query / wss 不动 / portOf / displayServerHost），全套 **43 通过**；`npm run check:fast` 全绿。
-  - 批次：20261027-0035
-- [x] [L10] 「选择」改成贴按钮的浮窗：`src/ui/ServerPicker.ts` 重写 → `npm run check:fast`
-  - 做了什么：`open(anchor)` 用 `getBoundingClientRect()` 算坐标（右边缘对齐按钮、下方优先、放不下翻到上方、横向夹在视口内）；标题随 `mode` 变「选择房间」/「选择服务器(8887)」，副标题「所有端口 8887 的房间/服务器」；正文 `server-picker-body` 自己滚，标题与底部按钮固定；外层容器改成透明（只负责接"点外面关闭"）。
-  - 为什么：以前是全屏遮罩 + 居中大卡片，不是设计图要的"浮窗"；而且列表一长「确定」会被顶出屏幕。
-  - 验证：`npm run check:fast` 全绿；dev server 截图（`.tmp/shots/picker.png`）与设计图对齐：标题居中、副标题在下一行、取消/确定两颗等宽。
-  - 批次：20261027-0035
-- [x] [L10] 浮窗按「服务器 → 房间」两级 + 打开即扫：`ServerPicker.ts` + `src/core/net/RoomList.ts` → `npm run check:fast`
-  - 做了什么：扫描发现一台就 append 一行 `IP …… 延迟 4ms`（虚线用 flex 撑开）+ 一个房间容器，随即 `loadRooms()` 拉这台机器的 `/rooms` 并渲染缩进的 `房间: xxx  1/10 在线`；`room` 模式房间行可点选中，`server` 模式渲染成 `div.readonly` 只展示；打开浮窗即 `scan()`，网段由 `suggestSubnet()` 从地址框/页面 hostname 推出。
-  - 为什么：设计图里房间是服务器的子项；开房模式如果允许选别人的房名，必然撞 `host-taken`。
-  - 验证：起本地服务端 + 假房主后截图，`192.168.1.72 —— 延迟 4ms / 房间: newplayer  1/10 在线` 与图一致；`check:fast` 全绿。
-  - 批次：20261027-0035
-- [x] [L10] 两个对话框改成单列版式（去掉右栏）：`MultiplayerScreen.ts` / `WorldScreen.ts` / `index.html` → `npm run check:fast`
-  - 做了什么：`MultiplayerScreen` 重排成 `mp-head`（居中标题 + 右上 ✕）/ 四行 `mp-row`（服务器、房间、密码、昵称）/ `mp-status mp-error` 红字行 / 通栏 `mp-action.primary`；删掉 `mp-columns`、`mp-rooms`、`mp-recent`、`refreshRooms()` 与 `RecentRoom` 那一套（房间与历史都进了浮窗）。`WorldScreen` 的开房对话框同版式：标题居中 + ✕、地址行 `[本机] : [8887] [选择]`、只有一个通栏「确定并进入」。`makeRow` 的 `extra` 支持数组并加 `world-row-inline`（flex）——那个 3 列 grid 放不下 5 个元素。
-  - 为什么：设计图两张图都是单列；`.world-row` 是 `grid-template-columns: 64px 1fr 44px`，多出来的元素会静默换行（第一次截图里端口和「选择」被挤到下一行）。
-  - 验证：截图 `join.png` / `host.png` 与设计图逐行比对；`test:ui` 21 条断言随版式迁移（右栏/最近连接改成反向守卫）；`check:fast` 全绿（**609** 单测）。
-  - 批次：20261027-0035
-- [x] [L10] 台账收口：`TASKS.md` 落 L10、`OVERVIEW.md` 摘要改成最终版式、批次索引加行
-  - 做了什么：TASKS 追加 L10（五条实现要点 + 验证口径）；OVERVIEW 那句"联机界面两个对话框"改写为"端口可编辑 / 选择浮窗=服务器→房间两级 / 局域网打开即扫 / 单列版式"（同时控制字节数，仍在上限内）；`notes/batches.md` 顶部加一行并记下 grid 那个坑。
-  - 为什么：锚点文档只留一句摘要，细节落在 TASKS 与本文件；TIPS 已满 500 行，坑先进批次索引。
-  - 验证：`node .continue/hooks/check.mjs --fast` 的 ids / docs 两项通过。
-  - 批次：20261027-0035
+- [x] [L21] 局域网扫描修复：`ServerListPanel.subnets()` → `npm run check`
+  - 做了什么：候选网段列表按可能性排序（hostname 私网 IP → 地址框私网 IP → localhost 加回环 → 常见私网段兜底），`refresh()` 分批扫（一次 2 段、找到就停）。
+  - 为什么：上一版只认 `location.hostname`，App webview 里它是 `localhost` → 兜底成回环 → 只扫本机；再上一版用地址框 IP 所以能扫到。WebRTC 也不可用（mDNS 混淆成 `xxx.local`）。
+  - 验证：右栏扫到 `127.0.0.1(newplayer)` 与 `192.168.1.72(cookroom)` 两台。
+  - 批次：20261027-2600
+- [x] [L21] 开房复用「加入房间」界面 + 右栏「选择本机」：`MultiplayerScreen.ts`、`ServerListPanel.ts`、`WorldScreen.ts`、`main.ts` → playwright
+  - 做了什么：`open('host', world)` 模式（标题/房名/按钮差异）、右栏「选择本机 127.0.0.1」、`onHostOpen` 接线、`hostWorldFlow` 抽成两入口共用。
+  - 为什么：两套界面字段完全一样，各写一套只会分叉。
+  - 验证：`mode=host` / 标题「开房：新的世界 1」/ 按钮「确定并进入」/ `localVisible=true` / 旧对话框 0。
+  - 批次：20261027-2600
+- [x] [L21] 修 `.hidden` 静默失效：`index.html`
+  - 做了什么：补 `#mp-host.hidden` / `#mp-join.hidden` / `#mp-disconnect.hidden` 三条规则。
+  - 为什么：项目里没有通用 `.hidden{display:none}`，`classList.add('hidden')` 对这三颗按钮一直无效——host 模式下「开房」按钮还在，玩家看到两个"开房"。
+  - 验证：截图只剩「确定并进入」一颗。
+  - 批次：20261027-2600
 
 ---
 
-## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
+## 批次 20261027-2500 · 2026-10-27 · 会话 12c62c
 
-> 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2327
-
-- [x] [L8] 野怪要能追房客：`EntityContext.targetFor` + `Mob.playerTarget()`，AI 不再写死 `ctx.player`（本地玩家） → `npm run check:fast`
-  - 做了什么：`Entity.ts` 新增 `PlayerTarget`（`x/y/z` + 可选 `invisible` / `hit` / `afflict`）与 `EntityContext.targetFor(mob)`；`Mob` 新增 `protected playerTarget(ctx)`（`targetFor` 优先，否则退回 `ctx.player`），用它替换 `updateAi` / `deliverMelee` / `distanceToPlayerSq` / `flyAi` 里的目标；`flyAi` 的参数类型放宽成 `PlayerTarget | null`；`Phantom`（幻翼）也改用 `playerTarget`。
-  - 为什么：从属端根本不跑生物 AI（`SimMode`），整场模拟都在房主那边，而 `EntityContext.player` 只有一个（本地玩家 = 房主）——怪物自然看不见房客，这就是"只打房主"的根因。改目标选择，而不是给从属端也跑一份 AI（那会重新引入两端各算一遍的老问题）。
-  - 验证：新增 `tests/mob-target.test.ts` **4 条**（没 `targetFor` 时退回本地玩家、指定远端后按远端算距离、返回 null 也退回、没有本地玩家时有远端目标也能算）；`npm run check:fast` **595 → 599 单测**全绿。
-- [x] [L8] 伤害要落到房客身上：新增 `mob-attack`（房主 → 服务端 → 被打的那个人），接收方走本地 `damagePlayer` → `npm run test:net`
-  - 做了什么：`NetClient.sendMobAttack()` + `mob-attack` 接收分支 + `onMobAttack` 回调；`server/index.mjs` 新增 `mob-attack` 路由（只收本房房主、`takeEffectToken` 限频、目标必须同房且不是自己、伤害夹 0~50、坐标有限、`source` 截 32 字、**只转给目标一人**）；`main.ts` 用 `pickRemotePlayerTarget()`（房主端挑"比本地玩家更近的、同维度、没死的远端玩家"）挂在 `targetFor`，`hit` 回调接 `sendMobAttack`，收到 `mob-attack` 走 `damagePlayer`。
-  - 为什么：血量和护甲是**各端自己的**，房主不能直接改房客的血。房主只负责判定"谁被哪只怪打了、基础伤害多少"，护甲减免/无敌帧/难度倍率都在接收方本地算——这样"被野怪咬"与"被本地野怪咬"走同一条路，死亡与掉落也自然一致。
-  - 验证：`npm run test:net` **286 → 292 通过 / 0 失败**（被打的人收到 + `fromId`；旁边的房客收不到；房客伪造被无视；伤害 0/NaN 不转发；伤害夹到 50）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 补 `mob-attack` 与"AI 目标可以是远端玩家"+ `TASKS.md` 的 L8 补一节 → `npm run check`
-  - 做了什么：§4 上行表新增 `mob-attack`（校验口径 + "只转给被打的人"）、§5 下行表同样补一条；§2 的"服务端不跑 tick"那句补上"生物 AI 的目标可以是远端玩家"；`TASKS.md` 的 L8 补第 ⑬ 点，并把两处已知差异写进去（末影龙仍只追房主、远端挨打不会中毒）。
-  - 为什么：这条链路的关键约定是"**伤害由谁结算**"——房主只判定"谁被哪只怪打了"，血量和护甲归接收方。不写清楚，下次很容易改成"房主直接改血量"（那会让两端的血量各算一遍）。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/chase-test.ts` 有一条结构断言钉着 `playerInvisible: ctx.playerInvisible === true`，改成跟着目标走之后按新写法更新。
-
-## 批次 20261027-0140 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27：① 设置里所有按钮 / 文字 / 输入框要统一规格，不要有大有小有高有低，弹框的位置 / 背景 /
-> 关闭按钮也要统一；② 有浮层时下层不要干扰浮层信息；③ **一个房间没有房主时不允许别人进入**。
+> 用户：整理文档太花时间，做成一条命令
 
 # 队列 · 会话 12c62cf015444720a2a57c257f80c045
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-0140
+> 批次：20261027-2500
 
-- [x] [L11] 没有房主的房间不许进：`server/index.mjs` + `src/core/net/Protocol.ts` + `src/util/net…` → `npm run test:net`
-  - 做了什么：`join` 时 `hosts` 里没登记该房名 → `reject('no-host', CLOSE_NO_HOST)`；`ProtocolErrorCode` 与 `isFatalProtocolError` 加 `no-host`；`NetErrorText` 加映射、六语言补 `say.net.noHost`；`main.ts` 探房失败改成"按码说人话"；浮窗里 `hasHost === false` 的房间行渲染成不可点并标「无房主」。产品默认严格，测试用 `ALLOW_HOSTLESS_ROOMS=1` 放开。
-  - 为什么：房间 = 房主开着世界那一局，没有他就是**不推进的世界**（方块能放、怪不动、红石不亮），而界面一切正常——比报错更难查。不做"先进空房等房主"：房名是玩家自己敲的，服务端分不清"等朋友"和"打错字"，后者会把人困死。
-  - 验证：`test:net` **296 通过 / 0 失败**（新增 4 条：空房名被拒 / 房主开起来后访客能进 / 严格模式启动）。
-  - 批次：20261027-0140
-- [x] [L11] 控件与弹层统一规格：`index.html`（`:root` 变量 + 一段统一规则） → `npm run check`
-  - 做了什么：新增 `--ctl-h(32)` / `--ctl-h-lg(40)` / `--ctl-font(13)` / `--ctl-pad-x(9)` / `--modal-w(460)` / `--modal-pad` / `--modal-bg` / `--modal-close(28)`；输入框（world / mp / settings）统一高度字号内边距，次级按钮 32、主按钮 40、标签 12；两个对话框同宽同内边距同边框，关闭按钮统一 28×28 钉右上。
-  - 为什么：用户看到的"有的高有的低"来自三套各自为政的尺寸（world-row 7px padding / mp-row 6px / settings 默认），弹层也各写一套背景与关闭按钮。
-  - 验证：截图 `ui-settings.png` / `ui-join-full.png` 对比，同一行控件基线一致；`npm run check` exit=0。
-  - 批次：20261027-0140
-- [x] [L11] 浮层降噪：`index.html` → 截图比对
-  - 做了什么：`.server-picker` 加 `rgba(0,0,0,.45)` 遮罩 + `backdrop-filter: blur(2px)`；`#multiplayer-screen` 与 `.world-modal` 背后的世界列表同样轻微虚化。
-  - 为什么：浮窗打开时下层「加入房间」面板的字还清晰可见，两层文字叠在一起读不出重点（用户原话"下层的信息不要对我的浮层信息造成干扰"）。
-  - 验证：截图 `ui-picker-full.png`——下层压暗虚化、浮窗清晰，层级一眼可分。
-  - 批次：20261027-0140
+- [x] [L20] 台账收尾一条命令：`tools/ledger.mjs`（新）、`tools/audit-tasks.mjs`、`AGENTS.md` → `npm run check`
+  - 做了什么：`ledger.mjs` 读队列文件 → 插 DONE（正则找第一条真实批次）→ archive-done → `audit-tasks --fix` 修 HANDOFF 数字 → archive-queue 归档 → 打印"还要手写什么、下一条用哪个编号"；`audit-tasks` 加 `--fix` 直接写回进度口径。
+  - 为什么：上一批功能提交 20:39、台账 20:56，**整理文档 17 分钟**——猜编号、猜锚点、手改数字再重跑 check，全是机械劳动。
+  - 验证：`npm run check` exit=0；自测时发现并修掉两个 bug（插入位置匹配到文档模板行、编号统计混入 D/O/P 前缀）。
+  - 批次：20261027-2500
 
 ---
 
-## 批次 20261027-0700 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："请继续" —— 承接合并后列的待补项：把「附近房间」在 Node 服务端上真正跑通。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0700
-
-- [x] [L12] Node 服务端补上 UDP 组播发现：`server/node/beacon.mjs` + `server/node/index.mjs` → `npm run test:net`
-  - 做了什么：照 `server/rust/src/beacon.rs` 写同一份报文（`mc/v/id/port/room/name/seed/players/host/pw`、组播 `239.255.42.99:25188`、3 秒一帧、12 秒过期、按 id 过滤回声），收发分成两个 socket；`/healthz` 补 `beacon` / `beaconPort` / `peers`；监听回调里启动（端口要等 `PORT=0` 分配完才知道）；`SIGTERM` 时先停发现层；`BEACON=0` 可关。
-  - 为什么：文档写着"Node 版 `/healthz` 返回 peers"，实际 body 里没有（只有 CORS 头），所以「附近房间」在 Node 服务端下永远是空的——只有手机上那份 Rust 才有数据。
-  - 验证：本机双实例互相发现（8887 ↔ 9001，`addr=192.168.1.72`）；假房主进 8887 的 `newplayer` 后，9001 的 peers 变成 `name=草原小屋 / room=newplayer / players=1 / hasHost=true`；`test:net` **297 通过 / 0 失败**。
-  - 批次：20261027-0700
-- [x] [L12] 附近房间收尾：`src/ui/ServerPicker.ts` → `npm run check:fast`
-  - 做了什么：附近设备行用它自报的 `room/players/hasHost` 直接列一行房间（不再去拉它的 `/rooms`，那台可能根本没连过来），延迟交给 `probeLatency()` 异步补；房间行支持"只知道人数不知道容量"（只写 `4`，不编 `1/0`）；空房名显示成「默认房间」。
-  - 为什么：合并时只移植了"列出来"，worktree 里的 `probeLatency` 没人调用，附近设备的延迟一直是 `--`；而它自报的房间名比"进默认房"准得多。
-  - 验证：`npm run check:fast` 全绿；补一条 ui-test 断言（自报房间 + 异步延迟 + `--` 兜底）。
-  - 批次：20261027-0700
-
----
-
-## 批次 20261027-0740 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："请继续，不要停" —— Rust 侧继续推进时发现剩下的都是结构性改动，先把会误导人的文档修掉、把缺口记成待办。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0740
-
-- [x] [R1] 修正「Rust 已逐条对齐」的过时声明 + 记下缺口：`server/README.md`、`server/rust/README.md`、`.continue/TASKS.md` → `npm run check`
-  - 做了什么：两处 README 原来都写「与 JS 版逐条对齐 / 195 条 0 失败」，改成「**对齐到 2026-10-25 那一版**」，并列出 Rust 还缺的四项（`session-sync`、`edits-request`/`edits-reply`、每房一套时钟、`join` 采纳房主时钟），已补的三项标「未编译验证」；TASKS 增 `R1`（含验收口径），HANDOFF 待办 0→1。
-  - 为什么：这句话正是本次合并把我误导的地方——文档说"逐条对齐"，实际 Rust 缺 5 项、且我补的 3 项没编译过。文档比代码更该保守。
-  - 验证：`npm run check` exit=0（HANDOFF 口径 / TASKS 差异台账已由脚本重写）。
-  - 批次：20261027-0740
-
----
-
-## 批次 20261027-0720 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："继续" —— 把合并后列出的 P0（Rust 与 Node 的协议差异）能安全补齐的部分先做掉。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0720
-
-- [x] [L13] Rust `join` 补 `no-host` / `host-offline`：`server/rust/src/{handlers,protocol}.rs` → 语法自查
-  - 做了什么：`protocol.rs` 补 `CLOSE_HOST_OFFLINE = 4009` / `CLOSE_NO_HOST = 4010`；`handlers.rs` 在 `wants_host` 判定之后加一段——`hosts` 里没登记房名就拒 `no-host`，登记着但人不在 `players`（宽限期断线）就拒 `host-offline`；用 `st.hosts.get(&room).copied()` 先取出 id 再判，避免 `drop(st)` 与借用打架。
-  - 为什么：与 Node 版同一口径。没有房主的房间是一个**不推进的世界**（方块能放、怪不动、红石不亮），界面却一切正常。
-  - 验证：**只做了语法与类型自查**——本机没有 `cargo`，`bash server/rust/run-net-test.sh` 未跑。
-  - 批次：20261027-0720
-- [x] [L13] Rust `/rooms` 补 `maxPlayers`、beacon 的 `has_host` 按房间判断：`server/rust/src/{lib,beacon}.rs` → 语法自查
-  - 做了什么：`Config` 加 `max_players`（`MAX_PLAYERS`，默认 10，脏值/0 退回默认）→ `Hub` → `/rooms` 输出 `maxPlayers`；`beacon::announce_of` 的 `has_host` 从 `!state.hosts.is_empty()`（任意房间有房主）改成 `state.hosts.contains_key(&room)`（这一间）。
-  - 为什么：前者让浮窗在手机内建服务端上也显示 `在线/容量`；后者在多房间时会对着一个没人跑模拟的房说「可以进」，客户端照它进房就踩到同一个坑。
-  - 验证：同上，未经编译验证。
-  - 批次：20261027-0720
-
----
-
-## 批次 20261027-0800 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："继续" —— 发现本机其实有 cargo（只是没进 PATH），于是把之前"盲写未验证"的 Rust 改动全部编译 + 跑黑盒断言。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0800
-
-- [x] [R1] Rust 编译验证 + 修 E0382：`server/rust/src/beacon.rs` → `cargo check` / `cargo test`
-  - 做了什么：`cargo check` 立刻抓到 `borrow of moved value: room`（`has_host` 在 `room` move 之后又借用），改成先算 `has_host` 再构造；`cargo test` **28 通过**。
-  - 为什么：之前几批 Rust 改动是在"没有工具链"的前提下写的，只能算推测；有了编译器才第一次被真正检验。
-  - 验证：`cargo check` 干净；`cargo test` 28 / 0。
-  - 批次：20261027-0800
-- [x] [R1] 补 Rust 的 `ALLOW_HOSTLESS_ROOMS` + `/ping` + `beaconPort` + `isHost`：`server/rust/src/{lib,handlers}.rs`、`run-net-test.sh` → `bash server/rust/run-net-test.sh`
-  - 做了什么：① `ALLOW_HOSTLESS_ROOMS=1`（Config/Hub/join 判断 + 验收脚本），否则单人用例全被 `no-host` 拒（第一次跑只有 **227/297**）；② `/ping` 路由（客户端扫网段只认能回它的机器，缺了它手机端永远扫不到）；③ `/healthz` 补 `beaconPort`；④ `player` 广播（join 与每条 `move`）补 `isHost`。
-  - 为什么：前两条是**产品级缺陷**（不是测试口径问题）：改名后别人扫不到手机上跑的服务端、队友的名字牌不标房主。
-  - 验证：黑盒断言 **227 → 233 / 297**；`cargo test` 28 / 0。
-  - 批次：20261027-0800
-- [x] [R1] 把剩余 64 条按 10 组写清（TASKS R1 + 两处 README）：`server/README.md`、`server/rust/README.md`
-  - 做了什么：README 的「195 条 0 失败」改成「当前基线 233/297、`cargo test` 28 绿」；缺口表扩成 10 组并标出每组的失败断言数（`day` 6 / 采纳时钟天气 6 / 快照 v2 6 / 关房清缓存 3 / `session-sync` 6 / `edits-*` 3 / `bye` 2 / 外观 1 / 掉落物 1 / 每房时钟）。
-  - 为什么：这 64 条就是可执行的验收清单——每一条都对应一句断言，不需要再猜"还缺什么"。
-  - 验证：`npm run check` exit=0。
-  - 批次：20261027-0800
-
----
-
-## 批次 20261027-1040 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："继续" —— R1 全绿之后，把原生壳（安卓/iOS）与 Rust 的接线做了一遍静态核对，并跑掉两个冒烟套件。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1040
-
-- [x] [R1] 手机壳 port=0 的语义修正：`server/rust/src/instance.rs`、`capi.rs`、`server/ios/include/minicraft_server.h` → `cargo check` + `run-smoke.sh`
-  - 做了什么：`start_instance` 只在 `want_port > 0` 时覆盖 `config.port`；0 走 `Config::from_env()` 的默认（8887 或 `PORT`）。注释与 iOS 头文件同步改口径。
-  - 为什么：安卓 Intent 不传 port（`wantPort=0`）、iOS `start(port: 0)` 都是默认路径，以前 `bind(0)` 会让系统随机分配——客户端与发现广播都用 8887，别人照着界面里的地址永远连不上。
-  - 验证：`cargo check` 零警告；`bash server/rust/run-smoke.sh` **20 / 0**；`run-beacon-smoke.sh` **13 / 0**。
-  - 批次：20261027-1040
-- [x] [R1] 原生壳接线核对（静态）：`Cargo.toml` / `app/build.gradle` / `NativeServer.java` / `jni.rs` / `capi.rs` / `minicraft_server.h`
-  - 做了什么：逐项确认真实名字与签名一致——`lib name = minicraft_server` ↔ gradle 拷 `libminicraft_server.so`；`Java_com_minicraft_server_NativeServer_{startServer,stopServer,serverPort}` 三对；`minicraft_{start,stop}_server` / `minicraft_server_port` 的 4/0/0 参数与 `.h` 一致；安卓的 `MulticastLock` 在位（不拿它会丢组播帧）。
-  - 为什么：真机之前能静态查的接线先查掉，剩下的（前台服务类型、真机权限、Bonjour 发布）只能上机验。
-  - 验证：无代码改动，只核对。
-  - 批次：20261027-1040
-
----
-
-## 批次 20261027-1000 · 2026-10-27 · 会话 12c62cf0
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1000
-
-- [x] [R1] `session-sync` / `mob-attack` / `edits-request`·`edits-reply`：`server/rust/src/{state,handlers}.rs` → `run-net-test.sh`
-  - 做了什么：① `session-sync` 房主整份上行容器/牌子/展示框（每批 200、每连接 256 条上限、不走令牌桶、不做距离闸），存表并按房广播；② `mob-attack` 只转给被打的那一个人（跨房/打自己一律丢，伤害夹 0~50，带 `fromId`）；③ 懒上行：`confirmed_chunks`/`requested_chunks`/`sent_edit_chunks`，未确认区块向房主要（8 条在飞上限、5 秒忘记以便重试），`edits-reply` 按区块校验后存缓存 + 标已确认 + 广播成普通 `blocks`，已确认或无房主时直接推缓存（每批 2048）。
-  - 为什么：这三块是"房主权威"的最后一块拼图——手机当房主时队友看不到箱子、野怪打不动人、远处的方块补不上。
-  - 验证：`bash server/rust/run-net-test.sh` → **297 通过 / 0 失败**（与 Node 同一份断言）；`cargo test` 28、`cargo check` 零警告。
-  - 批次：20261027-1000
-
----
-
-## 批次 20261027-0930 · 2026-10-27 · 会话 12c62cf0
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0930
-
-- [x] [R1] 每房一套时钟 + 天数 + `room-config` 模式 + `sleep` 过一天：`server/rust/src/{state,handlers,lib}.rs` → `run-net-test.sh`
-  - 做了什么：`RoomClock { start_ms, start_time_of_day, start_day, weather }` + `State.clocks` / `default_clock`；`welcome`/`time` 广播/`sleep`/`room-config`/天气推进全部按房；`join` 采纳房主上报的 `day`·`timeOfDay`·`weather`（宽限重连不覆盖，顺序是"先定天数与时刻、最后重置起点"）；`sleep` 先结算今天再 +1；`room-config` 累积 `applied` 并广播 `{t:room-config, by}`，`welcome.gameMode` 取当前模式。
-  - 为什么：以前是全服一套时钟——房主 B 在乙房开房会把甲房的太阳一起拨过去；而房主本地继续玩之后，重开房还会被拽回"服务端此刻"。
-  - 验证：黑盒 261 → **283 / 297**；`cargo test` 28 通过。
-  - 批次：20261027-0930
-
----
-
-## 批次 20261027-1120 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："请继续" —— 把两份原生壳的上机验收清单写下来，顺手跑通了 iOS 的模拟器级验收。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1120
-
-- [x] [R1] 修 `build-ios.sh` 的变量边界 bug：`server/rust/build-ios.sh` → `bash server/ios/check.sh`
-  - 做了什么：`echo "编真机（$DEVICE）"` 里全角右括号紧贴变量名，bash 把多字节首字节并进变量名（`DEVICE\xef: unbound variable`），整个 iOS 构建断在第一行。改成 `${DEVICE}`；同类的 `${SIM_ARM} / ${SIM_X86}` 一起改。
-  - 为什么：这不是"环境问题"，是脚本自己的错——`$VAR` 后面接中文/全角符号必须加花括号。
-  - 验证：`bash server/ios/check.sh` 全部通过（两架构 xcframework + 两 SDK typecheck + 三个 C 入口）；`check-sim.sh` 在模拟器里真跑 → **端口 8887**、`/healthz`、`/rooms`、停止后归零。
-  - 批次：20261027-1120
-- [x] [R1] 两份上机验收清单：`server/android/README.md`、`server/ios/README.md`
-  - 做了什么：安卓 11 步（服务起没起来 / 同机 webview / 另一台设备发现含 AP 隔离与 MulticastLock 排查 / 进房后世界对不对 / 后台省电 / 离线回归）；iOS 5 步（本地网络权限"拒绝后不再弹"、`dns-sd` 验 Bonjour、iOS↔iOS 互发现、前台限制、ATS）。
-  - 为什么：这几条 CI 跑不了，但每条都能写成"看什么 / 不对先查哪里"，真机时不至于重新推。
-  - 验证：`npm run check` exit=0。
-  - 批次：20261027-1120
-- [x] [R2] 记下 iOS 只发布不浏览的缺口：`server/ios/README.md`、`.continue/TASKS.md`
-  - 做了什么：README 的"还没做"补一条（`BonjourAdvertiser` 只有 `NetService`，没有 `NetServiceBrowser`）；TASKS 新增 `R2`。
-  - 为什么：现在 iOS 能看到邻居是因为对方也发了 UDP 组播，"靠 Bonjour 互相发现"这条其实不成立——不写清楚，下一个人会以为已经支持。
-  - 验证：`npm run check` exit=0（HANDOFF 待办 0→1）。
-  - 批次：20261027-1120
-
----
-
-## 批次 20261027-0848 · 2026-10-27 · 会话 49866712
-
-> 界面迁 canvas 的第一步：先立地基（文字 / 命中 / 覆盖层 / 控件）＋试点三样纯展示 HUD，
-> `?ui2d=1` 做 A/B；并把"哪些不搬、为什么"写成表（`notes/canvas-ui.md`）。
-
-# 队列 · 会话 498667122b7f4c508a73dac8f5e7e792
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0848
-
-> 本队列在并行工作树 `.continue/doing/.worktree/worktree_canvasui_20261027` 里执行
-> （分支 `worktree_canvasui_20261027`，基于 `88175334`）。父树没有队列 —— 这一批从头到尾只在这棵树里。
-
-- [x] [C1] 修 net-client-look 红灯：NetClient.tick 的 look 改成「变化 / 2 秒兜底」才发 → npx vitest run tests/net-client-look.test.ts
-  - 做了什么：**没有改代码**。上游 `88175334` 已把这条口径定成「每条 `move` 都带全量外观」，测试也同步改成 `expect(moves()[1].look).toEqual(LOOK_A)`。我先按旧断言写了去重补丁（`LOOK_RESEND_MS` + `lastLookKey/lastLookAt`），跑到一半发现与 HEAD 的测试冲突，于是三处编辑**完整回退**，`git status src/` 干净。
-  - 为什么：同一件事只能有一个口径。服务端 `readAppearance` 已改成**合并**语义，客户端"每条都带"不会再引发闪烁；去重是更省字节，但会与"每条都带"的断言直接冲突 —— 既然上游已经拍板并落了测试，就不该在迁移分支里偷偷改回去。
-  - 验证：`npx vitest run tests/net-client-look.test.ts` → **8 passed**；`git status --short src/` 无输出（确认回退干净）。
-  - 批次：20261027-0848
-
-- [x] [C2] 建 src/ui2d/ 骨架：overlay（DPR/尺寸）、text（测量/裁切/换行）、input（命中测试/焦点/层栈）、widgets（按钮）→ npm run check:fast
-  - 做了什么：新增 5 个模块 + 1 个汇总入口：`text.ts`（字体栈、测量缓存 512 条、`tokenize`/`truncateToWidth`/`wrapToWidth`、`drawText`）、`input.ts`（`hitRegionAt` 纯函数 + `Ui2DInput` 指针路由，空命中表时强制 `pointer-events: none`）、`overlay.ts`（2D 覆盖层、DPR 夹到 3、ResizeObserver、绘制单位统一 CSS px）、`widgets.ts`（圆角矩形/HUD 底板/进度条/原版按钮，色值抄 `index.html` 的 `--mc-*` 与 `--hud-*`）、`index.ts`（分层入口与"不许反向依赖 main"的约定）。
-  - 为什么：**文字走 `fillText` 而不是 SDF 字形图集** —— 6 种语言含中日韩，图集等于把字体搬进构建期；覆盖层做成**独立 2D canvas** 而不是塞进 WebGL，也是同一条理由。命中表默认为空且强制关掉 `pointer-events`，避免铺满全屏的层吃掉触摸端的视角手势（`TIPS.md` 里"按钮看得见、点了没反应"那条坑的 canvas 版）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **22 passed**（**抓到 1 个真实 bug**：`hitRegionAt` 原本反向遍历又用 `>=`，导致下层覆盖上层，已改正向遍历）；`npx tsc --noEmit` 干净；`npm run check:fast` 绿（643 条单测）。
-  - 批次：20261027-0848
-
-- [x] [C3] 试点：把准星 / 伤害闪 / Boss 条迁到 ui2d 覆盖层，DOM 版本保留为可回退开关 → check:fast + build:fast
-  - 做了什么：`src/ui2d/Hud2D.ts` 画三样 —— 受伤红闪（预渲染 320×180 三层 radial 精灵 + `globalAlpha`，只在上一帧真画过时才清屏）、Boss 血条（龙/凋灵/护盾三套渐变，几何照抄 `#boss-bar`）、破坏与进食进度条。`main.ts` 只加 3 处分支 + 1 处绘制调用：`updateBossBar` 改成"先算数值再分路画"、两个进度条函数开头提前 return、`damageFlash.update()` 之后调 `hud2d.render()`；`DamageFlash` 在开关打开时传 `null`（数值照算、不写 DOM opacity）。开关是 `?ui2d=1`，DOM 版本一行没删。
-  - 为什么：**准星没有搬**（与条目原文不同，见决策 D3）。它靠 `mix-blend-mode: difference` 与下层画面做差值混合，那是 DOM 合成器的能力；2D canvas 里 `difference` 只在本图层内生效，叠到 WebGL 上就是一块白十字，雪地/沙漠上反而看不见。换成"破坏/进食进度条"：同样是纯展示、每帧变、且没有混合模式依赖。
-  - 验证：`npm run check:fast` 绿；`npm run build:fast` 出包成功（`main-C75H5CHE.js` 2,126.25 kB / gzip 594.93 kB）；`npx tsc --noEmit` 干净。⚠️ **真机/浏览器观感与帧率未验**：本会话没有浏览器，且 dev 模式下 `__host/core.bin` 缺失会停在"去应用里玩"落地页 —— 需要用户用 `?ui2d=1` 进一次世界对比。
-  - 批次：20261027-0848
-
-- [x] [C4] 写迁移方案与阶段门禁到 .continue/notes/canvas-ui.md（含验收命令）
-  - 做了什么：`notes/canvas-ui.md` 九节 —— 现状三层与代码量、A/B 路线对比（选 2D 覆盖层的决定性理由是文字）、目录与依赖方向、阶段 0~6 的判据与验收命令（含"停在哪一格"的判据）、阶段 0 已落地清单与真机 A/B 步骤、**判定不搬/搬法特殊** 六条（准星混合模式、IME 必须留 DOM、拖拽、原生控件、无障碍退化、全屏剪贴板不变）、七个迁移 checklist（色值同步 / 文案走 t() / CSS px / pointer-events 默认关 / 横屏优先 / 可回退）、测试改写策略（先加后删）、四条风险。
-  - 为什么：这次迁移真正的成本不是"画出来"，而是**回归面**与**判定边界**。把"哪些不能搬、为什么"写成表，比写"要搬什么"更值钱 —— 准星那条如果不写，下一批一定会有人顺手搬过去，然后在雪地上发现白十字。
-  - 验证：`node .continue/hooks/check.mjs --fast` 通过（文档体量 / 编号 / 配置 / hooks 自检）；`npm run audit:docs` 通过（`npm run check` 里已跑过一遍）。
-  - 批次：20261027-0848
-
----
-
-## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
-
-> 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0900
-
-- [x] [R1] 快照 v2 + 关房清缓存 + bye + 外观 + 掉落物：`server/rust/src/{store,state,handlers,protocol,ratelimit}.rs` → `run-net-test.sh`
-  - 做了什么：① 快照 1→2（可读 v1），落盘只留 `savedAt/timeOfDay/day/weather`，`apply_snapshot` 不再读四张房间表；② `State::clear_room`（按房名前缀清 edits/containers/signs/frames/items/worlds/hosts/clocks）+ `OrderedMap::retain`（连带清顺序队列，否则 `remember` 会以为淘汰了却没释放容量）；③ `bye`：房主当场关房踢人、其他人当场广播 `leave`；④ 外观改成"白名单 + 合并写 + 能表达 false + 补 dead/hp/food"；⑤ 掉落物固定窗口 → 令牌桶 30/s + 突发 400。
-  - 为什么：这些都是 10-26 之后主线上已经定稿的行为，Rust 版缺一项队友就会看到不同的世界。
-  - 验证：黑盒 233 → **261 / 297**；`cargo test` 28 通过。
-  - 批次：20261027-0900
-
----
-
-## 批次 20261027-1009 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2347 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-1009
+> 批次：20261027-2347
 
-> 用户 2026-10-27：「你改的这几个地方都不太明显，看不出来效果如何。要不把快捷栏改一下？」
-> 阶段 0 那三样（红闪 / Boss 条 / 破坏与进食进度）本来就是为了"不打扰任何人"才挑的纯展示 HUD，
-> 结果也确实没人能看出差别。这一批换成**每帧都在眼前、9 格 + 图标 + 数量 + 耐久 + 选中框**的
-> 快捷栏 —— 它才是"一眼就能对比出 DOM 与 canvas"的那块。
+> 用户 2026-10-27：「继续完成」—— 按遗漏盘点做 M37：盔甲 4 格 + 副手 1 格。
 
-- [x] [U1] 新建 `src/ui2d/Hotbar2D.ts`：几何纯函数 + 状态签名 + 离屏快照；`tests/ui2d.test.ts` 加断言 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：新增 `ui2d/Hotbar2D.ts` —— 面板（`#c6c6c6` + 3px 斜面 + 2px 黑描边）、9 个格子（`#8b8b8b` + 2px 斜面）、图标 blit、数量（12px 四向描边）、序号（10px，选中时不透明）、耐久条（3px 三档）、选中格（白框 + 半透明白底 + 上抬 2px + 放大 1.08 + 柔光）；8 个几何纯函数（内容盒 / 图标居中 / 序号与数量锚点 / 耐久轨道与比例 / 选中矩形 / 快照原点）+ `hotbarSignature()`；`Hotbar2D` 类把整条栏画进一张离屏快照，签名不变时每帧只 `drawImage`。`Hud2D` 收下 `setHotbar()` 并最后画它（红闪在 DOM 里在它下面，不该给它上色）。`index.ts` 补导出。
-  - 为什么：几何**不抄 CSS 常量**，输入是 `getBoundingClientRect()` 量出来的矩形 —— `--hotbar-slot` 跟断点走、底部还有 `env(safe-area-inset-bottom)`，抄一份常量就是埋一个"转屏错几像素"的回归面。快照缓存是因为 9 格每帧重画要付二十几次填充 + 十几次文字，而快捷栏的变化率极低（见决策 D1、D3）。图标不自己实现，沿用现成的 `.slot canvas`（`ui/ItemIcon` 是唯一入口，见 D4）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **34 passed**（新增 12 条）；`npx tsc --noEmit` 干净。
-  - 批次：20261027-1009
+- [x] [K1] 布局加 `side`（竖排、贴右、副手隔 6px）+ 槽位顺序延长 → 6 条断言
+  - 做了什么：`SideSlotsSpec`；顺序改为 extra(+result) → side → main → hotbar；面板宽度与高度都跟着侧栏调整。
+  - 为什么：这是布局层唯一的缺口，做完布局层就完整了；顺序必须先定死，否则 `SlotAccess` 下标错位（症状：头盔进了背包第一格）。
+  - 验证：`test:ui2d-inventory-model` **52 passed**（新增 6 条：5 格与总数、贴右竖排、副手多让 6px、面板变宽、副手在面板内、高度取较大值）。
+  - 批次：20261027-2347
 
-- [x] [U2] `src/main.ts` 接线 `?ui2d=1`：DOM 快捷栏让位（保留布局与命中），pixels 全由 canvas 画；`?ui2d=0` 完全回退 → `npm run check:fast && npm run build:fast`
-  - 做了什么：`refreshHotbar()` 末尾只做两件事——`hotbar2dRevision += 1` 与置脏（**不量 DOM**：它被十几个事件路径调用，量 10 个 `getBoundingClientRect()` 每次都会强制布局）；真正测量与喂状态在每帧的 `updateHotbar2D()` 里，一帧最多一次。`applyHotbar2DDomFallback()` 把 `#hotbar` 的底/斜角/描边设成透明（**边框宽度保留**，否则两侧背包按钮位移 3px），9 个 `.slot` 设 `opacity: 0`。`#hotbar` 被 `visibility: hidden` 藏起来时（打开携带版背包）每 8 帧复查一次。
-  - 为什么：**命中继续借 DOM**（见决策 D2）。覆盖层的 `pointer-events` 是元素级、铺满全屏，打开就吃掉 `#touch-look` 的视角手势；而 `visibility: hidden` / `display: none` 会让格子退出命中，连 `bindHotbarTouch` 与长按看物品一起失效 —— 所以只能用 `opacity: 0`。
-  - 验证：`npm run check:fast` 绿（655 条单测）；`npm run check` 全量 **exit=0**（181 套离线 + 三张台账 + 文档体量）；`npm run build:fast` 出包成功；`npx tsc --noEmit` 干净。⚠️ **真机观感未验**：本会话没有浏览器，dev 模式下 `__host/core.bin` 缺失会停在落地页 —— A/B 步骤写在 `notes/canvas-ui.md` 的 §5.1。
-  - 批次：20261027-1009
+- [x] [K2] 修"副手挂在面板外"：高度改为 `max(playerHeight, sideHeight)` → 截图确认
+  - 做了什么：面板高度取两者较大值 + 两条断言。
+  - 为什么：第一版只按玩家网格算，4 盔甲 + 副手比网格高，副手直接伸到面板底边外面（截图里一眼可见）。
+  - 验证：截图 `39-inventory-armor.png` 里副手在面板内。
+  - 批次：20261027-2347
 
-- [x] [U4] 加 `tools/preview/hotbar.html` 对照页：不用进世界就能把 DOM 版与 canvas 版摆在一起看；顺手把数量字重对齐 CSS → `node tools/screenshot.mjs --url http://localhost:5173/tools/preview/hotbar.html --out hotbar-preview.png`
-  - 做了什么：一页 HTML —— 上半是照抄 `index.html` 那几条 CSS 的 DOM 版，下半是 `Hotbar2D` 画进 canvas 的版本，同一份假数据（空槽 / 数量 / 选中格 / 黄耐久 / 红耐久）。几何照样用 `getBoundingClientRect()` 量 DOM 再喂给 canvas，与 `main.ts` 走同一条路。数量字号原来是 700，改成跟 CSS 一致（`.count` 没写 `font-weight`）——迁移期两边并存，字重不同在 A/B 里就是"像素不一致"。
-  - 为什么：用户说的"看不出来效果"有一部分是**验收成本**问题 —— `?ui2d=1` 得先能进世界才看得到，而 dev 缺 `__host/core.bin` 会停在落地页。有了这一页，"画得对不对"不再被"能不能进世界"卡住；阶段 1 的控件库、阶段 2 的血条也能往这里加。
-  - 验证：`npx vite --port 5199` + `node tools/screenshot.mjs --url .../tools/preview/hotbar.html --out hotbar-preview.png` → 截图已存 `.tmp/shots/hotbar-preview.png`，逐项对照两排：格子尺寸/斜面、图标位置、数量与序号锚点、耐久条位置与长度、选中格的白色边框与上抬都对得上（唯一剩下的差异是文字抗锯齿）。⚠️ 页面自带 1 条 `console.error`：favicon 404，与页面无关。
-  - 批次：20261027-1009
+- [x] [K3] `F` 键换副手（`handleKey('KeyF')`）+ 预览 `?armor=1` + 文档 §5.43 / 决策 D55 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：与数字键同一入口，作用在悬停格；预览页多一列盔甲并预置 4 件装备与副手。
+  - 为什么：DOM 的 `swapWithSlot` 认 F，自绘侧不接就少一种操作。
+  - 验证：悬停主背包第一格（1x64）按 `F` → 与副手（6x8）互换。
+  - 批次：20261027-2347
 
-- [x] [U3] 更新 `.continue/notes/canvas-ui.md`：把"阶段 1.5 快捷栏"的判据、命中仍借 DOM 的理由、A/B 步骤写进去 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段表加 `1.5 快捷栏 ✅` 一行；新增 §5.1（做法 + 四条 A/B 步骤 + "这一版不能用来量省了多少 DOM 开销"的警告）与 §5.2（复盘阶段 0 为什么证明不了任何东西：三样都低频、都在屏幕边缘，选样品的判据从"最不打扰"改成"最容易对比"）；§6 判定表补一行"快捷栏的点击/长按：画在 canvas、命中仍走 DOM"。
-  - 为什么：这次的教训是**选样品的方式**，不是某个函数写错了。不写下来，下一批还会有人挑"最安全的三样"去证明"改造值不值"。
-  - 验证：`npm run check` exit=0（`audit:docs` 与文档体量检查都在里面）；决策写在 `doing/9f2dcf-decision.md` D1~D4。
-  - 批次：20261027-1009
-
-## 批次 20261027-1143 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2340 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-1143
-
-> 用户 2026-10-27：「现在看的还是不太清楚。要不然这样，如果是 canvas 画的，统一先加一层黄色遮罩，
-> 这样就容易区分了。」—— 对，这是"改造进度"最省事的一种可视化：不靠肉眼比对像素，
-> 而是让 canvas 产出的每一块像素自己"亮明身份"。
-
-- [x] [U5] 加调试遮罩：`src/ui2d/debug.ts` 的 `applyDebugTint()`（`source-atop` 整层刷）+ `Hud2D.setDebugTint()` + `main.ts` 解析 `?ui2dtint=1` + 两个预览页支持 `?tint=1` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：新增 `ui2d/debug.ts`（`applyDebugTint(ctx,w,h)`：`save` → `globalCompositeOperation='source-atop'` → 整块刷 `rgba(255,214,0,.52)` → `restore`）；`Hud2D` 加 `setDebugTint()`，在**所有绘制之后**刷遮罩；`main.ts` 把 `readUi2DFlag()` 拆成通用 `readFlag(name)`，新增 `UI2D_TINT_ENABLED = UI2D_ENABLED && readFlag('ui2dtint')`；两个预览页加 `?tint=1`。
-  - 为什么：`source-atop` 让**合成器**替我们判断"哪些地方有像素" —— 不用维护"这一帧画了哪些矩形"的账，将来新增控件自动被覆盖。遮罩单独一个参数、不跟 `ui2d=1` 绑定：多一次全屏填充会让帧率 A/B 失真，颜色不对也容易被当成 bug（见决策 D5/D6）。
-  - 验证：`tests/ui2d.test.ts` **36 passed**（新增 2 条：假 ctx 断言调用序列 = `save → op source-atop → fill → fillRect 0,0,w,h → restore`；尺寸非法时一笔不画）；`tsc` 干净；`npm run check` exit=0。
-  - 批次：20261027-1143
-
-- [x] [U6] `tools/preview/shoot-all.mjs` 补遮罩版截图并重拍全部；更新 `.tmp/canvas-version/README.md` 的进度表 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`SHOTS` 加 4 张遮罩版（`06-hotbar-tinted`、`06b-hotbar-tinted-dom-vs-canvas`、`07-boss-tinted`、`08-all-tinted`），重拍共 11 张；README 的表格补上四行，并加一张"URL → 看到什么"的表（不带参数 / `?ui2d=1` / `?ui2d=1&ui2dtint=1` / 关掉）。
-  - 为什么：用户要的是"一眼能判断实现到哪"，那截图里就必须有**同一份数据的染色/不染色对照** —— `06b` 那张（上排 DOM 不染色、下排 canvas 全黄）比任何文字说明都直接。
-  - 验证：`node tools/preview/shoot-all.mjs --base http://localhost:5199` 11 张全出，逐张看过：快捷栏整条染黄、DOM 那排原色；Boss 条只有那条被染、周围画面原色；红闪那版整屏偏黄（符合预期，红闪本身就是全屏填充）。
-  - 批次：20261027-1143
-
-- [x] [U7] 文档：`notes/canvas-ui.md` 记下这个调试开关与用法；决策写进 `doing/9f2dcf-decision.md` D5/D6 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：`notes/canvas-ui.md` 新增 §5.3（实现一句话、为什么需要它、三条边界、以及"红闪打开时整屏都黄"这个反直觉现象）；决策 D5（`source-atop` 整层刷而非逐块算矩形）、D6（开关独立成 `ui2dtint=1`）。
-  - 为什么：这个开关的价值不在代码而在**验收方式**——以后每迁一块界面，只要拍一张带遮罩的图就能说明"这块换了"，不必再靠肉眼比像素。不写下来，下一批会重新发明一遍。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1143
-
-## 批次 20261027-1153 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1153
-
-> 用户 2026-10-27：「继续」—— 接着做**阶段 2 的第一块**：状态栏四行（生命 / 饥饿 / 护甲 / 氧气）
-> 与经验条。它们和快捷栏一样"每帧都在眼前"，而且**全是纯展示**（没有命中测试），
-> 是整条底栏里最后两块 DOM。做完之后打开 `?ui2dtint=1`，屏幕底部会整排变黄。
-
-- [x] [V1] 抽出图标真源 + `src/ui2d/Vitals2D.ts`：`vitalsArt.ts`（心/鸡腿/护甲/气泡的 SVG 路径与色值，`ui/VitalsHud.ts` 改成 import 它）；`Vitals2D` 用 Path2D 画四行、离屏快照、低血量脉冲按帧外挂变换 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`ui2d/vitalsArt.ts` 收下四条 SVG 路径 / 七个色值 / 两个三态判据（`vitalIconState`、`bubbleIconState`），`ui/VitalsHud.ts` 删掉本地常量改为 import（依赖方向 `ui/ → ui2d/`）。`ui2d/Vitals2D.ts` 用 `Path2D` 填同一份 `d`，半颗在 **9×9 坐标系**里裁 `rect(0,0,4.5,9)`；整块画进离屏快照（签名不含脉冲），低血量脉冲在 blit 时套 `1→1.06` 变换。
-  - 为什么：图标两边都要画，路径抄两份必然漂，而"DOM 的心胖一点"没有任何断言抓得到；三态判据分家更糟（会出现一半整颗一半半颗）。脉冲写进签名就等于每帧重画 20 个图标、而它每秒一个来回（见决策 D7、D9）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **46 passed**（新增 6 条：三态 / 气泡分档 / 行内等距 / 包围盒 / 脉冲曲线 / 签名不含脉冲）。
-  - 批次：20261027-1153
-
-- [x] [V2] `src/ui2d/Xp2D.ts`：经验条（轨道 / 渐变填充 / 柔光）+ 等级牌（黑描边绿字，压在条中间），快照按 1% 取整 → 同上
-  - 做了什么：轨道 `#14150f` 圆角 3 + 顶部暗线近似内阴影 + 外侧一圈淡黑边；填充 `#c2ff7a→#63c335` 竖向渐变、顶 1px 高光、右端 2px 柔光；等级牌宽 = 文字宽 + 10、高 18、圆角 4、半透明黑底，绿字四向黑描边。签名把进度**取整到 1%**。
-  - 为什么：DOM 版自己就是 `Math.round(ratio*100)%`，canvas 按同一粒度重建才既跟得上又不会因浮点每帧重建。柔光只在快照里付一次（`shadowBlur` 在手机上是真开销）。
-  - 验证：同上 46 条（其中 4 条打在这里：百分比取整/夹取、填充宽度、等级牌居中、签名 1% 粒度）。
-  - 批次：20261027-1153
-
-- [x] [V3] `src/main.ts` 接线 `?ui2d=1`：状态栏与经验条 DOM 让位（纯展示，用 `visibility: hidden`）、几何量 DOM、按 key 变脏才量 → `npm run check:fast && npm run build:fast`
-  - 做了什么：`applyVitalsDomFallback()` 把 `#vitals` / `#xp-bar` 设 `visibility: hidden`（保留布局，canvas 才能量到随断点变化的 18/14/22px 图标）；`syncVitals2D(noVitals)` 每帧拼一个 key（生命/饥饿/氧气/护甲/等级/经验百分比/模式/`epoch`），变了才量 40 个 `svg.vital-icon` 与 `#xp-bar` 并喂给 `Hud2D`；resize 时 `vitals2dEpoch += 1` 强制重量。
-  - 为什么：DOM 版内部本来就按 key 早退，但"每帧量 40 个 rect"是强制布局，必须挡在 key 后面；`epoch` 解决"数值没变、转屏后矩形变了"这件 key 看不见的事。`visibility` 而非 `opacity`：这两块没有命中测试，`visibility` 还能让浏览器跳过这层绘制（决策 D8）。
-  - 验证：`npm run check:fast` 绿（46 条单测 + typecheck）；`npm run build:fast` 出包成功；`npx tsc --noEmit` 干净。⚠️ 真机观感未验（本会话没有浏览器进世界）。
-  - 批次：20261027-1153
-
-- [x] [V4] 预览页 `tools/preview/vitals.html` + `shoot-all.mjs` 补图，重拍 `.tmp/canvas-version/` 并更新其 README → `node tools/preview/shoot-all.mjs`
-  - 做了什么：新页 `vitals.html` 用**真的** `VitalsHud` / `XpHud` 建 DOM（只为测量，设 `visibility: hidden`），再把矩形喂给 `Hud2D`，所以它走的与游戏里同一条路；参数 `?health&food&air&armor&level&xp&tint&pulse`。`SHOTS` 加 3 张（`09-vitals` / `09b-vitals-low` / `09c-vitals-tinted`），累计 14 张，README 的进度表与"URL → 看到什么"同步更新。
-  - 为什么：截图是这一批的唯一"凭证"——用户上一轮的原话就是"截图发我"。顺带踩到一个真实的坑：预览页把 `MAX_AIR` 写成 30，而真值是 300（10 颗气泡、每颗 30 点），结果"氧气是否满""每颗几点"全算错；改成 import 真源后立刻对上了。
-  - 验证：`node tools/preview/shoot-all.mjs` 14 张全出；逐张看过：13 点生命 = 6 整 + 1 半 + 3 空、17 饥饿 = 8 整 + 1 半 + 1 空、5 护甲 = 2 整 + 1 半、180/300 氧气 = 6 颗；残血版护甲/气泡两行整行不显示；遮罩版底部整块黄。
-  - 批次：20261027-1153
-
-- [x] [V5] 文档：`notes/canvas-ui.md` 加 §5.4（阶段 2 已落地部分与"哪些还没搬"）、决策 D7~D9 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段表把 2 标成 🟡（血条/饥饿/护甲/氧气/经验条 ✅，只剩提示条）；新增 §5.4（Path2D 与 9×9 裁剪、量 DOM 的理由、`visibility` vs `opacity`、脉冲不重建快照、断言清单、预览页与三张截图、以及"阶段 2 还剩什么"表）；决策 D7（图标真源上移）、D8（`visibility: hidden` 的适用边界）、D9（脉冲走变换）。
-  - 为什么：这三条决策都不是"随手这么写"——尤其 D8，它和快捷栏的结论**相反**，不写清边界，下一个人会给快捷栏套 `visibility` 然后点不动。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1153
-
-## 批次 20261027-1209 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1209
-
-> 用户 2026-10-27：「继续继续」—— 接着做**阶段 1：控件库**。
-> 这是"整页搬走"的前提：设置页 / 主菜单 / 背包里的每一个交互，拆开都是这几个控件
-> （开关、滑块、下拉、页签、滚动列表、提示框、弹窗）。控件库一天，整页才有资格谈。
-
-- [x] [W1] `src/ui2d/controls.ts`：七个控件的**画法 + 纯状态机**（开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗），几何与命中全部做成可断言的纯函数 → `npx vitest run tests/ui2d-controls.test.ts`
-  - 做了什么：`controls.ts`（约 470 行）—— 七个 `draw*` + 一组纯函数：`toggleNext`、`sliderTrackRange`/`sliderRatioFromX`/`sliderRatioStep`、`dropdownMenuRect`/`dropdownIndexAt`、`tabRects`/`tabIndexAt`、`listMaxScroll`/`clampListScroll`/`listScrollByWheel`/`listVisibleRange`、`tooltipRect`、`modalRect`；另有 `controlRegion`（矩形登记命中）与 `insetRect`。色值延续 `PALETTE`，新增 `CONTROL_COLORS` / `MODAL_COLORS`。
-  - 为什么：**状态留在调用方、控件只给画法与状态机**（决策 D10）。canvas 没有"元素自己记得自己开着没有"，混在一起就会长出第二份真相（DOM 那套 `class` 正是如此）；而纯函数能离线断言，绘制不能。
-  - 验证：`npx tsc --noEmit` 干净；`npx vitest run tests/ui2d-controls.test.ts` → **21 passed**。
-  - 批次：20261027-1209
-
-- [x] [W2] `tests/ui2d-controls.test.ts`：每个控件"命中 → 状态 → 回调"的离线断言（滑块的 0/0.5/1、下拉的翻转与越界、列表的滚动夹取、提示框防溢出）→ `npm run test:unit`
-  - 做了什么：21 条断言，分七组：控件命中区域（矩形 + 开区间边界）、开关翻转、滑块（可拖范围两端各留半钮 / 0-0.5-1 / 越界与 NaN / 键盘步进同一夹取）、下拉（默认向下 / 下方放不下翻上 / 上下都放不下选空间大的那侧 / 菜单项越界 -1）、页签（等分 / 左闭右开 / 最右边界算最后一个）、列表（内容高 / 最大滚动 / 夹取 / 滚轮按整行含"恰好半行向上取整" / 可见范围首尾）、提示框（下方 / 翻上 / 左右夹进视口）、弹窗（居中 / 小屏夹进视口）。
-  - 为什么：这些错每一条都只表现为"手感不对"或"偶尔点不到"，真机上间歇出现、手指复现不出来 —— 只有纯函数断言能钉住。
-  - 验证：`npm run test:unit` 绿（新增文件被 `vitest run tests` 自动收进去，不需要注册）。
-  - 批次：20261027-1209
-
-- [x] [W3] `tools/preview/controls.html`：把七个控件摆一排并能真的点/拖/滚（canvas 直接接指针事件），加 `?tint=1`；`shoot-all.mjs` 补图并重拍 `.tmp/canvas-version/` → `node tools/preview/shoot-all.mjs`
-  - 做了什么：一页 900×560 的可交互画廊 —— 开关两枚、滑块（按住拖）、下拉（点开选中）、三页签、20 行滚动列表（滚轮 + 点行选中 + 右侧滚动条）、"?" 悬停提示框、"打开弹窗"（不透明深色面板 + 标题栏 + ✕ + Esc）。命中一律走 `hitRegionAt(regions(), x, y)`，就是将来设置页要用的那条路。`?state=dropdown|tooltip|modal` 把浮层固定打开（截图用），`?tint=1` 加遮罩。`shoot-all` 加 5 张，累计 19 张。
-  - 为什么：阶段 1 的判据就是"能在调试面板里摆一排"；而且**交互只能靠手**验，截图不行 —— 所以这一页刻意打开 `pointer-events`（游戏里铺满全屏的覆盖层必须关着，否则吃掉视角手势）。
-  - 验证：`node tools/preview/shoot-all.mjs` 19 张全出；逐张看过：下拉展开贴字段下方、已选项高亮；列表滚到 03~14 且滚动条在中段；提示框贴 "?" 下方两行；弹窗不透出底下列表；遮罩版整页黄。
-  - 批次：20261027-1209
-
-- [x] [W4] 文档：`notes/canvas-ui.md` 阶段表把 1 标成 ✅、新增 §5.5（七个控件的接口与"为什么状态留在调用方"）、决策 D10~D12 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段表补回 `1 控件库 ✅` 一行（上一批那次表格编辑把它整行替换掉了，这次顺手补回来）；新增 §5.5（七行接口表 + 三条经验：状态留调用方 / 翻转与避让必须自己算 / 弹窗要不透明）；决策 D10（画法与状态机分离）、D11（下拉与提示框自己避让）、D12（弹窗不复用 HUD 底板）。
-  - 为什么：D12 是这一批唯一"踩到才改"的一条 —— 第一版弹窗用半透明 HUD 底板，截图里底下列表的字全透上来，像字叠字。不写下来，下一个人做设置页还会再踩一次。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1209
-
-## 批次 20261027-1218 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1218
-
-> 用户 2026-10-27：「继续继续继续」—— 把**阶段 2 的最后一块**（提示条族）收掉：
-> 目标名、攻击蓄力条、切槽时浮出的物品名。三样都是纯展示、都不吃事件，
-> 做完之后「底部 HUD + 准星周围的东西」就全是 canvas 的了。
-
-- [x] [X1] `src/ui2d/overlays.ts`：三样提示条的画法 + 纯函数（`attackChargeRect` / `attackChargePercent` / `itemNameAlpha`），`Hud2D.setTips()` 统一收口 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`overlays.ts`（约 200 行）—— `drawTargetLabel` / `drawAttackCharge` / `drawItemNamePop` / `drawTips` + `attackChargeRect`（44×3、准星下 16px）/ `attackChargePercent`（量化到 2%，与 DOM 版同口径）/ `itemNameAlpha`（350ms 淡入 → 保持 2000ms → 350ms 淡出）；`Hud2D.setTips()` 在**所有绘制之后**画（提示条在原 DOM 里就是最上面那层）。
-  - 为什么：**不做快照缓存**（决策 D13）—— 三样加起来每帧就两次 `fillText` + 一块 44×3 小矩形，为它维护签名比直画还贵；缓存是按量级决定的，不是按"要不要优化"。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **51 passed**（本批 +5）；`npx tsc --noEmit` 干净。
-  - 批次：20261027-1218
-
-- [x] [X2] `src/main.ts` 接线 `?ui2d=1`：三样 DOM 让位（`visibility: hidden`），矩形仍从 DOM 量（文本长度/触摸 pinned 位置都在 CSS 里），alpha 按时间算 → `npm run check:fast && npm run build:fast`
-  - 做了什么：`applyTipsDomFallback()` 把 `#target-info` / `#attack-cooldown` / `#selected-item-name` 设 `visibility: hidden`（保留布局，canvas 才能量到"随文本变宽、触摸时被 JS 挪位"的矩形）；`syncTips2D()` 每帧喂状态——目标名与物品名**只在文本/锚点/视口变时量 DOM**，蓄力条的几何直接由 `attackChargeRect(overlay.width, overlay.height)` 算；`showSelectedItemName()` 里记 `itemNameShownAt`，淡化交给 `itemNameAlpha`；resize 时 `tips2dEpoch += 1`。
-  - 为什么：物品名的淡出 canvas 里没有 transition，要么按时间算要么每帧 `getComputedStyle`（更贵且不可断言）；按时间算还顺带解决了"暂停时不淡"（决策 D14）。
-  - 验证：`npm run check:fast` 绿；`npm run check` exit=0；`npm run build:fast` 出包；`tsc` 干净。⚠️ 真机观感未验。
-  - 批次：20261027-1218
-
-- [x] [X3] 预览页 `tools/preview/tips.html` + `shoot-all` 补图，重拍 `.tmp/canvas-version/` 并更新 README → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`tips.html` 按 `index.html` 那几条 CSS 建真 DOM（`visibility: hidden`）只为测量，再把矩形喂给 `Hud2D.setTips()`；参数 `?target=&item=&charge=&age=&tint=1`。`SHOTS` 加 3 张（`11-tips` / `11b-tips-fade` / `11c-tips-tinted`），累计 22 张；`.tmp/canvas-version/README.md` 的进度表与 URL 表同步。
-  - 为什么：提示条是"一闪而过"的东西（物品名 2 秒、蓄力条不到 1 秒），截图必须能把状态定住；`age=2175` 那张专门展示"淡出到一半"。
-  - 验证：`node tools/preview/shoot-all.mjs` 22 张全出；逐张看过：目标名贴在准星下方、蓄力条 44px 在它上面不远、物品名胶囊在快捷栏上方；`charge=100` 那版条确实消失；`age=2175` 那版半透明。
-  - 批次：20261027-1218
-
-- [x] [X4] 文档：`notes/canvas-ui.md` §5.6（阶段 2 收尾 + 还剩表盘）、决策 D13/D14 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段 2 行改成"只剩指南针·时钟表盘"；新增 §5.6（三处与前面不同的做法 + "阶段 2 还剩什么"表）；决策 D13（不做快照缓存）、D14（淡出按时间算）。
-  - 为什么：D13 容易被误解成"偷懒"——所以写清了判据是**量级**；D14 的代价（低帧率跳格）也写在正面，免得以后有人当成 bug 去修。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1218
-
-## 批次 20261027-1226 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1226
-
-> 用户 2026-10-27：「继续继续」—— 两件事：① 把**阶段 2 的最后一样**（指南针 / 时钟表盘）收掉，
-> 阶段 2 就此完整；② 做**阶段 3 的前置**：canvas 面板的**输入通道**（焦点行 / 上下键 / 回车 /
-> Esc / 指针点击），并在预览页里用它拼出一个能用的暂停菜单。
-> ⚠️ 这一批**不动游戏里的暂停流程**：真正的接线（把 DOM 面板藏起来、canvas 接管输入）
-> 单独一批做，因为那里一旦接错就是"Esc 打不开 / 关不掉"。
-
-- [x] [Y1] `src/ui2d/ToolDial2D.ts`：表盘（圆 + 铜边 / 白边）+ 四个方位刻度 + 旋转指针 + 读数文字，`dialNeedlePoints` 等纯函数 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`ToolDial2D.ts`（约 210 行）—— 52×52 圆盘（径向渐变 + 铜色/铁蓝边框）、N/E/S/W 四个方位字母（只有指南针画）、上红下白的三角指针（时钟是一根细白针）、表盘下方一行 10px 读数；纯函数 `dialCenter` / `dialNeedlePoints`（按角度算三角三顶点）/ `dialTickAnchors` / `dialBorderColor`。
-  - 为什么：**指针不用 `ctx.rotate` 而是算顶点**（决策 D15）—— 用 rotate 的话"指向哪"藏在变换栈里，没法离线断言；而顺/逆时针搞反在触摸端几乎发现不了。刻度锚点同理（随盘面尺寸变）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **57 passed**（本批 +6：圆心、0/90/180/270 尖端、底边对称、非法角度按 0°、四个刻度在盘内、两种边框色不同）；`tsc` 干净。
-  - 批次：20261027-1226
-
-- [x] [Y2] `src/ui2d/menu.ts`：`CanvasMenu` 输入通道（焦点行、`ArrowUp/Down/Home/End`、`Enter/Space` 激活、`Esc` 关闭、指针命中），纯状态机 + 绘制 → `npx vitest run tests/ui2d-menu.test.ts`
-  - 做了什么：`menu.ts`（约 240 行）—— `menuPanelSize` / `menuRowRects` / `menuFocusAfterKey`（上下循环、Home/End、越界夹回）+ `CanvasMenu` 类（`open/close/isOpen/focus`、`handleKey`、`handlePointer`、`regions()`、`render()`）；面板复用 `drawModalFrame`，焦点行用按钮 hover 态 + 左侧 ▶，底部一行操作提示。
-  - 为什么：**只返回"意图"不含游戏动作**（决策 D16）—— 写进动作就得 import 存档/网络/世界列表，这一层立刻变第二份真相，也没法在预览页里跑；"打开时游戏该不该暂停/还收不收其它键"同样留在主循环（否则重演"暂停时角色还在走"）。
-  - 验证：新建 `tests/ui2d-menu.test.ts` → **14 passed**（布局随行数增高、行等距居中、焦点循环与 Home/End、未打开时不理输入、Enter/空格激活返回 id、Esc 关闭、点行激活并移焦点、点外面关闭可关掉、`regions()` 的 id 与层号）；`tsc` 干净。
-  - 批次：20261027-1226
-
-- [x] [Y3] 预览页 `tools/preview/menu.html`（整页暂停菜单，键盘可操作）、`tools/preview/dial.html`（指南针/时钟）；`shoot-all` 补图并重拍 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`dial.html`（两块表盘并排、`?deg=&kind=&tint=1`）、`menu.html`（整页暂停菜单：↑↓ 移动焦点、Enter 激活、Esc 关、点行激活、点面板外关闭，底部一行实时显示"焦点/激活了什么"）；`SHOTS` 加 4 张（`12-tool-dial` / `12b-dial-tinted` / `13-menu` / `13b-menu-tinted`），累计 26 张；`.tmp/canvas-version/README.md` 同步。
-  - 为什么：输入通道的正确性一半在断言里（14 条），另一半只能在**能按**的页面上验——键盘导航尤其如此，触摸端完全测不到。
-  - 验证：`node tools/preview/shoot-all.mjs` 26 张全出；逐张看过：两块表盘（时钟蓝盘细针 210°、指南针米色盘红白针 45° + N/E/S/W）、暂停菜单四行 + 焦点 ▶ + 遮罩 + 底部提示。
-  - 批次：20261027-1226
-
-- [x] [Y4] 文档：`notes/canvas-ui.md` 阶段 2 标 ✅、新增 §5.7（表盘）与 §5.8（输入通道契约）、决策 D15/D16 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段 2 整行改 ✅（只剩准星判定不搬）；新增 §5.7（表盘两处自己算的东西）与 §5.8（"浏览器给的 vs 要自己做的"对照表 + 三条边界 + 明确写了"这一批没有接线"）；决策 D15（指针算顶点）、D16（只返回意图）。
-  - 为什么：§5.8 那三条边界里，"Esc 一律先关菜单、调用方不要再判一遍"是最容易在接线时写错的——写下来才能防止"按一次 Esc 关两层"。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1226
-
-
-## 批次 20261027-1235 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1235
-
-> 用户 2026-10-27：「继续继续继续继续」—— 把上一批做好的**输入通道接进游戏**：
-> `?ui2d=1` 时 Esc 唤出的暂停菜单页由 canvas 画、canvas 收输入。
-> 关键取舍：**不给每个按钮重写动作**，而是把 DOM 里那排按钮的 `textContent` 当标签、
-> `click()` 当动作 —— 文案（6 种语言）、条件显隐（联机按钮只在房里出现）、
-> 删除世界的二次确认全都自动继承，一条都不用抄。
-
-- [x] [Z1] `src/main.ts`：`syncPauseMenu2d()` 跟着 `settingsScreen.isOpen/page` 进出，DOM 面板让位（`visibility: hidden`）、HUD 让位、遮罩与面板都由 canvas 画 → `npm run check:fast`
-  - 做了什么：新增 `syncPauseMenu2d()`（每帧一次边沿检测：面板开着且 `page === 'menu'` 就接管）与 `renderPauseMenu2d()`（canvas 自己画 45% 遮罩 + 面板）；让位三处 —— `.settings-panel` 设 `visibility: hidden`（不能用 `display`，会打乱它自己 130ms 的淡出时序）、`#settings-screen` 的遮罩背景改 `transparent`（它排在 canvas 之上，不透明会把面板一起压暗）、`#hud` 设 `visibility: hidden`（body 级定位元素，不藏就压在 canvas 上）。退出时逐项还原。
-  - 为什么：三种转换（打开 / 从设置子页退回 / 关掉）都从这一处进出，就不必在 `SettingsScreen` 里埋钩子——埋了会分成两套时序。**还原判据用独立的 `pause2dEngaged` 而不是 `menu.isOpen`**（决策 D17）：激活时要先 `close()` 再点按钮，那时 `isOpen` 已经 false，用它当判据会漏还原（第一版就这么错，症状是"退出暂停后 HUD 永久消失"）。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
-  - 批次：20261027-1235
-
-- [x] [Z2] 输入路由：Esc / ↑↓ / Home·End / Enter·空格 走 `CanvasMenu`，指针点击走 `handlePointer`，激活 = `button.click()`；关掉时恢复原样 → `npm run check && npm run build:fast`
-  - 做了什么：keydown 监听开头加一段"菜单开着时整段键盘归它"（认 ↑↓/Home/End/Enter/空格/Esc，其余键 `preventDefault` 后 return）；覆盖层 canvas 上绑 `pointerdown`（平时 `pointer-events: none`，只有菜单打开时由 `syncPauseMenu2d` 打开），点击走 `handlePointer` → `dispatchPauseMenu`。激活时先 `menu.close()` 再 `button.click()`（按钮可能切页签或直接关面板），随后立刻 `syncPauseMenu2d()` 完成还原。
-  - 为什么：菜单开着时按 W 不该让角色在面板后面走——DOM 版靠浏览器焦点挡住了这一层，canvas 版必须自己挡（`preventDefault` + return）。
-  - 验证：`npm run check` 全量（含 181 套离线）通过；`npm run build:fast` 出包成功；`tsc` 干净。⚠️ **真机/浏览器没在游戏里跑过**：dev 模式缺 `__host/core.bin` 只能停在落地页，所以"Esc 打开→点设置→退回→再 Esc 关掉"这条链只有静态推演 + 预览页验证。
-  - 批次：20261027-1235
-
-- [x] [Z3] 预览页补一张"游戏里那一版"的对照（同一份 DOM 按钮 → canvas 行），`shoot-all` 补图并重拍 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`menu.html` 加 `?from=dom`：真的建出四颗 `<button>`（标签走 `t('pause.resume')` 等真实 i18n 键），再把它们的 `textContent` 喂给 `CanvasMenu`，激活时 `button.click()` —— 与 `main.ts` 完全同一条路。截图 `14-pause-dom-driven.png`；`shoot-all` 累计 27 张。
-  - 为什么：接线里最容易错的是"行与按钮的对应关系"，而这条关系在预览页里能一眼看出来（截图里四行就是真实那四颗按钮的文案）。
-  - 验证：`node tools/preview/shoot-all.mjs` 27 张全出；截图里四行分别是「继续游戏 / 设置 / 统计 / 保存并退出到主菜单」——正是 `SettingsScreen` 菜单页当前那四颗（成就那颗已在批次 20261024-1152 删除，多人那颗单机时不显示）。
-  - 批次：20261027-1235
-
-- [x] [Z4] 文档：`notes/canvas-ui.md` 阶段 3 前进一格（暂停菜单已接线）、决策 D17/D18 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段 3 标 🟡（暂停菜单页 ✅，其余未开始）；新增 §5.9（边沿检测、不重写动作的代码骨架、三处让位的表、"还原判据不能用 isOpen"的警告、键盘整段接管）；决策 D17（独立标志）、D18（行来自 DOM）。
-  - 为什么：D18 是这一批的核心取舍，也解释了一个反直觉的结论——"canvas 菜单的能力上限 = DOM 面板现有按钮"，这被当成优点写下来（避免两套 UI 各自长功能）。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿；`npm run check` 通过（TASKS 台账随收尾补齐）。
-  - 批次：20261027-1235
-
-
-## 批次 20261027-1258 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1258
-
-> 用户 2026-10-27：「继续继续」—— 往**设置页**走一步。
-> 这一批只做"能不能画对、点得着"：把 `.settings-row` 读成模型、用控件库画出来、
-> 交互写回 DOM 控件（`click()` / 写 `value` 再派发事件），并在预览页用**真实 DOM 行**验证。
-> ⚠️ **游戏里还没接线**（`?ui2d=1` 时设置页仍是 DOM）：接线要先把暂停菜单那套
-> `engaged` 机制泛化成"菜单/设置两态"，混在一起改容易把上一批刚通的 Esc 弄坏。
-
-- [x] [W1] `src/ui2d/form.ts`：`readFormRows()`（DOM → 模型）+ 行/控件几何纯函数 + `drawFormRow` + `writeRangeRatio` → `npx vitest run tests/ui2d-form.test.ts`
-  - 做了什么：`form.ts`（约 210 行）—— `readFormRows(host)` 扫 `.settings-row`：有 `.settings-switch` → `switch`（读 `aria-checked`/`.on`）、有 `input[type=range]` → `range`（按 min/max 算 0~1）、有 `.settings-cycle` → `cycle`（`textContent` 当值）；`formRowRects` / `formContentHeight` / `formControlRect` / `formRatioFromX` / `drawFormRow` / `writeRangeRatio`（写 `value` + 派发 `input`/`change`，让原有设置逻辑照常跑）。
-  - 为什么：与暂停菜单同一条思路（D18）——**DOM 是唯一真源**，这里不定义"有哪些设置项、什么范围、什么文案"，只负责画与转发；否则设置项一改，两套表必漂。
-  - 验证：`tests/ui2d-form.test.ts` **4 passed**（行距、内容高、控件右贴边与小行收窄、滑杆比例的 0/0.5/1 与 NaN）；`tsc` 干净。
-  - 批次：20261027-1258
-
-- [x] [W2] `tools/preview/form.html`：用**隐藏的真实 DOM 行**当数据源（开关 / 循环按钮 / 滑杆），画出并支持点/拖/滚/键盘；`shoot-all` 补图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：页面里先建 13 行真的 `.settings-row`（`.settings-switch` / `.settings-cycle` / `input[type=range]`，开关点击会翻转、循环按钮点击会换值），`readFormRows()` 读成模型后画到 canvas；点开关/循环按钮 = `element.click()`、拖滑杆 = `writeRangeRatio()`，每次交互后**重新读模型重画**。加 `?tint=1`；`shoot-all` 累计 29 张。
-  - 为什么：读取与写回靠 DOM，光看代码不算验证——这一页把"隐藏 DOM 当数据源"那条路真的跑通了（截图中四行开关/三行循环/三行滑杆的值都来自那些 DOM 元素）。
-  - 验证：`node tools/preview/shoot-all.mjs` 29 张全出；截图 `15-settings-form.png` 里页签、开关（绿）、循环按钮（关闭/第一人称）、滑杆（读数 8 / 60 / 50 在轨道左侧）都对；`15b` 是遮罩版。
-  - 批次：20261027-1258
-
-- [x] [W3] 游戏里接线：`syncPauseCanvas2d()` 统一管"菜单 / 设置"两态（DOM 让位、遮罩、HUD、`pointer-events`、键盘路由），设置页滚轮与页签点击走 `form.ts` 的模型 → `npm run check && npm run build:fast`
-  - 做了什么：把上一批的 `syncPauseMenu2d()` 泛化成 `syncPauseCanvas2d()`——每帧算一个模式（`null` / `'menu'` / `'settings'`），模式变了先 `teardownPauseCanvas2d()` 逐项还原、再按模式建状态。菜单页仍是 `CanvasMenu`（行来自 DOM 按钮）；设置页新增 `buildSettings2d()` / `refreshSettings2d()` / `renderSettings2d()`（标题栏 + 页签 + 行 + 滚动条）与 `handleSettingsPointer()` / `handleSettingsKey()`。键盘分两态路由（设置页自己吃 ↑↓/Enter/空格/Esc，并把焦点行滚进视口）；指针加了 `pointermove` / `pointerup`（滑杆要按下拖动）与 `wheel`（滚列表）。
-  - 为什么：两种页面**共用一个覆盖层、一批 DOM 让位/还原**，所以必须由同一个地方决定"现在是谁在接管"——放在别处就会出现"菜单收了、设置页没接上"这种半状态。还原判据继续用 `pauseCanvasMode`（D17），不用 `menu.isOpen`。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check` 全量通过；`npm run build:fast` 出包。⚠️ **游戏内仍未实测**（dev 缺 `__host/core.bin` 只能停在落地页）：设置页的"读 DOM → 画 → 写回"链路在 `tools/preview/form.html` 里跑通过（同一份 `form.ts`），但 `main.ts` 这段接线只有类型检查与静态推演。
-  - 批次：20261027-1258
-
-
-## 批次 20261027-1307 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1307
-
-> 用户 2026-10-27：「继续」—— 接着做**纯文字 HUD**：F3 调试信息与计分板侧边栏。
-> 这两块没有控件、没有命中测试，内容就是"一块底 + 几行字"，正好试一条新路子：
-> **不重排、按原位重画** —— 把 DOM 里直接带文字的元素连矩形/颜色/字号一起读出来画。
-
-- [x] [P1] `src/ui2d/textPanel.ts`：`readTextRuns` / `readTextBlocks` / `drawTextRuns` / `drawTextBlocks` + 归一化字号与签名 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：读 DOM 里**直接带文字**的元素（叶子）→ 「矩形 + 文本 + 计算样式的颜色/字号/字重/对齐 + 有无阴影」；另外单独读"有色底"的元素（F3 的 `.35`、计分板的 `.45`）连同圆角。绘制时先画底块再按行画字（多行文本按 `\n` 拆开、行高 1.35 倍字号、竖直居中）。
-  - 为什么：F3 那串文案是**拼出来的多行字符串**，计分板是"名字左、分数右"的 flex 行 —— 重排一遍就要把格式与对齐规则各抄一份；颜色字号还会随夜间/低血量/断点变（`ui2d/textPanel.ts` 顶部三条理由）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **60 passed**（新增 3 条：字重归一、基线、签名稳定性）；`tsc` 干净。
-  - 批次：20261027-1307
-
-- [x] [P2] `src/main.ts` 接线：`#debug` 与 `#scoreboard-hud` 让位，`syncTextPanels2d()` 按"文字内容 + 视口"签名决定要不要重读 → `npm run check:fast`
-  - 做了什么：`applyTextPanelsDomFallback()` 把两块设 `visibility: hidden`（保留布局：F3 的换行、计分板两列对齐都要靠 DOM 量）；`syncTextPanels2d()` 每帧拼一个"文字内容 + 视口尺寸"的签名，**没变就不碰 `getComputedStyle`**（那是会触发样式重算的调用），变了才 `readTextRuns` + `readTextBlocks` 喂给 `Hud2D.setTextPanels`；`Hud2D` 在最上层画（先底色块再文字），resize 时把签名清空。
-  - 为什么：F3 开着时每帧都变（帧率/坐标），那是它本来就该重画；**关着时一次都不读** —— 默认 F3 是关的，所以常态零成本。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
-  - 批次：20261027-1307
-
-- [x] [P3] 预览页 `tools/preview/textpanels.html`（真 DOM 当数据源）+ `shoot-all` 补图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：按 `index.html` 的 `#debug` / `.scoreboard-hud` CSS 建真 DOM（`visibility: hidden`），读 runs + blocks 后原位重画；两张截图（含遮罩版），`shoot-all` 累计 31 张。
-  - 为什么：这一路线的卖点是"原位重画"，那就必须能一眼看出**位置/颜色/对齐都与 DOM 一致**——截图里 F3 五行等宽、计分板分数右对齐且是黄色（`#ffd75e` 来自计算样式）。
-  - 验证：截图看过：F3 块左上带半透明底、计分板右上带圆角底，名字左/分数右、分数黄色；遮罩版两块都是黄的。
-  - 批次：20261027-1307
-
-- [x] [P4] 文档：`notes/canvas-ui.md` §5.11 + 决策 D21 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.11 记下"原位重画"这条路线的三条理由与代价（`getComputedStyle` 的门禁）；决策 D21（纯文字面板按原位重画，不重排版）。
-  - 为什么：这是本项目**第一次**"不重排、只重画"的迁移，与前面"画法全部自己实现"的路线不同 —— 不写清楚，下一块（聊天栏 / 状态效果）会重新纠结用哪条路。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1307
-
-
-## 批次 20261027-1319 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1319
-
-> 用户 2026-10-27：「继续继续」—— 把上一批那条「原位重画」的路子用到**剩下的纯展示 HUD**上：
-> 状态效果胶囊（`#effects-hud`）与聊天消息列表（`.chat-log`）。
-> 这两块本来就要重排一遍才好看，但它们的版式（胶囊/分行）已经在 CSS 里写好了，
-> 直接原位重画既省事又不会漂。
-
-- [x] [E1] `src/main.ts`：`#effects-hud` 与 `.chat-log` 纳入纯文字面板（让位 + 每帧签名同步）→ `npm run check:fast`
-  - 做了什么：`applyTextPanelsDomFallback()` 加上 `#effects-hud`，并**只藏 `.chat-log`**（输入行/提示/发送键仍是 DOM —— 那是阶段 3 输入法那一摊）；`syncTextPanels2d()` 把这两块一起纳入"文字内容 + 视口"签名与读取，根节点列表化（`roots[]` 逐个 `readTextRuns` + `readTextBlocks`）。
-  - 为什么：聊天**不能整块藏**——`#chat` 里还挂着输入行，一藏就把打字界面也藏了（与快捷栏"容器不能整体透明"同一个道理）。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
-  - 批次：20261027-1319
-
-- [x] [E2] `src/ui2d/textPanel.ts`：渐变底的近似（状态效果胶囊的 `--hud-bg` 是 `linear-gradient`，`backgroundColor` 是透明的）→ 预览页 + 截图
-  - 做了什么：`hasBackground()` 在 `backgroundColor` 透明但 `backgroundImage !== 'none'` 时，退化成一块半透明深色 `HUD_GRADIENT_FALLBACK = rgba(16,17,21,.66)`；预览页 `textpanels.html` 加状态效果胶囊（3 个，好/坏两种边框）与聊天 4 行（系统黄 / 普通白 / 提示蓝 / 报错红），两张截图重拍。
-  - 为什么：不退化的话这三个胶囊会**完全没有底**，白字直接压在世界画面上（截图里一眼就看出来）。复刻整条 CSS 渐变要解析 `linear-gradient(...)` 字符串，只为"上下差 2% 亮度"，不值得（决策 D22）。
-  - 验证：`node tools/preview/shoot-all.mjs` 31 张全出；截图看过：三个胶囊有底、边框分好坏、文字不溢出；聊天四行颜色分别对（黄/白/蓝/红）。
-  - 批次：20261027-1319
-
-- [x] [E3] 文档：`notes/canvas-ui.md` §5.12 + 决策 D22 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.12 记下"纯展示 HUD 到此清零"、渐变底的近似，以及聊天只藏消息列表的理由；决策 D22（渐变底退化成半透明深色）。
-  - 为什么：这是"纯展示 HUD 全部搬完"的收口，得写清**还剩什么**（聊天输入行、效果色点这类 pseudo 元素），否则下一批会以为还有活。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1319
-
-
-## 批次 20261027-1327 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1327
-
-> 用户 2026-10-27：「继续继续继续」—— 收一个上一批留下的尾巴：
-> 文字面板画的是**边框盒**，没扣元素自己的 `padding`，于是 `#debug` 与状态效果胶囊里的字
-> 都顶到了边框上（胶囊左侧那颗 `::before` 色点也因此被字压住）。
-
-- [x] [F1] `src/ui2d/textPanel.ts`：`readTextRuns` 改成按**内容盒**出矩形（扣 `padding` 四边）→ 预览页 + 截图
-  - 做了什么：读 `paddingLeft/Right/Top/Bottom`，把每段文字的绘制矩形内缩到内容盒；`drawTextRuns` 的对齐/换行逻辑没动（它本来就以传入矩形为准）。
-  - 为什么：`#debug` 是 `padding: 6px 9px`、状态效果胶囊是 `3px 9px` —— 不扣的话字比 DOM 里偏左/偏上 9px，胶囊里还会压住左边的色点。**这类偏差不会让功能坏**，只是"看着有点挤"，所以只有截图能发现。
-  - 尝试过又撤掉的：读 `::before` 的宽高把色点画出来。撤掉的原因见 D24（伪元素的占位不在元素自身 `rect` 里，字会压在色点上；要正确得先用伪元素宽度偏移文字，牵动排版，不值）。
-  - 验证：`npx tsc --noEmit` 干净；截图重拍 2 张（`16-text-panels.png` / `16b`），F3 与三个胶囊的文字都回到内边距以内、与 DOM 一致。
-  - 批次：20261027-1327
-
-- [x] [F2] 文档：`notes/canvas-ui.md` §5.12 补 padding 那条；决策 D24（伪元素色点为什么不画）→ `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.12 的"三个必须写下来的细节"补第 4 条（内容盒）；决策 D24 记下试过 `::before` 又撤掉的原因与正确做法。
-  - 为什么：下一个人看到"状态效果胶囊少了颗色点"会想顺手补 —— 不写清楚试过什么、为什么撤，就会重走一遍（还可能顺手把文字排版搞乱）。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1327
-
-
-## 批次 20261027-1334 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1334
-
-> 用户 2026-10-27：「继续继续」—— 接着做**主菜单 / 世界列表**。
-> 这一块与前面都不同：菜单在 `App` 之外（**没有覆盖层、没有主循环**），而且它是个
-> **静态整页**。所以不再"自己排版"，改走**整页镜像**：DOM 把 `opacity` 设 0 让位像素，
-> canvas 把每段文字、每块底色与边框按原位重画 —— 加按钮、改文案、换语言都自动跟上。
-
-- [x] [G1] `src/ui2d/textPanel.ts`：底块支持**边框**（`readSurface`），并给 `drawTextRuns` 加 `slack` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`readTextBlocks` 现在读 `borderTopWidth/TopColor` 与圆角，绘制时"先底后边"（描边画在内侧半像素上，与 `border-box` 对齐）；只有边框没有底色的元素也会被画。`drawTextRuns(ctx, runs, slack)` 给 `maxWidth` 留余量。
-  - 为什么：MC 风格的按钮靠边框出"凸起"感，没有边框整页就是一堆灰块；`slack` 是因为 DOM 的 `letter-spacing`（标题常写负值）会让元素盒子比 canvas 量出的字**窄**，不给余量 "MINICRAFT" 会被截成 "MINICRA…"（第一版截图就是这样）。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **62 passed**（新增 2 条：不给余量按盒子截断、给余量完整画出）；`tsc` 干净。
-  - 批次：20261027-1334
-
-- [x] [G2] `src/ui2d/menuScreen.ts`：`MenuScreen2D` —— 独立覆盖层 + `engage/disengage`（`opacity: 0` 让位）+ rAF 循环 + 签名比对
-  - 做了什么：`engage(el)` 建（或复用）一个 `Ui2DOverlay`、把元素的 `opacity` 设 0、起一个 `requestAnimationFrame` 循环；每 4 帧比一次签名（视口尺寸 + 所有可滚动元素的 `scrollTop` + 整块 `textContent`），变了才重读计算样式并重画；`disengage()` 还原 opacity 并停止循环。
-  - 为什么：菜单是静态的，每帧读整棵树的计算样式纯属浪费；而 `WorldScreen` 没有"打开/切视图/滚动"事件，只能靠签名自己发现变化。
-  - 验证：预览页 `tools/preview/menu-mirror.html` 跑通（首页与世界列表两种视图），`tsc` 干净。
-  - 批次：20261027-1334
-
-- [x] [G3] `src/main.ts`：主菜单接线 `?ui2d=1`（`mountMenuMirror`，200ms 轮询 + resize），只镜像 `home` / `worlds` → `npm run check:fast`
-  - 做了什么：`boot()` 里在 `installInstallHint()` 之后调 `mountMenuMirror(menu)`；它建一个 `MenuScreen2D`，每 200ms 检查"菜单是否开着且停在 `home`/`worlds`"，是就 `engage(.world-panel)`，否则 `disengage()`；`resize` 时立刻同步一次。
-  - 为什么：**只镜像这两个视图**——`create` 与多人面板里有 `<input>`，而 `<input>` 的当前值不在 `textContent` 里（镜像过去是空框），输入法那一摊要单独做。轮询是因为 `WorldScreen` 不暴露事件，而菜单静态、200ms 的代价可忽略。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ **游戏内未实测**（dev 缺 `__host/core.bin` 停在落地页），镜像效果由预览页与截图验证。
-  - 批次：20261027-1334
-
-- [x] [G4] 预览页 `tools/preview/menu-mirror.html` + 3 张截图 + 文档（§5.13、决策 D25）→ `node tools/preview/shoot-all.mjs`
-  - 做了什么：预览页按 `index.html` 的配色搭了一块"世界面板"（首页 / 世界列表两个视图），用 `MenuScreen2D` 镜像它；`?view=worlds`、`?tint=1`；`shoot-all` 加 3 张（累计 34 张）；`notes/canvas-ui.md` 新增 §5.13，决策 D25 记下"整页镜像"的适用边界。
-  - 为什么：镜像的卖点是"一像素不自己排"，那就必须能一眼看出**它画出来的和 DOM 完全一致**——预览页里 DOM 面板被设成 `opacity: 0`，屏幕上看到的每一块都是 canvas 画的。
-  - 验证：`node tools/preview/shoot-all.mjs` 34 张全出；截图看过：首页标题完整（`MINICRAFT` 不再被截）、四颗按钮有边框与文字、世界列表三张卡片 + 每张两个小按钮 + 新建/返回；遮罩版整块黄。
-  - 批次：20261027-1334
-
-
-## 批次 20261027-1345 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1345
-
-> 用户 2026-10-27：「去完成」—— 做上一轮说的**输入法定型**。
-> 这是新建世界、多人面板、聊天三条线共同的前置件：canvas 自己收不到输入法组合态，
-> 唯一正路是"屏幕外放一个看不见但可聚焦的 `<input>` 收字，canvas 只画"。
-
-- [x] [H1] `src/ui2d/textInput.ts`：`CanvasTextInput`（隐藏 input 收字 + 画光标/选区/组合态下划线）+ 一组纯几何/编辑函数 → `npx vitest run tests/ui2d-textinput.test.ts`
-  - 做了什么：`textInput.ts`（约 420 行）—— 隐藏 `<input>`（`opacity: 0` + 1×1 + 固定视口内 + `pointer-events: none`）承接输入；`metricsFor` / `caretXOf` / `clampCaret` / `applyInsert` / `backspaceAt`（按码点）/ `visibleSlice`（超宽滚动窗口）/ `rangeRect` / `caretRect` / `caretBlinkOn`；`CanvasTextInput` 负责 `open/close/focus/render/dispose`，Enter 提交、Esc 取消（两者都先看 `isComposing`）。
-  - 为什么：canvas 没有输入框，也收不到组合态。三条约束见 §5.14 —— 尤其"不能用 `display: none`"（拿不到焦点、移动端不弹键盘）和"组合态靠事件不靠 value"（拼音阶段 `value` 里已经有字母了）。
-  - 验证：`npx vitest run tests/ui2d-textinput.test.ts` → **18 passed**；`tsc` 干净。
-  - 批次：20261027-1345
-
-- [x] [H2] 预览页 `tools/preview/textinput.html`：能**真的打字**（含中文输入法）、可预填内容与选区；两张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：一页"新建世界"面板，两块 `CanvasTextInput`（世界名称 / 种子），点一下就能打字；`?value=我的世界&sel=1,3` 预填并选中一段（截图用），`?tint=1` 加遮罩。`shoot-all` 加 2 张（累计 36 张）。
-  - 为什么：这一层的正确性一半只能靠"真的敲一遍"——组合态下划线、光标闪烁、选区宽度都只有在动起来时才看得出问题；截图至少能把"中文 + 选区"这一幕定住。
-  - 验证：`node tools/preview/shoot-all.mjs` 36 张全出；截图看过：`18b` 里"我的世界"四个字、第 2~3 个字上有蓝色选区、种子框是未聚焦空框 + 占位提示。
-  - 批次：20261027-1345
-
-- [x] [H3] 文档：`notes/canvas-ui.md` §5.14（三条约束 + 未接线的边界）、决策 D26 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.14 把三条约束做成表格（每条都写"为什么"），并明确写了**还没接进游戏**；决策 D26 记下"为什么用隐藏 input 而不是自己实现键盘"。
-  - 为什么：这一层最容易被后来的人"简化"——把 `opacity: 0` 改成 `display: none`、或者干脆用 `value` 判组合态。两种改法在桌面 Chrome 上**都能跑**，只在移动端输入法下坏掉，不写清楚就会被改回去。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1345
-
-
-## 批次 20261027-1354 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1354
-
-> 用户 2026-10-27：「继续继续继续」—— 把**新建世界表单**也交给 canvas，
-> 让"整页镜像"覆盖主菜单的第三个视图。上一批说过：`<input>` 的值不在 `textContent` 里，
-> 所以镜像一直绕开这个视图；这一批就把这个缺口补上。
-
-- [x] [J1] `src/ui2d/textPanel.ts`：输入框取值（`textFieldValue` / `inputDisplayText`，占位提示 0.55 不透明度）+ `TextRun.alpha` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`readTextRuns` 现在优先认 `<input>` / `<textarea>`（`type` 只认 text/search/number，密码与隐藏框跳过），值为空时用 `placeholder` 并标为占位；`TextRun` 加 `alpha`，占位提示画成 0.55 透明（`::placeholder` 的计算样式读不到）；签名里带上 alpha。
-  - 为什么：`<input>` 的**当前值不在 `textContent` 里** —— 这是"整页镜像"最初不敢碰新建世界的原因，也是这一批的唯一硬缺口。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **66 passed**（新增 4 条：有值画值 / 空值画占位并标记 / 没有占位就不画 / 单个空格算有值）；`tsc` 干净。
-  - 批次：20261027-1354
-
-- [x] [J2] `src/ui2d/menuScreen.ts`：`drawFieldCaret()` 画焦点框的光标与选区；**签名补上 input 的 value** → 预览页 + 截图
-  - 做了什么：`drawFieldCaret()` 在镜像画完文字之后，检查 `document.activeElement` 是否属于被镜像的子树，是就按 `selectionStart/End` + `visibleSlice`/`rangeRect`/`caretRect` 画选区与光标（DOM 那份插入符被 `opacity: 0` 一起藏了）。同时修了签名：原来只比 `scrollTop` + `textContent`，**而敲字时 `textContent` 一点没变** → canvas 永远不重画、输入框一直显示占位提示（第一版截图就是这样）。
-  - 为什么：镜像路线下"输入"仍归 DOM，但"看得见"归 canvas —— 光标和选区不画，玩家打字时完全看不到自己在哪。
-  - 验证：预览页 `menu-mirror.html?view=create` 里把光标真的放进输入框，截图 `19-create-form.png` 显示出"我的世界"（值而非占位）与输入框边框。
-  - 批次：20261027-1354
-
-- [x] [J3] `src/main.ts`：镜像白名单加 `create`（`home` / `worlds` / `create`），更新注释 → `npm run check:fast`
-  - 做了什么：`mountMenuMirror()` 的视图白名单从两个扩到三个；注释写清"`create` 为什么现在能进来"（取值 + 光标都补上了）以及"多人面板是另一棵树，不在本批范围"。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
-  - 批次：20261027-1354
-
-- [x] [J4] 文档：`notes/canvas-ui.md` §5.15（含"签名要看输入框的值"这个坑）、决策 D27 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.15 记录输入框取值与焦点光标的两处实现、"签名要看 value"的坑，以及"阶段 3 还剩多人面板"的清单；决策 D27 记下"镜像路线里输入仍归 DOM、光标归 canvas"的分工。
-  - 为什么：那个签名坑**只在真人敲字时才出现**（截图、静态页面都正常），不写清楚下一个人会当成"输入框不刷新"的玄学。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1354
-
-
-## 批次 20261027-1404 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1404
-
-> 用户 2026-10-27：「继续继续」—— 接着把**聊天输入行**交给 canvas（上一批补的输入框
-> 取值 + 焦点光标正好能复用），并顺手修一个只在游戏里才会炸的层叠问题。
-
-- [x] [K1] `src/main.ts`：聊天输入行接入 `MenuScreen2D`（`.chat-entry` 让位像素，打开时才接管）→ `npm run check:fast`
-  - 做了什么：新增 `chatEntry2d`（`MenuScreen2D`，`zIndex: 12`）与 `syncChatEntry2d()`（每帧看 `.chat-entry` 的 `offsetParent` 是否非空，出现就 `engage`、收起就 `disengage`），在帧循环里排在 `syncTextPanels2d()` 之后；`dispose()` 里一起销毁。
-  - 为什么：输入本身一行都不用改（历史、命令补全、回车发送、发送键的 `pointerdown` 都留在 DOM），只需要"谁产像素"换人 —— 这正是镜像路线的价值。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
-  - 批次：20261027-1404
-
-- [x] [K2] `src/ui2d/menuScreen.ts`：新增 `MenuScreenOptions.zIndex`，并给主菜单镜像补上 45 → 预览页 + 截图
-  - 做了什么：`MenuScreen2D` 建覆盖层时按选项设 `zIndex`；主菜单传 45（`#world-screen` 是 40）、聊天传 12（`#chat` 是 8）。预览页 `tools/preview/chat.html`（`?value=`、`?tint=1`），截图 `20-chat-entry.png`。
-  - 为什么：`Ui2DOverlay` 默认 `zIndex` 是 1 —— 上一批主菜单镜像**在预览页看着正常、在游戏里会被 `#world-screen` 的背景整个盖住**（表现是"开了 `?ui2d=1` 主菜单直接没了"）。这类层叠问题离线断言查不到、预览页也照不出来。
-  - 验证：`node tools/preview/shoot-all.mjs` 38 张全出；截图看过：输入框有值「你好，有人在吗」、绿色发送键有斜面边框、提示行仍在（它是 DOM）。
-  - 批次：20261027-1404
-
-- [x] [K3] 文档：`notes/canvas-ui.md` §5.16（含 z-index 判据表）、决策 D28 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.16 记下聊天输入行的做法与"镜像哪棵树、覆盖层就要在它之上"的判据表；决策 D28 记下"覆盖层 z-index 必须按被镜像目标的层叠顺序给"。
-  - 为什么：这个坑的形态很隐蔽 —— 预览页正常、游戏里整块消失，很容易被当成"`?ui2d=1` 又坏了"。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1404
-
-
-## 批次 20261027-1517 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1517
-
-> 用户 2026-10-27：「请直接处理背包」—— 进阶段 4。
-> 背包是整个迁移里最大的一块（7564 行），但它有个有利结构：**每格槽位就是 42×42 盒子 +
-> 一张 36×36 图标 canvas + 一个数量文本**，与快捷栏几乎同构。所以先做「槽位像素」，
-> 交互（拖拽/分堆/连发）**一行都不动**。
-
-- [x] [L1] `src/ui2d/Inventory2D.ts`：槽位几何与绘制（底/斜面/图标/数量/耐久/红底/白框）+ 签名 + 读 DOM → `npx vitest run tests/ui2d-inventory.test.ts`
-  - 做了什么：`Inventory2D.ts`（约 330 行）—— `invContentRect` / `invIconRect`（等比居中）/ `invCountAnchor` / `invDurabilityRect` / `invSignature` / `drawInvSlot`；`readInvSlots()` 从 DOM 读每格的矩形、图标 canvas、数量、耐久条比例与档位、`:hover`/`:active`、`.locked`/`.held`；`readSlotSkin()` 从 CSS 变量读底面与四边斜面颜色（不抄常量）；`Inventory2D` 自带一层覆盖层（zIndex 12）+ 签名缓存，`update()` 每帧读 DOM、变了才重画。
-  - 为什么：槽位与快捷栏同构，直接复用那套结论（量 DOM、像素换手不换输入）；`#inv-held`（拿在手上的那一叠）也一起画，否则拖动时图标会消失。
-  - 验证：`npx vitest run tests/ui2d-inventory.test.ts` → **9 passed**（内容盒、图标居中与收窄、数量/耐久锚点、自定义边框宽度、签名稳定性与各字段变化）；`tsc` 干净。
-  - 批次：20261027-1517
-
-- [x] [K2→L2] `src/main.ts`：打开背包时接管（让位用挂在 `<html>` 上的类，扛得住槽位重建）→ `npm run check:fast`
-  - 做了什么：新增 `inventory2d`（`Inventory2D`，zIndex 12）与 `syncInventory2d()`：`inventoryScreen.isOpen` 变化时开关，开着时每帧 `update()`；让位靠 `<style>` 里一条 `html.ui2d-inv #inventory-screen .inv-slot, html.ui2d-inv #inv-held { opacity: 0 }` + 切换 `<html>` 上的类（**不用逐元素内联样式**：背包切模式/换容器会重建槽位 DOM）。
-  - 为什么：`opacity: 0` 保住了命中测试，于是拖拽分配、长按分堆、连发、悬停提示全都不用改；而"逐元素设 opacity"在重建后失效 —— 槽位会闪回 DOM 原样。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
-  - 批次：20261027-1517
-
-- [x] [L3] 预览页 `tools/preview/inventory.html`（27 格 + 快捷栏行 + 红底格 + 选择白框）+ 2 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：造了 27 格 + 9 格假槽位（图标用纯色块代替真实图集裁切、数量 64/12/3/32、两格带耐久条、一格红底、一格选择态），`Inventory2D` 接管绘制；`?tint=1` 加遮罩；`shoot-all` 加 2 张（累计 40 张）。
-  - 为什么：背包的槽位在各种工作台上数量不同（27/36/45），但**绘制代码只有一份**；预览页用 27 格就能看清底、斜面、图标、数量、耐久、红底、白框是否都对。
-  - 验证：`node tools/preview/shoot-all.mjs` 40 张全出；截图看过：格子斜面方向（上/左暗、下/右亮）、64/12/3/32 数字贴右下、黄/红耐久条、红底格、白框选择态都对。
-  - 批次：20261027-1517
-
-- [x] [L4] 文档：`notes/canvas-ui.md` §5.17（两条沿用 + 两个专坑 + "还没做的"表）、决策 D29 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.17 记下"槽位与快捷栏同构"的判断、`<html>` 类让位的原因、z-index 12 的理由，并明确列出"布局与交互仍是 DOM"的边界；决策 D29 记下"背包只换像素不换交互"。
-  - 为什么：背包最容易被误解成"整个界面都要重画"。写清楚"槽位是像素、交互是 DOM"这条线，才不会被后来的人越改越多。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1517
-
-
-## 批次 20261027-1531 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1531
-
-> 用户 2026-10-27：「重点把背包逻辑和界面用 canvas 来复原实现……最好能跟 DOM 实现的一模一样」。
-> 这一批先把**逻辑**与**面板**自己写一份（不再镜像），并做成 DOM/canvas 并排对照页：
-> 同一份数据、同一套逻辑，点哪边两边都变 —— "是否一样"不用我说，你自己点。
-
-- [x] [M1] `src/ui2d/inventoryModel.ts`：左键/右键/Shift 快速移动/拖拽均分的纯逻辑 → `npx vitest run tests/ui2d-inventory-model.test.ts`
-  - 做了什么：`leftClick` / `rightClick` / `quickMove` / `distributeDrag`，四个函数只操作 `SlotAccess(get/set)` 与 `Cursor`，堆叠上限与"同种物品"由调用方注入 `MoveRules`。
-  - 为什么：要做到"一模一样"，规则就不能散在绘制代码里；抽成纯逻辑之后，同一份逻辑可以套在真实 `Inventory` 上，也能被逐条断言钉住。
-  - 验证：`npx vitest run tests/ui2d-inventory-model.test.ts` → **19 passed**（左键 7 条、右键 5 条、Shift 3 条、拖拽 4 条）；`tsc` 干净。
-  - 批次：20261027-1531
-
-- [x] [M2] `src/ui2d/InventoryPanel2D.ts`：自己排版（面板/标题/36 格/光标叠）+ 命中 + 绘制 → 对照页 `tools/preview/inventory-compare.html` + 截图
-  - 做了什么：`layoutInventoryPanel()`（`INV_LAYOUT` 照抄 `.inv-*` 的 px）、`drawInventoryPanel()`（面板底 + 3px 斜面 + 标题 + 逐格用 `drawInvSlot` + 光标上那一叠）、`slotIndexAt()`；对照页左边 DOM、右边 canvas，共用同一份 `slots` 与 `cursor`，两边都绑了指针事件（左键/右键/Shift/拖拽均分）。
-  - 为什么：用户要"界面也复原"，而镜像的天花板是"DOM 长什么样就是什么样"；自己排版之后 `ui2d` 只有一份几何。对照页则把"一样不一样"变成可肉眼验证的东西。
-  - 验证：`node tools/preview/shoot-all.mjs` 41 张全出；截图 `22-inventory-compare.png` 里两边的格子位置、数量（64/12/3/28/7/41/10）、快捷栏行位置都一致；`tsc` 干净。
-  - 批次：20261027-1531
-
-- [x] [M3] 文档：`notes/canvas-ui.md` §5.18（规则表 + 未做的三件事）、决策 D30 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.18 记下"逻辑与排版都自己写"的理由、四条规则的对照表、以及下一批必须补的（接进游戏 / 双击收集 / 右键拖拽每格一个 / 长按分堆 / 专用槽位）；决策 D30 记下"逻辑纯函数化 + 规则注入"的分层。
-  - 为什么：DOM 版还有**双击收集、右键拖拽逐格放一个、触摸长按分堆**这些规则没搬 —— 不写清楚，"一模一样"会被误认为已经达成。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1531
-
-
-## 批次 20261027-1618 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1618
-
-> 用户 2026-10-27：「继续实现，不要停」—— 按任务表推进 M26：**把背包整页接进游戏**。
-> 这一批先落"整页镜像"（19 种工作站一次全覆盖、零回归），自绘版继续在预览页演进。
-
-- [x] [P1] `src/ui2d/textPanel.ts` + `menuScreen.ts`：新增 `readCanvasBlits` / `drawCanvasBlits`，镜像绘制顺序定为 底 → 位图 → 文字 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`CanvasBlit` + `readCanvasBlits(root, origin, view)`（读范围内所有 `<canvas>` 的矩形与位图）+ `drawCanvasBlits`（关掉平滑按原位贴）；`MenuScreen2D` 多存一份 `blits` 并在 `blocks` 与 `runs` 之间画；同时新增 `pollMs` 选项。
-  - 为什么：背包的图标不是文字也不是底色，而是 DOM 里已经画好的位图；不搬只能得到"有边框、没图标"的背包。顺序必须与 DOM 一致（槽位底 → 图标 → 数量）。
-  - 验证：`tests/ui2d.test.ts` → **68 passed**（新增 2 条：按原位贴并关平滑、空列表不画）。
-  - 批次：20261027-1618
-
-- [x] [P2] `src/main.ts`：背包改成整页镜像（`invMirror`，zIndex 12 + `pollMs: 120`），`#inv-held` 单独藏 → `npm run check:fast`
-  - 做了什么：把上一批的 `Inventory2D`（逐槽位读 DOM）换成 `MenuScreen2D` 镜像 `.inv-panel`；`syncInventory2d()` 简化为"开着就 `engage(panel)`、关了就 `disengage()`"；`#inv-held` 用 `html.ui2d-inv #inv-held { opacity: 0 }` 藏掉；`pollMs: 120` 兜住"只换图标不换字"的变化。
-  - 为什么：`Inventory2D` 只画槽位、面板底与标题仍是 DOM，遮罩版看得出来"只有格子黄"；整页镜像之后**面板里每一像素都是 canvas**。而 19 种工作站共用同一批 `.inv-slot`，镜像一次全覆盖。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
-  - 批次：20261027-1618
-
-- [x] [P3] 预览页 `tools/preview/inventory-mirror.html` + 2 张截图（含遮罩版）→ `node tools/preview/shoot-all.mjs`
-  - 做了什么：按 `index.html` 的 `.inv-*` 搭一块 27+9 格的真 DOM（每格含真 `<canvas>` 图标、数量、耐久条、红底格、选择态），`MenuScreen2D.engage(panel)` 镜像它；`?tint=1` 加遮罩；`shoot-all` 累计 43 张。
-  - 为什么：镜像的卖点是"面板里每一像素都由 canvas 产出"，遮罩版一张就能证明（整块黄、背景不黄）。
-  - 验证：`node tools/preview/shoot-all.mjs` 43 张全出；截图看过：面板底/斜面/图标/64·12·3·32 数量/黄色耐久条/红底格都在，遮罩版整块面板变黄。
-  - 批次：20261027-1618
-
-- [x] [P4] 文档：`notes/canvas-ui.md` §5.20（整页镜像 + 位图搬运 + `pollMs` 的坑）、决策 D32 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.20 记下"为什么先镜像"、"位图必须一起搬"、`pollMs` 兜底的原因，以及三条边界（悬停、tooltip、`#inv-held`）；决策 D32 记下"背包分两步：先镜像覆盖全部，再自绘替换"。
-  - 为什么：`pollMs` 那条尤其反直觉——"只换图不换字"的镜像会静默显示旧图标，不写清楚下一次会当成渲染 bug 查半天。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1618
-
-
-## 批次 20261027-1548 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1548
-
-> 用户 2026-10-27：「好的，你的建议处理。后面所有要做的事加到任务列表里，不用一个个找我确认。
-> 我们的目标是把背包完全复原」。
-> 所以先把**背包完全复原**拆成 M25~M31 写进 `TASKS.md`（M25 本批做完），然后执行 M25：
-> 补齐双击收集 / 右键拖拽逐格 / 长按分堆这三条规则。
-
-- [x] [N1] `src/ui2d/inventoryModel.ts`：`rightDragDistribute` / `doubleClickGather` / `splitTake` + 断言 → `npx vitest run tests/ui2d-inventory-model.test.ts`
-  - 做了什么：右键拖拽每格放一个（重复经过只放一次）；双击收集（先拿起那一格，再把同类凑到上限；光标本来就有货时把被点那格也并进来）；长按分堆取指定数量（异类拒绝、受上限）。测试从 19 条增到 **31 条**。
-  - 为什么：这是"逻辑一模一样"的核心 —— 之前只有左键/右键/Shift/左键拖拽四种，DOM 版还有这三种。
-  - 验证：`npx vitest run tests/ui2d-inventory-model.test.ts` → **31 passed**（新增 12 条：右键拖拽 4、双击收集 4、长按分堆 4）；`tsc` 干净。
-  - 批次：20261027-1548
-
-- [x] [N2] 对照页接上三种新操作 + **像素探针**验收 → 截图
-  - 做了什么：`inventory-compare.html` 双击（400ms 内同格）、右键拖拽（按下时放一个，之后每经过新格放一个）、触摸长按（500ms 取一半）；另外用 Playwright 读 `getImageData` 验证"点 canvas 第 0 格后该格中心从图标色变槽位底色，且 DOM 侧也空了"。
-  - 为什么：截图会骗人 —— 第一版两张截图看起来"没变化"，实际是**手上那叠浮在被点的那格上盖住了**；读像素才是硬证据。
-  - 验证：像素探针 `before=[139,90,43]` → `after=[139,139,139]`（槽位底色），DOM 侧 `.inv-count` 变空；截图 `22b-inventory-held.png`（手上那叠跟随指针）。
-  - 批次：20261027-1548
-
-- [x] [N3] `TASKS.md`：把"背包完全复原"拆成 M25~M31（含验收判据），M25 标记完成；文档 §5.19 + 决策 D31
-  - 做了什么：M25 交互规则（本批完成）、M26 接进游戏、M27 视觉对齐、M28 合成、M29 容器工作站、M30 重配方块、M31 触摸 UI 全套；§5.19 记录六种鼠标操作与像素探针手法。
-  - 为什么：用户要求"后面要做的事都进任务列表，不用逐个确认" —— 所以把整条路线写死在 TASKS 里，后续批次直接照着做。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1548
-
-
-## 批次 20261027-1650 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1650
-
-> 用户 2026-10-27：「继续实现，不要停」—— 把**阶段 3 的最后一块**（多人面板）收掉。
-> 它不在 `#world-screen` 那棵树里，所以单开一个镜像；面板里全是 `<input>`，
-> 正好检验上一批补的"值 + 光标"能不能用。
-
-- [x] [Q1] `src/main.ts`：`mountMultiplayerMirror()`（`#multiplayer-screen .mp-panel`，zIndex 65、`pollMs: 200`）→ `npm run check:fast`
-  - 做了什么：在 `mountMenuMirror(menu)` 之后挂 `mountMultiplayerMirror(multiplayerUi)`；200ms 轮询 `screen.isOpen`，开着就 `engage(.mp-panel)`、关了就 `disengage()`。
-  - 为什么：`#multiplayer-screen` 的 z-index 是 60，主菜单镜像（45）盖不到；而面板里是输入框，正好验证"镜像能画值与光标、输入仍归 DOM"这条路。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
-  - 批次：20261027-1650
-
-- [x] [Q2] 预览页 `tools/preview/multiplayer-mirror.html` + 2 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：按 `index.html` 的 `.mp-*` 搭一块真面板（标题 + ✕ + 三行输入框带值 + 红色状态行 + 取消/加入），`MenuScreen2D.engage(panel)`；把焦点放进"房间号"并置于末尾，让镜像画出光标；`?tint=1` 加遮罩；`shoot-all` 累计 46 张。
-  - 为什么：`<input>` 的值与光标是这一批唯一"新东西"，必须在能看见的页面上验一次（而不是只在代码里相信它）。
-  - 验证：`node tools/preview/shoot-all.mjs` 46 张全出；截图里三个输入框的值、红色状态行、两颗按钮都由 canvas 画出；遮罩版整块面板变黄。
-  - 批次：20261027-1650
-
-- [x] [Q3] 文档：`notes/canvas-ui.md` §5.21（镜像根的另一棵树 + 阶段 3 的账）、决策 D33 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.21 记下"独立一棵树要单开镜像、z-index 按它给"，并列出阶段 3 六块界面的完成账；决策 D33 记下"镜像没有"统一一个大根"，而是每个 z-index 层一个实例"。
-  - 为什么：镜像的 z-index 判据已经踩过一次（主菜单用默认 1 → 游戏里整块消失），这次要写清"按被镜像那一层的 z-index 往上给"。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1650
-
-
-## 批次 20261027-1654 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1654
-
-> 用户 2026-10-27：「点左侧分类按钮时，会把所有内容平铺出来、伸出弹窗；应该收在弹框内、物品滚动显示」。
-> 根因是**镜像不知道 `overflow`**：`readTextRuns`/`readTextBlocks`/`readCanvasBlits` 全按
-> `getBoundingClientRect()` 画，而 DOM 是靠 `overflow: hidden/auto` 裁的。
-
-- [x] [R1] `src/ui2d/textPanel.ts`：裁剪 —— `makeClipQuery`（祖先 padding-box 求交 + 缓存）、记录带 `clip`、裁空的跳过、绘制 `paintClipped` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：新增 `intersectRect` / `makeClipQuery` / `outsideClip` / `paintClipped`；三个读取函数给 `TextRun`/`TextBlock`/`CanvasBlit` 带上 `clip` 并跳过完全在框外的；三个绘制函数按 `clip` 做 `save→clip→paint→restore`。
-  - 为什么：`overflow` 是 DOM 才有的语义，canvas 不裁就会把滚出去、溢出面板的内容全画出来（用户报的正是这个）。
-  - 验证：`tests/ui2d.test.ts` → **71 passed**（新增 3 条：相交取公共部分、包含取小的、只贴边返回 null）。
-  - 批次：20261027-1654
-
-- [x] [R2] 预览页复现 + 修复验证：`inventory-mirror.html?creative=1&scroll=80`（96 项 / 150px 高滚动区）→ 截图
-  - 做了什么：预览页加"创造物品栏"模式：12 列 96 格塞进 `max-height: 150px; overflow-y: auto` 的网格并滚 80px，网格外面还有一行翻页条；截图 `25-inventory-scroll.png`。
-  - 为什么：这个 bug 只在"内容比容器高"的时候出现，普通背包（27 格）复现不了。
-  - 验证：截图里只画出滚动区里看得见的 4 行（最后一行在容器边缘被裁开），翻页条留在面板内，没有任何东西伸出面板。
-  - 批次：20261027-1654
-
-- [x] [R3] 文档：`notes/canvas-ui.md` §5.22、决策 D34 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.22 写清根因、修法三段（求交 / 跳过 / 裁剪绘制）与"滚动仍归 DOM"的边界；决策 D34 记下"镜像必须复刻 overflow 语义"。
-  - 为什么：这是**第二条**"DOM 有、canvas 没有"的语义（第一条是位图），不记下来还会再踩。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1654
-
-
-## 批次 20261027-1706 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1706
-
-> 用户 2026-10-27：「首页三个按钮的**显示位置**是错的，**点击位置**也是错的」。
-> 用真 `WorldScreen` 复现：首页在字体/排版稳定后按钮整体上移（y 483 → 309），
-> 而镜像只在第一帧量过一次，之后再也不重量 —— 画在旧位置、点在新位置。
-
-- [x] [S1] 复现页 `tools/preview/world-real.html`：真 `WorldScreen` + `fetch('/index.html')` 搬真样式 → 截图
-  - 做了什么：页面构造真的 `WorldScreen`（空存档表 + no-op actions），把 `index.html` 里那段 `<style>` 整段注入，再镜像 `.world-panel`；`?plain=1` 出 DOM 基准；报告晚 1.2s 再打（早期的数字是布局稳定前的旧值）。
-  - 为什么：手写假 DOM 测不出定位问题（第一版就是：没有游戏 CSS，元素全是裸节点，什么也没复现）。
-  - 验证：`node` 里读同一个按钮在不同时刻的 `y`：**150ms 时 483，1650ms 时 309** —— 差 174px，根因坐实。
-  - 批次：20261027-1706
-
-- [x] [S2] `MenuScreen2D`：签名带上几何；`main.ts` 给所有镜像开 `pollMs` 并在 `document.fonts.ready` 后重量 → `npm run check:fast`
-  - 做了什么：`computeSignature` 加 `getBoundingClientRect()` + `scrollWidth/scrollHeight`；主菜单 `pollMs: 200`、聊天输入行 `pollMs: 250`（原来 0）；主菜单挂载处加 `document.fonts.ready.then(sync)`。
-  - 为什么：几何不在签名里 → 第一帧的旧位置会被永久沿用；而"盒子尺寸没变、内部按钮却动了"的情况签名也抓不到，所以要定期重读兜底。
-  - 验证：`tsc` 干净；`npm run check:fast` 绿；镜像版截图（`26-world-mirror.png`）与 DOM 基准（`26b-world-dom.png`）位置一致。
-  - 批次：20261027-1706
-
-- [x] [S3] `textPanel`：`letter-spacing` 补偿（大标题不再被截成 `Minicra…`）+ 2 条断言 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`readTextRuns` 读 `letter-spacing`，负值按 `-spacing × 字数` 记进 `TextRun.widthSlack`（上限 64）；`drawTextRuns` 把补偿加到 `maxWidth`。
-  - 为什么：`world-logo` 是 48px + 负字距，盒子比 canvas 量出来的字窄，`maxWidth` 一夹就出省略号。
-  - 验证：`tests/ui2d.test.ts` → **73 passed**（新增 2 条：补偿生效、补偿为 0 时行为不变）。
-  - 批次：20261027-1706
-
-
-## 批次 20261027-1732 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1732
-
-> 用户 2026-10-27：「滑动物品滚动的能力不行，世界列表也滑不动；就应该是手贴着列表上下移动，它跟手」。
-> 根因：游戏把 `html, body` 的 `touch-action` 设成 `none`（为了拖动视角），内层滚动容器
-> 每家 WebView 处理不一致 → 手指贴着列表滑，列表纹丝不动。
-> 同时把用户点名要做的后续都写进 `TASKS.md`（M32~M36）。
-
-- [x] [U1] `src/ui2d/menuScreen.ts`：`bindDragScroll` —— 接管触摸拖拽滚动（找可滚祖先 / 8px 阈值 / 跟手 / 立刻重画）→ 合成指针事件验证
-  - 做了什么：`pointerdown`（非鼠标）→ 从命中元素往上找第一个真的能滚的祖先（`scrollHeight > clientHeight + 2` 且 `overflow-y: auto/scroll`）；纵向位移超过 8px 才劫持；之后每次 `pointermove` 设 `scrollTop = startScroll - dy` 并立刻 `refresh(true)`；`pointerup/cancel` 结束；`input/textarea/select` 不劫持。
-  - 为什么：`html, body { touch-action: none }` 让内层滚动容器在部分 WebView 上完全不响应滑动；镜像既然已经在画这一屏，就顺手把"跟手"这件事做掉，不依赖 UA 的滚动实现。
-  - 验证：Playwright 合成 touch 指针事件，在 `inventory-mirror.html?creative=1` 里向上拖 60px → `grid.scrollTop` 从 **0 → 60**，画面同步重画；`tsc` 干净。
-  - 批次：20261027-1732
-
-- [x] [U2] `TASKS.md`：把用户点名的后续拆成 M32~M36（立栏上 canvas / 触控控件 / 暂停弹窗验收 / 自绘滚动条 / 拖拽惯性）→ `node tools/audit-tasks.mjs`
-  - 做了什么：新增五条待办，并把进度口径与差异台账重算（HANDOFF 303/6/12、共 324 项）。
-  - 为什么：用户明确说过"后面要做的事都加到任务列表里，不用一个个确认"。
-  - 验证：`npm run check` exit=0。
-  - 批次：20261027-1732
-
-- [x] [U3] 文档：`notes/canvas-ui.md` §5.24（为什么自己做拖拽滚动、三条边界、验证方式）→ `node .continue/hooks/check.mjs --fast`
-  - 做了什么：记下根因（`touch-action: none`）、8px 阈值的理由（别把点击/物品拖拽/横向拖动一起劫持）、以及"滚动条（M35）与惯性（M36）还没做"。
-  - 为什么：这一层最容易被后来的人当成"我也可以顺手加个平滑滚动"，结果把点击阈值改坏。
+> 批次：20261027-2340
+
+> 用户 2026-10-27：「请继续完成，看有没有遗漏」—— 补三样输入，并把遗漏逐条盘出来。
+
+- [x] [J1] `swapSlots()`（数字键换槽）+ `host.handleKey('DigitN')` + 游戏里接管模式的键盘接线 → 预览验证
+  - 做了什么：纯函数交换两格（不经光标、不合并）；host 用 `hoverIndex` 决定作用哪格；main 在 `ui2dinv` 类存在时把 keydown 交给 host。
+  - 为什么：DOM 的 swap 依赖它自己的 `hovered`，接管后 DOM 收不到 pointermove → 按键"什么都不发生"，必须自己接。
+  - 验证：悬停第 0 格按 `1` → 第 0 格与快捷栏第 1 格互换（1x64 ↔ 2x41）；`test:ui2d-inventory-model` **46/46**（新增 2 条换槽断言）。
+  - 批次：20261027-2340
+
+- [x] [J2] `Shift`+左键 = 快速移动；拖到面板外松手 = 丢出（`onDrop` 回调）→ 预览验证
+  - 做了什么：`handlePointer` 增加 `shift`；`dragging` 改按"按下点位移 > 8px"判定（原来只在经过别的格子时才置位）；拖出面板且有光标时回调 `onDrop`。
+  - 为什么：拖到面板外丢弃时**一个格子都不会经过**，旧判定导致丢弃永远不触发（第一版实测 dropped 为空）。
+  - 验证：Shift+点第 9 格（6x7）→ 落到快捷栏第 28 格；从第 0 格拖到面板外松手 → `dropped: ["1x64"]`、槽位与光标都空。
+  - 批次：20261027-2340
+
+- [x] [J3] 遗漏盘点：对照 DOM 列了 11 项能力表，新增 M37~M41 五条待办 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.42 的能力对照表（输入/提示/盔甲副手/创造栏/进度条/工作站接线），把缺的五项写成任务。
+  - 为什么：用户明确要求"看有没有遗漏"；不列成表，缺的东西会一直藏在"好像做完了"的印象里。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1732
+  - 批次：20261027-2340
 
-
-## 批次 20261027-1739 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1739
-
-> 用户 2026-10-27：「背包左右两边的按钮（左：分类、仓库；右：人物、成就、配方）也还是 DOM」。
-> 根因：镜像根取的是 `.inv-panel`，而立栏挂在 `.inv-shell` 上、在 panel **外面**。
-
-- [x] [V1] `src/main.ts`：背包镜像根 `.inv-panel` → `.inv-shell`（带 `.inv-panel` 兜底）→ `npm run check:fast`
-  - 做了什么：`syncInventory2d()` 里先找 `#inventory-screen .inv-shell`、找不到再退回 `.inv-panel`。
-  - 为什么：`#inventory-screen > .inv-shell > [ 左立栏 | .inv-panel | 右立栏 ]` —— 只镜像 panel 就会"中间 canvas、两侧还是 DOM"，一屏两种渲染。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿；截图里左右立栏（分类/仓库 · 人物/成就/配方）都由 canvas 画出。
-  - 批次：20261027-1739
-
-- [x] [V2] 预览页补左右立栏 + 2 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`inventory-mirror.html` 外面套 `.inv-shell`，左右各放立栏按钮，镜像根同步改成 `.inv-shell`；`shoot-all` 累计 51 张。
-  - 为什么：立栏的选中态与抽屉展开全靠 DOM class 变化，镜像自动跟上——但这一点必须有图证明，不能只写在注释里。
-  - 验证：截图 `27-inventory-rails.png` / `27b-…-tinted.png`：面板 + 两侧立栏都在 canvas 上，遮罩版整片黄。
-  - 批次：20261027-1739
-
-- [x] [V3] 文档：`notes/canvas-ui.md` §5.25（"接手整页前先看清根是哪个节点"）、`TASKS.md` 的 M32 标完成 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.25 记下 DOM 层级与"差一层就漏一整块"的教训；M32 从待办移到已完成，进度口径与差异台账同步。
-  - 为什么：这个错很隐蔽 —— 漏掉的部分**看着正常**（因为它还是 DOM），只有开遮罩才看得出来。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1739
-
-
-## 批次 20261027-1922 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2324 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-1922
+> 批次：20261027-2324
 
-> 用户 2026-10-27：「继续啊，把任务都放到任务列表里去，一件一件去做吧」。
-> 这一件是 **M35 + M36**：把"能滚"补成"看得出能滚 + 松手继续滑"。
+> 用户 2026-10-27：「请继续完成」—— M26b 的最后一步：**自绘面板真正接管输入**。
 
-- [x] [W1] `src/ui2d/menuScreen.ts`：`scrollBarRects()` + 自绘滚动条 → `npx vitest run tests/ui2d-scroll.test.ts`
-  - 做了什么：`refresh()` 里遍历镜像子树，找出真的能滚的容器，按 `scrollBarRects()` 画 4px 半透明圆角拇指（右缩 2px，最小 18px）；`draw()` 里在文字之后画（压在内容右侧）。
-  - 为什么：DOM 的滚动条是 UA 画的，canvas 里没有 —— 不补就是"能滚但看不出能滚"。
-  - 验证：`tests/ui2d-scroll.test.ts` **9 passed**（装得下不画、比例、贴顶/贴底、极长内容用最小长度、越界与 NaN 夹住）。
-  - 批次：20261027-1922
+- [x] [I1] `?ui2dinv=1` 开关：画布吃指针、DOM 面板退场（`visibility: hidden`）、光标写回 `InventoryScreen.setHeldStack()` → `tsc` + 预览验证
+  - 做了什么：新开关与 `bindInventory2dInput()`（down/move/up 喂给 host，右键与触摸标记一并传）；让位样式用 `visibility`（不是 `display`，里面控件还要能被命中）；`externalCursor.set` 写回 DOM 那份 held。
+  - 为什么：这是"替换"的最后一步；两份状态必须合成一份，否则拖动会出现两叠。
+  - 验证：预览页点第 0 格 → 拿起 64、DOM 侧同步；`tsc` 干净、`npm run check` exit=0。
+  - 批次：20261027-2324
 
-- [x] [W2] 惯性：采样最近 5 次移动算速度、`decayVelocity()` 衰减、`stepInertia()` 每帧推进 → 合成 touch 事件实测
-  - 做了什么：`drag.samples` 只留 5 个；`onDragEnd` 用 `(first.y - last.y)/dt*16.67` 算 px/帧；`stepInertia()` 每帧 `scrollTop += v` 并按 `0.94^frames`（dt 归一）衰减，`|v| < 0.25` 停；重新按下立刻停住惯性。
-  - 为什么：松手即停的手感很硬；而"按帧衰减 + dt 归一"能在掉帧时不至于冲很远。
-  - 验证：Playwright 合成 touch 向上拖 60px 松手 → `scrollTop` **60 → 73 → 109 → 129 → 144 → 162 → 168**（到底停住）；`decayVelocity` 4 条断言（单帧/多帧归一、阈值、方向、NaN）。
-  - 批次：20261027-1922
+- [x] [I2] 面板外控件：`ui2d/forwardClick.ts`（同帧让开画布 → `elementFromPoint` → 派发 click）→ 预览验证转发与不误转发
+  - 做了什么：`forwardClickAt()`；只在**没有拖动过**且落点在面板外时转发；预览页放一颗被画布盖住的 DOM "关闭"按钮。
+  - 为什么：关闭 × 与左右立栏在面板外面，画布盖上去就点不到；这一批不重画它们，转发是最小代价。
+  - 验证：点面板外 → `closed: false → true`；点面板内的格子 → 拿起 64 且 `closed` 仍为 false（没误转发）。
+  - 批次：20261027-2324
 
-- [x] [W3] 截图 `28-inventory-scrollbar.png` + `shoot-all` + 文档 §5.26 / 决策 D38 + TASKS 的 M35 改 `[~]`、M36 标完成 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：滚动 48px 的截图里能看到细拇指在轨道上约 1/3 处；§5.26 记下两件事的做法与断言清单，并明确"滚动条还不能拖"。
-  - 为什么：M35 只做了一半（不能拖），如果不写清楚，下一批会以为它已完成。
+- [x] [I3] 文档：§5.41（接管细节 + 转发为什么只转发 click）、决策 D53、`TASKS` 的 M26b 更新 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"visibility 不是 display"的理由与转发边界。
+  - 为什么：`display: none` 会让 `elementFromPoint` 找不到按钮，转发直接失效 —— 这条不写下次一定踩。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1922
+  - 批次：20261027-2324
 
-
-## 批次 20261027-1943 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2307 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-1943
+> 批次：20261027-2307
 
-> 用户 2026-10-27：「还有游戏场景内的摇杆、跳跃按键、顶部的三个按钮」。
-> 这一批先做**摇杆**：它是唯一"连续跟随手指"的控件，不能再走镜像那条路。
+> 用户 2026-10-27：「继续完成，多做一点」—— 替换前最后一块地基：**光标合流**。
 
-- [x] [Y1] `src/ui2d/Touch2D.ts`：摇杆的画法与几何（`knobOffset` / `clampKnobOffset` / `drawStick` / `Touch2D`）→ `npx vitest run tests/ui2d-touch.test.ts`
-  - 做了什么：底座（暗底 + 径向高光 + 浅色描边 + 外圈暗边）、芯子（真线性渐变 + 深色描边）、潜行态绿芯与小牌；`Touch2D` 自带覆盖层（zIndex 30），每帧只喂两个矩形 + 两个 class 状态。
-  - 为什么：**摇杆不能镜像** —— 芯子一直动，镜像要么每帧读计算样式，要么落后几帧（黏手）。它只有两个圆，自己画更准更便宜。
-  - 验证：`tests/ui2d-touch.test.ts` **7 passed**（圆心偏移、芯子尺寸无关、内圈夹取按方向缩、NaN 回中、芯子大于底座时上限 0）；`tsc` 干净。
-  - 批次：20261027-1943
+- [x] [H1] `InventoryPanelHost.externalCursor`（拉/推）+ `InventoryScreen.heldStack` 只读 getter → 预览 `?ext=1` 验证
+  - 做了什么：入口（`open` / `handlePointer`）先 `pullCursor()`；`render()` 里 `pushCursor()`（没给 `set` 就只读）；游戏侧接 `get: () => inventoryScreen.heldStack`。
+  - 为什么：DOM 与自绘各存一份 held，拖动时屏幕上会出现**两叠**；合流之后自绘只做视图。
+  - 验证：`?ext=1` 里打开即画出外部 `3×5`，移动后仍是 `3×5`，且外部对象未被写脏（只拉不推）；`tsc` 干净。
+  - 批次：20261027-2307
 
-- [x] [Y2] `src/main.ts`：`syncTouch2d()` 接线（可见才接管、`html.ui2d-touch` 让位、小牌文字从 DOM 读）→ `npm run check:fast`
-  - 做了什么：每帧读 `#touch-stick` 与 `.knob` 两个矩形 + `.active`/`.sneaking` + `.sneak-badge` 的文案；`html.ui2d-touch #touch-stick { opacity: 0 }` 让位（命中仍归 DOM）。
-  - 为什么：与快捷栏同一条结论——`opacity: 0` 不杀 pointer 事件，所以拖摇杆的手势一行没改；而小牌文字走 DOM 才能跟着语言切换。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。
-  - 批次：20261027-1943
+- [x] [H2] 只读是有意为之：`set` 留到"接管输入"那一批再加
+  - 做了什么：`externalCursor.set` 设为可选；文档写明为什么现在不推。
+  - 为什么：这一阶段自绘面板不吃输入，写了 `set` 只会和 DOM 的逻辑打架；等 DOM 面板不再渲染时再加，就不存在两份状态。
+  - 验证：`tsc` 干净；`npm run check` exit=0；截图 `37-inventory-external-held.png` 里那一叠由外部驱动。
+  - 批次：20261027-2307
 
-- [x] [Y3] 预览页 `tools/preview/touch.html`（拖得动、`?state=active|sneak`、`?dx&dy` 定位置）+ 3 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：把 `index.html` 的样式整段搬进预览页（尺寸/渐变/描边全在 CSS 里），DOM 的摇杆按游戏里同一条规则 `opacity: 0`，canvas 那份才看得出是它画的；拖动芯子实时跟手。
-  - 为什么：**不藏 DOM 的话截图里两份会叠在一起**，看着"一样"但什么也没证明（第一版就是这样，连潜行小牌都分不清是 DOM 还是 canvas）。
-  - 验证：3 张截图（按下态 / 潜行态 / 遮罩），累计 55 张。
-  - 批次：20261027-1943
-
-- [x] [Y4] 文档：`notes/canvas-ui.md` §5.27（为什么不镜像 + 三条边界 + 阶段 6 还剩什么）、决策 D39、`TASKS` 的 M33 改 `[~]` → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.27 记下"自己画 + 几何量 DOM"的理由，以及"渐变必须用真渐变（两段纯色会留硬缝）"、`opacity: 0` 不影响命中；M33 标成进行中。
-  - 为什么：这一段是唯一"绕开镜像"的例外，不写清楚以后会有人想"统一改成镜像"，然后摇杆就黏手了。
+- [x] [H3] 文档：§5.40（两份状态的具体症状 + 只读的理由）、决策 D52 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：把"合流"写成一节，含游戏侧那段接法与只读理由。
+  - 为什么：下一个人很容易顺手把 `set` 写上，然后在没接管输入时看到行为诡异。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1943
+  - 批次：20261027-2307
 
-
-## 批次 20261027-2001 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2250 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-2001
+> 批次：20261027-2250
 
-> 用户 2026-10-27：「继续完成」—— 把 M33 的另一半做完：**顶部三颗 + 跳跃/飞行升降**。
-> 障碍是图标：它们是内联 SVG 字符串，canvas 拿不到。所以先做"图标真源上移"。
+> 用户 2026-10-27：「继续完成，多做一点」—— 替换之前必须补的两块：**提示框**与**耐久条**。
+> 镜像方案里 tooltip 是 DOM；自绘一旦接管指针，DOM 的 hover 就收不到事件，提示框会直接消失。
 
-- [x] [Z1] `src/ui2d/touchArt.ts`：六个图标的形状数据（path/rect/circle）+ `shapeToSvgMarkup` / `touchIconSvgMarkup`；`ui/TouchIcons.ts` 改为从它拼 SVG → `npx tsx tools/ui-test.ts`
-  - 做了什么：`TouchIconShape` 支持 `path`（含 `evenodd`）/`rect`（含 `rx`/`alpha`）/`circle`；`TOUCH_ICON_SHAPES` 收下六颗图标的原始几何；`ui/TouchIcons.ts` 只剩 i18n 标签 + 一层转发（依赖方向 `ui/ → ui2d/`）。
-  - 为什么：canvas 要画同一组图标，而"照着 SVG 抄一份路径"必然悄悄画歪，且没有断言抓得到（歪了只是看着不像）。与 `vitalsArt.ts` 同一条理由。
-  - 验证：`npm run test:ui` 图标段全绿（六个图标名齐全、SVG 合法且互不相同）；`tsc` 干净。
-  - 批次：20261027-2001
+- [x] [G1] `ui2d/itemTooltip.ts`：提示框画法 + `itemTooltipRect()` 位置逻辑（翻左/翻上/夹视口）→ 4 条断言
+  - 做了什么：紫底 + 紫边 + 稀有度色条 + 标题/说明行/耐久条；位置纯函数化；内容由 `describeOf` 注入（`ui2d` 不依赖 `core`）。
+  - 为什么：自绘面板接管指针后 DOM 的 tooltip 会消失，而"丢提示"很容易被当成"还没做"，不补就会在替换那天才发现。
+  - 验证：`tests/ui2d-inventory-model.test.ts` **44 passed**（新增 4 条位置断言：右下 / 翻左 / 翻上 / 夹视口）。
+  - 批次：20261027-2250
 
-- [x] [Z2] `src/ui2d/Touch2D.ts`：`drawTouchIcon`（`Path2D` 缓存）+ `drawTouchButton`（玻璃底 + 描边 + 图标 + 按下缩放）+ `setButtons` → `npx vitest run tests/ui2d-touch.test.ts`
-  - 做了什么：图标按 24×24 形状用 `ctx.scale` 缩进按钮，`Path2D` 按 `d` 缓存；按钮底用真 `createLinearGradient` + `createRadialGradient`；阴影用"同形状下移 1px 画一遍"（比 `shadowBlur` 便宜且够像）。
-  - 为什么：`shadowBlur` 每帧对 6 个图标会明显掉帧，而 `text-shadow` 的观感只需要一层偏移。
-  - 验证：`tests/ui2d-touch.test.ts` **11 passed**（新增 4 条：六名都有形状、两种拼法非空且互不相同、evenodd/opacity 不丢、图标占直径一半）。
-  - 批次：20261027-2001
+- [x] [G2] 槽位耐久条：`durabilityOf` 注入 + 接到 `drawInvSlot`；预览页给铁镐接上
+  - 做了什么：`InventoryPanelHost` 新增 `durabilityOf`，槽位视图里不再固定传 `null`。
+  - 为什么：之前自绘面板里工具类物品没有耐久条（镜像版有），属于"看着不像"的细节。
+  - 验证：截图 `36-inventory-tooltip.png` 里铁镐图标下方有绿色耐久条，提示框里有 62/250。
+  - 批次：20261027-2250
 
-- [x] [Z3] `src/main.ts`：`syncTouch2d()` 收集 `.touch-button`（顶部三颗 + 跳跃/飞行 + 快捷栏侧键一个选择器全覆盖）并让位 → 预览页加按钮 → `npm run check:fast`
-  - 做了什么：按钮矩形/`data-icon`/`:active` 每帧读；`html.ui2d-touch .touch-button { opacity: 0 }` 让位。
-  - 为什么：这些按钮都是 `makeIconButton()` 造的同一个类，所以一个选择器就够 —— 将来加按钮也不用改 canvas 侧。
-  - 验证：截图里顶部三颗（气泡/两杠/眼睛）与右下三颗（上箭/上箭/下箭）都由 canvas 画，DOM 那份不可见；`tsc` 干净、`check:fast` 绿。
-  - 批次：20261027-2001
-
-- [x] [Z4] 文档：`notes/canvas-ui.md` §5.28（图标真源 + 按钮画法 + 阶段 6 账）、决策 D40、`TASKS` 的 M33 标完成 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.28 记下"为什么把图标数据上移"、"阴影为什么不用 shadowBlur"、"一个选择器覆盖全部按钮"；M33 收口。
-  - 为什么：M33 是"触控控件"整条线，收口时要把"视角面判定不搬"写清楚，否则以后会有人问"为什么视角没画"。
+- [x] [G3] 文档：`notes/canvas-ui.md` §5.39、决策 D51、`TASKS` 的 M27 补一句自绘侧 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"为什么必须先补 tooltip 再替换"，并标注附魔/改名未画。
+  - 为什么：替换那一步的风险清单要提前列全，否则又会在真机上才发现少了东西。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2001
+  - 批次：20261027-2250
 
-
-## 批次 20261027-2017 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2234 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-2017
+> 批次：20261027-2234
 
-> 用户 2026-10-27：「继续完成」—— 把 M35 的另一半补上：**滚动条要能拖**。
+> 用户 2026-10-27：「继续完成」—— 自绘这条路要能表示工作站，先把**布局**扩出来（合成台 3×3 + 结果格）。
 
-- [x] [W1] `src/ui2d/menuScreen.ts`：滚动条命中 + 拖动（抓拇指不跳、抓轨道先对齐、两端夹住）→ Playwright 实测
-  - 做了什么：`scrollBars` 带上元素引用（`ScrollBarEntry`）；按下时先 `scrollBarAt()` 命中（±3px 宽容），命中就进"拖条"模式；抓拇指记 `offset`，抓轨道先把拇指中心跳过去；`applyBarDrag()` 把手指 y 换算成 `scrollTop` 并夹在两端。
-  - 为什么：不先做命中，右边缘的拖动会被内容拖拽抢走（拇指纹丝不动）；不记 `offset`，抓在拇指中间一拖拇指就往上跳。
-  - 验证：合成 touch 拖拇指 72px → `scrollTop` **0 → 153**（可滚 168），松手停住；`tsc` 干净。
-  - 批次：20261027-2017
+- [x] [F1] `layoutInventoryPanel` 支持 `extra: { cols, rows, result? }`（顺序定死 + 居中 + 结果格 + 箭头间距）→ 5 条断言
+  - 做了什么：额外槽位组排在玩家背包之上、块内居中；结果格在网格右侧竖直居中、中间留 28px；返回 `groups: { extra, result, main, hotbar }`；槽位顺序 = extra(+result) → main → hotbar。
+  - 为什么：19 种工作站的差别几乎只在"上方那组槽位长什么样"，把这层抽象出来，后面每种工作站只需要传一行参数。
+  - 验证：`tests/ui2d-inventory-model.test.ts` **40 passed**（新增 5 条：36/46 与顺序、结果格位置、居中、不重叠）。
+  - 批次：20261027-2234
 
-- [x] [W2] 文档：`notes/canvas-ui.md` §5.29、决策 D41、`TASKS` 的 M35 标完成 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.29 记下"先命中再拖"、"offset 防跳"、"抓轨道先对齐"三条，以及"拖条不产生惯性"（与手机一致）。
-  - 为什么：这三条都是"不做就像坏了"的细节，写下来下次接别的滚动容器不用重想。
+- [x] [F2] `drawInventoryPanel` 画结果格左侧的箭头；`InventoryPanelHost` 接受 `extra` 并用于布局/双击范围
+  - 做了什么：结果格旁画 "→"（DOM 的 `.craft-arrow`）；host 的 `allIndices()` 改成按**当前布局**取长度（工作站会多出 10 格，写死 36 会让双击收集漏格）。
+  - 为什么：没有箭头的"结果格"看起来就是普通槽位，玩家会往里塞东西。
+  - 验证：截图 `35-inventory-crafting.png`：3×3 + 箭头 + 结果格 + 玩家背包；`tsc` 干净。
+  - 批次：20261027-2234
+
+- [x] [F3] 预览页 `?craft=1` + 文档 §5.38 + 决策 D50 + `TASKS` 的 M28 更新 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：同一页按参数切成合成台（46 格），搬移逻辑未改。
+  - 为什么：这是"自绘能表示工作站"的证据；也说明布局抽象没把模型搞复杂。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2017
+  - 批次：20261027-2234
 
-
-## 批次 20261027-2023 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2220 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-2023
+> 批次：20261027-2220
 
-> 用户 2026-10-27：「继续完成，多做一点」—— 先修背包的两个真问题（一个是我自己引入的回归），
-> 再继续往 M26b 走。
+> 用户 2026-10-27：「请继续完成」—— M26b 继续：把长按"只取一半"补成**可以选数量**。
 
-- [x] [X1] 修回归：`html.ui2d-inv #inv-held { opacity: 0 }` 删掉 —— 拖动物品时那一叠会消失
-  - 做了什么：去掉那条让位规则（`#inv-held` 在镜像根 `.inv-shell` 外面，藏了没人画），改由 DOM 继续绘制；顺手把注释改成"为什么不能藏"。
-  - 为什么：让位 + 没人接手 = 内容消失；而它只在拖动时出现，静态截图完全正常（与 `.inv-shell` 那次同源）。
-  - 验证：`tsc` 干净；`npm run check:fast` 绿。
-  - 批次：20261027-2023
+- [x] [E1] `InventoryPanel2D`：`splitCountFromDrag`（纯函数）+ `drawSplitHint` / `drawSplitTarget` → 4 条断言
+  - 做了什么：拖动距离 → 数量（每 12px 加 1，夹 1..max）；数量牌画在格子正上方（深底 + 绿占比条）；目标格压暗。
+  - 为什么：DOM 版长按是弹滑条选数量，只取一半会让"取 3 个"这种操作做不了。
+  - 验证：`tests/ui2d-inventory-model.test.ts` **35 passed**（新增 4 条：不动取 1、每 12px 加 1、夹取、非法输入）。
+  - 批次：20261027-2220
 
-- [x] [X2] `MenuScreen2D.setHighlight()` + `main.ts` 用 `elementFromPoint` 算悬停格 → 截图
-  - 做了什么：镜像新增"悬停高亮"（白框 + 薄白底，画在所有内容之上）；`setHighlight()` 只比重画、不重读 DOM；`main.ts` 全局记指针位置，`inventoryHoverRect()` 用 `elementFromPoint(...).closest('.inv-slot')` 找那一格。
-  - 为什么：`.inv-slot:hover` 在 `opacity: 0` 的子树里看不见，玩家会以为"这格点不动"；而 `elementFromPoint` 天然跟着滚动与布局走，比自己算几何稳。
-  - 验证：预览页 `?hover=13` 截图里第 13 格有白框+薄白底；`tsc` 干净；`check:fast` 绿。
-  - 批次：20261027-2023
+- [x] [E2] `InventoryPanelHost`：长按进入选数量三态（按住 → 横move 调 → 松手确认）→ Playwright 实测
+  - 做了什么：`split` 状态机；move 时按 `x - x0` 换算数量并重画；up 时 `splitTake(count)`；close 清理。
+  - 为什么：滑条需要额外命中区域、手指要离开格子（手机上容易点歪）；"按住 + 横move"是基岩版的做法，手指始终在格子上。
+  - 验证：长按第 0 格（64）→ 右移 120px（牌上 11）→ 松手：格子 **53**、手上 **11**。
+  - 批次：20261027-2220
 
-- [x] [X3] 文档：`notes/canvas-ui.md` §5.30（两处修复 + "让位前先确认由谁画"的教训）、决策 D42 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：记下"让位 + 没人接手 = 内容消失"这条通用教训（第二次踩），以及 `setHighlight` 只重画不重读的取舍。
-  - 为什么：这两条都会在接 M26b 时反复出现，写清楚能少踩。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2023
+- [x] [E3] 修画序：压暗要画在 `drawInventoryPanel` **之后**（之前会被槽位底色盖掉）
+  - 做了什么：把 `drawSplitTarget` / `drawSplitHint` 挪到面板之后。
+  - 为什么：第一版截图里"看不出哪格被选中"——不是没画，是被后画的槽位底色盖了。
+  - 验证：截图 `34-inventory-split.png` 里目标格压暗、上方显示 11。
+  - 批次：20261027-2220
 
-
-## 批次 20261027-2050 · 2026-10-27 · 会话 9f2dcf81
+## 批次 20261027-2204 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
 > 状态：执行中
 > 创建：2026-10-27
-> 批次：20261027-2050
+> 批次：20261027-2204
 
-> 用户 2026-10-27：「请继续执行未完成的任务」。
-> M34（暂停弹窗验收）缺的是"能不能自动发现问题"，而今天连着两次"截图成功、页面全空"。
-> 所以先把这道门禁补上：**预览页空白检测**。
+> 用户 2026-10-27：「请继续完成」—— 接着 M26b：把自绘面板的**交互**补齐到与 DOM 一致。
 
-- [x] [Y1] `tools/ui2d-visual-check.mjs` + `npm run check:ui2d-visual`：7 个预览页的像素统计（非透明占比 + 颜色种类 + pageerror）→ 正反两个方向各跑一次
-  - 做了什么：对每页取**面积最大那块 canvas**，算非透明占比与颜色种类，阈值按页给（镜像 3~5%、触控 0.5%、纯文字 0.2%）；`pageerror` 计入失败；没浏览器时跳过并 exit 0。
-  - 为什么：脚本语法错（`as const` 写进内联 `<script>`）与"抓太早"都会得到一张"看着像还没画"的截图，`npm run check` 覆盖不到，肉眼也难判断。
-  - 验证：正跑 7 页全绿（背包 36.6%/151 色 … 纯文字 100%/1921 色）；反跑（`UI2D_BASE` 指向不存在的路径）7 页全红且 **exit 1**，修复后 exit 0。
-  - 批次：20261027-2050
+- [x] [D1] `InventoryPanelHost`：右键（取半/放一个）、右键拖拽（每格一个）、双击收集（400ms）→ Playwright 实测
+  - 做了什么：`handlePointer` 增加 `input.button` / `input.timeStamp`；四种鼠标操作分别走 `rightClick` / `rightDragDistribute` / `doubleClickGather`（凑不到就退化成 `quickMove`）。
+  - 为什么：自绘面板此前只有左键，右键与双击是 DOM 版最常用的两种操作，缺了就不叫"复原"。
+  - 验证：右键点 64 → 格 32 / 手 32；右键拖过两格 → 各放 1；双击 12 那格 → 手上 53（12+41），两格清空。
+  - 批次：20261027-2204
 
-- [x] [Y2] 修工具本身的坑：`querySelector('canvas')` 会拿到 36×36 的物品图标
-  - 做了什么：改成遍历所有 canvas 取面积最大的那块。
-  - 为什么：第一版统计到的是图标（36×36、3 种色、45% 非透明），**看着很健康于是全部通过** —— 等于没测。
-  - 验证：修正后背包页变成 844×390、151 种色，与截图一致。
-  - 批次：20261027-2050
+- [x] [D2] 触摸端"先按住再决定"：点击 / 长按分堆 / 滑出变拖拽（500ms、8px）→ Playwright 实测
+  - 做了什么：`pendingTouch` + 计时器；松手前没超时没移动 = 点击；500ms = `splitTake` 一半；滑动 8px = `leftClick` 拿起后按拖拽；长按触发后清 `pendingTouch`，松手不再点。
+  - 为什么：触摸若照抄"按下即拿起"，长按分堆永远拿不到 —— 第一版实测长按后**整叠**到了手上。
+  - 验证：长按 64 → 格 32 / 手 32 且松手不拿起；触摸拖 0→4..7 → 64 分成 16×4（被占的格子跳过）。
+  - 批次：20261027-2204
 
-- [x] [Y3] 文档：`notes/canvas-ui.md` §5.31（两次空白 + 两条实现坑 + 阈值表）、决策 D43 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：记下"为什么需要这道门禁"、"必须挑最大 canvas"、"阈值按页给"。
-  - 为什么：这道门禁的价值全在"它能红"；写清楚它为什么这么写，才不会被后来的人"简化"成 `querySelector`。
+- [x] [D3] 文档：`notes/canvas-ui.md` §5.36（六种操作表 + 触摸三态 + 验收表）、决策 D48、`TASKS` 的 M26b 更新 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：把"触摸为什么不能按下即拿起"写成一条规则，并标注长按只取一半（滑条 UI 未做）。
+  - 为什么：这三态（点/长按/滑出）任何一处顺序写反都会变成"点一下就没东西"或"长按整叠"。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2050
-
-
-## 批次 20261027-2106 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2106
-
-> 用户 2026-10-27：「继续执行未完成的任务」—— 上一件是"空白检测门禁"，这一件是 **M34**：
-> 暂停弹窗那条链一直"只能在真游戏里验"，所以把它写成一条命令。
-
-- [x] [Z1] `tools/pause-check.mjs` + `npm run check:pause`：暂停弹窗端到端 8 条断言（让位 / HUD / canvas 像素 / 进设置 / 退回 / 关闭恢复）→ 跳过分支实测
-  - 做了什么：`?ui2d=1` 加载 → 判"进没进世界"（`#hud` 与 `#settings-screen` 都在才算）→ Esc 后断言 `.settings-panel` 与 `#hud` 都是 `visibility: hidden`、canvas 有像素 → ↓+Enter 进设置、断言 `data-page` → Esc 退回 → Esc 关闭并断言 HUD 与面板 DOM 恢复。
-  - 为什么：这条链涉及三处让位 + engaged 标志 + 两套键鼠路由，任何一处错都表现为"Esc 打不开/关不掉/HUD 不回来"，而它只能在有 `core.bin` 的环境验；写成命令才能"一条命令过一遍"。
-  - 验证：落地页 → **跳过 exit 0**；连不上 dev server → 跳过 exit 0；`tsc` 无关、`node --check` 通过。
-  - 批次：20261027-2106
-
-- [x] [Z2] 修脚本自身的两个坑：落地页被误判成"进了世界"、`getComputedStyle(null)` 抛错
-  - 做了什么：进游戏判据加上"`#settings-screen` 必须存在"（它由 `SettingsScreen` 构造时创建、只在游戏里有）；所有 `getComputedStyle` 加空保护。
-  - 为什么：落地页 `#world-screen` 与 `#settings-screen` 都不存在，只判 `#hud` 会把落地页当成世界内 —— 第一次跑就是这么红的（还留下一条 `getComputedStyle` 异常）。
-  - 验证：修正后落地页正确跳过（exit 0）。
-  - 批次：20261027-2106
-
-- [x] [Z3] 文档：`notes/canvas-ui.md` §5.32（8 条判据表 + "跳过分支已验、通过分支待首跑"）、决策 D44、`TASKS` 的 M34 改 `[~]` → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：把每条断言对应的"坏掉症状"列成表，并如实写明通过分支尚未执行。
-  - 为什么：验收脚本最怕"写了但没人跑、也没人知道它没跑过"；把边界写在正面，下次跑红了才知道该往哪查。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2106
-
-
-## 批次 20261027-2114 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2114
-
-> 用户 2026-10-27：「继续完成」—— 把背包这几条任务（M27~M31）的"到底还差什么"查清楚，
-> 查到一处真缺口（配方书没在镜像里）并补掉。
-
-- [x] [A1] 证据盘点：M27~M31 逐条查实现路径（`.inv-slot` 通路、tooltip 层级、占比条位置、`<input>` 取值）→ 结论写进 §5.33 表
-  - 做了什么：确认 M27/M29/M30/M31 已被镜像覆盖（同一批 `.inv-slot` / `.inv-panel`），`#item-tooltip` 在 `body`、`z-index: 60` 不会被镜像（12）盖住。
-  - 为什么：这几条一直挂着"待办"，但没人说得清还差什么；逐条查过之后才知道只剩"自绘替换"这一件。
-  - 验证：`grep` 证据见 §5.33 表；`tsc` 干净。
-  - 批次：20261027-2114
-
-- [x] [A2] 补真缺口：配方书（`.recipe-panel`）挂在 `body`，背包镜像覆盖不到 → 单开一个镜像实例
-  - 做了什么：`main.ts` 新增 `recipe2d`（`MenuScreen2D`，zIndex 13、pollMs 150）与 `syncRecipe2d()`（可见就 engage、收起就 disengage），dispose 里一并释放。
-  - 为什么：`RecipeBook` 是 `new RecipeBook(document.body, …)`，它的面板不在 `#inventory-screen` 里 —— 不补就是"左半 canvas、右边 DOM"，而配方书里还有搜索框与滚动列表。
-  - 验证：`tsc` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 core.bin）。
-  - 批次：20261027-2114
-
-- [x] [A3] `TASKS`：M27~M31 按证据标完成（各自写明"为什么算完成"），剩下 M26b 与 M34 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：五条待办改 `[x]` 并补上依据；M34 仍是 `[~]`（验收脚本就绪、通过分支待首跑）。
-  - 为什么：待办里挂着"已完成功能的可能性"会让人重复劳动，也会让"还差多少"永远说不清。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2114
-
-
-## 批次 20261027-2121 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2121
-
-> 用户 2026-10-27：「继续完成」—— 剩下的大件只有 M26b（背包自绘）。这一批开工第一步：
-> 把"自己排版 + 自己命中 + 自己画"这条路跑通，并做出图标缓存。
-
-- [x] [B1] `src/ui/ItemIconCache.ts`：按 itemId 缓存图标位图（画法由调用方注入）→ `npx vitest run tests/ui2d-iconcache.test.ts`
-  - 做了什么：`get(itemId)` 第一次才画、之后命中；`clear()` 供资源包热重载；构造参数里注入 `painter` 与 `createCanvas`（后者让测试能在 node 里跑）。
-  - 为什么：自绘面板每帧要画 36 个图标，若不缓存就是每帧 36 次图集采样；而按 id 缓存与原版一致（同种物品共用一张图）。
-  - 验证：`tests/ui2d-iconcache.test.ts` **3 passed**（同 id 只画一次、异 id 各一张、clear 后重画）。
-  - 批次：20261027-2121
-
-- [x] [B2] `src/ui2d/InventoryPanelHost.ts`：自绘宿主（布局/命中/交互/绘制/光标叠）+ 预览页 → 截图
-  - 做了什么：复用 `layoutInventoryPanel` / `slotIndexAt` / `drawInventoryPanel`；交互走 `leftClick` / `rightClick` / `quickMove` / `distributeDrag`；数据直接吃 `SlotAccess`；预览页里整页没有背包 DOM，只有一块 canvas（自己接 pointer）。
-  - 为什么：这是 M26b 的地基 —— 镜像依赖 DOM 布局，这一步证明"不依赖 DOM 也能排版、命中、画"。
-  - 验证：截图 `32-inventory-selfdrawn.png`（面板 + 图标 + 数量）与 `32b`（手上那一叠跟随指针）；`tsc` 干净。
-  - 批次：20261027-2121
-
-- [x] [B3] 踩到的细节：抬起事件也要带真实坐标（否则"手上那一叠"被画到左上角）；`Inventory` 不需要适配器（结构上就是 `SlotAccess`）
-  - 做了什么：修预览页的 `pointerup` 传坐标；把"不需要适配器"写进 §5.34。
-  - 为什么：这两条都是"看起来能跑、但结果是错的"的典型；尤其坐标那条，只有截图能看出来。
-  - 验证：`32b` 里那一叠正确地跟着指针；`tsc` 干净。
-  - 批次：20261027-2121
-
-- [x] [B4] 文档：`notes/canvas-ui.md` §5.34（自绘第一条路 + 两个细节 + "还没做"表）、决策 D46、`TASKS` 的 M26b 改 `[~]` → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：写清"镜像依赖 DOM、自绘不依赖"，以及剩下三件事（接进游戏 / 19 种工作站布局 / 长按 UI）。
-  - 为什么：M26b 是"实现方式升级"而不是"功能缺口"，边界写清楚才不会让人以为界面还缺东西。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2121
-
-
-## 批次 20261027-2158 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2158
-
-> 用户 2026-10-27：「请继续执行未完成的任务」—— 接着 M26b：把自绘面板**接进游戏**。
-> 直接替换会丢功能（19 种工作站布局还没搬），所以先做"同位置叠加"来做真机比对。
-
-- [x] [C1] `src/main.ts`：`?ui2dinv2d=1` 开关 + `InventoryPanelHost` 接入（读真实 `Inventory`、图标走 `ItemIconCache`）→ `npm run check`
-  - 做了什么：`UI2D_INV2D` 常量；`inv2d` / `inv2dIcons` 字段；背包打开时 `open()` 并每帧 `render()`，关掉就 `close()`；显示索引映射（前 27 格 → 库存 9~35，后 9 格 → 0~8）。
-  - 为什么：自绘这条路的判据是"与镜像并排无差异"，只有**同位置叠加**才能在真机上看出来；而它不吃输入，所以零回归风险。
-  - 验证：`tsc` 干净、`npm run check` exit=0（缺省不开启 → 对现有行为零影响）、`build:fast` 出包。
-  - 批次：20261027-2158
-
-- [x] [C2] 文档：§5.35（叠加的原因 + 三条边界）、决策 D47、`TASKS` 的 M26b 更新 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：写清"只覆盖 36 格""标题不跟工作台变""cursor 与 held 是两份状态"三条边界。
-  - 为什么：第三条是替换时最容易出事的地方（拖动物品会出现两叠），现在写下来，替换那一批才不会踩。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2158
-
-
+  - 批次：20261027-2204

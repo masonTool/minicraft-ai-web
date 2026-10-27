@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { normalizeId, shortId } from './core/registry/ids.ts';
+import { installInputOverlay } from './ui/InputOverlay.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
@@ -422,6 +423,7 @@ import {
   parseSaveTransfer,
   transferFileName,
 } from './core/save/SaveTransfer.ts';
+import { unzipStore, zipStore, type PackEntry } from './core/save/McPack.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { collectContainerSpawns } from './core/save/EditSpawns.ts';
 import { missingResetTargets, type WorldResetTarget } from './game/worldReset.ts';
@@ -3117,6 +3119,12 @@ class App {
         // 手机上 high-performance 会钉在大核/高功耗 GPU，几分钟后降频，帧时间反而更差
         powerPreference: isTouchDevice() ? 'default' : 'high-performance',
         alpha: false,
+        /*
+         * 世界缩略图（用户 2026-10-27）：**必须开**，否则 `drawImage(canvas)` / `toDataURL`
+         * 拿到的是空白（实测存出来是全黑，`min=max=avg=0`）——帧缓冲在每帧结束后就被丢弃了。
+         * 代价是这一块显存不能复用；这个体量的像素游戏可以接受。
+         */
+        preserveDrawingBuffer: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -3653,13 +3661,6 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
-      // 多人游戏（联机9）/ 本局房间（L9）：暂停菜单里的入口
-      onMultiplayer: () => this.openMultiplayer(),
-      // 联机中这颗键叫「本局房间」，没联机才叫「多人游戏」（SettingsScreen 每次打开重读）
-      multiplayerLabelKey: () =>
-        this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'
-          ? 'pause.room'
-          : 'menu.multiplayer',
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
@@ -6259,6 +6260,15 @@ class App {
     this.physics.teleport(region.x + 0.5, landingY, region.z + 0.5);
     this.spawnPoint = [region.x + 0.5, landingY, region.z + 0.5];
     this.refreshWorld(toChunkCoord(region.x), toChunkCoord(region.z), true);
+    /*
+     * **新世界也要做落地校正**（用户 2026-10-27：新建世界人物卡在方块里、头埋在方块内）。
+     *
+     * `landingY` 是按 `generator.surfaceY()` 估的，真实区块还要算树、水、洞穴、群系混合，
+     * 落点可能正好在树干/石头里。以前只有"读档"与"联机加入"会 requestGroundSettle，
+     * 新世界这条路径没有 —— 卡住了就永远卡着（玩家只能自己挖出来）。
+     * 挂上之后，进世界第一帧就会检测"脚/头在实心块里、脚下没支撑、泡在水里"并挪到最近自然地面。
+     */
+    this.requestGroundSettle('spawn');
   }
 
   /**
@@ -21680,6 +21690,29 @@ async function boot(): Promise<void> {
     await startWorld(summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now()));
   };
 
+  /**
+   * 抓当前画面当缩略图（用户 2026-10-27）：缩到 160×90 的 jpeg，约 5~8KB。
+   *
+   * ⚠️ WebGL canvas 在 `preserveDrawingBuffer: false` 时 `drawImage` 可能拿到**空白**。
+   * 所以这里不抛错、拿不到就返回 `null`（调用方退回程序化预览图），
+   * 而不是把一张黑图存进存档——那个看起来像"世界坏了"。
+   */
+  const captureThumbnail = (): string | null => {
+    const canvas = document.querySelector('canvas');
+    if (canvas === null) return null;
+    try {
+      const small = document.createElement('canvas');
+      small.width = 160;
+      small.height = 90;
+      const ctx = small.getContext('2d');
+      if (ctx === null) return null;
+      ctx.drawImage(canvas, 0, 0, small.width, small.height);
+      return small.toDataURL('image/jpeg', 0.5);
+    } catch {
+      return null;
+    }
+  };
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     diag.event('app', 'world.enter', {
@@ -21765,7 +21798,25 @@ async function boot(): Promise<void> {
       app.connectOnline(intent);
     }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
-    app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
+    /*
+     * 保存时顺手抓一帧当缩略图（用户 2026-10-27："最后一次退出时那个界面的图片"）。
+     *
+     * 为什么挂在 `onSaved`：退出世界前一定会保存一次，那一刻 App 还活着、canvas 还在；
+     * 而 `onExitToMenu` 回调时 App 已经 dispose 完，画面没了。
+     * 自动保存也会更新它——这正是"这个存档现在长什么样"。
+     */
+    let lastShotAt = 0;
+    app.onSaved = (info) => {
+      const patch: Partial<WorldSummary> = { lastPlayed: Date.now(), ...info };
+      if (Date.now() - lastShotAt > 10_000) {
+        const shot = captureThumbnail();
+        if (shot !== null) {
+          patch.thumbnail = shot;
+          lastShotAt = Date.now();
+        }
+      }
+      registry.update(world.id, patch);
+    };
     app.onWorldDeleted = (id) => registry.remove(id);
     // 难度改了就回写世界清单（下次从主菜单进来还是这个难度）
     app.onDifficultyChanged = (value) => registry.update(world.id, { difficulty: value });
@@ -21839,7 +21890,8 @@ async function boot(): Promise<void> {
         onChange: (next) => saveSettings(next),
       });
       // 批次 20261024-1152：`setTitle` 不再收副标题（暂停页那行提示已删除）
-      menuSettings.setTitle('设置', '返回');
+      // 标题与返回键都走 i18n（原来写死中文，德语下标题还是「设置」——用户 2026-10-28）
+      menuSettings.setTitle(t('settings.title'), t('settings.back'));
     }
     // 打开菜单里的设置也压一条：返回键先关设置，而不是退出页面
     pushMenuGuard();
@@ -21980,6 +22032,43 @@ async function boot(): Promise<void> {
    * 以前它由 `App` 创建，于是"只有进了世界才有面板"——这正是"开房要先进入再按 Esc"
    * 的根源。挪到这里之后，主菜单点「加入房间…」就能直接开会话。
    */
+  /**
+   * 开房流程：预检（连得上 / 房名没被占）→ 记下待办 → 建世界。
+   *
+   * **为什么抽成独立变量**：合并界面之后有两个入口都走它——
+   * 世界卡片的「开房」（旧对话框，保留兜底）与联机面板 host 模式的「确定并进入」。
+   */
+  const hostWorldFlow = async (
+    world: WorldSummary,
+    room: string,
+    password: string,
+    baseUrl: string,
+    name: string,
+  ): Promise<string | null> => {
+      const blocked = await preflightHost({ baseUrl, room });
+      if (blocked === 'https-blocked') {
+        /*
+         * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
+         * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
+         */
+        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
+        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
+        return t('mp.hostHttpsBlocked');
+      }
+      if (blocked === 'unreachable') {
+        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
+        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
+        return t('mp.hostUnreachable');
+      }
+      if (blocked === 'taken') {
+        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
+        return t('say.net.hostTaken');
+      }
+      pendingHostRoom = { room, password, baseUrl, name };
+      void startWorld(world);
+      return null;
+    };
+
   const multiplayerUi = new MultiplayerScreen(document.body, {
     onConnect: (url, name, host) => {
       if (currentApp && currentApp.alive) {
@@ -21993,6 +22082,15 @@ async function boot(): Promise<void> {
       multiplayerUi.setState('offline');
     },
     onClose: () => multiplayerUi.close(),
+    /*
+     * 开房模式（用户 2026-10-27：和加入共用一套界面）：面板把世界原样带回来，
+     * 这里落到同一条预检 + 建世界流程上。失败原因返回给面板显示。
+     */
+    onHostWorld: (world, room, password, baseUrl, name) => {
+      void hostWorldFlow(world as unknown as WorldSummary, room, password, baseUrl, name).then((error) => {
+        if (error !== null && error !== undefined) multiplayerUi.setState('offline', error);
+      });
+    },
   });
 
   const menu = new WorldScreen(document.body, registry, {
@@ -22023,30 +22121,9 @@ async function boot(): Promise<void> {
      * 站在世界里了，只能看到一句看不懂的 `host-taken` 或者静默断开。现在失败就留在对话框里
      * 把原因写在提示行上（`preflightHost` 只连不发 join，不占房主位）。
      */
-    onHostWorld: async (world, room, password, baseUrl, name) => {
-      const blocked = await preflightHost({ baseUrl, room });
-      if (blocked === 'https-blocked') {
-        /*
-         * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
-         * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
-         */
-        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
-        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
-        return t('mp.hostHttpsBlocked');
-      }
-      if (blocked === 'unreachable') {
-        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
-        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
-        return t('mp.hostUnreachable');
-      }
-      if (blocked === 'taken') {
-        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
-        return t('say.net.hostTaken');
-      }
-      pendingHostRoom = { room, password, baseUrl, name };
-      void startWorld(world);
-      return null;
-    },
+    onHostWorld: hostWorldFlow,
+    /* 卡片的「开房」直接进联机面板的 host 模式（界面与「加入房间」一致） */
+    onHostOpen: (world) => multiplayerUi.open('host', world),
     /*
      * 开房对话框的地址默认值（用户 2026-10-25）：以前这里写死 `defaultServerUrl()`，
      * 玩家看不到也改不了；现在把"当前该连哪台机器"以地址栏口径（只 IP）回填给他。
@@ -22071,13 +22148,40 @@ async function boot(): Promise<void> {
    * 为什么不导出 localStorage 清单：导入到另一台设备时 id 会撞、时间戳也没意义；
    * 导入方按文件里的种子/类型/模式重新建一个**新世界**，数据原样放进去。
    */
+  /** dataURL（`data:image/jpeg;base64,...`）→ 二进制，塞进包里当 `thumbnail.jpg` */
+  const thumbnailBytes = (dataUrl: string | undefined): Uint8Array | null => {
+    if (dataUrl === undefined) return null;
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) return null;
+    try {
+      const binary = atob(dataUrl.slice(comma + 1));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    } catch {
+      return null;
+    }
+  };
+
   const exportWorld = async (world: WorldSummary): Promise<void> => {
     let save: SaveGame | null = null;
     try {
       save = await SaveGame.open(world.id);
       if (!save) return;
+      /*
+       * `.mc` = 标准 zip（用户 2026-10-27）：`world.json` + 缩略图。
+       * 用 zip 而不是自定义格式，是因为玩家拿系统解压工具就能打开、能抢救。
+       */
       const file = buildSaveTransfer(world, await save.exportStores());
-      const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+      const entries: PackEntry[] = [
+        { name: 'world.json', data: new TextEncoder().encode(JSON.stringify(file)) },
+      ];
+      const shot = thumbnailBytes(world.thumbnail);
+      if (shot !== null) entries.push({ name: 'thumbnail.jpg', data: shot });
+      // TS 的 `Uint8Array<ArrayBufferLike>` 与 `BlobPart` 不兼容（可能是 SharedArrayBuffer），
+      // 运行时没问题，这里收一次窄
+      const packed = zipStore(entries) as unknown as BlobPart;
+      const blob = new Blob([packed], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -22103,7 +22207,7 @@ async function boot(): Promise<void> {
   const importWorld = async (): Promise<void> => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,application/json';
+    input.accept = '.mc';
     input.style.display = 'none';
     document.body.appendChild(input);
     input.addEventListener('change', () => {
@@ -22115,7 +22219,14 @@ async function boot(): Promise<void> {
         return;
       }
       void (async () => {
-        const parsed = parseSaveTransfer(await file.text());
+        // `.mc` 是 zip：解出 `world.json` 再走原来的解析（格式没变，只是外壳换了）
+        const packed = unzipStore(new Uint8Array(await file.arrayBuffer()));
+        const worldJson = packed.get('world.json');
+        if (worldJson === undefined) {
+          console.warn('[world] 这个 .mc 包里没有 world.json');
+          return;
+        }
+        const parsed = parseSaveTransfer(new TextDecoder().decode(worldJson));
         if (!parsed) {
           console.warn('[world] 导入文件格式不正确');
           return;
@@ -22345,3 +22456,6 @@ void boot().catch((error: unknown) => {
   failBootLoading();
   throw error;
 });
+
+// 全站输入浮层（用户 2026-10-27）：一处接管所有文本输入，避免系统键盘盖住输入框
+installInputOverlay();

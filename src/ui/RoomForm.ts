@@ -328,7 +328,7 @@ export class RoomForm {
       });
       document.body.append(this.picker.element);
     }
-    // 浮窗贴着「选择」按钮弹出（用户 2026-10-27）
-    this.picker.open(this.pickButton ?? this.portInput);
+    // 二级页面（2026-10-27 第二版）：与主面板同宽同位置，像翻页而不是再弹一层
+    this.picker.open();
   }
 }
