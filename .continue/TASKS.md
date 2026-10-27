@@ -4301,8 +4301,14 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     390px 宽下五格并排时地址框只剩 90px，占位都被截断。
   - **空状态**：加「重新扫描」按钮（原来只能关掉面板重开）、公共服务器文案改"暂时没有可用的
     公共服务器"、副标题从"所有端口 8887 的房间"简化成"端口 8887"、标题去掉重复的端口。
-  - 验证：`npm run check` **exit=0**（621 单测）；6 张截图（横屏加入/选择/开房/开房选择 + 竖屏
-    加入/选择）；2 条 ui 断言随新结构迁移（浮窗定位 → 二级页面、三列 → 分档列宽）。
+  - **转场**：页面遮罩 `page-fade-in` 160ms；主面板/开房对话框 `panel-pop-in` 170ms（淡入 +
+    轻微放大 + 上移 8px）；选择页 `panel-slide-in` 180ms（右侧滑入，像翻页）。退出不再直接
+    `display:none`，而是加 `.closing` 播 160ms 反向动画、播完才隐藏（快速开关 `clearTimeout`
+    上一次，避免动画中途被藏掉）。按钮加 `:active` 位移 1px；`prefers-reduced-motion` 下全关。
+  - 验证：`npm run check` **exit=0**（621 单测 + 1 条动画守卫）；playwright 读 computed
+    `animationName/duration` 确认五段动画都挂上（播完 class 从 `server-picker closing`
+    变 `server-picker hidden`）；6 张截图（横屏加入/选择/开房/开房选择 + 竖屏加入/选择）；
+    2 条 ui 断言随新结构迁移（浮窗定位 → 二级页面、三列 → 分档列宽）。
 - [x] L11 **界面统一规格 + 空房间不许进**（用户 2026-10-27）。
   - 控件统一：`:root` 新增 `--ctl-h` / `--ctl-h-lg` / `--ctl-font` / `--ctl-pad-x` / `--modal-w` /
     `--modal-pad` / `--modal-bg` / `--modal-close`，并加一段"控件统一规格"：
