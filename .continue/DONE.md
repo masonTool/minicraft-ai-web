@@ -9,6 +9,43 @@
 
 ---
 
+## 批次 20261027-1307 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1307
+
+> 用户 2026-10-27：「继续」—— 接着做**纯文字 HUD**：F3 调试信息与计分板侧边栏。
+> 这两块没有控件、没有命中测试，内容就是"一块底 + 几行字"，正好试一条新路子：
+> **不重排、按原位重画** —— 把 DOM 里直接带文字的元素连矩形/颜色/字号一起读出来画。
+
+- [x] [P1] `src/ui2d/textPanel.ts`：`readTextRuns` / `readTextBlocks` / `drawTextRuns` / `drawTextBlocks` + 归一化字号与签名 → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：读 DOM 里**直接带文字**的元素（叶子）→ 「矩形 + 文本 + 计算样式的颜色/字号/字重/对齐 + 有无阴影」；另外单独读"有色底"的元素（F3 的 `.35`、计分板的 `.45`）连同圆角。绘制时先画底块再按行画字（多行文本按 `\n` 拆开、行高 1.35 倍字号、竖直居中）。
+  - 为什么：F3 那串文案是**拼出来的多行字符串**，计分板是"名字左、分数右"的 flex 行 —— 重排一遍就要把格式与对齐规则各抄一份；颜色字号还会随夜间/低血量/断点变（`ui2d/textPanel.ts` 顶部三条理由）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **60 passed**（新增 3 条：字重归一、基线、签名稳定性）；`tsc` 干净。
+  - 批次：20261027-1307
+
+- [x] [P2] `src/main.ts` 接线：`#debug` 与 `#scoreboard-hud` 让位，`syncTextPanels2d()` 按"文字内容 + 视口"签名决定要不要重读 → `npm run check:fast`
+  - 做了什么：`applyTextPanelsDomFallback()` 把两块设 `visibility: hidden`（保留布局：F3 的换行、计分板两列对齐都要靠 DOM 量）；`syncTextPanels2d()` 每帧拼一个"文字内容 + 视口尺寸"的签名，**没变就不碰 `getComputedStyle`**（那是会触发样式重算的调用），变了才 `readTextRuns` + `readTextBlocks` 喂给 `Hud2D.setTextPanels`；`Hud2D` 在最上层画（先底色块再文字），resize 时把签名清空。
+  - 为什么：F3 开着时每帧都变（帧率/坐标），那是它本来就该重画；**关着时一次都不读** —— 默认 F3 是关的，所以常态零成本。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
+  - 批次：20261027-1307
+
+- [x] [P3] 预览页 `tools/preview/textpanels.html`（真 DOM 当数据源）+ `shoot-all` 补图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：按 `index.html` 的 `#debug` / `.scoreboard-hud` CSS 建真 DOM（`visibility: hidden`），读 runs + blocks 后原位重画；两张截图（含遮罩版），`shoot-all` 累计 31 张。
+  - 为什么：这一路线的卖点是"原位重画"，那就必须能一眼看出**位置/颜色/对齐都与 DOM 一致**——截图里 F3 五行等宽、计分板分数右对齐且是黄色（`#ffd75e` 来自计算样式）。
+  - 验证：截图看过：F3 块左上带半透明底、计分板右上带圆角底，名字左/分数右、分数黄色；遮罩版两块都是黄的。
+  - 批次：20261027-1307
+
+- [x] [P4] 文档：`notes/canvas-ui.md` §5.11 + 决策 D21 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.11 记下"原位重画"这条路线的三条理由与代价（`getComputedStyle` 的门禁）；决策 D21（纯文字面板按原位重画，不重排版）。
+  - 为什么：这是本项目**第一次**"不重排、只重画"的迁移，与前面"画法全部自己实现"的路线不同 —— 不写清楚，下一块（聊天栏 / 状态效果）会重新纠结用哪条路。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1307
+
+
 ## 批次 20261027-1258 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -233,34 +270,4 @@
   - 为什么：这三条决策都不是"随手这么写"——尤其 D8，它和快捷栏的结论**相反**，不写清边界，下一个人会给快捷栏套 `visibility` 然后点不动。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
   - 批次：20261027-1153
-
-## 批次 20261027-1143 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1143
-
-> 用户 2026-10-27：「现在看的还是不太清楚。要不然这样，如果是 canvas 画的，统一先加一层黄色遮罩，
-> 这样就容易区分了。」—— 对，这是"改造进度"最省事的一种可视化：不靠肉眼比对像素，
-> 而是让 canvas 产出的每一块像素自己"亮明身份"。
-
-- [x] [U5] 加调试遮罩：`src/ui2d/debug.ts` 的 `applyDebugTint()`（`source-atop` 整层刷）+ `Hud2D.setDebugTint()` + `main.ts` 解析 `?ui2dtint=1` + 两个预览页支持 `?tint=1` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：新增 `ui2d/debug.ts`（`applyDebugTint(ctx,w,h)`：`save` → `globalCompositeOperation='source-atop'` → 整块刷 `rgba(255,214,0,.52)` → `restore`）；`Hud2D` 加 `setDebugTint()`，在**所有绘制之后**刷遮罩；`main.ts` 把 `readUi2DFlag()` 拆成通用 `readFlag(name)`，新增 `UI2D_TINT_ENABLED = UI2D_ENABLED && readFlag('ui2dtint')`；两个预览页加 `?tint=1`。
-  - 为什么：`source-atop` 让**合成器**替我们判断"哪些地方有像素" —— 不用维护"这一帧画了哪些矩形"的账，将来新增控件自动被覆盖。遮罩单独一个参数、不跟 `ui2d=1` 绑定：多一次全屏填充会让帧率 A/B 失真，颜色不对也容易被当成 bug（见决策 D5/D6）。
-  - 验证：`tests/ui2d.test.ts` **36 passed**（新增 2 条：假 ctx 断言调用序列 = `save → op source-atop → fill → fillRect 0,0,w,h → restore`；尺寸非法时一笔不画）；`tsc` 干净；`npm run check` exit=0。
-  - 批次：20261027-1143
-
-- [x] [U6] `tools/preview/shoot-all.mjs` 补遮罩版截图并重拍全部；更新 `.tmp/canvas-version/README.md` 的进度表 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`SHOTS` 加 4 张遮罩版（`06-hotbar-tinted`、`06b-hotbar-tinted-dom-vs-canvas`、`07-boss-tinted`、`08-all-tinted`），重拍共 11 张；README 的表格补上四行，并加一张"URL → 看到什么"的表（不带参数 / `?ui2d=1` / `?ui2d=1&ui2dtint=1` / 关掉）。
-  - 为什么：用户要的是"一眼能判断实现到哪"，那截图里就必须有**同一份数据的染色/不染色对照** —— `06b` 那张（上排 DOM 不染色、下排 canvas 全黄）比任何文字说明都直接。
-  - 验证：`node tools/preview/shoot-all.mjs --base http://localhost:5199` 11 张全出，逐张看过：快捷栏整条染黄、DOM 那排原色；Boss 条只有那条被染、周围画面原色；红闪那版整屏偏黄（符合预期，红闪本身就是全屏填充）。
-  - 批次：20261027-1143
-
-- [x] [U7] 文档：`notes/canvas-ui.md` 记下这个调试开关与用法；决策写进 `doing/9f2dcf-decision.md` D5/D6 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：`notes/canvas-ui.md` 新增 §5.3（实现一句话、为什么需要它、三条边界、以及"红闪打开时整屏都黄"这个反直觉现象）；决策 D5（`source-atop` 整层刷而非逐块算矩形）、D6（开关独立成 `ui2dtint=1`）。
-  - 为什么：这个开关的价值不在代码而在**验收方式**——以后每迁一块界面，只要拍一张带遮罩的图就能说明"这块换了"，不必再靠肉眼比像素。不写下来，下一批会重新发明一遍。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1143
 
