@@ -127,3 +127,22 @@ dns-sd -B _minicraft._tcp local.        # 应该列出这台 iPhone 的实例名
 - **看**：局域网直连能用（`ws://192.168.x.x:8887`）。
 - **不对查**：`Info.plist` 的 `NSAppTransportSecurity` → 只开 `NSAllowsLocalNetworking = true`，
   **不要**用 `NSAllowsArbitraryLoads`（会被上架审核问）。
+
+## 宿主必须提供的一个桥方法（2026-10-27）
+
+网页侧的联机界面**不再猜本机网段**，只从原生要：
+
+```js
+Capacitor.Plugins.NativeServer.localIp()  // → { ip: "192.168.1.20" } 或 { ip: null }
+```
+
+拿不到 → 网页会弹「需要完整版」并关掉联机界面（这是产品要求，不是兜底）。
+
+安卓侧已在 `NativeServerPlugin.localIp()` 实现（`NetworkInterface` 遍历，跳过回环与
+`169.254.*`）。**iOS 侧需要宿主按同样签名暴露**：`getifaddrs` 取 `en0` 的 IPv4 即可：
+
+```swift
+import Foundation
+// 在 Capacitor 插件里注册 @objc func localIp(_ call: CAPPluginCall) { ... }
+// 或由 App 层直接挂到 window.Capacitor.Plugins.NativeServer.localIp
+```

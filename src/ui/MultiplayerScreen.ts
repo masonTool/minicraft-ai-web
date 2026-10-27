@@ -17,6 +17,7 @@
  */
 
 import { t, tp } from '../core/i18n/I18n.ts';
+import { getLanIp, hasNativeLanBridge } from '../core/net/LanIp.ts';
 import { roomFromWorldName } from '../core/net/RoomName.ts';
 import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
 import { parsePort } from '../core/net/ServerUrl.ts';
@@ -70,6 +71,9 @@ const STORAGE_PORT = 'mc.mp.port';
 const STORAGE_ROOM = 'mc.mp.room';
 const STORAGE_PASSWORD = 'mc.mp.pw';
 const STORAGE_NAME = 'mc.mp.name';
+/** 完整版下载页（用户 2026-10-27：提示里给一个"前往下载"的入口，可换） */
+const FULL_VERSION_URL = 'https://minicraft.example.com/download';
+
 /** 昵称上限与服务端 `sanitizeName` 对齐（按字符算，不按字节） */
 export const MULTIPLAYER_NAME_MAX = 16;
 const DEFAULT_NAME = '玩家';
@@ -115,6 +119,10 @@ export class MultiplayerScreen {
   private list!: ServerListPanel;
   /** 开房模式下的世界（加入模式为 null） */
   private hostWorld: HostWorld | null = null;
+  /** 本机局域网 IP（来自 native 桥；null = 拿不到，说明不是完整版） */
+  private lanIp: string | null = null;
+  /** “需要完整版”提示层（同一时刻只开一个） */
+  private fullPrompt: HTMLDivElement | null = null;
   /** 端口确认弹窗（同一时刻只开一个） */
   private portDialog: HTMLDivElement | null = null;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
@@ -252,8 +260,8 @@ export class MultiplayerScreen {
       this.showError('');
     };
     this.list.onPortRequest = () => this.openPortDialog();
-    // 地址框里填过的 IP 也用来推网段（hostname 不是 IP 时它最靠谱）
-    this.list.addressProvider = () => this.urlInput.value;
+    // 本机 IP 只从 native 桥拿（用户 2026-10-27：不猜网段）
+    this.list.lanIp = () => this.lanIp;
 
     const columns = document.createElement('div');
     columns.className = 'mp-columns';
@@ -326,6 +334,13 @@ export class MultiplayerScreen {
     }
     // 「选择本机」只在开房时露出：加入时填本机没有意义（本机没服务端）
     this.list.setLocalVisible(this.hostWorld !== null);
+    /*
+     * 联机只在**完整版**可用（用户 2026-10-27）：完整版的原生壳能通过 JS bridge
+     * 报出本机局域网 IP；拿不到就说明是精简版/网页版，直接弹提示并关掉这个界面。
+     */
+    if (mode === 'join' || mode === 'host') {
+      void this.ensureFullVersion();
+    }
     // 刚打开时清掉上一次的错误/断线提示（否则一进来就写"连接已断开"）
     this.showError('');
     this.syncModeVisibility();
@@ -487,6 +502,80 @@ export class MultiplayerScreen {
    * 改端口要**确认**（用户 2026-10-27）：端口一变，右边扫的就是另一批机器，
    * 必须立刻按新端口重扫——所以不能在输入框里随手打字就生效。
    */
+  /**
+   * 联机前的完整版校验（用户 2026-10-27）。
+   *
+   * 有桥 → 拿到本机 IP，右栏按这个网段扫；没桥 → 弹"需要完整版"并关掉界面。
+   */
+  private async ensureFullVersion(): Promise<void> {
+    if (!hasNativeLanBridge()) {
+      this.showFullVersionPrompt();
+      return;
+    }
+    const ip = await getLanIp();
+    if (ip === null) {
+      this.showFullVersionPrompt();
+      return;
+    }
+    this.lanIp = ip;
+    void this.list.refresh();
+  }
+
+  /**
+   * 「完整版才支持联机」的提示（用户 2026-10-27）。
+   *
+   * 两个按钮（关闭 / 前往下载）**都把提示和联机界面一起关掉**——这一页在精简版里
+   * 本来就没有可用功能，留着只会让人反复点。
+   */
+  private showFullVersionPrompt(): void {
+    if (this.fullPrompt !== null) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-full-prompt';
+    wrap.id = 'mp-full-prompt';
+
+    const card = document.createElement('div');
+    card.className = 'mp-full-card';
+    const title = document.createElement('b');
+    title.className = 'mp-full-title';
+    title.textContent = t('mp.needFullTitle');
+    const body = document.createElement('div');
+    body.className = 'mp-full-body';
+    body.textContent = t('mp.needFullBody');
+
+    const actions = document.createElement('div');
+    actions.className = 'mp-full-actions';
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.className = 'mp-action';
+    later.id = 'mp-full-close';
+    later.textContent = t('mp.close');
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'mp-action primary';
+    go.id = 'mp-full-go';
+    go.textContent = t('mp.needFullGo');
+    const dismiss = (): void => {
+      wrap.remove();
+      this.fullPrompt = null;
+      this.close();
+    };
+    later.addEventListener('click', dismiss);
+    go.addEventListener('click', () => {
+      try {
+        window.open(FULL_VERSION_URL, '_blank', 'noopener');
+      } catch {
+        // 有些 webview 会拦新窗口：给个入口就行，关闭界面才是主行为
+      }
+      dismiss();
+    });
+
+    actions.append(later, go);
+    card.append(title, body, actions);
+    wrap.append(card);
+    this.root.append(wrap);
+    this.fullPrompt = wrap;
+  }
+
   /** 端口等于默认值时界面显示灰底（表示"没改过"），改过就恢复正常态 */
   private syncPortDefault(): void {
     const port = parsePort(this.form.portInput.value) ?? 8887;

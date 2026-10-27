@@ -53,8 +53,8 @@ export class ServerListPanel {
   onPick?: (target: PickedTarget) => void;
   /** 空状态下点「修改端口」 */
   onPortRequest?: () => void;
-  /** 取左侧地址框里填的值（用来推网段，见 `subnets()`） */
-  addressProvider?: () => string;
+  /** 本机局域网 IP（由宿主从 native 桥取，见 `core/net/LanIp.ts`） */
+  lanIp?: () => string | null;
 
   constructor() {
     this.element = document.createElement('div');
@@ -144,6 +144,17 @@ export class ServerListPanel {
   }
 
   /** 清空并重新扫描（第一次挂载、点「重新扫描」、换端口都走这里） */
+  /**
+   * 要扫的网段（用户 2026-10-27：**不猜**）。
+   *
+   * 本机局域网 IP 只从 native 桥拿（`core/net/LanIp.ts`）；拿不到说明不是完整版，
+   * 宿主会直接弹"需要完整版"并关掉这个界面，所以这里拿到 null 就**不扫描**。
+   */
+  private scanBase(): string | null {
+    const ip = this.lanIp?.() ?? '';
+    return subnetOf(ip);
+  }
+
   async refresh(): Promise<void> {
     if (this.scanning) {
       // 还在扫：作废旧的一轮，让它在下一次探测时自己退出
@@ -156,36 +167,29 @@ export class ServerListPanel {
     this.seen.clear();
     this.status.textContent = t('server.scanning');
 
+    const base = this.scanBase();
+    if (base === null) {
+      // 没有本机 IP：不扫（猜网段只会扫错一片网，而且这一版界面本不该出现）
+      this.status.textContent = t('server.noLanIp');
+      this.status.classList.add('empty');
+      this.scanning = false;
+      return;
+    }
+
     const startedAt = performance.now();
     try {
-      /*
-       * 分批扫（用户 2026-10-27）：一次只并行 2 个网段——6 个段 × 254 个地址一起打，
-       * 浏览器会把请求排队到几十秒，反而更慢。找到就停，所以常见情况是 1~2 批。
-       */
-      const bases = this.subnets();
-      const found: DiscoveredServer[] = [];
-      for (let index = 0; index < bases.length; index += 2) {
-        if (token !== this.token) break;
-        const batch = bases.slice(index, index + 2);
-        const results = await Promise.all(
-          batch.map((base) =>
-            scanSubnet(
-              base,
-              { reach: browserReach, now: () => performance.now() },
-              {
-                port: this.port,
-                onFound: (server) => {
-                  if (token !== this.token) return;
-                  this.appendServerRow(server);
-                },
-                cancelled: () => token !== this.token,
-              },
-            ),
-          ),
-        );
-        for (const list of results) found.push(...list);
-        if (found.length > 0) break;
-      }
+      const found = await scanSubnet(
+        base,
+        { reach: browserReach, now: () => performance.now() },
+        {
+          port: this.port,
+          onFound: (server) => {
+            if (token !== this.token) return;
+            this.appendServerRow(server);
+          },
+          cancelled: () => token !== this.token,
+        },
+      );
       if (token !== this.token) return;
       const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
       if (found.length > 0) {
@@ -223,53 +227,11 @@ export class ServerListPanel {
     body.className = 'server-list-group-body';
     head.addEventListener('click', () => {
       const open = head.getAttribute('aria-expanded') === 'true';
-      // 三角的朝向由 CSS 按 aria-expanded 决定，切换只改这一个属性
       head.setAttribute('aria-expanded', String(!open));
       body.classList.toggle('hidden', open);
     });
     group.append(head, body);
     return { group, body };
-  }
-
-  /**
-   * 要扫哪些网段（用户 2026-10-27："先找到本机 IP，取前三段去扫"）。
-   *
-   * 问题在于**浏览器根本拿不到本机内网 IP**：
-   *  - `location.hostname` 只在"页面本身就是用 IP 打开"时才是本机 IP；
-   *    App 的 webview / 域名访问时它是 `localhost`，按它扫只能扫到回环；
-   *  - WebRTC 的 host candidate 被 Chrome/Safari 混淆成 `xxx.local`（mDNS 隐私保护，
-   *    实测拿不到 192.168.x.x），不能当来源。
-   *
-   * 所以这里给一串**候选**，按"最可能是哪一个"排序，分批扫、找到就停：
-   *  1. 页面 hostname 是私网 IP → 它最准（浏览器直接访问局域网服务时就是这样）
-   *  2. 地址框里已填的私网 IP → 上一版能扫到就是靠它（通常是上次连过的机器）
-   *  3. 常见私网段兜底：192.168.1 命中率最高，其次 .0 / .2 / 10.0.0… 
-   */
-  private subnets(): string[] {
-    const candidates: string[] = [];
-    const push = (base: string | null): void => {
-      if (base !== null && base.length > 0 && candidates.indexOf(base) < 0) candidates.push(base);
-    };
-
-    push(subnetOf(location.hostname));
-    push(subnetOf(this.addressHint()));
-    /*
-     * localhost / 域名打开：先扫回环（开发时服务端就在本机），
-     * 但**不能只扫它**——手机 webview 也是 localhost，局域网里那台才是要找的。
-     */
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      push('127.0.0');
-    }
-    // 兜底：家用路由器最常见的几个段
-    for (const base of ['192.168.1', '192.168.0', '192.168.2', '192.168.31', '10.0.0', '10.0.1']) {
-      push(base);
-    }
-    return candidates;
-  }
-
-  /** 地址框里填的地址（去掉端口），用来推网段 */
-  private addressHint(): string {
-    return this.addressProvider?.() ?? '';
   }
 
   private showEmpty(): void {

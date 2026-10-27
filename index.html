@@ -6351,7 +6351,7 @@
       /* ⚠️ 必须排除弹层：`#multiplayer-screen > *` 的特异性 (1,0,0) 比
          `.mp-port-dialog` (0,1,0) 高，会把它的 `position: absolute` 覆盖成 relative，
          于是它参与 flex 布局、把主面板挤到一边（踩过一次）。 */
-      #multiplayer-screen > *:not(.mp-port-dialog),
+      #multiplayer-screen > *:not(.mp-port-dialog):not(.mp-full-prompt),
       .server-picker > *,
       .world-modal > * {
         position: relative;
@@ -6805,6 +6805,30 @@
         background-repeat: no-repeat;
         image-rendering: auto;
       }
+
+      /* 「需要完整版」提示（2026-10-27）：盖在联机界面之上，两个按钮都会把界面一起关掉 */
+      .mp-full-prompt {
+        /* fixed 而不是 absolute：它挂在 `#multiplayer-screen`（flex 容器）下面，
+           absolute 会变成 flex item 被排到面板右边（实测跑到了屏幕外）。 */
+        position: fixed; inset: 0; z-index: 400;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, .72);
+      }
+      .mp-full-card {
+        width: min(88%, 340px);
+        display: flex; flex-direction: column; gap: 12px;
+        padding: 18px 16px;
+        text-align: center;
+        background: linear-gradient(#3a3a3a, #2c2c2c);
+        border: 3px solid;
+        border-top-color: #5c5c5c; border-left-color: #545454;
+        border-right-color: #3a3a3a; border-bottom-color: #303030;
+        box-shadow: 0 22px 52px rgba(0, 0, 0, .6);
+      }
+      .mp-full-title { font-size: 15px; letter-spacing: .5px; }
+      .mp-full-body { font-size: 12px; line-height: 1.8; color: #c8c8c8; }
+      .mp-full-actions { display: flex; gap: 8px; }
+      .mp-full-actions .mp-action { flex: 1 1 0; min-height: 36px; font-size: 13px; }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
