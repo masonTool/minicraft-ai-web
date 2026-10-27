@@ -87,6 +87,52 @@ export function layoutInventoryPanel(
   return { panel, titleRect, slots, rows };
 }
 
+/**
+ * 长按选数量：把"手指相对按下点横向移了多远"换算成数量。
+ *
+ * 与 DOM 版的手感一致：**越往右越多，1 格 ≈ 12px**，夹在 `1..max`。
+ * 纯函数，离线可断言（DOM 版那条滑条也是这么算的）。
+ */
+export function splitCountFromDrag(dx: number, max: number): number {
+  if (!(max > 0)) return 0;
+  if (!Number.isFinite(dx)) return 1;
+  return Math.min(max, Math.max(1, Math.round(1 + dx / 12)));
+}
+
+/** 长按选数量时那格的高亮（原版是把选中那格压暗再罩一层） */
+export function drawSplitTarget(ctx: CanvasRenderingContext2D, slot: Rect): void {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 0, 0, .35)';
+  ctx.fillRect(slot.x, slot.y, slot.w, slot.h);
+  ctx.restore();
+}
+
+/** 画"长按选数量"的小牌：格子正上方，写着数量与一条占比条 */
+export function drawSplitHint(ctx: CanvasRenderingContext2D, slot: Rect, count: number, max: number): void {
+  const w = Math.max(46, slot.w + 12);
+  const h = 18;
+  const rect: Rect = { x: slot.x + slot.w / 2 - w / 2, y: slot.y - h - 6, w, h };
+  ctx.save();
+  roundRectPath(ctx, rect, 4);
+  ctx.fillStyle = 'rgba(12, 13, 16, .88)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, .55)';
+  ctx.lineWidth = 1;
+  roundRectPath(ctx, rect, 4);
+  ctx.stroke();
+  const ratio = max > 0 ? Math.min(1, count / max) : 0;
+  ctx.fillStyle = 'rgba(120, 200, 110, .85)';
+  ctx.fillRect(rect.x + 3, rect.y + rect.h - 4, (rect.w - 6) * ratio, 2);
+  drawText(ctx, `${count}`, rect.x + rect.w / 2, rect.y + rect.h / 2 - 1, {
+    font: uiFont(11),
+    color: '#f2f5f8',
+    align: 'center',
+    baseline: 'middle',
+    shadow: false,
+  });
+  ctx.restore();
+}
+
 /** 命中：指针落在第几格（不在任何格子上返回 -1） */
 export function slotIndexAt(layout: InventoryLayout, x: number, y: number): number {
   for (let i = 0; i < layout.slots.length; i++) {

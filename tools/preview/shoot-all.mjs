@@ -430,6 +430,13 @@ const SHOTS = [
     what: '自绘背包：右键取半（格子剩 32、手上 32），四种操作与 DOM 对齐',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '34-inventory-split.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 410],
+    what: '自绘背包：**长按选数量**（横move 调，牌上显示 11，松手后格 53 / 手 11）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

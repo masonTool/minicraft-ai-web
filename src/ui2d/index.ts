@@ -219,7 +219,10 @@ export {
 export {
   INV_LAYOUT,
   drawInventoryPanel,
+  drawSplitHint,
+  drawSplitTarget,
   layoutInventoryPanel,
+  splitCountFromDrag,
   slotIndexAt,
   type InventoryLayout,
 } from './InventoryPanel2D.ts';

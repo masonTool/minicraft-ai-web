@@ -11,7 +11,15 @@
 
 import { Ui2DOverlay } from './overlay.ts';
 import { applyDebugTint } from './debug.ts';
-import { drawInventoryPanel, layoutInventoryPanel, slotIndexAt, type InventoryLayout } from './InventoryPanel2D.ts';
+import {
+  drawInventoryPanel,
+  drawSplitHint,
+  drawSplitTarget,
+  layoutInventoryPanel,
+  slotIndexAt,
+  splitCountFromDrag,
+  type InventoryLayout,
+} from './InventoryPanel2D.ts';
 import { INV_SLOT_DEFAULT_SKIN, type InvSlotSkin } from './Inventory2D.ts';
 import {
   distributeDrag,
@@ -70,6 +78,13 @@ export class InventoryPanelHost {
    * 所以触摸时先按住，松手前没超时也没移动才算点击；超时就是分堆，移动就成了拖拽。
    */
   private pendingTouch: { index: number; x: number; y: number } | null = null;
+  /**
+   * 长按之后进入的"选数量"状态：手指横move 多少就改数量，松手才落到格子里。
+   *
+   * DOM 版是弹一条滑条；这里做成"按住那格 + 横move 选 + 松手确认"，
+   * 好处是不用额外的命中区域，手指一直在格子上，选的时候不会点歪。
+   */
+  private split: { readonly index: number; readonly x0: number; readonly max: number; count: number } | null = null;
   private pointerX = 0;
   private pointerY = 0;
   private opened = false;
@@ -101,6 +116,7 @@ export class InventoryPanelHost {
   close(): void {
     this.cancelLongPress();
     this.pendingTouch = null;
+    this.split = null;
     this.opened = false;
     this.hoverIndex = -1;
     this.dragIndices = [];
@@ -191,6 +207,11 @@ export class InventoryPanelHost {
       return true;
     }
     if (phase === 'move') {
+      if (this.split) {
+        this.split.count = splitCountFromDrag(x - this.split.x0, this.split.max);
+        this.render();
+        return true;
+      }
       const pending = this.pendingTouch;
       if (pending && Math.hypot(x - pending.x, y - pending.y) > TOUCH_DRAG_SLOP) {
         this.pendingTouch = null;
@@ -213,6 +234,15 @@ export class InventoryPanelHost {
       return false;
     }
     this.cancelLongPress();
+    if (this.split) {
+      const { index, count } = this.split;
+      this.split = null;
+      splitTake(this.slots, this.options, this.cursor, index, count);
+      this.dragIndices = [];
+      this.dragging = false;
+      this.render();
+      return true;
+    }
     const pending = this.pendingTouch;
     if (pending) {
       // 松手时还在等：这就是一次普通点击
@@ -250,7 +280,8 @@ export class InventoryPanelHost {
       this.longPressTimer = null;
       const stack = this.slots.get(index);
       if (!stack) return;
-      splitTake(this.slots, this.options, this.cursor, index, Math.ceil(stack.count / 2));
+      // 进入"选数量"：先给一半，之后靠横move 调
+      this.split = { index, x0: this.pointerX, max: stack.count, count: Math.ceil(stack.count / 2) };
       this.pendingTouch = null;
       this.dragIndices = [];
       this.dragging = false;
@@ -306,6 +337,7 @@ export class InventoryPanelHost {
       };
     });
     const held = this.cursor.stack;
+    const splitSlot = this.split ? layout.slots[this.split.index] : null;
     drawInventoryPanel(ctx, layout, {
       title: this.options.title,
       slots: views,
@@ -315,6 +347,11 @@ export class InventoryPanelHost {
       cursorY: this.pointerY,
       skin: this.options.skin ?? INV_SLOT_DEFAULT_SKIN,
     });
+    // 压暗与数量牌要画在面板**之上**（先画的话会被槽位底色盖掉）
+    if (splitSlot && this.split) {
+      drawSplitTarget(ctx, splitSlot);
+      drawSplitHint(ctx, splitSlot, this.split.count, this.split.max);
+    }
     if (this.options.tint) applyDebugTint(ctx, overlay.width, overlay.height);
   }
 

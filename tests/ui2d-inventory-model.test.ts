@@ -8,6 +8,7 @@
  * 用的是"数组 + 假物品表"（石头 64 上限、剑 1 上限），完全不碰 DOM/canvas。
  */
 import { describe, expect, it } from 'vitest';
+import { splitCountFromDrag } from '../src/ui2d/InventoryPanel2D.ts';
 import {
   arraySlots,
   distributeDrag,
@@ -303,5 +304,33 @@ describe('长按分堆（取指定数量）', () => {
     splitTake(slots, RULES, cursor, 0, 5);
     expect(cursor.stack).toEqual(sword());
     expect(slots.get(0)).toEqual(stone(10));
+  });
+});
+
+/**
+ * 长按选数量：拖动距离 → 数量（`splitCountFromDrag`）。
+ *
+ * DOM 版那条滑条就是"往右拉得越多、取得越多"，1 格 ≈ 12px；这里把它钉成纯函数，
+ * 免得以后调手感时改坏了却没人发现（错了的表现是"怎么拉都只取一个"）。
+ */
+describe('长按选数量', () => {
+  it('不动就是 1 个', () => {
+    expect(splitCountFromDrag(0, 64)).toBe(1);
+  });
+
+  it('往右每 12px 多一个', () => {
+    expect(splitCountFromDrag(12, 64)).toBe(2);
+    expect(splitCountFromDrag(36, 64)).toBe(4);
+    expect(splitCountFromDrag(120, 64)).toBe(11);
+  });
+
+  it('夹在 1..max 之间（不会取 0，也不会超过这一叠）', () => {
+    expect(splitCountFromDrag(-500, 64)).toBe(1);
+    expect(splitCountFromDrag(99999, 64)).toBe(64);
+  });
+
+  it('空格（max=0）返回 0；非法输入退回 1', () => {
+    expect(splitCountFromDrag(50, 0)).toBe(0);
+    expect(splitCountFromDrag(Number.NaN, 64)).toBe(1);
   });
 });
