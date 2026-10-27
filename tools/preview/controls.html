@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 控件库（canvas，可交互）</title>
+    <!--
+      阶段 1 的控件库预览：七个控件摆一排，**能真的点、拖、滚**。
+
+      为什么这一页是必需的：`notes/canvas-ui.md` 给阶段 1 定的判据就是
+      "每个控件都有'命中 → 状态 → 回调'的离线断言；能在调试面板里摆一排"。
+      离线断言钉住了纯函数，这一页负责"看起来对不对、点起来顺不顺"。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/controls.html
+        open http://localhost:5173/tools/preview/controls.html?tint=1   # 黄色遮罩
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage { position: relative; width: 900px; height: 560px; }
+      /* ⚠️ 这一页**要**打开 pointer-events（游戏里铺满全屏的覆盖层必须关着，
+         否则会吃掉触摸端的视角手势；这里是独立调试页，没有那层）。 */
+      #stage canvas { pointer-events: auto; touch-action: none; }
+      .hint {
+        position: absolute; left: 0; bottom: -26px;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #7d8a7d;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="hint">开关点一下就翻 · 滑块按住拖 · 下拉点开再选 · 页签点切换 · 列表滚轮滚/点行选中 · 悬停问号出提示 · 最下面那颗开弹窗</div></div>
+
+    <script type="module">
+      import {
+        DROPDOWN_ITEM_HEIGHT,
+        LIST_ITEM_HEIGHT,
+        Ui2DOverlay,
+        clampListScroll,
+        controlRegion,
+        drawButton,
+        drawDropdownField,
+        drawDropdownMenu,
+        drawListRow,
+        drawModalFrame,
+        drawScrollbar,
+        drawSlider,
+        drawTabs,
+        drawToggle,
+        drawTooltip,
+        dropdownIndexAt,
+        dropdownMenuRect,
+        hitRegionAt,
+        listScrollByWheel,
+        listVisibleRange,
+        modalRect,
+        sliderRatioFromX,
+        tabIndexAt,
+        tabRects,
+        toggleNext,
+        tooltipRect,
+        uiFont,
+        drawText,
+        PALETTE,
+        applyDebugTint,
+        roundRectPath,
+      } from '../../src/ui2d/index.ts';
+
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const stage = document.getElementById('stage');
+      const overlay = new Ui2DOverlay(stage);
+      const ctx = overlay.context;
+      const scale = window.devicePixelRatio || 1;
+      const W = 900;
+      const H = 560;
+      stage.style.width = `${W}px`;
+      stage.style.height = `${H}px`;
+
+      // ---------------- 状态（全部留在这一层，控件库本身无状态） ----------------
+      const state = {
+        particle: true,
+        autoJump: false,
+        sensitivity: 0.62,
+        dragging: false,
+        mode: 1,
+        modes: ['生存', '创造', '旁观'],
+        dropdownOpen: false,
+        dropdownHover: -1,
+        tab: 0,
+        listOffset: 48,
+        listActive: 5,
+        listHover: -1,
+        hoverTip: false,
+        modalOpen: false,
+      };
+      // 20 行 > 视口（300px / 24px ≈ 12 行），这样滚动条与滚动行为才看得出来
+      const LIST_ROWS = Array.from({ length: 20 }, (_, i) => `存档 ${String(i + 1).padStart(2, '0')}`);
+      // `?state=dropdown|tooltip|modal`：截图时把某个浮层固定打开（交互要靠人，截图不能）
+      const forced = new URLSearchParams(window.location.search).get('state') ?? '';
+      let pointer = { x: -1, y: -1 };
+      if (forced === 'dropdown') state.dropdownOpen = true;
+      if (forced === 'tooltip') state.hoverTip = true;
+      if (forced === 'modal') state.modalOpen = true;
+
+      // ---------------- 布局（全部是 CSS px） ----------------
+      const L = { x: 28, w: 300 };
+      const panel = { x: 12, y: 12, w: W - 24, h: H - 24 };
+      const toggle0 = { x: L.x + 150, y: 56, w: 44, h: 22 };
+      const toggle1 = { x: L.x + 150, y: 96, w: 44, h: 22 };
+      const slider = { x: L.x, y: 148, w: 200, h: 20 };
+      const field = { x: L.x, y: 208, w: 180, h: 26 };
+      const tipBtn = { x: L.x + 200, y: 208, w: 26, h: 26 };
+      const tabsBar = { x: 360, y: 48, w: 460, h: 28 };
+      const listRect = { x: 360, y: 96, w: 460, h: 300 };
+      const listInner = { x: listRect.x + 2, y: listRect.y + 2, w: listRect.w - 16, h: listRect.h - 4 };
+      const scrollTrack = { x: listRect.x + listRect.w - 10, y: listRect.y + 4, w: 6, h: listRect.h - 8 };
+      const modalBtn = { x: 360, y: 424, w: 160, h: 32 };
+      const modalPanel = modalRect(W, H, 420, 220);
+      const modalClose = { x: modalPanel.x + modalPanel.w - 34, y: modalPanel.y + 6, w: 28, h: 22 };
+
+      const labels = {
+        world: ['视距', '视野', '云'],
+        tip: ['提示框', '这一条是 canvas 画的', '上/下会自动翻边'],
+      };
+
+      function regions() {
+        const list = [
+          controlRegion('toggle0', toggle0),
+          controlRegion('toggle1', toggle1),
+          controlRegion('slider', slider),
+          controlRegion('dropdown', field),
+          controlRegion('tip', tipBtn),
+          controlRegion('list', listRect),
+          controlRegion('modal-open', modalBtn),
+        ];
+        const tabs = tabRects(tabsBar, 3);
+        tabs.forEach((rect, i) => list.push(controlRegion(`tab${i}`, rect)));
+        if (state.dropdownOpen) {
+          const menu = dropdownMenuRect(field, state.modes.length, DROPDOWN_ITEM_HEIGHT, H);
+          list.push(controlRegion('dropdown-menu', menu, 5));
+          state.modes.forEach((_, i) =>
+            list.push(
+              controlRegion(
+                `dd${i}`,
+                { x: menu.x, y: menu.y + i * DROPDOWN_ITEM_HEIGHT, w: menu.w, h: DROPDOWN_ITEM_HEIGHT },
+                6,
+              ),
+            ),
+          );
+        }
+        if (state.modalOpen) {
+          list.push(controlRegion('modal-panel', modalPanel, 20));
+          list.push(controlRegion('modal-close', modalClose, 21));
+        }
+        return list;
+      }
+
+      // ---------------- 绘制 ----------------
+      function render() {
+        overlay.syncSize();
+        ctx.clearRect(0, 0, W, H);
+        // 底板
+        ctx.fillStyle = '#232323';
+        ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = '#0d0d0d';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(panel.x, panel.y, panel.w, panel.h);
+
+        // ---- 左列：开关 / 滑块 / 下拉 / 提示 ----
+        drawText(ctx, '粒子效果', L.x, toggle0.y + 11, { font: uiFont(13), color: PALETTE.textLight, baseline: 'middle' });
+        drawToggle(ctx, toggle0, state.particle);
+        drawText(ctx, '自动跳跃', L.x, toggle1.y + 11, { font: uiFont(13), color: PALETTE.textLight, baseline: 'middle' });
+        drawToggle(ctx, toggle1, state.autoJump);
+
+        drawText(ctx, `灵敏度 ${Math.round(state.sensitivity * 100)}%`, L.x, slider.y - 10, {
+          font: uiFont(13),
+          color: PALETTE.textLight,
+          baseline: 'bottom',
+        });
+        drawSlider(ctx, slider, state.sensitivity, state.dragging);
+
+        drawDropdownField(ctx, field, state.modes[state.mode], state.dropdownOpen);
+        drawButton(ctx, tipBtn, '?', state.hoverTip ? 'hover' : 'idle');
+
+        // ---- 右列：页签 + 列表 ----
+        drawTabs(ctx, tabsBar, labels.world, state.tab);
+        ctx.fillStyle = '#1b1c18';
+        ctx.fillRect(listRect.x, listRect.y, listRect.w, listRect.h);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(listInner.x, listInner.y, listInner.w, listInner.h);
+        ctx.clip();
+        const range = listVisibleRange(state.listOffset, listInner.h, LIST_ROWS.length, LIST_ITEM_HEIGHT);
+        for (let i = range.first; i <= range.last; i++) {
+          drawListRow(
+            ctx,
+            {
+              x: listInner.x,
+              y: listInner.y + i * LIST_ITEM_HEIGHT - state.listOffset,
+              w: listInner.w,
+              h: LIST_ITEM_HEIGHT - 1,
+            },
+            LIST_ROWS[i],
+            i === state.listActive,
+            i === state.listHover,
+          );
+        }
+        ctx.restore();
+        drawScrollbar(ctx, scrollTrack, state.listOffset, LIST_ROWS.length * LIST_ITEM_HEIGHT, listInner.h);
+
+        drawButton(ctx, modalBtn, '打开弹窗', 'idle');
+
+        // ---- 浮层：下拉菜单 / 提示框 / 弹窗（顺序就是层序） ----
+        if (state.dropdownOpen) {
+          const menu = dropdownMenuRect(field, state.modes.length, DROPDOWN_ITEM_HEIGHT, H);
+          drawDropdownMenu(ctx, menu, state.modes, state.mode, state.dropdownHover);
+        }
+        if (state.hoverTip) {
+          const rect = tooltipRect(tipBtn, 170, 56, { w: W, h: H });
+          drawTooltip(ctx, rect, labels.tip.slice(1));
+        }
+        if (state.modalOpen) {
+          ctx.fillStyle = 'rgba(0, 0, 0, .55)';
+          ctx.fillRect(0, 0, W, H);
+          drawModalFrame(ctx, modalPanel, '暂停 · 这是 canvas 弹窗');
+          drawButton(ctx, modalClose, '✕', 'idle');
+          drawText(ctx, 'Esc 或点 ✕ 关闭；面板不透明，底下的列表不会透上来。', modalPanel.x + 20, modalPanel.y + 66, {
+            font: uiFont(13),
+            color: '#9aa69a',
+            maxWidth: modalPanel.w - 40,
+          });
+        }
+
+        if (tint) applyDebugTint(ctx, W, H);
+      }
+
+      // ---------------- 交互（这一层就是"命中 → 状态 → 回调"） ----------------
+      overlay.canvas.style.pointerEvents = 'auto';
+
+      function localPoint(event) {
+        const rect = overlay.canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+
+      // 鼠标悬停：列表行高亮 + 问号按钮 + 下拉项
+      overlay.canvas.addEventListener('pointermove', (event) => {
+        pointer = localPoint(event);
+        const hit = hitRegionAt(regions(), pointer.x, pointer.y);
+        const id = hit?.id ?? '';
+        state.hoverTip = id === 'tip';
+        state.dropdownHover = id.startsWith('dd') ? Number(id.slice(2)) : -1;
+        state.listHover = -1;
+        if (id === 'list') {
+          const y = pointer.y - listInner.y + state.listOffset;
+          const index = Math.floor(y / LIST_ITEM_HEIGHT);
+          if (index >= 0 && index < LIST_ROWS.length) state.listHover = index;
+        }
+        if (state.dragging) state.sensitivity = sliderRatioFromX(slider, pointer.x);
+        render();
+      });
+
+      overlay.canvas.addEventListener('pointerdown', (event) => {
+        const point = localPoint(event);
+        const id = hitRegionAt(regions(), point.x, point.y)?.id ?? '';
+        if (id === 'toggle0') state.particle = toggleNext(state.particle);
+        else if (id === 'toggle1') state.autoJump = toggleNext(state.autoJump);
+        else if (id === 'slider') {
+          state.dragging = true;
+          state.sensitivity = sliderRatioFromX(slider, point.x);
+        } else if (id === 'dropdown') state.dropdownOpen = !state.dropdownOpen;
+        else if (id.startsWith('dd')) {
+          state.mode = Number(id.slice(2));
+          state.dropdownOpen = false;
+        } else if (id.startsWith('tab')) state.tab = tabIndexAt(tabsBar, 3, point.x);
+        else if (id === 'list') {
+          const y = point.y - listInner.y + state.listOffset;
+          const index = Math.floor(y / LIST_ITEM_HEIGHT);
+          if (index >= 0 && index < LIST_ROWS.length) state.listActive = index;
+        } else if (id === 'modal-open') state.modalOpen = true;
+        else if (id === 'modal-close' || id === 'modal-panel') state.modalOpen = false;
+        else if (state.dropdownOpen) state.dropdownOpen = false; // 点别处收起
+        render();
+      });
+
+      overlay.canvas.addEventListener('pointerup', () => {
+        if (!state.dragging) return;
+        state.dragging = false;
+        render();
+      });
+
+      overlay.canvas.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault();
+          state.listOffset = listScrollByWheel(
+            state.listOffset,
+            event.deltaY,
+            LIST_ROWS.length,
+            listInner.h,
+            LIST_ITEM_HEIGHT,
+          );
+          state.listOffset = clampListScroll(state.listOffset, LIST_ROWS.length, listInner.h, LIST_ITEM_HEIGHT);
+          render();
+        },
+        { passive: false },
+      );
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        state.modalOpen = false;
+        state.dropdownOpen = false;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>

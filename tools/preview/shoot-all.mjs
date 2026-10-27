@@ -101,6 +101,41 @@ const SHOTS = [
     what: '同一块的另一种状态：残血 3 点、没穿甲（护甲行不显示）、氧气满（气泡行不显示）',
     status: '已迁 · 阶段 2',
   },
+  {
+    file: '10-controls.png',
+    page: 'tools/preview/controls.html',
+    size: [940, 620],
+    what: '控件库：开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗（可交互页）',
+    status: '已迁 · 阶段 1',
+  },
+  {
+    file: '10b-controls-dropdown.png',
+    page: 'tools/preview/controls.html?state=dropdown',
+    size: [940, 620],
+    what: '下拉展开：菜单贴在字段下方，已选中项高亮',
+    status: '已迁 · 阶段 1',
+  },
+  {
+    file: '10c-controls-modal.png',
+    page: 'tools/preview/controls.html?state=modal',
+    size: [940, 620],
+    what: '弹窗：不透明深色面板 + 标题栏 + ✕（底下的列表不会透上来）',
+    status: '已迁 · 阶段 1',
+  },
+  {
+    file: '10e-controls-tooltip.png',
+    page: 'tools/preview/controls.html?state=tooltip',
+    size: [940, 620],
+    what: '提示框：贴在锚点下方，靠边会自动翻边',
+    status: '已迁 · 阶段 1',
+  },
+  {
+    file: '10d-controls-tinted.png',
+    page: 'tools/preview/controls.html?tint=1',
+    size: [940, 620],
+    what: '控件库 + 黄色遮罩：整页黄 = 这七个控件全是 canvas 画的',
+    status: '遮罩 · 阶段 1',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
