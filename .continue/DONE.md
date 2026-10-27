@@ -9,6 +9,46 @@
 
 ---
 
+## 批次 20261027-0848 · 2026-10-27 · 会话 49866712
+
+> 界面迁 canvas 的第一步：先立地基（文字 / 命中 / 覆盖层 / 控件）＋试点三样纯展示 HUD，
+> `?ui2d=1` 做 A/B；并把"哪些不搬、为什么"写成表（`notes/canvas-ui.md`）。
+
+# 队列 · 会话 498667122b7f4c508a73dac8f5e7e792
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0848
+
+> 本队列在并行工作树 `.continue/doing/.worktree/worktree_canvasui_20261027` 里执行
+> （分支 `worktree_canvasui_20261027`，基于 `88175334`）。父树没有队列 —— 这一批从头到尾只在这棵树里。
+
+- [x] [C1] 修 net-client-look 红灯：NetClient.tick 的 look 改成「变化 / 2 秒兜底」才发 → npx vitest run tests/net-client-look.test.ts
+  - 做了什么：**没有改代码**。上游 `88175334` 已把这条口径定成「每条 `move` 都带全量外观」，测试也同步改成 `expect(moves()[1].look).toEqual(LOOK_A)`。我先按旧断言写了去重补丁（`LOOK_RESEND_MS` + `lastLookKey/lastLookAt`），跑到一半发现与 HEAD 的测试冲突，于是三处编辑**完整回退**，`git status src/` 干净。
+  - 为什么：同一件事只能有一个口径。服务端 `readAppearance` 已改成**合并**语义，客户端"每条都带"不会再引发闪烁；去重是更省字节，但会与"每条都带"的断言直接冲突 —— 既然上游已经拍板并落了测试，就不该在迁移分支里偷偷改回去。
+  - 验证：`npx vitest run tests/net-client-look.test.ts` → **8 passed**；`git status --short src/` 无输出（确认回退干净）。
+  - 批次：20261027-0848
+
+- [x] [C2] 建 src/ui2d/ 骨架：overlay（DPR/尺寸）、text（测量/裁切/换行）、input（命中测试/焦点/层栈）、widgets（按钮）→ npm run check:fast
+  - 做了什么：新增 5 个模块 + 1 个汇总入口：`text.ts`（字体栈、测量缓存 512 条、`tokenize`/`truncateToWidth`/`wrapToWidth`、`drawText`）、`input.ts`（`hitRegionAt` 纯函数 + `Ui2DInput` 指针路由，空命中表时强制 `pointer-events: none`）、`overlay.ts`（2D 覆盖层、DPR 夹到 3、ResizeObserver、绘制单位统一 CSS px）、`widgets.ts`（圆角矩形/HUD 底板/进度条/原版按钮，色值抄 `index.html` 的 `--mc-*` 与 `--hud-*`）、`index.ts`（分层入口与"不许反向依赖 main"的约定）。
+  - 为什么：**文字走 `fillText` 而不是 SDF 字形图集** —— 6 种语言含中日韩，图集等于把字体搬进构建期；覆盖层做成**独立 2D canvas** 而不是塞进 WebGL，也是同一条理由。命中表默认为空且强制关掉 `pointer-events`，避免铺满全屏的层吃掉触摸端的视角手势（`TIPS.md` 里"按钮看得见、点了没反应"那条坑的 canvas 版）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **22 passed**（**抓到 1 个真实 bug**：`hitRegionAt` 原本反向遍历又用 `>=`，导致下层覆盖上层，已改正向遍历）；`npx tsc --noEmit` 干净；`npm run check:fast` 绿（643 条单测）。
+  - 批次：20261027-0848
+
+- [x] [C3] 试点：把准星 / 伤害闪 / Boss 条迁到 ui2d 覆盖层，DOM 版本保留为可回退开关 → check:fast + build:fast
+  - 做了什么：`src/ui2d/Hud2D.ts` 画三样 —— 受伤红闪（预渲染 320×180 三层 radial 精灵 + `globalAlpha`，只在上一帧真画过时才清屏）、Boss 血条（龙/凋灵/护盾三套渐变，几何照抄 `#boss-bar`）、破坏与进食进度条。`main.ts` 只加 3 处分支 + 1 处绘制调用：`updateBossBar` 改成"先算数值再分路画"、两个进度条函数开头提前 return、`damageFlash.update()` 之后调 `hud2d.render()`；`DamageFlash` 在开关打开时传 `null`（数值照算、不写 DOM opacity）。开关是 `?ui2d=1`，DOM 版本一行没删。
+  - 为什么：**准星没有搬**（与条目原文不同，见决策 D3）。它靠 `mix-blend-mode: difference` 与下层画面做差值混合，那是 DOM 合成器的能力；2D canvas 里 `difference` 只在本图层内生效，叠到 WebGL 上就是一块白十字，雪地/沙漠上反而看不见。换成"破坏/进食进度条"：同样是纯展示、每帧变、且没有混合模式依赖。
+  - 验证：`npm run check:fast` 绿；`npm run build:fast` 出包成功（`main-C75H5CHE.js` 2,126.25 kB / gzip 594.93 kB）；`npx tsc --noEmit` 干净。⚠️ **真机/浏览器观感与帧率未验**：本会话没有浏览器，且 dev 模式下 `__host/core.bin` 缺失会停在"去应用里玩"落地页 —— 需要用户用 `?ui2d=1` 进一次世界对比。
+  - 批次：20261027-0848
+
+- [x] [C4] 写迁移方案与阶段门禁到 .continue/notes/canvas-ui.md（含验收命令）
+  - 做了什么：`notes/canvas-ui.md` 九节 —— 现状三层与代码量、A/B 路线对比（选 2D 覆盖层的决定性理由是文字）、目录与依赖方向、阶段 0~6 的判据与验收命令（含"停在哪一格"的判据）、阶段 0 已落地清单与真机 A/B 步骤、**判定不搬/搬法特殊** 六条（准星混合模式、IME 必须留 DOM、拖拽、原生控件、无障碍退化、全屏剪贴板不变）、七个迁移 checklist（色值同步 / 文案走 t() / CSS px / pointer-events 默认关 / 横屏优先 / 可回退）、测试改写策略（先加后删）、四条风险。
+  - 为什么：这次迁移真正的成本不是"画出来"，而是**回归面**与**判定边界**。把"哪些不能搬、为什么"写成表，比写"要搬什么"更值钱 —— 准星那条如果不写，下一批一定会有人顺手搬过去，然后在雪地上发现白十字。
+  - 验证：`node .continue/hooks/check.mjs --fast` 通过（文档体量 / 编号 / 配置 / hooks 自检）；`npm run audit:docs` 通过（`npm run check` 里已跑过一遍）。
+  - 批次：20261027-0848
+
+---
+
 ## 批次 20261027-0900 · 2026-10-27 · 会话 12c62cf0
 
 > 继续 R1：把 Rust 版缺的协议能力按组补齐，每组都跑一遍黑盒断言。
@@ -230,66 +270,4 @@
   - 批次：20261027-0140
 
 ---
-
-## 批次 20261027-0035 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27：上一批"没有按视觉实现"——端口要**可编辑**、局域网要按**自己 IP 段去掉最后一位自动检索**、
-> 「选择」要以**浮窗**形式弹出（选择房间 / 选择服务器），要求完全照设计图。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0035
-
-- [x] [L10] 端口改成可编辑：`src/core/net/ServerUrl.ts` + `src/ui/RoomForm.ts` → `npm run check:fast`
-  - 做了什么：新增 `parsePort` / `withPort` / `portOf` / `displayServerHost`；`RoomForm` 的 `portLabel`（只读后缀）换成 `portInput`（`mp-port-input`，默认 8887），`read()` 用 `withPort(normalized, port)` 拼回 URL；存储拆成 `mc.mp.url` + `mc.mp.port`；`splitAddress()` 把老地址里的端口提到端口框、地址框只留主机名。
-  - 为什么：设计图是 `服务器 [IP] : [8887] [选择]`，端口是独立可改的一格；`wss://` 那一路的端口归反代 443，`withPort` 只动 `ws://`，否则会把公网地址改坏。
-  - 验证：`tests/net-server-url.test.ts` 新增 11 条（parsePort 边界 / withPort 保留 query / wss 不动 / portOf / displayServerHost），全套 **43 通过**；`npm run check:fast` 全绿。
-  - 批次：20261027-0035
-- [x] [L10] 「选择」改成贴按钮的浮窗：`src/ui/ServerPicker.ts` 重写 → `npm run check:fast`
-  - 做了什么：`open(anchor)` 用 `getBoundingClientRect()` 算坐标（右边缘对齐按钮、下方优先、放不下翻到上方、横向夹在视口内）；标题随 `mode` 变「选择房间」/「选择服务器(8887)」，副标题「所有端口 8887 的房间/服务器」；正文 `server-picker-body` 自己滚，标题与底部按钮固定；外层容器改成透明（只负责接"点外面关闭"）。
-  - 为什么：以前是全屏遮罩 + 居中大卡片，不是设计图要的"浮窗"；而且列表一长「确定」会被顶出屏幕。
-  - 验证：`npm run check:fast` 全绿；dev server 截图（`.tmp/shots/picker.png`）与设计图对齐：标题居中、副标题在下一行、取消/确定两颗等宽。
-  - 批次：20261027-0035
-- [x] [L10] 浮窗按「服务器 → 房间」两级 + 打开即扫：`ServerPicker.ts` + `src/core/net/RoomList.ts` → `npm run check:fast`
-  - 做了什么：扫描发现一台就 append 一行 `IP …… 延迟 4ms`（虚线用 flex 撑开）+ 一个房间容器，随即 `loadRooms()` 拉这台机器的 `/rooms` 并渲染缩进的 `房间: xxx  1/10 在线`；`room` 模式房间行可点选中，`server` 模式渲染成 `div.readonly` 只展示；打开浮窗即 `scan()`，网段由 `suggestSubnet()` 从地址框/页面 hostname 推出。
-  - 为什么：设计图里房间是服务器的子项；开房模式如果允许选别人的房名，必然撞 `host-taken`。
-  - 验证：起本地服务端 + 假房主后截图，`192.168.1.72 —— 延迟 4ms / 房间: newplayer  1/10 在线` 与图一致；`check:fast` 全绿。
-  - 批次：20261027-0035
-- [x] [L10] 两个对话框改成单列版式（去掉右栏）：`MultiplayerScreen.ts` / `WorldScreen.ts` / `index.html` → `npm run check:fast`
-  - 做了什么：`MultiplayerScreen` 重排成 `mp-head`（居中标题 + 右上 ✕）/ 四行 `mp-row`（服务器、房间、密码、昵称）/ `mp-status mp-error` 红字行 / 通栏 `mp-action.primary`；删掉 `mp-columns`、`mp-rooms`、`mp-recent`、`refreshRooms()` 与 `RecentRoom` 那一套（房间与历史都进了浮窗）。`WorldScreen` 的开房对话框同版式：标题居中 + ✕、地址行 `[本机] : [8887] [选择]`、只有一个通栏「确定并进入」。`makeRow` 的 `extra` 支持数组并加 `world-row-inline`（flex）——那个 3 列 grid 放不下 5 个元素。
-  - 为什么：设计图两张图都是单列；`.world-row` 是 `grid-template-columns: 64px 1fr 44px`，多出来的元素会静默换行（第一次截图里端口和「选择」被挤到下一行）。
-  - 验证：截图 `join.png` / `host.png` 与设计图逐行比对；`test:ui` 21 条断言随版式迁移（右栏/最近连接改成反向守卫）；`check:fast` 全绿（**609** 单测）。
-  - 批次：20261027-0035
-- [x] [L10] 台账收口：`TASKS.md` 落 L10、`OVERVIEW.md` 摘要改成最终版式、批次索引加行
-  - 做了什么：TASKS 追加 L10（五条实现要点 + 验证口径）；OVERVIEW 那句"联机界面两个对话框"改写为"端口可编辑 / 选择浮窗=服务器→房间两级 / 局域网打开即扫 / 单列版式"（同时控制字节数，仍在上限内）；`notes/batches.md` 顶部加一行并记下 grid 那个坑。
-  - 为什么：锚点文档只留一句摘要，细节落在 TASKS 与本文件；TIPS 已满 500 行，坑先进批次索引。
-  - 验证：`node .continue/hooks/check.mjs --fast` 的 ids / docs 两项通过。
-  - 批次：20261027-0035
-
----
-
-## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
-
-> 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
-
-# 队列 · 会话 783135b39ab64f5599ca2897f9593157
-
-> 状态：执行中
-> 创建：2026-10-26
-> 批次：20261026-2327
-
-- [x] [L8] 野怪要能追房客：`EntityContext.targetFor` + `Mob.playerTarget()`，AI 不再写死 `ctx.player`（本地玩家） → `npm run check:fast`
-  - 做了什么：`Entity.ts` 新增 `PlayerTarget`（`x/y/z` + 可选 `invisible` / `hit` / `afflict`）与 `EntityContext.targetFor(mob)`；`Mob` 新增 `protected playerTarget(ctx)`（`targetFor` 优先，否则退回 `ctx.player`），用它替换 `updateAi` / `deliverMelee` / `distanceToPlayerSq` / `flyAi` 里的目标；`flyAi` 的参数类型放宽成 `PlayerTarget | null`；`Phantom`（幻翼）也改用 `playerTarget`。
-  - 为什么：从属端根本不跑生物 AI（`SimMode`），整场模拟都在房主那边，而 `EntityContext.player` 只有一个（本地玩家 = 房主）——怪物自然看不见房客，这就是"只打房主"的根因。改目标选择，而不是给从属端也跑一份 AI（那会重新引入两端各算一遍的老问题）。
-  - 验证：新增 `tests/mob-target.test.ts` **4 条**（没 `targetFor` 时退回本地玩家、指定远端后按远端算距离、返回 null 也退回、没有本地玩家时有远端目标也能算）；`npm run check:fast` **595 → 599 单测**全绿。
-- [x] [L8] 伤害要落到房客身上：新增 `mob-attack`（房主 → 服务端 → 被打的那个人），接收方走本地 `damagePlayer` → `npm run test:net`
-  - 做了什么：`NetClient.sendMobAttack()` + `mob-attack` 接收分支 + `onMobAttack` 回调；`server/index.mjs` 新增 `mob-attack` 路由（只收本房房主、`takeEffectToken` 限频、目标必须同房且不是自己、伤害夹 0~50、坐标有限、`source` 截 32 字、**只转给目标一人**）；`main.ts` 用 `pickRemotePlayerTarget()`（房主端挑"比本地玩家更近的、同维度、没死的远端玩家"）挂在 `targetFor`，`hit` 回调接 `sendMobAttack`，收到 `mob-attack` 走 `damagePlayer`。
-  - 为什么：血量和护甲是**各端自己的**，房主不能直接改房客的血。房主只负责判定"谁被哪只怪打了、基础伤害多少"，护甲减免/无敌帧/难度倍率都在接收方本地算——这样"被野怪咬"与"被本地野怪咬"走同一条路，死亡与掉落也自然一致。
-  - 验证：`npm run test:net` **286 → 292 通过 / 0 失败**（被打的人收到 + `fromId`；旁边的房客收不到；房客伪造被无视；伤害 0/NaN 不转发；伤害夹到 50）。
-- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 补 `mob-attack` 与"AI 目标可以是远端玩家"+ `TASKS.md` 的 L8 补一节 → `npm run check`
-  - 做了什么：§4 上行表新增 `mob-attack`（校验口径 + "只转给被打的人"）、§5 下行表同样补一条；§2 的"服务端不跑 tick"那句补上"生物 AI 的目标可以是远端玩家"；`TASKS.md` 的 L8 补第 ⑬ 点，并把两处已知差异写进去（末影龙仍只追房主、远端挨打不会中毒）。
-  - 为什么：这条链路的关键约定是"**伤害由谁结算**"——房主只判定"谁被哪只怪打了"，血量和护甲归接收方。不写清楚，下次很容易改成"房主直接改血量"（那会让两端的血量各算一遍）。
-  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/chase-test.ts` 有一条结构断言钉着 `playerInvisible: ctx.playerInvisible === true`，改成跟着目标走之后按新写法更新。
 

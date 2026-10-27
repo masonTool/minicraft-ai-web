@@ -18132,3 +18132,65 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 为什么：这几条都是"看起来像 bug 的行为其实是约定"（外观必须每条全量、`dead` 会随每条 move 重复到达），不写进协议表下次又会按"变化才发"改回去。
   - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。
 
+## 批次 20261027-0035 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：上一批"没有按视觉实现"——端口要**可编辑**、局域网要按**自己 IP 段去掉最后一位自动检索**、
+> 「选择」要以**浮窗**形式弹出（选择房间 / 选择服务器），要求完全照设计图。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0035
+
+- [x] [L10] 端口改成可编辑：`src/core/net/ServerUrl.ts` + `src/ui/RoomForm.ts` → `npm run check:fast`
+  - 做了什么：新增 `parsePort` / `withPort` / `portOf` / `displayServerHost`；`RoomForm` 的 `portLabel`（只读后缀）换成 `portInput`（`mp-port-input`，默认 8887），`read()` 用 `withPort(normalized, port)` 拼回 URL；存储拆成 `mc.mp.url` + `mc.mp.port`；`splitAddress()` 把老地址里的端口提到端口框、地址框只留主机名。
+  - 为什么：设计图是 `服务器 [IP] : [8887] [选择]`，端口是独立可改的一格；`wss://` 那一路的端口归反代 443，`withPort` 只动 `ws://`，否则会把公网地址改坏。
+  - 验证：`tests/net-server-url.test.ts` 新增 11 条（parsePort 边界 / withPort 保留 query / wss 不动 / portOf / displayServerHost），全套 **43 通过**；`npm run check:fast` 全绿。
+  - 批次：20261027-0035
+- [x] [L10] 「选择」改成贴按钮的浮窗：`src/ui/ServerPicker.ts` 重写 → `npm run check:fast`
+  - 做了什么：`open(anchor)` 用 `getBoundingClientRect()` 算坐标（右边缘对齐按钮、下方优先、放不下翻到上方、横向夹在视口内）；标题随 `mode` 变「选择房间」/「选择服务器(8887)」，副标题「所有端口 8887 的房间/服务器」；正文 `server-picker-body` 自己滚，标题与底部按钮固定；外层容器改成透明（只负责接"点外面关闭"）。
+  - 为什么：以前是全屏遮罩 + 居中大卡片，不是设计图要的"浮窗"；而且列表一长「确定」会被顶出屏幕。
+  - 验证：`npm run check:fast` 全绿；dev server 截图（`.tmp/shots/picker.png`）与设计图对齐：标题居中、副标题在下一行、取消/确定两颗等宽。
+  - 批次：20261027-0035
+- [x] [L10] 浮窗按「服务器 → 房间」两级 + 打开即扫：`ServerPicker.ts` + `src/core/net/RoomList.ts` → `npm run check:fast`
+  - 做了什么：扫描发现一台就 append 一行 `IP …… 延迟 4ms`（虚线用 flex 撑开）+ 一个房间容器，随即 `loadRooms()` 拉这台机器的 `/rooms` 并渲染缩进的 `房间: xxx  1/10 在线`；`room` 模式房间行可点选中，`server` 模式渲染成 `div.readonly` 只展示；打开浮窗即 `scan()`，网段由 `suggestSubnet()` 从地址框/页面 hostname 推出。
+  - 为什么：设计图里房间是服务器的子项；开房模式如果允许选别人的房名，必然撞 `host-taken`。
+  - 验证：起本地服务端 + 假房主后截图，`192.168.1.72 —— 延迟 4ms / 房间: newplayer  1/10 在线` 与图一致；`check:fast` 全绿。
+  - 批次：20261027-0035
+- [x] [L10] 两个对话框改成单列版式（去掉右栏）：`MultiplayerScreen.ts` / `WorldScreen.ts` / `index.html` → `npm run check:fast`
+  - 做了什么：`MultiplayerScreen` 重排成 `mp-head`（居中标题 + 右上 ✕）/ 四行 `mp-row`（服务器、房间、密码、昵称）/ `mp-status mp-error` 红字行 / 通栏 `mp-action.primary`；删掉 `mp-columns`、`mp-rooms`、`mp-recent`、`refreshRooms()` 与 `RecentRoom` 那一套（房间与历史都进了浮窗）。`WorldScreen` 的开房对话框同版式：标题居中 + ✕、地址行 `[本机] : [8887] [选择]`、只有一个通栏「确定并进入」。`makeRow` 的 `extra` 支持数组并加 `world-row-inline`（flex）——那个 3 列 grid 放不下 5 个元素。
+  - 为什么：设计图两张图都是单列；`.world-row` 是 `grid-template-columns: 64px 1fr 44px`，多出来的元素会静默换行（第一次截图里端口和「选择」被挤到下一行）。
+  - 验证：截图 `join.png` / `host.png` 与设计图逐行比对；`test:ui` 21 条断言随版式迁移（右栏/最近连接改成反向守卫）；`check:fast` 全绿（**609** 单测）。
+  - 批次：20261027-0035
+- [x] [L10] 台账收口：`TASKS.md` 落 L10、`OVERVIEW.md` 摘要改成最终版式、批次索引加行
+  - 做了什么：TASKS 追加 L10（五条实现要点 + 验证口径）；OVERVIEW 那句"联机界面两个对话框"改写为"端口可编辑 / 选择浮窗=服务器→房间两级 / 局域网打开即扫 / 单列版式"（同时控制字节数，仍在上限内）；`notes/batches.md` 顶部加一行并记下 grid 那个坑。
+  - 为什么：锚点文档只留一句摘要，细节落在 TASKS 与本文件；TIPS 已满 500 行，坑先进批次索引。
+  - 验证：`node .continue/hooks/check.mjs --fast` 的 ids / docs 两项通过。
+  - 批次：20261027-0035
+
+---
+
+## 批次 20261026-2327 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26：生存模式下野怪只咬房主、不咬房客，应该按原本的逻辑对两个人都可能下手。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2327
+
+- [x] [L8] 野怪要能追房客：`EntityContext.targetFor` + `Mob.playerTarget()`，AI 不再写死 `ctx.player`（本地玩家） → `npm run check:fast`
+  - 做了什么：`Entity.ts` 新增 `PlayerTarget`（`x/y/z` + 可选 `invisible` / `hit` / `afflict`）与 `EntityContext.targetFor(mob)`；`Mob` 新增 `protected playerTarget(ctx)`（`targetFor` 优先，否则退回 `ctx.player`），用它替换 `updateAi` / `deliverMelee` / `distanceToPlayerSq` / `flyAi` 里的目标；`flyAi` 的参数类型放宽成 `PlayerTarget | null`；`Phantom`（幻翼）也改用 `playerTarget`。
+  - 为什么：从属端根本不跑生物 AI（`SimMode`），整场模拟都在房主那边，而 `EntityContext.player` 只有一个（本地玩家 = 房主）——怪物自然看不见房客，这就是"只打房主"的根因。改目标选择，而不是给从属端也跑一份 AI（那会重新引入两端各算一遍的老问题）。
+  - 验证：新增 `tests/mob-target.test.ts` **4 条**（没 `targetFor` 时退回本地玩家、指定远端后按远端算距离、返回 null 也退回、没有本地玩家时有远端目标也能算）；`npm run check:fast` **595 → 599 单测**全绿。
+- [x] [L8] 伤害要落到房客身上：新增 `mob-attack`（房主 → 服务端 → 被打的那个人），接收方走本地 `damagePlayer` → `npm run test:net`
+  - 做了什么：`NetClient.sendMobAttack()` + `mob-attack` 接收分支 + `onMobAttack` 回调；`server/index.mjs` 新增 `mob-attack` 路由（只收本房房主、`takeEffectToken` 限频、目标必须同房且不是自己、伤害夹 0~50、坐标有限、`source` 截 32 字、**只转给目标一人**）；`main.ts` 用 `pickRemotePlayerTarget()`（房主端挑"比本地玩家更近的、同维度、没死的远端玩家"）挂在 `targetFor`，`hit` 回调接 `sendMobAttack`，收到 `mob-attack` 走 `damagePlayer`。
+  - 为什么：血量和护甲是**各端自己的**，房主不能直接改房客的血。房主只负责判定"谁被哪只怪打了、基础伤害多少"，护甲减免/无敌帧/难度倍率都在接收方本地算——这样"被野怪咬"与"被本地野怪咬"走同一条路，死亡与掉落也自然一致。
+  - 验证：`npm run test:net` **286 → 292 通过 / 0 失败**（被打的人收到 + `fromId`；旁边的房客收不到；房客伪造被无视；伤害 0/NaN 不转发；伤害夹到 50）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 补 `mob-attack` 与"AI 目标可以是远端玩家"+ `TASKS.md` 的 L8 补一节 → `npm run check`
+  - 做了什么：§4 上行表新增 `mob-attack`（校验口径 + "只转给被打的人"）、§5 下行表同样补一条；§2 的"服务端不跑 tick"那句补上"生物 AI 的目标可以是远端玩家"；`TASKS.md` 的 L8 补第 ⑬ 点，并把两处已知差异写进去（末影龙仍只追房主、远端挨打不会中毒）。
+  - 为什么：这条链路的关键约定是"**伤害由谁结算**"——房主只判定"谁被哪只怪打了"，血量和护甲归接收方。不写清楚，下次很容易改成"房主直接改血量"（那会让两端的血量各算一遍）。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了一次：`tools/chase-test.ts` 有一条结构断言钉着 `playerInvisible: ctx.playerInvisible === true`，改成跟着目标走之后按新写法更新。
+

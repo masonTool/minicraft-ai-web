@@ -6299,3 +6299,5 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 1. 每完成一个可独立验证的小块，立即 `git commit`（中文 message），保留版本记录。
 2. 每阶段结束必须在真实浏览器里跑一遍，确认无 JS 报错并留截图结论。
 3. 遇到无法完成或效果不达标的项，写清原因与替代方案，不允许静默跳过。
+
+- [x] 批次 20261027-0848 · **canvas 界面地基 + 试点（4 条）**：`src/ui2d/` 五模块（`text` 系统字体 + 测量缓存 + 分词/截断/折行、`input` 命中测试、`overlay` 2D 覆盖层与 DPR、`widgets` 画法、`Hud2D` 组合）+ 22 条离线断言；`main.ts` 加 `?ui2d=1` 开关，把**受伤红闪 / Boss 血条 / 破坏与进食进度条**画到 canvas（`DamageFlash` 传 null 只算数值不写 DOM）；准星因 `mix-blend-mode: difference` 属于 DOM 合成器能力而**判定不搬**；迁移路线与阶段门禁写进 `notes/canvas-ui.md`。验证：`test:ui2d` 22/22（顺手抓到 `hitRegionAt` 反向遍历致下层覆盖上层）、`check:fast` 绿、`check` 181 套离线全过、`build:fast` 出包（main 2,126.25 kB / gzip 594.93 kB）。未验证：真机帧率与观感（需 `?ui2d=1` 进世界 A/B）。坑见 `TIPS.md#界面与音频`。
