@@ -213,6 +213,10 @@ export {
   type StackLike,
 } from './inventoryModel.ts';
 export {
+  InventoryPanelHost,
+  type InventoryPanelHostOptions,
+} from './InventoryPanelHost.ts';
+export {
   INV_LAYOUT,
   drawInventoryPanel,
   layoutInventoryPanel,

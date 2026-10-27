@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 背包**自绘**（不读 DOM 布局，M26b 第一步）</title>
+    <!--
+      M26b 的第一步：`InventoryPanelHost` —— 自己排版、自己命中、自己画。
+      数据来自 `SlotAccess`（真实 `Inventory` 结构上就满足 `get/set`），
+      交互走 `inventoryModel` 的四个纯函数；图标走 `ItemIconCache`（游戏里由
+      `drawItemIcon` 画进缓存，这里用一个画色块的假画笔）。
+
+      与镜像版的区别：**不依赖 DOM 布局**。所以这一页里没有任何背包 DOM，
+      只有一块 canvas 与它的数据。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/inventory-selfdrawn.html
+        open 'http://localhost:5173/tools/preview/inventory-selfdrawn.html?tint=1'
+    -->
+    <style>
+      html, body { margin: 0; background: #111; height: 100%; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      #stage canvas { cursor: pointer; }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 40;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption"></div></div>
+
+    <script type="module">
+      import { InventoryPanelHost, arraySlots } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+
+      /* ---------------- 数据：与游戏同一套逻辑（`SlotAccess` + `MoveRules`） ---------------- */
+      const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
+      const initial = new Array(36).fill(null);
+      initial[0] = { id: 1, count: 64 };
+      initial[1] = { id: 2, count: 12 };
+      initial[2] = { id: 3, count: 3 };
+      initial[3] = { id: 4, count: 1 };
+      initial[5] = { id: 5, count: 28 };
+      initial[9] = { id: 6, count: 7 };
+      initial[27] = { id: 2, count: 41 };
+      const slots = arraySlots(initial);
+
+      /** 图标画笔：真机上这里是 `drawItemIcon(canvas, atlas, id)`，预览里画个色块 */
+      const paintIcon = (canvas, itemId) => {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = COLORS[(itemId - 1) % COLORS.length];
+        ctx.fillRect(3, 3, canvas.width - 6, canvas.height - 6);
+        ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+      };
+      const icons = new Map();
+      const iconOf = (itemId) => {
+        const hit = icons.get(itemId);
+        if (hit) return hit;
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        paintIcon(canvas, itemId);
+        icons.set(itemId, canvas);
+        return canvas;
+      };
+
+      const stage = document.getElementById('stage');
+      const host = new InventoryPanelHost(stage, slots, {
+        title: '生存背包',
+        mainRows: 3,
+        hotbarRows: 1,
+        zIndex: 12,
+        tint,
+        limitOf: (id) => (id === 4 ? 1 : 64),
+        sameItem: (a, b) => a.id === b.id,
+        iconOf,
+      });
+      host.open();
+
+      /* ---------------- 输入：canvas 自己收（这就是"不再依赖 DOM"的意思） ---------------- */
+      const canvas = stage.querySelector('canvas');
+      canvas.style.pointerEvents = 'auto';
+      const local = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
+      canvas.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const p = local(event);
+        host.handlePointer(p.x, p.y, 'down');
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        const p = local(event);
+        host.handlePointer(p.x, p.y, 'move');
+      });
+      canvas.addEventListener('pointerup', (event) => {
+        // 抬起也要带真实坐标：`handlePointer` 会用它记光标位置 ——
+        // 传 (0,0) 的话"手上那一叠"会被画到屏幕左上角（第一版就是这样）
+        const p = local(event);
+        host.handlePointer(p.x, p.y, 'up');
+      });
+      canvas.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        const p = local(event);
+        host.activateAtPointer?.(p.x, p.y, 2);
+        host.handlePointer(p.x, p.y, 'down');
+        host.handlePointer(p.x, p.y, 'up');
+      });
+      window.addEventListener('resize', () => host.relayout());
+
+      document.getElementById('caption').textContent =
+        '自绘背包：自己排版 + 自己命中 + 自己画（不读 DOM 布局）· 左键取放 · 拖过多格再松手 = 均分' +
+        ' · 图标由 ItemIconCache 提供' + (tint ? ' · 黄色遮罩' : '');
+    </script>
+  </body>
+</html>

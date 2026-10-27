@@ -409,6 +409,20 @@ const SHOTS = [
     what: '背包悬停高亮：第 13 格一圈白框 + 薄白底（`opacity: 0` 的子树里 CSS `:hover` 画不出来）',
     status: '已迁 · 阶段 4',
   },
+  {
+    file: '32-inventory-selfdrawn.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 410],
+    what: '**自绘背包**（M26b 第一步）：自己排版 + 自己命中 + 自己画，不读 DOM 布局',
+    status: '原型 · 阶段 4',
+  },
+  {
+    file: '32b-inventory-selfdrawn-held.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 410],
+    what: '自绘背包：点起一格后"手上那一叠"跟着指针（同样是 canvas 画的）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
