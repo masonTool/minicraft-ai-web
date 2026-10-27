@@ -21810,8 +21810,10 @@ async function boot(): Promise<void> {
  * 用 200ms 轮询去发现"菜单开了 / 切视图了 / 关掉了"——`WorldScreen` 没有暴露这类事件，
  * 而菜单是静态的，轮询的代价可以忽略。
  *
- * 只镜像 `home` 与 `worlds` 两个视图：`create` / 多人面板里有 `<input>`，
- * 而 `<input>` 的当前值**不在 `textContent` 里**，镜像过去会变成空框。
+ * 镜像 `home` / `worlds` / `create` 三个视图。`create` 之所以能进来，是因为
+ * 输入框的当前值由 `readTextRuns` 单独读（`<input>.value` 不在 `textContent` 里），
+ * 焦点框的光标与选区由 `MenuScreen2D.drawFieldCaret()` 按 `selectionStart/End` 画。
+ * 多人面板不在 `#world-screen` 里，是另一棵树，本批不涉及。
  *
  * ⚠️ 让位用的是 `opacity: 0`（不是 `visibility` / `display`）：按钮必须继续可点，
  * 镜像只换"谁产像素"，不换"谁收输入"。
@@ -21821,7 +21823,10 @@ function mountMenuMirror(menu: WorldScreen): void {
   const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED });
   const sync = (): void => {
     const panel = document.querySelector<HTMLElement>('#world-screen .world-panel');
-    const wanted = menu.isOpen && (menu.view === 'home' || menu.view === 'worlds') && panel !== null;
+    // `create` 也能镜像了：输入框的值由 `readTextRuns` 单独取（含占位提示），
+    // 光标/选区由 `MenuScreen2D` 用 `selectionStart/End` 自己画
+    const views: readonly string[] = ['home', 'worlds', 'create'];
+    const wanted = menu.isOpen && views.includes(menu.view) && panel !== null;
     if (wanted && panel) screen.engage(panel);
     else if (screen.engaged) screen.disengage();
   };

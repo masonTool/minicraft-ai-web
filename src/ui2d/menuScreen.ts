@@ -31,6 +31,7 @@ import {
   type TextBlock,
   type TextRun,
 } from './textPanel.ts';
+import { caretBlinkOn, caretRect, rangeRect, visibleSlice, metricsFor } from './textInput.ts';
 
 /** 每隔几帧做一次签名比对（菜单是静态的，没必要每帧读一遍 `textContent`） */
 const SIGNATURE_INTERVAL = 4;
@@ -132,12 +133,77 @@ export class MenuScreen2D {
    * 用 `textContent` 而不是逐元素比较，是因为菜单一次只会变一两处（切视图 / 删世界），
    * 拼一次整串（几百字）比读几十次计算样式便宜得多。
    */
+  /**
+   * 画**当前聚焦输入框**的光标与选区。
+   *
+   * 为什么需要：整页镜像把面板 `opacity` 设成 0，DOM 自己的插入符也一起不可见了 ——
+   * 玩家打字时看不到光标在哪。这里用 `selectionStart/End` 算位置（`textInput.ts` 的
+   * 同一套纯函数），只画"一条竖线 + 一块半透明蓝"，不接管任何输入。
+   *
+   * ⚠️ 只在**焦点元素属于被镜像的子树**时才画：菜单之外的输入框（比如聊天）不该被画进来。
+   */
+  private drawFieldCaret(): void {
+    const overlay = this.overlay;
+    const source = this.source;
+    if (!overlay || !source) return;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLInputElement) && !(active instanceof HTMLTextAreaElement)) return;
+    if (!source.contains(active)) return;
+
+    const ctx = overlay.context;
+    const box = active.getBoundingClientRect();
+    const origin = overlay.canvas.getBoundingClientRect();
+    const style = window.getComputedStyle(active);
+    const padLeft = Number.parseFloat(style.paddingLeft) || 0;
+    const padRight = Number.parseFloat(style.paddingRight) || 0;
+    const padTop = Number.parseFloat(style.paddingTop) || 0;
+    const padBottom = Number.parseFloat(style.paddingBottom) || 0;
+    const inner = {
+      x: box.left - origin.left + padLeft,
+      y: box.top - origin.top + padTop,
+      w: Math.max(0, box.width - padLeft - padRight),
+      h: Math.max(0, box.height - padTop - padBottom),
+    };
+    if (!(inner.w > 0) || !(inner.h > 0)) return;
+
+    const metrics = metricsFor(ctx, Number.parseFloat(style.fontSize) || 13);
+    const value = active.value;
+    const start = active.selectionStart ?? value.length;
+    const end = active.selectionEnd ?? value.length;
+    const caret = end;
+    const visible = visibleSlice(metrics, value, caret, inner.w);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(inner.x, inner.y, inner.w, inner.h);
+    ctx.clip();
+    const selection = rangeRect(metrics, visible, inner, Math.min(start, end), Math.max(start, end));
+    if (selection) {
+      ctx.fillStyle = 'rgba(96, 160, 255, .38)';
+      ctx.fillRect(selection.x, selection.y, selection.w, selection.h);
+    }
+    if (start === end && caretBlinkOn(performance.now()) > 0.5) {
+      const caretBox = caretRect(metrics, visible, inner, caret);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(caretBox.x, caretBox.y, caretBox.w, caretBox.h);
+    }
+    ctx.restore();
+  }
+
   private computeSignature(source: HTMLElement, width: number, height: number): string {
     let scroll = '';
     for (const el of source.querySelectorAll<HTMLElement>('*')) {
       if (el.scrollHeight > el.clientHeight + 1) scroll += `${el.scrollTop};`;
     }
-    return `${Math.round(width)}x${Math.round(height)}|${scroll}|${source.textContent ?? ''}`;
+    /*
+     * ⚠️ 输入框的值**不进 `textContent`**：只比文字的话，玩家在"新建世界"里敲字
+     * canvas 永远不会重画（第一版就是这样：输入框一直显示占位提示）。
+     */
+    let fields = '';
+    for (const el of source.querySelectorAll('input, textarea')) {
+      fields += `${(el as HTMLInputElement).value}\u0000`;
+    }
+    return `${Math.round(width)}x${Math.round(height)}|${scroll}|${fields}|${source.textContent ?? ''}`;
   }
 
   private draw(): void {
@@ -149,6 +215,8 @@ export class MenuScreen2D {
     drawTextBlocks(ctx, this.blocks);
     // 留一个字宽的余量：DOM 的 letter-spacing 会让标题盒子比 canvas 量出的字窄
     drawTextRuns(ctx, this.runs, 10);
+    // 焦点在输入框上时，光标/选区由我们画：DOM 那份被 `opacity: 0` 一起藏了
+    this.drawFieldCaret();
     if (this.options.tint) applyDebugTint(ctx, overlay.width, overlay.height);
   }
 }

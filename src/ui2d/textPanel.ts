@@ -30,6 +30,8 @@ export interface TextRun {
   readonly weight: 400 | 600 | 700;
   readonly align: 'left' | 'center' | 'right';
   readonly shadow: boolean;
+  /** 不透明度（占位提示用 0.55；其余默认 1） */
+  readonly alpha?: number;
 }
 
 /** 渐变底的近似色（见 `hasBackground` 的注释） */
@@ -150,9 +152,35 @@ export function textRunsSignature(runs: readonly TextRun[]): string {
       (run) =>
         `${Math.round(run.rect.x)},${Math.round(run.rect.y)},${Math.round(run.rect.w)}|${run.fontSize}${
           run.weight
-        }|${run.color}|${run.align}|${run.text}`,
+        }|${run.color}|${run.align}|${run.alpha ?? 1}|${run.text}`,
     )
     .join('\n');
+}
+
+/**
+ * 输入框当前该显示什么文字。
+ *
+ * `<input>` / `<textarea>` 的**值不在 `textContent` 里** —— 这就是"整页镜像"最初
+ * 不敢碰新建世界表单的原因。这里补上：值为空时用 `placeholder` 并降低不透明度
+ * （CSS 的 `::placeholder` 读不到，用 0.55 近似）。
+ */
+export function inputDisplayText(value: string, placeholder: string): { text: string; isPlaceholder: boolean } {
+  if (value.length > 0) return { text: value, isPlaceholder: false };
+  if (placeholder.length > 0) return { text: placeholder, isPlaceholder: true };
+  return { text: '', isPlaceholder: false };
+}
+
+/** 元素是不是要单独取值的输入框（密码/隐藏框不画） */
+export function textFieldValue(el: Element): { value: string; placeholder: string } | null {
+  if (el instanceof HTMLInputElement) {
+    // 只画"看得到字"的类型；`type=hidden` 本来就没有尺寸，密码框不该被镜像出来
+    if (el.type !== 'text' && el.type !== 'search' && el.type !== 'number') return null;
+    return { value: el.value, placeholder: el.placeholder ?? '' };
+  }
+  if (el instanceof HTMLTextAreaElement) {
+    return { value: el.value, placeholder: el.placeholder ?? '' };
+  }
+  return null;
 }
 
 /** 元素自己是否直接带文字（不是靠子元素拼出来的） */
@@ -178,8 +206,11 @@ export function readTextRuns(
   const runs: TextRun[] = [];
   const nodes: Element[] = [root, ...root.querySelectorAll('*')];
   for (const el of nodes) {
-    if (!hasOwnText(el)) continue;
-    const text = (el.textContent ?? '').trim();
+    const field = textFieldValue(el);
+    const own = hasOwnText(el);
+    if (!field && !own) continue;
+    const shown = field ? inputDisplayText(field.value, field.placeholder) : null;
+    const text = shown ? shown.text : (el.textContent ?? '').trim();
     if (text.length === 0) continue;
     const box = el.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) continue;
@@ -210,6 +241,7 @@ export function readTextRuns(
       align,
       // `#hud` 的 `text-shadow` 是全局的，这里统一按"有阴影"处理（与原版 HUD 一致）
       shadow: style.textShadow !== 'none',
+      alpha: shown?.isPlaceholder ? 0.55 : 1,
     });
   }
   return runs;
@@ -247,6 +279,7 @@ export function drawTextRuns(
         baseline: 'middle',
         shadow: run.shadow,
         maxWidth: run.rect.w + slack,
+        alpha: run.alpha ?? 1,
       });
       y += lineHeight;
     }

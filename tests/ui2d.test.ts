@@ -23,7 +23,13 @@ import {
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
-import { drawTextRuns, normalizeWeight, runBaselineY, textRunsSignature } from '../src/ui2d/textPanel.ts';
+import {
+  drawTextRuns,
+  inputDisplayText,
+  normalizeWeight,
+  runBaselineY,
+  textRunsSignature,
+} from '../src/ui2d/textPanel.ts';
 import {
   DIAL_SIZE,
   NEEDLE_HALF_WIDTH,
@@ -676,5 +682,29 @@ describe('文字面板的 slack', () => {
     const fake = fakeCtx();
     drawTextRuns(fake.ctx, [run], 20);
     expect(fake.drawn).toContain('MINICRAFT');
+  });
+});
+
+/**
+ * 输入框在镜像里的显示文本（`inputDisplayText`）。
+ *
+ * `<input>` 的当前值不在 `textContent` 里 —— 这是"整页镜像"最初绕开新建世界表单的原因。
+ * 补上之后要钉两件事：有值就画值、空值画占位提示（并且要标成占位，绘制时降不透明度）。
+ */
+describe('输入框的显示文本', () => {
+  it('有值时画值，不画占位', () => {
+    expect(inputDisplayText('我的世界', '世界名称')).toEqual({ text: '我的世界', isPlaceholder: false });
+  });
+
+  it('空值画占位提示并标记（绘制时用 0.55 不透明度近似 ::placeholder）', () => {
+    expect(inputDisplayText('', '世界名称')).toEqual({ text: '世界名称', isPlaceholder: true });
+  });
+
+  it('空值且没有占位就什么都不画', () => {
+    expect(inputDisplayText('', '')).toEqual({ text: '', isPlaceholder: false });
+  });
+
+  it('只有一个空格也算"有值"（玩家真的敲了一个空格，不该被占位盖掉）', () => {
+    expect(inputDisplayText(' ', '名字')).toEqual({ text: ' ', isPlaceholder: false });
   });
 });

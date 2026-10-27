@@ -411,6 +411,35 @@ DOM 只把 `opacity` 设 0 让位像素。已接：主菜单 `home` 与世界列
 前置件 —— 接线要按"点在某块矩形上 → `open()`，每帧 `render(ctx, rect)`，提交时写回设置/消息"来做，
 属于下一批。真机输入法（尤其安卓各家 WebView 的候选栏位置）也只能在真机验。
 
+## 5.15 已落地（阶段 3 收口：新建世界表单也能镜像了）
+
+`textPanel.ts` 补上"输入框取值"：`<input>` / `<textarea>` 的**当前值不在 `textContent` 里**，
+现在由 `textFieldValue()` 单独读（值为空则用 `placeholder`，并标成"占位"，绘制时 0.55 不透明度
+近似 `::placeholder`）。`MenuScreen2D.drawFieldCaret()` 再按 `selectionStart/End` 画
+**光标与选区**（DOM 那份插入符被 `opacity: 0` 一起藏了）。
+
+于是 `main.ts#mountMenuMirror()` 的白名单从 `home`/`worlds` 扩到 `create` ——
+新建世界表单第一次整页由 canvas 画。
+
+### 一个必须记住的坑：签名要看输入框的值
+
+`computeSignature` 原来只比 `scrollTop` + `textContent`。而玩家在输入框里敲字时
+**`textContent` 一点都没变** —— 结果是 canvas 永远不重画、输入框一直显示占位提示
+（第一版截图为证）。现在签名里显式拼上了所有 `input/textarea` 的 `value`。
+
+这条与 §5.13 的"`<input>` 的值不在 textContent 里"是同一件事的两面：取值要单独取，
+**判断要不要重画也要单独判**。
+
+### 还剩什么
+
+| 东西 | 状态 |
+| --- | --- |
+| 主菜单 / 世界列表 / 新建世界 | ✅ 整页镜像 |
+| 暂停菜单页 / 设置子页 | ✅ 自己画控件 |
+| **多人 / 服务器选择面板** | ❌ 不在 `#world-screen` 这棵树里，需要再挂一个镜像根 |
+| 背包 + 工作站 | ❌ 阶段 4（最大一块） |
+| 聊天输入行 | ❌ 可以接 `CanvasTextInput` 了（前置件已就绪） |
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

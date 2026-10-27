@@ -81,6 +81,17 @@
       .world-card-meta { font-size: 11px; color: #a8a8a8; }
       .world-card-actions { display: flex; gap: 6px; margin-left: auto; }
       .world-mini { font-size: 11px; padding: 6px 8px; }
+
+      /* 新建世界表单（与 index.html 的 `.world-new` / `.world-input` 同观感） */
+      .world-new { display: flex; flex-direction: column; gap: 8px; }
+      .world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 6px; }
+      .world-input {
+        width: 100%; box-sizing: border-box;
+        padding: 6px 8px; font: inherit; font-size: 13px;
+        color: #ffffff; background: rgba(12, 13, 16, .82);
+        border: 2px solid #4a4a4a;
+      }
+      .world-input::placeholder { color: rgba(255, 255, 255, .38); }
     </style>
   </head>
   <body>
@@ -93,7 +104,8 @@
       import { MenuScreen2D } from '../../src/ui2d/index.ts';
 
       const params = new URLSearchParams(window.location.search);
-      const view = params.get('view') === 'worlds' ? 'worlds' : 'home';
+      const viewParam = params.get('view');
+      const view = viewParam === 'worlds' || viewParam === 'create' ? viewParam : 'home';
       const tint = params.get('tint') === '1';
 
       const home = `
@@ -150,16 +162,41 @@
           <button class="world-secondary">返回</button>
         </div>`;
 
+      const create = `
+        <div class="world-group-label">新建世界</div>
+        <div class="world-new">
+          <div class="world-row"><span>世界名称</span><input class="world-input" id="name-input" placeholder="新世界" /></div>
+          <div class="world-row"><span>种子</span><input class="world-input" id="seed-input" placeholder="留空随机" /></div>
+          <div class="world-row"><span>游戏模式</span><button class="world-secondary">生存</button></div>
+          <div class="world-row"><span>难度</span><button class="world-secondary">普通</button></div>
+        </div>
+        <div class="world-menu">
+          <button class="world-primary">创建</button>
+          <button class="world-secondary">返回</button>
+        </div>`;
+
       const host = document.getElementById('world-screen');
-      host.innerHTML = `<div class="world-panel" data-view="${view}">${view === 'worlds' ? worlds : home}</div>`;
+      const body = view === 'worlds' ? worlds : view === 'create' ? create : home;
+      host.innerHTML = `<div class="world-panel" data-view="${view}">${body}</div>`;
       const panel = host.querySelector('.world-panel');
 
       // 镜像：DOM 让位像素（opacity 0，仍可点），canvas 按原位重画
       const screen = new MenuScreen2D(document.getElementById('stage'), { tint });
       screen.engage(panel);
 
+      /*
+       * 新建世界视图：真的把光标放进第一个输入框，证明"镜像 + 焦点光标"能一起工作
+       * （面板被设成 opacity 0，DOM 的插入符也跟着看不见了，光标是 `MenuScreen2D` 画的）。
+       */
+      const nameInput = host.querySelector('#name-input');
+      if (view === 'create' && nameInput) {
+        nameInput.value = params.get('value') ?? '我的世界';
+        nameInput.focus();
+        nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
+      }
+
       document.getElementById('caption').textContent =
-        `主菜单整页镜像（${view === 'worlds' ? '世界列表' : '首页'}）· 每一块像素都是 canvas 画的` +
+        `主菜单整页镜像（${view === 'worlds' ? '世界列表' : view === 'create' ? '新建世界' : '首页'}）· 每一块像素都是 canvas 画的` +
         (tint ? ' · 黄色遮罩' : '') +
         ' · 按钮仍由 DOM 接收点击（这里只是为了截图）';
     </script>
