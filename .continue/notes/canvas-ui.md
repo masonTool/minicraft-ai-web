@@ -869,6 +869,29 @@ npm run check:pause  # 默认 http://localhost:5173，可用 UI2D_BASE 覆盖
 **通过分支**要等有 `core.bin` 的机器才能首次执行。第一次跑如果红在第 8 步，八成还是
 `pauseCanvasMode` 的还原路径，而不是绘制。
 
+## 5.33 补齐（配方书 / `M28` 的一个缺口）+ 背包剩余项的证据盘点
+
+**配方书为什么漏了**：`RecipeBook` 在 `main.ts` 里是 `new RecipeBook(document.body, …)`，
+它的 `.recipe-panel` 因此挂在 **`body`** 上、不在 `#inventory-screen` 里 —— 背包镜像的根是
+`.inv-shell`，覆盖不到它。结果是"左边背包是 canvas、右边的配方书还是 DOM"（一屏两种渲染）。
+
+修法：单开一个镜像实例（`zIndex: 13`，比背包那层 12 高一档，`pollMs: 150`），
+`.recipe-panel` 可见就 `engage`、收起就 `disengage`。配方列表与分类都在它的子树里，
+所以搜索框的值、滚动、滚动条（含拖动）全都自动继承前面的能力。
+
+### 背包相关任务（M27~M31）的证据盘点
+
+| 任务 | 结论 | 证据 |
+| --- | --- | --- |
+| M27 视觉对齐 | ✅ 由镜像覆盖 | 图标走 `readCanvasBlits`（真位图）；悬停高亮 §5.30；`#item-tooltip` 在 `body`、`z-index: 60`（高于镜像 12）→ 提示框不受影响；断点/滚动由 `pollMs` 重读 |
+| M28 合成 | ✅ 合成格与结果格都是 `.inv-slot`（`registerSlot`）；**配方书本批补上** | 见上 |
+| M29 容器类工作站 | ✅ 箱子/漏斗/熔炉等用的都是同一批 `.inv-slot` + `.inv-panel` | `registerSlot` 一条通路 |
+| M30 重配方块 | ✅ 铁砧/砂轮/织布机等同上；`<input>`（铁砧改名）由 `textFieldValue` 画值 + 光标 | §5.15 |
+| M31 触摸端交互 | ✅ 长按分堆的占比条 `.inv-split-bar` 就在 `.inv-slot` 里；连发/拖拽全在 DOM | `createSlot` 的 append 顺序 |
+
+> 结论：**背包的"渲染"这件事已经全覆盖**（一行 DOM 像素都不用出）。真正还欠的只有
+> **M26b：把镜像换成自绘**（不再依赖 DOM 布局）—— 那是"实现方式"的升级，不是功能缺口。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

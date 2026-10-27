@@ -1300,6 +1300,15 @@ class App {
    */
   private invMirror: MenuScreen2D | null = null;
   /** 触控摇杆（阶段 6 第一块）：自己画，几何量 DOM，输入仍归 DOM */
+  /**
+   * 配方书（`.recipe-panel`）的镜像（`?ui2d=1`）。
+   *
+   * 它由 `main.ts` 构造 `RecipeBook` 时挂在 **`document.body`** 上（不在 `#inventory-screen` 里），
+   * 所以背包那个镜像（根是 `.inv-shell`）覆盖不到它 —— 结果是"左半是 canvas、右边的配方书还是 DOM"。
+   * 单开一个实例即可，`z-index` 比背包那层（12）高一档。
+   */
+  private recipe2d: MenuScreen2D | null = null;
+  private recipe2dOn = false;
   private touch2d: Touch2D | null = null;
   private touch2dOn = false;
   /**
@@ -3106,6 +3115,13 @@ class App {
        * `opacity: 0` 不影响 pointer 事件，拖动摇杆的手势一点没变。
        */
       this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
+      // 配方书在 `body` 上，与背包镜像不是同一棵树（见字段注释）
+      this.recipe2d = new MenuScreen2D(document.body, {
+        tint: UI2D_TINT_ENABLED,
+        zIndex: 13,
+        // 配方列表会随分类/搜索变，靠定期重读兜底（与背包同一档）
+        pollMs: 150,
+      });
       const style = document.createElement('style');
       /*
        * ⚠️ **`#inv-held` 不能藏**：它挂在 `#inventory-screen` 下、在 `.inv-shell` **外面**，
@@ -6857,6 +6873,25 @@ class App {
    * 只换像素：点击、拖拽分配、长按分堆、连发、悬停提示全在 DOM 里
    * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
    */
+  /** 配方书镜像的开关（`.recipe-panel` 可见就接管，收起就还原） */
+  private syncRecipe2d(): void {
+    const mirror = this.recipe2d;
+    if (!mirror) return;
+    // 配方书是独立挂到 `body` 的：`display: none` 时 `offsetParent` 为 null
+    // 全页只有一个 `.recipe-panel`（`RecipeBook` 里建的），挂在 `body` 或它自己的 root 下都可能
+    const panel = document.querySelector<HTMLElement>('.recipe-panel');
+    const visible = !!panel && panel.offsetParent !== null;
+    if (visible && panel) {
+      mirror.engage(panel);
+      this.recipe2dOn = true;
+      return;
+    }
+    if (this.recipe2dOn) {
+      mirror.disengage();
+      this.recipe2dOn = false;
+    }
+  }
+
   /**
    * 指针下面那一格（背包悬停高亮用）。
    *
@@ -18378,6 +18413,8 @@ class App {
     this.syncChatEntry2d();
     // 背包 / 工作站槽位（打开背包时才接管）
     this.syncInventory2d();
+    // 配方书（可见时）
+    this.syncRecipe2d();
     // 触控摇杆（触控 UI 可见时）
     this.syncTouch2d();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
@@ -20109,6 +20146,8 @@ class App {
     this.chatEntry2d = null;
     this.invMirror?.dispose();
     this.invMirror = null;
+    this.recipe2d?.dispose();
+    this.recipe2d = null;
     this.touch2d?.dispose();
     this.touch2d = null;
     document.documentElement.classList.remove('ui2d-touch');
