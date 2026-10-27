@@ -5992,6 +5992,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1307 · **纯文字 HUD 原位重画（4 条）**：新增 `src/ui2d/textPanel.ts` —— `readTextRuns()` 读 DOM 里**直接带文字**的叶子元素（矩形 + `getComputedStyle` 的颜色/字号/字重/对齐/是否有阴影），`readTextBlocks()` 单独读「有色底」元素（含圆角），`drawTextRuns()` 按换行拆行（行高 1.35 倍字号、竖直居中），先底后字；`main.ts#syncTextPanels2d()` 每帧拼「文字内容 + 视口尺寸」签名，**没变就不碰 `getComputedStyle`**（F3 默认关，常态零成本），变了才读并喂给 `Hud2D.setTextPanels()`；`applyTextPanelsDomFallback()` 把 `#debug` 与 `#scoreboard-hud` 设 `visibility: hidden` 保留布局。预览页 `tools/preview/textpanels.html`（真 DOM 当数据源）+ 2 张截图。验证：`test:ui2d` **60/60**（新增 3 条）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、31 张截图逐张看过。取舍（D21）：这一块**不重排版**——F3 是拼出来的多行串、计分板是 flex 两列、颜色字号随夜间/断点变，重排一遍等于把三样规则各抄一份且无断言可查。详见 `notes/canvas-ui.md` §5.11。
 
+- [x] 批次 20261027-1319 · **状态效果 + 聊天消息也原位重画（3 条）**：`applyTextPanelsDomFallback()` 加上 `#effects-hud` 并**只藏 `.chat-log`**（`#chat` 里还挂着输入行/提示/发送键，整块藏会把打字界面一起藏掉——与「快捷栏容器不能整体透明」同一条经验）；`syncTextPanels2d()` 的根节点改成列表逐个 `readTextRuns` + `readTextBlocks`；`textPanel.hasBackground()` 补了**渐变底退化**：`backgroundColor` 透明但 `backgroundImage !== none` 时用 `HUD_GRADIENT_FALLBACK`（`rgba(16,17,21,.66)`），否则状态效果胶囊会完全没有底（为了「上下差 2% 的亮度」去解析 `linear-gradient(...)` 不值得，见 D22）。预览页加 3 个效果胶囊 + 4 行聊天（系统黄/普通白/提示蓝/报错红）。验证：`tsc` 干净、`npm run check` exit=0（156 项 ✓）、`build:fast` 出包、31 张截图逐张看过。⚠️ 已知缺失：胶囊左侧那颗 `::before` 好/坏色点画不出来（伪元素不在 DOM 树里），只有边框颜色还在。至此纯展示 HUD 清零，剩下的是可交互面板与聊天输入行。详见 `notes/canvas-ui.md` §5.12。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6072,7 +6074,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（236 条，不是差异，但同样"集中查"更好）
+### 实现注意（237 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6311,6 +6313,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1226 · **表盘收场 + canvas 面板输入通道（4 条）**：新增 `src/ui2d/ToolDial2D.ts`（指南针/时钟的 52×52 圆盘、铜色/铁蓝边框、N/E/S/W 方位字母、上红下白的三角指针、10px 读数；指针用 `dialNeedlePoints` **按角度算三角顶点**，不用 `ctx.rotate` —— 否则"现在指向哪"藏在变换栈里、顺逆时针搞反也没有断言抓得到），阶段 2 到此完整；新增 `… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1235 · **暂停菜单页接线到 canvas（4 条）**：`main.ts#syncPauseMenu2d()` 每帧对 `settingsScreen.isOpen && page === 'menu'` 做边沿检测，打开 / 从设置子页退回 / 关掉三种转换都从这一处进出，不在 `SettingsScreen` 里埋钩子；接管时三处 DOM 让位（`.settings-panel` 用 `visibility: hidden` 而… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1258 · **设置页交给 canvas（3 条）**：新增 `src/ui2d/form.ts` —— `readFormRows()` 把 `.settings-row` 按**控件元素**读成模型（有 `.settings-switch` → 开关、有 `input[type=range]` → 滑杆（按 min/max 换算 0~1）、有 `.settings-cycle` → 循环按钮（`textContent` 即当前值）），… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1319 · **状态效果 + 聊天消息也原位重画（3 条）**：`applyTextPanelsDomFallback()` 加上 `#effects-hud` 并**只藏 `.chat-log`**（`#chat` 里还挂着输入行/提示/发送键，整块藏会把打字界面一起藏掉——与「快捷栏容器不能整体透明」同一条经验）；`syncTextPanels2d()` 的根节点改成列表逐个 `readTextRuns` + `readTextBlo… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
