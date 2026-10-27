@@ -37,6 +37,7 @@ export {
   progressBarRect,
   type BossBarState,
 } from './Hud2D.ts';
+export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   Hotbar2D,
   HOTBAR_ACTIVE_LIFT,

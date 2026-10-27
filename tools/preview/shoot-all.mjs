@@ -87,6 +87,35 @@ const SHOTS = [
     what: '阶段 0 三样同时在屏上的样子（红闪 + Boss 条 + 两条进度）',
     status: '已迁 · 阶段 0',
   },
+  // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
+  {
+    file: '06-hotbar-tinted.png',
+    page: 'tools/preview/hotbar.html?only=canvas&tint=1',
+    size: [520, 180],
+    what: '快捷栏 + 黄色遮罩：整条面板都是 canvas 的',
+    status: '遮罩 · 阶段 1.5',
+  },
+  {
+    file: '06b-hotbar-tinted-dom-vs-canvas.png',
+    page: 'tools/preview/hotbar.html?tint=1',
+    size: [520, 320],
+    what: '同一份数据：上排 DOM（不染色）/ 下排 canvas（染黄）',
+    status: '遮罩 · 阶段 1.5',
+  },
+  {
+    file: '07-boss-tinted.png',
+    page: 'tools/preview/hud.html?only=boss&tint=1',
+    size: [864, 410],
+    what: 'Boss 条 + 黄色遮罩（只有那条血条被染）',
+    status: '遮罩 · 阶段 0',
+  },
+  {
+    file: '08-all-tinted.png',
+    page: 'tools/preview/hud.html?tint=1',
+    size: [864, 410],
+    what: '三样一起 + 黄色遮罩：红闪本身是全屏的，所以整屏偏黄是对的',
+    status: '遮罩 · 阶段 0',
+  },
 ];
 
 const base = baseUrl(process.argv.slice(2));

@@ -21,6 +21,7 @@
  * `UI2D_ENABLED`），关掉参数即恢复原样。
  */
 
+import { applyDebugTint } from './debug.ts';
 import { Hotbar2D, type HotbarState } from './Hotbar2D.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import { drawText, uiFont } from './text.ts';
@@ -142,6 +143,13 @@ export class Hud2D {
   private readonly hotbar = new Hotbar2D();
   /** 上一帧画过东西没有：没画过就不用清屏（没接快捷栏时静止开销为 0） */
   private drewLastFrame = false;
+  /**
+   * 调试遮罩（`?ui2dtint=1`）：这一层画过的像素统一染黄。
+   *
+   * 存在的唯一理由：迁到 canvas 的东西画得和 DOM 一样时，**看不出哪块换了**
+   * （用户原话"改的这几个地方都不太明显"）。默认关，且不进游戏设置。
+   */
+  private debugTint = false;
 
   constructor(private readonly overlay: Ui2DOverlay) {}
 
@@ -159,6 +167,15 @@ export class Hud2D {
   /** 快捷栏状态（`null` = 不画；矩形由调用方按 DOM 实测给出） */
   setHotbar(state: HotbarState | null): void {
     this.hotbar.setState(state);
+  }
+
+  /** 调试遮罩开关（`?ui2dtint=1`）：打开后这一层产出的像素全被染黄 */
+  setDebugTint(on: boolean): void {
+    this.debugTint = on;
+  }
+
+  get debugTintEnabled(): boolean {
+    return this.debugTint;
   }
 
   /** `null` = 不显示 */
@@ -204,6 +221,9 @@ export class Hud2D {
     }
     // 快捷栏最后画：DOM 里它在 `#damage-flash` 之上，红闪不该给它上色
     if (showHotbar) this.hotbar.draw(ctx, overlay.dpr);
+
+    // 调试遮罩必须是**最后**一步（否则后面的绘制会把黄色盖掉）
+    if (this.debugTint) applyDebugTint(ctx, overlay.width, overlay.height);
 
     this.drewLastFrame = true;
   }

@@ -1066,15 +1066,28 @@ const ARM_SWING_INTERVAL = 0.3;
  * 只有下面三处更新函数在开关打开时提前 return。
  */
 const UI2D_ENABLED = readUi2DFlag();
+/**
+ * 调试遮罩：把 canvas 画出来的像素统一染黄（`?ui2dtint=1`）。
+ *
+ * 单独一个参数、不跟着 `ui2d=1` 一起开，理由有两条：① A/B 帧率对比要的是
+ * "原样"，多一次全屏填充会让数字失真；② 颜色是不对的，真机验收时容易被当成 bug。
+ * 只在"看实现进度"时用（见决策 D6）。
+ */
+const UI2D_TINT_ENABLED = UI2D_ENABLED && readFlag('ui2dtint');
 
-function readUi2DFlag(): boolean {
+/** 读一个 URL 开关（`?name=1`） */
+function readFlag(name: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return new URLSearchParams(window.location.search).get('ui2d') === '1';
+    return new URLSearchParams(window.location.search).get(name) === '1';
   } catch {
     // 某些 WebView 的 `location.search` 会抛（历史遗留），当作没开
     return false;
   }
+}
+
+function readUi2DFlag(): boolean {
+  return readFlag('ui2d');
 }
 
 /**
@@ -2936,6 +2949,8 @@ class App {
     if (UI2D_ENABLED) {
       this.ui2dOverlay = new Ui2DOverlay(container);
       this.hud2d = new Hud2D(this.ui2dOverlay);
+      // 调试遮罩：canvas 产出的像素全染黄，用来一眼分辨"这块是谁画的"
+      if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
     }
     // 选中描边是按**屏幕像素**算宽度的（批次 521），第一次就要把背板尺寸告诉它，
     // 否则第一帧到第一次 resize 之间描边宽度是 1 个像素（= 半个 CSS 像素）

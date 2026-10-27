@@ -90,6 +90,11 @@
         hud.setEatProgress(0.68);
         captions.push('破坏进度 42% / 进食进度 68%');
       }
+      // `?tint=1`：把 canvas 产出的像素统一染黄（与游戏里 `?ui2dtint=1` 同一条路）
+      if (new URLSearchParams(window.location.search).get('tint') === '1') {
+        hud.setDebugTint(true);
+        captions.push('黄色遮罩 = 这块由 canvas 画');
+      }
       document.getElementById('caption').textContent = captions.join(' · ');
       hud.render();
     </script>

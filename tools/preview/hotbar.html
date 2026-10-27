@@ -116,10 +116,12 @@
     </p>
 
     <script type="module">
-      import { Hotbar2D } from '../../src/ui2d/index.ts';
+      import { Hotbar2D, applyDebugTint } from '../../src/ui2d/index.ts';
 
       /** `?only=dom|canvas`：截图时只要一半（`both` 是默认） */
       const only = new URLSearchParams(window.location.search).get('only') ?? 'both';
+      /** `?tint=1`：把 canvas 产出的像素统一染黄（与游戏里 `?ui2dtint=1` 同一条路） */
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
 
       /** 假图标：32×32 的"等轴方块"意思一下（真图标由 ui/ItemIcon 出图，见决策 D4） */
       function fakeIcon(top, side, mark) {
@@ -239,6 +241,7 @@
       const hotbar = new Hotbar2D();
       hotbar.setState(state);
       hotbar.draw(ctx, scale);
+      if (tint) applyDebugTint(ctx, cssW, cssH);
 
       // 裁掉不要的那一半。⚠️ DOM 那排**不能用 `display: none`** —— canvas 的几何
       // 就是从它量出来的，挪出视口（仍然布局）才是安全的隐藏方式。

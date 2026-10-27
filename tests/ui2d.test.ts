@@ -22,6 +22,7 @@ import {
   type Measure,
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
+import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
 import {
   BOSS_BAR_HEIGHT,
   BOSS_BAR_MAX_WIDTH,
@@ -283,5 +284,59 @@ describe('快捷栏快照签名', () => {
     const a = hotbarSignature(make({ durability: { ratio: 0.501, level: 'high' } }));
     const b = hotbarSignature(make({ durability: { ratio: 0.504, level: 'high' } }));
     expect(a).toBe(b);
+  });
+});
+
+/**
+ * 调试遮罩（`?ui2dtint=1`）。
+ *
+ * 它只做两件事：把合成模式切成 `source-atop`、整块刷一层黄。
+ * 这两件都不能"差不多"——模式写错就染到透明区域（屏幕全黄而不是只有 canvas 的那几块），
+ * 忘了还原就会污染后续所有绘制。
+ */
+describe('调试遮罩', () => {
+  /** 只记调用序列的假 ctx：真 canvas 要浏览器，这里验的是"怎么下笔" */
+  function fakeContext() {
+    const log: string[] = [];
+    let composite = 'source-over';
+    const ctx = {
+      save: () => log.push('save'),
+      restore: () => log.push('restore'),
+      fillRect: (x: number, y: number, w: number, h: number) => log.push(`fillRect ${x},${y},${w},${h}`),
+      get globalCompositeOperation() {
+        return composite;
+      },
+      set globalCompositeOperation(value: string) {
+        composite = value;
+        log.push(`op ${value}`);
+      },
+      set fillStyle(value: string) {
+        log.push(`fill ${value}`);
+      },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, log, composite: () => composite };
+  }
+
+  it('用 source-atop 刷满整层（只染 canvas 已经画过的地方）', () => {
+    const fake = fakeContext();
+    applyDebugTint(fake.ctx, 844, 390);
+    expect(fake.log).toContain(`fill ${DEBUG_TINT_COLOR}`);
+    expect(fake.log).toContain('fillRect 0,0,844,390');
+    // 顺序：先 save、再切模式、刷完立刻 restore（否则后续绘制全被 source-atop 污染）
+    expect(fake.log).toEqual([
+      'save',
+      'op source-atop',
+      `fill ${DEBUG_TINT_COLOR}`,
+      'fillRect 0,0,844,390',
+      'restore',
+    ]);
+    expect(fake.composite()).toBe('source-atop'); // 假 ctx 不模拟 save/restore 的栈，只证明它被设过
+  });
+
+  it('尺寸非法时一笔都不画（没有覆盖层尺寸就别刷整屏）', () => {
+    const fake = fakeContext();
+    applyDebugTint(fake.ctx, 0, 300);
+    applyDebugTint(fake.ctx, 300, Number.NaN);
+    expect(fake.log).toEqual([]);
   });
 });
