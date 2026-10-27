@@ -283,6 +283,13 @@ const SHOTS = [
     what: '背包槽位 + 黄色遮罩（格子全黄 = 槽位都是 canvas 画的；面板底仍是 DOM）',
     status: '遮罩 · 阶段 4',
   },
+  {
+    file: '22-inventory-compare.png',
+    page: 'tools/preview/inventory-compare.html',
+    size: [900, 460],
+    what: '背包逻辑复原：左 DOM / 右 canvas，同一份数据同一套逻辑，点哪边两边都变',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

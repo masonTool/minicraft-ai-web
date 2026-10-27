@@ -185,6 +185,24 @@ export {
   type InvSlotSkin,
   type InvSlotState,
 } from './Inventory2D.ts';
+export {
+  arraySlots,
+  distributeDrag,
+  leftClick,
+  quickMove,
+  rightClick,
+  type Cursor,
+  type MoveRules,
+  type SlotAccess,
+  type StackLike,
+} from './inventoryModel.ts';
+export {
+  INV_LAYOUT,
+  drawInventoryPanel,
+  layoutInventoryPanel,
+  slotIndexAt,
+  type InventoryLayout,
+} from './InventoryPanel2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

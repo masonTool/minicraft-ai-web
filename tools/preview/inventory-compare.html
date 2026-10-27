@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 背包逻辑复原：DOM 与 canvas 并排对照</title>
+    <!--
+      阶段 4 的核心：**用 canvas 复原背包的界面与交互**，并和 DOM 版并排对照。
+
+      两边**共用同一份数据与同一套逻辑**（`ui2d/inventoryModel.ts`）：
+        · 左边是 DOM 渲染（`.inv-slot` 那套 CSS）
+        · 右边是 canvas 渲染（`ui2d/InventoryPanel2D.ts`）
+      任何一边点一下，两边都跟着变 —— 所以"是否一模一样"可以直接肉眼比。
+
+      能做的操作（两边都支持）：
+        左键：拿起整叠 / 放下 / 合并 / 交换
+        右键：拿一半（向上取整）/ 放一个
+        Shift+左键：快速移动（并进同类堆，再占空格）
+        按住左键拖过多格再松开：把手上这叠均分给经过的格子
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/inventory-compare.html
+        open 'http://localhost:5173/tools/preview/inventory-compare.html?tint=1'
+    -->
+    <style>
+      :root {
+        --slot-bg: #8b8b8b;
+        --slot-edge-light: #c6c6c6;
+        --slot-edge-dark: #373737;
+        --slot-radius: 2px;
+      }
+      body {
+        margin: 0; background: #111; min-height: 100vh;
+        display: grid; place-content: center; gap: 10px;
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+      }
+      h2 { margin: 0 0 4px; font-size: 12px; color: #9aa69a; font-weight: 400; }
+      .row { display: flex; gap: 24px; align-items: flex-start; }
+      .cell { display: flex; flex-direction: column; }
+      .hint { color: #9aa69a; font-size: 12px; }
+
+      /* ---------------- 左边：DOM 版（照抄 index.html） ---------------- */
+      .inv-panel {
+        padding: 14px; background: #c6c6c6;
+        border: 3px solid; border-color: #373737 #fff #fff #373737;
+        color: #3f3f3f;
+      }
+      .inv-title { height: 24px; line-height: 24px; font-size: 13px; }
+      .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 2px; }
+      .inv-grid.hotbar { margin-top: 10px; }
+      .inv-slot {
+        position: relative; width: 42px; height: 42px;
+        display: grid; place-items: center;
+        background: var(--slot-bg);
+        border: 2px solid;
+        border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+        border-radius: var(--slot-radius);
+      }
+      .inv-slot:hover { background: #a9a9a9; }
+      .inv-count {
+        position: absolute; right: 2px; bottom: 1px;
+        font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+      #dom-cursor {
+        position: fixed; width: 42px; height: 42px; pointer-events: none; display: none;
+        background: var(--slot-bg); border: 2px solid;
+        border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+        border-radius: var(--slot-radius);
+      }
+      #canvas-wrap { position: relative; }
+      #canvas-wrap canvas { display: block; }
+      .caption { color: #fff; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <div class="cell">
+        <h2>DOM 版（index.html 的 .inv-*）</h2>
+        <div class="inv-panel" id="dom-panel">
+          <div class="inv-title">生存背包</div>
+          <div class="inv-grid" id="dom-main"></div>
+          <div class="inv-grid hotbar" id="dom-hotbar"></div>
+        </div>
+      </div>
+      <div class="cell">
+        <h2>canvas 版（ui2d/InventoryPanel2D.ts）</h2>
+        <div id="canvas-wrap"><canvas id="canvas-panel"></canvas></div>
+      </div>
+    </div>
+    <div class="caption" id="caption"></div>
+    <div id="dom-cursor"></div>
+
+    <script type="module">
+      import {
+        arraySlots,
+        distributeDrag,
+        drawInventoryPanel,
+        layoutInventoryPanel,
+        leftClick,
+        quickMove,
+        rightClick,
+        slotIndexAt,
+        applyDebugTint,
+        INV_LAYOUT,
+      } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      const SLOT = INV_LAYOUT.slot;
+
+      /* ---------------- 数据：与游戏同一套逻辑 ---------------- */
+      const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f', '#b9c2cc'];
+      const MAX_STACK = (id) => (id === 7 ? 1 : 64); // 7 = 不可堆叠（剑）
+      const RULES = { limitOf: MAX_STACK, sameItem: (a, b) => a.id === b.id };
+
+      /** 每个物品一张 32×32 图标（两边共用同一张位图，避免"图标不一样"的噪声） */
+      const ICONS = COLORS.map((color, index) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.fillRect(3, 3, 26, 26);
+        ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(3, 3, 26, 26);
+        if (index === 6) {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(14, 6, 4, 20);
+        }
+        return canvas;
+      });
+      const iconOf = (id) => ICONS[(id - 1) % ICONS.length];
+
+      const initial = new Array(36).fill(null);
+      initial[0] = { id: 1, count: 64 };
+      initial[1] = { id: 2, count: 12 };
+      initial[2] = { id: 3, count: 3 };
+      initial[3] = { id: 7, count: 1 };
+      initial[5] = { id: 4, count: 28 };
+      initial[9] = { id: 5, count: 7 };
+      initial[27] = { id: 6, count: 41 };
+      initial[31] = { id: 1, count: 10 };
+      const slots = arraySlots(initial);
+      const cursor = { stack: null };
+
+      /* ---------------- 画：DOM ---------------- */
+      const domMain = document.getElementById('dom-main');
+      const domHotbar = document.getElementById('dom-hotbar');
+      const domCursor = document.getElementById('dom-cursor');
+      const domSlots = [];
+      function buildDomSlots() {
+        for (const [grid, from, to] of [
+          [domMain, 0, 27],
+          [domHotbar, 27, 36],
+        ]) {
+          for (let i = from; i < to; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.dataset.index = String(i);
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            canvas.style.width = '32px';
+            canvas.style.height = '32px';
+            canvas.style.imageRendering = 'pixelated';
+            const count = document.createElement('span');
+            count.className = 'inv-count';
+            slot.append(canvas, count);
+            grid.appendChild(slot);
+            domSlots[i] = { slot, canvas, count };
+          }
+        }
+      }
+      buildDomSlots();
+
+      function renderDom() {
+        for (let i = 0; i < 36; i++) {
+          const view = domSlots[i];
+          const stack = slots.stacks[i];
+          const ctx = view.canvas.getContext('2d');
+          ctx.clearRect(0, 0, 32, 32);
+          if (stack) ctx.drawImage(iconOf(stack.id), 0, 0);
+          view.count.textContent = stack && stack.count > 1 ? String(stack.count) : '';
+        }
+        if (cursor.stack) {
+          domCursor.style.display = 'block';
+          domCursor.innerHTML = '';
+          const canvas = document.createElement('canvas');
+          canvas.width = 32;
+          canvas.height = 32;
+          canvas.style.width = '32px';
+          canvas.style.height = '32px';
+          canvas.getContext('2d').drawImage(iconOf(cursor.stack.id), 0, 0);
+          domCursor.appendChild(canvas);
+          if (cursor.stack.count > 1) {
+            const span = document.createElement('span');
+            span.className = 'inv-count';
+            span.textContent = String(cursor.stack.count);
+            domCursor.appendChild(span);
+          }
+        } else {
+          domCursor.style.display = 'none';
+        }
+      }
+
+      /* ---------------- 画：canvas ---------------- */
+      const canvas = document.getElementById('canvas-panel');
+      const ctx = canvas.getContext('2d');
+      const scale = window.devicePixelRatio || 1;
+      const layout = layoutInventoryPanel(0, 0);
+      canvas.width = layout.panel.w * scale;
+      canvas.height = layout.panel.h * scale;
+      canvas.style.width = `${layout.panel.w}px`;
+      canvas.style.height = `${layout.panel.h}px`;
+      const panelOrigin = canvas.getBoundingClientRect();
+
+      let hoverIndex = -1;
+      let pointer = { x: -1, y: -1 };
+
+      function renderCanvas() {
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.clearRect(0, 0, layout.panel.w, layout.panel.h);
+        const stacks = slots.stacks.map((stack) => ({
+          icon: stack ? iconOf(stack.id) : null,
+          count: stack?.count ?? 0,
+          durability: null,
+        }));
+        drawInventoryPanel(ctx, layout, {
+          title: '生存背包',
+          slots: stacks,
+          hoverIndex,
+          cursor: cursor.stack ? { icon: iconOf(cursor.stack.id), count: cursor.stack.count } : null,
+          cursorX: pointer.x - layout.panel.x,
+          cursorY: pointer.y - layout.panel.y,
+        });
+        if (tint) applyDebugTint(ctx, layout.panel.w, layout.panel.h);
+      }
+
+      function renderAll() {
+        renderDom();
+        renderCanvas();
+      }
+
+      /* ---------------- 交互：两边共用同一套逻辑 ---------------- */
+      let dragButton = null;
+      let dragIndices = [];
+      let dragging = false;
+
+      function applyClick(index, button, shift) {
+        if (shift && button === 0) quickMove(slots, RULES, index, targetRangeFor(index));
+        else if (button === 2) rightClick(slots, RULES, cursor, index);
+        else leftClick(slots, RULES, cursor, index);
+        renderAll();
+      }
+
+      /** Shift 快速移动的目标区：主背包 ↔ 快捷栏（与原版一致） */
+      function targetRangeFor(index) {
+        const range = [];
+        if (index < 27) for (let i = 27; i < 36; i++) range.push(i);
+        else for (let i = 0; i < 27; i++) range.push(i);
+        return range;
+      }
+
+      function bindPointer(element, mapIndex) {
+        element.addEventListener('contextmenu', (event) => event.preventDefault());
+        element.addEventListener('pointerdown', (event) => {
+          const index = mapIndex(event);
+          if (index < 0) return;
+          event.preventDefault();
+          if (event.button === 0 || event.button === 2) {
+            dragButton = event.button;
+            dragIndices = [index];
+            dragging = false;
+          }
+          applyClick(index, event.button, event.shiftKey);
+        });
+        element.addEventListener('pointermove', (event) => {
+          const index = mapIndex(event);
+          if (index >= 0 && dragButton !== null && dragIndices[0] !== index) {
+            // 经过别的格子：记下来，松手时统一分配（与原版拖拽分配一致）
+            if (!dragIndices.includes(index)) dragIndices.push(index);
+            dragging = true;
+          }
+        });
+        element.addEventListener('pointerup', () => {
+          if (dragging && dragIndices.length > 1) {
+            distributeDrag(slots, RULES, cursor, dragIndices);
+            renderAll();
+          }
+          dragButton = null;
+          dragIndices = [];
+          dragging = false;
+        });
+      }
+
+      // DOM 侧：点在哪个 .inv-slot 上
+      bindPointer(domMain, (event) => {
+        const slot = event.target.closest?.('.inv-slot');
+        return slot ? Number(slot.dataset.index) : -1;
+      });
+      bindPointer(domHotbar, (event) => {
+        const slot = event.target.closest?.('.inv-slot');
+        return slot ? Number(slot.dataset.index) : -1;
+      });
+
+      // canvas 侧：自己算坐标（这就是"canvas 版自己接输入"）
+      canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+      const localPoint = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
+      canvas.addEventListener('pointerdown', (event) => {
+        const point = localPoint(event);
+        const index = slotIndexAt(layout, point.x, point.y);
+        if (index < 0) return;
+        event.preventDefault();
+        if (event.button === 0 || event.button === 2) {
+          dragButton = event.button;
+          dragIndices = [index];
+          dragging = false;
+        }
+        applyClick(index, event.button, event.shiftKey);
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        const point = localPoint(event);
+        pointer = point;
+        const index = slotIndexAt(layout, point.x, point.y);
+        hoverIndex = index;
+        if (index >= 0 && dragButton !== null && dragIndices[0] !== index && !dragIndices.includes(index)) {
+          dragIndices.push(index);
+          dragging = true;
+        }
+        renderAll();
+      });
+      canvas.addEventListener('pointerup', () => {
+        if (dragging && dragIndices.length > 1) {
+          distributeDrag(slots, RULES, cursor, dragIndices);
+        }
+        dragButton = null;
+        dragIndices = [];
+        dragging = false;
+        renderAll();
+      });
+
+      // 光标上的物品跟随（DOM 侧用 fixed 元素）
+      window.addEventListener('pointermove', (event) => {
+        domCursor.style.left = `${event.clientX - 21}px`;
+        domCursor.style.top = `${event.clientY - 21}px`;
+      });
+
+      document.getElementById('caption').textContent =
+        '两边同一份数据、同一套逻辑：左键取放 · 右键一半/一个 · Shift+左键快速移动 · 按住左键拖过多格再松手 = 均分' +
+        (tint ? ' · 右侧 canvas 有黄色遮罩' : '') +
+        ` · 单格 ${SLOT}px`;
+
+      renderAll();
+      void panelOrigin;
+    </script>
+  </body>
+</html>
