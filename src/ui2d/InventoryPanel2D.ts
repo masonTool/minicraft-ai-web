@@ -43,11 +43,24 @@ export interface ExtraSlotsSpec {
   readonly result?: boolean;
 }
 
+/**
+ * 右侧竖排那一列（盔甲 4 格 + 副手 1 格）。
+ *
+ * DOM 里它们贴着玩家网格的右侧：盔甲从上往下排（头盔 → 胸甲 → 护腿 → 靴子），
+ * 副手单独在下面、隔一小段。`count` 含副手。
+ */
+export interface SideSlotsSpec {
+  /** 总格数（生存是 5 = 4 盔甲 + 副手）；0 表示不要这一列 */
+  readonly count: number;
+  /** 副手前面那段额外的空档（缺省 6px） */
+  readonly offhandGap?: number;
+}
+
 export interface InventoryLayout {
   readonly panel: Rect;
   readonly titleRect: Rect;
   /**
-   * 全部槽位，顺序固定：**先工作站那几格（含结果格），再主背包 27，最后快捷栏 9**。
+   * 全部槽位，顺序固定：**工作站那几格（含结果格）→ 右侧竖排（盔甲+副手）→ 主背包 27 → 快捷栏 9**。
    * 顺序定死之后，`SlotAccess` 的下标就是稳定的（调用方按这个顺序接数据）。
    */
   readonly slots: Rect[];
@@ -56,6 +69,8 @@ export interface InventoryLayout {
   readonly groups: {
     readonly extra: readonly Rect[];
     readonly result: Rect | null;
+    /** 右侧竖排（盔甲 + 副手） */
+    readonly side: readonly Rect[];
     readonly main: readonly Rect[];
     readonly hotbar: readonly Rect[];
   };
@@ -69,6 +84,7 @@ export function layoutInventoryPanel(
     readonly mainRows?: number;
     readonly hotbarRows?: number;
     readonly extra?: ExtraSlotsSpec;
+    readonly side?: SideSlotsSpec;
   } = {},
 ): InventoryLayout {
   const mainRows = options.mainRows ?? INV_LAYOUT.mainRows;
@@ -86,11 +102,24 @@ export function layoutInventoryPanel(
   const resultGap = extra?.result ? 28 : 0;
   const extraHeight = extra ? extra.rows * INV_LAYOUT.slot + (extra.rows - 1) * INV_LAYOUT.gap : 0;
   const extraRowHeight = extra ? extraHeight + INV_LAYOUT.sectionGap : 0;
+  const side = options.side;
+  const sideCount = side ? Math.max(0, side.count) : 0;
+  const offhandGap = side?.offhandGap ?? 6;
+  // 侧栏与玩家网格之间空 8px（DOM 里是 grid 的 gap + 一段留白）
+  const sideGap = sideCount > 0 ? 8 : 0;
+  const sideWidth = sideCount > 0 ? INV_LAYOUT.slot + sideGap : 0;
+  // 侧栏可能比玩家网格高（4 盔甲 + 副手 + 那段空档）：面板高度要取两者的较大值，
+  // 否则副手会挂在面板外面（第一版就是这样，截图里那颗黄格子伸到面板底下了）
+  const sideHeight =
+    sideCount > 0 ? sideCount * INV_LAYOUT.slot + (sideCount - 1) * INV_LAYOUT.gap + offhandGap : 0;
   const panel: Rect = {
     x,
     y,
-    w: Math.max(gridWidth, extraWidth + resultGap + (extra?.result ? INV_LAYOUT.slot : 0)) + INV_LAYOUT.padding * 2,
-    h: INV_LAYOUT.titleHeight + extraRowHeight + playerHeight + INV_LAYOUT.padding * 2,
+    w:
+      Math.max(gridWidth, extraWidth + resultGap + (extra?.result ? INV_LAYOUT.slot : 0)) +
+      sideWidth +
+      INV_LAYOUT.padding * 2,
+    h: INV_LAYOUT.titleHeight + extraRowHeight + Math.max(playerHeight, sideHeight) + INV_LAYOUT.padding * 2,
   };
   const titleRect: Rect = {
     x: panel.x + INV_LAYOUT.padding,
@@ -131,6 +160,22 @@ export function layoutInventoryPanel(
     if (resultRect) slots.push(resultRect);
   }
 
+  const sideSlots: Rect[] = [];
+  if (sideCount > 0) {
+    const sideX = panel.x + panel.w - INV_LAYOUT.padding - INV_LAYOUT.slot;
+    for (let i = 0; i < sideCount; i++) {
+      // 最后一格是副手：往下多让一段，与盔甲分开
+      const extraOffset = i === sideCount - 1 && sideCount > 1 ? offhandGap : 0;
+      sideSlots.push({
+        x: sideX,
+        y: playerTop + i * step + extraOffset,
+        w: INV_LAYOUT.slot,
+        h: INV_LAYOUT.slot,
+      });
+    }
+    slots.push(...sideSlots);
+  }
+
   const mainSlots: Rect[] = [];
   const hotbarSlots: Rect[] = [];
   for (let row = 0; row < mainRows + hotbarRows; row++) {
@@ -156,7 +201,13 @@ export function layoutInventoryPanel(
     titleRect,
     slots,
     rows,
-    groups: { extra: extraSlots, result: resultRect, main: mainSlots, hotbar: hotbarSlots },
+    groups: {
+      extra: extraSlots,
+      result: resultRect,
+      side: sideSlots,
+      main: mainSlots,
+      hotbar: hotbarSlots,
+    },
   };
 }
 
