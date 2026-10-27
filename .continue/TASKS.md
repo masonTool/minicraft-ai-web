@@ -5994,6 +5994,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1319 · **状态效果 + 聊天消息也原位重画（3 条）**：`applyTextPanelsDomFallback()` 加上 `#effects-hud` 并**只藏 `.chat-log`**（`#chat` 里还挂着输入行/提示/发送键，整块藏会把打字界面一起藏掉——与「快捷栏容器不能整体透明」同一条经验）；`syncTextPanels2d()` 的根节点改成列表逐个 `readTextRuns` + `readTextBlocks`；`textPanel.hasBackground()` 补了**渐变底退化**：`backgroundColor` 透明但 `backgroundImage !== none` 时用 `HUD_GRADIENT_FALLBACK`（`rgba(16,17,21,.66)`），否则状态效果胶囊会完全没有底（为了「上下差 2% 的亮度」去解析 `linear-gradient(...)` 不值得，见 D22）。预览页加 3 个效果胶囊 + 4 行聊天（系统黄/普通白/提示蓝/报错红）。验证：`tsc` 干净、`npm run check` exit=0（156 项 ✓）、`build:fast` 出包、31 张截图逐张看过。⚠️ 已知缺失：胶囊左侧那颗 `::before` 好/坏色点画不出来（伪元素不在 DOM 树里），只有边框颜色还在。至此纯展示 HUD 清零，剩下的是可交互面板与聊天输入行。详见 `notes/canvas-ui.md` §5.12。
 
+- [x] 批次 20261027-1327 · **文字面板改按内容盒绘制（2 条）**：`readTextRuns()` 读 `paddingLeft/Right/Top/Bottom` 并把绘制矩形内缩到内容盒 —— 原来按边框盒画，`#debug`（`padding: 6px 9px`）与状态效果胶囊（`3px 9px`）里的字都顶到边框上（胶囊里还会压住左侧色点）。同时记下**试过又撤掉**的做法：读 `getComputedStyle(el, "::before")` 画那颗"好/坏"色点 —— 伪元素占的宽度不在元素自身 `rect` 里，字会正好压在色点上；要正确得先用伪元素宽度偏移文字，牵动排版而收益只有一颗 7px 的点（D24）。验证：`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、31 张截图重拍（F3 与三个胶囊的文字回到内边距以内）。详见 `notes/canvas-ui.md` §5.12。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

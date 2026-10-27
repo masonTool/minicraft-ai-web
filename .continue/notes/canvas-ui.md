@@ -338,8 +338,11 @@ this.pause2dButtons[index].click();
 - **渐变底要退化**：状态效果胶囊的 `background` 是 `var(--hud-bg)`（一条 `linear-gradient`），
   在 `backgroundColor` 上是透明的。`hasBackground()` 因此补了一条：有 `backgroundImage`
   就退化成 `HUD_GRADIENT_FALLBACK`（半透明深色）。不退化的话三个胶囊会**完全没有底**。
-- **`::before` 色点画不出来**（它是伪元素，不在 DOM 树里）。胶囊左侧那颗"好/坏"色点本批丢失，
-  只有边框颜色还在。要补就得单独解析 `::before` 的 `background`，本批不做。
+- **画的是内容盒，不是边框盒**：`#debug`（`padding: 6px 9px`）与胶囊（`3px 9px`）都要扣掉 padding，
+  否则字比 DOM 里偏 9px、胶囊里还会压住左侧色点。`readTextRuns` 现在四边都扣。
+- **`::before` 色点画不出来**（伪元素不在 DOM 树里）：试过读 `getComputedStyle(el, '::before')`
+  的宽高再画一颗圆，但**伪元素占的位不在元素自身的 `rect` 里** —— 文字会正好压在色点上。
+  要正确就得先用伪元素宽度偏移文字（牵动排版），收益是一颗 7px 的点，本批撤掉（决策 D24）。
 
 ### 纯展示 HUD 到此清零
 

@@ -149,8 +149,21 @@ export function readTextRuns(
     if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
     const style = window.getComputedStyle(el);
     const align = style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'right' : 'left';
+    /*
+     * 能画字的是**内容盒**：元素自己的 padding 不能丢（`#debug` 是 `6px 9px`、
+     * 状态效果胶囊是 `3px 9px`）。不扣掉的话字会顶到边框上。
+     */
+    const padLeft = Number.parseFloat(style.paddingLeft) || 0;
+    const padRight = Number.parseFloat(style.paddingRight) || 0;
+    const padTop = Number.parseFloat(style.paddingTop) || 0;
+    const padBottom = Number.parseFloat(style.paddingBottom) || 0;
     runs.push({
-      rect,
+      rect: {
+        x: rect.x + padLeft,
+        y: rect.y + padTop,
+        w: Math.max(0, rect.w - padLeft - padRight),
+        h: Math.max(0, rect.h - padTop - padBottom),
+      },
       text,
       color: style.color || '#ffffff',
       fontSize: Number.parseFloat(style.fontSize) || 12,
