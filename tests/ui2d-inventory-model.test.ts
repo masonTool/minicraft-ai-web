@@ -516,3 +516,23 @@ describe('盔甲列把面板撑高', () => {
     expect(layout.panel.y + layout.panel.h).toBeGreaterThanOrEqual(Math.max(gridBottom, sideBottom));
   });
 });
+
+/** 结果格左边的箭头区（熔炉的熔炼进度画在这） */
+describe('进度箭头', () => {
+  it('在额外网格与结果格之间、竖直居中', () => {
+    const layout = layoutInventoryPanel(0, 0, {
+      mainRows: 3,
+      hotbarRows: 1,
+      extra: { cols: 3, rows: 1, result: true },
+    });
+    const progress = layout.groups.progress!;
+    const result = layout.groups.result!;
+    expect(progress.x + progress.w).toBe(result.x);
+    expect(progress.y + progress.h / 2).toBeCloseTo(result.y + result.h / 2, 6);
+  });
+
+  it('没有结果格就没有箭头区（纯背包不会凭空多一块）', () => {
+    const layout = layoutInventoryPanel(0, 0, { mainRows: 3, hotbarRows: 1 });
+    expect(layout.groups.progress).toBeNull();
+  });
+});

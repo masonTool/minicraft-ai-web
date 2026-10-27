@@ -55,6 +55,8 @@ export interface InventoryPanelHostOptions extends MoveRules {
   readonly extra?: ExtraSlotsSpec;
   /** 右侧竖排（盔甲 4 + 副手 1）；不传 = 没有这一列 */
   readonly sideCount?: number;
+  /** 工作站进度（0..1，画在结果格左边那颗箭头上）；不传 = 空箭头 */
+  readonly progressOf?: () => number;
   readonly zIndex?: number;
   readonly tint?: boolean;
   /** 物品 id → 图标位图（游戏里由 `ui/ItemIconCache` 提供） */
@@ -497,6 +499,7 @@ export class InventoryPanelHost {
       title: this.options.title,
       slots: views,
       hoverIndex: this.hoverIndex,
+      progress: this.options.progressOf?.() ?? 0,
       cursor: held ? { icon: this.options.iconOf(held.id), count: held.count } : null,
       cursorX: this.pointerX,
       cursorY: this.pointerY,

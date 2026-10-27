@@ -47,6 +47,8 @@
       const craft = params.get('craft') === '1';
       // `?armor=1`：右侧多一列盔甲 4 格 + 副手 1 格（顺序：侧栏 → 主背包 → 快捷栏）
       const armor = params.get('armor') === '1';
+      // `?progress=0.4`：熔炉那类"结果格左边箭头带填充"
+      const progress = Number(params.get('progress') ?? '0');
       const TOTAL = craft ? 46 : armor ? 41 : 36;
 
       /* ---------------- 数据：与游戏同一套逻辑（`SlotAccess` + `MoveRules`） ---------------- */
@@ -132,6 +134,7 @@
         hotbarRows: 1,
         ...(craft ? { extra: { cols: 3, rows: 3, result: true } } : {}),
         ...(armor ? { sideCount: 5 } : {}),
+        ...(Number.isFinite(progress) && progress > 0 ? { progressOf: () => progress } : {}),
         zIndex: 12,
         tint,
         limitOf: (id) => (id === 4 ? 1 : 64),

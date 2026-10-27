@@ -69,6 +69,11 @@ export interface InventoryLayout {
   readonly groups: {
     readonly extra: readonly Rect[];
     readonly result: Rect | null;
+    /**
+     * 结果格左边那块"箭头区"（熔炉的熔炼进度、酿造台的箭头都画在这里）。
+     * 合成台没有进度，但箭头本身仍然画（只是不带填充）。
+     */
+    readonly progress: Rect | null;
     /** 右侧竖排（盔甲 + 副手） */
     readonly side: readonly Rect[];
     readonly main: readonly Rect[];
@@ -160,6 +165,15 @@ export function layoutInventoryPanel(
     if (resultRect) slots.push(resultRect);
   }
 
+  const progressRect: Rect | null = resultRect
+    ? {
+        x: resultRect.x - resultGap,
+        y: resultRect.y + resultRect.h / 2 - 7,
+        w: resultGap,
+        h: 14,
+      }
+    : null;
+
   const sideSlots: Rect[] = [];
   if (sideCount > 0) {
     const sideX = panel.x + panel.w - INV_LAYOUT.padding - INV_LAYOUT.slot;
@@ -205,6 +219,7 @@ export function layoutInventoryPanel(
       extra: extraSlots,
       result: resultRect,
       side: sideSlots,
+      progress: progressRect,
       main: mainSlots,
       hotbar: hotbarSlots,
     },
@@ -257,6 +272,48 @@ export function drawSplitHint(ctx: CanvasRenderingContext2D, slot: Rect, count: 
   ctx.restore();
 }
 
+/**
+ * 画结果格左边那颗箭头，并按 `ratio` 填一段。
+ *
+ * 空箭头与填充用同一条路径：先描边、再按比例把左侧那段填实 —— 这样"进度 0.4"
+ * 看起来就是箭头从左边亮到 40%，与 DOM 版熔炉的观感一致。
+ */
+export function drawProgressArrow(
+  ctx: CanvasRenderingContext2D,
+  progressRect: Rect | null,
+  result: Rect,
+  ratio: number,
+): void {
+  const clamped = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
+  const cy = result.y + result.h / 2;
+  const left = progressRect ? progressRect.x : result.x - 22;
+  const right = result.x - 8;
+
+  ctx.save();
+  // 底：暗色箭头轮廓
+  ctx.strokeStyle = 'rgba(63, 63, 63, .8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left, cy);
+  ctx.lineTo(right, cy);
+  ctx.moveTo(right - 6, cy - 5);
+  ctx.lineTo(right, cy);
+  ctx.lineTo(right - 6, cy + 5);
+  ctx.stroke();
+
+  // 进度：从左边亮到 40% 之类
+  if (clamped > 0) {
+    const tipX = left + (right - left) * clamped;
+    ctx.strokeStyle = 'rgba(240, 240, 240, .95)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(left, cy);
+    ctx.lineTo(tipX, cy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** 命中：指针落在第几格（不在任何格子上返回 -1） */
 export function slotIndexAt(layout: InventoryLayout, x: number, y: number): number {
   for (let i = 0; i < layout.slots.length; i++) {
@@ -274,6 +331,8 @@ export function drawInventoryPanel(
     readonly title: string;
     readonly slots: readonly ({ icon: HTMLCanvasElement | null; count: number; durability: { ratio: number; level: 'high' | 'mid' | 'low' } | null; locked?: boolean; held?: boolean } | null)[];
     readonly hoverIndex: number;
+    /** 结果格左边那颗箭头的填充比例（0..1）；缺省 0 = 空箭头 */
+    readonly progress?: number;
     readonly cursor: { icon: HTMLCanvasElement | null; count: number } | null;
     readonly cursorX: number;
     readonly cursorY: number;
@@ -321,22 +380,12 @@ export function drawInventoryPanel(
     );
   }
 
-  // 结果格左边那颗箭头（DOM 里是 `.craft-arrow` 的 "→"）：没有它，结果格看起来像普通槽位
+  /*
+   * 结果格左边那颗箭头（DOM 里是 `.craft-arrow` 的 "→"）：没有它，结果格看起来像普通槽位。
+   * `progress` 给了就按比例填一段（熔炉的熔炼进度就画在这里），没给就是空箭头。
+   */
   const result = layout.groups.result;
-  if (result) {
-    const cy = result.y + result.h / 2;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(63, 63, 63, .8)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(result.x - 22, cy);
-    ctx.lineTo(result.x - 8, cy);
-    ctx.moveTo(result.x - 14, cy - 5);
-    ctx.lineTo(result.x - 8, cy);
-    ctx.lineTo(result.x - 14, cy + 5);
-    ctx.stroke();
-    ctx.restore();
-  }
+  if (result) drawProgressArrow(ctx, layout.groups.progress, result, options.progress ?? 0);
 
   // 光标上那一叠：跟着指针、画在最上面
   if (options.cursor) {

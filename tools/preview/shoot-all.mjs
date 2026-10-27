@@ -472,6 +472,13 @@ const SHOTS = [
     what: '**盔甲列 + 副手**：右侧竖排 4 格盔甲（带耐久条）+ 副手（顺序：侧栏 → 主背包 → 快捷栏）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '40-inventory-progress.png',
+    page: 'tools/preview/inventory-selfdrawn.html?craft=1&progress=0.45',
+    size: [864, 470],
+    what: '**工作站进度箭头**：结果格左边那颗箭头按 45% 填充（熔炉/酿造就画在这）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

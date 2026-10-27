@@ -226,6 +226,7 @@ export {
 export {
   INV_LAYOUT,
   drawInventoryPanel,
+  drawProgressArrow,
   drawSplitHint,
   drawSplitTarget,
   layoutInventoryPanel,
