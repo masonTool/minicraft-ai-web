@@ -437,6 +437,13 @@ const SHOTS = [
     what: '自绘背包：**长按选数量**（横move 调，牌上显示 11，松手后格 53 / 手 11）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '35-inventory-crafting.png',
+    page: 'tools/preview/inventory-selfdrawn.html?craft=1',
+    size: [864, 470],
+    what: '**自绘合成台**：3×3 合成格 + 箭头 + 结果格 + 玩家背包（同一套排版/命中/画）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

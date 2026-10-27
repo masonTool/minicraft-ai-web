@@ -13,6 +13,7 @@ import { Ui2DOverlay } from './overlay.ts';
 import { applyDebugTint } from './debug.ts';
 import {
   drawInventoryPanel,
+  type ExtraSlotsSpec,
   drawSplitHint,
   drawSplitTarget,
   layoutInventoryPanel,
@@ -48,6 +49,8 @@ export interface InventoryPanelHostOptions extends MoveRules {
   /** 主背包行数（生存 3 行；工作台可能更多） */
   readonly mainRows?: number;
   readonly hotbarRows?: number;
+  /** 工作站那几格（合成 3×3、熔炉原料+燃料…）；不传 = 纯背包 */
+  readonly extra?: ExtraSlotsSpec;
   readonly zIndex?: number;
   readonly tint?: boolean;
   /** 物品 id → 图标位图（游戏里由 `ui/ItemIconCache` 提供） */
@@ -137,10 +140,11 @@ export class InventoryPanelHost {
     overlay.syncSize();
     const rows = this.options.mainRows ?? 3;
     const hotbarRows = this.options.hotbarRows ?? 1;
-    const probe = layoutInventoryPanel(0, 0, { mainRows: rows, hotbarRows });
+    const extra = this.options.extra;
+    const probe = layoutInventoryPanel(0, 0, { mainRows: rows, hotbarRows, ...(extra ? { extra } : {}) });
     const x = Math.max(0, Math.round((overlay.width - probe.panel.w) / 2));
     const y = Math.max(0, Math.round((overlay.height - probe.panel.h) / 2));
-    this.layout = layoutInventoryPanel(x, y, { mainRows: rows, hotbarRows });
+    this.layout = layoutInventoryPanel(x, y, { mainRows: rows, hotbarRows, ...(extra ? { extra } : {}) });
   }
 
   /**
@@ -264,7 +268,8 @@ export class InventoryPanelHost {
 
   /** 全部槽位下标（双击收集的范围） */
   private allIndices(): number[] {
-    const total = ((this.options.mainRows ?? 3) + (this.options.hotbarRows ?? 1)) * 9;
+    // 以**当前布局**为准（工作站会多出那几格 + 结果格）
+    const total = this.layout?.slots.length ?? ((this.options.mainRows ?? 3) + (this.options.hotbarRows ?? 1)) * 9;
     return Array.from({ length: total }, (_, i) => i);
   }
 

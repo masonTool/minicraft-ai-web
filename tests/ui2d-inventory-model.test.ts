@@ -8,7 +8,7 @@
  * 用的是"数组 + 假物品表"（石头 64 上限、剑 1 上限），完全不碰 DOM/canvas。
  */
 import { describe, expect, it } from 'vitest';
-import { splitCountFromDrag } from '../src/ui2d/InventoryPanel2D.ts';
+import { layoutInventoryPanel, splitCountFromDrag } from '../src/ui2d/InventoryPanel2D.ts';
 import {
   arraySlots,
   distributeDrag,
@@ -332,5 +332,61 @@ describe('长按选数量', () => {
   it('空格（max=0）返回 0；非法输入退回 1', () => {
     expect(splitCountFromDrag(50, 0)).toBe(0);
     expect(splitCountFromDrag(Number.NaN, 64)).toBe(1);
+  });
+});
+
+/**
+ * 工作站布局（`layoutInventoryPanel` 的 `extra`）：合成台的 3×3 + 结果格。
+ *
+ * 顺序是硬约定：**先工作站那几格（含结果格），再主背包 27，最后快捷栏 9** ——
+ * 调用方按这个顺序接 `SlotAccess`，顺序错了就会出现"拖进合成格、东西跑到背包"。
+ */
+describe('工作站布局', () => {
+  const base = { mainRows: 3, hotbarRows: 1 };
+
+  it('纯背包时是 36 格，没有额外分组', () => {
+    const layout = layoutInventoryPanel(0, 0, base);
+    expect(layout.slots.length).toBe(36);
+    expect(layout.groups.extra.length).toBe(0);
+    expect(layout.groups.result).toBeNull();
+    expect(layout.groups.main.length).toBe(27);
+    expect(layout.groups.hotbar.length).toBe(9);
+  });
+
+  it('合成台：9 + 结果 1 + 36 = 46，且顺序固定', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, extra: { cols: 3, rows: 3, result: true } });
+    expect(layout.slots.length).toBe(46);
+    expect(layout.groups.extra.length).toBe(9);
+    // 结果格排在第 10 个（extra 之后、主背包之前）
+    expect(layout.slots[9]).toEqual(layout.groups.result);
+    expect(layout.slots[10]).toEqual(layout.groups.main[0]);
+  });
+
+  it('结果格在网格右侧、竖直居中，中间留出箭头的位置', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, extra: { cols: 3, rows: 3, result: true } });
+    const result = layout.groups.result!;
+    const extra = layout.groups.extra;
+    const rightmost = Math.max(...extra.map((r) => r.x + r.w));
+    expect(result.x - rightmost).toBe(28);
+    const extraTop = Math.min(...extra.map((r) => r.y));
+    const extraBottom = Math.max(...extra.map((r) => r.y + r.h));
+    expect(result.y + result.h / 2).toBeCloseTo((extraTop + extraBottom) / 2, 6);
+  });
+
+  it('额外槽位块在面板里居中（不是靠左）', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, extra: { cols: 3, rows: 3, result: true } });
+    const extra = layout.groups.extra;
+    const blockLeft = Math.min(...extra.map((r) => r.x));
+    const blockRight = layout.groups.result!.x + layout.groups.result!.w;
+    const leftGap = blockLeft - (layout.panel.x + 14);
+    const rightGap = layout.panel.x + layout.panel.w - 14 - blockRight;
+    expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(1);
+  });
+
+  it('玩家网格被推到额外槽位下面（不会重叠）', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, extra: { cols: 3, rows: 3 } });
+    const extraBottom = Math.max(...layout.groups.extra.map((r) => r.y + r.h));
+    const mainTop = Math.min(...layout.groups.main.map((r) => r.y));
+    expect(mainTop).toBeGreaterThan(extraBottom);
   });
 });

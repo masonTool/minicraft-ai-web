@@ -30,33 +30,67 @@ export const INV_LAYOUT = {
   panelRadius: 3,
 } as const;
 
+/**
+ * 玩家背包**上方**那块额外槽位（工作站用）：合成台的 3×3、熔炉的原料+燃料……
+ *
+ * 结果格单列出来：它总是"网格右侧、隔一段箭头的位置"，而且**不是**普通槽位
+ * （不能往里放，只能往外拿）—— 把它混进网格会让命中与规则都变复杂。
+ */
+export interface ExtraSlotsSpec {
+  readonly cols: number;
+  readonly rows: number;
+  /** 要不要在右边留一个结果格（合成 / 熔炉产物） */
+  readonly result?: boolean;
+}
+
 export interface InventoryLayout {
   readonly panel: Rect;
   readonly titleRect: Rect;
-  /** 27 + 9 = 36 个槽位的矩形（前 27 个是主背包，后 9 个是快捷栏） */
+  /**
+   * 全部槽位，顺序固定：**先工作站那几格（含结果格），再主背包 27，最后快捷栏 9**。
+   * 顺序定死之后，`SlotAccess` 的下标就是稳定的（调用方按这个顺序接数据）。
+   */
   readonly slots: Rect[];
   readonly rows: number;
+  /** 分组视图（命中判定与"能不能放"的规则要用得到） */
+  readonly groups: {
+    readonly extra: readonly Rect[];
+    readonly result: Rect | null;
+    readonly main: readonly Rect[];
+    readonly hotbar: readonly Rect[];
+  };
 }
 
 /** 算一次布局（面板矩形 → 每个槽位的位置） */
 export function layoutInventoryPanel(
   x: number,
   y: number,
-  options: { readonly mainRows?: number; readonly hotbarRows?: number } = {},
+  options: {
+    readonly mainRows?: number;
+    readonly hotbarRows?: number;
+    readonly extra?: ExtraSlotsSpec;
+  } = {},
 ): InventoryLayout {
   const mainRows = options.mainRows ?? INV_LAYOUT.mainRows;
   const hotbarRows = options.hotbarRows ?? INV_LAYOUT.hotbarRows;
   const rows = (mainRows + hotbarRows) * INV_LAYOUT.cols;
+  const step = INV_LAYOUT.slot + INV_LAYOUT.gap;
   const gridWidth = INV_LAYOUT.cols * INV_LAYOUT.slot + (INV_LAYOUT.cols - 1) * INV_LAYOUT.gap;
-  const gridHeight =
+  const playerHeight =
     (mainRows + hotbarRows) * INV_LAYOUT.slot +
     (mainRows + hotbarRows - 1) * INV_LAYOUT.gap +
     (hotbarRows > 0 ? INV_LAYOUT.sectionGap - INV_LAYOUT.gap : 0);
+  const extra = options.extra;
+  const extraWidth = extra ? extra.cols * INV_LAYOUT.slot + (extra.cols - 1) * INV_LAYOUT.gap : 0;
+  // 结果格与网格之间那段（DOM 里是"箭头 + 空隙"，这里按 28px 算）
+  const resultGap = extra?.result ? 28 : 0;
+  const extraHeight = extra ? extra.rows * INV_LAYOUT.slot + (extra.rows - 1) * INV_LAYOUT.gap : 0;
+  const extraRowHeight = extra ? extraHeight + INV_LAYOUT.sectionGap : 0;
   const panel: Rect = {
     x,
     y,
-    w: gridWidth + INV_LAYOUT.padding * 2,
-    h: INV_LAYOUT.titleHeight + gridHeight + INV_LAYOUT.padding * 2,
+    w: Math.max(gridWidth, extraWidth + resultGap + (extra?.result ? INV_LAYOUT.slot : 0)) + INV_LAYOUT.padding * 2,
+    h: INV_LAYOUT.titleHeight + extraRowHeight + playerHeight + INV_LAYOUT.padding * 2,
   };
   const titleRect: Rect = {
     x: panel.x + INV_LAYOUT.padding,
@@ -66,25 +100,64 @@ export function layoutInventoryPanel(
   };
 
   const slots: Rect[] = [];
+  const extraSlots: Rect[] = [];
+  let resultRect: Rect | null = null;
+  const contentX = panel.x + INV_LAYOUT.padding;
+  const playerTop = panel.y + INV_LAYOUT.padding + INV_LAYOUT.titleHeight + extraRowHeight;
+  if (extra) {
+    // 工作站那几格在面板里**居中**（DOM 是 flex 居中，不是靠左）
+    const blockWidth = extraWidth + resultGap + (extra.result ? INV_LAYOUT.slot : 0);
+    const originX = contentX + Math.max(0, (gridWidth - blockWidth) / 2);
+    const originY = panel.y + INV_LAYOUT.padding + INV_LAYOUT.titleHeight;
+    for (let row = 0; row < extra.rows; row++) {
+      for (let col = 0; col < extra.cols; col++) {
+        extraSlots.push({
+          x: originX + col * step,
+          y: originY + row * step,
+          w: INV_LAYOUT.slot,
+          h: INV_LAYOUT.slot,
+        });
+      }
+    }
+    if (extra.result) {
+      resultRect = {
+        x: originX + extraWidth + resultGap,
+        y: originY + (extraHeight - INV_LAYOUT.slot) / 2,
+        w: INV_LAYOUT.slot,
+        h: INV_LAYOUT.slot,
+      };
+    }
+    slots.push(...extraSlots);
+    if (resultRect) slots.push(resultRect);
+  }
+
+  const mainSlots: Rect[] = [];
+  const hotbarSlots: Rect[] = [];
   for (let row = 0; row < mainRows + hotbarRows; row++) {
     const isHotbarRow = row >= mainRows;
-    const step = INV_LAYOUT.slot + INV_LAYOUT.gap;
     const rowY =
-      panel.y +
-      INV_LAYOUT.padding +
-      INV_LAYOUT.titleHeight +
+      playerTop +
       row * step +
       (isHotbarRow ? INV_LAYOUT.sectionGap - INV_LAYOUT.gap : 0);
     for (let col = 0; col < INV_LAYOUT.cols; col++) {
-      slots.push({
-        x: panel.x + INV_LAYOUT.padding + col * step,
+      const rect: Rect = {
+        x: contentX + col * step,
         y: rowY,
         w: INV_LAYOUT.slot,
         h: INV_LAYOUT.slot,
-      });
+      };
+      slots.push(rect);
+      if (isHotbarRow) hotbarSlots.push(rect);
+      else mainSlots.push(rect);
     }
   }
-  return { panel, titleRect, slots, rows };
+  return {
+    panel,
+    titleRect,
+    slots,
+    rows,
+    groups: { extra: extraSlots, result: resultRect, main: mainSlots, hotbar: hotbarSlots },
+  };
 }
 
 /**
@@ -195,6 +268,23 @@ export function drawInventoryPanel(
       },
       skin,
     );
+  }
+
+  // 结果格左边那颗箭头（DOM 里是 `.craft-arrow` 的 "→"）：没有它，结果格看起来像普通槽位
+  const result = layout.groups.result;
+  if (result) {
+    const cy = result.y + result.h / 2;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(63, 63, 63, .8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(result.x - 22, cy);
+    ctx.lineTo(result.x - 8, cy);
+    ctx.moveTo(result.x - 14, cy - 5);
+    ctx.lineTo(result.x - 8, cy);
+    ctx.lineTo(result.x - 14, cy + 5);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // 光标上那一叠：跟着指针、画在最上面

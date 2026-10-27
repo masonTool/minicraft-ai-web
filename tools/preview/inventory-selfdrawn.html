@@ -39,17 +39,34 @@
 
       const params = new URLSearchParams(window.location.search);
       const tint = params.get('tint') === '1';
+      // `?craft=1`：合成台（3×3 + 结果格 + 玩家背包），验证工作站的布局
+      const craft = params.get('craft') === '1';
+      const TOTAL = craft ? 46 : 36;
 
       /* ---------------- 数据：与游戏同一套逻辑（`SlotAccess` + `MoveRules`） ---------------- */
       const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
-      const initial = new Array(36).fill(null);
-      initial[0] = { id: 1, count: 64 };
-      initial[1] = { id: 2, count: 12 };
-      initial[2] = { id: 3, count: 3 };
-      initial[3] = { id: 4, count: 1 };
-      initial[5] = { id: 5, count: 28 };
-      initial[9] = { id: 6, count: 7 };
-      initial[27] = { id: 2, count: 41 };
+      const initial = new Array(TOTAL).fill(null);
+      if (craft) {
+        // 0..8 = 3×3 合成格，9 = 结果格，10..36 = 主背包，37..45 = 快捷栏
+        initial[0] = { id: 1, count: 1 };
+        initial[1] = { id: 1, count: 1 };
+        initial[3] = { id: 1, count: 1 };
+        initial[4] = { id: 1, count: 1 };
+        initial[9] = { id: 5, count: 4 };
+        initial[10] = { id: 1, count: 64 };
+        initial[11] = { id: 2, count: 12 };
+        initial[12] = { id: 3, count: 3 };
+        initial[14] = { id: 4, count: 1 };
+        initial[37] = { id: 6, count: 7 };
+      } else {
+        initial[0] = { id: 1, count: 64 };
+        initial[1] = { id: 2, count: 12 };
+        initial[2] = { id: 3, count: 3 };
+        initial[3] = { id: 4, count: 1 };
+        initial[5] = { id: 5, count: 28 };
+        initial[9] = { id: 6, count: 7 };
+        initial[27] = { id: 2, count: 41 };
+      }
       const slots = arraySlots(initial);
 
       /** 图标画笔：真机上这里是 `drawItemIcon(canvas, atlas, id)`，预览里画个色块 */
@@ -75,9 +92,10 @@
 
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
-        title: '生存背包',
+        title: craft ? '合成台' : '生存背包',
         mainRows: 3,
         hotbarRows: 1,
+        ...(craft ? { extra: { cols: 3, rows: 3, result: true } } : {}),
         zIndex: 12,
         tint,
         limitOf: (id) => (id === 4 ? 1 : 64),
@@ -119,7 +137,7 @@
 
       // 调试/验收用：读当前 36 格与手上那一叠（`playwright` 里断言全靠它）
       window.__probe = () => ({
-        slots: Array.from({ length: 36 }, (_, i) => {
+        slots: Array.from({ length: TOTAL }, (_, i) => {
           const stack = slots.get(i);
           return stack ? `${stack.id}x${stack.count}` : null;
         }),
@@ -128,7 +146,9 @@
       window.addEventListener('resize', () => host.relayout());
 
       document.getElementById('caption').textContent =
-        '自绘背包：自己排版 + 自己命中 + 自己画（不读 DOM 布局）· 左键取放 · 拖过多格再松手 = 均分' +
+        (craft
+          ? '自绘合成台：3×3 合成格 + 结果格 + 玩家背包（同一套排版/命中/画）· 结果格不可放入'
+          : '自绘背包：自己排版 + 自己命中 + 自己画（不读 DOM 布局）· 左键取放 · 拖过多格再松手 = 均分') +
         ' · 图标由 ItemIconCache 提供' + (tint ? ' · 黄色遮罩' : '');
     </script>
   </body>
