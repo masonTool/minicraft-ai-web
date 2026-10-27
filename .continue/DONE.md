@@ -9,6 +9,36 @@
 
 ---
 
+## 批次 20261027-2106 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2106
+
+> 用户 2026-10-27：「继续执行未完成的任务」—— 上一件是"空白检测门禁"，这一件是 **M34**：
+> 暂停弹窗那条链一直"只能在真游戏里验"，所以把它写成一条命令。
+
+- [x] [Z1] `tools/pause-check.mjs` + `npm run check:pause`：暂停弹窗端到端 8 条断言（让位 / HUD / canvas 像素 / 进设置 / 退回 / 关闭恢复）→ 跳过分支实测
+  - 做了什么：`?ui2d=1` 加载 → 判"进没进世界"（`#hud` 与 `#settings-screen` 都在才算）→ Esc 后断言 `.settings-panel` 与 `#hud` 都是 `visibility: hidden`、canvas 有像素 → ↓+Enter 进设置、断言 `data-page` → Esc 退回 → Esc 关闭并断言 HUD 与面板 DOM 恢复。
+  - 为什么：这条链涉及三处让位 + engaged 标志 + 两套键鼠路由，任何一处错都表现为"Esc 打不开/关不掉/HUD 不回来"，而它只能在有 `core.bin` 的环境验；写成命令才能"一条命令过一遍"。
+  - 验证：落地页 → **跳过 exit 0**；连不上 dev server → 跳过 exit 0；`tsc` 无关、`node --check` 通过。
+  - 批次：20261027-2106
+
+- [x] [Z2] 修脚本自身的两个坑：落地页被误判成"进了世界"、`getComputedStyle(null)` 抛错
+  - 做了什么：进游戏判据加上"`#settings-screen` 必须存在"（它由 `SettingsScreen` 构造时创建、只在游戏里有）；所有 `getComputedStyle` 加空保护。
+  - 为什么：落地页 `#world-screen` 与 `#settings-screen` 都不存在，只判 `#hud` 会把落地页当成世界内 —— 第一次跑就是这么红的（还留下一条 `getComputedStyle` 异常）。
+  - 验证：修正后落地页正确跳过（exit 0）。
+  - 批次：20261027-2106
+
+- [x] [Z3] 文档：`notes/canvas-ui.md` §5.32（8 条判据表 + "跳过分支已验、通过分支待首跑"）、决策 D44、`TASKS` 的 M34 改 `[~]` → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：把每条断言对应的"坏掉症状"列成表，并如实写明通过分支尚未执行。
+  - 为什么：验收脚本最怕"写了但没人跑、也没人知道它没跑过"；把边界写在正面，下次跑红了才知道该往哪查。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2106
+
+
 ## 批次 20261027-2050 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -255,36 +285,5 @@
   - 为什么：这一层最容易被后来的人当成"我也可以顺手加个平滑滚动"，结果把点击阈值改坏。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
   - 批次：20261027-1732
-
-
-## 批次 20261027-1706 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1706
-
-> 用户 2026-10-27：「首页三个按钮的**显示位置**是错的，**点击位置**也是错的」。
-> 用真 `WorldScreen` 复现：首页在字体/排版稳定后按钮整体上移（y 483 → 309），
-> 而镜像只在第一帧量过一次，之后再也不重量 —— 画在旧位置、点在新位置。
-
-- [x] [S1] 复现页 `tools/preview/world-real.html`：真 `WorldScreen` + `fetch('/index.html')` 搬真样式 → 截图
-  - 做了什么：页面构造真的 `WorldScreen`（空存档表 + no-op actions），把 `index.html` 里那段 `<style>` 整段注入，再镜像 `.world-panel`；`?plain=1` 出 DOM 基准；报告晚 1.2s 再打（早期的数字是布局稳定前的旧值）。
-  - 为什么：手写假 DOM 测不出定位问题（第一版就是：没有游戏 CSS，元素全是裸节点，什么也没复现）。
-  - 验证：`node` 里读同一个按钮在不同时刻的 `y`：**150ms 时 483，1650ms 时 309** —— 差 174px，根因坐实。
-  - 批次：20261027-1706
-
-- [x] [S2] `MenuScreen2D`：签名带上几何；`main.ts` 给所有镜像开 `pollMs` 并在 `document.fonts.ready` 后重量 → `npm run check:fast`
-  - 做了什么：`computeSignature` 加 `getBoundingClientRect()` + `scrollWidth/scrollHeight`；主菜单 `pollMs: 200`、聊天输入行 `pollMs: 250`（原来 0）；主菜单挂载处加 `document.fonts.ready.then(sync)`。
-  - 为什么：几何不在签名里 → 第一帧的旧位置会被永久沿用；而"盒子尺寸没变、内部按钮却动了"的情况签名也抓不到，所以要定期重读兜底。
-  - 验证：`tsc` 干净；`npm run check:fast` 绿；镜像版截图（`26-world-mirror.png`）与 DOM 基准（`26b-world-dom.png`）位置一致。
-  - 批次：20261027-1706
-
-- [x] [S3] `textPanel`：`letter-spacing` 补偿（大标题不再被截成 `Minicra…`）+ 2 条断言 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`readTextRuns` 读 `letter-spacing`，负值按 `-spacing × 字数` 记进 `TextRun.widthSlack`（上限 64）；`drawTextRuns` 把补偿加到 `maxWidth`。
-  - 为什么：`world-logo` 是 48px + 负字距，盒子比 canvas 量出来的字窄，`maxWidth` 一夹就出省略号。
-  - 验证：`tests/ui2d.test.ts` → **73 passed**（新增 2 条：补偿生效、补偿为 0 时行为不变）。
-  - 批次：20261027-1706
 
 
