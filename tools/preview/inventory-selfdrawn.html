@@ -129,7 +129,17 @@
        * `?ext=1`：模拟"与 DOM 合流"——光标由外部提供（只读）。
        * 用来验证"只拉不推"：canvas 上画出来的那一叠就是外部的，而外部不会被写脏。
        */
-      let externalHeld = params.get('ext') === '1' ? { id: 3, count: 5 } : null;
+      const extMode = params.get('ext') ?? '';
+      let externalHeld = extMode === '1' || extMode === 'live' ? { id: 3, count: 5 } : null;
+      /*
+       * `?ext=live`：可写的外部光标（模拟 `InventoryScreen.held` 与自绘面板合流）。
+       * 页面上多两颗按钮：一颗让"外部把东西丢掉"（对应接管模式下按 Q），一颗让我们自己改。
+       * 这两条正是 `cursorDirty` 要保证的：外部改动**不能被我们写回去**。
+       */
+      window.__dropExternal = () => {
+        externalHeld = null;
+      };
+      window.__external = () => (externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null);
 
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
@@ -151,7 +161,14 @@
         onDrop: (stack, count) => {
           window.__dropped.push(`${stack.id}x${count}`);
         },
-        ...(externalHeld !== null ? { externalCursor: { get: () => externalHeld } } : {}),
+        ...(externalHeld !== null
+          ? {
+              externalCursor: {
+                get: () => externalHeld,
+                ...(extMode === 'live' ? { set: (stack) => { externalHeld = stack; } } : {}),
+              },
+            }
+          : {}),
       });
       host.open();
 

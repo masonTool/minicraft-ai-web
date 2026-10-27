@@ -22346,6 +22346,13 @@ async function boot(): Promise<void> {
   mountPanelMirror('#advancements', 58);
   mountPanelMirror('#statistics', 58);
   mountPanelMirror('#server-picker', 58);
+  /*
+   * 死亡界面（`#death`，z 6）与引导卡（`#tutorial`，挂在 `#hud-right` 里）：
+   * 这两块之前也一直是 DOM —— 死亡界面甚至不是"面板"，是一层全屏红色渐晕 + 文字。
+   * 镜像层给 7 / 8，压在它们自己之上；`pointer-events: none` 与"只有按钮可点"的交互都不受影响。
+   */
+  mountPanelMirror('#death', 7);
+  mountPanelMirror('#tutorial', 8);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
   // 主菜单已经铺好，撤掉首屏启动遮罩（那之前一直由它盖着准星那个"加号"）。
   // 必须在 `menu.show()` 之后：菜单是不透明的整屏，先撤会闪一下黑底 + 准星。

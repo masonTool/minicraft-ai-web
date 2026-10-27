@@ -500,6 +500,20 @@ const SHOTS = [
     what: '**世界卡片缩略图**：`style.backgroundImage = url(data:...)` 由镜像贴图（cover 裁切）',
     status: '已迁 · 阶段 3',
   },
+  {
+    file: '44-creative.png',
+    page: 'tools/preview/creative-selfdrawn.html?tab=3&q=石&pick=6',
+    size: [900, 560],
+    what: '**创造物品栏**：12 列 × 34px 网格 + 页签 + 搜索框 + 快捷栏，手上那一叠是"整叠复制"',
+    status: '原型 · 阶段 4',
+  },
+  {
+    file: '44b-creative-tinted.png',
+    page: 'tools/preview/creative-selfdrawn.html?tint=1',
+    size: [900, 560],
+    what: '创造物品栏 + 遮罩（整块面板黄 = 全由 canvas 画）',
+    status: '遮罩 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

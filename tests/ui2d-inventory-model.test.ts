@@ -8,10 +8,16 @@
  * 用的是"数组 + 假物品表"（石头 64 上限、剑 1 上限），完全不碰 DOM/canvas。
  */
 import { describe, expect, it } from 'vitest';
-import { layoutInventoryPanel, splitCountFromDrag } from '../src/ui2d/InventoryPanel2D.ts';
+import {
+  layoutCreativePanel,
+  layoutInventoryPanel,
+  splitCountFromDrag,
+} from '../src/ui2d/InventoryPanel2D.ts';
 import { itemTooltipRect } from '../src/ui2d/itemTooltip.ts';
 import {
   arraySlots,
+  creativeDiscard,
+  creativePick,
   distributeDrag,
   doubleClickGather,
   leftClick,
@@ -534,5 +540,88 @@ describe('进度箭头', () => {
   it('没有结果格就没有箭头区（纯背包不会凭空多一块）', () => {
     const layout = layoutInventoryPanel(0, 0, { mainRows: 3, hotbarRows: 1 });
     expect(layout.groups.progress).toBeNull();
+  });
+});
+
+/**
+ * 创造模式的"无限取用"（`creativePick`）。
+ *
+ * 与生存模式的区别只有一条，但很容易写错：生存是"从格子里拿走"，创造是"照着格子复制一份满叠"。
+ * 如果在这一步复用了 `leftClick`，玩家在创造模式里就会把物品栏越拿越空 —— 而且不会报错，
+ * 只有真去点几下才发现。
+ */
+describe('创造模式取用', () => {
+  const limitOf = (id: number) => (id === 4 ? 1 : 64);
+
+  it('取到的是一整叠，而不是格子里那几个', () => {
+    expect(creativePick({ id: 1, count: 3 }, limitOf)).toEqual({ id: 1, count: 64 });
+  });
+
+  it('不可堆叠的东西只取 1（镐子不能被"复制"成 64 把）', () => {
+    expect(creativePick({ id: 4, count: 1 }, limitOf)).toEqual({ id: 4, count: 1 });
+  });
+
+  it('原格子的其它字段跟着走（耐久、附魔、改名不能在创造模式里丢掉）', () => {
+    // `StackLike` 只保证 `id`/`count`；真实物品还带耐久与名字，这里用交叉类型断言它们被原样带走
+    const source = { id: 4, count: 1, damage: 7, name: '挖挖' };
+    const picked = creativePick(source, limitOf) as typeof source;
+    expect(picked.damage).toBe(7);
+    expect(picked.name).toBe('挖挖');
+    expect(picked.count).toBe(1);
+    expect(picked).not.toBe(source);
+  });
+
+  it('空格子什么都不取', () => {
+    expect(creativePick(null, limitOf)).toBeNull();
+  });
+
+  it('放回物品栏 = 直接消失（物品栏不该被消耗）', () => {
+    expect(creativeDiscard()).toBeNull();
+  });
+});
+
+/**
+ * 创造物品栏的布局（`layoutCreativePanel`）。
+ *
+ * 它和生存背包的差别是**格子更小、列数更多**，而且多了一行页签和一条搜索框；
+ * 这几样任何一处算错，表现都是"格子叠在一起"或"搜索框盖住第一行"。
+ */
+describe('创造物品栏布局', () => {
+  it('每行 12 格、格宽 34、间距 2', () => {
+    const layout = layoutCreativePanel(0, 0, { rows: 2 });
+    expect(layout.grid.length).toBe(24);
+    expect(layout.grid[0]!.w).toBe(34);
+    expect(layout.grid[1]!.x - layout.grid[0]!.x).toBe(36);
+    expect(layout.grid[12]!.y - layout.grid[0]!.y).toBe(36);
+  });
+
+  it('页签等分宽度，且都在面板里', () => {
+    const layout = layoutCreativePanel(0, 0, { tabs: 5 });
+    expect(layout.tabs.length).toBe(5);
+    const widths = layout.tabs.map((tab) => Math.round(tab.w));
+    expect(new Set(widths).size).toBe(1);
+    for (const tab of layout.tabs) {
+      expect(tab.x).toBeGreaterThanOrEqual(layout.panel.x);
+      expect(tab.x + tab.w).toBeLessThanOrEqual(layout.panel.x + layout.panel.w);
+    }
+  });
+
+  it('搜索框在页签下面、网格上面（不重叠）', () => {
+    const layout = layoutCreativePanel(0, 0);
+    const tabsBottom = Math.max(...layout.tabs.map((tab) => tab.y + tab.h));
+    expect(layout.search.y).toBeGreaterThanOrEqual(tabsBottom);
+    const searchBottom = layout.search.y + layout.search.h;
+    expect(Math.min(...layout.grid.map((cell) => cell.y))).toBeGreaterThan(searchBottom);
+  });
+
+  it('底部快捷栏 9 格在网格下面，且整块都装进面板', () => {
+    const layout = layoutCreativePanel(0, 0);
+    expect(layout.hotbar.length).toBe(9);
+    const gridBottom = Math.max(...layout.grid.map((cell) => cell.y + cell.h));
+    expect(Math.min(...layout.hotbar.map((cell) => cell.y))).toBeGreaterThan(gridBottom);
+    for (const cell of [...layout.grid, ...layout.hotbar, ...layout.tabs, layout.search]) {
+      expect(cell.x + cell.w).toBeLessThanOrEqual(layout.panel.x + layout.panel.w + 0.5);
+      expect(cell.y + cell.h).toBeLessThanOrEqual(layout.panel.y + layout.panel.h + 0.5);
+    }
   });
 });

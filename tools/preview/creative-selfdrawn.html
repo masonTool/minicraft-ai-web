@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 创造物品栏（12 列 + 页签 + 搜索框）</title>
+    <!--
+      创造模式物品栏：12 列 34px 的网格 + 一行页签 + 一条搜索框 + 底部快捷栏。
+
+      与生存背包的两个不同点（都在 `ui2d/InventoryPanel2D.ts` 里）：
+       1. 格子更小、列数更多（34px × 12 列）；
+       2. 取用是"照着格子复制一整叠"（`creativePick`），来源不减 —— 生存模式那套 `leftClick`
+          会把物品栏越拿越空。
+
+      用法：
+        npm run dev
+        open 'http://localhost:5173/tools/preview/creative-selfdrawn.html'
+        open 'http://localhost:5173/tools/preview/creative-selfdrawn.html?tab=3&q=石'
+        open 'http://localhost:5173/tools/preview/creative-selfdrawn.html?pick=6'
+    -->
+    <style>
+      html, body { margin: 0; background: #111; }
+      #stage {
+        position: relative; width: 900px; height: 560px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 40;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption"></div></div>
+
+    <script type="module">
+      import {
+        CREATIVE_LAYOUT,
+        Ui2DOverlay,
+        creativePick,
+        drawCreativePanel,
+        layoutCreativePanel,
+      } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tab = Number(params.get('tab') ?? '0') || 0;
+      const query = params.get('q') ?? '';
+      const pickIndex = params.get('pick');
+      const tint = params.get('tint') === '1';
+
+      const TABS = ['建筑方块', '自然', '食物', '工具', '杂项'];
+      const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
+
+      /** 图标画笔：真机是 `drawItemIcon(canvas, atlas, id)`，这里画色块 */
+      const icons = new Map();
+      const iconOf = (itemId) => {
+        const hit = icons.get(itemId);
+        if (hit) return hit;
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = COLORS[(itemId - 1) % COLORS.length];
+        ctx.fillRect(3, 3, 26, 26);
+        ctx.strokeStyle = 'rgba(0,0,0,.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(3, 3, 26, 26);
+        icons.set(itemId, canvas);
+        return canvas;
+      };
+
+      const stage = document.getElementById('stage');
+      const overlay = new Ui2DOverlay(stage);
+      overlay.syncSize();
+
+      const layout = layoutCreativePanel(0, 0, { rows: 5, tabs: TABS.length });
+      const x = Math.round((overlay.width - layout.panel.w) / 2);
+      const y = Math.round((overlay.height - layout.panel.h) / 2);
+      const placed = layoutCreativePanel(x, y, { rows: 5, tabs: TABS.length });
+
+      // 网格里铺 60 件（每格一个 id，方便看"12 列"对不对）
+      const gridItems = placed.grid.map((_, index) => ({
+        icon: iconOf((index % 12) + 1),
+        count: 1 + (index % 8),
+        id: (index % 12) + 1,
+      }));
+      const hotbarItems = placed.hotbar.map((_, index) =>
+        index < 4 ? { icon: iconOf(index + 2), count: 1, id: index + 2 } : null,
+      );
+
+      /** 光标：创造模式下拿起的是"一整叠"（来源不减） */
+      let cursor = null;
+      let cursorX = 0;
+      let cursorY = 0;
+
+      function render() {
+        overlay.clear();
+        const ctx = overlay.context;
+        drawCreativePanel(ctx, placed, {
+          title: '创造模式物品栏',
+          tabs: TABS,
+          activeTab: tab,
+          query,
+          placeholder: '搜索物品',
+          grid: gridItems,
+          hotbar: hotbarItems,
+          hoverIndex: -1,
+        });
+        if (cursor) {
+          const half = CREATIVE_LAYOUT.slot / 2;
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.drawImage(cursor.icon, cursorX - half, cursorY - half, CREATIVE_LAYOUT.slot, CREATIVE_LAYOUT.slot);
+          ctx.restore();
+        }
+        if (tint) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-atop';
+          ctx.fillStyle = 'rgba(255, 214, 64, .42)';
+          ctx.fillRect(0, 0, overlay.width, overlay.height);
+          ctx.restore();
+        }
+      }
+
+      const canvas = overlay.canvas;
+      canvas.style.pointerEvents = 'auto';
+      const local = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
+      canvas.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const p = local(event);
+        cursorX = p.x;
+        cursorY = p.y;
+        const index = placed.grid.findIndex(
+          (cell) => p.x >= cell.x && p.x <= cell.x + cell.w && p.y >= cell.y && p.y <= cell.y + cell.h,
+        );
+        if (index < 0) return;
+        // 创造模式：拿起来就是"一整叠"，格子里的东西不会少
+        cursor = cursor ? null : creativePick(gridItems[index], () => 64);
+        render();
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        const p = local(event);
+        if (!cursor) return;
+        cursorX = p.x;
+        cursorY = p.y;
+        render();
+      });
+      window.addEventListener('resize', () => {
+        overlay.syncSize();
+        render();
+      });
+
+      // `?pick=N`：直接把第 N 格拿在手上（截图用，不用真的点）
+      if (pickIndex !== null) {
+        const item = gridItems[Number(pickIndex)];
+        if (item) {
+          cursor = creativePick(item, () => 64);
+          // 摆在网格右侧那片空白上（别压住页签与搜索框，否则截图看不出那是"手上那一叠"）
+          cursorX = placed.panel.x + placed.panel.w - 34;
+          cursorY = placed.grid[12].y + 60;
+        }
+      }
+
+      render();
+      document.getElementById('caption').textContent =
+        '创造物品栏：12 列 × 34px 网格 + 5 个页签 + 搜索框 + 底部快捷栏 · 点格子拿到"一整叠"（来源不减）' +
+        (tint ? ' · 黄色遮罩' : '');
+    </script>
+  </body>
+</html>

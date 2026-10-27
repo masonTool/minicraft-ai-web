@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-0732 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把待办里的三条清掉（M41 / M43 / M38 第一版）。
+
+- [x] M41 `cursorDirty`：只有我们改过才写回外部光标，否则先拉 —— 否则 `Q` 丢掉的东西下一帧被推回去
+- [x] M43 死亡界面（`#death`，z 7）与引导卡（`#tutorial`，z 8）各挂一个镜像
+- [x] M38 创造物品栏第一版：`CREATIVE_LAYOUT` + `layoutCreativePanel()` + `drawCreativePanel()` + `creativePick()`（无限取用）
+- [x] 预览页 `creative-selfdrawn.html` + 2 张截图；新增 9 条断言（取用 5 + 布局 4）
+
+验证：`test:ui2d-inventory-model` 63/63、`tsc` 干净、`npm run check` exit=0、71 张截图。
+
+
+
 ## 批次 20261028-0240 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：合并 `origin/main` + 把主分支的界面变化重新应用到 canvas。

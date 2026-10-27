@@ -327,6 +327,36 @@ export function swapSlots(slots: SlotAccess, a: number, b: number): boolean {
   return true;
 }
 
+/**
+ * 创造模式的"无限取用"：从物品栏里拿一叠**满的**，而来源不减。
+ *
+ * 与生存模式的区别就在这一点：生存是把东西从一个格子挪到手上（来源会少），
+ * 创造是把这一格当成"模板"（来源永远在）。所以这里**不能复用 `leftClick`** ——
+ * 复用的结果是玩家在创造模式里把物品栏越拿越空。
+ *
+ * @returns 手上应该拿的那一叠（`null` = 空格子，什么都不做）
+ */
+export function creativePick(
+  target: StackLike | null,
+  limitOf: (itemId: number) => number,
+): StackLike | null {
+  if (!target) return null;
+  const limit = Math.max(1, limitOf(target.id));
+  const { count: _ignored, ...rest } = target as StackLike & { count: number };
+  void _ignored;
+  return { ...rest, count: limit };
+}
+
+/**
+ * 创造模式把手上那一叠"放回物品栏"：直接消失（物品栏本来就不该被消耗）。
+ *
+ * 这里刻意只返回 `null` 而不是写进某个格子：放回哪一格是"拾取栏"的事，
+ * 而拾取栏的内容由游戏侧维护（它不等同于玩家背包）。
+ */
+export function creativeDiscard(): null {
+  return null;
+}
+
 /** 数组版的 `SlotAccess`（测试与预览页用；游戏里换成包着 `Inventory` 的适配器） */
 export function arraySlots(stacks: readonly (StackLike | null)[]): SlotAccess & {
   readonly stacks: (StackLike | null)[];

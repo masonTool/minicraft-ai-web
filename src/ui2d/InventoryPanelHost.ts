@@ -101,6 +101,14 @@ export class InventoryPanelHost {
   private layout: InventoryLayout | null = null;
   private readonly cursor: Cursor = { stack: null };
   private hoverIndex = -1;
+  /**
+   * 光标是不是"我们改过、还没推给外部"。
+   *
+   * 为什么需要它：`render()` 原来每帧都 `pushCursor()`，于是**外部把东西拿走之后会被我们写回去**。
+   * 真实症状：接管模式下按 `Q` 丢出整叠（DOM 那边把 `held` 置空），下一次重画又把它推回去 ——
+   * 东西"丢不掉"，而且看起来像按键没生效。
+   */
+  private cursorDirty = false;
   /** 当前悬停提示（`null` = 不显示） */
   private tooltip: { readonly model: TooltipModel; readonly x: number; readonly y: number } | null = null;
   private dragIndices: number[] = [];
@@ -249,6 +257,8 @@ export class InventoryPanelHost {
     this.tooltip = model ? { model, x, y } : null;
 
     this.pullCursor();
+    // 按下/抬起一定可能改光标；移动只在"按着拖"时才可能（右键拖拽每格放一个）
+    if (phase !== 'move' || this.dragButton !== null) this.cursorDirty = true;
     const button = input.button ?? 0;
     const now = input.timeStamp ?? (typeof performance === 'undefined' ? Date.now() : performance.now());
 
@@ -455,6 +465,7 @@ export class InventoryPanelHost {
 
   /** 右键 / Shift 之类的"非拖动"动作（供键盘或外部按钮调用） */
   activate(index: number, button: 0 | 2, shift = false): void {
+    this.cursorDirty = true;
     if (shift && button === 0) {
       quickMove(this.slots, this.options, index, this.targetRange(index));
     } else if (button === 2) {
@@ -477,7 +488,13 @@ export class InventoryPanelHost {
 
   /** 重画（数据变了就调它；本批不做签名缓存 —— 36 格 + 36 次 drawImage 很便宜） */
   render(): void {
-    this.pushCursor();
+    // 脏了才推（免得把外部刚拿走的东西写回去），否则先拉一次（外部可能变了：Q 丢弃、快捷键）
+    if (this.cursorDirty) {
+      this.pushCursor();
+      this.cursorDirty = false;
+    } else {
+      this.pullCursor();
+    }
     const overlay = this.overlay;
     const layout = this.layout;
     if (!overlay || !layout || !this.opened) return;

@@ -203,6 +203,8 @@ export {
   distributeDrag,
   doubleClickGather,
   leftClick,
+  creativeDiscard,
+  creativePick,
   quickMove,
   rightClick,
   swapSlots,
@@ -223,6 +225,13 @@ export {
   InventoryPanelHost,
   type InventoryPanelHostOptions,
 } from './InventoryPanelHost.ts';
+export {
+  CREATIVE_LAYOUT,
+  drawCreativePanel,
+  layoutCreativePanel,
+  type CreativeLayout,
+  type CreativePanelInput,
+} from './InventoryPanel2D.ts';
 export {
   INV_LAYOUT,
   drawFlameBar,

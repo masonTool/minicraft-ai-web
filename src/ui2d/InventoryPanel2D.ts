@@ -58,6 +58,110 @@ export interface SideSlotsSpec {
   readonly offhandGap?: number;
 }
 
+/**
+ * 创造物品栏的排版参数（照抄 `index.html` 的 `.inv-grid.inv-creative`）。
+ *
+ * 与生存背包最大的不同是**格子更小、列数更多**（12 列 34px），而且要额外排
+ * 一行页签和一条搜索框 —— 这两块是创造模式独有的。
+ */
+export const CREATIVE_LAYOUT = {
+  cols: 12,
+  slot: 34,
+  gap: 2,
+  tabsHeight: 30,
+  searchHeight: 24,
+  sectionGap: 10,
+} as const;
+
+export interface CreativeLayout {
+  readonly panel: Rect;
+  readonly titleRect: Rect;
+  /** 分类页签（横向一排，等分面板宽度） */
+  readonly tabs: Rect[];
+  /** 搜索框 */
+  readonly search: Rect;
+  /** 12 列网格（按行铺开） */
+  readonly grid: Rect[];
+  /** 底部快捷栏 9 格（沿用生存背包的 42px 尺寸） */
+  readonly hotbar: Rect[];
+}
+
+/** 算创造物品栏的布局（页签 / 搜索框 / 12 列网格 / 底部快捷栏） */
+export function layoutCreativePanel(
+  x: number,
+  y: number,
+  options: { readonly rows?: number; readonly tabs?: number } = {},
+): CreativeLayout {
+  const rows = Math.max(1, options.rows ?? 5);
+  const tabCount = Math.max(1, options.tabs ?? 5);
+  const step = CREATIVE_LAYOUT.slot + CREATIVE_LAYOUT.gap;
+  const gridWidth = CREATIVE_LAYOUT.cols * CREATIVE_LAYOUT.slot + (CREATIVE_LAYOUT.cols - 1) * CREATIVE_LAYOUT.gap;
+  // 底部快捷栏仍是 42px 九格，决定面板最小宽度
+  const hotbarWidth = INV_LAYOUT.cols * INV_LAYOUT.slot + (INV_LAYOUT.cols - 1) * INV_LAYOUT.gap;
+  const innerWidth = Math.max(gridWidth, hotbarWidth);
+  const gridHeight = rows * CREATIVE_LAYOUT.slot + (rows - 1) * CREATIVE_LAYOUT.gap;
+  const panel: Rect = {
+    x,
+    y,
+    w: innerWidth + INV_LAYOUT.padding * 2,
+    h:
+      INV_LAYOUT.titleHeight +
+      CREATIVE_LAYOUT.tabsHeight +
+      CREATIVE_LAYOUT.searchHeight +
+      CREATIVE_LAYOUT.sectionGap * 2 +
+      gridHeight +
+      INV_LAYOUT.slot +
+      INV_LAYOUT.padding * 2,
+  };
+  const contentX = panel.x + INV_LAYOUT.padding;
+  const titleRect: Rect = {
+    x: contentX,
+    y: panel.y + INV_LAYOUT.padding - 4,
+    w: innerWidth,
+    h: INV_LAYOUT.titleHeight,
+  };
+  // 页签：等分内容宽度
+  const tabsTop = titleRect.y + INV_LAYOUT.titleHeight + 6;
+  const tabWidth = innerWidth / tabCount;
+  const tabs: Rect[] = [];
+  for (let i = 0; i < tabCount; i++) {
+    tabs.push({ x: contentX + tabWidth * i, y: tabsTop, w: tabWidth - 2, h: CREATIVE_LAYOUT.tabsHeight - 6 });
+  }
+  const search: Rect = {
+    x: contentX,
+    y: tabsTop + CREATIVE_LAYOUT.tabsHeight,
+    w: innerWidth,
+    h: CREATIVE_LAYOUT.searchHeight,
+  };
+  // 网格：12 列居中（内容宽度可能比网格宽，因为快捷栏更宽）
+  const gridLeft = contentX + (innerWidth - gridWidth) / 2;
+  const gridTop = search.y + CREATIVE_LAYOUT.searchHeight + CREATIVE_LAYOUT.sectionGap;
+  const grid: Rect[] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < CREATIVE_LAYOUT.cols; col++) {
+      grid.push({
+        x: gridLeft + col * step,
+        y: gridTop + row * step,
+        w: CREATIVE_LAYOUT.slot,
+        h: CREATIVE_LAYOUT.slot,
+      });
+    }
+  }
+  // 底部快捷栏：九格居中
+  const hotbarTop = gridTop + gridHeight + CREATIVE_LAYOUT.sectionGap;
+  const hotbarLeft = contentX + (innerWidth - hotbarWidth) / 2;
+  const hotbar: Rect[] = [];
+  for (let col = 0; col < INV_LAYOUT.cols; col++) {
+    hotbar.push({
+      x: hotbarLeft + col * (INV_LAYOUT.slot + INV_LAYOUT.gap),
+      y: hotbarTop,
+      w: INV_LAYOUT.slot,
+      h: INV_LAYOUT.slot,
+    });
+  }
+  return { panel, titleRect, tabs, search, grid, hotbar };
+}
+
 export interface InventoryLayout {
   readonly panel: Rect;
   readonly titleRect: Rect;
@@ -285,6 +389,138 @@ export function drawSplitHint(ctx: CanvasRenderingContext2D, slot: Rect, count: 
     shadow: false,
   });
   ctx.restore();
+}
+
+/** 画创造物品栏需要的输入（页签、搜索框、格子里放什么） */
+export interface CreativePanelInput {
+  readonly title: string;
+  /** 页签文字（顺序与 `layout.tabs` 一致） */
+  readonly tabs: readonly string[];
+  /** 当前页签下标（-1 = 没有选中） */
+  readonly activeTab: number;
+  /** 搜索框里的文字（为空则显示占位文案） */
+  readonly query: string;
+  readonly placeholder: string;
+  /** 网格里每一格（`null` = 空） */
+  readonly grid: readonly ({ icon: HTMLCanvasElement | null; count: number } | null)[];
+  /** 底部快捷栏 */
+  readonly hotbar: readonly ({ icon: HTMLCanvasElement | null; count: number } | null)[];
+  readonly hoverIndex: number;
+  readonly skin?: InvSlotSkin;
+}
+
+/**
+ * 画创造物品栏：面板 + 标题 + 页签 + 搜索框 + 12 列网格 + 底部快捷栏。
+ *
+ * 与生存背包共用的只有"槽位怎么画"（`drawInvSlot`）；页签和搜索框是创造独有的两块，
+ * 所以单独一个函数，而不是往 `drawInventoryPanel` 里塞一堆 `if (creative)`。
+ */
+export function drawCreativePanel(
+  ctx: CanvasRenderingContext2D,
+  layout: CreativeLayout,
+  input: CreativePanelInput,
+): void {
+  const skin = input.skin ?? INV_SLOT_DEFAULT_SKIN;
+  const { panel, titleRect } = layout;
+  ctx.save();
+  roundRectPath(ctx, panel, INV_LAYOUT.panelRadius);
+  ctx.fillStyle = '#c6c6c6';
+  ctx.fill();
+  ctx.fillStyle = '#373737';
+  ctx.fillRect(panel.x, panel.y, panel.w, 3);
+  ctx.fillRect(panel.x, panel.y, 3, panel.h);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(panel.x, panel.y + panel.h - 3, panel.w, 3);
+  ctx.fillRect(panel.x + panel.w - 3, panel.y, 3, panel.h);
+  ctx.restore();
+
+  drawText(ctx, input.title, titleRect.x, titleRect.y + titleRect.h / 2, {
+    font: uiFont(13),
+    color: '#3f3f3f',
+    baseline: 'middle',
+    shadow: false,
+    maxWidth: titleRect.w,
+  });
+
+  // 页签：选中的那块深一点、字反白（DOM 是 `.inv-creative-tab.active`）
+  layout.tabs.forEach((rect, index) => {
+    const active = index === input.activeTab;
+    ctx.save();
+    roundRectPath(ctx, rect, 2);
+    ctx.fillStyle = active ? '#6f6f6f' : '#8b8b8b';
+    ctx.fill();
+    ctx.strokeStyle = active ? '#3f3f3f' : '#5a5a5a';
+    ctx.lineWidth = 2;
+    roundRectPath(ctx, rect, 2);
+    ctx.stroke();
+    ctx.restore();
+    drawText(ctx, input.tabs[index] ?? '', rect.x + rect.w / 2, rect.y + rect.h / 2, {
+      font: uiFont(11),
+      color: active ? '#ffffff' : '#3f3f3f',
+      align: 'center',
+      baseline: 'middle',
+      shadow: false,
+      maxWidth: rect.w - 6,
+    });
+  });
+
+  // 搜索框：白底 + 深边；没输入时显示占位文案（灰）
+  const search = layout.search;
+  ctx.save();
+  roundRectPath(ctx, search, 2);
+  ctx.fillStyle = '#f2f2f2';
+  ctx.fill();
+  ctx.strokeStyle = '#5a5a5a';
+  ctx.lineWidth = 2;
+  roundRectPath(ctx, search, 2);
+  ctx.stroke();
+  ctx.restore();
+  const query = input.query.length > 0 ? input.query : input.placeholder;
+  drawText(ctx, query, search.x + 6, search.y + search.h / 2, {
+    font: uiFont(11),
+    color: input.query.length > 0 ? '#2b2b2b' : '#8a8a8a',
+    baseline: 'middle',
+    shadow: false,
+    maxWidth: search.w - 12,
+  });
+
+  // 网格（12 列 × N 行）
+  layout.grid.forEach((rect, index) => {
+    const stack = input.grid[index] ?? null;
+    drawInvSlot(
+      ctx,
+      {
+        rect,
+        icon: stack?.icon ?? null,
+        count: stack?.count ?? 0,
+        durability: null,
+        hovered: index === input.hoverIndex,
+        pressed: false,
+        locked: false,
+        held: false,
+      },
+      skin,
+    );
+  });
+
+  // 底部快捷栏（沿用生存背包的槽位尺寸）
+  layout.hotbar.forEach((rect, index) => {
+    const stack = input.hotbar[index] ?? null;
+    drawInvSlot(
+      ctx,
+      {
+        rect,
+        icon: stack?.icon ?? null,
+        count: stack?.count ?? 0,
+        durability: null,
+        hovered: false,
+        pressed: false,
+        locked: false,
+        held: false,
+      },
+      skin,
+    );
+  });
 }
 
 /**
