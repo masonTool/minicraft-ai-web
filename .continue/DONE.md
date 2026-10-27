@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261027-2121 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2121
+
+> 用户 2026-10-27：「继续完成」—— 剩下的大件只有 M26b（背包自绘）。这一批开工第一步：
+> 把"自己排版 + 自己命中 + 自己画"这条路跑通，并做出图标缓存。
+
+- [x] [B1] `src/ui/ItemIconCache.ts`：按 itemId 缓存图标位图（画法由调用方注入）→ `npx vitest run tests/ui2d-iconcache.test.ts`
+  - 做了什么：`get(itemId)` 第一次才画、之后命中；`clear()` 供资源包热重载；构造参数里注入 `painter` 与 `createCanvas`（后者让测试能在 node 里跑）。
+  - 为什么：自绘面板每帧要画 36 个图标，若不缓存就是每帧 36 次图集采样；而按 id 缓存与原版一致（同种物品共用一张图）。
+  - 验证：`tests/ui2d-iconcache.test.ts` **3 passed**（同 id 只画一次、异 id 各一张、clear 后重画）。
+  - 批次：20261027-2121
+
+- [x] [B2] `src/ui2d/InventoryPanelHost.ts`：自绘宿主（布局/命中/交互/绘制/光标叠）+ 预览页 → 截图
+  - 做了什么：复用 `layoutInventoryPanel` / `slotIndexAt` / `drawInventoryPanel`；交互走 `leftClick` / `rightClick` / `quickMove` / `distributeDrag`；数据直接吃 `SlotAccess`；预览页里整页没有背包 DOM，只有一块 canvas（自己接 pointer）。
+  - 为什么：这是 M26b 的地基 —— 镜像依赖 DOM 布局，这一步证明"不依赖 DOM 也能排版、命中、画"。
+  - 验证：截图 `32-inventory-selfdrawn.png`（面板 + 图标 + 数量）与 `32b`（手上那一叠跟随指针）；`tsc` 干净。
+  - 批次：20261027-2121
+
+- [x] [B3] 踩到的细节：抬起事件也要带真实坐标（否则"手上那一叠"被画到左上角）；`Inventory` 不需要适配器（结构上就是 `SlotAccess`）
+  - 做了什么：修预览页的 `pointerup` 传坐标；把"不需要适配器"写进 §5.34。
+  - 为什么：这两条都是"看起来能跑、但结果是错的"的典型；尤其坐标那条，只有截图能看出来。
+  - 验证：`32b` 里那一叠正确地跟着指针；`tsc` 干净。
+  - 批次：20261027-2121
+
+- [x] [B4] 文档：`notes/canvas-ui.md` §5.34（自绘第一条路 + 两个细节 + "还没做"表）、决策 D46、`TASKS` 的 M26b 改 `[~]` → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"镜像依赖 DOM、自绘不依赖"，以及剩下三件事（接进游戏 / 19 种工作站布局 / 长按 UI）。
+  - 为什么：M26b 是"实现方式升级"而不是"功能缺口"，边界写清楚才不会让人以为界面还缺东西。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2121
+
+
 ## 批次 20261027-2114 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -253,35 +289,5 @@
   - 为什么：M35 只做了一半（不能拖），如果不写清楚，下一批会以为它已完成。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
   - 批次：20261027-1922
-
-
-## 批次 20261027-1739 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1739
-
-> 用户 2026-10-27：「背包左右两边的按钮（左：分类、仓库；右：人物、成就、配方）也还是 DOM」。
-> 根因：镜像根取的是 `.inv-panel`，而立栏挂在 `.inv-shell` 上、在 panel **外面**。
-
-- [x] [V1] `src/main.ts`：背包镜像根 `.inv-panel` → `.inv-shell`（带 `.inv-panel` 兜底）→ `npm run check:fast`
-  - 做了什么：`syncInventory2d()` 里先找 `#inventory-screen .inv-shell`、找不到再退回 `.inv-panel`。
-  - 为什么：`#inventory-screen > .inv-shell > [ 左立栏 | .inv-panel | 右立栏 ]` —— 只镜像 panel 就会"中间 canvas、两侧还是 DOM"，一屏两种渲染。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿；截图里左右立栏（分类/仓库 · 人物/成就/配方）都由 canvas 画出。
-  - 批次：20261027-1739
-
-- [x] [V2] 预览页补左右立栏 + 2 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`inventory-mirror.html` 外面套 `.inv-shell`，左右各放立栏按钮，镜像根同步改成 `.inv-shell`；`shoot-all` 累计 51 张。
-  - 为什么：立栏的选中态与抽屉展开全靠 DOM class 变化，镜像自动跟上——但这一点必须有图证明，不能只写在注释里。
-  - 验证：截图 `27-inventory-rails.png` / `27b-…-tinted.png`：面板 + 两侧立栏都在 canvas 上，遮罩版整片黄。
-  - 批次：20261027-1739
-
-- [x] [V3] 文档：`notes/canvas-ui.md` §5.25（"接手整页前先看清根是哪个节点"）、`TASKS.md` 的 M32 标完成 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.25 记下 DOM 层级与"差一层就漏一整块"的教训；M32 从待办移到已完成，进度口径与差异台账同步。
-  - 为什么：这个错很隐蔽 —— 漏掉的部分**看着正常**（因为它还是 DOM），只有开遮罩才看得出来。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1739
 
 
