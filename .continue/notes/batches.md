@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-1654 | 2026-10-27 | 界面与音频 | —（阶段 4 修复） | 3 条：① 用户报"点分类后物品平铺出弹窗"——根因是镜像不知道 `overflow`；② `textPanel` 新增 `makeClipQuery`（祖先 padding-box 求交 + 缓存）/`outsideClip`/`paintClipped`，三个读取函数给记录带 `clip` 并跳过框外项，三个绘制函数按 `clip` 裁剪；③ 预览页 `?creative=1`（96 格 / 150px 滚动区）复现并验证。验证：`test:ui2d` **71/71**（+3 裁剪求交）、`tsc` 干净、`check` exit=0、47 张截图 |
 | 20261027-1650 | 2026-10-27 | 界面与音频 | —（阶段 3 收口） | 3 条：① `mountMultiplayerMirror()` —— `#multiplayer-screen` 是另一棵树（z 60），单开镜像（65）、`pollMs: 200`；② 面板里全是 `<input>`：值由镜像画、光标按 `selectionStart` 画、输入仍归 DOM；③ 预览页 + 2 张截图。验证：`tsc` 干净、`check` exit=0、`build:fast` 出包、46 张截图。**阶段 3 六块界面至此全部上 canvas**。⚠️ 游戏内未实测 |
 | 20261027-1618 | 2026-10-27 | 界面与音频 | —（阶段 4 / M26 第一步） | 4 条：① `textPanel` 新增 `readCanvasBlits`/`drawCanvasBlits`（物品图标是 DOM 里已画好的 `<canvas>`，不搬就只剩空槽位）；② `MenuScreen2D` 新增 `pollMs` 兜底 —— 签名只看文字/值/滚动，**"只换图不换字"抓不到**（石头与剑对调时数量都不显示）；③ `main.ts` 背包改整页镜像（zIndex 12、`pollMs: 120`），`#inv-held` 单独藏；④ 预览页 `inventory-mirror.html` + 2 张截图。验证：`test:ui2d` **68/68**（+2 位图搬运）、`tsc` 干净、`check` exit=0、`build:fast` 出包、44 张截图。⚠️ 游戏内未实测；第二步（自绘替换）见 M26b |
 | 20261027-1548 | 2026-10-27 | 界面与音频 | —（阶段 4 / M25） | 3 条：① `inventoryModel` 补 `rightDragDistribute`（右键拖拽每格一个）、`doubleClickGather`（双击收集）、`splitTake`（长按取数量），断言 19 → **31**；② 对照页接上双击/右键拖拽/长按；③ 用**像素探针**验收 canvas 真的重画（点第 0 格后该格中心 `(139,90,43)` → `(139,139,139)`，DOM 侧同步变空）。另把"背包完全复原"拆成 M25~M31 写进 `TASKS.md`。验证：`test:ui2d-inventory-model` **31/31**、`tsc` 干净、`check` exit=0、`build:fast` 出包、42 张截图。⚠️ 仍未接进游戏（M26） |

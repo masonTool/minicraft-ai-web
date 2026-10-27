@@ -9,6 +9,37 @@
 
 ---
 
+## 批次 20261027-1654 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1654
+
+> 用户 2026-10-27：「点左侧分类按钮时，会把所有内容平铺出来、伸出弹窗；应该收在弹框内、物品滚动显示」。
+> 根因是**镜像不知道 `overflow`**：`readTextRuns`/`readTextBlocks`/`readCanvasBlits` 全按
+> `getBoundingClientRect()` 画，而 DOM 是靠 `overflow: hidden/auto` 裁的。
+
+- [x] [R1] `src/ui2d/textPanel.ts`：裁剪 —— `makeClipQuery`（祖先 padding-box 求交 + 缓存）、记录带 `clip`、裁空的跳过、绘制 `paintClipped` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：新增 `intersectRect` / `makeClipQuery` / `outsideClip` / `paintClipped`；三个读取函数给 `TextRun`/`TextBlock`/`CanvasBlit` 带上 `clip` 并跳过完全在框外的；三个绘制函数按 `clip` 做 `save→clip→paint→restore`。
+  - 为什么：`overflow` 是 DOM 才有的语义，canvas 不裁就会把滚出去、溢出面板的内容全画出来（用户报的正是这个）。
+  - 验证：`tests/ui2d.test.ts` → **71 passed**（新增 3 条：相交取公共部分、包含取小的、只贴边返回 null）。
+  - 批次：20261027-1654
+
+- [x] [R2] 预览页复现 + 修复验证：`inventory-mirror.html?creative=1&scroll=80`（96 项 / 150px 高滚动区）→ 截图
+  - 做了什么：预览页加"创造物品栏"模式：12 列 96 格塞进 `max-height: 150px; overflow-y: auto` 的网格并滚 80px，网格外面还有一行翻页条；截图 `25-inventory-scroll.png`。
+  - 为什么：这个 bug 只在"内容比容器高"的时候出现，普通背包（27 格）复现不了。
+  - 验证：截图里只画出滚动区里看得见的 4 行（最后一行在容器边缘被裁开），翻页条留在面板内，没有任何东西伸出面板。
+  - 批次：20261027-1654
+
+- [x] [R3] 文档：`notes/canvas-ui.md` §5.22、决策 D34 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.22 写清根因、修法三段（求交 / 跳过 / 裁剪绘制）与"滚动仍归 DOM"的边界；决策 D34 记下"镜像必须复刻 overflow 语义"。
+  - 为什么：这是**第二条**"DOM 有、canvas 没有"的语义（第一条是位图），不记下来还会再踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1654
+
+
 ## 批次 20261027-1650 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -241,36 +272,5 @@
   - 为什么：那个签名坑**只在真人敲字时才出现**（截图、静态页面都正常），不写清楚下一个人会当成"输入框不刷新"的玄学。
   - 验证：`node .continue/hooks/check.mjs --fast` 绿。
   - 批次：20261027-1354
-
-
-## 批次 20261027-1345 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1345
-
-> 用户 2026-10-27：「去完成」—— 做上一轮说的**输入法定型**。
-> 这是新建世界、多人面板、聊天三条线共同的前置件：canvas 自己收不到输入法组合态，
-> 唯一正路是"屏幕外放一个看不见但可聚焦的 `<input>` 收字，canvas 只画"。
-
-- [x] [H1] `src/ui2d/textInput.ts`：`CanvasTextInput`（隐藏 input 收字 + 画光标/选区/组合态下划线）+ 一组纯几何/编辑函数 → `npx vitest run tests/ui2d-textinput.test.ts`
-  - 做了什么：`textInput.ts`（约 420 行）—— 隐藏 `<input>`（`opacity: 0` + 1×1 + 固定视口内 + `pointer-events: none`）承接输入；`metricsFor` / `caretXOf` / `clampCaret` / `applyInsert` / `backspaceAt`（按码点）/ `visibleSlice`（超宽滚动窗口）/ `rangeRect` / `caretRect` / `caretBlinkOn`；`CanvasTextInput` 负责 `open/close/focus/render/dispose`，Enter 提交、Esc 取消（两者都先看 `isComposing`）。
-  - 为什么：canvas 没有输入框，也收不到组合态。三条约束见 §5.14 —— 尤其"不能用 `display: none`"（拿不到焦点、移动端不弹键盘）和"组合态靠事件不靠 value"（拼音阶段 `value` 里已经有字母了）。
-  - 验证：`npx vitest run tests/ui2d-textinput.test.ts` → **18 passed**；`tsc` 干净。
-  - 批次：20261027-1345
-
-- [x] [H2] 预览页 `tools/preview/textinput.html`：能**真的打字**（含中文输入法）、可预填内容与选区；两张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：一页"新建世界"面板，两块 `CanvasTextInput`（世界名称 / 种子），点一下就能打字；`?value=我的世界&sel=1,3` 预填并选中一段（截图用），`?tint=1` 加遮罩。`shoot-all` 加 2 张（累计 36 张）。
-  - 为什么：这一层的正确性一半只能靠"真的敲一遍"——组合态下划线、光标闪烁、选区宽度都只有在动起来时才看得出问题；截图至少能把"中文 + 选区"这一幕定住。
-  - 验证：`node tools/preview/shoot-all.mjs` 36 张全出；截图看过：`18b` 里"我的世界"四个字、第 2~3 个字上有蓝色选区、种子框是未聚焦空框 + 占位提示。
-  - 批次：20261027-1345
-
-- [x] [H3] 文档：`notes/canvas-ui.md` §5.14（三条约束 + 未接线的边界）、决策 D26 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.14 把三条约束做成表格（每条都写"为什么"），并明确写了**还没接进游戏**；决策 D26 记下"为什么用隐藏 input 而不是自己实现键盘"。
-  - 为什么：这一层最容易被后来的人"简化"——把 `opacity: 0` 改成 `display: none`、或者干脆用 `value` 判组合态。两种改法在桌面 Chrome 上**都能跑**，只在移动端输入法下坏掉，不写清楚就会被改回去。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1345
 
 

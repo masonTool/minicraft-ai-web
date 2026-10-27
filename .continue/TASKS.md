@@ -6023,6 +6023,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1650 · **多人面板整页镜像（3 条，阶段 3 收口）**：`#multiplayer-screen` 是**独立的一棵树**（z-index 60），主菜单镜像（45）盖不到，所以单开一个 `MenuScreen2D`（z-index 65、`pollMs: 200` 兜住"连接中/房间不存在"这类自己变的状态行）；面板里全是 `<input>`（服务器 / 房间号 / 口令 / 昵称）——**值由 `readTextRuns` 读 `input.value` 画、光标由 `drawFieldCaret` 按 `selectionStart` 画**，输入本身仍归 DOM（输入法、粘贴、选中一行未改）。预览页 `tools/preview/multiplayer-mirror.html` + 2 张截图。验证：`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、46 张截图。⚠️ 游戏内未实测（dev 缺 `core.bin`）。至此**阶段 3 的六块界面全部上 canvas**：暂停菜单 / 设置子页 / 主菜单 / 世界列表 / 新建世界 / 聊天输入行 / 多人面板。详见 `notes/canvas-ui.md` §5.21 与决策 D33。
 
+- [x] 批次 20261027-1654 · **镜像补上 overflow 裁剪（3 条）**：用户报「点左侧分类按钮后所有物品平铺、伸出弹窗」，根因是镜像只按 `getBoundingClientRect()` 画、不知道 `overflow`（`.inv-grid.inv-creative` 是 `max-height: 46vh` + `overflow-y: auto`，滚出去的 96 格全被画到面板外）。`textPanel.ts` 新增 `intersectRect` / `makeClipQuery`（从元素往上走到 root，把每个会裁剪祖先的 **padding-box**（`clientLeft/Top/Width/Height`，天然排除边框与滚动条）求交并缓存）/ `outsideClip` / `paintClipped`；三个读取函数（`readTextRuns`/`readTextBlocks`/`readCanvasBlits`）给每条记录带 `clip` 并**跳过完全在框外的**，三个绘制函数按 `clip` 做 `save→clip→paint→restore`。预览页 `inventory-mirror.html?creative=1&scroll=80`（12 列 96 格塞进 150px 高滚动区、外面留一行翻页条）+ 截图 `25-inventory-scroll.png`。验证：`test:ui2d` **71/71**（新增 3 条裁剪求交）、`tsc` 干净、`npm run check` exit=0、47 张截图。⚠️ 滚动本身仍由 DOM 处理（覆盖层 `pointer-events: none`，滚轮/触摸照旧落到下面），canvas 只画看得见的部分。详见 `notes/canvas-ui.md` §5.22 与决策 D34。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6103,7 +6105,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（246 条，不是差异，但同样"集中查"更好）
+### 实现注意（247 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6352,6 +6354,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1548 · **背包交互规则补齐（M25）**：`ui2d/inventoryModel.ts` 新增三个纯函数 —— `rightDragDistribute`（右键拖拽每格放一个，重复经过同一格只放一次）、`doubleClickGather`（双击收集：先拿起那一格，再把范围内同类一格一格并到堆叠上限；没凑到任何东西时由调用方退化成 `quickMove`）、`splitTake`（长按分堆取指定数量，光标上有异类时拒绝）。对照页 … |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1618 · **背包整页镜像（4 条，M26 第一步）**：`?ui2d=1` 时 `.inv-panel` 整块交给 `MenuScreen2D`（`opacity: 0` 让位像素），canvas 重画面板底/3px 斜面/槽位/**物品图标位图**/数量/耐久/标题，拖拽分配、长按分堆、连发、悬停提示**一行未改**，19 种工作站一次全覆盖。为此给镜像补了 `readCanvasBlits()`/`drawCanvasBlits(… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1650 · **多人面板整页镜像（3 条，阶段 3 收口）**：`#multiplayer-screen` 是**独立的一棵树**（z-index 60），主菜单镜像（45）盖不到，所以单开一个 `MenuScreen2D`（z-index 65、`pollMs: 200` 兜住"连接中/房间不存在"这类自己变的状态行）；面板里全是 `<input>`（服务器 / 房间号 / 口令 / 昵称）——**值由 `readTextRuns` 读… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1654 · **镜像补上 overflow 裁剪（3 条）**：用户报「点左侧分类按钮后所有物品平铺、伸出弹窗」，根因是镜像只按 `getBoundingClientRect()` 画、不知道 `overflow`（`.inv-grid.inv-creative` 是 `max-height: 46vh` + `overflow-y: auto`，滚出去的 96 格全被画到面板外）。`textPanel.ts` 新增 `intersect… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
