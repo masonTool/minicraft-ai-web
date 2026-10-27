@@ -4317,6 +4317,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L25 **「需要完整版」「修改端口」标题改白**（用户 2026-10-27）。
+  - 这两个弹层挂在 `#multiplayer-screen` 下（不在 `.mp-panel` 里），拿不到面板的
+    `--mc-text-light`，于是继承了偏暗的默认色。给 `.mp-full-title` / `.mp-port-title`
+    显式设 `color: #fff`。
+  - 验证：computed color 均为 `rgb(255, 255, 255)`。
 - [x] L24 **手机端输入框不再自动弹键盘**（用户 2026-10-27）。
   - 在 `focusin` 里判断"这次聚焦是不是用户点出来的"：真点击一定先有
     `pointerdown`/`touchstart`（window 捕获阶段记时间），程序调用的 `focus()` 没有。
