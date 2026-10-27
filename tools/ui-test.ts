@@ -3236,8 +3236,18 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   check(
     '新建世界表单：标签与输入框同一行（窄屏也不再拆两行）',
     !css.includes('.world-row .world-input { grid-column: 1 / -1; }') &&
-      css.includes('.world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px;') &&
-      css.includes('.world-row > span {'),
+      /\.world-row \{[^}]*grid-template-columns: 64px minmax\(0, 1fr\)/.test(css) &&
+      css.includes('.world-row > span:first-child {'),
+  );
+  /*
+   * 2026-10-27 第二版：以前固定三列（第三列 44px 只有"重新掷色子"用得上），
+   * 其余行空着一格 → 输入框右边缘比地址行短一截。现在按"有没有尾巴"分三档，
+   * 地址行单独五列，右边缘一律对齐。
+   */
+  check(
+    '地址行五列（标签/地址/`:`/端口/选择），其余行不留空列',
+    /\.world-row\.world-row-address \{[^}]*grid-template-columns: 64px minmax\(0, 1fr\) auto 62px auto/.test(css) &&
+      !/grid-template-columns: 64px minmax\(0, 1fr\) 44px/.test(css),
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
@@ -6441,12 +6451,17 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
       pickerSrc.includes('this.confirmButton.disabled = true;') &&
       pickerSrc.includes("t('server.confirm')"),
   );
-  // 用户 2026-10-27：点「选择」弹出浮窗，且是**贴着按钮的小卡片**，不是全屏遮罩
+  /*
+   * 用户 2026-10-27 第二版："层级太高、弹窗上面在弹窗" —— 「选择」不再贴按钮弹小浮窗，
+   * 改成**与主面板同宽同位置的二级页面**（左上「‹ 返回」、标题居中）：
+   * 切换时是翻页，而不是套娃。断言跟着改口径。
+   */
   check(
-    '「选择」打开浮窗并贴按钮定位（不是全屏遮罩卡片）',
-    pickerSrc.includes('open(anchor: HTMLElement): void') &&
-      pickerSrc.includes('anchor.getBoundingClientRect()') &&
-      /\.server-picker-panel \{[\s\S]{0,120}position: fixed; width: min\(340px, 92vw\)/.test(
+    '「选择」是二级页面（返回按钮 + 与主面板同宽），不再叠小浮窗',
+    pickerSrc.includes('open(): void') &&
+      pickerSrc.includes("back.className = 'server-picker-back'") &&
+      !pickerSrc.includes('getBoundingClientRect()') &&
+      /\.server-picker-panel \{[\s\S]{0,200}width: min\(92vw, var\(--modal-w\)\)/.test(
         htmlSrc2.replace(/\s+/g, ' '),
       ),
   );

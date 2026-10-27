@@ -144,6 +144,8 @@ export class MultiplayerScreen {
     const colon = document.createElement('span');
     colon.className = 'mp-colon';
     colon.textContent = ':';
+    // 地址行用 grid（标签/地址/`:`/端口/选择），右边缘才能和下面三行对齐
+    urlRow.classList.add('mp-row-address');
     urlRow.append(
       this.urlInput,
       colon,

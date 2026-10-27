@@ -470,10 +470,12 @@ export class WorldScreen {
     name.textContent = label;
     row.append(name, control);
     if (Array.isArray(extra)) {
-      // 多尾巴（地址行的 `:` + 端口 + 选择）用 flex 版式：那个 3 列 grid 放不下 5 个元素
-      row.classList.add('world-row-inline');
+      // 地址行：标签 / 地址 / `:` / 端口 / 选择 五格，列宽见 .world-row-address
+      row.classList.add('world-row-address');
       row.append(...extra);
     } else if (extra) {
+      // 单个尾巴（种子的重新掷色子）：三列
+      row.classList.add('world-row-inline');
       row.append(extra);
     }
     return row;

@@ -94,7 +94,7 @@
         --ctl-pad-x: 9px;         /* 控件左右内边距 */
         --modal-w: 460px;         /* 对话框面板宽度（上限，窄屏按 92vw 收） */
         --modal-pad: 12px 14px;   /* 对话框/浮窗的内边距 */
-        --modal-bg: rgba(22, 22, 22, .97);
+        --modal-bg: #2b2b2b;
         --modal-close: 28px;      /* 关闭按钮：正方形，钉在右上角 */
 
         /* ---- 暂停/设置面板的**固定尺寸**（批次 110） ----
@@ -691,15 +691,29 @@
          现在**任何宽度都保持"标签 + 输入框同一行"**，靠缩字号/内边距来适配窄屏。 */
       .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px 12px; align-content: start; }
       .world-new > .world-primary { grid-column: 1 / -1; }
-      .world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; }
-      /* 地址行是 5 个元素（标签 / 地址 / `:` / 端口 / 选择），3 列 grid 放不下 → 改 flex。
-         版式对齐设计图：地址吃掉剩余宽度，端口固定窄格，选择是文字按钮。 */
-      .world-row.world-row-inline { display: flex; align-items: center; gap: 6px; }
-      .world-row-inline > span:first-child { flex: 0 0 64px; text-align: right; }
-      .world-row-inline > input:first-of-type { flex: 1 1 auto; min-width: 0; }
-      .world-row-inline input.mp-port-input { flex: 0 0 62px; text-align: center; font-variant-numeric: tabular-nums; }
-      .world-row-inline .world-pick { flex: 0 0 auto; width: auto; padding: 6px 8px; font-size: 12px; }
-      .world-row-inline .mp-colon { flex: 0 0 auto; color: #cfcfcf; }
+      /*
+       * 世界表单的行（2026-10-27 第二版）
+       *
+       * 以前固定的三列 `64 / 1fr / 44`：第三列只有「种子」那行的重新掷色子用得上，
+       * 其余行空着一格 → 输入框右边缘比地址行短 44px，整片表单看起来参差。
+       * 现在按"这一行有没有尾巴"分三档，列数由类名决定，右边缘一律对齐：
+       *   .world-row           两列（标签 + 控件）
+       *   .world-row-inline    三列（标签 + 控件 + 一个尾巴，如重新掷色子）
+       *   .world-row-address   五列（标签 + 地址 + `:` + 端口 + 选择）
+       */
+      .world-row {
+        display: grid; grid-template-columns: 64px minmax(0, 1fr);
+        align-items: center; gap: 6px; min-width: 0;
+      }
+      .world-row.world-row-inline { grid-template-columns: 64px minmax(0, 1fr) auto; }
+      .world-row.world-row-address {
+        grid-template-columns: 64px minmax(0, 1fr) auto 62px auto;
+      }
+      .world-row > span:first-child { text-align: right; }
+      .world-row input { min-width: 0; width: 100%; }
+      .world-row input.mp-port-input { text-align: center; font-variant-numeric: tabular-nums; }
+      .world-row .world-pick { width: 100%; padding: 0 6px; }
+      .world-row .mp-colon { color: #cfcfcf; }
       /* 「选择服务器」的引子（用户 2026-10-26）：挂在地址行右侧那一列（44px）。
          用 ▾ 而不是文字——六种语言的"选择"长度差得多，44px 里只有图标不会溢出。 */
       .world-pick { padding: 5px 0; width: 100%; text-align: center; font-size: 12px; line-height: 1; }
@@ -786,10 +800,14 @@
       .world-modal {
         position: fixed; inset: 0; z-index: 46;
         display: flex; align-items: center; justify-content: center;
-        padding: 12px; background: rgba(0, 0, 0, .58);
+        padding: 12px;
+        background:
+          radial-gradient(ellipse 62% 46% at 50% 46%, rgba(118, 156, 112, .20), transparent 72%),
+          radial-gradient(ellipse 130% 96% at 50% -12%, rgba(0, 0, 0, .55), transparent 64%),
+          var(--mc-menu-bg);
       }
       .world-modal-panel {
-        width: min(92vw, 440px); max-height: min(90dvh, 520px);
+        width: min(92vw, var(--modal-w)); max-height: min(90dvh, 560px);
         overflow-y: auto; overscroll-behavior: contain;
         padding: 12px 14px;
         background: rgba(22, 22, 22, .97); color: var(--mc-text-light);
@@ -2110,12 +2128,6 @@
         font-size: 12px;
       }
 
-      /* 对话框背后那层也轻微虚化：层次靠"暗 + 糊"，不靠再叠一层边框 */
-      #multiplayer-screen,
-      .world-modal {
-        backdrop-filter: blur(2px);
-        -webkit-backdrop-filter: blur(2px);
-      }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
@@ -2145,12 +2157,17 @@
          手机横屏是本项目的主场景（高度只有 360~430），所以面板**矮而宽**：
          两行输入横排（标签定宽 + 输入框吃掉剩余宽度）、一行状态、一行按钮。
          刻意不做大厅：没有房间列表，能把地址填进去连上就够了。 */
+      /* 全屏页（2026-10-27 第二版）：不透明，底层世界列表完全不再透过来。
+         用户原话"层级过高、弹窗上又弹窗"——根治办法是让每一层都是**页面**，
+         层次靠明度与光晕表达，而不是靠叠半透明遮罩。 */
       #multiplayer-screen {
         position: fixed; inset: 0; z-index: 60;
         display: flex; align-items: center; justify-content: center;
-        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
-          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
-        background: rgba(0, 0, 0, .55);
+        padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+        background:
+          radial-gradient(ellipse 62% 46% at 50% 46%, rgba(118, 156, 112, .20), transparent 72%),
+          radial-gradient(ellipse 130% 96% at 50% -12%, rgba(0, 0, 0, .55), transparent 64%),
+          var(--mc-menu-bg);
       }
       #multiplayer-screen.hidden { display: none; }
       /* 单列卡片（2026-10-27 按设计图重排）：居中标题 + 四行表单 + 红字错误 + 通栏按钮。
@@ -2168,7 +2185,9 @@
       /* 标题居中、✕ 钉在右上角（设计图第一行就是这样） */
       .mp-head {
         position: relative; display: flex; align-items: center; justify-content: center;
-        min-height: 26px;
+        min-height: var(--modal-close);
+        padding-bottom: 10px;
+        border-bottom: 2px solid rgba(255, 255, 255, .1);
       }
       .mp-title { font-size: 16px; letter-spacing: 1px; }
       .mp-close {
@@ -2187,6 +2206,17 @@
         padding: 6px 8px; border: 2px solid; border-color: var(--pixel-bevel-dark);
         color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
       }
+      /* 地址行（2026-10-27 第二版）：标签 / 地址 / `:` / 端口 / 选择 五格用 grid 定宽，
+         地址吃掉剩余宽度 → 右边缘与下面三行的输入框**严格对齐**。
+         以前用 flex，地址框宽多少取决于内容，那一行看起来永远是"参差的"。 */
+      .mp-row.mp-row-address {
+        display: grid;
+        grid-template-columns: 5em minmax(0, 1fr) auto 4.6em auto;
+        gap: 6px;
+        align-items: center;
+      }
+      .mp-row.mp-row-address > input { width: 100%; min-width: 0; }
+      .mp-row.mp-row-address > .mp-pick { padding: 0 10px; }
       /* 地址与端口之间的冒号 */
       .mp-colon { flex: 0 0 auto; color: #cfcfcf; }
       /* 端口：窄一格、数字等宽居中（可编辑，默认 8887） */
@@ -2200,21 +2230,49 @@
         text-decoration: underline; cursor: pointer;
       }
       /* 「找房间」小按钮：跟在地址后面，不占一整行（横屏高度紧张） */
-      /* ---- 「选择房间 / 选择服务器」浮窗（2026-10-27 按设计图）
-         贴着「选择」按钮弹出的**小卡片**，不是全屏遮罩：外层透明，只负责接"点外面关闭"，
-         卡片用 fixed 定位、坐标由 JS 算（右边缘对齐按钮、下方优先、放不下就翻到上方）。 */
-      .server-picker { position: fixed; inset: 0; z-index: 70; }
+      /* ---- 「选择房间 / 选择服务器」二级页面（2026-10-27 第二版）
+         用户说"层级太高、弹窗上又弹窗"：这一层于是改成**与联机面板同宽同位置的页面**，
+         左上「‹ 返回」、标题居中、副标题一行小字。切换时看起来是翻页，不是套娃。
+         外层遮罩同步加深 + 虚化，把下层彻底压成背景。 */
+      .server-picker {
+        position: fixed; inset: 0; z-index: 70;
+        display: flex; align-items: center; justify-content: center;
+        padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+        /* 比联机页**再深一档**：靠明度差表达"进得更深一层" */
+        background:
+          radial-gradient(ellipse 62% 46% at 50% 46%, rgba(104, 138, 100, .14), transparent 72%),
+          radial-gradient(ellipse 130% 96% at 50% -12%, rgba(0, 0, 0, .6), transparent 64%),
+          #1b1b1b;
+      }
       .server-picker.hidden { display: none; }
       .server-picker-panel {
-        position: fixed; width: min(340px, 92vw); max-height: min(76vh, 460px);
+        box-sizing: border-box;
+        width: min(92vw, var(--modal-w));
+        max-height: min(86vh, 620px);
         display: flex; flex-direction: column; gap: 8px;
-        padding: 10px 12px;
-        background: rgba(22, 22, 22, .98); color: var(--mc-text-light);
+        padding: var(--modal-pad);
+        background: var(--modal-bg); color: var(--mc-text-light);
         border: 3px solid; border-color: var(--pixel-bevel-dark);
         box-shadow: var(--panel-shadow);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
-      .server-picker-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .server-picker-head {
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid rgba(255, 255, 255, .14);
+      }
+      /* 返回：与两个对话框的 ✕ 同尺寸、同位置（只是换成左箭头） */
+      .server-picker-back {
+        position: absolute; left: 0; top: 0;
+        box-sizing: border-box;
+        width: var(--modal-close); height: var(--modal-close);
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; font: inherit; font-size: 19px; line-height: 1;
+        color: var(--mc-text-light); background: rgba(0, 0, 0, .35);
+        border: 2px solid; border-color: var(--pixel-bevel-dark); cursor: pointer;
+      }
+      .server-picker-back:hover { background: rgba(255, 255, 255, .1); }
       .server-picker-title { font-size: 16px; letter-spacing: 1px; }
       .server-picker-sub { font-size: 11px; color: #a8a8a8; }
       /* 正文自己滚：标题与底部按钮固定，列表再长也不会把「确定」顶出屏幕 */
@@ -2352,7 +2410,9 @@
         background: rgba(0, 0, 0, .25); white-space: nowrap;
       }
       .mp-rooms-empty { font-size: 11px; opacity: .75; padding: 2px 4px; }
-      .mp-status { min-height: 1.2em; font-size: 12px; }
+      /* 空状态（idle 且没错误）整行撤掉：不占位、不留白，按钮紧跟表单 */
+      .mp-status { font-size: 12px; }
+      .mp-status:empty { display: none; }
       .mp-status[data-state='connected'] { color: #8ee08e; }
       .mp-status[data-state='error'] { color: #ff9a9a; }
       /* 四颗按钮（开房 / 加入 / 断开 / 关闭）：窄屏放不下就折成两行，
@@ -5357,7 +5417,9 @@
         /* 新建世界表单（批次 184）：**不再把标签和输入框拆成两行**——
            那样每个字段占两行，横屏手机上整张表单要滚才能看全。
            窄屏只把标签列收窄、字号压一档，保持"标签 + 输入框"同一行。 */
-        .world-row { grid-template-columns: 56px minmax(0, 1fr) 40px; gap: 5px; }
+        .world-row { grid-template-columns: 56px minmax(0, 1fr); gap: 5px; }
+        .world-row.world-row-inline { grid-template-columns: 56px minmax(0, 1fr) auto; }
+        .world-row.world-row-address { grid-template-columns: 56px minmax(0, 1fr) auto 56px auto; }
         .world-row > span { font-size: 11px; }
         /* 横屏手机（~390 高）把新建表单再压一档：三行字段 + 说明 + 创建键一次放下 */
         .world-panel[data-view='create'] { padding: 10px 12px; }
@@ -6137,7 +6199,220 @@
       }
       .unsupported-button:active { background: #2f6a2a; }
       .unsupported-code { font-size: 12px; color: #7d848f; }
-    </style>
+    
+      /* ==================================================================
+         卡片层（2026-10-27 第二版）—— **必须放在文件最后**：
+         三个面板的主定义在上面各自写了 background/border，同一特异性下
+         后面的规则才生效。放前面会被静默覆盖（第一版就是这么失效的）。
+         视觉口径：不透明受光渐变 + 斜角 bevel + 投影，从全屏页上浮起来。
+         ================================================================== */
+      .mp-panel,
+      .world-modal-panel,
+      .server-picker-panel {
+        background: linear-gradient(#3a3a3a, #2c2c2c);
+        border: 3px solid;
+        border-top-color: #5c5c5c;
+        border-left-color: #545454;
+        border-right-color: #3a3a3a;
+        border-bottom-color: #303030;
+        box-shadow:
+          0 22px 52px rgba(0, 0, 0, .6),
+          0 0 0 1px rgba(255, 255, 255, .06),
+          inset 0 1px 0 rgba(255, 255, 255, .1);
+      }
+
+      /* ---- 输入框 / 次级按钮的明暗（2026-10-27 第二版，必须放在最后）
+         卡片是"凸起"（上亮下暗），输入框就要"内凹"（上暗下亮）——两者一对比，
+         "哪里能输入"一眼可见。之前输入框是深底 + 深边框，在深色卡片上等于隐形。 */
+      .mp-row input,
+      .world-row input,
+      .settings-row input[type='text'],
+      .settings-row input[type='number'],
+      .settings-row select,
+      .settings-search input {
+        background: #1e1e1e;
+        border: 2px solid;
+        border-top-color: #141414;
+        border-left-color: #171717;
+        border-right-color: #4c4c4c;
+        border-bottom-color: #545454;
+        color: #eaeaea;
+      }
+      .mp-row input::placeholder,
+      .world-row input::placeholder,
+      .settings-search input::placeholder {
+        color: #777;
+      }
+      /* 焦点：换成游戏主色描边，光标明确落在哪一格 */
+      .mp-row input:focus,
+      .world-row input:focus {
+        outline: 2px solid #7fa86f;
+        outline-offset: -2px;
+      }
+
+      /* 「选择」是次级按钮：和端口框同高、有边界，但比主按钮轻 */
+      .mp-pick {
+        box-sizing: border-box;
+        height: var(--ctl-h);
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0 6px; font: inherit; font-size: 12px;
+        color: #dcdcdc; background: #3a3a3a; text-decoration: none;
+        border: 2px solid;
+        border-top-color: #5a5a5a;
+        border-left-color: #545454;
+        border-right-color: #2c2c2c;
+        border-bottom-color: #282828;
+        cursor: pointer;
+      }
+      .mp-pick:hover { background: #454545; color: #fff; }
+
+      /* 主按钮：降一点饱和度，加同色系描边，别在灰底上跳出来 */
+      .mp-action.primary,
+      .world-modal-actions .world-edit-save {
+        background: #3d6b2f;
+        border: 2px solid;
+        border-top-color: #5f9149;
+        border-left-color: #599046;
+        border-right-color: #2c4f21;
+        border-bottom-color: #274a1e;
+        color: #f2f7ee;
+      }
+      .mp-action.primary:hover,
+      .world-modal-actions .world-edit-save:hover { background: #457a35; }
+      .mp-action.primary:disabled {
+        background: #34342f; border-color: #3f3f3a; color: #7a7a76;
+      }
+
+      /* ---- 三页统一最小高度（2026-10-27 第二版）
+         「加入房间」与「选择房间」切换时如果高度不同，居中卡片会上下跳一下——很廉价。
+         统一给一个下限，内容少的页也保持同样的"体量"。 */
+      .mp-panel,
+      .world-modal-panel,
+      .server-picker-panel {
+        min-height: 300px;
+      }
+
+      /* 分组标题：文字 + 一条延伸线，比纯文字更像"分区" */
+      .server-picker-label {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12px; color: #cfcfcf; letter-spacing: .5px;
+        padding: 4px 0 2px;
+      }
+      .server-picker-label::after {
+        content: ''; flex: 1 1 auto; height: 1px;
+        background: rgba(255, 255, 255, .12);
+      }
+
+      /* 底部按钮贴底：卡片有最小高度，按钮跟着内容走会悬在中间，下面空一大块 */
+      .server-picker-actions,
+      .mp-actions {
+        margin-top: auto;
+      }
+      /* 分组延伸线加深一点（12% 在深底上几乎看不见） */
+      .server-picker-label::after { background: rgba(255, 255, 255, .2); }
+      .server-picker-sub { margin-top: 1px; opacity: .85; }
+
+      /* 空状态：一行说明 + 一颗「重新扫描」，别让玩家只能关掉面板再来一次 */
+      .server-picker-rescan {
+        align-self: flex-start;
+        box-sizing: border-box;
+        height: 28px; padding: 0 10px;
+        font: inherit; font-size: 12px;
+        color: #dcdcdc; background: #3a3a3a;
+        border: 2px solid;
+        border-top-color: #5a5a5a; border-left-color: #545454;
+        border-right-color: #2c2c2c; border-bottom-color: #282828;
+        cursor: pointer;
+      }
+      .server-picker-rescan:hover { background: #454545; color: #fff; }
+      .server-picker-rescan.hidden { display: none; }
+      /* 扫描中的"…"轻微呼吸，让玩家知道还在扫（一次扫 254 个地址要几秒） */
+      #server-scan-status:not(:empty) { animation: scan-pulse 1.4s ease-in-out infinite; }
+      @keyframes scan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+      /* ---- 氛围（2026-10-27 第二版）
+         纯色全屏 + 纯灰卡片看起来像开发者面板。加两处克制的装饰：
+         ① 极淡的扫描线（横向 3px 一条，像素风的老味道）；
+         ② 卡片顶部一条主色高光，把"这是本游戏的面板"点出来。 */
+      #multiplayer-screen::before,
+      .server-picker::before,
+      .world-modal::before {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: repeating-linear-gradient(
+          0deg,
+          rgba(255, 255, 255, .018) 0 1px,
+          transparent 1px 3px
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+      #multiplayer-screen > *,
+      .server-picker > *,
+      .world-modal > * {
+        position: relative;
+        z-index: 1;
+      }
+      .mp-panel::before,
+      .world-modal-panel::before,
+      .server-picker-panel::before {
+        content: '';
+        position: absolute; left: 0; right: 0; top: 0; height: 3px;
+        background: linear-gradient(90deg, #6f9a5f, #8fc77a 45%, #6f9a5f);
+        opacity: .9;
+      }
+      .mp-panel,
+      .world-modal-panel,
+      .server-picker-panel {
+        position: relative;
+      }
+
+      /* 禁用态：不要"半透明的绿"（看着像坏了），改成明确的灰 */
+      .server-picker-button:disabled {
+        background: #34342f; border-color: #3f3f3a; color: #767670;
+      }
+
+      /* ==================================================================
+         窄屏（手机竖屏 / 小窗）：地址行拆成两行（2026-10-27 第二版）
+         390px 宽下五格并排时地址框只剩 ~90px，`IP 或域名` 的占位都被截断——
+         而地址恰恰是玩家要手打的那一格。所以：
+           第一行：标签（左侧，跨两行）| 地址（吃满剩余宽度）
+           第二行：                    | `:` 端口 选择
+         只在 <520px 生效，宽屏保持单行（设计图那版）。
+         ================================================================== */
+      @media (max-width: 520px) {
+        .mp-row.mp-row-address,
+        .world-row.world-row-address {
+          /* 第二行：空白(吃掉剩余) + `:` + 端口 + 选择 —— 三个贴右，与地址框右边缘对齐 */
+          grid-template-columns: 4.2em 1fr auto 4.4em auto;
+          grid-template-rows: auto auto;
+          row-gap: 6px;
+          align-items: center;
+        }
+        .mp-row.mp-row-address > span:first-child,
+        .world-row.world-row-address > span:first-child {
+          grid-column: 1; grid-row: 1 / span 2; align-self: center;
+        }
+        .mp-row.mp-row-address > input:first-of-type,
+        .world-row.world-row-address > input:first-of-type {
+          grid-column: 2 / -1; grid-row: 1;
+        }
+        .mp-row.mp-row-address > .mp-colon,
+        .world-row.world-row-address > .mp-colon {
+          grid-column: 3; grid-row: 2; justify-self: end;
+        }
+        .mp-row.mp-row-address > .mp-port-input,
+        .world-row.world-row-address > .mp-port-input {
+          grid-column: 4; grid-row: 2;
+        }
+        .mp-row.mp-row-address > .mp-pick,
+        .world-row.world-row-address > .world-pick {
+          grid-column: 5; grid-row: 2; align-self: stretch;
+        }
+        /* 竖屏高度有限：卡片的最小高度让位给内容，别留一大块空白 */
+        .mp-panel, .world-modal-panel, .server-picker-panel { min-height: 0; }
+      }
+</style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
          核心数据 /__host/core.bin），拿到表才 boot()。浏览器里那一步是 404 →

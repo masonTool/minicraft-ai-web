@@ -79,6 +79,8 @@ export class ServerPicker {
   private readonly lanList: HTMLDivElement;
   private readonly publicList: HTMLDivElement;
   private readonly confirmButton: HTMLButtonElement;
+  /** 空状态下才露出来的「重新扫描」（原来只能关掉面板再打开） */
+  private readonly rescanButton: HTMLButtonElement;
 
   private opened = false;
   private scanning = false;
@@ -102,14 +104,28 @@ export class ServerPicker {
     this.panel = document.createElement('div');
     this.panel.className = 'server-picker-panel';
 
-    // ---- 标题：选择房间 / 选择服务器(8887) + 副标题
+    /*
+     * ---- 标题区（2026-10-27 第二版）
+     *
+     * 这一层不再是"贴在按钮上的小浮窗"，而是**与联机面板同宽同位置的二级页面**：
+     * 左上角是「‹ 返回」、标题居中、副标题一行小字。切换时看起来像翻页，
+     * 而不是"弹窗上又弹了一个窗"（那正是用户说的层级过高）。
+     */
     const head = document.createElement('div');
     head.className = 'server-picker-head';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'server-picker-back';
+    back.id = 'server-picker-back';
+    back.textContent = '‹';
+    back.title = t('menu.cancel');
+    back.setAttribute('aria-label', t('menu.cancel'));
+    back.addEventListener('click', () => this.close());
     this.titleEl = document.createElement('b');
     this.titleEl.className = 'server-picker-title';
     this.subtitleEl = document.createElement('span');
     this.subtitleEl.className = 'server-picker-sub';
-    head.append(this.titleEl, this.subtitleEl);
+    head.append(back, this.titleEl, this.subtitleEl);
 
     // ---- 可滚动的正文（列表长了只滚这一块，标题与底部按钮固定）
     const body = document.createElement('div');
@@ -133,11 +149,21 @@ export class ServerPicker {
     this.status.className = 'server-picker-status';
     this.status.id = 'server-scan-status';
 
+    this.rescanButton = document.createElement('button');
+    this.rescanButton.type = 'button';
+    this.rescanButton.className = 'server-picker-rescan hidden';
+    this.rescanButton.id = 'server-picker-rescan';
+    this.rescanButton.textContent = t('server.rescan');
+    this.rescanButton.addEventListener('click', () => {
+      void this.scan();
+    });
+
     const localSection = this.buildLocalSection();
     body.append(
       ...(localSection ? [localSection] : []),
       lanLabel,
       this.status,
+      this.rescanButton,
       this.lanList,
       publicLabel,
       this.publicList,
@@ -175,14 +201,13 @@ export class ServerPicker {
    * 定位规则：优先"右边缘对齐按钮 + 出现在按钮下方"；下方放不下就翻到上方，
    * 横向超出视口就往里收。手机横屏高度只有 360~430，必须夹住，否则整个浮窗会飘到屏幕外。
    */
-  open(anchor: HTMLElement): void {
+  open(): void {
     this.opened = true;
     this.token++;
     this.element.classList.remove('hidden');
     this.applyModeText();
     this.resetList();
     this.renderPublic();
-    this.position(anchor);
     this.status.textContent = '';
     // 打开即扫（用户 2026-10-27）：网段由当前地址推出来，不需要玩家再点一次
     void this.scan();
@@ -213,25 +238,6 @@ export class ServerPicker {
     this.subtitleEl.textContent = roomMode
       ? tp('server.subtitleRoom', { port })
       : tp('server.subtitleServer', { port });
-  }
-
-  private position(anchor: HTMLElement): void {
-    const rect = anchor.getBoundingClientRect();
-    const panel = this.panel.getBoundingClientRect();
-    const margin = 8;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let left = rect.right - panel.width;
-    left = Math.max(margin, Math.min(left, vw - panel.width - margin));
-
-    let top = rect.bottom + 6;
-    if (top + panel.height > vh - margin) {
-      const above = rect.top - panel.height - 6;
-      top = above >= margin ? above : Math.max(margin, vh - panel.height - margin);
-    }
-    this.panel.style.left = `${Math.round(left)}px`;
-    this.panel.style.top = `${Math.round(top)}px`;
   }
 
   private port(): number {
@@ -328,6 +334,7 @@ export class ServerPicker {
     const token = this.token;
     this.scanning = true;
     this.status.textContent = t('server.scanning');
+    this.rescanButton.classList.add('hidden');
     const startedAt = performance.now();
     try {
       const found = await scanSubnet(
@@ -346,11 +353,14 @@ export class ServerPicker {
       const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
       if (found.length > 0) {
         this.status.textContent = tp('server.found', { count: String(found.length), seconds });
+        this.rescanButton.classList.add('hidden');
       } else if (!canScanLan(location.protocol)) {
         // 一台都没扫到、且页面是 https：最可能就是没授权，把"去哪授权"写在同一行
         this.status.textContent = `${t('server.empty')} · ${t('server.httpsHint')}`;
+        this.rescanButton.classList.remove('hidden');
       } else {
         this.status.textContent = t('server.empty');
+        this.rescanButton.classList.remove('hidden');
       }
     } finally {
       if (token === this.token) this.scanning = false;
