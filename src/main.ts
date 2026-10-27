@@ -46,6 +46,7 @@ import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
 import {
   Hud2D,
+  Inventory2D,
   MenuScreen2D,
   Ui2DOverlay,
   ARMOR_PER_ICON,
@@ -1282,6 +1283,16 @@ class App {
    */
   private chatEntry2d: MenuScreen2D | null = null;
   private chatEntry2dOn = false;
+  /**
+   * 背包 / 工作站的槽位（`?ui2d=1`）。
+   *
+   * `#inventory-screen` 的 z-index 是 10，所以这一层用 12。槽位本身靠一条
+   * **挂在 `documentElement` 上的类**统一设 `opacity: 0`（而不是逐个元素设内联样式）：
+   * 背包切模式、换容器时会**重建槽位 DOM**，逐个设活不过一次重建。
+   */
+  private inventory2d: Inventory2D | null = null;
+  private inventory2dOn = false;
+  private readonly invStyleEl: HTMLStyleElement | null = null;
   /**
    * 暂停菜单页的 canvas 版（`?ui2d=1`）。
    *
@@ -3059,6 +3070,17 @@ class App {
       if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
       // 聊天输入行也交给 canvas（`#chat` 是 body 级 z-index 8，所以覆盖层要更高）
       this.chatEntry2d = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
+      // 背包槽位（`#inventory-screen` 是 10，覆盖层用 12）
+      this.inventory2d = new Inventory2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
+      /*
+       * 槽位让位用**一条挂在 `<html>` 上的类**，不是逐个元素的内联样式：
+       * 背包切模式/换容器会重建槽位 DOM，内联样式活不过下一次重建。
+       */
+      const style = document.createElement('style');
+      style.textContent =
+        'html.ui2d-inv #inventory-screen .inv-slot, html.ui2d-inv #inv-held { opacity: 0; }';
+      document.head.appendChild(style);
+      this.invStyleEl = style;
       /*
        * 暂停菜单的指针输入（`?ui2d=1`）。整层 `pointer-events` 平时是 `none`
        * ——开着会把触摸端的视角手势全吃掉；只有菜单/设置页打开时 `syncPauseCanvas2d()`
@@ -6784,6 +6806,30 @@ class App {
     } else if (this.chatEntry2dOn) {
       screen.disengage();
       this.chatEntry2dOn = false;
+    }
+  }
+
+  /**
+   * 背包槽位的接管开关（`?ui2d=1`）。
+   *
+   * 只换像素：点击、拖拽分配、长按分堆、连发、悬停提示全在 DOM 里
+   * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
+   */
+  private syncInventory2d(): void {
+    const screen = this.inventory2d;
+    if (!screen) return;
+    const open = this.inventoryScreen.isOpen;
+    if (open === this.inventory2dOn) {
+      if (open) screen.update();
+      return;
+    }
+    this.inventory2dOn = open;
+    document.documentElement.classList.toggle('ui2d-inv', open);
+    if (open) {
+      screen.open();
+      screen.update();
+    } else {
+      screen.close();
     }
   }
 
@@ -18205,6 +18251,8 @@ class App {
     this.syncTextPanels2d();
     // 聊天输入行（打开输入框时才接管）
     this.syncChatEntry2d();
+    // 背包 / 工作站槽位（打开背包时才接管）
+    this.syncInventory2d();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
@@ -19932,6 +19980,10 @@ class App {
     this.scoreboardHud.dispose();
     this.chatEntry2d?.dispose();
     this.chatEntry2d = null;
+    this.inventory2d?.dispose();
+    this.inventory2d = null;
+    this.invStyleEl?.remove();
+    document.documentElement.classList.remove('ui2d-inv');
     this.tutorialCard.dispose();
     this.miniGame.dispose();
     this.commandBlockEditor.dispose();

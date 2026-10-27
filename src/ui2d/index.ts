@@ -169,6 +169,22 @@ export {
   type TextInputOptions,
   type TextMetrics2D,
 } from './textInput.ts';
+export {
+  INV_COUNT_FONT_SIZE,
+  INV_DURABILITY_HEIGHT,
+  INV_SLOT_DEFAULT_SKIN,
+  Inventory2D,
+  drawInvSlot,
+  invContentRect,
+  invCountAnchor,
+  invDurabilityRect,
+  invIconRect,
+  invSignature,
+  readInvSlots,
+  readSlotSkin,
+  type InvSlotSkin,
+  type InvSlotState,
+} from './Inventory2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

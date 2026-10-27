@@ -269,6 +269,20 @@ const SHOTS = [
     what: '聊天输入行镜像：输入框与绿色发送键由 canvas 画，光标按 selectionStart 自己画',
     status: '已迁 · 阶段 3',
   },
+  {
+    file: '21-inventory.png',
+    page: 'tools/preview/inventory.html',
+    size: [864, 410],
+    what: '背包槽位（canvas）：27 格 + 快捷栏行、图标/数量/耐久/红底格/选择白框',
+    status: '已迁 · 阶段 4',
+  },
+  {
+    file: '21b-inventory-tinted.png',
+    page: 'tools/preview/inventory.html?tint=1',
+    size: [864, 410],
+    what: '背包槽位 + 黄色遮罩（格子全黄 = 槽位都是 canvas 画的；面板底仍是 DOM）',
+    status: '遮罩 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

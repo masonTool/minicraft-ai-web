@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 背包槽位（canvas）</title>
+    <!--
+      阶段 4 的第一块：背包 / 工作站槽位的 canvas 版。
+
+      与快捷栏同一条路：几何量 DOM、图标直接用 DOM 里那张 36×36 的 canvas、
+      槽位本身设 `opacity: 0` 让位像素（**不是** visibility/display —— 那会让拖拽、
+      长按分堆、悬停提示一起失效）。这里只造了 27 格假槽位，够看清绘制效果。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/inventory.html
+        open http://localhost:5173/tools/preview/inventory.html?tint=1
+    -->
+    <style>
+      :root {
+        --slot-bg: #8b8b8b;
+        --slot-edge-light: #c6c6c6;
+        --slot-edge-dark: #373737;
+        --slot-radius: 2px;
+      }
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 20;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      /* 与 index.html 的 .inv-panel / .inv-grid / .inv-slot 同观感 */
+      #inventory-screen {
+        position: absolute; inset: 0; display: grid; place-items: center;
+      }
+      .inv-panel {
+        padding: 12px 14px; background: #c6c6c6;
+        border: 3px solid; border-color: #373737 #ffffff #ffffff #373737;
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        color: #3f3f3f;
+      }
+      .inv-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+      .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 2px; }
+      .inv-grid + .inv-grid { margin-top: 10px; }
+      .inv-slot {
+        position: relative; width: 42px; height: 42px;
+        display: grid; place-items: center;
+        background: var(--slot-bg);
+        border: 2px solid;
+        border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+        border-radius: var(--slot-radius);
+        /* 像素让位给 canvas（命中/悬停仍由 DOM 负责） */
+        opacity: 0;
+      }
+      .inv-slot.locked { background: #9b3b35; }
+      .inv-count {
+        position: absolute; right: 2px; bottom: 1px;
+        font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+      .dur-bar {
+        position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px;
+        background: rgba(0, 0, 0, .65); border-radius: 2px; overflow: hidden;
+      }
+      .dur-bar b { display: block; height: 100%; background: #63c335; }
+      .dur-bar.dur-mid b { background: #e0d24a; }
+      .dur-bar.dur-low b { background: #e03b3b; }
+      .dur-bar.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="inventory-screen">
+        <div class="inv-panel">
+          <div class="inv-header"><span>生存背包</span><span>27 格 · 合成 2×2</span></div>
+          <div class="inv-grid" id="grid"></div>
+          <div class="inv-grid" id="hotbar-row"></div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { Inventory2D } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+
+      /** 造一格：图标用纯色块代替（真机上这里是物品图集的裁切） */
+      function makeSlot(icon, count, options = {}) {
+        const slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        if (options.locked) slot.classList.add('locked');
+        if (options.held) slot.classList.add('held');
+        const canvas = document.createElement('canvas');
+        canvas.width = 36;
+        canvas.height = 36;
+        const ctx = canvas.getContext('2d');
+        if (icon) {
+          ctx.fillStyle = icon;
+          ctx.fillRect(6, 6, 24, 24);
+          ctx.strokeStyle = 'rgba(0, 0, 0, .55)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(7, 7, 22, 22);
+        }
+        const countEl = document.createElement('span');
+        countEl.className = 'inv-count';
+        if (count > 1) countEl.textContent = String(count);
+        const dur = document.createElement('i');
+        dur.className = 'dur-bar hidden';
+        const fill = document.createElement('b');
+        dur.appendChild(fill);
+        if (options.durability) {
+          dur.classList.remove('hidden');
+          dur.classList.add(`dur-${options.durability.level}`);
+          fill.style.width = `${Math.round(options.durability.ratio * 100)}%`;
+        }
+        slot.append(canvas, countEl, dur);
+        return slot;
+      }
+
+      const grid = document.getElementById('grid');
+      const icons = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
+      for (let i = 0; i < 27; i++) {
+        grid.appendChild(
+          makeSlot(
+            i < 12 ? icons[i % icons.length] : null,
+            i === 0 ? 64 : i === 1 ? 12 : i === 2 ? 3 : 1,
+            {
+              durability: i === 3 ? { ratio: 0.62, level: 'mid' } : i === 4 ? { ratio: 0.12, level: 'low' } : null,
+              locked: i === 20,
+              held: i === 11,
+            },
+          ),
+        );
+      }
+      const row = document.getElementById('hotbar-row');
+      for (let i = 0; i < 9; i++) row.appendChild(makeSlot(i < 5 ? icons[(i + 2) % icons.length] : null, i === 6 ? 32 : 1));
+
+      const screen = new Inventory2D(document.body, { zIndex: 12, tint });
+      screen.open();
+      function loop() {
+        screen.update();
+        requestAnimationFrame(loop);
+      }
+      loop();
+
+      document.getElementById('caption').textContent =
+        '背包槽位由 canvas 画（底/斜面/图标/数量/耐久/选择白框）· 槽位 DOM 设 opacity: 0，拖拽与分堆仍归 DOM' +
+        (tint ? ' · 黄色遮罩' : '');
+    </script>
+  </body>
+</html>
