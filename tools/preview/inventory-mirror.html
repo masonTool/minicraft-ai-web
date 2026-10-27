@@ -66,6 +66,17 @@
         background: rgba(0, 0, 0, .65);
       }
       .dur-bar b { display: block; height: 100%; background: #e0d24a; }
+      /* 创造物品栏：**自己滚**，和 index.html 的 `.inv-grid.inv-creative` 同一套规则。
+         这一条是用户 2026-10-27 报的那个 bug 的现场：内容比面板高，靠滚动看。 */
+      .inv-grid.inv-creative {
+        grid-template-columns: repeat(12, 34px); gap: 2px;
+        max-height: 150px; padding-right: 14px;
+        overflow-x: hidden; overflow-y: auto;
+      }
+      .inv-grid.inv-creative .inv-slot { width: 34px; height: 34px; }
+      .inv-creative-controls { display: flex; gap: 8px; justify-content: center; margin: 6px 0; }
+      .inv-creative-tab { padding: 4px 8px; font-size: 12px; background: #8b8b8b; color: #3f3f3f; border: 2px solid #373737; }
+      .inv-creative-tab.active { background: #c6c6c6; }
     </style>
   </head>
   <body>
@@ -83,7 +94,10 @@
     <script type="module">
       import { MenuScreen2D } from '../../src/ui2d/index.ts';
 
-      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      const creative = params.get('creative') === '1';
+      const scrollBy = Number(params.get('scroll') ?? 0) || 0;
       const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
       const ICONS = COLORS.map((color, index) => {
         const canvas = document.createElement('canvas');
@@ -131,7 +145,28 @@
       }
 
       const grid = document.getElementById('grid');
-      for (let i = 0; i < 27; i++) {
+      const row = document.getElementById('hotbar-row');
+      if (creative) {
+        // 创造物品栏：96 格塞进一个只有 150px 高的滚动区（真实行数远不止 96）
+        const panel = document.querySelector('.inv-panel');
+        panel.style.width = '520px';
+        document.querySelector('.inv-header').innerHTML =
+          '<span>创造模式物品栏</span><span>建筑方块 · 96 项</span>';
+        grid.className = 'inv-grid inv-creative';
+        for (let i = 0; i < 96; i++) grid.appendChild(makeSlot(i, 1));
+        grid.scrollTop = scrollBy;
+        // 滚动区外面还有一行翻页条：它必须留在面板里，不能被滚走
+        const controls = document.createElement('div');
+        controls.className = 'inv-creative-controls';
+        for (const label of ['‹ 上一页', '1 / 8', '下一页 ›']) {
+          const button = document.createElement('button');
+          button.className = 'inv-creative-tab' + (label.includes('/') ? ' active' : '');
+          button.textContent = label;
+          controls.appendChild(button);
+        }
+        document.querySelector('.inv-header').after(controls);
+        row.style.display = 'none';
+      } else for (let i = 0; i < 27; i++) {
         grid.appendChild(
           makeSlot(i < 12 ? i : null, i === 0 ? 64 : i === 1 ? 12 : i === 2 ? 3 : 1, {
             durability: i === 4 ? 62 : 0,
@@ -140,7 +175,6 @@
           }),
         );
       }
-      const row = document.getElementById('hotbar-row');
       for (let i = 0; i < 9; i++) row.appendChild(makeSlot(i < 5 ? i + 1 : null, i === 6 ? 32 : 1));
 
       const panel = document.querySelector('.inv-panel');
@@ -148,7 +182,9 @@
       screen.engage(panel);
 
       document.getElementById('caption').textContent =
-        '背包整页镜像：面板底 / 槽位斜面 / 物品图标 / 数量 / 耐久条都由 canvas 重画 · DOM 只保留交互' +
+        (creative
+          ? `创造物品栏（滚动 ${scrollBy}px）：只画滚动区里看得见的那几行，超出的部分被裁掉`
+          : '背包整页镜像：面板底 / 槽位斜面 / 物品图标 / 数量 / 耐久条都由 canvas 重画 · DOM 只保留交互') +
         (tint ? ' · 黄色遮罩（整块黄 = 全是 canvas）' : '');
     </script>
   </body>

@@ -325,6 +325,13 @@ const SHOTS = [
     what: '多人面板 + 遮罩（整块面板黄 = 全是 canvas）',
     status: '遮罩 · 阶段 3',
   },
+  {
+    file: '25-inventory-scroll.png',
+    page: 'tools/preview/inventory-mirror.html?creative=1&scroll=80',
+    size: [864, 410],
+    what: '创造物品栏（96 项、滚动 80px）：canvas 只画滚动区里看得见的几行，超出的被裁掉',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

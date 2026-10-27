@@ -613,6 +613,28 @@ M26 接进游戏、M27 视觉对齐（真图标/tooltip）、M28 合成、M29 �
 | **多人面板** | ✅ 本批 |
 | 背包 / 工作站 | ✅ 整页镜像（§5.20，阶段 4 第一步；自绘替换见 M26b） |
 
+## 5.22 修复（镜像必须自己裁剪：滚出去的、溢出面板的都不该画）
+
+用户 2026-10-27：「点左侧那个分类按钮时，他会把所有的内容都平铺出来，直到所有物品栏都
+伸出到弹窗以外。正常来说应该收在弹框内、物品滚动显示。」
+
+根因：**镜像不知道 `overflow`**。`readTextRuns` / `readTextBlocks` / `readCanvasBlits`
+一律按元素的 `getBoundingClientRect()` 画，而 DOM 那边是靠 `overflow: hidden / auto` 裁的 ——
+`.inv-grid.inv-creative` 是 `max-height: 46vh; overflow-y: auto`，96 格里滚出去的那些
+照样被读出来画到面板外面，于是"所有物品平铺、伸出弹窗"。
+
+修法（`textPanel.ts`）：
+
+- `makeClipQuery(root, origin)`：从元素往上走到 `root`（含），把每个**会裁剪的祖先**
+  （`overflow-x/y` 不是 `visible`）的 **padding-box**（`clientLeft/Top/Width/Height`，
+  自然排除边框与滚动条）求交；结果按元素缓存。
+- 三个读取函数都给每条记录带上 `clip`，并把**完全落在裁剪框外的直接跳过**（顺带省掉一堆 `fillText`）。
+- 三个绘制函数用 `paintClipped(ctx, clip, paint)`：有裁剪就 `save → rect → clip → paint → restore`。
+
+于是滚动区里"滚出去的部分"和"溢出面板的部分"都不再被画 —— 与浏览器一致。
+⚠️ 滚动本身仍由 DOM 处理（覆盖层是 `pointer-events: none`，滚轮/触摸照旧落到下面那层），
+canvas 只负责"看得见的那一块"。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

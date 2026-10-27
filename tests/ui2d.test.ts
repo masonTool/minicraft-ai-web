@@ -26,6 +26,7 @@ import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
 import {
   drawCanvasBlits,
   drawTextRuns,
+  intersectRect,
   inputDisplayText,
   normalizeWeight,
   runBaselineY,
@@ -746,5 +747,35 @@ describe('位图搬运', () => {
     const fake = fakeCtx();
     drawCanvasBlits(fake.ctx, []);
     expect(fake.calls).toEqual([]);
+  });
+});
+
+
+/**
+ * 裁剪矩形求交（`intersectRect`）。
+ *
+ * 用户 2026-10-27 报的「点分类后所有物品平铺出来、伸出弹窗」就是缺了这一步：
+ * DOM 靠 `overflow` 裁剪，canvas 不裁就会把滚动区外面那几十格也画出来。
+ */
+describe('裁剪矩形求交', () => {
+  it('相交取公共部分', () => {
+    expect(intersectRect({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 })).toEqual({
+      x: 5,
+      y: 5,
+      w: 5,
+      h: 5,
+    });
+  });
+
+  it('包含关系取小的那个', () => {
+    const big = { x: 0, y: 0, w: 100, h: 100 };
+    const small = { x: 10, y: 10, w: 20, h: 20 };
+    expect(intersectRect(big, small)).toEqual(small);
+    expect(intersectRect(small, big)).toEqual(small);
+  });
+
+  it('只贴边不算相交（宽高退化就返回 null）', () => {
+    expect(intersectRect({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBeNull();
+    expect(intersectRect({ x: 0, y: 0, w: 10, h: 10 }, { x: 0, y: 20, w: 10, h: 10 })).toBeNull();
   });
 });

@@ -32,6 +32,14 @@ export interface TextRun {
   readonly shadow: boolean;
   /** 不透明度（占位提示用 0.55；其余默认 1） */
   readonly alpha?: number;
+  /**
+   * 裁剪矩形（相对覆盖层）。`undefined` = 不裁。
+   *
+   * DOM 里靠 `overflow: hidden / auto` 裁剪，canvas 没有这回事 —— 不裁的话
+   * **创造物品栏那种"内容比面板高、靠滚动看"的网格会把 100 多格全画到面板外面**
+   * （用户 2026-10-27 报的就是这个：点左侧分类后所有物品平铺出来、伸出弹窗）。
+   */
+  readonly clip?: Rect;
 }
 
 /** 渐变底的近似色（见 `hasBackground` 的注释） */
@@ -45,6 +53,8 @@ export interface TextBlock {
   /** 边框（宽度 0 表示没有；MC 风格的按钮靠它出"凸起"感） */
   readonly borderWidth: number;
   readonly borderColor: string;
+  /** 裁剪矩形（见 `TextRun.clip`） */
+  readonly clip?: Rect;
 }
 
 /** 元素是否有可见底色（`transparent` / alpha=0 的跳过） */
@@ -83,6 +93,7 @@ export function readTextBlocks(
   view: { readonly w: number; readonly h: number },
 ): TextBlock[] {
   const blocks: TextBlock[] = [];
+  const clipOf = makeClipQuery(root, origin);
   for (const el of [root, ...root.querySelectorAll('*')]) {
     const background = readSurface(el);
     if (!background) continue;
@@ -90,7 +101,10 @@ export function readTextBlocks(
     if (box.width <= 0 || box.height <= 0) continue;
     const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
     if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
+    const clip = clipOf(el);
+    if (outsideClip(rect, clip)) continue;
     blocks.push({
+      clip: clip ?? undefined,
       rect,
       color: background.color,
       radius: background.radius,
@@ -104,6 +118,13 @@ export function readTextBlocks(
 /** 画底色块（先块后字，与 DOM 的层叠一致） */
 export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly TextBlock[]): void {
   for (const block of blocks) {
+    paintClipped(ctx, block.clip, () => drawOneBlock(ctx, block));
+  }
+}
+
+/** 画一块（底 + 边）；裁剪由调用方负责 */
+function drawOneBlock(ctx: CanvasRenderingContext2D, block: TextBlock): void {
+  {
     ctx.save();
     if (block.color !== 'transparent') {
       roundRectPath(ctx, block.rect, block.radius);
@@ -142,6 +163,75 @@ export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly T
 export interface CanvasBlit {
   readonly rect: Rect;
   readonly canvas: HTMLCanvasElement;
+  /** 裁剪矩形（见 `TextRun.clip`） */
+  readonly clip?: Rect;
+}
+
+/** 两个矩形的交（任一为空就返回 `null`） */
+export function intersectRect(a: Rect, b: Rect): Rect | null {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.w, b.x + b.w);
+  const bottom = Math.min(a.y + a.h, b.y + b.h);
+  if (!(right > x) || !(bottom > y)) return null;
+  return { x, y, w: right - x, h: bottom - y };
+}
+
+/**
+ * 造一个"这个元素的裁剪矩形是什么"的查询函数（带缓存）。
+ *
+ * 从元素往上走到 `root`（含），把每个**会裁剪的祖先**（`overflow` 不是 `visible`
+ * 的任何一边）的 padding-box 求交 —— 与浏览器行为一致：滚动容器裁掉滚动出去的部分，
+ * `overflow: hidden` 的面板裁掉伸出来的内容。
+ */
+function makeClipQuery(root: HTMLElement, origin: DOMRect): (el: Element) => Rect | null {
+  const cache = new Map<Element, Rect | null>();
+  return (el: Element): Rect | null => {
+    const cached = cache.get(el);
+    if (cached !== undefined) return cached;
+    let clip: Rect | null = null;
+    let node: Element | null = el.parentElement;
+    while (node && (node === root || root.contains(node))) {
+      const style = window.getComputedStyle(node);
+      const scrolls = style.overflowX !== 'visible' || style.overflowY !== 'visible';
+      if (scrolls) {
+        const box = node.getBoundingClientRect();
+        // `clientLeft/Top/Width/Height` 就是 padding-box（不含边框、不含滚动条）
+        const rect: Rect = {
+          x: box.left + (node as HTMLElement).clientLeft - origin.left,
+          y: box.top + (node as HTMLElement).clientTop - origin.top,
+          w: (node as HTMLElement).clientWidth,
+          h: (node as HTMLElement).clientHeight,
+        };
+        if (rect.w > 0 && rect.h > 0) clip = clip ? intersectRect(clip, rect) : rect;
+        if (clip === null) break; // 已经裁空了
+      }
+      if (node === root) break;
+      node = node.parentElement;
+    }
+    cache.set(el, clip);
+    return clip;
+  };
+}
+
+/** 完全落在裁剪框外的就不用画了 */
+function outsideClip(rect: Rect, clip: Rect | null): boolean {
+  if (!clip) return false;
+  return !(rect.x + rect.w > clip.x && rect.x < clip.x + clip.w && rect.y + rect.h > clip.y && rect.y < clip.y + clip.h);
+}
+
+/** 按裁剪矩形执行一段绘制（没有裁剪就直接画） */
+function paintClipped(ctx: CanvasRenderingContext2D, clip: Rect | undefined, paint: () => void): void {
+  if (!clip) {
+    paint();
+    return;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(clip.x, clip.y, clip.w, clip.h);
+  ctx.clip();
+  paint();
+  ctx.restore();
 }
 
 /** 读出范围内所有 `<canvas>`（原位、原尺寸） */
@@ -151,6 +241,7 @@ export function readCanvasBlits(
   view: { readonly w: number; readonly h: number },
 ): CanvasBlit[] {
   const blits: CanvasBlit[] = [];
+  const clipOf = makeClipQuery(root, origin);
   for (const el of root.querySelectorAll('canvas')) {
     const canvas = el as HTMLCanvasElement;
     if (canvas.width <= 0 || canvas.height <= 0) continue;
@@ -158,7 +249,9 @@ export function readCanvasBlits(
     if (box.width <= 0 || box.height <= 0) continue;
     const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
     if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
-    blits.push({ rect, canvas });
+    const clip = clipOf(canvas);
+    if (outsideClip(rect, clip)) continue;
+    blits.push({ rect, canvas, clip: clip ?? undefined });
   }
   return blits;
 }
@@ -166,8 +259,10 @@ export function readCanvasBlits(
 /** 按原位把位图贴上去（像素风：关掉平滑） */
 export function drawCanvasBlits(ctx: CanvasRenderingContext2D, blits: readonly CanvasBlit[]): void {
   for (const blit of blits) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(blit.canvas, blit.rect.x, blit.rect.y, blit.rect.w, blit.rect.h);
+    paintClipped(ctx, blit.clip, () => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(blit.canvas, blit.rect.x, blit.rect.y, blit.rect.w, blit.rect.h);
+    });
   }
 }
 
@@ -244,6 +339,7 @@ export function readTextRuns(
   view: { readonly w: number; readonly h: number },
 ): TextRun[] {
   const runs: TextRun[] = [];
+  const clipOf = makeClipQuery(root, origin);
   const nodes: Element[] = [root, ...root.querySelectorAll('*')];
   for (const el of nodes) {
     const field = textFieldValue(el);
@@ -257,6 +353,8 @@ export function readTextRuns(
     const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
     // 完全在视口外就不画（否则会多出几十次 fillText）
     if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
+    const clip = clipOf(el);
+    if (outsideClip(rect, clip)) continue;
     const style = window.getComputedStyle(el);
     const align = style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'right' : 'left';
     /*
@@ -282,6 +380,7 @@ export function readTextRuns(
       // `#hud` 的 `text-shadow` 是全局的，这里统一按"有阴影"处理（与原版 HUD 一致）
       shadow: style.textShadow !== 'none',
       alpha: shown?.isPlaceholder ? 0.55 : 1,
+      clip: clip ?? undefined,
     });
   }
   return runs;
@@ -311,17 +410,20 @@ export function drawTextRuns(
         : run.align === 'right'
           ? run.rect.x + run.rect.w
           : run.rect.x;
-    for (const line of lines) {
-      drawText(ctx, line, x, y, {
-        font: uiFont(run.fontSize, run.weight),
-        color: run.color,
-        align: run.align,
-        baseline: 'middle',
-        shadow: run.shadow,
-        maxWidth: run.rect.w + slack,
-        alpha: run.alpha ?? 1,
-      });
-      y += lineHeight;
-    }
+    paintClipped(ctx, run.clip, () => {
+      let lineY = y;
+      for (const line of lines) {
+        drawText(ctx, line, x, lineY, {
+          font: uiFont(run.fontSize, run.weight),
+          color: run.color,
+          align: run.align,
+          baseline: 'middle',
+          shadow: run.shadow,
+          maxWidth: run.rect.w + slack,
+          alpha: run.alpha ?? 1,
+        });
+        lineY += lineHeight;
+      }
+    });
   }
 }
