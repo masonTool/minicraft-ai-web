@@ -23,7 +23,7 @@ import {
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
-import { normalizeWeight, runBaselineY, textRunsSignature } from '../src/ui2d/textPanel.ts';
+import { drawTextRuns, normalizeWeight, runBaselineY, textRunsSignature } from '../src/ui2d/textPanel.ts';
 import {
   DIAL_SIZE,
   NEEDLE_HALF_WIDTH,
@@ -628,5 +628,53 @@ describe('纯文字面板', () => {
     expect(textRunsSignature([run])).not.toBe(
       textRunsSignature([{ ...run, rect: { ...run.rect, x: 11 } }]),
     );
+  });
+});
+
+/**
+ * 镜像整页时给 `maxWidth` 留的余量（`drawTextRuns(..., slack)`）。
+ *
+ * 为什么值得一条断言：DOM 的 `letter-spacing`（标题常写负值）会让元素盒子比
+ * canvas 量出来的字**窄**，不给余量就会把 "MINICRAFT" 截成 "MINICRA…" ——
+ * 这种错只在长标题上出现，肉眼很容易当成"字体不一样"。
+ */
+describe('文字面板的 slack', () => {
+  /** 只认 measureText / fillText 的假 ctx：每字符固定 7px */
+  function fakeCtx(widthPerChar = 7) {
+    const drawn: string[] = [];
+    const ctx = {
+      save: () => undefined,
+      restore: () => undefined,
+      measureText: (text: string) => ({ width: text.length * widthPerChar }),
+      set font(_value: string) {},
+      set textAlign(_value: string) {},
+      set textBaseline(_value: string) {},
+      set fillStyle(_value: string) {},
+      set globalAlpha(_value: number) {},
+      fillText: (text: string) => drawn.push(text),
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, drawn };
+  }
+
+  const run = {
+    rect: { x: 0, y: 0, w: 50, h: 16 },
+    text: 'MINICRAFT',
+    color: '#ffffff',
+    fontSize: 12,
+    weight: 400 as const,
+    align: 'left' as const,
+    shadow: false,
+  };
+
+  it('不给余量时按盒子宽度截断（F3 / 计分板要的就是这个）', () => {
+    const fake = fakeCtx();
+    drawTextRuns(fake.ctx, [run]);
+    expect(fake.drawn.some((text) => text.includes('…'))).toBe(true);
+  });
+
+  it('给了余量就完整画出（主菜单那种带 letter-spacing 的标题）', () => {
+    const fake = fakeCtx();
+    drawTextRuns(fake.ctx, [run], 20);
+    expect(fake.drawn).toContain('MINICRAFT');
   });
 });

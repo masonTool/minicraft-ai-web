@@ -46,6 +46,7 @@ import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
 import {
   Hud2D,
+  MenuScreen2D,
   Ui2DOverlay,
   ARMOR_PER_ICON,
   CanvasMenu,
@@ -21793,10 +21794,40 @@ async function boot(): Promise<void> {
   });
   // 没装成 PWA 时引导一次"添加到主屏幕"——那是标签页里唯一零点击全屏的路径
   installInstallHint();
+  // 主菜单 / 世界列表交给 canvas（`?ui2d=1`，阶段 3 的"整页镜像"）
+  mountMenuMirror(menu);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
   // 主菜单已经铺好，撤掉首屏启动遮罩（那之前一直由它盖着准星那个"加号"）。
   // 必须在 `menu.show()` 之后：菜单是不透明的整屏，先撤会闪一下黑底 + 准星。
   hideBootLoading();
+}
+
+/**
+ * 主菜单 / 世界列表的 canvas 镜像（`?ui2d=1`）。
+ *
+ * 与游戏内那几块不同：菜单在 `App` 之外，**没有覆盖层、也没有主循环**。所以这里
+ * 自己建一个覆盖层、自己起一个 `requestAnimationFrame`（在 `MenuScreen2D` 里），
+ * 用 200ms 轮询去发现"菜单开了 / 切视图了 / 关掉了"——`WorldScreen` 没有暴露这类事件，
+ * 而菜单是静态的，轮询的代价可以忽略。
+ *
+ * 只镜像 `home` 与 `worlds` 两个视图：`create` / 多人面板里有 `<input>`，
+ * 而 `<input>` 的当前值**不在 `textContent` 里**，镜像过去会变成空框。
+ *
+ * ⚠️ 让位用的是 `opacity: 0`（不是 `visibility` / `display`）：按钮必须继续可点，
+ * 镜像只换"谁产像素"，不换"谁收输入"。
+ */
+function mountMenuMirror(menu: WorldScreen): void {
+  if (!UI2D_ENABLED) return;
+  const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED });
+  const sync = (): void => {
+    const panel = document.querySelector<HTMLElement>('#world-screen .world-panel');
+    const wanted = menu.isOpen && (menu.view === 'home' || menu.view === 'worlds') && panel !== null;
+    if (wanted && panel) screen.engage(panel);
+    else if (screen.engaged) screen.disengage();
+  };
+  window.setInterval(sync, 200);
+  window.addEventListener('resize', sync);
+  sync();
 }
 
 /**

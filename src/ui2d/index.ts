@@ -149,6 +149,7 @@ export {
   type TextBlock,
   type TextRun,
 } from './textPanel.ts';
+export { MenuScreen2D, type MenuScreenOptions } from './menuScreen.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 主菜单整页镜像（canvas）</title>
+    <!--
+      阶段 3 的最后一块：**整页镜像** —— 主菜单/世界列表这类静态界面，
+      不再"自己排版"，而是把 DOM 里的文字与底色/边框按原位重画到 canvas
+      （`ui2d/menuScreen.ts` + `ui2d/textPanel.ts`），DOM 只把 opacity 设成 0 让位像素。
+
+      这一页按 `index.html` 的关键配色搭了一块 "世界面板"，再用 `MenuScreen2D` 镜像它。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/menu-mirror.html
+        open 'http://localhost:5173/tools/preview/menu-mirror.html?view=worlds'
+        open 'http://localhost:5173/tools/preview/menu-mirror.html?tint=1'
+    -->
+    <style>
+      :root {
+        --bevel-dark: #0d0d0d;
+        --face: #8b8b8b;
+        --face-light: #c6c6c6;
+      }
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      #stage::after {
+        /* 菜单背后那层压暗（`#world-screen` 的渐变遮罩） */
+        content: ''; position: absolute; inset: 0;
+        background: linear-gradient(180deg, rgba(12, 23, 32, .12), rgba(6, 12, 8, .70));
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 5;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      /* ---- 与 index.html 同一套观感（颜色对齐像素风的斜面） ---- */
+      #world-screen {
+        position: absolute; inset: 0; display: grid; place-items: center; padding: 12px;
+      }
+      .world-panel {
+        position: relative; z-index: 1;
+        width: 380px; padding: 14px 16px;
+        background: rgba(22, 22, 22, .82);
+        border: 3px solid var(--bevel-dark);
+        display: flex; flex-direction: column; gap: 10px;
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        color: #e7e7e7;
+      }
+      .world-title { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .world-logo { font-size: 30px; font-weight: 700; letter-spacing: -1px; color: #e7e7e7; }
+      .world-hint { font-size: 12px; color: #a8a8a8; }
+      .world-menu { display: flex; flex-direction: column; gap: 8px; }
+      .world-primary,
+      .world-secondary {
+        min-height: 40px; padding: 8px;
+        background: var(--face); color: #ffffff;
+        border: 2px solid;
+        border-color: var(--face-light) #4a4a4a #4a4a4a var(--face-light);
+        text-shadow: 1px 1px 0 #000;
+      }
+      .world-primary { font-size: 15px; letter-spacing: 1px; }
+      .world-secondary { font-size: 13px; }
+      .world-group-label { font-size: 12px; color: #a8a8a8; }
+      .world-card {
+        display: flex; gap: 10px; align-items: center;
+        padding: 8px; background: rgba(0, 0, 0, .35);
+        border: 2px solid #3a3a3a;
+      }
+      .world-card-thumb {
+        width: 56px; height: 40px; flex: none;
+        background: linear-gradient(#7ec0ee 0 50%, #4e7440 50% 100%);
+        border: 2px solid var(--bevel-dark);
+      }
+      .world-card-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .world-card-name { font-size: 14px; color: #fff; }
+      .world-card-meta { font-size: 11px; color: #a8a8a8; }
+      .world-card-actions { display: flex; gap: 6px; margin-left: auto; }
+      .world-mini { font-size: 11px; padding: 6px 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="world-screen"></div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { MenuScreen2D } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view') === 'worlds' ? 'worlds' : 'home';
+      const tint = params.get('tint') === '1';
+
+      const home = `
+        <div class="world-title">
+          <div class="world-logo">MINICRAFT</div>
+          <div class="world-hint">一个方块世界 · 版本 1.18</div>
+        </div>
+        <div class="world-menu">
+          <button class="world-primary">游玩</button>
+          <button class="world-secondary">设置</button>
+          <button class="world-secondary">迷你游戏</button>
+          <button class="world-secondary">多人游戏</button>
+        </div>`;
+
+      const worlds = `
+        <div class="world-group-label">存档 · <span>3 个世界</span></div>
+        <div class="world-list">
+          <div class="world-card">
+            <div class="world-card-thumb"></div>
+            <div class="world-card-info">
+              <div class="world-card-name">我的世界</div>
+              <div class="world-card-meta">生存 · 普通 · 上次 10 月 26 日</div>
+            </div>
+            <div class="world-card-actions">
+              <button class="world-mini world-secondary">开房</button>
+              <button class="world-mini world-secondary">编辑</button>
+            </div>
+          </div>
+          <div class="world-card">
+            <div class="world-card-thumb"></div>
+            <div class="world-card-info">
+              <div class="world-card-name">创造试验场</div>
+              <div class="world-card-meta">创造 · 和平 · 上次 10 月 20 日</div>
+            </div>
+            <div class="world-card-actions">
+              <button class="world-mini world-secondary">开房</button>
+              <button class="world-mini world-secondary">编辑</button>
+            </div>
+          </div>
+          <div class="world-card">
+            <div class="world-card-thumb"></div>
+            <div class="world-card-info">
+              <div class="world-card-name">极限生存</div>
+              <div class="world-card-meta">生存 · 困难 · 极限</div>
+            </div>
+            <div class="world-card-actions">
+              <button class="world-mini world-secondary">开房</button>
+              <button class="world-mini world-secondary">编辑</button>
+            </div>
+          </div>
+        </div>
+        <div class="world-menu">
+          <button class="world-primary">新建世界</button>
+          <button class="world-secondary">返回</button>
+        </div>`;
+
+      const host = document.getElementById('world-screen');
+      host.innerHTML = `<div class="world-panel" data-view="${view}">${view === 'worlds' ? worlds : home}</div>`;
+      const panel = host.querySelector('.world-panel');
+
+      // 镜像：DOM 让位像素（opacity 0，仍可点），canvas 按原位重画
+      const screen = new MenuScreen2D(document.getElementById('stage'), { tint });
+      screen.engage(panel);
+
+      document.getElementById('caption').textContent =
+        `主菜单整页镜像（${view === 'worlds' ? '世界列表' : '首页'}）· 每一块像素都是 canvas 画的` +
+        (tint ? ' · 黄色遮罩' : '') +
+        ' · 按钮仍由 DOM 接收点击（这里只是为了截图）';
+    </script>
+  </body>
+</html>

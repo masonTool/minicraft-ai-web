@@ -40,14 +40,26 @@ export interface TextBlock {
   readonly rect: Rect;
   readonly color: string;
   readonly radius: number;
+  /** 边框（宽度 0 表示没有；MC 风格的按钮靠它出"凸起"感） */
+  readonly borderWidth: number;
+  readonly borderColor: string;
 }
 
 /** 元素是否有可见底色（`transparent` / alpha=0 的跳过） */
-function hasBackground(el: Element): { color: string; radius: number } | null {
+/** 元素自身的可画外观：底色（渐变退化）+ 圆角 + 边框；都没有就返回 `null` */
+function readSurface(
+  el: Element,
+): { color: string; radius: number; borderWidth: number; borderColor: string } | null {
   const style = window.getComputedStyle(el);
   const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+  const borderWidth = Number.parseFloat(style.borderTopWidth) || 0;
+  const borderColor = style.borderTopColor || 'transparent';
+  // 只画同宽的边（MC 的按钮四边等宽；只画上边那种"下划线"交给文字本身）
+  const hasBorder = borderWidth > 0 && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)';
   const color = style.backgroundColor;
-  if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') return { color, radius };
+  if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') {
+    return { color, radius, borderWidth: hasBorder ? borderWidth : 0, borderColor };
+  }
   /*
    * 渐变底（`background: var(--hud-bg)` 那类，状态效果的胶囊就是一例）在
    * `backgroundColor` 上是透明的，只能退化成一块半透明深色 —— **这是刻意的近似**：
@@ -55,8 +67,10 @@ function hasBackground(el: Element): { color: string; radius: number } | null {
    * 却要解析整串 `linear-gradient(...)`。
    */
   if (style.backgroundImage && style.backgroundImage !== 'none') {
-    return { color: HUD_GRADIENT_FALLBACK, radius };
+    return { color: HUD_GRADIENT_FALLBACK, radius, borderWidth: hasBorder ? borderWidth : 0, borderColor };
   }
+  // 只有边框（"描边按钮"）：底色透明，但边框要画出来
+  if (hasBorder) return { color: 'transparent', radius, borderWidth, borderColor };
   return null;
 }
 
@@ -68,13 +82,19 @@ export function readTextBlocks(
 ): TextBlock[] {
   const blocks: TextBlock[] = [];
   for (const el of [root, ...root.querySelectorAll('*')]) {
-    const background = hasBackground(el);
+    const background = readSurface(el);
     if (!background) continue;
     const box = el.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) continue;
     const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
     if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
-    blocks.push({ rect, color: background.color, radius: background.radius });
+    blocks.push({
+      rect,
+      color: background.color,
+      radius: background.radius,
+      borderWidth: background.borderWidth,
+      borderColor: background.borderColor,
+    });
   }
   return blocks;
 }
@@ -83,9 +103,28 @@ export function readTextBlocks(
 export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly TextBlock[]): void {
   for (const block of blocks) {
     ctx.save();
-    roundRectPath(ctx, block.rect, block.radius);
-    ctx.fillStyle = block.color;
-    ctx.fill();
+    if (block.color !== 'transparent') {
+      roundRectPath(ctx, block.rect, block.radius);
+      ctx.fillStyle = block.color;
+      ctx.fill();
+    }
+    if (block.borderWidth > 0) {
+      // 描边画在内侧半像素上：与 CSS 的 border-box 对齐（否则整块会胖 1px）
+      const inset = block.borderWidth / 2;
+      roundRectPath(
+        ctx,
+        {
+          x: block.rect.x + inset,
+          y: block.rect.y + inset,
+          w: Math.max(0, block.rect.w - block.borderWidth),
+          h: Math.max(0, block.rect.h - block.borderWidth),
+        },
+        Math.max(0, block.radius - inset),
+      );
+      ctx.strokeStyle = block.borderColor;
+      ctx.lineWidth = block.borderWidth;
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }
@@ -176,8 +215,18 @@ export function readTextRuns(
   return runs;
 }
 
-/** 按原位画这些文字（调用方负责清屏/画背景） */
-export function drawTextRuns(ctx: CanvasRenderingContext2D, runs: readonly TextRun[]): void {
+/**
+ * 按原位画这些文字（调用方负责清屏/画背景）。
+ *
+ * `slack` 给 `maxWidth` 留的余量（px）。为什么需要：DOM 的 `letter-spacing`（标题常常是
+ * 负值）会让元素盒子比 canvas 量出来的字**窄**，不给余量就会把 "MINICRAFT" 截成
+ * "MINICRA…"。镜像整页时传一个字的宽度即可；F3/计分板保持 0（那边要的就是严格截断）。
+ */
+export function drawTextRuns(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly TextRun[],
+  slack = 0,
+): void {
   for (const run of runs) {
     // 多行文字（F3 的 `textContent` 里有换行）要按行拆开逐行画
     const lines = run.text.split('\n');
@@ -197,7 +246,7 @@ export function drawTextRuns(ctx: CanvasRenderingContext2D, runs: readonly TextR
         align: run.align,
         baseline: 'middle',
         shadow: run.shadow,
-        maxWidth: run.rect.w,
+        maxWidth: run.rect.w + slack,
       });
       y += lineHeight;
     }

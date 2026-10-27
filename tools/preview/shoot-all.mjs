@@ -220,6 +220,27 @@ const SHOTS = [
     what: '纯文字 HUD + 遮罩（两块黄 = 底色与文字都是 canvas 画的）',
     status: '遮罩 · 阶段 4',
   },
+  {
+    file: '17-main-menu.png',
+    page: 'tools/preview/menu-mirror.html',
+    size: [864, 410],
+    what: '主菜单首页（整页镜像）：面板 / 标题 / 四颗按钮全部由 canvas 重画',
+    status: '已迁 · 阶段 3',
+  },
+  {
+    file: '17b-world-list.png',
+    page: 'tools/preview/menu-mirror.html?view=worlds',
+    size: [864, 410],
+    what: '世界列表（整页镜像）：3 张世界卡片 + 房间/编辑小按钮 + 新建世界',
+    status: '已迁 · 阶段 3',
+  },
+  {
+    file: '17c-main-menu-tinted.png',
+    page: 'tools/preview/menu-mirror.html?tint=1',
+    size: [864, 410],
+    what: '主菜单 + 黄色遮罩（整块黄 = 面板与文字都是 canvas 画的）',
+    status: '遮罩 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
