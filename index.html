@@ -6412,6 +6412,75 @@
         /* 竖屏高度有限：卡片的最小高度让位给内容，别留一大块空白 */
         .mp-panel, .world-modal-panel, .server-picker-panel { min-height: 0; }
       }
+
+      /* ==================================================================
+         转场（2026-10-27 第二版）
+         用户："现在体验是不太好"——之前三层都是硬切，点下去界面直接换一张。
+         规则：进入"淡入 + 轻微放大"，退出"淡出 + 轻微缩小"，两者都是 160ms。
+         二级页（选择房间/服务器）额外带一点横向位移，读起来像"翻页"而不是"换窗"。
+         `prefers-reduced-motion` 下一律关掉。
+         ================================================================== */
+      @keyframes page-fade-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes page-fade-out { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes panel-pop-in {
+        from { opacity: 0; transform: translateY(8px) scale(.985); }
+        to { opacity: 1; transform: none; }
+      }
+      @keyframes panel-pop-out {
+        from { opacity: 1; transform: none; }
+        to { opacity: 0; transform: translateY(6px) scale(.99); }
+      }
+      @keyframes panel-slide-in {
+        from { opacity: 0; transform: translateX(14px); }
+        to { opacity: 1; transform: none; }
+      }
+      @keyframes panel-slide-out {
+        from { opacity: 1; transform: none; }
+        to { opacity: 0; transform: translateX(10px); }
+      }
+
+      #multiplayer-screen:not(.hidden),
+      .world-modal:not(.hidden),
+      .server-picker:not(.hidden) {
+        animation: page-fade-in 160ms ease-out both;
+      }
+      #multiplayer-screen:not(.hidden) .mp-panel,
+      .world-modal:not(.hidden) .world-modal-panel {
+        animation: panel-pop-in 170ms cubic-bezier(.2, .8, .3, 1) both;
+      }
+      .server-picker:not(.hidden) .server-picker-panel {
+        animation: panel-slide-in 180ms cubic-bezier(.2, .8, .3, 1) both;
+      }
+
+      /* 退出：交给 JS 加 .closing，播完再真正 display:none（见两个 close()） */
+      #multiplayer-screen.closing,
+      .world-modal.closing,
+      .server-picker.closing {
+        animation: page-fade-out 160ms ease-in both;
+      }
+      #multiplayer-screen.closing .mp-panel,
+      .world-modal.closing .world-modal-panel {
+        animation: panel-pop-out 160ms ease-in both;
+      }
+      .server-picker.closing .server-picker-panel {
+        animation: panel-slide-out 160ms ease-in both;
+      }
+
+      /* 桌面上的按下反馈：触屏没有 hover，靠 :active 也能说明"点到了" */
+      .mp-action:active:not(:disabled),
+      .server-picker-button:active:not(:disabled),
+      .mp-pick:active,
+      .world-mini:active {
+        transform: translateY(1px);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #multiplayer-screen, .world-modal, .server-picker,
+        #multiplayer-screen .mp-panel, .world-modal .world-modal-panel,
+        .server-picker .server-picker-panel {
+          animation: none !important;
+        }
+      }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的

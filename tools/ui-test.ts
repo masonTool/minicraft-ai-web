@@ -6466,6 +6466,19 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
    * 改成**与主面板同宽同位置的二级页面**（左上「‹ 返回」、标题居中）：
    * 切换时是翻页，而不是套娃。断言跟着改口径。
    */
+  /*
+   * 转场（2026-10-27 第二版）：进入淡入放大、退出淡出收回，二级页带横向位移。
+   * 退出动画靠 JS 加 `.closing` + 160ms 后隐藏，所以三个条件都得在：
+   * 关键帧、class 挂接、以及 `prefers-reduced-motion` 的关闭开关。
+   */
+  check(
+    '三层都有转场（进入淡入 / 退出淡出），且 reduced-motion 下关闭',
+    htmlSrc2.includes('@keyframes panel-pop-in') &&
+      htmlSrc2.includes('@keyframes panel-slide-out') &&
+      htmlSrc2.includes('prefers-reduced-motion') &&
+      mpSrc2.includes("this.root.classList.add('closing')") &&
+      pickerSrc.includes("this.element.classList.add('closing')"),
+  );
   check(
     '「选择」是二级页面（返回按钮 + 与主面板同宽），不再叠小浮窗',
     pickerSrc.includes('open(): void') &&

@@ -81,6 +81,8 @@ export class ServerPicker {
   private readonly confirmButton: HTMLButtonElement;
   /** 空状态下才露出来的「重新扫描」（原来只能关掉面板再打开） */
   private readonly rescanButton: HTMLButtonElement;
+  /** 退出动画的定时器（快速开关时用来掐掉上一次） */
+  private closeTimer = 0;
 
   private opened = false;
   private scanning = false;
@@ -204,7 +206,9 @@ export class ServerPicker {
   open(): void {
     this.opened = true;
     this.token++;
-    this.element.classList.remove('hidden');
+    // 上一次的关闭动画还没播完就又被打开：把它掐掉，别让元素在动画中途被隐藏
+    window.clearTimeout(this.closeTimer);
+    this.element.classList.remove('closing', 'hidden');
     this.applyModeText();
     this.resetList();
     this.renderPublic();
@@ -214,10 +218,21 @@ export class ServerPicker {
   }
 
   close(): void {
+    if (!this.opened) return;
     this.opened = false;
     // 关掉之后旧扫描/房间请求的回调一律作废（它们可能还在路上）
     this.token++;
-    this.element.classList.add('hidden');
+    /*
+     * 退出也走一小段动画（2026-10-27）：直接 display:none 会"啪"一下消失，
+     * 而这一层是从右边滑进来的，退回去也该有来有回。
+     * 用固定的 160ms 定时器（与 CSS 里的时长一致）；快速开关时先清掉上一个。
+     */
+    this.element.classList.add('closing');
+    window.clearTimeout(this.closeTimer);
+    this.closeTimer = window.setTimeout(() => {
+      this.element.classList.remove('closing');
+      this.element.classList.add('hidden');
+    }, 160);
   }
 
   get isOpen(): boolean {

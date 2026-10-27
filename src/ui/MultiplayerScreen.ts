@@ -82,6 +82,8 @@ export class MultiplayerScreen {
   private openState = false;
   /** 当前期望的模式（`join` = 主菜单「加入房间」；`full` = 联机面板全量） */
   private mode: 'full' | 'join' = 'full';
+  /** 退出动画的定时器（快速开关时用来掐掉上一次） */
+  private closeTimer = 0;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
   private role: NetRole = 'solo';
   /** 最近一次 `setState` 收到的细节文案（角色变化时要在它后面补标签） */
@@ -233,7 +235,9 @@ export class MultiplayerScreen {
     this.titleEl.textContent = t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
     this.syncModeVisibility();
     this.openState = true;
-    this.root.classList.remove('hidden');
+    // 上一次的关闭动画还没播完就又被打开：掐掉它，别让面板在动画中途被隐藏
+    window.clearTimeout(this.closeTimer);
+    this.root.classList.remove('closing', 'hidden');
     // 每次打开都从存储里刷新一次地址/端口（上一次连接可能刚写过）
     this.form.portInput.value = readStored(STORAGE_PORT) ?? String(this.form.portInput.value || '');
     this.setState(this.state);
@@ -252,8 +256,18 @@ export class MultiplayerScreen {
   }
 
   close(): void {
+    if (!this.openState) return;
     this.openState = false;
-    this.root.classList.add('hidden');
+    /*
+     * 淡出而不是"啪"一下没了（2026-10-27）：面板是淡入放大的，退出对称地收回去。
+     * 固定 160ms，与 CSS 的动画时长一致。
+     */
+    this.root.classList.add('closing');
+    window.clearTimeout(this.closeTimer);
+    this.closeTimer = window.setTimeout(() => {
+      this.root.classList.remove('closing');
+      this.root.classList.add('hidden');
+    }, 160);
   }
 
   /** 由主程序在 `onStatus` 里推进：状态文案 + 按钮可用性 */
