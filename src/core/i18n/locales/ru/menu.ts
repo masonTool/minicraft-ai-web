@@ -80,6 +80,8 @@ export const menu = {
   'server.emptyHintHost': 'Убедитесь, что хост открыл комнату',
   'server.emptyHintPort': 'Возможно, порт не {port}',
   'server.changePort': 'Изменить порт',
+  'mp.hostTitle': 'Хостить: {world}',
+  'server.localHost': 'Это устройство',
   'server.portRescan': 'Поиск повторится с этим портом',
   'server.empty': 'Сервер не найден',
   'server.found': 'Найдено серверов: {count} за {seconds} с',

@@ -5421,7 +5421,9 @@ console.log('\n[加入房间：选项式面板（L9）]');
   check(
     'join 模式连着时也露出「断开」（否则联机中打开面板是个死界面）',
     mpSrc.includes('private syncModeVisibility(): void') &&
-      mpSrc.includes('joinMode && !multiplayerButtons(this.state).disconnect'),
+      // 2026-10-27：join/host 都算"单入口"（compact），只有 full 才三颗按钮
+      mpSrc.includes('const compact = this.mode !== \'full\'') &&
+      mpSrc.includes('multiplayerButtons(this.state).disconnect'),
   );
   check(
     '协议错误的状态文案按 code 出人话（面板错误行与消息栏同一份映射）',
@@ -6247,7 +6249,16 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
   const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
 
   // ---- ① 开房失败不许进世界：先预检，失败留在对话框里说原因
-  check('开房先跑预检（连得上 + 房名没被占）才建世界', /onHostWorld: async \(world, room, password, baseUrl, name\) => \{[\s\S]{0,300}?await preflightHost\(/.test(mainSrc3));
+  /*
+   * 2026-10-27：开房与「加入房间」合并成同一套界面后，这段预检从
+   * `onHostWorld: async (...)` 抽成了独立常量 `hostWorldFlow`（两个入口共用）。
+   * 断言跟着改成"存在这个流程、且先预检再建世界"。
+   */
+  check(
+    '开房先跑预检（连得上 + 房名没被占）才建世界',
+    /const hostWorldFlow = async \([\s\S]{0,220}?await preflightHost\(/.test(mainSrc3) &&
+      /await preflightHost\([\s\S]{0,900}?void startWorld\(world\)/.test(mainSrc3),
+  );
   check(
     '预检失败把原因还给对话框（不是静默进世界）',
     mainSrc3.includes("return t('mp.hostUnreachable')") && mainSrc3.includes("return t('say.net.hostTaken')"),

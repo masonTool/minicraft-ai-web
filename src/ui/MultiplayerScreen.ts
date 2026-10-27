@@ -16,7 +16,8 @@
  * `disconnect()`），状态由 `onStatus` 回调推进来。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
+import { roomFromWorldName } from '../core/net/RoomName.ts';
 import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
 import { parsePort } from '../core/net/ServerUrl.ts';
 import { RoomForm } from './RoomForm.ts';
@@ -26,6 +27,17 @@ import type { NetRole } from '../core/net/NetRole.ts';
 
 /** 面板状态；与 `NetSession` 的会话状态一一对应（`idle` 表示没连过） */
 export type MultiplayerScreenState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
+
+/**
+ * 开房时带过来的世界。
+ *
+ * 这里只声明用得到的两个字段，宿主传完整的世界摘要即可（它要拿 `id` 去开存档）——
+ * 面板不关心其余字段，也不应该依赖 `WorldSummary`（那是世界列表层的类型）。
+ */
+export interface HostWorld {
+  name: string;
+  seed?: number;
+}
 
 export interface MultiplayerScreenActions {
   /**
@@ -37,6 +49,19 @@ export interface MultiplayerScreenActions {
   onConnect: (url: string, name: string, host: boolean) => void;
   onDisconnect: () => void;
   onClose: () => void;
+  /**
+   * 开房模式下点「确定并进入」：带着世界信息一起交给宿主。
+   *
+   * 为什么不用 `onConnect(url, name, true)`：开房要先**把这个世界建起来**
+   * （预检 → 预占房名 → startWorld），不是一个 `setTimeout` 的连接动作。
+   */
+  onHostWorld?: (
+    world: HostWorld,
+    room: string,
+    password: string,
+    baseUrl: string,
+    name: string,
+  ) => void;
 }
 
 /** localStorage 记住上次填的地址 / 端口 / 房间 / 密码 / 昵称（手机上每次手输太痛苦） */
@@ -83,11 +108,13 @@ export class MultiplayerScreen {
   private state: MultiplayerScreenState = 'idle';
   private openState = false;
   /** 当前期望的模式（`join` = 主菜单「加入房间」；`full` = 联机面板全量） */
-  private mode: 'full' | 'join' = 'full';
+  private mode: 'full' | 'join' | 'host' = 'full';
   /** 退出动画的定时器（快速开关时用来掐掉上一次） */
   private closeTimer = 0;
   /** 右栏：常驻的服务器/房间列表 */
   private list!: ServerListPanel;
+  /** 开房模式下的世界（加入模式为 null） */
+  private hostWorld: HostWorld | null = null;
   /** 端口确认弹窗（同一时刻只开一个） */
   private portDialog: HTMLDivElement | null = null;
   /** 当前角色（L8）：由 `setRole` 推进，只在"已连接"时显示 */
@@ -225,6 +252,8 @@ export class MultiplayerScreen {
       this.showError('');
     };
     this.list.onPortRequest = () => this.openPortDialog();
+    // 地址框里填过的 IP 也用来推网段（hostname 不是 IP 时它最靠谱）
+    this.list.addressProvider = () => this.urlInput.value;
 
     const columns = document.createElement('div');
     columns.className = 'mp-columns';
@@ -269,10 +298,36 @@ export class MultiplayerScreen {
    * `mode = 'join'`：主菜单里点「加入房间」主要是"加入"这一件事——开房要指定用哪个世界，
    * 那件事在世界卡片的「开房」上，所以那颗恒藏；「断开」只在真连着时露出来。
    */
-  open(mode: 'full' | 'join' = 'full'): void {
+  /**
+   * 打开面板。
+   *
+   * `mode`：
+   *  - `full`  主菜单「联机」；
+   *  - `join`  主菜单「加入房间」（只留表单 + 加入）；
+   *  - `host`  **世界卡片的「开房」**（用户 2026-10-27：和加入共用同一套界面，
+   *            区别只有标题、按钮文案，以及右栏多一个「选择本机」）。
+   */
+  open(mode: 'full' | 'join' | 'host' = 'full', world?: HostWorld): void {
     this.mode = mode;
+    this.hostWorld = mode === 'host' && world !== undefined ? { ...world } : null;
     this.root.dataset.mode = mode;
-    this.titleEl.textContent = t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
+    this.titleEl.textContent =
+      this.hostWorld !== null
+        ? tp('mp.hostTitle', { world: this.hostWorld.name })
+        : t(mode === 'join' ? 'mp.joinTitle' : 'mp.title');
+    if (this.hostWorld !== null) {
+      // 开房：房名由世界名派生（玩家仍可改），主按钮换成「确定并进入」
+      this.roomInput.value = roomFromWorldName(this.hostWorld.name, this.hostWorld.seed ?? 0);
+      this.joinButton.textContent = t('world.hostStart');
+      this.hostButton.classList.add('hidden');
+    } else {
+      this.joinButton.textContent = t('mp.join');
+      this.hostButton.classList.remove('hidden');
+    }
+    // 「选择本机」只在开房时露出：加入时填本机没有意义（本机没服务端）
+    this.list.setLocalVisible(this.hostWorld !== null);
+    // 刚打开时清掉上一次的错误/断线提示（否则一进来就写"连接已断开"）
+    this.showError('');
     this.syncModeVisibility();
     this.openState = true;
     // 上一次的关闭动画还没播完就又被打开：掐掉它，别让面板在动画中途被隐藏
@@ -292,10 +347,18 @@ export class MultiplayerScreen {
    * 「开房」在 join 模式恒藏；「断开」只在真有连接（含重连中）时露出来——
    * 否则联机中打开「加入房间」会是一个全灰的死面板。
    */
+  /**
+   * 三个按钮的可见性。
+   *
+   * `join` / `host` 都是"单入口"模式（用户 2026-10-27：开房与加入共用一套界面），
+   * 只留一颗主按钮；只有主菜单的 `full` 才三颗都给。
+   * 开房模式下主按钮是「确定并进入」，那颗「开房」按钮必须藏起来——
+   * 否则玩家会看到两个都在说"开房"，分不清该点哪个。
+   */
   private syncModeVisibility(): void {
-    const joinMode = this.mode === 'join';
-    this.hostButton.classList.toggle('hidden', joinMode);
-    this.disconnectButton.classList.toggle('hidden', joinMode && !multiplayerButtons(this.state).disconnect);
+    const compact = this.mode !== 'full';
+    this.hostButton.classList.toggle('hidden', compact);
+    this.disconnectButton.classList.toggle('hidden', compact && !multiplayerButtons(this.state).disconnect);
   }
 
   close(): void {
@@ -412,6 +475,11 @@ export class MultiplayerScreen {
     writeStored(STORAGE_ROOM, this.roomInput.value.trim());
     writeStored(STORAGE_PASSWORD, this.passwordInput.value.trim().slice(0, 32));
     writeStored(STORAGE_NAME, values.name);
+    // 开房：交给宿主做预检 + 建世界（不是连上去就算）
+    if (this.hostWorld !== null) {
+      this.actions.onHostWorld?.(this.hostWorld, values.room, values.password, values.baseUrl, values.name);
+      return;
+    }
     this.actions.onConnect(values.url, values.name, host);
   }
 

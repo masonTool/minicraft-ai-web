@@ -6720,6 +6720,31 @@
       .inp-field::placeholder { color: #9a9a9a; }
       /* 选中文字纯白（各平台默认选中色会把字压暗） */
       .inp-field::selection { background: #4a7d39; color: #fff; }
+
+      /* 「选择本机」（2026-10-27）：开房时右栏顶部的第一项，点了把地址填成 127.0.0.1 */
+      .server-list-local {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        box-sizing: border-box; width: 100%;
+        padding: 7px 10px; margin-bottom: 4px;
+        font: inherit; font-size: 13px; text-align: left;
+        color: #eef5ea; background: #35502c;
+        border: 2px solid;
+        border-top-color: #527a41; border-left-color: #4d7440;
+        border-right-color: #263c1f; border-bottom-color: #22381c;
+        cursor: pointer;
+      }
+      .server-list-local:hover { background: #3d5c33; }
+      .server-list-local.hidden { display: none; }
+      .server-list-local-hint { font-size: 11px; color: #b9d3ab; font-variant-numeric: tabular-nums; }
+
+      /* 联机面板的三颗按钮：**.hidden 在这个项目里不是通用类**（每个元素各自声明
+         `#id.hidden { display: none }`），所以 `classList.add('hidden')` 对它们原本无效——
+         join/host 模式下「开房」按钮一直显示着（用户 2026-10-27 看到两个"开房"）。 */
+      #mp-host.hidden,
+      #mp-join.hidden,
+      #mp-disconnect.hidden {
+        display: none;
+      }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的

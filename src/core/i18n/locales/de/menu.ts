@@ -80,6 +80,8 @@ export const menu = {
   'server.emptyHintHost': 'Prüfe, ob der Host einen Raum geöffnet hat',
   'server.emptyHintPort': 'Der Port ist evtl. nicht {port}',
   'server.changePort': 'Port ändern',
+  'mp.hostTitle': 'Hosten: {world}',
+  'server.localHost': 'Dieses Gerät',
   'server.portRescan': 'Wird mit diesem Port neu gescannt',
   'server.empty': 'Kein Server gefunden',
   'server.found': '{count} Server in {seconds}s gefunden',

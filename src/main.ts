@@ -20654,6 +20654,43 @@ async function boot(): Promise<void> {
    * 以前它由 `App` 创建，于是"只有进了世界才有面板"——这正是"开房要先进入再按 Esc"
    * 的根源。挪到这里之后，主菜单点「加入房间…」就能直接开会话。
    */
+  /**
+   * 开房流程：预检（连得上 / 房名没被占）→ 记下待办 → 建世界。
+   *
+   * **为什么抽成独立变量**：合并界面之后有两个入口都走它——
+   * 世界卡片的「开房」（旧对话框，保留兜底）与联机面板 host 模式的「确定并进入」。
+   */
+  const hostWorldFlow = async (
+    world: WorldSummary,
+    room: string,
+    password: string,
+    baseUrl: string,
+    name: string,
+  ): Promise<string | null> => {
+      const blocked = await preflightHost({ baseUrl, room });
+      if (blocked === 'https-blocked') {
+        /*
+         * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
+         * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
+         */
+        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
+        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
+        return t('mp.hostHttpsBlocked');
+      }
+      if (blocked === 'unreachable') {
+        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
+        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
+        return t('mp.hostUnreachable');
+      }
+      if (blocked === 'taken') {
+        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
+        return t('say.net.hostTaken');
+      }
+      pendingHostRoom = { room, password, baseUrl, name };
+      void startWorld(world);
+      return null;
+    };
+
   const multiplayerUi = new MultiplayerScreen(document.body, {
     onConnect: (url, name, host) => {
       if (currentApp && currentApp.alive) {
@@ -20667,6 +20704,15 @@ async function boot(): Promise<void> {
       multiplayerUi.setState('offline');
     },
     onClose: () => multiplayerUi.close(),
+    /*
+     * 开房模式（用户 2026-10-27：和加入共用一套界面）：面板把世界原样带回来，
+     * 这里落到同一条预检 + 建世界流程上。失败原因返回给面板显示。
+     */
+    onHostWorld: (world, room, password, baseUrl, name) => {
+      void hostWorldFlow(world as unknown as WorldSummary, room, password, baseUrl, name).then((error) => {
+        if (error !== null && error !== undefined) multiplayerUi.setState('offline', error);
+      });
+    },
   });
 
   const menu = new WorldScreen(document.body, registry, {
@@ -20697,30 +20743,9 @@ async function boot(): Promise<void> {
      * 站在世界里了，只能看到一句看不懂的 `host-taken` 或者静默断开。现在失败就留在对话框里
      * 把原因写在提示行上（`preflightHost` 只连不发 join，不占房主位）。
      */
-    onHostWorld: async (world, room, password, baseUrl, name) => {
-      const blocked = await preflightHost({ baseUrl, room });
-      if (blocked === 'https-blocked') {
-        /*
-         * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
-         * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
-         */
-        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
-        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
-        return t('mp.hostHttpsBlocked');
-      }
-      if (blocked === 'unreachable') {
-        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
-        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
-        return t('mp.hostUnreachable');
-      }
-      if (blocked === 'taken') {
-        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
-        return t('say.net.hostTaken');
-      }
-      pendingHostRoom = { room, password, baseUrl, name };
-      void startWorld(world);
-      return null;
-    },
+    onHostWorld: hostWorldFlow,
+    /* 卡片的「开房」直接进联机面板的 host 模式（界面与「加入房间」一致） */
+    onHostOpen: (world) => multiplayerUi.open('host', world),
     /*
      * 开房对话框的地址默认值（用户 2026-10-25）：以前这里写死 `defaultServerUrl()`，
      * 玩家看不到也改不了；现在把"当前该连哪台机器"以地址栏口径（只 IP）回填给他。

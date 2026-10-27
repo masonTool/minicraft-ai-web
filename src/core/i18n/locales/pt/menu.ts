@@ -79,6 +79,8 @@ export const menu = {
   'server.emptyHintHost': 'Confirme que o anfitrião abriu uma sala',
   'server.emptyHintPort': 'A porta pode não ser {port}',
   'server.changePort': 'Mudar a porta',
+  'mp.hostTitle': 'Hospedar: {world}',
+  'server.localHost': 'Este aparelho',
   'server.portRescan': 'Vai procurar de novo nesta porta',
   'server.empty': 'Nenhum servidor encontrado',
   'server.found': '{count} servidor(es) em {seconds}s',

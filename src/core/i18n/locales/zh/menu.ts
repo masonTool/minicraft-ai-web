@@ -66,6 +66,8 @@ export const menu = {
   // ---- 多人游戏（联机9）：主菜单 / 暂停菜单的入口按钮 + 连接小面板
   'menu.multiplayer': '多人游戏',
   'mp.title': '多人游戏',
+  'mp.hostTitle': '开房：{world}',
+  'server.localHost': '选择本机',
   'mp.server': '服务器',
   'mp.serverHint': 'IP 或域名',
   'server.title': '选择服务器',
