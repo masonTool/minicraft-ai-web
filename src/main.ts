@@ -6763,10 +6763,13 @@ class App {
    */
   private applyTextPanelsDomFallback(): void {
     if (!UI2D_ENABLED) return;
-    for (const id of ['debug', 'scoreboard-hud']) {
+    for (const id of ['debug', 'scoreboard-hud', 'effects-hud']) {
       const el = document.getElementById(id);
       if (el) el.style.visibility = 'hidden';
     }
+    // 聊天**只藏消息列表**：输入行/提示/发送键仍是 DOM（阶段 3 的输入法那一摊）
+    const chatLog = document.querySelector<HTMLElement>('.chat-log');
+    if (chatLog) chatLog.style.visibility = 'hidden';
   }
 
   /**
@@ -6780,12 +6783,16 @@ class App {
     if (!hud || !overlay) return;
     const debug = document.getElementById('debug');
     const board = document.getElementById('scoreboard-hud');
+    const effects = document.getElementById('effects-hud');
+    const chatLog = document.querySelector<HTMLElement>('.chat-log');
     const shown = (el: HTMLElement | null): el is HTMLElement =>
       !!el && el.offsetParent !== null && !el.classList.contains('hidden');
 
     const parts: string[] = [];
     if (shown(debug)) parts.push(debug.textContent ?? '');
     if (shown(board)) parts.push(board.textContent ?? '');
+    if (shown(effects)) parts.push(effects.textContent ?? '');
+    if (chatLog && chatLog.childElementCount > 0) parts.push(chatLog.textContent ?? '');
     const key = `${parts.join('\u0001')}|${overlay.width}x${overlay.height}`;
     if (key === this.textPanelsKey) return;
     this.textPanelsKey = key;
@@ -6798,13 +6805,14 @@ class App {
     const view = { w: overlay.width, h: overlay.height };
     const runs: TextRun[] = [];
     const blocks: TextBlock[] = [];
-    if (shown(debug)) {
-      runs.push(...readTextRuns(debug, host, view));
-      blocks.push(...readTextBlocks(debug, host, view));
-    }
-    if (shown(board)) {
-      runs.push(...readTextRuns(board, host, view));
-      blocks.push(...readTextBlocks(board, host, view));
+    const roots: HTMLElement[] = [];
+    if (shown(debug)) roots.push(debug);
+    if (shown(board)) roots.push(board);
+    if (shown(effects)) roots.push(effects);
+    if (chatLog && chatLog.childElementCount > 0) roots.push(chatLog);
+    for (const root of roots) {
+      runs.push(...readTextRuns(root, host, view));
+      blocks.push(...readTextBlocks(root, host, view));
     }
     hud.setTextPanels({ runs, blocks });
   }

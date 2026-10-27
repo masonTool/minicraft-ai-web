@@ -32,6 +32,9 @@ export interface TextRun {
   readonly shadow: boolean;
 }
 
+/** 渐变底的近似色（见 `hasBackground` 的注释） */
+export const HUD_GRADIENT_FALLBACK = 'rgba(16, 17, 21, .66)';
+
 /** 一块带底色的区域（F3 的 `rgba(0,0,0,.35)`、计分板的 `.45` 都是它） */
 export interface TextBlock {
   readonly rect: Rect;
@@ -42,10 +45,19 @@ export interface TextBlock {
 /** 元素是否有可见底色（`transparent` / alpha=0 的跳过） */
 function hasBackground(el: Element): { color: string; radius: number } | null {
   const style = window.getComputedStyle(el);
-  const color = style.backgroundColor;
-  if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return null;
   const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
-  return { color, radius };
+  const color = style.backgroundColor;
+  if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') return { color, radius };
+  /*
+   * 渐变底（`background: var(--hud-bg)` 那类，状态效果的胶囊就是一例）在
+   * `backgroundColor` 上是透明的，只能退化成一块半透明深色 —— **这是刻意的近似**：
+   * 用 `createLinearGradient` 复刻一条 CSS 渐变，收益只有"上下差 2% 的亮度"，
+   * 却要解析整串 `linear-gradient(...)`。
+   */
+  if (style.backgroundImage && style.backgroundImage !== 'none') {
+    return { color: HUD_GRADIENT_FALLBACK, radius };
+  }
+  return null;
 }
 
 /** 读出范围内的所有"底色块"（原位、原色、原圆角） */

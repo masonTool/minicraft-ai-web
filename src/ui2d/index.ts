@@ -140,6 +140,7 @@ export {
 export {
   drawTextBlocks,
   drawTextRuns,
+  HUD_GRADIENT_FALLBACK,
   normalizeWeight,
   readTextBlocks,
   readTextRuns,

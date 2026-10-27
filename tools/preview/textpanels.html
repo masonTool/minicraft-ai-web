@@ -49,6 +49,33 @@
       }
       .scoreboard-row { display: flex; justify-content: space-between; gap: 10px; }
       .scoreboard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* 状态效果（`#effects-hud`）：胶囊 + 左侧色点；底色是 HUD 渐变 */
+      #effects-hud {
+        position: absolute; right: 10px; top: 108px;
+        display: flex; flex-direction: column; gap: 3px; align-items: flex-end;
+        font-size: 12px;
+      }
+      .effect-chip {
+        display: flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+        color: #fff;
+        background: linear-gradient(rgba(16, 17, 21, .62), rgba(8, 9, 12, .74));
+        border: 1px solid rgba(255, 255, 255, .16);
+        text-shadow: 1px 1px 0 #000;
+      }
+      .effect-chip.good { border-color: rgba(121, 196, 107, .4); }
+      .effect-chip.bad { border-color: rgba(212, 107, 107, .4); }
+
+      /* 聊天消息（`.chat-log`）：只有文字与颜色，颜色按 kind */
+      .chat-log {
+        position: absolute; left: 10px; bottom: 40px; width: 360px;
+        display: flex; flex-direction: column; gap: 2px;
+        font-size: 12px; line-height: 1.45;
+      }
+      .chat-line { color: #ffffff; }
+      .chat-line.chat-system { color: #ffff55; }
+      .chat-line.chat-error { color: #ff5555; }
+      .chat-line.chat-info { color: #9fd8ff; }
       .scoreboard-value { color: #ffd75e; font-variant-numeric: tabular-nums; }
     </style>
   </head>
@@ -88,6 +115,17 @@
           <div class="scoreboard-row"><span class="scoreboard-name">Alex</span><span class="scoreboard-value">9</span></div>
           <div class="scoreboard-row"><span class="scoreboard-name">Herobrine_</span><span class="scoreboard-value">7</span></div>
           <div class="scoreboard-row"><span class="scoreboard-name">小明</span><span class="scoreboard-value">3</span></div>
+        </div>
+        <div id="effects-hud">
+          <div class="effect-chip good">生命恢复 I 0:42</div>
+          <div class="effect-chip bad">中毒 II 1:23</div>
+          <div class="effect-chip bad">凋零 I 0:11</div>
+        </div>
+        <div class="chat-log">
+          <div class="chat-line chat-system">已保存世界</div>
+          <div class="chat-line">Steve: 这边有钻石</div>
+          <div class="chat-line chat-info">[提示] 按 E 打开背包</div>
+          <div class="chat-line chat-error">你无法在此处放置方块</div>
         </div>`;
       document.body.appendChild(layer);
       // F3 那串文案是**多行字符串**（原样换行，不做重排）
@@ -101,17 +139,14 @@
         ].join('\n');
 
       const host = overlay.canvas.getBoundingClientRect();
-      const debugEl = layer.querySelector('#debug');
-      const boardEl = layer.querySelector('.scoreboard-hud');
-      const runs = [
-        ...readTextRuns(debugEl, host, { w: W, h: H }),
-        ...readTextRuns(boardEl, host, { w: W, h: H }),
+      const roots = [
+        layer.querySelector('#debug'),
+        layer.querySelector('.scoreboard-hud'),
+        layer.querySelector('#effects-hud'),
+        layer.querySelector('.chat-log'),
       ];
-      // 底色块也要一起读：F3 与计分板各自的半透明底
-      const blocks = [
-        ...readTextBlocks(debugEl, host, { w: W, h: H }),
-        ...readTextBlocks(boardEl, host, { w: W, h: H }),
-      ];
+      const runs = roots.flatMap((root) => readTextRuns(root, host, { w: W, h: H }));
+      const blocks = roots.flatMap((root) => readTextBlocks(root, host, { w: W, h: H }));
 
       // ---- 画：底下的"世界" + 原位重画的文字 ----
       const bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -126,7 +161,7 @@
       if (tint) applyDebugTint(ctx, W, H);
 
       document.getElementById('caption').textContent =
-        `F3 ${runs.filter((r) => r.text.includes('fps')).length} 行 + 计分板 ${runs.length} 段文字（原位、原色、原字号）` +
+        `F3 / 计分板 / 状态效果 / 聊天消息，共 ${runs.length} 段文字、${blocks.length} 块底色（原位、原色、原字号）` +
         (tint ? ' · 黄色 = canvas 画的' : '');
     </script>
   </body>
