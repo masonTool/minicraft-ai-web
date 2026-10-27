@@ -63,8 +63,15 @@
         border: 1px solid rgba(255, 255, 255, .16);
         text-shadow: 1px 1px 0 #000;
       }
+      /* 左侧那颗"好/坏"色点是 ::before（canvas 侧也照它画了一个小圆） */
+      .effect-chip::before {
+        content: ''; width: 7px; height: 7px; border-radius: 50%;
+        margin-right: 6px; background: #b9c2cc;
+      }
       .effect-chip.good { border-color: rgba(121, 196, 107, .4); }
+      .effect-chip.good::before { background: #79c46b; }
       .effect-chip.bad { border-color: rgba(212, 107, 107, .4); }
+      .effect-chip.bad::before { background: #d46b6b; }
 
       /* 聊天消息（`.chat-log`）：只有文字与颜色，颜色按 kind */
       .chat-log {
