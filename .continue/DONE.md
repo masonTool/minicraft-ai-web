@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261027-1209 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1209
+
+> 用户 2026-10-27：「继续继续」—— 接着做**阶段 1：控件库**。
+> 这是"整页搬走"的前提：设置页 / 主菜单 / 背包里的每一个交互，拆开都是这几个控件
+> （开关、滑块、下拉、页签、滚动列表、提示框、弹窗）。控件库一天，整页才有资格谈。
+
+- [x] [W1] `src/ui2d/controls.ts`：七个控件的**画法 + 纯状态机**（开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗），几何与命中全部做成可断言的纯函数 → `npx vitest run tests/ui2d-controls.test.ts`
+  - 做了什么：`controls.ts`（约 470 行）—— 七个 `draw*` + 一组纯函数：`toggleNext`、`sliderTrackRange`/`sliderRatioFromX`/`sliderRatioStep`、`dropdownMenuRect`/`dropdownIndexAt`、`tabRects`/`tabIndexAt`、`listMaxScroll`/`clampListScroll`/`listScrollByWheel`/`listVisibleRange`、`tooltipRect`、`modalRect`；另有 `controlRegion`（矩形登记命中）与 `insetRect`。色值延续 `PALETTE`，新增 `CONTROL_COLORS` / `MODAL_COLORS`。
+  - 为什么：**状态留在调用方、控件只给画法与状态机**（决策 D10）。canvas 没有"元素自己记得自己开着没有"，混在一起就会长出第二份真相（DOM 那套 `class` 正是如此）；而纯函数能离线断言，绘制不能。
+  - 验证：`npx tsc --noEmit` 干净；`npx vitest run tests/ui2d-controls.test.ts` → **21 passed**。
+  - 批次：20261027-1209
+
+- [x] [W2] `tests/ui2d-controls.test.ts`：每个控件"命中 → 状态 → 回调"的离线断言（滑块的 0/0.5/1、下拉的翻转与越界、列表的滚动夹取、提示框防溢出）→ `npm run test:unit`
+  - 做了什么：21 条断言，分七组：控件命中区域（矩形 + 开区间边界）、开关翻转、滑块（可拖范围两端各留半钮 / 0-0.5-1 / 越界与 NaN / 键盘步进同一夹取）、下拉（默认向下 / 下方放不下翻上 / 上下都放不下选空间大的那侧 / 菜单项越界 -1）、页签（等分 / 左闭右开 / 最右边界算最后一个）、列表（内容高 / 最大滚动 / 夹取 / 滚轮按整行含"恰好半行向上取整" / 可见范围首尾）、提示框（下方 / 翻上 / 左右夹进视口）、弹窗（居中 / 小屏夹进视口）。
+  - 为什么：这些错每一条都只表现为"手感不对"或"偶尔点不到"，真机上间歇出现、手指复现不出来 —— 只有纯函数断言能钉住。
+  - 验证：`npm run test:unit` 绿（新增文件被 `vitest run tests` 自动收进去，不需要注册）。
+  - 批次：20261027-1209
+
+- [x] [W3] `tools/preview/controls.html`：把七个控件摆一排并能真的点/拖/滚（canvas 直接接指针事件），加 `?tint=1`；`shoot-all.mjs` 补图并重拍 `.tmp/canvas-version/` → `node tools/preview/shoot-all.mjs`
+  - 做了什么：一页 900×560 的可交互画廊 —— 开关两枚、滑块（按住拖）、下拉（点开选中）、三页签、20 行滚动列表（滚轮 + 点行选中 + 右侧滚动条）、"?" 悬停提示框、"打开弹窗"（不透明深色面板 + 标题栏 + ✕ + Esc）。命中一律走 `hitRegionAt(regions(), x, y)`，就是将来设置页要用的那条路。`?state=dropdown|tooltip|modal` 把浮层固定打开（截图用），`?tint=1` 加遮罩。`shoot-all` 加 5 张，累计 19 张。
+  - 为什么：阶段 1 的判据就是"能在调试面板里摆一排"；而且**交互只能靠手**验，截图不行 —— 所以这一页刻意打开 `pointer-events`（游戏里铺满全屏的覆盖层必须关着，否则吃掉视角手势）。
+  - 验证：`node tools/preview/shoot-all.mjs` 19 张全出；逐张看过：下拉展开贴字段下方、已选项高亮；列表滚到 03~14 且滚动条在中段；提示框贴 "?" 下方两行；弹窗不透出底下列表；遮罩版整页黄。
+  - 批次：20261027-1209
+
+- [x] [W4] 文档：`notes/canvas-ui.md` 阶段表把 1 标成 ✅、新增 §5.5（七个控件的接口与"为什么状态留在调用方"）、决策 D10~D12 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：阶段表补回 `1 控件库 ✅` 一行（上一批那次表格编辑把它整行替换掉了，这次顺手补回来）；新增 §5.5（七行接口表 + 三条经验：状态留调用方 / 翻转与避让必须自己算 / 弹窗要不透明）；决策 D10（画法与状态机分离）、D11（下拉与提示框自己避让）、D12（弹窗不复用 HUD 底板）。
+  - 为什么：D12 是这一批唯一"踩到才改"的一条 —— 第一版弹窗用半透明 HUD 底板，截图里底下列表的字全透上来，像字叠字。不写下来，下一个人做设置页还会再踩一次。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1209
+
 ## 批次 20261027-1153 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -256,34 +292,6 @@
   - 为什么：这三块是"房主权威"的最后一块拼图——手机当房主时队友看不到箱子、野怪打不动人、远处的方块补不上。
   - 验证：`bash server/rust/run-net-test.sh` → **297 通过 / 0 失败**（与 Node 同一份断言）；`cargo test` 28、`cargo check` 零警告。
   - 批次：20261027-1000
-
----
-
-## 批次 20261027-0800 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："继续" —— 发现本机其实有 cargo（只是没进 PATH），于是把之前"盲写未验证"的 Rust 改动全部编译 + 跑黑盒断言。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0800
-
-- [x] [R1] Rust 编译验证 + 修 E0382：`server/rust/src/beacon.rs` → `cargo check` / `cargo test`
-  - 做了什么：`cargo check` 立刻抓到 `borrow of moved value: room`（`has_host` 在 `room` move 之后又借用），改成先算 `has_host` 再构造；`cargo test` **28 通过**。
-  - 为什么：之前几批 Rust 改动是在"没有工具链"的前提下写的，只能算推测；有了编译器才第一次被真正检验。
-  - 验证：`cargo check` 干净；`cargo test` 28 / 0。
-  - 批次：20261027-0800
-- [x] [R1] 补 Rust 的 `ALLOW_HOSTLESS_ROOMS` + `/ping` + `beaconPort` + `isHost`：`server/rust/src/{lib,handlers}.rs`、`run-net-test.sh` → `bash server/rust/run-net-test.sh`
-  - 做了什么：① `ALLOW_HOSTLESS_ROOMS=1`（Config/Hub/join 判断 + 验收脚本），否则单人用例全被 `no-host` 拒（第一次跑只有 **227/297**）；② `/ping` 路由（客户端扫网段只认能回它的机器，缺了它手机端永远扫不到）；③ `/healthz` 补 `beaconPort`；④ `player` 广播（join 与每条 `move`）补 `isHost`。
-  - 为什么：前两条是**产品级缺陷**（不是测试口径问题）：改名后别人扫不到手机上跑的服务端、队友的名字牌不标房主。
-  - 验证：黑盒断言 **227 → 233 / 297**；`cargo test` 28 / 0。
-  - 批次：20261027-0800
-- [x] [R1] 把剩余 64 条按 10 组写清（TASKS R1 + 两处 README）：`server/README.md`、`server/rust/README.md`
-  - 做了什么：README 的「195 条 0 失败」改成「当前基线 233/297、`cargo test` 28 绿」；缺口表扩成 10 组并标出每组的失败断言数（`day` 6 / 采纳时钟天气 6 / 快照 v2 6 / 关房清缓存 3 / `session-sync` 6 / `edits-*` 3 / `bye` 2 / 外观 1 / 掉落物 1 / 每房时钟）。
-  - 为什么：这 64 条就是可执行的验收清单——每一条都对应一句断言，不需要再猜"还缺什么"。
-  - 验证：`npm run check` exit=0。
-  - 批次：20261027-0800
 
 ---
 
