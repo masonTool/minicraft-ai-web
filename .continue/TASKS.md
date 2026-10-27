@@ -4247,10 +4247,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
-- [ ] R2 **iOS 侧 Bonjour 浏览（`NetServiceBrowser`）**：现在只有发布
-      （`server/ios/Sources/BonjourAdvertiser.swift` 用的 `NetService`），没有浏览，
-      所以"iOS 之间靠 Bonjour 互相发现"还不成立——能看到邻居是因为对方也发了 UDP 组播。
-      补约 60 行 Swift + 在模拟器里用 Mac 的 `dns-sd -R` 发布假记录验证（`check-sim.sh` 可加一条）。
+- [x] R2 **iOS 侧 Bonjour 浏览（`NetServiceBrowser`）**。
+  - 做了什么：新增 `server/ios/Sources/BonjourBrowser.swift`（搜 `_minicraft._tcp`、
+    解析 IPv4 + TXT、每 8 秒重 resolve 一次以刷新 Rust 侧 12 秒 TTL、只认 IPv4）；
+    `ForegroundSession` 在服务起来/停止/进后台时分别 start/stop 浏览器；
+    Rust 侧新增 C 入口 `minicraft_add_bonjour_peer(name, ip, txt_json)`
+    （`beacon::from_txt` 转 `Announce` → `PeerBook::observe`），`instance` 暴露 `with_hub`。
+  - 验证：`check.sh` 三个 C 入口检查扩到四个并全过；`check-sim.sh` 在模拟器里注入一条
+    Bonjour 记录 → **`/healthz.peers` 里出现该邻居**（C 入口 → peer 表 → healthz 链路通）。
+  - ⚠️ **未验证**：真实 mDNS 发现（`NetServiceBrowser` 能否发现隔壁设备）——那要两台真机
+    或一个可用的 mDNS 域，已写进 `server/ios/README.md` 的上机清单第 3 条。
 - [x] R1 **Rust 版跟进 2026-10-26 之后的协议**（**已完成：297 / 297 全绿**）。
   - 补齐的能力：`no-host` / `host-offline` / `maxPlayers` / `/ping` / `/healthz.beaconPort` /
     `player` 广播的 `isHost` / 快照 **v2**（只留时钟，房间数据不落盘也不再读回）/
@@ -6054,7 +6060,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（233 条，不是差异，但同样"集中查"更好）
+### 实现注意（234 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6234,6 +6240,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | L8 房主权威 + 服务端只是这一局的会话缓存 | ⚠️ **取舍（用户已拍板）**：服务端不保留"救援副本"——房主设备丢/清浏览器数据 = 这一局 全丢（含队友盖的东西）。这是刻意的，别在后续批次里"顺手加回来"。 |
 | L8 房主权威 + 服务端只是这一局的会话缓存 | ⚠️ 懒上行抓到一个真 bug：`Chunk.coordsAt()` 返回的是**区块内** x/z（y 是世界坐标）， 漏加 `cx*16 / cz*16` 会把补发的方块全堆在区块西北角，而原点附近的房间完全看不出来。 |
 | L8 房主权威 + 服务端只是这一局的会话缓存 | ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与 "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。 |
+| R2 iOS 侧 Bonjour 浏览 | - ⚠️ **未验证**：真实 mDNS 发现（`NetServiceBrowser` 能否发现隔壁设备）——那要两台真机 或一个可用的 mDNS 域，已写进 `server/ios/README.md` 的上机清单第 3 条。 |
 | R1 Rust 版跟进 2026-10-26 之后的协议 | - ⚠️ 测试要带 `ALLOW_HOSTLESS_ROOMS=1`（脚本已带）：绝大多数用例是"单人连上去测同步"、不建房主， 不放开会被 `no-host` 拒。产品默认仍拒绝没有房主的房间。 |
 | L13 Rust 版补齐 `no-host` / `host-o | - ⚠️ **本机没有 `cargo`/`rustc`，这批改动未经编译验证**；装好工具链后先跑 `bash server/rust/run-net-test.sh`（195 条对齐测试）。 - 验证：`npm run check` exit=0（Rust 不参与编译，只能验文档与台账）。 |
 | M5 聊天框与命令系统 | ⚠️ 两条实测抓出来的坑：① `filledSlots` 要跳过 `count: 0` 的残留（否则根节点会多列一行 空气）；② **三个坐标原来是 `Number(raw)` 直接转的，`~` 变成 NaN 直接报用法错误** —— 浏览器里第一条 `/data get block ~ ~-1 ~`（"看我脚下是什么"，最自然的写法）就被拒了， |

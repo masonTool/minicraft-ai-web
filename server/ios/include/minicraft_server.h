@@ -35,6 +35,23 @@ void minicraft_stop_server(void);
 /** 当前端口；0 = 没在跑。 */
 int32_t minicraft_server_port(void);
 
+/**
+ * 把一条 Bonjour 记录塞进 peer 表（`NetServiceBrowser` 解析完地址后调它）。
+ *
+ * 为什么需要：`BonjourAdvertiser` 只**发布**，别人看得见我们、我们看不见别人。
+ * 组播（`beacon.rs`）两端都有，但某些 Wi-Fi 会挡组播（AP 隔离 / IGMP snooping），
+ * Bonjour 走 mDNS 能补上这一段。
+ *
+ * @param service_name `NetService.name`（当实例 id）
+ * @param ip           点分十进制 IPv4（只认 IPv4）
+ * @param txt_json     `{"port":"8887","room":"x","name":"…","seed":"1","players":"2","host":"1","pw":"0"}`
+ * @return 1 = 新发现或有变化；0 = 没变；-1 = 参数/服务状态不对（没在跑）
+ *
+ * 注意：**每 8 秒重新 resolve 一次**再调它——Rust 侧的 peer 表有 12 秒 TTL，
+ * 不刷新的话邻居会在列表里消失。
+ */
+int32_t minicraft_add_bonjour_peer(const char *service_name, const char *ip, const char *txt_json);
+
 #ifdef __cplusplus
 }
 #endif

@@ -55,6 +55,41 @@ guard rooms?.contains("\"ok\":true") == true else {
 }
 print("[smoke] ✓ /rooms 有响应")
 
+/*
+ * Bonjour 桥接（用户 2026-10-27）：**不依赖真的 mDNS**——直接注入一条记录，
+ * 验"C 入口 → peer 表 → /healthz.peers"这条链路。
+ *
+ * 为什么这样验：`NetServiceBrowser` 在模拟器里能不能发现 Mac 上发布的服务，取决于
+ * 环境（mDNS 域、本地网络权限），拿它当门禁会变成"环境问题"。而这条链路是我们自己的
+ * 代码，注入一条就应该出现——它断了就是代码断了。
+ */
+let injected = "示例 iPhone".withCString { name in
+    "192.168.1.99".withCString { ip in
+        #"{"port":"8887","room":"bonjourroom","name":"Bonjour 房","seed":"42","players":"3","host":"1","pw":"0"}"#
+            .withCString { txt in
+                minicraft_add_bonjour_peer(name, ip, txt)
+            }
+    }
+}
+print("[smoke] \(injected == 1 ? "✓" : "✗") Bonjour 记录注入 → \(injected)")
+guard injected == 1 else {
+    print("[smoke] ✗ C 入口没接上（期望 1，实际 \(injected)）")
+    exit(1)
+}
+var bonjourSeen = false
+for _ in 0..<20 {
+    if let body = httpGet("http://127.0.0.1:\(port)/healthz"), body.contains("bonjourroom") {
+        bonjourSeen = true
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.1)
+}
+guard bonjourSeen else {
+    print("[smoke] ✗ /healthz 的 peers 里没有 Bonjour 邻居")
+    exit(1)
+}
+print("[smoke] ✓ /healthz 的 peers 里有 Bonjour 邻居")
+
 NativeServer.stop()
 guard NativeServer.port == 0 else {
     print("[smoke] ✗ 停掉之后端口应当归零，实际 \(NativeServer.port)")

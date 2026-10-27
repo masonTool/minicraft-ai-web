@@ -19,6 +19,12 @@ struct Running {
 }
 
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
+/// 运行中实例的 hub：iOS 的 Bonjour 浏览器要把找到的邻居塞进它的 peer 表。
+///
+/// 单独存一份而不是塞进 `Running`：`Running` 是"怎么停"的句柄（stop 标志 + 线程），
+/// 而 hub 是"往里塞数据"的口子，两者的生命周期一样但用途不同，混在一起会让
+/// `stop_instance` 的语义变得含糊。
+static HUB: Mutex<Option<Arc<crate::handlers::Hub>>> = Mutex::new(None);
 static PORT: AtomicI32 = AtomicI32::new(0);
 
 /// 当前端口（`0` = 没在跑）。
@@ -73,6 +79,9 @@ pub fn start_instance(data_dir: &str, want_port: u16, seed: i64, beacon: bool) -
             match start(config).await {
                 Ok(server) => {
                     PORT.store(i32::from(server.port), Ordering::SeqCst);
+                    if let Ok(mut slot) = HUB.lock() {
+                        *slot = Some(server.hub.clone());
+                    }
                     while !thread_stop.load(Ordering::Relaxed) {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
@@ -112,6 +121,19 @@ pub fn stop_instance() {
         let _ = running.thread.join();
     }
     PORT.store(0, Ordering::SeqCst);
+    if let Ok(mut slot) = HUB.lock() {
+        *slot = None;
+    }
+}
+
+/// 在服务运行时借用 hub（没在跑返回 `None`）。
+///
+/// 给平台壳的 C 入口用：它们在**宿主的线程**上调（不在 tokio runtime 里），
+/// 所以可以安全地 `blocking_lock`（见 `capi::minicraft_add_bonjour_peer`）。
+pub fn with_hub<T>(f: impl FnOnce(&Arc<crate::handlers::Hub>) -> T) -> Option<T> {
+    let slot = HUB.lock().ok()?;
+    let hub = slot.as_ref()?;
+    Some(f(hub))
 }
 
 #[cfg(test)]
