@@ -19,6 +19,7 @@ import {
   rightClick,
   rightDragDistribute,
   splitTake,
+  swapSlots,
   type Cursor,
   type MoveRules,
   type StackLike,
@@ -422,5 +423,33 @@ describe('提示框位置', () => {
     const rect = itemTooltipRect({ x: 2, y: 2 }, { w: 200, h: 100 }, tiny);
     expect(rect.x).toBeGreaterThanOrEqual(0);
     expect(rect.y).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/**
+ * 数字键换槽（`swapSlots`）：DOM 版的 `swapWithSlot`。
+ *
+ * 与"拿手再放"不同：它**不经过光标**，所以手上那叠不受影响，也不做堆叠合并 —— 是纯粹的换位。
+ */
+describe('换槽', () => {
+  const stone = (count: number) => ({ id: 1, count });
+
+  it('两格互换（含空格）', () => {
+    const slots = arraySlots([stone(64), null, { id: 2, count: 5 }]);
+    expect(swapSlots(slots, 0, 1)).toBe(true);
+    expect(slots.get(0)).toBeNull();
+    expect(slots.get(1)).toEqual(stone(64));
+    expect(swapSlots(slots, 1, 2)).toBe(true);
+    expect(slots.get(1)).toEqual({ id: 2, count: 5 });
+    expect(slots.get(2)).toEqual(stone(64));
+  });
+
+  it('同一格 / 两格都空 / 越界 都不算换了', () => {
+    const slots = arraySlots([stone(64), null]);
+    expect(swapSlots(slots, 0, 0)).toBe(false);
+    expect(swapSlots(slots, 1, 5)).toBe(false);
+    expect(swapSlots(slots, -1, 0)).toBe(false);
+    const empty = arraySlots([null, null]);
+    expect(swapSlots(empty, 0, 1)).toBe(false);
   });
 });

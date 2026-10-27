@@ -124,6 +124,9 @@
         iconOf,
         describeOf,
         durabilityOf,
+        onDrop: (stack, count) => {
+          window.__dropped.push(`${stack.id}x${count}`);
+        },
         ...(externalHeld !== null ? { externalCursor: { get: () => externalHeld } } : {}),
       });
       host.open();
@@ -144,6 +147,7 @@
           timeStamp: event.timeStamp,
           // 触摸端要"先按住再决定"（点 / 长按 / 拖），鼠标则是按下即拿起
           touch: event.pointerType === 'touch',
+          shift: event.shiftKey,
         });
       });
       canvas.addEventListener('pointermove', (event) => {
@@ -170,6 +174,11 @@
       // 右键菜单要拦掉：不然按下就弹浏览器菜单，手势全断
       canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
+      // 数字键 1-9：悬停那格 ↔ 快捷栏（与游戏里同一套）
+      window.addEventListener('keydown', (event) => host.handleKey(event.code));
+      // 拖到面板外松手 = 丢出（游戏里由 onDrop 回调接掉落逻辑）
+      window.__dropped = [];
+
       // 调试/验收用：读当前 36 格与手上那一叠（`playwright` 里断言全靠它）
       window.__probe = () => ({
         slots: Array.from({ length: TOTAL }, (_, i) => {
@@ -179,6 +188,7 @@
         held: host.heldStack ? `${host.heldStack.id}x${host.heldStack.count}` : null,
         externalHeld: externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null,
         closed: window.__closed === true,
+        dropped: window.__dropped,
       });
       window.addEventListener('resize', () => host.relayout());
 

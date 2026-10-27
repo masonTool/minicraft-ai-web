@@ -205,6 +205,7 @@ export {
   leftClick,
   quickMove,
   rightClick,
+  swapSlots,
   rightDragDistribute,
   splitTake,
   type Cursor,

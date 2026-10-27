@@ -311,6 +311,22 @@ export function splitTake(
   cursor.stack = held ? withCount(held, held.count + take) : withCount(target, take);
 }
 
+/**
+ * 直接交换两格（数字键 1-9 换到快捷栏、F 换到副手 —— DOM 版的 `swapWithSlot`）。
+ *
+ * 与"拿在手上再放"不同：它**不经过光标**，所以手上那叠不受影响，也不会触发堆叠逻辑。
+ * 返回是否真的换了（同一格、越界都算没换，调用方据此决定要不要重画）。
+ */
+export function swapSlots(slots: SlotAccess, a: number, b: number): boolean {
+  if (a === b || a < 0 || b < 0) return false;
+  const left = slots.get(a);
+  const right = slots.get(b);
+  if (!left && !right) return false;
+  slots.set(a, right);
+  slots.set(b, left);
+  return true;
+}
+
 /** 数组版的 `SlotAccess`（测试与预览页用；游戏里换成包着 `Inventory` 的适配器） */
 export function arraySlots(stacks: readonly (StackLike | null)[]): SlotAccess & {
   readonly stacks: (StackLike | null)[];

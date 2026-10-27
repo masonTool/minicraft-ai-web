@@ -31,6 +31,7 @@ import {
   rightClick,
   rightDragDistribute,
   splitTake,
+  swapSlots,
   type Cursor,
   type MoveRules,
   type SlotAccess,
@@ -77,6 +78,13 @@ export interface InventoryPanelHostOptions extends MoveRules {
     /** 只读合流（例如"叠加比对"阶段）可以不传 setter */
     readonly set?: (stack: StackLike | null) => void;
   };
+  /**
+   * 丢出手上那一叠（拖到面板外松手）。
+   *
+   * 掉落是**游戏逻辑**（要知道玩家站哪、掉落物怎么生成），所以这里只回调，
+   * 由调用方接 `InventoryScreen` 的 `onDrop`。没接就当没这回事（东西留手上）。
+   */
+  readonly onDrop?: (stack: StackLike, count: number) => void;
   /** 快捷移动的目标范围（主背包 ↔ 快捷栏） */
   readonly targetRange?: (index: number) => readonly number[];
   readonly skin?: InvSlotSkin;
@@ -93,6 +101,9 @@ export class InventoryPanelHost {
   /** 这次拖动是按的哪个键：左键 = 均分，右键 = 每格放一个（与 DOM 版一致） */
   private dragButton: 0 | 2 | null = null;
   private dragging = false;
+  /** 按下点的坐标（判断"这算不算一次拖动"——拖出面板丢弃要靠它） */
+  private downX = 0;
+  private downY = 0;
   /** 上一次"按下"的格子与时刻（双击收集用，窗口与 DOM 版一致：400ms） */
   private lastDownIndex = -1;
   private lastDownAt = -Infinity;
@@ -201,7 +212,13 @@ export class InventoryPanelHost {
     x: number,
     y: number,
     phase: 'down' | 'move' | 'up',
-    input: { readonly button?: 0 | 2; readonly timeStamp?: number; readonly touch?: boolean } = {},
+    input: {
+      readonly button?: 0 | 2;
+      readonly timeStamp?: number;
+      readonly touch?: boolean;
+      /** Shift：快速移动（与 DOM 版一致，只在左键按下时生效） */
+      readonly shift?: boolean;
+    } = {},
   ): boolean {
     const layout = this.layout;
     if (!layout || !this.opened) return false;
@@ -238,6 +255,15 @@ export class InventoryPanelHost {
         return true;
       }
 
+      if (input.shift && button === 0) {
+        // Shift+左键 = 快速移动（先在同类堆里填，再占空格），与 DOM 版同一规则
+        quickMove(this.slots, this.options, index, this.targetRange(index));
+        this.dragButton = null;
+        this.dragIndices = [];
+        this.render();
+        return true;
+      }
+
       if (input.touch) {
         // 触摸：先按住看它是"点"还是"长按"，两者都要看后面的事件才能定
         this.pendingTouch = { index, x, y };
@@ -252,6 +278,8 @@ export class InventoryPanelHost {
       this.dragButton = button;
       this.dragIndices = [index];
       this.dragging = false;
+      this.downX = x;
+      this.downY = y;
       if (button === 2) rightClick(this.slots, this.options, this.cursor, index);
       else leftClick(this.slots, this.options, this.cursor, index);
       this.startLongPress(index);
@@ -272,6 +300,10 @@ export class InventoryPanelHost {
         leftClick(this.slots, this.options, this.cursor, pending.index);
         this.dragButton = 0;
         this.dragIndices = [pending.index];
+        this.dragging = true;
+      }
+      // 只要按着键移动超过阈值就算"在拖"（不要求经过别的槽位 —— 拖到面板外丢弃时不会经过任何格子）
+      if (this.dragButton !== null && Math.hypot(x - this.downX, y - this.downY) > TOUCH_DRAG_SLOP) {
         this.dragging = true;
       }
       if (index >= 0 && this.dragButton !== null && !this.dragIndices.includes(index)) {
@@ -307,6 +339,12 @@ export class InventoryPanelHost {
     if (this.dragging && this.dragButton === 0 && this.dragIndices.length > 1) {
       distributeDrag(this.slots, this.options, this.cursor, this.dragIndices);
     }
+    // 拖到面板**外面**松手 = 丢出（DOM 版：点面板空白 / 窗口外都是这个语义）
+    if (this.dragging && !this.pointInPanel(x, y) && this.cursor.stack) {
+      const stack = this.cursor.stack;
+      this.cursor.stack = null;
+      this.options.onDrop?.(stack, stack.count);
+    }
     this.dragButton = null;
     this.dragIndices = [];
     this.dragging = false;
@@ -326,6 +364,13 @@ export class InventoryPanelHost {
     const external = this.options.externalCursor;
     if (!external?.set) return;
     external.set(this.cursor.stack);
+  }
+
+  /** 点是不是落在面板里（拖出面板 = 丢弃） */
+  private pointInPanel(x: number, y: number): boolean {
+    const panel = this.layout?.panel;
+    if (!panel) return true;
+    return x >= panel.x && x <= panel.x + panel.w && y >= panel.y && y <= panel.y + panel.h;
   }
 
   /** 全部槽位下标（双击收集的范围） */
@@ -360,6 +405,24 @@ export class InventoryPanelHost {
     if (this.longPressTimer === null) return;
     clearTimeout(this.longPressTimer);
     this.longPressTimer = null;
+  }
+
+  /**
+   * 键盘：数字键 1-9 把**悬停那格**与对应快捷栏格交换（DOM 版的 `swapWithSlot`）。
+   *
+   * 为什么作用在"悬停格"而不是"最后点过的格"：DOM 版就是这么定的 —— 鼠标在哪、
+   * 数字键就作用在哪，手上的那一叠不参与。
+   *
+   * @returns 是否消费了这个键
+   */
+  handleKey(key: string): boolean {
+    const match = /^Digit([1-9])$/.exec(key);
+    if (!match) return false;
+    const hotbarStart = (this.options.mainRows ?? 3) * 9 + (this.options.extra ? (this.options.extra.cols * this.options.extra.rows + (this.options.extra.result ? 1 : 0)) : 0);
+    if (this.hoverIndex < 0) return false;
+    const target = hotbarStart + Number(match[1]) - 1;
+    if (swapSlots(this.slots, this.hoverIndex, target)) this.render();
+    return true;
   }
 
   /** 右键 / Shift 之类的"非拖动"动作（供键盘或外部按钮调用） */

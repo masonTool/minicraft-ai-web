@@ -6985,6 +6985,7 @@ class App {
         button: event.button === 2 ? 2 : 0,
         timeStamp: event.timeStamp,
         touch: touch(event),
+        shift: event.shiftKey,
       });
     });
     canvas.addEventListener('pointermove', (event) => {
@@ -7000,6 +7001,14 @@ class App {
       }
     });
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    /*
+     * 数字键 1-9：把**悬停那格**与对应快捷栏格交换（DOM 版是 `swapWithSlot`）。
+     * 为什么不让 DOM 那条链路处理：DOM 的 swap 依赖它自己的 `hovered`，而接管之后
+     * DOM 收不到 pointermove，`hovered` 永远是 null —— 按键会变成"什么都不发生"。
+     */
+    window.addEventListener('keydown', (event) => {
+      if (document.documentElement.classList.contains('ui2dinv')) host.handleKey(event.code);
+    });
   }
 
   /** 配方书镜像的开关（`.recipe-panel` 可见就接管，收起就还原） */
