@@ -9,6 +9,37 @@
 
 ---
 
+## 批次 20261027-2050 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2050
+
+> 用户 2026-10-27：「请继续执行未完成的任务」。
+> M34（暂停弹窗验收）缺的是"能不能自动发现问题"，而今天连着两次"截图成功、页面全空"。
+> 所以先把这道门禁补上：**预览页空白检测**。
+
+- [x] [Y1] `tools/ui2d-visual-check.mjs` + `npm run check:ui2d-visual`：7 个预览页的像素统计（非透明占比 + 颜色种类 + pageerror）→ 正反两个方向各跑一次
+  - 做了什么：对每页取**面积最大那块 canvas**，算非透明占比与颜色种类，阈值按页给（镜像 3~5%、触控 0.5%、纯文字 0.2%）；`pageerror` 计入失败；没浏览器时跳过并 exit 0。
+  - 为什么：脚本语法错（`as const` 写进内联 `<script>`）与"抓太早"都会得到一张"看着像还没画"的截图，`npm run check` 覆盖不到，肉眼也难判断。
+  - 验证：正跑 7 页全绿（背包 36.6%/151 色 … 纯文字 100%/1921 色）；反跑（`UI2D_BASE` 指向不存在的路径）7 页全红且 **exit 1**，修复后 exit 0。
+  - 批次：20261027-2050
+
+- [x] [Y2] 修工具本身的坑：`querySelector('canvas')` 会拿到 36×36 的物品图标
+  - 做了什么：改成遍历所有 canvas 取面积最大的那块。
+  - 为什么：第一版统计到的是图标（36×36、3 种色、45% 非透明），**看着很健康于是全部通过** —— 等于没测。
+  - 验证：修正后背包页变成 844×390、151 种色，与截图一致。
+  - 批次：20261027-2050
+
+- [x] [Y3] 文档：`notes/canvas-ui.md` §5.31（两次空白 + 两条实现坑 + 阈值表）、决策 D43 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：记下"为什么需要这道门禁"、"必须挑最大 canvas"、"阈值按页给"。
+  - 为什么：这道门禁的价值全在"它能红"；写清楚它为什么这么写，才不会被后来的人"简化"成 `querySelector`。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2050
+
+
 ## 批次 20261027-2023 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -255,36 +286,5 @@
   - 为什么：`world-logo` 是 48px + 负字距，盒子比 canvas 量出来的字窄，`maxWidth` 一夹就出省略号。
   - 验证：`tests/ui2d.test.ts` → **73 passed**（新增 2 条：补偿生效、补偿为 0 时行为不变）。
   - 批次：20261027-1706
-
-
-## 批次 20261027-1654 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1654
-
-> 用户 2026-10-27：「点左侧分类按钮时，会把所有内容平铺出来、伸出弹窗；应该收在弹框内、物品滚动显示」。
-> 根因是**镜像不知道 `overflow`**：`readTextRuns`/`readTextBlocks`/`readCanvasBlits` 全按
-> `getBoundingClientRect()` 画，而 DOM 是靠 `overflow: hidden/auto` 裁的。
-
-- [x] [R1] `src/ui2d/textPanel.ts`：裁剪 —— `makeClipQuery`（祖先 padding-box 求交 + 缓存）、记录带 `clip`、裁空的跳过、绘制 `paintClipped` → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：新增 `intersectRect` / `makeClipQuery` / `outsideClip` / `paintClipped`；三个读取函数给 `TextRun`/`TextBlock`/`CanvasBlit` 带上 `clip` 并跳过完全在框外的；三个绘制函数按 `clip` 做 `save→clip→paint→restore`。
-  - 为什么：`overflow` 是 DOM 才有的语义，canvas 不裁就会把滚出去、溢出面板的内容全画出来（用户报的正是这个）。
-  - 验证：`tests/ui2d.test.ts` → **71 passed**（新增 3 条：相交取公共部分、包含取小的、只贴边返回 null）。
-  - 批次：20261027-1654
-
-- [x] [R2] 预览页复现 + 修复验证：`inventory-mirror.html?creative=1&scroll=80`（96 项 / 150px 高滚动区）→ 截图
-  - 做了什么：预览页加"创造物品栏"模式：12 列 96 格塞进 `max-height: 150px; overflow-y: auto` 的网格并滚 80px，网格外面还有一行翻页条；截图 `25-inventory-scroll.png`。
-  - 为什么：这个 bug 只在"内容比容器高"的时候出现，普通背包（27 格）复现不了。
-  - 验证：截图里只画出滚动区里看得见的 4 行（最后一行在容器边缘被裁开），翻页条留在面板内，没有任何东西伸出面板。
-  - 批次：20261027-1654
-
-- [x] [R3] 文档：`notes/canvas-ui.md` §5.22、决策 D34 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.22 写清根因、修法三段（求交 / 跳过 / 裁剪绘制）与"滚动仍归 DOM"的边界；决策 D34 记下"镜像必须复刻 overflow 语义"。
-  - 为什么：这是**第二条**"DOM 有、canvas 没有"的语义（第一条是位图），不记下来还会再踩。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1654
 
 

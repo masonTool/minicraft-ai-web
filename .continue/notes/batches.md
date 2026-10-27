@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-2050 | 2026-10-27 | 界面与音频 | —（门禁） | 3 条：① 新增 `npm run check:ui2d-visual`（7 个预览页的像素统计：非透明占比按页给阈值、颜色种类、`pageerror`）；② 修工具自身的坑（`querySelector("canvas")` 拿到 36×36 物品图标 → 全绿等于没测，改成取面积最大的那块）；③ §5.31 + 决策 D43。验证：正跑 7 页全绿、反跑 7 页全红且 exit 1、`check` exit=0 |
 | 20261027-2023 | 2026-10-27 | 界面与音频 | —（阶段 4 修复） | 3 条：① 修回归 —— `#inv-held` 的 `opacity: 0` 让"拖动中的手持叠"彻底消失（它在镜像根之外）；② `MenuScreen2D.setHighlight()` + `elementFromPoint` 算悬停格（只重画不重读 DOM）；③ §5.30 + 决策 D42。验证：`tsc` 干净、`check` exit=0、58 张截图 |
 | 20261027-2017 | 2026-10-27 | 界面与音频 | —（阶段 4 / M35 完成） | 2 条：① 滚动条**可拖**（先命中再拖、抓拇指记 `offset` 防跳、抓轨道先对齐、两端夹住、拖条不接惯性）；② §5.29 + 决策 D41，M35 收口。验证：合成 touch 拖拇指 72px → `scrollTop` 0→153（可滚 168）、`tsc` 干净、`check` exit=0、`build:fast` 出包 |
 | 20261027-2001 | 2026-10-27 | 界面与音频 | —（阶段 6 收口 / M33） | 4 条：① `ui2d/touchArt.ts` 六个图标的形状数据（path/rect/circle），`ui/TouchIcons.ts` 改为从它拼 SVG；② `Touch2D.drawTouchIcon`（`Path2D` 缓存 + evenodd）+ `drawTouchButton`（玻璃底/描边/图标/按下缩放）；③ `main.ts` 一个选择器收集全部 `.touch-button` 并让位；④ 预览页按钮簇 + 2 张截图。验证：`test:ui2d-touch` **11/11**、`test:ui` 图标段全绿、`tsc` 干净、`check` exit=0、57 张截图 |
