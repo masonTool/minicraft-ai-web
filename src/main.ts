@@ -2843,6 +2843,12 @@ class App {
         // 手机上 high-performance 会钉在大核/高功耗 GPU，几分钟后降频，帧时间反而更差
         powerPreference: isTouchDevice() ? 'default' : 'high-performance',
         alpha: false,
+        /*
+         * 世界缩略图（用户 2026-10-27）：**必须开**，否则 `drawImage(canvas)` / `toDataURL`
+         * 拿到的是空白（实测存出来是全黑，`min=max=avg=0`）——帧缓冲在每帧结束后就被丢弃了。
+         * 代价是这一块显存不能复用；这个体量的像素游戏可以接受。
+         */
+        preserveDrawingBuffer: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -20354,6 +20360,29 @@ async function boot(): Promise<void> {
     await startWorld(summaryFromRoom(parsed.room || DEFAULT_MULTIPLAYER_ROOM, probe.world, Date.now()));
   };
 
+  /**
+   * 抓当前画面当缩略图（用户 2026-10-27）：缩到 160×90 的 jpeg，约 5~8KB。
+   *
+   * ⚠️ WebGL canvas 在 `preserveDrawingBuffer: false` 时 `drawImage` 可能拿到**空白**。
+   * 所以这里不抛错、拿不到就返回 `null`（调用方退回程序化预览图），
+   * 而不是把一张黑图存进存档——那个看起来像"世界坏了"。
+   */
+  const captureThumbnail = (): string | null => {
+    const canvas = document.querySelector('canvas');
+    if (canvas === null) return null;
+    try {
+      const small = document.createElement('canvas');
+      small.width = 160;
+      small.height = 90;
+      const ctx = small.getContext('2d');
+      if (ctx === null) return null;
+      ctx.drawImage(canvas, 0, 0, small.width, small.height);
+      return small.toDataURL('image/jpeg', 0.5);
+    } catch {
+      return null;
+    }
+  };
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     diag.event('app', 'world.enter', {
@@ -20439,7 +20468,25 @@ async function boot(): Promise<void> {
       app.connectOnline(intent);
     }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
-    app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
+    /*
+     * 保存时顺手抓一帧当缩略图（用户 2026-10-27："最后一次退出时那个界面的图片"）。
+     *
+     * 为什么挂在 `onSaved`：退出世界前一定会保存一次，那一刻 App 还活着、canvas 还在；
+     * 而 `onExitToMenu` 回调时 App 已经 dispose 完，画面没了。
+     * 自动保存也会更新它——这正是"这个存档现在长什么样"。
+     */
+    let lastShotAt = 0;
+    app.onSaved = (info) => {
+      const patch: Partial<WorldSummary> = { lastPlayed: Date.now(), ...info };
+      if (Date.now() - lastShotAt > 10_000) {
+        const shot = captureThumbnail();
+        if (shot !== null) {
+          patch.thumbnail = shot;
+          lastShotAt = Date.now();
+        }
+      }
+      registry.update(world.id, patch);
+    };
     app.onWorldDeleted = (id) => registry.remove(id);
     // 难度改了就回写世界清单（下次从主菜单进来还是这个难度）
     app.onDifficultyChanged = (value) => registry.update(world.id, { difficulty: value });

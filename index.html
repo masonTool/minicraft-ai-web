@@ -6797,6 +6797,14 @@
         padding: 0 10px;
         font-size: 13px;
       }
+
+      /* 世界缩略图：有截图时铺满（2026-10-27），没有就还是按世界类型画的预览 */
+      .world-card-thumb.has-shot {
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        image-rendering: auto;
+      }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的

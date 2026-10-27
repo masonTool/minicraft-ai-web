@@ -29,6 +29,14 @@ export interface WorldSummary {
   createdAt: number;
   /** 上次游玩时间（毫秒时间戳） */
   lastPlayed: number;
+  /**
+   * 退出世界时那一帧的画面（用户 2026-10-27）：160×90 的 jpeg dataURL。
+   *
+   * 放在清单里而不是存档里，是因为**世界列表要立刻显示它**——为了画一张缩略图
+   * 去打开每个世界的存档（几十 MB）显然不行。清单本身只有几百字节，多这 5~8KB 无所谓。
+   * 老存档没有这个字段 → 退回按世界类型画的程序化预览图。
+   */
+  thumbnail?: string;
   /** 累计游玩秒数 */
   playTime: number;
   /** 玩家改过的方块数（展示用） */

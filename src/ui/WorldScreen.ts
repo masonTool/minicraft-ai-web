@@ -566,6 +566,14 @@ export class WorldScreen {
     const thumbnail = document.createElement('div');
     thumbnail.className = 'world-card-thumb';
     thumbnail.dataset.worldType = world.worldType;
+    /*
+     * 有截图就用截图（退出时存下来的那一帧），没有才退回按世界类型画的预览图。
+     * 老存档没有 `thumbnail`，所以两套并存——不是"过渡期代码"，是新旧存档都合法。
+     */
+    if (world.thumbnail !== undefined && world.thumbnail.length > 0) {
+      thumbnail.classList.add('has-shot');
+      thumbnail.style.backgroundImage = `url(${JSON.stringify(world.thumbnail)})`;
+    }
     thumbnail.setAttribute('aria-hidden', 'true');
 
     const info = document.createElement('div');
