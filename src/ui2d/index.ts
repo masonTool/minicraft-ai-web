@@ -225,6 +225,7 @@ export {
 } from './InventoryPanelHost.ts';
 export {
   INV_LAYOUT,
+  drawFlameBar,
   drawInventoryPanel,
   drawProgressArrow,
   drawSplitHint,

@@ -15,6 +15,8 @@ import { roundRectPath, type Rect } from './widgets.ts';
 export interface TooltipModel {
   readonly title: string;
   readonly lines?: readonly string[];
+  /** 附魔行（"锋利 IV" 这种，DOM 是蓝紫色单独一块） */
+  readonly enchants?: readonly string[];
   /** 耐久条（工具/盔甲才有） */
   readonly durability?: { readonly ratio: number; readonly level: 'high' | 'mid' | 'low' } | null;
   /** 左侧色条（稀有度；缺省用普通色） */
@@ -28,6 +30,7 @@ export const TOOLTIP_SKIN = {
   accentDefault: '#8f8f8f',
   title: '#ffffff',
   line: '#d8d8d8',
+  enchant: '#a8a8ff',
   durability: {
     high: '#5ad45a',
     mid: '#d4d45a',
@@ -71,12 +74,14 @@ export function drawItemTooltip(
   viewport: { readonly w: number; readonly h: number },
 ): void {
   const lines = model.lines ?? [];
+  const enchants = model.enchants ?? [];
   const hasDurability = model.durability !== undefined && model.durability !== null;
   const height =
     TOOLTIP_SKIN.padding * 2 +
     TOOLTIP_SKIN.titleSize +
     4 +
     lines.length * (TOOLTIP_SKIN.lineSize + TOOLTIP_SKIN.lineGap) +
+    enchants.length * (TOOLTIP_SKIN.lineSize + TOOLTIP_SKIN.lineGap) +
     (hasDurability ? 8 : 0);
   const width = TOOLTIP_SKIN.width;
   const rect = itemTooltipRect(pointer, { w: width, h: height }, viewport);
@@ -108,6 +113,19 @@ export function drawItemTooltip(
     drawText(ctx, line, rect.x + TOOLTIP_SKIN.padding + 4, textY, {
       font: uiFont(TOOLTIP_SKIN.lineSize),
       color: TOOLTIP_SKIN.line,
+      baseline: 'middle',
+      shadow: true,
+      maxWidth: rect.w - TOOLTIP_SKIN.padding * 2 - 4,
+    });
+    textY += TOOLTIP_SKIN.lineSize / 2 + TOOLTIP_SKIN.lineGap;
+  }
+
+  // 附魔：单独一色（DOM 是 `.tooltip-enchants` 那一块）
+  for (const enchant of enchants) {
+    textY += TOOLTIP_SKIN.lineSize / 2;
+    drawText(ctx, enchant, rect.x + TOOLTIP_SKIN.padding + 4, textY, {
+      font: uiFont(TOOLTIP_SKIN.lineSize),
+      color: TOOLTIP_SKIN.enchant,
       baseline: 'middle',
       shadow: true,
       maxWidth: rect.w - TOOLTIP_SKIN.padding * 2 - 4,

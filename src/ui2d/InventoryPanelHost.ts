@@ -57,6 +57,8 @@ export interface InventoryPanelHostOptions extends MoveRules {
   readonly sideCount?: number;
   /** 工作站进度（0..1，画在结果格左边那颗箭头上）；不传 = 空箭头 */
   readonly progressOf?: () => number;
+  /** 熔炉燃料剩余（0..1，画在箭头下方的火焰里）；不传 = 不画火焰 */
+  readonly flameOf?: () => number;
   readonly zIndex?: number;
   readonly tint?: boolean;
   /** 物品 id → 图标位图（游戏里由 `ui/ItemIconCache` 提供） */
@@ -500,6 +502,7 @@ export class InventoryPanelHost {
       slots: views,
       hoverIndex: this.hoverIndex,
       progress: this.options.progressOf?.() ?? 0,
+      flame: this.options.flameOf?.() ?? 0,
       cursor: held ? { icon: this.options.iconOf(held.id), count: held.count } : null,
       cursorX: this.pointerX,
       cursorY: this.pointerY,

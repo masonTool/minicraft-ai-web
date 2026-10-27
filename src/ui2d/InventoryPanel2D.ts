@@ -41,6 +41,8 @@ export interface ExtraSlotsSpec {
   readonly rows: number;
   /** 要不要在右边留一个结果格（合成 / 熔炉产物） */
   readonly result?: boolean;
+  /** 要不要在箭头下方留一块"火焰"（熔炉的燃料剩余画在这里） */
+  readonly flame?: boolean;
 }
 
 /**
@@ -74,6 +76,8 @@ export interface InventoryLayout {
      * 合成台没有进度，但箭头本身仍然画（只是不带填充）。
      */
     readonly progress: Rect | null;
+    /** 箭头下方那块火焰（熔炉燃料剩余），没有就是 null */
+    readonly flame: Rect | null;
     /** 右侧竖排（盔甲 + 副手） */
     readonly side: readonly Rect[];
     readonly main: readonly Rect[];
@@ -174,6 +178,16 @@ export function layoutInventoryPanel(
       }
     : null;
 
+  const flameRect: Rect | null =
+    extra?.flame && progressRect
+      ? {
+          x: progressRect.x + (progressRect.w - 18) / 2,
+          y: progressRect.y + progressRect.h + 8,
+          w: 18,
+          h: 20,
+        }
+      : null;
+
   const sideSlots: Rect[] = [];
   if (sideCount > 0) {
     const sideX = panel.x + panel.w - INV_LAYOUT.padding - INV_LAYOUT.slot;
@@ -220,6 +234,7 @@ export function layoutInventoryPanel(
       result: resultRect,
       side: sideSlots,
       progress: progressRect,
+      flame: flameRect,
       main: mainSlots,
       hotbar: hotbarSlots,
     },
@@ -314,6 +329,33 @@ export function drawProgressArrow(
   ctx.restore();
 }
 
+/**
+ * 画熔炉的"火焰"（燃料剩余）：底是竖条纹空槽，橙色从下往上按 `ratio` 涨。
+ *
+ * 照 DOM 的 `.furnace-flame`：18×20 的框、竖条纹打底、里面一根 `<b>` 按百分比涨高。
+ */
+export function drawFlameBar(ctx: CanvasRenderingContext2D, rect: Rect, ratio: number): void {
+  const clamped = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
+  ctx.save();
+  // 底：竖条纹（DOM 是 repeating-linear-gradient 90deg）
+  ctx.fillStyle = 'rgba(90, 90, 90, .20)';
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  for (let x = rect.x + 3; x < rect.x + rect.w; x += 6) {
+    ctx.fillStyle = 'rgba(90, 90, 90, .38)';
+    ctx.fillRect(x, rect.y, 2, rect.h);
+  }
+  // 火苗：从底部往上
+  if (clamped > 0) {
+    const h = rect.h * clamped;
+    const gradient = ctx.createLinearGradient(0, rect.y + rect.h - h, 0, rect.y + rect.h);
+    gradient.addColorStop(0, 'rgba(255, 200, 80, .92)');
+    gradient.addColorStop(1, 'rgba(240, 110, 30, .92)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(rect.x + 2, rect.y + rect.h - h, rect.w - 4, h);
+  }
+  ctx.restore();
+}
+
 /** 命中：指针落在第几格（不在任何格子上返回 -1） */
 export function slotIndexAt(layout: InventoryLayout, x: number, y: number): number {
   for (let i = 0; i < layout.slots.length; i++) {
@@ -333,6 +375,8 @@ export function drawInventoryPanel(
     readonly hoverIndex: number;
     /** 结果格左边那颗箭头的填充比例（0..1）；缺省 0 = 空箭头 */
     readonly progress?: number;
+    /** 箭头下方火焰的比例（熔炉燃料剩余，0..1） */
+    readonly flame?: number;
     readonly cursor: { icon: HTMLCanvasElement | null; count: number } | null;
     readonly cursorX: number;
     readonly cursorY: number;
@@ -386,6 +430,7 @@ export function drawInventoryPanel(
    */
   const result = layout.groups.result;
   if (result) drawProgressArrow(ctx, layout.groups.progress, result, options.progress ?? 0);
+  if (layout.groups.flame) drawFlameBar(ctx, layout.groups.flame, options.flame ?? 0);
 
   // 光标上那一叠：跟着指针、画在最上面
   if (options.cursor) {

@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-0107 | 2026-10-27 | 界面与音频 | —（阶段 4 / M39 + M40） | 4 条：① `extra.flame` + `groups.flame` + `drawFlameBar`（竖条纹底 + 橙色按比例涨）；② `host.flameOf` 每帧现取；③ tooltip 加 `enchants` 蓝紫行（高度一并计算）；④ §5.45 + 决策 D57。验证：`check` exit=0、70 张截图 |
 | 20261028-0045 | 2026-10-27 | 界面与音频 | —（阶段 4 / M39 第一步） | 3 条：① 布局新增 `groups.progress`（结果格左侧箭头区，纯背包为 null）；② `drawProgressArrow` 按比例填充；③ `host.progressOf` 每帧现取 + 预览 `?progress=0.45`。验证：`test:ui2d-inventory-model` **54/54**（+2）、`check` exit=0、68 张截图 |
 | 20261027-2347 | 2026-10-27 | 界面与音频 | —（阶段 4 / M37） | 3 条：① 布局加 `side`（盔甲 4 + 副手，竖排贴右，顺序延长为 extra→side→main→hotbar）；② 修"副手挂在面板外"（高度取 `max(playerHeight, sideHeight)`）；③ `F` 键换副手 + 预览 `?armor=1`。验证：`test:ui2d-inventory-model` **52/52**（+6）、`check` exit=0、67 张截图 |
 | 20261027-2340 | 2026-10-27 | 界面与音频 | —（阶段 4 / M26b 输入） | 3 条：① 数字键 1-9 换槽（`swapSlots` + `handleKey`）；② Shift 快速移动 + 拖出面板丢弃（`onDrop`）；③ 遗漏盘点 —— 11 项能力对照表 + 新增 M37~M41。验证：`test:ui2d-inventory-model` **46/46**、预览三项实测、`check` exit=0、66 张截图 |

@@ -479,6 +479,20 @@ const SHOTS = [
     what: '**工作站进度箭头**：结果格左边那颗箭头按 45% 填充（熔炉/酿造就画在这）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '41-inventory-furnace.png',
+    page: 'tools/preview/inventory-selfdrawn.html?furnace=1&progress=0.55&flame=0.7',
+    size: [864, 470],
+    what: '**熔炉**：原料 → 箭头 55% → 产物，箭头下方火焰 70%（燃料剩余）',
+    status: '原型 · 阶段 4',
+  },
+  {
+    file: '42-inventory-tooltip-enchants.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 470],
+    what: '**提示框的附魔行**：锋利 IV / 耐久 III（蓝紫色，与 DOM 的 `.tooltip-enchants` 一致）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

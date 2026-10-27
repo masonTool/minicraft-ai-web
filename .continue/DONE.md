@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-0107 · 2026-10-27 · 会话 9f2dcf81
+
+> 队列：M39 剩下的火焰条 + M40 的附魔行。
+
+- [x] `extra.flame` + `groups.flame` + `drawFlameBar()`（竖条纹底 + 橙色按比例上涨）
+- [x] `host.flameOf` 每帧现取；预览 `?furnace=1&progress=0.55&flame=0.7`
+- [x] tooltip 加 `enchants`（`#a8a8ff`），高度计算一并算进去
+- [x] 文档 §5.45 + 决策 D57；M39 / M40 收口
+
+验证：`test:ui2d-inventory-model` 54/54、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、70 张截图。
+
+
+
 ## 批次 20261028-0045 · 2026-10-27 · 会话 9f2dcf81
 
 > 队列：M39 第一步 —— 工作站进度箭头。
