@@ -95,6 +95,34 @@ export {
   tipsVisible,
   type TipsState,
 } from './overlays.ts';
+export {
+  DIAL_BORDER,
+  DIAL_COLORS,
+  DIAL_LABEL_FONT_SIZE,
+  DIAL_SIZE,
+  NEEDLE_HALF_WIDTH,
+  NEEDLE_LENGTH,
+  dialBorderColor,
+  dialCenter,
+  dialNeedlePoints,
+  dialTickAnchors,
+  drawToolDial,
+  type ToolDialKind,
+} from './ToolDial2D.ts';
+export {
+  CanvasMenu,
+  MENU_HINT_HEIGHT,
+  MENU_MAX_WIDTH,
+  MENU_PADDING,
+  MENU_ROW_GAP,
+  MENU_ROW_HEIGHT,
+  MENU_TITLE_HEIGHT,
+  menuFocusAfterKey,
+  menuPanelSize,
+  menuRowRects,
+  type MenuInput,
+  type MenuRow,
+} from './menu.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

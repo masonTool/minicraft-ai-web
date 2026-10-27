@@ -24,6 +24,15 @@ import {
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
 import {
+  DIAL_SIZE,
+  NEEDLE_HALF_WIDTH,
+  NEEDLE_LENGTH,
+  dialBorderColor,
+  dialCenter,
+  dialNeedlePoints,
+  dialTickAnchors,
+} from '../src/ui2d/ToolDial2D.ts';
+import {
   ATTACK_CHARGE_HEIGHT,
   ATTACK_CHARGE_TOP_OFFSET,
   ATTACK_CHARGE_WIDTH,
@@ -524,5 +533,64 @@ describe('提示条几何与时间曲线', () => {
     // 过了 淡入+保持+淡出 之后就不该再画
     const expired = ITEM_NAME_HOLD_MS + ITEM_NAME_FADE_MS + 100;
     expect(tipsVisible({ ...EMPTY_TIPS, itemName: fresh }, 1000 + expired)).toBe(false);
+  });
+});
+
+/** 指南针 / 时钟表盘（阶段 2 的最后一样）：角度与刻度位置都是算出来的，必须钉住 */
+describe('工具表盘', () => {
+  const dial = { x: 100, y: 100, w: DIAL_SIZE, h: DIAL_SIZE };
+  const center = dialCenter(dial);
+
+  it('圆心就是矩形中心', () => {
+    expect(center).toEqual({ x: 126, y: 126 });
+  });
+
+  it('指针 0° 指上、90° 指右、180° 指下、270° 指左（顺时针，与 CSS rotate 同向）', () => {
+    const up = dialNeedlePoints(dial, 0);
+    expect(up.apex.x).toBeCloseTo(center.x, 6);
+    expect(up.apex.y).toBeCloseTo(center.y - NEEDLE_LENGTH, 6);
+
+    const right = dialNeedlePoints(dial, 90);
+    expect(right.apex.x).toBeCloseTo(center.x + NEEDLE_LENGTH, 6);
+    expect(right.apex.y).toBeCloseTo(center.y, 6);
+
+    const down = dialNeedlePoints(dial, 180);
+    expect(down.apex.y).toBeCloseTo(center.y + NEEDLE_LENGTH, 6);
+
+    const left = dialNeedlePoints(dial, 270);
+    expect(left.apex.x).toBeCloseTo(center.x - NEEDLE_LENGTH, 6);
+  });
+
+  it('底边两端关于指针轴对称（0° 时就是左右各半宽）', () => {
+    const up = dialNeedlePoints(dial, 0);
+    expect(up.left.x - center.x).toBeCloseTo(NEEDLE_HALF_WIDTH, 6);
+    expect(up.right.x - center.x).toBeCloseTo(-NEEDLE_HALF_WIDTH, 6);
+    expect(up.left.y).toBeCloseTo(center.y, 6);
+  });
+
+  it('角度非法时按 0° 处理（不能让指针飞到 NaN）', () => {
+    const pts = dialNeedlePoints(dial, Number.NaN);
+    expect(Number.isFinite(pts.apex.x)).toBe(true);
+    expect(pts.apex.y).toBeCloseTo(center.y - NEEDLE_LENGTH, 6);
+  });
+
+  it('四个方位字母贴在上下左右内缘', () => {
+    const anchors = dialTickAnchors(dial);
+    expect(anchors.n.x).toBeCloseTo(center.x, 6);
+    expect(anchors.n.y).toBeLessThan(center.y);
+    expect(anchors.s.y).toBeGreaterThan(center.y);
+    expect(anchors.e.x).toBeGreaterThan(center.x);
+    expect(anchors.w.x).toBeLessThan(center.x);
+    // 都在盘面里面
+    for (const point of Object.values(anchors)) {
+      expect(point.x).toBeGreaterThanOrEqual(dial.x);
+      expect(point.x).toBeLessThanOrEqual(dial.x + dial.w);
+      expect(point.y).toBeGreaterThanOrEqual(dial.y);
+      expect(point.y).toBeLessThanOrEqual(dial.y + dial.h);
+    }
+  });
+
+  it('指南针与时钟的边框色不同（铜 / 铁蓝）', () => {
+    expect(dialBorderColor('compass')).not.toBe(dialBorderColor('clock'));
   });
 });

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 暂停菜单（canvas 面板 + 输入通道）</title>
+    <!--
+      阶段 3 的前置：把 `CanvasMenu` 的**输入通道**跑起来看。
+      这一页不是游戏里的暂停菜单（那一层还没接线），但它用的是同一套代码：
+        ↑ / ↓ 移动焦点（循环）· Home / End 跳两端 · Enter / 空格 激活 · Esc 关闭
+        鼠标点某一行 = 激活；点面板外面 = 关闭
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/menu.html
+        open http://localhost:5173/tools/preview/menu.html?tint=1
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage { position: relative; width: 844px; height: 390px; }
+      #stage canvas { pointer-events: auto; }
+      .caption {
+        position: absolute; left: 12px; bottom: 10px; z-index: 5;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption">按 Esc 打开/关闭暂停菜单</div></div>
+
+    <script type="module">
+      import { CanvasMenu, Ui2DOverlay, applyDebugTint } from '../../src/ui2d/index.ts';
+
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const stage = document.getElementById('stage');
+      const overlay = new Ui2DOverlay(stage);
+      const ctx = overlay.context;
+      const W = 844;
+      const H = 390;
+      stage.style.width = `${W}px`;
+      stage.style.height = `${H}px`;
+      overlay.canvas.style.pointerEvents = 'auto';
+      overlay.syncSize();
+
+      const menu = new CanvasMenu('游戏已暂停', [
+        { id: 'resume', label: '继续游戏' },
+        { id: 'settings', label: '设置' },
+        { id: 'quit', label: '保存并回到主菜单' },
+        { id: 'delete', label: '删除本世界' },
+      ]);
+
+      const caption = document.getElementById('caption');
+      const say = (text) => {
+        caption.textContent = text;
+      };
+
+      function paint() {
+        ctx.clearRect(0, 0, W, H);
+        // 底下的"世界"（真接线时这里就是 WebGL 画面）
+        const gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#7ec0ee');
+        gradient.addColorStop(0.46, '#a8d8f0');
+        gradient.addColorStop(0.46, '#6f9a5a');
+        gradient.addColorStop(1, '#3b5a32');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, W, H);
+        if (menu.isOpen) {
+          ctx.fillStyle = 'rgba(0, 0, 0, .45)';
+          ctx.fillRect(0, 0, W, H);
+          menu.render(ctx, W, H);
+        }
+        if (tint) applyDebugTint(ctx, W, H);
+      }
+
+      function run(input) {
+        if (!input) return;
+        if (input.kind === 'move') say(`焦点：${menu.rows[input.focus].label}`);
+        else if (input.kind === 'close') say('菜单已关闭（Esc 再打开）');
+        else if (input.kind === 'activate') {
+          const row = menu.rows.find((item) => item.id === input.id);
+          say(`激活：${row?.label ?? input.id} —— 真接线时这里调用 SettingsScreen 的动作`);
+          // 预览里除了"继续游戏"都不真的关，方便反复点
+          if (input.id === 'resume') menu.close();
+        }
+        paint();
+      }
+
+      window.addEventListener('keydown', (event) => {
+        if (!menu.isOpen) {
+          if (event.key === 'Escape') {
+            menu.open();
+            say('焦点：继续游戏');
+            paint();
+          }
+          return;
+        }
+        const input = menu.handleKey(event.key);
+        if (input) event.preventDefault();
+        run(input);
+      });
+
+      overlay.canvas.addEventListener('pointerdown', (event) => {
+        const rect = overlay.canvas.getBoundingClientRect();
+        run(menu.handlePointer(event.clientX - rect.left, event.clientY - rect.top, { w: W, h: H }));
+      });
+
+      menu.open();
+      paint();
+      say('焦点：继续游戏 · ↑↓ 移动 · Enter 确认 · Esc 关闭 · 点外面也能关');
+    </script>
+  </body>
+</html>

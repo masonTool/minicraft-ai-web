@@ -157,6 +157,34 @@ const SHOTS = [
     what: '提示条 + 黄色遮罩（三块黄 = 这三样都是 canvas 画的）',
     status: '遮罩 · 阶段 2',
   },
+  {
+    file: '12-tool-dial.png',
+    page: 'tools/preview/dial.html',
+    size: [864, 410],
+    what: '指南针与时钟表盘（左时钟 210°、右指南针 45°）+ 读数',
+    status: '已迁 · 阶段 2',
+  },
+  {
+    file: '13-menu.png',
+    page: 'tools/preview/menu.html',
+    size: [864, 410],
+    what: '暂停菜单（canvas 面板）：4 行 + 焦点 ▶ + 底部操作提示',
+    status: '已迁 · 输入通道',
+  },
+  {
+    file: '13b-menu-tinted.png',
+    page: 'tools/preview/menu.html?tint=1',
+    size: [864, 410],
+    what: '暂停菜单 + 遮罩（面板与按钮都是 canvas 画的）',
+    status: '遮罩 · 输入通道',
+  },
+  {
+    file: '12b-dial-tinted.png',
+    page: 'tools/preview/dial.html?tint=1',
+    size: [864, 410],
+    what: '表盘 + 遮罩（两块黄 = canvas 画的）',
+    status: '遮罩 · 阶段 2',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

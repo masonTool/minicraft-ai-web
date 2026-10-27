@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 指南针 / 时钟表盘（canvas）</title>
+    <!--
+      阶段 2 的最后一样：手拿指南针/时钟时右下角那块表盘。
+
+      用法：
+        npm run dev
+        open 'http://localhost:5173/tools/preview/dial.html'
+        open 'http://localhost:5173/tools/preview/dial.html?deg=135&kind=clock&tint=1'
+    -->
+    <style>
+      body { margin: 0; background: #111; }
+      #scene {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 10px; z-index: 5;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene"><div class="caption" id="caption"></div></div>
+    <script type="module">
+      import { Ui2DOverlay, applyDebugTint, drawToolDial } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const deg = Number(params.get('deg') ?? 45);
+      const kind = params.get('kind') === 'clock' ? 'clock' : 'compass';
+      const tint = params.get('tint') === '1';
+
+      const scene = document.getElementById('scene');
+      const overlay = new Ui2DOverlay(scene);
+      const ctx = overlay.context;
+
+      // 与 `.tool-hud { right: 16px; bottom: 78px }` 一致（只有 52px 的盘 + 读数）
+      const dials = [
+        { rect: { x: 844 - 16 - 52, y: 390 - 78 - 66, w: 52, h: 52 }, kind, deg, label: kind === 'clock' ? '正午' : '128 格' },
+        {
+          rect: { x: 844 - 16 - 52 - 70, y: 390 - 78 - 66, w: 52, h: 52 },
+          kind: kind === 'clock' ? 'compass' : 'clock',
+          deg: 210,
+          label: kind === 'clock' ? '128 格' : '正午',
+        },
+      ];
+      drawToolDial(ctx, dials[0].rect, dials[0].kind, dials[0].deg, dials[0].label);
+      drawToolDial(ctx, dials[1].rect, dials[1].kind, dials[1].deg, dials[1].label);
+      if (tint) applyDebugTint(ctx, 844, 390);
+      document.getElementById('caption').textContent =
+        `左边 ${dials[1].kind} / 右边 ${dials[0].kind}（指针 ${deg}°）` + (tint ? ' · 黄色 = canvas 画的' : '');
+    </script>
+  </body>
+</html>
