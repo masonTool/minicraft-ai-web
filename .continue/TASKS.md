@@ -4317,6 +4317,22 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L23 **局域网 IP 改由 native 桥提供；非完整版禁止联机**（用户 2026-10-27）。
+  - `core/net/LanIp.ts`：`hasNativeLanBridge()` / `getLanIp()`，只问宿主
+    （`Capacitor.Plugins.NativeServer.localIp()`），1.5 秒超时、异常一律收敛成 null。
+    不猜的三条路都不成立：`location.hostname` 在 webview 里是 `localhost`、地址框里是上次的
+    服务器、WebRTC candidate 被 mDNS 混淆成 `xxx.local`。
+  - `ServerListPanel`：删掉候选网段猜测，`scanBase()` 直接用注入的 `lanIp`；拿不到不扫描。
+  - `MultiplayerScreen`：`join`/`host` 打开时先 `ensureFullVersion()`；没有桥就弹
+    「需要完整版」提示，**关闭 / 前往下载两个按钮都同时关掉提示和整个联机界面**。
+  - 原生侧：安卓 `NativeServerPlugin.localIp()`（遍历 `NetworkInterface`，跳过回环与
+    `169.254.*`）；iOS 在 README 写明宿主需按同签名暴露。
+  - 调试开关：`?lanip=192.168.1.20` 假装有桥（否则网页版永远只看到提示，列表没法验）。
+  - 坑：`#multiplayer-screen > *` 那条规则的特异性 (1,0,0) 会把提示层的
+    `position: fixed` 覆盖成 `relative`，于是它变成 flex item 被排到面板右边——
+    排除列表要同时写 `:not(.mp-port-dialog):not(.mp-full-prompt)`。
+  - 验证：无桥 → 提示出现、按钮 `[关闭, 前往下载]`、点关闭后提示与界面同关；
+    `?lanip=` → 不弹、界面正常；`npm run check` exit=0。
 - [x] L22 **输入浮层拦截 + 世界页三按钮 + ⋯ 下拉 + 缩略图 + `.mc` 包**（用户 2026-10-27）。
   - **浮层拦截**：原来只挡视觉——事件照样冒泡到 document，而页面大量交互是 document 级委托，
     于是"点遮罩"被当成"点了下层"。改成 window 捕获阶段掐断 pointer/touch/mouse/click/wheel
