@@ -185,6 +185,13 @@ const SHOTS = [
     what: '表盘 + 遮罩（两块黄 = canvas 画的）',
     status: '遮罩 · 阶段 2',
   },
+  {
+    file: '14-pause-dom-driven.png',
+    page: 'tools/preview/menu.html?from=dom',
+    size: [864, 410],
+    what: '暂停菜单（游戏里那一版）：行标签直接取自 DOM 按钮的 textContent（4 颗真实按钮）',
+    status: '已接线 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
