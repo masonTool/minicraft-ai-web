@@ -76,6 +76,8 @@ export const menu = {
   'server.rescan': 'Procurar de novo',
   'server.nearby': 'Salas próximas',
   'server.emptyHint': 'Nenhum servidor encontrado. Tente outra porta',
+  'server.emptyHintHost': 'Confirme que o anfitrião abriu uma sala',
+  'server.emptyHintPort': 'A porta pode não ser {port}',
   'server.changePort': 'Mudar a porta',
   'server.portRescan': 'Vai procurar de novo nesta porta',
   'server.empty': 'Nenhum servidor encontrado',

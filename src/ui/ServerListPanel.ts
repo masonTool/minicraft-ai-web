@@ -75,7 +75,22 @@ export class ServerListPanel {
 
     const lanLabel = document.createElement('div');
     lanLabel.className = 'server-list-label';
-    lanLabel.textContent = t('server.lan');
+    const lanText = document.createElement('span');
+    lanText.textContent = t('server.lan');
+    const lanRule = document.createElement('span');
+    lanRule.className = 'server-list-rule';
+    /*
+     * 「修改端口」挂在**局域网这一行的右边**（用户 2026-10-27）：它服务的正是"这一轮
+     * 局域网扫描用哪个端口"，放在「重新扫描」下面一行才对应得上。端口一变必须重扫，
+     * 所以点它开的是确认弹窗（宿主接 `onPortRequest`）。
+     */
+    const changePort = document.createElement('button');
+    changePort.type = 'button';
+    changePort.className = 'server-list-port';
+    changePort.id = 'server-list-change-port';
+    changePort.textContent = t('server.changePort');
+    changePort.addEventListener('click', () => this.onPortRequest?.());
+    lanLabel.append(lanText, lanRule, changePort);
     this.status = document.createElement('div');
     this.status.className = 'server-list-status';
     this.status.id = 'server-list-status';
@@ -116,7 +131,7 @@ export class ServerListPanel {
     const token = this.token;
     this.scanning = true;
     this.lanList.replaceChildren();
-    this.publicList.replaceChildren();
+    // `publicList` 目前是静态说明（公共服务器接口还没提供），重扫时**不要**清空它
     this.seen.clear();
     this.status.textContent = t('server.scanning');
 
@@ -169,25 +184,31 @@ export class ServerListPanel {
     return '192.168.1';
   }
 
+  /**
+   * 一台都没扫到时的提示（用户 2026-10-27：别写一大段，小字分条就行）。
+   *
+   * 三条按"最可能发生"排序：房主没开房 → 端口不对 → https 没授权。
+   * 前两条永远显示；第三条只在 https 页面上才有（那种页面本来就发不出局域网探测）。
+   */
   private showEmpty(): void {
     this.status.classList.add('empty');
     this.status.replaceChildren();
-    const line = document.createElement('div');
-    line.textContent = t('server.empty');
-    const hint = document.createElement('div');
-    hint.className = 'server-list-hint';
-    // "没找到"最常见的原因是端口不对（服务端不一定跑在默认端口上）；
-    // https 页面还可能是没授权本地网络——两种原因写在一起，玩家知道先试哪个
-    hint.textContent = canScanLan(location.protocol)
-      ? t('server.emptyHint')
-      : `${t('server.emptyHint')} · ${t('server.httpsHint')}`;
-    const changePort = document.createElement('button');
-    changePort.type = 'button';
-    changePort.className = 'server-list-port';
-    changePort.id = 'server-list-change-port';
-    changePort.textContent = t('server.changePort');
-    changePort.addEventListener('click', () => this.onPortRequest?.());
-    this.status.append(line, hint, changePort);
+    const title = document.createElement('div');
+    title.className = 'server-list-empty-title';
+    title.textContent = t('server.empty');
+    const list = document.createElement('ul');
+    list.className = 'server-list-hints';
+    const hints = [
+      t('server.emptyHintHost'),
+      tp('server.emptyHintPort', { port: String(this.port) }),
+    ];
+    if (!canScanLan(location.protocol)) hints.push(t('server.httpsHint'));
+    for (const text of hints) {
+      const item = document.createElement('li');
+      item.textContent = text;
+      list.append(item);
+    }
+    this.status.append(title, list);
   }
 
   /**

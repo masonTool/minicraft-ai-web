@@ -143,6 +143,19 @@ export class MultiplayerScreen {
     // join 模式一定建昵称框（`withName` 默认 true）
     this.nameInput = this.form.nameInput as HTMLInputElement;
 
+    /*
+     * 端口**不允许直接编辑**（用户 2026-10-27）：改了端口要按新端口重扫，
+     * 所以统一走确认弹窗。点它 / 焦点落到它身上都直接开弹窗。
+     */
+    this.form.portInput.readOnly = true;
+    this.form.portInput.classList.add('mp-port-readonly');
+    this.form.portInput.addEventListener('click', () => this.openPortDialog());
+    this.form.portInput.addEventListener('focus', () => {
+      this.form.portInput.blur();
+      this.openPortDialog();
+    });
+    this.syncPortDefault();
+
     const form = document.createElement('div');
     form.className = 'mp-form';
 
@@ -196,7 +209,7 @@ export class MultiplayerScreen {
 
     actionsRow.append(this.joinButton, this.hostButton, this.disconnectButton);
 
-    form.append(urlRow, roomRow, passwordRow, nameRow, this.statusEl, actionsRow);
+    form.append(urlRow, roomRow, passwordRow, nameRow, this.statusEl);
 
     /*
      * 右栏 = 常驻的服务器/房间列表（2026-10-27 第三版，用户定稿）。
@@ -217,7 +230,9 @@ export class MultiplayerScreen {
     columns.className = 'mp-columns';
     const formCol = document.createElement('div');
     formCol.className = 'mp-col mp-col-form';
-    formCol.append(form);
+    // 按钮放在 form **外面**（左栏直接子元素）：`margin-top: auto` 才会把它压到底部，
+    // 状态行出现/消失时按钮不会跟着上下跳。
+    formCol.append(form, actionsRow);
     const listCol = document.createElement('div');
     listCol.className = 'mp-col mp-col-list';
     listCol.append(this.list.element);
@@ -404,6 +419,12 @@ export class MultiplayerScreen {
    * 改端口要**确认**（用户 2026-10-27）：端口一变，右边扫的就是另一批机器，
    * 必须立刻按新端口重扫——所以不能在输入框里随手打字就生效。
    */
+  /** 端口等于默认值时界面显示灰底（表示"没改过"），改过就恢复正常态 */
+  private syncPortDefault(): void {
+    const port = parsePort(this.form.portInput.value) ?? 8887;
+    this.form.portInput.classList.toggle('is-default', port === 8887);
+  }
+
   private openPortDialog(): void {
     if (this.portDialog !== null) return;
 
@@ -457,6 +478,7 @@ export class MultiplayerScreen {
         return;
       }
       this.form.portInput.value = String(next);
+      this.syncPortDefault();
       this.list.setPort(next);
       close();
     });

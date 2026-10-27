@@ -78,6 +78,8 @@ export const menu = {
   'server.rescan': '重新扫描',
   'server.nearby': '附近的房间',
   'server.emptyHint': '没找到服务器。可以试试调整端口',
+  'server.emptyHintHost': '确认房主已经开房',
+  'server.emptyHintPort': '端口可能不是 {port}',
   'server.changePort': '修改端口',
   'server.portRescan': '确认后会按新端口重新扫描',
   'server.empty': '没找到服务器',

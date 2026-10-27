@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { normalizeId, shortId } from './core/registry/ids.ts';
+import { installInputOverlay } from './ui/InputOverlay.ts';
 import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { BRAND } from './core/brand.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
@@ -20914,3 +20915,6 @@ void boot().catch((error: unknown) => {
   failBootLoading();
   throw error;
 });
+
+// 全站输入浮层（用户 2026-10-27）：一处接管所有文本输入，避免系统键盘盖住输入框
+installInputOverlay();

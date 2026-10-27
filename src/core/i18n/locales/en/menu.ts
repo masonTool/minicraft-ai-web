@@ -79,6 +79,8 @@ export const menu = {
   'server.rescan': 'Scan again',
   'server.nearby': 'Nearby rooms',
   'server.emptyHint': 'No server found. Try a different port',
+  'server.emptyHintHost': 'Make sure the host has opened a room',
+  'server.emptyHintPort': 'The port may not be {port}',
   'server.changePort': 'Change port',
   'server.portRescan': 'Will rescan with this port',
   'server.empty': 'No server found',

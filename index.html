@@ -6303,10 +6303,11 @@
         background: rgba(255, 255, 255, .12);
       }
 
-      /* 底部按钮贴底：卡片有最小高度，按钮跟着内容走会悬在中间，下面空一大块 */
+      /* 底部按钮贴底：卡片是固定高度，按钮必须被压到最下面（状态行出现时也不动） */
       .server-picker-actions,
       .mp-actions {
         margin-top: auto;
+        flex: 0 0 auto;
       }
       /* 分组延伸线加深一点（12% 在深底上几乎看不见） */
       .server-picker-label::after { background: rgba(255, 255, 255, .2); }
@@ -6356,9 +6357,8 @@
         position: relative;
         z-index: 1;
       }
-      .mp-panel::before,
-      .world-modal-panel::before,
-      .server-picker-panel::before {
+      /* 顶部主色高光条（2026-10-27 只在世界对话框保留；联机面板按用户要求去掉） */
+      .world-modal-panel::before {
         content: '';
         position: absolute; left: 0; right: 0; top: 0; height: 3px;
         background: linear-gradient(90deg, #6f9a5f, #8fc77a 45%, #6f9a5f);
@@ -6492,7 +6492,13 @@
          ================================================================== */
       /* 宽卡片（两栏）。box-sizing 必须有：主定义里只写了 width，
          不加的话 border+padding 会把它撑出容器，居中会偏左。 */
-      .mp-panel.mp-panel-wide { box-sizing: border-box; width: min(94vw, 800px); }
+      .mp-panel.mp-panel-wide {
+        box-sizing: border-box;
+        width: min(94vw, 800px);
+        /* 固定高度而不是 min-height：状态行出现时按钮不该被往下推——
+           卡片撑满可用高度，「加入」靠 margin-top:auto 永远贴在最下面。 */
+        height: min(88vh, 640px);
+      }
       .mp-columns {
         display: flex; gap: 14px; min-height: 0; flex: 1 1 auto;
       }
@@ -6530,15 +6536,25 @@
         font-size: 11px; color: #b9b9b9; letter-spacing: .5px;
         padding: 4px 0 2px;
       }
-      .server-list-label::after {
-        content: ''; flex: 1 1 auto; height: 1px; background: rgba(255, 255, 255, .14);
+      /* 虚线用真实元素而不是 ::after：右边还要放「修改端口」，伪元素永远排最后 */
+      .server-list-rule {
+        flex: 1 1 auto; height: 1px; background: rgba(255, 255, 255, .14);
       }
       .server-list-status { font-size: 11px; line-height: 1.6; color: #9a9a9a; }
       .server-list-status.empty {
         display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
         padding: 10px 0; color: #b5b5b5;
       }
-      .server-list-hint { font-size: 11px; color: #8f8f8f; }
+      /* 空状态：一行标题 + 小字分条（用户 2026-10-27：别写一大段） */
+      .server-list-empty-title { font-size: 12px; color: #bdbdbd; }
+      .server-list-hints {
+        margin: 2px 0 0; padding-left: 14px;
+        font-size: 11px; line-height: 1.7; color: #8f8f8f;
+      }
+      .server-list-hints li { list-style: none; position: relative; }
+      .server-list-hints li::before {
+        content: '·'; position: absolute; left: -10px; color: #7d7d7d;
+      }
       .server-list-port {
         box-sizing: border-box; height: 26px; padding: 0 10px;
         font: inherit; font-size: 11px; cursor: pointer;
@@ -6613,13 +6629,73 @@
 
       /* 窄屏：两栏叠成上下，**列表在上**（先看到有哪些房，再决定填什么） */
       @media (max-width: 760px) {
-        .mp-panel.mp-panel-wide { width: min(94vw, 520px); }
+        .mp-panel.mp-panel-wide { width: min(94vw, 520px); height: auto; max-height: 92vh; }
         .mp-columns { flex-direction: column; gap: 10px; }
         .mp-col-list {
           order: -1; padding-left: 0; border-left: none;
           padding-bottom: 10px; border-bottom: 2px solid rgba(255, 255, 255, .08);
           max-height: 42vh;
         }
+      }
+
+      /* 端口框：只读（改端口要弹窗确认），默认 8887 时灰底表示"没改过" */
+      .mp-port-input.mp-port-readonly {
+        background: #242424; color: #cfcfcf; cursor: pointer;
+        border-right-color: #3a3a3a; border-bottom-color: #3a3a3a;
+      }
+      .mp-port-input.mp-port-readonly:hover { background: #2a2a2a; }
+      /* 默认值 8887：比普通输入框**更亮一档的灰底**，一眼看出"这是占位默认值、没改过" */
+      .mp-port-input.mp-port-readonly.is-default {
+        background: #333; color: #9b9b9b;
+        border-right-color: #454545; border-bottom-color: #4a4a4a;
+      }
+
+      /* ==================================================================
+         全站输入浮层（2026-10-27）
+         手机上点输入框时系统键盘会盖住那个框本身，所以统一改成"点击 → 浮层里编辑 →
+         确认写回"。浮层贴上方（输入法压不到），大字号，只做"确认/取消"两件事。
+         ================================================================== */
+      .inp-layer {
+        position: fixed; inset: 0; z-index: 200;
+        display: flex; align-items: flex-start; justify-content: center;
+        padding: max(9vh, 36px) 12px 12px;
+        background: rgba(0, 0, 0, .72);
+      }
+      .inp-card {
+        box-sizing: border-box;
+        width: min(92vw, 420px);
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 14px 16px;
+        background: linear-gradient(#3a3a3a, #2c2c2c);
+        border: 3px solid;
+        border-top-color: #5c5c5c; border-left-color: #545454;
+        border-right-color: #3a3a3a; border-bottom-color: #303030;
+        box-shadow: 0 22px 52px rgba(0, 0, 0, .6);
+        animation: panel-pop-in 150ms cubic-bezier(.2, .8, .3, 1) both;
+      }
+      .inp-title { font-size: 12px; color: #b9b9b9; }
+      .inp-field {
+        box-sizing: border-box; width: 100%; height: 42px;
+        padding: 0 10px; font: inherit; font-size: 17px;
+        color: #f0f0f0; background: #1e1e1e;
+        border: 2px solid;
+        border-top-color: #141414; border-left-color: #171717;
+        border-right-color: #4c4c4c; border-bottom-color: #545454;
+      }
+      .inp-field:focus { outline: 2px solid #7fa86f; outline-offset: -2px; }
+      .inp-actions { display: flex; gap: 8px; }
+      .inp-button {
+        flex: 1 1 0; box-sizing: border-box; min-height: 36px;
+        font: inherit; font-size: 13px; cursor: pointer;
+        color: #dcdcdc; background: #3a3a3a;
+        border: 2px solid;
+        border-top-color: #5a5a5a; border-left-color: #545454;
+        border-right-color: #2c2c2c; border-bottom-color: #282828;
+      }
+      .inp-button.primary {
+        background: #3d6b2f; color: #f2f7ee;
+        border-top-color: #5f9149; border-left-color: #599046;
+        border-right-color: #2c4f21; border-bottom-color: #274a1e;
       }
 </style>
 

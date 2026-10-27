@@ -77,6 +77,8 @@ export const menu = {
   'server.rescan': 'Сканировать снова',
   'server.nearby': 'Комнаты рядом',
   'server.emptyHint': 'Сервер не найден. Попробуйте другой порт',
+  'server.emptyHintHost': 'Убедитесь, что хост открыл комнату',
+  'server.emptyHintPort': 'Возможно, порт не {port}',
   'server.changePort': 'Изменить порт',
   'server.portRescan': 'Поиск повторится с этим портом',
   'server.empty': 'Сервер не найден',
