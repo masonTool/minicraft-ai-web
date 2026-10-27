@@ -6043,6 +6043,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-2001 · **触控按钮簇 + 图标真源上移（4 条，M33 完成）**：障碍是图标 —— 六个触控图标原本是内联 SVG 字符串（`<path d>` / `<rect>` / `<circle>`），canvas 拿不到，而"照着抄一份路径"是这类迁移里最容易悄悄画歪的做法（歪了不报错、只是看着不像，也没有断言能抓）。所以先把几何上移到 `src/ui2d/touchArt.ts`（`TouchIconShape` 支持 path/rect/circle + `evenodd` + `alpha`），`ui/TouchIcons.ts` 反过来从它拼 `<svg>`（依赖方向 `ui/ → ui2d/`，与 `vitalsArt.ts` 一致）；再用 `Touch2D.drawTouchIcon`（`Path2D` 按 `d` 缓存、`ctx.fill(path, "evenodd")` 保住眼睛的虹膜）+ `drawTouchButton`（玻璃底 + 顶部高光 + 2px 描边 + 图标占直径一半+ `:active` 缩 0.96）画按钮。`main.ts#syncTouch2d()` **一个选择器**就覆盖顶部三颗、跳跃/飞行升降与快捷栏侧键（都是 `makeIconButton()` 造的 `.touch-button`），让位仍是 `opacity: 0`，按住蓄力与双击起飞一行没改。新增 4 条断言（六名都有形状、两种拼法非空且互不相同、evenodd/opacity 不丢、图标占直径一半），合计 `test:ui2d-touch` **11/11**。验证：`test:ui` 图标段全绿、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、57 张截图（`30-touch-buttons.png` / `30b-…-tinted.png`）。⚠️ 阴影用"同形状下移 1px 再画一遍"，没用 `shadowBlur`（后者每帧 6 个图标会掉帧）。详见 `notes/canvas-ui.md` §5.28 与决策 D40。
 
+- [x] 批次 20261027-2017 · **滚动条可拖（2 条，M35 完成）**：上一批画出了滚动条但只能看，这一批把拖动接上 —— `pointerdown` 时先做**滚动条命中**（4px 宽的条给 ±3px 宽容），命中就进"拖条"模式并独占后续 `pointermove`，否则在右边缘拖会被内容拖拽抢走（拇指纹丝不动）；抓拇指记 `offset = 按下点 - 拇指顶`（否则一按拇指就往上跳），抓轨道空白先把拇指中心对齐到按下点再拖；换算 `ratio = (y - offset - 轨顶) / (轨高 - 拇指高)` 夹在两端，`travel <= 0` 或不可滚时不理。拖条**不接惯性**（对齐手机：原生滚动条松手即停）。验证：Playwright 合成 touch 把创造栏 `scrollTop` 归零后抓右边缘拇指往下拖 72px → **0 → 153**（可滚距离 168）、松手停住；`tsc` 干净、`npm run check` exit=0、`build:fast` 出包。详见 `notes/canvas-ui.md` §5.29 与决策 D41。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
