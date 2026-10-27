@@ -6035,6 +6035,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1732 · **触摸拖拽滚动由镜像接管（3 条）**：用户报「物品滚动、世界列表都滑不动，应该手贴着列表跟手」。根因：游戏为拖动视角把 `html, body` 的 `touch-action` 设成 `none`，内层滚动容器即便写了 `pan-y`，各家 WebView 处理也不一致。`MenuScreen2D` 新增 `bindDragScroll()`：`pointerdown`（触摸/笔）时从命中元素往上找**第一个真的能滚**的祖先；纵向位移超过 **8px** 才劫持（点击、物品拖拽、横向拖动都不受影响，内容装得下的容器根本命中不到）；之后每次 `pointermove` `scrollTop = startScroll - dy` 并立刻 `refresh(true)`（不等 `pollMs`，所以跟手）；`input/textarea/select` 上的手势不劫持。同时把用户点名的后续拆成 M32~M36（立栏上 canvas / 触控控件 / 暂停弹窗验收 / 自绘滚动条 / 拖拽惯性）。验证：Playwright 合成 touch 指针事件在 `inventory-mirror.html?creative=1` 里拖 60px → `grid.scrollTop` 0→60 且画面同步重画；`tsc` 干净、`npm run check` exit=0。详见 `notes/canvas-ui.md` §5.24 与决策 D36。
 
+- [x] 批次 20261027-1739 · **背包左右立栏上 canvas（3 条，M32）**：用户报「左边分类/仓库、右边人物/成就/配方那几颗还是 DOM」。根因是镜像根选错一层：DOM 是 `#inventory-screen > .inv-shell > [ 左立栏 | .inv-panel | 右立栏 ]`，而立栏在 panel **外面**，只镜像 panel 就成了"中间 canvas、两侧还是 DOM"——漏掉的部分**看起来正常**（它毕竟是 DOM），只有开 `?ui2dtint=1` 才看得出来。修法：`syncInventory2d()` 的镜像根改成 `.inv-shell`（`?? .inv-panel` 兜底）；立栏的选中态、抽屉展开、页签高亮全是 DOM class 变化，镜像自动跟上，不需要额外逻辑。预览页 `inventory-mirror.html` 套上 `.inv-shell` 并补左右立栏，2 张截图（含遮罩）。验证：`tsc` 干净、`npm run check` exit=0（181 套离线全过）、51 张截图。详见 `notes/canvas-ui.md` §5.25 与决策 D37。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

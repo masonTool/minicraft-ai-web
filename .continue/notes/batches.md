@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-1739 | 2026-10-27 | 界面与音频 | —（阶段 4 / M32） | 3 条：① 背包镜像根 `.inv-panel` → `.inv-shell`（立栏在 panel 外面，只镜像 panel 就"中间 canvas、两侧 DOM"）；② 预览页补左右立栏 + 2 张截图；③ M32 标完成、§5.25 + 决策 D37。验证：`tsc` 干净、`check` exit=0、51 张截图 |
 | 20261027-1732 | 2026-10-27 | 界面与音频 | —（阶段 3/4 修复） | 3 条：① 用户报"物品/世界列表滑不动"，根因是 `html,body { touch-action: none }`；② `MenuScreen2D.bindDragScroll` 自己接管拖拽滚动（找可滚祖先 / 8px 阈值 / 按 dy 改 `scrollTop` / 立刻重画）；③ 把用户点名的后续拆成 M32~M36 写进 `TASKS.md`。验证：合成 touch 事件拖 60px → `scrollTop` 0→60、`tsc` 干净、`check` exit=0 |
 | 20261027-1706 | 2026-10-27 | 界面与音频 | —（阶段 3 修复） | 3 条：① 用户报"首页三颗按钮显示与点击位置都错"，用真 `WorldScreen` + 真样式复现，实测按钮 `y` 从 150ms 的 483 变到 1650ms 的 309（差 174px）；② 修因：签名带上几何 + 所有镜像开 `pollMs` + `document.fonts.ready` 后重量；③ `letter-spacing` 补偿（大标题不再被夹成 `Minicra…`）。验证：`test:ui2d` **73/73**（+2）、`tsc` 干净、`check` exit=0、`build:fast` 出包、49 张截图 |
 | 20261027-1654 | 2026-10-27 | 界面与音频 | —（阶段 4 修复） | 3 条：① 用户报"点分类后物品平铺出弹窗"——根因是镜像不知道 `overflow`；② `textPanel` 新增 `makeClipQuery`（祖先 padding-box 求交 + 缓存）/`outsideClip`/`paintClipped`，三个读取函数给记录带 `clip` 并跳过框外项，三个绘制函数按 `clip` 裁剪；③ 预览页 `?creative=1`（96 格 / 150px 滚动区）复现并验证。验证：`test:ui2d` **71/71**（+3 裁剪求交）、`tsc` 干净、`check` exit=0、47 张截图 |
