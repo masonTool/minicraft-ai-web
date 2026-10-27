@@ -668,6 +668,30 @@ button「游戏」的 y：150ms 时 483 → 1650ms 时 309     （差 174px）
 > 教训：**镜像的正确性 = 一次测量的正确性 × 测量时机的正确性**。
 > 后者更难发现——错位看起来像"画错了"，实际是"画的是刚打开那一瞬间的旧布局"。
 
+## 5.24 修复（触摸拖拽滚动：手贴着列表，列表要跟着走）
+
+用户 2026-10-27：「滑动物品滚动的能力不行，世界列表也滑不动；就应该像普通列表一样，
+手贴着列表上下移动，它跟手。」
+
+根因：游戏为了拖动视角把 `html, body` 的 `touch-action` 设成 `none`（`index.html` 第 236 行）。
+内层滚动容器即使写了 `touch-action: pan-y`，各家 WebView 的处理也不一致 —— 结果就是
+手指贴着列表滑，列表纹丝不动。
+
+修法：`MenuScreen2D` 自己接管（`bindDragScroll`）：
+
+- `pointerdown`（触摸/笔）→ 从命中元素往上找**第一个真的能滚**的祖先
+  （`scrollHeight > clientHeight + 2` 且 `overflow-y` 是 auto/scroll）；
+- 纵向位移超过 **8px** 才算"这是滑动"（之前一律放过：点击、物品拖拽、横向拖动都不受影响）；
+- 之后每次 `pointermove`：`scrollTop = startScroll - dy`（夹在 0~max），并立刻 `refresh(true)`
+  —— 不等到 `pollMs`，所以是"跟手"而不是"两帧一跳"；
+- `pointerup/cancel` 结束；`input/textarea/select` 上的手势不劫持（免得影响选字）。
+
+**为什么不做成"通用滚动容器"**：镜像里的滚动条是 UA 画的，canvas 里没有（已记 M35）；
+惯性（松手后衰减）也没做（M36），现在是"松手即停"，手感偏硬但它可预测。
+
+验证（Playwright 合成 touch 指针事件）：`inventory-mirror.html?creative=1` 里向上拖 60px →
+`grid.scrollTop` 从 **0 变 60**，画面同步重画。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

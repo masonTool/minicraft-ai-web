@@ -81,6 +81,23 @@ export class MenuScreen2D {
   private frame = 0;
   /** 上次强制重读的时间（`pollMs` 用） */
   private lastForcedAt = 0;
+  /**
+   * 拖拽滚动（触摸"手贴着列表上下移动"）的状态。
+   *
+   * 为什么镜像要自己做这件事：`html, body { touch-action: none }` 是游戏为了拖动视角
+   * 关掉的，内层滚动容器即使写了 `touch-action: pan-y`，各家 WebView 的处理也不一致 ——
+   * 表现就是"手指贴着列表上下滑，列表纹丝不动"。这里直接接管：算位移、改 `scrollTop`，
+   * 与手指同步（每帧重读一次，画面立刻跟上）。
+   */
+  /** 绑了拖拽滚动监听的那个根（解绑时要按它摘） */
+  private dragSource: HTMLElement | null = null;
+  private drag: {
+    readonly pointerId: number;
+    readonly el: HTMLElement;
+    readonly startY: number;
+    readonly startScroll: number;
+    moved: boolean;
+  } | null = null;
   private raf = 0;
   /** 让位前的行内 opacity（有些容器自己写了 opacity，还原时要还回去） */
   private previousOpacity = '';
@@ -108,6 +125,7 @@ export class MenuScreen2D {
     source.style.opacity = '0';
     this.signature = '';
     this.frame = 0;
+    this.bindDragScroll(source);
     this.raf = requestAnimationFrame(this.loop);
     this.refresh(true);
   }
@@ -116,6 +134,7 @@ export class MenuScreen2D {
   disengage(): void {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.unbindDragScroll();
     if (this.source) this.source.style.opacity = this.previousOpacity;
     this.source = null;
     this.runs = [];
@@ -147,6 +166,79 @@ export class MenuScreen2D {
       }
     }
   };
+
+  /**
+   * 接管触摸拖拽滚动：在镜像的子树里找**可滚的祖先**，手指动多少就滚多少。
+   *
+   * 只劫持"纵向位移先超过 8px"的手势 —— 这样点击、横向拖动（物品拖拽分配）
+   * 仍然走原来的逻辑；内容装得下的容器（普通背包 27 格）根本不会命中，
+   * 也就不会把"拖动分堆"变成"滚动"。
+   */
+  private bindDragScroll(source: HTMLElement): void {
+    this.dragSource = source;
+    source.addEventListener('pointerdown', this.onDragStart, { passive: true });
+    window.addEventListener('pointermove', this.onDragMove, { passive: false });
+    window.addEventListener('pointerup', this.onDragEnd);
+    window.addEventListener('pointercancel', this.onDragEnd);
+  }
+
+  private unbindDragScroll(): void {
+    const source = this.dragSource;
+    if (source) source.removeEventListener('pointerdown', this.onDragStart);
+    window.removeEventListener('pointermove', this.onDragMove);
+    window.removeEventListener('pointerup', this.onDragEnd);
+    window.removeEventListener('pointercancel', this.onDragEnd);
+    this.dragSource = null;
+    this.drag = null;
+  }
+
+  private readonly onDragStart = (event: PointerEvent): void => {
+    if (event.pointerType === 'mouse') return;
+    const target = event.target as HTMLElement | null;
+    if (!target || target.closest('input, textarea, select')) return;
+    const el = this.scrollableAncestorOf(target);
+    if (!el) return;
+    this.drag = {
+      pointerId: event.pointerId,
+      el,
+      startY: event.clientY,
+      startScroll: el.scrollTop,
+      moved: false,
+    };
+  };
+
+  private readonly onDragMove = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < 8) return; // 还没到"这是滑动"的程度：点击/拖动物品照旧
+      drag.moved = true;
+    }
+    event.preventDefault();
+    const next = Math.max(0, Math.min(drag.el.scrollHeight - drag.el.clientHeight, drag.startScroll - dy));
+    if (next === drag.el.scrollTop) return;
+    drag.el.scrollTop = next;
+    // 画面立刻跟上手指（不等到 pollMs）
+    this.refresh(true);
+  };
+
+  private readonly onDragEnd = (): void => {
+    this.drag = null;
+  };
+
+  /** 从命中元素往上找第一个"真的能滚"的祖先（限制在镜像子树里） */
+  private scrollableAncestorOf(target: HTMLElement): HTMLElement | null {
+    let node: HTMLElement | null = target;
+    while (node && node !== this.source) {
+      if (node.scrollHeight > node.clientHeight + 2 && node.clientHeight > 0) {
+        const overflowY = window.getComputedStyle(node).overflowY;
+        if (overflowY === 'auto' || overflowY === 'scroll') return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
 
   /** 重新读一遍（`force` = 不看签名，直接读并重画） */
   private refresh(force: boolean): void {
