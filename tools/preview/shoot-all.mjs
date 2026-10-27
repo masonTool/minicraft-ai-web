@@ -206,6 +206,20 @@ const SHOTS = [
     what: '设置表单 + 遮罩',
     status: '遮罩 · 阶段 3',
   },
+  {
+    file: '16-text-panels.png',
+    page: 'tools/preview/textpanels.html',
+    size: [864, 410],
+    what: '纯文字 HUD：F3 调试信息（左上，多行等宽）+ 计分板（右上，名字左/分数右）',
+    status: '已迁 · 阶段 4',
+  },
+  {
+    file: '16b-text-panels-tinted.png',
+    page: 'tools/preview/textpanels.html?tint=1',
+    size: [864, 410],
+    what: '纯文字 HUD + 遮罩（两块黄 = 底色与文字都是 canvas 画的）',
+    status: '遮罩 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

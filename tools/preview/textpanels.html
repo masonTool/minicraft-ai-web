@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 纯文字 HUD（F3 / 计分板）</title>
+    <!--
+      阶段 4 的第一块：**纯文字面板**——F3 调试信息与计分板侧边栏。
+
+      做法：按 `index.html` 的那几条 CSS 建出真 DOM（`#debug` / `.scoreboard-hud`），
+      设成 `visibility: hidden` 只为测量；`readTextRuns()` 把每段文字连同它的**矩形 /
+      颜色 / 字号**一起读出来，再按原位画到 canvas 上。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/textpanels.html
+        open http://localhost:5173/tools/preview/textpanels.html?tint=1
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage { position: relative; width: 844px; height: 390px; overflow: hidden; }
+      #stage canvas { display: block; }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+
+      /* ---- 以下与 index.html 一致（`#hud` 的字色/阴影也复制过来） ---- */
+      #layer {
+        position: absolute; inset: 0; color: #fff;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        visibility: hidden;
+      }
+      #debug {
+        position: absolute; left: 10px; top: 10px;
+        font-size: 12px; line-height: 1.55; white-space: pre;
+        background: rgba(0, 0, 0, .35); padding: 6px 9px; border-radius: 3px;
+        text-align: left;
+      }
+      .scoreboard-hud {
+        position: absolute; top: 10px; right: 10px; min-width: 108px; max-width: 200px;
+        padding: 5px 8px; background: rgba(0, 0, 0, .45); border-radius: 6px;
+        color: #f2efe4; font-size: 12px; line-height: 1.45;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .75);
+      }
+      .scoreboard-title {
+        margin-bottom: 2px; font-weight: 700; text-align: center;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .scoreboard-row { display: flex; justify-content: space-between; gap: 10px; }
+      .scoreboard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .scoreboard-value { color: #ffd75e; font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import {
+        Ui2DOverlay,
+        applyDebugTint,
+        drawTextBlocks,
+        drawTextRuns,
+        readTextBlocks,
+        readTextRuns,
+      } from '../../src/ui2d/index.ts';
+
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const stage = document.getElementById('stage');
+      const overlay = new Ui2DOverlay(stage);
+      const ctx = overlay.context;
+      const W = 844;
+      const H = 390;
+      stage.style.width = `${W}px`;
+      stage.style.height = `${H}px`;
+      overlay.syncSize();
+
+      // ---- 数据源：与游戏里同样的 DOM（只为测量，自己不可见） ----
+      const layer = document.createElement('div');
+      layer.id = 'layer';
+      layer.innerHTML = `
+        <div id="debug"></div>
+        <div class="scoreboard-hud">
+          <div class="scoreboard-title">击杀榜</div>
+          <div class="scoreboard-row"><span class="scoreboard-name">Steve</span><span class="scoreboard-value">12</span></div>
+          <div class="scoreboard-row"><span class="scoreboard-name">Alex</span><span class="scoreboard-value">9</span></div>
+          <div class="scoreboard-row"><span class="scoreboard-name">Herobrine_</span><span class="scoreboard-value">7</span></div>
+          <div class="scoreboard-row"><span class="scoreboard-name">小明</span><span class="scoreboard-value">3</span></div>
+        </div>`;
+      document.body.appendChild(layer);
+      // F3 那串文案是**多行字符串**（原样换行，不做重排）
+      layer.querySelector('#debug').textContent =
+        [
+          'Minicraft 1.18 · 60.1 fps (16.6 ms)',
+          '区块 19/64 · 网格 412 · 实体 37',
+          'XYZ 128.50 / 64.00 / -302.25',
+          '维度 主世界 · 生物群系 plains',
+          '内存 214.6 MB · 图集 2048²',
+        ].join('\n');
+
+      const host = overlay.canvas.getBoundingClientRect();
+      const debugEl = layer.querySelector('#debug');
+      const boardEl = layer.querySelector('.scoreboard-hud');
+      const runs = [
+        ...readTextRuns(debugEl, host, { w: W, h: H }),
+        ...readTextRuns(boardEl, host, { w: W, h: H }),
+      ];
+      // 底色块也要一起读：F3 与计分板各自的半透明底
+      const blocks = [
+        ...readTextBlocks(debugEl, host, { w: W, h: H }),
+        ...readTextBlocks(boardEl, host, { w: W, h: H }),
+      ];
+
+      // ---- 画：底下的"世界" + 原位重画的文字 ----
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, '#7ec0ee');
+      bg.addColorStop(0.46, '#a8d8f0');
+      bg.addColorStop(0.46, '#6f9a5a');
+      bg.addColorStop(1, '#3b5a32');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      drawTextBlocks(ctx, blocks);
+      drawTextRuns(ctx, runs);
+      if (tint) applyDebugTint(ctx, W, H);
+
+      document.getElementById('caption').textContent =
+        `F3 ${runs.filter((r) => r.text.includes('fps')).length} 行 + 计分板 ${runs.length} 段文字（原位、原色、原字号）` +
+        (tint ? ' · 黄色 = canvas 画的' : '');
+    </script>
+  </body>
+</html>

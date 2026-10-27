@@ -137,6 +137,17 @@ export {
   type FormRow,
   type FormRowKind,
 } from './form.ts';
+export {
+  drawTextBlocks,
+  drawTextRuns,
+  normalizeWeight,
+  readTextBlocks,
+  readTextRuns,
+  runBaselineY,
+  textRunsSignature,
+  type TextBlock,
+  type TextRun,
+} from './textPanel.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

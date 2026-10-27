@@ -24,6 +24,7 @@
 import { applyDebugTint } from './debug.ts';
 import { Hotbar2D, type HotbarState } from './Hotbar2D.ts';
 import { drawTips, tipsVisible, type TipsState } from './overlays.ts';
+import { drawTextBlocks, drawTextRuns, type TextBlock, type TextRun } from './textPanel.ts';
 import { Vitals2D, type VitalsState } from './Vitals2D.ts';
 import { Xp2D, type XpState } from './Xp2D.ts';
 import { Ui2DOverlay } from './overlay.ts';
@@ -149,6 +150,9 @@ export class Hud2D {
   private readonly xp = new Xp2D();
   /** 提示条族（目标名 / 蓄力条 / 物品名浮标）—— 阶段 2 收尾，纯展示、不缓存 */
   private tips: TipsState | null = null;
+  /** 纯文字面板（F3 / 计分板）：原位重画 DOM 的底色与那几行字，不缓存 */
+  private textRuns: readonly TextRun[] = [];
+  private textBlocks: readonly TextBlock[] = [];
   /** 上一帧画过东西没有：没画过就不用清屏（没接快捷栏时静止开销为 0） */
   private drewLastFrame = false;
   /**
@@ -185,6 +189,12 @@ export class Hud2D {
   /** 经验条 + 等级（`null` = 不画） */
   setXp(state: XpState | null): void {
     this.xp.setState(state);
+  }
+
+  /** 纯文字面板（F3 / 计分板）—— 传 `null` = 这一帧不画 */
+  setTextPanels(panels: { runs: readonly TextRun[]; blocks: readonly TextBlock[] } | null): void {
+    this.textRuns = panels?.runs ?? [];
+    this.textBlocks = panels?.blocks ?? [];
   }
 
   /** 三样提示条的状态（`null` = 这一帧都不画） */
@@ -227,6 +237,7 @@ export class Hud2D {
     const showXp = this.xp.active;
     const now = nowMs();
     const showTips = tipsVisible(this.tips, now);
+    const showText = this.textRuns.length > 0 || this.textBlocks.length > 0;
     if (
       !showDamage &&
       !showBreak &&
@@ -235,7 +246,8 @@ export class Hud2D {
       !showHotbar &&
       !showVitals &&
       !showXp &&
-      !showTips
+      !showTips &&
+      !showText
     ) {
       this.drewLastFrame = false;
       return;
@@ -263,6 +275,11 @@ export class Hud2D {
 
     // 提示条画在最后：它们在 DOM 里也是 HUD 最上面那一层（目标名压在准星下方）
     if (showTips) drawTips(ctx, this.tips!, now);
+    // 纯文字面板最后画（F3 左上、计分板右上，压在所有 HUD 之上）
+    if (showText) {
+      drawTextBlocks(ctx, this.textBlocks);
+      drawTextRuns(ctx, this.textRuns);
+    }
     // 调试遮罩必须是**最后**一步（否则后面的绘制会把黄色盖掉）
     if (this.debugTint) applyDebugTint(ctx, overlay.width, overlay.height);
 

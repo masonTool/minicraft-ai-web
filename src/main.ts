@@ -65,12 +65,16 @@ import {
   formRowRects,
   modalRect,
   readFormRows,
+  readTextBlocks,
+  readTextRuns,
   vitalIconState,
   writeRangeRatio,
   type FormRow,
   type HotbarSlotState,
   type MenuInput,
   type Rect as Ui2DRect,
+  type TextBlock,
+  type TextRun,
   type VitalIcon,
 } from './ui2d/index.ts';
 import { attackChargeProgress, attackCooldownFor } from './core/combat/AttackSpeed.ts';
@@ -1261,6 +1265,13 @@ class App {
   private itemNameTipRect: Ui2DRect | null = null;
   /** 物品名浮标"显示那一刻"的时间戳（ms）——淡化进度靠它算 */
   private itemNameShownAt = Number.NEGATIVE_INFINITY;
+  /**
+   * 纯文字面板（F3 / 计分板）的读取签名。
+   *
+   * 只有**文字内容或视口尺寸**变了才去 `getComputedStyle` 重读颜色字号——
+   * F3 开着时每帧都变（帧率/坐标），那是它本来就该重画；关着时一次都不读。
+   */
+  private textPanelsKey = '';
   /**
    * 暂停菜单页的 canvas 版（`?ui2d=1`）。
    *
@@ -6315,6 +6326,8 @@ class App {
     this.applyHotbar2DDomFallback();
     // 提示条族（目标名 / 蓄力条 / 物品名浮标）同理：纯展示，直接 visibility 让位
     this.applyTipsDomFallback();
+    // F3 与计分板：同样是纯文字，直接让位
+    this.applyTextPanelsDomFallback();
 
     this.refreshHotbar();
   }
@@ -6740,6 +6753,60 @@ class App {
       ctx.fillStyle = 'rgba(255, 255, 255, .35)';
       ctx.fillRect(state.list.x + state.list.w + 2, state.list.y + (state.list.h - thumbH) * t, 5, thumbH);
     }
+  }
+
+  /**
+   * 纯文字面板的 DOM 让位（`?ui2d=1`）：F3 调试信息与计分板侧边栏。
+   *
+   * 两者都是"一块底 + 几行字"，没有控件也没有命中测试，直接 `visibility: hidden`
+   * （保留布局：F3 的换行与计分板的两列对齐都要靠 DOM 量出来）。
+   */
+  private applyTextPanelsDomFallback(): void {
+    if (!UI2D_ENABLED) return;
+    for (const id of ['debug', 'scoreboard-hud']) {
+      const el = document.getElementById(id);
+      if (el) el.style.visibility = 'hidden';
+    }
+  }
+
+  /**
+   * 把 F3 / 计分板那几行字喂给 canvas（原位重画，见 `ui2d/textPanel.ts`）。
+   *
+   * 门禁：文字内容没变就不碰 `getComputedStyle`（那是会触发样式重算的调用）。
+   */
+  private syncTextPanels2d(): void {
+    const hud = this.hud2d;
+    const overlay = this.ui2dOverlay;
+    if (!hud || !overlay) return;
+    const debug = document.getElementById('debug');
+    const board = document.getElementById('scoreboard-hud');
+    const shown = (el: HTMLElement | null): el is HTMLElement =>
+      !!el && el.offsetParent !== null && !el.classList.contains('hidden');
+
+    const parts: string[] = [];
+    if (shown(debug)) parts.push(debug.textContent ?? '');
+    if (shown(board)) parts.push(board.textContent ?? '');
+    const key = `${parts.join('\u0001')}|${overlay.width}x${overlay.height}`;
+    if (key === this.textPanelsKey) return;
+    this.textPanelsKey = key;
+    if (parts.length === 0) {
+      hud.setTextPanels(null);
+      return;
+    }
+
+    const host = overlay.canvas.getBoundingClientRect();
+    const view = { w: overlay.width, h: overlay.height };
+    const runs: TextRun[] = [];
+    const blocks: TextBlock[] = [];
+    if (shown(debug)) {
+      runs.push(...readTextRuns(debug, host, view));
+      blocks.push(...readTextBlocks(debug, host, view));
+    }
+    if (shown(board)) {
+      runs.push(...readTextRuns(board, host, view));
+      blocks.push(...readTextBlocks(board, host, view));
+    }
+    hud.setTextPanels({ runs, blocks });
   }
 
   /**
@@ -7326,6 +7393,8 @@ class App {
         this.vitals2dEpoch += 1;
         // 提示条的位置/宽度也跟着视口走
         this.tips2dEpoch += 1;
+        // 纯文字面板的位置也跟着视口走（下次同步会重读）
+        this.textPanelsKey = '';
         if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
       },
       { signal: this.listeners.signal },
@@ -18092,6 +18161,8 @@ class App {
     this.syncVitals2D(noVitals);
     // 提示条族（目标名 / 蓄力条 / 物品名浮标）
     this.syncTips2D();
+    // 纯文字面板（F3 / 计分板）：文字没变就不重读样式
+    this.syncTextPanels2d();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM

@@ -1,0 +1,180 @@
+/**
+ * **纯文字面板**的 canvas 版（`src/ui2d/` 阶段 4 的第一块）
+ *
+ * 适用对象：F3 调试信息（`#debug`）、计分板侧边栏（`#scoreboard-hud`）这类
+ * "一块背景 + 若干行字"的 HUD。它们没有控件、没有命中测试，唯一的内容就是文字。
+ *
+ * 做法与前面几块一致：**DOM 是真源**。这里不重新排一遍版，而是把 DOM 里
+ * **直接带文字的元素**（叶子节点）读成"一段文字 + 它的矩形 + 颜色字号"，
+ * 再按原位画到 canvas 上。
+ *
+ * 三条理由：
+ *  1. F3 那串文案是**拼出来的多行字符串**（帧率、区块数、坐标…），重排一遍等于把
+ *     格式逻辑抄两份；
+ *  2. 计分板是"名字左、分数右"的 flex 行，对齐规则在 CSS 里，抄一遍就会漂；
+ *  3. 颜色/字号也读计算样式 —— 夜里、低血量、触摸端断点各有不同，抄不得。
+ *
+ * ⚠️ 代价：`readTextRuns` 要 `getComputedStyle`，**只在签名变化时读**（F3 每帧都变，
+ * 但它只有 1~5 个叶子节点，一帧几次 `getComputedStyle` 是可接受的；计分板几乎不变）。
+ */
+
+import { drawText, uiFont } from './text.ts';
+import { roundRectPath, type Rect } from './widgets.ts';
+
+/** 一段文字：原位、原色、原字号 */
+export interface TextRun {
+  readonly rect: Rect;
+  readonly text: string;
+  readonly color: string;
+  readonly fontSize: number;
+  readonly weight: 400 | 600 | 700;
+  readonly align: 'left' | 'center' | 'right';
+  readonly shadow: boolean;
+}
+
+/** 一块带底色的区域（F3 的 `rgba(0,0,0,.35)`、计分板的 `.45` 都是它） */
+export interface TextBlock {
+  readonly rect: Rect;
+  readonly color: string;
+  readonly radius: number;
+}
+
+/** 元素是否有可见底色（`transparent` / alpha=0 的跳过） */
+function hasBackground(el: Element): { color: string; radius: number } | null {
+  const style = window.getComputedStyle(el);
+  const color = style.backgroundColor;
+  if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return null;
+  const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
+  return { color, radius };
+}
+
+/** 读出范围内的所有"底色块"（原位、原色、原圆角） */
+export function readTextBlocks(
+  root: HTMLElement,
+  origin: DOMRect,
+  view: { readonly w: number; readonly h: number },
+): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    const background = hasBackground(el);
+    if (!background) continue;
+    const box = el.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
+    if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
+    blocks.push({ rect, color: background.color, radius: background.radius });
+  }
+  return blocks;
+}
+
+/** 画底色块（先块后字，与 DOM 的层叠一致） */
+export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly TextBlock[]): void {
+  for (const block of blocks) {
+    ctx.save();
+    roundRectPath(ctx, block.rect, block.radius);
+    ctx.fillStyle = block.color;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** 把 CSS 的 `font-weight` 归一到我们支持的档位（`uiFont` 只认 400/600/700） */
+export function normalizeWeight(value: string | number): 400 | 600 | 700 {
+  const n = typeof value === 'number' ? value : Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return 400;
+  if (n >= 700) return 700;
+  if (n >= 600) return 600;
+  return 400;
+}
+
+/** 文字行的基线（竖直居中；`drawText` 用 `baseline: 'middle'` 时就是这个点） */
+export function runBaselineY(rect: Rect): number {
+  return rect.y + rect.h / 2;
+}
+
+/** 签名：文本 / 位置 / 颜色 / 字号任一变化就要重读（F3 每帧都会变，本来就该重画） */
+export function textRunsSignature(runs: readonly TextRun[]): string {
+  return runs
+    .map(
+      (run) =>
+        `${Math.round(run.rect.x)},${Math.round(run.rect.y)},${Math.round(run.rect.w)}|${run.fontSize}${
+          run.weight
+        }|${run.color}|${run.align}|${run.text}`,
+    )
+    .join('\n');
+}
+
+/** 元素自己是否直接带文字（不是靠子元素拼出来的） */
+function hasOwnText(el: Element): boolean {
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim().length > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * 从一段 DOM 里读出所有"直接带文字"的元素。
+ *
+ * @param root 读取范围（例如 `#debug` 本身、或 `#scoreboard-hud`）
+ * @param origin 覆盖层画布的视口矩形（把绝对坐标换成相对坐标）
+ * @param view 视口尺寸（用于剔掉完全在屏幕外的行）
+ */
+export function readTextRuns(
+  root: HTMLElement,
+  origin: DOMRect,
+  view: { readonly w: number; readonly h: number },
+): TextRun[] {
+  const runs: TextRun[] = [];
+  const nodes: Element[] = [root, ...root.querySelectorAll('*')];
+  for (const el of nodes) {
+    if (!hasOwnText(el)) continue;
+    const text = (el.textContent ?? '').trim();
+    if (text.length === 0) continue;
+    const box = el.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
+    // 完全在视口外就不画（否则会多出几十次 fillText）
+    if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
+    const style = window.getComputedStyle(el);
+    const align = style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'right' : 'left';
+    runs.push({
+      rect,
+      text,
+      color: style.color || '#ffffff',
+      fontSize: Number.parseFloat(style.fontSize) || 12,
+      weight: normalizeWeight(style.fontWeight),
+      align,
+      // `#hud` 的 `text-shadow` 是全局的，这里统一按"有阴影"处理（与原版 HUD 一致）
+      shadow: style.textShadow !== 'none',
+    });
+  }
+  return runs;
+}
+
+/** 按原位画这些文字（调用方负责清屏/画背景） */
+export function drawTextRuns(ctx: CanvasRenderingContext2D, runs: readonly TextRun[]): void {
+  for (const run of runs) {
+    // 多行文字（F3 的 `textContent` 里有换行）要按行拆开逐行画
+    const lines = run.text.split('\n');
+    const lineHeight = run.fontSize * 1.35;
+    const total = lines.length * lineHeight;
+    let y = run.rect.y + (run.rect.h - total) / 2 + lineHeight / 2;
+    const x =
+      run.align === 'center'
+        ? run.rect.x + run.rect.w / 2
+        : run.align === 'right'
+          ? run.rect.x + run.rect.w
+          : run.rect.x;
+    for (const line of lines) {
+      drawText(ctx, line, x, y, {
+        font: uiFont(run.fontSize, run.weight),
+        color: run.color,
+        align: run.align,
+        baseline: 'middle',
+        shadow: run.shadow,
+        maxWidth: run.rect.w,
+      });
+      y += lineHeight;
+    }
+  }
+}

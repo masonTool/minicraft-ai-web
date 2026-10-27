@@ -23,6 +23,7 @@ import {
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
+import { normalizeWeight, runBaselineY, textRunsSignature } from '../src/ui2d/textPanel.ts';
 import {
   DIAL_SIZE,
   NEEDLE_HALF_WIDTH,
@@ -592,5 +593,40 @@ describe('工具表盘', () => {
 
   it('指南针与时钟的边框色不同（铜 / 铁蓝）', () => {
     expect(dialBorderColor('compass')).not.toBe(dialBorderColor('clock'));
+  });
+});
+
+/** 纯文字 HUD（F3 / 计分板）：字号档位与签名的稳定性 */
+describe('纯文字面板', () => {
+  it('font-weight 归一到 400 / 600 / 700（uiFont 只认这三档）', () => {
+    expect(normalizeWeight('400')).toBe(400);
+    expect(normalizeWeight('normal')).toBe(400); // parseInt 失败 → 400
+    expect(normalizeWeight('500')).toBe(400);
+    expect(normalizeWeight('600')).toBe(600);
+    expect(normalizeWeight('bold')).toBe(400); // CSS 关键字：交给浏览器算过了才准，这里按默认
+    expect(normalizeWeight('700')).toBe(700);
+    expect(normalizeWeight(800)).toBe(700);
+  });
+
+  it('基线就是行的竖直中点（多行时由 drawTextRuns 自己分摊）', () => {
+    expect(runBaselineY({ x: 0, y: 100, w: 50, h: 20 })).toBe(110);
+  });
+
+  it('签名认文字/位置/字号/颜色，不认行高', () => {
+    const run = {
+      rect: { x: 10, y: 20, w: 120, h: 16 },
+      text: 'F3',
+      color: '#ffffff',
+      fontSize: 12,
+      weight: 400 as const,
+      align: 'left' as const,
+      shadow: true,
+    };
+    expect(textRunsSignature([run])).toBe(textRunsSignature([{ ...run }]));
+    expect(textRunsSignature([run])).not.toBe(textRunsSignature([{ ...run, text: 'F4' }]));
+    expect(textRunsSignature([run])).not.toBe(textRunsSignature([{ ...run, color: '#ffd75e' }]));
+    expect(textRunsSignature([run])).not.toBe(
+      textRunsSignature([{ ...run, rect: { ...run.rect, x: 11 } }]),
+    );
   });
 });
