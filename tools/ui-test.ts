@@ -5510,10 +5510,11 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
 }
 
 /*
- * 暂停菜单：本局房间信息卡（L9）
+ * 本局房间信息卡（L9；L30 删掉了它原来的入口）
  *
- * 联机之后那颗键原来还是「多人游戏」、点开让你再连一次——玩家真正想要的是
- * "我在哪个房间、谁是房主、怎么把朋友叫进来"。所以联机中改成信息卡。
+ * 卡片本身还在（`RoomCard.ts` + `openMultiplayer()` 里的分支），但暂停菜单那颗键
+ * 2026-10-28 被用户删掉了，所以它现在**没有界面入口**。下面的断言只保证卡片与
+ * 相关样式没被顺手拆坏——要恢复入口或彻底删卡片，先改这一节。
  */
 console.log('\n[暂停菜单：本局房间（L9）]');
 {
@@ -5538,12 +5539,16 @@ console.log('\n[暂停菜单：本局房间（L9）]');
     cardSrc.includes("navigator.clipboard && window.isSecureContext") &&
       cardSrc.includes("document.execCommand('copy')"),
   );
+  /*
+   * 2026-10-28（L30）：用户确认暂停菜单里那颗联机键是有意删除的，入口只留主菜单的
+   * 「加入房间…」与卡片上的「开房」。所以这条断言反过来写——**它不该再长回来**。
+   * 原来那条"按联机状态改文案（联机中 = 本局房间）"随按钮一起去掉。
+   */
   check(
-    '暂停菜单那颗键按联机状态改文案（联机中 = 本局房间）',
-    settingsSrc.includes('multiplayerLabelKey?: () => string') &&
-      settingsSrc.includes('this.refreshMultiplayerLabel();') &&
-      mainSrc.includes("? 'pause.room'") &&
-      mainSrc.includes(": 'menu.multiplayer'"),
+    '暂停菜单不再有联机键（入口只在主菜单与世界卡片）',
+    !settingsSrc.includes('pause-multiplayer') &&
+      !settingsSrc.includes('multiplayerLabelKey') &&
+      !mainSrc.includes('multiplayerLabelKey'),
   );
   check(
     '联机中点它开信息卡，没联机才打开连接面板',
