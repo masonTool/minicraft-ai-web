@@ -1274,6 +1274,15 @@ class App {
    */
   private textPanelsKey = '';
   /**
+   * 聊天输入行的镜像（`?ui2d=1`）。
+   *
+   * 与主菜单同一套（`MenuScreen2D`）：`.chat-entry` 设 `opacity: 0` 让位像素，
+   * canvas 按原位重画输入框、发送键，以及**焦点框的光标与选区**。
+   * 输入本身仍归 DOM —— 历史、命令补全、回车发送都不动。
+   */
+  private chatEntry2d: MenuScreen2D | null = null;
+  private chatEntry2dOn = false;
+  /**
    * 暂停菜单页的 canvas 版（`?ui2d=1`）。
    *
    * ⚠️ 它**不重写任何动作**：行标签取 DOM 按钮的 `textContent`、激活就是 `button.click()`。
@@ -3048,6 +3057,8 @@ class App {
       this.hud2d = new Hud2D(this.ui2dOverlay);
       // 调试遮罩：canvas 产出的像素全染黄，用来一眼分辨"这块是谁画的"
       if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
+      // 聊天输入行也交给 canvas（`#chat` 是 body 级 z-index 8，所以覆盖层要更高）
+      this.chatEntry2d = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
       /*
        * 暂停菜单的指针输入（`?ui2d=1`）。整层 `pointer-events` 平时是 `none`
        * ——开着会把触摸端的视角手势全吃掉；只有菜单/设置页打开时 `syncPauseCanvas2d()`
@@ -6753,6 +6764,26 @@ class App {
       const t = max > 0 ? Math.min(1, Math.max(0, state.scroll / max)) : 0;
       ctx.fillStyle = 'rgba(255, 255, 255, .35)';
       ctx.fillRect(state.list.x + state.list.w + 2, state.list.y + (state.list.h - thumbH) * t, 5, thumbH);
+    }
+  }
+
+  /**
+   * 聊天输入行的镜像开关（`?ui2d=1`）。
+   *
+   * 只在输入行真的可见时接管：`.chat-entry` 平时带 `.hidden`（`display: none`），
+   * 用 `offsetParent` 判断即可 —— 一旦它出现就 `engage`，收起就 `disengage`。
+   */
+  private syncChatEntry2d(): void {
+    const screen = this.chatEntry2d;
+    if (!screen) return;
+    const entry = document.querySelector<HTMLElement>('#chat .chat-entry');
+    const visible = !!entry && entry.offsetParent !== null;
+    if (visible && entry) {
+      screen.engage(entry);
+      this.chatEntry2dOn = true;
+    } else if (this.chatEntry2dOn) {
+      screen.disengage();
+      this.chatEntry2dOn = false;
     }
   }
 
@@ -18172,6 +18203,8 @@ class App {
     this.syncTips2D();
     // 纯文字面板（F3 / 计分板）：文字没变就不重读样式
     this.syncTextPanels2d();
+    // 聊天输入行（打开输入框时才接管）
+    this.syncChatEntry2d();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
@@ -19897,6 +19930,8 @@ class App {
     this.attackCooldownHud.dispose();
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
+    this.chatEntry2d?.dispose();
+    this.chatEntry2d = null;
     this.tutorialCard.dispose();
     this.miniGame.dispose();
     this.commandBlockEditor.dispose();
@@ -21820,7 +21855,7 @@ async function boot(): Promise<void> {
  */
 function mountMenuMirror(menu: WorldScreen): void {
   if (!UI2D_ENABLED) return;
-  const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED });
+  const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 45 });
   const sync = (): void => {
     const panel = document.querySelector<HTMLElement>('#world-screen .world-panel');
     // `create` 也能镜像了：输入框的值由 `readTextRuns` 单独取（含占位提示），

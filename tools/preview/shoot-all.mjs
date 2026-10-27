@@ -262,6 +262,13 @@ const SHOTS = [
     what: '新建世界表单（整页镜像）：输入框的值由 canvas 画、光标按 selectionStart 自己画',
     status: '已迁 · 阶段 3',
   },
+  {
+    file: '20-chat-entry.png',
+    page: 'tools/preview/chat.html',
+    size: [864, 410],
+    what: '聊天输入行镜像：输入框与绿色发送键由 canvas 画，光标按 selectionStart 自己画',
+    status: '已迁 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

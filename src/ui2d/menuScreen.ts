@@ -39,6 +39,14 @@ const SIGNATURE_INTERVAL = 4;
 export interface MenuScreenOptions {
   /** 调试遮罩（`?ui2dtint=1`）：这一层产出的像素染黄 */
   readonly tint?: boolean;
+  /**
+   * 覆盖层的 `z-index`（默认 `1`，与游戏内的 HUD 覆盖层一致）。
+   *
+   * ⚠️ 宿主是 `document.body` 时**必须显式给**：镜像的目标往往自己带高 z-index
+   * （`#world-screen` 是 40、`#chat` 是 8），覆盖层用 1 会被压在它们下面，
+   * 看起来就是"什么都没画"（`opacity: 0` 的 DOM 也看不见，于是整块消失）。
+   */
+  readonly zIndex?: number;
 }
 
 /**
@@ -74,7 +82,10 @@ export class MenuScreen2D {
   engage(source: HTMLElement): void {
     if (this.source === source) return;
     this.disengage();
-    if (!this.overlay) this.overlay = new Ui2DOverlay(this.host);
+    if (!this.overlay) {
+      this.overlay = new Ui2DOverlay(this.host);
+      if (this.options.zIndex !== undefined) this.overlay.canvas.style.zIndex = String(this.options.zIndex);
+    }
     this.source = source;
     this.previousOpacity = source.style.opacity;
     // 让位：只摘像素，不摘命中（`visibility` / `display` 会让按钮点不动）

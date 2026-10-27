@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 聊天输入行镜像（canvas）</title>
+    <!--
+      聊天输入行的 canvas 版：与主菜单同一套"整页镜像" —— `.chat-entry` 设 `opacity: 0`
+      让位像素，canvas 按原位重画输入框、发送键，以及**焦点框的光标/选区**。
+      输入本身仍归 DOM（历史、命令补全、回车发送都不动）。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/chat.html
+        open 'http://localhost:5173/tools/preview/chat.html?value=/time set day'
+        open http://localhost:5173/tools/preview/chat.html?tint=1
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 20;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      /* 与 index.html 的 #chat / .chat-entry / .chat-input / .chat-send 同观感 */
+      #chat {
+        position: absolute; left: 10px; top: 8px; z-index: 8;
+        width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
+        font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        color: #fff;
+      }
+      .chat-entry { display: flex; gap: 6px; align-items: stretch; }
+      .chat-input {
+        flex: 1 1 auto; min-width: 0;
+        padding: 6px 8px; font: inherit; font-size: 13px;
+        color: #fff; background: rgba(12, 13, 16, .82);
+        border: 2px solid rgba(255, 255, 255, .28); border-radius: 3px;
+      }
+      .chat-send {
+        flex: none; padding: 6px 12px; font: inherit; font-size: 13px;
+        color: #fff; background: #3a7d33;
+        border: 2px solid;
+        border-color: #7fbf74 #23501f #23501f #7fbf74;
+        text-shadow: 1px 1px 0 #000;
+      }
+      .chat-hint { color: #9fd8ff; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="chat">
+        <div class="chat-entry">
+          <input class="chat-input" id="chat-input" maxlength="256" placeholder="说点什么…" />
+          <button class="chat-send" id="chat-send">发送</button>
+        </div>
+        <div class="chat-hint">/help 查看命令 · ↑↓ 翻历史</div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { MenuScreen2D } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const value = params.get('value') ?? '你好，有人在吗';
+      const tint = params.get('tint') === '1';
+
+      const entry = document.querySelector('.chat-entry');
+      const input = document.getElementById('chat-input');
+
+      // 镜像：DOM 让位像素（仍可点、仍收字），canvas 按原位重画
+      const screen = new MenuScreen2D(document.body, { tint, zIndex: 12 });
+      screen.engage(entry);
+
+      input.value = value;
+      input.focus();
+      input.setSelectionRange(value.length, value.length);
+
+      document.getElementById('caption').textContent =
+        '聊天输入行镜像：输入框与发送键都是 canvas 画的（光标按 selectionStart 自己画）' +
+        (tint ? ' · 黄色遮罩' : '') +
+        ' · 打字、选中、点发送仍由 DOM 处理';
+    </script>
+  </body>
+</html>
