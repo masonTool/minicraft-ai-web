@@ -90,6 +90,17 @@
         return canvas;
       };
 
+      // 提示框内容：游戏里由 `itemName(id)` + 耐久上限算，这里给一份"看着像真的"的假数据
+      const NAMES = { 1: '圆石', 2: '泥土', 3: '铁矿', 4: '铁镐', 5: '木板', 6: '火把' };
+      const describeOf = (stack) => ({
+        title: NAMES[stack.id] ?? `物品 ${stack.id}`,
+        lines: [`数量 ${stack.count}`, stack.id === 4 ? '耐久 62 / 250' : 'minicraft:item_' + stack.id],
+        durability: stack.id === 4 ? { ratio: 0.75, level: 'high' } : null,
+        accent: stack.id === 4 ? '#4a8ad4' : '#8f8f8f',
+      });
+      // 只有 id=4（铁镐）画耐久条，用来验证"槽位里的耐久条"这条路
+      const durabilityOf = (stack) => (stack.id === 4 ? { ratio: 0.75, level: 'high' } : null);
+
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
         title: craft ? '合成台' : '生存背包',
@@ -101,6 +112,8 @@
         limitOf: (id) => (id === 4 ? 1 : 64),
         sameItem: (a, b) => a.id === b.id,
         iconOf,
+        describeOf,
+        durabilityOf,
       });
       host.open();
 

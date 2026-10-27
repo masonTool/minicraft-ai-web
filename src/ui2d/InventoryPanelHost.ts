@@ -9,6 +9,7 @@
  * 两者并存是刻意的，等自绘这条路稳定了再逐块换掉。
  */
 
+import { drawItemTooltip, type TooltipModel } from './itemTooltip.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import { applyDebugTint } from './debug.ts';
 import {
@@ -55,6 +56,15 @@ export interface InventoryPanelHostOptions extends MoveRules {
   readonly tint?: boolean;
   /** 物品 id → 图标位图（游戏里由 `ui/ItemIconCache` 提供） */
   readonly iconOf: (itemId: number) => HTMLCanvasElement | null;
+  /**
+   * 悬停提示的内容（名字/说明/耐久色条）。
+   *
+   * 为什么由调用方注入：名字与耐久上限在 `core`（`itemName` / `itemDef`），而 `ui2d` 不依赖 `core`。
+   * 返回 `null` 就是不提示（例如空格子）。
+   */
+  readonly describeOf?: (stack: StackLike) => TooltipModel | null;
+  /** 耐久条（0..1 + 三档颜色）；游戏里按 `itemDef(id).durability` 与 `stack.damage` 算 */
+  readonly durabilityOf?: (stack: StackLike) => { ratio: number; level: 'high' | 'mid' | 'low' } | null;
   /** 快捷移动的目标范围（主背包 ↔ 快捷栏） */
   readonly targetRange?: (index: number) => readonly number[];
   readonly skin?: InvSlotSkin;
@@ -65,6 +75,8 @@ export class InventoryPanelHost {
   private layout: InventoryLayout | null = null;
   private readonly cursor: Cursor = { stack: null };
   private hoverIndex = -1;
+  /** 当前悬停提示（`null` = 不显示） */
+  private tooltip: { readonly model: TooltipModel; readonly x: number; readonly y: number } | null = null;
   private dragIndices: number[] = [];
   /** 这次拖动是按的哪个键：左键 = 均分，右键 = 每格放一个（与 DOM 版一致） */
   private dragButton: 0 | 2 | null = null;
@@ -122,6 +134,7 @@ export class InventoryPanelHost {
     this.split = null;
     this.opened = false;
     this.hoverIndex = -1;
+    this.tooltip = null;
     this.dragIndices = [];
     this.dragButton = null;
     this.overlay?.clear();
@@ -166,6 +179,10 @@ export class InventoryPanelHost {
     this.pointerY = y;
     const index = slotIndexAt(layout, x, y);
     this.hoverIndex = index;
+    // 悬停提示：只在悬停到有东西的格子上时出现（与 DOM 版一致）
+    const hovered = index >= 0 ? this.slots.get(index) : null;
+    const model = hovered && this.options.describeOf ? this.options.describeOf(hovered) : null;
+    this.tooltip = model ? { model, x, y } : null;
 
     const button = input.button ?? 0;
     const now = input.timeStamp ?? (typeof performance === 'undefined' ? Date.now() : performance.now());
@@ -337,7 +354,7 @@ export class InventoryPanelHost {
       return {
         icon: this.options.iconOf(stack.id),
         count: stack.count,
-        durability: null,
+        durability: this.options.durabilityOf?.(stack) ?? null,
         held: false,
       };
     });
@@ -356,6 +373,10 @@ export class InventoryPanelHost {
     if (splitSlot && this.split) {
       drawSplitTarget(ctx, splitSlot);
       drawSplitHint(ctx, splitSlot, this.split.count, this.split.max);
+    }
+    // 悬停提示画在最上层（面板、数量牌、光标叠之上）
+    if (this.tooltip) {
+      drawItemTooltip(ctx, this.tooltip.model, this.tooltip, { w: overlay.width, h: overlay.height });
     }
     if (this.options.tint) applyDebugTint(ctx, overlay.width, overlay.height);
   }

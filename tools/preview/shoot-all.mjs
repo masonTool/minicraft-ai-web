@@ -444,6 +444,13 @@ const SHOTS = [
     what: '**自绘合成台**：3×3 合成格 + 箭头 + 结果格 + 玩家背包（同一套排版/命中/画）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '36-inventory-tooltip.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 470],
+    what: '**自绘提示框**：悬停铁镐 → 名称 / 数量 / 耐久（紫底 + 稀有度色条 + 耐久条）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

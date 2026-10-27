@@ -213,6 +213,12 @@ export {
   type StackLike,
 } from './inventoryModel.ts';
 export {
+  TOOLTIP_SKIN,
+  drawItemTooltip,
+  itemTooltipRect,
+  type TooltipModel,
+} from './itemTooltip.ts';
+export {
   InventoryPanelHost,
   type InventoryPanelHostOptions,
 } from './InventoryPanelHost.ts';

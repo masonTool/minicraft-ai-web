@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { layoutInventoryPanel, splitCountFromDrag } from '../src/ui2d/InventoryPanel2D.ts';
+import { itemTooltipRect } from '../src/ui2d/itemTooltip.ts';
 import {
   arraySlots,
   distributeDrag,
@@ -388,5 +389,38 @@ describe('工作站布局', () => {
     const extraBottom = Math.max(...layout.groups.extra.map((r) => r.y + r.h));
     const mainTop = Math.min(...layout.groups.main.map((r) => r.y));
     expect(mainTop).toBeGreaterThan(extraBottom);
+  });
+});
+
+/**
+ * 物品提示框的位置（`itemTooltipRect`）。
+ *
+ * 自绘面板接管指针之后，DOM 的 `#item-tooltip` 就再也收不到 hover 了，所以提示框得自己画。
+ * 位置规则很简单但很容易写错：默认右下、右边放不下翻左、下面放不下翻上、最后夹进视口。
+ */
+describe('提示框位置', () => {
+  const size = { w: 150, h: 60 };
+  const viewport = { w: 400, h: 300 };
+
+  it('空间够时在指针右下方（偏移 14px）', () => {
+    expect(itemTooltipRect({ x: 50, y: 50 }, size, viewport)).toEqual({ x: 64, y: 64, w: 150, h: 60 });
+  });
+
+  it('右边放不下就翻到左边', () => {
+    const rect = itemTooltipRect({ x: 380, y: 50 }, size, viewport);
+    expect(rect.x).toBe(380 - 14 - 150);
+    expect(rect.x + rect.w).toBeLessThan(380);
+  });
+
+  it('下面放不下就翻到上面', () => {
+    const rect = itemTooltipRect({ x: 50, y: 290 }, size, viewport);
+    expect(rect.y).toBe(290 - 14 - 60);
+  });
+
+  it('屏幕太小时夹进视口（不会出现负坐标）', () => {
+    const tiny = { w: 120, h: 40 };
+    const rect = itemTooltipRect({ x: 2, y: 2 }, { w: 200, h: 100 }, tiny);
+    expect(rect.x).toBeGreaterThanOrEqual(0);
+    expect(rect.y).toBeGreaterThanOrEqual(0);
   });
 });
