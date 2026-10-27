@@ -9,6 +9,44 @@
 
 ---
 
+## 批次 20261027-1334 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1334
+
+> 用户 2026-10-27：「继续继续」—— 接着做**主菜单 / 世界列表**。
+> 这一块与前面都不同：菜单在 `App` 之外（**没有覆盖层、没有主循环**），而且它是个
+> **静态整页**。所以不再"自己排版"，改走**整页镜像**：DOM 把 `opacity` 设 0 让位像素，
+> canvas 把每段文字、每块底色与边框按原位重画 —— 加按钮、改文案、换语言都自动跟上。
+
+- [x] [G1] `src/ui2d/textPanel.ts`：底块支持**边框**（`readSurface`），并给 `drawTextRuns` 加 `slack` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：`readTextBlocks` 现在读 `borderTopWidth/TopColor` 与圆角，绘制时"先底后边"（描边画在内侧半像素上，与 `border-box` 对齐）；只有边框没有底色的元素也会被画。`drawTextRuns(ctx, runs, slack)` 给 `maxWidth` 留余量。
+  - 为什么：MC 风格的按钮靠边框出"凸起"感，没有边框整页就是一堆灰块；`slack` 是因为 DOM 的 `letter-spacing`（标题常写负值）会让元素盒子比 canvas 量出的字**窄**，不给余量 "MINICRAFT" 会被截成 "MINICRA…"（第一版截图就是这样）。
+  - 验证：`npx vitest run tests/ui2d.test.ts` → **62 passed**（新增 2 条：不给余量按盒子截断、给余量完整画出）；`tsc` 干净。
+  - 批次：20261027-1334
+
+- [x] [G2] `src/ui2d/menuScreen.ts`：`MenuScreen2D` —— 独立覆盖层 + `engage/disengage`（`opacity: 0` 让位）+ rAF 循环 + 签名比对
+  - 做了什么：`engage(el)` 建（或复用）一个 `Ui2DOverlay`、把元素的 `opacity` 设 0、起一个 `requestAnimationFrame` 循环；每 4 帧比一次签名（视口尺寸 + 所有可滚动元素的 `scrollTop` + 整块 `textContent`），变了才重读计算样式并重画；`disengage()` 还原 opacity 并停止循环。
+  - 为什么：菜单是静态的，每帧读整棵树的计算样式纯属浪费；而 `WorldScreen` 没有"打开/切视图/滚动"事件，只能靠签名自己发现变化。
+  - 验证：预览页 `tools/preview/menu-mirror.html` 跑通（首页与世界列表两种视图），`tsc` 干净。
+  - 批次：20261027-1334
+
+- [x] [G3] `src/main.ts`：主菜单接线 `?ui2d=1`（`mountMenuMirror`，200ms 轮询 + resize），只镜像 `home` / `worlds` → `npm run check:fast`
+  - 做了什么：`boot()` 里在 `installInstallHint()` 之后调 `mountMenuMirror(menu)`；它建一个 `MenuScreen2D`，每 200ms 检查"菜单是否开着且停在 `home`/`worlds`"，是就 `engage(.world-panel)`，否则 `disengage()`；`resize` 时立刻同步一次。
+  - 为什么：**只镜像这两个视图**——`create` 与多人面板里有 `<input>`，而 `<input>` 的当前值不在 `textContent` 里（镜像过去是空框），输入法那一摊要单独做。轮询是因为 `WorldScreen` 不暴露事件，而菜单静态、200ms 的代价可忽略。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ **游戏内未实测**（dev 缺 `__host/core.bin` 停在落地页），镜像效果由预览页与截图验证。
+  - 批次：20261027-1334
+
+- [x] [G4] 预览页 `tools/preview/menu-mirror.html` + 3 张截图 + 文档（§5.13、决策 D25）→ `node tools/preview/shoot-all.mjs`
+  - 做了什么：预览页按 `index.html` 的配色搭了一块"世界面板"（首页 / 世界列表两个视图），用 `MenuScreen2D` 镜像它；`?view=worlds`、`?tint=1`；`shoot-all` 加 3 张（累计 34 张）；`notes/canvas-ui.md` 新增 §5.13，决策 D25 记下"整页镜像"的适用边界。
+  - 为什么：镜像的卖点是"一像素不自己排"，那就必须能一眼看出**它画出来的和 DOM 完全一致**——预览页里 DOM 面板被设成 `opacity: 0`，屏幕上看到的每一块都是 canvas 画的。
+  - 验证：`node tools/preview/shoot-all.mjs` 34 张全出；截图看过：首页标题完整（`MINICRAFT` 不再被截）、四颗按钮有边框与文字、世界列表三张卡片 + 每张两个小按钮 + 新建/返回；遮罩版整块黄。
+  - 批次：20261027-1334
+
+
 ## 批次 20261027-1327 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -250,40 +288,4 @@
   - 为什么：D13 容易被误解成"偷懒"——所以写清了判据是**量级**；D14 的代价（低帧率跳格）也写在正面，免得以后有人当成 bug 去修。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
   - 批次：20261027-1218
-
-## 批次 20261027-1209 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1209
-
-> 用户 2026-10-27：「继续继续」—— 接着做**阶段 1：控件库**。
-> 这是"整页搬走"的前提：设置页 / 主菜单 / 背包里的每一个交互，拆开都是这几个控件
-> （开关、滑块、下拉、页签、滚动列表、提示框、弹窗）。控件库一天，整页才有资格谈。
-
-- [x] [W1] `src/ui2d/controls.ts`：七个控件的**画法 + 纯状态机**（开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗），几何与命中全部做成可断言的纯函数 → `npx vitest run tests/ui2d-controls.test.ts`
-  - 做了什么：`controls.ts`（约 470 行）—— 七个 `draw*` + 一组纯函数：`toggleNext`、`sliderTrackRange`/`sliderRatioFromX`/`sliderRatioStep`、`dropdownMenuRect`/`dropdownIndexAt`、`tabRects`/`tabIndexAt`、`listMaxScroll`/`clampListScroll`/`listScrollByWheel`/`listVisibleRange`、`tooltipRect`、`modalRect`；另有 `controlRegion`（矩形登记命中）与 `insetRect`。色值延续 `PALETTE`，新增 `CONTROL_COLORS` / `MODAL_COLORS`。
-  - 为什么：**状态留在调用方、控件只给画法与状态机**（决策 D10）。canvas 没有"元素自己记得自己开着没有"，混在一起就会长出第二份真相（DOM 那套 `class` 正是如此）；而纯函数能离线断言，绘制不能。
-  - 验证：`npx tsc --noEmit` 干净；`npx vitest run tests/ui2d-controls.test.ts` → **21 passed**。
-  - 批次：20261027-1209
-
-- [x] [W2] `tests/ui2d-controls.test.ts`：每个控件"命中 → 状态 → 回调"的离线断言（滑块的 0/0.5/1、下拉的翻转与越界、列表的滚动夹取、提示框防溢出）→ `npm run test:unit`
-  - 做了什么：21 条断言，分七组：控件命中区域（矩形 + 开区间边界）、开关翻转、滑块（可拖范围两端各留半钮 / 0-0.5-1 / 越界与 NaN / 键盘步进同一夹取）、下拉（默认向下 / 下方放不下翻上 / 上下都放不下选空间大的那侧 / 菜单项越界 -1）、页签（等分 / 左闭右开 / 最右边界算最后一个）、列表（内容高 / 最大滚动 / 夹取 / 滚轮按整行含"恰好半行向上取整" / 可见范围首尾）、提示框（下方 / 翻上 / 左右夹进视口）、弹窗（居中 / 小屏夹进视口）。
-  - 为什么：这些错每一条都只表现为"手感不对"或"偶尔点不到"，真机上间歇出现、手指复现不出来 —— 只有纯函数断言能钉住。
-  - 验证：`npm run test:unit` 绿（新增文件被 `vitest run tests` 自动收进去，不需要注册）。
-  - 批次：20261027-1209
-
-- [x] [W3] `tools/preview/controls.html`：把七个控件摆一排并能真的点/拖/滚（canvas 直接接指针事件），加 `?tint=1`；`shoot-all.mjs` 补图并重拍 `.tmp/canvas-version/` → `node tools/preview/shoot-all.mjs`
-  - 做了什么：一页 900×560 的可交互画廊 —— 开关两枚、滑块（按住拖）、下拉（点开选中）、三页签、20 行滚动列表（滚轮 + 点行选中 + 右侧滚动条）、"?" 悬停提示框、"打开弹窗"（不透明深色面板 + 标题栏 + ✕ + Esc）。命中一律走 `hitRegionAt(regions(), x, y)`，就是将来设置页要用的那条路。`?state=dropdown|tooltip|modal` 把浮层固定打开（截图用），`?tint=1` 加遮罩。`shoot-all` 加 5 张，累计 19 张。
-  - 为什么：阶段 1 的判据就是"能在调试面板里摆一排"；而且**交互只能靠手**验，截图不行 —— 所以这一页刻意打开 `pointer-events`（游戏里铺满全屏的覆盖层必须关着，否则吃掉视角手势）。
-  - 验证：`node tools/preview/shoot-all.mjs` 19 张全出；逐张看过：下拉展开贴字段下方、已选项高亮；列表滚到 03~14 且滚动条在中段；提示框贴 "?" 下方两行；弹窗不透出底下列表；遮罩版整页黄。
-  - 批次：20261027-1209
-
-- [x] [W4] 文档：`notes/canvas-ui.md` 阶段表把 1 标成 ✅、新增 §5.5（七个控件的接口与"为什么状态留在调用方"）、决策 D10~D12 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段表补回 `1 控件库 ✅` 一行（上一批那次表格编辑把它整行替换掉了，这次顺手补回来）；新增 §5.5（七行接口表 + 三条经验：状态留调用方 / 翻转与避让必须自己算 / 弹窗要不透明）；决策 D10（画法与状态机分离）、D11（下拉与提示框自己避让）、D12（弹窗不复用 HUD 底板）。
-  - 为什么：D12 是这一批唯一"踩到才改"的一条 —— 第一版弹窗用半透明 HUD 底板，截图里底下列表的字全透上来，像字叠字。不写下来，下一个人做设置页还会再踩一次。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1209
 
