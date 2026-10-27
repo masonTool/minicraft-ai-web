@@ -6681,42 +6681,45 @@
       }
 
       /* ==================================================================
-         输入浮条（2026-10-27 定稿，用户原话）
-         点输入框时系统键盘会盖住框本身，所以把输入临时搬到**屏幕左上角一条细条**里：
-         没有标题、没有按钮、没有遮罩——它不是对话框，只是给输入框换个看得见的位置。
-         键盘上的「完成」写回，键盘收起就跟着消失。
+         手机端输入浮层（2026-10-27 定稿）
+         **整层黑色半透明遮罩**（75%）盖住界面，输入框作为它的子元素放在**左上角**。
+         遮罩全屏，所以下面的点击/滑动都落在它身上（拦截层）；
+         点它 = 结束输入 → 键盘收起 → 这一层消失。PC 端不启用。
          ================================================================== */
-      /*
-       * 浮条（2026-10-27 第三次调整）：显示时背景淡入一层**模糊暗色**，
-       * 把"底下那堆信息还在动"压下去，视线只落在左上角这一条上。
-       * 点遮罩 = 结束输入（值已实时同步，不需要再写一次）。
-       */
-      .inp-bar {
-        position: fixed; inset: 0; z-index: 200;
+      .inp-layer {
+        position: fixed;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: 9999;
         display: none;
-        background: rgba(0, 0, 0, .32);
-        backdrop-filter: blur(4px) saturate(.9);
-        -webkit-backdrop-filter: blur(4px) saturate(.9);
+        background: rgba(0, 0, 0, .75);
+        touch-action: none;
       }
-      .inp-bar.visible { display: block; animation: inp-fade 140ms ease-out both; }
-      @keyframes inp-fade { from { opacity: 0; } to { opacity: 1; } }
-      .inp-bar-field {
+      .inp-layer.visible { display: block; }
+      /* 左上角的输入区：**没有边框**，只有下方一条线 */
+      .inp-field {
         position: absolute;
-        top: max(8px, env(safe-area-inset-top));
-        left: max(8px, env(safe-area-inset-left));
+        top: max(12px, env(safe-area-inset-top));
+        left: max(12px, env(safe-area-inset-left));
         box-sizing: border-box;
-        width: min(64vw, 320px); height: 38px;
-        padding: 0 10px;
-        font: inherit; font-size: 16px;
-        color: #f0f0f0; background: #1e1e1e;
-        border: 2px solid;
-        border-top-color: #141414; border-left-color: #171717;
-        border-right-color: #4c4c4c; border-bottom-color: #545454;
-        box-shadow: 0 10px 26px rgba(0, 0, 0, .6);
+        width: min(62vw, 340px);
+        height: 42px;
+        padding: 0 2px;
+        font: inherit;
+        font-size: 17px;
+        line-height: 40px;
+        color: #fff;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid #7fa86f;
+        border-radius: 0;
+        outline: none;
+        box-shadow: none;
+        -webkit-appearance: none;
+        appearance: none;
       }
-      .inp-bar-field:focus { outline: 2px solid #7fa86f; outline-offset: -2px; }
-      /* 默认全选选中：绿底纯白字，避免各平台默认选中色把文字压暗 */
-      .inp-bar-field::selection { background: #4a7d39; color: #fff; }
+      .inp-field::placeholder { color: #9a9a9a; }
+      /* 选中文字纯白（各平台默认选中色会把字压暗） */
+      .inp-field::selection { background: #4a7d39; color: #fff; }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
