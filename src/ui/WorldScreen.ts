@@ -678,8 +678,29 @@ export class WorldScreen {
       event.stopPropagation();
       const willOpen = extra.classList.contains('hidden');
       this.closeCardMenus();
-      extra.classList.toggle('hidden', !willOpen);
       more.setAttribute('aria-expanded', String(willOpen));
+      if (!willOpen) {
+        extra.classList.add('hidden');
+        return;
+      }
+      extra.classList.remove('hidden');
+      /*
+       * 定位（用户 2026-10-27：条目在下面时菜单会被遮住/裁掉）。
+       *
+       * 两个问题一起解决：
+       *  1. `.world-list` 是 `overflow-y: auto`，absolute 的菜单超出列表就看不见
+       *     → 改成 `position: fixed`（相对视口，不受滚动容器裁剪）；
+       *  2. 靠底部的那几张卡片下方没空间 → 量一下剩余高度，不够就**翻到按钮上方**。
+       */
+      const rect = more.getBoundingClientRect();
+      const menuHeight = extra.offsetHeight;
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const top =
+        spaceBelow >= menuHeight ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+      extra.style.position = 'fixed';
+      extra.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+      extra.style.left = 'auto';
+      extra.style.top = `${top}px`;
     });
     // 菜单内部点击不要冒泡到"点别处收起"那条（否则点菜单项时先收起来了）
     extra.addEventListener('click', (event) => event.stopPropagation());
@@ -693,6 +714,8 @@ export class WorldScreen {
   private closeCardMenus(): void {
     for (const menu of this.listEl.querySelectorAll('.world-card-extra')) {
       menu.classList.add('hidden');
+      // 清掉上次算出来的 fixed 坐标：不同条目的位置不一样，下次必须重算
+      menu.removeAttribute('style');
     }
     for (const button of this.listEl.querySelectorAll('.world-more')) {
       button.setAttribute('aria-expanded', 'false');
