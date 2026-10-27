@@ -4317,6 +4317,22 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L22 **输入浮层拦截 + 世界页三按钮 + ⋯ 下拉 + 缩略图 + `.mc` 包**（用户 2026-10-27）。
+  - **浮层拦截**：原来只挡视觉——事件照样冒泡到 document，而页面大量交互是 document 级委托，
+    于是"点遮罩"被当成"点了下层"。改成 window 捕获阶段掐断 pointer/touch/mouse/click/wheel
+    （输入框自身放行），并按 `pointerdown` 收起浮层。
+  - **世界页**：去掉「世界 N」标题行，三颗按钮并排（新建/加入等宽、导入存档小一号靠右）。
+  - **「⋯」下拉**：导出/编辑/删除竖排浮层菜单，点页面其它位置收起（`pointerdown`，避开
+    click 的 300ms 延迟）。以前是卡片底部展开一行，高度会跳。
+  - **缩略图**：`WorldSummary.thumbnail`（160×90 jpeg）存清单；抓取点挂在 `app.onSaved`
+    （退出前必保存一次，那时 canvas 还在）。⚠️ 必须给 renderer 开 `preserveDrawingBuffer`，
+    否则 `drawImage` 拿空白（实测存出来全黑）。
+  - **`.mc` 包**：`src/core/save/McPack.ts` 手写 zip 读写（store 模式）；导出 `world.json` +
+    `thumbnail.jpg`，包名 `世界名.mc`（空格→中划线）；导入解包后走原有 `parseSaveTransfer`，
+    世界名优先用包内真实名（文件名还原只作兜底）。
+  - 验证：浮层点下层按钮 `lowerClicks=0`；三按钮 317/317/72；菜单 items=[导出,编辑,删除]、
+    点别处收起；缩略图 min=2/max=255（非空白）；导出 `新的世界-1.mc`，python zipfile 可解出
+    `['world.json','thumbnail.jpg']`；新增 3 条 zip 单测；`npm run check` exit=0（637 单测）。
 - [x] L21 **开房复用「加入房间」界面 + 局域网扫描修复**（用户 2026-10-27）。
   - **扫描失效真因**：上一版为"用本机 IP 段"把 `location.hostname` 当唯一来源。但 App
     webview / 域名访问时它是 `localhost`，代码兜底成 `127.0.0`（回环）→ 只能扫到本机；

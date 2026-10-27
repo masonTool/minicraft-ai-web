@@ -18426,3 +18426,49 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261027-0720 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 把合并后列出的 P0（Rust 与 Node 的协议差异）能安全补齐的部分先做掉。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0720
+
+- [x] [L13] Rust `join` 补 `no-host` / `host-offline`：`server/rust/src/{handlers,protocol}.rs` → 语法自查
+  - 做了什么：`protocol.rs` 补 `CLOSE_HOST_OFFLINE = 4009` / `CLOSE_NO_HOST = 4010`；`handlers.rs` 在 `wants_host` 判定之后加一段——`hosts` 里没登记房名就拒 `no-host`，登记着但人不在 `players`（宽限期断线）就拒 `host-offline`；用 `st.hosts.get(&room).copied()` 先取出 id 再判，避免 `drop(st)` 与借用打架。
+  - 为什么：与 Node 版同一口径。没有房主的房间是一个**不推进的世界**（方块能放、怪不动、红石不亮），界面却一切正常。
+  - 验证：**只做了语法与类型自查**——本机没有 `cargo`，`bash server/rust/run-net-test.sh` 未跑。
+  - 批次：20261027-0720
+- [x] [L13] Rust `/rooms` 补 `maxPlayers`、beacon 的 `has_host` 按房间判断：`server/rust/src/{lib,beacon}.rs` → 语法自查
+  - 做了什么：`Config` 加 `max_players`（`MAX_PLAYERS`，默认 10，脏值/0 退回默认）→ `Hub` → `/rooms` 输出 `maxPlayers`；`beacon::announce_of` 的 `has_host` 从 `!state.hosts.is_empty()`（任意房间有房主）改成 `state.hosts.contains_key(&room)`（这一间）。
+  - 为什么：前者让浮窗在手机内建服务端上也显示 `在线/容量`；后者在多房间时会对着一个没人跑模拟的房说「可以进」，客户端照它进房就踩到同一个坑。
+  - 验证：同上，未经编译验证。
+  - 批次：20261027-0720
+
+---
+
+## 批次 20261027-0700 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："请继续" —— 承接合并后列的待补项：把「附近房间」在 Node 服务端上真正跑通。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-0700
+
+- [x] [L12] Node 服务端补上 UDP 组播发现：`server/node/beacon.mjs` + `server/node/index.mjs` → `npm run test:net`
+  - 做了什么：照 `server/rust/src/beacon.rs` 写同一份报文（`mc/v/id/port/room/name/seed/players/host/pw`、组播 `239.255.42.99:25188`、3 秒一帧、12 秒过期、按 id 过滤回声），收发分成两个 socket；`/healthz` 补 `beacon` / `beaconPort` / `peers`；监听回调里启动（端口要等 `PORT=0` 分配完才知道）；`SIGTERM` 时先停发现层；`BEACON=0` 可关。
+  - 为什么：文档写着"Node 版 `/healthz` 返回 peers"，实际 body 里没有（只有 CORS 头），所以「附近房间」在 Node 服务端下永远是空的——只有手机上那份 Rust 才有数据。
+  - 验证：本机双实例互相发现（8887 ↔ 9001，`addr=192.168.1.72`）；假房主进 8887 的 `newplayer` 后，9001 的 peers 变成 `name=草原小屋 / room=newplayer / players=1 / hasHost=true`；`test:net` **297 通过 / 0 失败**。
+  - 批次：20261027-0700
+- [x] [L12] 附近房间收尾：`src/ui/ServerPicker.ts` → `npm run check:fast`
+  - 做了什么：附近设备行用它自报的 `room/players/hasHost` 直接列一行房间（不再去拉它的 `/rooms`，那台可能根本没连过来），延迟交给 `probeLatency()` 异步补；房间行支持"只知道人数不知道容量"（只写 `4`，不编 `1/0`）；空房名显示成「默认房间」。
+  - 为什么：合并时只移植了"列出来"，worktree 里的 `probeLatency` 没人调用，附近设备的延迟一直是 `--`；而它自报的房间名比"进默认房"准得多。
+  - 验证：`npm run check:fast` 全绿；补一条 ui-test 断言（自报房间 + 异步延迟 + `--` 兜底）。
+  - 批次：20261027-0700
+
+---
+
