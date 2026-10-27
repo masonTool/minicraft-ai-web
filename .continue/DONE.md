@@ -9,6 +9,36 @@
 
 ---
 
+## 批次 20261027-2114 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2114
+
+> 用户 2026-10-27：「继续完成」—— 把背包这几条任务（M27~M31）的"到底还差什么"查清楚，
+> 查到一处真缺口（配方书没在镜像里）并补掉。
+
+- [x] [A1] 证据盘点：M27~M31 逐条查实现路径（`.inv-slot` 通路、tooltip 层级、占比条位置、`<input>` 取值）→ 结论写进 §5.33 表
+  - 做了什么：确认 M27/M29/M30/M31 已被镜像覆盖（同一批 `.inv-slot` / `.inv-panel`），`#item-tooltip` 在 `body`、`z-index: 60` 不会被镜像（12）盖住。
+  - 为什么：这几条一直挂着"待办"，但没人说得清还差什么；逐条查过之后才知道只剩"自绘替换"这一件。
+  - 验证：`grep` 证据见 §5.33 表；`tsc` 干净。
+  - 批次：20261027-2114
+
+- [x] [A2] 补真缺口：配方书（`.recipe-panel`）挂在 `body`，背包镜像覆盖不到 → 单开一个镜像实例
+  - 做了什么：`main.ts` 新增 `recipe2d`（`MenuScreen2D`，zIndex 13、pollMs 150）与 `syncRecipe2d()`（可见就 engage、收起就 disengage），dispose 里一并释放。
+  - 为什么：`RecipeBook` 是 `new RecipeBook(document.body, …)`，它的面板不在 `#inventory-screen` 里 —— 不补就是"左半 canvas、右边 DOM"，而配方书里还有搜索框与滚动列表。
+  - 验证：`tsc` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 core.bin）。
+  - 批次：20261027-2114
+
+- [x] [A3] `TASKS`：M27~M31 按证据标完成（各自写明"为什么算完成"），剩下 M26b 与 M34 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：五条待办改 `[x]` 并补上依据；M34 仍是 `[~]`（验收脚本就绪、通过分支待首跑）。
+  - 为什么：待办里挂着"已完成功能的可能性"会让人重复劳动，也会让"还差多少"永远说不清。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2114
+
+
 ## 批次 20261027-2106 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -253,37 +283,5 @@
   - 为什么：这个错很隐蔽 —— 漏掉的部分**看着正常**（因为它还是 DOM），只有开遮罩才看得出来。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
   - 批次：20261027-1739
-
-
-## 批次 20261027-1732 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1732
-
-> 用户 2026-10-27：「滑动物品滚动的能力不行，世界列表也滑不动；就应该是手贴着列表上下移动，它跟手」。
-> 根因：游戏把 `html, body` 的 `touch-action` 设成 `none`（为了拖动视角），内层滚动容器
-> 每家 WebView 处理不一致 → 手指贴着列表滑，列表纹丝不动。
-> 同时把用户点名要做的后续都写进 `TASKS.md`（M32~M36）。
-
-- [x] [U1] `src/ui2d/menuScreen.ts`：`bindDragScroll` —— 接管触摸拖拽滚动（找可滚祖先 / 8px 阈值 / 跟手 / 立刻重画）→ 合成指针事件验证
-  - 做了什么：`pointerdown`（非鼠标）→ 从命中元素往上找第一个真的能滚的祖先（`scrollHeight > clientHeight + 2` 且 `overflow-y: auto/scroll`）；纵向位移超过 8px 才劫持；之后每次 `pointermove` 设 `scrollTop = startScroll - dy` 并立刻 `refresh(true)`；`pointerup/cancel` 结束；`input/textarea/select` 不劫持。
-  - 为什么：`html, body { touch-action: none }` 让内层滚动容器在部分 WebView 上完全不响应滑动；镜像既然已经在画这一屏，就顺手把"跟手"这件事做掉，不依赖 UA 的滚动实现。
-  - 验证：Playwright 合成 touch 指针事件，在 `inventory-mirror.html?creative=1` 里向上拖 60px → `grid.scrollTop` 从 **0 → 60**，画面同步重画；`tsc` 干净。
-  - 批次：20261027-1732
-
-- [x] [U2] `TASKS.md`：把用户点名的后续拆成 M32~M36（立栏上 canvas / 触控控件 / 暂停弹窗验收 / 自绘滚动条 / 拖拽惯性）→ `node tools/audit-tasks.mjs`
-  - 做了什么：新增五条待办，并把进度口径与差异台账重算（HANDOFF 303/6/12、共 324 项）。
-  - 为什么：用户明确说过"后面要做的事都加到任务列表里，不用一个个确认"。
-  - 验证：`npm run check` exit=0。
-  - 批次：20261027-1732
-
-- [x] [U3] 文档：`notes/canvas-ui.md` §5.24（为什么自己做拖拽滚动、三条边界、验证方式）→ `node .continue/hooks/check.mjs --fast`
-  - 做了什么：记下根因（`touch-action: none`）、8px 阈值的理由（别把点击/物品拖拽/横向拖动一起劫持）、以及"滚动条（M35）与惯性（M36）还没做"。
-  - 为什么：这一层最容易被后来的人当成"我也可以顺手加个平滑滚动"，结果把点击阈值改坏。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-1732
 
 
