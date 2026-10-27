@@ -49,11 +49,25 @@ import {
   Ui2DOverlay,
   ARMOR_PER_ICON,
   CanvasMenu,
+  FORM_ROW_GAP,
+  FORM_ROW_HEIGHT,
   applyDebugTint,
   attackChargePercent,
   attackChargeRect,
   bubbleIconState,
+  clampListScroll,
+  drawFormRow,
+  drawModalFrame,
+  drawTabs,
+  formContentHeight,
+  formControlRect,
+  formRatioFromX,
+  formRowRects,
+  modalRect,
+  readFormRows,
   vitalIconState,
+  writeRangeRatio,
+  type FormRow,
   type HotbarSlotState,
   type MenuInput,
   type Rect as Ui2DRect,
@@ -1257,16 +1271,28 @@ class App {
   private pause2d: CanvasMenu | null = null;
   /** 与 `pause2d` 的行一一对应的 DOM 按钮（激活时点它们） */
   private pause2dButtons: HTMLButtonElement[] = [];
-  private pause2dPanel: HTMLElement | null = null;
-  private pause2dScreen: HTMLElement | null = null;
   /**
-   * "canvas 这一层现在接着"——与 `pause2d.isOpen` **分开记**。
+   * canvas 现在接管的是哪一页：`null` = 没接管，`'menu'` = 暂停菜单页，`'settings'` = 设置页。
    *
-   * 激活某一项时我们会先 `pause2d.close()` 再点 DOM 按钮，此刻 `isOpen` 已经是 false，
-   * 但 DOM 面板／HUD 还在"让位"状态；用 isOpen 当还原判据就会漏还原，
-   * 表现为"退出暂停后 HUD 永久消失"（这一批第一次写就是这么错的）。
+   * ⚠️ 它是**还原判据**，不能拿菜单自己的 `isOpen` 代替：激活某一项时我们会先
+   * `pause2d.close()` 再点 DOM 按钮，此刻 `isOpen` 已经是 false，但 DOM 面板／HUD
+   * 还在"让位"状态 —— 用 isOpen 判就会漏还原，表现为"退出暂停后 HUD 永久消失"（决策 D17）。
    */
-  private pause2dEngaged = false;
+  private pauseCanvasMode: 'menu' | 'settings' | null = null;
+  /** 设置页的绘制/交互状态（页签、行模型、滚动、焦点、正在拖的滑杆） */
+  private settings2d: {
+    panel: Ui2DRect;
+    tabsBar: Ui2DRect;
+    list: Ui2DRect;
+    tabs: { label: string; active: boolean; el: HTMLElement }[];
+    rows: FormRow[];
+    scroll: number;
+    focus: number;
+  } | null = null;
+  private settings2dDrag: FormRow | null = null;
+  /** 让位期间记下的 DOM 引用（退出时按它还原） */
+  private pauseCanvasPanel: HTMLElement | null = null;
+  private pauseCanvasScreen: HTMLElement | null = null;
   /**
    * 图标位图版本号：`refreshHotbar()` 每跑一次 +1。
    *
@@ -3012,21 +3038,52 @@ class App {
       if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
       /*
        * 暂停菜单的指针输入（`?ui2d=1`）。整层 `pointer-events` 平时是 `none`
-       * ——开着会把触摸端的视角手势全吃掉；只有菜单打开时 `syncPauseMenu2d()`
+       * ——开着会把触摸端的视角手势全吃掉；只有菜单/设置页打开时 `syncPauseCanvas2d()`
        * 才把它打开，关掉时立刻还原。
        */
       const overlayCanvas = this.ui2dOverlay.canvas;
+      const localPoint = (event: PointerEvent): { x: number; y: number } => {
+        const rect = overlayCanvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
       overlayCanvas.addEventListener('pointerdown', (event) => {
         const overlay = this.ui2dOverlay;
-        const menu = this.pause2d;
-        if (!overlay || !menu?.isOpen) return;
-        const rect = overlayCanvas.getBoundingClientRect();
-        const input = menu.handlePointer(event.clientX - rect.left, event.clientY - rect.top, {
-          w: overlay.width,
-          h: overlay.height,
-        });
-        this.dispatchPauseMenu(input);
+        if (!overlay || !this.pauseCanvasMode) return;
+        const point = localPoint(event);
+        if (this.pauseCanvasMode === 'menu') {
+          const menu = this.pause2d;
+          if (!menu) return;
+          this.dispatchPauseMenu(menu.handlePointer(point.x, point.y, { w: overlay.width, h: overlay.height }));
+          return;
+        }
+        this.handleSettingsPointer(point.x, point.y, 'down');
       });
+      // 滑杆要按下并拖动：move/up 也走同一个入口
+      overlayCanvas.addEventListener('pointermove', (event) => {
+        if (this.pauseCanvasMode !== 'settings' || !this.settings2dDrag) return;
+        const point = localPoint(event);
+        this.handleSettingsPointer(point.x, point.y, 'move');
+      });
+      overlayCanvas.addEventListener('pointerup', (event) => {
+        if (this.pauseCanvasMode !== 'settings') return;
+        const point = localPoint(event);
+        this.handleSettingsPointer(point.x, point.y, 'up');
+      });
+      overlayCanvas.addEventListener(
+        'wheel',
+        (event) => {
+          const state = this.settings2d;
+          if (this.pauseCanvasMode !== 'settings' || !state) return;
+          event.preventDefault();
+          state.scroll = clampListScroll(
+            state.scroll + event.deltaY,
+            state.rows.length,
+            state.list.h,
+            FORM_ROW_HEIGHT + FORM_ROW_GAP,
+          );
+        },
+        { passive: false },
+      );
     }
     // 选中描边是按**屏幕像素**算宽度的（批次 521），第一次就要把背板尺寸告诉它，
     // 否则第一帧到第一次 resize 之间描边宽度是 1 个像素（= 半个 CSS 像素）
@@ -6405,67 +6462,135 @@ class App {
   }
 
   /**
-   * 暂停菜单页的 canvas 接管（`?ui2d=1`）。
+   * 暂停菜单页 / 设置页的 canvas 接管（`?ui2d=1`）。
    *
-   * 每帧调一次，自己在"面板开着 / 页签是菜单页"这两个条件上做边沿检测：
-   * 打开、从设置子页退回菜单页、关掉 —— 三种转换都从这一处进出，
-   * 不必去 `SettingsScreen` 里埋钩子（那样 DOM 版与 canvas 版的时序会分家）。
+   * 每帧调一次，自己在 `(面板开着, 当前页)` 上做边沿检测，算出想要的模式
+   * （`null` / `'menu'` / `'settings'`）。三种转换都从这一处进出，所以**不必**
+   * 去 `SettingsScreen` 里埋钩子 —— 埋了 DOM 版与 canvas 版的时序就会分家。
+   *
+   * DOM 让位是两者共用的（面板隐藏、遮罩透明、HUD 隐藏、pointer-events 打开），
+   * 退出时逐项还原；**还原判据是 `pauseCanvasMode` 而不是菜单自己的 `isOpen`**
+   * （激活时会先收起 canvas 层再点 DOM 按钮，那时 `isOpen` 已经 false，见决策 D17）。
    */
-  private syncPauseMenu2d(): void {
+  private syncPauseCanvas2d(): void {
     if (!UI2D_ENABLED) return;
     const overlay = this.ui2dOverlay;
     if (!overlay) return;
-    const wantMenu = this.settingsScreen.isOpen && this.settingsScreen.page === 'menu';
-    if (wantMenu === this.pause2dEngaged) return;
+    const mode: 'menu' | 'settings' | null = !this.settingsScreen.isOpen
+      ? null
+      : this.settingsScreen.page === 'menu'
+        ? 'menu'
+        : this.settingsScreen.page === 'settings'
+          ? 'settings'
+          : null;
+    if (mode === this.pauseCanvasMode) return;
 
-    if (wantMenu) {
-      const panel = document.querySelector<HTMLElement>('#settings-screen .settings-panel');
-      if (!panel) return;
-      // 只取看得见的按钮：联机那几颗在单机房里是 `display: none`
-      const buttons = [...panel.querySelectorAll<HTMLButtonElement>('.pause-actions button')].filter(
-        (button) => button.offsetParent !== null,
-      );
-      if (buttons.length === 0) return;
-      const title = panel.querySelector<HTMLElement>('.settings-title')?.textContent?.trim() ?? '';
-      this.pause2d = new CanvasMenu(
-        title,
-        buttons.map((button, index) => ({ id: `pause${index}`, label: (button.textContent ?? '').trim() })),
-      );
-      this.pause2dButtons = buttons;
-      this.pause2dPanel = panel;
-      this.pause2dScreen = document.getElementById('settings-screen');
-      this.pause2d.open();
+    this.teardownPauseCanvas2d();
+    if (!mode) return;
 
-      // DOM 让位：面板藏起来（可见性，不是 display —— 那是它自己淡出用的），
-      // 遮罩背景改透明（canvas 自己画一层，否则菜单会被压暗 42%），HUD 也藏
-      // （`#hud` 是 body 级的定位元素，不藏就会压在 canvas 上面）。
-      panel.style.visibility = 'hidden';
-      if (this.pause2dScreen) this.pause2dScreen.style.background = 'transparent';
-      const hud = document.getElementById('hud');
-      if (hud) hud.style.visibility = 'hidden';
-      overlay.canvas.style.pointerEvents = 'auto';
-      this.pause2dEngaged = true;
-      return;
-    }
-
-    // 退出：逐项还原（顺序无所谓，但每一项都必须还原，否则下次进游戏就是"看不见的 HUD"）
-    this.pause2d?.close();
-    if (this.pause2dPanel) this.pause2dPanel.style.visibility = '';
-    if (this.pause2dScreen) this.pause2dScreen.style.background = '';
+    const panel = document.querySelector<HTMLElement>('#settings-screen .settings-panel');
+    if (!panel) return;
+    this.pauseCanvasPanel = panel;
+    this.pauseCanvasScreen = document.getElementById('settings-screen');
+    // DOM 让位：面板藏起来（可见性，不是 display —— 那是它自己淡出用的），
+    // 遮罩背景改透明（canvas 自己画一层，否则面板会被压暗 42%），HUD 也藏
+    // （`#hud` 是 body 级的定位元素，不藏就会压在 canvas 上面）。
+    panel.style.visibility = 'hidden';
+    if (this.pauseCanvasScreen) this.pauseCanvasScreen.style.background = 'transparent';
     const hud = document.getElementById('hud');
-    if (hud) hud.style.visibility = '';
-    overlay.canvas.style.pointerEvents = 'none';
-    this.pause2dButtons = [];
-    this.pause2dEngaged = false;
+    if (hud) hud.style.visibility = 'hidden';
+    overlay.canvas.style.pointerEvents = 'auto';
+    this.pauseCanvasMode = mode;
+
+    if (mode === 'menu') this.buildMenu2d(panel);
+    else this.buildSettings2d(panel);
   }
 
-  /** 暂停菜单的输入结果 → 真正的动作（激活 = 点那颗 DOM 按钮） */
+  /** 退出 canvas 接管：逐项还原 DOM（漏一项的表现是"退出暂停后 HUD 永久消失"） */
+  private teardownPauseCanvas2d(): void {
+    this.pause2d?.close();
+    if (this.pauseCanvasPanel) this.pauseCanvasPanel.style.visibility = '';
+    if (this.pauseCanvasScreen) this.pauseCanvasScreen.style.background = '';
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.visibility = '';
+    if (this.ui2dOverlay) this.ui2dOverlay.canvas.style.pointerEvents = 'none';
+    this.pause2dButtons = [];
+    this.settings2d = null;
+    this.settings2dDrag = null;
+    this.pauseCanvasMode = null;
+  }
+
+  /** 菜单页：行来自 DOM 按钮（标签 = `textContent`，动作 = `click()`，见决策 D18） */
+  private buildMenu2d(panel: HTMLElement): void {
+    // 只取看得见的按钮：联机那几颗在单机房里是 `display: none`
+    const buttons = [...panel.querySelectorAll<HTMLButtonElement>('.pause-actions button')].filter(
+      (button) => button.offsetParent !== null,
+    );
+    if (buttons.length === 0) return;
+    const title = panel.querySelector<HTMLElement>('.settings-title')?.textContent?.trim() ?? '';
+    this.pause2d = new CanvasMenu(
+      title,
+      buttons.map((button, index) => ({ id: `pause${index}`, label: (button.textContent ?? '').trim() })),
+    );
+    this.pause2dButtons = buttons;
+    this.pause2d.open();
+  }
+
+  /**
+   * 设置页：页签 + 行模型都从 DOM 读（`readFormRows`，见决策 D19）。
+   *
+   * 几何（面板 / 页签条 / 列表区）按当前覆盖层尺寸算一次；滚轮与焦点移动只改
+   * `scroll` / `focus`，不改几何。
+   */
+  private buildSettings2d(panel: HTMLElement): void {
+    void panel;
+    const overlay = this.ui2dOverlay;
+    if (!overlay) return;
+    const width = overlay.width;
+    const height = overlay.height;
+    const modal = modalRect(width, height, Math.min(620, width - 32), Math.min(340, height - 24));
+    const tabsBar = { x: modal.x + 12, y: modal.y + 40, w: modal.w - 24, h: 26 };
+    const list = {
+      x: modal.x + 12,
+      y: tabsBar.y + tabsBar.h + 10,
+      w: modal.w - 24,
+      h: modal.y + modal.h - (tabsBar.y + tabsBar.h + 10) - 12,
+    };
+    this.settings2d = { panel: modal, tabsBar, list, tabs: [], rows: [], scroll: 0, focus: 0 };
+    this.refreshSettings2d();
+  }
+
+  /** 重新读一遍页签与行（值变了、切了分组、DOM 被别的逻辑刷新过，都靠它同步） */
+  private refreshSettings2d(): void {
+    const state = this.settings2d;
+    const panel = this.pauseCanvasPanel;
+    if (!state || !panel) return;
+    state.tabs = [...panel.querySelectorAll<HTMLElement>('.settings-tab')].map((tab) => ({
+      label: (tab.textContent ?? '').trim(),
+      active: tab.classList.contains('active'),
+      el: tab,
+    }));
+    // 只读**当前显示的那一组**（矮屏上 CSS 只放行 `.active` 那一节）
+    const section =
+      panel.querySelector<HTMLElement>('.settings-section.active') ??
+      panel.querySelector<HTMLElement>('.settings-section');
+    state.rows = section ? readFormRows(section) : [];
+    state.focus = Math.min(Math.max(0, state.focus), Math.max(0, state.rows.length - 1));
+    state.scroll = clampListScroll(
+      state.scroll,
+      state.rows.length,
+      state.list.h,
+      FORM_ROW_HEIGHT + FORM_ROW_GAP,
+    );
+  }
+
+  /** 菜单页的输入结果 → 真正的动作（激活 = 点那颗 DOM 按钮） */
   private dispatchPauseMenu(input: MenuInput): void {
     if (!input) return;
     if (input.kind === 'close') {
       this.closeSettings();
-      // 立刻还原 DOM（不等下一帧）：否则这一帧里 settings 面板/HUD 还是藏着的
-      this.syncPauseMenu2d();
+      // 立刻还原 DOM（不等下一帧）：否则这一帧里面板/HUD 还是藏着的
+      this.syncPauseCanvas2d();
       return;
     }
     if (input.kind !== 'activate') return;
@@ -6475,27 +6600,146 @@ class App {
     // 先收掉 canvas 这一层再点：按钮可能把页面切到设置子页、或直接关面板
     this.pause2d?.close();
     button.click();
-    // 按钮可能切到设置子页、也可能直接关面板：两种情况都要在这一帧内完成还原
-    this.syncPauseMenu2d();
+    // 按钮可能切到设置子页、也可能直接关面板：两种情况都要在这一帧内完成切换
+    this.syncPauseCanvas2d();
   }
 
   /**
-   * 画暂停菜单：遮罩 + 面板。
+   * 设置页的指针输入（`down` / `move` / `up` 三个阶段共用一个入口）。
    *
-   * 遮罩必须由 canvas 自己画 —— `#settings-screen` 的 42% 黑底已经被我们改成透明
-   * （不透明它会把 canvas 一起压暗，因为它排在 canvas 之上）。
+   * 滑杆要"按下并拖动"：`down` 记下当前行，`move` 持续写值，`up` 清掉。
    */
-  private renderPauseMenu2d(): void {
+  private handleSettingsPointer(x: number, y: number, phase: 'down' | 'move' | 'up'): void {
+    const state = this.settings2d;
+    if (!state) return;
+    // 页签
+    if (phase !== 'up' && y >= state.tabsBar.y && y < state.tabsBar.y + state.tabsBar.h) {
+      if (phase !== 'down' || state.tabs.length === 0) return;
+      const index = Math.min(
+        state.tabs.length - 1,
+        Math.max(0, Math.floor(((x - state.tabsBar.x) / state.tabsBar.w) * state.tabs.length)),
+      );
+      state.tabs[index]?.el.click();
+      state.scroll = 0;
+      state.focus = 0;
+      this.refreshSettings2d();
+      return;
+    }
+    // 行
+    const rects = formRowRects({ ...state.list, y: state.list.y - state.scroll }, state.rows.length);
+    let index = -1;
+    for (let i = 0; i < rects.length; i++) {
+      const rect = rects[i]!;
+      if (x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h) {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0) {
+      if (phase === 'up') this.settings2dDrag = null;
+      return;
+    }
+    state.focus = index;
+    const row = state.rows[index]!;
+    if (row.kind === 'range') {
+      if (phase === 'down') this.settings2dDrag = row;
+      if (phase !== 'up' && this.settings2dDrag === row && row.element instanceof HTMLInputElement) {
+        writeRangeRatio(row.element, formRatioFromX(formControlRect(rects[index]!), x));
+        this.refreshSettings2d();
+      }
+      if (phase === 'up') this.settings2dDrag = null;
+      return;
+    }
+    if (phase === 'down' && row.element) {
+      row.element.click();
+      this.refreshSettings2d();
+    }
+  }
+
+  /** 设置页的键盘输入；返回是否消费了这个键（菜单开着时整段键盘都归它） */
+  private handleSettingsKey(key: string): boolean {
+    const state = this.settings2d;
+    if (!state) return false;
+    if (key === 'Escape') {
+      // 回上一层（设置 → 菜单），与 DOM 版的「‹ 返回」同一动作
+      this.settingsScreen.goBack();
+      this.syncPauseCanvas2d();
+      return true;
+    }
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
+      const step = key === 'ArrowDown' ? 1 : -1;
+      state.focus = Math.min(Math.max(0, state.rows.length - 1), Math.max(0, state.focus + step));
+      // 把焦点行滚进视口（高度含行距，与滚动夹取同一套口径）
+      const top = state.focus * (FORM_ROW_HEIGHT + FORM_ROW_GAP);
+      if (top < state.scroll) state.scroll = top;
+      else if (top + FORM_ROW_HEIGHT > state.scroll + state.list.h) {
+        state.scroll = top + FORM_ROW_HEIGHT - state.list.h;
+      }
+      state.scroll = clampListScroll(
+        state.scroll,
+        state.rows.length,
+        state.list.h,
+        FORM_ROW_HEIGHT + FORM_ROW_GAP,
+      );
+      return true;
+    }
+    if (key === 'Enter' || key === ' ') {
+      const row = state.rows[state.focus];
+      if (row?.element) {
+        row.element.click();
+        this.refreshSettings2d();
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** 画当前接管的这一页（遮罩 + 面板） */
+  private renderPauseCanvas2d(): void {
     const overlay = this.ui2dOverlay;
-    const menu = this.pause2d;
-    if (!overlay || !menu?.isOpen) return;
+    if (!overlay || !this.pauseCanvasMode) return;
     overlay.syncSize();
     const ctx = overlay.context;
     overlay.clear();
+    // 遮罩由 canvas 画：`#settings-screen` 的 42% 黑底已经被改成透明
     ctx.fillStyle = 'rgba(0, 0, 0, .45)';
     ctx.fillRect(0, 0, overlay.width, overlay.height);
-    menu.render(ctx, overlay.width, overlay.height);
+    if (this.pauseCanvasMode === 'menu') this.pause2d?.render(ctx, overlay.width, overlay.height);
+    else this.renderSettings2d(ctx);
     if (UI2D_TINT_ENABLED) applyDebugTint(ctx, overlay.width, overlay.height);
+  }
+
+  /** 设置页：标题栏 + 页签 + 行（可滚）+ 滚动条 */
+  private renderSettings2d(ctx: CanvasRenderingContext2D): void {
+    const state = this.settings2d;
+    if (!state) return;
+    const title = this.pauseCanvasPanel?.querySelector<HTMLElement>('.settings-title')?.textContent?.trim() ?? '';
+    drawModalFrame(ctx, state.panel, title);
+    drawTabs(
+      ctx,
+      state.tabsBar,
+      state.tabs.map((tab) => tab.label),
+      state.tabs.findIndex((tab) => tab.active),
+    );
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(state.list.x, state.list.y, state.list.w, state.list.h);
+    ctx.clip();
+    const rects = formRowRects({ ...state.list, y: state.list.y - state.scroll }, state.rows.length);
+    for (let i = 0; i < state.rows.length; i++) {
+      drawFormRow(ctx, rects[i]!, state.rows[i]!, i === state.focus);
+    }
+    ctx.restore();
+
+    const content = formContentHeight(state.rows.length);
+    if (content > state.list.h) {
+      const thumbH = Math.max(16, (state.list.h * state.list.h) / content);
+      const max = content - state.list.h;
+      const t = max > 0 ? Math.min(1, Math.max(0, state.scroll / max)) : 0;
+      ctx.fillStyle = 'rgba(255, 255, 255, .35)';
+      ctx.fillRect(state.list.x + state.list.w + 2, state.list.y + (state.list.h - thumbH) * t, 5, thumbH);
+    }
   }
 
   /**
@@ -6863,10 +7107,16 @@ class App {
        * 菜单开着的时候按 W 不该让角色在面板后面走（DOM 版靠浏览器焦点挡住了这一层，
        * canvas 版必须自己挡）。
        */
-      if (this.pause2d?.isOpen) {
+      if (this.pauseCanvasMode === 'menu' && this.pause2d) {
         const input = this.pause2d.handleKey(e.key);
         e.preventDefault();
         if (input) this.dispatchPauseMenu(input);
+        return;
+      }
+      if (this.pauseCanvasMode === 'settings') {
+        // 设置页也整段吃掉键盘：否则按方向键会让相机/角色在面板后面动
+        e.preventDefault();
+        this.handleSettingsKey(e.key);
         return;
       }
       // 睡觉期间（B13）：只留跳跃键（提前起床），其余按键一律不处理——
@@ -19339,8 +19589,8 @@ class App {
         this.hud2d.setDamageFlash(this.damageFlash.intensity);
         // 暂停菜单页由 canvas 接管时（`?ui2d=1`），这一帧只画面板：
         // HUD 已经被藏起来了，再画一遍反而会透过面板边缘露出来
-        this.syncPauseMenu2d();
-        if (this.pause2dEngaged && this.pause2d?.isOpen) this.renderPauseMenu2d();
+        this.syncPauseCanvas2d();
+        if (this.pauseCanvasMode) this.renderPauseCanvas2d();
         else this.hud2d.render();
       }
       // 队伍（联机22）：跟着 move 发出去，队友据此判友伤

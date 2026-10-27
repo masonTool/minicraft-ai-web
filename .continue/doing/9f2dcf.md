@@ -22,4 +22,8 @@
   - 验证：`node tools/preview/shoot-all.mjs` 29 张全出；截图 `15-settings-form.png` 里页签、开关（绿）、循环按钮（关闭/第一人称）、滑杆（读数 8 / 60 / 50 在轨道左侧）都对；`15b` 是遮罩版。
   - 批次：20261027-1258
 
-- [ ] [W3] 游戏里接线：`syncPauseCanvas2d()` 统一管"菜单 / 设置"两态（DOM 让位、遮罩、HUD、`pointer-events`、键盘路由），设置页滚轮与页签点击走 `form.ts` 的模型 → `npm run check && npm run build:fast`
+- [x] [W3] 游戏里接线：`syncPauseCanvas2d()` 统一管"菜单 / 设置"两态（DOM 让位、遮罩、HUD、`pointer-events`、键盘路由），设置页滚轮与页签点击走 `form.ts` 的模型 → `npm run check && npm run build:fast`
+  - 做了什么：把上一批的 `syncPauseMenu2d()` 泛化成 `syncPauseCanvas2d()`——每帧算一个模式（`null` / `'menu'` / `'settings'`），模式变了先 `teardownPauseCanvas2d()` 逐项还原、再按模式建状态。菜单页仍是 `CanvasMenu`（行来自 DOM 按钮）；设置页新增 `buildSettings2d()` / `refreshSettings2d()` / `renderSettings2d()`（标题栏 + 页签 + 行 + 滚动条）与 `handleSettingsPointer()` / `handleSettingsKey()`。键盘分两态路由（设置页自己吃 ↑↓/Enter/空格/Esc，并把焦点行滚进视口）；指针加了 `pointermove` / `pointerup`（滑杆要按下拖动）与 `wheel`（滚列表）。
+  - 为什么：两种页面**共用一个覆盖层、一批 DOM 让位/还原**，所以必须由同一个地方决定"现在是谁在接管"——放在别处就会出现"菜单收了、设置页没接上"这种半状态。还原判据继续用 `pauseCanvasMode`（D17），不用 `menu.isOpen`。
+  - 验证：`npx tsc --noEmit` 干净；`npm run check` 全量通过；`npm run build:fast` 出包。⚠️ **游戏内仍未实测**（dev 缺 `__host/core.bin` 只能停在落地页）：设置页的"读 DOM → 画 → 写回"链路在 `tools/preview/form.html` 里跑通过（同一份 `form.ts`），但 `main.ts` 这段接线只有类型检查与静态推演。
+  - 批次：20261027-1258
