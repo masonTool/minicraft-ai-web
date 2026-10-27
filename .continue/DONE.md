@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261027-2001 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2001
+
+> 用户 2026-10-27：「继续完成」—— 把 M33 的另一半做完：**顶部三颗 + 跳跃/飞行升降**。
+> 障碍是图标：它们是内联 SVG 字符串，canvas 拿不到。所以先做"图标真源上移"。
+
+- [x] [Z1] `src/ui2d/touchArt.ts`：六个图标的形状数据（path/rect/circle）+ `shapeToSvgMarkup` / `touchIconSvgMarkup`；`ui/TouchIcons.ts` 改为从它拼 SVG → `npx tsx tools/ui-test.ts`
+  - 做了什么：`TouchIconShape` 支持 `path`（含 `evenodd`）/`rect`（含 `rx`/`alpha`）/`circle`；`TOUCH_ICON_SHAPES` 收下六颗图标的原始几何；`ui/TouchIcons.ts` 只剩 i18n 标签 + 一层转发（依赖方向 `ui/ → ui2d/`）。
+  - 为什么：canvas 要画同一组图标，而"照着 SVG 抄一份路径"必然悄悄画歪，且没有断言抓得到（歪了只是看着不像）。与 `vitalsArt.ts` 同一条理由。
+  - 验证：`npm run test:ui` 图标段全绿（六个图标名齐全、SVG 合法且互不相同）；`tsc` 干净。
+  - 批次：20261027-2001
+
+- [x] [Z2] `src/ui2d/Touch2D.ts`：`drawTouchIcon`（`Path2D` 缓存）+ `drawTouchButton`（玻璃底 + 描边 + 图标 + 按下缩放）+ `setButtons` → `npx vitest run tests/ui2d-touch.test.ts`
+  - 做了什么：图标按 24×24 形状用 `ctx.scale` 缩进按钮，`Path2D` 按 `d` 缓存；按钮底用真 `createLinearGradient` + `createRadialGradient`；阴影用"同形状下移 1px 画一遍"（比 `shadowBlur` 便宜且够像）。
+  - 为什么：`shadowBlur` 每帧对 6 个图标会明显掉帧，而 `text-shadow` 的观感只需要一层偏移。
+  - 验证：`tests/ui2d-touch.test.ts` **11 passed**（新增 4 条：六名都有形状、两种拼法非空且互不相同、evenodd/opacity 不丢、图标占直径一半）。
+  - 批次：20261027-2001
+
+- [x] [Z3] `src/main.ts`：`syncTouch2d()` 收集 `.touch-button`（顶部三颗 + 跳跃/飞行 + 快捷栏侧键一个选择器全覆盖）并让位 → 预览页加按钮 → `npm run check:fast`
+  - 做了什么：按钮矩形/`data-icon`/`:active` 每帧读；`html.ui2d-touch .touch-button { opacity: 0 }` 让位。
+  - 为什么：这些按钮都是 `makeIconButton()` 造的同一个类，所以一个选择器就够 —— 将来加按钮也不用改 canvas 侧。
+  - 验证：截图里顶部三颗（气泡/两杠/眼睛）与右下三颗（上箭/上箭/下箭）都由 canvas 画，DOM 那份不可见；`tsc` 干净、`check:fast` 绿。
+  - 批次：20261027-2001
+
+- [x] [Z4] 文档：`notes/canvas-ui.md` §5.28（图标真源 + 按钮画法 + 阶段 6 账）、决策 D40、`TASKS` 的 M33 标完成 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.28 记下"为什么把图标数据上移"、"阴影为什么不用 shadowBlur"、"一个选择器覆盖全部按钮"；M33 收口。
+  - 为什么：M33 是"触控控件"整条线，收口时要把"视角面判定不搬"写清楚，否则以后会有人问"为什么视角没画"。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2001
+
+
 ## 批次 20261027-1943 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -228,73 +264,5 @@
   - 为什么：镜像的 z-index 判据已经踩过一次（主菜单用默认 1 → 游戏里整块消失），这次要写清"按被镜像那一层的 z-index 往上给"。
   - 验证：`node .continue/hooks/check.mjs --fast` 绿。
   - 批次：20261027-1650
-
-
-## 批次 20261027-1618 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1618
-
-> 用户 2026-10-27：「继续实现，不要停」—— 按任务表推进 M26：**把背包整页接进游戏**。
-> 这一批先落"整页镜像"（19 种工作站一次全覆盖、零回归），自绘版继续在预览页演进。
-
-- [x] [P1] `src/ui2d/textPanel.ts` + `menuScreen.ts`：新增 `readCanvasBlits` / `drawCanvasBlits`，镜像绘制顺序定为 底 → 位图 → 文字 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`CanvasBlit` + `readCanvasBlits(root, origin, view)`（读范围内所有 `<canvas>` 的矩形与位图）+ `drawCanvasBlits`（关掉平滑按原位贴）；`MenuScreen2D` 多存一份 `blits` 并在 `blocks` 与 `runs` 之间画；同时新增 `pollMs` 选项。
-  - 为什么：背包的图标不是文字也不是底色，而是 DOM 里已经画好的位图；不搬只能得到"有边框、没图标"的背包。顺序必须与 DOM 一致（槽位底 → 图标 → 数量）。
-  - 验证：`tests/ui2d.test.ts` → **68 passed**（新增 2 条：按原位贴并关平滑、空列表不画）。
-  - 批次：20261027-1618
-
-- [x] [P2] `src/main.ts`：背包改成整页镜像（`invMirror`，zIndex 12 + `pollMs: 120`），`#inv-held` 单独藏 → `npm run check:fast`
-  - 做了什么：把上一批的 `Inventory2D`（逐槽位读 DOM）换成 `MenuScreen2D` 镜像 `.inv-panel`；`syncInventory2d()` 简化为"开着就 `engage(panel)`、关了就 `disengage()`"；`#inv-held` 用 `html.ui2d-inv #inv-held { opacity: 0 }` 藏掉；`pollMs: 120` 兜住"只换图标不换字"的变化。
-  - 为什么：`Inventory2D` 只画槽位、面板底与标题仍是 DOM，遮罩版看得出来"只有格子黄"；整页镜像之后**面板里每一像素都是 canvas**。而 19 种工作站共用同一批 `.inv-slot`，镜像一次全覆盖。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测（dev 缺 `core.bin`）。
-  - 批次：20261027-1618
-
-- [x] [P3] 预览页 `tools/preview/inventory-mirror.html` + 2 张截图（含遮罩版）→ `node tools/preview/shoot-all.mjs`
-  - 做了什么：按 `index.html` 的 `.inv-*` 搭一块 27+9 格的真 DOM（每格含真 `<canvas>` 图标、数量、耐久条、红底格、选择态），`MenuScreen2D.engage(panel)` 镜像它；`?tint=1` 加遮罩；`shoot-all` 累计 43 张。
-  - 为什么：镜像的卖点是"面板里每一像素都由 canvas 产出"，遮罩版一张就能证明（整块黄、背景不黄）。
-  - 验证：`node tools/preview/shoot-all.mjs` 43 张全出；截图看过：面板底/斜面/图标/64·12·3·32 数量/黄色耐久条/红底格都在，遮罩版整块面板变黄。
-  - 批次：20261027-1618
-
-- [x] [P4] 文档：`notes/canvas-ui.md` §5.20（整页镜像 + 位图搬运 + `pollMs` 的坑）、决策 D32 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.20 记下"为什么先镜像"、"位图必须一起搬"、`pollMs` 兜底的原因，以及三条边界（悬停、tooltip、`#inv-held`）；决策 D32 记下"背包分两步：先镜像覆盖全部，再自绘替换"。
-  - 为什么：`pollMs` 那条尤其反直觉——"只换图不换字"的镜像会静默显示旧图标，不写清楚下一次会当成渲染 bug 查半天。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1618
-
-
-## 批次 20261027-1548 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1548
-
-> 用户 2026-10-27：「好的，你的建议处理。后面所有要做的事加到任务列表里，不用一个个找我确认。
-> 我们的目标是把背包完全复原」。
-> 所以先把**背包完全复原**拆成 M25~M31 写进 `TASKS.md`（M25 本批做完），然后执行 M25：
-> 补齐双击收集 / 右键拖拽逐格 / 长按分堆这三条规则。
-
-- [x] [N1] `src/ui2d/inventoryModel.ts`：`rightDragDistribute` / `doubleClickGather` / `splitTake` + 断言 → `npx vitest run tests/ui2d-inventory-model.test.ts`
-  - 做了什么：右键拖拽每格放一个（重复经过只放一次）；双击收集（先拿起那一格，再把同类凑到上限；光标本来就有货时把被点那格也并进来）；长按分堆取指定数量（异类拒绝、受上限）。测试从 19 条增到 **31 条**。
-  - 为什么：这是"逻辑一模一样"的核心 —— 之前只有左键/右键/Shift/左键拖拽四种，DOM 版还有这三种。
-  - 验证：`npx vitest run tests/ui2d-inventory-model.test.ts` → **31 passed**（新增 12 条：右键拖拽 4、双击收集 4、长按分堆 4）；`tsc` 干净。
-  - 批次：20261027-1548
-
-- [x] [N2] 对照页接上三种新操作 + **像素探针**验收 → 截图
-  - 做了什么：`inventory-compare.html` 双击（400ms 内同格）、右键拖拽（按下时放一个，之后每经过新格放一个）、触摸长按（500ms 取一半）；另外用 Playwright 读 `getImageData` 验证"点 canvas 第 0 格后该格中心从图标色变槽位底色，且 DOM 侧也空了"。
-  - 为什么：截图会骗人 —— 第一版两张截图看起来"没变化"，实际是**手上那叠浮在被点的那格上盖住了**；读像素才是硬证据。
-  - 验证：像素探针 `before=[139,90,43]` → `after=[139,139,139]`（槽位底色），DOM 侧 `.inv-count` 变空；截图 `22b-inventory-held.png`（手上那叠跟随指针）。
-  - 批次：20261027-1548
-
-- [x] [N3] `TASKS.md`：把"背包完全复原"拆成 M25~M31（含验收判据），M25 标记完成；文档 §5.19 + 决策 D31
-  - 做了什么：M25 交互规则（本批完成）、M26 接进游戏、M27 视觉对齐、M28 合成、M29 容器工作站、M30 重配方块、M31 触摸 UI 全套；§5.19 记录六种鼠标操作与像素探针手法。
-  - 为什么：用户要求"后面要做的事都进任务列表，不用逐个确认" —— 所以把整条路线写死在 TASKS 里，后续批次直接照着做。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1548
 
 

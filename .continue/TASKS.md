@@ -6041,6 +6041,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1943 · **触控摇杆上 canvas（4 条，M33 一半）**：新增 `src/ui2d/Touch2D.ts` —— 底座（`rgba(12,16,20,.52)` + 径向高光 + 2px 浅描边 + 外圈暗边）、芯子（真 `createLinearGradient` + 深描边）、潜行态的绿芯与上方小牌。**这一块刻意不走镜像**：摇杆芯子一直跟着拇指走，镜像要么每帧 `getComputedStyle`（贵）、要么按 `pollMs` 落后几帧（黏手）——改成「自己画、几何量 DOM」，每帧只读 `#touch-stick` 与 `.knob` 两个矩形、0 次样式计算。命中完全不动（`html.ui2d-touch #touch-stick { opacity: 0 }`，`opacity` 不影响 pointer 事件），拖动、双击切潜行、回中全照旧；潜行小牌的文字从 DOM 的 `.sneak-badge` 读，跟着 i18n 走。新增 `tests/ui2d-touch.test.ts` **7 条**（圆心偏移 / 芯子尺寸无关 / 内圈按方向夹取 / NaN 回中 / 上限 0）。预览页 `tools/preview/touch.html`（拖得动、`?state=active|sneak`、`?dx&dy`）+ 3 张截图。验证：`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、55 张截图。⚠️ 渐变必须用真 canvas 渐变（第一版两段纯色近似，正中间留了条硬缝）。详见 `notes/canvas-ui.md` §5.27 与决策 D39。
 
+- [x] 批次 20261027-2001 · **触控按钮簇 + 图标真源上移（4 条，M33 完成）**：障碍是图标 —— 六个触控图标原本是内联 SVG 字符串（`<path d>` / `<rect>` / `<circle>`），canvas 拿不到，而"照着抄一份路径"是这类迁移里最容易悄悄画歪的做法（歪了不报错、只是看着不像，也没有断言能抓）。所以先把几何上移到 `src/ui2d/touchArt.ts`（`TouchIconShape` 支持 path/rect/circle + `evenodd` + `alpha`），`ui/TouchIcons.ts` 反过来从它拼 `<svg>`（依赖方向 `ui/ → ui2d/`，与 `vitalsArt.ts` 一致）；再用 `Touch2D.drawTouchIcon`（`Path2D` 按 `d` 缓存、`ctx.fill(path, "evenodd")` 保住眼睛的虹膜）+ `drawTouchButton`（玻璃底 + 顶部高光 + 2px 描边 + 图标占直径一半+ `:active` 缩 0.96）画按钮。`main.ts#syncTouch2d()` **一个选择器**就覆盖顶部三颗、跳跃/飞行升降与快捷栏侧键（都是 `makeIconButton()` 造的 `.touch-button`），让位仍是 `opacity: 0`，按住蓄力与双击起飞一行没改。新增 4 条断言（六名都有形状、两种拼法非空且互不相同、evenodd/opacity 不丢、图标占直径一半），合计 `test:ui2d-touch` **11/11**。验证：`test:ui` 图标段全绿、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、57 张截图（`30-touch-buttons.png` / `30b-…-tinted.png`）。⚠️ 阴影用"同形状下移 1px 再画一遍"，没用 `shadowBlur`（后者每帧 6 个图标会掉帧）。详见 `notes/canvas-ui.md` §5.28 与决策 D40。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6121,7 +6123,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（249 条，不是差异，但同样"集中查"更好）
+### 实现注意（250 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6373,6 +6375,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1654 · **镜像补上 overflow 裁剪（3 条）**：用户报「点左侧分类按钮后所有物品平铺、伸出弹窗」，根因是镜像只按 `getBoundingClientRect()` 画、不知道 `overflow`（`.inv-grid.inv-creative` 是 `max-height: 46vh` + `overflow-y: auto`，滚出去的 96 格全被画到面板外）。`textPanel.ts` 新增 `intersect… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1922 · **自绘滚动条 + 拖拽惯性（3 条，M35 一半 / M36）**：DOM 的滚动条是 UA 画的、canvas 里没有，不补就是"能滚但看不出能滚" —— `MenuScreen2D` 在每次重读时收集"真的能滚"的容器，按 `scrollBarRects()`（纯函数）画 4px 半透明圆角拇指（右缩 2px、最小 18px、`scrollTop` 越界/NaN 一律夹住）；惯性用最近 5 次 `pointermove`… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1943 · **触控摇杆上 canvas（4 条，M33 一半）**：新增 `src/ui2d/Touch2D.ts` —— 底座（`rgba(12,16,20,.52)` + 径向高光 + 2px 浅描边 + 外圈暗边）、芯子（真 `createLinearGradient` + 深描边）、潜行态的绿芯与上方小牌。**这一块刻意不走镜像**：摇杆芯子一直跟着拇指走，镜像要么每帧 `getComputedStyle`（贵）、要么按 `po… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2001 · **触控按钮簇 + 图标真源上移（4 条，M33 完成）**：障碍是图标 —— 六个触控图标原本是内联 SVG 字符串（`<path d>` / `<rect>` / `<circle>`），canvas 拿不到，而"照着抄一份路径"是这类迁移里最容易悄悄画歪的做法（歪了不报错、只是看着不像，也没有断言能抓）。所以先把几何上移到 `src/ui2d/touchArt.ts`（`TouchIconShape` 支持 path/r… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
