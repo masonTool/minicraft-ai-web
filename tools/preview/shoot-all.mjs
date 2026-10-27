@@ -465,6 +465,13 @@ const SHOTS = [
     what: '**接管输入**：画布吃指针（点格子取放），面板外的 DOM 控件靠 `forwardClickAt` 转发',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '39-inventory-armor.png',
+    page: 'tools/preview/inventory-selfdrawn.html?armor=1',
+    size: [864, 470],
+    what: '**盔甲列 + 副手**：右侧竖排 4 格盔甲（带耐久条）+ 副手（顺序：侧栏 → 主背包 → 快捷栏）',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

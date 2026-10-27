@@ -53,6 +53,8 @@ export interface InventoryPanelHostOptions extends MoveRules {
   readonly hotbarRows?: number;
   /** 工作站那几格（合成 3×3、熔炉原料+燃料…）；不传 = 纯背包 */
   readonly extra?: ExtraSlotsSpec;
+  /** 右侧竖排（盔甲 4 + 副手 1）；不传 = 没有这一列 */
+  readonly sideCount?: number;
   readonly zIndex?: number;
   readonly tint?: boolean;
   /** 物品 id → 图标位图（游戏里由 `ui/ItemIconCache` 提供） */
@@ -195,10 +197,21 @@ export class InventoryPanelHost {
     const rows = this.options.mainRows ?? 3;
     const hotbarRows = this.options.hotbarRows ?? 1;
     const extra = this.options.extra;
-    const probe = layoutInventoryPanel(0, 0, { mainRows: rows, hotbarRows, ...(extra ? { extra } : {}) });
+    const side = this.options.sideCount ? { count: this.options.sideCount } : undefined;
+    const probe = layoutInventoryPanel(0, 0, {
+      mainRows: rows,
+      hotbarRows,
+      ...(extra ? { extra } : {}),
+      ...(side ? { side } : {}),
+    });
     const x = Math.max(0, Math.round((overlay.width - probe.panel.w) / 2));
     const y = Math.max(0, Math.round((overlay.height - probe.panel.h) / 2));
-    this.layout = layoutInventoryPanel(x, y, { mainRows: rows, hotbarRows, ...(extra ? { extra } : {}) });
+    this.layout = layoutInventoryPanel(x, y, {
+      mainRows: rows,
+      hotbarRows,
+      ...(extra ? { extra } : {}),
+      ...(side ? { side } : {}),
+    });
   }
 
   /**
@@ -416,6 +429,17 @@ export class InventoryPanelHost {
    * @returns 是否消费了这个键
    */
   handleKey(key: string): boolean {
+    // F = 与副手交换（DOM 版同一条规则；只有在有侧栏时才有副手格）
+    if (key === 'KeyF') {
+      const sideCount = this.options.sideCount ?? 0;
+      if (sideCount <= 0 || this.hoverIndex < 0) return false;
+      const extraCount = this.options.extra
+        ? this.options.extra.cols * this.options.extra.rows + (this.options.extra.result ? 1 : 0)
+        : 0;
+      const offhand = extraCount + sideCount - 1;
+      if (swapSlots(this.slots, this.hoverIndex, offhand)) this.render();
+      return true;
+    }
     const match = /^Digit([1-9])$/.exec(key);
     if (!match) return false;
     const hotbarStart = (this.options.mainRows ?? 3) * 9 + (this.options.extra ? (this.options.extra.cols * this.options.extra.rows + (this.options.extra.result ? 1 : 0)) : 0);

@@ -45,7 +45,9 @@
       const tint = params.get('tint') === '1';
       // `?craft=1`：合成台（3×3 + 结果格 + 玩家背包），验证工作站的布局
       const craft = params.get('craft') === '1';
-      const TOTAL = craft ? 46 : 36;
+      // `?armor=1`：右侧多一列盔甲 4 格 + 副手 1 格（顺序：侧栏 → 主背包 → 快捷栏）
+      const armor = params.get('armor') === '1';
+      const TOTAL = craft ? 46 : armor ? 41 : 36;
 
       /* ---------------- 数据：与游戏同一套逻辑（`SlotAccess` + `MoveRules`） ---------------- */
       const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
@@ -62,6 +64,18 @@
         initial[12] = { id: 3, count: 3 };
         initial[14] = { id: 4, count: 1 };
         initial[37] = { id: 6, count: 7 };
+      } else if (armor) {
+        // 0..3 = 头盔/胸甲/护腿/靴子，4 = 副手，5..31 = 主背包，32..40 = 快捷栏
+        initial[0] = { id: 4, count: 1 };
+        initial[1] = { id: 4, count: 1 };
+        initial[2] = { id: 4, count: 1 };
+        initial[3] = { id: 4, count: 1 };
+        initial[4] = { id: 6, count: 8 };
+        initial[5] = { id: 1, count: 64 };
+        initial[6] = { id: 2, count: 12 };
+        initial[7] = { id: 3, count: 3 };
+        initial[9] = { id: 5, count: 28 };
+        initial[32] = { id: 2, count: 41 };
       } else {
         initial[0] = { id: 1, count: 64 };
         initial[1] = { id: 2, count: 12 };
@@ -117,6 +131,7 @@
         mainRows: 3,
         hotbarRows: 1,
         ...(craft ? { extra: { cols: 3, rows: 3, result: true } } : {}),
+        ...(armor ? { sideCount: 5 } : {}),
         zIndex: 12,
         tint,
         limitOf: (id) => (id === 4 ? 1 : 64),
@@ -188,6 +203,8 @@
         held: host.heldStack ? `${host.heldStack.id}x${host.heldStack.count}` : null,
         externalHeld: externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null,
         closed: window.__closed === true,
+        hover: host.hoverIndex,
+        panel: host.panelRect,
         dropped: window.__dropped,
       });
       window.addEventListener('resize', () => host.relayout());
@@ -195,7 +212,9 @@
       document.getElementById('caption').textContent =
         (craft
           ? '自绘合成台：3×3 合成格 + 结果格 + 玩家背包（同一套排版/命中/画）· 结果格不可放入'
-          : '自绘背包：自己排版 + 自己命中 + 自己画（不读 DOM 布局）· 左键取放 · 拖过多格再松手 = 均分') +
+          : armor
+            ? '自绘背包 + 盔甲列：右侧 4 格盔甲 + 1 格副手（顺序：侧栏 → 主背包 → 快捷栏）'
+            : '自绘背包：自己排版 + 自己命中 + 自己画（不读 DOM 布局）· 左键取放 · 拖过多格再松手 = 均分') +
         ' · 图标由 ItemIconCache 提供' + (tint ? ' · 黄色遮罩' : '');
     </script>
   </body>

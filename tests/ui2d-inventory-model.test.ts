@@ -453,3 +453,66 @@ describe('换槽', () => {
     expect(swapSlots(empty, 0, 1)).toBe(false);
   });
 });
+
+/**
+ * 右侧竖排（盔甲 4 + 副手 1）。
+ *
+ * DOM 里这一列贴着玩家网格右边：盔甲从上往下排、副手单独在下面隔一段。
+ * 顺序仍然定死（侧栏排在主背包之前），否则 `SlotAccess` 的下标会错位 ——
+ * 错位的表现是"把头盔放进背包第一格"。
+ */
+describe('盔甲与副手列', () => {
+  const base = { mainRows: 3, hotbarRows: 1 };
+
+  it('5 格：4 盔甲 + 1 副手，总数 41', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, side: { count: 5 } });
+    expect(layout.groups.side.length).toBe(5);
+    expect(layout.slots.length).toBe(41);
+    // 侧栏排在主背包之前
+    expect(layout.slots[0]).toEqual(layout.groups.side[0]);
+    expect(layout.slots[5]).toEqual(layout.groups.main[0]);
+  });
+
+  it('贴在面板右内边，且竖直往下排', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, side: { count: 5 } });
+    const side = layout.groups.side;
+    const expectedX = layout.panel.x + layout.panel.w - 14 - side[0]!.w;
+    for (const slot of side) expect(slot.x).toBe(expectedX);
+    for (let i = 1; i < side.length; i++) {
+      expect(side[i]!.y).toBeGreaterThan(side[i - 1]!.y);
+    }
+    // 前 4 格等距（42 + 2）
+    expect(side[1]!.y - side[0]!.y).toBe(44);
+    expect(side[3]!.y - side[2]!.y).toBe(44);
+  });
+
+  it('副手与盔甲之间多让一段（不会被当成第 5 件盔甲）', () => {
+    const layout = layoutInventoryPanel(0, 0, { ...base, side: { count: 5 } });
+    const side = layout.groups.side;
+    expect(side[4]!.y - side[3]!.y).toBe(44 + 6);
+  });
+
+  it('加了这个列，面板变宽（不会压住玩家网格）', () => {
+    const plain = layoutInventoryPanel(0, 0, base);
+    const withSide = layoutInventoryPanel(0, 0, { ...base, side: { count: 5 } });
+    expect(withSide.panel.w).toBeGreaterThan(plain.panel.w);
+    const gridRight = Math.max(...withSide.groups.main.map((r) => r.x + r.w));
+    expect(withSide.groups.side[0]!.x).toBeGreaterThanOrEqual(gridRight);
+  });
+});
+
+/** 侧栏比网格高时，面板要跟着变高（否则副手会挂在面板外面） */
+describe('盔甲列把面板撑高', () => {
+  it('副手留在面板内', () => {
+    const layout = layoutInventoryPanel(0, 0, { mainRows: 3, hotbarRows: 1, side: { count: 5 } });
+    const offhand = layout.groups.side[4]!;
+    expect(offhand.y + offhand.h).toBeLessThanOrEqual(layout.panel.y + layout.panel.h - 14 + 0.5);
+  });
+
+  it('面板高度取"玩家网格"与"侧栏"的较大值', () => {
+    const layout = layoutInventoryPanel(0, 0, { mainRows: 3, hotbarRows: 1, side: { count: 5 } });
+    const gridBottom = Math.max(...layout.groups.hotbar.map((r) => r.y + r.h));
+    const sideBottom = Math.max(...layout.groups.side.map((r) => r.y + r.h));
+    expect(layout.panel.y + layout.panel.h).toBeGreaterThanOrEqual(Math.max(gridBottom, sideBottom));
+  });
+});
