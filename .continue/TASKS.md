@@ -6079,6 +6079,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-2347 · **盔甲 4 格 + 副手 1 格（3 条，M37）**：布局加 `side: { count, offhandGap? }` —— 面板右侧竖排一列，盔甲从上往下、副手单独隔 6px；槽位顺序延长为 **extra(+结果格) → side → main(27) → hotbar(9)**（`SlotAccess` 下标就靠这条顺序，改了要同步所有调用方）。第一版只按玩家网格算面板高度，结果 4 盔甲 + 副手比网格高，**副手挂在面板外面**（截图里那颗黄格子伸到面板底边之下）—— 改为 `h = title + extraRow + max(playerHeight, sideHeight) + padding`，并加了两条断言（副手在面板内、高度取较大值）。`F` 键与副手交换（`host.handleKey("KeyF")`，与数字键同入口、作用在悬停那格）。预览页 `?armor=1` 预置 4 件装备 + 副手，截图 `39-inventory-armor.png`。验证：`test:ui2d-inventory-model` **52/52**（+6 条布局断言）、预览里悬停主背包第一格按 `F` → 与副手互换、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、67 张截图。⚠️ **穿戴规则**（头盔只能进头盔格）属游戏逻辑，仍未做。详见 `notes/canvas-ui.md` §5.43 与决策 D55。
 
+- [x] 批次 20261028-0045 · **工作站进度箭头（3 条，M39 第一步）**：熔炉/酿造/烟熏炉这类界面，结果格左边那颗箭头要按进度填。布局新增 `groups.progress`（额外网格与结果格之间那 28px），**单独成组** —— 它是不可点的装饰，混进 `slots` 会让命中判定、拖拽范围、能不能放的规则都多一层特判；纯背包时是 `null`。`drawProgressArrow()` 先描暗色空箭头、再按 `ratio` 从左往右描亮；合成台 `ratio = 0`，等价于 DOM 里那个静态箭头。进度是每帧值，走 `host.progressOf()` 现取，不参与布局。验证：`test:ui2d-inventory-model` **54/54**（+2 条：箭头区贴结果格且竖直居中、纯背包时不存在）、截图 `40-inventory-progress.png`（45% 填充）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、68 张截图。还差熔炉火焰条与酿造台泡泡 —— 同样会单独成组。详见 `notes/canvas-ui.md` §5.44 与决策 D56。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

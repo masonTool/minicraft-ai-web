@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-0045 · 2026-10-27 · 会话 9f2dcf81
+
+> 队列：M39 第一步 —— 工作站进度箭头。
+
+- [x] 布局新增 `groups.progress`（结果格左侧 28px 箭头区，纯背包为 null）→ 2 条断言
+- [x] `drawProgressArrow()`：空态描暗箭头，按 `ratio` 从左往右描亮；合成台 ratio=0 等价静态箭头
+- [x] `host.progressOf` 每帧现取（进度不参与布局）+ 预览 `?progress=0.45` + 截图
+- [x] 文档 §5.44（装饰块单独成组）+ 决策 D56
+
+验证：`test:ui2d-inventory-model` 54/54、tsc 干净、`npm run check` exit=0、`build:fast` 出包、68 张截图。
+
+
+
 ## 批次 20261027-2347 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
