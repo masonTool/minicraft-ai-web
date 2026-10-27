@@ -18262,3 +18262,61 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261027-1530 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27：加入和开房界面几乎一样，为什么不用同一套；改成左输入右列表、各占一半，
+> 右边点了左边自动填；不用二级弹窗也不用背景遮盖；右边为空提示调端口；改端口要弹窗确认
+> （改完要以新端口重扫）；局域网扫描要用**本机 IP 段**，不是输入框里的地址。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1530
+
+- [x] [L15] 两栏常驻 + 点右边回填左边：`src/ui/ServerListPanel.ts`（新）、`MultiplayerScreen.ts` → `npm run check`
+  - 做了什么：新增 `ServerListPanel`（扫描/房间/peers 从 `ServerPicker` 抽出，去掉遮罩与「取消/确定」）；面板改 `.mp-columns` 两栏（窄屏列表在上）；点服务器填地址+端口、点房间连房名一起填，行有 `picked` 高亮。
+  - 为什么：两件事界面一样，各弹一层纯属重复；列表常驻还能让"有哪些房/填什么"同屏可见。
+  - 验证：起本地服务端 + 假房主，右栏 `127.0.0.1 ··· 延迟 7ms / 房间: newplayer 1/10 在线`，点房间行左边填好。
+  - 批次：20261027-1530
+- [x] [L15] 端口确认弹窗：`MultiplayerScreen.openPortDialog()` + `index.html` → 截图
+  - 做了什么：不再让端口框随手改；空状态点「修改端口」弹小卡片（当前值预选、取消/确定、Enter 确认、Esc 关闭），确认后 `list.setPort()` 立即按新端口重扫。
+  - 为什么：端口一变扫的就是另一批机器，"改完没重扫"会让人以为列表坏了。
+  - 验证：截图 4-port-dialog（弹窗居中、下方提示"确认后会按新端口重新扫描"）。
+  - 批次：20261027-1530
+- [x] [L15] 扫描用本机网段：`ServerListPanel.subnet()` + `ServerDiscovery.ts` → `npm run check`
+  - 做了什么：`subnetOf(location.hostname)` 推导；`localhost` 打开时扫 `127.0.0.1`；`subnetOf` 认回环、`subnetHosts` 对回环只探 `.1`。
+  - 为什么：输入框里的地址可能是上一台服务器或公网域名，按它扫会扫错一片网；而页面本身是在用这台设备打开的。
+  - 验证：`127.0.0.1 ··· 延迟 7ms` 出现在列表里；断言"只扫私网/回环"同步更新。
+  - 批次：20261027-1530
+- [x] [L15] 修两个真 bug：`/ping` 缺 CORS、peers 递归扩散 → `npm run test:net` + 截图
+  - 做了什么：`/ping` 补 `access-control-allow-origin: *`（Node 与 Rust 两端）；`loadPeers` 只听一层（peer 来源的服务器不再扩散）并过滤非私网地址。
+  - 为什么：前者表现为"服务端明明在跑，一台都扫不到"（浏览器跨源被拦）；后者让同一台机器在列表里出现四遍。
+  - 验证：列表干净（1 台 1 行）；`/healthz` peers 为空时不再凭空多出行。
+  - 批次：20261027-1530
+- [x] [L15] 开房入口预留 `onHostOpen`：`WorldScreen.ts` → `npm run check`
+  - 做了什么：卡片的「开房」优先调 `onHostOpen`（有就打开统一界面并带世界名），没有则回落旧对话框 `showHostDialog()`（保留未删）。
+  - 为什么：`main.ts` 的预检+建世界流程写在 `actions.onHostWorld` 里，多入口复用它要先抽公共函数，且要迁移十几条旧对话框断言——**留到下一批**，混在这次布局改造里风险太大。
+  - 验证：`npm run check` exit=0（行为未变，仍是旧对话框）。
+  - 批次：20261027-1530
+
+---
+
+## 批次 20261027-1400 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："加吧，现在体验是不太好" —— 三层界面之前都是硬切，补上转场。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1400
+
+- [x] [L14] 三层转场动画：`index.html` + `src/ui/{MultiplayerScreen,ServerPicker}.ts` → `npm run check`
+  - 做了什么：进入——遮罩 `page-fade-in` 160ms、主面板与开房对话框 `panel-pop-in` 170ms（淡入 + 轻微放大 + 上移 8px）、选择页 `panel-slide-in` 180ms（右侧滑入 14px，读起来像翻页）；退出——`close()` 不再直接 `display:none`，改成加 `.closing` 播 160ms 反向动画、播完才隐藏，快速开关时 `clearTimeout` 上一次的定时器。附：按钮 `:active` 位移 1px；`prefers-reduced-motion` 下全关。
+  - 为什么：硬切在"世界列表 → 联机面板 → 选择页"这条路上尤其突兀（界面连着换两张），而且没有"我进到了更深一层"的方向感。
+  - 验证：playwright 读 computed `animationName/duration`——`panel-pop-in` 0.17s / `page-fade-in` 0.16s / `panel-slide-in` 0.18s / 退出 `panel-slide-out` 0.16s，播完 class 从 `server-picker closing` 变 `server-picker hidden`；`npm run check` exit=0（621 单测 + 1 条动画守卫）。
+  - 批次：20261027-1400
+
+---
+
