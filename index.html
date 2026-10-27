@@ -6844,6 +6844,16 @@
       .mp-full-body { font-size: 12px; line-height: 1.8; color: #c8c8c8; }
       .mp-full-actions { display: flex; gap: 8px; }
       .mp-full-actions .mp-action { flex: 1 1 0; min-height: 36px; font-size: 13px; }
+
+      /* 浮层打开时（2026-10-28）：除了浮层自己，**所有顶层元素都不接收指针事件**。
+         这是"遮盖层必须完全挡住下层"的硬保证——不依赖 JS 的事件拦截顺序。 */
+      body.inp-open > *:not(.inp-layer) {
+        pointer-events: none !important;
+      }
+      /* 浮层本身要能收事件（它是被 pointer-events:none 排除的那个） */
+      body.inp-open > .inp-layer {
+        pointer-events: auto !important;
+      }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的

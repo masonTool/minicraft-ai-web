@@ -35,6 +35,14 @@ let editing: HTMLInputElement | HTMLTextAreaElement | null = null;
  * 所以 focusin 时看"最近 600ms 内有没有按下"——没有就直接 blur，**连浮层都不弹**。
  */
 let lastPressAt = 0;
+/**
+ * 最近一次被按下的元素。
+ *
+ * 只看"600ms 内有没有按下"是不够的（用户 2026-10-28）：点「编辑世界」按钮也会满足这个条件，
+ * 而弹窗刚打开时代码会 `input.focus()` → 被误判成"用户点出来的" → 键盘自己弹起来。
+ * 所以还要比对**按下的元素是不是就是获得焦点的那个**：点输入框 → 是；点按钮后代码聚焦 → 不是。
+ */
+let lastPressTarget: EventTarget | null = null;
 
 /**
  * 要不要接管（用户 2026-10-27：**PC 端没有这套逻辑**）。
@@ -133,6 +141,7 @@ function build(): void {
 function close(): void {
   if (layer === null) return;
   layer.classList.remove('visible');
+  document.body.classList.remove('inp-open');
   editing = null;
 }
 
@@ -152,6 +161,12 @@ function open(element: HTMLInputElement | HTMLTextAreaElement): void {
     field.removeAttribute('maxlength');
   }
   layer.classList.add('visible');
+  /*
+   * 同时给 body 打标记：CSS 里 `body.inp-open > *:not(.inp-layer)` 一律
+   * `pointer-events: none`——**从浏览器层面**让下层收不到指针事件，
+   * 比在 JS 里拦事件更彻底（滚动、长按、合成 click 全都过不去）。
+   */
+  document.body.classList.add('inp-open');
   field.focus();
   // 全选：改 IP / 改名字这类"整体替换"最常见，一打字就盖掉旧值
   field.select();
@@ -176,7 +191,12 @@ function installEventShield(): void {
     const target = event.target as Node | null;
     if (target === null) return;
     if (field !== null && (target === field || field.contains(target))) return;
-    event.stopPropagation();
+    /*
+     * `stopImmediatePropagation` 而不是 `stopPropagation`：后者不拦**同一个元素上**
+     * 已经注册的其它监听器，而页面里不少委托就挂在 window/document 上（用户 2026-10-28：
+     * "遮盖层挡不住下层点击"）。
+     */
+    event.stopImmediatePropagation();
     if (event.cancelable) event.preventDefault();
     /*
      * 点遮罩 = 结束输入。
@@ -205,8 +225,9 @@ export function installInputOverlay(): void {
   if (!shouldLift()) return;
   installEventShield();
   // 记录"用户真的按下了"（鼠标与触摸都算），供 focusin 判断是不是用户点出来的
-  const markPress = (): void => {
+  const markPress = (event: Event): void => {
     lastPressAt = Date.now();
+    lastPressTarget = event.target;
   };
   window.addEventListener('pointerdown', markPress, true);
   window.addEventListener('touchstart', markPress, { capture: true, passive: true });
@@ -222,7 +243,8 @@ export function installInputOverlay(): void {
        * 手机端任何输入框都不该在"出现时"自动把键盘顶起来）。
        * 真点击一定先有 pointerdown/touchstart；程序调 `focus()` 没有。
        */
-      if (Date.now() - lastPressAt > 600) {
+      const sameTarget = lastPressTarget === target;
+      if (Date.now() - lastPressAt > 600 || !sameTarget) {
         target.blur();
         return;
       }
