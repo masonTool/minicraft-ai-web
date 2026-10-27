@@ -43,6 +43,8 @@ import { damageReason } from './core/survival/DamageNotice.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
+// canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
+import { Hud2D, Ui2DOverlay } from './ui2d/index.ts';
 import { attackCooldownFor } from './core/combat/AttackSpeed.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
@@ -1052,6 +1054,28 @@ const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
  */
 const ARM_SWING_INTERVAL = 0.3;
 
+/**
+ * 是否把**纯展示**的 HUD 画到 canvas 上（`src/ui2d/` 阶段 0）。
+ *
+ * 开关刻意做成 URL 参数而不是设置项：这一层现在是**待验证的试验**，
+ * 不该出现在玩家能点到的设置页里（那条路径要写文案、进 6 种语言、还要考虑存档）。
+ * 真机验收用 `?ui2d=1` 进世界，帧率与观感都没问题之后再谈"默认开"。
+ *
+ * ⚠️ 关掉它必须**恢复到完全原来的行为**：DOM 节点、CSS、更新逻辑一处都没删，
+ * 只有下面三处更新函数在开关打开时提前 return。
+ */
+const UI2D_ENABLED = readUi2DFlag();
+
+function readUi2DFlag(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URLSearchParams(window.location.search).get('ui2d') === '1';
+  } catch {
+    // 某些 WebView 的 `location.search` 会抛（历史遗留），当作没开
+    return false;
+  }
+}
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -1132,6 +1156,15 @@ class App {
     setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
   };
   /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
+  /**
+   * canvas 版的纯展示 HUD（阶段 0）：只有 `?ui2d=1` 时非空。
+   *
+   * 非空时下面三处更新函数（红闪 / Boss 条 / 破坏与进食进度）会**整段跳过 DOM 写入**，
+   * 同一帧只画一边 —— 不会出现"两套同屏、各自衰减"的鬼影。
+   */
+  private hud2d: Hud2D | null = null;
+  /** 覆盖层自己拿着画布，退出世界时要摘（`#app` 里的节点不靠 GC 回收） */
+  private ui2dOverlay: Ui2DOverlay | null = null;
   private bossBarEl: HTMLElement | null = null;
   private bossFillEl: HTMLElement | null = null;
   /** 血条上那行字（末影龙 / 凋灵共用一条，见 `updateBossBar`） */
@@ -2456,7 +2489,11 @@ class App {
    * 受伤红闪（批次 234）：所有掉血（含溺水/着火/饥饿）都从这里闪一下。
    * DOM 层在 `#hud` 之下，只写 opacity。
    */
-  private readonly damageFlash = new DamageFlash(document.getElementById('damage-flash'));
+  private readonly damageFlash = new DamageFlash(
+    // `?ui2d=1` 时传 null：红闪的**数值**照旧由 DamageFlash 算（衰减、封顶都在那边），
+    // 只是不再写 DOM 的 opacity —— 画到 canvas 上去（见 updateAndRenderHud2D）
+    UI2D_ENABLED ? null : document.getElementById('damage-flash'),
+  );
   /**
    * 准星锁定队友时的生命 / 饥饿（用户 2026-10-26）：一红一黄两条细条。
    *
@@ -2852,6 +2889,15 @@ class App {
     this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
+    /*
+     * canvas 界面覆盖层（阶段 0）：盖在 WebGL 画布上、`#hud` 之下。
+     * 只有 `?ui2d=1` 才建 —— 默认路径一个节点都不多，出问题关掉参数即回到原样。
+     * ⚠️ 必须在 WebGL 画布**之后** append：同层时 DOM 顺序决定谁在上面。
+     */
+    if (UI2D_ENABLED) {
+      this.ui2dOverlay = new Ui2DOverlay(container);
+      this.hud2d = new Hud2D(this.ui2dOverlay);
+    }
     // 选中描边是按**屏幕像素**算宽度的（批次 521），第一次就要把背板尺寸告诉它，
     // 否则第一帧到第一次 resize 之间描边宽度是 1 个像素（= 半个 CSS 像素）
     this.syncOutlineViewport();
@@ -15478,23 +15524,33 @@ class App {
   }
 
   private updateBossBar(): void {
-    if (!this.bossBarEl || !this.bossFillEl) return;
     const dragon = this.endDragon;
     const wither = this.aliveWither();
     const showDragon = this.dimension === Dimension.END && dragon !== null && !dragon.dead;
     const showWither = wither !== null;
     const show = showDragon || showWither;
+    const shielded = showWither && wither!.shielded;
+    /*
+     * 数值先算、再分路画（canvas / DOM 吃同一份）。
+     * ⚠️ 不要在两条分支里各算一遍 maxHealth/ratio：血量口径一改就会只改到一边，
+     * 表现是"canvas 上的血条和凋灵的护盾状态对不上"，极难查。
+     */
+    const maxHealth = showWither ? WITHER_TYPE.health : DRAGON_TYPE.health;
+    const health = show ? (showWither ? wither!.health : dragon!.health) : 0;
+    const ratio = show ? Math.max(0, Math.min(1, health / maxHealth)) : 0;
+    const title = show ? (showWither ? mobLabel(WITHER_TYPE) : mobLabel(DRAGON_TYPE)) : '';
+
+    if (this.hud2d) {
+      this.hud2d.setBossBar({ visible: show, title, ratio, wither: showWither, shielded });
+      return;
+    }
+
+    if (!this.bossBarEl || !this.bossFillEl) return;
     this.bossBarEl.classList.toggle('on', show);
     this.bossBarEl.classList.toggle('wither', showWither);
-    this.bossBarEl.classList.toggle('shielded', showWither && wither!.shielded);
+    this.bossBarEl.classList.toggle('shielded', shielded);
     if (!show) return;
-
-    const maxHealth = showWither ? WITHER_TYPE.health : DRAGON_TYPE.health;
-    const health = showWither ? wither!.health : dragon!.health;
-    const ratio = Math.max(0, Math.min(1, health / maxHealth));
     this.bossFillEl.style.width = `${(ratio * 100).toFixed(1)}%`;
-
-    const title = showWither ? mobLabel(WITHER_TYPE) : mobLabel(DRAGON_TYPE);
     if (this.bossTitleEl && this.bossTitleEl.textContent !== title) this.bossTitleEl.textContent = title;
   }
 
@@ -16029,6 +16085,11 @@ class App {
 
   /** 破坏进度条：只在真正挖掘时显示，创造模式瞬间破坏不显示 */
   private updateBreakProgressUi(): void {
+    // canvas 版（阶段 0）：判据与 DOM 版完全一致，只是画到覆盖层上
+    if (this.hud2d) {
+      this.hud2d.setBreakProgress(this.breakProgress > 0 && this.breakProgress < 1 ? this.breakProgress : null);
+      return;
+    }
     if (!this.breakProgressEls) this.breakProgressEls = this.progressBarEls('break-progress');
     const els = this.breakProgressEls;
     if (!els) return;
@@ -16053,6 +16114,11 @@ class App {
    * 进食要求准星**没**对着方块，判据互斥。
    */
   private updateEatingProgressUi(): void {
+    // canvas 版（阶段 0）：与破坏进度条同一套判据，画在它上面一条
+    if (this.hud2d) {
+      this.hud2d.setEatProgress(this.eatProgress > 0 && this.eatProgress < 1 ? this.eatProgress : null);
+      return;
+    }
     if (!this.eatProgressEls) this.eatProgressEls = this.progressBarEls('eat-progress');
     const els = this.eatProgressEls;
     if (!els) return;
@@ -18783,6 +18849,15 @@ class App {
       this.updateMusic(dt);
       // 红闪按**真实**帧时间衰减（不是 dt）：它是纯视觉反馈，暂停时也不该停在半红
       this.damageFlash.update(frameSeconds);
+      /*
+       * canvas 版纯展示 HUD（阶段 0）。
+       * 放在 `damageFlash.update()` **之后**：这一帧的强度是刚衰减完的值，
+       * 否则画出来永远慢一帧（真机上表现为"闪得比受伤晚一点点"）。
+       */
+      if (this.hud2d) {
+        this.hud2d.setDamageFlash(this.damageFlash.intensity);
+        this.hud2d.render();
+      }
       // 队伍（联机22）：跟着 move 发出去，队友据此判友伤
       this.net.setTeam(this.teamState.teamOf(this.playerName)?.name ?? '');
       this.net.tick(
@@ -19062,6 +19137,11 @@ class App {
     const bobberMaterial = this.bobberMesh?.material;
     if (Array.isArray(bobberMaterial)) for (const item of bobberMaterial) item.dispose();
     else bobberMaterial?.dispose();
+    // canvas 界面覆盖层（阶段 0）：断开 ResizeObserver / window 监听并摘掉节点
+    this.hud2d?.dispose();
+    this.hud2d = null;
+    this.ui2dOverlay?.dispose();
+    this.ui2dOverlay = null;
     // 画布必须摘掉：WebGL 上下文有上限，反复进出世界不能靠 GC
     this.renderer.dispose();
     this.renderer.domElement.remove();
