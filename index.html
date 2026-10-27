@@ -701,13 +701,18 @@
        *   .world-row-inline    三列（标签 + 控件 + 一个尾巴，如重新掷色子）
        *   .world-row-address   五列（标签 + 地址 + `:` + 端口 + 选择）
        */
+      /*
+       * 标签列宽度按**语言**给（用户 2026-10-28）：固定 64px 时德语 "Schwierigkeit"、
+       * 俄语 "Сложность" 会被截成 "Schwier…"；而中文/英文用不到那么宽。
+       * 统一由 `--label-w` 控制，再按 `html[lang]` 覆盖。
+       */
       .world-row {
-        display: grid; grid-template-columns: 64px minmax(0, 1fr);
+        display: grid; grid-template-columns: var(--label-w, 64px) minmax(0, 1fr);
         align-items: center; gap: 6px; min-width: 0;
       }
-      .world-row.world-row-inline { grid-template-columns: 64px minmax(0, 1fr) auto; }
+      .world-row.world-row-inline { grid-template-columns: var(--label-w, 64px) minmax(0, 1fr) auto; }
       .world-row.world-row-address {
-        grid-template-columns: 64px minmax(0, 1fr) auto 62px auto;
+        grid-template-columns: var(--label-w, 64px) minmax(0, 1fr) auto 62px auto;
       }
       .world-row > span:first-child { text-align: right; }
       .world-row input { min-width: 0; width: 100%; }
@@ -6853,6 +6858,34 @@
       /* 浮层本身要能收事件（它是被 pointer-events:none 排除的那个） */
       body.inp-open > .inp-layer {
         pointer-events: auto !important;
+      }
+
+      /* 标签列宽按语言（2026-10-28）：取各语言里最长的那个标签，留够但不浪费。
+         数字来自实测：de/ru 的「Schwierigkeit / Сложность」约 88px（11px 字）。 */
+      html[lang='de'],
+      html[lang='ru'] {
+        --label-w: 7.6em;
+      }
+      html[lang='fr'],
+      html[lang='pt'] {
+        --label-w: 5.6em;
+      }
+      /*
+       * 标签**不折行**（用户 2026-10-28）：折行会把那一行撑高，左右两列行高就不齐了
+       * （两列是两个独立的 grid，行高不同步）。宽度由 `--label-w` 按语言给足，
+       * 万一还超就让它轻微溢出，也好过把一个词拆成两半。
+       */
+      .world-row > span:first-child {
+        white-space: nowrap;
+        line-height: 1.25;
+      }
+
+      /* 世界弹窗高度贴合内容（2026-10-28）：德语/俄语下表单行变高，面板被 max-height
+         拉到 558px，内容却只有 320px，底下留下一大块空白。前面那条 min-height:300px
+         是给联机三页"切页不跳"用的，世界弹窗不需要。 */
+      .world-modal-panel {
+        min-height: 0;
+        height: auto;
       }
 </style>
 

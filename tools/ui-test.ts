@@ -3236,8 +3236,12 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   check(
     '新建世界表单：标签与输入框同一行（窄屏也不再拆两行）',
     !css.includes('.world-row .world-input { grid-column: 1 / -1; }') &&
-      /\.world-row \{[^}]*grid-template-columns: 64px minmax\(0, 1fr\)/.test(css) &&
-      css.includes('.world-row > span:first-child {'),
+      // 2026-10-28：首列改成 `var(--label-w, 64px)`——按语言给宽度（德语/俄语标签更长）
+      /\.world-row \{[^}]*grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\)/.test(css) &&
+      css.includes('.world-row > span:first-child {') &&
+      // 按语言覆盖标签宽度：没有这几条，非中文的长标签会被截成 "Schwier…"
+      css.includes("html[lang='de']") &&
+      css.includes("html[lang='ru']"),
   );
   /*
    * 2026-10-27 第二版：以前固定三列（第三列 44px 只有"重新掷色子"用得上），
@@ -3246,7 +3250,7 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
    */
   check(
     '地址行五列（标签/地址/`:`/端口/选择），其余行不留空列',
-    /\.world-row\.world-row-address \{[^}]*grid-template-columns: 64px minmax\(0, 1fr\) auto 62px auto/.test(css) &&
+    /\.world-row\.world-row-address \{[^}]*grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\) auto 62px auto/.test(css) &&
       !/grid-template-columns: 64px minmax\(0, 1fr\) 44px/.test(css),
   );
   check(
