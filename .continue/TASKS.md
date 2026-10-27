@@ -4247,6 +4247,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
+- [ ] R2 **iOS 侧 Bonjour 浏览（`NetServiceBrowser`）**：现在只有发布
+      （`server/ios/Sources/BonjourAdvertiser.swift` 用的 `NetService`），没有浏览，
+      所以"iOS 之间靠 Bonjour 互相发现"还不成立——能看到邻居是因为对方也发了 UDP 组播。
+      补约 60 行 Swift + 在模拟器里用 Mac 的 `dns-sd -R` 发布假记录验证（`check-sim.sh` 可加一条）。
 - [x] R1 **Rust 版跟进 2026-10-26 之后的协议**（**已完成：297 / 297 全绿**）。
   - 补齐的能力：`no-host` / `host-offline` / `maxPlayers` / `/ping` / `/healthz.beaconPort` /
     `player` 广播的 `isHost` / 快照 **v2**（只留时钟，房间数据不落盘也不再读回）/
