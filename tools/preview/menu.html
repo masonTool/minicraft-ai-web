@@ -29,8 +29,12 @@
 
     <script type="module">
       import { CanvasMenu, Ui2DOverlay, applyDebugTint } from '../../src/ui2d/index.ts';
+      import { t } from '../../src/core/i18n/I18n.ts';
 
-      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      /** `?from=dom`：行不是手写的，而是从一组真实 `<button>` 读 label、点它们执行动作 */
+      const fromDom = params.get('from') === 'dom';
       const stage = document.getElementById('stage');
       const overlay = new Ui2DOverlay(stage);
       const ctx = overlay.context;
@@ -41,12 +45,39 @@
       overlay.canvas.style.pointerEvents = 'auto';
       overlay.syncSize();
 
-      const menu = new CanvasMenu('游戏已暂停', [
-        { id: 'resume', label: '继续游戏' },
-        { id: 'settings', label: '设置' },
-        { id: 'quit', label: '保存并回到主菜单' },
-        { id: 'delete', label: '删除本世界' },
-      ]);
+      /*
+       * `?from=dom`：**游戏里就是这么接的** —— 行标签取 DOM 按钮的 textContent，
+       * 激活就是 button.click()。所以 6 种语言的文案、条件显隐、删除世界的二次确认
+       * 全都自动继承，不需要在这里抄一份。
+       */
+      const domButtons = [];
+      if (fromDom) {
+        // 就是 `SettingsScreen` 菜单页真实那四颗（成就那颗已在批次 20261024-1152 删掉，
+        // 入口留在背包左栏；多人那颗在单机房里是 `display: none`）
+        const keys = ['pause.resume', 'pause.settings', 'pause.statistics', 'pause.exit'];
+        const strip = document.createElement('div');
+        strip.className = 'pause-actions';
+        strip.style.display = 'none';
+        for (const key of keys) {
+          const button = document.createElement('button');
+          button.className = 'pause-action';
+          button.textContent = t(key);
+          button.addEventListener('click', () => say(`DOM 按钮被点：${button.textContent}`));
+          strip.appendChild(button);
+          domButtons.push(button);
+        }
+        document.body.appendChild(strip);
+      }
+
+      const rows = fromDom
+        ? domButtons.map((button, i) => ({ id: `dom${i}`, label: button.textContent.trim() }))
+        : [
+            { id: 'resume', label: '继续游戏' },
+            { id: 'settings', label: '设置' },
+            { id: 'quit', label: '保存并回到主菜单' },
+            { id: 'delete', label: '删除本世界' },
+          ];
+      const menu = new CanvasMenu(fromDom ? t('pause.title') : '游戏已暂停', rows);
 
       const caption = document.getElementById('caption');
       const say = (text) => {
@@ -76,10 +107,16 @@
         if (input.kind === 'move') say(`焦点：${menu.rows[input.focus].label}`);
         else if (input.kind === 'close') say('菜单已关闭（Esc 再打开）');
         else if (input.kind === 'activate') {
-          const row = menu.rows.find((item) => item.id === input.id);
-          say(`激活：${row?.label ?? input.id} —— 真接线时这里调用 SettingsScreen 的动作`);
-          // 预览里除了"继续游戏"都不真的关，方便反复点
-          if (input.id === 'resume') menu.close();
+          const index = menu.rows.findIndex((item) => item.id === input.id);
+          const row = menu.rows[index];
+          if (fromDom) {
+            // 与游戏里同一条路：先收 canvas 这一层，再点那颗 DOM 按钮
+            menu.close();
+            domButtons[index]?.click();
+          } else {
+            say(`激活：${row?.label ?? input.id} —— 真接线时这里调用 SettingsScreen 的动作`);
+            if (input.id === 'resume') menu.close();
+          }
         }
         paint();
       }
