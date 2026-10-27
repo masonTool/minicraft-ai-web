@@ -52,6 +52,7 @@ src/ui2d/
 | 阶段 | 内容 | 判据（做完能验什么） | 验收命令 |
 | --- | --- | --- | --- |
 | **0 地基** ✅ | text / input / overlay / widgets + 三样纯展示 HUD | 22 条排版与命中断言绿；`?ui2d=1` 能画出红闪/Boss 条/进度条 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
+| **1 控件库** ✅ | 开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗 | 21 条离线断言（命中 → 状态 → 回调）；`tools/preview/controls.html` 摆一排且能真的点/拖/滚 | `npx vitest run tests/ui2d-controls.test.ts` + 预览页 |
 | **1.5 快捷栏** ✅ | 面板 + 9 格 + 图标 + 数量 + 序号 + 耐久条 + 选中框 | 34 条断言绿；`?ui2d=1` 与默认版逐格对照，换槽/捡东西/掉耐久都跟上 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
 | **2 HUD** 🟡 | 血条/饥饿/护甲/氧气/经验条与等级 ✅（快捷栏在 1.5 已做）；**只剩提示条**；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
 | 3 菜单/表单 | 主菜单 / 世界列表 / 新建世界 / 多人 / 服务器选择 / 设置 | 隐藏 input + canvas 显示的**输入法定型**（见 §6）；设置项读写与存档一致 | `npm run check` + 真机输入法验收 |
@@ -154,6 +155,33 @@ npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotb
 | 生命 / 饥饿 / 护甲 / 氧气 | ✅ 本批 |
 | 经验条与等级 | ✅ 本批 |
 | **提示条**（`#target-info` 目标名、`#selected-item-name` 物品名浮标、攻击冷却条、工具/指南针读数） | ❌ 仍是 DOM：纯文字浮层，每帧变化量小，收益最低，排在最后 |
+
+## 5.5 已落地（阶段 1：控件库）
+
+七个控件的**画法 + 纯状态机**都在 `ui2d/controls.ts`，状态一律留在调用方。
+判据来自 §4：每个控件都要有"命中 → 状态 → 回调"的离线断言，并且能在一页里摆一排。
+
+| 控件 | 画 | 状态机（纯函数，可断言） |
+| --- | --- | --- |
+| 开关 | `drawToggle` | `toggleNext` |
+| 滑块 | `drawSlider` | `sliderTrackRange` / `sliderRatioFromX` / `sliderRatioStep` |
+| 下拉 | `drawDropdownField` / `drawDropdownMenu` | `dropdownMenuRect`（放不下自动翻上）/ `dropdownIndexAt` |
+| 页签 | `drawTabs` | `tabRects` / `tabIndexAt` |
+| 滚动列表 | `drawListRow` / `drawScrollbar` | `listMaxScroll` / `clampListScroll` / `listScrollByWheel` / `listVisibleRange` |
+| 提示框 | `drawTooltip` | `tooltipRect`（下方放不下就翻上、左右夹进视口） |
+| 弹窗 | `drawModalFrame` | `modalRect`（居中、小屏夹进视口） |
+
+三条经验：
+
+- **状态必须留在调用方**。canvas 没有"元素自己记得自己开着没有"，把状态和绘制混在一起，
+  迟早演进出 DOM 那套 `class` 的第二种真相；所以这里只给 `draw*(ctx, rect, state)` 与纯函数。
+- **两处几何不是"画"出来的**：下拉往哪翻、提示框贴哪边 —— DOM 版靠"挂 `body` + 浏览器 clamp"，
+  canvas 得自己算，算错的症状是"偶尔被屏幕边切掉"，离线断言（21 条）正好钉这个。
+- **弹窗面板要不透明**。用 `drawHudPanel`（半透明 HUD 底板）会把底下的列表文字透上来，
+  看起来像字叠字；这里按原版用 `#232323` + `--pixel-bevel-dark` 的硬斜角。
+
+预览页 `tools/preview/controls.html`（`?state=dropdown|tooltip|modal`、`?tint=1`）**故意打开**
+`pointer-events`（游戏里铺满全屏的覆盖层必须关着），所以能真的点开关、拖滑块、滚列表。
 
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
