@@ -32,10 +32,14 @@
     </style>
   </head>
   <body>
-    <div id="stage"><div class="caption" id="caption"></div></div>
+    <div id="stage">
+      <!-- 面板外面的 DOM 控件（模拟游戏里的关闭 × / 左右立栏）：画布盖在上面，靠转发点它 -->
+      <button id="behind" style="position: absolute; right: 12px; top: 12px; z-index: 1">关闭</button>
+      <div class="caption" id="caption"></div>
+    </div>
 
     <script type="module">
-      import { InventoryPanelHost, arraySlots } from '../../src/ui2d/index.ts';
+      import { InventoryPanelHost, arraySlots, forwardClickAt } from '../../src/ui2d/index.ts';
 
       const params = new URLSearchParams(window.location.search);
       const tint = params.get('tint') === '1';
@@ -144,13 +148,24 @@
       });
       canvas.addEventListener('pointermove', (event) => {
         const p = local(event);
+        if (event.buttons !== 0) moved = true;
         host.handlePointer(p.x, p.y, 'move', { touch: event.pointerType === 'touch' });
+      });
+      let moved = false;
+      window.__closed = false;
+      document.getElementById('behind').addEventListener('click', () => {
+        window.__closed = true;
       });
       canvas.addEventListener('pointerup', (event) => {
         // 抬起也要带真实坐标：`handlePointer` 会用它记光标位置 ——
         // 传 (0,0) 的话"手上那一叠"会被画到屏幕左上角（第一版就是这样）
         const p = local(event);
         host.handlePointer(p.x, p.y, 'up', { touch: event.pointerType === 'touch' });
+        // 面板外的点击转发给 DOM（游戏里是关闭 × 与左右立栏）
+        if (!moved && !host.contains(event.clientX, event.clientY)) {
+          forwardClickAt(canvas, event.clientX, event.clientY);
+        }
+        moved = false;
       });
       // 右键菜单要拦掉：不然按下就弹浏览器菜单，手势全断
       canvas.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -163,6 +178,7 @@
         }),
         held: host.heldStack ? `${host.heldStack.id}x${host.heldStack.count}` : null,
         externalHeld: externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null,
+        closed: window.__closed === true,
       });
       window.addEventListener('resize', () => host.relayout());
 

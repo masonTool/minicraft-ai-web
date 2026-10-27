@@ -126,6 +126,22 @@ export class InventoryPanelHost {
     return this.opened;
   }
 
+  /** 覆盖层画布（接管输入时，调用方要往上挂 pointer 监听） */
+  get canvas(): HTMLCanvasElement | null {
+    return this.overlay?.canvas ?? null;
+  }
+
+  /** 某个视口坐标是否落在面板里（不在面板里的点击要转发给 DOM） */
+  contains(clientX: number, clientY: number): boolean {
+    const canvas = this.overlay?.canvas;
+    const panel = this.layout?.panel;
+    if (!canvas || !panel) return false;
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    return x >= panel.x && x <= panel.x + panel.w && y >= panel.y && y <= panel.y + panel.h;
+  }
+
   /** 当前光标上拿着的那一叠（调用方可以拿来同步回真实数据，见 `takeCursor()`） */
   get heldStack(): StackLike | null {
     return this.cursor.stack;

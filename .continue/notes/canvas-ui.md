@@ -1059,6 +1059,37 @@ externalCursor: { get: () => this.inventoryScreen.heldStack }
 断言/验证：预览页 `?ext=1` 用一个外部对象模拟 DOM 的 `held` —— 打开时面板立刻画出 `3×5`，
 移动指针后仍是 `3×5`，而**外部对象没被写脏**（只拉不推）。
 
+## 5.41 最后一步（`?ui2dinv=1`：自绘面板真正接管输入）
+
+前一批把光标合流（只读）做了，这一批让自绘面板**吃指针**：
+
+- 覆盖层 `pointer-events: auto`，`pointerdown/move/up` 喂给 `InventoryPanelHost`；
+- DOM 面板退场：`html.ui2dinv #inventory-screen .inv-shell { visibility: hidden }`、
+  `html.ui2dinv #inv-held { visibility: hidden }`（**visibility 不是 display** —— 里面的按钮
+  和输入框还要能被 `elementFromPoint` 命中、被读值）；
+- 光标写回 DOM：`externalCursor.set` → `InventoryScreen.setHeldStack()`，两份状态在这里合成一份。
+
+### 面板外的控件怎么办：`forwardClickAt()`
+
+关闭 ×、左右立栏（分类/仓库/人物/成就）在面板**外面**，画布盖上去之后就点不到了。
+这一批不重画它们，改用一条转发通道：
+
+```ts
+canvas.style.pointerEvents = 'none';       // 同一帧内临时让开
+const el = document.elementFromPoint(x, y);
+canvas.style.pointerEvents = 'auto';       // 立刻恢复（用户看不到闪烁）
+el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+```
+
+只在**没有拖动**时转发：拖动是操作槽位的手势，松手时不该顺手点一下别的东西。
+
+⚠️ 只转发 `click`：按钮/页签够用，需要 `pointerdown/move/up` 序列的控件（拖拽抽屉）不在范围内。
+
+### 验收（预览页，画布盖住一颗 DOM "关闭"按钮）
+
+- 点面板**外**（画布上面、按钮真实位置）→ 按钮的 `click` 触发（`closed: false → true`）；
+- 点面板**内**（第 0 格）→ 拿起 64、`closed` 仍为 `false`（没有误转发）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

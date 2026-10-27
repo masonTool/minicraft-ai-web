@@ -936,6 +936,16 @@ export class InventoryScreen {
   get heldStack(): ItemStack | null {
     return this.held;
   }
+
+  /**
+   * 写回"拿在手上的那一叠"（自绘面板接管输入时用）。
+   *
+   * ⚠️ 只在 canvas 接管模式下调用：那时 DOM 的 `#inv-held` 已经不渲染，
+   * 所以这里不去同步它；DOM 模式的分配逻辑仍然只改 `this.held` 自己那一份。
+   */
+  setHeldStack(stack: ItemStack | null): void {
+    this.held = stack;
+  }
   private open = false;
   /** 鼠标**悬停**在哪一格（批次 128：数字键 1-9 / F 作用在它上面） */
   private hovered: { key: string; source: SlotSource; index: number } | null = null;

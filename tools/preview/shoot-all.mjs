@@ -458,6 +458,13 @@ const SHOTS = [
     what: '**光标合流**：手上的那一叠由外部提供（模拟 DOM 的 `held`），自绘面板只读地画出来',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '38-inventory-takeover.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 470],
+    what: '**接管输入**：画布吃指针（点格子取放），面板外的 DOM 控件靠 `forwardClickAt` 转发',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

@@ -56,6 +56,7 @@ import {
   FORM_ROW_HEIGHT,
   applyDebugTint,
   attackChargePercent,
+  forwardClickAt,
   attackChargeRect,
   bubbleIconState,
   clampListScroll,
@@ -1114,6 +1115,17 @@ const UI2D_ENABLED = readUi2DFlag();
  * 是否一致 —— 这是 TASKS 里 M26b 的判据（并排截图无差异）。
  * 它**不吃输入**（覆盖层 `pointer-events: none`），所以开着也不影响正常操作。
  */
+/**
+ * `?ui2dinv=1`：背包**真正接管**（自绘面板吃输入、DOM 面板退场）。
+ *
+ * 与 `?ui2dinv2d=1`（只读叠加比对）的区别只有一条：这一层吃指针、并把光标写回 DOM。
+ * 槽位以外的区域（关闭 ×、左右立栏）通过 `forwardClickAt()` 转发给 DOM。
+ */
+const UI2D_INV_TAKEOVER = (() => {
+  if (typeof location === 'undefined') return false;
+  return new URLSearchParams(location.search).get('ui2dinv') === '1';
+})();
+
 const UI2D_INV2D = (() => {
   if (typeof location === 'undefined') return false;
   return new URLSearchParams(location.search).get('ui2dinv2d') === '1';
@@ -1332,6 +1344,10 @@ class App {
   private inv2d: InventoryPanelHost | null = null;
   private inv2dIcons: ItemIconCache | null = null;
   private inv2dOn = false;
+  /** 接管模式下，覆盖层画布的指针监听是否已挂（只挂一次） */
+  private inv2dInputBound = false;
+  /** 接管模式下吃指针的那块画布（关闭时要还原 `pointer-events`） */
+  private takeoverCanvas: HTMLCanvasElement | null = null;
   private recipe2d: MenuScreen2D | null = null;
   private recipe2dOn = false;
   private touch2d: Touch2D | null = null;
@@ -3140,7 +3156,7 @@ class App {
        * `opacity: 0` 不影响 pointer 事件，拖动摇杆的手势一点没变。
        */
       this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
-      if (UI2D_INV2D) {
+      if (UI2D_INV2D || UI2D_INV_TAKEOVER) {
         const icons = new ItemIconCache((canvas, itemId) => drawItemIcon(canvas, this.atlas, itemId));
         this.inv2dIcons = icons;
         const toInvIndex = (display: number): number => (display < 27 ? 9 + display : display - 27);
@@ -3159,7 +3175,13 @@ class App {
              * 与 DOM 的"拿在手上那一叠"合流（只读）：这一层只是比对用的叠加，
              * 不接管输入，所以只拉不推 —— 两份状态各画各的就会出现两叠。
              */
-            externalCursor: { get: () => this.inventoryScreen.heldStack },
+            externalCursor: {
+              get: () => this.inventoryScreen.heldStack,
+              // 接管模式下把光标写回 DOM 那一份（两份状态在这里合流成一份）
+              ...(UI2D_INV_TAKEOVER
+                ? { set: (stack: unknown) => this.inventoryScreen.setHeldStack((stack as ItemStack | null) ?? null) }
+                : {}),
+            },
             tint: UI2D_TINT_ENABLED,
             zIndex: 12,
           },
@@ -3178,7 +3200,14 @@ class App {
        * 镜像覆盖不到；上一批把它设成 `opacity: 0` 之后，拖动物品的过程里那一叠就"消失"了
        * （松手才又出现）。所以它继续由 DOM 画 —— 镜像的覆盖层是透明的，它照样看得见。
        */
-      style.textContent = 'html.ui2d-touch #touch-stick, html.ui2d-touch .touch-button { opacity: 0; }';
+      style.textContent =
+        'html.ui2d-touch #touch-stick, html.ui2d-touch .touch-button { opacity: 0; }\n' +
+        /*
+         * 接管模式：DOM 面板整体退场（visibility 而不是 display —— 里面的输入框、按钮
+         * 还要能被 `forwardClickAt` 命中、被读值），`#inv-held` 也藏掉（自绘侧画这一叠）。
+         */
+        'html.ui2dinv #inventory-screen .inv-shell { visibility: hidden; }\n' +
+        'html.ui2dinv #inv-held { visibility: hidden; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -6923,6 +6952,56 @@ class App {
    * 只换像素：点击、拖拽分配、长按分堆、连发、悬停提示全在 DOM 里
    * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
    */
+  /**
+   * 接管模式：让覆盖层吃指针，并把事件喂给自绘面板。
+   *
+   * 两条分支很重要：
+   *  - **落在面板里** → 交给 `InventoryPanelHost`（槽位取放/分堆/双击/长按都在它那边）；
+   *  - **落在面板外**（关闭 ×、左右立栏在面板外面）→ `forwardClickAt()` 把点击转发给 DOM，
+   *    这些控件这一批还不重画，转发是最小代价。
+   *
+   * "转发"只在**没有拖动**时发生：拖动是操作槽位的手势，松手时不该顺手点一下别的东西。
+   */
+  private bindInventory2dInput(): void {
+    if (this.inv2dInputBound) return;
+    const host = this.inv2d;
+    const canvas = host?.canvas;
+    if (!host || !canvas) return;
+    this.inv2dInputBound = true;
+    this.takeoverCanvas = canvas;
+    canvas.style.pointerEvents = 'auto';
+    let moved = false;
+
+    const local = (event: PointerEvent): { x: number; y: number } => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    const touch = (event: PointerEvent): boolean => event.pointerType === 'touch';
+
+    canvas.addEventListener('pointerdown', (event) => {
+      moved = false;
+      const p = local(event);
+      host.handlePointer(p.x, p.y, 'down', {
+        button: event.button === 2 ? 2 : 0,
+        timeStamp: event.timeStamp,
+        touch: touch(event),
+      });
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      const p = local(event);
+      if (event.buttons !== 0) moved = true;
+      host.handlePointer(p.x, p.y, 'move', { touch: touch(event) });
+    });
+    canvas.addEventListener('pointerup', (event) => {
+      const p = local(event);
+      host.handlePointer(p.x, p.y, 'up', { touch: touch(event) });
+      if (!moved && !host.contains(event.clientX, event.clientY)) {
+        forwardClickAt(canvas, event.clientX, event.clientY);
+      }
+    });
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+  }
+
   /** 配方书镜像的开关（`.recipe-panel` 可见就接管，收起就还原） */
   private syncRecipe2d(): void {
     const mirror = this.recipe2d;
@@ -6938,6 +7017,10 @@ class App {
         if (!this.inv2dOn) {
           this.inv2dOn = true;
           this.inv2d.open();
+          if (UI2D_INV_TAKEOVER) {
+            document.documentElement.classList.add('ui2dinv');
+            this.bindInventory2dInput();
+          }
         } else {
           this.inv2d.render();
         }
@@ -7045,6 +7128,10 @@ class App {
         if (!this.inv2dOn) {
           this.inv2dOn = true;
           this.inv2d.open();
+          if (UI2D_INV_TAKEOVER) {
+            document.documentElement.classList.add('ui2dinv');
+            this.bindInventory2dInput();
+          }
         } else {
           this.inv2d.render();
         }
@@ -7057,6 +7144,8 @@ class App {
     if (this.inv2dOn) {
       this.inv2dOn = false;
       this.inv2d?.close();
+      if (this.takeoverCanvas) this.takeoverCanvas.style.pointerEvents = 'none';
+      document.documentElement.classList.remove('ui2dinv');
     }
     if (this.invMirrorOn) {
       this.invMirrorOn = false;
