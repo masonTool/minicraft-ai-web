@@ -23,6 +23,8 @@
 
 import { applyDebugTint } from './debug.ts';
 import { Hotbar2D, type HotbarState } from './Hotbar2D.ts';
+import { Vitals2D, type VitalsState } from './Vitals2D.ts';
+import { Xp2D, type XpState } from './Xp2D.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import { drawText, uiFont } from './text.ts';
 import { drawHudPanel, drawProgressBar, type Rect } from './widgets.ts';
@@ -141,6 +143,9 @@ export class Hud2D {
    * 这条对覆盖层就不再成立 —— 稳态仍是每帧一次 `drawImage`（快照），见 `Hotbar2D`。
    */
   private readonly hotbar = new Hotbar2D();
+  /** 状态栏四行（生命/饥饿/护甲/氧气）与经验条 —— 阶段 2 */
+  private readonly vitals = new Vitals2D();
+  private readonly xp = new Xp2D();
   /** 上一帧画过东西没有：没画过就不用清屏（没接快捷栏时静止开销为 0） */
   private drewLastFrame = false;
   /**
@@ -167,6 +172,16 @@ export class Hud2D {
   /** 快捷栏状态（`null` = 不画；矩形由调用方按 DOM 实测给出） */
   setHotbar(state: HotbarState | null): void {
     this.hotbar.setState(state);
+  }
+
+  /** 状态栏四行（`null` = 不画：创造/旁观模式、或者整条藏在 DOM 后面） */
+  setVitals(state: VitalsState | null): void {
+    this.vitals.setState(state);
+  }
+
+  /** 经验条 + 等级（`null` = 不画） */
+  setXp(state: XpState | null): void {
+    this.xp.setState(state);
   }
 
   /** 调试遮罩开关（`?ui2dtint=1`）：打开后这一层产出的像素全被染黄 */
@@ -200,7 +215,9 @@ export class Hud2D {
     const showEat = this.eatRatio !== null;
     const showBoss = this.boss.visible;
     const showHotbar = this.hotbar.active;
-    if (!showDamage && !showBreak && !showEat && !showBoss && !showHotbar) {
+    const showVitals = this.vitals.active;
+    const showXp = this.xp.active;
+    if (!showDamage && !showBreak && !showEat && !showBoss && !showHotbar && !showVitals && !showXp) {
       this.drewLastFrame = false;
       return;
     }
@@ -219,6 +236,9 @@ export class Hud2D {
     if (showEat) {
       drawProgressBar(ctx, progressBarRect(overlay.width, overlay.height, PROGRESS_EAT_BOTTOM), this.eatRatio!, EAT_STYLE);
     }
+    // 状态栏与经验条：都在快捷栏正上方，互不重叠
+    if (showVitals) this.vitals.draw(ctx, overlay.dpr, nowSeconds());
+    if (showXp) this.xp.draw(ctx, overlay.dpr);
     // 快捷栏最后画：DOM 里它在 `#damage-flash` 之上，红闪不该给它上色
     if (showHotbar) this.hotbar.draw(ctx, overlay.dpr);
 
@@ -264,9 +284,16 @@ export class Hud2D {
     this.breakRatio = null;
     this.eatRatio = null;
     this.hotbar.dispose();
+    this.vitals.dispose();
+    this.xp.dispose();
     this.drewLastFrame = false;
     this.overlay.clear();
   }
+}
+
+/** 当前时间（秒）：低血量脉冲靠它算缩放；取不到就返回 0（= 不脉冲） */
+function nowSeconds(): number {
+  return typeof performance === 'undefined' ? 0 : performance.now() / 1000;
 }
 
 /** 供调试/断言：当前这一层是否"什么都没画"（静止时应当是 `true`） */

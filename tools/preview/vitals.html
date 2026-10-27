@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 状态栏与经验条（canvas）</title>
+    <!--
+      阶段 2 的预览：生命 / 饥饿 / 护甲 / 氧气四行 + 经验条与等级。
+
+      做法与游戏里**同一条路**：先用真的 `VitalsHud` / `XpHud` 建出 DOM（只为了测量），
+      把 DOM 设成 `visibility: hidden`（仍参与布局），再把量到的矩形喂给 `Hud2D`，
+      像素由 canvas 画。所以这一页能直接看出"搬完后长什么样"。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/vitals.html
+        open http://localhost:5173/tools/preview/vitals.html?tint=1     # 黄色遮罩
+        open 'http://localhost:5173/tools/preview/vitals.html?health=3&food=8&air=18&armor=5&level=12&xp=0.42'
+    -->
+    <style>
+      /* 与 index.html 的 #vitals / #xp-bar 那一组逐条对应（少了变量就换成字面值） */
+      :root {
+        --hotbar-slot: 42px;
+        --hotbar-gap: 3px;
+        --hotbar-pad: 4px;
+        --hotbar-w: calc(9 * var(--hotbar-slot) + 8 * var(--hotbar-gap) + 2 * var(--hotbar-pad) + 2px);
+      }
+      body { margin: 0; background: #111; }
+      #scene {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 12px; z-index: 5;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+
+      #vitals {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: 86px; width: var(--hotbar-w);
+        display: flex; align-items: flex-end; justify-content: space-between;
+        pointer-events: none;
+        /* 预览：DOM 只用来量几何，像素交给 canvas */
+        visibility: hidden;
+      }
+      #vitals .vital-defs { position: absolute; width: 0; height: 0; }
+      #vitals .vital-side { display: flex; flex-direction: column; gap: 2px; }
+      #vitals .vital-side.right { align-items: flex-end; }
+      .vital-row { display: flex; gap: 1px; }
+      .vital-row svg.vital-icon { width: 18px; height: 18px; display: block; }
+      #vital-air { visibility: hidden; }
+      #vital-air.on { visibility: visible; }
+      #vital-armor { visibility: hidden; }
+      #vital-armor.on { visibility: visible; }
+
+      #xp-bar {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: 68px; width: 182px; height: 6px;
+        background: #14150f; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .6);
+        border-radius: 3px; visibility: hidden;
+      }
+      #xp-bar #xp-fill {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(#c2ff7a, #63c335); border-radius: 3px;
+      }
+      #xp-level {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        padding: 0 5px; border-radius: 4px; font-size: 13px; font-weight: 700; line-height: 1.35;
+        color: #80ff20; background: rgba(0, 0, 0, .42);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene">
+      <div id="vitals"></div>
+      <div id="hud-xp"></div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { Hud2D, Ui2DOverlay, ARMOR_PER_ICON, vitalIconState, bubbleIconState } from '../../src/ui2d/index.ts';
+      import { VitalsHud } from '../../src/ui/VitalsHud.ts';
+      import { XpHud } from '../../src/ui/XpHud.ts';
+      /* 上限不自己写数字：空气在原始数据里是 300 点（10 颗气泡、每颗 30 点），
+         预览页写死 30 会让"氧气满不满""每颗气泡几点"全套算错（踩过一次）。 */
+      import { MAX_AIR, MAX_HEALTH } from '../../src/core/survival/PlayerStats.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const num = (name, fallback) => {
+        const value = Number(params.get(name));
+        return Number.isFinite(value) && params.has(name) ? value : fallback;
+      };
+      const health = num('health', 13);
+      const food = num('food', 17);
+      const air = num('air', 180);
+      const armorPoints = num('armor', 5);
+      const level = num('level', 12);
+      const ratio = num('xp', 0.42);
+      const tint = params.get('tint') === '1';
+
+      const scene = document.getElementById('scene');
+      const overlay = new Ui2DOverlay(scene);
+      const hud = new Hud2D(overlay);
+
+      // ---- 1. 用真的 DOM 组件量几何（与游戏里完全一致，含断点尺寸） ----------
+      const vitalsEl = document.getElementById('vitals');
+      const xpRoot = document.getElementById('hud-xp');
+      // `VitalsHud` 要 `PlayerStats` 形状，预览里给一个够用的鸭子（它只读这几个字段）
+      const vitalsHud = new VitalsHud(vitalsEl);
+      vitalsHud.update({ health, food, air, dead: false, armorPoints }, false);
+      const xpHud = new XpHud(xpRoot);
+      xpHud.update({ level, ratio }, false);
+
+      const host = overlay.canvas.getBoundingClientRect();
+      const rectOf = (r) => ({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+
+      const iconsOf = (rowId, states) => {
+        const row = document.getElementById(rowId);
+        const nodes = row ? row.querySelectorAll('svg.vital-icon') : [];
+        const out = [];
+        for (let i = 0; i < states.length && i < nodes.length; i++) {
+          out.push({ rect: rectOf(nodes[i].getBoundingClientRect()), state: states[i] });
+        }
+        return out;
+      };
+
+      const hearts = [];
+      const foods = [];
+      const armors = [];
+      const bubbles = [];
+      for (let i = 0; i < MAX_HEALTH / 2; i++) {
+        hearts.push(vitalIconState(health - i * 2));
+        foods.push(vitalIconState(food - i * 2));
+        armors.push(vitalIconState(armorPoints - i * ARMOR_PER_ICON));
+      }
+      const perBubble = MAX_AIR / 10;
+      for (let i = 0; i < 10; i++) bubbles.push(bubbleIconState(air - i * perBubble, perBubble));
+
+      hud.setVitals({
+        hearts: iconsOf('vital-health', hearts),
+        foods: iconsOf('vital-food', foods),
+        armors: armorPoints > 0 ? iconsOf('vital-armor', armors) : [],
+        bubbles: air < MAX_AIR ? iconsOf('vital-air', bubbles) : [],
+        // 低血量脉冲：预览里默认关掉（截图要稳定），`?pulse=1` 才开
+        pulse: params.get('pulse') === '1',
+      });
+
+      const barEl = xpRoot.querySelector('#xp-bar');
+      hud.setXp(barEl && barEl.getBoundingClientRect().width > 0 ? { rect: rectOf(barEl.getBoundingClientRect()), ratio, level } : null);
+
+      if (tint) hud.setDebugTint(true);
+      document.getElementById('caption').textContent =
+        `生命 ${health}/${MAX_HEALTH} · 饥饿 ${food}/${MAX_HEALTH} · 护甲 ${armorPoints} · 氧气 ${air}/${MAX_AIR} · 等级 ${level} · 经验 ${Math.round(ratio * 100)}%` +
+        (tint ? ' · 黄色 = canvas 画的' : '');
+      hud.render();
+    </script>
+  </body>
+</html>

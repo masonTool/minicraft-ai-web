@@ -44,7 +44,16 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
-import { Hud2D, Ui2DOverlay, type HotbarSlotState, type Rect as Ui2DRect } from './ui2d/index.ts';
+import {
+  Hud2D,
+  Ui2DOverlay,
+  ARMOR_PER_ICON,
+  bubbleIconState,
+  vitalIconState,
+  type HotbarSlotState,
+  type Rect as Ui2DRect,
+  type VitalIcon,
+} from './ui2d/index.ts';
 import { attackCooldownFor } from './core/combat/AttackSpeed.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
@@ -1210,6 +1219,15 @@ class App {
    * `getComputedStyle`）。正常路径（`refreshHotbar` 置脏）仍然是一帧内生效。
    */
   private hotbar2dRetry = 0;
+  /**
+   * 状态栏 + 经验条的"该重量一次 DOM 了"判据。
+   *
+   * 这两块每帧都被 `update()` 喂一次（DOM 版内部按 key 早退），所以这边也只做
+   * **拼一个字符串 + 比较**：变了才去量 40 个图标的 `getBoundingClientRect()`。
+   * `epoch` 让"转屏/断点变了"也能触发重量（那时数值没变、矩形变了）。
+   */
+  private vitals2dKey = '';
+  private vitals2dEpoch = 0;
   /**
    * 图标位图版本号：`refreshHotbar()` 每跑一次 +1。
    *
@@ -2876,6 +2894,8 @@ class App {
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
+    // canvas 版接管状态栏与经验条的外观（`?ui2d=1`；纯展示，DOM 直接 visibility: hidden）
+    this.applyVitalsDomFallback();
     // 攻击冷却条（G8，批次 506）：准星正下方
     this.attackCooldownHud = new AttackCooldownHud(document.getElementById('hud') ?? container);
     // 指南针/时钟读数（批次 195）：与生命/经验挂在同一个 `#hud` 里
@@ -6236,6 +6256,97 @@ class App {
   }
 
   /**
+   * 状态栏与经验条交给 canvas（`?ui2d=1`）。
+   *
+   * 这两块是**纯展示**（没有任何命中测试），所以 DOM 可以直接 `visibility: hidden` ——
+   * 与快捷栏不同（那里必须留命中，只能用 `opacity: 0`）。`visibility` 仍然保留布局，
+   * 于是 canvas 的几何照样从 DOM 量（图标尺寸随断点变：18 / 14 / 22px）。
+   */
+  private applyVitalsDomFallback(): void {
+    if (!UI2D_ENABLED) return;
+    const vitals = document.getElementById('vitals');
+    if (vitals) vitals.style.visibility = 'hidden';
+    const xp = document.getElementById('xp-bar');
+    if (xp) xp.style.visibility = 'hidden';
+  }
+
+  /**
+   * 按需重量并喂给 canvas（每帧调用，但只有数值/断点变化时才真的量 DOM）。
+   */
+  private syncVitals2D(noVitals: boolean): void {
+    const hud = this.hud2d;
+    if (!hud) return;
+    const percent = Math.round(Math.min(1, Math.max(0, this.experience.ratio)) * 100);
+    const key = `${this.stats.health}|${this.stats.food}|${this.stats.air}|${this.stats.armorPoints}|${
+      this.experience.level
+    }|${percent}|${noVitals ? 1 : 0}|${this.vitals2dEpoch}`;
+    if (key === this.vitals2dKey) return;
+    this.vitals2dKey = key;
+
+    // 创造 / 旁观：整条状态栏与原版一样不显示
+    if (noVitals) {
+      hud.setVitals(null);
+      hud.setXp(null);
+      return;
+    }
+
+    const host = this.ui2dOverlay?.canvas.getBoundingClientRect() ?? null;
+    if (!host) return;
+
+    const iconsOf = (rowId: string, states: readonly ReturnType<typeof vitalIconState>[]): VitalIcon[] => {
+      const row = document.getElementById(rowId);
+      const nodes = row ? row.querySelectorAll('svg.vital-icon') : null;
+      if (!nodes || nodes.length === 0) return [];
+      const out: VitalIcon[] = [];
+      for (let i = 0; i < states.length && i < nodes.length; i++) {
+        const rect = ui2dRectOf(nodes[i]!.getBoundingClientRect(), host);
+        // 整行被藏起来（`visibility: hidden` 不会让 rect 变 0）时仍然照画；
+        // 但 `display: none`（创造模式）会让 rect 为 0 —— 那时整行都不该有图标
+        if (rect.w <= 0) return [];
+        out.push({ rect, state: states[i]! });
+      }
+      return out;
+    };
+
+    const hearts: ReturnType<typeof vitalIconState>[] = [];
+    for (let i = 0; i < MAX_HEALTH / 2; i++) hearts.push(vitalIconState(this.stats.health - i * 2));
+    const foods: ReturnType<typeof vitalIconState>[] = [];
+    for (let i = 0; i < MAX_HEALTH / 2; i++) foods.push(vitalIconState(this.stats.food - i * 2));
+
+    // 护甲只在身上有甲时出现；一点护甲 = 半颗图标
+    const armors: ReturnType<typeof vitalIconState>[] = [];
+    const showArmor = this.stats.armorPoints > 0;
+    if (showArmor) {
+      for (let i = 0; i < MAX_HEALTH / 2; i++) armors.push(vitalIconState(this.stats.armorPoints - i * ARMOR_PER_ICON));
+    }
+
+    // 氧气只在没吸满时出现
+    const bubbles: ReturnType<typeof vitalIconState>[] = [];
+    const showAir = this.stats.air < MAX_AIR;
+    if (showAir) {
+      const perBubble = MAX_AIR / 10;
+      for (let i = 0; i < 10; i++) bubbles.push(bubbleIconState(this.stats.air - i * perBubble, perBubble));
+    }
+
+    hud.setVitals({
+      hearts: iconsOf('vital-health', hearts),
+      foods: iconsOf('vital-food', foods),
+      armors: showArmor ? iconsOf('vital-armor', armors) : [],
+      bubbles: showAir ? iconsOf('vital-air', bubbles) : [],
+      // 低血量脉冲：与 DOM 版同一条判据（`#vitals.low-health`）
+      pulse: !this.stats.dead && this.stats.health > 0 && this.stats.health <= 4,
+    });
+
+    const barEl = document.getElementById('xp-bar');
+    const bar = barEl ? ui2dRectOf(barEl.getBoundingClientRect(), host) : null;
+    hud.setXp(
+      bar && bar.w > 0
+        ? { rect: bar, ratio: this.experience.ratio, level: this.experience.level }
+        : null,
+    );
+  }
+
+  /**
    * 量 DOM、喂状态（一帧最多一次）。
    *
    * 几何全部来自 `getBoundingClientRect()`：断点、安全区、转屏后的尺寸都跟着 CSS 走，
@@ -6740,6 +6851,8 @@ class App {
         this.applyResolutionScale();
         // 快捷栏在手机断点由 32px 变 36px，重新按实际 CSS 尺寸分配清晰背板。
         this.refreshHotbar();
+        // 状态栏的图标也随断点变（18 / 14 / 22px）：数值没变、矩形变了，靠 epoch 触发重量
+        this.vitals2dEpoch += 1;
         if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
       },
       { signal: this.listeners.signal },
@@ -17502,6 +17615,8 @@ class App {
     const noVitals = this.isCreative || this.isSpectator;
     this.vitalsHud.update(this.stats, noVitals);
     this.xpHud.update(this.experience, noVitals);
+    // canvas 版状态栏 + 经验条：内部按 key 比较，数值没变就不量 DOM
+    this.syncVitals2D(noVitals);
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM

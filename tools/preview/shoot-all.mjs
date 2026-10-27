@@ -87,6 +87,20 @@ const SHOTS = [
     what: '阶段 0 三样同时在屏上的样子（红闪 + Boss 条 + 两条进度）',
     status: '已迁 · 阶段 0',
   },
+  {
+    file: '09-vitals.png',
+    page: 'tools/preview/vitals.html',
+    size: [864, 410],
+    what: '状态栏四行（生命 13 / 饥饿 17 / 护甲 5 / 氧气 180）+ 经验条与等级 12',
+    status: '已迁 · 阶段 2',
+  },
+  {
+    file: '09b-vitals-low.png',
+    page: 'tools/preview/vitals.html?health=3&food=8&armor=0&air=300&level=7&xp=0.9',
+    size: [864, 410],
+    what: '同一块的另一种状态：残血 3 点、没穿甲（护甲行不显示）、氧气满（气泡行不显示）',
+    status: '已迁 · 阶段 2',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
@@ -108,6 +122,13 @@ const SHOTS = [
     size: [864, 410],
     what: 'Boss 条 + 黄色遮罩（只有那条血条被染）',
     status: '遮罩 · 阶段 0',
+  },
+  {
+    file: '09c-vitals-tinted.png',
+    page: 'tools/preview/vitals.html?tint=1',
+    size: [864, 410],
+    what: '状态栏 + 经验条 + 黄色遮罩（底部整块黄 = 全是 canvas 画的）',
+    status: '遮罩 · 阶段 2',
   },
   {
     file: '08-all-tinted.png',

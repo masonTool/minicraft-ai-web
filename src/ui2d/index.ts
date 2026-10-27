@@ -39,6 +39,45 @@ export {
 } from './Hud2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
+  ARMOR_PER_ICON,
+  ARMOR_PATH,
+  BUBBLE,
+  FOOD_PATH,
+  HEART_PATH,
+  VITAL_COLORS,
+  VITAL_VIEW_BOX,
+  bubbleIconState,
+  vitalIconState,
+  type VitalState,
+} from './vitalsArt.ts';
+export {
+  Vitals2D,
+  VITALS_PULSE_PERIOD,
+  VITALS_PULSE_SCALE,
+  VITALS_SNAPSHOT_PAD,
+  drawVitals,
+  vitalIconRect,
+  vitalsBounds,
+  vitalsPulseScale,
+  vitalsSignature,
+  type VitalIcon,
+  type VitalsState,
+} from './Vitals2D.ts';
+export {
+  Xp2D,
+  XP_LEVEL_FONT_SIZE,
+  XP_LEVEL_HEIGHT,
+  XP_LEVEL_PADDING_X,
+  XP_LEVEL_RADIUS,
+  XP_PALETTE,
+  drawXp,
+  xpFillRect,
+  xpLevelBadgeRect,
+  xpRatioPercent,
+  xpSignature,
+  type XpState,
+} from './Xp2D.ts';
+export {
   Hotbar2D,
   HOTBAR_ACTIVE_LIFT,
   HOTBAR_ACTIVE_SCALE,

@@ -8,27 +8,22 @@
  */
 
 import { MAX_AIR, MAX_HEALTH, type PlayerStats } from '../core/survival/PlayerStats.ts';
+/*
+ * 图标形状、色值、三态判据都从 `ui2d/vitalsArt.ts` 来 —— canvas 版
+ * （`ui2d/Vitals2D.ts`）与这里画的是同一组图标，抄两份必然漂（见该文件头）。
+ */
+import {
+  ARMOR_PATH,
+  ARMOR_PER_ICON,
+  BUBBLE,
+  FOOD_PATH,
+  HEART_PATH,
+  VITAL_COLORS,
+  bubbleIconState,
+  vitalIconState,
+} from '../ui2d/vitalsArt.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-/** 9×9 坐标下的心形 */
-const HEART_PATH =
-  'M4.5 8 C4.5 8 1 5.4 1 3.4 C1 2 2.1 1 3.4 1 C4 1 4.5 1.3 4.5 1.6 C4.5 1.3 5 1 5.6 1 C6.9 1 8 2 8 3.4 C8 5.4 4.5 8 4.5 8 Z';
-/** 鸡腿（饥饿） */
-const FOOD_PATH =
-  'M6.4 1.1 A2.9 2.9 0 1 0 3.2 5.6 L1.5 7.3 a1.2 1.2 0 1 0 1.7 1.7 L4.9 7.3 A2.9 2.9 0 0 0 6.4 1.1 Z';
-/** 护甲片（胸甲：顶部中间留出领口） */
-const ARMOR_PATH = 'M1 1.5 H3.5 V3 H5.5 V1.5 H8 V7.5 H1 Z';
-
-const EMPTY_COLOR = '#3a1414';
-const HEALTH_COLOR = '#e03b3b';
-const FOOD_EMPTY_COLOR = '#33281a';
-const FOOD_COLOR = '#b1742f';
-const AIR_COLOR = '#9fd8ff';
-const ARMOR_EMPTY_COLOR = '#2c3138';
-const ARMOR_COLOR = '#dfe2ea';
-
-/** 一颗护甲图标代表 2 点护甲值（满护甲 20 点 = 10 颗，与 10 颗心同宽） */
-const ARMOR_PER_ICON = 2;
 
 /** 半颗心 / 半只鸡腿的裁剪（只显示左半边） */
 const HALF_CLIP_ID = 'vitals-half-clip';
@@ -60,10 +55,6 @@ function applyState(icon: IconState, state: 'full' | 'half' | 'empty'): void {
   icon.foreground.style.display = '';
   if (state === 'half') icon.foreground.setAttribute('clip-path', `url(#${HALF_CLIP_ID})`);
   else icon.foreground.removeAttribute('clip-path');
-}
-
-function stateOf(value: number): 'full' | 'half' | 'empty' {
-  return value >= 2 ? 'full' : value >= 1 ? 'half' : 'empty';
 }
 
 export class VitalsHud {
@@ -104,22 +95,22 @@ export class VitalsHud {
     const iconCount = MAX_HEALTH / 2;
     for (let i = 0; i < iconCount; i++) {
       const svg = createSvg();
-      svg.append(createPath(HEART_PATH, EMPTY_COLOR));
-      const fg = createPath(HEART_PATH, HEALTH_COLOR);
+      svg.append(createPath(HEART_PATH, VITAL_COLORS.heartEmpty));
+      const fg = createPath(HEART_PATH, VITAL_COLORS.heart);
       svg.append(fg);
       healthRow.append(svg);
       this.hearts.push({ foreground: fg });
 
       const foodSvg = createSvg();
-      foodSvg.append(createPath(FOOD_PATH, FOOD_EMPTY_COLOR));
-      const foodFg = createPath(FOOD_PATH, FOOD_COLOR);
+      foodSvg.append(createPath(FOOD_PATH, VITAL_COLORS.foodEmpty));
+      const foodFg = createPath(FOOD_PATH, VITAL_COLORS.food);
       foodSvg.append(foodFg);
       foodRow.append(foodSvg);
       this.foods.push({ foreground: foodFg });
 
       const armorSvg = createSvg();
-      armorSvg.append(createPath(ARMOR_PATH, ARMOR_EMPTY_COLOR));
-      const armorFg = createPath(ARMOR_PATH, ARMOR_COLOR);
+      armorSvg.append(createPath(ARMOR_PATH, VITAL_COLORS.armorEmpty));
+      const armorFg = createPath(ARMOR_PATH, VITAL_COLORS.armor);
       armorSvg.append(armorFg);
       this.armorRow.append(armorSvg);
       this.armors.push({ foreground: armorFg });
@@ -128,17 +119,17 @@ export class VitalsHud {
     for (let i = 0; i < 10; i++) {
       const svg = createSvg();
       const bg = document.createElementNS(SVG_NS, 'circle');
-      bg.setAttribute('cx', '4.5');
-      bg.setAttribute('cy', '4.5');
-      bg.setAttribute('r', '3.6');
+      bg.setAttribute('cx', String(BUBBLE.cx));
+      bg.setAttribute('cy', String(BUBBLE.cy));
+      bg.setAttribute('r', String(BUBBLE.r));
       bg.setAttribute('fill', 'none');
-      bg.setAttribute('stroke', EMPTY_COLOR);
-      bg.setAttribute('stroke-width', '1.2');
+      bg.setAttribute('stroke', VITAL_COLORS.heartEmpty);
+      bg.setAttribute('stroke-width', String(BUBBLE.strokeWidth));
       const fg = document.createElementNS(SVG_NS, 'circle');
-      fg.setAttribute('cx', '4.5');
-      fg.setAttribute('cy', '4.5');
-      fg.setAttribute('r', '3.6');
-      fg.setAttribute('fill', AIR_COLOR);
+      fg.setAttribute('cx', String(BUBBLE.cx));
+      fg.setAttribute('cy', String(BUBBLE.cy));
+      fg.setAttribute('r', String(BUBBLE.r));
+      fg.setAttribute('fill', VITAL_COLORS.air);
       svg.append(bg, fg);
       this.airRow.append(svg);
       this.bubbles.push({ foreground: fg });
@@ -177,17 +168,17 @@ export class VitalsHud {
     this.container.classList.toggle('creative-mode', creative);
 
     for (let i = 0; i < this.hearts.length; i++) {
-      applyState(this.hearts[i]!, stateOf(stats.health - i * 2));
+      applyState(this.hearts[i]!, vitalIconState(stats.health - i * 2));
     }
     for (let i = 0; i < this.foods.length; i++) {
-      applyState(this.foods[i]!, stateOf(stats.food - i * 2));
+      applyState(this.foods[i]!, vitalIconState(stats.food - i * 2));
     }
 
     // 护甲条只在穿着盔甲时出现；一点护甲值 = 半颗图标（与原版的半片甲一致）
     this.armorRow.classList.toggle('on', armorPoints > 0);
     if (armorPoints > 0) {
       for (let i = 0; i < this.armors.length; i++) {
-        applyState(this.armors[i]!, stateOf(armorPoints - i * ARMOR_PER_ICON));
+        applyState(this.armors[i]!, vitalIconState(armorPoints - i * ARMOR_PER_ICON));
       }
     }
 
@@ -202,9 +193,7 @@ export class VitalsHud {
     if (showAir) {
       const perBubble = MAX_AIR / this.bubbles.length;
       for (let i = 0; i < this.bubbles.length; i++) {
-        const value = stats.air - i * perBubble;
-        const state = value >= perBubble ? 'full' : value > 0 ? 'half' : 'empty';
-        applyState(this.bubbles[i]!, state);
+        applyState(this.bubbles[i]!, bubbleIconState(stats.air - i * perBubble, perBubble));
       }
     }
   }

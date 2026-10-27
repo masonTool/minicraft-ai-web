@@ -23,6 +23,22 @@ import {
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
+import { bubbleIconState, vitalIconState } from '../src/ui2d/vitalsArt.ts';
+import {
+  VITALS_PULSE_SCALE,
+  vitalIconRect,
+  vitalsBounds,
+  vitalsPulseScale,
+  vitalsSignature,
+} from '../src/ui2d/Vitals2D.ts';
+import {
+  XP_LEVEL_HEIGHT,
+  XP_LEVEL_PADDING_X,
+  xpFillRect,
+  xpLevelBadgeRect,
+  xpRatioPercent,
+  xpSignature,
+} from '../src/ui2d/Xp2D.ts';
 import {
   BOSS_BAR_HEIGHT,
   BOSS_BAR_MAX_WIDTH,
@@ -338,5 +354,107 @@ describe('调试遮罩', () => {
     applyDebugTint(fake.ctx, 0, 300);
     applyDebugTint(fake.ctx, 300, Number.NaN);
     expect(fake.log).toEqual([]);
+  });
+});
+
+/**
+ * 状态栏四行（阶段 2）。
+ *
+ * 钉三件事：三态判据（半颗心什么时候算半颗）、脉冲曲线（两端斜率为 0 才有"呼吸"感）、
+ * 包围盒（快照大小定错 = 边缘被裁掉半个心）。
+ */
+describe('状态栏几何与三态', () => {
+  const icon = (x: number, state: 'full' | 'half' | 'empty' = 'full') => ({
+    rect: { x, y: 300, w: 18, h: 18 },
+    state,
+  });
+
+  it('心/鸡腿/护甲的三态：2 点整颗、1 点半颗、0 点空', () => {
+    expect(vitalIconState(2)).toBe('full');
+    expect(vitalIconState(3)).toBe('full');
+    expect(vitalIconState(1.5)).toBe('half');
+    expect(vitalIconState(1)).toBe('half');
+    expect(vitalIconState(0.5)).toBe('empty');
+    expect(vitalIconState(0)).toBe('empty');
+  });
+
+  it('气泡按"每颗多少点氧气"分三态（不是固定 2 点）', () => {
+    expect(bubbleIconState(3, 3)).toBe('full');
+    expect(bubbleIconState(1.2, 3)).toBe('half');
+    expect(bubbleIconState(0, 3)).toBe('empty');
+    // 每颗 0 点 = 算不出来，按空处理（不能除零）
+    expect(bubbleIconState(5, 0)).toBe('empty');
+  });
+
+  it('一行的图标按 (图标 + 间距) 等距排开', () => {
+    const row = { x: 100, y: 300, w: 0, h: 18 };
+    expect(vitalIconRect(row, 0, 18, 1)).toEqual({ x: 100, y: 300, w: 18, h: 18 });
+    expect(vitalIconRect(row, 3, 18, 1)).toEqual({ x: 157, y: 300, w: 18, h: 18 });
+  });
+
+  it('包围盒覆盖四行（空的行走忽略）', () => {
+    const bounds = vitalsBounds({
+      hearts: [icon(100), icon(120)],
+      foods: [icon(300)],
+      armors: [],
+      bubbles: [],
+      pulse: false,
+    });
+    // 最左是 100，最右是鸡腿的右边缘 300+18=318
+    expect(bounds).toEqual({ x: 100, y: 300, w: 218, h: 18 });
+    expect(vitalsBounds({ hearts: [], foods: [], armors: [], bubbles: [], pulse: false })).toBeNull();
+  });
+
+  it('脉冲 1 → 1.06 → 1，一个周期 1 秒，两端斜率为 0', () => {
+    expect(vitalsPulseScale(0)).toBeCloseTo(1, 6);
+    expect(vitalsPulseScale(0.5)).toBeCloseTo(VITALS_PULSE_SCALE, 6);
+    expect(vitalsPulseScale(1)).toBeCloseTo(1, 6);
+    // 中点两侧对称（ease-in-out 的观感）
+    expect(vitalsPulseScale(0.25)).toBeCloseTo(vitalsPulseScale(0.75), 6);
+    expect(vitalsPulseScale(Number.NaN)).toBe(1);
+  });
+
+  it('签名只认"会长出不同像素"的东西', () => {
+    const base = { hearts: [icon(100)], foods: [icon(300)], armors: [], bubbles: [], pulse: false };
+    expect(vitalsSignature(base)).toBe(vitalsSignature({ ...base }));
+    // 脉冲不进签名：它是 blit 时的变换，不该触发重建
+    expect(vitalsSignature({ ...base, pulse: true })).toBe(vitalsSignature(base));
+    // 状态/位置变了才重建
+    expect(vitalsSignature({ ...base, hearts: [icon(100, 'half')] })).not.toBe(vitalsSignature(base));
+    expect(vitalsSignature({ ...base, hearts: [icon(101)] })).not.toBe(vitalsSignature(base));
+  });
+});
+
+/** 经验条（阶段 2）：百分比取整、填充宽度、等级牌居中 */
+describe('经验条几何', () => {
+  const bar = { x: 300, y: 200, w: 182, h: 6 };
+
+  it('进度取整到 1%（与 DOM 版的 Math.round(...)% 同一口径）', () => {
+    expect(xpRatioPercent(0.423)).toBe(42);
+    expect(xpRatioPercent(1.4)).toBe(100);
+    expect(xpRatioPercent(-1)).toBe(0);
+    expect(xpRatioPercent(Number.NaN)).toBe(0);
+  });
+
+  it('填充宽度 = 轨道宽 × 百分比', () => {
+    expect(xpFillRect(bar, 0.5).w).toBeCloseTo(91, 6);
+    expect(xpFillRect(bar, 0).w).toBe(0);
+    expect(xpFillRect(bar, 2).w).toBe(bar.w);
+  });
+
+  it('等级牌压在条的正中间，宽度随文字量', () => {
+    const badge = xpLevelBadgeRect(bar, 14);
+    expect(badge.w).toBe(14 + XP_LEVEL_PADDING_X * 2);
+    expect(badge.h).toBe(XP_LEVEL_HEIGHT);
+    expect(badge.x + badge.w / 2).toBeCloseTo(bar.x + bar.w / 2, 6);
+    expect(badge.y + badge.h / 2).toBeCloseTo(bar.y + bar.h / 2, 6);
+  });
+
+  it('签名：1% 以内不重建，等级/矩形变了要重建', () => {
+    const base = { rect: bar, ratio: 0.421, level: 7 };
+    expect(xpSignature(base)).toBe(xpSignature({ ...base, ratio: 0.424 }));
+    expect(xpSignature(base)).not.toBe(xpSignature({ ...base, ratio: 0.5 }));
+    expect(xpSignature(base)).not.toBe(xpSignature({ ...base, level: 8 }));
+    expect(xpSignature(base)).not.toBe(xpSignature({ ...base, rect: { ...bar, x: 301 } }));
   });
 });
