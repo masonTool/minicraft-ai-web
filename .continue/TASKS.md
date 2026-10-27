@@ -5984,6 +5984,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1218 · **提示条三样迁 canvas（4 条）**：新增 `src/ui2d/overlays.ts` —— 目标名（`#target-info`）、攻击蓄力条（`#attack-cooldown`，44×3 贴准星下 16px，进度量化到 2% 与 DOM 同口径）、物品名浮标（`#selected-item-name`，胶囊 + `itemNameAlpha` 三段淡入淡出），由 `Hud2D.setTips()` 画在所有内容之上；`main.ts` 里三样 DOM 用 `visibility: hidden` 让位**但保留布局**（目标名宽度随文本变、触摸瞄准时 JS 还会挪它的位置），矩形只在"文本 / 锚点 / 视口"变化时量，蓄力条几何直接由 `attackChargeRect` 算，`showSelectedItemName()` 记 `itemNameShownAt` 供淡化用；预览页 `tools/preview/tips.html` + 3 张截图。验证：`test:ui2d` **51/51**（新增 5 条）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、22 张截图逐张看过。两条经验：**缓存与否按量级决定**（这三样每帧两次 `fillText`，维护签名反而更贵）；**淡出按时间算**而不是读 `getComputedStyle`，代价是低帧率跳格、好处是暂停时不淡。坑记 `notes/canvas-ui.md` §5.6。
 
+- [x] 批次 20261027-1226 · **表盘收场 + canvas 面板输入通道（4 条）**：新增 `src/ui2d/ToolDial2D.ts`（指南针/时钟的 52×52 圆盘、铜色/铁蓝边框、N/E/S/W 方位字母、上红下白的三角指针、10px 读数；指针用 `dialNeedlePoints` **按角度算三角顶点**，不用 `ctx.rotate` —— 否则"现在指向哪"藏在变换栈里、顺逆时针搞反也没有断言抓得到），阶段 2 到此完整；新增 `src/ui2d/menu.ts` 的 `CanvasMenu` **面板输入通道**（焦点行循环 / `Home`·`End` / `Enter`·空格激活 / `Esc` 关闭 / 指针命中 / `regions()` 供 `hitRegionAt`），它只把按键与点击翻译成"意图"（`activate id` / `close` / `move`），**不含任何游戏动作**、也不管"菜单打开时游戏该不该暂停"（都留在主循环）；预览页 `tools/preview/menu.html`（键盘 + 鼠标都能操作）与 `dial.html`，`shoot-all` 补 4 张。验证：`test:ui2d` **57/57**（+6 表盘：0/90/180/270 尖端、底边对称、非法角度、刻度在盘内、边框色）、新增 `test:ui2d-menu` **14/14**（布局随行数、焦点循环、未打开不理输入、Enter 返回行 id、Esc 关闭、点行/点外、regions 的 id 与层号）、`tsc` 干净、`npm run check` exit=0、26 张截图逐张看过。⚠️ 游戏里的暂停流程**还没接线**（Esc 仍走 `SettingsScreen`），单独一批做。坑记 `notes/canvas-ui.md` §5.7/§5.8。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
