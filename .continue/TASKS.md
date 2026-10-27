@@ -5982,6 +5982,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1209 · **canvas 控件库（4 条）**：新增 `src/ui2d/controls.ts` —— 七个控件的**画法 + 纯状态机**（开关 `drawToggle`/`toggleNext`、滑块 `drawSlider`/`sliderRatioFromX`·`sliderRatioStep`、下拉 `drawDropdownField`·`drawDropdownMenu`/`dropdownMenuRect`·`dropdownIndexAt`、页签 `drawTabs`/`tabRects`·`tabIndexAt`、滚动列表 `drawListRow`·`drawScrollbar`/`listMaxScroll`·`clampListScroll`·`listScrollByWheel`·`listVisibleRange`、提示框 `drawTooltip`/`tooltipRect`、弹窗 `drawModalFrame`/`modalRect`），**状态留给调用方**（canvas 没有"元素自己记得自己开着没有"）；`tests/ui2d-controls.test.ts` **21 条**离线断言钉"命中 → 状态 → 回调"的边界（滑块 0/0.5/1 与越界、下拉下方放不下翻上、页签左闭右开、列表滚动夹取与"恰好半行向上取整"、提示框贴边夹进视口、弹窗小屏收缩）；`tools/preview/controls.html` 900×560 可交互画廊（命中走 `hitRegionAt`，`?state=dropdown|tooltip|modal` 固定浮层、`?tint=1` 遮罩），`shoot-all` 补 5 张。验证：`test:unit` 绿、`tsc` 干净、`npm run check` exit=0、19 张截图逐张看过。两条经验：下拉翻转与提示框避让**必须自己算**；弹窗要用**不透明**面板，复用半透明 HUD 底板会让底下的字透上来。坑记 `notes/canvas-ui.md` §5.5。
 
+- [x] 批次 20261027-1218 · **提示条三样迁 canvas（4 条）**：新增 `src/ui2d/overlays.ts` —— 目标名（`#target-info`）、攻击蓄力条（`#attack-cooldown`，44×3 贴准星下 16px，进度量化到 2% 与 DOM 同口径）、物品名浮标（`#selected-item-name`，胶囊 + `itemNameAlpha` 三段淡入淡出），由 `Hud2D.setTips()` 画在所有内容之上；`main.ts` 里三样 DOM 用 `visibility: hidden` 让位**但保留布局**（目标名宽度随文本变、触摸瞄准时 JS 还会挪它的位置），矩形只在"文本 / 锚点 / 视口"变化时量，蓄力条几何直接由 `attackChargeRect` 算，`showSelectedItemName()` 记 `itemNameShownAt` 供淡化用；预览页 `tools/preview/tips.html` + 3 张截图。验证：`test:ui2d` **51/51**（新增 5 条）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、22 张截图逐张看过。两条经验：**缓存与否按量级决定**（这三样每帧两次 `fillText`，维护签名反而更贵）；**淡出按时间算**而不是读 `getComputedStyle`，代价是低帧率跳格、好处是暂停时不淡。坑记 `notes/canvas-ui.md` §5.6。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
