@@ -134,7 +134,6 @@ export class WorldScreen {
   readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly listEl: HTMLDivElement;
-  private readonly worldCountEl: HTMLSpanElement;
   private readonly nameInput: HTMLInputElement;
   private readonly seedInput: HTMLInputElement;
   /** 批次 528：三张原生 select 换成与设置页同一套下拉 */
@@ -246,6 +245,18 @@ export class WorldScreen {
 
     home.append(title, subtitle, menu, footer);
 
+    /*
+     * 点页面其它任何地方收起卡片菜单（用户 2026-10-27）。
+     * 用 `pointerdown` 而不是 `click`：手机上 click 有 300ms 延迟，菜单会"晚一拍"才收。
+     */
+    document.addEventListener('pointerdown', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.closest('.world-card-extra') !== null || target.closest('.world-more') !== null)) {
+        return;
+      }
+      this.closeCardMenus();
+    });
+
     // ---------------------------------------------------------------- ② 世界列表
     //
     // 用户要的"新建游戏 / 使用存档"都在这一页：新建在最上（主入口），
@@ -262,14 +273,10 @@ export class WorldScreen {
     newEntry.textContent = t('menu.newWorld');
     newEntry.addEventListener('click', () => this.setView('create'));
 
-    const listLabel = document.createElement('div');
-    listLabel.className = 'world-group-label';
-    listLabel.append(t('world.list'));
-    this.worldCountEl = document.createElement('span');
-    this.worldCountEl.className = 'world-count';
-    listLabel.appendChild(this.worldCountEl);
-
-    // 导入（批次 591，L2）：入口放在世界列表标题旁，不占卡片按钮位
+    /*
+     * 顶部一颗「导入存档」——原来是「世界 12」标题旁边的一颗小按钮（用户 2026-10-27：
+     * 那一行的标题和数字不用显示）。现在并进下面那一排的**最右**，比其他两颗小一号。
+     */
     const importButton = document.createElement('button');
     importButton.type = 'button';
     importButton.className = 'world-mini world-import';
@@ -277,13 +284,17 @@ export class WorldScreen {
     importButton.addEventListener('click', () => {
       void this.actions.onImport?.();
     });
-    listLabel.appendChild(importButton);
 
     /*
      * 顶部并排两颗（L9，方案 A）：**＋ 新建世界** 与 **加入房间…**。
      *
      * 加入放在这里而不是首页菜单：它和"新建/选世界"是同一层的事（都是"开始一局"），
      * 首页只留游戏/设置/小游戏三个入口，不再堆第二颗联机键。
+     */
+    /*
+     * 顶部这一排（用户 2026-10-27）：**新建世界 / 加入房间 两颗大的并排，导入存档放最后小一号**。
+     * 以前「新建世界 / 加入房间」在上面一行、`世界 12` 标题和导入按钮在下面一行——两行都是
+     * 入口，玩家要在两处找，而且标题那行还占着高度。
      */
     const topRow = document.createElement('div');
     topRow.className = 'world-list-top';
@@ -298,10 +309,10 @@ export class WorldScreen {
       topRow.append(join);
     }
 
+    topRow.append(importButton);
     worlds.append(
       this.makeNav(t('world.list'), () => this.setView('home')),
       topRow,
-      listLabel,
       this.listEl,
     );
 
@@ -532,7 +543,6 @@ export class WorldScreen {
   render(): void {
     this.listEl.textContent = '';
     const worlds = this.registry.list();
-    this.worldCountEl.textContent = String(worlds.length);
 
     if (worlds.length === 0) {
       const empty = document.createElement('div');
@@ -648,15 +658,37 @@ export class WorldScreen {
 
     const extra = document.createElement('div');
     extra.className = 'world-card-extra hidden';
-    extra.append(edit, exportButton, remove);
-    more.addEventListener('click', () => {
-      const open = extra.classList.toggle('hidden') === false;
-      more.setAttribute('aria-expanded', String(open));
+    extra.append(exportButton, edit, remove);
+    /*
+     * 「⋯」= **下拉菜单**（用户 2026-10-27）：点开在按钮下方浮出一列
+     * 导出 / 编辑 / 删除，点页面其它任何地方收起。
+     *
+     * 以前是"在卡片底部展开一行"——卡片高度会跳，而且横屏下这一行会把
+     * 下面那张卡挤走；下拉浮在卡片之上，不参与一局布局。
+     */
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = extra.classList.contains('hidden');
+      this.closeCardMenus();
+      extra.classList.toggle('hidden', !willOpen);
+      more.setAttribute('aria-expanded', String(willOpen));
     });
+    // 菜单内部点击不要冒泡到"点别处收起"那条（否则点菜单项时先收起来了）
+    extra.addEventListener('click', (event) => event.stopPropagation());
 
     buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);
     card.append(thumbnail, info, buttons, extra);
     return card;
+  }
+
+  /** 收起所有卡片的下拉菜单（点别处 / 打开另一个时调用） */
+  private closeCardMenus(): void {
+    for (const menu of this.listEl.querySelectorAll('.world-card-extra')) {
+      menu.classList.add('hidden');
+    }
+    for (const button of this.listEl.querySelectorAll('.world-more')) {
+      button.setAttribute('aria-expanded', 'false');
+    }
   }
 
   /** 列表里的彩色小标签（模式 / 难度 / 类型） */

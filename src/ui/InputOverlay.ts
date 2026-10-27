@@ -149,9 +149,52 @@ function open(element: HTMLInputElement | HTMLTextAreaElement): void {
 }
 
 /** 装一次就够（幂等）：在 `main.ts` 启动时调用 */
+/**
+ * 在**捕获阶段**把所有输入类事件吞掉（用户 2026-10-27："遮罩没挡住下层触摸"）。
+ *
+ * 为什么不能只靠遮罩是 `position: fixed; inset: 0`：
+ *  - 遮罩确实盖在最上层，`elementFromPoint` 也返回它，但事件**照样会冒泡到 document**；
+ *  - 页面里大量交互是 document 级事件委托（列表点击、键盘、游戏输入），
+ *    它们不看坐标、只看事件流——于是"点遮罩"会被当成"点了下层某处"。
+ *
+ * 所以在 window 的捕获阶段就掐断：浮层可见时，凡是落在浮层之外的事件一律
+ * `stopPropagation + preventDefault`。输入框自身的事件放行（否则打不了字）。
+ * `keydown` 不吞——吞了就没法输入；但仍要求它只来自浮层里的输入框。
+ */
+function installEventShield(): void {
+  const swallow = (event: Event): void => {
+    if (layer === null || !layer.classList.contains('visible')) return;
+    const target = event.target as Node | null;
+    if (target === null) return;
+    if (field !== null && (target === field || field.contains(target))) return;
+    event.stopPropagation();
+    if (event.cancelable) event.preventDefault();
+    /*
+     * 点遮罩 = 结束输入。
+     * ⚠️ 必须在这里做：`stopPropagation` 之后事件不会再传到遮罩自己的监听器，
+     * 那边写的收起逻辑永远收不到（改成捕获拦截后踩到过一次）。
+     */
+    if (event.type === 'pointerdown' && target === layer) field?.blur();
+  };
+  for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'touchmove', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel']) {
+    window.addEventListener(type, swallow, { capture: true, passive: false });
+  }
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (layer === null || !layer.classList.contains('visible')) return;
+      const target = event.target as Node | null;
+      if (field !== null && (target === field || field.contains(target))) return;
+      event.stopPropagation();
+    },
+    { capture: true },
+  );
+}
+
 export function installInputOverlay(): void {
   if (typeof document === 'undefined') return;
   if (!shouldLift()) return;
+  installEventShield();
 
   document.addEventListener(
     'focusin',

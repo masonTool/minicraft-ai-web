@@ -6745,6 +6745,58 @@
       #mp-disconnect.hidden {
         display: none;
       }
+
+      /* 世界页顶部那一排（2026-10-27）：新建世界 / 加入房间两颗大的并排，导入存档在最后小一号 */
+      .world-list-top {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .world-list-top > #world-new-button,
+      .world-list-top > #world-multiplayer-button {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 46px;
+        font-size: 15px;
+      }
+      .world-list-top > .world-import {
+        flex: 0 0 auto;
+        min-height: 34px;
+        align-self: center;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+
+      /* 世界卡片的「⋯」下拉菜单（2026-10-27）：浮在卡片之上，不占布局
+         （以前是卡片底部展开一行，卡片高度会跳、还会把下一张挤走） */
+      .world-card { position: relative; }
+      .world-card-extra {
+        position: absolute;
+        right: 8px;
+        top: calc(100% - 10px);
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 92px;
+        padding: 6px;
+        background: #333;
+        border: 2px solid;
+        border-top-color: #565656;
+        border-left-color: #505050;
+        border-right-color: #262626;
+        border-bottom-color: #222;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .55);
+      }
+      .world-card-extra.hidden { display: none; }
+      .world-card-extra > button {
+        width: 100%;
+        min-height: 32px;
+        text-align: left;
+        padding: 0 10px;
+        font-size: 13px;
+      }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的

@@ -5479,13 +5479,16 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
     mainSrc.includes("multiplayerUi.open('join');") && mpSource.includes("this.root.dataset.mode = mode;"),
   );
   check(
-    '卡片上只留「进入 / 开房 / ⋯」，管理动作收进折叠行（方案 A）',
+    '卡片上只留「进入 / 开房 / ⋯」，管理动作是「⋯」的下拉菜单（导出/编辑/删除）',
     (() => {
       const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
       return (
         worldSrc.includes('buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);') &&
         worldSrc.includes("extra.className = 'world-card-extra hidden';") &&
-        worldSrc.includes('extra.append(edit, exportButton, remove);')
+        // 2026-10-27 用户口径：下拉里依次是 导出 / 编辑 / 删除
+        worldSrc.includes('extra.append(exportButton, edit, remove);') &&
+        // 点别处收起
+        worldSrc.includes('private closeCardMenus(): void')
       );
     })(),
   );
