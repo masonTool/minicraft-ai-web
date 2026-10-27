@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-2324 | 2026-10-27 | 界面与音频 | —（阶段 4 / M26b 接管） | 3 条：① `?ui2dinv=1` 接管（画布吃指针、DOM 面板 `visibility: hidden` 退场、光标写回 `setHeldStack`）；② `ui2d/forwardClick.ts`（同帧让开 → `elementFromPoint` → 派发 click，关闭 ×/立栏用）；③ §5.41 + 决策 D53。验证：预览转发不误转发、`check` exit=0、66 张截图 |
 | 20261027-2307 | 2026-10-27 | 界面与音频 | —（阶段 4 / M26b 合流） | 3 条：① `InventoryPanelHost.externalCursor`（入口拉、render 推、set 可选）；② `InventoryScreen.heldStack` 只读 getter + 游戏侧叠加层接上；③ §5.40 + 决策 D52。验证：`?ext=1` 只拉不推、`tsc` 干净、`check` exit=0、65 张截图 |
 | 20261027-2250 | 2026-10-27 | 界面与音频 | —（阶段 4 / M27 自绘侧） | 3 条：① `ui2d/itemTooltip.ts`（紫底紫边 + 稀有度色条 + 位置翻边纯函数，4 条断言）；② `InventoryPanelHost` 的 `describeOf` / `durabilityOf`（悬停提示 + 槽位耐久条）；③ §5.39 + 决策 D51。验证：`test:ui2d-inventory-model` **44/44**、`check` exit=0、64 张截图 |
 | 20261027-2234 | 2026-10-27 | 界面与音频 | —（阶段 4 / M28 自绘布局） | 3 条：① `layoutInventoryPanel` 支持 `extra`（额外槽位组居中 + 结果格 + 箭头间距），返回 `groups`；② `drawInventoryPanel` 画结果格箭头，host 按当前布局取双击范围；③ 预览 `?craft=1` + §5.38 + 决策 D50。验证：`test:ui2d-inventory-model` **40/40**（+5 布局断言）、`check` exit=0、63 张截图 |

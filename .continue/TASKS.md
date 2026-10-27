@@ -6067,6 +6067,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-2307 · **光标合流（3 条，M26b 地基）**：DOM 面板有一份 `held`（画在 `#inv-held`），自绘面板也有一个 `cursor`；两份各画各的症状很具体 —— **拖动时屏幕上出现两叠**。所以给 `InventoryPanelHost` 加 `externalCursor: { get, set? }`：入口（`open` / `handlePointer`）先 `pullCursor()`、`render()` 里 `pushCursor()`；`InventoryScreen` 开放**只读** `heldStack` getter，游戏侧 `?ui2dinv2d=1` 叠加层接 `get: () => inventoryScreen.heldStack`。**只读是刻意的**：这一阶段自绘不吃输入，写回会与 DOM 的分配逻辑打架。验证：预览 `?ext=1` 用外部对象模拟 DOM 的 `held` —— 打开即画出 `3×5`、移动后仍是 `3×5`、外部对象未被写脏（只拉不推）；`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、65 张截图。详见 `notes/canvas-ui.md` §5.40 与决策 D52。
 
+- [x] 批次 20261027-2324 · **自绘背包真正接管输入（3 条，M26b 最后一步）**：新增 `?ui2dinv=1` —— 覆盖层 `pointer-events: auto` 吃指针（down/move/up 连同右键与触摸标记喂给 `InventoryPanelHost`），DOM 面板用 `html.ui2dinv .inv-shell { visibility: hidden }` 退场（**不是 `display: none`**：里面的按钮/输入框还要能被 `elementFromPoint` 命中、被读值），光标通过 `externalCursor.set` 写回 `InventoryScreen.setHeldStack()`（两份状态在此合成一份）。面板**外面**的控件（关闭 ×、左右立栏）这一批不重画，改用 `ui2d/forwardClick.ts`：同一帧内把画布的 `pointer-events` 临时关掉 → `elementFromPoint` → 派发 `click` → 立刻恢复，**只在没拖动过且落点在面板外时**转发（拖动松手不该顺手点别的东西）。验证：预览页点面板外的 DOM 按钮 → `closed: false → true`；点面板内第 0 格 → 拿起 64 且 `closed` 仍为 `false`（无误转发）；`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、66 张截图。⚠️ 接管是**可选开关**，`?ui2d=1` 默认仍走镜像；只转发 `click`（拖拽序列类控件不含）。详见 `notes/canvas-ui.md` §5.41 与决策 D53。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6147,7 +6149,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（257 条，不是差异，但同样"集中查"更好）
+### 实现注意（258 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6407,6 +6409,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2204 · **自绘背包补齐六种操作与触摸三态（3 条，M26b 交互）**：`InventoryPanelHost` 原来只有左键取放 + 左拖均分，这批补齐右键（取半/放一个，`rightClick`）、右键拖拽（**每格放一个**，`rightDragDistribute`）、双击收集（400ms，`doubleClickGather`，凑不到就退化成 `quickMove`）；触摸端改成**先按住再决定** —— 松手=点击、50… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2234 · **自绘布局支持工作站（3 条，M28 自绘部分）**：19 种工作站的差别几乎只在"上方那组槽位长什么样"，所以把 `layoutInventoryPanel` 扩成接受 `extra: { cols, rows, result? }` —— 额外槽位组排在玩家背包**上方并居中**，结果格在网格右侧竖直居中、中间留 28px 画箭头（`.craft-arrow`），并返回 `groups: { extra, result,… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2250 · **自绘背包补上提示框与耐久条（3 条，M27 自绘侧）**：镜像方案里 tooltip 是 DOM（`#item-tooltip`），自绘面板一旦接管指针，DOM 的 `hover` 就收不到事件 —— 提示框会**直接消失**，而这种"丢功能"最容易被误判成"还没做"，所以必须在替换之前补齐。新增 `ui2d/itemTooltip.ts`：近黑紫底 + 紫边 + 左侧稀有度色条 + 标题/说明行/耐久条，位置逻辑抽成纯函… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2324 · **自绘背包真正接管输入（3 条，M26b 最后一步）**：新增 `?ui2dinv=1` —— 覆盖层 `pointer-events: auto` 吃指针（down/move/up 连同右键与触摸标记喂给 `InventoryPanelHost`），DOM 面板用 `html.ui2dinv .inv-shell { visibility: hidden }` 退场（**不是 `display: none`**：里面的按钮… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->

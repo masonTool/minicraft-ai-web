@@ -9,6 +9,35 @@
 
 ---
 
+## 批次 20261027-2324 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2324
+
+> 用户 2026-10-27：「请继续完成」—— M26b 的最后一步：**自绘面板真正接管输入**。
+
+- [x] [I1] `?ui2dinv=1` 开关：画布吃指针、DOM 面板退场（`visibility: hidden`）、光标写回 `InventoryScreen.setHeldStack()` → `tsc` + 预览验证
+  - 做了什么：新开关与 `bindInventory2dInput()`（down/move/up 喂给 host，右键与触摸标记一并传）；让位样式用 `visibility`（不是 `display`，里面控件还要能被命中）；`externalCursor.set` 写回 DOM 那份 held。
+  - 为什么：这是"替换"的最后一步；两份状态必须合成一份，否则拖动会出现两叠。
+  - 验证：预览页点第 0 格 → 拿起 64、DOM 侧同步；`tsc` 干净、`npm run check` exit=0。
+  - 批次：20261027-2324
+
+- [x] [I2] 面板外控件：`ui2d/forwardClick.ts`（同帧让开画布 → `elementFromPoint` → 派发 click）→ 预览验证转发与不误转发
+  - 做了什么：`forwardClickAt()`；只在**没有拖动过**且落点在面板外时转发；预览页放一颗被画布盖住的 DOM "关闭"按钮。
+  - 为什么：关闭 × 与左右立栏在面板外面，画布盖上去就点不到；这一批不重画它们，转发是最小代价。
+  - 验证：点面板外 → `closed: false → true`；点面板内的格子 → 拿起 64 且 `closed` 仍为 false（没误转发）。
+  - 批次：20261027-2324
+
+- [x] [I3] 文档：§5.41（接管细节 + 转发为什么只转发 click）、决策 D53、`TASKS` 的 M26b 更新 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：写清"visibility 不是 display"的理由与转发边界。
+  - 为什么：`display: none` 会让 `elementFromPoint` 找不到按钮，转发直接失效 —— 这条不写下次一定踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2324
+
+
 ## 批次 20261027-2307 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -243,35 +272,5 @@
   - 为什么：待办里挂着"已完成功能的可能性"会让人重复劳动，也会让"还差多少"永远说不清。
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
   - 批次：20261027-2114
-
-
-## 批次 20261027-2106 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2106
-
-> 用户 2026-10-27：「继续执行未完成的任务」—— 上一件是"空白检测门禁"，这一件是 **M34**：
-> 暂停弹窗那条链一直"只能在真游戏里验"，所以把它写成一条命令。
-
-- [x] [Z1] `tools/pause-check.mjs` + `npm run check:pause`：暂停弹窗端到端 8 条断言（让位 / HUD / canvas 像素 / 进设置 / 退回 / 关闭恢复）→ 跳过分支实测
-  - 做了什么：`?ui2d=1` 加载 → 判"进没进世界"（`#hud` 与 `#settings-screen` 都在才算）→ Esc 后断言 `.settings-panel` 与 `#hud` 都是 `visibility: hidden`、canvas 有像素 → ↓+Enter 进设置、断言 `data-page` → Esc 退回 → Esc 关闭并断言 HUD 与面板 DOM 恢复。
-  - 为什么：这条链涉及三处让位 + engaged 标志 + 两套键鼠路由，任何一处错都表现为"Esc 打不开/关不掉/HUD 不回来"，而它只能在有 `core.bin` 的环境验；写成命令才能"一条命令过一遍"。
-  - 验证：落地页 → **跳过 exit 0**；连不上 dev server → 跳过 exit 0；`tsc` 无关、`node --check` 通过。
-  - 批次：20261027-2106
-
-- [x] [Z2] 修脚本自身的两个坑：落地页被误判成"进了世界"、`getComputedStyle(null)` 抛错
-  - 做了什么：进游戏判据加上"`#settings-screen` 必须存在"（它由 `SettingsScreen` 构造时创建、只在游戏里有）；所有 `getComputedStyle` 加空保护。
-  - 为什么：落地页 `#world-screen` 与 `#settings-screen` 都不存在，只判 `#hud` 会把落地页当成世界内 —— 第一次跑就是这么红的（还留下一条 `getComputedStyle` 异常）。
-  - 验证：修正后落地页正确跳过（exit 0）。
-  - 批次：20261027-2106
-
-- [x] [Z3] 文档：`notes/canvas-ui.md` §5.32（8 条判据表 + "跳过分支已验、通过分支待首跑"）、决策 D44、`TASKS` 的 M34 改 `[~]` → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：把每条断言对应的"坏掉症状"列成表，并如实写明通过分支尚未执行。
-  - 为什么：验收脚本最怕"写了但没人跑、也没人知道它没跑过"；把边界写在正面，下次跑红了才知道该往哪查。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
-  - 批次：20261027-2106
 
 
