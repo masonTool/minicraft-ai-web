@@ -4317,6 +4317,24 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L21 **开房复用「加入房间」界面 + 局域网扫描修复**（用户 2026-10-27）。
+  - **扫描失效真因**：上一版为"用本机 IP 段"把 `location.hostname` 当唯一来源。但 App
+    webview / 域名访问时它是 `localhost`，代码兜底成 `127.0.0`（回环）→ 只能扫到本机；
+    再上一版用**地址框里的 IP** 推网段（通常是上次连过的 `192.168.x.x`），所以那时能扫到。
+    另实测 **WebRTC 拿不到内网 IP**（Chrome/Safari 把 host candidate 混淆成 `xxx.local`）。
+  - **修法**：`ServerListPanel.subnets()` 返回候选网段并按可能性排序（hostname 私网 IP →
+    地址框私网 IP → localhost 加回环 → `192.168.1/0/2/31`、`10.0.0/1` 兜底）；
+    `refresh()` 分批扫（一次并行 2 段、找到就停），避免 6×254 请求把浏览器排队到几十秒。
+  - **界面**：`MultiplayerScreen.open()` 支持 `'host'` 模式（标题「开房：{世界}」、房名由
+    世界名派生、主按钮「确定并进入」、隐藏多余的「开房/断开」）；右栏新增「选择本机
+    127.0.0.1」（仅开房显示）。`WorldScreen` 的「开房」经 `onHostOpen` 进这套界面，
+    旧对话框保留兜底；`main.ts` 把预检+建世界抽成 `hostWorldFlow`，两个入口共用。
+  - 坑：**项目里没有通用的 `.hidden{display:none}`**（每个元素各自声明），所以
+    `classList.add('hidden')` 对 `#mp-host`/`#mp-disconnect` 一直无效——join/host 模式下
+    「开房」按钮始终显示，玩家会看到两个"开房"。
+  - 验证：开房 → `mode=host`、标题「开房：新的世界 1」、按钮「确定并进入」、`localVisible=true`、
+    旧对话框 0；右栏实测扫到 `127.0.0.1(newplayer)` 与 `192.168.1.72(cookroom)` 两台；
+    `npm run check` exit=0（2 条断言随实现迁移）。
 - [x] L20 **台账收尾一条命令**（用户 2026-10-27：整理文档太花时间）。
   - `tools/ledger.mjs`：读 `.continue/doing/` 的队列文件（它本身就是 DONE 条目正文）→
     插到 DONE 第一条真实批次之前（用 `^## 批次 \d{8}-\d{4}` 匹配，避开文档开头的模板示例）→
