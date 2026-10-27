@@ -423,6 +423,13 @@ const SHOTS = [
     what: '自绘背包：点起一格后"手上那一叠"跟着指针（同样是 canvas 画的）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '33-inventory-selfdrawn-rightclick.png',
+    page: 'tools/preview/inventory-selfdrawn.html',
+    size: [864, 410],
+    what: '自绘背包：右键取半（格子剩 32、手上 32），四种操作与 DOM 对齐',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

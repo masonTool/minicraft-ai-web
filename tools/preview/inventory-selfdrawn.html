@@ -96,24 +96,34 @@
       canvas.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         const p = local(event);
-        host.handlePointer(p.x, p.y, 'down');
+        // 右键 = 2（取半 / 放一个 / 逐格放），左键 = 0
+        host.handlePointer(p.x, p.y, 'down', {
+          button: event.button === 2 ? 2 : 0,
+          timeStamp: event.timeStamp,
+          // 触摸端要"先按住再决定"（点 / 长按 / 拖），鼠标则是按下即拿起
+          touch: event.pointerType === 'touch',
+        });
       });
       canvas.addEventListener('pointermove', (event) => {
         const p = local(event);
-        host.handlePointer(p.x, p.y, 'move');
+        host.handlePointer(p.x, p.y, 'move', { touch: event.pointerType === 'touch' });
       });
       canvas.addEventListener('pointerup', (event) => {
         // 抬起也要带真实坐标：`handlePointer` 会用它记光标位置 ——
         // 传 (0,0) 的话"手上那一叠"会被画到屏幕左上角（第一版就是这样）
         const p = local(event);
-        host.handlePointer(p.x, p.y, 'up');
+        host.handlePointer(p.x, p.y, 'up', { touch: event.pointerType === 'touch' });
       });
-      canvas.addEventListener('contextmenu', (event) => {
-        event.preventDefault();
-        const p = local(event);
-        host.activateAtPointer?.(p.x, p.y, 2);
-        host.handlePointer(p.x, p.y, 'down');
-        host.handlePointer(p.x, p.y, 'up');
+      // 右键菜单要拦掉：不然按下就弹浏览器菜单，手势全断
+      canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+
+      // 调试/验收用：读当前 36 格与手上那一叠（`playwright` 里断言全靠它）
+      window.__probe = () => ({
+        slots: Array.from({ length: 36 }, (_, i) => {
+          const stack = slots.get(i);
+          return stack ? `${stack.id}x${stack.count}` : null;
+        }),
+        held: host.heldStack ? `${host.heldStack.id}x${host.heldStack.count}` : null,
       });
       window.addEventListener('resize', () => host.relayout());
 

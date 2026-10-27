@@ -13,8 +13,27 @@ import { Ui2DOverlay } from './overlay.ts';
 import { applyDebugTint } from './debug.ts';
 import { drawInventoryPanel, layoutInventoryPanel, slotIndexAt, type InventoryLayout } from './InventoryPanel2D.ts';
 import { INV_SLOT_DEFAULT_SKIN, type InvSlotSkin } from './Inventory2D.ts';
-import { distributeDrag, leftClick, quickMove, rightClick, type Cursor, type MoveRules, type SlotAccess, type StackLike } from './inventoryModel.ts';
+import {
+  distributeDrag,
+  doubleClickGather,
+  leftClick,
+  quickMove,
+  rightClick,
+  rightDragDistribute,
+  splitTake,
+  type Cursor,
+  type MoveRules,
+  type SlotAccess,
+  type StackLike,
+} from './inventoryModel.ts';
 import type { Rect } from './widgets.ts';
+
+/** 双击窗口（与 DOM 版一致：400ms 内点同一格） */
+export const DOUBLE_CLICK_MS = 400;
+/** 长按分堆的等待时长（与 DOM 版一致） */
+export const LONG_PRESS_MS = 500;
+/** 触摸滑动多少像素算"这不是点击"（与镜像的拖拽阈值同量级） */
+export const TOUCH_DRAG_SLOP = 8;
 
 export interface InventoryPanelHostOptions extends MoveRules {
   readonly title: string;
@@ -36,8 +55,21 @@ export class InventoryPanelHost {
   private readonly cursor: Cursor = { stack: null };
   private hoverIndex = -1;
   private dragIndices: number[] = [];
-  private dragButton: number | null = null;
+  /** 这次拖动是按的哪个键：左键 = 均分，右键 = 每格放一个（与 DOM 版一致） */
+  private dragButton: 0 | 2 | null = null;
   private dragging = false;
+  /** 上一次"按下"的格子与时刻（双击收集用，窗口与 DOM 版一致：400ms） */
+  private lastDownIndex = -1;
+  private lastDownAt = -Infinity;
+  /** 长按分堆的计时器（500ms，与 DOM 版一致） */
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * 触摸按下但**还没决定是"点"还是"长按"**的那一次。
+   *
+   * 触摸端不能像鼠标那样"按下就拿起来"：那样长按分堆永远拿不到（东西已经在手上了）。
+   * 所以触摸时先按住，松手前没超时也没移动才算点击；超时就是分堆，移动就成了拖拽。
+   */
+  private pendingTouch: { index: number; x: number; y: number } | null = null;
   private pointerX = 0;
   private pointerY = 0;
   private opened = false;
@@ -67,6 +99,8 @@ export class InventoryPanelHost {
   }
 
   close(): void {
+    this.cancelLongPress();
+    this.pendingTouch = null;
     this.opened = false;
     this.hoverIndex = -1;
     this.dragIndices = [];
@@ -93,8 +127,19 @@ export class InventoryPanelHost {
     this.layout = layoutInventoryPanel(x, y, { mainRows: rows, hotbarRows });
   }
 
-  /** 指针 → 槽位（`phase` 对应按下/移动/抬起） */
-  handlePointer(x: number, y: number, phase: 'down' | 'move' | 'up'): boolean {
+  /**
+   * 指针 → 槽位（`phase` 对应按下/移动/抬起）。
+   *
+   * `input.button` 取 0/2（左/右），缺省左键；`input.timeStamp` 用来判双击。
+   * 四种操作与 DOM 版对齐：左键取放 / 右键取半与放一 / 左键拖过多格均分 /
+   * 右键拖过多格每格放一个 / 双击收集 / 长按取一半。
+   */
+  handlePointer(
+    x: number,
+    y: number,
+    phase: 'down' | 'move' | 'up',
+    input: { readonly button?: 0 | 2; readonly timeStamp?: number; readonly touch?: boolean } = {},
+  ): boolean {
     const layout = this.layout;
     if (!layout || !this.opened) return false;
     this.pointerX = x;
@@ -102,28 +147,82 @@ export class InventoryPanelHost {
     const index = slotIndexAt(layout, x, y);
     this.hoverIndex = index;
 
+    const button = input.button ?? 0;
+    const now = input.timeStamp ?? (typeof performance === 'undefined' ? Date.now() : performance.now());
+
     if (phase === 'down') {
       if (index < 0) {
         this.render();
         return false;
       }
-      this.dragButton = 0;
+      const isDouble = button === 0 && index === this.lastDownIndex && now - this.lastDownAt <= DOUBLE_CLICK_MS;
+      this.lastDownIndex = isDouble ? -1 : index;
+      this.lastDownAt = isDouble ? -Infinity : now;
+
+      if (isDouble) {
+        // 双击：先把同类凑成一堆；凑不到东西就退化成快速移动（与 DOM 版同一条规则）
+        const before = this.cursor.stack?.count ?? 0;
+        doubleClickGather(this.slots, this.options, this.cursor, index, this.allIndices());
+        if ((this.cursor.stack?.count ?? 0) === before) {
+          quickMove(this.slots, this.options, index, this.targetRange(index));
+        }
+        this.render();
+        return true;
+      }
+
+      if (input.touch) {
+        // 触摸：先按住看它是"点"还是"长按"，两者都要看后面的事件才能定
+        this.pendingTouch = { index, x, y };
+        this.dragButton = null;
+        this.dragIndices = [];
+        this.dragging = false;
+        this.startLongPress(index);
+        this.render();
+        return true;
+      }
+
+      this.dragButton = button;
       this.dragIndices = [index];
       this.dragging = false;
-      leftClick(this.slots, this.options, this.cursor, index);
+      if (button === 2) rightClick(this.slots, this.options, this.cursor, index);
+      else leftClick(this.slots, this.options, this.cursor, index);
+      this.startLongPress(index);
       this.render();
       return true;
     }
     if (phase === 'move') {
+      const pending = this.pendingTouch;
+      if (pending && Math.hypot(x - pending.x, y - pending.y) > TOUCH_DRAG_SLOP) {
+        this.pendingTouch = null;
+        this.cancelLongPress();
+        // 手指滑出来了：等同于"按下拿起"，之后按拖拽处理
+        leftClick(this.slots, this.options, this.cursor, pending.index);
+        this.dragButton = 0;
+        this.dragIndices = [pending.index];
+        this.dragging = true;
+      }
       if (index >= 0 && this.dragButton !== null && !this.dragIndices.includes(index)) {
         this.dragIndices.push(index);
         this.dragging = true;
+        // 一动就不是长按了，先撤掉计时器（否则松手前会突然"分一半"）
+        this.cancelLongPress();
+        // 右键拖拽是"每经过一格放一个"，不是均分
+        if (this.dragButton === 2) rightDragDistribute(this.slots, this.options, this.cursor, [index]);
       }
       this.render();
       return false;
     }
-    // up：拖过多格 = 均分（与 `distributeDrag` 同一语义）
-    if (this.dragging && this.dragIndices.length > 1) {
+    this.cancelLongPress();
+    const pending = this.pendingTouch;
+    if (pending) {
+      // 松手时还在等：这就是一次普通点击
+      this.pendingTouch = null;
+      leftClick(this.slots, this.options, this.cursor, pending.index);
+      this.render();
+      return true;
+    }
+    // up：左键拖过多格 = 均分（右键在 move 里已经逐格放过了）
+    if (this.dragging && this.dragButton === 0 && this.dragIndices.length > 1) {
       distributeDrag(this.slots, this.options, this.cursor, this.dragIndices);
     }
     this.dragButton = null;
@@ -131,6 +230,38 @@ export class InventoryPanelHost {
     this.dragging = false;
     this.render();
     return false;
+  }
+
+  /** 全部槽位下标（双击收集的范围） */
+  private allIndices(): number[] {
+    const total = ((this.options.mainRows ?? 3) + (this.options.hotbarRows ?? 1)) * 9;
+    return Array.from({ length: total }, (_, i) => i);
+  }
+
+  /**
+   * 长按分堆：按住 500ms 且没动，取走**一半**（向上取整）。
+   *
+   * DOM 版长按会弹出"拖到某处选数量"的滑条；这里先取一半 —— 一是规则与"右键取半"一致，
+   * 二是滑条那一套 UI 还没画（已在 §5.34 的"还没做"里记着）。
+   */
+  private startLongPress(index: number): void {
+    this.cancelLongPress();
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTimer = null;
+      const stack = this.slots.get(index);
+      if (!stack) return;
+      splitTake(this.slots, this.options, this.cursor, index, Math.ceil(stack.count / 2));
+      this.pendingTouch = null;
+      this.dragIndices = [];
+      this.dragging = false;
+      this.render();
+    }, LONG_PRESS_MS);
+  }
+
+  private cancelLongPress(): void {
+    if (this.longPressTimer === null) return;
+    clearTimeout(this.longPressTimer);
+    this.longPressTimer = null;
   }
 
   /** 右键 / Shift 之类的"非拖动"动作（供键盘或外部按钮调用） */
