@@ -150,6 +150,25 @@ export {
   type TextRun,
 } from './textPanel.ts';
 export { MenuScreen2D, type MenuScreenOptions } from './menuScreen.ts';
+export {
+  CanvasTextInput,
+  TEXT_INPUT_BLINK_MS,
+  TEXT_INPUT_CARET_WIDTH,
+  TEXT_INPUT_COLORS,
+  TEXT_INPUT_FONT_SIZE,
+  TEXT_INPUT_PADDING_X,
+  applyInsert,
+  backspaceAt,
+  caretBlinkOn,
+  caretRect,
+  caretXOf,
+  clampCaret,
+  metricsFor,
+  rangeRect,
+  visibleSlice,
+  type TextInputOptions,
+  type TextMetrics2D,
+} from './textInput.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

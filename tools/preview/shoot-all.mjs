@@ -241,6 +241,20 @@ const SHOTS = [
     what: '主菜单 + 黄色遮罩（整块黄 = 面板与文字都是 canvas 画的）',
     status: '遮罩 · 阶段 3',
   },
+  {
+    file: '18-text-input.png',
+    page: 'tools/preview/textinput.html',
+    size: [864, 410],
+    what: 'canvas 文本输入（聚焦态）：占位提示 + 光标，第二个字段是未聚焦的空框',
+    status: '已迁 · 阶段 3',
+  },
+  {
+    file: '18b-text-input-typed.png',
+    page: 'tools/preview/textinput.html?value=%E6%88%91%E7%9A%84%E4%B8%96%E7%95%8C&sel=1,3',
+    size: [864, 410],
+    what: '同一块里填了中文并选中一段（选区是 canvas 画的）',
+    status: '已迁 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
