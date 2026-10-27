@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-2023 | 2026-10-27 | 界面与音频 | —（阶段 4 修复） | 3 条：① 修回归 —— `#inv-held` 的 `opacity: 0` 让"拖动中的手持叠"彻底消失（它在镜像根之外）；② `MenuScreen2D.setHighlight()` + `elementFromPoint` 算悬停格（只重画不重读 DOM）；③ §5.30 + 决策 D42。验证：`tsc` 干净、`check` exit=0、58 张截图 |
 | 20261027-2017 | 2026-10-27 | 界面与音频 | —（阶段 4 / M35 完成） | 2 条：① 滚动条**可拖**（先命中再拖、抓拇指记 `offset` 防跳、抓轨道先对齐、两端夹住、拖条不接惯性）；② §5.29 + 决策 D41，M35 收口。验证：合成 touch 拖拇指 72px → `scrollTop` 0→153（可滚 168）、`tsc` 干净、`check` exit=0、`build:fast` 出包 |
 | 20261027-2001 | 2026-10-27 | 界面与音频 | —（阶段 6 收口 / M33） | 4 条：① `ui2d/touchArt.ts` 六个图标的形状数据（path/rect/circle），`ui/TouchIcons.ts` 改为从它拼 SVG；② `Touch2D.drawTouchIcon`（`Path2D` 缓存 + evenodd）+ `drawTouchButton`（玻璃底/描边/图标/按下缩放）；③ `main.ts` 一个选择器收集全部 `.touch-button` 并让位；④ 预览页按钮簇 + 2 张截图。验证：`test:ui2d-touch` **11/11**、`test:ui` 图标段全绿、`tsc` 干净、`check` exit=0、57 张截图 |
 | 20261027-1943 | 2026-10-27 | 界面与音频 | —（阶段 6 第一块 / M33 一半） | 4 条：① `ui2d/Touch2D.ts` 摇杆（底座暗底+径向高光+浅描边、芯子真线性渐变、潜行绿芯与小牌），**不走镜像**——每帧只读两个矩形、0 次样式计算；② `main.ts#syncTouch2d()` 接线，`html.ui2d-touch #touch-stick { opacity: 0 }` 让位像素但保住命中；③ 预览页（拖得动）+ 3 张截图；④ 新增 `tests/ui2d-touch.test.ts` 7 条。验证：`tsc` 干净、`check` exit=0、`build:fast` 出包、55 张截图。M33 还差跳跃/飞行与顶部三颗 |

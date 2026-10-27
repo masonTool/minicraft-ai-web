@@ -9,6 +9,36 @@
 
 ---
 
+## 批次 20261027-2023 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2023
+
+> 用户 2026-10-27：「继续完成，多做一点」—— 先修背包的两个真问题（一个是我自己引入的回归），
+> 再继续往 M26b 走。
+
+- [x] [X1] 修回归：`html.ui2d-inv #inv-held { opacity: 0 }` 删掉 —— 拖动物品时那一叠会消失
+  - 做了什么：去掉那条让位规则（`#inv-held` 在镜像根 `.inv-shell` 外面，藏了没人画），改由 DOM 继续绘制；顺手把注释改成"为什么不能藏"。
+  - 为什么：让位 + 没人接手 = 内容消失；而它只在拖动时出现，静态截图完全正常（与 `.inv-shell` 那次同源）。
+  - 验证：`tsc` 干净；`npm run check:fast` 绿。
+  - 批次：20261027-2023
+
+- [x] [X2] `MenuScreen2D.setHighlight()` + `main.ts` 用 `elementFromPoint` 算悬停格 → 截图
+  - 做了什么：镜像新增"悬停高亮"（白框 + 薄白底，画在所有内容之上）；`setHighlight()` 只比重画、不重读 DOM；`main.ts` 全局记指针位置，`inventoryHoverRect()` 用 `elementFromPoint(...).closest('.inv-slot')` 找那一格。
+  - 为什么：`.inv-slot:hover` 在 `opacity: 0` 的子树里看不见，玩家会以为"这格点不动"；而 `elementFromPoint` 天然跟着滚动与布局走，比自己算几何稳。
+  - 验证：预览页 `?hover=13` 截图里第 13 格有白框+薄白底；`tsc` 干净；`check:fast` 绿。
+  - 批次：20261027-2023
+
+- [x] [X3] 文档：`notes/canvas-ui.md` §5.30（两处修复 + "让位前先确认由谁画"的教训）、决策 D42 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：记下"让位 + 没人接手 = 内容消失"这条通用教训（第二次踩），以及 `setHighlight` 只重画不重读的取舍。
+  - 为什么：这两条都会在接 M26b 时反复出现，写清楚能少踩。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过。
+  - 批次：20261027-2023
+
+
 ## 批次 20261027-2017 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -256,36 +286,5 @@
   - 为什么：这是**第二条**"DOM 有、canvas 没有"的语义（第一条是位图），不记下来还会再踩。
   - 验证：`node .continue/hooks/check.mjs --fast` 绿。
   - 批次：20261027-1654
-
-
-## 批次 20261027-1650 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1650
-
-> 用户 2026-10-27：「继续实现，不要停」—— 把**阶段 3 的最后一块**（多人面板）收掉。
-> 它不在 `#world-screen` 那棵树里，所以单开一个镜像；面板里全是 `<input>`，
-> 正好检验上一批补的"值 + 光标"能不能用。
-
-- [x] [Q1] `src/main.ts`：`mountMultiplayerMirror()`（`#multiplayer-screen .mp-panel`，zIndex 65、`pollMs: 200`）→ `npm run check:fast`
-  - 做了什么：在 `mountMenuMirror(menu)` 之后挂 `mountMultiplayerMirror(multiplayerUi)`；200ms 轮询 `screen.isOpen`，开着就 `engage(.mp-panel)`、关了就 `disengage()`。
-  - 为什么：`#multiplayer-screen` 的 z-index 是 60，主菜单镜像（45）盖不到；而面板里是输入框，正好验证"镜像能画值与光标、输入仍归 DOM"这条路。
-  - 验证：`npx tsc --noEmit` 干净；`npm run check:fast` 绿。⚠️ 游戏内未实测。
-  - 批次：20261027-1650
-
-- [x] [Q2] 预览页 `tools/preview/multiplayer-mirror.html` + 2 张截图 → `node tools/preview/shoot-all.mjs`
-  - 做了什么：按 `index.html` 的 `.mp-*` 搭一块真面板（标题 + ✕ + 三行输入框带值 + 红色状态行 + 取消/加入），`MenuScreen2D.engage(panel)`；把焦点放进"房间号"并置于末尾，让镜像画出光标；`?tint=1` 加遮罩；`shoot-all` 累计 46 张。
-  - 为什么：`<input>` 的值与光标是这一批唯一"新东西"，必须在能看见的页面上验一次（而不是只在代码里相信它）。
-  - 验证：`node tools/preview/shoot-all.mjs` 46 张全出；截图里三个输入框的值、红色状态行、两颗按钮都由 canvas 画出；遮罩版整块面板变黄。
-  - 批次：20261027-1650
-
-- [x] [Q3] 文档：`notes/canvas-ui.md` §5.21（镜像根的另一棵树 + 阶段 3 的账）、决策 D33 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：§5.21 记下"独立一棵树要单开镜像、z-index 按它给"，并列出阶段 3 六块界面的完成账；决策 D33 记下"镜像没有"统一一个大根"，而是每个 z-index 层一个实例"。
-  - 为什么：镜像的 z-index 判据已经踩过一次（主菜单用默认 1 → 游戏里整块消失），这次要写清"按被镜像那一层的 z-index 往上给"。
-  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
-  - 批次：20261027-1650
 
 
