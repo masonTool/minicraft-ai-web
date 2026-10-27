@@ -101,8 +101,15 @@ open http://localhost:5173/tools/preview/hotbar.html
 npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotbar.png
 ```
 
+阶段 0 那三样另有一页 `tools/preview/hud.html`（`?only=flash|boss|progress`，
+按 844×390 手机横屏摆）—— 它们只在事件发生的一瞬间出现，必须能把状态定住看。
+
 为什么值得留：`?ui2d=1` 得进世界才看得到，而 dev 缺 `__host/core.bin` 时会停在落地页 ——
 "画得对不对"不该被"能不能进世界"卡住。阶段 1 的控件库、阶段 2 的血条/经验条也可以往这一页加。
+
+`node tools/preview/shoot-all.mjs` 把**已经迁完的界面**逐个截图到 `.tmp/canvas-version/`
+（不进 git）。这份清单就是"实现到哪一步"的凭证：加一块新界面时往脚本的 `SHOTS` 里加一行，
+跑一遍，目录里就多一张图 —— 比在文档里写"已完成"可靠。
 
 ### 快捷栏 A/B 怎么做（还没在真机上做，等用户）
 

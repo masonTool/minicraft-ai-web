@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 阶段 0 的三样 HUD（canvas）</title>
+    <!--
+      阶段 0 那三样（受伤红闪 / Boss 条 / 破坏与进食进度条）的离线预览。
+
+      它们都是"事件发生时才出现"的浮层，抓不住一瞬间，所以**必须**有个页面能把状态定住看。
+      画面按手机横屏 844×390 摆（`notes/canvas-ui.md` 说横屏是第一场景）。
+
+      用法：
+        npm run dev
+        open 'http://localhost:5173/tools/preview/hud.html?only=flash'
+        open 'http://localhost:5173/tools/preview/hud.html?only=boss&variant=wither'
+        open 'http://localhost:5173/tools/preview/hud.html?only=progress'
+        open 'http://localhost:5173/tools/preview/hud.html'          # 三样一起
+
+      `only` = flash | boss | progress | all；`variant` = dragon | wither | shield（只影响 Boss 条配色）
+    -->
+    <style>
+      body { margin: 0; background: #111; }
+      #scene {
+        position: relative;
+        width: 844px;
+        height: 390px;
+        overflow: hidden;
+        /* 一块"假世界"：天空 + 远山 + 近地，用来看 HUD 压在画面上是否清楚 */
+        background:
+          linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%),
+          repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.06) 0 16px, transparent 16px 32px);
+        background-blend-mode: normal;
+        image-rendering: pixelated;
+      }
+      /* 远山：两个三角形，纯粹为了给画面一点层次 */
+      #scene::before,
+      #scene::after {
+        content: '';
+        position: absolute;
+        bottom: 54%;
+        width: 0;
+        height: 0;
+        border-left: 120px solid transparent;
+        border-right: 120px solid transparent;
+        border-bottom: 90px solid #5b7d63;
+      }
+      #scene::before { left: 60px; opacity: 0.85; }
+      #scene::after { left: 520px; border-bottom-color: #4f6f57; opacity: 0.9; }
+      .caption {
+        position: absolute; left: 12px; bottom: 12px;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif;
+        color: #fff; text-shadow: 1px 1px 0 #000; z-index: 5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene"><div class="caption" id="caption"></div></div>
+
+    <script type="module">
+      import { Hud2D, Ui2DOverlay } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const only = params.get('only') ?? 'all';
+      const variant = params.get('variant') ?? 'dragon';
+
+      const scene = document.getElementById('scene');
+      // 覆盖层自己会往 host 里 append 一张 canvas —— 与 main.ts 里挂在 `#app` 上是同一条路
+      const overlay = new Ui2DOverlay(scene);
+      const hud = new Hud2D(overlay);
+
+      const captions = [];
+      if (only === 'flash' || only === 'all') {
+        // 被苦力怕炸一下的瞬间（强度 0.55）
+        hud.setDamageFlash(0.55);
+        captions.push('受伤红闪 damageFlash=0.55');
+      }
+      if (only === 'boss' || only === 'all') {
+        hud.setBossBar({
+          visible: true,
+          title: variant === 'wither' ? '凋灵' : '末影龙',
+          ratio: variant === 'wither' ? 0.35 : 0.62,
+          wither: variant === 'wither',
+          shielded: variant === 'shield',
+        });
+        captions.push(`Boss 条（${variant}）`);
+      }
+      if (only === 'progress' || only === 'all') {
+        // 挖石头挖到 42%、吃牛排吃到 68%
+        hud.setBreakProgress(0.42);
+        hud.setEatProgress(0.68);
+        captions.push('破坏进度 42% / 进食进度 68%');
+      }
+      document.getElementById('caption').textContent = captions.join(' · ');
+      hud.render();
+    </script>
+  </body>
+</html>

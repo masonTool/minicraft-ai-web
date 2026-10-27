@@ -99,19 +99,27 @@
     </style>
   </head>
   <body>
-    <h2>DOM 版（照抄 index.html 的 #hotbar）</h2>
-    <div class="row"><div class="dom-hotbar" id="dom-hotbar"></div></div>
+    <section id="sec-dom">
+      <h2>DOM 版（照抄 index.html 的 #hotbar）</h2>
+      <div class="row"><div class="dom-hotbar" id="dom-hotbar"></div></div>
+    </section>
 
-    <h2>canvas 版（src/ui2d/Hotbar2D.ts）</h2>
-    <div class="row"><div id="canvas-host"><canvas id="canvas-hotbar"></canvas></div></div>
+    <section id="sec-canvas">
+      <h2>canvas 版（src/ui2d/Hotbar2D.ts）</h2>
+      <div class="row"><div id="canvas-host"><canvas id="canvas-hotbar"></canvas></div></div>
+    </section>
 
     <p class="hint">
       同一份假数据：0 号空槽 · 1~4 号带数量 · 5 号选中（木镐，掉了一半耐久，黄色）·
       6 号选中态以外的一把剑（耐久见红）· 7 号南瓜 · 8 号钻石。
+      只截一半用 `?only=canvas`（或 `?only=dom`）。
     </p>
 
     <script type="module">
       import { Hotbar2D } from '../../src/ui2d/index.ts';
+
+      /** `?only=dom|canvas`：截图时只要一半（`both` 是默认） */
+      const only = new URLSearchParams(window.location.search).get('only') ?? 'both';
 
       /** 假图标：32×32 的"等轴方块"意思一下（真图标由 ui/ItemIcon 出图，见决策 D4） */
       function fakeIcon(top, side, mark) {
@@ -231,6 +239,15 @@
       const hotbar = new Hotbar2D();
       hotbar.setState(state);
       hotbar.draw(ctx, scale);
+
+      // 裁掉不要的那一半。⚠️ DOM 那排**不能用 `display: none`** —— canvas 的几何
+      // 就是从它量出来的，挪出视口（仍然布局）才是安全的隐藏方式。
+      if (only === 'canvas') {
+        const section = document.getElementById('sec-dom');
+        section.style.cssText = 'position: absolute; left: -9999px; top: 0';
+      } else if (only === 'dom') {
+        document.getElementById('sec-canvas').style.display = 'none';
+      }
     </script>
   </body>
 </html>
