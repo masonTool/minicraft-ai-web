@@ -311,6 +311,20 @@ const SHOTS = [
     what: '背包整页镜像 + 遮罩（整块黄 = 面板里每一像素都是 canvas 画的）',
     status: '遮罩 · 阶段 4',
   },
+  {
+    file: '24-multiplayer.png',
+    page: 'tools/preview/multiplayer-mirror.html',
+    size: [864, 410],
+    what: '多人面板整页镜像：标题/输入框的值/状态行/按钮全由 canvas 画（光标按 selectionStart）',
+    status: '已迁 · 阶段 3',
+  },
+  {
+    file: '24b-multiplayer-tinted.png',
+    page: 'tools/preview/multiplayer-mirror.html?tint=1',
+    size: [864, 410],
+    what: '多人面板 + 遮罩（整块面板黄 = 全是 canvas）',
+    status: '遮罩 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

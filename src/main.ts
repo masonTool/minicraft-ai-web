@@ -21894,6 +21894,8 @@ async function boot(): Promise<void> {
   installInstallHint();
   // 主菜单 / 世界列表交给 canvas（`?ui2d=1`，阶段 3 的"整页镜像"）
   mountMenuMirror(menu);
+  // 多人面板同理（它不在 `#world-screen` 里，是另一棵树，所以单开一个镜像）
+  mountMultiplayerMirror(multiplayerUi);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
   // 主菜单已经铺好，撤掉首屏启动遮罩（那之前一直由它盖着准星那个"加号"）。
   // 必须在 `menu.show()` 之后：菜单是不透明的整屏，先撤会闪一下黑底 + 准星。
@@ -21916,6 +21918,34 @@ async function boot(): Promise<void> {
  * ⚠️ 让位用的是 `opacity: 0`（不是 `visibility` / `display`）：按钮必须继续可点，
  * 镜像只换"谁产像素"，不换"谁收输入"。
  */
+/**
+ * 多人面板的 canvas 镜像（`?ui2d=1`）。
+ *
+ * 它**不在 `#world-screen` 那棵树里**（`#multiplayer-screen` 是独立的一层，z-index 60），
+ * 主菜单那个镜像盖不到，得单开一个，z-index 用 65。
+ *
+ * 面板里全是 `<input>`（地址 / 房间 / 密码 / 昵称）：镜像能画出它们的**值与光标**
+ * （`readTextRuns` 读 `value`、`drawFieldCaret` 按 `selectionStart` 画），
+ * 输入本身仍归 DOM —— 输入法、粘贴、选中都照旧。
+ */
+function mountMultiplayerMirror(screen: MultiplayerScreen): void {
+  if (!UI2D_ENABLED) return;
+  const mirror = new MenuScreen2D(document.body, {
+    tint: UI2D_TINT_ENABLED,
+    zIndex: 65,
+    // 状态行（连接中 / 失败原因）会自己变，靠定期重读兜底
+    pollMs: 200,
+  });
+  const sync = (): void => {
+    const panel = document.querySelector<HTMLElement>('#multiplayer-screen .mp-panel');
+    if (screen.isOpen && panel) mirror.engage(panel);
+    else if (mirror.engaged) mirror.disengage();
+  };
+  window.setInterval(sync, 200);
+  window.addEventListener('resize', sync);
+  sync();
+}
+
 function mountMenuMirror(menu: WorldScreen): void {
   if (!UI2D_ENABLED) return;
   const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 45 });

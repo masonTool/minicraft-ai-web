@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 多人面板整页镜像（canvas）</title>
+    <!--
+      阶段 3 的最后一块：多人面板（`#multiplayer-screen`）。
+
+      它不在 `#world-screen` 那棵树里，所以主菜单那个镜像盖不到，单开一个（z-index 65）。
+      面板里全是 `<input>`：镜像能画出**值与光标**，输入本身仍归 DOM。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/multiplayer-mirror.html
+        open 'http://localhost:5173/tools/preview/multiplayer-mirror.html?tint=1'
+    -->
+    <style>
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 90;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      /* 与 index.html 的 #multiplayer-screen / .mp-* 同观感 */
+      #multiplayer-screen {
+        position: absolute; inset: 0; display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+      }
+      .mp-panel {
+        width: 420px; padding: 14px 16px;
+        background: #232323;
+        border: 3px solid; border-color: #373737 #4a4a4a #0d0d0d #373737;
+        color: #e7e7e7;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .mp-head { display: flex; align-items: center; justify-content: space-between; }
+      .mp-title { font-size: 15px; font-weight: 700; }
+      .mp-close { padding: 2px 8px; color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.3); }
+      .mp-form { display: flex; flex-direction: column; gap: 8px; }
+      .mp-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 8px; }
+      .mp-input {
+        width: 100%; box-sizing: border-box; padding: 6px 8px;
+        font: inherit; font-size: 13px; color: #fff;
+        background: rgba(12, 13, 16, .82); border: 2px solid rgba(255,255,255,.28);
+      }
+      .mp-status { font-size: 12px; color: #ff9a9a; }
+      .mp-actions { display: flex; gap: 8px; justify-content: flex-end; }
+      .mp-action {
+        padding: 8px 16px; color: #fff; background: #8b8b8b;
+        border: 2px solid; border-color: #c6c6c6 #4a4a4a #4a4a4a #c6c6c6;
+        text-shadow: 1px 1px 0 #000;
+      }
+      .mp-action.primary { background: #3a7d33; border-color: #7fbf74 #23501f #23501f #7fbf74; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="multiplayer-screen">
+        <div class="mp-panel">
+          <div class="mp-head">
+            <span class="mp-title">加入房间</span>
+            <button class="mp-close">✕</button>
+          </div>
+          <div class="mp-form">
+            <div class="mp-row"><span>服务器</span><input class="mp-input" id="url" value="ws://192.168.1.20:8080" /></div>
+            <div class="mp-row"><span>房间号</span><input class="mp-input" id="room" value="mason-的-世界" /></div>
+            <div class="mp-row"><span>口令</span><input class="mp-input" id="pass" value="1234" /></div>
+          </div>
+          <div class="mp-status">上次连接失败：房间不存在</div>
+          <div class="mp-actions">
+            <button class="mp-action">取消</button>
+            <button class="mp-action primary">加入</button>
+          </div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { MenuScreen2D } from '../../src/ui2d/index.ts';
+
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const panel = document.querySelector('.mp-panel');
+      const screen = new MenuScreen2D(document.getElementById('stage'), { tint, zIndex: 65 });
+      screen.engage(panel);
+
+      // 焦点放在房间号上：镜像会用 selectionStart 画出光标
+      const room = document.getElementById('room');
+      room.focus();
+      room.setSelectionRange(room.value.length, room.value.length);
+
+      document.getElementById('caption').textContent =
+        '多人面板整页镜像：标题/输入框的值/状态行/两颗按钮都由 canvas 画 · 光标按 selectionStart 画 · 输入仍归 DOM' +
+        (tint ? ' · 黄色遮罩' : '');
+    </script>
+  </body>
+</html>
