@@ -73,6 +73,11 @@ function build(): void {
     if (!committing) close();
   });
 
+  // 点遮罩空白处 = 结束输入：值已经实时同步过，直接收起即可（不补 change）
+  bar.addEventListener('click', (event) => {
+    if (event.target === bar) close();
+  });
+
   bar.append(field);
   document.body.append(bar);
 }

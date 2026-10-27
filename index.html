@@ -2965,7 +2965,7 @@
       }
       .cmd-help-usage {
         margin-top: 6px; padding: 6px 8px;
-        background: rgba(0, 0, 0, .32); border-left: 3px solid #6cc349;
+        background: rgba(0, 0, 0, .26); border-left: 3px solid #6cc349;
         color: #fff; font-size: 11px; line-height: 1.45; word-break: break-all;
       }
       .cmd-help-desc {
@@ -6623,7 +6623,7 @@
       .mp-port-dialog {
         position: absolute; inset: 0; z-index: 5;
         display: flex; align-items: center; justify-content: center;
-        background: rgba(0, 0, 0, .6);
+        background: rgba(0, 0, 0, .42);
         animation: page-fade-in 140ms ease-out both;
       }
       .mp-port-card {
@@ -6662,16 +6662,22 @@
         }
       }
 
-      /* 端口框：只读（改端口要弹窗确认），默认 8887 时灰底表示"没改过" */
+      /*
+       * 端口格（2026-10-27）：它**是一个按钮**，不是输入框——只负责"点开修改端口弹窗"。
+       * 所以外观走凸起（与输入框的内凹相反）+ hover，一眼看出"这里是点的不是打的"。
+       */
       .mp-port-input.mp-port-readonly {
-        background: #242424; color: #cfcfcf; cursor: pointer;
-        border-right-color: #3a3a3a; border-bottom-color: #3a3a3a;
+        background: #3a3a3a; color: #eaeaea; cursor: pointer;
+        text-align: center; font-variant-numeric: tabular-nums;
+        border: 2px solid;
+        border-top-color: #5a5a5a; border-left-color: #545454;
+        border-right-color: #2c2c2c; border-bottom-color: #282828;
       }
-      .mp-port-input.mp-port-readonly:hover { background: #2a2a2a; }
-      /* 默认值 8887：比普通输入框**更亮一档的灰底**，一眼看出"这是占位默认值、没改过" */
+      .mp-port-input.mp-port-readonly:hover { background: #454545; color: #fff; }
+      .mp-port-input.mp-port-readonly:active { transform: translateY(1px); }
+      /* 默认值 8887：暗一档，表示"没改过" */
       .mp-port-input.mp-port-readonly.is-default {
-        background: #333; color: #9b9b9b;
-        border-right-color: #454545; border-bottom-color: #4a4a4a;
+        background: #333; color: #c4c4c4;
       }
 
       /* ==================================================================
@@ -6680,14 +6686,24 @@
          没有标题、没有按钮、没有遮罩——它不是对话框，只是给输入框换个看得见的位置。
          键盘上的「完成」写回，键盘收起就跟着消失。
          ================================================================== */
+      /*
+       * 浮条（2026-10-27 第三次调整）：显示时背景淡入一层**模糊暗色**，
+       * 把"底下那堆信息还在动"压下去，视线只落在左上角这一条上。
+       * 点遮罩 = 结束输入（值已实时同步，不需要再写一次）。
+       */
       .inp-bar {
-        position: fixed; z-index: 200;
+        position: fixed; inset: 0; z-index: 200;
+        display: none;
+        background: rgba(0, 0, 0, .32);
+        backdrop-filter: blur(4px) saturate(.9);
+        -webkit-backdrop-filter: blur(4px) saturate(.9);
+      }
+      .inp-bar.visible { display: block; animation: inp-fade 140ms ease-out both; }
+      @keyframes inp-fade { from { opacity: 0; } to { opacity: 1; } }
+      .inp-bar-field {
+        position: absolute;
         top: max(8px, env(safe-area-inset-top));
         left: max(8px, env(safe-area-inset-left));
-        display: none;
-      }
-      .inp-bar.visible { display: block; }
-      .inp-bar-field {
         box-sizing: border-box;
         width: min(64vw, 320px); height: 38px;
         padding: 0 10px;
@@ -6699,6 +6715,8 @@
         box-shadow: 0 10px 26px rgba(0, 0, 0, .6);
       }
       .inp-bar-field:focus { outline: 2px solid #7fa86f; outline-offset: -2px; }
+      /* 默认全选选中：绿底纯白字，避免各平台默认选中色把文字压暗 */
+      .inp-bar-field::selection { background: #4a7d39; color: #fff; }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
