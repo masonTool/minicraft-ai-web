@@ -3246,13 +3246,6 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
-      // 多人游戏（联机9）/ 本局房间（L9）：暂停菜单里的入口
-      onMultiplayer: () => this.openMultiplayer(),
-      // 联机中这颗键叫「本局房间」，没联机才叫「多人游戏」（SettingsScreen 每次打开重读）
-      multiplayerLabelKey: () =>
-        this.net.sessionState === 'connected' || this.net.sessionState === 'reconnecting'
-          ? 'pause.room'
-          : 'menu.multiplayer',
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,

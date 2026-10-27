@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-0033 | 2026-10-28 | 存档与多人（暂停菜单入口） | `L30` | 清掉暂停菜单联机键的残留：动作接口 + `main.ts` 传参 + `test:ui` 断言（改成反向守卫）。门禁由红转绿；遗留 `openMultiplayer()` 无调用方、`RoomCard` 无入口 |
 | 1363 | 2026-10-22 | 工程与基础设施 | —（机制本身） | continue-do 升级：门禁回绿、旧契约自测退役、`EXPERIENCE`→`TIPS`、`OVERVIEW` 落地、`HANDOFF` 瘦身；`DONE` 只留最近的批次 |
 | 1355 | 2026-10-22 | 工程与基础设施 / 界面与音频 | A7 / O4 / M23 / M8 | 清台账两处盲区、A7+O4 收口、队伍前后缀接名字牌、两屏 105 处文案接 i18n、修好长期变红的 `test:hooks`（已归档） |
 | 20261027-1200 | 2026-10-27 | 存档与多人（iOS Bonjour 浏览） | `R2` | 4 处：`BonjourBrowser.swift`（搜 `_minicraft._tcp`、IPv4+TXT、8 秒重 resolve、只认 IPv4）、`ForegroundSession` 生命周期挂接、Rust `with_hub` + `minicraft_add_bonjour_peer`、头文件声明。验证：`check-sim.sh` 注入一条记录 → `/healthz.peers` 出现。坑：**peer 表有 12 秒 TTL**，Bonjour 只在 didFind 时刷一次 → 不重 resolve 就会"闪一下消失"；**`NSObject` 子类才能 `super.init()`**，`ForegroundSession` 不是，加了会编不过 |

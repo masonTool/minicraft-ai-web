@@ -4317,6 +4317,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L30 **清掉暂停菜单那颗联机键的残留**（用户 2026-10-28 确认：按钮是有意删掉的）。
+  - 上一轮末尾已删掉按钮本体，但 `SettingsScreenActions.onMultiplayer` / `multiplayerLabelKey`、
+    `main.ts` 的 8 行传参、`ui-test.ts` 那条"按联机状态改文案"的断言都还在：
+    `tsc` 不报（都是可选参数），只有 `test:ui` 的源码断言能抓到 → 门禁一直是红的。
+  - 断言改成**反向守卫**「暂停菜单不再有联机键」。不留空变量的原因：`settingsSrc` 只被那条断言用过，
+    直接删会让 `noUnusedLocals` 在 `tools/` 上报错。
+  - ⚠ 遗留：`openMultiplayer()`（`main.ts`）现在没有调用方 → `RoomCard` 失去界面入口。
+    删卡片还是补新入口是产品决定，本轮没动。
+  - 验证：`npm run check:fast` exit=0（命中 viewmode / settings / ui 3 套全绿）。
 - [x] L29 **清掉最后 5 处 UI 硬编码中文**（用户 2026-10-28：设置窗口标题没多语言）。
   - 真因：`main.ts` 里 `menuSettings.setTitle('设置', '返回')` 写死中文——`t()` 只在面板内部用了；
     之前那轮扫描**把 `src/main.ts` 排除了**，所以漏掉。
