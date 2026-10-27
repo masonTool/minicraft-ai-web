@@ -360,6 +360,13 @@ const SHOTS = [
     what: '背包 + 立栏 + 遮罩（面板与立栏全黄）',
     status: '遮罩 · 阶段 4',
   },
+  {
+    file: '28-inventory-scrollbar.png',
+    page: 'tools/preview/inventory-mirror.html?creative=1&scroll=48',
+    size: [864, 410],
+    what: '滚动条：镜像自己画的细拇指（滚 48px 时的位置与长度都对）',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

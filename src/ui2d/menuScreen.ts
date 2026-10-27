@@ -22,6 +22,7 @@
  */
 
 import { applyDebugTint } from './debug.ts';
+import { roundRectPath } from './widgets.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import {
   drawCanvasBlits,
@@ -35,6 +36,42 @@ import {
   type TextRun,
 } from './textPanel.ts';
 import { caretBlinkOn, caretRect, rangeRect, visibleSlice, metricsFor } from './textInput.ts';
+
+/** 滚动条的宽度（与 DOM 的 UA 滚动条一个量级，但更细、不抢视线） */
+export const SCROLLBAR_WIDTH = 4;
+/** 滚动条与容器右边缘的间距 */
+export const SCROLLBAR_INSET = 2;
+/** 滚动条最小拇指长度（内容再长也要抓得住） */
+export const SCROLLBAR_MIN_THUMB = 18;
+/** 每帧的速度衰减（60fps 下 0.94 ≈ 0.4 秒停下来） */
+export const SCROLL_DECAY = 0.94;
+/** 低于这个速度就停（px/帧） */
+export const SCROLL_STOP = 0.25;
+
+/** 一根滚动条的轨道与拇指（纯几何，离线可断言） */
+export function scrollBarRects(
+  track: { x: number; y: number; w: number; h: number },
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): { track: { x: number; y: number; w: number; h: number }; thumb: { x: number; y: number; w: number; h: number } } | null {
+  if (!(scrollHeight > clientHeight + 2) || !(track.h > 0)) return null;
+  const thumbH = Math.max(SCROLLBAR_MIN_THUMB, (clientHeight / scrollHeight) * track.h);
+  const max = scrollHeight - clientHeight;
+  // `scrollTop` 可能是 NaN（刚重建的容器）或越界：一律夹进 [0, max]，别让拇指飞出轨道
+  const safeTop = Number.isFinite(scrollTop) ? Math.min(max, Math.max(0, scrollTop)) : 0;
+  const t = max > 0 ? safeTop / max : 0;
+  const y = track.y + (track.h - thumbH) * t;
+  return { track, thumb: { x: track.x, y, w: track.w, h: thumbH } };
+}
+
+/** 惯性：每帧按 `SCROLL_DECAY` 衰减；带 `dt` 归一化，掉帧时不会突然冲很远 */
+export function decayVelocity(velocity: number, dtMs: number): number {
+  if (!Number.isFinite(velocity)) return 0;
+  const frames = Math.min(3, Math.max(0, dtMs) / 16.67);
+  const next = velocity * Math.pow(SCROLL_DECAY, frames);
+  return Math.abs(next) < SCROLL_STOP ? 0 : next;
+}
 
 /** 每隔几帧做一次签名比对（菜单是静态的，没必要每帧读一遍 `textContent`） */
 const SIGNATURE_INTERVAL = 4;
@@ -97,7 +134,14 @@ export class MenuScreen2D {
     readonly startY: number;
     readonly startScroll: number;
     moved: boolean;
+    /** 最近几次移动的采样（算松手时的速度，给惯性用） */
+    samples: { y: number; at: number }[];
   } | null = null;
+  /** 惯性：松手后继续滑（`v` 是 px/帧） */
+  private inertia: { readonly el: HTMLElement; v: number } | null = null;
+  private lastFrameAt = 0;
+  /** 这一帧要画的滚动条（`refresh` 里算，`draw` 里画） */
+  private scrollBars: { x: number; y: number; w: number; h: number; thumb: { x: number; y: number; w: number; h: number } }[] = [];
   private raf = 0;
   /** 让位前的行内 opacity（有些容器自己写了 opacity，还原时要还回去） */
   private previousOpacity = '';
@@ -154,6 +198,7 @@ export class MenuScreen2D {
     if (!this.source) return;
     this.raf = requestAnimationFrame(this.loop);
     this.frame += 1;
+    this.stepInertia();
     // 大部分帧只比一次"要不要重画"，省掉整棵树的计算样式读取
     if (this.frame % SIGNATURE_INTERVAL === 0) this.refresh(false);
     // 兜底：只换了位图（图标）、文字没变的情况签名抓不到（见 `pollMs` 的注释）
@@ -198,12 +243,14 @@ export class MenuScreen2D {
     if (!target || target.closest('input, textarea, select')) return;
     const el = this.scrollableAncestorOf(target);
     if (!el) return;
+    this.inertia = null; // 一旦重新按住，立刻停住惯性
     this.drag = {
       pointerId: event.pointerId,
       el,
       startY: event.clientY,
       startScroll: el.scrollTop,
       moved: false,
+      samples: [{ y: event.clientY, at: event.timeStamp }],
     };
   };
 
@@ -219,13 +266,87 @@ export class MenuScreen2D {
     const next = Math.max(0, Math.min(drag.el.scrollHeight - drag.el.clientHeight, drag.startScroll - dy));
     if (next === drag.el.scrollTop) return;
     drag.el.scrollTop = next;
+    // 采样给惯性用（只留最近 5 个）
+    drag.samples.push({ y: event.clientY, at: event.timeStamp });
+    if (drag.samples.length > 5) drag.samples.shift();
     // 画面立刻跟上手指（不等到 pollMs）
     this.refresh(true);
   };
 
   private readonly onDragEnd = (): void => {
+    const drag = this.drag;
     this.drag = null;
+    if (!drag || !drag.moved) return;
+    // 松手速度 = 最近两次采样的位移 / 时间（px/帧，60fps 归一）
+    const samples = drag.samples;
+    if (samples.length < 2) return;
+    const last = samples[samples.length - 1]!;
+    const first = samples[0]!;
+    const dt = last.at - first.at;
+    if (!(dt > 0)) return;
+    // 向上拖时 `first.y > last.y` → 速度为正 = "内容继续往上走"
+    const velocity = ((first.y - last.y) / dt) * 16.67;
+    if (Math.abs(velocity) < 1) return;
+    this.inertia = { el: drag.el, v: velocity };
   };
+
+  /** 松手后的惯性：每帧衰减，直到停下（0.94/帧，约 0.4 秒） */
+  private stepInertia(): void {
+    const inertia = this.inertia;
+    if (!inertia) return;
+    const now = typeof performance === 'undefined' ? 0 : performance.now();
+    const dt = this.lastFrameAt === 0 ? 16.67 : Math.min(64, now - this.lastFrameAt);
+    this.lastFrameAt = now;
+    const el = inertia.el;
+    const max = el.scrollHeight - el.clientHeight;
+    // `v` 是"内容继续往上走的像素/帧"（向上拖为正）→ scrollTop 继续增大
+    const next = Math.max(0, Math.min(max, el.scrollTop + inertia.v));
+    el.scrollTop = next;
+    inertia.v = decayVelocity(inertia.v, dt);
+    if (inertia.v === 0 || next === 0 || next === max) this.inertia = null;
+    this.refresh(true);
+  }
+
+  /** 收集这一帧要画的滚动条（每个真的能滚的容器一根） */
+  private collectScrollBars(
+    source: HTMLElement,
+    origin: DOMRect,
+  ): { x: number; y: number; w: number; h: number; thumb: { x: number; y: number; w: number; h: number } }[] {
+    const bars = [];
+    for (const el of source.querySelectorAll<HTMLElement>('*')) {
+      if (!(el.scrollHeight > el.clientHeight + 2) || el.clientHeight <= 0) continue;
+      const overflowY = window.getComputedStyle(el).overflowY;
+      if (overflowY !== 'auto' && overflowY !== 'scroll') continue;
+      const box = el.getBoundingClientRect();
+      const rect = scrollBarRects(
+        {
+          x: box.left - origin.left + box.width - SCROLLBAR_WIDTH - SCROLLBAR_INSET,
+          y: box.top - origin.top,
+          w: SCROLLBAR_WIDTH,
+          h: box.height,
+        },
+        el.scrollTop,
+        el.scrollHeight,
+        el.clientHeight,
+      );
+      if (rect) bars.push({ ...rect.track, thumb: rect.thumb });
+    }
+    return bars;
+  }
+
+  /** 画滚动条（半透明圆角拇指，压在内容右侧） */
+  private drawScrollBars(ctx: CanvasRenderingContext2D): void {
+    for (const bar of this.scrollBars) {
+      ctx.save();
+      roundRectPath(ctx, bar, bar.w / 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, .16)';
+      ctx.fill();
+      roundRectPath(ctx, bar.thumb, bar.thumb.w / 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, .55)';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
 
   /** 从命中元素往上找第一个"真的能滚"的祖先（限制在镜像子树里） */
   private scrollableAncestorOf(target: HTMLElement): HTMLElement | null {
@@ -254,6 +375,7 @@ export class MenuScreen2D {
     this.runs = readTextRuns(source, origin, view);
     this.blocks = readTextBlocks(source, origin, view);
     this.blits = readCanvasBlits(source, origin, view);
+    this.scrollBars = this.collectScrollBars(source, origin);
     this.draw();
   }
 
@@ -354,6 +476,8 @@ export class MenuScreen2D {
     drawCanvasBlits(ctx, this.blits);
     // 留一个字宽的余量：DOM 的 letter-spacing 会让标题盒子比 canvas 量出的字窄
     drawTextRuns(ctx, this.runs, 10);
+    // 滚动条：DOM 的是 UA 画的，canvas 里没有，得自己补（否则"能滚但看不出能滚"）
+    this.drawScrollBars(ctx);
     // 焦点在输入框上时，光标/选区由我们画：DOM 那份被 `opacity: 0` 一起藏了
     this.drawFieldCaret();
     if (this.options.tint) applyDebugTint(ctx, overlay.width, overlay.height);
