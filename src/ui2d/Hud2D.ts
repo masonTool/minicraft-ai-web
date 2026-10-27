@@ -21,6 +21,7 @@
  * `UI2D_ENABLED`），关掉参数即恢复原样。
  */
 
+import { Hotbar2D, type HotbarState } from './Hotbar2D.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import { drawText, uiFont } from './text.ts';
 import { drawHudPanel, drawProgressBar, type Rect } from './widgets.ts';
@@ -134,7 +135,12 @@ export class Hud2D {
   private boss: BossBarState = EMPTY_BOSS_BAR;
   private breakRatio: number | null = null;
   private eatRatio: number | null = null;
-  /** 上一帧画过东西没有：没画过就不用清屏（静止时这一层开销为 0） */
+  /**
+   * 快捷栏（阶段 1.5）。它**一直在**，所以只要它接上了，"静止时这一层零开销"
+   * 这条对覆盖层就不再成立 —— 稳态仍是每帧一次 `drawImage`（快照），见 `Hotbar2D`。
+   */
+  private readonly hotbar = new Hotbar2D();
+  /** 上一帧画过东西没有：没画过就不用清屏（没接快捷栏时静止开销为 0） */
   private drewLastFrame = false;
 
   constructor(private readonly overlay: Ui2DOverlay) {}
@@ -148,6 +154,11 @@ export class Hud2D {
 
   setBossBar(state: BossBarState): void {
     this.boss = state;
+  }
+
+  /** 快捷栏状态（`null` = 不画；矩形由调用方按 DOM 实测给出） */
+  setHotbar(state: HotbarState | null): void {
+    this.hotbar.setState(state);
   }
 
   /** `null` = 不显示 */
@@ -171,7 +182,8 @@ export class Hud2D {
     const showBreak = this.breakRatio !== null;
     const showEat = this.eatRatio !== null;
     const showBoss = this.boss.visible;
-    if (!showDamage && !showBreak && !showEat && !showBoss) {
+    const showHotbar = this.hotbar.active;
+    if (!showDamage && !showBreak && !showEat && !showBoss && !showHotbar) {
       this.drewLastFrame = false;
       return;
     }
@@ -190,6 +202,8 @@ export class Hud2D {
     if (showEat) {
       drawProgressBar(ctx, progressBarRect(overlay.width, overlay.height, PROGRESS_EAT_BOTTOM), this.eatRatio!, EAT_STYLE);
     }
+    // 快捷栏最后画：DOM 里它在 `#damage-flash` 之上，红闪不该给它上色
+    if (showHotbar) this.hotbar.draw(ctx, overlay.dpr);
 
     this.drewLastFrame = true;
   }
@@ -229,6 +243,7 @@ export class Hud2D {
     this.boss = EMPTY_BOSS_BAR;
     this.breakRatio = null;
     this.eatRatio = null;
+    this.hotbar.dispose();
     this.drewLastFrame = false;
     this.overlay.clear();
   }

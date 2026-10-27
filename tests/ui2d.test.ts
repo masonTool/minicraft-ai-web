@@ -32,6 +32,23 @@ import {
   bossBarWidth,
   progressBarRect,
 } from '../src/ui2d/Hud2D.ts';
+import {
+  HOTBAR_ACTIVE_LIFT,
+  HOTBAR_ACTIVE_SCALE,
+  HOTBAR_DURABILITY_HEIGHT,
+  HOTBAR_ICON_SIZE,
+  HOTBAR_SNAPSHOT_PAD,
+  hotbarActiveRect,
+  hotbarContentRect,
+  hotbarCountAnchor,
+  hotbarDurabilityFillRect,
+  hotbarDurabilityRect,
+  hotbarIconRect,
+  hotbarIndexAnchor,
+  hotbarSignature,
+  hotbarSnapshotOrigin,
+  type HotbarState,
+} from '../src/ui2d/Hotbar2D.ts';
 
 /**
  * 假测量：CJK/全角按 14px、其余按 7px。
@@ -168,5 +185,103 @@ describe('几何换算（照抄 CSS 的那几个数）', () => {
   it('字体串带等宽+中文回退', () => {
     expect(uiFont(12)).toContain('PingFang SC');
     expect(uiFont(12, 700).startsWith('700 12px')).toBe(true);
+  });
+});
+
+/**
+ * 快捷栏（阶段 1.5）。
+ *
+ * 这里钉的是**相对偏移**：格子 42×42、边框 2px、图标 32px、数量贴右下、耐久条贴底
+ * —— 都是照抄 `index.html` 那几个 `px` 的。抄错了在真机上只是"图标偏 1px、数字压到边"，
+ * 肉眼几乎看不出，但一旦换到平板/横屏就明显了。
+ */
+describe('快捷栏几何', () => {
+  // 一个 42×42 的格子，左上角放在 (100, 200)
+  const slot = { x: 100, y: 200, w: 42, h: 42 };
+
+  it('内容盒扣掉 2px 边框', () => {
+    expect(hotbarContentRect(slot)).toEqual({ x: 102, y: 202, w: 38, h: 38 });
+  });
+
+  it('图标 32px 在内容盒里居中', () => {
+    const icon = hotbarIconRect(slot);
+    expect(icon).toEqual({ x: 105, y: 205, w: HOTBAR_ICON_SIZE, h: HOTBAR_ICON_SIZE });
+    // 左右留白相等（居中）
+    expect(icon.x - slot.x).toBe(slot.x + slot.w - (icon.x + icon.w));
+  });
+
+  it('序号贴左上（top: 0 / left: 3px，相对内容盒）', () => {
+    expect(hotbarIndexAnchor(slot)).toEqual({ x: 105, y: 202 });
+  });
+
+  it('数量贴右下（right: 2px / bottom: 1px，相对内容盒）', () => {
+    expect(hotbarCountAnchor(slot)).toEqual({ x: 138, y: 239 });
+  });
+
+  it('耐久条贴底居中（left/right: 3px、bottom: 2px、高 3px）', () => {
+    const track = hotbarDurabilityRect(slot);
+    expect(track).toEqual({ x: 105, y: 235, w: 32, h: HOTBAR_DURABILITY_HEIGHT });
+    // 低端与高端留白相等
+    expect(track.x - slot.x).toBe(slot.x + slot.w - (track.x + track.w));
+  });
+
+  it('耐久填充按比例，并夹在 0~1', () => {
+    expect(hotbarDurabilityFillRect(slot, 0.5).w).toBeCloseTo(16, 5);
+    expect(hotbarDurabilityFillRect(slot, 0).w).toBe(0);
+    expect(hotbarDurabilityFillRect(slot, 3).w).toBeCloseTo(32, 5);
+    expect(hotbarDurabilityFillRect(slot, Number.NaN).w).toBe(0);
+  });
+
+  it('选中格绕中心放大 1.08 再上抬 2px', () => {
+    const active = hotbarActiveRect(slot);
+    expect(active.w).toBeCloseTo(slot.w * HOTBAR_ACTIVE_SCALE, 5);
+    expect(active.h).toBeCloseTo(slot.h * HOTBAR_ACTIVE_SCALE, 5);
+    // 中心仍在原中心的正上方 2px（缩放不改中心，位移只改 y）
+    expect(active.x + active.w / 2).toBeCloseTo(slot.x + slot.w / 2, 5);
+    expect(active.y + active.h / 2).toBeCloseTo(slot.y + slot.h / 2 - HOTBAR_ACTIVE_LIFT, 5);
+  });
+
+  it('快照比面板多留一圈（选中格的柔光在面板外面）', () => {
+    const panel = { x: 50, y: 500, w: 412, h: 50 };
+    expect(hotbarSnapshotOrigin(panel)).toEqual({ x: 50 - HOTBAR_SNAPSHOT_PAD, y: 500 - HOTBAR_SNAPSHOT_PAD });
+  });
+});
+
+describe('快捷栏快照签名', () => {
+  const slotState = {
+    rect: { x: 100, y: 200, w: 42, h: 42 },
+    active: false,
+    count: 1,
+    index: 0,
+    icon: null,
+    durability: null,
+  };
+
+  const make = (over: Partial<HotbarState['slots'][number]> = {}, revision = 1): HotbarState => ({
+    panel: { x: 50, y: 200, w: 412, h: 50 },
+    slots: [{ ...slotState, ...over }],
+    revision,
+  });
+
+  it('同状态同签名（稳态不会白重建快照）', () => {
+    expect(hotbarSignature(make())).toBe(hotbarSignature(make()));
+  });
+
+  it('版本号变了就重建（图标是同一个 canvas 反复重绘的，引用看不出变化）', () => {
+    expect(hotbarSignature(make({}, 1))).not.toBe(hotbarSignature(make({}, 2)));
+  });
+
+  it('数量 / 选中 / 耐久 / 矩形任一变化都换签名', () => {
+    const base = hotbarSignature(make());
+    expect(hotbarSignature(make({ count: 5 }))).not.toBe(base);
+    expect(hotbarSignature(make({ active: true }))).not.toBe(base);
+    expect(hotbarSignature(make({ durability: { ratio: 0.5, level: 'mid' } }))).not.toBe(base);
+    expect(hotbarSignature(make({ rect: { x: 101, y: 200, w: 42, h: 42 } }))).not.toBe(base);
+  });
+
+  it('耐久只看档位与百分比（1% 以内不重建）', () => {
+    const a = hotbarSignature(make({ durability: { ratio: 0.501, level: 'high' } }));
+    const b = hotbarSignature(make({ durability: { ratio: 0.504, level: 'high' } }));
+    expect(a).toBe(b);
   });
 });

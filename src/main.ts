@@ -44,7 +44,7 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
-import { Hud2D, Ui2DOverlay } from './ui2d/index.ts';
+import { Hud2D, Ui2DOverlay, type HotbarSlotState, type Rect as Ui2DRect } from './ui2d/index.ts';
 import { attackCooldownFor } from './core/combat/AttackSpeed.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
@@ -851,7 +851,8 @@ import { preflightHost } from './net/HostPreflight.ts';
 import { applyManifestLink } from './ui/ManifestLink.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
-import { updateDurabilityBar } from './ui/SlotVisuals.ts';
+import { maxDurabilityOf, updateDurabilityBar } from './ui/SlotVisuals.ts';
+import { durabilityBar } from './core/registry/itemVisuals.ts';
 import {
   blockForItem,
   dropFor,
@@ -1076,6 +1077,21 @@ function readUi2DFlag(): boolean {
   }
 }
 
+/**
+ * 把某个 DOM 元素的视口矩形换算成"相对覆盖层画布"的矩形（都是 CSS px）。
+ *
+ * 覆盖层铺满 `#app`，正常情况下两者重合；但设备像素比、`#app` 的内边距、
+ * 将来把界面嵌进别的容器时都可能差一截 —— 所以一律做一次减法，不要假设左上角是 0。
+ */
+function ui2dRectOf(rect: DOMRect, host: DOMRect): Ui2DRect {
+  return {
+    x: rect.left - host.left,
+    y: rect.top - host.top,
+    w: rect.width,
+    h: rect.height,
+  };
+}
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -1165,6 +1181,29 @@ class App {
   private hud2d: Hud2D | null = null;
   /** 覆盖层自己拿着画布，退出世界时要摘（`#app` 里的节点不靠 GC 回收） */
   private ui2dOverlay: Ui2DOverlay | null = null;
+  /**
+   * 快捷栏（阶段 1.5）的"该重新量一次 DOM 了"标记。
+   *
+   * `refreshHotbar()` 里**不直接量**：它被十几个事件路径调用，量 10 个
+   * `getBoundingClientRect()` 每次都会强制一次布局。这里只置脏 + 递增版本号，
+   * 真正测量与绘制在同帧的 `updateHotbar2D()` 里做，一帧最多一次。
+   */
+  private hotbar2dDirty = false;
+  /**
+   * 快捷栏被藏起来时（打开携带版背包）的复查节拍。
+   *
+   * `#hotbar` 那时只是 `visibility: hidden`，`rect` 仍然非零、也没有任何事件告诉我们
+   * "它又被显示回来了"，所以每隔 8 帧补一次复查（≈130ms，够快又不至于每帧都去读
+   * `getComputedStyle`）。正常路径（`refreshHotbar` 置脏）仍然是一帧内生效。
+   */
+  private hotbar2dRetry = 0;
+  /**
+   * 图标位图版本号：`refreshHotbar()` 每跑一次 +1。
+   *
+   * 图标是**同一个 canvas 元素**反复重绘的，引用永远不变，快照光比引用看不出
+   * "这一格换了物品"（见 `ui2d/Hotbar2D.ts` 的 `revision`）。
+   */
+  private hotbar2dRevision = 0;
   private bossBarEl: HTMLElement | null = null;
   private bossFillEl: HTMLElement | null = null;
   /** 血条上那行字（末影龙 / 凋灵共用一条，见 `updateBossBar`） */
@@ -6124,6 +6163,9 @@ class App {
     // 而触摸层的视角面铺满全屏且排在快捷栏之后（见 index.html 的 body.touch 规则）
     bindHotbarTouch(container, (index) => this.selectSlot(index));
 
+    // 像素换手（`?ui2d=1`）：DOM 只留下布局与命中，外观交给 canvas
+    this.applyHotbar2DDomFallback();
+
     this.refreshHotbar();
   }
 
@@ -6151,6 +6193,88 @@ class App {
       updateDurabilityBar(durability, stack);
       slot.classList.toggle('active', index === this.hotbarIndex);
     }
+    // canvas 版（阶段 1.5）：DOM 这边照旧维护（图标 bitmap 就是它画的，见决策 D4），
+    // 只把"该重新量一次 + 重画快照"标脏，真正的测量留到本帧的 updateHotbar2D()
+    if (this.hud2d) {
+      this.hotbar2dRevision += 1;
+      this.hotbar2dDirty = true;
+    }
+  }
+
+  /**
+   * 把快捷栏交给 canvas（`?ui2d=1`）。
+   *
+   * 做法是"**DOM 让位、像素换手**"：容器自己的底/斜角/描边设成透明（边框宽度保留，
+   * 否则两侧的背包按钮会位移 3px），9 个格子设 `opacity: 0` —— 注意**不能**用
+   * `visibility: hidden` 或 `display: none`：那样格子不再参与命中，
+   * `bindHotbarTouch` 与长按提示会一起失效（见决策 D2）。
+   */
+  private applyHotbar2DDomFallback(): void {
+    if (!UI2D_ENABLED) return;
+    const container = document.getElementById('hotbar');
+    if (container) {
+      container.style.background = 'transparent';
+      container.style.borderColor = 'transparent';
+      container.style.boxShadow = 'none';
+    }
+    for (const slot of this.hotbarSlots) slot.style.opacity = '0';
+  }
+
+  /**
+   * 量 DOM、喂状态（一帧最多一次）。
+   *
+   * 几何全部来自 `getBoundingClientRect()`：断点、安全区、转屏后的尺寸都跟着 CSS 走，
+   * canvas 侧不再抄一份 `--hotbar-slot`（见决策 D1）。
+   */
+  private updateHotbar2D(): void {
+    const hud = this.hud2d;
+    const overlay = this.ui2dOverlay;
+    if (!hud || !overlay) return;
+    this.hotbar2dDirty = false;
+
+    const container = document.getElementById('hotbar');
+    if (!container || this.hotbarSlots.length === 0) {
+      hud.setHotbar(null);
+      return;
+    }
+    // 打开携带版背包时 `#hotbar` 只是 `visibility: hidden`（rect 仍然非零），必须显式问一次
+    const hidden =
+      container.offsetWidth <= 0 || window.getComputedStyle(container).visibility === 'hidden';
+    if (hidden) {
+      hud.setHotbar(null);
+      this.hotbar2dRetry = (this.hotbar2dRetry + 1) % 8;
+      this.hotbar2dDirty = this.hotbar2dRetry === 0;
+      return;
+    }
+
+    const host = overlay.canvas.getBoundingClientRect();
+    const panel = ui2dRectOf(container.getBoundingClientRect(), host);
+    if (panel.w <= 0 || panel.h <= 0) {
+      // 还没排版完（`buildHotbar` 里第一次就可能撞上）：留脏，下一帧再量
+      this.hotbar2dDirty = true;
+      return;
+    }
+
+    const slots: HotbarSlotState[] = [];
+    for (let index = 0; index < this.hotbarSlots.length; index++) {
+      const element = this.hotbarSlots[index]!;
+      const rect = ui2dRectOf(element.getBoundingClientRect(), host);
+      if (rect.w <= 0 || rect.h <= 0) {
+        this.hotbar2dDirty = true;
+        return;
+      }
+      const stack = this.inventory.get(index);
+      slots.push({
+        rect,
+        active: index === this.hotbarIndex,
+        count: stack?.count ?? 0,
+        index,
+        // 图标沿用 refreshHotbar 已经画好的那张 canvas（背板倍率/等轴立方体都在它里面）
+        icon: stack ? (element.querySelector('canvas') as HTMLCanvasElement | null) : null,
+        durability: stack ? durabilityBar(stack.damage, maxDurabilityOf(stack.id)) : null,
+      });
+    }
+    hud.setHotbar({ panel, slots, revision: this.hotbar2dRevision });
   }
 
   /** 当前手持方块；手上不是可放置物品时返回 undefined */
@@ -18855,6 +18979,8 @@ class App {
        * 否则画出来永远慢一帧（真机上表现为"闪得比受伤晚一点点"）。
        */
       if (this.hud2d) {
+        // 快捷栏脏了才量一次 DOM（一帧最多一次；`refreshHotbar` 只置脏不量）
+        if (this.hotbar2dDirty) this.updateHotbar2D();
         this.hud2d.setDamageFlash(this.damageFlash.intensity);
         this.hud2d.render();
       }
