@@ -48,6 +48,16 @@ export const SCROLL_DECAY = 0.94;
 /** 低于这个速度就停（px/帧） */
 export const SCROLL_STOP = 0.25;
 
+/** 一根画出来的滚动条：轨道、拇指，外加它管着哪个元素 */
+export interface ScrollBarEntry {
+  readonly el: HTMLElement;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly thumb: { x: number; y: number; w: number; h: number };
+}
+
 /** 一根滚动条的轨道与拇指（纯几何，离线可断言） */
 export function scrollBarRects(
   track: { x: number; y: number; w: number; h: number },
@@ -141,7 +151,14 @@ export class MenuScreen2D {
   private inertia: { readonly el: HTMLElement; v: number } | null = null;
   private lastFrameAt = 0;
   /** 这一帧要画的滚动条（`refresh` 里算，`draw` 里画） */
-  private scrollBars: { x: number; y: number; w: number; h: number; thumb: { x: number; y: number; w: number; h: number } }[] = [];
+  private scrollBars: ScrollBarEntry[] = [];
+  /**
+   * 正在拖的那根滚动条。
+   *
+   * `offset` 是"按下点相对拇指顶端的位移"：抓在拇指中间再拖，拇指不会往上一跳。
+   * 抓在轨道空白处时先按"翻页"对齐（拇指中心跳到按下点），再继续拖。
+   */
+  private barDrag: { readonly bar: ScrollBarEntry; readonly offset: number } | null = null;
   private raf = 0;
   /** 让位前的行内 opacity（有些容器自己写了 opacity，还原时要还回去） */
   private previousOpacity = '';
@@ -241,6 +258,23 @@ export class MenuScreen2D {
     if (event.pointerType === 'mouse') return;
     const target = event.target as HTMLElement | null;
     if (!target || target.closest('input, textarea, select')) return;
+    // 先看是不是抓在滚动条上：抓拇指 = 直接拖，抓轨道空白 = 拇指中心跳过来再拖
+    const hostRect = this.overlay?.canvas.getBoundingClientRect();
+    const localX = hostRect ? event.clientX - hostRect.left : event.clientX;
+    const localY = hostRect ? event.clientY - hostRect.top : event.clientY;
+    const bar = this.scrollBarAt(localX, localY);
+    if (bar) {
+      const y = localY;
+      const inThumb = y >= bar.thumb.y && y <= bar.thumb.y + bar.thumb.h;
+      this.barDrag = {
+        bar,
+        offset: inThumb ? y - bar.thumb.y : bar.thumb.h / 2,
+      };
+      this.inertia = null;
+      if (!inThumb) this.applyBarDrag(y);
+      return;
+    }
+
     const el = this.scrollableAncestorOf(target);
     if (!el) return;
     this.inertia = null; // 一旦重新按住，立刻停住惯性
@@ -255,6 +289,12 @@ export class MenuScreen2D {
   };
 
   private readonly onDragMove = (event: PointerEvent): void => {
+    if (this.barDrag) {
+      event.preventDefault();
+      const hostRect = this.overlay?.canvas.getBoundingClientRect();
+      this.applyBarDrag(hostRect ? event.clientY - hostRect.top : event.clientY);
+      return;
+    }
     const drag = this.drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     const dy = event.clientY - drag.startY;
@@ -274,6 +314,10 @@ export class MenuScreen2D {
   };
 
   private readonly onDragEnd = (): void => {
+    if (this.barDrag) {
+      this.barDrag = null;
+      return;
+    }
     const drag = this.drag;
     this.drag = null;
     if (!drag || !drag.moved) return;
@@ -307,12 +351,34 @@ export class MenuScreen2D {
     this.refresh(true);
   }
 
+  /** 命中测试：按下的点落在哪根滚动条上（横向给 ±3px 的宽容，4px 宽的条太细） */
+  private scrollBarAt(x: number, y: number): ScrollBarEntry | null {
+    for (const bar of this.scrollBars) {
+      if (x < bar.x - 3 || x > bar.x + bar.w + 3) continue;
+      if (y < bar.y || y > bar.y + bar.h) continue;
+      return bar;
+    }
+    return null;
+  }
+
+  /** 把"手指的 y"换算成 scrollTop（拇指顶到轨顶 = 0，到底 = 最大） */
+  private applyBarDrag(y: number): void {
+    const state = this.barDrag;
+    if (!state) return;
+    const { bar, offset } = state;
+    const travel = bar.h - bar.thumb.h;
+    const max = bar.el.scrollHeight - bar.el.clientHeight;
+    if (travel <= 0 || max <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (y - offset - bar.y) / travel));
+    const next = Math.round(ratio * max);
+    if (next === bar.el.scrollTop) return;
+    bar.el.scrollTop = next;
+    this.refresh(true);
+  }
+
   /** 收集这一帧要画的滚动条（每个真的能滚的容器一根） */
-  private collectScrollBars(
-    source: HTMLElement,
-    origin: DOMRect,
-  ): { x: number; y: number; w: number; h: number; thumb: { x: number; y: number; w: number; h: number } }[] {
-    const bars = [];
+  private collectScrollBars(source: HTMLElement, origin: DOMRect): ScrollBarEntry[] {
+    const bars: ScrollBarEntry[] = [];
     for (const el of source.querySelectorAll<HTMLElement>('*')) {
       if (!(el.scrollHeight > el.clientHeight + 2) || el.clientHeight <= 0) continue;
       const overflowY = window.getComputedStyle(el).overflowY;
@@ -329,7 +395,7 @@ export class MenuScreen2D {
         el.scrollHeight,
         el.clientHeight,
       );
-      if (rect) bars.push({ ...rect.track, thumb: rect.thumb });
+      if (rect) bars.push({ el, ...rect.track, thumb: rect.thumb });
     }
     return bars;
   }
