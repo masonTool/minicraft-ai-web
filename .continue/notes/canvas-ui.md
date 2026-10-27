@@ -54,7 +54,7 @@ src/ui2d/
 | **0 地基** ✅ | text / input / overlay / widgets + 三样纯展示 HUD | 22 条排版与命中断言绿；`?ui2d=1` 能画出红闪/Boss 条/进度条 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
 | **1 控件库** ✅ | 开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗 | 21 条离线断言（命中 → 状态 → 回调）；`tools/preview/controls.html` 摆一排且能真的点/拖/滚 | `npx vitest run tests/ui2d-controls.test.ts` + 预览页 |
 | **1.5 快捷栏** ✅ | 面板 + 9 格 + 图标 + 数量 + 序号 + 耐久条 + 选中框 | 34 条断言绿；`?ui2d=1` 与默认版逐格对照，换槽/捡东西/掉耐久都跟上 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
-| **2 HUD** 🟡 | 血条/饥饿/护甲/氧气/经验条与等级 ✅（快捷栏在 1.5 已做）；**只剩提示条**；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
+| **2 HUD** 🟡 | 血条/饥饿/护甲/氧气/经验条与等级 ✅、目标名/蓄力条/物品名浮标 ✅；**只剩指南针·时钟表盘**；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
 | 3 菜单/表单 | 主菜单 / 世界列表 / 新建世界 / 多人 / 服务器选择 / 设置 | 隐藏 input + canvas 显示的**输入法定型**（见 §6）；设置项读写与存档一致 | `npm run check` + 真机输入法验收 |
 | 4 背包/工作站 | 36 格 + 快捷栏 + 19 种工作站 + 拖拽/长按分堆 | 交互表逐条过（按 `notes/modules.md` 的 H2/H19）；配方书嵌入位置不回归 | `npm run check` + 真机 |
 | 5 次级面板 | 配方书 / 成就 / 统计 / 地图 / 书 / 告示牌 / 命令帮助 / 交易 | 每条面板都能开、能关、Esc 自己收；文案 6 语言不溢出 | `npm run check` + `npm run test:i18n` |
@@ -182,6 +182,32 @@ npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotb
 
 预览页 `tools/preview/controls.html`（`?state=dropdown|tooltip|modal`、`?tint=1`）**故意打开**
 `pointer-events`（游戏里铺满全屏的覆盖层必须关着），所以能真的点开关、拖滑块、滚列表。
+
+## 5.6 已落地（阶段 2 收尾：三样提示条）
+
+`ui2d/overlays.ts`：目标名（`#target-info`）、攻击蓄力条（`#attack-cooldown`）、
+物品名浮标（`#selected-item-name`）。都由 `Hud2D.setTips()` 统一收口，画在**最上层**。
+
+三处与前面几块不同的做法：
+
+- **不做快照缓存**。三样加起来每帧也就两次 `fillText` + 一块 44×3 的小矩形，
+  为它们维护签名反而更贵（前三块是"几十个图标/一整条面板"，量级完全不同）。
+- **矩形仍然量 DOM**：目标名的宽度随文本变，触摸瞄准时 JS 还会改它的 `left/top`（`.pinned`），
+  自己算等于把那套 CSS 再实现一遍；只在"文本 / 锚点 / 视口尺寸"变化时量。
+- **物品名的淡出按时间算**（`itemNameAlpha(age)`：350ms 淡入 → 保持到 2000ms → 350ms 淡出），
+  DOM 那边是 CSS `transition`。好处是暂停时不淡（暂停时 `shownAt` 不变），
+  代价是**帧率低时会"跳格"**——这是刻意的取舍，见决策 D14。
+
+断言：`tests/ui2d.test.ts` 51 条（本批 +5：蓄力条几何 44×3 与 +16px、进度量化到 2%、
+物品名的三段曲线、全空不画、过期不画）。
+
+### 阶段 2 还剩什么
+
+| 东西 | 状态 |
+| --- | --- |
+| 生命/饥饿/护甲/氧气/经验条 | ✅ |
+| 目标名 / 蓄力条 / 物品名浮标 | ✅ 本批 |
+| **指南针 / 时钟表盘**（`ui/ToolHud.ts`） | ❌ 唯一剩下的：要画刻度盘 + 旋转指针 + 读数文字（手拿那两件物品才出现） |
 
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
