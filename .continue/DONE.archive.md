@@ -18585,3 +18585,22 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261027-1200 · 2026-10-27 · 会话 12c62cf0
+
+> 用户 2026-10-27："继续" —— 把 R2（iOS 只发布不浏览 Bonjour）补完，并在模拟器里验通桥接链路。
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1200
+
+- [x] [R2] `NetServiceBrowser` + C 桥接：`server/ios/Sources/BonjourBrowser.swift`（新）、`ForegroundSession.swift`、`server/rust/src/{instance,capi}.rs`、`minicraft_server.h` → `check.sh` + `check-sim.sh`
+  - 做了什么：① Swift 侧搜 `_minicraft._tcp`、解析 IPv4 + TXT、**每 8 秒重 resolve**（刷新 Rust 侧 12 秒 TTL，否则邻居会闪一下就没）、只认 IPv4（Rust 只 parse `Ipv4Addr`）；② `ForegroundSession` 在服务起来时 start、停止/进后台时 stop；③ Rust 侧 `instance` 加 `HUB` 槽 + `with_hub`，`capi` 新增 `minicraft_add_bonjour_peer(name, ip, txt_json)`：`beacon::from_txt` → `PeerBook::observe`。
+  - 为什么：`BonjourAdvertiser` 只发布，我们能被人看见、看不见别人；组播在部分 Wi-Fi 上会被挡（AP 隔离 / IGMP snooping），mDNS 能补这一段。
+  - 验证：`check.sh` 的 C 入口检查三个 → 四个全过；`check-sim.sh` 在模拟器里注入一条记录 → `/healthz.peers` 出现该邻居（C 入口 → peer 表 → healthz 链路通）；`npm run check` exit=0。
+  - 边界：**真实 mDNS 发现未验**（要两台真机或可用 mDNS 域），已写进 `server/ios/README.md` 上机清单第 3 条。
+  - 批次：20261027-1200
+
+---
+

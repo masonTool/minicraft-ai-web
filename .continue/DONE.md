@@ -9,6 +9,24 @@
 
 ---
 
+## 批次 20261028-0200 · 2026-10-28 · 会话 12c62c
+
+> 用户：设置窗口标题没多语言，全面检查遗漏
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-28
+> 批次：20261028-0200
+
+- [x] [L29] 清掉 UI 硬编码中文：`main.ts`、`WorldScreen.ts`、`ToolHud.ts`、`WorldRegistry.ts`、六语言 → playwright
+  - 做了什么：`setTitle(t('settings.title'), t('settings.back'))` + 另外 4 处（构建信息、卡片 tooltip、罗盘格数、未命名世界），新增 4 key × 6 语言。
+  - 为什么：`main.ts` 的 `setTitle('设置','返回')` 写死中文，德语下页签是德语、标题却是「设置」；上一轮扫描排除了 main.ts 才漏掉。
+  - 验证：德语设置标题 = Einstellungen；全项目复扫 UI 硬编码 0（剩 1 注释）；check exit=0。
+  - 批次：20261028-0200
+
+---
+
 ## 批次 20261028-0100 · 2026-10-28 · 会话 12c62c
 
 > 用户：编辑弹窗又自动弹键盘；遮罩还是挡不住下层点击
@@ -262,25 +280,6 @@
   - 为什么：以前是全服一套时钟——房主 B 在乙房开房会把甲房的太阳一起拨过去；而房主本地继续玩之后，重开房还会被拽回"服务端此刻"。
   - 验证：黑盒 261 → **283 / 297**；`cargo test` 28 通过。
   - 批次：20261027-0930
-
----
-
-## 批次 20261027-1200 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："继续" —— 把 R2（iOS 只发布不浏览 Bonjour）补完，并在模拟器里验通桥接链路。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1200
-
-- [x] [R2] `NetServiceBrowser` + C 桥接：`server/ios/Sources/BonjourBrowser.swift`（新）、`ForegroundSession.swift`、`server/rust/src/{instance,capi}.rs`、`minicraft_server.h` → `check.sh` + `check-sim.sh`
-  - 做了什么：① Swift 侧搜 `_minicraft._tcp`、解析 IPv4 + TXT、**每 8 秒重 resolve**（刷新 Rust 侧 12 秒 TTL，否则邻居会闪一下就没）、只认 IPv4（Rust 只 parse `Ipv4Addr`）；② `ForegroundSession` 在服务起来时 start、停止/进后台时 stop；③ Rust 侧 `instance` 加 `HUB` 槽 + `with_hub`，`capi` 新增 `minicraft_add_bonjour_peer(name, ip, txt_json)`：`beacon::from_txt` → `PeerBook::observe`。
-  - 为什么：`BonjourAdvertiser` 只发布，我们能被人看见、看不见别人；组播在部分 Wi-Fi 上会被挡（AP 隔离 / IGMP snooping），mDNS 能补这一段。
-  - 验证：`check.sh` 的 C 入口检查三个 → 四个全过；`check-sim.sh` 在模拟器里注入一条记录 → `/healthz.peers` 出现该邻居（C 入口 → peer 表 → healthz 链路通）；`npm run check` exit=0。
-  - 边界：**真实 mDNS 发现未验**（要两台真机或可用 mDNS 域），已写进 `server/ios/README.md` 上机清单第 3 条。
-  - 批次：20261027-1200
 
 ---
 
