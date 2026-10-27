@@ -5978,6 +5978,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1143 · **canvas 调试遮罩（3 条）**：新增 `src/ui2d/debug.ts` 的 `applyDebugTint()` —— 所有绘制结束后把 `globalCompositeOperation` 切成 `source-atop` 再整块刷半透明黄，**只有 canvas 产出过像素的地方被染**（合成器替我们算，不用维护"这一帧画了哪些矩形"，将来新增控件自动覆盖）；`Hud2D.setDebugTint()` 在最后一步刷，`main.ts` 把开关读取抽成通用 `readFlag()` 并新增 `?ui2dtint=1`（独立参数：多一次全屏填充会让帧率 A/B 失真、颜色不对也容易被当成 bug）——屏幕上黄色的地方就是 canvas 画的，用来一眼判断迁移进度；预览页加 `?tint=1`，`tools/preview/shoot-all.mjs` 补 4 张遮罩版截图（含"上排 DOM 不染色 / 下排 canvas 全黄"的对照）。验证：`test:ui2d` **36/36**（新增 2 条：调用序列 `save→source-atop→fill→fillRect→restore`、尺寸非法一笔不画）、`tsc` 干净、`npm run check` exit=0、11 张截图逐张看过。坑记 `notes/canvas-ui.md` §5.3。
 
+- [x] 批次 20261027-1153 · **状态栏四行 + 经验条迁 canvas（5 条）**：`ui2d/vitalsArt.ts` 收下四条 SVG 路径 / 七个色值 / 两个三态判据（`vitalIconState`、`bubbleIconState`），`ui/VitalsHud.ts` 改为 import —— 同一组图标只能有一份形状；`ui2d/Vitals2D.ts` 用 `Path2D` 填同一份 `d`，半颗在 **9×9 坐标系**里裁，整块进离屏快照、签名不含脉冲（低血量脉冲在 blit 时套 1→1.06 变换，否则每秒一个来回等于每帧重画 20 个图标）；`ui2d/Xp2D.ts` 轨道 + `#c2ff7a→#63c335` 渐变 + 顶高光 + 柔光 + **压在条中间的等级牌**（绿字四向黑描边），签名按 1% 取整；`main.ts` 里这两块是**纯展示**，DOM 直接 `visibility: hidden` 让位（退出命中、跳过绘制；快捷栏那边必须 `opacity: 0` 的结论**不适用**），几何仍量 DOM（图标随断点 18/14/22px），每帧只比 key、变脏才量，转屏靠 `epoch` 强制重量；预览页 `tools/preview/vitals.html`（真 `VitalsHud`/`XpHud` 建 DOM 只为测量）。验证：`test:ui2d` **46/46**（新增 10 条）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、14 张截图逐张看过。未验证：真机观感与帧率。坑记 `notes/canvas-ui.md` §5.4。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
