@@ -138,14 +138,17 @@ export {
   type FormRowKind,
 } from './form.ts';
 export {
+  drawCanvasBlits,
   drawTextBlocks,
   drawTextRuns,
   HUD_GRADIENT_FALLBACK,
   normalizeWeight,
+  readCanvasBlits,
   readTextBlocks,
   readTextRuns,
   runBaselineY,
   textRunsSignature,
+  type CanvasBlit,
   type TextBlock,
   type TextRun,
 } from './textPanel.ts';

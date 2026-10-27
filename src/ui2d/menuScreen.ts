@@ -24,10 +24,13 @@
 import { applyDebugTint } from './debug.ts';
 import { Ui2DOverlay } from './overlay.ts';
 import {
+  drawCanvasBlits,
   drawTextBlocks,
   drawTextRuns,
+  readCanvasBlits,
   readTextBlocks,
   readTextRuns,
+  type CanvasBlit,
   type TextBlock,
   type TextRun,
 } from './textPanel.ts';
@@ -39,6 +42,15 @@ const SIGNATURE_INTERVAL = 4;
 export interface MenuScreenOptions {
   /** 调试遮罩（`?ui2dtint=1`）：这一层产出的像素染黄 */
   readonly tint?: boolean;
+  /**
+   * 强制重读的间隔（毫秒，`0` = 只靠签名）。
+   *
+   * 为什么需要：签名只看"文字 / 输入框的值 / 滚动位置"，而**背包的图标是位图** ——
+   * 把一格石头和一格剑对调时，两边的数量文字都没变（都是 1，不显示数字），
+   * 签名完全一样，canvas 就会一直显示旧图标。这类"只换了图、没换字"的变化
+   * 用签名抓不到，只能定期兜底重读。背包面板是模态的，120ms 一次的开销可以接受。
+   */
+  readonly pollMs?: number;
   /**
    * 覆盖层的 `z-index`（默认 `1`，与游戏内的 HUD 覆盖层一致）。
    *
@@ -63,8 +75,12 @@ export class MenuScreen2D {
   private source: HTMLElement | null = null;
   private runs: readonly TextRun[] = [];
   private blocks: readonly TextBlock[] = [];
+  /** DOM 里的 `<canvas>`（物品图标）：必须一起搬，否则背包镜像是个"没有图标的背包" */
+  private blits: readonly CanvasBlit[] = [];
   private signature = '';
   private frame = 0;
+  /** 上次强制重读的时间（`pollMs` 用） */
+  private lastForcedAt = 0;
   private raf = 0;
   /** 让位前的行内 opacity（有些容器自己写了 opacity，还原时要还回去） */
   private previousOpacity = '';
@@ -104,6 +120,7 @@ export class MenuScreen2D {
     this.source = null;
     this.runs = [];
     this.blocks = [];
+    this.blits = [];
     this.signature = '';
     this.overlay?.clear();
   }
@@ -120,6 +137,15 @@ export class MenuScreen2D {
     this.frame += 1;
     // 大部分帧只比一次"要不要重画"，省掉整棵树的计算样式读取
     if (this.frame % SIGNATURE_INTERVAL === 0) this.refresh(false);
+    // 兜底：只换了位图（图标）、文字没变的情况签名抓不到（见 `pollMs` 的注释）
+    const pollMs = this.options.pollMs ?? 0;
+    if (pollMs > 0) {
+      const now = typeof performance === 'undefined' ? 0 : performance.now();
+      if (now - this.lastForcedAt >= pollMs) {
+        this.lastForcedAt = now;
+        this.refresh(true);
+      }
+    }
   };
 
   /** 重新读一遍（`force` = 不看签名，直接读并重画） */
@@ -135,6 +161,7 @@ export class MenuScreen2D {
     const view = { w: overlay.width, h: overlay.height };
     this.runs = readTextRuns(source, origin, view);
     this.blocks = readTextBlocks(source, origin, view);
+    this.blits = readCanvasBlits(source, origin, view);
     this.draw();
   }
 
@@ -224,6 +251,8 @@ export class MenuScreen2D {
     const ctx = overlay.context;
     // 先底后字：与 DOM 的层叠一致（底块含边框）
     drawTextBlocks(ctx, this.blocks);
+    // 图标位图夹在"底"与"文字"之间：DOM 里它们也在槽位底之上、数量文字之下
+    drawCanvasBlits(ctx, this.blits);
     // 留一个字宽的余量：DOM 的 letter-spacing 会让标题盒子比 canvas 量出的字窄
     drawTextRuns(ctx, this.runs, 10);
     // 焦点在输入框上时，光标/选区由我们画：DOM 那份被 `opacity: 0` 一起藏了

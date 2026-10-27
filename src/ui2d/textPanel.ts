@@ -131,6 +131,46 @@ export function drawTextBlocks(ctx: CanvasRenderingContext2D, blocks: readonly T
   }
 }
 
+/**
+ * 一块"要把 DOM 里的 `<canvas>` 位图搬过去"的区域。
+ *
+ * 为什么单开一条：背包 / 创造的**物品图标**不是文字也不是底色，而是 DOM 里
+ * 已经画好的一张 `<canvas>`（`ui/ItemIcon.ts` 画的等轴方块 / 精灵）。镜像文字与底色
+ * 只能得到一个"有边框、有空位、没有图标"的背包 —— 看起来很怪，而且没人会想到
+ * 是"镜像漏了一类内容"。
+ */
+export interface CanvasBlit {
+  readonly rect: Rect;
+  readonly canvas: HTMLCanvasElement;
+}
+
+/** 读出范围内所有 `<canvas>`（原位、原尺寸） */
+export function readCanvasBlits(
+  root: HTMLElement,
+  origin: DOMRect,
+  view: { readonly w: number; readonly h: number },
+): CanvasBlit[] {
+  const blits: CanvasBlit[] = [];
+  for (const el of root.querySelectorAll('canvas')) {
+    const canvas = el as HTMLCanvasElement;
+    if (canvas.width <= 0 || canvas.height <= 0) continue;
+    const box = canvas.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    const rect: Rect = { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
+    if (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > view.w || rect.y > view.h) continue;
+    blits.push({ rect, canvas });
+  }
+  return blits;
+}
+
+/** 按原位把位图贴上去（像素风：关掉平滑） */
+export function drawCanvasBlits(ctx: CanvasRenderingContext2D, blits: readonly CanvasBlit[]): void {
+  for (const blit of blits) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(blit.canvas, blit.rect.x, blit.rect.y, blit.rect.w, blit.rect.h);
+  }
+}
+
 /** 把 CSS 的 `font-weight` 归一到我们支持的档位（`uiFont` 只认 400/600/700） */
 export function normalizeWeight(value: string | number): 400 | 600 | 700 {
   const n = typeof value === 'number' ? value : Number.parseInt(value, 10);

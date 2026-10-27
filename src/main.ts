@@ -46,7 +46,6 @@ import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 // canvas 界面（`src/ui2d/` 阶段 0）：只有 `?ui2d=1` 时才挂，DOM 版一个字节没动
 import {
   Hud2D,
-  Inventory2D,
   MenuScreen2D,
   Ui2DOverlay,
   ARMOR_PER_ICON,
@@ -1284,14 +1283,19 @@ class App {
   private chatEntry2d: MenuScreen2D | null = null;
   private chatEntry2dOn = false;
   /**
-   * 背包 / 工作站的槽位（`?ui2d=1`）。
+   * 背包 / 工作站整页的 canvas 镜像（`?ui2d=1`）。
    *
-   * `#inventory-screen` 的 z-index 是 10，所以这一层用 12。槽位本身靠一条
-   * **挂在 `documentElement` 上的类**统一设 `opacity: 0`（而不是逐个元素设内联样式）：
-   * 背包切模式、换容器时会**重建槽位 DOM**，逐个设活不过一次重建。
+   * 这一版走**整页镜像**（与主菜单同一条路）：`.inv-panel` 设 `opacity: 0` 让位像素，
+   * canvas 把面板底、每个槽位的底/斜面、**物品图标位图**、数量、标题按原位重画。
+   *
+   * 为什么先镜像而不是自绘：背包有 19 种工作站（合成 2×2/3×3、熔炉、铁砧、附魔台…），
+   * 自绘要先把这些布局一个个搬过来，而镜像**一次覆盖全部**——它不需要知道界面上有什么。
+   * 自绘版（`ui2d/InventoryPanel2D.ts`）留在预览页里继续演进，等规则与视觉都稳定再切换。
+   *
+   * `#inventory-screen` 的 z-index 是 10，所以覆盖层用 12。
    */
-  private inventory2d: Inventory2D | null = null;
-  private inventory2dOn = false;
+  private invMirror: MenuScreen2D | null = null;
+  private invMirrorOn = false;
   private readonly invStyleEl: HTMLStyleElement | null = null;
   /**
    * 暂停菜单页的 canvas 版（`?ui2d=1`）。
@@ -3070,15 +3074,20 @@ class App {
       if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
       // 聊天输入行也交给 canvas（`#chat` 是 body 级 z-index 8，所以覆盖层要更高）
       this.chatEntry2d = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
-      // 背包槽位（`#inventory-screen` 是 10，覆盖层用 12）
-      this.inventory2d = new Inventory2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
+      // 背包整页镜像（`#inventory-screen` 是 10，覆盖层用 12）
+      this.invMirror = new MenuScreen2D(document.body, {
+        tint: UI2D_TINT_ENABLED,
+        zIndex: 12,
+        // 背包的图标是位图：拖动物品后数量文字常常没变，签名抓不到，靠定期重读兜底
+        pollMs: 120,
+      });
       /*
-       * 槽位让位用**一条挂在 `<html>` 上的类**，不是逐个元素的内联样式：
-       * 背包切模式/换容器会重建槽位 DOM，内联样式活不过下一次重建。
+       * `#inv-held`（拿在手上的那一叠）在面板**外面**，镜像覆盖不到，用一条挂在
+       * `<html>` 上的类藏掉。用类而不是逐个元素设内联样式：这个元素是常驻的，
+       * 但风格与「背包切模式会重建槽位 DOM」那条一致，省得以后再踩。
        */
       const style = document.createElement('style');
-      style.textContent =
-        'html.ui2d-inv #inventory-screen .inv-slot, html.ui2d-inv #inv-held { opacity: 0; }';
+      style.textContent = 'html.ui2d-inv #inv-held { opacity: 0; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -6816,20 +6825,22 @@ class App {
    * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
    */
   private syncInventory2d(): void {
-    const screen = this.inventory2d;
-    if (!screen) return;
-    const open = this.inventoryScreen.isOpen;
-    if (open === this.inventory2dOn) {
-      if (open) screen.update();
+    const mirror = this.invMirror;
+    if (!mirror) return;
+    const panel = document.querySelector<HTMLElement>('#inventory-screen .inv-panel');
+    const open = this.inventoryScreen.isOpen && panel !== null;
+    if (open && panel) {
+      if (!this.invMirrorOn) {
+        this.invMirrorOn = true;
+        document.documentElement.classList.add('ui2d-inv');
+      }
+      mirror.engage(panel);
       return;
     }
-    this.inventory2dOn = open;
-    document.documentElement.classList.toggle('ui2d-inv', open);
-    if (open) {
-      screen.open();
-      screen.update();
-    } else {
-      screen.close();
+    if (this.invMirrorOn) {
+      this.invMirrorOn = false;
+      document.documentElement.classList.remove('ui2d-inv');
+      mirror.disengage();
     }
   }
 
@@ -19980,8 +19991,8 @@ class App {
     this.scoreboardHud.dispose();
     this.chatEntry2d?.dispose();
     this.chatEntry2d = null;
-    this.inventory2d?.dispose();
-    this.inventory2d = null;
+    this.invMirror?.dispose();
+    this.invMirror = null;
     this.invStyleEl?.remove();
     document.documentElement.classList.remove('ui2d-inv');
     this.tutorialCard.dispose();

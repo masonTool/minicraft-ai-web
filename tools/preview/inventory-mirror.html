@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 背包整页镜像（canvas）</title>
+    <!--
+      M26 的第一步：背包 / 工作站**整页**交给 canvas。
+
+      做法与主菜单同一套（`MenuScreen2D`）：`.inv-panel` 设 `opacity: 0` 让位像素，
+      canvas 把面板底、每个槽位的底/斜面、**物品图标位图**、数量、标题按原位重画。
+      交互（拖拽分配 / 长按分堆 / 连发 / 悬停提示）全部留在 DOM —— 所以 19 种工作站
+      一次全覆盖，不需要逐个适配。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/inventory-mirror.html
+        open 'http://localhost:5173/tools/preview/inventory-mirror.html?tint=1'
+    -->
+    <style>
+      :root {
+        --slot-bg: #8b8b8b;
+        --slot-edge-light: #c6c6c6;
+        --slot-edge-dark: #373737;
+        --slot-radius: 2px;
+      }
+      body { margin: 0; background: #111; display: grid; place-items: center; min-height: 100vh; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 20;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      /* 与 index.html 的 #inventory-screen / .inv-panel / .inv-slot 同观感 */
+      #inventory-screen {
+        position: absolute; inset: 0; display: grid; place-items: center;
+      }
+      .inv-panel {
+        position: relative; padding: 14px; background: #c6c6c6;
+        border: 3px solid; border-color: #373737 #fff #fff #373737;
+        color: #3f3f3f;
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+      }
+      .inv-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+      .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 2px; }
+      .inv-grid + .inv-grid { margin-top: 10px; }
+      .inv-slot {
+        position: relative; width: 42px; height: 42px;
+        display: grid; place-items: center;
+        background: var(--slot-bg);
+        border: 2px solid;
+        border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+        border-radius: var(--slot-radius);
+      }
+      .inv-slot.locked { background: #9b3b35; }
+      .inv-slot.held { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .92); }
+      .inv-count {
+        position: absolute; right: 2px; bottom: 1px;
+        font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000;
+      }
+      .dur-bar {
+        position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px;
+        background: rgba(0, 0, 0, .65);
+      }
+      .dur-bar b { display: block; height: 100%; background: #e0d24a; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="inventory-screen">
+        <div class="inv-panel">
+          <div class="inv-header"><span>生存背包</span><span>27 格 · 合成 2×2</span></div>
+          <div class="inv-grid" id="grid"></div>
+          <div class="inv-grid" id="hotbar-row"></div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { MenuScreen2D } from '../../src/ui2d/index.ts';
+
+      const tint = new URLSearchParams(window.location.search).get('tint') === '1';
+      const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
+      const ICONS = COLORS.map((color, index) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 36;
+        canvas.height = 36;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.fillRect(7, 7, 22, 22);
+        ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(7, 7, 22, 22);
+        if (index === 3) {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(16, 9, 4, 18);
+        }
+        return canvas;
+      });
+
+      /** 造一格：图标是一张真的 `<canvas>`（镜像必须把它的位图也搬过去） */
+      function makeSlot(iconIndex, count, options = {}) {
+        const slot = document.createElement('div');
+        slot.className = 'inv-slot';
+        if (options.locked) slot.classList.add('locked');
+        if (options.held) slot.classList.add('held');
+        const canvas = document.createElement('canvas');
+        canvas.width = 36;
+        canvas.height = 36;
+        canvas.style.width = '32px';
+        canvas.style.height = '32px';
+        canvas.style.imageRendering = 'pixelated';
+        if (iconIndex !== null) {
+          canvas.getContext('2d').drawImage(ICONS[iconIndex % ICONS.length], 0, 0, 36, 36, 0, 0, 36, 36);
+        }
+        const countEl = document.createElement('span');
+        countEl.className = 'inv-count';
+        if (count > 1) countEl.textContent = String(count);
+        const dur = document.createElement('i');
+        dur.className = 'dur-bar';
+        const fill = document.createElement('b');
+        fill.style.width = `${options.durability ?? 100}%`;
+        dur.appendChild(fill);
+        if (!options.durability) dur.style.display = 'none';
+        slot.append(canvas, countEl, dur);
+        return slot;
+      }
+
+      const grid = document.getElementById('grid');
+      for (let i = 0; i < 27; i++) {
+        grid.appendChild(
+          makeSlot(i < 12 ? i : null, i === 0 ? 64 : i === 1 ? 12 : i === 2 ? 3 : 1, {
+            durability: i === 4 ? 62 : 0,
+            locked: i === 20,
+            held: i === 11,
+          }),
+        );
+      }
+      const row = document.getElementById('hotbar-row');
+      for (let i = 0; i < 9; i++) row.appendChild(makeSlot(i < 5 ? i + 1 : null, i === 6 ? 32 : 1));
+
+      const panel = document.querySelector('.inv-panel');
+      const screen = new MenuScreen2D(document.getElementById('stage'), { tint, zIndex: 12 });
+      screen.engage(panel);
+
+      document.getElementById('caption').textContent =
+        '背包整页镜像：面板底 / 槽位斜面 / 物品图标 / 数量 / 耐久条都由 canvas 重画 · DOM 只保留交互' +
+        (tint ? ' · 黄色遮罩（整块黄 = 全是 canvas）' : '');
+    </script>
+  </body>
+</html>

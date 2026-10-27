@@ -24,6 +24,7 @@ import {
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
 import {
+  drawCanvasBlits,
   drawTextRuns,
   inputDisplayText,
   normalizeWeight,
@@ -706,5 +707,44 @@ describe('输入框的显示文本', () => {
 
   it('只有一个空格也算"有值"（玩家真的敲了一个空格，不该被占位盖掉）', () => {
     expect(inputDisplayText(' ', '名字')).toEqual({ text: ' ', isPlaceholder: false });
+  });
+});
+
+
+/**
+ * 位图搬运（`readCanvasBlits` / `drawCanvasBlits`）。
+ *
+ * 背包镜像必须把槽位里的 `<canvas>` 图标一起搬过去，否则画出来是
+ * "有边框、有空位、没有图标"的背包 —— 看着像漏了内容，也很难联想到是镜像的事。
+ * 这里钉两件：贴图用原矩形、关掉平滑（像素风）。
+ */
+describe('位图搬运', () => {
+  function fakeCtx() {
+    const calls: string[] = [];
+    let smoothing = true;
+    const ctx = {
+      set imageSmoothingEnabled(value: boolean) {
+        smoothing = value;
+        calls.push(`smooth ${value}`);
+      },
+      get imageSmoothingEnabled() {
+        return smoothing;
+      },
+      drawImage: (_img: unknown, x: number, y: number, w: number, h: number) => calls.push(`draw ${x},${y},${w},${h}`),
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
+  }
+
+  it('按原位贴、关平滑', () => {
+    const fake = fakeCtx();
+    const canvas = { width: 36, height: 36 } as HTMLCanvasElement;
+    drawCanvasBlits(fake.ctx, [{ rect: { x: 10, y: 20, w: 32, h: 32 }, canvas }]);
+    expect(fake.calls).toEqual(['smooth false', 'draw 10,20,32,32']);
+  });
+
+  it('空列表一笔都不画', () => {
+    const fake = fakeCtx();
+    drawCanvasBlits(fake.ctx, []);
+    expect(fake.calls).toEqual([]);
   });
 });

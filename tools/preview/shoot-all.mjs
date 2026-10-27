@@ -297,6 +297,20 @@ const SHOTS = [
     what: '在 canvas 面板上点起一格：两侧同步清空，手上那叠由 canvas 画并跟随指针',
     status: '已迁 · 阶段 4',
   },
+  {
+    file: '23-inventory-mirror.png',
+    page: 'tools/preview/inventory-mirror.html',
+    size: [864, 410],
+    what: '背包**整页镜像**：面板底/槽位斜面/物品图标/数量/耐久条全由 canvas 重画',
+    status: '已迁 · 阶段 4',
+  },
+  {
+    file: '23b-inventory-mirror-tinted.png',
+    page: 'tools/preview/inventory-mirror.html?tint=1',
+    size: [864, 410],
+    what: '背包整页镜像 + 遮罩（整块黄 = 面板里每一像素都是 canvas 画的）',
+    status: '遮罩 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
