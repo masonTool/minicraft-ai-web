@@ -18095,3 +18095,40 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
   - 为什么：协议表是两端共同的契约；这次改的是"谁说了算"的边界（共享 → 每房），不写进表里下次照旧实现会再踩一遍。掉落物那条顺手把上一轮我说错的话在台账里更正，避免以后被人当成事实引用。
   - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。⚠️ 先红了 4 条 `tools/ui-test.ts` 的结构断言（它们钉着旧的 `currentDay()` / `startTimeOfDay = …` 字面串）——改成按新结构断言（`currentDay(clockOf(player.room))` / `clock.startTimeOfDay` / `clocks.set(room, clock)` / `const clock = createClock()`），`test:ui` **1197 通过 / 0 失败**。
 
+## 批次 20261026-2259 · 2026-10-26 · 会话 783135b3
+
+> 用户 2026-10-26 报的五件事：① 对方形象每隔几秒闪一次；② 队友死了对方还站着；
+> ③ 名字要像网游那样一直看得到、正面朝向；④ 生存模式瞄准队友要看到生命/饥饿；
+> ⑤ 野怪血条小一点细一点。
+
+# 队列 · 会话 783135b39ab64f5599ca2897f9593157
+
+> 状态：执行中
+> 创建：2026-10-26
+> 批次：20261026-2259
+
+- [x] [L8] 修"对方形象每隔几秒闪一次"：`move` 每条带全量外观 + 服务端 `player.appearance` 改成合并 + 接收端"没带就不动" → `npm run test:net`
+  - 做了什么：`NetClient.tick()` 不再按 `lookDue` 节流，`held/offhand/armor/look/sneak/swing/hurt/fire/ride/sleep/dead/hp/food` **每条都带**（0/false 也带）；`server/index.mjs` 的 `readAppearance()` 改成"只返回消息里真的带了的键"，`move` 分支用 `player.appearance = { ...player.appearance, ...readAppearance(message) }` 合并；`RemoteAppearance.update()` 每个字段 `!== undefined` 才覆盖；删掉 `LOOK_RESEND_MS`/`lastSentLookKey`/`lastLookSentAt`。
+  - 为什么：根因是"整份覆盖 + 客户端只在变化/每 2 秒带 look"——不带 look 的那 99% 消息把服务端的 appearance 清成空，对端回退到"按昵称派生"的外观，2 秒后再纠正回来，周期正好 2 秒。三层都改是为了老服务端/老客户端混着用也不闪。
+  - 验证：`npm run test:net` **278 → 286 通过 / 0 失败**（新增 8 条：带 look/held/hp/food 转发、**不带 look 的 move 不清空皮肤**、不带 held 不清空手持、dead 1/0 都能覆盖、死亡时 hp=0 能表达、hp/food 夹到 0~20）；两条旧断言按新语义改写（"非正 id 被丢掉" → "规整成 0"、"长度不足的 look 不下发" → "不被采纳、保持上一次"）；`tests/net-client-look.test.ts` 重写 4 条为"每条都带"；`npm run check:fast` 595 单测。
+- [x] [L8] 队友死亡：上行 `dead` + 对端当场收掉模型 + 消息栏说一句 → `npm run test:net`
+  - 做了什么：`localAppearance()` 补 `dead/hp/food/fire`；服务端白名单加 `dead/hp/food`（`clampPoints` 夹 0~20）；`updateRemotePlayers()` 的可见性改成 `visible && !dead`；`updateNameTags()` 跳过死者；`onNetPlayer` 在 `dead` 的**边沿**推一句 `say.net.playerDied`（六语言新增）。
+  - 为什么：以前死亡没有任何上行，服务端只看到"他在原位不动"，尸体就一直站着，直到复活后位置变了才更新；模型凭空消失也得有一句解释。
+  - 验证：`npm run test:net` 见上（dead 的两条）；`npm run audit:i18n` 2973 键 × 6 语言通过。
+- [x] [L8] 队友名字牌：范围 64 → **视距尽头 128 格**、去掉距离渐隐 → `npm run check:fast`
+  - 做了什么：`REMOTE_NAME_TAG_RANGE` 64 → 128；删掉 `REMOTE_NAME_TAG_FADE_FROM` 与 `remoteNameTagOpacity()`，`updateNameTags` 固定传 1；`tools/nametag-test.ts` 的四条渐隐断言换成两条范围断言；`tools/render-test.ts` 无关。
+  - 为什么：用户要的是"像常见网游那样，视野里就一直能看到"——64 格 + 32 格起变淡 + 固定 16 个牌子池，观感就是"名字时有时无"。
+  - 验证：`npm run check:fast` 全绿（`nametag` 套件通过）。
+- [x] [L8] 生存模式下准星锁定队友 → 显示一红（生命）一黄（饥饿）两条细条 → `npm run check:fast`
+  - 做了什么：`index.html` 加 `#target-vitals`（96×两条 3px，在准星与冷却条下方）+ 样式；`main.ts` 新增 `aimRemotePlayer()`（12 格、8° 锥、跳过死者/他维度）与 `updateTargetVitals()`（只在 `gameMode === 'survival' && !uiOpen && !dead` 且对方报过血量时显示，宽度按 `hp/20`、`food/20`），每帧跟着 `updateNameTags()` 调。
+  - 为什么：`player` 消息以前完全不带血量/饥饿，所以这次先把数据补上（随每条 `move` 发 0~20 的整数），再画 UI；"对方没报过就不画"是为了不显示一根恒满的假条。
+  - 验证：`npm run check:fast` 全绿（typecheck + 595 单测）；`npm run test:ui` 1199 通过。
+- [x] [L8] 野怪血条变小变细 → `npm run check:fast`（`render` 套件）
+  - 做了什么：`MobHealthBar` 世界宽度 `1.1~2.4` → **`0.7~1.4`**、画布 `256×40` → **`256×16`**（条 24px → 12px、描边 2 → 1、内边距 3 → 2）、离头顶 `0.12` → `0.06`；`tools/render-test.ts` 三条尺寸断言按新值改写。
+  - 为什么：画布原来 40px 高、条只占 24px（60%），世界高度被画布比例稀释，看起来既粗又占地；画布贴紧条（12/16 = 75%）之后同样是"细条"但分辨率没浪费。
+  - 验证：`npm run check:fast` 全绿（`render` 套件通过）。
+- [x] [L8] 协议与台账：`NET-PROTOCOL.md` 的 `move` 行补 `dead/hp/food` 与"外观每条全量、服务端合并" + `TASKS.md` 的 L8 补一节 → `npm run check`
+  - 做了什么：§4 的 `move` 行字段补 `dead / hp / food`，备注写清"每条带全量 + 服务端合并"以及闪烁的来龙去脉与 2 秒周期；§7 的 `player` 行补"没带的字段保持原值""dead 为真时模型与名字牌一起收掉并提示"；`TASKS.md` 的 L8 补第 ⑫ 点（观感四件套）。
+  - 为什么：这几条都是"看起来像 bug 的行为其实是约定"（外观必须每条全量、`dead` 会随每条 move 重复到达），不写进协议表下次又会按"变化才发"改回去。
+  - 验证：`npm run check` 全绿（typecheck + 181 套离线测试 + 三张台账）。
+
