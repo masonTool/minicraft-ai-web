@@ -346,6 +346,20 @@ const SHOTS = [
     what: '同一页的 DOM 基准（不镜像）：用来比对位置',
     status: '基准 · 阶段 3',
   },
+  {
+    file: '27-inventory-rails.png',
+    page: 'tools/preview/inventory-mirror.html',
+    size: [864, 410],
+    what: '背包 + **左右立栏**（左：分类/仓库；右：人物/成就/配方）——镜像根改成 `.inv-shell` 后一起上 canvas',
+    status: '已迁 · 阶段 4',
+  },
+  {
+    file: '27b-inventory-rails-tinted.png',
+    page: 'tools/preview/inventory-mirror.html?tint=1',
+    size: [864, 410],
+    what: '背包 + 立栏 + 遮罩（面板与立栏全黄）',
+    status: '遮罩 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

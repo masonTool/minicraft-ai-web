@@ -6832,7 +6832,15 @@ class App {
   private syncInventory2d(): void {
     const mirror = this.invMirror;
     if (!mirror) return;
-    const panel = document.querySelector<HTMLElement>('#inventory-screen .inv-panel');
+    /*
+     * 镜像根取 `.inv-shell` 而不是 `.inv-panel`：**左右两侧的立栏在 panel 外面**
+     * （`.inv-shell > .inv-rail-left / .inv-panel / .inv-rail-right`），
+     * 只镜像 panel 的话，左边的分类/仓库抽屉、右边的「人物 / 成就」那几颗仍是 DOM ——
+     * 一屏里一半 canvas 一半 DOM，看着就是"这两块没迁"。
+     */
+    const panel =
+      document.querySelector<HTMLElement>('#inventory-screen .inv-shell') ??
+      document.querySelector<HTMLElement>('#inventory-screen .inv-panel');
     const open = this.inventoryScreen.isOpen && panel !== null;
     if (open && panel) {
       if (!this.invMirrorOn) {

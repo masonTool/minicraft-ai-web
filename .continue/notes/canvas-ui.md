@@ -692,6 +692,24 @@ button「游戏」的 y：150ms 时 483 → 1650ms 时 309     （差 174px）
 验证（Playwright 合成 touch 指针事件）：`inventory-mirror.html?creative=1` 里向上拖 60px →
 `grid.scrollTop` 从 **0 变 60**，画面同步重画。
 
+## 5.25 修复（背包左右立栏没上 canvas：镜像根选错了一层）
+
+用户 2026-10-27：「左右两边的按钮 —— 左边的分类按钮、仓库按钮，右边的人物、成就，那三颗（也还是 DOM）」。
+
+原因很简单：镜像根取的是 `.inv-panel`，而 DOM 结构是
+
+```
+#inventory-screen > .inv-shell > [ .inv-rail-left | .inv-panel | .inv-rail-right | .pocket-tabs ]
+```
+
+**立栏在 panel 外面**，所以一屏里"中间是 canvas、两侧还是 DOM"。
+
+修法：镜像根改成 `.inv-shell`（`?? .inv-panel` 兜底）。立栏的选中态、抽屉展开、
+页签高亮全都是 DOM 的 class 变化，镜像自动跟上 —— 一行额外逻辑都不用写。
+
+教训：接手"整页"之前先看清**这一页的根到底是哪个节点**。差一层，就会漏掉一整块
+（而且漏掉的部分看起来"正常"，只是它还是 DOM）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

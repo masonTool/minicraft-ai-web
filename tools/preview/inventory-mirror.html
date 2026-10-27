@@ -38,6 +38,14 @@
       #inventory-screen {
         position: absolute; inset: 0; display: grid; place-items: center;
       }
+      .inv-shell { display: flex; align-items: center; gap: 10px; }
+      .inv-rail-left, .inv-rail-right { display: flex; flex-direction: column; gap: 8px; }
+      .inv-rail-tab {
+        width: 44px; padding: 10px 0; font-size: 12px;
+        color: #3f3f3f; background: #8b8b8b;
+        border: 2px solid; border-color: #c6c6c6 #4a4a4a #4a4a4a #c6c6c6;
+      }
+      .inv-rail-tab.active { background: #c6c6c6; }
       .inv-panel {
         position: relative; padding: 14px; background: #c6c6c6;
         border: 3px solid; border-color: #373737 #fff #fff #373737;
@@ -82,10 +90,21 @@
   <body>
     <div id="stage">
       <div id="inventory-screen">
-        <div class="inv-panel">
+        <div class="inv-shell">
+          <div class="inv-rail-left">
+            <button class="inv-rail-tab active">分类</button>
+            <button class="inv-rail-tab">仓库</button>
+          </div>
+          <div class="inv-panel">
           <div class="inv-header"><span>生存背包</span><span>27 格 · 合成 2×2</span></div>
           <div class="inv-grid" id="grid"></div>
           <div class="inv-grid" id="hotbar-row"></div>
+          </div>
+          <div class="inv-rail-right">
+            <button class="inv-rail-tab">人物</button>
+            <button class="inv-rail-tab">成就</button>
+            <button class="inv-rail-tab">配方</button>
+          </div>
         </div>
       </div>
       <div class="caption" id="caption"></div>
@@ -177,7 +196,8 @@
       }
       for (let i = 0; i < 9; i++) row.appendChild(makeSlot(i < 5 ? i + 1 : null, i === 6 ? 32 : 1));
 
-      const panel = document.querySelector('.inv-panel');
+      // 镜像根是 `.inv-shell`（左右立栏在 `.inv-panel` 外面，只镜像 panel 会漏掉它们）
+      const panel = document.querySelector('.inv-shell');
       const screen = new MenuScreen2D(document.getElementById('stage'), { tint, zIndex: 12 });
       screen.engage(panel);
 
