@@ -26,6 +26,15 @@ const SKIP_TYPES = new Set(['range', 'checkbox', 'radio', 'file', 'color', 'subm
 let layer: HTMLDivElement | null = null;
 let field: HTMLInputElement | null = null;
 let editing: HTMLInputElement | HTMLTextAreaElement | null = null;
+/**
+ * 最近一次"用户按下"的时间。
+ *
+ * 用户 2026-10-27：**手机上任何输入框都不该在出现时自动弹键盘**（打开面板、
+ * 切换表单、代码里为了"方便"调 `input.focus()` 都会把键盘顶起来）。
+ * 判断办法：真点击一定先有 `pointerdown`/`touchstart`，程序调用的 `focus()` 没有。
+ * 所以 focusin 时看"最近 600ms 内有没有按下"——没有就直接 blur，**连浮层都不弹**。
+ */
+let lastPressAt = 0;
 
 /**
  * 要不要接管（用户 2026-10-27：**PC 端没有这套逻辑**）。
@@ -195,6 +204,12 @@ export function installInputOverlay(): void {
   if (typeof document === 'undefined') return;
   if (!shouldLift()) return;
   installEventShield();
+  // 记录"用户真的按下了"（鼠标与触摸都算），供 focusin 判断是不是用户点出来的
+  const markPress = (): void => {
+    lastPressAt = Date.now();
+  };
+  window.addEventListener('pointerdown', markPress, true);
+  window.addEventListener('touchstart', markPress, { capture: true, passive: true });
 
   document.addEventListener(
     'focusin',
@@ -202,6 +217,15 @@ export function installInputOverlay(): void {
       const target = event.target;
       if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return;
       if (target.closest('.inp-layer') !== null) return;
+      /*
+       * 不是用户点出来的聚焦 → 直接退还，**不弹浮层也不弹键盘**（用户 2026-10-27：
+       * 手机端任何输入框都不该在"出现时"自动把键盘顶起来）。
+       * 真点击一定先有 pointerdown/touchstart；程序调 `focus()` 没有。
+       */
+      if (Date.now() - lastPressAt > 600) {
+        target.blur();
+        return;
+      }
       if (target.readOnly === true || target.disabled === true) return;
       if (target instanceof HTMLInputElement && SKIP_TYPES.has(target.type)) return;
       /*
