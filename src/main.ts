@@ -48,13 +48,15 @@ import {
   Hud2D,
   Ui2DOverlay,
   ARMOR_PER_ICON,
+  attackChargePercent,
+  attackChargeRect,
   bubbleIconState,
   vitalIconState,
   type HotbarSlotState,
   type Rect as Ui2DRect,
   type VitalIcon,
 } from './ui2d/index.ts';
-import { attackCooldownFor } from './core/combat/AttackSpeed.ts';
+import { attackChargeProgress, attackCooldownFor } from './core/combat/AttackSpeed.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
 import {
@@ -1228,6 +1230,20 @@ class App {
    */
   private vitals2dKey = '';
   private vitals2dEpoch = 0;
+  /**
+   * 提示条族（目标名 / 蓄力条 / 物品名浮标）的量测缓存。
+   *
+   * 三样里只有**目标名与物品名**需要量 DOM（文本长度、触摸 pinned 的位置都在 CSS 里），
+   * 蓄力条的几何是"视口中线 + 16px"，直接算即可。量测只在 key 变化时做 ——
+   * 文本没变、手指没动、没转屏就不该碰 `getBoundingClientRect()`。
+   */
+  private tips2dEpoch = 0;
+  private targetTipKey = '';
+  private targetTipRect: Ui2DRect | null = null;
+  private itemNameTipKey = '';
+  private itemNameTipRect: Ui2DRect | null = null;
+  /** 物品名浮标"显示那一刻"的时间戳（ms）——淡化进度靠它算 */
+  private itemNameShownAt = Number.NEGATIVE_INFINITY;
   /**
    * 图标位图版本号：`refreshHotbar()` 每跑一次 +1。
    *
@@ -6200,6 +6216,8 @@ class App {
 
     // 像素换手（`?ui2d=1`）：DOM 只留下布局与命中，外观交给 canvas
     this.applyHotbar2DDomFallback();
+    // 提示条族（目标名 / 蓄力条 / 物品名浮标）同理：纯展示，直接 visibility 让位
+    this.applyTipsDomFallback();
 
     this.refreshHotbar();
   }
@@ -6344,6 +6362,63 @@ class App {
         ? { rect: bar, ratio: this.experience.ratio, level: this.experience.level }
         : null,
     );
+  }
+
+  /**
+   * 三样提示条的 DOM 让位（`?ui2d=1`）。
+   *
+   * 全是纯展示，所以 `visibility: hidden`（退出命中、跳过绘制）而不是 `opacity: 0`；
+   * 它们的**布局必须留着**：目标名的宽度随文本变、触摸瞄准时还会被 JS 挪位置，
+   * canvas 全靠量出来的矩形跟它对齐。
+   */
+  private applyTipsDomFallback(): void {
+    if (!UI2D_ENABLED) return;
+    for (const id of ['target-info', 'attack-cooldown', 'selected-item-name']) {
+      const el = document.getElementById(id);
+      if (el) el.style.visibility = 'hidden';
+    }
+  }
+
+  /** 每帧喂一次提示条（不缓存像素：三样加起来也就两次文字 + 一块小矩形） */
+  private syncTips2D(): void {
+    const hud = this.hud2d;
+    const overlay = this.ui2dOverlay;
+    if (!hud || !overlay) return;
+    const host = overlay.canvas.getBoundingClientRect();
+
+    // ---- 目标名 ----
+    let target: { rect: Ui2DRect; text: string } | null = null;
+    if (this.targetInfoText.length > 0 && this.targetInfoEl && !this.targetInfoEl.classList.contains('hidden')) {
+      const key = `${this.targetInfoText}|${this.targetPinned ? `${this.targetAnchorX},${this.targetAnchorY}` : 'center'}|${this.tips2dEpoch}`;
+      if (key !== this.targetTipKey) {
+        this.targetTipKey = key;
+        const rect = ui2dRectOf(this.targetInfoEl.getBoundingClientRect(), host);
+        this.targetTipRect = rect.w > 0 ? rect : null;
+      }
+      if (this.targetTipRect) target = { rect: this.targetTipRect, text: this.targetInfoText };
+    }
+
+    // ---- 攻击蓄力条（几何算得出，不用量 DOM）----
+    const percent = attackChargePercent(attackChargeProgress(this.attackCooldown, this.attackCooldownMax));
+    const charge = percent < 100 ? { rect: attackChargeRect(overlay.width, overlay.height), percent } : null;
+
+    // ---- 物品名浮标（矩形量 DOM，淡化按时间算）----
+    let itemName: { rect: Ui2DRect; text: string; shownAtMs: number } | null = null;
+    const label = this.selectedItemName;
+    const text = label?.textContent ?? '';
+    if (label && text.length > 0 && Number.isFinite(this.itemNameShownAt)) {
+      if (text !== this.itemNameTipKey || !this.itemNameTipRect) {
+        this.itemNameTipKey = text;
+        const rect = ui2dRectOf(label.getBoundingClientRect(), host);
+        this.itemNameTipRect = rect.w > 0 ? rect : null;
+      }
+      if (this.itemNameTipRect) itemName = { rect: this.itemNameTipRect, text, shownAtMs: this.itemNameShownAt };
+    } else if (text.length === 0) {
+      this.itemNameTipKey = '';
+      this.itemNameTipRect = null;
+    }
+
+    hud.setTips({ target, charge, itemName });
   }
 
   /**
@@ -6853,6 +6928,8 @@ class App {
         this.refreshHotbar();
         // 状态栏的图标也随断点变（18 / 14 / 22px）：数值没变、矩形变了，靠 epoch 触发重量
         this.vitals2dEpoch += 1;
+        // 提示条的位置/宽度也跟着视口走
+        this.tips2dEpoch += 1;
         if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
       },
       { signal: this.listeners.signal },
@@ -17617,6 +17694,8 @@ class App {
     this.xpHud.update(this.experience, noVitals);
     // canvas 版状态栏 + 经验条：内部按 key 比较，数值没变就不量 DOM
     this.syncVitals2D(noVitals);
+    // 提示条族（目标名 / 蓄力条 / 物品名浮标）
+    this.syncTips2D();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
@@ -19861,6 +19940,8 @@ class App {
     const name = itemLabel(stack.id);
     label.textContent = stack.count > 1 ? `${name} ×${stack.count}` : name;
     label.classList.add('show');
+    // canvas 版靠这个时间戳算淡入淡出（DOM 版靠 CSS transition）
+    this.itemNameShownAt = typeof performance === 'undefined' ? 0 : performance.now();
     if (this.itemNameTimer !== null) clearTimeout(this.itemNameTimer);
     this.itemNameTimer = window.setTimeout(() => {
       this.itemNameTimer = null;

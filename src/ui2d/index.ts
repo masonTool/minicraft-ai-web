@@ -73,6 +73,28 @@ export {
   toggleNext,
   tooltipRect,
 } from './controls.ts';
+export {
+  ATTACK_CHARGE_HEIGHT,
+  ATTACK_CHARGE_TOP_OFFSET,
+  ATTACK_CHARGE_WIDTH,
+  EMPTY_TIPS,
+  ITEM_NAME_BOTTOM,
+  ITEM_NAME_FADE_MS,
+  ITEM_NAME_HOLD_MS,
+  ITEM_NAME_RADIUS,
+  TIP_COLORS,
+  TIP_NAME_FONT_SIZE,
+  TIP_TARGET_FONT_SIZE,
+  attackChargePercent,
+  attackChargeRect,
+  drawAttackCharge,
+  drawItemNamePop,
+  drawTargetLabel,
+  drawTips,
+  itemNameAlpha,
+  tipsVisible,
+  type TipsState,
+} from './overlays.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

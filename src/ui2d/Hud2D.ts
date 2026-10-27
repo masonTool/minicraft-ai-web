@@ -23,6 +23,7 @@
 
 import { applyDebugTint } from './debug.ts';
 import { Hotbar2D, type HotbarState } from './Hotbar2D.ts';
+import { drawTips, tipsVisible, type TipsState } from './overlays.ts';
 import { Vitals2D, type VitalsState } from './Vitals2D.ts';
 import { Xp2D, type XpState } from './Xp2D.ts';
 import { Ui2DOverlay } from './overlay.ts';
@@ -146,6 +147,8 @@ export class Hud2D {
   /** 状态栏四行（生命/饥饿/护甲/氧气）与经验条 —— 阶段 2 */
   private readonly vitals = new Vitals2D();
   private readonly xp = new Xp2D();
+  /** 提示条族（目标名 / 蓄力条 / 物品名浮标）—— 阶段 2 收尾，纯展示、不缓存 */
+  private tips: TipsState | null = null;
   /** 上一帧画过东西没有：没画过就不用清屏（没接快捷栏时静止开销为 0） */
   private drewLastFrame = false;
   /**
@@ -184,6 +187,11 @@ export class Hud2D {
     this.xp.setState(state);
   }
 
+  /** 三样提示条的状态（`null` = 这一帧都不画） */
+  setTips(state: TipsState | null): void {
+    this.tips = state;
+  }
+
   /** 调试遮罩开关（`?ui2dtint=1`）：打开后这一层产出的像素全被染黄 */
   setDebugTint(on: boolean): void {
     this.debugTint = on;
@@ -217,7 +225,18 @@ export class Hud2D {
     const showHotbar = this.hotbar.active;
     const showVitals = this.vitals.active;
     const showXp = this.xp.active;
-    if (!showDamage && !showBreak && !showEat && !showBoss && !showHotbar && !showVitals && !showXp) {
+    const now = nowMs();
+    const showTips = tipsVisible(this.tips, now);
+    if (
+      !showDamage &&
+      !showBreak &&
+      !showEat &&
+      !showBoss &&
+      !showHotbar &&
+      !showVitals &&
+      !showXp &&
+      !showTips
+    ) {
       this.drewLastFrame = false;
       return;
     }
@@ -242,6 +261,8 @@ export class Hud2D {
     // 快捷栏最后画：DOM 里它在 `#damage-flash` 之上，红闪不该给它上色
     if (showHotbar) this.hotbar.draw(ctx, overlay.dpr);
 
+    // 提示条画在最后：它们在 DOM 里也是 HUD 最上面那一层（目标名压在准星下方）
+    if (showTips) drawTips(ctx, this.tips!, now);
     // 调试遮罩必须是**最后**一步（否则后面的绘制会把黄色盖掉）
     if (this.debugTint) applyDebugTint(ctx, overlay.width, overlay.height);
 
@@ -294,6 +315,11 @@ export class Hud2D {
 /** 当前时间（秒）：低血量脉冲靠它算缩放；取不到就返回 0（= 不脉冲） */
 function nowSeconds(): number {
   return typeof performance === 'undefined' ? 0 : performance.now() / 1000;
+}
+
+/** 当前时间（毫秒）：物品名浮标的淡入淡出靠它算（时间戳同源，见 `overlays.ts`） */
+function nowMs(): number {
+  return typeof performance === 'undefined' ? 0 : performance.now();
 }
 
 /** 供调试/断言：当前这一层是否"什么都没画"（静止时应当是 `true`） */

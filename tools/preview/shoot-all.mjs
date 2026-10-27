@@ -136,6 +136,27 @@ const SHOTS = [
     what: '控件库 + 黄色遮罩：整页黄 = 这七个控件全是 canvas 画的',
     status: '遮罩 · 阶段 1',
   },
+  {
+    file: '11-tips.png',
+    page: 'tools/preview/tips.html',
+    size: [864, 410],
+    what: '提示条三样：目标名（准星下）、攻击蓄力条 60%、物品名浮标（已显示 400ms）',
+    status: '已迁 · 阶段 2',
+  },
+  {
+    file: '11b-tips-fade.png',
+    page: 'tools/preview/tips.html?age=2175&charge=100',
+    size: [864, 410],
+    what: '同一屏的另一态：蓄力满了（条消失）+ 物品名淡出到一半',
+    status: '已迁 · 阶段 2',
+  },
+  {
+    file: '11c-tips-tinted.png',
+    page: 'tools/preview/tips.html?tint=1',
+    size: [864, 410],
+    what: '提示条 + 黄色遮罩（三块黄 = 这三样都是 canvas 画的）',
+    status: '遮罩 · 阶段 2',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

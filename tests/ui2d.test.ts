@@ -23,6 +23,18 @@ import {
 } from '../src/ui2d/text.ts';
 import { hitRegionAt, type HitRegion } from '../src/ui2d/input.ts';
 import { DEBUG_TINT_COLOR, applyDebugTint } from '../src/ui2d/debug.ts';
+import {
+  ATTACK_CHARGE_HEIGHT,
+  ATTACK_CHARGE_TOP_OFFSET,
+  ATTACK_CHARGE_WIDTH,
+  EMPTY_TIPS,
+  ITEM_NAME_FADE_MS,
+  ITEM_NAME_HOLD_MS,
+  attackChargePercent,
+  attackChargeRect,
+  itemNameAlpha,
+  tipsVisible,
+} from '../src/ui2d/overlays.ts';
 import { bubbleIconState, vitalIconState } from '../src/ui2d/vitalsArt.ts';
 import {
   VITALS_PULSE_SCALE,
@@ -456,5 +468,61 @@ describe('经验条几何', () => {
     expect(xpSignature(base)).not.toBe(xpSignature({ ...base, ratio: 0.5 }));
     expect(xpSignature(base)).not.toBe(xpSignature({ ...base, level: 8 }));
     expect(xpSignature(base)).not.toBe(xpSignature({ ...base, rect: { ...bar, x: 301 } }));
+  });
+});
+
+/**
+ * 提示条族（阶段 2 收尾）：目标名 / 攻击蓄力条 / 物品名浮标。
+ *
+ * 三样都是"几十像素、每帧在动"的东西，错了只表现为"看着有点怪"：
+ * 蓄力条偏 1px、物品名淡出比 DOM 快一拍 —— 所以几何与时间曲线都钉住。
+ */
+describe('提示条几何与时间曲线', () => {
+  it('蓄力条 44×3，贴在准星正下方 16px', () => {
+    expect(attackChargeRect(800, 600)).toEqual({
+      x: 400 - ATTACK_CHARGE_WIDTH / 2,
+      y: 300 + ATTACK_CHARGE_TOP_OFFSET,
+      w: ATTACK_CHARGE_WIDTH,
+      h: ATTACK_CHARGE_HEIGHT,
+    });
+  });
+
+  it('蓄力进度量化到 2%（与 DOM 版同一条口径）', () => {
+    expect(attackChargePercent(0)).toBe(0);
+    expect(attackChargePercent(0.5)).toBe(50);
+    // 0.503 → round(25.15)=25 → 50；0.51 → round(25.5)=26 → 52
+    expect(attackChargePercent(0.503)).toBe(50);
+    expect(attackChargePercent(0.51)).toBe(52);
+    expect(attackChargePercent(1)).toBe(100);
+    expect(attackChargePercent(2)).toBe(100);
+    expect(attackChargePercent(-1)).toBe(0);
+    expect(attackChargePercent(Number.NaN)).toBe(0);
+  });
+
+  it('物品名：350ms 淡入 → 保持到 2000ms → 350ms 淡出', () => {
+    expect(itemNameAlpha(0)).toBe(0);
+    expect(itemNameAlpha(ITEM_NAME_FADE_MS / 2)).toBeCloseTo(0.5, 6);
+    expect(itemNameAlpha(ITEM_NAME_FADE_MS)).toBe(1);
+    expect(itemNameAlpha(ITEM_NAME_HOLD_MS)).toBe(1);
+    expect(itemNameAlpha(ITEM_NAME_HOLD_MS + ITEM_NAME_FADE_MS / 2)).toBeCloseTo(0.5, 6);
+    expect(itemNameAlpha(ITEM_NAME_HOLD_MS + ITEM_NAME_FADE_MS)).toBe(0);
+    expect(itemNameAlpha(-5)).toBe(0);
+    expect(itemNameAlpha(Number.NaN)).toBe(0);
+  });
+
+  it('三样全空时不画（覆盖层可以整帧跳过）', () => {
+    expect(tipsVisible(EMPTY_TIPS)).toBe(false);
+    expect(tipsVisible(null)).toBe(false);
+  });
+
+  it('有任何一样就画（物品名过期的除外）', () => {
+    const rect = { x: 0, y: 0, w: 10, h: 10 };
+    expect(tipsVisible({ ...EMPTY_TIPS, target: { rect, text: '石头' } })).toBe(true);
+    expect(tipsVisible({ ...EMPTY_TIPS, charge: { rect, percent: 40 } })).toBe(true);
+    const fresh = { rect, text: '钻石剑', shownAtMs: 1000 };
+    expect(tipsVisible({ ...EMPTY_TIPS, itemName: fresh }, 1200)).toBe(true);
+    // 过了 淡入+保持+淡出 之后就不该再画
+    const expired = ITEM_NAME_HOLD_MS + ITEM_NAME_FADE_MS + 100;
+    expect(tipsVisible({ ...EMPTY_TIPS, itemName: fresh }, 1000 + expired)).toBe(false);
   });
 });

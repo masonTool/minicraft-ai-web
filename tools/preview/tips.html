@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 提示条（目标名 / 蓄力条 / 物品名浮标）</title>
+    <!--
+      阶段 2 收尾的三样提示条：准星下方的目标名、攻击蓄力条、快捷栏上方的物品名浮标。
+
+      与游戏里同一条路：先按 `index.html` 的那几条 CSS 建出 DOM（**只为了测量**，
+      设成 `visibility: hidden`），把量到的矩形喂给 `Hud2D.setTips()`，像素由 canvas 画。
+
+      用法：
+        npm run dev
+        open 'http://localhost:5173/tools/preview/tips.html'
+        open 'http://localhost:5173/tools/preview/tips.html?target=石头&item=钻石剑%20×1&charge=60&age=400&tint=1'
+        open 'http://localhost:5173/tools/preview/tips.html?age=2100'   # 看淡出
+    -->
+    <style>
+      body { margin: 0; background: #111; }
+      #scene {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      /* 与 index.html 的 #target-info 一致（含 padding，canvas 直接用这个矩形） */
+      #target-info {
+        position: absolute; left: 50%; top: calc(50% + 24px); transform: translateX(-50%);
+        padding: 2px 7px; background: rgba(0, 0, 0, .42);
+        color: #f0f0f0; font-size: 12px; line-height: 1.5; white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        visibility: hidden;
+      }
+      /* 与 #selected-item-name 一致（圆角胶囊，贴在快捷栏上方 78px） */
+      #selected-item-name {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: 78px; padding: 4px 12px; border-radius: 14px;
+        background: rgba(0, 0, 0, .58); color: #fff; font-size: 13px; white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', monospace;
+        visibility: hidden;
+      }
+      /* 准星（只在本页画一下，方便看蓄力条贴在哪儿） */
+      #cross {
+        position: absolute; left: 50%; top: 50%; width: 2px; height: 14px;
+        margin: -7px 0 0 -1px; background: rgba(255, 255, 255, .9);
+      }
+      #cross::before {
+        content: ''; position: absolute; left: -6px; top: 6px; width: 14px; height: 2px;
+        background: rgba(255, 255, 255, .9);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 10px; z-index: 5;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene">
+      <div id="cross"></div>
+      <div id="target-info"></div>
+      <div id="selected-item-name"></div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { Hud2D, Ui2DOverlay, attackChargeRect } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get('target') ?? '石头';
+      const item = params.get('item') ?? '钻石剑 ×1';
+      const charge = Number(params.get('charge') ?? 60);
+      const age = Number(params.get('age') ?? 400);
+      const tint = params.get('tint') === '1';
+
+      const scene = document.getElementById('scene');
+      const overlay = new Ui2DOverlay(scene);
+      const hud = new Hud2D(overlay);
+
+      const targetEl = document.getElementById('target-info');
+      const nameEl = document.getElementById('selected-item-name');
+      targetEl.textContent = target;
+      nameEl.textContent = item;
+
+      const host = overlay.canvas.getBoundingClientRect();
+      const rectOf = (r) => ({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+
+      const now = performance.now();
+      hud.setTips({
+        target: { rect: rectOf(targetEl.getBoundingClientRect()), text: target },
+        charge: Number.isFinite(charge) && charge < 100
+          ? { rect: attackChargeRect(844, 390), percent: Math.round(charge / 2) * 2 }
+          : null,
+        itemName: item.length > 0
+          ? { rect: rectOf(nameEl.getBoundingClientRect()), text: item, shownAtMs: now - age }
+          : null,
+      });
+      if (tint) hud.setDebugTint(true);
+      document.getElementById('caption').textContent =
+        `目标名「${target}」 · 蓄力 ${charge}% · 物品名「${item}」（已显示 ${age}ms）` + (tint ? ' · 黄色 = canvas 画的' : '');
+      hud.render();
+    </script>
+  </body>
+</html>
