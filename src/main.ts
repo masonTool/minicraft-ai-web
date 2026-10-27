@@ -47,6 +47,7 @@ import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
 import {
   Hud2D,
   MenuScreen2D,
+  Touch2D,
   Ui2DOverlay,
   ARMOR_PER_ICON,
   CanvasMenu,
@@ -72,6 +73,7 @@ import {
   writeRangeRatio,
   type FormRow,
   type HotbarSlotState,
+  type StickState,
   type MenuInput,
   type Rect as Ui2DRect,
   type TextBlock,
@@ -1295,6 +1297,9 @@ class App {
    * `#inventory-screen` 的 z-index 是 10，所以覆盖层用 12。
    */
   private invMirror: MenuScreen2D | null = null;
+  /** 触控摇杆（阶段 6 第一块）：自己画，几何量 DOM，输入仍归 DOM */
+  private touch2d: Touch2D | null = null;
+  private touch2dOn = false;
   private invMirrorOn = false;
   private readonly invStyleEl: HTMLStyleElement | null = null;
   /**
@@ -3091,8 +3096,14 @@ class App {
        * `<html>` 上的类藏掉。用类而不是逐个元素设内联样式：这个元素是常驻的，
        * 但风格与「背包切模式会重建槽位 DOM」那条一致，省得以后再踩。
        */
+      /*
+       * 触控摇杆（阶段 6）：底座与芯子都由 canvas 重画，但**命中仍归 DOM** ——
+       * `opacity: 0` 不影响 pointer 事件，拖动摇杆的手势一点没变。
+       */
+      this.touch2d = new Touch2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 30 });
       const style = document.createElement('style');
-      style.textContent = 'html.ui2d-inv #inv-held { opacity: 0; }';
+      style.textContent =
+        'html.ui2d-inv #inv-held { opacity: 0; }\nhtml.ui2d-touch #touch-stick { opacity: 0; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -6829,6 +6840,43 @@ class App {
    * 只换像素：点击、拖拽分配、长按分堆、连发、悬停提示全在 DOM 里
    * （`.inv-slot` 设 `opacity: 0` —— 用 `visibility`/`display` 会让它们一起失效）。
    */
+  /**
+   * 触控摇杆的接管（`?ui2d=1` + 触控 UI 可见时）。
+   *
+   * 每帧只读两个矩形（底座 + 芯子），不做 `getComputedStyle` —— 摇杆芯子一直跟着
+   * 拇指走，读计算样式既贵又慢半拍。
+   */
+  private syncTouch2d(): void {
+    const touch = this.touch2d;
+    if (!touch) return;
+    const baseEl = document.getElementById('touch-stick');
+    const knobEl = baseEl?.querySelector<HTMLElement>('.knob') ?? null;
+    const visible = !!baseEl && !!knobEl && baseEl.offsetParent !== null;
+    if (!visible || !baseEl || !knobEl) {
+      if (this.touch2dOn) {
+        this.touch2dOn = false;
+        document.documentElement.classList.remove('ui2d-touch');
+        touch.close();
+      }
+      return;
+    }
+    if (!this.touch2dOn) {
+      this.touch2dOn = true;
+      document.documentElement.classList.add('ui2d-touch');
+      touch.open();
+    }
+    const host = this.ui2dOverlay?.canvas.getBoundingClientRect();
+    if (!host) return;
+    const stick: StickState = {
+      base: ui2dRectOf(baseEl.getBoundingClientRect(), host),
+      knob: ui2dRectOf(knobEl.getBoundingClientRect(), host),
+      active: baseEl.classList.contains('active'),
+      sneaking: baseEl.classList.contains('sneaking'),
+      sneakLabel: baseEl.querySelector<HTMLElement>('.sneak-badge')?.textContent?.trim() ?? '',
+    };
+    touch.setStick(stick);
+  }
+
   private syncInventory2d(): void {
     const mirror = this.invMirror;
     if (!mirror) return;
@@ -18277,6 +18325,8 @@ class App {
     this.syncChatEntry2d();
     // 背包 / 工作站槽位（打开背包时才接管）
     this.syncInventory2d();
+    // 触控摇杆（触控 UI 可见时）
+    this.syncTouch2d();
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
@@ -20006,6 +20056,9 @@ class App {
     this.chatEntry2d = null;
     this.invMirror?.dispose();
     this.invMirror = null;
+    this.touch2d?.dispose();
+    this.touch2d = null;
+    document.documentElement.classList.remove('ui2d-touch');
     this.invStyleEl?.remove();
     document.documentElement.classList.remove('ui2d-inv');
     this.tutorialCard.dispose();

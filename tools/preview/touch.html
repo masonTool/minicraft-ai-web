@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 触控摇杆（canvas）</title>
+    <!--
+      阶段 6 第一块：摇杆。
+
+      做法与别处不同：摇杆芯子一直跟着拇指走，所以**不镜像**（读计算样式又贵又慢半拍），
+      而是「自己画、几何量 DOM」—— 每帧只读两个矩形（底座 + 芯子）。
+
+      这一页把 `index.html` 那段 `<style>` 整段搬进来（摇杆的样子/尺寸全在 CSS 里），
+      再用鼠标/手指拖着芯子走：canvas 上的摇杆跟着动，DOM 那份被 `opacity: 0` 藏了。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/touch.html
+        open 'http://localhost:5173/tools/preview/touch.html?state=active'
+        open 'http://localhost:5173/tools/preview/touch.html?state=sneak&tint=1'
+    -->
+    <style>
+      html, body { margin: 0; background: #111; height: 100%; }
+      #stage {
+        position: relative; width: 844px; height: 390px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 40;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+      /* 让 `#touch-ui` 落在 stage 里（游戏里它是 fixed inset:0） */
+      #touch-ui { position: absolute !important; }
+      /*
+       * 与游戏里同一条让位规则：`?ui2d=1` 时摇杆的像素由 canvas 出，DOM 只留命中。
+       * 这一页必须显式写上，否则截图里 DOM 与 canvas 两份会叠在一起 —— 看着"一样"，
+       * 实际什么也没证明。
+       */
+      #touch-stick { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="touch-ui">
+        <div id="touch-stick">
+          <div class="knob"></div>
+          <div class="sneak-badge">潜行</div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+
+    <script type="module">
+      import { Touch2D } from '../../src/ui2d/index.ts';
+
+      // ① 搬游戏里的样式：摇杆的尺寸（含 --touch-scale）、渐变、描边全在 index.html 里
+      const html = await fetch('/index.html').then((res) => res.text());
+      const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+      document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
+      document.body.classList.add('touch-mode');
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      const state = params.get('state') ?? 'idle';
+      const stage = document.getElementById('stage');
+      const stick = document.getElementById('touch-stick');
+      const knob = stick.querySelector('.knob');
+      if (state === 'active') stick.classList.add('active');
+      if (state === 'sneak') {
+        stick.classList.add('sneaking');
+        stick.classList.add('active');
+      }
+
+      const screen = new Touch2D(stage, { tint, zIndex: 30 });
+      screen.open();
+
+      /** 拖动芯子：与游戏里的 `bindStick()` 同一套（位移夹进内圈，写 transform） */
+      let dragging = false;
+      const center = () => {
+        const rect = stick.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.width };
+      };
+      function moveKnob(clientX, clientY) {
+        const c = center();
+        const limit = (c.size - knob.getBoundingClientRect().width) / 2;
+        let dx = clientX - c.x;
+        let dy = clientY - c.y;
+        const d = Math.hypot(dx, dy);
+        if (d > limit) {
+          dx = (dx / d) * limit;
+          dy = (dy / d) * limit;
+        }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+      stick.addEventListener('pointerdown', (event) => {
+        dragging = true;
+        stick.classList.add('active');
+        moveKnob(event.clientX, event.clientY);
+        update();
+      });
+      window.addEventListener('pointermove', (event) => {
+        if (!dragging) return;
+        moveKnob(event.clientX, event.clientY);
+        update();
+      });
+      window.addEventListener('pointerup', () => {
+        if (!dragging) return;
+        dragging = false;
+        knob.style.transform = 'translate(0px, 0px)';
+        stick.classList.remove('active');
+        update();
+      });
+
+      // ② 每帧只读两个矩形，交给 canvas 画
+      function update() {
+        const host = stage.getBoundingClientRect();
+        const base = stick.getBoundingClientRect();
+        const k = knob.getBoundingClientRect();
+        screen.setStick({
+          base: { x: base.left - host.left, y: base.top - host.top, w: base.width, h: base.height },
+          knob: { x: k.left - host.left, y: k.top - host.top, w: k.width, h: k.height },
+          active: stick.classList.contains('active'),
+          sneaking: stick.classList.contains('sneaking'),
+        });
+      }
+      update();
+      requestAnimationFrame(function loop() {
+        update();
+        requestAnimationFrame(loop);
+      });
+
+      document.getElementById('caption').textContent =
+        '摇杆由 canvas 画（底座玻璃 + 高光 + 芯子两段渐变 + 潜行小牌）· 拖动芯子试试 · 命中仍归 DOM' +
+        (tint ? ' · 黄色遮罩' : '');
+
+      // 截图用：`?dx=&dy=` 直接把芯子摆到某个位置
+      const dx = Number(params.get('dx') ?? '');
+      const dy = Number(params.get('dy') ?? '');
+      if (Number.isFinite(dx) && Number.isFinite(dy) && (dx !== 0 || dy !== 0)) {
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        update();
+      }
+    </script>
+  </body>
+</html>

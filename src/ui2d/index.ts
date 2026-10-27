@@ -219,6 +219,14 @@ export {
   slotIndexAt,
   type InventoryLayout,
 } from './InventoryPanel2D.ts';
+export {
+  STICK_COLORS,
+  Touch2D,
+  clampKnobOffset,
+  drawStick,
+  knobOffset,
+  type StickState,
+} from './Touch2D.ts';
 export { DEBUG_TINT_COLOR, applyDebugTint } from './debug.ts';
 export {
   ARMOR_PER_ICON,

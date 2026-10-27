@@ -367,6 +367,27 @@ const SHOTS = [
     what: '滚动条：镜像自己画的细拇指（滚 48px 时的位置与长度都对）',
     status: '已迁 · 阶段 4',
   },
+  {
+    file: '29-touch-stick.png',
+    page: 'tools/preview/touch.html?state=active&dx=24&dy=-16',
+    size: [864, 410],
+    what: '触控摇杆（按下态、芯子偏右上）：底座玻璃 + 高光 + 芯子渐变',
+    status: '已迁 · 阶段 6',
+  },
+  {
+    file: '29b-touch-stick-sneak.png',
+    page: 'tools/preview/touch.html?state=sneak&dx=-18&dy=12',
+    size: [864, 410],
+    what: '潜行态：绿芯 + 绿边 + 上方「潜行」小牌（文字从 DOM 读，跟着 i18n）',
+    status: '已迁 · 阶段 6',
+  },
+  {
+    file: '29c-touch-stick-tinted.png',
+    page: 'tools/preview/touch.html?state=active&tint=1',
+    size: [864, 410],
+    what: '摇杆 + 遮罩（两块黄 = canvas 画的）',
+    status: '遮罩 · 阶段 6',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
