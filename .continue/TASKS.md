@@ -4317,6 +4317,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L31 **世界表单标签列按语言给宽度**（用户 2026-10-28：非中文下创建/编辑世界界面空间不够）。
+  - 根因：`.world-row` 标签列写死 `64px`，德语「Schwierigkeit」、俄语「Название мира」
+    直接溢出成「Schwier…」。
+  - 改：`grid-template-columns: var(--label-w, 64px) minmax(0,1fr)`，按 `html[lang]` 覆盖
+    （de/ru `7.6em`、fr/pt `5.6em`、其余不变）；标签 `white-space: nowrap`。
+  - 坑：**标签折行会把行撑高**，而左右两列是两个独立 grid、行高不同步 → 会错位
+    （先试 `white-space: normal`，de 的 Schwierigkeit 折成「Schwierigkei/t」且两列差 3px）；
+    只能"给足宽度 + 不折行"。
+  - 验证：de 创建标签列 106px、「Schwierigkeit」完整、两列对齐；ru 创建 7 个标签全部
+    `clipped=false`；ru 编辑面板 460px，按钮正常。
 - [x] L30 **清掉暂停菜单那颗联机键的残留**（用户 2026-10-28 确认：按钮是有意删掉的）。
   - 上一轮末尾已删掉按钮本体，但 `SettingsScreenActions.onMultiplayer` / `multiplayerLabelKey`、
     `main.ts` 的 8 行传参、`ui-test.ts` 那条"按联机状态改文案"的断言都还在：
