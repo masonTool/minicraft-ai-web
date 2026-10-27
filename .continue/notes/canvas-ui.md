@@ -54,7 +54,7 @@ src/ui2d/
 | **0 地基** ✅ | text / input / overlay / widgets + 三样纯展示 HUD | 22 条排版与命中断言绿；`?ui2d=1` 能画出红闪/Boss 条/进度条 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
 | **1 控件库** ✅ | 开关 / 滑块 / 下拉 / 页签 / 滚动列表 / 提示框 / 弹窗 | 21 条离线断言（命中 → 状态 → 回调）；`tools/preview/controls.html` 摆一排且能真的点/拖/滚 | `npx vitest run tests/ui2d-controls.test.ts` + 预览页 |
 | **1.5 快捷栏** ✅ | 面板 + 9 格 + 图标 + 数量 + 序号 + 耐久条 + 选中框 | 34 条断言绿；`?ui2d=1` 与默认版逐格对照，换槽/捡东西/掉耐久都跟上 | `npx vitest run tests/ui2d.test.ts` + `npm run check:fast` + `npm run build:fast` |
-| **2 HUD** 🟡 | 血条/饥饿/护甲/氧气/经验条与等级 ✅、目标名/蓄力条/物品名浮标 ✅；**只剩指南针·时钟表盘**；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
+| **2 HUD** ✅ | 血条/饥饿/护甲/氧气、经验条与等级、快捷栏（1.5）、目标名/蓄力条/物品名浮标、指南针·时钟表盘；准星**(仅中心瞄准模式)** 判定不搬 | 与 DOM 版逐像素对照截图；手机横屏不溢出 | `npm run shot`（有浏览器时）+ 真机 |
 | 3 菜单/表单 | 主菜单 / 世界列表 / 新建世界 / 多人 / 服务器选择 / 设置 | 隐藏 input + canvas 显示的**输入法定型**（见 §6）；设置项读写与存档一致 | `npm run check` + 真机输入法验收 |
 | 4 背包/工作站 | 36 格 + 快捷栏 + 19 种工作站 + 拖拽/长按分堆 | 交互表逐条过（按 `notes/modules.md` 的 H2/H19）；配方书嵌入位置不回归 | `npm run check` + 真机 |
 | 5 次级面板 | 配方书 / 成就 / 统计 / 地图 / 书 / 告示牌 / 命令帮助 / 交易 | 每条面板都能开、能关、Esc 自己收；文案 6 语言不溢出 | `npm run check` + `npm run test:i18n` |
@@ -208,6 +208,38 @@ npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotb
 | 生命/饥饿/护甲/氧气/经验条 | ✅ |
 | 目标名 / 蓄力条 / 物品名浮标 | ✅ 本批 |
 | **指南针 / 时钟表盘**（`ui/ToolHud.ts`） | ❌ 唯一剩下的：要画刻度盘 + 旋转指针 + 读数文字（手拿那两件物品才出现） |
+
+## 5.7 已落地（阶段 2 收场：指南针 / 时钟表盘）
+
+`ui2d/ToolDial2D.ts`：52×52 圆盘（径向渐变 + 铜色/铁蓝边框）、四个方位字母（只有指南针）、
+上红下白的三角指针（时钟是一根细白针）、下面一行 10px 读数。
+
+两处必须自己算：**指针的旋转**（CSS 是 `rotate()` + `transform-origin`，canvas 只能按角度
+把三角三个顶点算出来，见 `dialNeedlePoints`）与**刻度锚点**（随盘面尺寸变）。
+两者都是纯函数，断言直接打角度：0°/90°/180°/270° 的尖端坐标、非法角度按 0° 处理。
+
+## 5.8 已落地（阶段 3 前置：面板输入通道）
+
+`ui2d/menu.ts` 的 `CanvasMenu` 顶替了浏览器白送的三件事：
+
+| 浏览器给的 | canvas 里要自己做的 | 实现 |
+| --- | --- | --- |
+| 焦点（Tab / `:focus`） | 一个整数 + 循环上下 + Home/End | `menuFocusAfterKey` |
+| 按钮的点击 | 行矩形 → `hitRegionAt` → 行 id | `regions()` / `handlePointer()` |
+| `Enter` 触发 / `Esc` 关闭 | 按键翻译成**意图** | `handleKey()` 返回 `{activate}/ {close}/ {move}` |
+
+三条边界（写死，别在调用方随意扩展）：
+
+- **这一层不含任何游戏逻辑**：`handleKey` 只返回行 id，真正的"回到主菜单 / 删世界"由
+  `main.ts` 按 id 分派。所以它连 `main.ts` 都不 import。
+- **它也不决定"菜单打开时游戏该不该暂停/还收不收其它按键"**：那是调用方的事。
+  混进来就会重演 DOM 那边"暂停时角色还在走"的老问题。
+- **`Esc` 一律先关菜单**（`handleKey('Escape')` 直接返回 `close` 并置 `isOpen=false`），
+  调用方不要再自己判一遍，否则会出现"按一次 Esc 关两层"。
+
+⚠️ **这一批没有接线**：游戏里的 `Esc` 仍然走 `SettingsScreen`。预览页 `tools/preview/menu.html`
+把它跑起来了（键盘 + 鼠标都能操作），截图 `13-menu.png`。下一步才是把 DOM 暂停面板
+藏起来、由 canvas 接管那一页的输入 —— 那一步接错就是"Esc 打不开/关不掉"，值得单独一批。
 
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
