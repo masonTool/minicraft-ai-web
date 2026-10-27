@@ -6065,6 +6065,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-2250 · **自绘背包补上提示框与耐久条（3 条，M27 自绘侧）**：镜像方案里 tooltip 是 DOM（`#item-tooltip`），自绘面板一旦接管指针，DOM 的 `hover` 就收不到事件 —— 提示框会**直接消失**，而这种"丢功能"最容易被误判成"还没做"，所以必须在替换之前补齐。新增 `ui2d/itemTooltip.ts`：近黑紫底 + 紫边 + 左侧稀有度色条 + 标题/说明行/耐久条，位置逻辑抽成纯函数 `itemTooltipRect()`（默认右下 → 右边放不下翻左 → 下面放不下翻上 → 夹进视口）；内容由调用方 `describeOf` 注入（名字/耐久在 `core`，`ui2d` 不依赖 `core`）。顺带补上槽位**耐久条**（`durabilityOf`，之前固定传 `null`，工具类物品光秃秃的）。验证：`test:ui2d-inventory-model` **44/44**（+4 条位置断言）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、64 张截图、空白检测门禁全绿。⚠️ 附魔列表与铁砧改名还没画。详见 `notes/canvas-ui.md` §5.39 与决策 D51。
 
+- [x] 批次 20261027-2307 · **光标合流（3 条，M26b 地基）**：DOM 面板有一份 `held`（画在 `#inv-held`），自绘面板也有一个 `cursor`；两份各画各的症状很具体 —— **拖动时屏幕上出现两叠**。所以给 `InventoryPanelHost` 加 `externalCursor: { get, set? }`：入口（`open` / `handlePointer`）先 `pullCursor()`、`render()` 里 `pushCursor()`；`InventoryScreen` 开放**只读** `heldStack` getter，游戏侧 `?ui2dinv2d=1` 叠加层接 `get: () => inventoryScreen.heldStack`。**只读是刻意的**：这一阶段自绘不吃输入，写回会与 DOM 的分配逻辑打架。验证：预览 `?ext=1` 用外部对象模拟 DOM 的 `held` —— 打开即画出 `3×5`、移动后仍是 `3×5`、外部对象未被写脏（只拉不推）；`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、65 张截图。详见 `notes/canvas-ui.md` §5.40 与决策 D52。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
