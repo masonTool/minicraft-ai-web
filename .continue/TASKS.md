@@ -5998,6 +5998,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1334 · **主菜单/世界列表整页镜像（4 条）**：新增 `src/ui2d/menuScreen.ts` 的 `MenuScreen2D` —— 主菜单这类**静态整页**不再自己排版：`engage(el)` 建独立覆盖层、把元素 `opacity` 设 0 （保住命中：`visibility`/`display` 会让按钮点不动）、起 rAF 循环，每 4 帧比一次签名（视口尺寸 + 所有可滚动元素的 `scrollTop` + 整块 `textContent`），变了才重读计算样式并按原位重画；`textPanel` 的底块补上**边框**（先底后边、描边画在内侧半像素与 `border-box` 对齐），`drawTextRuns` 加 `slack` 余量（DOM 的 `letter-spacing` 会让元素盒子比 canvas 量出的字窄，不给余量 `MINICRAFT` 会被截成 `MINICRA…`）；`main.ts#mountMenuMirror()` 在 `boot()` 里挂上，200ms 轮询"菜单开着且停在 `home`/`worlds`"（`WorldScreen` 不暴露事件），**只镜像这两个视图** —— `create` 与多人面板有 `<input>`，其值不在 `textContent` 里，镜像过去是空框。预览页 `tools/preview/menu-mirror.html` + 3 张截图。验证：`test:ui2d` **62/62**（新增 2 条 slack 断言）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、34 张截图逐张看过。⚠️ 游戏内未实测（dev 缺 `__host/core.bin`）。已知近似：渐变底退化纯色（缩略图偏暗）、四边不等宽的像素斜角只能画一种颜色。详见 `notes/canvas-ui.md` §5.13 与决策 D25。
 
+- [x] 批次 20261027-1345 · **canvas 文本输入 / 输入法定型（3 条）**：新增 `src/ui2d/textInput.ts` —— `CanvasTextInput` 在屏幕外放一个 `opacity: 0` 的 1×1 `<input>`（固定视口内、`pointer-events: none`）承接全部输入与**输入法组合态**，canvas 只画 `value` / 光标 / 选区 / 组合态下划线；纯函数 `caretXOf` / `clampCaret` / `applyInsert` / `backspaceAt`（按码点切，不切半个 emoji）/ `visibleSlice`（超宽时只在光标顶到右边界才滚动）/ `rangeRect` / `caretRect` / `caretBlinkOn`；`Enter` 提交、`Esc` 取消，**两者都先看 `isComposing`**（组合中那两个键归输入法）。三条硬约束：① 用 `opacity: 0` 而**不是** `display: none`/`visibility: hidden`（否则拿不到焦点、移动端不弹键盘）；② `pointer-events: none`（不拦点击，聚焦靠调用方显式 `focus()`）；③ 组合态靠 `compositionstart/update/end`而**不靠** `value`（拼音阶段的字母已在 value 里，但"哪一段还没上屏"只有事件知道）。预览页 `tools/preview/textinput.html` 可以**真的打字**（含中文输入法）、`?value=&sel=` 预填并选中一段。验证：`test:ui2d-textinput` **18/18**、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、36 张截图。⚠️ **还没接进游戏**（新建世界 / 聊天 / 多人面板仍是 DOM 输入框），真机输入法（安卓各家候选栏位置）待验。详见 `notes/canvas-ui.md` §5.14 与决策 D26。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6078,7 +6080,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（238 条，不是差异，但同样"集中查"更好）
+### 实现注意（239 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6319,6 +6321,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1258 · **设置页交给 canvas（3 条）**：新增 `src/ui2d/form.ts` —— `readFormRows()` 把 `.settings-row` 按**控件元素**读成模型（有 `.settings-switch` → 开关、有 `input[type=range]` → 滑杆（按 min/max 换算 0~1）、有 `.settings-cycle` → 循环按钮（`textContent` 即当前值）），… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1319 · **状态效果 + 聊天消息也原位重画（3 条）**：`applyTextPanelsDomFallback()` 加上 `#effects-hud` 并**只藏 `.chat-log`**（`#chat` 里还挂着输入行/提示/发送键，整块藏会把打字界面一起藏掉——与「快捷栏容器不能整体透明」同一条经验）；`syncTextPanels2d()` 的根节点改成列表逐个 `readTextRuns` + `readTextBlo… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1334 · **主菜单/世界列表整页镜像（4 条）**：新增 `src/ui2d/menuScreen.ts` 的 `MenuScreen2D` —— 主菜单这类**静态整页**不再自己排版：`engage(el)` 建独立覆盖层、把元素 `opacity` 设 0 （保住命中：`visibility`/`display` 会让按钮点不动）、起 rAF 循环，每 4 帧比一次签名（视口尺寸 + 所有可滚动元素的 `scrollTop` +… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1345 · **canvas 文本输入 / 输入法定型（3 条）**：新增 `src/ui2d/textInput.ts` —— `CanvasTextInput` 在屏幕外放一个 `opacity: 0` 的 1×1 `<input>`（固定视口内、`pointer-events: none`）承接全部输入与**输入法组合态**，canvas 只画 `value` / 光标 / 选区 / 组合态下划线；纯函数 `caretXOf` / … |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->

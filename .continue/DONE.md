@@ -9,6 +9,37 @@
 
 ---
 
+## 批次 20261027-1345 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1345
+
+> 用户 2026-10-27：「去完成」—— 做上一轮说的**输入法定型**。
+> 这是新建世界、多人面板、聊天三条线共同的前置件：canvas 自己收不到输入法组合态，
+> 唯一正路是"屏幕外放一个看不见但可聚焦的 `<input>` 收字，canvas 只画"。
+
+- [x] [H1] `src/ui2d/textInput.ts`：`CanvasTextInput`（隐藏 input 收字 + 画光标/选区/组合态下划线）+ 一组纯几何/编辑函数 → `npx vitest run tests/ui2d-textinput.test.ts`
+  - 做了什么：`textInput.ts`（约 420 行）—— 隐藏 `<input>`（`opacity: 0` + 1×1 + 固定视口内 + `pointer-events: none`）承接输入；`metricsFor` / `caretXOf` / `clampCaret` / `applyInsert` / `backspaceAt`（按码点）/ `visibleSlice`（超宽滚动窗口）/ `rangeRect` / `caretRect` / `caretBlinkOn`；`CanvasTextInput` 负责 `open/close/focus/render/dispose`，Enter 提交、Esc 取消（两者都先看 `isComposing`）。
+  - 为什么：canvas 没有输入框，也收不到组合态。三条约束见 §5.14 —— 尤其"不能用 `display: none`"（拿不到焦点、移动端不弹键盘）和"组合态靠事件不靠 value"（拼音阶段 `value` 里已经有字母了）。
+  - 验证：`npx vitest run tests/ui2d-textinput.test.ts` → **18 passed**；`tsc` 干净。
+  - 批次：20261027-1345
+
+- [x] [H2] 预览页 `tools/preview/textinput.html`：能**真的打字**（含中文输入法）、可预填内容与选区；两张截图 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：一页"新建世界"面板，两块 `CanvasTextInput`（世界名称 / 种子），点一下就能打字；`?value=我的世界&sel=1,3` 预填并选中一段（截图用），`?tint=1` 加遮罩。`shoot-all` 加 2 张（累计 36 张）。
+  - 为什么：这一层的正确性一半只能靠"真的敲一遍"——组合态下划线、光标闪烁、选区宽度都只有在动起来时才看得出问题；截图至少能把"中文 + 选区"这一幕定住。
+  - 验证：`node tools/preview/shoot-all.mjs` 36 张全出；截图看过：`18b` 里"我的世界"四个字、第 2~3 个字上有蓝色选区、种子框是未聚焦空框 + 占位提示。
+  - 批次：20261027-1345
+
+- [x] [H3] 文档：`notes/canvas-ui.md` §5.14（三条约束 + 未接线的边界）、决策 D26 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：§5.14 把三条约束做成表格（每条都写"为什么"），并明确写了**还没接进游戏**；决策 D26 记下"为什么用隐藏 input 而不是自己实现键盘"。
+  - 为什么：这一层最容易被后来的人"简化"——把 `opacity: 0` 改成 `display: none`、或者干脆用 `value` 判组合态。两种改法在桌面 Chrome 上**都能跑**，只在移动端输入法下坏掉，不写清楚就会被改回去。
+  - 验证：`node .continue/hooks/check.mjs --fast` 绿。
+  - 批次：20261027-1345
+
+
 ## 批次 20261027-1334 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -252,40 +283,4 @@
   - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
   - 批次：20261027-1226
 
-
-## 批次 20261027-1218 · 2026-10-27 · 会话 9f2dcf81
-
-# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-1218
-
-> 用户 2026-10-27：「继续继续继续」—— 把**阶段 2 的最后一块**（提示条族）收掉：
-> 目标名、攻击蓄力条、切槽时浮出的物品名。三样都是纯展示、都不吃事件，
-> 做完之后「底部 HUD + 准星周围的东西」就全是 canvas 的了。
-
-- [x] [X1] `src/ui2d/overlays.ts`：三样提示条的画法 + 纯函数（`attackChargeRect` / `attackChargePercent` / `itemNameAlpha`），`Hud2D.setTips()` 统一收口 → `npx vitest run tests/ui2d.test.ts`
-  - 做了什么：`overlays.ts`（约 200 行）—— `drawTargetLabel` / `drawAttackCharge` / `drawItemNamePop` / `drawTips` + `attackChargeRect`（44×3、准星下 16px）/ `attackChargePercent`（量化到 2%，与 DOM 版同口径）/ `itemNameAlpha`（350ms 淡入 → 保持 2000ms → 350ms 淡出）；`Hud2D.setTips()` 在**所有绘制之后**画（提示条在原 DOM 里就是最上面那层）。
-  - 为什么：**不做快照缓存**（决策 D13）—— 三样加起来每帧就两次 `fillText` + 一块 44×3 小矩形，为它维护签名比直画还贵；缓存是按量级决定的，不是按"要不要优化"。
-  - 验证：`npx vitest run tests/ui2d.test.ts` → **51 passed**（本批 +5）；`npx tsc --noEmit` 干净。
-  - 批次：20261027-1218
-
-- [x] [X2] `src/main.ts` 接线 `?ui2d=1`：三样 DOM 让位（`visibility: hidden`），矩形仍从 DOM 量（文本长度/触摸 pinned 位置都在 CSS 里），alpha 按时间算 → `npm run check:fast && npm run build:fast`
-  - 做了什么：`applyTipsDomFallback()` 把 `#target-info` / `#attack-cooldown` / `#selected-item-name` 设 `visibility: hidden`（保留布局，canvas 才能量到"随文本变宽、触摸时被 JS 挪位"的矩形）；`syncTips2D()` 每帧喂状态——目标名与物品名**只在文本/锚点/视口变时量 DOM**，蓄力条的几何直接由 `attackChargeRect(overlay.width, overlay.height)` 算；`showSelectedItemName()` 里记 `itemNameShownAt`，淡化交给 `itemNameAlpha`；resize 时 `tips2dEpoch += 1`。
-  - 为什么：物品名的淡出 canvas 里没有 transition，要么按时间算要么每帧 `getComputedStyle`（更贵且不可断言）；按时间算还顺带解决了"暂停时不淡"（决策 D14）。
-  - 验证：`npm run check:fast` 绿；`npm run check` exit=0；`npm run build:fast` 出包；`tsc` 干净。⚠️ 真机观感未验。
-  - 批次：20261027-1218
-
-- [x] [X3] 预览页 `tools/preview/tips.html` + `shoot-all` 补图，重拍 `.tmp/canvas-version/` 并更新 README → `node tools/preview/shoot-all.mjs`
-  - 做了什么：`tips.html` 按 `index.html` 那几条 CSS 建真 DOM（`visibility: hidden`）只为测量，再把矩形喂给 `Hud2D.setTips()`；参数 `?target=&item=&charge=&age=&tint=1`。`SHOTS` 加 3 张（`11-tips` / `11b-tips-fade` / `11c-tips-tinted`），累计 22 张；`.tmp/canvas-version/README.md` 的进度表与 URL 表同步。
-  - 为什么：提示条是"一闪而过"的东西（物品名 2 秒、蓄力条不到 1 秒），截图必须能把状态定住；`age=2175` 那张专门展示"淡出到一半"。
-  - 验证：`node tools/preview/shoot-all.mjs` 22 张全出；逐张看过：目标名贴在准星下方、蓄力条 44px 在它上面不远、物品名胶囊在快捷栏上方；`charge=100` 那版条确实消失；`age=2175` 那版半透明。
-  - 批次：20261027-1218
-
-- [x] [X4] 文档：`notes/canvas-ui.md` §5.6（阶段 2 收尾 + 还剩表盘）、决策 D13/D14 → `node .continue/hooks/check.mjs --fast`
-  - 做了什么：阶段 2 行改成"只剩指南针·时钟表盘"；新增 §5.6（三处与前面不同的做法 + "阶段 2 还剩什么"表）；决策 D13（不做快照缓存）、D14（淡出按时间算）。
-  - 为什么：D13 容易被误解成"偷懒"——所以写清了判据是**量级**；D14 的代价（低帧率跳格）也写在正面，免得以后有人当成 bug 去修。
-  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
-  - 批次：20261027-1218
 
