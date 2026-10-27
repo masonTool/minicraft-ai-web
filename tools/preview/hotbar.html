@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 快捷栏对照（DOM vs canvas）</title>
+    <!--
+      快捷栏的**离线对照页**（批次 20261027-1009）。
+
+      为什么需要它：`?ui2d=1` 要在世界里才看得到，而 dev 模式下 `__host/core.bin`
+      缺失会停在落地页 —— 于是一个"改造得对不对"的问题，得先能进世界才有资格问。
+      这一页把两边摆在一起：左边是照抄 `index.html` 那套 CSS 的 DOM 版，
+      右边是 `ui2d/Hotbar2D` 画的 canvas 版，同一份假数据、同一条尺寸。
+
+      用法：
+        npm run dev                       # 另一个终端
+        open http://localhost:5173/tools/preview/hotbar.html
+        npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotbar.png
+
+      ⚠️ 只在 dev 里跑：它直接 import `../../src/ui2d/index.ts`，不进 `vite build`
+         （构建入口只有根目录的 `index.html`）。
+    -->
+    <style>
+      :root {
+        --mc-panel: #c6c6c6;
+        --mc-face: #8b8b8b;
+        --mc-edge-light: #ffffff;
+        --mc-edge-dark: #555555;
+        --mc-outline: #000000;
+        --panel-bg: var(--mc-panel);
+        --pixel-bevel: var(--mc-edge-light) var(--mc-edge-dark) var(--mc-edge-dark) var(--mc-edge-light);
+        --panel-shadow: 0 0 0 2px var(--mc-outline);
+        --slot-bg: var(--mc-face);
+        --dur-high: #4ce04c;
+        --dur-mid: #e8d24c;
+        --dur-low: #e0503c;
+        --hotbar-slot: 42px;
+        --hotbar-gap: 3px;
+        --hotbar-pad: 4px;
+      }
+      body {
+        margin: 0;
+        background: #2b3a2b;
+        color: #e0e0e0;
+        font: 13px/1.5 -apple-system, 'PingFang SC', sans-serif;
+        padding: 24px;
+      }
+      h2 { font-size: 13px; font-weight: 600; color: #cfd6cf; margin: 24px 0 8px; }
+      .row { display: flex; justify-content: flex-start; }
+
+      /* ---- DOM 版：与 index.html 的 #hotbar 那几条一字不差 ---- */
+      .dom-hotbar {
+        display: flex;
+        gap: var(--hotbar-gap);
+        padding: var(--hotbar-pad);
+        background: var(--panel-bg);
+        border: 3px solid;
+        border-color: var(--pixel-bevel);
+        border-radius: 0;
+        box-shadow: var(--panel-shadow);
+      }
+      .dom-hotbar .slot {
+        position: relative;
+        width: var(--hotbar-slot);
+        height: var(--hotbar-slot);
+        display: grid;
+        place-items: center;
+        background: var(--slot-bg);
+        border: 2px solid;
+        border-color: var(--pixel-bevel);
+      }
+      .dom-hotbar .slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+      .dom-hotbar .slot.active {
+        border-color: #fff;
+        background: rgba(255, 255, 255, 0.26);
+        transform: translateY(-2px) scale(1.08);
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.5);
+      }
+      .dom-hotbar .slot .index {
+        position: absolute; top: 0; left: 3px; font-size: 10px; color: #fff;
+        text-shadow: 1px 1px 0 #000; opacity: 0.7;
+      }
+      .dom-hotbar .slot.active .index { opacity: 1; }
+      .dom-hotbar .slot .count {
+        position: absolute; right: 2px; bottom: 1px; font-size: 12px; color: #fff;
+        text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+      }
+      .dur-bar {
+        position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px;
+        background: rgba(0, 0, 0, 0.65); border-radius: 2px; overflow: hidden;
+      }
+      .dur-bar b { display: block; height: 100%; background: var(--dur-high); }
+      .dur-bar.dur-mid b { background: var(--dur-mid); }
+      .dur-bar.dur-low b { background: var(--dur-low); }
+
+      /* 画布比面板大一圈：选中格上抬 2px + 柔光 12px 都画在面板外面，不裁掉才看得清 */
+      #canvas-host { position: relative; width: 452px; height: 90px; }
+      #canvas-host canvas { position: absolute; inset: 0; }
+      p.hint { color: #9aa69a; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h2>DOM 版（照抄 index.html 的 #hotbar）</h2>
+    <div class="row"><div class="dom-hotbar" id="dom-hotbar"></div></div>
+
+    <h2>canvas 版（src/ui2d/Hotbar2D.ts）</h2>
+    <div class="row"><div id="canvas-host"><canvas id="canvas-hotbar"></canvas></div></div>
+
+    <p class="hint">
+      同一份假数据：0 号空槽 · 1~4 号带数量 · 5 号选中（木镐，掉了一半耐久，黄色）·
+      6 号选中态以外的一把剑（耐久见红）· 7 号南瓜 · 8 号钻石。
+    </p>
+
+    <script type="module">
+      import { Hotbar2D } from '../../src/ui2d/index.ts';
+
+      /** 假图标：32×32 的"等轴方块"意思一下（真图标由 ui/ItemIcon 出图，见决策 D4） */
+      function fakeIcon(top, side, mark) {
+        const c = document.createElement('canvas');
+        c.width = 32;
+        c.height = 32;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = false;
+        // 顶面（菱形）+ 两个侧面
+        g.fillStyle = top;
+        g.beginPath();
+        g.moveTo(16, 3); g.lineTo(29, 10); g.lineTo(16, 17); g.lineTo(3, 10); g.closePath(); g.fill();
+        g.fillStyle = side;
+        g.beginPath();
+        g.moveTo(3, 10); g.lineTo(16, 17); g.lineTo(16, 29); g.lineTo(3, 22); g.closePath(); g.fill();
+        g.fillStyle = `color-mix(in srgb, ${side} 78%, #000)`;
+        g.beginPath();
+        g.moveTo(29, 10); g.lineTo(16, 17); g.lineTo(16, 29); g.lineTo(29, 22); g.closePath(); g.fill();
+        if (mark) {
+          g.fillStyle = mark;
+          g.fillRect(12, 8, 8, 3);
+        }
+        return c;
+      }
+
+      // 假数据：数量 / 耐久 / 图标
+      const items = [
+        null,
+        { count: 64, icon: fakeIcon('#7a5a3a', '#5d4326') },
+        { count: 12, icon: fakeIcon('#8b8b8b', '#6c6c6c') },
+        { count: 3, icon: fakeIcon('#c6c6c6', '#8b8b8b') },
+        { count: 1, icon: fakeIcon('#e8d24c', '#b89a2c') },
+        { count: 1, icon: fakeIcon('#b08a5a', '#7d5f38'), durability: { ratio: 0.48, level: 'mid' } },
+        { count: 1, icon: fakeIcon('#8fd8ff', '#2f7fbf'), durability: { ratio: 0.16, level: 'low' } },
+        { count: 7, icon: fakeIcon('#e0883c', '#a85f22') },
+        { count: 32, icon: fakeIcon('#74d8d8', '#3f9c9c') },
+      ];
+      const ACTIVE = 5;
+
+      // ---------------- DOM 版 ----------------
+      const domHotbar = document.getElementById('dom-hotbar');
+      const domSlots = [];
+      for (let index = 0; index < items.length; index++) {
+        const slot = document.createElement('div');
+        slot.className = 'slot' + (index === ACTIVE ? ' active' : '');
+        const item = items[index];
+        if (item) {
+          // ⚠️ 不能用 `cloneNode(true)`：canvas 的位图不会被复制，克隆出来是全透明的
+          const icon = document.createElement('canvas');
+          icon.width = item.icon.width;
+          icon.height = item.icon.height;
+          icon.style.width = '32px';
+          icon.style.height = '32px';
+          icon.style.imageRendering = 'pixelated';
+          icon.getContext('2d').drawImage(item.icon, 0, 0);
+          slot.appendChild(icon);
+          if (item.count > 1) {
+            const count = document.createElement('span');
+            count.className = 'count';
+            count.textContent = String(item.count);
+            slot.appendChild(count);
+          }
+          if (item.durability) {
+            const bar = document.createElement('i');
+            bar.className = `dur-bar dur-${item.durability.level}`;
+            const fill = document.createElement('b');
+            fill.style.width = `${Math.round(item.durability.ratio * 100)}%`;
+            bar.appendChild(fill);
+            slot.appendChild(bar);
+          }
+        }
+        const label = document.createElement('span');
+        label.className = 'index';
+        label.textContent = String(index + 1);
+        slot.appendChild(label);
+        domHotbar.appendChild(slot);
+        domSlots.push(slot);
+      }
+
+      // ---------------- canvas 版 ----------------
+      const canvas = document.getElementById('canvas-hotbar');
+      const host = document.getElementById('canvas-host');
+      const scale = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      const domPanel = domHotbar.getBoundingClientRect();
+      const PAD = 20;
+      const cssW = domPanel.width + PAD * 2;
+      const cssH = domPanel.height + PAD * 2;
+      host.style.width = `${cssW}px`;
+      host.style.height = `${cssH}px`;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.width = Math.round(cssW * scale);
+      canvas.height = Math.round(cssH * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+      // 几何照样取自 DOM 实测（与 main.ts 的 updateHotbar2D 同一条路），只是整体挪进 PAD
+      const frame = domHotbar.getBoundingClientRect();
+      const rectOf = (r) => ({
+        x: r.left - frame.left + PAD,
+        y: r.top - frame.top + PAD,
+        w: r.width,
+        h: r.height,
+      });
+      const state = {
+        panel: { x: PAD, y: PAD, w: domPanel.width, h: domPanel.height },
+        slots: domSlots.map((el, index) => ({
+          rect: rectOf(el.getBoundingClientRect()),
+          active: index === ACTIVE,
+          count: items[index]?.count ?? 0,
+          index,
+          icon: items[index]?.icon ?? null,
+          durability: items[index]?.durability ?? null,
+        })),
+        revision: 1,
+      };
+      const hotbar = new Hotbar2D();
+      hotbar.setState(state);
+      hotbar.draw(ctx, scale);
+    </script>
+  </body>
+</html>

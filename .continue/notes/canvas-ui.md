@@ -90,6 +90,20 @@ src/ui2d/
 - 断言：`tests/ui2d.test.ts` 34 条（新增 12 条：内容盒 / 图标居中 / 数量与序号锚点 /
   耐久轨道与比例 / 选中格的缩放与上抬 / 快照原点 / 签名稳定性）。
 
+### 离线对照页（不用进世界也能看）
+
+`tools/preview/hotbar.html`：同一份假数据摆两排 —— 上面是照抄 `index.html` 的 DOM 版，
+下面是 `Hotbar2D` 画的 canvas 版。dev 里直接开：
+
+```bash
+npm run dev &
+open http://localhost:5173/tools/preview/hotbar.html
+npm run shot -- --url http://localhost:5173/tools/preview/hotbar.html --out hotbar.png
+```
+
+为什么值得留：`?ui2d=1` 得进世界才看得到，而 dev 缺 `__host/core.bin` 时会停在落地页 ——
+"画得对不对"不该被"能不能进世界"卡住。阶段 1 的控件库、阶段 2 的血条/经验条也可以往这一页加。
+
 ### 快捷栏 A/B 怎么做（还没在真机上做，等用户）
 
 1. 同一台机器开两个标签页：`?ui2d=1` 与不带参数，进同一个存档；

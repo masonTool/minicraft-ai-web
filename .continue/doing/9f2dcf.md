@@ -21,6 +21,12 @@
   - 验证：`npm run check:fast` 绿（655 条单测）；`npm run check` 全量 **exit=0**（181 套离线 + 三张台账 + 文档体量）；`npm run build:fast` 出包成功；`npx tsc --noEmit` 干净。⚠️ **真机观感未验**：本会话没有浏览器，dev 模式下 `__host/core.bin` 缺失会停在落地页 —— A/B 步骤写在 `notes/canvas-ui.md` 的 §5.1。
   - 批次：20261027-1009
 
+- [x] [U4] 加 `tools/preview/hotbar.html` 对照页：不用进世界就能把 DOM 版与 canvas 版摆在一起看；顺手把数量字重对齐 CSS → `node tools/screenshot.mjs --url http://localhost:5173/tools/preview/hotbar.html --out hotbar-preview.png`
+  - 做了什么：一页 HTML —— 上半是照抄 `index.html` 那几条 CSS 的 DOM 版，下半是 `Hotbar2D` 画进 canvas 的版本，同一份假数据（空槽 / 数量 / 选中格 / 黄耐久 / 红耐久）。几何照样用 `getBoundingClientRect()` 量 DOM 再喂给 canvas，与 `main.ts` 走同一条路。数量字号原来是 700，改成跟 CSS 一致（`.count` 没写 `font-weight`）——迁移期两边并存，字重不同在 A/B 里就是"像素不一致"。
+  - 为什么：用户说的"看不出来效果"有一部分是**验收成本**问题 —— `?ui2d=1` 得先能进世界才看得到，而 dev 缺 `__host/core.bin` 会停在落地页。有了这一页，"画得对不对"不再被"能不能进世界"卡住；阶段 1 的控件库、阶段 2 的血条也能往这里加。
+  - 验证：`npx vite --port 5199` + `node tools/screenshot.mjs --url .../tools/preview/hotbar.html --out hotbar-preview.png` → 截图已存 `.tmp/shots/hotbar-preview.png`，逐项对照两排：格子尺寸/斜面、图标位置、数量与序号锚点、耐久条位置与长度、选中格的白色边框与上抬都对得上（唯一剩下的差异是文字抗锯齿）。⚠️ 页面自带 1 条 `console.error`：favicon 404，与页面无关。
+  - 批次：20261027-1009
+
 - [x] [U3] 更新 `.continue/notes/canvas-ui.md`：把"阶段 1.5 快捷栏"的判据、命中仍借 DOM 的理由、A/B 步骤写进去 → `node .continue/hooks/check.mjs --fast`
   - 做了什么：阶段表加 `1.5 快捷栏 ✅` 一行；新增 §5.1（做法 + 四条 A/B 步骤 + "这一版不能用来量省了多少 DOM 开销"的警告）与 §5.2（复盘阶段 0 为什么证明不了任何东西：三样都低频、都在屏幕边缘，选样品的判据从"最不打扰"改成"最容易对比"）；§6 判定表补一行"快捷栏的点击/长按：画在 canvas、命中仍走 DOM"。
   - 为什么：这次的教训是**选样品的方式**，不是某个函数写错了。不写下来，下一批还会有人挑"最安全的三样"去证明"改造值不值"。

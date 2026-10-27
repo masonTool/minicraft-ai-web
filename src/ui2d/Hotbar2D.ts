@@ -266,12 +266,14 @@ function drawSlot(ctx: CanvasRenderingContext2D, slot: HotbarSlotState): void {
 
   if (slot.count > 1) {
     const anchor = hotbarCountAnchor(rect);
+    // 字重跟着 CSS 走：`.count` 没写 font-weight（继承 body 的 400）。
+    // 这里**不要**自作主张加粗 —— 迁移期两边并存，字重不一样在 A/B 里就是"像素不一致"。
     drawOutlinedText(
       ctx,
       String(slot.count),
       anchor.x,
       anchor.y,
-      uiFont(HOTBAR_COUNT_FONT_SIZE, 700),
+      uiFont(HOTBAR_COUNT_FONT_SIZE),
       'right',
       'bottom',
     );
