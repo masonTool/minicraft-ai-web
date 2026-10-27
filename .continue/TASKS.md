@@ -6033,6 +6033,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1706 · **首页按钮错位修复（3 条）**：用户报「首页三颗按钮显示位置错、点击位置也错」。用**真 `WorldScreen`** 复现（`tools/preview/world-real.html` 把 `index.html` 那段 `<style>` 用 `fetch` 搬过来，才是真布局）：同一个按钮的 `y` 在 **150ms 时 483、1650ms 时 309**（差 174px）——字体/排版稳定后整排上移。根因是 `MenuScreen2D` 的签名只看"文字 / 输入框值 / 滚动位置"，**几何不进签名**，于是第一帧量到的旧矩形被永久沿用：canvas 画在旧位置、DOM 在新位置 → 显示错位 + 点不中。修法三处：① `computeSignature` 加入 `getBoundingClientRect()` 与 `scrollWidth/scrollHeight`；② 所有镜像实例开 `pollMs`（主菜单 200 / 聊天输入行 250 / 多人 200 / 背包 120），并在 `document.fonts.ready` 之后再同步一次；③ `readTextRuns` 读 `letter-spacing`，把 `-spacing × 字数` 记进 `TextRun.widthSlack` 补偿 `maxWidth`（大标题不再被截成 `Minicra…`）。验证：`test:ui2d` **73/73**（新增 2 条补偿断言）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、49 张截图（含真 WorldScreen 的镜像/DOM 基准对照）。详见 `notes/canvas-ui.md` §5.23 与决策 D35。
 
+- [x] 批次 20261027-1732 · **触摸拖拽滚动由镜像接管（3 条）**：用户报「物品滚动、世界列表都滑不动，应该手贴着列表跟手」。根因：游戏为拖动视角把 `html, body` 的 `touch-action` 设成 `none`，内层滚动容器即便写了 `pan-y`，各家 WebView 处理也不一致。`MenuScreen2D` 新增 `bindDragScroll()`：`pointerdown`（触摸/笔）时从命中元素往上找**第一个真的能滚**的祖先；纵向位移超过 **8px** 才劫持（点击、物品拖拽、横向拖动都不受影响，内容装得下的容器根本命中不到）；之后每次 `pointermove` `scrollTop = startScroll - dy` 并立刻 `refresh(true)`（不等 `pollMs`，所以跟手）；`input/textarea/select` 上的手势不劫持。同时把用户点名的后续拆成 M32~M36（立栏上 canvas / 触控控件 / 暂停弹窗验收 / 自绘滚动条 / 拖拽惯性）。验证：Playwright 合成 touch 指针事件在 `inventory-mirror.html?creative=1` 里拖 60px → `grid.scrollTop` 0→60 且画面同步重画；`tsc` 干净、`npm run check` exit=0。详见 `notes/canvas-ui.md` §5.24 与决策 D36。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
