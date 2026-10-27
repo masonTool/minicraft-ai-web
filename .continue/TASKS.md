@@ -4317,6 +4317,14 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
     挪到键盘盖不住的位置。
   - 验证：playwright 实测「点地址框 → 浮层出现（标题取 placeholder）→ 输入 192.168.1.9
     → 确认 → 写回原框且浮层关闭」；截图确认空状态 / 端口灰底 / 按钮贴底；`npm run check` exit=0。
+- [x] L26 **「⋯」菜单项风格对齐 chip + 自动翻转**（用户 2026-10-27）。
+  - 风格：改用 `.world-chip` 那套语言（半透明底 `rgba(255,255,255,.07)` + 1px 细边
+    `rgba(255,255,255,.22)` + 12px 字），删除复用 chip 里 hard 难度那组红色。
+  - 定位：菜单改 `position: fixed`（`.world-list` 是 `overflow-y: auto`，absolute 菜单
+    超出列表就被裁），打开时量按钮下方剩余空间、不够就翻到上方；关闭时清掉内联坐标
+    （每个条目位置不同，必须重算）。
+  - 验证：菜单项 `bg=rgba(255,255,255,.07)`、`menu position=fixed`；窗口压到 300px 高后
+    菜单自动翻到按钮上方（`menuBottom=152 ≤ buttonTop=150`）。
 - [x] L25 **「需要完整版」「修改端口」标题改白**（用户 2026-10-27）。
   - 这两个弹层挂在 `#multiplayer-screen` 下（不在 `.mp-panel` 里），拿不到面板的
     `--mc-text-light`，于是继承了偏暗的默认色。给 `.mp-full-title` / `.mp-port-title`
