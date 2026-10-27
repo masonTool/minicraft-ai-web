@@ -6004,6 +6004,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1404 · **聊天输入行镜像 + 覆盖层 z-index 修正（3 条）**：`main.ts` 新增 `chatEntry2d`（`MenuScreen2D`，`zIndex: 12`）与 `syncChatEntry2d()` —— 每帧看 `#chat .chat-entry` 的 `offsetParent`，出现就 `engage`、收起就 `disengage`；输入本身一行没改（历史、命令补全、回车发送、发送键的 `pointerdown` 都留 DOM）。`MenuScreen2D` 新增 `MenuScreenOptions.zIndex`：**镜像的宿主是 `document.body` 时必须显式给** —— `#world-screen` 的 z-index 是 40、`#chat` 是 8，而 `Ui2DOverlay` 默认 1，排在它们下面就会被它们的不透明背景整个盖住；上一批主菜单镜像正是用默认 1，**预览页看着正常、游戏里却是"开了 `?ui2d=1` 主菜单直接消失"**。预览页 `tools/preview/chat.html` + 截图 `20-chat-entry.png`。验证：`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、38 张截图。⚠️ 游戏内仍未实测（dev 缺 `core.bin`）；多人面板仍未覆盖。详见 `notes/canvas-ui.md` §5.16 与决策 D28。
 
+- [x] 批次 20261027-1517 · **背包/工作站槽位交给 canvas（4 条）**：新增 `src/ui2d/Inventory2D.ts` —— `drawInvSlot()` 画一格的底、四边斜面（上/左暗、下/右亮）、图标（`drawImage` 复用 DOM 那张 36×36 canvas）、数量（四向黑描边）、耐久条（三档）、红底格、选择白框；`readInvSlots()` 从 `.inv-slot` 读矩形/图标/数量/耐久比例与档位/`:hover`·`:active`/`.locked`·`.held`，`readSlotSkin()` 从 CSS 变量读底面与斜面颜色（不抄常量），`#inv-held`（拿在手上的那一叠）一起画。`main.ts#syncInventory2d()` 在 `inventoryScreen.isOpen` 变化时开关，让位靠 `<style>` 里一条 `html.ui2d-inv #inventory-screen .inv-slot, html.ui2d-inv #inv-held { opacity: 0 }` + 切换 `<html>` 上的类 —— **不用逐元素内联样式**（背包切模式/换容器会重建槽位 DOM，内联 `opacity` 活不过一次重建）；覆盖层 zIndex 12（`#inventory-screen` 是 10）。因此**拖拽分配、长按分堆、连发、悬停提示一行代码都没改**，19 种工作站也不用逐个适配（共用同一批 `.inv-slot`）。预览页 `tools/preview/inventory.html`（27 格 + 快捷栏行 + 红底格 + 选择白框）+ 2 张截图（含遮罩版）。验证：`test:ui2d-inventory` **9/9**（内容盒、图标居中与收窄、数量/耐久锚点、自定义边框、签名稳定性）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、40 张截图。⚠️ 游戏内未实测（dev 缺 `core.bin`）；面板底、标题、标签栏、合成书布局与 tooltip 仍是 DOM。详见 `notes/canvas-ui.md` §5.17 与决策 D29。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6084,7 +6086,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（241 条，不是差异，但同样"集中查"更好）
+### 实现注意（242 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6328,6 +6330,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1345 · **canvas 文本输入 / 输入法定型（3 条）**：新增 `src/ui2d/textInput.ts` —— `CanvasTextInput` 在屏幕外放一个 `opacity: 0` 的 1×1 `<input>`（固定视口内、`pointer-events: none`）承接全部输入与**输入法组合态**，canvas 只画 `value` / 光标 / 选区 / 组合态下划线；纯函数 `caretXOf` / … |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1354 · **新建世界表单接入整页镜像（4 条）**：`textPanel` 补上输入框取值 —— `textFieldValue()` 读 `<input>`/`<textarea>` 的 `value`（`type` 只认 text/search/number，密码与隐藏框跳过），`inputDisplayText()` 在空值时用 `placeholder` 并标成占位（`TextRun.alpha` 0.55 近似 `::pla… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1404 · **聊天输入行镜像 + 覆盖层 z-index 修正（3 条）**：`main.ts` 新增 `chatEntry2d`（`MenuScreen2D`，`zIndex: 12`）与 `syncChatEntry2d()` —— 每帧看 `#chat .chat-entry` 的 `offsetParent`，出现就 `engage`、收起就 `disengage`；输入本身一行没改（历史、命令补全、回车发送、发送键的 `poi… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1517 · **背包/工作站槽位交给 canvas（4 条）**：新增 `src/ui2d/Inventory2D.ts` —— `drawInvSlot()` 画一格的底、四边斜面（上/左暗、下/右亮）、图标（`drawImage` 复用 DOM 那张 36×36 canvas）、数量（四向黑描边）、耐久条（三档）、红底格、选择白框；`readInvSlots()` 从 `.inv-slot` 读矩形/图标/数量/耐久比例与档位/`:h… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
