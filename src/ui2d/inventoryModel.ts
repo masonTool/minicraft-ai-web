@@ -212,6 +212,105 @@ export function distributeDrag(
   cursor.stack = rest > 0 ? withCount(held, rest) : null;
 }
 
+/**
+ * 右键拖拽：每经过一格放**一个**。
+ *
+ * 与左键拖拽的"均分"不同（Wiki「物品管理」：右键拖过若干格子 = 每格放一个，
+ * 手上的东西按格数递减）。空格与"同类且没满"的格子才放。
+ */
+export function rightDragDistribute(
+  slots: SlotAccess,
+  rules: MoveRules,
+  cursor: Cursor,
+  indices: readonly number[],
+): void {
+  const held = cursor.stack;
+  if (!held) return;
+  let remaining = held.count;
+  const seen: number[] = [];
+  for (const index of indices) {
+    if (remaining <= 0) break;
+    if (seen.includes(index)) continue;
+    seen.push(index);
+    const target = slots.get(index);
+    if (!target) {
+      slots.set(index, withCount(held, 1));
+      remaining -= 1;
+      continue;
+    }
+    if (!rules.sameItem(held, target)) continue;
+    if (target.count >= rules.limitOf(target.id)) continue;
+    slots.set(index, withCount(target, target.count + 1));
+    remaining -= 1;
+  }
+  cursor.stack = remaining > 0 ? withCount(held, remaining) : null;
+}
+
+/**
+ * 双击收集：把容器里的**同类**凑到光标上。
+ *
+ * 原版（基岩版 Wiki）：双击某一格时，先把那一叠拿到光标上，再把范围内的同类
+ * 一格一格并过来，**直到堆叠上限**；上限满了（或根本没有同类可补）时，
+ * 调用方应把它退化成"快速移动"（`quickMove`）—— 这个判断留给调用方，
+ * 因为这层不知道"哪边算容器"。
+ */
+export function doubleClickGather(
+  slots: SlotAccess,
+  rules: MoveRules,
+  cursor: Cursor,
+  index: number,
+  range: readonly number[],
+): void {
+  let held = cursor.stack;
+  const first = slots.get(index);
+  if (!held && first) {
+    held = first;
+    slots.set(index, null);
+  }
+  if (!held) return;
+  const limit = rules.limitOf(held.id);
+
+  for (const targetIndex of range) {
+    if (held.count >= limit) break;
+    // 不再跳过 `index`：光标上本来就有东西时，被双击的那一格也该并进来
+    // （拿起来的分支已经把那一格清空了，这里自然读到 null）
+    const target = slots.get(targetIndex);
+    if (!target || !rules.sameItem(held, target)) continue;
+    const room = limit - held.count;
+    if (room <= 0) break;
+    const moved = Math.min(room, target.count);
+    held = withCount(held, held.count + moved);
+    slots.set(targetIndex, target.count - moved > 0 ? withCount(target, target.count - moved) : null);
+  }
+  cursor.stack = held;
+}
+
+/**
+ * 长按分堆：从某格取 `count` 个到光标上（触摸端"选数量"的最后一步）。
+ *
+ * 只做搬运，不碰 UI：绿色占比条、拖动选数量都是**调用方**的事。
+ * 光标上已经有别的物品、或同类已满时不动作（与原版一致）。
+ */
+export function splitTake(
+  slots: SlotAccess,
+  rules: MoveRules,
+  cursor: Cursor,
+  index: number,
+  count: number,
+): void {
+  const target = slots.get(index);
+  if (!target || count <= 0) return;
+  const held = cursor.stack;
+  if (held && !rules.sameItem(held, target)) return;
+  const limit = rules.limitOf(target.id);
+  const room = held ? limit - held.count : limit;
+  if (room <= 0) return;
+  const take = Math.min(Math.floor(count), target.count, room);
+  if (take <= 0) return;
+  slots.set(index, target.count - take > 0 ? withCount(target, target.count - take) : null);
+  cursor.stack = held ? withCount(held, held.count + take) : withCount(target, take);
+}
+
 /** 数组版的 `SlotAccess`（测试与预览页用；游戏里换成包着 `Inventory` 的适配器） */
 export function arraySlots(stacks: readonly (StackLike | null)[]): SlotAccess & {
   readonly stacks: (StackLike | null)[];

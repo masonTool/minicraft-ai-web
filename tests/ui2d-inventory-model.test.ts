@@ -11,9 +11,12 @@ import { describe, expect, it } from 'vitest';
 import {
   arraySlots,
   distributeDrag,
+  doubleClickGather,
   leftClick,
   quickMove,
   rightClick,
+  rightDragDistribute,
+  splitTake,
   type Cursor,
   type MoveRules,
   type StackLike,
@@ -187,5 +190,118 @@ describe('拖拽分配', () => {
     const cursor: Cursor = { stack: stone(3) };
     distributeDrag(slots, RULES, cursor, [0]);
     expect(cursor.stack).toEqual(stone(3));
+  });
+});
+
+describe('右键拖拽（每格放一个）', () => {
+  it('拖过 3 格各放一个，手上的递减', () => {
+    const slots = arraySlots([null, null, null]);
+    const cursor: Cursor = { stack: stone(5) };
+    rightDragDistribute(slots, RULES, cursor, [0, 1, 2]);
+    expect(slots.get(0)).toEqual(stone(1));
+    expect(slots.get(1)).toEqual(stone(1));
+    expect(slots.get(2)).toEqual(stone(1));
+    expect(cursor.stack).toEqual(stone(2));
+  });
+
+  it('手上不够时按格数停下（不会凭空多出物品）', () => {
+    const slots = arraySlots([null, null, null]);
+    const cursor: Cursor = { stack: stone(2) };
+    rightDragDistribute(slots, RULES, cursor, [0, 1, 2]);
+    expect(slots.get(0)).toEqual(stone(1));
+    expect(slots.get(1)).toEqual(stone(1));
+    expect(slots.get(2)).toBeNull();
+    expect(cursor.stack).toBeNull();
+  });
+
+  it('跳过异类与已满的同类格', () => {
+    const slots = arraySlots([sword(), stone(64), null]);
+    const cursor: Cursor = { stack: stone(3) };
+    rightDragDistribute(slots, RULES, cursor, [0, 1, 2]);
+    expect(slots.get(0)).toEqual(sword());
+    expect(slots.get(1)).toEqual(stone(64));
+    expect(slots.get(2)).toEqual(stone(1));
+    expect(cursor.stack).toEqual(stone(2));
+  });
+
+  it('重复经过同一格只放一个', () => {
+    const slots = arraySlots([null]);
+    const cursor: Cursor = { stack: stone(4) };
+    rightDragDistribute(slots, RULES, cursor, [0, 0, 0]);
+    expect(slots.get(0)).toEqual(stone(1));
+    expect(cursor.stack).toEqual(stone(3));
+  });
+});
+
+describe('双击收集', () => {
+  it('先拿起那一格，再把同类凑到上限', () => {
+    // 0 号 10 个（被双击），1 号 20 个，2 号 40 个
+    const slots = arraySlots([stone(10), stone(20), stone(40)]);
+    const cursor = emptyCursor();
+    doubleClickGather(slots, RULES, cursor, 0, [0, 1, 2]);
+    // 10 + 20 + 34 = 64（上限），2 号剩 6
+    expect(cursor.stack).toEqual(stone(64));
+    expect(slots.get(0)).toBeNull();
+    expect(slots.get(1)).toBeNull();
+    expect(slots.get(2)).toEqual(stone(6));
+  });
+
+  it('跳过异类，不碰不可堆叠的东西', () => {
+    const slots = arraySlots([stone(10), sword(), stone(5)]);
+    const cursor = emptyCursor();
+    doubleClickGather(slots, RULES, cursor, 0, [0, 1, 2]);
+    expect(cursor.stack).toEqual(stone(15));
+    expect(slots.get(1)).toEqual(sword());
+  });
+
+  it('光标上已有一叠时，先并进它再收集', () => {
+    const slots = arraySlots([stone(10), stone(10)]);
+    const cursor: Cursor = { stack: stone(50) };
+    doubleClickGather(slots, RULES, cursor, 0, [0, 1]);
+    // 50 + 10（0 号）+ 4（1 号补到 64）= 64，1 号剩 6
+    expect(cursor.stack).toEqual(stone(64));
+    expect(slots.get(1)).toEqual(stone(6));
+  });
+
+  it('双击空格且空手：什么都不做', () => {
+    const slots = arraySlots([null, stone(10)]);
+    const cursor = emptyCursor();
+    doubleClickGather(slots, RULES, cursor, 0, [0, 1]);
+    expect(cursor.stack).toBeNull();
+    expect(slots.get(1)).toEqual(stone(10));
+  });
+});
+
+describe('长按分堆（取指定数量）', () => {
+  it('取指定的 3 个到光标', () => {
+    const slots = arraySlots([stone(10)]);
+    const cursor = emptyCursor();
+    splitTake(slots, RULES, cursor, 0, 3);
+    expect(cursor.stack).toEqual(stone(3));
+    expect(slots.get(0)).toEqual(stone(7));
+  });
+
+  it('数量超过格里的就全取走', () => {
+    const slots = arraySlots([stone(2)]);
+    const cursor = emptyCursor();
+    splitTake(slots, RULES, cursor, 0, 9);
+    expect(cursor.stack).toEqual(stone(2));
+    expect(slots.get(0)).toBeNull();
+  });
+
+  it('光标上有同类时并进去（受上限）', () => {
+    const slots = arraySlots([stone(10)]);
+    const cursor: Cursor = { stack: stone(60) };
+    splitTake(slots, RULES, cursor, 0, 8);
+    expect(cursor.stack).toEqual(stone(64));
+    expect(slots.get(0)).toEqual(stone(6));
+  });
+
+  it('光标上有异类时拒绝（与原版一致）', () => {
+    const slots = arraySlots([stone(10)]);
+    const cursor: Cursor = { stack: sword() };
+    splitTake(slots, RULES, cursor, 0, 5);
+    expect(cursor.stack).toEqual(sword());
+    expect(slots.get(0)).toEqual(stone(10));
   });
 });

@@ -188,9 +188,12 @@ export {
 export {
   arraySlots,
   distributeDrag,
+  doubleClickGather,
   leftClick,
   quickMove,
   rightClick,
+  rightDragDistribute,
+  splitTake,
   type Cursor,
   type MoveRules,
   type SlotAccess,

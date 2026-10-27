@@ -290,6 +290,13 @@ const SHOTS = [
     what: '背包逻辑复原：左 DOM / 右 canvas，同一份数据同一套逻辑，点哪边两边都变',
     status: '已迁 · 阶段 4',
   },
+  {
+    file: '22b-inventory-held.png',
+    page: 'tools/preview/inventory-compare.html',
+    size: [900, 470],
+    what: '在 canvas 面板上点起一格：两侧同步清空，手上那叠由 canvas 画并跟随指针',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
