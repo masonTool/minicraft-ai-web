@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 用**真** WorldScreen 验证主菜单镜像</title>
+    <!--
+      主菜单镜像是"读 DOM 矩形再原位重画"。用户报「首页几个按钮的**显示位置**和**点击位置**都对不上」，
+      说明画出来的位置与 DOM 真实位置有偏差。这一页把**真的 `WorldScreen`**（不是手写假 DOM）建出来，
+      再镜像它 —— 复现用户看到的那一屏，并能用像素/矩形比对定位偏差。
+
+      用法：
+        npm run dev
+        open http://localhost:5173/tools/preview/world-real.html           # 只看 canvas（DOM 让位）
+        open 'http://localhost:5173/tools/preview/world-real.html?tint=1'
+        open 'http://localhost:5173/tools/preview/world-real.html?plain=1' # 只看 DOM（基准）
+    -->
+    <style>
+      /* 这一页**不手抄样式**：下面用 fetch 把 index.html 里那段 <style> 整段搬进来，
+         否则真 WorldScreen 会是一堆没有样式的裸节点（第一版就是这样，什么也测不出来）。 */
+      html, body { margin: 0; background: #0b0b0b; }
+      #stage { position: relative; width: 414px; height: 716px; overflow: hidden; }
+      #stage .caption {
+        position: absolute; left: 8px; bottom: 6px; z-index: 999; color: #fff;
+        text-shadow: 1px 1px 0 #000; font-size: 11px;
+      }
+      #report {
+        position: fixed; right: 8px; bottom: 8px; z-index: 9999; max-width: 380px;
+        background: rgba(0,0,0,.85); border: 1px solid #444; padding: 8px;
+        font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; color: #9fe08f;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption"></div></div>
+    <pre id="report"></pre>
+
+    <script type="module">
+      import { WorldScreen } from '../../src/ui/WorldScreen.ts';
+      import { MenuScreen2D } from '../../src/ui2d/index.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      const plain = params.get('plain') === '1';
+
+      /** 空存档表 + 全 no-op 的 actions：只为把首页原样建出来 */
+      const registry = {
+        list: () => [],
+        get: () => null,
+        update: () => {},
+        remove: () => {},
+        create: () => null,
+      };
+      const actions = new Proxy({}, { get: () => () => {} });
+
+      // ① 把游戏首页那段样式搬进来（真样式才是"定位对不对"的前提）
+      const html = await fetch('/index.html').then((res) => res.text());
+      const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+      document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
+      // 与游戏一致：手机横屏那套断点用 CSS 媒体查询，这里只补 body 的类别
+      document.body.classList.add('menu-open');
+
+      const stage = document.getElementById('stage');
+      const screen = new WorldScreen(stage, registry, actions);
+      screen.show();
+
+      const panel = stage.querySelector('.world-panel');
+
+      if (!plain) {
+        const mirror = new MenuScreen2D(stage, { tint, zIndex: 45 });
+        mirror.engage(panel);
+      } else {
+        panel.style.opacity = '1';
+      }
+
+      /*
+       * 报告要**晚一点**打印：首页在字体/排版稳定后按钮会整体上移（实测 y 483 → 309）。
+       * 第一版在 `show()` 之后立刻打，写出来的全是"布局稳定前"的旧位置，很容易被当成结论。
+       */
+      function report() {
+        const lines = [];
+        for (const el of panel.querySelectorAll('.world-primary, .world-secondary, .world-logo')) {
+          const r = el.getBoundingClientRect();
+          const host = stage.getBoundingClientRect();
+          lines.push(
+            `${el.className.split(' ')[0].padEnd(16)} x=${Math.round(r.left - host.left)} y=${Math.round(r.top - host.top)} w=${Math.round(r.width)} h=${Math.round(r.height)}  「${(el.textContent ?? '').trim()}」`,
+          );
+        }
+        document.getElementById('report').textContent =
+          `stage ${Math.round(stage.getBoundingClientRect().width)}×${Math.round(stage.getBoundingClientRect().height)}\n` +
+          `panel opacity=${getComputedStyle(panel).opacity}  ${plain ? '(DOM 基准)' : '(canvas 镜像)'}\n` +
+          lines.join('\n');
+      }
+      report();
+      setTimeout(report, 1200);
+      void document.fonts?.ready.then(report);
+      document.getElementById('caption').textContent = plain
+        ? 'DOM 基准：真 WorldScreen 首页'
+        : 'canvas 镜像：真 WorldScreen 首页（DOM 已 opacity: 0）' + (tint ? ' · 黄色遮罩' : '');
+    </script>
+  </body>
+</html>

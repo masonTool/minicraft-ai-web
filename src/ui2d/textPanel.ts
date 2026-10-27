@@ -33,6 +33,11 @@ export interface TextRun {
   /** 不透明度（占位提示用 0.55；其余默认 1） */
   readonly alpha?: number;
   /**
+   * 量宽补偿：CSS 的负 `letter-spacing` 会让元素盒子比 canvas 量出来的字**窄**，
+   * 不给补偿就会把大标题截成 "Minicra…"。这里的值 = `-letterSpacing × 字数`。
+   */
+  readonly widthSlack?: number;
+  /**
    * 裁剪矩形（相对覆盖层）。`undefined` = 不裁。
    *
    * DOM 里靠 `overflow: hidden / auto` 裁剪，canvas 没有这回事 —— 不裁的话
@@ -275,6 +280,9 @@ export function normalizeWeight(value: string | number): 400 | 600 | 700 {
   return 400;
 }
 
+/** `letter-spacing` 补偿的上限（防止某些元素算出离谱的宽度） */
+const run_letterCap = 64;
+
 /** 文字行的基线（竖直居中；`drawText` 用 `baseline: 'middle'` 时就是这个点） */
 export function runBaselineY(rect: Rect): number {
   return rect.y + rect.h / 2;
@@ -380,6 +388,11 @@ export function readTextRuns(
       // `#hud` 的 `text-shadow` 是全局的，这里统一按"有阴影"处理（与原版 HUD 一致）
       shadow: style.textShadow !== 'none',
       alpha: shown?.isPlaceholder ? 0.55 : 1,
+      widthSlack: (() => {
+        const spacing = Number.parseFloat(style.letterSpacing);
+        if (!Number.isFinite(spacing) || spacing >= 0) return 0;
+        return Math.min(Math.abs(spacing) * text.length, run_letterCap);
+      })(),
       clip: clip ?? undefined,
     });
   }
@@ -419,7 +432,7 @@ export function drawTextRuns(
           align: run.align,
           baseline: 'middle',
           shadow: run.shadow,
-          maxWidth: run.rect.w + slack,
+          maxWidth: run.rect.w + slack + (run.widthSlack ?? 0),
           alpha: run.alpha ?? 1,
         });
         lineY += lineHeight;

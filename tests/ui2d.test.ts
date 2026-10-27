@@ -685,6 +685,19 @@ describe('文字面板的 slack', () => {
     drawTextRuns(fake.ctx, [run], 20);
     expect(fake.drawn).toContain('MINICRAFT');
   });
+
+  it('`widthSlack` 也能补偿（负字距把盒子压窄时，按字数补回来）', () => {
+    const fake = fakeCtx();
+    // 9 个字 × 7px = 63 > 50，给 14 就画得下
+    drawTextRuns(fake.ctx, [{ ...run, widthSlack: 14 }]);
+    expect(fake.drawn).toContain('MINICRAFT');
+  });
+
+  it('补偿为 0 时行为与之前完全一致（不影响 F3 / 计分板）', () => {
+    const fake = fakeCtx();
+    drawTextRuns(fake.ctx, [{ ...run, widthSlack: 0 }]);
+    expect(fake.drawn.some((text) => text.includes('…'))).toBe(true);
+  });
 });
 
 /**

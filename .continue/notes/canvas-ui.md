@@ -635,6 +635,39 @@ M26 接进游戏、M27 视觉对齐（真图标/tooltip）、M28 合成、M29 �
 ⚠️ 滚动本身仍由 DOM 处理（覆盖层是 `pointer-events: none`，滚轮/触摸照旧落到下面那层），
 canvas 只负责"看得见的那一块"。
 
+## 5.23 修复（首页按钮错位：量早了，而且再也不重量）
+
+用户 2026-10-27：「首页的三个按钮显示位置是错的，点击的位置也是错的。」
+
+**根因是"量太早 + 不重量"**，用真 `WorldScreen` 复现（`tools/preview/world-real.html`，
+把 `index.html` 那段 `<style>` 用 `fetch` 搬过来，才是真布局）：
+
+```
+button「游戏」的 y：150ms 时 483 → 1650ms 时 309     （差 174px）
+```
+
+字体/排版稳定后按钮整体上移。而 `MenuScreen2D` 的签名只看"文字 / 输入框值 / 滚动位置"，
+**几何不在签名里**，于是第一帧量到的旧位置被一直沿用：
+
+- canvas 画在 y≈483（屏幕下半），DOM 真的在 y≈309 → 看起来"按钮错位"；
+- 点击落到 DOM 的真实位置，于是"点也点不中"。
+
+三处一起修：
+
+1. **签名带上几何**：`source.getBoundingClientRect()` + `scrollWidth/scrollHeight`；
+2. **所有镜像都开 `pollMs`**（主菜单 200ms、聊天输入行 250ms、多人 200ms、背包 120ms）：
+   定期强制重读，兜住"盒子尺寸没变、内部元素却动了"的情况；
+3. **等字体**：`document.fonts.ready.then(sync)`，字体到位后再量一遍。
+
+### 顺带修掉截断："Minicra…"
+
+大标题（`world-logo`，48px + 负 `letter-spacing`）量出来比盒子宽，被 `maxWidth` 截成
+"Minicra…"。现在 `readTextRuns` 会读 `letter-spacing`，把 **`-letterSpacing × 字数`**
+记进 `TextRun.widthSlack`，绘制时加到 `maxWidth` 上（F3/计分板不受影响：它们的补偿是 0）。
+
+> 教训：**镜像的正确性 = 一次测量的正确性 × 测量时机的正确性**。
+> 后者更难发现——错位看起来像"画错了"，实际是"画的是刚打开那一瞬间的旧布局"。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

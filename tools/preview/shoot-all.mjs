@@ -332,6 +332,20 @@ const SHOTS = [
     what: '创造物品栏（96 项、滚动 80px）：canvas 只画滚动区里看得见的几行，超出的被裁掉',
     status: '已迁 · 阶段 4',
   },
+  {
+    file: '26-world-mirror.png',
+    page: 'tools/preview/world-real.html',
+    size: [480, 760],
+    what: '**真 WorldScreen 首页**的镜像（三颗按钮 游戏/设置/小游戏）：位置与 DOM 基准一致',
+    status: '已迁 · 阶段 3',
+  },
+  {
+    file: '26b-world-dom.png',
+    page: 'tools/preview/world-real.html?plain=1',
+    size: [480, 760],
+    what: '同一页的 DOM 基准（不镜像）：用来比对位置',
+    status: '基准 · 阶段 3',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

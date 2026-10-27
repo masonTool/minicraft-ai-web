@@ -241,7 +241,14 @@ export class MenuScreen2D {
     for (const el of source.querySelectorAll('input, textarea')) {
       fields += `${(el as HTMLInputElement).value}\u0000`;
     }
-    return `${Math.round(width)}x${Math.round(height)}|${scroll}|${fields}|${source.textContent ?? ''}`;
+    /*
+     * ⚠️ **几何也要进签名**：首页的按钮在字体/排版稳定后会整体上移（实测同一个按钮
+     * y 从 483 变成 309）。只比文字的话，第一帧量到的旧位置会被一直沿用 ——
+     * canvas 画在旧位置、DOM 在新位置，看起来就是"按钮显示错位、点也点不中"。
+     */
+    const box = source.getBoundingClientRect();
+    const geometry = `${Math.round(box.left)},${Math.round(box.top)},${Math.round(box.width)},${Math.round(box.height)}|${source.scrollWidth}x${source.scrollHeight}`;
+    return `${Math.round(width)}x${Math.round(height)}|${geometry}|${scroll}|${fields}|${source.textContent ?? ''}`;
   }
 
   private draw(): void {

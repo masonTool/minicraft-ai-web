@@ -3073,7 +3073,12 @@ class App {
       // 调试遮罩：canvas 产出的像素全染黄，用来一眼分辨"这块是谁画的"
       if (UI2D_TINT_ENABLED) this.hud2d.setDebugTint(true);
       // 聊天输入行也交给 canvas（`#chat` 是 body 级 z-index 8，所以覆盖层要更高）
-      this.chatEntry2d = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 12 });
+      this.chatEntry2d = new MenuScreen2D(document.body, {
+        tint: UI2D_TINT_ENABLED,
+        zIndex: 12,
+        // 输入行的位置会随聊天栏内容条数变（`#chat` 是 flex 列），定期重读兜底
+        pollMs: 250,
+      });
       // 背包整页镜像（`#inventory-screen` 是 10，覆盖层用 12）
       this.invMirror = new MenuScreen2D(document.body, {
         tint: UI2D_TINT_ENABLED,
@@ -21948,7 +21953,13 @@ function mountMultiplayerMirror(screen: MultiplayerScreen): void {
 
 function mountMenuMirror(menu: WorldScreen): void {
   if (!UI2D_ENABLED) return;
-  const screen = new MenuScreen2D(document.body, { tint: UI2D_TINT_ENABLED, zIndex: 45 });
+  const screen = new MenuScreen2D(document.body, {
+    tint: UI2D_TINT_ENABLED,
+    zIndex: 45,
+    // 首页的按钮在字体/排版稳定后会整体上移（实测 y 483 → 309）：
+    // 靠定期重读兜底，不能指望"只量一次"就落在最终位置
+    pollMs: 200,
+  });
   const sync = (): void => {
     const panel = document.querySelector<HTMLElement>('#world-screen .world-panel');
     // `create` 也能镜像了：输入框的值由 `readTextRuns` 单独取（含占位提示），
@@ -21961,6 +21972,8 @@ function mountMenuMirror(menu: WorldScreen): void {
   window.setInterval(sync, 200);
   window.addEventListener('resize', sync);
   sync();
+  // 字体加载完布局会再动一次（首页最明显）：等它稳定后重量一遍
+  void document.fonts?.ready.then(sync);
 }
 
 /**
