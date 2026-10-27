@@ -150,4 +150,5 @@ export const menu = {
   'mp.error.name': '起个名字再进：昵称不能空着',
   'mp.portHint': '端口固定，不用填',
   'mp.port': '端口',
+  'mp.inputBar': '输入',
 } as const;

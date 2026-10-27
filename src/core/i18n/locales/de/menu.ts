@@ -89,6 +89,7 @@ export const menu = {
   'server.rtt': 'Latenz {ms} ms',
   'server.confirm': 'OK',
   'mp.port': 'Port',
+  'mp.inputBar': 'Eingabe',
   'mp.pick': 'Wählen',
   'server.titleRoom': 'Raum wählen',
   'server.titleServer': 'Server wählen',

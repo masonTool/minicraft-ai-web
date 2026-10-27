@@ -151,4 +151,5 @@ export const menu = {
   'mp.error.name': 'Pick a nickname first — it cannot be empty',
   'mp.portHint': 'Port is fixed — nothing to fill in',
   'mp.port': 'Port',
+  'mp.inputBar': 'Input',
 } satisfies Pick<Messages, keyof typeof zhmenu>;

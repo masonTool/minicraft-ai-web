@@ -89,6 +89,7 @@ export const menu = {
   'server.rtt': 'Задержка {ms} мс',
   'server.confirm': 'ОК',
   'mp.port': 'Порт',
+  'mp.inputBar': 'Ввод',
   'mp.pick': 'Выбрать',
   'server.titleRoom': 'Выбрать комнату',
   'server.titleServer': 'Выбрать сервер',

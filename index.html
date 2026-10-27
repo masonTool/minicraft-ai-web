@@ -6651,52 +6651,30 @@
       }
 
       /* ==================================================================
-         全站输入浮层（2026-10-27）
-         手机上点输入框时系统键盘会盖住那个框本身，所以统一改成"点击 → 浮层里编辑 →
-         确认写回"。浮层贴上方（输入法压不到），大字号，只做"确认/取消"两件事。
+         输入浮条（2026-10-27 定稿，用户原话）
+         点输入框时系统键盘会盖住框本身，所以把输入临时搬到**屏幕左上角一条细条**里：
+         没有标题、没有按钮、没有遮罩——它不是对话框，只是给输入框换个看得见的位置。
+         键盘上的「完成」写回，键盘收起就跟着消失。
          ================================================================== */
-      .inp-layer {
-        position: fixed; inset: 0; z-index: 200;
-        display: flex; align-items: flex-start; justify-content: center;
-        padding: max(9vh, 36px) 12px 12px;
-        background: rgba(0, 0, 0, .72);
+      .inp-bar {
+        position: fixed; z-index: 200;
+        top: max(8px, env(safe-area-inset-top));
+        left: max(8px, env(safe-area-inset-left));
+        display: none;
       }
-      .inp-card {
+      .inp-bar.visible { display: block; }
+      .inp-bar-field {
         box-sizing: border-box;
-        width: min(92vw, 420px);
-        display: flex; flex-direction: column; gap: 10px;
-        padding: 14px 16px;
-        background: linear-gradient(#3a3a3a, #2c2c2c);
-        border: 3px solid;
-        border-top-color: #5c5c5c; border-left-color: #545454;
-        border-right-color: #3a3a3a; border-bottom-color: #303030;
-        box-shadow: 0 22px 52px rgba(0, 0, 0, .6);
-        animation: panel-pop-in 150ms cubic-bezier(.2, .8, .3, 1) both;
-      }
-      .inp-title { font-size: 12px; color: #b9b9b9; }
-      .inp-field {
-        box-sizing: border-box; width: 100%; height: 42px;
-        padding: 0 10px; font: inherit; font-size: 17px;
+        width: min(64vw, 320px); height: 38px;
+        padding: 0 10px;
+        font: inherit; font-size: 16px;
         color: #f0f0f0; background: #1e1e1e;
         border: 2px solid;
         border-top-color: #141414; border-left-color: #171717;
         border-right-color: #4c4c4c; border-bottom-color: #545454;
+        box-shadow: 0 10px 26px rgba(0, 0, 0, .6);
       }
-      .inp-field:focus { outline: 2px solid #7fa86f; outline-offset: -2px; }
-      .inp-actions { display: flex; gap: 8px; }
-      .inp-button {
-        flex: 1 1 0; box-sizing: border-box; min-height: 36px;
-        font: inherit; font-size: 13px; cursor: pointer;
-        color: #dcdcdc; background: #3a3a3a;
-        border: 2px solid;
-        border-top-color: #5a5a5a; border-left-color: #545454;
-        border-right-color: #2c2c2c; border-bottom-color: #282828;
-      }
-      .inp-button.primary {
-        background: #3d6b2f; color: #f2f7ee;
-        border-top-color: #5f9149; border-left-color: #599046;
-        border-right-color: #2c4f21; border-bottom-color: #274a1e;
-      }
+      .inp-bar-field:focus { outline: 2px solid #7fa86f; outline-offset: -2px; }
 </style>
 
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
