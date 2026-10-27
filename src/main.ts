@@ -5852,6 +5852,15 @@ class App {
     this.physics.teleport(region.x + 0.5, landingY, region.z + 0.5);
     this.spawnPoint = [region.x + 0.5, landingY, region.z + 0.5];
     this.refreshWorld(toChunkCoord(region.x), toChunkCoord(region.z), true);
+    /*
+     * **新世界也要做落地校正**（用户 2026-10-27：新建世界人物卡在方块里、头埋在方块内）。
+     *
+     * `landingY` 是按 `generator.surfaceY()` 估的，真实区块还要算树、水、洞穴、群系混合，
+     * 落点可能正好在树干/石头里。以前只有"读档"与"联机加入"会 requestGroundSettle，
+     * 新世界这条路径没有 —— 卡住了就永远卡着（玩家只能自己挖出来）。
+     * 挂上之后，进世界第一帧就会检测"脚/头在实心块里、脚下没支撑、泡在水里"并挪到最近自然地面。
+     */
+    this.requestGroundSettle('spawn');
   }
 
   /**
