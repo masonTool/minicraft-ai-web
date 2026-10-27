@@ -6513,11 +6513,13 @@
       /* ---- 右栏列表 ---- */
       .server-list { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 0; }
       .server-list-head {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        display: flex; align-items: center; gap: 6px;
         font-size: 12px; color: #cfcfcf;
         padding-bottom: 6px;
         border-bottom: 2px solid rgba(255, 255, 255, .1);
       }
+      /* 标题吃掉剩余宽度，两个按钮贴在右边（修改端口在左、重新扫描在右） */
+      .server-list-title { flex: 1 1 auto; }
       .server-list-rescan {
         box-sizing: border-box; height: 24px; padding: 0 8px;
         font: inherit; font-size: 11px; cursor: pointer;
@@ -6531,15 +6533,37 @@
         flex: 1 1 auto; min-height: 0; overflow-y: auto;
         display: flex; flex-direction: column; gap: 3px;
       }
-      .server-list-label {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 11px; color: #b9b9b9; letter-spacing: .5px;
-        padding: 4px 0 2px;
+      /* ---- 两类服务器：本地 / 远程（用户 2026-10-27）
+         各自可折叠（默认展开）。标题条做成"整条色块 + 左侧主色竖条"，
+         比原来那条细虚线醒目得多——用户要的就是"突出这两个类别"。 */
+      .server-list-group { display: flex; flex-direction: column; gap: 2px; }
+      .server-list-group + .server-list-group { margin-top: 6px; }
+      .server-list-group-head {
+        display: flex; align-items: center; gap: 6px; width: 100%;
+        box-sizing: border-box;
+        padding: 5px 8px; font: inherit; font-size: 12px; text-align: left;
+        color: #eaeaea; background: rgba(255, 255, 255, .06);
+        border: none; border-left: 3px solid #6f9a5f;
+        cursor: pointer;
       }
-      /* 虚线用真实元素而不是 ::after：右边还要放「修改端口」，伪元素永远排最后 */
-      .server-list-rule {
-        flex: 1 1 auto; height: 1px; background: rgba(255, 255, 255, .14);
+      .server-list-group-head:hover { background: rgba(255, 255, 255, .1); }
+      .server-list-group-label { letter-spacing: .5px; }
+      /* 展开/收起箭头：用 CSS 三角画，不依赖字体（`▾` 有些系统会回退成圆点） */
+      .server-list-caret {
+        flex: 0 0 auto; width: 0; height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #9fd08a;
+        transition: transform 120ms ease;
       }
+      .server-list-group-head[aria-expanded='false'] .server-list-caret {
+        transform: rotate(-90deg);
+      }
+      .server-list-group-body {
+        display: flex; flex-direction: column; gap: 3px;
+        padding: 4px 0 2px 6px;
+      }
+      .server-list-group-body.hidden { display: none; }
       .server-list-status { font-size: 11px; line-height: 1.6; color: #9a9a9a; }
       .server-list-status.empty {
         display: flex; flex-direction: column; align-items: flex-start; gap: 6px;

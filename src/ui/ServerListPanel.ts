@@ -59,7 +59,18 @@ export class ServerListPanel {
     const head = document.createElement('div');
     head.className = 'server-list-head';
     const title = document.createElement('span');
+    title.className = 'server-list-title';
     title.textContent = t('server.nearby');
+    /*
+     * 「修改端口」放在「重新扫描」**左边**（用户 2026-10-27）：两者是一组动作——
+     * 改端口就是为了重扫，排在一起才顺。
+     */
+    const headPort = document.createElement('button');
+    headPort.type = 'button';
+    headPort.className = 'server-list-port';
+    headPort.id = 'server-list-change-port';
+    headPort.textContent = t('server.changePort');
+    headPort.addEventListener('click', () => this.onPortRequest?.());
     this.rescanButton = document.createElement('button');
     this.rescanButton.type = 'button';
     this.rescanButton.className = 'server-list-rescan';
@@ -68,50 +79,37 @@ export class ServerListPanel {
     this.rescanButton.addEventListener('click', () => {
       void this.refresh();
     });
-    head.append(title, this.rescanButton);
+    head.append(title, headPort, this.rescanButton);
 
     const body = document.createElement('div');
     body.className = 'server-list-body';
 
-    const lanLabel = document.createElement('div');
-    lanLabel.className = 'server-list-label';
-    const lanText = document.createElement('span');
-    lanText.textContent = t('server.lan');
-    const lanRule = document.createElement('span');
-    lanRule.className = 'server-list-rule';
     /*
-     * 「修改端口」挂在**局域网这一行的右边**（用户 2026-10-27）：它服务的正是"这一轮
-     * 局域网扫描用哪个端口"，放在「重新扫描」下面一行才对应得上。端口一变必须重扫，
-     * 所以点它开的是确认弹窗（宿主接 `onPortRequest`）。
+     * 两类服务器（用户 2026-10-27）：**本地服务器**（这台机器所在网段扫到的）与
+     * **远程服务器**（公网/别人的机器）。各自可折叠，**默认展开**。
+     * 折叠用 `aria-expanded` + 隐藏 body，不用 `<details>`——原生 summary 的三角
+     * 在各平台的样式差异太大，这里要的是统一的像素风箭头。
      */
-    const changePort = document.createElement('button');
-    changePort.type = 'button';
-    changePort.className = 'server-list-port';
-    changePort.id = 'server-list-change-port';
-    changePort.textContent = t('server.changePort');
-    changePort.addEventListener('click', () => this.onPortRequest?.());
-    lanLabel.append(lanText, lanRule, changePort);
+    const local = this.makeGroup(t('server.lan'));
     this.status = document.createElement('div');
     this.status.className = 'server-list-status';
     this.status.id = 'server-list-status';
     this.lanList = document.createElement('div');
     this.lanList.className = 'server-list-items';
     this.lanList.id = 'server-lan-list';
+    local.body.append(this.status, this.lanList);
 
-    const publicLabel = document.createElement('div');
-    publicLabel.className = 'server-list-label';
-    publicLabel.textContent = t('server.public');
+    const remote = this.makeGroup(t('server.public'));
     this.publicList = document.createElement('div');
     this.publicList.className = 'server-list-items';
     this.publicList.id = 'server-public-list';
-
-    // 公共服务器：接口还没提供，先给一行说明（空着会让人以为列表坏了）
     const publicSoon = document.createElement('div');
     publicSoon.className = 'server-list-room-empty';
     publicSoon.textContent = t('server.publicSoon');
     this.publicList.append(publicSoon);
+    remote.body.append(this.publicList);
 
-    body.append(lanLabel, this.status, this.lanList, publicLabel, this.publicList);
+    body.append(local.group, remote.group);
     this.element.append(head, body);
   }
 
@@ -160,6 +158,33 @@ export class ServerListPanel {
     } finally {
       if (token === this.token) this.scanning = false;
     }
+  }
+
+  /** 一个可折叠分组（本地 / 远程）：标题条 + 可隐藏的正文，**默认展开** */
+  private makeGroup(titleText: string): { group: HTMLDivElement; body: HTMLDivElement } {
+    const group = document.createElement('div');
+    group.className = 'server-list-group';
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'server-list-group-head';
+    head.setAttribute('aria-expanded', 'true');
+    const caret = document.createElement('span');
+    caret.className = 'server-list-caret';
+    caret.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'server-list-group-label';
+    label.textContent = titleText;
+    head.append(caret, label);
+    const body = document.createElement('div');
+    body.className = 'server-list-group-body';
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      // 三角的朝向由 CSS 按 aria-expanded 决定，切换只改这一个属性
+      head.setAttribute('aria-expanded', String(!open));
+      body.classList.toggle('hidden', open);
+    });
+    group.append(head, body);
+    return { group, body };
   }
 
   /**
