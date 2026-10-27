@@ -114,6 +114,8 @@ export interface WorldScreenActions {
     baseUrl: string,
     name: string,
   ) => Promise<string | null> | string | null;
+  /** 卡片上的「开房」：打开统一的多人界面（host 模式），世界名带过去 */
+  onHostOpen?: (world: WorldSummary) => void;
   /**
    * 开房对话框昵称的默认值（本批）：取联机面板记住的那个，省得每次重填。
    * 不传就空着——昵称必填，空着等于让玩家自己起一个。
@@ -680,8 +682,26 @@ export class WorldScreen {
    * 复制邀请），默认值必须一眼能认，也要允许改（同一台服务器上开两局得分开）。
    * 房间名只收 `[A-Za-z0-9_-]`——服务端把它当数据 key 前缀、还会拼进地址 path。
    */
+  /**
+   * 卡片上的「开房」。
+   *
+   * 2026-10-27 第三版：**不再弹一个自己的对话框**——加入和开房字段完全一样，
+   * 共用「左输入 / 右列表」那一套界面即可（用户原话：为什么不用同一套 UI）。
+   * 世界名带过去，那边会把房间名预填成由世界名派生的那个、按钮换成「确定并进入」。
+   *
+   * 旧的独立对话框保留在 `showHostDialog()`（未删）：万一统一界面在某些平台上
+   * 需要退回旧路径，改一行就能切回来。
+   */
   private openHostWorld(world: WorldSummary): void {
     this.editCleanup?.();
+    if (this.actions.onHostOpen) {
+      this.actions.onHostOpen(world);
+      return;
+    }
+    this.showHostDialog(world);
+  }
+
+  private showHostDialog(world: WorldSummary): void {
     const defaultRoom = roomFromWorldName(world.name, world.seed);
 
     const overlay = document.createElement('div');
