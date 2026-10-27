@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261027-1143 | 2026-10-27 | 界面与音频 | —（迁移可视化） | 3 条：① `ui2d/debug.ts` 的 `applyDebugTint()` —— 绘制结束后切 `source-atop` 整块刷半透明黄，**只有 canvas 产出像素的地方被染**，不用维护"画了哪些矩形"；② `Hud2D.setDebugTint()` + `?ui2dtint=1`（独立参数，不跟 `ui2d=1` 绑定：多一次全屏填充会让帧率 A/B 失真）；③ 预览页 `?tint=1`、`shoot-all` 补 4 张遮罩版截图。验证：`test:ui2d` **36/36**、`check` exit=0、11 张截图逐张看过（快捷栏整条染黄 / DOM 排原色 / Boss 条只染自己 / 红闪整屏偏黄符合预期） |
 | 20261027-1009 | 2026-10-27 | 界面与音频 | —（迁移阶段 1.5） | 4 条：① `ui2d/Hotbar2D.ts` 把整条快捷栏画到 canvas（面板/9 格/图标/数量/序号/耐久三档/选中框，几何取 DOM 实测、离屏快照 + 状态签名，稳态每帧一次 `drawImage`）；② `?ui2d=1` 时 DOM 让位（`.slot` 设 `opacity: 0`、容器的底与斜角透明但**保留边框宽度**），点击与长按提示仍走 DOM；③ `tools/preview/hotbar.html` 离线对照页，不用进世界就能把 DOM 版与 canvas 版摆在一起；④ `notes/canvas-ui.md` 补阶段 1.5 判据、A/B 步骤与"阶段 0 为什么证明不了什么"的复盘。验证：`tests/ui2d.test.ts` **34/34**（新增 12 条几何与签名断言）、`check` exit=0、`build:fast` 出包、截图逐项对照 `.tmp/shots/hotbar-preview.png`；真机 A/B 待验。坑：**像素换手只能用 `opacity: 0`**（`visibility: hidden`/`display: none` 会退出命中），**容器不能整体透明**（两侧按钮是它的子节点） |
 | 20261027-0848 | 2026-10-27 | 界面与音频 | —（迁移地基，长期项） | 4 条：① 核清 net-client-look 红灯是上游已改口径（未改代码，8/8 绿）；② `src/ui2d/` 五模块（文字/命中/覆盖层/控件）+ 22 条离线断言，命中测试抓到"反向遍历致下层覆盖上层"；③ 试点把红闪/Boss 条/进度条画到 canvas（`?ui2d=1`，准星因 `mix-blend-mode` 判定不搬）；④ `notes/canvas-ui.md` 迁移方案（阶段 0~6 门禁 + 不搬清单）。验证：`check:fast` 绿、181 套离线全过、`build:fast` 出包（main 2,126 kB / gzip 595 kB）；真机帧率与观感待验 |
 | 1363 | 2026-10-22 | 工程与基础设施 | —（机制本身） | continue-do 升级：门禁回绿、旧契约自测退役、`EXPERIENCE`→`TIPS`、`OVERVIEW` 落地、`HANDOFF` 瘦身；`DONE` 只留最近的批次 |

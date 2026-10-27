@@ -5976,6 +5976,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1009 · **快捷栏整条迁到 canvas（4 条）**：新增 `src/ui2d/Hotbar2D.ts` —— 面板（`#c6c6c6` + 3px 斜面 + 2px 黑描边）、9 个格子 + 图标 + 数量（四向描边）+ 序号 + 耐久条三档 + 选中格（白框 / 半透明底 / 上抬 2px / 放大 1.08 / 柔光）；几何一律取 `getBoundingClientRect()`（不抄 `--hotbar-slot`，断点与安全区自动跟上），整条栏画进离屏快照、签名不变时每帧只一次 `drawImage`；`?ui2d=1` 时 DOM 让位（`.slot` 设 `opacity: 0` 保住命中与长按提示，容器的底与斜角设透明但保留边框宽度，两侧按钮不位移），关掉参数即回到原样；另加离线对照页 `tools/preview/hotbar.html`（不用进世界就能把 DOM 版与 canvas 版摆在一起），并把阶段 1.5 的判据 / A/B 步骤 / "阶段 0 为什么证明不了什么"的复盘写进 `notes/canvas-ui.md`。验证：`test:ui2d` **34/34**（新增 12 条：内容盒 / 图标居中 / 数量与序号锚点 / 耐久轨道与比例 / 选中格缩放上抬 / 快照原点 / 签名稳定性）、`npm run check` exit=0、`build:fast` 出包、截图逐项对照。未验证：真机观感与帧率 A/B（需 `?ui2d=1` 进世界）。坑见 `TIPS.md#界面与音频`。
 
+- [x] 批次 20261027-1143 · **canvas 调试遮罩（3 条）**：新增 `src/ui2d/debug.ts` 的 `applyDebugTint()` —— 所有绘制结束后把 `globalCompositeOperation` 切成 `source-atop` 再整块刷半透明黄，**只有 canvas 产出过像素的地方被染**（合成器替我们算，不用维护"这一帧画了哪些矩形"，将来新增控件自动覆盖）；`Hud2D.setDebugTint()` 在最后一步刷，`main.ts` 把开关读取抽成通用 `readFlag()` 并新增 `?ui2dtint=1`（独立参数：多一次全屏填充会让帧率 A/B 失真、颜色不对也容易被当成 bug）——屏幕上黄色的地方就是 canvas 画的，用来一眼判断迁移进度；预览页加 `?tint=1`，`tools/preview/shoot-all.mjs` 补 4 张遮罩版截图（含"上排 DOM 不染色 / 下排 canvas 全黄"的对照）。验证：`test:ui2d` **36/36**（新增 2 条：调用序列 `save→source-atop→fill→fillRect→restore`、尺寸非法一笔不画）、`tsc` 干净、`npm run check` exit=0、11 张截图逐张看过。坑记 `notes/canvas-ui.md` §5.3。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

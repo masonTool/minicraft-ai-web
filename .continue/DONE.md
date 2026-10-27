@@ -9,6 +9,36 @@
 
 ---
 
+## 批次 20261027-1143 · 2026-10-27 · 会话 9f2dcf81
+
+# 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-1143
+
+> 用户 2026-10-27：「现在看的还是不太清楚。要不然这样，如果是 canvas 画的，统一先加一层黄色遮罩，
+> 这样就容易区分了。」—— 对，这是"改造进度"最省事的一种可视化：不靠肉眼比对像素，
+> 而是让 canvas 产出的每一块像素自己"亮明身份"。
+
+- [x] [U5] 加调试遮罩：`src/ui2d/debug.ts` 的 `applyDebugTint()`（`source-atop` 整层刷）+ `Hud2D.setDebugTint()` + `main.ts` 解析 `?ui2dtint=1` + 两个预览页支持 `?tint=1` → `npx vitest run tests/ui2d.test.ts`
+  - 做了什么：新增 `ui2d/debug.ts`（`applyDebugTint(ctx,w,h)`：`save` → `globalCompositeOperation='source-atop'` → 整块刷 `rgba(255,214,0,.52)` → `restore`）；`Hud2D` 加 `setDebugTint()`，在**所有绘制之后**刷遮罩；`main.ts` 把 `readUi2DFlag()` 拆成通用 `readFlag(name)`，新增 `UI2D_TINT_ENABLED = UI2D_ENABLED && readFlag('ui2dtint')`；两个预览页加 `?tint=1`。
+  - 为什么：`source-atop` 让**合成器**替我们判断"哪些地方有像素" —— 不用维护"这一帧画了哪些矩形"的账，将来新增控件自动被覆盖。遮罩单独一个参数、不跟 `ui2d=1` 绑定：多一次全屏填充会让帧率 A/B 失真，颜色不对也容易被当成 bug（见决策 D5/D6）。
+  - 验证：`tests/ui2d.test.ts` **36 passed**（新增 2 条：假 ctx 断言调用序列 = `save → op source-atop → fill → fillRect 0,0,w,h → restore`；尺寸非法时一笔不画）；`tsc` 干净；`npm run check` exit=0。
+  - 批次：20261027-1143
+
+- [x] [U6] `tools/preview/shoot-all.mjs` 补遮罩版截图并重拍全部；更新 `.tmp/canvas-version/README.md` 的进度表 → `node tools/preview/shoot-all.mjs`
+  - 做了什么：`SHOTS` 加 4 张遮罩版（`06-hotbar-tinted`、`06b-hotbar-tinted-dom-vs-canvas`、`07-boss-tinted`、`08-all-tinted`），重拍共 11 张；README 的表格补上四行，并加一张"URL → 看到什么"的表（不带参数 / `?ui2d=1` / `?ui2d=1&ui2dtint=1` / 关掉）。
+  - 为什么：用户要的是"一眼能判断实现到哪"，那截图里就必须有**同一份数据的染色/不染色对照** —— `06b` 那张（上排 DOM 不染色、下排 canvas 全黄）比任何文字说明都直接。
+  - 验证：`node tools/preview/shoot-all.mjs --base http://localhost:5199` 11 张全出，逐张看过：快捷栏整条染黄、DOM 那排原色；Boss 条只有那条被染、周围画面原色；红闪那版整屏偏黄（符合预期，红闪本身就是全屏填充）。
+  - 批次：20261027-1143
+
+- [x] [U7] 文档：`notes/canvas-ui.md` 记下这个调试开关与用法；决策写进 `doing/9f2dcf-decision.md` D5/D6 → `node .continue/hooks/check.mjs --fast`
+  - 做了什么：`notes/canvas-ui.md` 新增 §5.3（实现一句话、为什么需要它、三条边界、以及"红闪打开时整屏都黄"这个反直觉现象）；决策 D5（`source-atop` 整层刷而非逐块算矩形）、D6（开关独立成 `ui2dtint=1`）。
+  - 为什么：这个开关的价值不在代码而在**验收方式**——以后每迁一块界面，只要拍一张带遮罩的图就能说明"这块换了"，不必再靠肉眼比像素。不写下来，下一批会重新发明一遍。
+  - 验证：`node .continue/hooks/check.mjs --fast` 六项全过；`npm run check` exit=0。
+  - 批次：20261027-1143
+
 ## 批次 20261027-1009 · 2026-10-27 · 会话 9f2dcf81
 
 # 队列 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
@@ -253,29 +283,6 @@
   - 为什么：前者让浮窗在手机内建服务端上也显示 `在线/容量`；后者在多房间时会对着一个没人跑模拟的房说「可以进」，客户端照它进房就踩到同一个坑。
   - 验证：同上，未经编译验证。
   - 批次：20261027-0720
-
----
-
-## 批次 20261027-0700 · 2026-10-27 · 会话 12c62cf0
-
-> 用户 2026-10-27："请继续" —— 承接合并后列的待补项：把「附近房间」在 Node 服务端上真正跑通。
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-0700
-
-- [x] [L12] Node 服务端补上 UDP 组播发现：`server/node/beacon.mjs` + `server/node/index.mjs` → `npm run test:net`
-  - 做了什么：照 `server/rust/src/beacon.rs` 写同一份报文（`mc/v/id/port/room/name/seed/players/host/pw`、组播 `239.255.42.99:25188`、3 秒一帧、12 秒过期、按 id 过滤回声），收发分成两个 socket；`/healthz` 补 `beacon` / `beaconPort` / `peers`；监听回调里启动（端口要等 `PORT=0` 分配完才知道）；`SIGTERM` 时先停发现层；`BEACON=0` 可关。
-  - 为什么：文档写着"Node 版 `/healthz` 返回 peers"，实际 body 里没有（只有 CORS 头），所以「附近房间」在 Node 服务端下永远是空的——只有手机上那份 Rust 才有数据。
-  - 验证：本机双实例互相发现（8887 ↔ 9001，`addr=192.168.1.72`）；假房主进 8887 的 `newplayer` 后，9001 的 peers 变成 `name=草原小屋 / room=newplayer / players=1 / hasHost=true`；`test:net` **297 通过 / 0 失败**。
-  - 批次：20261027-0700
-- [x] [L12] 附近房间收尾：`src/ui/ServerPicker.ts` → `npm run check:fast`
-  - 做了什么：附近设备行用它自报的 `room/players/hasHost` 直接列一行房间（不再去拉它的 `/rooms`，那台可能根本没连过来），延迟交给 `probeLatency()` 异步补；房间行支持"只知道人数不知道容量"（只写 `4`，不编 `1/0`）；空房名显示成「默认房间」。
-  - 为什么：合并时只移植了"列出来"，worktree 里的 `probeLatency` 没人调用，附近设备的延迟一直是 `--`；而它自报的房间名比"进默认房"准得多。
-  - 验证：`npm run check:fast` 全绿；补一条 ui-test 断言（自报房间 + 异步延迟 + `--` 兜底）。
-  - 批次：20261027-0700
 
 ---
 
