@@ -5470,6 +5470,14 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       复验工具：`npm run diag:perf -- <诊断.json>`（判据见 `src/game/diagPerf.ts`，
       由 `test:diag` 断言；旧版导出缺字段会明确提示"无法判断"）。
 
+- [x] M25 背包交互规则补齐（**纯逻辑**）：**双击收集**（同类凑满，没凑到退化成快速移动）、**右键拖拽逐格放一个**、**长按分堆取指定数量**。判据：`ui2d/inventoryModel.ts` 纯函数 + 31 条断言覆盖 Wiki「物品管理」；对照页可手动复现。触摸端的占比条与拖动选数量 UI 归 M31
+- [ ] M26 背包面板接进游戏：canvas 面板包一层真实 `Inventory`（`get/set` 适配器）与容器来源，打开背包时 DOM 面板**整个退出**（不是 opacity），Esc/关闭按钮、快捷栏行、与 `uiOpen` 的交互都要对齐
+- [ ] M27 背包视觉对齐：真实物品图标（图集裁切）、间距/标题/标签栏、滚动与断点（手机 42→更大）、悬停高亮、物品名称浮标
+- [ ] M28 合成：2×2 / 3×3 合成格 + 结果格 + 配方书（点配方把材料摆进去）
+- [ ] M29 容器类工作站：箱子 / 木桶 / 漏斗 / 发射器 / 投掷器 / 熔炉 / 营火 / 高炉 / 烟熏炉（各自动槽位与进度条）
+- [ ] M30 重配方块工作站：铁砧 / 砂轮 / 织布机 / 制图台 / 锻造台 / 附魔台 / 酿造台 / 信标
+- [ ] M31 触摸端交互对齐：长按分堆的全套（绿色占比条、拖动选数量）、拖拽分配、连发；并与 DOM 版逐条对照验收（`tools/preview/inventory-compare.html` 扩成可切换"DOM / canvas / 并排"）
+
 ## O. 验证
 
 - [~] O1 噪声/密度函数与已知参考值对齐测试
@@ -6008,6 +6016,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261027-1531 · **背包逻辑复原（3 条）**：用户要求"背包逻辑和界面用 canvas 复原实现、跟 DOM 一模一样"，因此这一批不再镜像，而是把规则与排版都自己写一份：新增 `src/ui2d/inventoryModel.ts` （`leftClick` / `rightClick` / `quickMove` / `distributeDrag`，只依赖 `SlotAccess(get/set)` + `Cursor` + 注入的 `MoveRules`（堆叠上限、同种判断），所以同一份逻辑既能套在真实 `Inventory` 上，也能被数组断言逐条钉住）；新增 `src/ui2d/InventoryPanel2D.ts`（`layoutInventoryPanel` 按 `INV_LAYOUT`（照抄 `.inv-*` 的 px）算出面板/标题/36 格，`drawInventoryPanel` 画面板底 + 3px 斜面 + 标题 + 逐格（复用 `drawInvSlot`）+ 光标上那一叠，`slotIndexAt` 做命中）。对照页 `tools/preview/inventory-compare.html`：**左边 DOM 渲染、右边 canvas 渲染，共用同一份数据与逻辑**，点/右键/Shift/拖拽任意一边两边同步变。验证：`test:ui2d-inventory-model` **19/19**（左键 7 / 右键 5 / Shift 3 / 拖拽 4）、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、41 张截图。⚠️ **还没接进游戏**；DOM 版里的**双击收集、右键拖拽逐格放一个、触摸长按分堆、合成/熔炉等专用槽位**尚未搬迁 —— 补齐后才谈得上"一模一样"。详见 `notes/canvas-ui.md` §5.18 与决策 D30。
 
+- [x] 批次 20261027-1548 · **背包交互规则补齐（M25）**：`ui2d/inventoryModel.ts` 新增三个纯函数 —— `rightDragDistribute`（右键拖拽每格放一个，重复经过同一格只放一次）、`doubleClickGather`（双击收集：先拿起那一格，再把范围内同类一格一格并到堆叠上限；没凑到任何东西时由调用方退化成 `quickMove`）、`splitTake`（长按分堆取指定数量，光标上有异类时拒绝）。对照页 `inventory-compare.html` 接上三种操作（双击 400ms、右键拖拽、触摸长按 500ms），并写了一个**像素探针**验收：点 canvas 第 0 格后，canvas 该格中心像素从图标色 `(139,90,43)` 变成槽位底色 `(139,139,139)`，同时 DOM 侧该格也空了 —— 两条渲染路径共用同一个模型。验证：`test:ui2d-inventory-model` **31/31**、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、42 张截图。⚠️ 仍未接进游戏（M26）；触摸占比条归 M31。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6088,7 +6098,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（243 条，不是差异，但同样"集中查"更好）
+### 实现注意（244 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6334,6 +6344,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1404 · **聊天输入行镜像 + 覆盖层 z-index 修正（3 条）**：`main.ts` 新增 `chatEntry2d`（`MenuScreen2D`，`zIndex: 12`）与 `syncChatEntry2d()` —— 每帧看 `#chat .chat-entry` 的 `offsetParent`，出现就 `engage`、收起就 `disengage`；输入本身一行没改（历史、命令补全、回车发送、发送键的 `poi… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1517 · **背包/工作站槽位交给 canvas（4 条）**：新增 `src/ui2d/Inventory2D.ts` —— `drawInvSlot()` 画一格的底、四边斜面（上/左暗、下/右亮）、图标（`drawImage` 复用 DOM 那张 36×36 canvas）、数量（四向黑描边）、耐久条（三档）、红底格、选择白框；`readInvSlots()` 从 `.inv-slot` 读矩形/图标/数量/耐久比例与档位/`:h… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1531 · **背包逻辑复原（3 条）**：用户要求"背包逻辑和界面用 canvas 复原实现、跟 DOM 一模一样"，因此这一批不再镜像，而是把规则与排版都自己写一份：新增 `src/ui2d/inventoryModel.ts` （`leftClick` / `rightClick` / `quickMove` / `distributeDrag`，只依赖 `SlotAccess(get/set)` + `Cursor` + 注入的 … |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-1548 · **背包交互规则补齐（M25）**：`ui2d/inventoryModel.ts` 新增三个纯函数 —— `rightDragDistribute`（右键拖拽每格放一个，重复经过同一格只放一次）、`doubleClickGather`（双击收集：先拿起那一格，再把范围内同类一格一格并到堆叠上限；没凑到任何东西时由调用方退化成 `quickMove`）、`splitTake`（长按分堆取指定数量，光标上有异类时拒绝）。对照页 … |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->
