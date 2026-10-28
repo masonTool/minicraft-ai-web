@@ -104,10 +104,11 @@ export const settings = {
   "settings.resourcePack.help3": "Textures: put PNG files in textures/blocks/ and name each one after the texture it replaces (e.g. stone.png, grass_top.png, oak_planks.png); placing them directly in textures/ works as well. Names that do not match are skipped and do not affect the rest.",
   "settings.resourcePack.help4": "Any size works: images are scaled to the 16×16 texture cell on import, so a larger image is not sharper, just heavier in memory.",
   "settings.resourcePack.help5": "Sounds: .ogg / .wav files in sounds/ — only the kinds the game actually plays (digging, placing, footsteps and so on) are used; the rest is ignored. Textures and sounds are independent: if one fails, the other still applies.",
-  "settings.resourcePack.help6": "Scope: applies to the current run only and is never written into a save; after closing the page you need to import again. Only import files you made yourself or are allowed to use and redistribute.",
+  "settings.resourcePack.help6": "Scope: the pack is kept on this device and applied automatically next time you enter the game; press ✕ at the end of the row to remove it. Only import files you made yourself or are allowed to use and redistribute.",
   "settings.save": "Save",
   "settings.saved": "Saved",
   "settings.unsavedTitle": "Unsaved changes",
   "settings.unsavedText": "These settings have not been saved yet. Save them?",
-  "settings.discard": "Cancel (don't save)"
+  "settings.discard": "Cancel (don't save)",
+  "settings.resourcePack.remove": "Remove current resource pack"
 } satisfies Pick<Messages, keyof typeof zhsettings>;

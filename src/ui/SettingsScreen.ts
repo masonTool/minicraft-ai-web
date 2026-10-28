@@ -693,6 +693,15 @@ export interface SettingsActions {
   /** 导入资源包（.mcpack / .zip） */
   onResourcePack?: (file: File) => void;
   /**
+   * 当前生效的资源包名（没装 = null）。
+   *
+   * 资源包现在是**持久**的（2026-10-28）：存进 IndexedDB，下次进游戏自动应用。
+   * 面板每次打开都按它回填状态，玩家才知道"现在装的是哪个包"。
+   */
+  resourcePackName?: () => string | null;
+  /** 移除已保存的资源包（图集回到程序化贴图） */
+  onRemoveResourcePack?: () => void;
+  /**
    * 打开成就 / 进度面板（M7，批次 87）。
    *
    * 原版把"成就"就放在暂停菜单里（基岩版的暂停菜单第一项），这里照做；
@@ -886,6 +895,10 @@ export class SettingsScreen {
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
   private diagnosticsStatusEl: HTMLElement | null = null;
+  /** 资源包行的状态文字（当前包名 / 未选择） */
+  private packStatusEl: HTMLElement | null = null;
+  /** 资源包行的「移除」（只有装着包时才出现） */
+  private packRemoveEl: HTMLButtonElement | null = null;
   /**
    * 控件"按当前 settings 重画"的回调表（批次 185，"恢复默认"要用）。
    *
@@ -2103,19 +2116,57 @@ export class SettingsScreen {
     status.className = 'settings-status';
     status.textContent = t('settings.notChosen');
 
+    /*
+     * 「移除」（2026-10-28）：资源包改成持久之后，没有移除键就等于"装错了再也回不去"。
+     * 它跟状态文字挤在同一格里（`.settings-status-tail`），行仍是四列，手机上不变宽。
+     */
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'settings-pack-remove';
+    remove.textContent = '✕';
+    remove.title = t('settings.resourcePack.remove');
+    remove.setAttribute('aria-label', t('settings.resourcePack.remove'));
+    remove.hidden = true;
+    remove.addEventListener('click', () => this.actions.onRemoveResourcePack?.());
+
+    const tail = document.createElement('div');
+    tail.className = 'settings-status-tail';
+    tail.append(status, remove);
+
+    this.packStatusEl = status;
+    this.packRemoveEl = remove;
+    this.refreshResourcePack();
+
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file) {
         status.textContent = file.name;
         status.title = file.name;
+        remove.hidden = false;
         this.actions.onResourcePack?.(file);
       }
       // 清空 value：同一个文件再选一次也要能触发 change
       input.value = '';
     });
 
-    row.append(name, button, help, status, input);
+    row.append(name, button, help, tail, input);
     return row;
+  }
+
+  /**
+   * 按主程序里的真实状态刷新资源包行（2026-10-28）。
+   *
+   * 两个入口都会动它：导入完成（名称变了）、点「移除」（回到未选择）。
+   * 面板每次打开也调一次——持久化的包是跨会话的，界面不能只在本次导入后才显示名字。
+   */
+  refreshResourcePack(): void {
+    const name = this.actions.resourcePackName?.() ?? null;
+    const status = this.packStatusEl;
+    if (status) {
+      status.textContent = name ?? t('settings.notChosen');
+      status.title = name ?? '';
+    }
+    if (this.packRemoveEl) this.packRemoveEl.hidden = name === null;
   }
 
   /**
@@ -2141,7 +2192,8 @@ export class SettingsScreen {
    *    匹配图集里的 tile，名字对不上的跳过；
    *  - 图会被缩放到 16×16 的图集格子，所以大图不会更清晰；
    *  - 音效只认 `SoundPack.ts` 映射表里登记的那几族，其余忽略；
-   *  - 包**不落盘**：只作用于这一次运行，重开页面要重新导入（没有任何持久化）。
+   *  - 包会**存在这台设备上**（IndexedDB，`resourcepack/PackStore.ts`），下次进游戏自动应用；
+   *    行尾的 ✕ 可以移除（2026-10-28 起不再是"只当次有效"）。
    *
    * ⚠️ 文案里不许出现别的产品的名字、扩展名或"兼容某格式"的说法（用户明确要求
    * 界面文字不与任何其它产品挂钩）：这里只描述"压缩包里怎么摆文件，我们就怎么认"。
@@ -2552,6 +2604,8 @@ export class SettingsScreen {
     document.body.classList.add('pause-open');
     // 日志条数每次打开都会变，进来时对一次账
     this.refreshDiagnostics();
+    // 资源包是持久化的（2026-10-28）：每次打开都按真实状态回填
+    this.refreshResourcePack();
     // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填
     this.refreshGameModeRows();
   }

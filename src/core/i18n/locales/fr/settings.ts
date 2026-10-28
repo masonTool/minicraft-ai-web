@@ -100,10 +100,11 @@ export const settings = {
   "settings.resourcePack.help3": "Textures : place les PNG dans textures/blocks/ en les nommant d’après la texture remplacée (par ex. stone.png, grass_top.png, oak_planks.png) ; directement dans textures/ fonctionne aussi. Les noms non reconnus sont ignorés sans gêner le reste.",
   "settings.resourcePack.help4": "Toutes les tailles sont acceptées : à l’import, l’image est redimensionnée vers la case de 16×16 ; une image plus grande n’est donc pas plus nette, juste plus lourde.",
   "settings.resourcePack.help5": "Sons : les .ogg / .wav de sounds/ — seuls les types réellement joués par le jeu (creuser, poser, pas, etc.) sont repris, le reste est ignoré. Textures et sons sont indépendants : si l’un échoue, l’autre s’applique quand même.",
-  "settings.resourcePack.help6": "Portée : uniquement la session en cours, rien n’est écrit dans la sauvegarde ; après fermeture de la page, il faut réimporter. N’importe que des fichiers que tu as créés ou que tu as le droit d’utiliser et de redistribuer.",
+  "settings.resourcePack.help6": "Portée : le pack reste sur cet appareil et s’applique automatiquement à la prochaine partie ; le ✕ en fin de ligne permet de le retirer. N’importe que des fichiers que tu as créés ou que tu as le droit d’utiliser et de redistribuer.",
   "settings.save": "Enregistrer",
   "settings.saved": "Enregistré",
   "settings.unsavedTitle": "Modifications non enregistrées",
   "settings.unsavedText": "Ces réglages ne sont pas encore enregistrés. Les enregistrer ?",
-  "settings.discard": "Annuler (ne pas enregistrer)"
+  "settings.discard": "Annuler (ne pas enregistrer)",
+  "settings.resourcePack.remove": "Retirer le pack de ressources actuel"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

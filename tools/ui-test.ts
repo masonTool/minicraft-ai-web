@@ -3600,6 +3600,17 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         return /['"]settings\.resourcePack\.hint['"]/.test(table) && !/['"]settings\.notice['"]/.test(table);
       }),
   );
+  // 资源包持久化（2026-10-28，用户："为什么只有当次生效？"）：导入后存 IndexedDB、
+  // 下次进游戏自动应用；行尾那颗 ✕ 负责移除（否则装错了就再也回不去）。
+  check(
+    '资源包导入后持久化、启动时自动恢复、可移除',
+    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('saveStoredPack(file.name, bytes)') &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('void this.restoreResourcePack();') &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('this.atlas.clearOverrides()') &&
+      settingsSrc.includes('refreshResourcePack(): void') &&
+      settingsSrc.includes('settings-pack-remove') &&
+      settingsHtml.includes('.settings-pack-remove {'),
+  );
   // 资源包说明（2026-10-28 第二次迭代，用户）：**不再是内联的一大块**，而是
   // 「导入」右边一颗 ?，点开浮层看六条说明。所以这里守的是：
   //   ① ? 按钮真的在资源包那一行里（和导入按钮同一行）；
@@ -3608,7 +3619,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '资源包说明走 ? 浮层：按钮在导入键右边，浮层六条正文 + 六语言齐全',
     settingsSrc.includes("help.className = 'settings-help';") &&
-      settingsSrc.includes('row.append(name, button, help, status, input);') &&
+      // 2026-10-28：第四格变成 `tail`（状态文字 + 移除键），? 仍在导入键右边
+      settingsSrc.includes('row.append(name, button, help, tail, input);') &&
       settingsSrc.includes('private buildPackHelpModal(): void') &&
       settingsSrc.includes("t('settings.resourcePack.about')") &&
       [1, 2, 3, 4, 5, 6].every((n) => settingsSrc.includes(`'settings.resourcePack.help${n}'`)) &&

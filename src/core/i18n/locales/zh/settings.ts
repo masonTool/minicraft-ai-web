@@ -108,10 +108,12 @@ export const settings = {
   'settings.resourcePack.help3': '贴图：PNG 放进 textures/blocks/，文件名就是它要替换的方块贴图名（如 stone.png、grass_top.png、oak_planks.png）；直接放在 textures/ 下也认。名字对不上的会被跳过，不影响其它文件。',
   'settings.resourcePack.help4': '尺寸任意：导入时会缩放到 16×16 的贴图格子，所以给大图并不会更清晰，只是更费内存。',
   'settings.resourcePack.help5': '音效：sounds/ 下的 .ogg / .wav，只采用游戏里真的会播放的那几类（挖掘、放置、脚步等），其余忽略。贴图与音效互不影响：一边失败，另一边照常生效。',
-  'settings.resourcePack.help6': '生效范围：只在当前这一次运行里有效，不会写进存档；关掉页面后要重新导入。请只导入你自己制作、或有权使用与分发的文件。',
+  'settings.resourcePack.help6': '生效范围：导入后会保存在这台设备上，下次进入游戏自动应用；点行尾的 ✕ 可以移除。请只导入你自己制作、或有权使用与分发的文件。',
   'settings.save': '保存',
   'settings.saved': '已保存',
   'settings.unsavedTitle': '未保存的修改',
   'settings.unsavedText': '当前设置还没有保存，要保存吗？',
-  'settings.discard': '取消（不保存）'
+  'settings.discard': '取消（不保存）',
+  // 资源包改成持久化之后（2026-10-28）需要一颗"移除"键
+  'settings.resourcePack.remove': '移除当前资源包'
 } as const;

@@ -384,6 +384,8 @@ import { mobVoiceFor, mobVoicePitchFor, mobVoiceSpec } from './core/audio/MobVoi
 import { MusicDirector } from './core/audio/Music.ts';
 import { DamageFlash } from './ui/DamageFlash.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
+// 资源包持久化（2026-10-28）：导入的包存进 IndexedDB，下次进游戏自动重新应用
+import { clearStoredPack, loadStoredPack, saveStoredPack } from './core/resourcepack/PackStore.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import {
   LEGACY_SAVE_FILE_EXTENSION,
@@ -3263,7 +3265,14 @@ class App {
       onExitToMenu: () => void this.exitToMenu(),
       onDeleteWorld: () => void this.deleteCurrentWorld(),
       onChange: (settings) => this.applySettings(settings),
-      onResourcePack: (file) => void this.loadResourcePack(file),
+      // 资源包（2026-10-28）：导入后落库，并把行上的状态刷成新包名
+      onResourcePack: (file) => {
+        void this.loadResourcePack(file).then(() => this.settingsScreen.refreshResourcePack());
+      },
+      resourcePackName: () => this.resourcePack?.name ?? null,
+      onRemoveResourcePack: () => {
+        void this.removeResourcePack().then(() => this.settingsScreen.refreshResourcePack());
+      },
       // 成就（M7）：暂停菜单里点"成就"→ 面板叠在它上面（面板自己会接管 uiOpen）
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
@@ -18340,6 +18349,9 @@ class App {
     // 批次 181：局内常驻一条返回守卫——**没有面板时按返回也要先落到我们手里**
     //（以前无面板时没有任何守卫，浏览器会直接退出页面，PWA 里等于退游戏）
     this.backButton.armRoot();
+    // 资源包（2026-10-28）：把上次导入的那份重新贴回图集，玩家不必每次进游戏都重导一次。
+    // 与读档并行、互不依赖——它只改图集像素，不影响世界数据。
+    void this.restoreResourcePack();
     // 读档是异步的：先让世界跑起来（玩家看到创建中的世界），读完再恢复位置与背包
     if (this.save?.hasSave) {
       void this.loadSaveState()
@@ -20073,7 +20085,7 @@ class App {
    * 因此替换贴图内容后不需要重建任何区块网格，只要把纹理重新上传一次——
    * 在设置里换材质包，画面下一帧就变了。
    */
-  async loadResourcePack(file: File): Promise<ResourcePackResult | null> {
+  async loadResourcePack(file: File, persist = true): Promise<ResourcePackResult | null> {
     try {
       const result = await applyResourcePack(file, this.atlas, packNameFromFile(file.name), this.audio);
       this.resourcePack = {
@@ -20082,12 +20094,54 @@ class App {
         skipped: result.skipped.length,
         sounds: result.sounds.length,
       };
+      /*
+       * 持久化（2026-10-28，用户）：以前只在这一次运行里有效，刷新就没了。
+       * 原版会把资源包记在设置里（Java）或世界目录里（基岩），所以这里补上。
+       * `persist = false` 是"启动时从库里恢复"的那条路径——它不该再写一次库。
+       */
+      if (persist) {
+        try {
+          const bytes = await file.arrayBuffer();
+          const saved = await saveStoredPack(file.name, bytes);
+          diag.event('app', 'pack.persist', { name: file.name, bytes: bytes.byteLength, saved });
+        } catch (error) {
+          // 存不进去（无痕/配额）不影响这次已经生效的贴图，只少了下一次自动应用
+          console.warn('[pack] 资源包没能存下来（下次进游戏需要重新导入）', error);
+        }
+      }
       return result;
     } catch (error) {
       console.warn('[pack] 资源包加载失败（文件可能不是有效的 zip）', error);
       this.resourcePack = { name: packNameFromFile(file.name), replaced: 0, skipped: 0, sounds: 0, error: true };
       return null;
     }
+  }
+
+  /**
+   * 启动时把上次导入的资源包重新应用（2026-10-28）。
+   *
+   * 时序：图集在构造函数里已建好，这里只是把存下来的字节再喂一次 `applyResourcePack`
+   * （它同步重画图集并上传，不重建任何区块网格）。读不到 / 解不出就当没有。
+   */
+  async restoreResourcePack(): Promise<void> {
+    const stored = await loadStoredPack();
+    if (this.disposed || !stored) return;
+    const file = new File([stored.bytes], stored.name, { type: 'application/zip' });
+    const result = await this.loadResourcePack(file, false);
+    diag.event('app', 'pack.restore', { name: stored.name, ok: result !== null });
+  }
+
+  /**
+   * 移除已保存的资源包（2026-10-28）。
+   *
+   * 图集覆盖清掉并重画即回到程序化贴图；音效挂在音频引擎的缓冲区上，
+   * 要等下一次进入游戏才回默认（这里不重建 AudioEngine，那会把正在播的声音一起掐掉）。
+   */
+  async removeResourcePack(): Promise<void> {
+    await clearStoredPack();
+    this.resourcePack = null;
+    this.atlas.clearOverrides();
+    diag.event('app', 'pack.remove', {});
   }
 
   /** 已加载的资源包状态（验收脚本用） */

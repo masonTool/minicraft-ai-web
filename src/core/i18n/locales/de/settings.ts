@@ -100,10 +100,11 @@ export const settings = {
   "settings.resourcePack.help3": "Texturen: PNG-Dateien in textures/blocks/ legen und nach der ersetzten Textur benennen (z. B. stone.png, grass_top.png, oak_planks.png); direkt in textures/ funktioniert ebenfalls. Nicht passende Namen werden übersprungen und stören den Rest nicht.",
   "settings.resourcePack.help4": "Jede Größe ist erlaubt: beim Import wird auf die 16×16-Texturzelle skaliert, ein größeres Bild ist also nicht schärfer, nur speicherhungriger.",
   "settings.resourcePack.help5": "Geräusche: .ogg / .wav in sounds/ — nur die Arten, die das Spiel wirklich abspielt (Graben, Setzen, Schritte usw.), werden übernommen; der Rest wird ignoriert. Texturen und Geräusche sind unabhängig: schlägt eines fehl, wirkt das andere trotzdem.",
-  "settings.resourcePack.help6": "Wirkung: nur für den aktuellen Lauf, nichts wird im Spielstand gespeichert; nach dem Schließen der Seite erneut importieren. Importiere nur Dateien, die du selbst erstellt hast oder nutzen und weitergeben darfst.",
+  "settings.resourcePack.help6": "Wirkung: das Paket bleibt auf diesem Gerät und wird beim nächsten Start automatisch angewendet; über ✕ am Zeilenende lässt es sich entfernen. Importiere nur Dateien, die du selbst erstellt hast oder nutzen und weitergeben darfst.",
   "settings.save": "Speichern",
   "settings.saved": "Gespeichert",
   "settings.unsavedTitle": "Nicht gespeicherte Änderungen",
   "settings.unsavedText": "Diese Einstellungen sind noch nicht gespeichert. Speichern?",
-  "settings.discard": "Abbrechen (nicht speichern)"
+  "settings.discard": "Abbrechen (nicht speichern)",
+  "settings.resourcePack.remove": "Aktuelles Ressourcenpaket entfernen"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

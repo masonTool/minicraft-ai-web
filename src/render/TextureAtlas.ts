@@ -6926,6 +6926,17 @@ export class TextureAtlas {
     }
   }
 
+  /**
+   * 清掉所有"资源包覆盖"并重画（2026-10-28）。
+   *
+   * 删包要用：`overrides` 是玩家贴图的唯一来源，不清掉的话重画会把包又贴回来。
+   * 音效不在这里——它挂在 `AudioEngine` 的缓冲区上，要等下一次进入游戏才回默认。
+   */
+  clearOverrides(): void {
+    this.overrides.clear();
+    this.repaint();
+  }
+
   /** 贴图在图集中的列号（供 UI 从图集裁切图标） */
   tileIndex(tile: string): number {
     return TILE_INDEX.get(tile) ?? 0;
