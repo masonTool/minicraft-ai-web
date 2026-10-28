@@ -157,7 +157,9 @@ console.log('\n[/worldborder：get / set / center]');
     isFlying(): boolean {
       return false;
     }
-    setGameMode(): void {}
+    setGameMode(): boolean {
+      return true;
+    }
     isCreative(): boolean {
       return true;
     }

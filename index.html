@@ -834,6 +834,19 @@
       }
       .world-edit-form { display: flex; flex-direction: column; gap: 6px; }
       .world-edit-hint { font-size: 10px; line-height: 1.45; color: #a8a8a8; margin-top: 2px; }
+      /* 新建表单的「?」说明浮层（2026-10-28）：正文一段、按 \n 换行，底部一颗「知道了」 */
+      .world-help-text {
+        margin: 0; white-space: pre-line;
+        font-size: 12px; line-height: 1.6; color: #cfcfcf;
+      }
+      .world-help-ok {
+        min-height: 32px; padding: 4px 14px;
+        font: inherit; font-size: 12px; cursor: pointer;
+        color: #e8e8e8; background: #6e6e6e;
+        border: 2px solid; border-color: #a8a8a8 #3c3c3c #3c3c3c #a8a8a8;
+      }
+      body.touch-mode .world-help-ok { min-height: 40px; }
+      body.touch-mode .world-help-text { font-size: 12.5px; line-height: 1.55; }
       /* 开房对话框的校验提示（用户 2026-10-25：房名必填、地址必填）复用同一行，只换颜色 */
       .world-edit-hint.error { color: #ff8a7a; }
       .world-edit-error { font-size: 11px; color: #ff9b8a; }
@@ -2501,6 +2514,13 @@
         font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;
       }
       body.touch-mode .settings-dropdown-button { min-width: var(--settings-ctrl-w); padding: 5px 6px; font-size: 13px; }
+      /* 被锁死的下拉（2026-10-28，极限模式把难度与游戏模式锁死）：
+         画成"明确按不动"的凹灰块，与可点状态拉开差距——手机上灰一点和可点很难分辨。 */
+      .settings-dropdown-locked .settings-dropdown-button {
+        color: #8f8f8f; background: #3a3a3a;
+        border-color: #2a2a2a #555555 #555555 #2a2a2a;
+        cursor: default;
+      }
       .settings-dropdown-menu {
         position: fixed; z-index: 70; display: none;
         padding: 2px; overflow-y: auto;

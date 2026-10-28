@@ -307,4 +307,5 @@ export const cmd = {
   "cmd.label.lootTable.stronghold_corridor": "Festungskorridor",
   "cmd.label.lootTable.stronghold_crossing": "Festungskreuzung",
   "cmd.label.lootTable.ocean_ruins": "Ozeanruinen",
+  "cmd.reply.gamemode.locked": "Diese Welt ist Hardcore – der Spielmodus ist gesperrt",
 } satisfies Pick<Messages, keyof typeof zhCmd>;

@@ -135,7 +135,8 @@ export interface CommandContext {
    * 以前是 `setCreative(boolean)`，加旁观时改成传入完整模式名——
    * 布尔没法表达第三种，硬塞会变成"旁观 = 创造 + 一堆特判"。
    */
-  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): void;
+  /** 切模式；返回 false = 这个世界不许改（极限模式，2026-10-28） */
+  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): boolean;
   isCreative(): boolean;
   killPlayer(): void;
   seed(): number;
@@ -983,9 +984,14 @@ export const COMMANDS: readonly CommandSpec[] = [
         out.error(usageError('gamemode'));
         return;
       }
-      ctx.setGameMode(mode);
       // 飞行由 `setGameMode` 内部处理（旁观强制飞、切回生存强制落地），
       // 这里**不再**单独调 `setFlying`——两处都设会让"切到生存却还在飞"再现
+      if (!ctx.setGameMode(mode)) {
+        // 极限世界（2026-10-28）：模式锁死。回执必须说清原因，
+        // 否则玩家以为自己打错了，而实际上这条命令在这个世界里永远不生效。
+        out.error(msg('cmd.reply.gamemode.locked'));
+        return;
+      }
       out.info(msg('cmd.reply.gamemode.game-mode-set-to-mode', { mode: t(`cmd.label.gamemode.${mode}`) }));
     },
   },

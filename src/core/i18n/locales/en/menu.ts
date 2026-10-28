@@ -163,4 +163,22 @@ export const menu = {
   'mp.portHint': 'Port is fixed — nothing to fill in',
   'mp.port': 'Port',
   'mp.inputBar': 'Input',
+  // New world: help popovers behind the "?" next to each dropdown (2026-10-28)
+  'world.help.open': 'Help',
+  'world.help.close': 'Got it',
+  'world.help.type':
+    'Decides what the map looks like. It cannot be changed after creation:\n· Default: biomes, trees, ores, villages, strongholds — best for survival\n· Flat: three layers of ground only, no trees, ores or villages (good for building)\n· Large biomes: same content, biomes about 4× larger\n· Amplified: same content, taller mountains and deeper valleys\n· Single biome: normal terrain, but the whole world uses one biome',
+  'world.help.difficulty':
+    'Decides how dangerous the world is:\n· Peaceful: no hostile mobs, no starving, fastest healing\n· Easy: half mob damage and half the mob cap, slower hunger\n· Normal: baseline\n· Hard: more damage and more mobs, faster hunger\nCreative and Spectator take no damage, but difficulty still decides whether hostile mobs spawn.',
+  'world.help.gameMode':
+    'Decides what you can do:\n· Survival: you take damage, get hungry, mine slowly and drop items on death\n· Creative: no damage, instant breaking, unlimited items, can fly\n· Adventure: walk, fight and interact, but cannot break or place blocks\nSpectator is not offered at creation; use /gamemode spectator in-game.',
+  'world.help.hardcore':
+    'Hardcore is a world setting on top of mode and difficulty:\n· Forces Hard difficulty and Survival mode\n· On death you can only spectate — no respawn\n· Cannot be turned back into a normal world; mode and difficulty stay locked\nIf you want to adjust things later, do not pick Hardcore.',
+  'world.help.biome':
+    'Only for the Single Biome world type: the whole overworld becomes that one biome (terrain shape is unchanged).\nSurface biomes such as plains, forest, desert, snowy plains or mushroom fields work best; cave and river biomes normally appear only in specific places, so an entire world of them may look odd.',
+  'world.hardcoreHint': 'Hardcore: difficulty locked to Hard, mode locked to Survival; on death you can only spectate. This cannot be changed later.',
+  'world.hardcoreConfirm.title': 'Create a Hardcore world?',
+  'world.hardcoreConfirm.text': 'A Hardcore world is locked to Hard + Survival. After death you can only spectate, and it cannot be undone. Create it?',
+  'world.editHintLocked': 'Hardcore world: mode and difficulty are locked; only the name can be changed.',
+  'world.modeLocked': 'Mode is locked to Survival in a Hardcore world',
 } satisfies Pick<Messages, keyof typeof zhmenu>;

@@ -161,4 +161,22 @@ export const menu = {
   "mp.error.url": "L’adresse doit être ws:// ou wss:// (ws:// est ajouté automatiquement)",
   "mp.error.name": "Choisis un pseudo — il ne peut pas être vide",
   "mp.portHint": "Le port est fixe — rien à remplir",
+  // Nouveau monde : fenêtres d’aide derrière le « ? » de chaque liste (2026-10-28)
+  "world.help.open": "Aide",
+  "world.help.close": "Compris",
+  "world.help.type":
+    "Détermine l’aspect de la carte. Non modifiable après la création :\n· Par défaut : biomes, arbres, minerais, villages, forteresses — idéal en survie\n· Plat : trois couches de sol seulement, sans arbres, minerais ni villages (idéal pour construire)\n· Grands biomes : même contenu, biomes environ 4× plus grands\n· Amplifié : même contenu, montagnes plus hautes et vallées plus profondes\n· Biome unique : relief normal, mais tout le monde n’utilise qu’un seul biome",
+  "world.help.difficulty":
+    "Détermine la dangerosité du monde :\n· Paisible : aucun monstre hostile, pas de faim, régénération la plus rapide\n· Facile : dégâts et plafond de monstres divisés par deux, faim plus lente\n· Normale : valeur de référence\n· Difficile : plus de dégâts et de monstres, faim plus rapide\nCréatif et Spectateur ne subissent aucun dégât, mais la difficulté décide toujours si des monstres hostiles apparaissent.",
+  "world.help.gameMode":
+    "Détermine ce que tu peux faire :\n· Survie : dégâts, faim, minage lent, objets lâchés à la mort\n· Créatif : aucun dégât, casse instantanée, objets illimités, vol\n· Aventure : marcher, combattre, interagir, mais pas casser ni poser de blocs\nLe mode Spectateur n’est pas proposé à la création ; utilise /gamemode spectator en jeu.",
+  "world.help.hardcore":
+    "L’extrême est un réglage de monde qui s’ajoute au mode et à la difficulté :\n· Force la difficulté Difficile et le mode Survie\n· À la mort, tu ne peux plus qu’observer — pas de réapparition\n· Impossible de revenir à un monde normal ; mode et difficulté restent verrouillés\nSi tu veux ajuster plus tard, ne choisis pas l’extrême.",
+  "world.help.biome":
+    "Uniquement pour le type « Biome unique » : tout le monde supérieur devient ce biome (le relief reste identique).\nPréfère les biomes de surface comme plaine, forêt, désert, plaine enneigée ou champ de champignons ; les biomes de caverne et de rivière n’apparaissent normalement qu’à des endroits précis et rendent le monde étrange.",
+  "world.hardcoreHint": "Extrême : difficulté Difficile, mode Survie ; à la mort, seulement observer. Non modifiable ensuite.",
+  "world.hardcoreConfirm.title": "Créer un monde extrême ?",
+  "world.hardcoreConfirm.text": "Un monde extrême est verrouillé en Difficile + Survie. À la mort, tu ne peux qu’observer, et c’est irréversible. Créer ?",
+  "world.editHintLocked": "Monde extrême : mode et difficulté verrouillés, seul le nom est modifiable.",
+  "world.modeLocked": "Dans un monde extrême, le mode est verrouillé sur Survie",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

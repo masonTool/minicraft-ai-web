@@ -189,11 +189,12 @@ class FakeWorld implements CommandContext {
   isFlying(): boolean {
     return this.flying;
   }
-  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): void {
+  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): boolean {
     // 与真实现同一口径：只有创造与旁观能飞，冒险/生存都落地
     this.creative = mode === 'creative';
     this.flying = mode === 'creative' || mode === 'spectator';
     this.gameMode_ = mode;
+    return true;
   }
   gameMode_: 'survival' | 'creative' | 'adventure' | 'spectator' = 'survival';
   isCreative(): boolean {

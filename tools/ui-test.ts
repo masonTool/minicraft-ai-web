@@ -2226,7 +2226,13 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
 
   // 模式与飞行分开（批次 181）：老存档按 flying 迁移，新世界在表单里选
-  check('老存档迁移：flying=true 视为创造', mainSource.includes("else if (data.flying) this.setGameMode('creative')"));
+  // 2026-10-28：迁移也要过极限判据（极限世界的老存档 flying=true 不能变成创造），
+  // 所以锚点从字面量换成"先算 restoredGameMode，再带 internal 放行"
+  check(
+    '老存档迁移：flying=true 视为创造（仍要过极限判据）',
+    mainSource.includes("normalizeGameMode(data.gameMode ?? (data.flying ? 'creative' : 'survival'))") &&
+      mainSource.includes('this.setGameMode(restoredGameMode(this.hardcore, savedMode), true)'),
+  );
   // 批次 491：旁观也能飞，所以判据从 `isCreative` 换成 `canFly`
   check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !canFly(this.gameMode))'));
   const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
@@ -2296,7 +2302,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     '游戏模式单独成行且飞行在右半格（只有创造才显示）',
     settingsSource.includes("row.className = 'settings-row mode';") &&
       settingsSource.includes('private flyingCell') &&
-      /refreshGameModeRows\(\):[\s\S]{0,400}this\.flyingCell\.style\.display = mode === 'creative' \? '' : 'none';/.test(
+      /refreshGameModeRows\(\):[\s\S]{0,500}this\.flyingCell\.style\.display = !locked && mode === 'creative' \? '' : 'none';/.test(
         settingsSource,
       ),
   );
@@ -2419,8 +2425,10 @@ console.log('\n[主菜单分层（批次 108）]');
   check(
     '编辑世界的模式与难度同步进玩家存档（否则读档会被旧值覆盖）',
     mainSrc.includes('const editWorld = async (world: WorldSummary, patch: WorldEditPatch)') &&
-      mainSrc.includes('gameMode: patch.gameMode') &&
-      mainSrc.includes('difficulty: patch.difficulty') &&
+      // 2026-10-28：写盘前先过一遍极限口径（极限世界只放行改名），所以写的是 `applied`
+      mainSrc.includes('const applied: WorldEditPatch = world.hardcore') &&
+      mainSrc.includes('gameMode: applied.gameMode') &&
+      mainSrc.includes('difficulty: applied.difficulty') &&
       mainSrc.includes('await save.savePlayer('),
   );
   // 20261024-0136 用户拍板：首页大字从 MINECRAFT 改成品牌名，并**去掉「基岩版」字样**
@@ -3283,8 +3291,30 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
-    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, null\),[\s\S]*this\.makeRow\(t\('world\.hardcore'\), this\.hardcoreSelect\.element, null\),[\s\S]*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
+    // 2026-10-28：每个下拉后面多了一颗「?」（第三个参数），锚点跟着放宽
+    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, [\s\S]{0,60}?\),[\s\S]*this\.makeRow\(t\('world\.hardcore'\), this\.hardcoreSelect\.element, [\s\S]{0,60}?\),[\s\S]*this\.typeHintEl,\s*createButton,/.test(
+      worldSrc,
+    ) &&
       css.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
+  );
+  // 2026-10-28（用户）：每个选择框后面一颗「?」，点开浮层讲清这一项
+  check(
+    '新建世界：五项下拉都挂「?」说明，浮层与编辑世界共用外壳',
+    /this\.makeRow\(t\('world\.type'\), this\.typeSelect\.element, this\.makeHelpButton\('type'\)\)/.test(worldSrc) &&
+      /this\.makeRow\(t\('world\.difficulty'\), this\.difficultySelect\.element, this\.makeHelpButton\('difficulty'\)\)/.test(worldSrc) &&
+      /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, this\.makeHelpButton\('gameMode'\)\)/.test(worldSrc) &&
+      /this\.makeRow\(t\('world\.hardcore'\), this\.hardcoreSelect\.element, this\.makeHelpButton\('hardcore'\)\)/.test(worldSrc) &&
+      /this\.makeRow\(t\('world\.biome'\), this\.biomeSelect\.element, this\.makeHelpButton\('biome'\)\)/.test(worldSrc) &&
+      worldSrc.includes("overlay.className = 'world-modal';") &&
+      css.includes('.world-help-text'),
+  );
+  // 极限联动：选极限 → 两个下拉锁死；创建前二次确认
+  check(
+    '极限模式锁死难度与游戏模式，并在创建前确认',
+    /this\.gameModeSelect\.setDisabled\(hardcore\)/.test(worldSrc) &&
+      /this\.difficultySelect\.setDisabled\(hardcore\)/.test(worldSrc) &&
+      worldSrc.includes("t('world.hardcoreConfirm.text')") &&
+      worldSrc.includes("effectiveGameMode(world.hardcore === true, world.gameMode)"),
   );
   // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）
   check(

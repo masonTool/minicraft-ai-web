@@ -26,6 +26,8 @@ export class Dropdown<T extends string> {
   private readonly menu: HTMLDivElement;
   private readonly optionButtons: Array<{ value: T; button: HTMLButtonElement }> = [];
   private current: T;
+  /** 被锁死（极限模式的难度/游戏模式）：按钮 disabled，`open()` 直接返回 */
+  private disabled = false;
   /** 展开期间才挂的全局监听（关闭就 abort，不在每个实例上常驻） */
   private openListeners: AbortController | null = null;
 
@@ -91,6 +93,25 @@ export class Dropdown<T extends string> {
     return this.openListeners !== null;
   }
 
+  get isDisabled(): boolean {
+    return this.disabled;
+  }
+
+  /**
+   * 禁用 / 恢复（2026-10-28）。
+   *
+   * 用在"极限模式把难度与游戏模式锁死"这类联动上：**必须真的不可点**，
+   * 而不是只把颜色调灰——灰着还能点开、点了又没反应，比不禁用更让人困惑。
+   * 展开中的菜单会一起收起（否则会留一个漂浮的选项列表）。
+   */
+  setDisabled(disabled: boolean): void {
+    this.disabled = disabled;
+    if (disabled) this.close();
+    this.button.disabled = disabled;
+    this.button.setAttribute('aria-disabled', String(disabled));
+    this.element.classList.toggle('settings-dropdown-locked', disabled);
+  }
+
   /** 外部状态变了（例如游戏模式被 /gamemode 改掉）：按真实值重画 */
   setValue(value: T): void {
     this.current = value;
@@ -110,6 +131,8 @@ export class Dropdown<T extends string> {
   /** 展开菜单（同一时间只保留一个） */
   open(): void {
     if (this.isOpen) return;
+    // 锁死时连菜单都不该出现（按钮 disabled 已经挡住点击，这里兜住代码调用）
+    if (this.disabled) return;
     activeDropdown?.close();
     this.sync();
     this.place();

@@ -735,6 +735,13 @@ export interface SettingsActions {
    */
   onSetGameMode?: (mode: GameMode) => void;
   gameMode?: () => GameMode;
+  /**
+   * 模式是不是锁死的（极限世界，2026-10-28）。
+   *
+   * 极限的模式是世界级硬约束，玩家不能自己改；这里给了回调就把下拉画成禁用态
+   * 并补一句原因——而不是"能点、点了没反应"。
+   */
+  gameModeLocked?: () => boolean;
 }
 
 /**
@@ -1687,6 +1694,8 @@ export class SettingsScreen {
     labels: Record<T, string>,
     read: () => T,
     write: (value: T) => void,
+    /** 造好之后想拿到实例（极限模式要把"游戏模式"那颗锁死） */
+    onCreate?: (control: Dropdown<T>) => void,
   ): HTMLButtonElement {
     const row = document.createElement('div');
     // 两列：标签与下拉紧挨着
@@ -1701,6 +1710,7 @@ export class SettingsScreen {
       this.updateSaveState();
     });
     this.dropdowns.push(control);
+    onCreate?.(control);
     const sync = (): void => control.setValue(read());
     this.controlSync.set(control.button, sync);
     this.refreshers.push(sync);
@@ -2210,6 +2220,20 @@ export class SettingsScreen {
       Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>,
       () => this.actions.gameMode?.() ?? 'survival',
       (mode) => this.actions.onSetGameMode?.(mode),
+      /*
+       * 极限世界（2026-10-28）：模式是世界级硬约束，这里直接把下拉锁死。
+       *
+       * 只做 `setGameMode` 的守卫是不够的——玩家点开下拉、选中创造、结果什么都没发生，
+       * 那种"点了没反应"比置灰更让人困惑（而且他会以为自己点错了）。
+       */
+      (control) => {
+        if (!this.actions.gameModeLocked?.()) return;
+        control.setDisabled(true);
+        const note = document.createElement('p');
+        note.className = 'settings-note';
+        note.textContent = t('world.modeLocked');
+        modeCell.appendChild(note);
+      },
     );
     this.makeCreativeRow(flyCell);
     row.append(modeCell, flyCell);
@@ -2220,10 +2244,12 @@ export class SettingsScreen {
   /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
   refreshGameModeRows(): void {
     const mode = this.actions.gameMode?.() ?? 'survival';
+    const locked = this.actions.gameModeLocked?.() === true;
     if (this.gameModeToggle) this.controlSync.get(this.gameModeToggle)?.();
     if (this.flyingToggle) this.controlSync.get(this.flyingToggle)?.();
     // 隐藏的是**右半格**，不是整行：左半的游戏模式永远都在
-    if (this.flyingCell) this.flyingCell.style.display = mode === 'creative' ? '' : 'none';
+    // 极限世界连飞行也没有（模式锁生存，生存本来就不能飞）
+    if (this.flyingCell) this.flyingCell.style.display = !locked && mode === 'creative' ? '' : 'none';
   }
 
   /** 造一个布尔开关（switch 组件；只有开关本身能点，整行不转发） */

@@ -352,4 +352,6 @@ export const cmd = {
   "cmd.label.lootTable.stronghold_corridor": "要塞走廊",
   "cmd.label.lootTable.stronghold_crossing": "要塞十字口",
   "cmd.label.lootTable.ocean_ruins": "海底废墟",
+  // 极限世界（2026-10-28）：模式锁死时的回执
+  "cmd.reply.gamemode.locked": "这个世界是极限模式，游戏模式已锁定",
 } as const;

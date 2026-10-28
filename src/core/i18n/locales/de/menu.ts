@@ -161,4 +161,22 @@ export const menu = {
   "mp.error.url": "Die Adresse muss ws:// oder wss:// sein (ws:// wird automatisch ergänzt)",
   "mp.error.name": "Bitte einen Namen wählen – der Nickname darf nicht leer sein",
   "mp.portHint": "Port ist fest – nichts auszufüllen",
+  // Neue Welt: Hilfe-Fenster hinter dem "?" neben jedem Auswahlfeld (2026-10-28)
+  "world.help.open": "Hilfe",
+  "world.help.close": "Verstanden",
+  "world.help.type":
+    "Legt fest, wie die Welt aussieht. Nach dem Erstellen nicht mehr änderbar:\n· Standard: Biome, Bäume, Erze, Dörfer, Festungen – für Survival empfohlen\n· Flach: nur drei Schichten Boden, keine Bäume, Erze oder Dörfer (gut zum Bauen)\n· Große Biome: gleicher Inhalt, Biome etwa 4× größer\n· Verstärkt: gleicher Inhalt, höhere Berge und tiefere Täler\n· Ein Biom: normales Gelände, aber die ganze Welt nutzt ein einziges Biom",
+  "world.help.difficulty":
+    "Legt fest, wie gefährlich die Welt ist:\n· Friedlich: keine feindlichen Mobs, kein Verhungern, schnellste Heilung\n· Einfach: halber Mobschaden und halbe Mob-Obergrenze, langsamerer Hunger\n· Normal: Ausgangswert\n· Schwer: mehr Schaden und mehr Mobs, schnellerer Hunger\nKreativ und Zuschauer nehmen keinen Schaden, aber die Schwierigkeit entscheidet weiterhin, ob feindliche Mobs spawnen.",
+  "world.help.gameMode":
+    "Legt fest, was du tun kannst:\n· Überleben: Schaden, Hunger, langsames Abbauen, Gegenstände fallen beim Tod\n· Kreativ: kein Schaden, sofortiges Abbauen, unbegrenzte Gegenstände, Fliegen\n· Abenteuer: laufen, kämpfen, interagieren – aber keine Blöcke abbauen oder setzen\nZuschauer gibt es beim Erstellen nicht; nutze im Spiel /gamemode spectator.",
+  "world.help.hardcore":
+    "Hardcore ist eine Welt-Einstellung über Modus und Schwierigkeit:\n· Erzwingt Schwierigkeit Schwer und Modus Überleben\n· Nach dem Tod nur Zuschauen – kein Wiederauferstehen\n· Lässt sich nicht in eine normale Welt zurückverwandeln; Modus und Schwierigkeit bleiben gesperrt\nWenn du später etwas anpassen willst, wähle kein Hardcore.",
+  "world.help.biome":
+    "Nur beim Welttyp „Ein Biom“: die ganze Oberwelt wird zu diesem einen Biom (die Geländeform bleibt gleich).\nAm besten eignen sich Oberflächenbiome wie Ebene, Wald, Wüste, Schneeebene oder Pilzland; Höhlen- und Flussbiome erscheinen sonst nur an bestimmten Stellen und wirken als ganze Welt ungewohnt.",
+  "world.hardcoreHint": "Hardcore: Schwierigkeit Schwer, Modus Überleben; nach dem Tod nur Zuschauen. Später nicht änderbar.",
+  "world.hardcoreConfirm.title": "Hardcore-Welt erstellen?",
+  "world.hardcoreConfirm.text": "Eine Hardcore-Welt wird auf Schwer + Überleben gesperrt. Nach dem Tod kannst du nur zuschauen, und das lässt sich nicht rückgängig machen. Erstellen?",
+  "world.editHintLocked": "Hardcore-Welt: Modus und Schwierigkeit sind gesperrt, nur der Name ist änderbar.",
+  "world.modeLocked": "In einer Hardcore-Welt ist der Modus auf Überleben gesperrt",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

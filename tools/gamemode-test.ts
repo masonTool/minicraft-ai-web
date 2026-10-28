@@ -26,6 +26,13 @@ import {
   normalizeGameMode,
   type GameMode,
 } from '../src/core/world/GameMode.ts';
+// 极限模式的唯一判据（2026-10-28）：这一节直接断言纯函数，不再靠源码字符串猜
+import {
+  canChangeGameMode,
+  effectiveDifficulty,
+  effectiveGameMode,
+  restoredGameMode,
+} from '../src/core/world/Hardcore.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -130,9 +137,18 @@ console.log('\n[源码守卫：真接上了没有]');
   check('冒险模式的破坏入口被挡住', mainSrc.includes('if (!canBreakBlocks(this.gameMode)) return;'));
   check('冒险模式的放方块入口被挡住', mainSrc.includes('if (!canPlaceBlocks(this.gameMode)) return;'));
   check('切到冒险/生存时强制落地', /if \(!canFly\(next\) && this\.flying\)/.test(mainSrc));
-  // 极限模式（批次 550）：死亡转旁观、难度锁死
-  check('极限模式死亡后转旁观', mainSrc.includes("this.setGameMode('spectator');"));
+  // 极限模式（批次 550 / 2026-10-28）：死亡转旁观、难度与模式都锁死
+  check('极限模式死亡后转旁观（走 internal 放行）', mainSrc.includes("this.setGameMode('spectator', true);"));
   check('极限模式锁住难度修改', mainSrc.includes('if (this.hardcore) return;'));
+  check('极限模式锁住模式修改', mainSrc.includes('canChangeGameMode(this.hardcore)'));
+  check('极限世界不把"死亡转旁观"写回世界清单', mainSrc.includes('if (!this.hardcore) this.onGameModeChanged?.(next);'));
+  // 纯函数口径（`core/world/Hardcore.ts`）：创建/读档/展示三处必须走同一套判定
+  equal('极限创建恒为生存', effectiveGameMode(true, 'creative'), 'survival');
+  equal('普通世界保留创造', effectiveGameMode(false, 'creative'), 'creative');
+  equal('极限读档保住旁观（死亡状态要跨重启）', restoredGameMode(true, 'spectator'), 'spectator');
+  equal('极限读档把创造拉回生存', restoredGameMode(true, 'creative'), 'survival');
+  equal('极限难度恒为困难', effectiveDifficulty(true, 'peaceful'), 'hard');
+  check('极限不允许玩家改模式', canChangeGameMode(true) === false && canChangeGameMode(false) === true);
 }
 
 console.log(`\n游戏模式测试：${passed} 通过 / ${failed} 失败`);

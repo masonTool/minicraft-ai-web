@@ -346,6 +346,13 @@ import {
   normalizeGameMode,
   type GameMode,
 } from './core/world/GameMode.ts';
+// 极限模式的唯一判据（2026-10-28）：创建/读档/运行期/联机全部走这里，别再各写一次
+import {
+  HARDCORE_DIFFICULTY,
+  canChangeGameMode,
+  effectiveGameMode,
+  restoredGameMode,
+} from './core/world/Hardcore.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
@@ -1946,7 +1953,8 @@ class App {
        * 晚进的人要跟当前模式一致（用户 2026-10-26）：房主中途改过模式，世界元数据里
        * 那份是**开房那一刻**的快照，只有 `welcome.gameMode` 是最新的。
        */
-      if (this.net.role === 'client' && this.net.roomGameMode !== null) {
+      // 极限世界不跟房主改模式（2026-10-28）：模式是这个世界的硬约束，不随房间漂
+      if (this.net.role === 'client' && this.net.roomGameMode !== null && !this.hardcore) {
         this.applyingRemoteGameMode = true;
         try {
           this.setGameMode(this.net.roomGameMode);
@@ -1978,7 +1986,9 @@ class App {
        * `applyingRemoteGameMode` 挡住"收到 → setGameMode → 又上报"的回声；
        * 非房主本来也不会发（`sendRoomConfig` 里还有一道 `role !== 'host'`）。
        */
-      if (config.gameMode !== undefined) {
+      // 极限世界（2026-10-28）：不套用房主的模式，也不播报"模式已改变"——
+      // 否则玩家会看到"模式改成创造"的提示，实际却还是生存，比不提示更糟。
+      if (config.gameMode !== undefined && !this.hardcore) {
         this.applyingRemoteGameMode = true;
         try {
           this.setGameMode(config.gameMode);
@@ -2765,7 +2775,7 @@ class App {
     this.conduits.clear();
     // 极限模式（批次 550）：从清单读进来就是只读的；难度与模式都锁死
     this.hardcore = this.worldConfig.hardcore === true;
-    this.gameMode = this.hardcore ? 'survival' : normalizeGameMode(this.worldConfig.gameMode);
+    this.gameMode = effectiveGameMode(this.hardcore, normalizeGameMode(this.worldConfig.gameMode));
     // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
     this.flying = startsFlying(this.gameMode);
     this.waitingForSaveRestore = Boolean(save?.hasSave);
@@ -3158,7 +3168,7 @@ class App {
     this.statisticsScreen = new StatisticsScreen(document.body);
 
     // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
-    this.difficulty = this.hardcore ? 'hard' : this.worldConfig.difficulty;
+    this.difficulty = this.hardcore ? HARDCORE_DIFFICULTY : this.worldConfig.difficulty;
 
     // 水面动画：告诉材质"哪些贴图要做波浪与滚动"（水与岩浆）
     const fluidTiles: Array<readonly [number, number]> = [
@@ -3263,6 +3273,8 @@ class App {
       // 批次 20261024-1455：按**选中的值**切（原来是无参 toggle，选创造可能反而退回生存）
       onSetGameMode: (mode) => this.setGameMode(mode),
       gameMode: () => this.gameMode,
+      // 极限世界的模式是锁死的（2026-10-28）：设置页据此把那一行画成"不可改"
+      gameModeLocked: () => this.hardcore,
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
       diagnosticsStats: () => diag.stats(),
@@ -5178,8 +5190,13 @@ class App {
       this.pitch = data.pitch;
     }
     // 批次 181 迁移：老存档没有 `gameMode`，`flying === true` 视为创造模式
-    if (data.gameMode) this.setGameMode(data.gameMode);
-    else if (data.flying) this.setGameMode('creative');
+    // 2026-10-28：极限世界只认「生存 / 旁观」——存档被改成创造或冒险时拉回生存，
+    // 而死亡后的旁观必须保住（否则每重启一次就复活一次，"一命"不存在）。
+    // 读档不是玩家切换，所以走 `internal = true` 放行守卫。
+    if (data.gameMode || data.flying) {
+      const savedMode = normalizeGameMode(data.gameMode ?? (data.flying ? 'creative' : 'survival'));
+      this.setGameMode(restoredGameMode(this.hardcore, savedMode), true);
+    }
     // 生存模式不允许飞：`setFlying` 自己也会挡，这里把条件写清楚
     // 旁观模式永远允许飞；创造仍按存档里的飞行状态恢复（批次 532 修掉旁观被卡成 false）
     this.setFlying(isSpectatorMode(this.gameMode) || (data.flying === true && this.isCreative));
@@ -5211,7 +5228,7 @@ class App {
     // 难度与游戏规则按世界存：旧存档没有这两个字段时回退默认值
     // 难度优先用存档里的（玩家可能在游戏里改过），没有就用世界清单里新建时选的
     this.difficulty = this.hardcore
-      ? 'hard'
+      ? HARDCORE_DIFFICULTY
       : data.difficulty
         ? normalizeDifficulty(data.difficulty)
         : this.worldConfig.difficulty;
@@ -17368,7 +17385,8 @@ class App {
         // 极限模式（批次 550）：不能回生存，重生后直接转旁观（原版 Java 也只剩旁观）
         if (this.respawnCountdown >= RESPAWN_DELAY) {
           this.respawnPlayer();
-          this.setGameMode('spectator');
+          // `internal = true`：这是极限模式的定义之一，不是"玩家自己切模式"
+          this.setGameMode('spectator', true);
           this.chat.push(t('say.hardcore.dead'), 'system');
         }
       } else if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) {
@@ -19427,12 +19445,27 @@ class App {
    * 入口只有三处：新建世界、暂停菜单、`/gamemode`。双击跳跃**不再**走这里。
    * 切回生存时强制落地，否则会出现"生存模式在飞"——既不受重力也不掉血。
    */
-  setGameMode(mode: GameMode): void {
+  setGameMode(mode: GameMode, internal = false): boolean {
     const next = normalizeGameMode(mode);
+    /*
+     * 极限模式（2026-10-28 修）：模式是**世界级**设置，玩家不能自己改。
+     *
+     * 以前这里没有守卫，于是暂停菜单、`/gamemode`、编辑世界、联机广播四条路都能把
+     * 极限世界改成创造；而创造免伤 → 永不死亡 → 死亡转旁观那条路永远走不到，
+     * 极限只剩卡片上一个标签。
+     *
+     * `internal` 只给两条内部路径用：死亡转旁观（就是极限的定义）、读档恢复。
+     */
+    if (this.hardcore && !internal && !canChangeGameMode(this.hardcore)) {
+      // 回执由调用方给（`/gamemode` 会报"已锁定"，设置页那颗下拉根本点不开），
+      // 这里只留一条诊断——不弹 toast，否则每条路径都会重复提示一次。
+      diag.event('mode', 'gameMode.locked', { requested: next, current: this.gameMode });
+      return false;
+    }
     if (next === this.gameMode) {
       // 已经是旁观但没在飞（老存档/初始化顺序）：补一次，避免穿地
       if (isSpectatorMode(next) && !this.flying) this.setFlying(true);
-      return;
+      return true;
     }
     diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
     this.gameMode = next;
@@ -19457,7 +19490,10 @@ class App {
     // 旁观模式一定在飞（批次 491）：否则"穿墙但受重力"会让人一直往下掉
     if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
-    this.onGameModeChanged?.(next);
+    //
+    // ⚠️ 极限世界**不写**：死亡转旁观是"这名玩家已阵亡"，不是"这个世界改成了旁观"。
+    // 写进去会让卡片标签变成「旁观」，读清单时又被拉回生存，来回反复。
+    if (!this.hardcore) this.onGameModeChanged?.(next);
     /*
      * 房主改模式 = 改这一局的规则（用户 2026-10-26："房主改了游戏模式，其他人也没收到"）。
      *
@@ -19471,6 +19507,7 @@ class App {
     // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();
+    return true;
   }
 
   /** 切换创造飞行（键盘 F、双击跳跃、设置里的"飞行"共用；生存模式会被拒绝） */
@@ -20980,7 +21017,16 @@ async function boot(): Promise<void> {
    * 难度也在玩家存档里。不同步的话，列表里改成创造，进去仍是旧模式。
    */
   const editWorld = async (world: WorldSummary, patch: WorldEditPatch): Promise<void> => {
-    registry.update(world.id, patch);
+    /*
+     * 极限世界（2026-10-28）：模式与难度都锁死，这里只放行"改名"。
+     *
+     * UI 那侧已经把两个下拉置灰了，但这里是**数据出口**（导入、脚本、老界面都可能传脏值），
+     * 必须在写盘前再收一次口——否则"界面灰着、存档却是创造"又会回来。
+     */
+    const applied: WorldEditPatch = world.hardcore
+      ? { name: patch.name, gameMode: effectiveGameMode(true, patch.gameMode), difficulty: HARDCORE_DIFFICULTY }
+      : patch;
+    registry.update(world.id, applied);
     let save: SaveGame | null = null;
     try {
       save = await SaveGame.open(world.id);
@@ -20989,8 +21035,8 @@ async function boot(): Promise<void> {
       if (!data) return;
       await save.savePlayer({
         ...data,
-        gameMode: patch.gameMode,
-        difficulty: patch.difficulty,
+        gameMode: applied.gameMode,
+        difficulty: applied.difficulty,
       });
     } catch (error) {
       console.warn('[world] 编辑世界时同步存档失败', error);

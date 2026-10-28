@@ -372,7 +372,9 @@ console.log('\n引导进行中切模式 → 作废（批次 20261024-1152）');
   // 接线：判定必须真挂在 setGameMode 上，而且作废时要落盘。
   // （只测纯函数的话，"函数写好了但没人调用"这种静默失败测不出来。）
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const setGameModeBody = /setGameMode\(mode: GameMode\): void \{[\s\S]*?\n  \}/.exec(mainSrc)?.[0] ?? '';
+  // 2026-10-28：`setGameMode` 多了一个 `internal` 参数（极限守卫要放行"死亡转旁观/读档"），
+  // 所以这里的锚点跟着改；断言的内容不变——作废判定仍然挂在切模式这一跳上。
+  const setGameModeBody = /setGameMode\(mode: GameMode, internal = false\): boolean \{[\s\S]*?\n  \}/.exec(mainSrc)?.[0] ?? '';
   check('setGameMode 里调用了作废判定', setGameModeBody.includes('shouldVoidTutorialOnModeChange({'));
   check('作废时同时把模式传给判定（restoringSave）', setGameModeBody.includes('restoringSave: this.waitingForSaveRestore'));
   check('作废后收起卡片', setGameModeBody.includes('this.tutorialCard.hide()'));

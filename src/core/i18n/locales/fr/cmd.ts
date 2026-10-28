@@ -307,4 +307,5 @@ export const cmd = {
   "cmd.label.lootTable.stronghold_corridor": "Couloir de forteresse",
   "cmd.label.lootTable.stronghold_crossing": "Croisement de forteresse",
   "cmd.label.lootTable.ocean_ruins": "Ruines océaniques",
+  "cmd.reply.gamemode.locked": "Ce monde est en mode extrême — le mode de jeu est verrouillé",
 } satisfies Pick<Messages, keyof typeof zhCmd>;

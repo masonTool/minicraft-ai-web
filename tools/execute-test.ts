@@ -123,7 +123,9 @@ class FakeWorld implements CommandContext {
   isFlying(): boolean {
     return this.flying;
   }
-  setGameMode(): void {}
+  setGameMode(): boolean {
+    return true;
+  }
   isCreative(): boolean {
     return this.creative;
   }

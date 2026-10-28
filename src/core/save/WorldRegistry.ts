@@ -19,6 +19,7 @@ import { t } from '../i18n/I18n.ts';
 import { isWorldType, randomSeed, type WorldType } from '../gen/WorldType.ts';
 import { normalizeDifficulty, type Difficulty } from '../world/Rules.ts';
 import { normalizeGameMode, type GameMode } from '../world/GameMode.ts';
+import { effectiveDifficulty, effectiveGameMode } from '../world/Hardcore.ts';
 import { biomeByName } from '../gen/Biome.ts';
 
 export interface WorldSummary {
@@ -119,9 +120,9 @@ export class WorldRegistry {
       // 批次 529：三种创建参数一律在这里收口，非 UI 调用传脏值也不会写进清单
       worldType: isWorldType(options.worldType) ? options.worldType : 'default',
       // 批次 529：与 gameMode 同口径——非法值落到普通，而不是先写进清单等读盘才修
-      // 批次 550：极限模式强制困难 + 生存（原版极限模式也不能选难度/创造）
-      difficulty: hardcore ? 'hard' : normalizeDifficulty(options.difficulty),
-      gameMode: hardcore ? 'survival' : normalizeGameMode(options.gameMode),
+      // 批次 550 / 2026-10-28：极限模式强制困难 + 生存（判据集中在 `core/world/Hardcore.ts`）
+      difficulty: effectiveDifficulty(hardcore, normalizeDifficulty(options.difficulty)),
+      gameMode: effectiveGameMode(hardcore, normalizeGameMode(options.gameMode)),
       ...(hardcore ? { hardcore: true } : {}),
       // 单一群系：只在这个类型下保留，且必须是注册表里存在的群系名
       ...(options.worldType === 'single_biome' && biomeByName(options.singleBiome ?? '')
@@ -224,9 +225,9 @@ function normalizeWorld(value: unknown): WorldSummary | null {
     name:
       typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : t('world.unnamed'),
     seed: typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.floor(raw.seed) : randomSeed(),
-    // 极限模式（批次 550）：老清单/脏数据里如果困难或创造被改过，这里一律拉回困难 + 生存
-    difficulty: hardcore ? 'hard' : normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),
-    gameMode: hardcore ? 'survival' : normalizeGameMode((raw as { gameMode?: unknown }).gameMode),
+    // 极限模式（批次 550 / 2026-10-28）：老清单/脏数据里如果困难或创造被改过，这里一律拉回困难 + 生存
+    difficulty: effectiveDifficulty(hardcore, normalizeDifficulty((raw as { difficulty?: unknown }).difficulty)),
+    gameMode: effectiveGameMode(hardcore, normalizeGameMode((raw as { gameMode?: unknown }).gameMode)),
     ...(hardcore ? { hardcore: true } : {}),
     worldType: isWorldType(raw.worldType) ? raw.worldType : 'default',
     ...(isWorldType(raw.worldType) &&

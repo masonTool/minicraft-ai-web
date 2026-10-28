@@ -17,6 +17,15 @@ export type GameMode = 'survival' | 'creative' | 'adventure' | 'spectator';
 export const GAME_MODES: readonly GameMode[] = ['survival', 'creative', 'adventure', 'spectator'];
 
 /**
+ * **新建世界**时可选的三项（2026-10-28）。
+ *
+ * 旁观不在这里：一个"建出来就只能看"的世界没有任何下一步动作，玩家进去第一件事
+ * 就是改模式（基岩版的创建页同样不提供旁观，只能进世界后用 `/gamemode spectator`）。
+ * 编辑世界仍然用 `GAME_MODES`——那要看得到"死亡后已转旁观"的极限存档。
+ */
+export const CREATION_MODES: readonly GameMode[] = ['survival', 'creative', 'adventure'];
+
+/**
  * 模式的中文名（批次 20261024-0020 之前这里是中文常量表）。
  *
  * ⚠️ 现在**只有一个入口** `gameModeLabel()`，值来自语言表的 `cmd.label.gamemode.*`：

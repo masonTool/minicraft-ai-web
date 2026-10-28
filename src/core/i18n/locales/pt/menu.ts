@@ -160,4 +160,22 @@ export const menu = {
   "mp.error.url": "O endereço precisa ser ws:// ou wss:// (ws:// é adicionado automaticamente)",
   "mp.error.name": "Escolha um apelido — ele não pode ficar vazio",
   "mp.portHint": "A porta é fixa — não precisa preencher",
+  // Novo mundo: janelas de ajuda atrás do «?» de cada lista (2026-10-28)
+  "world.help.open": "Ajuda",
+  "world.help.close": "Entendi",
+  "world.help.type":
+    "Define a aparência do mapa. Não pode ser alterado depois da criação:\n· Padrão: biomas, árvores, minérios, vilas, fortalezas — recomendado para sobrevivência\n· Plano: apenas três camadas de chão, sem árvores, minérios ou vilas (bom para construir)\n· Biomas grandes: mesmo conteúdo, biomas cerca de 4× maiores\n· Ampliado: mesmo conteúdo, montanhas mais altas e vales mais fundos\n· Bioma único: relevo normal, mas o mundo inteiro usa um só bioma",
+  "world.help.difficulty":
+    "Define o quão perigoso é o mundo:\n· Pacífico: sem monstros hostis, sem fome, cura mais rápida\n· Fácil: metade do dano e do limite de monstros, fome mais lenta\n· Normal: valor base\n· Difícil: mais dano e mais monstros, fome mais rápida\nCriativo e Espectador não sofrem dano, mas a dificuldade ainda decide se monstros hostis aparecem.",
+  "world.help.gameMode":
+    "Define o que você pode fazer:\n· Sobrevivência: sofre dano, sente fome, minera devagar, solta itens ao morrer\n· Criativo: sem dano, quebra instantânea, itens ilimitados, pode voar\n· Aventura: anda, luta e interage, mas não quebra nem coloca blocos\nEspectador não é oferecido na criação; use /gamemode spectator no jogo.",
+  "world.help.hardcore":
+    "O modo extremo é um ajuste do mundo além do modo e da dificuldade:\n· Força dificuldade Difícil e modo Sobrevivência\n· Ao morrer, só pode observar — sem renascer\n· Não pode voltar a ser um mundo normal; modo e dificuldade ficam travados\nSe quiser ajustar depois, não escolha o modo extremo.",
+  "world.help.biome":
+    "Só no tipo «Bioma único»: todo o mundo superior vira aquele bioma (o relevo continua igual).\nPrefira biomas de superfície como planície, floresta, deserto, planície nevada ou campos de cogumelos; biomas de caverna e rio normalmente só aparecem em lugares específicos e ficam estranhos no mundo inteiro.",
+  "world.hardcoreHint": "Extremo: dificuldade Difícil, modo Sobrevivência; ao morrer, só observar. Não pode ser alterado depois.",
+  "world.hardcoreConfirm.title": "Criar um mundo extremo?",
+  "world.hardcoreConfirm.text": "Um mundo extremo fica travado em Difícil + Sobrevivência. Ao morrer você só pode observar, e isso não pode ser desfeito. Criar?",
+  "world.editHintLocked": "Mundo extremo: modo e dificuldade travados; só o nome pode ser alterado.",
+  "world.modeLocked": "Em um mundo extremo o modo fica travado em Sobrevivência",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

@@ -349,4 +349,5 @@ export const cmd = {
   "cmd.label.lootTable.stronghold_corridor": "Stronghold Corridor",
   "cmd.label.lootTable.stronghold_crossing": "Stronghold Crossing",
   "cmd.label.lootTable.ocean_ruins": "Ocean Ruins",
+  "cmd.reply.gamemode.locked": "This world is Hardcore — the game mode is locked",
 } satisfies Pick<Messages, keyof typeof zhcmd>;

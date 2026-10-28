@@ -25,7 +25,13 @@ import {
   type WorldType,
 } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, difficultyLabel, type Difficulty } from '../core/world/Rules.ts';
-import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
+import { CREATION_MODES, GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
+import {
+  HARDCORE_DIFFICULTY,
+  HARDCORE_MODE,
+  effectiveDifficulty,
+  effectiveGameMode,
+} from '../core/world/Hardcore.ts';
 import { clientCapabilities } from '../core/net/ClientCapabilities.ts';
 import { roomFromWorldName } from '../core/net/RoomName.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
@@ -45,6 +51,14 @@ const gameModeLabels = (): Record<GameMode, string> =>
   Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>;
 const difficultyLabels = (): Record<Difficulty, string> =>
   Object.fromEntries(DIFFICULTIES.map((difficulty) => [difficulty, difficultyLabel(difficulty)])) as Record<Difficulty, string>;
+
+/**
+ * 新建表单里带「?」说明的项（2026-10-28）。
+ *
+ * 名称与 `world.<topic>` / `world.help.<topic>` 两组 i18n 键一一对应，
+ * 所以清单只能有这五项——加项时两边的键要一起加。
+ */
+export type WorldHelpTopic = 'type' | 'difficulty' | 'gameMode' | 'hardcore' | 'biome';
 
 /** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */
 export interface WorldEditPatch {
@@ -154,6 +168,16 @@ export class WorldScreen {
   private editCleanup: (() => void) | null = null;
   /** 世界类型下面那行说明（批次 181：超平坦没有树/村庄/矿石要说在前面） */
   private readonly typeHintEl: HTMLDivElement;
+  /** 「?」说明浮层（2026-10-28）：同一时间只留一个，Esc / 点压暗区收起 */
+  private helpEl: HTMLDivElement | null = null;
+  private helpCleanup: (() => void) | null = null;
+  /**
+   * 选「极限」之前那一组"模式 + 难度"（2026-10-28）。
+   *
+   * 极限会强制成生存 + 困难；玩家取消极限时要**还原他自己选过的值**，
+   * 否则"点一下极限再点回来，模式就永久变成生存了"——比不联动更气人。
+   */
+  private preHardcore: { mode: GameMode; difficulty: Difficulty } | null = null;
   /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
   private readonly views = new Map<WorldView, HTMLElement>();
   private currentView: WorldView = 'home';
@@ -360,7 +384,8 @@ export class WorldScreen {
     // 2026-10-28（用户）：新建世界默认 **创造模式**——进世界先能自由搭，
     // 想要生存的玩家自己在这一次下拉里切成生存即可。
     this.gameModeSelect = new Dropdown<GameMode>(
-      GAME_MODES,
+      // 2026-10-28（用户）：旁观不进创建页——建出来"只能看"的世界没有下一步动作
+      CREATION_MODES,
       gameModeLabels(),
       'creative',
       () => this.updateTypeHint(),
@@ -387,7 +412,7 @@ export class WorldScreen {
       () => undefined,
       { fullWidth: true, className: 'world-dropdown' },
     );
-    this.biomeRow = this.makeRow(t('world.biome'), this.biomeSelect.element, null);
+    this.biomeRow = this.makeRow(t('world.biome'), this.biomeSelect.element, this.makeHelpButton('biome'));
     this.biomeRow.hidden = true;
 
     // 世界类型说明（批次 181）：超平坦"没有树/村庄/矿石"必须写在选之前
@@ -414,13 +439,19 @@ export class WorldScreen {
     // 批次 184：**说明放最后**（原来夹在"类型"和"难度"中间，把两列栅格切断了：
     // 第二行只剩类型一格、难度与模式被挤到下面，整张表单多出两行高度）。
     // 现在三行字段两两并排 → 一行说明 → 跨满两列的创建键，横屏手机一屏就能看全。
+    /*
+     * 每个下拉后面挂一颗「?」（2026-10-28，用户）：点开浮层讲清这一项到底管什么。
+     *
+     * 用户的原话是"很多人可能不懂这里的各种逻辑"——所以说明不能只在新建时一闪而过，
+     * 而要随手能查。形态与设置页资源包那颗 ? 完全一致（同一个 `.settings-help` 样式）。
+     */
     form.append(
       this.makeRow(t('world.name'), this.nameInput, null),
       this.makeRow(t('world.seed'), this.seedInput, reroll),
-      this.makeRow(t('world.type'), this.typeSelect.element, null),
-      this.makeRow(t('world.difficulty'), this.difficultySelect.element, null),
-      this.makeRow(t('world.gameMode'), this.gameModeSelect.element, null),
-      this.makeRow(t('world.hardcore'), this.hardcoreSelect.element, null),
+      this.makeRow(t('world.type'), this.typeSelect.element, this.makeHelpButton('type')),
+      this.makeRow(t('world.difficulty'), this.difficultySelect.element, this.makeHelpButton('difficulty')),
+      this.makeRow(t('world.gameMode'), this.gameModeSelect.element, this.makeHelpButton('gameMode')),
+      this.makeRow(t('world.hardcore'), this.hardcoreSelect.element, this.makeHelpButton('hardcore')),
       this.biomeRow,
       this.typeHintEl,
       createButton,
@@ -510,6 +541,8 @@ export class WorldScreen {
    */
   setView(view: WorldView): void {
     this.currentView = view;
+    // 切层级时把上一次打开的说明浮层收掉（它还挂在这棵 DOM 上）
+    this.closeHelp();
     this.panel.dataset.view = view;
     for (const [key, element] of this.views) element.classList.toggle('active', key === view);
     if (view === 'worlds') this.render();
@@ -589,10 +622,14 @@ export class WorldScreen {
     // 更好扫读，也不再让种子这种低频信息占掉一整行。
     const chips = document.createElement('div');
     chips.className = 'world-card-chips';
+    // 极限世界按**有效值**展示（生存 / 困难）：死亡后的旁观是玩家状态，不是世界模式，
+    // 写进卡片会让"这个世界还能不能玩"看不出来（2026-10-28）。
+    const shownMode = effectiveGameMode(world.hardcore === true, world.gameMode);
+    const shownDifficulty = effectiveDifficulty(world.hardcore === true, world.difficulty);
     chips.append(
       ...(world.hardcore ? [this.makeChip(t('world.hardcoreOn'), 'hardcore', 'hardcore')] : []),
-      this.makeChip(gameModeLabel(world.gameMode), 'mode', world.gameMode),
-      this.makeChip(difficultyLabel(world.difficulty), 'difficulty', world.difficulty),
+      this.makeChip(gameModeLabel(shownMode), 'mode', shownMode),
+      this.makeChip(difficultyLabel(shownDifficulty), 'difficulty', shownDifficulty),
       this.makeChip(worldTypeLabel(world.worldType), 'type', world.worldType),
     );
 
@@ -953,6 +990,7 @@ export class WorldScreen {
   }
 
   private openEdit(world: WorldSummary): void {
+    this.closeHelp();
     this.editCleanup?.();
     const overlay = document.createElement('div');
     overlay.className = 'world-modal';
@@ -979,24 +1017,34 @@ export class WorldScreen {
     nameInput.maxLength = 24;
     nameInput.value = world.name;
 
+    /*
+     * 极限世界（2026-10-28）：模式与难度都不可改，只允许改名。
+     *
+     * 这里连"初始显示值"也走有效值（生存 / 困难），而不是清单里可能残留的脏值——
+     * 界面上出现"创造"就等于告诉玩家"这个极限世界可以改成创造"。
+     */
     const mode = new Dropdown<GameMode>(
       GAME_MODES,
       gameModeLabels(),
-      world.gameMode,
+      effectiveGameMode(world.hardcore === true, world.gameMode),
       () => undefined,
       { fullWidth: true, className: 'world-dropdown' },
     );
     const difficulty = new Dropdown<Difficulty>(
       DIFFICULTIES,
       difficultyLabels(),
-      world.difficulty,
+      effectiveDifficulty(world.hardcore === true, world.difficulty),
       () => undefined,
       { fullWidth: true, className: 'world-dropdown' },
     );
+    if (world.hardcore === true) {
+      mode.setDisabled(true);
+      difficulty.setDisabled(true);
+    }
 
     const hint = document.createElement('div');
     hint.className = 'world-edit-hint';
-    hint.textContent = t('world.editHint');
+    hint.textContent = t(world.hardcore === true ? 'world.editHintLocked' : 'world.editHint');
     const error = document.createElement('div');
     error.className = 'world-edit-error hidden';
 
@@ -1164,6 +1212,26 @@ export class WorldScreen {
       seed = Math.floor(parsed);
     }
 
+    /*
+     * 极限是世界级不可逆设定（2026-10-28，用户拍板选 A：不可改回）：
+     * 创建前确认一次。这里只挡"点创建"这一下，取消就退回表单，什么都不会写盘。
+     */
+    if (this.hardcoreSelect.value === 'hardcore') {
+      void this.confirm({
+        title: t('world.hardcoreConfirm.title'),
+        message: t('world.hardcoreConfirm.text'),
+        confirmText: t('menu.create'),
+        danger: true,
+      }).then((ok) => {
+        if (ok) this.commitCreate(seed);
+      });
+      return;
+    }
+    this.commitCreate(seed);
+  }
+
+  /** 真正建世界并进入（极限的确认弹窗答"创建"之后也走这里） */
+  private commitCreate(seed: number | undefined): void {
     const world = this.registry.create({
       name: this.nameInput.value,
       seed,
@@ -1176,6 +1244,11 @@ export class WorldScreen {
     // 清空表单：下次再新建时不会带上一次的名字与种子
     this.nameInput.value = '';
     this.seedInput.value = '';
+    // 极限提示与锁定态是跟着下拉算出来的：把极限复位成"普通"再刷一次，
+    // `updateTypeHint()` 会顺便把 `preHardcore` 里记着的那组选择还原回来
+    // （不留 `preHardcore = null` 在这里，否则建完一个极限世界，表单会永久停在生存+困难）
+    this.hardcoreSelect.setValue('normal');
+    this.updateTypeHint();
     this.actions.onEnter(world);
   }
 
@@ -1206,16 +1279,132 @@ export class WorldScreen {
     this.updateTypeHint();
   }
 
+  /** 「?」说明浮层讲哪一项（2026-10-28） */
+  private makeHelpButton(topic: WorldHelpTopic): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    // 与设置页资源包那颗 ? 同一套外观（22×22，手机端热区 32）
+    button.className = 'settings-help';
+    button.textContent = '?';
+    button.setAttribute('aria-label', t('world.help.open'));
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.openHelp(topic);
+    });
+    return button;
+  }
+
+  /**
+   * 打开某一项的说明浮层（2026-10-28，用户："每个选择框后面加一个问号，点开浮窗介绍"）。
+   *
+   * 外壳复用世界页已有的 `.world-modal`（与编辑世界同一套卡片），所以不用为它新造一套
+   * 会漂的样式；正文只有一段，靠 `white-space: pre-line` 显示换行。
+   * 三个出口都能关：✕、底部「知道了」、Esc / 点压暗区（触屏上最常见的是点外面）。
+   */
+  private openHelp(topic: WorldHelpTopic): void {
+    this.closeHelp();
+    const overlay = document.createElement('div');
+    overlay.className = 'world-modal';
+    const panel = document.createElement('div');
+    panel.className = 'world-modal-panel';
+
+    const header = document.createElement('div');
+    header.className = 'world-modal-header';
+    const title = document.createElement('b');
+    title.textContent = t(`world.${topic}`);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'world-modal-close';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', t('misc.close'));
+    header.append(title, close);
+
+    const body = document.createElement('p');
+    body.className = 'world-help-text';
+    body.textContent = t(`world.help.${topic}`);
+
+    const foot = document.createElement('div');
+    foot.className = 'world-modal-actions';
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'world-help-ok';
+    ok.textContent = t('world.help.close');
+    foot.appendChild(ok);
+
+    panel.append(header, body, foot);
+    overlay.appendChild(panel);
+    this.root.appendChild(overlay);
+    this.helpEl = overlay;
+
+    const cleanup = (): void => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      if (this.helpEl === overlay) this.helpEl = null;
+      if (this.helpCleanup === cleanup) this.helpCleanup = null;
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      cleanup();
+    };
+    document.addEventListener('keydown', onKey, true);
+    close.addEventListener('click', cleanup);
+    ok.addEventListener('click', cleanup);
+    // 点压暗区关（点面板本身不关）
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) cleanup();
+    });
+    this.helpCleanup = cleanup;
+  }
+
+  /** 收起说明浮层（切页 / 切分组 / 重开之前都调一次） */
+  private closeHelp(): void {
+    this.helpCleanup?.();
+    this.helpCleanup = null;
+    this.helpEl = null;
+  }
+
   /** 世界类型说明 + "超平坦 + 生存"的警告（批次 181） */
   private updateTypeHint(): void {
     const type = this.typeSelect.value as WorldType;
+    const hardcore = this.hardcoreSelect.value === 'hardcore';
+
+    /*
+     * 极限联动（2026-10-28）：模式与难度**锁死**，并把值拉回 生存 / 困难。
+     *
+     * 以前只在下拉里选"极限"，实际创建时才被静默覆盖 —— 玩家看到的仍是创造 + 普通，
+     * 进了世界却是生存 + 困难，属于"显示欺骗"。现在当场改成真实值并置灰。
+     * 取消极限时还原玩家原来的选择（记住在 `preHardcore` 里）。
+     */
+    if (hardcore) {
+      if (!this.preHardcore) {
+        this.preHardcore = {
+          mode: this.gameModeSelect.value as GameMode,
+          difficulty: this.difficultySelect.value as Difficulty,
+        };
+      }
+      this.gameModeSelect.setValue(HARDCORE_MODE);
+      this.difficultySelect.setValue(HARDCORE_DIFFICULTY);
+    } else if (this.preHardcore) {
+      this.gameModeSelect.setValue(this.preHardcore.mode);
+      this.difficultySelect.setValue(this.preHardcore.difficulty);
+      this.preHardcore = null;
+    }
+    this.gameModeSelect.setDisabled(hardcore);
+    this.difficultySelect.setDisabled(hardcore);
+
     const survival = this.gameModeSelect.value === 'survival';
     const base = worldTypeHint(type);
-    const warn = type === 'flat' && survival;
+    const warn = !hardcore && type === 'flat' && survival;
     // 只有单一群系世界才显示"选群系"这一行
     this.biomeRow.hidden = type !== 'single_biome';
-    this.typeHintEl.textContent = warn ? tp('world.survivalWarn', { base }) : base;
-    this.typeHintEl.classList.toggle('bad', warn);
+    this.typeHintEl.textContent = hardcore
+      ? t('world.hardcoreHint')
+      : warn
+        ? tp('world.survivalWarn', { base })
+        : base;
+    this.typeHintEl.classList.toggle('bad', hardcore || warn);
   }
 
   /** 验收脚本用：等价于点"创建并进入" */
