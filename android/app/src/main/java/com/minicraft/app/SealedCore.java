@@ -15,21 +15,25 @@ import javax.crypto.spec.SecretKeySpec;
  * 抽出来之后，同一份代码可以被 javac 编译、被 JVM 直接跑真实产物（见
  * `tools/sealed-check.sh`），不需要设备、不需要 Gradle。
  *
- * <p>格式与 `tools/seal-core.ts` 一一对应（小端、无魔数）：
+ * <p>格式 v2 与 `tools/seal-core.ts` 一一对应（小端、无魔数）：
  *
  * <pre>
  *   u8 version   u8 wrapCount   u16 permK   u32 plainLen   u16 reserved
  *   12B nonce
- *   u16 wrapLen  ...wrapped CEK(AES-256-GCM)
- *   u32 payloadLen ...payload(AES-256-GCM)
+ *   wrapCount × (u16 wrapLen + 包裹后的 CEK)
+ *   u32 payloadLen ...payload
  * </pre>
+ *
+ * <p>关键点：传入的 {@code signerHex} 必须是**安装包实际签名**的摘要。
+ * KEK 由它派生，只有与之一致的包裹体能打开——于是"把校验判断 patch 成 true"没有意义，
+ * 换证书重签的包拿不到 CEK。
  */
 final class SealedCore {
 
     /** 与 `tools/seal-core.ts` 的 INFO 必须逐字节一致 */
     private static final byte[] INFO =
             {'m', 'i', 'n', 'i', 'c', 'r', 'a', 'f', 't', '/', 'c', 'o', 'r', 'e', '/', 'v', '1'};
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
     private static final int NONCE_LEN = 12;
     private static final int TAG_LEN = 16;
 
@@ -39,7 +43,7 @@ final class SealedCore {
      * 解封。返回 `null` 表示"打不开"——签名不对、数据被改、版本不符，一律同一个结果。
      *
      * @param sealed    封存体字节
-     * @param signerHex 期望的签名证书摘要（十六进制，大小写不敏感）
+     * @param signerHex **实际**签名证书摘要（十六进制，大小写不敏感）
      * @param salt      编译期盐（32 字节）
      */
     static byte[] open(byte[] sealed, String signerHex, byte[] salt) {
@@ -56,7 +60,7 @@ final class SealedCore {
         if (sealed.length < 34) return null;
         int version = sealed[p++] & 0xff;
         int wrapCount = sealed[p++] & 0xff;
-        if (version != VERSION || wrapCount != 1) return null;
+        if (version != VERSION || wrapCount < 1) return null;
 
         int permK = readU16(sealed, p);
         p += 2;
@@ -67,24 +71,40 @@ final class SealedCore {
         byte[] header = Arrays.copyOfRange(sealed, 0, p);
         byte[] nonce = Arrays.copyOfRange(sealed, p, p + NONCE_LEN);
         p += NONCE_LEN;
+        int wrapBlockStart = p;
 
-        int wrapLen = readU16(sealed, p);
-        int wrapStart = p + 2;
-        int wrapEnd = wrapStart + wrapLen;
-        if (wrapLen < TAG_LEN || wrapEnd > sealed.length) return null;
-        byte[] wrapped = Arrays.copyOfRange(sealed, wrapStart, wrapEnd);
-
+        // 用**实际**签名派生一次 KEK；只有与之匹配的那份包裹体能打开
         byte[] kek = hkdf(salt, concat(hexToBytes(signerHex), salt));
-        byte[] cek = aesGcmOpen(kek, nonce, concat(header, nonce), wrapped);
+        byte[] wrapAad = concat(header, nonce);
+
+        byte[] cek = null;
+        for (int i = 0; i < wrapCount; i++) {
+            int len = readU16(sealed, p);
+            int start = p + 2;
+            int end = start + len;
+            if (len < TAG_LEN || end > sealed.length) return null;
+            if (cek == null) {
+                cek = aesGcmOpen(kek, nonce, wrapAad, Arrays.copyOfRange(sealed, start, end));
+            }
+            p = end;
+        }
         if (cek == null) return null;
 
-        int payloadLen = readU32(sealed, wrapEnd);
-        int payloadStart = wrapEnd + 4;
+        int wrapBlockLen = p - wrapBlockStart;
+        int payloadLen = readU32(sealed, p);
+        int payloadStart = p + 4;
         if (payloadLen <= TAG_LEN || payloadStart + payloadLen > sealed.length) return null;
-        byte[] payload = Arrays.copyOfRange(sealed, payloadStart, payloadStart + payloadLen);
 
-        // AAD 与 seal-core 一致：header + nonce + wrapLen + 包裹体（不含 payloadLen 本身）
-        byte[] transformed = aesGcmOpen(cek, nonce, Arrays.copyOfRange(sealed, 0, wrapEnd), payload);
+        // AAD 绑上"全部包裹体"：少一份、改一份，载荷都解不开
+        byte[] payloadAad = new byte[header.length + NONCE_LEN + wrapBlockLen];
+        System.arraycopy(header, 0, payloadAad, 0, header.length);
+        System.arraycopy(nonce, 0, payloadAad, header.length, NONCE_LEN);
+        System.arraycopy(sealed, wrapBlockStart, payloadAad, header.length + NONCE_LEN, wrapBlockLen);
+
+        byte[] transformed = aesGcmOpen(
+                cek, nonce, payloadAad, Arrays.copyOfRange(sealed, payloadStart, payloadStart + payloadLen));
+        Arrays.fill(kek, (byte) 0);
+        Arrays.fill(cek, (byte) 0);
         if (transformed == null || transformed.length != plainLen) return null;
 
         // 形态逆变换：plain[(i * k) % n] = transformed[i]
@@ -95,6 +115,7 @@ final class SealedCore {
             plain[position] = transformed[i];
             position = (position + permK) % n;
         }
+        Arrays.fill(transformed, (byte) 0);
         return plain;
     }
 

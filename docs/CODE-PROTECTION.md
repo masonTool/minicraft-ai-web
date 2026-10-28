@@ -32,12 +32,16 @@
 | `desktop/core-vault.mjs` | 同一套步骤的 Node 版（Windows 比证书指纹 / macOS 比 Team ID） |
 | `desktop/main.mjs` | 桌面端用 `app://` 协议拦截 `__host/core.bin`，与安卓的拦截点等价 |
 
-密钥关系：
+密钥关系（格式 v2）：
 
 ```
-KEK = HKDF-SHA256(salt, 证书摘要 ‖ salt, info="minicraft/core/v1")
-CEK = 每次构建随机 32 字节，被 KEK 用 AES-256-GCM 包住
+KEK_i = HKDF-SHA256(salt, 摘要_i ‖ salt, info="minicraft/core/v1")
+CEK   = 每次构建随机 32 字节，被每个 KEK_i 各包一份（wrapCount = 允许的签名个数）
 ```
+
+**关键点：Android 运行时用的是「安装包实际签名」的摘要去派生 KEK**，不是文件里写的期望值。
+正版包恰好能打开属于自己的那份包裹；换证书重签派生出来的 KEK 打不开任何一份。
+iOS / 桌面端因为拿不到自身签名摘要，只能用 `signers.txt[0]` 派生（强度见 §7）。
 
 ## 2.5 已经打开的加固开关
 
@@ -103,16 +107,20 @@ npm run check              # 全量门禁
 - Android：模拟器（API 37 / arm64）实跑，页面正常启动、无崩溃；顺带用 CDP 直连 WebView
   验了宿主桥与开房链路（`startServer()` 后 8887 端口就绪）。
 
-**最关键的一条（A/B 实验，2026-10-29）**：同一份 release APK（已开 R8），
+**最关键的一组实验（2026-10-29）**：同一份 release APK（已开 R8），三种情况：
 
-| 用哪张证书签 | 结果 |
+| 情况 | 结果 |
 | --- | --- |
-| 证书 A（其摘要写进 `signers.txt`） | **正常进游戏**（主包加载、方块表解开） |
-| 证书 B（同一个 APK，只重签） | **停在"Get it on Google Play"落地页**，游戏起不来 |
+| 证书 A 签名（其摘要被封进 `core.sealed`） | **正常进游戏** |
+| 证书 B 重签（同一个 APK，只换签名） | **停在 "Get it on Google Play" 落地页** |
+| 证书 B 重签 **+ 把代码里唯一的白名单判断整行删掉** | **仍然是落地页** |
 
-也就是说"改包重签 → 不能运行"不是设计意图，是**实测行为**。复现方式见
-`docs/` 里这段记录的命令（生成两张 keystore → `gen:sealed` 用 A 的摘要 →
-`assembleRelease` 用 A 签 → `apksigner` 用 B 重签 → 两个都装一遍）。
+第三行是重点：删掉判断也进不去，因为 KEK 由**实际签名**派生，B 派生出的钥匙打不开任何一份包裹。
+这就是"签名参与密钥派生"从口号变成事实的地方。
+
+复现：生成两张 keystore → `gen:sealed` 用 A 的摘要 → `assembleRelease` 用 A 签 →
+`apksigner` 用 B 重签 → 装一遍；再把 `CoreVault` 里那行 `allowlist(...).contains(actual)`
+删掉、用 B 重新出包 → 依旧进不去。
 
 R8 也确实在生效：release 的 `classes.dex` 里 `unsealCore` / `hkdf` / `isSignedByUs`
 **一个都搜不到**，只剩必须保留的插件名 `CoreVault`（JS 侧要按名字找）。
@@ -137,8 +145,9 @@ R8 也确实在生效：release 的 `classes.dex` 里 `unsealCore` / `hkdf` / `i
 1. **不做"校验失败弹窗"**：失败只表现为数据拿不到。布尔判断可以被 patch 成 `true`，
    "解不开"不行。
 2. **解封放在原生而不是 JS**：JS 里的解码器等于把格式说明书一起送出去。
-3. **签名参与密钥派生**：换签名后整条派生链错位。但这只是**提高成本**——
-   证书摘要本身是公开信息，不是"只有私钥能算"的秘密。
+3. **签名参与密钥派生（v2 起是"实际签名"）**：换签名后派生出的 KEK 打不开任何一份包裹，
+   删掉校验代码也没用。但边界仍在——证书摘要、盐、密文都在包里，读懂格式的人可以离线自己解；
+   这一步挡住的是"改包重签"，不是"愿意读代码的人"。
 4. **解封用 Java 不用 Rust**（与初版方案不同）：本机没有 cargo，写出的 Rust 无法编译验证，
    等于交付不可运行的代码。Java 走平台自带 `javax.crypto`，安全性质一致。
 5. **走 Capacitor 插件不用 `shouldInterceptRequest`**（与初版方案不同）：

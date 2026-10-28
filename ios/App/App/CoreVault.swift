@@ -12,7 +12,7 @@ import Security
 enum CoreVault {
 
     private static let info = Data("minicraft/core/v1".utf8)
-    private static let sealedVersion: UInt8 = 1
+    private static let sealedVersion: UInt8 = 2
     private static let nonceLength = 12
     private static let tagLength = 16
     private static let sealedAsset = "sealed/core.sealed"
@@ -75,24 +75,33 @@ enum CoreVault {
             return slice
         }
 
-        guard let head = take(2), head[0] == sealedVersion, head[1] == 1 else { return nil }
+        guard let head = take(2), head[0] == sealedVersion, head[1] >= 1 else { return nil }
+        let wrapCount = Int(head[1])
         guard let permKData = take(2), let plainLenData = take(4), take(2) != nil else { return nil }
         let permK = Int(u16(permKData))
         let plainLen = Int(u32(plainLenData))
         let header = sealed.subdata(in: 0..<offset)
         guard let nonceData = take(nonceLength) else { return nil }
 
-        guard let wrapLenData = take(2), let wrapped = take(Int(u16(wrapLenData))) else { return nil }
-        let wrapEnd = offset
+        // v2：每个允许的签名各一份包裹。iOS 拿不到自身签名摘要，用 signers.txt[0]
+        // 派生 KEK；与它对应的那份包裹能打开，其余打不开。
+        guard let kek = deriveKek(salt: salt, signer: signer) else { return nil }
         let wrapAad = header + nonceData
 
-        guard let kek = deriveKek(salt: salt, signer: signer),
-              let cek = aesGcmOpen(key: kek, nonce: nonceData, aad: wrapAad, box: wrapped)
+        var cek: Data?
+        for _ in 0..<wrapCount {
+            guard let wrapLenData = take(2), let wrapped = take(Int(u16(wrapLenData))) else { return nil }
+            if cek == nil {
+                cek = aesGcmOpen(key: kek, nonce: nonceData, aad: wrapAad, box: wrapped)
+            }
+        }
+        let wrapEnd = offset
+        guard let unwrapped = cek,
+              let payloadLenData = take(4),
+              let payload = take(Int(u32(payloadLenData)))
         else { return nil }
-
-        guard let payloadLenData = take(4), let payload = take(Int(u32(payloadLenData))) else { return nil }
         let payloadAad = sealed.subdata(in: 0..<wrapEnd)
-        guard let transformed = aesGcmOpen(key: SymmetricKey(data: cek), nonce: nonceData, aad: payloadAad, box: payload),
+        guard let transformed = aesGcmOpen(key: SymmetricKey(data: unwrapped), nonce: nonceData, aad: payloadAad, box: payload),
               transformed.count == plainLen
         else { return nil }
 

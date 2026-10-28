@@ -1435,18 +1435,22 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
         本地只警告，`MINICRAFT_RELEASE=1`（`android:aab` 自带）才升级为错误
       · 顺手删掉 `tools/tmp-crack.py`（一次性脚本，标着"用完即删"，还指着重排前的 `src/`）
 
-- [ ] A30 【P0】签名没真正参与密钥派生：patch 一处判断即可绕过
-      · 现状：`CoreVault.unseal()` 先 `if (!isSignedByUs()) return null;`，然后
-        `SealedCore.open(sealed, expectedSigner(), salt)` —— 喂给 KEK 的是
-        `signers.txt` 里的**期望摘要**，不是 `PackageManager` 拿到的**实际签名**。
-        于是把这个 `if` 改成 `return true` 就能正常解密：R8 只是让这个布尔难找。
-      · iOS 的 `CoreVault.swift`、桌面端的 `desktop/core-vault.mjs` 同一形状（都读 `signers.txt`）
-      · 修法：封存时按**允许的签名摘要列表**各包一份 CEK（格式里的 `wrapCount` 就是为此留的），
-        运行时用**实际**摘要去匹配包裹体。这样"patch 判断"完全无效——数据本身打不开。
-        开发包需要单独一份按 debug 证书摘要封存的产物（不能把 debug 摘要混进 release 封存体）
-      · 验收：① A 签名的包能进游戏；② B 重签的包进不去；③ **把 `isSignedByUs` 强行改成 true
-        的 B 签包，仍然进不去**（这条是本次的核心）
-      · 成本约 1 小时（含 A/B 复测与三端同步）
+- [x] A30 【P0·已修】签名真正参与密钥派生（封存格式 v2，2026-10-29）
+      · 缺陷：`CoreVault.unseal()` 喂给 KEK 的是 `signers.txt` 里的**期望摘要**，不是
+        `PackageManager` 拿到的**实际签名** → 把那个 `if` 改成 `return true` 就能解密，
+        R8 只是让这个布尔难找。
+      · 修法（封存格式 v2）：`wrapCount` 从固定 1 变成 N，**每个允许的签名各包一份 CEK**；
+        Android 运行时用**实际签名**派生 KEK 去试包裹体，正版包恰好能打开自己那份，
+        换证书派生的钥匙打不开任何一份。iOS / 桌面端拿不到自身签名摘要，退回用
+        `signers.txt[0]` 派生（强度差异写进 `docs/CODE-PROTECTION.md` §7）
+      · 开发包：`gen:sealed` 在非发布模式（`MINICRAFT_RELEASE` 未设）时自动把本机
+        `~/.android/debug.keystore` 的摘要也封一份，本地 debug 包才不会自己解不开；
+        正式封装（`android:aab` 带 `MINICRAFT_RELEASE=1`）只封配置里的证书，且缺证书直接报错
+      · 三端同步：`SealedCore.java` / `CoreVault.swift` / `desktop/core-vault.mjs` 都改成 v2；
+        `tools/sealed-test.ts`（17 条）与 `tools/sealed-check.sh`（11 条）各加"包裹数为 0
+        也要解不开"的断言，模拟"绕过判断"
+      · **实测（模拟器，API 37 arm64）**：A 签 → 进游戏；B 重签 → 落地页；
+        **B 重签 + 删掉代码里唯一那行白名单判断 → 仍然落地页**
 
       **外部阻塞（不是代码问题，需要人来推）**
       · 四端正式签名证书：Play 应用签名证书 / Apple Developer / Windows Authenticode

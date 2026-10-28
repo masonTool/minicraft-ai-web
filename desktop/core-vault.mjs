@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { createDecipheriv, hkdfSync } from 'node:crypto';
 
 const INFO = Buffer.from('minicraft/core/v1', 'utf8');
-const VERSION = 1;
+const VERSION = 2;
 const NONCE_LEN = 12;
 const TAG_LEN = 16;
 
@@ -138,7 +138,7 @@ function decrypt(sealed, signerHex, salt) {
   if (sealed.length < 34) return null;
   const version = sealed[p++];
   const wrapCount = sealed[p++];
-  if (version !== VERSION || wrapCount !== 1) return null;
+  if (version !== VERSION || wrapCount < 1) return null;
 
   const permK = sealed.readUInt16LE(p);
   p += 2;
@@ -150,22 +150,29 @@ function decrypt(sealed, signerHex, salt) {
   const nonce = sealed.subarray(p, p + NONCE_LEN);
   p += NONCE_LEN;
 
-  const wrapLen = sealed.readUInt16LE(p);
-  const wrapStart = p + 2;
-  const wrapEnd = wrapStart + wrapLen;
-  if (wrapLen < TAG_LEN || wrapEnd > sealed.length) return null;
-  const wrapped = sealed.subarray(wrapStart, wrapEnd);
-
+  // v2：每个允许的签名各一份包裹。桌面端拿不到"自身签名摘要"，
+  // 只能用 signers.txt[0] 派生——与它对应的那份包裹能打开，其余打不开。
   const kek = Buffer.from(hkdfSync('sha256', Buffer.concat([Buffer.from(signerHex, 'hex'), salt]), salt, INFO, 32));
-  const cek = open(kek, nonce, Buffer.concat([header, nonce]), wrapped);
+  const wrapAad = Buffer.concat([header, nonce]);
+
+  let cek = null;
+  for (let i = 0; i < wrapCount; i++) {
+    const len = sealed.readUInt16LE(p);
+    const start = p + 2;
+    const end = start + len;
+    if (len < TAG_LEN || end > sealed.length) return null;
+    if (cek === null) cek = open(kek, nonce, wrapAad, sealed.subarray(start, end));
+    p = end;
+  }
   if (cek === null) return null;
 
-  const payloadLen = sealed.readUInt32LE(wrapEnd);
-  const payloadStart = wrapEnd + 4;
+  const payloadLen = sealed.readUInt32LE(p);
+  const payloadStart = p + 4;
   if (payloadLen <= TAG_LEN || payloadStart + payloadLen > sealed.length) return null;
   const payload = sealed.subarray(payloadStart, payloadStart + payloadLen);
 
-  const transformed = open(cek, nonce, sealed.subarray(0, wrapEnd), payload);
+  // AAD 绑上"全部包裹体"（header + nonce + wraps）
+  const transformed = open(cek, nonce, sealed.subarray(0, p), payload);
   if (transformed === null || transformed.length !== plainLen) return null;
 
   const n = transformed.length;
