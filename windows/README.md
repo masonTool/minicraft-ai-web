@@ -8,7 +8,7 @@ Electron 套壳，运行时逻辑与 macOS 共用 [`desktop/`](../desktop/README
 ```bash
 npm run win:dist
 # = gen:sealed → build:app（含发布检查）→ electron-builder --win
-# → dist-win/Minicraft Setup 0.1.0.exe
+# → dist/windows/Minicraft Setup 0.1.0.exe
 ```
 
 > macOS 上也能出 NSIS 安装包（electron-builder 会自动下载 wine），

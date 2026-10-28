@@ -5,7 +5,7 @@ copyright: Copyright © 2026 Minicraft
 
 directories:
   app: desktop
-  output: dist-mac
+  output: dist/mac
   buildResources: mac/build
 
 # 只带运行必需的文件：源码目录（web/src）不进包，游戏本体在 extraResources 的 web/ 里

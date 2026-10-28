@@ -1370,7 +1370,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 方案、发布清单、验证命令、未做项与边界：`docs/CODE-PROTECTION.md`（单页）
 
 - [x] A24 桌面端（Windows / macOS）落地（2026-10-29）：`desktop/` 一份 Electron 运行时，
-      `windows/` 与 `mac/` 各自打包配置，产物 `dist-win` / `dist-mac`
+      `windows/` 与 `mac/` 各自打包配置，产物 `dist/windows` / `dist/mac`
       · **不用 `file://`**：那是 opaque origin，Chromium 会关掉 IndexedDB，存档直接废；
         改注册 `app://minicraft/`（standard + secure），顺带成了与安卓 `shouldInterceptRequest`
         等价的拦截点，`web/src/core/hostCore.ts` 一行未改
@@ -1452,6 +1452,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 四端正式签名证书：Play 应用签名证书 / Apple Developer / Windows Authenticode
       · Windows 实机验证：目前只能在 macOS 上出包，没装过
       · Play Integrity 不适用：判定必须服务端验证，本项目无后台
+
+- [x] A31 根目录整理（2026-10-29）：桌面产物从根上的 `dist-mac` / `dist-win` 收进统一的 `dist/`
+      · `mac/electron-builder.yml` 与 `windows/electron-builder.yml` 的 `output` 改成 `dist/mac` / `dist/windows`；
+        `.gitignore` 删掉两条专用规则（顶层 `dist/` 本来就覆盖），README 结构块补上 `dist/` 并注明
+        "Web 产物在 `web/dist`，两者不是同一个目录"（重排后最容易认错的一处）
+      · 清掉 4 个 electron-builder 的中间解包目录（`mac`/`mac-arm64`/`win-unpacked`/`win-arm64-unpacked`）：
+        `dist/` 从 1.34 GB 降到 **276 MB**，只留 2 个 dmg + 1 个 exe（都能重新生成）
+      · 没动：`.continue/doing/.worktree/`（181 MB，是另一个会话的工作树，不属于本会话）；
+        `.tmp/` 与 `server/rust/target`（构建缓存，删了下次要重编）
 
 ## B. 方块与物品注册表
 

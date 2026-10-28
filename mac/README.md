@@ -8,7 +8,7 @@ Electron 套壳，运行时逻辑与 Windows 共用 [`desktop/`](../desktop/READ
 ```bash
 npm run mac:dist
 # = gen:sealed → build:app（含发布检查）→ electron-builder --mac
-# → dist-mac/Minicraft-0.1.0-arm64.dmg · dist-mac/Minicraft-0.1.0.dmg
+# → dist/mac/Minicraft-0.1.0-arm64.dmg · dist/mac/Minicraft-0.1.0.dmg
 ```
 
 | 文件 | 作用 |

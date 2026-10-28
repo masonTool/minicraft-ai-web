@@ -7,7 +7,7 @@ copyright: Copyright © 2026 Minicraft
 
 directories:
   app: desktop
-  output: dist-win
+  output: dist/windows
   buildResources: windows/build
 
 files:
