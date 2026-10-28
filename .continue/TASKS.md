@@ -1367,7 +1367,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 走 Capacitor 插件而非 `shouldInterceptRequest`：Capacitor 6 的 Bridge 自装 WebViewClient 且无 getter，
         外层包一层会拆掉它自己的协议处理
       · `release.config.json` 空白名单时用全零占位封存（真机必解不开），`release:audit` 见到占位直接红
-      · 见 `docs/ANDROID-CODE-PROTECTION.md`；落地状态与未做项见 `docs/CODE-PROTECTION-STATUS.md`
+      · 方案、发布清单、验证命令、未做项与边界：`docs/CODE-PROTECTION.md`（单页）
 
 ## B. 方块与物品注册表
 

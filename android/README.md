@@ -13,13 +13,17 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 # 1) Rust 侧交叉编译（arm64-v8a + x86_64）
 bash server/rust/build-android.sh
 
-# 2) 网页产物用 **app 形态**（方块表不进主包，走 __host/core.bin）
-npm run build:app && npx cap sync android
+# 2) 封存核心数据 + app 形态产物 + 同步（一条命令）
+npm run android:sync
+#    = gen:sealed → build:app → npx cap sync android
 
 # 3) 出 APK
 cd android && ./gradlew assembleDebug
 #    → app/build/outputs/apk/debug/app-debug.apk
 ```
+
+> 方块表**不以明文进包**：`gen:sealed` 产出 `assets/sealed/core.sealed`，
+> 运行时由 `CoreVault` 先验签名再解封。详见 [`docs/CODE-PROTECTION.md`](../docs/CODE-PROTECTION.md)。
 
 设备级断言（需要一台连着的设备 / 已启动的模拟器）：
 
@@ -38,7 +42,10 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 | `app/src/main/java/com/minicraft/app/ServerService.java` | 前台服务（常驻通知）+ `MulticastLock` / `WifiLock`；JNI 调用丢在工作线程（主线程会 ANR） |
 | `app/src/main/java/com/minicraft/app/NativeServerPlugin.java` | 给网页用的 Capacitor 插件 `NativeServer.start/port/stop` |
 | `app/src/main/java/com/minicraft/app/MainActivity.java` | 注册插件（必须在 `super.onCreate()` 之前） |
-| `app/build.gradle` | 两个任务：`copyRustLibs`（把 `.so` 拷进 `jniLibs`）、`copyHostCore`（把 `host/core-baseline.bin` 拷成 `assets/public/__host/core.bin`） |
+| `app/src/main/java/com/minicraft/app/SealedCore.java` | 封存体的解析与解密（纯 Java，可被 JVM 直接验证） |
+| `app/src/main/java/com/minicraft/app/CoreVault.java` | 读 assets + 取安装包签名 + 比白名单，失败一律 `null` |
+| `app/src/main/java/com/minicraft/app/CoreVaultPlugin.java` | 给网页用的 Capacitor 插件 `CoreVault.read()` |
+| `app/build.gradle` | 两个任务：`copyRustLibs`（把 `.so` 拷进 `jniLibs`）、`checkSealedCore`（缺封存体 / 残留明文都直接报错） |
 | `app/src/androidTest/...` | 3 条设备级断言，见上 |
 
 `AndroidManifest.xml` 里补的权限都有具体理由：
@@ -48,16 +55,22 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 - `WAKE_LOCK`：`WifiLock`（同上，Wi-Fi 芯片打盹会让 TCP 也断）
 - `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` + `POST_NOTIFICATIONS`：常驻通知
 - `usesCleartextTraffic="true"`：联机走明文 `ws://`（局域网自建，没有证书）
+- `allowBackup="false"`：`adb backup` 拖不走存档与设置
 
-## 为什么 `core.bin` 放 assets
+## 核心数据：从哪来、怎么进游戏
 
-`src/core/hostCore.ts` 从 `./__host/core.bin` 读方块表（724 块，40 KB）。`build:app` 会把
-`blockSpecs.ts` 换成空桩——**724 个方块的明文根本不进主包**，浏览器打开也因此显示
-"去 Google Play 下载"的落地页。
+`web/src/core/hostCore.ts` 启动时要取方块表（724 块，41 KB）。`build:app` 会把
+`blockSpecs.ts` 换成空桩——**明文根本不进主包**，浏览器打开也因此显示"去 Google Play 下载"。
 
-我们把 `host/core-baseline.bin` 拷到 `assets/public/__host/core.bin`：WebView 从
-`http://localhost/__host/core.bin` 直接读到，**不需要**再写一层 `shouldInterceptRequest`
-（原方案的宿主拦截）。同一个文件，放哪决定形态。
+这份数据在 APK 里的形态是**封存体**，不是明文：
+
+1. `npm run gen:sealed` 把 `host/core-baseline.bin` 封成 `assets/sealed/core.sealed`；
+2. 网页调 `Capacitor.Plugins.CoreVault.read()`；
+3. `CoreVault` 比对安装包签名 → 派生 KEK → 解封 → 交回字节；
+4. 签名不符或解封失败 → `reject`，网页停在落地页。
+
+放在 `assets/sealed/`（不是 `assets/public/`）是刻意的：WebView 的静态根是 `public/`，
+放进去等于谁都能 `fetch` 到。
 
 ## 已知坑
 

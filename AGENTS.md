@@ -38,7 +38,7 @@
 `web/`（游戏源码与构建，产物 `web/dist`）· `android/`（Capacitor 壳 + 签名闸门）·
 `ios/`（对等壳，Swift 源码已就位、Xcode 工程待补）· `server/`（node / rust / ios 原生库）·
 `windows/` `mac/`（预留）。**改游戏代码只动 `web/src`**；目录与保护方案的落地状态见
-[`docs/CODE-PROTECTION-STATUS.md`](./docs/CODE-PROTECTION-STATUS.md)。
+[`docs/CODE-PROTECTION.md`](./docs/CODE-PROTECTION.md)。
 
 ## 3. 命令：内循环用快的，提交前用全的
 
