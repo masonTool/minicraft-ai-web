@@ -4936,7 +4936,13 @@
           var(--touch-side-inset) + (var(--touch-stick-size) - var(--touch-jump-size)) / 2
         );
         --touch-stick-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-        --touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));
+        /* ⚠️ 2026-10-28（用户："按钮改大以后，按钮与背包有一点重叠"）：
+           跳跃键簇的锚点是**跳跃键**，但飞行时"下降"键挂在它下面——按钮放大时
+           下降键会**向下**长进快捷栏 / 背包键那一带。这里让整簇随跳跃键的
+           放大额同步上移，等于把增长全部朝上（下降键的下沿保持不动）。 */
+        --touch-buttons-bottom: calc(
+          124px + (var(--touch-jump-size) - 76px) + env(safe-area-inset-bottom, 0px)
+        );
         --touch-cluster-gap: calc(10px * var(--touch-scale, 1));
       }
       #touch-stick {
@@ -5192,7 +5198,10 @@
                  env(safe-area-inset-bottom) env(safe-area-inset-left);
         --pc-side-inset: 40px;
         --pc-stick-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-        --pc-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));
+        /* 与触摸端同一条规则（放大额朝上，下降键不压到快捷栏/背包键） */
+        --pc-buttons-bottom: calc(
+          124px + (var(--touch-jump-size) - 76px) + env(safe-area-inset-bottom, 0px)
+        );
         /* 跳跃/升降按钮的尺寸与间距**沿用触摸端那两个变量名**：
            `.touch-button.jump` / `.fly-up` / `.fly-down` 那几条规则是按名字取值的，
            换一套 PC 专用的名字就得把那几条再抄一遍。 */
@@ -5511,7 +5520,12 @@
           --touch-side-inset: 34px;
           --touch-stick-size: calc(124px * var(--touch-scale, 1));
           --touch-stick-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
-          --touch-buttons-bottom: calc(131px + env(safe-area-inset-bottom, 0px));
+          /* 同基础规则：放大额全部朝上，下降键不往快捷栏里钻。
+             基准 138（原 131）：竖屏快捷栏更矮、位置更靠下，131 时下降键会压到
+             快捷栏上沿 3px。 */
+          --touch-buttons-bottom: calc(
+            138px + (var(--touch-jump-size) - 70px) + env(safe-area-inset-bottom, 0px)
+          );
           --touch-jump-size: calc(70px * var(--touch-scale, 1));
         }
         #touch-stick .knob {
@@ -5528,6 +5542,14 @@
         }
       }
 
+      /* 窄屏（手机横屏 <760）：快捷栏几乎占满宽度，右侧的背包键正上方就是
+         跳跃键簇。把整簇改成**贴右沿**（原来 30~60px 的边距在这里会让升降键
+         横向压到背包键上）——2026-10-28，用户反馈"按钮放大后与背包重叠"。
+         左手模式下 `left-handed` 那条规则读的是同一个变量，会自动镜像。 */
+      @media (orientation: landscape) and (max-width: 759px) {
+        #touch-ui { --touch-buttons-inset: 8px; }
+      }
+
       /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心。
          ⚠️ 横屏屏幕宽（≥ 760px 命中上面那条），所以背包/聊天是摆在快捷栏**左右两侧**的，
          不再需要为它们留出"上方"的空间——这一簇仍然只有"潜行 + 跳跃"两颗 */
@@ -5536,7 +5558,10 @@
           --touch-side-inset: 30px;
           --touch-stick-size: calc(108px * var(--touch-scale, 1));
           --touch-stick-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-          --touch-buttons-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+          /* 同基础规则：放大额全部朝上 */
+          --touch-buttons-bottom: calc(
+            92px + (var(--touch-jump-size) - 64px) + env(safe-area-inset-bottom, 0px)
+          );
           --touch-jump-size: calc(64px * var(--touch-scale, 1));
         }
         #touch-stick .knob {

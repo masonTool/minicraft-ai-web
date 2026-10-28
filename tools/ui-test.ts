@@ -233,6 +233,21 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // 2026-10-28（用户反馈的两条触屏 bug）：
+  //  ① 按钮放大后，飞行时的"下降"键向下长进快捷栏 / 背包键 → 整簇按跳跃键的
+  //     放大额上移（下降键下沿不动），窄屏再贴右沿避开背包键；
+  //  ② 点升降键会向右跳一下 → `:active` 的 `transform` 把 `translateX(-50%)` 覆盖了。
+  {
+    const needles: ReadonlyArray<readonly [string, string]> = [
+      ['按钮簇随缩放上移（横屏基础）', '124px + (var(--touch-jump-size) - 76px)'],
+      ['按钮簇随缩放上移（竖屏）', '138px + (var(--touch-jump-size) - 70px)'],
+      ['按钮簇随缩放上移（矮横屏）', '92px + (var(--touch-jump-size) - 64px)'],
+      ['窄屏按钮簇贴右沿', '#touch-ui { --touch-buttons-inset: 8px; }'],
+    ];
+    for (const [label, needle] of needles) {
+      check(`触屏布局：${label}`, compact.includes(needle), needle);
+    }
+  }
   // 批次 528：设置内容区控件统一 96px，左侧页签文字居中，滑杆填满中间列
   check(
     '设置控件统一尺寸 / 页签居中 / 滑杆与读数等边距',
@@ -1870,7 +1885,8 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
       /--touch-buttons-inset: calc\([\s\S]{0,120}?var\(--touch-stick-size\)[\s\S]{0,60}?var\(--touch-jump-size\)/.test(
         compact,
       ) &&
-      compact.includes('--touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));'),
+      // 2026-10-28：底部锚点改成"124px + 跳跃键放大额"——圆心仍然同高（scale=1 时就是 124）
+      /--touch-buttons-bottom: calc\(\s*124px \+ \(var\(--touch-jump-size\) - 76px\)/.test(compact),
   );
   check(
     '飞行时跳跃键不位移，升降键挂在其上下',
