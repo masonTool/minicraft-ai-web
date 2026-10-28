@@ -47,7 +47,11 @@ const CONFIG = join(ROOT, 'release.config.json');
 const OUT_DIR = join(ROOT, 'android/app/src/main/assets/sealed');
 const OUT_SEALED = join(OUT_DIR, 'core.sealed');
 const OUT_SIGNERS = join(OUT_DIR, 'signers.txt');
-const OUT_SALT = join(OUT_DIR, 'salt.bin');
+/**
+ * iOS 侧同一份产物：`ios/App/App/sealed/` 是以**文件夹引用**加进 Xcode target 的，
+ * 所以两条路必须由同一次生成写出来——分别生成迟早会出现"两个平台装的是不同数据"。
+ */
+const IOS_DIR = join(ROOT, 'ios/App/App/sealed');
 
 /** 与 `CoreVault.java` 的 `INFO` 必须逐字节一致 */
 const INFO = Buffer.from('minicraft/core/v1', 'utf8');
@@ -163,12 +167,24 @@ function main(): void {
 
   const sealed = Buffer.concat([header, nonce, wrapLen, wrapped, payloadLen, payload]);
 
-  mkdirSync(OUT_DIR, { recursive: true });
-  writeFileSync(OUT_SEALED, sealed);
-  // 原生只读这一份白名单；与 KEK 用的是同一条（[0]），两处不可能对不上
-  writeFileSync(OUT_SIGNERS, `${signers.join('\n')}\n`);
-  // 盐也写进包：**单一真源**。Java 侧不再抄一遍常量，改盐只改 release.config.json 一处
-  writeFileSync(OUT_SALT, salt);
+  const appId = String(
+    (JSON.parse(readFileSync(join(ROOT, 'capacitor.config.json'), 'utf8')) as { appId?: unknown }).appId ?? '',
+  );
+  if (appId === '') throw new Error('capacitor.config.json 里没有 appId：iOS 的 bundle 绑定靠它');
+
+  const writeAll = (dir: string): void => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'core.sealed'), sealed);
+    // 原生只读这一份白名单；与 KEK 用的是同一条（[0]），两处不可能对不上
+    writeFileSync(join(dir, 'signers.txt'), `${signers.join('\n')}\n`);
+    // 盐也写进包：**单一真源**。Java / Swift 都不再抄一遍常量，改盐只改一处
+    writeFileSync(join(dir, 'salt.bin'), salt);
+    // iOS 的身份判据（Android 用证书摘要）：iOS 没有读自身签名身份的公开 API，
+    // 能绑的只有 bundle id；见 ios/App/App/CoreVault.swift 的注释
+    writeFileSync(join(dir, 'bundle.txt'), `${appId}\n`);
+  };
+  writeAll(OUT_DIR);
+  writeAll(IOS_DIR);
 
   const kb = (n: number): string => `${(n / 1024).toFixed(1)} KB`;
   console.log('\n核心数据封存');

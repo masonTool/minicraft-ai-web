@@ -16,6 +16,7 @@ enum CoreVault {
     private static let nonceLength = 12
     private static let tagLength = 16
     private static let sealedAsset = "sealed/core.sealed"
+    private static let bundleAsset = "sealed/bundle.txt"
     private static let signersAsset = "sealed/signers.txt"
     private static let saltAsset = "sealed/salt.bin"
 
@@ -31,13 +32,29 @@ enum CoreVault {
 
     // MARK: - 签名身份
 
-    /// 当前可执行文件的团队标识是否命中白名单（`signers.txt` 一行一个）。
+    /// 当前安装身份是否是我们自己。
+    ///
+    /// ⚠️ **iOS 没有读取自身代码签名身份的公开 API**（`SecCodeCopySelf` 那套是 macOS 的，
+    /// iOS SDK 里根本不存在）。所以这里能做的是"绑 bundle id"：把构建期写死的
+    /// `bundle.txt` 与运行时 `Bundle.main.bundleIdentifier` 比对。
+    ///
+    /// 这挡住的是"改包名重新打包再分发"；挡不住"同一个 bundle id 换证书重签"——
+    /// 但后者在 iOS 上只能靠越狱或企业证书安装，系统本身已经是第一道防线。
+    /// 这也是纯客户端项目在 iOS 上的真实上限，别把它当成 Android 那种证书比对。
     static func isSignedByUs() -> Bool {
-        guard let expected = expectedSigner().map({ $0.lowercased() }) else { return false }
-        guard let team = currentTeamIdentifier()?.lowercased() else { return false }
-        return expected == team
+        guard let expected = expectedBundleId(), !expected.isEmpty else { return false }
+        return Bundle.main.bundleIdentifier == expected
     }
 
+    private static func expectedBundleId() -> String? {
+        guard let data = readAsset(bundleAsset), let text = String(data: data, encoding: .utf8) else { return nil }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    /// KEK 的 ikm 来源。两个平台共用同一份 `signers.txt`（Android 的证书摘要），
+    /// 否则同一份 `core.sealed` 在 iOS 上解不开——这里读它是为了密码学一致性，
+    /// **不是**身份判据（iOS 的身份判据是上面的 bundle id）。
     private static func expectedSigner() -> String? {
         guard let data = readAsset(signersAsset), let text = String(data: data, encoding: .utf8) else { return nil }
         for line in text.split(separator: "\n") {
@@ -45,21 +62,6 @@ enum CoreVault {
             if !value.isEmpty { return value }
         }
         return nil
-    }
-
-    /// 取自身签名信息里的 team identifier；未签名 / 被重签都会在这里体现。
-    private static func currentTeamIdentifier() -> String? {
-        var code: SecCode?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let selfCode = code else { return nil }
-        var staticCode: SecStaticCode?
-        guard SecCodeCopyStaticCode(selfCode, [], &staticCode) == errSecSuccess, let stat = staticCode else { return nil }
-        var info: CFDictionary?
-        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
-        guard SecCodeCopySigningInformation(stat, flags, &info) == errSecSuccess,
-              let dict = info as? [String: Any],
-              let team = dict[kSecCodeInfoTeamIdentifier as String] as? String
-        else { return nil }
-        return team
     }
 
     // MARK: - 解封
@@ -90,7 +92,7 @@ enum CoreVault {
 
         guard let payloadLenData = take(4), let payload = take(Int(u32(payloadLenData))) else { return nil }
         let payloadAad = sealed.subdata(in: 0..<wrapEnd)
-        guard let transformed = aesGcmOpen(key: cek, nonce: nonceData, aad: payloadAad, box: payload),
+        guard let transformed = aesGcmOpen(key: SymmetricKey(data: cek), nonce: nonceData, aad: payloadAad, box: payload),
               transformed.count == plainLen
         else { return nil }
 
@@ -131,8 +133,21 @@ enum CoreVault {
 
     // MARK: - 工具
 
+    /// 读包内资源。`sealed` 是以**文件夹引用**加进 target 的（与 `public` 同样处理），
+    /// 所以在 bundle 里是 `App.app/sealed/core.sealed`，要按 "子目录 + 文件名" 取。
     private static func readAsset(_ path: String) -> Data? {
-        guard let url = Bundle.main.url(forResource: path, withExtension: nil) else { return nil }
+        if let direct = Bundle.main.url(forResource: path, withExtension: nil),
+           let data = try? Data(contentsOf: direct) {
+            return data
+        }
+        let full = path as NSString
+        let directory = full.deletingLastPathComponent
+        let file = full.lastPathComponent as NSString
+        guard let url = Bundle.main.url(
+            forResource: file.deletingPathExtension,
+            withExtension: file.pathExtension,
+            subdirectory: directory.isEmpty ? nil : directory
+        ) else { return nil }
         return try? Data(contentsOf: url)
     }
 

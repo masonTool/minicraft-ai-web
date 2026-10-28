@@ -1,41 +1,43 @@
 # iOS 壳
 
 与 [`android/`](../android/README.md) **对等**：消费 `web/dist`，在原生侧完成
-「验签名 → 解封核心数据 → 交给 WebView」这一条链。
+「验身份 → 解封核心数据 → 交给 WebView」。
 
-## 现在有什么
+## 出包
+
+```bash
+npm run ios:sync     # gen:sealed → build:app → cap sync ios
+open ios/App/App.xcworkspace
+```
+
+> 需要 CocoaPods（`pod --version`）。本机目前**没有装**，所以 iOS 侧只做到
+> "工程结构 + 源码通过 `swiftc -typecheck`"，运行时行为还没在设备上验过。
+
+## 文件
 
 | 文件 | 作用 |
 | --- | --- |
-| `App/CoreVault.swift` | 解封核心数据：验签名身份 → HKDF 派生 KEK → AES-GCM 解 CEK → 解载荷 → 逆形态变换 |
-| `App/CoreVaultPlugin.swift` | Capacitor 插件 `CoreVault.read()`，把解封结果以 base64 交给网页 |
+| `App/App/CoreVault.swift` | 解封：验身份 → HKDF 派生 KEK → AES-GCM 解 CEK → 解载荷 → 逆形态变换 |
+| `App/App/CoreVaultPlugin.swift` | Capacitor 插件 `CoreVault.read()`，base64 交给网页 |
+| `App/App/MinicraftViewController.swift` | 把插件注册进桥（`capacitorDidLoad`） |
+| `App/App/sealed/` | 封存产物（gitignore，由 `npm run gen:sealed` 写入） |
 
-两侧格式与 `tools/seal-core.ts` **逐字节一致**；`tools/sealed-test.ts` 把同一套步骤
-在 Node 里跑一遍，格式写错会立刻红。
+`App.xcodeproj` 里已经把 `sealed` 作为**文件夹引用**加进 Copy Bundle Resources，
+所以它在包里是 `App.app/sealed/…`——**不在** `public/` 下，WebView 读不到。
 
-## 还没有的：Xcode 工程本体
+## 一个必须说清的限制
 
-`@capacitor/ios` 未安装，`npx cap add ios` 需要联网装平台包并生成 `.xcodeproj`。
-在此之前本目录只有源码，不参与构建。补齐步骤：
+**iOS 没有读取自身代码签名身份的公开 API**（`SecCodeCopySelf` 那套是 macOS 的）。
+所以 iOS 侧的身份判据只能绑 `bundle id`：
 
-```bash
-npm i -D @capacitor/ios
-npx cap add ios            # 生成 ios/App/App.xcodeproj（会与现有 App/ 源码合并）
-npm run gen:sealed         # 产出 ios/App/App/sealed/{core.sealed,salt.bin,signers.txt}
-```
+- 挡住：改包名重新打包再分发；
+- 挡不住：同一个 bundle id 换证书重签——但那种包只能靠越狱/企业证书安装，
+  系统本身已经是第一道防线。
 
-生成之后把三份封存产物加进 Xcode 的 **Copy Bundle Resources**（目录结构保持
-`sealed/` 不变），`CoreVault.readAsset` 按同样的相对路径取。
-
-## 签名闸门
-
-`CoreVault.isSignedByUs()` 取自身代码签名信息里的 **team identifier**，与
-`signers.txt` 里的值逐字比对。这与 Android 的证书摘要不是同一个东西：
-Android 比的是证书 SHA-256，iOS 比的是团队标识（对个人开发者够用；
-如果以后要求更细，可换成 `kSecCodeInfoUnique` 之类的可执行文件摘要）。
+Android 那边是真正的证书摘要比对，两者强度不同，别混为一谈。
 
 ## 验收口径
 
 - App Store 包：能进游戏；
-- 改 bundle id 重签：`isSignedByUs()` 为 false → 插件 reject → 停在"请从 App Store 安装"；
-- 未签名 / 越狱注入环境：同上（无法证明身份即拒绝）。
+- `bundle.txt` 与 `Info.plist` 的 bundle id 不一致：插件 reject，停在落地页；
+- 越狱改包：同上（`isSignedByUs()` 失败即无数据）。

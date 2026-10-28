@@ -64,3 +64,6 @@ server/node/.data/
 
 # 封存产物由 `npm run gen:sealed` 从 host/core-baseline.bin 生成，不进仓库
 android/app/src/main/assets/sealed/
+
+# 封存产物（iOS）：与 android 同源，由 npm run gen:sealed 生成
+ios/App/App/sealed/

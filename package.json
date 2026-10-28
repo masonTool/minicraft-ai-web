@@ -12,6 +12,7 @@
     "build:web": "SPECS_STUB=0 HOST_CORE_REQUIRED=0 SOURCEMAP=0 vite build --config web/vite.config.ts && node tools/release-check.mjs --mode web",
     "android:sync": "npm run gen:sealed && npm run build:app && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "ios:sync": "npm run gen:sealed && npm run build:app && npx cap sync ios",
     "preview": "vite preview --config web/vite.config.ts --port 4173",
     "typecheck": "tsc --noEmit",
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
@@ -245,6 +246,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.2",
+    "@capacitor/ios": "^6.2.2",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
     "esbuild": "^0.28.2",
