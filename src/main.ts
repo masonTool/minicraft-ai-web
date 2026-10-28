@@ -49,8 +49,10 @@ import {
   Hud2D,
   InventoryPanelHost,
   MenuScreen2D,
+  inventoryIndexAt,
   Touch2D,
   Ui2DOverlay,
+  type PanelIndexSpec,
   ARMOR_PER_ICON,
   CanvasMenu,
   FORM_ROW_GAP,
@@ -3167,12 +3169,27 @@ class App {
       if (UI2D_INV2D || UI2D_INV_TAKEOVER) {
         const icons = new ItemIconCache((canvas, itemId) => drawItemIcon(canvas, this.atlas, itemId));
         this.inv2dIcons = icons;
-        const toInvIndex = (display: number): number => (display < 27 ? 9 + display : display - 27);
+        /*
+         * 版面下标 → 库存下标：走 `ui2d/panelIndexing.ts` 的纯函数，不再写死一行三元表达式。
+         * 那份写死只在"纯背包"下成立 —— 打开熔炉（+3 格）或装备列（+5 格）之后，
+         * `display < 27` 会把工作站格子当成主背包（"把煤放进背包第 9 格"，不报错）。
+         * 现在把版面规格放在 `inv2dIndexSpec` 里，将来 `retarget()` 时一并更新即可。
+         */
+        // 目前只画玩家背包，所以规格是 0/0；等 `retarget()` 接进游戏时改成可变字段
+        const inv2dIndexSpec: PanelIndexSpec = { extraCount: 0, sideCount: 0 };
         this.inv2d = new InventoryPanelHost(
           document.body,
           {
-            get: (display) => this.inventory.get(toInvIndex(display)),
-            set: (display, stack) => this.inventory.set(toInvIndex(display), (stack as ItemStack | null) ?? null),
+            // 不是玩家库存的格子（工作站/装备列）返回 null —— 那几格由容器自己提供
+            get: (display) => {
+              const index = inventoryIndexAt(inv2dIndexSpec, display);
+              return index === null ? null : this.inventory.get(index);
+            },
+            set: (display, stack) => {
+              const index = inventoryIndexAt(inv2dIndexSpec, display);
+              if (index === null) return;
+              this.inventory.set(index, (stack as ItemStack | null) ?? null);
+            },
           },
           {
             title: t('inventory.title'),

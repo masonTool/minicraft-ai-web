@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-1006 | 2026-10-28 | 界面与音频 | —（M26b 下标层） | 3 条：① `ui2d/panelIndexing.ts`（四区划分 + 双向换算）；② `main.ts` 的 `SlotAccess` 接入；③ 8 条断言（含"加 15 格后前 15 格不算库存"与往返一致）。验证：`test:ui2d-indexing` **8/8**、`check` exit=0 |
 | 20261028-1000 | 2026-10-28 | 界面与音频 | —（M37 规则层 / M26b 换版面） | 4 条：① `MoveRules.canPlace` 五条路径统一拦截；② 修 `canPlaceInSideSlot(null)` 语义（旧断言钉错了）；③ `InventoryPanelHost.retarget()`（234→374→330 实测）；④ 6 条新断言。验证：`test:ui2d-place-rules` **6/6**、`check` exit=0 |
 | 20261028-0946 | 2026-10-28 | 界面与音频 | —（M26b / M37 数据层） | 4 条：① `ui2d/stationLayouts.ts` 20 条工作站预设；② `ui2d/armorRules.ts` 装备列规则；③ 预览 `?station=furnace` + 截图；④ 修 `stationExtra` 漏传 `flame`（火焰块不排版）。验证：`test:ui2d-station` **11/11**、`test:ui2d-armor` **7/7**、`check` exit=0、74 张截图 |
 | 20261028-0812 | 2026-10-28 | 界面与音频 | —（R2 + M38 搜索分页） | 4 条：① `npm run check:swift`（`swiftc -parse`）补上 Swift 那半边的门禁；② R2 收口（代码早已落地，任务没跟上）；③ `ui2d/creativeModel.ts`（搜索/页签/分页/铺网格）；④ 面板翻页区 + 预览真数据 + 2 张截图。验证：`test:ui2d-creative` **13/13**、`check` exit=0、73 张截图 |

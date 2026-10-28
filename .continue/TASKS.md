@@ -5491,7 +5491,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] M25 背包交互规则补齐（**纯逻辑**）：**双击收集**（同类凑满，没凑到退化成快速移动）、**右键拖拽逐格放一个**、**长按分堆取指定数量**。判据：`ui2d/inventoryModel.ts` 纯函数 + 31 条断言覆盖 Wiki「物品管理」；对照页可手动复现。触摸端的占比条与拖动选数量 UI 归 M31
 - [~] M26 背包面板接进游戏（**第一步已落：整页镜像**）：`?ui2d=1` 时 `.inv-panel` 交给 canvas 重画（面板底/槽位/图标位图/数量/耐久/标题），交互全留 DOM，19 种工作站一次全覆盖；剩第二步 —— 自绘替换（见 M26b）
 - [~] M26b 背包自绘替换镜像：**20 种工作站的槽位预设表**（`ui2d/stationLayouts.ts`）+
-      **换版面 API `InventoryPanelHost.retarget()`**（§5.50 / §5.51）已就绪；**`?ui2dinv=1` 已能接管**（画布吃指针、DOM 面板退场、光标写回 `held`、面板外点击转发给 DOM）；**还差**19 种工作站接入（布局已抽象）+ 真机验收
+      **换版面 API `InventoryPanelHost.retarget()`**（§5.51）+ **下标映射 `ui2d/panelIndexing.ts`**
+      （§5.52，8 条断言）已就绪；**`?ui2dinv=1` 已能接管**（画布吃指针、DOM 面板退场、光标写回 `held`、面板外点击转发给 DOM）；**还差**19 种工作站接入（布局已抽象）+ 真机验收
 - [x] M27 背包视觉对齐：镜像侧全部覆盖（真实图标/悬停高亮/tooltip 层级/滚动断点）；**自绘侧**也已补上提示框（`ui2d/itemTooltip.ts`）与槽位耐久条（§5.39）
 - [~] M28 合成：镜像已覆盖（合成格/结果格都是 `.inv-slot`，配方书已单开镜像 §5.33）；**自绘版**已支持"上方额外槽位组 + 结果格"的布局（`extra`，5 条断言，预览 `?craft=1`），还差配方匹配与结果格规则（属游戏逻辑）
 - [x] M29 容器类工作站：与背包共用同一批 `.inv-slot` / `.inv-panel`，镜像一次全覆盖（无需逐个适配）
@@ -6116,6 +6117,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] 批次 20261028-0946 · **工作站预设表 + 装备列规则（4 条，M26b / M37 数据层）**：自绘面板的排版只需要"上方那组格子几行几列、有没有结果格"，这正是每个工作站的差别 → 做成 `ui2d/stationLayouts.ts`（**20 条** = 13 个工作站 + 7 个存储容器，含熔炉那三种的 `flame` 与 `progress` 标记），宿主只查表；另加 `ui2d/armorRules.ts`（`canPlaceInSideSlot`：盔甲格只收对应部位、副手什么都收、空手永远能放；`sideSlotAt(index, sideStart)` **不能写死 0..4** —— 装备列可能排在工作站槽位之后）。**踩到一个"表里写了没人用"的坑**：`stationExtra()` 最初只传 `cols/rows/result`，`flame` 留在表里，于是熔炉的火焰块**根本不排版**（`groups.flame` 恒 `null`，预览里看着像"熔炉少了点火"）—— 现在一并带下去并加断言钉住。预览页 `?station=furnace` 直接套预设，截图 `45-inventory-furnace.png`。验证：`test:ui2d-station` **11/11**、`test:ui2d-armor` **7/7**、`tsc` 干净、`npm run check` exit=0、74 张截图。⚠️ 这两块**还没接进 `?ui2dinv=1`**（要游戏侧给"当前容器种类"与"物品装备品类"）。详见 `notes/canvas-ui.md` §5.50。
 
 - [x] 批次 20261028-1000 · **放置规则进模型层 + 换版面 API（4 条）**：装备列如果把东西当普通格子收，玩家能把面包塞进头盔格 —— 那就只是"41 格的背包"。要拦的地方有**五条**（左键放空/合并/交换、右键放一个、Shift 快速移动、拖拽均分），散在宿主里必然漏一条（典型症状：**拖拽能塞进去、点一下不能**），所以闸门放进 `MoveRules.canPlace`，五条路径统一 `if (!allows(rules, index, held)) return;`。**踩到一个语义坑**：`canPlaceInSideSlot(slot, item)` 里 `item === null` 到底是"空手"还是"不是装备"？第一版按"空手所以放行"写 → 规则**什么都不拦**，而断言还写着 `canPlaceInSideSlot("helmet", null) === true`，等于把 bug 钉成了预期（真正"拿走"走的是 `leftClick` 的空手分支，不过这条规则）。改成"null = 不是装备"后，6 条新断言才真的在拦。另加 `InventoryPanelHost.retarget()`：版面参数改成可变字段，换容器只重排不重造宿主（预览实测 234 → chest 374 → furnace 330，面板重新居中）。验证：`test:ui2d-place-rules` **6/6**、`test:ui2d-armor` **7/7**、`tsc` 干净、`npm run check` exit=0。⚠️ 还没接进游戏（容器访问器仍是私有）。详见 `notes/canvas-ui.md` §5.51 与决策 D61。
+
+- [x] 批次 20261028-1006 · **版面下标映射抽成纯函数（3 条）**：自绘面板的顺序是 `extra → side → main(27) → hotbar(9)`，而 `Inventory` 是**快捷栏 0..8 在前、主背包 9..35 在后**，两者的映射之前是 `main.ts` 里一行 `display < 27 ? 9 + display : display - 27` —— **只在纯背包下成立**：打开熔炉（+3 格）或装备列（+5 格）后，`display < 27` 会把工作站格子当成主背包，表现是"把煤放进背包第 9 格"，不报错、只在真机看得出来。抽成 `ui2d/panelIndexing.ts`（`panelRegions` / `regionOfDisplayIndex` / `inventoryIndexAt` / `displayIndexForInventory`，非玩家库存的格子返回 `null`），`main.ts` 的 `SlotAccess` 改走它（规格现为 0/0，行为不变，`retarget()` 接进游戏时改成字段即可）。8 条断言，其中两条最有用：**加 15 格后前 15 格都不算玩家库存**（正是老代码的坑）与 **36 格往返换算一致**（映射不一一对应时会被抓住）。验证：`test:ui2d-indexing` **8/8**、`tsc` 干净、`npm run check` exit=0。详见 `notes/canvas-ui.md` §5.52 与决策 D62。
 
 ## 附：与原版的差异台账（自动生成）
 

@@ -1369,6 +1369,40 @@ if (!allows(rules, index, held)) return;   // 被拒 = 什么都不变，东西�
 （`activeContainer`）在 `InventoryScreen` 里还是私有的。这一步要加个只读访问器 + 一段下标映射，
 十行左右，但只能在真机里验，所以留在下一批。
 
+## 5.52 版面下标 → 库存下标：一行三元表达式埋的雷
+
+自绘面板的槽位顺序是定死的：
+
+```
+extra（工作站 + 结果格） → side（盔甲 + 副手） → main（27 主背包） → hotbar（9 快捷栏）
+```
+
+而 `Inventory` 的下标是另一套：**快捷栏 0..8 在前、主背包 9..35 在后**。两者的映射之前是
+`main.ts` 里的一行：
+
+```ts
+const toInvIndex = (display) => (display < 27 ? 9 + display : display - 27);
+```
+
+这行**只在"纯背包"前提下成立**。一旦打开熔炉（extra +3）或装备列（side +5），`display < 27`
+就把工作站格子当成了主背包 —— 表现是"**把煤放进背包第 9 格**"，不报错，只在真机上看出来。
+
+抽成 `ui2d/panelIndexing.ts`：
+
+| 函数 | 作用 |
+| --- | --- |
+| `panelRegions(spec)` | 四个区的 `{ start, count }` 与总数 |
+| `regionOfDisplayIndex(spec, i)` | 这个下标落在哪个区（越界 / 非整数 → `null`） |
+| `inventoryIndexAt(spec, i)` | 显示下标 → 库存下标（**非玩家库存的格子返回 `null`**） |
+| `displayIndexForInventory(spec, inv)` | 反查（"玩家按 3 选了快捷栏第 3 格，版面高亮哪一格"） |
+
+`main.ts` 的 `SlotAccess` 现在走它：`null` 表示"这一格不归玩家库存"（工作站/装备列由容器提供）。
+目前规格写 `{ extraCount: 0, sideCount: 0 }`（只画玩家背包），**行为与之前完全一致**，
+但等 `retarget()` 接进游戏时只需把规格从常量改成字段。
+
+8 条断言钉住，其中两条最有用：**"加了 10+5 格之后前 15 格都不算玩家库存"**（正是老代码的坑）
+与 **"36 格来回换算一致"**（映射不是一一对应时会被这条抓住）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

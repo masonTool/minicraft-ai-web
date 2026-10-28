@@ -226,6 +226,16 @@ export {
   type InventoryPanelHostOptions,
 } from './InventoryPanelHost.ts';
 export {
+  displayIndexForInventory,
+  inventoryIndexAt,
+  panelRegions,
+  regionOfDisplayIndex,
+  type PanelIndexSpec,
+  type PanelRegion,
+  type PanelRegionName,
+  type PanelRegions,
+} from './panelIndexing.ts';
+export {
   SIDE_SLOT_KINDS,
   canPlaceInSideSlot,
   sideSlotAt,

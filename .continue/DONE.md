@@ -9,6 +9,18 @@
 
 ---
 
+## 批次 20261028-1006 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把"版面下标 ↔ 库存下标"从一行三元表达式抽成纯函数。
+
+- [x] `ui2d/panelIndexing.ts`：`panelRegions` / `regionOfDisplayIndex` / `inventoryIndexAt` / `displayIndexForInventory`
+- [x] `main.ts` 的 `SlotAccess` 改走它（规格现为 0/0，行为与之前一致；非玩家格子返回 `null`）
+- [x] 8 条断言：11+5 格后的错位、越界、非整数、往返一致
+
+验证：`test:ui2d-indexing` 8/8、`tsc` 干净、`npm run check` exit=0。
+
+
+
 ## 批次 20261028-1000 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：把放置规则做成模型层的一道闸，并给宿主加"换版面"能力。
@@ -274,24 +286,6 @@
   - 为什么：它们挂在 `#multiplayer-screen` 下、不在 `.mp-panel` 里，拿不到面板的文字色变量。
   - 验证：computed color = rgb(255,255,255)；截图 V/W。
   - 批次：20261027-3200
-
----
-
-## 批次 20261027-3100 · 2026-10-27 · 会话 12c62c
-
-> 用户：手机端输入框不许自动弹键盘，只有点击才出浮层
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-3100
-
-- [x] [L24] 手机端输入框不再自动弹键盘：`InputOverlay.ts` → playwright
-  - 做了什么：`focusin` 里用"最近 600ms 有没有 pointerdown/touchstart"区分用户点击与代码 focus，后者直接 blur 且不弹浮层。
-  - 为什么：打开面板/切换表单时代码调 focus() 会把键盘顶起来；逐个删十几处调用不现实。
-  - 验证：打开面板 active=BUTTON 无浮层；程序 focus → active=BODY；真点击 → layer=true/active=inp-field。
-  - 批次：20261027-3100
 
 ---
 
