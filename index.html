@@ -2542,13 +2542,18 @@
          2026-10-28（用户）：设置项不再改动即生效，页脚两颗键只管**当前分组**：
          「保存」进页面是灰的、改过才亮；「恢复默认」把这一组写回默认值。
          两条都放在内容滚动区之外，滑到哪一页都在屏幕下方。 */
+      /* 2026-10-28（用户）：两颗键统一收到**右下角**，不再让「保存」拉满整行。
+         游戏内设置（`.live`）没有「保存」，只剩「恢复默认」——右对齐同一条基线。 */
       .settings-footer {
         flex: 0 0 auto; margin-top: 4px; padding-top: 6px;
         border-top: 1px solid rgba(255, 255, 255, .14);
-        display: flex; align-items: stretch; gap: 6px;
+        display: flex; align-items: stretch; justify-content: flex-end; gap: 8px;
       }
-      .settings-footer .settings-save { flex: 1 1 auto; }
-      .settings-footer .settings-reset { flex: 0 0 auto; width: auto; min-width: 104px; }
+      .settings-footer .settings-save,
+      .settings-footer .settings-reset {
+        flex: 0 0 auto; width: auto; min-width: 104px;
+      }
+      .settings-footer.live .settings-reset { min-width: 120px; }
       /* 资源包说明（整行跨列）：刻意做得不抢眼，但不用悬停也能读到。
          ⚠️ 2026-10-28（用户）：设置页底部那条「非官方」声明整块删掉——
          界面上不该出现"我们和谁无关"这种自我定位。 */

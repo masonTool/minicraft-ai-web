@@ -3278,7 +3278,10 @@ class App {
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
       diagnosticsStats: () => diag.stats(),
-    });
+    },
+    // 游戏内设置：改一下就生效（2026-10-28，用户），页脚不出现「保存」
+    { apply: 'live' },
+  );
 
     // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
     // 它要盖住整个视口（含触摸控件），而且主菜单阶段就可能要打开它。
@@ -20613,6 +20616,10 @@ async function boot(): Promise<void> {
       menuSettings = new SettingsScreen(document.body, settings, {
         onResume: () => menuSettings?.hide(),
         onChange: (next) => saveSettings(next),
+        // 通用设置也要能导出日志（2026-10-28，用户）：以前只有游戏内设置里有这一行，
+        // 而"打不开游戏"恰恰是最需要日志的时候
+        onDiagnosticsExport: () => diag.download(),
+        diagnosticsStats: () => diag.stats(),
       });
       // 批次 20261024-1152：`setTitle` 不再收副标题（暂停页那行提示已删除）
       // 标题与返回键都走 i18n（原来写死中文，德语下标题还是「设置」——用户 2026-10-28）

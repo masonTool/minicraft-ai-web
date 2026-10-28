@@ -2518,6 +2518,26 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       '共享 Dropdown',
     );
   }
+  // 2026-10-28（用户）：两颗键统一收到右下角；游戏内设置没有「保存」，改一下就生效
+  check(
+    '页脚两颗键在右下角（保存不再拉满整行）',
+    /\.settings-footer \{[^}]*justify-content: flex-end;/.test(compact) &&
+      /\.settings-footer \.settings-save,[^}]*\.settings-footer \.settings-reset \{[^}]*width: auto;/.test(compact),
+  );
+  check(
+    '通用设置（保存制）与游戏内设置（即时生效）分开',
+    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+      'private readonly live: boolean;',
+    ) &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private commitLive(): void') &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
+  );
+  check(
+    '通用设置也有「日志 → 导出」入口',
+    /onDiagnosticsExport: \(\) => diag\.download\(\),\s*\n\s*diagnosticsStats: \(\) => diag\.stats\(\),\s*\n\s*\}\);/.test(
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'),
+    ),
+  );
   check(
     '保存 / 恢复默认在所有分组之外、整页最底部（批次 334 / 2026-10-28）',
     compact.includes('.settings-footer {') &&

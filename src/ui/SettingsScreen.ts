@@ -745,6 +745,18 @@ export interface SettingsActions {
 }
 
 /**
+ * 面板的"生效方式"（2026-10-28，用户）。
+ *
+ * 同一个 `SettingsScreen` 被两处用：主菜单的**通用设置**与游戏内的**暂停菜单设置**，
+ * 但两者的期望不一样：
+ *  - `draft`（通用设置）：改完点「保存」，页脚右下角两颗键（保存 / 恢复默认）；
+ *  - `live`（游戏内设置）：**改一下就生效**，玩家正在玩，不该为了调个音量再点一次保存。
+ */
+export interface SettingsScreenOptions {
+  apply?: 'draft' | 'live';
+}
+
+/**
  * 暂停菜单的两个页面（批次 108）。
  *
  * `menu` = 暂停菜单（继续游戏 / 设置 / 保存并退出…），`settings` = 设置项那一页。
@@ -780,6 +792,8 @@ export class SettingsScreen {
    * 并触发 `onChange`。这样拖滑块、点开关都不会立刻改游戏状态。
    */
   private draft: GameSettings;
+  /** 是否"即时生效"（游戏内设置）：见 `SettingsScreenOptions`，页脚因此没有「保存」 */
+  private readonly live: boolean;
   /** 已保存的基准（= 最后一次落盘的值），用来判断"这一页脏了没有" */
   private saved: GameSettings;
   /** 哪些分组按过「恢复默认」但还没保存：该组保存时要带 `reset` 标记（批次 202 的约定） */
@@ -884,10 +898,12 @@ export class SettingsScreen {
     host: HTMLElement,
     private readonly settings: GameSettings,
     private readonly actions: SettingsActions,
+    options: SettingsScreenOptions = {},
   ) {
     // 草稿与基准都从当前设置拷一份（见 `draft` 字段的注释）
     this.draft = { ...settings };
     this.saved = { ...settings };
+    this.live = options.apply === 'live';
 
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
@@ -1349,6 +1365,11 @@ export class SettingsScreen {
     resetButton.className = 'settings-reset';
     resetButton.textContent = t('settings.reset');
     resetButton.addEventListener('click', () => this.resetActiveGroup());
+    // 游戏内设置（live）：没有「保存」这一步，改一下就生效，页脚只剩右下角那颗「恢复默认」
+    if (this.live) {
+      saveButton.hidden = true;
+      footer.classList.add('live');
+    }
     footer.append(saveButton, resetButton);
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
@@ -1611,11 +1632,14 @@ export class SettingsScreen {
 
     input.addEventListener('input', () => {
       const raw = Number(input.value) / scale;
-      // 只写草稿：没点「保存」之前游戏里的一切都不变（2026-10-28，用户要求）
+      // 写草稿：通用设置要点「保存」才生效；游戏内设置则在这段拖动过程中不落盘，
+      // 等松手（`change`）再一次性提交——每移动一格都 applySettings 会把拖动拖卡。
       (this.draft[key] as number) = raw;
       value.textContent = readout();
       this.updateSaveState();
     });
+    // 松手才提交（游戏内设置的"即时生效"）；通用设置在这里只是把保存键点亮
+    input.addEventListener('change', () => this.commitLive());
 
     // 恢复默认 / 重新打开面板时按**草稿**重画（见 `refreshers`）
     this.refreshers.push(() => {
@@ -1670,7 +1694,10 @@ export class SettingsScreen {
       write();
       sync();
       // 飞行这类"世界状态"仍然立即生效（它不在这份偏好里）；真正的设置项只标脏
-      if (commit) this.updateSaveState();
+      if (commit) {
+        this.updateSaveState();
+        this.commitLive();
+      }
     });
     this.controlSync.set(button, sync);
     this.refreshers.push(sync);
@@ -1706,8 +1733,9 @@ export class SettingsScreen {
 
     const control = new Dropdown<T>(values, labels, read(), (next) => {
       write(next);
-      // 只标脏：保存按钮亮起，真正生效等玩家点「保存」
+      // 通用设置：只标脏（保存按钮亮起）；游戏内设置：立刻落盘并生效
       this.updateSaveState();
+      this.commitLive();
     });
     this.dropdowns.push(control);
     onCreate?.(control);
@@ -1748,10 +1776,22 @@ export class SettingsScreen {
     // 视距不在任何分组里，但恢复默认时仍要按设备口径落一次
     this.draft.viewDistance = defaultViewDistanceFor(isTouchUi());
     for (const refresh of this.refreshers) refresh();
-    // 保存时要带 `reset` 标记：分辨率倍率 / 装饰层档位不在这份 settings 里，
-    // 不带标记它们会永远停在"上一台机器扛不住"的那一档（批次 202 的坑）
-    this.pendingResetGroups.add(group);
     this.updateSaveState();
+    if (this.live) {
+      /*
+       * 游戏内设置（2026-10-28）：恢复默认也**当场生效**，不存在"再点保存"。
+       *
+       * `reset` 标记仍然要带出去：分辨率倍率与装饰层档位不在这份 settings 里，
+       * 不带标记它们会永远停在"上一台机器扛不住"的那一档（批次 202 的坑）。
+       * `viewDistance` 也不在任何分组里，`commitLive()` 拷不到，这里单独补一次。
+       */
+      this.settings.viewDistance = this.draft.viewDistance;
+      this.commitLive();
+      this.actions.onChange(this.settings, { reset: true });
+    } else {
+      // 草稿模式：保存时才带 `reset` 标记（见 `saveGroups`）
+      this.pendingResetGroups.add(group);
+    }
     // 给一句确认：面板上没有独立 toast，借用设置页那行提示，2 秒后恢复原文
     this.settingsHintEl.textContent = t('settings.resetDone');
     window.setTimeout(() => this.renderSubtitle(), 2000);
@@ -1778,6 +1818,8 @@ export class SettingsScreen {
         // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）
         for (const refresh of this.refreshers) refresh();
         this.updateSaveState();
+        // 游戏内设置：套预设也当场生效（否则要再点一次保存，而那颗键已经被藏了）
+        this.commitLive();
       });
       this.presetButtons.push(button);
       row.appendChild(button);
@@ -2322,7 +2364,37 @@ export class SettingsScreen {
 
   /** 有没有任何一页脏了（返回 / 关闭面板时用来决定要不要提醒） */
   hasUnsaved(): boolean {
+    // 游戏内设置是即时的：每次改动都当场落盘，不存在"未保存"这种状态
+    if (this.live) return false;
     return SETTING_GROUPS.some((group) => this.isGroupDirty(group));
+  }
+
+  /**
+   * 游戏内设置的"即时生效"（2026-10-28，用户）。
+   *
+   * 把草稿里**所有组**的键拷回主程序那份 `settings`、落盘、再通知它重算——
+   * 只拷当前组是不够的：桌面端四组同时可见，玩家的最后一次改动不一定在当前页签里。
+   *
+   * 与 `saveGroups()` 的分工：那条是"点保存"（按组、带 reset 标记）；
+   * 这条是"每一次控件变化"，所以不带 reset 标记（恢复默认自己会走 `resetActiveGroup`）。
+   */
+  private commitLive(): void {
+    if (!this.live) return;
+    const languageBefore = this.settings.language;
+    for (const group of SETTING_GROUPS) {
+      for (const key of SETTING_GROUP_KEYS[group]) {
+        (this.settings as unknown as Record<string, unknown>)[key] = (
+          this.draft as unknown as Record<string, unknown>
+        )[key];
+      }
+    }
+    this.saved = { ...this.settings };
+    saveSettings(this.settings);
+    this.actions.onChange(this.settings);
+    this.settingsHintEl.textContent = t('settings.saved');
+    window.setTimeout(() => this.renderSubtitle(), 1200);
+    // 语言必须整页重载（理由见 `bindLabel`：局部重刷覆盖不到物品名/成就/命令反馈）
+    if (this.settings.language !== languageBefore) location.reload();
   }
 
   /** 保存按钮的亮/灰（只有当前页改过才亮），页脚顺便挂一个 `.dirty` 提示 */
