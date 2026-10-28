@@ -1459,6 +1459,32 @@ get activeContainerAccess(): { get(index); set(index, stack) } | null
 ⚠️ **"产物格排在最后"是约定**，19 种里没有反例，但接新容器时值得先看一眼它的下标表
 （把这条写进函数注释，而不是散在调用处）。
 
+## 5.55 装备列的数据源：原来它一直住在 `Inventory` 里
+
+本来以为要新开一个数据源，查了一下发现**盔甲与副手也在 `Inventory` 里**：
+
+```
+HOTBAR 0..8 | MAIN 9..35 | ARMOR 36..39 | OFFHAND 40
+```
+
+只是它们不在"背包那 36 格"里。所以装备列不需要新数据源，只要把这三个落点告诉映射层：
+
+```ts
+{ sideCount: 5, armorSlotBase: ARMOR_SLOT_BASE, offhandSlot: OFFHAND_SLOT }
+```
+
+`inventoryIndexAt` 里 side 区按"前 4 格盔甲、最后一格副手"换算 —— **落点由调用方注入**，
+`ui2d` 不写死 36/40（那几个常量属于 `core`）。没注入就返回 `null`（不猜）。
+
+同时把 `canPlace` 接到 `armorSlotForItem(id)`：它给 0..3（头/胸/腿/靴），其余东西是 `null`，
+所以"面包塞进头盔格"会被 `inventoryModel` 的闸门拦掉（五条放置路径都过那道闸，见 §5.51）。
+
+**装备列只在纯背包那一屏出现**（DOM 也是如此：工作站的右栏没有盔甲列），所以
+`syncInventory2dStation()` 里 `sideCount = mode === 'inventory' ? 5 : 0`。
+
+断言把三块串起来：装备列 0..4 → 库存 36..40、5 → 库存 9（主背包第一格），
+以及"熔炉 3 格 + 装备 5 格"共存时不会串区。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

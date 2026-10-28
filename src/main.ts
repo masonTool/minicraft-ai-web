@@ -50,7 +50,9 @@ import {
   InventoryPanelHost,
   MenuScreen2D,
   inventoryIndexAt,
+  canPlaceInSideSlot,
   extraSlotWritable,
+  sideSlotAt,
   stationExtra,
   stationSpec,
   Touch2D,
@@ -1355,7 +1357,13 @@ class App {
    * 自绘面板的槽位顺序是 extra → side → main → hotbar，而 `Inventory` 是快捷栏在前，
    * 所以每次换容器都要同步这份规格（`inventoryIndexAt` 靠它换算）。
    */
-  private readonly inv2dSpec: PanelIndexSpec = { extraCount: 0, sideCount: 0 };
+  private readonly inv2dSpec: PanelIndexSpec = {
+    extraCount: 0,
+    sideCount: 0,
+    // 盔甲与副手其实也住在 `Inventory` 里（36..39 + 40），把落点告诉映射层就够了
+    armorSlotBase: ARMOR_SLOT_BASE,
+    offhandSlot: OFFHAND_SLOT,
+  };
   private inv2dIcons: ItemIconCache | null = null;
   private inv2dOn = false;
   /** 接管模式下，覆盖层画布的指针监听是否已挂（只挂一次） */
@@ -3238,6 +3246,21 @@ class App {
               ...(UI2D_INV_TAKEOVER
                 ? { set: (stack: unknown) => this.inventoryScreen.setHeldStack((stack as ItemStack | null) ?? null) }
                 : {}),
+            },
+            /*
+             * 装备列的放置规则：`armorSlotForItem(id)` 给出 0..3（头/胸/腿/靴），
+             * 其余东西（面包、火把）是 `null` —— 只有副手格收。
+             * 这层闸门在 `inventoryModel` 里，五条放置路径都会过（见 §5.51）。
+             */
+            canPlace: (index, stack) => {
+              const extraCount = this.inv2dSpec.extraCount ?? 0;
+              if (index < extraCount) return true; // 容器那几格由 `extraSlotWritable` 管
+              const slot = sideSlotAt(index, extraCount);
+              if (!slot) return true;
+              if (slot === 'offhand') return true;
+              const armor = armorSlotForItem(stack.id);
+              if (armor === null) return false; // 非装备进不了盔甲格
+              return canPlaceInSideSlot(slot, (['helmet', 'chestplate', 'leggings', 'boots'] as const)[armor]!);
             },
             tint: UI2D_TINT_ENABLED,
             zIndex: 12,
@@ -7034,9 +7057,15 @@ class App {
     const mode = this.inventoryScreen.currentMode;
     const spec = stationSpec(mode);
     const extraCount = spec ? spec.cols * spec.rows + (spec.result ? 1 : 0) : 0;
-    if (this.inv2dSpec.extraCount === extraCount) return;
+    /*
+     * 装备列只在**纯背包**那一屏出现（DOM 也是如此：工作站的右栏没有盔甲列）。
+     * 一格 5 格 = 4 盔甲 + 副手，与 `sideSlotAt` 的顺序一致。
+     */
+    const sideCount = mode === 'inventory' ? 5 : 0;
+    if (this.inv2dSpec.extraCount === extraCount && this.inv2dSpec.sideCount === sideCount) return;
     this.inv2dSpec.extraCount = extraCount;
-    host.retarget({ extra: stationExtra(mode) });
+    this.inv2dSpec.sideCount = sideCount;
+    host.retarget({ extra: stationExtra(mode), sideCount });
   }
 
   private bindInventory2dInput(): void {

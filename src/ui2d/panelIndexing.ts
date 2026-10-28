@@ -36,6 +36,15 @@ export interface PanelIndexSpec {
   mainRows?: number;
   /** 快捷栏行数（默认 1 行 = 9 格） */
   hotbarRows?: number;
+  /**
+   * 装备列第 0 格（头盔）落在 `Inventory` 的哪个下标。
+   *
+   * 不写死：`Inventory` 里盔甲排在主背包之后（36..39）、副手在 40，而这几个常量属于
+   * `core`；`ui2d` 不依赖 `core`，所以由调用方注入。不传 = 装备列不归玩家库存（返回 `null`）。
+   */
+  armorSlotBase?: number;
+  /** 副手落在 `Inventory` 的哪个下标（同上，不传 = 不归玩家库存） */
+  offhandSlot?: number;
 }
 
 export interface PanelRegion {
@@ -91,6 +100,19 @@ export function inventoryIndexAt(spec: PanelIndexSpec, display: number): number 
   const region = regionOfDisplayIndex(spec, display);
   if (region === 'main') return 9 + (display - regions.main.start);
   if (region === 'hotbar') return display - regions.hotbar.start;
+  if (region === 'side') {
+    /*
+     * 装备列：前 4 格是盔甲、最后一格是副手。
+     * 原版把它们也放在 `Inventory` 里（36..39 + 40），只是不在"背包那 36 格"里 ——
+     * 所以这里能直接换算，不需要另开数据源。
+     */
+    const offset = display - regions.side.start;
+    const armorSlots = Math.max(0, regions.side.count - 1);
+    if (offset < armorSlots) {
+      return spec.armorSlotBase === undefined ? null : spec.armorSlotBase + offset;
+    }
+    return spec.offhandSlot === undefined ? null : spec.offhandSlot;
+  }
   return null;
 }
 
@@ -102,6 +124,16 @@ export function inventoryIndexAt(spec: PanelIndexSpec, display: number): number 
 export function displayIndexForInventory(spec: PanelIndexSpec, invIndex: number): number | null {
   const regions = panelRegions(spec);
   if (!Number.isInteger(invIndex) || invIndex < 0) return null;
+  // 装备列（盔甲 + 副手）：先认这几个下标，否则会被当成越界
+  if (spec.armorSlotBase !== undefined && regions.side.count > 0) {
+    const armorSlots = regions.side.count - 1;
+    if (invIndex >= spec.armorSlotBase && invIndex < spec.armorSlotBase + armorSlots) {
+      return regions.side.start + (invIndex - spec.armorSlotBase);
+    }
+    if (spec.offhandSlot !== undefined && invIndex === spec.offhandSlot) {
+      return regions.side.start + armorSlots;
+    }
+  }
   if (invIndex < 9) {
     const offset = invIndex;
     return offset < regions.hotbar.count ? regions.hotbar.start + offset : null;

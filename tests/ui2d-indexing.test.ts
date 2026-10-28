@@ -123,3 +123,45 @@ describe('工作站版面', () => {
     expect(panelRegions(indexSpec).total).toBe(63);
   });
 });
+
+/**
+ * 装备列的下标换算。
+ *
+ * 盔甲与副手其实也住在 `Inventory` 里（36..39 + 40），只是不在"背包那 36 格"里 ——
+ * 所以不需要另开数据源，只要把落点告诉映射层。这两个落点属于 `core`，由调用方注入。
+ */
+describe('装备列', () => {
+  const spec = { extraCount: 0, sideCount: 5, armorSlotBase: 36, offhandSlot: 40 };
+
+  it('前 4 格 → 36..39，最后一格 → 40', () => {
+    expect(inventoryIndexAt(spec, 0)).toBe(36);
+    expect(inventoryIndexAt(spec, 3)).toBe(39);
+    expect(inventoryIndexAt(spec, 4)).toBe(40);
+  });
+
+  it('装备列之后才是主背包（5 → 库存 9）', () => {
+    expect(inventoryIndexAt(spec, 5)).toBe(9);
+    expect(inventoryIndexAt(spec, 5 + 26)).toBe(35);
+    expect(inventoryIndexAt(spec, 5 + 27)).toBe(0);
+  });
+
+  it('没注入落点时返回 null（不猜 36/40）', () => {
+    expect(inventoryIndexAt({ sideCount: 5 }, 0)).toBeNull();
+    expect(inventoryIndexAt({ sideCount: 5 }, 4)).toBeNull();
+  });
+
+  it('反查：库存 36..40 → 面板 0..4', () => {
+    expect(displayIndexForInventory(spec, 36)).toBe(0);
+    expect(displayIndexForInventory(spec, 39)).toBe(3);
+    expect(displayIndexForInventory(spec, 40)).toBe(4);
+  });
+
+  it('与工作站共存时不会串区（熔炉 3 格 + 装备 5 格）', () => {
+    const mixed = { extraCount: 3, sideCount: 5, armorSlotBase: 36, offhandSlot: 40 };
+    expect(inventoryIndexAt(mixed, 0)).toBeNull(); // 熔炉原料
+    expect(inventoryIndexAt(mixed, 2)).toBeNull(); // 熔炉产物
+    expect(inventoryIndexAt(mixed, 3)).toBe(36); // 头盔
+    expect(inventoryIndexAt(mixed, 7)).toBe(40); // 副手
+    expect(inventoryIndexAt(mixed, 8)).toBe(9); // 主背包第一格
+  });
+});
