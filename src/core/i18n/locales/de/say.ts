@@ -91,7 +91,7 @@ export const say = {
   'say.net.hostTag': 'Host',
 
   // ---- Weltgeschehen, Fortschritt und Wetter (T3)
-  'say.progress.reconciled': 'Inventar abgeglichen: {count} Fortschritte erreicht (Details mit J)',
+  'say.progress.reconciled': 'Aus dem Inventar nachgetragen: {count} Fortschritte (mit J ansehen)',
   'say.progress.earned': 'Fortschritt erreicht: {title} — {desc}',
   'say.progress.challenge': 'Herausforderung geschafft: {title} — {desc}',
   'say.effect.gained': 'Effekt erhalten: {effect}{level}',
@@ -122,4 +122,7 @@ export const say = {
   'say.net.status.legacyServer': 'alt',
   'say.sleep.wokeUp': 'Du bist aufgestanden.',
   'say.sleep.monsterNear': 'Ein Monster hat dich geweckt!',
+  'say.welcome.title': 'Willkommen in „{world}“',
+  'say.welcome.tip': 'J für Fortschritte · Pausenmenü für Einstellungen und Multiplayer',
+  'say.welcome.hardcoreTag': 'Hardcore',
 } satisfies Pick<Messages, keyof typeof zhSay>;

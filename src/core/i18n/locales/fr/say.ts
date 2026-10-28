@@ -91,7 +91,7 @@ export const say = {
   'say.net.hostTag': 'Hôte',
 
   // ---- Événements du monde, progrès et météo (T3)
-  'say.progress.reconciled': 'Inventaire vérifié : {count} succès obtenus (détails avec J)',
+  'say.progress.reconciled': '{count} succès déduits de l’inventaire (voir avec J)',
   'say.progress.earned': 'Succès débloqué : {title} — {desc}',
   'say.progress.challenge': 'Défi relevé : {title} — {desc}',
   'say.effect.gained': 'Effet obtenu : {effect}{level}',
@@ -122,4 +122,7 @@ export const say = {
   'say.net.status.legacyServer': 'ancien',
   'say.sleep.wokeUp': 'Tu t’es levé.',
   'say.sleep.monsterNear': 'Un monstre t’a réveillé !',
+  'say.welcome.title': 'Bienvenue dans « {world} »',
+  'say.welcome.tip': 'J pour les succès · menu pause pour les réglages et le multijoueur',
+  'say.welcome.hardcoreTag': 'Extrême',
 } satisfies Pick<Messages, keyof typeof zhSay>;

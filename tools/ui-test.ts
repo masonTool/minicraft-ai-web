@@ -2547,6 +2547,24 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('world: {') &&
       !readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
   );
+  // 进入世界的第一句（2026-10-28，用户）：以前是进度系统的"对了一次背包"，看不懂
+  check(
+    '进世界先给欢迎语：世界名 + 模式/难度/类型 + 操作提示',
+    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('private pushWelcome(): void') &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("tp('say.welcome.title'") &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("t('say.welcome.tip')") &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('worldTypeLabel(this.worldConfig.worldType)'),
+  );
+  // 创建世界表单：窄屏不再把标签列写死成 56px（德语 Welttyp / 俄语 Сложность 会被省略号吃掉）
+  check(
+    '新建世界表单的标签列按语言给宽，窄屏也没被写死',
+    /\.world-row \{ grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\); gap: 5px; \}/.test(
+      readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+    ) &&
+      !/\.world-row \{ grid-template-columns: 56px minmax\(0, 1fr\); gap: 5px; \}/.test(
+        readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+      ),
+  );
   check(
     '世界页有难度 / 时间 / 天气 / 常用规则',
     readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_RULE_KEYS') &&

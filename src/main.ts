@@ -565,7 +565,7 @@ import { OverworldGenerator } from './core/gen/OverworldGenerator.ts';
 // 出生点预选要用"跟世界种子绑定的随机源"（批次 20261024-1152）：
 // 用 Math.random 的话同一个种子重进世界会落在不同地方，与原版口径不符
 import { Random } from './core/gen/noise/Random.ts';
-import { WORLD_SURFACE_Y } from './core/gen/WorldType.ts';
+import { WORLD_SURFACE_Y, worldTypeLabel } from './core/gen/WorldType.ts';
 import {
   findSafeSpawn,
   naturalGroundNear,
@@ -11085,6 +11085,28 @@ class App {
    * **只在这里**开启 `progressReady`：在那之前背包变动一律不报事件
    * （读档回填背包的那一串 `add` 会走同一条 `onChange` 通道）。
    */
+  /**
+   * 进入世界的欢迎语（2026-10-28，用户）。
+   *
+   * 三行：**这是什么世界 → 什么规则 → 能按什么键**。
+   * 以前进世界第一句是进度系统的内部对账（"对了一次背包：已达成 N 条进度"），
+   * 玩家完全看不懂那是干什么的——那句现在改成"按背包补记了几条"，并且排在欢迎语之后。
+   *
+   * 联机不在这里说房间信息：加入/开房各有 `say.net.roomJoined` / `roomHosted`，
+   * 那两句会紧跟着出现，这里重复一遍只会像刷屏。
+   */
+  private pushWelcome(): void {
+    this.chat.push(tp('say.welcome.title', { world: this.worldConfig.name }), 'system');
+    const tags = [
+      gameModeLabel(this.gameMode),
+      difficultyLabel(this.difficulty),
+      worldTypeLabel(this.worldConfig.worldType),
+    ];
+    if (this.hardcore) tags.push(t('say.welcome.hardcoreTag'));
+    this.chat.push(tags.join(' · '), 'system');
+    this.chat.push(t('say.welcome.tip'), 'system');
+  }
+
   private armProgress(): void {
     this.progressReady = true;
     this.suppressProgressToasts = true;
@@ -18356,6 +18378,9 @@ class App {
     // 批次 181：局内常驻一条返回守卫——**没有面板时按返回也要先落到我们手里**
     //（以前无面板时没有任何守卫，浏览器会直接退出页面，PWA 里等于退游戏）
     this.backButton.armRoot();
+    // 欢迎语（用户 2026-10-28）：进世界第一句要能看懂"这是哪、什么规则"，
+    // 而不是上来就一句"对了一次背包"（那是进度系统的内部对账，见 `armProgress`）。
+    this.pushWelcome();
     // 资源包（2026-10-28）：把上次导入的那份重新贴回图集，玩家不必每次进游戏都重导一次。
     // 与读档并行、互不依赖——它只改图集像素，不影响世界数据。
     void this.restoreResourcePack();
