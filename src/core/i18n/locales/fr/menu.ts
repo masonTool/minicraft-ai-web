@@ -180,4 +180,5 @@ export const menu = {
   "world.editHintLocked": "Monde extrême : mode et difficulté verrouillés, seul le nom est modifiable.",
   "world.modeLocked": "Dans un monde extrême, le mode est verrouillé sur Survie",
   "world.deleteConfirm": "Supprimer « {name} » ? Sa sauvegarde sera aussi supprimée — action irréversible.",
+  'world.defaultName': 'Monde par défaut',
 } satisfies Pick<Messages, keyof typeof zhMenu>;

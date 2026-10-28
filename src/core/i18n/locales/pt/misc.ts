@@ -88,4 +88,7 @@ export const misc = {
   "misc.toast.renderError": "Erro de renderização, quadro ignorado",
   "misc.toast.gameMode": "Modo de jogo: {mode}",
   "misc.signEditorHint": "{name} (clique direito para editar de novo)",
+  'misc.defaultPlayerName': 'Jogador',
+  'misc.youInList': '{name} (você)',
+  'misc.nameMobPrompt': 'Dar um nome a este {kind}',
 } satisfies Pick<Messages, keyof typeof zhMisc>;

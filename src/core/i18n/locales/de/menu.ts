@@ -180,4 +180,5 @@ export const menu = {
   "world.editHintLocked": "Hardcore-Welt: Modus und Schwierigkeit sind gesperrt, nur der Name ist änderbar.",
   "world.modeLocked": "In einer Hardcore-Welt ist der Modus auf Überleben gesperrt",
   "world.deleteConfirm": "„{name}“ löschen? Der Spielstand wird mitgelöscht – das lässt sich nicht rückgängig machen.",
+  'world.defaultName': 'Standardwelt',
 } satisfies Pick<Messages, keyof typeof zhMenu>;

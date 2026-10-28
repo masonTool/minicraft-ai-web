@@ -182,4 +182,5 @@ export const menu = {
   'world.editHintLocked': 'Hardcore world: mode and difficulty are locked; only the name can be changed.',
   'world.modeLocked': 'Mode is locked to Survival in a Hardcore world',
   "world.deleteConfirm": "Delete \"{name}\"? Its save will be deleted too — this cannot be undone.",
+  'world.defaultName': 'Default World',
 } satisfies Pick<Messages, keyof typeof zhmenu>;

@@ -89,4 +89,7 @@ export const misc = {
   "misc.toast.renderError": "Renderfehler, Frame übersprungen",
   "misc.toast.gameMode": "Spielmodus: {mode}",
   "misc.signEditorHint": "{name} (Rechtsklick zum erneuten Bearbeiten)",
+  'misc.defaultPlayerName': 'Spieler',
+  'misc.youInList': '{name} (du)',
+  'misc.nameMobPrompt': '{kind} benennen',
 } satisfies Pick<Messages, keyof typeof zhMisc>;

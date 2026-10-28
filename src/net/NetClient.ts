@@ -13,6 +13,8 @@
  */
 
 import { browserClientId } from '../core/net/ClientId.ts';
+// 状态文字是给玩家看的（HUD / 联机面板），所以走 i18n，不在协议层写死中文
+import { t, tp } from '../core/i18n/I18n.ts';
 import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../core/net/Protocol.ts';
 import { netErrorText } from '../core/net/NetErrorText.ts';
 import { decodeEditsPack } from '../core/net/EditPack.ts';
@@ -455,7 +457,7 @@ export class NetClient {
    */
   private readonly position = { x: 0, y: 80, z: 0, dimension: 'overworld' };
   /** 连接状态文本（HUD 显示用） */
-  status = '未连接';
+  status = t('say.net.status.idle');
 
   constructor(private readonly handlers: NetHandlers) {}
 
@@ -547,7 +549,7 @@ export class NetClient {
       this.socket = null;
     }
 
-    this.status = `连接中 ${this.url}`;
+    this.status = tp('say.net.status.connecting', { url: this.url });
     this.handlers.onStatus(false, this.status);
 
     const socket = new WebSocket(this.url);
@@ -555,7 +557,7 @@ export class NetClient {
 
     socket.onopen = () => {
       this.session.opened();
-      this.status = `已连接 ${this.url}`;
+      this.status = tp('say.net.status.connected', { url: this.url });
       this.handlers.onStatus(true, this.status);
       socket.send(
         JSON.stringify({
@@ -597,7 +599,7 @@ export class NetClient {
 
     socket.onclose = () => {
       // 致命错误时保留原因（"协议版本不匹配"比"连接已断开"有用得多）
-      if (!this.fatal) this.status = '连接已断开';
+      if (!this.fatal) this.status = t('say.net.status.closed');
       this.remote.clear();
       this.selfId = 0;
       // 统计归零（联机29）：重连之后是一条新连接，延迟/速率都该重新算
@@ -616,7 +618,7 @@ export class NetClient {
     };
 
     socket.onerror = () => {
-      this.status = `无法连接到 ${this.url}（服务端没启动？）`;
+      this.status = tp('say.net.status.unreachable', { url: this.url });
       this.handlers.onStatus(false, this.status);
     };
   }
@@ -643,7 +645,10 @@ export class NetClient {
         const version = Number(message.v ?? 0);
         if (version !== NET_PROTOCOL_VERSION) {
           this.fatal = true;
-          this.status = `协议版本不匹配：服务端 ${version || '旧版'}，客户端 ${NET_PROTOCOL_VERSION}`;
+          this.status = tp('say.net.status.versionMismatch', {
+            server: version || t('say.net.status.legacyServer'),
+            client: NET_PROTOCOL_VERSION,
+          });
           this.handlers.onError?.('version', this.status);
           this.socket?.close();
           break;
@@ -1477,7 +1482,7 @@ export class NetClient {
       }
       this.socket = null;
     }
-    this.status = '未连接';
+    this.status = t('say.net.status.idle');
     this.handlers.onStatus(false, this.status);
   }
 }

@@ -1808,8 +1808,8 @@ class App {
   private readonly rodPulses = new RodPulses();
   /** 下一次打雷的倒计时（只在雷暴里走） */
   private strikeTimer = 0;
-  /** 玩家名（联机时用服务端给的，单机固定"玩家"） */
-  private playerName = '玩家';
+  /** 玩家名（联机时用服务端给的，单机用本地化的默认名） */
+  private playerName = t('misc.defaultPlayerName');
   /** 难度（I7）：保存在世界里 */
   private difficulty: Difficulty = 'normal';
   /** 极限模式（批次 550）：只读；难度锁困难、死亡后只能旁观 */
@@ -2556,7 +2556,7 @@ class App {
   private simulatedFrameTime = 0;
   // ⚠️ 自适应视距的冷却（`adaptiveCooldown`）在**批次 130** 并进了 `this.perf.cooldown`：
   // 分辨率与视距共用同一个冷却倒计时，这样"先降分辨率、再降视距"之间的间隔是统一的
-  private netStatus = '未连接（按 L 联机）';
+  private netStatus = t('say.net.status.idleHint');
   private chatLine = '';
   private chatUntil = 0;
 
@@ -2734,7 +2734,8 @@ class App {
     /** 本局玩的是哪个世界（主菜单选出来的）；缺省时用一个固定种子的默认世界 */
     private readonly worldConfig: WorldConfig = {
       id: LEGACY_WORLD_ID,
-      name: '默认世界',
+      // 老版本单存档升级上来的那个世界叫这个名字；它会出现在列表卡片上，所以走 i18n
+      name: t('world.defaultName'),
       seed: DEFAULT_WORLD_SEED,
       worldType: 'default',
       difficulty: 'normal',
@@ -7106,7 +7107,7 @@ class App {
     this.pendingNameTarget = mob;
     // 打开界面要交出输入权（与告示牌编辑器同一套）：先收起触摸层、放指针
     this.handleInventoryOpen(true);
-    this.nameTagEditor.show(mob.customName, `给${mobLabel(mob.type)}起个名字`);
+    this.nameTagEditor.show(mob.customName, tp('misc.nameMobPrompt', { kind: mobLabel(mob.type) }));
     return true;
   }
 
@@ -10317,7 +10318,7 @@ class App {
     // ⚠️ 前 0.25 秒不认这个键：玩家点床那一下可能正按着跳跃键，
     // 不挡的话会"刚点下去就立刻起床"，看起来像床坏了
     if (input.jump && this.sleepTimer > 0.25) {
-      this.wakeUp('你起来了。');
+      this.wakeUp(t('say.sleep.wokeUp'));
       return;
     }
 
@@ -10326,7 +10327,7 @@ class App {
 
     // 醒来之前再看一眼：怪物在这几秒里靠近了床 → 被惊醒（原版"被怪物打扰而惊醒"）
     if (this.hostileMobsNear(bed.x, bed.y, bed.z)) {
-      this.wakeUp('你被怪物惊醒了！');
+      this.wakeUp(t('say.sleep.monsterNear'));
       return;
     }
 
@@ -10785,7 +10786,7 @@ class App {
       this.mapChunkZ = Math.floor(this.physics.z) >> 4;
       this.refreshHotbar();
       this.audio.play('item_move', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
-      this.mapScreen.show(data, { x: this.physics.x, z: this.physics.z, yaw: this.yaw }, '已填好的地图');
+      this.mapScreen.show(data, { x: this.physics.x, z: this.physics.z, yaw: this.yaw }, itemName(Item.FILLED_MAP));
       this.handleInventoryOpen(true);
       return true;
     }
@@ -14051,7 +14052,7 @@ class App {
         total: this.experience.total,
       }),
       onlinePlayers: () => {
-        const names = [`${this.playerName}(你)`];
+        const names = [tp('misc.youInList', { name: this.playerName })];
         for (const player of this.net.remote.values()) names.push(player.name);
         return names;
       },

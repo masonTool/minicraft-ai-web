@@ -90,4 +90,7 @@ export const misc = {
   "misc.toast.renderError": "渲染出错，已跳过该帧",
   "misc.toast.gameMode": "游戏模式：{mode}",
   "misc.signEditorHint": "{name}（右键可再改）",
+  'misc.defaultPlayerName': '玩家',
+  'misc.youInList': '{name}(你)',
+  'misc.nameMobPrompt': '给{kind}起个名字',
 } as const;

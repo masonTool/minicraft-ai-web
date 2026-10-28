@@ -89,4 +89,7 @@ export const misc = {
   "misc.toast.renderError": "Erreur de rendu, image ignorée",
   "misc.toast.gameMode": "Mode de jeu : {mode}",
   "misc.signEditorHint": "{name} (clic droit pour modifier à nouveau)",
+  'misc.defaultPlayerName': 'Joueur',
+  'misc.youInList': '{name} (toi)',
+  'misc.nameMobPrompt': 'Nommer ce {kind}',
 } satisfies Pick<Messages, keyof typeof zhMisc>;

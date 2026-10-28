@@ -89,4 +89,7 @@ export const misc = {
   "misc.toast.renderError": "Ошибка рендера, кадр пропущен",
   "misc.toast.gameMode": "Режим игры: {mode}",
   "misc.signEditorHint": "{name} (правый клик — изменить снова)",
+  'misc.defaultPlayerName': 'Игрок',
+  'misc.youInList': '{name} (вы)',
+  'misc.nameMobPrompt': 'Дать имя: {kind}',
 } satisfies Pick<Messages, keyof typeof zhMisc>;

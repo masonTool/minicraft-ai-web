@@ -92,4 +92,7 @@ export const misc = {
   "misc.toast.renderError": "Render error, frame skipped",
   "misc.toast.gameMode": "Game mode: {mode}",
   "misc.signEditorHint": "{name} (right-click to edit again)",
+  'misc.defaultPlayerName': 'Player',
+  'misc.youInList': '{name} (you)',
+  'misc.nameMobPrompt': 'Name this {kind}',
 } satisfies Pick<Messages, keyof typeof zhmisc>;

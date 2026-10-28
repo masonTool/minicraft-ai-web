@@ -179,4 +179,5 @@ export const menu = {
   "world.editHintLocked": "Mundo extremo: modo e dificuldade travados; só o nome pode ser alterado.",
   "world.modeLocked": "Em um mundo extremo o modo fica travado em Sobrevivência",
   "world.deleteConfirm": "Excluir \"{name}\"? O save também será excluído — isso não pode ser desfeito.",
+  'world.defaultName': 'Mundo padrão',
 } satisfies Pick<Messages, keyof typeof zhMenu>;

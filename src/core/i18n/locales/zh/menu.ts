@@ -181,4 +181,5 @@ export const menu = {
   'world.editHintLocked': '极限世界：模式与难度已锁定，只能修改名称。',
   'world.modeLocked': '极限世界中模式已锁定为生存',
   'world.deleteConfirm': '删除「{name}」？该世界的存档会一起删掉，无法恢复。',
+  'world.defaultName': '默认世界',
 } as const;

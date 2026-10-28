@@ -180,4 +180,5 @@ export const menu = {
   "world.editHintLocked": "Хардкорный мир: режим и сложность заблокированы, можно менять только название.",
   "world.modeLocked": "В хардкорном мире режим заблокирован на «Выживание»",
   "world.deleteConfirm": "Удалить «{name}»? Сохранение тоже будет удалено — отменить это нельзя.",
+  'world.defaultName': 'Мир по умолчанию',
 } satisfies Pick<Messages, keyof typeof zhMenu>;
