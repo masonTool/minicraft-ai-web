@@ -250,6 +250,15 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
       check(`触屏布局：${label}`, compact.includes(needle), needle);
     }
   }
+  // 2026-10-28（用户："各个页面的切换效果…有动画，让切换丝滑一点"）：
+  // 入场动画共用一条 keyframes，且时长必须走 `--dur-med`（reduced-motion 下为 0s）。
+  check(
+    '页面 / 页签切换有入场动画，且 reduced-motion 下自动失效',
+    compact.includes('@keyframes page-enter {') &&
+      /\.pause-page\.active,\s*\.settings-section\.active,\s*\.world-view\.active\s*\{\s*animation: page-enter var\(--dur-med\) var\(--ease\);/.test(
+        compact,
+      ),
+  );
   // 批次 528：设置内容区控件统一 96px，左侧页签文字居中，滑杆填满中间列
   check(
     '设置控件统一尺寸 / 页签居中 / 滑杆与读数等边距',

@@ -5626,6 +5626,27 @@
       .inv-panel.panel-out, .recipe-panel.panel-out {
         animation: panel-out var(--dur-med) var(--ease) forwards;
       }
+      /* ---------------- 页面 / 页签切换的过渡（2026-10-28） ----------------
+         用户："优化各个页面的切换效果，希望能够有动画，让切换丝滑一点。"
+         三处地方共用一条"淡入 + 轻微上移"：暂停菜单 ↔ 设置页、设置页的四个页签、
+         主菜单的三层（标题页 → 世界列表 → 新建世界）。
+         ⚠️ 只做**入场**，不做出场：这些页面都是 `display:none` 切换的，
+         出场动画需要先把元素留在屏幕上（会拖慢 Esc / 返回键的响应）。
+         `--dur-med` 在 `prefers-reduced-motion` 下是 0s，这条动画自动失效。 */
+      @keyframes page-enter {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: none; }
+      }
+      .pause-page.active,
+      .settings-section.active,
+      .world-view.active {
+        animation: page-enter var(--dur-med) var(--ease);
+      }
+      /* 页签 / 卡片这类"小方块"只做颜色过渡，别跟着整体上移（会晃眼） */
+      .settings-tab {
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+      }
+
       /* 创造整屏：只留创造网格 + 快捷栏（批次 142） */
       .inv-panel.creative-ui .inv-body { width: 100%; }
       .inv-panel.creative-ui .inv-creative {
