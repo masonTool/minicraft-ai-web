@@ -236,6 +236,19 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
         settingsSrc2.includes('paletteOf(this.appearanceTarget())'),
     );
     check(
+      '形象弹窗：套预设也会点亮「保存」',
+      // 预设那条分支单独补了一次刷新（下拉/开关走 updateSaveState，预设不走）
+      settingsSrc2.includes('// 套预设也是一次"形象改动"') &&
+        settingsSrc2.includes('this.updateAppearanceSaveState();'),
+    );
+    check(
+      '形象弹窗页脚：保存右对齐、宽度自适应',
+      htmlSrc2.includes('.appearance-modal-foot {') &&
+        htmlSrc2.includes('justify-content: flex-end;') &&
+        htmlSrc2.includes('.appearance-modal-foot .appearance-save {'),
+    );
+
+    check(
       '背包预览右下角有小笔头，点了直接进角色形象',
       invSrc2.includes("editAppearance.className = 'inv-preview-edit';") &&
         invSrc2.includes('this.hooks.onEditAppearance?.();') &&

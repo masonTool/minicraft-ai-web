@@ -1961,6 +1961,9 @@ export class SettingsScreen {
         for (const refresh of this.refreshers) refresh();
         this.refreshPresetRow();
         this.refreshAvatar();
+        // 套预设也是一次"形象改动"：弹窗里的「保存」要跟着亮
+        // （下拉/开关走 `updateSaveState()`，预设这条是独立的，漏了就会"点了没反应"）
+        this.updateAppearanceSaveState();
       });
       this.presetButtons.push(button);
       row.appendChild(button);
