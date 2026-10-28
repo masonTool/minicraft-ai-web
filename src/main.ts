@@ -11109,7 +11109,9 @@ class App {
     ];
     if (this.hardcore) tags.push(t('say.welcome.hardcoreTag'));
     this.chat.push(tags.join(' · '), 'system');
-    this.chat.push(t('say.welcome.tip'), 'system');
+    // 最后一行按设备分开（2026-10-29，用户）：手机上根本没有 J 键，
+    // 进度在背包右轨那颗奖杯里；暂停键是屏幕顶部那颗，不是 Esc。
+    this.chat.push(t(isTouchDevice() ? 'say.welcome.tipTouch' : 'say.welcome.tip'), 'system');
   }
 
   private armProgress(): void {

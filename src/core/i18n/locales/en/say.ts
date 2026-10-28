@@ -91,7 +91,7 @@ export const say = {
   'say.net.hostTag': 'Host',
 
   // ---- World events, progress and weather (T3)
-  'say.progress.reconciled': 'Recorded {count} advancements from your inventory (press J)',
+  'say.progress.reconciled': 'Recorded {count} advancements from your inventory (see the advancements panel)',
   'say.progress.earned': 'Advancement made: {title} — {desc}',
   'say.progress.challenge': 'Challenge complete: {title} — {desc}',
   'say.effect.gained': 'Effect gained: {effect}{level}',
@@ -125,4 +125,5 @@ export const say = {
   'say.welcome.title': 'Welcome to "{world}"',
   'say.welcome.tip': 'Press J for advancements · pause menu for settings and multiplayer',
   'say.welcome.hardcoreTag': 'Hardcore',
+  'say.welcome.tipTouch': 'Tap the trophy on the backpack rail for advancements · the pause button at the top opens the menu',
 } satisfies Pick<Messages, keyof typeof zhSay>;

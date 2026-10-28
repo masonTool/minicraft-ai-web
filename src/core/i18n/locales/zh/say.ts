@@ -96,7 +96,7 @@ export const say = {
   'say.net.hostTag': '房主',
 
   // ---- 世界事件、进度与天气（T3）
-  'say.progress.reconciled': '按背包里的物品补记了 {count} 条进度（按 J 查看）',
+  'say.progress.reconciled': '按背包里的物品补记了 {count} 条进度（在进度面板里查看）',
   'say.progress.earned': '进度已达成：{title}——{desc}',
   'say.progress.challenge': '挑战完成：{title}——{desc}',
   'say.effect.gained': '获得效果：{effect}{level}',
@@ -130,4 +130,5 @@ export const say = {
   'say.welcome.title': '欢迎来到「{world}」',
   'say.welcome.tip': '按 J 查看进度 · 暂停菜单里可以改设置、联机',
   'say.welcome.hardcoreTag': '极限模式',
+  'say.welcome.tipTouch': '背包里点右轨的奖杯看进度 · 屏幕顶部的暂停键打开菜单',
 } as const;

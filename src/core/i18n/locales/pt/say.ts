@@ -91,7 +91,7 @@ export const say = {
   'say.net.hostTag': 'Anfitrião',
 
   // ---- Eventos do mundo, progresso e clima (T3)
-  'say.progress.reconciled': '{count} conquistas registradas pelo inventário (veja com J)',
+  'say.progress.reconciled': '{count} conquistas registradas pelo inventário (veja o painel de conquistas)',
   'say.progress.earned': 'Conquista obtida: {title} — {desc}',
   'say.progress.challenge': 'Desafio concluído: {title} — {desc}',
   'say.effect.gained': 'Efeito obtido: {effect}{level}',
@@ -125,4 +125,5 @@ export const say = {
   'say.welcome.title': 'Bem-vindo a "{world}"',
   'say.welcome.tip': 'J para conquistas · menu de pausa para ajustes e multijogador',
   'say.welcome.hardcoreTag': 'Extremo',
+  'say.welcome.tipTouch': 'No inventário, toque no troféu para ver as conquistas · o botão de pausa no topo abre o menu',
 } satisfies Pick<Messages, keyof typeof zhSay>;

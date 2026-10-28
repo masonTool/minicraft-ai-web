@@ -2589,7 +2589,10 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
     '进世界先给欢迎语：世界名 + 模式/难度/类型 + 操作提示',
     readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('private pushWelcome(): void') &&
       readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("tp('say.welcome.title'") &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("t('say.welcome.tip')") &&
+      // 2026-10-29：提示按设备分开（手机没有 J 键）
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes(
+        "t(isTouchDevice() ? 'say.welcome.tipTouch' : 'say.welcome.tip')",
+      ) &&
       readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('worldTypeLabel(this.worldConfig.worldType)'),
   );
   // 创建世界表单：窄屏不再把标签列写死成 56px（德语 Welttyp / 俄语 Сложность 会被省略号吃掉）

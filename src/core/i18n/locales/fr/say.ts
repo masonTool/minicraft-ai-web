@@ -91,7 +91,7 @@ export const say = {
   'say.net.hostTag': 'Hôte',
 
   // ---- Événements du monde, progrès et météo (T3)
-  'say.progress.reconciled': '{count} succès déduits de l’inventaire (voir avec J)',
+  'say.progress.reconciled': '{count} succès déduits de l’inventaire (voir le panneau des succès)',
   'say.progress.earned': 'Succès débloqué : {title} — {desc}',
   'say.progress.challenge': 'Défi relevé : {title} — {desc}',
   'say.effect.gained': 'Effet obtenu : {effect}{level}',
@@ -125,4 +125,5 @@ export const say = {
   'say.welcome.title': 'Bienvenue dans « {world} »',
   'say.welcome.tip': 'J pour les succès · menu pause pour les réglages et le multijoueur',
   'say.welcome.hardcoreTag': 'Extrême',
+  'say.welcome.tipTouch': 'Dans l’inventaire, touchez le trophée pour les succès · le bouton pause en haut ouvre le menu',
 } satisfies Pick<Messages, keyof typeof zhSay>;
