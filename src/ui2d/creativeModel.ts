@@ -21,18 +21,27 @@ export function normalizeQuery(query: string): string {
   return query.trim().toLowerCase();
 }
 
-/** 物品名是否命中搜索词（空搜索全部命中） */
-export function matchesQuery(name: string, query: string): boolean {
+/**
+ * 名字是否命中搜索词（空搜索全部命中）。
+ *
+ * 支持**多个别名**（`string[]`）：DOM 版就是拿三个东西比的 —— 英文 label、本地化名字、
+ * 以及物品 id 的字符串形式；少一个就会出现"原版能搜 stone、canvas 搜不到"。
+ */
+export function matchesQuery(name: string | readonly string[], query: string): boolean {
   const needle = normalizeQuery(query);
   if (needle.length === 0) return true;
-  return name.toLowerCase().includes(needle);
+  const names = typeof name === 'string' ? [name] : name;
+  for (const entry of names) {
+    if (entry.toLowerCase().includes(needle)) return true;
+  }
+  return false;
 }
 
 export interface CreativeFilterOptions<T> {
   /** 搜索词（空 = 不过滤） */
   readonly query: string;
-  /** 取名字（i18n 后的可显示名字） */
-  readonly nameOf: (item: T) => string;
+  /** 取名字（可给多个别名：英文 label / 本地化名字 / id 字符串） */
+  readonly nameOf: (item: T) => string | readonly string[];
   /** 所属页签（不传 = 不按页签过滤） */
   readonly tabOf?: (item: T) => string;
   /** 当前页签（配合 `tabOf`；不传 = 全部页签） */

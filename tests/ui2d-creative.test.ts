@@ -38,6 +38,13 @@ describe('搜索词', () => {
     expect(matchesQuery('圆石', '铁')).toBe(false);
   });
 
+  it('多个别名任意命中（英文 label / 本地化名 / id 字符串）', () => {
+    expect(matchesQuery(['圆石', 'Cobblestone', '1'], 'cobble')).toBe(true);
+    expect(matchesQuery(['圆石', 'Cobblestone', '1'], '圆')).toBe(true);
+    expect(matchesQuery(['圆石', 'Cobblestone', '1'], '1')).toBe(true);
+    expect(matchesQuery(['圆石', 'Cobblestone', '1'], 'dirt')).toBe(false);
+  });
+
   it('不做模糊匹配（搜"石"不会把"钻石"也算命中以外的意外，但确实包含）', () => {
     // 包含关系是刻意保留的：搜"石"应该同时给出"圆石/石砖/钻石"
     expect(filterCreativeItems(ITEMS, { query: '石', nameOf }).map((i) => i.id)).toEqual([1, 2, 3]);

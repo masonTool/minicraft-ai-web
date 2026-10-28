@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-1022 | 2026-10-28 | 界面与音频 | —（M38 数据层 / 验收清单） | 4 条：① `matchesQuery` 支持多别名（DOM 就是三样都比）；② 真注册表测试 9 条；③ 真机清单 44 条（六段，动作→期望）；④ §5.56 + 清单里"专防本批改动"的六条。验证：`test:ui2d-creative-realdata` **9/9**、`check` exit=0 |
 | 20261028-1017 | 2026-10-28 | 界面与音频 | —（M37 收口） | 4 条：① 装备列落点注入（盔甲住在 `Inventory` 36..39、副手 40）；② side 区换算；③ `canPlace` 接 `armorSlotForItem`；④ 与工作站共存的串区断言。验证：`test:ui2d-indexing` **15/15**、`check` exit=0 |
 | 20261028-1014 | 2026-10-28 | 界面与音频 | —（M26b 容器数据源） | 4 条：① `activeContainerAccess`（`set` 带脏标记）；② `extraSlotWritable()` 结果格只出不进；③ `SlotAccess` 按 `extraCount` 分流；④ 组合断言（熔炉/箱子）。验证：`test:ui2d-station` **17/17**、`test:ui2d-indexing` **10/10**、`check` exit=0 |
 | 20261028-1009 | 2026-10-28 | 界面与音频 | —（M26b 接游戏） | 4 条：① `syncInventory2dStation()` 按 `currentMode` 自动切版面；② 下标规格改可变对象（闭包读字段）；③ 修 `shulker_box` 命名并对齐 20 个模式（`satisfies` 断言）；④ 复验 `check:pause` 跳过分支。验证：`test:ui2d-station` **13/13**、`check` exit=0 |

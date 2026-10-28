@@ -1485,6 +1485,47 @@ HOTBAR 0..8 | MAIN 9..35 | ARMOR 36..39 | OFFHAND 40
 断言把三块串起来：装备列 0..4 → 库存 36..40、5 → 库存 9（主背包第一格），
 以及"熔炉 3 格 + 装备 5 格"共存时不会串区。
 
+## 5.56 创造栏的过滤吃上了真数据；真机清单立起来了
+
+### 创造栏：三个别名，一个都不能少
+
+把 `ui2d/creativeModel.ts` 接到真注册表（`CREATIVE_ITEMS` + `itemName` + `itemLabel` +
+`creativeTabFor`）时发现一件要命的小事：**DOM 版的搜索是拿三个东西比的**
+
+```ts
+itemLabel(id).includes(query) || itemName(id).toLowerCase().includes(lower) || String(id) === query
+```
+
+而 canvas 版只拿一个名字比 —— 结果就是"原版能搜 `stone`、canvas 搜不到"。所以
+`matchesQuery` 改成接受 `string | readonly string[]`，`nameOf` 也允许返回数组。
+
+新增 `tests/ui2d-creative-realdata.test.ts`（**9 条**，跑真注册表）：
+
+- 每个页签都至少有一件；各页签加起来**正好等于**"全部"（没有既不在任何页签、又没被排除的物品）
+- 中文/英文/id 三种搜法都命中；搜不到就是空（不退化成全部）
+- 一页正好 60 格、最后一页补 `null`、每件都有非空名字
+
+这条测试的价值在于：它证明"通用过滤 + 真数据"能拼起来 —— 接进游戏之前就把
+"某个页签一件都没有""名字全是 `item.123`"这类问题挡掉。
+
+### 真机清单：`.continue/notes/device-checklist.md`
+
+离线能验的都验完了，剩下的每一条都只在有 `core.bin` 的环境成立。清单按六段分开
+（背包接管 15 条 / 触摸 6 条 / 工作站 8 条 / 盔甲 6 条 / 创造栏 5 条 / 暂停 4 条），
+每条都是"动作 → 期望"，后面留空格打勾；发现问题的记录格式也写在末尾
+（复现 / 期望 / 实际 / 猜测），避免只留一句"坏了"。
+
+其中几条是**这次几批改动专门防的坑**，值得优先走：
+
+| 清单项 | 防的是 |
+| --- | --- |
+| C3 熔炉产物格放不进去 | `extraSlotWritable` |
+| C7 放东西 → 退出重进还在 | `containerDirty`（不置就不存盘） |
+| C8 打开潜影盒是 27 格 | `shulker_box` 命名对齐 |
+| D2/D3 头盔只能进头盔格 | `canPlace` 闸门 |
+| E4 拿一整叠而栏里不减少 | `creativePick`（不是 `leftClick`） |
+| F4 关掉暂停后 HUD 恢复 | 之前真踩过的"退出后 HUD 永久消失" |
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

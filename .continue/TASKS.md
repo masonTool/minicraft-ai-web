@@ -6128,6 +6128,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261028-1017 · **装备列数据源（4 条，M37 收口）**：原以为要新开数据源，查下来**盔甲与副手也在 `Inventory` 里**（`HOTBAR 0..8 | MAIN 9..35 | ARMOR 36..39 | OFFHAND 40`），只是不在"背包那 36 格"里 → 装备列只要把三个落点告诉映射层：`{ sideCount: 5, armorSlotBase, offhandSlot }`，`inventoryIndexAt` 的 side 区按"前 4 格盔甲、最后一格副手"换算（**落点由调用方注入**，`ui2d` 不写死 36/40，没注入就返回 `null`）。`syncInventory2dStation()` 里 `sideCount = mode === "inventory" ? 5 : 0`（工作站的右栏本来就没有盔甲列）；`canPlace` 接 `armorSlotForItem(id)`（0..3 = 头/胸/腿/靴，其余是 null）—— "面包塞进头盔格"会被 §5.51 的闸门拦掉。断言把三块串起来：装备列 0..4 → 库存 36..40、5 → 9，以及"熔炉 3 格 + 装备 5 格"共存不串区。验证：`test:ui2d-indexing` **15/15**、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包。⚠️ 仅离线验证。详见 `notes/canvas-ui.md` §5.55 与决策 D65。
 
+- [x] 批次 20261028-1022 · **创造栏吃真数据 + 真机清单（4 条）**：把 `ui2d/creativeModel` 接到真注册表时发现一个要命的小事 —— DOM 的搜索是拿**三个东西**比的（`itemLabel` 英文、`itemName` 本地化、`id` 字符串），而 canvas 只拿一个名字比，结果"原版能搜 `stone`、canvas 搜不到"；`matchesQuery` 改成接受 `string | readonly string[]`。新增 `test:ui2d-creative-realdata` **9 条**（跑真 `CREATIVE_ITEMS`）：每个页签非空、**各页签加总正好等于"全部"**、中/英/id 三种搜法、一页 60 格、末页补 `null`、名字非空。另立 `.continue/notes/device-checklist.md`：**六段 44 条**真机清单（背包接管 15 / 触摸 6 / 工作站 8 / 盔甲 6 / 创造栏 5 / 暂停 4），每条"动作 → 期望 → 打勾"，末尾附问题记录格式（复现/期望/实际/猜测）；其中六条专防本轮改动（产物格只出不进、`containerDirty` 存盘、`shulker_box` 命名、`canPlace` 闸门、`creativePick` 不消耗、暂停关闭后 HUD 恢复）。验证：`test:ui2d-creative` **14/14**、`test:ui2d-creative-realdata` **9/9**、`tsc` 干净、`npm run check` exit=0。详见 §5.56。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
