@@ -40,7 +40,9 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 | --- | --- |
 | `app/src/main/java/com/minicraft/server/NativeServer.java` | JNI 声明（`startServer` / `stopServer` / `serverPort`），名字必须与 `server/rust/src/jni.rs` 逐字对应 |
 | `app/src/main/java/com/minicraft/app/ServerService.java` | 前台服务（常驻通知）+ `MulticastLock` / `WifiLock`；JNI 调用丢在工作线程（主线程会 ANR） |
-| `app/src/main/java/com/minicraft/app/NativeServerPlugin.java` | 给网页用的 Capacitor 插件 `NativeServer.start/port/stop` |
+| `app/src/main/java/com/minicraft/app/ServerControl.java` | 起/停/查端口/查 IP，插件与同步桥共用 |
+| `app/src/main/java/com/minicraft/app/JsHostBridge.java` | 注入 `window.MinicraftAndroid`（网页用它判断能不能开房） |
+| `app/src/main/java/com/minicraft/app/NativeServerPlugin.java` | Capacitor 插件 `NativeServer.start/port/stop`（异步版，保留给以后带参数的场景） |
 | `app/src/main/java/com/minicraft/app/MainActivity.java` | 注册插件（必须在 `super.onCreate()` 之前） |
 | `app/src/main/java/com/minicraft/app/SealedCore.java` | 封存体的解析与解密（纯 Java，可被 JVM 直接验证） |
 | `app/src/main/java/com/minicraft/app/CoreVault.java` | 读 assets + 取安装包签名 + 比白名单，失败一律 `null` |

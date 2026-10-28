@@ -69,7 +69,9 @@ npm run check              # 全量门禁
 - 桌面端：`MacOS/Minicraft` 冒烟 → `title=Minicraft core=41107B`；dmg（arm64/x64）与
   `Minicraft Setup 0.1.0.exe` 都产出了，`Resources/` 里是 `web` + `sealed` 两张皮；
 - iOS：iPhone 16 模拟器实跑，日志 `CoreVault read` 返回的 base64 解码是 `MCTB` + 方块名，
-  0 条 error——**解封链路在真实运行时跑通了**。
+  0 条 error——**解封链路在真实运行时跑通了**；
+- Android：模拟器（API 37 / arm64）实跑，页面正常启动、无崩溃；顺带用 CDP 直连 WebView
+  验了宿主桥与开房链路（`startServer()` 后 8887 端口就绪）。
 
 **没验证过**：
 
