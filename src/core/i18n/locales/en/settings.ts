@@ -110,5 +110,17 @@ export const settings = {
   "settings.unsavedTitle": "Unsaved changes",
   "settings.unsavedText": "These settings have not been saved yet. Save them?",
   "settings.discard": "Cancel (don't save)",
-  "settings.resourcePack.remove": "Remove current resource pack"
+  "settings.resourcePack.remove": "Remove current resource pack",
+  'settings.group.world': 'World',
+  'settings.world.hint': 'These settings apply to the current world only and take effect immediately.',
+  'settings.world.time': 'Time',
+  'settings.world.weather': 'Weather',
+  'settings.world.rulesHint': 'Finer rules (random tick speed, spawn radius, ...) can be changed with /gamerule.',
+  'settings.world.time.day': 'Sunrise',
+  'settings.world.time.noon': 'Noon',
+  'settings.world.time.night': 'Night',
+  'settings.world.time.midnight': 'Midnight',
+  'settings.world.weather.clear': 'Clear',
+  'settings.world.weather.rain': 'Rain',
+  'settings.world.weather.thunder': 'Thunderstorm',
 } satisfies Pick<Messages, keyof typeof zhsettings>;

@@ -30,6 +30,14 @@ import {
   type LanguageSetting,
 } from '../core/i18n/I18n.ts';
 import { GAME_MODES, gameModeLabel, type GameMode } from '../core/world/GameMode.ts';
+// 世界页（2026-10-28）：难度与游戏规则都是"这个世界"的状态，标签表都现成
+import {
+  DIFFICULTIES,
+  difficultyLabel,
+  gameRuleLabel,
+  type Difficulty,
+  type GameRules,
+} from '../core/world/Rules.ts';
 import { FOV_MAX, FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import {
   handednessLabels,
@@ -249,7 +257,19 @@ export function nextCycleValue(values: readonly string[], raw: unknown): string 
  */
 export const SETTING_GROUPS = ['game', 'controls', 'appearance', 'sound'] as const;
 
-export type SettingGroup = (typeof SETTING_GROUPS)[number];
+/** 通用设置的分组（= 存在这台设备上的偏好，草稿 + 保存） */
+export type DeviceGroup = (typeof SETTING_GROUPS)[number];
+
+/**
+ * 「世界」页（2026-10-28，用户）。
+ *
+ * 与上面四组的本质区别：**它改的是当前这个世界，不是这台设备的偏好**，
+ * 所以不进 `GameSettings`、不参与草稿、也没有「保存」——改一下立刻生效
+ * （原版的世界设置就是即时生效的，难度、规则、时间、天气都算世界状态）。
+ * 这一页只在游戏内出现（主菜单里没有"当前世界"）。
+ */
+export const WORLD_GROUP = 'world';
+export type SettingGroup = DeviceGroup | typeof WORLD_GROUP;
 
 /**
  * 分组中文名。
@@ -280,6 +300,14 @@ export function settingGroupLabel(group: SettingGroup): string {
  * 故意不在表里：它们由设备的性能策略决定（见批次 203 的注释）。
  */
 export const SETTING_GROUP_KEYS: Record<SettingGroup, readonly (keyof GameSettings)[]> = {
+  /**
+   * 世界页：**空数组**。
+   *
+   * 它的控件是"世界状态"（难度/模式/规则/时间/天气），不属于 `GameSettings`，
+   * 也不参与草稿与脏值判断。留一个空表而不是把它从 `Record` 里删掉，
+   * 是为了让 `isGroupDirty()` / `saveGroups()` 这类按组遍历的代码不用到处判空。
+   */
+  world: [],
   // 游戏：进世界后最常改的（模式与飞行是"世界状态"，不在这份偏好里）
   game: ['daylightCycle', 'showDebug', 'language'],
   controls: [
@@ -540,6 +568,63 @@ export const DEFAULT_SETTINGS: GameSettings = {
 const STORAGE_KEY = 'bedrock-settings';
 
 /**
+ * 世界页列出的规则（2026-10-28）。
+ *
+ * 挑了原版最常被玩家改的那一批；其余（`randomTickSpeed` / `spawnRadius` /
+ * `snowAccumulationHeight` / `maxCommandChainLength` …）是数值型，给界面要另配输入控件，
+ * 先留在 `/gamerule` 里，页面上用一行小字说明。
+ *
+ */
+const WORLD_RULE_KEYS: readonly (keyof GameRules)[] = [
+  // 昼夜循环：原版就是 gamerule；从「游戏」页搬过来（同一个行为只留一个开关）
+  'doDaylightCycle',
+  'keepInventory',
+  'doWeatherCycle',
+  'doMobSpawning',
+  'mobGriefing',
+  'doFireTick',
+  'naturalRegeneration',
+  'doImmediateRespawn',
+  'doMobLoot',
+  'doTileDrops',
+  'showDeathMessages',
+  'announceAdvancements',
+];
+
+/** 时间预设对应的 0~1 时刻（与 `/time set` 同一坐标系） */
+const TIME_PRESET_VALUE: Record<WorldTimePreset, number> = { day: 0, noon: 0.25, night: 0.5, midnight: 0.75 };
+const TIME_PRESETS: readonly WorldTimePreset[] = ['day', 'noon', 'night', 'midnight'];
+/** 时间/天气的标签键写成显式映射：模板拼键会让 `audit:i18n` 把整族当成"已引用" */
+const TIME_PRESET_LABEL_KEY: Record<WorldTimePreset, string> = {
+  day: 'settings.world.time.day',
+  noon: 'settings.world.time.noon',
+  night: 'settings.world.time.night',
+  midnight: 'settings.world.time.midnight',
+};
+type WorldWeather = 'clear' | 'rain' | 'thunder';
+const WORLD_WEATHERS: readonly WorldWeather[] = ['clear', 'rain', 'thunder'];
+const WEATHER_LABEL_KEY: Record<WorldWeather, string> = {
+  clear: 'settings.world.weather.clear',
+  rain: 'settings.world.weather.rain',
+  thunder: 'settings.world.weather.thunder',
+};
+
+/** 当前时刻最接近哪个预设（跨午夜要按环距算，否则 23:00 会被判成"日出"） */
+export function nearestTimePreset(time: number): WorldTimePreset {
+  let best: WorldTimePreset = 'day';
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const preset of TIME_PRESETS) {
+    const raw = Math.abs((((time % 1) + 1) % 1) - TIME_PRESET_VALUE[preset]);
+    const distance = Math.min(raw, 1 - raw);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = preset;
+    }
+  }
+  return best;
+}
+
+/**
  * 这台设备的**视距上限**（批次 202 引入，批次 203 改语义）。
  *
  * ⚠️ 这里必须按设备分开，不能直接用 `DEFAULT_SETTINGS.viewDistance`：
@@ -751,18 +836,33 @@ export interface SettingsActions {
    * 并补一句原因——而不是"能点、点了没反应"。
    */
   gameModeLocked?: () => boolean;
+  /**
+   * 「世界」页（2026-10-28）：**只在游戏内给**。给了才出现这一页，且它即时生效。
+   * 主菜单的通用设置没有"当前世界"，所以整页不出现。
+   */
+  world?: WorldSettingsActions;
 }
 
+/** 世界页的时间预设（与 `/time set day|noon|night|midnight` 同一口径） */
+export type WorldTimePreset = 'day' | 'noon' | 'night' | 'midnight';
+
 /**
- * 面板的"生效方式"（2026-10-28，用户）。
+ * 「世界」页能改什么（2026-10-28，用户）。
  *
- * 同一个 `SettingsScreen` 被两处用：主菜单的**通用设置**与游戏内的**暂停菜单设置**，
- * 但两者的期望不一样：
- *  - `draft`（通用设置）：改完点「保存」，页脚右下角两颗键（保存 / 恢复默认）；
- *  - `live`（游戏内设置）：**改一下就生效**，玩家正在玩，不该为了调个音量再点一次保存。
+ * 全部**即时生效**：这些是当前世界的状态（难度 / 规则 / 时间 / 天气），
+ * 不像通用设置那样存在"改了但还没保存"的中间态——所以这一页没有「保存」。
+ * 模式与飞行不在这里：它们本来就在 `SettingsActions` 上（`onSetGameMode` / `isFlying`）。
  */
-export interface SettingsScreenOptions {
-  apply?: 'draft' | 'live';
+export interface WorldSettingsActions {
+  difficulty: () => Difficulty;
+  onSetDifficulty: (value: Difficulty) => void;
+  /** 一天内的时刻（0~1，与原版 `tick / 24000` 同一坐标系） */
+  timeOfDay: () => number;
+  onSetTime: (time: WorldTimePreset) => void;
+  weather: () => 'clear' | 'rain' | 'thunder';
+  onSetWeather: (kind: 'clear' | 'rain' | 'thunder') => void;
+  rules: () => GameRules;
+  onSetRule: (key: keyof GameRules, value: boolean | number) => void;
 }
 
 /**
@@ -801,8 +901,8 @@ export class SettingsScreen {
    * 并触发 `onChange`。这样拖滑块、点开关都不会立刻改游戏状态。
    */
   private draft: GameSettings;
-  /** 是否"即时生效"（游戏内设置）：见 `SettingsScreenOptions`，页脚因此没有「保存」 */
-  private readonly live: boolean;
+  /** 这次面板要不要显示「世界」页（游戏内有、主菜单没有），见 `SettingsActions.world` */
+  private readonly groups: readonly SettingGroup[];
   /** 已保存的基准（= 最后一次落盘的值），用来判断"这一页脏了没有" */
   private saved: GameSettings;
   /** 哪些分组按过「恢复默认」但还没保存：该组保存时要带 `reset` 标记（批次 202 的约定） */
@@ -911,12 +1011,13 @@ export class SettingsScreen {
     host: HTMLElement,
     private readonly settings: GameSettings,
     private readonly actions: SettingsActions,
-    options: SettingsScreenOptions = {},
   ) {
     // 草稿与基准都从当前设置拷一份（见 `draft` 字段的注释）
     this.draft = { ...settings };
     this.saved = { ...settings };
-    this.live = options.apply === 'live';
+    // 游戏内多一页「世界」并排在第一位（玩的时候最常调的就是它）
+    this.groups = actions.world ? [WORLD_GROUP, ...SETTING_GROUPS] : SETTING_GROUPS;
+    this.activeGroup = this.groups[0]!;
 
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
@@ -1018,7 +1119,7 @@ export class SettingsScreen {
     // 挂上 tab 角色反而会让读屏念出错误的层级。用 `aria-pressed` 就够表达"当前选中哪个"。
     const tabs = document.createElement('div');
     tabs.className = 'settings-tabs';
-    for (const group of SETTING_GROUPS) {
+    for (const group of this.groups) {
       const tab = document.createElement('button');
       tab.type = 'button';
       tab.className = 'settings-tab';
@@ -1032,7 +1133,7 @@ export class SettingsScreen {
     // ---- 设置项（按分组切成 section：每组的行数不多，一屏放得下）
     const body = document.createElement('div');
     body.className = 'settings-body';
-    for (const group of SETTING_GROUPS) {
+    for (const group of this.groups) {
       const section = document.createElement('section');
       section.className = 'settings-section';
       section.dataset.group = group;
@@ -1302,12 +1403,12 @@ export class SettingsScreen {
       this.makeSlider('volumeMusic', t('settings.row.volumeMusic'), '%', 0, 100, 1, 100),
     );
 
+    // 世界页（2026-10-28）：只在游戏内给（主菜单没有"当前世界"），改完立即生效
+    if (this.actions.world) this.buildWorldSection(this.section(WORLD_GROUP));
+
     const game = this.section('game');
     // 第一块：开关与下拉
     const gameOptions = this.makeBlock(game);
-    // 批次 528（用户）：游戏模式单独成行、排第一；选中创造后"飞行"才在右边出现。
-    if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
-    this.makeToggle(gameOptions, 'daylightCycle', t('settings.row.daylightCycle'));
     this.makeToggle(gameOptions, 'showDebug', t('settings.row.showDebug'));
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
     // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
@@ -1378,11 +1479,6 @@ export class SettingsScreen {
     resetButton.className = 'settings-reset';
     resetButton.textContent = t('settings.reset');
     resetButton.addEventListener('click', () => this.resetActiveGroup());
-    // 游戏内设置（live）：没有「保存」这一步，改一下就生效，页脚只剩右下角那颗「恢复默认」
-    if (this.live) {
-      saveButton.hidden = true;
-      footer.classList.add('live');
-    }
     footer.append(saveButton, resetButton);
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
@@ -1395,7 +1491,8 @@ export class SettingsScreen {
     // 设置页只需要处理角色形象弹窗的 Esc。
     document.addEventListener('keydown', this.onDocumentKeyDown, true);
 
-    this.applyActiveGroup(SETTING_GROUPS[0]);
+    // 游戏内默认停在「世界」页（玩的时候最常调的就是它）；主菜单仍是「游戏」
+    this.applyActiveGroup(this.groups[0]!);
     this.applyPage('menu');
     this.renderSubtitle();
 
@@ -1573,6 +1670,8 @@ export class SettingsScreen {
     if (this.open && group === 'appearance') this.refreshAvatar();
     // 每一页的"保存"按钮各自判断脏不脏（换页之后要重算）
     this.updateSaveState();
+    // 页头那句提示也跟着页签变（世界页没有「保存」）
+    this.renderSubtitle();
   }
 
   /** 当前分组（验收脚本/调试用） */
@@ -1651,8 +1750,6 @@ export class SettingsScreen {
       value.textContent = readout();
       this.updateSaveState();
     });
-    // 松手才提交（游戏内设置的"即时生效"）；通用设置在这里只是把保存键点亮
-    input.addEventListener('change', () => this.commitLive());
 
     // 恢复默认 / 重新打开面板时按**草稿**重画（见 `refreshers`）
     this.refreshers.push(() => {
@@ -1707,10 +1804,7 @@ export class SettingsScreen {
       write();
       sync();
       // 飞行这类"世界状态"仍然立即生效（它不在这份偏好里）；真正的设置项只标脏
-      if (commit) {
-        this.updateSaveState();
-        this.commitLive();
-      }
+      if (commit) this.updateSaveState();
     });
     this.controlSync.set(button, sync);
     this.refreshers.push(sync);
@@ -1746,9 +1840,8 @@ export class SettingsScreen {
 
     const control = new Dropdown<T>(values, labels, read(), (next) => {
       write(next);
-      // 通用设置：只标脏（保存按钮亮起）；游戏内设置：立刻落盘并生效
+      // 只标脏：保存按钮亮起，真正生效等玩家点「保存」
       this.updateSaveState();
-      this.commitLive();
     });
     this.dropdowns.push(control);
     onCreate?.(control);
@@ -1789,22 +1882,10 @@ export class SettingsScreen {
     // 视距不在任何分组里，但恢复默认时仍要按设备口径落一次
     this.draft.viewDistance = defaultViewDistanceFor(isTouchUi());
     for (const refresh of this.refreshers) refresh();
+    // 保存时才带 `reset` 标记（见 `saveGroups`）。「世界」页没有这一颗键（页脚收起），
+    // 也不该走到这里——它的组键表是空的，循环什么都不会改。
+    this.pendingResetGroups.add(group);
     this.updateSaveState();
-    if (this.live) {
-      /*
-       * 游戏内设置（2026-10-28）：恢复默认也**当场生效**，不存在"再点保存"。
-       *
-       * `reset` 标记仍然要带出去：分辨率倍率与装饰层档位不在这份 settings 里，
-       * 不带标记它们会永远停在"上一台机器扛不住"的那一档（批次 202 的坑）。
-       * `viewDistance` 也不在任何分组里，`commitLive()` 拷不到，这里单独补一次。
-       */
-      this.settings.viewDistance = this.draft.viewDistance;
-      this.commitLive();
-      this.actions.onChange(this.settings, { reset: true });
-    } else {
-      // 草稿模式：保存时才带 `reset` 标记（见 `saveGroups`）
-      this.pendingResetGroups.add(group);
-    }
     // 给一句确认：面板上没有独立 toast，借用设置页那行提示，2 秒后恢复原文
     this.settingsHintEl.textContent = t('settings.resetDone');
     window.setTimeout(() => this.renderSubtitle(), 2000);
@@ -1831,8 +1912,6 @@ export class SettingsScreen {
         // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）
         for (const refresh of this.refreshers) refresh();
         this.updateSaveState();
-        // 游戏内设置：套预设也当场生效（否则要再点一次保存，而那颗键已经被藏了）
-        this.commitLive();
       });
       this.presetButtons.push(button);
       row.appendChild(button);
@@ -2289,6 +2368,79 @@ export class SettingsScreen {
   }
 
   /**
+   * 「世界」页（2026-10-28，用户："游戏内设置里应该有一个『世界』的 item"）。
+   *
+   * 内容对齐原版世界里"玩的时候真的会去调"的那一批：
+   * 难度 / 游戏模式（含飞行）/ 时间 / 天气 / 常用世界规则。
+   * 全部**即时生效**：这一页没有草稿、没有「保存」，页脚也整块收起。
+   */
+  private buildWorldSection(section: HTMLElement): void {
+    const world = this.actions.world;
+    if (!world) return;
+
+    const block = this.makeBlock(section);
+    // 游戏模式 + 飞行：与之前同一个组件，只是从「游戏」页搬到世界页
+    if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(block);
+    this.makeDropdown<Difficulty>(
+      block,
+      t('world.difficulty'),
+      DIFFICULTIES,
+      Object.fromEntries(DIFFICULTIES.map((difficulty) => [difficulty, difficultyLabel(difficulty)])) as Record<
+        Difficulty,
+        string
+      >,
+      () => world.difficulty(),
+      (next) => world.onSetDifficulty(next),
+      (control) => {
+        // 极限世界难度也锁死（与游戏模式同一条口径，2026-10-28）
+        if (this.actions.gameModeLocked?.()) control.setDisabled(true);
+      },
+    );
+
+    // 时间 / 天气：原版在作弊命令里，这里给成下拉（省得玩家记 `/time set noon`）
+    const envBlock = this.makeBlock(section);
+    this.makeDropdown<WorldTimePreset>(
+      envBlock,
+      t('settings.world.time'),
+      TIME_PRESETS,
+      Object.fromEntries(TIME_PRESETS.map((preset) => [preset, t(TIME_PRESET_LABEL_KEY[preset])])) as Record<
+        WorldTimePreset,
+        string
+      >,
+      () => nearestTimePreset(world.timeOfDay()),
+      (next) => world.onSetTime(next),
+    );
+    this.makeDropdown<WorldWeather>(
+      envBlock,
+      t('settings.world.weather'),
+      WORLD_WEATHERS,
+      Object.fromEntries(WORLD_WEATHERS.map((kind) => [kind, t(WEATHER_LABEL_KEY[kind])])) as Record<
+        WorldWeather,
+        string
+      >,
+      () => world.weather(),
+      (next) => world.onSetWeather(next),
+    );
+
+    // 世界规则：标签直接用 `/gamerule` 那张表（六语言早就有了）
+    const rulesBlock = this.makeBlock(section);
+    for (const key of WORLD_RULE_KEYS) {
+      this.makeSwitch(
+        rulesBlock,
+        gameRuleLabel(key),
+        () => world.rules()[key] === true,
+        () => world.onSetRule(key, !(world.rules()[key] === true)),
+        // 世界规则不进草稿：改完立刻生效，也不参与"未保存"判断
+        false,
+      );
+    }
+    const rulesHint = document.createElement('p');
+    rulesHint.className = 'settings-note';
+    rulesHint.textContent = t('settings.world.rulesHint');
+    section.appendChild(rulesHint);
+  }
+
+  /**
    * "游戏模式 + 飞行"同一行（批次 528，用户要求）。
    *
    * 模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
@@ -2389,6 +2541,15 @@ export class SettingsScreen {
         this.settings.viewDistance = defaultViewDistanceFor(isTouchUi());
       }
     }
+    /*
+     * 昼夜循环的真身在**世界规则**里（世界页 / `/gamerule` 改它，主循环读 `settings.daylightCycle`）。
+     *
+     * 草稿是打开面板那一刻的快照：如果玩家先在「世界」页关掉昼夜循环、再回「游戏」页
+     * 改个别的东西并保存，草稿里那个旧 `true` 会把设置盖回去 —— 规则说 false、时间却还在走。
+     * 所以保存通用设置时，这一项一律以世界规则为准。
+     */
+    if (this.actions.world) this.settings.daylightCycle = this.actions.world.rules().doDaylightCycle;
+
     this.saved = { ...this.settings };
 
     saveSettings(this.settings);
@@ -2416,42 +2577,20 @@ export class SettingsScreen {
 
   /** 有没有任何一页脏了（返回 / 关闭面板时用来决定要不要提醒） */
   hasUnsaved(): boolean {
-    // 游戏内设置是即时的：每次改动都当场落盘，不存在"未保存"这种状态
-    if (this.live) return false;
+    // 只问通用设置那四组：「世界」页是即时生效的，本来就没有"未保存"这种状态
     return SETTING_GROUPS.some((group) => this.isGroupDirty(group));
   }
 
   /**
-   * 游戏内设置的"即时生效"（2026-10-28，用户）。
+   * 保存按钮的亮/灰（只有当前页改过才亮），页脚顺便挂一个 `.dirty` 提示。
    *
-   * 把草稿里**所有组**的键拷回主程序那份 `settings`、落盘、再通知它重算——
-   * 只拷当前组是不够的：桌面端四组同时可见，玩家的最后一次改动不一定在当前页签里。
-   *
-   * 与 `saveGroups()` 的分工：那条是"点保存"（按组、带 reset 标记）；
-   * 这条是"每一次控件变化"，所以不带 reset 标记（恢复默认自己会走 `resetActiveGroup`）。
+   * 「世界」页（2026-10-28）：没有草稿、没有「保存」，所以整个页脚收起——
+   * 留着两颗键反而会让人以为"刚才那一下还没生效"。
    */
-  private commitLive(): void {
-    if (!this.live) return;
-    const languageBefore = this.settings.language;
-    for (const group of SETTING_GROUPS) {
-      for (const key of SETTING_GROUP_KEYS[group]) {
-        (this.settings as unknown as Record<string, unknown>)[key] = (
-          this.draft as unknown as Record<string, unknown>
-        )[key];
-      }
-    }
-    this.saved = { ...this.settings };
-    saveSettings(this.settings);
-    this.actions.onChange(this.settings);
-    this.settingsHintEl.textContent = t('settings.saved');
-    window.setTimeout(() => this.renderSubtitle(), 1200);
-    // 语言必须整页重载（理由见 `bindLabel`：局部重刷覆盖不到物品名/成就/命令反馈）
-    if (this.settings.language !== languageBefore) location.reload();
-  }
-
-  /** 保存按钮的亮/灰（只有当前页改过才亮），页脚顺便挂一个 `.dirty` 提示 */
   private updateSaveState(): void {
-    const dirty = this.isGroupDirty(this.activeGroup);
+    const isWorld = this.activeGroup === WORLD_GROUP;
+    const dirty = !isWorld && this.isGroupDirty(this.activeGroup);
+    if (this.footerEl) this.footerEl.hidden = isWorld;
     if (this.saveButton) this.saveButton.disabled = !dirty;
     this.footerEl?.classList.toggle('dirty', dirty);
   }
@@ -2564,8 +2703,11 @@ export class SettingsScreen {
    * 批次 20261024-1152：暂停页那句触摸/键盘提示随副标题一起删了，这里只剩设置页这一句。
    */
   private renderSubtitle(): void {
-    // 批次 335：设置页只留一句"改动立即生效"——返回按钮与 Esc 本来就看得见/试得到
-    this.settingsHintEl.textContent = t('settings.hintApplies');
+    // 批次 335：设置页只留一句提示——返回按钮与 Esc 本来就看得见/试得到。
+    // 2026-10-28：世界页没有「保存」，那句话在这儿是错的，换成"只影响当前世界、立即生效"。
+    this.settingsHintEl.textContent = t(
+      this.activeGroup === WORLD_GROUP ? 'settings.world.hint' : 'settings.hintApplies',
+    );
   }
 
   get isOpen(): boolean {

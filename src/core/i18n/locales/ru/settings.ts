@@ -106,5 +106,17 @@ export const settings = {
   "settings.unsavedTitle": "Несохранённые изменения",
   "settings.unsavedText": "Эти настройки ещё не сохранены. Сохранить?",
   "settings.discard": "Отмена (не сохранять)",
-  "settings.resourcePack.remove": "Удалить текущий пакет ресурсов"
+  "settings.resourcePack.remove": "Удалить текущий пакет ресурсов",
+  'settings.group.world': 'Мир',
+  'settings.world.hint': 'Эти настройки относятся только к текущему миру и применяются сразу.',
+  'settings.world.time': 'Время',
+  'settings.world.weather': 'Погода',
+  'settings.world.rulesHint': 'Более тонкие правила (скорость случайных тиков, радиус появления…) меняются командой /gamerule.',
+  'settings.world.time.day': 'Рассвет',
+  'settings.world.time.noon': 'Полдень',
+  'settings.world.time.night': 'Ночь',
+  'settings.world.time.midnight': 'Полночь',
+  'settings.world.weather.clear': 'Ясно',
+  'settings.world.weather.rain': 'Дождь',
+  'settings.world.weather.thunder': 'Гроза',
 } satisfies Pick<Messages, keyof typeof zhSettings>;

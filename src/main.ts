@@ -216,7 +216,7 @@ import {
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
-import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
+import { executeCommand, parseTime, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 // 选择器（批次 399）：`/execute` 需要"当前维度里有哪些实体"的扁平快照
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 // 记分板（M23，批次 402）
@@ -3290,9 +3290,21 @@ class App {
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
       diagnosticsStats: () => diag.stats(),
+      /*
+       * 「世界」页（2026-10-28，用户）：只在游戏内给，改的是**当前这个世界**，
+       * 全部即时生效（难度 / 规则 / 时间 / 天气）。通用设置仍然是草稿 + 保存。
+       */
+      world: {
+        difficulty: () => this.difficulty,
+        onSetDifficulty: (value) => this.setDifficulty(value),
+        timeOfDay: () => this.timeOfDay,
+        onSetTime: (preset) => this.commandSetTimeOfDay(parseTime(preset) ?? 0),
+        weather: () => this.weather.current,
+        onSetWeather: (kind) => this.commandSetWeather(kind),
+        rules: () => this.rules,
+        onSetRule: (key, value) => this.applyGameRule(key, value),
+      },
     },
-    // 游戏内设置：改一下就生效（2026-10-28，用户），页脚不出现「保存」
-    { apply: 'live' },
   );
 
     // 联机入口（联机9）：叠在暂停菜单上的小面板。挂 `document.body` 而不是画布容器——
@@ -5250,6 +5262,13 @@ class App {
     this.rules = normalizeGameRules(data.gameRules);
     // 读档时也要把"火要不要处理"推给模块级开关（否则读档后开关停在旧世界/默认值上）
     setFireTickEnabled(this.rules.doFireTick);
+    /*
+     * 昼夜循环的实际读数在**设备设置**里（主循环看 `settings.daylightCycle`），
+     * 而它的真身在**世界规则**里（`/gamerule doDaylightCycle`）。不同步的话：
+     * 在世界页把昼夜循环关掉 → 存档里规则是 false，但重启后 settings 还是 true，
+     * 时间又开始走——玩家会以为设置没保存。
+     */
+    this.settings.daylightCycle = this.rules.doDaylightCycle;
     this.effects.restore(data.effects);
     // 旧存档没有 xp 字段：视为 0 级，而不是 NaN
     this.experience.restore(data.xp);
@@ -14003,22 +14022,9 @@ class App {
       setWeather: (kind) => this.commandSetWeather(kind),
       canChangeWorld: () => !this.net.connected || this.net.role === 'host',
       difficulty: () => this.difficulty,
-      setDifficulty: (value) => {
-        // 极限模式（批次 550）：难度锁死困难，/difficulty 与设置面板都不生效
-        if (this.hardcore) return;
-        this.difficulty = value;
-        // 回写世界清单：下次进这个世界（还没保存过玩家数据时）也能拿到新难度
-        this.onDifficultyChanged?.(value);
-      },
+      setDifficulty: (value) => this.setDifficulty(value),
       gameRules: () => this.rules,
-      setGameRule: (key, value) => {
-        this.rules[key] = value;
-        // 火系统的开关是模块级状态（见 `Fire.setFireTickEnabled` 的注释）：
-        // 规则变了必须**显式**推过去，否则 `/gamerule doFireTick false` 要等下次读档才生效
-        if (key === 'doFireTick') setFireTickEnabled(value as boolean);
-        // 昼夜循环这类规则同时写回设置（设置是"这台设备的默认"，规则是"这个世界的当前值"）
-        if (key === 'doDaylightCycle') this.settings.daylightCycle = value as boolean;
-      },
+      setGameRule: (key, value) => this.applyGameRule(key, value),
       // 世界边界（K12，批次 175）：改完立刻生效（蓝墙下一帧就在新位置），并进存档
       worldBorder: () => ({ ...this.border }),
       setWorldBorder: (patch) => {
@@ -19416,6 +19422,33 @@ class App {
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
     this.applyEnvironment();
+  }
+
+  /**
+   * 改难度（2026-10-28）。
+   *
+   * 命令层（`/difficulty`）与暂停菜单的「世界」页共用这一条出口：
+   * 极限世界锁死困难，判定只写在**这一处**，免得两个入口各判一次再漂。
+   */
+  setDifficulty(value: Difficulty): void {
+    if (this.hardcore) return;
+    this.difficulty = value;
+    // 回写世界清单：下次进这个世界（还没保存过玩家数据时）也能拿到新难度
+    this.onDifficultyChanged?.(value);
+  }
+
+  /**
+   * 改一条世界规则（`/gamerule` 与「世界」页共用，2026-10-28）。
+   *
+   * 两处副作用必须**立刻**推下去，不能等下次读档：
+   *  - `doFireTick` 是模块级开关（见 `Fire.setFireTickEnabled` 的注释）；
+   *  - `doDaylightCycle` 的实际读数在设备设置里（主循环看 `settings.daylightCycle`），
+   *    两者历史上就是同步写的。
+   */
+  applyGameRule(key: keyof GameRules, value: boolean | number): void {
+    (this.rules as unknown as Record<string, unknown>)[key] = value;
+    if (key === 'doFireTick') setFireTickEnabled(value === true);
+    if (key === 'doDaylightCycle') this.settings.daylightCycle = value === true;
   }
 
   /**

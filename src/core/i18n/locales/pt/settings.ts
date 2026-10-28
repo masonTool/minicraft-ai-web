@@ -105,5 +105,17 @@ export const settings = {
   "settings.unsavedTitle": "Alterações não salvas",
   "settings.unsavedText": "Estas configurações ainda não foram salvas. Salvar?",
   "settings.discard": "Cancelar (não salvar)",
-  "settings.resourcePack.remove": "Remover o pacote de recursos atual"
+  "settings.resourcePack.remove": "Remover o pacote de recursos atual",
+  'settings.group.world': 'Mundo',
+  'settings.world.hint': 'Estas configurações valem só para o mundo atual e têm efeito imediato.',
+  'settings.world.time': 'Hora',
+  'settings.world.weather': 'Clima',
+  'settings.world.rulesHint': 'Regras mais finas (velocidade de ticks aleatórios, raio de spawn…) podem ser alteradas com /gamerule.',
+  'settings.world.time.day': 'Amanhecer',
+  'settings.world.time.noon': 'Meio-dia',
+  'settings.world.time.night': 'Noite',
+  'settings.world.time.midnight': 'Meia-noite',
+  'settings.world.weather.clear': 'Limpo',
+  'settings.world.weather.rain': 'Chuva',
+  'settings.world.weather.thunder': 'Tempestade',
 } satisfies Pick<Messages, keyof typeof zhSettings>;

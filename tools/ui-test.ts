@@ -299,8 +299,9 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
         inventory.includes("t(touchDevice ? 'inventory.recipeBook' : 'inventory.recipeBookKey')"),
       );
   check(
-    '设置页提示只留一句"改动立即生效"（不再提 Esc / 返回）',
-    settings.includes("this.settingsHintEl.textContent = t('settings.hintApplies');"),
+    '设置页提示只留一句（通用设置=保存后生效 / 世界页=立即生效）',
+    // 2026-10-28：世界页没有「保存」，所以页头提示按页签分两句
+    settings.includes("'settings.world.hint' : 'settings.hintApplies'"),
   );
 }
 
@@ -2524,13 +2525,34 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
     /\.settings-footer \{[^}]*justify-content: flex-end;/.test(compact) &&
       /\.settings-footer \.settings-save,[^}]*\.settings-footer \.settings-reset \{[^}]*width: auto;/.test(compact),
   );
+  // 2026-10-28（用户口径修正）：只有「世界」页即时生效；通用设置（四组）仍是草稿 + 保存
   check(
-    '通用设置（保存制）与游戏内设置（即时生效）分开',
-    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
-      'private readonly live: boolean;',
-    ) &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private commitLive(): void') &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
+    '「世界」页即时生效、且只在游戏内出现；通用设置仍是保存制',
+    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("export const WORLD_GROUP = 'world';") &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+        'this.groups = actions.world ? [WORLD_GROUP, ...SETTING_GROUPS] : SETTING_GROUPS;',
+      ) &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+        'if (this.actions.world) this.buildWorldSection(this.section(WORLD_GROUP));',
+      ) &&
+      // 世界页不收页脚（没有保存/恢复默认）
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+        'if (this.footerEl) this.footerEl.hidden = isWorld;',
+      ) &&
+      // 脏值判断只看通用设置那四组
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+        'return SETTING_GROUPS.some((group) => this.isGroupDirty(group));',
+      ) &&
+      // 主程序给的是世界级回调，不再是整面板的 live 开关
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('world: {') &&
+      !readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
+  );
+  check(
+    '世界页有难度 / 时间 / 天气 / 常用规则',
+    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_RULE_KEYS') &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("t('settings.world.time')") &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("t('settings.world.weather')") &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('nearestTimePreset(world.timeOfDay())'),
   );
   check(
     '通用设置也有「日志 → 导出」入口',
@@ -5350,7 +5372,8 @@ console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
   );
   check(
     '游戏模式那一行的显隐判据跟着新回调（否则整行会消失）',
-    settingsSrc.includes('if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);'),
+    // 2026-10-28：这一行从「游戏」页搬到「世界」页，判据不变、容器改名
+    settingsSrc.includes('if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(block);'),
   );
 }
 

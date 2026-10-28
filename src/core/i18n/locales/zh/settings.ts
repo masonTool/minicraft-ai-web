@@ -115,5 +115,17 @@ export const settings = {
   'settings.unsavedText': '当前设置还没有保存，要保存吗？',
   'settings.discard': '取消（不保存）',
   // 资源包改成持久化之后（2026-10-28）需要一颗"移除"键
-  'settings.resourcePack.remove': '移除当前资源包'
+  'settings.resourcePack.remove': '移除当前资源包',
+  'settings.group.world': '世界',
+  'settings.world.hint': '这些是当前世界的设置，改完立刻生效，不影响其它世界。',
+  'settings.world.time': '时间',
+  'settings.world.weather': '天气',
+  'settings.world.rulesHint': '更细的规则（随机刻速度、重生半径等）可以用 /gamerule 命令修改。',
+  'settings.world.time.day': '日出',
+  'settings.world.time.noon': '正午',
+  'settings.world.time.night': '夜晚',
+  'settings.world.time.midnight': '午夜',
+  'settings.world.weather.clear': '晴朗',
+  'settings.world.weather.rain': '下雨',
+  'settings.world.weather.thunder': '雷暴',
 } as const;

@@ -106,5 +106,17 @@ export const settings = {
   "settings.unsavedTitle": "Nicht gespeicherte Änderungen",
   "settings.unsavedText": "Diese Einstellungen sind noch nicht gespeichert. Speichern?",
   "settings.discard": "Abbrechen (nicht speichern)",
-  "settings.resourcePack.remove": "Aktuelles Ressourcenpaket entfernen"
+  "settings.resourcePack.remove": "Aktuelles Ressourcenpaket entfernen",
+  'settings.group.world': 'Welt',
+  'settings.world.hint': 'Diese Einstellungen gelten nur für die aktuelle Welt und wirken sofort.',
+  'settings.world.time': 'Zeit',
+  'settings.world.weather': 'Wetter',
+  'settings.world.rulesHint': 'Feinere Regeln (Random-Tick-Geschwindigkeit, Spawn-Radius …) lassen sich mit /gamerule ändern.',
+  'settings.world.time.day': 'Sonnenaufgang',
+  'settings.world.time.noon': 'Mittag',
+  'settings.world.time.night': 'Nacht',
+  'settings.world.time.midnight': 'Mitternacht',
+  'settings.world.weather.clear': 'Klar',
+  'settings.world.weather.rain': 'Regen',
+  'settings.world.weather.thunder': 'Gewitter',
 } satisfies Pick<Messages, keyof typeof zhSettings>;
