@@ -4247,10 +4247,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       ⚠️ 待人工：双端手测"联机盖房 → 退房 → 单机进同一世界房子还在"与
       "房主退房后单机改动 → 重开同名房，队友能看到"。离线套件只覆盖协议与服务端记账，不覆盖 `App`。
 
-- [ ] R2 **iOS 侧 Bonjour 浏览（`NetServiceBrowser`）**：现在只有发布
-      （`server/ios/Sources/BonjourAdvertiser.swift` 用的 `NetService`），没有浏览，
-      所以"iOS 之间靠 Bonjour 互相发现"还不成立——能看到邻居是因为对方也发了 UDP 组播。
-      补约 60 行 Swift + 在模拟器里用 Mac 的 `dns-sd -R` 发布假记录验证（`check-sim.sh` 可加一条）。
+- [x] R2 **iOS 侧 Bonjour 浏览（`NetServiceBrowser`）** —— 代码早已落地（`Sources/BonjourBrowser.swift`：搜 `_minicraft._tcp`、IPv4 + TXT、每 8 秒重 resolve 对齐 Rust 的 12 秒 TTL、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`；`ForegroundSession` 已接线，`check.sh` 检查该符号），本轮补上缺的**语法门禁** `npm run check:swift`（`swiftc -parse` 四个文件，接进 `npm run check`）。⚠️ 真实 mDNS 发现仍需两台真机（README 的上机清单第 3 条）
+
 - [x] R1 **Rust 版跟进 2026-10-26 之后的协议**（**已完成：297 / 297 全绿**）。
   - 补齐的能力：`no-host` / `host-offline` / `maxPlayers` / `/ping` / `/healthz.beaconPort` /
     `player` 广播的 `isHost` / 快照 **v2**（只留时钟，房间数据不落盘也不再读回）/
@@ -6112,6 +6110,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261028-0732 · **待办清零：M41 / M43 / M38 第一版（4 条）**：① **M41** —— 接管模式下 `Q` 由 DOM 处理（读同一份 `held`）本来能丢，但 `render()` 每帧都 `pushCursor()` 会把旧值写回去，表现是"按 Q 丢不掉"；加 `cursorDirty`：只有**我们自己改过**才推，否则先拉，外部改动（Q 丢弃、快捷键）因此被正确吸收。② **M43** —— `#death`（z 6）与 `#tutorial` 各挂一个镜像（z 7 / 8）。③ **M38 第一版** —— 创造模式与生存的差别集中在"格子更小列数更多"与"**取用不减来源**"：`CREATIVE_LAYOUT`（12 列 / 34px）+ `layoutCreativePanel()`（页签 / 搜索框 / 网格 / 快捷栏）+ `drawCreativePanel()` + `creativePick()`（照着格子复制一整叠，**不能复用 `leftClick`**，否则物品栏越拿越空）。新增 9 条断言（取用 5 + 布局 4）。预览 `?creative` + 2 张截图。验证：`test:ui2d-inventory-model` **63/63**、`tsc` 干净、`npm run check` exit=0、71 张截图。M38 还差分类数据/搜索过滤（游戏侧数据）与接进 `?ui2dinv=1`。详见 `notes/canvas-ui.md` §5.48。
 
+- [x] 批次 20261028-0812 · **R2 收口 + 创造栏搜索分页（4 条）**：① **R2 不是没做** —— `Sources/BonjourBrowser.swift` 早就写全（搜 `_minicraft._tcp`、IPv4+TXT、每 8 秒重 resolve 对齐 Rust 的 12 秒 TTL、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`），`ForegroundSession` 已接线、`check.sh` 也查了符号，是**任务表没跟上代码**；缺的是门禁 —— 新增 `npm run check:swift`（`tools/swift-parse-check.mjs`，对四个 `.swift` 跑 `swiftc -parse`），因为 `check.sh` 要先 `cargo` 编 xcframework，本机常没有 cargo，于是 Swift 那半边**从来没被任何门禁碰过**；已接进 `npm run check`，`check.sh` 也加了同样的 ⓪ 步。② **M38 剩余**：分类数据早在 `ui/creativeTabs.ts`，缺的是"筛出来再摆进 12 列网格" —— 新增 `ui2d/creativeModel.ts`（`matchesQuery` 按包含匹配、`filterCreativeItems` 保持注册表顺序、`creativePageCount` / `creativePageSlice` **页号越界自动夹住**、`fillCreativeGrid` 补 `null` 到固定格数），面板补**翻页区**（`‹ 2 / 2 ›`）。页号夹取是关键：搜索词一变页数就变，停在"第 5 页"时搜一个 3 结果的词，不夹就是**一屏空白**。预览页改用真数据（450 件 / 每页签 90 件），截图 `44-creative.png`（搜"石"命中 8）与 `44b-creative-page2.png`（第 2/2 页）。验证：`test:ui2d-creative` **13/13**、`test:ui2d-inventory-model` **65/65**、`check:swift` 四文件通过、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、73 张截图。⚠️ 真实 mDNS 发现仍需两台真机。详见 `notes/canvas-ui.md` §5.49。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6192,7 +6192,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（259 条，不是差异，但同样"集中查"更好）
+### 实现注意（260 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6454,6 +6454,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2250 · **自绘背包补上提示框与耐久条（3 条，M27 自绘侧）**：镜像方案里 tooltip 是 DOM（`#item-tooltip`），自绘面板一旦接管指针，DOM 的 `hover` 就收不到事件 —— 提示框会**直接消失**，而这种"丢功能"最容易被误判成"还没做"，所以必须在替换之前补齐。新增 `ui2d/itemTooltip.ts`：近黑紫底 + 紫边 + 左侧稀有度色条 + 标题/说明行/耐久条，位置逻辑抽成纯函… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2324 · **自绘背包真正接管输入（3 条，M26b 最后一步）**：新增 `?ui2dinv=1` —— 覆盖层 `pointer-events: auto` 吃指针（down/move/up 连同右键与触摸标记喂给 `InventoryPanelHost`），DOM 面板用 `html.ui2dinv .inv-shell { visibility: hidden }` 退场（**不是 `display: none`**：里面的按钮… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2347 · **盔甲 4 格 + 副手 1 格（3 条，M37）**：布局加 `side: { count, offhandGap? }` —— 面板右侧竖排一列，盔甲从上往下、副手单独隔 6px；槽位顺序延长为 **extra(+结果格) → side → main(27) → hotbar(9)**（`SlotAccess` 下标就靠这条顺序，改了要同步所有调用方）。第一版只按玩家网格算面板高度，结果 4 盔甲 + 副手比网格高，**… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261028-0812 · **R2 收口 + 创造栏搜索分页（4 条）**：① **R2 不是没做** —— `Sources/BonjourBrowser.swift` 早就写全（搜 `_minicraft._tcp`、IPv4+TXT、每 8 秒重 resolve 对齐 Rust 的 12 秒 TTL、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`），`ForegroundSession` 已接线… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->

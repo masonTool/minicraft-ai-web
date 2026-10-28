@@ -37,18 +37,29 @@
       import {
         CREATIVE_LAYOUT,
         Ui2DOverlay,
+        creativePageCount,
+        creativePageSlice,
         creativePick,
         drawCreativePanel,
+        fillCreativeGrid,
+        filterCreativeItems,
         layoutCreativePanel,
       } from '../../src/ui2d/index.ts';
 
       const params = new URLSearchParams(window.location.search);
-      const tab = Number(params.get('tab') ?? '0') || 0;
+      const tabIndex = Number(params.get('tab') ?? '0') || 0;
       const query = params.get('q') ?? '';
+      const pageParam = Number(params.get('page') ?? '0') || 0;
       const pickIndex = params.get('pick');
       const tint = params.get('tint') === '1';
 
-      const TABS = ['建筑方块', '自然', '食物', '工具', '杂项'];
+      const TABS = [
+        { key: 'building', label: '建筑方块' },
+        { key: 'nature', label: '自然' },
+        { key: 'items', label: '物品' },
+        { key: 'equipment', label: '工具' },
+        { key: 'misc', label: '杂项' },
+      ];
       const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
 
       /** 图标画笔：真机是 `drawItemIcon(canvas, atlas, id)`，这里画色块 */
@@ -78,12 +89,33 @@
       const y = Math.round((overlay.height - layout.panel.h) / 2);
       const placed = layoutCreativePanel(x, y, { rows: 5, tabs: TABS.length });
 
-      // 网格里铺 60 件（每格一个 id，方便看"12 列"对不对）
-      const gridItems = placed.grid.map((_, index) => ({
-        icon: iconOf((index % 12) + 1),
-        count: 1 + (index % 8),
-        id: (index % 12) + 1,
+      /*
+       * 60 件"物品"：每条都有名字与页签，这样搜索/分页才测得出效果。
+       * 真机上这份数据来自注册表（`itemName(id)` + `creativeTabFor(id)`）。
+       */
+      const NAMES = ['圆石', '石砖', '泥土', '草方块', '沙子', '砂岩', '木板', '原木', '树叶', '铁矿石', '钻石', '铁镐'];
+      // 450 件、每页签 90 件 → 每页签 2 页（60 一页，正好演示翻页）
+      const catalogue = Array.from({ length: 450 }, (_, i) => ({
+        id: (i % 12) + 1,
+        name: `${NAMES[i % NAMES.length]} ${i + 1}`,
+        tab: TABS[i % TABS.length].key,
       }));
+
+      // 页签过滤 → 搜索过滤 → 分页 → 铺进 12 列网格（全部是 ui2d 里的纯函数）
+      const tabKey = TABS[tabIndex]?.key ?? TABS[0].key;
+      const matched = filterCreativeItems(catalogue, {
+        query,
+        nameOf: (entry) => entry.name,
+        tabOf: (entry) => entry.tab,
+        tab: tabKey,
+      });
+      const pages = creativePageCount(matched.length);
+      const pageItems = creativePageSlice(matched, pageParam);
+      const page = Math.min(pages - 1, Math.max(0, pageParam));
+      const filled = fillCreativeGrid(pageItems, CREATIVE_LAYOUT.cols, 5);
+      const gridItems = filled.map((entry) =>
+        entry ? { icon: iconOf(entry.id), count: 1 + (entry.id % 8), id: entry.id, name: entry.name } : null,
+      );
       const hotbarItems = placed.hotbar.map((_, index) =>
         index < 4 ? { icon: iconOf(index + 2), count: 1, id: index + 2 } : null,
       );
@@ -98,10 +130,12 @@
         const ctx = overlay.context;
         drawCreativePanel(ctx, placed, {
           title: '创造模式物品栏',
-          tabs: TABS,
-          activeTab: tab,
+          tabs: TABS.map((entry) => entry.label),
+          activeTab: tabIndex,
           query,
           placeholder: '搜索物品',
+          page,
+          pages,
           grid: gridItems,
           hotbar: hotbarItems,
           hoverIndex: -1,
@@ -136,7 +170,7 @@
         const index = placed.grid.findIndex(
           (cell) => p.x >= cell.x && p.x <= cell.x + cell.w && p.y >= cell.y && p.y <= cell.y + cell.h,
         );
-        if (index < 0) return;
+        if (index < 0 || !gridItems[index]) return;
         // 创造模式：拿起来就是"一整叠"，格子里的东西不会少
         cursor = cursor ? null : creativePick(gridItems[index], () => 64);
         render();
@@ -166,7 +200,8 @@
 
       render();
       document.getElementById('caption').textContent =
-        '创造物品栏：12 列 × 34px 网格 + 5 个页签 + 搜索框 + 底部快捷栏 · 点格子拿到"一整叠"（来源不减）' +
+        `创造物品栏：页签=${tabKey} · 搜索"${query}" 命中 ${matched.length} 件 · 第 ${page + 1}/${pages} 页` +
+        ' · 点格子拿到"一整叠"（来源不减）' +
         (tint ? ' · 黄色遮罩' : '');
     </script>
   </body>

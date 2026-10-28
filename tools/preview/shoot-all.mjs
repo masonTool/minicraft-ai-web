@@ -502,17 +502,17 @@ const SHOTS = [
   },
   {
     file: '44-creative.png',
-    page: 'tools/preview/creative-selfdrawn.html?tab=3&q=石&pick=6',
-    size: [900, 560],
+    page: 'tools/preview/creative-selfdrawn.html?tab=1&q=石',
+    size: [900, 600],
     what: '**创造物品栏**：12 列 × 34px 网格 + 页签 + 搜索框 + 快捷栏，手上那一叠是"整叠复制"',
     status: '原型 · 阶段 4',
   },
   {
-    file: '44b-creative-tinted.png',
-    page: 'tools/preview/creative-selfdrawn.html?tint=1',
-    size: [900, 560],
-    what: '创造物品栏 + 遮罩（整块面板黄 = 全由 canvas 画）',
-    status: '遮罩 · 阶段 4',
+    file: '44b-creative-page2.png',
+    page: 'tools/preview/creative-selfdrawn.html?tab=1&page=1',
+    size: [900, 600],
+    what: '**创造物品栏翻页**：命中 90 件 → 第 2/2 页（最后一页 30 件）',
+    status: '原型 · 阶段 4',
   },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {

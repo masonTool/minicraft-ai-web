@@ -1,8 +1,8 @@
 # 决策记录 · 会话 9f2dcf8178d4474f8c0f3f8f4e52851c
 
-> 批次 20261028-0732 · 光标写回、镜像收尾、创造物品栏
+> 批次 20261028-0812 · Swift 门禁与创造栏过滤
 
-## D58 · 光标只"推自己的改动"，创造模式不能复用生存的取放
-- 决定：`InventoryPanelHost` 加 `cursorDirty`（改过才 `pushCursor()`，否则先 `pullCursor()`）；创造物品栏用独立的 `creativePick()`（复制一整叠、来源不减）与 `drawCreativePanel()`，只跟生存背包共用 `drawInvSlot`。
-- 为什么：① 每帧无条件写回会**覆盖外部刚做的改动** —— 典型症状是接管模式下按 `Q` 丢不掉（DOM 清空了 `held`，我们下一帧又写回去）；② 生存的 `leftClick` 语义是"从格子里拿走"，创造是"照着格子复制"，复用它的后果是物品栏越拿越空，而且不报错、只有真点几下才发现。
-- 影响：创造模式的**分类数据与搜索过滤**仍属游戏侧（哪些物品属于哪一类、按什么字段匹配），渲染层只管排版与画。
+## D59 · Swift 也要有一条不依赖 cargo 的门禁；分页必须夹页号
+- 决定：新增 `npm run check:swift`（`swiftc -parse`，无 SDK、无 cargo，缺 `swiftc` 时跳过），并接进 `npm run check` 与 `server/ios/check.sh` 的 ⓪ 步；创造栏的搜索/分页抽成 `ui2d/creativeModel.ts` 纯函数，页号越界一律夹住。
+- 为什么：① `check.sh` 的第一步是 `cargo` 编 xcframework，本机常没有 cargo → **Swift 那半边从来没被任何门禁碰过**，少一个括号要等上机才发现；② 分页不夹页号，搜索词一变页数就变，玩家停在"第 5 页"时搜一个只有 3 个结果的词会看到**一屏空白**（这类 bug 只会被用户撞到）。
+- 影响：`-parse` 只挡语法，类型与平台 API 仍要 `check.sh` 的 `-typecheck` 或真机；创造栏的剩余工作只有"接进 `?ui2dinv=1`"（把 `itemName` / `creativeTabFor` 喂给宿主）。

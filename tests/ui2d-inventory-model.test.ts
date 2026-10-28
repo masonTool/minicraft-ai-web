@@ -614,6 +614,15 @@ describe('创造物品栏布局', () => {
     expect(Math.min(...layout.grid.map((cell) => cell.y))).toBeGreaterThan(searchBottom);
   });
 
+  it('翻页区在网格与快捷栏之间（不压住任何一格）', () => {
+    const layout = layoutCreativePanel(0, 0);
+    const gridBottom = Math.max(...layout.grid.map((cell) => cell.y + cell.h));
+    expect(layout.pager.y).toBeGreaterThanOrEqual(gridBottom);
+    expect(layout.pager.y + layout.pager.h).toBeLessThanOrEqual(
+      Math.min(...layout.hotbar.map((cell) => cell.y)),
+    );
+  });
+
   it('底部快捷栏 9 格在网格下面，且整块都装进面板', () => {
     const layout = layoutCreativePanel(0, 0);
     expect(layout.hotbar.length).toBe(9);

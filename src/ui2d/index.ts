@@ -226,6 +226,16 @@ export {
   type InventoryPanelHostOptions,
 } from './InventoryPanelHost.ts';
 export {
+  CREATIVE_PAGE_SIZE,
+  creativePageCount,
+  creativePageSlice,
+  fillCreativeGrid,
+  filterCreativeItems,
+  matchesQuery,
+  normalizeQuery,
+  type CreativeFilterOptions,
+} from './creativeModel.ts';
+export {
   CREATIVE_LAYOUT,
   drawCreativePanel,
   layoutCreativePanel,

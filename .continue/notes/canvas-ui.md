@@ -1266,6 +1266,40 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 ⚠️ 还没做：**分类数据与搜索过滤**（哪些物品属于哪一类、按名字过滤）是游戏侧的数据问题，
 以及**接进游戏**（`?ui2dinv=1` 下打开创造物品栏时换成这套）。
 
+## 5.49 收尾第二轮（R2 iOS Bonjour / M38 搜索与分页 / Swift 语法门禁）
+
+### R2：iOS Bonjour 浏览——**代码早就在了，只是任务没勾**
+
+`server/ios/Sources/BonjourBrowser.swift`（138 行）已经写全：搜 `_minicraft._tcp`、解析 IPv4 + TXT、
+每 8 秒重 resolve（Rust 侧 peer 表 12 秒 TTL）、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`；
+`ForegroundSession` 已接线，`check.sh` 也检查这个符号。README 写着"桥接链路已在模拟器验过，
+真实 mDNS 发现要两台真机"。
+
+所以这条不是"没做"，是**任务表没跟上代码**。本轮补的是它缺的那道门禁：
+
+**`npm run check:swift`**（`tools/swift-parse-check.mjs`）：对 `server/ios/Sources/*.swift` 跑
+`swiftc -parse`。为什么需要：`check.sh` 要先 `cargo` 编 xcframework，而本机常常没有 cargo，
+于是 Swift 那半边**从来没被任何门禁碰过** —— 少一个括号也要等上机才发现。`-parse` 不要 SDK、
+不要链接，几百毫秒。已接进 `npm run check` 链条（`typecheck:tools` 之后），`check.sh` 也加了同样的 ⓪ 步。
+
+⚠️ 它挡不住类型错误与平台 API 用法（那要 `check.sh` 的 `-typecheck` 或真机）。
+
+### M38 剩余：搜索与分页（`ui2d/creativeModel.ts`）
+
+分类数据早就在 `ui/creativeTabs.ts`（`creativeTabFor` / `categoryOf`），缺的是"筛出来再摆进 12 列网格"：
+
+| 函数 | 作用 |
+| --- | --- |
+| `normalizeQuery` / `matchesQuery` | 去空白 + 转小写，按"包含"匹配（**不做模糊匹配**：搜"石"不该把"钻石"排到"圆石"前面） |
+| `filterCreativeItems` | 页签 + 搜索词筛，**保持注册表顺序** |
+| `creativePageCount` / `creativePageSlice` | 60 一页（12×5）；**页号越界自动夹住** |
+| `fillCreativeGrid` | 补 `null` 到固定格数（空格也是格子，让绘制层自己补会把边界弄模糊） |
+
+页号夹取是重点：搜索词一变页数就变，玩家停在"第 5 页"时搜一个只有 3 个结果的词，
+不夹就是**一屏空白**。面板里也补了翻页区（`‹ 2 / 2 ›`），画在网格与快捷栏之间。
+
+预览页改成真的走这套（450 件 / 每页签 90 件）：`?tab=1&q=石` → 命中 8 件、`?tab=1&page=1` → 第 2/2 页。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

@@ -9,6 +9,20 @@
 
 ---
 
+## 批次 20261028-0812 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：清最后一条待办（R2）+ M38 的搜索与分页。
+
+- [x] R2 收口：Bonjour 浏览代码早已落地，缺的是门禁 → 新增 `npm run check:swift`（`swiftc -parse`），接进 `npm run check`
+- [x] `check.sh` 加 ⓪ 步：先语法后编译（编 Rust 要 cargo 与几分钟，语法错没必要等）
+- [x] M38 剩余：`ui2d/creativeModel.ts`（搜索 / 页签过滤 / 分页 / 铺网格，13 条断言）
+- [x] 面板补翻页区（`‹ 2 / 2 ›`）+ 预览改真数据（450 件 / 每页签 90 件）+ 2 张截图
+
+验证：`test:ui2d-creative` 13/13、`test:ui2d-inventory-model` 65/65、`check:swift` 4 文件、
+`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、73 张截图。
+
+
+
 ## 批次 20261028-0732 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：把待办里的三条清掉（M41 / M43 / M38 第一版）。

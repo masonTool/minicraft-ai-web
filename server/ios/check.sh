@@ -11,6 +11,13 @@ set -euo pipefail
 cd "$(dirname "$0")" || exit 1
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
+echo "⓪ Swift 语法（不用 SDK，几百毫秒）"
+# 放在编译 Rust 之前：编 xcframework 要 cargo、要几分钟，语法写错时没必要等
+for file in Sources/*.swift; do
+  swiftc -parse "$file"
+  echo "   ✓ $file"
+done
+
 echo "① 编 Rust → xcframework"
 bash ../rust/build-ios.sh > /tmp/minicraft-ios-build.log 2>&1 || {
   echo "   失败，日志见 /tmp/minicraft-ios-build.log"; tail -20 /tmp/minicraft-ios-build.log; exit 1

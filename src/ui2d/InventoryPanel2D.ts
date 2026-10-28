@@ -71,6 +71,7 @@ export const CREATIVE_LAYOUT = {
   tabsHeight: 30,
   searchHeight: 24,
   sectionGap: 10,
+  pagerHeight: 20,
 } as const;
 
 export interface CreativeLayout {
@@ -82,6 +83,8 @@ export interface CreativeLayout {
   readonly search: Rect;
   /** 12 列网格（按行铺开） */
   readonly grid: Rect[];
+  /** 翻页区（网格下方一条：‹ 页码 ›） */
+  readonly pager: Rect;
   /** 底部快捷栏 9 格（沿用生存背包的 42px 尺寸） */
   readonly hotbar: Rect[];
 }
@@ -110,6 +113,8 @@ export function layoutCreativePanel(
       CREATIVE_LAYOUT.searchHeight +
       CREATIVE_LAYOUT.sectionGap * 2 +
       gridHeight +
+      CREATIVE_LAYOUT.sectionGap +
+      CREATIVE_LAYOUT.pagerHeight +
       INV_LAYOUT.slot +
       INV_LAYOUT.padding * 2,
   };
@@ -147,8 +152,15 @@ export function layoutCreativePanel(
       });
     }
   }
+  // 翻页区：网格下方一条（不占格位，只是几个字）
+  const pager: Rect = {
+    x: contentX,
+    y: gridTop + gridHeight + CREATIVE_LAYOUT.sectionGap,
+    w: innerWidth,
+    h: CREATIVE_LAYOUT.pagerHeight,
+  };
   // 底部快捷栏：九格居中
-  const hotbarTop = gridTop + gridHeight + CREATIVE_LAYOUT.sectionGap;
+  const hotbarTop = pager.y + pager.h + CREATIVE_LAYOUT.sectionGap;
   const hotbarLeft = contentX + (innerWidth - hotbarWidth) / 2;
   const hotbar: Rect[] = [];
   for (let col = 0; col < INV_LAYOUT.cols; col++) {
@@ -159,7 +171,7 @@ export function layoutCreativePanel(
       h: INV_LAYOUT.slot,
     });
   }
-  return { panel, titleRect, tabs, search, grid, hotbar };
+  return { panel, titleRect, tabs, search, grid, pager, hotbar };
 }
 
 export interface InventoryLayout {
@@ -401,6 +413,9 @@ export interface CreativePanelInput {
   /** 搜索框里的文字（为空则显示占位文案） */
   readonly query: string;
   readonly placeholder: string;
+  /** 当前页（从 0 起）与总页数（显示成 `3 / 8`） */
+  readonly page?: number;
+  readonly pages?: number;
   /** 网格里每一格（`null` = 空） */
   readonly grid: readonly ({ icon: HTMLCanvasElement | null; count: number } | null)[];
   /** 底部快捷栏 */
@@ -483,6 +498,25 @@ export function drawCreativePanel(
     shadow: false,
     maxWidth: search.w - 12,
   });
+
+  /*
+   * 翻页区：`‹ 3 / 8 ›`。
+   * 只画，不做命中 —— 创造栏的翻页在游戏里由滚轮/滚动条驱动（DOM 版也没有翻页按钮，
+   * 只有一条"第几页"的提示），画出来是为了让玩家知道"下面还有"。
+   */
+  if (input.page !== undefined && input.pages !== undefined) {
+    const pager = layout.pager;
+    const label = `${input.page + 1} / ${input.pages}`;
+    const mid = pager.y + pager.h / 2;
+    drawText(ctx, `‹  ${label}  ›`, pager.x + pager.w / 2, mid, {
+      font: uiFont(11),
+      color: '#3f3f3f',
+      align: 'center',
+      baseline: 'middle',
+      shadow: false,
+      maxWidth: pager.w,
+    });
+  }
 
   // 网格（12 列 × N 行）
   layout.grid.forEach((rect, index) => {
