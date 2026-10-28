@@ -22,6 +22,21 @@ cd android && ./gradlew assembleDebug
 #    → app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 上架用的 AAB
+
+Play 只收 **已签名** 的 AAB，签名密钥不进仓库、走环境变量：
+
+```bash
+export MINICRAFT_KEYSTORE=~/.keys/minicraft-upload.jks
+export MINICRAFT_KEYSTORE_PASSWORD='…'
+export MINICRAFT_KEY_ALIAS=upload
+export MINICRAFT_KEY_PASSWORD='…'
+npm run android:aab        # → android/app/build/outputs/bundle/release/app-release.aab
+```
+
+没配这四个变量时 `bundleRelease` 仍会成功，但产物**没有签名**（Play 会拒收）——
+这是有意的失败方式：不签名时不能假装可上架。
+
 > 方块表**不以明文进包**：`gen:sealed` 产出 `assets/sealed/core.sealed`，
 > 运行时由 `CoreVault` 先验签名再解封。详见 [`docs/CODE-PROTECTION.md`](../docs/CODE-PROTECTION.md)。
 

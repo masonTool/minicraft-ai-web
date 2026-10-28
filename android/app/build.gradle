@@ -1,5 +1,23 @@
 apply plugin: 'com.android.application'
 
+/*
+ * 上传签名（Play 只收**已签名**的 AAB，之前 `bundleRelease` 出的是未签名包，上架会被拒）。
+ *
+ * 密钥不进仓库、不进 CI 缓存，全部走环境变量：
+ *   MINICRAFT_KEYSTORE            ~/.keys/minicraft-upload.jks
+ *   MINICRAFT_KEYSTORE_PASSWORD
+ *   MINICRAFT_KEY_ALIAS
+ *   MINICRAFT_KEY_PASSWORD
+ *
+ * 没设置时 release 不签名（本地 `assembleRelease` 照样能跑，用于验证 R8 规则），
+ * 但**不会**伪装成"可上架"——AAB 里没有 META-INF 签名块，Play 会直接报错。
+ */
+def signingEnv = { String key ->
+    def value = System.getenv(key)
+    return (value != null && !value.trim().isEmpty()) ? value.trim() : null
+}
+def uploadKeystore = signingEnv('MINICRAFT_KEYSTORE')
+
 android {
     namespace "com.minicraft.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -34,6 +52,16 @@ android {
             useLegacyPackaging = false
         }
     }
+    signingConfigs {
+        release {
+            if (uploadKeystore != null) {
+                storeFile file(uploadKeystore)
+                storePassword signingEnv('MINICRAFT_KEYSTORE_PASSWORD')
+                keyAlias signingEnv('MINICRAFT_KEY_ALIAS')
+                keyPassword signingEnv('MINICRAFT_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             /*
@@ -48,6 +76,10 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 配了上传密钥才签；没配就保持未签名（Play 会拒收，这是有意的显式失败）
+            if (uploadKeystore != null) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             // 显式写出来：调试期不要混淆，否则断点与栈都对不上

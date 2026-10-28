@@ -1417,6 +1417,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 口径：这种"客户端内自我校验"只能提高成本。真正的锁是"改包必须重签 → 签名不符 → 数据解不开"，
         而不是"校验函数返回 false"
 
+- [x] A28 补齐四条产物的发布链路（2026-10-29）
+      · Android：发现 `bundleRelease` 出的是**未签名 AAB**（Play 会拒），补 `signingConfigs.release`
+        读四个环境变量（`MINICRAFT_KEYSTORE*`），配了才签、没配保持未签名；实测签名后 AAB 里有签名块
+      · 四端产物统一重建一遍：arm64 dmg 之前早于当前 `web/dist`（已过期），mac dmg 两份 + win exe 重出，
+        并重新冒烟（`title=Minicraft core=41107B`）
+      · 打包内 `Resources/web/assets/*` 与 `web/dist/assets/*` 文件名逐个对齐
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
