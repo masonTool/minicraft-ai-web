@@ -25,14 +25,14 @@ describe('装备列规则', () => {
     expect(canPlaceInSideSlot('offhand', 'helmet')).toBe(true);
   });
 
-  it('空手永远能放（那是"拿走"，不是"塞入"）', () => {
-    for (const slot of SIDE_SLOT_KINDS) expect(canPlaceInSideSlot(slot, null)).toBe(true);
+  it('非装备（`null`）进不了盔甲格，但能进副手（这是"塞入"的判据）', () => {
+    for (const slot of ['helmet', 'chestplate', 'leggings', 'boots'] as const) {
+      expect(canPlaceInSideSlot(slot, null)).toBe(false);
+    }
+    expect(canPlaceInSideSlot('offhand', null)).toBe(true);
   });
 
-  it('非装备物品进不了盔甲格', () => {
-    expect(canPlaceInSideSlot('helmet', null)).toBe(true);
-    // 面包这类在 `armorKindOf` 里是 null，与"空手"同样的返回值 —— 由调用方区分
-    // （见下面 sideSlotFor：非装备没有归属格）
+  it('非装备没有归属格（`sideSlotFor` 只回答"这件装备该进哪格"）', () => {
     expect(sideSlotFor(null)).toBeNull();
   });
 

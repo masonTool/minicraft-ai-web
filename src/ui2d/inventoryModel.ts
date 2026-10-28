@@ -36,6 +36,19 @@ export interface MoveRules {
   readonly limitOf: (id: number) => number;
   /** 两个堆是不是"同一种东西"（含耐久/附魔/改名的比较由 core 决定） */
   readonly sameItem: (a: StackLike, b: StackLike) => boolean;
+  /**
+   * 这一格收不收这件东西（缺省 = 什么都收）。
+   *
+   * 装备列靠它拦住"把面包塞进头盔格"：规则本身（哪个部位收什么）在
+   * `ui2d/armorRules.ts`，物品品类由调用方给 —— 模型层只负责**在写入前问一句**。
+   */
+  readonly canPlace?: (index: number, stack: StackLike) => boolean;
+}
+
+/** 这一格能不能放（没配规则就是能放） */
+function allows(rules: MoveRules, index: number, stack: StackLike | null): boolean {
+  if (!stack) return true;
+  return rules.canPlace ? rules.canPlace(index, stack) : true;
 }
 
 /** 光标上拿着的那一叠（可变持有者：函数直接改它） */
@@ -61,8 +74,9 @@ export function leftClick(slots: SlotAccess, rules: MoveRules, cursor: Cursor, i
     slots.set(index, null);
     return;
   }
-  // 手上有货 + 空格：整叠放下
+  // 手上有货 + 空格：整叠放下（**先问这一格收不收**，装备列就靠它拦住面包）
   if (held && !target) {
+    if (!allows(rules, index, held)) return;
     slots.set(index, held);
     cursor.stack = null;
     return;
@@ -78,6 +92,7 @@ export function leftClick(slots: SlotAccess, rules: MoveRules, cursor: Cursor, i
       // 这里选择"不交换"以对齐 Wiki 的"满堆无法合并"）
       return;
     }
+    if (!allows(rules, index, held)) return;
     const moved = Math.min(room, held.count);
     slots.set(index, withCount(target, target.count + moved));
     const rest = held.count - moved;
@@ -85,7 +100,8 @@ export function leftClick(slots: SlotAccess, rules: MoveRules, cursor: Cursor, i
     return;
   }
 
-  // 异类：交换
+  // 异类：交换（两边都要收得下：放进去的这个、以及换回手上的那个都算）
+  if (!allows(rules, index, held)) return;
   slots.set(index, held);
   cursor.stack = target;
 }
@@ -104,6 +120,7 @@ export function rightClick(slots: SlotAccess, rules: MoveRules, cursor: Cursor, 
   }
   if (held && !target) {
     // 放一个
+    if (!allows(rules, index, held)) return;
     slots.set(index, withCount(held, 1));
     cursor.stack = held.count > 1 ? withCount(held, held.count - 1) : null;
     return;
@@ -113,6 +130,7 @@ export function rightClick(slots: SlotAccess, rules: MoveRules, cursor: Cursor, 
   // 同类：放一个（受上限）
   if (rules.sameItem(held, target)) {
     if (target.count >= rules.limitOf(target.id)) return;
+    if (!allows(rules, index, held)) return;
     slots.set(index, withCount(target, target.count + 1));
     cursor.stack = held.count > 1 ? withCount(held, held.count - 1) : null;
   }
@@ -142,6 +160,7 @@ export function quickMove(
     if (!target || !rules.sameItem(stack, target)) continue;
     const room = rules.limitOf(target.id) - target.count;
     if (room <= 0) continue;
+    if (!allows(rules, targetIndex, stack)) continue;
     const moved = Math.min(room, stack.count);
     slots.set(targetIndex, withCount(target, target.count + moved));
     stack = withCount(stack, stack.count - moved);
@@ -152,6 +171,7 @@ export function quickMove(
     if (stack.count <= 0) break;
     if (targetIndex === index) continue;
     if (slots.get(targetIndex)) continue;
+    if (!allows(rules, targetIndex, stack)) continue;
     slots.set(targetIndex, stack);
     stack = withCount(stack, 0);
   }
@@ -177,6 +197,8 @@ export function distributeDrag(
   const eligible: number[] = [];
   for (const index of indices) {
     if (eligible.includes(index)) continue;
+    // 这一格收不收（装备列拦面包的位置）
+    if (!allows(rules, index, held)) continue;
     const target = slots.get(index);
     if (!target) {
       eligible.push(index);

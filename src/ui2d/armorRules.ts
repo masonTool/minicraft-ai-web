@@ -17,16 +17,19 @@ export type SideSlotKind = (typeof SIDE_SLOT_KINDS)[number];
 export type ItemEquipKind = 'helmet' | 'chestplate' | 'leggings' | 'boots' | null;
 
 /**
- * 这一格能不能放这件东西。
+ * 这一格能不能放进这件东西。
  *
- * 规则三条：
+ * 规则两条：
  *  1. 四个盔甲格只收**对应部位**（头盔格不收靴子 —— 原版就是这样，没有"通用盔甲格"）；
- *  2. 副手格什么都收（原版也允许放方块/食物，只是拿着不生效）；
- *  3. 空手（`null`）永远可以放 —— 这是"拿走"而不是"放入"。
+ *  2. 副手格什么都收（原版也允许放方块/食物，只是拿着不生效）。
+ *
+ * ⚠️ `item === null` 表示**"这不是装备"**（面包、火把），不是"空手"：盔甲格必须拒绝它。
+ * 第一版把这个 `null` 当成"空手所以放行"，结果规则放上去**什么都不拦** —— 而且断言还写着
+ * `canPlaceInSideSlot('helmet', null) === true`，等于把 bug 钉成了预期。真正"拿走"的动作
+ * 走的是 `leftClick` 的"空手 + 有货"分支，根本不经过这条规则。
  */
 export function canPlaceInSideSlot(slot: SideSlotKind, item: ItemEquipKind): boolean {
   if (slot === 'offhand') return true;
-  if (item === null) return true;
   return item === slot;
 }
 

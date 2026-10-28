@@ -1337,6 +1337,38 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 把这两样接进 `?ui2dinv=1`：需要游戏侧把「当前打开的是哪个容器」与「物品的装备品类」喂给宿主，
 而那条链路只能在真机里验。表与规则已经可以用，接的是十行代码。
 
+## 5.51 放置规则进了模型层；版面可以换（`retarget`）
+
+### `MoveRules.canPlace`：一道闸，五条路径
+
+装备列如果把东西当普通格子收，玩家能把面包塞进头盔格 —— 那就不是"背包 + 装备栏"，
+只是"41 格的背包"。规则要拦的地方有**五条**：左键放空、左键合并、左键交换、右键放一个、
+Shift 快速移动、拖拽均分。散在宿主里必然漏一条（典型症状：**拖拽能塞进去、点一下不能**）。
+
+所以闸门放在 `inventoryModel` 的 `MoveRules.canPlace`，五条路径统一先问一句：
+
+```ts
+if (!allows(rules, index, held)) return;   // 被拒 = 什么都不变，东西还在手上
+```
+
+**踩到的一个语义坑**：`canPlaceInSideSlot(slot, item)` 里 `item === null` 到底是"空手"还是
+"不是装备"？第一版按"空手所以放行"写，结果规则**什么都不拦**，而且断言还写着
+`canPlaceInSideSlot('helmet', null) === true` —— 等于把 bug 钉成了预期。正确语义是
+**`null` = 这不是装备**（面包/火把），盔甲格必须拒绝；真正"拿走"的动作走 `leftClick` 的
+"空手 + 有货"分支，根本不经过这条规则。这条改完之后 6 条新断言才真的在拦。
+
+### `InventoryPanelHost.retarget()`：换容器不用重造宿主
+
+`options` 是构造时定下的，而"打开的是哪个容器"运行时会变（熔炉 +2 格 + 结果格、箱子 +27 格、
+装备列 +5 格）。现在把版面参数（`mainRows/hotbarRows/extra/sideCount`）单拎成可变字段，
+`retarget({ extra })` 改完重排 + 重画，**槽位访问器不动**。
+
+验证（预览页 `window.__retarget`）：纯背包 234 高 → `chest` 374（多 3 行）→ `furnace` 330，面板跟着重新居中。
+
+⚠️ **还没接进游戏**：`retarget` 需要知道"现在打开的是哪个容器"，而容器槽位的读写访问器
+（`activeContainer`）在 `InventoryScreen` 里还是私有的。这一步要加个只读访问器 + 一段下标映射，
+十行左右，但只能在真机里验，所以留在下一批。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

@@ -46,6 +46,8 @@
         stationExtra,
         stationSlotCount,
         stationSpec,
+        canPlaceInSideSlot,
+        sideSlotAt,
       } from '../../src/ui2d/index.ts';
 
       const params = new URLSearchParams(window.location.search);
@@ -164,6 +166,13 @@
       };
       window.__external = () => (externalHeld ? `${externalHeld.id}x${externalHeld.count}` : null);
 
+      /*
+       * 装备列的放置规则（`?armor=1` 时生效）：id → 部位，非装备是 null。
+       * 真机上这一步由 `armorSlotForItem(id)` 提供（`core/world/ArmorStands.ts`）。
+       */
+      const FAKE_ARMOR = { 1: 'helmet', 2: 'chestplate', 3: 'leggings', 4: 'boots' };
+      const armorKindOf = (itemId) => FAKE_ARMOR[itemId] ?? null;
+
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
         title: station ? station.label : craft ? '合成台' : '生存背包',
@@ -185,6 +194,18 @@
         durabilityOf,
         onDrop: (stack, count) => {
           window.__dropped.push(`${stack.id}x${count}`);
+        },
+        /*
+         * 装备列规则：只有前 5 格（盔甲 + 副手）受限，其余照旧。
+         * 装备列的起始下标 = 额外槽位（工作站）之后 —— 所以用 `sideSlotAt(index, sideStart)` 换算，
+         * 而不是写死 `index < 4`（工作站一多就会错位）。
+         */
+        canPlace: (index, stack) => {
+          if (!armor) return true;
+          const sideStart = stationSlots;
+          const slot = sideSlotAt(index, sideStart);
+          if (!slot) return true;
+          return canPlaceInSideSlot(slot, armorKindOf(stack.id));
         },
         ...(externalHeld !== null
           ? {
@@ -246,6 +267,10 @@
       window.__dropped = [];
 
       // 调试/验收用：读当前 36 格与手上那一叠（`playwright` 里断言全靠它）
+      // 换版面（打开别的容器）：`host.retarget()` 只改版面，槽位访问器不动
+      window.__retarget = (kind) => host.retarget({ extra: stationExtra(kind) });
+      window.__layout = () => ({ slots: host.panelRect?.w ?? 0 });
+
       window.__probe = () => ({
         slots: Array.from({ length: TOTAL }, (_, i) => {
           const stack = slots.get(i);

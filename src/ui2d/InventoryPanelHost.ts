@@ -145,10 +145,60 @@ export class InventoryPanelHost {
     private readonly host: HTMLElement,
     private readonly slots: SlotAccess,
     private readonly options: InventoryPanelHostOptions,
-  ) {}
+  ) {
+    this.layoutOptions = {
+      mainRows: options.mainRows ?? 3,
+      hotbarRows: options.hotbarRows ?? 1,
+      sideCount: options.sideCount ?? 0,
+      ...(options.extra ? { extra: options.extra } : {}),
+    };
+  }
+
+  /**
+   * 当前的版面参数（**可变**：换容器要重排）。
+   *
+   * `options` 是构造时定下的，而"打开的是哪个容器"在运行时会变 —— 熔炉多 2 格 +
+   * 结果格、箱子多 27 格、装备列多 5 格。所以把这四个字段单拎出来，`retarget()` 改它们。
+   */
+  private layoutOptions: {
+    mainRows: number;
+    hotbarRows: number;
+    extra?: ExtraSlotsSpec;
+    sideCount: number;
+  };
 
   get isOpen(): boolean {
     return this.opened;
+  }
+
+  /**
+   * 换版面（打开别的容器时调）。
+   *
+   * 只改**版面**：`slots` 访问器不变（玩家背包还是那 36 格，容器槽位由调用方在
+   * `SlotAccess` 里按新的下标顺序接）。等价于 DOM 那边"换一种 `InventoryPanelMode`"。
+   *
+   * @returns 版面是否真的变了（没变就不重排，避免每帧抖动）
+   */
+  retarget(next: { extra?: ExtraSlotsSpec; sideCount?: number; mainRows?: number; hotbarRows?: number }): boolean {
+    const before = JSON.stringify(this.layoutOptions);
+    const merged = {
+      mainRows: next.mainRows ?? this.layoutOptions.mainRows,
+      hotbarRows: next.hotbarRows ?? this.layoutOptions.hotbarRows,
+      sideCount: next.sideCount ?? this.layoutOptions.sideCount,
+      ...(next.extra !== undefined ? { extra: next.extra } : this.layoutOptions.extra ? { extra: this.layoutOptions.extra } : {}),
+    };
+    if (JSON.stringify(merged) === before) return false;
+    this.layoutOptions = merged;
+    // 槽位数量变了：游标与拖拽状态都按旧下标存的，直接清掉最安全（DOM 版换容器也是重置）
+    this.dragIndices = [];
+    this.dragging = false;
+    this.hoverIndex = -1;
+    this.tooltip = null;
+    if (this.opened) {
+      this.relayout();
+      this.render();
+    }
+    return true;
   }
 
   /** 覆盖层画布（接管输入时，调用方要往上挂 pointer 监听） */
@@ -206,10 +256,10 @@ export class InventoryPanelHost {
     const overlay = this.overlay;
     if (!overlay) return;
     overlay.syncSize();
-    const rows = this.options.mainRows ?? 3;
-    const hotbarRows = this.options.hotbarRows ?? 1;
-    const extra = this.options.extra;
-    const side = this.options.sideCount ? { count: this.options.sideCount } : undefined;
+    const rows = this.layoutOptions.mainRows;
+    const hotbarRows = this.layoutOptions.hotbarRows;
+    const extra = this.layoutOptions.extra;
+    const side = this.layoutOptions.sideCount > 0 ? { count: this.layoutOptions.sideCount } : undefined;
     const probe = layoutInventoryPanel(0, 0, {
       mainRows: rows,
       hotbarRows,

@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-1000 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把放置规则做成模型层的一道闸，并给宿主加"换版面"能力。
+
+- [x] `MoveRules.canPlace`：五条放置路径（左键放空/合并/交换、右键放一个、Shift、拖拽均分）统一先问
+- [x] 修语义坑：`canPlaceInSideSlot(slot, null)` 的 `null` = "不是装备"，盔甲格必须拒绝（旧断言把 bug 钉成了预期）
+- [x] `InventoryPanelHost.retarget()`：换容器只改版面、不重造宿主（预览实测 234 → 374 → 330）
+- [x] 预览 `window.__retarget` 用于验证；新增 6 条规则断言
+
+验证：`test:ui2d-place-rules` 6/6、`test:ui2d-armor` 7/7、`tsc` 干净、`npm run check` exit=0。
+
+
+
 ## 批次 20261028-0946 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：把"20 种工作站"的排版数据与装备列规则做成可离线验的两块。
