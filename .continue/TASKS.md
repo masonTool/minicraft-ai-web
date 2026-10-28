@@ -1435,6 +1435,24 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
         本地只警告，`MINICRAFT_RELEASE=1`（`android:aab` 自带）才升级为错误
       · 顺手删掉 `tools/tmp-crack.py`（一次性脚本，标着"用完即删"，还指着重排前的 `src/`）
 
+- [ ] A30 【P0】签名没真正参与密钥派生：patch 一处判断即可绕过
+      · 现状：`CoreVault.unseal()` 先 `if (!isSignedByUs()) return null;`，然后
+        `SealedCore.open(sealed, expectedSigner(), salt)` —— 喂给 KEK 的是
+        `signers.txt` 里的**期望摘要**，不是 `PackageManager` 拿到的**实际签名**。
+        于是把这个 `if` 改成 `return true` 就能正常解密：R8 只是让这个布尔难找。
+      · iOS 的 `CoreVault.swift`、桌面端的 `desktop/core-vault.mjs` 同一形状（都读 `signers.txt`）
+      · 修法：封存时按**允许的签名摘要列表**各包一份 CEK（格式里的 `wrapCount` 就是为此留的），
+        运行时用**实际**摘要去匹配包裹体。这样"patch 判断"完全无效——数据本身打不开。
+        开发包需要单独一份按 debug 证书摘要封存的产物（不能把 debug 摘要混进 release 封存体）
+      · 验收：① A 签名的包能进游戏；② B 重签的包进不去；③ **把 `isSignedByUs` 强行改成 true
+        的 B 签包，仍然进不去**（这条是本次的核心）
+      · 成本约 1 小时（含 A/B 复测与三端同步）
+
+      **外部阻塞（不是代码问题，需要人来推）**
+      · 四端正式签名证书：Play 应用签名证书 / Apple Developer / Windows Authenticode
+      · Windows 实机验证：目前只能在 macOS 上出包，没装过
+      · Play Integrity 不适用：判定必须服务端验证，本项目无后台
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
@@ -4169,7 +4187,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] L3 世界种子与确定性重生成：生成器是纯函数（同种子同区块必得同样结果），
       因此存档只需存增量（`core/save/ChunkEdits.ts`）、联机只需同步种子（见 L4）。
       已有离线测试逐方块比对"同区域生成两遍一致"与"与生成顺序无关"
-- [~] L4 多人：**服务端 + 位置/方块同步已完成**（`server/index.mjs` + `src/net/NetClient.ts`）——
+- [~] L4 多人：**服务端 + 位置/方块同步已完成**（`server/node/index.mjs` + `web/src/net/NetClient.ts`）——
       区块同步为零带宽（只发种子 + 方块增量），新玩家进来收快照即可；
       队友用生物渲染器的模型显示。
       —— **批次 601 补位置插值**：`core/net/RemoteInterpolation.ts` 用

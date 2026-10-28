@@ -22,7 +22,7 @@
 
 - 时间：2026-10-24 · 提交总数 1769（锚定 d4340a02；每个功能点一条，可逐条回滚。数字锚在某个提交上而不是追当前 HEAD——`npm run audit:tasks` 核对锚点，要重新锚定它会直接给出可粘的一行）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 `three`）
-- 进度口径：`TASKS.md` 共 304 项 —— 已完成 **331**、进行中 **5**、待办 0 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 304 项 —— 已完成 **331**、进行中 **5**、待办 1 条（另有 3 条主动放弃：D22 预设、L5 局域网发现、O5 原版对照截图）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `.continue/notes/modules.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.continue/doing/<session_id>.md` 队列为准**，队列与总表分工不同，别只看总表
@@ -92,7 +92,7 @@ npm run server             # 联机服务端（Node 版 :8887；换端口 = npm 
 > `test:hooks` 现在**委派给框架自带的自检**（`node .continue/hooks/check.mjs hooks`）：
 > 那份自测跟着框架升级，不会再有"框架改了、本仓库的断言还停在旧契约"这种事（批次 1355 踩过）。
 
-浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）的完整接口清单 →
+浏览器控制台 `window.__mc`（`web/src/main.ts` 末尾挂的 App 实例）的完整接口清单 →
 [`notes/ops.md`](./notes/ops.md)；`tools/pixel-probe.mjs` 能把"看起来偏暗"
 变成可对比的像素亮度数字。
 
@@ -179,7 +179,7 @@ npm run server             # 联机服务端（Node 版 :8887；换端口 = npm 
 
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
-| `.continue/`（`doing/` / `DONE` / `OVERVIEW` / `TIPS` + `notes/` / `HANDOFF` / `TASKS` / `hooks` / `README`）、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
+| `.continue/`（`doing/` / `DONE` / `OVERVIEW` / `TIPS` + `notes/` / `HANDOFF` / `TASKS` / `hooks` / `README`）、`AGENTS.md`、`README.md`、`docs/`、`web/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
 | `.codebuddy/settings.json`（钩子注册）、`.codebuddy/memory/`（AI 记忆的版本化副本）、`.codebuddy/skills/continue-task/`（**框架补丁的源**，重装用它） | `.continue/logs/`（日志 + 计数状态，每轮都变）、`.continue/auto.off`（刹车）、`.codebuddy/skills/` 的**其它**技能（本地）、截图 `shot-*.png` |
 
 **唯一的外部依赖：git 远程仓库**（没有远程 = 代码只在本机）。查看 `git remote -v`，
