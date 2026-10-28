@@ -306,3 +306,16 @@
 顺带一条有用的：**Capacitor 6 支持自定义平台目录** —— `capacitor.config.json` 里
 `"android": { "path": "server/android" }`（CLI 读 `extConfig.android.path`），
 所以"想把 android/ 挪进子目录"不必牺牲 `npx cap sync android`，也不用软链。
+
+## 原生↔JS 的桥，用 CDP 直连 WebView 验，别靠手点
+
+- 症状：补了 `addJavascriptInterface` 之后"到底注入了没有、`startServer()` 后端口起没起来"，
+  截图看不出来（开房按钮在二级页面里）。
+- 处置：debug 包的 WebView 调试口是开着的，可以直接在真机/模拟器里 eval：
+  `adb shell cat /proc/net/unix | grep webview_devtools_remote` 拿 pid →
+  `adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>` →
+  `curl 127.0.0.1:9222/json/list` 取 `webSocketDebuggerUrl` → 用 `ws` 发 `Runtime.evaluate`。
+  实测能直接断言 `typeof window.MinicraftAndroid === "object"`、`localIp()` 的返回值、
+  以及 `startServer()` 后轮询到 `{"port":8887}`——比点 UI 稳，也比加临时日志干净。
+- 两条附带：① 注入点要排在 `loadUrl` 被投递之前（Capacitor 是 `webView.post(...)`），
+  否则首屏 JS 看不到对象，只能靠 reload 补救；② 验完 `adb forward --remove-all` 并关掉模拟器。
