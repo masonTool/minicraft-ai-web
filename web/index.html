@@ -7132,9 +7132,18 @@
          只显示"去应用里玩"的提示屏，游戏不会启动。详见 src/core/hostCore.ts 的注释。 -->
     <script type="module" src="/src/boot.ts"></script>
     <script type="module">
-      // Service Worker 只在构建产物里注册：开发时注册会把 vite 的开发资源缓存住，
-      // 改代码看不到效果（这是 PWA 开发里最常见的坑）
-      if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+      // Service Worker 只在**真正走网络的 HTTP(S) 站点**上注册。
+      //
+      // 三个条件缺一不可：
+      //  1. PROD：开发时注册会把 vite 的开发资源缓存住，改代码看不到效果（PWA 最常见的坑）；
+      //  2. 协议是 http/https：桌面端用 `app://`、安卓宿主用 `http://localhost`，
+      //     这些"本地资源"本来就在包里，SW 缓存只会带来一个后果——
+      //     **应用更新后仍然跑旧 JS**（旧前端配新核心数据 = 版本不匹配），而且很难查；
+      //  3. 主机不是本机地址：`npm run preview` 同理。
+      const pwaOrigin =
+        /^https?:$/.test(location.protocol) &&
+        !['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
+      if (import.meta.env.PROD && pwaOrigin && 'serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js').catch((error) => {
             console.warn('[pwa] Service Worker 注册失败（离线功能不可用）', error);

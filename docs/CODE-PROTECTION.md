@@ -67,12 +67,14 @@ npm run check              # 全量门禁
 - JVM 跑真实产物能还原出逐字节相同的明文；
 - 换签名 / 换盐 / 改任一字节 / 截断 / 空白名单，全部解不开；
 - 桌面端：`MacOS/Minicraft` 冒烟 → `title=Minicraft core=41107B`；dmg（arm64/x64）与
-  `Minicraft Setup 0.1.0.exe` 都产出了，`Resources/` 里是 `web` + `sealed` 两张皮。
+  `Minicraft Setup 0.1.0.exe` 都产出了，`Resources/` 里是 `web` + `sealed` 两张皮；
+- iOS：iPhone 16 模拟器实跑，日志 `CoreVault read` 返回的 base64 解码是 `MCTB` + 方块名，
+  0 条 error——**解封链路在真实运行时跑通了**。
 
 **没验证过**：
 
-- iOS 运行时（本机没有 CocoaPods，工程只到 `swiftc -typecheck` 通过）；
-- Windows 产物没在 Windows 上装过（生成是在 macOS 上用 wine 完成的）。
+- Windows 产物没在 Windows 上装过（生成是在 macOS 上用 wine 完成的）；
+- 三个平台的**正式签名**都没验（没有证书 / 没有 Windows 机器）。
 
 ## 5. 还没做
 
@@ -80,9 +82,8 @@ npm run check              # 全量门禁
 | --- | --- |
 | `minifyEnabled` / R8 | 需要真机回归 keep 规则，值不上一轮的风险 |
 | `androidScheme` 改 `https` | **会清空存量存档**，属于一次性不可逆决策，要你拍板 |
-| iOS 真机验证 | 装不上 CocoaPods |
 | Windows 实机验证 | 只能在 macOS 上出包，没有 Windows 机器 |
-| macOS 签名/公证 | 没有 Apple Developer 证书 |
+| 各平台正式签名 | 没有 Apple Developer 证书 / Windows 代码签名证书 |
 | Play Integrity | 需要服务端验证才有意义，本项目没有后台 |
 | 增量通道 / 存档 HMAC / 联机校验 | 尚未开始 |
 

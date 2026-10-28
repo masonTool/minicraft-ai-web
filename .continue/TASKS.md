@@ -1382,6 +1382,14 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 顺带修掉一个重排遗留 bug：`vitest` 在仓库根找不到配置，排除规则与缓存开关全失效
         （工作树里的测试被重复跑、`node_modules/.vitest-cache` 触发批量删除守卫）；拆出根级 `vitest.config.ts`
 
+- [x] A25 iOS 工程改为 SPM 并跑通运行时（2026-10-29）：`npx cap add ios --packagemanager SPM`
+      替代 CocoaPods（系统 Ruby 2.6 编不出 nkf，`gem install cocoapods` 一直失败；SPM 不需要）
+      · 部署门槛 13.0 → **14.0**：CryptoKit 的 `HKDF` 是 iOS 14+（编译时直接报错，不是猜测）
+      · 模拟器实跑日志：`CoreVault read` 返回的 base64 解码为 `MCTB` + `minicraft:air/stone/…`，
+        0 条 error —— 签名判据 → HKDF → AES-GCM → 逆变换 → 装表 → `main.ts` 全链路通
+      · 顺带：`web/index.html` 的 Service Worker 只在真实 http(s) 站点注册（`app://` 与
+        `localhost` 都跳过）。否则桌面端/移动端更新后仍跑旧 JS，旧前端配新核心数据最难查
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

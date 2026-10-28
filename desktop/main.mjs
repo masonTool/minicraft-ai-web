@@ -14,7 +14,7 @@
  * 浏览器里 404 走落地页，桌面端由主进程接住。
  */
 
-import { app, BrowserWindow, protocol } from 'electron';
+import { app, BrowserWindow, Menu, protocol, shell } from 'electron';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
@@ -94,7 +94,28 @@ async function serveStatic(pathname) {
   }
 }
 
+/**
+ * 单实例锁：两个实例同时开同一个 IndexedDB，存档会互相覆盖。
+ * 第二次启动把已有窗口拉到前台，然后自己退出。
+ */
+// 冒烟模式不抢锁：否则上一次没退干净的实例会让冒烟"直接退出当成功"
+const singleInstance = SMOKE ? true : app.requestSingleInstanceLock();
+if (!singleInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win === undefined) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+}
+
 app.whenReady().then(async () => {
+  // 生产构建去掉默认菜单：Ctrl+Shift+I / 重新加载对玩家没意义，
+  // 而且默认菜单会在 macOS 菜单栏里挂着 "Electron" 的调试项
+  if (app.isPackaged) Menu.setApplicationMenu(null);
+
   protocol.handle('app', async (request) => {
     const url = new URL(request.url);
     if (url.pathname === '/__host/core.bin') return coreResponse();
@@ -116,9 +137,16 @@ app.whenReady().then(async () => {
     },
   });
 
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // 外链一律交给系统浏览器：WebView 里开新窗口等于把一个不受控的页面塞进我们的
+  // 协议上下文里。`app://` 之外的导航同理——先拦下，是 http(s) 再交给系统。
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (event, target) => {
-    if (!target.startsWith('app://minicraft/')) event.preventDefault();
+    if (target.startsWith('app://minicraft/')) return;
+    event.preventDefault();
+    if (/^https?:$/.test(new URL(target).protocol)) void shell.openExternal(target);
   });
 
   await win.loadURL('app://minicraft/index.html');
