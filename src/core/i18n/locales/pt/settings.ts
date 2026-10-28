@@ -90,5 +90,11 @@ export const settings = {
   "settings.opt.sec120": "120 s",
   "settings.cameraMode.first": "Primeira pessoa",
   "settings.cameraMode.thirdBack": "Terceira pessoa (atrás)",
-  "settings.cameraMode.thirdFront": "Terceira pessoa (à frente)"
+  "settings.cameraMode.thirdFront": "Terceira pessoa (à frente)",
+  "settings.resourcePack.about": "Sobre pacotes de recursos",
+  "settings.resourcePack.help1": "Formatos aceitos: .mcpack / .zip (ambos são arquivos compactados). Toque em Importar, escolha o arquivo e o efeito é imediato — sem reiniciar.",
+  "settings.resourcePack.help2": "O que muda: texturas de blocos (associadas pelo nome do arquivo em textures/blocks/, por exemplo stone.png) e alguns sons (.ogg / .wav em sounds/). O restante é ignorado.",
+  "settings.resourcePack.help3": "Qualquer tamanho de textura funciona: 16×16 fica mais nítido; imagens maiores são reduzidas ao tamanho da célula do atlas.",
+  "settings.resourcePack.help4": "Vale só para esta sessão — nada é gravado no save e o mundo não é alterado. Importe de novo depois de reabrir o jogo.",
+  "settings.resourcePack.help5": "Este aplicativo não oferece downloads de pacotes. Importe apenas pacotes que você possui ou tem permissão para usar."
 } satisfies Pick<Messages, keyof typeof zhSettings>;

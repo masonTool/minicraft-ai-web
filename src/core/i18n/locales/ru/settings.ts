@@ -91,5 +91,11 @@ export const settings = {
   "settings.opt.sec120": "120 сек",
   "settings.cameraMode.first": "От первого лица",
   "settings.cameraMode.thirdBack": "От третьего лица (сзади)",
-  "settings.cameraMode.thirdFront": "От третьего лица (спереди)"
+  "settings.cameraMode.thirdFront": "От третьего лица (спереди)",
+  "settings.resourcePack.about": "О наборах ресурсов",
+  "settings.resourcePack.help1": "Поддерживаются файлы .mcpack / .zip (это архивы). Нажмите «Импорт», выберите файл — изменения вступят сразу, перезапуск не нужен.",
+  "settings.resourcePack.help2": "Что заменяется: текстуры блоков (по имени файла в textures/blocks/, например stone.png) и часть звуков (.ogg / .wav в sounds/). Остальное игнорируется.",
+  "settings.resourcePack.help3": "Размер текстур любой: 16×16 выглядит чётче всего, крупнее — уменьшается до размера ячейки атласа.",
+  "settings.resourcePack.help4": "Действует только в текущем сеансе: в сохранение ничего не пишется, мир не меняется. После перезапуска импортируйте снова.",
+  "settings.resourcePack.help5": "Приложение не предоставляет наборы для скачивания. Импортируйте только те, что принадлежат вам или разрешены к использованию."
 } satisfies Pick<Messages, keyof typeof zhSettings>;

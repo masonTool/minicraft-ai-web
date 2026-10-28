@@ -3492,6 +3492,25 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         return /['"]settings\.resourcePack\.hint['"]/.test(table) && !/['"]settings\.notice['"]/.test(table);
       }),
   );
+  // 资源包使用说明（2026-10-28，用户）：五条正文 + 标题，六语言都得在，
+  // 少一条就是界面上少一行说明（不会报错，只会静默变短）。
+  check(
+    '资源包使用说明（五条 + 标题）在、且六语言齐全',
+    settingsSrc.includes('private makePackHelp(): HTMLElement') &&
+      settingsSrc.includes("t('settings.resourcePack.about')") &&
+      settingsHtml.includes('.settings-note.pack-help') &&
+      [1, 2, 3, 4, 5].every((n) => settingsSrc.includes(`'settings.resourcePack.help${n}'`)) &&
+      LOCALES.every((locale) => {
+        const table = readFileSync(
+          new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+          'utf8',
+        );
+        return (
+          /['"]settings\.resourcePack\.about['"]/.test(table) &&
+          [1, 2, 3, 4, 5].every((n) => new RegExp(`['"]settings\.resourcePack\.help${n}['"]`).test(table))
+        );
+      }),
+  );
   // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，
   // 而网页版的"分发物"就是 `dist/`——所以这两份必须是 `public/` 里的静态文件，
   // 不是只躺在仓库根目录（`vite build` 只复制 `public/`）。

@@ -99,5 +99,11 @@ export const settings = {
   'settings.opt.sec120': '120 秒',
   "settings.cameraMode.first": "第一人称",
   "settings.cameraMode.thirdBack": "第三人称（背后）",
-  "settings.cameraMode.thirdFront": "第三人称（正面）"
+  "settings.cameraMode.thirdFront": "第三人称（正面）",
+  'settings.resourcePack.about': '关于资源包',
+  'settings.resourcePack.help1': '支持的格式：.mcpack / .zip（两者都只是压缩包）。点「导入」选文件，导入后立刻生效，不用重开游戏。',
+  'settings.resourcePack.help2': '能改什么：方块贴图（按文件名对应 textures/blocks/<名称>.png）与一部分音效（sounds/ 下的 .ogg / .wav）。其它文件会被忽略。',
+  'settings.resourcePack.help3': '贴图尺寸不限：16×16 最清晰；更大的图会缩到图集格子的大小。',
+  'settings.resourcePack.help4': '只影响这一次运行的画面与声音，不写进存档、也不会改动世界；下次打开游戏要重新导入。',
+  'settings.resourcePack.help5': '本应用不提供资源包下载，请只导入你自己拥有或有权使用的包。'
 } as const;

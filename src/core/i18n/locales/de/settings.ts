@@ -91,5 +91,11 @@ export const settings = {
   "settings.opt.sec120": "120 Sek.",
   "settings.cameraMode.first": "Erste Person",
   "settings.cameraMode.thirdBack": "Dritte Person (hinten)",
-  "settings.cameraMode.thirdFront": "Dritte Person (vorne)"
+  "settings.cameraMode.thirdFront": "Dritte Person (vorne)",
+  "settings.resourcePack.about": "Über Ressourcenpakete",
+  "settings.resourcePack.help1": "Unterstützte Dateien: .mcpack / .zip (beides sind Archive). Auf „Importieren“ tippen, Datei wählen – wirkt sofort, kein Neustart nötig.",
+  "settings.resourcePack.help2": "Was sich ändert: Blocktexturen (Zuordnung über den Dateinamen unter textures/blocks/, z. B. stone.png) und einige Klänge (.ogg / .wav unter sounds/). Alles andere wird ignoriert.",
+  "settings.resourcePack.help3": "Jede Texturgröße ist erlaubt: 16×16 ist am schärfsten, größere Bilder werden auf die Atlas-Kachel skaliert.",
+  "settings.resourcePack.help4": "Wirkt nur in dieser Sitzung – nichts wird im Spielstand gespeichert, die Welt bleibt unverändert. Nach dem Neustart erneut importieren.",
+  "settings.resourcePack.help5": "Diese App bietet keine Paket-Downloads an. Importiere nur Pakete, die dir gehören oder die du verwenden darfst."
 } satisfies Pick<Messages, keyof typeof zhSettings>;

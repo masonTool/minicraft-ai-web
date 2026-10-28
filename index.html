@@ -2519,6 +2519,20 @@
         grid-column: 1 / -1; margin: 0 0 2px; padding: 0 2px;
         color: rgba(255, 255, 255, .5); font-size: 10px; line-height: 1.35;
       }
+      /* 资源包的使用说明（2026-10-28）：比免责那一行多一点分量（深浅底 + 左侧色条），
+         但仍然是灰字——它是"要看才看"的说明，不该抢走导入按钮的注意力。 */
+      .settings-note.pack-help {
+        padding: 6px 8px; margin: 2px 0 4px;
+        background: rgba(0, 0, 0, .22);
+        border-left: 2px solid rgba(255, 255, 255, .22);
+        color: rgba(255, 255, 255, .62); font-size: 10.5px; line-height: 1.45;
+      }
+      .settings-note.pack-help b {
+        display: block; margin-bottom: 2px;
+        color: rgba(255, 255, 255, .85); font-size: 11px;
+      }
+      .settings-note.pack-help ul { margin: 0; padding-left: 14px; }
+      .settings-note.pack-help li { margin: 1px 0; }
       /* ---------------- 角色形象（批次 296 → 528 改成二级弹窗） ----------------
          用户："外观这里人物的形象的设置可以放到二级弹窗里面去完成，
          二级弹窗里人物可以高一点，右侧按钮紧凑、高度跟人物一致。"

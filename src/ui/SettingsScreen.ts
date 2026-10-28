@@ -1217,9 +1217,10 @@ export class SettingsScreen {
     // 第二块：导入 / 导出这类动作，各占半行
     const gameActions = this.makeBlock(game);
     gameActions.appendChild(this.makeResourcePackRow());
-    // 批次 20261025-0117：资源包这一项长期被当作"换个官方外观"的入口，法律上
-    // 本应用只能让玩家导入**自己拥有的**包，不能提供、也不能引导去下载官方素材。
+    // 2026-10-28（用户）：资源包下面要有**详细说明**——能改什么、怎么导入、生效范围。
+    // 逐条写在 `makePackHelp()` 里；上面那一句是"只能导自己的包"的免责。
     gameActions.appendChild(this.makePackHint());
+    gameActions.appendChild(this.makePackHelp());
     // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起只留「导出」
     if (this.actions.onDiagnosticsExport) gameActions.appendChild(this.makeDiagnosticsRow());
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
@@ -1911,6 +1912,42 @@ export class SettingsScreen {
     note.className = 'settings-note';
     note.textContent = t('settings.resourcePack.hint');
     return note;
+  }
+
+  /**
+   * 资源包的使用说明（2026-10-28，用户："请加入资源包的详细的介绍说明、如何使用等等"）。
+   *
+   * 五条按"能不能用 → 改了什么 → 尺寸 → 生效范围 → 来源"排，**每条都得准确**：
+   *  - 只替换方块贴图（按 `textures/blocks/<名字>.png` 对应图集）与
+   *    `SoundPack.ts` 映射表里登记的那批音效，其它文件直接忽略；
+   *  - 贴图会被缩放到图集格子（16×16），所以大图能用但不会更清晰；
+   *  - 包不落盘：只作用于当前这次运行，重开页面要重新导入（见 `applyResourcePack`
+   *    的调用点，没有任何持久化）——这句必须写，否则玩家会以为"选了就永久生效"。
+   *
+   * 文案走 i18n（`settings.resourcePack.help1..5`），六语言齐全。
+   */
+  private makePackHelp(): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'settings-note pack-help';
+
+    const title = document.createElement('b');
+    title.textContent = t('settings.resourcePack.about');
+
+    const list = document.createElement('ul');
+    for (const key of [
+      'settings.resourcePack.help1',
+      'settings.resourcePack.help2',
+      'settings.resourcePack.help3',
+      'settings.resourcePack.help4',
+      'settings.resourcePack.help5',
+    ]) {
+      const item = document.createElement('li');
+      item.textContent = t(key);
+      list.appendChild(item);
+    }
+
+    box.append(title, list);
+    return box;
   }
 
   /**
