@@ -1825,8 +1825,11 @@ class App {
    * 只有玩家攻击才用的数据。载具被移除后条目自动可回收。
    */
   private readonly vehicleHealth = new WeakMap<object, number>();
-  /** 设置里的"显示调试信息"（批次 409）：与 `/gamerule reducedDebugInfo` 一起决定面板可见 */
-  private showDebugSetting = true;
+  /**
+   * 设置里的"显示调试信息"（批次 409）：与 `/gamerule reducedDebugInfo` 一起决定面板可见。
+   * 默认 **关**（2026-10-28，用户）；真正的值由 `applySettings()` 从设置里读。
+   */
+  private showDebugSetting = false;
   /** 蜂巢的蜂蜜等级（J21，批次 407）：按坐标存，键里带维度 */
   private readonly beeHives = new BeeHives();
   /**
@@ -3213,6 +3216,10 @@ class App {
     // （要等玩家进设置动一下才生效）——这也是批次 215 顺手修的
     this.camera.fov = this.settings.fov;
     this.camera.updateProjectionMatrix();
+    // 调试面板的开关同理：`applySettings` 只在"改设置"时跑，启动时这里补一次，
+    // 否则玩家打开调试信息、重启之后又变回关闭（`0` 是默认值，见字段注释）
+    this.showDebugSetting = this.settings.showDebug;
+    this.syncDebugVisibility();
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;

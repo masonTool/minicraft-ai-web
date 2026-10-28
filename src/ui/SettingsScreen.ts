@@ -188,6 +188,7 @@ export function touchAimModeLabel(mode: TouchAimMode): string {
  *  - 版本 3 = 视野默认 72° → **60°**、摇杆默认 固定 → **跟随手指**、
  *    **灵敏度重新定标**（1~8，4 档 = 上一版最快档 4×），字段含义随之改变。
  *  - 版本 4 = 摇杆默认 **跟随手指 → 固定**（批次 528，用户要求）。
+ *  - 版本 5 = 调试信息默认 **开 → 关**（2026-10-28，用户要求）。
  *
  * **必须显式存版本**：老默认值 1 在新口径里是"档位 1"，直接 clamp 会把
  * 所有老玩家的灵敏度从 1× 悄悄降到 0.7×。
@@ -195,7 +196,7 @@ export function touchAimModeLabel(mode: TouchAimMode): string {
  * 迁移只改"还停在旧默认值上"的那几项（见 `loadSettings`）：
  * 玩家自己调过的 72° / 摇杆模式要保留——迁移默认值不等于覆盖玩家的选择。
  */
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 
 /**
  * 场景亮度的范围（批次 220）：0.5 ~ 2，1 = 原始亮度。
@@ -388,7 +389,12 @@ export interface GameSettings {
   invertY: boolean;
   /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
   daylightCycle: boolean;
-  /** 是否显示左上角调试信息（HUD） */
+  /**
+   * 是否显示左上角调试信息（HUD）。
+   *
+   * 2026-10-28（用户）：**默认关闭**——坐标/区块/帧率那一块是排查用的，
+   * 普通玩家一进来看到满屏数字会以为是没做完。需要的人自己去「设置 → 游戏」打开。
+   */
   showDebug: boolean;
   /**
    * 自适应视距：帧率掉下去时自动缩小视距（玩家设定的视距是**上限**，只会往下调）。
@@ -468,7 +474,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   fastEat: true,
   invertY: false,
   daylightCycle: true,
-  showDebug: true,
+  // 2026-10-28（用户）：调试信息默认关闭
+  showDebug: false,
   adaptiveViewDistance: true,
   adaptiveResolution: true,
   maxFps: 0,
@@ -581,7 +588,10 @@ export function loadSettings(): GameSettings {
       fastEat: parsed.fastEat !== false,
       invertY: parsed.invertY === true,
       daylightCycle: parsed.daylightCycle !== false,
-      showDebug: parsed.showDebug !== false,
+      // 2026-10-28（用户）：默认关闭。
+      // ⚠️ 老存档（v4 及以前）里这一项是**旧默认 true** 被整份写进去的，
+      // 分不清"玩家主动开的"和"默认值"——一律按新口径回到关（要开就再点一次）。
+      showDebug: storedVersion >= 5 && parsed.showDebug === true,
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
       adaptiveResolution: parsed.adaptiveResolution !== false,
       maxFps: FPS_CAPS.includes(parsed.maxFps as number) ? (parsed.maxFps as number) : DEFAULT_SETTINGS.maxFps,

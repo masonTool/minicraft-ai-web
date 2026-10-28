@@ -5373,7 +5373,9 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
     '开房意图一路传到连接（进世界后直接连，不再要求再按一次）',
     // 2026-10-25：地址也进了意图，用的是玩家在对话框里填的那个（不再写死 defaultServerUrl）
     // 本批：昵称也进意图（对话框里填的那个），不再悄悄用面板记住的值
-    mainSrc.includes('pendingHostRoom = { room, password, baseUrl, name };') &&
+    // ⚠️ 2026-10-28：本机开房要先拉起服务端，意图里存的是 `effectiveBaseUrl`
+    //（拉起成功时是 `ws://<局域网IP>:<端口>`），所以这里按"字段齐全 + 值来自 effectiveBaseUrl"断言
+    /pendingHostRoom = \{ room, password, baseUrl: effectiveBaseUrl, name \};/.test(mainSrc) &&
       mainSrc.includes('app.connectOnline({') &&
       mainSrc.includes('baseUrl: intent.baseUrl,') &&
       mainSrc.includes('name: intent.name,'),
@@ -6185,7 +6187,7 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
   );
   check(
     '开房用的是玩家填的地址（不再写死 defaultServerUrl）',
-    mainSrc.includes('pendingHostRoom = { room, password, baseUrl, name };') &&
+    /pendingHostRoom = \{ room, password, baseUrl: effectiveBaseUrl, name \};/.test(mainSrc) &&
       mainSrc.includes('baseUrl: intent.baseUrl,'),
   );
   check(
@@ -6268,8 +6270,10 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
    */
   check(
     '开房先跑预检（连得上 + 房名没被占）才建世界',
-    /const hostWorldFlow = async \([\s\S]{0,220}?await preflightHost\(/.test(mainSrc3) &&
-      /await preflightHost\([\s\S]{0,900}?void startWorld\(world\)/.test(mainSrc3),
+    // ⚠️ 2026-10-28：函数头与预检之间隔着一整段"本机服务端先启动"的注释与分支，
+    // 原窗口（220 / 900 字符）装不下；预检与建世界之间还隔着三段失败分支（https / 连不上 / 房名被占）
+    /const hostWorldFlow = async \([\s\S]{0,1600}?await preflightHost\(/.test(mainSrc3) &&
+      /await preflightHost\([\s\S]{0,1600}?void startWorld\(world\)/.test(mainSrc3),
   );
   check(
     '预检失败把原因还给对话框（不是静默进世界）',

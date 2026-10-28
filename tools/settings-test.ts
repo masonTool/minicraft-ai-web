@@ -115,7 +115,9 @@ console.log('\n[默认设置]');
   check('默认右手模式（摇杆在左）', DEFAULT_SETTINGS.handedness === 'right');
   // 批次 521 曾把默认改成"跟随手指"；批次 528（用户）又改回"固定"
   check('摇杆默认固定', DEFAULT_SETTINGS.touchStick === 'fixed' && fallback.touchStick === 'fixed');
-  check('设置格式版本是 4', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 4);
+  check('设置格式版本是 5', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 5);
+  // 2026-10-28（用户）：调试信息默认关闭
+  check('调试信息默认关闭', DEFAULT_SETTINGS.showDebug === false && fallback.showDebug === false);
 }
 
 // ---------------------------------------------------------------- 2. 容错
@@ -188,7 +190,13 @@ console.log('\n[设置的容错]');
   check('clouds 不是 false 就当开（缺省友好）', messy.clouds === true);
   check('invertY 必须是严格的 true 才生效', messy.invertY === false);
   check('daylightCycle 缺省为开', messy.daylightCycle === true);
-  check('showDebug 不是 false 就当开', messy.showDebug === true);
+  // 2026-10-28：showDebug 的默认值从「开」翻成「关」，语义也跟着反了——
+  // 只有 v5 之后**显式存过 true** 才算打开；脏值/老版本一律关。
+  check('showDebug 脏值按关处理', messy.showDebug === false);
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 4, showDebug: true }));
+  check('v4 老存档里的 showDebug: true 是旧默认，迁到 v5 后回到关', loadSettings().showDebug === false);
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: SETTINGS_VERSION, showDebug: true }));
+  check('v5 之后显式打开能读回来', loadSettings().showDebug === true);
 
   storage.setItem(KEY, JSON.stringify({ clouds: false, invertY: true, daylightCycle: false, particles: 'off', autoJump: false }));
   const off = loadSettings();
