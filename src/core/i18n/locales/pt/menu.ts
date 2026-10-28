@@ -178,4 +178,5 @@ export const menu = {
   "world.hardcoreConfirm.text": "Um mundo extremo fica travado em Difícil + Sobrevivência. Ao morrer você só pode observar, e isso não pode ser desfeito. Criar?",
   "world.editHintLocked": "Mundo extremo: modo e dificuldade travados; só o nome pode ser alterado.",
   "world.modeLocked": "Em um mundo extremo o modo fica travado em Sobrevivência",
+  "world.deleteConfirm": "Excluir \"{name}\"? O save também será excluído — isso não pode ser desfeito.",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

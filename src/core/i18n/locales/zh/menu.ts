@@ -180,4 +180,5 @@ export const menu = {
   'world.hardcoreConfirm.text': '极限世界会被锁定为「困难 + 生存」，死亡后只能旁观，创建后无法改回。确定创建吗？',
   'world.editHintLocked': '极限世界：模式与难度已锁定，只能修改名称。',
   'world.modeLocked': '极限世界中模式已锁定为生存',
+  'world.deleteConfirm': '删除「{name}」？该世界的存档会一起删掉，无法恢复。',
 } as const;

@@ -179,4 +179,5 @@ export const menu = {
   "world.hardcoreConfirm.text": "Eine Hardcore-Welt wird auf Schwer + Überleben gesperrt. Nach dem Tod kannst du nur zuschauen, und das lässt sich nicht rückgängig machen. Erstellen?",
   "world.editHintLocked": "Hardcore-Welt: Modus und Schwierigkeit sind gesperrt, nur der Name ist änderbar.",
   "world.modeLocked": "In einer Hardcore-Welt ist der Modus auf Überleben gesperrt",
+  "world.deleteConfirm": "„{name}“ löschen? Der Spielstand wird mitgelöscht – das lässt sich nicht rückgängig machen.",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

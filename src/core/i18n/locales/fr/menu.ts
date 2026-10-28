@@ -179,4 +179,5 @@ export const menu = {
   "world.hardcoreConfirm.text": "Un monde extrême est verrouillé en Difficile + Survie. À la mort, tu ne peux qu’observer, et c’est irréversible. Créer ?",
   "world.editHintLocked": "Monde extrême : mode et difficulté verrouillés, seul le nom est modifiable.",
   "world.modeLocked": "Dans un monde extrême, le mode est verrouillé sur Survie",
+  "world.deleteConfirm": "Supprimer « {name} » ? Sa sauvegarde sera aussi supprimée — action irréversible.",
 } satisfies Pick<Messages, keyof typeof zhMenu>;

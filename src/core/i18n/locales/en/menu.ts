@@ -181,4 +181,5 @@ export const menu = {
   'world.hardcoreConfirm.text': 'A Hardcore world is locked to Hard + Survival. After death you can only spectate, and it cannot be undone. Create it?',
   'world.editHintLocked': 'Hardcore world: mode and difficulty are locked; only the name can be changed.',
   'world.modeLocked': 'Mode is locked to Survival in a Hardcore world',
+  "world.deleteConfirm": "Delete \"{name}\"? Its save will be deleted too — this cannot be undone.",
 } satisfies Pick<Messages, keyof typeof zhmenu>;

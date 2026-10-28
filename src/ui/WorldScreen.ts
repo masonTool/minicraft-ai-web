@@ -60,6 +60,21 @@ const difficultyLabels = (): Record<Difficulty, string> =>
  */
 export type WorldHelpTopic = 'type' | 'difficulty' | 'gameMode' | 'hardcore' | 'biome';
 
+/**
+ * 「?」浮层的标题键。
+ *
+ * 刻意写成**显式映射**而不是 ``t(`world.${topic}`)``：模板拼键会让 `audit:i18n`
+ * 把 `world.*` 整片当成"已引用"（前缀才 6 个字符），以后 `world.*` 下真出现孤儿键
+ * 就查不出来了。这里五个键在表单行里本来就各出现一次，写死不会漏。
+ */
+const WORLD_HELP_TITLE_KEY: Record<WorldHelpTopic, string> = {
+  type: 'world.type',
+  difficulty: 'world.difficulty',
+  gameMode: 'world.gameMode',
+  hardcore: 'world.hardcore',
+  biome: 'world.biome',
+};
+
 /** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */
 export interface WorldEditPatch {
   name: string;
@@ -1092,7 +1107,8 @@ export class WorldScreen {
     cancel.addEventListener('click', cleanup);
     save.addEventListener('click', () => {
       void (async () => {
-        const name = nameInput.value.trim() || '未命名世界';
+        // 兜底名走 i18n：以前写死「未命名世界」，德语/俄语界面里会蹦中文
+        const name = nameInput.value.trim() || t('world.unnamed');
         save.disabled = true;
         try {
           const patch: WorldEditPatch = {
@@ -1128,7 +1144,7 @@ export class WorldScreen {
   private async confirmDelete(world: WorldSummary): Promise<void> {
     const ok = await this.confirm({
       title: t('world.delete'),
-      message: `删除「${world.name}」？该世界的存档会一起删掉，无法恢复。`,
+      message: tp('world.deleteConfirm', { name: world.name }),
       confirmText: t('world.delete'),
       danger: true,
     });
@@ -1311,7 +1327,7 @@ export class WorldScreen {
     const header = document.createElement('div');
     header.className = 'world-modal-header';
     const title = document.createElement('b');
-    title.textContent = t(`world.${topic}`);
+    title.textContent = t(WORLD_HELP_TITLE_KEY[topic]);
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'world-modal-close';
