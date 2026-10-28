@@ -4010,6 +4010,8 @@ class App {
       pc: this.pc?.debugState,
     });
     this.uiOpen = open;
+    // 背包关掉时，顺手收起"从背包打开"的形象弹窗（从设置页打开的那扇不受影响）
+    if (!open) this.settingsScreen?.closeStandaloneAppearance();
     this.keys.clear();
     this.leftDown = false;
     this.rightDown = false;

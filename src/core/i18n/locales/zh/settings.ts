@@ -112,7 +112,7 @@ export const settings = {
   'settings.saved': '已保存',
   'settings.unsavedTitle': '未保存的修改',
   'settings.unsavedText': '当前设置还没有保存，要保存吗？',
-  'settings.discard': '取消（不保存）',
+  'settings.discard': '取消',
   // 资源包改成持久化之后（2026-10-28）需要一颗"移除"键
   'settings.resourcePack.remove': '移除当前资源包',
   'settings.group.world': '世界',

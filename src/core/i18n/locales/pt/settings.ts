@@ -103,7 +103,7 @@ export const settings = {
   "settings.saved": "Salvo",
   "settings.unsavedTitle": "Alterações não salvas",
   "settings.unsavedText": "Estas configurações ainda não foram salvas. Salvar?",
-  "settings.discard": "Cancelar (não salvar)",
+  "settings.discard": "Cancelar",
   "settings.resourcePack.remove": "Remover o pacote de recursos atual",
   'settings.group.world': 'Mundo',
   'settings.world.hint': 'Dificuldade, modo e regras valem depois de «Salvar».',

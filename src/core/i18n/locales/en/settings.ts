@@ -108,7 +108,7 @@ export const settings = {
   "settings.saved": "Saved",
   "settings.unsavedTitle": "Unsaved changes",
   "settings.unsavedText": "These settings have not been saved yet. Save them?",
-  "settings.discard": "Cancel (don't save)",
+  "settings.discard": "Cancel",
   "settings.resourcePack.remove": "Remove current resource pack",
   'settings.group.world': 'World',
   'settings.world.hint': 'Difficulty, mode and rules apply after you tap Save.',

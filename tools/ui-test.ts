@@ -2695,7 +2695,8 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
       compact.includes('.settings-block + .settings-block {') &&
       source.includes('const controlOptions = this.makeBlock(controls);') &&
       source.includes('const controlSliders = this.makeBlock(controls);') &&
-      source.includes('const gameOptions = this.makeBlock(game);') &&
+      // 2026-10-29：游戏页第一块直接内联成语言下拉（不再有 gameOptions 变量）
+      source.includes("this.makeBlock(game, 'block-single'),") &&
       source.includes('const gameActions = this.makeBlock(game);') &&
       source.includes('const soundSliders = this.makeBlock(sound);'),
   );
@@ -2707,7 +2708,13 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
       source.includes("row.className = 'settings-row action';"),
   );
   // 诊断日志（批次 181）：入口在设置里，读数与按钮挤一行且不许撑破
-  check('诊断日志入口在设置里', source.includes('诊断日志') && source.includes('makeDiagnosticsRow'));
+  // 2026-10-29（用户）：调试信息与日志导出合并成一行
+  check(
+    '调试信息与日志导出在同一行',
+    source.includes('private makeDebugLogRow(): HTMLDivElement') &&
+      source.includes("row.append(debugLabel, debugSwitch, logLabel, button);") &&
+      compact.includes('.settings-row.debug-log {'),
+  );
   // 批次 220（用户）：只保留「导出」——打点与复制对玩家不产出额外信息
   check(
     '诊断日志只留导出（不再有记录问题 / 复制）',

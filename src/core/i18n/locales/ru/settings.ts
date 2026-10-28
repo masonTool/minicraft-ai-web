@@ -104,7 +104,7 @@ export const settings = {
   "settings.saved": "Сохранено",
   "settings.unsavedTitle": "Несохранённые изменения",
   "settings.unsavedText": "Эти настройки ещё не сохранены. Сохранить?",
-  "settings.discard": "Отмена (не сохранять)",
+  "settings.discard": "Отмена",
   "settings.resourcePack.remove": "Удалить текущий пакет ресурсов",
   'settings.group.world': 'Мир',
   'settings.world.hint': 'Сложность, режим и правила применяются после «Сохранить».',

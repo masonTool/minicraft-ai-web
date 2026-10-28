@@ -104,7 +104,7 @@ export const settings = {
   "settings.saved": "Gespeichert",
   "settings.unsavedTitle": "Nicht gespeicherte Änderungen",
   "settings.unsavedText": "Diese Einstellungen sind noch nicht gespeichert. Speichern?",
-  "settings.discard": "Abbrechen (nicht speichern)",
+  "settings.discard": "Abbrechen",
   "settings.resourcePack.remove": "Aktuelles Ressourcenpaket entfernen",
   'settings.group.world': 'Welt',
   'settings.world.hint': 'Schwierigkeit, Modus und Regeln gelten nach „Speichern“.',

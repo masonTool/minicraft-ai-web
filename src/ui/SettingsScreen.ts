@@ -1001,7 +1001,11 @@ export class SettingsScreen {
   private avatarDrag: { pointerId: number; x: number } | null = null;
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
-  private diagnosticsStatusEl: HTMLElement | null = null;
+  /**
+   * 「日志 → 导出」那颗按钮（2026-10-29 起行里不再有第三格状态文字，
+   * 读数改成按钮的 `title`，导出/失败的反馈写到页头提示里）。
+   */
+  private diagnosticsButton: HTMLButtonElement | null = null;
   /** 资源包行的状态文字（当前包名 / 未选择） */
   private packStatusEl: HTMLElement | null = null;
   /** 资源包行的「移除」（只有装着包时才出现） */
@@ -1433,14 +1437,12 @@ export class SettingsScreen {
     if (this.actions.world) this.buildWorldSection(this.section(WORLD_GROUP));
 
     const game = this.section('game');
-    // 第一块：开关与下拉
-    const gameOptions = this.makeBlock(game);
-    this.makeToggle(gameOptions, 'showDebug', t('settings.row.showDebug'));
-    // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
-    // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
-    // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
-    // 选项 = "跟随系统" + **可选**的语言（有表或登记了加载器，多语言 P0-5/P0-7）。
-    // `auto` 的标签要写出**这台设备上解析成什么**，否则玩家不知道"跟随系统"等于哪种语言。
+    /*
+     * 「游戏」页顺序（2026-10-29，用户）：
+     *  ① 界面语言——独立一行，排最上面（原「调试信息」的位置）
+     *  ② 资源包（导入按钮 + 免责说明）
+     *  ③ 调试信息 + 日志导出——同一行
+     */
     const languageOptions: readonly LanguageSetting[] = [AUTO_LANGUAGE, ...availableLanguages()];
     const languageLabels: Record<LanguageSetting, string> = {
       [AUTO_LANGUAGE]: tp('settings.language.autoWith', {
@@ -1449,28 +1451,30 @@ export class SettingsScreen {
       ...LANGUAGE_NAMES,
     };
     this.makeDropdown(
-      gameOptions,
+      // `block-single`：整块只有一行时别被"块内两列"挤成半宽
+      this.makeBlock(game, 'block-single'),
       t('settings.language'),
       languageOptions,
       languageLabels,
       () => this.draft.language,
       (next) => {
-        // 语言同样走草稿：点了「保存」才落盘并重载（2026-10-28 的统一口径）。
-        // 保存时如果语言真的变了，`saveActiveGroup()` 会整页重载——理由见
-        // `bindLabel()` 的注释：局部重刷只能覆盖挂了 ref 的节点，物品名/生物名/
-        // 成就/命令反馈都刷不到。
+        // 语言同样走草稿：点了「保存」才落盘并重载——理由
+        // 见 `bindLabel()` 的注释：局部重刷只能覆盖挂了 ref 的节点，
+        // 物品名/生物名/成就/命令反馈都刷不到。
         this.draft.language = next;
       },
     );
 
-    // 第二块：导入 / 导出这类动作，各占半行
+    // 第二块：导入这类动作，各占半行
     const gameActions = this.makeBlock(game);
     gameActions.appendChild(this.makeResourcePackRow());
     // 2026-10-28（用户）：详细说明收进「导入」右边那颗 ?（浮层，见 `openPackHelp()`）；
     // 行下只剩一句"只能导自己的包"的免责——这句不点也要看得见。
     gameActions.appendChild(this.makePackHint());
-    // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起只留「导出」
-    if (this.actions.onDiagnosticsExport) gameActions.appendChild(this.makeDiagnosticsRow());
+
+    // 第三块：调试信息 + 日志导出同一行（2026-10-29，用户）
+    this.makeBlock(game, 'block-single').appendChild(this.makeDebugLogRow());
+
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
     const columns = document.createElement('div');
@@ -1719,9 +1723,9 @@ export class SettingsScreen {
    * 这样"开关/下拉"与"滑杆"不会交错排；每块自己用 auto-fit 栅格，
    * 宽屏两列、窄屏自动退回一列。
    */
-  private makeBlock(host: HTMLElement): HTMLDivElement {
+  private makeBlock(host: HTMLElement, extra?: string): HTMLDivElement {
     const block = document.createElement('div');
-    block.className = 'settings-block';
+    block.className = extra ? `settings-block ${extra}` : 'settings-block';
     host.appendChild(block);
     return block;
   }
@@ -1808,6 +1812,19 @@ export class SettingsScreen {
     const name = document.createElement('span');
     name.textContent = label;
 
+    const button = this.createSwitch(read, write, commit);
+    row.append(name, button);
+    host.appendChild(row);
+    return button;
+  }
+
+  /**
+   * 只造开关本身（不套行）。
+   *
+   * 给"一行里塞两组控件"的场景用（2026-10-29：调试信息 + 日志导出同一行）。
+   * `makeSwitch` 就是它 + 一行标签。
+   */
+  private createSwitch(read: () => boolean, write: () => void, commit = true): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'settings-switch';
@@ -1831,9 +1848,6 @@ export class SettingsScreen {
     this.controlSync.set(button, sync);
     this.refreshers.push(sync);
     sync();
-
-    row.append(name, button);
-    host.appendChild(row);
     return button;
   }
 
@@ -2033,6 +2047,15 @@ export class SettingsScreen {
     window.setTimeout(() => this.renderSubtitle(), 1200);
   }
 
+  /**
+   * 背包关掉时把"从背包打开"的形象弹窗一并收起（2026-10-29）。
+   *
+   * 只在独立打开时生效：正常从设置页打开的那扇，不能被背包的开关顺手关掉。
+   */
+  closeStandaloneAppearance(): void {
+    if (this.standaloneAppearance) this.closeAppearance();
+  }
+
   /** 弹窗「保存」的亮/灰：形象草稿与已保存值不一致才亮 */
   private updateAppearanceSaveState(): void {
     const button = this.appearanceSaveButton;
@@ -2230,24 +2253,28 @@ export class SettingsScreen {
   }
 
   /**
-   * 诊断日志（批次 181；批次 220 只留「导出」）。
+   * 「调试信息 [开关] · 日志 [导出]」同一行（2026-10-29，用户）。
    *
-   * 读数与按钮挤在同一行：出事时玩家只记得"进设置点那个日志"，
+   * 以前是三行：调试开关一行、日志一行（标签 / 导出 / 读数）；
+   * 现在合成一行，"读条数与占用"挪到导出按钮的 `title` 上。
+   * 为什么只留「导出」这一颗：出事时玩家只记得"进设置点那个日志"，
    * 再分子菜单就又多一层找不到的入口。
-   *
-   * 为什么删掉另外两颗（用户："只保留那个导出按钮就可以了"）：
-   *  - 「记录问题」只是往时间线里插一条要自己命名的 mark，而导出本来就从最早一条开始；
-   *  - 「复制」产出的是可读时间线，但导出的 JSON 里每个会话都带同一份事件，
-   *    AI 侧本来就要转成时间线再读。
-   *   两颗按钮不提供额外能力，却让"出了问题该点哪个"变成一个选择。
    */
-  private makeDiagnosticsRow(): HTMLElement {
-    // 批次 335：从横跨整行的 diag-block 改成普通半行——标签 / 导出 / 读数
+  private makeDebugLogRow(): HTMLDivElement {
     const row = document.createElement('div');
-    row.className = 'settings-row action';
+    row.className = 'settings-row debug-log';
 
-    const title = document.createElement('span');
-    title.textContent = t('settings.diagnostics');
+    const debugLabel = document.createElement('span');
+    debugLabel.textContent = t('settings.row.showDebug');
+    const debugSwitch = this.createSwitch(
+      () => this.draft.showDebug,
+      () => {
+        this.draft.showDebug = !this.draft.showDebug;
+      },
+    );
+
+    const logLabel = document.createElement('span');
+    logLabel.textContent = t('settings.diagnostics');
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -2255,35 +2282,42 @@ export class SettingsScreen {
     button.textContent = t('settings.export');
     button.title = t('settings.exportTitle');
     button.addEventListener('click', () => {
-      button.blur(); // 手机上点完别一直保持「按下」态（行尾注释里不用英文引号，见 i18n 的字面量守卫）
+      button.blur(); // 手机上点完别一直保持「按下」态
       const ok = this.actions.onDiagnosticsExport?.() ?? false;
       this.refreshDiagnostics(t(ok ? 'settings.exported' : 'settings.exportFailed'));
     });
 
-    const status = document.createElement('i');
-    status.className = 'settings-status';
-    this.diagnosticsStatusEl = status;
-
-    row.append(title, button, status);
+    // 没有导出能力（理论上不会发生）就只留调试开关，别摆一颗点不动的键
+    if (!this.actions.onDiagnosticsExport) {
+      row.append(debugLabel, debugSwitch);
+      return row;
+    }
+    row.append(debugLabel, debugSwitch, logLabel, button);
+    this.diagnosticsButton = button;
     this.refreshDiagnostics();
     return row;
   }
 
   /**
-   * 刷新诊断入口上的读数。
+   * 刷新日志按钮上的读数（2026-10-29 起不再单独占一格）。
    *
-   * @param note 传了就临时显示这句话（"已导出"），否则显示条数/占用。
+   * - 平时：把"事件条数 / 占用 / 是否打过点"写进导出按钮的 `title`；
+   * - 导出成功 / 失败：额外用页头那行提示说一句，2 秒后恢复原文——
+   *   手机上没有悬停，只写 `title` 等于没有反馈。
    */
   refreshDiagnostics(note?: string): void {
-    const element = this.diagnosticsStatusEl;
-    if (!element) return;
+    const button = this.diagnosticsButton;
     const stats = this.actions.diagnosticsStats?.();
-    if (!stats) {
-      element.textContent = note ?? '';
-      return;
+    const marked = stats?.marked ? t('settings.exportMarked') : '';
+    const detail =
+      note ?? (stats ? tp('settings.exportStats', { events: stats.events, kb: stats.kb, marked }) : '');
+    if (button) {
+      button.title = detail.length > 0 ? `${t('settings.exportTitle')} · ${detail}` : t('settings.exportTitle');
     }
-    const marked = stats.marked ? t('settings.exportMarked') : '';
-    element.textContent = note ?? tp('settings.exportStats', { events: stats.events, kb: stats.kb, marked });
+    if (note) {
+      this.settingsHintEl.textContent = note;
+      window.setTimeout(() => this.renderSubtitle(), 1600);
+    }
   }
 
   /** 资源包导入行（.mcpack / .zip） */

@@ -104,7 +104,7 @@ export const settings = {
   "settings.saved": "Enregistré",
   "settings.unsavedTitle": "Modifications non enregistrées",
   "settings.unsavedText": "Ces réglages ne sont pas encore enregistrés. Les enregistrer ?",
-  "settings.discard": "Annuler (ne pas enregistrer)",
+  "settings.discard": "Annuler",
   "settings.resourcePack.remove": "Retirer le pack de ressources actuel",
   'settings.group.world': 'Monde',
   'settings.world.hint': 'Difficulté, mode et règles s’appliquent après « Enregistrer ».',
