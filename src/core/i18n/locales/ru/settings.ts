@@ -108,7 +108,7 @@ export const settings = {
   "settings.discard": "Отмена (не сохранять)",
   "settings.resourcePack.remove": "Удалить текущий пакет ресурсов",
   'settings.group.world': 'Мир',
-  'settings.world.hint': 'Эти настройки относятся только к текущему миру и применяются сразу.',
+  'settings.world.hint': 'Сложность, режим и правила применяются после «Сохранить»; время и погода — сразу.',
   'settings.world.time': 'Время',
   'settings.world.weather': 'Погода',
   'settings.world.rulesHint': 'Более тонкие правила (скорость случайных тиков, радиус появления…) меняются командой /gamerule.',

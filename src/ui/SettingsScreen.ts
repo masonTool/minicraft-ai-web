@@ -853,16 +853,41 @@ export type WorldTimePreset = 'day' | 'noon' | 'night' | 'midnight';
  * 不像通用设置那样存在"改了但还没保存"的中间态——所以这一页没有「保存」。
  * 模式与飞行不在这里：它们本来就在 `SettingsActions` 上（`onSetGameMode` / `isFlying`）。
  */
+/**
+ * 「世界」页可进草稿的那一份配置。
+ *
+ * 时间与天气**不在**这里：它们是"现在立刻要变"的动作（原版也是 `/time`、`/weather`），
+ * 没法做"改了但先不生效"。所以世界页是混合的：配置走草稿，时间/天气立即生效。
+ */
+export interface WorldSettingsSnapshot {
+  difficulty: Difficulty;
+  gameMode: GameMode;
+  rules: GameRules;
+}
+
 export interface WorldSettingsActions {
-  difficulty: () => Difficulty;
-  onSetDifficulty: (value: Difficulty) => void;
+  /** 这个世界此刻的真实配置（打开面板时拷一份当草稿） */
+  current: () => WorldSettingsSnapshot;
+  /**
+   * 这个世界的**默认配置**。
+   *
+   * 定义（2026-10-28，用户）：**首次进入这个世界时的初始配置**——不是全局默认值。
+   * 主程序在第一次开这个世界时把它记下来（按世界 id 存在 localStorage），
+   * 之后「恢复默认」就回到那一份。
+   */
+  defaults: () => WorldSettingsSnapshot;
+  /** 点「保存」时把草稿落到世界（难度 / 模式 / 规则） */
+  apply: (next: WorldSettingsSnapshot) => void;
   /** 一天内的时刻（0~1，与原版 `tick / 24000` 同一坐标系） */
   timeOfDay: () => number;
   onSetTime: (time: WorldTimePreset) => void;
   weather: () => 'clear' | 'rain' | 'thunder';
   onSetWeather: (kind: 'clear' | 'rain' | 'thunder') => void;
-  rules: () => GameRules;
-  onSetRule: (key: keyof GameRules, value: boolean | number) => void;
+}
+
+/** 深拷贝一份世界配置（结构里只有一层 rules） */
+function cloneWorldSnapshot(snapshot: WorldSettingsSnapshot): WorldSettingsSnapshot {
+  return { difficulty: snapshot.difficulty, gameMode: snapshot.gameMode, rules: { ...snapshot.rules } };
 }
 
 /**
@@ -901,6 +926,10 @@ export class SettingsScreen {
    * 并触发 `onChange`。这样拖滑块、点开关都不会立刻改游戏状态。
    */
   private draft: GameSettings;
+  /** 「世界」页的草稿（难度 / 模式 / 规则）；没有世界页时为 null */
+  private worldDraft: WorldSettingsSnapshot | null = null;
+  /** 上一次保存（或刚打开面板）时的世界配置，用来判断世界页脏没脏 */
+  private worldSaved: WorldSettingsSnapshot | null = null;
   /** 这次面板要不要显示「世界」页（游戏内有、主菜单没有），见 `SettingsActions.world` */
   private readonly groups: readonly SettingGroup[];
   /** 已保存的基准（= 最后一次落盘的值），用来判断"这一页脏了没有" */
@@ -1018,6 +1047,8 @@ export class SettingsScreen {
     // 游戏内多一页「世界」并排在第一位（玩的时候最常调的就是它）
     this.groups = actions.world ? [WORLD_GROUP, ...SETTING_GROUPS] : SETTING_GROUPS;
     this.activeGroup = this.groups[0]!;
+    // 世界页的草稿必须在造控件之前就位（控件构造时就要读初值）
+    this.snapshotWorld();
 
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
@@ -1873,6 +1904,17 @@ export class SettingsScreen {
    */
   resetActiveGroup(): void {
     const group = this.activeGroup;
+    if (group === WORLD_GROUP) {
+      // 「恢复默认」= 回到这个世界**首次进入时**的初始配置（用户 2026-10-28 的定义）
+      const world = this.actions.world;
+      if (world) this.worldDraft = cloneWorldSnapshot(world.defaults());
+      for (const refresh of this.refreshers) refresh();
+      this.refreshGameModeRows();
+      this.updateSaveState();
+      this.settingsHintEl.textContent = t('settings.resetDone');
+      window.setTimeout(() => this.renderSubtitle(), 2000);
+      return;
+    }
     for (const key of SETTING_GROUP_KEYS[group]) {
       // 逐键赋值：`GameSettings[key]` 在联合键下会退化成 never，不能整体下标赋值
       (this.draft as unknown as Record<string, unknown>)[key] = (
@@ -2389,8 +2431,11 @@ export class SettingsScreen {
         Difficulty,
         string
       >,
-      () => world.difficulty(),
-      (next) => world.onSetDifficulty(next),
+      // 难度走草稿（2026-10-28：世界页也改成"改完点保存"）
+      () => this.worldDraft?.difficulty ?? world.current().difficulty,
+      (next) => {
+        if (this.worldDraft) this.worldDraft.difficulty = next;
+      },
       (control) => {
         // 极限世界难度也锁死（与游戏模式同一条口径，2026-10-28）
         if (this.actions.gameModeLocked?.()) control.setDisabled(true);
@@ -2428,10 +2473,15 @@ export class SettingsScreen {
       this.makeSwitch(
         rulesBlock,
         gameRuleLabel(key),
-        () => world.rules()[key] === true,
-        () => world.onSetRule(key, !(world.rules()[key] === true)),
-        // 世界规则不进草稿：改完立刻生效，也不参与"未保存"判断
-        false,
+        () => this.worldDraft?.rules[key] === true,
+        () => {
+          if (!this.worldDraft) return;
+          // 取反要看**草稿**的当前值：看真实值的话连点两次永远只会变成 true
+          const current = this.worldDraft.rules[key] === true;
+          (this.worldDraft.rules as unknown as Record<string, unknown>)[key] = !current;
+        },
+        // 规则也进草稿：与难度/模式一起点「保存」，脏值判断里算它一份
+        true,
       );
     }
     const rulesHint = document.createElement('p');
@@ -2464,8 +2514,16 @@ export class SettingsScreen {
       t('settings.row.gameMode'),
       GAME_MODES,
       Object.fromEntries(GAME_MODES.map((mode) => [mode, gameModeLabel(mode)])) as Record<GameMode, string>,
-      () => this.actions.gameMode?.() ?? 'survival',
-      (mode) => this.actions.onSetGameMode?.(mode),
+      // 模式也走草稿；草稿不存在（主菜单）时才直接调主程序
+      () => this.worldDraft?.gameMode ?? this.actions.gameMode?.() ?? 'survival',
+      (mode) => {
+        if (!this.worldDraft) {
+          this.actions.onSetGameMode?.(mode);
+          return;
+        }
+        this.worldDraft.gameMode = mode;
+        this.refreshGameModeRows();
+      },
       /*
        * 极限世界（2026-10-28）：模式是世界级硬约束，这里直接把下拉锁死。
        *
@@ -2489,7 +2547,8 @@ export class SettingsScreen {
 
   /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
   refreshGameModeRows(): void {
-    const mode = this.actions.gameMode?.() ?? 'survival';
+    // 面板开着时以**草稿**为准（改了模式还没保存，飞行那一格要跟着变）
+    const mode = this.worldDraft?.gameMode ?? this.actions.gameMode?.() ?? 'survival';
     const locked = this.actions.gameModeLocked?.() === true;
     if (this.gameModeToggle) this.controlSync.get(this.gameModeToggle)?.();
     if (this.flyingToggle) this.controlSync.get(this.flyingToggle)?.();
@@ -2530,6 +2589,14 @@ export class SettingsScreen {
     const languageBefore = this.saved.language;
     let reset = false;
     for (const group of groups) {
+      // 世界页：把草稿整份落到世界（难度/模式/规则），时间与天气本来就已经生效
+      if (group === WORLD_GROUP) {
+        if (this.worldDraft && this.actions.world) {
+          this.actions.world.apply(cloneWorldSnapshot(this.worldDraft));
+          this.worldSaved = cloneWorldSnapshot(this.worldDraft);
+        }
+        continue;
+      }
       for (const key of SETTING_GROUP_KEYS[group]) {
         (this.settings as unknown as Record<string, unknown>)[key] = (
           this.draft as unknown as Record<string, unknown>
@@ -2548,7 +2615,8 @@ export class SettingsScreen {
      * 改个别的东西并保存，草稿里那个旧 `true` 会把设置盖回去 —— 规则说 false、时间却还在走。
      * 所以保存通用设置时，这一项一律以世界规则为准。
      */
-    if (this.actions.world) this.settings.daylightCycle = this.actions.world.rules().doDaylightCycle;
+    // 用**已保存**的世界规则（worldSaved），不能用草稿里还没保存的改动
+    if (this.worldSaved) this.settings.daylightCycle = this.worldSaved.rules.doDaylightCycle;
 
     this.saved = { ...this.settings };
 
@@ -2567,6 +2635,8 @@ export class SettingsScreen {
 
   /** 某个分组有没有未保存的改动 */
   private isGroupDirty(group: SettingGroup): boolean {
+    // 世界页不按 `SETTING_GROUP_KEYS` 比：它比对的是世界配置快照
+    if (group === WORLD_GROUP) return this.isWorldDirty();
     for (const key of SETTING_GROUP_KEYS[group]) {
       if ((this.draft as unknown as Record<string, unknown>)[key] !== (this.saved as unknown as Record<string, unknown>)[key]) {
         return true;
@@ -2577,8 +2647,32 @@ export class SettingsScreen {
 
   /** 有没有任何一页脏了（返回 / 关闭面板时用来决定要不要提醒） */
   hasUnsaved(): boolean {
-    // 只问通用设置那四组：「世界」页是即时生效的，本来就没有"未保存"这种状态
-    return SETTING_GROUPS.some((group) => this.isGroupDirty(group));
+    // 通用设置四组 + 世界页（2026-10-28：世界页也改成草稿+保存了）
+    return this.groups.some((group) => this.isGroupDirty(group));
+  }
+
+  /** 世界页脏没脏：逐字段比难度/模式，规则逐键比 */
+  private isWorldDirty(): boolean {
+    const draft = this.worldDraft;
+    const saved = this.worldSaved;
+    if (!draft || !saved) return false;
+    if (draft.difficulty !== saved.difficulty || draft.gameMode !== saved.gameMode) return true;
+    for (const key of Object.keys(draft.rules) as (keyof GameRules)[]) {
+      if (draft.rules[key] !== saved.rules[key]) return true;
+    }
+    return false;
+  }
+
+  /** 把世界的真实配置拷成草稿（打开面板 / 放弃改动时） */
+  private snapshotWorld(): void {
+    const world = this.actions.world;
+    if (!world) {
+      this.worldDraft = null;
+      this.worldSaved = null;
+      return;
+    }
+    this.worldDraft = cloneWorldSnapshot(world.current());
+    this.worldSaved = cloneWorldSnapshot(this.worldDraft);
   }
 
   /**
@@ -2588,9 +2682,7 @@ export class SettingsScreen {
    * 留着两颗键反而会让人以为"刚才那一下还没生效"。
    */
   private updateSaveState(): void {
-    const isWorld = this.activeGroup === WORLD_GROUP;
-    const dirty = !isWorld && this.isGroupDirty(this.activeGroup);
-    if (this.footerEl) this.footerEl.hidden = isWorld;
+    const dirty = this.isGroupDirty(this.activeGroup);
     if (this.saveButton) this.saveButton.disabled = !dirty;
     this.footerEl?.classList.toggle('dirty', dirty);
   }
@@ -2613,7 +2705,10 @@ export class SettingsScreen {
     this.draft = { ...this.settings };
     this.saved = { ...this.settings };
     this.pendingResetGroups.clear();
+    // 世界页的草稿也是"这一张纸"：取消时一并回到真实值
+    this.snapshotWorld();
     this.refreshControls();
+    this.refreshGameModeRows();
   }
 
   /**
@@ -2734,6 +2829,8 @@ export class SettingsScreen {
     this.draft = { ...this.settings };
     this.saved = { ...this.settings };
     this.pendingResetGroups.clear();
+    // 世界页也重新开一张：上次没保存的改动不该带进这一次
+    this.snapshotWorld();
     this.renderSubtitle();
     this.refreshControls();
     this.applyPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));

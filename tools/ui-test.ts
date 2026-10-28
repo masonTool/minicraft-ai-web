@@ -2527,7 +2527,7 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
   );
   // 2026-10-28（用户口径修正）：只有「世界」页即时生效；通用设置（四组）仍是草稿 + 保存
   check(
-    '「世界」页即时生效、且只在游戏内出现；通用设置仍是保存制',
+    '「世界」页只在游戏内出现，且与通用设置一样走草稿 + 保存',
     readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("export const WORLD_GROUP = 'world';") &&
       readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'this.groups = actions.world ? [WORLD_GROUP, ...SETTING_GROUPS] : SETTING_GROUPS;',
@@ -2535,16 +2535,17 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'if (this.actions.world) this.buildWorldSection(this.section(WORLD_GROUP));',
       ) &&
-      // 世界页不收页脚（没有保存/恢复默认）
+      // 世界页有自己的草稿与脏值判断
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private worldDraft') &&
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private isWorldDirty(): boolean') &&
       readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
-        'if (this.footerEl) this.footerEl.hidden = isWorld;',
+        'return this.groups.some((group) => this.isGroupDirty(group));',
       ) &&
-      // 脏值判断只看通用设置那四组
+      // 恢复默认 = 首次进入世界时的初始配置
       readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
-        'return SETTING_GROUPS.some((group) => this.isGroupDirty(group));',
+        'cloneWorldSnapshot(world.defaults())',
       ) &&
-      // 主程序给的是世界级回调，不再是整面板的 live 开关
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('world: {') &&
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('private ensureWorldDefaults(): void') &&
       !readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
   );
   // 进入世界的第一句（2026-10-28，用户）：以前是进度系统的"对了一次背包"，看不懂
@@ -3336,8 +3337,11 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
       /\.world-row \{[^}]*grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\)/.test(css) &&
       css.includes('.world-row > span:first-child {') &&
       // 按语言覆盖标签宽度：没有这几条，非中文的长标签会被截成 "Schwier…"
-      css.includes("html[lang='de']") &&
-      css.includes("html[lang='ru']"),
+      // 2026-10-28 修正：用 `:lang()`（pt 实际是 pt-BR，属性选择器匹配不到），并补上 en
+      css.includes('html:lang(de)') &&
+      css.includes('html:lang(ru)') &&
+      css.includes('html:lang(pt)') &&
+      css.includes('html:lang(en)'),
   );
   /*
    * 2026-10-27 第二版：以前固定三列（第三列 44px 只有"重新掷色子"用得上），
@@ -5383,7 +5387,9 @@ console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
   );
   check(
     '切换按选中的值（不再是无参 toggle）',
-    /\(mode\) => this\.actions\.onSetGameMode\?\.\(mode\)/.test(settingsSrc) &&
+    // 2026-10-28：世界页改成草稿后，下拉写的是 worldDraft（没有草稿时才直连主程序）
+    settingsSrc.includes('this.worldDraft.gameMode = mode;') &&
+      settingsSrc.includes('this.actions.onSetGameMode?.(mode);') &&
       !settingsSrc.includes('onToggleGameMode?.(()') &&
       !/onToggleGameMode\?\.\(\),/.test(settingsSrc) &&
       mainSrc.includes('onSetGameMode: (mode) => this.setGameMode(mode)'),

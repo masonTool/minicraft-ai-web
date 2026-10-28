@@ -108,7 +108,7 @@ export const settings = {
   "settings.discard": "Annuler (ne pas enregistrer)",
   "settings.resourcePack.remove": "Retirer le pack de ressources actuel",
   'settings.group.world': 'Monde',
-  'settings.world.hint': 'Ces réglages concernent uniquement le monde actuel et s’appliquent immédiatement.',
+  'settings.world.hint': 'Difficulté, mode et règles s’appliquent après « Enregistrer » ; l’heure et la météo sont immédiates.',
   'settings.world.time': 'Heure',
   'settings.world.weather': 'Météo',
   'settings.world.rulesHint': 'Les règles plus fines (vitesse des ticks aléatoires, rayon d’apparition…) se règlent avec /gamerule.',

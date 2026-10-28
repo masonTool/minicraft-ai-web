@@ -174,6 +174,7 @@ import {
   sensitivityGain,
   type GameSettings,
   type SettingsChangeMeta,
+  type WorldSettingsSnapshot,
 } from './ui/SettingsScreen.ts';
 import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
 // 导出文件：优先弹系统"另存为"（让玩家选目录），不支持才退回浏览器下载（2026-10-28）
@@ -1823,6 +1824,14 @@ class App {
   /** 游戏规则（I11）：保存在世界里 */
   private rules: GameRules = { ...DEFAULT_GAME_RULES };
   /**
+   * 这个世界的**默认配置**（2026-10-28，用户）。
+   *
+   * 定义是"首次进入这个世界时的初始配置"，按世界 id 记在 localStorage 里
+   * （不进存档：它只服务于「世界 → 恢复默认」这一颗键，改存档格式代价更大）。
+   * 见 `ensureWorldDefaults()`。
+   */
+  private worldDefaults: WorldSettingsSnapshot | null = null;
+  /**
    * 记分板（M23，批次 402）：`/scoreboard` 与 `/execute if score` 共用这一份。
    * ⚠️ 还没进存档（`Scoreboard.snapshot/restore` 已经写好，缺的是 SaveGame 那个对象仓）；
    * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
@@ -3295,14 +3304,13 @@ class App {
        * 全部即时生效（难度 / 规则 / 时间 / 天气）。通用设置仍然是草稿 + 保存。
        */
       world: {
-        difficulty: () => this.difficulty,
-        onSetDifficulty: (value) => this.setDifficulty(value),
+        current: () => this.worldSnapshot(),
+        defaults: () => this.worldDefaults ?? this.worldSnapshot(),
+        apply: (next) => this.applyWorldSnapshot(next),
         timeOfDay: () => this.timeOfDay,
         onSetTime: (preset) => this.commandSetTimeOfDay(parseTime(preset) ?? 0),
         weather: () => this.weather.current,
         onSetWeather: (kind) => this.commandSetWeather(kind),
-        rules: () => this.rules,
-        onSetRule: (key, value) => this.applyGameRule(key, value),
       },
     },
   );
@@ -18391,6 +18399,8 @@ class App {
           // 读档还没回来玩家就退出了：不要再往已经销毁的世界里写
           if (this.disposed) return;
           this.waitingForSaveRestore = false;
+          // 世界配置已经按存档落定，此刻才是"这个世界的初始配置"该被记下的时机
+          this.ensureWorldDefaults();
           if (restored) console.info('[save] 已恢复上次的进度');
           else {
             // 种子不匹配、缺玩家数据：当新世界安全进入，而不是停在未请求任何区块的临时坐标。
@@ -18404,6 +18414,7 @@ class App {
           if (this.disposed) return;
           console.error('[save] 读档失败，按新世界进入', error);
           this.waitingForSaveRestore = false;
+          this.ensureWorldDefaults();
           this.prepareNewWorldSpawn();
           this.armProgress();
           this.flushSessionSync();
@@ -18411,6 +18422,8 @@ class App {
     } else {
       // 新世界：没有存档要读，进度系统直接上岗（背包里此刻是开发期初始物资 → 记账为基线）
       this.armProgress();
+      // 新建世界：此刻的难度/模式/规则就是"首次进入时的初始配置"
+      this.ensureWorldDefaults();
     }
 
     // 切后台/关页面前补一次保存：移动端切走随时可能被系统回收
@@ -19447,6 +19460,56 @@ class App {
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
     this.applyEnvironment();
+  }
+
+  /** 世界页要的那一份快照（难度 / 模式 / 规则） */
+  private worldSnapshot(): WorldSettingsSnapshot {
+    return { difficulty: this.difficulty, gameMode: this.gameMode, rules: { ...this.rules } };
+  }
+
+  /**
+   * 记下这个世界的"默认配置"= **首次进入时的初始配置**（2026-10-28，用户）。
+   *
+   * 存在 localStorage 里（键带世界 id），不进存档：它只服务于世界页那颗「恢复默认」。
+   * 第一次进世界时如果还没有记录，就把此刻的配置写下来；之后每次进都不再覆盖。
+   * 所以"玩家后来改过难度/规则"不会污染默认值——恢复默认永远回到第一次那一份。
+   */
+  private ensureWorldDefaults(): void {
+    if (this.worldDefaults) return;
+    const key = `mc.worldDefaults.${this.worldConfig.id}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<WorldSettingsSnapshot>;
+        this.worldDefaults = {
+          difficulty: normalizeDifficulty(parsed.difficulty),
+          gameMode: normalizeGameMode(parsed.gameMode),
+          rules: normalizeGameRules(parsed.rules),
+        };
+        return;
+      }
+    } catch {
+      // 无痕 / 坏数据：当没有记录，下面现captured一份（只是本会话有效）
+    }
+    const snapshot = this.worldSnapshot();
+    this.worldDefaults = snapshot;
+    try {
+      localStorage.setItem(key, JSON.stringify(snapshot));
+    } catch {
+      /* 写不进去就只在本次会话有效 */
+    }
+  }
+
+  /** 世界页点「保存」：把草稿整份落到世界（难度 / 模式 / 规则） */
+  private applyWorldSnapshot(next: WorldSettingsSnapshot): void {
+    this.setDifficulty(next.difficulty);
+    // 极限世界的模式是锁死的：`setGameMode` 自己会拒绝，这里不重复判断
+    this.setGameMode(next.gameMode);
+    for (const key of Object.keys(next.rules) as (keyof GameRules)[]) {
+      this.applyGameRule(key, next.rules[key]);
+    }
+    // 模式没变/被拒时 `setGameMode` 会早退，但难度与规则已经落了，界面按真实值重画
+    if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();
   }
 
   /**

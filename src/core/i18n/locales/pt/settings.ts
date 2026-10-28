@@ -107,7 +107,7 @@ export const settings = {
   "settings.discard": "Cancelar (não salvar)",
   "settings.resourcePack.remove": "Remover o pacote de recursos atual",
   'settings.group.world': 'Mundo',
-  'settings.world.hint': 'Estas configurações valem só para o mundo atual e têm efeito imediato.',
+  'settings.world.hint': 'Dificuldade, modo e regras valem depois de «Salvar»; hora e clima têm efeito imediato.',
   'settings.world.time': 'Hora',
   'settings.world.weather': 'Clima',
   'settings.world.rulesHint': 'Regras mais finas (velocidade de ticks aleatórios, raio de spawn…) podem ser alteradas com /gamerule.',

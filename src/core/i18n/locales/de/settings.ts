@@ -108,7 +108,7 @@ export const settings = {
   "settings.discard": "Abbrechen (nicht speichern)",
   "settings.resourcePack.remove": "Aktuelles Ressourcenpaket entfernen",
   'settings.group.world': 'Welt',
-  'settings.world.hint': 'Diese Einstellungen gelten nur für die aktuelle Welt und wirken sofort.',
+  'settings.world.hint': 'Schwierigkeit, Modus und Regeln gelten nach „Speichern“; Zeit und Wetter wirken sofort.',
   'settings.world.time': 'Zeit',
   'settings.world.weather': 'Wetter',
   'settings.world.rulesHint': 'Feinere Regeln (Random-Tick-Geschwindigkeit, Spawn-Radius …) lassen sich mit /gamerule ändern.',

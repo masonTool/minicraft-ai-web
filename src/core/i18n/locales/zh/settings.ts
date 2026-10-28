@@ -117,7 +117,7 @@ export const settings = {
   // 资源包改成持久化之后（2026-10-28）需要一颗"移除"键
   'settings.resourcePack.remove': '移除当前资源包',
   'settings.group.world': '世界',
-  'settings.world.hint': '这些是当前世界的设置，改完立刻生效，不影响其它世界。',
+  'settings.world.hint': '难度、模式与规则点「保存」后生效；时间与天气点一下立即生效。',
   'settings.world.time': '时间',
   'settings.world.weather': '天气',
   'settings.world.rulesHint': '更细的规则（随机刻速度、重生半径等）可以用 /gamerule 命令修改。',

@@ -5198,9 +5198,15 @@
 
       #touch-hint {
         position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);
+        box-sizing: border-box;
+        /* 2026-10-28（用户）：多语言下这句会横着顶出屏幕（原来写死 nowrap）。
+           现在限宽 + 允许换行：长语言折成两三行，短语言仍然一行。 */
+        max-width: min(92vw, 560px);
         padding: 7px 14px; border-radius: 16px;
-        background: rgba(0, 0, 0, .5); color: #fff; font-size: 12px;
-        white-space: nowrap; transition: opacity .6s;
+        background: rgba(0, 0, 0, .5); color: #fff; font-size: 12px; line-height: 1.45;
+        text-align: center;
+        white-space: normal; overflow-wrap: anywhere;
+        transition: opacity .6s;
       }
       #touch-hint.fade { opacity: 0; }
 
@@ -7051,13 +7057,18 @@
          数字来自实测：de/ru 的「Schwierigkeit / Сложность」约 88px（11px 字）。 */
       /* 用 px 而不是 em：`em` 会跟着使用处的字号变（桌面 12px / 手机 11px），
          同一个语言两种设备得到两个宽度，实测下来就是"手机上又被截了"。 */
-      html[lang='de'],
-      html[lang='ru'] {
-        --label-w: 96px;
+      /* ⚠️ 用 `:lang()` 而不是 `[lang='pt']`：葡萄牙语写的是 `pt-BR`，
+         属性选择器匹配不到，之前它一直落在 64px 的回退值上。 */
+      html:lang(en) {
+        --label-w: 84px;
       }
-      html[lang='fr'],
-      html[lang='pt'] {
-        --label-w: 78px;
+      html:lang(de),
+      html:lang(ru) {
+        --label-w: 100px;
+      }
+      html:lang(fr),
+      html:lang(pt) {
+        --label-w: 82px;
       }
       /*
        * 标签**不折行**（用户 2026-10-28）：折行会把那一行撑高，左右两列行高就不齐了

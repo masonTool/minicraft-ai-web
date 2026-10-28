@@ -112,7 +112,7 @@ export const settings = {
   "settings.discard": "Cancel (don't save)",
   "settings.resourcePack.remove": "Remove current resource pack",
   'settings.group.world': 'World',
-  'settings.world.hint': 'These settings apply to the current world only and take effect immediately.',
+  'settings.world.hint': 'Difficulty, mode and rules apply after you tap Save; time and weather apply immediately.',
   'settings.world.time': 'Time',
   'settings.world.weather': 'Weather',
   'settings.world.rulesHint': 'Finer rules (random tick speed, spawn radius, ...) can be changed with /gamerule.',
