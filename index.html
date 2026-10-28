@@ -5046,6 +5046,14 @@
         filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .85));
       }
       .touch-button:active { transform: scale(.94); }
+      /* ⚠️ 2026-10-28（用户："点击飞行按钮向上向下时，会向右偏一下"）：
+         升降键靠 `translateX(-50%)` 居中，而上面那条 `:active` 的 `transform`
+         会把**整个 transform** 换成 `scale(.94)`——平移被丢掉，按钮就跳到自己
+         右半宽的位置。这两条把它补回来（顺序要在 `:active` 之后）。 */
+      .touch-button.fly-up:active,
+      .touch-button.fly-down:active {
+        transform: translateX(-50%) scale(.94);
+      }
       .touch-button.jump {
         width: var(--touch-jump-size);
         height: var(--touch-jump-size);

@@ -243,6 +243,8 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
       ['按钮簇随缩放上移（竖屏）', '138px + (var(--touch-jump-size) - 70px)'],
       ['按钮簇随缩放上移（矮横屏）', '92px + (var(--touch-jump-size) - 64px)'],
       ['窄屏按钮簇贴右沿', '#touch-ui { --touch-buttons-inset: 8px; }'],
+      ['升降键按下时保留水平居中', '.touch-button.fly-up:active,'],
+      ['升降键按下时的 transform 带 translateX', 'transform: translateX(-50%) scale(.94);'],
     ];
     for (const [label, needle] of needles) {
       check(`触屏布局：${label}`, compact.includes(needle), needle);
