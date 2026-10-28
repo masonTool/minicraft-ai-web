@@ -5490,7 +5490,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] M25 背包交互规则补齐（**纯逻辑**）：**双击收集**（同类凑满，没凑到退化成快速移动）、**右键拖拽逐格放一个**、**长按分堆取指定数量**。判据：`ui2d/inventoryModel.ts` 纯函数 + 31 条断言覆盖 Wiki「物品管理」；对照页可手动复现。触摸端的占比条与拖动选数量 UI 归 M31
 - [~] M26 背包面板接进游戏（**第一步已落：整页镜像**）：`?ui2d=1` 时 `.inv-panel` 交给 canvas 重画（面板底/槽位/图标位图/数量/耐久/标题），交互全留 DOM，19 种工作站一次全覆盖；剩第二步 —— 自绘替换（见 M26b）
-- [~] M26b 背包自绘替换镜像：**`?ui2dinv=1` 已能接管**（画布吃指针、DOM 面板退场、光标写回 `held`、面板外点击转发给 DOM）；**还差**19 种工作站接入（布局已抽象）+ 真机验收
+- [~] M26b 背包自绘替换镜像：**20 种工作站的槽位预设表**（`ui2d/stationLayouts.ts`，§5.50）已就绪；**`?ui2dinv=1` 已能接管**（画布吃指针、DOM 面板退场、光标写回 `held`、面板外点击转发给 DOM）；**还差**19 种工作站接入（布局已抽象）+ 真机验收
 - [x] M27 背包视觉对齐：镜像侧全部覆盖（真实图标/悬停高亮/tooltip 层级/滚动断点）；**自绘侧**也已补上提示框（`ui2d/itemTooltip.ts`）与槽位耐久条（§5.39）
 - [~] M28 合成：镜像已覆盖（合成格/结果格都是 `.inv-slot`，配方书已单开镜像 §5.33）；**自绘版**已支持"上方额外槽位组 + 结果格"的布局（`extra`，5 条断言，预览 `?craft=1`），还差配方匹配与结果格规则（属游戏逻辑）
 - [x] M29 容器类工作站：与背包共用同一批 `.inv-slot` / `.inv-panel`，镜像一次全覆盖（无需逐个适配）
@@ -6112,6 +6112,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261028-0812 · **R2 收口 + 创造栏搜索分页（4 条）**：① **R2 不是没做** —— `Sources/BonjourBrowser.swift` 早就写全（搜 `_minicraft._tcp`、IPv4+TXT、每 8 秒重 resolve 对齐 Rust 的 12 秒 TTL、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`），`ForegroundSession` 已接线、`check.sh` 也查了符号，是**任务表没跟上代码**；缺的是门禁 —— 新增 `npm run check:swift`（`tools/swift-parse-check.mjs`，对四个 `.swift` 跑 `swiftc -parse`），因为 `check.sh` 要先 `cargo` 编 xcframework，本机常没有 cargo，于是 Swift 那半边**从来没被任何门禁碰过**；已接进 `npm run check`，`check.sh` 也加了同样的 ⓪ 步。② **M38 剩余**：分类数据早在 `ui/creativeTabs.ts`，缺的是"筛出来再摆进 12 列网格" —— 新增 `ui2d/creativeModel.ts`（`matchesQuery` 按包含匹配、`filterCreativeItems` 保持注册表顺序、`creativePageCount` / `creativePageSlice` **页号越界自动夹住**、`fillCreativeGrid` 补 `null` 到固定格数），面板补**翻页区**（`‹ 2 / 2 ›`）。页号夹取是关键：搜索词一变页数就变，停在"第 5 页"时搜一个 3 结果的词，不夹就是**一屏空白**。预览页改用真数据（450 件 / 每页签 90 件），截图 `44-creative.png`（搜"石"命中 8）与 `44b-creative-page2.png`（第 2/2 页）。验证：`test:ui2d-creative` **13/13**、`test:ui2d-inventory-model` **65/65**、`check:swift` 四文件通过、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包、73 张截图。⚠️ 真实 mDNS 发现仍需两台真机。详见 `notes/canvas-ui.md` §5.49。
 
+- [x] 批次 20261028-0946 · **工作站预设表 + 装备列规则（4 条，M26b / M37 数据层）**：自绘面板的排版只需要"上方那组格子几行几列、有没有结果格"，这正是每个工作站的差别 → 做成 `ui2d/stationLayouts.ts`（**20 条** = 13 个工作站 + 7 个存储容器，含熔炉那三种的 `flame` 与 `progress` 标记），宿主只查表；另加 `ui2d/armorRules.ts`（`canPlaceInSideSlot`：盔甲格只收对应部位、副手什么都收、空手永远能放；`sideSlotAt(index, sideStart)` **不能写死 0..4** —— 装备列可能排在工作站槽位之后）。**踩到一个"表里写了没人用"的坑**：`stationExtra()` 最初只传 `cols/rows/result`，`flame` 留在表里，于是熔炉的火焰块**根本不排版**（`groups.flame` 恒 `null`，预览里看着像"熔炉少了点火"）—— 现在一并带下去并加断言钉住。预览页 `?station=furnace` 直接套预设，截图 `45-inventory-furnace.png`。验证：`test:ui2d-station` **11/11**、`test:ui2d-armor` **7/7**、`tsc` 干净、`npm run check` exit=0、74 张截图。⚠️ 这两块**还没接进 `?ui2dinv=1`**（要游戏侧给"当前容器种类"与"物品装备品类"）。详见 `notes/canvas-ui.md` §5.50。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。
@@ -6192,7 +6194,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | M21 音效补齐 | ⚠️ 与原版的差异：配方全部是程序化合成（不采样、不碰原版音源），**刻意不与原版一致**； 想更接近原版只能走 M10 的资源包音效替换 |
 | O7 "与原版的差异"集中台账 | `tools/diff-ledger.mjs`（`npm run audit:diffs`）扫 TASKS 各条目里的 `⚠️` 注记， 按最近的条目名归行，写回文末标记块之间（`diffs` 那对注释标记）； 分成**「与原版的差异」与「实现注意」两张表**（前者是台账的正题，后者同样"集中查"更好）， |
 
-### 实现注意（260 条，不是差异，但同样"集中查"更好）
+### 实现注意（261 条，不是差异，但同样"集中查"更好）
 
 | 条目 | 注意 |
 | --- | --- |
@@ -6455,6 +6457,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2324 · **自绘背包真正接管输入（3 条，M26b 最后一步）**：新增 `?ui2dinv=1` —— 覆盖层 `pointer-events: auto` 吃指针（down/move/up 连同右键与触摸标记喂给 `InventoryPanelHost`），DOM 面板用 `html.ui2dinv .inv-shell { visibility: hidden }` 退场（**不是 `display: none`**：里面的按钮… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261027-2347 · **盔甲 4 格 + 副手 1 格（3 条，M37）**：布局加 `side: { count, offhandGap? }` —— 面板右侧竖排一列，盔甲从上往下、副手单独隔 6px；槽位顺序延长为 **extra(+结果格) → side → main(27) → hotbar(9)**（`SlotAccess` 下标就靠这条顺序，改了要同步所有调用方）。第一版只按玩家网格算面板高度，结果 4 盔甲 + 副手比网格高，**… |
 | O6 让离线测试本身也过类型检查 | - [x] 批次 20261028-0812 · **R2 收口 + 创造栏搜索分页（4 条）**：① **R2 不是没做** —— `Sources/BonjourBrowser.swift` 早就写全（搜 `_minicraft._tcp`、IPv4+TXT、每 8 秒重 resolve 对齐 Rust 的 12 秒 TTL、经 `minicraft_add_bonjour_peer` 进 `/healthz.peers`），`ForegroundSession` 已接线… |
+| O6 让离线测试本身也过类型检查 | - [x] 批次 20261028-0946 · **工作站预设表 + 装备列规则（4 条，M26b / M37 数据层）**：自绘面板的排版只需要"上方那组格子几行几列、有没有结果格"，这正是每个工作站的差别 → 做成 `ui2d/stationLayouts.ts`（**20 条** = 13 个工作站 + 7 个存储容器，含熔炉那三种的 `flame` 与 `progress` 标记），宿主只查表；另加 `ui2d/armorRules.ts`（`canPlaceInS… |
 | O6 让离线测试本身也过类型检查 | 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。 |
 
 <!-- diffs:end -->

@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-0946 | 2026-10-28 | 界面与音频 | —（M26b / M37 数据层） | 4 条：① `ui2d/stationLayouts.ts` 20 条工作站预设；② `ui2d/armorRules.ts` 装备列规则；③ 预览 `?station=furnace` + 截图；④ 修 `stationExtra` 漏传 `flame`（火焰块不排版）。验证：`test:ui2d-station` **11/11**、`test:ui2d-armor` **7/7**、`check` exit=0、74 张截图 |
 | 20261028-0812 | 2026-10-28 | 界面与音频 | —（R2 + M38 搜索分页） | 4 条：① `npm run check:swift`（`swiftc -parse`）补上 Swift 那半边的门禁；② R2 收口（代码早已落地，任务没跟上）；③ `ui2d/creativeModel.ts`（搜索/页签/分页/铺网格）；④ 面板翻页区 + 预览真数据 + 2 张截图。验证：`test:ui2d-creative` **13/13**、`check` exit=0、73 张截图 |
 | 20261028-0732 | 2026-10-28 | 界面与音频 | —（待办清零 / M41+M43+M38） | 4 条：① `cursorDirty`（外部丢弃不被写回，`Q` 才丢得掉）；② 死亡界面/引导卡挂镜像；③ 创造物品栏第一版（12 列布局 + 页签 + 搜索框 + 无限取用 `creativePick`）；④ 预览 + 2 张截图。验证：`test:ui2d-inventory-model` **63/63**、`check` exit=0、71 张截图 |
 | 20261028-0240 | 2026-10-28 | 界面与音频 | —（合并主分支） | 4 条：① 合并 `origin/main`（源码零冲突，台账按批次段落并集重建，补 L14~L33）；② 逐条核对界面变化，唯一必补项是**世界卡片缩略图**（`background-image` 的 data URL）；③ 新增 `ui2d/backgroundImages.ts` + `TextBlock.imageUrl`，载完数进签名触发重画；④ 预览 `?shot=1` + 截图。验证：`test:ui2d*` 127/127、`check` exit=0、71 张截图 |

@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-0946 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把"20 种工作站"的排版数据与装备列规则做成可离线验的两块。
+
+- [x] `ui2d/stationLayouts.ts`：20 条预设（13 工作站 + 7 存储）+ `stationExtra/stationSpec/stationSlotCount`
+- [x] `ui2d/armorRules.ts`：`canPlaceInSideSlot` / `sideSlotFor` / `sideSlotAt`（部位按 `sideStart` 换算）
+- [x] 预览 `?station=furnace`（套预设排版）+ 截图 `45-inventory-furnace.png`
+- [x] 修坑：`stationExtra()` 漏传 `flame` → 熔炉的火焰块根本不排版
+
+验证：`test:ui2d-station` 11/11、`test:ui2d-armor` 7/7、`tsc` 干净、`npm run check` exit=0、74 张截图。
+
+
+
 ## 批次 20261028-0812 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：清最后一条待办（R2）+ M38 的搜索与分页。
@@ -266,28 +279,6 @@
   - 为什么：打开面板/切换表单时代码调 focus() 会把键盘顶起来；逐个删十几处调用不现实。
   - 验证：打开面板 active=BUTTON 无浮层；程序 focus → active=BODY；真点击 → layer=true/active=inp-field。
   - 批次：20261027-3100
-
----
-
-## 批次 20261027-3000 · 2026-10-27 · 会话 12c62c
-
-> 用户：不猜网段，改从 native 拿；非完整版禁止联机
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-3000
-
-- [x] [L23] 局域网 IP 只从 native 桥拿：`core/net/LanIp.ts`（新）、`ServerListPanel.ts` → playwright
-  - 做了什么：`hasNativeLanBridge()`/`getLanIp()` 只问 `Capacitor.Plugins.NativeServer.localIp()`；删掉候选网段猜测，`scanBase()` 拿不到就不扫。
-  - 为什么：hostname 在 webview 里是 localhost、地址框是上次的服务器、WebRTC 被 mDNS 混淆——都不成立。
-  - 验证：`?lanip=192.168.1.20` 时不弹提示、按该网段扫。
-  - 批次：20261027-3000
-- [x] [L23] 非完整版禁止联机：`MultiplayerScreen.ts`、`NativeServerPlugin.java`、iOS README
-  - 做了什么：join/host 打开先 `ensureFullVersion()`；没桥弹「需要完整版」，关闭/前往下载都同时关掉提示与界面；安卓补 `localIp()`。
-  - 验证：无桥 → 提示 + 按钮[关闭,前往下载]，点关闭后两者同关；有桥 → 正常。
-  - 批次：20261027-3000
 
 ---
 

@@ -39,12 +39,25 @@
     </div>
 
     <script type="module">
-      import { InventoryPanelHost, arraySlots, forwardClickAt } from '../../src/ui2d/index.ts';
+      import {
+        InventoryPanelHost,
+        arraySlots,
+        forwardClickAt,
+        stationExtra,
+        stationSlotCount,
+        stationSpec,
+      } from '../../src/ui2d/index.ts';
 
       const params = new URLSearchParams(window.location.search);
       const tint = params.get('tint') === '1';
       // `?craft=1`：合成台（3×3 + 结果格 + 玩家背包），验证工作站的布局
       const craft = params.get('craft') === '1';
+      /*
+       * `?station=furnace`：直接套用 `stationLayouts.ts` 里的预设（额外槽位 + 进度箭头 + 火焰）。
+       * 这张表是"20 种工作站"的唯一出处，预览页用它才能证明"预设真的能排出布局"。
+       */
+      const stationKind = params.get('station');
+      const station = stationKind ? stationSpec(stationKind) : null;
       // `?armor=1`：右侧多一列盔甲 4 格 + 副手 1 格（顺序：侧栏 → 主背包 → 快捷栏）
       const armor = params.get('armor') === '1';
       // `?progress=0.4`：熔炉那类"结果格左边箭头带填充"
@@ -52,12 +65,22 @@
       // `?furnace=1`：熔炉布局（额外 1 格原料 + 结果格 + 火焰），顺带演示附魔提示
       const furnace = params.get('furnace') === '1';
       const flame = Number(params.get('flame') ?? '0');
-      const TOTAL = craft ? 46 : armor ? 41 : 36;
+      const stationExtraSpec = stationKind ? stationExtra(stationKind) : undefined;
+      const stationSlots = stationKind ? stationSlotCount(stationKind) + (station?.result ? 1 : 0) : 0;
+      const TOTAL = stationKind ? stationSlots + 36 : craft ? 46 : armor ? 41 : 36;
 
       /* ---------------- 数据：与游戏同一套逻辑（`SlotAccess` + `MoveRules`） ---------------- */
       const COLORS = ['#8b5a2b', '#6c8b3f', '#9b9b9b', '#3f6c8b', '#8b3f5a', '#c6a13f'];
       const initial = new Array(TOTAL).fill(null);
-      if (craft) {
+      if (stationKind) {
+        // 工作站：前几格放原料（熔炉是 原料 + 燃料），结果格放一件产物
+        const extraCount = stationSlots;
+        for (let i = 0; i < extraCount - 1; i += 1) initial[i] = { id: (i % 6) + 1, count: 4 };
+        initial[extraCount - 1] = { id: 6, count: 3 };
+        initial[extraCount] = { id: 5, count: 2 };
+        initial[extraCount + 1] = { id: 1, count: 64 };
+        initial[TOTAL - 9] = { id: 2, count: 12 };
+      } else if (craft) {
         // 0..8 = 3×3 合成格，9 = 结果格，10..36 = 主背包，37..45 = 快捷栏
         initial[0] = { id: 1, count: 1 };
         initial[1] = { id: 1, count: 1 };
@@ -143,13 +166,15 @@
 
       const stage = document.getElementById('stage');
       const host = new InventoryPanelHost(stage, slots, {
-        title: craft ? '合成台' : '生存背包',
+        title: station ? station.label : craft ? '合成台' : '生存背包',
         mainRows: 3,
         hotbarRows: 1,
         ...(craft ? { extra: { cols: 3, rows: 3, result: true } } : {}),
+        ...(stationExtraSpec ? { extra: stationExtraSpec } : {}),
         ...(furnace ? { extra: { cols: 1, rows: 1, result: true, flame: true } } : {}),
         ...(armor ? { sideCount: 5 } : {}),
         ...(Number.isFinite(progress) && progress > 0 ? { progressOf: () => progress } : {}),
+        ...(station?.flame ? { flameOf: () => Number(params.get('flame') ?? 0.7) } : {}),
         ...(Number.isFinite(flame) && flame > 0 ? { flameOf: () => flame } : {}),
         zIndex: 12,
         tint,
@@ -236,7 +261,10 @@
       window.addEventListener('resize', () => host.relayout());
 
       document.getElementById('caption').textContent =
-        (craft
+        (station
+          ? `工作站预设：${station.label}（${station.cols}×${station.rows}${station.result ? ' + 结果格' : ''}` +
+            `${station.progress ? ' + 进度箭头' : ''}${station.flame ? ' + 火焰' : ''}）`
+          : craft
           ? '自绘合成台：3×3 合成格 + 结果格 + 玩家背包（同一套排版/命中/画）· 结果格不可放入'
           : armor
             ? '自绘背包 + 盔甲列：右侧 4 格盔甲 + 1 格副手（顺序：侧栏 → 主背包 → 快捷栏）'

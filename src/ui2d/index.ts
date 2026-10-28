@@ -226,6 +226,23 @@ export {
   type InventoryPanelHostOptions,
 } from './InventoryPanelHost.ts';
 export {
+  SIDE_SLOT_KINDS,
+  canPlaceInSideSlot,
+  sideSlotAt,
+  sideSlotFor,
+  type ItemEquipKind,
+  type SideSlotKind,
+} from './armorRules.ts';
+export {
+  STATION_KINDS,
+  STATION_SPECS,
+  stationExtra,
+  stationSlotCount,
+  stationSpec,
+  type StationKind,
+  type StationSpec,
+} from './stationLayouts.ts';
+export {
   CREATIVE_PAGE_SIZE,
   creativePageCount,
   creativePageSlice,

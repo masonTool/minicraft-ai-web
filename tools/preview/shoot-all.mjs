@@ -514,6 +514,13 @@ const SHOTS = [
     what: '**创造物品栏翻页**：命中 90 件 → 第 2/2 页（最后一页 30 件）',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '45-inventory-furnace.png',
+    page: 'tools/preview/inventory-selfdrawn.html?station=furnace&progress=0.45',
+    size: [864, 470],
+    what: '**工作站预设**：`station=furnace` → 1×2 原料/燃料 + 箭头 45% + 结果格 + 火焰',
+    status: '原型 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',
