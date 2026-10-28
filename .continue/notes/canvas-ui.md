@@ -1560,6 +1560,36 @@ itemLabel(id).includes(query) || itemName(id).toLowerCase().includes(lower) || S
 换成 `CreativePanel2D`（数据用 `CREATIVE_ITEMS` + `itemName` + `creativeTabFor` 筛，图标走
 `ItemIconCache`，`onPick` 里调 `creativePick` 再写回 `held`）。
 
+## 5.58 创造栏接进游戏；顺手抓到一个"转发静默失效"的真 bug
+
+### 接线（`?ui2dcreative=1`）
+
+`syncInventory2d()` 里判断 `inventoryScreen.creativeState.showing`：是就让背包面板让位、换
+`CreativePanel2D`。数据每帧现算（`filterCreativeItems` 过 1129 件，O(n) 很小），**不维护缓存**
+——页码/搜索词/页签随便变都不会不同步。
+
+单独一个开关而不是并进 `?ui2dinv=1`：它一上线就换掉**整块左栏**，作者要能单独关掉它。
+
+三个细节：
+
+1. **换页签不自己改状态**，而是 `forwardClickAt()` 去点 DOM 那颗真按钮（切分类会连带做一串事：
+   按分类存滚动/搜索、重置页码、重排 chrome）；
+2. **手上那一叠由面板自己画**（`heldOf`）：接管模式下 `#inv-held` 已隐藏，而"点创造栏拿到一整叠"
+   正是最常见的动作 —— 不画就像"点了没反应"；
+3. 面板收起时同步 `syncCreative2d(false)`，否则它的画布会留在屏幕上。
+
+### 真 bug：`visibility: hidden` 会让转发**静默失效**
+
+之前接管模式用 `html.ui2dinv .inv-shell { visibility: hidden }`，注释里还写着"用 visibility 而不是
+display，因为里面的按钮还要能被 `elementFromPoint` 命中" —— **这句是错的**：
+
+> `visibility: hidden` 的元素**不参与命中测试**。
+
+于是 `forwardClickAt()` 里的 `elementFromPoint` 永远拿不到关闭 ×、左右立栏、页签 —— 转发
+静默失效（点 × 没反应），而画面上一切正常、断言也不会响（转发函数返回 `null` 而已）。
+
+改为 `opacity: 0`：既不显示、又保留布局与命中。这条同时修正了 §5.41 的说法。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

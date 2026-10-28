@@ -54,6 +54,13 @@ export interface CreativePanelOptions {
    * 玩家那 9 格原样摆在下面，这里保持同样的位置。
    */
   readonly hotbarOf?: () => readonly (CreativeCellView | null)[];
+  /**
+   * "拿在手上那一叠"。不传就不画。
+   *
+   * 为什么创造栏要自己画：接管模式下 `#inv-held` 已经被隐藏（`opacity: 0`），
+   * 而点创造栏正是"拿到一整叠"的动作 —— 不画的话玩家会觉得"点了没反应"。
+   */
+  readonly heldOf?: () => { readonly icon: HTMLCanvasElement | null; readonly count: number } | null;
 }
 
 /** 翻页区的左右热区（与 `layoutCreativePanel` 的 `pager` 对齐） */
@@ -71,6 +78,9 @@ export class CreativePanel2D {
   private tab = 0;
   private page = 0;
   private hoverIndex = -1;
+  /** 最后一次指针位置（画"手上那一叠"用） */
+  private pointerX = 0;
+  private pointerY = 0;
   private opened = false;
 
   constructor(
@@ -183,6 +193,14 @@ export class CreativePanel2D {
     ctx.fillStyle = this.page < pages - 1 ? 'rgba(63, 63, 63, .9)' : 'rgba(63, 63, 63, .25)';
     ctx.fillText('›', hits.next.x + hits.next.w / 2, hits.next.y + hits.next.h / 2);
     ctx.restore();
+    // 手上那一叠：跟着指针（`#inv-held` 在接管模式下已被隐藏）
+    const held = this.options.heldOf?.() ?? null;
+    if (held?.icon) {
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(held.icon, this.pointerX - 17, this.pointerY - 17, 34, 34);
+      ctx.restore();
+    }
     if (this.options.tint) applyDebugTint(ctx, overlay.width, overlay.height);
   }
 
@@ -190,6 +208,8 @@ export class CreativePanel2D {
   move(x: number, y: number): void {
     const layout = this.layout;
     if (!layout) return;
+    this.pointerX = x;
+    this.pointerY = y;
     const index = this.slotAt(layout, x, y);
     if (index === this.hoverIndex) return;
     this.hoverIndex = index;
@@ -200,6 +220,8 @@ export class CreativePanel2D {
   down(x: number, y: number): boolean {
     const layout = this.layout;
     if (!layout) return false;
+    this.pointerX = x;
+    this.pointerY = y;
     // 页签
     const tabIndex = layout.tabs.findIndex((rect) => contains(rect, x, y));
     if (tabIndex >= 0) {

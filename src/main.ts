@@ -50,8 +50,16 @@ import {
   InventoryPanelHost,
   MenuScreen2D,
   inventoryIndexAt,
+  CREATIVE_GRID_SLOTS,
+  CreativePanel2D,
+  CREATIVE_LAYOUT,
   canPlaceInSideSlot,
+  creativePageCount,
+  creativePageSlice,
+  creativePick,
   extraSlotWritable,
+  fillCreativeGrid,
+  filterCreativeItems,
   sideSlotAt,
   stationExtra,
   stationSpec,
@@ -898,6 +906,8 @@ import { PcControls } from './ui/PcControls.ts';
 import { preflightHost } from './net/HostPreflight.ts';
 import { applyManifestLink } from './ui/ManifestLink.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
+import { CREATIVE_TABS, creativeTabFor, creativeTabLabel } from './ui/CreativeTabs.ts';
+import { CREATIVE_ITEMS } from './core/registry/items.ts';
 import { ItemIconCache } from './ui/ItemIconCache.ts';
 import { clearBlockIconCache } from './ui/BlockIcon.ts';
 import { maxDurabilityOf, updateDurabilityBar } from './ui/SlotVisuals.ts';
@@ -1130,6 +1140,17 @@ const UI2D_ENABLED = readUi2DFlag();
  * 与 `?ui2dinv2d=1`（只读叠加比对）的区别只有一条：这一层吃指针、并把光标写回 DOM。
  * 槽位以外的区域（关闭 ×、左右立栏）通过 `forwardClickAt()` 转发给 DOM。
  */
+/**
+ * `?ui2dcreative=1`：创造栏交给 `CreativePanel2D` 画。
+ *
+ * 单独一个开关（而不是并进 `?ui2dinv=1`）：创造栏是**另一套布局**（12 列 + 页签 + 翻页），
+ * 它一上线就会替换整块左栏；万一有问题，作者可以只关这一个，背包自绘仍然可用。
+ */
+const UI2D_CREATIVE = (() => {
+  if (typeof location === 'undefined') return false;
+  return new URLSearchParams(location.search).get('ui2dcreative') === '1';
+})();
+
 const UI2D_INV_TAKEOVER = (() => {
   if (typeof location === 'undefined') return false;
   return new URLSearchParams(location.search).get('ui2dinv') === '1';
@@ -1357,6 +1378,9 @@ class App {
    * 自绘面板的槽位顺序是 extra → side → main → hotbar，而 `Inventory` 是快捷栏在前，
    * 所以每次换容器都要同步这份规格（`inventoryIndexAt` 靠它换算）。
    */
+  /** 创造栏自绘面板（`?ui2dcreative=1` 时才建） */
+  private creative2d: CreativePanel2D | null = null;
+  private creative2dOn = false;
   private readonly inv2dSpec: PanelIndexSpec = {
     extraCount: 0,
     sideCount: 0,
@@ -3286,8 +3310,14 @@ class App {
          * 接管模式：DOM 面板整体退场（visibility 而不是 display —— 里面的输入框、按钮
          * 还要能被 `forwardClickAt` 命中、被读值），`#inv-held` 也藏掉（自绘侧画这一叠）。
          */
-        'html.ui2dinv #inventory-screen .inv-shell { visibility: hidden; }\n' +
-        'html.ui2dinv #inv-held { visibility: hidden; }';
+        /*
+         * 用 `opacity: 0` 而不是 `visibility: hidden`：后者会把整棵子树从**命中测试**里摘掉，
+         * 于是 `forwardClickAt()` 的 `elementFromPoint` 找不到关闭 × 与页签 ——
+         * 转发会静默失效（点 × 没反应），而画面上看起来一切正常。
+         * `opacity: 0` 既不显示、又保留布局与命中，正是这里要的。
+         */
+        'html.ui2dinv #inventory-screen .inv-shell { opacity: 0; }\n' +
+        'html.ui2dinv #inv-held { opacity: 0; }';
       document.head.appendChild(style);
       this.invStyleEl = style;
       /*
@@ -7068,6 +7098,112 @@ class App {
     host.retarget({ extra: stationExtra(mode), sideCount });
   }
 
+  /**
+   * 创造栏的面板（懒建）。
+   *
+   * 数据每帧现算：`cellsOf` / `pagesOf` 各自跑一遍 `filterCreativeItems`（1129 件，O(n) 的简单过滤），
+   * 换来的好处是**不用维护缓存与失效**——页码、搜索词、页签随便变都不会不同步。
+   */
+  private makeCreative2d(): CreativePanel2D {
+    const icons = this.inv2dIcons ?? new ItemIconCache((canvas, itemId) => drawItemIcon(canvas, this.atlas, itemId));
+    this.inv2dIcons = icons;
+    /** 当前页签筛完之后的物品 id（页签 + 搜索词都算上） */
+    const idsOf = (tabIndex: number): number[] => {
+      const tab = CREATIVE_TABS[tabIndex] ?? 'all';
+      return filterCreativeItems(CREATIVE_ITEMS, {
+        query: this.inventoryScreen.creativeState.query,
+        // 三个别名，与 DOM 的 matchesQuery 一致（少一个就"原版能搜 canvas 搜不到"）
+        nameOf: (id) => [itemName(id), itemLabel(id), String(id)],
+        tabOf: (id) => creativeTabFor(id),
+        ...(tab === 'all' ? {} : { tab }),
+      });
+    };
+    return new CreativePanel2D(document.body, {
+      tabs: CREATIVE_TABS.map((tab) => creativeTabLabel(tab)),
+      title: t('inventory.title'),
+      zIndex: 12,
+      tint: UI2D_TINT_ENABLED,
+      query: this.inventoryScreen.creativeState.query,
+      cellsOf: (tabIndex, page) => {
+        const visible = creativePageSlice(idsOf(tabIndex), page, CREATIVE_GRID_SLOTS);
+        return fillCreativeGrid(visible, CREATIVE_LAYOUT.cols, 5).map((id) =>
+          id === null ? null : { itemId: id, icon: icons.get(id), name: itemName(id) },
+        );
+      },
+      pagesOf: (tabIndex) => creativePageCount(idsOf(tabIndex).length, CREATIVE_GRID_SLOTS),
+      /*
+       * 换页签**不自己改状态**，而是去点 DOM 那颗真按钮：
+       * 切分类会连带做一串事（按分类存滚动/搜索、重置页码、重排 chrome），
+       * 复制一份到 canvas 必然和 DOM 漂移。
+       */
+      onTab: (tabIndex) => {
+        const buttons = Array.from(
+          document.querySelectorAll<HTMLElement>('[data-role="creative-tabs"] button[data-category]'),
+        );
+        const button = buttons[tabIndex];
+        const canvas = this.creative2d?.canvas;
+        if (!button || !canvas) return;
+        const rect = button.getBoundingClientRect();
+        forwardClickAt(canvas, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      },
+      // 手上那一叠（接管模式下 `#inv-held` 已隐藏，由面板自己画）
+      heldOf: () => {
+        const held = this.inventoryScreen.heldStack;
+        return held ? { icon: icons.get(held.id), count: held.count } : null;
+      },
+      // 创造模式：拿一整叠，栏里那一件不减少
+      onPick: (itemId) => {
+        const stack = creativePick({ id: itemId, count: 1 }, maxStackOf);
+        if (stack) this.inventoryScreen.setHeldStack(stack as ItemStack);
+      },
+    });
+  }
+
+  /**
+   * 创造栏的接管：`true` = 这一屏由创造面板画（背包面板要让位）。
+   */
+  private syncCreative2d(visible: boolean): boolean {
+    if (!UI2D_CREATIVE) return false;
+    const state = this.inventoryScreen.creativeState;
+    if (!visible || !state.showing) {
+      if (this.creative2dOn) {
+        this.creative2dOn = false;
+        this.creative2d?.close();
+      }
+      return false;
+    }
+    if (!this.creative2d) this.creative2d = this.makeCreative2d();
+    if (!this.creative2dOn) {
+      this.creative2dOn = true;
+      this.creative2d.open();
+      this.bindCreative2dInput();
+    }
+    // 页签与页码跟随游戏状态（游戏那边变了，这边下一帧就跟上）
+    const tabIndex = Math.max(0, CREATIVE_TABS.indexOf(state.category));
+    this.creative2d.setState({ tab: tabIndex, page: state.page });
+    return true;
+  }
+
+  private bindCreative2dInput(): void {
+    const canvas = this.creative2d?.canvas;
+    if (!canvas) return;
+    canvas.style.pointerEvents = 'auto';
+    const local = (event: PointerEvent): { x: number; y: number } => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    canvas.addEventListener('pointermove', (event) => {
+      const p = local(event);
+      this.creative2d?.move(p.x, p.y);
+    });
+    canvas.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      const p = local(event);
+      this.creative2d?.down(p.x, p.y);
+    });
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+  }
+
   private bindInventory2dInput(): void {
     if (this.inv2dInputBound) return;
     const host = this.inv2d;
@@ -7127,6 +7263,18 @@ class App {
     const visible = !!panel && panel.offsetParent !== null;
     if (visible && panel) {
       mirror.engage(panel);
+      /*
+       * 创造栏优先：它占的是**整块左栏**（12 列 + 页签 + 翻页），和背包面板不能同时画。
+       * 由 `?ui2dcreative=1` 单独开关 —— 它一上线就换掉整块左栏，作者要能单独关掉它。
+       */
+      if (this.syncCreative2d(true)) {
+        if (this.inv2dOn) {
+          this.inv2dOn = false;
+          this.inv2d?.close();
+          if (this.takeoverCanvas) this.takeoverCanvas.style.pointerEvents = 'none';
+        }
+        return;
+      }
       // 旁路：同一位置再画一层自绘面板（不吃输入，只用来比对）
       if (this.inv2d) {
         if (!this.inv2dOn) {
@@ -7264,6 +7412,8 @@ class App {
       mirror.setHighlight(host ? this.inventoryHoverRect(host) : null);
       return;
     }
+    // 面板整个收起：创造栏也要关（否则它的画布会留在屏幕上）
+    this.syncCreative2d(false);
     if (this.inv2dOn) {
       this.inv2dOn = false;
       this.inv2d?.close();

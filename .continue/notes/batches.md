@@ -9,6 +9,7 @@
 
 | 批次 | 日期 | 模块 | 需求 | 一句话结果 |
 | --- | --- | --- | --- | --- |
+| 20261028-1045 | 2026-10-28 | 界面与音频 | —（M38 接线） | 4 条：① `?ui2dcreative=1` 接进 `syncInventory2d`；② 换页签走 `forwardClickAt` 点真按钮；③ 手上那一叠由面板画（`heldOf`）；④ **修 bug**：`visibility: hidden` 不参与命中 → 转发静默失效，改 `opacity: 0`。验证：`test:ui2d-creative` **17/17**、`check` exit=0 |
 | 20261028-1027 | 2026-10-28 | 界面与音频 | —（M38 面板） | 4 条：① `CreativePanel2D`（tab/page 状态 + 绘制 + 命中）；② `creativePagerHits` 热区（3 条断言）；③ `creativeState` 只读入口；④ 预览吃真注册表（1129 件 / 19 页）。验证：`test:ui2d-creative` **17/17**、`check` exit=0、76 张截图 |
 | 20261028-1022 | 2026-10-28 | 界面与音频 | —（M38 数据层 / 验收清单） | 4 条：① `matchesQuery` 支持多别名（DOM 就是三样都比）；② 真注册表测试 9 条；③ 真机清单 44 条（六段，动作→期望）；④ §5.56 + 清单里"专防本批改动"的六条。验证：`test:ui2d-creative-realdata` **9/9**、`check` exit=0 |
 | 20261028-1017 | 2026-10-28 | 界面与音频 | —（M37 收口） | 4 条：① 装备列落点注入（盔甲住在 `Inventory` 36..39、副手 40）；② side 区换算；③ `canPlace` 接 `armorSlotForItem`；④ 与工作站共存的串区断言。验证：`test:ui2d-indexing` **15/15**、`check` exit=0 |

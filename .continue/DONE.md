@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-1045 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把创造栏接进游戏（`?ui2dcreative=1`），并修掉转发失效的真 bug。
+
+- [x] `syncCreative2d()`：`creativeState.showing` → 换面板；页签/页码跟随游戏状态
+- [x] 换页签走 `forwardClickAt()` 点 DOM 真按钮（不复制"切分类"的副作用）
+- [x] 手上那一叠由面板自己画（`heldOf`）—— 接管下 `#inv-held` 已隐藏
+- [x] **修 bug**：`visibility: hidden` 不参与命中测试 → 转发静默失效，改成 `opacity: 0`（同时修正 §5.41 的错误说法）
+
+验证：`test:ui2d-creative` 17/17、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包。
+
+
+
 ## 批次 20261028-1027 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：给创造栏做独立面板（布局 / 绘制 / 命中），并用真注册表验证。
