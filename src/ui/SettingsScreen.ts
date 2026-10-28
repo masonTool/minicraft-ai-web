@@ -321,20 +321,14 @@ export const SETTING_GROUP_KEYS: Record<SettingGroup, readonly (keyof GameSettin
     'autoJump',
     'fastEat',
   ],
-  appearance: [
-    'brightness',
-    'cape',
-    'hairStyle',
-    'hairColor',
-    'beard',
-    'eyes',
-    'eyeColor',
-    'build',
-    'frame',
-    'skinTone',
-    'shirtColor',
-    'pantsColor',
-  ],
+  /*
+   * 外观页只留**场景亮度**（2026-10-29，用户）。
+   *
+   * 角色形象的那一堆字段搬去了 `APPEARANCE_KEYS`：它们有自己的弹窗和「保存」，
+   * 预览只改弹窗里的草稿，点保存才写回设置。所以外层这颗「保存」不该因为
+   * "你调了发型"而亮起——它现在只对亮度有效。
+   */
+  appearance: ['brightness'],
   sound: [
     'volume',
     'volumeBlocks',
@@ -345,6 +339,33 @@ export const SETTING_GROUP_KEYS: Record<SettingGroup, readonly (keyof GameSettin
     'volumeMusic',
   ],
 };
+
+/**
+ * 角色形象的字段（2026-10-29，用户："应该在那个角色形象界面有保存按钮"）。
+ *
+ * ⚠️ 它们**故意不在** `SETTING_GROUP_KEYS` 里：
+ *  - 弹窗里的改动只写自己的草稿（`appearanceDraft`），预览立刻变、但**不进游戏**；
+ *  - 点弹窗里的「保存」才写回 `settings` 并落盘（见 `saveAppearance()`）；
+ *  - 因此外层外观页那颗「保存」不再对形象生效（只对场景亮度）。
+ */
+export const APPEARANCE_KEYS = [
+  'cape',
+  'hairStyle',
+  'hairColor',
+  'beard',
+  'eyes',
+  'eyeColor',
+  'build',
+  'frame',
+  'skinTone',
+  'shirtColor',
+  'pantsColor',
+] as const satisfies readonly (keyof GameSettings)[];
+
+/** 这个键是不是"角色形象"字段（决定写哪份草稿，见 `draftFor`） */
+function isAppearanceKey(key: string): boolean {
+  return (APPEARANCE_KEYS as readonly string[]).includes(key);
+}
 
 /** 自动保存间隔的可选值（秒，批次 172 / TASKS M20）：不提供"关闭"，避免丢档 */
 export const AUTOSAVE_OPTIONS: readonly number[] = [30, 60, 120];
@@ -876,6 +897,17 @@ export class SettingsScreen {
    * 并触发 `onChange`。这样拖滑块、点开关都不会立刻改游戏状态。
    */
   private draft: GameSettings;
+  /**
+   * 角色形象弹窗的草稿（2026-10-29）。
+   *
+   * 打开弹窗时从**已保存的** settings 拷一份；弹窗里的控件只读写它，所以
+   * 3D 预览会变、游戏里的角色不变。点「保存」才由 `saveAppearance()` 写回去。
+   */
+  private appearanceDraft: GameSettings | null = null;
+  /** 从背包直接打开时：只显示弹窗，不显示设置面板本体 */
+  private standaloneAppearance = false;
+  /** 弹窗底部那颗「保存」（只有草稿真的变了才亮） */
+  private appearanceSaveButton: HTMLButtonElement | null = null;
   /** 「世界」页的草稿（难度 / 模式 / 规则）；没有世界页时为 null */
   private worldDraft: WorldSettingsSnapshot | null = null;
   /** 上一次保存（或刚打开面板）时的世界配置，用来判断世界页脏没脏 */
@@ -1224,7 +1256,24 @@ export class SettingsScreen {
     const modalBody = document.createElement('div');
     modalBody.className = 'appearance-modal-body';
     modalBody.append(hero);
-    modalPanel.append(modalHeader, modalBody);
+
+    /*
+     * 弹窗自己的「保存」（2026-10-29，用户）。
+     *
+     * 形象与其它设置分开：这里改的只是**预览**（`appearanceDraft`），
+     * 点这颗才写回设置并让游戏里的角色换装。所以外层外观页那颗「保存」不再对形象生效。
+     */
+    const modalFoot = document.createElement('div');
+    modalFoot.className = 'appearance-modal-foot';
+    const appearanceSave = document.createElement('button');
+    appearanceSave.type = 'button';
+    appearanceSave.className = 'settings-save appearance-save';
+    appearanceSave.textContent = t('settings.save');
+    appearanceSave.addEventListener('click', () => this.saveAppearance());
+    this.appearanceSaveButton = appearanceSave;
+    modalFoot.appendChild(appearanceSave);
+
+    modalPanel.append(modalHeader, modalBody, modalFoot);
     modal.append(modalPanel);
     this.appearanceModal = modal;
 
@@ -1892,10 +1941,12 @@ export class SettingsScreen {
       // 批次 20261024-0245：预设名走 `label.appearance.preset.*`
       button.textContent = t(`label.appearance.preset.${preset.id}`);
       button.addEventListener('click', () => {
-        applyCharacterPreset(this.draft, index);
+        // 预设只作用于形象：弹窗打开时写形象草稿（点保存才进游戏）
+        applyCharacterPreset(this.appearanceTarget(), index);
         // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）
         for (const refresh of this.refreshers) refresh();
-        this.updateSaveState();
+        this.refreshPresetRow();
+        this.refreshAvatar();
       });
       this.presetButtons.push(button);
       row.appendChild(button);
@@ -1907,7 +1958,7 @@ export class SettingsScreen {
   /** 手动改了任一外观项：四颗预设按钮按反查结果重新高亮（都不匹配 = 自定义） */
   private refreshPresetRow(): void {
     if (this.presetButtons.length === 0) return;
-    const index = presetIndexOf(this.draft);
+    const index = presetIndexOf(this.appearanceTarget());
     this.presetButtons.forEach((button, i) => {
       const on = i === index;
       button.classList.toggle('active', on);
@@ -1915,22 +1966,90 @@ export class SettingsScreen {
     });
   }
 
-  /** 打开角色形象二级弹窗（批次 528） */
-  private openAppearance(): void {
+  /**
+   * 打开角色形象弹窗（批次 528；2026-10-29 改成"自己带保存"）。
+   *
+   * 打开时从**已保存**的设置拷一份草稿：弹窗里的改动只影响预览，
+   * 关掉（✕ / Esc）就等于放弃。
+   */
+  openAppearance(): void {
     if (!this.appearanceModal || this.appearanceOpen) return;
     this.closeDropdown();
+    this.appearanceDraft = { ...this.settings };
     this.appearanceOpen = true;
+    // 控件要按新草稿重画（这里不能只 refreshAvatar：下拉/开关还停在旧值上）
+    for (const refresh of this.refreshers) refresh();
+    this.refreshPresetRow();
+    this.updateAppearanceSaveState();
     this.appearanceModal.classList.remove('hidden');
     // 弹窗显示后画布才有尺寸；下一帧再画，否则 PlayerPreview3D 会按 0×0 建渲染器
     window.requestAnimationFrame(() => this.refreshAvatar());
   }
 
-  /** 关闭角色形象二级弹窗 */
-  private closeAppearance(): void {
+  /**
+   * 从背包的「角色形象」入口直接打开（2026-10-29，用户）。
+   *
+   * 这时暂停菜单没有打开，所以把设置面板本体藏起来、只留弹窗；根节点仍在
+   * 背包之上（`.appearance-only` 会把它抬到背包那层之上）。
+   */
+  openAppearanceStandalone(): void {
+    if (!this.appearanceModal || this.appearanceOpen) return;
+    this.standaloneAppearance = true;
+    this.root.classList.remove('hidden');
+    this.root.classList.add('appearance-only');
+    this.openAppearance();
+  }
+
+  /** 关闭角色形象弹窗：丢掉草稿（等于「取消」） */
+  closeAppearance(): void {
     if (!this.appearanceOpen) return;
     this.appearanceOpen = false;
+    this.appearanceDraft = null;
     this.avatarDrag = null;
     this.appearanceModal?.classList.add('hidden');
+    if (this.standaloneAppearance) {
+      this.standaloneAppearance = false;
+      this.root.classList.remove('appearance-only');
+      this.root.classList.add('hidden');
+    }
+  }
+
+  /** 弹窗里的「保存」：把形象草稿写回设置、落盘，并让游戏里的角色立刻换装 */
+  saveAppearance(): void {
+    const draft = this.appearanceDraft;
+    if (!draft) return;
+    for (const key of APPEARANCE_KEYS) {
+      (this.settings as unknown as Record<string, unknown>)[key] = (draft as unknown as Record<string, unknown>)[key];
+      // 设置草稿也同步一份：否则玩家接着去点外层「保存」时，会用旧值覆盖回去
+      (this.draft as unknown as Record<string, unknown>)[key] = (draft as unknown as Record<string, unknown>)[key];
+    }
+    saveSettings(this.settings);
+    this.actions.onChange(this.settings);
+    this.refreshAvatar();
+    this.refreshPresetRow();
+    this.updateAppearanceSaveState();
+    this.updateSaveState();
+    this.settingsHintEl.textContent = t('settings.saved');
+    window.setTimeout(() => this.renderSubtitle(), 1200);
+  }
+
+  /** 弹窗「保存」的亮/灰：形象草稿与已保存值不一致才亮 */
+  private updateAppearanceSaveState(): void {
+    const button = this.appearanceSaveButton;
+    if (!button) return;
+    const draft = this.appearanceDraft;
+    let dirty = false;
+    if (draft) {
+      for (const key of APPEARANCE_KEYS) {
+        if (
+          (draft as unknown as Record<string, unknown>)[key] !== (this.settings as unknown as Record<string, unknown>)[key]
+        ) {
+          dirty = true;
+          break;
+        }
+      }
+    }
+    button.disabled = !dirty;
   }
 
   /**
@@ -1946,8 +2065,11 @@ export class SettingsScreen {
     if (!canvas) return;
     // 只在角色形象弹窗真正显示时创建/绘制：否则一打开暂停菜单就会白占一个
     // WebGL 上下文（手机上的上下文数量是有限资源），而且隐藏时画布尺寸为 0、画了也没用。
-    if (!this.open || this.currentPage !== 'settings' || !this.appearanceOpen) return;
-    const palette = paletteOf(this.draft);
+    if (!this.appearanceOpen) return;
+    // 正常路径是"设置页 → 外观 → 弹窗"；从背包直接打开时面板本体不显示（standalone）
+    if (!this.standaloneAppearance && (!this.open || this.currentPage !== 'settings')) return;
+    // 预览读的是**弹窗草稿**：改一项就在 3D 上看到，没点保存前进不了游戏
+    const palette = paletteOf(this.appearanceTarget());
     if (!this.avatar && !this.avatarFailed) {
       try {
         // 比背包更正一点的初始角度：设置页主要看脸
@@ -2031,14 +2153,32 @@ export class SettingsScreen {
     values: readonly T[],
     labels: Record<T, string>,
   ): HTMLButtonElement {
+    // ⚠️ 这里**不能把 `this.draft` 存成闭包变量**：`show()` / `discardDraft()` 会整份替换它，
+    // 捕获旧对象就会出现"控件改了但界面不动"。所以每次读写都按 key 现算草稿。
     return this.makeDropdown(
       options,
       label,
       values,
       labels,
-      () => cycleValue(values, this.draft[key]) as T,
-      (next) => this.assignSelectValue(key, next),
+      () => cycleValue(values, this.draftFor(key)[key]) as T,
+      (next) => this.assignSelectValue(key, next, this.draftFor(key)),
     );
+  }
+
+  /**
+   * 这个键该写哪一份草稿（2026-10-29）。
+   *
+   * 形象字段（`APPEARANCE_KEYS`）在弹窗里编辑 → 写 `appearanceDraft`；
+   * 其余字段属于设置草稿。弹窗没打开时一律写设置草稿（控件初始化阶段）。
+   */
+  private draftFor(key: string): GameSettings {
+    if (this.appearanceDraft && isAppearanceKey(key)) return this.appearanceDraft;
+    return this.draft;
+  }
+
+  /** 形象弹窗那份草稿；没打开时退回设置草稿（保证控件初始化能读到值） */
+  private appearanceTarget(): GameSettings {
+    return this.appearanceDraft ?? this.draft;
   }
 
   /**
@@ -2067,25 +2207,26 @@ export class SettingsScreen {
       | 'build'
       | 'frame',
     next: string,
+    target: GameSettings = this.draft,
   ): void {
-    // ⚠️ 全部写**草稿**（`this.draft`）：这些值要等「保存」才拷回 `settings`
-    if (key === 'cameraMode') this.draft.cameraMode = next as CameraMode;
-    else if (key === 'particles') this.draft.particles = next as ParticleLevel;
-    else if (key === 'aimMode') this.draft.aimMode = next as TouchAimMode;
-    else if (key === 'handedness') this.draft.handedness = next as Handedness;
-    else if (key === 'maxFps') this.draft.maxFps = Number(next);
-    else if (key === 'autosaveSeconds') this.draft.autosaveSeconds = Number(next);
-    else if (key === 'skinTone') this.draft.skinTone = Number(next);
-    else if (key === 'shirtColor') this.draft.shirtColor = Number(next);
-    else if (key === 'pantsColor') this.draft.pantsColor = Number(next);
-    else if (key === 'hairColor') this.draft.hairColor = Number(next);
-    else if (key === 'hairStyle') this.draft.hairStyle = Number(next);
-    else if (key === 'beard') this.draft.beard = Number(next);
-    else if (key === 'eyes') this.draft.eyes = Number(next);
-    else if (key === 'eyeColor') this.draft.eyeColor = Number(next);
-    else if (key === 'build') this.draft.build = Number(next);
-    else if (key === 'frame') this.draft.frame = Number(next);
-    else this.draft.touchStick = next as StickMode;
+    // ⚠️ 全部写**草稿**：外观弹窗写 `appearanceDraft`，其余写设置草稿
+    if (key === 'cameraMode') target.cameraMode = next as CameraMode;
+    else if (key === 'particles') target.particles = next as ParticleLevel;
+    else if (key === 'aimMode') target.aimMode = next as TouchAimMode;
+    else if (key === 'handedness') target.handedness = next as Handedness;
+    else if (key === 'maxFps') target.maxFps = Number(next);
+    else if (key === 'autosaveSeconds') target.autosaveSeconds = Number(next);
+    else if (key === 'skinTone') target.skinTone = Number(next);
+    else if (key === 'shirtColor') target.shirtColor = Number(next);
+    else if (key === 'pantsColor') target.pantsColor = Number(next);
+    else if (key === 'hairColor') target.hairColor = Number(next);
+    else if (key === 'hairStyle') target.hairStyle = Number(next);
+    else if (key === 'beard') target.beard = Number(next);
+    else if (key === 'eyes') target.eyes = Number(next);
+    else if (key === 'eyeColor') target.eyeColor = Number(next);
+    else if (key === 'build') target.build = Number(next);
+    else if (key === 'frame') target.frame = Number(next);
+    else target.touchStick = next as StickMode;
   }
 
   /**
@@ -2441,9 +2582,11 @@ export class SettingsScreen {
     return this.makeSwitch(
       options,
       label,
-      () => this.draft[key],
+      // 披风属于形象字段：弹窗打开时读形象草稿，其余读设置草稿（每次现算，见 `draftFor`）
+      () => this.draftFor(key)[key],
       () => {
-        this.draft[key] = !this.draft[key];
+        const target = this.draftFor(key);
+        target[key] = !target[key];
       },
     );
   }
@@ -2564,6 +2707,8 @@ export class SettingsScreen {
     const dirty = this.isGroupDirty(this.activeGroup);
     if (this.saveButton) this.saveButton.disabled = !dirty;
     this.footerEl?.classList.toggle('dirty', dirty);
+    // 形象弹窗有自己的「保存」：改一项就要点亮它（外层那颗不再管形象）
+    this.updateAppearanceSaveState();
   }
 
   /** 按草稿重画所有控件（打开面板 / 恢复默认 / 放弃改动之后） */

@@ -25,6 +25,7 @@ import {
   SENSITIVITY_MAX,
   SENSITIVITY_MIN,
   SETTINGS_VERSION,
+  APPEARANCE_KEYS,
   SETTING_GROUP_KEYS,
   SETTING_GROUPS,
   TOUCH_AIM_MODES,
@@ -262,8 +263,14 @@ console.log('\n[设置分组表]');
   }
   check('同一个字段不会挂在两个分组里', duplicate === '', duplicate);
 
-  /** 故意**没有**界面入口的字段：由设备性能策略或存档格式决定，不该出现在分组表里 */
+  /**
+   * 故意**没有**界面入口的字段：由设备性能策略或存档格式决定，不该出现在分组表里。
+   *
+   * 2026-10-29 起角色形象也在这一列：它有自己的一扇弹窗与「保存」（`APPEARANCE_KEYS`），
+   * 不进分组草稿——外层外观页的保存只对场景亮度生效。
+   */
   const hidden = new Set([
+    ...APPEARANCE_KEYS,
     'settingsVersion',
     'viewDistance',
     'particles',

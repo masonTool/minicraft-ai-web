@@ -303,6 +303,13 @@ export interface InventoryScreenHooks {
   onOpenAdvancements?: () => void;
   /** 预览用：披风外观是否开启（批次 185） */
   isCapeVisible?: () => boolean;
+  /**
+   * 打开角色形象编辑器（2026-10-29，用户）。
+   *
+   * 按钮挂在盔甲列旁边那块小人的右下角（一支笔）：背包是手机端最常开的界面，
+   * 想改形象不必先退到暂停菜单 → 设置 → 外观 → 编辑。
+   */
+  onEditAppearance?: () => void;
   /** 预览用：肤色 / 上衣 / 裤子（批次 187） */
   appearance?: () => AppearancePalette;
   /**
@@ -1382,7 +1389,27 @@ export class InventoryScreen {
     this.playerPreviewEl.setAttribute('aria-label', t('inventory.playerPreview'));
     const gearRow = document.createElement('div');
     gearRow.className = 'inv-gear-row';
-    gearRow.append(this.buildArmorGrid(), this.playerPreviewEl);
+    /*
+     * 预览右下角一颗小笔头（2026-10-29，用户）：点了直接进「角色形象」编辑。
+     *
+     * 包一层 `.inv-preview-wrap` 是为了给按钮一个定位父元素：画布在双栏布局下会变成
+     * 170×190，按钮要贴着**画布**右下角，而不是跟着盔甲列跑。
+     */
+    const previewWrap = document.createElement('div');
+    previewWrap.className = 'inv-preview-wrap';
+    const editAppearance = document.createElement('button');
+    editAppearance.type = 'button';
+    editAppearance.className = 'inv-preview-edit';
+    editAppearance.textContent = '✎';
+    editAppearance.title = t('settings.appearance.edit');
+    editAppearance.setAttribute('aria-label', t('settings.appearance.edit'));
+    editAppearance.addEventListener('click', (event) => {
+      // 别冒泡到"点面板外面关背包"那条
+      event.stopPropagation();
+      this.hooks.onEditAppearance?.();
+    });
+    previewWrap.append(this.playerPreviewEl, editAppearance);
+    gearRow.append(this.buildArmorGrid(), previewWrap);
     this.gearEl.append(this.armorTitleEl, gearRow);
     this.playerBody.appendChild(this.gearEl);
     this.panel.appendChild(this.playerBody);

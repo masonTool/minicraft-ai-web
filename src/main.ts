@@ -3128,6 +3128,8 @@ class App {
         onOpenAdvancements: () => this.openAdvancements(),
         isCapeVisible: () => this.settings.cape,
         appearance: () => paletteOf(this.settings),
+        // 背包里那颗小笔头（2026-10-29，用户）：直接弹「角色形象」，带自己的保存
+        onEditAppearance: () => this.settingsScreen?.openAppearanceStandalone(),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 织布机（J25，批次 503）：界面负责扣料与改图案，这里只响一声

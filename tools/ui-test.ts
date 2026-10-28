@@ -219,6 +219,31 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => settingGroupLabel(group))).size, SETTING_GROUPS.length);
 
   // ---- ④ CSS 守卫（少哪一条就是哪一种"半手机半桌面"的怪界面）
+  // 2026-10-29（用户）：角色形象有自己的保存，外层外观页只对亮度负责
+  {
+    const settingsSrc2 = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+    const invSrc2 = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+    const appSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const htmlSrc2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    check(
+      '角色形象弹窗自带「保存」；外观分组只含亮度',
+      settingsSrc2.includes('saveAppearance(): void') &&
+        settingsSrc2.includes("appearanceSave.className = 'settings-save appearance-save';") &&
+        settingsSrc2.includes('this.updateAppearanceSaveState();') &&
+        settingsSrc2.includes("appearance: ['brightness'],") &&
+        settingsSrc2.includes('export const APPEARANCE_KEYS') &&
+        settingsSrc2.includes('private draftFor(key: string): GameSettings') &&
+        settingsSrc2.includes('paletteOf(this.appearanceTarget())'),
+    );
+    check(
+      '背包预览右下角有小笔头，点了直接进角色形象',
+      invSrc2.includes("editAppearance.className = 'inv-preview-edit';") &&
+        invSrc2.includes('this.hooks.onEditAppearance?.();') &&
+        appSrc2.includes('onEditAppearance: () => this.settingsScreen?.openAppearanceStandalone()') &&
+        htmlSrc2.includes('.inv-preview-edit {'),
+    );
+  }
+
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
@@ -2315,7 +2340,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     settingsSource.includes("const appearanceTop = this.makeBlock(appearance);") &&
       settingsSource.includes("appearanceEntry.className = 'settings-row pair appearance-entry';") &&
       settingsSource.includes("modal.className = 'appearance-modal hidden';") &&
-      settingsSource.includes('private openAppearance()') &&
+      settingsSource.includes('openAppearance(): void') &&
       settingsSource.includes('this.appearanceOpen = true;'),
   );
 
@@ -4039,8 +4064,8 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
     /export const CHARACTER_PRESETS[\s\S]{0,1200}id: 'man'[\s\S]{0,400}id: 'woman'[\s\S]{0,400}id: 'boy'[\s\S]{0,400}id: 'girl'/.test(
       readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
-      settingsSrc.includes('presetIndexOf(this.draft)') &&
-      settingsSrc.includes('applyCharacterPreset(this.draft, index)'),
+      settingsSrc.includes('presetIndexOf(this.appearanceTarget())') &&
+      settingsSrc.includes('applyCharacterPreset(this.appearanceTarget(), index)'),
   );
   check(
     '改设置立刻作用到第三人称、第一人称手臂与 3D 预览',

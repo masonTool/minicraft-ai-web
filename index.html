@@ -1892,6 +1892,9 @@
         background: rgba(0, 0, 0, .42);
       }
       #settings-screen.hidden { display: none; }
+      /* 从背包直接打开角色形象（2026-10-29）：只显示那扇弹窗，设置面板本体不可见 */
+      #settings-screen.appearance-only > .settings-panel { visibility: hidden; }
+      #settings-screen.appearance-only { z-index: 62; }
       /* 关闭时的淡出（批次 231）：`SettingsScreen.hide()` 先挂这个类，
          130ms 后才加 `.hidden`。**时序是功能的一部分**——面板必须比
          "触摸操作层恢复"晚几帧消失，否则同一帧拆/建两层会让浏览器重算
@@ -3671,6 +3674,20 @@
         touch-action: none;
         cursor: grab;
       }
+      /* 预览右下角那颗「改形象」的笔（2026-10-29，用户）：点了直接进角色形象编辑 */
+      .inv-preview-wrap { position: relative; flex: 0 0 auto; display: block; }
+      .inv-preview-edit {
+        position: absolute; right: 2px; bottom: 2px;
+        width: 22px; height: 22px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        font: inherit; font-size: 13px; line-height: 1;
+        color: #f0f0f0; background: rgba(20, 20, 20, .72);
+        border: 2px solid; border-color: #a8a8a8 #3c3c3c #3c3c3c #a8a8a8;
+        cursor: pointer;
+      }
+      .inv-preview-edit:active { background: rgba(70, 70, 70, .9); }
+      body.touch-mode .inv-preview-edit { width: 32px; height: 32px; font-size: 16px; }
+      .inv-panel.pocket-ui.pocket-dual .inv-preview-edit { width: 26px; height: 26px; }
       .inv-main { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 4px; }
       /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */
       .inv-main .inv-hotbar { margin-top: 5px; }
