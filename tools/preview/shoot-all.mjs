@@ -521,6 +521,20 @@ const SHOTS = [
     what: '**工作站预设**：`station=furnace` → 1×2 原料/燃料 + 箭头 45% + 结果格 + 火焰',
     status: '原型 · 阶段 4',
   },
+  {
+    file: '46-creative-panel.png',
+    page: 'tools/preview/creative-panel.html',
+    size: [900, 620],
+    what: '**创造栏面板**（`CreativePanel2D`）：真注册表 1129 件 / 19 页 / 5 个页签，`‹ 1 / 19 ›` 可点',
+    status: '已迁 · 阶段 4',
+  },
+  {
+    file: '46b-creative-panel-tab.png',
+    page: 'tools/preview/creative-panel.html?tab=1',
+    size: [900, 620],
+    what: '创造栏面板：点页签后换内容（建筑 145 件，页码归 0）',
+    status: '已迁 · 阶段 4',
+  },
   // ---- 黄色遮罩版（`?tint=1`）：一眼看出"这块像素是 canvas 画的" ------------------
   {
     file: '06-hotbar-tinted.png',

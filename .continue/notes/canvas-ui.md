@@ -1526,6 +1526,40 @@ itemLabel(id).includes(query) || itemName(id).toLowerCase().includes(lower) || S
 | E4 拿一整叠而栏里不减少 | `creativePick`（不是 `leftClick`） |
 | F4 关掉暂停后 HUD 恢复 | 之前真踩过的"退出后 HUD 永久消失" |
 
+## 5.57 创造栏有了自己的面板（`CreativePanel2D`）
+
+创造栏和背包不是一回事：**12 列小格子 + 页签 + 搜索框 + 翻页**，而且物品不"存在格子里"
+（它是注册表的一个视图，点一下复制一整叠）。往通用宿主里塞 `if (creative)` 会把两边都弄脏，
+所以单独一个类：
+
+| 职责 | 实现 |
+| --- | --- |
+| 状态 | 自己维护 `tab` / `page`（搜索词由调用方给 —— 输入法那一层不在这里） |
+| 数据 | `cellsOf(tab, page)` 由调用方提供（用 `creativeModel` 的三个纯函数筛好） |
+| 绘制 | `layoutCreativePanel` + `drawCreativePanel`（与预览页共用同一套） |
+| 命中 | 点页签 → 换页签并归零页码；点 `‹ / ›` → 翻页；点格子 → `onPick(itemId)` |
+
+两个实现细节：
+
+1. **翻页热区要够宽**：可见的只有 `‹ 1 / 19 ›` 几个字，但热区左右各取 1/3（上限 40px），
+   否则手指戳不中那个小三角；`creativePagerHits` 是纯函数，3 条断言钉住"不重叠 / 有上限 / 窄面板按比例"。
+2. **底部快捷栏要能传进来**（`hotbarOf`）：创造栏不消耗物品，但玩家仍需看到自己那 9 格。
+
+预览页 `creative-panel.html` 直接吃**真注册表**（1129 件 / 19 页），实测：
+点页签 → 建筑 145 件且页码归 0；点 `›` → 0 → 1 页；点格子 → `picked = 1x64`（一整叠）。
+
+### 还差最后一步：接进游戏
+
+`InventoryScreen` 现在暴露了只读的 `creativeState`（`showing` / `category` / `query` / `page`）。
+
+**为什么只读**：改这三个状态会连带做一堆事（按分类存滚动位置、按分类存搜索词、重置页码、
+重排 chrome），那是 DOM 侧那颗页签按钮的职责 —— canvas 想换页签应该走 `forwardClickAt()`
+去点那颗真按钮，而不是复制一份逻辑（复制出来的那份一定会跟 DOM 漂移）。
+
+所以最后一步只差：在 `syncInventory2d` 里判断 `creativeState.showing`，是就把背包面板让位、
+换成 `CreativePanel2D`（数据用 `CREATIVE_ITEMS` + `itemName` + `creativeTabFor` 筛，图标走
+`ItemIconCache`，`onPick` 里调 `creativePick` 再写回 `held`）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

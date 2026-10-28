@@ -5,6 +5,7 @@
  * 它们全是不依赖 DOM 的纯函数，正好钉死。
  */
 import { describe, expect, it } from 'vitest';
+import { creativePagerHits } from '../src/ui2d/CreativePanel2D.ts';
 import {
   CREATIVE_PAGE_SIZE,
   creativePageCount,
@@ -108,5 +109,34 @@ describe('铺网格', () => {
   it('行列非法时返回空数组', () => {
     expect(fillCreativeGrid([1], 0, 5)).toEqual([]);
     expect(fillCreativeGrid([1], 3, -1)).toEqual([]);
+  });
+});
+
+/**
+ * 翻页热区（`creativePagerHits`）。
+ *
+ * 翻页区的可见内容只有 `‹ 1 / 19 ›` 这几个字，但**热区**要够宽才点得到：
+ * 手指不会正好戳在那个小三角上。左/右各取 1/3 宽度（上限 40px），中间留给页码。
+ */
+describe('翻页热区', () => {
+  const pager = { x: 100, y: 400, w: 300, h: 20 };
+
+  it('左右各一块，中间是页码（不相交）', () => {
+    const hits = creativePagerHits(pager);
+    expect(hits.prev.x).toBe(100);
+    expect(hits.next.x + hits.next.w).toBe(400);
+    expect(hits.prev.x + hits.prev.w).toBeLessThan(hits.next.x);
+  });
+
+  it('热区有上限（宽面板上不会把页码挤掉）', () => {
+    const wide = creativePagerHits({ x: 0, y: 0, w: 900, h: 20 });
+    expect(wide.prev.w).toBeLessThanOrEqual(40);
+    expect(wide.next.w).toBeLessThanOrEqual(40);
+  });
+
+  it('窄面板按 1/3 缩（不会重叠）', () => {
+    const narrow = creativePagerHits({ x: 0, y: 0, w: 90, h: 20 });
+    expect(narrow.prev.w).toBeCloseTo(30, 6);
+    expect(narrow.next.x).toBeCloseTo(60, 6);
   });
 });

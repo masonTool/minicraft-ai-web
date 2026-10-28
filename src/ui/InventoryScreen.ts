@@ -6217,6 +6217,28 @@ export class InventoryScreen {
   }
 
   /**
+   * 创造栏当前的状态（只读，给 canvas 自绘面板用）。
+   *
+   * 为什么要读它：创造栏的"页签 / 搜索词 / 页码"三样都只有界面自己知道，而 canvas 版要按同样的
+   * 条件筛物品。**只读是刻意的** —— 改这三个状态会连带做一堆事（按分类存滚动位置、按分类存
+   * 搜索词、重置页码、重排 chrome），那是 DOM 侧那颗页签按钮的职责；
+   * canvas 想换页签应该走 `forwardClickAt()` 去点那颗真按钮，而不是复制一份逻辑。
+   */
+  get creativeState(): {
+    readonly showing: boolean;
+    readonly category: CreativeTab;
+    readonly query: string;
+    readonly page: number;
+  } {
+    return {
+      showing: this.pane === 'creative',
+      category: this.creativeCategory,
+      query: this.creativeQuery,
+      page: this.creativePage,
+    };
+  }
+
+  /**
    * 当前打开的那个容器（**只读入口**，给 canvas 自绘面板读/写它那几格）。
    *
    * 为什么需要：自绘面板接管之后 DOM 不再渲染，而容器里的东西（熔炉的原料与燃料、

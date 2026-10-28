@@ -26,6 +26,8 @@ const PAGES = [
   { url: 'tools/preview/menu-mirror.html?view=worlds', min: 0.03, label: '世界列表镜像' },
   { url: 'tools/preview/multiplayer-mirror.html', min: 0.02, label: '多人面板镜像' },
   { url: 'tools/preview/touch.html?fly=1', min: 0.005, label: '触控摇杆 + 按钮' },
+  { url: 'tools/preview/creative-panel.html', min: 0.05, label: '创造栏面板（真注册表）' },
+  { url: 'tools/preview/inventory-selfdrawn.html?station=furnace&progress=0.45', min: 0.04, label: '自绘熔炉（进度+火焰）' },
   { url: 'tools/preview/textpanels.html', min: 0.002, label: '纯文字 HUD' },
 ];
 

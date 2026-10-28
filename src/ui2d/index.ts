@@ -254,6 +254,13 @@ export {
   type StationSpec,
 } from './stationLayouts.ts';
 export {
+  CREATIVE_GRID_SLOTS,
+  CreativePanel2D,
+  creativePagerHits,
+  type CreativeCellView,
+  type CreativePanelOptions,
+} from './CreativePanel2D.ts';
+export {
   CREATIVE_PAGE_SIZE,
   creativePageCount,
   creativePageSlice,

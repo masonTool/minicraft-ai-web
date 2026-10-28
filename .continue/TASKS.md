@@ -6130,6 +6130,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] 批次 20261028-1022 · **创造栏吃真数据 + 真机清单（4 条）**：把 `ui2d/creativeModel` 接到真注册表时发现一个要命的小事 —— DOM 的搜索是拿**三个东西**比的（`itemLabel` 英文、`itemName` 本地化、`id` 字符串），而 canvas 只拿一个名字比，结果"原版能搜 `stone`、canvas 搜不到"；`matchesQuery` 改成接受 `string | readonly string[]`。新增 `test:ui2d-creative-realdata` **9 条**（跑真 `CREATIVE_ITEMS`）：每个页签非空、**各页签加总正好等于"全部"**、中/英/id 三种搜法、一页 60 格、末页补 `null`、名字非空。另立 `.continue/notes/device-checklist.md`：**六段 44 条**真机清单（背包接管 15 / 触摸 6 / 工作站 8 / 盔甲 6 / 创造栏 5 / 暂停 4），每条"动作 → 期望 → 打勾"，末尾附问题记录格式（复现/期望/实际/猜测）；其中六条专防本轮改动（产物格只出不进、`containerDirty` 存盘、`shulker_box` 命名、`canPlace` 闸门、`creativePick` 不消耗、暂停关闭后 HUD 恢复）。验证：`test:ui2d-creative` **14/14**、`test:ui2d-creative-realdata` **9/9**、`tsc` 干净、`npm run check` exit=0。详见 §5.56。
 
+- [x] 批次 20261028-1027 · **创造栏独立面板（4 条，M38 面板）**：创造栏与背包不是一回事（12 列小格子 + 页签 + 搜索框 + 翻页，且物品不"存在格子里"而是注册表的视图），往通用宿主里塞 `if (creative)` 会把两边都弄脏 → 独立 `ui2d/CreativePanel2D.ts`：自己维护 `tab`/`page`，数据靠 `cellsOf(tab, page)` 注入（用 `creativeModel` 的三个纯函数筛好），绘制复用 `drawCreativePanel`，命中分三种（页签 / 翻页 / 格子）。两个细节：**翻页热区左右各 1/3、上限 40px**（可见的只有几个字，手指戳不中小三角；`creativePagerHits` 3 条断言）、**底部快捷栏要能传进来**（创造栏不消耗物品，但玩家仍要看自己那 9 格）。预览页 `creative-panel.html` 吃真注册表（1129 件 / 19 页），实测点页签 → 建筑 145 件且页码归 0、点 `›` → 0→1、点格子 → `picked=1x64`。另开 `InventoryScreen.creativeState` **只读**入口 —— 改那三个状态会连带做一串事（按分类存滚动/搜索、重置页码、重排 chrome），那是 DOM 页签按钮的职责，canvas 换页签应该走 `forwardClickAt` 去点真按钮，不复制逻辑。验证：`test:ui2d-creative` **17/17**、`tsc` 干净、`npm run check` exit=0、76 张截图。详见 `notes/canvas-ui.md` §5.57 与决策 D67。
+
 ## 附：与原版的差异台账（自动生成）
 
 来源是各条目里的 `⚠️` 注记——**改注记就会改这里，别手改这一节**（`npm run audit:diffs` 会覆盖它）。

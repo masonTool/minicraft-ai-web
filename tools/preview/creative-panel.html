@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>ui2d · 创造栏面板（真注册表数据）</title>
+    <!--
+      `CreativePanel2D` 的端到端预览：**真注册表**（`CREATIVE_ITEMS`）+ 真页签（`CREATIVE_TABS`）。
+
+      这里证明三件事：
+        1. 面板能把"筛好的物品"摆进 12 列网格；
+        2. 点页签会换内容（且页码归零）；
+        3. 点 `‹` / `›` 能翻页。
+
+      真机上"点格子 → 复制一整叠"由 `creativePick` 完成（本页只把它显示出来）。
+
+      用法：npm run dev → open /tools/preview/creative-panel.html
+    -->
+    <style>
+      html, body { margin: 0; background: #111; }
+      #stage {
+        position: relative; width: 900px; height: 620px; overflow: hidden;
+        background: linear-gradient(#7ec0ee 0%, #a8d8f0 46%, #6f9a5a 46%, #4e7440 62%, #3b5a32 100%);
+      }
+      .caption {
+        position: absolute; left: 12px; bottom: 8px; z-index: 40;
+        font: 12px/1.4 -apple-system, 'PingFang SC', sans-serif; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><div class="caption" id="caption"></div></div>
+
+    <script type="module">
+      import {
+        CREATIVE_GRID_SLOTS,
+        CreativePanel2D,
+        creativePageCount,
+        creativePageSlice,
+        fillCreativeGrid,
+        filterCreativeItems,
+        creativePick,
+      } from '../../src/ui2d/index.ts';
+      import { CREATIVE_ITEMS, itemName } from '../../src/core/registry/items.ts';
+      import { itemLabel } from '../../src/core/registry/itemNames.ts';
+      import { CREATIVE_TABS, creativeTabFor, creativeTabLabel } from '../../src/ui/CreativeTabs.ts';
+
+      const params = new URLSearchParams(window.location.search);
+      const tint = params.get('tint') === '1';
+      const query = params.get('q') ?? '';
+
+      /** 图标：真机是 `drawItemIcon(canvas, atlas, id)`，这里按 id 画色块（够看排版） */
+      const icons = new Map();
+      const iconOf = (itemId) => {
+        const hit = icons.get(itemId);
+        if (hit) return hit;
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = `hsl(${(itemId * 47) % 360} 55% 52%)`;
+        ctx.fillRect(2, 2, 28, 28);
+        ctx.strokeStyle = 'rgba(0,0,0,.45)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(2, 2, 28, 28);
+        icons.set(itemId, canvas);
+        return canvas;
+      };
+
+      const labels = CREATIVE_TABS.map((tab) => creativeTabLabel(tab));
+      /** 按页签 + 搜索词筛（与游戏里同一套纯函数） */
+      const listFor = (tabIndex) => {
+        const tab = CREATIVE_TABS[tabIndex] ?? 'all';
+        return filterCreativeItems(CREATIVE_ITEMS, {
+          query,
+          nameOf: (id) => [itemName(id), itemLabel(id), String(id)],
+          tabOf: (id) => creativeTabFor(id),
+          ...(tab === 'all' ? {} : { tab }),
+        });
+      };
+
+      const panel = new CreativePanel2D(document.getElementById('stage'), {
+        tabs: labels,
+        zIndex: 12,
+        tint,
+        query,
+        cellsOf: (tabIndex, page) => {
+          const items = listFor(tabIndex);
+          const visible = creativePageSlice(items, page);
+          const filled = fillCreativeGrid(visible, 12, 5);
+          return filled.map((id) => (id === null ? null : { itemId: id, icon: iconOf(id), name: itemName(id) }));
+        },
+        pagesOf: (tabIndex) => creativePageCount(listFor(tabIndex).length),
+        onPick: (itemId) => {
+          // 创造模式：拿一整叠，栏里的物品不变
+          window.__picked = creativePick({ id: itemId, count: 1 }, () => 64);
+          render();
+        },
+      });
+
+      function render() {
+        panel.render();
+        const tab = panel.currentTab;
+        const total = listFor(tab).length;
+        document.getElementById('caption').textContent =
+          `创造栏（真注册表 ${CREATIVE_ITEMS.length} 件）：页签=${labels[tab]} · 命中 ${total} 件 · ` +
+          `第 ${panel.currentPage + 1}/${Math.max(1, creativePageCount(total))} 页` +
+          (query ? ` · 搜索"${query}"` : '') +
+          (window.__picked ? ` · 手上 ${window.__picked.id}x${window.__picked.count}` : '');
+      }
+
+      // 先 open 再拿 canvas：覆盖层是 open() 里建的（第一版顺序反了，`canvas` 还是 null）
+      panel.open();
+      const canvas = panel.canvas;
+      canvas.style.pointerEvents = 'auto';
+      const local = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      };
+      canvas.addEventListener('pointermove', (event) => {
+        const p = local(event);
+        panel.move(p.x, p.y);
+      });
+      canvas.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const p = local(event);
+        if (panel.down(p.x, p.y)) render();
+      });
+      canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+      window.addEventListener('resize', () => {
+        panel.relayout();
+        render();
+      });
+
+      // 截图/断言用
+      window.__probe = () => ({
+        tab: panel.currentTab,
+        page: panel.currentPage,
+        total: listFor(panel.currentTab).length,
+        slots: CREATIVE_GRID_SLOTS,
+        picked: window.__picked ? `${window.__picked.id}x${window.__picked.count}` : null,
+        panel: panel.canvas?.getBoundingClientRect().width ?? 0,
+        rects: panel.rects,
+      });
+
+      // `?tab=1`：直接停在某个页签（截图用，不用真的点）
+      const tabParam = Number(params.get('tab') ?? '');
+      if (Number.isFinite(tabParam) && params.get('tab') !== null) panel.setState({ tab: tabParam });
+      const pageParam = Number(params.get('page') ?? '');
+      if (Number.isFinite(pageParam) && params.get('page') !== null) panel.setState({ page: pageParam });
+
+      render();
+    </script>
+  </body>
+</html>
