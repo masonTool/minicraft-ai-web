@@ -61,3 +61,6 @@ references/
 
 # 联机服务端的世界快照（联机13）：本地运行时产物，不进版本库
 server/node/.data/
+
+# 封存产物由 `npm run gen:sealed` 从 host/core-baseline.bin 生成，不进仓库
+android/app/src/main/assets/sealed/

@@ -88,29 +88,32 @@ tasks.register('copyRustLibs') {
 tasks.named('preBuild').configure { dependsOn 'copyRustLibs' }
 
 // ---------------------------------------------------------------------------
-// 把**核心数据**（方块表快照）放进 APK 的 assets，路径与 `src/core/hostCore.ts` 的
-// `CORE_URL = './__host/core.bin'` 对齐。
+// 核心数据（方块表快照）**不再以明文进包**（A23）。
 //
-// 为什么放 assets 而不是打进 JS 包：app 形态的整条设计就是"724 个方块的明文不进主包"
-// （`build:app` 把 `blockSpecs.ts` 换成空桩）。放 assets 之后 WebView 从
-// `http://localhost/__host/core.bin` 就能读到，**不需要**再写一层
-// `shouldInterceptRequest`——同一个文件，放哪决定形态（浏览器那条路上没有它，于是显示
-// "去 Google Play 下载"的落地页）。
+// 旧做法是把 `host/core-baseline.bin` 拷成 `assets/public/__host/core.bin`：
+// `unzip` 就能拿到 724 个方块的完整表，等于白送。现在由 `npm run gen:sealed`
+// 产出 `assets/sealed/core.sealed`（AEAD + 形态变换），由 `CoreVault` 先验签名再解封。
+//
+// 这里只做**存在性检查**：缺封存体时明确报错，而不是让 Gradle 编出一个
+// "装上去点开始就停在落地页"的 APK——那种失败最难查。
 // ---------------------------------------------------------------------------
-tasks.register('copyHostCore') {
-    description = '把 host/core-baseline.bin 拷成 APK assets 里的 __host/core.bin'
-    def repoRoot = rootProject.projectDir.parentFile
-    def source = new File(repoRoot, 'host/core-baseline.bin')
+tasks.register('checkSealedCore') {
+    description = '确认 assets/sealed/core.sealed 已生成（npm run gen:sealed）'
+    def sealed = file('src/main/assets/sealed/core.sealed')
+    def signers = file('src/main/assets/sealed/signers.txt')
     doLast {
-        if (!source.exists()) {
-            throw new GradleException("缺少核心数据：${source}（先跑 `npm run gen:hostcore`）")
+        if (!sealed.exists()) {
+            throw new GradleException("缺少封存数据：${sealed}\n先跑 `npm run gen:sealed`（它会读 release.config.json 的签名白名单）")
         }
-        copy {
-            from source
-            into file('src/main/assets/public/__host')
-            rename { 'core.bin' }
+        if (!signers.exists()) {
+            throw new GradleException("缺少签名白名单：${signers}\n先跑 `npm run gen:sealed`")
+        }
+        // 明文表**不许**再出现在 assets 里：这条断言比人工 review 可靠
+        def plaintext = file('src/main/assets/public/__host/core.bin')
+        if (plaintext.exists()) {
+            throw new GradleException("assets 里还有明文核心数据：${plaintext}\n删掉它——明文只允许出现在 host/ 与 .tmp/")
         }
     }
 }
 
-tasks.named('preBuild').configure { dependsOn 'copyHostCore' }
+tasks.named('preBuild').configure { dependsOn 'checkSealedCore' }

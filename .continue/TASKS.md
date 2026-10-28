@@ -1361,8 +1361,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] A23 安卓「只认自家签名」与核心数据封存（2026-10-29）：`build:app` 不再把明文 `core.bin` 放进 assets，
       改为 `sealed/core.sealed`（AES-256-GCM + 形态变换），运行时由原生校验签名 → 派生 KEK → 解封 → 交给 WebView
-      · 签名不符 / 解封失败一律返回 404，JS 落到既有「去应用里玩」路径：没有"弹窗后继续"这种可 patch 的分支
-      · 见 `docs/ANDROID-CODE-PROTECTION.md`；实测口径写在 `docs/CODE-PROTECTION-STATUS.md`
+      · 签名不符 / 解封失败一律 reject，JS 落到既有「去应用里玩」路径：没有"弹窗后继续"这种可 patch 的分支
+      · 解封用 Java（`javax.crypto`）而非方案原文的 Rust：本机没有 cargo，写出来是**不可编译验证**的代码；
+        格式由 `tools/sealed-test.ts` 在 Node 侧逐字节对齐（15 条，含 6 条负面断言）
+      · 走 Capacitor 插件而非 `shouldInterceptRequest`：Capacitor 6 的 Bridge 自装 WebViewClient 且无 getter，
+        外层包一层会拆掉它自己的协议处理
+      · `release.config.json` 空白名单时用全零占位封存（真机必解不开），`release:audit` 见到占位直接红
+      · 见 `docs/ANDROID-CODE-PROTECTION.md`；落地状态与未做项见 `docs/CODE-PROTECTION-STATUS.md`
 
 ## B. 方块与物品注册表
 

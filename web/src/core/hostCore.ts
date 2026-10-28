@@ -120,8 +120,49 @@ async function fetchMinSupportedCore(): Promise<number> {
   }
 }
 
-/** 取核心数据；任何失败都抛，由调用方决定显示哪一屏 */
+/**
+ * 原生保险柜（A23）：只在 APK 里存在，浏览器里没有。
+ *
+ * 走插件而不是 `fetch('./__host/core.bin')`，是因为 Capacitor 6 的 Bridge 内部自装
+ * `WebViewClient`，而 `WebView` 没有 getter——外层再包一层就得整块替换，会拆掉
+ * Capacitor 自己的协议处理。插件这条路拿到的是同一份字节，省掉的是那处侵入。
+ */
+interface CoreVaultPlugin {
+  read(): Promise<{ data: string }>;
+}
+
+function nativeCoreVault(): CoreVaultPlugin | null {
+  const capacitor = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor;
+  const plugins = capacitor?.Plugins;
+  if (plugins === undefined || plugins === null) return null;
+  const plugin = plugins['CoreVault'];
+  if (typeof plugin !== 'object' || plugin === null) return null;
+  const read = (plugin as { read?: unknown }).read;
+  return typeof read === 'function' ? (plugin as CoreVaultPlugin) : null;
+}
+
+/** `atob` 给的是二进制字符串，逐字节搬进 Uint8Array（表是二进制，不能过 TextDecoder） */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/**
+ * 取核心数据；任何失败都抛，由调用方决定显示哪一屏。
+ *
+ * 两条路**顺序是安全相关的**：宿主里先问保险柜（它自己会验签名），拿不到再退回
+ * 静态路径。浏览器没有插件，于是仍然是一次真实的 404 → 落地页。
+ */
 async function fetchCore(): Promise<ArrayBuffer> {
+  const vault = nativeCoreVault();
+  if (vault !== null) {
+    // 原生侧 reject 时不回退到 URL：/assets 里已经没有明文表了，回退只会把
+    // "签名不符"伪装成"网络问题"，反而给了绕过者一个可观测的分支
+    const { data } = await vault.read();
+    return base64ToArrayBuffer(data);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CORE_TIMEOUT_MS);
   try {

@@ -171,6 +171,44 @@ if (existsSync(hostDir)) {
   problems.push('dist 里出现了 __host/：两种形态都不该带 core.bin（它的去处只有 APK），已删除');
 }
 
+// ------------------------------------------------------------------ 3.1 封存体（A23）
+/**
+ * 核心数据只允许以**封存体**形式出现在 Android 工程里。
+ *
+ * 三条断言都是"静默失效"类型：明文体进了 assets、封存体其实是明文换了名字、
+ * 或者在 app 形态下 dist 里又冒出一份——这三种都不会让构建报错，只会让整套保护
+ * 白做。发布前必须有人把它喊出来。
+ */
+{
+  const ASSETS = join(ROOT, 'android/app/src/main/assets');
+  const plaintext = join(ASSETS, 'public/__host/core.bin');
+  if (existsSync(plaintext)) {
+    problems.push(`assets 里有明文核心数据：${plaintext}（删掉它，明文只允许在 host/ 与 .tmp/）`);
+  }
+  const sealedPath = join(ASSETS, 'sealed/core.sealed');
+  if (mode === 'app') {
+    if (!existsSync(sealedPath)) {
+      problems.push('app 形态缺 assets/sealed/core.sealed：先跑 npm run gen:sealed');
+    } else {
+      const head = readFileSync(sealedPath).subarray(0, 4);
+      if (head.equals(Buffer.from('MCTB', 'ascii'))) {
+        problems.push('core.sealed 以明文方块表魔数 MCTB 开头：这不是封存体，是改了名的明文');
+      }
+      const signersPath = join(ASSETS, 'sealed/signers.txt');
+      const signers = existsSync(signersPath) ? readFileSync(signersPath, 'utf8') : '';
+      if (signers.includes('0'.repeat(64))) {
+        problems.push(
+          'signers.txt 里还是**全零占位**：release.config.json 的 signingCertSha256 没填真实证书。' +
+            '发出去玩家一定解不开（fail-closed），必须填 Play App Signing 的应用签名证书 SHA-256',
+        );
+      }
+      if (!existsSync(join(ASSETS, 'sealed/salt.bin'))) {
+        problems.push('缺 assets/sealed/salt.bin：gen:sealed 没跑完，或产物被手工改过');
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 2.4 基线台账
 /**
  * `host/baseline.json` 与 `host/core-baseline.bin` 必须**自洽**（批次 20261025-1627）。

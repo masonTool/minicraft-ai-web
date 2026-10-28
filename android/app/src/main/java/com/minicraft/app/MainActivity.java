@@ -14,6 +14,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeServerPlugin.class);
+        // 核心数据的唯一出口：先验签名再解封，签名不符时这个插件只会 reject
+        registerPlugin(CoreVaultPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

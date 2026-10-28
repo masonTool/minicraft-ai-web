@@ -17,7 +17,7 @@ P9 另支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev         # 开发服务器 http://localhost:5173
 npm run typecheck   # 类型检查
-npm test            # 先过 tools 的类型检查，再跑 vitest + 181 套自建离线测试（含可达性审计）
+npm test            # 先过 tools 的类型检查，再跑 vitest + 182 套自建离线测试（含可达性审计）
 npm run check       # 提交前门禁：`typecheck` + `test` + 三张台账，任一失败即非零退出
 npm run check:fast  # 改代码时的内循环：只跑被本次改动命中的那几套离线测试
 npm run build       # 生产构建（`npm run build:fast` 是关掉 sourcemap 的快版本）
@@ -26,7 +26,7 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 ```
 
 > 用 AI 推进这个仓库时，先读 [`AGENTS.md`](./AGENTS.md)（会话入口 + 该展开哪些文档的索引）。
-> 181 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
+> 182 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
 > 单套仍可直接 `npm run test:reach` 这样跑。
 
 操作：`W/A/S/D` 移动 · `Space` 跳跃/上升 · `Shift` 潜行/下降 · `Ctrl` 疾跑 ·
@@ -84,8 +84,29 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
 
 ## 目录结构
 
+**一个仓库、五个产物**，按产物分目录（2026-10-29 重排）：
+
 ```
-src/
+web/              Web 端：游戏本体的唯一源码与构建入口（产物 web/dist）
+  src/            游戏代码（下面这份明细就是 web/src 的结构）
+  index.html      页面外壳（设计令牌、布局规则都在这里）
+  public/         PWA 清单、Service Worker、隐私政策等静态文件
+  vite.config.ts  产品级构建配置（root 自锚定到本目录）
+android/          Android 壳（Capacitor）：消费 web/dist，负责签名闸门与核心数据解封
+ios/              iOS 壳：与 android/ 对等（CoreVault 解封 + 签名身份校验）
+server/           服务端与原生库：node/（Node 版）· rust/（Rust 版）· ios/（iOS 静态库）
+windows/          预留（暂无代码）
+mac/              预留（暂无代码）
+tools/            离线测试与自检脚本（每个 test:* 一个）
+tests/            vitest 用例（光照、生成、碰撞、资源包）
+docs/             设计方案与发布说明（按需读）
+host/             核心数据基线（明文只允许出现在这里与 .tmp/）
+```
+
+`web/src` 内部：
+
+```
+  src/
   core/
     registry/     方块 / 物品 / 工具 / 盔甲注册表，中文名与说明
     world/        区块与世界存储（光照、流体、计划刻）
@@ -110,10 +131,6 @@ src/
   net/            WebSocket 多人（客户端）
   worker/         区块生成与网格化的 Worker
   main.ts         应用入口（纯入口 + `App` 类；**按段落名 grep 定位，不要整份读**）
-docs/             HANDOFF 的历史归档与"已定论的经验"（按需读，不是每轮必读）
-server/           服务端（node/ = Node 版 · rust/ = Rust 版 · android/ios/ = 手机宿主示例）
-tools/            离线测试与自检脚本（每个 test:* 一个）
-tests/            vitest 用例（光照、生成、碰撞、资源包）
 ```
 
 ## 性能目标
@@ -128,4 +145,4 @@ tests/            vitest 用例（光照、生成、碰撞、资源包）
 - 授权范围（保留所有权利）见 [`LICENSE`](./LICENSE)；
 - 分发的第三方库（three.js / ws，均 MIT）见 [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)，
   构建产物里另有一份纯文本副本 `third-party-notices.txt`；
-- 隐私政策（上架应用商店用）见 [`public/privacy.html`](./public/privacy.html)。
+- 隐私政策（上架应用商店用）见 [`web/public/privacy.html`](./web/public/privacy.html)。

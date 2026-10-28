@@ -33,6 +33,13 @@
 | 长期待办 / 覆盖率 | [`.continue/TASKS.md`](./.continue/TASKS.md)（按 `[~]` 或 `TASKS.md` 的段字母 grep，**不要通读**；需求号是 `A1`~`O16`，不是 `T<n>`） |
 | 这个大任务拆成了哪几批、走到哪个里程碑了（**开新批次前 / "为什么不往下走了"**） | [`.continue/notes/milestones.md`](./.continue/notes/milestones.md)（机制）+ 当前队列里的 `## 里程碑 MSn` 节点。平时不读 |
 
+## 2.5 一仓多产物（2026-10-29 重排）
+
+`web/`（游戏源码与构建，产物 `web/dist`）· `android/`（Capacitor 壳 + 签名闸门）·
+`ios/`（对等壳，Swift 源码已就位、Xcode 工程待补）· `server/`（node / rust / ios 原生库）·
+`windows/` `mac/`（预留）。**改游戏代码只动 `web/src`**；目录与保护方案的落地状态见
+[`docs/CODE-PROTECTION-STATUS.md`](./docs/CODE-PROTECTION-STATUS.md)。
+
 ## 3. 命令：内循环用快的，提交前用全的
 
 ```bash
@@ -42,8 +49,8 @@ npm run dev            # 开发服务器 http://localhost:5173
 npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离线套件（实测 ~4s）
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
-# —— 提交前（全量，约 40s，大头是 181 套离线测试 26s）——
-npm run check          # typecheck + 181 套离线测试 + 三张台账，任一失败即非零退出
+# —— 提交前（全量，约 40s，大头是 182 套离线测试 26s）——
+npm run check          # typecheck + 182 套离线测试 + 三张台账，任一失败即非零退出
                        # （CI 也跑同一道：.github/workflows/check.yml）
 ```
 
