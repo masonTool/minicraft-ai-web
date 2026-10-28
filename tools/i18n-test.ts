@@ -2265,5 +2265,38 @@ console.log('\n[伪语言（多语言 P0-8）]');
   resetLanguageForTest();
 }
 
+// ---------------------------------------------------------------- 物品说明的"基线"用词
+//
+// 2026-10-28（用户）：界面文字不许跟任何别的产品挂钩。物品说明里以前大量拿
+// "原版 / vanilla / Original / l'original / no original / оригинал" 当差异基线，
+// 全项目统一换成中性的说法（常规玩法 / the base game / Grundspiel / le jeu de base /
+// o jogo base / базовая игра）。这条守卫只扫 `itemDesc.ts`——`station.ts` 里的
+// "Original bleibt"（指地图原件）是正常词义，不能连坐。
+console.log('\n[物品说明不再拿别的产品当基线]');
+{
+  const BASELINE: Record<string, RegExp> = {
+    zh: /原版/,
+    en: /vanilla/i,
+    de: /Original/i,
+    fr: /original/i,
+    pt: /original/i,
+    ru: /оригинал/i,
+  };
+  const NEUTRAL: Record<string, string> = {
+    zh: '常规玩法',
+    en: 'the base game',
+    de: 'Grundspiel',
+    fr: 'jeu de base',
+    pt: 'jogo base',
+    ru: 'базовая игра',
+  };
+  for (const [code, pattern] of Object.entries(BASELINE)) {
+    const table = readFileSync(new URL(`../src/core/i18n/locales/${code}/itemDesc.ts`, import.meta.url), 'utf8');
+    const hits = table.split('\n').filter((line) => !line.trimStart().startsWith('*') && pattern.test(line));
+    check(`${code} 的物品说明里没有"原版 / vanilla"这类基线词`, hits.length === 0, hits.slice(0, 2).join(' | '));
+    check(`${code} 的物品说明用的是中性基线「${NEUTRAL[code]}」`, table.includes(NEUTRAL[code]!));
+  }
+}
+
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
