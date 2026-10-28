@@ -386,7 +386,9 @@ import { DamageFlash } from './ui/DamageFlash.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import {
+  LEGACY_SAVE_FILE_EXTENSION,
   MAX_TRANSFER_BYTES,
+  SAVE_FILE_EXTENSION,
   buildSaveTransfer,
   parseSaveTransfer,
   transferFileName,
@@ -20925,7 +20927,7 @@ async function boot(): Promise<void> {
       save = await SaveGame.open(world.id);
       if (!save) return;
       /*
-       * `.mc` = 标准 zip（用户 2026-10-27）：`world.json` + 缩略图。
+       * `.world` = 标准 zip（2026-10-28，与导入同一个后缀）：`world.json` + 缩略图。
        * 用 zip 而不是自定义格式，是因为玩家拿系统解压工具就能打开、能抢救。
        */
       const file = buildSaveTransfer(world, await save.exportStores());
@@ -20948,7 +20950,7 @@ async function boot(): Promise<void> {
       const outcome = await saveBlobWithPicker(blob, {
         suggestedName: fileName,
         description: t('world.exportFileType'),
-        extensions: ['.mc'],
+        extensions: [SAVE_FILE_EXTENSION],
       });
       if (outcome === 'unsupported') downloadBlob(blob, fileName);
     } catch (error) {
@@ -20966,7 +20968,8 @@ async function boot(): Promise<void> {
   const importWorld = async (): Promise<void> => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.mc';
+    // 新后缀在前；旧 `.mc` 继续接受（导出格式没变，只是壳的名字改了）
+    input.accept = `${SAVE_FILE_EXTENSION},${LEGACY_SAVE_FILE_EXTENSION}`;
     input.style.display = 'none';
     document.body.appendChild(input);
     input.addEventListener('change', () => {
@@ -20978,11 +20981,11 @@ async function boot(): Promise<void> {
         return;
       }
       void (async () => {
-        // `.mc` 是 zip：解出 `world.json` 再走原来的解析（格式没变，只是外壳换了）
+        // `.world`（旧版 `.mc`）都是 zip：解出 `world.json` 再走原来的解析
         const packed = unzipStore(new Uint8Array(await file.arrayBuffer()));
         const worldJson = packed.get('world.json');
         if (worldJson === undefined) {
-          console.warn('[world] 这个 .mc 包里没有 world.json');
+          console.warn('[world] 这个存档包里没有 world.json（不是本程序导出的文件？）');
           return;
         }
         const parsed = parseSaveTransfer(new TextDecoder().decode(worldJson));

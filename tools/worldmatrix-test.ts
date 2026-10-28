@@ -25,6 +25,7 @@ import { planSpawnRegion } from '../src/core/world/SpawnPoint.ts';
 import { DIFFICULTIES, difficultyProfile, isDifficulty, type Difficulty } from '../src/core/world/Rules.ts';
 import { GAME_MODES, isCreativeMode, type GameMode } from '../src/core/world/GameMode.ts';
 import { WorldRegistry, type WorldSummary } from '../src/core/save/WorldRegistry.ts';
+import { SAVE_FILE_EXTENSION, transferFileName, worldNameFromFile } from '../src/core/save/SaveTransfer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -221,6 +222,29 @@ console.log('\n[极限模式（批次 550）]');
 
   const normal = registry.create({ name: '普通测试' });
   check('普通世界不带极限标记', normal.hardcore !== true);
+}
+
+console.log('\n[清单跨刷新保留缩略图（2026-10-28 修的丢失）]');
+{
+  const storage = new MemoryStorage();
+  const registry = new WorldRegistry(storage as unknown as Storage);
+  const world = registry.create({ name: '缩略图测试' });
+  const shot = 'data:image/jpeg;base64,AAAA';
+  registry.update(world.id, { thumbnail: shot });
+  const reloaded = new WorldRegistry(storage as unknown as Storage);
+  equal('刷新后缩略图还在（逐字段重建时曾经被丢掉）', reloaded.get(world.id)?.thumbnail, shot);
+
+  // 脏数据：不是 data:image 的一律不认（清单是玩家可改的字符串）
+  registry.update(world.id, { thumbnail: 'javascript:alert(1)' });
+  equal('非 data:image 的缩略图被丢弃', new WorldRegistry(storage as unknown as Storage).get(world.id)?.thumbnail, undefined);
+}
+
+console.log('\n[存档包后缀统一为 .world（2026-10-28）]');
+{
+  equal('导出文件名带 .world', transferFileName('我的 世界').endsWith(SAVE_FILE_EXTENSION), true);
+  equal('空格换成中划线', transferFileName('我的 世界'), '我的-世界.world');
+  equal('旧 .mc 包仍能还原世界名', worldNameFromFile('我的-世界.mc'), '我的 世界');
+  equal('新 .world 包能还原世界名', worldNameFromFile('我的-世界.world'), '我的 世界');
 }
 
 console.log(`\n世界创建矩阵测试：${passed} 通过 / ${failed} 失败\n`);

@@ -52,7 +52,7 @@ export const menu = {
   'world.editHint': '模式与难度会在下次进入世界时生效。',
   'world.delete': '删除',
   'world.export': '导出',
-  'world.exportFileType': '世界存档（.mc）',
+  'world.exportFileType': '世界存档（.world）',
   'world.import': '导入存档',
   // ---- 小游戏选择页（小游戏3）
   'menu.minigames': '小游戏',

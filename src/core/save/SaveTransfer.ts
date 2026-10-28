@@ -23,6 +23,16 @@ export const SAVE_TRANSFER_VERSION = 1;
 /** 导入文件上限：正常存档几十 KB~几 MB，64MB 已经非常宽松 */
 export const MAX_TRANSFER_BYTES = 64 * 1024 * 1024;
 
+/**
+ * 存档包后缀（2026-10-28，用户：导入与导出用同一个后缀）。
+ *
+ * 里面仍是**标准 zip**（`world.json` + `thumbnail.jpg`），所以改后缀不影响
+ * "拿解压工具就能打开抢救"这条性质。旧版导出的 `.mc` 仍然能被导入。
+ */
+export const SAVE_FILE_EXTENSION = '.world';
+/** 导入时仍接受旧后缀，避免玩家手上的旧包变成"打不开的文件" */
+export const LEGACY_SAVE_FILE_EXTENSION = '.mc';
+
 export interface StoreEntry {
   key: string | number;
   value: unknown;
@@ -111,9 +121,9 @@ export function decodeStoresFromJson(value: unknown): unknown {
 
 /** 文件名里剔除路径分隔符与控制字符，避免各平台另存为失败 */
 /**
- * 包名：`世界名.mc`（用户 2026-10-27）。
+ * 包名：`世界名.world`（2026-10-28，用户：导入导出统一用同一个后缀）。
  *
- * 规则：**空格换成中划线**（`我的 世界` → `我的-世界.mc`），导入时再换回来。
+ * 规则：**空格换成中划线**（`我的 世界` → `我的-世界.world`），导入时再换回来。
  * 文件系统不允许的字符（`/ \ : * ? " < > |`）仍然替换成 `_`，否则下载会被浏览器拒绝。
  *
  * ⚠️ 转换是**有损**的：世界名里原本就有中划线时会被还原成空格。所以导入时
@@ -128,7 +138,7 @@ export function transferFileName(name: string): string {
     .replace(/\s+/g, '-')
     .slice(0, 40)
     .trim();
-  return `${safe || 'world'}.mc`;
+  return `${safe || 'world'}${SAVE_FILE_EXTENSION}`;
 }
 
 /**

@@ -52,7 +52,7 @@ export const menu = {
   "world.editHint": "Режим и сложность применятся при следующем входе в мир.",
   "world.delete": "Удалить",
   "world.export": "Экспорт",
-  "world.exportFileType": "Сохранение мира (.mc)",
+  "world.exportFileType": "Сохранение мира (.world)",
   "world.import": "Импорт сохранения",
   "menu.minigames": "Мини-игры",
   "world.saveFailed": "Не удалось сохранить, попробуйте ещё раз",

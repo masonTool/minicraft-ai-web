@@ -120,16 +120,18 @@ describe('导入文件校验', () => {
     expect(parsed!.stores.chunks).toBeUndefined();
   });
 
-  it('文件名剔除非法字符、空格转中划线、后缀是 .mc', () => {
-    // 2026-10-27 用户口径：导出的是 `.mc` 包（内部是 zip）
-    expect(transferFileName('a/b:c*?"<>|')).toBe('a_b_c______.mc');
-    expect(transferFileName('我的 世界')).toBe('我的-世界.mc');
-    expect(transferFileName('   ')).toBe('world.mc');
+  it('文件名剔除非法字符、空格转中划线、后缀是 .world', () => {
+    // 2026-10-28 用户口径：导入导出统一 `.world`（内部仍是 zip，旧 `.mc` 仍可导入）
+    expect(transferFileName('a/b:c*?"<>|')).toBe('a_b_c______.world');
+    expect(transferFileName('我的 世界')).toBe('我的-世界.world');
+    expect(transferFileName('   ')).toBe('world.world');
   });
 
   it('导入时中划线还原成空格（仅在没有包内名字时兜底）', () => {
+    expect(worldNameFromFile('我的-世界.world')).toBe('我的 世界');
+    // 旧后缀的包照样能导入（格式没变过，只是壳的名字改了）
     expect(worldNameFromFile('我的-世界.mc')).toBe('我的 世界');
-    expect(worldNameFromFile('.mc')).toBe('导入的世界');
+    expect(worldNameFromFile('.world')).toBe('导入的世界');
   });
 
   it('格式常量稳定（导出的文件靠它识别）', () => {

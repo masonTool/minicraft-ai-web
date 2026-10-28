@@ -53,7 +53,7 @@ export const menu = {
   'world.editHint': 'Mode and difficulty take effect next time you enter.',
   'world.delete': 'Delete',
   'world.export': 'Export',
-  'world.exportFileType': 'World save (.mc)',
+  'world.exportFileType': 'World save (.world)',
   'world.import': 'Import Save',
   // ---- mini-game menu (batch 20261022-1954)
   'menu.minigames': 'Mini-games',

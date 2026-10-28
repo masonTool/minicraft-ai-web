@@ -240,8 +240,26 @@ function normalizeWorld(value: unknown): WorldSummary | null {
     lastPlayed: typeof raw.lastPlayed === 'number' ? raw.lastPlayed : createdAt,
     playTime: typeof raw.playTime === 'number' && raw.playTime >= 0 ? raw.playTime : 0,
     edits: typeof raw.edits === 'number' && raw.edits >= 0 ? raw.edits : 0,
+    /*
+     * 缩略图（2026-10-28 修）。
+     *
+     * ⚠️ 这里以前**漏了这一项**：清单是逐字段重建的，`thumbnail` 不在返回对象里，
+     * 于是"退出世界 → 缩略图出现 → 刷新页面 → 缩略图消失"——存档其实好好的，
+     * 只是每次读清单都把截图丢掉了，卡片退回程序化预览图。
+     *
+     * 只收 `data:image/*` 且长度有上限：清单写在 localStorage，一张 160×90 的 jpeg
+     * 约 5~8KB，给到 96KB 已经够宽；再大说明不是我们生成的图，宁可不用也不要撑爆配额。
+     */
+    ...(typeof raw.thumbnail === 'string' &&
+    raw.thumbnail.startsWith('data:image/') &&
+    raw.thumbnail.length <= THUMBNAIL_MAX_CHARS
+      ? { thumbnail: raw.thumbnail }
+      : {}),
   };
 }
+
+/** 清单里缩略图的字符上限（localStorage 配额有限，这条也顺手挡住脏数据） */
+const THUMBNAIL_MAX_CHARS = 96 * 1024;
 
 function uniqueId(worlds: readonly WorldSummary[], now: number): string {
   // 时间戳 36 进制 + 冲突时加后缀：可读、稳定、不依赖随机数

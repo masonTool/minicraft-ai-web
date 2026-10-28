@@ -52,7 +52,7 @@ export const menu = {
   "world.editHint": "Modus und Schwierigkeit gelten beim nächsten Betreten.",
   "world.delete": "Löschen",
   "world.export": "Exportieren",
-  "world.exportFileType": "Weltspielstand (.mc)",
+  "world.exportFileType": "Weltspielstand (.world)",
   "world.import": "Spielstand importieren",
   "menu.minigames": "Minispiele",
   "world.saveFailed": "Speichern fehlgeschlagen, bitte erneut versuchen",

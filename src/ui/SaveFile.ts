@@ -38,7 +38,7 @@ export interface SaveBlobOptions {
   suggestedName: string;
   /** 对话框里"文件类型"那一行的人话说明（走 i18n） */
   description: string;
-  /** 允许的扩展名，形如 `['.mc']` */
+  /** 允许的扩展名，形如 `['.world']` */
   extensions: readonly string[];
 }
 
