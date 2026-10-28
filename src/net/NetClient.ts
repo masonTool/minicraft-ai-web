@@ -21,6 +21,7 @@ import { INITIAL_ROLE, roleFromWelcome, type NetRole } from '../core/net/NetRole
 import { DEFAULT_MULTIPLAYER_ROOM } from '../core/net/MultiplayerSave.ts';
 import type { RemoteAppearanceInput } from '../core/net/RemoteAppearance.ts';
 import { parseServerUrl, resolveDefaultServerUrl } from '../core/net/ServerUrl.ts';
+import { hostServerUrl } from '../core/net/HostBridge.ts';
 import { NetStats } from '../core/net/NetStats.ts';
 
 /**
@@ -1483,9 +1484,18 @@ export class NetClient {
 
 /** 默认的服务端地址（本地开发用） */
 export function defaultServerUrl(): string {
-  // 显式指定优先（部署到子路径/别的主机时用）：`?server=wss://mc.example.com/ws`
+  // 显式指定优先（调试/自建服务器时用）：`?server=wss://mc.example.com/ws`
   const override = new URLSearchParams(window.location.search).get('server');
   if (override) return override;
+  /*
+   * 手机壳里地址由原生桥给（局域网 IP + 固定端口）。
+   *
+   * 为什么不再往 URL 里拼 `?server=ws://<内网IP>:8887`：那样内网 IP 会出现在
+   * 页面地址（以及可能的 Referer）里，而且玩家一换 Wi-Fi 就过期。
+   * 桥是随时可问的，网络变了重新问一次就好。
+   */
+  const hosted = hostServerUrl();
+  if (hosted !== null) return hosted;
   // 同源 https 页面走 `wss://<host>/ws`（混合内容会被浏览器拦），http 页面走本地默认端口
   return resolveDefaultServerUrl(window.location.protocol, window.location.host, window.location.hostname);
 }

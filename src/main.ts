@@ -413,6 +413,7 @@ import {
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
+import { hasHostBridge, startHostServer, stopHostServer } from './core/net/HostBridge.ts';
 import { netErrorText } from './core/net/NetErrorText.ts';
 import { JOIN_WORLD_PREFIX, summaryFromRoom } from './core/net/JoinWorld.ts';
 import { displayServerAddress } from './core/net/ServerUrl.ts';
@@ -4997,6 +4998,8 @@ class App {
 
   disconnect(): void {
     this.net.disconnect();
+    // 只有"自己开过房"才会真的停（内部有 hosting 标记）；加入别人的房间不受影响
+    stopHostServer();
   }
 
   sendChat(text: string): void {
@@ -18994,6 +18997,8 @@ class App {
      * `disconnect()` 会先发 `bye`（服务端收到立刻广播 `leave`）再关 socket。
      */
     this.net.disconnect();
+    // 退出世界 = 退出房间：手机当房主时，那个前台服务端到这里就该关了
+    stopHostServer();
 
     if (this.pauseAfterFullscreenTimer !== null) {
       window.clearTimeout(this.pauseAfterFullscreenTimer);
@@ -20718,26 +20723,50 @@ async function boot(): Promise<void> {
     baseUrl: string,
     name: string,
   ): Promise<string | null> => {
-      const blocked = await preflightHost({ baseUrl, room });
+      /*
+       * 手机当房主：**开房是一个动作** —— 先把本机服务端拉起来，再预检。
+       *
+       * 顺序不能反：`preflightHost` 第一步就是连服务器，服务端没起来必然"连不上"。
+       * `startHostServer` 会等到端口真的绑好才返回（不是发了就走），
+       * 所以这里 await 完就能直接预检。
+       *
+       * 浏览器里没有桥：沿用面板里填的地址（连别人的服务器），行为和以前一致。
+       */
+      let effectiveBaseUrl = baseUrl;
+      if (hasHostBridge()) {
+        const hostInfo = await startHostServer();
+        if (hostInfo === null) {
+          diag.event('app', 'hostServer.startFailed', {});
+          console.warn('[host] 本机联机服务启动失败（端口没就绪或拿不到局域网 IP）');
+          return t('mp.hostUnreachable');
+        }
+        effectiveBaseUrl = `ws://${hostInfo.ip}:${hostInfo.port}`;
+      }
+
+      const blocked = await preflightHost({ baseUrl: effectiveBaseUrl, room });
       if (blocked === 'https-blocked') {
         /*
          * 页面在 https 上，而目标是 `ws://`（局域网 IP）：浏览器按混合内容直接拒。
          * 这条跟网络无关，必须给一句"该怎么办"，否则玩家会一直改 IP/重启服务器。
          */
-        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl });
-        console.warn(`[host] 页面是 https，不能连 ${baseUrl}（混合内容）`);
+        diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl: effectiveBaseUrl });
+        console.warn(`[host] 页面是 https，不能连 ${effectiveBaseUrl}（混合内容）`);
+        stopHostServer();
         return t('mp.hostHttpsBlocked');
       }
       if (blocked === 'unreachable') {
-        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl });
-        console.warn(`[host] 连不上 ${baseUrl}（预检 3 秒内没 open）`);
+        diag.event('app', 'hostPreflight.unreachable', { room, baseUrl: effectiveBaseUrl });
+        console.warn(`[host] 连不上 ${effectiveBaseUrl}（预检 3 秒内没 open）`);
+        stopHostServer();
         return t('mp.hostUnreachable');
       }
       if (blocked === 'taken') {
-        diag.event('app', 'hostPreflight.taken', { room, baseUrl });
+        diag.event('app', 'hostPreflight.taken', { room, baseUrl: effectiveBaseUrl });
+        // 房名被占：刚才拉起来的服务端没有用处，关掉，别让端口白开着
+        stopHostServer();
         return t('say.net.hostTaken');
       }
-      pendingHostRoom = { room, password, baseUrl, name };
+      pendingHostRoom = { room, password, baseUrl: effectiveBaseUrl, name };
       void startWorld(world);
       return null;
     };

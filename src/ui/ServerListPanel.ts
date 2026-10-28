@@ -42,6 +42,14 @@ export class ServerListPanel {
   private readonly rescanButton: HTMLButtonElement;
   /** 开房时右栏顶部那颗「选择本机」（加入模式下不显示） */
   private localRow!: HTMLButtonElement;
+  private localHint!: HTMLSpanElement;
+  /**
+   * 「本机」的实际地址。
+   *
+   * 手机上当房主时必须是**局域网 IP**：`127.0.0.1` 只有房主自己连得上，
+   * 队友拿到邀请也连不了。浏览器里（没有桥）保持 127.0.0.1，那是本机调试。
+   */
+  private localAddress = '127.0.0.1';
 
   /** 已画过的 `host:port`：自己扫到的 + 从别的服务器 `/healthz` 听来的，两者会重叠 */
   private readonly seen = new Set<string>();
@@ -124,12 +132,12 @@ export class ServerListPanel {
     this.localRow.id = 'server-list-local';
     const localName = document.createElement('span');
     localName.textContent = t('server.localHost');
-    const localHint = document.createElement('span');
-    localHint.className = 'server-list-local-hint';
-    localHint.textContent = '127.0.0.1';
-    this.localRow.append(localName, localHint);
+    this.localHint = document.createElement('span');
+    this.localHint.className = 'server-list-local-hint';
+    this.localHint.textContent = this.localAddress;
+    this.localRow.append(localName, this.localHint);
     this.localRow.addEventListener('click', () => {
-      this.onPick?.({ address: '127.0.0.1', port: this.port });
+      this.onPick?.({ address: this.localAddress, port: this.port });
     });
 
     body.append(this.localRow, local.group, remote.group);
@@ -206,6 +214,13 @@ export class ServerListPanel {
   /** 开房模式才显示「选择本机」 */
   setLocalVisible(visible: boolean): void {
     this.localRow.classList.toggle('hidden', !visible);
+    if (!visible) return;
+    // 手机的"本机"是局域网 IP（宿主已经查好了），不是 127.0.0.1——后者队友连不上
+    const ip = this.lanIp?.() ?? null;
+    if (ip !== null && ip.length > 0) {
+      this.localAddress = ip;
+      this.localHint.textContent = ip;
+    }
   }
 
   /** 一个可折叠分组（本地 / 远程）：标题条 + 可隐藏的正文，**默认展开** */
