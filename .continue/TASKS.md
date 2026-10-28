@@ -1424,6 +1424,17 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
         并重新冒烟（`title=Minicraft core=41107B`）
       · 打包内 `Resources/web/assets/*` 与 `web/dist/assets/*` 文件名逐个对齐
 
+- [x] A29 收掉三条"会静默削弱保护"的遗漏（2026-10-29）
+      · **GitHub Pages 随 push 自动发布**：`deploy-pages.yml` 触发条件是 `push: [main]`，
+        跑的是 `build:web`（方块表**明文**编进 JS）。只要 Pages 开着，每次推送就等于把
+        724 条数据挂到公网。已去掉 push 触发，只留手动（可逆）
+      · **CI 会红**：上一轮我把"缺封存体"挂进 `build:app`，而 `deploy-cf-app.yml` 在全新检出上
+        跑同一个命令 → 必红。改为正交开关 `--android`，只在出 APK 的链路
+        （`android:sync` / `android:aab`）上校验
+      · **占位白名单挡死本地出包**：没证书就 `android:sync` 必红。改成分级——
+        本地只警告，`MINICRAFT_RELEASE=1`（`android:aab` 自带）才升级为错误
+      · 顺手删掉 `tools/tmp-crack.py`（一次性脚本，标着"用完即删"，还指着重排前的 `src/`）
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

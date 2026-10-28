@@ -30,8 +30,16 @@ const CORE_SRC = join(ROOT, '.tmp/hostcore/core-v1.bin');
 
 const modeArg = process.argv.indexOf('--mode');
 const mode = modeArg >= 0 ? process.argv[modeArg + 1] : undefined;
+/**
+ * `--android`：额外校验 APK 的封存体（A23）。
+ *
+ * 为什么不是一个新 `--mode`：`mode` 决定"这批产物该长什么样"（app / web 两种形态），
+ * 而"要不要检查 Android 工程"是**正交**的——出 APK 时仍然是 app 形态的产物。
+ * 用独立开关就不用把 mode 的每个分支都再分叉一次。
+ */
+const checkAndroid = process.argv.includes('--android');
 if (mode !== 'app' && mode !== 'web') {
-  console.error('用法：node tools/release-check.mjs --mode app|web');
+  console.error('用法：node tools/release-check.mjs --mode app|web [--android]');
   process.exit(2);
 }
 
@@ -175,9 +183,11 @@ if (existsSync(hostDir)) {
 /**
  * 核心数据只允许以**封存体**形式出现在 Android 工程里。
  *
- * 三条断言都是"静默失效"类型：明文体进了 assets、封存体其实是明文换了名字、
- * 或者在 app 形态下 dist 里又冒出一份——这三种都不会让构建报错，只会让整套保护
- * 白做。发布前必须有人把它喊出来。
+ * 断言分两层，因为 `build:app` 和"出 APK"不是同一件事：
+ *   · 任何模式都查：assets 里不许有明文 `core.bin`（旧 `copyHostCore` 的残留）；
+ *   · 只有 `--mode android` 才查封存体本身——`build:app` 也被 CI 的
+ *     `deploy-cf-app.yml` 用来发布"只认 APK"的网页，那里根本没有 Android 工程，
+ *     把封存断言挂上去会让那条流水线必红（而且红得毫无意义）。
  */
 {
   const ASSETS = join(ROOT, 'android/app/src/main/assets');
@@ -186,7 +196,7 @@ if (existsSync(hostDir)) {
     problems.push(`assets 里有明文核心数据：${plaintext}（删掉它，明文只允许在 host/ 与 .tmp/）`);
   }
   const sealedPath = join(ASSETS, 'sealed/core.sealed');
-  if (mode === 'app') {
+  if (checkAndroid) {
     if (!existsSync(sealedPath)) {
       problems.push('app 形态缺 assets/sealed/core.sealed：先跑 npm run gen:sealed');
     } else {
@@ -197,10 +207,16 @@ if (existsSync(hostDir)) {
       const signersPath = join(ASSETS, 'sealed/signers.txt');
       const signers = existsSync(signersPath) ? readFileSync(signersPath, 'utf8') : '';
       if (signers.includes('0'.repeat(64))) {
-        problems.push(
+        const message =
           'signers.txt 里还是**全零占位**：release.config.json 的 signingCertSha256 没填真实证书。' +
-            '发出去玩家一定解不开（fail-closed），必须填 Play App Signing 的应用签名证书 SHA-256',
-        );
+          '发出去玩家一定解不开（fail-closed），必须填 Play App Signing 的应用签名证书 SHA-256';
+        /*
+         * 分级：占位只挡**正式发版**，不挡本地出包。
+         * 否则没证书的人连 `npm run android:apk` 都跑不了——而本地包本来就只给自己装。
+         * `android:aab` 会设 MINICRAFT_RELEASE=1，把这一条升级成错误。
+         */
+        if (process.env.MINICRAFT_RELEASE === '1') problems.push(message);
+        else notes.push(message);
       }
       if (!existsSync(join(ASSETS, 'sealed/salt.bin'))) {
         problems.push('缺 assets/sealed/salt.bin：gen:sealed 没跑完，或产物被手工改过');

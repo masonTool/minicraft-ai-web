@@ -10,9 +10,15 @@
 #   （保持默认的 "Deploy from a branch" 时，这个工作流会成功跑完但不生效）
 name: Deploy to GitHub Pages
 
+# ⚠️ 2026-10-29 起**不再随 push 自动发布**，只保留手动触发。
+#
+# 原因：这个工作流跑的是 `build:web`（SPECS_STUB=0），方块表会以**明文 JS** 编进产物。
+# 一旦 Pages 是开着的，每次推 main 就等于把 724 条方块数据挂到公网——
+# 那正是 APK 里那套封存要保护的东西，等于从后门全送出去。
+#
+# 确实想要一个公开可玩的 Web 版时：手动点运行即可（那时"数据保密"这件事就自动放弃了，
+# 只剩"防改包"，见 docs/CODE-PROTECTION.md）。
 on:
-  push:
-    branches: [main]
   # 允许在 Actions 页面手动点一次发布（改完仓库设置后不用空提交）
   workflow_dispatch:
 
