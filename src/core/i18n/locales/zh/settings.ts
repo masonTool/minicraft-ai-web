@@ -21,7 +21,6 @@ export const settings = {
   // ---- 设置行（"游戏"组那几行：进世界后最常改的）
   'settings.row.daylightCycle': '昼夜循环',
   'settings.row.showDebug': '调试信息',
-  'settings.row.flying': '飞行',
   'settings.row.gameMode': '游戏模式',
   // ---- 设置行（"控制"组：视角、手感与触屏按钮）
   'settings.row.cameraMode': '视角',
@@ -117,15 +116,8 @@ export const settings = {
   // 资源包改成持久化之后（2026-10-28）需要一颗"移除"键
   'settings.resourcePack.remove': '移除当前资源包',
   'settings.group.world': '世界',
-  'settings.world.hint': '难度、模式与规则点「保存」后生效；时间与天气点一下立即生效。',
+  'settings.world.hint': '难度、模式与规则点「保存」后生效。',
   'settings.world.time': '时间',
   'settings.world.weather': '天气',
   'settings.world.rulesHint': '更细的规则（随机刻速度、重生半径等）可以用 /gamerule 命令修改。',
-  'settings.world.time.day': '日出',
-  'settings.world.time.noon': '正午',
-  'settings.world.time.night': '夜晚',
-  'settings.world.time.midnight': '午夜',
-  'settings.world.weather.clear': '晴朗',
-  'settings.world.weather.rain': '下雨',
-  'settings.world.weather.thunder': '雷暴',
 } as const;

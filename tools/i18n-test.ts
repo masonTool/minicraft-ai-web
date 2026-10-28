@@ -177,7 +177,7 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.language',
     'settings.row.daylightCycle',
     'settings.row.showDebug',
-    'settings.row.flying',
+    // 2026-10-29：飞行开关已从世界页移除（双击跳跃仍可起降），文案键一并删掉
     'settings.row.gameMode',
     'settings.row.cameraMode',
     'settings.row.handedness',

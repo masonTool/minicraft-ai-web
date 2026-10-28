@@ -591,39 +591,6 @@ const WORLD_RULE_KEYS: readonly (keyof GameRules)[] = [
   'announceAdvancements',
 ];
 
-/** 时间预设对应的 0~1 时刻（与 `/time set` 同一坐标系） */
-const TIME_PRESET_VALUE: Record<WorldTimePreset, number> = { day: 0, noon: 0.25, night: 0.5, midnight: 0.75 };
-const TIME_PRESETS: readonly WorldTimePreset[] = ['day', 'noon', 'night', 'midnight'];
-/** 时间/天气的标签键写成显式映射：模板拼键会让 `audit:i18n` 把整族当成"已引用" */
-const TIME_PRESET_LABEL_KEY: Record<WorldTimePreset, string> = {
-  day: 'settings.world.time.day',
-  noon: 'settings.world.time.noon',
-  night: 'settings.world.time.night',
-  midnight: 'settings.world.time.midnight',
-};
-type WorldWeather = 'clear' | 'rain' | 'thunder';
-const WORLD_WEATHERS: readonly WorldWeather[] = ['clear', 'rain', 'thunder'];
-const WEATHER_LABEL_KEY: Record<WorldWeather, string> = {
-  clear: 'settings.world.weather.clear',
-  rain: 'settings.world.weather.rain',
-  thunder: 'settings.world.weather.thunder',
-};
-
-/** 当前时刻最接近哪个预设（跨午夜要按环距算，否则 23:00 会被判成"日出"） */
-export function nearestTimePreset(time: number): WorldTimePreset {
-  let best: WorldTimePreset = 'day';
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const preset of TIME_PRESETS) {
-    const raw = Math.abs((((time % 1) + 1) % 1) - TIME_PRESET_VALUE[preset]);
-    const distance = Math.min(raw, 1 - raw);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = preset;
-    }
-  }
-  return best;
-}
-
 /**
  * 这台设备的**视距上限**（批次 202 引入，批次 203 改语义）。
  *
@@ -796,15 +763,6 @@ export interface SettingsActions {
   /** 打开世界统计面板（批次 552） */
   onOpenStatistics?: () => void;
   /**
-   * 切换创造模式（飞行）（批次 107）。
-   *
-   * 手机端右下那一簇原来有一颗"飞行"键，批次 107 精简掉之后它搬到这里
-   *（基岩版手机也把这类开关放在暂停菜单/设置里）。两个回调都传了才显示这一行。
-   */
-  onToggleFly?: () => void;
-  /** 当前是不是在飞（决定那一行的开关亮不亮） */
-  isFlying?: () => boolean;
-  /**
    * 诊断日志（批次 181）：给了这个回调才显示这一块。
    *
    * 为什么放在设置而不是暂停菜单：暂停菜单只放"几个主要按钮"（批次 108 的定论），
@@ -843,15 +801,12 @@ export interface SettingsActions {
   world?: WorldSettingsActions;
 }
 
-/** 世界页的时间预设（与 `/time set day|noon|night|midnight` 同一口径） */
-export type WorldTimePreset = 'day' | 'noon' | 'night' | 'midnight';
-
 /**
  * 「世界」页能改什么（2026-10-28，用户）。
  *
  * 全部**即时生效**：这些是当前世界的状态（难度 / 规则 / 时间 / 天气），
  * 不像通用设置那样存在"改了但还没保存"的中间态——所以这一页没有「保存」。
- * 模式与飞行不在这里：它们本来就在 `SettingsActions` 上（`onSetGameMode` / `isFlying`）。
+ * 模式在 `SettingsActions` 上（草稿由世界页自己持有）；飞行已不在这份设置里。
  */
 /**
  * 「世界」页可进草稿的那一份配置。
@@ -878,11 +833,6 @@ export interface WorldSettingsActions {
   defaults: () => WorldSettingsSnapshot;
   /** 点「保存」时把草稿落到世界（难度 / 模式 / 规则） */
   apply: (next: WorldSettingsSnapshot) => void;
-  /** 一天内的时刻（0~1，与原版 `tick / 24000` 同一坐标系） */
-  timeOfDay: () => number;
-  onSetTime: (time: WorldTimePreset) => void;
-  weather: () => 'clear' | 'rain' | 'thunder';
-  onSetWeather: (kind: 'clear' | 'rain' | 'thunder') => void;
 }
 
 /** 深拷贝一份世界配置（结构里只有一层 rules） */
@@ -973,10 +923,6 @@ export class SettingsScreen {
     element.textContent = t(key);
   }
 
-  /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
-  private flyingToggle: HTMLButtonElement | null = null;
-  /** 飞行开关所在的右半格（批次 528：与游戏模式同一行，不是整行） */
-  private flyingCell: HTMLElement | null = null;
   /** "游戏模式"那个开关（生存 ↔ 创造） */
   private gameModeToggle: HTMLButtonElement | null = null;
   /** 四颗角色预设按钮（批次 333）：手动改任一外观项后全部取消高亮 */
@@ -1598,10 +1544,6 @@ export class SettingsScreen {
     if (page !== 'settings') {
       this.closeAppearance();
       this.closePackHelp();
-    }
-    // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
-    if (page === 'settings' && this.flyingToggle) {
-      this.controlSync.get(this.flyingToggle)?.();
     }
     // 切页时下拉菜单必须收起：它锚在上一页的按钮上
     this.closeDropdown();
@@ -2391,81 +2333,15 @@ export class SettingsScreen {
   }
 
   /**
-   * "创造模式（飞行）"开关（批次 107）。
-   *
-   * ⚠️ 它**不是** `GameSettings` 里的一项：飞行是"当前世界里的状态"，而设置面板里
-   * 其余各项都是"这台设备的偏好"（存 localStorage、换个世界也跟着走）。把它塞进
-   * `saveSettings` 会让"上次开过飞行"这种临时状态跨世界粘住。所以它只在打开面板时
-   * 按当前状态刷新、切一下立刻生效，不落盘。
-   */
-  private makeCreativeRow(host: HTMLElement): void {
-    this.flyingToggle = this.makeSwitch(
-      host,
-      t('settings.row.flying'),
-      () => this.actions.isFlying?.() ?? false,
-      () => this.actions.onToggleFly?.(),
-      // 飞行不写进 localStorage（见上面注释），所以切换后不必保存设置
-      false,
-    );
-  }
-
-  /**
    * 「世界」页（2026-10-28，用户："游戏内设置里应该有一个『世界』的 item"）。
    *
-   * 内容对齐原版世界里"玩的时候真的会去调"的那一批：
-   * 难度 / 游戏模式（含飞行）/ 时间 / 天气 / 常用世界规则。
-   * 全部**即时生效**：这一页没有草稿、没有「保存」，页脚也整块收起。
+   * 内容：**游戏模式 | 难度** 一行 + 常用世界规则。
+   * 全部进草稿，点「保存」才落到世界；时间与天气是 `/time`、`/weather` 那类动作，
+   * 2026-10-29 按用户要求从这里去掉。
    */
   private buildWorldSection(section: HTMLElement): void {
-    const world = this.actions.world;
-    if (!world) return;
-
-    const block = this.makeBlock(section);
-    // 游戏模式 + 飞行：与之前同一个组件，只是从「游戏」页搬到世界页
-    if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(block);
-    this.makeDropdown<Difficulty>(
-      block,
-      t('world.difficulty'),
-      DIFFICULTIES,
-      Object.fromEntries(DIFFICULTIES.map((difficulty) => [difficulty, difficultyLabel(difficulty)])) as Record<
-        Difficulty,
-        string
-      >,
-      // 难度走草稿（2026-10-28：世界页也改成"改完点保存"）
-      () => this.worldDraft?.difficulty ?? world.current().difficulty,
-      (next) => {
-        if (this.worldDraft) this.worldDraft.difficulty = next;
-      },
-      (control) => {
-        // 极限世界难度也锁死（与游戏模式同一条口径，2026-10-28）
-        if (this.actions.gameModeLocked?.()) control.setDisabled(true);
-      },
-    );
-
-    // 时间 / 天气：原版在作弊命令里，这里给成下拉（省得玩家记 `/time set noon`）
-    const envBlock = this.makeBlock(section);
-    this.makeDropdown<WorldTimePreset>(
-      envBlock,
-      t('settings.world.time'),
-      TIME_PRESETS,
-      Object.fromEntries(TIME_PRESETS.map((preset) => [preset, t(TIME_PRESET_LABEL_KEY[preset])])) as Record<
-        WorldTimePreset,
-        string
-      >,
-      () => nearestTimePreset(world.timeOfDay()),
-      (next) => world.onSetTime(next),
-    );
-    this.makeDropdown<WorldWeather>(
-      envBlock,
-      t('settings.world.weather'),
-      WORLD_WEATHERS,
-      Object.fromEntries(WORLD_WEATHERS.map((kind) => [kind, t(WEATHER_LABEL_KEY[kind])])) as Record<
-        WorldWeather,
-        string
-      >,
-      () => world.weather(),
-      (next) => world.onSetWeather(next),
-    );
+    if (!this.actions.world) return;
+    this.makeWorldTopRow(section);
 
     // 世界规则：标签直接用 `/gamerule` 那张表（六语言早就有了）
     const rulesBlock = this.makeBlock(section);
@@ -2491,24 +2367,24 @@ export class SettingsScreen {
   }
 
   /**
-   * "游戏模式 + 飞行"同一行（批次 528，用户要求）。
+   * 「游戏模式 | 难度」同一行（2026-10-29，用户："飞行去掉，难度放在飞行那个位置"）。
    *
-   * 模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
-   * 布局：第一行左半 = 游戏模式，右半 = 飞行；**只有创造模式才显示右半格**，
-   * 生存模式下不会出现"生存也能飞"的误解。
+   * 布局沿用 `.settings-row.mode` 的两格：左半模式、右半难度。
+   * 极限世界里两个都锁死——模式是世界级硬约束，难度锁困难，同一条口径。
    */
-  private makeGameModeRow(host: HTMLElement): void {
+  private makeWorldTopRow(host: HTMLElement): void {
+    const world = this.actions.world;
+    if (!world) return;
     const row = document.createElement('div');
     row.className = 'settings-row mode';
     const modeCell = document.createElement('div');
     modeCell.className = 'mode-cell';
-    const flyCell = document.createElement('div');
-    flyCell.className = 'mode-cell';
-    this.flyingCell = flyCell;
+    const difficultyCell = document.createElement('div');
+    difficultyCell.className = 'mode-cell';
+    row.append(modeCell, difficultyCell);
+    host.appendChild(row);
 
-    // 四个模式全列出来（批次 20261024-1455；用户："他也没有把所有的模式都展示出来"）。
-    // 回调按**选中的值**设，不再用无参 toggle——否则选"创造"时如果本来就在创造，
-    // 会切去生存，看起来就是"真正切换的不是我选中的"。
+    const locked = this.actions.gameModeLocked?.() === true;
     this.gameModeToggle = this.makeDropdown<GameMode>(
       modeCell,
       t('settings.row.gameMode'),
@@ -2524,38 +2400,41 @@ export class SettingsScreen {
         this.worldDraft.gameMode = mode;
         this.refreshGameModeRows();
       },
-      /*
-       * 极限世界（2026-10-28）：模式是世界级硬约束，这里直接把下拉锁死。
-       *
-       * 只做 `setGameMode` 的守卫是不够的——玩家点开下拉、选中创造、结果什么都没发生，
-       * 那种"点了没反应"比置灰更让人困惑（而且他会以为自己点错了）。
-       */
       (control) => {
-        if (!this.actions.gameModeLocked?.()) return;
-        control.setDisabled(true);
-        const note = document.createElement('p');
-        note.className = 'settings-note';
-        note.textContent = t('world.modeLocked');
-        modeCell.appendChild(note);
+        if (locked) control.setDisabled(true);
       },
     );
-    this.makeCreativeRow(flyCell);
-    row.append(modeCell, flyCell);
-    host.appendChild(row);
+    this.makeDropdown<Difficulty>(
+      difficultyCell,
+      t('world.difficulty'),
+      DIFFICULTIES,
+      Object.fromEntries(DIFFICULTIES.map((difficulty) => [difficulty, difficultyLabel(difficulty)])) as Record<
+        Difficulty,
+        string
+      >,
+      () => this.worldDraft?.difficulty ?? world.current().difficulty,
+      (next) => {
+        if (this.worldDraft) this.worldDraft.difficulty = next;
+      },
+      (control) => {
+        if (locked) control.setDisabled(true);
+      },
+    );
+    // 极限世界：在格子里补一句"为什么不能改"（只是提示，不是控件）
+    if (locked) {
+      const note = document.createElement('p');
+      note.className = 'settings-note';
+      note.textContent = t('world.modeLocked');
+      difficultyCell.appendChild(note);
+    }
     this.refreshGameModeRows();
   }
 
-  /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
+  /** 打开面板 / 切模式之后，把模式下拉的文案对齐真实状态 */
   refreshGameModeRows(): void {
-    // 面板开着时以**草稿**为准（改了模式还没保存，飞行那一格要跟着变）
-    const mode = this.worldDraft?.gameMode ?? this.actions.gameMode?.() ?? 'survival';
-    const locked = this.actions.gameModeLocked?.() === true;
     if (this.gameModeToggle) this.controlSync.get(this.gameModeToggle)?.();
-    if (this.flyingToggle) this.controlSync.get(this.flyingToggle)?.();
-    // 隐藏的是**右半格**，不是整行：左半的游戏模式永远都在
-    // 极限世界连飞行也没有（模式锁生存，生存本来就不能飞）
-    if (this.flyingCell) this.flyingCell.style.display = !locked && mode === 'creative' ? '' : 'none';
   }
+
 
   /** 造一个布尔开关（switch 组件；只有开关本身能点，整行不转发） */
   private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLButtonElement {

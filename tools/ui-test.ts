@@ -2271,14 +2271,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   // ⚠️ 查表**走 `t()`**，不再读文案文件的源码：多语言 P0-2 起中文表按界面拆到
   // `core/i18n/locales/zh/*.ts`，用文本匹配会在每次搬文件时假红（改过一次就够）。
   check(
-    '设置面板有"游戏模式"与"飞行"两个开关（批次 181 拆开）',
-    // 批次 417 起这两行的文案走 i18n 键：验"绑了哪个键"+"中文表里是什么"
+    '世界页有"游戏模式"与"难度"（2026-10-29：飞行开关去掉，难度挪到右半格）',
     settingsSource.includes("t('settings.row.gameMode')") &&
-      settingsSource.includes("t('settings.row.flying')") &&
+      settingsSource.includes("t('world.difficulty')") &&
       t('settings.row.gameMode', 'zh') === '游戏模式' &&
-      t('settings.row.flying', 'zh') === '飞行' &&
-      settingsSource.includes('private makeCreativeRow') &&
-      settingsSource.includes('private makeGameModeRow'),
+      settingsSource.includes('private makeWorldTopRow') &&
+      // 飞行那颗开关整块删掉了（双击跳跃仍然能起降）
+      !settingsSource.includes('private makeCreativeRow') &&
+      !settingsSource.includes('flyingToggle'),
   );
   check(
     '设置面板里的"视角"下拉还在',
@@ -2290,8 +2290,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       settingsSource.includes("t('settings.row.cameraMode')"),
   );
   check(
-    '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
-    !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
+    '飞行不再是设置项（不写进 localStorage，也不再有开关）',
+    !settingsSource.includes("key: 'flying'") && !settingsSource.includes('private makeCreativeRow'),
   );
   check(
     '设置里不再有自动保存与全屏按钮（批次 528，用户要求去掉）',
@@ -2300,12 +2300,10 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       !settingsSource.includes('onToggleFullscreen'),
   );
   check(
-    '游戏模式单独成行且飞行在右半格（只有创造才显示）',
+    '游戏模式与难度同一行（左模式 / 右难度）',
     settingsSource.includes("row.className = 'settings-row mode';") &&
-      settingsSource.includes('private flyingCell') &&
-      /refreshGameModeRows\(\):[\s\S]{0,500}this\.flyingCell\.style\.display = !locked && mode === 'creative' \? '' : 'none';/.test(
-        settingsSource,
-      ),
+      /row\.append\(modeCell, difficultyCell\);/.test(settingsSource) &&
+      settingsSource.includes('private makeWorldTopRow'),
   );
   check(
     '控制页滑杆（视野/按钮/灵敏度）排在开关之前',
@@ -2567,11 +2565,11 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       ),
   );
   check(
-    '世界页有难度 / 时间 / 天气 / 常用规则',
+    '世界页只剩「模式|难度」+ 常用规则（时间与天气已按用户要求移除）',
     readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_RULE_KEYS') &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("t('settings.world.time')") &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("t('settings.world.weather')") &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('nearestTimePreset(world.timeOfDay())'),
+      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private makeWorldTopRow') &&
+      !readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('nearestTimePreset') &&
+      !readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_WEATHERS'),
   );
   check(
     '通用设置也有「日志 → 导出」入口',
@@ -5395,9 +5393,10 @@ console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
       mainSrc.includes('onSetGameMode: (mode) => this.setGameMode(mode)'),
   );
   check(
-    '游戏模式那一行的显隐判据跟着新回调（否则整行会消失）',
-    // 2026-10-28：这一行从「游戏」页搬到「世界」页，判据不变、容器改名
-    settingsSrc.includes('if (this.actions.onSetGameMode && this.actions.gameMode) this.makeGameModeRow(block);'),
+    '世界页第一行由 makeWorldTopRow 统一造（模式 | 难度）',
+    // 2026-10-29：模式与难度合并成一行，入口从 makeGameModeRow 改成 makeWorldTopRow
+    settingsSrc.includes('this.makeWorldTopRow(section);') &&
+      settingsSrc.includes('private makeWorldTopRow(host: HTMLElement): void {'),
   );
 }
 

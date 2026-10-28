@@ -217,7 +217,7 @@ import {
 import { ChatInput } from './ui/ChatInput.ts';
 import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
-import { executeCommand, parseTime, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
+import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 // 选择器（批次 399）：`/execute` 需要"当前维度里有哪些实体"的扁平快照
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 // 记分板（M23，批次 402）
@@ -3287,9 +3287,6 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
       // 统计（批次 552）：与成就同一层，面板只是只读展示
       onOpenStatistics: () => this.toggleStatistics(),
-      // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
-      onToggleFly: () => this.setFlying(!this.flying),
-      isFlying: () => this.flying,
       // 模式（批次 181）：唯一的入口在暂停菜单；双击跳只切飞行
       // 批次 20261024-1455：按**选中的值**切（原来是无参 toggle，选创造可能反而退回生存）
       onSetGameMode: (mode) => this.setGameMode(mode),
@@ -3307,10 +3304,6 @@ class App {
         current: () => this.worldSnapshot(),
         defaults: () => this.worldDefaults ?? this.worldSnapshot(),
         apply: (next) => this.applyWorldSnapshot(next),
-        timeOfDay: () => this.timeOfDay,
-        onSetTime: (preset) => this.commandSetTimeOfDay(parseTime(preset) ?? 0),
-        weather: () => this.weather.current,
-        onSetWeather: (kind) => this.commandSetWeather(kind),
       },
     },
   );
