@@ -40,7 +40,7 @@ export const settings = {
   "settings.avatar.face": "Rosto",
   "settings.backArrow": "‹ Voltar",
   "settings.backLayer": "Voltar um nível",
-  "settings.hintApplies": "As mudanças valem na hora",
+  "settings.hintApplies": "As alterações valem depois de salvar",
   "settings.escResume": "Esc para continuar o jogo",
   "settings.touchBack": "Toque em « {label} » ou no botão voltar do sistema",
   "settings.groupUndefined": "Grupo indefinido: {group}",
@@ -96,5 +96,7 @@ export const settings = {
   "settings.resourcePack.help2": "O que muda: texturas de blocos (associadas pelo nome do arquivo em textures/blocks/, por exemplo stone.png) e alguns sons (.ogg / .wav em sounds/). O restante é ignorado.",
   "settings.resourcePack.help3": "Qualquer tamanho de textura funciona: 16×16 fica mais nítido; imagens maiores são reduzidas ao tamanho da célula do atlas.",
   "settings.resourcePack.help4": "Vale só para esta sessão — nada é gravado no save e o mundo não é alterado. Importe de novo depois de reabrir o jogo.",
-  "settings.resourcePack.help5": "Este aplicativo não oferece downloads de pacotes. Importe apenas pacotes que você possui ou tem permissão para usar."
+  "settings.resourcePack.help5": "Este aplicativo não oferece downloads de pacotes. Importe apenas pacotes que você possui ou tem permissão para usar.",
+  "settings.save": "Salvar",
+  "settings.saved": "Salvo"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

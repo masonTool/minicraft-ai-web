@@ -2484,9 +2484,10 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
     );
   }
   check(
-    '恢复默认在所有分组之外、整页最底部（批次 334）',
+    '保存 / 恢复默认在所有分组之外、整页最底部（批次 334 / 2026-10-28）',
     compact.includes('.settings-footer {') &&
-      /const footer = document\.createElement\('div'\);[\s\S]{0,400}settingsPage\.append\(header, this\.settingsHintEl, columns, footer\)/.test(
+      // 2026-10-28：页脚里现在有两颗按钮，建到 append 的距离变长，窗口放宽到 1200
+      /const footer = document\.createElement\('div'\);[\s\S]{0,1200}settingsPage\.append\(header, this\.settingsHintEl, columns, footer\)/.test(
         readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8'),
       ),
   );
@@ -3465,15 +3466,17 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     /blockAfterBreak\(brokenId, brokenState\)[\s\S]{0,400}this\.wakeFluidsAround\(this\.hit\.x, this\.hit\.y, this\.hit\.z\);/.test(appSrc),
   );
 
-  // ⑩ 设置：恢复默认 + 性能项精简
+  // ⑩ 设置：保存 / 恢复默认（2026-10-28：都不再"改动即生效"，按分组生效）
   check(
-    '设置里能一键恢复默认，且控件跟着重画',
-    settingsSrc.includes('resetDefaults(): void') &&
-      settingsSrc.includes(
-        'Object.assign(this.settings, DEFAULT_SETTINGS, { viewDistance: defaultViewDistanceFor(isTouchUi()) })',
-      ) &&
+    '设置页有「保存 + 恢复默认」，且只作用于当前分组、控件跟着重画',
+    settingsSrc.includes('saveActiveGroup(): void') &&
+      settingsSrc.includes('resetActiveGroup(): void') &&
+      settingsSrc.includes('export const SETTING_GROUP_KEYS') &&
       settingsSrc.includes('for (const refresh of this.refreshers) refresh();') &&
-      settingsSrc.includes("resetButton.id = 'settings-reset'"),
+      settingsSrc.includes("saveButton.id = 'settings-save'") &&
+      settingsSrc.includes('saveButton.disabled = true;') &&
+      settingsSrc.includes("resetButton.id = 'settings-reset'") &&
+      settingsSrc.includes('footer.append(saveButton, resetButton);'),
   );
   // 资源包那一行下面必须有一句"只导自己的包"（2026-10-28 起不再有「非官方」声明：
   // 用户明确要求界面上不要出现任何指向"我们不是官方"的自我定位）。
@@ -3533,7 +3536,10 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   // 主程序不收到这个标记的话，玩家会看到"点了恢复默认，画面还是糊的 / 云还是没有"
   check(
     '恢复默认会通知主程序复位运行时的降级档位',
-    settingsSrc.includes('this.commit(true)') && appSrc.includes('meta?.reset'),
+    // 2026-10-28：改成草稿模型之后，reset 标记由「保存」那一跳带出去
+    settingsSrc.includes("this.actions.onChange(this.settings, reset ? { reset: true } : undefined)") &&
+      settingsSrc.includes('const reset = this.pendingResetGroups.delete(group);') &&
+      appSrc.includes('meta?.reset'),
   );
   // 批次 202：改设置不再无条件重算区块范围（拖个音量滑块不该惊动流式层）
   check(
@@ -3804,7 +3810,7 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
   );
   check(
     '设置页形象只展示原始角色：盔甲与副手一律传空',
-    /this\.avatar\.update\(\[null, null, null, null\], this\.settings\.cape, null, palette\)/.test(settingsSrc),
+    /this\.avatar\.update\(\[null, null, null, null\], this\.draft\.cape, null, palette\)/.test(settingsSrc),
   );
   check(
     '设置页形象有「全身 / 面部」两档视角（面部才看得清眼睛与胡须）',
@@ -3849,8 +3855,8 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
     /export const CHARACTER_PRESETS[\s\S]{0,1200}id: 'man'[\s\S]{0,400}id: 'woman'[\s\S]{0,400}id: 'boy'[\s\S]{0,400}id: 'girl'/.test(
       readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
-      settingsSrc.includes('presetIndexOf(this.settings)') &&
-      settingsSrc.includes('applyCharacterPreset(this.settings, index)'),
+      settingsSrc.includes('presetIndexOf(this.draft)') &&
+      settingsSrc.includes('applyCharacterPreset(this.draft, index)'),
   );
   check(
     '改设置立刻作用到第三人称、第一人称手臂与 3D 预览',

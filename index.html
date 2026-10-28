@@ -2505,13 +2505,17 @@
       .settings-dropdown-option.selected { background: #6cc349; color: #10230a; }
       body.touch-mode .settings-dropdown-option { min-height: 34px; padding: 7px 9px; font-size: 13px; }
 
-      /* ---------------- 恢复默认（批次 334）：固定在整个设置页最底部 ----------------
-         它影响所有分组，所以放在内容滚动区之外，不跟随某个页签。 */
+      /* ---------------- 保存 / 恢复默认：固定在设置页最底部 ----------------
+         2026-10-28（用户）：设置项不再改动即生效，页脚两颗键只管**当前分组**：
+         「保存」进页面是灰的、改过才亮；「恢复默认」把这一组写回默认值。
+         两条都放在内容滚动区之外，滑到哪一页都在屏幕下方。 */
       .settings-footer {
         flex: 0 0 auto; margin-top: 4px; padding-top: 6px;
         border-top: 1px solid rgba(255, 255, 255, .14);
+        display: flex; align-items: stretch; gap: 6px;
       }
-      .settings-footer .settings-reset { width: 100%; }
+      .settings-footer .settings-save { flex: 1 1 auto; }
+      .settings-footer .settings-reset { flex: 0 0 auto; width: auto; min-width: 104px; }
       /* 资源包说明（整行跨列）：刻意做得不抢眼，但不用悬停也能读到。
          ⚠️ 2026-10-28（用户）：设置页底部那条「非官方」声明整块删掉——
          界面上不该出现"我们和谁无关"这种自我定位。 */
@@ -2633,6 +2637,23 @@
         background: #6b332f;
         border-color: #2a1210 #a0544f #a0544f #2a1210;
       }
+      /* 「保存」（2026-10-28）：只在当前页脏了之后才亮起。
+         灰态做成"明确按不动"的样子（去掉高光/换灰底），而不是只降一点透明度——
+         手机上"半透明"和"可点"很难分辨。 */
+      .settings-save {
+        width: 100%; min-height: 34px; padding: 5px 10px;
+        font: inherit; font-size: 13px; cursor: pointer;
+        color: #10230a; background: #6cc349;
+        border: 2px solid; border-color: #a8e08a #2f5c22 #2f5c22 #a8e08a;
+      }
+      .settings-save:disabled {
+        cursor: default; color: #9a9a9a; background: #4a4f47;
+        border-color: #6d6d6d #2a2a2a #2a2a2a #6d6d6d;
+      }
+      .settings-save:not(:disabled):active {
+        background: #5aa93c;
+        border-color: #2f5c22 #a8e08a #a8e08a #2f5c22;
+      }
       /* ---------------- 滑杆（range 自绘，原版形态） ----------------
          原版滑块 = **深色凹槽 + 浅灰方块把手**（把手是一块带斜面的灰块，
          不是圆点、也不是绿色）。用 inset 硬阴影而不是 border：border 会把 track
@@ -2753,7 +2774,8 @@
         body.touch-mode .settings-switch-knob { width: 18px; height: 18px; }
         body.touch-mode .settings-switch.on .settings-switch-knob { left: 26px; }
         body.touch-mode .settings-footer { margin-top: 2px; padding-top: 4px; }
-        body.touch-mode .settings-footer .settings-reset { min-height: 28px; padding: 3px 8px; font-size: 12px; }
+        body.touch-mode .settings-footer .settings-reset,
+        body.touch-mode .settings-footer .settings-save { min-height: 28px; padding: 3px 8px; font-size: 12px; }
         /* 横屏高度紧张：资源包说明收一档（仍是 9px 可读） */
         body.touch-mode .settings-note { font-size: 9px; line-height: 1.3; }
       }

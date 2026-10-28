@@ -43,7 +43,7 @@ export const settings = {
   // ---- leftover settings strings (batch 1355 / T5)
   'settings.backArrow': '‹ Back',
   'settings.backLayer': 'Back one level',
-  'settings.hintApplies': 'Changes apply immediately',
+  'settings.hintApplies': 'Changes take effect after you tap Save',
   'settings.escResume': 'Press Esc to resume',
   'settings.touchBack': 'Tap "{label}" or the system back key to return',
   'settings.groupUndefined': 'Undefined settings group: {group}',
@@ -101,5 +101,7 @@ export const settings = {
   "settings.resourcePack.help2": "What it changes: block textures (matched by file name under textures/blocks/, e.g. stone.png) and some sounds (.ogg / .wav under sounds/). Everything else is ignored.",
   "settings.resourcePack.help3": "Any texture size works: 16×16 is the sharpest; larger images are scaled down to the atlas tile.",
   "settings.resourcePack.help4": "It only affects this session — nothing is written to the save and the world is left untouched. Import again after reopening the game.",
-  "settings.resourcePack.help5": "This app does not offer pack downloads. Import only packs you own or are allowed to use."
+  "settings.resourcePack.help5": "This app does not offer pack downloads. Import only packs you own or are allowed to use.",
+  "settings.save": "Save",
+  "settings.saved": "Saved"
 } satisfies Pick<Messages, keyof typeof zhsettings>;

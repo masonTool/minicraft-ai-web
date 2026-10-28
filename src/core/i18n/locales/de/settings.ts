@@ -41,7 +41,7 @@ export const settings = {
   "settings.avatar.face": "Gesicht",
   "settings.backArrow": "‹ Zurück",
   "settings.backLayer": "Eine Ebene zurück",
-  "settings.hintApplies": "Änderungen gelten sofort",
+  "settings.hintApplies": "Änderungen gelten nach dem Speichern",
   "settings.escResume": "Esc setzt das Spiel fort",
   "settings.touchBack": "„{label}\" oder die System-Zurücktaste tippen",
   "settings.groupUndefined": "Unbekannte Gruppe: {group}",
@@ -97,5 +97,7 @@ export const settings = {
   "settings.resourcePack.help2": "Was sich ändert: Blocktexturen (Zuordnung über den Dateinamen unter textures/blocks/, z. B. stone.png) und einige Klänge (.ogg / .wav unter sounds/). Alles andere wird ignoriert.",
   "settings.resourcePack.help3": "Jede Texturgröße ist erlaubt: 16×16 ist am schärfsten, größere Bilder werden auf die Atlas-Kachel skaliert.",
   "settings.resourcePack.help4": "Wirkt nur in dieser Sitzung – nichts wird im Spielstand gespeichert, die Welt bleibt unverändert. Nach dem Neustart erneut importieren.",
-  "settings.resourcePack.help5": "Diese App bietet keine Paket-Downloads an. Importiere nur Pakete, die dir gehören oder die du verwenden darfst."
+  "settings.resourcePack.help5": "Diese App bietet keine Paket-Downloads an. Importiere nur Pakete, die dir gehören oder die du verwenden darfst.",
+  "settings.save": "Speichern",
+  "settings.saved": "Gespeichert"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

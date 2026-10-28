@@ -263,6 +263,61 @@ export function settingGroupLabel(group: SettingGroup): string {
   return t(`settings.group.${group}`);
 }
 
+/**
+ * 每个分组里有哪些设置字段（2026-10-28，用户："每个设置页面下方都有两个按钮，
+ * 一个是保存、一个是恢复默认"）。
+ *
+ * 有了这张表，"保存"与"恢复默认"只作用于**当前这一页**，而不是整份设置：
+ *  - 脏值判断按组比：另一页没保存的改动不会点亮这一页的保存按钮；
+ *  - 恢复默认只把这一组的字段写回 `DEFAULT_SETTINGS`（比如在「音频」页点恢复默认
+ *    不会把角色形象也一起改掉）。
+ *
+ * ⚠️ 新增设置项必须同时挂进某个分组：漏挂的后果是那个控件改了永远保存不了
+ * （保存按钮一直灰着），而且恢复默认也碰不到它。`tools/settings-test.ts` 有一条
+ * "每个字段都被某个分组覆盖"的断言在盯着这件事。
+ *
+ * `viewDistance` / `adaptiveResolution` / `maxFps` 这些**没有界面入口**的字段
+ * 故意不在表里：它们由设备的性能策略决定（见批次 203 的注释）。
+ */
+export const SETTING_GROUP_KEYS: Record<SettingGroup, readonly (keyof GameSettings)[]> = {
+  // 游戏：进世界后最常改的（模式与飞行是"世界状态"，不在这份偏好里）
+  game: ['daylightCycle', 'showDebug', 'language'],
+  controls: [
+    'fov',
+    'touchScale',
+    'sensitivity',
+    'cameraMode',
+    'handedness',
+    'aimMode',
+    'touchStick',
+    'autoJump',
+    'fastEat',
+  ],
+  appearance: [
+    'brightness',
+    'cape',
+    'hairStyle',
+    'hairColor',
+    'beard',
+    'eyes',
+    'eyeColor',
+    'build',
+    'frame',
+    'skinTone',
+    'shirtColor',
+    'pantsColor',
+  ],
+  sound: [
+    'volume',
+    'volumeBlocks',
+    'volumeMobs',
+    'volumePlayer',
+    'volumeUi',
+    'volumeAmbient',
+    'volumeMusic',
+  ],
+};
+
 /** 自动保存间隔的可选值（秒，批次 172 / TASKS M20）：不提供"关闭"，避免丢档 */
 export const AUTOSAVE_OPTIONS: readonly number[] = [30, 60, 120];
 export function autosaveLabel(seconds: number | string): string {
@@ -711,6 +766,21 @@ export class SettingsScreen {
   /** `hide()` 排下的"淡出结束后隐藏"计时器 */
   private hideTimer: number | null = null;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
+  /**
+   * **草稿**（2026-10-28，用户："所有的设置项都不是改动立即生效"）。
+   *
+   * 控件只改这一份；按「保存」才把它按组拷回 `settings`（主程序握着的那份引用）
+   * 并触发 `onChange`。这样拖滑块、点开关都不会立刻改游戏状态。
+   */
+  private draft: GameSettings;
+  /** 已保存的基准（= 最后一次落盘的值），用来判断"这一页脏了没有" */
+  private saved: GameSettings;
+  /** 哪些分组按过「恢复默认」但还没保存：该组保存时要带 `reset` 标记（批次 202 的约定） */
+  private readonly pendingResetGroups = new Set<SettingGroup>();
+  /** 页脚的「保存」（脏了才亮） */
+  private saveButton: HTMLButtonElement | null = null;
+  /** 页脚容器（脏值时加 `.dirty` 给 CSS 做提示） */
+  private footerEl: HTMLElement | null = null;
   /** 设置页的标题（`setTitle` 改的是它：主菜单里打开时是"设置"） */
   private readonly settingsTitleEl: HTMLElement;
   /** 设置页那句提示 */
@@ -793,6 +863,10 @@ export class SettingsScreen {
     private readonly settings: GameSettings,
     private readonly actions: SettingsActions,
   ) {
+    // 草稿与基准都从当前设置拷一份（见 `draft` 字段的注释）
+    this.draft = { ...settings };
+    this.saved = { ...settings };
+
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
     this.root.classList.add('hidden');
@@ -1201,16 +1275,13 @@ export class SettingsScreen {
       t('settings.language'),
       languageOptions,
       languageLabels,
-      () => this.settings.language,
+      () => this.draft.language,
       (next) => {
-        if (next === this.settings.language) return;
-        this.settings.language = next;
-        saveSettings(this.settings);
-        // 切语言 = **整页重载**（多语言 P0-7）。理由见 `bindLabel()` 的注释：
-        // 局部重刷只能覆盖挂了 ref 的节点，物品名/生物名/成就/命令反馈都刷不到。
-        // 重载后 `boot()` 会重新解析语言、按需加载表、重建整个界面。
-        // ⚠️ 这里**不**调 `setLanguage()`：重载前那几十毫秒改语言只会让界面半中半英。
-        location.reload();
+        // 语言同样走草稿：点了「保存」才落盘并重载（2026-10-28 的统一口径）。
+        // 保存时如果语言真的变了，`saveActiveGroup()` 会整页重载——理由见
+        // `bindLabel()` 的注释：局部重刷只能覆盖挂了 ref 的节点，物品名/生物名/
+        // 成就/命令反馈都刷不到。
+        this.draft.language = next;
       },
     );
 
@@ -1229,17 +1300,35 @@ export class SettingsScreen {
     columns.className = 'settings-columns';
     columns.append(tabs, body);
 
-    // 恢复默认（批次 185 / 334）：它影响**所有**分组，所以放在设置页最底部、
-    // 内容滚动区之外——不管当前停在哪个页签，它都在下方，而不是塞进某一组里。
+    /*
+     * 页脚：**保存 + 恢复默认**（2026-10-28，用户）。
+     *
+     * 两条都只作用于**当前分组**（见 `SETTING_GROUP_KEYS`）：
+     *  - 「保存」进页面时是灰的，改过任何一项才亮（提示"该落盘了"）；
+     *  - 「恢复默认」把这一组的字段写回默认值，同样要点保存才生效。
+     *
+     * 位置仍在内容滚动区**之外**——滑到哪一页它都在屏幕下方，不用滚到底去找。
+     */
     const footer = document.createElement('div');
     footer.className = 'settings-footer';
+    this.footerEl = footer;
+
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.id = 'settings-save';
+    saveButton.className = 'settings-save';
+    saveButton.textContent = t('settings.save');
+    saveButton.disabled = true;
+    saveButton.addEventListener('click', () => this.saveActiveGroup());
+    this.saveButton = saveButton;
+
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
     resetButton.id = 'settings-reset';
     resetButton.className = 'settings-reset';
     resetButton.textContent = t('settings.reset');
-    resetButton.addEventListener('click', () => this.resetDefaults());
-    footer.appendChild(resetButton);
+    resetButton.addEventListener('click', () => this.resetActiveGroup());
+    footer.append(saveButton, resetButton);
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
 
@@ -1389,6 +1478,8 @@ export class SettingsScreen {
     this.closeDropdown();
     // 批次 333：形象画布只在真正显示外观页时才有尺寸，切回来要补一帧
     if (this.open && group === 'appearance') this.refreshAvatar();
+    // 每一页的"保存"按钮各自判断脏不脏（换页之后要重算）
+    this.updateSaveState();
   }
 
   /** 当前分组（验收脚本/调试用） */
@@ -1452,7 +1543,7 @@ export class SettingsScreen {
     input.min = String(min);
     input.max = String(max);
     input.step = String(step);
-    input.value = String((this.settings[key] as number) * scale);
+    input.value = String((this.draft[key] as number) * scale);
 
     const readout = (): string => `${input.value}${unit}`;
 
@@ -1461,14 +1552,15 @@ export class SettingsScreen {
 
     input.addEventListener('input', () => {
       const raw = Number(input.value) / scale;
-      (this.settings[key] as number) = raw;
+      // 只写草稿：没点「保存」之前游戏里的一切都不变（2026-10-28，用户要求）
+      (this.draft[key] as number) = raw;
       value.textContent = readout();
-      this.commit();
+      this.updateSaveState();
     });
 
-    // 恢复默认时按 settings 重画（见 `refreshers`）
+    // 恢复默认 / 重新打开面板时按**草稿**重画（见 `refreshers`）
     this.refreshers.push(() => {
-      input.value = String((this.settings[key] as number) * scale);
+      input.value = String((this.draft[key] as number) * scale);
       value.textContent = readout();
     });
 
@@ -1518,7 +1610,8 @@ export class SettingsScreen {
     button.addEventListener('click', () => {
       write();
       sync();
-      if (commit) this.commit();
+      // 飞行这类"世界状态"仍然立即生效（它不在这份偏好里）；真正的设置项只标脏
+      if (commit) this.updateSaveState();
     });
     this.controlSync.set(button, sync);
     this.refreshers.push(sync);
@@ -1552,7 +1645,8 @@ export class SettingsScreen {
 
     const control = new Dropdown<T>(values, labels, read(), (next) => {
       write(next);
-      this.commit();
+      // 只标脏：保存按钮亮起，真正生效等玩家点「保存」
+      this.updateSaveState();
     });
     this.dropdowns.push(control);
     const sync = (): void => control.setValue(read());
@@ -1572,23 +1666,31 @@ export class SettingsScreen {
   }
 
   /**
-   * 一键恢复默认（批次 185，用户要求；批次 202 修了三处"恢复了但没生效"）。
+   * 「恢复默认」：把**当前分组**的字段写回默认值（2026-10-28，用户）。
    *
-   * `Object.assign` 而不是 `this.settings = {...DEFAULT}`：主程序握着同一个对象引用
-   * （`loadSettings()` 的结果直接传进构造函数），换引用会让"改设置立即生效"断掉。
+   * 只改草稿——控件立刻显示默认值，但真正生效要玩家再点「保存」。
+   * 这样"恢复默认"和"手改"走同一条保存路径，不会出现"一部分已经生效、一部分还没"
+   * 的半吊子状态。
    *
-   * 批次 202 的三处修正（真机反馈："恢复默认都没用"）：
-   *  1. **视距按设备给默认值**（见 `defaultViewDistanceFor`）：手机上回落到 12 只会更卡；
-   *  2. **带 `reset` 标记通知主程序**：分辨率倍率 / 装饰层档位不在这份 settings 里，
-   *     不带标记的话它们会永远停在"上一台机器扛不住"的那一档；
-   *  3. **同时清掉运行时那份"降级记忆"**（由 `main.applySettings` 完成）。
+   * `viewDistance` 单独按设备给（见 `defaultViewDistanceFor`）：虽然界面上已经没有
+   * 它的入口，但默认值仍要跟设备匹配（手机上 12 会一口气请求 489 个区块，见批次 202）。
    */
-  resetDefaults(): void {
-    // 先按设备决定视距，再整体覆盖：`Object.assign` 后者覆盖前者，顺序不能反
-    Object.assign(this.settings, DEFAULT_SETTINGS, { viewDistance: defaultViewDistanceFor(isTouchUi()) });
+  resetActiveGroup(): void {
+    const group = this.activeGroup;
+    for (const key of SETTING_GROUP_KEYS[group]) {
+      // 逐键赋值：`GameSettings[key]` 在联合键下会退化成 never，不能整体下标赋值
+      (this.draft as unknown as Record<string, unknown>)[key] = (
+        DEFAULT_SETTINGS as unknown as Record<string, unknown>
+      )[key];
+    }
+    // 视距不在任何分组里，但恢复默认时仍要按设备口径落一次
+    this.draft.viewDistance = defaultViewDistanceFor(isTouchUi());
     for (const refresh of this.refreshers) refresh();
-    this.commit(true);
-    // 给一句确认：面板上没有独立的 toast，借用设置页那行提示，2 秒后恢复原文
+    // 保存时要带 `reset` 标记：分辨率倍率 / 装饰层档位不在这份 settings 里，
+    // 不带标记它们会永远停在"上一台机器扛不住"的那一档（批次 202 的坑）
+    this.pendingResetGroups.add(group);
+    this.updateSaveState();
+    // 给一句确认：面板上没有独立 toast，借用设置页那行提示，2 秒后恢复原文
     this.settingsHintEl.textContent = t('settings.resetDone');
     window.setTimeout(() => this.renderSubtitle(), 2000);
   }
@@ -1610,10 +1712,10 @@ export class SettingsScreen {
       // 批次 20261024-0245：预设名走 `label.appearance.preset.*`
       button.textContent = t(`label.appearance.preset.${preset.id}`);
       button.addEventListener('click', () => {
-        applyCharacterPreset(this.settings, index);
+        applyCharacterPreset(this.draft, index);
         // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）
         for (const refresh of this.refreshers) refresh();
-        this.commit();
+        this.updateSaveState();
       });
       this.presetButtons.push(button);
       row.appendChild(button);
@@ -1625,7 +1727,7 @@ export class SettingsScreen {
   /** 手动改了任一外观项：四颗预设按钮按反查结果重新高亮（都不匹配 = 自定义） */
   private refreshPresetRow(): void {
     if (this.presetButtons.length === 0) return;
-    const index = presetIndexOf(this.settings);
+    const index = presetIndexOf(this.draft);
     this.presetButtons.forEach((button, i) => {
       const on = i === index;
       button.classList.toggle('active', on);
@@ -1665,7 +1767,7 @@ export class SettingsScreen {
     // 只在角色形象弹窗真正显示时创建/绘制：否则一打开暂停菜单就会白占一个
     // WebGL 上下文（手机上的上下文数量是有限资源），而且隐藏时画布尺寸为 0、画了也没用。
     if (!this.open || this.currentPage !== 'settings' || !this.appearanceOpen) return;
-    const palette = paletteOf(this.settings);
+    const palette = paletteOf(this.draft);
     if (!this.avatar && !this.avatarFailed) {
       try {
         // 比背包更正一点的初始角度：设置页主要看脸
@@ -1677,7 +1779,7 @@ export class SettingsScreen {
     }
     if (this.avatar) {
       this.avatar.setFocus(this.avatarFocus);
-      this.avatar.update([null, null, null, null], this.settings.cape, null, palette);
+      this.avatar.update([null, null, null, null], this.draft.cape, null, palette);
       return;
     }
     drawPlayerPreview(
@@ -1754,7 +1856,7 @@ export class SettingsScreen {
       label,
       values,
       labels,
-      () => cycleValue(values, this.settings[key]) as T,
+      () => cycleValue(values, this.draft[key]) as T,
       (next) => this.assignSelectValue(key, next),
     );
   }
@@ -1786,23 +1888,24 @@ export class SettingsScreen {
       | 'frame',
     next: string,
   ): void {
-    if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
-    else if (key === 'particles') this.settings.particles = next as ParticleLevel;
-    else if (key === 'aimMode') this.settings.aimMode = next as TouchAimMode;
-    else if (key === 'handedness') this.settings.handedness = next as Handedness;
-    else if (key === 'maxFps') this.settings.maxFps = Number(next);
-    else if (key === 'autosaveSeconds') this.settings.autosaveSeconds = Number(next);
-    else if (key === 'skinTone') this.settings.skinTone = Number(next);
-    else if (key === 'shirtColor') this.settings.shirtColor = Number(next);
-    else if (key === 'pantsColor') this.settings.pantsColor = Number(next);
-    else if (key === 'hairColor') this.settings.hairColor = Number(next);
-    else if (key === 'hairStyle') this.settings.hairStyle = Number(next);
-    else if (key === 'beard') this.settings.beard = Number(next);
-    else if (key === 'eyes') this.settings.eyes = Number(next);
-    else if (key === 'eyeColor') this.settings.eyeColor = Number(next);
-    else if (key === 'build') this.settings.build = Number(next);
-    else if (key === 'frame') this.settings.frame = Number(next);
-    else this.settings.touchStick = next as StickMode;
+    // ⚠️ 全部写**草稿**（`this.draft`）：这些值要等「保存」才拷回 `settings`
+    if (key === 'cameraMode') this.draft.cameraMode = next as CameraMode;
+    else if (key === 'particles') this.draft.particles = next as ParticleLevel;
+    else if (key === 'aimMode') this.draft.aimMode = next as TouchAimMode;
+    else if (key === 'handedness') this.draft.handedness = next as Handedness;
+    else if (key === 'maxFps') this.draft.maxFps = Number(next);
+    else if (key === 'autosaveSeconds') this.draft.autosaveSeconds = Number(next);
+    else if (key === 'skinTone') this.draft.skinTone = Number(next);
+    else if (key === 'shirtColor') this.draft.shirtColor = Number(next);
+    else if (key === 'pantsColor') this.draft.pantsColor = Number(next);
+    else if (key === 'hairColor') this.draft.hairColor = Number(next);
+    else if (key === 'hairStyle') this.draft.hairStyle = Number(next);
+    else if (key === 'beard') this.draft.beard = Number(next);
+    else if (key === 'eyes') this.draft.eyes = Number(next);
+    else if (key === 'eyeColor') this.draft.eyeColor = Number(next);
+    else if (key === 'build') this.draft.build = Number(next);
+    else if (key === 'frame') this.draft.frame = Number(next);
+    else this.draft.touchStick = next as StickMode;
   }
 
   /**
@@ -2016,19 +2119,86 @@ export class SettingsScreen {
     return this.makeSwitch(
       options,
       label,
-      () => this.settings[key],
+      () => this.draft[key],
       () => {
-        this.settings[key] = !this.settings[key];
+        this.draft[key] = !this.draft[key];
       },
     );
   }
 
-  private commit(reset = false): void {
+  /**
+   * 「保存」：把**当前分组**的草稿拷回主程序那份 `settings`，落盘并通知它生效。
+   *
+   * 只拷当前分组：另一页没保存的改动**不会**被顺手带上去——否则"我在音频页点了保存，
+   * 结果外观页试了一半的配色也被写进去了"这种事一定会发生。
+   */
+  saveActiveGroup(): void {
+    const group = this.activeGroup;
+    const languageBefore = this.saved.language;
+    for (const key of SETTING_GROUP_KEYS[group]) {
+      (this.settings as unknown as Record<string, unknown>)[key] = (
+        this.draft as unknown as Record<string, unknown>
+      )[key];
+    }
+    // 恢复默认要把"设备口径"的视距一起落（这一项没有界面入口，见 `defaultViewDistanceFor`）
+    if (this.pendingResetGroups.has(group)) this.settings.viewDistance = defaultViewDistanceFor(isTouchUi());
+    const reset = this.pendingResetGroups.delete(group);
+    this.saved = { ...this.settings };
+
     saveSettings(this.settings);
     this.actions.onChange(this.settings, reset ? { reset: true } : undefined);
-    // 批次 333：改完立刻在设置页的形象上生效，同时按当前下标重新高亮预设
+    // 批次 333：形象与预设高亮按当前草稿重画
     this.refreshPresetRow();
     this.refreshAvatar();
+    this.updateSaveState();
+    this.settingsHintEl.textContent = t('settings.saved');
+    window.setTimeout(() => this.renderSubtitle(), 1200);
+
+    // 语言变了必须整页重载（多语言 P0-7：局部重刷覆盖不到物品名/成就/命令反馈）
+    if (this.settings.language !== languageBefore) location.reload();
+  }
+
+  /** 某个分组有没有未保存的改动 */
+  private isGroupDirty(group: SettingGroup): boolean {
+    for (const key of SETTING_GROUP_KEYS[group]) {
+      if ((this.draft as unknown as Record<string, unknown>)[key] !== (this.saved as unknown as Record<string, unknown>)[key]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 有没有任何一页脏了（返回 / 关闭面板时用来决定要不要提醒） */
+  hasUnsaved(): boolean {
+    return SETTING_GROUPS.some((group) => this.isGroupDirty(group));
+  }
+
+  /** 保存按钮的亮/灰（只有当前页改过才亮），页脚顺便挂一个 `.dirty` 提示 */
+  private updateSaveState(): void {
+    const dirty = this.isGroupDirty(this.activeGroup);
+    if (this.saveButton) this.saveButton.disabled = !dirty;
+    this.footerEl?.classList.toggle('dirty', dirty);
+  }
+
+  /** 按草稿重画所有控件（打开面板 / 恢复默认 / 放弃改动之后） */
+  private refreshControls(): void {
+    for (const refresh of this.refreshers) refresh();
+    this.refreshPresetRow();
+    this.refreshAvatar();
+    this.updateSaveState();
+  }
+
+  /**
+   * 丢掉草稿：回到"已保存的那一份"。
+   *
+   * 用在「取消（不保存）」与每次重新打开面板时——草稿是这一次编辑的临时纸，
+   * 不改主程序那份设置，所以"不保存"只是把纸揉了。
+   */
+  discardDraft(): void {
+    this.draft = { ...this.settings };
+    this.saved = { ...this.settings };
+    this.pendingResetGroups.clear();
+    this.refreshControls();
   }
 
   /**
@@ -2074,7 +2244,13 @@ export class SettingsScreen {
       this.hideTimer = null;
     }
     this.root.classList.remove('closing');
+    // 每次打开都从"已保存的那一份"重新开一张草稿：上一次没保存的改动不该带进这一次
+    //（玩家点「取消」离开时也是这条路径，见 `T8` 的未保存提醒）
+    this.draft = { ...this.settings };
+    this.saved = { ...this.settings };
+    this.pendingResetGroups.clear();
     this.renderSubtitle();
+    this.refreshControls();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
     // 批次 333：面板可见之后形象画布才有尺寸，补一帧（隐藏期间 render 会直接返回）

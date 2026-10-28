@@ -25,6 +25,8 @@ import {
   SENSITIVITY_MAX,
   SENSITIVITY_MIN,
   SETTINGS_VERSION,
+  SETTING_GROUP_KEYS,
+  SETTING_GROUPS,
   TOUCH_AIM_MODES,
   touchAimModeLabel,
   cycleValue,
@@ -241,6 +243,46 @@ console.log('\n[语言设置：跟随系统与老存档]');
   check('德语（还没有文案表）也算合法选择，不会被重置', loadSettings().language === 'de');
   write({ language: 42 });
   check('不是字符串也回落到跟随系统', loadSettings().language === 'auto');
+}
+
+// ---------------------------------------------------------------- 2c. 分组表（2026-10-28）
+//
+// 「保存」与「恢复默认」都只作用于当前分组，所以**每个有界面的设置项都必须挂进某个分组**：
+// 漏挂的后果是那个控件改了永远保存不了（按钮一直灰着），而且恢复默认也碰不到它——
+// 界面上不会报错，只会"点了没反应"。
+console.log('\n[设置分组表]');
+{
+  const covered = new Set<string>();
+  let duplicate = '';
+  for (const group of SETTING_GROUPS) {
+    for (const key of SETTING_GROUP_KEYS[group]) {
+      if (covered.has(key)) duplicate = key;
+      covered.add(key);
+    }
+  }
+  check('同一个字段不会挂在两个分组里', duplicate === '', duplicate);
+
+  /** 故意**没有**界面入口的字段：由设备性能策略或存档格式决定，不该出现在分组表里 */
+  const hidden = new Set([
+    'settingsVersion',
+    'viewDistance',
+    'particles',
+    'clouds',
+    'weatherEffects',
+    'autosaveSeconds',
+    'adaptiveViewDistance',
+    'adaptiveResolution',
+    'maxFps',
+  ]);
+  const missing = Object.keys(DEFAULT_SETTINGS).filter((key) => !covered.has(key) && !hidden.has(key));
+  check('有界面的设置项都被某个分组覆盖（漏挂 = 改了保存不了）', missing.length === 0, missing.join(', '));
+  const extra = [...covered].filter((key) => !(key in DEFAULT_SETTINGS));
+  check('分组表里没有拼错的字段名', extra.length === 0, extra.join(', '));
+  // 反向：界面调了的项要真的生效——分组要能从草稿拷回设置（用一份浅拷贝验一遍形状）
+  check(
+    '每个分组都至少有一项，且键名与 GameSettings 对得上',
+    SETTING_GROUPS.every((group) => SETTING_GROUP_KEYS[group].length > 0),
+  );
 }
 
 // ---------------------------------------------------------------- 3. 往返

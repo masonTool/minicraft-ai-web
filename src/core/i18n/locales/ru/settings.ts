@@ -41,7 +41,7 @@ export const settings = {
   "settings.avatar.face": "Лицо",
   "settings.backArrow": "‹ Назад",
   "settings.backLayer": "На уровень назад",
-  "settings.hintApplies": "Изменения применяются сразу",
+  "settings.hintApplies": "Изменения вступят после сохранения",
   "settings.escResume": "Esc продолжает игру",
   "settings.touchBack": "Нажмите «{label}» или системную кнопку «Назад»",
   "settings.groupUndefined": "Неизвестная группа: {group}",
@@ -97,5 +97,7 @@ export const settings = {
   "settings.resourcePack.help2": "Что заменяется: текстуры блоков (по имени файла в textures/blocks/, например stone.png) и часть звуков (.ogg / .wav в sounds/). Остальное игнорируется.",
   "settings.resourcePack.help3": "Размер текстур любой: 16×16 выглядит чётче всего, крупнее — уменьшается до размера ячейки атласа.",
   "settings.resourcePack.help4": "Действует только в текущем сеансе: в сохранение ничего не пишется, мир не меняется. После перезапуска импортируйте снова.",
-  "settings.resourcePack.help5": "Приложение не предоставляет наборы для скачивания. Импортируйте только те, что принадлежат вам или разрешены к использованию."
+  "settings.resourcePack.help5": "Приложение не предоставляет наборы для скачивания. Импортируйте только те, что принадлежат вам или разрешены к использованию.",
+  "settings.save": "Сохранить",
+  "settings.saved": "Сохранено"
 } satisfies Pick<Messages, keyof typeof zhSettings>;
