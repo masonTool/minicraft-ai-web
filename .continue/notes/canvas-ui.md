@@ -1403,6 +1403,32 @@ const toInvIndex = (display) => (display < 27 ? 9 + display : display - 27);
 8 条断言钉住，其中两条最有用：**"加了 10+5 格之后前 15 格都不算玩家库存"**（正是老代码的坑）
 与 **"36 格来回换算一致"**（映射不是一一对应时会被这条抓住）。
 
+## 5.53 版面跟着"打开的容器"自动切（`currentMode` → 预设）
+
+`InventoryScreen.currentMode` 是公开的，而 `stationLayouts.ts` 的表就是按模式名建的 —— 两者接起来
+就是一句话的事：
+
+```ts
+const spec = stationSpec(this.inventoryScreen.currentMode);
+this.inv2dSpec.extraCount = spec ? spec.cols * spec.rows + (spec.result ? 1 : 0) : 0;
+host.retarget({ extra: stationExtra(mode) });
+```
+
+三个细节：
+
+1. **打开前先同步**，否则第一帧按"纯背包"排一次、下一帧跳变（视觉上像闪了一下）；
+2. **规格是可变对象、闭包读字段**：`SlotAccess` 捕获的是 `this.inv2dSpec` 本身，改字段下一帧生效。
+   若每次换容器都新建对象，闭包还指着旧的 —— 那种错看起来像"映射函数算错了"，极难查；
+3. **名字必须逐字一致**：`InventoryPanelMode` 里是 `shulker_box`，表里我一开始写的是 `shulker` ——
+   查不到表就静默退回纯背包。现在加了一条断言：把 20 个模式列成 `satisfies InventoryPanelMode[]`，
+   TS 校验名字存在、运行时校验每种都能查到预设。
+
+⚠️ **容器里的格子目前显示为空**：`InventoryScreen.activeContainer` 还是私有的，自绘侧没有数据源。
+版面形状与玩家背包映射是对的，装东西的格子要等容器只读访问器开放（十行左右，但只能在真机验）。
+
+顺带复验了 `npm run check:pause` 的两条跳过分支（连不上 dev server / 停在落地页）——都还是 exit 0，
+说明这些改动没有把验收脚本弄坏。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

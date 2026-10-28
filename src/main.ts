@@ -50,6 +50,8 @@ import {
   InventoryPanelHost,
   MenuScreen2D,
   inventoryIndexAt,
+  stationExtra,
+  stationSpec,
   Touch2D,
   Ui2DOverlay,
   type PanelIndexSpec,
@@ -1346,6 +1348,13 @@ class App {
    * 显示顺序：前面 27 格 = 主背包（库存 9~35），后面 9 格 = 快捷栏（库存 0~8）。
    */
   private inv2d: InventoryPanelHost | null = null;
+  /**
+   * 当前版面规格（`extraCount` = 工作站那几格 + 结果格，`sideCount` = 装备列）。
+   *
+   * 自绘面板的槽位顺序是 extra → side → main → hotbar，而 `Inventory` 是快捷栏在前，
+   * 所以每次换容器都要同步这份规格（`inventoryIndexAt` 靠它换算）。
+   */
+  private readonly inv2dSpec: PanelIndexSpec = { extraCount: 0, sideCount: 0 };
   private inv2dIcons: ItemIconCache | null = null;
   private inv2dOn = false;
   /** 接管模式下，覆盖层画布的指针监听是否已挂（只挂一次） */
@@ -3175,8 +3184,11 @@ class App {
          * `display < 27` 会把工作站格子当成主背包（"把煤放进背包第 9 格"，不报错）。
          * 现在把版面规格放在 `inv2dIndexSpec` 里，将来 `retarget()` 时一并更新即可。
          */
-        // 目前只画玩家背包，所以规格是 0/0；等 `retarget()` 接进游戏时改成可变字段
-        const inv2dIndexSpec: PanelIndexSpec = { extraCount: 0, sideCount: 0 };
+        /*
+         * 版面规格（可变）：`syncInventory2dStation()` 按当前打开的容器改它。
+         * 闭包读的是**字段**而不是副本，所以改完下一帧就让生效 —— 不必重建 `SlotAccess`。
+         */
+        const inv2dIndexSpec = this.inv2dSpec;
         this.inv2d = new InventoryPanelHost(
           document.body,
           {
@@ -6989,6 +7001,24 @@ class App {
    *
    * "转发"只在**没有拖动**时发生：拖动是操作槽位的手势，松手时不该顺手点一下别的东西。
    */
+  /**
+   * 按"当前打开的是哪个容器"同步自绘面板的版面。
+   *
+   * 只改**版面**（`host.retarget`）与下标规格：容器里那些格子此刻还没有数据源
+   * （`InventoryScreen.activeContainer` 仍是私有的），所以它们显示为空 —— 但**形状对了**，
+   * 玩家背包的映射也仍然正确。等容器访问器开放后，只要把这几个 `SlotAccess` 分支补上。
+   */
+  private syncInventory2dStation(): void {
+    const host = this.inv2d;
+    if (!host) return;
+    const mode = this.inventoryScreen.currentMode;
+    const spec = stationSpec(mode);
+    const extraCount = spec ? spec.cols * spec.rows + (spec.result ? 1 : 0) : 0;
+    if (this.inv2dSpec.extraCount === extraCount) return;
+    this.inv2dSpec.extraCount = extraCount;
+    host.retarget({ extra: stationExtra(mode) });
+  }
+
   private bindInventory2dInput(): void {
     if (this.inv2dInputBound) return;
     const host = this.inv2d;
@@ -7052,12 +7082,16 @@ class App {
       if (this.inv2d) {
         if (!this.inv2dOn) {
           this.inv2dOn = true;
+          // 先同步版面再打开：否则第一帧会按"纯背包"排一次，然后立刻跳变
+          this.syncInventory2dStation();
           this.inv2d.open();
           if (UI2D_INV_TAKEOVER) {
             document.documentElement.classList.add('ui2dinv');
             this.bindInventory2dInput();
           }
         } else {
+          // 同一个面板里也可能换容器（工作站页签、箱子互相切换），每帧对一次很便宜
+          this.syncInventory2dStation();
           this.inv2d.render();
         }
       }
@@ -7163,12 +7197,16 @@ class App {
       if (this.inv2d) {
         if (!this.inv2dOn) {
           this.inv2dOn = true;
+          // 先同步版面再打开：否则第一帧会按"纯背包"排一次，然后立刻跳变
+          this.syncInventory2dStation();
           this.inv2d.open();
           if (UI2D_INV_TAKEOVER) {
             document.documentElement.classList.add('ui2dinv');
             this.bindInventory2dInput();
           }
         } else {
+          // 同一个面板里也可能换容器（工作站页签、箱子互相切换），每帧对一次很便宜
+          this.syncInventory2dStation();
           this.inv2d.render();
         }
       }

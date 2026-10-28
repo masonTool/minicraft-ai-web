@@ -17,7 +17,13 @@
  * 后者是游戏逻辑，由调用方按 `SlotAccess` 下标接。
  */
 
-/** 支持的容器/工作站种类（与 `InventoryPanelMode` 的容器部分同名，但这里是纯字符串） */
+/**
+ * 支持的容器/工作站种类。
+ *
+ * ⚠️ 名字**必须与 `InventoryPanelMode` 逐字一致**（`shulker_box` 不是 `shulker`）：
+ * 游戏侧直接用 `currentMode` 查表，差一个字母就是"打开潜影盒时版面还是纯背包"，
+ * 而且不报错。
+ */
 export type StationKind =
   | 'crafting'
   | 'furnace'
@@ -34,7 +40,7 @@ export type StationKind =
   | 'campfire'
   | 'chest'
   | 'barrel'
-  | 'shulker'
+  | 'shulker_box'
   | 'ender_chest'
   | 'hopper'
   | 'dispenser'
@@ -71,7 +77,7 @@ export const STATION_SPECS: Readonly<Record<StationKind, StationSpec>> = {
   campfire: { cols: 4, rows: 1, result: false, label: '营火' },
   chest: { cols: 9, rows: 3, result: false, label: '箱子' },
   barrel: { cols: 9, rows: 3, result: false, label: '木桶' },
-  shulker: { cols: 9, rows: 3, result: false, label: '潜影盒' },
+  shulker_box: { cols: 9, rows: 3, result: false, label: '潜影盒' },
   ender_chest: { cols: 9, rows: 3, result: false, label: '末影箱' },
   hopper: { cols: 5, rows: 1, result: false, label: '漏斗' },
   dispenser: { cols: 3, rows: 3, result: false, label: '发射器' },

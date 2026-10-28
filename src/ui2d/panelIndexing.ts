@@ -20,15 +20,22 @@
  * `Inventory` 里，返回 `null`（由调用方去查对应的容器/装备表）。
  */
 
+/**
+ * 版面规格（**可变**：换容器时游戏侧直接改这几个字段）。
+ *
+ * 为什么不做成 readonly：`SlotAccess` 的闭包捕获的是这个对象本身，改字段下一帧就生效；
+ * 若每次换容器都新建对象，闭包还指着旧的 —— 那样"打开熔炉后玩家背包错位"会变成
+ * 一个非常难查的问题（看起来像映射函数算错了）。
+ */
 export interface PanelIndexSpec {
   /** 工作站那几格 + 结果格的总数（0 = 纯背包） */
-  readonly extraCount?: number;
+  extraCount?: number;
   /** 装备列格数（4 盔甲 + 1 副手 = 5；0 = 没有这一列） */
-  readonly sideCount?: number;
+  sideCount?: number;
   /** 主背包行数（默认 3 行 = 27 格） */
-  readonly mainRows?: number;
+  mainRows?: number;
   /** 快捷栏行数（默认 1 行 = 9 格） */
-  readonly hotbarRows?: number;
+  hotbarRows?: number;
 }
 
 export interface PanelRegion {

@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-1009 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：让自绘版面跟着"打开的容器"自动切，并把模式名对齐钉死。
+
+- [x] `syncInventory2dStation()`：`currentMode` → `stationSpec` → `retarget({ extra })`，打开前先同步
+- [x] 下标规格改成"可变对象 + 闭包读字段"（新建对象会让闭包指着旧的）
+- [x] 修 `shulker` → `shulker_box`（与 `InventoryPanelMode` 逐字一致），加 `satisfies` 断言钉住 20 个模式
+- [x] 复验 `check:pause` 两条跳过分支（连不上 / 落地页）仍 exit 0
+
+验证：`test:ui2d-station` 13/13、`tsc` 干净、`npm run check` exit=0、`build:fast` 出包。
+
+
+
 ## 批次 20261028-1006 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：把"版面下标 ↔ 库存下标"从一行三元表达式抽成纯函数。
@@ -268,24 +281,6 @@
   - 为什么：列表是 `overflow-y:auto` 会裁掉 absolute 子元素；靠底卡片的下拉必然被吃。
   - 验证：bg=rgba(255,255,255,.07)、position=fixed；300px 高窗口下自动上翻（menuBottom=152 ≤ buttonTop=150）。
   - 批次：20261027-3300
-
----
-
-## 批次 20261027-3200 · 2026-10-27 · 会话 12c62c
-
-> 用户：两个弹窗标题要白，深色底上发灰
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-3200
-
-- [x] [L25] 两个弹窗标题改白：`index.html`
-  - 做了什么：`.mp-full-title` / `.mp-port-title` 显式 `color:#fff`。
-  - 为什么：它们挂在 `#multiplayer-screen` 下、不在 `.mp-panel` 里，拿不到面板的文字色变量。
-  - 验证：computed color = rgb(255,255,255)；截图 V/W。
-  - 批次：20261027-3200
 
 ---
 

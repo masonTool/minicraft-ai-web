@@ -15,6 +15,14 @@ import {
 } from '../src/ui2d/stationLayouts.ts';
 
 describe('工作站表', () => {
+  it('名字与 `InventoryPanelMode` 逐字一致（差一个字母就查不到表）', () => {
+    // 这几个最容易写错：shulker_box 不是 shulker
+    for (const kind of ['shulker_box', 'ender_chest', 'blast_furnace', 'cartography'] as const) {
+      expect(STATION_SPECS[kind]).toBeDefined();
+    }
+    expect((STATION_SPECS as Record<string, unknown>).shulker).toBeUndefined();
+  });
+
   it('20 种都在（13 个工作站 + 7 个存储容器），且每种都有名字与正整数行列', () => {
     expect(STATION_KINDS.length).toBe(20);
     for (const kind of STATION_KINDS) {
@@ -43,7 +51,7 @@ describe('工作站表', () => {
   });
 
   it('存储类没有结果格（有结果格就成了工作台）', () => {
-    for (const kind of ['chest', 'barrel', 'shulker', 'ender_chest', 'hopper', 'dispenser', 'dropper'] as const) {
+    for (const kind of ['chest', 'barrel', 'shulker_box', 'ender_chest', 'hopper', 'dispenser', 'dropper'] as const) {
       expect(STATION_SPECS[kind].result).toBe(false);
     }
   });
@@ -100,5 +108,46 @@ describe('预设喂给布局', () => {
       const mainTop = Math.min(...layout.groups.main.map((rect) => rect.y));
       expect(mainTop).toBeGreaterThan(extraBottom);
     }
+  });
+});
+
+/**
+ * 与游戏侧 `InventoryPanelMode` 的**名字对齐**（跨层耦合的唯一一处，所以要显式钉）。
+ *
+ * 玩法侧用 `currentMode` 直接查表，所以两边的字面量必须逐字一致。这里用
+ * `satisfies InventoryPanelMode[]` 让 TS 校验"名字确实存在"，再用运行时断言校验
+ * "每个模式都能查到表" —— 改名的两个方向（改模式 / 改 StationKind）都会被抓住。
+ */
+describe('与 InventoryPanelMode 对齐', () => {
+  it('每个容器/工作站模式都能查到预设', async () => {
+    const { STATION_SPECS } = await import('../src/ui2d/stationLayouts.ts');
+    const modes = [
+      'crafting',
+      'furnace',
+      'chest',
+      'barrel',
+      'ender_chest',
+      'shulker_box',
+      'enchanting',
+      'anvil',
+      'grindstone',
+      'smithing',
+      'smoker',
+      'blast_furnace',
+      'campfire',
+      'stonecutter',
+      'loom',
+      'cartography',
+      'hopper',
+      'dropper',
+      'dispenser',
+      'brewing',
+    ] as const satisfies readonly import('../src/ui/InventoryScreen.ts').InventoryPanelMode[];
+    for (const mode of modes) {
+      expect(STATION_SPECS[mode as keyof typeof STATION_SPECS], `缺少 ${mode} 的预设`).toBeDefined();
+    }
+    // 纯背包与交易没有"操作区"，不该出现在表里
+    expect((STATION_SPECS as Record<string, unknown>).inventory).toBeUndefined();
+    expect((STATION_SPECS as Record<string, unknown>).trade).toBeUndefined();
   });
 });
