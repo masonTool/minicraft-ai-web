@@ -236,6 +236,14 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
         settingsSrc2.includes('paletteOf(this.appearanceTarget())'),
     );
     check(
+      '形象弹窗：下拉/开关改动立刻重画预览，且只改草稿',
+      // 下拉与开关两条写路径都要刷预览（预设本来就有）；披风读的也是形象草稿
+      (settingsSrc2.match(/if \(this\.appearanceOpen && isAppearanceKey\(key\)\)/g) ?? []).length >= 2 &&
+        settingsSrc2.includes('this.refreshAvatar();\n          // 手动改过任一项') &&
+        settingsSrc2.includes('this.appearanceTarget().cape'),
+    );
+
+    check(
       '形象弹窗：套预设也会点亮「保存」',
       // 预设那条分支单独补了一次刷新（下拉/开关走 updateSaveState，预设不走）
       settingsSrc2.includes('// 套预设也是一次"形象改动"') &&
@@ -4042,7 +4050,10 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
   );
   check(
     '设置页形象只展示原始角色：盔甲与副手一律传空',
-    /this\.avatar\.update\(\[null, null, null, null\], this\.draft\.cape, null, palette\)/.test(settingsSrc),
+    // 2026-10-29：披风改读**形象草稿**（弹窗里勾掉立刻消失，保存才进游戏）
+    /this\.avatar\.update\(\[null, null, null, null\], this\.appearanceTarget\(\)\.cape, null, palette\)/.test(
+      settingsSrc,
+    ),
   );
   check(
     '设置页形象有「全身 / 面部」两档视角（面部才看得清眼睛与胡须）',

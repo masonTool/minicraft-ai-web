@@ -2107,7 +2107,7 @@ export class SettingsScreen {
     }
     if (this.avatar) {
       this.avatar.setFocus(this.avatarFocus);
-      this.avatar.update([null, null, null, null], this.draft.cape, null, palette);
+      this.avatar.update([null, null, null, null], this.appearanceTarget().cape, null, palette);
       return;
     }
     drawPlayerPreview(
@@ -2187,7 +2187,21 @@ export class SettingsScreen {
       values,
       labels,
       () => cycleValue(values, this.draftFor(key)[key]) as T,
-      (next) => this.assignSelectValue(key, next, this.draftFor(key)),
+      (next) => {
+        this.assignSelectValue(key, next, this.draftFor(key));
+        /*
+         * 形象字段改完**立刻重画 3D 预览**（2026-10-29 修）。
+         *
+         * 之前只有"套预设"那条路会 `refreshAvatar()`，于是发型/肤色/体型这些下拉
+         * 改了之后预览纹丝不动——玩家会以为"选了没生效"。预览读的是弹窗草稿，
+         * 所以这里重画不会影响游戏里的角色（保存才应用）。
+         */
+        if (this.appearanceOpen && isAppearanceKey(key)) {
+          this.refreshAvatar();
+          // 手动改过任一项 → 四颗预设全部取消高亮（与 `refreshPresetRow` 的注释一致）
+          this.refreshPresetRow();
+        }
+      },
     );
   }
 
@@ -2624,6 +2638,12 @@ export class SettingsScreen {
       () => {
         const target = this.draftFor(key);
         target[key] = !target[key];
+        // 披风也是形象项：勾掉立刻在预览里消失（不影响游戏内的角色）
+        if (this.appearanceOpen && isAppearanceKey(key)) {
+          this.refreshAvatar();
+          // 手动改过任一项 → 四颗预设全部取消高亮（与 `refreshPresetRow` 的注释一致）
+          this.refreshPresetRow();
+        }
       },
     );
   }
