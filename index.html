@@ -2017,7 +2017,20 @@
         #settings-screen .settings-row.mode { grid-template-columns: minmax(0, 1fr); }
       }
       /* 动作行：标签 | 按钮 | 状态文字（资源包 / 日志导出） */
-      .settings-row.action { grid-template-columns: minmax(72px, auto) auto minmax(0, 1fr); }
+      /* 2026-10-28：动作行多了「?」说明键，列数 3 → 4（资源包那一行） */
+      .settings-row.action { grid-template-columns: minmax(72px, auto) auto auto minmax(0, 1fr); }
+      /* 「?」说明键：22×22 的小方块，和设置按钮同一套像素边，但更小更轻 */
+      .settings-help {
+        justify-self: start; width: 22px; height: 22px; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        font: inherit; font-size: 12px; line-height: 1; cursor: pointer;
+        color: #e8e8e8; background: #6e6e6e;
+        border: 2px solid; border-color: #a8a8a8 #3c3c3c #3c3c3c #a8a8a8;
+        text-shadow: 1px 1px 0 #2a2a2a;
+      }
+      .settings-help:active { background: #5a5a5a; border-color: #3c3c3c #a8a8a8 #a8a8a8 #3c3c3c; }
+      /* 手机端把热区撑到 32px（视觉仍是小方块，靠内边距撑大命中区） */
+      body.touch-mode .settings-help { width: 32px; height: 32px; font-size: 14px; }
       .settings-status {
         min-width: 0; color: #a8a8a8; font-size: 11px; line-height: 1.3;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -2523,32 +2536,21 @@
         grid-column: 1 / -1; margin: 0 0 2px; padding: 0 2px;
         color: rgba(255, 255, 255, .5); font-size: 10px; line-height: 1.35;
       }
-      /* 资源包的使用说明（2026-10-28）：比免责那一行多一点分量（深浅底 + 左侧色条），
-         但仍然是灰字——它是"要看才看"的说明，不该抢走导入按钮的注意力。 */
-      .settings-note.pack-help {
-        padding: 6px 8px; margin: 2px 0 4px;
-        background: rgba(0, 0, 0, .22);
-        border-left: 2px solid rgba(255, 255, 255, .22);
-        color: rgba(255, 255, 255, .62); font-size: 10.5px; line-height: 1.45;
-      }
-      .settings-note.pack-help b {
-        display: block; margin-bottom: 2px;
-        color: rgba(255, 255, 255, .85); font-size: 11px;
-      }
-      .settings-note.pack-help ul { margin: 0; padding-left: 14px; }
-      .settings-note.pack-help li { margin: 1px 0; }
       /* ---------------- 角色形象（批次 296 → 528 改成二级弹窗） ----------------
          用户："外观这里人物的形象的设置可以放到二级弹窗里面去完成，
          二级弹窗里人物可以高一点，右侧按钮紧凑、高度跟人物一致。"
          外观页只留「亮度」与「角色形象：编辑」两行；控件全部搬进弹窗。 */
       .appearance-entry { grid-column: 1 / -1; }
-      .appearance-modal {
+      .appearance-modal,
+      .settings-modal {
         position: absolute; inset: 0; z-index: 60;
         display: flex; align-items: center; justify-content: center;
         padding: 8px; background: rgba(0, 0, 0, .55);
       }
-      .appearance-modal.hidden { display: none; }
-      .appearance-modal-panel {
+      .appearance-modal.hidden,
+      .settings-modal.hidden { display: none; }
+      .appearance-modal-panel,
+      .settings-modal-panel {
         width: min(92vw, 620px); max-height: calc(100dvh - 16px);
         display: flex; flex-direction: column; overflow: hidden;
         padding: 8px 10px;
@@ -2557,17 +2559,42 @@
         box-shadow: var(--panel-shadow);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
-      .appearance-modal-header {
+      .appearance-modal-header,
+      .settings-modal-header {
         flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
         padding-bottom: 6px; margin-bottom: 6px;
         border-bottom: 2px solid #9a9a9a;
       }
-      .appearance-modal-header b { font-size: 14px; }
+      .appearance-modal-header b,
+      .settings-modal-header b { font-size: 14px; }
       .appearance-close { margin-left: auto; }
       body.touch-mode .appearance-modal .appearance-close {
         min-width: 24px; min-height: 20px; padding: 0 6px; font-size: 12px; line-height: 1.1;
       }
-      .appearance-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+      .appearance-modal-body,
+      .settings-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+      /* 资源包说明浮层（2026-10-28）：文字型浮层，比捏人那扇窄，长句自己去滚 */
+      .settings-modal-panel { width: min(92vw, 460px); }
+      .settings-help-list {
+        margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 6px;
+        font-size: 12px; line-height: 1.55; color: #c8c8c8;
+      }
+      .settings-help-list li::marker { color: #8fc46a; }
+      @media (max-height: 430px) {
+        .settings-help-list { font-size: 11.5px; gap: 4px; }
+      }
+      .settings-modal-foot {
+        flex: 0 0 auto; display: flex; justify-content: flex-end;
+        margin-top: 8px; padding-top: 8px; border-top: 2px solid #3c3c3c;
+      }
+      .settings-help-ok {
+        min-height: 32px; padding: 4px 14px; font: inherit; font-size: 12px; cursor: pointer;
+        color: #e8e8e8; background: #6e6e6e;
+        border: 2px solid; border-color: #a8a8a8 #3c3c3c #3c3c3c #a8a8a8;
+        text-shadow: 1px 1px 0 #2a2a2a;
+      }
+      .settings-help-ok:active { background: #5a5a5a; border-color: #3c3c3c #a8a8a8 #a8a8a8 #3c3c3c; }
+      body.touch-mode .settings-help-ok { min-height: 40px; }
       .appearance-hero {
         display: flex; align-items: stretch; gap: 10px;
         min-width: 0; height: 100%;

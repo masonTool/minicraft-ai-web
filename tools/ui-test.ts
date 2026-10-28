@@ -3550,14 +3550,21 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         return /['"]settings\.resourcePack\.hint['"]/.test(table) && !/['"]settings\.notice['"]/.test(table);
       }),
   );
-  // 资源包使用说明（2026-10-28，用户）：五条正文 + 标题，六语言都得在，
-  // 少一条就是界面上少一行说明（不会报错，只会静默变短）。
+  // 资源包说明（2026-10-28 第二次迭代，用户）：**不再是内联的一大块**，而是
+  // 「导入」右边一颗 ?，点开浮层看六条说明。所以这里守的是：
+  //   ① ? 按钮真的在资源包那一行里（和导入按钮同一行）；
+  //   ② 浮层里有六条正文 + 标题 + 「知道了」，且六语言齐全；
+  //   ③ 文案里**不许**出现别的产品的扩展名或"兼容"说法（用户明确要求）。
   check(
-    '资源包使用说明（五条 + 标题）在、且六语言齐全',
-    settingsSrc.includes('private makePackHelp(): HTMLElement') &&
+    '资源包说明走 ? 浮层：按钮在导入键右边，浮层六条正文 + 六语言齐全',
+    settingsSrc.includes("help.className = 'settings-help';") &&
+      settingsSrc.includes('row.append(name, button, help, status, input);') &&
+      settingsSrc.includes('private buildPackHelpModal(): void') &&
       settingsSrc.includes("t('settings.resourcePack.about')") &&
-      settingsHtml.includes('.settings-note.pack-help') &&
-      [1, 2, 3, 4, 5].every((n) => settingsSrc.includes(`'settings.resourcePack.help${n}'`)) &&
+      [1, 2, 3, 4, 5, 6].every((n) => settingsSrc.includes(`'settings.resourcePack.help${n}'`)) &&
+      settingsSrc.includes("t('settings.resourcePack.close')") &&
+      settingsHtml.includes('.settings-help-list {') &&
+      settingsHtml.includes('.settings-modal-panel { width: min(92vw, 460px); }') &&
       LOCALES.every((locale) => {
         const table = readFileSync(
           new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
@@ -3565,9 +3572,26 @@ console.log('\n[用户第二轮反馈（批次 185）]');
         );
         return (
           /['"]settings\.resourcePack\.about['"]/.test(table) &&
-          [1, 2, 3, 4, 5].every((n) => new RegExp(`['"]settings\.resourcePack\.help${n}['"]`).test(table))
+          /['"]settings\.resourcePack\.help['"]/.test(table) &&
+          /['"]settings\.resourcePack\.close['"]/.test(table) &&
+          [1, 2, 3, 4, 5, 6].every((n) => new RegExp(`['"]settings\\.resourcePack\\.help${n}['"]`).test(table))
         );
       }),
+  );
+  // 反向守卫：资源包那几条文案里不再提别的产品的扩展名 / 兼容性（2026-10-28，用户）
+  check(
+    '资源包文案不出现 .mcpack 或「兼容某格式」的说法',
+    LOCALES.every((locale) => {
+      const table = readFileSync(
+        new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+        'utf8',
+      );
+      const block = table
+        .split('\n')
+        .filter((line) => /settings\.(resourcePack|importTitle)/.test(line))
+        .join('\n');
+      return !/\.mcpack/i.test(block) && !/compatib|совместим|kompatibel|compatíve/i.test(block);
+    }),
   );
   // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，
   // 而网页版的"分发物"就是 `dist/`——所以这两份必须是 `public/` 里的静态文件，

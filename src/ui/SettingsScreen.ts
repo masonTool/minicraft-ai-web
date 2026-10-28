@@ -832,7 +832,15 @@ export class SettingsScreen {
   private readonly controlSync = new Map<HTMLButtonElement, () => void>();
   /** Esc：角色形象弹窗（下拉菜单自己在 `Dropdown` 里处理 Esc） */
   private readonly onDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape' || !this.appearanceOpen) return;
+    if (event.key !== 'Escape') return;
+    if (this.packHelpOpen) {
+      // 浮层在最上面：Esc 只收浮层，不退出设置页
+      event.preventDefault();
+      event.stopPropagation();
+      this.closePackHelp();
+      return;
+    }
+    if (!this.appearanceOpen) return;
     event.preventDefault();
     event.stopPropagation();
     this.closeAppearance();
@@ -850,6 +858,9 @@ export class SettingsScreen {
   /** 角色形象的二级弹窗（批次 528，用户要求把外观控件收进二级页） */
   private appearanceModal: HTMLDivElement | null = null;
   private appearanceOpen = false;
+  /** 资源包说明的浮层（2026-10-28，用户：说明收进「导入」右边的 ? 里） */
+  private packHelpModal: HTMLDivElement | null = null;
+  private packHelpOpen = false;
   private avatarDrag: { pointerId: number; x: number } | null = null;
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
@@ -1292,10 +1303,9 @@ export class SettingsScreen {
     // 第二块：导入 / 导出这类动作，各占半行
     const gameActions = this.makeBlock(game);
     gameActions.appendChild(this.makeResourcePackRow());
-    // 2026-10-28（用户）：资源包下面要有**详细说明**——能改什么、怎么导入、生效范围。
-    // 逐条写在 `makePackHelp()` 里；上面那一句是"只能导自己的包"的免责。
+    // 2026-10-28（用户）：详细说明收进「导入」右边那颗 ?（浮层，见 `openPackHelp()`）；
+    // 行下只剩一句"只能导自己的包"的免责——这句不点也要看得见。
     gameActions.appendChild(this.makePackHint());
-    gameActions.appendChild(this.makePackHelp());
     // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起只留「导出」
     if (this.actions.onDiagnosticsExport) gameActions.appendChild(this.makeDiagnosticsRow());
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
@@ -1416,7 +1426,10 @@ export class SettingsScreen {
     this.panel.dataset.page = page;
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
     // 弹窗只属于设置页；回菜单页时一起收起
-    if (page !== 'settings') this.closeAppearance();
+    if (page !== 'settings') {
+      this.closeAppearance();
+      this.closePackHelp();
+    }
     // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
     if (page === 'settings' && this.flyingToggle) {
       this.controlSync.get(this.flyingToggle)?.();
@@ -1454,6 +1467,11 @@ export class SettingsScreen {
     // 未保存提醒在最上面：Esc 等同「取消（不保存）」，然后继续它原本要做的事
     if (this.leaveAnswer) {
       this.leaveAnswer(false);
+      return true;
+    }
+    // 浮层在最上面：先收它，再谈"设置页 / 菜单页"
+    if (this.packHelpOpen) {
+      this.closePackHelp();
       return true;
     }
     // 二级弹窗在最上面：先关它，再谈"设置页 / 菜单页"
@@ -1500,8 +1518,9 @@ export class SettingsScreen {
   private applyActiveGroup(group: SettingGroup): void {
     this.activeGroup = group;
     for (const [key, section] of this.sections) section.classList.toggle('active', key === group);
-    // 切到别的页签时，外观的二级弹窗不该还浮在上面
+    // 切到别的页签时，二级弹窗 / 浮层都不该还浮在上面
     if (group !== 'appearance') this.closeAppearance();
+    if (group !== 'game') this.closePackHelp();
     for (const [key, tab] of this.tabs) {
       const on = key === group;
       tab.classList.toggle('active', on);
@@ -2018,6 +2037,16 @@ export class SettingsScreen {
     button.title = t('settings.importTitle');
     button.addEventListener('click', () => input.click());
 
+    // 2026-10-28（用户）：使用说明收进「导入」右边这颗 ?，点了弹浮层；
+    // 行里只留一句"只能用你自己的包"的免责，那一句必须不点也看得见。
+    const help = document.createElement('button');
+    help.type = 'button';
+    help.className = 'settings-help';
+    help.textContent = '?';
+    help.title = t('settings.resourcePack.help');
+    help.setAttribute('aria-label', t('settings.resourcePack.help'));
+    help.addEventListener('click', () => this.openPackHelp());
+
     const status = document.createElement('i');
     status.className = 'settings-status';
     status.textContent = t('settings.notChosen');
@@ -2033,7 +2062,7 @@ export class SettingsScreen {
       input.value = '';
     });
 
-    row.append(name, button, status, input);
+    row.append(name, button, help, status, input);
     return row;
   }
 
@@ -2051,39 +2080,89 @@ export class SettingsScreen {
   }
 
   /**
-   * 资源包的使用说明（2026-10-28，用户："请加入资源包的详细的介绍说明、如何使用等等"）。
+   * 资源包说明浮层（2026-10-28 第二次迭代，用户："说明应该是导入按钮右边一个小问号，
+   * 点开浮层"）。
    *
-   * 五条按"能不能用 → 改了什么 → 尺寸 → 生效范围 → 来源"排，**每条都得准确**：
-   *  - 只替换方块贴图（按 `textures/blocks/<名字>.png` 对应图集）与
-   *    `SoundPack.ts` 映射表里登记的那批音效，其它文件直接忽略；
-   *  - 贴图会被缩放到图集格子（16×16），所以大图能用但不会更清晰；
-   *  - 包不落盘：只作用于当前这次运行，重开页面要重新导入（见 `applyResourcePack`
-   *    的调用点，没有任何持久化）——这句必须写，否则玩家会以为"选了就永久生效"。
+   * 五+一条按"这是什么 → 怎么导入 → 贴图放哪 → 尺寸 → 音效 → 生效范围"排，
+   * **每条都得与实现一致**（`core/resourcepack/ResourcePack.ts`）：
+   *  - 只认 zip（stored / deflate），方块 PNG 按 `textures/blocks/<名>.png` 的**文件名**
+   *    匹配图集里的 tile，名字对不上的跳过；
+   *  - 图会被缩放到 16×16 的图集格子，所以大图不会更清晰；
+   *  - 音效只认 `SoundPack.ts` 映射表里登记的那几族，其余忽略；
+   *  - 包**不落盘**：只作用于这一次运行，重开页面要重新导入（没有任何持久化）。
    *
-   * 文案走 i18n（`settings.resourcePack.help1..5`），六语言齐全。
+   * ⚠️ 文案里不许出现别的产品的名字、扩展名或"兼容某格式"的说法（用户明确要求
+   * 界面文字不与任何其它产品挂钩）：这里只描述"压缩包里怎么摆文件，我们就怎么认"。
    */
-  private makePackHelp(): HTMLElement {
-    const box = document.createElement('div');
-    box.className = 'settings-note pack-help';
+  private openPackHelp(): void {
+    if (!this.packHelpModal) this.buildPackHelpModal();
+    if (this.packHelpOpen || !this.packHelpModal) return;
+    this.closeDropdown();
+    this.packHelpOpen = true;
+    this.packHelpModal.classList.remove('hidden');
+  }
 
+  private closePackHelp(): void {
+    if (!this.packHelpOpen) return;
+    this.packHelpOpen = false;
+    this.packHelpModal?.classList.add('hidden');
+  }
+
+  /** 浮层内容：标题 + 六条说明 + 一颗「知道了」 */
+  private buildPackHelpModal(): void {
+    const modal = document.createElement('div');
+    modal.className = 'settings-modal hidden';
+
+    const panel = document.createElement('div');
+    panel.className = 'settings-modal-panel';
+
+    const header = document.createElement('div');
+    header.className = 'settings-modal-header';
     const title = document.createElement('b');
     title.textContent = t('settings.resourcePack.about');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'inv-close appearance-close';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', t('settings.resourcePack.close'));
+    close.addEventListener('click', () => this.closePackHelp());
+    header.append(title, close);
 
+    const body = document.createElement('div');
+    body.className = 'settings-modal-body';
     const list = document.createElement('ul');
+    list.className = 'settings-help-list';
     for (const key of [
       'settings.resourcePack.help1',
       'settings.resourcePack.help2',
       'settings.resourcePack.help3',
       'settings.resourcePack.help4',
       'settings.resourcePack.help5',
+      'settings.resourcePack.help6',
     ]) {
       const item = document.createElement('li');
       item.textContent = t(key);
       list.appendChild(item);
     }
+    body.appendChild(list);
+    // 「知道了」放在**滚动区之外**：矮屏上正文要滚，但退出键必须一直看得见
+    const foot = document.createElement('div');
+    foot.className = 'settings-modal-foot';
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'settings-help-ok';
+    ok.textContent = t('settings.resourcePack.close');
+    ok.addEventListener('click', () => this.closePackHelp());
+    foot.appendChild(ok);
+    panel.append(header, body, foot);
+    modal.appendChild(panel);
+    // 点浮层外的压暗区也关（与其它浮层一致）
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) this.closePackHelp();
+    });
 
-    box.append(title, list);
-    return box;
+    this.packHelpModal = modal;
+    this.root.appendChild(modal);
   }
 
   /**
@@ -2402,6 +2481,7 @@ export class SettingsScreen {
   private forceHide(): void {
     this.open = false;
     this.closeAppearance();
+    this.closePackHelp();
     // 下拉菜单挂在 body 上，面板关掉时必须一起收起（否则会孤零零留在页面上）
     this.closeDropdown();
     document.body.classList.remove('pause-open');
@@ -2423,6 +2503,8 @@ export class SettingsScreen {
     this.open = false;
     this.closeLeaveDialog();
     this.closeAppearance();
+    this.closePackHelp();
+    this.packHelpModal = null;
     this.appearanceModal = null;
     if (this.hideTimer !== null) {
       window.clearTimeout(this.hideTimer);
