@@ -1,0 +1,10 @@
+{
+  "name": "minicraft-desktop",
+  "productName": "Minicraft",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minicraft desktop shell (Windows / macOS)",
+  "author": "Minicraft",
+  "main": "main.mjs"
+}

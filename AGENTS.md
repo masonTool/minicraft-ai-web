@@ -36,8 +36,9 @@
 ## 2.5 一仓多产物（2026-10-29 重排）
 
 `web/`（游戏源码与构建，产物 `web/dist`）· `android/`（Capacitor 壳 + 签名闸门）·
-`ios/`（对等壳，Swift 源码已就位、Xcode 工程待补）· `server/`（node / rust / ios 原生库）·
-`windows/` `mac/`（预留）。**改游戏代码只动 `web/src`**；目录与保护方案的落地状态见
+`ios/`（对等壳，Swift 源码已就位）· `server/`（node / rust / ios 原生库）·
+`desktop/`（Electron 运行时，Windows/macOS 共用）+ `windows/` `mac/`（各自的打包配置）。
+**改游戏代码只动 `web/src`**；保护方案与验证命令见
 [`docs/CODE-PROTECTION.md`](./docs/CODE-PROTECTION.md)。
 
 ## 3. 命令：内循环用快的，提交前用全的
@@ -49,8 +50,8 @@ npm run dev            # 开发服务器 http://localhost:5173
 npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离线套件（实测 ~4s）
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
-# —— 提交前（全量，约 40s，大头是 182 套离线测试 26s）——
-npm run check          # typecheck + 182 套离线测试 + 三张台账，任一失败即非零退出
+# —— 提交前（全量，约 40s，大头是 183 套离线测试 26s）——
+npm run check          # typecheck + 183 套离线测试 + 三张台账，任一失败即非零退出
                        # （CI 也跑同一道：.github/workflows/check.yml）
 ```
 

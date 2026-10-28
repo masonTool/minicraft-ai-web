@@ -29,6 +29,8 @@
 | `android/…/SealedCore.java` | 纯 Java 的字节处理（可被 JVM 直接验证） |
 | `android/…/CoreVault.java` | 读 assets + 取安装包签名 + 比对白名单 |
 | `ios/App/App/CoreVault.swift` | 同一套步骤的 Swift 版（身份判据是 bundle id） |
+| `desktop/core-vault.mjs` | 同一套步骤的 Node 版（Windows 比证书指纹 / macOS 比 Team ID） |
+| `desktop/main.mjs` | 桌面端用 `app://` 协议拦截 `__host/core.bin`，与安卓的拦截点等价 |
 
 密钥关系：
 
@@ -41,9 +43,9 @@ CEK = 每次构建随机 32 字节，被 KEK 用 AES-256-GCM 包住
 
 | # | 事项 | 怎么做 |
 | --- | --- | --- |
-| 1 | 填真实签名证书 | `release.config.json` 的 `signingCertSha256` 填 **Play App Signing 的应用签名证书**，不是 upload key：`apksigner verify --print-certs <apk>` |
+| 1 | 填真实签名身份 | `release.config.json`：Android 填 **Play App Signing 的应用签名证书**（`apksigner verify --print-certs`，不是 upload key）；macOS 填 `macTeamId`（`codesign -dv` 的 `TeamIdentifier`）；Windows 填 `winCertThumbprint`（`Get-AuthenticodeSignature` 的 Thumbprint） |
 | 2 | 重新封存 | `npm run gen:sealed` |
-| 3 | 出包 | Android `npm run android:sync`；iOS `npm run ios:sync` |
+| 3 | 出包 | Android `npm run android:sync`；iOS `npm run ios:sync`；macOS `npm run mac:dist`；Windows `npm run win:dist` |
 
 > 白名单留空时会用**全零占位**封存：链路能跑通，但真机一定解不开（故意的 fail-closed），
 > 而且 `release:audit` 会直接红。这是防止"占位悄悄发出去"的最后一道闸。
@@ -53,6 +55,8 @@ CEK = 每次构建随机 32 字节，被 KEK 用 AES-256-GCM 包住
 ```bash
 npm run test:sealed        # 格式往返：15 条（含 6 条负面）
 bash tools/sealed-check.sh # 用真实 JVM 跑 Android 的解封代码：10 条
+npm run test:desktop       # 桌面端解封 + 身份判据四象限：11 条
+npm run desktop:smoke      # 真起 Electron（隐藏窗口）验页面与解封链路
 npm run build:app          # 发布检查：无明文 / 非 MCTB / 白名单非占位 / 有 salt
 npm run check              # 全量门禁
 ```
@@ -61,9 +65,14 @@ npm run check              # 全量门禁
 
 - `assembleDebug` 能出包（7.4 MB），包内只有 `assets/sealed/*`，**没有明文 `core.bin`**；
 - JVM 跑真实产物能还原出逐字节相同的明文；
-- 换签名 / 换盐 / 改任一字节 / 截断 / 空白名单，全部解不开。
+- 换签名 / 换盐 / 改任一字节 / 截断 / 空白名单，全部解不开；
+- 桌面端：`MacOS/Minicraft` 冒烟 → `title=Minicraft core=41107B`；dmg（arm64/x64）与
+  `Minicraft Setup 0.1.0.exe` 都产出了，`Resources/` 里是 `web` + `sealed` 两张皮。
 
-**没验证过**：iOS 的运行时行为（本机没有 CocoaPods，工程只到 `swiftc -typecheck` 通过）。
+**没验证过**：
+
+- iOS 运行时（本机没有 CocoaPods，工程只到 `swiftc -typecheck` 通过）；
+- Windows 产物没在 Windows 上装过（生成是在 macOS 上用 wine 完成的）。
 
 ## 5. 还没做
 
@@ -72,6 +81,8 @@ npm run check              # 全量门禁
 | `minifyEnabled` / R8 | 需要真机回归 keep 规则，值不上一轮的风险 |
 | `androidScheme` 改 `https` | **会清空存量存档**，属于一次性不可逆决策，要你拍板 |
 | iOS 真机验证 | 装不上 CocoaPods |
+| Windows 实机验证 | 只能在 macOS 上出包，没有 Windows 机器 |
+| macOS 签名/公证 | 没有 Apple Developer 证书 |
 | Play Integrity | 需要服务端验证才有意义，本项目没有后台 |
 | 增量通道 / 存档 HMAC / 联机校验 | 尚未开始 |
 

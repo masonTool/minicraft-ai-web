@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Electron 在 hardened runtime 下必须放开的三项：
+        JIT / 未签名可执行内存 / 关闭库校验。
+        ⚠️ 这三项也是 macOS 上所有 Electron 应用的共性弱点——别指望它们能防注入。
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- 联机走局域网 ws，需要出站网络 -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- 手机当房主时桌面端也要能被局域网发现 -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>

@@ -67,3 +67,8 @@ android/app/src/main/assets/sealed/
 
 # 封存产物（iOS）：与 android 同源，由 npm run gen:sealed 生成
 ios/App/App/sealed/
+
+# 桌面端：封存产物与打包输出（由 npm run gen:sealed / mac:dist / win:dist 生成）
+desktop/resources/sealed/
+dist-mac/
+dist-win/

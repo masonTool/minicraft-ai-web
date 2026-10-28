@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
-import { configDefaults, defineConfig } from 'vitest/config';
+import { defineConfig } from 'vite';
 
 /**
  * 读当前 HEAD 的"短 hash + 提交标题"（批次 182）。
@@ -161,25 +161,4 @@ export default defineConfig({
     plugins: () => [hostSpecsStub()],
   },
   plugins: [hostCoreDev(), hostSpecsStub()],
-  /**
-   * 单测的收文件范围（联机32）。
-   *
-   * 并行会话的工作树建在 `.continue/doing/.worktree/<名字>/` 下，里面有**同名**的
-   * `tests/` 与 `src/`。vitest 默认只按测试文件名找文件、不看
-   * `.gitignore`，于是主树的 23 套会连同工作树的副本各跑一遍：计数虚高一倍
-   * （169 → 332），更要紧的是**工作树里的红会让主树门禁变红**，而与这边的改动无关。
-   *
-   * 用 `configDefaults.exclude` 打底再追加，避免把默认的 `node_modules`/`dist`
-   * 排除项一起覆盖掉（`--exclude` 命令行参数是覆盖语义，踩过）。
-   */
-  test: {
-    exclude: [...configDefaults.exclude, '**/.continue/**'],
-    /*
-     * 关掉磁盘缓存：vitest 的缓存目录有上千个文件，IDE 的**安全删除守卫**（删 >500 个
-     * 文件要人工确认）会拦住它的自动清理，于是整套测试**启动即失败**
-     * （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`，本地实测过）。
-     * 这套测试本身 1 秒内跑完，缓存省下的时间不值得引入这种"换台机器就起不来"的失败。
-     */
-    cache: false,
-  },
 });

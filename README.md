@@ -17,7 +17,7 @@ P9 另支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev         # 开发服务器 http://localhost:5173
 npm run typecheck   # 类型检查
-npm test            # 先过 tools 的类型检查，再跑 vitest + 182 套自建离线测试（含可达性审计）
+npm test            # 先过 tools 的类型检查，再跑 vitest + 183 套自建离线测试（含可达性审计）
 npm run check       # 提交前门禁：`typecheck` + `test` + 三张台账，任一失败即非零退出
 npm run check:fast  # 改代码时的内循环：只跑被本次改动命中的那几套离线测试
 npm run build       # 生产构建（`npm run build:fast` 是关掉 sourcemap 的快版本）
@@ -26,7 +26,7 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 ```
 
 > 用 AI 推进这个仓库时，先读 [`AGENTS.md`](./AGENTS.md)（会话入口 + 该展开哪些文档的索引）。
-> 182 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
+> 183 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
 > 单套仍可直接 `npm run test:reach` 这样跑。
 
 操作：`W/A/S/D` 移动 · `Space` 跳跃/上升 · `Shift` 潜行/下降 · `Ctrl` 疾跑 ·
@@ -71,7 +71,7 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| **P0** 工程基建 | 仓库、TS + Vite、渲染管线打通（方块 → 区块 → 网格化 → 图集 → 相机） | ✅ 全部完成（67 项） |
+| **P0** 工程基建 | 仓库、TS + Vite、渲染管线打通（方块 → 区块 → 网格化 → 图集 → 相机） | ✅ 全部完成（68 项） |
 | **P1** 体素引擎核心 | 完整方块注册表、区块调度与流式加载、贪心网格化、Web Worker 生成、光照引擎 | 🔶 已完成 51 / 共 52 |
 | **P2** 地形生成 1.18 | 多噪声群系源、7 个密度函数、样条插值、地表规则、洞穴/峡谷、含水层、矿物 Y 分布、地物 | ✅ 全部完成（26 项） |
 | **P3** 玩家与交互 | AABB 物理、疾跑/潜行/游泳/摔伤、射线选块、破坏耗时与工具等级、方块掉落 | ✅ 全部完成（31 项） |
@@ -95,8 +95,9 @@ web/              Web 端：游戏本体的唯一源码与构建入口（产物 
 android/          Android 壳（Capacitor）：消费 web/dist，负责签名闸门与核心数据解封
 ios/              iOS 壳：与 android/ 对等（CoreVault 解封 + 签名身份校验）
 server/           服务端与原生库：node/（Node 版）· rust/（Rust 版）· ios/（iOS 静态库）
-windows/          预留（暂无代码）
-mac/              预留（暂无代码）
+desktop/          桌面端运行时（Electron，Windows / macOS 共用一份 main.mjs）
+windows/          Windows 打包：NSIS 配置 + 图标
+mac/              macOS 打包：dmg 配置 + entitlements + 图标
 tools/            离线测试与自检脚本（每个 test:* 一个）
 tests/            vitest 用例（光照、生成、碰撞、资源包）
 docs/             设计方案与发布说明（按需读）

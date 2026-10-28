@@ -52,6 +52,8 @@ const OUT_SIGNERS = join(OUT_DIR, 'signers.txt');
  * 所以两条路必须由同一次生成写出来——分别生成迟早会出现"两个平台装的是不同数据"。
  */
 const IOS_DIR = join(ROOT, 'ios/App/App/sealed');
+/** 桌面端：Electron 打包时作为 extraResources 进 `resources/sealed`。 */
+const DESKTOP_DIR = join(ROOT, 'desktop/resources/sealed');
 
 /** 与 `CoreVault.java` 的 `INFO` 必须逐字节一致 */
 const INFO = Buffer.from('minicraft/core/v1', 'utf8');
@@ -64,6 +66,10 @@ const DEV_PLACEHOLDER_SIGNER = '0'.repeat(64);
 interface ReleaseConfig {
   signingCertSha256?: unknown;
   saltHex?: unknown;
+  /** macOS 的 Team ID（`codesign -dv` 里的 TeamIdentifier=XXXX） */
+  macTeamId?: unknown;
+  /** Windows Authenticode 证书指纹（`Get-AuthenticodeSignature` 拿到的 Thumbprint） */
+  winCertThumbprint?: unknown;
 }
 
 /** 最小质因数互不相关的步长：挑第一个与 n 互质的奇数，避免退化成位移 */
@@ -172,6 +178,15 @@ function main(): void {
   );
   if (appId === '') throw new Error('capacitor.config.json 里没有 appId：iOS 的 bundle 绑定靠它');
 
+  // 桌面端的身份判据与移动端不同：macOS 看 codesign 的 Team ID，Windows 看
+  // Authenticode 证书指纹。没填就写空文件——打包后的应用会因此拒绝解封（fail-closed），
+  // 而开发态（未打包）仍然放行，否则本地没法跑。
+  const rawConfig = JSON.parse(readFileSync(CONFIG, 'utf8')) as ReleaseConfig;
+  const macTeamId = typeof rawConfig.macTeamId === 'string' ? rawConfig.macTeamId.trim() : '';
+  const winThumbprint = typeof rawConfig.winCertThumbprint === 'string'
+    ? rawConfig.winCertThumbprint.replace(/\s/g, '').toUpperCase()
+    : '';
+
   const writeAll = (dir: string): void => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'core.sealed'), sealed);
@@ -182,9 +197,13 @@ function main(): void {
     // iOS 的身份判据（Android 用证书摘要）：iOS 没有读自身签名身份的公开 API，
     // 能绑的只有 bundle id；见 ios/App/App/CoreVault.swift 的注释
     writeFileSync(join(dir, 'bundle.txt'), `${appId}\n`);
+    // 桌面端：两个平台各自的身份判据（留空 = 打包后拒绝解封）
+    writeFileSync(join(dir, 'team.txt'), `${macTeamId}\n`);
+    writeFileSync(join(dir, 'win-cert.txt'), `${winThumbprint}\n`);
   };
   writeAll(OUT_DIR);
   writeAll(IOS_DIR);
+  writeAll(DESKTOP_DIR);
 
   const kb = (n: number): string => `${(n / 1024).toFixed(1)} KB`;
   console.log('\n核心数据封存');

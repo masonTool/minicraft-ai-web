@@ -1,0 +1,49 @@
+# macOS 打包配置（在仓库根执行：electron-builder -c mac/electron-builder.yml --mac）
+appId: com.minicraft.app
+productName: Minicraft
+copyright: Copyright © 2026 Minicraft
+
+directories:
+  app: desktop
+  output: dist-mac
+  buildResources: mac/build
+
+# 只带运行必需的文件：源码目录（web/src）不进包，游戏本体在 extraResources 的 web/ 里
+files:
+  - main.mjs
+  - core-vault.mjs
+  - package.json
+
+extraResources:
+  - from: web/dist
+    to: web
+  # 封存体放在 resources/sealed，**不在** web/ 下：网页侧取不到它
+  - from: desktop/resources/sealed
+    to: sealed
+
+mac:
+  category: public.app-category.games
+  icon: mac/build/icon.png
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: mac/entitlements.mac.plist
+  entitlementsInherit: mac/entitlements.mac.plist
+  darkModeSupport: true
+  # App Store 之外的直分发：不做公证时用户首次打开需右键"打开"
+  notarize: false
+
+dmg:
+  title: Minicraft
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications

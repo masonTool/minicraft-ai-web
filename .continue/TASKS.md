@@ -1369,6 +1369,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · `release.config.json` 空白名单时用全零占位封存（真机必解不开），`release:audit` 见到占位直接红
       · 方案、发布清单、验证命令、未做项与边界：`docs/CODE-PROTECTION.md`（单页）
 
+- [x] A24 桌面端（Windows / macOS）落地（2026-10-29）：`desktop/` 一份 Electron 运行时，
+      `windows/` 与 `mac/` 各自打包配置，产物 `dist-win` / `dist-mac`
+      · **不用 `file://`**：那是 opaque origin，Chromium 会关掉 IndexedDB，存档直接废；
+        改注册 `app://minicraft/`（standard + secure），顺带成了与安卓 `shouldInterceptRequest`
+        等价的拦截点，`web/src/core/hostCore.ts` 一行未改
+      · 核心数据同样走封存：`resources/sealed/` 单独放，`resources/web/` 只有 JS
+      · 身份判据四象限（`desktop/core-vault.mjs`）：配置为空且未签名 → 放行（无证书也要能开）；
+        配置为空却有签名 / 配置有值却未签名 / 两边不一致 → 一律解不开
+      · 实测：`MacOS/Minicraft` 冒烟 `title=Minicraft core=41107B`；dmg（arm64/x64）与
+        `Minicraft Setup 0.1.0.exe`（macOS 上用 wine）均产出；`test:desktop` 11/0
+      · 顺带修掉一个重排遗留 bug：`vitest` 在仓库根找不到配置，排除规则与缓存开关全失效
+        （工作树里的测试被重复跑、`node_modules/.vitest-cache` 触发批量删除守卫）；拆出根级 `vitest.config.ts`
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

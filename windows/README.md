@@ -1,18 +1,42 @@
-# Windows 端（预留）
+# Windows 版
 
-当前**没有代码**，只是把目录占住，避免以后又长回 `server/` 或仓库根。
+Electron 套壳，运行时逻辑与 macOS 共用 [`desktop/`](../desktop/README.md)；
+本目录只放 **Windows 特有的打包配置与资源**。
 
-## 可能的形态（未定）
+## 出包
 
-本项目是 Three.js / WebGL2 的 Web 应用，桌面端有两条路：
+```bash
+npm run win:dist
+# = gen:sealed → build:app（含发布检查）→ electron-builder --win
+# → dist-win/Minicraft Setup 0.1.0.exe
+```
 
-1. **Electron / Tauri 套壳**：直接消费 `web/dist`，与 Android 壳同构；
-   `web/src/core/hostCore.ts` 已经有"先问原生保险柜、再退回静态路径"的分支，
-   桌面壳只要提供一个同名能力（`Capacitor.Plugins.CoreVault.read`）就能复用。
-2. **真正的原生窗口**（WebView2）：等价于 Android 的 Capacitor 方案，但签名闸门的
-   做法不同——Windows 上要换成 Authenticode 证书比对。
+> macOS 上也能出 NSIS 安装包（electron-builder 会自动下载 wine），
+> 但**产物没在 Windows 上跑过**。正式发版请走 Windows 机器或 Windows CI。
 
-## 定下来之前的约定
+| 文件 | 作用 |
+| --- | --- |
+| `electron-builder.yml` | 打包配置（NSIS、x64、资源拷贝） |
+| `build/icon.png` | 应用图标（自动转 ico） |
 
-- 不要在这里放临时脚本（放 `tools/`）；
-- 不要把 `web/` 的源码复制一份过来，一律通过 `web/dist` 消费。
+## 签名
+
+```bash
+export CSC_LINK=~/keys/minicraft-win.pfx
+export CSC_KEY_PASSWORD='…'
+npm run win:dist
+```
+
+签名后把证书指纹填进 `release.config.json` 的 `winCertThumbprint`：
+
+```powershell
+(Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint
+```
+
+再跑 `npm run gen:sealed`。判定规则与 macOS 一致（见 [`mac/README.md`](../mac/README.md#签名)），
+不填就是"未签名能开、带别人签名就拒绝"。
+
+## 已验证 / 未验证
+
+- ✅ 能在 macOS 上完整生成 `Minicraft Setup 0.1.0.exe`（79 MB），`resources/` 里有 `app.asar` / `web` / `sealed`；
+- ❌ 未在 Windows 上安装运行过——`app://` 协议、IndexedDB 存档、WebGL2 这几条都需要实机确认。
