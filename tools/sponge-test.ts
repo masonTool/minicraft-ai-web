@@ -13,11 +13,11 @@
  * 运行：npm run test:sponge
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { ITEMS } from '../src/core/registry/items.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
-import { SPONGE_MAX_ABSORB, SPONGE_RADIUS, absorbWater, type SpongeWorld } from '../src/core/world/Sponge.ts';
-import { smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { ITEMS } from '../web/src/core/registry/items.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
+import { SPONGE_MAX_ABSORB, SPONGE_RADIUS, absorbWater, type SpongeWorld } from '../web/src/core/world/Sponge.ts';
+import { smeltingRecipeFor } from '../web/src/core/crafting/Smelting.ts';
 
 let passed = 0;
 let failed = 0;

@@ -12,10 +12,10 @@
  * 运行：npm run test:potioncloud
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { potionById, POTION_IDS, lingeringIdOf, splashIdOf } from '../src/core/registry/potions.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { potionById, POTION_IDS, lingeringIdOf, splashIdOf } from '../web/src/core/registry/potions.ts';
 import {
   CLOUD_DURATION,
   CLOUD_PULSE_INTERVAL,
@@ -29,13 +29,13 @@ import {
   createDragonBreathCloud,
   createLingeringCloud,
   tickCloud,
-} from '../src/core/survival/PotionCloud.ts';
-import { Throwable } from '../src/core/entity/Throwable.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/survival/PotionCloud.ts';
+import { Throwable } from '../web/src/core/entity/Throwable.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

@@ -11,15 +11,15 @@
  * 运行：npm run test:lectern
  */
 
-import { Item } from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { LECTERN_SLOT, LECTERN_SIZE, Lectern } from '../src/core/container/Lectern.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
-import { acceptingSlots, containerSlotCount } from '../src/core/container/Transfer.ts';
-import { CONTAINER_BLOCKS, BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { LECTERN_SLOT, LECTERN_SIZE, Lectern } from '../web/src/core/container/Lectern.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
+import { acceptingSlots, containerSlotCount } from '../web/src/core/container/Transfer.ts';
+import { CONTAINER_BLOCKS, BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 
 let passed = 0;
 let failed = 0;

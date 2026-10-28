@@ -13,12 +13,12 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { durabilityBar, durabilityLevel, rarityClassName, rarityOf } from '../src/core/registry/itemVisuals.ts';
-import { itemTooltip } from '../src/core/registry/itemNames.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { durabilityBar, durabilityLevel, rarityClassName, rarityOf } from '../web/src/core/registry/itemVisuals.ts';
+import { itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
 
 let passed = 0;
 let failed = 0;
@@ -116,7 +116,7 @@ console.log('\n[提示框：耐久与附魔各自成行]');
 
 console.log('\n[index.html：设计令牌与美化规则]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // 令牌：上面的判断都依赖它们，缺一个就是"界面某处变成默认色"
   const tokens = [

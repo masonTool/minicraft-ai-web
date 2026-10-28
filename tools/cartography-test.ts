@@ -9,20 +9,20 @@
  * 运行：npm run test:cartography
  */
 
-import { Block, GLASS_PANE_ID, blockDef } from '../src/core/registry/blocks.ts';
-import { reasonText, type ReasonRef } from '../src/core/container/reason.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { BlockEntityStore, CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainer } from '../src/core/save/ContainerSave.ts';
-import { acceptingSlots, containerSlotCount } from '../src/core/container/Transfer.ts';
+import { Block, GLASS_PANE_ID, blockDef } from '../web/src/core/registry/blocks.ts';
+import { reasonText, type ReasonRef } from '../web/src/core/container/reason.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { BlockEntityStore, CONTAINER_BLOCKS } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainer } from '../web/src/core/save/ContainerSave.ts';
+import { acceptingSlots, containerSlotCount } from '../web/src/core/container/Transfer.ts';
 import {
   CARTO_MAP,
   CARTO_MATERIAL,
   CartographyTable,
   planCartography,
-} from '../src/core/container/CartographyTable.ts';
+} from '../web/src/core/container/CartographyTable.ts';
 import {
   MAP_CHUNK_SPAN,
   MAP_GRID,
@@ -38,7 +38,7 @@ import {
   sanitizeMap,
   zoomOutMap,
   type MapData,
-} from '../src/core/items/Map.ts';
+} from '../web/src/core/items/Map.ts';
 
 let passed = 0;
 let failed = 0;

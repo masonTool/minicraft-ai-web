@@ -30,12 +30,12 @@ import {
   isSolid,
   lightOpacity,
   type BlockDef,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   BLOCK_TABLE_VERSION,
   decodeBlockTable,
   encodeBlockTable,
-} from '../src/core/registry/blockTableCodec.ts';
+} from '../web/src/core/registry/blockTableCodec.ts';
 
 let passed = 0;
 let failed = 0;

@@ -31,7 +31,7 @@ import {
   specialDuration,
   specialSequence,
   type Note,
-} from '../src/minigame/games/jump/audio.ts';
+} from '../web/src/minigame/games/jump/audio.ts';
 
 let passed = 0;
 let failed = 0;

@@ -25,14 +25,14 @@ import {
   serializeArmorStands,
   armorDisplayColor,
   standSlotsEmpty,
-} from '../src/core/world/ArmorStands.ts';
-import { ArmorStandRenderer } from '../src/render/ArmorStandRenderer.ts';
-import { ARMOR_SPECS } from '../src/core/registry/armor.ts';
-import { Block, ARMOR_STAND_ID, blockDef } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { Item } from '../src/core/registry/items.ts';
+} from '../web/src/core/world/ArmorStands.ts';
+import { ArmorStandRenderer } from '../web/src/render/ArmorStandRenderer.ts';
+import { ARMOR_SPECS } from '../web/src/core/registry/armor.ts';
+import { Block, ARMOR_STAND_ID, blockDef } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 
 let passed = 0;
 let failed = 0;

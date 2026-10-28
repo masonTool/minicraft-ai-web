@@ -13,7 +13,7 @@ import {
   RemoteAppearance,
   emptyAppearance,
   normalizeItemId,
-} from '../src/core/net/RemoteAppearance.ts';
+} from '../web/src/core/net/RemoteAppearance.ts';
 
 describe('normalizeItemId', () => {
   it('0 / 负数 / NaN / undefined 都当空手', () => {

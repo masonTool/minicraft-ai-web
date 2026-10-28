@@ -13,21 +13,21 @@
  * 运行：npm run test:bonemeal
  */
 
-import { Block, CROP_STAGES, berryStageOf, cocoaStageOf, cropOf } from '../src/core/registry/blocks.ts';
-import { Item, categoryOf, dyeIdByName, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, CROP_STAGES, berryStageOf, cocoaStageOf, cropOf } from '../web/src/core/registry/blocks.ts';
+import { Item, categoryOf, dyeIdByName, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   BONE_MEAL_MAX_STAGES,
   BONE_MEAL_MIN_STAGES,
   BONE_MEAL_PLANTS,
   fertilizeAt,
   type BoneMealWorld,
-} from '../src/core/world/BoneMeal.ts';
-import { BAMBOO_MAX_HEIGHT } from '../src/core/tick/RandomTicks.ts';
-import { dispenseBehaviorFor } from '../src/core/registry/dispense.ts';
-import { runDispenseAction, type DispenseContext } from '../src/core/world/Dispense.ts';
+} from '../web/src/core/world/BoneMeal.ts';
+import { BAMBOO_MAX_HEIGHT } from '../web/src/core/tick/RandomTicks.ts';
+import { dispenseBehaviorFor } from '../web/src/core/registry/dispense.ts';
+import { runDispenseAction, type DispenseContext } from '../web/src/core/world/Dispense.ts';
 
 let passed = 0;
 let failed = 0;

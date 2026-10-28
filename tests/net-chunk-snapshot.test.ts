@@ -8,9 +8,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ChunkEdits, packEdit } from '../src/core/save/ChunkEdits.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { chunkSnapshotBlocks } from '../src/core/net/ChunkSnapshot.ts';
+import { ChunkEdits, packEdit } from '../web/src/core/save/ChunkEdits.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { chunkSnapshotBlocks } from '../web/src/core/net/ChunkSnapshot.ts';
 
 describe('chunkSnapshotBlocks', () => {
   it('没有附件（区块没改过）时回空列表——这是"这块没改动"的有效回答', () => {

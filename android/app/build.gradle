@@ -68,7 +68,8 @@ def rustTriples = [
 
 tasks.register('copyRustLibs') {
     description = '拷贝 server/rust 交叉编译出的 libminicraft_server.so 到 jniLibs'
-    def repoRoot = rootProject.projectDir.parentFile.parentFile
+    // 2026-10-29 目录重排：`android/` 已位于仓库根下，只往上一层
+    def repoRoot = rootProject.projectDir.parentFile
     doLast {
         rustTriples.each { abi, triple ->
             def source = new File(repoRoot, "server/rust/target/${triple}/release/libminicraft_server.so")
@@ -98,7 +99,7 @@ tasks.named('preBuild').configure { dependsOn 'copyRustLibs' }
 // ---------------------------------------------------------------------------
 tasks.register('copyHostCore') {
     description = '把 host/core-baseline.bin 拷成 APK assets 里的 __host/core.bin'
-    def repoRoot = rootProject.projectDir.parentFile.parentFile
+    def repoRoot = rootProject.projectDir.parentFile
     def source = new File(repoRoot, 'host/core-baseline.bin')
     doLast {
         if (!source.exists()) {

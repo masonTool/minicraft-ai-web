@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { packEdit, type SerializedEdits } from '../src/core/save/ChunkEdits.ts';
-import { collectContainerSpawns } from '../src/core/save/EditSpawns.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { packEdit, type SerializedEdits } from '../web/src/core/save/ChunkEdits.ts';
+import { collectContainerSpawns } from '../web/src/core/save/EditSpawns.ts';
 
 /** 手工拼一份 SerializedEdits（区块内坐标 → 打包值） */
 function makeEdits(entries: { x: number; y: number; z: number; id: number; state?: number }[]): SerializedEdits {

@@ -7,9 +7,9 @@
  * 运行：node tools/gen-stats.ts [种子] [半径]
  */
 
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
-import { Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { Block, BLOCKS } from '../web/src/core/registry/blocks.ts';
+import { Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
 
 const seed = Number(process.argv[2] ?? 20261014);
 const radius = Number(process.argv[3] ?? 2);

@@ -25,14 +25,14 @@ import {
   nextGameMode,
   normalizeGameMode,
   type GameMode,
-} from '../src/core/world/GameMode.ts';
+} from '../web/src/core/world/GameMode.ts';
 // 极限模式的唯一判据（2026-10-28）：这一节直接断言纯函数，不再靠源码字符串猜
 import {
   canChangeGameMode,
   effectiveDifficulty,
   effectiveGameMode,
   restoredGameMode,
-} from '../src/core/world/Hardcore.ts';
+} from '../web/src/core/world/Hardcore.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -119,7 +119,7 @@ console.log('\n[能力矩阵]');
 console.log('\n[源码守卫：真接上了没有]');
 {
   // 这一层测的是"接线"，不是能力——能力矩阵已经在上面的纯函数里测完了
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '物理层在旁观时换了"不碰撞的世界"（否则穿墙是假的）',
     /hasBlockCollision\(this\.gameMode\) \? this\.world : this\.spectatorWorld/.test(mainSrc),

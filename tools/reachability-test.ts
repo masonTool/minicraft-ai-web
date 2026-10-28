@@ -47,7 +47,7 @@ import {
   woolId,
   // 剥皮（批次 443）：交互型来源，闭包里要用
   stripResult,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   BLOCK_ITEM_ID_LIMIT,
   CREATIVE_ITEMS,
@@ -60,22 +60,22 @@ import {
   itemDef,
   nonSelfBlockDropIds,
   possibleBlockDropIds,
-} from '../src/core/registry/items.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { BREW_RECIPES, brewRecipeFor } from '../src/core/crafting/Brewing.ts';
-import { netheriteUpgradeOf } from '../src/core/crafting/Smithing.ts';
-import { isStonecuttingInput, stonecuttingOffers } from '../src/core/crafting/Stonecutting.ts';
-import { POTION_ITEMS, TIPPED_ARROWS, TIPPED_ARROW_ID_OFFSET, variantBaseId } from '../src/core/registry/potions.ts';
-import { lootItemIds } from '../src/core/registry/loot.ts';
-import { fishingEntryIds } from '../src/core/registry/fishing.ts';
-import { DROPPING_MOB_TYPES, MOB_TYPES } from '../src/core/entity/mobs.ts';
+} from '../web/src/core/registry/items.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { recipeIngredients } from '../web/src/core/crafting/RecipeBook.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { BREW_RECIPES, brewRecipeFor } from '../web/src/core/crafting/Brewing.ts';
+import { netheriteUpgradeOf } from '../web/src/core/crafting/Smithing.ts';
+import { isStonecuttingInput, stonecuttingOffers } from '../web/src/core/crafting/Stonecutting.ts';
+import { POTION_ITEMS, TIPPED_ARROWS, TIPPED_ARROW_ID_OFFSET, variantBaseId } from '../web/src/core/registry/potions.ts';
+import { lootItemIds } from '../web/src/core/registry/loot.ts';
+import { fishingEntryIds } from '../web/src/core/registry/fishing.ts';
+import { DROPPING_MOB_TYPES, MOB_TYPES } from '../web/src/core/entity/mobs.ts';
 // 世界生成登记表（B52，批次 118）：方块侧的"种子"就是它——那张表由 `test:genregistry` 对账
-import { generatedBlockIds } from '../src/core/gen/GenerationSources.ts';
-import { PROFESSIONS, professionLabel } from '../src/core/registry/villagerTrades.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
+import { generatedBlockIds } from '../web/src/core/gen/GenerationSources.ts';
+import { PROFESSIONS, professionLabel } from '../web/src/core/registry/villagerTrades.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
 
 let passed = 0;
 let failed = 0;

@@ -21,9 +21,9 @@
  * 运行：npm run test:enderman
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item, itemDef } from '../src/core/registry/items.ts';
-import { LOOT_TABLES } from '../src/core/registry/loot.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item, itemDef } from '../web/src/core/registry/items.ts';
+import { LOOT_TABLES } from '../web/src/core/registry/loot.ts';
 import {
   ALL_HOSTILE_MOBS,
   ENDERMAN_TYPE,
@@ -32,12 +32,12 @@ import {
   MOB_TYPES,
   mobSpawnsIn,
   mobTypeById,
-} from '../src/core/entity/mobs.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { Mob, TELEPORT_ATTEMPTS, mobLabel } from '../src/core/entity/Mob.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/entity/mobs.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { Mob, TELEPORT_ATTEMPTS, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

@@ -14,9 +14,9 @@ import {
   parseSaveTransfer,
   transferFileName,
   type SaveTransferFile,
-} from '../src/core/save/SaveTransfer.ts';
-import { worldNameFromFile } from '../src/core/save/SaveTransfer.ts';
-import type { WorldSummary } from '../src/core/save/WorldRegistry.ts';
+} from '../web/src/core/save/SaveTransfer.ts';
+import { worldNameFromFile } from '../web/src/core/save/SaveTransfer.ts';
+import type { WorldSummary } from '../web/src/core/save/WorldRegistry.ts';
 
 const world: WorldSummary = {
   id: 'abc',

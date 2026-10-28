@@ -13,17 +13,17 @@
  * 运行：npm run test:husk
  */
 
-import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { ALL_HOSTILE_MOBS, HOSTILE_MOBS, HUSK_TYPE, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
-import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from '../src/core/world/Daylight.ts';
-import { isNight } from '../src/core/survival/Sleep.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { ALL_HOSTILE_MOBS, HOSTILE_MOBS, HUSK_TYPE, MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { MobSpawner, type SpawnContext } from '../web/src/core/entity/MobSpawner.ts';
+import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from '../web/src/core/world/Daylight.ts';
+import { isNight } from '../web/src/core/survival/Sleep.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

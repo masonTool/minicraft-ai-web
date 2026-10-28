@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MOB_HIT_MATCH_DISTANCE, findMobMatch } from '../src/core/net/MobMatch.ts';
+import { MOB_HIT_MATCH_DISTANCE, findMobMatch } from '../web/src/core/net/MobMatch.ts';
 
 const zombie = (x: number, y = 70, z = 0, typeId = 'zombie') => ({ typeId, x, y, z });
 

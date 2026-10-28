@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NetStats, PING_TIMEOUT_MS, STATS_WINDOW_MS } from '../src/core/net/NetStats.ts';
+import { NetStats, PING_TIMEOUT_MS, STATS_WINDOW_MS } from '../web/src/core/net/NetStats.ts';
 
 describe('字节速率', () => {
   it('窗口内的速率（5 秒）', () => {

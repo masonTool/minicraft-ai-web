@@ -5,9 +5,9 @@
  * 摆法、缺块、方向、以及"村庄守卫"的 3 村民门槛。
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { ironGolemPatternAt, shouldSpawnVillageGolem } from '../src/core/world/GolemSummon.ts';
-import { GUARD_RANGE, nearestHostileTarget } from '../src/core/world/GuardAI.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { ironGolemPatternAt, shouldSpawnVillageGolem } from '../web/src/core/world/GolemSummon.ts';
+import { GUARD_RANGE, nearestHostileTarget } from '../web/src/core/world/GuardAI.ts';
 
 let passed = 0;
 let failed = 0;

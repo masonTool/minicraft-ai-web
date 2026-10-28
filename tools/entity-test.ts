@@ -5,26 +5,26 @@
  * 用一个假的碰撞世界（地面 + 一堵墙）驱动实体，验证重力、落地、拾取、超时消失与区块清理。
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { withPowered } from '../src/core/registry/blockState.ts';
-import { Item, isFireproofItem } from '../src/core/registry/items.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../src/core/registry/spawnEggs.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { withPowered } from '../web/src/core/registry/blockState.ts';
+import { Item, isFireproofItem } from '../web/src/core/registry/items.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../web/src/core/registry/spawnEggs.ts';
 import { readFileSync } from 'node:fs';
-import { TOOL_KINDS, toolItemId } from '../src/core/registry/tools.ts';
-import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity/ItemEntity.ts';
-import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/entity/XpOrb.ts';
-import { EntityManager } from '../src/core/entity/EntityManager.ts';
-import { Boat } from '../src/core/entity/Boat.ts';
+import { TOOL_KINDS, toolItemId } from '../web/src/core/registry/tools.ts';
+import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../web/src/core/entity/ItemEntity.ts';
+import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../web/src/core/entity/XpOrb.ts';
+import { EntityManager } from '../web/src/core/entity/EntityManager.ts';
+import { Boat } from '../web/src/core/entity/Boat.ts';
 import {
   VEHICLE_MAX_HEALTH,
   applyVehicleDamage,
   vehicleDropFor,
   vehicleHitDamage,
-} from '../src/core/world/VehicleBreach.ts';
-import { Horse, horseArmorTier } from '../src/core/entity/Horse.ts';
-import { mobAppearanceKey } from '../src/render/MobRenderer.ts';
+} from '../web/src/core/world/VehicleBreach.ts';
+import { Horse, horseArmorTier } from '../web/src/core/entity/Horse.ts';
+import { mobAppearanceKey } from '../web/src/render/MobRenderer.ts';
 import {
   BEE_STING_POISON_SECONDS,
   BeeHives,
@@ -32,16 +32,16 @@ import {
   HONEY_MAX_LEVEL,
   HONEY_REGROW_SECONDS,
   shouldSting,
-} from '../src/core/world/BeeHive.ts';
-import { Minecart } from '../src/core/entity/Minecart.ts';
-import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
-import { EntityParking } from '../src/core/entity/EntityParking.ts';
-import { Arrow } from '../src/core/entity/Arrow.ts';
-import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
-import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../src/core/entity/FurnaceMinecart.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
+} from '../web/src/core/world/BeeHive.ts';
+import { Minecart } from '../web/src/core/entity/Minecart.ts';
+import { VehicleParking } from '../web/src/core/entity/VehicleParking.ts';
+import { EntityParking } from '../web/src/core/entity/EntityParking.ts';
+import { Arrow } from '../web/src/core/entity/Arrow.ts';
+import { HopperMinecart } from '../web/src/core/entity/HopperMinecart.ts';
+import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../web/src/core/entity/FurnaceMinecart.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;
@@ -462,7 +462,7 @@ console.log('\n[经验球：拆档 / 吸附 / 结算 / 合并（批次 170，I16
   check('球掉在它倒下的位置（x/z 对得上，y 抬到半身高）', dropped[0]?.x === 3.5 && dropped[0]?.z === 2.5 && (dropped[0]?.y ?? 0) > 0.5);
 
   // ---- 主程序两处接线（源码级）：死亡掉球那条公式 + 上下文把两个钩子分开
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '玩家死亡掉 min(等级×7, 100) 点球（原版那条公式）',
     mainSrc.includes('Math.min(this.experience.level * 7, 100)'),

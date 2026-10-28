@@ -8,8 +8,8 @@
  *  ④ 放置（占两格、上方必须是空气、下方要实心）。
  */
 
-import { Block, BANNER_ID_START, bannerPatternTile, blockDef, isBannerId } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
+import { Block, BANNER_ID_START, bannerPatternTile, blockDef, isBannerId } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
 import {
   BANNER_PATTERN_COUNT,
   bannerPatternOf,
@@ -20,12 +20,12 @@ import {
   withBannerPattern,
   withBannerTop,
   withFacing,
-} from '../src/core/registry/blockState.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import { readFileSync } from 'node:fs';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;
@@ -246,7 +246,7 @@ console.log('\n[图案：状态位与循环（批次 497）]');
   check('（缺的是）', missing.length === 0, missing.slice(0, 4).join(' '));
 
   // 接线守卫
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   // 批次 503：右键免费换图案已删（改由织布机消耗染料），换成两条新守卫
   check('右键旗帜不再免费换图案（否则染料消耗形同虚设）', !mainSrc.includes('cycleBannerPattern'));
   check(

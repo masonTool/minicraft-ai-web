@@ -14,14 +14,14 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { MINIGAME_CATALOG, miniGameEntry } from '../src/minigame/catalog.ts';
+import { MINIGAME_CATALOG, miniGameEntry } from '../web/src/minigame/catalog.ts';
 import {
   BLOCK_COLORS,
   JUMP_PALETTES,
   blockColorAt,
   paletteForSeed,
   shadeForNormal,
-} from '../src/minigame/games/jump/palette.ts';
+} from '../web/src/minigame/games/jump/palette.ts';
 import {
   EMPTY_PROGRESS,
   MINIGAME_PROGRESS_KEY,
@@ -29,9 +29,9 @@ import {
   loadProgress,
   recordScore,
   saveProgress,
-} from '../src/minigame/progress.ts';
-import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
-import { JUMPER_HEIGHT_RATIO } from '../src/minigame/games/jump/iso.ts';
+} from '../web/src/minigame/progress.ts';
+import { JUMP_CONFIG } from '../web/src/minigame/games/jump/config.ts';
+import { JUMPER_HEIGHT_RATIO } from '../web/src/minigame/games/jump/iso.ts';
 import {
   blockOverhang,
   blockSizeForScore,
@@ -55,7 +55,7 @@ import {
   targetBlock,
   type JumpBlock,
   type JumpRun,
-} from '../src/minigame/games/jump/logic.ts';
+} from '../web/src/minigame/games/jump/logic.ts';
 
 let passed = 0;
 let failed = 0;
@@ -82,14 +82,14 @@ function almost(label: string, actual: number, expected: number, tolerance = 1e-
   );
 }
 
-const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-const hostSrc = readFileSync(new URL('../src/minigame/MiniGameHost.ts', import.meta.url), 'utf8');
-const smokeSrc = readFileSync(new URL('../src/minigame/games/smoke.ts', import.meta.url), 'utf8');
-const jumpSrc = readFileSync(new URL('../src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
-const menuSrc = readFileSync(new URL('../src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
-const blockSceneSrc = readFileSync(new URL('../src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
-const audioSrc = readFileSync(new URL('../src/minigame/games/jump/audio.ts', import.meta.url), 'utf8');
-const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+const hostSrc = readFileSync(new URL('../web/src/minigame/MiniGameHost.ts', import.meta.url), 'utf8');
+const smokeSrc = readFileSync(new URL('../web/src/minigame/games/smoke.ts', import.meta.url), 'utf8');
+const jumpSrc = readFileSync(new URL('../web/src/minigame/games/jump/scene.ts', import.meta.url), 'utf8');
+const menuSrc = readFileSync(new URL('../web/src/ui/MiniGameMenu.ts', import.meta.url), 'utf8');
+const blockSceneSrc = readFileSync(new URL('../web/src/minigame/games/jump/BlockScene.ts', import.meta.url), 'utf8');
+const audioSrc = readFileSync(new URL('../web/src/minigame/games/jump/audio.ts', import.meta.url), 'utf8');
+const htmlSrc = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
 console.log('\n小游戏框架：主程序接线');
 {
@@ -905,7 +905,7 @@ console.log('\n小游戏选择页（一层）');
 
 console.log('\n主菜单入口（静态断言）');
 {
-  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check('主菜单有小游戏 action', worldSrc.includes('onMiniGames?: () => void;'));
   check('入口按钮是 secondary', worldSrc.includes("miniGames.className = 'world-secondary';"));
   check('入口按钮有稳定 id', worldSrc.includes("miniGames.id = 'world-minigames-button';"));

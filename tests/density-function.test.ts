@@ -10,7 +10,7 @@ import {
   densityToJson,
   evaluateDensity,
   type DensityNode,
-} from '../src/core/gen/DensityFunction.ts';
+} from '../web/src/core/gen/DensityFunction.ts';
 
 const ctx = { x: 1.5, y: 2.5, z: -3.5 };
 

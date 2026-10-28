@@ -17,27 +17,27 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { BLOCKS, Block, blockDef } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS } from '../src/core/registry/items.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { BIOMES } from '../src/core/gen/Biome.ts';
-import { NETHER_BIOME_NAMES } from '../src/core/gen/NetherGenerator.ts';
-import { END_BIOME_NAMES } from '../src/core/gen/EndGenerator.ts';
-import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
-import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
-import { END_STRUCTURE_KINDS } from '../src/core/gen/EndStructures.ts';
-import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
-import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
-import { DRINKABLE } from '../src/core/registry/potions.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { COMMANDS } from '../src/core/commands/Commands.ts';
-import { DEFAULT_GAME_RULES } from '../src/core/world/Rules.ts';
-import { DIMENSION_CYCLE } from '../src/core/gen/Dimension.ts';
-import { ORE_BLOCKS } from '../src/core/gen/OreGenerator.ts';
-import { TREE_KINDS } from '../src/core/gen/Features.ts';
-import { isRedstoneComponent } from '../src/core/redstone/RedstoneEngine.ts';
-import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
+import { BLOCKS, Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS } from '../web/src/core/registry/items.ts';
+import { MOB_TYPES } from '../web/src/core/entity/mobs.ts';
+import { BIOMES } from '../web/src/core/gen/Biome.ts';
+import { NETHER_BIOME_NAMES } from '../web/src/core/gen/NetherGenerator.ts';
+import { END_BIOME_NAMES } from '../web/src/core/gen/EndGenerator.ts';
+import { STRUCTURE_KINDS } from '../web/src/core/gen/Structures.ts';
+import { NETHER_STRUCTURE_KINDS } from '../web/src/core/gen/Bastion.ts';
+import { END_STRUCTURE_KINDS } from '../web/src/core/gen/EndStructures.ts';
+import { ENCHANTMENTS } from '../web/src/core/registry/enchantments.ts';
+import { EFFECTS } from '../web/src/core/survival/StatusEffects.ts';
+import { DRINKABLE } from '../web/src/core/registry/potions.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { COMMANDS } from '../web/src/core/commands/Commands.ts';
+import { DEFAULT_GAME_RULES } from '../web/src/core/world/Rules.ts';
+import { DIMENSION_CYCLE } from '../web/src/core/gen/Dimension.ts';
+import { ORE_BLOCKS } from '../web/src/core/gen/OreGenerator.ts';
+import { TREE_KINDS } from '../web/src/core/gen/Features.ts';
+import { isRedstoneComponent } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { ADVANCEMENTS } from '../web/src/core/progress/advancements.ts';
 
 const TASKS_FILE = new URL('../.continue/TASKS.md', import.meta.url);
 const START_MARK = '<!-- coverage:start -->';

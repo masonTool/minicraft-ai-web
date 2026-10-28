@@ -10,7 +10,7 @@ import {
   WORLD_RESET_TARGETS,
   isResetPlanComplete,
   missingResetTargets,
-} from '../src/game/worldReset.ts';
+} from '../web/src/game/worldReset.ts';
 
 describe('WORLD_RESET_TARGETS', () => {
   it('非空且每一项都是非空字符串', () => {

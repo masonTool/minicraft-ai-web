@@ -17,16 +17,16 @@
  * 运行：npm run test:endportal
  */
 
-import { Block, blockDef, blockTiles } from '../src/core/registry/blocks.ts';
-import { hasEndPortalEye, withEndPortalEye, withFacing, facingOf } from '../src/core/registry/blockState.ts';
-import { CREATIVE_ITEMS, ITEMS, Item, itemDef } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
-import { LOOT_TABLES, lootTableIndex } from '../src/core/registry/loot.ts';
-import { DROPPING_MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, blockDef, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { hasEndPortalEye, withEndPortalEye, withFacing, facingOf } from '../web/src/core/registry/blockState.ts';
+import { CREATIVE_ITEMS, ITEMS, Item, itemDef } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { recipeIngredients } from '../web/src/core/crafting/RecipeBook.ts';
+import { LOOT_TABLES, lootTableIndex } from '../web/src/core/registry/loot.ts';
+import { DROPPING_MOB_TYPES } from '../web/src/core/entity/mobs.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   END_ARRIVAL_X,
   END_ARRIVAL_Y,
@@ -43,7 +43,7 @@ import {
   isRingComplete,
   ringCenterAt,
   type EndPortalWorld,
-} from '../src/core/world/EndPortal.ts';
+} from '../web/src/core/world/EndPortal.ts';
 
 let passed = 0;
 let failed = 0;

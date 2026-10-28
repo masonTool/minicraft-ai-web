@@ -16,7 +16,7 @@ import {
   pickOpaqueSamples,
   uploadSampleAt,
   type PixelSample,
-} from '../src/render/canvasProbe.ts';
+} from '../web/src/render/canvasProbe.ts';
 
 /** 造一份 RGBA 数据：`opaque` 里的像素坐标写成不透明，其余全透明 */
 function makeData(width: number, height: number, opaque: readonly PixelSample[] = []): Uint8ClampedArray {

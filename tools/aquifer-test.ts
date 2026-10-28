@@ -10,10 +10,10 @@
  *   4. 生成是确定性的（同种子同区块两次结果一致）。
  */
 
-import { LAVA_LEVEL } from '../src/core/gen/Aquifer.ts';
-import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
-import { Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { LAVA_LEVEL } from '../web/src/core/gen/Aquifer.ts';
+import { OverworldGenerator, SEA_LEVEL } from '../web/src/core/gen/OverworldGenerator.ts';
+import { Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;

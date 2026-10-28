@@ -14,8 +14,8 @@
  */
 
 import * as THREE from 'three';
-import { JUMPER_HEIGHT_RATIO } from '../src/minigame/games/jump/iso.ts';
-import { JUMPER_COLOR, JumperModel, SQUASH_LIMIT } from '../src/minigame/games/jump/JumperModel.ts';
+import { JUMPER_HEIGHT_RATIO } from '../web/src/minigame/games/jump/iso.ts';
+import { JUMPER_COLOR, JumperModel, SQUASH_LIMIT } from '../web/src/minigame/games/jump/JumperModel.ts';
 
 /** 边长 2 时的身高：比例只有 iso.ts 一处真值，测试跟着它算，不许再手抄 0.72 */
 const BIG = 2 * JUMPER_HEIGHT_RATIO;

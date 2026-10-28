@@ -14,11 +14,11 @@
  * 运行：npm run test:copper
  */
 
-import { BLOCKS, Block, COPPER_ID_START, COPPER_STAGES, blockDef, blockHardness, copperId } from '../src/core/registry/blocks.ts';
-import { canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { CREATIVE_ITEMS, Item, categoryOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { BLOCKS, Block, COPPER_ID_START, COPPER_STAGES, blockDef, blockHardness, copperId } from '../web/src/core/registry/blocks.ts';
+import { canHarvest, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { CREATIVE_ITEMS, Item, categoryOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   COPPER_IDS,
   COPPER_SELF_START_CHANCE,
@@ -29,9 +29,9 @@ import {
   nextOxidation,
   oxidationStageOf,
   scrapeResult,
-} from '../src/core/world/Copper.ts';
-import { RANDOM_TICK_BEHAVIORS, type TickWorld } from '../src/core/tick/RandomTicks.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/world/Copper.ts';
+import { RANDOM_TICK_BEHAVIORS, type TickWorld } from '../web/src/core/tick/RandomTicks.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;

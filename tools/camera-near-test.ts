@@ -12,7 +12,7 @@
  * 运行：npm run test:cameranear
  */
 
-import { CAMERA_NEAR } from '../src/render/Sky.ts';
+import { CAMERA_NEAR } from '../web/src/render/Sky.ts';
 import {
   CAMERA_NEAR_MIN,
   CAMERA_PROBE_RADIUS,
@@ -21,8 +21,8 @@ import {
   cameraClearanceInfo,
   nearPlaneFor,
   pushCameraOutOfWalls,
-} from '../src/render/cameraNear.ts';
-import type { CollisionWorld, VoxelCollision } from '../src/core/physics/AABB.ts';
+} from '../web/src/render/cameraNear.ts';
+import type { CollisionWorld, VoxelCollision } from '../web/src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;

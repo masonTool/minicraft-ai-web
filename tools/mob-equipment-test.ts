@@ -21,10 +21,10 @@ import {
   sanitizeMobEquipment,
   weaponKindOf,
   weaponTint,
-} from '../src/core/entity/MobEquipment.ts';
-import { armorInfoById, armorItemId } from '../src/core/registry/armor.ts';
-import { Item, durabilityOf } from '../src/core/registry/items.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
+} from '../web/src/core/entity/MobEquipment.ts';
+import { armorInfoById, armorItemId } from '../web/src/core/registry/armor.ts';
+import { Item, durabilityOf } from '../web/src/core/registry/items.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
 
 let passed = 0;
 let failed = 0;
@@ -156,8 +156,8 @@ console.log('\n[渲染辅助]');
 
 console.log('\n[接线守卫]');
 {
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('Mob 受击走 applyMobArmor', mobSrc.includes('applyMobArmor(this.equipment, amount)'));
   check('Mob 死亡走 equipmentDrops', mobSrc.includes('equipmentDrops(this.equipment, Math.random, looting)'));
   check('Mob 构造时掷装备', mobSrc.includes('rollMobEquipment(type.id, Math.random'));

@@ -18,17 +18,17 @@
  * 运行：npm run test:advancement
  */
 
-import { Block, CROP_STAGES } from '../src/core/registry/blocks.ts';
-import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { ALL_HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
-import { fishingEntryIds } from '../src/core/registry/fishing.ts';
-import { lootItemIds } from '../src/core/registry/loot.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+import { Block, CROP_STAGES } from '../web/src/core/registry/blocks.ts';
+import { Item, dropFor, itemDef, possibleBlockDropIds } from '../web/src/core/registry/items.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { ALL_HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { DRAGON_TYPE } from '../web/src/core/entity/EndBoss.ts';
+import { fishingEntryIds } from '../web/src/core/registry/fishing.ts';
+import { lootItemIds } from '../web/src/core/registry/loot.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 import {
   ADVANCEMENTS,
   ADVANCEMENT_TABS,
@@ -37,8 +37,8 @@ import {
   advancementsOfTab,
   childrenOf,
   type TriggerKind,
-} from '../src/core/progress/advancements.ts';
-import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+} from '../web/src/core/progress/advancements.ts';
+import { AdvancementTracker } from '../web/src/core/progress/AdvancementTracker.ts';
 
 let passed = 0;
 let failed = 0;

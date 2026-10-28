@@ -15,25 +15,25 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
-import { describeState, hopperOutputOf, hopperOutputOffset, withHopperLocked, withHopperOutput } from '../src/core/registry/blockState.ts';
-import { collisionBoxes, isFullBlockShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, harvestRequirement, makeToolInfo, toolItemId } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { HOPPER_SIZE, HOPPER_TRANSFER_SECONDS, Hopper, type HopperEnv } from '../src/core/container/Hopper.ts';
-import { acceptingSlots, containerSlotCount, peekTake, takeOne, tryInsertOne } from '../src/core/container/Transfer.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../src/core/container/Furnace.ts';
-import { Campfire } from '../src/core/container/Campfire.ts';
-import { EnchantTable } from '../src/core/container/EnchantTable.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, restoreContainers, serializeContainers, type SerializedContainer } from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { isRedstoneComponent } from '../src/core/redstone/RedstoneEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, blockDef, blockHardness } from '../web/src/core/registry/blocks.ts';
+import { describeState, hopperOutputOf, hopperOutputOffset, withHopperLocked, withHopperOutput } from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, isFullBlockShape, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { planPlacement, type PlacementInput } from '../web/src/core/interaction/Placement.ts';
+import { Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, harvestRequirement, makeToolInfo, toolItemId } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { HOPPER_SIZE, HOPPER_TRANSFER_SECONDS, Hopper, type HopperEnv } from '../web/src/core/container/Hopper.ts';
+import { acceptingSlots, containerSlotCount, peekTake, takeOne, tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../web/src/core/container/Furnace.ts';
+import { Campfire } from '../web/src/core/container/Campfire.ts';
+import { EnchantTable } from '../web/src/core/container/EnchantTable.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, restoreContainers, serializeContainers, type SerializedContainer } from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { isRedstoneComponent } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -419,7 +419,7 @@ console.log('\n[特殊目标：堆肥桶（批次 555）]');
   const result = rejected.tick(0.4, envOf({ tryPush: () => false }));
   check('目标不收时不搬（物品留在漏斗里）', !result.moved && rejected.get(0)?.count === 1);
 
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主程序给漏斗接了 tryPush', mainSrc.includes('tryPush: (stack) => this.pushToComposter'));
   check('堆肥桶与玩家右键共用 compostStep', mainSrc.includes('compostStep(level, stack.id, Math.random)'));
 }

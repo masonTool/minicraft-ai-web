@@ -18,7 +18,7 @@ import {
   classifyGlSupport,
   rendererFailure,
   type GlProbe,
-} from '../src/core/render/webglSupport.ts';
+} from '../web/src/core/render/webglSupport.ts';
 
 let passed = 0;
 let failed = 0;

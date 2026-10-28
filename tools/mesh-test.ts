@@ -11,13 +11,13 @@
  *   3. **真实地形上的合并率**：用真实生成的区块对比「逐面网格化」的三角形数。
  */
 
-import { AO_BRIGHTNESS, createGeometry, meshSection, type GeometryArrays, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
-import { mergeSectionLayer } from '../src/render/ChunkRenderer.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { Block, blockDef, slabId } from '../src/core/registry/blocks.ts';
-import { withWaterlogged } from '../src/core/registry/blockState.ts';
-import { Chunk, SECTION_COUNT, Chunk as ChunkClass } from '../src/core/world/Chunk.ts';
-import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
+import { AO_BRIGHTNESS, createGeometry, meshSection, type GeometryArrays, type MeshContext, type TileUvSource } from '../web/src/core/mesh/ChunkMesher.ts';
+import { mergeSectionLayer } from '../web/src/render/ChunkRenderer.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { Block, blockDef, slabId } from '../web/src/core/registry/blocks.ts';
+import { withWaterlogged } from '../web/src/core/registry/blockState.ts';
+import { Chunk, SECTION_COUNT, Chunk as ChunkClass } from '../web/src/core/world/Chunk.ts';
+import { isFullBlockShape } from '../web/src/core/registry/blockShapes.ts';
 
 let passed = 0;
 let failed = 0;

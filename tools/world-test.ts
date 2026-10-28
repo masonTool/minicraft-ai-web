@@ -20,25 +20,25 @@ import {
   worldTypeLabel,
   isWorldType,
   randomSeed,
-} from '../src/core/gen/WorldType.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
+} from '../web/src/core/gen/WorldType.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { OverworldGenerator, SEA_LEVEL } from '../web/src/core/gen/OverworldGenerator.ts';
 // 出生点随机源必须与主程序同一套（由世界种子派生），否则这里钉的"同种子同出生点"是假的
-import { Random } from '../src/core/gen/noise/Random.ts';
-import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
+import { Random } from '../web/src/core/gen/noise/Random.ts';
+import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../web/src/core/world/Chunk.ts';
 import {
   findSafeSpawn,
   naturalGroundNear,
   naturalGroundY,
   planSpawnRegion,
   type SpawnSearchWorld,
-} from '../src/core/world/SpawnPoint.ts';
-import { resetLanguageForTest, setLanguage } from '../src/core/i18n/I18n.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
+} from '../web/src/core/world/SpawnPoint.ts';
+import { resetLanguageForTest, setLanguage } from '../web/src/core/i18n/I18n.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../web/src/core/save/WorldRegistry.ts';
 import { readFileSync } from 'node:fs';
-import { relativeTime } from '../src/ui/WorldScreen.ts';
+import { relativeTime } from '../web/src/ui/WorldScreen.ts';
 
 let passed = 0;
 let failed = 0;
@@ -535,7 +535,7 @@ console.log('\n[光照快路径：写入侧的接线（批次 283）]');
 {
   // 判据本身在 `tests/light.test.ts` 里逐条断言；这里只保证 `World` 的两条写入路径
   // 真的用了它，而且 `onBlockChanged` 没有被漏在分支外面（漏一处就等于没做）。
-  const src = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../web/src/core/world/World.ts', import.meta.url), 'utf8');
   check('两条写入路径都用 lightNeedsUpdate 判定', (src.match(/lightNeedsUpdate\(/g) ?? []).length === 2);
   check('onBlockChanged 全部在 lightChanged 分支里', (src.match(/if \(lightChanged\) this\.light\.onBlockChanged/g) ?? []).length === 2);
   check('跳过光照的写入单独计数（诊断）', src.includes('this.lightSkipped++'));

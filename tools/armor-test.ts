@@ -11,7 +11,7 @@
  * 运行：npm run test:armor
  */
 
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   ALL_ARMOR_MATERIALS,
   ARMOR_ITEM_START,
@@ -31,15 +31,15 @@ import {
   makeArmorInfo,
   totalDefense,
   totalToughness,
-} from '../src/core/registry/armor.ts';
-import { itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
-import { PlayerStats, type DamageCause } from '../src/core/survival/PlayerStats.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
-import { Inventory } from '../src/core/container/Inventory.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/armor.ts';
+import { itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel, itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { PlayerStats, type DamageCause } from '../web/src/core/survival/PlayerStats.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { recipesForResult } from '../web/src/core/crafting/RecipeBook.ts';
+import { Inventory } from '../web/src/core/container/Inventory.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;

@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBlockTable } from '../src/core/registry/blocks.ts';
+import { buildBlockTable } from '../web/src/core/registry/blocks.ts';
 import { STATE_COUNT, behaviorHash, hasBehavior } from './behavior-signature.ts';
 
 let passed = 0;

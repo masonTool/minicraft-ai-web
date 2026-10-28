@@ -12,11 +12,11 @@
  * 运行：npm run test:anvil
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { reasonText } from '../src/core/container/reason.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { reasonText } from '../web/src/core/container/reason.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
 import {
   COMBINE_COST,
   MAX_ANVIL_COST,
@@ -27,13 +27,13 @@ import {
   maxDurabilityOf,
   nextRepairCost,
   repairMaterialOf,
-} from '../src/core/crafting/Anvil.ts';
-import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../src/core/container/Anvil.ts';
-import { Inventory, type ItemStack } from '../src/core/container/Inventory.ts';
-import { Experience } from '../src/core/survival/Experience.ts';
-import { itemTooltip } from '../src/core/registry/itemNames.ts';
-import { enchantmentById } from '../src/core/registry/enchantments.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/crafting/Anvil.ts';
+import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../web/src/core/container/Anvil.ts';
+import { Inventory, type ItemStack } from '../web/src/core/container/Inventory.ts';
+import { Experience } from '../web/src/core/survival/Experience.ts';
+import { itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { enchantmentById } from '../web/src/core/registry/enchantments.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;

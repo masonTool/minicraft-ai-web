@@ -5,7 +5,7 @@
  * "测试依赖家里路由器"，而且慢。
  */
 import { describe, expect, it } from 'vitest';
-import { fetchPublicServers } from '../src/ui/ServerPicker.ts';
+import { fetchPublicServers } from '../web/src/ui/ServerPicker.ts';
 import {
   DEFAULT_SCAN_PORT,
   canScanLan,
@@ -14,7 +14,7 @@ import {
   scanSubnet,
   subnetHosts,
   subnetOf,
-} from '../src/core/net/ServerDiscovery.ts';
+} from '../web/src/core/net/ServerDiscovery.ts';
 
 describe('subnetOf / subnetHosts', () => {
   it('常见的三个私网段都认', () => {

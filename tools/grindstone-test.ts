@@ -12,35 +12,35 @@
  * 运行：npm run test:grindstone
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { maxDurabilityOf } from '../src/core/crafting/Anvil.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { maxDurabilityOf } from '../web/src/core/crafting/Anvil.ts';
 import {
   GRINDSTONE_DURABILITY_BONUS,
   grindExperience,
   grindOnGrindstone,
   grindstoneHint,
-} from '../src/core/crafting/Grindstone.ts';
+} from '../web/src/core/crafting/Grindstone.ts';
 import {
   GRINDSTONE_LEFT,
   GRINDSTONE_RESULT,
   GRINDSTONE_RIGHT,
   GRINDSTONE_SIZE,
   Grindstone,
-} from '../src/core/container/Grindstone.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
-import { Anvil } from '../src/core/container/Anvil.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { SmithingTable } from '../src/core/container/SmithingTable.ts';
+} from '../web/src/core/container/Grindstone.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
+import { Anvil } from '../web/src/core/container/Anvil.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { SmithingTable } from '../web/src/core/container/SmithingTable.ts';
 import {
   acceptingSlots,
   containerSlotCount,
   isComputedResultSlot,
-} from '../src/core/container/Transfer.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+} from '../web/src/core/container/Transfer.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 
 let passed = 0;
 let failed = 0;

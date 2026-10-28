@@ -16,14 +16,14 @@ import {
   SNOW_GOLEM_THROW_SPEED,
   ruleAccepts,
   targetRuleFor,
-} from '../src/core/entity/TargetRules.ts';
+} from '../web/src/core/entity/TargetRules.ts';
 import {
   GUARD_ATTACK_COOLDOWN,
   GUARD_ATTACK_RANGE,
   GUARD_DAMAGE,
   GUARD_RANGE,
   nearestHostileTarget,
-} from '../src/core/world/GuardAI.ts';
+} from '../web/src/core/world/GuardAI.ts';
 
 let passed = 0;
 let failed = 0;
@@ -175,13 +175,13 @@ console.log('\n[选择：最近 / 并列 / 半径 / 尸体]');
 
 console.log('\n[接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主程序用规则表拿参数', mainSrc.includes('targetRuleFor(entity.type.id, entity.tamed === true)'));
   check('不再写死 iron_golem 分支', !mainSrc.includes("entity.type.id !== 'iron_golem'"));
   check('伤害/冷却来自规则', mainSrc.includes('entity.guardCooldown = rule.cooldown') && mainSrc.includes('rule.damage'));
   check('恐慌优先只给"打敌对"的规则', mainSrc.includes('rule.hostileOnly ? hostiles.filter'));
 
-  const rulesSrc = readFileSync(new URL('../src/core/entity/TargetRules.ts', import.meta.url), 'utf8');
+  const rulesSrc = readFileSync(new URL('../web/src/core/entity/TargetRules.ts', import.meta.url), 'utf8');
   check('规则表里有狼', rulesSrc.includes("typeId === 'wolf'"));
   check('规则表里有雪傀儡', rulesSrc.includes("typeId === 'snow_golem'"));
   check('主程序给远程规则单独一条分支', mainSrc.includes('if (rule.ranged)'));

@@ -17,19 +17,19 @@
  * 运行：npm run test:enderchest
  */
 
-import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
-import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, efficientToolType, harvestRequirement, makeToolInfo, toolItemId } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { emitLight } from '../src/core/registry/blocks.ts';
-import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
-import { EnderChest } from '../src/core/world/EnderChest.ts';
-import { restoreStacks, serializeStacks } from '../src/core/save/ContainerSave.ts';
-import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
-import { canPush } from '../src/core/redstone/RedstoneEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { isFullBlockShape } from '../web/src/core/registry/blockShapes.ts';
+import { Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, efficientToolType, harvestRequirement, makeToolInfo, toolItemId } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { emitLight } from '../web/src/core/registry/blocks.ts';
+import { CHEST_SIZE, Chest } from '../web/src/core/container/Chest.ts';
+import { EnderChest } from '../web/src/core/world/EnderChest.ts';
+import { restoreStacks, serializeStacks } from '../web/src/core/save/ContainerSave.ts';
+import { CONTAINER_BLOCKS } from '../web/src/core/world/BlockEntityStore.ts';
+import { canPush } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

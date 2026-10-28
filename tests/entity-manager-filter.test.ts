@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { EntityManager } from '../src/core/entity/EntityManager.ts';
-import type { Entity } from '../src/core/entity/Entity.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
+import { EntityManager } from '../web/src/core/entity/EntityManager.ts';
+import type { Entity } from '../web/src/core/entity/Entity.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
 
 /** 只实现 `tick` 与 `dead` 的假实体：`update` 只用到这两个 */
 function fakeEntity(name: string, log: string[]): Entity {

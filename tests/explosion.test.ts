@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Block, blastResistanceOf, explosionBreaksBlock } from '../src/core/registry/blocks.ts';
+import { Block, blastResistanceOf, explosionBreaksBlock } from '../web/src/core/registry/blocks.ts';
 
 describe('爆炸抗性', () => {
   it('基岩/黑曜石/铁砧/附魔台扛得住普通爆炸', () => {

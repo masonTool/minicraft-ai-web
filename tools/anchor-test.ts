@@ -13,17 +13,17 @@
  * 运行：npm run test:anchor
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { ITEMS } from '../src/core/registry/items.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { ITEMS } from '../web/src/core/registry/items.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   RESPAWN_ANCHOR_MAX_CHARGE,
   anchorCharge,
   anchorLight,
   withAnchorCharge,
-} from '../src/core/world/RespawnAnchor.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/RespawnAnchor.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

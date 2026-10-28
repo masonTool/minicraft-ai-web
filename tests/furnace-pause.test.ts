@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { FURNACE_FUEL, FURNACE_INPUT, Furnace } from '../src/core/container/Furnace.ts';
-import { Campfire } from '../src/core/container/Campfire.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { FURNACE_FUEL, FURNACE_INPUT, Furnace } from '../web/src/core/container/Furnace.ts';
+import { Campfire } from '../web/src/core/container/Campfire.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 
 describe('熔炉的"点目标框才开始"（批次 295）', () => {
   it('暂停时燃料不烧、进度不走；恢复后才推进', () => {

@@ -18,9 +18,9 @@
  * 运行：npm run test:face
  */
 
-import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { Block, BLOCKS, blockDef, blockTiles, blockHardness, faceTileOn } from '../src/core/registry/blocks.ts';
+import { meshSection, type MeshContext, type TileUvSource } from '../web/src/core/mesh/ChunkMesher.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { Block, BLOCKS, blockDef, blockTiles, blockHardness, faceTileOn } from '../web/src/core/registry/blocks.ts';
 import {
   facingOf,
   sixFacingOffset,
@@ -29,9 +29,9 @@ import {
   withSixFacing,
   sixFacingOf,
   sixFacingOpposite,
-} from '../src/core/registry/blockState.ts';
-import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { planPlacement, type PlacementInput } from '../web/src/core/interaction/Placement.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

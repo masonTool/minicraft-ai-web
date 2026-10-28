@@ -13,11 +13,11 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { t, tableOf } from '../src/core/i18n/I18n.ts';
+import { t, tableOf } from '../web/src/core/i18n/I18n.ts';
 // 语言全集：跨语言一致性断言要遍历它，而不是手写六个码（以后加语言不用改测试）
-import { LOCALES } from '../src/core/i18n/locale.ts';
-import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
-import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
+import { LOCALES } from '../web/src/core/i18n/locale.ts';
+import { UnsupportedScreen } from '../web/src/ui/UnsupportedScreen.ts';
+import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../web/src/ui/DamageFlash.ts';
 import {
   CARD_PAGE_SIZE_NARROW,
   CARD_PAGE_SIZE_WIDE,
@@ -31,22 +31,22 @@ import {
   pageLabel,
   pageSizeFor,
   slicePage,
-} from '../src/ui/ItemPager.ts';
-import { TOUCH_ICON_NAMES, touchIconLabel, touchIconSvg } from '../src/ui/TouchIcons.ts';
-import { armorSlotHintSvg, type ArmorSlotKind } from '../src/ui/SlotVisuals.ts';
-import { iconBackingScale, iconDisplaySize } from '../src/ui/ItemIcon.ts';
-import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../src/ui/BlockIcon.ts';
-import { BLOCKS } from '../src/core/registry/blocks.ts';
-import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
-import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
-import { damageReason } from '../src/core/survival/DamageNotice.ts';
-import { BackButton } from '../src/ui/BackButton.ts';
+} from '../web/src/ui/ItemPager.ts';
+import { TOUCH_ICON_NAMES, touchIconLabel, touchIconSvg } from '../web/src/ui/TouchIcons.ts';
+import { armorSlotHintSvg, type ArmorSlotKind } from '../web/src/ui/SlotVisuals.ts';
+import { iconBackingScale, iconDisplaySize } from '../web/src/ui/ItemIcon.ts';
+import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../web/src/ui/BlockIcon.ts';
+import { BLOCKS } from '../web/src/core/registry/blocks.ts';
+import { TOUCH_TOOLTIP_MS } from '../web/src/ui/Tooltip.ts';
+import { TOUCH_LONG_PRESS_MS } from '../web/src/ui/InventoryScreen.ts';
+import { damageReason } from '../web/src/core/survival/DamageNotice.ts';
+import { BackButton } from '../web/src/ui/BackButton.ts';
 import {
   STICK_MODES,
   stickModeLabels,
   TOUCH_BREAK_LONG_PRESS_MS,
   isTouchUi,
-} from '../src/ui/TouchControls.ts';
+} from '../web/src/ui/TouchControls.ts';
 import {
   DEFAULT_SETTINGS,
   SENSITIVITY_MAX,
@@ -57,15 +57,15 @@ import {
   TOUCH_SCALE_MIN,
   loadSettings,
   sensitivityGain,
-} from '../src/ui/SettingsScreen.ts';
-import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
+} from '../web/src/ui/SettingsScreen.ts';
+import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../web/src/ui/CreativeTabs.ts';
 import {
   MULTIPLAYER_NAME_MAX,
   multiplayerButtons,
   normalizeServerUrl,
   sanitizeMultiplayerName,
-} from '../src/ui/MultiplayerScreen.ts';
-import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
+} from '../web/src/ui/MultiplayerScreen.ts';
+import { armAutoFullscreen, isFullscreen } from '../web/src/ui/Fullscreen.ts';
 import {
   failBootLoading,
   hideBootLoading,
@@ -73,9 +73,9 @@ import {
   isBootLoadingVisible,
   isLoadingVisible,
   showLoading,
-} from '../src/ui/LoadingOverlay.ts';
-import { CREATIVE_ITEMS, itemDef, itemIconTile } from '../src/core/registry/items.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/ui/LoadingOverlay.ts';
+import { CREATIVE_ITEMS, itemDef, itemIconTile } from '../web/src/core/registry/items.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -221,10 +221,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   // ---- ④ CSS 守卫（少哪一条就是哪一种"半手机半桌面"的怪界面）
   // 2026-10-29（用户）：角色形象有自己的保存，外层外观页只对亮度负责
   {
-    const settingsSrc2 = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-    const invSrc2 = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-    const appSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const htmlSrc2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const settingsSrc2 = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+    const invSrc2 = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+    const appSrc2 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+    const htmlSrc2 = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     check(
       '角色形象弹窗自带「保存」；外观分组只含亮度',
       settingsSrc2.includes('saveAppearance(): void') &&
@@ -265,7 +265,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
     );
   }
 
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
@@ -335,9 +335,9 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   check('触摸端不再覆盖面板尺寸（尺寸只有 --panel-w/--panel-h 一处）', !cssOnly.includes('body.touch-mode .settings-panel {'));
 
   // ---- ⑤ 手机端不能出现键盘字母（用户直接提的一条：关界面用 ✕，不是字母 R）
-  const recipeBook = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
-  const inventory = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const settings = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const recipeBook = readFileSync(new URL('../web/src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const inventory = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   // 多语言 P6-5a：文案搬进 notice.recipe.*，判据跟到键调用（仍是"手机上 ✕、PC 才带键盘提示"）
   check('配方书的关闭键在手机上是 ✕（PC 才写关闭提示）', recipeBook.includes("isTouchUi() ? '✕' : t('notice.recipe.close')"));
   check(
@@ -355,7 +355,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
 
 console.log('\n[index.html：手机端与 PC 端的布局规则]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
 
   // 安全区：底部贴边的 HUD 必须让开"home 横条"
@@ -412,7 +412,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   );
 
   // 按键/手势说明搬到了暂停菜单底部（标记在 SettingsScreen.ts 里，不再是 HTML 外壳）
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check(
     '暂停菜单底部同时有键盘提示与手势提示',
     settingsSrc.includes("help.className = 'pause-help'") &&
@@ -425,12 +425,12 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
 
   // 点空白关闭（批次 111 按用户要求删掉）：三个面板里都不许再有这条
   const noBackdropClose = ['SettingsScreen', 'AdvancementScreen', 'RecipeBook'].every((name) => {
-    const source = readFileSync(new URL(`../src/ui/${name}.ts`, import.meta.url), 'utf8');
+    const source = readFileSync(new URL(`../web/src/ui/${name}.ts`, import.meta.url), 'utf8');
     return !source.includes('event.target === this.root');
   });
   check('三个面板都不再用"点空白关闭"', noBackdropClose);
   // 删掉它之后每个面板必须还有**看得见**的出口
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   check('背包补上了关闭键（它原来根本没有）', invSrc.includes("closeButton.className = 'inv-close'") && html.includes('.inv-close {'));
   check(
     '关闭背包会同步关闭携带版配方页（不留下孤立左板）',
@@ -443,9 +443,9 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
 
 console.log('\n[PC 端 HUD 按钮层（2026-10-25：与手机同构 + 每颗带键帽）]');
 {
-  const pcSrc = readFileSync(new URL('../src/ui/PcControls.ts', import.meta.url), 'utf8');
-  const mainPc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const htmlPc = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  const pcSrc = readFileSync(new URL('../web/src/ui/PcControls.ts', import.meta.url), 'utf8');
+  const mainPc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const htmlPc = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
 
   // ---- ① 手机上有哪几颗，PC 上就得有哪几颗（用户口径："所有的按钮都要显示"）
   for (const action of ['chat', 'pause', 'view', 'inventory', 'jump', 'flyUp', 'flyDown'] as const) {
@@ -511,7 +511,7 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   check('但也不能长到"按不出来"（≤ 1200ms）', TOUCH_TOOLTIP_MS <= 1200, String(TOUCH_TOOLTIP_MS));
 
   // ---- ③ CSS：触摸端的快捷栏必须可点、槽位够大、物品名浮标在
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     // ⚠️ 这一条是这次体检的核心：`#hud` 是 pointer-events: none，不显式打开的话
@@ -587,18 +587,18 @@ console.log('\n[方块物品的等轴（iso）图标]');
   }
 
   // ⑤ 资源包换贴图之后图标缓存必须失效（否则背包里还是旧材质）
-  const packSrc = readFileSync(new URL('../src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
+  const packSrc = readFileSync(new URL('../web/src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
   check('替换贴图走 markTextureChanged（一次性作废所有按像素派生的缓存）', packSrc.includes('atlas.markTextureChanged()'));
   check('不再直接写 texture.needsUpdate', !packSrc.includes('atlas.texture.needsUpdate = true'));
-  const isoSrc = readFileSync(new URL('../src/ui/BlockIcon.ts', import.meta.url), 'utf8');
+  const isoSrc = readFileSync(new URL('../web/src/ui/BlockIcon.ts', import.meta.url), 'utf8');
   check('图标缓存以 atlas.revision 为失效判据', isoSrc.includes('atlas.revision'));
 }
 
 console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
 
   // ---- ① 元素真的建出来了（没建 = 长按之后什么都不会出现，且没有任何报错）
   check('槽位里建了指示条', invSrc.includes("splitBar.className = 'inv-split-bar hidden'"));
@@ -657,8 +657,8 @@ console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条
 
 console.log('\n[背包搬运音效（H19 ⑪，批次 138）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
 
   check('界面提供了 onMove 钩子', invSrc.includes('onMove?: () => void;'));
   // ⚠️ 判据是"动过"而不是"点过"：散在十几个分支里逐个补一句迟早漏，
@@ -671,9 +671,9 @@ console.log('\n[背包搬运音效（H19 ⑪，批次 138）]');
 
 console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克隆]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   check('界面提供了 isCreative 钩子', invSrc.includes('isCreative?: () => boolean;'));
   // 批次 181：创造能力看**模式**，不再看"在不在飞"
@@ -703,12 +703,12 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
 
 console.log('\n[携带版统一双栏（批次 140 / 156）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const core = readFileSync(new URL('../src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
-  const pagerSrc = readFileSync(new URL('../src/ui/ItemPager.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const recipeSrc = readFileSync(new URL('../web/src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const core = readFileSync(new URL('../web/src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
+  const pagerSrc = readFileSync(new URL('../web/src/ui/ItemPager.ts', import.meta.url), 'utf8');
 
   check('左右栏仍复用 PocketInventoryTab 状态', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
   check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
@@ -922,10 +922,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '酿造台/营火都有 started 硬开关，关界面按是否开工决定继续（批次 330）',
-    readFileSync(new URL('../src/core/container/BrewingStand.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/core/container/BrewingStand.ts', import.meta.url), 'utf8').includes(
       'if (this.paused || !this.started)',
     ) &&
-      readFileSync(new URL('../src/core/container/Campfire.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/core/container/Campfire.ts', import.meta.url), 'utf8').includes(
         'if (this.paused || !this.started)',
       ) &&
       invSrc.includes('this.activeContainer.started = this.brewStarted') &&
@@ -1052,7 +1052,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '熔炉核心 started 硬开关：未点目标即使 paused=false 也不推进（批次 328）',
-    readFileSync(new URL('../src/core/container/Furnace.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/core/container/Furnace.ts', import.meta.url), 'utf8').includes(
       'if (this.paused || !this.started)',
     ) &&
       invSrc.includes('this.activeContainer.started = true') &&
@@ -1134,7 +1134,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check(
     '熔炉与酿造台离开玩家继续跑，营火/漏斗仍限 64 格（批次 312 / 330）',
     /!\(container instanceof Furnace\)[\s\S]{0,160}!\(container instanceof BrewingStand\)[\s\S]{0,160}> rangeSq/.test(
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8'),
     ),
   );
   check(
@@ -1288,8 +1288,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
 
 console.log('\n[携带版细节收口（批次 159）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // ① 左栏是物品分类时，右栏只留合成区
   check(
@@ -1390,12 +1390,12 @@ console.log('\n[携带版细节收口（批次 159）]');
   check('点合成区不再清空配方预览', !invSrc.includes('this.craftGhost && slot?.closest'));
 
   // 游戏内一行提示（批次 181）：与背包那块分开，2 秒 + 200ms 淡出
-  const hudToastSrc = readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8');
+  const hudToastSrc = readFileSync(new URL('../web/src/ui/HudToast.ts', import.meta.url), 'utf8');
   check('游戏内提示停留 2 秒', hudToastSrc.includes('export const HUD_TOAST_MS = 2000;'));
   check('游戏内提示 200ms 淡出', hudToastSrc.includes('const FADE_MS = 200;'));
   check(
     '顶部视角键接了相机循环',
-    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('onCycleCamera: () => {'),
+    readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('onCycleCamera: () => {'),
   );
   check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
 
@@ -1418,10 +1418,10 @@ console.log('\n[携带版细节收口（批次 159）]');
 
 console.log('\n[携带版细节收口（二）（批次 159）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const recipeSrc = readFileSync(new URL('../web/src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // ① 左轨分类按钮点中后**一直保持按下**的样子
   check('分类按钮有选中态（斜面翻进去 + 底色亮一档）', css.includes('.inv-pocket-recipe-tab.active {'));
@@ -1489,9 +1489,9 @@ console.log('\n[携带版细节收口（二）（批次 159）]');
 
 console.log('\n[左栏 = 物品分类（批次 159 三）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // ③ 左栏的职责是**物品分类**：默认只列我拥有的（仓库里的泥土就在它那个分类里）
   check(
@@ -1554,7 +1554,7 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     '提示条可以点一下立刻消失',
     invSrc.includes('this.pickToastEl.addEventListener(\'pointerdown\'') &&
       invSrc.includes('this.hidePickToast(true)') &&
-      readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8').includes('hide(): void {'),
+      readFileSync(new URL('../web/src/ui/HudToast.ts', import.meta.url), 'utf8').includes('hide(): void {'),
   );
   // 创造模式不展示配方；红底目标框只在生存模式做
   check(
@@ -1624,8 +1624,8 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
 
 console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // ① 创造栏 800 多个格子**不能**每次 refresh 都重建：重建期间整栏是空的，
   //    连点几下就是"分类栏怎么全空了"
@@ -1654,8 +1654,8 @@ console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
 
 console.log('\n[合成产物直接进背包（批次 160）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const inv = readFileSync(new URL('../src/core/container/Inventory.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const inv = readFileSync(new URL('../web/src/core/container/Inventory.ts', import.meta.url), 'utf8');
 
   check(
     '点产物不再挂到光标上，而是直接收进背包',
@@ -1675,8 +1675,8 @@ console.log('\n[合成产物直接进背包（批次 160）]');
 
 console.log('\n[丢出口袋要在拾取范围之外（批次 161）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const itemSrc = readFileSync(new URL('../src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const itemSrc = readFileSync(new URL('../web/src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
 
   // 站在原地点"界面外丢出"时，东西原来就丢在自己脚下：0.5 秒冷却一过就被自己吸回去
   check('掉落物有 0.5 秒拾取冷却（所以不能丢在脚下）', itemSrc.includes('const PICKUP_DELAY = 0.5;'));
@@ -1690,7 +1690,7 @@ console.log('\n[丢出口袋要在拾取范围之外（批次 161）]');
 
 console.log('\n[浅底按钮用深色字（批次 162）]');
 {
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   // 统一按钮那套给的是浅色文字（--btn-text = #e0e0e0），而背包这几颗是浅底；
   // 选中时底变成 #dcdec4，浅色字就彻底看不见了
@@ -1703,7 +1703,7 @@ console.log('\n[浅底按钮用深色字（批次 162）]');
 
 console.log('\n[创造模式不给配方入口（批次 163）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
 
   check(
     '创造模式下标题栏那颗配方按钮整颗藏掉（不只是"创造物品"那一栏）',
@@ -1733,7 +1733,7 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
 
 console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批次 165）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
 
   // ⚠️ 真事故：`detachRecipeBook()` 是批次 157 留下的（那时这个元素还是"配方书落脚点"），
   // 里面有一句 `categoryHostEl.style.display = 'none'`；而 `applyInventoryChrome()`
@@ -1758,10 +1758,10 @@ console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批�
 
 console.log('\n[玩家预览占位（批次 141）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const previewSrc = readFileSync(new URL('../web/src/ui/PlayerPreview.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../web/src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
 
   check('有 PlayerPreview 模块', previewSrc.includes('export function drawPlayerPreview'));
   check('色板与 PlayerRenderer 同源（肤色）', previewSrc.includes('#dc9a6b') && playerSrc.includes('0xdc9a6b'));
@@ -1860,7 +1860,7 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   // 原来写死了像素值（同优先级、后出现 → 会盖掉带变量的那条），
   // 于是"触摸按钮大小"在手机上等于没接线（拉滑块毫无反应）。这条断言盯的就是它
   {
-    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     const blocks = [...html.matchAll(/(#touch-stick[^{]*|#touch-buttons|.touch-button\.[a-z]+|.touch-button)\s*\{([^}]*)\}/g)];
     const offenders: string[] = [];
     for (const [, selector, body] of blocks) {
@@ -1903,7 +1903,7 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
 
   // CSS：动态摇杆靠透明度隐藏（不能 display: none——那样量出来的矩形是 0），
   // 飞行提示用伪元素画（不往按钮里塞文字节点）
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     // 批次 20261024-1152（用户）：动态摇杆的底圈**默认就要看得见**（以前是 opacity: 0）
@@ -1921,7 +1921,7 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   // 批次 20261024-1152（用户）：跟手摇杆的底圈常驻显示之后，松手必须回左下默认点，
   // 否则它会停在最后按过的位置（看着像"摇杆卡住了"）。
   {
-    const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+    const touchSrc = readFileSync(new URL('../web/src/ui/TouchControls.ts', import.meta.url), 'utf8');
     check(
       '跟手摇杆松手后清掉内联坐标（回到左下默认点）',
       touchSrc.includes('private clearDynamicOffset(): void {') &&
@@ -1991,7 +1991,7 @@ console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形�
   );
 
   // CSS：窄屏只留图标，宽屏图标 + 文字
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     ['标签里有图标尺寸', '.inv-tab-icon { width: 18px; height: 18px; image-rendering: pixelated;'],
@@ -2034,7 +2034,7 @@ console.log('\n[主页不能被"整屏层"盖住（批次 102，A10 的回归门
   check('构造 UnsupportedScreen 不碰 DOM（Node 里没有 document，碰了就会抛）', constructed);
   equal('构造它不往父节点加任何东西（否则空层就上屏了）', String(parent.appended.length), '0');
 
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   check(
     '整屏提示层默认不显示（少一句 display: none，一个空层就能把主页盖黑）',
@@ -2048,7 +2048,7 @@ console.log('\n[主页不能被"整屏层"盖住（批次 102，A10 的回归门
 
 console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 {
-  const source = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../web/src/ui/TouchControls.ts', import.meta.url), 'utf8');
   // 右下那一簇只剩"潜行 + 跳跃"；背包/聊天挂到快捷栏两侧（挂进 #hotbar 内部并绝对定位）
   check(
     '右下：上升/跳跃/下降三颗（飞行前 CSS 藏升降）',
@@ -2085,7 +2085,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
 
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
-  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSource = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     'usingItem 在触摸端走"按下即使用"（不等 400ms 长按阈值）',
     mainSource.includes('return this.leftDown || this.touch.holding;'),
@@ -2110,7 +2110,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
 
   // 批次 239：触摸端"点哪打哪"——白圈跟手，方块目标改由手指落点决定
-  const indexSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const indexSource = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   check(
     '按下即出白圈，白圈用 fixed + transform 跟手（安全区 padding 不会带偏）',
     indexSource.includes('#touch-ring {') &&
@@ -2155,7 +2155,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   {
     // 批次 336（用户："只能操作四五格，正式版能到 10 格左右"）
-    const tuning = readFileSync(new URL('../src/game/tuning.ts', import.meta.url), 'utf8');
+    const tuning = readFileSync(new URL('../web/src/game/tuning.ts', import.meta.url), 'utf8');
     check(
       '交互距离：放置/破坏 10 格、近战 7.5 格（近战仍短于放置）',
       tuning.includes('export const REACH = 10;') &&
@@ -2251,7 +2251,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
    * 它们本来就对键鼠无效（`handedness`/`touchStick` 只喂 `TouchControls`，
    * `aimMode` 的两处消费都带 `this.touch !== null`），但摆在设置里等于让人以为能调。
    */
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   const touchOnlyBlock = /if \(isTouchUi\(\)\) \{([\s\S]*?)\n {4}\}/.exec(settingsSrc)?.[1] ?? '';
   check(
     '惯用手 / 瞄准 / 摇杆三行在 isTouchUi() 里创建',
@@ -2282,7 +2282,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   // 批次 491：旁观也能飞，所以判据从 `isCreative` 换成 `canFly`
   check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !canFly(this.gameMode))'));
-  const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const worldSource = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check(
     '新建世界表单有"游戏模式"',
     // 批次 421：文案走 i18n 键，验"绑了哪个键"
@@ -2292,7 +2292,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     '首页显示构建时间与提交标题（批次 182）',
     worldSource.includes("build.id = 'world-build'") &&
       worldSource.includes('formatBuildInfo(readBuildInfo())') &&
-      readFileSync(new URL('../index.html', import.meta.url), 'utf8').includes('.world-build {'),
+      readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').includes('.world-build {'),
   );
   check(
     '世界类型下面有"到底有什么"的说明（超平坦会警告）',
@@ -2303,7 +2303,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       worldSource.includes("tp('world.survivalWarn'"),
   );
   {
-    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
     check('原生下拉声明深色（不再白底弹窗）', html.includes('color-scheme: dark;'));
     check('世界类型说明样式在', html.includes('.world-type-hint {') && html.includes('.world-type-hint.bad'));
   }
@@ -2311,7 +2311,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('飞行态用 applyFlyChrome 露出升降键', source.includes('private applyFlyChrome') && source.includes('fly-only'));
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
-  const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const settingsSource = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   // 文案表也要查：批次 417 起"游戏模式/飞行"走 i18n 键，
   // 只验源码里有没有那个键，还不足以保证中文表里有它。
   // ⚠️ 查表**走 `t()`**，不再读文案文件的源码：多语言 P0-2 起中文表按界面拆到
@@ -2365,7 +2365,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       settingsSource.includes('this.appearanceOpen = true;'),
   );
 
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   check(
     '触摸端背包面板收进视口（吃 --panel-*，再用 vw/dvh 夹紧）',
@@ -2377,7 +2377,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 
 console.log('\n[暂停菜单分两层（批次 108）]');
 {
-  const source = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   // 两页 = 同一份 DOM 的两个 `.pause-page`，切页只切 `.active`（没有重建、没有动画）
   check('定义了两页（menu / settings）', source.includes("export const PAUSE_PAGES = ['menu', 'settings'] as const;"));
   check('切页只切 class（不重建 DOM）', source.includes("element.classList.toggle('active', key === page);"));
@@ -2415,7 +2415,7 @@ console.log('\n[暂停菜单分两层（批次 108）]');
   // 从主菜单打开时没有"暂停"可言，直接进设置页
   check('从主菜单打开直接进设置页', source.includes("page ?? (this.actions.onExitToMenu ? 'menu' : 'settings')"));
   // 主程序三条路径都要走 goBack（Esc / Android 返回键 / 关最上层界面）
-  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('Esc 走 goBack（设置页 → 菜单页 → 继续游戏）', main.includes('this.settingsScreen.goBack();'));
   check(
     'Android 返回键也走 goBack（先退到菜单页，再按一次才真的关）',
@@ -2425,7 +2425,7 @@ console.log('\n[暂停菜单分两层（批次 108）]');
 
 console.log('\n[主菜单分层（批次 108）]');
 {
-  const source = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   // 首页**只留两颗按钮**（基岩版标题页就是"游戏 / 设置"）。
   // 批次 107 那版有四颗，其中"开始游戏"会直接进最近玩的世界——用户当场反问
   // "进入游戏，进入什么呢？"，所以这条断言防的就是那四颗回来。
@@ -2457,7 +2457,7 @@ console.log('\n[主菜单分层（批次 108）]');
       source.includes("overlay.className = 'world-confirm';"),
   );
   // 批次 529（用户）：世界列表可编辑名称/模式/难度，列表精简成"名称 + 标签 + 活跃度"
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '世界列表可编辑名称/模式/难度',
     source.includes('private openEdit(world: WorldSummary): void') &&
@@ -2502,7 +2502,7 @@ console.log('\n[主菜单分层（批次 108）]');
 
 console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
 
   // ① 直角：令牌是唯一口径，逐条钉住（漏一条就会出现"面板直、按钮圆"的混搭）
@@ -2547,13 +2547,13 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       compact.includes('position: fixed; z-index: 70;'),
   );
   {
-    const settingsSrcText = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+    const settingsSrcText = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
     check(
       '设置行容器不再用 label（整行不会转发点击）',
       !/const row = document\.createElement\('label'\)/.test(settingsSrcText) &&
         settingsSrcText.includes("const row = document.createElement('div');"),
     );
-    const dropdownSrc = readFileSync(new URL('../src/ui/Dropdown.ts', import.meta.url), 'utf8');
+    const dropdownSrc = readFileSync(new URL('../web/src/ui/Dropdown.ts', import.meta.url), 'utf8');
     check(
       '设置与主菜单共用同一个下拉组件，菜单挂在 body 上（不被滚动区裁切）',
       settingsSrcText.includes('new Dropdown<T>(') &&
@@ -2572,58 +2572,58 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
   // 2026-10-28（用户口径修正）：只有「世界」页即时生效；通用设置（四组）仍是草稿 + 保存
   check(
     '「世界」页只在游戏内出现，且与通用设置一样走草稿 + 保存',
-    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("export const WORLD_GROUP = 'world';") &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes("export const WORLD_GROUP = 'world';") &&
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'this.groups = actions.world ? [WORLD_GROUP, ...SETTING_GROUPS] : SETTING_GROUPS;',
       ) &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'if (this.actions.world) this.buildWorldSection(this.section(WORLD_GROUP));',
       ) &&
       // 世界页有自己的草稿与脏值判断
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private worldDraft') &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private isWorldDirty(): boolean') &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private worldDraft') &&
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private isWorldDirty(): boolean') &&
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'return this.groups.some((group) => this.isGroupDirty(group));',
       ) &&
       // 恢复默认 = 首次进入世界时的初始配置
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes(
         'cloneWorldSnapshot(world.defaults())',
       ) &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('private ensureWorldDefaults(): void') &&
-      !readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('private ensureWorldDefaults(): void') &&
+      !readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes("{ apply: 'live' }"),
   );
   // 进入世界的第一句（2026-10-28，用户）：以前是进度系统的"对了一次背包"，看不懂
   check(
     '进世界先给欢迎语：世界名 + 模式/难度/类型 + 操作提示',
-    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('private pushWelcome(): void') &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes("tp('say.welcome.title'") &&
+    readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('private pushWelcome(): void') &&
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes("tp('say.welcome.title'") &&
       // 2026-10-29：提示按设备分开（手机没有 J 键）
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes(
         "t(isTouchDevice() ? 'say.welcome.tipTouch' : 'say.welcome.tip')",
       ) &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('worldTypeLabel(this.worldConfig.worldType)'),
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('worldTypeLabel(this.worldConfig.worldType)'),
   );
   // 创建世界表单：窄屏不再把标签列写死成 56px（德语 Welttyp / 俄语 Сложность 会被省略号吃掉）
   check(
     '新建世界表单的标签列按语言给宽，窄屏也没被写死',
     /\.world-row \{ grid-template-columns: var\(--label-w, 64px\) minmax\(0, 1fr\); gap: 5px; \}/.test(
-      readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+      readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'),
     ) &&
       !/\.world-row \{ grid-template-columns: 56px minmax\(0, 1fr\); gap: 5px; \}/.test(
-        readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+        readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'),
       ),
   );
   check(
     '世界页只剩「模式|难度」+ 常用规则（时间与天气已按用户要求移除）',
-    readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_RULE_KEYS') &&
-      readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private makeWorldTopRow') &&
-      !readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('nearestTimePreset') &&
-      !readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_WEATHERS'),
+    readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_RULE_KEYS') &&
+      readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('private makeWorldTopRow') &&
+      !readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('nearestTimePreset') &&
+      !readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8').includes('WORLD_WEATHERS'),
   );
   check(
     '通用设置也有「日志 → 导出」入口',
     /onDiagnosticsExport: \(\) => diag\.download\(\),\s*\n\s*diagnosticsStats: \(\) => diag\.stats\(\),\s*\n\s*\}\);/.test(
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8'),
     ),
   );
   check(
@@ -2631,7 +2631,7 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
     compact.includes('.settings-footer {') &&
       // 2026-10-28：页脚里现在有两颗按钮，建到 append 的距离变长，窗口放宽到 1200
       /const footer = document\.createElement\('div'\);[\s\S]{0,1200}settingsPage\.append\(header, this\.settingsHintEl, columns, footer\)/.test(
-        readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8'),
+        readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8'),
       ),
   );
 
@@ -2644,9 +2644,9 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
 
 console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 110）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
-  const source = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   const landscape =
     /@media \(orientation: landscape\) and \(max-height: 560px\) \{([\s\S]*?)\n      \}/.exec(html)?.[1] ?? '';
 
@@ -2774,7 +2774,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
 
 console.log('\n[按钮尺寸对齐（批次 111）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   // 背包那一块（批次 111）：装备竖排在左、主背包/快捷栏在右，且**不再有文字标签**
   check(
@@ -2794,7 +2794,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
     (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
   );
   // 批次 528：成就面板改成与背包同尺寸；从背包打开时 JS 直接复制背包 rect
-  const advSource = readFileSync(new URL('../src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
+  const advSource = readFileSync(new URL('../web/src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
   check(
     '成就面板与背包同尺寸 / 重叠（从背包打开时复制 rect）',
     advSource.includes('show(anchor?: HTMLElement): void') &&
@@ -2810,7 +2810,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
       compact.includes('min-width: 24px; min-height: 20px;'),
   );
   // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
-  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSource = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   check(
     '「主背包 / 快捷栏 / 盔甲与副手」三行文字标签已去掉',
     !invSource.includes("buildLabel('主背包')") &&
@@ -2895,10 +2895,10 @@ console.log('\n[进游戏首页默认全屏]');
   // 一个目标都没给时不该炸（`#overlay` 在某些外壳里可能不在）
   check('没有目标时安静返回', typeof armAutoFullscreen([]) === 'function');
 
-  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
-  const manifest = readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8');
-  const htmlHead = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const fullscreenSrc = readFileSync(new URL('../web/src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const manifest = readFileSync(new URL('../web/public/manifest.webmanifest', import.meta.url), 'utf8');
+  const htmlHead = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('第一次点击同时请求全屏和横屏锁', fullscreenSrc.includes('enterMobilePresentation') && fullscreenSrc.includes("orientation.lock('landscape')"));
   check('竖屏触摸设备有横屏提示，点它就是那一次手势', fullscreenSrc.includes('installRotateHint') && htmlHead.includes('rotate-hint'));
   check(
@@ -2929,7 +2929,7 @@ console.log('\n[进游戏首页默认全屏]');
       fullscreenSrc.includes("['pointerdown', 'touchstart', 'keydown']") &&
       fullscreenSrc.includes('addEventListener(type, trigger, true)'),
   );
-  const installSrc = readFileSync(new URL('../src/ui/InstallHint.ts', import.meta.url), 'utf8');
+  const installSrc = readFileSync(new URL('../web/src/ui/InstallHint.ts', import.meta.url), 'utf8');
   check(
     '没装成 PWA 时引导一次"添加到主屏幕"（标签页里唯一零点击全屏的路径）',
     installSrc.includes("beforeinstallprompt") &&
@@ -2959,9 +2959,9 @@ console.log('\n[进游戏首页默认全屏]');
 
 console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const overlaySrc = readFileSync(new URL('../src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const overlaySrc = readFileSync(new URL('../web/src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
 
   // 用户："首次加载这个页面的时候，它会显示一个'地图生成中'的东西，能不能一开始不需要？
   // 因为地图生成是在创建游戏的时候才生成的。"
@@ -3031,13 +3031,13 @@ console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
 
 console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');
 {
-  const inventorySrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const quickMoveSrc = readFileSync(new URL('../src/core/container/QuickMove.ts', import.meta.url), 'utf8');
-  const bookUi = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
-  const creativeSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const inventorySrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const quickMoveSrc = readFileSync(new URL('../web/src/core/container/QuickMove.ts', import.meta.url), 'utf8');
+  const bookUi = readFileSync(new URL('../web/src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const creativeSrc = readFileSync(new URL('../web/src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
 
   // ---- 配方书：点一格 = **把材料摆进合成格**（原版主交互）
@@ -3199,10 +3199,10 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
 
 console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
 {
-  const vitalsSrc = readFileSync(new URL('../src/ui/VitalsHud.ts', import.meta.url), 'utf8');
-  const xpSrc = readFileSync(new URL('../src/ui/XpHud.ts', import.meta.url), 'utf8');
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  const vitalsSrc = readFileSync(new URL('../web/src/ui/VitalsHud.ts', import.meta.url), 'utf8');
+  const xpSrc = readFileSync(new URL('../web/src/ui/XpHud.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const touchSrc = readFileSync(new URL('../web/src/ui/TouchControls.ts', import.meta.url), 'utf8');
   check('血条构造时先清空静态容器（重进世界不再叠第二套）', vitalsSrc.includes('container.replaceChildren();'));
   check('经验条构造时先删旧的那条', xpSrc.includes("container.querySelector('#xp-bar')?.remove()"));
   check(
@@ -3230,9 +3230,9 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
     touchSrc.includes("'pointer.rebase'") && touchSrc.includes('this.lookPointSource = alt.source'),
   );
   // 批次 231：真机"从暂停回来第一次滑动卡住"的根因是**同一帧拆层/建层**。
-  const pageCss = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const pageCss = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check(
     '界面打开时只收"壳"，不再把触摸层 display:none（层拆建会让坐标映射重算）',
     touchSrc.includes("classList.toggle('ui-off', !value)") &&
@@ -3284,14 +3284,14 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
 
 console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
-  const vitalsSrc = readFileSync(new URL('../src/ui/VitalsHud.ts', import.meta.url), 'utf8');
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const physicsSrc = readFileSync(new URL('../src/core/physics/PlayerPhysics.ts', import.meta.url), 'utf8');
-  const worldSrc = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
-  const statsSrc = readFileSync(new URL('../src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
-  const xpHudSrc = readFileSync(new URL('../src/ui/XpHud.ts', import.meta.url), 'utf8');
+  const vitalsSrc = readFileSync(new URL('../web/src/ui/VitalsHud.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const physicsSrc = readFileSync(new URL('../web/src/core/physics/PlayerPhysics.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/core/world/World.ts', import.meta.url), 'utf8');
+  const statsSrc = readFileSync(new URL('../web/src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
+  const xpHudSrc = readFileSync(new URL('../web/src/ui/XpHud.ts', import.meta.url), 'utf8');
 
   check(
     '快捷栏与状态栏共用一组几何变量（两端才能真的对齐）',
@@ -3359,12 +3359,12 @@ console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]')
 
 console.log('\n[用户反馈一轮收口（批次 184）]');
 {
-  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  const keyboardSrc = readFileSync(new URL('../src/ui/Keyboard.ts', import.meta.url), 'utf8');
+  const fullscreenSrc = readFileSync(new URL('../web/src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const keyboardSrc = readFileSync(new URL('../web/src/ui/Keyboard.ts', import.meta.url), 'utf8');
 
   // ① 竖屏点任何区域都进横屏全屏：不是一次性监听，只在"已经横屏且全屏"时跳过
   check(
@@ -3464,12 +3464,12 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
 
 console.log('\n[用户第二轮反馈（批次 185）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
-  const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const fullscreenSrc = readFileSync(new URL('../web/src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const touchSrc = readFileSync(new URL('../web/src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
 
   // ① 竖屏：整屏浮层
   check(
@@ -3511,7 +3511,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       appSrc.includes("this.requestGroundSettle('load');") &&
       appSrc.includes("this.requestGroundSettle('respawn');") &&
       appSrc.includes('this.groundSettleReason !== null') &&
-      readFileSync(new URL('../src/core/world/SpawnPoint.ts', import.meta.url), 'utf8').includes('Block.NETHERRACK'),
+      readFileSync(new URL('../web/src/core/world/SpawnPoint.ts', import.meta.url), 'utf8').includes('Block.NETHERRACK'),
   );
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
@@ -3670,7 +3670,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '「未保存」弹窗六语言齐全，且样式在位',
     LOCALES.every((locale) => {
       const table = readFileSync(
-        new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+        new URL(`../web/src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
         'utf8',
       );
       return (
@@ -3683,7 +3683,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
 
   // 资源包那一行下面必须有一句"只导自己的包"（2026-10-28 起不再有「非官方」声明：
   // 用户明确要求界面上不要出现任何指向"我们不是官方"的自我定位）。
-  const settingsHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const settingsHtml = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   check(
     '资源包免责说明在、且六语言齐全；「非官方」声明已删除',
     settingsSrc.includes("t('settings.resourcePack.hint')") &&
@@ -3692,7 +3692,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       !settingsHtml.includes('.settings-notice {') &&
       LOCALES.every((locale) => {
         const table = readFileSync(
-          new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+          new URL(`../web/src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
           'utf8',
         );
         return /['"]settings\.resourcePack\.hint['"]/.test(table) && !/['"]settings\.notice['"]/.test(table);
@@ -3702,9 +3702,9 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   // 下次进游戏自动应用；行尾那颗 ✕ 负责移除（否则装错了就再也回不去）。
   check(
     '资源包导入后持久化、启动时自动恢复、可移除',
-    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('saveStoredPack(file.name, bytes)') &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('void this.restoreResourcePack();') &&
-      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('this.atlas.clearOverrides()') &&
+    readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('saveStoredPack(file.name, bytes)') &&
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('void this.restoreResourcePack();') &&
+      readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes('this.atlas.clearOverrides()') &&
       settingsSrc.includes('refreshResourcePack(): void') &&
       settingsSrc.includes('settings-pack-remove') &&
       settingsHtml.includes('.settings-pack-remove {'),
@@ -3727,7 +3727,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       settingsHtml.includes('.settings-modal-panel { width: min(92vw, 460px); }') &&
       LOCALES.every((locale) => {
         const table = readFileSync(
-          new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+          new URL(`../web/src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
           'utf8',
         );
         return (
@@ -3743,7 +3743,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '资源包文案不出现 .mcpack 或「兼容某格式」的说法',
     LOCALES.every((locale) => {
       const table = readFileSync(
-        new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+        new URL(`../web/src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
         'utf8',
       );
       const block = table
@@ -3759,14 +3759,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   let noticesOk = false;
   let privacyOk = false;
   try {
-    const notices = readFileSync(new URL('../public/third-party-notices.txt', import.meta.url), 'utf8');
+    const notices = readFileSync(new URL('../web/public/third-party-notices.txt', import.meta.url), 'utf8');
     noticesOk =
       notices.includes('three.js authors') && notices.includes('Einar Otto Stangvik') && notices.includes('MIT');
   } catch {
     noticesOk = false;
   }
   try {
-    privacyOk = readFileSync(new URL('../public/privacy.html', import.meta.url), 'utf8').includes('Privacy Policy');
+    privacyOk = readFileSync(new URL('../web/public/privacy.html', import.meta.url), 'utf8').includes('Privacy Policy');
   } catch {
     privacyOk = false;
   }
@@ -3815,7 +3815,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
 
   // 批次 215：水的"流动"不花钱，花钱的是半透明层（水/玻璃）的覆盖 + 双面。
   // 双面只在水下抬头时才必需，所以按"摄像机是否在液体里"来回切。
-  const renderMapSrc = readFileSync(new URL('../src/render/VoxelMaterial.ts', import.meta.url), 'utf8');
+  const renderMapSrc = readFileSync(new URL('../web/src/render/VoxelMaterial.ts', import.meta.url), 'utf8');
   check(
     '半透明层按"摄像机在水下"切单/双面（岸上省一半水面填充率）',
     appSrc.includes('this.translucentMaterial.setDoubleSided(this.isCameraUnderwater());') &&
@@ -3890,11 +3890,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
 
 console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精简（批次 185 续）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../web/src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   check(
     '返回键：暂停菜单页再按返回 = 保存退出到主菜单（设置子页仍先退回菜单页）',
@@ -3921,7 +3921,7 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
   );
 
   // 3D 角色预览（批次 185 外观）
-  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
+  const previewSrc = readFileSync(new URL('../web/src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
   check(
     '背包角色预览是 3D、可拖动旋转（WebGL 不可用时退回 2D 剪影）',
     previewSrc.includes('class PlayerPreview3D') &&
@@ -4010,11 +4010,11 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
 
 console.log('\n[角色创建：外观（批次 187 / 296）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
-  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../web/src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const previewSrc = readFileSync(new URL('../web/src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
 
   check(
     '设置存"档位下标"而不是颜色（旧存档不会失效）',
@@ -4080,13 +4080,13 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
   check(
     '头发/胡须/眼睛各有新增档位（齐耳、翘发、山羊胡、三种眼型）',
     /HAIR_STYLES = \['short', 'long', 'ponytail', 'bald', 'bob', 'messy'\]/.test(
-      readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../web/src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
       /BEARD_STYLES = \['none', 'stubble', 'full', 'goatee'\]/.test(
-        readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+        readFileSync(new URL('../web/src/game/appearance.ts', import.meta.url), 'utf8'),
       ) &&
       /EYE_STYLES = \['calm', 'bright', 'round'\]/.test(
-        readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+        readFileSync(new URL('../web/src/game/appearance.ts', import.meta.url), 'utf8'),
       ) &&
       playerSrc.includes('this.bobMeshes') &&
       playerSrc.includes('this.messyMeshes') &&
@@ -4096,7 +4096,7 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
   check(
     '四个角色预设（man / woman / boy / girl，名字走 label.appearance.preset.*），选中后可继续微调',
     /export const CHARACTER_PRESETS[\s\S]{0,1200}id: 'man'[\s\S]{0,400}id: 'woman'[\s\S]{0,400}id: 'boy'[\s\S]{0,400}id: 'girl'/.test(
-      readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../web/src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
       settingsSrc.includes('presetIndexOf(this.appearanceTarget())') &&
       settingsSrc.includes('applyCharacterPreset(this.appearanceTarget(), index)'),
@@ -4114,9 +4114,9 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
 
 console.log('\n[左上聊天 + 右上性能（批次 206）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const chatSrc = readFileSync(new URL('../web/src/ui/ChatInput.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   check(
     '聊天栏在左上角（不再贴快捷栏上方）',
@@ -4206,7 +4206,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       // 那种语言的角标退化成一个空底色（`content` 取不到属性），肉眼很难发现。
       LOCALES.every((locale) =>
         /['"]chat\.expandBadge['"]/.test(
-          readFileSync(new URL(`../src/core/i18n/locales/${locale.code}/chat.ts`, import.meta.url), 'utf8'),
+          readFileSync(new URL(`../web/src/core/i18n/locales/${locale.code}/chat.ts`, import.meta.url), 'utf8'),
         ),
       ),
   );
@@ -4249,7 +4249,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
 
   // 批次 533（用户）：/help 改成独立弹窗，不再往聊天历史刷介绍
-  const helpSrc = readFileSync(new URL('../src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
+  const helpSrc = readFileSync(new URL('../web/src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
   check(
     '/help 打开独立弹窗（不写聊天历史）',
     appSrc.includes('const help = /^\\/help(?:\\s+(.+))?\\s*$/i.exec(text.trim());') &&
@@ -4313,7 +4313,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     appSrc.includes('if (this.dimension !== Dimension.OVERWORLD) return;') &&
       appSrc.includes("diag.event('world', 'weather', {"),
   );
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
   /**
    * 中文表的所有值拼成一条长串。
    *
@@ -4412,7 +4412,7 @@ console.log('\n[伤害原因文案（批次 207）]');
 
 console.log('\n[受伤红闪（批次 234）]');
 {
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   check(
     '#damage-flash 元素存在且垫在 HUD 之下',
@@ -4453,7 +4453,7 @@ console.log('\n[受伤红闪（批次 234）]');
 
 console.log('\n[附魔效果接线（批次 243）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '击退 / 火焰附加接在近战入口（只在真正造成伤害时点火）',
     appSrc.includes("enchantLevel(this.heldEnchants, 'knockback')") &&
@@ -4482,9 +4482,9 @@ console.log('\n[附魔效果接线（批次 243）]');
 
 console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
-  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../web/src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../web/src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
   check(
     '船物品存在（id 1478，堆叠 1）',
     itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minicraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
@@ -4519,16 +4519,16 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   // ⚠️ id 常量与方块表数据分别搬到了 `blockIds.ts` / `blockSpecs.ts`（批次 20261025-1032），三处源码拼起来看：
   //    这些断言关心的是"581 就是激活轨"，而不是"这行写在哪个文件里"。
   const blocksSrc =
-    readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
+    readFileSync(new URL('../web/src/core/registry/blocks.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../web/src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../web/src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
   /**
    * 方块**行为**（`stateTiles` / `faceTile` / `stateLight`）在批次 20261025-0329 搬到了
    * `blockBehaviors.ts`（要能把数据放进二进制，闭包必须留在代码里）。所以"某块有哪两张贴图"
    * 这类断言要查那个文件，查 `blocks.ts` 会永远为假。
    */
-  const behaviorsSrc = readFileSync(new URL('../src/core/registry/blockBehaviors.ts', import.meta.url), 'utf8');
-  const cartSrc = readFileSync(new URL('../src/core/entity/Minecart.ts', import.meta.url), 'utf8');
+  const behaviorsSrc = readFileSync(new URL('../web/src/core/registry/blockBehaviors.ts', import.meta.url), 'utf8');
+  const cartSrc = readFileSync(new URL('../web/src/core/entity/Minecart.ts', import.meta.url), 'utf8');
   check(
     '铁轨复用 flat 薄板形状（不新增 shape），且 6 铁锭 + 1 木棍做 16 段',
     blocksSrc.includes('export const RAIL_ID = 578') &&
@@ -4551,7 +4551,7 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
 
   // 批次 246：动力铁轨（负载）与探测铁轨（电源）
-  const engineSrc = readFileSync(new URL('../src/core/redstone/RedstoneEngine.ts', import.meta.url), 'utf8');
+  const engineSrc = readFileSync(new URL('../web/src/core/redstone/RedstoneEngine.ts', import.meta.url), 'utf8');
   check(
     '探测铁轨：轨上有实体就发 15，并登记进 10Hz 轮询',
     blocksSrc.includes('export const DETECTOR_RAIL_ID = 580') &&
@@ -4641,8 +4641,8 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
 
 console.log('\n[游戏规则 6 → 11（批次 255）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const rulesSrc = readFileSync(new URL('../src/core/world/Rules.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const rulesSrc = readFileSync(new URL('../web/src/core/world/Rules.ts', import.meta.url), 'utf8');
   check(
     '五条新规则都进了默认表（旧存档会被 normalizeGameRules 补齐）',
     ['doMobLoot', 'doTileDrops', 'doWeatherCycle', 'doInsomnia', 'doImmediateRespawn'].every((key) =>
@@ -4681,10 +4681,10 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
 
 console.log('\n[拴绳（批次 256）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
-  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../web/src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../web/src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check(
     '拴绳物品（id 1487，4 线 + 1 黏液球 → 2 条）',
     itemsSrc.includes('LEAD: 1487') && recipesSrc.includes('result: { id: Item.LEAD, count: 2 }'),
@@ -4711,8 +4711,8 @@ console.log('\n[拴绳（批次 256）]');
 
 console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const parkingSrc = readFileSync(new URL('../src/core/entity/VehicleParking.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const parkingSrc = readFileSync(new URL('../web/src/core/entity/VehicleParking.ts', import.meta.url), 'utf8');
   check(
     '卸载前登记、加载后原样造回（两个钩子都接上）',
     appSrc.includes('private parkVehicles(cx: number, cz: number)') &&
@@ -4730,7 +4730,7 @@ console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
   );
 
   // 批次 258：停放的载具要进存档（否则退出游戏就丢）
-  const saveSrc = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  const saveSrc = readFileSync(new URL('../web/src/core/save/SaveGame.ts', import.meta.url), 'utf8');
   check(
     '存档结构里有 vehicles 字段（老存档按"没有"处理）',
     saveSrc.includes('vehicles?: SavedVehicle[]') && saveSrc.includes("from '../entity/VehicleParking.ts'"),
@@ -4747,9 +4747,9 @@ console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
   );
 
   // 批次 258：生物与掉落物也进存档
-  const saveSrc2 = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  const saveSrc2 = readFileSync(new URL('../web/src/core/save/SaveGame.ts', import.meta.url), 'utf8');
   const entityParkingSrc = readFileSync(
-    new URL('../src/core/entity/EntityParking.ts', import.meta.url),
+    new URL('../web/src/core/entity/EntityParking.ts', import.meta.url),
     'utf8',
   );
   check(
@@ -4773,10 +4773,10 @@ console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
 
 console.log('\n[位移 / 横扫附魔（批次 262）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
-  const statsSrc = readFileSync(new URL('../src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
-  const toolsSrc = readFileSync(new URL('../src/core/registry/tools.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const statsSrc = readFileSync(new URL('../web/src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
+  const toolsSrc = readFileSync(new URL('../web/src/core/registry/tools.ts', import.meta.url), 'utf8');
   check(
     '三条附魔都标了 implemented（深度探索者 / 灵魂疾行 / 横扫之刃）',
     ["depth_strider", 'soul_speed', 'sweeping'].every((id) => {
@@ -4806,14 +4806,14 @@ console.log('\n[位移 / 横扫附魔（批次 262）]');
 
 console.log('\n[冰霜行者（批次 263）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   // ⚠️ id 常量与方块表数据分别搬到了 `blockIds.ts` / `blockSpecs.ts`（批次 20261025-1032），三处源码拼起来看：
   //    这些断言关心的是"581 就是激活轨"，而不是"这行写在哪个文件里"。
   const blocksSrc =
-    readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
-    readFileSync(new URL('../src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+    readFileSync(new URL('../web/src/core/registry/blocks.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../web/src/core/registry/blockIds.ts', import.meta.url), 'utf8') +
+    readFileSync(new URL('../web/src/core/registry/blockSpecs.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const frostAt = enchantSrc.indexOf("id: 'frost_walker'");
   check(
     '霜冰方块注册（id 586，无物品形态）',
@@ -4836,10 +4836,10 @@ console.log('\n[冰霜行者（批次 263）]');
 
 console.log('\n[荆棘（批次 264）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const entitySrc = readFileSync(new URL('../src/core/entity/Entity.ts', import.meta.url), 'utf8');
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const entitySrc = readFileSync(new URL('../web/src/core/entity/Entity.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const thornsAt = enchantSrc.indexOf("id: 'thorns'");
   check(
     '荆棘标了 implemented',
@@ -4862,10 +4862,10 @@ console.log('\n[荆棘（批次 264）]');
 
 console.log('\n[弩（批次 265）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
-  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../web/src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../web/src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   check(
     '弩物品（id 1510，耐久 465）与配方',
     itemsSrc.includes('CROSSBOW: 1510') &&
@@ -4891,7 +4891,7 @@ console.log('\n[弩（批次 265）]');
       enchantSrc.includes("id: 'piercing'"),
   );
   // 批次 266：穿透
-  const arrowSrc = readFileSync(new URL('../src/core/entity/Arrow.ts', import.meta.url), 'utf8');
+  const arrowSrc = readFileSync(new URL('../web/src/core/entity/Arrow.ts', import.meta.url), 'utf8');
   check(
     '穿透：箭带剩余次数，命中后不消失、同一只不重复打',
     arrowSrc.includes('pierce?: number') &&
@@ -4903,9 +4903,9 @@ console.log('\n[弩（批次 265）]');
 
 console.log('\n[三叉戟：穿刺 / 激流（批次 267）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const toolsSrc = readFileSync(new URL('../src/core/registry/tools.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const toolsSrc = readFileSync(new URL('../web/src/core/registry/tools.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const impalingAt = enchantSrc.indexOf("id: 'impaling'");
   const riptideAt = enchantSrc.indexOf("id: 'riptide'");
   check(
@@ -4930,8 +4930,8 @@ console.log('\n[三叉戟：穿刺 / 激流（批次 267）]');
 
 console.log('\n[投掷三叉戟 + 忠诚（批次 268）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const loyaltyAt = enchantSrc.indexOf("id: 'loyalty'");
   check(
     '忠诚标了 implemented',
@@ -4959,10 +4959,10 @@ console.log('\n[投掷三叉戟 + 忠诚（批次 268）]');
 
 console.log('\n[引雷（批次 269）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const arrowSrc = readFileSync(new URL('../src/core/entity/Arrow.ts', import.meta.url), 'utf8');
-  const entitySrc = readFileSync(new URL('../src/core/entity/Entity.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const arrowSrc = readFileSync(new URL('../web/src/core/entity/Arrow.ts', import.meta.url), 'utf8');
+  const entitySrc = readFileSync(new URL('../web/src/core/entity/Entity.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const channelingAt = enchantSrc.indexOf("id: 'channeling'");
   check(
     '引雷标了 implemented',
@@ -4990,8 +4990,8 @@ console.log('\n[引雷（批次 269）]');
 
 console.log('\n[绑定诅咒（批次 270）]');
 {
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../web/src/core/registry/enchantments.ts', import.meta.url), 'utf8');
   const curseAt = enchantSrc.indexOf("id: 'binding_curse'");
   check(
     '绑定诅咒标了 implemented，并提供纯函数判定',
@@ -5015,12 +5015,12 @@ console.log('\n[绑定诅咒（批次 270）]');
 
 console.log('\n[切后台回来图标全空（批次 295）]');
 {
-  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
-  const probeSrc = readFileSync(new URL('../src/render/canvasProbe.ts', import.meta.url), 'utf8');
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const packSrc = readFileSync(new URL('../src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
-  const mobBarSrc = readFileSync(new URL('../src/render/MobHealthBar.ts', import.meta.url), 'utf8');
-  const signSrc = readFileSync(new URL('../src/render/SignRenderer.ts', import.meta.url), 'utf8');
+  const atlasSrc = readFileSync(new URL('../web/src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  const probeSrc = readFileSync(new URL('../web/src/render/canvasProbe.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const packSrc = readFileSync(new URL('../web/src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
+  const mobBarSrc = readFileSync(new URL('../web/src/render/MobHealthBar.ts', import.meta.url), 'utf8');
+  const signSrc = readFileSync(new URL('../web/src/render/SignRenderer.ts', import.meta.url), 'utf8');
 
   // ---- ① 图集：构造与"被系统回收后重画"必须共用同一条铺像素的路
   // （拆成两份的话，改了画笔却只重画一份，图标会和世界里的方块对不上）
@@ -5146,9 +5146,9 @@ console.log('\n[切后台回来图标全空（批次 295）]');
 
 console.log('\n[页面压后台立即暂停（批次 303）]');
 {
-  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
-  const keyboardSrc = readFileSync(new URL('../src/ui/Keyboard.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const audioSrc = readFileSync(new URL('../web/src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
+  const keyboardSrc = readFileSync(new URL('../web/src/ui/Keyboard.ts', import.meta.url), 'utf8');
 
   const enterBody =
     /private enterBackground\(reason: 'hidden' \| 'pagehide' \| 'blur'\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
@@ -5227,8 +5227,8 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
 // 批次 432：游泳的**视觉**姿态。⚠️ 视觉效果只能人眼确认（浏览器里泡水里看第三人称），
 // 这里只钉住"这条分支还在、且不吃错状态"——防止以后重构时被静默删掉。
 {
-  const rendererSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../web/src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('游泳姿态由 swimming 字段驱动（不是复用潜行）', rendererSrc.includes('swimming?: boolean'));
   check('游泳时身体横过来（前倾 1.25 rad）', rendererSrc.includes('swim ? 1.25 : sneak ? 0.22 : 0'));
   check('游泳时手臂前伸划水', rendererSrc.includes('swim ? 1.35 : 0'));
@@ -5240,9 +5240,9 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
 
 // 批次 539：PC 专用显示/操作优化。必须只命中桌面精确指针，不能碰手机。
 {
-  const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const tuningSource = readFileSync(new URL('../src/game/tuning.ts', import.meta.url), 'utf8');
+  const htmlSource = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const mainSource = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const tuningSource = readFileSync(new URL('../web/src/game/tuning.ts', import.meta.url), 'utf8');
   check(
     'PC 宽屏放大 HUD（手机断点不变）',
     htmlSource.includes('@media (pointer: fine) and (min-width: 1024px)') &&
@@ -5263,7 +5263,7 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
     'PC 锁 60 帧并默认视距 8，避免高刷 GPU 满负荷',
     mainSource.includes('if (!isTouchDevice()) this.settings.maxFps = 60;') &&
       mainSource.includes('defaultViewDistanceFor(isTouchDevice())') &&
-      /viewDistance: 8,/.test(readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8')),
+      /viewDistance: 8,/.test(readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8')),
   );
   check(
     'PC 鼠标视角按帧平滑消费，且单次增量有上限',
@@ -5273,7 +5273,7 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       mainSource.includes('const k = 1 - Math.exp(-Math.max(0, dt) * 30);') &&
       mainSource.includes('this.pendingLookX += dx;'),
   );
-  const fullscreenSource = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const fullscreenSource = readFileSync(new URL('../web/src/ui/Fullscreen.ts', import.meta.url), 'utf8');
   check(
     'PC 不自动全屏（请求/启动/手势三处都只看粗指针）',
     /export function enterFullscreen\(\)[\s\S]{0,180}?if \(!doc \|\| !isCoarsePointer\(\)/.test(fullscreenSource) &&
@@ -5299,7 +5299,7 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
   {
     // 构建版本信息**保留**（用户："git 的版本信息暂时保留"），只删 splash 与页脚说明
-    const worldUiSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+    const worldUiSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
     check(
       '首页不再渲染 splash 与页脚说明（构建版本仍在）',
       !worldUiSrc.includes("'world-splash'") &&
@@ -5338,14 +5338,14 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       htmlSource.includes('.inv-category-scroll-thumb {'),
   );
   const webglSource = readFileSync(
-    new URL('../src/core/render/webglSupport.ts', import.meta.url),
+    new URL('../web/src/core/render/webglSupport.ts', import.meta.url),
     'utf8',
   );
   check(
     '主菜单探测 WebGL 后立刻释放离屏上下文',
     webglSource.includes("gl?.getExtension('WEBGL_lose_context')?.loseContext();"),
   );
-  const atlasSource = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  const atlasSource = readFileSync(new URL('../web/src/render/TextureAtlas.ts', import.meta.url), 'utf8');
   check(
     '主菜单延迟绘制纹理图集（进世界才铺三百张贴图）',
     mainSource.includes('new TextureAtlas(true)') &&
@@ -5395,9 +5395,9 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
    * 钉住四件改回去就会出事的事：按钮没合回一颗"连接"、开房/加入各自传对布尔位、
    * 回车只走"加入"（开房会占住房主位）、以及这个意图真的传到了 `join` 消息。
    */
-  const screenSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
-  const mainSrcForMp = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netClientSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const screenSrc = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mainSrcForMp = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netClientSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   check(
     '面板是「开房 / 加入」两颗按钮（不再是单颗"连接"）',
     screenSrc.includes("this.hostButton.id = 'mp-host'") &&
@@ -5434,8 +5434,8 @@ console.log('\n[联机入口（联机9）：地址与昵称的清洗]');
 // 而且也没有把所有模式都展示出来。"
 console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
 {
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
 
   check(
     '下拉列出全部四个模式（来自 GAME_MODES，不再写死两项）',
@@ -5464,7 +5464,7 @@ console.log('\n[设置 · 游戏模式下拉（批次 20261024-1455）]');
 // 批次 20261024-1455（用户自测）："背包在某些屏幕上被挤到快捷栏的上部一点"。
 console.log('\n[背包面板与快捷栏避让（批次 20261024-1455）]');
 {
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
   check(
     '携带版打开时给底部 dock 留高度（面板不再压在快捷栏上）',
     /body\.inv-pocket-open #inventory-screen \{[^}]*padding-bottom: calc\(62px \+ env\(safe-area-inset-bottom, 0px\)\);/.test(
@@ -5482,8 +5482,8 @@ console.log('\n[背包面板与快捷栏避让（批次 20261024-1455）]');
 // 批次 20261024-1455（用户）："创造模式背包滚动条显示异常，参照生存模式的样式"。
 console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
 {
-  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  const invSource = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').replace(/\s+/g, ' ');
 
   // 批次 20261024-1531（用户确认）：两栏**各自一套**，创造栏那条贴容器右边 2px、宽 6px。
   check(
@@ -5562,10 +5562,10 @@ console.log('\n[左栏自绘滚动条（批次 20261024-1455）]');
 //   ③ `main.openRecipeBook` 先 `show()` 再 `syncRecipePane()`，且开完把 UI 保持打开。
 console.log('\n[配方书开关（批次 20261024-1455）]');
 {
-  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
-  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const recipeSource = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const invSource = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSource = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const recipeSource = readFileSync(new URL('../web/src/ui/RecipeBook.ts', import.meta.url), 'utf8');
 
   // 批次 20261024-1609（用户澄清）：那颗键不再碰配方书那一层——它只是"可合成物品"视图的开关。
   check(
@@ -5617,10 +5617,10 @@ console.log('\n[配方书开关（批次 20261024-1455）]');
  */
 console.log('\n[世界列表：进入 / 开房（L9）]');
 {
-  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   // 开房与加入共用的表单字段（L9）：房名/密码输入框与清洗规则本批搬到这里
-  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
+  const roomFormSrc = readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8');
 
   check('卡片上有专属的「开房」按钮类名', worldSrc.includes("host.className = 'world-host';"));
   check(
@@ -5660,8 +5660,8 @@ console.log('\n[世界列表：进入 / 开房（L9）]');
  */
 console.log('\n[加入房间：选项式面板（L9）]');
 {
-  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
-  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
+  const mpSrc = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const roomFormSrc = readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8');
 
   check(
     '房间与密码是独立输入框（不再靠手写 URL）',
@@ -5682,7 +5682,7 @@ console.log('\n[加入房间：选项式面板（L9）]');
       mpSrc.includes('this.form.splitAddress()'),
   );
   // 房间列表从主面板搬进了「选择」浮窗（2026-10-27）：拉取与清洗也跟着搬
-  const pickerSrcEarly = readFileSync(new URL('../src/ui/ServerPicker.ts', import.meta.url), 'utf8');
+  const pickerSrcEarly = readFileSync(new URL('../web/src/ui/ServerPicker.ts', import.meta.url), 'utf8');
   check(
     '浮窗拉 /rooms 并清洗（失败只提示一行，不挡手填）',
     pickerSrcEarly.includes('roomsEndpoint(url)') &&
@@ -5703,7 +5703,7 @@ console.log('\n[加入房间：选项式面板（L9）]');
   );
   check(
     '协议错误的状态文案按 code 出人话（面板错误行与消息栏同一份映射）',
-    readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
+    readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8').includes('netErrorText(code) || text'),
   );
   /*
    * 2026-10-27 第三版：加入和开房共用一套界面，改成**左输入 / 右列表**，
@@ -5714,7 +5714,7 @@ console.log('\n[加入房间：选项式面板（L9）]');
     mpSrc.includes("columns.className = 'mp-columns'") &&
       mpSrc.includes('this.list = new ServerListPanel()') &&
       mpSrc.includes('this.list.onPick = (picked) => {') &&
-      readFileSync(new URL('../src/ui/ServerListPanel.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/ui/ServerListPanel.ts', import.meta.url), 'utf8').includes(
         "this.onPick?.({ address, port, room });",
       ),
   );
@@ -5729,9 +5729,9 @@ console.log('\n[加入房间：选项式面板（L9）]');
  */
 console.log('\n[连接时机：主菜单先连后进世界（L9）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const probeSrc = readFileSync(new URL('../src/net/RoomProbe.ts', import.meta.url), 'utf8');
-  const mpSource = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const probeSrc = readFileSync(new URL('../web/src/net/RoomProbe.ts', import.meta.url), 'utf8');
+  const mpSource = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   const appSrcCount = (mainSrc.match(/new MultiplayerScreen\(/g) ?? []).length;
 
   check('面板只在 boot 层创建一份（App 不再 new 它）', appSrcCount === 1);
@@ -5757,7 +5757,7 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
   check(
     '卡片上只留「进入 / 开房 / ⋯」，管理动作是「⋯」的下拉菜单（导出/编辑/删除）',
     (() => {
-      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
       return (
         worldSrc.includes('buttons.append(enter, ...(this.actions.onHostWorld ? [host] : []), more);') &&
         worldSrc.includes("extra.className = 'world-card-extra hidden';") &&
@@ -5771,7 +5771,7 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
   check(
     '世界列表顶部「＋ 新建世界」与「加入房间…」并排（不再散落在首页）',
     (() => {
-      const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+      const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
       return (
         worldSrc.includes("topRow.className = 'world-list-top';") &&
         worldSrc.includes("join.id = 'world-multiplayer-button';") &&
@@ -5784,8 +5784,8 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
   check(
     '导出世界优先弹「另存为」让用户选目录，不支持才回退下载',
     (() => {
-      const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-      const saveFileSrc = readFileSync(new URL('../src/ui/SaveFile.ts', import.meta.url), 'utf8');
+      const mainSrc2 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+      const saveFileSrc = readFileSync(new URL('../web/src/ui/SaveFile.ts', import.meta.url), 'utf8');
       return (
         mainSrc2.includes('await saveBlobWithPicker(blob, {') &&
         mainSrc2.includes("if (outcome === 'unsupported') downloadBlob(blob, fileName);") &&
@@ -5810,9 +5810,9 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
  */
 console.log('\n[暂停菜单：本局房间（L9）]');
 {
-  const cardSrc = readFileSync(new URL('../src/ui/RoomCard.ts', import.meta.url), 'utf8');
-  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const cardSrc = readFileSync(new URL('../web/src/ui/RoomCard.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
 
   check(
     '卡片显示房间 / 角色 / 人数 / 世界（含种子）',
@@ -5851,7 +5851,7 @@ console.log('\n[暂停菜单：本局房间（L9）]');
     '卡片挂 body 且有专属样式与热区（触摸端 44px）',
     mainSrc.includes('new RoomCard(document.body,') &&
       /\.room-action \{[^}]*min-height: 38px/.test(
-        readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
+        readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').replace(/\s+/g, ' '),
       ),
   );
 }
@@ -5864,7 +5864,7 @@ console.log('\n[暂停菜单：本局房间（L9）]');
  */
 console.log('\n[最近连接（已撤）]');
 {
-  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mpSrc = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   /*
    * 2026-10-27：设计图里的加入面板只有四行 + 一颗按钮，"最近去过哪"随右栏一起撤掉，
    * 历史与房间都在「选择」浮窗里。这里留反向守卫，防止旧结构被无声地加回来
@@ -5884,7 +5884,7 @@ console.log('\n[最近连接（已撤）]');
  */
 console.log('\n[方块模拟只在房主那端跑（L8 · MS2）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     'tickWorldBlocks 的调用点在 shouldSimulate 闸门里',
     mainSrc.includes("if (shouldSimulate(this.net.role, 'blocks')) this.tickWorldBlocks(TICK_SECONDS);"),
@@ -5908,8 +5908,8 @@ console.log('\n[方块模拟只在房主那端跑（L8 · MS2）]');
  */
 console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2）]');
 {
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '房主走上行 blocks + authority，从属端走 edit-request',
     netSrc.includes("this.role === 'host'") &&
@@ -5957,7 +5957,7 @@ console.log('\n[改动请求：从属端发请求、房主发结果（L8 · MS2�
  */
 console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '刷怪在 shouldSimulate(mobs) 闸门里，且只调用一次',
     mainSrc.includes("if (shouldSimulate(this.net.role, 'mobs')) this.mobSpawner.update(dt, ctx);") &&
@@ -5969,7 +5969,7 @@ console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
   );
   check(
     '实体管理器支持 shouldTick 过滤（不传就是老行为）',
-    readFileSync(new URL('../src/core/entity/EntityManager.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/core/entity/EntityManager.ts', import.meta.url), 'utf8').includes(
       'update(ctx: EntityContext, dt: number, shouldTick?: (entity: Entity) => boolean): void',
     ),
   );
@@ -6024,8 +6024,8 @@ console.log('\n[生物模拟只在房主那端跑（L8 · MS3）]');
  */
 console.log('\n[容器计时只在房主那端跑（L8 · MS4）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   check(
     'tickContainers 在 shouldSimulate(containers) 闸门里',
     mainSrc.includes("if (shouldSimulate(this.net.role, 'containers')) {") &&
@@ -6054,9 +6054,9 @@ console.log('\n[容器计时只在房主那端跑（L8 · MS4）]');
  */
 console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const protoSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
+  const protoSrc = readFileSync(new URL('../web/src/core/net/Protocol.ts', import.meta.url), 'utf8');
   check(
     '客户端认 `room-closed` 并把它变成玩家看得见的一句话',
     netSrc.includes("case 'room-closed':") && mainSrc.includes('onRoomClosing: (graceMs) =>'),
@@ -6067,7 +6067,7 @@ console.log('\n[房主退出：提示 + 不再重连（L8 · MS4）]');
   );
   check(
     '会话状态机把"房间已关闭"当作停车理由（与致命错误分开表达）',
-    readFileSync(new URL('../src/core/net/NetSession.ts', import.meta.url), 'utf8').includes('roomClosed?: boolean'),
+    readFileSync(new URL('../web/src/core/net/NetSession.ts', import.meta.url), 'utf8').includes('roomClosed?: boolean'),
   );
   check(
     '提示文案带宽限秒数（别让玩家对着不推进的世界猜"卡了"）',
@@ -6118,8 +6118,8 @@ console.log('\n[协议文档 v2 与本批改动逐条对照（L8 · MS4）]');
  */
 console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收尾）]');
 {
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '四类发送都走统一出口（房主直发 / 从属端包请求）',
     netSrc.includes('private sendEditOrRequest(message: Record<string, unknown>): void') &&
@@ -6153,9 +6153,9 @@ console.log('\n[容器/牌子/展示框/TNT 也走请求通道（L8 · MS4 收�
  */
 console.log('\n[命中按全局键认那只怪（L8 · MS3 收尾）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const matchSrc = readFileSync(new URL('../src/core/net/MobMatch.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
+  const matchSrc = readFileSync(new URL('../web/src/core/net/MobMatch.ts', import.meta.url), 'utf8');
   check(
     '匹配先比全局键，比不到才退回类型 + 邻域',
     matchSrc.includes('const wanted = typeof hit.key') && matchSrc.includes('if (candidate.key === wanted) return candidate;'),
@@ -6178,8 +6178,8 @@ console.log('\n[命中按全局键认那只怪（L8 · MS3 收尾）]');
  */
 console.log('\n[远端玩家模型（本轮修复）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const skinSrc = readFileSync(new URL('../src/core/net/RemoteSkin.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const skinSrc = readFileSync(new URL('../web/src/core/net/RemoteSkin.ts', import.meta.url), 'utf8');
   check(
     '远端玩家改成 PlayerRenderer（不再借 MobRenderer 的方盒人形）',
     mainSrc.includes('this.remoteRenderers.set(player.id, renderer)') &&
@@ -6224,7 +6224,7 @@ console.log('\n[远端玩家模型（本轮修复）]');
  */
 console.log('\n[房间进出提示]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '进房时说清房间名 / 房主 / 在线人数（房主与加入方两套文案）',
     mainSrc.includes("tp('say.net.roomHosted'") &&
@@ -6253,11 +6253,11 @@ console.log('\n[房间进出提示]');
  */
 console.log('\n[皮肤同步与昵称唯一]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const protocolSrc = readFileSync(new URL('../src/core/net/Protocol.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const protocolSrc = readFileSync(new URL('../web/src/core/net/Protocol.ts', import.meta.url), 'utf8');
   // 错误码 → 文案的映射本批搬出了 main.ts（`netErrorText`），断言跟着改读新位置
-  const netErrorSrc = readFileSync(new URL('../src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
-  const appearanceSrc = readFileSync(new URL('../src/core/net/RemoteAppearance.ts', import.meta.url), 'utf8');
+  const netErrorSrc = readFileSync(new URL('../web/src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
+  const appearanceSrc = readFileSync(new URL('../web/src/core/net/RemoteAppearance.ts', import.meta.url), 'utf8');
   check(
     '外观按玩家自己的下标发送（move.look，10 个字段）',
     mainSrc.includes('look: [') && mainSrc.includes('this.settings.skinTone') && appearanceSrc.includes('REMOTE_LOOK_LENGTH = 10'),
@@ -6286,8 +6286,8 @@ console.log('\n[皮肤同步与昵称唯一]');
  */
 console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
 {
-  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const mpSrc = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   check(
     '面板改成单列卡片（设计图：标题居中 + 四行表单 + 通栏按钮）',
     mpSrc.includes("form.className = 'mp-form'") &&
@@ -6313,9 +6313,9 @@ console.log('\n[加入房间面板：左右栏 + 紧凑列表]');
  */
 console.log('\n[加入房间：地址只填 IP]');
 {
-  const serverUrlSrc = readFileSync(new URL('../src/core/net/ServerUrl.ts', import.meta.url), 'utf8');
+  const serverUrlSrc = readFileSync(new URL('../web/src/core/net/ServerUrl.ts', import.meta.url), 'utf8');
   const serverSrc = readFileSync(new URL('../server/node/protocol.mjs', import.meta.url), 'utf8');
-  const mpSrc = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const mpSrc = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
   check(
     '只填 IP 自动补 ws:// 与固定端口',
     // 2026-10-25：归一化搬到 `core/net/ServerUrl.ts`（开房对话框也要用它），判据跟着搬
@@ -6331,15 +6331,15 @@ console.log('\n[加入房间：地址只填 IP]');
     serverUrlSrc.includes('export function isLanHost') &&
       serverUrlSrc.includes('export const DEFAULT_WS_PATH') &&
       // 两个入口共用 RoomForm，归一化只在它那里调一次
-      readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
         'normalizeServerUrl(this.urlInput.value)',
       ),
   );
   check(
     '地址栏提示写明"IP 或域名"（六语言都有这条键）',
     ['zh', 'en', 'de', 'ru', 'fr', 'pt'].every((code) =>
-      readFileSync(new URL(`../src/core/i18n/locales/${code}/menu.ts`, import.meta.url), 'utf8').includes('mp.serverHint'),
-    ) && readFileSync(new URL('../src/core/i18n/locales/zh/menu.ts', import.meta.url), 'utf8').includes('域名'),
+      readFileSync(new URL(`../web/src/core/i18n/locales/${code}/menu.ts`, import.meta.url), 'utf8').includes('mp.serverHint'),
+    ) && readFileSync(new URL('../web/src/core/i18n/locales/zh/menu.ts', import.meta.url), 'utf8').includes('域名'),
   );
   check(
     '联机面板仍导出 normalizeServerUrl（搬到 core 之后旧调用点不用改）',
@@ -6380,9 +6380,9 @@ console.log('\n[加入房间：地址只填 IP]');
  */
 console.log('\n[房主标识与房间配置]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const cmdSrc = readFileSync(new URL('../web/src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check(
     '房主的名字牌是金色 +「房主 ·」前缀（优先级高于队伍色）',
@@ -6435,7 +6435,7 @@ console.log('\n[房主标识与房间配置]');
  */
 console.log('\n[退出/刷新立刻离线（用户 2026-10-25 实测 ⑥前半）]');
 {
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check('页面卸载时发 bye（pagehide，capture）', netSrc.includes("window.addEventListener('pagehide', () => this.sendBye(), { capture: true })"));
   check('主动断开也先告别（不是只关 socket）', /disconnect\(\): void \{[\s\S]{0,400}?this\.sendBye\(\);/.test(netSrc));
@@ -6445,12 +6445,12 @@ console.log('\n[退出/刷新立刻离线（用户 2026-10-25 实测 ⑥前半�
 
 console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 实测 ④）]');
 {
-  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const htmlSrc = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   // 错误码 → 文案的映射本批搬到 `NetErrorText.ts`，这里两处都认：预检直接用的那句 + 映射表
-  const netErrorSrc = readFileSync(new URL('../src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
-  const roomFormSrc = readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8');
+  const netErrorSrc = readFileSync(new URL('../web/src/core/net/NetErrorText.ts', import.meta.url), 'utf8');
+  const roomFormSrc = readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8');
   check(
     '开房对话框有地址输入框（默认回填当前地址）',
     roomFormSrc.includes("options.mode === 'host' ? 'world-host-address' : 'mp-url'") &&
@@ -6485,8 +6485,8 @@ console.log('\n[开房要填服务器地址 + 房名必填（用户 2026-10-25 �
 
 console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   const serverSrc = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
   check(
     '服务端算出权威天数并随快照下发（每房一套时钟，用户 2026-10-26）',
@@ -6523,8 +6523,8 @@ console.log('\n[天数与时间一起对齐（用户 2026-10-25 实测 ②）]')
 
 console.log('\n[加入失败不再留在世界里（2026-10-25 实测 ①⑤）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
   check('NetClient 暴露致命断开标记', netSrc.includes('get closeIsFatal(): boolean'));
   check('主程序在致命断开时中止这一局的加入', mainSrc.includes('if (this.net.closeIsFatal) this.abortJoin(this.netStatus);'));
   check(
@@ -6544,9 +6544,9 @@ console.log('\n[加入失败不再留在世界里（2026-10-25 实测 ①⑤）]
 
 console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-10-26）]');
 {
-  const mainSrc3 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const worldUiSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
+  const mainSrc3 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const worldUiSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const audioSrc = readFileSync(new URL('../web/src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
 
   // ---- ① 开房失败不许进世界：先预检，失败留在对话框里说原因
   /*
@@ -6601,8 +6601,8 @@ console.log('\n[开房预检 / 雨声跟随天气 / 加入自愈（用户 2026-1
 
 console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]');
 {
-  const netSrc = readFileSync(new URL('../src/net/NetClient.ts', import.meta.url), 'utf8');
-  const mainSrc4 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const netSrc = readFileSync(new URL('../web/src/net/NetClient.ts', import.meta.url), 'utf8');
+  const mainSrc4 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   const serverSrc4 = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
 
   /*
@@ -6663,7 +6663,7 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
    * 开房失败要分得清"连不上"和"被浏览器拦了"（用户 2026-10-26 手机开房失败）：
    * https 页面连 `ws://` 是混合内容，跟网络无关，必须给专门的提示。
    */
-  const preflightSrc = readFileSync(new URL('../src/net/HostPreflight.ts', import.meta.url), 'utf8');
+  const preflightSrc = readFileSync(new URL('../web/src/net/HostPreflight.ts', import.meta.url), 'utf8');
   check(
     '预检区分 https 混合内容：**先尝试**，连不上才归因到"要授权"',
     preflightSrc.includes("'https-blocked'") &&
@@ -6682,7 +6682,7 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
    * 判据必须走 `(pointer: fine)`：`body.touch-mode` 是**进世界之后**才挂的，
    * 主菜单阶段手机上也没有这个类，拿它当判据会把手机上的 52px 一起压掉。
    */
-  const cssWorld = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const cssWorld = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   check(
     '新建世界 / 加入房间等宽（flex 基线 0）',
     /\.world-list-top > \.world-primary,\s*\n\s*\.world-list-top > \.world-secondary \{[\s\S]{0,200}?flex: 1 1 0;/.test(cssWorld),
@@ -6710,7 +6710,7 @@ console.log('\n[远端皮肤同步 / 房间设置通知（用户 2026-10-26）]'
 
 console.log('\n[每帧 DOM 收干（批次 20261026-0141）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
 
   // 调试面板文本节流：fps 本来就 0.5 秒一算，5Hz 刷新肉眼看不出差别
   const throttle = Number(/const DEBUG_TEXT_REFRESH_MS = (\d+);/.exec(mainSrc)?.[1] ?? 0);
@@ -6742,11 +6742,11 @@ console.log('\n[每帧 DOM 收干（批次 20261026-0141）]');
 
 console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 2026-10-26）]');
 {
-  const pickerSrc = readFileSync(new URL('../src/ui/ServerPicker.ts', import.meta.url), 'utf8');
-  const discoverySrc = readFileSync(new URL('../src/core/net/ServerDiscovery.ts', import.meta.url), 'utf8');
-  const worldUiSrc2 = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  const mpSrc2 = readFileSync(new URL('../src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
-  const htmlSrc2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const pickerSrc = readFileSync(new URL('../web/src/ui/ServerPicker.ts', import.meta.url), 'utf8');
+  const discoverySrc = readFileSync(new URL('../web/src/core/net/ServerDiscovery.ts', import.meta.url), 'utf8');
+  const worldUiSrc2 = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const mpSrc2 = readFileSync(new URL('../web/src/ui/MultiplayerScreen.ts', import.meta.url), 'utf8');
+  const htmlSrc2 = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const serverSrc5 = readFileSync(new URL('../server/node/index.mjs', import.meta.url), 'utf8');
 
   // ① 服务端必须有探测接口（无状态 + 禁缓存），否则扫描永远扫不到
@@ -6853,7 +6853,7 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
     '「允许其它人建房」只给能内建服务端的客户端（web 版整块不渲染）',
     pickerSrc.includes('if (this.actions.localServer !== true) return null;') &&
       pickerSrc.includes("t('server.allowHosting')") &&
-      readFileSync(new URL('../src/core/net/ClientCapabilities.ts', import.meta.url), 'utf8').includes(
+      readFileSync(new URL('../web/src/core/net/ClientCapabilities.ts', import.meta.url), 'utf8').includes(
         'localServer: false',
       ),
   );
@@ -6875,9 +6875,9 @@ console.log('\n[选择服务器：局域网扫描 + 公开列表预留（用户 
   // 用户 2026-10-27 改口径：端口**可编辑**（不再是只读后缀）
   check(
     '端口是可编辑输入框，默认取 DEFAULT_NET_PORT',
-    readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8').includes(
       "this.portInput.value = String(options.initialPort ?? DEFAULT_NET_PORT);",
-    ) && !readFileSync(new URL('../src/ui/RoomForm.ts', import.meta.url), 'utf8').includes('portLabel'),
+    ) && !readFileSync(new URL('../web/src/ui/RoomForm.ts', import.meta.url), 'utf8').includes('portLabel'),
   );
   check(
     '开房对话框关掉时一起拆面板（否则浮层留在屏幕上）',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unzipStore, zipStore } from '../src/core/save/McPack.ts';
+import { unzipStore, zipStore } from '../web/src/core/save/McPack.ts';
 
 describe('.mc 存档包（zip）', () => {
   it('打包再解包内容一致', () => {

@@ -8,19 +8,19 @@
  * 运行：npm run test:note
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   nextNotePitch,
   noteFrequency,
   notePitchOf,
   withNotePitch,
-} from '../src/core/registry/blockState.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { AudioEngine } from '../src/core/audio/AudioEngine.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { AudioEngine } from '../web/src/core/audio/AudioEngine.ts';
 
 let passed = 0;
 let failed = 0;

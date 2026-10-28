@@ -8,10 +8,10 @@
  * 运行：npm run test:support
  */
 
-import { Block, JUNGLE_LOG_ID, STEM_STAGES } from '../src/core/registry/blocks.ts';
-import { withFacing } from '../src/core/registry/blockState.ts';
-import { supportIsValid, supportKindOf, sweepUnsupported, type SupportWorld } from '../src/core/world/Support.ts';
-import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
+import { Block, JUNGLE_LOG_ID, STEM_STAGES } from '../web/src/core/registry/blocks.ts';
+import { withFacing } from '../web/src/core/registry/blockState.ts';
+import { supportIsValid, supportKindOf, sweepUnsupported, type SupportWorld } from '../web/src/core/world/Support.ts';
+import { planPlacement, type PlacementInput } from '../web/src/core/interaction/Placement.ts';
 
 let passed = 0;
 let failed = 0;

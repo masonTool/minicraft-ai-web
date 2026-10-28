@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { SWIM_FLOAT_SPEED, SWIM_UP_SPEED, swimVerticalSpeed } from '../src/core/entity/SwimRules.ts';
+import { SWIM_FLOAT_SPEED, SWIM_UP_SPEED, swimVerticalSpeed } from '../web/src/core/entity/SwimRules.ts';
 
 let passed = 0;
 let failed = 0;
@@ -49,7 +49,7 @@ console.log('\n[不硬拽已有速度]');
 
 console.log('\n[接线守卫]');
 {
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check('Mob 在水里调用纯函数', mobSrc.includes('this.vy = swimVerticalSpeed({ submerged: true, headAboveWater, targetAbove, vy: this.vy })'));
   check('头露出水面的判定取了 0.9 身高', mobSrc.includes('this.y + this.height * 0.9'));
   check('只有追击时才设目标高度', mobSrc.includes('this.swimTargetY = chasing && player ? player.y : null'));

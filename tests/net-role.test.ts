@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { INITIAL_ROLE, nextRole, roleFromWelcome, type NetRole } from '../src/core/net/NetRole.ts';
+import { INITIAL_ROLE, nextRole, roleFromWelcome, type NetRole } from '../web/src/core/net/NetRole.ts';
 
 describe('NetRole', () => {
   it('初始角色是 solo（单机行为是回归基线）', () => {

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { swapOffhand } from '../src/core/container/Offhand.ts';
+import { swapOffhand } from '../web/src/core/container/Offhand.ts';
 
 describe('swapOffhand', () => {
   it('两边都有东西：互换', () => {

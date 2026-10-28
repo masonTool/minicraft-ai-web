@@ -19,7 +19,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBlockTable } from '../src/core/registry/blocks.ts';
+import { buildBlockTable } from '../web/src/core/registry/blocks.ts';
 import { STATE_COUNT, behaviorHash, hasBehavior } from './behavior-signature.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');

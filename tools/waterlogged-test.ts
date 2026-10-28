@@ -19,22 +19,22 @@ import {
   slabId,
   stairsId,
   waterloggedPlacementState,
-} from '../src/core/registry/blocks.ts';
-import { GLASS_PANE_ID } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { GLASS_PANE_ID } from '../web/src/core/registry/blocks.ts';
 import {
   isSlabDouble,
   isWaterlogged,
   withFacing,
   withSlabDouble,
   withWaterlogged,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   canFillWaterlogged,
   fluidTick,
   isWaterAt,
   wakeFluidAt,
   WATER,
-} from '../src/core/world/Fluids.ts';
+} from '../web/src/core/world/Fluids.ts';
 
 let passed = 0;
 let failed = 0;

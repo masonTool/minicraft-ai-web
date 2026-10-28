@@ -12,11 +12,11 @@
  * 运行：npm run test:navigation
  */
 
-import { Item, CREATIVE_ITEMS, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { clockAngleDeg, compassAngleDeg, horizontalDistance, timeOfDayLabel } from '../src/core/items/Navigation.ts';
+import { Item, CREATIVE_ITEMS, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { clockAngleDeg, compassAngleDeg, horizontalDistance, timeOfDayLabel } from '../web/src/core/items/Navigation.ts';
 
 let passed = 0;
 let failed = 0;

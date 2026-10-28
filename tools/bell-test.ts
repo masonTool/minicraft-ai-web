@@ -11,13 +11,13 @@
  * 而 1 : 2.76 : 5.4 才是钟体被敲响时那几个不对齐的峰。
  */
 
-import { Block, BELL_ID, blockDef } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { BELL_BASE_HZ, BELL_RING_SECONDS, bellSoundSpec } from '../src/core/audio/BellSound.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block, BELL_ID, blockDef } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { BELL_BASE_HZ, BELL_RING_SECONDS, bellSoundSpec } from '../web/src/core/audio/BellSound.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 
 let passed = 0;
 let failed = 0;

@@ -29,7 +29,7 @@ import {
   blockHardness,
   blockTiles,
   woolId,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   ITEM_FRAME_ITEM_SIZE,
   ITEM_FRAME_THICKNESS,
@@ -41,7 +41,7 @@ import {
   isFullBlockShape,
   meshBoxes,
   type LocalBox,
-} from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockShapes.ts';
 import {
   describeState,
   facingOf,
@@ -51,7 +51,7 @@ import {
   withFacing,
   withPaintingVariant,
   type Facing,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   PAINTING_VARIANTS,
   PAINTING_VARIANT_LIMIT,
@@ -59,18 +59,18 @@ import {
   paintingName,
   paintingTile,
   pickPaintingVariant,
-} from '../src/core/registry/paintings.ts';
-import { Item, categoryOf, dropFor, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
+} from '../web/src/core/registry/paintings.ts';
+import { Item, categoryOf, dropFor, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
 import {
   supportIsValid,
   supportKindOf,
   sweepHangingsAround,
   type SupportWorld,
-} from '../src/core/world/Support.ts';
+} from '../web/src/core/world/Support.ts';
 import {
   FRAME_ROTATIONS,
   ItemFrameStore,
@@ -81,8 +81,8 @@ import {
   normalizeFrameItem,
   restoreFrames,
   serializeFrames,
-} from '../src/core/world/ItemFrame.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/ItemFrame.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

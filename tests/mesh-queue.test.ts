@@ -12,7 +12,7 @@ import {
   MESH_PRIORITY_REFRESH,
   compareMeshQueue,
   type QueueItem,
-} from '../src/render/ChunkRenderer.ts';
+} from '../web/src/render/ChunkRenderer.ts';
 
 function item(cx: number, cz: number, distanceSq: number, priority: number): QueueItem {
   return { cx, cz, distanceSq, priority };

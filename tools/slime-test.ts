@@ -19,12 +19,12 @@
  * 运行：npm run test:slime
  */
 
-import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { matchRecipe, RECIPES } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { matchRecipe, RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
 import {
   HOSTILE_MOBS,
   MOB_TYPES,
@@ -32,8 +32,8 @@ import {
   SLIME_SMALL_TYPE,
   SLIME_TYPE,
   mobTypeById,
-} from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
+} from '../web/src/core/entity/mobs.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
 import {
   MIN_BOUNCE_SPEED,
   SLIME_BOUNCE_FACTOR,
@@ -41,10 +41,10 @@ import {
   SLIME_SPAWN_MAX_Y,
   isSlimeChunk,
   slimeBounceVelocity,
-} from '../src/core/world/Slime.ts';
-import { slimeSpawnFactor } from '../src/core/world/MoonPhase.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/world/Slime.ts';
+import { slimeSpawnFactor } from '../web/src/core/world/MoonPhase.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

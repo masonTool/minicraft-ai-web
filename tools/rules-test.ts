@@ -15,7 +15,7 @@ import {
   normalizeGameRules,
   shouldEchoCommandResult,
   type GameRules,
-} from '../src/core/world/Rules.ts';
+} from '../web/src/core/world/Rules.ts';
 
 let passed = 0;
 let failed = 0;

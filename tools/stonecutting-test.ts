@@ -16,9 +16,9 @@ import {
   blockDef,
   slabId,
   stairsId,
-} from '../src/core/registry/blocks.ts';
-import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 import {
   isStonecuttingInput,
   stonecuttingConversionCount,
@@ -26,18 +26,18 @@ import {
   stonecuttingOffers,
   stonecuttingRecipeCount,
   stonecuttingYield,
-} from '../src/core/crafting/Stonecutting.ts';
-import { stoneVariantId } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/crafting/Stonecutting.ts';
+import { stoneVariantId } from '../web/src/core/registry/blocks.ts';
 import {
   STONECUTTER_SIZE,
   Stonecutter,
-} from '../src/core/container/Stonecutter.ts';
-import { CREATIVE_ITEMS, Item, categoryOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+} from '../web/src/core/container/Stonecutter.ts';
+import { CREATIVE_ITEMS, Item, categoryOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainers } from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 
 let passed = 0;
 let failed = 0;

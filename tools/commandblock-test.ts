@@ -9,9 +9,9 @@
  * 执行本身（`executeCommand`）在 main 里，这一层只保证"该执行的时候回调了、且只回调一次"。
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { COMMAND_MAX_LENGTH, CommandBlockStore, commandKey, normalizeCommand } from '../src/core/world/CommandBlocks.ts';
-import { RedstoneEngine, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { COMMAND_MAX_LENGTH, CommandBlockStore, commandKey, normalizeCommand } from '../web/src/core/world/CommandBlocks.ts';
+import { RedstoneEngine, type RedstoneWorld } from '../web/src/core/redstone/RedstoneEngine.ts';
 
 let passed = 0;
 let failed = 0;

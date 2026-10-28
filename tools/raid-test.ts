@@ -14,7 +14,7 @@ import {
   countsAsRaidKill,
   raidWaveSpec,
   waveSize,
-} from '../src/core/world/Raid.ts';
+} from '../web/src/core/world/Raid.ts';
 
 let passed = 0;
 let failed = 0;

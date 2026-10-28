@@ -13,7 +13,7 @@ import {
   parsePeersResponse,
   peerAddress,
   probeLatency,
-} from '../src/core/net/NearbyRooms.ts';
+} from '../web/src/core/net/NearbyRooms.ts';
 
 describe('parsePeersResponse', () => {
   it('正常响应：名字 / 地址 / 端口 / 人数 / 房主 / 口令 / 种子', () => {

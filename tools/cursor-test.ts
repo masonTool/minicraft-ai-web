@@ -7,15 +7,15 @@
  * 运行：npm run test:cursor
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
 import {
   Inventory,
   MAIN_START,
   OFFHAND_SLOT,
   type ItemStack,
   type SlotSource,
-} from '../src/core/container/Inventory.ts';
+} from '../web/src/core/container/Inventory.ts';
 import {
   distributeEvenly,
   dropCount,
@@ -24,7 +24,7 @@ import {
   placeOneEach,
   slotForKey,
   swapWithSlot,
-} from '../src/core/container/CursorActions.ts';
+} from '../web/src/core/container/CursorActions.ts';
 
 let passed = 0;
 let failed = 0;

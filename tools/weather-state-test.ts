@@ -28,7 +28,7 @@ import {
   tickWeather,
   weatherNotice,
   weatherSecondsFor,
-} from '../src/core/world/WeatherState.ts';
+} from '../web/src/core/world/WeatherState.ts';
 
 let passed = 0;
 let failed = 0;

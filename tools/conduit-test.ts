@@ -6,10 +6,10 @@
  * 运行：npm run test:conduit
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { Item, itemDef } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { Item, itemDef } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
 import {
   CONDUIT_RADII,
   conduitRadius,
@@ -17,7 +17,7 @@ import {
   countConduitFrame,
   isConduitFrameBlock,
   type ConduitWorld,
-} from '../src/core/world/Conduit.ts';
+} from '../web/src/core/world/Conduit.ts';
 
 let passed = 0;
 let failed = 0;

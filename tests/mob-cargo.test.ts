@@ -7,11 +7,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Chest, CHEST_SIZE, MOB_CARGO_SIZE } from '../src/core/container/Chest.ts';
-import { Horse } from '../src/core/entity/Horse.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { EntityParking } from '../src/core/entity/EntityParking.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { Chest, CHEST_SIZE, MOB_CARGO_SIZE } from '../web/src/core/container/Chest.ts';
+import { Horse } from '../web/src/core/entity/Horse.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { EntityParking } from '../web/src/core/entity/EntityParking.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 
 describe('可变格数容器', () => {
   it('默认箱子仍是 27 格', () => {

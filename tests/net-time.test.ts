@@ -14,7 +14,7 @@ import {
   stepTimeOfDayToward,
   timeDelta,
   timeOfDayAt,
-} from '../src/core/net/NetTime.ts';
+} from '../web/src/core/net/NetTime.ts';
 
 describe('timeDelta 最短环形差', () => {
   it('普通差值就是减法', () => {

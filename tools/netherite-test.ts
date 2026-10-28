@@ -15,8 +15,8 @@
  * 运行：npm run test:netherite
  */
 
-import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
-import { breakSeconds, harvestRequirement, toolItemId } from '../src/core/registry/tools.ts';
+import { Block, blockDef, blockHardness } from '../web/src/core/registry/blocks.ts';
+import { breakSeconds, harvestRequirement, toolItemId } from '../web/src/core/registry/tools.ts';
 import {
   Item,
   MATERIAL_REPAIR_ITEM,
@@ -24,14 +24,14 @@ import {
   itemDef,
   itemName,
   maxStackOf,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
-import { rarityOf } from '../src/core/registry/itemVisuals.ts';
-import { ARMOR_SPECS, armorItemId, armorInfoById } from '../src/core/registry/armor.ts';
-import { TOOL_SPECS, toolInfoById } from '../src/core/registry/tools.ts';
-import { SMELTING_RECIPES, smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel, itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { rarityOf } from '../web/src/core/registry/itemVisuals.ts';
+import { ARMOR_SPECS, armorItemId, armorInfoById } from '../web/src/core/registry/armor.ts';
+import { TOOL_SPECS, toolInfoById } from '../web/src/core/registry/tools.ts';
+import { SMELTING_RECIPES, smeltingRecipeFor } from '../web/src/core/crafting/Smelting.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { recipesForResult } from '../web/src/core/crafting/RecipeBook.ts';
 import {
   SMITHING_INGOT_COST,
   combineOnSmithing,
@@ -39,12 +39,12 @@ import {
   netheriteUpgradeCount,
   netheriteUpgradeOf,
   smithingHint,
-} from '../src/core/crafting/Smithing.ts';
-import { SMITHING_EQUIPMENT, SMITHING_MATERIAL, SMITHING_RESULT, SMITHING_SIZE, SmithingTable } from '../src/core/container/SmithingTable.ts';
-import { SLOT_COUNTS, kindOf, serializeContainer, restoreContainers } from '../src/core/save/ContainerSave.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/crafting/Smithing.ts';
+import { SMITHING_EQUIPMENT, SMITHING_MATERIAL, SMITHING_RESULT, SMITHING_SIZE, SmithingTable } from '../web/src/core/container/SmithingTable.ts';
+import { SLOT_COUNTS, kindOf, serializeContainer, restoreContainers } from '../web/src/core/save/ContainerSave.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

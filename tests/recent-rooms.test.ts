@@ -14,7 +14,7 @@ import {
   pushRecentRoom,
   serializeRecentRooms,
   type RecentRoom,
-} from '../src/core/net/RecentRooms.ts';
+} from '../web/src/core/net/RecentRooms.ts';
 
 const entry = (url: string, room: string, at = 1, name = ''): RecentRoom => ({ url, room, name, at });
 

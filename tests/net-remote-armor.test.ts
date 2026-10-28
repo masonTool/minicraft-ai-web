@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from '../src/core/net/RemoteArmor.ts';
+import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from '../web/src/core/net/RemoteArmor.ts';
 
 describe('armorEquipmentPatch', () => {
   it('四槽齐全时逐槽映射到头/胸/腿/脚', () => {

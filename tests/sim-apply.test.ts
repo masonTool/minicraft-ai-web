@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SHADOW_GRACE_SNAPSHOTS, SimApply } from '../src/game/sim/SimApply.ts';
-import { ENTITY_FLAGS } from '../src/core/net/EntitySnapshot.ts';
+import { SHADOW_GRACE_SNAPSHOTS, SimApply } from '../web/src/game/sim/SimApply.ts';
+import { ENTITY_FLAGS } from '../web/src/core/net/EntitySnapshot.ts';
 
 /** 造一条线上形态的快照项 */
 function wire(key: string, x: number, z: number, extra: { y?: number; health?: number; flags?: number; type?: string } = {}) {

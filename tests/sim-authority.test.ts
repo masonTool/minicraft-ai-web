@@ -18,8 +18,8 @@ import {
   encodeEntitySnapshots,
   withinEntityAoi,
   type SimEntity,
-} from '../src/game/sim/SimAuthority.ts';
-import { ENTITY_FLAGS } from '../src/core/net/EntitySnapshot.ts';
+} from '../web/src/game/sim/SimAuthority.ts';
+import { ENTITY_FLAGS } from '../web/src/core/net/EntitySnapshot.ts';
 
 function entity(key: string, x: number, z: number, extra: Partial<SimEntity> = {}): SimEntity {
   return {

@@ -1,4 +1,4 @@
-import { BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
+import { BLOCKS, blockDef } from '../web/src/core/registry/blocks.ts';
 
 const names = new Set<string>();
 for (let id = 1; id < BLOCKS.length; id++) {

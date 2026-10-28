@@ -18,8 +18,8 @@ import {
   mapPackSounds,
   soundNameOf,
   soundPathsFor,
-} from '../src/core/resourcepack/SoundPack.ts';
-import { AudioEngine, SOUND_KINDS, soundSpec } from '../src/core/audio/AudioEngine.ts';
+} from '../web/src/core/resourcepack/SoundPack.ts';
+import { AudioEngine, SOUND_KINDS, soundSpec } from '../web/src/core/audio/AudioEngine.ts';
 
 let passed = 0;
 let failed = 0;

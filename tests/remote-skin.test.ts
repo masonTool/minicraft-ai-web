@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { remotePaletteFromLook, remotePaletteFromName } from '../src/core/net/RemoteSkin.ts';
-import { SKIN_TONES, SHIRT_COLORS, PANTS_COLORS, HAIR_COLORS, EYE_COLORS, HAIR_STYLES, BEARD_STYLES, EYE_STYLES, BODY_BUILDS, BODY_FRAMES } from '../src/game/appearance.ts';
+import { remotePaletteFromLook, remotePaletteFromName } from '../web/src/core/net/RemoteSkin.ts';
+import { SKIN_TONES, SHIRT_COLORS, PANTS_COLORS, HAIR_COLORS, EYE_COLORS, HAIR_STYLES, BEARD_STYLES, EYE_STYLES, BODY_BUILDS, BODY_FRAMES } from '../web/src/game/appearance.ts';
 
 describe('remotePaletteFromName', () => {
   it('同名两次结果完全一致（跨端一致的前提）', () => {

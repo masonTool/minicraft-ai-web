@@ -6,9 +6,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { mergeSectionLayer } from '../src/render/ChunkRenderer.ts';
-import type { GeometryArrays } from '../src/core/mesh/ChunkMesher.ts';
+import { WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { mergeSectionLayer } from '../web/src/render/ChunkRenderer.ts';
+import type { GeometryArrays } from '../web/src/core/mesh/ChunkMesher.ts';
 
 function triangle(y: number, seed = 0): GeometryArrays {
   return {

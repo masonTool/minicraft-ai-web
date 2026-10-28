@@ -26,9 +26,9 @@
  * 运行：`npm run test:terrain`
  */
 
-import { isSolid } from '../src/core/registry/blocks.ts';
-import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z } from '../src/core/world/Chunk.ts';
-import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
+import { isSolid } from '../web/src/core/registry/blocks.ts';
+import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z } from '../web/src/core/world/Chunk.ts';
+import { OverworldGenerator, SEA_LEVEL } from '../web/src/core/gen/OverworldGenerator.ts';
 
 let passed = 0;
 let failed = 0;

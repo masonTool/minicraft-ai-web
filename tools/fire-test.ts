@@ -10,12 +10,12 @@
  * 运行：npm run test:fire
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { breakSeconds } from '../src/core/registry/tools.ts';
-import { Item, blockDrops, dropFor, itemDef, maxStackOf, durabilityOf } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { PlayerStats, type SurvivalEnvironment } from '../src/core/survival/PlayerStats.ts';
-import { randomTickBlock, hasRandomTick, type TickWorld } from '../src/core/tick/RandomTicks.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { breakSeconds } from '../web/src/core/registry/tools.ts';
+import { Item, blockDrops, dropFor, itemDef, maxStackOf, durabilityOf } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { PlayerStats, type SurvivalEnvironment } from '../web/src/core/survival/PlayerStats.ts';
+import { randomTickBlock, hasRandomTick, type TickWorld } from '../web/src/core/tick/RandomTicks.ts';
 import {
   FIRE_CONSUME_CHANCE,
   FIRE_DAMAGE_INTERVAL_TICKS,
@@ -31,10 +31,10 @@ import {
   flammableCount,
   CAMPFIRE_IGNITE_SECONDS,
   burnsOnContact,
-} from '../src/core/world/Fire.ts';
-import { withLitState } from '../src/core/registry/blockState.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/Fire.ts';
+import { withLitState } from '../web/src/core/registry/blockState.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

@@ -14,14 +14,14 @@
  * 运行：npm run test:daylight
  */
 
-import { isHandHarvestable } from '../src/core/registry/tools.ts';
+import { isHandHarvestable } from '../web/src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
   DAYLIGHT_DETECTOR_ID,
   blockDef,
   blockHardness,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   isInverted,
   facingOf,
@@ -29,8 +29,8 @@ import {
   withFacing,
   withInverted,
   withPowered,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -38,16 +38,16 @@ import {
   categoryOf,
   dropFor,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   RedstoneEngine,
   daylightOutput,
   isRedstoneComponent,
   type RedstoneWorld,
-} from '../src/core/redstone/RedstoneEngine.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/redstone/RedstoneEngine.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

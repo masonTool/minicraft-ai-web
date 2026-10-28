@@ -15,14 +15,14 @@ import {
   shulkerBoxId,
   terracottaId,
   woolId,
-} from '../src/core/registry/blocks.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { Item, dyeItemId } from '../src/core/registry/items.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
-import { Inventory } from '../src/core/container/Inventory.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { Item, dyeItemId } from '../web/src/core/registry/items.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { CraftingGrid } from '../web/src/core/crafting/CraftingGrid.ts';
+import { Inventory } from '../web/src/core/container/Inventory.ts';
 
 let passed = 0;
 let failed = 0;

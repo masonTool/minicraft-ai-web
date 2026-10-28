@@ -15,15 +15,15 @@
  * 运行：npm run test:tnt
  */
 
-import { isHandHarvestable } from '../src/core/registry/tools.ts';
+import { isHandHarvestable } from '../web/src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
   TNT_ID,
   blockDef,
   blockHardness,
-} from '../src/core/registry/blocks.ts';
-import { isFlash, isPowered, withFacing, withFlash, withPowered } from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { isFlash, isPowered, withFacing, withFlash, withPowered } from '../web/src/core/registry/blockState.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -31,8 +31,8 @@ import {
   categoryOf,
   dropFor,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   PrimedTnt,
   TNT_FLASH_INTERVAL,
@@ -41,15 +41,15 @@ import {
   isTntPrimed,
   tntTiles,
   type TntWorld,
-} from '../src/core/world/PrimedTnt.ts';
-import { RANDOM_TICK_BEHAVIORS, type TickWorld } from '../src/core/tick/RandomTicks.ts';
+} from '../web/src/core/world/PrimedTnt.ts';
+import { RANDOM_TICK_BEHAVIORS, type TickWorld } from '../web/src/core/tick/RandomTicks.ts';
 import {
   RedstoneEngine,
   isRedstoneComponent,
   type RedstoneWorld,
-} from '../src/core/redstone/RedstoneEngine.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/redstone/RedstoneEngine.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

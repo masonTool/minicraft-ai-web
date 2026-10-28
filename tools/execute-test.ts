@@ -8,14 +8,14 @@
  * 运行：npm run test:execute
  */
 
-import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+import { AdvancementTracker } from '../web/src/core/progress/AdvancementTracker.ts';
 import {
   executeCommand,
   type CommandContext,
   type CommandFeedback,
   type Difficulty,
   type GameRules,
-} from '../src/core/commands/Commands.ts';
+} from '../web/src/core/commands/Commands.ts';
 import {
   PLAYER_ENTITY_ID,
   describeSelector,
@@ -24,12 +24,12 @@ import {
   resolveSelector,
   type CommandEntity,
   type SelectorView,
-} from '../src/core/commands/Selectors.ts';
-import { DEFAULT_GAME_RULES } from '../src/core/world/Rules.ts';
-import { defaultBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
-import { resolveBlockId } from '../src/core/registry/itemNames.ts';
-import { Scoreboard } from '../src/core/world/Scoreboard.ts';
-import { Teams } from '../src/core/world/Teams.ts';
+} from '../web/src/core/commands/Selectors.ts';
+import { DEFAULT_GAME_RULES } from '../web/src/core/world/Rules.ts';
+import { defaultBorder, type WorldBorder } from '../web/src/core/world/WorldBorder.ts';
+import { resolveBlockId } from '../web/src/core/registry/itemNames.ts';
+import { Scoreboard } from '../web/src/core/world/Scoreboard.ts';
+import { Teams } from '../web/src/core/world/Teams.ts';
 const TEAMS = new Teams();
 
 let passed = 0;

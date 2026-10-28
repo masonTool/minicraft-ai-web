@@ -23,10 +23,10 @@ import {
   clampedCameraDistance,
   nextCameraMode,
   type CameraMode,
-} from '../src/core/viewMode.ts';
-import { DEFAULT_SETTINGS, loadSettings } from '../src/ui/SettingsScreen.ts';
-import { PlayerRenderer, shadeHex } from '../src/render/PlayerRenderer.ts';
-import { DEFAULT_APPEARANCE, paletteOf } from '../src/game/appearance.ts';
+} from '../web/src/core/viewMode.ts';
+import { DEFAULT_SETTINGS, loadSettings } from '../web/src/ui/SettingsScreen.ts';
+import { PlayerRenderer, shadeHex } from '../web/src/render/PlayerRenderer.ts';
+import { DEFAULT_APPEARANCE, paletteOf } from '../web/src/game/appearance.ts';
 
 let passed = 0;
 let failed = 0;

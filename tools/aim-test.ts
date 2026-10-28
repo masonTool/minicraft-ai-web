@@ -10,11 +10,11 @@
  * 运行：npm run test:aim
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { isSightBlocker, sightBlocked } from '../src/core/interaction/AimTarget.ts';
-import { raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
-import { Entity } from '../src/core/entity/Entity.ts';
-import { STICK_DEAD_ZONE_RATIO, withinStickDeadZone } from '../src/ui/TouchControls.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { isSightBlocker, sightBlocked } from '../web/src/core/interaction/AimTarget.ts';
+import { raycastEntities } from '../web/src/core/interaction/EntityRaycast.ts';
+import { Entity } from '../web/src/core/entity/Entity.ts';
+import { STICK_DEAD_ZONE_RATIO, withinStickDeadZone } from '../web/src/ui/TouchControls.ts';
 
 let passed = 0;
 let failed = 0;

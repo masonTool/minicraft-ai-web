@@ -16,11 +16,11 @@
  * 运行：`npm run test:terrain:normal`
  */
 
-import { isSolid } from '../src/core/registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
-import { findSafeSpawn, type SpawnSearchWorld } from '../src/core/world/SpawnPoint.ts';
-import type { WorldType } from '../src/core/gen/WorldType.ts';
+import { isSolid } from '../web/src/core/registry/blocks.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { OverworldGenerator, SEA_LEVEL } from '../web/src/core/gen/OverworldGenerator.ts';
+import { findSafeSpawn, type SpawnSearchWorld } from '../web/src/core/world/SpawnPoint.ts';
+import type { WorldType } from '../web/src/core/gen/WorldType.ts';
 
 let passed = 0;
 let failed = 0;

@@ -7,19 +7,19 @@
  * 翻译质量靠人看，表的一致性只能靠断言。
  */
 
-import { COMMANDS, executeCommand, findCommand, usageError } from '../src/core/commands/Commands.ts';
-import { commandHelpEntries } from '../src/core/commands/CommandHelp.ts';
+import { COMMANDS, executeCommand, findCommand, usageError } from '../web/src/core/commands/Commands.ts';
+import { commandHelpEntries } from '../web/src/core/commands/CommandHelp.ts';
 // 多语言 P2-3c3：效果名键化的守卫要逐个核对
-import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
+import { EFFECTS } from '../web/src/core/survival/StatusEffects.ts';
 // 多语言 P2-4：生物名
-import { mobLabel } from '../src/core/entity/Mob.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { DIMENSION_CYCLE } from '../src/core/gen/Dimension.ts';
-import { WORLD_TYPES } from '../src/core/gen/WorldType.ts';
-import { BIOMES } from '../src/core/gen/Biome.ts';
-import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
-import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
-import { SOUND_GROUPS } from '../src/core/audio/AudioEngine.ts';
+import { mobLabel } from '../web/src/core/entity/Mob.ts';
+import { MOB_TYPES } from '../web/src/core/entity/mobs.ts';
+import { DIMENSION_CYCLE } from '../web/src/core/gen/Dimension.ts';
+import { WORLD_TYPES } from '../web/src/core/gen/WorldType.ts';
+import { BIOMES } from '../web/src/core/gen/Biome.ts';
+import { ENCHANTMENTS } from '../web/src/core/registry/enchantments.ts';
+import { PROFESSIONS } from '../web/src/core/registry/villagerTrades.ts';
+import { SOUND_GROUPS } from '../web/src/core/audio/AudioEngine.ts';
 import {
   BEARD_STYLES,
   BODY_BUILDS,
@@ -31,25 +31,25 @@ import {
   PANTS_COLORS,
   SHIRT_COLORS,
   SKIN_TONES,
-} from '../src/game/appearance.ts';
-import { RECIPE_BOOK_TABS } from '../src/core/crafting/RecipeBook.ts';
-import { ITEM_CATEGORIES, itemDef } from '../src/core/registry/items.ts';
-import { itemDescription, translateName } from '../src/core/registry/itemNames.ts';
-import { GAME_MODES, gameModeLabel } from '../src/core/world/GameMode.ts';
-import { POTIONS, TIPPED_ARROWS } from '../src/core/registry/potions.ts';
-import { damageReason } from '../src/core/survival/DamageNotice.ts';
-import { glFailText } from '../src/core/render/webglSupport.ts';
-import { BRAND, BRAND_EDITION } from '../src/core/brand.ts';
-import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
-import { DEFAULT_GAME_RULES, gameRuleLabel } from '../src/core/world/Rules.ts';
-import { LOOT_TABLES } from '../src/core/registry/loot.ts';
-import { DIFFICULTIES, difficultyLabel } from '../src/core/world/Rules.ts';
-import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../src/core/entity/EndBoss.ts';
-import { PHANTOM_TYPE } from '../src/core/entity/Phantom.ts';
-import { WITHER_TYPE } from '../src/core/entity/Wither.ts';
-import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../src/core/progress/advancements.ts';
-import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../src/core/progress/advancementText.data.ts';
-import { advancementDesc, advancementTabTitle, advancementTitle } from '../src/core/progress/advancementText.ts';
+} from '../web/src/game/appearance.ts';
+import { RECIPE_BOOK_TABS } from '../web/src/core/crafting/RecipeBook.ts';
+import { ITEM_CATEGORIES, itemDef } from '../web/src/core/registry/items.ts';
+import { itemDescription, translateName } from '../web/src/core/registry/itemNames.ts';
+import { GAME_MODES, gameModeLabel } from '../web/src/core/world/GameMode.ts';
+import { POTIONS, TIPPED_ARROWS } from '../web/src/core/registry/potions.ts';
+import { damageReason } from '../web/src/core/survival/DamageNotice.ts';
+import { glFailText } from '../web/src/core/render/webglSupport.ts';
+import { BRAND, BRAND_EDITION } from '../web/src/core/brand.ts';
+import { CAMERA_MODES, cameraModeLabel } from '../web/src/core/viewMode.ts';
+import { DEFAULT_GAME_RULES, gameRuleLabel } from '../web/src/core/world/Rules.ts';
+import { LOOT_TABLES } from '../web/src/core/registry/loot.ts';
+import { DIFFICULTIES, difficultyLabel } from '../web/src/core/world/Rules.ts';
+import { DRAGON_TYPE, END_CRYSTAL_TYPE } from '../web/src/core/entity/EndBoss.ts';
+import { PHANTOM_TYPE } from '../web/src/core/entity/Phantom.ts';
+import { WITHER_TYPE } from '../web/src/core/entity/Wither.ts';
+import { ADVANCEMENTS, ADVANCEMENT_TABS } from '../web/src/core/progress/advancements.ts';
+import { ADVANCEMENT_TEXT_EN, ADVANCEMENT_TAB_EN } from '../web/src/core/progress/advancementText.data.ts';
+import { advancementDesc, advancementTabTitle, advancementTitle } from '../web/src/core/progress/advancementText.ts';
 import { readFileSync, readdirSync } from 'node:fs';
 
 import {
@@ -81,7 +81,7 @@ import {
   tn,
   tp,
   joinList,
-} from '../src/core/i18n/I18n.ts';
+} from '../web/src/core/i18n/I18n.ts';
 import {
   FALLBACK_LOCALE,
   LOCALES,
@@ -90,7 +90,7 @@ import {
   localeMeta,
   matchLocale,
   type LocaleCode,
-} from '../src/core/i18n/locale.ts';
+} from '../web/src/core/i18n/locale.ts';
 
 let passed = 0;
 let failed = 0;
@@ -405,7 +405,7 @@ console.log('\n[背包界面文案接线（批次 617 / Q12）]');
   check('每条都有真正翻成英文（不是照抄中文）', untranslated.length === 0, untranslated.join(','));
 
   // 界面里那几处必须引用键，不能还是硬编码
-  const screenSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const screenSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   for (const [label, literal, key] of [
     ['触摸提示', '轻点拿起 / 再轻点放下', 'inventory.hintTouch'],
     ['键盘提示', '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭', 'inventory.hintKeyboard'],
@@ -456,19 +456,19 @@ console.log('\n[工作站与面板标题（批次 617 / Q13）]');
   check('每条都真翻成英文', all.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
 
   // 表必须改成键驱动（不是还留着中文常量）
-  const stationSrc = readFileSync(new URL('../src/core/crafting/StationRecipes.ts', import.meta.url), 'utf8');
+  const stationSrc = readFileSync(new URL('../web/src/core/crafting/StationRecipes.ts', import.meta.url), 'utf8');
   check('站台名改成 stationLabel() 查键', stationSrc.includes('export function stationLabel(') && stationSrc.includes("'station.name.furnace'"));
   check('红底原因改成 stationReasonLabel()', stationSrc.includes('export function stationReasonLabel('));
 
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   check('面板标题改成 modeTitle() 查键', invSrc.includes('function modeTitle(') && invSrc.includes("'panel.inventory'"));
   check('面板标题不再用中文常量表', !codeOf(invSrc).includes("inventory: '物品栏',"));
   check('站台标签调用会翻译的版本', invSrc.includes('stationLabel(this.stationRecipeKey())'));
 
-  const tabsSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
+  const tabsSrc = readFileSync(new URL('../web/src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
   check('创造分类改成 creativeTabLabel()', tabsSrc.includes('export function creativeTabLabel('));
 
-  const pagerSrc = readFileSync(new URL('../src/ui/ItemPager.ts', import.meta.url), 'utf8');
+  const pagerSrc = readFileSync(new URL('../web/src/ui/ItemPager.ts', import.meta.url), 'utf8');
   check('分页文案走 tp()，不再拼中文', pagerSrc.includes("tp('pager.summary'") && !codeOf(pagerSrc).includes('页 · 共'));
 }
 
@@ -482,7 +482,7 @@ console.log('\n[背包与工作站面板的残留文案（批次 1355 / M8 第 N
    *     这个文件里还有行尾中文注释（`// 不可堆叠（工具 / 盔甲）` 这种），
    *     拿整份源码判会把注释也算进去，那样只能靠"以后别再写中文注释"来过关，方向错了。
    */
-  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../web/src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const code = codeOf(invSrc);
 
   const leftoverKeys = [
@@ -532,7 +532,7 @@ console.log('\n[背包与工作站面板的残留文案（批次 1355 / M8 第 N
 
 console.log('\n[设置界面的残留文案（批次 1355 / T5）]');
 {
-  const src = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../web/src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   const code = codeOf(src);
 
   const keys = [
@@ -593,7 +593,7 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   check('每条都真翻成英文', chatKeys.filter((k) => t(k, 'zh') === t(k, 'en')).length === 0);
 
   // —— 用法报错（多语言 P1-2 起传**命令名**，不再各自抄一份用法串）——
-  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const cmdSrc = readFileSync(new URL('../web/src/core/commands/Commands.ts', import.meta.url), 'utf8');
   const nameArgs: string[] = [];
   for (const m of codeOf(cmdSrc).matchAll(/usageError\(\s*'([^']*)'\s*\)/g)) nameArgs.push(m[1]!);
   check('用法报错全部走 usageError() 且传命令名', nameArgs.length >= 39 && !codeOf(cmdSrc).includes('用法：'), `找到 ${nameArgs.length} 处`);
@@ -617,7 +617,7 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
   resetLanguageForTest();
 
   // 聊天输入框：不能留硬编码
-  const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');
+  const chatSrc = readFileSync(new URL('../web/src/ui/ChatInput.ts', import.meta.url), 'utf8');
   const chatHard = linesWithCjkLiteral(codeOf(chatSrc), (line) => line.includes("t('"));
   check('聊天输入框没有残留硬编码中文', chatHard.length === 0, chatHard.slice(0, 3).join(' / '));
   check('候选提示走占位符（不是拼中文）', chatSrc.includes("tp('chat.candidates'"));
@@ -629,12 +629,12 @@ console.log('\n[聊天与命令用法（批次 617 / Q14）]');
    * 面板短语 40 余条，全部硬编码在里面。搬完之后立一条守卫，
    * 防的是"以后顺手又写一句中文"——那种回退没有任何其它检查能发现。
    */
-  const helpSrc = readFileSync(new URL('../src/core/commands/CommandHelp.ts', import.meta.url), 'utf8');
+  const helpSrc = readFileSync(new URL('../web/src/core/commands/CommandHelp.ts', import.meta.url), 'utf8');
   const helpHard = linesWithCjkLiteral(codeOf(helpSrc));
   check('命令帮助面板没有残留中文字面量（全部走 cmd.help.*）', helpHard.length === 0, helpHard.slice(0, 3).join(' / '));
 
   // 整屏 DOM（多语言 P1-4）：标题 / 搜索 / 空态 / 操作列 / 填入 / 可选 / 自定义 / 预览 / 必填提示
-  const helpScreenSrc = readFileSync(new URL('../src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
+  const helpScreenSrc = readFileSync(new URL('../web/src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
   const helpScreenHard = linesWithCjkLiteral(codeOf(helpScreenSrc));
   check(
     '命令帮助整屏没有残留中文字面量（全部走 cmd.help.screen.*）',
@@ -762,7 +762,7 @@ console.log('\n[命令运行时反馈（批次 617 · 条目 [发现]）]');
   resetLanguageForTest();
 
   // 源码里不该再有中文的 out.* 调用
-  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const cmdSrc = readFileSync(new URL('../web/src/core/commands/Commands.ts', import.meta.url), 'utf8');
   const rawOut = linesWithCjkLiteral(
     codeOf(cmdSrc),
     (line) => line.includes('msg(') || line.includes('usageError('),
@@ -795,16 +795,16 @@ console.log('\n[地图 / 成就 / 死亡遮罩（批次 619 / Q15）]');
 
   const read = (rel: string) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
   for (const [file, label] of [
-    ['src/ui/MapScreen.ts', '地图'],
-    ['src/ui/AdvancementScreen.ts', '成就'],
-    ['src/ui/AdvancementToast.ts', '成就弹窗'],
+    ['web/src/ui/MapScreen.ts', '地图'],
+    ['web/src/ui/AdvancementScreen.ts', '成就'],
+    ['web/src/ui/AdvancementToast.ts', '成就弹窗'],
   ] as const) {
     const hard = linesWithCjkLiteral(codeOf(read(file)), (line) => line.includes("t('"));
     check(`${label}界面没有残留硬编码中文`, hard.length === 0, hard.slice(0, 2).join(' / '));
   }
 
   // 静态 HTML 里不许再写死这几句
-  const html = read('index.html');
+  const html = read('web/index.html');
   // 只看 `<body>` 里的**标记**：这个仓库的 CSS 直接写在 `<style>` 里（也在 body 内），
   // 而注释里会提到这几句作为解释（"别和「正在重生」挤在一起"），不是写死的文案。
   // 第一版整份 HTML 一起查，被注释误判成红；第二版剥了 `<!-- -->` 还是红，因为那是 `/* */`。
@@ -818,7 +818,7 @@ console.log('\n[地图 / 成就 / 死亡遮罩（批次 619 / Q15）]');
   check('睡觉遮罩改成两个可写入的节点', html.includes('sleep-dawn') && html.includes('sleep-hint'));
 
   // 主程序必须真的往里写
-  const mainSrc = read('src/main.ts');
+  const mainSrc = read('web/src/main.ts');
   check('死亡时写标题与尾句', mainSrc.includes("t('death.title')") && mainSrc.includes("t('death.respawning')"));
   check('睡觉时写两行提示', mainSrc.includes("t('sleep.dawn')") && mainSrc.includes("t('sleep.hint')"));
 }
@@ -869,8 +869,8 @@ console.log('\n[成就数据层（批次 620）]');
   );
 
   // 界面必须真的调这几个函数（防"加了数据没接线"）
-  const screenSrc = readFileSync(new URL('../src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
-  const toastSrc = readFileSync(new URL('../src/ui/AdvancementToast.ts', import.meta.url), 'utf8');
+  const screenSrc = readFileSync(new URL('../web/src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
+  const toastSrc = readFileSync(new URL('../web/src/ui/AdvancementToast.ts', import.meta.url), 'utf8');
   check('成就面板用 advancementTitle / advancementDesc', screenSrc.includes('advancementTitle(def)') && screenSrc.includes('advancementDesc(def)'));
   check('标签页用 advancementTabTitle', screenSrc.includes('advancementTabTitle(tab)'));
   check('成就弹窗标题也按语言取', toastSrc.includes('advancementTitle(def)'));
@@ -1026,7 +1026,7 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
    *  ② `lang` 与 `<html lang>` 用同一套值（`localeMeta().htmlLang`，带地区的写成 `pt-BR`）；
    *  ③ 描述**两两不同** —— 六份都抄英文的话，字段检查全过、界面却是"六个一样的描述"。
    */
-  const manifestDir = 'public';
+  const manifestDir = 'web/public';
   const baseManifest = JSON.parse(readFileSync(`${manifestDir}/manifest.webmanifest`, 'utf8'));
   const manifestLocales: Array<[string, string]> = [
     ['zh', 'manifest.webmanifest'],
@@ -1105,10 +1105,10 @@ console.log('\n[设置项：跟随系统（多语言 P0-5）]');
     if (manifest.short_name !== BRAND) brandDrift.push(`${file}.short_name=${String(manifest.short_name)}`);
   }
   check('六份 manifest 的 name / short_name 都是同一个品牌名', brandDrift.length === 0, brandDrift.slice(0, 3).join(','));
-  check('页面标题是品牌名', readFileSync('index.html', 'utf8').includes(`<title>${BRAND}</title>`));
+  check('页面标题是品牌名', readFileSync('web/index.html', 'utf8').includes(`<title>${BRAND}</title>`));
   // 判据看**赋值点**而不是全文 grep：注释里提到「基岩版」是历史说明（"原来写的是…"），
   // 真正要保证的是「界面上取值的两个源头不再是旧字面量」。
-  const worldScreenSrc = readFileSync('src/ui/WorldScreen.ts', 'utf8');
+  const worldScreenSrc = readFileSync('web/src/ui/WorldScreen.ts', 'utf8');
   check(
     '首页只显示品牌名（副标题已删，旧字面量已清掉）',
     worldScreenSrc.includes('logo.textContent = BRAND') &&
@@ -1362,7 +1362,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
 
   // 名字牌是世界里的 canvas 文字：字体栈必须留 `sans-serif` 兜底，
   // 否则西里尔（ru）与变音（de/fr/pt）会在没装 PingFang / Segoe 的机器上变豆腐块。
-  const nameTagSrc = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
+  const nameTagSrc = readFileSync(new URL('../web/src/render/MobNameTag.ts', import.meta.url), 'utf8');
   check('名字牌字体栈留了 sans-serif 兜底（西里尔 / 变音符靠它接住）', /sans-serif/.test(nameTagSrc));
   check('名字牌字体栈保留中文字体（PingFang / YaHei）', nameTagSrc.includes('PingFang SC') && nameTagSrc.includes('Microsoft YaHei'));
 
@@ -1376,7 +1376,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
   const reasonKeys = new Set<string>();
   const cjkReasons: string[] = [];
   for (const name of containerFiles) {
-    const code = codeOf(readFileSync(new URL(`../src/core/container/${name}.ts`, import.meta.url), 'utf8'));
+    const code = codeOf(readFileSync(new URL(`../web/src/core/container/${name}.ts`, import.meta.url), 'utf8'));
     for (const match of code.matchAll(/reason\('([^']+)'/g)) reasonKeys.add(match[1]!);
     for (const match of code.matchAll(/return '([^']*[\u4e00-\u9fff][^']*)'/g)) cjkReasons.push(`${name}: ${match[1]!.slice(0, 12)}`);
   }
@@ -1952,15 +1952,15 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
    * 用 `localizeBootLoading()` 覆盖；② manifest 出中英两份，`boot()` 按语言换 `<link>`。
    * 这两点必须被断言钉住，否则以后有人"顺手"把文案写回 HTML 就没人发现。
    */
-  const overlaySrc2 = readFileSync(new URL('../src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
+  const overlaySrc2 = readFileSync(new URL('../web/src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
   check('首屏两句有本地化入口', overlaySrc2.includes("t('loading.boot')") && overlaySrc2.includes("t('loading.bootSub')"));
-  const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc2 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('boot() 会调用 localizeBootLoading()', mainSrc2.includes('localizeBootLoading();'));
   // 多语言 P5-3：六种语言各一份 manifest，文件名按语言码拼（`manifest.${language}.webmanifest`），
   // 中文那份仍是默认的 `manifest.webmanifest`（已装 PWA 的地址不能改）。
   // 2026-10-25 起再加一维**设备**：桌面走 `.desktop.webmanifest`（不再 fullscreen），
   // 拼接规则收在 `ui/ManifestLink.ts`，`boot()` 只调一次 `applyManifestLink()`。
-  const manifestLinkSrc = readFileSync(new URL('../src/ui/ManifestLink.ts', import.meta.url), 'utf8');
+  const manifestLinkSrc = readFileSync(new URL('../web/src/ui/ManifestLink.ts', import.meta.url), 'utf8');
   check('boot() 会按语言 + 设备换 manifest 链接', mainSrc2.includes('applyManifestLink(getLanguage(), isTouchDevice())'));
   check(
     'manifest 文件名规则：中文不带语言码、桌面加 .desktop',
@@ -1968,8 +1968,8 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
       manifestLinkSrc.includes('`./manifest.${language}${desktop}.webmanifest`'),
   );
 
-  const zhManifest = JSON.parse(readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
-  const enManifest = JSON.parse(readFileSync(new URL('../public/manifest.en.webmanifest', import.meta.url), 'utf8'));
+  const zhManifest = JSON.parse(readFileSync(new URL('../web/public/manifest.webmanifest', import.meta.url), 'utf8'));
+  const enManifest = JSON.parse(readFileSync(new URL('../web/public/manifest.en.webmanifest', import.meta.url), 'utf8'));
   check('中英两份 manifest 的键完全一致', JSON.stringify(Object.keys(zhManifest).sort()) === JSON.stringify(Object.keys(enManifest).sort()));
   check('英文 manifest 里没有中文（name / description）', !/[\u4e00-\u9fff]/.test(enManifest.name + enManifest.description));
   check('两份 manifest 的图标一致（别一边加了 png 另一边没加）', JSON.stringify(zhManifest.icons) === JSON.stringify(enManifest.icons));
@@ -2000,7 +2000,7 @@ console.log('\n[物品名构件表（多语言 P2-1）]');
     'ui/StatisticsScreen.ts',
   ];
   for (const rel of chromeFiles) {
-    const code = codeOf(readFileSync(new URL(`../src/${rel}`, import.meta.url), 'utf8'));
+    const code = codeOf(readFileSync(new URL(`../web/src/${rel}`, import.meta.url), 'utf8'));
     const hard = linesWithCjkLiteral(code);
     check(`${rel} 没有残留中文字面量`, hard.length === 0, hard.slice(0, 2).join(' / '));
   }
@@ -2115,12 +2115,12 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
    * 一律走 `t()` / `tp()`。这一节盯的是"目录结构还在"——防的是有人图省事
    * 又把一张大表塞回 `I18n.ts`（那样下次加语言又要在一千行里对着找）。
    */
-  const zhDir = new URL('../src/core/i18n/locales/zh/', import.meta.url);
+  const zhDir = new URL('../web/src/core/i18n/locales/zh/', import.meta.url);
   const zhFiles = readdirSync(zhDir).filter((name) => name.endsWith('.ts'));
   check('中文表按界面拆成多个文件', zhFiles.length >= 8, zhFiles.join(','));
   check('index.ts 是合并入口', zhFiles.includes('index.ts'));
 
-  const indexSource = readFileSync(new URL('../src/core/i18n/locales/zh/index.ts', import.meta.url), 'utf8');
+  const indexSource = readFileSync(new URL('../web/src/core/i18n/locales/zh/index.ts', import.meta.url), 'utf8');
   const orphans = zhFiles.filter((name) => name !== 'index.ts' && !indexSource.includes(`'./${name}'`));
   check('每个分组文件都被 index.ts 合并（不留孤儿文件）', orphans.length === 0, orphans.join(','));
 
@@ -2133,7 +2133,7 @@ console.log('\n[文案表的落脚点（多语言 P0-2 / P0-3）]');
    * `satisfies Pick<Messages, …>`**。少写那一行不会有任何报错，于是"漏翻一条"就退回
    * 到"跑测试才发现"——这条断言防的就是这个（类型保护被悄悄删掉）。
    */
-  const enDir = new URL('../src/core/i18n/locales/en/', import.meta.url);
+  const enDir = new URL('../web/src/core/i18n/locales/en/', import.meta.url);
   // `plural.ts` 不是分组文件，是"需要区分单复数的那些键"的可选精修（多语言 P0-6）
   const enFilesAll = readdirSync(enDir).filter((name) => name.endsWith('.ts'));
   const enGroups = enFilesAll.filter((name) => name !== 'index.ts' && name !== 'plural.ts');
@@ -2187,7 +2187,7 @@ console.log('\n[聊天栏文案（批次 20261025-0105）]');
       }
     }
   };
-  walk(new URL('../src/', import.meta.url));
+  walk(new URL('../web/src/', import.meta.url));
   check(
     '聊天栏 / 提示条不再直接吞中文字面量（必须走 t() / tp()）',
     offenders.length === 0,
@@ -2195,7 +2195,7 @@ console.log('\n[聊天栏文案（批次 20261025-0105）]');
   );
 
   // 静态 CSS 里的 `content: '展开'` 是同一类漏网：样式表不参与切语言重绘
-  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   const cjkContent = [...html.matchAll(/content:\s*'([^']*)'/g)]
     .map((match) => match[1]!)
     .filter((value) => /[\u4e00-\u9fa5]/.test(value));
@@ -2203,7 +2203,7 @@ console.log('\n[聊天栏文案（批次 20261025-0105）]');
   check(
     '聊天行的「展开」角标改由 data-expand-badge 提供',
     html.includes('content: attr(data-expand-badge)') &&
-      readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8').includes("t('chat.expandBadge')"),
+      readFileSync(new URL('../web/src/ui/ChatInput.ts', import.meta.url), 'utf8').includes("t('chat.expandBadge')"),
   );
 }
 
@@ -2291,7 +2291,7 @@ console.log('\n[物品说明不再拿别的产品当基线]');
     ru: 'базовая игра',
   };
   for (const [code, pattern] of Object.entries(BASELINE)) {
-    const table = readFileSync(new URL(`../src/core/i18n/locales/${code}/itemDesc.ts`, import.meta.url), 'utf8');
+    const table = readFileSync(new URL(`../web/src/core/i18n/locales/${code}/itemDesc.ts`, import.meta.url), 'utf8');
     const hits = table.split('\n').filter((line) => !line.trimStart().startsWith('*') && pattern.test(line));
     check(`${code} 的物品说明里没有"原版 / vanilla"这类基线词`, hits.length === 0, hits.slice(0, 2).join(' | '));
     check(`${code} 的物品说明用的是中性基线「${NEUTRAL[code]}」`, table.includes(NEUTRAL[code]!));

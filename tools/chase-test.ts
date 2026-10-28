@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { isPacified, shouldChasePlayer, type ChaseInput } from '../src/core/entity/ChaseRules.ts';
+import { isPacified, shouldChasePlayer, type ChaseInput } from '../web/src/core/entity/ChaseRules.ts';
 
 let passed = 0;
 let failed = 0;
@@ -85,7 +85,7 @@ console.log('\n[isPacified 单独看]');
 
 console.log('\n[接线守卫]');
 {
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check('updateAi 用纯函数判追击', mobSrc.includes('const chasing = shouldChasePlayer(chaseInput)'));
   check('不再自己拼 pacified', !mobSrc.includes('const pacified ='));
   // 用户 2026-10-26：隐身现在跟着"这一帧的目标"走（房主联机时目标可能是远端玩家）

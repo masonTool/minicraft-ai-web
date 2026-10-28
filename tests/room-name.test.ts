@@ -12,7 +12,7 @@ import {
   isValidRoomName,
   roomFromWorldName,
   sanitizeRoomName,
-} from '../src/core/net/RoomName.ts';
+} from '../web/src/core/net/RoomName.ts';
 
 describe('roomFromWorldName', () => {
   it('ASCII 世界名：空格折成一个 -，其余原样保留', () => {

@@ -12,7 +12,7 @@ import {
   ensureClientId,
   isValidClientId,
   type ClientIdStorage,
-} from '../src/core/net/ClientId.ts';
+} from '../web/src/core/net/ClientId.ts';
 
 /** 假 storage：可预置内容、记录写入、按需抛异常 */
 function memoryStorage(initial: Record<string, string> = {}) {

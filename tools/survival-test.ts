@@ -21,10 +21,10 @@ import {
   soulSpeedMultiplier,
   thornsDamage,
   type SurvivalEnvironment,
-} from '../src/core/survival/PlayerStats.ts';
-import { touchesCactus } from '../src/core/world/Cactus.ts';
-import { Statistics, emptyStatistics, formatPlayTime, normalizeStatistics } from '../src/core/survival/Statistics.ts';
-import { boxAt, type CollisionWorld } from '../src/core/physics/AABB.ts';
+} from '../web/src/core/survival/PlayerStats.ts';
+import { touchesCactus } from '../web/src/core/world/Cactus.ts';
+import { Statistics, emptyStatistics, formatPlayTime, normalizeStatistics } from '../web/src/core/survival/Statistics.ts';
+import { boxAt, type CollisionWorld } from '../web/src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;

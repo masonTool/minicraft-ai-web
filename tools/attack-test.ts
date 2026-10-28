@@ -12,8 +12,8 @@ import {
   HAND_ATTACK_COOLDOWN,
   attackChargeProgress,
   attackCooldownFor,
-} from '../src/core/combat/AttackSpeed.ts';
-import type { ToolMaterial, ToolType } from '../src/core/registry/tools.ts';
+} from '../web/src/core/combat/AttackSpeed.ts';
+import type { ToolMaterial, ToolType } from '../web/src/core/registry/tools.ts';
 
 let passed = 0;
 let failed = 0;
@@ -106,9 +106,9 @@ console.log('\n[进度换算]');
 
 console.log('\n[接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const hudSrc = readFileSync(new URL('../src/ui/AttackCooldownHud.ts', import.meta.url), 'utf8');
-  const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const hudSrc = readFileSync(new URL('../web/src/ui/AttackCooldownHud.ts', import.meta.url), 'utf8');
+  const htmlSrc = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 
   check('主程序用了逐武器冷却表', mainSrc.includes('attackCooldownFor(this.heldTool)'));
   check('攻击时记下了这次的总冷却', mainSrc.includes('this.attackCooldownMax = this.attackCooldown'));

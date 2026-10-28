@@ -28,8 +28,8 @@ import {
   blockTiles,
   isBed,
   woolId,
-} from '../src/core/registry/blocks.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
 import {
   BED_PILLOW_HEIGHT,
   BED_PILLOW_LENGTH,
@@ -37,7 +37,7 @@ import {
   isFullBlockShape,
   meshBoxes,
   type LocalBox,
-} from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockShapes.ts';
 import {
   bedFootPos,
   bedOtherHalf,
@@ -47,16 +47,16 @@ import {
   withBedHead,
   withFacing,
   type Facing,
-} from '../src/core/registry/blockState.ts';
-import { categoryOf, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, harvestRequirement } from '../src/core/registry/tools.ts';
-import { dropFor } from '../src/core/registry/items.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { DAWN_TIME, SLEEP_SECONDS, isNight, monstersNearBed, sleepRefusal } from '../src/core/survival/Sleep.ts';
-import { breakSoundFor } from '../src/core/audio/AudioEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { categoryOf, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { dropFor } from '../web/src/core/registry/items.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { DAWN_TIME, SLEEP_SECONDS, isNight, monstersNearBed, sleepRefusal } from '../web/src/core/survival/Sleep.ts';
+import { breakSoundFor } from '../web/src/core/audio/AudioEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

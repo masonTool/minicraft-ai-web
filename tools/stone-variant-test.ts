@@ -34,17 +34,17 @@ import {
   slabId,
   stoneVariantId,
   type StoneVariantKind,
-} from '../src/core/registry/blocks.ts';
-import { harvestRequirement } from '../src/core/registry/tools.ts';
-import { CREATIVE_ITEMS, Item, blockDrops, categoryOf, itemDef } from '../src/core/registry/items.ts';
-import { itemLabel, resolveItemId } from '../src/core/registry/itemNames.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
-import { columnSurface } from '../src/core/gen/SurfaceRules.ts';
-import { terracottaId } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { CREATIVE_ITEMS, Item, blockDrops, categoryOf, itemDef } from '../web/src/core/registry/items.ts';
+import { itemLabel, resolveItemId } from '../web/src/core/registry/itemNames.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { isFullBlockShape } from '../web/src/core/registry/blockShapes.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { BIOME_TABLE, Biome } from '../web/src/core/gen/Biome.ts';
+import { columnSurface } from '../web/src/core/gen/SurfaceRules.ts';
+import { terracottaId } from '../web/src/core/registry/blocks.ts';
 
 /** 荒地色带允许出现的方块名（与 `SurfaceRules.BADLANDS_BANDS` 的注释一一对应） */
 const BADLANDS_BAND_NAMES: ReadonlySet<string> = new Set([

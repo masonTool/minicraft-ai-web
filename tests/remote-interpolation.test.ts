@@ -14,7 +14,7 @@ import {
   REMOTE_TELEPORT_SNAP,
   RemotePlayerSmoother,
   lerpAngle,
-} from '../src/core/net/RemoteInterpolation.ts';
+} from '../web/src/core/net/RemoteInterpolation.ts';
 
 describe('远程玩家位置插值', () => {
   it('普通更新不会瞬移，而是逐步逼近', () => {

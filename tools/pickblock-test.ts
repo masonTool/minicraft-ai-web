@@ -13,16 +13,16 @@
  * 运行：npm run test:pickblock
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   HOTBAR_SIZE,
   HOTBAR_START,
   Inventory,
   MAIN_SIZE,
   MAIN_START,
-} from '../src/core/container/Inventory.ts';
-import { applyPickBlock, pickItemFor, planPickBlock } from '../src/core/interaction/PickBlock.ts';
+} from '../web/src/core/container/Inventory.ts';
+import { applyPickBlock, pickItemFor, planPickBlock } from '../web/src/core/interaction/PickBlock.ts';
 
 let passed = 0;
 let failed = 0;

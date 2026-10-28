@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { realignedWorldSummary, remoteWorldWritable, seedConflict } from '../src/core/net/SeedReconcile.ts';
-import type { WorldSummary } from '../src/core/save/WorldRegistry.ts';
+import { realignedWorldSummary, remoteWorldWritable, seedConflict } from '../web/src/core/net/SeedReconcile.ts';
+import type { WorldSummary } from '../web/src/core/save/WorldRegistry.ts';
 
 const world: WorldSummary = {
   id: 'w1',

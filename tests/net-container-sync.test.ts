@@ -9,11 +9,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Chest } from '../src/core/container/Chest.ts';
-import { Furnace } from '../src/core/container/Furnace.ts';
-import { Hopper } from '../src/core/container/Hopper.ts';
-import { Dropper } from '../src/core/container/Dropper.ts';
-import { BrewingStand } from '../src/core/container/BrewingStand.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { Furnace } from '../web/src/core/container/Furnace.ts';
+import { Hopper } from '../web/src/core/container/Hopper.ts';
+import { Dropper } from '../web/src/core/container/Dropper.ts';
+import { BrewingStand } from '../web/src/core/container/BrewingStand.ts';
 
 const stack = { id: 1, count: 3 } as never;
 

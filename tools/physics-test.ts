@@ -24,19 +24,19 @@ import {
   SWIM_DIVE_SPEED,
   WALK_SPEED,
   type PlayerInput,
-} from '../src/core/physics/PlayerPhysics.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { moveBody } from '../src/core/physics/EntityMotion.ts';
+} from '../web/src/core/physics/PlayerPhysics.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { moveBody } from '../web/src/core/physics/EntityMotion.ts';
 import {
   FLOW_DRIFT_SPEED,
   FLOW_ENTITY_ACCEL,
   flowPush,
   waterFlowAt,
   type FlowWorld,
-} from '../src/core/world/FluidFlow.ts';
-import { Block, CONCRETE_POWDER_ID_START } from '../src/core/registry/blocks.ts';
-import { FALL_STEP_SECONDS, FallingBlocks, isFallingBlock } from '../src/core/world/FallingBlocks.ts';
-import { withFluidLevel } from '../src/core/registry/blockState.ts';
+} from '../web/src/core/world/FluidFlow.ts';
+import { Block, CONCRETE_POWDER_ID_START } from '../web/src/core/registry/blocks.ts';
+import { FALL_STEP_SECONDS, FallingBlocks, isFallingBlock } from '../web/src/core/world/FallingBlocks.ts';
+import { withFluidLevel } from '../web/src/core/registry/blockState.ts';
 
 let passed = 0;
 let failed = 0;
@@ -604,8 +604,8 @@ console.log('\n[水流推动（批次 447）]');
   check('逆流仍保留正向速度（不会只能顺流）', upstreamMob.x > 0, JSON.stringify(upstreamMob));
   check('推力强度是有限值', FLOW_ENTITY_ACCEL > 0 && FLOW_ENTITY_ACCEL < 20);
 
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
-  const itemSrc = readFileSync(new URL('../src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const itemSrc = readFileSync(new URL('../web/src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
   check('生物移动前调用 flowPush', mobSrc.includes('flowPush(this.vx, this.vz, flow, dt)'));
   check('掉落物在水里也调用 flowPush', itemSrc.includes('flowPush(this.vx, this.vz, flow, dt)'));
 
@@ -757,7 +757,7 @@ console.log('\n[下落方块（批次 543）]');
   for (let i = 0; i < 20; i++) fb.tick(world, FALL_STEP_SECONDS);
   check('沙子穿过水并落在石头上', world.getBlock(0, 59, 0) === Block.SAND && world.getBlock(0, 60, 0) === Block.AIR);
 
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('方块变动后唤醒下落方块', mainSrc.includes('fallingBlocks.wakeAfterChange(this.world, x, y, z)'));
   check('主循环推进下落方块', mainSrc.includes('fallingBlocks.tick(this.world, dt)'));
 }

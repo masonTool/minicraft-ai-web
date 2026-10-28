@@ -15,7 +15,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { BlockDef } from '../src/core/registry/blocks.ts';
+import type { BlockDef } from '../web/src/core/registry/blocks.ts';
 
 /** 六个外法线（与网格化器 `FACES` 的 `dir` 同义） */
 export const FACE_DIRS: readonly (readonly [number, number, number])[] = [

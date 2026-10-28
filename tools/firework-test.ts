@@ -12,11 +12,11 @@
  * 运行：npm run test:firework
  */
 
-import { Item, CREATIVE_ITEMS, dyeItemId, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Item, CREATIVE_ITEMS, dyeItemId, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   DEFAULT_FIREWORK_COLOR,
   FIREWORK_RISE_SPEED,
@@ -32,14 +32,14 @@ import {
   makeFireworkStar,
   sanitizeFirework,
   withFirework,
-} from '../src/core/items/Firework.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
-import { restoreStack, sameExtras, stackExtras } from '../src/core/container/Inventory.ts';
-import { tryInsertOne } from '../src/core/container/Transfer.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { Firework } from '../src/core/entity/Firework.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
+} from '../web/src/core/items/Firework.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { CraftingGrid } from '../web/src/core/crafting/CraftingGrid.ts';
+import { restoreStack, sameExtras, stackExtras } from '../web/src/core/container/Inventory.ts';
+import { tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { Firework } from '../web/src/core/entity/Firework.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
 
 let passed = 0;
 let failed = 0;

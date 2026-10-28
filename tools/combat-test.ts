@@ -7,11 +7,11 @@
  * 实体在射线起点后方、以及"平行于盒面"的退化情形。
  */
 
-import { Mob } from '../src/core/entity/Mob.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { rayBoxDistance, raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
-import { meleeDamage, riptideSpeed, sweepDamage } from '../src/core/registry/tools.ts';
-import { crossbowChargeTime, crossbowVolley } from '../src/core/entity/Bow.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { rayBoxDistance, raycastEntities } from '../web/src/core/interaction/EntityRaycast.ts';
+import { meleeDamage, riptideSpeed, sweepDamage } from '../web/src/core/registry/tools.ts';
+import { crossbowChargeTime, crossbowVolley } from '../web/src/core/entity/Bow.ts';
 
 let passed = 0;
 let failed = 0;

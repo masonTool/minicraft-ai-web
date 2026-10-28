@@ -16,7 +16,7 @@ import {
   nextWeatherKind as clientNextKind,
   tickWeather as clientTick,
   weatherSecondsFor as clientSeconds,
-} from '../src/core/world/WeatherState.ts';
+} from '../web/src/core/world/WeatherState.ts';
 
 /** 固定序列的随机源：两边吃同一串数，结果就该一样 */
 function sequence(values: number[]): () => number {

@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { readZipEntries, tileNameOf } from '../src/core/resourcepack/ResourcePack.ts';
+import { readZipEntries, tileNameOf } from '../web/src/core/resourcepack/ResourcePack.ts';
 
 /** 拼一个只有中央目录 + 本地头的最小 zip（stored，不压缩） */
 function buildStoredZip(files: Array<{ name: string; content: string }>): ArrayBuffer {

@@ -13,7 +13,7 @@ import {
   aoiIntervalForDistance,
   aoiIntervalMs,
   aoiLevel,
-} from '../src/core/net/NetAoi.ts';
+} from '../web/src/core/net/NetAoi.ts';
 
 describe('aoiLevel 三档边界', () => {
   it('16 格内是近档（含边界与 0）', () => {

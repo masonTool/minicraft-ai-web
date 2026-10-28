@@ -14,7 +14,7 @@
  * 运行：npm run test:scaffold
  */
 
-import { isHandHarvestable } from '../src/core/registry/tools.ts';
+import { isHandHarvestable } from '../web/src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
@@ -22,14 +22,14 @@ import {
   blockDef,
   blockHardness,
   isClimbableBlock,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   SCAFFOLD_PLATFORM_HEIGHT,
   canScaffoldConnectTo,
   collisionBoxes,
   meshBoxes,
   type LocalBox,
-} from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockShapes.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -37,12 +37,12 @@ import {
   categoryOf,
   dropFor,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { isFlammable } from '../src/core/world/Fire.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { isFlammable } from '../web/src/core/world/Fire.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

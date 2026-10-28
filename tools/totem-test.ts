@@ -14,11 +14,11 @@ import {
   TOTEM_RESCUE_HEALTH,
   shouldRescueWithTotem,
   totemSoundSpec,
-} from '../src/core/items/Totem.ts';
-import { Item, itemDef } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
+} from '../web/src/core/items/Totem.ts';
+import { Item, itemDef } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { MOB_TYPES } from '../web/src/core/entity/mobs.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -113,7 +113,7 @@ console.log('\n[与世界的接线]');
   );
   check('原来的绿宝石掉落还在', drops.some((drop) => drop.itemId === Item.EMERALD));
 
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
     '扣血入口里判了"死了才救"',
     /this\.stats\.dead\) this\.tryRescueWithTotem\(cause\)/.test(mainSrc),

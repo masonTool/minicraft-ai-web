@@ -10,14 +10,14 @@
  * 运行：npm run test:projectile
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item, itemDef, maxStackOf, replaceDropFor, durabilityOf, SPECIAL_ITEMS } from '../src/core/registry/items.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { enchantKindOf, offeringFor } from '../src/core/crafting/Enchanting.ts';
-import { maxDurabilityOf, repairMaterialOf } from '../src/core/crafting/Anvil.ts';
-import { Arrow, ARROW_LIFETIME } from '../src/core/entity/Arrow.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item, itemDef, maxStackOf, replaceDropFor, durabilityOf, SPECIAL_ITEMS } from '../web/src/core/registry/items.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { itemLabel, itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { enchantKindOf, offeringFor } from '../web/src/core/crafting/Enchanting.ts';
+import { maxDurabilityOf, repairMaterialOf } from '../web/src/core/crafting/Anvil.ts';
+import { Arrow, ARROW_LIFETIME } from '../web/src/core/entity/Arrow.ts';
 import {
   ARROW_MAX_DAMAGE,
   ARROW_MAX_SPEED,
@@ -32,11 +32,11 @@ import {
   canShoot,
   chargeAfter,
   knockbackStrength,
-} from '../src/core/entity/Bow.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { Mob } from '../src/core/entity/Mob.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
+} from '../web/src/core/entity/Bow.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { Mob } from '../web/src/core/entity/Mob.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;

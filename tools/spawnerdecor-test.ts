@@ -10,12 +10,12 @@
  */
 
 import * as THREE from 'three';
-import { Block } from '../src/core/registry/blocks.ts';
-import { SPAWNER_DEFS, spawnerDefFor } from '../src/core/registry/spawners.ts';
-import { collectSpawnerDecorations, decorationIsActive } from '../src/core/world/SpawnerDecor.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { MobRenderer } from '../src/render/MobRenderer.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { SPAWNER_DEFS, spawnerDefFor } from '../web/src/core/registry/spawners.ts';
+import { collectSpawnerDecorations, decorationIsActive } from '../web/src/core/world/SpawnerDecor.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { MobRenderer } from '../web/src/render/MobRenderer.ts';
 
 let passed = 0;
 let failed = 0;

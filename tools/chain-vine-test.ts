@@ -22,12 +22,12 @@ import {
   blockDef,
   blockHardness,
   isClimbableBlock,
-} from '../src/core/registry/blocks.ts';
-import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { blockDrops, CREATIVE_ITEMS, Item, maxStackOf, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { isFlammable } from '../src/core/world/Fire.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { blockDrops, CREATIVE_ITEMS, Item, maxStackOf, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { isFlammable } from '../web/src/core/world/Fire.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   axisOf,
   hasVineSide,
@@ -37,20 +37,20 @@ import {
   withVineUp,
   vineSideCount,
   vineSides,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, isFullBlockShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { PlayerPhysics, type PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import type { VoxelCollision } from '../src/core/physics/AABB.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, isFullBlockShape, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { PlayerPhysics, type PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import type { VoxelCollision } from '../web/src/core/physics/AABB.ts';
 import {
   RANDOM_TICK_BEHAVIORS,
   VINE_GROW_DOWN_CHANCE,
   VINE_SPREAD_CHANCE,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
-import { plantTree, TREE_VINE_CHANCE } from '../src/core/gen/Features.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../web/src/core/world/Chunk.ts';
+import { plantTree, TREE_VINE_CHANCE } from '../web/src/core/gen/Features.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;

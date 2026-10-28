@@ -13,22 +13,22 @@ import {
   commandHelpEntries,
   suggestCommandValues,
   type CommandHelpField,
-} from '../src/core/commands/CommandHelp.ts';
+} from '../web/src/core/commands/CommandHelp.ts';
 // 多语言 P1-1b：spec 里存的是 `cmd.*` 键，用法文案要经 `commandUsage()` 查表
-import { commandUsage } from '../src/core/commands/messages.ts';
-import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
-import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
-import { findNearestBiome } from '../src/core/gen/Locate.ts';
+import { commandUsage } from '../web/src/core/commands/messages.ts';
+import { AdvancementTracker } from '../web/src/core/progress/AdvancementTracker.ts';
+import { ADVANCEMENTS } from '../web/src/core/progress/advancements.ts';
+import { findNearestBiome } from '../web/src/core/gen/Locate.ts';
 // 结构清单的权威来源（批次 624）：只取那三个常量，不碰生成逻辑
-import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
-import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
-import { END_STRUCTURE_KINDS } from '../src/core/gen/EndStructures.ts';
+import { STRUCTURE_KINDS } from '../web/src/core/gen/Structures.ts';
+import { NETHER_STRUCTURE_KINDS } from '../web/src/core/gen/Bastion.ts';
+import { END_STRUCTURE_KINDS } from '../web/src/core/gen/EndStructures.ts';
 import {
   STRUCTURE_NAMES,
   findStructureName,
   structureNamesIn,
   structuresIn,
-} from '../src/core/commands/structureNames.data.ts';
+} from '../web/src/core/commands/structureNames.data.ts';
 import {
   CLONE_LIMIT,
   cloneBoxInWorld,
@@ -37,7 +37,7 @@ import {
   cloneVolume,
   normalizeCloneBox,
   shiftCloneBox,
-} from '../src/core/commands/Clone.ts';
+} from '../web/src/core/commands/Clone.ts';
 import {
   COMMANDS,
   commandNames,
@@ -54,9 +54,9 @@ import {
   type CommandFeedback,
   type Difficulty,
   type GameRules,
-} from '../src/core/commands/Commands.ts';
-import type { CommandEntity } from '../src/core/commands/Selectors.ts';
-import type { BlockEntityData, EntityData } from '../src/core/commands/BlockData.ts';
+} from '../web/src/core/commands/Commands.ts';
+import type { CommandEntity } from '../web/src/core/commands/Selectors.ts';
+import type { BlockEntityData, EntityData } from '../web/src/core/commands/BlockData.ts';
 import {
   BLOCK_PATHS,
   ENTITY_PATHS,
@@ -67,10 +67,10 @@ import {
   pathFitsBlock,
   pathFitsEntity,
   slotAt,
-} from '../src/core/commands/BlockData.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
-import { Scoreboard } from '../src/core/world/Scoreboard.ts';
-import { Teams } from '../src/core/world/Teams.ts';
+} from '../web/src/core/commands/BlockData.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
+import { Scoreboard } from '../web/src/core/world/Scoreboard.ts';
+import { Teams } from '../web/src/core/world/Teams.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
@@ -80,13 +80,13 @@ import {
   isDifficulty,
   normalizeDifficulty,
   normalizeGameRules,
-} from '../src/core/world/Rules.ts';
-import { BLOCKS } from '../src/core/registry/blocks.ts';
-import { defaultBorder, normalizeBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
-import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
-import { Experience } from '../src/core/survival/Experience.ts';
+} from '../web/src/core/world/Rules.ts';
+import { BLOCKS } from '../web/src/core/registry/blocks.ts';
+import { defaultBorder, normalizeBorder, type WorldBorder } from '../web/src/core/world/WorldBorder.ts';
+import { resolveBlockId, resolveItemId } from '../web/src/core/registry/itemNames.ts';
+import { Experience } from '../web/src/core/survival/Experience.ts';
 // 中英双语回执的断言（批次 624）：切语言跑同一批命令，扫残留中文
-import { getLanguage, resetLanguageForTest, setLanguage, t } from '../src/core/i18n/I18n.ts';
+import { getLanguage, resetLanguageForTest, setLanguage, t } from '../web/src/core/i18n/I18n.ts';
 
 let passed = 0;
 let failed = 0;

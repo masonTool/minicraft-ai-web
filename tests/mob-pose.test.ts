@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { RIDE_LIFT, SNEAK_SINK, mobPoseOffsetY } from '../src/core/render/MobPose.ts';
+import { RIDE_LIFT, SNEAK_SINK, mobPoseOffsetY } from '../web/src/core/render/MobPose.ts';
 
 describe('mobPoseOffsetY', () => {
   it('站着不动：偏移 0（普通生物不该被这条逻辑碰到）', () => {

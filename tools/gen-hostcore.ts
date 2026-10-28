@@ -17,8 +17,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBlockTable } from '../src/core/registry/blocks.ts';
-import { BLOCK_TABLE_VERSION, encodeBlockTable } from '../src/core/registry/blockTableCodec.ts';
+import { buildBlockTable } from '../web/src/core/registry/blocks.ts';
+import { BLOCK_TABLE_VERSION, encodeBlockTable } from '../web/src/core/registry/blockTableCodec.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, `.tmp/hostcore/core-v${BLOCK_TABLE_VERSION}.bin`);

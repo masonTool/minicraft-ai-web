@@ -8,9 +8,9 @@
  *  ④ 矿车真的会被掰过去（一次 tick 看速度方向）。
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { railTileFor } from '../src/core/registry/blocks.ts';
-import { withPowered } from '../src/core/registry/blockState.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { railTileFor } from '../web/src/core/registry/blocks.ts';
+import { withPowered } from '../web/src/core/registry/blockState.ts';
 import {
   RAIL_SHAPES,
   isSlopeRail,
@@ -22,12 +22,12 @@ import {
   railShapeOf,
   railSlopeHeight,
   withRailShape,
-} from '../src/core/world/RailShape.ts';
-import { meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { Minecart } from '../src/core/entity/Minecart.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/RailShape.ts';
+import { meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { Minecart } from '../web/src/core/entity/Minecart.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

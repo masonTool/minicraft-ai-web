@@ -32,15 +32,15 @@ import {
   CROP_STAGES,
   CORAL_ID_START,
   SHAPED_PARENTS,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   breakSeconds,
   canHarvest,
   harvestRequirement,
   isHandHarvestable,
   makeToolInfo,
-} from '../src/core/registry/tools.ts';
-import { itemDef } from '../src/core/registry/items.ts';
+} from '../web/src/core/registry/tools.ts';
+import { itemDef } from '../web/src/core/registry/items.ts';
 
 let passed = 0;
 let failed = 0;

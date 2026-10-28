@@ -21,9 +21,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBlockTable } from '../src/core/registry/blocks.ts';
-import { decodeBlockTable } from '../src/core/registry/blockTableCodec.ts';
-import { buildDelta, isEmptyDelta } from '../src/core/registry/coreDelta.ts';
+import { buildBlockTable } from '../web/src/core/registry/blocks.ts';
+import { decodeBlockTable } from '../web/src/core/registry/blockTableCodec.ts';
+import { buildDelta, isEmptyDelta } from '../web/src/core/registry/coreDelta.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASE_FILE = resolve(ROOT, 'host/core-baseline.bin');

@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NetSession } from '../src/core/net/NetSession.ts';
+import { NetSession } from '../web/src/core/net/NetSession.ts';
 
 describe('NetSession', () => {
   it('初始是 idle，connect 进 connecting', () => {

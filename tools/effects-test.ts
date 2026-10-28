@@ -16,8 +16,8 @@ import {
   resolveEffect,
   romanLevel,
   type EffectId,
-} from '../src/core/survival/StatusEffects.ts';
-import { MAX_HEALTH, PlayerStats } from '../src/core/survival/PlayerStats.ts';
+} from '../web/src/core/survival/StatusEffects.ts';
+import { MAX_HEALTH, PlayerStats } from '../web/src/core/survival/PlayerStats.ts';
 
 let passed = 0;
 let failed = 0;

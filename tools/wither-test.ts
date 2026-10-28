@@ -18,26 +18,26 @@
  * 运行：npm run test:wither
  */
 
-import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { CREATIVE_ITEMS, Item, dropFor, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, toolItemId } from '../src/core/registry/tools.ts';
-import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { CREATIVE_ITEMS, Item, dropFor, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, toolItemId } from '../web/src/core/registry/tools.ts';
+import { planPlacement, type PlacementInput } from '../web/src/core/interaction/Placement.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   WITHER_SKELETON_TYPE,
   DROPPING_MOB_TYPES,
   HOSTILE_MOBS,
   MOB_TYPES,
   mobTypeById,
-} from '../src/core/entity/mobs.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
+} from '../web/src/core/entity/mobs.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
 import {
   Wither,
   WITHER_SHIELD_SECONDS,
   WITHER_TYPE,
-} from '../src/core/entity/Wither.ts';
+} from '../web/src/core/entity/Wither.ts';
 import {
   BLUE_WITHER_SKULL_DAMAGE,
   BLUE_WITHER_SKULL_WITHER_SECONDS,
@@ -45,19 +45,19 @@ import {
   WITHER_SKULL_DAMAGE,
   WITHER_SKULL_WITHER_SECONDS,
   isWitherSkull,
-} from '../src/core/entity/Throwable.ts';
-import { StatusEffects } from '../src/core/survival/StatusEffects.ts';
+} from '../web/src/core/entity/Throwable.ts';
+import { StatusEffects } from '../web/src/core/survival/StatusEffects.ts';
 import {
   consumeSummonSkulls,
   witherPatternAt,
   type WitherSummonWorld,
-} from '../src/core/world/WitherSummon.ts';
-import { NetherBiome, NetherGenerator } from '../src/core/gen/NetherGenerator.ts';
-import { fortressAt, fortressInstanceForTest } from '../src/core/gen/NetherFortress.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/world/WitherSummon.ts';
+import { NetherBiome, NetherGenerator } from '../web/src/core/gen/NetherGenerator.ts';
+import { fortressAt, fortressInstanceForTest } from '../web/src/core/gen/NetherFortress.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

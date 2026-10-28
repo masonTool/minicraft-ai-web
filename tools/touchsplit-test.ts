@@ -19,8 +19,8 @@ import {
   splitCountForDrag,
   splitFraction,
   splitStack,
-} from '../src/core/container/TouchSplit.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
+} from '../web/src/core/container/TouchSplit.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
 
 let passed = 0;
 let failed = 0;

@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MobShadows, SHADOW_TTL_MS } from '../src/core/net/MobShadows.ts';
+import { MobShadows, SHADOW_TTL_MS } from '../web/src/core/net/MobShadows.ts';
 
 describe('MobShadows', () => {
   it('没收到过上报：不压（本地该正常刷怪）', () => {

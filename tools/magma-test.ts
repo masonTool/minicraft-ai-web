@@ -18,13 +18,13 @@
  * 运行：npm run test:magma
  */
 
-import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { VARIANT_INGREDIENTS } from '../src/core/crafting/Brewing.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
+import { Block, blockDef, blockHardness } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { VARIANT_INGREDIENTS } from '../web/src/core/crafting/Brewing.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
 import {
   HOSTILE_MOBS,
   MAGMA_CUBE_BIG_TYPE,
@@ -32,10 +32,10 @@ import {
   MAGMA_CUBE_TYPE,
   MOB_TYPES,
   mobTypeById,
-} from '../src/core/entity/mobs.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/entity/mobs.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

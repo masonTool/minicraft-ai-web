@@ -4,16 +4,16 @@
  * 运行：npm run test:furnace
  */
 
-import { Block, blockDef, blockHardness, blockTiles, emitLightWithState } from '../src/core/registry/blocks.ts';
-import { CAMPFIRE_HEIGHT, collisionBoxes, isFullBlockShape } from '../src/core/registry/blockShapes.ts';
-import { isLitState, withLitState, withPowered } from '../src/core/registry/blockState.ts';
-import { CAMPFIRE_SIZE, Campfire } from '../src/core/container/Campfire.ts';
-import { breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { CREATIVE_ITEMS, Item, categoryOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { harvestRequirement } from '../src/core/registry/tools.ts';
-import { Furnace, FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT } from '../src/core/container/Furnace.ts';
-import { Chest, CHEST_SIZE } from '../src/core/container/Chest.ts';
+import { Block, blockDef, blockHardness, blockTiles, emitLightWithState } from '../web/src/core/registry/blocks.ts';
+import { CAMPFIRE_HEIGHT, collisionBoxes, isFullBlockShape } from '../web/src/core/registry/blockShapes.ts';
+import { isLitState, withLitState, withPowered } from '../web/src/core/registry/blockState.ts';
+import { CAMPFIRE_SIZE, Campfire } from '../web/src/core/container/Campfire.ts';
+import { breakSeconds, canHarvest, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { CREATIVE_ITEMS, Item, categoryOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { Furnace, FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT } from '../web/src/core/container/Furnace.ts';
+import { Chest, CHEST_SIZE } from '../web/src/core/container/Chest.ts';
 import {
   FURNACE_STATIONS,
   cookSeconds,
@@ -22,12 +22,12 @@ import {
   stationOfBlock,
   stationRejectReason,
   SMELTING_TIME,
-} from '../src/core/crafting/Smelting.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { restoreContainers, serializeContainers } from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+} from '../web/src/core/crafting/Smelting.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { restoreContainers, serializeContainers } from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 
 let passed = 0;
 let failed = 0;

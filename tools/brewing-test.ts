@@ -16,25 +16,25 @@
  * 运行：npm run test:brewing
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, categoryOf, itemDef, itemName, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { SPLASH_RADIUS } from '../src/core/survival/SplashPotion.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, itemDef, itemName, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { SPLASH_RADIUS } from '../web/src/core/survival/SplashPotion.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   BREW_RECIPES,
   BREW_SECONDS,
   BREWS_PER_BLAZE_POWDER,
   brewRecipeFor,
   canBrew,
-} from '../src/core/crafting/Brewing.ts';
+} from '../web/src/core/crafting/Brewing.ts';
 import {
   BREW_BOTTLE_SLOTS,
   BREW_FUEL_SLOT,
   BREW_INGREDIENT_SLOT,
   BREW_SLOT_COUNT,
   BrewingStand,
-} from '../src/core/container/BrewingStand.ts';
+} from '../web/src/core/container/BrewingStand.ts';
 import {
   DRINKABLE,
   LINGERING_ID_OFFSET,
@@ -51,11 +51,11 @@ import {
   splashIdOf,
   splashOf,
   variantBaseId,
-} from '../src/core/registry/potions.ts';
-import { CLOUD_DURATION, LINGERING_RADIUS } from '../src/core/survival/PotionCloud.ts';
-import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
-import { EFFECTS, StatusEffects, type EffectId } from '../src/core/survival/StatusEffects.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
+} from '../web/src/core/registry/potions.ts';
+import { CLOUD_DURATION, LINGERING_RADIUS } from '../web/src/core/survival/PotionCloud.ts';
+import { recipesForResult } from '../web/src/core/crafting/RecipeBook.ts';
+import { EFFECTS, StatusEffects, type EffectId } from '../web/src/core/survival/StatusEffects.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
 
 let passed = 0;
 let failed = 0;

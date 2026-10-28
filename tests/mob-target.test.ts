@@ -9,9 +9,9 @@
  * 以及 `hit` 能把伤害导向别处（远端玩家走网络，不能直接改本地血量）。
  */
 import { describe, expect, it } from 'vitest';
-import { Mob } from '../src/core/entity/Mob.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import type { EntityContext, PlayerTarget } from '../src/core/entity/Entity.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import type { EntityContext, PlayerTarget } from '../web/src/core/entity/Entity.ts';
 
 const bareContext = (extra: Partial<EntityContext> = {}): EntityContext =>
   ({

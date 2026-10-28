@@ -16,7 +16,7 @@ import {
   hasFlag,
   withFlag,
   type EntitySnapshot,
-} from '../src/core/net/EntitySnapshot.ts';
+} from '../web/src/core/net/EntitySnapshot.ts';
 
 const zombie: EntitySnapshot = {
   key: '3:7',

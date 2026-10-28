@@ -12,16 +12,16 @@
  * 运行：npm run test:soul
  */
 
-import { Block, blockDef, blockHardness, isHardnessRegistered } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { describeState } from '../src/core/registry/blockState.ts';
-import { supportKindOf } from '../src/core/world/Support.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { isoBoxesForShape } from '../src/ui/BlockIcon.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { Block, blockDef, blockHardness, isHardnessRegistered } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { describeState } from '../web/src/core/registry/blockState.ts';
+import { supportKindOf } from '../web/src/core/world/Support.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { isoBoxesForShape } from '../web/src/ui/BlockIcon.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;

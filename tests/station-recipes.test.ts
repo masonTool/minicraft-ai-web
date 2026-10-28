@@ -6,11 +6,11 @@ import {
   stationCatalogIds,
   stationFamilyIds,
   stationNeedFor,
-} from '../src/core/crafting/StationRecipes.ts';
-import { BREW_RECIPES } from '../src/core/crafting/Brewing.ts';
-import { netheriteUpgradeList } from '../src/core/crafting/Smithing.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/crafting/StationRecipes.ts';
+import { BREW_RECIPES } from '../web/src/core/crafting/Brewing.ts';
+import { netheriteUpgradeList } from '../web/src/core/crafting/Smithing.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 
 function countsOf(entries: Readonly<Record<number, number>>) {
   return (id: number): number => entries[id] ?? 0;

@@ -14,14 +14,14 @@
  * 运行：`npm run perf`
  */
 
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
-import { StartupRamp } from '../src/core/world/StartupRamp.ts';
-import { RemoteAoiGate } from '../src/core/net/NetAoi.ts';
-import { STARTUP_PHASES, StartupTrace } from '../src/game/startupTrace.ts';
-import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
-import { withFacing } from '../src/core/registry/blockState.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../web/src/core/world/Chunk.ts';
+import { StartupRamp } from '../web/src/core/world/StartupRamp.ts';
+import { RemoteAoiGate } from '../web/src/core/net/NetAoi.ts';
+import { STARTUP_PHASES, StartupTrace } from '../web/src/game/startupTrace.ts';
+import { meshSection, type MeshContext, type TileUvSource } from '../web/src/core/mesh/ChunkMesher.ts';
+import { withFacing } from '../web/src/core/registry/blockState.ts';
 import {
   HEIGHT_DIRTY,
   computeColumn,
@@ -29,7 +29,7 @@ import {
   heightAt,
   heightToY,
   onBlockChanged,
-} from '../src/core/world/Heightmap.ts';
+} from '../web/src/core/world/Heightmap.ts';
 
 let passed = 0;
 let failed = 0;

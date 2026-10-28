@@ -12,22 +12,22 @@
  * 运行：npm run test:save
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { Chunk, CHUNK_VOLUME, WORLD_MAX_Y, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { Chunk, CHUNK_VOLUME, WORLD_MAX_Y, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
 import {
   SLOT_COUNTS,
   restoreContainers,
   serializeContainers,
-} from '../src/core/save/ContainerSave.ts';
-import { Scoreboard, SIDEBAR_MAX_ROWS } from '../src/core/world/Scoreboard.ts';
-import { Teams } from '../src/core/world/Teams.ts';
-import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
-import { resetSaveIssues, saveIssueReport, saveIssueTotal } from '../src/core/save/SaveIssues.ts';
-import { restoreStack } from '../src/core/container/Inventory.ts';
-import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../src/core/crafting/Brewing.ts';
+} from '../web/src/core/save/ContainerSave.ts';
+import { Scoreboard, SIDEBAR_MAX_ROWS } from '../web/src/core/world/Scoreboard.ts';
+import { Teams } from '../web/src/core/world/Teams.ts';
+import { ChunkEdits, packEdit, packEditId, packEditState } from '../web/src/core/save/ChunkEdits.ts';
+import { resetSaveIssues, saveIssueReport, saveIssueTotal } from '../web/src/core/save/SaveIssues.ts';
+import { restoreStack } from '../web/src/core/container/Inventory.ts';
+import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../web/src/core/crafting/Brewing.ts';
 
 let passed = 0;
 let failed = 0;

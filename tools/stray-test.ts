@@ -16,18 +16,18 @@
  * 运行：npm run test:stray
  */
 
-import { BIOMES } from '../src/core/gen/Biome.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { HOSTILE_MOBS, MOB_TYPES, STRAY_TYPE, HUSK_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
-import { Arrow } from '../src/core/entity/Arrow.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { BIOMES } from '../web/src/core/gen/Biome.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { HOSTILE_MOBS, MOB_TYPES, STRAY_TYPE, HUSK_TYPE, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { MobSpawner, type SpawnContext } from '../web/src/core/entity/MobSpawner.ts';
+import { Arrow } from '../web/src/core/entity/Arrow.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

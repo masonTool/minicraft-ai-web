@@ -13,9 +13,9 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block, BLOCKS, Wood, blockDef } from '../src/core/registry/blocks.ts';
-import { chestLootIndex } from '../src/core/registry/blockState.ts';
-import { FeatureWriter, type FeatureWorld } from '../src/core/gen/Features.ts';
+import { Block, BLOCKS, Wood, blockDef } from '../web/src/core/registry/blocks.ts';
+import { chestLootIndex } from '../web/src/core/registry/blockState.ts';
+import { FeatureWriter, type FeatureWorld } from '../web/src/core/gen/Features.ts';
 import {
   STRUCTURE_KINDS,
   generateStructures,
@@ -24,33 +24,33 @@ import {
   structureInstanceForTest,
   nearestStructure,
   type StructureKind,
-} from '../src/core/gen/Structures.ts';
-import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { planMineshaft } from '../src/core/gen/MineshaftLayout.ts';
-import { planStronghold } from '../src/core/gen/StrongholdLayout.ts';
-import { mansionRoomHalf, planMansion } from '../src/core/gen/MansionLayout.ts';
-import { lootTableIndex } from '../src/core/registry/loot.ts';
+} from '../web/src/core/gen/Structures.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { planMineshaft } from '../web/src/core/gen/MineshaftLayout.ts';
+import { planStronghold } from '../web/src/core/gen/StrongholdLayout.ts';
+import { mansionRoomHalf, planMansion } from '../web/src/core/gen/MansionLayout.ts';
+import { lootTableIndex } from '../web/src/core/registry/loot.ts';
 import {
   STRUCTURE_CREATURE_KINDS,
   STRUCTURE_CREATURES,
   creatureAnchorsFor,
   nearbyStandingSpot,
-} from '../src/core/gen/StructureCreatures.ts';
+} from '../web/src/core/gen/StructureCreatures.ts';
 import {
   planVillageLayout,
   VILLAGE_PIECE_CLEAR_HALF,
   VILLAGE_PIECE_HALF,
   VILLAGE_WELL_HALF,
-} from '../src/core/gen/VillageLayout.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
+} from '../web/src/core/gen/VillageLayout.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
 import {
   type BlockArray,
   CHUNK_SIZE_X,
   CHUNK_SIZE_Z,
   CHUNK_VOLUME,
   Chunk,
-} from '../src/core/world/Chunk.ts';
+} from '../web/src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 
@@ -583,8 +583,8 @@ console.log('\n[结构箱都挂着战利品表]');
 
 console.log('\n[矿井里的蛛网（批次 442）]');
 {
-  const structures = readFileSync(new URL('../src/core/gen/Structures.ts', import.meta.url), 'utf8');
-  const sources = readFileSync(new URL('../src/core/gen/GenerationSources.ts', import.meta.url), 'utf8');
+  const structures = readFileSync(new URL('../web/src/core/gen/Structures.ts', import.meta.url), 'utf8');
+  const sources = readFileSync(new URL('../web/src/core/gen/GenerationSources.ts', import.meta.url), 'utf8');
   check(
     '废弃矿井生成时会挂蛛网',
     structures.includes('w.fill(cx - px, stepY + 2, cz - pz, Block.COBWEB)'),

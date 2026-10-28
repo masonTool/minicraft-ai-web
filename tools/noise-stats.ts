@@ -7,9 +7,9 @@
  * 这里量出单层 Perlin 的标准差，以及按候选因子归一化后各噪声通道的实际标准差。
  */
 
-import { DoublePerlinNoise, NormalNoise } from '../src/core/gen/noise/PerlinNoise.ts';
-import { Random } from '../src/core/gen/noise/Random.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
+import { DoublePerlinNoise, NormalNoise } from '../web/src/core/gen/noise/PerlinNoise.ts';
+import { Random } from '../web/src/core/gen/noise/Random.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
 
 const SAMPLES = 40000;
 

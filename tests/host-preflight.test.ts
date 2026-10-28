@@ -5,7 +5,7 @@
  * 用假的 socket / fetch 注入，不真的连服务器（真连会变成"测试环境依赖网络"）。
  */
 import { describe, expect, it } from 'vitest';
-import { preflightHost } from '../src/net/HostPreflight.ts';
+import { preflightHost } from '../web/src/net/HostPreflight.ts';
 
 /** 假 WebSocket：按 `mode` 决定 open / error / 永不回应 */
 class FakeSocket {

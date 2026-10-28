@@ -20,23 +20,23 @@
  * 运行：npm run test:genregistry
  */
 
-import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME } from '../src/core/world/Chunk.ts';
-import { FeatureWriter } from '../src/core/gen/Features.ts';
-import { Dimension, type DimensionId } from '../src/core/gen/Dimension.ts';
-import { BIOMES } from '../src/core/gen/Biome.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { NetherGenerator } from '../src/core/gen/NetherGenerator.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { generateStructures, structureInstanceForTest, type StructureKind } from '../src/core/gen/Structures.ts';
-import { bastionInstanceForTest, generateBastions } from '../src/core/gen/Bastion.ts';
-import { fortressInstanceForTest, generateFortresses } from '../src/core/gen/NetherFortress.ts';
-import { generateEndStructures } from '../src/core/gen/EndStructures.ts';
-import { EndGenerator } from '../src/core/gen/EndGenerator.ts';
-import { SEA_LEVEL } from '../src/core/gen/Features.ts';
-import { columnSurface } from '../src/core/gen/SurfaceRules.ts';
-import { ORE_BLOCKS } from '../src/core/gen/OreGenerator.ts';
-import { generatedBlockIds, generationSourcesOf, generationStats, GENERATION_SOURCES } from '../src/core/gen/GenerationSources.ts';
+import { Block, BLOCKS, blockDef } from '../web/src/core/registry/blocks.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME } from '../web/src/core/world/Chunk.ts';
+import { FeatureWriter } from '../web/src/core/gen/Features.ts';
+import { Dimension, type DimensionId } from '../web/src/core/gen/Dimension.ts';
+import { BIOMES } from '../web/src/core/gen/Biome.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { NetherGenerator } from '../web/src/core/gen/NetherGenerator.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { generateStructures, structureInstanceForTest, type StructureKind } from '../web/src/core/gen/Structures.ts';
+import { bastionInstanceForTest, generateBastions } from '../web/src/core/gen/Bastion.ts';
+import { fortressInstanceForTest, generateFortresses } from '../web/src/core/gen/NetherFortress.ts';
+import { generateEndStructures } from '../web/src/core/gen/EndStructures.ts';
+import { EndGenerator } from '../web/src/core/gen/EndGenerator.ts';
+import { SEA_LEVEL } from '../web/src/core/gen/Features.ts';
+import { columnSurface } from '../web/src/core/gen/SurfaceRules.ts';
+import { ORE_BLOCKS } from '../web/src/core/gen/OreGenerator.ts';
+import { generatedBlockIds, generationSourcesOf, generationStats, GENERATION_SOURCES } from '../web/src/core/gen/GenerationSources.ts';
 
 let passed = 0;
 let failed = 0;

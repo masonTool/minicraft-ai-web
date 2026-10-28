@@ -7,17 +7,17 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Item } from '../src/core/registry/items.ts';
-import { itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   SPYGLASS_MIN_FOV,
   SPYGLASS_ZOOM,
   isSpyglassZoomed,
   spyglassFov,
-} from '../src/core/items/Spyglass.ts';
+} from '../web/src/core/items/Spyglass.ts';
 
 let passed = 0;
 let failed = 0;
@@ -79,7 +79,7 @@ console.log('\n[FOV 换算]');
 
 console.log('\n[接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主程序每帧更新 FOV', mainSrc.includes('this.updateCameraFov(dt);'));
   check('用的是纯函数倍率', mainSrc.includes('spyglassFov(base)'));
   check(

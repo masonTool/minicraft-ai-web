@@ -25,14 +25,14 @@ import {
   blockDef,
   blockHardness,
   woodShaped,
-} from '../src/core/registry/blocks.ts';
-import { isHandHarvestable, breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
-import { CREATIVE_ITEMS, Item, categoryOf, dropFor } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { WOOD_TYPES } from '../src/core/registry/colors.ts';
-import { isFlammable } from '../src/core/world/Fire.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { isHandHarvestable, breakSeconds, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, dropFor } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { WOOD_TYPES } from '../web/src/core/registry/colors.ts';
+import { isFlammable } from '../web/src/core/world/Fire.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   facingOf,
   isDoorOpen,
@@ -45,10 +45,10 @@ import {
   withFacing,
   withFenceGateOpen,
   withTop,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { RedstoneEngine, isRedstoneComponent, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { RedstoneEngine, isRedstoneComponent, type RedstoneWorld } from '../web/src/core/redstone/RedstoneEngine.ts';
 
 let passed = 0;
 let failed = 0;

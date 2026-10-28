@@ -14,33 +14,33 @@
  * 运行：npm run test:phantom
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { mobLabel } from '../src/core/entity/Mob.ts';
-import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { VARIANT_INGREDIENTS, brewRecipeFor } from '../src/core/crafting/Brewing.ts';
-import { POTIONS, POTION_IDS, variantByKey } from '../src/core/registry/potions.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { ALL_HOSTILE_MOBS, HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { mobLabel } from '../web/src/core/entity/Mob.ts';
+import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { VARIANT_INGREDIENTS, brewRecipeFor } from '../web/src/core/crafting/Brewing.ts';
+import { POTIONS, POTION_IDS, variantByKey } from '../web/src/core/registry/potions.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { ALL_HOSTILE_MOBS, HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
 import {
   Phantom,
   PHANTOM_CIRCLE_SECONDS,
   PHANTOM_DIVE_SECONDS,
   PHANTOM_HIT_RANGE,
   PHANTOM_TYPE,
-} from '../src/core/entity/Phantom.ts';
+} from '../web/src/core/entity/Phantom.ts';
 import {
   PHANTOM_MAX_COUNT,
   PHANTOM_MIN_DAYS,
   PHANTOM_SPAWN_INTERVAL,
   phantomNightIsComing,
   phantomSpawnCount,
-} from '../src/core/survival/Insomnia.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/survival/Insomnia.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

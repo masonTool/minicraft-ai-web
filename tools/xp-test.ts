@@ -12,12 +12,12 @@
  * 运行：npm run test:xp
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Experience, blockXpRange, rollBlockXp, totalXpForLevel, xpToNext } from '../src/core/survival/Experience.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { DRAGON_TYPE, ENDER_DRAGON_XP } from '../src/core/entity/EndBoss.ts';
-import { FURNACE_OUTPUT, Furnace } from '../src/core/container/Furnace.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Experience, blockXpRange, rollBlockXp, totalXpForLevel, xpToNext } from '../web/src/core/survival/Experience.ts';
+import { MOB_TYPES } from '../web/src/core/entity/mobs.ts';
+import { DRAGON_TYPE, ENDER_DRAGON_XP } from '../web/src/core/entity/EndBoss.ts';
+import { FURNACE_OUTPUT, Furnace } from '../web/src/core/container/Furnace.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 
 let passed = 0;
 let failed = 0;

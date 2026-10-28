@@ -6,8 +6,8 @@
  *  · 解码器面对"别的版本/坏数据"要**整体拒收**，不能解出半片错位地形。
  */
 import { describe, expect, it } from 'vitest';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { EDIT_PACK_VERSION, decodeEditsPack, encodeEditsPack, packIndex, unpackIndex } from '../src/core/net/EditPack.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { EDIT_PACK_VERSION, decodeEditsPack, encodeEditsPack, packIndex, unpackIndex } from '../web/src/core/net/EditPack.ts';
 // 服务端那份是纯 JS，vitest 直接 import 即可（就是要证明两套实现一致）
 import { encodeEditsPack as encodeOnServer } from '../server/editpack.mjs';
 

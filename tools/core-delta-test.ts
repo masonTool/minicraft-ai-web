@@ -8,7 +8,7 @@
  * 运行：npm run test:coredelta
  */
 
-import { BLOCKS, buildBlockTable, installBlockTable } from '../src/core/registry/blocks.ts';
+import { BLOCKS, buildBlockTable, installBlockTable } from '../web/src/core/registry/blocks.ts';
 import {
   CORE_DELTA_VERSION,
   applyCoreDelta,
@@ -17,7 +17,7 @@ import {
   isEmptyDelta,
   parseCoreDelta,
   type CoreDelta,
-} from '../src/core/registry/coreDelta.ts';
+} from '../web/src/core/registry/coreDelta.ts';
 
 let passed = 0;
 let failed = 0;

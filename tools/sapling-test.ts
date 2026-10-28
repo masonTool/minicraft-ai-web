@@ -24,20 +24,20 @@ import {
   saplingId,
   saplingTreeOf,
   woodBlocks,
-} from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, rareDropFor } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, isHandHarvestable } from '../src/core/registry/tools.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { growTreeAt, type TreeWorld } from '../src/core/world/TreeGrowth.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef, rareDropFor } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, isHandHarvestable } from '../web/src/core/registry/tools.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { growTreeAt, type TreeWorld } from '../web/src/core/world/TreeGrowth.ts';
 import {
   SAPLING_GROW_CHANCE,
   SAPLING_MIN_LIGHT,
   hasRandomTick,
   randomTickBlock,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
-import { TREE_KINDS } from '../src/core/gen/Features.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
+import { TREE_KINDS } from '../web/src/core/gen/Features.ts';
 
 let passed = 0;
 let failed = 0;

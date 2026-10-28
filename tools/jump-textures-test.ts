@@ -24,7 +24,7 @@ import {
   type CanvasFactory,
   type CanvasLike,
   type Ctx2D,
-} from '../src/minigame/games/jump/blockTextures.ts';
+} from '../web/src/minigame/games/jump/blockTextures.ts';
 
 let passed = 0;
 let failed = 0;

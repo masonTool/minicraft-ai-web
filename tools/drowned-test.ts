@@ -17,24 +17,24 @@
  * 运行：npm run test:drowned
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { TRIDENT_ITEM_ID, toolInfoById } from '../src/core/registry/tools.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { DROWNED_TYPE, HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { TRIDENT_ITEM_ID, toolInfoById } from '../web/src/core/registry/tools.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { DROWNED_TYPE, HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { MobSpawner, type SpawnContext } from '../web/src/core/entity/MobSpawner.ts';
 import {
   TRIDENT_THROW_DAMAGE,
   THROWABLE_LIFETIME,
   Throwable,
-} from '../src/core/entity/Throwable.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/entity/Throwable.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

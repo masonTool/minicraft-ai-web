@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ROOM_CAPACITY, parseRoomsResponse } from '../src/core/net/RoomList.ts';
+import { DEFAULT_ROOM_CAPACITY, parseRoomsResponse } from '../web/src/core/net/RoomList.ts';
 
 describe('parseRoomsResponse', () => {
   it('正常响应：房间名 / 人数 / 房主标记 / 世界名与种子', () => {

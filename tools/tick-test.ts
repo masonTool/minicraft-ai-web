@@ -10,8 +10,8 @@
  * 运行：npm run test:tick
  */
 
-import { Block, JUNGLE_LOG_ID, blockDef, Wood } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block, JUNGLE_LOG_ID, blockDef, Wood } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   facingOf,
   fluidHeight,
@@ -23,14 +23,14 @@ import {
   withFluidLevel,
   withSnowLayers,
   withVineSide,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   RANDOM_TICK_BEHAVIORS,
   TickScheduler,
   randomTickBlock,
   randomTickChunk,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
 import {
   LAVA_SPREAD,
   WATER_SPREAD,
@@ -40,8 +40,8 @@ import {
   wakeFluidAt,
   wakeFluidNeighbours,
   type FluidWorld,
-} from '../src/core/world/Fluids.ts';
-import { FLUID_SIM_RADIUS_CHUNKS, FLUID_TICKS_PER_TICK, isWithinFluidSim } from '../src/core/world/FluidSimWindow.ts';
+} from '../web/src/core/world/Fluids.ts';
+import { FLUID_SIM_RADIUS_CHUNKS, FLUID_TICKS_PER_TICK, isWithinFluidSim } from '../web/src/core/world/FluidSimWindow.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -612,7 +612,7 @@ console.log('\n[流体模拟窗口（批次 283）]');
   check('每 tick 流体刻上限是 256（20Hz → 5120 刻/秒，高于观测值）', FLUID_TICKS_PER_TICK === 256);
 
   // 接线：主循环必须真的用了这两个旋钮（漏一处就等于没做）
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主循环按窗口过滤流体刻', mainSrc.includes('isWithinFluidSim(px, pz, pos.x, pos.z)'));
   check('主循环有每 tick 上限并推迟而不是丢弃', mainSrc.includes('this.scheduler.schedule(pos.x, pos.y, pos.z, pos.dimension, 1)'));
   check('被冻结/被推迟的刻都有计数（诊断）', mainSrc.includes('this.fluidTicksFar++') && mainSrc.includes('this.fluidTicksDeferred++'));
@@ -720,7 +720,7 @@ console.log('\n[游戏规则接进随机刻（批次 625 / Q23）]');
   );
 
   // ---- 接线：主循环必须真的把规则传进去 ----
-  const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc2 = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主循环把 doVinesSpread 传进随机刻', mainSrc2.includes('vineSpreadEnabled: () => this.rules.doVinesSpread'));
   check('主循环把 snowAccumulationHeight 传进随机刻', mainSrc2.includes('snowHeightLimit: () => this.rules.snowAccumulationHeight'));
   check('主循环把 freezeDamage 传进生存环境', mainSrc2.includes('freezeDamage: this.rules.freezeDamage'));

@@ -9,9 +9,9 @@
  *  ④ 接线守卫（主程序按"装备 + 空中按下跳跃"判定、落地/入水结束）。
  */
 
-import { ARMOR_SLOT_BASE, ELYTRA_ITEM_ID, armorSlotAccepts, armorInfoById } from '../src/core/registry/armor.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { GLIDE_SPEED, PlayerPhysics, WALK_SPEED, type PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { ARMOR_SLOT_BASE, ELYTRA_ITEM_ID, armorSlotAccepts, armorInfoById } from '../web/src/core/registry/armor.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { GLIDE_SPEED, PlayerPhysics, WALK_SPEED, type PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -109,7 +109,7 @@ console.log('\n[对照：不滑翔就是自由落体]');
 
 console.log('\n[接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('每帧在 physics.update 之前更新滑翔状态', /this\.updateGliding\(rawInput\);[\s\S]{0,200}this\.physics\.update\(/.test(mainSrc));
   check('滑翔状态传进了物理层', /this\.gliding,\s*\);\s*\n\s*\/\/ 自动跳跃进诊断日志/.test(mainSrc) || /this\.settings\.autoJump,\s*\n\s*\/\/ 滑翔（批次 499）：鞘翅\s*\n\s*this\.gliding,/.test(mainSrc));
   check('按"这一帧按下"判定（按住起跳不算滑翔）', /const jumpPressed = input\.jump && !this\.jumpWasDown;/.test(mainSrc));

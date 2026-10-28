@@ -12,20 +12,20 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 import {
   WORLD_SURFACE_Y,
   WORLD_TYPES,
   isWorldType,
   type WorldType,
-} from '../src/core/gen/WorldType.ts';
-import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { planSpawnRegion } from '../src/core/world/SpawnPoint.ts';
-import { DIFFICULTIES, difficultyProfile, isDifficulty, type Difficulty } from '../src/core/world/Rules.ts';
-import { GAME_MODES, isCreativeMode, type GameMode } from '../src/core/world/GameMode.ts';
-import { WorldRegistry, type WorldSummary } from '../src/core/save/WorldRegistry.ts';
-import { SAVE_FILE_EXTENSION, transferFileName, worldNameFromFile } from '../src/core/save/SaveTransfer.ts';
+} from '../web/src/core/gen/WorldType.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { planSpawnRegion } from '../web/src/core/world/SpawnPoint.ts';
+import { DIFFICULTIES, difficultyProfile, isDifficulty, type Difficulty } from '../web/src/core/world/Rules.ts';
+import { GAME_MODES, isCreativeMode, type GameMode } from '../web/src/core/world/GameMode.ts';
+import { WorldRegistry, type WorldSummary } from '../web/src/core/save/WorldRegistry.ts';
+import { SAVE_FILE_EXTENSION, transferFileName, worldNameFromFile } from '../web/src/core/save/SaveTransfer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -195,7 +195,7 @@ console.log('\n[难度语义（与创建组合无关，逐档钉住）]');
 
 console.log('\n[UI 联动守卫]');
 {
-  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check('类型传进 create', worldSrc.includes('worldType: this.typeSelect.value as WorldType'));
   check('难度传进 create', worldSrc.includes('difficulty: this.difficultySelect.value as Difficulty'));
   check('模式传进 create', worldSrc.includes('gameMode: this.gameModeSelect.value as GameMode'));

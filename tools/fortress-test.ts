@@ -26,12 +26,12 @@ import {
   blockHardness,
   blockTiles,
   netherWartStageOf,
-} from '../src/core/registry/blocks.ts';
-import { Item, blockDrops, categoryOf, extraCropDrop, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
-import { harvestRequirement } from '../src/core/registry/tools.ts';
-import { hasRandomTick, randomTickBlock } from '../src/core/tick/RandomTicks.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { Item, blockDrops, categoryOf, extraCropDrop, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, missingBlockNames } from '../web/src/core/registry/itemNames.ts';
+import { harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { hasRandomTick, randomTickBlock } from '../web/src/core/tick/RandomTicks.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
 import {
   FORTRESS_CLEARANCE,
   FORTRESS_RADIUS,
@@ -42,23 +42,23 @@ import {
   fortressIntersects,
   type FortressInstance,
   type FortressWorld,
-} from '../src/core/gen/NetherFortress.ts';
-import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
-import { NetherGenerator, NetherBiome } from '../src/core/gen/NetherGenerator.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { FeatureWriter } from '../src/core/gen/Features.ts';
-import { CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
-import { planSpawnerSpawn, type SpawnerWorldView } from '../src/core/world/SpawnerTicking.ts';
-import { SPAWNER_DEFS, spawnerDefFor } from '../src/core/registry/spawners.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { Blaze, BLAZE_FIRE_COOLDOWN, BLAZE_FIRE_RANGE, FIREBALL_DAMAGE, FIREBALL_FIRE_SECONDS } from '../src/core/entity/Blaze.ts';
-import { BLAZE_TYPE, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, type MobType } from '../src/core/entity/Mob.ts';
-import { SMALL_FIREBALL_DAMAGE, SMALL_FIREBALL_FIRE_SECONDS, Throwable } from '../src/core/entity/Throwable.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/gen/NetherFortress.ts';
+import { NETHER_STRUCTURE_KINDS } from '../web/src/core/gen/Bastion.ts';
+import { NetherGenerator, NetherBiome } from '../web/src/core/gen/NetherGenerator.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { FeatureWriter } from '../web/src/core/gen/Features.ts';
+import { CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
+import { planSpawnerSpawn, type SpawnerWorldView } from '../web/src/core/world/SpawnerTicking.ts';
+import { SPAWNER_DEFS, spawnerDefFor } from '../web/src/core/registry/spawners.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { Blaze, BLAZE_FIRE_COOLDOWN, BLAZE_FIRE_RANGE, FIREBALL_DAMAGE, FIREBALL_FIRE_SECONDS } from '../web/src/core/entity/Blaze.ts';
+import { BLAZE_TYPE, MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, type MobType } from '../web/src/core/entity/Mob.ts';
+import { SMALL_FIREBALL_DAMAGE, SMALL_FIREBALL_FIRE_SECONDS, Throwable } from '../web/src/core/entity/Throwable.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 const SEED = 20261016;
 

@@ -33,7 +33,7 @@ import {
   rippleRingRadius,
   sinusInOut,
   toppleAngle,
-} from '../src/minigame/games/jump/motion.ts';
+} from '../web/src/minigame/games/jump/motion.ts';
 
 let passed = 0;
 let failed = 0;

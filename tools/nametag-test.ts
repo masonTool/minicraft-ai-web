@@ -21,12 +21,12 @@ import {
   nameTagWorldWidth,
   NAME_TAG_CANVAS_HEIGHT,
   sanitizeName,
-} from '../src/core/entity/NameTag.ts';
-import { Item, itemDef, itemIconTile, itemName } from '../src/core/registry/items.ts';
-import { itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { FISHING_POOLS } from '../src/core/registry/fishing.ts';
-import { EntityParking } from '../src/core/entity/EntityParking.ts';
-import { REMOTE_PLAYER_TYPE } from '../src/core/entity/mobs.ts';
+} from '../web/src/core/entity/NameTag.ts';
+import { Item, itemDef, itemIconTile, itemName } from '../web/src/core/registry/items.ts';
+import { itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { FISHING_POOLS } from '../web/src/core/registry/fishing.ts';
+import { EntityParking } from '../web/src/core/entity/EntityParking.ts';
+import { REMOTE_PLAYER_TYPE } from '../web/src/core/entity/mobs.ts';
 import {
   PLAIN_NAME_TAG_STYLE,
   TEAM_COLOR_HEX,
@@ -35,8 +35,8 @@ import {
   nameTagStyleFor,
   normalizeTeamColor,
   teamColorToHex,
-} from '../src/core/entity/NameTagColor.ts';
-import { MAX_AFFIX_LENGTH, TEAM_COLORS, Teams, sanitizeAffix } from '../src/core/world/Teams.ts';
+} from '../web/src/core/entity/NameTagColor.ts';
+import { MAX_AFFIX_LENGTH, TEAM_COLORS, Teams, sanitizeAffix } from '../web/src/core/world/Teams.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -327,7 +327,7 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
    * 所以这里断言的是**源码契约**——它防的是"改了一半"这类真实会犯的错：
    * 加了参数但没传下去、判据又退回只比名字、颜色硬编码成白色。
    */
-  const src = readFileSync(new URL('../src/render/MobNameTag.ts', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../web/src/render/MobNameTag.ts', import.meta.url), 'utf8');
 
   check(
     'show() 收样式对象（颜色 + 前后缀一次传入）',
@@ -362,7 +362,7 @@ console.log('\n[渲染层接线（Q2 / 批次 616）]');
   check('默认色来自 NameTagColor，不是本地硬编码', src.includes('DEFAULT_NAME_COLOR'));
 
   // ---- Q3：main.ts 的接线 ----
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主程序导入 nameTagStyleFor', /import \{ nameTagStyleFor \} from '\.\/core\/entity\/NameTagColor\.ts'/.test(mainSrc));
   check(
     'updateNameTags 里把样式传给 show()',
@@ -468,7 +468,7 @@ console.log('\n[队伍前后缀（批次 1359）]');
   );
 
   // ---- ⑥ 命令层接线 ----
-  const cmdSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  const cmdSrc = readFileSync(new URL('../web/src/core/commands/Commands.ts', import.meta.url), 'utf8');
   check('有 prefix / suffix 两个属性分支', /key === 'prefix' \|\| key === 'suffix'/.test(cmdSrc));
   check('前后缀保留中间空格（第 4 段之后全部拼回）', cmdSrc.includes('args.slice(3).join('));
   check('有剥引号的助手（支持 prefix "" 清空）', cmdSrc.includes('function stripAffixQuotes('));

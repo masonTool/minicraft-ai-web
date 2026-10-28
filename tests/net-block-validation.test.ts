@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { BLOCKS } from '../src/core/registry/blocks.ts';
+import { BLOCKS } from '../web/src/core/registry/blocks.ts';
 import {
   MAX_BLOCK_ID,
   MAX_BLOCK_STATE,

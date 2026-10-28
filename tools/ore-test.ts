@@ -11,8 +11,8 @@
  *   3. **丰度关系**：煤炭 > 铁、煤炭 > 铜，钻石明显比其他矿石稀有且集中在深部。
  */
 
-import { ORE_BLOCKS } from '../src/core/gen/OreGenerator.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
+import { ORE_BLOCKS } from '../web/src/core/gen/OreGenerator.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
 import {
   type BlockArray,
   CHUNK_SIZE_X,
@@ -20,8 +20,8 @@ import {
   Chunk,
   WORLD_HEIGHT,
   WORLD_MIN_Y,
-} from '../src/core/world/Chunk.ts';
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/world/Chunk.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
 
 const label = (id: number): string => blockDef(id).name.replace('minicraft:', '');
 

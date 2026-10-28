@@ -13,8 +13,8 @@
  * 运行：npm run test:recipebook
  */
 
-import { Block, woolId } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, categoryOf, type ItemCategory } from '../src/core/registry/items.ts';
+import { Block, woolId } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, type ItemCategory } from '../web/src/core/registry/items.ts';
 import {
   blockLabel,
   hasDescription,
@@ -24,13 +24,13 @@ import {
   knownNameCount,
   missingBlockNames,
   translateName,
-} from '../src/core/registry/itemNames.ts';
-import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
-import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { stationItemsFor } from '../src/core/crafting/RecipeStations.ts';
-import { BREW_RECIPES } from '../src/core/crafting/Brewing.ts';
-import { netheriteUpgradeList } from '../src/core/crafting/Smithing.ts';
+} from '../web/src/core/registry/itemNames.ts';
+import { RECIPES, type Recipe } from '../web/src/core/crafting/Recipes.ts';
+import { recipeLayout, stationLabel, trimPattern } from '../web/src/core/crafting/RecipeLayout.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { stationItemsFor } from '../web/src/core/crafting/RecipeStations.ts';
+import { BREW_RECIPES } from '../web/src/core/crafting/Brewing.ts';
+import { netheriteUpgradeList } from '../web/src/core/crafting/Smithing.ts';
 import {
   RECIPE_BOOK_TABS,
   RECIPE_BOOK_TABS_POCKET,
@@ -47,9 +47,9 @@ import {
   recipeIngredients,
   recipePlacement,
   recipesForResult,
-} from '../src/core/crafting/RecipeBook.ts';
-import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
-import { Inventory } from '../src/core/container/Inventory.ts';
+} from '../web/src/core/crafting/RecipeBook.ts';
+import { CraftingGrid } from '../web/src/core/crafting/CraftingGrid.ts';
+import { Inventory } from '../web/src/core/container/Inventory.ts';
 
 let passed = 0;
 let failed = 0;

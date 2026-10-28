@@ -18,10 +18,10 @@ import {
   discSoundSpec,
   discTrack,
   midiToHz,
-} from '../src/core/audio/DiscMelody.ts';
-import { Block, JUKEBOX_ID, blockDef } from '../src/core/registry/blocks.ts';
-import { Item, ITEMS, itemDef } from '../src/core/registry/items.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/audio/DiscMelody.ts';
+import { Block, JUKEBOX_ID, blockDef } from '../web/src/core/registry/blocks.ts';
+import { Item, ITEMS, itemDef } from '../web/src/core/registry/items.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;

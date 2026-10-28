@@ -21,12 +21,12 @@ import {
   categoryOf,
   itemDef,
   type ItemDef,
-} from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { FOOD_TABLE, foodForName, saturationFrom } from '../src/core/registry/food.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { FOOD_TABLE, foodForName, saturationFrom } from '../web/src/core/registry/food.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

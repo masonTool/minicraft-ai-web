@@ -11,7 +11,7 @@
  * 运行：npm run test:migration
  */
 
-import { PLAYER_MIGRATIONS, SAVE_VERSION, migratePlayer } from '../src/core/save/SaveMigrations.ts';
+import { PLAYER_MIGRATIONS, SAVE_VERSION, migratePlayer } from '../web/src/core/save/SaveMigrations.ts';
 
 let passed = 0;
 let failed = 0;

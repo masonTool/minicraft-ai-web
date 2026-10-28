@@ -12,8 +12,8 @@ import {
   isMultiplayerWorldId,
   multiplayerWorldId,
   singlePlayerWorldId,
-} from '../src/core/net/MultiplayerSave.ts';
-import { dbNameFor } from '../src/core/save/WorldRegistry.ts';
+} from '../web/src/core/net/MultiplayerSave.ts';
+import { dbNameFor } from '../web/src/core/save/WorldRegistry.ts';
 
 describe('multiplayerWorldId', () => {
   it('默认房间：world id 加 @mp:default 后缀', () => {

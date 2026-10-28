@@ -23,15 +23,15 @@ import {
   attackSwingAmount,
   leashClampedPosition,
   leashPullBoost,
-} from '../src/core/entity/Mob.ts';
-import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
-import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { Horse } from '../src/core/entity/Horse.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import { Block, woolId } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
+} from '../web/src/core/entity/Mob.ts';
+import { Pathfinder, type BlockSampler } from '../web/src/core/entity/Pathfinder.ts';
+import { MOB_TYPES, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { Horse } from '../web/src/core/entity/Horse.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import { Block, woolId } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   BABY_GROW_SECONDS,
   BABY_SCALE,
@@ -39,9 +39,9 @@ import {
   WOOL_EAT_COOLDOWN_SECONDS,
   mobAcceptsTame,
   mobEats,
-} from '../src/core/entity/Mob.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
-import { describeMobModel, mobAppearanceKey } from '../src/render/MobRenderer.ts';
+} from '../web/src/core/entity/Mob.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
+import { describeMobModel, mobAppearanceKey } from '../web/src/render/MobRenderer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -1098,8 +1098,8 @@ console.log('\n[出手动画（J12）]');
   );
   check('剩余时间为负也不会画出异常角度', attackSwingAmount(-1) === 0);
 
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
-  const rendererSrc = readFileSync(new URL('../src/render/MobRenderer.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../web/src/render/MobRenderer.ts', import.meta.url), 'utf8');
   check('命中时重置动画计时', mobSrc.includes('this.attackAnim = ATTACK_ANIM_SECONDS'));
   check('渲染层每帧读动画曲线', rendererSrc.includes('attackSwingAmount(mob.attackAnim)'));
   check('手臂绕肩关节转（不是绕自己中心）', rendererSrc.includes('spec.pivot && rotX !== 0'));

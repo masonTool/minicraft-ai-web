@@ -20,21 +20,21 @@ import {
   isAttachedStem,
   stemKindOf,
   stemStageOf,
-} from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, dropFor, itemDef } from '../src/core/registry/items.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, isHandHarvestable } from '../src/core/registry/tools.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, dropFor, itemDef } from '../web/src/core/registry/items.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, isHandHarvestable } from '../web/src/core/registry/tools.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   CROP_MIN_LIGHT,
   hasRandomTick,
   isHydrated,
   randomTickBlock,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
-import { fertilizeAt } from '../src/core/world/BoneMeal.ts';
-import { facingOf, withFacing } from '../src/core/registry/blockState.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
+import { fertilizeAt } from '../web/src/core/world/BoneMeal.ts';
+import { facingOf, withFacing } from '../web/src/core/registry/blockState.ts';
 
 let passed = 0;
 let failed = 0;

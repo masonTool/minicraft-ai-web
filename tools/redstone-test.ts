@@ -15,13 +15,13 @@
  * 运行：npm run test:redstone
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { isButtonId, isPlateId } from '../src/core/redstone/RedstoneEngine.ts';
-import { Item, itemDef } from '../src/core/registry/items.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { containerSignalStrength } from '../src/core/world/ContainerSignal.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { isButtonId, isPlateId } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { Item, itemDef } from '../web/src/core/registry/items.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { containerSignalStrength } from '../web/src/core/world/ContainerSignal.ts';
 // 配方（批次 119）：这一节要断言"红石元件的配方就是原版那一条"
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 import {
   isComparatorSubtract,
   isDoorOpen,
@@ -38,7 +38,7 @@ import {
   withFenceGateOpen,
   withPowered,
   withTrapdoorOpen,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   RedstoneEngine,
   canPush,
@@ -46,8 +46,8 @@ import {
   weightedPlateSignal,
   wirePowerOf,
   type RedstoneWorld,
-} from '../src/core/redstone/RedstoneEngine.ts';
-import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
+} from '../web/src/core/redstone/RedstoneEngine.ts';
+import { CONTAINER_BLOCKS } from '../web/src/core/world/BlockEntityStore.ts';
 
 let passed = 0;
 let failed = 0;

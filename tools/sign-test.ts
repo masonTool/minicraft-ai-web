@@ -28,8 +28,8 @@ import {
   isSign,
   signId,
   woolId,
-} from '../src/core/registry/blocks.ts';
-import { WOOD_TYPES } from '../src/core/registry/colors.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { WOOD_TYPES } from '../web/src/core/registry/colors.ts';
 import {
   SIGN_BOARD_THICKNESS,
   SIGN_TEXT_OFFSET,
@@ -39,7 +39,7 @@ import {
   signBoardBox,
   signTextAnchor,
   type LocalBox,
-} from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockShapes.ts';
 import {
   describeState,
   facingOf,
@@ -47,14 +47,14 @@ import {
   withFacing,
   withWallMounted,
   type Facing,
-} from '../src/core/registry/blockState.ts';
-import { Item, categoryOf, dropFor, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
-import { isFlammable } from '../src/core/world/Fire.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { breakSoundFor } from '../src/core/audio/AudioEngine.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { Item, categoryOf, dropFor, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, efficientToolType, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { isFlammable } from '../web/src/core/world/Fire.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { breakSoundFor } from '../web/src/core/audio/AudioEngine.ts';
 import {
   SIGN_LINES,
   SIGN_LINE_LENGTH,
@@ -62,8 +62,8 @@ import {
   normalizeSignLines,
   restoreSigns,
   serializeSigns,
-} from '../src/core/world/SignText.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/SignText.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

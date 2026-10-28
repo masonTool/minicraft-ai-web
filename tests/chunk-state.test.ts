@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { advanceChunkState, type ChunkState } from '../src/core/world/Chunk.ts';
+import { advanceChunkState, type ChunkState } from '../web/src/core/world/Chunk.ts';
 
 describe('区块状态推进', () => {
   it('按顺序向前推进', () => {

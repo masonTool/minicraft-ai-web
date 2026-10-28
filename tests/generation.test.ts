@@ -7,14 +7,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { NetherGenerator } from '../src/core/gen/NetherGenerator.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { Chunk, CHUNK_VOLUME, WORLD_MAX_Y, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { breakSoundFor } from '../src/core/audio/AudioEngine.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { NetherGenerator } from '../web/src/core/gen/NetherGenerator.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { Chunk, CHUNK_VOLUME, WORLD_MAX_Y, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { ChunkEdits, packEdit, packEditId, packEditState } from '../web/src/core/save/ChunkEdits.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { breakSoundFor } from '../web/src/core/audio/AudioEngine.ts';
 
 const SEED = 20261014;
 

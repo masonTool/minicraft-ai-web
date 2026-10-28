@@ -14,7 +14,7 @@ import {
   patrolSpawnPoint,
   planPatrol,
   shouldTryPatrol,
-} from '../src/core/world/Patrol.ts';
+} from '../web/src/core/world/Patrol.ts';
 
 let passed = 0;
 let failed = 0;

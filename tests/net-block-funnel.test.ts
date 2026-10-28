@@ -10,7 +10,7 @@ import {
   BLOCK_FLUSH_INTERVAL_MS,
   BlockFunnel,
   MAX_BLOCKS_PER_FLUSH,
-} from '../src/core/net/BlockFunnel.ts';
+} from '../web/src/core/net/BlockFunnel.ts';
 
 const edit = (x: number, y: number, z: number, id: number, dimension = 'overworld') => ({
   x,

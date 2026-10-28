@@ -28,8 +28,8 @@ import {
   type IsoBox,
   type IsoFrame,
   type Vec3,
-} from '../src/minigame/games/jump/iso.ts';
-import { createRun, currentBlock, jump, targetBlock, type JumpRun } from '../src/minigame/games/jump/logic.ts';
+} from '../web/src/minigame/games/jump/iso.ts';
+import { createRun, currentBlock, jump, targetBlock, type JumpRun } from '../web/src/minigame/games/jump/logic.ts';
 
 let passed = 0;
 let failed = 0;

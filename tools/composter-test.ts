@@ -22,23 +22,23 @@ import {
   blockDef,
   blockHardness,
   blockTiles,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   COMPOSTER_MAX_LEVEL,
   composterLevelOf,
   isComposterReady,
   withComposterLevel,
-} from '../src/core/registry/blockState.ts';
-import { isFullBlockShape, collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { SHAPED_PARENTS, slabId } from '../src/core/registry/blocks.ts';
-import { compostChanceFor, compostStep, compostTable } from '../src/core/registry/compost.ts';
-import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
-import { canPush } from '../src/core/redstone/RedstoneEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { isFullBlockShape, collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, efficientToolType, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { SHAPED_PARENTS, slabId } from '../web/src/core/registry/blocks.ts';
+import { compostChanceFor, compostStep, compostTable } from '../web/src/core/registry/compost.ts';
+import { CONTAINER_BLOCKS } from '../web/src/core/world/BlockEntityStore.ts';
+import { canPush } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

@@ -8,9 +8,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { GLASS_PANE_ID, Block, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes, type LocalBox } from '../src/core/registry/blockShapes.ts';
-import { withDoorOpen, withFacing, withTop } from '../src/core/registry/blockState.ts';
+import { GLASS_PANE_ID, Block, blockDef, slabId, stairsId } from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes, meshBoxes, type LocalBox } from '../web/src/core/registry/blockShapes.ts';
+import { withDoorOpen, withFacing, withTop } from '../web/src/core/registry/blockState.ts';
 
 function totalHeight(boxes: readonly LocalBox[]): number {
   return boxes.reduce((sum, box) => sum + (box[4] - box[1]), 0);

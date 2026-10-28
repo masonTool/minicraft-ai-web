@@ -15,16 +15,16 @@
  * 运行：npm run test:ghast
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { Ghast, GHAST_FIRE_COOLDOWN, GHAST_FIRE_RANGE, GHAST_KEEP_DISTANCE } from '../src/core/entity/Ghast.ts';
-import { GHAST_TYPE, HOSTILE_MOBS, MOB_TYPES, mobSpawnsIn } from '../src/core/entity/mobs.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { Throwable, LARGE_FIREBALL_DAMAGE, LARGE_FIREBALL_FIRE_SECONDS, LARGE_FIREBALL_POWER } from '../src/core/entity/Throwable.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { Ghast, GHAST_FIRE_COOLDOWN, GHAST_FIRE_RANGE, GHAST_KEEP_DISTANCE } from '../web/src/core/entity/Ghast.ts';
+import { GHAST_TYPE, HOSTILE_MOBS, MOB_TYPES, mobSpawnsIn } from '../web/src/core/entity/mobs.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { Throwable, LARGE_FIREBALL_DAMAGE, LARGE_FIREBALL_FIRE_SECONDS, LARGE_FIREBALL_POWER } from '../web/src/core/entity/Throwable.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

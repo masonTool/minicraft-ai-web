@@ -12,9 +12,9 @@
  * 运行：npm run test:tipped
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   DRINKABLE,
   POTION_IDS,
@@ -27,17 +27,17 @@ import {
   tippedArrowById,
   tippedArrowIdOf,
   tippedArrowOfPotion,
-} from '../src/core/registry/potions.ts';
-import { TIPPED_ARROW_SCALE, tippedArrowEffects } from '../src/core/survival/TippedArrow.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { arrowAmmoTotal, isArrowItem, pickArrowAmmo } from '../src/core/entity/ArrowAmmo.ts';
-import { Arrow } from '../src/core/entity/Arrow.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { boxAt } from '../src/core/physics/AABB.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+} from '../web/src/core/registry/potions.ts';
+import { TIPPED_ARROW_SCALE, tippedArrowEffects } from '../web/src/core/survival/TippedArrow.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { arrowAmmoTotal, isArrowItem, pickArrowAmmo } from '../web/src/core/entity/ArrowAmmo.ts';
+import { Arrow } from '../web/src/core/entity/Arrow.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { boxAt } from '../web/src/core/physics/AABB.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

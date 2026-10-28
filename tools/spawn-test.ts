@@ -8,24 +8,24 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { t, tp } from '../src/core/i18n/I18n.ts';
-import { MobSpawner, PASSIVE_LIMIT, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
+import { t, tp } from '../web/src/core/i18n/I18n.ts';
+import { MobSpawner, PASSIVE_LIMIT, type SpawnContext } from '../web/src/core/entity/MobSpawner.ts';
 // 史莱姆那条高度线（批次 120）：断言里按它比，别写死 40
-import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import type { MobType } from '../src/core/entity/Mob.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef } from '../src/core/registry/items.ts';
+import { SLIME_SPAWN_MAX_Y } from '../web/src/core/world/Slime.ts';
+import { MOB_TYPES } from '../web/src/core/entity/mobs.ts';
+import type { MobType } from '../web/src/core/entity/Mob.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef } from '../web/src/core/registry/items.ts';
 import {
   SPAWN_EGG_EXCLUDED,
   SPAWN_EGG_SPECS,
   spawnEggItemId,
   spawnEggMobOf,
   spawnEggTile,
-} from '../src/core/registry/spawnEggs.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/spawnEggs.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;
@@ -505,7 +505,7 @@ console.log('\n[刷怪蛋（批次 174，J17）：每种生物一枚，创造专
   );
 
   // 批次 274：创造模式也要消耗。刷怪蛋是"一枚换一只"，不能套用"创造不消耗方块"那条。
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   const eggUse = /const eggMob = spawnEggMobOf[\s\S]{0,600}?placeCooldown = PLACE_COOLDOWN \* 2;/.exec(mainSrc)?.[0] ?? '';
   check(
     '刷怪蛋在创造模式也消耗（不再有 !isCreative 守卫）',

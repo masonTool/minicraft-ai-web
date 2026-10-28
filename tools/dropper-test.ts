@@ -19,7 +19,7 @@
  * 运行：npm run test:dropper
  */
 
-import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockHardness } from '../web/src/core/registry/blocks.ts';
 import {
   sixFacingLabel,
   describeState,
@@ -30,27 +30,27 @@ import {
   withHopperOutput,
   withSixFacing,
   type SixFacing,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, dropperBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, harvestRequirement, makeToolInfo } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { DROPPER_SIZE, Dropper, type DropperEnv } from '../src/core/container/Dropper.ts';
-import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
-import { acceptingSlots, containerSlotCount, peekTake, tryInsertOne } from '../src/core/container/Transfer.ts';
-import { BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, dropperBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { planPlacement, type PlacementInput } from '../web/src/core/interaction/Placement.ts';
+import { Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, harvestRequirement, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { DROPPER_SIZE, Dropper, type DropperEnv } from '../web/src/core/container/Dropper.ts';
+import { CHEST_SIZE, Chest } from '../web/src/core/container/Chest.ts';
+import { acceptingSlots, containerSlotCount, peekTake, tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
 import {
   SLOT_COUNTS,
   kindOf,
   restoreContainers,
   serializeContainers,
   type SerializedContainer,
-} from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { RedstoneEngine, isRedstoneComponent, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { RedstoneEngine, isRedstoneComponent, type RedstoneWorld } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

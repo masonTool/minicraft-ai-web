@@ -15,11 +15,11 @@ import {
   findLandBiome,
   regionVariantAt,
   type ClimatePoint,
-} from '../src/core/gen/Biome.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { BLOCKS } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/gen/Biome.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { BLOCKS } from '../web/src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;

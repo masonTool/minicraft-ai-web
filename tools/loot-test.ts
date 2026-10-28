@@ -10,8 +10,8 @@
  * 运行：npm run test:loot
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { chestLootIndex, withChestLoot, withFacing, facingOf } from '../src/core/registry/blockState.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { chestLootIndex, withChestLoot, withFacing, facingOf } from '../web/src/core/registry/blockState.ts';
 import {
   LOOT_INDEX_MAX,
   LOOT_TABLES,
@@ -21,18 +21,18 @@ import {
   rollLoot,
   validateLootTables,
   type LootTable,
-} from '../src/core/registry/loot.ts';
-import { Item, durabilityOf, itemDef, itemName } from '../src/core/registry/items.ts';
-import { fillLootChests, lootDurabilityDamage, lootEnchantment } from '../src/core/world/LootFill.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { enchantmentById } from '../src/core/registry/enchantments.ts';
-import { BlockEntityStore, type BlockContainer } from '../src/core/world/BlockEntityStore.ts';
-import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
-import { SLOT_COUNTS, serializeContainer, restoreContainers } from '../src/core/save/ContainerSave.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import { PositionalRng } from '../src/core/gen/Features.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import type { ItemStack } from '../src/core/container/Inventory.ts';
+} from '../web/src/core/registry/loot.ts';
+import { Item, durabilityOf, itemDef, itemName } from '../web/src/core/registry/items.ts';
+import { fillLootChests, lootDurabilityDamage, lootEnchantment } from '../web/src/core/world/LootFill.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { enchantmentById } from '../web/src/core/registry/enchantments.ts';
+import { BlockEntityStore, type BlockContainer } from '../web/src/core/world/BlockEntityStore.ts';
+import { CHEST_SIZE, Chest } from '../web/src/core/container/Chest.ts';
+import { SLOT_COUNTS, serializeContainer, restoreContainers } from '../web/src/core/save/ContainerSave.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { PositionalRng } from '../web/src/core/gen/Features.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import type { ItemStack } from '../web/src/core/container/Inventory.ts';
 
 let passed = 0;
 let failed = 0;

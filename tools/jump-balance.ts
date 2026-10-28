@@ -11,7 +11,7 @@
  * 随机数是确定性的（`logic.nextRandom`），所以这次输出与下次一样，便于对比调参前后。
  */
 
-import { JUMP_CONFIG } from '../src/minigame/games/jump/config.ts';
+import { JUMP_CONFIG } from '../web/src/minigame/games/jump/config.ts';
 import {
   createRun,
   gapRangeForScore,
@@ -22,7 +22,7 @@ import {
   nextRandom,
   targetBlock,
   type JumpRun,
-} from '../src/minigame/games/jump/logic.ts';
+} from '../web/src/minigame/games/jump/logic.ts';
 
 type Skill = 'perfect' | 'sharp' | 'random';
 

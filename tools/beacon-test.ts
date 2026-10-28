@@ -14,14 +14,14 @@
  * 运行：npm run test:beacon
  */
 
-import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
-import { effectLabel } from '../src/core/survival/StatusEffects.ts';
-import { CREATIVE_ITEMS, Item, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { effectLabel } from '../web/src/core/survival/StatusEffects.ts';
+import { CREATIVE_ITEMS, Item, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, makeToolInfo } from '../web/src/core/registry/tools.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { recipeIngredients } from '../web/src/core/crafting/RecipeBook.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   beaconPrimary,
   beaconRegen,
@@ -29,7 +29,7 @@ import {
   withBeaconPrimary,
   withBeaconRegen,
   withBeaconSecondary,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   BEACON_BASE_BLOCKS,
   BEACON_EFFECT_SECONDS,
@@ -43,7 +43,7 @@ import {
   beaconRange,
   beaconSummary,
   type BeaconWorld,
-} from '../src/core/world/Beacon.ts';
+} from '../web/src/core/world/Beacon.ts';
 
 let passed = 0;
 let failed = 0;

@@ -12,13 +12,13 @@
  * 运行：npm run test:kelp
  */
 
-import { isHandHarvestable } from '../src/core/registry/tools.ts';
+import { isHandHarvestable } from '../web/src/core/registry/tools.ts';
 import {
   Block,
   KELP_MAX_HEIGHT,
   blockDef,
-} from '../src/core/registry/blocks.ts';
-import { collisionBoxes } from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { collisionBoxes } from '../web/src/core/registry/blockShapes.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -29,18 +29,18 @@ import {
   itemDef,
   requiresShears,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { FOOD_TABLE, saturationFrom } from '../src/core/registry/food.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RANDOM_TICK_BEHAVIORS, KELP_GROW_CHANCE, type TickWorld } from '../src/core/tick/RandomTicks.ts';
-import { canFlowInto, fluidTick, type FluidWorld } from '../src/core/world/Fluids.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { SMELTING_RECIPES, fuelSeconds, isFuel, smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { BIOME_FEATURES, SEA_LEVEL, decorate, type FeatureWorld } from '../src/core/gen/Features.ts';
-import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
+} from '../web/src/core/registry/items.ts';
+import { FOOD_TABLE, saturationFrom } from '../web/src/core/registry/food.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RANDOM_TICK_BEHAVIORS, KELP_GROW_CHANCE, type TickWorld } from '../web/src/core/tick/RandomTicks.ts';
+import { canFlowInto, fluidTick, type FluidWorld } from '../web/src/core/world/Fluids.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { SMELTING_RECIPES, fuelSeconds, isFuel, smeltingRecipeFor } from '../web/src/core/crafting/Smelting.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { BIOME_FEATURES, SEA_LEVEL, decorate, type FeatureWorld } from '../web/src/core/gen/Features.ts';
+import { BIOME_TABLE, Biome } from '../web/src/core/gen/Biome.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
 
 let passed = 0;
 let failed = 0;

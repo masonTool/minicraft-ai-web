@@ -13,9 +13,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { applyRemoteBlock, planRemoteBlock, readEditRequest } from '../src/core/net/RemoteBlockWrite.ts';
-import { ChunkEdits } from '../src/core/save/ChunkEdits.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
+import { applyRemoteBlock, planRemoteBlock, readEditRequest } from '../web/src/core/net/RemoteBlockWrite.ts';
+import { ChunkEdits } from '../web/src/core/save/ChunkEdits.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
 
 /** 与 `World.toChunkCoord` 同一式：`>> 4` 对负数也是向下取整，`Math.floor` 的等价写法 */
 function chunkCoord(worldCoord: number): number {

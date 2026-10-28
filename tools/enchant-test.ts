@@ -11,11 +11,11 @@
  * 运行：npm run test:enchant
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { reasonText } from '../src/core/container/reason.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { reasonText } from '../web/src/core/container/reason.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   ENCHANTMENTS,
   VANILLA_ENCHANTMENT_COUNT,
@@ -24,7 +24,7 @@ import {
   enchantmentName,
   isBoundByCurse,
   romanLevel,
-} from '../src/core/registry/enchantments.ts';
+} from '../web/src/core/registry/enchantments.ts';
 import {
   MAX_BOOKSHELF_POWER,
   bookshelfPower,
@@ -33,12 +33,12 @@ import {
   offeringFor,
   optionLabel,
   rollOptions,
-} from '../src/core/crafting/Enchanting.ts';
-import { ENCHANT_ITEM_SLOT, ENCHANT_LAPIS_SLOT, EnchantTable } from '../src/core/container/EnchantTable.ts';
-import { Inventory } from '../src/core/container/Inventory.ts';
-import { Experience } from '../src/core/survival/Experience.ts';
-import { itemTooltip } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/crafting/Enchanting.ts';
+import { ENCHANT_ITEM_SLOT, ENCHANT_LAPIS_SLOT, EnchantTable } from '../web/src/core/container/EnchantTable.ts';
+import { Inventory } from '../web/src/core/container/Inventory.ts';
+import { Experience } from '../web/src/core/survival/Experience.ts';
+import { itemTooltip } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
 
 let passed = 0;
 let failed = 0;
@@ -288,7 +288,7 @@ console.log('\n[存档与提示框]');
 
 console.log('\n[未接效果的附魔要标出来]');
 {
-  const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
+  const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../web/src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
     '已接效果的附魔有 38 条（全部接完，… + 269 引雷、270 绑定诅咒）',
@@ -359,7 +359,7 @@ console.log('\n[未接效果的附魔要标出来]');
 
 console.log('\n[K3-1 效率：拿对工具才加速]');
 {
-  const { breakSeconds, makeToolInfo } = await import('../src/core/registry/tools.ts');
+  const { breakSeconds, makeToolInfo } = await import('../web/src/core/registry/tools.ts');
   // 注意 `breakSeconds` 收的是 `ToolInfo` 而不是物品 id（`toolItemId` 给的是 id）
   const pick = makeToolInfo('pickaxe', 'diamond');
   const bare = breakSeconds(Block.STONE, pick);
@@ -378,7 +378,7 @@ console.log('\n[K3-1 效率：拿对工具才加速]');
 
 console.log('\n[K3-2 时运：只放大矿石]');
 {
-  const { fortuneMultiplier, isFortuneBlock } = await import('../src/core/registry/items.ts');
+  const { fortuneMultiplier, isFortuneBlock } = await import('../web/src/core/registry/items.ts');
   equal('没时运时倍数为 1', fortuneMultiplier(Block.DIAMOND_ORE, 0, 0.99), 1);
   equal('时运不影响石头', fortuneMultiplier(Block.STONE, 3, 0.99), 1);
   equal('时运不影响铁矿（原版也是）', fortuneMultiplier(Block.IRON_ORE, 3, 99), 1);
@@ -392,7 +392,7 @@ console.log('\n[K3-2 时运：只放大矿石]');
 
 console.log('\n[K3-3 精准采集：掉方块自身]');
 {
-  const { silkTouchDropsSelf } = await import('../src/core/registry/items.ts');
+  const { silkTouchDropsSelf } = await import('../web/src/core/registry/items.ts');
   check('玻璃能完整带走（原版就是靠精准采集）', silkTouchDropsSelf(Block.GLASS));
   check('草方块能完整带走', silkTouchDropsSelf(Block.GRASS_BLOCK));
   check('西瓜块能完整带走（否则只会掉片）', silkTouchDropsSelf(Block.MELON));
@@ -403,7 +403,7 @@ console.log('\n[K3-3 精准采集：掉方块自身]');
 
 console.log('\n[K3-4 锋利：近战伤害]');
 {
-  const { meleeDamage, toolInfoById } = await import('../src/core/registry/tools.ts');
+  const { meleeDamage, toolInfoById } = await import('../web/src/core/registry/tools.ts');
   const ironSword = toolItemId('sword', 'iron');
   const base = toolInfoById(ironSword)!.attack;
   equal('没有锋利时就是武器基础伤害', meleeDamage(base), base);
@@ -415,9 +415,9 @@ console.log('\n[K3-4 锋利：近战伤害]');
 
 console.log('\n[K3-5 保护：EPF 叠加在护甲之上]');
 {
-  const { absorbWithArmor, createArmorWearer } = await import('../src/core/registry/armor.ts');
-  const { Inventory } = await import('../src/core/container/Inventory.ts');
-  const { ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
+  const { absorbWithArmor, createArmorWearer } = await import('../web/src/core/registry/armor.ts');
+  const { Inventory } = await import('../web/src/core/container/Inventory.ts');
+  const { ARMOR_SLOT_BASE } = await import('../web/src/core/registry/armor.ts');
 
   const plain = new Inventory();
   const protectedInv = new Inventory();
@@ -446,9 +446,9 @@ console.log('\n[K3-5 保护：EPF 叠加在护甲之上]');
 
 console.log('\n[K3-6 耐久：按概率跳过一次损耗]');
 {
-  const { absorbWithArmor } = await import('../src/core/registry/armor.ts');
-  const { Inventory } = await import('../src/core/container/Inventory.ts');
-  const { ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
+  const { absorbWithArmor } = await import('../web/src/core/registry/armor.ts');
+  const { Inventory } = await import('../web/src/core/container/Inventory.ts');
+  const { ARMOR_SLOT_BASE } = await import('../web/src/core/registry/armor.ts');
   const id = armorItemId('chestplate', 'diamond');
 
   // 耐久 III：每次有 3/4 概率不掉耐久。跑 60 次，全都没跳过的概率是 0.25^60，不可能发生
@@ -474,8 +474,8 @@ console.log('\n[K3-6 耐久：按概率跳过一次损耗]');
 
 console.log('\n[K3-7 保护类：按伤害类型分流]');
 {
-  const { protectionPoints, absorbWithArmor, ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
-  const { Inventory } = await import('../src/core/container/Inventory.ts');
+  const { protectionPoints, absorbWithArmor, ARMOR_SLOT_BASE } = await import('../web/src/core/registry/armor.ts');
+  const { Inventory } = await import('../web/src/core/container/Inventory.ts');
 
   /** 造一套四件都带指定附魔的钻石甲 */
   const setWith = (enchants: Record<string, number>): Inventory => {
@@ -526,7 +526,7 @@ console.log('\n[K3-7 保护类：按伤害类型分流]');
 
 console.log('\n[K3-8 亡灵杀手 / 节肢杀手]');
 {
-  const { meleeDamage } = await import('../src/core/registry/tools.ts');
+  const { meleeDamage } = await import('../web/src/core/registry/tools.ts');
   const sword = 7;
   equal('对亡灵：亡灵杀手每级 +2.5', meleeDamage(sword, { smite: 5 }, 'undead'), sword + 12.5);
   equal('对普通生物：亡灵杀手一点不加', meleeDamage(sword, { smite: 5 }), sword);
@@ -538,7 +538,7 @@ console.log('\n[K3-8 亡灵杀手 / 节肢杀手]');
 
 console.log('\n[K3-9 抢夺：抬高掉落上限]');
 {
-  const { lootingBonus } = await import('../src/core/registry/tools.ts');
+  const { lootingBonus } = await import('../web/src/core/registry/tools.ts');
   equal('没抢夺时加成 0', lootingBonus(undefined), 0);
   equal('抢夺 III 加成 3', lootingBonus({ looting: 3 }), 3);
   check('抢夺只认自己的等级，不受别的附魔影响', lootingBonus({ sharpness: 5, looting: 1 }) === 1);
@@ -546,8 +546,8 @@ console.log('\n[K3-9 抢夺：抬高掉落上限]');
 
 console.log('\n[K3-10 经验修补]');
 {
-  const { applyMending, isMendable, MENDING_DURABILITY_PER_XP } = await import('../src/core/crafting/Repair.ts');
-  const { toolItemId } = await import('../src/core/registry/tools.ts');
+  const { applyMending, isMendable, MENDING_DURABILITY_PER_XP } = await import('../web/src/core/crafting/Repair.ts');
+  const { toolItemId } = await import('../web/src/core/registry/tools.ts');
   const pick = toolItemId('pickaxe', 'diamond');
   equal('1 点经验换 2 点耐久', MENDING_DURABILITY_PER_XP, 2);
   equal('没损耗的物品不算可修', isMendable({ id: pick, count: 1 }), false);

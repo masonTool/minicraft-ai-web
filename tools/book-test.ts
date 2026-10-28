@@ -11,13 +11,13 @@
  * 运行：npm run test:book
  */
 
-import { Item } from '../src/core/registry/items.ts';
-import { itemLabel, hasDescription, itemDescription } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
-import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { CREATIVE_ITEMS, itemDef, maxStackOf } from '../src/core/registry/items.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { itemLabel, hasDescription, itemDescription } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { CraftingGrid } from '../web/src/core/crafting/CraftingGrid.ts';
+import { recipeIngredients } from '../web/src/core/crafting/RecipeBook.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { CREATIVE_ITEMS, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
 import {
   BOOK_MAX_PAGES,
   BOOK_PAGE_CHARS,
@@ -32,11 +32,11 @@ import {
   sanitizePages,
   signBook,
   withPages,
-} from '../src/core/items/Book.ts';
-import { restoreStack, sameExtras, stackExtras, type ItemStack } from '../src/core/container/Inventory.ts';
-import { tryInsertOne } from '../src/core/container/Transfer.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { CHEST_SIZE } from '../src/core/container/Chest.ts';
+} from '../web/src/core/items/Book.ts';
+import { restoreStack, sameExtras, stackExtras, type ItemStack } from '../web/src/core/container/Inventory.ts';
+import { tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { CHEST_SIZE } from '../web/src/core/container/Chest.ts';
 
 let passed = 0;
 let failed = 0;

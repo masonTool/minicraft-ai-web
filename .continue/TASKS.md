@@ -1351,6 +1351,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · `sw.js` / `_headers` 把 `core-delta.json` 排除出缓存（缓存住 = 更新永远不生效且不报错）
       · 实测：`test:coredelta` 29 条；Playwright 端到端"改 1 条 + 增 1 条"增量应用成功、0 pageerror
 
+- [x] A22 多产品目录重排（2026-10-29）：仓库按**产物**分目录——`web/`（Web 端：`src` / `index.html` / `public` /
+      `vite.config.ts`，产物 `web/dist`）、`android/`（Capacitor 工程，原 `server/android`）、`ios/`、`server/`
+      （`node` / `rust` / `ios` 原生库）、`windows/`、`mac/`
+      · `tools` / `tests` 里 250+ 处 `../src` 一次性改到 `../web/src`；`tsconfig` 两份 `include`、`release-check` 的
+        `DIST` 与 `index.html`、`capacitor.config.json` 的 `webDir` / `android.path`、Gradle 的 `repoRoot` 同步
+      · `vite.config.ts` 以 `root: WEB_ROOT` 自锚定，`.tmp/hostcore` 走 `REPO_ROOT`，不再依赖进程 cwd
+      · 实测：`npm run check` 全绿（离线 181 套）、`build:fast` 出包到 `web/dist`、单测 153 套 1579 条
+
+- [x] A23 安卓「只认自家签名」与核心数据封存（2026-10-29）：`build:app` 不再把明文 `core.bin` 放进 assets，
+      改为 `sealed/core.sealed`（AES-256-GCM + 形态变换），运行时由原生校验签名 → 派生 KEK → 解封 → 交给 WebView
+      · 签名不符 / 解封失败一律返回 404，JS 落到既有「去应用里玩」路径：没有"弹窗后继续"这种可 patch 的分支
+      · 见 `docs/ANDROID-CODE-PROTECTION.md`；实测口径写在 `docs/CODE-PROTECTION-STATUS.md`
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

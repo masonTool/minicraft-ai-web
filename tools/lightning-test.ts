@@ -16,23 +16,23 @@
  * 运行：npm run test:lightning
  */
 
-import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
 import {
   ROD_LENGTH,
   ROD_THICKNESS,
   collisionBoxes,
   lightningRodBox,
   type LocalBox,
-} from '../src/core/registry/blockShapes.ts';
-import { sixFacingOf, withSixFacing, type SixFacing } from '../src/core/registry/blockState.ts';
-import { Item, categoryOf, dropFor, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
-import { canHarvest, harvestRequirement } from '../src/core/registry/tools.ts';
-import { ARMOR_BYPASS_CAUSES } from '../src/core/registry/armor.ts';
-import { RedstoneEngine, isRedstoneComponent, wirePowerOf, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
-import { isPowered } from '../src/core/registry/blockState.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
+} from '../web/src/core/registry/blockShapes.ts';
+import { sixFacingOf, withSixFacing, type SixFacing } from '../web/src/core/registry/blockState.ts';
+import { Item, categoryOf, dropFor, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, missingBlockNames } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { ARMOR_BYPASS_CAUSES } from '../web/src/core/registry/armor.ts';
+import { RedstoneEngine, isRedstoneComponent, wirePowerOf, type RedstoneWorld } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { isPowered } from '../web/src/core/registry/blockState.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
 import {
   LIGHTNING_DAMAGE,
   LIGHTNING_DAMAGE_RADIUS,
@@ -46,8 +46,8 @@ import {
   pickStrike,
   rodTipPoint,
   shouldIgnite,
-} from '../src/core/world/Lightning.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/Lightning.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

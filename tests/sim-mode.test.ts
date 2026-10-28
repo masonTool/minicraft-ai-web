@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SIM_DOMAINS, describeSimMode, shouldSimulate, type SimDomain } from '../src/core/net/SimMode.ts';
-import type { NetRole } from '../src/core/net/NetRole.ts';
+import { SIM_DOMAINS, describeSimMode, shouldSimulate, type SimDomain } from '../web/src/core/net/SimMode.ts';
+import type { NetRole } from '../web/src/core/net/NetRole.ts';
 
 const ROLES: NetRole[] = ['solo', 'host', 'client'];
 

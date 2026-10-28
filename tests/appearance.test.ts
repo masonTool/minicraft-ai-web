@@ -26,7 +26,7 @@ import {
   hairStyleOf,
   paletteOf,
   presetIndexOf,
-} from '../src/game/appearance.ts';
+} from '../web/src/game/appearance.ts';
 
 describe('角色外观（批次 187 / 279 / 296）', () => {
   it('默认外观就是原来的配色（老存档不换衣服/发型）', () => {

@@ -14,19 +14,19 @@
  * 运行：npm run test:squid
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, dyeIdByName, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { MOB_TYPES, PASSIVE_MOBS, SQUID_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
-import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../src/core/registry/spawnEggs.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, dyeIdByName, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { recipeIngredients } from '../web/src/core/crafting/RecipeBook.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { MOB_TYPES, PASSIVE_MOBS, SQUID_TYPE, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { MobSpawner, type SpawnContext } from '../web/src/core/entity/MobSpawner.ts';
+import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../web/src/core/registry/spawnEggs.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

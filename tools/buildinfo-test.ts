@@ -10,7 +10,7 @@
  * 运行：npm run test:buildinfo
  */
 
-import { formatBuildInfo, formatLocalTime, readBuildInfo } from '../src/game/buildInfo.ts';
+import { formatBuildInfo, formatLocalTime, readBuildInfo } from '../web/src/game/buildInfo.ts';
 
 let passed = 0;
 let failed = 0;

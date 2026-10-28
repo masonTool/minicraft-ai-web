@@ -10,7 +10,7 @@
  * 这里用假 socket 直接看报文，把"每条都带、且能表达 0"钉死。
  */
 import { describe, expect, it } from 'vitest';
-import { NetClient } from '../src/net/NetClient.ts';
+import { NetClient } from '../web/src/net/NetClient.ts';
 
 const LOOK_A = [1, 2, 3, 4, 5, 0, 1, 2, 0, 1];
 const LOOK_B = [2, 2, 3, 4, 5, 0, 1, 2, 1, 0];

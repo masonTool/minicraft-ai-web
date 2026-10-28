@@ -4,10 +4,10 @@ import {
   BREW_FUEL_SLOT,
   BREW_INGREDIENT_SLOT,
   BrewingStand,
-} from '../src/core/container/BrewingStand.ts';
-import { BREW_RECIPES } from '../src/core/crafting/Brewing.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { POTION_IDS } from '../src/core/registry/potions.ts';
+} from '../web/src/core/container/BrewingStand.ts';
+import { BREW_RECIPES } from '../web/src/core/crafting/Brewing.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { POTION_IDS } from '../web/src/core/registry/potions.ts';
 
 /** 摆好一份最小可酿配方（水瓶 + 下界疣 + 烈焰粉） */
 function readyStand(): { stand: BrewingStand; from: number } {

@@ -18,15 +18,15 @@ import {
   trimSessions,
   type LogEvent,
   type LogSession,
-} from '../src/game/diagnostics.ts';
-import { DiagnosticsRuntime, DIAG_STORAGE_KEY } from '../src/game/diagnosticsRuntime.ts';
+} from '../web/src/game/diagnostics.ts';
+import { DiagnosticsRuntime, DIAG_STORAGE_KEY } from '../web/src/game/diagnosticsRuntime.ts';
 import {
   collectPerfEvents,
   summarizePerf,
   type LightWindow,
   type PerfWindow,
   type RawDiagEvent,
-} from '../src/game/diagPerf.ts';
+} from '../web/src/game/diagPerf.ts';
 
 let passed = 0;
 let failed = 0;

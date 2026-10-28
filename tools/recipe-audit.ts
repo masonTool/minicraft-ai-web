@@ -16,10 +16,10 @@
  * 它的用途是"把 204 条缩到能一条条看的几十条"，不是替代逐条核对。
  */
 
-import { BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { GENERATION_SOURCES } from '../src/core/gen/GenerationSources.ts';
+import { BLOCKS, blockDef } from '../web/src/core/registry/blocks.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { GENERATION_SOURCES } from '../web/src/core/gen/GenerationSources.ts';
 
 const made = new Set<number>();
 for (const recipe of RECIPES) made.add(recipe.result.id);

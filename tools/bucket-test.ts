@@ -8,7 +8,7 @@
  * 运行：npm run test:bucket
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
 import {
   CAULDRON_MAX_LEVEL,
   cauldronLevelOf,
@@ -17,8 +17,8 @@ import {
   withCauldronLevel,
   withFluidLevel,
   withFallingFluid,
-} from '../src/core/registry/blockState.ts';
-import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
 import {
   CAULDRON_RAIN_CHANCE,
   bucketFluidAt,
@@ -34,11 +34,11 @@ import {
   isCauldronFull,
   isLavaCauldronState,
   isPowderSnowCauldronState,
-} from '../src/core/world/Cauldron.ts';
-import { RANDOM_TICK_BEHAVIORS, hasRandomTick } from '../src/core/tick/RandomTicks.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/world/Cauldron.ts';
+import { RANDOM_TICK_BEHAVIORS, hasRandomTick } from '../web/src/core/tick/RandomTicks.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;

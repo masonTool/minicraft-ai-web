@@ -39,17 +39,17 @@ import {
   legacySensitivityGain,
   sensitivityLevelFromGain,
   type GameSettings,
-} from '../src/ui/SettingsScreen.ts';
-import { HANDEDNESS_MODES, fingerAimPoint, handednessLabels } from '../src/ui/TouchControls.ts';
-import { CAMERA_MODES, cameraModeLabel } from '../src/core/viewMode.ts';
+} from '../web/src/ui/SettingsScreen.ts';
+import { HANDEDNESS_MODES, fingerAimPoint, handednessLabels } from '../web/src/ui/TouchControls.ts';
+import { CAMERA_MODES, cameraModeLabel } from '../web/src/core/viewMode.ts';
 import {
   FRAME_TIME_DROP,
   MOBILE_VIEW_DISTANCE,
   MOBILE_VIEW_DISTANCE_MAX,
   initialPerfState,
   viewDistanceCapFor,
-} from '../src/core/world/PerfPolicy.ts';
-import { ParticleSystem } from '../src/render/ParticleSystem.ts';
+} from '../web/src/core/world/PerfPolicy.ts';
+import { ParticleSystem } from '../web/src/render/ParticleSystem.ts';
 
 let passed = 0;
 let failed = 0;

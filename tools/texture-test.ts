@@ -17,13 +17,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
-import { BANNER_PATTERN_COUNT } from '../src/core/registry/blockState.ts';
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_STRIDE } from '../src/render/atlasLayout.ts';
-import { PAINTERS } from '../src/render/TextureAtlas.ts';
-import { tileRectAt } from '../src/render/atlasCoords.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { Block, BLOCKS } from '../web/src/core/registry/blocks.ts';
+import { BANNER_PATTERN_COUNT } from '../web/src/core/registry/blockState.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_STRIDE } from '../web/src/render/atlasLayout.ts';
+import { PAINTERS } from '../web/src/render/TextureAtlas.ts';
+import { tileRectAt } from '../web/src/render/atlasCoords.ts';
 
 let passed = 0;
 let failed = 0;
@@ -186,7 +186,7 @@ console.log('\n[顺带确认这些方块的机制本身是完整的]');
 // 这套断言守"次序 + 守卫"，因为这两种错都不会报错、只会少画东西。
 console.log('\n图标缓存不能被"还没铺像素的图集"毒化');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   const ensureAt = mainSrc.indexOf('atlas.ensureUploaded()');
   const cardAt = mainSrc.indexOf('new TutorialCard(');
   const editorAt = mainSrc.indexOf('new CommandBlockEditor(');
@@ -200,10 +200,10 @@ console.log('\n图标缓存不能被"还没铺像素的图集"毒化');
     mainSrc.split('clearBlockIconCache()').length - 1 >= 2,
   );
 
-  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  const atlasSrc = readFileSync(new URL('../web/src/render/TextureAtlas.ts', import.meta.url), 'utf8');
   check('图集对外暴露"像素铺好了没有"', atlasSrc.includes('get isPainted(): boolean'));
 
-  const iconSrc = readFileSync(new URL('../src/ui/BlockIcon.ts', import.meta.url), 'utf8');
+  const iconSrc = readFileSync(new URL('../web/src/ui/BlockIcon.ts', import.meta.url), 'utf8');
   const guardAt = iconSrc.indexOf('if (!atlas.isPainted) return null;');
   const setAt = iconSrc.indexOf('cache.set(blockId, canvas)');
   check(

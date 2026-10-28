@@ -15,8 +15,8 @@
  * 开着哪个容器、容器多少格"交出来。运行：npm run test:quickmove
  */
 
-import { ARMOR_SLOT_BASE } from '../src/core/registry/armor.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { ARMOR_SLOT_BASE } from '../web/src/core/registry/armor.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 import {
   HOTBAR_SIZE,
   Inventory,
@@ -25,10 +25,10 @@ import {
   OFFHAND_SLOT,
   type ItemStack,
   type SlotSource,
-} from '../src/core/container/Inventory.ts';
-import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../src/core/container/QuickMove.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
+} from '../web/src/core/container/Inventory.ts';
+import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../web/src/core/container/QuickMove.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
 
 let passed = 0;
 let failed = 0;

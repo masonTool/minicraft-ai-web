@@ -20,10 +20,10 @@ import {
   cropOf,
   slabId,
   woolId,
-} from '../src/core/registry/blocks.ts';
-import { RANDOM_TICK_BEHAVIORS } from '../src/core/tick/RandomTicks.ts';
-import { LOOT_TABLES } from '../src/core/registry/loot.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { RANDOM_TICK_BEHAVIORS } from '../web/src/core/tick/RandomTicks.ts';
+import { LOOT_TABLES } from '../web/src/core/registry/loot.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 
 /** 构造 size×size 的扁平网格，'·' 表示空（合成配方断言用） */
 function grid(size: 2 | 3, rows: readonly string[], legend: Record<string, number>): number[] {
@@ -38,7 +38,7 @@ function grid(size: 2 | 3, rows: readonly string[], legend: Record<string, numbe
   }
   return cells;
 }
-import { isHandHarvestable, breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, breakSeconds, makeToolInfo } from '../web/src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -51,13 +51,13 @@ import {
   requiresShears,
   GRASS_SEED_CHANCE,
   categoryOf,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { FACING_OFFSET, facingOf, snowLayers } from '../src/core/registry/blockState.ts';
-import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { recipesForResult } from '../web/src/core/crafting/RecipeBook.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { FACING_OFFSET, facingOf, snowLayers } from '../web/src/core/registry/blockState.ts';
+import { BIOME_TABLE, Biome } from '../web/src/core/gen/Biome.ts';
 import {
   BIOME_FEATURES,
   TREE_KINDS,
@@ -65,11 +65,11 @@ import {
   plantTree,
   type FeatureStats,
   type FeatureWorld,
-} from '../src/core/gen/Features.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
+} from '../web/src/core/gen/Features.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
 
 let passed = 0;
 let failed = 0;

@@ -34,5 +34,5 @@
     // `checkJs` 保持默认 false：只解析 .mjs 让它参与类型推断，不去检查 JS 内部。
     "allowJs": true
   },
-  "include": ["tools", "tests", "src"]
+  "include": ["tools", "tests", "web/src"]
 }

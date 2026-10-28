@@ -16,13 +16,13 @@
  * 运行：npm run test:bastion
  */
 
-import { Block, BLOCKS, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
-import { chestLootIndex, withChestLoot } from '../src/core/registry/blockState.ts';
-import { Item, categoryOf, dropFor, fortuneMultiplier, itemDef, rangeDropFor } from '../src/core/registry/items.ts';
-import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
-import { canHarvest, efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { LOOT_TABLES, lootTableByIndex, lootTableIndex, rollLoot, validateLootTables } from '../src/core/registry/loot.ts';
+import { Block, BLOCKS, blockDef, blockHardness, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { chestLootIndex, withChestLoot } from '../web/src/core/registry/blockState.ts';
+import { Item, categoryOf, dropFor, fortuneMultiplier, itemDef, rangeDropFor } from '../web/src/core/registry/items.ts';
+import { hasDescription, missingBlockNames } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, efficientToolType, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { LOOT_TABLES, lootTableByIndex, lootTableIndex, rollLoot, validateLootTables } from '../web/src/core/registry/loot.ts';
 import {
   BASTION_CLEARANCE,
   BASTION_RADIUS,
@@ -38,14 +38,14 @@ import {
   generateBastions,
   type BastionInstance,
   type BastionWorld,
-} from '../src/core/gen/Bastion.ts';
-import { NetherGenerator, NetherBiome } from '../src/core/gen/NetherGenerator.ts';
-import { nearbyStandingSpot } from '../src/core/gen/StructureCreatures.ts';
-import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { FeatureWriter } from '../src/core/gen/Features.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/gen/Bastion.ts';
+import { NetherGenerator, NetherBiome } from '../web/src/core/gen/NetherGenerator.ts';
+import { nearbyStandingSpot } from '../web/src/core/gen/StructureCreatures.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { FeatureWriter } from '../web/src/core/gen/Features.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 const SEED = 20261016;
 

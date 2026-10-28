@@ -7,7 +7,7 @@
  * 运行：npm run test:border
  */
 
-import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+import { AdvancementTracker } from '../web/src/core/progress/AdvancementTracker.ts';
 import {
   BORDER_MAX_SIZE,
   BORDER_MIN_SIZE,
@@ -24,14 +24,14 @@ import {
   describeBorder,
   normalizeBorder,
   type WorldBorder,
-} from '../src/core/world/WorldBorder.ts';
-import { executeCommand, type CommandContext } from '../src/core/commands/Commands.ts';
-import type { CommandEntity } from '../src/core/commands/Selectors.ts';
-import { Scoreboard } from '../src/core/world/Scoreboard.ts';
-import { Teams } from '../src/core/world/Teams.ts';
+} from '../web/src/core/world/WorldBorder.ts';
+import { executeCommand, type CommandContext } from '../web/src/core/commands/Commands.ts';
+import type { CommandEntity } from '../web/src/core/commands/Selectors.ts';
+import { Scoreboard } from '../web/src/core/world/Scoreboard.ts';
+import { Teams } from '../web/src/core/world/Teams.ts';
 const TEAMS = new Teams();
-import { DEFAULT_GAME_RULES, type GameRules } from '../src/core/world/Rules.ts';
-import { BorderRenderer } from '../src/render/BorderRenderer.ts';
+import { DEFAULT_GAME_RULES, type GameRules } from '../web/src/core/world/Rules.ts';
+import { BorderRenderer } from '../web/src/render/BorderRenderer.ts';
 
 let passed = 0;
 let failed = 0;

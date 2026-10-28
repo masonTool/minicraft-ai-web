@@ -26,8 +26,8 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodeBlockTable } from '../src/core/registry/blockTableCodec.ts';
-import { fingerprint } from '../src/core/registry/coreDelta.ts';
+import { decodeBlockTable } from '../web/src/core/registry/blockTableCodec.ts';
+import { fingerprint } from '../web/src/core/registry/coreDelta.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CANDIDATE = resolve(ROOT, '.tmp/hostcore/core-v1.bin');

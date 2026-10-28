@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Chest } from '../src/core/container/Chest.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
 
 describe('Chest.onMutate', () => {
   it('set 与 add 会触发', () => {

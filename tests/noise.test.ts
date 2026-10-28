@@ -11,9 +11,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DoublePerlinNoise, NormalNoise } from '../src/core/gen/noise/PerlinNoise.ts';
-import { Random } from '../src/core/gen/noise/Random.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
+import { DoublePerlinNoise, NormalNoise } from '../web/src/core/gen/noise/PerlinNoise.ts';
+import { Random } from '../web/src/core/gen/noise/Random.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
 
 const SEED = 20261014;
 

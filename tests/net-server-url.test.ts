@@ -18,8 +18,8 @@ import {
   roomsEndpoint,
   withDefaultPort,
   withPort,
-} from '../src/core/net/ServerUrl.ts';
-import { normalizeServerUrl } from '../src/ui/MultiplayerScreen.ts';
+} from '../web/src/core/net/ServerUrl.ts';
+import { normalizeServerUrl } from '../web/src/ui/MultiplayerScreen.ts';
 
 /**
  * 地址栏显示（用户要求 2026-10-25）：框里该是 IP，不是 `ws://` 长串。

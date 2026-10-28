@@ -26,7 +26,7 @@ function installBridge(bridge: RawBridge | null): void {
 /** 每个用例都拿一份"新模块"：`hosting` 是模块内状态，不能跨用例串 */
 async function freshHostBridge() {
   vi.resetModules();
-  return import('../src/core/net/HostBridge.ts');
+  return import('../web/src/core/net/HostBridge.ts');
 }
 
 const ip = (value: string | null): string => JSON.stringify({ ip: value });

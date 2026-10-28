@@ -15,11 +15,11 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Item, CREATIVE_ITEMS, itemDef, durabilityOf, maxStackOf } from '../src/core/registry/items.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { Item, CREATIVE_ITEMS, itemDef, durabilityOf, maxStackOf } from '../web/src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 import {
   SHIELD_DISABLE_SECONDS,
   SHIELD_DURABILITY,
@@ -29,7 +29,7 @@ import {
   isFrontalAttack,
   isShield,
   shieldWear,
-} from '../src/core/items/Shield.ts';
+} from '../web/src/core/items/Shield.ts';
 
 let passed = 0;
 let failed = 0;
@@ -128,7 +128,7 @@ console.log('\n[是不是盾牌]');
 
 console.log('\n[接线守卫（批次 551）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('举盾减速接进物理倍率', mainSrc.includes('(this.isShieldUp ? SHIELD_SLOWDOWN : 1)'));
   check('斧头命中写入破防计时', mainSrc.includes('this.shieldDisabled = SHIELD_DISABLE_SECONDS'));
   check('破防期间 `isShieldUp` 为假', mainSrc.includes('this.shieldDisabled > 0'));

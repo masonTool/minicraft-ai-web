@@ -19,8 +19,8 @@ import {
   canFly,
   canPickUpItems,
   canTakeDamage,
-} from '../src/core/world/GameMode.ts';
-import { WorldRegistry } from '../src/core/save/WorldRegistry.ts';
+} from '../web/src/core/world/GameMode.ts';
+import { WorldRegistry } from '../web/src/core/save/WorldRegistry.ts';
 
 let passed = 0;
 let failed = 0;

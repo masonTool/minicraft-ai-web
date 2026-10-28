@@ -15,8 +15,8 @@ import {
   slabId,
   stairsId,
   woolId,
-} from '../src/core/registry/blocks.ts';
-import { FLAT_HEIGHT, collisionBoxes, isFullBlockShape, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { FLAT_HEIGHT, collisionBoxes, isFullBlockShape, meshBoxes, stairsShape } from '../web/src/core/registry/blockShapes.ts';
 import {
   MAX_SNOW_LAYERS,
   facingFromYaw,
@@ -35,12 +35,12 @@ import {
   withSnowLayers,
   withTop,
   withTrapdoorOpen,
-} from '../src/core/registry/blockState.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, Item, blockDrops, categoryOf } from '../src/core/registry/items.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { CREATIVE_ITEMS, Item, blockDrops, categoryOf } from '../web/src/core/registry/items.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { itemLabel, itemTooltip } from '../web/src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;

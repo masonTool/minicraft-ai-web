@@ -6,9 +6,9 @@
  * 比开浏览器验证快得多，也不必担心渲染干扰。
  */
 
-import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
-import { restoreStack, sameExtras, stackExtras } from '../src/core/container/Inventory.ts';
+import { Block, BLOCKS, blockDef } from '../web/src/core/registry/blocks.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
+import { restoreStack, sameExtras, stackExtras } from '../web/src/core/container/Inventory.ts';
 import {
   ITEMS,
   Item,
@@ -17,13 +17,13 @@ import {
   dropFor,
   itemName,
   maxStackOf,
-} from '../src/core/registry/items.ts';
-import { translateName } from '../src/core/registry/itemNames.ts';
-import { HOTBAR_SIZE, Inventory, OFFHAND_SLOT, TOTAL_SLOTS } from '../src/core/container/Inventory.ts';
-import { DEV_KIT_ITEMS, devKitRequested, grantDevKit } from '../src/game/startupKit.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { Chest } from '../src/core/container/Chest.ts';
-import { tryInsertOne } from '../src/core/container/Transfer.ts';
+} from '../web/src/core/registry/items.ts';
+import { translateName } from '../web/src/core/registry/itemNames.ts';
+import { HOTBAR_SIZE, Inventory, OFFHAND_SLOT, TOTAL_SLOTS } from '../web/src/core/container/Inventory.ts';
+import { DEV_KIT_ITEMS, devKitRequested, grantDevKit } from '../web/src/game/startupKit.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
+import { tryInsertOne } from '../web/src/core/container/Transfer.ts';
 
 let passed = 0;
 let failed = 0;

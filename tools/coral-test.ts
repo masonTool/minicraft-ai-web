@@ -30,10 +30,10 @@ import {
   blockHardness,
   isDeadCoral,
   isLiveCoral,
-} from '../src/core/registry/blocks.ts';
-import { FACING_OFFSET, facingOf, isWallMounted } from '../src/core/registry/blockState.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { isHandHarvestable, canHarvest, harvestRequirement, makeToolInfo } from '../src/core/registry/tools.ts';
+} from '../web/src/core/registry/blocks.ts';
+import { FACING_OFFSET, facingOf, isWallMounted } from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { isHandHarvestable, canHarvest, harvestRequirement, makeToolInfo } from '../web/src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
   blockDrops,
@@ -41,19 +41,19 @@ import {
   dropFor,
   requiresShears,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   CORAL_REVIVE_CHANCE,
   RANDOM_TICK_BEHAVIORS,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
-import { canFlowInto } from '../src/core/world/Fluids.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { BIOME_FEATURES, SEA_LEVEL, decorate, type FeatureWorld } from '../src/core/gen/Features.ts';
-import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
+import { canFlowInto } from '../web/src/core/world/Fluids.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { BIOME_FEATURES, SEA_LEVEL, decorate, type FeatureWorld } from '../web/src/core/gen/Features.ts';
+import { BIOME_TABLE, Biome } from '../web/src/core/gen/Biome.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
 
 let passed = 0;
 let failed = 0;

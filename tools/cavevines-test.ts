@@ -9,16 +9,16 @@
  *  ⑤ 贴图与"不掉自己"（只掉浆果）。
  */
 
-import { Block, CAVE_VINES_ID, blockDef } from '../src/core/registry/blocks.ts';
-import { dropFor } from '../src/core/registry/items.ts';
+import { Block, CAVE_VINES_ID, blockDef } from '../web/src/core/registry/blocks.ts';
+import { dropFor } from '../web/src/core/registry/items.ts';
 import {
   caveVinesHaveBerries,
   withCaveVinesBerries,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { supportIsValid, supportKindOf, sweepCaveVinesBelow, type SupportWorld } from '../src/core/world/Support.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { supportIsValid, supportKindOf, sweepCaveVinesBelow, type SupportWorld } from '../web/src/core/world/Support.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -154,12 +154,12 @@ console.log('\n[放置]');
 
 console.log('\n[地物接线（源码守卫）]');
 {
-  const generator = readFileSync(new URL('../src/core/gen/OverworldGenerator.ts', import.meta.url), 'utf8');
+  const generator = readFileSync(new URL('../web/src/core/gen/OverworldGenerator.ts', import.meta.url), 'utf8');
   check(
     '繁茂洞穴的洞顶会垂藤（判据看的是上方）',
     /lush && stoneLike\(above\)[\s\S]{0,400}Block\.CAVE_VINES/.test(generator),
   );
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('破坏有浆果的那节会掉发光浆果', /caveVinesHaveBerries\(brokenState\)[\s\S]{0,120}spawnDrop\(Block\.GLOW_BERRIES/.test(mainSrc));
   check('破坏时往下扫', /sweepCaveVinesBelow\(/.test(mainSrc));
 }

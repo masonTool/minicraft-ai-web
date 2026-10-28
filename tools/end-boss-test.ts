@@ -12,10 +12,10 @@
  * 运行：npm run test:endboss
  */
 
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import { DRAGON_TYPE, Dragon, EndCrystal } from '../src/core/entity/EndBoss.ts';
-import { Block } from '../src/core/registry/blocks.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import { DRAGON_TYPE, Dragon, EndCrystal } from '../web/src/core/entity/EndBoss.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

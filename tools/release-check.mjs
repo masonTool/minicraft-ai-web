@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = join(ROOT, 'dist');
+const DIST = join(ROOT, 'web/dist');
 const CORE_SRC = join(ROOT, '.tmp/hostcore/core-v1.bin');
 
 const modeArg = process.argv.indexOf('--mode');
@@ -267,7 +267,7 @@ if (mode === 'web') {
   // 自足形态：数据在包里，页面不取 core.bin、也不看版本清单 —— 生成一份会误导（"web 也有版本契约？"）
   notes.push('web 形态：不生成 version.json（数据自足，不做宿主版本判定）');
 } else {
-  const codecSrc = readFileSync(join(ROOT, 'src/core/registry/blockTableCodec.ts'), 'utf8');
+  const codecSrc = readFileSync(join(ROOT, 'web/src/core/registry/blockTableCodec.ts'), 'utf8');
   const versionMatch = /export const BLOCK_TABLE_VERSION = (\d+)/.exec(codecSrc);
   if (versionMatch === null) {
     problems.push('读不到 blockTableCodec.ts 的 BLOCK_TABLE_VERSION（改过声明形式？）');
@@ -432,7 +432,7 @@ if (indexSize > Buffer.byteLength(before)) {
   problems.push(`index.html 压缩后反而变大了（${indexSize} > ${Buffer.byteLength(before)}），压缩逻辑有问题`);
 }
 // 顺带记一笔：源文件那份 304 KB 里绝大部分是注释与缩进，产物应当明显更小
-const sourceIndex = readFileSync(join(ROOT, 'index.html'), 'utf8').length;
+const sourceIndex = readFileSync(join(ROOT, 'web/index.html'), 'utf8').length;
 notes.push(`index.html 产物 ${kb(indexSize)}（源文件 ${kb(sourceIndex)}）`);
 
 const summary = createHash('sha256').update(`${mode}:${totalGzip}:${indexSize}`).digest('hex').slice(0, 12);

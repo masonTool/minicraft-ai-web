@@ -18,7 +18,7 @@
  * 运行：npm run test:village
  */
 
-import { Block, bedId, blockDef, isBed } from '../src/core/registry/blocks.ts';
+import { Block, bedId, blockDef, isBed } from '../web/src/core/registry/blocks.ts';
 import {
   bedOtherHalf,
   facingOf,
@@ -26,19 +26,19 @@ import {
   withBedHead,
   withFacing,
   type Facing,
-} from '../src/core/registry/blockState.ts';
+} from '../web/src/core/registry/blockState.ts';
 import {
   POPULATION_DUPLICATE_RADIUS,
   POPULATION_MAX_PER_CHUNK,
   planVillagePopulation,
   villagerSpotNearBed,
   type VillageWorldView,
-} from '../src/core/world/VillagePopulation.ts';
-import { isWorkstation, professionById, WORKSTATION_BLOCKS } from '../src/core/registry/villagerTrades.ts';
-import { structureInstanceForTest } from '../src/core/gen/Structures.ts';
-import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk } from '../src/core/world/Chunk.ts';
+} from '../web/src/core/world/VillagePopulation.ts';
+import { isWorkstation, professionById, WORKSTATION_BLOCKS } from '../web/src/core/registry/villagerTrades.ts';
+import { structureInstanceForTest } from '../web/src/core/gen/Structures.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk } from '../web/src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 

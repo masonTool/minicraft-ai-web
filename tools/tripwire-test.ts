@@ -11,7 +11,7 @@
  * 运行：npm run test:tripwire
  */
 
-import { isHandHarvestable } from '../src/core/registry/tools.ts';
+import { isHandHarvestable } from '../web/src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
@@ -20,7 +20,7 @@ import {
   TRIPWIRE_MAX_LENGTH,
   blockDef,
   blockHardness,
-} from '../src/core/registry/blocks.ts';
+} from '../web/src/core/registry/blocks.ts';
 import {
   facingOf,
   isDisarmed,
@@ -31,8 +31,8 @@ import {
   withFacing,
   withPowered,
   withTripwireAttached,
-} from '../src/core/registry/blockState.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
+} from '../web/src/core/registry/blockState.ts';
+import { collisionBoxes, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -41,16 +41,16 @@ import {
   dropFor,
   itemDef,
   type DropContext,
-} from '../src/core/registry/items.ts';
-import { blockLabel, hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+} from '../web/src/core/registry/items.ts';
+import { blockLabel, hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
 import {
   RedstoneEngine,
   isRedstoneComponent,
   type RedstoneWorld,
-} from '../src/core/redstone/RedstoneEngine.ts';
-import { planPlacement } from '../src/core/interaction/Placement.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/redstone/RedstoneEngine.ts';
+import { planPlacement } from '../web/src/core/interaction/Placement.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

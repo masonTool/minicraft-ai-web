@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { JOIN_WORLD_PREFIX, summaryFromRoom } from '../src/core/net/JoinWorld.ts';
+import { JOIN_WORLD_PREFIX, summaryFromRoom } from '../web/src/core/net/JoinWorld.ts';
 
 const NOW = 1_700_000_000_000;
 

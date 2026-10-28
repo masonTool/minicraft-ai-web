@@ -31,8 +31,8 @@ import {
   stepSoundFor,
   underwaterGain,
   type SoundSpec,
-} from '../src/core/audio/AudioEngine.ts';
-import { MUSIC_SCALES, MusicDirector } from '../src/core/audio/Music.ts';
+} from '../web/src/core/audio/AudioEngine.ts';
+import { MUSIC_SCALES, MusicDirector } from '../web/src/core/audio/Music.ts';
 import {
   MOB_VOICES,
   MOB_VOICE_IDS,
@@ -40,9 +40,9 @@ import {
   mobVoiceFor,
   mobVoicePitchFor,
   mobVoiceSpec,
-} from '../src/core/audio/MobVoices.ts';
-import { BLOCKS } from '../src/core/registry/blocks.ts';
-import { DROPPING_MOB_TYPES, REMOTE_PLAYER_TYPE } from '../src/core/entity/mobs.ts';
+} from '../web/src/core/audio/MobVoices.ts';
+import { BLOCKS } from '../web/src/core/registry/blocks.ts';
+import { DROPPING_MOB_TYPES, REMOTE_PLAYER_TYPE } from '../web/src/core/entity/mobs.ts';
 
 let passed = 0;
 let failed = 0;

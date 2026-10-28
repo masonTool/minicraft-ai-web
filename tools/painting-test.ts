@@ -15,7 +15,7 @@ import {
   multiPaintingByName,
   paintingSubTile,
   paintingSubTileCount,
-} from '../src/core/registry/paintings.ts';
+} from '../web/src/core/registry/paintings.ts';
 import {
   PaintingStore,
   paintingCellKey,
@@ -23,12 +23,12 @@ import {
   pickPaintingThatFits,
   restorePaintings,
   serializePaintings,
-} from '../src/core/world/Paintings.ts';
+} from '../web/src/core/world/Paintings.ts';
 import * as THREE from 'three';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { MULTI_PAINTING_VARIANT, paintingTile } from '../src/core/registry/paintings.ts';
-import { PaintingRenderer } from '../src/render/PaintingRenderer.ts';
-import type { TextureAtlas } from '../src/render/TextureAtlas.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { MULTI_PAINTING_VARIANT, paintingTile } from '../web/src/core/registry/paintings.ts';
+import { PaintingRenderer } from '../web/src/render/PaintingRenderer.ts';
+import type { TextureAtlas } from '../web/src/render/TextureAtlas.ts';
 import { readFileSync } from 'node:fs';
 
 let passed = 0;
@@ -232,7 +232,7 @@ console.log('\n[渲染层：每格一个平面（批次 495）]');
 
 console.log('\n[接线守卫：放置 / 破坏 / 存读档真的接了]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('放置时补写整幅（哨兵状态才走）', /paintingVariantOf\(placeState\) === MULTI_PAINTING_VARIANT[\s\S]{0,80}placeMultiPainting/.test(mainSrc));
   check('拆任意一格带走整幅', /brokenId === Block\.PAINTING\) this\.breakMultiPainting/.test(mainSrc));
   check('渲染对账在主循环的节拍里', /this\.syncPaintings\(\);/.test(mainSrc));

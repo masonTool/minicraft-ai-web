@@ -13,12 +13,12 @@
  * 运行：npm run test:concrete
  */
 
-import { Block, CONCRETE_POWDER_ID_START, concreteId, concretePowderId, blockDef } from '../src/core/registry/blocks.ts';
-import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { CREATIVE_ITEMS, dyeItemId, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { Block, CONCRETE_POWDER_ID_START, concreteId, concretePowderId, blockDef } from '../web/src/core/registry/blocks.ts';
+import { DYE_COLORS } from '../web/src/core/registry/colors.ts';
+import { CREATIVE_ITEMS, dyeItemId, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { RECIPES, type Recipe } from '../web/src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 import {
   CONCRETE_COLOR_COUNT,
   concreteForPowder,
@@ -28,7 +28,7 @@ import {
   isConcretePowder,
   touchesWater,
   type ConcreteWorld,
-} from '../src/core/world/Concrete.ts';
+} from '../web/src/core/world/Concrete.ts';
 
 let passed = 0;
 let failed = 0;

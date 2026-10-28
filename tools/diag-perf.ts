@@ -10,7 +10,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { collectPerfEvents, formatPerfReport, summarizePerf, type RawDiagEvent } from '../src/game/diagPerf.ts';
+import { collectPerfEvents, formatPerfReport, summarizePerf, type RawDiagEvent } from '../web/src/game/diagPerf.ts';
 
 interface DiagExport {
   meta?: Record<string, unknown>;

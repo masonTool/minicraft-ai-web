@@ -18,9 +18,9 @@
  */
 
 import * as THREE from 'three';
-import { BLOCKS, Block, blockDef } from '../src/core/registry/blocks.ts';
-import { isCrossShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { BLOCKS, Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { isCrossShape, meshBoxes } from '../web/src/core/registry/blockShapes.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   ATLAS_ANISOTROPY_DESKTOP,
   ATLAS_ANISOTROPY_MOBILE,
@@ -32,33 +32,33 @@ import {
   paintedEdgeOpaque,
   paintedThinColumns,
   type TextureAtlas,
-} from '../src/render/TextureAtlas.ts';
-import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src/render/atlasMesh.ts';
-import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
-import { ScreenEffects } from '../src/render/ScreenEffects.ts';
-import { HandRenderer } from '../src/render/HandRenderer.ts';
-import { PlayerRenderer } from '../src/render/PlayerRenderer.ts';
-import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
-import { Mob } from '../src/core/entity/Mob.ts';
-import { mobTypeById } from '../src/core/entity/mobs.ts';
-import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
-import { buildOutlineGeometry } from '../src/render/BlockOutline.ts';
-import { applyBoxFaceShade } from '../src/render/boxShading.ts';
-import { MobHealthBar } from '../src/render/MobHealthBar.ts';
-import { FLUID_TILE_SLOTS, SHADE_COOL, SHADE_WARM, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
-import { ALPHA_DITHER_BAND, ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
-import { GLSL_DITHER } from '../src/render/dither.ts';
+} from '../web/src/render/TextureAtlas.ts';
+import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../web/src/render/atlasMesh.ts';
+import { PARTICLE_POOL, ParticleSystem } from '../web/src/render/ParticleSystem.ts';
+import { ScreenEffects } from '../web/src/render/ScreenEffects.ts';
+import { HandRenderer } from '../web/src/render/HandRenderer.ts';
+import { PlayerRenderer } from '../web/src/render/PlayerRenderer.ts';
+import { SHEARED_BODY_COLOR, mobBodyColor } from '../web/src/render/MobRenderer.ts';
+import { Mob } from '../web/src/core/entity/Mob.ts';
+import { mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../web/src/render/BlockOverlay.ts';
+import { buildOutlineGeometry } from '../web/src/render/BlockOutline.ts';
+import { applyBoxFaceShade } from '../web/src/render/boxShading.ts';
+import { MobHealthBar } from '../web/src/render/MobHealthBar.ts';
+import { FLUID_TILE_SLOTS, SHADE_COOL, SHADE_WARM, VoxelMaterial } from '../web/src/render/VoxelMaterial.ts';
+import { ALPHA_DITHER_BAND, ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../web/src/render/alphaCoverage.ts';
+import { GLSL_DITHER } from '../web/src/render/dither.ts';
 import { readFileSync } from 'node:fs';
-import { srgbColor } from '../src/render/srgb.ts';
-import { tileOriginAt, tileRectAt, tileSpanAt } from '../src/render/atlasCoords.ts';
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING, TILE_SIZE, TILE_STRIDE } from '../src/render/atlasLayout.ts';
-import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
-import { domeOcclusionSafe } from '../src/render/Sky.ts';
-import { createGeometry } from '../src/core/mesh/ChunkMesher.ts';
-import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
-import type { World } from '../src/core/world/World.ts';
-import type { MeshResponse } from '../src/worker/chunk.worker.ts';
+import { srgbColor } from '../web/src/render/srgb.ts';
+import { tileOriginAt, tileRectAt, tileSpanAt } from '../web/src/render/atlasCoords.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING, TILE_SIZE, TILE_STRIDE } from '../web/src/render/atlasLayout.ts';
+import { ChunkRenderer } from '../web/src/render/ChunkRenderer.ts';
+import { domeOcclusionSafe } from '../web/src/render/Sky.ts';
+import { createGeometry } from '../web/src/core/mesh/ChunkMesher.ts';
+import type { MeshWorkerPool } from '../web/src/render/MeshWorkerPool.ts';
+import { Chunk } from '../web/src/core/world/Chunk.ts';
+import type { World } from '../web/src/core/world/World.ts';
+import type { MeshResponse } from '../web/src/worker/chunk.worker.ts';
 
 let passed = 0;
 let failed = 0;
@@ -716,7 +716,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
   check('抖色幅度是一个量化级（1/255，再大就成颗粒了）', GLSL_DITHER.includes('/ 255.0'));
   check(
     '天空穹顶用同一段抖色（不能各写一版）',
-    readFileSync(new URL('../src/render/Sky.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/render/Sky.ts', import.meta.url), 'utf8').includes(
       'ditherColor(color, gl_FragCoord.xy)',
     ),
   );
@@ -736,7 +736,7 @@ console.log('\n[天空穹顶的绘制顺序（批次 20261026-0141）]');
 
   // 源码结构守卫：这两行是"被地形挡住的像素直接死掉"的前提。
   // 用多行模式匹配材质对象本体，避免命中文件头注释里的同一串字。
-  const skySrc = readFileSync(new URL('../src/render/Sky.ts', import.meta.url), 'utf8');
+  const skySrc = readFileSync(new URL('../web/src/render/Sky.ts', import.meta.url), 'utf8');
   check(
     '穹顶默认开深度测试、不写深度',
     /depthTest:\s*true,\s*\n\s*depthWrite:\s*false,/.test(skySrc),
@@ -1433,7 +1433,7 @@ console.log('\n[草地与植物整体压暗]');
   equal('白不会溢出', foliage([255, 255, 255])[0], 204);
 
   // 结构守卫：这一族必须走 `foliage()` / `FOLIAGE_DARKEN`，否则改回去了也没人发现
-  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  const atlasSrc = readFileSync(new URL('../web/src/render/TextureAtlas.ts', import.meta.url), 'utf8');
   check(
     '草方块顶面与侧面那圈草边都压了',
     atlasSrc.includes('grass_top: layered(148 * FOLIAGE_DARKEN') && atlasSrc.includes('* FOLIAGE_DARKEN;'),
@@ -1525,7 +1525,7 @@ console.log('\n[生物/玩家的逐面明暗（批次 521）]');
 
   // 属性写了、材质没开 `vertexColors` 的话等于没加——这条是那个失败模式的门禁
   for (const file of ['MobRenderer.ts', 'PlayerRenderer.ts']) {
-    const source = readFileSync(new URL(`../src/render/${file}`, import.meta.url), 'utf8');
+    const source = readFileSync(new URL(`../web/src/render/${file}`, import.meta.url), 'utf8');
     check(
       `${file} 打开了 vertexColors`,
       source.includes('vertexColors: true') && source.includes('applyBoxFaceShade'),
@@ -1535,8 +1535,8 @@ console.log('\n[生物/玩家的逐面明暗（批次 521）]');
 
 console.log('\n[光照收敛后全量重刷（E23 / 批次 565、616）]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const rendererSrc = readFileSync(new URL('../src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../web/src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
   check('网格层提供已渲染区块的全量重刷入口', rendererSrc.includes('enqueueAllRendered(): void'));
   check('主程序在光照收敛后调用', mainSrc.includes('enqueueAllRendered()'));
   check('没有网格先不刷，等网格出来再刷', mainSrc.includes('chunkMeshCount > 0'));
@@ -1557,7 +1557,7 @@ console.log('\n[光照收敛后全量重刷（E23 / 批次 565、616）]');
   // 为什么会黑：平滑光照要读**跨区块**的 4 个采样格，邻居不在内存时 World 返回 0。
   // 这条不是"要不要修"的开关，而是修复的**前提事实**——它一旦改成别的语义
   // （例如返回 15），上面"反复重刷"就不再是必需的，那时的结论要重新推。
-  const worldSrc = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../web/src/core/world/World.ts', import.meta.url), 'utf8');
   const skyFn = worldSrc.slice(worldSrc.indexOf('getSkyLight(worldX'));
   check(
     '前提：邻居区块缺失时光照读作 0（所以先到的区块会烘出黑边）',
@@ -1565,7 +1565,7 @@ console.log('\n[光照收敛后全量重刷（E23 / 批次 565、616）]');
   );
   check(
     '前提：网格化确实读跨区块的采样格（平滑光照 4 邻）',
-    readFileSync(new URL('../src/core/mesh/ChunkMesher.ts', import.meta.url), 'utf8').includes(
+    readFileSync(new URL('../web/src/core/mesh/ChunkMesher.ts', import.meta.url), 'utf8').includes(
       'originX + nx, worldY + dy, originZ + nz',
     ),
   );
@@ -1573,7 +1573,7 @@ console.log('\n[光照收敛后全量重刷（E23 / 批次 565、616）]');
 
 console.log('\n[区块几何复用池（N3 / 批次 566）]');
 {
-  const rendererSrc = readFileSync(new URL('../src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../web/src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
   check('有按形状分桶的几何池', rendererSrc.includes('geometryPool = new Map'));
   check('重刷时优先从池里取', rendererSrc.includes('this.acquireGeometry('));
   check('卸载时回池而不是直接 dispose', rendererSrc.includes('this.releaseGeometry(mesh.geometry)'));

@@ -14,7 +14,7 @@ import {
   assignMobKey,
   pickAuthority,
   type AuthorityCandidate,
-} from '../src/core/net/MobAuthority.ts';
+} from '../web/src/core/net/MobAuthority.ts';
 
 describe('mobKey / parseMobKey', () => {
   it('拼出 ownerId:localId', () => {

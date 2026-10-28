@@ -17,17 +17,17 @@
  * 运行：npm run test:piglin
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { BARTER_TABLE, BARTER_TOTAL_WEIGHT, barterRoll } from '../src/core/items/Barter.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import { HOSTILE_MOBS, MOB_TYPES, ZOMBIE_PIGLIN_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { Mob, provokedBy, mobLabel } from '../src/core/entity/Mob.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { BARTER_TABLE, BARTER_TOTAL_WEIGHT, barterRoll } from '../web/src/core/items/Barter.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import { HOSTILE_MOBS, MOB_TYPES, ZOMBIE_PIGLIN_TYPE, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { Mob, provokedBy, mobLabel } from '../web/src/core/entity/Mob.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

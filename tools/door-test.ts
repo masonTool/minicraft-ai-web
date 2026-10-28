@@ -11,9 +11,9 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block } from '../src/core/registry/blocks.ts';
-import { Pathfinder } from '../src/core/entity/Pathfinder.ts';
-import { opensDoors } from '../src/core/entity/DoorRules.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Pathfinder } from '../web/src/core/entity/Pathfinder.ts';
+import { opensDoors } from '../web/src/core/entity/DoorRules.ts';
 
 let passed = 0;
 let failed = 0;
@@ -89,9 +89,9 @@ console.log('\n[站立判定把门当可通行]');
 
 console.log('\n[接线守卫]');
 {
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const ctxSrc = readFileSync(new URL('../src/core/entity/Entity.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  const ctxSrc = readFileSync(new URL('../web/src/core/entity/Entity.ts', import.meta.url), 'utf8');
 
   check('寻路时按"会不会开门"决定传不传 isDoor', mobSrc.includes('isDoor: opensDoors(this.type.id) ? ctx.isClosedDoor : undefined'));
   check('贴合时真的去开门', mobSrc.includes('this.openDoorsAhead(ctx)') && mobSrc.includes('ctx.isClosedDoor?.(node.x, node.y, node.z)'));

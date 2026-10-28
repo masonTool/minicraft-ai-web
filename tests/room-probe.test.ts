@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { probeRoom } from '../src/net/RoomProbe.ts';
+import { probeRoom } from '../web/src/net/RoomProbe.ts';
 
 interface FakeSocket {
   url: string;

@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../src/core/net/Protocol.ts';
+import { NET_PROTOCOL_VERSION, isFatalProtocolError } from '../web/src/core/net/Protocol.ts';
 
 const serverSource = readFileSync(new URL('../server/node/protocol.mjs', import.meta.url), 'utf8');
 

@@ -18,19 +18,19 @@
  * 运行：npm run test:fishing
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { Item, categoryOf, durabilityOf, itemDef } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { foodForName } from '../src/core/registry/food.ts';
-import { enchantKindOf, offeringFor } from '../src/core/crafting/Enchanting.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { Item, categoryOf, durabilityOf, itemDef } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { foodForName } from '../web/src/core/registry/food.ts';
+import { enchantKindOf, offeringFor } from '../web/src/core/crafting/Enchanting.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { smeltingRecipeFor } from '../web/src/core/crafting/Smelting.ts';
 import {
   FISHING_POOLS,
   fishingEntryIds,
   poolWeightWithLuck,
   rollFishing,
-} from '../src/core/registry/fishing.ts';
+} from '../web/src/core/registry/fishing.ts';
 import {
   BITE_WINDOW_SECONDS,
   CAST_GRAVITY,
@@ -47,8 +47,8 @@ import {
   fishingBonuses,
   reelFishing,
   waitSecondsFor,
-} from '../src/core/survival/Fishing.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/survival/Fishing.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

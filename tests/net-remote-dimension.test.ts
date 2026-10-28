@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { RemotePresence } from '../src/core/net/RemotePresence.ts';
+import { RemotePresence } from '../web/src/core/net/RemotePresence.ts';
 
 describe('RemotePresence', () => {
   it('没有记录时按同维度处理（旧服务端不带 dimension）', () => {

@@ -10,11 +10,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Block } from '../src/core/registry/blocks.ts';
-import { withFluidLevel, withPowered } from '../src/core/registry/blockState.ts';
-import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
-import { LightEngine, type LightAccessor } from '../src/core/light/LightEngine.ts';
-import { lightNeedsUpdate } from '../src/core/light/LightSignature.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { withFluidLevel, withPowered } from '../web/src/core/registry/blockState.ts';
+import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import { LightEngine, type LightAccessor } from '../web/src/core/light/LightEngine.ts';
+import { lightNeedsUpdate } from '../web/src/core/light/LightSignature.ts';
 
 /** 最小的世界适配器：把区块塞进一张表，光照引擎只需要读写方块与光照等级 */
 class WorldStub implements LightAccessor {

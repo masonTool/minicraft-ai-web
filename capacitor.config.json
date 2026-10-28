@@ -1,9 +1,9 @@
 {
   "appId": "com.minicraft.app",
   "appName": "Minicraft",
-  "webDir": "dist",
+  "webDir": "web/dist",
   "android": {
-    "path": "server/android",
+    "path": "android",
     "allowMixedContent": true
   },
   "server": {

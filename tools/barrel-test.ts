@@ -17,27 +17,27 @@
  * 运行：npm run test:barrel
  */
 
-import { Block, SHAPED_PARENTS, blockDef, blockHardness, slabId } from '../src/core/registry/blocks.ts';
-import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
-import { withSixFacing } from '../src/core/registry/blockState.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
-import { canHarvest, efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { BARREL_SIZE, Barrel } from '../src/core/container/Barrel.ts';
-import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
-import { acceptingSlots, containerSlotCount, peekTake, tryInsertOne } from '../src/core/container/Transfer.ts';
-import { BlockEntityStore, CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
+import { Block, SHAPED_PARENTS, blockDef, blockHardness, slabId } from '../web/src/core/registry/blocks.ts';
+import { isFullBlockShape } from '../web/src/core/registry/blockShapes.ts';
+import { withSixFacing } from '../web/src/core/registry/blockState.ts';
+import { Item, categoryOf, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { canHarvest, efficientToolType, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { BARREL_SIZE, Barrel } from '../web/src/core/container/Barrel.ts';
+import { CHEST_SIZE, Chest } from '../web/src/core/container/Chest.ts';
+import { acceptingSlots, containerSlotCount, peekTake, tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { BlockEntityStore, CONTAINER_BLOCKS } from '../web/src/core/world/BlockEntityStore.ts';
 import {
   SLOT_COUNTS,
   kindOf,
   restoreContainers,
   serializeContainers,
   type SerializedContainer,
-} from '../src/core/save/ContainerSave.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { canPush, isRedstoneComponent } from '../src/core/redstone/RedstoneEngine.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/save/ContainerSave.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { canPush, isRedstoneComponent } from '../web/src/core/redstone/RedstoneEngine.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

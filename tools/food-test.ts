@@ -15,7 +15,7 @@
  * 运行：npm run test:food
  */
 
-import { Block, Wood } from '../src/core/registry/blocks.ts';
+import { Block, Wood } from '../web/src/core/registry/blocks.ts';
 import {
   CREATIVE_ITEMS,
   Item,
@@ -23,7 +23,7 @@ import {
   foodInfoById,
   itemDef,
   rareDropFor,
-} from '../src/core/registry/items.ts';
+} from '../web/src/core/registry/items.ts';
 import {
   EAT_SECONDS,
   EAT_SECONDS_FAST,
@@ -32,13 +32,13 @@ import {
   eatSecondsFor,
   foodForName,
   saturationFrom,
-} from '../src/core/registry/food.ts';
-import { itemLabel } from '../src/core/registry/itemNames.ts';
-import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../src/core/survival/PlayerStats.ts';
-import { StatusEffects } from '../src/core/survival/StatusEffects.ts';
-import { SMELTING_RECIPES, smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
-import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
+} from '../web/src/core/registry/food.ts';
+import { itemLabel } from '../web/src/core/registry/itemNames.ts';
+import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../web/src/core/survival/PlayerStats.ts';
+import { StatusEffects } from '../web/src/core/survival/StatusEffects.ts';
+import { SMELTING_RECIPES, smeltingRecipeFor } from '../web/src/core/crafting/Smelting.ts';
+import { matchRecipe } from '../web/src/core/crafting/Recipes.ts';
+import { recipesForResult } from '../web/src/core/crafting/RecipeBook.ts';
 
 let passed = 0;
 let failed = 0;

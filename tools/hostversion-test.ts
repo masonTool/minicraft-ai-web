@@ -12,7 +12,7 @@
  * 运行：npm run test:hostversion
  */
 
-import { evaluateHostVersion, readHostCoreVersion } from '../src/core/hostCore.ts';
+import { evaluateHostVersion, readHostCoreVersion } from '../web/src/core/hostCore.ts';
 
 let passed = 0;
 let failed = 0;

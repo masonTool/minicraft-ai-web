@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
@@ -23,6 +23,11 @@ function gitSummary(): string {
     return '';
   }
 }
+
+/** 产品根目录（`web/`）。所有相对路径都以它为准，不再依赖进程 cwd。 */
+const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
+/** 仓库根目录：`web/` 的上一层，`.tmp/`、`host/` 都在这里。 */
+const REPO_ROOT = resolve(WEB_ROOT, '..');
 
 const buildCommit = gitSummary() || 'unknown';
 /** 构建时刻；同时给首页显示与排错时对照 */
@@ -55,7 +60,7 @@ function hostCoreDev(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__host/core.bin', (_req, res) => {
         try {
-          const body = readFileSync(resolve('.tmp/hostcore/core-v1.bin'));
+          const body = readFileSync(resolve(REPO_ROOT, '.tmp/hostcore/core-v1.bin'));
           res.setHeader('Content-Type', 'application/octet-stream');
           res.setHeader('Cache-Control', 'no-store');
           res.end(body);
@@ -100,6 +105,14 @@ function hostSpecsStub(): Plugin {
 }
 
 export default defineConfig({
+  /**
+   * 产品根目录（2026-10-29 目录重排）。
+   *
+   * `src/` / `index.html` / `public/` 都搬进了 `web/`，构建、dev server、`public/`
+   * 复制、`dist` 输出一律以它为准。配置本身留在产品目录里，多产品各自一份，
+   * 不再靠"仓库根恰好就是 web 根"这种隐含约定。
+   */
+  root: WEB_ROOT,
   // 相对 base：产物不写死 `/assets/...`，因此在域名根目录（自建服务器）和
   // 子路径（GitHub Pages 的 `/<repo>/`、任意静态托管的子目录）下都能直接跑。
   // ⚠️ 别改成 '/'，否则 Pages 上会去根域找 JS 而 404。

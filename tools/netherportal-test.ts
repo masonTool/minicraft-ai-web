@@ -13,12 +13,12 @@
  * 运行：npm run test:portal
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { breakSeconds } from '../src/core/registry/tools.ts';
-import { Item, blockDrops, dropFor, itemDef } from '../src/core/registry/items.ts';
-import { blockLabel } from '../src/core/registry/itemNames.ts';
-import { portalAxis, withPortalAxis } from '../src/core/registry/blockState.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { breakSeconds } from '../web/src/core/registry/tools.ts';
+import { Item, blockDrops, dropFor, itemDef } from '../web/src/core/registry/items.ts';
+import { blockLabel } from '../web/src/core/registry/itemNames.ts';
+import { portalAxis, withPortalAxis } from '../web/src/core/registry/blockState.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
 import {
   NETHER_SCALE,
   NEW_PORTAL_HEIGHT,
@@ -45,8 +45,8 @@ import {
   type PortalShape,
   type PortalStanding,
   type PortalWorld,
-} from '../src/core/world/NetherPortal.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+} from '../web/src/core/world/NetherPortal.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;

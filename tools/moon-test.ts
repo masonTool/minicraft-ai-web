@@ -23,7 +23,7 @@ import {
   moonShape,
   moonlightLevel,
   slimeSpawnFactor,
-} from '../src/core/world/MoonPhase.ts';
+} from '../web/src/core/world/MoonPhase.ts';
 
 let passed = 0;
 let failed = 0;

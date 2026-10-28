@@ -14,7 +14,7 @@
  *      （原来一轮会刷几千行 ✓，人看不见、AI 读着也费 token）。
  *
  * ⚠️ 产物必须输出到 `.tmp/<名字>.mjs`（**与老脚本同一层**）：
- * `tools/theme-test.ts` / `tools/ui-test.ts` 用 `new URL('../index.html', import.meta.url)`
+ * `tools/theme-test.ts` / `tools/ui-test.ts` 用 `new URL('../web/index.html', import.meta.url)`
  * 读仓库根的 `index.html`，深度一变就读不到了。
  *
  * 用法：

@@ -16,15 +16,15 @@
  * 运行：npm run test:spider
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { meleeDamage } from '../src/core/registry/tools.ts';
-import { Mob, mobLabel } from '../src/core/entity/Mob.ts';
-import { ALL_HOSTILE_MOBS, CAVE_SPIDER_TYPE, HOSTILE_MOBS, MOB_TYPES, SPIDER_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { describeMobModel } from '../src/render/MobRenderer.ts';
-import type { EntityContext } from '../src/core/entity/Entity.ts';
-import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { Item } from '../web/src/core/registry/items.ts';
+import { meleeDamage } from '../web/src/core/registry/tools.ts';
+import { Mob, mobLabel } from '../web/src/core/entity/Mob.ts';
+import { ALL_HOSTILE_MOBS, CAVE_SPIDER_TYPE, HOSTILE_MOBS, MOB_TYPES, SPIDER_TYPE, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { describeMobModel } from '../web/src/render/MobRenderer.ts';
+import type { EntityContext } from '../web/src/core/entity/Entity.ts';
+import type { PhysicsWorld } from '../web/src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
 let failed = 0;

@@ -11,11 +11,11 @@
  * 运行：npm run test:nether
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { NETHER_BIOME_NAMES, NetherBiome, NetherGenerator } from '../src/core/gen/NetherGenerator.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
+import { Block, blockDef } from '../web/src/core/registry/blocks.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { NETHER_BIOME_NAMES, NetherBiome, NetherGenerator } from '../web/src/core/gen/NetherGenerator.ts';
+import { generateChunkBlocks } from '../web/src/core/gen/TerrainGenerator.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 

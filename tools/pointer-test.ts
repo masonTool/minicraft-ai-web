@@ -11,7 +11,7 @@
  * 运行：npm run test:pointer
  */
 
-import { pointFromEventWithSource, resolvePointerPoint } from '../src/core/input/PointerPoint.ts';
+import { pointFromEventWithSource, resolvePointerPoint } from '../web/src/core/input/PointerPoint.ts';
 
 let passed = 0;
 let failed = 0;

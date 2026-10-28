@@ -20,25 +20,25 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { Block, blockDef, blockTiles } from '../src/core/registry/blocks.ts';
-import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
-import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
-import { efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
-import { armorItemId } from '../src/core/registry/armor.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { RECIPES } from '../src/core/crafting/Recipes.ts';
-import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { lootItemIds } from '../src/core/registry/loot.ts';
-import { MOB_TYPES, PASSIVE_MOBS, HOSTILE_MOBS, VILLAGER_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
-import { mobEats, Mob } from '../src/core/entity/Mob.ts';
-import { createMob } from '../src/core/entity/MobFactory.ts';
-import { Villager } from '../src/core/entity/Villager.ts';
-import { EntityParking, type SavedEntityRecord } from '../src/core/entity/EntityParking.ts';
-import { mobAccentColor, mobAppearanceKey, mobBodyColor } from '../src/render/MobRenderer.ts';
-import { fishingEntryIds } from '../src/core/registry/fishing.ts';
-import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
-import { advancementById } from '../src/core/progress/advancements.ts';
-import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+import { Block, blockDef, blockTiles } from '../web/src/core/registry/blocks.ts';
+import { Item, dropFor, itemDef, possibleBlockDropIds } from '../web/src/core/registry/items.ts';
+import { hasDescription, missingBlockNames } from '../web/src/core/registry/itemNames.ts';
+import { efficientToolType, harvestRequirement } from '../web/src/core/registry/tools.ts';
+import { armorItemId } from '../web/src/core/registry/armor.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { RECIPES } from '../web/src/core/crafting/Recipes.ts';
+import { SMELTING_RECIPES } from '../web/src/core/crafting/Smelting.ts';
+import { lootItemIds } from '../web/src/core/registry/loot.ts';
+import { MOB_TYPES, PASSIVE_MOBS, HOSTILE_MOBS, VILLAGER_TYPE, mobTypeById } from '../web/src/core/entity/mobs.ts';
+import { mobEats, Mob } from '../web/src/core/entity/Mob.ts';
+import { createMob } from '../web/src/core/entity/MobFactory.ts';
+import { Villager } from '../web/src/core/entity/Villager.ts';
+import { EntityParking, type SavedEntityRecord } from '../web/src/core/entity/EntityParking.ts';
+import { mobAccentColor, mobAppearanceKey, mobBodyColor } from '../web/src/render/MobRenderer.ts';
+import { fishingEntryIds } from '../web/src/core/registry/fishing.ts';
+import { DRAGON_TYPE } from '../web/src/core/entity/EndBoss.ts';
+import { advancementById } from '../web/src/core/progress/advancements.ts';
+import { AdvancementTracker } from '../web/src/core/progress/AdvancementTracker.ts';
 import {
   VILLAGER_FLEE_DISTANCE,
   VILLAGER_PANIC_RADIUS,
@@ -47,7 +47,7 @@ import {
   fleePointFrom,
   isPanicThreat,
   nearestPanicThreat,
-} from '../src/core/entity/VillagerPanic.ts';
+} from '../web/src/core/entity/VillagerPanic.ts';
 import {
   VILLAGER_ARRIVE_RADIUS,
   VILLAGER_WORK_END,
@@ -56,7 +56,7 @@ import {
   routineTarget,
   villagerArrived,
   villagerRoutine,
-} from '../src/core/world/VillagerRoutine.ts';
+} from '../web/src/core/world/VillagerRoutine.ts';
 import {
   PROFESSIONS,
   PROFESSION_COUNT,
@@ -85,7 +85,7 @@ import {
   tradePriceDelta,
   tradeSettlement,
   professionLabel,
-} from '../src/core/registry/villagerTrades.ts';
+} from '../web/src/core/registry/villagerTrades.ts';
 
 let passed = 0;
 let failed = 0;
@@ -851,7 +851,7 @@ console.log('\n[作息坐标进存档与寄存]');
 
 console.log('\n[接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('村庄人口给村民设了家', mainSrc.includes('villager.setHome({ x: plan.bedX'));
   check('主程序每 0.5 秒下发作息指令', mainSrc.includes('this.villagerRoutineTimer = 0.5'));
   check(
@@ -918,7 +918,7 @@ console.log('\n[恐慌：计时与加速]');
 
 console.log('\n[恐慌：接线守卫]');
 {
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('主程序识别恐慌威胁', mainSrc.includes('isPanicThreat(entity.type.id)'));
   check('恐慌源被记进优先集', mainSrc.includes('this.panicThreats.add(threatened.mob)'));
   check(
@@ -926,7 +926,7 @@ console.log('\n[恐慌：接线守卫]');
     mainSrc.indexOf('this.tickVillagerRoutine();') < mainSrc.indexOf('this.tickGuardians(context, dt);'),
   );
   check('铁傀儡优先打恐慌源', mainSrc.includes('this.panicThreats.has(mob)'));
-  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../web/src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check('基类留了速度倍率钩子', mobSrc.includes('this.speedMultiplier()'));
 }
 

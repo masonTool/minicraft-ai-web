@@ -11,10 +11,10 @@
  * 运行：npm run test:map
  */
 
-import { Item, CREATIVE_ITEMS, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
-import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { Item, CREATIVE_ITEMS, itemDef, maxStackOf } from '../web/src/core/registry/items.ts';
+import { itemLabel, itemDescription, hasDescription } from '../web/src/core/registry/itemNames.ts';
+import { TILE_ORDER } from '../web/src/render/atlasLayout.ts';
+import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 import {
   MAP_BIT_BYTES,
   MAP_CHUNK_SPAN,
@@ -29,10 +29,10 @@ import {
   mapOffset,
   sanitizeMap,
   markExplored,
-} from '../src/core/items/Map.ts';
-import { restoreStack, sameExtras, stackExtras } from '../src/core/container/Inventory.ts';
-import { tryInsertOne } from '../src/core/container/Transfer.ts';
-import { Chest } from '../src/core/container/Chest.ts';
+} from '../web/src/core/items/Map.ts';
+import { restoreStack, sameExtras, stackExtras } from '../web/src/core/container/Inventory.ts';
+import { tryInsertOne } from '../web/src/core/container/Transfer.ts';
+import { Chest } from '../web/src/core/container/Chest.ts';
 
 let passed = 0;
 let failed = 0;

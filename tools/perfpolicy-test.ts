@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { CAMERA_NEAR, SKY_MAX_RADIUS, cameraFarFor } from '../src/render/Sky.ts';
+import { CAMERA_NEAR, SKY_MAX_RADIUS, cameraFarFor } from '../web/src/render/Sky.ts';
 
 import {
   LIGHT_BUDGET_PER_FRAME,
@@ -17,7 +17,7 @@ import {
   MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME,
   STARTUP_LIGHT_BUDGET_PER_FRAME,
   lightBudgetForFrame,
-} from '../src/game/tuning.ts';
+} from '../web/src/game/tuning.ts';
 import {
   DECOR_LEVEL_MAX,
   FRAME_TIME_DROP,
@@ -50,7 +50,7 @@ import {
   viewDistanceCapFor,
   type PerfState,
   type PerfTuning,
-} from '../src/core/world/PerfPolicy.ts';
+} from '../web/src/core/world/PerfPolicy.ts';
 
 let passed = 0;
 let failed = 0;
@@ -473,7 +473,7 @@ console.log('\n[接线：雾的推进不能假设渲染层已经建好]');
   // 还早跑一次（它排在建 Worker 池之后），而 `updateFogRadius` 要读它的 `queueLength`
   // ——于是每一局的第一帧都是 `Cannot read properties of undefined`。
   // 纯函数（`fogRadiusStep`）测不到"被调用得太早"这件事，只能盯住接线那一处必须有守卫。
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   const from = mainSrc.indexOf('private updateFogRadius');
   check('找得到 updateFogRadius', from >= 0);
   const after = mainSrc.slice(from);

@@ -14,21 +14,21 @@
  * 运行：npm run test:snow
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { MAX_SNOW_LAYERS, snowLayers, withSnowLayers } from '../src/core/registry/blockState.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { MAX_SNOW_LAYERS, snowLayers, withSnowLayers } from '../web/src/core/registry/blockState.ts';
+import { Item } from '../web/src/core/registry/items.ts';
 import {
   RANDOM_TICK_BEHAVIORS,
   SNOW_ACCUMULATE_CHANCE,
   SNOW_MELT_LIGHT,
   type TickWorld,
-} from '../src/core/tick/RandomTicks.ts';
+} from '../web/src/core/tick/RandomTicks.ts';
 import {
   PRECIPITATION_ATTEMPTS,
   PRECIPITATION_INTERVAL,
   PrecipitationTicker,
-} from '../src/core/tick/Precipitation.ts';
-import { WHEAT_STAGES } from '../src/core/registry/blocks.ts';
+} from '../web/src/core/tick/Precipitation.ts';
+import { WHEAT_STAGES } from '../web/src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;

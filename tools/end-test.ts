@@ -13,14 +13,14 @@
  * 运行：npm run test:end
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { chestLootIndex } from '../src/core/registry/blockState.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { END_BIOME_NAMES, EndGenerator } from '../src/core/gen/EndGenerator.ts';
-import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
-import { endCityCreatureSpawnsAt, nearestEndCity } from '../src/core/gen/EndStructures.ts';
-import { nearbyStandingSpot } from '../src/core/gen/StructureCreatures.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { chestLootIndex } from '../web/src/core/registry/blockState.ts';
+import { Dimension } from '../web/src/core/gen/Dimension.ts';
+import { END_BIOME_NAMES, EndGenerator } from '../web/src/core/gen/EndGenerator.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../web/src/core/world/Chunk.ts';
+import { endCityCreatureSpawnsAt, nearestEndCity } from '../web/src/core/gen/EndStructures.ts';
+import { nearbyStandingSpot } from '../web/src/core/gen/StructureCreatures.ts';
 
 const SEED = 20261014;
 

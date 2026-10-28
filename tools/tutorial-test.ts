@@ -9,13 +9,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { BED_IDS, Block, woolId } from '../src/core/registry/blocks.ts';
-import { toolItemId } from '../src/core/registry/tools.ts';
-import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../src/tutorial/steps.ts';
-import { MAX_TRACKED_KINDS, TutorialTracker } from '../src/tutorial/TutorialTracker.ts';
+import { BED_IDS, Block, woolId } from '../web/src/core/registry/blocks.ts';
+import { toolItemId } from '../web/src/core/registry/tools.ts';
+import { TUTORIAL_STEPS, familyOfItem, stepsOf } from '../web/src/tutorial/steps.ts';
+import { MAX_TRACKED_KINDS, TutorialTracker } from '../web/src/tutorial/TutorialTracker.ts';
 // 文案那一侧走 `t()` / `allKeys()` 查表，不读文案文件源码（多语言 P0-2 起中文表按界面拆分）
-import { allKeys, t } from '../src/core/i18n/I18n.ts';
-import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from '../src/tutorial/boot.ts';
+import { allKeys, t } from '../web/src/core/i18n/I18n.ts';
+import { planTutorialBoot, shouldVoidTutorialOnModeChange, tutorialTrackFor } from '../web/src/tutorial/boot.ts';
 import {
   TUTORIAL_CARD_MAX_WIDTH,
   isShortViewport,
@@ -23,7 +23,7 @@ import {
   overlapsTouchPauseBar,
   touchPauseBarRight,
   tutorialCardBox,
-} from '../src/ui/tutorialLayout.ts';
+} from '../web/src/ui/tutorialLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -371,7 +371,7 @@ console.log('\n引导进行中切模式 → 作废（批次 20261024-1152）');
 
   // 接线：判定必须真挂在 setGameMode 上，而且作废时要落盘。
   // （只测纯函数的话，"函数写好了但没人调用"这种静默失败测不出来。）
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   // 2026-10-28：`setGameMode` 多了一个 `internal` 参数（极限守卫要放行"死亡转旁观/读档"），
   // 所以这里的锚点跟着改；断言的内容不变——作废判定仍然挂在切模式这一跳上。
   const setGameModeBody = /setGameMode\(mode: GameMode, internal = false\): boolean \{[\s\S]*?\n  \}/.exec(mainSrc)?.[0] ?? '';
@@ -387,14 +387,14 @@ console.log('\n存档仓与主程序接线（静态断言）');
 {
   // 这几条守的是"改了版本却忘了建仓"这类**静默失败**：
   // IndexedDB 的 onupgradeneeded 少一行不会报错，只会让 loadTutorial 永远拿到 null。
-  const saveSrc = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  const saveSrc = readFileSync(new URL('../web/src/core/save/SaveGame.ts', import.meta.url), 'utf8');
   check('引导仓有常量', saveSrc.includes("const STORE_TUTORIAL = 'tutorial';"));
   check('建库时会补建（老库自动升级）', saveSrc.includes('createObjectStore(STORE_TUTORIAL)'));
   check('DB_VERSION 已升到 11', /const DB_VERSION = 11;/.test(saveSrc));
   check('有 loadTutorial 读取入口', saveSrc.includes('async loadTutorial('));
   check('有 saveTutorial 写入入口', saveSrc.includes('async saveTutorial('));
 
-  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check('读档时会恢复引导进度', mainSrc.includes('loadTutorial()'));
   check('读档用纯决策函数判"新世界 / 老存档 / 有数据"', mainSrc.includes('planTutorialBoot('));
   check('「不再提示」立刻写存档', mainSrc.includes('void this.saveTutorialNow()'));
@@ -412,7 +412,7 @@ console.log('\n存档仓与主程序接线（静态断言）');
     '面板打开时引导卡让位',
     mainSrc.includes('this.tutorialCard.setSuppressed(this.uiOpen || this.settingsScreen.isOpen)'),
   );
-  const htmlSrc = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const htmlSrc = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   check('让位有对应样式', htmlSrc.includes('.tutorial-root.suppressed'));
 
   // 2026-10-22 用户反馈：收起键与「不再提示」都点不动。

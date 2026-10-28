@@ -9,8 +9,8 @@
  * 运行：npm run test:loom
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { DYE_ITEM_START } from '../src/core/registry/items.ts';
+import { Block } from '../web/src/core/registry/blocks.ts';
+import { DYE_ITEM_START } from '../web/src/core/registry/items.ts';
 import {
   LOOM_BANNER,
   LOOM_DYE,
@@ -18,10 +18,10 @@ import {
   Loom,
   isDyeItem,
   loomBlocker,
-} from '../src/core/container/Loom.ts';
-import { restoreStack } from '../src/core/container/Inventory.ts';
-import { CONTAINER_BLOCKS, BlockEntityStore } from '../src/core/world/BlockEntityStore.ts';
-import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainer } from '../src/core/save/ContainerSave.ts';
+} from '../web/src/core/container/Loom.ts';
+import { restoreStack } from '../web/src/core/container/Inventory.ts';
+import { CONTAINER_BLOCKS, BlockEntityStore } from '../web/src/core/world/BlockEntityStore.ts';
+import { SLOT_COUNTS, kindOf, restoreContainers, serializeContainer } from '../web/src/core/save/ContainerSave.ts';
 
 let passed = 0;
 let failed = 0;

@@ -22,12 +22,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { allKeys, availableLanguages, loadLocale, tableOf } from '../src/core/i18n/I18n.ts';
-import { LOCALES } from '../src/core/i18n/locale.ts';
+import { allKeys, availableLanguages, loadLocale, tableOf } from '../web/src/core/i18n/I18n.ts';
+import { LOCALES } from '../web/src/core/i18n/locale.ts';
 
-const ROOT = 'src';
+const ROOT = 'web/src';
 /** 文案表自己的目录：里面的字符串**就是**文案，不能算"引用" */
-const LOCALE_DIR = join('src', 'core', 'i18n', 'locales');
+const LOCALE_DIR = join('web/src', 'core', 'i18n', 'locales');
 
 interface Hit {
   readonly key: string;
