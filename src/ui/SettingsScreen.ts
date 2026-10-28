@@ -781,6 +781,10 @@ export class SettingsScreen {
   private saveButton: HTMLButtonElement | null = null;
   /** 页脚容器（脏值时加 `.dirty` 给 CSS 做提示） */
   private footerEl: HTMLElement | null = null;
+  /** 「未保存，要保存吗」弹窗（同一时间只留一个） */
+  private leaveDialog: HTMLDivElement | null = null;
+  /** 弹窗还没答完时，Esc 直接按「取消（不保存）」处理 */
+  private leaveAnswer: ((save: boolean) => void) | null = null;
   /** 设置页的标题（`setTitle` 改的是它：主菜单里打开时是"设置"） */
   private readonly settingsTitleEl: HTMLElement;
   /** 设置页那句提示 */
@@ -1340,8 +1344,8 @@ export class SettingsScreen {
     // 设置页只需要处理角色形象弹窗的 Esc。
     document.addEventListener('keydown', this.onDocumentKeyDown, true);
 
-    this.setActiveGroup(SETTING_GROUPS[0]);
-    this.setPage('menu');
+    this.applyActiveGroup(SETTING_GROUPS[0]);
+    this.applyPage('menu');
     this.renderSubtitle();
 
     // ⚠️ 批次 111 删掉了"点空白处关闭"：用户要求"不要点击空白关闭，就用关闭按钮"。
@@ -1392,8 +1396,22 @@ export class SettingsScreen {
     return header;
   }
 
-  /** 切页：`menu`（暂停菜单）/ `settings`（设置项） */
+  /**
+   * 切页：`menu`（暂停菜单）/ `settings`（设置项）。
+   *
+   * ⚠️ 从设置页往菜单页退时，如果有没保存的改动，先弹窗问一句
+   * （2026-10-28，用户："在返回按钮或者切换设置项时，弹窗提醒是否保存"）。
+   */
   setPage(page: PausePage): void {
+    if (page !== this.currentPage && this.currentPage === 'settings' && this.hasUnsaved()) {
+      this.askSave(() => this.applyPage(page));
+      return;
+    }
+    this.applyPage(page);
+  }
+
+  /** 真正的切页（无询问版本；询问与初始化都走它） */
+  private applyPage(page: PausePage): void {
     this.currentPage = page;
     this.panel.dataset.page = page;
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
@@ -1433,6 +1451,11 @@ export class SettingsScreen {
    * 不必各自去判断"现在停在哪一页"——**判据只有一处，就不会漂**。
    */
   goBack(): boolean {
+    // 未保存提醒在最上面：Esc 等同「取消（不保存）」，然后继续它原本要做的事
+    if (this.leaveAnswer) {
+      this.leaveAnswer(false);
+      return true;
+    }
     // 二级弹窗在最上面：先关它，再谈"设置页 / 菜单页"
     if (this.appearanceOpen) {
       this.closeAppearance();
@@ -1465,6 +1488,16 @@ export class SettingsScreen {
    * 只有矮屏（横屏手机）由 CSS 只放行 `.settings-section.active` 那一组。
    */
   setActiveGroup(group: SettingGroup): void {
+    // 换设置项（页签）时同样要问一句：否则另一页改了一半的配色会被静默丢掉
+    if (group !== this.activeGroup && this.hasUnsaved()) {
+      this.askSave(() => this.applyActiveGroup(group));
+      return;
+    }
+    this.applyActiveGroup(group);
+  }
+
+  /** 真正的换页签（无询问版本） */
+  private applyActiveGroup(group: SettingGroup): void {
     this.activeGroup = group;
     for (const [key, section] of this.sections) section.classList.toggle('active', key === group);
     // 切到别的页签时，外观的二级弹窗不该还浮在上面
@@ -2133,16 +2166,30 @@ export class SettingsScreen {
    * 结果外观页试了一半的配色也被写进去了"这种事一定会发生。
    */
   saveActiveGroup(): void {
-    const group = this.activeGroup;
+    this.saveGroups([this.activeGroup]);
+  }
+
+  /**
+   * 把指定的几组草稿拷回 `settings` 并落盘。
+   *
+   * 「保存」按钮传当前分组；未保存提醒弹窗里点「保存」传**所有脏分组**
+   * （玩家可能在外观页改完又翻到音频页改了一点，退出时不该只存一半）。
+   */
+  private saveGroups(groups: readonly SettingGroup[]): void {
     const languageBefore = this.saved.language;
-    for (const key of SETTING_GROUP_KEYS[group]) {
-      (this.settings as unknown as Record<string, unknown>)[key] = (
-        this.draft as unknown as Record<string, unknown>
-      )[key];
+    let reset = false;
+    for (const group of groups) {
+      for (const key of SETTING_GROUP_KEYS[group]) {
+        (this.settings as unknown as Record<string, unknown>)[key] = (
+          this.draft as unknown as Record<string, unknown>
+        )[key];
+      }
+      // 恢复默认要把"设备口径"的视距一起落（这一项没有界面入口，见 `defaultViewDistanceFor`）
+      if (this.pendingResetGroups.delete(group)) {
+        reset = true;
+        this.settings.viewDistance = defaultViewDistanceFor(isTouchUi());
+      }
     }
-    // 恢复默认要把"设备口径"的视距一起落（这一项没有界面入口，见 `defaultViewDistanceFor`）
-    if (this.pendingResetGroups.has(group)) this.settings.viewDistance = defaultViewDistanceFor(isTouchUi());
-    const reset = this.pendingResetGroups.delete(group);
     this.saved = { ...this.settings };
 
     saveSettings(this.settings);
@@ -2202,6 +2249,73 @@ export class SettingsScreen {
   }
 
   /**
+   * 有未保存改动时先问一句，答完再执行原来的动作（2026-10-28，用户）。
+   *
+   * 两个出口，与用户描述的一一对应：
+   *  - 「保存」= 把**所有脏分组**落盘，然后照常退出 / 切换；
+   *  - 「取消」= 不保存，直接退出 / 切换（草稿丢掉，已保存的设置一字不动）。
+   *
+   * 没有脏改动时**不弹**：直接执行，别把正常操作也变成一次点击。
+   */
+  private askSave(action: () => void): void {
+    if (!this.hasUnsaved()) {
+      action();
+      return;
+    }
+    this.closeLeaveDialog();
+    this.closeDropdown();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'settings-confirm';
+    const panel = document.createElement('div');
+    panel.className = 'settings-confirm-panel';
+
+    const title = document.createElement('b');
+    title.className = 'settings-confirm-title';
+    title.textContent = t('settings.unsavedTitle');
+    const text = document.createElement('p');
+    text.className = 'settings-confirm-text';
+    text.textContent = t('settings.unsavedText');
+
+    const actions = document.createElement('div');
+    actions.className = 'settings-confirm-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = 'settings-unsaved-cancel';
+    cancel.textContent = t('settings.discard');
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.id = 'settings-unsaved-save';
+    save.className = 'settings-confirm-save';
+    save.textContent = t('settings.save');
+    actions.append(cancel, save);
+    panel.append(title, text, actions);
+    overlay.appendChild(panel);
+    this.root.appendChild(overlay);
+    this.leaveDialog = overlay;
+
+    let settled = false;
+    const finish = (doSave: boolean): void => {
+      if (settled) return;
+      settled = true;
+      this.closeLeaveDialog();
+      if (doSave) this.saveGroups(SETTING_GROUPS.filter((group) => this.isGroupDirty(group)));
+      else this.discardDraft();
+      action();
+    };
+    this.leaveAnswer = finish;
+    cancel.addEventListener('click', () => finish(false));
+    save.addEventListener('click', () => finish(true));
+  }
+
+  /** 收起未保存提醒（答完之后 / 重新弹之前） */
+  private closeLeaveDialog(): void {
+    this.leaveAnswer = null;
+    this.leaveDialog?.remove();
+    this.leaveDialog = null;
+  }
+
+  /**
    * 改标题与"继续游戏"那颗按钮的文字：同一个面板在"游戏中"与"主菜单"两处用，文案要跟着场景变。
    *
    * 批次 20261024-1152：**副标题参数去掉了**——暂停页那行"点「继续游戏」或系统返回键返回"
@@ -2251,7 +2365,7 @@ export class SettingsScreen {
     this.pendingResetGroups.clear();
     this.renderSubtitle();
     this.refreshControls();
-    this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
+    this.applyPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
     // 批次 333：面板可见之后形象画布才有尺寸，补一帧（隐藏期间 render 会直接返回）
     this.refreshAvatar();
@@ -2276,6 +2390,16 @@ export class SettingsScreen {
    * 时序对齐背包：面板先继续画几帧，触摸层先回来并被画出来，再摘面板。
    */
   hide(): void {
+    // 有没保存的改动：先问（用户要求"返回/退出时弹窗提醒是否保存"）
+    if (this.open && this.hasUnsaved()) {
+      this.askSave(() => this.forceHide());
+      return;
+    }
+    this.forceHide();
+  }
+
+  /** 真正收起面板（不问保存） */
+  private forceHide(): void {
     this.open = false;
     this.closeAppearance();
     // 下拉菜单挂在 body 上，面板关掉时必须一起收起（否则会孤零零留在页面上）
@@ -2297,6 +2421,7 @@ export class SettingsScreen {
   /** 主菜单设置是懒建的临时实例；进世界前销毁，避免与局内面板重复 `#settings-screen`。 */
   destroy(): void {
     this.open = false;
+    this.closeLeaveDialog();
     this.closeAppearance();
     this.appearanceModal = null;
     if (this.hideTimer !== null) {

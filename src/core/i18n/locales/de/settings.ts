@@ -99,5 +99,8 @@ export const settings = {
   "settings.resourcePack.help4": "Wirkt nur in dieser Sitzung – nichts wird im Spielstand gespeichert, die Welt bleibt unverändert. Nach dem Neustart erneut importieren.",
   "settings.resourcePack.help5": "Diese App bietet keine Paket-Downloads an. Importiere nur Pakete, die dir gehören oder die du verwenden darfst.",
   "settings.save": "Speichern",
-  "settings.saved": "Gespeichert"
+  "settings.saved": "Gespeichert",
+  "settings.unsavedTitle": "Nicht gespeicherte Änderungen",
+  "settings.unsavedText": "Diese Einstellungen sind noch nicht gespeichert. Speichern?",
+  "settings.discard": "Abbrechen (nicht speichern)"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

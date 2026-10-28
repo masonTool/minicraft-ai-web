@@ -99,5 +99,8 @@ export const settings = {
   "settings.resourcePack.help4": "Действует только в текущем сеансе: в сохранение ничего не пишется, мир не меняется. После перезапуска импортируйте снова.",
   "settings.resourcePack.help5": "Приложение не предоставляет наборы для скачивания. Импортируйте только те, что принадлежат вам или разрешены к использованию.",
   "settings.save": "Сохранить",
-  "settings.saved": "Сохранено"
+  "settings.saved": "Сохранено",
+  "settings.unsavedTitle": "Несохранённые изменения",
+  "settings.unsavedText": "Эти настройки ещё не сохранены. Сохранить?",
+  "settings.discard": "Отмена (не сохранять)"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

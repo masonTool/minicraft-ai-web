@@ -98,5 +98,8 @@ export const settings = {
   "settings.resourcePack.help4": "Vale só para esta sessão — nada é gravado no save e o mundo não é alterado. Importe de novo depois de reabrir o jogo.",
   "settings.resourcePack.help5": "Este aplicativo não oferece downloads de pacotes. Importe apenas pacotes que você possui ou tem permissão para usar.",
   "settings.save": "Salvar",
-  "settings.saved": "Salvo"
+  "settings.saved": "Salvo",
+  "settings.unsavedTitle": "Alterações não salvas",
+  "settings.unsavedText": "Estas configurações ainda não foram salvas. Salvar?",
+  "settings.discard": "Cancelar (não salvar)"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

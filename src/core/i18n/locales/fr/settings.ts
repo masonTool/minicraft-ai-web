@@ -99,5 +99,8 @@ export const settings = {
   "settings.resourcePack.help4": "Cela ne vaut que pour la session en cours : rien n’est écrit dans la sauvegarde et le monde n’est pas modifié. Réimportez après avoir rouvert le jeu.",
   "settings.resourcePack.help5": "Cette application ne fournit pas de packs à télécharger. N’importez que des packs que vous possédez ou que vous avez le droit d’utiliser.",
   "settings.save": "Enregistrer",
-  "settings.saved": "Enregistré"
+  "settings.saved": "Enregistré",
+  "settings.unsavedTitle": "Modifications non enregistrées",
+  "settings.unsavedText": "Ces réglages ne sont pas encore enregistrés. Les enregistrer ?",
+  "settings.discard": "Annuler (ne pas enregistrer)"
 } satisfies Pick<Messages, keyof typeof zhSettings>;

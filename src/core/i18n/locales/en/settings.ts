@@ -103,5 +103,8 @@ export const settings = {
   "settings.resourcePack.help4": "It only affects this session — nothing is written to the save and the world is left untouched. Import again after reopening the game.",
   "settings.resourcePack.help5": "This app does not offer pack downloads. Import only packs you own or are allowed to use.",
   "settings.save": "Save",
-  "settings.saved": "Saved"
+  "settings.saved": "Saved",
+  "settings.unsavedTitle": "Unsaved changes",
+  "settings.unsavedText": "These settings have not been saved yet. Save them?",
+  "settings.discard": "Cancel (don't save)"
 } satisfies Pick<Messages, keyof typeof zhsettings>;

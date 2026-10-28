@@ -3478,6 +3478,34 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       settingsSrc.includes("resetButton.id = 'settings-reset'") &&
       settingsSrc.includes('footer.append(saveButton, resetButton);'),
   );
+  // 2026-10-28（用户）：改了没保存就离开 / 换设置项，要弹窗问"是否保存"；
+  // 「取消」= 不保存直接走（草稿丢掉，已保存的设置一字不动）。
+  check(
+    '未保存改动在返回 / 切页签 / 关面板时弹窗提醒（保存 / 取消=不保存）',
+    settingsSrc.includes('private askSave(action: () => void): void') &&
+      settingsSrc.includes("this.askSave(() => this.applyPage(page));") &&
+      settingsSrc.includes("this.askSave(() => this.applyActiveGroup(group));") &&
+      settingsSrc.includes("this.askSave(() => this.forceHide());") &&
+      settingsSrc.includes("cancel.id = 'settings-unsaved-cancel'") &&
+      settingsSrc.includes("save.id = 'settings-unsaved-save'") &&
+      settingsSrc.includes('saveGroups(SETTING_GROUPS.filter((group) => this.isGroupDirty(group)))') &&
+      settingsSrc.includes('else this.discardDraft();'),
+  );
+  check(
+    '「未保存」弹窗六语言齐全，且样式在位',
+    LOCALES.every((locale) => {
+      const table = readFileSync(
+        new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
+        'utf8',
+      );
+      return (
+        /['"]settings\.unsavedTitle['"]/.test(table) &&
+        /['"]settings\.unsavedText['"]/.test(table) &&
+        /['"]settings\.discard['"]/.test(table)
+      );
+    }),
+  );
+
   // 资源包那一行下面必须有一句"只导自己的包"（2026-10-28 起不再有「非官方」声明：
   // 用户明确要求界面上不要出现任何指向"我们不是官方"的自我定位）。
   const settingsHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -3538,7 +3566,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '恢复默认会通知主程序复位运行时的降级档位',
     // 2026-10-28：改成草稿模型之后，reset 标记由「保存」那一跳带出去
     settingsSrc.includes("this.actions.onChange(this.settings, reset ? { reset: true } : undefined)") &&
-      settingsSrc.includes('const reset = this.pendingResetGroups.delete(group);') &&
+      settingsSrc.includes('if (this.pendingResetGroups.delete(group)) {') &&
+      settingsSrc.includes('reset = true;') &&
       appSrc.includes('meta?.reset'),
   );
   // 批次 202：改设置不再无条件重算区块范围（拖个音量滑块不该惊动流式层）

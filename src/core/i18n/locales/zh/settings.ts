@@ -107,5 +107,8 @@ export const settings = {
   'settings.resourcePack.help4': '只影响这一次运行的画面与声音，不写进存档、也不会改动世界；下次打开游戏要重新导入。',
   'settings.resourcePack.help5': '本应用不提供资源包下载，请只导入你自己拥有或有权使用的包。',
   'settings.save': '保存',
-  'settings.saved': '已保存'
+  'settings.saved': '已保存',
+  'settings.unsavedTitle': '未保存的修改',
+  'settings.unsavedText': '当前设置还没有保存，要保存吗？',
+  'settings.discard': '取消（不保存）'
 } as const;
