@@ -25,7 +25,6 @@ export const settings = {
   "settings.row.handedness": "Ведущая рука",
   "settings.row.aimMode": "Прицеливание",
   "settings.row.touchStick": "Стик",
-  "settings.row.invertY": "Инвертировать обзор",
   "settings.row.autoJump": "Автопрыжок",
   "settings.row.fastEat": "Быстрая еда",
   "settings.row.fov": "Угол обзора",

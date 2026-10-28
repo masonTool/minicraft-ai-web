@@ -200,7 +200,8 @@ console.log('\n[UI 联动守卫]');
   check('模式传进 create', worldSrc.includes('gameMode: this.gameModeSelect.value as GameMode'));
   check('三个下拉框都在新建表单里', worldSrc.includes("makeRow(t('world.type')") && worldSrc.includes("makeRow(t('world.difficulty')") && worldSrc.includes("makeRow(t('world.gameMode')"));
   check('单一群系选择传进 create', worldSrc.includes("singleBiome: this.biomeSelect.value"));
-  check('测试用的预填入口还在（spec 三个参数都能设）', worldSrc.includes('difficulty: Difficulty = \'normal\'') && worldSrc.includes('gameMode: GameMode = \'survival\''));
+  // 2026-10-28：新建世界默认改成创造，预填入口的默认值跟着改（两处必须一致）
+  check('测试用的预填入口还在（spec 三个参数都能设）', worldSrc.includes('difficulty: Difficulty = \'normal\'') && worldSrc.includes('gameMode: GameMode = \'creative\''));
 }
 
 console.log('\n[极限模式（批次 550）]');

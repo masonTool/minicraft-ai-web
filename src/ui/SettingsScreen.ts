@@ -272,7 +272,6 @@ export function autosaveLabel(seconds: number | string): string {
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
 type BoolSettingKey =
   | 'clouds'
-  | 'invertY'
   | 'daylightCycle'
   | 'showDebug'
   | 'adaptiveViewDistance'
@@ -385,9 +384,9 @@ export interface GameSettings {
    * 关掉即回到原版的 1.6 秒节奏（数值见 `core/registry/food.ts` 的两个常量）。
    */
   fastEat: boolean;
-  /** 反转视角的上下方向（触摸拖动与鼠标都受影响） */
-  invertY: boolean;
-  /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
+  /**
+   * 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用）
+   */
   daylightCycle: boolean;
   /**
    * 是否显示左上角调试信息（HUD）。
@@ -472,7 +471,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   autosaveSeconds: 30,
   autoJump: true,
   fastEat: true,
-  invertY: false,
   daylightCycle: true,
   // 2026-10-28（用户）：调试信息默认关闭
   showDebug: false,
@@ -586,7 +584,6 @@ export function loadSettings(): GameSettings {
       autoJump: parsed.autoJump !== false,
       // 快速进食默认开（与 autoJump 同一口径：只有显式 false 才关）
       fastEat: parsed.fastEat !== false,
-      invertY: parsed.invertY === true,
       daylightCycle: parsed.daylightCycle !== false,
       // 2026-10-28（用户）：默认关闭。
       // ⚠️ 老存档（v4 及以前）里这一项是**旧默认 true** 被整份写进去的，
@@ -1158,7 +1155,10 @@ export class SettingsScreen {
       // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
       this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, stickModeLabels());
     }
-    this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
+    // ⚠️ 2026-10-28（用户）：**「反转视角」整项删掉**。
+    // 这一项原本只是"上下方向反一下"，没有实际使用场景（触摸端是拖动手感、
+    // 键鼠端是整块鼠标反向），留着反而容易被误触后不知道怎么调回来。
+    // 设置字段也一起删了——老存档里残留的那个键会在 `loadSettings` 里被忽略。
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
     this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));
     // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒，想对齐原版节奏就关掉

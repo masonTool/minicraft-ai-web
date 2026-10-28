@@ -25,7 +25,6 @@ export const settings = {
   "settings.row.handedness": "Main",
   "settings.row.aimMode": "Visée",
   "settings.row.touchStick": "Joystick",
-  "settings.row.invertY": "Inverser la vue",
   "settings.row.autoJump": "Saut automatique",
   "settings.row.fastEat": "Manger vite",
   "settings.row.fov": "Champ de vision",

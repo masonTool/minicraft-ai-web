@@ -24,7 +24,6 @@ export const settings = {
   "settings.row.handedness": "Mão principal",
   "settings.row.aimMode": "Mira",
   "settings.row.touchStick": "Analógico",
-  "settings.row.invertY": "Inverter câmera",
   "settings.row.autoJump": "Pulo automático",
   "settings.row.fastEat": "Comer rápido",
   "settings.row.fov": "Campo de visão",

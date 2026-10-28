@@ -26,7 +26,6 @@ export const settings = {
   'settings.row.handedness': 'Handedness',
   'settings.row.aimMode': 'Aiming',
   'settings.row.touchStick': 'Joystick',
-  'settings.row.invertY': 'Invert Y',
   'settings.row.autoJump': 'Auto Jump',
   'settings.row.fastEat': 'Fast Eat',
   'settings.row.fov': 'Field of View',

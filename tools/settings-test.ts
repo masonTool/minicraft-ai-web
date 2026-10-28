@@ -92,7 +92,6 @@ console.log('\n[默认设置]');
   check('没有 localStorage 时也能拿到一份完整设置', typeof fallback.fov === 'number' && fallback.cameraMode === 'first');
   check('默认视角是第一人称', DEFAULT_SETTINGS.cameraMode === 'first');
   check('默认粒子是全部、云是开、昼夜循环是开', DEFAULT_SETTINGS.particles === 'all' && DEFAULT_SETTINGS.clouds && DEFAULT_SETTINGS.daylightCycle);
-  check('默认不反转上下视角', DEFAULT_SETTINGS.invertY === false);
   check('自动跳跃默认开（与基岩版一致，老存档缺字段也按开）', DEFAULT_SETTINGS.autoJump === true && fallback.autoJump === true);
   // 批次 219：触摸端没有独立使用键，进食要借用"长按空处"，1.6 秒 + 280ms 太磨
   check('快速进食默认开（老存档缺字段也按开）', DEFAULT_SETTINGS.fastEat === true && fallback.fastEat === true);
@@ -141,7 +140,6 @@ console.log('\n[设置的容错]');
       cameraMode: '从没见过',
       particles: 'super',
       clouds: 'yes',
-      invertY: 1,
       daylightCycle: null,
       showDebug: 'nope',
     }),
@@ -188,7 +186,6 @@ console.log('\n[设置的容错]');
   check('非法视角模式回退第一人称', messy.cameraMode === 'first');
   check('非法粒子档位回退"全部"', messy.particles === 'all');
   check('clouds 不是 false 就当开（缺省友好）', messy.clouds === true);
-  check('invertY 必须是严格的 true 才生效', messy.invertY === false);
   check('daylightCycle 缺省为开', messy.daylightCycle === true);
   // 2026-10-28：showDebug 的默认值从「开」翻成「关」，语义也跟着反了——
   // 只有 v5 之后**显式存过 true** 才算打开；脏值/老版本一律关。
@@ -198,9 +195,12 @@ console.log('\n[设置的容错]');
   storage.setItem(KEY, JSON.stringify({ settingsVersion: SETTINGS_VERSION, showDebug: true }));
   check('v5 之后显式打开能读回来', loadSettings().showDebug === true);
 
-  storage.setItem(KEY, JSON.stringify({ clouds: false, invertY: true, daylightCycle: false, particles: 'off', autoJump: false }));
+  storage.setItem(KEY, JSON.stringify({ clouds: false, daylightCycle: false, particles: 'off', autoJump: false }));
   const off = loadSettings();
-  check('显式关掉的三项都能读回来', off.clouds === false && off.invertY === true && off.daylightCycle === false && off.particles === 'off');
+  check('显式关掉的三项都能读回来', off.clouds === false && off.daylightCycle === false && off.particles === 'off');
+  // 2026-10-28（用户）：「反转视角」整项删除，老存档里残留的键被忽略（不再进 GameSettings）
+  storage.setItem(KEY, JSON.stringify({ invertY: true }));
+  check('老存档里残留的 invertY 不再进设置', !('invertY' in loadSettings()));
   check('自动跳跃可以显式关掉', off.autoJump === false);
 
   // 快速进食（批次 219）：默认开，但必须能显式关回原版的 1.6 秒
@@ -258,7 +258,6 @@ console.log('\n[保存与读取]');
     cameraMode: 'third-front',
     particles: 'reduced',
     clouds: false,
-    invertY: true,
     daylightCycle: false,
     showDebug: false,
     adaptiveViewDistance: false,

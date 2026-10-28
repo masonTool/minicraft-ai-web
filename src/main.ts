@@ -6626,8 +6626,9 @@ class App {
    */
   private applyLook(dxPixels: number, dyPixels: number): void {
     this.yaw -= dxPixels;
-    // 反转上下视角（设置项）：把纵向增量取反即可，水平方向不受影响
-    this.pitch -= this.settings.invertY ? -dyPixels : dyPixels;
+    // 上下方向固定（2026-10-28，用户）：原来这里按「反转视角」设置项取反，
+    // 那一项已删——没有实际使用场景，误触后还容易调不回来。
+    this.pitch -= dyPixels;
     const limit = Math.PI / 2 - 0.001;
     this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
   }

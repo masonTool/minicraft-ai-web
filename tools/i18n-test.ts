@@ -183,7 +183,6 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.row.handedness',
     'settings.row.aimMode',
     'settings.row.touchStick',
-    'settings.row.invertY',
     'settings.row.autoJump',
     'settings.row.fastEat',
     'settings.row.fov',

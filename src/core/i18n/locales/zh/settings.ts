@@ -28,7 +28,6 @@ export const settings = {
   'settings.row.handedness': '惯用手',
   'settings.row.aimMode': '瞄准',
   'settings.row.touchStick': '摇杆',
-  'settings.row.invertY': '反转视角',
   'settings.row.autoJump': '自动跳跃',
   'settings.row.fastEat': '快速进食',
   'settings.row.fov': '视野',
