@@ -9,6 +9,80 @@
 
 ---
 
+## 批次 20261028-2101 · 2026-10-28 · 会话 db119a0b
+
+> 用户：9 条界面/设置反馈（新建世界默认创造、资源包说明、导出选目录、去官方字样、调试默认关、删反转视角、设置保存制、按钮放大重叠、升降键偏移、切换动画）
+
+# 队列 · 会话 db119a0b96db41469bc93f04d7852469
+
+> 状态：执行中
+> 创建：2026-10-28
+> 批次：20261028-2101
+
+> 这一批是用户 2026-10-28 一次性提的 9 条反馈，拆成 11 条可独立验证的条目。
+> 项目总表用 A~O 编号（不是「T + 数字」那套），这些是**当场才出现的需求**，
+> 收尾时统一补进 `TASKS.md` 的「队列落地 · 当场任务（已完成）」。
+
+- [x] 1/11 新建世界默认创造模式：`src/ui/WorldScreen.ts` → `npm run test:ui` 全绿
+  - 做了什么：新建世界表单里「游戏模式」下拉的初始值 `survival` → `creative`；验收辅助方法 `fillNewWorldForm()` 的同名默认参数一起改
+  - 为什么：用户要求"首次进入创建世界默认创造模式"；辅助方法的默认值必须和表单一致，否则验收脚本拿到的世界与玩家手点的不是同一种
+  - 验证：`npm run check:fast` 全绿（typecheck + 单测 + 命中的 world 套件）；`npm run test:ui` 1202 通过 / 3 失败——那 3 条是开房流程的既有红项（与本次改动无关，改前就红）
+  - 批次：20261028-2101
+- [x] 2/11 调试信息默认关闭：`src/ui/SettingsScreen.ts` / `src/main.ts` / `tools/settings-test.ts` → `npm run test:settings` 全绿
+  - 做了什么：`DEFAULT_SETTINGS.showDebug` 改 false；`loadSettings` 改成「只有 v5 之后显式存过 true 才算开」；`SETTINGS_VERSION` 4 → 5（专门为这次语义翻转留迁移锚点）；`main` 的 `showDebugSetting` 初值改 false，并在启动时按设置补一次对账
+  - 为什么：老存档里的 true 是**旧默认值**被整份写进去的，分不清"玩家主动开的"和"默认值"——不升版本就只能二选一：要么老用户永远开着，要么把主动开过的人也关掉。升 v5 让两侧都说得通
+  - 验证：`npm run test:settings` 122 通过 / 0 失败（新增 4 条：默认关、脏值按关、v4 迁移回关、v5 显式开能读回）
+  - 顺手：`test:ui` 里 3 条开房流程的断言本就是红的（`pendingHostRoom` 早已改成存 `effectiveBaseUrl`、预检到建世界之间多了三段失败分支，注释窗口装不下）——按当前代码改断言，不改行为；`test:ui` 1205 通过 / 0 失败
+  - 批次：20261028-2101
+- [x] 3/11 删掉「反转视角」设置项：`src/ui/SettingsScreen.ts` / `tools/settings-test.ts` → `npm run test:settings` 全绿
+  - 做了什么：删掉控制页那一行开关、`GameSettings.invertY` 字段与它的默认值/读取分支、`main.applyLook()` 里的取反分支；六语言里 `settings.row.invertY` 一起删（`test:i18n` 的必需键清单同步去掉）；`test:settings` 里关于它的 4 条断言换成「老存档残留的键不再进设置」
+  - 为什么：用户判断这一项没有使用场景。字段一起删而不是留着——留着就是一个永远为 false、没有入口的死开关，下次改设置的人还得先猜它有没有用
+  - 验证：`npm run typecheck` 通过；`npm run test:settings` 121 通过 / 0 失败；`npm run test:i18n` 582 通过 / 0 失败；`npm run audit:i18n` 通过（六语言覆盖 3009/3009）
+  - 批次：20261028-2101
+- [x] 4/11 清掉「官方 / 非官方 / Mojang」等与原版挂钩的文案：`src/ui/SettingsScreen.ts` / `src/core/i18n/locales/*/settings.ts` / `docs/store/*.md` / `README.md` → `npm run test:i18n` 全绿
+  - 做了什么：删掉设置页底部整块「非官方」声明（`makeFooterNotice()` + `.settings-notice` 两处样式 + 六语言的 `settings.notice`）；资源包那行说明改写成「只导自己的包 / 本应用不提供也不分发资源包文件」；六份商店文案的「关于」段与拍摄要求、README 首段与许可段一并去掉与原版/厂商的挂钩
+  - 为什么：用户明确要求界面上不能出现"我们不是官方"这种自我定位。代码注释里的"基岩版/原版"是工程笔记（解释为什么这么实现），不是产品文字，保留——全删会把大量"为什么"一起删掉，得不偿失
+  - 验证：`npm run test:i18n` 582 通过 / 0 失败；`npm run test:ui` 1205 通过 / 0 失败（那条合规断言改成"资源包免责在 + 非官方声明已删除"）；`npm run check:fast` 全绿
+  - 批次：20261028-2101
+- [x] 5/11 资源包使用说明（六语言）：`src/ui/SettingsScreen.ts` / `src/core/i18n/locales/*/settings.ts` → `npm run test:i18n` 全绿
+  - 做了什么：资源包那一行下面加一块说明（`makePackHelp()`：标题 + 5 条），文案键 `settings.resourcePack.about` / `help1..help5` 六语言各一套；`index.html` 加 `.settings-note.pack-help` 样式（灰字 + 左侧色条，不抢按钮注意力）；`test:ui` 加一条"五条 + 标题、六语言齐全"的断言
+  - 为什么：说明必须**准确**——贴图只按 `textures/blocks/<名字>.png` 对应图集（大图会缩到 16×16 格子）、音效只认 `SoundPack.ts` 映射表那批、包**不落盘**（重开页面要重新导入）。后一条不写清楚，玩家会以为"导一次就永久生效"
+  - 验证：`npm run typecheck` 通过；`npm run test:i18n` 582 通过 / 0 失败；`npm run test:ui` 1206 通过 / 0 失败
+  - 批次：20261028-2101
+- [x] 6/11 导出世界让用户选目录保存：`src/main.ts` → `npm run check:fast` 通过
+  - 做了什么：新增 `src/ui/SaveFile.ts`（`saveBlobWithPicker()` / `downloadBlob()` / `canPickSaveLocation()`），`exportWorld()` 改成优先弹系统「另存为」并写入玩家选定的位置，只有 API 不存在或写入失败才退回原来的 `<a download>`；玩家点取消（`AbortError`）直接结束，不再偷偷下载一份；文件类型说明走新键 `world.exportFileType`（六语言）
+  - 为什么：原来的 `<a download>` 只能落到浏览器的下载目录，手机上玩家既看不到也选不了。`showSaveFilePicker` 不在 `lib.dom` 里，所以手写最小类型声明，不引新的 @types 包
+  - 验证：`npm run test:ui` 1207 通过 / 0 失败（新增一条"优先另存为 + 取消不下载 + 回退下载"）；`npm run check:fast` 全绿
+  - 批次：20261028-2101
+- [x] 7/11 设置页改成「草稿 + 保存 / 恢复默认」：`src/ui/SettingsScreen.ts` / `index.html` / 六语言 → `npm run test:ui` + `test:i18n` 全绿
+  - 做了什么：`SettingsScreen` 加 `draft` / `saved` 两份拷贝——所有控件只改草稿（不再 `commit()` 即生效）；新增 `SETTING_GROUP_KEYS`（分组 → 字段表）与 `saveActiveGroup()` / `resetActiveGroup()` / `updateSaveState()`；页脚改成「保存 + 恢复默认」两颗（保存进页面是 `disabled`，当前页改过才亮；恢复默认只作用于当前页，且同样要点保存才生效）；语言下拉也走草稿，保存时若语言变了才整页重载；`viewDistance` 这类没有界面入口的字段不进任何分组
+  - 为什么：用户要求"所有设置项都不改动立即生效 + 每页下方保存/恢复默认 + 保存按钮灰着直到改动"。只改草稿还顺带解决了"拖滑块每帧都写 localStorage 并重算区块范围"的老开销
+  - 取舍：**游戏模式与飞行仍立即生效**——它们是"这个世界现在的状态"（会进存档/影响玩法），不是这台设备的偏好，也从来不在 `GameSettings` 里；把它们也做成草稿就要在退回菜单时回滚世界状态，得不偿失。已写进决策文件
+  - 验证：`npm run test:settings` 125 通过 / 0 失败（新增分组覆盖断言：有界面的字段漏挂会红）；`npm run test:ui` 1207 通过 / 0 失败；`npm run test:i18n` 582 通过 / 0 失败；`npm run check:fast` 全绿
+  - 批次：20261028-2101
+- [x] 8/11 未保存修改时离开 / 切换设置项弹窗提醒：`src/ui/SettingsScreen.ts` → `npm run test:ui` 全绿
+  - 做了什么：`askSave(action)` 统一闸门——`setPage('menu')`（返回箭头 / 暂停页）、`setActiveGroup()`（换页签）、`hide()`（关面板 / 退出暂停菜单）三处都先过它；弹窗只有两个出口：「保存」= 把**所有脏分组**落盘再继续，「取消（不保存）」= 丢掉草稿再继续；Esc 等同「取消」；`show()` 每次从已保存的那份重开草稿，所以上一次没保存的改动不会带进去
+  - 为什么：用户描述的就是"取消 = 不保存，直接退出或切换"这两个出口，没有第三个"留在原地"。保存时一起存所有脏分组，是因为玩家可能改了两页才退出，只存一页等于丢一半
+  - 验证：`npm run typecheck` 通过；`npm run test:ui` 1209 通过 / 0 失败（新增两条：闸门三处齐全 + 六语言文案）；`npm run test:i18n` 582 通过 / 0 失败；`npm run check:fast` 全绿
+  - 批次：20261028-2101
+- [x] 9/11 按钮放大后与快捷栏重叠：`index.html` → 代码走查 + `npm run test:ui` 全绿
+  - 做了什么：跳跃键簇的 `--touch-buttons-bottom` 改成「基准 + 跳跃键的放大额」，即放大时整簇**只向上长**（飞行时挂在跳跃键下面的"下降"键不再向下钻）；竖屏基准 131 → 138（让下降键离快捷栏上沿再留 4px）；窄屏横屏（<760）把簇贴到右沿 8px，避开快捷栏右侧的背包键
+  - 为什么：`--touch-scale` 1.4 时下降键从 28px 长到 62px 高、且锚点不动，于是压进快捷栏/背包键那片区域；只调基准值改不了"越大压得越深"，必须让锚点跟着尺寸走
+  - 验证：用真实 `index.html` 的 CSS 在 Chrome 里量矩形（探针脚本，用完已删）：640×360 / 667×375 / 844×390 / 390×844 × scale 1 与 1.4 共 8 组，下降键与「背包键 / 快捷栏」的重叠面积**全部 0px²**；把旧写法塞回去做对抗性验证 → 竖屏 390×844 重叠 **2451px²**（说明探针不是瞎的）。`npm run test:ui` 1213 通过 / 0 失败（新增 6 条 CSS 守卫）
+  - 批次：20261028-2101
+- [x] 10/11 飞行升降按钮点击时向右偏：`index.html` → 代码走查 + `npm run test:ui` 全绿
+  - 做了什么：补一条 `.touch-button.fly-up:active, .touch-button.fly-down:active { transform: translateX(-50%) scale(.94); }`
+  - 为什么：升降键靠 `translateX(-50%)` 居中，而通用的 `.touch-button:active { transform: scale(.94) }` 会把整个 transform 覆盖掉——平移没了，按钮就跳到"自己的右半宽"那个位置。用户说的"向右偏一下"就是这个
+  - 验证：Chrome 里用真实鼠标按下（等 `transition: transform .08s` 走完再量）——修后中心横移 **0.00px**；把旧规则塞回去做对抗性验证 → 横移 **32.40px**（正好半个按钮宽）。`npm run test:ui` 1215 通过 / 0 失败
+  - 批次：20261028-2101
+- [x] 11/11 各页面切换加过渡动画：`index.html` → `npm run test:ui` 全绿
+  - 做了什么：新增 `@keyframes page-enter`（淡入 + 上移 10px），挂到 `.pause-page.active` / `.settings-section.active` / `.world-view.active` 三处（暂停菜单↔设置页、四个设置页签、主菜单三层）；页签另补颜色过渡；只做入场不做退场（这些页面是 `display:none` 切换，退场动画会把 Esc/返回拖慢一拍）
+  - 为什么：用户要"切换丝滑一点"。三处共用一条 keyframes 而不是各写一套，是因为它们同属"面板里的整页替换"，视觉语言要一致；时长走 `--dur-med`，`prefers-reduced-motion` 下自动变 0s（不用另写分支）
+  - 验证：Chrome 里读计算样式——三处 `animation-name: page-enter`、时长 0.22s；开 `reducedMotion: reduce` 后时长变 **0s**；`npm run test:ui` 1216 通过 / 0 失败（新增 1 条守卫）
+  - 批次：20261028-2101
+
+---
+
 ## 批次 20261028-0600 · 2026-10-28 · 会话 12c62c
 
 > 用户：体积基线放宽到 1.5 MB，项目小不值得费劲
@@ -213,87 +287,6 @@
   - 做了什么：join/host 打开先 `ensureFullVersion()`；没桥弹「需要完整版」，关闭/前往下载都同时关掉提示与界面；安卓补 `localIp()`。
   - 验证：无桥 → 提示 + 按钮[关闭,前往下载]，点关闭后两者同关；有桥 → 正常。
   - 批次：20261027-3000
-
----
-
-## 批次 20261027-2900 · 2026-10-27 · 会话 12c62c
-
-> 用户：浮层挡不住触摸、世界页三按钮、⋯下拉、缩略图、.mc 包
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2900
-
-- [x] [L22] 浮层遮罩真正拦截：`InputOverlay.ts` → playwright
-  - 做了什么：window 捕获阶段吞掉 pointer/touch/mouse/click/wheel（输入框放行），pointerdown 收起浮层。
-  - 为什么：遮罩只挡视觉，事件仍冒泡到 document；页面大量交互是 document 委托，点遮罩会被当成点下层。
-  - 验证：点下层按钮位置 → lowerClicks=0、浮层收起。
-  - 批次：20261027-2900
-- [x] [L22] 世界页三按钮一排：`WorldScreen.ts` + CSS
-  - 做了什么：去掉「世界 N」标题行；新建/加入等宽并排（317px），导入存档小一号靠右（72px）。
-  - 验证：截图 + 实测宽度。
-  - 批次：20261027-2900
-- [x] [L22] 「⋯」下拉菜单：`WorldScreen.ts` + CSS
-  - 做了什么：导出/编辑/删除竖排浮层，点别处 `pointerdown` 收起。
-  - 验证：items=[导出,编辑,删除]，点别处 hidden=true。
-  - 批次：20261027-2900
-- [x] [L22] 世界缩略图存真实画面：`WorldRegistry.ts`、`WorldScreen.ts`、`main.ts`
-  - 做了什么：`thumbnail` 存清单；`onSaved` 抓 160×90 jpeg（10 秒限频）；renderer 开 `preserveDrawingBuffer`。
-  - 为什么：原来按世界类型画 CSS 渐变，所有同类世界看起来一样。
-  - 验证：min=2/max=255/颜色丰富（非空白），截图能看到天空与草地。
-  - 批次：20261027-2900
-- [x] [L22] 导出/导入改 `.mc`（zip）：`McPack.ts`（新）、`SaveTransfer.ts`、`main.ts`、`tests/mc-pack.test.ts`
-  - 做了什么：手写 store zip；包内 `world.json` + `thumbnail.jpg`；包名空格→中划线，导入优先用包内真名。
-  - 验证：导出 `新的世界-1.mc`，python zipfile 解出两个条目；3 条往返单测。
-  - 批次：20261027-2900
-
----
-
-## 批次 20261027-2600 · 2026-10-27 · 会话 12c62c
-
-> 用户：开房界面复用加入房间，只加「选择本机」；另外扫描坏了，先分析原因
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2600
-
-- [x] [L21] 局域网扫描修复：`ServerListPanel.subnets()` → `npm run check`
-  - 做了什么：候选网段列表按可能性排序（hostname 私网 IP → 地址框私网 IP → localhost 加回环 → 常见私网段兜底），`refresh()` 分批扫（一次 2 段、找到就停）。
-  - 为什么：上一版只认 `location.hostname`，App webview 里它是 `localhost` → 兜底成回环 → 只扫本机；再上一版用地址框 IP 所以能扫到。WebRTC 也不可用（mDNS 混淆成 `xxx.local`）。
-  - 验证：右栏扫到 `127.0.0.1(newplayer)` 与 `192.168.1.72(cookroom)` 两台。
-  - 批次：20261027-2600
-- [x] [L21] 开房复用「加入房间」界面 + 右栏「选择本机」：`MultiplayerScreen.ts`、`ServerListPanel.ts`、`WorldScreen.ts`、`main.ts` → playwright
-  - 做了什么：`open('host', world)` 模式（标题/房名/按钮差异）、右栏「选择本机 127.0.0.1」、`onHostOpen` 接线、`hostWorldFlow` 抽成两入口共用。
-  - 为什么：两套界面字段完全一样，各写一套只会分叉。
-  - 验证：`mode=host` / 标题「开房：新的世界 1」/ 按钮「确定并进入」/ `localVisible=true` / 旧对话框 0。
-  - 批次：20261027-2600
-- [x] [L21] 修 `.hidden` 静默失效：`index.html`
-  - 做了什么：补 `#mp-host.hidden` / `#mp-join.hidden` / `#mp-disconnect.hidden` 三条规则。
-  - 为什么：项目里没有通用 `.hidden{display:none}`，`classList.add('hidden')` 对这三颗按钮一直无效——host 模式下「开房」按钮还在，玩家看到两个"开房"。
-  - 验证：截图只剩「确定并进入」一颗。
-  - 批次：20261027-2600
-
----
-
-## 批次 20261027-2500 · 2026-10-27 · 会话 12c62c
-
-> 用户：整理文档太花时间，做成一条命令
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-2500
-
-- [x] [L20] 台账收尾一条命令：`tools/ledger.mjs`（新）、`tools/audit-tasks.mjs`、`AGENTS.md` → `npm run check`
-  - 做了什么：`ledger.mjs` 读队列文件 → 插 DONE（正则找第一条真实批次）→ archive-done → `audit-tasks --fix` 修 HANDOFF 数字 → archive-queue 归档 → 打印"还要手写什么、下一条用哪个编号"；`audit-tasks` 加 `--fix` 直接写回进度口径。
-  - 为什么：上一批功能提交 20:39、台账 20:56，**整理文档 17 分钟**——猜编号、猜锚点、手改数字再重跑 check，全是机械劳动。
-  - 验证：`npm run check` exit=0；自测时发现并修掉两个 bug（插入位置匹配到文档模板行、编号统计混入 D/O/P 前缀）。
-  - 批次：20261027-2500
 
 ---
 

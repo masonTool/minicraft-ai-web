@@ -18667,3 +18667,84 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261027-2900 · 2026-10-27 · 会话 12c62c
+
+> 用户：浮层挡不住触摸、世界页三按钮、⋯下拉、缩略图、.mc 包
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2900
+
+- [x] [L22] 浮层遮罩真正拦截：`InputOverlay.ts` → playwright
+  - 做了什么：window 捕获阶段吞掉 pointer/touch/mouse/click/wheel（输入框放行），pointerdown 收起浮层。
+  - 为什么：遮罩只挡视觉，事件仍冒泡到 document；页面大量交互是 document 委托，点遮罩会被当成点下层。
+  - 验证：点下层按钮位置 → lowerClicks=0、浮层收起。
+  - 批次：20261027-2900
+- [x] [L22] 世界页三按钮一排：`WorldScreen.ts` + CSS
+  - 做了什么：去掉「世界 N」标题行；新建/加入等宽并排（317px），导入存档小一号靠右（72px）。
+  - 验证：截图 + 实测宽度。
+  - 批次：20261027-2900
+- [x] [L22] 「⋯」下拉菜单：`WorldScreen.ts` + CSS
+  - 做了什么：导出/编辑/删除竖排浮层，点别处 `pointerdown` 收起。
+  - 验证：items=[导出,编辑,删除]，点别处 hidden=true。
+  - 批次：20261027-2900
+- [x] [L22] 世界缩略图存真实画面：`WorldRegistry.ts`、`WorldScreen.ts`、`main.ts`
+  - 做了什么：`thumbnail` 存清单；`onSaved` 抓 160×90 jpeg（10 秒限频）；renderer 开 `preserveDrawingBuffer`。
+  - 为什么：原来按世界类型画 CSS 渐变，所有同类世界看起来一样。
+  - 验证：min=2/max=255/颜色丰富（非空白），截图能看到天空与草地。
+  - 批次：20261027-2900
+- [x] [L22] 导出/导入改 `.mc`（zip）：`McPack.ts`（新）、`SaveTransfer.ts`、`main.ts`、`tests/mc-pack.test.ts`
+  - 做了什么：手写 store zip；包内 `world.json` + `thumbnail.jpg`；包名空格→中划线，导入优先用包内真名。
+  - 验证：导出 `新的世界-1.mc`，python zipfile 解出两个条目；3 条往返单测。
+  - 批次：20261027-2900
+
+---
+
+## 批次 20261027-2600 · 2026-10-27 · 会话 12c62c
+
+> 用户：开房界面复用加入房间，只加「选择本机」；另外扫描坏了，先分析原因
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2600
+
+- [x] [L21] 局域网扫描修复：`ServerListPanel.subnets()` → `npm run check`
+  - 做了什么：候选网段列表按可能性排序（hostname 私网 IP → 地址框私网 IP → localhost 加回环 → 常见私网段兜底），`refresh()` 分批扫（一次 2 段、找到就停）。
+  - 为什么：上一版只认 `location.hostname`，App webview 里它是 `localhost` → 兜底成回环 → 只扫本机；再上一版用地址框 IP 所以能扫到。WebRTC 也不可用（mDNS 混淆成 `xxx.local`）。
+  - 验证：右栏扫到 `127.0.0.1(newplayer)` 与 `192.168.1.72(cookroom)` 两台。
+  - 批次：20261027-2600
+- [x] [L21] 开房复用「加入房间」界面 + 右栏「选择本机」：`MultiplayerScreen.ts`、`ServerListPanel.ts`、`WorldScreen.ts`、`main.ts` → playwright
+  - 做了什么：`open('host', world)` 模式（标题/房名/按钮差异）、右栏「选择本机 127.0.0.1」、`onHostOpen` 接线、`hostWorldFlow` 抽成两入口共用。
+  - 为什么：两套界面字段完全一样，各写一套只会分叉。
+  - 验证：`mode=host` / 标题「开房：新的世界 1」/ 按钮「确定并进入」/ `localVisible=true` / 旧对话框 0。
+  - 批次：20261027-2600
+- [x] [L21] 修 `.hidden` 静默失效：`index.html`
+  - 做了什么：补 `#mp-host.hidden` / `#mp-join.hidden` / `#mp-disconnect.hidden` 三条规则。
+  - 为什么：项目里没有通用 `.hidden{display:none}`，`classList.add('hidden')` 对这三颗按钮一直无效——host 模式下「开房」按钮还在，玩家看到两个"开房"。
+  - 验证：截图只剩「确定并进入」一颗。
+  - 批次：20261027-2600
+
+---
+
+## 批次 20261027-2500 · 2026-10-27 · 会话 12c62c
+
+> 用户：整理文档太花时间，做成一条命令
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-27
+> 批次：20261027-2500
+
+- [x] [L20] 台账收尾一条命令：`tools/ledger.mjs`（新）、`tools/audit-tasks.mjs`、`AGENTS.md` → `npm run check`
+  - 做了什么：`ledger.mjs` 读队列文件 → 插 DONE（正则找第一条真实批次）→ archive-done → `audit-tasks --fix` 修 HANDOFF 数字 → archive-queue 归档 → 打印"还要手写什么、下一条用哪个编号"；`audit-tasks` 加 `--fix` 直接写回进度口径。
+  - 为什么：上一批功能提交 20:39、台账 20:56，**整理文档 17 分钟**——猜编号、猜锚点、手改数字再重跑 check，全是机械劳动。
+  - 验证：`npm run check` exit=0；自测时发现并修掉两个 bug（插入位置匹配到文档模板行、编号统计混入 D/O/P 前缀）。
+  - 批次：20261027-2500
+
+---
+
