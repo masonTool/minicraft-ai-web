@@ -5526,6 +5526,22 @@ console.log('\n[连接时机：主菜单先连后进世界（L9）]');
       );
     })(),
   );
+  // 2026-10-28（用户）：导出要**让玩家选目录**。有 `showSaveFilePicker` 就用它，
+  // 没有才退回 `<a download>`；玩家点取消不许偷偷下载（`cancelled` 不进 fallback）。
+  check(
+    '导出世界优先弹「另存为」让用户选目录，不支持才回退下载',
+    (() => {
+      const mainSrc2 = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+      const saveFileSrc = readFileSync(new URL('../src/ui/SaveFile.ts', import.meta.url), 'utf8');
+      return (
+        mainSrc2.includes('await saveBlobWithPicker(blob, {') &&
+        mainSrc2.includes("if (outcome === 'unsupported') downloadBlob(blob, fileName);") &&
+        saveFileSrc.includes("showSaveFilePicker") &&
+        saveFileSrc.includes("return 'cancelled'") &&
+        saveFileSrc.includes('await writable.close();')
+      );
+    })(),
+  );
   check(
     '探房用一次性身份（复用本机 clientId 会被判 duplicate 拒连）',
     probeSrc.includes('probe${Math.random()') && probeSrc.includes('setTimeout(() => finish(null)'),

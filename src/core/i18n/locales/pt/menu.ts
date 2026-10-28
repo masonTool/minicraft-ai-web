@@ -51,6 +51,7 @@ export const menu = {
   "world.editHint": "O modo e a dificuldade valem na próxima vez que você entrar no mundo.",
   "world.delete": "Excluir",
   "world.export": "Exportar",
+  "world.exportFileType": "Save de mundo (.mc)",
   "world.import": "Importar save",
   "menu.minigames": "Minijogos",
   "world.saveFailed": "Falha ao salvar, tente novamente",

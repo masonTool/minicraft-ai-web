@@ -176,6 +176,8 @@ import {
   type SettingsChangeMeta,
 } from './ui/SettingsScreen.ts';
 import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
+// 导出文件：优先弹系统"另存为"（让玩家选目录），不支持才退回浏览器下载（2026-10-28）
+import { downloadBlob, saveBlobWithPicker } from './ui/SaveFile.ts';
 import { MultiplayerScreen } from './ui/MultiplayerScreen.ts';
 import { RoomCard } from './ui/RoomCard.ts';
 import {
@@ -20892,16 +20894,19 @@ async function boot(): Promise<void> {
       // 运行时没问题，这里收一次窄
       const packed = zipStore(entries) as unknown as BlobPart;
       const blob = new Blob([packed], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = transferFileName(world.name);
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      // 立刻 revoke 会让部分浏览器的下载中断，留一拍再释放
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const fileName = transferFileName(world.name);
+      /*
+       * 2026-10-28（用户）：导出要**让玩家选目录**。
+       * 优先弹系统的"另存为"（`showSaveFilePicker`）；不支持的浏览器
+       * （Safari / Firefox / Android WebView）才退回 `<a download>`。
+       * 玩家在对话框里点取消 → 什么都不做（不要再偷偷下载一份）。
+       */
+      const outcome = await saveBlobWithPicker(blob, {
+        suggestedName: fileName,
+        description: t('world.exportFileType'),
+        extensions: ['.mc'],
+      });
+      if (outcome === 'unsupported') downloadBlob(blob, fileName);
     } catch (error) {
       console.warn('[world] 导出存档失败', error);
     } finally {
