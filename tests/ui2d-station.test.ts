@@ -9,6 +9,7 @@ import { layoutInventoryPanel } from '../src/ui2d/InventoryPanel2D.ts';
 import {
   STATION_KINDS,
   STATION_SPECS,
+  extraSlotWritable,
   stationExtra,
   stationSlotCount,
   stationSpec,
@@ -149,5 +150,31 @@ describe('与 InventoryPanelMode 对齐', () => {
     // 纯背包与交易没有"操作区"，不该出现在表里
     expect((STATION_SPECS as Record<string, unknown>).inventory).toBeUndefined();
     expect((STATION_SPECS as Record<string, unknown>).trade).toBeUndefined();
+  });
+});
+
+/** 结果格只出不进（`extraSlotWritable`） */
+describe('额外槽位的可写性', () => {
+  it('合成台：前 9 格可写、第 10 格（结果）不可写', () => {
+    const spec = STATION_SPECS.crafting;
+    for (let i = 0; i < 9; i += 1) expect(extraSlotWritable(spec, i)).toBe(true);
+    expect(extraSlotWritable(spec, 9)).toBe(false);
+  });
+
+  it('熔炉：原料/燃料可写、产物格不可写', () => {
+    const spec = STATION_SPECS.furnace;
+    expect(extraSlotWritable(spec, 0)).toBe(true);
+    expect(extraSlotWritable(spec, 1)).toBe(true);
+    expect(extraSlotWritable(spec, 2)).toBe(false);
+  });
+
+  it('没有结果格的容器：全部可写（箱子 27 格）', () => {
+    const spec = STATION_SPECS.chest;
+    for (let i = 0; i < 27; i += 1) expect(extraSlotWritable(spec, i)).toBe(true);
+    expect(extraSlotWritable(spec, 27)).toBe(false); // 越界
+  });
+
+  it('未知种类一律不可写（不猜）', () => {
+    expect(extraSlotWritable(null, 0)).toBe(false);
   });
 });

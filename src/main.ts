@@ -50,6 +50,7 @@ import {
   InventoryPanelHost,
   MenuScreen2D,
   inventoryIndexAt,
+  extraSlotWritable,
   stationExtra,
   stationSpec,
   Touch2D,
@@ -3192,15 +3193,34 @@ class App {
         this.inv2d = new InventoryPanelHost(
           document.body,
           {
-            // 不是玩家库存的格子（工作站/装备列）返回 null —— 那几格由容器自己提供
+            /*
+             * 三层来源，按显示下标判断（顺序与版面一致：extra → side → main → hotbar）：
+             *  - extra：当前打开的容器（熔炉原料/燃料、箱子 27 格…）；
+             *  - side：装备列（还没有数据源，见下）；
+             *  - main / hotbar：玩家背包。
+             */
             get: (display) => {
+              const extraCount = this.inv2dSpec.extraCount ?? 0;
+              if (display < extraCount) {
+                const container = this.inventoryScreen.activeContainerAccess;
+                return container ? container.get(display) : null;
+              }
               const index = inventoryIndexAt(inv2dIndexSpec, display);
               return index === null ? null : this.inventory.get(index);
             },
             set: (display, stack) => {
+              const next = (stack as ItemStack | null) ?? null;
+              const extraCount = this.inv2dSpec.extraCount ?? 0;
+              if (display < extraCount) {
+                // **结果格只出不进**：容器下标 0..extraCount-2 可写，最后一格是产物
+                const spec = stationSpec(this.inventoryScreen.currentMode);
+                if (!spec || !extraSlotWritable(spec, display)) return;
+                this.inventoryScreen.activeContainerAccess?.set(display, next);
+                return;
+              }
               const index = inventoryIndexAt(inv2dIndexSpec, display);
               if (index === null) return;
-              this.inventory.set(index, (stack as ItemStack | null) ?? null);
+              this.inventory.set(index, next);
             },
           },
           {

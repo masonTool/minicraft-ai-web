@@ -1429,6 +1429,36 @@ host.retarget({ extra: stationExtra(mode) });
 顺带复验了 `npm run check:pause` 的两条跳过分支（连不上 dev server / 停在落地页）——都还是 exit 0，
 说明这些改动没有把验收脚本弄坏。
 
+## 5.54 容器数据源接上了（`activeContainerAccess`）
+
+自绘面板接管后 DOM 不再渲染，而容器里的东西（熔炉的原料与燃料、箱子的 27 格、铁砧的两格）
+只存在 `InventoryScreen.activeContainer` 里 —— 之前自绘侧只能画出**空形状**。
+
+`InventoryScreen` 新增只读入口：
+
+```ts
+get activeContainerAccess(): { get(index); set(index, stack) } | null
+```
+
+两个关键点：
+
+1. **`set` 顺带把 `containerDirty` 置起来** —— 不置的话改动不会被存盘，
+   玩家的症状是"放进去的东西退出重进就没了"（这类 bug 只在重进后出现，极难归因）；
+2. **下标是容器自己的**（熔炉 0=原料 1=燃料 2=产物），与面板显示下标之间还要过
+   `panelIndexing`，所以 `main.ts` 的 `SlotAccess` 按 `display < extraCount` 分流：
+
+| 显示下标落区 | 数据源 | 可写 |
+| --- | --- | --- |
+| `extra`（容器） | `activeContainerAccess` | **结果格只出不进**（`extraSlotWritable`） |
+| `side`（装备列） | 没有数据源 → `null` | 目前不写 |
+| `main` / `hotbar` | `Inventory`（经 `inventoryIndexAt` 换算） | 可写 |
+
+`extraSlotWritable(spec, offset)` 把"最后一格是产物"这条约定写成函数：合成台 9 格可写、
+第 10 格不可写；熔炉前 2 格可写、产物格不可写；箱子 27 格全可写。
+
+⚠️ **"产物格排在最后"是约定**，19 种里没有反例，但接新容器时值得先看一眼它的下标表
+（把这条写进函数注释，而不是散在调用处）。
+
 ## 5.3 调试遮罩：一块黄色告诉你"这块是谁画的"
 
 `?ui2d=1&ui2dtint=1`（只在 `ui2d` 打开时生效）。屏幕上**每一块黄色的地方就是 canvas 画的**，

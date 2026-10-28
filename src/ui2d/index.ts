@@ -246,6 +246,7 @@ export {
 export {
   STATION_KINDS,
   STATION_SPECS,
+  extraSlotWritable,
   stationExtra,
   stationSlotCount,
   stationSpec,

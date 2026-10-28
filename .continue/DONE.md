@@ -9,6 +9,19 @@
 
 ---
 
+## 批次 20261028-1014 · 2026-10-28 · 会话 9f2dcf81
+
+> 队列：把容器数据源接进自绘面板（最后一块数据源）。
+
+- [x] `InventoryScreen.activeContainerAccess`：只读 `get/set`，`set` 顺带置 `containerDirty`（否则不存盘）
+- [x] `ui2d/stationLayouts.extraSlotWritable()`：结果格只出不进（4 条断言）
+- [x] `main.ts` 的 `SlotAccess` 按 `display < extraCount` 分流到容器，其余走玩家背包
+- [x] 组合断言：熔炉 0/1 可写、产物格不可写；箱子 27 格 + 玩家 36 格
+
+验证：`test:ui2d-station` 17/17、`test:ui2d-indexing` 10/10、`tsc` 干净、`npm run check` exit=0。
+
+
+
 ## 批次 20261028-1009 · 2026-10-28 · 会话 9f2dcf81
 
 > 队列：让自绘版面跟着"打开的容器"自动切，并把模式名对齐钉死。

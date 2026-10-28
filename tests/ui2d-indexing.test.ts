@@ -12,6 +12,7 @@ import {
   panelRegions,
   regionOfDisplayIndex,
 } from '../src/ui2d/panelIndexing.ts';
+import { STATION_SPECS, extraSlotWritable } from '../src/ui2d/stationLayouts.ts';
 
 describe('区域划分', () => {
   it('纯背包：27 主背包 + 9 快捷栏 = 36', () => {
@@ -89,5 +90,36 @@ describe('下标换算', () => {
       expect(display).not.toBeNull();
       expect(inventoryIndexAt(spec, display!)).toBe(inv);
     }
+  });
+});
+
+/**
+ * 与工作站预设合起来看：`extraCount` 由 `stationSpec` 算出，面板下标先落"容器区"。
+ *
+ * 这条串起了三块（stationLayouts → panelIndexing → 容器访问），也是"打开熔炉时
+ * 原料格显示空、玩家背包错位"那类 bug 的防线。
+ */
+describe('工作站版面', () => {
+  it('熔炉：0/1 是容器格（原料/燃料），2 是产物，3 起才是玩家背包', () => {
+    const spec = STATION_SPECS.furnace;
+    const indexSpec = { extraCount: spec.cols * spec.rows + (spec.result ? 1 : 0), sideCount: 0 };
+    expect(indexSpec.extraCount).toBe(3);
+    // 前 3 格不归玩家库存（由容器提供）
+    for (let i = 0; i < 3; i += 1) {
+      expect(inventoryIndexAt(indexSpec, i)).toBeNull();
+      expect(extraSlotWritable(spec, i)).toBe(i < 2); // 产物格不可写
+    }
+    expect(inventoryIndexAt(indexSpec, 3)).toBe(9);
+    expect(inventoryIndexAt(indexSpec, 3 + 26)).toBe(35);
+    expect(inventoryIndexAt(indexSpec, 3 + 27)).toBe(0);
+  });
+
+  it('箱子：27 格容器 + 36 玩家格', () => {
+    const spec = STATION_SPECS.chest;
+    const indexSpec = { extraCount: spec.cols * spec.rows, sideCount: 0 };
+    expect(indexSpec.extraCount).toBe(27);
+    expect(inventoryIndexAt(indexSpec, 26)).toBeNull();
+    expect(inventoryIndexAt(indexSpec, 27)).toBe(9);
+    expect(panelRegions(indexSpec).total).toBe(63);
   });
 });

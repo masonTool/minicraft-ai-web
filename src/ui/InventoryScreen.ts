@@ -6217,6 +6217,36 @@ export class InventoryScreen {
   }
 
   /**
+   * 当前打开的那个容器（**只读入口**，给 canvas 自绘面板读/写它那几格）。
+   *
+   * 为什么需要：自绘面板接管之后 DOM 不再渲染，而容器里的东西（熔炉的原料与燃料、
+   * 箱子的 27 格、铁砧的两格）只存在 `activeContainer` 里。没有这个入口，自绘侧
+   * 只能画出"空形状"。
+   *
+   * ⚠️ 三个边界：
+   *  1. `set` 会顺带把 `containerDirty` 置起来 —— 不置的话改动不会被存盘，
+   *     玩家会看到"放进去的东西退出重进就没了"；
+   *  2. 返回值里的下标是**容器自己的下标**（熔炉 0=原料 1=燃料 2=产物），
+   *     与面板的显示下标还要经过 `ui2d/panelIndexing.ts` 换算；
+   *  3. 没有容器时返回 `null`（纯背包、交易）。
+   */
+  get activeContainerAccess(): {
+    readonly get: (index: number) => ItemStack | null;
+    readonly set: (index: number, stack: ItemStack | null) => void;
+  } | null {
+    const container = this.activeContainer;
+    if (!container) return null;
+    return {
+      get: (index) => container.get(index) ?? null,
+      set: (index, stack) => {
+        container.set(index, stack);
+        // 同一套脏标记：`refreshContainerPanel` 与存档都靠它
+        this.containerDirty = true;
+      },
+    };
+  }
+
+  /**
    * 配方书开合之后重排左栏（批次 157）。
    *
    * 配方书是主程序开的（界面只提供落脚点），开完要回头告诉界面一声，

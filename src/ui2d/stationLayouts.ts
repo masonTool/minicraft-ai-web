@@ -118,3 +118,21 @@ export function stationExtra(
     ...(spec.flame ? { flame: true } : {}),
   };
 }
+
+/**
+ * 工作站那几格里，第 `offset` 格（0 起）能不能放东西。
+ *
+ * 规则：**结果格只出不进**（原版里合成台/熔炉的产物格塞不进任何东西）。
+ * 结果格排在额外槽位的**最后一格** —— 这是布局的约定（`extra` 之后紧跟 `result`），
+ * 也是容器的下标约定（熔炉 0=原料 1=燃料 2=产物）。
+ *
+ * ⚠️ 这条约定对"产物不在最后"的容器要单独处理；目前 19 种里没有反例，
+ * 但接新容器时值得先看一眼它的下标表。
+ */
+export function extraSlotWritable(spec: StationSpec | null, offset: number): boolean {
+  if (!spec) return false;
+  const slots = spec.cols * spec.rows;
+  if (offset < 0) return false;
+  if (!spec.result) return offset < slots;
+  return offset < slots; // 第 `slots` 格（结果格）不可写
+}
