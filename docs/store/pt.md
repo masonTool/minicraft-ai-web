@@ -38,7 +38,7 @@ Dois esquemas — toque e teclado/mouse — tela cheia na horizontal, tamanho do
 Interface em seis idiomas: 简体中文, English, Deutsch, Русский, Français, Português (Brasil).
 
 ■ Sobre
-Esta é uma recriação de fã não oficial, sem vínculo com a Mojang ou a Microsoft, e sem nenhum material oficial.
+Um sandbox de blocos desenvolvido de forma independente; todo o material é produzido pelo próprio projeto.
 Todas as texturas e sons são gerados por código em tempo de execução. Os saves ficam no seu aparelho (armazenamento local do navegador) e nunca são enviados.
 
 ■ Observações
@@ -59,4 +59,4 @@ Todas as texturas e sons são gerados por código em tempo de execução. Os sav
 | 7 | Painel de ajuda dos comandos | Escolha gráfica de parâmetros — «comandos também têm interface» |
 | 8 | Configurações · idioma | Lista suspensa com seis idiomas |
 
-Regras de captura: sem marcas, texturas oficiais ou imagens de outros jogos; texto da interface no idioma correspondente.
+Regras de captura: apenas imagens deste projeto, nunca material de outros jogos; texto da interface no idioma correspondente.

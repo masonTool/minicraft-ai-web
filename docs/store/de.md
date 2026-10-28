@@ -38,7 +38,7 @@ Zwei Steuerungen — Touch und Tastatur/Maus — Querformat-Vollbild, einstellba
 Oberfläche in sechs Sprachen: 简体中文, English, Deutsch, Русский, Français, Português (Brasil).
 
 ■ Über das Projekt
-Dies ist ein unoffizielles Fan-Remake, steht in keiner Verbindung zu Mojang oder Microsoft und enthält keine offiziellen Inhalte.
+Eine eigenständig entwickelte Blockwelt; alle Inhalte werden von diesem Projekt selbst erzeugt.
 Alle Texturen und Klänge entstehen zur Laufzeit im Code. Spielstände liegen auf dem eigenen Gerät (lokaler Browserspeicher) und werden nie hochgeladen.
 
 ■ Hinweise
@@ -59,4 +59,4 @@ Alle Texturen und Klänge entstehen zur Laufzeit im Code. Spielstände liegen au
 | 7 | Befehlshilfe | Grafische Parameterwahl — „Befehle haben auch eine Oberfläche" |
 | 8 | Einstellungen · Sprache | Auswahl mit sechs Sprachen |
 
-Aufnahmeregeln: keine offiziellen Marken, Texturen oder fremdes Bildmaterial; Oberflächentext in der passenden Sprache.
+Aufnahmeregeln: nur eigenes Bildmaterial dieses Projekts, nichts aus anderen Spielen; Oberflächentext in der passenden Sprache.

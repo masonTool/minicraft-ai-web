@@ -3475,23 +3475,21 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       settingsSrc.includes('for (const refresh of this.refreshers) refresh();') &&
       settingsSrc.includes("resetButton.id = 'settings-reset'"),
   );
-  // 合规（批次 20261025-0117）：商店版本要有一个**用户自己找得到**的免责位置。
-  // 首页那句页脚被用户删掉了，所以挪到设置页底部；资源包那一行再单独一句"只导自己的包"。
-  // 三处都得在：源里引用了这两个键、CSS 有对应的两条样式、六种语言都有这两条文案——
-  // 少任何一处都不会报错，只会静默地少一行灰字（界面上根本没人会发现）。
+  // 资源包那一行下面必须有一句"只导自己的包"（2026-10-28 起不再有「非官方」声明：
+  // 用户明确要求界面上不要出现任何指向"我们不是官方"的自我定位）。
   const settingsHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   check(
-    '设置页有「非官方」声明与资源包免责，且六语言齐全',
-    settingsSrc.includes("t('settings.notice')") &&
-      settingsSrc.includes("t('settings.resourcePack.hint')") &&
-      settingsHtml.includes('.settings-notice {') &&
+    '资源包免责说明在、且六语言齐全；「非官方」声明已删除',
+    settingsSrc.includes("t('settings.resourcePack.hint')") &&
       settingsHtml.includes('.settings-note {') &&
+      !settingsSrc.includes("t('settings.notice')") &&
+      !settingsHtml.includes('.settings-notice {') &&
       LOCALES.every((locale) => {
         const table = readFileSync(
           new URL(`../src/core/i18n/locales/${locale.code}/settings.ts`, import.meta.url),
           'utf8',
         );
-        return /['"]settings\.notice['"]/.test(table) && /['"]settings\.resourcePack\.hint['"]/.test(table);
+        return /['"]settings\.resourcePack\.hint['"]/.test(table) && !/['"]settings\.notice['"]/.test(table);
       }),
   );
   // 合规（批次 20261025-0117）：MIT 要求"分发物里带版权声明与许可全文"，

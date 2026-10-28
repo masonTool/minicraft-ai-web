@@ -1241,11 +1241,6 @@ export class SettingsScreen {
     footer.appendChild(resetButton);
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
-    // 批次 20261025-0117：首页那句"非官方"页脚被用户删掉了（20261024-1152 觉得碍眼），
-    // 但商店版本需要一个**用户自己找得到**的免责位置——放设置页底部、恢复默认之上。
-    // 用 `prepend` 而不是改上面的组装顺序：那段顺序有一条测试盯着"footer 一定在整页最底部"，
-    // 插在中间会把它顶出断言允许的距离。
-    footer.prepend(this.makeFooterNotice());
 
     this.root.append(panel, modal);
     panel.append(menuPage, settingsPage);
@@ -1916,19 +1911,6 @@ export class SettingsScreen {
     note.className = 'settings-note';
     note.textContent = t('settings.resourcePack.hint');
     return note;
-  }
-
-  /**
-   * 设置页底部的「非官方」声明（批次 20261025-0117）。
-   *
-   * 措辞刻意只陈述"与 Mojang / Microsoft 无关 + 素材全部由代码生成"，不讲"复刻的是哪个
-   * 游戏"——免责声明的价值在于划清关系，写清对象反而等于自认使用了他人作品。
-   */
-  private makeFooterNotice(): HTMLElement {
-    const notice = document.createElement('p');
-    notice.className = 'settings-notice';
-    notice.textContent = t('settings.notice');
-    return notice;
   }
 
   /**

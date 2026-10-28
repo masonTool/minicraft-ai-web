@@ -38,7 +38,7 @@ Deux schémas de commande — tactile et clavier/souris — plein écran paysage
 Interface en six langues : 简体中文, English, Deutsch, Русский, Français, Português (Brasil).
 
 ■ À propos
-C'est une recréation de fan non officielle, sans lien avec Mojang ou Microsoft, et sans aucun élément officiel.
+Un bac à sable de blocs développé de façon indépendante ; tous ses éléments sont produits par le projet lui-même.
 Toutes les textures et tous les sons sont générés par le code à l'exécution. Les sauvegardes restent sur votre appareil (stockage local du navigateur) et ne sont jamais envoyées.
 
 ■ Remarques
@@ -59,4 +59,4 @@ Toutes les textures et tous les sons sont générés par le code à l'exécution
 | 7 | Panneau d'aide des commandes | Choix graphique des paramètres — « les commandes ont aussi une interface » |
 | 8 | Réglages · langue | Menu déroulant des six langues |
 
-Règles de prise de vue : pas de marques, de textures officielles ni d'images d'autres jeux ; le texte de l'interface dans la langue correspondante.
+Règles de prise de vue : uniquement des images de ce projet, jamais de contenu d'autres jeux ; le texte de l'interface dans la langue correspondante.

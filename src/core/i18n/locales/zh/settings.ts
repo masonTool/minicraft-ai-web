@@ -84,8 +84,7 @@ export const settings = {
   'settings.import': '导入',
   'settings.importTitle': '选择 .mcpack / .zip 资源包',
   'settings.notChosen': '未选择',
-  'settings.resourcePack.hint': '只能导入你自己拥有的资源包。本应用不提供、也不分发任何官方素材。',
-  'settings.notice': '非官方的爱好者项目，与 Mojang / Microsoft 无关。所有贴图与音效都由代码实时生成，不含任何官方素材。',
+  'settings.resourcePack.hint': '只能导入你自己拥有、或有权使用的资源包；本应用不提供、也不分发任何资源包文件。',
   // ---- 档位标签（这五组原来是导出给断言看的常量表，现在改成查表函数）
   'settings.opt.unlimited': '不限',
   'settings.opt.fps30': '30 帧',
