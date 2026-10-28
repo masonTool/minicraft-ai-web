@@ -1390,6 +1390,16 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 顺带：`web/index.html` 的 Service Worker 只在真实 http(s) 站点注册（`app://` 与
         `localhost` 都跳过）。否则桌面端/移动端更新后仍跑旧 JS，旧前端配新核心数据最难查
 
+- [ ] A26 【发现】安卓"手机当房主"没接上：`web/src/core/net/HostBridge.ts` 读的是
+      `window.MinicraftAndroid`（同步 JS 接口），但 `android/` 里**没有任何地方注入它**
+      （`grep -rn "JavascriptInterface\|MinicraftAndroid" android/app/src/main/java` 为空）。
+      结果是 `hasHostBridge()` 恒为 false，"开房"入口永远不出现——Rust 服务端、`ServerService`、
+      `NativeServerPlugin` 三样都在，唯独缺网页能看到的那一层。
+      · 待定：补一个 `@JavascriptInterface` 注入（四个方法转发到 `NativeServerPlugin`），
+        还是让 `HostBridge` 改读 `Capacitor.Plugins.NativeServer`（异步，接口形状要变）
+      · 为什么没当场修：两种做法都要**真机验证**局域网组播 + 前台服务 + 端口绑定，
+        这台机器只能编译不能跑安卓；盲改会做出"看着接上了、实际开不了房"的东西
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
