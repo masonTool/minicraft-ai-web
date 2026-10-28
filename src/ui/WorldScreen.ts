@@ -357,10 +357,12 @@ export class WorldScreen {
       { fullWidth: true, className: 'world-dropdown' },
     );
     // 游戏模式（批次 181）：**在创建时就要选**，不要靠游戏里双击跳跃去猜
+    // 2026-10-28（用户）：新建世界默认 **创造模式**——进世界先能自由搭，
+    // 想要生存的玩家自己在这一次下拉里切成生存即可。
     this.gameModeSelect = new Dropdown<GameMode>(
       GAME_MODES,
       gameModeLabels(),
-      'survival',
+      'creative',
       () => this.updateTypeHint(),
       { fullWidth: true, className: 'world-dropdown' },
     );
@@ -1188,7 +1190,8 @@ export class WorldScreen {
     seed: string,
     worldType: WorldType,
     difficulty: Difficulty = 'normal',
-    gameMode: GameMode = 'survival',
+    // 默认值与表单一致（2026-10-28：新建世界默认创造）
+    gameMode: GameMode = 'creative',
     singleBiome = 'plains',
     hardcore: 'normal' | 'hardcore' = 'normal',
   ): void {
