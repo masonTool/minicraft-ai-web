@@ -1404,6 +1404,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · ⚠️ 安全前提：`addJavascriptInterface` 只对**包内页面**安全。以后若允许 WebView 加载
         远程页面，这层桥必须先删掉（注释已写在 `JsHostBridge` 里）
 
+- [x] A27 原生产物加固，并用 A/B 签名实测"改包即不能跑"（2026-10-29）
+      · Android：release 开 `minifyEnabled` + `shrinkResources`（4.2 MB vs debug 7.4 MB），
+        `proguard-rules.pro` 只保留 JNI / `@JavascriptInterface` / `@CapacitorPlugin` 三类必留项；
+        `extractNativeLibs=false`（.so 不再解压到可替换的磁盘副本）
+      · iOS：Release 加 `STRIP_INSTALLED_PRODUCT` / `DEPLOYMENT_POSTPROCESSING` /
+        `SWIFT_REFLECTION_METADATA_LEVEL=none` / `ENABLE_TESTABILITY=NO`，并关 `webView.isInspectable`
+      · **A/B 实测**：同一份 release APK，用证书 A（摘要写进 signers.txt）签 → 正常进游戏；
+        用证书 B 重签 → 停在"Get it on Google Play"落地页。**这就是"改了包不能运行"的实证**
+      · 混淆实测：release 的 classes.dex 里 `unsealCore` / `hkdf` / `isSignedByUs` 一个都搜不到，
+        只剩必须保留的 `CoreVault`（JS 按名字找插件）
+      · 口径：这种"客户端内自我校验"只能提高成本。真正的锁是"改包必须重签 → 签名不符 → 数据解不开"，
+        而不是"校验函数返回 false"
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

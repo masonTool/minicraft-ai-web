@@ -39,6 +39,25 @@ KEK = HKDF-SHA256(salt, 证书摘要 ‖ salt, info="minicraft/core/v1")
 CEK = 每次构建随机 32 字节，被 KEK 用 AES-256-GCM 包住
 ```
 
+## 2.5 已经打开的加固开关
+
+改包重签挡得住之后，剩下的成本在于"读得懂"。下面这些开关都已经打开并实测：
+
+| 平台 | 开关 | 挡的是什么 | 状态 |
+| --- | --- | --- | --- |
+| Android | `minifyEnabled` + `shrinkResources`（R8） | 反编译后一眼看懂解封链路 | ✅ 实测 release 4.2 MB（debug 7.4 MB），`unsealCore`/`hkdf` 等名字全部消失 |
+| Android | `extractNativeLibs=false` | root 后直接替换磁盘上的 `.so` | ✅ 实测 JNI 仍可用（`startServer()` 后 8887 就绪） |
+| Android | `allowBackup=false` | `adb backup` 拖走存档 | ✅ |
+| Android | release 关 `setWebContentsDebuggingEnabled` | `chrome://inspect` 内存 dump | ✅ |
+| iOS | `STRIP_INSTALLED_PRODUCT` + `DEPLOYMENT_POSTPROCESSING` | 符号表/调试信息随包发布 | ✅ Release 编译通过 |
+| iOS | `SWIFT_REFLECTION_METADATA_LEVEL=none` | Swift 反射元数据暴露类型与方法名 | ✅ |
+| iOS | `ENABLE_TESTABILITY=NO` | 测试钩子残留 | ✅ |
+| iOS | release 关 `webView.isInspectable` | Safari Web Inspector 看 JS 变量 | ✅ |
+| 桌面 | 生产构建去掉默认菜单、禁导航/开窗 | DevTools 与外部页面注入 | ✅ |
+
+> **不建议再加的**：反调试 / 反 root / 反 frida。它们只提高动态调试门槛，
+> 而本项目已经把判定收敛到"数据能不能解开"；每加一层就要在每次系统大版本上重测误伤。
+
 ## 3. 发布前必做
 
 | # | 事项 | 怎么做 |
@@ -73,6 +92,20 @@ npm run check              # 全量门禁
 - Android：模拟器（API 37 / arm64）实跑，页面正常启动、无崩溃；顺带用 CDP 直连 WebView
   验了宿主桥与开房链路（`startServer()` 后 8887 端口就绪）。
 
+**最关键的一条（A/B 实验，2026-10-29）**：同一份 release APK（已开 R8），
+
+| 用哪张证书签 | 结果 |
+| --- | --- |
+| 证书 A（其摘要写进 `signers.txt`） | **正常进游戏**（主包加载、方块表解开） |
+| 证书 B（同一个 APK，只重签） | **停在"Get it on Google Play"落地页**，游戏起不来 |
+
+也就是说"改包重签 → 不能运行"不是设计意图，是**实测行为**。复现方式见
+`docs/` 里这段记录的命令（生成两张 keystore → `gen:sealed` 用 A 的摘要 →
+`assembleRelease` 用 A 签 → `apksigner` 用 B 重签 → 两个都装一遍）。
+
+R8 也确实在生效：release 的 `classes.dex` 里 `unsealCore` / `hkdf` / `isSignedByUs`
+**一个都搜不到**，只剩必须保留的插件名 `CoreVault`（JS 侧要按名字找）。
+
 **没验证过**：
 
 - Windows 产物没在 Windows 上装过（生成是在 macOS 上用 wine 完成的）；
@@ -82,7 +115,6 @@ npm run check              # 全量门禁
 
 | 项 | 为什么没做 |
 | --- | --- |
-| `minifyEnabled` / R8 | 需要真机回归 keep 规则，值不上一轮的风险 |
 | `androidScheme` 改 `https` | **会清空存量存档**，属于一次性不可逆决策，要你拍板 |
 | Windows 实机验证 | 只能在 macOS 上出包，没有 Windows 机器 |
 | 各平台正式签名 | 没有 Apple Developer 证书 / Windows 代码签名证书 |
@@ -117,7 +149,12 @@ npm run check              # 全量门禁
 
 按投入产出排序：
 
-1. 开 R8 + 真机回归（挡脚本小子读 Java 层）；
-2. `androidScheme` 换 `https` + 关混合内容（要在有真实用户之前做）；
+1. `androidScheme` 换 `https` + 关混合内容（要在有真实用户之前做，一次性）；
+2. 给**资源**也加清单签名（现在只保护了核心数据，JS 被改后重签虽然进不去，
+   但"改 JS 再签自己的证书"这条路本身没有二次校验）；
 3. 加 `Play Integrity`（必须先有后端，否则客户端自己验证没有意义）；
 4. 商业加固壳（对 AI 逆向有效，但按年授权，与"被抄"的动机不匹配）。
+
+已做且**不建议再加码**的：反调试、反 root、反 frida。它们只提高"动态调试"的门槛，
+而本项目已经把判定收敛到"数据能不能解开"，再叠军备竞赛的边际收益趋近于零，
+还要在每次 Android/iOS 大版本上重测误伤。

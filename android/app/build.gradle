@@ -21,10 +21,37 @@ android {
     buildFeatures {
         buildConfig true
     }
+    /*
+     * 原生库**不解压到磁盘**（A27）。
+     *
+     * 默认 `extractNativeLibs=true` 会把 libminicraft_server.so 释放到应用私有目录，
+     * 拿到 root 的人可以直接替换那个文件——而它正是"手机当房主"的服务端。
+     * 设成 false 之后 .so 以压缩态留在 APK 里、由系统直接从 APK 映射，
+     * 磁盘上不存在可被替换的副本。
+     */
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
     buildTypes {
         release {
+            /*
+             * R8 + 资源压缩（A27）。
+             *
+             * 为什么不只是"省体积"：解封链路（HKDF 派生、AES-GCM、形态变换）在 Java 里
+             * 本来是**带注释的明文**，读一遍就能照着实现。开混淆之后类名/方法名变成 a/b/c，
+             * 逆向成本从"看懂"变成"先重建调用关系"——这是当前性价比最高的一层。
+             *
+             * ⚠️ 收益只在 release：debug 包仍是不混淆的（要能调试）。
+             */
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // 显式写出来：调试期不要混淆，否则断点与栈都对不上
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 }
