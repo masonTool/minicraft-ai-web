@@ -16,6 +16,11 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // CoreVault / MainActivity 要用 BuildConfig.DEBUG 判"是不是 debug 构建"。
+    // AGP 8 默认会生成，但显式打开一次，避免哪天默认值变了变成编译错误。
+    buildFeatures {
+        buildConfig true
+    }
     buildTypes {
         release {
             minifyEnabled false

@@ -1,6 +1,7 @@
 package com.minicraft.app;
 
 import android.os.Bundle;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -17,5 +18,10 @@ public class MainActivity extends BridgeActivity {
         // 核心数据的唯一出口：先验签名再解封，签名不符时这个插件只会 reject
         registerPlugin(CoreVaultPlugin.class);
         super.onCreate(savedInstanceState);
+        // release 包关掉 chrome://inspect（最省事的内存 dump 入口）。
+        // 默认值本来就是 false，这里显式写出来是为了"有人改成 true"时能在 review 里看见。
+        if (!BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(false);
+        }
     }
 }
