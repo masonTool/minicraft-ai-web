@@ -238,7 +238,9 @@
     "build:app": "SPECS_STUB=1 HOST_CORE_REQUIRED=1 SOURCEMAP=0 vite build --config web/vite.config.ts && node tools/release-check.mjs --mode app",
     "android:sync": "npm run gen:sealed && npm run build:app && node tools/release-check.mjs --mode app --android && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "android:aab": "MINICRAFT_RELEASE=1 npm run android:sync && cd android && ./gradlew bundleRelease"
+    "android:aab": "MINICRAFT_RELEASE=1 npm run android:sync && cd android && ./gradlew bundleRelease",
+    "pack": "esbuild tools/pack-bundle.ts --bundle --platform=node --format=esm --outfile=.tmp/pack-bundle.mjs --log-level=error && node .tmp/pack-bundle.mjs",
+    "test:pack": "node tools/pack-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",
