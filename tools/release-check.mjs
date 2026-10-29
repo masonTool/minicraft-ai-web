@@ -411,7 +411,10 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
 // 原基线 712 KB 是**app 形态**下的实测值，与现在的 web 形态不可比：入口简化
 // （boot.ts 不再有取数闸门）让原先分散的模块并入了主包。按 web 形态重新实测
 // 741.8 KB，取 745 KB（实测 + 余量）。总 JS 合计从 1536 KB 降到 1251 KB。
-const MAIN_GZIP_BASELINE = 745 * 1024;
+// 2026-10-30：target 从 es2022 降到 es2018（真机上 WebView 72 解析不了 es2022 语法，
+// 页面永远停在"加载中…"）。降级由 esbuild 做语法转换，主包 gzip 741.8 → 774.5 KB，
+// 这 11.6 KB 是"能在老 WebView 上跑起来"的价钱，值得。
+const MAIN_GZIP_BASELINE = 776 * 1024;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }
