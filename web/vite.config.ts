@@ -134,18 +134,7 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    /*
-     * 目标降到 es2018（2026-10-30，真机实测后改）。
-     *
-     * 原来写 es2022，理由是"只跑在自家壳里，WebView 肯定新"。实测打脸：
-     * 一台 Android 9 的手机 WebView 停在 **72.0.3626.121**（用户不更新 WebView 很常见），
-     * es2022 产物里的可选链等语法**解析阶段就报错**，页面永远停在"加载中…"，
-     * 而 logcat 里没有像样的错误——最典型的"白屏且无解"。
-     *
-     * es2018 覆盖 Chrome 63+，Android System WebView 从 2018 年起就是这个水平以上；
-     * 代价只是体积略增（esbuild 负责降级可选链、空值合并这类语法）。
-     */
-    target: 'es2018',
+    target: 'es2022',
     /**
      * 显式写 `minify`（宿主4）。
      *

@@ -1,6 +1,9 @@
 package com.minicraft.app;
 
+import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -43,6 +46,15 @@ public class MainActivity extends Activity {
     /** 让网页知道"这是带原生壳的触屏设备"。UA 在任何脚本之前就可用，比注入全局变量可靠 */
     private static final String TOUCH_MARKER = "MinicraftTouch/1";
     private static final String ORIGIN = "http://localhost";
+    /**
+     * 兼容基线：Android System WebView 88。
+     *
+     * 依据（caniuse，2026-09 全球使用份额）：min()/max()/clamp() 需要 79、flex gap 84、
+     * inset 87、aspect-ratio 88——界面样式全部建立在这些之上，低于 88 的 WebView 会
+     * **直接丢弃这些声明**，菜单容器 width 退化成 auto，整屏塌成一列。
+     * 88 起步覆盖 97.07%，再往上抬（92 才有 Array.at）收益不足 0.05%，不值得。
+     */
+    private static final int MIN_WEBVIEW_MAJOR = 88;
 
     private WebView webView;
 
@@ -132,6 +144,51 @@ public class MainActivity extends Activity {
         }
 
         webView.loadUrl(ORIGIN + "/index.html");
+        warnIfWebViewTooOld();
+    }
+
+    /**
+     * WebView 太旧时提示更新。
+     *
+     * 为什么用原生弹窗而不是网页里弹：版本过低时网页的样式本身就是坏的
+     * （`min()/clamp()/inset` 全被丢弃），用它自己的 UI 提示反而可能显示不全。
+     */
+    private void warnIfWebViewTooOld() {
+        int major = webViewMajorVersion();
+        // 取不到版本号时不做判断：宁可放行，也不要因为解析失败把正常用户挡在门外
+        if (major == 0 || major >= MIN_WEBVIEW_MAJOR) return;
+
+        new AlertDialog.Builder(this)
+                .setTitle("WebView 版本过低")
+                .setMessage("当前 Android System WebView 版本为 " + major
+                        + "，低于建议的 " + MIN_WEBVIEW_MAJOR + "。\n\n"
+                        + "游戏界面可能显示异常（按钮变形、布局错乱、无法进入世界）。\n"
+                        + "请更新到最新版本后再玩。")
+                .setPositiveButton("去更新", (dialog, which) -> openWebViewStore())
+                .setNegativeButton("仍然进入", null)
+                .show();
+    }
+
+    /** WebView 主版本号，取不到返回 0 */
+    private int webViewMajorVersion() {
+        try {
+            String ua = WebSettings.getDefaultUserAgent(this);
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("Chrome/(\\d+)").matcher(ua);
+            return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    /** 跳应用商店；没有商店（或国内无 Play）时退到网页版详情页 */
+    private void openWebViewStore() {
+        Intent market = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.webview"));
+        try {
+            startActivity(market);
+        } catch (Throwable ignored) {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+        }
     }
 
     /** 从内存表里取文件；取不到就 404（与"文件不存在"语义一致，不暴露内部结构） */

@@ -8,7 +8,7 @@
     "dev": "vite --config web/vite.config.ts",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build --config web/vite.config.ts",
     "build:fast": "SOURCEMAP=0 vite build --config web/vite.config.ts",
-    "build:web": "SPECS_STUB=0 HOST_CORE_REQUIRED=0 SOURCEMAP=0 vite build --config web/vite.config.ts && node tools/downlevel.mjs && node tools/release-check.mjs --mode web",
+    "build:web": "SPECS_STUB=0 HOST_CORE_REQUIRED=0 SOURCEMAP=0 vite build --config web/vite.config.ts && node tools/release-check.mjs --mode web",
     "preview": "vite preview --config web/vite.config.ts --port 4173",
     "typecheck": "tsc --noEmit",
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
@@ -232,7 +232,7 @@
     "android:test": "cd server/android && ./gradlew connectedDebugAndroidTest",
     "android:apk": "npm run build:web && npm run pack && cd android && ./gradlew assembleDebug",
     "android:aab": "MINICRAFT_RELEASE=1 npm run build:web && MINICRAFT_RELEASE=1 npm run pack && cd android && ./gradlew bundleRelease",
-    "pack": "node tools/downlevel.mjs && esbuild tools/pack-bundle.ts --bundle --platform=node --format=esm --outfile=.tmp/pack-bundle.mjs --log-level=error && node .tmp/pack-bundle.mjs",
+    "pack": "esbuild tools/pack-bundle.ts --bundle --platform=node --format=esm --outfile=.tmp/pack-bundle.mjs --log-level=error && node .tmp/pack-bundle.mjs",
     "test:pack": "node tools/pack-test.mjs"
   },
   "dependencies": {

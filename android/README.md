@@ -91,6 +91,12 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 
 ## 已知坑
 
+- **WebView 兼容基线 = 88**（`MainActivity.MIN_WEBVIEW_MAJOR`）。低于 88 时启动会弹原生提示
+  并给商店跳转。依据：界面大量使用 `min()/max()/clamp()`（Chrome 79）、flex `gap`（84）、
+  `inset`（87）、`aspect-ratio`（88），WebView 72 这类旧内核会**直接丢弃这些声明**，
+  菜单容器 `width` 退化成 `auto`，整屏塌成一列——表现是"DOM 尺寸全错"，但视口与 dpr 都正常，
+  很容易误判成壳的问题。caniuse 口径：88 覆盖 97.07%，抬到 92 只多 0.05%，不划算。
+
 - **模拟器必须指定 GPU**：AVD 里 `hw.gpu.mode=auto` 在这台 M3 上会退化到
   **SwiftShader（软件渲染）**，表现是主菜单能显示、但一进世界就永远停在
   `Generating world…`（CPU 打满、`world.chunks.size` 恒为 0）。启动时显式给 GPU：
