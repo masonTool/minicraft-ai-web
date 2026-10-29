@@ -41,11 +41,29 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828）
+      - run: npm ci --include=optional
+
+      # npm 的可选依赖在「跨平台锁文件 + npm ci」下偶尔不装（npm/cli#4828）。
+      # vitest 5 走 rolldown 的原生绑定，缺了会直接 Startup Error —— 这里按已装版本补一次，
+      # 补不上就让后面的测试红，别静默跳过。
+      - name: 补齐 rolldown 原生绑定
+        run: |
+          VER=$(node -p "require('rolldown/package.json').version")
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null \
+            || npm i --no-save "@rolldown/binding-linux-x64-gnu@$VER"
 
       # 本地那道门禁：typecheck → vitest → 全部离线套件 → 三张台账
       # （浏览器那一段由 `check:browser` 默认跳过，CI 里没有 Chrome，见 tools/browser-check.mjs）
       - run: npm run check
 
-      # 再验一次"能不能出包"（关 sourcemap 的快版本，产物内容与正式构建一致）
-      - run: npm run build:fast
+      # 产物只有 **web** 这一种（用户 2026-10-29：其它端不用管）：
+      # build:web = 数据编进包 + 关 sourcemap + release-check（无 .map / 无 core.bin / 体积基线）
+      - run: npm run build:web
+
+      - name: 上传 web 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: minicraft-web
+          path: dist
+          retention-days: 7

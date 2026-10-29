@@ -40,7 +40,16 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828）
+      - run: npm ci --include=optional
+
+      # npm 可选依赖在跨平台锁文件下偶尔不装（npm/cli#4828）；vitest 5 的原生绑定缺了会直接启动失败
+      - name: 补齐 rolldown 原生绑定
+        run: |
+          VER=$(node -p "require('rolldown/package.json').version")
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null \
+            || npm i --no-save "@rolldown/binding-linux-x64-gnu@$VER"
+
       - run: npm run check
 
       # build:web = 数据编进包（SPECS_STUB=0）+ 不做宿主版本判定（HOST_CORE_REQUIRED=0）

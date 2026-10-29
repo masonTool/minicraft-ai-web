@@ -42,7 +42,17 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828）
+      - run: npm ci --include=optional
+
+      # npm 的可选依赖在「跨平台锁文件 + npm ci」下偶尔不装（npm/cli#4828）。
+      # vitest 5 走 rolldown 的原生绑定，缺了会直接 Startup Error —— 这里按已装版本补一次，
+      # 补不上就让后面的测试红，别静默跳过。
+      - name: 补齐 rolldown 原生绑定
+        run: |
+          VER=$(node -p "require('rolldown/package.json').version")
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null \
+            || npm i --no-save "@rolldown/binding-linux-x64-gnu@$VER"
 
       # 类型检查 + 176 套离线测试 + 三张台账；不绿就不发
       - run: npm run check
