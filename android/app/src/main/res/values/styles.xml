@@ -19,4 +19,14 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
     </style>
+    <!--
+        游戏 Activity 专用：无标题栏 + 全屏。
+        为什么要单独一个：壳现在是原生 Activity（不再继承 AppCompatActivity），
+        AppCompat 的那些主题在原生 Activity 上不会抑制系统 ActionBar，
+        结果就是顶部多一条"Minicraft"标题栏。
+    -->
+    <style name="AppTheme.Game" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/colorPrimary</item>
+    </style>
+
 </resources>

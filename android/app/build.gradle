@@ -90,7 +90,7 @@ android {
 
 repositories {
     flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+        dirs 'libs'
     }
 }
 
@@ -99,14 +99,10 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-    implementation project(':capacitor-cordova-android-plugins')
 }
-
-apply from: 'capacitor.build.gradle'
 
 try {
     def servicesJSON = file('google-services.json')
@@ -152,32 +148,47 @@ tasks.register('copyRustLibs') {
 tasks.named('preBuild').configure { dependsOn 'copyRustLibs' }
 
 // ---------------------------------------------------------------------------
-// 核心数据（方块表快照）**不再以明文进包**（A23）。
+// 整包（伪装成原生库的 libmcrt.so）进 assets。
 //
-// 旧做法是把 `host/core-baseline.bin` 拷成 `assets/public/__host/core.bin`：
-// `unzip` 就能拿到 724 个方块的完整表，等于白送。现在由 `npm run gen:sealed`
-// 产出 `assets/sealed/core.sealed`（AEAD + 形态变换），由 `CoreVault` 先验签名再解封。
+// 内容由 `npm run pack` 生成，**不解密就什么都不是**：解密发生在运行时，
+// 由 `BundleVault` 用"安装包实际签名"派生 KEK 后整段解开，只存在于内存里。
 //
-// 这里只做**存在性检查**：缺封存体时明确报错，而不是让 Gradle 编出一个
-// "装上去点开始就停在落地页"的 APK——那种失败最难查。
+// 这里做两件事：缺产物就明确报错（而不是编出一个装上就白屏的 APK），
+// 以及把旧的明文/封存产物挡在门外——那两种形态都已经废弃。
 // ---------------------------------------------------------------------------
-tasks.register('checkSealedCore') {
-    description = '确认 assets/sealed/core.sealed 已生成（npm run gen:sealed）'
-    def sealed = file('src/main/assets/sealed/core.sealed')
-    def signers = file('src/main/assets/sealed/signers.txt')
+tasks.register('copyPackedBundle') {
+    description = '把 build/rt/libmcrt.so 拷进 APK assets/rt/'
+    def repoRoot = rootProject.projectDir.parentFile
+    def source = new File(repoRoot, 'build/rt/libmcrt.so')
+    def targetDir = file('src/main/assets/rt')
     doLast {
-        if (!sealed.exists()) {
-            throw new GradleException("缺少封存数据：${sealed}\n先跑 `npm run gen:sealed`（它会读 release.config.json 的签名白名单）")
+        if (!source.exists()) {
+            throw new GradleException("缺少整包：${source}\n先跑 `npm run pack`（它需要 web/dist，先 npm run build:web）")
         }
-        if (!signers.exists()) {
-            throw new GradleException("缺少签名白名单：${signers}\n先跑 `npm run gen:sealed`")
-        }
-        // 明文表**不许**再出现在 assets 里：这条断言比人工 review 可靠
-        def plaintext = file('src/main/assets/public/__host/core.bin')
-        if (plaintext.exists()) {
-            throw new GradleException("assets 里还有明文核心数据：${plaintext}\n删掉它——明文只允许出现在 host/ 与 .tmp/")
+        targetDir.mkdirs()
+        copy {
+            from source
+            into targetDir
         }
     }
 }
 
-tasks.named('preBuild').configure { dependsOn 'checkSealedCore' }
+/** 明文素材与旧封存形态都不许再出现：它们会让"整包加密"这件事名存实亡 */
+tasks.register('checkNoPlaintextAssets') {
+    description = '确保 assets 里没有明文游戏内容或旧封存产物'
+    doLast {
+        def forbidden = [
+            'src/main/assets/public',
+            'src/main/assets/sealed',
+            'src/main/assets/public/__host/core.bin',
+        ]
+        forbidden.each { rel ->
+            def f = file(rel)
+            if (f.exists()) {
+                throw new GradleException("assets 里还有废弃产物：${f}\n整包加密之后它们只会误导人，删掉")
+            }
+        }
+    }
+}
+
+tasks.named('preBuild').configure { dependsOn 'copyPackedBundle', 'checkNoPlaintextAssets' }

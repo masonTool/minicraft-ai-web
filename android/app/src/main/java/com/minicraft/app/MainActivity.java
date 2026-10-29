@@ -1,44 +1,195 @@
 package com.minicraft.app;
 
+import android.content.pm.ActivityInfo;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.TextView;
 
-import com.getcapacitor.BridgeActivity;
+import android.app.Activity;
+
+import java.io.ByteArrayInputStream;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 /**
- * 应用入口。除了注册插件，还负责把同步宿主桥注入 WebView。
+ * 自研 WebView 壳（去 Capacitor）。
  *
- * <p>插件注册必须在 {@code super.onCreate()} **之前**（Capacitor 的插件表在那一步被冻结）；
- * JS 接口注入相反，必须在**之后**（那时 WebView 才存在）。
+ * ## 为什么不再用 Capacitor
+ *
+ * 整包是加密的，壳必须"解密后再交给 WebView"。Capacitor 6 的 Bridge 内部自装
+ * `WebViewClient` 且没有 getter，外层再包一层会拆掉它自己的协议处理——它提供的
+ * 资源服务恰好是我们不需要的那一层。现在只需要三件事：一个 WebView、一个拦截器、
+ * 一个同步 JS 桥，这些自己写反而更短。
+ *
+ * ## 内容从哪来
+ *
+ * `assets/rt/libmcrt.so` 整段解密（见 {@link BundleVault}），全部放在内存里。
+ * WebView 加载 `http://localhost/index.html`，每个请求由 {@link #shouldIntercept} 从内存
+ * 切一份返回——**磁盘上从来没有明文**。origin 用 `localhost` 是因为它被 Chromium 视为
+ * 可信来源：IndexedDB、剪贴板、`ws://` 联机都正常。
  */
-public class MainActivity extends BridgeActivity {
+public class MainActivity extends Activity {
+
+    /** 让网页知道"这是带原生壳的触屏设备"。UA 在任何脚本之前就可用，比注入全局变量可靠 */
+    private static final String TOUCH_MARKER = "MinicraftTouch/1";
+    private static final String ORIGIN = "http://localhost";
+
+    private WebView webView;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(NativeServerPlugin.class);
-        // 核心数据的唯一出口：先验签名再解封，签名不符时这个插件只会 reject
-        registerPlugin(CoreVaultPlugin.class);
         super.onCreate(savedInstanceState);
-        // release 包关掉 chrome://inspect（最省事的内存 dump 入口）。
-        // 默认值本来就是 false，这里显式写出来是为了"有人改成 true"时能在 review 里看见。
-        if (!BuildConfig.DEBUG) {
-            WebView.setWebContentsDebuggingEnabled(false);
+
+        // 横屏 + 全屏：游戏本身就是横屏布局，别让玩家先看一屏"请横屏游玩"
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        currentBundle = BundleVault.open(this);
+        if (currentBundle == null) {
+            // 解不开 = 不是我们的包（或包被动过）。没有降级分支，直接说清楚。
+            showFatal("游戏内容校验失败：请从官方渠道重新安装");
+            return;
         }
+
+        webView = new WebView(this);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        // 资源都在内存里，不需要文件/内容提供器
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
+        // 设备默认 UA + 触屏标记：摸拟器带鼠标时 `pointer: coarse` 不成立，
+        // 靠 UA 才能稳定走进触屏那套界面
+        settings.setUserAgentString(settings.getUserAgentString() + " " + TOUCH_MARKER);
+
+        webView.addJavascriptInterface(new JsHostBridge(this), "MinicraftAndroid");
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return MainActivity.this.shouldIntercept(request);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                // 只允许留在自己的 origin 里；外链一律不跳（游戏内没有需要外跳的链接）
+                String url = request.getUrl().toString();
+                return !url.startsWith(ORIGIN);
+            }
+        });
+
+        setContentView(webView);
+        // 必须在 setContentView 之后：之前 decorView 还不存在，getInsetsController() 会 NPE
+        applyImmersive();
+
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
+
+        webView.loadUrl(ORIGIN + "/index.html");
     }
 
-    /**
-     * 注入 `window.MinicraftAndroid`（见 {@link JsHostBridge}）。
-     *
-     * <p>为什么覆盖 {@code load()} 而不是写在 {@code onCreate} 末尾：
-     * Capacitor 在 {@code load()} 里才创建出 {@link #bridge}，而真正的页面加载是
-     * {@code webView.post(() -> loadUrl(...))}——投递到主线程队列。这里同步注入，
-     * 一定排在那次投递之前，所以首屏 JS 就能看到对象，不需要 reload。
-     */
+    /** 从内存表里取文件；取不到就 404（与"文件不存在"语义一致，不暴露内部结构） */
+    private WebResourceResponse shouldIntercept(WebResourceRequest request) {
+        String path = request.getUrl().getPath();
+        String name = path == null ? "" : path.replaceAll("^/+", "");
+        if (name.isEmpty()) name = "index.html";
+
+        Map<String, byte[]> bundle = currentBundle;
+        byte[] body = bundle == null ? null : bundle.get(name);
+        if (body == null) {
+            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
+                    new HashMap<>(), new ByteArrayInputStream(new byte[0]));
+        }
+
+        String mime = MIME.getOrDefault(extensionOf(name), "application/octet-stream");
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-store");
+        return new WebResourceResponse(mime, mime.startsWith("text/") ? "utf-8" : null,
+                new ByteArrayInputStream(body));
+    }
+
+    private static String extensionOf(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot < 0 ? "" : name.substring(dot).toLowerCase(Locale.ROOT);
+    }
+
+    /** minSdk 23：`Map.ofEntries` 要 API 30，这里用静态初始化块 */
+    private static final Map<String, String> MIME = new HashMap<>();
+
+    static {
+        MIME.put(".html", "text/html");
+        MIME.put(".js", "text/javascript");
+        MIME.put(".mjs", "text/javascript");
+        MIME.put(".css", "text/css");
+        MIME.put(".json", "application/json");
+        MIME.put(".webmanifest", "application/manifest+json");
+        MIME.put(".svg", "image/svg+xml");
+        MIME.put(".png", "image/png");
+        MIME.put(".jpg", "image/jpeg");
+        MIME.put(".webp", "image/webp");
+        MIME.put(".woff2", "font/woff2");
+        MIME.put(".txt", "text/plain");
+    }
+
+    /** 解密结果常驻内存：整包 4~5 MB，反复解密没有意义 */
+    private Map<String, byte[]> currentBundle;
+
+    private void showFatal(String message) {
+        TextView view = new TextView(this);
+        view.setText(message);
+        view.setTextSize(16f);
+        view.setPadding(48, 48, 48, 48);
+        setContentView(view);
+        applyImmersive();
+        view.setVisibility(View.VISIBLE);
+    }
+
+    private void applyImmersive() {
+        if (getWindow().getDecorView() == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.systemBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+            return;
+        }
+        // API 30 以下：老的那套 flags（这个项目 minSdk 23）
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
     @Override
-    protected void load() {
-        super.load();
-        if (bridge == null) return;
-        WebView webView = bridge.getWebView();
-        if (webView == null) return;
-        webView.addJavascriptInterface(new JsHostBridge(this), "MinicraftAndroid");
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersive();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (webView != null) {
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
     }
 }

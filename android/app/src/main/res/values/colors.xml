@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    主题用的三个颜色。原来这三个来自 `@capacitor/android` 自带的 res，
+    去掉 Capacitor 之后必须自己定义，否则 `styles.xml` 链接失败。
+-->
+<resources>
+    <color name="colorPrimary">#0B0F14</color>
+    <color name="colorPrimaryDark">#05080B</color>
+    <color name="colorAccent">#4C9AFF</color>
+</resources>
