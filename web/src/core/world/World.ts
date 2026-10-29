@@ -22,6 +22,7 @@ import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
+import { coreBytes } from '../registry/coreBytes.ts';
 
 export function chunkKey(cx: number, cz: number): string {
   return `${cx},${cz}`;
@@ -129,6 +130,12 @@ export class World {
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(new URL('../../worker/chunk.worker.ts', import.meta.url), { type: 'module' });
       worker.addEventListener('message', (event: MessageEvent<GenerateResponse>) => this.onGenerated(event.data));
+      /*
+       * 先把方块表发给 Worker（app 形态下它自己那份注册表是空的，见 coreBytes.ts 的说明）。
+       * 消息是 FIFO 的，这一条一定先于后面的 `generate` 到达，所以不需要额外等 ack。
+       * `core` 为 null 表示表已经在包里（Web 形态），Worker 侧只做一次动态 import。
+       */
+      worker.postMessage({ type: 'init', core: coreBytes() });
       this.workers.push(worker);
     }
   }

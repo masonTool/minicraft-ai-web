@@ -34,6 +34,7 @@
 
 import { BLOCK_TABLE_MAGIC, decodeBlockTable } from './registry/blockTableCodec.ts';
 import { BLOCKS, installBlockTable } from './registry/blocks.ts';
+import { setCoreBytes } from './registry/coreBytes.ts';
 import { applyCoreDelta, parseCoreDelta } from './registry/coreDelta.ts';
 
 /** 核心数据路径（相对，跟随 vite `base: './'`，放在子目录也能用） */
@@ -344,6 +345,8 @@ export async function ensureHostCore(): Promise<boolean> {
   }
 
   try {
+    // 存一份原始字节：Worker 是独立模块实例，要拿同一份表才能生成地形（见 coreBytes.ts）
+    setCoreBytes(core);
     installBlockTable(decodeBlockTable(core));
     await applyRemoteDelta();
   } catch (error) {

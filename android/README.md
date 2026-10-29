@@ -91,6 +91,17 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 
 ## 已知坑
 
+- **模拟器必须指定 GPU**：AVD 里 `hw.gpu.mode=auto` 在这台 M3 上会退化到
+  **SwiftShader（软件渲染）**，表现是主菜单能显示、但一进世界就永远停在
+  `Generating world…`（CPU 打满、`world.chunks.size` 恒为 0）。启动时显式给 GPU：
+
+  ```bash
+  $ANDROID_HOME/emulator/emulator -avd <名字> -gpu host -memory 2048 -cores 2
+  ```
+
+  验证方式：`WebGL 渲染器` 应当是 `Android Emulator OpenGL ES Translator (Apple M3 Pro)`，
+  不是 `... (SwiftShader Device ...)`。
+
 - **Gradle 8.2.1 不支持 JDK 21**（报错很像语法错，其实是 Gradle 不认 class 文件版本）：
   构建时 `JAVA_HOME` 指到 17。要长期用 21，把 `gradle/wrapper` 升到 8.7+。
 - **`cap sync` 很慢**（本项目实测 5 分钟）：它要逐个小文件拷 12MB 的 `assets/public`。

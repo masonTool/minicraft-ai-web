@@ -9,6 +9,7 @@
  */
 
 import type { MeshRequest, MeshResponse } from '../worker/chunk.worker.ts';
+import { coreBytes } from '../core/registry/coreBytes.ts';
 
 export class MeshWorkerPool {
   private readonly workers: Worker[] = [];
@@ -20,6 +21,8 @@ export class MeshWorkerPool {
     const count = Math.max(1, workerCount);
     for (let i = 0; i < count; i++) {
       const worker = new Worker(new URL('../worker/chunk.worker.ts', import.meta.url), { type: 'module' });
+      // 同 World：先发方块表，Worker 才能建起自己那份注册表
+      worker.postMessage({ type: 'init', core: coreBytes() });
       worker.addEventListener('message', (event: MessageEvent<MeshResponse>) => {
         const data = event.data;
         if (data.type !== 'meshed') return;
