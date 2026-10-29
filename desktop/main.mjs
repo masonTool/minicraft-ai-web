@@ -1,28 +1,34 @@
 /**
  * Electron 主进程（Windows / macOS 共用）。
  *
- * 关键设计：**不用 `file://` 加载页面**。
- * `file://` 是 opaque origin，IndexedDB 会被 Chromium 直接关掉——而本项目的存档
- * 全在 IndexedDB 里，等于"能进游戏但存不了档"。所以注册一个自有 scheme
- * `app://minicraft/`（standard + secure），它既有正常 origin，也顺带给了我们一个
- * 和安卓 `shouldInterceptRequest` 完全等价的拦截点：
+ * ## 为什么起一个 loopback HTTP 服务，而不是 file:// 或自定义协议
  *
- *   app://minicraft/__host/core.bin  →  解封后的方块表（解不开就 404）
- *   app://minicraft/…                →  web/dist 里的静态文件
+ * - `file://` 是 opaque origin，Chromium 会**直接关掉 IndexedDB**——存档全在里面，
+ *   表现是"能进游戏但存不了档"，且不报错。
+ * - 自定义 scheme（之前的 `app://minicraft`）能用，但三端就没法统一到同一个 origin 语义。
  *
- * 于是 `web/src/core/hostCore.ts` **一行都不用改**：它本来就是 fetch 这个相对路径，
- * 浏览器里 404 走落地页，桌面端由主进程接住。
+ * 现在统一成 **`http://127.0.0.1:<固定端口>`**：和 Android 壳的 `http://localhost` 是同一类
+ * 可信来源，IndexedDB、剪贴板、`ws://` 联机都正常。端口固定是为了存档——origin 变一次，
+ * IndexedDB 就是全新的库（等于清档）。
+ *
+ * ## 内容从哪来
+ *
+ * 整个游戏产物打成了 `libmcrt.so`（整段 AES-GCM + gzip，伪装成原生库）。
+ * 主进程启动时用**签名摘要**派生 KEK、解开 CEK、整段解密并常驻内存，
+ * 之后每个 HTTP 请求都从内存里切一份返回——**磁盘上从来没有明文**。
  */
 
-import { app, BrowserWindow, Menu, protocol, shell } from 'electron';
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
+import { app, BrowserWindow, Menu, shell } from 'electron';
+import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { unsealCore } from './core-vault.mjs';
+import { openBundle } from './bundle.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SMOKE = process.env.MINICRAFT_SMOKE === '1';
+/** 固定端口：换了就等于换 origin，IndexedDB 存档全部作废 */
+const PORT = 18764;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -39,65 +45,50 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-/** 打包后资源在 `resources/`；开发时读仓库里的目录 */
-const webRoot = () => (app.isPackaged ? join(process.resourcesPath, 'web') : resolve(HERE, '../web/dist'));
-const sealedDir = () => (app.isPackaged ? join(process.resourcesPath, 'sealed') : resolve(HERE, 'resources/sealed'));
-
-// 必须在 ready 之前注册权限
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'app',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
-  },
-]);
-
-function coreResponse() {
-  const data = unsealCore({
-    dir: sealedDir(),
-    packaged: app.isPackaged,
-    bundlePath: app.isPackaged ? macBundlePath() : undefined,
-  });
-  if (data === null) {
-    // 与"宿主没装 / 浏览器打开"表现一致：404。没有"提示后继续"的分支
-    return new Response('', { status: 404 });
-  }
-  return new Response(data, {
-    status: 200,
-    headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' },
-  });
-}
-
-/** 打包后 `app.getAppPath()` 在 `Foo.app/Contents/Resources/app.asar` 里 */
-function macBundlePath() {
-  if (process.platform !== 'darwin') return process.execPath;
-  const marker = `${sep}Contents${sep}`;
-  const index = process.execPath.indexOf(marker);
-  return index >= 0 ? process.execPath.slice(0, index) : process.execPath;
-}
-
-async function serveStatic(pathname) {
-  const root = webRoot();
-  const relative = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, '');
-  const target = resolve(root, relative === '' ? 'index.html' : relative);
-  // 目录穿越守卫：必须仍在 web 根下
-  if (target !== root && !target.startsWith(root + sep)) return new Response('', { status: 403 });
-  try {
-    const info = await stat(target);
-    if (info.isDirectory()) return serveStatic(join(relative, 'index.html'));
-    const type = MIME[extname(target).toLowerCase()] ?? 'application/octet-stream';
-    return new Response(createReadStream(target), {
-      status: 200,
-      headers: { 'content-type': type, 'cache-control': 'no-store' },
-    });
-  } catch {
-    return new Response('', { status: 404 });
-  }
-}
+/** 打包后放 `resources/rt/`；开发时读仓库里的 `build/rt/` */
+const rtDir = () => (app.isPackaged ? resolve(process.resourcesPath, 'rt') : resolve(HERE, '../build/rt'));
 
 /**
- * 单实例锁：两个实例同时开同一个 IndexedDB，存档会互相覆盖。
- * 第二次启动把已有窗口拉到前台，然后自己退出。
+ * 打开整包。
+ *
+ * 桌面端拿不到"自身代码签名摘要"（那是 macOS 的 codesign，且不是证书摘要），
+ * 所以用构建期写死的摘要——这也是桌面端强度弱于 Android 的根因，
+ * 见 `docs/CODE-PROTECTION.md`。
  */
+function loadBundle() {
+  const dir = rtDir();
+  const signers = JSON.parse(readFileSync(resolve(dir, 'signers.json'), 'utf8')).signers;
+  const pkg = readFileSync(resolve(dir, 'libmcrt.so'));
+  const bundle = openBundle(pkg, String(signers[0]));
+  if (bundle === null) {
+    throw new Error('整包解密失败：签名摘要对不上，或包被改过');
+  }
+  return bundle;
+}
+
+function startServer(bundle) {
+  const server = createServer((req, res) => {
+    const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+    const name = decodeURIComponent(path).replace(/^\/+/, '') || 'index.html';
+    const body = bundle.get(name);
+    if (body === undefined || body === null) {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, {
+      'content-type': MIME[extname(name).toLowerCase()] ?? 'application/octet-stream',
+      // 内容每次启动都可能不同（新包），不让 WebView 缓存旧 JS
+      'cache-control': 'no-store',
+    });
+    res.end(body);
+  });
+  return new Promise((ok, fail) => {
+    server.once('error', fail);
+    // 只监听回环，不对局域网暴露
+    server.listen(PORT, '127.0.0.1', () => ok(server));
+  });
+}
+
 // 冒烟模式不抢锁：否则上一次没退干净的实例会让冒烟"直接退出当成功"
 const singleInstance = SMOKE ? true : app.requestSingleInstanceLock();
 if (!singleInstance) {
@@ -112,16 +103,26 @@ if (!singleInstance) {
 }
 
 app.whenReady().then(async () => {
-  // 生产构建去掉默认菜单：Ctrl+Shift+I / 重新加载对玩家没意义，
-  // 而且默认菜单会在 macOS 菜单栏里挂着 "Electron" 的调试项
   if (app.isPackaged) Menu.setApplicationMenu(null);
 
-  protocol.handle('app', async (request) => {
-    const url = new URL(request.url);
-    if (url.pathname === '/__host/core.bin') return coreResponse();
-    return serveStatic(url.pathname);
-  });
+  let bundle;
+  try {
+    bundle = loadBundle();
+  } catch (error) {
+    console.error(`✗ ${String(error)}`);
+    app.exit(1);
+    return;
+  }
 
+  try {
+    await startServer(bundle);
+  } catch (error) {
+    console.error(`✗ 端口 ${PORT} 无法监听（可能被别的程序占用）：${String(error)}`);
+    app.exit(1);
+    return;
+  }
+
+  const origin = `http://127.0.0.1:${PORT}`;
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -132,43 +133,58 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      // 桌面端不需要 Capacitor 桥：核心数据走协议拦截，页面代码与 Web 版完全一致
       webSecurity: true,
     },
   });
 
-  // 外链一律交给系统浏览器：WebView 里开新窗口等于把一个不受控的页面塞进我们的
-  // 协议上下文里。`app://` 之外的导航同理——先拦下，是 http(s) 再交给系统。
+  // 外链交给系统浏览器；只允许留在本站点内导航
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:$/.test(new URL(url).protocol)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, target) => {
-    if (target.startsWith('app://minicraft/')) return;
+    if (target.startsWith(origin)) return;
     event.preventDefault();
     if (/^https?:$/.test(new URL(target).protocol)) void shell.openExternal(target);
   });
 
-  await win.loadURL('app://minicraft/index.html');
+  if (SMOKE) {
+    // 冒烟时把页面控制台打到 stdout：失败时只知道"没起来"是没法查的
+    win.webContents.on('console-message', (_event, level, message) => {
+      if (level >= 2) console.log(`  [page:${level}] ${message.slice(0, 300)}`);
+    });
+  }
+
+  await win.loadURL(`${origin}/index.html`);
 
   if (SMOKE) {
-    const verdict = await smokeCheck(win);
+    const verdict = await smokeCheck(win, bundle);
     console.log(verdict.ok ? `✓ 桌面端冒烟通过：${verdict.detail}` : `✗ 桌面端冒烟失败：${verdict.detail}`);
     app.exit(verdict.ok ? 0 : 1);
   }
 });
 
-/** 冒烟：页面能加载 + 核心数据能取到 + 不是明文 */
-async function smokeCheck(win) {
+/**
+ * 冒烟：页面能加载 + 主菜单真的渲染出来。
+ *
+ * 不用 `window.__mc` 当判据——它在切世界等路径上会被置空，代表的是"调试实例"，
+ * 不是"界面起来了"。这里直接看页面上的按钮数量，更贴近玩家能看到的东西。
+ */
+async function smokeCheck(win, bundle) {
   try {
     const title = await win.webContents.executeJavaScript('document.title');
-    const core = await win.webContents.executeJavaScript(
-      `fetch('/__host/core.bin', { cache: 'no-store' })
-         .then(async (r) => (r.ok ? (await r.arrayBuffer()).byteLength : -r.status))
-         .catch(() => -1)`,
-    );
-    if (core <= 0) return { ok: false, detail: `核心数据不可用（${core}）` };
-    return { ok: true, detail: `title=${title} core=${core}B` };
+    // `loadURL` 只等到 DOMContentLoaded，主包还要异步装表/建菜单，所以轮询而不是睡固定时长
+    let buttons = 0;
+    for (let i = 0; i < 80; i += 1) {
+      buttons = await win.webContents.executeJavaScript("document.querySelectorAll('button').length");
+      if (buttons >= 3) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (buttons < 3) {
+      const text = await win.webContents.executeJavaScript('document.body.innerText.slice(0, 120)');
+      return { ok: false, detail: `主菜单没渲染（button=${buttons}）文字=${JSON.stringify(text)}` };
+    }
+    return { ok: true, detail: `title=${title} 按钮=${buttons} 包内=${bundle.paths.length} 文件 / ${bundle.bytes}B` };
   } catch (error) {
     return { ok: false, detail: String(error) };
   }

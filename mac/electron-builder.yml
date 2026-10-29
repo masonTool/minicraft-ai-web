@@ -11,15 +11,13 @@ directories:
 # 只带运行必需的文件：源码目录（web/src）不进包，游戏本体在 extraResources 的 web/ 里
 files:
   - main.mjs
-  - core-vault.mjs
+  - bundle.mjs
   - package.json
 
 extraResources:
-  - from: web/dist
-    to: web
-  # 封存体放在 resources/sealed，**不在** web/ 下：网页侧取不到它
-  - from: desktop/resources/sealed
-    to: sealed
+  # 只带加密包：解密后的内容只存在于主进程内存里，磁盘上没有明文
+  - from: build/rt
+    to: rt
 
 mac:
   category: public.app-category.games

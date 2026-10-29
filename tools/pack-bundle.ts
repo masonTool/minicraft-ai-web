@@ -1,29 +1,38 @@
 /**
- * 整包加密（A35）：把 `web/dist` 打成一个 `game.pkg`，壳里解密后喂给 WebView。
+ * 整包加密（A36）：`web/dist` → 一个**看起来像原生库**的加密包 `libmcrt.so`。
  *
- * ## 为什么不再只加密方块表
+ * ## 为什么是"整包一个密文"
  *
- * 发版只有 APP 一种形态，网页构建只用于自测。既然如此，"把数据藏起来、其余 JS 明文放
- * assets"就没有意义了——攻击者 `unzip` 之后拿到的是完整的游戏逻辑。整包加密之后，
- * 包里只剩密文，连"这是什么游戏"都要先解出来。
+ * 逐文件加密在安全上没有额外收益——同一把 CEK，解开一个文件和解开整包成本一样。
+ * 整包一次 AES-GCM 反而更简单，语义也更强：**任何一处被改，整个包直接打不开**。
+ * 4.4 MB 的包整段解密只要十几毫秒，谈不上性能问题。
  *
- * ## 包格式（小端）
+ * ## 为什么叫 `.so`、还带假 ELF 头
  *
- *   "MCPK" | u8 version=1 | u8 wrapCount | u16 reserved
- *   salt 32B | fileNonce 12B
- *   wrapCount × (u16 len + 包住 CEK 的密文)
- *   u16 entryCount
- *   entryCount × (u16 pathLen, path, u32 offset, u32 length, 12B nonce)
- *   数据区：逐文件密文首尾相接
+ * 放 `assets/` 下（**不是** `lib/<abi>/`，那里会被 Android 当原生库、Play 会校验 ELF）
+ * 的文件，Android 完全不解释。名字与头 4 字节 `\x7fELF` 只是让 `unzip` + `file` 的人
+ * 以为它是原生库，顺手跳过。
+ *
+ * ## 包格式（小端，假头之后）
+ *
+ *   "\x7fELF" + 4B 占位            假 ELF 头，不属于加密范围
+ *   u8 version=1 | u8 codec(gzip) | u8 wrapCount | u8 reserved
+ *   32B salt | 12B fileNonce
+ *   wrapCount × (u16 len + AES-GCM(CEK))     每个允许的签名一份
+ *   u32 cipherLen
+ *   整段密文 = AES-GCM( gzip( 内层容器 ) )
+ *
+ * 内层容器（解密 + gunzip 之后）：
+ *
+ *   "MCB1" | u16 count | count × (u16 pathLen, path, u32 offset, u32 length) | 数据区
  *
  * ## 密钥
  *
  *   KEK_i = HKDF-SHA256(salt, 摘要_i ‖ salt, info="minicraft/bundle/v1")
- *   CEK   = 随机 32B，被每个 KEK_i 各包一份（每个允许的签名一份）
- *   文件  = AES-256-GCM(CEK, 该文件自己的 nonce, aad = path ‖ 索引)
+ *   CEK   = 随机 32B，被每个 KEK_i 各包一份
  *
- * ⚠️ 与方块表那套一样：证书摘要是**公开信息**。这里挡住的是"改包重签后跑起来"，
- * 以及"解包后把 JS 搬去别的站点"；不是"别人永远拿不到内容"。
+ * ⚠️ 证书摘要是**公开信息**。这里挡住的是"改包重签后跑起来"和"解包后把游戏搬走"，
+ * 不是"别人永远拿不到内容"——纯客户端做不到后者。
  */
 
 import { execFileSync } from 'node:child_process';
@@ -32,25 +41,31 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'web/dist');
 const CONFIG = join(ROOT, 'release.config.json');
-const OUT_DIR = join(ROOT, 'build/pkg');
-const OUT_PKG = join(OUT_DIR, 'game.pkg');
+const OUT_DIR = join(ROOT, 'build/rt');
+/** 伪装成原生库的文件名（三端统一） */
+const OUT_PKG = join(OUT_DIR, 'libmcrt.so');
 
-const MAGIC = Buffer.from('MCPK', 'ascii');
+const FAKE_ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0]);
 const VERSION = 1;
+const CODEC_GZIP = 1;
 const INFO = Buffer.from('minicraft/bundle/v1', 'utf8');
-const SALT_LEN = 32;
 const NONCE_LEN = 12;
-const TAG_LEN = 16;
 
 interface ReleaseConfig {
   signingCertSha256?: unknown;
-  saltHex?: unknown;
 }
 
+/**
+ * 本机 Android debug keystore 的证书摘要。
+ *
+ * 开发包用 debug 证书签名，摘要不在正式白名单里；本地要能跑通，就把 debug 摘要也包一份。
+ * `MINICRAFT_RELEASE=1`（正式发布）时**不**加入——否则等于给拿到我们 debug keystore 的人留了钥匙。
+ */
 function debugKeystoreDigest(): string | null {
   const home = process.env.HOME ?? '';
   const path = join(home, '.android/debug.keystore');
@@ -91,7 +106,6 @@ function readSigners(): string[] {
   return signers;
 }
 
-/** 收集 `web/dist` 下的所有文件，路径用 `/` 分隔并排序（保证可复现） */
 function collectFiles(dir: string): string[] {
   const out: string[] = [];
   const walk = (current: string): void => {
@@ -109,23 +123,55 @@ function hkdf(salt: Buffer, ikm: Buffer): Buffer {
   return Buffer.from(hkdfSync('sha256', ikm, salt, INFO, 32));
 }
 
+/** 内层容器：索引 + 数据区。整体会被 gzip 再加密，所以这里不做压缩。 */
+function buildContainer(files: string[]): { container: Buffer; plainBytes: number } {
+  const count = Buffer.alloc(2);
+  count.writeUInt16LE(files.length, 0);
+
+  const indexParts: Buffer[] = [Buffer.from('MCB1', 'ascii'), count];
+  const dataParts: Buffer[] = [];
+  let cursor = 0;
+  let plainBytes = 0;
+
+  for (const path of files) {
+    const plain = readFileSync(join(DIST, path));
+    plainBytes += plain.length;
+    const pathBytes = Buffer.from(path, 'utf8');
+    // 索引顺序必须与读取端一致：pathLen → path → offset → length
+    const pathLen = Buffer.alloc(2);
+    pathLen.writeUInt16LE(pathBytes.length, 0);
+    const offset = Buffer.alloc(4);
+    offset.writeUInt32LE(cursor, 0);
+    const length = Buffer.alloc(4);
+    length.writeUInt32LE(plain.length, 0);
+    indexParts.push(pathLen, pathBytes, offset, length);
+    dataParts.push(plain);
+    cursor += plain.length;
+  }
+
+  return { container: Buffer.concat([...indexParts, ...dataParts]), plainBytes };
+}
+
 function main(): void {
   if (!existsSync(join(DIST, 'index.html'))) {
     throw new Error(`缺少 ${DIST}/index.html：先跑 npm run build:web`);
   }
   const signers = readSigners();
   const files = collectFiles(DIST);
+  const { container, plainBytes } = buildContainer(files);
 
-  const salt = randomBytes(SALT_LEN);
+  const compressed = gzipSync(container, { level: 9 });
+
+  const salt = randomBytes(32);
   const fileNonce = randomBytes(NONCE_LEN);
   const cek = randomBytes(32);
 
-  // ---- 头 + 盐 + 包 CEK 用的 nonce
-  const head = Buffer.alloc(8);
-  MAGIC.copy(head, 0);
-  head.writeUInt8(VERSION, 4);
-  head.writeUInt8(signers.length, 5);
-  head.writeUInt16LE(0, 6);
+  // 头部（不含假 ELF 的 8 字节）
+  const head = Buffer.alloc(4);
+  head.writeUInt8(VERSION, 0);
+  head.writeUInt8(CODEC_GZIP, 1);
+  head.writeUInt8(signers.length, 2);
+  head.writeUInt8(0, 3);
   const wrapAad = Buffer.concat([head, salt, fileNonce]);
 
   const wraps: Buffer[] = [];
@@ -138,66 +184,32 @@ function main(): void {
     len.writeUInt16LE(sealed.length, 0);
     wraps.push(Buffer.concat([len, sealed]));
   }
+  const wrapBlock = Buffer.concat(wraps);
 
-  // ---- 逐文件加密（先算索引，再拼数据区）
-  interface Entry {
-    path: string;
-    nonce: Buffer;
-    data: Buffer;
-    offset: number;
-  }
-  const entries: Entry[] = files.map((path) => {
-    const plain = readFileSync(join(DIST, path));
-    const nonce = randomBytes(NONCE_LEN);
-    const aad = Buffer.concat([Buffer.from(path, 'utf8'), Buffer.from([0])]);
-    const cipher = createCipheriv('aes-256-gcm', cek, nonce);
-    cipher.setAAD(aad);
-    const data = Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
-    return { path, nonce, data, offset: 0 };
-  });
+  // 整段密文：AAD 绑住"它前面的一切"，改头、改包裹都会让解密失败
+  const payloadAad = Buffer.concat([head, salt, fileNonce, wrapBlock]);
+  const bodyCipher = createCipheriv('aes-256-gcm', cek, fileNonce);
+  bodyCipher.setAAD(payloadAad);
+  const body = Buffer.concat([bodyCipher.update(compressed), bodyCipher.final(), bodyCipher.getAuthTag()]);
+  const bodyLen = Buffer.alloc(4);
+  bodyLen.writeUInt32LE(body.length, 0);
 
-  const countBuf = Buffer.alloc(2);
-  countBuf.writeUInt16LE(entries.length, 0);
-  const indexParts: Buffer[] = [countBuf];
-  let cursor = 0;
-  for (const entry of entries) {
-    const pathBytes = Buffer.from(entry.path, 'utf8');
-    const pathLen = Buffer.alloc(2);
-    pathLen.writeUInt16LE(pathBytes.length, 0);
-    const offset = Buffer.alloc(4);
-    offset.writeUInt32LE(cursor, 0);
-    const length = Buffer.alloc(4);
-    length.writeUInt32LE(entry.data.length, 0);
-    indexParts.push(pathLen, pathBytes, offset, length, entry.nonce);
-    entry.offset = cursor;
-    cursor += entry.data.length;
-  }
-
-  const pkg = Buffer.concat([
-    head,
-    salt,
-    fileNonce,
-    ...wraps,
-    ...indexParts,
-    ...entries.map((e) => e.data),
-  ]);
+  const pkg = Buffer.concat([FAKE_ELF, head, salt, fileNonce, wrapBlock, bodyLen, body]);
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(OUT_PKG, pkg);
-  // 仅构建侧产物：测试与诊断要知道"这份包是哪几个签名能开"。
-  // 摘要本身是公开信息，但它**不进包**（壳不需要，也不该给）。
+  // 仅构建侧：测试与三端壳需要知道"用哪个摘要去开"。摘要本身公开，但它不属于包内容。
   writeFileSync(join(OUT_DIR, 'signers.json'), `${JSON.stringify({ signers }, null, 2)}\n`);
 
   const kb = (n: number): string => `${(n / 1024).toFixed(1)} KB`;
-  const plainTotal = entries.reduce((sum, e) => sum + e.data.length - TAG_LEN, 0);
-  console.log('\n整包加密');
-  console.log(`  文件数      ${entries.length}`);
-  console.log(`  明文        ${kb(plainTotal)}`);
-  console.log(`  包           ${kb(pkg.length)}（+${kb(pkg.length - plainTotal)}）`);
+  console.log('\n整包加密（单段密文）');
+  console.log(`  文件数      ${files.length}`);
+  console.log(`  明文        ${kb(plainBytes)}`);
+  console.log(`  gzip 后     ${kb(compressed.length)}（压掉 ${(100 - (compressed.length / plainBytes) * 100).toFixed(1)}%）`);
+  console.log(`  成品        ${kb(pkg.length)}  ${OUT_PKG}`);
   console.log(`  签名包裹    ${signers.length} 份`);
   for (const [i, s] of signers.entries()) console.log(`    [${i}] ${s.slice(0, 16)}…`);
-  console.log(`  产物        ${OUT_PKG}`);
-  console.log(`  明文摘要    ${createHash('sha256').update(pkg).digest('hex').slice(0, 16)}…`);
+  console.log(`  产物摘要    ${createHash('sha256').update(pkg).digest('hex').slice(0, 16)}…`);
 }
 
 main();

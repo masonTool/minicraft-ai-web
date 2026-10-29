@@ -70,3 +70,6 @@ ios/App/App/sealed/
 
 # 桌面端：封存产物（打包输出统一在 dist/ 下，见 mac/ 与 windows/ 的 electron-builder.yml）
 desktop/resources/sealed/
+
+# 整包加密产物（npm run pack 生成）
+build/
