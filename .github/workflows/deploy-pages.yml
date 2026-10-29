@@ -1,25 +1,21 @@
-# 发布到 GitHub Pages
+# 发布到 GitHub Pages（前端产物）
 #
-# 为什么走 Actions 而不是"提交 dist/ 到某个分支"：
-#   构建产物带内容哈希、体积还有 1MB+，提交进仓库会让每次 diff 淹没在几百个
-#   `assets/*.js` 里，而且历史会迅速膨胀。Actions 每次推 main 现场构建，
-#   仓库里只留源码。
+# 2026-10-29（用户）：改完前端要**立刻在 Pages 上看到**，所以恢复成随 push 自动发布。
 #
-# ⚠️ 首次发布前必须在仓库设置里把 Pages 的 Source 改成 **GitHub Actions**：
-#   Settings → Pages → Build and deployment → Source = GitHub Actions
-#   （保持默认的 "Deploy from a branch" 时，这个工作流会成功跑完但不生效）
+# ⚠️ 这条流水线跑的是 `build:web`（SPECS_STUB=0）——方块表会以**明文 JS** 编进产物，
+#    等于把 724 条数据放到公网。这是"公开可玩 Web 版"的应有之义；
+#    要"只有 App 能玩"的形态，用 `deploy-cf-app.yml`（build:app，带 core.bin）。
+#    两件事务必分开，别把 app 形态发到这个域名上。
+#
+# 为什么只有一个 job：
+#   原来 build 与 deploy 是两个 job，第二个要重新起一台 runner、再把 artifact 传过去，
+#   光这一来一回就多 30~60 秒。合成一个 job 后 `upload-pages-artifact` 直接给下一步用。
 name: Deploy to GitHub Pages
 
-# ⚠️ 2026-10-29 起**不再随 push 自动发布**，只保留手动触发。
-#
-# 原因：这个工作流跑的是 `build:web`（SPECS_STUB=0），方块表会以**明文 JS** 编进产物。
-# 一旦 Pages 是开着的，每次推 main 就等于把 724 条方块数据挂到公网——
-# 那正是 APK 里那套封存要保护的东西，等于从后门全送出去。
-#
-# 确实想要一个公开可玩的 Web 版时：手动点运行即可（那时"数据保密"这件事就自动放弃了，
-# 只剩"防改包"，见 docs/CODE-PROTECTION.md）。
 on:
-  # 允许在 Actions 页面手动点一次发布（改完仓库设置后不用空提交）
+  push:
+    branches: [main]
+  # 也允许在 Actions 页面手动点一次（改完仓库设置后不用空提交）
   workflow_dispatch:
 
 # Pages 部署需要这三项：读代码、写 Pages、用 OIDC 换一次性部署令牌
@@ -29,51 +25,60 @@ permissions:
   id-token: write
 
 # 同一时刻只允许一个部署在跑；后到的提交取消排队中的旧任务
-# （否则连续推送时两个部署会互相覆盖，最终线上可能停在一个旧版本）
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      # 前端构建完全用不到这两样，但它们的 postinstall 会各拉上百 MB 的二进制
+      # （electron ≈ 100~200MB）。不关掉的话 npm ci 一个人就能吃掉 2~4 分钟。
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          # 与 vite 8 / vitest 5 的要求对齐（Node 20.19+ 为下限，取当前 LTS）
           node-version: 24
           cache: npm
 
-      # 用 ci 而不是 install：严格按 package-lock.json 装，构建可复现
-      - run: npm ci
+      # node_modules 直接按锁文件哈希缓存：命中时跳过 npm ci（省 60~120 秒）。
+      # 冷启动那次才真的装一遍。
+      - name: 缓存 node_modules
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      # ⚠️ 用 `build:web` 而不是 `build`（批次 20261025-1032 按用户要求调整）：
-      #   1. `build` 的 sourcemap 默认是**开的**——发布产物里带 .map 等于把 TypeScript
-      #      原文件一起公开，必须先关掉（`build:web` 内含 `SOURCEMAP=0`）；
-      #   2. `build:web` 会跑 `tools/release-check.mjs`，断言"无 .map / core.bin 形态正确 /
-      #      首屏体积不超基线"，漏了一样就非零退出，不会静默发出去。
-      #
-      # 结果：GitHub Pages 是**自足的完整前端**——方块表（724 块）编在 JS 包里，
-      # 不需要 `core.bin`、也不做宿主版本判定，浏览器打开**直接能玩**。
-      # 代价是这部分数据在这个域名上是公开的（本来就是"可玩版"的应有之义）；
-      # 要"只有 App 能玩"，请用 `build:app` 发到另一个域名。
+      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828），
+      # 而 vite / rolldown 的原生绑定正是 optional —— 缺了构建直接失败。
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci --include=optional --no-audit --no-fund
+
+      - name: 补齐 rolldown 原生绑定
+        run: |
+          VER=$(node -p "require('rolldown/package.json').version")
+          if ! node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null; then
+            npm i --no-save --include=optional "@rolldown/binding-linux-x64-gnu@$VER" \
+              || npm i --no-save --force "@rolldown/binding-linux-x64-gnu@$VER"
+          fi
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')"
+
+      # 唯一的构建入口：数据编进包 + 关 sourcemap + release-check（无 .map / 体积基线）
       - run: npm run build:web
 
-      # 注入 Pages 的 base path 等环境信息（配合 vite 的 base: './' 生效）
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
