@@ -36,9 +36,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     env:
-      # 前端构建完全用不到这两样，但它们的 postinstall 会各拉上百 MB 的二进制
-      # （electron ≈ 100~200MB）。不关掉的话 npm ci 一个人就能吃掉 2~4 分钟。
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      # 前端构建用不到浏览器二进制（截图套件只在本地跑），别让 postinstall 去拉
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
