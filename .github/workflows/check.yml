@@ -1,64 +1,57 @@
-# 提交前的门禁（CI）
+# 只做一件事：**把前端（web）编出来**
 #
-# 为什么要有这一条：`npm run check`（typecheck + vitest + 全部离线套件 + 三张台账；
-# 套数以 `package.json` 的 `test:*` 为准，**这里不抄数字**——抄过的那个数已经从 129 漂到 169 了）
-# 一直是**本地自觉**跑的——推上去之后只有"能不能构建"会被验证（`deploy-pages.yml`）。
-# 换句话说，某一次赶时间跳过 check 也不会被发现，直到线上行为不对。
-# 这个工作流把同一道门禁搬到 CI：推送与 PR 都跑一遍，红了就有记录。
+# 2026-10-29（用户）：流程要短、要快。这个项目对外只发布前端产物，
+# 所以 CI 不再跑门禁（vitest / 离线套件 / 三张台账都不要），只保留：
 #
-# 三个容易踩的细节：
-#   1. **checkout 必须 fetch-depth: 0**：`audit:tasks` 要用
-#      `git rev-list --count HEAD` 核对 HANDOFF 里的"提交总数"，
-#      浅克隆（默认 depth 1）会算出 1，直接把台账判红；
-#   2. 用 `npm ci` 而不是 `npm install`：严格按 lock 装，CI 与本地可复现；
-#   3. Node 版本与 `deploy-pages.yml` 对齐（vite 8 / vitest 5 要求 20.19+，取 24）。
+#   npm ci → npm run build:web → 上传 dist
 #
-# ⚠️ 与"发布"分开两个工作流：发布只关心"能不能出包"，门禁关心"改动是否自洽"。
-#    合成一个的话，门禁红了会直接把线上卡在旧版本，而这两件事的处置方式并不一样。
-name: Check
+# 为什么不再跑 `npm run check`：
+#   1. 那一步要 2~4 分钟（181 套离线套件 + vitest），每次推送都等它没有意义；
+#   2. 它跟"能不能出包"没有因果关系——台账类断言在赶时间的提交里还会误报；
+#   3. 本地提交前仍可用 `npm run check:fast` 自查（那是**本地**的事，不必搬到 CI）。
+#
+# ⚠️ 仍然保留 120 秒级的 `release-check`：它由 `build:web` 自带
+#    （无 .map / core.bin 形态正确 / 体积不超基线），失败会非零退出——
+#    这是"产物有没有问题"，不是"代码风格有没有问题"。
+name: Build (web)
 
 on:
   push:
     branches: [main]
   pull_request:
 
-# 同一分支连续推送时，只保留最新一次（旧的那次结论已经过期）
+# 同一分支连续推送时只保留最新一次（旧的结论已经过期）
 concurrency:
-  group: check-${{ github.ref }}
+  group: build-web-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # 见文件头第 1 条：台账要数提交数，浅克隆会误判
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
-      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828）
+      # `--include=optional`：跨平台锁文件下 npm ci 偶尔漏装可选依赖（npm/cli#4828），
+      # 而 vite 8 / rolldown 的原生绑定正是 optional —— 缺了构建会直接失败。
       - run: npm ci --include=optional
 
-      # npm 的可选依赖在「跨平台锁文件 + npm ci」下偶尔不装（npm/cli#4828）。
-      # vitest 5 走 rolldown 的原生绑定，缺了会直接 Startup Error —— 这里按已装版本补一次，
-      # 补不上就让后面的测试红，别静默跳过。
+      # 兜底：按已装版本补一次 linux-x64 的原生绑定（补不上就让构建红，不静默）
       - name: 补齐 rolldown 原生绑定
         run: |
           VER=$(node -p "require('rolldown/package.json').version")
-          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null \
-            || npm i --no-save "@rolldown/binding-linux-x64-gnu@$VER"
+          if ! node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null; then
+            npm i --no-save --include=optional "@rolldown/binding-linux-x64-gnu@$VER" \
+              || npm i --no-save --force "@rolldown/binding-linux-x64-gnu@$VER"
+          fi
+          # 再确认一次：缺了就在这一步红，不要等到 vite build 里报一条看不懂的栈
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')"
 
-      # 本地那道门禁：typecheck → vitest → 全部离线套件 → 三张台账
-      # （浏览器那一段由 `check:browser` 默认跳过，CI 里没有 Chrome，见 tools/browser-check.mjs）
-      - run: npm run check
-
-      # 产物只有 **web** 这一种（用户 2026-10-29：其它端不用管）：
-      # build:web = 数据编进包 + 关 sourcemap + release-check（无 .map / 无 core.bin / 体积基线）
+      # 唯一的构建入口：数据编进包 + 关 sourcemap + release-check
       - run: npm run build:web
 
       - name: 上传 web 产物

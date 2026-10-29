@@ -51,11 +51,12 @@ jobs:
       - name: 补齐 rolldown 原生绑定
         run: |
           VER=$(node -p "require('rolldown/package.json').version")
-          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null \
-            || npm i --no-save "@rolldown/binding-linux-x64-gnu@$VER"
-
-      # 类型检查 + 176 套离线测试 + 三张台账；不绿就不发
-      - run: npm run check
+          if ! node -e "require.resolve('@rolldown/binding-linux-x64-gnu')" 2>/dev/null; then
+            npm i --no-save --include=optional "@rolldown/binding-linux-x64-gnu@$VER" \
+              || npm i --no-save --force "@rolldown/binding-linux-x64-gnu@$VER"
+          fi
+          # 再确认一次：缺了就在这一步红，不要等到 vite build 里报一条看不懂的栈
+          node -e "require.resolve('@rolldown/binding-linux-x64-gnu')"
 
       # build:app = SOURCEMAP=0 + release-check（断言无 .map、无 core.bin、体积不超基线）
       - run: npm run build:app
