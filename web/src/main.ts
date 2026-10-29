@@ -20735,9 +20735,12 @@ async function boot(): Promise<void> {
       hideLoading();
       // 局内实例已经拆掉：调试入口也要跟着清掉，否则自动化会对着一个死对象操作
       (window as unknown as { __mc?: App }).__mc = undefined;
-      menu.setView('home');
-      menu.render();
-      menu.show();
+      /*
+       * 2026-10-29（用户）：从世界里「保存并退出」要落在**世界列表**，
+       * 而不是主菜单首页——玩家退出一个世界，下一步通常是"换一个"或"再进一次"。
+       * `showView()` 自带 `open = true` + 渲染，所以不再需要 `render()` / `show()`。
+       */
+      menu.showView('worlds');
       // 局内那条守卫已经被 `dispose()` 收走；主菜单自己要重新压一条，
       // 否则玩家在菜单里按返回会直接退出页面
       pushMenuGuard();

@@ -2020,16 +2020,8 @@
       }
       /* 开关 / 下拉：两列（没有读数），控件紧跟标签 */
       .settings-row.pair { grid-template-columns: minmax(72px, auto) minmax(0, 1fr); }
-      /* 「调试信息 + 日志导出」同一行（2026-10-29，用户）：
-         四格 = 标签 / 开关 / 标签 / 键；两对各自紧挨，中间留一道缝。 */
-      .settings-row.debug-log {
-        grid-column: 1 / -1;
-        grid-template-columns: minmax(64px, auto) auto minmax(48px, auto) auto;
-        column-gap: 10px; row-gap: 4px;
-      }
-      /* 只有一行的块（界面语言 / 调试+日志）：整块就一格，别被"块内两列"挤成半宽 */
+      /* 只有一行的块（界面语言）：整块就一格，别被"块内两列"挤成半宽 */
       .settings-block.block-single { grid-template-columns: minmax(0, 1fr); }
-      body.touch-mode .settings-row.debug-log { column-gap: 8px; }
       /* 游戏模式 + 飞行同一行（批次 528）：左半模式、右半飞行，整行跨满两列。
          里面两个 `.mode-cell` 各自再放一条普通的 pair 行。 */
       #settings-screen .settings-row.mode {

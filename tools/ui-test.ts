@@ -2731,13 +2731,20 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
       source.includes("row.className = 'settings-row pair';") &&
       source.includes("row.className = 'settings-row action';"),
   );
-  // 诊断日志（批次 181）：入口在设置里，读数与按钮挤一行且不许撑破
-  // 2026-10-29（用户）：调试信息与日志导出合并成一行
+  // 2026-10-29（用户）：从世界里「保存并退出」要回到世界列表，而不是主菜单首页
   check(
-    '调试信息与日志导出在同一行',
-    source.includes('private makeDebugLogRow(): HTMLDivElement') &&
-      source.includes("row.append(debugLabel, debugSwitch, logLabel, button);") &&
-      compact.includes('.settings-row.debug-log {'),
+    '退出世界落在世界列表',
+    readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8').includes("menu.showView('worlds');"),
+  );
+  // 诊断日志（批次 181）：入口在设置里，读数与按钮同一行且不许撑破
+  // 2026-10-29（用户）：试过和「调试信息」挤成四格一行，窄屏上互相挤、导出被顶到下一行，
+  // 所以退回标准两列：一行一个控件，读数仍占第三格。
+  check(
+    '调试信息与日志各占一个标准行（标签 | 控件）',
+    source.includes('private makeDiagnosticsRow(): HTMLElement') &&
+      source.includes("row.append(title, button, status);") &&
+      source.includes("this.makeToggle(debugLog, 'showDebug', t('settings.row.showDebug'));") &&
+      !compact.includes('.settings-row.debug-log {'),
   );
   // 批次 220（用户）：只保留「导出」——打点与复制对玩家不产出额外信息
   check(

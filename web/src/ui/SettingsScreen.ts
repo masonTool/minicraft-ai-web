@@ -1001,11 +1001,8 @@ export class SettingsScreen {
   private avatarDrag: { pointerId: number; x: number } | null = null;
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
-  /**
-   * 「日志 → 导出」那颗按钮（2026-10-29 起行里不再有第三格状态文字，
-   * 读数改成按钮的 `title`，导出/失败的反馈写到页头提示里）。
-   */
-  private diagnosticsButton: HTMLButtonElement | null = null;
+  /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
+  private diagnosticsStatusEl: HTMLElement | null = null;
   /** 资源包行的状态文字（当前包名 / 未选择） */
   private packStatusEl: HTMLElement | null = null;
   /** 资源包行的「移除」（只有装着包时才出现） */
@@ -1473,7 +1470,11 @@ export class SettingsScreen {
     gameActions.appendChild(this.makePackHint());
 
     // 第三块：调试信息 + 日志导出同一行（2026-10-29，用户）
-    this.makeBlock(game, 'block-single').appendChild(this.makeDebugLogRow());
+    // 两个标准行（标签 | 控件），宽屏上这块会自然分成两列并排；
+    // 2026-10-29：之前把它们硬塞进四格一行，中间空一大截、导出被挤到第二行
+    const debugLog = this.makeBlock(game);
+    this.makeToggle(debugLog, 'showDebug', t('settings.row.showDebug'));
+    if (this.actions.onDiagnosticsExport) debugLog.appendChild(this.makeDiagnosticsRow());
 
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
@@ -2270,28 +2271,17 @@ export class SettingsScreen {
   }
 
   /**
-   * 「调试信息 [开关] · 日志 [导出]」同一行（2026-10-29，用户）。
+   * 诊断日志行（标签 / 导出 / 读数）。
    *
-   * 以前是三行：调试开关一行、日志一行（标签 / 导出 / 读数）；
-   * 现在合成一行，"读条数与占用"挪到导出按钮的 `title` 上。
-   * 为什么只留「导出」这一颗：出事时玩家只记得"进设置点那个日志"，
-   * 再分子菜单就又多一层找不到的入口。
+   * 2026-10-29：先试过和「调试信息」挤成一行，结果四格在窄屏上互相挤、导出被顶到
+   * 下一行，所以退回**标准两列**——一行一个控件，读数仍然占第三格。
    */
-  private makeDebugLogRow(): HTMLDivElement {
+  private makeDiagnosticsRow(): HTMLElement {
     const row = document.createElement('div');
-    row.className = 'settings-row debug-log';
+    row.className = 'settings-row action';
 
-    const debugLabel = document.createElement('span');
-    debugLabel.textContent = t('settings.row.showDebug');
-    const debugSwitch = this.createSwitch(
-      () => this.draft.showDebug,
-      () => {
-        this.draft.showDebug = !this.draft.showDebug;
-      },
-    );
-
-    const logLabel = document.createElement('span');
-    logLabel.textContent = t('settings.diagnostics');
+    const title = document.createElement('span');
+    title.textContent = t('settings.diagnostics');
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -2304,37 +2294,30 @@ export class SettingsScreen {
       this.refreshDiagnostics(t(ok ? 'settings.exported' : 'settings.exportFailed'));
     });
 
-    // 没有导出能力（理论上不会发生）就只留调试开关，别摆一颗点不动的键
-    if (!this.actions.onDiagnosticsExport) {
-      row.append(debugLabel, debugSwitch);
-      return row;
-    }
-    row.append(debugLabel, debugSwitch, logLabel, button);
-    this.diagnosticsButton = button;
+    const status = document.createElement('i');
+    status.className = 'settings-status';
+    this.diagnosticsStatusEl = status;
+
+    row.append(title, button, status);
     this.refreshDiagnostics();
     return row;
   }
 
   /**
-   * 刷新日志按钮上的读数（2026-10-29 起不再单独占一格）。
+   * 刷新诊断入口上的读数。
    *
-   * - 平时：把"事件条数 / 占用 / 是否打过点"写进导出按钮的 `title`；
-   * - 导出成功 / 失败：额外用页头那行提示说一句，2 秒后恢复原文——
-   *   手机上没有悬停，只写 `title` 等于没有反馈。
+   * @param note 传了就临时显示这句话（"已导出"），否则显示条数/占用。
    */
   refreshDiagnostics(note?: string): void {
-    const button = this.diagnosticsButton;
+    const element = this.diagnosticsStatusEl;
+    if (!element) return;
     const stats = this.actions.diagnosticsStats?.();
-    const marked = stats?.marked ? t('settings.exportMarked') : '';
-    const detail =
-      note ?? (stats ? tp('settings.exportStats', { events: stats.events, kb: stats.kb, marked }) : '');
-    if (button) {
-      button.title = detail.length > 0 ? `${t('settings.exportTitle')} · ${detail}` : t('settings.exportTitle');
+    if (!stats) {
+      element.textContent = note ?? '';
+      return;
     }
-    if (note) {
-      this.settingsHintEl.textContent = note;
-      window.setTimeout(() => this.renderSubtitle(), 1600);
-    }
+    const marked = stats.marked ? t('settings.exportMarked') : '';
+    element.textContent = note ?? tp('settings.exportStats', { events: stats.events, kb: stats.kb, marked });
   }
 
   /** 资源包导入行（.mcpack / .zip） */
