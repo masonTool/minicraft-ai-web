@@ -61,8 +61,8 @@ jobs:
       # release-check 已用探针确认"数据在包内"，这里再守一道"没有多余的核心文件"。
       - name: 确认产物是自足形态（不该有 core.bin）
         run: |
-          if [ -e dist/__host/core.bin ]; then
-            echo "✗ dist/__host/core.bin 存在：web 形态不该带它（它的去处只有 APK）"
+          if [ -e web/dist/__host/core.bin ]; then
+            echo "✗ web/dist/__host/core.bin 存在：web 形态不该带它（它的去处只有 APK）"
             exit 1
           fi
           echo "✓ 无 core.bin，数据在包里"
@@ -72,6 +72,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: >-
-            pages deploy dist
+            pages deploy web/dist
             --project-name=minicraft-web
             --branch=${{ inputs.channel == 'production' && 'main' || format('preview-{0}', github.run_number) }}

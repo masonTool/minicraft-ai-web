@@ -72,11 +72,17 @@ jobs:
       # 唯一的构建入口：数据编进包 + 关 sourcemap + release-check（无 .map / 体积基线）
       - run: npm run build:web
 
+      # 落点是 `web/dist`（vite 的 root 在 web/，2026-10-29 目录重排后如此）。
+      # 这里先断言一次：产物目录换了位置时，报错会落在这行，而不是 archive 那一步
+      # 给一句 `tar: dist: Cannot open`（2026-10-29 就是这样踩的）。
+      - name: 确认产物存在
+        run: test -f web/dist/index.html
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: web/dist
 
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -69,6 +69,6 @@ jobs:
           # 与项目里的"生产分支"同名即为 production，其它名字都是 preview 部署
           # （preview 会得到一个独立的 `<hash>.<project>.pages.dev` 地址，可先验收再 promote）
           command: >-
-            pages deploy dist
+            pages deploy web/dist
             --project-name=minicraft-app
             --branch=${{ inputs.channel == 'production' && 'main' || format('preview-{0}', github.run_number) }}

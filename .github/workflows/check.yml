@@ -67,9 +67,12 @@ jobs:
       # 唯一的构建入口：数据编进包 + 关 sourcemap + release-check
       - run: npm run build:web
 
+      - name: 确认产物存在
+        run: test -f web/dist/index.html
+
       - name: 上传 web 产物
         uses: actions/upload-artifact@v4
         with:
           name: minicraft-web
-          path: dist
+          path: web/dist
           retention-days: 7
