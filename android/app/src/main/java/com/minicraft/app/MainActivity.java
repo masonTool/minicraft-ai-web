@@ -164,7 +164,7 @@ public class MainActivity extends Activity {
                         + "，低于建议的 " + MIN_WEBVIEW_MAJOR + "。\n\n"
                         + "游戏界面可能显示异常（按钮变形、布局错乱、无法进入世界）。\n"
                         + "请更新到最新版本后再玩。")
-                .setPositiveButton("去更新", (dialog, which) -> openWebViewStore())
+                .setPositiveButton("如何更新", (dialog, which) -> showUpdateGuide())
                 .setNegativeButton("仍然进入", null)
                 .show();
     }
@@ -180,14 +180,34 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 跳应用商店；没有商店（或国内无 Play）时退到网页版详情页 */
-    private void openWebViewStore() {
-        Intent market = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.webview"));
+    /**
+     * 更新指引。
+     *
+     * 为什么不直接 startActivity(market://...) 了事：实测这台机器上 `market://` 会被
+     * MIUI 应用商店接走，但它**没有 Google WebView 的条目**，于是自己跳去一个搜索结果页，
+     * 玩家看到的是一屏广告和搜索框——比不给按钮还糟。
+     * 所以先给可执行的文字步骤，把"打开商店"降级成可选的一步。
+     */
+    private void showUpdateGuide() {
+        new AlertDialog.Builder(this)
+                .setTitle("更新 Android System WebView")
+                .setMessage("这台设备的 WebView 版本过低，游戏界面可能显示异常。可以这样更新：\n\n"
+                        + "1. 打开「设置 → 应用管理」，搜索「Android System WebView」，看是否有更新；\n"
+                        + "2. 若系统里没有更新项，在能访问 Google 的设备上下载 WebView 安装包，"
+                        + "再用数据线连上安装；\n\n"
+                        + "更新后不需要重装游戏，重新打开即可。")
+                .setPositiveButton("打开应用商店", (dialog, which) -> openStoreBestEffort())
+                .setNegativeButton("知道了", null)
+                .show();
+    }
+
+    /** 尽力打开商店；没有处理者就算了（已经给过文字指引，不必再打断） */
+    private void openStoreBestEffort() {
         try {
-            startActivity(market);
-        } catch (Throwable ignored) {
             startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")));
+                    Uri.parse("market://details?id=com.google.android.webview")));
+        } catch (Throwable ignored) {
+            // 没有商店：指引里已经写了手工步骤，这里静默即可
         }
     }
 

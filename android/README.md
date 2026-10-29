@@ -91,6 +91,9 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 
 ## 已知坑
 
+- **"去更新"不要写成无脑 startActivity(market://)**：实测这台机器上 `market://` 被 MIUI 应用商店
+  接走，但它没有 Google WebView 的条目，自己跳去一个搜索结果页（一屏广告+搜索框）。
+  现在的做法：弹窗按钮先给**可执行的文字步骤**，把"打开应用商店"作为该指引里的可选项。
 - **WebView 兼容基线 = 88**（`MainActivity.MIN_WEBVIEW_MAJOR`）。低于 88 时启动会弹原生提示
   并给商店跳转。依据：界面大量使用 `min()/max()/clamp()`（Chrome 79）、flex `gap`（84）、
   `inset`（87）、`aspect-ratio`（88），WebView 72 这类旧内核会**直接丢弃这些声明**，
