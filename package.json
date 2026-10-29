@@ -233,13 +233,21 @@
     "shotdiff": "node tools/shot-diff.mjs",
     "test:shotdiff": "node tools/shot-diff-test.mjs",
     "skill:e2e": "node .codebuddy/skills/continue-task/scripts/e2e.mjs",
-    "android:test": "cd server/android && ./gradlew connectedDebugAndroidTest"
+    "android:test": "cd server/android && ./gradlew connectedDebugAndroidTest",
+    "web:app": "SPECS_STUB=1 HOST_CORE_REQUIRED=1 SOURCEMAP=0 vite build --config web/vite.config.ts",
+    "build:app": "SPECS_STUB=1 HOST_CORE_REQUIRED=1 SOURCEMAP=0 vite build --config web/vite.config.ts && node tools/release-check.mjs --mode app",
+    "android:sync": "npm run gen:sealed && npm run build:app && node tools/release-check.mjs --mode app --android && npx cap sync android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:aab": "MINICRAFT_RELEASE=1 npm run android:sync && cd android && ./gradlew bundleRelease"
   },
   "dependencies": {
     "three": "^0.186.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "@types/node": "^26.6.5",
     "@types/three": "^0.186.0",
     "esbuild": "^0.28.2",
