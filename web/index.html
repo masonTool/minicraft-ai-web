@@ -115,6 +115,8 @@
            ⚠️ 主菜单（首页/世界列表/新建世界）也从批次 167 起吃这一对——
               用户："首页两个按钮点下去应该是弹出一个固定大小的框，不是一大一小。" */
         --panel-w: min(94vw, 760px);
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        --panel-h: min(88vh, 620px);
         --panel-h: min(88dvh, 620px);
         /* 暂停菜单页的宽度（批次 231，用户："游戏暂停页面也太宽了"）。
            菜单页只有**一列按钮**（`.pause-actions` 本身收到 300px），用设置页那
@@ -132,6 +134,8 @@
         --inv-pocket-w: min(calc(100vw - 88px), 568px);
         /* 318px 是手机横屏那一档（高 360~430）；桌面屏高得多，给到 42vh 不至于
            把同一副壳压成一条。手机上 42vh 仍小于 318，取值不变。 */
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        --inv-pocket-h: min(calc(100vh - 72px), max(318px, 42vh));
         --inv-pocket-h: min(calc(100dvh - 72px), max(318px, 42vh));
 
         /* ---- 面板 ---- */
@@ -812,6 +816,8 @@
           var(--mc-menu-bg);
       }
       .world-modal-panel {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        width: min(92vw, var(--modal-w)); max-height: min(90vh, 560px);
         width: min(92vw, var(--modal-w)); max-height: min(90dvh, 560px);
         overflow-y: auto; overscroll-behavior: contain;
         padding: 12px 14px;
@@ -1108,6 +1114,8 @@
       .sign-editor-panel {
         display: flex; flex-direction: column; gap: 10px;
         padding: 14px 16px;
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: calc(100vh - var(--kb-inset, 0px) - 16px);
         max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
         overflow-y: auto;
         min-width: min(360px, 92vw); max-width: 92vw;
@@ -1153,6 +1161,8 @@
       .map-panel {
         display: flex; flex-direction: column; align-items: center; gap: 8px;
         padding: 12px 14px;
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: calc(100vh - var(--kb-inset, 0px) - 16px);
         max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
         background: var(--panel-bg); color: var(--panel-text);
         border: 3px solid; border-color: var(--pixel-bevel);
@@ -1602,6 +1612,8 @@
         display: flex; flex-direction: column; gap: 8px;
         padding: 12px 14px;
         width: min(420px, 92vw);
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: calc(100vh - var(--kb-inset, 0px) - 16px);
         max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
         background: var(--panel-bg); color: var(--panel-text);
         border: 3px solid; border-color: var(--pixel-bevel);
@@ -1609,6 +1621,8 @@
       }
       .book-title { font-size: 14px; font-weight: 600; text-align: center; }
       .book-page-input {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        box-sizing: border-box; width: 100%; height: 46vh; min-height: 96px;
         box-sizing: border-box; width: 100%; height: 46dvh; min-height: 96px;
         padding: 8px 10px; font: inherit; font-size: 14px; line-height: 1.45;
         color: var(--field-text); background: #f6f1dc;
@@ -1617,6 +1631,8 @@
       }
       .book-page-input:focus { outline: none; border-color: #3a7d33; }
       .book-page-read {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        box-sizing: border-box; width: 100%; height: 46vh; min-height: 96px;
         box-sizing: border-box; width: 100%; height: 46dvh; min-height: 96px;
         padding: 10px 12px; font-size: 14px; line-height: 1.5;
         color: #2a2318; background: #f6f1dc;
@@ -2599,6 +2615,8 @@
       .settings-modal.hidden { display: none; }
       .appearance-modal-panel,
       .settings-modal-panel {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        width: min(92vw, 620px); max-height: calc(100vh - 16px);
         width: min(92vw, 620px); max-height: calc(100dvh - 16px);
         display: flex; flex-direction: column; overflow: hidden;
         padding: 8px 10px;
@@ -2940,6 +2958,8 @@
            ⚠️ 别把 `--kb-inset` 减在这里：横屏手机本身只有 ~390px 高，键盘一弹
            再减 250px 就把整块压成 0 高（输入框被 flex 挤没），看起来就是"闪一下不见了"。
            键盘在屏幕底部，顶部这块不需要为它让高度；让日志自己算。 */
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: calc(100vh - 120px);
         max-height: calc(100dvh - 120px);
       }
       #chat.open { pointer-events: auto; }
@@ -2975,6 +2995,8 @@
       #chat.open .chat-log {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: max(56px, calc(100vh - var(--kb-inset, 0px) - 180px));
         max-height: max(56px, calc(100dvh - var(--kb-inset, 0px) - 180px));
         /* 批次 528：展开后与输入框 / 提示同字号，不再"下面大一号" */
         font-size: var(--chat-open-size);
@@ -3060,6 +3082,8 @@
       }
       #command-help.hidden { display: none; }
       .cmd-help-panel {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        width: min(92vw, 880px); height: min(88vh, 620px);
         width: min(92vw, 880px); height: min(88dvh, 620px);
         display: flex; flex-direction: column; overflow: hidden;
         padding: 12px 14px;
@@ -3167,6 +3191,8 @@
       .cmd-help-confirm:not(:disabled):hover { background: #4a8236; }
       .cmd-help-confirm:disabled { opacity: .45; cursor: default; }
       body.touch-mode .cmd-help-panel {
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        width: 96vw; height: min(92vh, calc(100vh - 24px)); padding: 10px;
         width: 96vw; height: min(92dvh, calc(100dvh - 24px)); padding: 10px;
       }
       body.touch-mode .cmd-help-item { min-height: 40px; }
@@ -4349,6 +4375,12 @@
         max-height: 40px;
       }
       /* 截图里的两颗右侧键在右下角：第一颗工作台，第二颗人物装备。 */
+      /* `:has()` 要 Chrome 105，88 上整条规则会被丢弃；
+         JS 在挂 `pocket-dual` 时会同步在 shell 上加 `pocket-has-dual`。 */
+      .inv-shell.pocket-chrome.pocket-has-dual .inv-rail-right {
+        justify-content: flex-end;
+        padding-bottom: 8px;
+      }
       .inv-shell.pocket-chrome:has(.pocket-dual) .inv-rail-right {
         justify-content: flex-end;
         padding-bottom: 8px;
@@ -5446,7 +5478,11 @@
       body.touch-mode .inv-panel {
         width: min(96vw, var(--panel-w));
         max-width: min(96vw, var(--panel-w));
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        height: min(86vh, var(--panel-h));
         height: min(86dvh, var(--panel-h));
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        max-height: min(86vh, var(--panel-h));
         max-height: min(86dvh, var(--panel-h));
         min-width: 0;
         overflow: hidden; /* 外框不滚；内容在 .inv-body 里滚 */
@@ -5797,6 +5833,8 @@
            从背包里打开时 JS 会直接复制背包面板的 rect（见 AdvancementScreen#alignTo），
            这里的默认值只负责"从暂停菜单打开"那条路。 */
         width: min(94vw, 660px); max-width: min(94vw, 660px);
+        /* 老 WebView 兜底：dvh 要 Chrome 108 */
+        height: min(92vh, 620px); max-height: min(92vh, 620px);
         height: min(92dvh, 620px); max-height: min(92dvh, 620px);
         display: flex; flex-direction: column; overflow: hidden;
         background: var(--panel-bg);
@@ -6050,6 +6088,8 @@
            PC 屏大、鼠标精度高，给到 52~54px，文字也放一档。 */
         :root {
           --inv-pocket-w: min(calc(100vw - 160px), 600px);
+          /* 老 WebView 兜底：dvh 要 Chrome 108 */
+          --inv-pocket-h: min(calc(100vh - 80px), 500px);
           --inv-pocket-h: min(calc(100dvh - 80px), 500px);
           --pause-w: min(92vw, 560px);
           --settings-ctrl-w: 116px;

@@ -134,7 +134,14 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    target: 'es2022',
+    /*
+     * 目标锁定 chrome88（与 App 侧 MIN_WEBVIEW_MAJOR 对齐）。
+     *
+     * 原先是 es2022，它对应的语法水平是 Chrome 94——产物里确实带出了
+     * `static {}`（Chrome 94）和顶层 await（Chrome 89），88 的 WebView 解析即失败。
+     * 用浏览器版本号而不是 es 年份，才能"只降 88 不认识的部分"，不多降。
+     */
+    target: 'chrome88',
     /**
      * 显式写 `minify`（宿主4）。
      *

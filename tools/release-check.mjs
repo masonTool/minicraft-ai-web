@@ -411,7 +411,12 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
 // 原基线 712 KB 是**app 形态**下的实测值，与现在的 web 形态不可比：入口简化
 // （boot.ts 不再有取数闸门）让原先分散的模块并入了主包。按 web 形态重新实测
 // 741.8 KB，取 745 KB（实测 + 余量）。总 JS 合计从 1536 KB 降到 1251 KB。
-const MAIN_GZIP_BASELINE = 745 * 1024;
+// 2026-10-30：target 从 es2022 换成 chrome88（与 App 的 MIN_WEBVIEW_MAJOR 对齐）。
+// es2022 对应 Chrome 94：实测产物里有 2 个文件带 `static {}`（Chrome 94 才有），
+// 88 的 WebView 解析即失败。（"顶层 await" 一度被 grep 误报，用 esbuild 按 chrome88
+// 复核后确认不存在。）
+// 降级代价：主包 gzip 741.9 → 751.0 KB，按实测 + 余量取 753 KB。
+const MAIN_GZIP_BASELINE = 753 * 1024;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }

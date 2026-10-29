@@ -4112,6 +4112,7 @@ export class InventoryScreen {
       this.panel.classList.remove('creative-ui', 'station-ui');
       this.panel.dataset.pocketLeft = '';
       this.shellEl.classList.remove('pocket-chrome');
+      this.shellEl.classList.remove('pocket-has-dual');
       this.pocketTabsEl.classList.add('hidden');
       this.pocketRecipeBar.classList.add('hidden');
       this.railLeft.classList.add('hidden');
@@ -4158,6 +4159,8 @@ export class InventoryScreen {
       // `station` 不是一个可点的页签：它只用来让 CSS 的 armor/crafting 规则不命中
       this.panel.dataset.pocketTab = 'station';
       this.shellEl.classList.add('pocket-chrome');
+      // `:has(.pocket-dual)` 的等价物：88 及更老的 WebView 不支持 :has
+      this.shellEl.classList.toggle('pocket-has-dual', this.panel.classList.contains('pocket-dual'));
       this.pocketTabsEl.classList.add('hidden');
       this.railRight.classList.add('hidden');
       // 右轨被藏了 → 成就退到标题栏那颗
@@ -4244,6 +4247,7 @@ export class InventoryScreen {
     this.panel.dataset.pocketLeft = leftPane;
     this.panel.dataset.pocketTab = this.pocketTab;
     this.shellEl.classList.add('pocket-chrome');
+    this.shellEl.classList.toggle('pocket-has-dual', this.panel.classList.contains('pocket-dual'));
     this.pocketTabsEl.classList.remove('hidden');
     this.playerBody.style.display = '';
 
