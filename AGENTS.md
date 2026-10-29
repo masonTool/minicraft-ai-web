@@ -50,8 +50,8 @@ npm run dev            # 开发服务器 http://localhost:5173
 npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离线套件（实测 ~4s）
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
-# —— 提交前（全量，约 40s，大头是 184 套离线测试 26s）——
-npm run check          # typecheck + 184 套离线测试 + 三张台账，任一失败即非零退出
+# —— 提交前（全量，约 40s，大头是 181 套离线测试 26s）——
+npm run check          # typecheck + 181 套离线测试 + 三张台账，任一失败即非零退出
                        # （CI 也跑同一道：.github/workflows/check.yml）
 ```
 

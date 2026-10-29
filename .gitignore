@@ -62,14 +62,10 @@ references/
 # 联机服务端的世界快照（联机13）：本地运行时产物，不进版本库
 server/node/.data/
 
-# 封存产物由 `npm run gen:sealed` 从 host/core-baseline.bin 生成，不进仓库
-android/app/src/main/assets/sealed/
 
 # 封存产物（iOS）：与 android 同源，由 npm run gen:sealed 生成
-ios/App/App/sealed/
 
 # 桌面端：封存产物（打包输出统一在 dist/ 下，见 mac/ 与 windows/ 的 electron-builder.yml）
-desktop/resources/sealed/
 
 # 整包加密产物（npm run pack 生成）
 build/

@@ -1,47 +1,17 @@
 /**
- * 真正的入口（批次 20261025-1032 · 宿主9 收尾）
+ * 入口。
  *
- * **为什么要有这一层**：生产构建把方块表数据换成了空桩（`blockSpecs.ts` → `[]`），
- * 表只能由 `hostCore` 从 `core.bin` 装。而 `main.ts` 的模块图里有一批模块在**模块初始化期**
- * 就会读方块表——只要 `main.ts` 被静态引入，那些模块会在门禁之前求值，空表下当场
- * `TypeError: Cannot read properties of undefined (reading 'id')`（实测过，页面停在"加载中…"）。
+ * 现在只有一种产物：方块表**已经编进包里**（整包加密，壳解出来直接给 WebView）。
+ * 所以这里不再有"取宿主核心数据 → 装表 → 再拉起游戏"那套门禁，只保留动态 import：
  *
- * 所以顺序必须是：**先取核心数据、装好表，再 `import('./main.ts')`**。
- * 动态 import 保证主包的模块体在装表之后才执行，不依赖任何"某个模块恰好没在顶层读表"的假设。
- *
- * ⚠️ 上一批试过两段式又回退了：那时方块表还在主包里，入口 chunk 与 main chunk **各打一份**，
- * 主包从 1.2 MB 涨到 2.0 MB。现在数据被桩掉、两份都是空的，重复打包的前提已不存在。
+ * 主包的模块图里有一批模块在**模块初始化期**就读方块表，动态 import 让"入口先执行、
+ * 主包后加载"这件事保持显式，将来若再加任何"加载前必须先准备"的步骤，
+ * 顺序仍然是清楚的。
  */
 
-import { ensureHostCore } from './core/hostCore.ts';
-
-/**
- * 是否必须由宿主提供核心数据（构建期注入，见 `vite.config.ts`）。
- *
- * `build:web` 为 false：方块表已经编进包里（`blocks.ts` 在模块初始化时就建好表了），
- * 既不需要取 `core.bin`，也就不涉及"宿主版本太老"那套判定——**纯网页，开箱能玩**。
- */
-const HOST_CORE_REQUIRED: boolean =
-  typeof __HOST_CORE_REQUIRED__ === 'undefined' ? true : __HOST_CORE_REQUIRED__;
-
-void (async () => {
-  if (!HOST_CORE_REQUIRED) {
-    await import('./main.ts');
-    return;
-  }
-
-  // 拿不到核心数据时 `ensureHostCore()` 已经画好了整屏提示（"去应用里玩" / "请更新应用"），
-  // 这里直接放弃即可：没有方块表的世界不报错，只会是一片空白。
-  if (!(await ensureHostCore())) return;
-  await import('./main.ts');
-})().catch((error: unknown) => {
-  // 启动期抛错：别让"加载中…"永远转下去（也别说谎说还在加载）。
-  // 这里只给玩家一句人话，错误本身照旧 rethrow，交给 `unhandledrejection` 记账。
-  // `ui/LoadingOverlay.ts` 是轻模块（只碰 DOM + i18n），可以安全地动态取它
-  void import('./ui/LoadingOverlay.ts')
-    .then(({ failBootLoading }) => failBootLoading())
-    .catch(() => undefined)
-    .finally(() => {
-      throw error;
-    });
+void import('./main.ts').catch((error: unknown) => {
+  // 启动期抛错：别让"加载中…"永远转下去，也别谎称还在加载
+  console.error('[boot] 主包加载失败', error);
+  const el = document.getElementById('boot-error');
+  if (el !== null) el.textContent = '启动失败，请重启游戏';
 });

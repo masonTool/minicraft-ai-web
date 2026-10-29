@@ -1,6 +1,6 @@
 {
-  "//": "发布期常量。signingCertSha256 填 Play App Signing 的**应用签名证书** SHA-256（不是 upload key），可用 `apksigner verify --print-certs` 或 Play Console 查看。留空时 `gen:sealed` 会用全零占位，真机必解不开，且 release:audit 会红。",
-  "//salt": "编译期盐，只用于 KEK 派生，改动它等于让所有既有封存数据作废（需重新 gen:sealed）。",
+  "//": "发布期常量。signingCertSha256 填 Play App Signing 的**应用签名证书** SHA-256（不是 upload key），可用 `apksigner verify --print-certs` 或 Play Console 查看。留空时 `npm run pack` 会缺签名包裹，真机必解不开，且 release:audit 会红。",
+  "//salt": "编译期盐，只用于 KEK 派生，改动它等于让所有既有封存数据作废（需重新 pack）。",
   "//macTeamId": "macOS 的 Team ID，`codesign -dv --verbose=4 Minicraft.app` 里的 TeamIdentifier=XXXX。留空时未签名的本地构建能开，带签名的副本一律拒绝。",
   "//winCertThumbprint": "Windows 代码签名证书指纹，`(Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint`。规则同上。",
   "signingCertSha256": [],

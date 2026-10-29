@@ -179,47 +179,32 @@ if (existsSync(hostDir)) {
   problems.push('dist 里出现了 __host/：两种形态都不该带 core.bin（它的去处只有 APK），已删除');
 }
 
-// ------------------------------------------------------------------ 3.1 封存体（A23）
+// ------------------------------------------------------------------ 3.1 整包（A36）
 /**
- * 核心数据只允许以**封存体**形式出现在 Android 工程里。
+ * 发布产物里**不许**再出现明文游戏内容或旧封存形态。
  *
- * 断言分两层，因为 `build:app` 和"出 APK"不是同一件事：
- *   · 任何模式都查：assets 里不许有明文 `core.bin`（旧 `copyHostCore` 的残留）；
- *   · 只有 `--mode android` 才查封存体本身——`build:app` 也被 CI 的
- *     `deploy-cf-app.yml` 用来发布"只认 APK"的网页，那里根本没有 Android 工程，
- *     把封存断言挂上去会让那条流水线必红（而且红得毫无意义）。
+ * 整包加密之后，APK 里只该有 `assets/rt/libmcrt.so` 一个加密文件；
+ * 旧形态（`assets/public`、`assets/sealed`）如果还在，说明有人走了老路，
+ * 而这三种失败都不会让构建报错——只会让保护白做。
  */
 {
   const ASSETS = join(ROOT, 'android/app/src/main/assets');
-  const plaintext = join(ASSETS, 'public/__host/core.bin');
-  if (existsSync(plaintext)) {
-    problems.push(`assets 里有明文核心数据：${plaintext}（删掉它，明文只允许在 host/ 与 .tmp/）`);
+  for (const [rel, why] of [
+    ['public', '整包加密后不该再有明文素材目录'],
+    ['sealed', '旧的方块表封存形态已废弃'],
+    ['public/__host/core.bin', '明文核心数据的旧路径'],
+  ]) {
+    const target = join(ASSETS, rel);
+    if (existsSync(target)) problems.push(`assets 里还有废弃产物：${rel}（${why}）`);
   }
-  const sealedPath = join(ASSETS, 'sealed/core.sealed');
-  if (checkAndroid) {
-    if (!existsSync(sealedPath)) {
-      problems.push('app 形态缺 assets/sealed/core.sealed：先跑 npm run gen:sealed');
+  if (mode === 'app') {
+    const pkg = join(ASSETS, 'rt/libmcrt.so');
+    if (!existsSync(pkg)) {
+      problems.push('缺 assets/rt/libmcrt.so：先跑 npm run pack（需要先 build:web）');
     } else {
-      const head = readFileSync(sealedPath).subarray(0, 4);
-      if (head.equals(Buffer.from('MCTB', 'ascii'))) {
-        problems.push('core.sealed 以明文方块表魔数 MCTB 开头：这不是封存体，是改了名的明文');
-      }
-      const signersPath = join(ASSETS, 'sealed/signers.txt');
-      const signers = existsSync(signersPath) ? readFileSync(signersPath, 'utf8') : '';
-      if (signers.includes('0'.repeat(64))) {
-        const message =
-          'signers.txt 里还是**全零占位**：release.config.json 的 signingCertSha256 没填真实证书。' +
-          '发出去玩家一定解不开（fail-closed），必须填 Play App Signing 的应用签名证书 SHA-256';
-        /*
-         * 分级：占位只挡**正式发版**，不挡本地出包。
-         * 否则没证书的人连 `npm run android:apk` 都跑不了——而本地包本来就只给自己装。
-         * `android:aab` 会设 MINICRAFT_RELEASE=1，把这一条升级成错误。
-         */
-        if (process.env.MINICRAFT_RELEASE === '1') problems.push(message);
-        else notes.push(message);
-      }
-      if (!existsSync(join(ASSETS, 'sealed/salt.bin'))) {
-        problems.push('缺 assets/sealed/salt.bin：gen:sealed 没跑完，或产物被手工改过');
+      const head = readFileSync(pkg).subarray(0, 8);
+      if (!head.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0]))) {
+        problems.push('libmcrt.so 不是预期的加密包（假 ELF 头不对）');
       }
     }
   }
