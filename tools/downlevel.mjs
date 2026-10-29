@@ -63,6 +63,13 @@ for (const file of files) {
     // 已经是模块，保持模块语义；不生成 sourcemap（发布产物要求无 .map）
     format: 'esm',
     legalComments: 'none',
+    /*
+     * 必须保留 `import.meta`：worker 的地址是 `new Worker(new URL('...', import.meta.url))` 拼的，
+     * 而 esbuild 在 target < es2020 时会把它降成 `{}`，于是 `import.meta.url` 是 undefined、
+     * `new URL('x', undefined)` 抛 `Invalid URL` —— 表现是**世界永远卡在"正在生成世界"**。
+     * Chrome 64+ 就支持 import.meta，这里保留是安全的。
+     */
+    supported: { 'import-meta': true, 'dynamic-import': true },
   });
 
   /*

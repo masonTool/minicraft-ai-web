@@ -163,7 +163,8 @@ export default defineConfig({
     sourcemap: process.env.SOURCEMAP !== '0',
   },
   worker: {
-    format: 'es',
+    // 经典 worker（不是 ESM）：老 WebView 不支持 module worker，构造即抛错
+    format: 'iife',
     /**
      * ⚠️ worker 的构建走**独立的插件链**，主 `plugins` 里的桩换不进去（实测：app 形态下
      * `chunk.worker-*.js` 里仍是完整方块表，探针一抓就中）。地形 worker 会 import `blocks.ts`，

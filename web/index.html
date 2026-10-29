@@ -7122,8 +7122,6 @@
     <!-- 入口仍是 main.ts：它在末尾先过一道门禁（`core/hostCore.ts` 取宿主注入的
          核心数据 /__host/core.bin），拿到表才 boot()。浏览器里那一步是 404 →
          只显示"去应用里玩"的提示屏，游戏不会启动。详见 src/core/hostCore.ts 的注释。 -->
-    <!-- 老 WebView 的内置 API 兜底：必须早于任何 module 执行（见 web/public/polyfill.js） -->
-    <script src="/polyfill.js"></script>
     <script type="module" src="/src/boot.ts"></script>
     <script type="module">
       // Service Worker 只在**真正走网络的 HTTP(S) 站点**上注册。

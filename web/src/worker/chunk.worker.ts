@@ -1,84 +1,275 @@
 /**
- * 区块 Worker 的**入口 / bootstrap**。
+ * 区块 Worker：地形生成 + 网格化。
  *
- * 它只做一件事：等主线程把方块表发过来 → 装上 → 再 `import()` 真正的实现
- * （`chunk.worker.impl.ts`，地形生成 + 网格化）。
+ * ## 为什么是"一个文件、经典 worker"
  *
- * ## 为什么需要这一层
+ * 整包加密之后方块表就编在包里（不再有 `SPECS_STUB`），Worker 里 `BLOCKS` 在模块求值时
+ * 已经是完整的，不需要再由主线程注入——所以这里不需要 bootstrap + 动态 import。
  *
- * app 形态（`SPECS_STUB=1`）下方块表不进主包，是运行时由原生解封后注入的。
- * 而 Worker 是**独立的模块实例**，模块求值那一刻注册表还是空的——`items.ts` 顶层那段
- * "按方块 id 注册物品"的循环会读 `blockDef(id).id`，直接抛
- * `Cannot read properties of undefined (reading 'id')`，于是 Worker 一条结果都回不来，
- * 表现是**永远停在 "Generating world…"**（区块数恒为 0，且页面不报错）。
- *
- * 主线程没这个问题，因为 `boot.ts` 先 `await ensureHostCore()` 才动态 `import()` 游戏主包。
- * 这里用的是同一个办法：**先装表，再引入依赖注册表的模块**。所以 impl 不能
- * 静态 import，只能用 `import()`。
- *
- * Web 形态下表已经在包里，主线程发 `{ core: null }`，这一层只做一次动态 import。
+ * 而 `{ type: 'module' }` 这种 ESM worker **在老 WebView 上直接不支持**（实测 WebView 72:
+ * `Failed to construct 'Worker': Module scripts are not supported on DedicatedWorker yet`），
+ * 构造即抛错 → 世界永远卡在"正在生成世界"。所以构建格式用 `iife`（见 vite.config.ts 的 worker.format）。
  */
 
-import { decodeBlockTable } from '../core/registry/blockTableCodec.ts';
-import { installBlockTable } from '../core/registry/blocks.ts';
-import type { WorkerRequest } from './chunk.worker.impl.ts';
+import '../polyfill.ts';
+import type { DimensionId } from '../core/gen/Dimension.ts';
+import type { WorldType } from '../core/gen/WorldType.ts';
+import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../core/gen/TerrainGenerator.ts';
+import { meshSection, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
+import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING } from '../render/atlasLayout.ts';
+import { tileOriginAt } from '../render/atlasCoords.ts';
 
-// 类型在这里转出去，其他模块继续从 `chunk.worker.ts` 引入即可（`export type` 会被擦除，
-// 不会把 impl 拉进静态依赖图）
-export type {
-  GenerateRequest,
-  GenerateResponse,
-  MeshChunkPayload,
-  MeshRequest,
-  MeshResponse,
-  GeometryPayload,
-} from './chunk.worker.impl.ts';
+// ---------------------------------------------------------------- 消息类型
+
+export interface GenerateRequest {
+  type: 'generate';
+  id: number;
+  cx: number;
+  cz: number;
+  seed: number;
+  /** 维度（主世界 / 下界 / 末地） */
+  dimension: DimensionId;
+  /** 世界类型（默认 / 超平坦 / 大型群系 / 放大化 / 单一群系） */
+  worldType: WorldType;
+  /** 单一群系世界的群系注册名 */
+  singleBiome?: string;
+}
+
+export interface GenerateResponse {
+  type: 'generated';
+  id: number;
+  cx: number;
+  cz: number;
+  blocks: ArrayBuffer;
+  /**
+   * 方块状态（朝向/开关）。自然地形全是 0，只有结构生成的门、楼梯才会用到，
+   * 因此这里允许为 null —— 避免每个区块都白白多传 96KB。
+   */
+  states: ArrayBuffer | null;
+}
+
+/** 一个区块的网格化输入数据 */
+export interface MeshChunkPayload {
+  cx: number;
+  cz: number;
+  blocks: ArrayBuffer;
+  light: ArrayBuffer;
+  counts: Int32Array;
+  states: ArrayBuffer | null;
+}
+
+export interface MeshRequest {
+  type: 'mesh';
+  id: number;
+  cx: number;
+  cz: number;
+  chunks: MeshChunkPayload[];
+}
+
+/** 一个渲染层的顶点数据 */
+export interface GeometryPayload {
+  position: Float32Array;
+  uv: Float32Array;
+  tile: Float32Array;
+  light: Uint8Array;
+  shade: Uint8Array;
+  index: Uint32Array;
+}
+
+export interface MeshSectionPayload {
+  section: number;
+  solid: GeometryPayload | null;
+  translucent: GeometryPayload | null;
+}
+
+export interface MeshResponse {
+  type: 'meshed';
+  id: number;
+  cx: number;
+  cz: number;
+  sections: MeshSectionPayload[];
+}
+
+export type WorkerRequest = GenerateRequest | MeshRequest;
+export type WorkerResponse = GenerateResponse | MeshResponse;
+
+/** 只依赖几何体的读取接口，避免 Worker 里引入 three 的类型 */
+interface GeometryLike {
+  getAttribute(name: string): { array: ArrayLike<number> };
+  getIndex(): { array: ArrayLike<number> } | null;
+}
+
+// ---------------------------------------------------------------- 贴图位置
+
+const TILE_INDEX = new Map<string, number>(TILE_ORDER.map((name, index) => [name, index]));
+const ATLAS_ROWS = Math.ceil(TILE_ORDER.length / ATLAS_COLUMNS);
+
+/**
+ * 与 TextureAtlas.tileOrigin 必须完全一致。
+ * 这里只用常量算，不创建 canvas —— 顶点只需要「贴图在图集里的起点」。
+ *
+ * ⚠️ `TILE_PADDING` 不能漏（批次 520）：上传图集每格四周有 8 纹素的外扩边距，
+ * 顶点里的起点是**内容区**的左下角。这里少传一个参数，整张图的 UV 就会偏移
+ * 半个格子（所有方块贴图错位）。两边的一致性由 `test:mesh` 的 UV 断言守着。
+ */
+const tileUv: TileUvSource = {
+  tileOrigin(tile: string): [number, number] {
+    return tileOriginAt(TILE_INDEX.get(tile) ?? 0, ATLAS_COLUMNS, ATLAS_ROWS, TILE_PADDING);
+  },
+};
+
+// ---------------------------------------------------------------- 取样上下文
+
+/** Worker 侧的区块数据（只保留本次请求带来的 5 个区块） */
+class MeshWorld implements MeshContext {
+  private readonly chunks = new Map<string, Chunk>();
+  /** 单条目缓存：网格化会沿 X/Z 连续取样，命中率很高 */
+  private lastCx = Number.NaN;
+  private lastCz = Number.NaN;
+  private last: Chunk | undefined;
+
+  constructor(payloads: readonly MeshChunkPayload[], private readonly centerCx: number, private readonly centerCz: number) {
+    for (const payload of payloads) {
+      const chunk = Chunk.fromData(payload.cx, payload.cz, new Uint16Array(payload.blocks), payload.counts);
+      if (payload.light.byteLength > 0) chunk.light.set(new Uint8Array(payload.light));
+      if (payload.states && payload.states.byteLength > 0) chunk.restoreStates(new Uint8Array(payload.states));
+      this.chunks.set(`${payload.cx},${payload.cz}`, chunk);
+    }
+  }
+
+  /** 本次要网格化的中心区块 */
+  get center(): Chunk | undefined {
+    return this.at(this.centerCx, this.centerCz);
+  }
+
+  private at(cx: number, cz: number): Chunk | undefined {
+    if (cx === this.lastCx && cz === this.lastCz) return this.last;
+    this.lastCx = cx;
+    this.lastCz = cz;
+    this.last = this.chunks.get(`${cx},${cz}`);
+    return this.last;
+  }
+
+  getBlock(worldX: number, worldY: number, worldZ: number): number {
+    if (worldY < WORLD_MIN_Y || worldY >= WORLD_MAX_Y) return 0;
+    const chunk = this.at(worldX >> 4, worldZ >> 4);
+    if (!chunk) return 0;
+    return chunk.get(worldX & 15, worldY, worldZ & 15);
+  }
+
+  getBlockState(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.at(worldX >> 4, worldZ >> 4);
+    if (!chunk) return 0;
+    return chunk.getState(worldX & 15, worldY, worldZ & 15);
+  }
+
+  getSkyLight(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.at(worldX >> 4, worldZ >> 4);
+    if (!chunk) return 0;
+    return chunk.getSkyLight(worldX & 15, worldY, worldZ & 15);
+  }
+
+  getBlockLight(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.at(worldX >> 4, worldZ >> 4);
+    if (!chunk) return 0;
+    return chunk.getBlockLight(worldX & 15, worldY, worldZ & 15);
+  }
+}
+
+// ---------------------------------------------------------------- 网格化
+
+function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transferable[] } {
+  const world = new MeshWorld(req.chunks, req.cx, req.cz);
+  const sections: MeshSectionPayload[] = [];
+  const transfer: Transferable[] = [];
+  const chunk = world.center;
+
+  const collect = (geometry: GeometryLike | null): GeometryPayload | null => {
+    if (!geometry) return null;
+    const payload: GeometryPayload = {
+      position: geometry.getAttribute('position').array as Float32Array,
+      uv: geometry.getAttribute('uv').array as Float32Array,
+      tile: geometry.getAttribute('aTile').array as Float32Array,
+      light: geometry.getAttribute('aLight').array as Uint8Array,
+      shade: geometry.getAttribute('aShade').array as Uint8Array,
+      index: geometry.getIndex()!.array as Uint32Array,
+    };
+    transfer.push(
+      payload.position.buffer,
+      payload.uv.buffer,
+      payload.tile.buffer,
+      payload.light.buffer,
+      payload.shade.buffer,
+      payload.index.buffer,
+    );
+    return payload;
+  };
+
+  if (chunk) {
+    for (let section = 0; section < SECTION_COUNT; section++) {
+      if (chunk.sectionIsEmpty(section)) continue;
+      const { solid, translucent } = meshSection(chunk, section, tileUv, world);
+      const solidPayload = collect(solid);
+      const translucentPayload = collect(translucent);
+      if (solidPayload || translucentPayload) {
+        sections.push({ section, solid: solidPayload, translucent: translucentPayload });
+      }
+    }
+  }
+
+  return { response: { type: 'meshed', id: req.id, cx: req.cx, cz: req.cz, sections }, transfer };
+}
+
+// ---------------------------------------------------------------- 入口
 
 /** 避免依赖 WebWorker lib（会与 DOM lib 冲突），只声明用到的接口 */
 interface WorkerScope {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest | InitMessage>) => void): void;
-}
-
-interface InitMessage {
-  type: 'init';
-  /** 原始方块表字节；`null` = 表已经在包里（Web 形态），不需要装 */
-  core: ArrayBuffer | null;
+  addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest>) => void): void;
 }
 
 const ctx = self as unknown as WorkerScope;
 
-let handle: ((req: WorkerRequest) => void) | null = null;
-let ready: Promise<void> | null = null;
-/** 实现还没加载完就到达的请求：按到达顺序排队，加载完按序补发 */
-const queued: WorkerRequest[] = [];
-
-function bootstrap(core: ArrayBuffer | null): Promise<void> {
-  if (ready !== null) return ready;
-  ready = (async () => {
-    if (core !== null) {
-      installBlockTable(decodeBlockTable(core));
-    }
-    const module = await import('./chunk.worker.impl.ts');
-    handle = module.handleRequest;
-    for (const request of queued) handle(request);
-    queued.length = 0;
-  })();
-  return ready;
-}
-
-ctx.addEventListener('message', (event) => {
-  const data = event.data;
-
-  if ((data as InitMessage).type === 'init') {
-    void bootstrap((data as InitMessage).core);
+/**
+ * 处理一条请求（由 `chunk.worker.ts` 那个 bootstrap 在**装完方块表之后**调用）。
+ *
+ * 原来是本模块自己在顶层 `addEventListener` 监听；改成导出函数是因为：
+ * app 形态下方块表要等 bootstrap 收到才装得上，而本模块的依赖链里有
+ * `items.ts` 的模块级注册循环，**必须在装表之后才能求值**。
+ * 于是唯一能保证顺序的办法是——bootstrap 先装表，再 `import()` 本模块。
+ */
+ctx.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
+  const req = event.data;
+  if (req.type === 'generate') {
+    const blocks = generateChunkBlocks(
+      req.cx,
+      req.cz,
+      req.seed,
+      req.dimension,
+      req.worldType,
+      new Uint16Array(CHUNK_BLOCK_COUNT),
+      undefined,
+      req.singleBiome,
+    );
+    const states = takeGeneratedStates();
+    const response: GenerateResponse = {
+      type: 'generated',
+      id: req.id,
+      cx: req.cx,
+      cz: req.cz,
+      // 转移所有权：零拷贝交给主线程
+      blocks: blocks.buffer as ArrayBuffer,
+      states: states ? (states.buffer as ArrayBuffer) : null,
+    };
+    const transfer: Transferable[] = [response.blocks];
+    if (response.states) transfer.push(response.states);
+    ctx.postMessage(response, transfer);
     return;
   }
 
-  const request = data as WorkerRequest;
-  if (handle === null) {
-    queued.push(request);
-    return;
+  if (req.type === 'mesh') {
+    const { response, transfer } = meshChunk(req);
+    ctx.postMessage(response, transfer);
   }
-  handle(request);
 });

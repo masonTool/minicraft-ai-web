@@ -18,6 +18,7 @@
  * 所以往外搬东西不会牵动别处；反过来，要给别人用的东西也不该留在这里。
  */
 
+import './polyfill.ts';
 import * as THREE from 'three';
 import { normalizeId, shortId } from './core/registry/ids.ts';
 import { installInputOverlay } from './ui/InputOverlay.ts';

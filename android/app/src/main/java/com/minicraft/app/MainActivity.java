@@ -54,6 +54,25 @@ public class MainActivity extends Activity {
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        /*
+         * 调试入口：`adb shell am start -n com.minicraft.app/.MainActivity -e url <地址>`
+         * 用壳直接加载任意页面，用于区分"壳环境有问题"还是"我们的资源供给有问题"。
+         * 只在 debug 构建生效。
+         */
+        String debugUrl = BuildConfig.DEBUG ? getIntent().getStringExtra("url") : null;
+        if (debugUrl != null && debugUrl.startsWith("http")) {
+            WebView probe = new WebView(this);
+            probe.getSettings().setJavaScriptEnabled(true);
+            probe.getSettings().setDomStorageEnabled(true);
+            probe.getSettings().setTextZoom(100);
+            probe.getSettings().setUseWideViewPort(true);
+            probe.getSettings().setLoadWithOverviewMode(true);
+            setContentView(probe);
+            applyImmersive();
+            probe.loadUrl(debugUrl);
+            return;
+        }
+
         currentBundle = BundleVault.open(this);
         if (currentBundle == null) {
             // 解不开 = 不是我们的包（或包被动过）。没有降级分支，直接说清楚。
@@ -71,6 +90,20 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
+        /*
+         * 下面四行是"浏览器里正常、壳里 DOM 尺寸全错"的根因（真机实测过）。
+         *
+         * WebView 与 Chrome 的默认值不一样：
+         *  · `textZoom` 默认**跟随系统字体大小**——用户把字体调大过，WebView 里每个
+         *    文字都会被放大，布局跟着错位；Chrome 浏览器不受这个设置影响。
+         *  · `useWideViewPort` 默认 false，viewport meta 的 width 不被采纳，
+         *    布局按 980px 虚拟宽度来，再整体缩放。
+         *  · `loadWithOverviewMode` 默认 false，页面不会被缩放到适配宽度。
+         */
+        settings.setTextZoom(100);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
         // 设备默认 UA + 触屏标记：摸拟器带鼠标时 `pointer: coarse` 不成立，
         // 靠 UA 才能稳定走进触屏那套界面
         settings.setUserAgentString(settings.getUserAgentString() + " " + TOUCH_MARKER);
@@ -103,6 +136,9 @@ public class MainActivity extends Activity {
 
     /** 从内存表里取文件；取不到就 404（与"文件不存在"语义一致，不暴露内部结构） */
     private WebResourceResponse shouldIntercept(WebResourceRequest request) {
+        // 只接管自己的 origin；外部页面（A/B 调试用）交给 WebView 正常走网络
+        if (!request.getUrl().toString().startsWith(ORIGIN + "/")) return null;
+
         String path = request.getUrl().getPath();
         String name = path == null ? "" : path.replaceAll("^/+", "");
         if (name.isEmpty()) name = "index.html";
