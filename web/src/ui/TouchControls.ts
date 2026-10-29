@@ -200,18 +200,12 @@ function capturePointer(element: HTMLElement, pointerId: number): void {
   }
 }
 
-/**
- * 原生壳通过 UA 打的标记（Android: `MainActivity`，iOS/桌面对应壳同样加）。
- *
- * 为什么要它：`pointer: coarse` 在带鼠标的模拟器上不成立，会被判成 PC 版；
- * 而"有没有原生壳"这件事壳自己最清楚，UA 又是在任何脚本之前就可用的。
- */
-const SHELL_TOUCH = typeof navigator !== 'undefined' && /MinicraftTouch\/1/.test(navigator.userAgent);
-
 /** 是否应当启用触摸操作 */
+import { isNativeShell } from '../core/shell.ts';
 export function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
-  if (SHELL_TOUCH) return true;
+  // 壳里一律按触屏处理：模拟器带鼠标时 pointer:coarse 不成立，会被判成 PC 版
+  if (isNativeShell()) return true;
   const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   return coarse && hasTouch;

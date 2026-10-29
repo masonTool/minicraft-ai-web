@@ -24,6 +24,7 @@
  */
 
 import { t } from '../core/i18n/I18n.ts';
+import { isNativeShell } from '../core/shell.ts';
 type FullscreenCapableElement = HTMLElement & {
   webkitRequestFullscreen?: () => void;
 };
@@ -138,6 +139,8 @@ export function enterMobilePresentation(): void {
  */
 export function isStandalone(): boolean {
   if (typeof window === 'undefined') return false;
+  // 原生壳里没有浏览器框架，等价于"已装成 App"：不该再弹"添加到主屏幕"
+  if (isNativeShell()) return true;
   const standalone =
     window.matchMedia?.('(display-mode: standalone)').matches === true ||
     window.matchMedia?.('(display-mode: fullscreen)').matches === true ||

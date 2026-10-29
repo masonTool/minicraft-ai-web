@@ -407,7 +407,11 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
  * 数值调低是**显式动作**：把闸门收紧，别让这 12 KB 的收益被后续提交悄悄吃回去。
  * 想复现"带数据的对照"用 `SPECS_STUB=0 npm run build:app`（那时基线不适用）。
  */
-const MAIN_GZIP_BASELINE = 712 * 1024;
+// 2026-10-30：app 形态（方块表桩掉、由宿主注入）下线后，只剩 web 形态一条构建线。
+// 原基线 712 KB 是**app 形态**下的实测值，与现在的 web 形态不可比：入口简化
+// （boot.ts 不再有取数闸门）让原先分散的模块并入了主包。按 web 形态重新实测
+// 741.8 KB，取 745 KB（实测 + 余量）。总 JS 合计从 1536 KB 降到 1251 KB。
+const MAIN_GZIP_BASELINE = 745 * 1024;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }
