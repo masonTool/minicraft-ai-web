@@ -69,3 +69,6 @@ server/node/.data/
 
 # 整包加密产物（npm run pack 生成）
 build/
+
+# Android 里的加密包是构建产物（gradle 的 copyPackedBundle 从 build/rt 拷过来）
+android/app/src/main/assets/rt/

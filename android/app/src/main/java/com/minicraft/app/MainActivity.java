@@ -148,24 +148,28 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * WebView 太旧时提示更新。
+     * WebView 太旧时提示更新（**一层弹窗**）。
      *
      * 为什么用原生弹窗而不是网页里弹：版本过低时网页的样式本身就是坏的
-     * （`min()/clamp()/inset` 全被丢弃），用它自己的 UI 提示反而可能显示不全。
+     * （`min()/clamp()/inset/dvh` 全被丢弃），用它自己的 UI 提示反而可能显示不全。
+     *
+     * 为什么只有一层：之前是"提示 → 如何更新 → 指引"三层跳转，玩家点两下才看到
+     * 该怎么操作。现在原因 / 现象 / 解决一次性写在同一屏里，按钮只有"去更新"和"知道了"。
      */
     private void warnIfWebViewTooOld() {
         int major = webViewMajorVersion();
         // 取不到版本号时不做判断：宁可放行，也不要因为解析失败把正常用户挡在门外
         if (major == 0 || major >= MIN_WEBVIEW_MAJOR) return;
 
+        String message = getString(R.string.webview_too_old_cause, major, MIN_WEBVIEW_MAJOR)
+                + "\n\n" + getString(R.string.webview_too_old_effect)
+                + "\n\n" + getString(R.string.webview_too_old_fix);
+
         new AlertDialog.Builder(this)
-                .setTitle("WebView 版本过低")
-                .setMessage("当前 Android System WebView 版本为 " + major
-                        + "，低于建议的 " + MIN_WEBVIEW_MAJOR + "。\n\n"
-                        + "游戏界面可能显示异常（按钮变形、布局错乱、无法进入世界）。\n"
-                        + "请更新到最新版本后再玩。")
-                .setPositiveButton("如何更新", (dialog, which) -> showUpdateGuide())
-                .setNegativeButton("仍然进入", null)
+                .setTitle(R.string.webview_too_old_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.webview_too_old_update, (dialog, which) -> openWebViewStore())
+                .setNegativeButton(R.string.webview_too_old_dismiss, null)
                 .show();
     }
 
@@ -181,33 +185,17 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 更新指引。
+     * 尽力打开应用商店的 WebView 详情页。
      *
-     * 为什么不直接 startActivity(market://...) 了事：实测这台机器上 `market://` 会被
-     * MIUI 应用商店接走，但它**没有 Google WebView 的条目**，于是自己跳去一个搜索结果页，
-     * 玩家看到的是一屏广告和搜索框——比不给按钮还糟。
-     * 所以先给可执行的文字步骤，把"打开商店"降级成可选的一步。
+     * 实测有些机器（如 MIUI）没有 Google WebView 的商店条目，`market://` 会被商店接走
+     * 但只给一个搜索结果页。那种情况下静默即可——弹窗里已经写了手工步骤，不再多弹一层。
      */
-    private void showUpdateGuide() {
-        new AlertDialog.Builder(this)
-                .setTitle("更新 Android System WebView")
-                .setMessage("这台设备的 WebView 版本过低，游戏界面可能显示异常。可以这样更新：\n\n"
-                        + "1. 打开「设置 → 应用管理」，搜索「Android System WebView」，看是否有更新；\n"
-                        + "2. 若系统里没有更新项，在能访问 Google 的设备上下载 WebView 安装包，"
-                        + "再用数据线连上安装；\n\n"
-                        + "更新后不需要重装游戏，重新打开即可。")
-                .setPositiveButton("打开应用商店", (dialog, which) -> openStoreBestEffort())
-                .setNegativeButton("知道了", null)
-                .show();
-    }
-
-    /** 尽力打开商店；没有处理者就算了（已经给过文字指引，不必再打断） */
-    private void openStoreBestEffort() {
+    private void openWebViewStore() {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW,
                     Uri.parse("market://details?id=com.google.android.webview")));
         } catch (Throwable ignored) {
-            // 没有商店：指引里已经写了手工步骤，这里静默即可
+            // 没有可用商店：按弹窗里写的"设置 → 应用管理"手工更新
         }
     }
 

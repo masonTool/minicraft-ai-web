@@ -94,6 +94,13 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 - **"去更新"不要写成无脑 startActivity(market://)**：实测这台机器上 `market://` 被 MIUI 应用商店
   接走，但它没有 Google WebView 的条目，自己跳去一个搜索结果页（一屏广告+搜索框）。
   现在的做法：弹窗按钮先给**可执行的文字步骤**，把"打开应用商店"作为该指引里的可选项。
+- **minSdk 24 与 WebView 88 是两件事**：`minSdkVersion=24`（Android 7.0）决定"能不能装"，
+  运行时闸门 `MIN_WEBVIEW_MAJOR=88` 决定"能不能跑"。Android 7 的 WebView 出厂是 Chromium 51
+  （没有 WebGL2），但能更新到 **119**（Chrome 120 起不再支持 Android 7）——所以 88 在
+  minSdk 24 的机器上是可达的，前提是用户更新过 WebView。
+- **启动遮罩只能用"最老也认"的写法**：它必须早于任何脚本可见，所以不能依赖 `inset`
+  （Chrome 87）、flex `gap`（84）、`min()`（79）。实测 `inset: 0` 被丢弃时整块料会塌到左上角，
+  这就是"低版本 WebView 上加载中跑到角落"的原因。间距用 margin、定位用四条边、宽度给静态兜底。
 - **WebView 兼容基线 = 88**（`MainActivity.MIN_WEBVIEW_MAJOR`）。低于 88 时启动会弹原生提示
   并给商店跳转。依据：界面大量使用 `min()/max()/clamp()`（Chrome 79）、flex `gap`（84）、
   `inset`（87）、`aspect-ratio`（88），WebView 72 这类旧内核会**直接丢弃这些声明**，

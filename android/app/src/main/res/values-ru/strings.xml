@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="webview_too_old_title">WebView устарел</string>
+    <string name="webview_too_old_cause">• Причина: WebView версии %1$d, игре нужна версия %2$d или новее.</string>
+    <string name="webview_too_old_effect">• Симптомы: смещённый интерфейс, кнопки за экраном, мир может не загрузиться.</string>
+    <string name="webview_too_old_fix">• Решение: обновите «Android System WebView» (Настройки → Приложения), затем откройте игру заново.</string>
+    <string name="webview_too_old_update">Обновить</string>
+    <string name="webview_too_old_dismiss">Позже</string>
+</resources>

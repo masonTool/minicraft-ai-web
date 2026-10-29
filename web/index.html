@@ -1744,13 +1744,21 @@
          z-index 60：压住主菜单(40) / 设置(50) / 回前台层(55)，但**低于**竖屏提示与
          不支持提示(90)——手机上竖屏打开时应该先看见"请横屏"。 */
       #boot-loading {
-        position: fixed; inset: 0; z-index: 60;
+        /* ⚠️ 不要用 `inset: 0`：它要 Chrome 87，老 WebView 上整条声明被丢弃，
+           容器塌成 auto 尺寸停在**左上角**——这正是"版本低时加载中跑到角落"的原因。
+           四条边分开写是任何版本都认的写法。 */
+        position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60;
+        width: 100%; height: 100%; box-sizing: border-box;
         display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 12px;
+        align-items: center; justify-content: center;
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
         color: #c8c8c8; font-size: 14px; text-align: center;
         cursor: progress;
       }
+      /* 间距用 margin 而不是 flex 的 `gap`（gap 要 Chrome 84）。
+         为什么不用 `@supports not (gap: 1px)` 兜底：那对 grid 的 gap 早在 Chrome 66 就成立，
+         探针会误判为"支持"，结果 flex 里照样没有间距。这里直接写死 margin，任何版本都对。 */
+      #boot-loading > * + * { margin-top: 12px; }
       /* 转圈：一圈暗环 + 一段高亮弧（整圈同色的话转起来看不出在动） */
       .boot-spinner {
         width: 34px; height: 34px; box-sizing: border-box;
@@ -1764,7 +1772,8 @@
       /* 不确定进度条（与 `#loading` 那条同一套动画）：启动没有可靠的总进度，
          用"一直在走"的一条比一个假的百分比诚实 */
       .boot-bar {
-        width: min(180px, 46vw); height: 3px;
+        /* min() 要 Chrome 79：不认时整条 width 会被丢弃，进度条直接消失 */
+        width: 180px; width: min(180px, 46vw); height: 3px;
         background: linear-gradient(90deg, transparent, var(--accent), transparent);
         background-size: 60% 100%; background-repeat: no-repeat;
         animation: loading-sweep 1.4s var(--ease) infinite;
@@ -6327,10 +6336,52 @@
          `hideBootLoading()` 整块 remove。 -->
     <div id="boot-loading" role="status" aria-live="polite">
       <div class="boot-spinner" aria-hidden="true"></div>
-      <div class="boot-text">加载中…</div>
+      <div class="boot-text" id="boot-text">加载中…</div>
       <div class="boot-bar" aria-hidden="true"></div>
-      <div class="boot-sub">正在准备材质与存档</div>
+      <div class="boot-sub" id="boot-sub">正在准备材质与存档</div>
     </div>
+
+    <script>
+      /*
+       * 启动遮罩的文案本地化。
+       *
+       * 为什么不用 `core/i18n`：这段界面在**模块脚本执行之前**就要显示，
+       * 而 i18n 是模块、还要 await 加载语言包。所以这里放一份极小的内联字典，
+       * 取值顺序 = 设置里存的语言（`bedrock-settings`.language）→ 系统语言 → 英文。
+       * 语法必须是 ES5：老 WebView 解析不了箭头函数和 const。
+       */
+      (function () {
+        var DICT = {
+          zh: { loading: '加载中…', preparing: '正在准备材质与存档', failed: '启动失败，请重启游戏' },
+          en: { loading: 'Loading…', preparing: 'Preparing textures and saves', failed: 'Failed to start. Please restart the game.' },
+          de: { loading: 'Wird geladen…', preparing: 'Texturen und Spielstände werden vorbereitet', failed: 'Start fehlgeschlagen. Bitte das Spiel neu starten.' },
+          fr: { loading: 'Chargement…', preparing: 'Préparation des textures et sauvegardes', failed: 'Échec du démarrage. Relance le jeu.' },
+          pt: { loading: 'Carregando…', preparing: 'Preparando texturas e saves', failed: 'Falha ao iniciar. Reabra o jogo.' },
+          ru: { loading: 'Загрузка…', preparing: 'Подготовка текстур и сохранений', failed: 'Не удалось запустить. Перезапустите игру.' }
+        };
+        var lang = 'en';
+        try {
+          var raw = localStorage.getItem('bedrock-settings');
+          var setting = raw ? (JSON.parse(raw) || {}).language : 'auto';
+          if (setting && setting !== 'auto' && DICT[setting]) {
+            lang = setting;
+          } else {
+            var tag = (navigator.language || 'en').toLowerCase();
+            var two = tag.slice(0, 2);
+            lang = DICT[two] ? two : 'en';
+          }
+        } catch (e) {
+          lang = 'en';
+        }
+        var texts = DICT[lang] || DICT.en;
+        // 启动失败时 `boot.ts` 用它，避免在 JS 里再抄一份文案
+        window.__bootTexts = texts;
+        var textEl = document.getElementById('boot-text');
+        if (textEl) textEl.textContent = texts.loading;
+        var subEl = document.getElementById('boot-sub');
+        if (subEl) subEl.textContent = texts.preparing;
+      })();
+    </script>
 
     <!-- 受伤红闪（批次 234）：垫在 HUD 下面，只由 `ui/DamageFlash` 写 opacity -->
     <div id="damage-flash" aria-hidden="true"></div>

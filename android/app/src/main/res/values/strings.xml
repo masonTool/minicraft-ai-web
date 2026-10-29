@@ -4,4 +4,11 @@
     <string name="title_activity_main">Minicraft</string>
     <string name="package_name">com.minicraft.app</string>
     <string name="custom_url_scheme">com.minicraft.app</string>
+    <!-- WebView 版本闸门（一层弹窗）：原因 / 现象 / 解决 三段，跟着系统语言走 -->
+    <string name="webview_too_old_title">WebView is too old</string>
+    <string name="webview_too_old_cause">• Cause: this device\'s WebView is v%1$d; the game needs v%2$d or newer.</string>
+    <string name="webview_too_old_effect">• Symptoms: misaligned UI, buttons off-screen, the world may never finish loading.</string>
+    <string name="webview_too_old_fix">• Fix: update \"Android System WebView\" (Settings → Apps), then reopen the game.</string>
+    <string name="webview_too_old_update">Update</string>
+    <string name="webview_too_old_dismiss">Not now</string>
 </resources>

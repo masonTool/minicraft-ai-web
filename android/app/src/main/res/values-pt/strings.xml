@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="webview_too_old_title">WebView muito antigo</string>
+    <string name="webview_too_old_cause">• Causa: o WebView é v%1$d; o jogo precisa da v%2$d ou superior.</string>
+    <string name="webview_too_old_effect">• Sintomas: interface desalinhada, botões fora da tela, o mundo pode não carregar.</string>
+    <string name="webview_too_old_fix">• Solução: atualize o \"Android System WebView\" (Configurações → Apps) e reabra o jogo.</string>
+    <string name="webview_too_old_update">Atualizar</string>
+    <string name="webview_too_old_dismiss">Agora não</string>
+</resources>

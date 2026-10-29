@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="webview_too_old_title">WebView 版本过低</string>
+    <string name="webview_too_old_cause">• 原因：本机 WebView 是 %1$d 版，游戏需要 %2$d 或更高。</string>
+    <string name="webview_too_old_effect">• 现象：界面错位、按钮跑出屏幕、世界可能一直加载不出来。</string>
+    <string name="webview_too_old_fix">• 解决：更新「Android System WebView」（设置 → 应用管理），然后重新打开游戏。</string>
+    <string name="webview_too_old_update">去更新</string>
+    <string name="webview_too_old_dismiss">知道了</string>
+</resources>
