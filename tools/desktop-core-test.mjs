@@ -7,7 +7,7 @@
  * 运行：`npm run test:desktop`
  */
 
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unsealCore, verifyIdentity } from '../desktop/core-vault.mjs';
@@ -27,6 +27,16 @@ function check(name, ok, detail = '') {
     failed += 1;
     console.error(`  ✗ ${name}${detail ? ` · ${detail}` : ''}`);
   }
+}
+
+/**
+ * 封存产物是 **gitignore 的构建输出**：全新检出 / CI 上不存在。
+ * 缺它就跳过（而不是崩），与项目里"没浏览器就跳过浏览器门禁"同一口径；
+ * 但要明确说"跳过"，不能伪装成通过。
+ */
+if (!existsSync(join(DIR, 'core.sealed'))) {
+  console.log('\n[skip] 桌面端封存产物不存在：先跑 `npm run gen:sealed`');
+  process.exit(0);
 }
 
 const plain = readFileSync(join(ROOT, 'host/core-baseline.bin'));

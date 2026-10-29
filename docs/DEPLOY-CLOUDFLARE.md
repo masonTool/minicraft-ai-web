@@ -1,5 +1,15 @@
 # Cloudflare Pages 发布手册（宿主专属形态 / 完整前端形态）
 
+> ## ⚠️ 2026-10-29：本文的「app 形态」那条线已下线
+>
+> 仓库方向改成**只出前端产物**：
+> `build:app`、`web:app`、`deploy-cf-app.yml` 已移除（连同 electron / capacitor 依赖），
+> 现在只剩 `build:web` 一条构建、Pages 一条发布。
+>
+> 因此下文凡是提到 **A 站 / app 形态 / `npm run build:app`** 的内容**仅作历史参考**，
+> 现在跑不起来。要恢复"只有装 App 才能玩"的形态，需要先把那套脚本与工作流从历史里取回
+> （`git show 32125997:package.json`、`git show 32125997:.github/workflows/deploy-cf-app.yml`）。
+
 > 批次 20261025-0329 · 宿主6
 >
 > 一句话：**两种形态的数据位置不同。**

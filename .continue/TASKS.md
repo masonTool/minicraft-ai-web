@@ -1466,6 +1466,21 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       · 没动：`.continue/doing/.worktree/`（181 MB，是另一个会话的工作树，不属于本会话）；
         `.tmp/` 与 `server/rust/target`（构建缓存，删了下次要重编）
 
+- [x] A32 清理 `build:app` 与端上构建脚本（2026-10-29）
+      · 背景：仓库方向已改成"只出前端产物"（`6cb99a5a` 移走了 electron / capacitor 与
+        android:sync / ios:sync / desktop:* / mac:dist / win:dist 八个脚本），
+        `build:app` 因此**只剩一个消费者**：`.github/workflows/deploy-cf-app.yml`
+      · 做法：删 `build:app` + `web:app`（后者原本只给 desktop:dev/smoke 用，同样没人调），
+        同时删 `deploy-cf-app.yml`——留着它就会调一个不存在的脚本，CI 必红
+      · 顺手修一个我自己埋的坑：`test:sealed` / `test:desktop` 依赖 gitignore 的封存产物，
+        **全新检出会直接崩**（ENOENT，`npm run check` 变红）。改成缺产物时打印 `[skip]`
+        并正常退出，与"没浏览器就跳过浏览器门禁"同一口径
+      · 文档同步：`docs/CODE-PROTECTION.md` 顶部加状态说明（封存线目前没有消费者，
+        `build:web` 会把方块表明文编进 JS）；`DEPLOY-CLOUDFLARE.md` 加"app 形态已下线"横幅；
+        `host/README.md` 与 `deploy-pages.yml` 的注释改到新口径
+      · 保留未动：`android/ ios/ mac/ windows/ desktop/` 五个目录与 `gen:sealed` 那一套
+        —— 目录本身没删，恢复端上分发时不用重建
+
 ## B. 方块与物品注册表
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）

@@ -3,9 +3,11 @@
 # 2026-10-29（用户）：改完前端要**立刻在 Pages 上看到**，所以恢复成随 push 自动发布。
 #
 # ⚠️ 这条流水线跑的是 `build:web`（SPECS_STUB=0）——方块表会以**明文 JS** 编进产物，
-#    等于把 724 条数据放到公网。这是"公开可玩 Web 版"的应有之义；
-#    要"只有 App 能玩"的形态，用 `deploy-cf-app.yml`（build:app，带 core.bin）。
-#    两件事务必分开，别把 app 形态发到这个域名上。
+#    等于把 724 条数据放到公网。这是"公开可玩 Web 版"的应有之义。
+#
+#    2026-10-29 起仓库只保留这一条构建线：`build:app` 与 `deploy-cf-app.yml`
+#    （"只有装 App 才能玩"的形态）已随端上形态下线。要恢复那条线，见
+#    docs/CODE-PROTECTION.md 的「发布口径」一节。
 #
 # 为什么只有一个 job：
 #   原来 build 与 deploy 是两个 job，第二个要重新起一台 runner、再把 artifact 传过去，

@@ -64,14 +64,22 @@ iOS / 桌面端因为拿不到自身签名摘要，只能用 `signers.txt[0]` �
 
 ### 发布口径（最容易漏的一条）
 
-**只发原生包。** `build:web`（`SPECS_STUB=0`）会把 724 条方块表以**明文 JS** 编进产物，
-任何能打开站点的人 `curl` 一下就能拿到——那正是封存要保护的东西。
+> **⚠️ 2026-10-29 状态变更：仓库改成「只出前端产物」，本页描述的封存线目前没有消费者。**
+>
+> `build:app` / `web:app` / `deploy-cf-app.yml` 已移除（连同 electron / capacitor 依赖），
+> 现在唯一的构建是 `build:web`（`SPECS_STUB=0`，把 724 条方块表以**明文 JS** 编进产物），
+> Pages 推送即发布。
+>
+> 这意味着：**Web 版一旦上线，任何人 `curl` 一下 JS 就能拿到整张方块表**，
+> 本页第 3~4 节那套封存 + 签名闸门**不生效**（不是失效，是没人调用它）。
+>
+> 下面的内容保留给"以后要重新做端上分发"时用；要恢复，先从历史取回：
+> `git show 32125997:package.json`、`git show 32125997:.github/workflows/deploy-cf-app.yml`、
+> 以及 `android/ ios/ mac/ windows/ desktop/` 各目录（目录本身没删）。
 
-所以 `.github/workflows/deploy-pages.yml` 已在 2026-10-29 去掉 `push` 自动触发，
-只保留手动。真要公开一个可玩的 Web 版，等于主动放弃"数据保密"，只剩"防改包"。
-
-同理，`android/app/build.gradle` 里那条旧 `copyHostCore`（把明文 `core.bin` 拷进
-`assets/public`）已经删掉，换成 `checkSealedCore`：缺封存体、或明文回潮，构建直接失败。
+**端上形态的规则（恢复时照此执行）：** `build:app` 把方块表从主包里桩掉，改由封存体提供；
+`build:web` 则把表编进包。两者**必须发到不同站点**，绝不混用——混用的后果是"线上看起来一切正常，
+保护已经没了"。`android/app/build.gradle` 的 `checkSealedCore` 会在缺封存体或明文回潮时让构建失败。
 
 ## 3. 发布前必做
 
@@ -87,13 +95,15 @@ iOS / 桌面端因为拿不到自身签名摘要，只能用 `signers.txt[0]` �
 ## 4. 怎么验证
 
 ```bash
-npm run test:sealed        # 格式往返：15 条（含 6 条负面）
-bash tools/sealed-check.sh # 用真实 JVM 跑 Android 的解封代码：10 条
+npm run gen:sealed         # 先产封存体（下列测试依赖它；缺了会打印 [skip]）
+npm run test:sealed        # 格式往返：17 条（含 5 条负面 + "包裹数改 0 也解不开"）
+bash tools/sealed-check.sh # 用真实 JVM 跑 Android 的解封代码：11 条
 npm run test:desktop       # 桌面端解封 + 身份判据四象限：11 条
-npm run desktop:smoke      # 真起 Electron（隐藏窗口）验页面与解封链路
-npm run build:app          # 发布检查：无明文 / 非 MCTB / 白名单非占位 / 有 salt
 npm run check              # 全量门禁
 ```
+
+> 端上脚本（`build:app` / `android:sync` / `desktop:smoke` …）已于 2026-10-29 随端上形态一起下线，
+> 上面前四条仍然可以被单独执行，用来验证封存实现本身没坏。
 
 已验证过的：
 

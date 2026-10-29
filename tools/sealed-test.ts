@@ -13,7 +13,7 @@
  */
 
 import { createDecipheriv, createHash, hkdfSync, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -106,8 +106,20 @@ function unseal(sealed: Buffer, signerHex: string, salt: Buffer): Buffer | null 
   return plain;
 }
 
+const SEALED_PATH = join(ROOT, 'android/app/src/main/assets/sealed/core.sealed');
+/**
+ * 封存产物是 **gitignore 的构建输出**：全新检出 / CI 上不存在。
+ * 缺它就跳过（而不是崩），与项目里"没浏览器就跳过浏览器门禁"同一口径——
+ * 但要说清是"跳过"不是"通过"，否则等于静默失去这条断言。
+ */
+if (!existsSync(SEALED_PATH)) {
+  console.log('\n[skip] 封存产物不存在：先跑 `npm run gen:sealed`');
+  console.log('       （端上构建下线后这条测试只在有产物时才有意义）');
+  process.exit(0);
+}
+
 const plain = readFileSync(join(ROOT, 'host/core-baseline.bin'));
-const sealed = readFileSync(join(ROOT, 'android/app/src/main/assets/sealed/core.sealed'));
+const sealed = readFileSync(SEALED_PATH);
 const salt = readFileSync(join(ROOT, 'android/app/src/main/assets/sealed/salt.bin'));
 const signers = readFileSync(join(ROOT, 'android/app/src/main/assets/sealed/signers.txt'), 'utf8')
   .split('\n')
