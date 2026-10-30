@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
     private static final int MIN_WEBVIEW_MAJOR = 88;
 
     private WebView webView;
+    /** 本次前台会话是否已经提示过（离开前台后重置，见 onPause） */
+    private boolean warnedThisSession = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -144,7 +146,6 @@ public class MainActivity extends Activity {
         }
 
         webView.loadUrl(ORIGIN + "/index.html");
-        warnIfWebViewTooOld();
     }
 
     /**
@@ -161,16 +162,37 @@ public class MainActivity extends Activity {
         // 取不到版本号时不做判断：宁可放行，也不要因为解析失败把正常用户挡在门外
         if (major == 0 || major >= MIN_WEBVIEW_MAJOR) return;
 
-        String message = getString(R.string.webview_too_old_cause, major, MIN_WEBVIEW_MAJOR)
-                + "\n\n" + getString(R.string.webview_too_old_effect)
-                + "\n\n" + getString(R.string.webview_too_old_fix);
-
         new AlertDialog.Builder(this)
                 .setTitle(R.string.webview_too_old_title)
-                .setMessage(message)
+                .setMessage(getString(R.string.webview_too_old_message, major, MIN_WEBVIEW_MAJOR))
                 .setPositiveButton(R.string.webview_too_old_update, (dialog, which) -> openWebViewStore())
                 .setNegativeButton(R.string.webview_too_old_dismiss, null)
                 .show();
+    }
+
+    /**
+     * 每次进入前台都提示一次（不是只弹一次）。
+     *
+     * 为什么：WebView 版本过低时玩家可能**完全进不去游戏**，弹一次就再也不提醒，
+     * 下次打开只会看到一屏错乱，根本不知道为什么。所以按"前台会话"计：
+     * `onResume` 时没弹过就弹，`onPause` 时重置——冷启动、从后台切回来都会再提示一遍。
+     *
+     * 同一会话内不重复弹：`AlertDialog` 自己不会触发 `onPause`，但玩家关掉弹窗、
+     * 旋转屏幕等操作可能引起多次 `onResume`，这个标记把它们挡住。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (warnedThisSession) return;
+        warnedThisSession = true;
+        warnIfWebViewTooOld();
+    }
+
+    @Override
+    protected void onPause() {
+        // 离开前台 = 这一段"会话"结束，下次回来重新提示
+        warnedThisSession = false;
+        super.onPause();
     }
 
     /** WebView 主版本号，取不到返回 0 */

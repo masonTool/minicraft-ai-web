@@ -94,6 +94,9 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 - **"去更新"不要写成无脑 startActivity(market://)**：实测这台机器上 `market://` 被 MIUI 应用商店
   接走，但它没有 Google WebView 的条目，自己跳去一个搜索结果页（一屏广告+搜索框）。
   现在的做法：弹窗按钮先给**可执行的文字步骤**，把"打开应用商店"作为该指引里的可选项。
+- **版本提示按"前台会话"弹，不是只弹一次**：WebView 过低时玩家可能**完全进不去**，
+  只提示一次的话，下次打开只会看到一屏错乱而不知道为什么。所以 `onResume` 里弹、
+  `onPause` 里重置标记——冷启动和从后台切回来都会再提示一遍。
 - **minSdk 24 与 WebView 88 是两件事**：`minSdkVersion=24`（Android 7.0）决定"能不能装"，
   运行时闸门 `MIN_WEBVIEW_MAJOR=88` 决定"能不能跑"。Android 7 的 WebView 出厂是 Chromium 51
   （没有 WebGL2），但能更新到 **119**（Chrome 120 起不再支持 Android 7）——所以 88 在
