@@ -49,6 +49,19 @@ function applyDeadZone(value: number, deadZone = DEAD_ZONE): number {
   return sign * ((Math.abs(value) - deadZone) / (1 - deadZone));
 }
 
+/**
+ * 收到过 `gamepadconnected` 才开始轮询（批次 20261030-2316）。
+ * 每帧 `getGamepads()` 会让浏览器起一条手柄轮询线程（安卓 WebView 上实测约 2% CPU），
+ * 而绝大多数手机根本没接手柄。浏览器在手柄第一次按键时就会派发这个事件，不会漏掉。
+ * 放在模块级：回主菜单再进世界会新建 `GamepadInput`，已连着的手柄不会再派发一次连接事件。
+ */
+let armed = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('gamepadconnected', () => {
+    armed = true;
+  });
+}
+
 export class GamepadInput {
   /** 当前连接的手柄名（空串表示没连接） */
   name = '';
@@ -56,16 +69,18 @@ export class GamepadInput {
   private readonly previous = new Map<number, boolean>();
   /** 潜行是"切换"式的：手柄只有按钮没有按住的说法，切换更顺手 */
   private sneakToggle = false;
-
   get connected(): boolean {
     return this.name !== '';
   }
 
   /** 每帧调用；没有手柄时返回 null（调用方就不用管分支了） */
   poll(dt: number): GamepadOverride | null {
+    if (!armed) return null;
     const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
     const pad = pads.find((candidate): candidate is Gamepad => candidate !== null && candidate.connected);
     if (!pad) {
+      // 拔掉之后停止轮询，等下一次 `gamepadconnected`
+      armed = false;
       if (this.name !== '') {
         this.name = '';
         this.previous.clear();

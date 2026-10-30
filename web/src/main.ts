@@ -18256,6 +18256,8 @@ class App {
         ? Math.hypot(this.ridingVehicle.vx, this.ridingVehicle.vz)
         : 0;
     this.audio.setMinecart(minecartLevelForSpeed(minecartSpeed));
+    // 全静音几秒就挂起 AudioContext（安卓上 AAudio 线程不再空转混音）
+    this.audio.idleTick();
 
     // ---- 脚步：按水平位移累积（`frameMove` 在函数开头就算好了）
     this.lastStepX = p.x;

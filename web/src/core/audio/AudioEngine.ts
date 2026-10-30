@@ -1031,6 +1031,8 @@ const SAME_SOUND_THROTTLE = 0.07;
  * 批次 232：12 → 16（生物环境叫也进这条路了），并给"最该听见的"留了余地。
  */
 const MAX_CONCURRENT_VOICES = 16;
+/** 全静音多久之后挂起 AudioContext（秒，见 `AudioEngine.idleTick`） */
+const IDLE_SUSPEND_S = 3;
 
 /**
  * 关键的几种声音可以**突破上限**（再宽限这么多声）。
@@ -1116,6 +1118,15 @@ export class AudioEngine {
    * 键是 `SoundKind` 字符串；值是若干个 `AudioBuffer`（原版就是这么多个变体随机挑）。
    */
   private readonly samples = new Map<string, AudioBuffer[]>();
+  /**
+   * 静音空闲挂起（批次 20261030-2316）：没有任何声音在响超过 `IDLE_SUSPEND_S` 秒就挂起
+   * AudioContext——运行中的 context 哪怕全静音，安卓上的 AAudio 线程也一直在混音（实测约 5% CPU）。
+   * 下一声来时 `awake()` 先 resume 再照常预约（挂起期间 currentTime 冻结，预约时刻整体顺延）。
+   * 与"切后台"的挂起区分开：那个必须等 `resume()`，不能被一声脚步叫醒。
+   */
+  private idleSuspended = false;
+  /** 开始全静音的时刻（AudioContext 时钟，-1 = 现在有声） */
+  private quietSince = -1;
 
   /**
    * 创建/恢复 AudioContext。必须由用户手势触发（浏览器自动播放策略），
@@ -1126,6 +1137,8 @@ export class AudioEngine {
     try {
       this.ctx ??= new AudioContext();
       this.ensureGraph(this.ctx);
+      this.idleSuspended = false;
+      this.quietSince = -1;
       if (this.ctx.state === 'suspended') void this.ctx.resume();
     } catch {
       // 某些环境（无音频设备、隐私模式）会直接抛错：关掉音效，不影响游戏
@@ -1141,7 +1154,53 @@ export class AudioEngine {
    */
   suspend(): void {
     const ctx = this.ctx;
+    // 空闲挂起中切后台：转成"硬挂起"，之后只有 `resume()` 能叫醒
+    this.idleSuspended = false;
     if (!ctx || ctx.state !== 'running') return;
+    void ctx.suspend().catch(() => undefined);
+  }
+
+  /** 能不能预约声音（空闲挂起也算能：真要发声时 `awake()` 会叫醒） */
+  private canSchedule(): boolean {
+    return this.enabled && this.ctx !== null && (this.idleSuspended || this.ctx.state === 'running');
+  }
+
+  /** 确定要发声时调用：空闲挂起中就顺手叫醒；返回能不能预约声音 */
+  private awake(): boolean {
+    const ctx = this.ctx;
+    if (!this.enabled || !ctx) return false;
+    if (this.idleSuspended) {
+      this.idleSuspended = false;
+      this.quietSince = -1;
+      void ctx.resume().catch(() => undefined);
+      return true;
+    }
+    return ctx.state === 'running';
+  }
+
+  /** 每帧调用一次：全静音持续 `IDLE_SUSPEND_S` 秒就挂起 AudioContext */
+  idleTick(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.idleSuspended || ctx.state !== 'running') return;
+    const now = ctx.currentTime;
+    let busyUntil = 0;
+    for (const end of this.voiceEnds) if (end > busyUntil) busyUntil = end;
+    for (const end of this.musicEnds) if (end > busyUntil) busyUntil = end;
+    const loops =
+      (this.ambienceGain !== null && this.ambienceGain.gain.value > 0.0005) ||
+      (this.minecartGain !== null && this.minecartGain.gain.value > 0.0005);
+    // 混响尾巴（两条反馈延迟）约 1 秒，留足再判静音
+    if (loops || now < busyUntil + 1.5) {
+      this.quietSince = -1;
+      return;
+    }
+    if (this.quietSince < 0) {
+      this.quietSince = now;
+      return;
+    }
+    if (now - this.quietSince < IDLE_SUSPEND_S) return;
+    this.idleSuspended = true;
+    this.quietSince = -1;
     void ctx.suspend().catch(() => undefined);
   }
 
@@ -1191,6 +1250,8 @@ export class AudioEngine {
     this.musicEnds = [];
     this.lastStartAt.clear();
     this.voiceEnds = [];
+    this.idleSuspended = false;
+    this.quietSince = -1;
     if (ctx) void ctx.close().catch(() => undefined);
   }
 
@@ -1307,9 +1368,11 @@ export class AudioEngine {
    * 只有真的需要出声时才建节点：晴天一个常驻节点都不会多。
    */
   setAmbience(level: number): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
+    if (!this.enabled || !this.ctx || !this.master) return;
     const target = Math.max(0, Math.min(1, level));
-    if (target <= 0.001 && !this.ambienceGain) return;
+    // 每帧都会调：静音目标不能把空闲挂起的 context 叫醒
+    if (target <= 0.001 && (!this.ambienceGain || this.idleSuspended)) return;
+    if (!this.awake()) return;
 
     const ctx = this.ctx;
     if (!this.ambienceGain) {
@@ -1374,9 +1437,10 @@ export class AudioEngine {
    * 与雨声同一条“循环噪声 + 滤波 + 增益”通道；离开矿车时调用 0 淡出。
    */
   setMinecart(level: number): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
+    if (!this.enabled || !this.ctx || !this.master) return;
     const target = Math.max(0, Math.min(1, level));
-    if (target <= 0.001 && !this.minecartGain) return;
+    if (target <= 0.001 && (!this.minecartGain || this.idleSuspended)) return;
+    if (!this.awake()) return;
 
     const ctx = this.ctx;
     if (!this.minecartGain) {
@@ -1426,8 +1490,8 @@ export class AudioEngine {
     hz: number,
     options: { duration?: number; velocity?: number; delay?: number; wave?: OscillatorType } = {},
   ): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
-    const ctx = this.ctx;
+    if (!this.master || !this.canSchedule()) return;
+    const ctx = this.ctx!;
     const now = ctx.currentTime;
     const duration = Math.max(0.2, Math.min(12, options.duration ?? 2));
     const delay = Math.max(0, Math.min(12, options.delay ?? 0));
@@ -1444,6 +1508,7 @@ export class AudioEngine {
     // 音乐整体比音效轻（0.16），主音量/音乐滑杆再乘上去
     const gain = 0.16 * velocity * this.volume * this.groupVolume.music;
     if (gain <= 0.0005) return;
+    this.awake();
 
     const out = ctx.createGain();
     const attack = duration > 4 ? 0.5 : 0.015;
@@ -1485,8 +1550,8 @@ export class AudioEngine {
     rateScale: number,
     throttle: number,
   ): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
-    const ctx = this.ctx;
+    if (!this.canSchedule()) return;
+    const ctx = this.ctx!;
     const master = this.master;
     const wet = this.reverbSend;
     if (!master) return;
@@ -1533,6 +1598,7 @@ export class AudioEngine {
     // 水下：全局压低音量（低通在下面的出口处接）
     if (this.underwater) gain = underwaterGain(gain);
     if (gain <= 0.001) return;
+    this.awake();
 
     this.lastStartAt.set(key, now);
     this.voiceEnds.push(now + duration);
@@ -1713,8 +1779,8 @@ export class AudioEngine {
    * 玩家都听不出来（与 `play()` 同一条判断）。
    */
   playNote(frequency: number, at?: { x: number; y: number; z: number }): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
-    const ctx = this.ctx;
+    if (!this.canSchedule()) return;
+    const ctx = this.ctx!;
     const master = this.master;
     if (!master) return;
     const now = ctx.currentTime;
@@ -1737,6 +1803,7 @@ export class AudioEngine {
     }
     if (this.underwater) gain = underwaterGain(gain);
     if (gain <= 0.001) return;
+    this.awake();
 
     this.voiceEnds.push(now + duration);
     const out = ctx.createGain();
