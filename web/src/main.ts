@@ -17946,18 +17946,15 @@ class App {
   /**
    * 为抓缩略图**重画一帧世界**（2026-10-30，配合 `preserveDrawingBuffer: false`）。
    *
-   * `preserveDrawingBuffer: false` 时背板在交给合成器之后就不保证还有内容，
-   * 所以 `drawImage(canvas)` 想看画面，只能**先画、再在同一个任务里读**。
-   * 调用方是主菜单的 `captureThumbnail`，只在存档时触发（自动保存 10 秒最多一次）。
+   * 背板在交给合成器之后就不保证还有内容，所以 `drawImage(canvas)` 想看画面，
+   * 只能**先画、再在同一个任务里读**。调用方是 `captureThumbnail`，只在存档时触发。
    *
    * ⚠️ 只画世界这一趟：手持物品与色罩是叠在世界之上的两次独立 render，
-   * 缩到 160×90 的缩略图里看不出差别，少画两次就少两次状态切换。
-   * ⚠️ 这一帧**不推进**任何模拟（不调 `update`），只是把当前状态重新提交一遍，
-   * 所以不会让世界"多走一帧"。
+   * 缩到 160×90 的缩略图里看不出差别。不推进任何模拟，不会让世界"多走一帧"。
+   * ⚠️ `autoClear` 每帧末尾已恢复 `true`，这里不必再设；`currentApp` 在拆解时置空，
+   * 所以调用方用 `?.` 即可，方法内不再重复判 `disposed`。
    */
-  renderForThumbnail(): void {
-    if (this.disposed) return;
-    this.renderer.autoClear = true;
+  repaint(): void {
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -20658,7 +20655,7 @@ async function boot(): Promise<void> {
     const canvas = document.querySelector('canvas');
     if (canvas === null) return null;
     // 画一帧再读；App 已经拆掉（退出到主菜单那一刻）就只剩旧内容，读不到就返回 null
-    currentApp?.renderForThumbnail();
+    currentApp?.repaint();
     try {
       const small = document.createElement('canvas');
       small.width = 160;

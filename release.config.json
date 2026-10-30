@@ -3,7 +3,9 @@
   "//salt": "编译期盐，只用于 KEK 派生，改动它等于让所有既有封存数据作废（需重新 pack）。",
   "//macTeamId": "macOS 的 Team ID，`codesign -dv --verbose=4 Minicraft.app` 里的 TeamIdentifier=XXXX。留空时未签名的本地构建能开，带签名的副本一律拒绝。",
   "//winCertThumbprint": "Windows 代码签名证书指纹，`(Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint`。规则同上。",
-  "signingCertSha256": [],
+  "signingCertSha256": [
+    "036df64c25ddadf7806a58b0e0160fd54d446c30eedf90a45ac91aaaa9947ba7"
+  ],
   "saltHex": "3f9c1d7a5b2e84c60d1f93a7e5b8c2406d7a1f3e9c4b52806a7d1e3f5b9c2a40",
   "macTeamId": "",
   "winCertThumbprint": ""
