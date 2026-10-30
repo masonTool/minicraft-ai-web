@@ -393,6 +393,7 @@ export class MultiplayerScreen {
 
   /** 由主程序在 `onStatus` 里推进：状态文案 + 按钮可用性 */
   setState(state: MultiplayerScreenState, detail?: string): void {
+    const previous = this.state;
     this.state = state;
     const buttons = multiplayerButtons(state);
     this.hostButton.disabled = !buttons.connect;
@@ -402,6 +403,15 @@ export class MultiplayerScreen {
     this.detailText = detail && detail.length > 0 ? detail : '';
     this.refreshStatus();
     this.syncModeVisibility();
+
+    /*
+     * 连上就自动收起（2026-10-30，用户："确定并进入之后就应该直接进游戏，把弹窗关掉"）。
+     *
+     * 只在 `connecting → connected` 这一跳收：玩家已经按过"加入/开房"，期待的是进游戏，
+     * 而不是看着一个连好的对话框再点一次 ✕。反过来"本来就已连接、玩家主动打开面板看状态"
+     * 这条路径（open 时直接是 connected）不会被误关。
+     */
+    if (state === 'connected' && previous === 'connecting') this.close();
   }
 
   /**

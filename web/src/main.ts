@@ -21009,6 +21009,11 @@ async function boot(): Promise<void> {
         return t('say.net.hostTaken');
       }
       pendingHostRoom = { room, password, baseUrl: effectiveBaseUrl, name };
+      /*
+       * 开房成功后立刻收起联机面板（2026-10-30，用户）：这条路径不经过 `connected`，
+       * 只能在这里显式关，否则进游戏后那个对话框还浮在上面。
+       */
+      multiplayerUi.close();
       void startWorld(world);
       return null;
     };
