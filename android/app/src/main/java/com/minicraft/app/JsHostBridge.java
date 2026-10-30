@@ -58,7 +58,7 @@ public final class JsHostBridge {
     }
 
     /**
-     * 现在有没有接手柄（批次 20261031）。
+     * 现在有没有接手柄（批次 20261031-0055）。
      *
      * <p>网页侧只有拿到 {@code true} 才开始轮询 Gamepad API：Chromium 里只要页面注册了
      * {@code gamepadconnected} 监听，就会常驻一条手柄轮询线程（真机约 2% CPU），

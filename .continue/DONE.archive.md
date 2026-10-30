@@ -18878,3 +18878,44 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261028-0400 · 2026-10-28 · 会话 12c62c
+
+> 用户：创建/编辑世界界面在非中文下空间不够，要所有语言都正常
+
+# 队列 · 会话 12c62cf015444720a2a57c257f80c045
+
+> 状态：执行中
+> 创建：2026-10-28
+> 批次：20261028-0400
+
+- [x] [L31] 世界表单标签列按语言给宽度：`index.html`、`tools/ui-test.ts` → playwright（de/ru）
+  - 做了什么：`var(--label-w, 64px)` + `html[lang='de'|'ru'] 7.6em`、`fr/pt 5.6em`；标签 nowrap。
+  - 为什么：固定 64px 时 de「Schwierigkeit」、ru「Название мира」被截成省略号。
+  - 验证：de 106px 完整、两列对齐；ru 7 行 clipped=false；ru 编辑面板按钮正常；check exit=0。
+  - 批次：20261028-0400
+
+---
+
+## 批次 20261028-0033 · 2026-10-28 · 会话 45545c
+
+> 暂停菜单联机键删除后的残留清理（死参数 + 断言）
+
+# 队列 · 会话 45545c939bf44f9ea0cb708a4fb37884
+
+> 状态：执行中
+> 创建：2026-10-28
+> 批次：20261028-0033
+
+- [x] [L30] 清掉暂停菜单联机键的残留（用户确认是有意删除）：`src/ui/SettingsScreen.ts` 的 actions 接口、`src/main.ts` 的传参、`tools/ui-test.ts` 那条断言 → `npm run check:fast` 全绿
+  - 做了什么：删掉 `SettingsScreenActions` 的 `onMultiplayer` / `multiplayerLabelKey` 两个接口项（连带文档注释）、
+    `main.ts` 里对应的 8 行传参，以及 `ui-test.ts` 那条"按联机状态改文案"的断言；
+    断言改成反向守卫「暂停菜单不再有联机键」（否则 `settingsSrc` 会变成未使用变量，`noUnusedLocals` 直接红）。
+  - 为什么：按钮在上一轮末尾（00:28）已被删掉，但接口、传参、断言还留着——`tsc` 不报错（都是可选参数），
+    只有 `test:ui` 的源码断言能抓到，所以门禁一直是红的。
+  - 验证：`npm run check:fast` exit=0，命中 3/3 套全绿（viewmode / settings / ui）。
+  - 遗留：`openMultiplayer()`（`main.ts:3691`）现在**没有任何调用方**，`RoomCard` 因此没有界面入口；
+    删卡片还是补新入口是产品决定，留给用户，未动。
+  - 批次：20261028-0033
+
+---
+

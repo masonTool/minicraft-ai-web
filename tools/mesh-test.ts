@@ -350,7 +350,7 @@ console.log('\n[区段遮挡剔除：连通图 + 搜索（批次 20261030-2316�
     check('16 位索引数值不变', small?.index.join(',') === '0,1,2,0,2,3');
   }
 
-  // 包围球收紧（批次 20261031）：只套住要画的 section，且把这些顶点全部包住
+  // 包围球收紧（批次 20261031-0055）：只套住要画的 section，且把这些顶点全部包住
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 16, 32, 16, 0, -64, 0], 3));
   const mesh = new THREE.Mesh(geo);

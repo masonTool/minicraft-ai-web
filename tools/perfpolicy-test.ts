@@ -655,7 +655,7 @@ console.log('\n[CPU 卡但没继续恶化：把分辨率还回去]');
   check('还回后高于 0.75（近处恢复清晰）', cpu.state.resolutionScale > MOBILE_RESOLUTION_MIN, String(cpu.state.resolutionScale));
 }
 
-console.log('\n[空闲降帧（批次 20261031）]');
+console.log('\n[空闲降帧（批次 20261031-0055）]');
 {
   const still = { position: { x: 1, y: 2, z: 3 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } };
   const idle = new IdleFrameRate();

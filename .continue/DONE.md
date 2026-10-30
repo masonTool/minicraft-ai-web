@@ -9,6 +9,34 @@
 
 ---
 
+## 批次 20261031-0055 · 2026-10-31 · 会话 c747f7
+
+> 降温第二批：数据驱动砍 draw call / 三角形，加空闲降帧
+
+# 队列 · 会话 c747f798fe5f443089f73456db302086
+
+> 状态：执行中
+> 创建：2026-10-31
+> 批次：20261031-0055
+
+- [x] 摸底：真机 WebView 远程调试（release 包 `-e debugweb true`）逐帧统计 draw call 来源、DOM 变化、IO 来源 → 数据驱动后续各项
+  做了：低头满屏地形每帧 157 次 draw call 里 152 次是区块网格、三角形 167 万；DOM 每帧只有 `#death` / `#target-vitals` 各写一次 class；5 秒内 localStorage 1 次、worker 消息 6 条，IO 不是问题。
+  验证：CDP 取样脚本在 Pixel 2 XL 上实跑，数据见上。
+- [x] 遮挡搜索加视锥约束 + 包围球收紧到要画的 section + 两处 class 不再每帧写：`render/SectionOcclusion.ts` + `render/ChunkRenderer.ts#applySections` + `main.ts` → `npm run check:fast` + 真机 draw call / 三角形
+  做了：BFS 只往视锥内 section 扩展（视图矩阵变化才重算，真机转视角时每帧 ≤1.1ms）；包围球按实际要画的 section 高度重设；`classList.toggle(…, force)` 状态不变不写。提交 `c0bb0cf9`。
+  验证：`test:mesh` 新增 8 条断言（视锥前/后、包围球覆盖与收紧、全画回整列）；真机低头 draw call 298 → 163、三角形 164 万 → 57 万，平视 148 / 23 万；平视截图远景、水、树林无漏画。
+- [x] 顶点 / 索引无损瘦身：合并网格顶点 < 65536 用 16 位索引 → `npm run check:fast` + 真机画面
+  做了：`mergeSectionLayer` 按顶点数选 `Uint16Array` / `Uint32Array`，数值不变。顶点属性改 16 位整数（植物交叉面等非 1/16 坐标会变）不满足"逐像素一致"，判定不做。提交 `ecede2bc`。
+  验证：`test:mesh` 新增 2 条断言（类型与数值）；真机画面正常。
+- [x] 动态帧率（用户 2026-10-31 提出）：没操作、画面不动时降帧，任何输入立即恢复 → 离线断言 + 真机帧率时间线
+  做了：`core/world/IdleFrameRate.ts`，2.5 秒无输入 + 相机位姿不变 + 世界不在成批加载时上限 30 帧；手指按住、坠落 / 载具、成批加载都不降（随机刻零星重刷不算加载）；空闲帧不喂自适应降档。安卓壳改由原生 `InputManager` 判断手柄（`JsHostBridge.hasGamepad` + 设备监听派发事件），网页不再注册 `gamepadconnected`（Chromium 有这个监听就常驻手柄轮询线程）。提交 `6ea853d6`。
+  验证：`test:perfpolicy` 新增 9 条断言；真机静止 100% 时间 30 帧、拖动视角当帧恢复 60；线程表里 Gamepad polling 消失。
+- [x] 真机冷机（电池 ≤33°C）复测：持续拖动视角 59.0 fps、帧时间中位 5ms / 90 分位 10ms、卡顿 3.5%、CPU 合计 73%；稳态静止 30.8 fps、卡顿 0.3%、CPU 合计 44%（上一批末静止为 61 fps / 74%）
+  做了：测量脚本加入"持续拖动"与"只采样"两种模式，APK 路径显式传入、安装失败即报错。
+  验证：两轮 20 秒 `dumpsys gfxinfo` + `/proc` 线程采样，开测/结束电池温度均在 32.4~34.2°C。
+
+---
+
 ## 批次 20261030-2316 · 2026-10-31 · 会话 c747f7
 
 > 手机发烫，在不降画质前提下做四步渲染与空转优化
@@ -254,47 +282,6 @@
   - 为什么：发布只因 255 字节（0.02%）被卡，是上次余量被日常提交吃光，不是代码膨胀。
   - 验证：`npm run build:web` ✓ 通过（note：已用掉容差 258/6298 字节）；check exit=0。
   - 批次：20261028-0500
-
----
-
-## 批次 20261028-0400 · 2026-10-28 · 会话 12c62c
-
-> 用户：创建/编辑世界界面在非中文下空间不够，要所有语言都正常
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-0400
-
-- [x] [L31] 世界表单标签列按语言给宽度：`index.html`、`tools/ui-test.ts` → playwright（de/ru）
-  - 做了什么：`var(--label-w, 64px)` + `html[lang='de'|'ru'] 7.6em`、`fr/pt 5.6em`；标签 nowrap。
-  - 为什么：固定 64px 时 de「Schwierigkeit」、ru「Название мира」被截成省略号。
-  - 验证：de 106px 完整、两列对齐；ru 7 行 clipped=false；ru 编辑面板按钮正常；check exit=0。
-  - 批次：20261028-0400
-
----
-
-## 批次 20261028-0033 · 2026-10-28 · 会话 45545c
-
-> 暂停菜单联机键删除后的残留清理（死参数 + 断言）
-
-# 队列 · 会话 45545c939bf44f9ea0cb708a4fb37884
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-0033
-
-- [x] [L30] 清掉暂停菜单联机键的残留（用户确认是有意删除）：`src/ui/SettingsScreen.ts` 的 actions 接口、`src/main.ts` 的传参、`tools/ui-test.ts` 那条断言 → `npm run check:fast` 全绿
-  - 做了什么：删掉 `SettingsScreenActions` 的 `onMultiplayer` / `multiplayerLabelKey` 两个接口项（连带文档注释）、
-    `main.ts` 里对应的 8 行传参，以及 `ui-test.ts` 那条"按联机状态改文案"的断言；
-    断言改成反向守卫「暂停菜单不再有联机键」（否则 `settingsSrc` 会变成未使用变量，`noUnusedLocals` 直接红）。
-  - 为什么：按钮在上一轮末尾（00:28）已被删掉，但接口、传参、断言还留着——`tsc` 不报错（都是可选参数），
-    只有 `test:ui` 的源码断言能抓到，所以门禁一直是红的。
-  - 验证：`npm run check:fast` exit=0，命中 3/3 套全绿（viewmode / settings / ui）。
-  - 遗留：`openMultiplayer()`（`main.ts:3691`）现在**没有任何调用方**，`RoomCard` 因此没有界面入口；
-    删卡片还是补新入口是产品决定，留给用户，未动。
-  - 批次：20261028-0033
 
 ---
 

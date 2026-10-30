@@ -57,7 +57,7 @@ function applyDeadZone(value: number, deadZone = DEAD_ZONE): number {
  */
 let armed = false;
 /**
- * 安卓壳里**不注册** `gamepadconnected`（批次 20261031）：Chromium 只要有这个监听就常驻一条
+ * 安卓壳里**不注册** `gamepadconnected`（批次 20261031-0055）：Chromium 只要有这个监听就常驻一条
  * 手柄轮询线程（真机约 2% CPU）。改由原生 `InputManager` 判断有没有手柄，接上 / 拔掉时
  * 派发 `mc-gamepad-attached` / `mc-gamepad-detached`。浏览器与桌面版照旧用标准事件。
  */

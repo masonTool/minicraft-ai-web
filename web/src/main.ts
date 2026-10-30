@@ -2544,7 +2544,7 @@ class App {
    * 于是 5 秒一次的采样读到的永远是最后那趟叠画（1 call / 12 tris）。
    */
   private readonly lastWorldDraw = { calls: 0, tris: 0 };
-  /** 空闲降帧（批次 20261031，见 `core/world/IdleFrameRate.ts`） */
+  /** 空闲降帧（批次 20261031-0055，见 `core/world/IdleFrameRate.ts`） */
   readonly idleFps = new IdleFrameRate();
   private idleCappedLastFrame = false;
 
@@ -6578,7 +6578,7 @@ class App {
       signal: this.listeners.signal,
     });
 
-    // 空闲降帧（批次 20261031）：捕获阶段监听，界面层 `stopPropagation` 也挡不住它
+    // 空闲降帧（批次 20261031-0055）：捕获阶段监听，界面层 `stopPropagation` 也挡不住它
     {
       const idle = this.idleFps;
       const options = { capture: true, passive: true, signal: this.listeners.signal };
@@ -17500,7 +17500,7 @@ class App {
         this.dropInventoryOnDeath();
         this.dropExperienceOnDeath();
       }
-      // `toggle(…, force)` 状态不变时不写属性；`add/remove` 每帧都会写一次 class（批次 20261031）
+      // `toggle(…, force)` 状态不变时不写属性；`add/remove` 每帧都会写一次 class（批次 20261031-0055）
       this.deathEl.classList.toggle('hidden', false);
       this.respawnCountdown += dt;
       if (this.hardcore) {
@@ -18698,7 +18698,7 @@ class App {
       // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
       // ⚠️ 跳过时必须**继续排下一帧**（`schedule()` 后再 return）——
       // 直接 return 会让循环停住，画面就此冻住（最容易写错的一处）
-      // 空闲降帧（批次 20261031）：没操作、画面不动、世界不在加载时上限 30，取与 `maxFps` 更严的那个
+      // 空闲降帧（批次 20261031-0055）：没操作、画面不动、世界不在加载时上限 30，取与 `maxFps` 更严的那个
       const idleCap = this.miniGame.active ? 0 : this.idleFps.capFor(now, this.worldBusy());
       const interval = Math.max(frameIntervalMs(this.settings.maxFps), frameIntervalMs(idleCap));
       if (interval > 0 && now - this.lastTime < interval) {
