@@ -9,6 +9,42 @@
 
 ---
 
+## 批次 20261030-1925 · 2026-10-30 · 会话 c747f798
+
+> 真机发热归因：不是内存也不是游戏逻辑，而是每像素的填充与提交开销；关掉 preserveDrawingBuffer + 削掉两处整屏像素成本
+
+# 队列 · 会话 c747f798fe5f443089f73456db302086
+
+> 状态：执行中
+> 创建：2026-10-30
+> 批次：20261030-1925
+
+- [x] 关掉 `preserveDrawingBuffer`，缩略图改成抓之前在同一任务里重画一帧：`web/src/main.ts`
+  - 做了什么：`WebGLRenderer` 的 `preserveDrawingBuffer` 由 `true` 改成 `false`；新增 `App.renderForThumbnail()`，`captureThumbnail` 在 `drawImage` 之前先调它画一帧
+  - 为什么：这一位原本只为"存档缩略图"（一局抓几次）而开，却和 `antialias: true` 叠成**每帧**一次 MSAA resolve + 一块不可复用的背板。隔离基准（同机 Adreno 540、1644×822、MSAA 开、同样绘制量、只改这一位）：**42.9 fps → 57.8 fps**
+  - 验证：`npm run check` 全绿；缩略图路径改为"先画再读"，仍是同一任务内读背板（真机世界卡片缩略图此前一直正常，逻辑未变，只是抓之前多画一帧）
+  - 批次：20261030-1925
+
+- [x] 天空穹顶着色器去掉三处整屏逐像素开销：`web/src/render/Sky.ts`
+  - 做了什么：去掉对 `uSunDir` 的逐像素 `normalize`（`Sky.update` 写进去的就是 `(cos t, sin t, 0)`，本来单位长）；`pow(x, 8.0)` 展开成三次乘法；霞光整段包进 `if (uSunGlow > 0.0)`（它只在日出日落前后非零）
+  - 为什么：抬头看天时 `Chrome_InProcGp` 顶到一核的 37.4%（JS 反而降到 6.1%），说明瓶颈是穹顶这个**整屏**着色器的每像素开销，不是 draw call 数量。三处改动输出逐位等价
+  - 验证：`npm run render-test` 通过，并新增三条结构守卫（不许回去用 `pow`、不许再 `normalize(uSunDir)`、霞光必须有 `uSunGlow > 0.0` 判据）；两套 GLSL 用无头 Chrome 实际编译通过（`PASS Sky dome fragment` / `PASS Voxel fragment`）
+  - 批次：20261030-1925
+
+- [x] 地形着色器把 `bayer4(gl_FragCoord)` 从算两遍改成算一次复用：`web/src/render/dither.ts` + `VoxelMaterial.ts`
+  - 做了什么：`GLSL_DITHER` 拆出 `ditherWithBayer(color, bayer)`；地形着色器在 `discard` 之前算一次 `bayer4`，阈值抖动与最终输出抖色共用
+  - 为什么：两处本来就该用同一个屏幕空间图案（批次 524 + 520），各算一遍等于整屏多十几条 ALU，而地形是占屏面积最大的着色器
+  - 验证：`npm run check` 全绿；`render-test` 换成新判据并补了"整屏只算一次 bayer4"的断言（材质里 `bayer4(gl_FragCoord.xy)` 出现次数必须为 1）
+  - 批次：20261030-1925
+
+- [x] 真机复测与结论归档
+  - 做了什么：提交后把真机数据、隔离基准与"未能验证的部分"写清楚
+  - 为什么：**新包没法装到这台机器上**——`assembleRelease` 需要 `MINICRAFT_KEYSTORE*` 口令（只有用户知道），而 debug 包签名不同、覆盖安装要先卸载并丢掉存档，属于不可回退动作，没有擅自做
+  - 验证：基准数据来自设备 Chrome 的隔离页面（同 GPU、同分辨率、同 MSAA）；着色器那两处只做了"编译通过 + 结构守卫"，未量化
+  - 批次：20261030-1925
+
+---
+
 ## 批次 20261029-1600 · 2026-10-29 · 会话 ea9ea51
 
 > 一仓多产物目录重排 + 安卓只认自家签名的核心数据封存
@@ -252,42 +288,6 @@
   - 为什么：`main.ts` 的 `setTitle('设置','返回')` 写死中文，德语下页签是德语、标题却是「设置」；上一轮扫描排除了 main.ts 才漏掉。
   - 验证：德语设置标题 = Einstellungen；全项目复扫 UI 硬编码 0（剩 1 注释）；check exit=0。
   - 批次：20261028-0200
-
----
-
-## 批次 20261028-0100 · 2026-10-28 · 会话 12c62c
-
-> 用户：编辑弹窗又自动弹键盘；遮罩还是挡不住下层点击
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-0100
-
-- [x] [L28] 弹窗不再自动弹键盘 + 遮罩硬拦截：`InputOverlay.ts`、`index.html`
-  - 做了什么：焦点门槛加"按下元素 === 获得焦点的元素"；遮罩改 `stopImmediatePropagation` + body `.inp-open`（CSS `pointer-events:none`）。
-  - 为什么：600ms 窗口把"点按钮后代码聚焦"误判成用户点击；stopPropagation 拦不住同元素上的其它监听。
-  - 验证：编辑弹窗 active=BODY 无浮层；浮层开着点下层 lowerClicks=0。
-  - 批次：20261028-0100
-
----
-
-## 批次 20261027-3400 · 2026-10-28 · 会话 12c62c
-
-> 用户：新建世界人物卡在方块里，应该站在地面上
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-27
-> 批次：20261027-3400
-
-- [x] [L27] 新建世界落地校正：`main.ts` → playwright
-  - 做了什么：`prepareNewWorldSpawn()` 末尾补 `requestGroundSettle('spawn')`。
-  - 为什么：落点按 surfaceY 估算，实际生成有树/水/洞穴；而校正只挂在读档与联机加入上，新世界漏了。
-  - 验证：两个新世界都在地面上（y=66/100，脚头空气、下方实体）；手动塞进地里 2.5 秒自愈。
-  - 批次：20261027-3400
 
 ---
 
