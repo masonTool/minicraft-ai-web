@@ -129,7 +129,21 @@ public class MainActivity extends Activity {
         // 必须在 setContentView 之后：之前 decorView 还不存在，getInsetsController() 会 NPE
         applyImmersive();
 
-        if (BuildConfig.DEBUG) {
+        /*
+         * 调试口：debug 构建常开；release 只在**这次启动带 `-e debugweb true`** 时开。
+         *
+         * 为什么 release 也要留这个口子：布局问题（视口宽度、dpr、安全区）只有在真机上
+         * 通过 CDP 量得出，而 release 包才是"用户手里那个"。不带参数时完全关闭，
+         * 正常使用不会暴露调试端口。
+         *
+         *   adb shell am start -n com.minicraft.app/.MainActivity -e debugweb true
+         */
+        boolean debugWeb = BuildConfig.DEBUG
+                || getIntent().getBooleanExtra("debugweb", false)
+                // `am start -e debugweb true` 传的是字符串，`getBooleanExtra` 会忽略它，
+                // 所以两种写法都认：`--ez debugweb true` 与 `-e debugweb true`
+                || "true".equals(getIntent().getStringExtra("debugweb"));
+        if (debugWeb) {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 

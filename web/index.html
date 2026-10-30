@@ -5350,9 +5350,12 @@
          ① 快捷栏自己就是定位父元素，"贴着它两端"不用算任何像素；
          ② 它们**不参与那一行 9 个格子的宽度计算**（竖屏手机上 9 × 44px ≈ 408px
             已经把 430px 的屏宽占满，再往行里塞按钮必然溢出）。
-         默认摆在快捷栏**两端上方**；屏幕够宽时按基岩版摆到左右两侧。 */
+         位置固定为快捷栏**右侧、与它同一行**（见下条规则）。 */
       #hotbar .touch-side-btn {
-        position: absolute; bottom: calc(100% + 4px);
+        /* 一律与快捷栏**同一行**（2026-10-30）。原来是"窄屏挂到上方"，
+           实测 753px 视口（PLR110 横屏）仍能放下 44px 的按钮，却因为命中
+           `min-width: 760px` 的断点被堆到上面去了——两台手机观感不一致就是这么来的。 */
+        position: absolute; bottom: 0;
         width: calc(44px * var(--touch-scale, 1));
         height: calc(44px * var(--touch-scale, 1));
         /* 背景/描边沿用 `.touch-button` 的深色玻璃 */
@@ -5361,14 +5364,9 @@
          不要写成 `display:none`——那会让整条快捷栏重排一次 */
       #hotbar .touch-side-btn.ui-off { visibility: hidden; }
       /* 批次 181：聊天已搬到顶部，快捷栏右侧只留背包 */
-      #touch-hotbar-inventory { right: 0; }
+      #touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }
       /* PC 端同一颗背包键（用户要求 2026-10-25：与手机同构） */
-      #pc-hotbar-inventory { right: 0; }
-      @media (min-width: 760px) {
-        #hotbar .touch-side-btn { bottom: 0; }
-        #touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }
-        #pc-hotbar-inventory { right: auto; left: calc(100% + 8px); }
-      }
+      #pc-hotbar-inventory { right: auto; left: calc(100% + 8px); }
 
       /* ---------------- PC（键鼠）HUD 按钮层 ----------------
          用户要求（2026-10-25）：**PC 版的界面跟手机版保持一致**——手机上有的按钮
@@ -5701,14 +5699,6 @@
         .world-panel[data-view='create'] .world-hint { margin-top: 6px; font-size: 11px; }
       }
 
-      /* 窄屏（< 760px，背包键只能挂在快捷栏**右端上方**）：血条/饥饿整行再抬一个
-         按钮的高度，否则饥饿那 10 个图标会和背包键叠在一起。
-         ≥ 760px 时背包键摆在快捷栏右侧（见 `#touch-hotbar-inventory`），不需要这条。
-         ⚠️ 竖屏本身被"请横屏"整屏浮层挡着，这里实际只影响 667~759px 的横屏机。 */
-      @media (max-width: 759px) {
-        #vitals { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
-      }
-
       /* 竖屏手机：摇杆与按钮簇都往上收一点，给屏幕中间留出视野 */
       @media (orientation: portrait) and (max-width: 900px) {
         /* ⚠️ 这里的尺寸**必须**乘 `--touch-scale`：竖屏手机是最常见的场景，
@@ -5741,24 +5731,23 @@
       }
 
       /* 窄屏（手机横屏 <760）：快捷栏几乎占满宽度，右侧的背包键正上方就是
-         跳跃键簇。把整簇改成**贴右沿**（原来 30~60px 的边距在这里会让升降键
-         横向压到背包键上）——2026-10-28，用户反馈"按钮放大后与背包重叠"。
+         跳跃键簇。2026-10-30 起按钮簇不再需要"贴右沿"为背包键让位——背包键已经
+         回到快捷栏右侧、与快捷栏同一行，两者不再抢同一块地方。
          左手模式下 `left-handed` 那条规则读的是同一个变量，会自动镜像。 */
-      @media (orientation: landscape) and (max-width: 759px) {
-        #touch-ui { --touch-buttons-inset: 8px; }
-      }
 
       /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心。
          ⚠️ 横屏屏幕宽（≥ 760px 命中上面那条），所以背包/聊天是摆在快捷栏**左右两侧**的，
          不再需要为它们留出"上方"的空间——这一簇仍然只有"潜行 + 跳跃"两颗 */
       @media (max-height: 480px) {
         #touch-ui {
-          --touch-side-inset: 30px;
+          /* 2026-10-30（用户）：横屏手机上摇杆/按钮贴边太狠，"感觉要溢出"。
+             边距 30→44、离底 70→84。全屏壳里没有地址栏挡着，视觉上比浏览器更贴边。 */
+          --touch-side-inset: 44px;
           --touch-stick-size: calc(108px * var(--touch-scale, 1));
-          --touch-stick-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+          --touch-stick-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
           /* 同基础规则：放大额全部朝上 */
           --touch-buttons-bottom: calc(
-            92px + (var(--touch-jump-size) - 64px) + env(safe-area-inset-bottom, 0px)
+            106px + (var(--touch-jump-size) - 64px) + env(safe-area-inset-bottom, 0px)
           );
           --touch-jump-size: calc(64px * var(--touch-scale, 1));
         }
@@ -7130,7 +7119,7 @@
       .mp-port-actions .mp-action { flex: 1 1 0; min-height: 34px; font-size: 13px; }
 
       /* 窄屏：两栏叠成上下，**列表在上**（先看到有哪些房，再决定填什么） */
-      @media (max-width: 760px) {
+      @media (max-width: 700px) {
         .mp-panel.mp-panel-wide { width: min(94vw, 520px); height: auto; max-height: 92vh; }
         .mp-columns { flex-direction: column; gap: 10px; }
         .mp-col-list {

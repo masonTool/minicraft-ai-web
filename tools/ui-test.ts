@@ -287,8 +287,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
     const needles: ReadonlyArray<readonly [string, string]> = [
       ['按钮簇随缩放上移（横屏基础）', '124px + (var(--touch-jump-size) - 76px)'],
       ['按钮簇随缩放上移（竖屏）', '138px + (var(--touch-jump-size) - 70px)'],
-      ['按钮簇随缩放上移（矮横屏）', '92px + (var(--touch-jump-size) - 64px)'],
-      ['窄屏按钮簇贴右沿', '#touch-ui { --touch-buttons-inset: 8px; }'],
+      ['按钮簇随缩放上移（矮横屏）', '106px + (var(--touch-jump-size) - 64px)'],
+      // 2026-10-30：那条 "窄屏贴右沿" 的 8px 覆盖已删——背包键回到快捷栏右侧后，
+      // 右下按钮簇不再需要为它让位，四边统一用 44px。
+      ['矮横屏控件离边 44px', '--touch-side-inset: 44px;'],
       ['升降键按下时保留水平居中', '.touch-button.fly-up:active,'],
       ['升降键按下时的 transform 带 translateX', 'transform: translateX(-50%) scale(.94);'],
     ];
@@ -377,8 +379,12 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
     ['右下按钮簇以跳跃键为固定锚点', '#touch-buttons { position: absolute; right: var(--touch-buttons-inset); bottom: var(--touch-buttons-bottom); width: var(--touch-jump-size);'],
     // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
-    ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
-    ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
+    // 2026-10-30（用户）：背包键**永远**与快捷栏同一行。
+    // 原来按 760px 断点分成"窄屏挂上方 / 宽屏挂右侧"，而 753px 视口的手机（PLR110 横屏）
+    // 恰好落在窄屏那侧 —— 同样的界面在两台手机上观感不一致，这里把断点去掉。
+    // 用"块内唯一的声明"当锚点：选择器和属性之间夹着注释，拼多行 needle 太脆
+    ['背包键与快捷栏同一行', 'position: absolute; bottom: 0;'],
+    ['背包键固定在快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
     ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;'],
     ['准星下方有目标名称', '#target-info {'],
     ['游戏内一行提示在快捷栏上方', '#hud-toast {'],
@@ -478,7 +484,7 @@ console.log('\n[PC 端 HUD 按钮层（2026-10-25：与手机同构 + 每颗带�
     ['下降键的键帽挂在下方（否则压在跳跃键上）', '.touch-button.fly-down > .pc-key {'],
     ['左下 WASD 键位图例（手机那儿是摇杆）', '#pc-move {'],
     ['右下跳跃簇', '#pc-buttons {'],
-    ['背包键挂在快捷栏右侧', '#pc-hotbar-inventory { right: 0; }'],
+    ['PC 背包键同样挂在快捷栏右侧', '#pc-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
   ] as const) {
     check(`index.html 里有"${label}"`, htmlPc.includes(needle), needle);
   }

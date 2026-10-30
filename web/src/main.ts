@@ -6739,7 +6739,14 @@ class App {
         (touch?.sneak ?? false) ||
         (pad?.sneak ?? false) ||
         (pc?.sneak ?? false),
-      sprint: keyboardSprint || (touch?.sprint ?? false) || (pad?.sprint ?? false),
+      /*
+       * 飞行时忽略**触屏**的自动 sprint（2026-10-30，用户："创造模式飞得太快"）。
+       *
+       * 触屏的 sprint 是"摇杆推到底就成立"（`TouchControls.input` 里按幅度判断），
+       * 而原版飞行速度是 10.9、sprint 飞行是 21.8 —— 推满就等于一直开着 2 倍速，
+       * 手感自然"飞一般"。键盘的 Ctrl 仍然有效（PC 玩家自己控制），手柄同理。
+       */
+      sprint: keyboardSprint || (!this.flying && (touch?.sprint ?? false)) || (pad?.sprint ?? false),
     };
   }
 
