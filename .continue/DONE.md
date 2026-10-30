@@ -9,6 +9,31 @@
 
 ---
 
+## 批次 20261030-2316 · 2026-10-31 · 会话 c747f7
+
+> 手机发烫，在不降画质前提下做四步渲染与空转优化
+
+# 队列 · 会话 c747f798fe5f443089f73456db302086
+
+> 状态：执行中
+> 创建：2026-10-30
+> 批次：20261030-2316
+
+- [x] 实心层拆成「不透明 / 镂空」两份材质，不透明层不再 discard：`core/mesh/ChunkMesher.ts` + `render/ChunkRenderer.ts` + `render/VoxelMaterial.ts` → `npm run check:fast` + 真机出帧数
+  做了：图集逐张判定 16×16 全不透明贴图（资源包覆盖后重判），下发给网格 worker；整格方块且贴图全不透明的面进 `opaque` 层，`VOXEL_OPAQUE` 宏编译掉 alpha 测试，先于镂空层绘制吃 early-Z。提交 `50b71b0e`。
+  验证：`npm run check:fast` 全绿；Pixel 2 XL 冷机（电池≈33°C）同种子满屏地形 20 秒：60 fps 封顶、帧时间中位 5ms / 90 分位 18ms、GPU 中位 6ms / 90 分位 12ms；截图镂空方块（树叶）与实心方块显示正常。
+- [x] 区块网格按「地表在前、地下在后」合并：`render/ChunkRenderer.ts#mergeSectionLayer` → `npm run check:fast` + 真机出帧数
+  做了：不透明/镂空层按 section 从高到低合并，半透明层保持原顺序（不改混合次序）。提交 `a98ea200`。
+  验证：`npm run check:fast` 全绿；同口径真机：60 fps、帧时间 5 / 17ms、GPU 6 / 13ms，与上一步持平（满屏地表视角下地下面片本就少）。
+- [x] 区段遮挡剔除（section 连通性 + 方向受限 BFS，按区块收 drawRange）：mesher 产出连通掩码 + 渲染侧裁剪 → `npm run check:fast` + 真机出帧数
+  做了：新增 `core/mesh/SectionVisibility.ts`（每 section 六面连通图，与面剔除同一个 `opaque` 判定）与 `render/SectionOcclusion.ts`（从相机 section 做方向受限 BFS，只在换 section / 网格增删时重算）；合并网格记录 section 索引区间，用 drawRange 截掉不可见段。提交 `c25885c8`。
+  验证：`test:mesh` 新增 9 条断言（空/实心/竖井连通图、剔除深层、出世界高度全画、区间记录）全过；同口径真机：60 fps、帧时间 5 / 5ms、卡顿 0.16%、GPU 6 / 11ms；抬头/平视截图远景、水面、洞口无漏画。
+- [x] 去掉空转开销：没接手柄不轮询、无声时挂起音频（先确认是否空转）→ `npm run check:fast` + 真机出帧数 + 线程占比
+  做了：收到 `gamepadconnected` 才调 `getGamepads()`（模块级门控，拔掉停止）；`AudioEngine.idleTick` 全静音 3 秒挂起 AudioContext，确定要发声时自动 resume，切后台的硬挂起不受影响。提交 `569d33c5`。
+  验证：`npm run check:fast` 全绿；同口径真机：61 fps、帧时间 5 / 7ms、卡顿 4.7%、CPU 合计 74%；线程表里 Gamepad polling 消失，AAudio 由约 5% 降到 2.1%。
+
+---
+
 ## 批次 20261030-1925 · 2026-10-30 · 会话 c747f798
 
 > 真机发热归因：不是内存也不是游戏逻辑，而是每像素的填充与提交开销；关掉 preserveDrawingBuffer + 削掉两处整屏像素成本
@@ -270,24 +295,6 @@
   - 遗留：`openMultiplayer()`（`main.ts:3691`）现在**没有任何调用方**，`RoomCard` 因此没有界面入口；
     删卡片还是补新入口是产品决定，留给用户，未动。
   - 批次：20261028-0033
-
----
-
-## 批次 20261028-0200 · 2026-10-28 · 会话 12c62c
-
-> 用户：设置窗口标题没多语言，全面检查遗漏
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-0200
-
-- [x] [L29] 清掉 UI 硬编码中文：`main.ts`、`WorldScreen.ts`、`ToolHud.ts`、`WorldRegistry.ts`、六语言 → playwright
-  - 做了什么：`setTitle(t('settings.title'), t('settings.back'))` + 另外 4 处（构建信息、卡片 tooltip、罗盘格数、未命名世界），新增 4 key × 6 语言。
-  - 为什么：`main.ts` 的 `setTitle('设置','返回')` 写死中文，德语下页签是德语、标题却是「设置」；上一轮扫描排除了 main.ts 才漏掉。
-  - 验证：德语设置标题 = Einstellungen；全项目复扫 UI 硬编码 0（剩 1 注释）；check exit=0。
-  - 批次：20261028-0200
 
 ---
 
