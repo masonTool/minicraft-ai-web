@@ -16,6 +16,7 @@ import type { DimensionId } from '../core/gen/Dimension.ts';
 import type { WorldType } from '../core/gen/WorldType.ts';
 import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../core/gen/TerrainGenerator.ts';
 import { meshSection, setOpaqueTiles, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
+import { computeSectionVisibility, VISIBILITY_ALL } from '../core/mesh/SectionVisibility.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING } from '../render/atlasLayout.ts';
 import { tileOriginAt } from '../render/atlasCoords.ts';
@@ -92,6 +93,8 @@ export interface MeshResponse {
   cx: number;
   cz: number;
   sections: MeshSectionPayload[];
+  /** 每个 section 的六面连通图（区段遮挡剔除用，见 SectionVisibility） */
+  visibility?: Uint16Array;
 }
 
 export type WorkerRequest = GenerateRequest | MeshRequest;
@@ -187,6 +190,8 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
   const sections: MeshSectionPayload[] = [];
   const transfer: Transferable[] = [];
   const chunk = world.center;
+  const visibility = new Uint16Array(SECTION_COUNT).fill(VISIBILITY_ALL);
+  transfer.push(visibility.buffer);
 
   const collect = (geometry: GeometryLike | null): GeometryPayload | null => {
     if (!geometry) return null;
@@ -212,6 +217,7 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
   if (chunk) {
     for (let section = 0; section < SECTION_COUNT; section++) {
       if (chunk.sectionIsEmpty(section)) continue;
+      visibility[section] = computeSectionVisibility(chunk, section);
       const { opaque, solid, translucent } = meshSection(chunk, section, tileUv, world);
       const opaquePayload = collect(opaque);
       const solidPayload = collect(solid);
@@ -222,7 +228,7 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
     }
   }
 
-  return { response: { type: 'meshed', id: req.id, cx: req.cx, cz: req.cz, sections }, transfer };
+  return { response: { type: 'meshed', id: req.id, cx: req.cx, cz: req.cz, sections, visibility }, transfer };
 }
 
 // ---------------------------------------------------------------- 入口

@@ -15,6 +15,8 @@
 
 import * as THREE from 'three';
 import { createGeometry, meshSection, setOpaqueTiles, type GeometryArrays } from '../core/mesh/ChunkMesher.ts';
+import { computeSectionVisibility } from '../core/mesh/SectionVisibility.ts';
+import { SECTIONS_ALL, SectionOcclusion } from './SectionOcclusion.ts';
 import {
   SECTION_COUNT,
   WORLD_MIN_Y,
@@ -31,7 +33,14 @@ interface ChunkMeshes {
   triangles: number;
   cx: number;
   cz: number;
+  /** 每个 section 的六面连通图（没有就按全连通） */
+  visibility: Uint16Array | undefined;
+  /** 上次套到网格上的可见 section 位图（-1 = 还没套过） */
+  applied: number;
 }
+
+/** 合并网格里每个 section 的索引区间：`[section, start, count]` 依次排列，顺序即绘制顺序 */
+type SectionRanges = number[];
 
 /**
  * 网格化优先级（N2，批次 604）：
@@ -78,6 +87,9 @@ export class ChunkRenderer {
   private readonly maxInFlight: number;
   /** 上一帧真正画出来的区块数（见 `applyViewDistance`） */
   private drawnChunks = 0;
+  /** 区段遮挡剔除；连通图有增删就加版本号，让它重算 */
+  private readonly occlusion = new SectionOcclusion();
+  private visibilityRevision = 0;
 
   /**
    * 调试用：抽样某区块网格顶点里的光照值，以及这段网格覆盖的 Y 区间。
@@ -342,8 +354,9 @@ export class ChunkRenderer {
   private mergeLayer(
     entries: Array<{ section: number; arrays: GeometryArrays }>,
     topFirst: boolean,
+    ranges: SectionRanges,
   ): GeometryArrays | null {
-    return mergeSectionLayer(entries, topFirst);
+    return mergeSectionLayer(entries, topFirst, ranges);
   }
 
   /** Worker 结果 → 场景网格 */
@@ -367,10 +380,12 @@ export class ChunkRenderer {
       [solids, this.solidMaterial],
       [translucent, this.translucentMaterial],
     ] as const) {
-      const merged = this.mergeLayer(layer, material !== this.translucentMaterial);
+      const ranges: SectionRanges = [];
+      const merged = this.mergeLayer(layer, material !== this.translucentMaterial, ranges);
       if (!merged) continue;
       const geometry = this.acquireGeometry(merged);
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData.sectionRanges = ranges;
       // 顶点里已经烘入 section 的 baseY，网格只放水平偏移
       this.freezeAt(mesh, offsetX, 0, offsetZ);
       mesh.frustumCulled = true;
@@ -378,7 +393,7 @@ export class ChunkRenderer {
       triangles += geometry.index!.count / 3;
     }
 
-    this.replaceMeshes(key, response.cx, response.cz, meshes, triangles);
+    this.replaceMeshes(key, response.cx, response.cz, meshes, triangles, response.visibility);
     const chunk = this.world.getChunk(response.cx, response.cz);
     if (chunk) chunk.state = advanceChunkState(chunk.state, 'meshed');
   }
@@ -390,11 +405,14 @@ export class ChunkRenderer {
     const offsetZ = cz * 16;
     const meshes: THREE.Mesh[] = [];
     let triangles = 0;
+    const visibility = new Uint16Array(SECTION_COUNT);
 
     for (let section = 0; section < SECTION_COUNT; section++) {
+      visibility[section] = computeSectionVisibility(chunk, section);
       if (chunk.sectionIsEmpty(section)) continue;
       const { opaque, solid, translucent } = meshSection(chunk, section, this.atlas, this.world);
       const baseY = WORLD_MIN_Y + section * 16;
+      const first = meshes.length;
 
       if (opaque) {
         const mesh = new THREE.Mesh(opaque, this.opaqueMaterial ?? this.solidMaterial);
@@ -417,9 +435,12 @@ export class ChunkRenderer {
         meshes.push(mesh);
         triangles += translucent.index!.count / 3;
       }
+      for (let i = first; i < meshes.length; i++) {
+        meshes[i]!.userData.sectionRanges = [section, 0, meshes[i]!.geometry.index!.count];
+      }
     }
 
-    this.replaceMeshes(key, cx, cz, meshes, triangles);
+    this.replaceMeshes(key, cx, cz, meshes, triangles, visibility);
     chunk.state = advanceChunkState(chunk.state, 'meshed');
   }
 
@@ -451,10 +472,18 @@ export class ChunkRenderer {
    * 整个 16×16 区块暂时消失，邻区块载入时还会连带四块一起闪。现在旧几何一直留到新几何
    * 全部建好；回调期间先挂新网格再拆旧网格，渲染帧永远只会看到“旧”或“新”中的完整一版。
    */
-  private replaceMeshes(key: string, cx: number, cz: number, meshes: THREE.Mesh[], triangles: number): void {
+  private replaceMeshes(
+    key: string,
+    cx: number,
+    cz: number,
+    meshes: THREE.Mesh[],
+    triangles: number,
+    visibility: Uint16Array | undefined,
+  ): void {
     for (const mesh of meshes) this.scene.add(mesh);
     this.dispose(key);
-    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles, cx, cz });
+    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles, cx, cz, visibility, applied: -1 });
+    this.visibilityRevision++;
   }
 
   /**
@@ -473,16 +502,31 @@ export class ChunkRenderer {
    * ⚠️ 半径取 `视距 + 0.5` 格：区块中心相对玩家最远 8 格（半格 + 半区块），
    * 多一点余量避免边缘区块在两帧之间闪进闪出。多出来的这半圈本来也在雾里。
    */
-  applyViewDistance(centerCx: number, centerCz: number, viewChunks: number): void {
+  applyViewDistance(
+    centerCx: number,
+    centerCz: number,
+    viewChunks: number,
+    eye: { x: number; y: number; z: number } | null = null,
+  ): void {
     const limit = Math.max(1, viewChunks) + 0.5;
     const limitSq = limit * limit;
+    if (eye) {
+      // 搜索半径比视距多 2 圈：相机（第三人称）可能不在玩家所在区块
+      this.occlusion.update(eye.x, eye.y, eye.z, Math.ceil(limit) + 2, this.visibilityRevision, (cx, cz) =>
+        this.rendered.get(chunkKey(cx, cz))?.visibility,
+      );
+    }
     let drawn = 0;
     for (const entry of this.rendered.values()) {
       const dx = entry.cx - centerCx;
       const dz = entry.cz - centerCz;
-      const visible = dx * dx + dz * dz <= limitSq;
-      if (visible) drawn++;
-      for (const mesh of entry.meshes) mesh.visible = visible;
+      const inRange = dx * dx + dz * dz <= limitSq;
+      const sections = !inRange ? 0 : eye ? this.occlusion.sectionsOf(entry.cx, entry.cz) : SECTIONS_ALL;
+      if (sections !== entry.applied) {
+        entry.applied = sections;
+        for (const mesh of entry.meshes) applySections(mesh, sections);
+      }
+      if (sections !== 0) drawn++;
     }
     this.drawnChunks = drawn;
   }
@@ -519,6 +563,8 @@ export class ChunkRenderer {
     const reused = bucket?.pop();
     if (!reused) return createGeometry(arrays);
     this.pooledGeometryCount--;
+    // 上一任主人可能被遮挡剔除截过一段
+    reused.setDrawRange(0, Infinity);
 
     const position = reused.getAttribute('position') as THREE.BufferAttribute;
     const uv = reused.getAttribute('uv') as THREE.BufferAttribute;
@@ -583,6 +629,7 @@ export class ChunkRenderer {
       this.releaseGeometry(mesh.geometry);
     }
     this.rendered.delete(key);
+    this.visibilityRevision++;
   }
 
   disposeAll(): void {
@@ -601,6 +648,7 @@ export class ChunkRenderer {
 export function mergeSectionLayer(
   entries: Array<{ section: number; arrays: GeometryArrays }>,
   topFirst = false,
+  ranges: SectionRanges | null = null,
 ): GeometryArrays | null {
   if (entries.length === 0) return null;
   // 不透明层地表在前：玩家多数时候在地表，先画近处地表写深度，地下面片走 early-Z 直接丢弃
@@ -644,9 +692,36 @@ export function mergeSectionLayer(
     for (let i = 0; i < arrays.index.length; i++) {
       index[indexOffset + i] = arrays.index[i]! + vertexOffset;
     }
+    if (ranges && arrays.index.length > 0) ranges.push(entry.section, indexOffset, arrays.index.length);
     vertexOffset += count;
     indexOffset += arrays.index.length;
   }
 
   return { position, uv, tile, light, shade, index };
+}
+
+/**
+ * 按可见 section 位图截网格：合并网格里各 section 是连续排的，取第一个到最后一个可见
+ * section 之间的整段（中间夹着的不可见 section 也会画，换来只用一次 draw call）。
+ */
+function applySections(mesh: THREE.Mesh, sections: number): void {
+  const ranges = mesh.userData.sectionRanges as SectionRanges | undefined;
+  if (sections === 0) {
+    mesh.visible = false;
+    return;
+  }
+  if (sections === SECTIONS_ALL || !ranges) {
+    mesh.visible = true;
+    mesh.geometry.setDrawRange(0, Infinity);
+    return;
+  }
+  let start = -1;
+  let end = 0;
+  for (let i = 0; i < ranges.length; i += 3) {
+    if (!(sections & (1 << ranges[i]!))) continue;
+    if (start < 0) start = ranges[i + 1]!;
+    end = ranges[i + 1]! + ranges[i + 2]!;
+  }
+  mesh.visible = start >= 0;
+  if (start >= 0) mesh.geometry.setDrawRange(start, end - start);
 }

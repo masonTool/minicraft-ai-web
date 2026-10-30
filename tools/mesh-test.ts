@@ -13,6 +13,8 @@
 
 import { AO_BRIGHTNESS, createGeometry, meshSection, type GeometryArrays, type MeshContext, type TileUvSource } from '../web/src/core/mesh/ChunkMesher.ts';
 import { mergeSectionLayer } from '../web/src/render/ChunkRenderer.ts';
+import { computeSectionVisibility, PAIR_BIT, VISIBILITY_ALL } from '../web/src/core/mesh/SectionVisibility.ts';
+import { SECTIONS_ALL, SectionOcclusion } from '../web/src/render/SectionOcclusion.ts';
 import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
 import { Block, blockDef, slabId } from '../web/src/core/registry/blocks.ts';
 import { withWaterlogged } from '../web/src/core/registry/blockState.ts';
@@ -284,6 +286,47 @@ console.log('\n[跨 section 合并：属性步长必须与 createGeometry 一致
     check('aTile 的顶点数与合并结果一致', geometry.getAttribute('aTile').count === vertices);
     check('aLight 的顶点数与合并结果一致', geometry.getAttribute('aLight').count === vertices);
   }
+}
+
+console.log('\n[区段遮挡剔除：连通图 + 搜索（批次 20261030-2316）]');
+{
+  const ALL = VISIBILITY_ALL;
+  const empty = new Chunk(0, 0);
+  check('空 section 全连通', computeSectionVisibility(empty, 4) === ALL);
+
+  const rock = new Chunk(0, 0);
+  const sy = 4;
+  const baseY = -64 + sy * 16;
+  for (let y = 0; y < 16; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) rock.set(x, baseY + y, z, Block.STONE);
+  check('实心岩层不连通', computeSectionVisibility(rock, sy) === 0);
+
+  // 竖井：x=z=8 一列挖空 → 只有上下两面连通
+  for (let y = 0; y < 16; y++) rock.set(8, baseY + y, 8, Block.AIR);
+  check('竖井只连通上下', computeSectionVisibility(rock, sy) === PAIR_BIT[2 * 6 + 3]);
+
+  // 一整列：地表以下 section 全是实心，相机在地表上方 → 能看到最上面那层实心（画它的顶面），再往下看不到
+  const masks = new Uint16Array(SECTION_COUNT).fill(ALL);
+  for (let s = 0; s <= 8; s++) masks[s] = 0;
+  const occlusion = new SectionOcclusion();
+  occlusion.update(8, -64 + 9 * 16 + 4, 8, 2, 1, () => masks);
+  const sections = occlusion.sectionsOf(0, 0);
+  check('相机所在 section 可见', (sections & (1 << 9)) !== 0);
+  check('脚下第一层实心可见', (sections & (1 << 8)) !== 0);
+  check('更深的实心层被剔除', (sections & (1 << 7)) === 0 && (sections & 1) === 0, sections.toString(2));
+  check('相邻区块同理', (occlusion.sectionsOf(1, 0) & (1 << 7)) === 0 && (occlusion.sectionsOf(1, 0) & (1 << 8)) !== 0);
+  check('相机出了世界高度：整列全画', (occlusion.update(8, 400, 8, 2, 2, () => masks), occlusion.sectionsOf(0, 0)) === SECTIONS_ALL);
+
+  const ranges: number[] = [];
+  const quad = (): GeometryArrays => ({
+    position: new Float32Array(12),
+    uv: new Float32Array(8),
+    tile: new Float32Array(8),
+    light: new Float32Array(8),
+    shade: new Float32Array(4),
+    index: new Uint32Array([0, 1, 2, 0, 2, 3]),
+  });
+  mergeSectionLayer([{ section: 1, arrays: quad() }, { section: 5, arrays: quad() }], true, ranges);
+  check('地表在前合并 + 记录区间', ranges.join(',') === '5,0,6,1,6,6', ranges.join(','));
 }
 
 console.log(`\n网格化测试：${passed} 通过 / ${failed} 失败\n`);

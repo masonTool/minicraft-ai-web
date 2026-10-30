@@ -19046,7 +19046,8 @@ class App {
       // 只画视距之内的区块（批次 203）：加载圈留了 `radius + 2` 的缓冲，而远裁面被
       // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
       // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。
-      this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow);
+      // 同时按相机位置做区段遮挡剔除（被地形整块挡住的 section 不画，批次 20261030-2316）
+      this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow, this.camera.position);
       // 半透明层（水/玻璃）只在水下才双面（批次 215）：水面顶面的正面朝上，
       // 摄像机在水下看到的是背面，单面会看穿水面；而岸上双面等于把整片水混合两遍
       // ——真机"一靠近水域就卡一点"主要就是这笔填充率。
