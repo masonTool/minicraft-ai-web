@@ -10,6 +10,8 @@
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
+		C0A1DEC00000000000000053 /* NativeServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1DEC00000000000000061 /* NativeServer.swift */; };
+		C0A1DEC00000000000000054 /* MinicraftServer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0A1DEC00000000000000063 /* MinicraftServer.xcframework */; };
 		C0A1DEC00000000000000021 /* BundleVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1DEC00000000000000031 /* BundleVault.swift */; };
 		C0A1DEC00000000000000022 /* LocalServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1DEC00000000000000032 /* LocalServer.swift */; };
 		C0A1DEC00000000000000013 /* MinicraftViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1DEC00000000000000003 /* MinicraftViewController.swift */; };
@@ -24,6 +26,9 @@
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		C0A1DEC00000000000000061 /* NativeServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeServer.swift; sourceTree = "<group>"; };
+		C0A1DEC00000000000000062 /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
+		C0A1DEC00000000000000063 /* MinicraftServer.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MinicraftServer.xcframework; path = "../../server/ios/MinicraftServer.xcframework"; sourceTree = "<group>"; };
 		C0A1DEC00000000000000031 /* BundleVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleVault.swift; sourceTree = "<group>"; };
 		C0A1DEC00000000000000032 /* LocalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalServer.swift; sourceTree = "<group>"; };
 		C0A1DEC00000000000000003 /* MinicraftViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinicraftViewController.swift; sourceTree = "<group>"; };
@@ -39,6 +44,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0A1DEC00000000000000054 /* MinicraftServer.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,6 +56,7 @@
 			children = (
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				C0A1DEC00000000000000063 /* MinicraftServer.xcframework */,
 			);
 			sourceTree = "<group>";
 		};
@@ -69,6 +76,8 @@
 				C0A1DEC00000000000000003 /* MinicraftViewController.swift */,
 				C0A1DEC00000000000000031 /* BundleVault.swift */,
 				C0A1DEC00000000000000032 /* LocalServer.swift */,
+				C0A1DEC00000000000000061 /* NativeServer.swift */,
+				C0A1DEC00000000000000062 /* Bridging-Header.h */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -178,6 +187,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				C0A1DEC00000000000000013 /* MinicraftViewController.swift in Sources */,
 				C0A1DEC00000000000000021 /* BundleVault.swift in Sources */,
+				C0A1DEC00000000000000053 /* NativeServer.swift in Sources */,
 				C0A1DEC00000000000000022 /* LocalServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -330,6 +340,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.minicraft.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../server/ios/include";
+				SWIFT_OBJC_BRIDGING_HEADER = "App/Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -355,6 +367,8 @@
 				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_REFLECTION_METADATA_LEVEL = none;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../server/ios/include";
+				SWIFT_OBJC_BRIDGING_HEADER = "App/Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
