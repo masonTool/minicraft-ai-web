@@ -7,8 +7,14 @@
  *
  * 只在相机换 section、或有区块连通图更新时重算；平时每帧只是查表。
  * 没有连通图的区块（还没网格化）按全连通处理，宁可多画不漏画。
+ *
+ * **视锥约束**（批次 20261031，原版同款）：只往视锥内的 section 扩展。视线是直线，
+ * 到达任何屏幕上可见 section 的那条路径上的 section 都在视锥内，所以不会漏画。
+ * 不加这条时，低头看地也会把远处区块"经洞穴连通"的地下层标成可见（真机每帧 164 万三角形）。
+ * 代价是相机一转就要重算（只比较视图矩阵，静止时零开销）。
  */
 
+import * as THREE from 'three';
 import { PAIR_BIT, VISIBILITY_ALL } from '../core/mesh/SectionVisibility.ts';
 import { SECTION_COUNT, WORLD_MIN_Y } from '../core/world/Chunk.ts';
 
@@ -34,6 +40,8 @@ export class SectionOcclusion {
   private visited = new Uint8Array(0);
   private qCell = new Int32Array(0);
   private qInfo = new Int32Array(0);
+  private frustum: THREE.Frustum | null = null;
+  private readonly box = new THREE.Box3();
 
   /**
    * 需要时重算。`maskOf` 返回某区块 24 个 section 的连通图（没有就 undefined）。
@@ -46,6 +54,9 @@ export class SectionOcclusion {
     radius: number,
     revision: number,
     maskOf: (cx: number, cz: number) => Uint16Array | undefined,
+    /** 视锥（null = 不约束）；调用方在视图变化时传 `viewChanged = true` 强制重算 */
+    frustum: THREE.Frustum | null = null,
+    viewChanged = false,
   ): boolean {
     const cx = Math.floor(eyeX / 16);
     const cz = Math.floor(eyeZ / 16);
@@ -55,7 +66,8 @@ export class SectionOcclusion {
       cx === this.originCx &&
       cz === this.originCz &&
       sy === this.eyeSection &&
-      revision === this.revision
+      revision === this.revision &&
+      !viewChanged
     ) {
       return false;
     }
@@ -64,6 +76,7 @@ export class SectionOcclusion {
     this.originCz = cz;
     this.eyeSection = sy;
     this.revision = revision;
+    this.frustum = frustum;
     this.active = sy >= 0 && sy < SECTION_COUNT;
     if (!this.active) return true;
 
@@ -152,6 +165,14 @@ export class SectionOcclusion {
     const x = (col % side) + DX[d]!;
     const z = ((col / side) | 0) + DZ[d]!;
     if (x < 0 || z < 0 || x >= side || z >= side) return -1;
+    if (this.frustum) {
+      const wx = (this.originCx + x - this.radius) * 16;
+      const wz = (this.originCz + z - this.radius) * 16;
+      const wy = WORLD_MIN_Y + ny * 16;
+      this.box.min.set(wx, wy, wz);
+      this.box.max.set(wx + 16, wy + 16, wz + 16);
+      if (!this.frustum.intersectsBox(this.box)) return -1;
+    }
     return (z * side + x) * SECTION_COUNT + ny;
   }
 }

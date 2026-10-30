@@ -10579,10 +10579,10 @@ class App {
       this.gameMode === 'survival' && !this.uiOpen && !this.stats.dead ? this.aimRemotePlayer() : null;
     const state = target ? this.remoteAppearance.get(target.id)?.state : null;
     if (!target || !state || (state.hp === null && state.food === null)) {
-      box.classList.add('hidden');
+      box.classList.toggle('hidden', true);
       return;
     }
-    box.classList.remove('hidden');
+    box.classList.toggle('hidden', false);
     if (this.targetVitals.name) this.targetVitals.name.textContent = target.mob.customName ?? '';
     if (this.targetVitals.hp) {
       const ratio = state.hp === null ? 0 : Math.max(0, Math.min(1, state.hp / 20));
@@ -17462,7 +17462,8 @@ class App {
         this.dropInventoryOnDeath();
         this.dropExperienceOnDeath();
       }
-      this.deathEl.classList.remove('hidden');
+      // `toggle(…, force)` 状态不变时不写属性；`add/remove` 每帧都会写一次 class（批次 20261031）
+      this.deathEl.classList.toggle('hidden', false);
       this.respawnCountdown += dt;
       if (this.hardcore) {
         // 极限模式（批次 550）：不能回生存，重生后直接转旁观（原版 Java 也只剩旁观）
@@ -17478,7 +17479,7 @@ class App {
       }
     } else {
       if (this.respawnCountdown !== 0) this.respawnCountdown = 0;
-      this.deathEl.classList.add('hidden');
+      this.deathEl.classList.toggle('hidden', true);
       this.deathHandled = false;
     }
   }
@@ -19049,7 +19050,7 @@ class App {
       // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
       // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。
       // 同时按相机位置做区段遮挡剔除（被地形整块挡住的 section 不画，批次 20261030-2316）
-      this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow, this.camera.position);
+      this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow, this.camera);
       // 半透明层（水/玻璃）只在水下才双面（批次 215）：水面顶面的正面朝上，
       // 摄像机在水下看到的是背面，单面会看穿水面；而岸上双面等于把整片水混合两遍
       // ——真机"一靠近水域就卡一点"主要就是这笔填充率。

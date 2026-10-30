@@ -12,7 +12,8 @@
  */
 
 import { AO_BRIGHTNESS, createGeometry, meshSection, type GeometryArrays, type MeshContext, type TileUvSource } from '../web/src/core/mesh/ChunkMesher.ts';
-import { mergeSectionLayer } from '../web/src/render/ChunkRenderer.ts';
+import { applySections, mergeSectionLayer } from '../web/src/render/ChunkRenderer.ts';
+import * as THREE from 'three';
 import { computeSectionVisibility, PAIR_BIT, VISIBILITY_ALL } from '../web/src/core/mesh/SectionVisibility.ts';
 import { SECTIONS_ALL, SectionOcclusion } from '../web/src/render/SectionOcclusion.ts';
 import { OverworldGenerator } from '../web/src/core/gen/OverworldGenerator.ts';
@@ -314,6 +315,22 @@ console.log('\n[区段遮挡剔除：连通图 + 搜索（批次 20261030-2316�
   check('脚下第一层实心可见', (sections & (1 << 8)) !== 0);
   check('更深的实心层被剔除', (sections & (1 << 7)) === 0 && (sections & 1) === 0, sections.toString(2));
   check('相邻区块同理', (occlusion.sectionsOf(1, 0) & (1 << 7)) === 0 && (occlusion.sectionsOf(1, 0) & (1 << 8)) !== 0);
+  // 视锥约束：相机在 (8, 地表上 4 格, 8) 直视 -Z，背后（+Z 方向）的区块不该被扩展到
+  {
+    const cam = new THREE.PerspectiveCamera(60, 2, 0.1, 212);
+    cam.position.set(8, -64 + 9 * 16 + 4, 8);
+    cam.lookAt(8, -64 + 9 * 16 + 4, -100);
+    cam.updateMatrixWorld();
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(
+      new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse),
+    );
+    const open = new Uint16Array(SECTION_COUNT).fill(ALL);
+    const occ = new SectionOcclusion();
+    occ.update(cam.position.x, cam.position.y, cam.position.z, 4, 1, () => open, frustum, true);
+    check('视锥约束：前方区块可见', occ.sectionsOf(0, -2) !== 0, occ.sectionsOf(0, -2).toString(2));
+    check('视锥约束：正后方区块不扩展', occ.sectionsOf(0, 3) === 0, occ.sectionsOf(0, 3).toString(2));
+    check('视锥约束：相机所在区块总可见', (occ.sectionsOf(0, 0) & (1 << 9)) !== 0);
+  }
   check('相机出了世界高度：整列全画', (occlusion.update(8, 400, 8, 2, 2, () => masks), occlusion.sectionsOf(0, 0)) === SECTIONS_ALL);
 
   const ranges: number[] = [];
@@ -327,6 +344,20 @@ console.log('\n[区段遮挡剔除：连通图 + 搜索（批次 20261030-2316�
   });
   mergeSectionLayer([{ section: 1, arrays: quad() }, { section: 5, arrays: quad() }], true, ranges);
   check('地表在前合并 + 记录区间', ranges.join(',') === '5,0,6,1,6,6', ranges.join(','));
+
+  // 包围球收紧（批次 20261031）：只套住要画的 section，且把这些顶点全部包住
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 16, 32, 16, 0, -64, 0], 3));
+  const mesh = new THREE.Mesh(geo);
+  mesh.userData.sectionRanges = [5, 0, 6, 4, 6, 6, 0, 12, 6];
+  applySections(mesh, (1 << 5) | (1 << 4));
+  const sphere = geo.boundingSphere!;
+  check('只画 4~5 层：drawRange 0..12', geo.drawRange.start === 0 && geo.drawRange.count === 12);
+  check('包围球中心落在 4~5 层中间', sphere.center.y === 16, `${sphere.center.y}`);
+  check('包围球包住 4~5 层的整盒', sphere.containsPoint(new THREE.Vector3(0, 0, 0)) && sphere.containsPoint(new THREE.Vector3(16, 32, 16)));
+  check('包围球不再覆盖地底', !sphere.containsPoint(new THREE.Vector3(8, -64, 8)));
+  applySections(mesh, SECTIONS_ALL);
+  check('全画时包围球回到整列', sphere.containsPoint(new THREE.Vector3(8, -64, 8)) && geo.drawRange.count === Infinity);
 }
 
 console.log(`\n网格化测试：${passed} 通过 / ${failed} 失败\n`);

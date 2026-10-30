@@ -89,6 +89,9 @@ export class ChunkRenderer {
   private drawnChunks = 0;
   /** 区段遮挡剔除；连通图有增删就加版本号，让它重算 */
   private readonly occlusion = new SectionOcclusion();
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProjection = new THREE.Matrix4();
+  private readonly lastViewProjection = new THREE.Matrix4().makeScale(0, 0, 0);
   private visibilityRevision = 0;
 
   /**
@@ -506,14 +509,31 @@ export class ChunkRenderer {
     centerCx: number,
     centerCz: number,
     viewChunks: number,
-    eye: { x: number; y: number; z: number } | null = null,
+    camera: THREE.Camera | null = null,
   ): void {
     const limit = Math.max(1, viewChunks) + 0.5;
     const limitSq = limit * limit;
-    if (eye) {
+    const eye = camera?.position ?? null;
+    if (camera) {
+      // ⚠️ 先把相机矩阵更新到**本帧**：three 要到 render() 里才更新，用上一帧的视锥会让
+      // 转头时屏幕边缘新露出来的 section 晚一帧才画（一帧的缺口）
+      camera.updateMatrixWorld();
+      this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      const viewChanged = !this.viewProjection.equals(this.lastViewProjection);
+      if (viewChanged) {
+        this.lastViewProjection.copy(this.viewProjection);
+        this.frustum.setFromProjectionMatrix(this.viewProjection);
+      }
       // 搜索半径比视距多 2 圈：相机（第三人称）可能不在玩家所在区块
-      this.occlusion.update(eye.x, eye.y, eye.z, Math.ceil(limit) + 2, this.visibilityRevision, (cx, cz) =>
-        this.rendered.get(chunkKey(cx, cz))?.visibility,
+      this.occlusion.update(
+        eye!.x,
+        eye!.y,
+        eye!.z,
+        Math.ceil(limit) + 2,
+        this.visibilityRevision,
+        (cx, cz) => this.rendered.get(chunkKey(cx, cz))?.visibility,
+        this.frustum,
+        viewChanged,
       );
     }
     let drawn = 0;
@@ -703,25 +723,54 @@ export function mergeSectionLayer(
 /**
  * 按可见 section 位图截网格：合并网格里各 section 是连续排的，取第一个到最后一个可见
  * section 之间的整段（中间夹着的不可见 section 也会画，换来只用一次 draw call）。
+ *
+ * 同时把包围球**收紧到实际要画的那几层 section**（批次 20261031）：整列合并后几何的包围球
+ * 覆盖地下到地表（真机实测半径中位 57 格），低头看地也是 137 个区块全过视锥、每帧 167 万三角形。
+ * 包围球只用于视锥剔除，收紧到"要画的顶点都在里面"不改变任何像素。
  */
-function applySections(mesh: THREE.Mesh, sections: number): void {
+export function applySections(mesh: THREE.Mesh, sections: number): void {
   const ranges = mesh.userData.sectionRanges as SectionRanges | undefined;
   if (sections === 0) {
     mesh.visible = false;
     return;
   }
-  if (sections === SECTIONS_ALL || !ranges) {
-    mesh.visible = true;
-    mesh.geometry.setDrawRange(0, Infinity);
-    return;
-  }
+  const all = sections === SECTIONS_ALL || !ranges;
   let start = -1;
   let end = 0;
-  for (let i = 0; i < ranges.length; i += 3) {
-    if (!(sections & (1 << ranges[i]!))) continue;
-    if (start < 0) start = ranges[i + 1]!;
-    end = ranges[i + 1]! + ranges[i + 2]!;
+  let lo = SECTION_COUNT;
+  let hi = -1;
+  if (ranges) {
+    for (let i = 0; i < ranges.length; i += 3) {
+      if (!all && !(sections & (1 << ranges[i]!))) continue;
+      if (start < 0) start = ranges[i + 1]!;
+      end = ranges[i + 1]! + ranges[i + 2]!;
+    }
+    // 落在 [start, end) 里的 section（含夹在中间、不可见但仍会画的）决定高度范围
+    for (let i = 0; i < ranges.length; i += 3) {
+      const offset = ranges[i + 1]!;
+      if (offset < start || offset >= end) continue;
+      const section = ranges[i]!;
+      if (section < lo) lo = section;
+      if (section > hi) hi = section;
+    }
   }
-  mesh.visible = start >= 0;
-  if (start >= 0) mesh.geometry.setDrawRange(start, end - start);
+  if (all) {
+    mesh.visible = true;
+    mesh.geometry.setDrawRange(0, Infinity);
+  } else {
+    mesh.visible = start >= 0;
+    if (start < 0) return;
+    mesh.geometry.setDrawRange(start, end - start);
+  }
+  if (hi < 0) return;
+  fitSphere(mesh, WORLD_MIN_Y + lo * 16, WORLD_MIN_Y + (hi + 1) * 16);
+}
+
+/** 包围球套住 x/z ∈ [0,16]、y ∈ [bottom, top]（世界坐标）的盒子，各向外留 1 格余量 */
+function fitSphere(mesh: THREE.Mesh, bottom: number, top: number): void {
+  const geometry = mesh.geometry;
+  const sphere = geometry.boundingSphere ?? (geometry.boundingSphere = new THREE.Sphere());
+  const halfY = (top - bottom) / 2 + 1;
+  sphere.center.set(8, (bottom + top) / 2 - mesh.position.y, 8);
+  sphere.radius = Math.sqrt(2 * 9 * 9 + halfY * halfY);
 }
