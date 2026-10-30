@@ -898,7 +898,8 @@ export interface GeometryArrays {
    */
   light: Float32Array | Uint8Array;
   shade: Float32Array | Uint8Array;
-  index: Uint32Array;
+  /** 合并网格顶点数 < 65536 时为 16 位（索引带宽减半，批次 20261031），否则 32 位 */
+  index: Uint32Array | Uint16Array;
 }
 
 /** 0~1 浮点 → 0~255 字节；已经是字节就原样返回（Worker 侧不重复量化） */

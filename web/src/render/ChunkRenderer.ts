@@ -690,7 +690,8 @@ export function mergeSectionLayer(
   // section（山地、洞穴、带树的区块），后面 section 的贴图起点与光照就整体错位，
   // 顶点读到的是上一个 section 的尾巴或 0 —— 表现就是"方块表面纯黑、贴图错乱"。
   const tile = new Float32Array(vertices * 2);
-  const index = new Uint32Array(indices);
+  // 16 位索引够用就用 16 位：GPU 读索引的带宽减半，数值完全一样
+  const index = vertices <= 0xffff ? new Uint16Array(indices) : new Uint32Array(indices);
   const byteLight = entries.every((entry) => entry.arrays.light instanceof Uint8Array);
   const byteShade = entries.every((entry) => entry.arrays.shade instanceof Uint8Array);
   const light = byteLight ? new Uint8Array(vertices * 2) : new Float32Array(vertices * 2);

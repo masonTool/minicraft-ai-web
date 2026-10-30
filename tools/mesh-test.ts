@@ -344,6 +344,11 @@ console.log('\n[区段遮挡剔除：连通图 + 搜索（批次 20261030-2316�
   });
   mergeSectionLayer([{ section: 1, arrays: quad() }, { section: 5, arrays: quad() }], true, ranges);
   check('地表在前合并 + 记录区间', ranges.join(',') === '5,0,6,1,6,6', ranges.join(','));
+  {
+    const small = mergeSectionLayer([{ section: 1, arrays: quad() }]);
+    check('顶点 < 65536 的合并网格用 16 位索引', small?.index instanceof Uint16Array);
+    check('16 位索引数值不变', small?.index.join(',') === '0,1,2,0,2,3');
+  }
 
   // 包围球收紧（批次 20261031）：只套住要画的 section，且把这些顶点全部包住
   const geo = new THREE.BufferGeometry();
