@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { createGeometry, meshSection, type GeometryArrays } from '../core/mesh/ChunkMesher.ts';
+import { createGeometry, meshSection, setOpaqueTiles, type GeometryArrays } from '../core/mesh/ChunkMesher.ts';
 import {
   SECTION_COUNT,
   WORLD_MIN_Y,
@@ -137,8 +137,29 @@ export class ChunkRenderer {
     private readonly solidMaterial: THREE.Material,
     private readonly translucentMaterial: THREE.Material,
     private readonly meshPool: MeshWorkerPool | null = null,
+    /** 全不透明整格面的材质（无 discard，批次 20261030-2316）；不传就和镂空层共用 */
+    private readonly opaqueMaterial: THREE.Material | null = null,
   ) {
     this.maxInFlight = Math.max(4, (meshPool?.size ?? 1) * 3);
+  }
+
+  /** 已经同步给网格器的"全不透明贴图"版本（与 `atlas.opaqueTilesRevision` 对齐） */
+  private opaqueRevision = 0;
+
+  /**
+   * 图集的全不透明贴图集合变了（首次铺像素 / 资源包增删）就同步给网格器，
+   * 已经画过的区块整批重刷——否则旧网格里该进不透明层的面还留在镂空层（不错，只是慢），
+   * 反过来资源包把某张贴图改出洞时，旧网格会把洞画成实心（这个是错）。
+   */
+  private syncOpaqueTiles(): void {
+    if (this.opaqueMaterial === null) return;
+    const revision = this.atlas.opaqueTilesRevision;
+    if (revision === this.opaqueRevision) return;
+    this.opaqueRevision = revision;
+    const names = [...this.atlas.opaqueTiles];
+    setOpaqueTiles(names);
+    this.meshPool?.setOpaqueTiles(names);
+    if (this.rendered.size > 0) this.enqueueAllRendered();
   }
 
   /** 供调试面板显示：当前在途的网格化请求数 */
@@ -224,6 +245,8 @@ export class ChunkRenderer {
    * @param budget 本帧最多派发的区块数
    */
   processQueue(budget: number, centerCx: number, centerCz: number): void {
+    // 每帧都要看一眼（只比一个整数）：资源包改贴图时不一定有区块在排队
+    this.syncOpaqueTiles();
     if (this.queue.length === 0) return;
 
     for (const item of this.queue) {
@@ -329,14 +352,17 @@ export class ChunkRenderer {
     const meshes: THREE.Mesh[] = [];
     let triangles = 0;
 
+    const opaques: Array<{ section: number; arrays: GeometryArrays }> = [];
     const solids: Array<{ section: number; arrays: GeometryArrays }> = [];
     const translucent: Array<{ section: number; arrays: GeometryArrays }> = [];
     for (const section of response.sections) {
+      if (section.opaque) opaques.push({ section: section.section, arrays: section.opaque });
       if (section.solid) solids.push({ section: section.section, arrays: section.solid });
       if (section.translucent) translucent.push({ section: section.section, arrays: section.translucent });
     }
 
     for (const [layer, material] of [
+      [opaques, this.opaqueMaterial ?? this.solidMaterial],
       [solids, this.solidMaterial],
       [translucent, this.translucentMaterial],
     ] as const) {
@@ -366,9 +392,16 @@ export class ChunkRenderer {
 
     for (let section = 0; section < SECTION_COUNT; section++) {
       if (chunk.sectionIsEmpty(section)) continue;
-      const { solid, translucent } = meshSection(chunk, section, this.atlas, this.world);
+      const { opaque, solid, translucent } = meshSection(chunk, section, this.atlas, this.world);
       const baseY = WORLD_MIN_Y + section * 16;
 
+      if (opaque) {
+        const mesh = new THREE.Mesh(opaque, this.opaqueMaterial ?? this.solidMaterial);
+        this.freezeAt(mesh, offsetX, baseY, offsetZ);
+        mesh.frustumCulled = true;
+        meshes.push(mesh);
+        triangles += opaque.index!.count / 3;
+      }
       if (solid) {
         const mesh = new THREE.Mesh(solid, this.solidMaterial);
         this.freezeAt(mesh, offsetX, baseY, offsetZ);

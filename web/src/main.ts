@@ -2979,6 +2979,7 @@ class App {
       this.solidMaterial.material,
       this.translucentMaterial.material,
       this.meshPool,
+      this.solidMaterial.opaqueMaterial,
     );
     this.scene.add(this.outline.object);
     this.scene.add(this.mobHealthBar.object);

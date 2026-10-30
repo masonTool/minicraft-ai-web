@@ -49,10 +49,26 @@ export class MeshWorkerPool {
   ): void {
     const id = this.nextId++;
     this.callbacks.set(id, onDone);
-    const worker = this.workers[this.roundRobin++ % this.workers.length]!;
+    const index = this.roundRobin++ % this.workers.length;
+    const worker = this.workers[index]!;
     const message: MeshRequest = { type: 'mesh', id, cx, cz, chunks };
+    // 贴图集合只在"这个 worker 还没收到当前版本"时随请求带一次（消息按序到达）
+    if (this.opaqueTiles !== null && this.sentOpaque[index] !== this.opaqueVersion) {
+      message.opaqueTiles = this.opaqueTiles;
+      this.sentOpaque[index] = this.opaqueVersion;
+    }
     worker.postMessage(message, transfer);
   }
+
+  /** 全不透明贴图名变了（批次 20261030-2316）：下一条请求起各 worker 依次换上 */
+  setOpaqueTiles(names: string[]): void {
+    this.opaqueTiles = names;
+    this.opaqueVersion++;
+  }
+
+  private opaqueTiles: string[] | null = null;
+  private opaqueVersion = 0;
+  private readonly sentOpaque: number[] = [];
 
   dispose(): void {
     for (const worker of this.workers) worker.terminate();

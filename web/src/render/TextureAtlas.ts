@@ -6570,6 +6570,31 @@ export class TextureAtlas {
    * 玩家装过的材质包在一次切后台后失效，这种 bug 几乎没人能联想到。
    */
   private readonly overrides = new Map<string, ImageData>();
+
+  /**
+   * 16×16 每个像素 alpha 都是 255 的贴图（批次 20261030-2316）。
+   *
+   * 网格器据此把整格面分进"不透明层"（材质里没有 discard，吃得到 early-Z）。
+   * 判据只看像素、不看方块属性：树叶是 `opaque`（要剔除相邻面）但贴图有洞。
+   * 资源包覆盖过的贴图按覆盖后的像素重判——包把石头画出洞，石头就回镂空层。
+   */
+  private opaqueSet = new Set<string>();
+  private opaqueRevisionValue = 0;
+
+  get opaqueTiles(): ReadonlySet<string> {
+    return this.opaqueSet;
+  }
+
+  /** 集合内容每变一次 +1（首次铺像素、资源包增删） */
+  get opaqueTilesRevision(): number {
+    return this.opaqueRevisionValue;
+  }
+
+  private setOpaque(next: Set<string>): void {
+    if (next.size === this.opaqueSet.size && [...next].every((name) => this.opaqueSet.has(name))) return;
+    this.opaqueSet = next;
+    this.opaqueRevisionValue++;
+  }
   /** 上下文正丢着（等 `contextrestored` 再画） */
   private repaintPending = false;
   /** 是否已经真正画过像素（主菜单阶段可以延迟到进世界再画） */
@@ -6769,6 +6794,20 @@ export class TextureAtlas {
       ctx.putImageData(pixels, origin.x, origin.y);
     }
 
+    const opaque = new Set<string>();
+    for (let index = 0; index < TILE_ORDER.length; index++) {
+      const name = TILE_ORDER[index]!;
+      const override = this.overrides.get(name);
+      if (override) {
+        if (allOpaque(override.data, 0, TILE_SIZE, TILE_SIZE)) opaque.add(name);
+        continue;
+      }
+      const originX = (index % this.columns) * TILE_SIZE;
+      const originY = Math.floor(index / this.columns) * TILE_SIZE;
+      if (allOpaque(data, (originY * canvas.width + originX) * 4, canvas.width, TILE_SIZE)) opaque.add(name);
+    }
+    this.setOpaque(opaque);
+
     // 取样点取自"刚铺完的程序化像素"：分散在几个窗口里，只要还有一个不透明
     // 就说明画布内容还在（见 `canvasProbe.ts` 的取舍）
     this.samples = pickOpaqueSamples(data, canvas.width);
@@ -6920,7 +6959,12 @@ export class TextureAtlas {
     const originX = (index % this.columns) * TILE_SIZE;
     const originY = Math.floor(index / this.columns) * TILE_SIZE;
     try {
-      this.overrides.set(tile, this.context.getImageData(originX, originY, TILE_SIZE, TILE_SIZE));
+      const pixels = this.context.getImageData(originX, originY, TILE_SIZE, TILE_SIZE);
+      this.overrides.set(tile, pixels);
+      const next = new Set(this.opaqueSet);
+      if (allOpaque(pixels.data, 0, TILE_SIZE, TILE_SIZE)) next.add(tile);
+      else next.delete(tile);
+      this.setOpaque(next);
     } catch {
       // 画布正丢着（极罕见）：放弃记这一张，重画时退回程序化贴图
     }
@@ -7191,6 +7235,15 @@ PAINTERS.jukebox_top = (x, y) => {
  * 几何那边已经画成"两条交叉的薄片"，这张图只负责"藤条上有叶子"：
  * 中间一根主茎 + 两侧零星的叶子；带浆果的那张在叶间点上几颗橙色浆果。
  */
+/** 从 `offset` 起、行宽 `stride` 像素的一块 TILE_SIZE×TILE_SIZE 区域是否每个像素 alpha 都是 255 */
+function allOpaque(data: Uint8ClampedArray, offset: number, stride: number, size: number): boolean {
+  for (let y = 0; y < size; y++) {
+    const row = offset + y * stride * 4;
+    for (let x = 0; x < size; x++) if (data[row + x * 4 + 3] !== 255) return false;
+  }
+  return true;
+}
+
 function caveVinesPainter(withBerries: boolean): Painter {
   return (x, y) => {
     // 主茎：x 7~8

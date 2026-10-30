@@ -51,7 +51,7 @@ export interface TileUvSource {
   tileOrigin(tile: string): [number, number];
 }
 
-export type RenderLayer = 'solid' | 'translucent';
+export type RenderLayer = 'opaque' | 'solid' | 'translucent';
 
 /** 网格化时需要从世界取样的数据 */
 export interface MeshContext {
@@ -264,6 +264,25 @@ function layerOf(id: number): RenderLayer {
   return blockDef(id).translucent ? 'translucent' : 'solid';
 }
 
+/**
+ * 贴图 16×16 全不透明的贴图名（批次 20261030-2316）。
+ *
+ * 只有**整格方块**、且这一面的贴图在集合里，才进 `opaque` 层（没有 discard 的材质，
+ * 能吃到 early-Z）；其余非半透明面仍进 `solid`（镂空材质）。集合由主线程按图集像素
+ * 算好再下发（含资源包覆盖），没下发时为 null：一切照旧全进 `solid`，画面不会错。
+ */
+let opaqueTiles: ReadonlySet<string> | null = null;
+
+export function setOpaqueTiles(names: Iterable<string> | null): void {
+  opaqueTiles = names === null ? null : new Set(names);
+}
+
+function faceLayerOf(id: number, tile: string): RenderLayer {
+  const layer = layerOf(id);
+  if (layer === 'solid' && opaqueTiles !== null && opaqueTiles.has(tile)) return 'opaque';
+  return layer;
+}
+
 interface LayerBuffer {
   pos: number[];
   uv: number[];
@@ -278,6 +297,8 @@ function newBuffer(): LayerBuffer {
 }
 
 export interface MeshResult {
+  /** 全不透明贴图的整格面（无 discard 材质）；未下发 `setOpaqueTiles` 时恒为 null */
+  opaque: THREE.BufferGeometry | null;
   solid: THREE.BufferGeometry | null;
   translucent: THREE.BufferGeometry | null;
 }
@@ -589,7 +610,7 @@ function greedyMesh(
           if (neighborId === id && def.translucent) continue;
 
           const tile = faceTileOn(id, ctx.getBlockState(originX + x, worldY, originZ + z), face.dir, face.tile);
-          const layerId = layerOf(id);
+          const layerId = faceLayerOf(id, tile);
           // 四个角直接写进复用对象，不走 `face.corners.map(...)`（那会每面多分配 1 个数组）
           const corners = face.corners;
           const c0 = cornerLighting(
@@ -691,10 +712,14 @@ export function meshSection(
   atlas: TileUvSource,
   ctx: MeshContext,
 ): MeshResult {
-  if (section < 0 || section >= SECTION_COUNT) return { solid: null, translucent: null };
-  if (chunk.sectionIsEmpty(section)) return { solid: null, translucent: null };
+  if (section < 0 || section >= SECTION_COUNT) return { opaque: null, solid: null, translucent: null };
+  if (chunk.sectionIsEmpty(section)) return { opaque: null, solid: null, translucent: null };
 
-  const buffers: Record<RenderLayer, LayerBuffer> = { solid: newBuffer(), translucent: newBuffer() };
+  const buffers: Record<RenderLayer, LayerBuffer> = {
+    opaque: newBuffer(),
+    solid: newBuffer(),
+    translucent: newBuffer(),
+  };
 
   const baseY = Chunk.sectionMinY(section);
   const originX = chunk.cx * 16;
@@ -830,6 +855,7 @@ export function meshSection(
   }
 
   return {
+    opaque: buildGeometry(buffers.opaque),
     solid: buildGeometry(buffers.solid),
     translucent: buildGeometry(buffers.translucent),
   };

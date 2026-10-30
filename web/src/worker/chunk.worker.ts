@@ -15,7 +15,7 @@ import '../polyfill.ts';
 import type { DimensionId } from '../core/gen/Dimension.ts';
 import type { WorldType } from '../core/gen/WorldType.ts';
 import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../core/gen/TerrainGenerator.ts';
-import { meshSection, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
+import { meshSection, setOpaqueTiles, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING } from '../render/atlasLayout.ts';
 import { tileOriginAt } from '../render/atlasCoords.ts';
@@ -65,6 +65,8 @@ export interface MeshRequest {
   cx: number;
   cz: number;
   chunks: MeshChunkPayload[];
+  /** 全不透明贴图名（只在变化后的第一条请求上带，见 MeshWorkerPool） */
+  opaqueTiles?: string[];
 }
 
 /** 一个渲染层的顶点数据 */
@@ -79,6 +81,7 @@ export interface GeometryPayload {
 
 export interface MeshSectionPayload {
   section: number;
+  opaque: GeometryPayload | null;
   solid: GeometryPayload | null;
   translucent: GeometryPayload | null;
 }
@@ -209,11 +212,12 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
   if (chunk) {
     for (let section = 0; section < SECTION_COUNT; section++) {
       if (chunk.sectionIsEmpty(section)) continue;
-      const { solid, translucent } = meshSection(chunk, section, tileUv, world);
+      const { opaque, solid, translucent } = meshSection(chunk, section, tileUv, world);
+      const opaquePayload = collect(opaque);
       const solidPayload = collect(solid);
       const translucentPayload = collect(translucent);
-      if (solidPayload || translucentPayload) {
-        sections.push({ section, solid: solidPayload, translucent: translucentPayload });
+      if (opaquePayload || solidPayload || translucentPayload) {
+        sections.push({ section, opaque: opaquePayload, solid: solidPayload, translucent: translucentPayload });
       }
     }
   }
@@ -269,6 +273,7 @@ ctx.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   }
 
   if (req.type === 'mesh') {
+    if (req.opaqueTiles) setOpaqueTiles(req.opaqueTiles);
     const { response, transfer } = meshChunk(req);
     ctx.postMessage(response, transfer);
   }

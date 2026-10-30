@@ -182,9 +182,11 @@ void main() {
   // mipmap 的 alpha 是**覆盖率平均**：43% 覆盖率的草到 mip2 就掉到 0.2~0.4，
   // 被 0.5 的阈值整块 discard —— 剪影随距离被一点点啃掉，走动时洞的位置还跟着跳，
   // 这就是"草的颗粒感"。按 LOD 把 alpha 乘法抬回去：alpha=0 恒等（空白永远空白），
-  // 实心方块 alpha=1 也恒等（所以不需要为它单开一层材质）。
+  // 实心方块 alpha=1 也恒等（全不透明的整格面另走 VOXEL_OPAQUE，这段根本不编译）。
   //
   // 常量与 alphaCoverage.ts 同源（那边是离线断言的唯一口径）。
+  float bayer = bayer4(gl_FragCoord.xy);
+#ifndef VOXEL_OPAQUE
   float alphaLod = clamp(log2(max(rho, 0.0001)), 0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)});
   float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));
 
@@ -201,9 +203,12 @@ void main() {
   // ⚠️ 这个图案和最后"输出抖色"用的是**同一个** gl_FragCoord 图案（批次 524 + 520），
   // 所以只算一次、两处复用（ditherWithBayer）。以前这里各算一遍 bayer4，
   // 那等于整屏多算十几个 ALU —— 而地形是占屏面积最大的那一个着色器。
-  float bayer = bayer4(gl_FragCoord.xy);
   float threshold = uAlphaTest + (bayer - 0.5) * uAlphaDither;
   if (covered < threshold) discard;
+#endif
+  // ⚠️ VOXEL_OPAQUE（批次 20261030-2316）：只装"贴图 16×16 全不透明"的整格面。
+  // 着色器里只要出现 discard，驱动就得把深度测试推迟到着色之后（late-Z），
+  // 被挡住的像素也要把采样/光照/雾整套跑完才丢——所以这一层整段编译掉。
 
   // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
   // 洞里只有块光、白天只有天光。
@@ -236,7 +241,11 @@ void main() {
   // 抖色（批次 520）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带，
   // ±0.5/255 的有序抖动把它们打散，肉眼不可见。见 dither.ts
   // 图案复用上面算好的那一份（见 float bayer 那段）。
+#ifdef VOXEL_OPAQUE
+  gl_FragColor = vec4(ditherWithBayer(color, bayer), 1.0);
+#else
   gl_FragColor = vec4(ditherWithBayer(color, bayer), texel.a);
+#endif
 }
 `;
 
@@ -251,6 +260,8 @@ export interface VoxelMaterialOptions {
 
 export class VoxelMaterial {
   readonly material: THREE.ShaderMaterial;
+  /** 全不透明整格面专用（没有 discard）；半透明实例上就是 `material` 本身 */
+  readonly opaqueMaterial: THREE.ShaderMaterial;
   private readonly uniforms: Record<string, THREE.IUniform>;
   /** 构造时的默认最低亮度（切回主世界要还原） */
   readonly defaultMinBrightness: number;
@@ -297,6 +308,20 @@ export class VoxelMaterial {
 
     this.defaultMinBrightness = translucent ? 0.32 : 0.06;
 
+    // 不透明层（批次 20261030-2316）：同一份 uniforms、同一份源码，只多一个宏把
+    // discard 编译掉。**先于** `material` 创建：three 对不透明物体按 material.id 升序画，
+    // 遮挡者（满屏的石头/泥土/草方块）先写深度，镂空层再画时被挡住的像素在着色前就被剔掉。
+    const opaque = translucent
+      ? null
+      : new THREE.ShaderMaterial({
+          uniforms: this.uniforms,
+          vertexShader: VERTEX_SHADER,
+          fragmentShader: FRAGMENT_SHADER,
+          defines: { VOXEL_OPAQUE: '' },
+          fog: false,
+          lights: false,
+        });
+
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: VERTEX_SHADER,
@@ -307,6 +332,7 @@ export class VoxelMaterial {
       fog: false,
       lights: false,
     });
+    this.opaqueMaterial = opaque ?? this.material;
   }
 
   /**
