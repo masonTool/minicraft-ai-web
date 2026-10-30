@@ -55,6 +55,10 @@ export class ServerListPanel {
   private readonly seen = new Set<string>();
   private token = 0;
   private scanning = false;
+  /** 还在等 `/rooms` 的服务器数量：用来决定"扫描完了到底有没有房间" */
+  private pendingRows = 0;
+  /** 上一轮扫描耗时（异步补行时状态栏要复用它） */
+  private lastSeconds = '0.0';
   private port = 8887;
 
   /** 点中某一项：宿主把内容填进左侧表单（列表常驻，不关） */
@@ -186,7 +190,7 @@ export class ServerListPanel {
 
     const startedAt = performance.now();
     try {
-      const found = await scanSubnet(
+      await scanSubnet(
         base,
         { reach: browserReach, now: () => performance.now() },
         {
@@ -199,13 +203,13 @@ export class ServerListPanel {
         },
       );
       if (token !== this.token) return;
-      const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
-      if (found.length > 0) {
-        this.status.textContent = tp('server.found', { count: String(found.length), seconds });
-        this.status.classList.remove('empty');
-      } else {
-        this.showEmpty();
-      }
+      /*
+       * 状态栏的"找到 N 台"改成**按实际画出来的行**计，不按扫描到的服务器数：
+       * 没有房间的服务器现在不显示，用 found.length 会报出一个玩家看不见的数字。
+       * 行是异步补进来的，所以这里只存耗时，由 `settleStatus()` 在每行落地时刷新。
+       */
+      this.lastSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+      this.settleStatus();
     } finally {
       if (token === this.token) this.scanning = false;
     }
@@ -249,6 +253,22 @@ export class ServerListPanel {
     return { group, body };
   }
 
+  /**
+   * 按"实际显示的行"刷新状态栏；一台都没有且没有在途请求时才显示"没找到"。
+   *
+   * 为什么不直接用扫描结果：没有房间的服务器现在被过滤掉，扫描到 3 台但 0 个房间时
+   * 状态栏必须说"没找到"，而不是"找到 3 台"然后下面空着。
+   */
+  private settleStatus(): void {
+    const count = this.lanList.querySelectorAll('.server-list-host').length;
+    if (count === 0) {
+      if (this.pendingRows === 0) this.showEmpty();
+      return;
+    }
+    this.status.textContent = tp('server.found', { count: String(count), seconds: this.lastSeconds });
+    this.status.classList.remove('empty');
+  }
+
   private showEmpty(): void {
     this.status.classList.add('empty');
     this.status.replaceChildren();
@@ -276,6 +296,7 @@ export class ServerListPanel {
    * 表现是同一台机器在列表里出现好几遍）。
    */
   private appendServerRow(server: DiscoveredServer, fromPeer = false): void {
+    const token = this.token;
     const address = server.host;
     // 只认私网 / 回环：组播里偶尔会混进奇怪的地址（NAT、虚拟网卡），不要画到列表里
     if (!/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(address)) return;
@@ -310,9 +331,20 @@ export class ServerListPanel {
     const rooms = document.createElement('div');
     rooms.className = 'server-list-rooms';
     host.append(row, rooms);
-    this.lanList.append(host);
 
-    void this.loadRooms(address, port, rooms, fromPeer);
+    /*
+     * **没有房间的服务器不显示**（2026-10-30 用户："看到它也进不去"）。
+     *
+     * 所以先不把它挂进列表：等 `/rooms` 回来，有房间才 append。
+     * 反过来"先挂上、拉空了再删"会在列表里闪一下，比不显示更晃眼。
+     */
+    this.pendingRows += 1;
+    void this.loadRooms(address, port, rooms, fromPeer).then((roomCount) => {
+      if (token !== this.token) return;
+      this.pendingRows -= 1;
+      if (roomCount > 0) this.lanList.append(host);
+      this.settleStatus();
+    });
   }
 
   /** 高亮当前选中的那一行（服务器行或房间行互斥） */
@@ -329,20 +361,21 @@ export class ServerListPanel {
     port: number,
     container: HTMLDivElement,
     fromPeer: boolean,
-  ): Promise<void> {
+  ): Promise<number> {
     const token = this.token;
     const url = `ws://${address}:${port}`;
     let maxPlayers = 10;
+    let roomCount = 0;
     try {
       const endpoint = roomsEndpoint(url);
-      if (endpoint === null) return;
+      if (endpoint === null) return 0;
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 2500);
       const response = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
       window.clearTimeout(timer);
-      if (token !== this.token) return;
+      if (token !== this.token) return 0;
       const parsed = parseRoomsResponse(await response.json());
-      if (parsed === null || token !== this.token) return;
+      if (parsed === null || token !== this.token) return 0;
       maxPlayers = parsed.maxPlayers;
       if (parsed.rooms.length === 0) {
         const empty = document.createElement('div');
@@ -356,8 +389,9 @@ export class ServerListPanel {
           ),
         );
       }
+      roomCount = parsed.rooms.length;
     } catch {
-      if (token !== this.token) return;
+      if (token !== this.token) return 0;
       const failed = document.createElement('div');
       failed.className = 'server-list-room-empty';
       failed.textContent = t('server.roomsFailed');
@@ -366,6 +400,7 @@ export class ServerListPanel {
     // 顺手借这台服务器的耳朵：它用 UDP 组播听到的其它设备（浏览器自己发不出 UDP）。
     // 只听**一层**：peer 来源的服务器不再扩散，否则会绕回来重复列出同一台。
     if (!fromPeer) void this.loadPeers(url, token);
+    return roomCount;
   }
 
   /**

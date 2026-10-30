@@ -232,7 +232,7 @@
     "android:test": "cd server/android && ./gradlew connectedDebugAndroidTest",
     "android:apk": "npm run build:web && npm run pack && cd android && ./gradlew assembleDebug",
     "android:aab": "MINICRAFT_RELEASE=1 npm run build:web && MINICRAFT_RELEASE=1 npm run pack && cd android && ./gradlew bundleRelease",
-    "pack": "esbuild tools/pack-bundle.ts --bundle --platform=node --format=esm --outfile=.tmp/pack-bundle.mjs --log-level=error && node .tmp/pack-bundle.mjs",
+    "pack": "esbuild tools/pack-bundle.ts --bundle --platform=node --format=esm --outfile=.tmp/pack-bundle.mjs --log-level=error && node .tmp/pack-bundle.mjs && node tools/build-desktop-server.mjs",
     "test:pack": "node tools/pack-test.mjs"
   },
   "dependencies": {

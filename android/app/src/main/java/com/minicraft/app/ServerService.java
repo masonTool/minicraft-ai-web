@@ -86,8 +86,35 @@ public class ServerService extends Service {
             }, "minicraft-server");
             worker.start();
         }
-        // 被系统杀掉后自动重启（玩家的房间不该因为一次内存回收就消失）
-        return START_STICKY;
+        /*
+         * **不要** START_STICKY（2026-10-30 用户口径：主机的服务器只在主机玩着的时候存在）。
+         *
+         * 原来这里是 STICKY，注释写着"玩家的房间不该因为一次内存回收就消失"。但进程被杀之后
+         * 重启出来的服务端是**空的**：没有房主连接、没有房间，端口却重新绑上了 LAN，
+         * 邻居扫描能扫到一台连不进任何房间的服务器——所谓"网络上残留"就是这么来的。
+         * 主机不在 = 房间不存在，宁可让队友看到房间消失，也不要挂一个假服务器在那儿。
+         */
+        return START_NOT_STICKY;
+    }
+
+    /**
+     * 用户从最近任务里划掉应用 → 立刻停服。
+     *
+     * manifest 里已经把 `stopWithTask` 改成 true，正常情况系统会直接 stopService；
+     * 这里再显式 `stopSelf()` 是兜底：不同 ROM 对 stopWithTask 的处理有出入，
+     * 而这里多做一次的代价只是"已经要停了，再喊一声"。
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.i(TAG, "任务被移除，停止联机服务");
+        try {
+            NativeServer.stopServer();
+        } catch (Throwable error) {
+            Log.w(TAG, "停止服务端出错", error);
+        }
+        port = 0;
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override

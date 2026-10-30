@@ -80,7 +80,11 @@ pub const MAX_ENTITY_REMOVE_KEYS: usize = 64;
 pub const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 
 /// 断线宽限期默认 30 秒（测试用 `GRACE_MS` 压到几百毫秒）。
-pub const GRACE_MS_DEFAULT: u64 = 30_000;
+/// 宽限期：主机断线后房间保留多久（2026-10-30 与 Node 侧同步改成 10 秒）。
+///
+/// 留宽限是为了扛住"切后台/wifi 抖一下"；只留 10 秒是因为主机不在游戏里时，
+/// 队友不该对着一个进不去的空房间等半分钟。
+pub const GRACE_MS_DEFAULT: u64 = 10_000;
 
 /// 一天多长（毫秒）：20 分钟，与客户端 `dayLengthSeconds` 默认值一致。
 pub const DAY_LENGTH_MS: f64 = 20.0 * 60.0 * 1000.0;

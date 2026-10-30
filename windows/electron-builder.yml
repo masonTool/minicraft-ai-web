@@ -13,6 +13,8 @@ directories:
 files:
   - main.mjs
   - bundle.mjs
+  - game-server.mjs
+  - preload.cjs
   - package.json
 
 extraResources:

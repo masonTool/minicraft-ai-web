@@ -238,6 +238,22 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        /*
+         * 屏幕转一下、系统回收重建这类销毁**不该**停服（`isChangingConfigurations()`）；
+         * 玩家真正退出应用（返回键 / 被系统结束）才停。
+         *
+         * 为什么由壳来做而不是等网页：网页那边的 `dispose()` 只在"退出世界"时触发，
+         * 玩家直接按返回键关掉应用根本走不到那里。而服务器只在主机玩着的时候才该存在，
+         * 所以这里必须补一刀（用户 2026-10-30 的口径）。
+         *
+         * 不在这里处理的三件事：
+         *  · 切后台（Home 键）：不停服——看条消息就断队友线太糟；
+         *  · 划掉最近任务：由 `ServerService.onTaskRemoved` + `stopWithTask` 负责；
+         *  · 进程被杀：服务是 START_NOT_STICKY，不会自己复活。
+         */
+        if (isFinishing() && !isChangingConfigurations()) {
+            ServerControl.stop(this);
+        }
         if (webView != null) {
             webView.destroy();
             webView = null;

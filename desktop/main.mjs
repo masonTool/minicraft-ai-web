@@ -18,10 +18,11 @@
  * 之后每个 HTTP 请求都从内存里切一份返回——**磁盘上从来没有明文**。
  */
 
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron';
+import { createGameServer } from './game-server.mjs';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { dirname, extname, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openBundle } from './bundle.mjs';
 
@@ -29,6 +30,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SMOKE = process.env.MINICRAFT_SMOKE === '1';
 /** 固定端口：换了就等于换 origin，IndexedDB 存档全部作废 */
 const PORT = 18764;
+
+/**
+ * 联机服务端（玩家当房主时才跑）。脚本由 `npm run pack` 用 esbuild 打成单文件，
+ * 跟着 `build/rt` 一起进安装包——这样不依赖用户机器上装了 Node。
+ */
+const GAME_SERVER_SCRIPT = app.isPackaged
+  ? join(process.resourcesPath, 'rt', 'minicraft-server.cjs')
+  : join(HERE, '..', 'build', 'rt', 'minicraft-server.cjs');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -102,6 +111,38 @@ if (!singleInstance) {
   });
 }
 
+/**
+ * 宿主桥的桌面实现（与 Android 的 `JsHostBridge` 一一对应）。
+ *
+ * 全部用 `sendSync`：网页侧契约就是同步（见 `HostBridge.ts` —— `hasHostBridge()`
+ * 在渲染期就被调用，改异步要翻整条 UI 路径）。
+ */
+const gameServer = createGameServer({
+  scriptPath: GAME_SERVER_SCRIPT,
+  dataDir: join(app.getPath('userData'), 'world'),
+  log: (message) => console.log(message),
+});
+
+ipcMain.on('mc:localIp', (event) => {
+  const ip = gameServer.ip();
+  event.returnValue = ip === null ? '{"ip":null}' : `{"ip":"${ip}"}`;
+});
+ipcMain.on('mc:serverPort', (event) => {
+  event.returnValue = `{"port":${gameServer.port()}}`;
+});
+ipcMain.on('mc:startServer', (event) => {
+  gameServer.start();
+  event.returnValue = '{"started":true}';
+});
+ipcMain.on('mc:stopServer', (event) => {
+  gameServer.stop();
+  event.returnValue = '{"stopped":true}';
+});
+
+// 关掉应用 = 主机离开游戏，服务端必须跟着走，否则局域网里会留一台连不进的空服务器
+app.on('before-quit', () => gameServer.stop());
+app.on('will-quit', () => gameServer.stop());
+
 app.whenReady().then(async () => {
   if (app.isPackaged) Menu.setApplicationMenu(null);
 
@@ -134,6 +175,8 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      // 与 Android 同形状的宿主导出：`window.MinicraftAndroid`
+      preload: join(HERE, 'preload.cjs'),
     },
   });
 
