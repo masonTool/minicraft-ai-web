@@ -197,7 +197,12 @@ void main() {
   // 这些点还会被覆盖率再抹一次。
   //
   // 半透明层 uAlphaTest = 0、uAlphaDither = 0，这个分支对它完全透明（永远不 discard）。
-  float threshold = uAlphaTest + (bayer4(gl_FragCoord.xy) - 0.5) * uAlphaDither;
+  //
+  // ⚠️ 这个图案和最后"输出抖色"用的是**同一个** gl_FragCoord 图案（批次 524 + 520），
+  // 所以只算一次、两处复用（ditherWithBayer）。以前这里各算一遍 bayer4，
+  // 那等于整屏多算十几个 ALU —— 而地形是占屏面积最大的那一个着色器。
+  float bayer = bayer4(gl_FragCoord.xy);
+  float threshold = uAlphaTest + (bayer - 0.5) * uAlphaDither;
   if (covered < threshold) discard;
 
   // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
@@ -230,7 +235,8 @@ void main() {
 
   // 抖色（批次 520）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带，
   // ±0.5/255 的有序抖动把它们打散，肉眼不可见。见 dither.ts
-  gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), texel.a);
+  // 图案复用上面算好的那一份（见 float bayer 那段）。
+  gl_FragColor = vec4(ditherWithBayer(color, bayer), texel.a);
 }
 `;
 

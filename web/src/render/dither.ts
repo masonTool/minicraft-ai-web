@@ -39,8 +39,18 @@ float bayer2(vec2 a) {
 float bayer4(vec2 a) {
   return bayer2(0.5 * a) * 0.25 + bayer2(a);
 }
-/** 最终颜色 + 一个量化级以内的有序抖动 */
+/**
+ * 最终颜色 + 一个量化级以内的有序抖动。
+ *
+ * ⚠️ 已经自己算过 bayer4 的地方用这个版本，**不要再调一次 ditherColor**：
+ * 地形着色器要拿同一个图案既做"镂空阈值抖动"又做"输出抖色"（批次 524 + 520），
+ * 两次各算一遍 bayer4 等于整屏多算十几个 ALU（2026-10-30 起改为复用）。
+ */
+vec3 ditherWithBayer(vec3 color, float bayer) {
+  return color + (bayer - 0.5) / ${DITHER_LEVELS}.0;
+}
+/** 最终颜色 + 一个量化级以内的有序抖动（内部自己算图案） */
 vec3 ditherColor(vec3 color, vec2 fragCoord) {
-  return color + (bayer4(fragCoord) - 0.5) / ${DITHER_LEVELS}.0;
+  return ditherWithBayer(color, bayer4(fragCoord));
 }
 `;

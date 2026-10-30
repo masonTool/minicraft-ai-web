@@ -712,7 +712,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
   );
   check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
   // 抖色（批次 520）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带
-  check('片元最后加了抖色', frag.includes('ditherColor(color, gl_FragCoord.xy)'));
+  check('片元最后加了抖色', frag.includes('ditherWithBayer(color, bayer)'));
   check('抖色幅度是一个量化级（1/255，再大就成颗粒了）', GLSL_DITHER.includes('/ 255.0'));
   check(
     '天空穹顶用同一段抖色（不能各写一版）',
@@ -740,6 +740,21 @@ console.log('\n[天空穹顶的绘制顺序（批次 20261026-0141）]');
   check(
     '穹顶默认开深度测试、不写深度',
     /depthTest:\s*true,\s*\n\s*depthWrite:\s*false,/.test(skySrc),
+  );
+
+  // 2026-10-30：穹顶整屏都在跑，逐像素的三处开销必须保持"已优化"的状态。
+  // 抬头看天时 `Chrome_InProcGp` 会顶到一核的 37.4%，是全场最高的一段。
+  // ⚠️ 上面那段说明本身写着 `normalize(uSunDir)` / `pow(x, 8.0)`，所以先剥掉 `//` 注释再判，
+  // 否则断言会被自己的一句话打红。
+  const skyCode = skySrc
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/, ''))
+    .join('\n');
+  check('霞光不再逐像素 normalize 一个已经单位长的 uniform', !/normalize\(uSunDir\)/.test(skyCode));
+  check('霞光不再用 pow(x, 8.0)（展开成三次乘法）', !/pow\([^)]*8\.0\)/.test(skyCode));
+  check(
+    '霞光整段被 uSunGlow > 0.0 挡住（一天里绝大多数时间它是 0）',
+    skyCode.includes('if (uSunGlow > 0.0) {'),
   );
 }
 
@@ -774,8 +789,14 @@ console.log('\n[镂空贴图的覆盖率补偿（批次 520）]');
   // 批次 524：硬阈值 + 屏幕空间抖色（草尖不再整片翻转）
   check(
     '阈值按屏幕空间 4×4 Bayer 打散（草尖不再整片翻）',
-    solid.material.fragmentShader.includes('float threshold = uAlphaTest + (bayer4(gl_FragCoord.xy) - 0.5) * uAlphaDither;') &&
+    solid.material.fragmentShader.includes('float threshold = uAlphaTest + (bayer - 0.5) * uAlphaDither;') &&
       solid.material.fragmentShader.includes('if (covered < threshold) discard;'),
+  );
+  // 2026-10-30：阈值抖动与输出抖色用的是同一个 gl_FragCoord 图案，
+  // 整屏各算一遍 bayer4 等于白算十几个 ALU（地形是占屏最大的着色器）
+  check(
+    '整屏只算一次 bayer4（阈值与输出抖色复用同一份图案）',
+    (solid.material.fragmentShader.match(/bayer4\(gl_FragCoord\.xy\)/g) ?? []).length === 1,
   );
   equal('实心层的抖动幅度 = ALPHA_DITHER_BAND', solid.material.uniforms.uAlphaDither!.value, ALPHA_DITHER_BAND);
   equal('半透明层不抖（那层没有 alphaTest，抖了只是白算）', translucent.material.uniforms.uAlphaDither!.value, 0);

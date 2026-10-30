@@ -108,9 +108,27 @@ ${GLSL_DITHER}
 void main() {
   float h = clamp(vDir.y, -1.0, 1.0);
   vec3 color = mix(uHorizon, uTop, smoothstep(-0.08, 0.5, h));
-  // 日出日落时太阳附近泛橙红（霞光）
-  float glow = pow(max(dot(normalize(vDir), normalize(uSunDir)), 0.0), 8.0) * uSunGlow;
-  color += vec3(1.0, 0.52, 0.22) * glow;
+
+  // ---- 日出日落时太阳附近泛橙红（霞光）
+  //
+  // 这个穹顶**整屏都在跑**（1.35M 像素/帧），所以下面三处都是按"每像素少算一次"改的，
+  // 而且改完的输出与原来**完全等价**。2026-10-30 真机实测：抬头看天时
+  // Chrome_InProcGp 会顶到一个核的 37.4%，是全场最高的那一段。
+  //
+  //  1) normalize(uSunDir) 删掉：Sky.update 写进去的就是 (cos t, sin t, 0)，
+  //     本来单位长（浮点误差 ~1e-7，乘在 0~0.9 的辉光上肉眼不可见）；
+  //  2) pow(x, 8.0) 展开成三次乘法：GLSL ES 不保证驱动把常数幂展开成乘法，
+  //     而 pow 是 log/exp 一对超越函数，在被整屏乘一遍时是这一段的成本主体；
+  //  3) 整段包进 uSunGlow > 0.0：它只在日出日落前后非零（见 applyEnvironment
+  //     的 sunGlow），一天里绝大多数时间这里有 1.35M 个像素在算"乘 0 的幂"。
+  //     uSunGlow 是 uniform，同一帧里所有像素走同一条分支，没有发散代价。
+  if (uSunGlow > 0.0) {
+    float d = max(dot(normalize(vDir), uSunDir), 0.0);
+    float d2 = d * d;
+    float d4 = d2 * d2;
+    color += vec3(1.0, 0.52, 0.22) * (d4 * d4 * uSunGlow);
+  }
+
   // 抖色（批次 520）：天空是横跨整个屏幕的平滑渐变，8 bit 输出在夜里会出台阶状
   // 色带（白天也有一条条很淡的横纹）。±0.5/255 的有序抖动把台阶打散。见 dither.ts
   gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), 1.0);

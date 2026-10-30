@@ -2877,11 +2877,19 @@ class App {
         powerPreference: isTouchDevice() ? 'default' : 'high-performance',
         alpha: false,
         /*
-         * 世界缩略图（用户 2026-10-27）：**必须开**，否则 `drawImage(canvas)` / `toDataURL`
-         * 拿到的是空白（实测存出来是全黑，`min=max=avg=0`）——帧缓冲在每帧结束后就被丢弃了。
-         * 代价是这一块显存不能复用；这个体量的像素游戏可以接受。
+         * 世界缩略图（用户 2026-10-27）曾经要求这里开 `true`：不开的话 `drawImage(canvas)`
+         * 抓到的是空白（实测存出来全黑，`min=max=avg=0`）。
+         *
+         * ⚠️ 2026-10-30 改成 `false`：这一位是**每帧**的代价，而缩略图一局只抓几次。
+         * 它和上面的 `antialias: true` 叠在一起时最贵——驱动不能把多重采样的背板直接
+         * 交给合成器，必须每帧先 resolve 到一块"不许复用"的缓冲再保住它。Pixel 2 XL
+         * 真机日志里 `Chrome_InProcGp`（WebGL 提交线程）占满一个核的 21.5%，
+         * 这一位是里面最容易拿掉的一块，而且**画面一个像素都不变**。
+         *
+         * 现在缩略图走"抓之前在同一任务里重画一帧"（见 `captureThumbnail`）——
+         * 缓冲在**本任务结束前**仍然是有效内容，`drawImage` 读得到。
          */
-        preserveDrawingBuffer: true,
+        preserveDrawingBuffer: false,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -17936,6 +17944,24 @@ class App {
   }
 
   /**
+   * 为抓缩略图**重画一帧世界**（2026-10-30，配合 `preserveDrawingBuffer: false`）。
+   *
+   * `preserveDrawingBuffer: false` 时背板在交给合成器之后就不保证还有内容，
+   * 所以 `drawImage(canvas)` 想看画面，只能**先画、再在同一个任务里读**。
+   * 调用方是主菜单的 `captureThumbnail`，只在存档时触发（自动保存 10 秒最多一次）。
+   *
+   * ⚠️ 只画世界这一趟：手持物品与色罩是叠在世界之上的两次独立 render，
+   * 缩到 160×90 的缩略图里看不出差别，少画两次就少两次状态切换。
+   * ⚠️ 这一帧**不推进**任何模拟（不调 `update`），只是把当前状态重新提交一遍，
+   * 所以不会让世界"多走一帧"。
+   */
+  renderForThumbnail(): void {
+    if (this.disposed) return;
+    this.renderer.autoClear = true;
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
    * 这一刻的渲染规模快照（批次 202）。
    *
    * 两处共用同一份口径：①诊断导出时的 `meta.perf`；②主循环里每 5 秒的 `perf/sample`。
@@ -20622,13 +20648,17 @@ async function boot(): Promise<void> {
   /**
    * 抓当前画面当缩略图（用户 2026-10-27）：缩到 160×90 的 jpeg，约 5~8KB。
    *
-   * ⚠️ WebGL canvas 在 `preserveDrawingBuffer: false` 时 `drawImage` 可能拿到**空白**。
-   * 所以这里不抛错、拿不到就返回 `null`（调用方退回程序化预览图），
-   * 而不是把一张黑图存进存档——那个看起来像"世界坏了"。
+   * ⚠️ WebGL canvas 在 `preserveDrawingBuffer: false` 时 `drawImage` 拿到的是**空白**
+   * （2026-10-30 之前的做法是把这个上下文位打开，代价是每帧一次背板 resolve）。
+   * 所以这里先让 App **重画一帧**：同一个任务里画完立刻 `drawImage`，背板还是有效内容。
+   * 拿不到就返回 `null`（调用方退回程序化预览图），而不是把一张黑图存进存档
+   * ——那个看起来像"世界坏了"。
    */
   const captureThumbnail = (): string | null => {
     const canvas = document.querySelector('canvas');
     if (canvas === null) return null;
+    // 画一帧再读；App 已经拆掉（退出到主菜单那一刻）就只剩旧内容，读不到就返回 null
+    currentApp?.renderForThumbnail();
     try {
       const small = document.createElement('canvas');
       small.width = 160;
