@@ -27,6 +27,11 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+
+        // 只打这两种 ABI（与上面的 rustTriples 对齐；x86_64 只在模拟器上有意义，不进发行包）
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -121,9 +126,15 @@ try {
 // 缺产物就在配置阶段报一句明确的错，而不是让 Gradle 编出一个没有 JNI 的 APK
 // （那个 APK 装上去点"开房"会 UnsatisfiedLinkError，最难查）。
 // ---------------------------------------------------------------------------
+/*
+ * 只出 arm64-v8a + armeabi-v7a（2026-10-30）。
+ *
+ * 去掉了 x86_64：本项目的分发目标是真机，x86_64 只对模拟器有意义，却让安装包多背
+ * 一份 ~2 MB 的 .so。32 位（armeabi-v7a）保留——存量低端机还有不少。
+ */
 def rustTriples = [
-        'arm64-v8a': 'aarch64-linux-android',
-        'x86_64'   : 'x86_64-linux-android',
+        'arm64-v8a'  : 'aarch64-linux-android',
+        'armeabi-v7a': 'armv7-linux-androideabi',
 ]
 
 tasks.register('copyRustLibs') {

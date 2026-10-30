@@ -22,6 +22,38 @@ cd android && ./gradlew assembleDebug
 #    → app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 出一个能发给别人的 APK
+
+**ABI**：只打 `arm64-v8a` + `armeabi-v7a`（2026-10-30 去掉 x86_64——那只对模拟器有意义，
+却让包多背 ~2 MB）。`build.gradle` 里 `rustTriples` 与 `ndk.abiFilters` 两处一起管这件事。
+
+仓库里的 `release.config.json` 故意是空的（fail-closed）。要发版就在本地填一次摘要：
+
+```bash
+# 1) 发行签名（只需生成一次；密钥放仓库外，别提交）
+keytool -genkeypair -keystore ~/.keys/minicraft-release.jks -alias minicraft \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass <口令> -keypass <口令> -dname "CN=Minicraft"
+
+# 2) 取证书摘要，填进 release.config.json 的 signingCertSha256
+keytool -list -v -keystore ~/.keys/minicraft-release.jks -alias minicraft \
+  -storepass <口令> | grep SHA256
+
+# 3) 正式口径打包 + 出包
+export MINICRAFT_KEYSTORE=~/.keys/minicraft-release.jks
+export MINICRAFT_KEYSTORE_PASSWORD=<口令>
+export MINICRAFT_KEY_ALIAS=minicraft
+export MINICRAFT_KEY_PASSWORD=<口令>
+MINICRAFT_RELEASE=1 npm run pack
+cd android && ./gradlew assembleRelease
+#   → app/build/outputs/apk/release/app-release.apk
+```
+
+> ⚠️ **必须带 `MINICRAFT_RELEASE=1`**：不带它时 `pack` 会把**本机 debug keystore** 的摘要
+> 也封一份，而那个 keystore 是公开的（`androiddebugkey` / 口令 `android`）——
+> 等于给任何人一把备用钥匙。正式的包必须是 **1 份包裹**。
+> 打包完把 `release.config.json` 改回空数组，别把发行摘要提交上去。
+
 ### 上架用的 AAB
 
 Play 只收 **已签名** 的 AAB，签名密钥不进仓库、走环境变量：
