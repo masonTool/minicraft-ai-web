@@ -1788,6 +1788,42 @@
       #boot-loading.failed .boot-bar { display: none; }
       #boot-loading.failed .boot-text { color: var(--danger); }
 
+      /*
+       * WebView 版本提示（页面内实现，不用原生弹窗）。
+       *
+       * 写法约束：这块界面要在**极老的 WebView 上**也要显示正常，所以故意不用
+       * `inset` / `dvh` / `min()` / `clamp()` / flex 的 `gap` —— 它们分别是
+       * Chrome 87 / 108 / 79 / 79 / 84 才有的。定位用四条边，居中用 flex（Chrome 29+ 即可），
+       * 间距用 margin，宽度用百分比 + max-width。
+       */
+      #webview-warn {
+        display: none;
+        position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 95; /* 压住启动遮罩(60)与竖屏/不支持提示(90) */
+        background: rgba(0, 0, 0, .74);
+        -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+        -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
+      }
+      #webview-warn.show { display: -webkit-box; display: -webkit-flex; display: flex; }
+      #webview-warn .warn-card {
+        width: 86%; max-width: 360px;
+        padding: 18px 18px 12px;
+        background: #1b2027; color: #e6e6e6;
+        border: 3px solid #3a424d; box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+        font-size: 14px; line-height: 1.6; text-align: left;
+        box-sizing: border-box;
+      }
+      #webview-warn .warn-title { font-size: 16px; font-weight: bold; color: #fff; margin: 0 0 8px; }
+      #webview-warn .warn-body { color: #b9c0c9; margin: 0 0 14px; }
+      #webview-warn .warn-actions { text-align: right; }
+      #webview-warn button {
+        font: inherit; font-size: 14px; padding: 7px 14px; margin: 0 0 0 8px;
+        background: #2b333d; color: #e6e6e6; border: 2px solid #4a5462;
+        border-radius: 0; cursor: pointer;
+      }
+      #webview-warn button.primary { background: #3b7dd8; border-color: #5a97e8; color: #fff; }
+
       #hotbar {
         position: absolute; left: 50%; transform: translateX(-50%);
         /* 底部安全区：刘海屏/全面屏的"home 横条"会盖住贴边的 UI */
@@ -6341,24 +6377,83 @@
       <div class="boot-sub" id="boot-sub">正在准备材质与存档</div>
     </div>
 
+    <!-- WebView 版本提示：**页面内**的弹窗（不用原生 AlertDialog）。
+         默认 display:none，由下面那段 ES5 脚本按 UA 里的 Chrome 版本决定是否显示。 -->
+    <div id="webview-warn" role="alertdialog" aria-modal="true" aria-hidden="true">
+      <div class="warn-card">
+        <div class="warn-title" id="webview-warn-title">WebView 版本过低</div>
+        <div class="warn-body" id="webview-warn-body"></div>
+        <div class="warn-actions">
+          <button type="button" id="webview-warn-dismiss">知道了</button>
+          <button type="button" class="primary" id="webview-warn-update">去更新</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       /*
-       * 启动遮罩的文案本地化。
+       * 启动期文案 + WebView 版本闸门（都是**页面内**实现，不用原生弹窗）。
        *
-       * 为什么不用 `core/i18n`：这段界面在**模块脚本执行之前**就要显示，
-       * 而 i18n 是模块、还要 await 加载语言包。所以这里放一份极小的内联字典，
-       * 取值顺序 = 设置里存的语言（`bedrock-settings`.language）→ 系统语言 → 英文。
-       * 语法必须是 ES5：老 WebView 解析不了箭头函数和 const。
+       * 为什么两件事写在同一段 ES5 里：
+       *  · 启动遮罩要在模块脚本之前就可见，用不了 `core/i18n`（那是模块 + 异步加载语言包）；
+       *  · 版本闸门必须在**游戏加载之前**判断——版本太低时游戏本身可能跑不起来，
+       *    等主程序里再判断就晚了。
+       *
+       * 语法必须是 ES5：这段要在 Chrome 51 那种内核上也跑得动。
        */
       (function () {
         var DICT = {
-          zh: { loading: '加载中…', preparing: '正在准备材质与存档', failed: '启动失败，请重启游戏' },
-          en: { loading: 'Loading…', preparing: 'Preparing textures and saves', failed: 'Failed to start. Please restart the game.' },
-          de: { loading: 'Wird geladen…', preparing: 'Texturen und Spielstände werden vorbereitet', failed: 'Start fehlgeschlagen. Bitte das Spiel neu starten.' },
-          fr: { loading: 'Chargement…', preparing: 'Préparation des textures et sauvegardes', failed: 'Échec du démarrage. Relance le jeu.' },
-          pt: { loading: 'Carregando…', preparing: 'Preparando texturas e saves', failed: 'Falha ao iniciar. Reabra o jogo.' },
-          ru: { loading: 'Загрузка…', preparing: 'Подготовка текстур и сохранений', failed: 'Не удалось запустить. Перезапустите игру.' }
+          zh: {
+            loading: '加载中…', preparing: '正在准备材质与存档',
+            failed: '启动失败，请重启游戏',
+            warnTitle: 'WebView 版本过低',
+            warnBody: '检测到你的 Android System WebView 版本过低（当前 {cur}，需要 {min} 以上）。' +
+              '较低的版本会导致游戏显示异常、加载失败等问题，请更新后重新进入。',
+            warnOk: '知道了', warnUpdate: '去更新'
+          },
+          en: {
+            loading: 'Loading…', preparing: 'Preparing textures and saves',
+            failed: 'Failed to start. Please restart the game.',
+            warnTitle: 'WebView is too old',
+            warnBody: 'Your Android System WebView is too old (v{cur}, v{min} or newer is needed). ' +
+              'Older versions cause display glitches and loading failures. Please update and reopen the game.',
+            warnOk: 'Got it', warnUpdate: 'Update'
+          },
+          de: {
+            loading: 'Wird geladen…', preparing: 'Texturen und Spielstände werden vorbereitet',
+            failed: 'Start fehlgeschlagen. Bitte das Spiel neu starten.',
+            warnTitle: 'WebView ist zu alt',
+            warnBody: 'Dein Android System WebView ist zu alt (v{cur}, nötig ist v{min}+). ' +
+              'Ältere Versionen führen zu Darstellungs- und Ladefehlern. Bitte aktualisieren und neu öffnen.',
+            warnOk: 'Verstanden', warnUpdate: 'Aktualisieren'
+          },
+          fr: {
+            loading: 'Chargement…', preparing: 'Préparation des textures et sauvegardes',
+            failed: 'Échec du démarrage. Relance le jeu.',
+            warnTitle: 'WebView trop ancien',
+            warnBody: 'Ton Android System WebView est trop ancien (v{cur}, v{min}+ requis). ' +
+              'Les anciennes versions provoquent des défauts d’affichage et des échecs de chargement. Mets à jour puis rouvre le jeu.',
+            warnOk: 'Compris', warnUpdate: 'Mettre à jour'
+          },
+          pt: {
+            loading: 'Carregando…', preparing: 'Preparando texturas e saves',
+            failed: 'Falha ao iniciar. Reabra o jogo.',
+            warnTitle: 'WebView muito antigo',
+            warnBody: 'Seu Android System WebView está antigo (v{cur}, precisa da v{min}+). ' +
+              'Versões antigas causam falhas de exibição e de carregamento. Atualize e reabra o jogo.',
+            warnOk: 'Entendi', warnUpdate: 'Atualizar'
+          },
+          ru: {
+            loading: 'Загрузка…', preparing: 'Подготовка текстур и сохранений',
+            failed: 'Не удалось запустить. Перезапустите игру.',
+            warnTitle: 'WebView устарел',
+            warnBody: 'Ваш Android System WebView устарел (версия {cur}, нужна {min} или новее). ' +
+              'Старые версии дают сбои отображения и загрузки. Обновите и откройте игру заново.',
+            warnOk: 'Понятно', warnUpdate: 'Обновить'
+          }
         };
+
+        // ---- 语言：设置里存的 → 系统语言 → 英文 ----
         var lang = 'en';
         try {
           var raw = localStorage.getItem('bedrock-settings');
@@ -6373,13 +6468,77 @@
         } catch (e) {
           lang = 'en';
         }
+
         var texts = DICT[lang] || DICT.en;
         // 启动失败时 `boot.ts` 用它，避免在 JS 里再抄一份文案
         window.__bootTexts = texts;
-        var textEl = document.getElementById('boot-text');
-        if (textEl) textEl.textContent = texts.loading;
-        var subEl = document.getElementById('boot-sub');
-        if (subEl) subEl.textContent = texts.preparing;
+
+        function setText(id, value) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = value;
+        }
+        setText('boot-text', texts.loading);
+        setText('boot-sub', texts.preparing);
+
+        // ---- WebView 版本闸门 ----
+        // 88 = 本页样式真正需要的下限（min()/clamp() 79、inset 87、aspect-ratio 88）。
+        // 取不到版本号（iOS / 桌面壳的 UA 没有 Chrome/x）就放行，不误伤。
+        var MIN_WEBVIEW = 88;
+        var ua = navigator.userAgent || '';
+        var matched = ua.match(/Chrome\/(\d+)/);
+        var major = matched ? parseInt(matched[1], 10) : 0;
+        if (!major || major >= MIN_WEBVIEW) return;
+
+        var warnEl = document.getElementById('webview-warn');
+        if (!warnEl) return;
+
+        setText('webview-warn-title', texts.warnTitle);
+        setText('webview-warn-body', texts.warnBody
+          .replace('{cur}', String(major))
+          .replace('{min}', String(MIN_WEBVIEW)));
+        setText('webview-warn-dismiss', texts.warnOk);
+        setText('webview-warn-update', texts.warnUpdate);
+
+        var dismissed = false;
+        function showWarn() {
+          warnEl.className = 'show';
+          warnEl.setAttribute('aria-hidden', 'false');
+        }
+        function hideWarn() {
+          warnEl.className = '';
+          warnEl.setAttribute('aria-hidden', 'true');
+        }
+
+        var okBtn = document.getElementById('webview-warn-dismiss');
+        if (okBtn) {
+          okBtn.onclick = function () { dismissed = true; hideWarn(); };
+        }
+
+        var updateBtn = document.getElementById('webview-warn-update');
+        if (updateBtn) {
+          updateBtn.onclick = function () {
+            // 跳商店必须过原生桥：WebView 里 `market://` 会被当成导航、被拦截器挡掉
+            try {
+              if (window.MinicraftAndroid && window.MinicraftAndroid.openWebViewStore) {
+                window.MinicraftAndroid.openWebViewStore();
+                return;
+              }
+            } catch (e) { /* 没有桥就退回浏览器打开 */ }
+            try {
+              window.location.href = 'https://play.google.com/store/apps/details?id=com.google.android.webview';
+            } catch (e2) { /* 什么都没打开也不影响游戏 */ }
+          };
+        }
+
+        showWarn();
+
+        // 每次回到前台再提醒一次：版本过低时可能**完全进不去**，只提醒一次等于没说
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible' && dismissed) {
+            dismissed = false;
+            showWarn();
+          }
+        });
       })();
     </script>
 

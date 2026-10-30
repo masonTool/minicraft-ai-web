@@ -1,6 +1,5 @@
 package com.minicraft.app;
 
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
@@ -46,19 +45,8 @@ public class MainActivity extends Activity {
     /** 让网页知道"这是带原生壳的触屏设备"。UA 在任何脚本之前就可用，比注入全局变量可靠 */
     private static final String TOUCH_MARKER = "MinicraftTouch/1";
     private static final String ORIGIN = "http://localhost";
-    /**
-     * 兼容基线：Android System WebView 88。
-     *
-     * 依据（caniuse，2026-09 全球使用份额）：min()/max()/clamp() 需要 79、flex gap 84、
-     * inset 87、aspect-ratio 88——界面样式全部建立在这些之上，低于 88 的 WebView 会
-     * **直接丢弃这些声明**，菜单容器 width 退化成 auto，整屏塌成一列。
-     * 88 起步覆盖 97.07%，再往上抬（92 才有 Array.at）收益不足 0.05%，不值得。
-     */
-    private static final int MIN_WEBVIEW_MAJOR = 88;
 
     private WebView webView;
-    /** 本次前台会话是否已经提示过（离开前台后重置，见 onPause） */
-    private boolean warnedThisSession = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -146,79 +134,6 @@ public class MainActivity extends Activity {
         }
 
         webView.loadUrl(ORIGIN + "/index.html");
-    }
-
-    /**
-     * WebView 太旧时提示更新（**一层弹窗**）。
-     *
-     * 为什么用原生弹窗而不是网页里弹：版本过低时网页的样式本身就是坏的
-     * （`min()/clamp()/inset/dvh` 全被丢弃），用它自己的 UI 提示反而可能显示不全。
-     *
-     * 为什么只有一层：之前是"提示 → 如何更新 → 指引"三层跳转，玩家点两下才看到
-     * 该怎么操作。现在原因 / 现象 / 解决一次性写在同一屏里，按钮只有"去更新"和"知道了"。
-     */
-    private void warnIfWebViewTooOld() {
-        int major = webViewMajorVersion();
-        // 取不到版本号时不做判断：宁可放行，也不要因为解析失败把正常用户挡在门外
-        if (major == 0 || major >= MIN_WEBVIEW_MAJOR) return;
-
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.webview_too_old_title)
-                .setMessage(getString(R.string.webview_too_old_message, major, MIN_WEBVIEW_MAJOR))
-                .setPositiveButton(R.string.webview_too_old_update, (dialog, which) -> openWebViewStore())
-                .setNegativeButton(R.string.webview_too_old_dismiss, null)
-                .show();
-    }
-
-    /**
-     * 每次进入前台都提示一次（不是只弹一次）。
-     *
-     * 为什么：WebView 版本过低时玩家可能**完全进不去游戏**，弹一次就再也不提醒，
-     * 下次打开只会看到一屏错乱，根本不知道为什么。所以按"前台会话"计：
-     * `onResume` 时没弹过就弹，`onPause` 时重置——冷启动、从后台切回来都会再提示一遍。
-     *
-     * 同一会话内不重复弹：`AlertDialog` 自己不会触发 `onPause`，但玩家关掉弹窗、
-     * 旋转屏幕等操作可能引起多次 `onResume`，这个标记把它们挡住。
-     */
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (warnedThisSession) return;
-        warnedThisSession = true;
-        warnIfWebViewTooOld();
-    }
-
-    @Override
-    protected void onPause() {
-        // 离开前台 = 这一段"会话"结束，下次回来重新提示
-        warnedThisSession = false;
-        super.onPause();
-    }
-
-    /** WebView 主版本号，取不到返回 0 */
-    private int webViewMajorVersion() {
-        try {
-            String ua = WebSettings.getDefaultUserAgent(this);
-            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("Chrome/(\\d+)").matcher(ua);
-            return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
-        } catch (Throwable ignored) {
-            return 0;
-        }
-    }
-
-    /**
-     * 尽力打开应用商店的 WebView 详情页。
-     *
-     * 实测有些机器（如 MIUI）没有 Google WebView 的商店条目，`market://` 会被商店接走
-     * 但只给一个搜索结果页。那种情况下静默即可——弹窗里已经写了手工步骤，不再多弹一层。
-     */
-    private void openWebViewStore() {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("market://details?id=com.google.android.webview")));
-        } catch (Throwable ignored) {
-            // 没有可用商店：按弹窗里写的"设置 → 应用管理"手工更新
-        }
     }
 
     /** 从内存表里取文件；取不到就 404（与"文件不存在"语义一致，不暴露内部结构） */

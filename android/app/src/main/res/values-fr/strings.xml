@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- WebView 版本闸门（每次进入前台都会弹）：一句话说原因，一句话说现象，一句话说怎么办 -->
-    <string name="webview_too_old_title">WebView trop ancien pour le jeu</string>
-    <string name="webview_too_old_message">Ton WebView système est en v%1$d, le jeu en demande v%2$d ou plus.\nL’interface peut être décalée, des boutons sortir de l’écran, ou le chargement ne jamais aboutir.\nMets à jour « Android System WebView » puis rouvre le jeu — rien à réinstaller.</string>
-    <string name="webview_too_old_update">Mettre à jour</string>
-    <string name="webview_too_old_dismiss">Continuer quand même</string>
-</resources>

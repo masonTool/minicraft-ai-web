@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- WebView 版本闸门（每次进入前台都会弹）：一句话说原因，一句话说现象，一句话说怎么办 -->
-    <string name="webview_too_old_title">WebView 太旧，可能进不去游戏</string>
-    <string name="webview_too_old_message">你的系统 WebView 还是 %1$d 版，这个游戏需要 %2$d 以上。\n界面会错位、按钮跑出屏幕，严重时一直卡在加载中。\n更新「Android System WebView」后重新打开就行，游戏不用重装。</string>
-    <string name="webview_too_old_update">去更新</string>
-    <string name="webview_too_old_dismiss">仍然进入</string>
-</resources>

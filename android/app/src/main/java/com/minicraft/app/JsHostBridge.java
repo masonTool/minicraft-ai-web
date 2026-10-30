@@ -1,6 +1,8 @@
 package com.minicraft.app;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.webkit.JavascriptInterface;
 
 /**
@@ -52,5 +54,25 @@ public final class JsHostBridge {
     public String stopServer() {
         ServerControl.stop(context);
         return "{\"stopped\":true}";
+    }
+
+    /**
+     * 打开应用商店里 Android System WebView 的详情页。
+     *
+     * <p>为什么这件事必须留在原生：网页打不开 `market://`（WebView 会把它当成导航，
+     * 被拦截器挡掉）。版本检测本身在页面里做（见 `index.html`），只有"跳商店"这一步过桥。
+     *
+     * @return 总是 `{"ok":true}`：打不开商店也静默——页面上的文案已经写清了手工更新方式
+     */
+    @JavascriptInterface
+    public String openWebViewStore() {
+        try {
+            context.startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("market://details?id=com.google.android.webview"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Throwable ignored) {
+            // 没有可用商店：静默，文案里已给出"设置 → 应用管理"的手工路径
+        }
+        return "{\"ok\":true}";
     }
 }

@@ -94,9 +94,15 @@ cd android && ./gradlew connectedDebugAndroidTest   # 3 条：包名 / JNI+HTTP 
 - **"去更新"不要写成无脑 startActivity(market://)**：实测这台机器上 `market://` 被 MIUI 应用商店
   接走，但它没有 Google WebView 的条目，自己跳去一个搜索结果页（一屏广告+搜索框）。
   现在的做法：弹窗按钮先给**可执行的文字步骤**，把"打开应用商店"作为该指引里的可选项。
-- **版本提示按"前台会话"弹，不是只弹一次**：WebView 过低时玩家可能**完全进不去**，
-  只提示一次的话，下次打开只会看到一屏错乱而不知道为什么。所以 `onResume` 里弹、
-  `onPause` 里重置标记——冷启动和从后台切回来都会再提示一遍。
+- **WebView 版本闸门在页面里，不在原生**：`index.html` 里一段 ES5 内联脚本读 UA 的
+  `Chrome/N`，低于 88 就在页面内弹一个自绘弹窗（不是 `AlertDialog`）。这样三端（Android /
+  iOS / 桌面）行为一致，也不用维护 6 份 `strings.xml`。原生只留一个
+  `openWebViewStore()` 桥方法——`market://` 在 WebView 里会被当成导航、被拦截器挡掉，
+  跳商店必须过桥。
+  弹窗文案在页面的内联字典里（与启动遮罩共用），6 种语言；**每次回到前台都会再弹**
+  （`visibilitychange`），因为版本过低时玩家可能完全进不去，只提醒一次等于没说。
+  这块界面故意只用 Chrome 51 也认的写法：定位四条边、居中用 flex、间距用 margin、
+  宽度百分比 + max-width —— 不用 `inset`/`min()`/`clamp()`/`dvh`/flex `gap`。
 - **minSdk 24 与 WebView 88 是两件事**：`minSdkVersion=24`（Android 7.0）决定"能不能装"，
   运行时闸门 `MIN_WEBVIEW_MAJOR=88` 决定"能不能跑"。Android 7 的 WebView 出厂是 Chromium 51
   （没有 WebGL2），但能更新到 **119**（Chrome 120 起不再支持 Android 7）——所以 88 在
