@@ -14,6 +14,7 @@
  * 进世界的动作交回给调用方（`main.ts` 的 boot）。这样这个模块在 Node 里也能测。
  */
 
+import type { HostTarget } from './MultiplayerScreen.ts';
 import { getLanguage, t, tp } from '../core/i18n/I18n.ts';
 import { BRAND } from '../core/brand.ts';
 import { localeMeta } from '../core/i18n/locale.ts';
@@ -142,6 +143,8 @@ export interface WorldScreenActions {
     password: string,
     baseUrl: string,
     name: string,
+    /** 不传 = 按地址自动判断（本机 IP/localhost 算本机，其余算远程） */
+    target?: HostTarget,
   ) => Promise<string | null> | string | null;
   /** 卡片上的「开房」：打开统一的多人界面（host 模式），世界名带过去 */
   onHostOpen?: (world: WorldSummary) => void;

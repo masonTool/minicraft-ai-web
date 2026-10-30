@@ -7004,6 +7004,8 @@
          各自可折叠（默认展开）。标题条做成"整条色块 + 左侧主色竖条"，
          比原来那条细虚线醒目得多——用户要的就是"突出这两个类别"。 */
       .server-list-group { display: flex; flex-direction: column; gap: 2px; }
+      /* 开房模式下整组隐藏「本地服务器」（.hidden 是按组件定义的，没有全局工具类） */
+      .server-list-group.hidden { display: none; }
       .server-list-group + .server-list-group { margin-top: 6px; }
       .server-list-group-head {
         display: flex; align-items: center; gap: 6px; width: 100%;

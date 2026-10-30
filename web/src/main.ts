@@ -428,7 +428,7 @@ import {
 } from './core/net/SeedReconcile.ts';
 import { DEFAULT_MULTIPLAYER_ROOM, multiplayerWorldId } from './core/net/MultiplayerSave.ts';
 import { formatServerUrl, parseServerUrl } from './core/net/ServerUrl.ts';
-import { hasHostBridge, startHostServer, stopHostServer } from './core/net/HostBridge.ts';
+import { hasHostBridge, hostLocalIp, startHostServer, stopHostServer } from './core/net/HostBridge.ts';
 import { netErrorText } from './core/net/NetErrorText.ts';
 import { JOIN_WORLD_PREFIX, summaryFromRoom } from './core/net/JoinWorld.ts';
 import { displayServerAddress } from './core/net/ServerUrl.ts';
@@ -20958,12 +20958,30 @@ async function boot(): Promise<void> {
    * **为什么抽成独立变量**：合并界面之后有两个入口都走它——
    * 世界卡片的「开房」（旧对话框，保留兜底）与联机面板 host 模式的「确定并进入」。
    */
+  /**
+   * 这个地址是不是指向**本机**（自己这台设备）。
+   *
+   * 用在"开房目标没显式给"的入口（世界卡片上的开房对话框）：填的是本机 IP 就按本机处理，
+   * 填别的机器则按远程处理。判据只看 host 部分，端口/协议头不参与。
+   */
+  function pointsAtSelf(baseUrl: string, localIp: string | null): boolean {
+    const host = baseUrl
+      .replace(/^wss?:\/\//, '')
+      .replace(/^https?:\/\//, '')
+      .split(/[:/]/)[0]
+      ?.toLowerCase();
+    if (host === undefined || host.length === 0) return true;
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    return localIp !== null && host === localIp.toLowerCase();
+  }
+
   const hostWorldFlow = async (
     world: WorldSummary,
     room: string,
     password: string,
     baseUrl: string,
     name: string,
+    target?: 'local' | 'remote',
   ): Promise<string | null> => {
       /*
        * 手机当房主：**开房是一个动作** —— 先把本机服务端拉起来，再预检。
@@ -20974,8 +20992,22 @@ async function boot(): Promise<void> {
        *
        * 浏览器里没有桥：沿用面板里填的地址（连别人的服务器），行为和以前一致。
        */
+      /*
+       * 房间开在哪（2026-10-30 用户口径）：只允许**本机**或**远程服务器**。
+       *
+       * 以前是"只要有桥就起本机服务并覆盖地址"，于是玩家在右栏选了一台局域网机器、
+       * 房间却开在本机——界面和行为对不上。现在按目标分叉：
+       *   · 本机   → 起本机服务，地址以它为准（填的地址没有意义）
+       *   · 远程   → **不起**本机服务，直接用玩家填的地址去那台机器上开房
+       * `target` 没传时按地址推断：等于本机 IP / localhost / 127.0.0.1 就算本机。
+       */
+      const localIp = hostLocalIp();
+      const isLocalTarget =
+        target === 'local' ||
+        (target === undefined &&
+          (baseUrl.length === 0 || pointsAtSelf(baseUrl, localIp)));
       let effectiveBaseUrl = baseUrl;
-      if (hasHostBridge()) {
+      if (isLocalTarget && hasHostBridge()) {
         const hostInfo = await startHostServer();
         if (hostInfo === null) {
           diag.event('app', 'hostServer.startFailed', {});
@@ -20993,19 +21025,19 @@ async function boot(): Promise<void> {
          */
         diag.event('app', 'hostPreflight.httpsBlocked', { room, baseUrl: effectiveBaseUrl });
         console.warn(`[host] 页面是 https，不能连 ${effectiveBaseUrl}（混合内容）`);
-        stopHostServer();
+        if (isLocalTarget) stopHostServer();
         return t('mp.hostHttpsBlocked');
       }
       if (blocked === 'unreachable') {
         diag.event('app', 'hostPreflight.unreachable', { room, baseUrl: effectiveBaseUrl });
         console.warn(`[host] 连不上 ${effectiveBaseUrl}（预检 3 秒内没 open）`);
-        stopHostServer();
+        if (isLocalTarget) stopHostServer();
         return t('mp.hostUnreachable');
       }
       if (blocked === 'taken') {
         diag.event('app', 'hostPreflight.taken', { room, baseUrl: effectiveBaseUrl });
         // 房名被占：刚才拉起来的服务端没有用处，关掉，别让端口白开着
-        stopHostServer();
+        if (isLocalTarget) stopHostServer();
         return t('say.net.hostTaken');
       }
       pendingHostRoom = { room, password, baseUrl: effectiveBaseUrl, name };
@@ -21035,8 +21067,8 @@ async function boot(): Promise<void> {
      * 开房模式（用户 2026-10-27：和加入共用一套界面）：面板把世界原样带回来，
      * 这里落到同一条预检 + 建世界流程上。失败原因返回给面板显示。
      */
-    onHostWorld: (world, room, password, baseUrl, name) => {
-      void hostWorldFlow(world as unknown as WorldSummary, room, password, baseUrl, name).then((error) => {
+    onHostWorld: (world, room, password, baseUrl, name, target) => {
+      void hostWorldFlow(world as unknown as WorldSummary, room, password, baseUrl, name, target).then((error) => {
         if (error !== null && error !== undefined) multiplayerUi.setState('offline', error);
       });
     },

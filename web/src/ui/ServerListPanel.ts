@@ -57,6 +57,8 @@ export class ServerListPanel {
   private scanning = false;
   /** 还在等 `/rooms` 的服务器数量：用来决定"扫描完了到底有没有房间" */
   private pendingRows = 0;
+  /** 「本地服务器」这一组（局域网扫描结果）；开房模式下整组隐藏 */
+  private lanGroup: HTMLDivElement | null = null;
   /** 上一轮扫描耗时（异步补行时状态栏要复用它） */
   private lastSeconds = '0.0';
   private port = 8887;
@@ -107,6 +109,7 @@ export class ServerListPanel {
      * 在各平台的样式差异太大，这里要的是统一的像素风箭头。
      */
     const local = this.makeGroup(t('server.lan'));
+    this.lanGroup = local.group;
     this.status = document.createElement('div');
     this.status.className = 'server-list-status';
     this.status.id = 'server-list-status';
@@ -213,6 +216,31 @@ export class ServerListPanel {
     } finally {
       if (token === this.token) this.scanning = false;
     }
+  }
+
+  /**
+   * 「本地服务器」整组是否显示（2026-10-30 用户口径）。
+   *
+   * 开房时必须隐藏：局域网里别人的机器**不能**用来开房（房间只能开在本机或远程），
+   * 列出来只会让人点一下、以为房间开在那台机器上。
+   * 「选择本机」是单独一行，不受这里影响。
+   */
+  setLanVisible(visible: boolean): void {
+    this.lanGroup?.classList.toggle('hidden', !visible);
+  }
+
+  /** 清掉局域网扫描结果（切到开房模式时调用，避免残留行留在隐藏的组里） */
+  clearLan(): void {
+    this.token += 1; // 作废在途的扫描
+    this.lanList.replaceChildren();
+    this.seen.clear();
+    this.pendingRows = 0;
+  }
+
+  /** 本机局域网地址（宿主已查到就返回它，否则返回 127.0.0.1） */
+  get localAddressOrDefault(): string {
+    const ip = this.lanIp?.() ?? null;
+    return ip !== null && ip.length > 0 ? ip : this.localAddress;
   }
 
   /** 开房模式才显示「选择本机」 */

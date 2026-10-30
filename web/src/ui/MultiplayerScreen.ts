@@ -30,6 +30,17 @@ import type { NetRole } from '../core/net/NetRole.ts';
 export type MultiplayerScreenState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline';
 
 /**
+ * 房间开在哪。
+ *
+ * - `local`  ：这台设备自己起服务端（只有它有原生桥时才有意义）
+ * - `remote` ：连到一台已经在跑的服务端，在**那台机器**上开房
+ *
+ * 为什么必须显式区分：以前的实现是"只要有桥就起本机服务并覆盖地址"，
+ * 于是玩家在右栏选了一台局域网机器、房间却开在了本机——行为和界面对不上。
+ */
+export type HostTarget = 'local' | 'remote';
+
+/**
  * 开房时带过来的世界。
  *
  * 这里只声明用得到的两个字段，宿主传完整的世界摘要即可（它要拿 `id` 去开存档）——
@@ -62,6 +73,8 @@ export interface MultiplayerScreenActions {
     password: string,
     baseUrl: string,
     name: string,
+    /** 房间开在哪：「本机」还是「远程服务器」（2026-10-30） */
+    target: HostTarget,
   ) => void;
 }
 
@@ -335,6 +348,17 @@ export class MultiplayerScreen {
     // 「选择本机」只在开房时露出：加入时填本机没有意义（本机没服务端）
     this.list.setLocalVisible(this.hostWorld !== null);
     /*
+     * 开房：**隐藏整个「本地服务器」组**（2026-10-30 用户口径）。
+     * 房间只允许开在本机或远程服务器上，局域网里别人的机器既不该列、也不该能选——
+     * 否则玩家点一下会以为房间开在了那台机器上（旧实现确实是这样误导的）。
+     */
+    this.list.setLanVisible(this.hostWorld === null);
+    if (this.hostWorld !== null) {
+      // 默认目标就是本机：地址栏直接显示本机 IP，让玩家一眼看出房间开在哪
+      const local = this.list.localAddressOrDefault;
+      this.urlInput.value = local;
+    }
+    /*
      * 联机只在**完整版**可用（用户 2026-10-27）：完整版的原生壳能通过 JS bridge
      * 报出本机局域网 IP；拿不到就说明是精简版/网页版，直接弹提示并关掉这个界面。
      */
@@ -348,9 +372,16 @@ export class MultiplayerScreen {
     // 上一次的关闭动画还没播完就又被打开：掐掉它，别让面板在动画中途被隐藏
     window.clearTimeout(this.closeTimer);
     this.root.classList.remove('closing', 'hidden');
-    // 右栏：打开就重新扫一遍（端口按表单当前值）
+    /*
+     * 右栏：只有"加入"模式需要扫网段。开房模式已经把「本地服务器」整组藏了，
+     * 再扫一遍等于白花几秒钟，还会往那个看不见的状态栏里写"找到 N 台"。
+     */
     this.list.setPort(Number(this.form.portInput.value) || 8887);
-    void this.list.refresh();
+    if (this.hostWorld === null) {
+      void this.list.refresh();
+    } else {
+      this.list.clearLan();
+    }
     // 每次打开都从存储里刷新一次地址/端口（上一次连接可能刚写过）
     this.form.portInput.value = readStored(STORAGE_PORT) ?? String(this.form.portInput.value || '');
     this.setState(this.state);
@@ -502,10 +533,36 @@ export class MultiplayerScreen {
     writeStored(STORAGE_NAME, values.name);
     // 开房：交给宿主做预检 + 建世界（不是连上去就算）
     if (this.hostWorld !== null) {
-      this.actions.onHostWorld?.(this.hostWorld, values.room, values.password, values.baseUrl, values.name);
+      this.actions.onHostWorld?.(
+        this.hostWorld,
+        values.room,
+        values.password,
+        values.baseUrl,
+        values.name,
+        this.hostTarget(values.baseUrl),
+      );
       return;
     }
     this.actions.onConnect(values.url, values.name, host);
+  }
+
+  /**
+   * 这次开房的目标是本机还是远程。
+   *
+   * 判据是**地址本身**，不看玩家点过哪个按钮：
+   *   · 地址等于本机局域网 IP / `localhost` / `127.0.0.1` → 本机
+   *   · 其它 → 远程
+   * 这样"点选择本机后再把地址改成公网 IP"也能自然变成远程，不需要额外的状态机。
+   */
+  private hostTarget(baseUrl: string): HostTarget {
+    const host = baseUrl
+      .replace(/^wss?:\/\//, '')
+      .replace(/^https?:\/\//, '')
+      .split(/[:/]/)[0]
+      ?.toLowerCase();
+    if (host === undefined || host.length === 0) return 'local';
+    if (host === 'localhost' || host === '127.0.0.1') return 'local';
+    return host === this.list.localAddressOrDefault.toLowerCase() ? 'local' : 'remote';
   }
 
   /**
@@ -528,7 +585,20 @@ export class MultiplayerScreen {
       return;
     }
     this.lanIp = ip;
-    void this.list.refresh();
+    if (this.hostWorld === null) {
+      void this.list.refresh();
+      return;
+    }
+    /*
+     * 开房：IP 是**异步**拿到的（`getLanIp()` 走原生桥），而 `open()` 里设置地址栏时
+     * 它还是 null，于是先填了 127.0.0.1。这里补一次：把「选择本机」和地址栏刷成本机
+     * 真实局域网地址——队友要连的是那个地址，不是回环。
+     */
+    this.list.setLocalVisible(true);
+    const current = this.urlInput.value.trim();
+    if (current.length === 0 || current === '127.0.0.1' || current === 'localhost') {
+      this.urlInput.value = ip;
+    }
   }
 
   /**
