@@ -942,6 +942,8 @@ try {
 
     alice.mailbox.length = 0;
     rival.mailbox.length = 0;
+    // bob 是这堆的**主人**：他必须也收到 item-remove，否则他那边还看得见、还能再捡一次
+    bob.mailbox.length = 0;
     // 两边几乎同时申请：服务端"查还在 → 删 → 回 ok"是原子的
     alice.send({ t: 'item-take', owner: bobId, localId: 41 });
     rival.send({ t: 'item-take', owner: bobId, localId: 41 });
@@ -957,6 +959,17 @@ try {
     check(
       '抢到之后各端都收到 item-remove（镜像一起消失）',
       (await alice.wait('item-remove', 2000)) !== null && (await rival.wait('item-remove', 2000)) !== null,
+    );
+    /*
+     * 主人这一端必须也收到（2026-10-30 物品重复的前提）：
+     * 客户端以前只在自己的 `localNetItems` 里删"自己捡的"，收到这条却不处理，
+     * 于是别人捡走了他还看得见、还能再捡一次。服务端这条广播不带 except，是有意的。
+     */
+    const ownerGotRemove = await bob.wait('item-remove', 2000);
+    check(
+      '被捡走的主人（owner）也收到 item-remove',
+      ownerGotRemove !== null && Number(ownerGotRemove.owner) === bobId && Number(ownerGotRemove.localId) === 41,
+      JSON.stringify(ownerGotRemove),
     );
 
     // 已经被抢走的再抢：gone（不能凭空变出一堆）

@@ -437,6 +437,7 @@ import { SimApply, type ShadowRenderState } from './game/sim/SimApply.ts';
 import { ENTITY_SNAPSHOT_INTERVAL_MS, encodeEntitySnapshots, type SimEntity } from './game/sim/SimAuthority.ts';
 import { assignMobKey } from './core/net/MobAuthority.ts';
 import { ENTITY_FLAGS, hasFlag } from './core/net/EntitySnapshot.ts';
+import { killLocalItemByLocalId } from './core/net/LocalItemMirror.ts';
 import { probeRoom } from './net/RoomProbe.ts';
 import { ARMOR_EQUIPMENT_SLOTS, armorEquipmentPatch, offhandEquipmentPatch } from './core/net/RemoteArmor.ts';
 import { swapOffhand } from './core/container/Offhand.ts';
@@ -4753,9 +4754,24 @@ class App {
   private onNetItemRemove(owner: number, localId: number): void {
     const key = `${owner}:${localId}`;
     const ghost = this.remoteItems.get(key);
-    if (!ghost) return;
-    ghost.dead = true;
-    this.remoteItems.delete(key);
+    if (ghost !== undefined) {
+      ghost.dead = true;
+      this.remoteItems.delete(key);
+      return;
+    }
+
+    /*
+     * 别人捡走了**自己**那堆（2026-10-30 用户报的物品重复）。
+     *
+     * 服务端 `item-take` 成功后会 `broadcast(item-remove)` 给**所有人**（含被捡的那位），
+     * 但这里以前只查 `remoteItems`（别人的堆的镜像）——自己那堆在 `localNetItems` 里，
+     * 查不到就直接 return。于是：B 捡走了，A 那边照样看得见、还能再捡一次，两个人各得一份。
+     *
+     * 先把自己那份从 `localNetItems` 摘掉再置 dead：否则 `syncNetItems` 会发现
+     * "这堆不见了"又发一条 `item-remove` 回去（服务端会忽略，但没必要多发一次）。
+     */
+    if (owner !== this.net.selfId) return;
+    killLocalItemByLocalId(this.localNetItems, localId);
   }
 
   /** 断开/重连时清空镜像：旧会话的 key 在服务端已经不存在了 */
