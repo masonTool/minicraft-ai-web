@@ -3,6 +3,7 @@ package com.minicraft.app;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.view.InputDevice;
 import android.webkit.JavascriptInterface;
 
 /**
@@ -54,6 +55,31 @@ public final class JsHostBridge {
     public String stopServer() {
         ServerControl.stop(context);
         return "{\"stopped\":true}";
+    }
+
+    /**
+     * 现在有没有接手柄（批次 20261031）。
+     *
+     * <p>网页侧只有拿到 {@code true} 才开始轮询 Gamepad API：Chromium 里只要页面注册了
+     * {@code gamepadconnected} 监听，就会常驻一条手柄轮询线程（真机约 2% CPU），
+     * 而绝大多数玩家没接手柄。接上 / 拔掉由 {@link MainActivity} 的设备监听通知网页。
+     */
+    @JavascriptInterface
+    public boolean hasGamepad() {
+        return gamepadPresent();
+    }
+
+    static boolean gamepadPresent() {
+        for (int id : InputDevice.getDeviceIds()) {
+            InputDevice device = InputDevice.getDevice(id);
+            if (device == null || device.isVirtual()) continue;
+            int sources = device.getSources();
+            if ((sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                    || (sources & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

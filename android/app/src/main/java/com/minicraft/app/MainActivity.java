@@ -2,6 +2,7 @@ package com.minicraft.app;
 
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.hardware.input.InputManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -47,6 +48,29 @@ public class MainActivity extends Activity {
     private static final String ORIGIN = "http://localhost";
 
     private WebView webView;
+    private InputManager inputManager;
+    private final InputManager.InputDeviceListener gamepadListener = new InputManager.InputDeviceListener() {
+        @Override
+        public void onInputDeviceAdded(int deviceId) {
+            notifyGamepad();
+        }
+
+        @Override
+        public void onInputDeviceRemoved(int deviceId) {
+            notifyGamepad();
+        }
+
+        @Override
+        public void onInputDeviceChanged(int deviceId) {
+            notifyGamepad();
+        }
+    };
+
+    private void notifyGamepad() {
+        if (webView == null) return;
+        String type = JsHostBridge.gamepadPresent() ? "mc-gamepad-attached" : "mc-gamepad-detached";
+        webView.evaluateJavascript("window.dispatchEvent(new Event('" + type + "'))", null);
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -111,6 +135,9 @@ public class MainActivity extends Activity {
         settings.setUserAgentString(settings.getUserAgentString() + " " + TOUCH_MARKER);
 
         webView.addJavascriptInterface(new JsHostBridge(this), "MinicraftAndroid");
+        // 手柄接上 / 拔掉通知网页（见 `JsHostBridge.hasGamepad` 为什么不让网页自己监听）
+        inputManager = (InputManager) getSystemService(INPUT_SERVICE);
+        if (inputManager != null) inputManager.registerInputDeviceListener(gamepadListener, null);
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -254,6 +281,7 @@ public class MainActivity extends Activity {
         if (isFinishing() && !isChangingConfigurations()) {
             ServerControl.stop(this);
         }
+        if (inputManager != null) inputManager.unregisterInputDeviceListener(gamepadListener);
         if (webView != null) {
             webView.destroy();
             webView = null;

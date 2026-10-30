@@ -165,6 +165,7 @@ import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/
 import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
+import { IDLE_LIGHT_BACKLOG, IDLE_MESH_BACKLOG, IdleFrameRate } from './core/world/IdleFrameRate.ts';
 import {
   BRIGHTNESS_MAX,
   BRIGHTNESS_MIN,
@@ -2543,6 +2544,22 @@ class App {
    * 于是 5 秒一次的采样读到的永远是最后那趟叠画（1 call / 12 tris）。
    */
   private readonly lastWorldDraw = { calls: 0, tris: 0 };
+  /** 空闲降帧（批次 20261031，见 `core/world/IdleFrameRate.ts`） */
+  readonly idleFps = new IdleFrameRate();
+  private idleCappedLastFrame = false;
+
+  /**
+   * 世界还在**成批**加载 / 补光照：这时降帧会让加载变慢，不降。
+   * ⚠️ 不能写成"队列非空"：随机刻（草蔓延、树叶、作物）每秒都会改一两格、重刷一两个区块，
+   * 真机静止时有一半的帧队列非空，空闲降帧就形同虚设。一两个区块 30 帧也是一帧就刷完。
+   */
+  private worldBusy(): boolean {
+    return (
+      this.chunkRenderer.queueLength + this.chunkRenderer.inFlightCount > IDLE_MESH_BACKLOG ||
+      this.world.pendingCount > 0 ||
+      this.world.lightWorkCount > IDLE_LIGHT_BACKLOG
+    );
+  }
   /** 上一次光照队列来源计数（批次 217，诊断用） */
   private lastLightStats = { self: 0, border: 0, change: 0, readded: 0, spread: 0, dropped: 0, overflow: 0 };
   /**
@@ -6560,6 +6577,21 @@ class App {
     document.addEventListener('keyup', (e) => this.keys.delete(e.code), {
       signal: this.listeners.signal,
     });
+
+    // 空闲降帧（批次 20261031）：捕获阶段监听，界面层 `stopPropagation` 也挡不住它
+    {
+      const idle = this.idleFps;
+      const options = { capture: true, passive: true, signal: this.listeners.signal };
+      const note = (): void => idle.noteInput(performance.now());
+      window.addEventListener('pointerdown', () => idle.pointerDown(performance.now()), options);
+      window.addEventListener('pointerup', () => idle.pointerUp(performance.now()), options);
+      window.addEventListener('pointercancel', () => idle.pointerUp(performance.now()), options);
+      window.addEventListener('pointermove', note, options);
+      window.addEventListener('wheel', note, options);
+      window.addEventListener('keydown', note, options);
+      window.addEventListener('keyup', note, options);
+      window.addEventListener('blur', () => idle.resetPointers(), options);
+    }
 
     // 批次 159：**长按属于我们的手势**（取一半 / 看详情 / 选数量），
     // 必须先屏蔽 HTML 自带的那一套长按效果——否则手机上长按物品图标会弹出
@@ -15395,6 +15427,12 @@ class App {
       this.padUse = false;
       return;
     }
+    if (
+      pad.forward !== 0 || pad.strafe !== 0 || pad.lookDx !== 0 || pad.lookDy !== 0 ||
+      pad.jump || pad.attack || pad.use || pad.openInventoryPressed
+    ) {
+      this.idleFps.noteInput(performance.now());
+    }
 
     // 视角：右摇杆按帧速率转（与触摸拖动共用 applyLook，因此灵敏度表现一致）
     if (pad.lookDx !== 0 || pad.lookDy !== 0) {
@@ -18014,6 +18052,7 @@ class App {
       // 采样时直接读只会拿到"最后一次叠画"的 1 call / 12 tris
       calls: this.lastWorldDraw.calls,
       tris: this.lastWorldDraw.tris,
+      idleCapped: this.idleFps.capped,
       geo: info.memory.geometries,
       tex: info.memory.textures,
       prog: info.programs?.length ?? 0,
@@ -18659,7 +18698,9 @@ class App {
       // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
       // ⚠️ 跳过时必须**继续排下一帧**（`schedule()` 后再 return）——
       // 直接 return 会让循环停住，画面就此冻住（最容易写错的一处）
-      const interval = frameIntervalMs(this.settings.maxFps);
+      // 空闲降帧（批次 20261031）：没操作、画面不动、世界不在加载时上限 30，取与 `maxFps` 更严的那个
+      const idleCap = this.miniGame.active ? 0 : this.idleFps.capFor(now, this.worldBusy());
+      const interval = Math.max(frameIntervalMs(this.settings.maxFps), frameIntervalMs(idleCap));
       if (interval > 0 && now - this.lastTime < interval) {
         schedule();
         return;
@@ -18927,7 +18968,10 @@ class App {
       // 正好撞在补区块/重建上，感觉就是"卡一下"。顺带也避免暂停帧污染 5 秒采样窗口。
       // 采样用的真实帧间距：`perf.frameTimeAvg` 是给策略用的指数平滑值，
       // 在 9fps 这种长帧下会滞后好几秒，诊断要看的是"这个窗口里平均多少毫秒"
-      if (!paused) {
+      // 空闲降帧的帧（以及刚恢复的那一帧）间距是人为拉长的，不能拿去喂自适应降档
+      const idleFrame = this.idleFps.capped || this.idleCappedLastFrame;
+      this.idleCappedLastFrame = this.idleFps.capped;
+      if (!paused && !idleFrame) {
         this.sampleFrames++;
         this.sampleMs += frameSeconds * 1000;
         this.updatePerfPolicy(frameSeconds);
@@ -19062,6 +19106,7 @@ class App {
       // `calls: 1, tris: 12` 就是这么来的，等于这一项一直没在工作。
       this.lastWorldDraw.calls = this.renderer.info.render.calls;
       this.lastWorldDraw.tris = this.renderer.info.render.triangles;
+      this.idleFps.afterRender(now, this.camera);
       // 世界之后叠画"贴在屏幕上的两件事"：手持物品与视野色罩。
       // ⚠️ 必须先关掉 autoClear，否则第二次 render 会把刚画好的世界清掉。
       this.renderer.autoClear = false;

@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { IDLE_AFTER_MS, IDLE_MAX_FPS, IdleFrameRate } from '../web/src/core/world/IdleFrameRate.ts';
 import { CAMERA_NEAR, SKY_MAX_RADIUS, cameraFarFor } from '../web/src/render/Sky.ts';
 
 import {
@@ -652,6 +653,31 @@ console.log('\n[CPU 卡但没继续恶化：把分辨率还回去]');
   // ⚠️ 从地板 0.75 加上 0.1 再 `round1` 会得到 0.9（`Math.round(8.5) = 9`），
   // 这是既有的取整口径（见降档那一处的注释），这里只断言"确实还回去了"。
   check('还回后高于 0.75（近处恢复清晰）', cpu.state.resolutionScale > MOBILE_RESOLUTION_MIN, String(cpu.state.resolutionScale));
+}
+
+console.log('\n[空闲降帧（批次 20261031）]');
+{
+  const still = { position: { x: 1, y: 2, z: 3 }, quaternion: { x: 0, y: 0, z: 0, w: 1 } };
+  const idle = new IdleFrameRate();
+  idle.afterRender(0, still);
+  check('刚画完一帧：不降', idle.capFor(100, false) === 0);
+  check('静止超过阈值：降到上限', idle.capFor(IDLE_AFTER_MS + 1, false) === IDLE_MAX_FPS);
+  check('世界在加载：不降', idle.capFor(IDLE_AFTER_MS + 1, true) === 0);
+  idle.noteInput(5000);
+  check('有输入：立刻恢复', idle.capFor(5001, false) === 0);
+  idle.pointerDown(6000);
+  check('手指按住不放（挖方块）：一直不降', idle.capFor(60000, false) === 0);
+  idle.pointerUp(60000);
+  check('松手后静止超过阈值：降', idle.capFor(60000 + IDLE_AFTER_MS + 1, false) === IDLE_MAX_FPS);
+  idle.afterRender(70000, { position: { x: 1, y: 1.5, z: 3 }, quaternion: still.quaternion });
+  check('相机在动（坠落 / 载具）：不降', idle.capFor(70001, false) === 0);
+  idle.afterRender(70040, { position: { x: 1, y: 1.5, z: 3 }, quaternion: still.quaternion });
+  check('相机停下后静止超过阈值：降', idle.capFor(70040 + IDLE_AFTER_MS + 1, false) === IDLE_MAX_FPS);
+  idle.pointerDown(80000);
+  idle.resetPointers();
+  check('失焦清掉按住状态', idle.capFor(80000 + IDLE_AFTER_MS + 1, false) === IDLE_MAX_FPS);
+  const main = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
+  check('空闲帧不喂自适应降档', /if \(!paused && !idleFrame\)/.test(main));
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);

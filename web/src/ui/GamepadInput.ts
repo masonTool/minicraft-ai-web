@@ -56,10 +56,30 @@ function applyDeadZone(value: number, deadZone = DEAD_ZONE): number {
  * 放在模块级：回主菜单再进世界会新建 `GamepadInput`，已连着的手柄不会再派发一次连接事件。
  */
 let armed = false;
+/**
+ * 安卓壳里**不注册** `gamepadconnected`（批次 20261031）：Chromium 只要有这个监听就常驻一条
+ * 手柄轮询线程（真机约 2% CPU）。改由原生 `InputManager` 判断有没有手柄，接上 / 拔掉时
+ * 派发 `mc-gamepad-attached` / `mc-gamepad-detached`。浏览器与桌面版照旧用标准事件。
+ */
+const androidHost =
+  typeof window !== 'undefined'
+    ? (window as unknown as { MinicraftAndroid?: { hasGamepad?: () => boolean } }).MinicraftAndroid
+    : undefined;
+const nativeGamepad = typeof androidHost?.hasGamepad === 'function';
 if (typeof window !== 'undefined') {
-  window.addEventListener('gamepadconnected', () => {
-    armed = true;
-  });
+  if (nativeGamepad) {
+    armed = androidHost!.hasGamepad!() === true;
+    window.addEventListener('mc-gamepad-attached', () => {
+      armed = true;
+    });
+    window.addEventListener('mc-gamepad-detached', () => {
+      armed = false;
+    });
+  } else {
+    window.addEventListener('gamepadconnected', () => {
+      armed = true;
+    });
+  }
 }
 
 export class GamepadInput {
@@ -79,8 +99,9 @@ export class GamepadInput {
     const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
     const pad = pads.find((candidate): candidate is Gamepad => candidate !== null && candidate.connected);
     if (!pad) {
-      // 拔掉之后停止轮询，等下一次 `gamepadconnected`
-      armed = false;
+      // 拔掉之后停止轮询，等下一次 `gamepadconnected`。
+      // 安卓壳里由原生说了算：手柄接着但还没按过键时 Gamepad API 不暴露它，不能就此停掉
+      if (!nativeGamepad) armed = false;
       if (this.name !== '') {
         this.name = '';
         this.previous.clear();
