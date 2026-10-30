@@ -341,8 +341,9 @@ export class ChunkRenderer {
    */
   private mergeLayer(
     entries: Array<{ section: number; arrays: GeometryArrays }>,
+    topFirst: boolean,
   ): GeometryArrays | null {
-    return mergeSectionLayer(entries);
+    return mergeSectionLayer(entries, topFirst);
   }
 
   /** Worker 结果 → 场景网格 */
@@ -366,7 +367,7 @@ export class ChunkRenderer {
       [solids, this.solidMaterial],
       [translucent, this.translucentMaterial],
     ] as const) {
-      const merged = this.mergeLayer(layer);
+      const merged = this.mergeLayer(layer, material !== this.translucentMaterial);
       if (!merged) continue;
       const geometry = this.acquireGeometry(merged);
       const mesh = new THREE.Mesh(geometry, material);
@@ -599,8 +600,11 @@ export class ChunkRenderer {
  */
 export function mergeSectionLayer(
   entries: Array<{ section: number; arrays: GeometryArrays }>,
+  topFirst = false,
 ): GeometryArrays | null {
   if (entries.length === 0) return null;
+  // 不透明层地表在前：玩家多数时候在地表，先画近处地表写深度，地下面片走 early-Z 直接丢弃
+  if (topFirst) entries = [...entries].sort((a, b) => b.section - a.section);
   let vertices = 0;
   let indices = 0;
   for (const entry of entries) {
