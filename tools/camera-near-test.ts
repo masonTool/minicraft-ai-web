@@ -59,7 +59,7 @@ console.log('\n[near 映射]');
   check('空场（Infinity）保持满 near', nearPlaneFor(Infinity) === CAMERA_NEAR);
   check('NaN 也走上限（探针算出脏值时不至于把画面裁没）', nearPlaneFor(NaN) === CAMERA_NEAR);
   check('间隙很大（100）也是满 near', nearPlaneFor(100) === CAMERA_NEAR);
-  check('间隙 0.5（正常站在空地）就已经是满 near', nearPlaneFor(0.5) === CAMERA_NEAR);
+  check('间隙 0.5 按 1/4 收缩到 0.125', nearPlaneFor(0.5) === 0.125, String(nearPlaneFor(0.5)));
 
   // 用户报的三档真实间隙（见 HANDOFF 交接：resolveVertical 让头顶正好贴住天花板）
   for (const [scene, clearance] of [
@@ -71,10 +71,15 @@ console.log('\n[near 映射]');
     check(`${scene}：near ${near.toFixed(3)} < 间隙 ${clearance}`, near < clearance, `near=${near}`);
   }
 
-  check('洞里跳那档不至于小到没边（≥ 0.1）', nearPlaneFor(0.18) >= 0.1, String(nearPlaneFor(0.18)));
+  check('洞里跳那档不至于小到下限（≥ CAMERA_NEAR_MIN）', nearPlaneFor(0.18) >= CAMERA_NEAR_MIN, String(nearPlaneFor(0.18)));
+  /*
+   * 2026-10-30 反转了这条：以前要求"贴墙仍是满 near"，而正是它导致墙角透视——
+   * 裁剪看的是**沿视线的深度**，贴着墙时墙面的 view-z 可以接近 0，
+   * 满 0.25 的近裁面会把那一片切掉。现在要求贴墙时必须缩到 0.1 以下。
+   */
   check(
-    '贴墙那档不牺牲深度精度（仍等于 CAMERA_NEAR）',
-    nearPlaneFor(0.3) === CAMERA_NEAR,
+    '贴墙那档必须收缩（> 0.1 就会看穿墙角）',
+    nearPlaneFor(0.3) < 0.1,
     String(nearPlaneFor(0.3)),
   );
   check('埋在方块里（0）压到下限', nearPlaneFor(0) === CAMERA_NEAR_MIN, String(nearPlaneFor(0)));
@@ -105,13 +110,13 @@ console.log('\n[探针 · 三档真实场景]');
   check('这一档近裁面必须收缩到 0.18 以内', nearPlaneFor(c) < 0.18, `near=${nearPlaneFor(c)}`);
 
   const standing = cameraClearance(tunnel, 0.5, 1.62, 0.5);
-  check('站直时头顶还有 0.38，不收缩', nearPlaneFor(standing) === CAMERA_NEAR, String(standing));
+  check('站直时头顶还有 0.38，按 1/4 收缩到 0.095', Math.abs(nearPlaneFor(standing) - 0.095) < 1e-9, String(nearPlaneFor(standing)));
 
   // 贴墙：墙在 x∈[1,2]，相机在 x=0.7（AABB 半宽 0.3）
   const wall = worldOf([{ x: 1, y: 0, z: 0, collision: 'full' }]);
   const cw = cameraClearance(wall, 0.7, 0.5, 0.5);
   check('贴墙走：间隙 0.30', close(cw, 0.3, 1e-9), String(cw));
-  check('贴墙这档 near 仍是 0.25（不动，保住深度精度）', nearPlaneFor(cw) === CAMERA_NEAR, String(nearPlaneFor(cw)));
+  check('贴墙这档 near 收缩到 0.075（墙角透视的修复点）', Math.abs(nearPlaneFor(cw) - 0.075) < 1e-9, String(nearPlaneFor(cw)));
 
   // 半砖天花板：上半砖的局部盒是 y∈[2.5,3]，蹲在下面（脚在 1.0、眼在脚 +1.27 = 2.27）
   // 时到盒底只有 0.23 —— 按"整格方块"（盒底 2.0）算会把人判成埋在方块里
@@ -120,7 +125,7 @@ console.log('\n[探针 · 三档真实场景]');
   check('半砖天花板下蹲着：间隙 0.23（按局部盒底 2.5 算）', close(cs, 0.23, 1e-9), String(cs));
   check('如果按整格盒底（2.0）算会得到 0 —— 那就误判成"埋在里面"了', cs !== 0, String(cs));
   check('如果按整格顶面（3.0）算会得到 0.73 —— 那就漏判了', close(cs, 0.73, 1e-9) === false, String(cs));
-  check('半砖这档 near 也要收缩', nearPlaneFor(cs) < 0.23 && nearPlaneFor(cs) >= 0.1, String(nearPlaneFor(cs)));
+  check('半砖这档 near 收缩到 0.0575', Math.abs(nearPlaneFor(cs) - 0.0575) < 1e-9, String(nearPlaneFor(cs)));
 }
 
 // ---------------------------------------------------------------- 3. 用碰撞盒，不用"非空气格"
