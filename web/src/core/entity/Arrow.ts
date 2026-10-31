@@ -20,8 +20,13 @@ import type { EffectId } from '../survival/StatusEffects.ts';
 import { boxAt } from '../physics/AABB.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 
-/** 箭的重力（原版 0.05 格/tick² ≈ 20 格/秒²） */
-const GRAVITY = 20;
+/**
+ * 箭的重力（原版 0.05 格/tick² ≈ 20 格/秒²）。
+ *
+ * ⚠️ 导出是给 `ArrowPath.ts`（拉弓时的弹道预览）用的：预览与实体必须同一个数，
+ * 否则预览会"骗"玩家（见那边的注释）。
+ */
+export const ARROW_GRAVITY = 20;
 /** 水中阻力（每秒衰减到原来的 0.36 倍） */
 const WATER_DRAG = 0.36;
 /** 存在时长上限（秒） */
@@ -77,6 +82,13 @@ export interface ArrowOptions {
    * 是否真的落雷由主程序判（只有雷雨天才会打）——这里只是"报点"。
    */
   channeling?: boolean;
+  /**
+   * **满蓄力**射出的箭（批次 20261031-1108）：飞行时一路撒暴击星星。
+   *
+   * 原版就是这样——满蓄力的箭带白色星点，玩家靠它判断"这一箭是满的"、
+   * 也更容易看见箭飞到哪。由 `fireBow` 按蓄力决定，不传 = 不画。
+   */
+  crit?: boolean;
 }
 
 /** 补全默认值之后的选项（内部用，避免到处写 `?? 1`） */
@@ -91,6 +103,8 @@ interface ResolvedArrowOptions {
   effect?: { effect: EffectId; seconds: number };
   /** 引雷（批次 269）：命中时把点报给主程序 */
   channeling: boolean;
+  /** 满蓄力箭的暴击尾迹（批次 20261031-1108） */
+  crit: boolean;
 }
 
 export class Arrow extends Entity implements MovingBody {
@@ -106,6 +120,8 @@ export class Arrow extends Entity implements MovingBody {
   private hitMobIds = new Set<number>();
   /** 还能穿过几只生物（批次 266，穿透附魔；0 = 命中即停） */
   private pierceLeft: number;
+  /** 下一次撒暴击星星的倒计时（满蓄力箭；批次 20261031-1108） */
+  private trailTimer = 0;
 
   constructor(
     x: number,
@@ -128,6 +144,7 @@ export class Arrow extends Entity implements MovingBody {
       ...(options.potionId === undefined ? {} : { potionId: options.potionId }),
       ...(options.effect === undefined ? {} : { effect: options.effect }),
       channeling: options.channeling === true,
+      crit: options.crit === true,
     };
     this.pierceLeft = Math.max(0, Math.floor(options.pierce ?? 0));
     this.updateDirection();
@@ -168,7 +185,7 @@ export class Arrow extends Entity implements MovingBody {
     }
 
     const inWater = ctx.world.isLiquid(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z));
-    this.vy -= GRAVITY * dt;
+    this.vy -= ARROW_GRAVITY * dt;
     if (inWater) {
       const drag = Math.pow(WATER_DRAG, dt);
       this.vx *= drag;
@@ -177,6 +194,16 @@ export class Arrow extends Entity implements MovingBody {
     }
 
     this.updateDirection();
+
+    // 满蓄力箭的暴击尾迹（批次 20261031-1108）：每 0.05 秒在当前位置报一次点，
+    // 主程序在那里撒星星。**报点而不是自己建粒子**——实体层不碰渲染。
+    if (this.options.crit) {
+      this.trailTimer -= dt;
+      if (this.trailTimer <= 0) {
+        this.trailTimer = 0.05;
+        ctx.critTrailAt?.(this.x, this.y, this.z);
+      }
+    }
 
     // 自己切段推进：每段只走 ≤0.4 格，段内判一次生物命中
     const dx = this.vx * dt;

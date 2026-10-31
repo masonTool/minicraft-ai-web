@@ -321,8 +321,9 @@
         opacity: .85; mix-blend-mode: difference;
       }
       body.touch-mode #crosshair { display: none; }
-      /* 批次 271：设置 → 瞄准方式 = 屏幕中心时，触摸端把准星装回来
-         （默认仍是手指落点那套，准星保持隐藏） */
+      /* 批次 271 / 20261031-1108：`aim-center` 由 `main.syncAimChrome()` 落，两个触发条件——
+         ① 设置里选了「瞄准 = 屏幕中心」；② 手里拿着弓 / 弩 / 望远镜（射击必须有一个
+         看得见的准心，否则"箭飞到哪"全靠猜）。判据与 `usesCenterAim()` 是同一个。 */
       body.touch-mode.aim-center #crosshair { display: block; }
       /* 屏幕中心瞄准时，白圈（手指落点锚点）没有意义：目标在正中，不在手指上 */
       body.touch-mode.aim-center #touch-ring { display: none; }

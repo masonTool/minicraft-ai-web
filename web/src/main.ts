@@ -526,6 +526,7 @@ import { MobHealthBar } from './render/MobHealthBar.ts';
 import { MobNameTag } from './render/MobNameTag.ts';
 import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
+import { TrajectoryPreview } from './render/TrajectoryPreview.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
 import { PlayerRenderer } from './render/PlayerRenderer.ts';
 // 平色（浮标那种）一律走 `srgbColor`：`new THREE.Color(hex)` 会做一次 sRGB→线性，
@@ -855,6 +856,7 @@ import {
 } from './core/registry/blockState.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
+import { simulateArrowPath } from './core/entity/ArrowPath.ts';
 import {
   FLAME_SECONDS,
   arrowDamageAt,
@@ -1213,6 +1215,13 @@ class App {
   private readonly weather: Weather;
   /** 粒子：破坏碎块、水花、烟雾、火焰（E13） */
   private readonly particles = new ParticleSystem();
+  /**
+   * 拉弓时的弹道预览（批次 20261031-1108）：白点串 + 落点圆环。
+   *
+   * 数据来自 `simulateArrowPath`（纯函数，与 `Arrow` 同一个重力常量）；
+   * 只在"正在拉弓且蓄力够"时显示，其它时候整组隐藏。
+   */
+  private readonly trajectory = new TrajectoryPreview();
   /** 第一人称手持物品与手臂（E15） */
   private readonly hand: HandRenderer;
   /** 第三人称的玩家模型（F7）：只有第三人称才可见 */
@@ -3052,6 +3061,8 @@ class App {
     // 多格画（批次 495）：方块是透明的哨兵格，画面全部由这里画
     this.paintingRenderer = new PaintingRenderer(atlas);
     this.scene.add(this.paintingRenderer.group);
+    // 拉弓时的弹道预览（批次 20261031-1108）：白点 + 落点圆环
+    this.scene.add(this.trajectory.object);
     this.signEditor.onSave = (lines) => this.applySignText(lines);
     this.signEditor.onClose = () => {
       this.editingSign = null;
@@ -3679,11 +3690,27 @@ class App {
    */
   private applyTouchChrome(): void {
     const settings = this.settings;
-    // 触摸端选了"屏幕中心"才把十字准星装回来；手指瞄准下保持隐藏（批次 239 的约定）
-    document.body.classList.toggle('aim-center', this.touch !== null && settings.aimMode === 'center');
+    this.syncAimChrome();
     document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
     this.touch?.setHandedness(settings.handedness);
     this.touch?.setStickMode(settings.touchStick);
+  }
+
+  /**
+   * 准星显隐（批次 271 / 20261031-1108）。
+   *
+   * 两种情况下触屏要"屏幕中心瞄准"：
+   *  ① 玩家在设置里选了「瞄准 = 屏幕中心」；
+   *  ② 手里拿着弓 / 弩 / 望远镜——它们必须**边瞄边按住**，而触屏没有独立使用键；
+   *     若还拿"手指落点"当射线，玩家就没有一个稳定的可见准心，箭射出去只能靠猜
+   *     （用户原话："箭飞得很快，打出去就没有了，我也不知道打到哪"）。
+   *
+   * ⚠️ 准星的显隐与实际取目标必须是**同一个判据**（`usesCenterAim`），
+   * 否则"准星在这里、射线在那里"，比不显示更误导。
+   * 换槽/拿起放下都会改手持物，所以 `refreshHotbar` 每次也调一遍。
+   */
+  private syncAimChrome(): void {
+    document.body.classList.toggle('aim-center', this.usesCenterAim());
   }
 
   private applySettings(settings: GameSettings, meta?: SettingsChangeMeta): void {
@@ -6261,6 +6288,10 @@ class App {
       updateDurabilityBar(durability, stack);
       slot.classList.toggle('active', index === this.hotbarIndex);
     }
+    // 手持物变了 → 准星与射线的取点方式可能跟着变（批次 20261031-1108：
+    // 拿起弓/弩就切成屏幕中心瞄准）。这是**唯一**一个每帧之外会改手持物的出口，
+    // 挂在这里就不会漏（切槽、拿起、放回、界面里移动物品都会走它）。
+    this.syncAimChrome();
   }
 
   /** 当前手持方块；手上不是可放置物品时返回 undefined */
@@ -7425,6 +7456,8 @@ class App {
     // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
     this.updateBow(dt);
     this.updateCrossbow(dt);
+    // 弹道预览紧跟拉弓结算：松手那一帧就收起（帧末 `bowDrawing` 已清）
+    this.updateTrajectoryPreview();
     this.updateRiptide(dt);
     this.updateThrownTridents(dt);
     this.hand.setDrawPull(this.bowCharge);
@@ -7850,6 +7883,37 @@ class App {
     this.refreshHotbar();
   }
 
+  /**
+   * 拉弓时的弹道预览（批次 20261031-1108）。
+   *
+   * 只在"拿着弓/弩 + 正在蓄力 + 蓄力已经够射出去"时画，其余一律收起。
+   * 抛物线交给 `simulateArrowPath`（与 `Arrow` 共用 `ARROW_GRAVITY`）；命中判定用
+   * `world.isSelectable`——箭会被**有碰撞的方块**挡下，草/花/水不挡，正好是这个语义。
+   */
+  private updateTrajectoryPreview(): void {
+    const id = this.heldItemId;
+    const drawing =
+      id === Item.BOW ? this.bowDrawing : id === Item.CROSSBOW ? this.crossbowDrawing : false;
+    // 弩是"装满才射"，初速与蓄力无关；弓按当前蓄力给初速
+    const charge = id === Item.BOW ? this.bowCharge : 1;
+    if (!drawing || this.uiOpen || this.stats.dead || !canFire(charge)) {
+      this.trajectory.clear();
+      return;
+    }
+
+    const cosPitch = Math.cos(this.pitch);
+    const dirX = -Math.sin(this.yaw) * cosPitch;
+    const dirY = Math.sin(this.pitch);
+    const dirZ = -Math.cos(this.yaw) * cosPitch;
+    const speed = arrowSpeedAt(charge);
+    const { points, landing } = simulateArrowPath(
+      { x: this.physics.x + dirX * 0.4, y: this.physics.eyeY - 0.12, z: this.physics.z + dirZ * 0.4 },
+      { x: dirX * speed, y: dirY * speed, z: dirZ * speed },
+      (x, y, z) => this.world.isSelectable(Math.floor(x), Math.floor(y), Math.floor(z)),
+    );
+    this.trajectory.update(points, landing);
+  }
+
   /** 放出一支箭：扣箭、算伤害与附魔、给弓扣耐久 */
   private fireBow(charge: number): void {
     const effects = bowEffects(this.heldEnchants);
@@ -7883,6 +7947,9 @@ class App {
         damage: arrowDamageAt(charge, effects.power),
         knockback: knockbackStrength(effects.punch),
         fireSeconds: effects.flame > 0 ? FLAME_SECONDS : 0,
+        // 满蓄力的箭带暴击尾迹（批次 20261031-1108，原版行为）：
+        // 既是"这一箭是满的"的反馈，也让玩家在飞行中看得见箭
+        crit: charge >= 1 - 1e-6,
         // 无限附魔射出的箭不能捡（否则等于无限刷箭）
         pickable: effects.infinity === 0,
         // 这一箭是哪件物品 + 带没带药水（药水箭命中时按 1/8 时长挂效果）
@@ -7924,9 +7991,15 @@ class App {
     return best;
   }
 
-  /** 触摸端是否选了"屏幕中心"瞄准（批次 271；桌面端永远走准星，不受它影响） */
+  /**
+   * 触摸端是不是"屏幕中心瞄准"（批次 271；桌面端永远走准星，不受它影响）。
+   *
+   * 批次 20261031-1108：手持弓 / 弩 / 望远镜时**强制**屏幕中心——射击必须有一个
+   * 稳定、看得见的准心，而"手指落点"那套是给挖掘/放置设计的（点哪打哪）。
+   * 这条同时决定了准星显隐与 `hit` 的取点，两者不能分家。
+   */
   private usesCenterAim(): boolean {
-    return this.touch !== null && this.settings.aimMode === 'center';
+    return this.touch !== null && (this.settings.aimMode === 'center' || this.holdsChargeable);
   }
 
   /** 画布中心（client 坐标）：屏幕中心瞄准的落点，也是触摸端准星的锚 */
@@ -8346,7 +8419,15 @@ class App {
    * 重复命中只续时间，不重复喊重算。
    */
   private onProjectileHitBlock(x: number, y: number, z: number): void {
-    if (this.world.getBlock(x, y, z) !== Block.TARGET) return;
+    const blockId = this.world.getBlock(x, y, z);
+    if (blockId !== Block.TARGET) {
+      // 普通方块（批次 20261031-1108）：一声"咔" + 几点碎屑。
+      // 原来这里只对标靶有反馈，箭插在草地上是**完全静音**的 —— 用户的原话就是
+      // "打出去就没有了，我也不知道那个箭打到哪里去了"。
+      this.audio.play('arrow_hit', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, this.blockParticleColor(blockId), 3);
+      return;
+    }
     const key = `${x},${y},${z}`;
     const fresh = !this.targetPulses.has(key);
     this.targetPulses.set(key, 1);
@@ -13541,6 +13622,8 @@ class App {
       },
       // 投掷物撞到方块（批次 248，标靶）：实体层只报格子，是不是标靶由这里判
       hitBlock: (x, y, z) => this.onProjectileHitBlock(x, y, z),
+      // 满蓄力箭的飞行尾迹（批次 20261031-1108）：每 0.05 秒两点白星
+      critTrailAt: (x, y, z) => this.particles.spawnCrit(x, y, z, 2),
       // 引雷（批次 269）：只在雷雨天真的落雷（原版规则）
       strikeLightningAt: (x, y, z) => {
         if (this.weather.current !== 'thunder') return;
@@ -19363,6 +19446,7 @@ class App {
     this.itemFrameRenderer.dispose();
     this.armorStandRenderer.dispose();
     this.paintingRenderer.dispose();
+    this.trajectory.dispose();
     this.beaconBeamRenderer.dispose();
     this.borderRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿

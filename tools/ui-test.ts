@@ -2139,6 +2139,35 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       'this.bowDrawing = false;\n      this.bowCharge = 0;\n      this.crossbowDrawing = false;\n      this.crossbowCharge = 0;',
     ),
   );
+  /*
+   * 批次 20261031-1108：用户"不知道该怎么打中目标"。三件事各有断言——
+   * 准星（看得见准心）、弹道预览（看得见落点）、命中反馈（知道打到了）。
+   */
+  check(
+    '持弓/弩/望远镜时强制屏幕中心瞄准（准星与射线必须是同一判据）',
+    mainSource.includes("this.settings.aimMode === 'center' || this.holdsChargeable"),
+  );
+  check(
+    'syncAimChrome 在两个入口都落（启动/改设置 + 每次刷新快捷栏）',
+    mainSource.includes('private syncAimChrome(): void') &&
+      (mainSource.match(/this\.syncAimChrome\(\);/g)?.length ?? 0) >= 2,
+  );
+  check(
+    '拉弓弹道预览接进帧循环，且用与箭同一个纯函数',
+    mainSource.includes('private updateTrajectoryPreview(): void') &&
+      mainSource.includes('this.updateTrajectoryPreview();') &&
+      mainSource.includes('simulateArrowPath('),
+  );
+  check(
+    '箭命中普通方块也有音效与碎屑（原来只在标靶上响，草地静音）',
+    mainSource.includes("this.audio.play('arrow_hit', { x: x + 0.5") &&
+      mainSource.includes('this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5'),
+  );
+  check(
+    '满蓄力箭带暴击尾迹（原版行为：看得见箭也看得出这一箭是满的）',
+    mainSource.includes('crit: charge >= 1 - 1e-6') &&
+      mainSource.includes('critTrailAt: (x, y, z) => this.particles.spawnCrit'),
+  );
   check(
     '进食时长按设置取档（原版 1.6 / 快速 1.0）',
     mainSource.includes('eatSecondsFor(this.settings.fastEat)'),
@@ -2308,9 +2337,12 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     touchOnlyBlock.length > 0 ? 'ok' : '没找到触摸判据块',
   );
   check(
-    'PC 上「瞄准」恒为中心点（aimMode 只在触摸端参与取物）',
-    /private usesCenterAim\(\): boolean \{[\s\S]{0,240}?this\.touch !== null && this\.settings\.aimMode === 'center'/.test(mainSource) &&
-      mainSource.includes("document.body.classList.toggle('aim-center', this.touch !== null && settings.aimMode === 'center')"),
+    'PC 上「瞄准」恒为中心点（aimMode / 持弓强制都只在触摸端参与取物）',
+    // 判据必须以 `this.touch !== null` 开头：桌面端走 else 分支的视线射线，与 aimMode 无关。
+    // 批次 20261031-1108 之后括号里多了一条 `holdsChargeable`（持弓时强制中心瞄准）。
+    /private usesCenterAim\(\): boolean \{[\s\S]{0,320}?return this\.touch !== null && \(/.test(mainSource) &&
+      // 准星显隐必须读同一个判据——两处各写一份就会出现"准星在这、射线在那"
+      mainSource.includes("document.body.classList.toggle('aim-center', this.usesCenterAim());"),
   );
   check(
     '键鼠取物走的是视线射线（准星），不是某个手指落点',

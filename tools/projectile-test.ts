@@ -17,7 +17,8 @@ import { itemLabel, itemTooltip } from '../web/src/core/registry/itemNames.ts';
 import { RECIPES, matchRecipe } from '../web/src/core/crafting/Recipes.ts';
 import { enchantKindOf, offeringFor } from '../web/src/core/crafting/Enchanting.ts';
 import { maxDurabilityOf, repairMaterialOf } from '../web/src/core/crafting/Anvil.ts';
-import { Arrow, ARROW_LIFETIME } from '../web/src/core/entity/Arrow.ts';
+import { Arrow, ARROW_GRAVITY, ARROW_LIFETIME } from '../web/src/core/entity/Arrow.ts';
+import { TRAJECTORY_STEPS, simulateArrowPath } from '../web/src/core/entity/ArrowPath.ts';
 import {
   ARROW_MAX_DAMAGE,
   ARROW_MAX_SPEED,
@@ -413,6 +414,42 @@ console.log('\n[箭够不够]');
   check('无限弓一支箭都没有 → 也不能射（原版行为，否则空手无限射）', !canShoot(true, 1, 0, infinite));
   check('蓄力不够 → 不能射', !canShoot(true, 0.1, 64, plain));
   check('手上不是弓 → 不能射', !canShoot(false, 1, 64, plain));
+}
+
+console.log('\n[弹道预览]');
+{
+  // 批次 20261031-1108：拉弓时的预测弹道必须与实体用同一套数，否则预览会"骗"玩家。
+  equal('预览与箭用同一个重力常量', ARROW_GRAVITY, 20);
+
+  const flat = simulateArrowPath(
+    { x: 0, y: 0, z: 0 },
+    { x: ARROW_MAX_SPEED, y: 0, z: 0 },
+    () => false,
+  );
+  equal('射程内不撞东西 → 用满步数', flat.points.length, TRAJECTORY_STEPS);
+  equal('没有落点', flat.landing, null);
+  // 步长 0.02 秒、60 格/秒 → 相邻两点水平相距 1.2 格（点距太密会糊成一条线）
+  const gap = Math.hypot(flat.points[1]!.x - flat.points[0]!.x, flat.points[1]!.z - flat.points[0]!.z);
+  check('相邻点相距约 1.2 格', Math.abs(gap - 1.2) < 1e-6, gap.toFixed(3));
+  // 整秒处的下坠：水平射 1 秒（50 步）后 y = -g·step²·n(n+1)/2 = -10.2 格
+  const oneSecond = flat.points[49]!;
+  check(
+    '平射 1 秒下坠约 10 格（与原版 20 格/秒² 一致）',
+    oneSecond.y < -9.9 && oneSecond.y > -10.5,
+    oneSecond.y.toFixed(2),
+  );
+  check('水平方向不减速', Math.abs(oneSecond.x - ARROW_MAX_SPEED) < 1e-6, oneSecond.x.toFixed(2));
+
+  // 撞到就停在**撞点前一格**（不许把点画进方块里）
+  const blocked = simulateArrowPath({ x: 0, y: 0, z: 0 }, { x: ARROW_MAX_SPEED, y: 0, z: 0 }, (x) => x >= 10);
+  check('撞到方块时有落点', blocked.landing !== null);
+  check(
+    '落点在撞击前一格（不是穿进方块里）',
+    blocked.landing !== null && Math.round(blocked.landing.x * 10) / 10 === 9.6,
+    blocked.landing ? blocked.landing.x.toFixed(2) : 'null',
+  );
+  // 每步 1.2 格：飞到 9.6 格是第 8 个点，下一步 10.8 就撞上了
+  check('撞到之后不再往后画点', blocked.points.length === 8, String(blocked.points.length));
 }
 
 console.log(`\n弹射物测试：${passed} 通过 / ${failed} 失败`);
