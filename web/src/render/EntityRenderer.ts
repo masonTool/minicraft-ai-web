@@ -484,7 +484,10 @@ export class EntityRenderer {
       this.object.add(mesh);
     }
 
-    if (fireball) {
+    // 末影之眼（批次 20261031-1025）：本体也归进**自发光**那一档——它飞得远、又常在夜里
+    // 或洞口被扔出去，跟着环境光变暗就等于"飞出去看不见了"。原版靠身后那条紫色尾迹保证
+    // 可见（尾迹见 `Throwable` 的 `ENDER_EYE_TRAIL_INTERVAL`），这里两样都要。
+    if (fireball || throwable.kind === 'ender_eye') {
       // **自发光**：火球是光源本身，不该跟着周围的光照变暗（原版它一路都亮着）
       mesh.material = this.materialForLevel(15);
     } else if (lightAt) {
