@@ -6357,6 +6357,17 @@ class App {
   }
 
   /**
+   * 正在拉弓 / 装填（批次 20261031-1031）。
+   *
+   * 触屏上"按住"同时意味着三件事：瞄准、使用、挖方块/打怪。前两件已经归了弓弩，
+   * 这一条把第三件挡掉——否则一边拉弓一边把脚下那块地挖穿、或者把瞄准的猪揍一顿。
+   * `updateBreaking` / `updateAttacking` / `updateArmSwing` 都读它。
+   */
+  private get chargingShot(): boolean {
+    return this.bowDrawing || this.crossbowDrawing;
+  }
+
+  /**
    * 这一帧算不算"正在使用手里的东西"。
    *
    * 触摸端没有独立的使用键，靠"按住不动"借用（批次 219/224）。原来还额外要求
@@ -9753,6 +9764,8 @@ class App {
     const tap = this.tapSwingRequest;
     this.tapSwingRequest = false;
     if (this.uiOpen) return;
+    // 拉弓/装填期间手臂由 `hand.setDrawPull` 驱动，不该再按节拍乱挥
+    if (this.chargingShot) return;
     const holding = this.leftDown || this.padAttack || this.touch?.holding === true;
     if (!tap && !(holding && this.armSwingCooldown <= 0)) return;
     this.hand.swing();
@@ -9767,6 +9780,14 @@ class App {
     // 手机上按住一只猪就会把脚下的地挖穿。
     this.suppressBreaking = this.aimMob !== null;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    // 拉弓/装填期间（批次 20261031-1031）：按住与轻点都归弓弩。
+    // 触屏上同一根手指既在瞄准也在"按住使用"，不挡掉就会边拉弓边揍瞄准的那只怪。
+    // 顺手把排队的轻点请求作废，否则松手那一帧会补一记空手攻击。
+    if (this.chargingShot) {
+      this.tapAttackRequest = false;
+      this.tapAttackMob = null;
+      return;
+    }
     // 触摸"轻点生物"是一次性请求（批次 181）；按住（leftDown）仍然持续攻击
     const tapped = this.tapAttackRequest;
     // 批次 185：轻点那一下点中的生物优先（点哪打哪），没有才回退到准星
@@ -9930,7 +9951,9 @@ class App {
     // 冒险模式（批次 549）：能打怪、能交互，但不能破坏方块
     if (!canBreakBlocks(this.gameMode)) return;
 
-    if (this.suppressBreaking) {
+    // 拉弓/装填期间不许挖方块（批次 20261031-1031）：触屏上按住那一下是"充能"，
+    // 不是"挖"——不挡掉的话，一拉弓就把瞄着的那块地挖穿（`REACH` 10 格更明显）。
+    if (this.suppressBreaking || this.chargingShot) {
       this.breakingKey = '';
       this.breakProgress = 0;
       this.digSoundTimer = 0;
