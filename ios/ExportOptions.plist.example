@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  导出 ipa 用的配置模板。
+
+  用法：
+    1. 复制成 ios/ExportOptions.plist（该文件已在 .gitignore 里，不会进仓库）
+    2. 把 YOUR_TEAM_ID 换成你的 Apple 开发者 Team ID
+       （Xcode → 选中 target → Signing & Capabilities → Team 那一栏，或
+        `security find-identity -v -p codesigning` 看证书的 OU 字段）
+    3. npm run release:ios   然后
+       xcodebuild -exportArchive -archivePath ios/build/App.xcarchive \
+         -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build/ipa
+
+  method 的取值（按分发方式选一个）：
+    app-store        上架 App Store
+    ad-hoc           给已登记 UDID 的设备装（最多 100 台）
+    development      开发机自用
+    enterprise       企业内部分发（需企业开发者账号）
+-->
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>teamID</key>
+  <string>YOUR_TEAM_ID</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+  <key>uploadSymbols</key>
+  <true/>
+  <key>stripSwiftSymbols</key>
+  <true/>
+</dict>
+</plist>

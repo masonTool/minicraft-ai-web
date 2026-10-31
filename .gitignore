@@ -63,9 +63,10 @@ references/
 server/node/.data/
 
 
-# 封存产物（iOS）：与 android 同源，由 npm run gen:sealed 生成
+# iOS：导出 ipa 的配置（含 Team ID，从 ExportOptions.plist.example 复制，本地生成）
+ios/ExportOptions.plist
 
-# 桌面端：封存产物（打包输出统一在 dist/ 下，见 mac/ 与 windows/ 的 electron-builder.yml）
+# 桌面端打包输出统一在 dist/ 下（见 mac/ 与 windows/ 的 electron-builder.yml）
 
 # 整包加密产物（npm run pack 生成）
 build/
