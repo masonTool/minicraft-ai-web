@@ -19167,3 +19167,31 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261031-0055 · 2026-10-31 · 会话 c747f7
+
+> 降温第二批：数据驱动砍 draw call / 三角形，加空闲降帧
+
+# 队列 · 会话 c747f798fe5f443089f73456db302086
+
+> 状态：执行中
+> 创建：2026-10-31
+> 批次：20261031-0055
+
+- [x] 摸底：真机 WebView 远程调试（release 包 `-e debugweb true`）逐帧统计 draw call 来源、DOM 变化、IO 来源 → 数据驱动后续各项
+  做了：低头满屏地形每帧 157 次 draw call 里 152 次是区块网格、三角形 167 万；DOM 每帧只有 `#death` / `#target-vitals` 各写一次 class；5 秒内 localStorage 1 次、worker 消息 6 条，IO 不是问题。
+  验证：CDP 取样脚本在 Pixel 2 XL 上实跑，数据见上。
+- [x] 遮挡搜索加视锥约束 + 包围球收紧到要画的 section + 两处 class 不再每帧写：`render/SectionOcclusion.ts` + `render/ChunkRenderer.ts#applySections` + `main.ts` → `npm run check:fast` + 真机 draw call / 三角形
+  做了：BFS 只往视锥内 section 扩展（视图矩阵变化才重算，真机转视角时每帧 ≤1.1ms）；包围球按实际要画的 section 高度重设；`classList.toggle(…, force)` 状态不变不写。提交 `c0bb0cf9`。
+  验证：`test:mesh` 新增 8 条断言（视锥前/后、包围球覆盖与收紧、全画回整列）；真机低头 draw call 298 → 163、三角形 164 万 → 57 万，平视 148 / 23 万；平视截图远景、水、树林无漏画。
+- [x] 顶点 / 索引无损瘦身：合并网格顶点 < 65536 用 16 位索引 → `npm run check:fast` + 真机画面
+  做了：`mergeSectionLayer` 按顶点数选 `Uint16Array` / `Uint32Array`，数值不变。顶点属性改 16 位整数（植物交叉面等非 1/16 坐标会变）不满足"逐像素一致"，判定不做。提交 `ecede2bc`。
+  验证：`test:mesh` 新增 2 条断言（类型与数值）；真机画面正常。
+- [x] 动态帧率（用户 2026-10-31 提出）：没操作、画面不动时降帧，任何输入立即恢复 → 离线断言 + 真机帧率时间线
+  做了：`core/world/IdleFrameRate.ts`，2.5 秒无输入 + 相机位姿不变 + 世界不在成批加载时上限 30 帧；手指按住、坠落 / 载具、成批加载都不降（随机刻零星重刷不算加载）；空闲帧不喂自适应降档。安卓壳改由原生 `InputManager` 判断手柄（`JsHostBridge.hasGamepad` + 设备监听派发事件），网页不再注册 `gamepadconnected`（Chromium 有这个监听就常驻手柄轮询线程）。提交 `6ea853d6`。
+  验证：`test:perfpolicy` 新增 9 条断言；真机静止 100% 时间 30 帧、拖动视角当帧恢复 60；线程表里 Gamepad polling 消失。
+- [x] 真机冷机（电池 ≤33°C）复测：持续拖动视角 59.0 fps、帧时间中位 5ms / 90 分位 10ms、卡顿 3.5%、CPU 合计 73%；稳态静止 30.8 fps、卡顿 0.3%、CPU 合计 44%（上一批末静止为 61 fps / 74%）
+  做了：测量脚本加入"持续拖动"与"只采样"两种模式，APK 路径显式传入、安装失败即报错。
+  验证：两轮 20 秒 `dumpsys gfxinfo` + `/proc` 线程采样，开测/结束电池温度均在 32.4~34.2°C。
+
+---
+
