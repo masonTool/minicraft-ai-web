@@ -294,6 +294,10 @@ export const LOOT_TABLES: readonly LootTable[] = [
     rollsMax: 7,
     entries: [
       entry(Item.ENDER_PEARL, 2, 3, 10),
+      // 末影之眼（批次 20261031-0943，对齐原版）：这张表原版就有眼睛，本项目原先只给
+      // 珍珠——玩家没带够眼睛时，进了要塞也点不亮那一圈（烈焰粉还得回下界拿）。
+      // 量按原版那一档给 1~3；权重压得比珍珠低，主角仍是"打末影人"。
+      entry(Item.ENDER_EYE, 1, 3, 4),
       entry(Item.IRON_INGOT, 1, 5, 8),
       entry(Item.GOLD_INGOT, 1, 3, 6),
       entry(Item.REDSTONE, 4, 9, 5),

@@ -307,6 +307,15 @@ console.log('\n[六、末影之眼这一条链]');
   check('这张表能按名字查到序号（写进方块状态的就是它）', lootTableIndex('stronghold_portal') > 0);
   const pearlEntry = table?.entries.find((entry) => entry.id === Item.ENDER_PEARL);
   check('表里有末影珍珠', pearlEntry !== undefined);
+  // 批次 20261031-0943：原版这张表就有末影之眼；只给珍珠的话，玩家没带够眼睛
+  // 进了要塞也点不亮那一圈（烈焰粉还得回下界拿）
+  const eyeEntry = table?.entries.find((entry) => entry.id === Item.ENDER_EYE);
+  check('表里有末影之眼（原版就有）', eyeEntry !== undefined);
+  check(
+    '眼睛的量是原版那一档（1~3 个）',
+    eyeEntry?.min === 1 && eyeEntry?.max === 3,
+    `实际 ${String(eyeEntry?.min)}~${String(eyeEntry?.max)}`,
+  );
   const totalWeight = table!.entries.reduce((sum, entry) => sum + entry.weight, 0);
   const expectedRolls = (table!.rollsMin + table!.rollsMax) / 2;
   const expectedPearls = expectedRolls * (pearlEntry!.weight / totalWeight) * ((pearlEntry!.min + pearlEntry!.max) / 2);
