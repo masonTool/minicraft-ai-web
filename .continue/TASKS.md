@@ -6055,6 +6055,9 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] L41 **Android 整包解密下沉到 native**（用户 2026-10-31）：明文只在 native 堆，Java 按路径取单文件。
+  - 新增 `native/vault`（C++17，自实现 SHA-256 / HMAC / HKDF / AES-256-GCM，无 openssl 依赖）；`BundleVault` 从"返回 Map"改成 `nativeOpen` / `nativeRead` 句柄；`MainActivity` 改 `vault.read(name)`。
+  - 验证：`test:vault` 18（标准向量 + 与 `web/dist` 逐字节 + 多签名 + 6 条负面）、`test:pack` 17、`assembleDebug` 通过、`check:fast` 全绿。
 - [x] L40 **地下岩浆囊太浅太多（1 条）**（用户 2026-10-31）：水下 y≈-13 挖洞就撞上岩浆、灌进要塞缺口。
   - `Aquifer` 的岩浆囊起点 `y<0` → **`y<-24`**（`LAVA_POCKET_MIN_Y`）、噪声阈值 0.72 → **0.82**；`y<=-54` 的深层岩浆不动。
   - 验证：`test:aquifer` 15（岩浆 8657 → 6087、水 41296 → 43866，y=-24 以上无岩浆）、`test:perf` 44（网格指纹更新为 `2618f192`）、`check:fast` 18 套全绿。

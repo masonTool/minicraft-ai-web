@@ -9,6 +9,65 @@
 
 ---
 
+## 批次 20261031-1033 · 2026-10-31 · 会话 da0b9d
+
+> Android 整包解密下沉到 native：明文不再进 Java 堆
+
+# 队列 · 会话 da0b9dbb005245c4a3b080a7db857823
+
+> 状态：执行中
+> 创建：2026-10-31
+> 批次：20261031-1033
+
+## 目标
+
+「层次 B」：把整包解密从 Java 搬到 native，**native 持有全量明文，Java 只按路径取单文件**。
+目标不是"防破解"（纯客户端做不到），而是：
+
+1. Java 堆上不再出现完整的 `Map<path, bytes>`，内存 dump 要逐文件拼；
+2. jadx 打开 `BundleVault` 只能看到一个 `native` 声明，算法全在 `.so` 里；
+3. 顺带获得一份**三端可复用**的 vault 实现（iOS/桌面后续接入，避免 Java/Swift/TS 三份漂移）。
+
+## 条目
+
+- [x] 实现 `native/vault` 核心：`src/crypto.cpp`（SHA-256 / HMAC-SHA256 / HKDF / AES-256-GCM）、`src/vault.cpp`（包解析 + MCB1 容器索引）、`src/vault_cli.cpp`（host 命令行）→ `bash native/vault/build-host.sh && native/vault/build/host/vault-selftest` 全绿（含 NIST/RFC 标准向量）
+  - 做了什么：`crypto.cpp` 自实现四个原语（GCM 只需要加密方向的 AES 块函数，CTR 解密复用同一 keystream，省掉逆 S-box）；S-box 由 GF(2^8) 逆元 + 仿射**算出来**而不是抄 256 个常量；`vault.cpp` 解析假 ELF 头 / salt / 多份包裹 / 整段密文 / MCB1 容器，明文缓冲留在对象内
+  - 为什么：环境里**没有 Rust**（`rustc`/`cargo`/`rustup` 全缺失），NDK 28/29 又**不再提供 BoringSSL 头与 libcrypto**，所以只能 C++ 自包含。这样 host 与 Android 编同一份源码，"host 上通过"才代表设备行为
+  - 验证：`vault-selftest` 17 条全绿（NIST GCM TC13/TC14、RFC 4231 TestCase 1/2/6、RFC 5869 TestCase 1、FIPS 180-4）
+  - 批次：20261031-1033
+
+- [x] host 端到端：用真实 `build/rt/libmcrt.so` + `signers.json` 解密，与 `web/dist` 逐字节比对，并覆盖负面用例（错签名/改字节/截断/坏头）→ `npm run test:vault` 通过
+  - 做了什么：`tools/vault-test.mjs` 分四层断言——标准向量、与 `desktop/bundle.mjs` 的元信息对齐（文件数 / 容器字节）、逐文件 SHA-256 比对、六条负面用例；编译失败或没打包时优雅跳过
+  - 为什么：三份解密实现（`desktop/bundle.mjs` / `BundleVault.java` / `native/vault`）漂移的症状是"电脑上正常、手机上白屏"，只能装机 + logcat 才发现。这条测试把它压到 host 上一次 3 秒
+  - 验证：`npm run test:vault` **18 条通过**（解出 25 个文件，与 `web/dist` 逐字节一致；1.3 MB 包 0.06s）；`npm run test:pack` 17 条仍全过（包格式未变，向后兼容）
+  - 批次：20261031-1033
+
+- [x] JNI 接线：`src/jni_bridge.cpp` + 重写 `BundleVault.java`（`nativeOpen/nativeRead/nativeClose`）+ `MainActivity` 改成 `vault.read(name)` → `bash native/vault/build-android.sh` 出两个 ABI 的 `.so`
+  - 做了什么：JNI 五个导出（open/read/count/totalBytes/close），native 侧用 `Mutex + unique_ptr<Bundle>` 持有明文；`BundleVault` 从"返回 Map"改成"持有句柄 + `read(path)`"；`MainActivity` 的 `currentBundle.get(name)` 换成 `vault.read(name)`，`isFinishing()` 时 `vault.close()`
+  - 为什么：这是"层次 B"的本体——明文不进 Java 堆。锁是必需的：`shouldInterceptRequest` 在 WebView 的 IO 线程上并发拉多个资源
+  - 验证：`build-android.sh` 出 arm64 401K / v7a 252K；`llvm-nm` 确认 5 个 `Java_com_minicraft_app_BundleVault_*` 符号导出；`llvm-readelf` 确认依赖只有 libz/libc/libm/libdl/liblog（**无 `libc++_shared`**，静态链接生效）
+  - 批次：20261031-1033
+
+- [x] 构建管线：`android/app/build.gradle` 新增 `copyVaultLib`（缺产物明确报错）+ `package.json` 增 `native:vault` / `test:vault`，`android:apk` 前置编译 → `npm run check:fast` 通过
+  - 做了什么：`copyVaultLib` 从 `native/vault/build/android/<abi>/` 拷进 `jniLibs`，缺产物时抛 GradleException 并提示该跑哪条命令；`android:apk` / `android:aab` 前插入 `npm run native:vault`
+  - 为什么：宁可构建期报错，也不要编出"装上就 UnsatisfiedLinkError"的 APK——那类问题在真机上最难查
+  - 验证：`./gradlew :app:assembleDebug` **BUILD SUCCESSFUL**，APK 内含 `lib/arm64-v8a/libminicraft_vault.so`(410456) 与 v7a(258488)；`npm run check:fast` 全绿（typecheck + 649 单测 + 182 套离线）
+  - 批次：20261031-1033
+
+- [x] 文档：`docs/CODE-PROTECTION.md` 更新架构图/威胁模型，明确"指纹仍来自 Java"这一剩余缺口 → `npm run audit:docs` 通过
+  - 做了什么：新增 §2.1（Android 三层分工表）与 §2.2（为什么自实现密码学）；"能挡住什么"表补两行——**"改 `installedSignerDigest` 硬编码公开指纹 = ⚠️ 可以"**、jadx 只能看到 native 声明；"还没做"里写清"指纹不在 native 自校验"的取舍理由；顺手修掉过期结论（原文说 release 仍 `minifyEnabled false`，实际 `build.gradle` 早已是 `true`）
+  - 为什么：原文档把强度写得太乐观，缺"改代码就能绕过"这一条，读的人会误判它能防逆向
+  - 验证：`npm run audit:docs` 通过；文档通读一遍与实现逐条对照
+  - 批次：20261031-1033
+
+- [x] 提交并 push（只 `git add` 本批文件，不带走其它会话已暂存的 8 个 `web/src` 改动）
+  - 做了什么：只 add `native/vault/{src,test,*.sh}`、`android/.../{BundleVault,MainActivity}.java`、`android/app/build.gradle`、`package.json`、`tools/vault-test.mjs`、`docs/CODE-PROTECTION.md`、`.continue/doing/da0b9d*.md`；`native/vault/build/` 由 `.gitignore` 的 `build/` 规则排除，`jniLibs` 下的 `.so` 未被跟踪
+  - 为什么：另一个会话的 `web/src` 改动虽然已提交，但 `jniLibs`/`build` 这类产物绝不能进仓库
+  - 验证：`git status --short --untracked-files=all native/` 只列出 10 个源文件，无 `.so`/二进制
+  - 批次：20261031-1033
+
+---
+
 ## 批次 20261031-1203 · 2026-10-31 · 会话 d02a01-decision
 
 > 地下岩浆囊收窄到深部（y<-24、阈值 0.82）
@@ -224,53 +283,6 @@
   - 为什么：`git commit` 的守卫只跑 `check:fast`（不含 `typecheck:tools` 与三张台账），所以这两处能在 main 上一直红着不被发现；不修掉的话这批的"全量门禁"是空话。
   - 验证：`npm run check` 退出码 0；`test:offline` 181 套全绿；台账 `--print` 三项通过。
   - 批次：20261031-1031
-
----
-
-## 批次 20261031-1100 · 2026-10-31 · 会话 mine20261031
-
-> 挖方块时方块要等停手才消失：在途网格被后续改动作废
-
-# 队列 · 会话 mine20261031
-
-> 状态：执行中
-> 创建：2026-10-31
-> 批次：20261031-1100
-
-- [x] 复现与定位：真机按住挖 + 边走边挖，逐次记录"改方块 / 网格派发 / 结果回传 / 挂进场景"的时间线
-  做了：`/tmp/mine8.mjs` 6 秒挖掉 54 格只挂上 13 次网格，中间 2 秒画面完全不动；停手后最后一份才挂上。根因在 `ChunkRenderer.enqueue`：遇到在途请求就把序号往前推让在途结果作废，连续挖时在途结果永远比下一次改动旧，全部被丢弃。这条逻辑 2026-10-17 起就有，不是本批引入的，但移动时的帧内预算让它更容易被看见。
-  验证：同脚本在旧包（`app-step7`）上同样复现（190 格 / 19 次挂载），确认非回归而是老毛病。
-- [x] 在途请求不再被后续改动作废：`ChunkRenderer.dirtyRebuild` + 挂上后立刻按最新状态重烘 → `test:render`
-  做了：同一区块同时只允许一个在途请求，期间的改动只记一笔脏；结果挂进场景后立刻用 `MESH_PRIORITY_EDIT` 重排一次。单块最多落后一次往返。
-  验证：`test:render` 新增 5 条（在途期间不重复派发、在途结果照样挂、挂上后立刻重排、重排确实派发）；真机同场景挂载 13 → 70 次 / 6 秒，改动→派发 1ms、派发→回传 76ms、回传→挂载 5ms，无整块丢弃。提交 `266fbd83`。
-
----
-
-## 批次 20261031-0930 · 2026-10-31 · 会话 judder20261031
-
-> 低端机移动时满帧却顿：帧时钟与 Worker 回传重活的帧内预算
-
-# 队列 · 会话 judder20261031
-
-> 状态：执行中
-> 创建：2026-10-31
-> 批次：20261031-0930
-
-- [x] 摸底：真机 CDP 逐帧记录 rAF 时间戳 / 帧体分段 / GL 上传 + CPU profile，飞行前进时找"满帧却卡"的来源
-  做了：三个来源。① dt 用回调开头的 `performance.now()`，回调起点被推迟 0~5ms（p90 4.6ms），dt 在 13~19ms 之间跳，位移忽大忽小；② Worker 生成结果在消息回调里当场并入，`onChunkLoaded` 里刷怪笼 / 村庄床两趟全高度三重循环 + 光照播种，一次 20~54ms，正好落在两帧之间；③ 网格结果也在回调里合并 + 逐顶点 `computeBoundingSphere`，一块 3~8ms，几块前后脚到就叠起来。
-  验证：`/tmp/judder.mjs`、`/tmp/prof.mjs` 在 Pixel 2 XL 实跑，旧包飞行 12 秒掉帧 26~33、显示间隔 p99 50~67ms。
-- [x] 帧时钟改用 rAF 时间戳：`core/world/PerfPolicy.ts#frameClock` + `main.ts` 主循环 → `test:perfpolicy`
-  做了：dt / 限帧判据 / 暂停与后台的 lastTime 一律用 vsync 时间戳；缺失、非法或比 now 晚时退回 now。
-  验证：`test:perfpolicy` 新增 5 条（回调抖动不进 dt、对照组 now 会抖 4ms 以上、三种退回）。
-- [x] 区块并入挪进帧内按预算：`World.enqueueGenerated` / `integrateArrived` + `CHUNK_INTEGRATE_BUDGET_MS = 1`（实际每帧一块）→ `test:render`
-  做了：消息只排队，主循环每帧并入；遮罩期不限；200ms 没人取由定时器兜底；`setDimension` / `reset` / `dispose` 清队列；排队中的仍算 `pendingCount`。
-  验证：`test:render` 新增 8 条（到达不并、至少一块、不限一次并完、计数）。
-- [x] 加载扫描先查表跳过：`core/world/ChunkContents.ts` + `main.ts#onChunkLoaded` → `test:loot`
-  做了：一趟查表（空 section 跳过、全找到提前返回）判断有无箱子 / 避雷针 / 刷怪笼 / 信标 / 床，没有的那几趟整趟跳过，有的照旧跑原扫描。
-  验证：`test:loot` 新增 8 条，含与逐格扫描对拍 40 个随机区块。
-- [x] 网格挂载挪进帧内按预算 + 包围球按 section 范围直接给：`ChunkRenderer.applyReady` + `MESH_APPLY_BUDGET_MS = 4` → `test:render`
-  做了：Worker 网格结果排队，帧内挂载；排队期间区块卸载就丢弃；包围球用 `fitSphere`（与 `applySections` 同一个盒子），不再逐顶点算。
-  验证：`test:render` 新增 4 条；真机同场景 A/B（飞行前进 12 秒 × 3 次）：掉帧 26~33 → 2~3，显示间隔 p99 50~67ms → 16.9ms，平均 55 → 59.4 fps。提交 `b52b0054`。
 
 ---
 
