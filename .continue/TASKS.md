@@ -6055,6 +6055,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] L43 **统一五端命令体系 + 装齐桌面依赖**（用户 2026-10-31）：多端要遵循同一套规范，且 electron 那些依赖要装好以便直接验证。
+  - 命令统一为 `build:<平台>` / `release:<平台>`（web / android / ios / mac / win），旧 `android:apk` / `android:aab` 保留为别名；新增 `mac|windows|ios/build.sh`（dev 免证书，release 校验证书）。
+  - 装 electron 45 + electron-builder 26：此前根本没装，桌面端实际编不出包。
+  - 顺手修 iOS 明文进包：从 `project.pbxproj` 移除 `public/` 的 4 处引用（Capacitor 残留，内容是明文），重建后 App 内只剩密文。
+  - 验证：`build:android` 出 APK 13M、`build:mac` 出 arm64+x64 dmg、`build:ios` 出 App.app 且模拟器启动渲染主菜单、`build:win` 在 macOS 上明确报需要 wine；`check:fast` 182 套全绿。
 - [x] L42 **构建与分发指南**（用户 2026-10-31）：多端理解成本高，要一份"开发版/正式版怎么编、每个平台配什么"的说明。
   - 新增 `docs/BUILD-GUIDE.md`：决策表 → 概念（同一份代码 + 两种签名）→ 一次性配置总表 → 各端步骤 → 产物怎么给别人 → 失效文档清单；`AGENTS.md` 索引加一行。
   - 顺手核出 6 处漂移：`android` / `mac` / `windows` 的 README 里命令已不存在、`saltHex` 字段无任何引用、`ios/App/App/public` 残留明文、桌面端缺 electron 依赖。
