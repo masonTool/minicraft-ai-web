@@ -16,6 +16,8 @@ files:
   - game-server.mjs
   - preload.cjs
   - package.json
+  # 同 mac：主进程不需要 three，排除掉 app.asar 里那份多余副本
+  - "!node_modules/three/**"
 
 extraResources:
   # 只带加密包：解密后的内容只存在于主进程内存里，磁盘上没有明文

@@ -30,7 +30,7 @@
 | 端到端冒烟（自起自停） | `bash run-smoke.sh` | 20 / 0 |
 | **全量黑盒断言**（与 JS 版共用） | `bash run-net-test.sh` | **297 / 297** |
 | 局域网发现（两个真进程互相发现） | `bash run-beacon-smoke.sh` | 12 / 0 |
-| Android 产物 | `bash build-android.sh` | `arm64-v8a` + `x86_64` 各一个 `.so` |
+| Android 产物 | `bash build-android.sh` | `arm64-v8a` + `armeabi-v7a` 各一个 `.so` |
 
 已覆盖：`join`（版本 / clientId / 同 clientId 在线 / 同房重名 / 一房一房主 / 房间名 / 口令 /
 来源白名单 / `world` 按房种子）、`welcome`（种子 + `world` + `isHost`/`hostId` + 时间 + 天气 +
@@ -70,7 +70,7 @@ cargo test               # 纯逻辑单测（协议 / 限频 / AOI / 发现）
 bash run-smoke.sh        # 自起临时服务端（25199）→ 20 条断言 → 关掉
 bash run-net-test.sh     # 用 tools/net-test.mjs 的 195 条断言验收（build 后直接跑 Rust 二进制）
 bash run-beacon-smoke.sh # 起两个真进程验"互相发现"（组播 + 自回声过滤）
-bash build-android.sh    # 交叉编译 Android 的 .so（arm64-v8a / x86_64）
+bash build-android.sh    # 交叉编译 Android 的 .so（arm64-v8a / armeabi-v7a）
 cargo run                # 手动跑（默认 8887，与 JS 版一致）
 ```
 

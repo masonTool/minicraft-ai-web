@@ -85,8 +85,21 @@ function debugKeystoreDigest(): string | null {
 }
 
 function readSigners(): string[] {
-  const raw = JSON.parse(readFileSync(CONFIG, 'utf8')) as ReleaseConfig;
-  const list = Array.isArray(raw.signingCertSha256) ? raw.signingCertSha256 : [];
+  // 环境变量优先，配置文件兜底。
+  //
+  // 为什么加这条路：证书轮换或"同一份代码发多个渠道"时，指纹不该写进仓库；
+  // CI 用 `MINICRAFT_SIGNING_CERT_SHA256=a,b` 注入即可，本地仍可用配置文件。
+  //
+  // ⚠️ 注意这不等于"把指纹藏起来了"——指纹是公开信息（Play Console / apksigner 都能查），
+  // 而且本仓库的 git 历史里已经有过它。这条只是让**以后换证书**不用改代码。
+  const fromEnv = process.env.MINICRAFT_SIGNING_CERT_SHA256;
+  let list: unknown[];
+  if (fromEnv !== undefined && fromEnv.trim() !== '') {
+    list = fromEnv.split(/[,;]/).map((v) => v.trim());
+  } else {
+    const raw = JSON.parse(readFileSync(CONFIG, 'utf8')) as ReleaseConfig;
+    list = Array.isArray(raw.signingCertSha256) ? raw.signingCertSha256 : [];
+  }
   const configured = list
     .filter((v): v is string => typeof v === 'string')
     .map((v) => v.replace(/:/g, '').trim().toLowerCase())

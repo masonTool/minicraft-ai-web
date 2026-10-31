@@ -55,6 +55,10 @@
 3. 首次上传 AAB 后，去 **Play Console → 应用完整性 → 应用签名**，复制 SHA-256。
 4. 填进 `release.config.json` 的 `signingCertSha256`（数组，可填多个）。
 
+> CI 或多渠道发版可以用环境变量覆盖，不必改仓库文件：
+> `MINICRAFT_SIGNING_CERT_SHA256=abc,def npm run release:android`（逗号或分号分隔）。
+> 环境变量存在时**完全替代**配置文件里的数组。
+
 **自己分发 APK、不上 Play** → 填你自己那张证书的摘要：
 
 ```bash

@@ -15,6 +15,9 @@ files:
   - game-server.mjs
   - preload.cjs
   - package.json
+  # 主进程不需要 three：游戏在渲染进程里跑，three 只服务 web 包。
+  # 不排除的话 electron-builder 会把根 node_modules/three 整个塞进 app.asar。
+  - "!node_modules/three/**"
 
 extraResources:
   # 只带加密包：解密后的内容只存在于主进程内存里，磁盘上没有明文

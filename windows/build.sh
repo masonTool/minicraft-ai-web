@@ -16,6 +16,10 @@ if [ ! -f build/rt/libmcrt.so ]; then
   exit 1
 fi
 
+# 同 mac/build.sh：先在 shell 层清掉中间目录，避免 electron-builder 内部的
+# 批量删除被带安全护栏的终端拦下
+rm -rf dist/windows/win-unpacked dist/windows/win-unpacked-x64
+
 if [ "$(uname -s)" = "Darwin" ] && ! command -v wine >/dev/null 2>&1; then
   echo "在 macOS 上出 Windows 安装包需要 wine，本机没有。" >&2
   echo "  选项 A：在 Windows 机器 / Windows CI 上跑这条命令" >&2

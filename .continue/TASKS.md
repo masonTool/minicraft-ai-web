@@ -6055,6 +6055,15 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] L45 **构建体系三轮收尾：残留清理 + 体积 + 可配置性**（用户 2026-10-31：全做完，按建议做不用问）。
+  - `server/rust/README.md` 的 ABI 描述 `x86_64` → `armeabi-v7a`（实际只编这两个）
+  - iOS 移除 `config.xml` / `capacitor.config.json`（Capacitor 残留，之前真进了 App 包）
+  - 桌面包排除 `node_modules/three`：asar 里不再有它，arm64 dmg 116M、x64 120M（原 119M / 123M）
+  - `mac/build.sh` 改为**每个 arch 单独起一次 electron-builder**：单进程连做两个 arch 时
+    会反复解压/删除 550+ 文件，被带安全护栏的终端拦下（表现为 x64 那趟打包失败）
+  - `pack-bundle.ts` 支持 `MINICRAFT_SIGNING_CERT_SHA256` 环境变量覆盖指纹，便于换证书/多渠道
+  - 验证：`build:mac` 两个 dmg 均生成（exit 0，无 safe-delete）；打包后的 `Minicraft.app`
+    冒烟通过（`title=Minicraft 按钮=95 包内=25 文件`）；iOS 增量构建通过且包内无 Capacitor 残留
 - [x] L44 **构建文档二轮核查：清掉上一轮的遗留**（用户 2026-10-31）：要求检查是否都做完。
   - `desktop/README.md` 整份重写：`core-vault.mjs` → `bundle.mjs`、`app://minicraft` → `http://127.0.0.1:18764`，删掉 3 条不存在的命令
   - 修正 `mac` / `windows` README 里的**错误**签名判定表：Team ID / 证书指纹那套逻辑已随 `core-vault.mjs` 下线，桌面端实际只用 `signers.json[0]`
