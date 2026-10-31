@@ -112,8 +112,13 @@ npm run check          # 全量门禁
   宿主桥可用、`startServer()` → 8887
 - **iOS**（iPhone 16 模拟器）：主菜单正常渲染、无 Safari 安装提示
 
-**没验过**：native 版在真机上的端到端（本批只做到"host 端到端 + APK 构建通过"，
-真机待装）；iOS 横屏下画面右侧疑似有黑边；Windows 从没在真机跑过。
+- **Android 真机**（Pixel 2 XL / arm64-v8a）：把同一份源码编成 arm64 可执行后推到
+  `/data/local/tmp` 跑——标准向量 **17 条全过**（说明自实现的 AES/SHA 在 ARM 上没有
+  字节序或对齐问题）；真实包解出 25 个文件，`index.html` 的 SHA-256 与 host `web/dist`
+  **逐字节相同**；正式与 debug 两份签名都能开，错误签名正确拒绝。临时文件已清理。
+
+**没验过**：**装 APK 后 WebView 实际加载**（覆盖安装会动到已安装应用与存档，留给用户确认）；
+iOS 横屏下画面右侧疑似有黑边；Windows 从没在真机跑过。
 
 ## 6. 能挡住什么
 
@@ -138,7 +143,7 @@ npm run check          # 全量门禁
 
 | 项 | 说明 |
 | --- | --- |
-| native 真机验证 | host 端到端与 APK 构建均已通过，真机待装一次确认 |
+| APK 真机跑通 | native 库已在设备 arm64 上验证（标准向量 + 真实包逐字节一致），但"装 APK 后 WebView 加载"还需覆盖安装一次——会动到已安装的 debug 包 |
 | 指纹不在 native 自校验 | 仍由 Java 传入（见 §6"硬编码指纹"）——在 native 自读 APK 证书只增加 400 行与回归风险，不解决"改代码"这个根本问题 |
 | iOS / 桌面接入 native | `native/vault/src/vault.h` 是纯 C++、无 JNI 依赖，可直接复用；本批只接 Android |
 | 字符串加密 | R8 已开 `minifyEnabled true`，但 `"AES/GCM/NoPadding"` 等字面量仍在 dex 里，搜到即可定位；Java 侧现在没这些字符串了，收益主要在其它模块 |
