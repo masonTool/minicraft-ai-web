@@ -32,6 +32,7 @@
 | 想知道"这一项和原版哪里不一样" | [`.continue/TASKS.md`](./.continue/TASKS.md) 文末的差异台账（脚本生成） |
 | 长期待办 / 覆盖率 | [`.continue/TASKS.md`](./.continue/TASKS.md)（按 `[~]` 或 `TASKS.md` 的段字母 grep，**不要通读**；需求号是 `A1`~`O16`，不是 `T<n>`） |
 | 这个大任务拆成了哪几批、走到哪个里程碑了（**开新批次前 / "为什么不往下走了"**） | [`.continue/notes/milestones.md`](./.continue/notes/milestones.md)（机制）+ 当前队列里的 `## 里程碑 MSn` 节点。平时不读 |
+| **要出包 / 配签名 / 把产物发给别人**（开发版 vs 正式版、各端配什么、AAB 装不上手机） | [`docs/BUILD-GUIDE.md`](./docs/BUILD-GUIDE.md)。⚠️ 各端 README 里有失效命令，以这份为准 |
 
 ## 2.5 一仓多产物（2026-10-29 重排）
 

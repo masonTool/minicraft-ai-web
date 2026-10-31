@@ -6055,6 +6055,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] L42 **构建与分发指南**（用户 2026-10-31）：多端理解成本高，要一份"开发版/正式版怎么编、每个平台配什么"的说明。
+  - 新增 `docs/BUILD-GUIDE.md`：决策表 → 概念（同一份代码 + 两种签名）→ 一次性配置总表 → 各端步骤 → 产物怎么给别人 → 失效文档清单；`AGENTS.md` 索引加一行。
+  - 顺手核出 6 处漂移：`android` / `mac` / `windows` 的 README 里命令已不存在、`saltHex` 字段无任何引用、`ios/App/App/public` 残留明文、桌面端缺 electron 依赖。
+  - 验证：每条命令对着 `package.json` / `build.gradle` / `electron-builder.yml` 核对；`npm run audit:docs` 通过。
 - [x] L41 **Android 整包解密下沉到 native**（用户 2026-10-31）：明文只在 native 堆，Java 按路径取单文件。
   - 新增 `native/vault`（C++17，自实现 SHA-256 / HMAC / HKDF / AES-256-GCM，无 openssl 依赖）；`BundleVault` 从"返回 Map"改成 `nativeOpen` / `nativeRead` 句柄；`MainActivity` 改 `vault.read(name)`。
   - 验证：`test:vault` 18（标准向量 + 与 `web/dist` 逐字节 + 多签名 + 6 条负面）、`test:pack` 17、`assembleDebug` 通过、`check:fast` 全绿。
