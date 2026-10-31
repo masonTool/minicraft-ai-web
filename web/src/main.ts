@@ -7286,6 +7286,13 @@ class App {
       this.touchTapPoint = null;
       this.tapUseMob = null;
       this.tapVehicle = null;
+      // 拉弓/装填必须**当场作废**（批次 20261031-1031）：这段早退把 `updateBow` /
+      // `updateCrossbow` 一起跳过了，只清 `hit` 的话 `bowDrawing` 会悬在 true、
+      // 蓄力值也不清零——关掉背包那一帧就会拿旧蓄力补射一箭。
+      this.bowDrawing = false;
+      this.bowCharge = 0;
+      this.crossbowDrawing = false;
+      this.crossbowCharge = 0;
       this.outline.hide();
       this.mobHealthBar.hide();
       this.blockOverlay.hide();
@@ -16824,8 +16831,10 @@ class App {
       return;
     }
 
-    // 手上是弓时右键是"拉弓"，不放置也不使用（功能方块在上面已经处理过了）
-    if (this.heldItemId === Item.BOW) return;
+    // 手上是弓/弩时右键是"拉弓 / 装填"，不放置也不使用（功能方块在上面已经处理过了）
+    // ⚠️ 弩必须一起判（批次 20261031-1031）：原来只有弓有这一条，于是拿弩对着箱子/
+    //    工作台按住会先把界面打开、装填白做一遍，`uiOpen` 又把装填取消。
+    if (this.heldItemId === Item.BOW || this.heldItemId === Item.CROSSBOW) return;
 
     // 锄头耕地（H13）：拿着锄头右键泥土/草方块 → 变成耕地，不放置方块
     if (this.tillSoil(this.hit.x, this.hit.y, this.hit.z)) {
