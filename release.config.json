@@ -1,12 +1,7 @@
 {
-  "//": "发布期常量。signingCertSha256 填 Play App Signing 的**应用签名证书** SHA-256（不是 upload key），可用 `apksigner verify --print-certs` 或 Play Console 查看。留空时 `npm run pack` 会缺签名包裹，真机必解不开，且 release:audit 会红。",
-  "//salt": "编译期盐，只用于 KEK 派生，改动它等于让所有既有封存数据作废（需重新 pack）。",
-  "//macTeamId": "macOS 的 Team ID，`codesign -dv --verbose=4 Minicraft.app` 里的 TeamIdentifier=XXXX。留空时未签名的本地构建能开，带签名的副本一律拒绝。",
-  "//winCertThumbprint": "Windows 代码签名证书指纹，`(Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint`。规则同上。",
+  "//": "signingCertSha256 = 会被封进加密包的证书摘要白名单（数组，可多条）。走 Google Play 时填 **Play 应用签名证书**的 SHA-256（不是 upload key）；自己分发 APK 时填自己 keystore 的证书摘要。留空时 `pack` 只封本机 debug keystore 的摘要——本地能跑，正式包解不开。",
+  "//note": "iOS / macOS / Windows 没有额外配置项：三端都用 `build/rt/signers.json` 里打包时写入的摘要解密。macOS / Windows 的代码签名（CSC_LINK）只影响系统信任与分发体验，不参与解密。详见 docs/BUILD-GUIDE.md §2。",
   "signingCertSha256": [
     "036df64c25ddadf7806a58b0e0160fd54d446c30eedf90a45ac91aaaa9947ba7"
-  ],
-  "saltHex": "3f9c1d7a5b2e84c60d1f93a7e5b8c2406d7a1f3e9c4b52806a7d1e3f5b9c2a40",
-  "macTeamId": "",
-  "winCertThumbprint": ""
+  ]
 }

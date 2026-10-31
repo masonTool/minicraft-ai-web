@@ -1,6 +1,10 @@
 # host/ · App 内置的核心数据
 
-`core-baseline.bin` —— **当前安卓 App 里内置的那份方块表快照**（724 条，约 40 KB）。
+> ⚠️ **2026-10-29 起"宿主 / app 形态"已下线**：方块表现在直接编在 JS 包里（`build:web` 的
+> `SPECS_STUB=0`），APK 里不再有 `core.bin`。这个目录与 `npm run gen:delta` 的增量机制
+> **只对旧形态有意义**，保留是作历史对照，新功能不要依赖它。
+
+`core-baseline.bin` —— 旧版安卓 App 里内置的那份方块表快照（724 条，约 40 KB）。
 
 它在这里的唯一目的是"算增量时要有个对照"：`npm run gen:delta` 拿它跟当前的
 `src/core/registry/blockSpecs.ts` 比，算出"线上要发哪些改动"。

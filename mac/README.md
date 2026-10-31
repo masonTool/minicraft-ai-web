@@ -13,21 +13,24 @@ npm run release:mac   # 签名 dmg（需 CSC_LINK + CSC_KEY_PASSWORD）
 
 脚本 `mac/build.sh`；产物在 `dist/mac/`（arm64 + x64 两个 dmg）。
 
-## 签名判定
+## 签名的实际作用（别想多了）
 
-把 Team ID 填进 `release.config.json` 的 `macTeamId` 之后才有意义：
+**macOS 的代码签名只管"系统信不信任这个 app"，不参与解密。**
 
-| 配置 | 签名 | 结果 |
-| --- | --- | --- |
-| 没填 | 没签（本地自用） | ✅ 能开 |
-| 没填 | 有别人的签名 | ❌ 拒绝（等于改包重签） |
-| 填了 | 没签 | ❌ 拒绝（正式包被剥了签名） |
-| 填了 | 一致 | ✅ 正常 |
+桌面端的钥匙来自安装包里的 `Resources/rt/signers.json`（打包时写入的公开摘要），
+`desktop/bundle.mjs` 拿它派生 KEK 解开整包——和开发者证书完全无关。
 
-拒绝的表现是**拿不到核心数据**（停在"请去应用里玩"），不是弹窗。
+所以：
 
-因此 `build:mac` 会主动关掉签名自动发现（`--config.mac.identity=null`）：
-本机若装了自己的开发者证书，自动签名反而会造出"没配置却带签名"的组合。
+| 想达到的效果 | 靠什么 |
+| --- | --- |
+| 用户双击不被 Gatekeeper 拦 | `CSC_LINK` 签名 + （可选）公证 |
+| 防止别人改包后还能拿到内容 | **做不到**。摘要写在包里，改包的人照样能解 |
+
+这也是文档里把桌面端强度标成"中"的原因（见 [`docs/CODE-PROTECTION.md`](../docs/CODE-PROTECTION.md) §3）。
+
+> 早期版本曾用 Team ID 做过身份判定，那套逻辑（`core-vault.mjs`）已被
+> `bundle.mjs` 的签名摘要方案取代，`release.config.json` 里的 `macTeamId` 字段也一并删除。
 
 ## 文件
 

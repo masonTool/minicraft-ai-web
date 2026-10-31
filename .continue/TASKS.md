@@ -6055,6 +6055,13 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 > 队列收尾时：A~O 里已有的条目直接改 `[x]`；**当场才出现的、总表里原本没有的任务**在这里补一行。
 > 只记已完成的事实，**不要在这里排新计划**（新计划由用户提，写进对应分节）。
 
+- [x] L44 **构建文档二轮核查：清掉上一轮的遗留**（用户 2026-10-31）：要求检查是否都做完。
+  - `desktop/README.md` 整份重写：`core-vault.mjs` → `bundle.mjs`、`app://minicraft` → `http://127.0.0.1:18764`，删掉 3 条不存在的命令
+  - 修正 `mac` / `windows` README 里的**错误**签名判定表：Team ID / 证书指纹那套逻辑已随 `core-vault.mjs` 下线，桌面端实际只用 `signers.json[0]`
+  - `android:test` 从 `server/android`（不存在）改为 `cd android`
+  - `release.config.json` 删 `saltHex` / `macTeamId` / `winCertThumbprint` 三个**死字段**（全仓无活代码读取）
+  - 补 `dev:desktop`；`host/README` 标注宿主形态已下线；删 iOS 本地残留 `public/`
+  - 验证：`pack` 正常（2 份包裹）、iOS 增量构建通过且包内无 `public`、`test:vault` 18、`check:fast` 182 套全绿
 - [x] L43 **统一五端命令体系 + 装齐桌面依赖**（用户 2026-10-31）：多端要遵循同一套规范，且 electron 那些依赖要装好以便直接验证。
   - 命令统一为 `build:<平台>` / `release:<平台>`（web / android / ios / mac / win），旧 `android:apk` / `android:aab` 保留为别名；新增 `mac|windows|ios/build.sh`（dev 免证书，release 校验证书）。
   - 装 electron 45 + electron-builder 26：此前根本没装，桌面端实际编不出包。

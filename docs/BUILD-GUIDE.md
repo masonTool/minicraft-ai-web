@@ -32,10 +32,8 @@
 | iOS 开发版 | — | — | — |
 | iOS 正式版 | Apple 团队 + 证书 | Xcode → Signing & Capabilities | `archive` 失败 |
 | macOS 开发版 | — | — | — |
-| macOS 正式版 | 证书 p12 + 口令 | `CSC_LINK` / `CSC_KEY_PASSWORD` | 打不出签名包 |
-| | Team ID | `release.config.json` → `macTeamId` | 正式包拒绝启动 |
-| Windows 正式版 | 证书 pfx + 口令 | 同上 | 打不出签名包 |
-| | 证书指纹 | `release.config.json` → `winCertThumbprint` | 正式包拒绝启动 |
+| macOS 正式版 | 证书 p12 + 口令 | `CSC_LINK` / `CSC_KEY_PASSWORD` | 出不了签名包（用户首次要右键「打开」） |
+| Windows 正式版 | 证书 pfx + 口令 | 同上 | 出不了签名包（会多一次 SmartScreen 拦截） |
 | Web | Cloudflare Pages 项目 | `.github/workflows/` 的 secrets | 发不出去 |
 
 ### Android 正式版：指纹到底填哪个（最容易错的一项）
@@ -82,6 +80,8 @@ keytool -list -v -keystore ~/.keys/minicraft-upload.jks -alias minicraft | grep 
 
 - `build:mac` 出**未签名** dmg，本机双击能开（首次可能要右键「打开」）
 - `release:mac` 需要 `CSC_LINK` + `CSC_KEY_PASSWORD`
+- **代码签名只影响系统信任，不参与解密**：桌面端的钥匙来自安装包里的 `signers.json`，
+  与开发者证书无关。别指望"签了名就更安全"。
 - **Windows 的 NSIS 安装包不能在 macOS 上出**（需要 wine）。`build:win` 会直接告诉你该去哪跑，不会甩一堆 wine 报错。正式发版走 Windows 机器或 Windows CI
 
 ### Web

@@ -95,7 +95,7 @@ function hostSpecsStub(): Plugin {
     resolveId(source) {
       // 默认**开**。入口已经是两段式（`src/boot.ts` 先装表、再 `import('./main.ts')`），
       // 所以空表不再是"模块初始化期崩"的隐患。
-      // 想临时关掉做对比（比如量体积差异）用 `SPECS_STUB=0 npm run build:app`。
+      // 想临时关掉做对比（比如量体积差异）用 `SPECS_STUB=0 npm run build:web`。
       if (process.env.SPECS_STUB === '0') return null;
       // 只拦"数据本体"，别把桩自己也拦成自己
       if (source.endsWith('/blockSpecs.ts') || source === './blockSpecs.ts') return stub;
@@ -124,7 +124,7 @@ export default defineConfig({
     /**
      * 页面是否**必须**由宿主提供 `core.bin`（批次 20261025-1032）。
      *
-     * `build:app` 默认 `true`（分离形态）；`build:web` 传 `HOST_CORE_REQUIRED=0`（自足形态）。
+     * 分离形态（`build:app`，2026-10-29 已下线）默认 `true`；`build:web` 传 `HOST_CORE_REQUIRED=0`（自足形态）。
      * 为 false 时 `src/boot.ts` 不取 `core.bin`、不看 `version.json`，直接用编进包里的数据。
      */
     __HOST_CORE_REQUIRED__: (process.env.HOST_CORE_REQUIRED === '0' ? 'false' : 'true'),

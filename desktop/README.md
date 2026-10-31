@@ -1,54 +1,51 @@
 # 桌面端运行时（Windows / macOS 共用）
 
-一份 Electron 代码，两个平台各自打包：平台差异只在 [`windows/`](../windows/README.md)
-与 [`mac/`](../mac/README.md) 的配置和资源里。**不要**为两个平台各复制一份 main.mjs。
+**一份** Electron 代码，两个平台各自打包：平台差异只在 [`windows/`](../windows/README.md)
+与 [`mac/`](../mac/README.md) 的配置和资源里。**不要**为两个平台各复制一份 `main.mjs`。
 
-## 三个文件
+## 文件
 
 | 文件 | 作用 |
 | --- | --- |
-| `main.mjs` | 主进程：注册 `app://` 协议、开窗口、拦截核心数据 |
-| `core-vault.mjs` | 解封 + 身份校验（纯 Node，可单测） |
-| `package.json` | electron-builder 的 app 清单（name/version/main） |
+| `main.mjs` | 主进程：起 loopback HTTP 服务、开窗口、解密取内容 |
+| `bundle.mjs` | 整包解密（与 Android/iOS 同一份包格式），纯 Node，可单测 |
+| `game-server.mjs` | 联机服务端入口（玩家当房主时才跑） |
+| `preload.cjs` | 渲染进程的受限桥 |
+| `package.json` | electron-builder 的 app 清单（name / version / main） |
 
-## 关键设计：为什么不用 `file://`
+## 关键设计：为什么是 `http://127.0.0.1:18764`
 
-`file://` 是 opaque origin，Chromium 会**直接关掉 IndexedDB**——而本项目的存档全在里面，
-表现是"能进游戏但存不了档"，且不报错。
+| 方案 | 问题 |
+| --- | --- |
+| `file://` | opaque origin，Chromium **直接关掉 IndexedDB**——存档全在里面，表现是"能进游戏但存不了档"，且不报错 |
+| 自定义 `app://` scheme | 能用，但三端就没法统一到同一个 origin 语义 |
+| **`http://127.0.0.1:固定端口`** | 和 Android 壳的 `http://localhost` 同类可信来源；IndexedDB、剪贴板、`ws://` 联机都正常 |
 
-所以注册了一个自有 scheme `app://minicraft/`（standard + secure）。它顺带成了一个和安卓
-`shouldInterceptRequest` 完全等价的拦截点：
+端口固定是**为了存档**：origin 变一次，IndexedDB 就是一个全新的库（等于清档）。
 
-```
-app://minicraft/__host/core.bin  →  解封后的方块表（解不开就 404）
-app://minicraft/…                →  web/dist 里的静态文件
-```
-
-于是 `web/src/core/hostCore.ts` **一行都不用改**：它本来就是 fetch 这个相对路径，
-浏览器里 404 走落地页，桌面端由主进程接住。
+内容来源与 Android 一样：`libmcrt.so` 整段解密后常驻主进程内存，每个请求从内存切一份返回，
+**磁盘上从来没有明文**。
 
 ## 跑起来
 
 ```bash
-npm run desktop:dev     # gen:sealed → web:app → electron desktop（开窗口）
-npm run desktop:smoke   # 同上但隐藏窗口，跑完自动退出（CI 用）
-npm run test:desktop    # 只测解封与身份判据，不需要 Electron
+npm run dev:desktop    # build:web + pack + 开窗口（不热更新）
+npm run build:mac      # 出 dmg
+npm run build:win      # 出 exe（需 Windows 机器或 wine）
 ```
 
-`desktop:smoke` 通过时的输出长这样：
+想带 HMR 调界面用 `npm run dev`（浏览器）；`dev:desktop` 是验证"壳里跑得对不对"。
 
+冒烟（不开窗口、跑完自动退出）：
+
+```bash
+MINICRAFT_SMOKE=1 npx electron desktop/main.mjs
 ```
-✓ 桌面端冒烟通过：title=Minicraft core=41107B
-```
-
-## 身份判据
-
-见 `core-vault.mjs` 里的四象限表。要点：**没配置签名时，未签名的构建能开**
-（否则没有证书就完全没法用）；一旦配置了，未签名或被别人签名的副本都解不开数据。
 
 ## 与移动端的差别
 
-- 移动端解封后在 WebView 里跑；桌面端解封后由主进程直接喂给 `fetch`。
-- Android 比证书摘要、iOS 比 bundle id、macOS 比 Team ID、Windows 比证书指纹——
-  四个平台的判据不同，别互相套用。
-- 桌面端**能**限制导航与开窗（`will-navigate` + `setWindowOpenHandler`），比 WebView 更容易收紧。
+- 移动端解封后在 WebView 里跑；桌面端解封后在主进程里直接喂给 HTTP。
+- 四端判据不同，**别互相套用**：Android 比证书摘要、iOS 用 `signers.json`、
+  macOS 比 Team ID、Windows 比证书指纹。
+- 桌面端能收紧导航与开窗（`will-navigate` + `setWindowOpenHandler`），比 WebView 更容易限死。
+- 桌面端的钥匙材料（`signers.json`）**就在安装包里**，所以这一端的强度只到"防随手改包"。

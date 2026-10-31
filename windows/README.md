@@ -16,16 +16,13 @@ npm run release:win   # 签名 exe（需 CSC_LINK + CSC_KEY_PASSWORD）
 > ⚠️ **NSIS 目标不能在 macOS 上出**（需要 wine）。`build:win` 会先检查并在缺失时
 > 直接告诉你该去哪跑，而不是甩一堆 wine 堆栈。正式发版走 Windows 机器或 Windows CI。
 
-## 签名判定
+## 签名的实际作用
 
-签名后把证书指纹填进 `release.config.json` 的 `winCertThumbprint`：
+和 macOS 一样：**代码签名只影响系统信任（少一次 SmartScreen 拦截），不参与解密。**
 
-```powershell
-(Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint
-```
-
-判定规则与 macOS 完全一致（见 [`mac/README.md`](../mac/README.md#签名判定)）：
-不填就是"未签名能开、带别人签名就拒绝"。
+桌面端的钥匙来自 `Resources/rt/signers.json`，与 Authenticode 证书无关。
+早期版本里的 `winCertThumbprint` 判定已经随 `core-vault.mjs` 一起下线，
+`release.config.json` 里不再有该字段。
 
 ## 文件
 
