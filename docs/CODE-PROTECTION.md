@@ -81,13 +81,13 @@ npm run build:web          # 全量产物（数据编在包内）
 npm run pack               # 打包成 build/rt/libmcrt.so（读 release.config.json 的签名白名单）
 npm run native:vault       # 编 libminicraft_vault.so（arm64-v8a + armeabi-v7a，需 NDK）
 
-npm run android:apk        # 上面三步 + gradle assembleDebug
-npm run android:aab        # 正式包（MINICRAFT_RELEASE=1，只封配置里的证书）
-npm run mac:dist / win:dist / ios 走各自工程
+npm run build:android      # 上面三步 + gradle assembleDebug
+npm run release:android    # 正式包（MINICRAFT_RELEASE=1，只封配置里的证书）
+npm run build:ios / build:mac / build:win   # 其余三端，见 docs/BUILD-GUIDE.md
 ```
 
 `release.config.json` 的 `signingCertSha256` 填 **Play App Signing 的应用签名证书**（不是 upload key）。
-留空时 `pack` 只封本机 debug keystore 的摘要——本地能跑，正式包解不开，`android:aab` 会报错。
+留空时 `pack` 只封本机 debug keystore 的摘要——本地能跑，正式包解不开，`release:android` 会报错。
 
 ## 5. 验证
 

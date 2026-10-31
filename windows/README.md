@@ -1,31 +1,22 @@
 # Windows 版
 
-Electron 套壳，运行时逻辑与 macOS 共用 [`desktop/`](../desktop/README.md)；
-本目录只放 **Windows 特有的打包配置与资源**。
+Electron 套壳。运行时逻辑与 macOS 共用 [`desktop/`](../desktop/README.md)，本目录只放 Windows 特有的打包配置。
 
 ## 出包
 
-```bash
-npm run win:dist
-# = gen:sealed → build:app（含发布检查）→ electron-builder --win
-# → dist/windows/Minicraft Setup 0.1.0.exe
-```
-
-> macOS 上也能出 NSIS 安装包（electron-builder 会自动下载 wine），
-> 但**产物没在 Windows 上跑过**。正式发版请走 Windows 机器或 Windows CI。
-
-| 文件 | 作用 |
-| --- | --- |
-| `electron-builder.yml` | 打包配置（NSIS、x64、资源拷贝） |
-| `build/icon.png` | 应用图标（自动转 ico） |
-
-## 签名
+见 [`docs/BUILD-GUIDE.md`](../docs/BUILD-GUIDE.md)。一句话：
 
 ```bash
-export CSC_LINK=~/keys/minicraft-win.pfx
-export CSC_KEY_PASSWORD='…'
-npm run win:dist
+npm run build:win     # 未签名 exe
+npm run release:win   # 签名 exe（需 CSC_LINK + CSC_KEY_PASSWORD）
 ```
+
+脚本 `windows/build.sh`；产物在 `dist/windows/`。
+
+> ⚠️ **NSIS 目标不能在 macOS 上出**（需要 wine）。`build:win` 会先检查并在缺失时
+> 直接告诉你该去哪跑，而不是甩一堆 wine 堆栈。正式发版走 Windows 机器或 Windows CI。
+
+## 签名判定
 
 签名后把证书指纹填进 `release.config.json` 的 `winCertThumbprint`：
 
@@ -33,10 +24,13 @@ npm run win:dist
 (Get-AuthenticodeSignature 'Minicraft.exe').SignerCertificate.Thumbprint
 ```
 
-再跑 `npm run gen:sealed`。判定规则与 macOS 一致（见 [`mac/README.md`](../mac/README.md#签名)），
+判定规则与 macOS 完全一致（见 [`mac/README.md`](../mac/README.md#签名判定)）：
 不填就是"未签名能开、带别人签名就拒绝"。
 
-## 已验证 / 未验证
+## 文件
 
-- ✅ 能在 macOS 上完整生成 `Minicraft Setup 0.1.0.exe`（79 MB），`resources/` 里有 `app.asar` / `web` / `sealed`；
-- ❌ 未在 Windows 上安装运行过——`app://` 协议、IndexedDB 存档、WebGL2 这几条都需要实机确认。
+| 文件 | 作用 |
+| --- | --- |
+| `build.sh` | 出包脚本（dev / release，含 wine 检查） |
+| `electron-builder.yml` | 打包配置（NSIS、x64、`extraResources` 从 `build/rt` 取密文） |
+| `build/icon.png` | 图标（自动转 ico） |
