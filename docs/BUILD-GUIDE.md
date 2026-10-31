@@ -115,7 +115,7 @@ keytool -list -v -keystore ~/.keys/minicraft-upload.jks -alias minicraft | grep 
 | Web | ✅ `build:web` 通过（CI 也在跑） | ✅ 走 Pages 流水线 |
 | Android | ✅ 出 APK 并装真机跑通 | ⏳ 无正式证书，未实测（需 §2 的配置） |
 | iOS | ✅ 模拟器构建 + 启动渲染主菜单 | ⏳ 无 Apple 证书，未实测 |
-| macOS | ✅ 出 dmg（arm64 + x64） | ⏳ 无签名证书，未实测 |
+| macOS | ✅ 出 dmg（arm64 + x64）；壳冒烟通过（`title=Minicraft 按钮=95 包内=25 文件`） | ⏳ 无签名证书，未实测 |
 | Windows | ⏳ 需 Windows 机器（macOS 缺 wine） | ⏳ 同上 |
 
 **"⏳"的都只是缺证书/缺机器，命令与配置路径已经就位**；拿到证书后按 §2 填完即可。

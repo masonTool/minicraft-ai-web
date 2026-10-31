@@ -40,7 +40,10 @@ npm run build:win      # 出 exe（需 Windows 机器或 wine）
 
 ```bash
 MINICRAFT_SMOKE=1 npx electron desktop/main.mjs
+# ✓ 桌面端冒烟通过：title=Minicraft 按钮=95 包内=25 文件 / 4649060B
 ```
+
+它会真的解密整包、加载页面、等主菜单渲染出来再判定，不是只看"进程没崩"。
 
 ## 与移动端的差别
 
