@@ -289,7 +289,7 @@
 
 - 根因同一类：① 队友看不到你的甲/副手/蹲姿，而 `move.armor`/`offhand`/`sneak` 早进白名单并被转发——**发送端没填**或**消费端没用**；② `net` 并发偶发红、单跑又绿——它按毫秒窗口确认"应该没收到"，抢 CPU 时窗口被挤破。处置：按"发→转→收"三段各查一次，条目里"要改存档"的前提先读现有结构；`run-tests.mjs` 让 `net` **独占** + 否定窗口压到 250ms。
 
-- esbuild 打包（死锁 / `banner` 不打包）、"换桩后门禁晚于主包加载"、"resolveId 做打包开关"、"基线+增量的两处坑"、**Rust 服务端的 tokio 锁不可重入 / tungstenite 不回 1009 / 握手回调拿不到 `error.code`**、**手机壳的 Gradle/JDK21 / `test:*` 命名 / cap sync 慢 / 原生桥用 CDP 验** 见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
+- esbuild 打包（死锁 / `banner` 不打包）、"换桩后门禁晚于主包加载"、"resolveId 做打包开关"、"基线+增量的两处坑"、**Rust 服务端的 tokio 锁不可重入 / tungstenite 不回 1009 / 握手回调拿不到 `error.code`**、**手机壳的 Gradle/JDK21 / `test:*` 命名 / cap sync 慢 / 原生桥用 CDP 验**、**收尾脚本 `ledger.mjs` 按字母序选队列会归档错决策文件** 见 [`notes/tips-tooling.md`](./notes/tips-tooling.md)。
 ### `check:fast` 只跑"改动的命中套件"——横切改动会把红留到收尾
 
 - 症状：改了一个默认值（`WorldScreen` 的初始游戏模式），`check:fast` 全绿、提交顺利；后来动到别的文件时 `worldmatrix` 突然红了（它断言的是那个默认值）。

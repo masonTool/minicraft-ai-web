@@ -319,3 +319,22 @@
   以及 `startServer()` 后轮询到 `{"port":8887}`——比点 UI 稳，也比加临时日志干净。
 - 两条附带：① 注入点要排在 `loadUrl` 被投递之前（Capacitor 是 `webView.post(...)`），
   否则首屏 JS 看不到对象，只能靠 reload 补救；② 验完 `adb forward --remove-all` 并关掉模拟器。
+
+## 收尾脚本 `ledger.mjs` 按字母序选队列，会归档错文件
+
+- 症状：`node tools/ledger.mjs --batch ... --note ...` 打印"✓ 队列已归档"，但 `DONE.md`
+  里插入的是**决策记录**，真正的队列还躺在 `doing/`。
+- 根因：`ledger.mjs` 用 `readdirSync(doing).filter(*.md)[0]` 取第一个文件。`<会话ID>-decision.md`
+  里的 `-`(0x2d) 排在 `<会话ID>.md` 的 `.`(0x2e) 之前 → 决策记录被当成队列。
+- 处置（顺序不能反）：
+  1. 把决策文件移出 `doing/`（挪到 `/tmp`）；
+  2. 跑 `ledger.mjs`——此时 `doing/` 只剩队列，归档正确、目录清空；
+  3. 放回并命名成 `<会话ID>-decision.md`；
+  4. `node .continue/hooks/archive-queue.mjs <会话ID> --decision`。
+- 为什么不直接改名成 `decision-<会话ID>.md`（README §7 的规范名）：`d` > `a` 确实能让队列
+  排第一，但 `archive-queue.mjs --decision` **只认后缀命名**，改前缀它就说"没有这个文件"。
+  两个脚本对命名的约定不一致，只能靠上面的顺序绕开。
+- ⚠️ 回滚时别删 `.logs/`：误归档的决策原文已经被 `archive-queue` **移动**到
+  `.logs/<名>/queue.md`，`rm -rf` 那个目录就真没了（本次踩过，只能照上下文重建一份）。
+- 另一条更小的：`DONE.md` 里的条目别用 `[T1]` 这种编号——本项目的需求号是 `A1`~`O16`，
+  `audit-ids` 会拿 `[T\d]` 去 `TASKS.md` 里找，找不到就红。当场任务用 `L<n>`，或干脆不编号。
