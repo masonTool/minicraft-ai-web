@@ -1106,7 +1106,9 @@ console.log('\n[要塞的房间网格拼图（批次 462）]');
     // 要塞原本完全封闭（原版有螺旋楼梯从地表下去），末影之眼只给水平方向，
     // 玩家跟到正上方也只能盲挖五十多格。这条井是"眼睛指到哪、地面上就有入口"的
     // 唯一保证，所以逐格断言：井里不能有一格实心、每一格都要有梯子、井口要有石砖框。
-    const shaftCache = new Map<string, Uint8Array>();
+    // ⚠️ 缓存类型必须跟着 `BlockArray` 走（方块 id 改成 16 位之后，
+    // 写死 `Uint8Array` 会让 `typecheck:tools` 直接红——这里曾经漏过一次）
+    const shaftCache = new Map<string, BlockArray>();
     const blockAt = (x: number, y: number, z: number): number => {
       const cx = Math.floor(x / 16);
       const cz = Math.floor(z / 16);
