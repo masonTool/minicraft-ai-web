@@ -57,7 +57,7 @@ import { domeOcclusionSafe } from '../web/src/render/Sky.ts';
 import { createGeometry } from '../web/src/core/mesh/ChunkMesher.ts';
 import type { MeshWorkerPool } from '../web/src/render/MeshWorkerPool.ts';
 import { Chunk } from '../web/src/core/world/Chunk.ts';
-import type { World } from '../web/src/core/world/World.ts';
+import { World } from '../web/src/core/world/World.ts';
 import type { MeshResponse } from '../web/src/worker/chunk.worker.ts';
 
 let passed = 0;
@@ -125,8 +125,18 @@ console.log('\n[区块网格原子替换]');
 
   renderer.onChunkLoaded(0, 0);
   renderer.processQueue(1, 0, 0);
-  callbacks.shift()!(response([{ section: 8, solid: triangle, translucent: null }]));
+  callbacks.shift()!(response([{ section: 8, opaque: null, solid: triangle, translucent: null }]));
+  // 批次 20261031-0930：Worker 结果先排队，由主循环在帧内按预算挂进场景
+  equal('结果到达时还不挂（不在两帧之间做重活）', renderer.chunkMeshCount, 0);
+  equal('排队的结果算在在途数里（空闲降帧 / 雾推进的判据不漏算）', renderer.inFlightCount, 1);
+  equal('帧内挂一块', renderer.applyReady(4), 1);
   equal('首版网格已显示', renderer.chunkMeshCount, 1);
+  const sphere = (scene.children[0] as THREE.Mesh).geometry.boundingSphere;
+  check(
+    '包围球按 section 范围直接给（section 8 → y∈[64,80]，不逐顶点算）',
+    sphere !== null && sphere.center.y === 72 && sphere.radius > 12,
+    sphere ? `${sphere.center.y} r=${sphere.radius}` : 'null',
+  );
 
   // 批次 20261026-0141：区块 mesh 的位置建好就固定，世界矩阵冻结，不再每帧白算
   const frozen = scene.children[0] as THREE.Mesh;
@@ -147,6 +157,7 @@ console.log('\n[区块网格原子替换]');
   equal('场景里仍有旧网格', scene.children.length, 1);
 
   callbacks.shift()!(response([]));
+  renderer.applyReady(4);
   equal('空的新结果就绪后才移除旧网格', renderer.chunkMeshCount, 0);
   equal('旧几何已从场景释放', scene.children.length, 0);
   renderer.disposeAll();
@@ -1371,9 +1382,10 @@ console.log('\n[只画视距之内的区块]');
       id: 1,
       cx: cx!,
       cz: cz!,
-      sections: [{ section: 8, solid: triangle, translucent: null }],
+      sections: [{ section: 8, opaque: null, solid: triangle, translucent: null }],
     });
   }
+  renderer.applyReady(Infinity);
   equal('四个区块的网格都在场景里', renderer.chunkMeshCount, 4);
 
   // 视距 4：中心区块与 (3,1) 在 4.5 格内，(8,0) 与 (0,-9) 应被切掉
@@ -1655,6 +1667,33 @@ console.log('\n[方块形状的盒子坐标（批次 20261026-0141）]');
   const silent = shapes.filter((shape) => !isCrossShape(shape) && !produced.has(shape));
   check('每个形状至少有一种状态能画出几何（否则就是整块消失）', silent.length === 0, silent.join(' | '));
   check('形状表覆盖了所有实际使用的形状', shapes.length >= 20, String(shapes.length));
+}
+
+console.log('\n[生成好的区块在帧内按预算并入（批次 20261031-0930）]');
+{
+  const world = new World(1, 'default', undefined, 0);
+  // 无 Worker 环境：塞一个只吞消息的桩（结果由下面手动送回）
+  (world as unknown as { workers: unknown[] }).workers.push({ postMessage: () => {}, terminate: () => {} });
+  const loaded: string[] = [];
+  world.events = { onChunkLoaded: (chunk) => loaded.push(`${chunk.cx},${chunk.cz}`) };
+  world.update(0, 0, 1);
+  const wanted = world.pendingCount;
+  check('派发了生成请求（无 Worker 时只记账）', wanted > 0, String(wanted));
+  const blank = new Chunk(0, 0).blocks;
+  const internals = world as unknown as { pending: Map<number, string>; enqueueGenerated: (data: unknown) => void };
+  for (const [id, key] of [...internals.pending]) {
+    const [cx, cz] = key.split(',').map(Number);
+    internals.enqueueGenerated({ type: 'generated', id, cx, cz, blocks: blank.slice().buffer, states: null });
+  }
+  equal('消息到达时不当场并入', loaded.length, 0);
+  equal('排队的仍算在待生成里（雾 / 空闲降帧判据不漏算）', world.pendingCount, wanted);
+  equal('预算 0 也至少并一块（单块比预算贵时不会永远卡住）', world.integrateArrived(0), 1);
+  equal('并入一块就触发一次 onChunkLoaded', loaded.length, 1);
+  world.integrateArrived(Infinity);
+  equal('不限预算一次并完', loaded.length, wanted);
+  equal('并完队列清空', world.arrivedCount, 0);
+  equal('待生成归零', world.pendingCount, 0);
+  world.dispose();
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);

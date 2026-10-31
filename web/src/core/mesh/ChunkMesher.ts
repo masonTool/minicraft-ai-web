@@ -918,7 +918,7 @@ function quantizeUnit(values: Float32Array | Uint8Array): Uint8Array {
  * 主线程既用它装配本地网格化的结果，也用它重建 Worker 传回来的顶点数据，
  * 两边共用同一套属性布局，避免属性名/分量数对不上。
  */
-export function createGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
+export function createGeometry(arrays: GeometryArrays, computeSphere = true): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(arrays.position, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(arrays.uv, 2));
@@ -927,7 +927,8 @@ export function createGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
   geometry.setAttribute('aLight', new THREE.BufferAttribute(quantizeUnit(arrays.light), 2, true));
   geometry.setAttribute('aShade', new THREE.BufferAttribute(quantizeUnit(arrays.shade), 1, true));
   geometry.setIndex(new THREE.BufferAttribute(arrays.index, 1));
-  geometry.computeBoundingSphere();
+  // 区块合并网格的包围球由 `ChunkRenderer.applyMeshes` 按 section 范围直接给（不逐顶点算）
+  if (computeSphere) geometry.computeBoundingSphere();
   return geometry;
 }
 

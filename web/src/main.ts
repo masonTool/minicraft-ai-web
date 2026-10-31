@@ -266,6 +266,15 @@ import { FallingBlocks } from './core/world/FallingBlocks.ts';
 import { conduitRadius } from './core/world/Conduit.ts';
 import { containerSignalStrength } from './core/world/ContainerSignal.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
+import {
+  CONTAINS_BEACON,
+  CONTAINS_BED,
+  CONTAINS_CHEST,
+  CONTAINS_LIGHTNING_ROD,
+  CONTAINS_SPAWNER,
+  buildContentTable,
+  chunkContents,
+} from './core/world/ChunkContents.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
 // 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
 import {
@@ -717,6 +726,7 @@ import {
   decorRainFraction,
   effectivePixelRatio,
   fogRadiusStep,
+  frameClock,
   frameIntervalMs,
   initialPerfState,
   perfPolicyStep,
@@ -905,6 +915,8 @@ import {
   LAVA_FOG_NEAR,
   LIGHT_BACKLOG_MESH_PATIENCE,
   MESH_BUDGET_PER_FRAME,
+  CHUNK_INTEGRATE_BUDGET_MS,
+  MESH_APPLY_BUDGET_MS,
   MOUSE_SENSITIVITY,
   NETHER_FOG,
   NETHER_FOG_FAR,
@@ -1071,6 +1083,26 @@ const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
  * 挥动中 `swing()` 不会重开，间隔给太小等于白白调用；0.3 ≈ 原版挖方块每 6 tick 一下。
  */
 const ARM_SWING_INTERVAL = 0.3;
+
+/**
+ * 区块加载时那几趟全高度扫描各自找的方块（批次 20261031-0930，见 `ChunkContents.ts`）。
+ * 判据与各趟扫描里的写法一一对应：箱子 `=== Block.CHEST`、刷怪笼 `spawnerDefFor`、床 `isBed`。
+ * 第一次加载区块时才建表（6.5 万个 id 各判一次，约几毫秒），之后每个区块只是查表。
+ */
+let chunkContentTable: Uint8Array | null = null;
+let chunkContentAll = 0;
+function chunkContentLookup(): Uint8Array {
+  if (chunkContentTable) return chunkContentTable;
+  chunkContentTable = buildContentTable([
+    [CONTAINS_CHEST, (id) => id === Block.CHEST],
+    [CONTAINS_LIGHTNING_ROD, (id) => id === Block.LIGHTNING_ROD],
+    [CONTAINS_SPAWNER, (id) => spawnerDefFor(id) !== undefined],
+    [CONTAINS_BEACON, (id) => id === Block.BEACON],
+    [CONTAINS_BED, (id) => isBed(id)],
+  ]);
+  chunkContentAll = CONTAINS_CHEST | CONTAINS_LIGHTNING_ROD | CONTAINS_SPAWNER | CONTAINS_BEACON | CONTAINS_BED;
+  return chunkContentTable;
+}
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -3051,23 +3083,26 @@ class App {
 
     this.world.events = {
       onChunkLoaded: (chunk) => {
+        // 先用一趟查表扫描问清楚"这一列里有哪几类"（批次 20261031-0930，见 `ChunkContents.ts`）：
+        // 下面五趟全高度扫描在大多数区块里一样都找不到，没有的整趟跳过，有的照旧跑原扫描
+        const contents = chunkContents(chunk, chunkContentLookup(), chunkContentAll);
         // 结构箱的战利品（K8 尾巴）：方块状态里写着"哪张表"，在这里按表掷点填进容器。
         // 放在网格化之前也没关系——箱子内容不影响渲染
-        fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
+        if (contents & CONTAINS_CHEST) fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
         // 队友的容器内容（联机13）：放在战利品之后——队友改过的才是最终状态
         this.flushPendingContainers(chunk.cx, chunk.cz);
         // 联机33：经增量表补上的漏斗/投掷器/发射器要补建容器实体
         this.spawnContainersFromEdits(chunk.cx, chunk.cz);
         // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
-        this.scanRodsInChunk(chunk.cx, chunk.cz);
+        if (contents & CONTAINS_LIGHTNING_ROD) this.scanRodsInChunk(chunk.cx, chunk.cz);
         // 刷怪笼索引（批次 92）：同一个道理——下界要塞里的笼子在加载时登记，之后按倒计时生成
-        this.scanSpawnersInChunk(chunk.cx, chunk.cz);
+        if (contents & CONTAINS_SPAWNER) this.scanSpawnersInChunk(chunk.cx, chunk.cz);
         // 信标索引（K5，批次 117）：光柱要逐帧画、效果要每秒挂，所以先知道"哪儿有信标"
-        this.scanBeaconsInChunk(chunk.cx, chunk.cz);
+        if (contents & CONTAINS_BEACON) this.scanBeaconsInChunk(chunk.cx, chunk.cz);
         // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民。
         // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
         // （结构生成在 Worker 里，而 Worker 造不了实体）
-        this.populateVillage(chunk.cx, chunk.cz);
+        if (contents & CONTAINS_BED) this.populateVillage(chunk.cx, chunk.cz);
         // 结构里的生物（批次 457）：海底神殿的守卫者、府邸的唤魔者、前哨的掠夺者……
         // 与村庄人口同一条机制（结构在 Worker 里造不了实体，主线程按纯函数重算）
         this.populateStructureMobs(chunk.cx, chunk.cz);
@@ -18681,15 +18716,19 @@ class App {
 
     // ⚠️ 这是**一帧的循环体**，不是 rAF 回调本身（回调见下面的 `loop`，批次 238）。
     // 它自己只负责"干完这一帧"，排下一帧统一走 `schedule()`。
-    const frame = (): void => {
+    const frame = (vsync?: number): void => {
       // 退出世界后不再排下一帧（否则旧 App 会继续画一个已经拆掉的世界）
       if (this.disposed) return;
       const now = performance.now();
+      // 帧时钟用 rAF 的时间戳（批次 20261031-0930）：它对齐 vsync，相邻两帧正好差一个刷新间隔。
+      // 原来拿回调开头的 `performance.now()`，真机上回调起点会被前面的任务推迟 0~5ms，
+      // 于是 dt 在 13~19ms 之间跳、位移跟着忽大忽小——帧率是满的，画面却一顿一顿。
+      const clock = frameClock(vsync, now);
       // 页面在后台（批次 303）：物理、生存、区块加载/光照/网格化、渲染**一个都不做**。
       // 只把 lastTime 往前推——回来时 rawDt 才不会变成"一帧卡了几分钟"。
       // ⚠️ 仍然要排下一帧：解冻是靠 `visible`/`focus` 事件，循环不能自己停死。
       if (this.backgroundPaused) {
-        this.lastTime = now;
+        this.lastTime = clock;
         schedule();
         return;
       }
@@ -18701,7 +18740,7 @@ class App {
       // 空闲降帧（批次 20261031-0055）：没操作、画面不动、世界不在加载时上限 30，取与 `maxFps` 更严的那个
       const idleCap = this.miniGame.active ? 0 : this.idleFps.capFor(now, this.worldBusy());
       const interval = Math.max(frameIntervalMs(this.settings.maxFps), frameIntervalMs(idleCap));
-      if (interval > 0 && now - this.lastTime < interval) {
+      if (interval > 0 && clock - this.lastTime < interval) {
         schedule();
         return;
       }
@@ -18712,8 +18751,8 @@ class App {
       // 单机小游戏（小游戏1）：只跑小游戏帧，世界这一整帧（物理 / 区块 / 实体 / 音频）
       // 全部跳过。放在 paused 判断之前：小游戏自己管自己的暂停（退出按钮与 Esc 在它那层）。
       if (this.miniGame.active) {
-        const gameDt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
-        this.lastTime = now;
+        const gameDt = Math.min(0.1, Math.max(0, (clock - this.lastTime) / 1000));
+        this.lastTime = clock;
         this.miniGame.update(gameDt);
         schedule();
         return;
@@ -18723,7 +18762,7 @@ class App {
         this.backgroundPaused || this.settingsScreen.isOpen;
       this.syncPauseAudio(paused);
       if (paused) {
-        this.lastTime = now;
+        this.lastTime = clock;
         schedule();
         return;
       }
@@ -18734,10 +18773,10 @@ class App {
       //    "卡成什么样"在报告里看不出来。
       // 后台回来那一下 `now - lastTime` 可能是几分钟：那是"暂停"，不是"一帧卡了 3 分钟"，
       // 所以测量值另有一个 2 秒上限。
-      const rawDt = Math.max(0, (now - this.lastTime) / 1000);
+      const rawDt = Math.max(0, (clock - this.lastTime) / 1000);
       const dt = Math.min(rawDt, 0.1);
       const frameSeconds = Math.min(rawDt, 2);
-      this.lastTime = now;
+      this.lastTime = clock;
       // 帧内分段计时的起点（诊断用，见 `lap`）
       let mark = performance.now();
 
@@ -19003,6 +19042,9 @@ class App {
 
       const centerCx = toChunkCoord(this.physics.x);
       const centerCz = toChunkCoord(this.physics.z);
+      // Worker 生成好的区块在帧内按预算并入（批次 20261031-0930，见 `World.enqueueGenerated`）。
+      // 遮罩还在时一次并完：那时没有画面可卡，越快越好
+      this.world.integrateArrived(this.loadingCleared ? CHUNK_INTEGRATE_BUDGET_MS : Infinity);
       this.refreshWorld(centerCx, centerCz);
 
       // 光照预算：遮罩还在时开大（批次 103，桌面把"能玩"从 16s 压到 1s 内）。
@@ -19058,6 +19100,8 @@ class App {
       // 它永远为真，于是**一块区块都不再网格化**（meshQueue 卡住、画面停在旧帧）。
       // 积压太深时退让：用当前光照照常烘焙，等队列排空后 `pendingSettle` 会再刷一遍。
       const lightBacklog = this.world.lightWorkCount > LIGHT_BACKLOG_MESH_PATIENCE;
+      // Worker 算好的网格在帧内按预算挂进场景（批次 20261031-0930，见 `ChunkRenderer.ready`）
+      this.chunkRenderer.applyReady(this.loadingCleared ? MESH_APPLY_BUDGET_MS : Infinity);
       if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
@@ -19148,10 +19192,10 @@ class App {
      * **异常只丢这一帧，下一帧照排**；连续失败 3 次给一句提示（说明有系统性错误，
      * 画面会一直不更新），前 3 次 + 之后每 120 次各记一条诊断，避免把 4000 条环形缓冲刷满。
      */
-    const loop = (): void => {
+    const loop = (vsync?: number): void => {
       if (this.disposed) return;
       try {
-        frame();
+        frame(vsync);
         this.frameErrors = 0;
       } catch (err) {
         this.onFrameError(err);

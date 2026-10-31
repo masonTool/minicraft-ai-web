@@ -84,6 +84,17 @@ export class ChunkRenderer {
   private readonly pending = new Map<string, number>();
   private requestSeq = 0;
   private inFlight = 0;
+  /**
+   * Worker 已经算好、还没挂进场景的网格（批次 20261031-0930）。
+   *
+   * 原来是 Worker 消息一到就当场合并 + 建几何 + 上 GPU，一块 3~8ms；三个 Worker 的结果
+   * 常常前后脚到，两帧之间连着跑 15~25ms，真机走路/飞行时画面一顿一顿（帧率却是满的）。
+   * 现在先排队，由主循环在帧内按时间预算挂进去（`applyReady`）。结果到得早就在下一帧挂，
+   * 和原来一样；只有一批同时到时才会顺延到后面一两帧。
+   */
+  private readonly ready: Array<{ key: string; response: MeshResponse }> = [];
+  private lastApplyAt = 0;
+  private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly maxInFlight: number;
   /** 上一帧真正画出来的区块数（见 `applyViewDistance`） */
   private drawnChunks = 0;
@@ -177,9 +188,42 @@ export class ChunkRenderer {
     if (this.rendered.size > 0) this.enqueueAllRendered();
   }
 
-  /** 供调试面板显示：当前在途的网格化请求数 */
+  /** 供调试面板显示：当前在途的网格化请求数（含已算好、等着挂进场景的） */
   get inFlightCount(): number {
-    return this.inFlight;
+    return this.inFlight + this.ready.length;
+  }
+
+  /**
+   * 把排队的网格结果挂进场景：先到先挂，用时达到 `budgetMs` 就停（**至少挂一块**）。
+   * 返回这次挂了几块。
+   */
+  applyReady(budgetMs: number): number {
+    const start = performance.now();
+    this.lastApplyAt = start;
+    let head = 0;
+    try {
+      while (head < this.ready.length) {
+        if (head > 0 && performance.now() - start >= budgetMs) break;
+        const { key, response } = this.ready[head++]!;
+        // 排队期间区块卸载了（玩家走远 / 换维度）：不能再挂回去，否则留下孤儿网格
+        if (!this.world.getChunk(response.cx, response.cz)) continue;
+        this.applyMeshes(key, response);
+      }
+    } finally {
+      if (head > 0) this.ready.splice(0, head);
+    }
+    return head;
+  }
+
+  /** 主循环没在跑（后台 / 暂停页）时兜底：排队超过 200ms 没人取就由定时器一次挂完 */
+  private armReadyFallback(): void {
+    if (this.readyTimer !== null) return;
+    this.readyTimer = setTimeout(() => {
+      this.readyTimer = null;
+      if (this.ready.length === 0) return;
+      if (performance.now() - this.lastApplyAt >= 200) this.applyReady(Infinity);
+      if (this.ready.length > 0) this.armReadyFallback();
+    }, 200);
   }
 
   get triangles(): number {
@@ -296,7 +340,8 @@ export class ChunkRenderer {
         this.inFlight--;
         if (this.pending.get(key) !== seq) return; // 已被更新的请求取代
         this.pending.delete(key);
-        this.applyMeshes(key, response);
+        this.ready.push({ key, response });
+        this.armReadyFallback();
       });
       return;
     }
@@ -391,6 +436,17 @@ export class ChunkRenderer {
       mesh.userData.sectionRanges = ranges;
       // 顶点里已经烘入 section 的 baseY，网格只放水平偏移
       this.freezeAt(mesh, offsetX, 0, offsetZ);
+      // 包围球按 section 范围直接给（批次 20261031-0930）：不再逐顶点 `computeBoundingSphere`
+      // （真机上一块 2~4ms）。与 `applySections` 每帧收紧时用的是同一个盒子，
+      // 而新网格在被画出来之前一定会先走一遍 `applySections`，所以剔除结果与原来一致
+      let lo = SECTION_COUNT;
+      let hi = -1;
+      for (let i = 0; i < ranges.length; i += 3) {
+        if (ranges[i]! < lo) lo = ranges[i]!;
+        if (ranges[i]! > hi) hi = ranges[i]!;
+      }
+      if (hi >= 0) fitSphere(mesh, WORLD_MIN_Y + lo * 16, WORLD_MIN_Y + (hi + 1) * 16);
+      else geometry.computeBoundingSphere();
       mesh.frustumCulled = true;
       meshes.push(mesh);
       triangles += geometry.index!.count / 3;
@@ -581,7 +637,8 @@ export class ChunkRenderer {
     const key = ChunkRenderer.geometryPoolKey(arrays);
     const bucket = this.geometryPool.get(key);
     const reused = bucket?.pop();
-    if (!reused) return createGeometry(arrays);
+    // 包围球由调用方（`applyMeshes`）按 section 范围直接给，这里不逐顶点算
+    if (!reused) return createGeometry(arrays, false);
     this.pooledGeometryCount--;
     // 上一任主人可能被遮挡剔除截过一段
     reused.setDrawRange(0, Infinity);
@@ -604,7 +661,6 @@ export class ChunkRenderer {
     light.needsUpdate = true;
     shade.needsUpdate = true;
     index.needsUpdate = true;
-    reused.computeBoundingSphere();
     return reused;
   }
 
@@ -653,6 +709,9 @@ export class ChunkRenderer {
   }
 
   disposeAll(): void {
+    this.ready.length = 0;
+    if (this.readyTimer !== null) clearTimeout(this.readyTimer);
+    this.readyTimer = null;
     for (const key of [...this.rendered.keys()]) this.dispose(key);
     this.disposePool();
     this.queue.length = 0;

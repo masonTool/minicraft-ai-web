@@ -29,7 +29,19 @@ import { enchantmentById } from '../web/src/core/registry/enchantments.ts';
 import { BlockEntityStore, type BlockContainer } from '../web/src/core/world/BlockEntityStore.ts';
 import { CHEST_SIZE, Chest } from '../web/src/core/container/Chest.ts';
 import { SLOT_COUNTS, serializeContainer, restoreContainers } from '../web/src/core/save/ContainerSave.ts';
-import { Chunk } from '../web/src/core/world/Chunk.ts';
+import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
+import {
+  CONTAINS_BEACON,
+  CONTAINS_BED,
+  CONTAINS_CHEST,
+  CONTAINS_LIGHTNING_ROD,
+  CONTAINS_SPAWNER,
+  buildContentTable,
+  chunkContents,
+} from '../web/src/core/world/ChunkContents.ts';
+import { SPAWNER_DEFS, spawnerDefFor } from '../web/src/core/registry/spawners.ts';
+import { isBed } from '../web/src/core/registry/blocks.ts';
+import { BED_ID_START } from '../web/src/core/registry/blockIds.ts';
 import { PositionalRng } from '../web/src/core/gen/Features.ts';
 import { Dimension } from '../web/src/core/gen/Dimension.ts';
 import type { ItemStack } from '../web/src/core/container/Inventory.ts';
@@ -392,6 +404,64 @@ console.log('\n[战利品随机附魔（批次 574）]');
   check('附魔 id 在附魔表里', def !== undefined);
   check('等级在 1~最高级之间', (enchanted?.level ?? 0) >= 1 && (enchanted?.level ?? 0) <= (def?.maxLevel ?? 0));
   check('附魔不超宝藏限制（非宝藏）', def?.treasure !== true);
+}
+
+console.log('\n[区块内容速查：没有的那几趟扫描整趟跳过（批次 20261031-0930）]');
+{
+  const spawnerId = SPAWNER_DEFS[0]!.block;
+  const bedId = BED_ID_START + 3;
+  const table = buildContentTable([
+    [CONTAINS_CHEST, (id) => id === Block.CHEST],
+    [CONTAINS_LIGHTNING_ROD, (id) => id === Block.LIGHTNING_ROD],
+    [CONTAINS_SPAWNER, (id) => spawnerDefFor(id) !== undefined],
+    [CONTAINS_BEACON, (id) => id === Block.BEACON],
+    [CONTAINS_BED, (id) => isBed(id)],
+  ]);
+  const all = CONTAINS_CHEST | CONTAINS_LIGHTNING_ROD | CONTAINS_SPAWNER | CONTAINS_BEACON | CONTAINS_BED;
+  equal('表：箱子', table[Block.CHEST], CONTAINS_CHEST);
+  equal('表：任一颜色的床', table[bedId], CONTAINS_BED);
+  equal('表：石头不属于任何一类', table[Block.STONE], 0);
+
+  equal('空区块：一类都没有', chunkContents(new Chunk(0, 0), table, all), 0);
+  const plain = new Chunk(0, 0);
+  for (let y = WORLD_MIN_Y; y < 70; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) plain.set(x, y, z, Block.STONE);
+  equal('满是石头：一类都没有', chunkContents(plain, table, all), 0);
+
+  const mixed = new Chunk(0, 0);
+  mixed.set(15, WORLD_MIN_Y, 15, spawnerId);
+  mixed.set(0, WORLD_MAX_Y - 1, 0, Block.LIGHTNING_ROD);
+  mixed.set(7, 64, 9, bedId);
+  equal('最底一格 / 最顶一格 / 中间都找得到', chunkContents(mixed, table, all), CONTAINS_SPAWNER | CONTAINS_LIGHTNING_ROD | CONTAINS_BED);
+  mixed.set(2, 10, 3, Block.CHEST);
+  mixed.set(4, 100, 5, Block.BEACON);
+  equal('五类都在：全部报出', chunkContents(mixed, table, all), all);
+
+  // 与原逐格扫描对拍：随机撒一些方块，两种写法结论必须一致
+  const rng = new PositionalRng(7, 11, 99);
+  const ids = [Block.STONE, Block.CHEST, Block.LIGHTNING_ROD, spawnerId, Block.BEACON, bedId];
+  let agree = true;
+  for (let round = 0; round < 40 && agree; round++) {
+    const c = new Chunk(round, 0);
+    for (let k = 0; k < 6; k++) {
+      const id = ids[Math.floor(rng.next() * ids.length)]!;
+      c.set(Math.floor(rng.next() * 16), WORLD_MIN_Y + Math.floor(rng.next() * (WORLD_MAX_Y - WORLD_MIN_Y)), Math.floor(rng.next() * 16), id);
+    }
+    let slow = 0;
+    for (let y = WORLD_MIN_Y; y < WORLD_MAX_Y; y++) {
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) {
+          const id = c.get(x, y, z);
+          if (id === Block.CHEST) slow |= CONTAINS_CHEST;
+          if (id === Block.LIGHTNING_ROD) slow |= CONTAINS_LIGHTNING_ROD;
+          if (spawnerDefFor(id)) slow |= CONTAINS_SPAWNER;
+          if (id === Block.BEACON) slow |= CONTAINS_BEACON;
+          if (isBed(id)) slow |= CONTAINS_BED;
+        }
+      }
+    }
+    if (chunkContents(c, table, all) !== slow) agree = false;
+  }
+  check('与逐格扫描对拍 40 个随机区块：结论一致', agree);
 }
 
 console.log(`\n战利品测试：${passed} 通过 / ${failed} 失败`);

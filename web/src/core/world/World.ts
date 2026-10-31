@@ -23,6 +23,9 @@ import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
 
+/** 生成结果排队多久没人取就由定时器兜底并入（毫秒，见 `World.enqueueGenerated`） */
+const ARRIVAL_FALLBACK_MS = 200;
+
 export function chunkKey(cx: number, cz: number): string {
   return `${cx},${cz}`;
 }
@@ -128,9 +131,66 @@ export class World {
     this.light = new LightEngine(this);
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(new URL('../../worker/chunk.worker.ts', import.meta.url));
-      worker.addEventListener('message', (event: MessageEvent<GenerateResponse>) => this.onGenerated(event.data));
+      worker.addEventListener('message', (event: MessageEvent<GenerateResponse>) => this.enqueueGenerated(event.data));
       this.workers.push(worker);
     }
+  }
+
+  /**
+   * Worker 生成好的区块**先排队，由主循环在帧内按时间预算并进来**（批次 20261031-0930）。
+   *
+   * 原来是消息一到就当场并入：解包、叠增量、播种光照、`onChunkLoaded` 里那一串扫描，
+   * 一块 3~7ms。几个 Worker 的结果常常前后脚到，于是两帧之间连着跑 20~50ms——
+   * 真机（Pixel 2 XL）飞行前进时每跨一个区块边界就有 3~5 帧被挤掉，帧率是满的，画面却在顿。
+   * 挪进帧里之后它和网格化、光照一样受预算管，单帧再也不会被一批到货压垮。
+   *
+   * 兜底：主循环没在跑（后台、暂停页、退出前那几帧）时队列不能一直攒着——
+   * 超过 `ARRIVAL_FALLBACK_MS` 没人来取，就由定时器一次并完（与原来"到了就并"等价）。
+   */
+  private readonly arrived: GenerateResponse[] = [];
+  private lastIntegrateAt = 0;
+  private arrivalTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private enqueueGenerated(data: GenerateResponse): void {
+    this.arrived.push(data);
+    this.armArrivalFallback();
+  }
+
+  private armArrivalFallback(): void {
+    if (this.arrivalTimer !== null) return;
+    this.arrivalTimer = setTimeout(() => {
+      this.arrivalTimer = null;
+      if (this.arrived.length === 0) return;
+      if (performance.now() - this.lastIntegrateAt >= ARRIVAL_FALLBACK_MS) this.integrateArrived(Infinity);
+      if (this.arrived.length > 0) this.armArrivalFallback();
+    }, ARRIVAL_FALLBACK_MS);
+  }
+
+  /** 已经生成好、还没并进世界的区块数（仍算在 `pendingCount` 里） */
+  get arrivedCount(): number {
+    return this.arrived.length;
+  }
+
+  /**
+   * 把排队的生成结果并进世界：先到先并，用时达到 `budgetMs` 就停（**至少并一块**，
+   * 否则单块比预算还贵时会永远并不进来）。返回这次并了几块。
+   */
+  integrateArrived(budgetMs: number): number {
+    const start = performance.now();
+    this.lastIntegrateAt = start;
+    let count = 0;
+    let head = 0;
+    try {
+      while (head < this.arrived.length) {
+        if (count > 0 && performance.now() - start >= budgetMs) break;
+        this.onGenerated(this.arrived[head++]!);
+        count++;
+      }
+    } finally {
+      // 某一块并入时抛了异常也要把已经处理过的移出队列，否则下一帧会再并一遍
+      if (head > 0) this.arrived.splice(0, head);
+    }
+    return count;
   }
 
   private onGenerated(data: GenerateResponse): void {
@@ -166,6 +226,7 @@ export class World {
    * 这里正好复用。
    */
   reset(): void {
+    this.arrived.length = 0;
     this.wanted.clear();
     this.loading.clear();
     this.pending.clear();
@@ -276,6 +337,8 @@ export class World {
     for (const chunk of [...this.chunks.values()]) {
       this.events.onChunkUnloaded?.(chunk.cx, chunk.cz);
     }
+    // 排队里的是旧维度的地形：同坐标在新维度会被重新请求，旧结果一块都不能并进来
+    this.arrived.length = 0;
     this.chunks.clear();
     this.loading.clear();
     this.pending.clear();
@@ -561,6 +624,9 @@ export class World {
   }
 
   dispose(): void {
+    if (this.arrivalTimer !== null) clearTimeout(this.arrivalTimer);
+    this.arrivalTimer = null;
+    this.arrived.length = 0;
     for (const worker of this.workers) worker.terminate();
     this.workers.length = 0;
     this.chunks.clear();

@@ -503,6 +503,20 @@ export function frameIntervalMs(maxFps: number): number {
   return Math.max(0, 1000 / maxFps - FRAME_CAP_TOLERANCE_MS);
 }
 
+/**
+ * 帧时钟（毫秒）：优先用 rAF 回调收到的时间戳。
+ *
+ * 时间戳是这一帧的 vsync 起点，相邻两帧正好差一个刷新间隔；回调开头的 `performance.now()`
+ * 却会被排在前面的任务（Worker 消息、定时器、GC）推迟 0~5ms。拿后者算 dt，屏幕上
+ * 等间隔出现的帧里位移忽大忽小（真机实测 dt 在 13~19ms 之间跳），满帧也显得一顿一顿。
+ *
+ * 时间戳缺失（不是 rAF 调用的）、不是有限正数、或比 `now` 还晚（时钟基准对不上）时退回 `now`。
+ */
+export function frameClock(vsync: number | undefined, now: number): number {
+  if (typeof vsync !== 'number' || !Number.isFinite(vsync) || vsync <= 0 || vsync > now) return now;
+  return vsync;
+}
+
 /** 画质档对应的**粒子硬上限**（场上同时存在的粒子上限） */
 export function particleBudgetFor(level: 'off' | 'reduced' | 'all'): number {
   if (level === 'off') return 0;

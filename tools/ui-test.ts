@@ -3274,7 +3274,8 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
   );
   check(
     '暂停期间不做帧采样与自适应降档（否则回来要补一圈区块）',
-    /if \(!paused\) \{[\s\S]{0,160}this\.updatePerfPolicy\(frameSeconds\);/.test(appSrc),
+    // 空闲降帧（批次 20261031-0055）的帧同样不喂给降档，判据多了 `&& !idleFrame`
+    /if \(!paused(?: && !idleFrame)?\) \{[\s\S]{0,160}this\.updatePerfPolicy\(frameSeconds\);/.test(appSrc),
   );
   // 批次 231："连续异常 → 开关一次背包"整套删除（它自己就是那 0.5 秒卡顿）
   check(
@@ -3820,7 +3821,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     // 批次 303：暂停判据多了"页面在后台"这一条，断言按多行写法匹配
     /const paused =[\s\S]{0,120}this\.backgroundPaused \|\| this\.settingsScreen\.isOpen;/.test(appSrc) &&
       appSrc.includes('this.syncPauseAudio(paused);') &&
-      /if \(paused\) \{[\s\S]{0,120}this\.lastTime = now;[\s\S]{0,80}schedule\(\);[\s\S]{0,60}return;/.test(appSrc) &&
+      // 批次 20261031-0930：帧时钟改用 rAF 时间戳（`clock`），不再是回调开头的 `now`
+      /if \(paused\) \{[\s\S]{0,120}this\.lastTime = clock;[\s\S]{0,80}schedule\(\);[\s\S]{0,60}return;/.test(appSrc) &&
       appSrc.includes('const dt = Math.min(rawDt, 0.1);') &&
       appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
       appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
@@ -5183,7 +5185,7 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
   check(
     '页面在后台时主循环整帧跳过（物理/区块/渲染都不做）',
-    /if \(this\.backgroundPaused\) \{[\s\S]{0,160}this\.lastTime = now;[\s\S]{0,80}schedule\(\);[\s\S]{0,40}return;/.test(appSrc),
+    /if \(this\.backgroundPaused\) \{[\s\S]{0,160}this\.lastTime = clock;[\s\S]{0,80}schedule\(\);[\s\S]{0,40}return;/.test(appSrc),
   );
   check(
     '暂停判据包含后台标记（漏清时有双保险）',

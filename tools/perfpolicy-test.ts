@@ -44,6 +44,7 @@ import {
   FOG_SHRINK_CHUNKS_PER_SEC,
   effectivePixelRatio,
   fogRadiusStep,
+  frameClock,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
@@ -382,6 +383,29 @@ console.log('\n[限帧与粒子总量（另外两个旋钮）]');
   equal('60Hz 屏选"60 帧"→ 真的 60 帧', simulatedFps(60, 60), 60);
   equal('60Hz 屏选"30 帧"→ 30 帧', simulatedFps(30, 60), 30);
   equal('120Hz 屏选"60 帧"→ 60 帧（不是 40）', simulatedFps(60, 120), 60);
+
+  // 帧时钟（批次 20261031-0930）：回调起点被推迟 0~5ms 时，dt 仍然等于刷新间隔
+  const lags = [0.8, 4.6, 0.2, 3.1, 0.9, 0, 4.4, 1.2];
+  const vsyncDts: number[] = [];
+  const nowDts: number[] = [];
+  let prevClock = 0;
+  let prevNow = 0;
+  lags.forEach((lag, i) => {
+    const vsync = 1000 + i * (1000 / 60);
+    const now = vsync + lag;
+    if (i > 0) {
+      vsyncDts.push(frameClock(vsync, now) - prevClock);
+      nowDts.push(now - prevNow);
+    }
+    prevClock = frameClock(vsync, now);
+    prevNow = now;
+  });
+  const spread = (xs: number[]): number => Math.max(...xs) - Math.min(...xs);
+  check('帧时钟：回调起点抖动不进 dt', spread(vsyncDts) < 1e-6, `dt 极差 ${spread(vsyncDts)}ms`);
+  check('（对照）拿 performance.now 算 dt 会抖 4ms 以上', spread(nowDts) > 4, `dt 极差 ${spread(nowDts)}ms`);
+  equal('帧时钟：没有时间戳就用 now', frameClock(undefined, 123), 123);
+  equal('帧时钟：时间戳比 now 还晚（基准不一致）就用 now', frameClock(200, 123), 123);
+  equal('帧时钟：非法时间戳就用 now', frameClock(Number.NaN, 123), 123);
 
   equal('粒子关掉 → 上限 0', particleBudgetFor('off'), 0);
   equal('粒子减半 → 120', particleBudgetFor('reduced'), 120);
