@@ -19078,3 +19078,67 @@ M23 队伍前后缀从数据层接到名字牌、M8 把背包面板与设置面�
 
 ---
 
+## 批次 20261030-1925 · 2026-10-30 · 会话 c747f798
+
+> 真机发热归因：不是内存也不是游戏逻辑，而是每像素的填充与提交开销；关掉 preserveDrawingBuffer + 削掉两处整屏像素成本
+
+# 队列 · 会话 c747f798fe5f443089f73456db302086
+
+> 状态：执行中
+> 创建：2026-10-30
+> 批次：20261030-1925
+
+- [x] 关掉 `preserveDrawingBuffer`，缩略图改成抓之前在同一任务里重画一帧：`web/src/main.ts`
+  - 做了什么：`WebGLRenderer` 的 `preserveDrawingBuffer` 由 `true` 改成 `false`；新增 `App.renderForThumbnail()`，`captureThumbnail` 在 `drawImage` 之前先调它画一帧
+  - 为什么：这一位原本只为"存档缩略图"（一局抓几次）而开，却和 `antialias: true` 叠成**每帧**一次 MSAA resolve + 一块不可复用的背板。隔离基准（同机 Adreno 540、1644×822、MSAA 开、同样绘制量、只改这一位）：**42.9 fps → 57.8 fps**
+  - 验证：`npm run check` 全绿；缩略图路径改为"先画再读"，仍是同一任务内读背板（真机世界卡片缩略图此前一直正常，逻辑未变，只是抓之前多画一帧）
+  - 批次：20261030-1925
+
+- [x] 天空穹顶着色器去掉三处整屏逐像素开销：`web/src/render/Sky.ts`
+  - 做了什么：去掉对 `uSunDir` 的逐像素 `normalize`（`Sky.update` 写进去的就是 `(cos t, sin t, 0)`，本来单位长）；`pow(x, 8.0)` 展开成三次乘法；霞光整段包进 `if (uSunGlow > 0.0)`（它只在日出日落前后非零）
+  - 为什么：抬头看天时 `Chrome_InProcGp` 顶到一核的 37.4%（JS 反而降到 6.1%），说明瓶颈是穹顶这个**整屏**着色器的每像素开销，不是 draw call 数量。三处改动输出逐位等价
+  - 验证：`npm run render-test` 通过，并新增三条结构守卫（不许回去用 `pow`、不许再 `normalize(uSunDir)`、霞光必须有 `uSunGlow > 0.0` 判据）；两套 GLSL 用无头 Chrome 实际编译通过（`PASS Sky dome fragment` / `PASS Voxel fragment`）
+  - 批次：20261030-1925
+
+- [x] 地形着色器把 `bayer4(gl_FragCoord)` 从算两遍改成算一次复用：`web/src/render/dither.ts` + `VoxelMaterial.ts`
+  - 做了什么：`GLSL_DITHER` 拆出 `ditherWithBayer(color, bayer)`；地形着色器在 `discard` 之前算一次 `bayer4`，阈值抖动与最终输出抖色共用
+  - 为什么：两处本来就该用同一个屏幕空间图案（批次 524 + 520），各算一遍等于整屏多十几条 ALU，而地形是占屏面积最大的着色器
+  - 验证：`npm run check` 全绿；`render-test` 换成新判据并补了"整屏只算一次 bayer4"的断言（材质里 `bayer4(gl_FragCoord.xy)` 出现次数必须为 1）
+  - 批次：20261030-1925
+
+- [x] 真机复测与结论归档
+  - 做了什么：提交后把真机数据、隔离基准与"未能验证的部分"写清楚
+  - 为什么：**新包没法装到这台机器上**——`assembleRelease` 需要 `MINICRAFT_KEYSTORE*` 口令（只有用户知道），而 debug 包签名不同、覆盖安装要先卸载并丢掉存档，属于不可回退动作，没有擅自做
+  - 验证：基准数据来自设备 Chrome 的隔离页面（同 GPU、同分辨率、同 MSAA）；着色器那两处只做了"编译通过 + 结构守卫"，未量化
+  - 批次：20261030-1925
+
+---
+
+## 批次 20261029-1600 · 2026-10-29 · 会话 ea9ea51
+
+> 一仓多产物目录重排 + 安卓只认自家签名的核心数据封存
+
+# 队列 · 会话 ea9ea51
+
+> 状态：执行中
+> 创建：2026-10-29
+> 批次：20261029-1600
+
+- [x] [A22] 多产品目录重排：`src/ index.html public/ vite.config.ts` 迁入 `web/`，`server/android` 迁到 `android/`
+  - 做了什么：`git mv` 四个路径进 `web/`、`server/android` 提到根；`tools`/`tests` 的 `../src`、`../public`、`index.html` 引用批量改向；`tsconfig` 两份 include、`vite.config.ts`（`root: WEB_ROOT` + `REPO_ROOT` 锚定 `.tmp`）、`release-check` 的 `DIST`/`index.html`、`capacitor.config.json`、Gradle 的 `repoRoot` 与 `capacitor.settings.gradle` 一起改
+  - 为什么：一仓多产物，Web 的入口/资源/配置自成一目录；Android 壳不该埋在 `server/` 里（它消费 `web/dist`，不是服务端）
+  - 验证：`npm run check` 全绿（离线 **181** 套、单测 153 套 1579 条）、`build:fast` 产物落 `web/dist`
+  - 批次：20261029-1600
+- [x] [A23] 安卓签名闸门与核心数据封存
+  - 做了什么：新增 `tools/seal-core.ts`（AES-256-GCM 封存 + 与长度互质的形态变换，产物 `android/app/src/main/assets/sealed/{core.sealed,salt.bin,signers.txt}`）、`CoreVault.java`（验签名 → HKDF 派生 KEK → 解 CEK → 解载荷 → 逆变换，失败一律 null）、`CoreVaultPlugin.java`（`CoreVault.read()`，失败 reject）；`hostCore.ts` 先问原生保险柜、拿不到再走静态 URL；Gradle 去掉明文 `copyHostCore`、改为 `checkSealedCore`（缺封存体或残留明文都直接报错）；`release-check` 增加"无明文 / 非 MCTB / 白名单非占位 / 有 salt"四条断言
+  - 为什么：明文 41 KB 方块表放 `assets/public` 等于白送；"改签包能不能跑"必须绑在**数据能不能解开**上，而不是一个可被 patch 的布尔判断
+  - 验证：`npm run test:sealed` **15/0**（含换签名 / 换盐 / 改字节 / 截断 / 空白名单 5 条负面）；`gen:sealed` 产出 41.2 KB 封存体；`build:app` 在占位白名单上**按预期红**（证明门禁有效）；`npm run check` 全绿（离线 182 套）
+  - 批次：20261029-1600
+- [x] [A23] iOS 侧对等 + 三端说明文档
+  - 做了什么：`ios/App/CoreVault.swift`（CryptoKit 版解封 + Team ID 校验）、`ios/App/CoreVaultPlugin.swift`；`ios/ windows/ mac/` 各一份 README；`docs/CODE-PROTECTION-STATUS.md` 记已落地 / 未做 / 两处偏离
+  - 为什么：iOS 与 Android 共用同一份封存格式与同一套"验签名再解封"的顺序，但 Xcode 工程需要 `@capacitor/ios`，本机没装，先把源码与契约落下来
+  - 验证：`typecheck` + `typecheck:tools` 清洁；Swift 侧待 Xcode 工程补齐后实测（状态文档已标注）
+  - 批次：20261029-1600
+
+---
+
