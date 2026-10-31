@@ -66,6 +66,15 @@ export interface MeshRequest {
   cx: number;
   cz: number;
   chunks: MeshChunkPayload[];
+  /**
+   * 只重烘这几段（挖/放方块引起的重烘，批次 20261031-1300）。
+   *
+   * 不给就是整列重烘（加载、重刷）。给了的话 Worker 会拿上一次这个区块的结果当底，
+   * 只把这几段重新算一遍——挖方块一次只动 16³ 的一小片，没必要整列都算。
+   */
+  sections?: number[];
+  /** 整列重烘但**保留**可供局部重烘的底（挖方块攒了太多段时的兜底，见 `ChunkRenderer.build`） */
+  keep?: boolean;
   /** 全不透明贴图名（只在变化后的第一条请求上带，见 MeshWorkerPool） */
   opaqueTiles?: string[];
 }
@@ -95,6 +104,8 @@ export interface MeshResponse {
   sections: MeshSectionPayload[];
   /** 每个 section 的六面连通图（区段遮挡剔除用，见 SectionVisibility） */
   visibility?: Uint16Array;
+  /** Worker 侧各阶段耗时（诊断用，毫秒；批次 20261031-1300 找"挖方块多久才消失"用） */
+  perf?: { parse: number; mesh: number; clone: number; sections: number };
 }
 
 export type WorkerRequest = GenerateRequest | MeshRequest;
@@ -185,17 +196,65 @@ class MeshWorld implements MeshContext {
 
 // ---------------------------------------------------------------- 网格化
 
+/**
+ * 上一次"重烘"留下的各段顶点数据，供下一次只重算少数几段时复用（批次 20261031-1300）。
+ *
+ * 只留最近 2 个区块：挖方块永远发生在脚边那一两个区块里，留多了只是白占内存
+ * （一个区块的顶点数据约 1MB）。
+ */
+interface CachedMesh {
+  sections: MeshSectionPayload[];
+  visibility: Uint16Array;
+}
+
+const sectionCache = new Map<string, CachedMesh>();
+const SECTION_CACHE_LIMIT = 2;
+
+/** 深拷贝一份顶点数据（缓存里的要留着，发出去的那份会被 transfer 走） */
+function cloneGeometry(payload: GeometryPayload | null): GeometryPayload | null {
+  if (!payload) return null;
+  return {
+    position: payload.position.slice(),
+    uv: payload.uv.slice(),
+    tile: payload.tile.slice(),
+    light: payload.light.slice(),
+    shade: payload.shade.slice(),
+    index: payload.index.slice(),
+  };
+}
+
+function cloneSections(sections: readonly MeshSectionPayload[]): MeshSectionPayload[] {
+  return sections.map((s) => ({
+    section: s.section,
+    opaque: cloneGeometry(s.opaque),
+    solid: cloneGeometry(s.solid),
+    translucent: cloneGeometry(s.translucent),
+  }));
+}
+
+function rememberSections(key: string, sections: MeshSectionPayload[], visibility: Uint16Array): void {
+  sectionCache.delete(key);
+  sectionCache.set(key, { sections: cloneSections(sections), visibility: visibility.slice() });
+  while (sectionCache.size > SECTION_CACHE_LIMIT) {
+    const oldest = sectionCache.keys().next().value as string;
+    sectionCache.delete(oldest);
+  }
+}
+
 function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transferable[] } {
+  const tStart = performance.now();
   const world = new MeshWorld(req.chunks, req.cx, req.cz);
   const sections: MeshSectionPayload[] = [];
   const transfer: Transferable[] = [];
   const chunk = world.center;
   const visibility = new Uint16Array(SECTION_COUNT).fill(VISIBILITY_ALL);
   transfer.push(visibility.buffer);
+  const key = `${req.cx},${req.cz}`;
+  const parseMs = performance.now() - tStart;
 
   const collect = (geometry: GeometryLike | null): GeometryPayload | null => {
     if (!geometry) return null;
-    const payload: GeometryPayload = {
+    return {
       position: geometry.getAttribute('position').array as Float32Array,
       uv: geometry.getAttribute('uv').array as Float32Array,
       tile: geometry.getAttribute('aTile').array as Float32Array,
@@ -203,16 +262,76 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
       shade: geometry.getAttribute('aShade').array as Uint8Array,
       index: geometry.getIndex()!.array as Uint32Array,
     };
-    transfer.push(
-      payload.position.buffer,
-      payload.uv.buffer,
-      payload.tile.buffer,
-      payload.light.buffer,
-      payload.shade.buffer,
-      payload.index.buffer,
-    );
-    return payload;
   };
+
+  /**
+   * 所有要发回去的顶点 buffer 统一登记进 transfer（零拷贝）。
+   * ⚠️ 必须**最后只走这一遍**：`sections` 里既有刚烘的、也有从缓存拷来的，
+   * 两处各自 push 一遍会让同一个 buffer 在 transfer 列表里出现两次（postMessage 会抛错）。
+   */
+  const takeAll = (list: readonly MeshSectionPayload[]): void => {
+    for (const s of list) {
+      for (const p of [s.opaque, s.solid, s.translucent]) {
+        if (!p) continue;
+        transfer.push(p.position.buffer, p.uv.buffer, p.tile.buffer, p.light.buffer, p.shade.buffer, p.index.buffer);
+      }
+    }
+  };
+
+  /** 只重烘 `req.sections` 这几段，其余段沿用缓存 */
+  const cached = req.sections ? sectionCache.get(key) : undefined;
+  if (chunk && req.sections && cached) {
+    const meshStart = performance.now();
+    // 连通图也复用：它只在"这一段的不透明度变了"时才需要重算，而重算它（每段一次 BFS）
+    // 原来在每次重烘时对**所有**段都跑一遍，是"局部重烘"省不下时间的主因
+    visibility.set(cached.visibility);
+    const byId = new Map<number, MeshSectionPayload>();
+    for (const s of cached.sections) {
+      byId.set(s.section, {
+        section: s.section,
+        opaque: cloneGeometry(s.opaque),
+        solid: cloneGeometry(s.solid),
+        translucent: cloneGeometry(s.translucent),
+      });
+    }
+    for (const section of req.sections) {
+      if (section < 0 || section >= SECTION_COUNT) continue;
+      if (chunk.sectionIsEmpty(section)) {
+        byId.delete(section);
+        visibility[section] = VISIBILITY_ALL;
+        continue;
+      }
+      visibility[section] = computeSectionVisibility(chunk, section);
+      const { opaque, solid, translucent } = meshSection(chunk, section, tileUv, world);
+      const opaquePayload = collect(opaque);
+      const solidPayload = collect(solid);
+      const translucentPayload = collect(translucent);
+      if (opaquePayload || solidPayload || translucentPayload) {
+        byId.set(section, { section, opaque: opaquePayload, solid: solidPayload, translucent: translucentPayload });
+      } else {
+        byId.delete(section);
+      }
+    }
+    for (const s of byId.values()) sections.push(s);
+    sections.sort((a, b) => a.section - b.section);
+    const meshMs = performance.now() - meshStart;
+    const cloneStart = performance.now();
+    takeAll(sections);
+    rememberSections(key, sections, visibility);
+    const cloneMs = performance.now() - cloneStart;
+    return {
+      response: {
+        type: 'meshed',
+        id: req.id,
+        cx: req.cx,
+        cz: req.cz,
+        sections,
+        visibility,
+        perf: { parse: parseMs, mesh: meshMs, clone: cloneMs, sections: sections.length },
+      },
+      transfer,
+    };
+  }
 
   if (chunk) {
     for (let section = 0; section < SECTION_COUNT; section++) {
@@ -228,7 +347,26 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
     }
   }
 
-  return { response: { type: 'meshed', id: req.id, cx: req.cx, cz: req.cz, sections, visibility }, transfer };
+  const meshMs = performance.now() - tStart - parseMs;
+  const cloneStart = performance.now();
+  takeAll(sections);
+  // 整列重烘：给了 `sections` 说明是编辑引起的（下次还要复用），留一份底；
+  // 没给是加载/重刷，缓存作废（区块可能已经换了一份数据）
+  if (req.sections) rememberSections(key, sections, visibility);
+  else sectionCache.delete(key);
+  const cloneMs = performance.now() - cloneStart;
+  return {
+    response: {
+      type: 'meshed',
+      id: req.id,
+      cx: req.cx,
+      cz: req.cz,
+      sections,
+      visibility,
+      perf: { parse: parseMs, mesh: meshMs, clone: cloneMs, sections: sections.length },
+    },
+    transfer,
+  };
 }
 
 // ---------------------------------------------------------------- 入口

@@ -18,15 +18,25 @@ import { createGeometry, meshSection, setOpaqueTiles, type GeometryArrays } from
 import { computeSectionVisibility } from '../core/mesh/SectionVisibility.ts';
 import { SECTIONS_ALL, SectionOcclusion } from './SectionOcclusion.ts';
 import {
+  Chunk,
   SECTION_COUNT,
   WORLD_MIN_Y,
   advanceChunkState,
-  type Chunk,
 } from '../core/world/Chunk.ts';
 import { chunkKey, type World } from '../core/world/World.ts';
 import type { TextureAtlas } from './TextureAtlas.ts';
 import type { MeshWorkerPool } from './MeshWorkerPool.ts';
 import type { MeshChunkPayload, MeshResponse } from '../worker/chunk.worker.ts';
+
+/**
+ * 一次局部重烘最多带几段（批次 20261031-1300）。
+ *
+ * 真机实测一段约 12~16ms，三段约 40ms，整列（9~10 段非空）要 96~160ms。
+ * 创造模式按住不放时每秒挖 20~30 格，一次往返期间能跨过七八段；要是把攒下的段全带上，
+ * 每次都退化成整列重烘，比不改还慢。所以**只追最新那一段**（±1），
+ * 被挤掉的改动交给"追平"（`needsCatchUp`）在后台整列补一次——快的先上屏，慢的后到。
+ */
+const MAX_PARTIAL_SECTIONS = 3;
 
 interface ChunkMeshes {
   meshes: THREE.Mesh[];
@@ -101,6 +111,16 @@ export class ChunkRenderer {
    * 等这次结果挂上去之后立刻再烘一遍——画面匀速往前跟，最多落后一次往返。
    */
   private readonly dirtyRebuild = new Set<string>();
+  /**
+   * 等着重烘的区块里**哪几段**被改过（批次 20261031-1300）。
+   *
+   * 挖方块只动一小片：整列（9~10 段非空）要 96~160ms，三段约 40ms，差的就是"方块挖掉后
+   * 多久消失"。`last` 是最新改动落在哪一段（攒多了按它挑最近三段），
+   * `catchUp` 表示有段被挤掉了、要在后台整列补一次（见 `MAX_PARTIAL_SECTIONS`）。
+   */
+  private readonly edits = new Map<string, { sections: Set<number>; last: number }>();
+  /** 等着"整列追平"的区块（改动段被挤掉时置上，见 `MAX_PARTIAL_SECTIONS`） */
+  private readonly pendingSet = new Set<string>();
   private lastApplyAt = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly maxInFlight: number;
@@ -263,22 +283,24 @@ export class ChunkRenderer {
     this.queued.delete(key);
     this.pending.delete(key);
     this.dirtyRebuild.delete(key);
+    this.edits.delete(key);
+    this.pendingSet.delete(key);
   }
 
   /**
    * 方块被玩家修改后，把受影响的区块重新入队。
    * 改动落在区块边界上时要连带邻居一起重刷，否则交界面的剔除会残留。
    */
-  enqueueAround(worldX: number, worldZ: number): void {
+  enqueueAround(worldX: number, worldZ: number, worldY?: number): void {
     const cx = worldX >> 4;
     const cz = worldZ >> 4;
-    this.enqueue(cx, cz, MESH_PRIORITY_EDIT);
+    this.enqueue(cx, cz, MESH_PRIORITY_EDIT, worldY);
     const lx = worldX & 15;
     const lz = worldZ & 15;
-    if (lx === 0) this.enqueue(cx - 1, cz, MESH_PRIORITY_EDIT);
-    if (lx === 15) this.enqueue(cx + 1, cz, MESH_PRIORITY_EDIT);
-    if (lz === 0) this.enqueue(cx, cz - 1, MESH_PRIORITY_EDIT);
-    if (lz === 15) this.enqueue(cx, cz + 1, MESH_PRIORITY_EDIT);
+    if (lx === 0) this.enqueue(cx - 1, cz, MESH_PRIORITY_EDIT, worldY);
+    if (lx === 15) this.enqueue(cx + 1, cz, MESH_PRIORITY_EDIT, worldY);
+    if (lz === 0) this.enqueue(cx, cz - 1, MESH_PRIORITY_EDIT, worldY);
+    if (lz === 15) this.enqueue(cx, cz + 1, MESH_PRIORITY_EDIT, worldY);
   }
 
   /**
@@ -292,8 +314,16 @@ export class ChunkRenderer {
     for (const entry of this.rendered.values()) this.enqueue(entry.cx, entry.cz, MESH_PRIORITY_REFRESH);
   }
 
-  private enqueue(cx: number, cz: number, priority: number = MESH_PRIORITY_LOAD): void {
+  private enqueue(cx: number, cz: number, priority: number = MESH_PRIORITY_LOAD, editedY?: number): void {
     const key = chunkKey(cx, cz);
+    if (editedY !== undefined) {
+      // 改动的方块所在段 + 上下各一段：跨段的交界面上，AO / 平滑光会读到相邻段
+      const section = Chunk.sectionOf(editedY);
+      const mark = this.edits.get(key) ?? { sections: new Set<number>(), last: section };
+      this.edits.set(key, mark);
+      for (let s = section - 1; s <= section + 1; s++) if (s >= 0 && s < SECTION_COUNT) mark.sections.add(s);
+      mark.last = section;
+    }
     const existing = this.queued.get(key);
     if (existing) {
       // 已在队列里：只允许**升级**优先级（例如加载途中玩家改了方块）
@@ -354,15 +384,34 @@ export class ChunkRenderer {
       const seq = ++this.requestSeq;
       this.pending.set(key, seq);
       this.inFlight++;
+      // 这一份要重烘哪几段（批次 20261031-1300）；没有记录就是整列
+      const mark = this.edits.get(key);
+      this.edits.delete(key);
+      let options: { sections?: number[]; keep?: boolean } | undefined;
+      if (mark) {
+        let sections = [...mark.sections].sort((a, b) => a - b);
+        if (sections.length > MAX_PARTIAL_SECTIONS) {
+          // 攒太多：只追最新那一段，其余留给"追平"（全带上会退化成整列重烘，比不改还慢）
+          sections = [mark.last - 1, mark.last, mark.last + 1].filter((s) => s >= 0 && s < SECTION_COUNT);
+          this.pendingSet.add(key);
+        }
+        options = { sections, keep: true };
+      } else if (this.pendingSet.has(key)) {
+        // 追平：整列重烘一次，把被挤掉的段补上（慢，但这时画面已经更新过一轮了）
+        this.pendingSet.delete(key);
+        options = { keep: true };
+      }
       this.meshPool.request(cx, cz, request.chunks, request.transfer, (response) => {
         this.inFlight--;
         if (this.pending.get(key) !== seq) return; // 已被更新的请求取代
         this.pending.delete(key);
         // 烘焙期间又被改过：这一份先挂（画面立刻往前挪一格），紧接着重烘最新状态
         if (this.dirtyRebuild.delete(key)) this.enqueue(cx, cz, MESH_PRIORITY_EDIT);
+        // 有段被挤掉了（见 MAX_PARTIAL_SECTIONS）：这一份挂上后，后台整列补一次
+        else if (this.pendingSet.has(key)) this.enqueue(cx, cz, MESH_PRIORITY_REFRESH);
         this.ready.push({ key, response });
         this.armReadyFallback();
-      });
+      }, options);
       return;
     }
 
@@ -731,6 +780,8 @@ export class ChunkRenderer {
   disposeAll(): void {
     this.ready.length = 0;
     this.dirtyRebuild.clear();
+    this.edits.clear();
+    this.pendingSet.clear();
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     this.readyTimer = null;
     for (const key of [...this.rendered.keys()]) this.dispose(key);

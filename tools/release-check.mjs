@@ -423,7 +423,9 @@ const mainChunk = [...gzipped].sort((a, b) => b.gzip - a.gzip)[0];
 // 2026-10-30（批次 20261030-2316）：手机降温四步（不透明层去 discard / 地表先画 / 区段遮挡剔除 /
 // 去空转）属于同一批渲染路径改动，一次性给 3 KB 额度（前三步实测用掉 2.1 KB），做完不再上调。
 // 2026-10-31（降温第二批：视锥约束遮挡 / 包围球收紧 / 动态帧率）：一次性给 2 KB，做完不再上调。
-const MAIN_GZIP_BASELINE = 758 * 1024;
+// 2026-10-31（挖方块即时消失）：ChunkRenderer 多了一份"哪些段被改过 / 要追平"的账（三张表合成一张），
+// 实测 +60 字节。按"闸门拦异常、不压榨常量"的口径给到 760 KB（下一次要涨得另说理由）。
+const MAIN_GZIP_BASELINE = 760 * 1024;
 if (mainChunk.gzip > MAIN_GZIP_BASELINE) {
   problems.push(`主包 ${mainChunk.name} gzip ${mainChunk.gzip} 超过基线 ${MAIN_GZIP_BASELINE}（+${mainChunk.gzip - MAIN_GZIP_BASELINE} 字节）`);
 }

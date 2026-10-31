@@ -3143,7 +3143,7 @@ class App {
         this.refreshLoadingState();
       },
       onBlockChanged: (x, y, z) => {
-        this.chunkRenderer.enqueueAround(x, z);
+        this.chunkRenderer.enqueueAround(x, z, y);
         this.pendingSettle.push(x, y, z);
         // 红石：方块一变就重算受影响的电路（放粉、开关、活塞推拉都走这条路径）
         this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
@@ -19084,7 +19084,7 @@ class App {
       // 光照收敛后再重刷一次方块改动过的区块，避免烘焙进未收敛的光照
       if (!lightBusy && this.pendingSettle.length > 0) {
         for (let i = 0; i < this.pendingSettle.length; i += 3) {
-          this.chunkRenderer.enqueueAround(this.pendingSettle[i]!, this.pendingSettle[i + 2]!);
+          this.chunkRenderer.enqueueAround(this.pendingSettle[i]!, this.pendingSettle[i + 2]!, this.pendingSettle[i + 1]!);
         }
         this.pendingSettle.length = 0;
       } else if (this.pendingSettle.length > PENDING_SETTLE_LIMIT) {

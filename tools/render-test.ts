@@ -1679,6 +1679,55 @@ console.log('\n[方块形状的盒子坐标（批次 20261026-0141）]');
   check('形状表覆盖了所有实际使用的形状', shapes.length >= 20, String(shapes.length));
 }
 
+console.log('\n[挖方块只重烘改过的那几段（批次 20261031-1300）]');
+{
+  const chunk = new Chunk(0, 0);
+  chunk.set(0, 64, 0, Block.STONE);
+  const world = { getChunk: (cx: number, cz: number) => (cx === 0 && cz === 0 ? chunk : undefined) } as unknown as World;
+  const scene = new THREE.Scene();
+  const material = new THREE.MeshBasicMaterial();
+  const requested: Array<number[] | undefined> = [];
+  const callbacks: Array<(r: MeshResponse) => void> = [];
+  const pool = {
+    size: 1,
+    request: (_cx: number, _cz: number, _chunks: unknown, _transfer: unknown, onDone: (r: MeshResponse) => void, options?: { sections?: number[] }) => {
+      requested.push(options?.sections);
+      callbacks.push(onDone);
+    },
+  } as unknown as MeshWorkerPool;
+  const renderer = new ChunkRenderer(scene, {} as TextureAtlas, world, material, material, pool);
+  const empty = (): MeshResponse => ({ type: 'meshed', id: 1, cx: 0, cz: 0, sections: [] });
+
+  renderer.onChunkLoaded(0, 0);
+  renderer.processQueue(1, 0, 0);
+  equal('加载/重刷是整列重烘（不带 sections）', requested[0], undefined);
+  callbacks.shift()!(empty());
+  renderer.applyReady(4);
+
+  renderer.enqueueAround(1, 1, 65);
+  renderer.processQueue(1, 0, 0);
+  equal('改一格只重烘那一段 + 上下各一段', requested[1]?.join('/'), '7/8/9');
+
+  // 在途期间又改了两处（不同段）：不重复派发，但要把段攒下来
+  renderer.enqueueAround(1, 1, 65);
+  renderer.enqueueAround(1, 1, 100);
+  renderer.processQueue(1, 0, 0);
+  equal('在途期间不重复派发', requested.length, 2);
+  callbacks.shift()!(empty());
+  renderer.applyReady(4);
+  renderer.processQueue(1, 0, 0);
+  equal('挂上后只追最新那一段（攒多了会退化成整列重烘）', requested[2]?.join('/'), '9/10/11');
+  callbacks.shift()!(empty());
+  renderer.applyReady(4);
+  // 被挤掉的 7/8 段由"追平"在后台补一次（整列）
+  renderer.processQueue(1, 0, 0);
+  equal('被挤掉的段由追平补（整列重烘，不带 sections）', requested[3], undefined);
+  callbacks.shift()!(empty());
+  renderer.applyReady(4);
+  renderer.disposeAll();
+  material.dispose();
+}
+
 console.log('\n[生成好的区块在帧内按预算并入（批次 20261031-0930）]');
 {
   const world = new World(1, 'default', undefined, 0);
