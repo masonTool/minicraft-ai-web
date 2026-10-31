@@ -86,6 +86,45 @@
 
 ---
 
+## 批次 20261031-1031 · 2026-10-31 · 会话 55858f3f
+
+# 队列 · 会话 55858f3f628e4b31821c7b04ebc713c3
+
+> 状态：执行中
+> 创建：2026-10-31
+> 批次：20261031-1031
+
+> 目标（用户 2026-10-31）：手机（安卓壳 / 触屏）上弓弩射不出去——按住没有反应，
+> 松手只会挖方块。要修根因（手势归属），不是绕开症状。
+
+- [x] 触屏上弓/弩/望远镜不再被"射线必须指空"挡住：`web/src/main.ts`（`usingItem` + 新增 `holdsChargeable`）→ `npm run test:ui` + `npm run check:fast`
+  - 做了什么：`usingItem` 按手持物品分流——新增 `holdsChargeable`（弓 / 弩 / 望远镜），这三件跳过 `hit !== null` 判据，维持条件读 `touch.aimPoint !== null`（手指还按着）；其余物品保持原判据。
+  - 为什么：触屏的 `hit` 就是手指落点，而 `REACH` 已是 10 格（批次 336），"射线前方 10 格没有方块"几乎不成立，于是弓一次都充不了能；`touch.holding` 还要求"未拖动"，等于禁止边拉弓边瞄准。
+  - 验证：`npm run check:fast` 全绿；`npm run test:ui` 1232 通过 / 0 失败。
+  - 批次：20261031-1031
+- [x] 拉弓/装填期间不再顺手挖方块、打怪、乱挥手：`web/src/main.ts`（`chargingShot` + `updateBreaking` / `updateAttacking` / `updateArmSwing`）→ `npm run check:fast`
+  - 做了什么：新增 `chargingShot`（`bowDrawing || crossbowDrawing`），`updateBreaking` 的早退条件、`updateAttacking` 的攻击分支、`updateArmSwing` 的节拍器三处读它；拉弓期间顺手作废排队的轻点攻击请求。
+  - 为什么：放宽 `usingItem` 之后，触屏长按 400ms 会同时把这一下判成"挖方块/打怪"（`onBreakStart → leftDown`），一边拉弓一边把瞄着的地挖穿。
+  - 验证：`npm run check:fast` 全绿；`read_lints` 零诊断。
+  - 批次：20261031-1031
+- [x] 弩对功能方块让位 + 开界面时显式取消蓄力（关背包不再补射）：`web/src/main.ts`（`updatePlacing` / `updateInteraction` 早退）→ `npm run check:fast`
+  - 做了什么：`updatePlacing` 里"手上是弓就 return"那条扩成 `BOW || CROSSBOW`；`updateInteraction` 在 `uiOpen || sleeping` 的早退分支里显式清 `bowDrawing/bowCharge/crossbowDrawing/crossbowCharge`。
+  - 为什么：弩原来没有这一条，对着箱子/工作台按住会先开界面、装填白做；而那段早退会把 `updateBow`/`updateCrossbow` 整段跳过，只清 `hit` 的话 `bowDrawing` 悬在 true、蓄力值不清零，关掉背包那一帧会补射一箭。
+  - 验证：`npm run check:fast` 全绿；`read_lints` 零诊断。
+  - 批次：20261031-1031
+- [x] 把这次的语义钉成离线断言：`tools/ui-test.ts` → `npm run test:ui`
+  - 做了什么：`tools/ui-test.ts` 新增 6 条断言——`holdsChargeable` 白名单内容与顺序（必须在 `hit !== null` 之前）、弓弩维持条件读 `aimPoint`、食物/盾仍保留原判据、`chargingShot` 被挖/打/挥三处读取、弩与弓一样对功能方块让位、开界面早退里清两套蓄力状态。
+  - 为什么：`usingItem` 这条判据之前零断言（只钉了一句源码字符串），改坏了没人红——这次就是这么静默坏掉的。
+  - 验证：`npm run test:ui` 1232 → **1238 通过 / 0 失败**（新增 6 条全过）。
+  - 批次：20261031-1031
+- [x] 全量门禁 + 台账收尾：`npm run check` → 全绿
+  - 做了什么：跑全量 `npm run check` 发现两道**预存**的红（与本次改动无关）：① `tools/structure-test.ts` 的 `shaftCache` 写死 `Map<string, Uint8Array>`，而方块 id 已是 16 位（`BlockArray = Uint16Array`）→ `typecheck:tools` 直接报 3 条；② `audit:diffs` 的差异台账过期（237 → 238 条，由批次 20261031-1025 往 L39 里补注记后没重新生成）。①随本条修掉（只改缓存类型声明），②按台账规矩重新生成（派生内容不手改）。
+  - 为什么：`git commit` 的守卫只跑 `check:fast`（不含 `typecheck:tools` 与三张台账），所以这两处能在 main 上一直红着不被发现；不修掉的话这批的"全量门禁"是空话。
+  - 验证：`npm run check` 退出码 0；`test:offline` 181 套全绿；台账 `--print` 三项通过。
+  - 批次：20261031-1031
+
+---
+
 ## 批次 20261031-1100 · 2026-10-31 · 会话 mine20261031
 
 > 挖方块时方块要等停手才消失：在途网格被后续改动作废
@@ -247,30 +286,6 @@
   - 为什么：iOS 与 Android 共用同一份封存格式与同一套"验签名再解封"的顺序，但 Xcode 工程需要 `@capacitor/ios`，本机没装，先把源码与契约落下来
   - 验证：`typecheck` + `typecheck:tools` 清洁；Swift 侧待 Xcode 工程补齐后实测（状态文档已标注）
   - 批次：20261029-1600
-
----
-
-## 批次 20261028-2226 · 2026-10-28 · 会话 db119a0b
-
-> 用户："原版的差异基线，我们还是要做吧?" —— 确认把玩家可见文案里的基线词全部中性化
-
-# 队列 · 会话 db119a0b96db41469bc93f04d7852469
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-2226
-
-- [x] 1/2 物品说明里"原版 / vanilla"当差异基线的说法全部换成中性词：`src/core/i18n/locales/*/itemDesc.ts` → `npm run test:i18n` + `audit:i18n` 全绿
-  - 做了什么：六个语言的 `itemDesc.ts` 全量替换基线词（zh 原版 → **常规玩法**，en vanilla → **the base game**，de Original → **Grundspiel**，fr l’original → **le jeu de base**，pt o original → **o jogo base**，ru оригинал → **базовая игра**，按各语言格位写成完整词组）；"与原版的差异：/Difference from vanilla:/Unterschied zum Original:/Écart avec l’original :/Diferença do original:/Отличие от оригинала:" 这类**比较式引导语整句删掉**（换成中性名词之后它会变成"跟自己比"），删完句首大写补齐；顺手修 `dort/là-bas/lá`（指代"那边"）与几处读不通的搭配（"猪的常规玩法口粮"→"常用口粮"等）
-  - 为什么：用户要求界面文字不与任何别的产品挂钩，而物品说明（背包里直接看得到）有约 270 处拿另一款产品当基线。内部分差异台账（`TASKS.md` 附节 + `audit:diffs`）**不动**：那是工程记账，不是玩家看到的文字
-  - 取舍：不逐条重写整句（270 条 × 6 语言风险太大），用"同词性等位替换 + 删比较引导语"保持句子结构与语气不变；`station.ts` 里的 "Original bleibt"（指地图原件）是正常词义，**故意不动**
-  - 验证：`npm run typecheck` 通过；`npm run audit:i18n` 六语言仍 100%；`npm run test:i18n` 594 通过 / 0 失败；逐条看过 zh 的 51 处、en 的 44 处替换结果与 de/fr/pt/ru 的抽样，无重复词/双标点/断句；`grep` 六个 itemDesc 里基线词已 0 命中
-  - 批次：20261028-2226
-- [x] 2/2 给"物品说明不许拿别家当基线"加守卫：`tools/i18n-test.ts` → `npm run test:i18n` 全绿
-  - 做了什么：新增 12 条断言（六语言各两条）：`itemDesc.ts` 里不许再出现基线词（原版 / vanilla / Original / original / оригинал），且必须出现中性词（常规玩法 / the base game / Grundspiel / jeu de base / jogo base / базовая игра）；注释行（`*` 开头）不算
-  - 为什么：这类替换只做一次就会慢慢回流——以后加物品说明的人照着旧文案抄，界面上又会冒出"原版"。断言的边界刻意只扫 `itemDesc.ts`：`station.ts` 的 "Original bleibt" 指地图原件，是正常词义
-  - 验证：`npm run test:i18n` 594 通过 / 0 失败（新增 12 条全绿）
-  - 批次：20261028-2226
 
 ---
 
