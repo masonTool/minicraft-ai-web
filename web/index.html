@@ -3341,6 +3341,25 @@
         background: linear-gradient(#ffe9a8, #e0b552);
         box-shadow: 0 0 8px rgba(255, 210, 120, .5);
       }
+      /* 蓄力进度条（批次 20261031-1140）：与进食同一位置（两者按手持物互斥，不会同时出现）。
+         **越过 15% 最小蓄力线就变金色**——"现在松手会射出去"这件事必须看得见，
+         否则玩家会觉得"我就点了一下，怎么箭就飞了"。 */
+      #bow-progress {
+        position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%);
+        width: 120px; height: 6px;
+        background: rgba(0, 0, 0, .62);
+        overflow: hidden; display: none;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .12);
+      }
+      #bow-progress.on { display: block; }
+      #bow-progress i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(#c9d6e2, #7d8b98);
+      }
+      #bow-progress.ready i {
+        background: linear-gradient(#fff4c2, #e8b53c);
+        box-shadow: 0 0 8px rgba(255, 210, 120, .55);
+      }
 
       /* boss 血条（末影龙）：只在 boss 存活时显示 */
       #boss-bar {
@@ -6058,6 +6077,7 @@
       :is(#debug, #overlay kbd, .inv-header kbd, .inv-label::before, .inv-panel kbd,
           #item-tooltip, .adv-badge, .adv-toast, #chat .chat-line, .chat-send,
           #xp-bar, #xp-fill, #xp-level, #boss-bar, #break-progress, #eat-progress,
+          #bow-progress,
           #selected-item-name, #touch-hint, .unsupported-panel,
           #chat, .chat-log, .sign-editor-hint) {
         border-radius: 0;
@@ -6549,6 +6569,7 @@
       </div>
       <div id="break-progress"><i></i></div>
       <div id="eat-progress"><i></i></div>
+      <div id="bow-progress"><i></i></div>
       <div id="boss-bar"><b></b><i><s id="boss-fill"></s></i></div>
       <div id="vitals"></div>
       <div id="hotbar"></div>

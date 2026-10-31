@@ -2746,6 +2746,9 @@ class App {
   /** 破坏 / 进食进度条的元素（懒查一次后缓存，不再每帧 `getElementById`） */
   private breakProgressEls: { container: HTMLElement; bar: HTMLElement } | null = null;
   private eatProgressEls: { container: HTMLElement; bar: HTMLElement } | null = null;
+  /** 蓄力进度条（批次 20261031-1140）：与进食/破坏同一套节点缓存写法 */
+  private bowProgressEls: { container: HTMLElement; bar: HTMLElement } | null = null;
+  private bowBarPercent = -1;
   /** 上一次写进 DOM 的进度百分比（-1 = 还没写过） */
   private breakBarPercent = -1;
   private eatBarPercent = -1;
@@ -6292,6 +6295,9 @@ class App {
     // 拿起弓/弩就切成屏幕中心瞄准）。这是**唯一**一个每帧之外会改手持物的出口，
     // 挂在这里就不会漏（切槽、拿起、放回、界面里移动物品都会走它）。
     this.syncAimChrome();
+    // 同时告诉触摸层"按住是使用还是挖"（批次 20261031-1140）：
+    // 蓄力到 400ms 时不许进入破坏模式，否则视角再也拖不动（还附带一次系统长按震动）。
+    this.touch?.setHoldMeansUse(this.holdMeansUse);
   }
 
   /** 当前手持方块；手上不是可放置物品时返回 undefined */
@@ -6385,6 +6391,22 @@ class App {
   private get holdsChargeable(): boolean {
     const id = this.heldItemId;
     return id === Item.BOW || id === Item.CROSSBOW || id === Item.SPYGLASS;
+  }
+
+  /**
+   * 手持物的"按住"是不是**使用**而不是挖方块（批次 20261031-1140）。
+   *
+   * 触屏上长按 400ms 会被操作层判成破坏（`onBreakStart` → 视角冻结 + 系统长按震动）。
+   * 这几类物品的按住语义就是"用它"，必须让位：
+   * 弓 / 弩 / 望远镜（蓄力）、食物与药水（进食）、盾（格挡）。
+   *
+   * ⚠️ 传的是**手持物**而不是"这一帧在不在用"——手势是在按下那一刻就分好工的，
+   * 中途再改判会让同一次手势前后不一致。
+   */
+  private get holdMeansUse(): boolean {
+    if (this.holdsChargeable) return true;
+    if (this.heldFood !== null || this.heldPotion !== null) return true;
+    return isShield(this.inventory.get(this.hotbarIndex)) || isShield(this.inventory.get(OFFHAND_SLOT));
   }
 
   /**
@@ -7914,7 +7936,12 @@ class App {
       { x: dirX * speed, y: dirY * speed, z: dirZ * speed },
       (x, y, z) => this.world.isSelectable(Math.floor(x), Math.floor(y), Math.floor(z)),
     );
-    this.trajectory.update(points, landing);
+    // 圆环按落点距离缩放：固定世界尺寸在 2 格处会糊满半个屏幕（用户反馈"近距离圈很大"）。
+    // 除以 12 是"12 格处按原始大小"，两端各夹一下，避免贴脸时缩成看不见、远处又糊成一片。
+    const ringScale = landing
+      ? Math.min(2.2, Math.max(0.35, Math.hypot(landing.x - this.physics.x, landing.z - this.physics.z) / 12))
+      : 1;
+    this.trajectory.update(points, landing, ringScale);
   }
 
   /** 放出一支箭：扣箭、算伤害与附魔、给弓扣耐久 */
@@ -16409,6 +16436,48 @@ class App {
   }
 
   /**
+   * 蓄力进度条（批次 20261031-1140）。
+   *
+   * 用户："我手上搭着弓，一点就发射了，发的很快"——原版**确实**只要按住 ≥150ms
+   * 松手就会射（威力随蓄力线性，150ms 那一箭几乎飞不动）。问题不在"射了"，
+   * 而在**看不见自己按了多久**：有了这条进度，15% 之前是灰的、过了变金色，
+   * "现在松手会不会射出去"就是可读的。
+   *
+   * 与进食/破坏条互斥（按住弓时不会在吃、也不会在挖），所以共用同一个位置。
+   */
+  private updateBowProgressUi(): void {
+    if (!this.bowProgressEls) this.bowProgressEls = this.progressBarEls('bow-progress');
+    const els = this.bowProgressEls;
+    if (!els) return;
+
+    const bow = this.heldItemId === Item.BOW && this.bowDrawing;
+    const crossbow = this.heldItemId === Item.CROSSBOW && this.crossbowDrawing;
+    const active = (bow || crossbow) && !this.uiOpen && !this.stats.dead;
+    els.container.classList.toggle('on', active);
+    if (!active) {
+      this.bowBarPercent = -1;
+      return;
+    }
+
+    let percent: number;
+    let ready: boolean;
+    if (bow) {
+      percent = Math.round(this.bowCharge * 100);
+      // 弓：越过 15% 松手就会射出去（原版同一条线）
+      ready = canFire(this.bowCharge);
+    } else {
+      const full = crossbowChargeTime(enchantLevel(this.heldEnchants, 'quick_charge'));
+      percent = Math.round(Math.min(1, this.crossbowCharge / full) * 100);
+      // 弩：装满才能射，差 0.01 秒也算满（与 `updateCrossbow` 同一个容差）
+      ready = this.crossbowCharge >= full - 0.01;
+    }
+    els.container.classList.toggle('ready', ready);
+    if (percent === this.bowBarPercent) return;
+    this.bowBarPercent = percent;
+    els.bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+
+  /**
    * 扔出手上的东西（K4 尾巴）：雪球 / 鸡蛋 / 喷溅药水。
    *
    * 为什么是"点按即投"而不是像吃喝那样长按：扔东西时瞄准的就是正前方
@@ -19283,6 +19352,7 @@ class App {
       this.refreshLoadingState();
       this.updateBreakProgressUi();
       this.updateEatingProgressUi();
+      this.updateBowProgressUi();
       // 只画视距之内的区块（批次 203）：加载圈留了 `radius + 2` 的缓冲，而远裁面被
       // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
       // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。

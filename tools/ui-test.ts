@@ -2168,6 +2168,33 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     mainSource.includes('crit: charge >= 1 - 1e-6') &&
       mainSource.includes('critTrailAt: (x, y, z) => this.particles.spawnCrit'),
   );
+  /*
+   * 批次 20261031-1140：三个真机反馈。
+   * ① 近距离落点圈糊满屏幕（固定世界尺寸）；② 蓄力过 400ms 后视角拖不动 + 震动；
+   * ③ "点一下就射"缺少可见的蓄力进度。
+   */
+  check(
+    '落点圆环按落点距离缩放（近距离不再糊满屏幕）',
+    mainSource.includes('const ringScale = landing') &&
+      mainSource.includes('this.trajectory.update(points, landing, ringScale)'),
+  );
+  check(
+    '按住=使用的手持物把标记传给触摸层（弓/弩/望远镜/食物/盾）',
+    mainSource.includes('private get holdMeansUse(): boolean') &&
+      mainSource.includes('this.touch?.setHoldMeansUse(this.holdMeansUse)'),
+  );
+  check(
+    '长按越过阈值时"使用手势"不进入破坏（否则视角冻结、还带系统长按震动）',
+    source.includes('if (this.holdMeansUse) {') &&
+      source.includes('this.longHeld = true;') &&
+      source.includes('} else if (!this.lookDragged && !this.longHeld) {'),
+  );
+  check(
+    '蓄力进度条（越过 15% 变金色，弩装满才亮）',
+    mainSource.includes('private updateBowProgressUi(): void') &&
+      mainSource.includes('this.updateBowProgressUi();') &&
+      mainSource.includes('ready = canFire(this.bowCharge)'),
+  );
   check(
     '进食时长按设置取档（原版 1.6 / 快速 1.0）',
     mainSource.includes('eatSecondsFor(this.settings.fastEat)'),
@@ -2203,6 +2230,12 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       !source.includes("classList.add('touch-aiming')") &&
       mainSource.includes('} else if (this.touch !== null) {') &&
       mainSource.includes("document.body.classList.toggle('aim-center'"),
+  );
+  // 蓄力进度条的 DOM 与样式（批次 20261031-1140）：与进食条同位、越过阈值变金色
+  check(
+    '蓄力进度条节点与「够射」配色都在 index.html',
+    indexSource.includes('<div id="bow-progress"><i></i></div>') &&
+      indexSource.includes('#bow-progress.ready i'),
   );
   check(
     '屏幕中心瞄准时白圈收起（目标在正中，不在手指上）',

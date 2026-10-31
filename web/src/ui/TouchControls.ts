@@ -279,6 +279,18 @@ export class TouchControls {
   private tapFlashTimer: number | null = null;
   private longPressTimer: number | null = null;
   private breaking = false;
+  /**
+   * 手上这件东西的"按住"就是**使用**（弓 / 弩 / 望远镜 / 食物 / 盾），不是挖方块
+   * （批次 20261031-1140，由主程序按手持物每次刷新）。
+   *
+   * 为什么得由操作层知道：长按 400ms 那条分支会置 `breaking = true`，而
+   * `pointermove` 里 `if (this.lookDragged && !this.breaking)` 决定**要不要转视角**——
+   * 于是"按住蓄力"到 400ms 就被判成破坏：视角再也拖不动（用户："蓄力之后没办法调整视角"），
+   * 顺带 Android 还会给一次长按震动反馈。
+   */
+  private holdMeansUse = false;
+  /** 本次手势已经越过长按阈值（但因为是"使用"手势，没有进入破坏） */
+  private longHeld = false;
 
   private enabled = false;
   private sneaking = false;
@@ -593,6 +605,16 @@ export class TouchControls {
     this.resetStick('handedness');
   }
 
+  /**
+   * 告诉操作层"当前手持物的按住是使用，不是挖方块"（批次 20261031-1140）。
+   *
+   * 主程序在每次刷新快捷栏时落一次。见 `holdMeansUse` 的注释：
+   * 置为 true 时长按**不进入破坏**，因此视角可以一直拖（蓄力时能瞄准）。
+   */
+  setHoldMeansUse(value: boolean): void {
+    this.holdMeansUse = value;
+  }
+
   /** 同步潜行状态（键盘切换时按钮也要跟着变——潜行已不在右簇，只保内部状态） */
   setSneaking(sneaking: boolean): void {
     this.sneaking = sneaking;
@@ -850,6 +872,7 @@ export class TouchControls {
       this.lookDownAt = performance.now();
       this.lookDrift = 0;
       this.breaking = false;
+      this.longHeld = false;
       this.zeroMoveCount = 0;
       capturePointer(this.lookSurface, event.pointerId);
       // 批次 239：按下即出白圈，并把落点交给主程序做"手指射线"（目标不再看准星）
@@ -865,6 +888,13 @@ export class TouchControls {
       // 只有一个阈值（批次 181）：按住超过它才是破坏/持续攻击，松手早于它就是轻点
       this.longPressTimer = window.setTimeout(() => {
         if (this.lookDragged) return;
+        // 蓄力 / 进食 / 举盾这类"按住=使用"的手持物（批次 20261031-1140）：
+        // 越过阈值**也不进入破坏**——否则 `breaking = true` 会让视角再也拖不动，
+        // 而且 Android 会给一次长按震动。只记一笔"这次不是轻点"，抬手时不派发 onTap。
+        if (this.holdMeansUse) {
+          this.longHeld = true;
+          return;
+        }
         this.breaking = true;
         diag.event('gesture', 'break.start', { pointer: this.lookPointer, state: this.debugState });
         this.actions.onBreakStart();
@@ -951,7 +981,7 @@ export class TouchControls {
         // 按住（破坏/使用）抬手：白圈立即收起
         this.releaseAim(false);
         this.actions.onBreakEnd();
-      } else if (!this.lookDragged) {
+      } else if (!this.lookDragged && !this.longHeld) {
         // 松手早于长按阈值 → 轻点：白圈原地闪一下，主程序按落点决定攻击/交互/放置
         this.releaseAim(true);
         this.actions.onTap(tapX, tapY);
@@ -1028,6 +1058,7 @@ export class TouchControls {
     this.releaseAim(false);
     if (!this.breaking) return;
     this.breaking = false;
+    this.longHeld = false;
     this.actions.onBreakEnd();
   }
 

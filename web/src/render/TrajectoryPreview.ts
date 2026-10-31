@@ -64,8 +64,13 @@ export class TrajectoryPreview {
     this.object.add(this.points, this.ring);
   }
 
-  /** 每帧刷新：`points` 是抛物线上的采样点，`landing` 是预计命中点（null = 打不到地面） */
-  update(points: readonly ArrowPathPoint[], landing: ArrowPathPoint | null): void {
+  /**
+   * 每帧刷新：`points` 是抛物线上的采样点，`landing` 是预计命中点（null = 打不到地面）。
+   *
+   * `ringScale` 由主程序按**落点距离**给：圆环是固定世界尺寸，2 格处会糊满半个屏幕
+   * （用户："近距离那个圈会变得很大"）。按距离缩放后，屏幕上看到的大小基本恒定。
+   */
+  update(points: readonly ArrowPathPoint[], landing: ArrowPathPoint | null, ringScale = 1): void {
     const count = Math.min(points.length, MAX_POINTS);
     for (let i = 0; i < count; i++) {
       const point = points[i]!;
@@ -80,6 +85,7 @@ export class TrajectoryPreview {
     if (landing) {
       // 抬高 2cm：贴在地面上会和草方块顶面 z-fighting
       this.ring.position.set(landing.x, landing.y + 0.02, landing.z);
+      this.ring.scale.setScalar(ringScale);
       this.ring.visible = true;
     } else {
       this.ring.visible = false;
