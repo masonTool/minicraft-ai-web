@@ -122,15 +122,27 @@ export const LARGE_FIREBALL_POWER = 1;
 
 /**
  * 末影之眼飞多久（秒，批次 114）：原版约 80 tick（4 秒），
- * 飞出去四十格上下就落地——**它给的是方向，不是位置**（这是原版的用法）。
+ * 飞出去三四十格就落地——**它给的是方向，不是位置**（这是原版的用法）。
  *
- * 批次 20261031-0943 从 3.5 抬到 4（对齐原版的 80 tick）：3.5 秒 × 11 格/秒只有
- * 三十八格，玩家跟着眼睛走一趟要塞要扔二十多次；抬到原版时长 + 更高的出手弧线
- * （见 `ENDER_EYE_RISE`）之后一次约 44 格。
+ * 批次 20261031-0943 从 3.5 抬到 4（对齐原版的 80 tick）；批次 20261031-1025 把速度
+ * 降到 8（原版约 9）之后补到 4.5，射程仍是 **36 格**——慢下来但不用多扔十几次。
  */
-export const ENDER_EYE_LIFETIME = 4;
-/** 眼睛朝要塞飘的水平速度（格/秒） */
-export const ENDER_EYE_SPEED = 11;
+export const ENDER_EYE_LIFETIME = 4.5;
+/**
+ * 眼睛朝要塞飘的水平速度（格/秒）。
+ *
+ * 原版是"每 tick 朝目标加一点速度 + 阻尼"，稳态约 **9 格/秒**；这里原来取 11，
+ * 比玩家跑动（约 4.3）快太多，没有参照物时"嗖"一下就看不见了。批次 20261031-1025
+ * 降到 8：慢一点、看得清飞向哪，射程靠 `ENDER_EYE_LIFETIME` 补回来。
+ */
+export const ENDER_EYE_SPEED = 8;
+/**
+ * 尾迹间隔（秒）：飞行中每隔这么久在身后撒一颗紫色 portal 粒子。
+ *
+ * 原版是**每 tick 一颗**（20 颗/秒），所以远处能看见一条紫尾迹；这里按 20/秒对齐。
+ * 不能按渲染帧撒（60fps 会变成 270 颗，既挤 1024 的粒子池又过密）。
+ */
+export const ENDER_EYE_TRAIL_INTERVAL = 0.05;
 /**
  * 出手时往上的速度（格/秒）。
  *
@@ -193,6 +205,8 @@ export class Throwable extends Entity implements MovingBody {
   dirX = 0;
   dirY = 0;
   dirZ = -1;
+  /** 末影之眼的尾迹计时（秒，见 `ENDER_EYE_TRAIL_INTERVAL`） */
+  private eyeTrail = 0;
 
   constructor(
     x: number,
@@ -229,6 +243,17 @@ export class Throwable extends Entity implements MovingBody {
     if (this.age > THROWABLE_LIFETIME) {
       this.dead = true;
       return;
+    }
+
+    // 末影之眼飞行尾迹（批次 20261031-1025）：原版每 tick 在身后撒一颗 `PORTAL` 粒子，
+    // 所以远处能看见一条紫尾迹、进而看出它往哪飞。按 20 颗/秒对齐原版的 tick 频率
+    // （按渲染帧撒会变成 60 颗/秒，既过密又挤粒子池）。
+    if (this.kind === 'ender_eye') {
+      this.eyeTrail += dt;
+      while (this.eyeTrail >= ENDER_EYE_TRAIL_INTERVAL) {
+        this.eyeTrail -= ENDER_EYE_TRAIL_INTERVAL;
+        ctx.spawnPortalParticles?.(this.x, this.y, this.z, 1, 0.06);
+      }
     }
 
     // 末影之眼（批次 114）：飞够时间就落地（原版约 4 秒）——落地的结算与"撞到东西"一样

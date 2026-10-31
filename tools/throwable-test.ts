@@ -347,11 +347,27 @@ console.log('\n[末影之眼：朝要塞飞]');
   });
   equal('出手时记下了目标（渲染与测试都读它）', eye.target?.x, 400);
   advance(eye, sky, 1);
-  check('朝要塞飞（x 在一秒里走出去十几格）', eye.x > 8, `x=${eye.x.toFixed(1)}`);
+  check('朝要塞飞（一秒里走出去好几格）', eye.x > 5, `x=${eye.x.toFixed(1)}`);
   check('先上升（不叠重力）', eye.y > 70.5, `y=${eye.y.toFixed(2)}`);
   advance(eye, sky, 1);
   check('上升速度会衰减（弧线压平，不是一直窜）', eye.vy < ENDER_EYE_RISE, `vy=${eye.vy.toFixed(2)}`);
   check('水平速度收敛到设计值附近', Math.abs(eye.vx - ENDER_EYE_SPEED) < 1, `vx=${eye.vx.toFixed(2)}`);
+
+  // ---- 飞行尾迹（批次 20261031-1025）：原版每 tick 一颗 portal 粒子，远处才看得见它往哪飞
+  const trails: number[] = [];
+  const trailCtx = makeCtx(emptyWorld(), { spawnPortalParticles: () => trails.push(1) });
+  const trailing = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  advance(trailing, trailCtx, 1);
+  check('飞行时每秒撒约 20 颗尾迹（原版每 tick 一颗）', trails.length >= 15 && trails.length <= 25, `${trails.length} 颗`);
+  const silent = makeCtx(emptyWorld(), { spawnPortalParticles: () => trails.push(1) });
+  const snowball = new Throwable(0.5, 70, 0.5, { x: 10, y: 0, z: 0 }, { kind: 'snowball', itemId: Item.SNOWBALL });
+  const before = trails.length;
+  advance(snowball, silent, 0.5);
+  equal('别的投掷物不会撒紫色尾迹', trails.length, before);
 
   // ---- 朝反方向扔：也会拐回来（原版就是"它自己指向要塞"）
   const back = new Throwable(0.5, 70, 0.5, { x: -ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
@@ -382,8 +398,8 @@ console.log('\n[末影之眼：朝要塞飞]');
   check(`${ENDER_EYE_LIFETIME} 秒内一直在飞（还没落地）`, !timed.dead);
   advance(timed, sky, 1);
   check('飞够时间就落地（原版约 4 秒）', timed.dead);
-  check('落地时飞出去四十格上下（够看出方向）', timed.x > 30 && timed.x < 60, `x=${timed.x.toFixed(1)}`);
-  close('存活时长对齐原版的 4 秒（80 tick）', ENDER_EYE_LIFETIME, 4);
+  check('落地时飞出去三十多格（够看出方向）', timed.x > 25 && timed.x < 50, `x=${timed.x.toFixed(1)}`);
+  close('存活时长 4.5 秒（原版 4 秒，多出来的是补降速后的射程）', ENDER_EYE_LIFETIME, 4.5);
 
   // 批次 20261031-0943：抬高出手弧线，让它能越过树冠与小坡。
   // 以前 `ENDER_EYE_RISE` 是 5.5，最高只到约 8 格——实测 60 个地表采样点里
@@ -406,10 +422,22 @@ console.log('\n[末影之眼：朝要塞飞]');
     const drops: number[] = [];
     const sounds: string[] = [];
     const particles: number[] = [];
+    // `afterImpact` 区分"飞行中"与"落地后"：紫色尾迹（批次 20261031-1025）只在落地前撒，
+    // 不区分的话"碎掉时冒一圈"会被尾迹的几十颗淹掉（判据变成"至少有一颗"就没意义了）
+    let afterImpact = false;
     const landed = makeCtx(emptyWorld(), {
-      spawnDrop: (itemId) => drops.push(itemId),
-      playSound: (kind) => sounds.push(kind),
-      spawnPortalParticles: () => particles.push(1),
+      spawnDrop: (itemId) => {
+        drops.push(itemId);
+        afterImpact = true;
+      },
+      // 碎掉那条路**没有** `spawnDrop`（只有声音 + 粒子），所以落地标志在声音里也置一次
+      playSound: (kind) => {
+        sounds.push(kind);
+        afterImpact = true;
+      },
+      spawnPortalParticles: () => {
+        if (afterImpact) particles.push(1);
+      },
     });
     Math.random = () => 0.5; // < 0.8 → 掉回地上
     const lucky = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: 0, z: 0 }, {
@@ -423,6 +451,8 @@ console.log('\n[末影之眼：朝要塞飞]');
     equal('掉回地上时不放碎裂粒子', particles.length, 0);
 
     Math.random = () => 0.95; // ≥ 0.8 → 碎掉
+    // 第二颗：只关掉"落地后"开关；`drops` 保留——下面那条断言靠"还是 1"表示没有新增
+    afterImpact = false;
     const broken = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: 0, z: 0 }, {
       kind: 'ender_eye',
       itemId: Item.ENDER_EYE,
