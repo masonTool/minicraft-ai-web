@@ -382,7 +382,23 @@ console.log('\n[末影之眼：朝要塞飞]');
   check(`${ENDER_EYE_LIFETIME} 秒内一直在飞（还没落地）`, !timed.dead);
   advance(timed, sky, 1);
   check('飞够时间就落地（原版约 4 秒）', timed.dead);
-  check('落地时飞出去三四十格（够看出方向）', timed.x > 25 && timed.x < 60, `x=${timed.x.toFixed(1)}`);
+  check('落地时飞出去四十格上下（够看出方向）', timed.x > 30 && timed.x < 60, `x=${timed.x.toFixed(1)}`);
+  close('存活时长对齐原版的 4 秒（80 tick）', ENDER_EYE_LIFETIME, 4);
+
+  // 批次 20261031-0943：抬高出手弧线，让它能越过树冠与小坡。
+  // 以前 `ENDER_EYE_RISE` 是 5.5，最高只到约 8 格——实测 60 个地表采样点里
+  // 12% 飞不到 5 格（一撞树就落地），看起来像"眼睛根本不指路"。
+  const arc = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  let peak = arc.y;
+  for (let i = 0; i < ENDER_EYE_LIFETIME * 60 && !arc.dead; i++) {
+    arc.tick(sky, 1 / 60);
+    if (arc.y > peak) peak = arc.y;
+  }
+  check('整条弧线最高点 > 10 格（能越过树冠）', peak - 70 > 10, `最高 ${(peak - 70).toFixed(1)} 格`);
 
   // ---- 落地：八成掉回地上，两成碎掉
   const realRandom = Math.random;
