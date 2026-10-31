@@ -41,6 +41,8 @@ import { lootTableIndex } from '../registry/loot.ts';
 import { WORKSTATION_BLOCKS } from '../registry/villagerTrades.ts';
 import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
+// 要塞地表竖井要知道"这一格属于哪个区块"（只在与井相交的区块里画，见 `buildSurfaceShaft`）
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z } from '../world/Chunk.ts';
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
 import { planStronghold, roomHalf, type StrongholdPlan } from './StrongholdLayout.ts';
@@ -1176,7 +1178,7 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
  * 广度优先所以全部连通；**传送门房永远在离入口最深的叶节点**。
  * 这里只负责按零件画：走廊（石砖 + 火把）与六种房间。
  */
-function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
+function buildStronghold(w: FeatureWriter, s: StructureInstance, world: FeatureWorld): void {
   const rng = s.rng;
   const brick = Block.STONE_BRICKS;
   const mossy = Block.MOSSY_STONE_BRICKS;
@@ -1312,6 +1314,58 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
     for (const dx of [0, 1]) {
       w.fill(s.x + dx, y, s.z, Block.AIR);
       w.fill(s.x + dx, y, s.z, Block.LADDER);
+    }
+  }
+
+  // 地表入口（批次 20261031-0943）：把上面这条梯子井**继续往上挖到地表**。
+  // 原版要塞有螺旋楼梯从地表下去；本项目以前完全封闭，玩家跟着末影之眼走到
+  // 要塞正上方也只能盲挖五十多格——挖偏几格就是纯石头，于是"从来找不到末地"。
+  buildSurfaceShaft(w, s, world);
+}
+
+/**
+ * 要塞的地表入口（批次 20261031-0943）。
+ *
+ * 井位就是原点房间正中那 2×1（`s.x`/`s.x+1`, `s.z`）——与上面那条上下层梯子井
+ * **同一条**，所以不需要再横挖一段去接通：玩家从地表爬下来，先落到上层入口房间。
+ *
+ * 四条约束：
+ *  1. 只依赖 `world.surfaceY` 与世界坐标（`s.*`），跨区块重放逐格一致；
+ *  2. **地表在水下时井口砌到海平面以上**：井壁是完整的 4×3 外框、井内是空气，
+ *     所以不会灌水；那一截在水里看起来就是一根石砖烟囱，玩家游到塔顶进井；
+ *  3. 只在**与井相交的区块**里画——要塞包围盒跨七乘七个区块，井只有 4 格宽，
+ *     不筛的话每个区块都要空跑两千次 `fill`；
+ *  4. 井壁只包"房间天花板以上"那一段：房间自己就有石砖墙，包进去反而会把房间填掉。
+ */
+function buildSurfaceShaft(w: FeatureWriter, s: StructureInstance, world: FeatureWorld): void {
+  const minX = s.x - 1;
+  const maxX = s.x + 2;
+  const minZ = s.z - 1;
+  const maxZ = s.z + 1;
+  if (maxX < w.originX || minX > w.originX + CHUNK_SIZE_X - 1) return;
+  if (maxZ < w.originZ || minZ > w.originZ + CHUNK_SIZE_Z - 1) return;
+
+  const surfaceTop = world.surfaceY(s.x, s.z);
+  // 水下要塞也要能进（默认种子里最近那座就在海面下）：井口一律砌到海平面以上一格。
+  const top = Math.max(surfaceTop, SEA_LEVEL + 1);
+  const bottom = s.y + 3;
+  if (top <= bottom) return;
+
+  // 井：2×1 的空气 + 梯子（梯子放在两列上，与下面那条井一样）
+  for (let y = bottom; y <= top; y++) {
+    for (const dx of [0, 1]) {
+      w.fill(s.x + dx, y, s.z, Block.AIR);
+      w.fill(s.x + dx, y, s.z, Block.LADDER);
+    }
+  }
+  // 井壁：4×3 的外框（内部 2×1 留空）。地表那一层因此会留下一个石砖井口，
+  // 玩家一眼能看出"这里有个入口"，而不是一块光秃秃的草地。
+  for (let y = bottom; y <= top; y++) {
+    for (let dx = -1; dx <= 2; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if ((dx === 0 || dx === 1) && dz === 0) continue;
+        w.fill(s.x + dx, y, s.z + dz, Block.STONE_BRICKS);
+      }
     }
   }
 }
@@ -1978,7 +2032,7 @@ function buildAmethystGeode(w: FeatureWriter, s: StructureInstance): void {
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
   village: buildVillage,
   mineshaft: buildMineshaft,
-  stronghold: (w, s) => buildStronghold(w, s),
+  stronghold: (w, s, world) => buildStronghold(w, s, world),
   dungeon: (w, s) => buildDungeon(w, s),
   shipwreck: (w, s) => buildShipwreck(w, s),
   ocean_monument: (w, s, world, seed) => buildOceanMonument(w, s, world, seed),

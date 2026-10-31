@@ -26,6 +26,7 @@ import {
   type StructureKind,
 } from '../web/src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../web/src/core/gen/TerrainGenerator.ts';
+import { SEA_LEVEL } from '../web/src/core/gen/Features.ts';
 import { mobTypeById } from '../web/src/core/entity/mobs.ts';
 import { planMineshaft } from '../web/src/core/gen/MineshaftLayout.ts';
 import { planStronghold } from '../web/src/core/gen/StrongholdLayout.ts';
@@ -1099,6 +1100,50 @@ console.log('\n[要塞的房间网格拼图（批次 462）]');
     equal('末地传送门框架是 12 格（原版一圈）', frames >= 12, true);
     check('图书馆里有两只箱子', libraryChests >= 2, `${libraryChests} 只`);
     check('图书馆里有蠹虫刷怪笼', silverfish >= 1, `${silverfish} 个`);
+
+    // ---- 批次 20261031-0943：地表入口（竖井 + 梯子 + 石砖井壁）
+    //
+    // 要塞原本完全封闭（原版有螺旋楼梯从地表下去），末影之眼只给水平方向，
+    // 玩家跟到正上方也只能盲挖五十多格。这条井是"眼睛指到哪、地面上就有入口"的
+    // 唯一保证，所以逐格断言：井里不能有一格实心、每一格都要有梯子、井口要有石砖框。
+    const shaftCache = new Map<string, Uint8Array>();
+    const blockAt = (x: number, y: number, z: number): number => {
+      const cx = Math.floor(x / 16);
+      const cz = Math.floor(z / 16);
+      const key = `${cx},${cz}`;
+      let blocks = shaftCache.get(key);
+      if (!blocks) {
+        blocks = generateChunkBlocks(cx, cz, seed);
+        shaftCache.set(key, blocks);
+      }
+      return blocks[Chunk.index(x - cx * 16, y, z - cz * 16)]!;
+    };
+
+    // 与 `buildSurfaceShaft` 同一个口径：水下要塞的井口砌到海平面以上
+    const shaftTop = Math.max(world.surfaceY(fort.x, fort.z), SEA_LEVEL + 1);
+    const shaftBottom = fort.y + 3;
+    check('井有得挖（井口在地表/海面之上，井底在要塞天花板）', shaftTop > shaftBottom, `${shaftTop} → ${shaftBottom}`);
+    let shaftSolid = 0;
+    let shaftLadders = 0;
+    let shaftCells = 0;
+    for (let y = shaftBottom; y <= shaftTop; y++) {
+      for (const dx of [0, 1]) {
+        shaftCells++;
+        const id = blockAt(fort.x + dx, y, fort.z);
+        if (blockDef(id).solid) shaftSolid++;
+        if (id === Block.LADDER) shaftLadders++;
+      }
+    }
+    equal('井里没有一格是实心的（能一路爬下去）', shaftSolid, 0);
+    equal(`整条井都铺了梯子（${shaftCells} 格）`, shaftLadders, shaftCells);
+    let rim = 0;
+    for (let dx = -1; dx <= 2; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if ((dx === 0 || dx === 1) && dz === 0) continue;
+        if (blockAt(fort.x + dx, shaftTop, fort.z + dz) === Block.STONE_BRICKS) rim++;
+      }
+    }
+    check('井口四周有一圈石砖（玩家一眼看得出这里有个入口）', rim >= 8, `实际 ${rim}/10 格`);
   }
 }
 
