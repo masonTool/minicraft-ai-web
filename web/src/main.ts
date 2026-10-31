@@ -6341,9 +6341,40 @@ class App {
     if (!zoomed && Math.abs(this.camera.fov - base) < 0.05) this.camera.fov = base;
   }
 
+  /**
+   * 手里这件东西的"按住"是否**只有一种语义**（用它），与脚下有没有方块无关。
+   *
+   * 弓 / 弩要边瞄边按住、望远镜要边看边按住，它们对着方块按下去也没有第二种含义
+   * （原版对着箱子举弓也只是拉弓）。所以这三件跳过下面那道"射线必须指空"的判据——
+   * 否则触屏上等于不可用：手指指哪就打到哪，`hit` 永远是脚下那块地。
+   *
+   * ⚠️ **不能把食物/药水/盾加进来**：它们保留"对着方块按住 ≠ 吃"的原语义
+   * （批次 219/224 修过"按住打怪顺手把肉吃掉"那个洞）。
+   */
+  private get holdsChargeable(): boolean {
+    const id = this.heldItemId;
+    return id === Item.BOW || id === Item.CROSSBOW || id === Item.SPYGLASS;
+  }
+
+  /**
+   * 这一帧算不算"正在使用手里的东西"。
+   *
+   * 触摸端没有独立的使用键，靠"按住不动"借用（批次 219/224）。原来还额外要求
+   * `hit === null`（手指底下没有方块才算用），那是给食物/盾留的"对着方块那一下归方块"；
+   * 但触屏的目标就是手指落点，`REACH` 又是 10 格（批次 336），于是**只要瞄着东西就永远
+   * 拉不开弓**——这是"以前能射、现在射不出去"的根因。
+   *
+   * 现在按手持物品分流：
+   *  - `holdsChargeable`（弓/弩/望远镜）→ 按住即用，且**允许拖动瞄准**（`aimPoint` 非空
+   *    就说明手指还按着），否则"一边拉弓一边调准心"在触屏上根本做不到；
+   *  - 其余物品 → 保持原判据（对着方块按住仍归方块）。
+   */
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;
-    if (this.touch === null || this.hit !== null) return false;
+    if (this.touch === null) return false;
+    // 描准与使用是同一根手指：只要求"还按着"，不再要求"没指着方块"
+    if (this.holdsChargeable) return this.leftDown || this.touch.aimPoint !== null;
+    if (this.hit !== null) return false;
     return this.leftDown || this.touch.holding;
   }
 
