@@ -1146,6 +1146,17 @@ console.log('\n[要塞的房间网格拼图（批次 462）]');
       }
     }
     check('井口四周有一圈石砖（玩家一眼看得出这里有个入口）', rim >= 8, `实际 ${rim}/10 格`);
+
+    // 两层之间那段井壁（批次 20261031-1156）：以前是裸的，穿过含水层时水会顺着井灌下去
+    const midY = fort.y - 6;
+    let midWall = 0;
+    for (let dx = -1; dx <= 2; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if ((dx === 0 || dx === 1) && dz === 0) continue;
+        if (blockAt(fort.x + dx, midY, fort.z + dz) === Block.STONE_BRICKS) midWall++;
+      }
+    }
+    equal('两层之间那段井壁也封死了（10 格石砖）', midWall, 10);
   }
 }
 

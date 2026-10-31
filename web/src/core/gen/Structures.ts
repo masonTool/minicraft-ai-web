@@ -1213,6 +1213,12 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance, world: FeatureW
       for (let ox = -px; ox <= px; ox++) {
         for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, link.y - 1, cz + oz, brick);
       }
+      // 天花板（批次 20261031-1156）：以前走廊顶部**敞着**，穿过含水层时水会从上面
+      // 直接灌下来。房间自带 6 面壳（`mottled`），走廊必须自己也封顶，整座要塞才是
+      // 密闭的——原版每个拼图房间/走廊都自带墙顶地，所以水下要塞内部也是干的。
+      for (let ox = -px; ox <= px; ox++) {
+        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, link.y + 4, cz + oz, brick);
+      }
       // 两侧墙（走廊尽头会接到房间，房间后画会把入口清开）
       for (const side of [-1, 1]) {
         const wx = cx + (dz !== 0 ? side : 0);
@@ -1314,6 +1320,16 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance, world: FeatureW
     for (const dx of [0, 1]) {
       w.fill(s.x + dx, y, s.z, Block.AIR);
       w.fill(s.x + dx, y, s.z, Block.LADDER);
+    }
+    // 包壁（批次 20261031-1156）：两层之间那十几格以前是**裸的**，穿过含水层时
+    // 水会顺着井一路灌到下层。房间层跳过——房间自己就有 6 面壳，包进去反而把房间
+    // 内部填掉（井在房间正中，`s.x - 1` 那一列是房间的地板）。
+    if (y < lowerY + 4 || y > s.y - 2) continue;
+    for (let dx = -1; dx <= 2; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if ((dx === 0 || dx === 1) && dz === 0) continue;
+        w.fill(s.x + dx, y, s.z + dz, brick);
+      }
     }
   }
 
