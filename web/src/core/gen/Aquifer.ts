@@ -33,8 +33,21 @@ export const LAVA_LEVEL = -54;
 const SUBMERGED_LOW = -0.45;
 const SUBMERGED_HIGH = 0.55;
 
-/** 深部岩浆池的噪声阈值（值越高越稀有） */
-const LAVA_POCKET_THRESHOLD = 0.72;
+/**
+ * 岩浆囊的噪声阈值（值越高越稀有）。
+ *
+ * 批次 20261031-1203 从 0.72 收到 0.82：`test:aquifer` 实测一片区域"水位以下流体"里
+ * **17% 是岩浆**（8657 / 49852 格），玩家在 y=-13 挖洞就频繁撞上岩浆、灌进要塞缺口。
+ */
+const LAVA_POCKET_THRESHOLD = 0.82;
+/**
+ * 岩浆囊的最低起始高度（批次 20261031-1203）。
+ *
+ * 原先从 `y < 0` 就开始，于是要塞上半段（-35~19）与常见的浅层洞穴里到处是岩浆；
+ * 原版的岩浆囊主要在深部。抬到 -24 之后，浅层地下只有水——"挖地下挖出一片岩浆"
+ * 变成真正的深部现象。
+ */
+export const LAVA_POCKET_MIN_Y = -24;
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -79,7 +92,7 @@ export class Aquifer {
   /** 该点的流体方块 id（水 / 岩浆） */
   fluidAt(worldX: number, y: number, worldZ: number): number {
     if (y <= LAVA_LEVEL) return Block.LAVA;
-    if (y < 0 && this.lavaNoise.getValue(worldX, y, worldZ) > LAVA_POCKET_THRESHOLD) return Block.LAVA;
+    if (y < LAVA_POCKET_MIN_Y && this.lavaNoise.getValue(worldX, y, worldZ) > LAVA_POCKET_THRESHOLD) return Block.LAVA;
     return Block.WATER;
   }
 

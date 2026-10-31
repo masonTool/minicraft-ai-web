@@ -10,7 +10,7 @@
  *   4. 生成是确定性的（同种子同区块两次结果一致）。
  */
 
-import { LAVA_LEVEL } from '../web/src/core/gen/Aquifer.ts';
+import { LAVA_LEVEL, LAVA_POCKET_MIN_Y } from '../web/src/core/gen/Aquifer.ts';
 import { OverworldGenerator, SEA_LEVEL } from '../web/src/core/gen/OverworldGenerator.ts';
 import { Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../web/src/core/world/Chunk.ts';
 import { Block } from '../web/src/core/registry/blocks.ts';
@@ -96,7 +96,8 @@ console.log('\n[含水层：填充]');
               yMaxWater = Math.max(yMaxWater, y);
             } else if (id === Block.LAVA) {
               lava++;
-              if (y > 0) shallowLava++;
+              // 浅层 = `LAVA_POCKET_MIN_Y` 及以上（批次 20261031-1203 之前是 y>0）
+              if (y >= LAVA_POCKET_MIN_Y) shallowLava++;
             } else if (id === Block.AIR) {
               airBelowLevel++;
             }
@@ -111,7 +112,7 @@ console.log('\n[含水层：填充]');
   check('雕刻出的空洞被灌满（水位以下无残留空气）', airBelowLevel === 0, `残留 ${airBelowLevel} 格`);
   check('确实产生了水体', water > 500, `水 ${water} 格`);
   check('深处产生了岩浆', lava > 0, `岩浆 ${lava} 格`);
-  check('浅层没有岩浆', shallowLava === 0, `y>0 岩浆 ${shallowLava} 格`);
+  check(`y=${LAVA_POCKET_MIN_Y} 以上没有岩浆`, shallowLava === 0, `浅层岩浆 ${shallowLava} 格`);
   check('水位以下的流体不高于海平面', yMaxWater <= SEA_LEVEL + 1, `最高 y=${yMaxWater}`);
 }
 
