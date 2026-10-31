@@ -2093,8 +2093,51 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
   const mainSource = readFileSync(new URL('../web/src/main.ts', import.meta.url), 'utf8');
   check(
-    'usingItem 在触摸端走"按下即使用"（不等 400ms 长按阈值）',
+    'usingItem 在触摸端走"按下即使用"（不等 400ms 长按阈值；蓄力型手持物另有分支，见下）',
     mainSource.includes('return this.leftDown || this.touch.holding;'),
+  );
+  /*
+   * 批次 20261031-1031：触屏上弓/弩"按住射不出去"的回归断言。
+   *
+   * 根因是 `usingItem` 的触摸分支要求 `hit === null`（手指底下没有方块才算"使用"）——
+   * 触屏的目标就是手指落点，而 `REACH` 已经是 10 格（批次 336），于是瞄着任何东西
+   * 都永远拉不开弓。下面几条把"按手持物品分流"这件事钉死：谁都不许把 `hit` 判据
+   * 重新挪到弓弩前面，也不许把 `chargingShot` 从挖/打/挥三条路上摘掉。
+   */
+  check(
+    '蓄力型手持物（弓/弩/望远镜）单独一条判据，且排在 hit 判据之前',
+    mainSource.includes('private get holdsChargeable(): boolean') &&
+      mainSource.includes('return id === Item.BOW || id === Item.CROSSBOW || id === Item.SPYGLASS;') &&
+      mainSource.indexOf('if (this.holdsChargeable) return') > 0 &&
+      mainSource.indexOf('if (this.holdsChargeable) return') <
+        mainSource.indexOf('if (this.hit !== null) return false;'),
+  );
+  check(
+    '弓弩的维持条件是"手指还按着"（aimPoint 非空），因此允许拖动瞄准',
+    mainSource.includes('if (this.holdsChargeable) return this.leftDown || this.touch.aimPoint !== null;'),
+  );
+  check(
+    '食物/药水/盾保留"对着方块按住 ≠ 吃/挡"的原语义（批次 219/224 的洞）',
+    mainSource.includes('if (this.hit !== null) return false;') &&
+      mainSource.includes('return this.leftDown || this.touch.holding;'),
+  );
+  check(
+    '拉弓/装填期间不挖方块、不打怪、不按节拍挥手（三处都读 chargingShot）',
+    mainSource.includes('private get chargingShot(): boolean') &&
+      mainSource.includes('return this.bowDrawing || this.crossbowDrawing;') &&
+      mainSource.includes('if (this.suppressBreaking || this.chargingShot)') &&
+      mainSource.includes('if (this.chargingShot) {\n      this.tapAttackRequest = false;') &&
+      mainSource.includes('if (this.chargingShot) return;'),
+  );
+  check(
+    '弩与弓一样对功能方块让位（拿弩对着箱子按住不该先开界面）',
+    mainSource.includes('if (this.heldItemId === Item.BOW || this.heldItemId === Item.CROSSBOW) return;'),
+  );
+  check(
+    '开界面/睡觉时显式取消蓄力（否则关背包那一帧会补射一箭）',
+    mainSource.includes(
+      'this.bowDrawing = false;\n      this.bowCharge = 0;\n      this.crossbowDrawing = false;\n      this.crossbowCharge = 0;',
+    ),
   );
   check(
     '进食时长按设置取档（原版 1.6 / 快速 1.0）',
