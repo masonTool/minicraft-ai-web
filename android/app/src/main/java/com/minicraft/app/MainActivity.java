@@ -36,10 +36,10 @@ import java.util.Map;
  *
  * ## 内容从哪来
  *
- * `assets/rt/libmcrt.so` 整段解密（见 {@link BundleVault}），全部放在内存里。
- * WebView 加载 `http://localhost/index.html`，每个请求由 {@link #shouldIntercept} 从内存
- * 切一份返回——**磁盘上从来没有明文**。origin 用 `localhost` 是因为它被 Chromium 视为
- * 可信来源：IndexedDB、剪贴板、`ws://` 联机都正常。
+ * `assets/rt/libmcrt.so` 由 {@link BundleVault} 交给 native 整段解密，**明文只留在 native 堆**。
+ * WebView 加载 `http://localhost/index.html`，每个请求由 {@link #shouldIntercept} 按路径
+ * 向 native 要一份字节——磁盘上从来没有明文，Java 堆上也没有整包明文。
+ * origin 用 `localhost` 是因为它被 Chromium 视为可信来源：IndexedDB、剪贴板、`ws://` 联机都正常。
  */
 public class MainActivity extends Activity {
 
@@ -99,8 +99,8 @@ public class MainActivity extends Activity {
             return;
         }
 
-        currentBundle = BundleVault.open(this);
-        if (currentBundle == null) {
+        vault = BundleVault.open(this);
+        if (vault == null) {
             // 解不开 = 不是我们的包（或包被动过）。没有降级分支，直接说清楚。
             showFatal("游戏内容校验失败：请从官方渠道重新安装");
             return;
@@ -186,8 +186,9 @@ public class MainActivity extends Activity {
         String name = path == null ? "" : path.replaceAll("^/+", "");
         if (name.isEmpty()) name = "index.html";
 
-        Map<String, byte[]> bundle = currentBundle;
-        byte[] body = bundle == null ? null : bundle.get(name);
+        // 每次只向 native 要**这一个**文件：完整明文不经过 Java 堆
+        BundleVault current = vault;
+        byte[] body = current == null ? null : current.read(name);
         if (body == null) {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
                     new HashMap<>(), new ByteArrayInputStream(new byte[0]));
@@ -223,8 +224,8 @@ public class MainActivity extends Activity {
         MIME.put(".txt", "text/plain");
     }
 
-    /** 解密结果常驻内存：整包 4~5 MB，反复解密没有意义 */
-    private Map<String, byte[]> currentBundle;
+    /** 解密的句柄；明文本体在 native 堆（见 {@link BundleVault}），这里只是个句柄 */
+    private BundleVault vault;
 
     private void showFatal(String message) {
         TextView view = new TextView(this);
@@ -280,6 +281,13 @@ public class MainActivity extends Activity {
          */
         if (isFinishing() && !isChangingConfigurations()) {
             ServerControl.stop(this);
+            // 玩家真的退出了：顺手放掉 native 侧的明文缓冲。
+            // 旋转（isChangingConfigurations）不关——新实例会自己重新 open，
+            // 而且 native 侧被重开时会先清掉旧的，不会泄漏。
+            if (vault != null) {
+                vault.close();
+                vault = null;
+            }
         }
         if (inputManager != null) inputManager.unregisterInputDeviceListener(gamepadListener);
         if (webView != null) {

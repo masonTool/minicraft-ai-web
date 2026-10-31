@@ -184,6 +184,37 @@ tasks.register('copyPackedBundle') {
     }
 }
 
+// ---------------------------------------------------------------------------
+// native 解密库（`native/vault/`）进 jniLibs。
+//
+// 为什么解密要放 native：`BundleVault.java` 之前会返回 `Map<String, byte[]>`，
+// 整包 4~5 MB 明文同时躺在 Java 堆上，一次 dump 全拿到。现在明文只在 native 堆，
+// Java 每次按路径取一个文件（见 BundleVault 的注释）。
+//
+// 缺产物就明确报错——编出一个"装上就 UnsatisfiedLinkError / 白屏"的 APK 是最难查的。
+// ---------------------------------------------------------------------------
+def vaultAbis = ['arm64-v8a', 'armeabi-v7a']
+
+tasks.register('copyVaultLib') {
+    description = '把 native/vault 编出的 libminicraft_vault.so 拷进 jniLibs'
+    def repoRoot = rootProject.projectDir.parentFile
+    def sourceRoot = new File(repoRoot, 'native/vault/build/android')
+    doLast {
+        vaultAbis.each { abi ->
+            def source = new File(sourceRoot, "${abi}/libminicraft_vault.so")
+            if (!source.exists()) {
+                throw new GradleException(
+                        "缺少 native 解密库：${source}\n" +
+                        "先跑 `bash native/vault/build-android.sh`（或用 `npm run native:vault`，需要 NDK）")
+            }
+            copy {
+                from source
+                into file("src/main/jniLibs/${abi}")
+            }
+        }
+    }
+}
+
 /** 明文素材与旧封存形态都不许再出现：它们会让"整包加密"这件事名存实亡 */
 tasks.register('checkNoPlaintextAssets') {
     description = '确保 assets 里没有明文游戏内容或旧封存产物'
@@ -202,4 +233,4 @@ tasks.register('checkNoPlaintextAssets') {
     }
 }
 
-tasks.named('preBuild').configure { dependsOn 'copyPackedBundle', 'checkNoPlaintextAssets' }
+tasks.named('preBuild').configure { dependsOn 'copyPackedBundle', 'checkNoPlaintextAssets', 'copyVaultLib' }
