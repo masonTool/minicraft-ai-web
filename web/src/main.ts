@@ -7324,6 +7324,9 @@ class App {
       this.bowCharge = 0;
       this.crossbowDrawing = false;
       this.crossbowCharge = 0;
+      // 弹道预览也要一起收：这段早退会跳过 `updateTrajectoryPreview`，
+      // 不清的话关掉背包前那一帧的弹道会一直挂在世界里
+      this.trajectory.clear();
       this.outline.hide();
       this.mobHealthBar.hide();
       this.blockOverlay.hide();
