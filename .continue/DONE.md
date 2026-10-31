@@ -9,6 +9,34 @@
 
 ---
 
+## 批次 20261031-0930 · 2026-10-31 · 会话 judder20261031
+
+> 低端机移动时满帧却顿：帧时钟与 Worker 回传重活的帧内预算
+
+# 队列 · 会话 judder20261031
+
+> 状态：执行中
+> 创建：2026-10-31
+> 批次：20261031-0930
+
+- [x] 摸底：真机 CDP 逐帧记录 rAF 时间戳 / 帧体分段 / GL 上传 + CPU profile，飞行前进时找"满帧却卡"的来源
+  做了：三个来源。① dt 用回调开头的 `performance.now()`，回调起点被推迟 0~5ms（p90 4.6ms），dt 在 13~19ms 之间跳，位移忽大忽小；② Worker 生成结果在消息回调里当场并入，`onChunkLoaded` 里刷怪笼 / 村庄床两趟全高度三重循环 + 光照播种，一次 20~54ms，正好落在两帧之间；③ 网格结果也在回调里合并 + 逐顶点 `computeBoundingSphere`，一块 3~8ms，几块前后脚到就叠起来。
+  验证：`/tmp/judder.mjs`、`/tmp/prof.mjs` 在 Pixel 2 XL 实跑，旧包飞行 12 秒掉帧 26~33、显示间隔 p99 50~67ms。
+- [x] 帧时钟改用 rAF 时间戳：`core/world/PerfPolicy.ts#frameClock` + `main.ts` 主循环 → `test:perfpolicy`
+  做了：dt / 限帧判据 / 暂停与后台的 lastTime 一律用 vsync 时间戳；缺失、非法或比 now 晚时退回 now。
+  验证：`test:perfpolicy` 新增 5 条（回调抖动不进 dt、对照组 now 会抖 4ms 以上、三种退回）。
+- [x] 区块并入挪进帧内按预算：`World.enqueueGenerated` / `integrateArrived` + `CHUNK_INTEGRATE_BUDGET_MS = 1`（实际每帧一块）→ `test:render`
+  做了：消息只排队，主循环每帧并入；遮罩期不限；200ms 没人取由定时器兜底；`setDimension` / `reset` / `dispose` 清队列；排队中的仍算 `pendingCount`。
+  验证：`test:render` 新增 8 条（到达不并、至少一块、不限一次并完、计数）。
+- [x] 加载扫描先查表跳过：`core/world/ChunkContents.ts` + `main.ts#onChunkLoaded` → `test:loot`
+  做了：一趟查表（空 section 跳过、全找到提前返回）判断有无箱子 / 避雷针 / 刷怪笼 / 信标 / 床，没有的那几趟整趟跳过，有的照旧跑原扫描。
+  验证：`test:loot` 新增 8 条，含与逐格扫描对拍 40 个随机区块。
+- [x] 网格挂载挪进帧内按预算 + 包围球按 section 范围直接给：`ChunkRenderer.applyReady` + `MESH_APPLY_BUDGET_MS = 4` → `test:render`
+  做了：Worker 网格结果排队，帧内挂载；排队期间区块卸载就丢弃；包围球用 `fitSphere`（与 `applySections` 同一个盒子），不再逐顶点算。
+  验证：`test:render` 新增 4 条；真机同场景 A/B（飞行前进 12 秒 × 3 次）：掉帧 26~33 → 2~3，显示间隔 p99 50~67ms → 16.9ms，平均 55 → 59.4 fps。提交 `b52b0054`。
+
+---
+
 ## 批次 20261031-0055 · 2026-10-31 · 会话 c747f7
 
 > 降温第二批：数据驱动砍 draw call / 三角形，加空闲降帧
@@ -264,24 +292,6 @@
   - 为什么：用户拍板——项目本来就小（合计 1230 KB / 首屏约 1 MB），为几百字节卡发布不值。
   - 验证：`npm run build:web` ✓ 通过（余量 305.8 KB）。
   - 批次：20261028-0600
-
----
-
-## 批次 20261028-0500 · 2026-10-28 · 会话 12c62c
-
-> 用户：GitHub Pages 因体积超基线 255 字节发布不了
-
-# 队列 · 会话 12c62cf015444720a2a57c257f80c045
-
-> 状态：执行中
-> 创建：2026-10-28
-> 批次：20261028-0500
-
-- [x] [L32] 体积闸门加容差：`tools/release-check.mjs` → `npm run build:web`
-  - 做了什么：全部 JS 合计基线上加 0.5%（≈6 KB）容差；容差内通过并 note 播报消耗量，超容差才红。
-  - 为什么：发布只因 255 字节（0.02%）被卡，是上次余量被日常提交吃光，不是代码膨胀。
-  - 验证：`npm run build:web` ✓ 通过（note：已用掉容差 258/6298 字节）；check exit=0。
-  - 批次：20261028-0500
 
 ---
 
