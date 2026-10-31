@@ -93,6 +93,14 @@ export class ChunkRenderer {
    * 和原来一样；只有一批同时到时才会顺延到后面一两帧。
    */
   private readonly ready: Array<{ key: string; response: MeshResponse }> = [];
+  /**
+   * 网格正在 Worker 里烘、这期间又被改过方块的区块（批次 20261031-1100）。
+   *
+   * 挖方块时这个标记是**关键**：连续挖同一区块时，新的改动不能把在途结果作废
+   * （作废就一格都刷不出来，整片地基等你停手才一起消失），只能记一笔，
+   * 等这次结果挂上去之后立刻再烘一遍——画面匀速往前跟，最多落后一次往返。
+   */
+  private readonly dirtyRebuild = new Set<string>();
   private lastApplyAt = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly maxInFlight: number;
@@ -254,6 +262,7 @@ export class ChunkRenderer {
     this.dispose(key);
     this.queued.delete(key);
     this.pending.delete(key);
+    this.dirtyRebuild.delete(key);
   }
 
   /**
@@ -291,9 +300,18 @@ export class ChunkRenderer {
       if (priority < existing.priority) existing.priority = priority;
       return;
     }
-    // 已有 Worker 请求在途时，改动一入队就立刻让旧结果失效；否则旧结果可能赶在
-    // 新请求派发前回来，把“破坏前”的方块短暂画回去一帧。
-    if (this.pending.has(key)) this.pending.set(key, ++this.requestSeq);
+    // 已有 Worker 请求在途时**不作废它**（批次 20261031-1100）。
+    //
+    // 原来这里把 `pending` 的序号往前推，让在途结果回来时报废。单次挖方块看是"少一次无用挂载"，
+    // 连续挖（按住不放、边走边挖）就是灾难：每次改动都作废上一次，在途结果**永远**比下一次改动旧，
+    // 于是一格都不刷——真机实测 6 秒挖掉 54 格只挂上 13 次网格，中间有 2 秒画面完全不动，
+    // 玩家看到的就是"方块等我停手才一起消失"。
+    // 改成"记一笔脏，等这次结果挂上去立刻重烘"：单块最多落后一次往返（实测约 100ms），
+    // 但画面一直在跟；并且同一区块同时只允许一个在途请求，不会把 Worker 池堆满。
+    if (this.pending.has(key)) {
+      this.dirtyRebuild.add(key);
+      return;
+    }
     const item: QueueItem = { cx, cz, distanceSq: 0, priority };
     this.queued.set(key, item);
     this.queue.push(item);
@@ -340,6 +358,8 @@ export class ChunkRenderer {
         this.inFlight--;
         if (this.pending.get(key) !== seq) return; // 已被更新的请求取代
         this.pending.delete(key);
+        // 烘焙期间又被改过：这一份先挂（画面立刻往前挪一格），紧接着重烘最新状态
+        if (this.dirtyRebuild.delete(key)) this.enqueue(cx, cz, MESH_PRIORITY_EDIT);
         this.ready.push({ key, response });
         this.armReadyFallback();
       });
@@ -710,6 +730,7 @@ export class ChunkRenderer {
 
   disposeAll(): void {
     this.ready.length = 0;
+    this.dirtyRebuild.clear();
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     this.readyTimer = null;
     for (const key of [...this.rendered.keys()]) this.dispose(key);

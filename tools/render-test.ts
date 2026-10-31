@@ -156,6 +156,16 @@ console.log('\n[区块网格原子替换]');
   equal('Worker 重建期间旧网格仍留在场景里（不会整块闪空）', renderer.chunkMeshCount, 1);
   equal('场景里仍有旧网格', scene.children.length, 1);
 
+  // 批次 20261031-1100：连续挖方块时，新的改动**不能**把在途结果作废
+  // （作废就一格都不刷，整片地基等玩家停手才一起消失）
+  renderer.enqueueAround(1, 1);
+  renderer.enqueueAround(2, 2);
+  equal('在途期间再改动不会重复派发（同一区块同时只有一个在途请求）', callbacks.length, 1);
+  callbacks.shift()!(response([{ section: 8, opaque: null, solid: triangle, translucent: null }]));
+  equal('在途结果照样挂进场景（不会被后来的改动作废）', renderer.applyReady(4) > 0, true);
+  equal('挂上之后立刻为最新的改动重排一次', renderer.queueLength, 1);
+  renderer.processQueue(1, 0, 0);
+  equal('重排的那次也派发出去了', callbacks.length, 1);
   callbacks.shift()!(response([]));
   renderer.applyReady(4);
   equal('空的新结果就绪后才移除旧网格', renderer.chunkMeshCount, 0);
